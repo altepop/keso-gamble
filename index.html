@@ -1,38 +1,183 @@
 <!doctype html>
-<html lang="ja"><head>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-<meta name="theme-color" content="#0b1018"><meta name="description" content="KESO EXCHANGE — Discord向け架空株式・カジノ・交換所ゲームの試作品" />
-<title>KESO EXCHANGE • PROTOTYPE</title><style>:root{color-scheme:dark;--bg:#0b1018;--surface:#121b27;--panel:#151f2c;--stroke:#273444;--text:#eaf0f6;--muted:#8b9aad;--mint:#66deb2;--red:#ff7b86;--gold:#f3c775;--blue:#7fb6ff;--mono:'DM Sans',system-ui,sans-serif;--font:'DM Sans','Noto Sans JP',sans-serif}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:var(--font);font-size:14px}button,input{font:inherit}button{cursor:pointer}a{color:inherit;text-decoration:none}button:focus-visible,input:focus-visible{outline:2px solid var(--blue);outline-offset:2px}.app-shell{max-width:1700px;min-height:100vh;margin:0 auto;display:grid;grid-template-columns:244px minmax(0,1fr)}.sidebar{padding:31px 16px;border-right:1px solid var(--stroke);position:sticky;top:0;height:100vh;display:flex;flex-direction:column}.brand{display:flex;align-items:center;gap:12px;margin:0 10px 58px}.brand-mark{display:grid;place-items:center;width:40px;height:40px;background:var(--mint);border-radius:10px;color:#10201f;font-weight:900;font-size:24px}.brand-mark .dot{color:#207a5c}.brand strong{font-size:14px;letter-spacing:.09em}.brand small{display:block;color:var(--muted);font-size:9px;letter-spacing:.15em;margin-top:5px}.side-section{font-size:11px;color:#61768e;letter-spacing:.13em;font-weight:800;padding:0 15px;margin-bottom:15px}.nav-list{display:grid;gap:5px}.nav-link{width:100%;text-align:left;display:flex;align-items:center;gap:13px;padding:14px 15px;border-radius:11px;border:0;background:transparent;color:#95a3b6;font-weight:700}.nav-link.active,.nav-link:hover{color:var(--mint);background:#192b2d}.nav-ico{font-size:20px;width:24px;text-align:center}.side-bottom{margin:auto 10px 10px;border-top:1px solid var(--stroke);padding-top:22px;display:flex;gap:10px;align-items:flex-start;font-size:11px;color:#b7c6d9}.side-bottom small{display:block;color:var(--muted);margin-top:3px}.status-dot{background:var(--mint);width:8px;height:8px;border-radius:50%;margin-top:3px;box-shadow:0 0 12px var(--mint)}.main-column{min-width:0}.topbar{height:83px;padding:0 40px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--stroke)}.breadcrumb{display:flex;align-items:center;gap:13px;color:var(--muted);font-size:12px}.breadcrumb strong{color:var(--text)}.slash{color:#536477}.header-actions{display:flex;align-items:center;gap:20px}.demo-pill{color:var(--gold);font-size:11px;border:1px solid #6d5630;background:#302717;border-radius:30px;padding:8px 12px;font-weight:700}.profile-avatar{width:34px;height:34px;background:linear-gradient(130deg,#b2eecb,#58a58d);border-radius:50%;display:grid;place-items:center;color:#133a32;font-weight:800}.page{max-width:1240px;margin:0 auto;padding:38px 40px 55px}.eyebrow{font-size:11px;color:var(--mint);letter-spacing:.23em;font-weight:800;text-transform:uppercase}.page-title{margin:10px 0 8px;font-size:30px;letter-spacing:-.04em;line-height:1.4}.subtitle{color:var(--muted);font-size:13px;line-height:1.7;margin:0 0 30px}.section-head{display:flex;justify-content:space-between;align-items:center;margin:29px 0 14px;gap:10px}.section-head h2{margin:0;font-size:17px}.section-head .hint{font-size:11px;color:var(--muted)}.metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.card{border:1px solid var(--stroke);background:var(--surface);border-radius:16px;padding:22px;min-width:0}.metric-label{font-size:12px;color:var(--muted);margin-bottom:19px}.metric-value{font-size:29px;font-weight:800;letter-spacing:-.04em;font-variant-numeric:tabular-nums}.metric-value small{font-size:13px;font-weight:700;color:var(--muted);margin-left:5px}.metric-foot{margin-top:11px;color:var(--muted);font-size:11px}.mint{color:var(--mint)!important}.red{color:var(--red)!important}.gold{color:var(--gold)!important}.hero-grid{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(270px,.9fr);gap:15px;margin-top:16px}.chart-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}.chart-head h3,.card h3{font-size:15px;margin:0 0 6px}.card .sub{font-size:11px;color:var(--muted)}.market-chart{height:180px;margin-top:20px}.market-chart svg{width:100%;height:100%;overflow:visible}.pill{border-radius:30px;padding:5px 8px;font-size:11px;font-weight:800}.pill.green{background:#18382f;color:var(--mint)}.pill.red{background:#432630;color:var(--red)}.card-inner{background:#192634;border:1px solid #2c394a;border-radius:12px;padding:14px}.salary{display:flex;align-items:center;gap:12px;margin:20px 0}.salary-icon{font-size:24px;background:#233c37;color:var(--mint);width:45px;height:45px;display:grid;place-items:center;border-radius:12px}.salary h4{margin:0 0 5px}.salary p{margin:0;color:var(--muted);font-size:11px;line-height:1.7}.button{border:0;padding:13px 16px;border-radius:11px;background:var(--mint);color:#0b2922;font-weight:800;transition:transform .15s,opacity .15s}.button:hover{transform:translateY(-1px)}.button:disabled{opacity:.35;cursor:not-allowed;transform:none}.button.ghost{background:#243445;color:var(--text)}.button.warn{background:#3c2b1b;color:var(--gold)}.button.full{width:100%}.notice{border:1px solid #51472f;background:#28251c;color:#e2c995;border-radius:11px;padding:12px 14px;font-size:11px;line-height:1.7;margin-top:16px}.list-table{width:100%;border-collapse:collapse;font-size:12px}.list-table td,.list-table th{padding:14px 6px;border-bottom:1px solid #243040;text-align:left}.list-table th{font-size:10px;color:#718599;font-weight:600}.list-table tr:last-child td{border-bottom:none}.align-right{text-align:right!important}.symbol{display:inline-grid;place-items:center;width:33px;height:33px;background:#273845;border-radius:9px;margin-right:10px;font-size:13px;font-weight:900;color:var(--gold)}.ticker{color:var(--muted);font-size:10px;display:block;margin-top:3px}.stock-cell{display:flex;align-items:center}.tag{font-size:10px;color:var(--muted);border:1px solid var(--stroke);border-radius:30px;padding:4px 9px}.two-col{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(300px,.9fr);gap:16px}.item-stock{border:1px solid var(--stroke);border-radius:11px;padding:14px 16px;background:#111e2a;text-align:left;width:100%;color:var(--text);display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}.item-stock.selected{border-color:var(--mint);background:#172b2d}.item-stock .symbol{margin-right:8px}.item-stock p{margin:5px 0 0;font-size:10px;color:var(--muted)}.field{display:grid;gap:8px;margin:16px 0}.field label{font-size:11px;color:var(--muted)}input,select{width:100%;background:#0e1621;color:var(--text);border:1px solid #344153;border-radius:9px;padding:12px;outline:none}input:focus{border-color:var(--mint)}.seg{display:flex;gap:5px;padding:5px;border-radius:11px;background:#0e1722}.seg button{background:none;color:var(--muted);border:0;flex:1;padding:9px;border-radius:8px;font-weight:700}.seg button.selected{background:#2a3f46;color:var(--mint)}.stat-line{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:13px 0;font-size:12px}.stat-line span{color:var(--muted)}.stat-line strong{font-variant-numeric:tabular-nums}.casino-layout{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(300px,.85fr);gap:16px}.roulette-outer{width:min(280px,76vw);height:min(280px,76vw);border-radius:50%;margin:8px auto 18px;background:conic-gradient(#ad423e 0deg 10deg,#222f38 10deg 20deg,#ad423e 20deg 30deg,#222f38 30deg 40deg,#ad423e 40deg 50deg,#222f38 50deg 60deg,#ad423e 60deg 70deg,#222f38 70deg 80deg,#ad423e 80deg 90deg,#222f38 90deg 100deg,#ad423e 100deg 110deg,#222f38 110deg 120deg,#ad423e 120deg 130deg,#222f38 130deg 140deg,#ad423e 140deg 150deg,#222f38 150deg 160deg,#ad423e 160deg 170deg,#222f38 170deg 180deg,#ad423e 180deg 190deg,#222f38 190deg 200deg,#ad423e 200deg 210deg,#222f38 210deg 220deg,#ad423e 220deg 230deg,#222f38 230deg 240deg,#ad423e 240deg 250deg,#222f38 250deg 260deg,#ad423e 260deg 270deg,#222f38 270deg 280deg,#ad423e 280deg 290deg,#222f38 290deg 300deg,#ad423e 300deg 310deg,#222f38 310deg 320deg,#ad423e 320deg 330deg,#222f38 330deg 340deg,#ad423e 340deg 350deg,#222f38 350deg 360deg);border:9px solid #c29959;box-shadow:inset 0 0 0 7px #503d27,0 12px 38px #0007;display:grid;place-items:center;position:relative;transition:transform 2.1s cubic-bezier(.16,.8,.13,1)}.roulette-center{background:radial-gradient(circle,#1b3437,#101c25);border:7px solid #c99b59;border-radius:50%;width:50%;height:50%;display:grid;place-items:center;box-shadow:0 0 0 6px #101820;color:var(--gold);font-size:57px;font-weight:800}.wheel-pointer{position:absolute;top:-15px;left:calc(50% - 9px);z-index:3;border-left:9px solid transparent;border-right:9px solid transparent;border-top:19px solid var(--gold)}.casino-bets{display:grid;grid-template-columns:repeat(2,1fr);gap:7px;margin:16px 0}.bet-option{padding:12px 8px;background:#192836;border:1px solid #344253;border-radius:9px;color:var(--text);font-weight:800}.bet-option.selected{border-color:var(--gold);background:#332c23}.bet-option.red-opt:before,.bet-option.black-opt:before{content:'';display:inline-block;border-radius:50%;background:var(--red);width:10px;height:10px;margin-right:8px}.bet-option.black-opt:before{background:#71869d}.result-banner{border:1px solid #3b5448;background:#1a342b;padding:15px;border-radius:12px;text-align:center;min-height:70px}.result-banner strong{font-size:23px}.shop-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.shop-item{display:flex;flex-direction:column;gap:9px}.shop-icon{width:47px;height:47px;border-radius:13px;background:linear-gradient(135deg,#35463e,#1f3738);color:var(--gold);font-size:24px;display:grid;place-items:center}.shop-item h3{margin:7px 0 0}.shop-item p{margin:0;color:var(--muted);font-size:11px;line-height:1.7;min-height:38px}.shop-bottom{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:auto;padding-top:10px}.shop-bottom strong{color:var(--gold);font-size:13px}.badge{font-size:10px;border:1px solid #425468;padding:5px 7px;border-radius:30px;color:var(--muted)}.showcase{border-radius:13px;background:linear-gradient(120deg,#253a35,#17252b);border:1px solid #49675a;padding:24px;position:relative;overflow:hidden}.showcase:after{content:'✦';position:absolute;font-size:140px;right:-12px;top:-42px;color:#b6efc2;opacity:.09}.showcase h3{font-size:24px;margin:10px 0}.showcase p{margin:0;line-height:1.7;color:#a1b8ad;font-size:12px}.event-feed{display:grid;gap:8px}.event-line{padding:13px 14px;background:#15212e;border:1px solid #253344;border-radius:10px;font-size:12px;display:flex;gap:11px;justify-content:space-between;align-items:center}.event-line small{color:var(--muted);white-space:nowrap}.footnote{text-align:center;padding:15px;color:#71839a;font-size:10px;line-height:1.6}.mobile-nav{display:none}.toast{position:fixed;bottom:24px;left:50%;transform:translate(-50%,30px);background:#253b3c;color:#ecfdf5;padding:14px 20px;border:1px solid #4b7772;border-radius:12px;box-shadow:0 8px 32px #0008;opacity:0;pointer-events:none;transition:.2s;z-index:20;max-width:min(95vw,480px)}.toast.show{transform:translate(-50%,0);opacity:1}.toast.error{background:#442830;border-color:#864756}.celebration{position:fixed;inset:0;pointer-events:none;overflow:hidden;z-index:15}.particle{position:absolute;top:-15px;color:var(--gold);animation:fall 2.2s linear forwards;font-size:20px;text-shadow:0 0 6px #f3c775}@keyframes fall{to{transform:translateY(105vh) rotate(720deg);opacity:0}}
-@media(max-width:1050px){.app-shell{grid-template-columns:200px minmax(0,1fr)}.page{padding:28px 25px}.topbar{padding:0 25px}.hero-grid,.two-col,.casino-layout{grid-template-columns:minmax(0,1fr)}.shop-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.sidebar{padding:22px 12px}.brand{margin:0 0 45px 2px}.brand strong{font-size:12px}}
-@media(max-width:720px){.app-shell{display:block}.sidebar{display:none}.topbar{height:65px;padding:0 16px}.page{padding:24px 15px 115px}.page-title{font-size:25px}.breadcrumb{font-size:11px;gap:8px}.demo-pill{font-size:9px;padding:6px}.profile-avatar{width:29px;height:29px}.metrics{grid-template-columns:repeat(2,1fr);gap:9px}.metrics .card:last-child{grid-column:span 2}.card{padding:16px;border-radius:14px}.metric-value{font-size:25px}.metric-label{margin-bottom:11px}.hero-grid,.two-col,.casino-layout{gap:10px}.shop-grid{grid-template-columns:1fr 1fr;gap:9px}.shop-item h3{font-size:13px}.shop-item p{font-size:10px}.shop-bottom{display:block}.shop-bottom button{width:100%;margin-top:10px}.list-table{font-size:10px}.list-table td,.list-table th{padding:11px 3px}.symbol{width:28px;height:28px;margin-right:5px}.mobile-nav{position:fixed;bottom:0;left:0;right:0;z-index:10;background:#131e2b;border-top:1px solid #344257;display:flex;justify-content:space-around;padding:7px 6px calc(7px + env(safe-area-inset-bottom))}.mobile-nav button{background:none;border:0;color:#899aaf;flex:1;display:grid;justify-items:center;gap:1px;font-size:23px;padding:5px 0}.mobile-nav button.active{color:var(--mint)}.mobile-nav small{font-size:9px;font-weight:700}.footnote{display:none}.toast{bottom:90px}.section-head h2{font-size:15px}}
-@media(max-width:370px){.shop-grid{grid-template-columns:1fr}.breadcrumb span:first-child{display:none}}
-@media(prefers-reduced-motion:reduce){*,*:before,*:after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#050b1e" />
+  <title>KESO EXCHANGE</title>
+  <style>:root{
+  color-scheme: dark;
+  --bg:#02081a;
+  --bg2:#07112d;
+  --panel:#061028;
+  --panel2:#09162f;
+  --line:#102446;
+  --line2:#18345d;
+  --text:#eef3ff;
+  --muted:#8b9ab8;
+  --blue:#2daeff;
+  --green:#15d13f;
+  --green2:#00c73c;
+  --red:#ff5b52;
+  --yellow:#f8c63f;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:linear-gradient(180deg,#071033 0%,#030815 100%);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Hiragino Sans','Noto Sans JP',sans-serif;font-variant-numeric:tabular-nums}
+button,input,select{font:inherit}
+button{cursor:pointer}
+#app{min-height:100dvh}
+.screen{max-width:520px;margin:0 auto;min-height:100dvh;background:#030a1d;position:relative;padding-bottom:96px}
+.topbar{position:sticky;top:0;z-index:10;background:linear-gradient(180deg,#07133a 0%,#081437 82%,rgba(8,20,55,.95) 100%);padding:18px 16px 12px;border-bottom:1px solid rgba(46,74,129,.5)}
+.toprow{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.title{font-size:29px;font-weight:500;letter-spacing:.02em;margin:0}
+.icon-btn{appearance:none;background:none;border:0;color:#dbe6ff;padding:0;display:grid;place-items:center;width:32px;height:32px;font-size:20px}
+.small-actions{display:flex;align-items:center;gap:14px}
+.top-tabs{display:flex;gap:0;margin-top:14px;overflow:auto;scrollbar-width:none}
+.top-tabs::-webkit-scrollbar{display:none}
+.top-tab{appearance:none;border:0;background:none;color:#9fb1d9;padding:0 14px 12px;white-space:nowrap;font-size:15px;position:relative}
+.top-tab.active{color:#fff}
+.top-tab.active::after{content:'';position:absolute;left:10px;right:10px;bottom:0;height:3px;border-radius:999px;background:#28b7ff}
+.section{padding:0 0 14px}
+.list{border-top:1px solid rgba(32,59,106,.48)}
+.row{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:12px;padding:14px 16px;border-bottom:1px solid rgba(32,59,106,.48);align-items:center;background:linear-gradient(180deg,rgba(7,16,44,.92),rgba(4,11,28,.92))}
+.row.touch{cursor:pointer}
+.row:hover{background:linear-gradient(180deg,rgba(10,20,52,.98),rgba(6,14,37,.98))}
+.label{font-size:23px;font-weight:500;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sublabel{display:block;color:var(--muted);font-size:14px;margin-top:5px}
+.value{font-size:30px;font-weight:600;letter-spacing:.01em;text-align:right;line-height:1.02}
+.timestamp{display:block;font-size:14px;color:#d9e0f4;opacity:.88;margin-top:4px}
+.arrow{font-size:44px;line-height:1;text-align:center;min-width:28px}
+.delta{font-size:17px;font-weight:600;min-width:90px;text-align:right;line-height:1.25}
+.positive{color:var(--red)}
+.negative{color:var(--green)}
+.neutral{color:#d8e2ff}
+.flag{font-size:22px;margin-right:10px;vertical-align:middle}
+.panel{margin:14px 14px 0;background:linear-gradient(180deg,#08122d,#040d23);border:1px solid rgba(35,61,113,.7);border-radius:14px;overflow:hidden}
+.panel-head{padding:14px 16px;border-bottom:1px solid rgba(32,59,106,.48);display:flex;align-items:center;justify-content:space-between;gap:10px}
+.panel-title{font-size:18px;font-weight:600}
+.card-body{padding:14px 16px}
+.news-item{padding:14px 16px;border-bottom:1px solid rgba(32,59,106,.48)}
+.news-item:last-child{border-bottom:0}
+.news-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}
+.news-tag{font-size:12px;color:#8ccfff;background:#0a2047;border:1px solid #153b79;border-radius:999px;padding:4px 10px}
+.news-time{font-size:12px;color:var(--muted)}
+.news-title{font-size:16px;line-height:1.5;margin:0 0 6px}
+.news-copy{font-size:14px;color:#9fb0d0;line-height:1.55;margin:0}
+.rank-row{display:grid;grid-template-columns:36px minmax(0,1fr) auto auto;gap:12px;align-items:center;padding:14px 16px;border-bottom:1px solid rgba(32,59,106,.48)}
+.rank-no{font-size:20px;font-weight:700;color:#cfdcff;text-align:center}
+.badge{display:inline-flex;align-items:center;gap:6px;border:1px solid #20487d;background:#0a1a3b;color:#d9e6ff;border-radius:999px;padding:4px 10px;font-size:12px}
+.metric-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;padding:14px}
+.metric-card{border:1px solid rgba(35,61,113,.7);background:linear-gradient(180deg,#08122d,#050d22);border-radius:14px;padding:14px}
+.metric-name{font-size:13px;color:#9caac7;margin-bottom:8px}
+.metric-main{font-size:28px;font-weight:700;line-height:1.1}
+.metric-note{font-size:13px;color:#9caac7;margin-top:8px}
+.bottom-nav{position:fixed;left:0;right:0;bottom:0;z-index:15;background:rgba(4,11,29,.97);border-top:1px solid rgba(32,59,106,.65);backdrop-filter:blur(12px)}
+.bottom-inner{max-width:520px;margin:0 auto;display:grid;grid-template-columns:repeat(4,1fr)}
+.nav-btn{appearance:none;border:0;background:none;color:#8fa1c6;padding:10px 6px 12px;display:flex;flex-direction:column;align-items:center;gap:4px;font-size:13px}
+.nav-btn .ico{font-size:24px;line-height:1}
+.nav-btn.active{color:#fff}
+.nav-btn.active .ico{color:#fff}
+.wallet-strip{display:flex;justify-content:space-between;gap:12px;padding:10px 16px;border-top:1px solid rgba(32,59,106,.48);border-bottom:1px solid rgba(32,59,106,.48);background:#060f28}
+.wallet-item{min-width:0}
+.wallet-item small{display:block;color:#8ea1c6;font-size:11px;margin-bottom:4px}
+.wallet-item strong{font-size:18px;font-weight:700}
+.action-row{display:flex;gap:10px;padding:14px 16px}
+.action-btn{flex:1;appearance:none;border:1px solid #294f85;background:linear-gradient(180deg,#0d2348,#091a38);color:#fff;border-radius:12px;padding:12px 14px;font-size:15px;font-weight:600}
+.action-btn.primary{background:linear-gradient(180deg,#1776f2,#0b57c4);border-color:#1c73eb}
+.sub-tabs{display:flex;gap:8px;padding:14px 14px 0;overflow:auto;scrollbar-width:none}
+.sub-tabs::-webkit-scrollbar{display:none}
+.sub-tab{appearance:none;border:1px solid rgba(36,67,120,.72);background:#08142d;color:#cad8f8;border-radius:10px;padding:10px 14px;white-space:nowrap}
+.sub-tab.active{background:#e8eefc;color:#0b1733;border-color:#e8eefc}
+.trade-box{margin:14px;border:1px solid rgba(35,61,113,.7);border-radius:14px;overflow:hidden;background:linear-gradient(180deg,#08122d,#050d22)}
+.trade-box h3{font-size:18px;margin:0;padding:14px 16px;border-bottom:1px solid rgba(32,59,106,.48)}
+.field{padding:0 16px 14px}
+.field label{display:block;font-size:13px;color:#9caac7;margin:0 0 7px}
+.input,.select{width:100%;appearance:none;background:#000814;border:1px solid #274670;border-radius:10px;color:#fff;padding:12px 14px}
+.segment{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;padding:14px 16px}
+.segment button{appearance:none;border:1px solid #294f85;background:#08142d;color:#cad8f8;border-radius:10px;padding:10px 0;font-weight:600}
+.segment button.active{background:#e8eefc;color:#07142f;border-color:#e8eefc}
+.stock-list .rank-row{grid-template-columns:minmax(0,1fr) auto auto;cursor:pointer}
+.stock-name{font-size:17px;font-weight:600}
+.stock-code{font-size:12px;color:var(--muted);margin-top:4px}
+.center-panel{padding:20px 14px}
+.roulette-board{margin:0 auto;width:min(320px,86vw);aspect-ratio:1;border-radius:50%;position:relative;background:conic-gradient(#d24b45 0deg 10deg,#151515 10deg 20deg,#d24b45 20deg 30deg,#151515 30deg 40deg,#d24b45 40deg 50deg,#151515 50deg 60deg,#d24b45 60deg 70deg,#151515 70deg 80deg,#d24b45 80deg 90deg,#151515 90deg 100deg,#d24b45 100deg 110deg,#151515 110deg 120deg,#d24b45 120deg 130deg,#151515 130deg 140deg,#d24b45 140deg 150deg,#151515 150deg 160deg,#d24b45 160deg 170deg,#0e6f3c 170deg 180deg,#151515 180deg 190deg,#d24b45 190deg 200deg,#151515 200deg 210deg,#d24b45 210deg 220deg,#151515 220deg 230deg,#d24b45 230deg 240deg,#151515 240deg 250deg,#d24b45 250deg 260deg,#151515 260deg 270deg,#d24b45 270deg 280deg,#151515 280deg 290deg,#d24b45 290deg 300deg,#151515 300deg 310deg,#d24b45 310deg 320deg,#151515 320deg 330deg,#d24b45 330deg 340deg,#151515 340deg 350deg,#d24b45 350deg 360deg);border:8px solid #86734a;box-shadow:0 0 0 4px #55431f inset}
+.roulette-center{position:absolute;inset:25%;border-radius:50%;display:grid;place-items:center;background:radial-gradient(circle at 30% 30%,#0b1635,#030611);border:3px solid #cab06a;font-size:36px;font-weight:800}
+.pointer{position:absolute;left:50%;top:-4px;transform:translateX(-50%);width:0;height:0;border-left:12px solid transparent;border-right:12px solid transparent;border-top:22px solid #e8eefc;filter:drop-shadow(0 4px 4px rgba(0,0,0,.35))}
+.bet-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;padding:14px 16px}
+.bet-grid button{appearance:none;border:1px solid #284875;background:#08142d;color:#fff;border-radius:10px;padding:12px 10px}
+.bet-grid button.active{border-color:#e8eefc;background:#e8eefc;color:#07142f}
+.result-panel{margin:14px;border:1px solid rgba(35,61,113,.7);border-radius:14px;background:linear-gradient(180deg,#08122d,#050d22);padding:14px 16px}
+.result-title{font-size:22px;font-weight:700;margin:0 0 8px}
+.inventory-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;padding:14px}
+.item-card{border:1px solid rgba(35,61,113,.7);background:linear-gradient(180deg,#08122d,#050d22);border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:10px}
+.item-icon{font-size:26px}
+.item-name{font-size:16px;font-weight:700}
+.item-desc{font-size:13px;color:#9fb0d0;line-height:1.5;min-height:58px}
+.item-price{font-size:20px;font-weight:700}
+.item-btn{appearance:none;border:1px solid #1c73eb;background:linear-gradient(180deg,#1776f2,#0b57c4);color:#fff;border-radius:10px;padding:10px 12px;font-weight:700}
+.item-btn[disabled]{opacity:.45}
+.asset-list{padding:0 14px 14px}
+.asset-card{border:1px solid rgba(35,61,113,.7);background:linear-gradient(180deg,#08122d,#050d22);border-radius:14px;padding:14px;margin-top:14px}
+.asset-line{display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid rgba(32,59,106,.48)}
+.asset-line:last-child{border-bottom:0}
+.asset-line span{color:#9caac7}
+.modal{position:fixed;inset:0;z-index:30;background:rgba(0,0,0,.62);display:flex;justify-content:center;align-items:flex-end}
+.modal.hidden{display:none}
+.sheet{width:min(520px,100%);max-height:92dvh;background:#020914;border-radius:18px 18px 0 0;border:1px solid rgba(40,73,132,.85);overflow:auto}
+.sheet-header{position:sticky;top:0;background:linear-gradient(180deg,#07133a 0%,#07133a 80%,rgba(7,19,58,.94) 100%);padding:18px 16px 14px;border-bottom:1px solid rgba(32,59,106,.48);display:flex;align-items:center;justify-content:space-between}
+.sheet-title{font-size:28px;font-weight:500;margin:0}
+.chart-toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:14px 16px 8px}
+.dropdown{appearance:none;border:1px solid #274670;background:#3f4554;color:#fff;border-radius:8px;padding:9px 12px;min-width:90px}
+.toolbar-chip{border:1px solid #274670;background:#f4f5f7;color:#1f2d45;border-radius:8px;padding:9px 12px;font-weight:600}
+.chart-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:0 16px 8px}
+.chart-stats .stat{font-size:13px;line-height:1.6}
+.chart-stats .stat strong{font-size:18px}
+.candle-wrap{padding:0 0 10px;background:#020914}
+.chart-panel{position:relative;height:560px;background:#02091f;border-top:1px solid rgba(32,59,106,.48);border-bottom:1px solid rgba(32,59,106,.48)}
+.chart-panel svg{width:100%;height:100%;display:block}
+.close-row{padding:18px 16px 22px;display:flex;justify-content:center}
+.close-btn{appearance:none;border:1px solid #c6cad7;background:#d7d8dc;color:#212b3c;border-radius:12px;padding:14px 18px;min-width:220px;font-size:18px;font-weight:600}
+.chart-legend{padding:0 16px 8px;font-size:12px;color:#cad8f8;display:flex;gap:10px;flex-wrap:wrap}
+.legend-short{color:#efdb40}
+.legend-mid{color:#ff7a32}
+.legend-long{color:#58d3ff}
+.helper{font-size:12px;color:#9ba8c4;padding:0 16px 8px}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.toast{position:fixed;left:50%;bottom:102px;transform:translateX(-50%);background:rgba(15,20,36,.95);border:1px solid rgba(60,87,134,.8);color:#fff;padding:12px 14px;border-radius:12px;font-size:14px;z-index:50;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(-4px)}
+@media (min-width: 720px){
+  .screen{max-width:680px}
+  .bottom-inner{max-width:680px}
+  .label{font-size:26px}
+  .value{font-size:34px}
+}
+
+/* v0.2.1: mobile trading terminal refinements */
+.screen { min-height:100dvh; }
+.market-disclaimer { padding:7px 14px 9px; font-size:11px; letter-spacing:.01em; background:#07142f; color:#879fc9; border-bottom:1px solid rgba(40,74,134,.5); line-height:1.5; }
+.mock-tag {border-radius:4px;background:#12264a;color:#84b5ef;border:1px solid #224b83;font-size:10px;letter-spacing:.08em;padding:4px 6px;font-weight:800}
+.top-order {appearance:none;border:1px solid #315287;background:#0d2045;color:#d5e5ff;border-radius:7px;padding:7px 8px;white-space:nowrap;font-size:12px}
+.depth-section { margin:14px 16px 0;background:#07112b;border:1px solid #29446e;border-radius:10px;overflow:hidden;}
+.depth-head{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid #29446e}
+.depth-head strong{font-size:16px}.depth-head small{color:#879fc9;font-size:11px}
+.depth-label,.depth-row {display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;text-align:center;padding:8px 12px;border-bottom:1px solid #1b2f55}
+.depth-label{color:#91a5ce;font-size:12px;background:#0a1b3b}.depth-row{font-size:14px}.depth-row:last-child{border-bottom:0}
+.depth-row strong{color:#dde8fc;font-weight:600}.depth-row .ask{color:#fa786e}.depth-row .bid{color:#31d264}
+.chart-note{font-size:11px;color:#8298c3;padding:1px 16px 10px}
+.modal {overscroll-behavior:contain}.sheet {overscroll-behavior:contain}
+.bottom-nav {padding-bottom:env(safe-area-inset-bottom,0px)}
+body{overscroll-behavior-y:contain}
+.row .label{font-size:clamp(14px,4.2vw,23px)}
+.row .value{font-size:clamp(19px,6.3vw,30px)}
+.row .delta{font-size:clamp(12px,3.65vw,17px);min-width:65px}
+.row .arrow{font-size:clamp(23px,8vw,42px)}
+@media(max-width:370px){.row{gap:5px;padding:13px 9px}.top-tab{padding:0 9px 12px}.wallet-item strong{font-size:14px}.value{font-size:20px}}
 </style>
-</head><body>
-<div class="app-shell">
-  <aside class="sidebar">
-    <a href="#home" class="brand" data-go="home"><span class="brand-mark">K<span class="dot">.</span></span><span><strong>KESO EXCHANGE</strong><small>THE PRIVATE MARKET</small></span></a>
-    <div class="side-section">メニュー</div>
-    <nav id="sidebar-nav" class="nav-list" aria-label="メインメニュー">
-      <button type="button" class="nav-link active" data-go="home"><span class="nav-ico">⌂</span>ダッシュボード</button>
-      <button type="button" class="nav-link" data-go="market"><span class="nav-ico">↗</span>株式市場</button>
-      <button type="button" class="nav-link" data-go="casino"><span class="nav-ico">◈</span>カジノ</button>
-      <button type="button" class="nav-link" data-go="shop"><span class="nav-ico">✦</span>ポイント交換所</button>
-      <button type="button" class="nav-link" data-go="assets"><span class="nav-ico">▦</span>マイ資産</button>
-    </nav>
-    <div class="side-bottom"><div class="status-dot"></div><span>LOCAL DEMO <small>v0.1 / No real currency</small></span></div>
-  </aside>
-  <div class="main-column">
-    <header class="topbar"><div class="breadcrumb"><span>限界集落 kesotown</span><span class="slash">/</span><strong id="page-breadcrumb">ダッシュボード</strong></div><div class="header-actions"><span class="demo-pill">● プロトタイプ</span><div class="profile-avatar">K</div></div></header>
-    <main id="main" aria-live="polite"></main>
-    <footer class="footnote">KESO EXCHANGE v0.1 · 架空通貨KCのみ · 現金・現物との交換不可 · 試作データはこのブラウザ内だけに保存</footer>
-  </div>
-</div>
-<nav class="mobile-nav" aria-label="スマートフォンメニュー"><button data-go="home">⌂<small>ホーム</small></button><button data-go="market">↗<small>株</small></button><button data-go="casino">◈<small>カジノ</small></button><button data-go="shop">✦<small>交換所</small></button><button data-go="assets">▦<small>資産</small></button></nav>
-<div id="toast" class="toast" role="status" aria-live="polite"></div>
-<div id="celebration" class="celebration" aria-hidden="true"></div>
-<script type="module">
-/** KESO EXCHANGE v0.1 - local prototype engine (NOT authoritative for real multiplayer). */
+</head>
+<body>
+  <div id="app"></div>
+  <script>/** KESO EXCHANGE v0.1 - local prototype engine (NOT authoritative for real multiplayer). */
 const SCHEMA_VERSION = 1;
 const MARKET = [
   { id: 'keso', ticker: 'KESO', name: 'KESOホールディングス', category: '総合', initialPrice: 1200, volatility: 0.036, drift: 0.002, icon: '◆' },
@@ -148,34 +293,276 @@ function cryptoRouletteNumber() {
   return v[0]%37;
 }
 
-const KEY='keso-exchange-prototype-v1';
-const pages={home:'ダッシュボード',market:'株式市場',casino:'カジノ',shop:'ポイント交換所',assets:'マイ資産'};
-let state;try{state=hydrateState(JSON.parse(localStorage.getItem(KEY)));}catch{state=hydrateState(null);}
-let page='home',symbol='keso',side='buy',betType='red',spinLock=false,rotation=0;
-const $=sel=>document.querySelector(sel);
-const sanitize=t=>String(t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
-const save=()=>localStorage.setItem(KEY,JSON.stringify(state));
-function toast(message,error=false){const el=$('#toast');el.textContent=message;el.classList.toggle('error',error);el.classList.add('show');clearTimeout(toast.timer);toast.timer=setTimeout(()=>el.classList.remove('show'),3600);}
-function celebrate(){const c=$('#celebration');c.replaceChildren();for(let i=0;i<54;i++){const el=document.createElement('span');el.className='particle';el.textContent=['✦','★','❖','✧'][i%4];el.style.left=(Math.random()*100)+'%';el.style.animationDelay=(Math.random()*.65)+'s';el.style.animationDuration=(1.7+Math.random()*1.8)+'s';c.append(el);}setTimeout(()=>c.replaceChildren(),4000)}
-function chime(){try{const ctx=new (window.AudioContext||window.webkitAudioContext)();[523.25,659.25,783.99,1046.5].forEach((f,i)=>{const osc=ctx.createOscillator(),g=ctx.createGain();osc.type='sine';osc.frequency.value=f;osc.connect(g);g.connect(ctx.destination);const t=ctx.currentTime+i*.12;g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(.12,t+.015);g.gain.exponentialRampToValueAtTime(.001,t+.33);osc.start(t);osc.stop(t+.34)});setTimeout(()=>ctx.close(),1500)}catch{}}
-const fmt=n=>Math.floor(n).toLocaleString('ja-JP');
-const stat=(label,value,foot,cls='')=>`<div class="card"><div class="metric-label">${label}</div><div class="metric-value ${cls}">${value}</div><div class="metric-foot">${foot}</div></div>`;
-function sparkline(points,id='chart'){const mn=Math.min(...points),mx=Math.max(...points),diff=Math.max(mx-mn,1);const xy=points.map((n,i)=>[i*600/(points.length-1),157-135*(n-mn)/diff]);const p=xy.map(([x,y])=>`${x.toFixed(1)},${y.toFixed(1)}`).join(' ');return `<div class="market-chart"><svg viewBox="0 0 600 180" preserveAspectRatio="none" role="img" aria-label="価格推移チャート"><defs><linearGradient id="fill-${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#66deb2" stop-opacity=".21"/><stop offset="1" stop-color="#66deb2" stop-opacity="0"/></linearGradient></defs>${[25,70,115,160].map(y=>`<line x1="0" y1="${y}" x2="600" y2="${y}" stroke="#344253" stroke-dasharray="3 5" opacity=".6"/>`).join('')}<polygon points="0,180 ${p} 600,180" fill="url(#fill-${id})"/><polyline points="${p}" fill="none" stroke="#66deb2" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/></svg></div>`}
-function home(){const arr=MARKET.map(s=>({s,value:state.prices[s.id],change:Math.round((state.prices[s.id]/state.history[s.id][0]-1)*1000)/10}));return `<div class="eyebrow">WELCOME TO THE MARKET</div><h1 class="page-title">限界集落の経済を動かそう。</h1><p class="subtitle">通話で稼ぎ、株で増やし、カジノで勝負する。ここでの財力は、Discordに残る称号や特典に変わる。</p><div class="metrics">${stat('総資産',fmt(assets(state))+'<small>KC</small>','現金 + 株式評価額')}${stat('現金残高',fmt(state.cash)+'<small>KC</small>','すぐに利用できる通貨','gold')}${stat('株式評価額',fmt(portfolioValue(state))+'<small>KC</small>',`${MARKET.filter(s=>state.holdings[s.id]>0).length}銘柄を保有`,'mint')}</div><div class="hero-grid"><section class="card"><div class="chart-head"><div><h3>KESO総合指数（試作）</h3><div class="sub">主要4銘柄の平均価格を元に計算</div></div><span class="pill green">SIMULATION</span></div><div style="font-size:29px;font-weight:800;margin-top:17px">${fmt(Math.round(MARKET.reduce((v,s)=>v+state.prices[s.id]/s.initialPrice*1000,0)/MARKET.length))}<span style="font-size:12px;color:var(--muted)"> INDEX</span></div>${sparkline(Array.from({length:Math.min(13, state.history.keso.length)},(_,i)=>MARKET.reduce((v,s)=>v+(state.history[s.id].slice(-13)[i] ?? state.prices[s.id])/s.initialPrice*1000,0)/MARKET.length).filter(Number.isFinite),'overview')}</section><section class="card"><div class="chart-head"><div><h3>通話給与</h3><div class="sub">VOICE REWARDS</div></div><span class="pill green">+600 KC</span></div><div class="salary"><span class="salary-icon">♫</span><div><h4>通話で稼ぐ、新しい経済。</h4><p>本番では既存Botが通話時間を計測し、給与を付与する。</p></div></div><button class="button full" data-action="salary">デモ給与を受け取る +600 KC</button><div class="notice">現在はテスト用ボタン。実際の通話時間は計測していない。</div></section></div><div class="section-head"><h2>注目の銘柄</h2><button class="button ghost" data-go="market">すべて見る ↗</button></div><section class="card" style="padding:8px 17px"><table class="list-table"><thead><tr><th>銘柄</th><th class="align-right">株価</th><th class="align-right">推移</th><th class="align-right">保有</th></tr></thead><tbody>${arr.map(({s,value,change})=>`<tr><td><div class="stock-cell"><span class="symbol">${s.icon}</span><span><strong>${s.name}</strong><small class="ticker">${s.ticker}</small></span></div></td><td class="align-right"><strong>${fmt(value)}</strong></td><td class="align-right ${change>=0?'mint':'red'}">${change>=0?'+':''}${change}%</td><td class="align-right">${state.holdings[s.id]}株</td></tr>`).join('')}</tbody></table></section><div class="section-head"><h2>次の遊び方</h2></div><div class="two-col"><div class="showcase"><div class="eyebrow">TRY YOUR LUCK</div><h3>運命のルーレット</h3><p>0〜36の抽選。赤・黒・偶数・奇数・数字への賭けが可能。1回100 KCから。</p><button class="button" data-go="casino" style="margin-top:20px">カジノに行く ↗</button></div><div class="showcase" style="background:linear-gradient(120deg,#322b20,#1e242b);border-color:#6a5740"><div class="eyebrow" style="color:var(--gold)">REDEEM REWARDS</div><h3>稼いだKCを使う</h3><p>称号、専用SE、祝砲、将来の専用VCやロールをチェック。</p><button class="button warn" data-go="shop" style="margin-top:20px">ポイント交換所 ↗</button></div></div>`}
-function market(){const s=MARKET.find(x=>x.id===symbol),cost=state.prices[s.id];const diff=cost-s.initialPrice;return `<div class="eyebrow">KESO STOCK EXCHANGE</div><h1 class="page-title">株式市場</h1><p class="subtitle">4つの架空企業に投資。価格はデモ内で1分ごとに変化する。売買手数料は1%。</p><div class="two-col"><div><div class="card"><div class="chart-head"><div><div class="tag">${s.ticker} · ${s.category}</div><h3 style="font-size:23px;margin-top:10px">${s.name}</h3></div><span class="pill ${diff>=0?'green':'red'}">${diff>=0?'+':''}${((diff/s.initialPrice)*100).toFixed(2)}%</span></div><div class="metric-value" style="margin-top:14px">${fmt(cost)}<small>KC / 株</small></div>${sparkline(state.history[s.id],s.id)}<div class="stat-line"><span>保有株数</span><strong>${state.holdings[s.id]} 株</strong></div><div class="stat-line"><span>評価額</span><strong>${money(state.holdings[s.id]*cost)}</strong></div></div><div class="section-head"><h2>銘柄一覧</h2><span class="hint">1分ごとに変動</span></div>${MARKET.map(v=>`<button class="item-stock ${v.id===symbol?'selected':''}" data-symbol="${v.id}"><div class="stock-cell"><span class="symbol">${v.icon}</span><span><strong>${v.name}</strong><small class="ticker">${v.ticker} · ${v.category}</small></span></div><strong>${fmt(state.prices[v.id])} KC</strong></button>`).join('')}</div><div><div class="card"><h3>取引注文</h3><p class="sub">株価は現在のデモ相場</p><div class="seg" style="margin-top:18px"><button data-side="buy" class="${side==='buy'?'selected':''}">買う</button><button data-side="sell" class="${side==='sell'?'selected':''}">売る</button></div><div class="field"><label>数量（株）</label><input id="order-qty" type="number" min="1" step="1" value="1" inputmode="numeric"></div><div class="stat-line"><span>1株あたり</span><strong>${money(cost)}</strong></div><div class="stat-line"><span>手数料</span><strong>1%</strong></div><div class="stat-line"><span>利用可能な現金</span><strong>${money(state.cash)}</strong></div><button class="button full" data-action="trade">${side==='buy'?'株式を購入':'株式を売却'} →</button><div class="notice">取引はブラウザ内の仮想売買。将来の本番版ではサーバー側で約定させる。</div></div><div class="section-head"><h2>最近の取引</h2></div><div class="event-feed">${state.trades.length?state.trades.slice(0,4).map(t=>`<div class="event-line"><div>${t.side==='buy'?'購入':'売却'} · ${MARKET.find(s=>s.id===t.symbol).ticker} ${t.quantity}株</div><small>${fmt(t.price)} KC/株</small></div>`).join(''):'<div class="card sub">まだ取引がない。</div>'}</div></div></div>`}
-function casino(){const recent=state.spins[0];return `<div class="eyebrow">KESO GRAND CASINO</div><h1 class="page-title">ルーレット</h1><p class="subtitle">選ぶのは運か、戦略か。架空KCのみを使うカジノの試作だ。現金との交換・課金はできない。</p><div class="casino-layout"><div class="card" style="text-align:center"><div class="chart-head"><div><h3>ROULETTE</h3><div class="sub">EUROPEAN · SINGLE ZERO</div></div><span class="pill green">0 — 36</span></div><div style="position:relative;max-width:300px;margin:15px auto"><span class="wheel-pointer"></span><div id="roulette-wheel" class="roulette-outer" style="transform:rotate(${rotation}deg)"><div class="roulette-center" id="roulette-center">${recent?recent.outcome:'K'}</div></div></div><div id="casino-result" class="result-banner">${recent?`${recent.payout>0?'<strong class="mint">WIN!':'<strong class="red">LOSE'} </strong><div>出目 ${recent.outcome} · ${recent.payout>0?'払戻 '+money(recent.payout):'残念、次の勝負へ'}</div>`:'<strong>PLACE YOUR BET</strong><div class="sub">賭け方を選んでスタート</div>'}</div><p class="sub" style="margin-top:16px">通常の赤黒・偶奇は的中時2倍、数字指定は36倍の払戻（賭け金を含む）。</p></div><div class="card"><div class="chart-head"><h3>BETTING DESK</h3><span class="tag">所持 ${money(state.cash)}</span></div><div class="casino-bets">${[{id:'red',text:'赤',cls:'red-opt'},{id:'black',text:'黒',cls:'black-opt'},{id:'even',text:'偶数'},{id:'odd',text:'奇数'},{id:'number',text:'数字を指定'}].map(b=>`<button class="bet-option ${b.cls||''} ${betType===b.id?'selected':''}" data-bet="${b.id}">${b.text}</button>`).join('')}</div><div class="field" id="number-field" style="${betType==='number'?'':'display:none'}"><label>賭ける数字（0〜36）</label><input id="roulette-number" type="number" min="0" max="36" value="7" inputmode="numeric"></div><div class="field"><label>賭け金（100〜20,000 KC）</label><input id="bet-amount" type="number" min="100" max="20000" step="100" value="500" inputmode="numeric"></div><button class="button full" data-action="spin" id="spin-button">ルーレットを回す ◈</button><div class="notice">試作版：結果はブラウザの暗号学的乱数で決定。本番ではサーバー側で抽選・記録・残高更新する。</div><div class="section-head"><h2>直近の結果</h2></div><div class="event-feed">${state.spins.length?state.spins.slice(0,5).map(r=>`<div class="event-line"><span>出目 <strong>${r.outcome}</strong> / ${r.type}</span><strong class="${r.payout>0?'mint':'red'}">${r.payout>0?'+':''}${fmt(r.payout-r.amount)} KC</strong></div>`).join(''):'<div class="sub">まだ抽選履歴がない。</div>'}</div></div></div>`}
-function shop(){return `<div class="eyebrow">REWARDS MARKET</div><h1 class="page-title">ポイント交換所</h1><p class="subtitle">金は使ってこそ価値がある。外観や演出を購入できる。Discordへの実際の付与はBot連携後に対応する。</p><div class="metrics">${stat('利用可能',fmt(state.cash)+'<small>KC</small>','現在の現金残高','gold')}${stat('獲得した景品',state.owned.length+'<small>点</small>','このブラウザ内で保存')}${stat('交換できる商品',SHOP.filter(s=>!state.owned.includes(s.id)&&s.price<=state.cash).length+'<small>点</small>','購入可能な商品数','mint')}</div><div class="section-head"><h2>交換商品</h2><span class="hint">試作商品価格</span></div><div class="shop-grid">${SHOP.map(s=>`<div class="card shop-item"><div class="shop-icon">${s.icon}</div><span class="tag" style="align-self:flex-start">${s.tier}</span><h3>${s.name}</h3><p>${s.detail}</p><div class="shop-bottom"><strong>${money(s.price)}</strong><button class="button ${state.owned.includes(s.id)?'ghost':''}" data-purchase="${s.id}" ${state.owned.includes(s.id)||state.cash<s.price?'disabled':''}>${state.owned.includes(s.id)?'所持中':state.cash<s.price?'KC不足':'交換する'}</button></div></div>`).join('')}</div><div class="notice">「専用VC」「金色ロール」「殿堂入り」は現在交換を記録するだけで、実際のDiscordサーバーには反映されない。Botとの安全な連携、権限、購入承認が必要だ。</div>`}
-function assetPage(){return `<div class="eyebrow">YOUR PORTFOLIO</div><h1 class="page-title">マイ資産</h1><p class="subtitle">あなたが所有している現金、株式、特典を一覧で確認できる。</p><div class="metrics">${stat('純資産',fmt(assets(state))+'<small>KC</small>','借入なし')}${stat('現金',fmt(state.cash)+'<small>KC</small>','ウォレット','gold')}${stat('保有株式',fmt(portfolioValue(state))+'<small>KC</small>','時価評価','mint')}</div><div class="section-head"><h2>保有銘柄</h2></div><div class="card" style="padding:8px 14px"><table class="list-table"><thead><tr><th>銘柄</th><th class="align-right">株数</th><th class="align-right">評価額</th></tr></thead><tbody>${MARKET.map(s=>`<tr><td><span class="symbol">${s.icon}</span>${s.name}</td><td class="align-right">${state.holdings[s.id]}</td><td class="align-right">${money(state.holdings[s.id]*state.prices[s.id])}</td></tr>`).join('')}</tbody></table></div><div class="section-head"><h2>所持特典</h2></div>${state.owned.length?`<div class="shop-grid">${state.owned.map(id=>SHOP.find(s=>s.id===id)).filter(Boolean).map(s=>`<div class="card"><div class="shop-icon">${s.icon}</div><h3 style="margin-top:14px">${s.name}</h3><p class="sub">${s.detail}</p></div>`).join('')}</div>`:'<div class="card"><p class="sub">まだ交換した特典はない。ポイント交換所で最初の景品を獲得しよう。</p></div>'}<div class="section-head"><h2>データ管理</h2></div><div class="card"><p class="sub">試作ではすべてのデータをこのブラウザのlocalStorageに保存。Discordやサーバーには共有していない。</p><button class="button ghost" data-action="reset" style="margin-top:15px">試作データを初期化</button></div>`}
-function render(){if(spinLock)return;advanceMarket(state);save();$('#page-breadcrumb').textContent=pages[page];document.querySelectorAll('[data-go]').forEach(btn=>btn.classList.toggle('active',btn.dataset.go===page));$('#main').className='page';$('#main').innerHTML=({home,market,casino,shop,assets:assetPage})[page]();}
-function go(p){if(spinLock)return;if(!pages[p])return;page=p;render();window.scrollTo({top:0,behavior:'smooth'});}
-document.addEventListener('click',async e=>{const btn=e.target.closest('button,[data-go]');if(!btn)return;if(btn.dataset.go){e.preventDefault();go(btn.dataset.go);return;}if(btn.dataset.symbol){symbol=btn.dataset.symbol;render();return;}if(btn.dataset.side){side=btn.dataset.side;render();return;}if(btn.dataset.bet){betType=btn.dataset.bet;render();return;}try{
-if(btn.dataset.action==='salary'){grantDemoSalary(state);save();render();toast('デモ給与 +600 KC を獲得');}
-if(btn.dataset.action==='trade'){const qty=Number($('#order-qty').value);const s=MARKET.find(s=>s.id===symbol);const action=side;trade(state,symbol,side,qty);save();render();toast(`${s.name}を${qty}株${action==='buy'?'購入':'売却'}した`);}
-if(btn.dataset.purchase){const reward=buyReward(state,btn.dataset.purchase);save();render();toast(`${reward.name}を獲得！`);celebrate();if(['fanfar','firework','gold'].includes(reward.id))chime();}
-if(btn.dataset.action==='reset'){if(!confirm('このブラウザの試作データを初期化する？（元に戻せない）'))return;localStorage.removeItem(KEY);state=hydrateState(null);render();toast('デモを初期化した');}
-if(btn.dataset.action==='spin'){if(spinLock)return;const amount=Number($('#bet-amount').value),choice=betType==='number'?Number($('#roulette-number').value):0;const outcome=cryptoRouletteNumber();if(!Number.isSafeInteger(amount)||amount<100||amount>20000)throw new Error('賭け額は100〜20,000 KC');if(state.cash<amount)throw new Error('所持KCが不足している');if(betType==='number'&&(!Number.isInteger(choice)||choice<0||choice>36))throw new Error('数字は0〜36で指定');spinLock=true;const wheel=$('#roulette-wheel');$('#spin-button').disabled=true;rotation += 1440+Math.floor(Math.random()*360);wheel.style.transform=`rotate(${rotation}deg)`;$('#roulette-center').textContent='?';setTimeout(()=>{try{const r=spin(state,betType,amount,choice,outcome);save();spinLock=false;render();toast(r.payout>0?`的中！ ${money(r.payout)}を払い戻し`:`出目 ${outcome} / ${money(amount)} を失った`);if(r.payout>0){celebrate();chime()}}catch(err){spinLock=false;render();toast(err.message,true)}},2200);}
-}catch(err){toast(err.message||'操作に失敗',true)}});
-render();setInterval(()=>{if(!spinLock && advanceMarket(state)){save();render()}},15000);
 
-</script>
-</body></html>
+const KEY='keso-exchange-v0.2';
+const LEGACY_KEY='keso-exchange-prototype-v1';
+const $=(s,el=document)=>el.querySelector(s);
+const $$=(s,el=document)=>[...el.querySelectorAll(s)];
+const fmt=(n,d=2)=>Number(n).toLocaleString('ja-JP',{minimumFractionDigits:d,maximumFractionDigits:d});
+const fmt0=(n)=>Number(n).toLocaleString('ja-JP');
+const yenTime=(h,m)=>`10/24 ${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+
+let state=hydrateState(load());
+let screen='market';
+let marketTab='indices';
+let marketMode='indices';
+let activeSymbol=MARKET[0].id;
+let tradeSide='buy';
+let betType='red';
+let rotation=0;
+let spinLock=false;
+let detail=null;
+
+// SBI screenshot-inspired display sample. Every index quotation below is static mock data, NOT live prices.
+const INDEXES=[
+  {id:'nikkei',name:'日経平均',value:62693.16,change:-214.68,pct:-0.34,time:'10/23 15:45',country:''},
+  {id:'topix',name:'TOPIX',value:3965.81,change:31.69,pct:0.79,time:'10/23 15:30',country:''},
+  {id:'fut',name:'日経平均先物',value:62640.00,change:-270.00,pct:-0.43,time:'10/24 06:00',country:''},
+  {id:'cme',name:'CME日経平均先物',value:62650.00,change:-30.00,pct:-0.05,time:'10/23 17:00',country:''},
+  {id:'top20',name:'東証スタンダード市場TOP20',value:1534.29,change:-8.87,pct:-0.57,time:'10/23 15:30',country:''},
+  {id:'core',name:'東証グロース市場Core',value:841.57,change:1.89,pct:0.23,time:'10/23 15:30',country:''},
+  {id:'usd',name:'米ドル/円',value:156.86,change:0.10,pct:0.06,time:'10/24 05:59',country:'🇺🇸🇯🇵'},
+  {id:'eur',name:'ユーロ/円',value:175.70,change:-0.11,pct:-0.06,time:'10/24 05:59',country:'🇪🇺🇯🇵'},
+  {id:'growth250',name:'グロース250指数',value:754.60,change:1.33,pct:0.18,time:'10/23 15:30',country:''},
+  {id:'shanghai',name:'上海総合',value:3690.48,change:32.45,pct:0.89,time:'10/23 15:00',country:''},
+  {id:'hang',name:'香港ハンセン',value:23093.37,change:158.69,pct:0.69,time:'10/23 16:08',country:''},
+  {id:'ny',name:'NYダウ',value:52215.16,change:-652.82,pct:-1.23,time:'10/23 16:42',country:''}
+];
+
+// Sample headlines: fictitious, generated locally, never passed off as an actual news feed.
+const NEWS=[
+  {tag:'相場',time:'07:05',title:'寄り前の先物は小安いスタート',copy:'海外指数は強弱まちまち。朝方は大型株の気配を見ながらのスタートになりそう。'},
+  {tag:'個別',time:'06:48',title:'ゆーやエンタメに買いが続く',copy:'直近の大当たり演出強化が好感され、値動きは引き続き大きい。'},
+  {tag:'為替',time:'06:31',title:'ドル円は156円台後半',copy:'朝方は大きな方向感なし。高値圏での推移が続いている。'},
+  {tag:'市況',time:'05:58',title:'今日の注目は指数寄与度の高い銘柄',copy:'値がさ株の初動しだいで、日経平均の見え方が大きく変わる場面。'}
+];
+
+const app=$('#app');
+const toastEl=document.createElement('div');toastEl.className='toast';document.body.appendChild(toastEl);
+
+function load(){try{return JSON.parse(localStorage.getItem(KEY)||localStorage.getItem(LEGACY_KEY)||'null')}catch{return null}}
+function save(){localStorage.setItem(KEY,JSON.stringify(state))}
+function toast(msg){toastEl.textContent=msg;toastEl.classList.add('show');clearTimeout(toastEl._t);toastEl._t=setTimeout(()=>toastEl.classList.remove('show'),1800)}
+function clsByChange(v){return v>0?'positive':v<0?'negative':'neutral'}
+function arrow(v){return v>0?'↑':v<0?'↓':'→'}
+function moneyCompact(n){return fmt0(Math.floor(n))+' KC'}
+
+function playerRows(){
+  return MARKET.map(s=>{
+    const price=state.prices[s.id];
+    const prev=(state.history[s.id].at(-2)??s.initialPrice);
+    const diff=price-prev;const pct=(diff/prev)*100;
+    return {id:s.id,name:s.name,code:s.ticker,value:price,change:diff,pct,time:'更新',country:'',holding:state.holdings[s.id],category:s.category};
+  }).sort((a,b)=>b.value-a.value);
+}
+
+function linePath(points,w,h,pad=10){
+  const min=Math.min(...points),max=Math.max(...points); const range=(max-min)||1;
+  return points.map((v,i)=>`${i===0?'M':'L'} ${pad + (i*(w-pad*2)/(points.length-1))} ${h-pad-((v-min)/range)*(h-pad*2)}`).join(' ');
+}
+
+function genCandles(base,id){
+  const out=[];let close=base*0.98;let seed=id.split('').reduce((a,c)=>a+c.charCodeAt(0),0)+77;
+  const rand=()=>{seed=(seed*1664525+1013904223)>>>0;return seed/4294967296};
+  for(let i=0;i<46;i++){
+    const open=close + (rand()-.5)*base*0.035;
+    close=Math.max(base*0.78,Math.min(base*1.18, open + (rand()-.5)*base*0.07));
+    const high=Math.max(open,close)+rand()*base*0.03;
+    const low=Math.min(open,close)-rand()*base*0.03;
+    const vol=150000+Math.floor(rand()*130000);
+    const date=new Date(Date.now()-(45-i)*86400000);const label=`${String(date.getMonth()+1).padStart(2,'0')}/${String(date.getDate()).padStart(2,'0')}`;
+    out.push({open,high,low,close,vol,date:label});
+  }
+  out[out.length-1].close=base;
+  out[out.length-1].high=Math.max(out[out.length-1].high,base+base*0.012);
+  out[out.length-1].low=Math.min(out[out.length-1].low,base-base*0.012);
+  return out;
+}
+
+function movingAverage(data,n,idx){
+  return data.map((_,i)=>{
+    const start=Math.max(0,i-n+1); const slice=data.slice(start,i+1).map(v=>v.close);
+    return slice.reduce((a,b)=>a+b,0)/slice.length;
+  });
+}
+
+function svgCandles(data,w=660,h=560){
+  const pad={t:22,r:70,b:36,l:18};
+  const plotW=w-pad.l-pad.r, plotH=h-pad.t-pad.b;
+  const max=Math.max(...data.map(d=>d.high));
+  const min=Math.min(...data.map(d=>d.low));
+  const range=max-min||1;
+  const y=v=>pad.t + (max-v)/range*plotH;
+  const step=plotW/data.length;
+  const body=Math.max(6,step*.56);
+  const ma5=movingAverage(data,5), ma10=movingAverage(data,10), ma25=movingAverage(data,25);
+  const maPath=(arr)=>arr.map((v,i)=>`${i?'L':'M'} ${pad.l+step*i+step/2} ${y(v)}`).join(' ');
+  const gridY=[0,.25,.5,.75,1].map(r=>min+(range*(1-r)));
+  const labelsY=gridY.map(v=>Math.round(v/10)*10);
+  const lowIdx=data.reduce((m,v,i)=>v.low<data[m].low?i:m,0);
+  const highIdx=data.reduce((m,v,i)=>v.high>data[m].high?i:m,0);
+  return `
+  <svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" role="img" aria-label="デモ相場のローソク足チャート">
+    <rect x="0" y="0" width="${w}" height="${h}" fill="#02091f"/>
+    ${labelsY.map(v=>`<g><line x1="${pad.l}" x2="${pad.l+plotW}" y1="${y(v)}" y2="${y(v)}" stroke="#263759" stroke-width="1"/><text x="${w-8}" y="${y(v)+5}" text-anchor="end" fill="#eef3ff" font-size="14">${fmt0(v)}</text></g>`).join('')}
+    ${[0,15,30,45].map(i=>`<g><line x1="${pad.l+step*i+step/2}" x2="${pad.l+step*i+step/2}" y1="${pad.t}" y2="${pad.t+plotH}" stroke="#263759" stroke-width="1"/><text x="${pad.l+step*i+step/2}" y="${h-8}" text-anchor="middle" fill="#eef3ff" font-size="14">${data[i].date}</text></g>`).join('')}
+    <path d="${maPath(ma5)}" fill="none" stroke="#f0db33" stroke-width="2.5"/>
+    <path d="${maPath(ma10)}" fill="none" stroke="#ff7a32" stroke-width="2.5"/>
+    <path d="${maPath(ma25)}" fill="none" stroke="#59d3ff" stroke-width="2.5"/>
+    ${data.map((c,i)=>{
+      const x=pad.l+step*i+step/2;const color=c.close>=c.open?'#15d13f':'#ff5b52';
+      const yOpen=y(c.open), yClose=y(c.close), yHigh=y(c.high), yLow=y(c.low);
+      const top=Math.min(yOpen,yClose), bottom=Math.max(yOpen,yClose), height=Math.max(3,bottom-top);
+      return `<g><line x1="${x}" x2="${x}" y1="${yHigh}" y2="${yLow}" stroke="${color}" stroke-width="2"/><rect x="${x-body/2}" y="${top}" width="${body}" height="${height}" fill="${color}" rx="1.5"/></g>`;
+    }).join('')}
+    <line x1="${pad.l}" x2="${pad.l+plotW}" y1="${y(data.at(-1).close)}" y2="${y(data.at(-1).close)}" stroke="#d7bb22" stroke-width="2" stroke-dasharray="10 8"/>
+    <rect x="${w-85}" y="${y(data.at(-1).close)-14}" width="78" height="28" rx="8" fill="#d3a800"/>
+    <text x="${w-46}" y="${y(data.at(-1).close)+6}" text-anchor="middle" fill="#111" font-size="18" font-weight="700">${fmt(data.at(-1).close)}</text>
+    <text x="${pad.l+step*highIdx+10}" y="${y(data[highIdx].high)-10}" fill="#fff" font-size="16">${fmt(data[highIdx].high)}</text>
+    <text x="${pad.l+step*lowIdx+10}" y="${y(data[lowIdx].low)-8}" fill="#fff" font-size="16">${fmt(data[lowIdx].low)}</text>
+  </svg>`;
+}
+
+function renderRow(item){
+  const changeClass=clsByChange(item.change);
+  const sign=item.change>0?'+':'';
+  return `<div class="row touch" data-open="${item.id}" data-kind="${item.kind||'index'}">
+    <div><div class="label">${item.country?`<span class="flag">${item.country}</span>`:''}${item.name}</div></div>
+    <div>
+      <div class="value ${changeClass}">${fmt(item.value)}</div>
+      <span class="timestamp">${item.time}</span>
+    </div>
+    <div>
+      <div class="arrow ${changeClass}">${arrow(item.change)}</div>
+      <div class="delta ${changeClass}">${sign}${fmt(item.change)}<br>${sign}${fmt(item.pct)}%</div>
+    </div>
+  </div>`;
+}
+
+function screenMarket(){
+  const rows=marketMode==='indices' ? INDEXES.map(v=>({...v,kind:'index'})) : playerRows().map(v=>({...v,kind:'stock'}));
+  const body = marketTab==='indices'
+    ? `<div class="sub-tabs"><button class="sub-tab ${marketMode==='indices'?'active':''}" data-market-mode="indices">主要指数</button><button class="sub-tab ${marketMode==='stocks'?'active':''}" data-market-mode="stocks">銘柄</button></div><div class="list">${rows.map(renderRow).join('')}</div>`
+    : marketTab==='news'
+      ? `<div class="panel">${NEWS.map(n=>`<div class="news-item"><div class="news-head"><span class="news-tag">${n.tag}</span><span class="news-time">${n.time}</span></div><p class="news-title">${n.title}</p><p class="news-copy">${n.copy}</p></div>`).join('')}</div>`
+      : marketTab==='ranking'
+        ? `<div class="panel"><div class="panel-head"><div class="panel-title">騰落率ランキング</div><span class="badge">更新中</span></div>${playerRows().sort((a,b)=>((b.change/(b.value-b.change||1))-(a.change/(a.value-a.change||1)))).map((r,i)=>`<div class="rank-row" data-open="${r.id}" data-kind="stock"><div class="rank-no">${i+1}</div><div><div class="stock-name">${r.name}</div><div class="stock-code">${r.code} ・ ${r.category}</div></div><div class="value ${clsByChange(r.change)}" style="font-size:23px">${fmt(r.value,0)}</div><div class="delta ${clsByChange(r.change)}">${r.change>0?'+':''}${fmt((r.change/Math.max(1,r.value-r.change))*100)}%</div></div>`).join('')}</div>`
+        : `<div class="metric-grid">${[
+            ['現金残高', moneyCompact(state.cash),'使用可能'],
+            ['株式評価額', moneyCompact(portfolioValue(state)),'保有銘柄合計'],
+            ['純資産', moneyCompact(assets(state)),'現金＋株式'],
+            ['保有銘柄数', fmt0(MARKET.filter(s=>state.holdings[s.id]>0).length),'0を含まない']
+          ].map(v=>`<div class="metric-card"><div class="metric-name">${v[0]}</div><div class="metric-main">${v[1]}</div><div class="metric-note">${v[2]}</div></div>`).join('')}</div>
+           <div class="panel"><div class="panel-head"><div class="panel-title">最近の売買</div></div><div class="card-body">${state.trades.length?state.trades.slice(0,6).map(t=>{const s=MARKET.find(v=>v.id===t.symbol);return `<div class="asset-line"><span>${s.name} ${t.quantity}株 ${t.side==='buy'?'買付':'売却'}</span><strong>${moneyCompact(t.price*t.quantity)}</strong></div>`}).join(''):'<div class="helper">まだ取引はありません。</div>'}</div></div>`;
+
+  return `
+  <div class="screen">
+    <header class="topbar">
+      <div class="toprow">
+        <h1 class="title">マーケット</h1>
+        <div class="small-actions">
+          <span class="mock-tag">DEMO</span>
+          <button class="top-order" data-screen="assets">注文照会</button>
+        </div>
+      </div>
+      <div class="top-tabs">
+        <button class="top-tab ${marketTab==='indices'?'active':''}" data-market-tab="indices">主要指標</button>
+        <button class="top-tab ${marketTab==='news'?'active':''}" data-market-tab="news">ニュース</button>
+        <button class="top-tab ${marketTab==='ranking'?'active':''}" data-market-tab="ranking">ランキング</button>
+        <button class="top-tab ${marketTab==='overview'?'active':''}" data-market-tab="overview">市場概況</button>
+      </div>
+    </header>
+    <div class="market-disclaimer">仮想取引デモ ｜ 指数・ニュースはサンプル表示 ｜ 実際の金融市場とは連動しない</div>
+    ${body}
+    ${bottomNav()}
+  </div>`;
+}
+
+function tradePanel(){
+  const s=MARKET.find(v=>v.id===activeSymbol);
+  return `<div class="trade-box"><h3>注文</h3><div class="segment"><button data-trade-side="buy" class="${tradeSide==='buy'?'active':''}">買う</button><button data-trade-side="sell" class="${tradeSide==='sell'?'active':''}">売る</button></div><div class="field"><label>銘柄</label><select class="select" id="trade-symbol">${MARKET.map(v=>`<option value="${v.id}" ${v.id===activeSymbol?'selected':''}>${v.name}</option>`).join('')}</select></div><div class="field"><label>数量（株）</label><input id="trade-qty" class="input" type="number" min="1" value="1"></div><div class="field"><label>現在値</label><input class="input mono" value="${fmt0(state.prices[s.id])} KC" disabled></div><div class="action-row"><button class="action-btn primary" data-action="trade">${tradeSide==='buy'?'買付':'売却'}</button></div></div>`;
+}
+
+function screenCasino(){
+  const recent=state.spins[0];
+  return `<div class="screen"><header class="topbar"><div class="toprow"><h1 class="title">カジノ</h1><div class="small-actions"><span class="badge">所持 ${moneyCompact(state.cash)}</span></div></div></header><div class="center-panel"><div style="position:relative;width:min(320px,86vw);margin:0 auto 18px"><div class="pointer"></div><div class="roulette-board" id="wheel" style="transform:rotate(${rotation}deg)"><div class="roulette-center">${recent?recent.outcome:'K'}</div></div></div></div><div class="bet-grid">${[['red','赤'],['black','黒'],['even','偶数'],['odd','奇数'],['number','数字指定']].map(([id,label])=>`<button data-bet="${id}" class="${betType===id?'active':''}">${label}</button>`).join('')}</div><div class="trade-box"><h3>ベット</h3>${betType==='number'?`<div class="field"><label>数字（0〜36）</label><input id="bet-number" class="input" type="number" min="0" max="36" value="7"></div>`:''}<div class="field"><label>賭け金</label><input id="bet-amount" class="input" type="number" min="100" step="100" value="500"></div><div class="action-row"><button class="action-btn primary" data-action="spin" ${spinLock?'disabled':''}>ルーレットを回す</button></div></div><div class="result-panel"><p class="result-title ${recent && recent.payout>0?'negative':recent?'positive':''}">${recent ? (recent.payout>0?'的中':'不的中') : '直近結果'}</p><div class="helper">${recent ? `出目 ${recent.outcome} / 賭け ${moneyCompact(recent.amount)} / 払戻 ${moneyCompact(recent.payout)}` : 'まだ抽選履歴はありません。'}</div></div>${bottomNav()}</div>`;
+}
+
+function screenShop(){
+  return `<div class="screen"><header class="topbar"><div class="toprow"><h1 class="title">交換所</h1><div class="small-actions"><span class="badge">${moneyCompact(state.cash)}</span></div></div></header><div class="market-disclaimer">景品はこの端末にのみ記録。Discordロール・VCにはまだ反映されない</div><div class="inventory-grid">${SHOP.map(item=>`<div class="item-card"><div class="item-icon">${item.icon}</div><div class="item-name">${item.name}</div><div class="item-desc">${item.detail}</div><div class="item-price">${moneyCompact(item.price)}</div><button class="item-btn" data-buy="${item.id}" ${state.cash<item.price||state.owned.includes(item.id)?'disabled':''}>${state.owned.includes(item.id)?'交換済み':state.cash<item.price?'KC不足':'交換する'}</button></div>`).join('')}</div>${bottomNav()}</div>`;
+}
+
+function screenAssets(){
+  return `<div class="screen"><header class="topbar"><div class="toprow"><h1 class="title">資産</h1><div class="small-actions"><button class="icon-btn" data-action="reset" aria-label="初期化">↺</button></div></div></header><div class="wallet-strip"><div class="wallet-item"><small>現金</small><strong>${moneyCompact(state.cash)}</strong></div><div class="wallet-item"><small>株式評価額</small><strong>${moneyCompact(portfolioValue(state))}</strong></div><div class="wallet-item"><small>純資産</small><strong>${moneyCompact(assets(state))}</strong></div></div><div class="market-disclaimer">端末内の仮想口座。通話時間計測・他ユーザーとの共有は未対応</div><div class="action-row"><button class="action-btn" data-action="salary">デモ給与 +600 KC</button></div><div class="asset-list"><div class="asset-card"><div class="panel-title" style="margin-bottom:10px">保有銘柄</div>${MARKET.map(s=>`<div class="asset-line"><span>${s.name}</span><strong>${state.holdings[s.id]}株 / ${moneyCompact(state.holdings[s.id]*state.prices[s.id])}</strong></div>`).join('')}</div><div class="asset-card"><div class="panel-title" style="margin-bottom:10px">交換済み</div>${state.owned.length?state.owned.map(id=>{const item=SHOP.find(v=>v.id===id);return `<div class="asset-line"><span>${item.name}</span><strong>${item.tier}</strong></div>`}).join(''):'<div class="helper">まだありません。</div>'}</div>${tradePanel()}</div>${bottomNav()}</div>`;
+}
+
+function bottomNav(){
+  const items=[['market','🌐','マーケット'],['casino','★','カジノ'],['shop','▤','交換所'],['assets','⌕','資産']];
+  return `<nav class="bottom-nav"><div class="bottom-inner">${items.map(([id,ico,label])=>`<button class="nav-btn ${screen===id?'active':''}" data-screen="${id}"><span class="ico">${ico}</span><span>${label}</span></button>`).join('')}</div></nav>`;
+}
+
+function openDetail(kind,id){detail={kind,id};render();}
+function closeDetail(){detail=null;render();}
+
+function detailSheet(){
+  if(!detail) return '';
+  const item=detail.kind==='stock'
+    ? (()=>{const s=MARKET.find(v=>v.id===detail.id); const prev=state.history[s.id].at(-2)||s.initialPrice; const diff=state.prices[s.id]-prev; return {name:s.name, value:state.prices[s.id], change:diff, pct:(diff/prev)*100, time:new Date().toLocaleDateString('ja-JP'), data:genCandles(state.prices[s.id],s.id)};})()
+    : (()=>{const x=INDEXES.find(v=>v.id===detail.id);return {name:x.name,value:x.value,change:x.change,pct:x.pct,time:'サンプル',data:genCandles(x.value,x.id)}})();
+  const c=item.data.at(-1), ma5=movingAverage(item.data,5).at(-1), ma10=movingAverage(item.data,10).at(-1), ma25=movingAverage(item.data,25).at(-1);
+  return `<div class="modal" id="modal"><div class="sheet"><div class="sheet-header"><h2 class="sheet-title">${item.name}</h2><button class="icon-btn" data-close="1">◌</button></div><div class="chart-toolbar"><select class="dropdown"><option>日足</option></select><button class="toolbar-chip">価格帯別出来高</button><div style="margin-left:auto;display:flex;gap:10px"><button class="toolbar-chip">▦</button><button class="toolbar-chip">✎</button></div></div><div class="chart-stats"><div class="stat">高値 <strong>${fmt(c.high)}</strong><br>安値 <strong>${fmt(c.low)}</strong></div><div class="stat">始値 <strong>${fmt(c.open)}</strong><br>終値 <strong>${fmt(c.close)}</strong></div><div class="stat">出来高 <strong>${fmt0(c.vol)}</strong><br>日時 <strong>${item.time}</strong></div></div><div class="chart-legend"><span class="legend-short">短期:${fmt(ma5)}</span><span class="legend-mid">中期:${fmt(ma10)}</span><span class="legend-long">長期:${fmt(ma25)}</span></div><div class="chart-note">表示価格・日足・移動平均線はデモ用の疑似データ</div><div class="candle-wrap"><div class="chart-panel">${svgCandles(item.data)}</div></div>${detail.kind==='stock' ? `<div class="depth-section"><div class="depth-head"><strong>板情報</strong><small>参考気配・疑似注文</small></div><div class="depth-label"><span>売数量</span><span>気配（KC）</span><span>買数量</span></div>${Array.from({length:7},(_,i)=>{const level=3-i;const price=Math.max(1,Math.round(item.value+level));const ask=level>0;const bid=level<0;const aVol=(31+i*13)%79+8,bVol=(43+i*17)%83+9;return `<div class="depth-row"><span class="ask">${ask?fmt0(aVol*10):''}</span><strong>${fmt0(price)}</strong><span class="bid">${bid?fmt0(bVol*10):''}</span></div>`}).join('')}</div><div class="action-row"><button class="action-btn primary" data-order-symbol="${detail.id}">この銘柄を注文</button></div>`:''}<div class="close-row"><button class="close-btn" data-close="1">閉じる</button></div></div></div>`;
+}
+
+function render(){
+  advanceMarket(state); save();
+  const html = screen==='market'?screenMarket():screen==='casino'?screenCasino():screen==='shop'?screenShop():screenAssets();
+  app.innerHTML = html + detailSheet();
+}
+
+function doTrade(){
+  const symbol=$('#trade-symbol')?.value || activeSymbol; const qty=Number($('#trade-qty')?.value||1);
+  activeSymbol=symbol; trade(state,symbol,tradeSide,qty); save(); render(); toast(`${MARKET.find(v=>v.id===symbol).name}を${tradeSide==='buy'?'買付':'売却'}した`);
+}
+function doSpin(){
+  if(spinLock) return;
+  const amount=Number($('#bet-amount')?.value);
+  const choice=betType==='number'?Number($('#bet-number')?.value):0;
+  if(!Number.isSafeInteger(amount) || amount<100 || amount>20000 || amount>state.cash) throw new Error('賭け額は100〜20,000 KC（所持金以内）');
+  if(betType==='number' && (!Number.isInteger(choice)||choice<0||choice>36)) throw new Error('数字は0〜36で指定');
+  const lockedType=betType;
+  const outcome=cryptoRouletteNumber(); spinLock=true;
+  const wheel=$('#wheel');
+  const button=$('[data-action="spin"]'); if(button) button.disabled=true;
+  rotation += 1440 + Math.floor(Math.random()*360);
+  if(wheel) {wheel.style.transition='transform 1.8s cubic-bezier(.15,.82,.14,1)';wheel.style.transform=`rotate(${rotation}deg)`;}
+  setTimeout(()=>{try{
+      const r=spin(state,lockedType,amount,choice,outcome);
+      spinLock=false; save(); render(); toast(r.payout>0?`的中 ${moneyCompact(r.payout)}`:`出目 ${r.outcome}`);
+    }catch(err){spinLock=false;render();toast(err.message)}
+  },1800);
+}
+
+addEventListener('click',e=>{
+  const t=e.target.closest('button,[data-open]'); if(!t) return;
+  try{
+    if(t.dataset.screen){if(spinLock){toast('抽選中は画面を切り替えられません');return;}detail=null;screen=t.dataset.screen;render();return;}
+    if(t.dataset.marketTab){marketTab=t.dataset.marketTab;render();return;}
+    if(t.dataset.marketMode){marketMode=t.dataset.marketMode;render();return;}
+    if(t.dataset.open){openDetail(t.dataset.kind,t.dataset.open);return;}
+    if(t.dataset.orderSymbol){activeSymbol=t.dataset.orderSymbol;detail=null;screen='assets';render();return;}
+    if(t.dataset.close){closeDetail();return;}
+    if(t.dataset.tradeSide){tradeSide=t.dataset.tradeSide;render();return;}
+    if(t.dataset.bet){betType=t.dataset.bet;render();return;}
+    if(t.dataset.action==='salary'){grantDemoSalary(state);save();render();toast('デモ給与 +600 KC');return;}
+    if(t.dataset.action==='trade'){doTrade();return;}
+    if(t.dataset.action==='spin'){doSpin();return;}
+    if(t.dataset.action==='reset'){if(confirm('データを初期化しますか？')){localStorage.removeItem(KEY);state=createInitialState();render();toast('初期化した')}return;}
+    if(t.dataset.buy){const item=buyReward(state,t.dataset.buy);save();render();toast(`${item.name}を交換した`);return;}
+  }catch(err){toast(err.message||'操作に失敗した');}
+});
+
+addEventListener('change',e=>{if(e.target.id==='trade-symbol'){activeSymbol=e.target.value; render();}})
+setInterval(()=>{if(!spinLock && advanceMarket(state)){save();if(!detail)render();}},15000);
+render();</script>
+</body>
+</html>
