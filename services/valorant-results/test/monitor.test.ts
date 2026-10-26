@@ -1,4 +1,4 @@
-import { commentPools } from '../src/comments.ts';
+import { commentPools, memeQuotes } from '../src/comments.ts';
 import configuredPlayers from '../players.json' with { type: 'json' };
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -273,7 +273,12 @@ test('three and five losses switch taunts, override performance teasing, and sta
       await monitor(env, [{ riotId: 'player#JP1' }]);
       const content = deliveries.at(-1)!;
       assert.equal((content.match(/💬/g) ?? []).length, 1);
-      if (n >= 3) assert.match(content.split('\n💬 ')[1], new RegExp(n + '連敗'));
+      if (n >= 3) {
+        assert.match(content, new RegExp('現在：' + n + '連敗'));
+        const group = n >= 5 ? 'long_losing_streak' : 'losing_streak';
+        const comment = content.split('\n💬 ')[1];
+        assert.ok(commentPools[group].some(line => line.replaceAll('{streak}', String(n)) === comment));
+      }
     }
     games = [match('loss-six', 'competitive', false, base + 6000), ...games].slice(0, 2);
     failures = 1;
@@ -1229,7 +1234,7 @@ test('all outcome comment pools are populated, short, unique and safe for Discor
       assert.ok(line.trim().length > 0 && [...line].length <= 120, kind);
       assert.doesNotMatch(line, /[\r\n]|@everyone|@here|<@|https?:\/\//);
       assert.doesNotMatch(line.replaceAll('{streak}', '5'), /[{}]/);
-      if (kind.includes('streak')) assert.match(line, /\{streak\}/);
+      if (kind.includes('streak') && !memeQuotes.some(quote => quote.text === line)) assert.match(line, /\{streak\}/);
     }
   }
 });
