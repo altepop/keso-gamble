@@ -61,13 +61,13 @@ export async function prepareLiveSettings(directory,env=process.env,request=fetc
   const base=`https://api.cloudflare.com/client/v4/accounts/${account}/workers/scripts/${worker}`;
   async function get(path,json=true) {
     const response=await request(base+path,{headers:{Authorization:`Bearer ${token}`},signal:AbortSignal.timeout(30000)});
-    if (!response.ok) throw Error(`Cloudflare read failed (${response.status}); check token permissions and target account`);
+    if (!response.ok) throw Error(`Cloudflare read failed (${response.status}) at ${path}; check token permissions and target account`);
     if (!json) return response;
     const body=await response.json();if(!body.success || !body.result) throw Error('Cloudflare did not return usable live settings');return body.result;
   }
   const settings=await get('/settings');
   const scheduleResult=await get('/schedules');
-  const content=await get('/content',false);
+  const content=await get('/content/v2',false);
   let sources=[];
   if (content.headers.get('content-type')?.includes('multipart/form-data')) {
     const form=await content.formData();
