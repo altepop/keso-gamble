@@ -46,7 +46,7 @@ test('winner flags and opaque team IDs produce the requested chat messages', () 
   assert.match(loss.message, /\n💬 .+/);
   assert.equal(resultMessage(match('2', 'ggteam', false), 'user-1', 'はなこ')!.message, loss.message);
   assert.ok(new Set(Array.from({ length: 32 }, (_, n) => resultMessage(match('loss-' + n, 'competitive', false), 'user-1', 'name')!.message)).size > 1);
-  assert.equal(resultMessage(match('3', 'hurm'), 'user-1', 'name'), null);
+  assert.match(resultMessage(match('3', 'hurm'), 'user-1', 'name')!.message,/チームデスマッチ/);
   const draw = match('4'); draw.teams.forEach(t => { t.won = false; });
   assert.equal(resultMessage(draw, 'user-1', 'name')?.outcome, 'draw');
   const incomplete = match('5'); incomplete.metadata.is_completed = false;
@@ -644,7 +644,7 @@ test('death-unrated sends a player to competitive for any one condition, even af
   }
   safe.players[0].stats.kills = safe.players[0].stats.deaths;
   assert.equal(deathUnratedVerdict(safe, 'user-1').negativeKD, false);
-  assert.equal(resultMessage(safe, 'user-1', 'プレイヤーA'), null, 'Unrated is opt-in at the result renderer');
+  assert.doesNotMatch(resultMessage(safe, 'user-1', 'プレイヤーA')!.message,/デスアンレ|コンペ行き/);
 });
 
 test('last-death uses the final round and own teammates, independent of kill-list order and opposing deaths', async () => {
@@ -744,7 +744,7 @@ function deathInteraction(id: string, action: string, targets: string[] = []) {
   };
 }
 
-test('ordinary unrated is excluded; a reservation consumes only the first match, and later ordinary unrated stays excluded', async () => {
+test('ordinary unrated is monitored separately; only the first reserved match gets a death verdict', async () => {
   const { runDeathCommand } = await import('../src/discord-interactions.ts');
   const env = environment(); const original = globalThis.fetch; const clock = Date.now;
   let now = Date.now(); Date.now = () => now;
@@ -758,16 +758,16 @@ test('ordinary unrated is excluded; a reservation consumes only the first match,
     messages.push(JSON.parse(String(init?.body)).content); return Response.json({ id: '123' });
   };
   try {
-    await monitor(env, config); assert.equal(messages.length, 0);
+    await monitor(env, config); assert.equal(messages.length, 1);assert.doesNotMatch(messages[0],/デスアンレ|旧版の誤対象/);
     await runDeathCommand(env.DB, deathInteraction('1', 'start', ['one#JP1']), config);
-    await monitor(env, config); assert.equal(messages.length, 0, 'A match already underway or completed before start cannot be captured');
+    await monitor(env, config); assert.equal(messages.length, 1, 'A previously monitored match cannot become a death verdict');
     now += 60_000;
     const first = unratedMatch('reserved-first');
     now += 60_000;
     const second = unratedMatch('ordinary-after');
     games = [second, first];
     await monitor(env, config); await monitor(env, config);
-    assert.equal(messages.length, 1);
+    assert.equal(messages.length, 3);assert.match(messages[1],/デスアンレ/);assert.doesNotMatch(messages[2],/デスアンレ/);
     const session = await env.DB.prepare('SELECT match_id FROM death_unrated_sessions WHERE riot_id=?').bind('one#JP1').first<{ match_id: string }>();
     assert.equal(session!.match_id, 'reserved-first');
     assert.match(await runDeathCommand(env.DB, deathInteraction('2', 'status'), config), /次の予約はOFF/);
@@ -784,17 +784,17 @@ test('reservations select participants explicitly and cancellation suppresses fa
   const raw = unratedMatch(); let games = [raw]; const messages: string[] = [];
   globalThis.fetch = async (url, init) => {
     if (String(url).includes('api.henrikdev.xyz')) return Response.json({ data: games });
-    messages.push(JSON.parse(String(init?.body)).content); return new Response('', { status: 500 });
+    messages.push(JSON.parse(String(init?.body)).content); return messages.length===1?new Response('',{status:500}):Response.json({id:'123'});
   };
   try {
     await monitor(env, config);
-    assert.equal(messages.length, 1); assert.match(messages[0], /プレイヤーA/); assert.doesNotMatch(messages[0], /プレイヤーC/);
+    assert.equal(messages.length, 1); assert.match(messages[0], /プレイヤーA、.*デスアンレ/);assert.doesNotMatch(messages[0],/プレイヤーC、.*デスアンレ/);
     await runDeathCommand(env.DB, deathInteraction('2', 'stop', ['one#JP1']), config);
     await env.DB.prepare("DELETE FROM monitor_state WHERE key='discord_after'").run();
-    await monitor(env, config); assert.equal(messages.length, 1);
+    await monitor(env, config); assert.equal(messages.length, 2);assert.doesNotMatch(messages[1],/デスアンレ|プレイヤーA/);
     games = [JSON.parse(JSON.stringify(match('regular-competitive')))];
-    await monitor(env, config); assert.equal(messages.length, 2);
-    assert.match(messages[1], /コンペ）/);
+    await monitor(env, config); assert.equal(messages.length, 3);
+    assert.match(messages[2], /コンペ）/);
   } finally { globalThis.fetch = original; }
 });
 
@@ -1294,4 +1294,22 @@ test('winning performance pools distinguish high kills, team-assisted, close and
     assert.ok(pools[kind].includes(message.split('\n💬 ')[1]),kind);
     assert.doesNotMatch(message,/負けても健闘賞/);
   }
+});
+
+test('all completed queue IDs are monitored with correct labels; unknown queues do not become escalation',()=>{
+ for(const [queue,label] of [['swiftplay','スイフトプレイ'],['spikerush','スパイクラッシュ'],['hurm','チームデスマッチ'],['onefa','レプリケーション'],['custom','カスタム'],['new_mode_2026','new_mode_2026'],['unrated','アンレート']] as const){
+  const result=resultMessage(match(queue,queue),'user-1','Player')!;assert.ok(result);assert.match(result.message,new RegExp(label));assert.doesNotMatch(result.message,/エスカレーション|デスアンレ/);
+ }
+ const invalid=match('invalid');invalid.metadata.queue.id='bad\n@everyone';assert.equal(resultMessage(invalid,'user-1','Player'),null);
+});
+test('solo deathmatch and unavailable team results are never invented as wins, losses or draws',()=>{
+ const raw=match('solo','deathmatch');raw.teams=[];
+ const result=resultMessage(raw,'user-1','Player')!;assert.equal(result.outcome,null);assert.match(result.message,/デスマッチ.*勝敗判定なし|勝敗判定なし.*デスマッチ/);assert.doesNotMatch(result.message,/勝ち！！|負け！|引き分け/);
+ raw.teams=match('teams').teams;assert.equal(resultMessage(raw,'user-1','Player')!.outcome,null);
+});
+test('a mixed all-mode history is saved and delivered exactly once without consuming unrated reservations',async()=>{
+ const env=environment(),original=globalThis.fetch;await env.DB.prepare('INSERT INTO tracked_players VALUES(?,?,?,?)').bind('one#JP1','user-1','ap',0).run();
+ const games=['deathmatch','hurm','swiftplay','spikerush','custom'].map((mode,n)=>match('all-'+n,mode,true,Date.now()-10000+n*1000));games[0].teams=[];
+ const messages:string[]=[];globalThis.fetch=async(url,init)=>String(url).includes('api.henrikdev.xyz')?Response.json({data:games}):(messages.push(JSON.parse(String(init?.body)).content),Response.json({id:'123'}));
+ try{await monitor(env,[{riotId:'one#JP1'}]);await monitor(env,[{riotId:'one#JP1'}]);assert.equal(messages.length,5);assert.equal((await env.DB.prepare('SELECT COUNT(*) AS n FROM notifications').first<{n:number}>())!.n,5);assert.equal((await env.DB.prepare('SELECT COUNT(*) AS n FROM death_unrated_sessions').first<{n:number}>())!.n,0);assert.match(messages[0],/勝敗判定なし/);assert.doesNotMatch(messages[0],/連勝|連敗/);}finally{globalThis.fetch=original;}
 });
