@@ -1,0 +1,147 @@
+import { createProgress, hydrateProgress } from './progression.js';
+/** KESO EXCHANGE - local prototype engine (NOT authoritative for real multiplayer). */
+const SCHEMA_VERSION = 1;
+const MARKET = [
+  { id: 'keso', ticker: 'KESO', name: 'KESOホールディングス', category: '総合', initialPrice: 1200, volatility: 0.036, drift: 0.002, icon: '◆' },
+  { id: 'riso', ticker: 'RISO', name: 'リソ寿司', category: '飲食', initialPrice: 780, volatility: 0.054, drift: 0.001, icon: '寿' },
+  { id: 'yuya', ticker: 'YUYA', name: 'ゆーやエンタメ', category: '娯楽', initialPrice: 420, volatility: 0.082, drift: 0.002, icon: '★' },
+  { id: 'yano', ticker: 'YANO', name: '矢野ファイナンス', category: '金融', initialPrice: 1860, volatility: 0.031, drift: 0.001, icon: '¥' },
+];
+const SHOP = [
+  { id: 'gold', icon: '✦', name: 'ゴールド称号', detail: 'Activity内で黄金の称号を表示', price: 2200, tier: '装飾' },
+  { id: 'fanfar', icon: '♫', name: '大当たりSE', detail: 'Activity内で購入記念SEを再生', price: 1100, tier: '演出' },
+  { id: 'firework', icon: '✺', name: '黄金の祝砲', detail: 'Activity内にきらめく祝賀演出', price: 3500, tier: '演出' },
+  { id: 'vc', icon: '⌘', name: '専用VC開設権', detail: '本番ではBotによる専用VC作成を申請', price: 6500, tier: 'Discord連携予定' },
+  { id: 'color', icon: '◉', name: '金色ロール', detail: '本番ではBotによるロール付与を申請', price: 4800, tier: 'Discord連携予定' },
+  { id: 'monument', icon: '♛', name: '殿堂入り', detail: '本番では記念メッセージを投稿', price: 16000, tier: 'Discord連携予定' },
+];
+function createInitialState(now = Date.now()) {
+  return {
+    version: SCHEMA_VERSION,
+    ...createProgress(),
+    cash: 10000,
+    holdings: Object.fromEntries(MARKET.map((stock) => [stock.id, 0])),
+    prices: Object.fromEntries(MARKET.map((stock) => [stock.id, stock.initialPrice])),
+    history: Object.fromEntries(MARKET.map((stock) => [stock.id, Array.from({ length: 13 }, (_, i) => Math.round(stock.initialPrice * (0.96 + (i / 12) * .04)))])),
+    owned: [], trades: [], spins: [], salaryClaims: 0, lastSalaryAt: 0,
+    ticks: 0, lastMarketAt: now, seed: 7331,
+  };
+}
+const validInt = (value, min = 0) => Number.isSafeInteger(value) && value >= min;
+function hydrateState(raw, now = Date.now()) {
+  const state = createInitialState(now);
+  if (!raw || raw.version !== SCHEMA_VERSION || !validInt(raw.cash)) return state;
+  if (MARKET.some(({id}) => !validInt(raw.prices?.[id], 1) || !validInt(raw.holdings?.[id]))) return state;
+  state.cash = raw.cash;
+  for (const {id} of MARKET) {
+    state.prices[id] = raw.prices[id];
+    state.holdings[id] = raw.holdings[id];
+    const history = Array.isArray(raw.history?.[id]) ? raw.history[id].filter(v => validInt(v, 1)).slice(-25) : [];
+    if (history.at(-1) !== state.prices[id]) history.push(state.prices[id]);
+    state.history[id] = history.length ? history : [state.prices[id]];
+  }
+  if (!Number.isSafeInteger(assets(state))) return createInitialState(now);
+  state.owned = [...new Set(Array.isArray(raw.owned) ? raw.owned.filter(id => SHOP.some(item => item.id === id)) : [])];
+  state.trades = (Array.isArray(raw.trades) ? raw.trades : []).filter(t => t && MARKET.some(s => s.id === t.symbol) && ['buy','sell'].includes(t.side) && validInt(t.quantity, 1) && validInt(t.price, 1) && validInt(t.fee) && validInt(t.time)).slice(0, 50).map(t => ({side:t.side, symbol:t.symbol, quantity:t.quantity, price:t.price, fee:t.fee, time:t.time}));
+  state.spins = (Array.isArray(raw.spins) ? raw.spins : []).filter(t => t && ['red','black','even','odd','number'].includes(t.type) && validInt(t.choice) && t.choice <= 36 && validInt(t.outcome) && t.outcome <= 36 && validInt(t.amount, 100) && t.amount <= 20000 && validInt(t.payout) && t.payout === roulettePayout(t.type,t.choice,t.outcome,t.amount) && validInt(t.time)).slice(0, 30).map(t => ({type:t.type, choice:t.choice, outcome:t.outcome, amount:t.amount, payout:t.payout, time:t.time}));
+  for (const key of ['salaryClaims','ticks','seed']) if (validInt(raw[key])) state[key] = raw[key];
+  for (const key of ['lastSalaryAt','lastMarketAt']) if (validInt(raw[key]) && raw[key] <= now) state[key] = raw[key];
+  Object.assign(state,hydrateProgress(raw));
+  return state;
+}
+function checkedAdd(value, increment) {
+  const result = value + increment;
+  if (!validInt(result)) throw new Error('金額または株数が上限を超えています');
+  return result;
+}
+function checkedCash(state, value) {
+  if (!validInt(value) || !validInt(value + portfolioValue(state))) throw new Error('純資産が上限を超えています');
+  return value;
+}
+function portfolioValue(state) { return MARKET.reduce((sum,s) => sum + state.holdings[s.id]*state.prices[s.id],0); }
+function assets(state) { return state.cash + portfolioValue(state); }
+function nextRandom(state) { state.seed = (Math.imul(state.seed, 1664525) + 1013904223) >>> 0; return state.seed / 4294967296; }
+function advanceMarket(state, now = Date.now()) {
+  const elapsed = Math.max(0, Math.floor((now - state.lastMarketAt)/60000));
+  const steps = Math.min(elapsed, 30); // Demo never performs unbounded offline work.
+  if (!steps) return 0;
+  for (let i=0;i<steps;i++) for(const s of MARKET) {
+    const direction = (nextRandom(state)*2-1)*s.volatility + s.drift;
+    const newPrice = Math.max(20, Math.round(state.prices[s.id]*(1+direction)));
+    state.prices[s.id] = newPrice;
+    state.history[s.id].push(newPrice);
+    state.history[s.id] = state.history[s.id].slice(-26);
+  }
+  state.ticks += steps;
+  state.lastMarketAt = elapsed > 30 ? now : state.lastMarketAt + steps * 60000;
+  return steps;
+}
+function trade(state, symbol, side, quantity, now = Date.now()) {
+  const stock= MARKET.find(s=>s.id===symbol);
+  if(!stock) throw new Error('存在しない銘柄だ');
+  if(!Number.isSafeInteger(quantity)||quantity<1||quantity>100000) throw new Error('株数は1以上の整数で指定');
+  if(side!=='buy'&&side!=='sell') throw new Error('無効な取引だ');
+  const gross=state.prices[symbol]*quantity;
+  if(!Number.isSafeInteger(gross)) throw new Error('取引額が大きすぎる');
+  const fee=Math.ceil(gross/100);
+  if(side==='buy') {
+    if(state.cash < gross+fee) throw new Error('保有KPが不足している');
+    const holdings = checkedAdd(state.holdings[symbol], quantity);
+    state.cash -= gross+fee;state.holdings[symbol]=holdings;
+  }else{
+    if(state.holdings[symbol]<quantity) throw new Error('保有株数が不足している');
+    if(gross-fee<0) throw new Error('取引できない');
+    state.cash = checkedAdd(state.cash, gross-fee);state.holdings[symbol]-=quantity;
+  }
+  state.trades.unshift({id:`${now}-${state.trades.length}`,side,symbol,quantity,price:state.prices[symbol],fee,time:now});
+  state.trades=state.trades.slice(0,50);
+  return {gross,fee};
+}
+function roulettePayout(type,choice,number,bet) {
+  if(!Number.isInteger(number)||number<0||number>36) throw new Error('出目が不正だ');
+  const redNumbers=new Set([1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36]);
+  if(type==='red') return redNumbers.has(number)? bet*2 : 0;
+  if(type==='black') return number!==0&&!redNumbers.has(number)?bet*2:0;
+  if(type==='even') return number!==0&&number%2===0?bet*2:0;
+  if(type==='odd') return number%2===1?bet*2:0;
+  if(type==='number')return number===choice?bet*36:0;
+  throw new Error('無効な賭け方だ');
+}
+function spin(state, type, amount, choice=0, outcome, now=Date.now()) {
+  if(!Number.isSafeInteger(amount)||amount<100||amount>20000) throw new Error('賭け額は100〜20,000 KP');
+  if(state.cash<amount)throw new Error('所持KPが不足している');
+  if(type==='number'&&(!Number.isInteger(choice)||choice<0||choice>36))throw new Error('数字は0〜36だ');
+  if(!['red','black','even','odd','number'].includes(type))throw new Error('無効な賭け方だ');
+  // Demo: browser crypto must supply outcome; engine never uses predictable PRNG for casino.
+  if(!Number.isInteger(outcome)||outcome<0||outcome>36)throw new Error('抽選結果が必要だ');
+  const payout=roulettePayout(type,choice,outcome,amount);
+  state.cash = checkedCash(state, checkedAdd(state.cash-amount, payout));
+  const record={type,choice,outcome,amount,payout,time:now};
+  state.spins.unshift(record); state.spins=state.spins.slice(0,30);
+  return record;
+}
+function buyReward(state, itemId) {
+  const item=SHOP.find(s=>s.id===itemId);
+  if(!item)throw new Error('存在しない商品だ');
+  if(state.owned.includes(itemId))throw new Error('購入済みだ');
+  if(state.cash<item.price)throw new Error('所持KPが不足している');
+  state.cash-=item.price;state.owned.push(itemId);
+  return item;
+}
+function grantDemoSalary(state, now=Date.now()) {
+  if(now - state.lastSalaryAt < 30000)throw new Error('デモ給与は30秒ごとに受け取れる');
+  const cash=checkedCash(state,checkedAdd(state.cash,600));
+  const claims=checkedAdd(state.salaryClaims,1);
+  state.cash=cash;state.lastSalaryAt=now;state.salaryClaims=claims;
+  return 600;
+}
+function cryptoRouletteNumber() {
+  if(!globalThis.crypto?.getRandomValues) throw new Error('この環境では暗号学的乱数を利用できない');
+  const v=new Uint32Array(1), max=Math.floor(4294967296/37)*37;
+  do { globalThis.crypto.getRandomValues(v); } while(v[0]>=max);
+  return v[0]%37;
+}
+
+
+
+export { SCHEMA_VERSION, MARKET, SHOP, createInitialState, hydrateState, portfolioValue, assets, advanceMarket, trade, roulettePayout, spin, buyReward, grantDemoSalary, cryptoRouletteNumber };

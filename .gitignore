@@ -1,0 +1,19 @@
+node_modules/
+.wrangler/
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+.env
+.env.*
+!.env.example
+*.zip
+*.sqlite*
+*.db
+__pycache__/
+# Real mappings and deployment settings must stay outside the public repository.
+services/valorant-results/players.json
+services/valorant-results/reward-accounts.json
+services/valorant-results/discord-config.json
+services/valorant-results/wrangler.jsonc
+services/valorant-results/.private/
+services/valorant-results/GAMBLE_HANDOFF.md

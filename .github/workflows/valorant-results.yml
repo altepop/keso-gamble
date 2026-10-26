@@ -4,11 +4,21 @@ on:
     paths:
       - 'services/valorant-results/**'
       - '.github/workflows/valorant-results.yml'
+      - 'index.html'
+      - 'js/**'
+      - 'css/**'
+      - 'tests/**'
+      - 'package.json'
   push:
     branches: [main]
     paths:
       - 'services/valorant-results/**'
       - '.github/workflows/valorant-results.yml'
+      - 'index.html'
+      - 'js/**'
+      - 'css/**'
+      - 'tests/**'
+      - 'package.json'
   workflow_dispatch:
 permissions:
   contents: read
@@ -30,6 +40,8 @@ jobs:
           cache-dependency-path: services/valorant-results/package-lock.json
       - run: npm ci
       - run: npm run check
+      - name: Check Activity logic
+        run: npm --prefix ../.. test
       - run: npm run build
   deploy:
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
