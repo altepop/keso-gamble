@@ -78,7 +78,7 @@ test('a duplicate active directive rolls back payment for all issuers and owners
  await assert.rejects(operateKp(f.env,mapping,two,'self-directive-001','directive',{target:two,task:'competitive'}),/相手/);
  assert.throws(()=>f.sql.prepare('UPDATE kp_accounts SET user=? WHERE puuid=?').run(two,'p-one'));
 });
-test('login codes and sessions are hashed, expire, and a code can only be exchanged once',async()=>{
+test('login codes expire and are one-use; sessions are hashed and can be invalidated',async()=>{
  const f=await fixture();const code=(await issueKpCode(f.env,mapping,one))!;
  assert.ok(code&&!JSON.stringify(f.sql.prepare('SELECT * FROM kp_codes').all()).includes(code));
  const tokens=await Promise.allSettled([exchangeKpCode(f.env,code),exchangeKpCode(f.env,code)]);assert.equal(tokens.filter(x=>x.status==='fulfilled').length,1);
@@ -137,4 +137,22 @@ test('four players with cached five-match histories avoid repeating wallet setup
  globalThis.fetch=async url=>{const target=String(url).split('/').at(-1)!.split('?')[0];return Response.json({data:histories.get(target)??[]});};
  try{f.resetQueries();await monitor({...f.env,HENRIK_API_KEY:'fixture',DISCORD_WEBHOOK_URL:'https://discord.com/api/webhooks/1/fixture'},names.map(name=>({riotId:name+'#JP1'})));assert.ok(f.queries()+3<=50,`queries including three cold-initialization reads: ${f.queries()+3}`);}
  finally{globalThis.fetch=original;}
+});
+
+test('sessions remain valid years later; valid legacy sessions upgrade but expired and revoked sessions cannot return',async()=>{
+ const {revokeKpSession,kpHash}=await import('../src/kp.ts');const f=await fixture();
+ const token=await exchangeKpCode(f.env,(await issueKpCode(f.env,mapping,one))!);
+ const clock=Date.now,now=clock();
+ try{Date.now=()=>now+100*365*86400000;assert.equal((await kpSession(f.env,token))!.user,one);}
+ finally{Date.now=clock;}
+ f.sql.prepare('UPDATE kp_sessions SET expires=?').run(now+30*86400000);
+ assert.equal((await kpSession(f.env,token))!.user,one);assert.equal(f.sql.prepare('SELECT expires FROM kp_sessions').get()!.expires,-1);
+ await revokeKpSession(f.env,token);assert.equal(await kpSession(f.env,token),null);
+ f.sql.prepare('INSERT INTO kp_sessions VALUES(?,?,?,?)').run(await kpHash(token),guild,one,now-1);assert.equal(await kpSession(f.env,token),null);assert.notEqual(f.sql.prepare('SELECT expires FROM kp_sessions').get()!.expires,-1);
+});
+test('authenticated logout revokes only that device session and does not touch any KP',async()=>{
+ const f=await fixture();seed(f.sql,one,900);const a=await exchangeKpCode(f.env,(await issueKpCode(f.env,mapping,one))!),b=await exchangeKpCode(f.env,(await issueKpCode(f.env,mapping,one))!);
+ const request=(token:string)=>new Request('https://worker.example/api/kp/logout',{method:'POST',headers:{Authorization:'Bearer '+token}});
+ assert.equal((await kpApi(request('b'.repeat(48)),f.env,mapping)).status,401);
+ assert.equal((await kpApi(request(a),f.env,mapping)).status,200);assert.equal(await kpSession(f.env,a),null);assert.equal((await kpSession(f.env,b))!.user,one);assert.equal((await readKpState(f.env,mapping,one)).cash,900);
 });

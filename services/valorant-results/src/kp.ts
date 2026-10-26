@@ -108,9 +108,17 @@ export async function exchangeKpCode(env:KpEnv,code:string){
  const token=kpRandom(),hash=await kpHash(token);
  const owner=await env.DB.prepare('UPDATE kp_codes SET session_hash=? WHERE hash=? AND expires>? AND session_hash IS NULL RETURNING guild,user').bind(hash,await kpHash(code),Date.now()).first<{guild:string;user:string}>();
  if(!owner)throw Error('接続コードが無効か期限切れです。/valo status でもう一度取得してください。');
- await env.DB.prepare('INSERT INTO kp_sessions VALUES(?,?,?,?)').bind(hash,owner.guild,owner.user,Date.now()+30*86400000).run();return token;
+ await env.DB.prepare('INSERT INTO kp_sessions VALUES(?,?,?,?)').bind(hash,owner.guild,owner.user,-1).run();return token;
 }
-export async function kpSession(env:KpEnv,token:string){return env.DB.prepare('SELECT guild,user FROM kp_sessions WHERE hash=? AND expires>?').bind(await kpHash(token),Date.now()).first<{guild:string;user:string}>();}
+// -1 is an explicitly revocable session without a time limit. Do not revive expired sessions.
+export async function kpSession(env:KpEnv,token:string){
+ const hash=await kpHash(token),now=Date.now();
+ const owner=await env.DB.prepare('SELECT guild,user,expires FROM kp_sessions WHERE hash=? AND (expires=-1 OR expires>?)').bind(hash,now).first<{guild:string;user:string;expires:number}>();
+ if(!owner)return null;
+ if(owner.expires!==-1)return env.DB.prepare('UPDATE kp_sessions SET expires=-1 WHERE hash=? AND expires>? RETURNING guild,user').bind(hash,now).first<{guild:string;user:string}>();
+ return {guild:owner.guild,user:owner.user};
+}
+export async function revokeKpSession(env:KpEnv,token:string){await env.DB.prepare('DELETE FROM kp_sessions WHERE hash=?').bind(await kpHash(token)).run();}
 
 export async function flushKpDirectives(env:KpEnv & {DISCORD_WEBHOOK_URL:string},mapping:KpMapping){
  const rows=(await env.DB.prepare("SELECT d.id,d.issuer,d.target,d.task,d.cost,d.status FROM kp_directives d LEFT JOIN kp_directive_deliveries r ON r.id=d.id WHERE d.guild=? AND (r.status IS NULL OR r.status!=d.status) ORDER BY d.at LIMIT 4").bind(mapping.guildId).all<{id:string;issuer:string;target:string;task:string;cost:number;status:string}>()).results;

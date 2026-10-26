@@ -14,7 +14,7 @@ test('live operation persists before request; lost replies and reloads reuse one
 test('definitive rejection clears pending; server uncertainty retains it and blocks new actions',async()=>{
  for(const retryable of [true,false]){const saved=storage();saved.setItem('keso-kp-session-v1','session');
  const client=createKpClient({storage:saved,request:async()=>Response.json({error:'残高不足',retryable},{status:400}),randomId:()=> 'stable-operation-id'});
- await assert.rejects(client.operate('trade',{}));assert.equal(client.pending,retryable);if(retryable){await assert.rejects(client.operate('spin',{}),/前の通信/);assert.throws(()=>client.disconnect(),/通信結果/);}
+ await assert.rejects(client.operate('trade',{}));assert.equal(client.pending,retryable);if(retryable){await assert.rejects(client.operate('spin',{}),/前の通信/);await assert.rejects(client.disconnect(),/通信結果/);}
  }
 });
 test('embedded requests use the Discord proxy mapping and auth codes are never persisted',async()=>{
@@ -28,7 +28,7 @@ test('login survives closing a tab while pending payments remain isolated betwee
  assert.equal(persistent.getItem('keso-kp-session-v1'),'remembered-session');assert.equal(tabA.getItem('keso-kp-session-v1'),null);
  const reopened=createKpClient({storage:persistent,temporaryStorage:tabB,request});assert.equal(reopened.connected,true);assert.equal((await reopened.state()).cash,900);
  const failed=createKpClient({storage:persistent,temporaryStorage:tabA,request:async()=>{throw Error('offline')},randomId:()=> 'isolated-operation'});await assert.rejects(failed.operate('spin',{amount:100,type:'red'}));assert.equal(failed.pending,true);assert.equal(reopened.pending,false);assert.equal(persistent.getItem('keso-kp-pending-v1'),null);
- reopened.disconnect();assert.equal(persistent.getItem('keso-kp-session-v1'),null);
+ await reopened.disconnect();assert.equal(persistent.getItem('keso-kp-session-v1'),null);
 });
 test('an existing temporary login migrates to persistent storage without issuing another code',()=>{
  const persistent=storage(),temporary=storage();temporary.setItem('keso-kp-session-v1','old-session');temporary.setItem('keso-kp-pending-v1',JSON.stringify({id:'old-operation',action:'spin',args:{amount:100,type:'red'}}));
@@ -37,5 +37,11 @@ test('an existing temporary login migrates to persistent storage without issuing
 test('blocked persistent storage falls back to temporary login and reports that it cannot remember',async()=>{
  const blocked={getItem(){throw Error('blocked')},setItem(){throw Error('blocked')},removeItem(){throw Error('blocked')}},temporary=storage();
  const client=createKpClient({storage:blocked,temporaryStorage:temporary,request:async url=>Response.json(url.endsWith('/auth')?{token:'temporary-session'}:{cash:0})});
- await client.connect('code');assert.equal(client.connected,true);assert.equal(client.remembered,false);assert.equal(temporary.getItem('keso-kp-session-v1'),'temporary-session');client.disconnect();assert.equal(temporary.getItem('keso-kp-session-v1'),null);
+ await client.connect('code');assert.equal(client.connected,true);assert.equal(client.remembered,false);assert.equal(temporary.getItem('keso-kp-session-v1'),'temporary-session');await client.disconnect();assert.equal(temporary.getItem('keso-kp-session-v1'),null);
+});
+test('disconnect revokes the server session before forgetting the device, and a lost reply can be retried',async()=>{
+ const saved=storage();saved.setItem('keso-kp-session-v1','session');let calls=0;
+ const client=createKpClient({storage:saved,request:async(url,init)=>{assert.ok(url.endsWith('/logout'));assert.equal(init.headers.Authorization,'Bearer session');calls++;if(calls===1)throw Error('lost response');return Response.json({error:'already revoked'},{status:401});}});
+ await assert.rejects(client.disconnect(),/通信/);assert.equal(client.connected,true);assert.equal(saved.getItem('keso-kp-session-v1'),'session');
+ await client.disconnect();assert.equal(client.connected,false);assert.equal(saved.getItem('keso-kp-session-v1'),null);assert.equal(calls,2);
 });
