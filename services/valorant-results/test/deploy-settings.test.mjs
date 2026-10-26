@@ -32,8 +32,8 @@ test('unknown bindings and changed cron fail closed before deployment',()=>{
 function fixture(t){const dir=mkdtempSync(join(tmpdir(),'live-settings-'));t.after(()=>rmSync(dir,{recursive:true,force:true}));mkdirSync(join(dir,'src'));writeFileSync(join(dir,'src/index.ts'),'export default {};');writeFileSync(join(dir,'rewards-config.json'),JSON.stringify({enabled:false,startsAt:null,modes:{competitive:{participation:null,winBonus:null}}}));return dir;}
 const env={CLOUDFLARE_API_TOKEN:'example-token-never-write',CLOUDFLARE_ACCOUNT_ID:'a'.repeat(32),VALORANT_RESULTS_WORKER:'example-worker'};
 test('live settings are written only after successful API reads and validations',async t=>{
- const dir=fixture(t);const requests=[];const request=async(url,options)=>{requests.push(url);assert.equal(options.headers.Authorization,'Bearer '+env.CLOUDFLARE_API_TOKEN);if(url.endsWith('/content')){const form=new FormData();form.set('index.js',new Blob([source],{type:'application/javascript'}),'index.js');return new Response(form);}return Response.json({success:true,result:url.endsWith('/schedules')?{schedules}:settings});};
- await prepareLiveSettings(dir,env,request);assert.equal(requests.length,3);
+ const dir=fixture(t);const requests=[];const request=async(url,options)=>{requests.push(url);assert.equal(options.headers.Authorization,'Bearer '+env.CLOUDFLARE_API_TOKEN);if(url.endsWith('/content/v2')){const form=new FormData();form.set('index.js',new Blob([source],{type:'application/javascript'}),'index.js');return new Response(form);}return Response.json({success:true,result:url.endsWith('/schedules')?{schedules}:settings});};
+ await prepareLiveSettings(dir,env,request);assert.equal(requests.length,3);assert.ok(requests[2].endsWith('/content/v2'));
  assert.deepEqual(JSON.parse(readFileSync(join(dir,'players.json'))),players);
  assert.equal(JSON.parse(readFileSync(join(dir,'discord-config.json'))).guildId,discord.guildId);
  assert.deepEqual(JSON.parse(readFileSync(join(dir,'reward-accounts.json'))),{guildId:discord.guildId,accounts:[]});
