@@ -9,7 +9,7 @@ const groups = Object.keys(commentTones) as CommentGroup[];
 
 test('all situations keep the original catalogue and separate authored lines from sourced memes', () => {
   // Count distinct wording, not repeated mappings of one quotation to several situations.
-  assert.equal(new Set(Object.values(commentPools).flat()).size, 748);
+  assert.equal(new Set(Object.values(commentPools).flat()).size, 781);
   assert.deepEqual([...commentToneNames].sort(), ['dry', 'hot', 'meme', 'net', 'normal', 'roast']);
   for (const group of groups) {
     assert.deepEqual(Object.keys(commentTones[group]).sort(), [...commentToneNames].sort());

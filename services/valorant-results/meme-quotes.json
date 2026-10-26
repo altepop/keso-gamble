@@ -29,6 +29,150 @@
       "context": "ガキの使いのなぞなぞへの回答として記録。距離のミームと同じ場面ではない。",
       "verification": "secondary-transcription",
       "note": "解説記事の短い文字起こしで照合。元放送の音声は直接確認していない。"
+    },
+    "yokatta-followup": {
+      "url": "https://note.com/qa/etudiant/q/cf16480b4b6e4298909b605f2b13139c",
+      "title": "距離ミームの会話を投稿したnote質問箱（2026-08-18）",
+      "context": "同じ場面のVTRへの進行と掛け声を記録したコミュニティ投稿。元放送の完全な逐語録とは断定しない。",
+      "verification": "secondary-usage-record",
+      "note": "公開記事・用語集の文字起こしまたは用例で照合。元動画の音声を直接確認したとは扱わない。短い抜粋の表記は資料に従う。",
+      "recentContext": "2026年8月の投稿。派生楽曲の歌詞は採用元にしない。"
+    },
+    "dauso-strike": {
+      "url": "https://note.com/ponwe_stars/n/n7cf11615ff8a",
+      "title": "水曜日のダウソダウソ面白シーンランキング",
+      "context": "同じモノマネ回の野球ネタと返答、お祭り男の呼びかけ。半角カナを含め投稿中の表記に従う。距離の返しの直後の発言とは扱わない。",
+      "verification": "secondary-usage-record",
+      "note": "公開記事・用語集の文字起こしまたは用例で照合。元動画の音声を直接確認したとは扱わない。短い抜粋の表記は資料に従う。",
+      "recentContext": "2026年9月9日のファン記事で使用例を確認。"
+    },
+    "hori-dialogue": {
+      "url": "https://news.livedoor.com/article/detail/32021763/",
+      "title": "高須幹弥氏との対談についてのSmart FLASH記事（ライブドア掲載）",
+      "context": "対談の短い応答と投稿の文句の引用。睡眠に関する主張の正しさを裏付けるものではない。",
+      "verification": "secondary-transcription",
+      "note": "公開記事・用語集の文字起こしまたは用例で照合。元動画の音声を直接確認したとは扱わない。短い抜粋の表記は資料に従う。",
+      "recentContext": "2026年8月8日公開の報道で発言を確認。"
+    },
+    "hori-microsleep": {
+      "url": "https://smart-flash.jp/entertainment/entertainment-news/427872/",
+      "title": "1週間生配信とマイクロスリープについてのSmart FLASH記事",
+      "context": "配信での説明として報じられた文句を短く抜粋。Botがプレイヤーの睡眠や健康状態を判定する意味ではない。",
+      "verification": "secondary-transcription",
+      "note": "公開記事・用語集の文字起こしまたは用例で照合。元動画の音声を直接確認したとは扱わない。短い抜粋の表記は資料に従う。",
+      "recentContext": "2026年9月の配信の報道。医療情報や睡眠の推奨として使用しない。"
+    },
+    "hori-kuiya": {
+      "url": "https://motonetajp.com/kuiya/",
+      "title": "クイヤの元ネタ解説内の堀大輔配信の短い文字起こし",
+      "context": "架空の動物についてコメントを受けた場面の応答。動物の実在や本人の意図を断定しない。",
+      "verification": "secondary-transcription",
+      "note": "公開記事・用語集の文字起こしまたは用例で照合。元動画の音声を直接確認したとは扱わない。短い抜粋の表記は資料に従う。",
+      "recentContext": "2026年8月の配信の出来事として9月22日の記事に記載。"
+    },
+    "rust-reactions": {
+      "url": "https://drks-archive-fan.com/neta/term_mendokuse_aakoreda",
+      "title": "めんどくせ…あぁこれだ — ドロクサーアーカイブ",
+      "context": "老人会RUSTの短い独り言と周囲の反応。ファン記事・クリップ名に基づく記録で、厳密な音声表記は未確定。",
+      "verification": "secondary-usage-record",
+      "note": "公開記事・用語集の文字起こしまたは用例で照合。元動画の音声を直接確認したとは扱わない。短い抜粋の表記は資料に従う。",
+      "recentContext": "2026年8〜9月の使用例がある配信ミーム。"
+    },
+    "elite": {
+      "url": "https://drks-archive-fan.com/neta/term_elite",
+      "title": "エリート — ドロクサーアーカイブ",
+      "context": "布団ちゃんのマリオメーカー2での短い台詞の抜粋。Cランクという具体的な値は別ゲームへ持ち込まない。",
+      "verification": "secondary-transcription",
+      "note": "公開記事・用語集の文字起こしまたは用例で照合。元動画の音声を直接確認したとは扱わない。短い抜粋の表記は資料に従う。",
+      "recentContext": "2026年8月に広まり、10月の別ゲームでも使用例があると記録。"
+    },
+    "iiwa": {
+      "url": "https://drks-archive-fan.com/neta/term_iiwa",
+      "title": "いいわぁ — ドロクサーアーカイブ",
+      "context": "配信とコメント欄の短い定型。ヤフミのモノマネという説明はあるが、言葉の最初の発言者は断定しない。",
+      "verification": "secondary-usage-record",
+      "note": "公開記事・用語集の文字起こしまたは用例で照合。元動画の音声を直接確認したとは扱わない。短い抜粋の表記は資料に従う。",
+      "recentContext": "2026年8月以降の配信使用例。"
+    },
+    "aji": {
+      "url": "https://drks-archive-fan.com/neta/term_aji_koi_usui",
+      "title": "味濃い薄いあったら言ってください — ドロクサーアーカイブ",
+      "context": "王道家公式動画の題名と、配信チャットで使われる短縮形を採用。略形を店主の元発言とは扱わない。",
+      "verification": "secondary-usage-record",
+      "note": "公開記事・用語集の文字起こしまたは用例で照合。元動画の音声を直接確認したとは扱わない。短い抜粋の表記は資料に従う。",
+      "recentContext": "2026年4月以降に使用され、10月9日のゲーム配信でも確認された定型。"
+    },
+    "gooku": {
+      "url": "https://drks-archive-fan.com/neta/term_gooku_majika",
+      "title": "5億マジかw — ドロクサーアーカイブ",
+      "context": "バトラの配信コメントの定型。由来は説の段階であり、ゲームの実際のスコアや通貨額ではない。",
+      "verification": "secondary-usage-record",
+      "note": "公開記事・用語集の文字起こしまたは用例で照合。元動画の音声を直接確認したとは扱わない。短い抜粋の表記は資料に従う。",
+      "recentContext": "以前からの定番。2026年10月7日にも使用例ありと記録。"
+    },
+    "jun-win": {
+      "url": "https://drks-archive-fan.com/neta/term_jun_no_kachida",
+      "title": "純の勝ちだ — ドロクサーアーカイブ",
+      "context": "親子の寸劇の短い台詞を各々単体で採用。純をプレイヤー名に置換しない。声真似の元作品は未確定。",
+      "verification": "secondary-transcription",
+      "note": "公開記事・用語集の文字起こしまたは用例で照合。元動画の音声を直接確認したとは扱わない。短い抜粋の表記は資料に従う。",
+      "recentContext": "2025年からの定番。2026年10月に公式企画の候補にも挙がったと記録。"
+    },
+    "oniisan": {
+      "url": "https://drks-archive-fan.com/neta/term_ryoukai_oniisan",
+      "title": "了解お兄さん — ドロクサーアーカイブ",
+      "context": "運転ゲームのAIの妹の返答と、配信者が返した短い言葉。発祥の配信者や最初の使用日は断定しない。",
+      "verification": "secondary-transcription",
+      "note": "公開記事・用語集の文字起こしまたは用例で照合。元動画の音声を直接確認したとは扱わない。短い抜粋の表記は資料に従う。",
+      "recentContext": "2026年9月27〜30日の配信・コメントでの使用記録。"
+    },
+    "kiitete": {
+      "url": "https://drks-archive-fan.com/neta/term_kiitete_kusa",
+      "title": "効いてて草 — ドロクサーアーカイブ",
+      "context": "以前からのネットスラングの配信使用例。配信者が言葉そのものを発明したとは扱わない。",
+      "verification": "secondary-usage-record",
+      "note": "公開記事・用語集の文字起こしまたは用例で照合。元動画の音声を直接確認したとは扱わない。短い抜粋の表記は資料に従う。",
+      "recentContext": "2026年1月の配信や夏〜9月のコメントで使用例あり。"
+    },
+    "ittanna": {
+      "url": "https://drks-archive-fan.com/neta/term_ittanna",
+      "title": "一旦な — ドロクサーアーカイブ",
+      "context": "配信終了前後のコメントとして記録された定型。由来となった本人の配信場面は未確認。",
+      "verification": "secondary-usage-record",
+      "note": "公開記事・用語集の文字起こしまたは用例で照合。元動画の音声を直接確認したとは扱わない。短い抜粋の表記は資料に従う。",
+      "recentContext": "2026年7〜8月の複数配信で使用例あり。"
+    },
+    "san": {
+      "url": "https://drks-archive-fan.com/neta/term_san_ga_aru",
+      "title": "3がある — ドロクサーアーカイブ",
+      "context": "配信コメントの定型。元となった掛け合いはファン用語集による説で、Botがラウンド数を述べる意味ではない。",
+      "verification": "secondary-usage-record",
+      "note": "公開記事・用語集の文字起こしまたは用例で照合。元動画の音声を直接確認したとは扱わない。短い抜粋の表記は資料に従う。",
+      "recentContext": "2026年2月のファン用語集で説明された定番。"
+    },
+    "kigakiku": {
+      "url": "https://zawatto.com/meme/kiga-kikune/",
+      "title": "気が利くねぇ — ざわっとミーム辞典",
+      "context": "タピオカ動画の短い反応として広まった文句。高須幹弥とステハゲのどちらが元祖かは断定しない。",
+      "verification": "secondary-usage-record",
+      "note": "公開記事・用語集の文字起こしまたは用例で照合。元動画の音声を直接確認したとは扱わない。短い抜粋の表記は資料に従う。",
+      "recentContext": "2026年9月に拡散し、10月23日の記事でも紹介されている。"
+    },
+    "dokukamo": {
+      "url": "https://fomo-fomo.com/sns/trend/yabai-doku-maybe-meme-2026/",
+      "title": "ヤバい、これ毒かも！間に合え — FOMO²",
+      "context": "ジェラードンのコントを使った短尺動画の文句。資料で確認できた短い連続部分を採用し、別の語を足さない。",
+      "verification": "secondary-usage-record",
+      "note": "公開記事・用語集の文字起こしまたは用例で照合。元動画の音声を直接確認したとは扱わない。短い抜粋の表記は資料に従う。",
+      "recentContext": "2022年の元動画に対し、2026年10月1〜2日の派生使用例を10月20日の記事が紹介。"
+    },
+    "yokatta-next-vtr": {
+      "url": "https://steamcommunity.com/profiles/76561198133561297/",
+      "title": "距離ミームのVTR進行の言葉を記録したSteamコミュニティ投稿",
+      "context": "同じ場面で次のVTRへ進む言葉の投稿表記。元放送の完全な逐語録や音声を直接確認したとは扱わない。",
+      "verification": "secondary-usage-record",
+      "note": "公開投稿の連続した短い一文をそのまま採用。他の投稿や派生楽曲とつなぎ合わせない。",
+      "recentContext": "2026年8月の投稿で確認。距離ミームと同じ場面の続きとして記録。"
     }
   },
   "quotes": [
@@ -85,6 +229,204 @@
       "source": "kuiya",
       "text": "クイヤ",
       "groups": ["default", "high_kills", "low_kd", "close_loss", "blowout", "losing_streak", "long_losing_streak", "win", "win_high_kills", "win_low_kd", "close_win", "blowout_win", "winning_streak", "long_winning_streak", "draw", "completed"]
+    },
+    {
+      "id": "next-vtr",
+      "source": "yokatta-next-vtr",
+      "text": "じゃああの、続きまして、次のVTR行ってみましょか",
+      "groups": ["default", "close_loss", "blowout", "losing_streak", "long_losing_streak", "win", "close_win", "blowout_win", "draw", "completed"]
+    },
+    {
+      "id": "vtr-don",
+      "source": "yokatta-followup",
+      "text": "VTR ドーン！",
+      "groups": ["default", "high_kills", "low_kd", "close_loss", "blowout", "losing_streak", "long_losing_streak", "win", "win_high_kills", "win_low_kd", "close_win", "blowout_win", "winning_streak", "long_winning_streak", "draw", "completed"]
+    },
+    {
+      "id": "bachikon-strike",
+      "source": "dauso-strike",
+      "text": "バチコーンストライク",
+      "groups": ["default", "high_kills", "low_kd", "close_loss", "blowout", "losing_streak", "long_losing_streak", "win", "win_high_kills", "win_low_kd", "close_win", "blowout_win", "winning_streak", "long_winning_streak", "draw", "completed"]
+    },
+    {
+      "id": "furuta-atsuya",
+      "source": "dauso-strike",
+      "text": "ｲﾔﾌﾙﾀｱﾂﾔｼﾞｬﾈｴﾜ",
+      "groups": ["default", "high_kills", "low_kd", "close_loss", "blowout", "losing_streak", "long_losing_streak", "win", "win_high_kills", "win_low_kd", "close_win", "blowout_win", "winning_streak", "long_winning_streak", "draw", "completed"]
+    },
+    {
+      "id": "furuta-janeewa",
+      "source": "dauso-strike",
+      "text": "ﾌﾙﾀｼﾞｬﾈｴﾜ",
+      "groups": ["default", "high_kills", "low_kd", "close_loss", "blowout", "losing_streak", "long_losing_streak", "win", "win_high_kills", "win_low_kd", "close_win", "blowout_win", "winning_streak", "long_winning_streak", "draw", "completed"]
+    },
+    {
+      "id": "omatsuri-otoko",
+      "source": "dauso-strike",
+      "text": "お祭り男か",
+      "groups": ["default", "high_kills", "low_kd", "close_loss", "blowout", "losing_streak", "long_losing_streak", "win", "win_high_kills", "win_low_kd", "close_win", "blowout_win", "winning_streak", "long_winning_streak", "draw", "completed"]
+    },
+    {
+      "id": "nametemasuka",
+      "source": "hori-dialogue",
+      "text": "あの、ナメてます？",
+      "groups": ["default", "high_kills", "low_kd", "close_loss", "blowout", "losing_streak", "long_losing_streak", "win_low_kd"]
+    },
+    {
+      "id": "chotto-matte",
+      "source": "hori-dialogue",
+      "text": "ちょっと待ってください。",
+      "groups": ["default", "high_kills", "low_kd", "close_loss", "blowout", "losing_streak", "long_losing_streak", "win_low_kd", "draw", "completed"]
+    },
+    {
+      "id": "akan-kattana",
+      "source": "hori-dialogue",
+      "text": "あかんかったなぁ…",
+      "groups": ["default", "high_kills", "low_kd", "close_loss", "blowout", "losing_streak", "long_losing_streak", "win_low_kd"]
+    },
+    {
+      "id": "microsleep-ten",
+      "source": "hori-microsleep",
+      "text": "マイクロスリープ10回しただけ",
+      "groups": ["default", "low_kd", "blowout", "losing_streak", "long_losing_streak", "win_low_kd", "completed"]
+    },
+    {
+      "id": "nenai-challenge",
+      "source": "hori-microsleep",
+      "text": "寝ないチャレンジではない",
+      "groups": ["default", "low_kd", "blowout", "losing_streak", "long_losing_streak", "win_low_kd", "completed"]
+    },
+    {
+      "id": "aa-kuiyane",
+      "source": "hori-kuiya",
+      "text": "あぁ～クイヤね。",
+      "groups": ["default", "high_kills", "low_kd", "close_loss", "blowout", "losing_streak", "long_losing_streak", "win", "win_high_kills", "win_low_kd", "close_win", "blowout_win", "winning_streak", "long_winning_streak", "draw", "completed"]
+    },
+    {
+      "id": "anahori",
+      "source": "hori-kuiya",
+      "text": "穴掘ったりするやつでしたっけ？",
+      "groups": ["default", "high_kills", "low_kd", "close_loss", "blowout", "losing_streak", "long_losing_streak", "win", "win_high_kills", "win_low_kd", "close_win", "blowout_win", "winning_streak", "long_winning_streak", "draw", "completed"]
+    },
+    {
+      "id": "mendokuse-aakoreda",
+      "source": "rust-reactions",
+      "text": "めんどくせ…あぁこれだ",
+      "groups": ["default", "high_kills", "low_kd", "close_loss", "blowout", "losing_streak", "long_losing_streak", "win_low_kd", "completed"]
+    },
+    {
+      "id": "macchan-imanowha",
+      "source": "rust-reactions",
+      "text": "まっちゃんか今の？",
+      "groups": ["default", "high_kills", "low_kd", "close_loss", "blowout", "losing_streak", "long_losing_streak", "win", "win_high_kills", "win_low_kd", "close_win", "blowout_win", "winning_streak", "long_winning_streak", "draw", "completed"]
+    },
+    {
+      "id": "daijoubu",
+      "source": "rust-reactions",
+      "text": "大丈夫だよ、大丈夫！",
+      "groups": ["default", "high_kills", "low_kd", "close_loss", "blowout", "losing_streak", "long_losing_streak", "win_low_kd", "draw", "completed"]
+    },
+    {
+      "id": "umaremo-elite",
+      "source": "elite",
+      "text": "生まれもエリート、育ちもエリート",
+      "groups": ["default", "high_kills", "low_kd", "close_loss", "blowout", "losing_streak", "long_losing_streak", "win", "win_high_kills", "win_low_kd", "close_win", "blowout_win", "winning_streak", "long_winning_streak", "draw", "completed"]
+    },
+    {
+      "id": "hantei-okashii",
+      "source": "elite",
+      "text": "判定してるやつがおかしいんだ",
+      "groups": ["default", "high_kills", "low_kd", "close_loss", "blowout", "losing_streak", "long_losing_streak", "win_low_kd", "draw"]
+    },
+    {
+      "id": "iiwaa",
+      "source": "iiwa",
+      "text": "いいわぁ",
+      "groups": ["win", "win_high_kills", "win_low_kd", "close_win", "blowout_win", "winning_streak", "long_winning_streak", "completed"]
+    },
+    {
+      "id": "yokunaiwaa",
+      "source": "iiwa",
+      "text": "よくないわー",
+      "groups": ["default", "high_kills", "low_kd", "close_loss", "blowout", "losing_streak", "long_losing_streak", "win_low_kd"]
+    },
+    {
+      "id": "aji-koi-usui",
+      "source": "aji",
+      "text": "味濃い薄いあったら言ってください",
+      "groups": ["default", "high_kills", "low_kd", "close_loss", "blowout", "losing_streak", "long_losing_streak", "win", "win_high_kills", "win_low_kd", "close_win", "blowout_win", "winning_streak", "long_winning_streak", "draw", "completed"]
+    },
+    {
+      "id": "aji-koi",
+      "source": "aji",
+      "text": "味濃い！",
+      "groups": ["default", "high_kills", "low_kd", "close_loss", "blowout", "losing_streak", "long_losing_streak", "win", "win_high_kills", "win_low_kd", "close_win", "blowout_win", "winning_streak", "long_winning_streak", "draw", "completed"]
+    },
+    {
+      "id": "gooku-majika",
+      "source": "gooku",
+      "text": "5億マジかw",
+      "groups": ["default", "high_kills", "low_kd", "close_loss", "blowout", "losing_streak", "long_losing_streak", "win", "win_high_kills", "win_low_kd", "close_win", "blowout_win", "winning_streak", "long_winning_streak", "draw", "completed"]
+    },
+    {
+      "id": "tousan-korette",
+      "source": "jun-win",
+      "text": "父さん、これって…！",
+      "groups": ["win", "win_high_kills", "win_low_kd", "close_win", "blowout_win", "winning_streak", "long_winning_streak"]
+    },
+    {
+      "id": "jun-no-kachida",
+      "source": "jun-win",
+      "text": "ああ、純の勝ちだ",
+      "groups": ["win", "win_high_kills", "win_low_kd", "close_win", "blowout_win", "winning_streak", "long_winning_streak"]
+    },
+    {
+      "id": "ryoukai-oniisan",
+      "source": "oniisan",
+      "text": "了解、お兄さん",
+      "groups": ["default", "high_kills", "low_kd", "close_loss", "blowout", "losing_streak", "long_losing_streak", "win", "win_high_kills", "win_low_kd", "close_win", "blowout_win", "winning_streak", "long_winning_streak", "draw", "completed"]
+    },
+    {
+      "id": "oniisan-yamero",
+      "source": "oniisan",
+      "text": "了解お兄さんやめろ",
+      "groups": ["default", "high_kills", "low_kd", "close_loss", "blowout", "losing_streak", "long_losing_streak", "win_low_kd"]
+    },
+    {
+      "id": "kiitete-kusa",
+      "source": "kiitete",
+      "text": "効いてて草",
+      "groups": ["default", "high_kills", "low_kd", "close_loss", "blowout", "losing_streak", "long_losing_streak", "win_low_kd"]
+    },
+    {
+      "id": "ittanna",
+      "source": "ittanna",
+      "text": "一旦な",
+      "groups": ["default", "close_loss", "blowout", "losing_streak", "long_losing_streak", "win", "close_win", "blowout_win", "draw", "completed"]
+    },
+    {
+      "id": "san-ga-aru",
+      "source": "san",
+      "text": "3がある",
+      "groups": ["default", "high_kills", "low_kd", "close_loss", "blowout", "losing_streak", "long_losing_streak", "win", "win_high_kills", "win_low_kd", "close_win", "blowout_win", "winning_streak", "long_winning_streak", "draw", "completed"]
+    },
+    {
+      "id": "kiga-kikune",
+      "source": "kigakiku",
+      "text": "気が利くねぇ",
+      "groups": ["win", "win_high_kills", "win_low_kd", "close_win", "blowout_win", "winning_streak", "long_winning_streak", "completed"]
+    },
+    {
+      "id": "dokukamo",
+      "source": "dokukamo",
+      "text": "ヤバい、これ毒かも！",
+      "groups": ["default", "high_kills", "low_kd", "close_loss", "blowout", "losing_streak", "long_losing_streak", "win_low_kd"]
+    },
+    {
+      "id": "maniae",
+      "source": "dokukamo",
+      "text": "間に合え間に合え",
+      "groups": ["default", "close_loss", "low_kd", "losing_streak", "long_losing_streak", "close_win", "completed"]
     }
   ]
 }
