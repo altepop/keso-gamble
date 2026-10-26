@@ -1,7 +1,7 @@
-import { createKpClient } from './kp-client.js?v=20261027-live';
+import { createKpClient } from './kp-client.js?v=20261027-remember';
 import { fmt, fmt0 } from './format.js';
 import { submitClaim, approveClaim, issueDirective, completeDirective } from './progression.js';
-import { titleView, homeView, playView, directivesView } from './progression-views.js?v=20261027-live';
+import { titleView, homeView, playView, directivesView } from './progression-views.js?v=20261027-remember';
 import { genCandles, movingAverage, svgCandles } from './charts.js';
 import { MARKET, createInitialState, portfolioValue, assets, advanceMarket, trade, spin, grantDemoSalary, cryptoRouletteNumber } from './engine.js';
 import { KEY, LEGACY_KEY } from './storage.js';
@@ -113,13 +113,13 @@ function detailSheet(){
 }
 
 function render(){
-  const html = screen==='title'?titleView(state):screen==='home'?homeView(state,bottomNav()):screen==='play'?playView(state,drafts,bottomNav()):screen==='directives'?directivesView(state,drafts,bottomNav()):screen==='market'?screenMarket():screen==='casino'?screenCasino():screenAssets();
+  const html = screen==='title'?titleView(state,wallet.remembered):screen==='home'?homeView(state,bottomNav()):screen==='play'?playView(state,drafts,bottomNav()):screen==='directives'?directivesView(state,drafts,bottomNav()):screen==='market'?screenMarket():screen==='casino'?screenCasino():screenAssets();
   const openDetails=[...app.querySelectorAll('details')].map(el=>el.open);
   const focusedElement=document.activeElement;
   const focused=focusedElement?.id;
   const focusData=focusedElement && Object.entries(focusedElement.dataset).find(([key])=>['screen','marketTab','marketMode','tradeSide','bet','action','open'].includes(key));
   const warning=live?connectionError:sessionOnly?'端末に保存できないため、この画面を閉じると変更が失われます。':!navigator.locks?.request?'このブラウザでは安全な保存を利用できません。HTTPS対応の最新ブラウザで開いてください。':'';
-  const connection=live?`<div class="kp-connection"><span>${wallet.pending?'通信結果の確認待ち':'KP口座 接続中'}</span><button data-action="refresh-kp">${wallet.pending?'通信結果を確認':'残高を更新'}</button><button data-action="disconnect-kp">接続を解除</button></div>`:'';
+  const connection=live?`<div class="kp-connection"><span>${wallet.pending?'通信結果の確認待ち':wallet.remembered?'KP口座 接続中':'KP口座 一時接続'}</span><button data-action="refresh-kp">${wallet.pending?'通信結果を確認':'残高を更新'}</button><button data-action="disconnect-kp">接続を解除</button></div>`:'';
   app.innerHTML = connection+html.replace('<div class="screen">','<div class="screen">'+(warning?`<div class="storage-warning" role="status">${warning}</div>`:'')) + detailSheet();
   app.querySelectorAll('details').forEach((el,index)=>{el.open=openDetails[index]??false;});
   for (const [id,value] of Object.entries(drafts)) { const input=document.getElementById(id); if(input) input.value=value; }
@@ -175,7 +175,7 @@ addEventListener('click',async e=>{
   if(mutates && mutationPending)return;
   if(mutates)mutationPending=true;
   try{
-    if(t.dataset.action==='connect-kp'){state=await wallet.connect($('#kp-connect-code').value);live=true;connectionError='';delete drafts['kp-connect-code'];screen='home';render();toast('口座に接続しました');return;}
+    if(t.dataset.action==='connect-kp'){state=await wallet.connect($('#kp-connect-code').value);live=true;connectionError='';delete drafts['kp-connect-code'];screen='home';render();toast(wallet.remembered?'接続しました。次回は自動で接続します':'接続しました。この環境では閉じると再接続が必要です');return;}
     if(t.dataset.action==='refresh-kp'){await refreshWallet(true);render();return;}
     if(t.dataset.action==='disconnect-kp'){wallet.disconnect();live=false;connectionError='';state=store.state;screen='title';render();return;}
     if(t.dataset.screen){if(spinLock){toast('抽選中は画面を切り替えられません');return;}detail=null;screen=t.dataset.screen;render();return;}
