@@ -10,13 +10,14 @@ import {readKpState,operateKp,kpApi}from'../src/kp-api.ts';
 const guild='100000000000000100',one='100000000000000101',two='100000000000000102';
 const mapping:KpMapping={guildId:guild,accounts:[{riotId:'One#JP1',discordUserId:one},{riotId:'Two#JP1',discordUserId:two}]};
 async function fixture(){
+ let queryCount=0;
  const sql=new DatabaseSync(':memory:');sql.exec('PRAGMA foreign_keys=ON');
  for(const file of readdirSync(new NodeURL('../migrations/',import.meta.url)).filter(f=>f.endsWith('.sql')).sort())sql.exec(readFileSync(new NodeURL('../migrations/'+file,import.meta.url),'utf8'));
- class Query{text:string;values:unknown[];constructor(text:string,values:unknown[]=[]){this.text=text;this.values=values;}bind(...values:unknown[]){return new Query(this.text,values);}first(){return sql.prepare(this.text).get(...this.values as never[])??null;}all(){return {results:sql.prepare(this.text).all(...this.values as never[])};}run(){return {meta:{changes:Number(sql.prepare(this.text).run(...this.values as never[]).changes)}};}}
+ class Query{text:string;values:unknown[];constructor(text:string,values:unknown[]=[]){this.text=text;this.values=values;}bind(...values:unknown[]){return new Query(this.text,values);}first(){queryCount++;return sql.prepare(this.text).get(...this.values as never[])??null;}all(){queryCount++;return {results:sql.prepare(this.text).all(...this.values as never[])};}run(){queryCount++;return {meta:{changes:Number(sql.prepare(this.text).run(...this.values as never[]).changes)}};}}
  const env:KpEnv={KP_BOOTSTRAP_PRIVATE_KEY:'fixture-key',DB:{prepare:(text:string)=>new Query(text),batch:(queries:Query[])=>{sql.exec('BEGIN');try{const rows=queries.map(q=>q.run());sql.exec('COMMIT');return rows;}catch(error){sql.exec('ROLLBACK');throw error;}}}as unknown as D1Database};
  sql.prepare('INSERT INTO tracked_players VALUES(?,?,?,?)').run('One#JP1','p-one','ap',0);sql.prepare('INSERT INTO tracked_players VALUES(?,?,?,?)').run('Two#JP1','p-two','ap',0);
  await initializeKp(env,mapping);await syncKpAccounts(env,mapping);
- return {env,sql,enableHistory(){sql.exec("UPDATE kp_settings SET value='0' WHERE key='starts_at';UPDATE kp_accounts SET linked_at=0;");}};
+ return {env,sql,resetQueries(){queryCount=0;},queries(){return queryCount;},enableHistory(){sql.exec("UPDATE kp_settings SET value='0' WHERE key='starts_at';UPDATE kp_accounts SET linked_at=0;");}};
 }
 function game(id:string,queue='competitive',win=true){return {metadata:{match_id:id,is_completed:true,queue:{id:queue},started_at:new Date(Date.now()-10000).toISOString(),game_length_in_ms:1000},players:[{puuid:'p-one',team_id:'red'}],teams:[{team_id:'red',won:win},{team_id:'blue',won:!win}]};}
 function seed(sql:DatabaseSync,user:string,amount:number){sql.prepare('INSERT INTO kp_ledger VALUES(?,?,?,?,?,?)').run('test-'+user,guild,user,amount,'test-only',Date.now());}
@@ -125,4 +126,15 @@ test('funded directives reach the target, complete only on the selected subseque
  raw.metadata.queue.id='competitive';raw.metadata.match_id='target-comp';await collectKpMatch(f.env,mapping,raw,'p-two');assert.equal(f.sql.prepare('SELECT status FROM kp_directives').get()!.status,'completed');
  await flushKpDirectives(env,mapping);await flushKpDirectives(env,mapping);assert.equal(sent.length,2);assert.match(sent[1].content,/指令達成/);assert.deepEqual(sent[1].allowed_mentions.users,[]);
  }finally{globalThis.fetch=original;}
+});
+
+test('four players with cached five-match histories avoid repeating wallet setup and stay within the normal D1 query allowance',async()=>{
+ const {monitor}=await import('../src/index.ts');const f=await fixture(),original=globalThis.fetch;
+ const names=['One','Two','Three','Four'],puuids=['p-one','p-two','p-three','p-four'];
+ for(let i=2;i<4;i++)f.sql.prepare('INSERT INTO tracked_players VALUES(?,?,?,?)').run(names[i]+'#JP1',puuids[i],'ap',0);
+ const histories=new Map<string,ReturnType<typeof game>[]>();
+ for(let i=0;i<4;i++){const games=Array.from({length:5},(_,n)=>{const raw=game('cached-'+i+'-'+n);raw.players[0].puuid=puuids[i];f.sql.prepare('INSERT INTO notifications(riot_id,match_id,message,ended_at,mode,sent) VALUES(?,?,?,?,?,1)').run(names[i]+'#JP1',raw.metadata.match_id,'fixture',Date.now()-9000,'competitive');return raw;});histories.set(puuids[i],games);}
+ globalThis.fetch=async url=>{const target=String(url).split('/').at(-1)!.split('?')[0];return Response.json({data:histories.get(target)??[]});};
+ try{f.resetQueries();await monitor({...f.env,HENRIK_API_KEY:'fixture',DISCORD_WEBHOOK_URL:'https://discord.com/api/webhooks/1/fixture'},names.map(name=>({riotId:name+'#JP1'})));assert.ok(f.queries()+3<=50,`queries including three cold-initialization reads: ${f.queries()+3}`);}
+ finally{globalThis.fetch=original;}
 });

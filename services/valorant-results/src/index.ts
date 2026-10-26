@@ -1,5 +1,6 @@
 import { claimDeathMatch } from './death-sessions.ts';
-import { initializeKp, syncKpAccounts, collectKpMatch, drainKpInbox, flushKpDirectives, kpCreditLine } from './kp.ts';
+import type { KpRun } from './kp.ts';
+import { initializeKp, syncKpAccounts, collectKpMatch, drainKpInbox, flushKpDirectives, prepareKpRun, kpEventId, kpCreditLine } from './kp.ts';
 import { kpApi } from './kp-api.ts';
 import { lastDeathCheck } from './death-unrated.ts';
 import { isDeathMode, isDeathNotice, sessionModeSQL } from './death-modes.ts';
@@ -35,14 +36,17 @@ function validatePlayers(players: Player[]): void {
   if (new Set(ids).size !== ids.length) throw new Error('Riot IDが重複しています。');
 }
 
+const runApiBudget=new WeakMap<Env,number>();
 async function state(env: Env, key: string): Promise<number> {
+  if(key==='api_after'&&runApiBudget.has(env))return runApiBudget.get(env)!;
   const row = await env.DB.prepare('SELECT value FROM monitor_state WHERE key=?').bind(key).first<{ value: string }>();
-  return Number(row?.value ?? 0);
+  const value=Number(row?.value??0);if(key==='api_after')runApiBudget.set(env,value);return value;
 }
 
 async function setState(env: Env, key: string, value: number | string): Promise<void> {
   await env.DB.prepare('INSERT INTO monitor_state(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value')
     .bind(key, String(value)).run();
+  if(key==='api_after')runApiBudget.set(env,Number(value));
 }
 
 // Log fixed categories only: fetch errors can contain webhook URLs or credentials.
@@ -99,13 +103,13 @@ async function api<T>(env: Env, path: string): Promise<T> {
 }
 
 
-async function saveMatch(env: Env, match: Match, player: Player, account: Account): Promise<'excluded' | 'beforeMonitoring' | 'newResults' | 'duplicates'> {
+async function saveMatch(env: Env, match: Match, player: Player, account: Account, kpRun:KpRun|null,reservations:Map<string,string>,saved:Set<string>): Promise<'excluded' | 'beforeMonitoring' | 'newResults' | 'duplicates'> {
   const mode = match.metadata?.queue?.id;
   const ordinary = resultMessage(match, account.puuid, player.name?.trim() || parseId(player.riotId)[0]);
   if (!ordinary) return 'excluded';
   if (ordinary.endedAt <= account.since) return 'beforeMonitoring';
   // Only the selected queue can consume a reservation; normal games stay normal.
-  const death = isDeathMode(mode) && await claimDeathMatch(env.DB,player.riotId,match.metadata.match_id,Date.parse(match.metadata.started_at),ordinary.endedAt,mode);
+  const death = isDeathMode(mode) && reservations.get(player.riotId)===mode && await claimDeathMatch(env.DB,player.riotId,match.metadata.match_id,Date.parse(match.metadata.started_at),ordinary.endedAt,mode);
   let previousLastDeath: boolean | undefined;
   if (death) {
     const check = lastDeathCheck(match, account.puuid);
@@ -123,19 +127,24 @@ async function saveMatch(env: Env, match: Match, player: Player, account: Accoun
   }
   const result = death ? resultMessage(match,account.puuid,player.name?.trim() || parseId(player.riotId)[0],true,previousLastDeath)! : ordinary;
   let kpActive = false;
+  const kpId=kpRun?kpEventId(kpRun.mapping.guildId,match.metadata.match_id,account.puuid):'';
   try {
-    const mapping = await initializeKp(env);
-    if (mapping) {
-      kpActive = true;
-      const amount = await collectKpMatch(env, mapping, match, account.puuid);
+    if (kpRun && Date.parse(match.metadata.started_at)>=kpRun.startsAt) {
+      const amount = kpRun.credits.get(kpId) ?? await collectKpMatch(env,kpRun.mapping,match,account.puuid);
       if (amount !== null) {
-        result.message = kpCreditLine(result.message,amount);
+        kpRun.credits.set(kpId,amount);
+        result.message=kpCreditLine(result.message,amount);
+        kpActive=kpRun.messages.get(kpId)!==result.message;
       }
     }
   } catch { console.warn('kp_match_pending'); }
+  const savedKey=JSON.stringify([player.riotId,match.metadata.match_id]);
+  if(saved.has(savedKey)&&!kpActive&&!isDeathNotice(result.mode))return 'duplicates';
   const inserted = await env.DB.prepare('INSERT OR IGNORE INTO notifications(riot_id,match_id,message,ended_at,mode,act_id,act_name,outcome,sent,team_id) VALUES(?,?,?,?,?,?,?,?,?,?)')
     .bind(player.riotId, match.metadata.match_id, result.message, result.endedAt, result.mode, result.actId, result.actName,
       result.outcome, result.outcome === 'draw' && result.mode === 'escalation' ? 1 : 0, result.teamId).run();
+  saved.add(savedKey);
+  if(kpRun&&kpRun.credits.has(kpId))kpRun.messages.set(kpId,result.message);
   if (inserted.meta.changes) {
     await env.DB.prepare('INSERT OR IGNORE INTO monitor_state(key,value) VALUES(?,?)').bind('detected:' + match.metadata.match_id, String(Date.now())).run();
     console.info('result_saved', { player: player.name || player.riotId, outcome: result.outcome, endedAt: new Date(result.endedAt).toISOString(),
@@ -150,10 +159,11 @@ async function saveMatch(env: Env, match: Match, player: Player, account: Accoun
 interface DeathDetails {
   remaining: number;
   matches: Map<string, Match | null>;
+  reservations:Map<string,string>;
 }
 
 async function deathDetail(env: Env, match: Match, players: Player[], accounts: Map<string, Account>, details: DeathDetails): Promise<Match | null> {
-  if (!isDeathMode(match.metadata?.queue?.id) || !match.metadata.is_completed) return null;
+  if (!isDeathMode(match.metadata?.queue?.id) || !match.metadata.is_completed || ![...details.reservations.values()].includes(match.metadata.queue.id)) return null;
   const matchId = match.metadata.match_id;
   if (details.matches.has(matchId)) return details.matches.get(matchId) ?? null;
   details.matches.set(matchId, null);
@@ -256,6 +266,7 @@ async function flushNotifications(env: Env, players: Player[]): Promise<void> {
 
 export async function monitor(env: Env, players: Player[] = configuredPlayers): Promise<void> {
   validatePlayers(players);
+  runApiBudget.delete(env);
   console.info('monitor_start', { players: players.length, time: new Date().toISOString() });
   const lease = Date.now() + 5 * 60_000;
   const lock = await env.DB.prepare(`INSERT INTO monitor_state(key,value) VALUES('lock',?)
@@ -272,10 +283,13 @@ export async function monitor(env: Env, players: Player[] = configuredPlayers): 
     await env.DB.prepare('DELETE FROM discord_command_receipts WHERE expires_at<?').bind(Date.now()).run();
     const accounts = new Map<string, Account>((await env.DB.prepare('SELECT riot_id,puuid,region,since FROM tracked_players')
       .all<Account & { riot_id: string }>()).results.map(account => [account.riot_id, account]));
-    try { const mapping = await initializeKp(env); if (mapping) { await syncKpAccounts(env, mapping); await drainKpInbox(env); await flushKpDirectives(env,mapping); } }
+    let kpRun:KpRun|null=null;
+    try { const mapping = await initializeKp(env); if (mapping) { await syncKpAccounts(env,mapping); await drainKpInbox(env); await flushKpDirectives(env,mapping);kpRun=await prepareKpRun(env,mapping); } }
     catch { console.warn('kp_setup_pending'); }
     // Bound extra API traffic: one reserved match per run, one attempt per match per five minutes.
-    const deathDetails: DeathDetails = { remaining: 1, matches: new Map() };
+    const reservations=new Map((await env.DB.prepare(`SELECT s.riot_id,${sessionModeSQL} AS mode FROM death_unrated_sessions s WHERE s.cancelled_at IS NULL`).all<{riot_id:string;mode:string}>()).results.map(r=>[r.riot_id,r.mode]));
+    const saved=new Set((await env.DB.prepare('SELECT riot_id,match_id FROM notifications ORDER BY ended_at DESC LIMIT 200').all<{riot_id:string;match_id:string}>()).results.map(r=>JSON.stringify([r.riot_id,r.match_id])));
+    const deathDetails: DeathDetails = { remaining: 1, matches: new Map(),reservations };
     // Deliver a previously queued result before spending time polling the API again.
     if (players.length) await flushNotifications(env, players);
     const offset = await state(env, 'cursor') % Math.max(1, players.length);
@@ -288,8 +302,8 @@ export async function monitor(env: Env, players: Player[] = configuredPlayers): 
       await setState(env, 'cursor', (index + 1) % players.length);
       let stage = 'account';
       try {
-        let account = await env.DB.prepare('SELECT puuid,region,since FROM tracked_players WHERE riot_id=?')
-          .bind(player.riotId).first<Account>();
+        let account = accounts.get(player.riotId);
+        const newlyTracked=!account;
         if (!account) {
           const [name, tag] = parseId(player.riotId);
           const found = await api<Account>(env, `/valorant/v2/account/${encodeURIComponent(name)}/${encodeURIComponent(tag)}`);
@@ -300,7 +314,7 @@ export async function monitor(env: Env, players: Player[] = configuredPlayers): 
           console.info('player_registered', { player: player.name || player.riotId, since: new Date(account.since).toISOString() });
         }
         accounts.set(player.riotId, account);
-        try { const mapping = await initializeKp(env); if (mapping) await syncKpAccounts(env, mapping); }
+        try { if(newlyTracked&&kpRun){await syncKpAccounts(env,kpRun.mapping);kpRun=await prepareKpRun(env,kpRun.mapping);} }
         catch { console.warn('kp_link_pending'); }
         stage = 'match_history';
         const matches = await api<Match[]>(env, `/valorant/v4/by-puuid/matches/${account.region}/pc/${encodeURIComponent(account.puuid)}?size=5`);
@@ -308,17 +322,17 @@ export async function monitor(env: Env, players: Player[] = configuredPlayers): 
         const counts = { fetched: matches.length, newResults: 0, duplicates: 0, beforeMonitoring: 0, excluded: 0 };
         stage = 'save_result';
         for (const match of [...matches].sort((a, b) => Date.parse(a.metadata.started_at) - Date.parse(b.metadata.started_at))) {
-          counts[await saveMatch(env, match, player, account)]++;
+          counts[await saveMatch(env, match, player, account,kpRun,reservations,saved)]++;
           // A full match already contains other registered players; do not wait for their history to catch up.
           for (const other of players) {
             if (other.riotId === player.riotId) continue;
             const otherAccount = accounts.get(other.riotId);
-            if (otherAccount && match.players?.some(member => member.puuid === otherAccount.puuid)) await saveMatch(env, match, other, otherAccount);
+            if (otherAccount && match.players?.some(member => member.puuid === otherAccount.puuid)) await saveMatch(env, match, other, otherAccount,kpRun,reservations,saved);
           }
           const detail = await deathDetail(env, match, players, accounts, deathDetails);
           if (detail) for (const target of players) {
             const targetAccount = accounts.get(target.riotId);
-            if (targetAccount && detail.players.some(member => member.puuid === targetAccount.puuid)) await saveMatch(env, detail, target, targetAccount);
+            if (targetAccount && detail.players.some(member => member.puuid === targetAccount.puuid)) await saveMatch(env, detail, target, targetAccount,kpRun,reservations,saved);
           }
         }
         await setState(env, 'checked:' + player.riotId, Date.now());
@@ -331,6 +345,7 @@ export async function monitor(env: Env, players: Player[] = configuredPlayers): 
     try {const mapping=await initializeKp(env);if(mapping)await flushKpDirectives(env,mapping);}catch{console.warn('kp_directive_delivery_pending');}
 
   } finally {
+    runApiBudget.delete(env);
     await env.DB.prepare("DELETE FROM monitor_state WHERE key='lock' AND value=?").bind(String(lease)).run();
     await setState(env, 'monitor_finished', Date.now());
     console.info('monitor_finish');
