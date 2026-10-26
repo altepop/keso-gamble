@@ -40,7 +40,7 @@ function match(id: string, mode = 'competitive', win = true, ended = Date.now(),
 }
 
 test('winner flags and opaque team IDs produce the requested chat messages', () => {
-  assert.equal(resultMessage(match('1'), 'user-1', 'たろう')?.message, '🎉 たろうは13対10で勝ち！！（コンペ）');
+  assert.equal(resultMessage(match('1'), 'user-1', 'たろう')?.message.split('\n')[0], '🎉 たろうは13対10で勝ち！！（コンペ）');
   const loss = resultMessage(match('2', 'ggteam', false), 'user-1', 'はなこ')!;
   assert.equal(loss.message.split('\n')[0], '📢 はなこは10対13で負け！（エスカレーション）');
   assert.match(loss.message, /\n💬 .+/);
@@ -155,7 +155,7 @@ test('ACT totals and streaks stay separate by mode, reset at the next ACT, and b
     const drawText = await push(draw); assert.equal(messages.length, beforeDraw + 1);
     assert.match(drawText, /14対14で引き分け（コンペ）/);
     assert.match(drawText, /1勝2敗1分\n現在：連勝・連敗なし（引き分けでリセット）/);
-    assert.doesNotMatch(drawText, /連勝ストップ|連敗ストップ|\d+連勝|\d+連敗|💬/);
+    assert.doesNotMatch(drawText, /連勝ストップ|連敗ストップ|\d+連勝|\d+連敗/);
     assert.match(await push(match('f', 'competitive', true, base + 5000)), /2勝2敗1分\n現在：1連勝/);
     assert.match(await push(match('g', 'competitive', true, base + 6000)), /3勝2敗1分\n現在：2連勝/);
     const nextAct = match('h', 'competitive', true, base + 7000);
@@ -234,7 +234,7 @@ test('match details calculate KDA, ACS and hit-based HS rate; absent fields neve
   assert.doesNotMatch(resultMessage(raw, 'user-1', 'プレイヤーA')!.message, /0K|ACS|HS命中率/);
 });
 
-test('performance-specific taunts apply only to defeats and select the matching situation', () => {
+test('performance-specific defeat taunts stay separate from win and draw comments', () => {
   const taunts = JSON.parse(readFileSync(new NodeURL('../taunts.json', import.meta.url), 'utf8')) as Record<string, string[]>;
   for (const [kind, kills, deaths, ownScore] of [
     ['high_kills', 24, 16, 10], ['low_kd', 5, 20, 10], ['close_loss', 18, 16, 11], ['blowout', 18, 16, 3],
@@ -246,9 +246,9 @@ test('performance-specific taunts apply only to defeats and select the matching 
     const comment = loss.split('\n💬 ')[1];
     assert.ok(taunts[kind].includes(comment), 'Expected situational taunt for ' + kind);
     raw.teams[1].won = true; raw.teams[0].won = false;
-    assert.doesNotMatch(resultMessage(raw, 'user-1', 'プレイヤーA')!.message, /💬/);
+    assert.ok(taunts.win_high_kills.concat(taunts.win_low_kd,taunts.win,taunts.close_win,taunts.blowout_win).includes(resultMessage(raw, 'user-1', 'プレイヤーA')!.message.split('\n💬 ')[1]));
     raw.teams[1].won = false;
-    assert.doesNotMatch(resultMessage(raw, 'user-1', 'プレイヤーA')!.message, /💬/);
+    assert.ok(taunts.draw.includes(resultMessage(raw, 'user-1', 'プレイヤーA')!.message.split('\n💬 ')[1]));
   }
 });
 
@@ -339,7 +339,7 @@ test('losing-streak recovery celebrates three or more losses once within the sam
       await monitor(env, config);
       if (scenario === 'three' || scenario === 'five') assert.match(deliveries[0], new RegExp('🎊 ' + losses + '連敗ストップ！'));
       else assert.doesNotMatch(deliveries[0], /🎊|連敗ストップ/);
-      assert.doesNotMatch(deliveries[0], /💬/);
+      assert.equal((deliveries[0].match(/\n💬 /g) ?? []).length, 1);
       game = { ...game, metadata: { ...game.metadata, match_id: 'next-win', started_at: new Date(base + 11_000).toISOString() } };
       await monitor(env, config);
       assert.doesNotMatch(deliveries[1], /🎊|連敗ストップ/);
@@ -882,7 +882,7 @@ test('verified Discord commands defer immediately and return the result privatel
     assert.deepEqual(await response.json(), { type: 5, data: { flags: 64 } });
     await Promise.all(jobs);
     assert.equal(replies.length, 1); assert.equal(replies[0].method, 'PATCH');
-    assert.match(replies[0].content, /プレイヤーA：次のアンレ1試合だけ対象/);
+    assert.ok(replies[0].content.includes((configuredPlayers[0].name || configuredPlayers[0].riotId.split('#')[0]) + '：次のアンレ1試合だけ対象'));
     assert.deepEqual(replies[0].allowed_mentions, { parse: [] });
     const receipt = await env.DB.prepare('SELECT * FROM discord_command_receipts').first();
     assert.doesNotMatch(JSON.stringify(receipt), /callback-token/);
@@ -1216,4 +1216,82 @@ test('network delivery failures do not cause an immediate retry for every player
     assert.equal(attempts, 1);
     assert.equal((await env.DB.prepare('SELECT COUNT(*) AS n FROM notifications WHERE sent=0').first<{ n: number }>())!.n, 1);
   } finally { globalThis.fetch = original; }
+});
+
+test('all outcome comment pools are populated, short, unique and safe for Discord text', () => {
+  const pools = JSON.parse(readFileSync(new NodeURL('../taunts.json', import.meta.url), 'utf8')) as Record<string, string[]>;
+  assert.ok(Object.values(pools).reduce((n, lines) => n + lines.length, 0) >= 270);
+  for (const [kind, lines] of Object.entries(pools)) {
+    assert.ok(lines.length >= 12, kind);
+    assert.equal(new Set(lines).size, lines.length, kind);
+    for (const line of lines) {
+      assert.ok(line.trim().length > 0 && [...line].length <= 120, kind);
+      assert.doesNotMatch(line, /[\r\n]|@everyone|@here|<@|https?:\/\//);
+      assert.doesNotMatch(line.replaceAll('{streak}', '5'), /[{}]/);
+      if (kind.includes('streak')) assert.match(line, /\{streak\}/);
+    }
+  }
+});
+
+test('wins and draws each select stable comments across many different matches', () => {
+  const pools = JSON.parse(readFileSync(new NodeURL('../taunts.json', import.meta.url), 'utf8')) as Record<string, string[]>;
+  for (const outcome of ['win', 'draw'] as const) {
+    const seen = new Set<string>();
+    for (let n = 0; n < 80; n++) {
+      const raw = match(`${outcome}-${n}`);
+      if (outcome === 'draw') raw.teams.forEach(t => { t.won = false; });
+      const first = resultMessage(raw, 'user-1', 'プレイヤーA')!.message;
+      assert.equal(first, resultMessage(raw, 'user-1', 'プレイヤーA')!.message);
+      const comment = first.split('\n💬 ')[1];
+      assert.ok(pools[outcome].includes(comment));seen.add(comment);
+      assert.equal((first.match(/\n💬 /g) ?? []).length, 1);
+    }
+    assert.ok(seen.size >= 12, outcome);
+  }
+});
+
+test('winning streaks use three/five thresholds, remain stable, and draw resets commentary', async () => {
+  const env = environment(), original = globalThis.fetch;
+  await env.DB.prepare('INSERT INTO tracked_players VALUES(?,?,?,?)').bind('player#JP1', 'user-1', 'ap', 0).run();
+  let games: ReturnType<typeof match>[] = [];
+  const deliveries: string[] = [];
+  globalThis.fetch = async (url, init) => {
+    if (String(url).includes('api.henrikdev.xyz')) return Response.json({ data: games });
+    deliveries.push(JSON.parse(String(init?.body)).content);return Response.json({ id: '1' });
+  };
+  try {
+    const base = Date.now() - 10_000;
+    const pools = JSON.parse(readFileSync(new NodeURL('../taunts.json', import.meta.url), 'utf8')) as Record<string, string[]>;
+    for (let n = 1; n <= 5; n++) {
+      games = [match('winning-' + n, 'competitive', true, base + n * 1000), ...games].slice(0, 2);
+      await monitor(env, [{ riotId: 'player#JP1' }]);
+      const content = deliveries.at(-1)!;
+      const comment = content.split('\n💬 ')[1];
+      const group = n >= 5 ? 'long_winning_streak' : n >= 3 ? 'winning_streak' : 'win';
+      assert.ok(pools[group].some(line => line.replaceAll('{streak}', String(n)) === comment));
+      assert.equal((content.match(/\n💬 /g) ?? []).length, 1);
+      const count = deliveries.length;
+      await monitor(env, [{ riotId: 'player#JP1' }]);assert.equal(deliveries.length, count);
+    }
+    const draw = match('after-wins-draw', 'competitive', false, base + 6000);
+    draw.teams.forEach(team => { team.won = false; team.rounds.won = 14; });
+    games = [draw,...games].slice(0,2);await monitor(env,[{riotId:'player#JP1'}]);
+    const content=deliveries.at(-1)!;
+    assert.match(content,/連勝・連敗なし（引き分けでリセット）/);
+    assert.ok(pools.draw.includes(content.split('\n💬 ')[1]));
+    assert.doesNotMatch(content,/\{streak\}|\d+連勝|\d+連敗/);
+  } finally {globalThis.fetch=original;}
+});
+
+test('winning performance pools distinguish high kills, team-assisted, close and dominant wins', () => {
+  const pools = JSON.parse(readFileSync(new NodeURL('../taunts.json', import.meta.url), 'utf8')) as Record<string, string[]>;
+  for (const [kind,kills,deaths,enemyScore] of [
+    ['win_high_kills',24,16,10],['win_low_kd',5,20,10],['close_win',18,16,11],['blowout_win',18,16,3],
+  ] as const) {
+    const raw=JSON.parse(JSON.stringify(match(kind)));
+    raw.players[0].stats={kills,deaths,assists:5};raw.teams[0].rounds.won=enemyScore;
+    const message=resultMessage(raw,'user-1','プレイヤーA')!.message;
+    assert.ok(pools[kind].includes(message.split('\n💬 ')[1]),kind);
+    assert.doesNotMatch(message,/負けても健闘賞/);
+  }
 });

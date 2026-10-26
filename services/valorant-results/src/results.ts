@@ -26,7 +26,7 @@ interface Result {
   actId: string | null; actName: string | null; teamId: string;
 }
 
-function defeatComment(matchId: string, puuid: string, group: keyof typeof taunts = 'default', streak = 0): string {
+function resultComment(matchId: string, puuid: string, group: keyof typeof taunts = 'default', streak = 0): string {
   // A seeded choice stays the same across repeated API fetches and delivery retries.
   let seed = 2166136261;
   for (const char of matchId + ':' + puuid) {
@@ -91,8 +91,13 @@ export function resultMessage(raw: Match, puuid: string, label: string, deathUnr
   else if (nonnegative(stats?.kills) && nonnegative(stats?.deaths) && stats.deaths >= 10 && stats.kills / stats.deaths <= 0.5) tauntGroup = 'low_kd';
   else if (mode === 'competitive' && hasScore && enemyScore! > ownScore! && enemyScore! - ownScore! <= 2) tauntGroup = 'close_loss';
   else if (mode === 'competitive' && hasScore && enemyScore! - ownScore! >= 8) tauntGroup = 'blowout';
+  if (outcome === 'win') {
+    tauntGroup = tauntGroup === 'high_kills' ? 'win_high_kills' : tauntGroup === 'low_kd' ? 'win_low_kd'
+      : mode === 'competitive' && hasScore && ownScore! > enemyScore! && ownScore! - enemyScore! <= 2 ? 'close_win'
+      : mode === 'competitive' && hasScore && ownScore! - enemyScore! >= 8 ? 'blowout_win' : 'win';
+  } else if (outcome === 'draw') tauntGroup = 'draw';
   return {
-    message: `${outcome === 'win' ? '🎉' : '📢'} ${name}は${score}${result}（${modeName}）${hasScore ? '' : ' ※スコア未取得'}` + performance + award + (outcome === 'loss' ? defeatComment(raw.metadata.match_id, puuid, tauntGroup) : ''),
+    message: `${outcome === 'win' ? '🎉' : '📢'} ${name}は${score}${result}（${modeName}）${hasScore ? '' : ' ※スコア未取得'}` + performance + award + resultComment(raw.metadata.match_id, puuid, tauntGroup),
     endedAt: start + duration, mode: mode === 'competitive' ? 'competitive' : 'escalation', outcome,
     actId: raw.metadata.season?.id || null, actName: raw.metadata.season?.short || null, teamId: player.team_id,
   };
@@ -152,7 +157,10 @@ export async function notificationContent(db: D1Database, notice: Notice): Promi
   const base = split < 0 ? notice.message : notice.message.slice(0, split);
   let comment = split < 0 ? '' : notice.message.slice(split);
   if (notice.outcome === 'loss' && summary.streak >= 3) {
-    comment = defeatComment(notice.match_id, notice.riot_id, summary.streak >= 5 ? 'long_losing_streak' : 'losing_streak', summary.streak);
+    comment = resultComment(notice.match_id, notice.riot_id, summary.streak >= 5 ? 'long_losing_streak' : 'losing_streak', summary.streak);
+  }
+  if (notice.outcome === 'win' && summary.streak >= 3) {
+    comment = resultComment(notice.match_id, notice.riot_id, summary.streak >= 5 ? 'long_winning_streak' : 'winning_streak', summary.streak);
   }
   return base + summary.text + comment;
 }
