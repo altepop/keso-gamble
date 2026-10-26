@@ -50,8 +50,8 @@ const help = `📖 コマンド一覧
 /valo ranking [mode]：最新ACTの勝率ランキング
 /valo status：監視・API待機・送信待ちの状況
 
-☠️ デスアンレ（管理者・サーバー管理権限）
-/death start player [player2…]：次のアンレ1試合だけ予約
+☠️ デスアンレ／デススイフト（管理者・サーバー管理権限）
+/death start player [player2…]：対象を選び、表示されるメニューでモードを選択
 /death stop [player]：取消（省略で全員）
 /death status：予約を確認
 
@@ -84,7 +84,7 @@ export async function runValoCommand(db: D1Database, interaction: Interaction, p
     const states = (await db.prepare("SELECT key,value FROM monitor_state WHERE key IN ('monitor_started','monitor_finished','api_after','discord_after') OR key LIKE 'checked:%'").all<{ key: string; value: string }>()).results;
     const state = new Map(states.map(row => [row.key, Number(row.value)]));
     const queue = await db.prepare(`SELECT COUNT(DISTINCT match_id) AS n FROM notifications WHERE sent=0 AND
-      (mode IS NULL OR mode!='unrated' OR EXISTS(SELECT 1 FROM death_unrated_sessions s WHERE s.riot_id=notifications.riot_id
+      (mode IS NULL OR mode NOT IN ('unrated','death_swiftplay') OR EXISTS(SELECT 1 FROM death_unrated_sessions s WHERE s.riot_id=notifications.riot_id
       AND s.match_id=notifications.match_id AND s.cancelled_at IS NULL))`).first<{ n: number }>();
     const lines = await Promise.all(players.map(async player => {
       const account = await db.prepare('SELECT since FROM tracked_players WHERE riot_id=?').bind(player.riotId).first<{ since: number }>();

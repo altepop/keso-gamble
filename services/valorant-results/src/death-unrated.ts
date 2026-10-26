@@ -1,4 +1,5 @@
 import type { Match } from './results.ts';
+import { deathName, isDeathMode } from './death-modes.ts';
 
 type Check = boolean | null;
 export interface DeathUnratedVerdict {
@@ -86,7 +87,7 @@ export function deathUnratedMessage(raw: Match, puuid: string, name: string, pre
     + ' ' + label + '：' + (check === true ? '該当' : check === false ? '非該当' : 'データ不足') + detail;
   const title = result.verdict === 'competitive' ? '☠️ ' + name + '、コンペ行き確定！'
     : result.verdict === 'safe' ? '🕊️ ' + name + '、今回はセーフ！' : '⏳ ' + name + '、判定保留';
-  return title + '（デスアンレ）'
+  return title + '（' + deathName(isDeathMode(raw.metadata.queue.id) ? raw.metadata.queue.id : 'unrated') + '）'
     + line('KDマイナス', result.negativeKD, kd)
     + line('最終R・自チーム内ラストデス', result.lastDeath,
       result.lastDeath === null ? '（' + lastDeathReasons[lastDeathCheck(raw, puuid).reason] + '）' : '')

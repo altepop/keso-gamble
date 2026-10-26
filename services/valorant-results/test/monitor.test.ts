@@ -743,12 +743,199 @@ test('an unknown death-unrated verdict is edited in place once complete death da
 });
 
 
-function deathInteraction(id: string, action: string, targets: string[] = []) {
+function deathInteraction(id: string, action: string, targets: string[] = [], mode?: string) {
   return {
-    id, application_id: '111', type: 2, token: 'callback-token', guild_id: '222', member: { permissions: '32' },
-    data: { name: 'death', options: [{ type: 1, name: action, options: targets.map((value, n) => ({ type: 3, name: n ? 'player' + (n + 1) : 'player', value })) }] },
+    id, application_id: '111', type: 2, token: 'callback-token', guild_id: '222', member: { permissions: '32', user: { id: '444' } },
+    data: { name: 'death', options: [{ type: 1, name: action, options: [...targets.map((value, n) => ({ type: 3, name: n ? 'player' + (n + 1) : 'player', value })),
+      ...(mode ? [{ type: 3, name: 'mode', value: mode }] : [])] }] },
   };
 }
+
+function swiftMatch(id = 'death-swift') {
+  const raw = unratedMatch(id); raw.metadata.queue.id = 'swiftplay';
+  raw.rounds = Array.from({ length: 9 }, (_, id) => ({ id }));
+  raw.kills.forEach(kill => { if (kill.round === 22) kill.round = 8; });
+  raw.teams[0].rounds.won = 4; raw.teams[1].rounds.won = 5;
+  return raw;
+}
+function deathSelection(id: string, parent: string, mode = 'swiftplay', userId = '444') {
+  return { id, application_id: '111', type: 3, token: 'selection-callback-token', guild_id: '222',
+    member: { permissions: '32', user: { id: userId } }, data: { custom_id: 'death_mode:' + parent, component_type: 3, values: [mode] } };
+}
+
+test('death reservations persist an explicit queue, preserve legacy unrated, and only the selected queue can claim them', async () => {
+  const { runDeathCommand } = await import('../src/discord-interactions.ts');
+  const { claimDeathMatch } = await import('../src/death-sessions.ts');
+  const env = environment(), config = [{ riotId: 'one#JP1' }, { riotId: 'two#JP1' }];
+  await env.DB.prepare('INSERT INTO death_unrated_sessions(riot_id,session_id,armed_at,expires_at) VALUES(?,?,?,?)')
+    .bind('two#JP1', 'legacy', Date.now() - 1000, Date.now() + 7200_000).run();
+  assert.match(await runDeathCommand(env.DB, deathInteraction('600', 'start', ['one#JP1'], 'swiftplay'), config), /次のスイフト1試合だけ対象/);
+  const now = Date.now() + 1000;
+  assert.equal(await claimDeathMatch(env.DB, 'one#JP1', 'wrong-unrated', now, now + 1000, 'unrated'), false);
+  assert.equal(await claimDeathMatch(env.DB, 'two#JP1', 'wrong-swift', now, now + 1000, 'swiftplay'), false);
+  assert.equal(await claimDeathMatch(env.DB, 'two#JP1', 'legacy-unrated', now, now + 1000, 'unrated'), true);
+  assert.equal(await claimDeathMatch(env.DB, 'one#JP1', 'right-swift', now, now + 1000, 'swiftplay'), true);
+  assert.equal(await claimDeathMatch(env.DB, 'one#JP1', 'second-swift', now, now + 1000, 'swiftplay'), false);
+  const status = await runDeathCommand(env.DB, deathInteraction('601', 'status'), config);
+  assert.match(status, /デススイフト：対象試合は決定済み/); assert.match(status, /デスアンレ：対象試合は決定済み/);
+});
+
+test('choosing another death mode switches a waiting reservation without resetting an identical choice or allowing stale command replay', async () => {
+  const { runDeathCommand } = await import('../src/discord-interactions.ts');
+  const { claimDeathMatch } = await import('../src/death-sessions.ts');
+  const env = environment(), config = [{ riotId: 'one#JP1' }];
+  const first = deathInteraction('610', 'start', ['one#JP1'], 'unrated');
+  await runDeathCommand(env.DB, first, config);
+  await runDeathCommand(env.DB, deathInteraction('611', 'start', ['one#JP1'], 'unrated'), config);
+  assert.equal((await env.DB.prepare('SELECT COUNT(*) AS n FROM death_unrated_sessions').first<{ n: number }>())!.n, 1);
+  const result = await runDeathCommand(env.DB, deathInteraction('612', 'start', ['one#JP1'], 'swiftplay'), config);
+  assert.match(result, /次のスイフト/);
+  await runDeathCommand(env.DB, first, config);
+  const now = Date.now() + 1000;
+  assert.equal(await claimDeathMatch(env.DB, 'one#JP1', 'unrated-after-switch', now, now + 1000, 'unrated'), false);
+  assert.equal(await claimDeathMatch(env.DB, 'one#JP1', 'swift-after-switch', now, now + 1000, 'swiftplay'), true);
+  assert.equal((await env.DB.prepare('SELECT COUNT(*) AS n FROM death_unrated_sessions WHERE match_id IS NULL AND cancelled_at IS NULL').first<{ n: number }>())!.n, 0);
+  const before = (await env.DB.prepare('SELECT COUNT(*) AS n FROM death_unrated_sessions').first<{ n: number }>())!.n;
+  assert.match(await runDeathCommand(env.DB, deathInteraction('613', 'start', ['one#JP1'], 'deathmatch'), config), /モードは/);
+  assert.equal((await env.DB.prepare('SELECT COUNT(*) AS n FROM death_unrated_sessions').first<{ n: number }>())!.n, before);
+});
+
+test('mode menus reserve nothing until selection, bind to their operator, and cannot be selected twice or replayed to rearm', async () => {
+  const { deathModePicker, selectDeathMode } = await import('../src/death-mode-picker.ts');
+  const { runDeathCommand } = await import('../src/discord-interactions.ts');
+  const env = environment(), config = [{ riotId: 'one#JP1', name: 'プレイヤーA' }];
+  const request = deathInteraction('620', 'start', ['one#JP1']);
+  const menu = await deathModePicker(env.DB, request, config);
+  assert.deepEqual(menu.components?.[0]?.components[0].options.map(option => option.value), ['unrated', 'swiftplay']);
+  assert.equal((await env.DB.prepare('SELECT COUNT(*) AS n FROM death_unrated_sessions').first<{ n: number }>())!.n, 0);
+  assert.match(await selectDeathMode(env.DB, deathSelection('621', '620', 'swiftplay', '555'), config, runDeathCommand), /本人だけ/);
+  assert.match(await selectDeathMode(env.DB, deathSelection('622', '620', 'deathmatch'), config, runDeathCommand), /モードは/);
+  const selection = deathSelection('623', '620');
+  const result = await selectDeathMode(env.DB, selection, config, runDeathCommand);
+  assert.match(result, /次のスイフト/);
+  assert.equal(await selectDeathMode(env.DB, selection, config, runDeathCommand), result);
+  assert.match(await selectDeathMode(env.DB, deathSelection('624', '620', 'unrated'), config, runDeathCommand), /選択済み/);
+  await runDeathCommand(env.DB, deathInteraction('625', 'stop'), config);
+  assert.equal(await selectDeathMode(env.DB, selection, config, runDeathCommand), result, 'Retry returns the old response but does not rearm after stop');
+  assert.equal((await env.DB.prepare('SELECT COUNT(*) AS n FROM death_unrated_sessions WHERE cancelled_at IS NULL').first<{ n: number }>())!.n, 0);
+  assert.equal((await deathModePicker(env.DB, request, config)).components?.length, 0);
+  assert.doesNotMatch(JSON.stringify((await env.DB.prepare('SELECT * FROM discord_command_receipts').all()).results), /callback-token/);
+});
+
+test('expired, cancelled, superseded or changed-roster mode menus cannot create a later reservation', async () => {
+  const { deathModePicker, selectDeathMode } = await import('../src/death-mode-picker.ts');
+  const { runDeathCommand } = await import('../src/discord-interactions.ts');
+  for (const kind of ['expired', 'cancelled', 'superseded', 'roster'] as const) {
+    const env = environment(), config = [{ riotId: 'one#JP1' }];
+    await deathModePicker(env.DB, deathInteraction('630', 'start', ['one#JP1']), config);
+    if (kind === 'expired') await env.DB.prepare('UPDATE discord_command_receipts SET expires_at=0').run();
+    if (kind === 'cancelled') await runDeathCommand(env.DB, deathInteraction('631', 'stop'), config);
+    if (kind === 'superseded') await runDeathCommand(env.DB, deathInteraction('632', 'start', ['one#JP1'], 'unrated'), config);
+    const result = await selectDeathMode(env.DB, deathSelection('633', '630'), kind === 'roster' ? [] : config, runDeathCommand);
+    assert.match(result, /期限切れ|予約状態が変わって|対象者の登録が変わって/, kind);
+    assert.equal(await env.DB.prepare("SELECT * FROM monitor_state WHERE key LIKE 'death_mode:%' AND value='swiftplay'").first(), null, kind);
+  }
+});
+
+test('simultaneous mode selections can commit only one mode, and reservation plus mode roll back together', async () => {
+  const { deathModePicker, selectDeathMode } = await import('../src/death-mode-picker.ts');
+  const { runDeathCommand } = await import('../src/discord-interactions.ts');
+  const env = environment(), config = [{ riotId: 'one#JP1' }, { riotId: 'two#JP1' }];
+  await deathModePicker(env.DB, deathInteraction('640', 'start', ['all']), config);
+  const results = await Promise.all([selectDeathMode(env.DB, deathSelection('641', '640'), config, runDeathCommand),
+    selectDeathMode(env.DB, deathSelection('642', '640', 'unrated'), config, runDeathCommand)]);
+  assert.ok(results.some(result => result.includes('選択済み')));
+  const modes = (await env.DB.prepare("SELECT DISTINCT value FROM monitor_state WHERE key LIKE 'death_mode:%'").all<{ value: string }>()).results;
+  assert.equal(modes.length, 1);
+  const broken = environment(), batch = broken.DB.batch.bind(broken.DB);
+  broken.DB.batch = async queries => batch([...queries, broken.DB.prepare('INSERT INTO no_such_table VALUES(1)')]);
+  assert.match(await runDeathCommand(broken.DB, deathInteraction('643', 'start', ['all'], 'swiftplay'), config), /操作結果を確認できません/);
+  assert.equal((await broken.DB.prepare('SELECT COUNT(*) AS n FROM death_unrated_sessions').first<{ n: number }>())!.n, 0);
+  assert.equal(await broken.DB.prepare("SELECT * FROM monitor_state WHERE key LIKE 'death_mode:%'").first(), null);
+});
+
+test('a stop committed during menu selection cannot be undone by the older menu transaction', async () => {
+  const { deathModePicker, selectDeathMode } = await import('../src/death-mode-picker.ts');
+  const { runDeathCommand } = await import('../src/discord-interactions.ts');
+  const env = environment(), config = [{ riotId: 'one#JP1' }, { riotId: 'two#JP1' }];
+  await deathModePicker(env.DB, deathInteraction('644', 'start', ['all']), config);
+  const result = await selectDeathMode(env.DB, deathSelection('645', '644'), config, async (db, interaction, players, expected) => {
+    await runDeathCommand(db, deathInteraction('646', 'stop', ['two#JP1']), players);
+    return runDeathCommand(db, interaction, players, expected);
+  });
+  assert.match(result, /予約状態が変わって/);
+  assert.equal((await env.DB.prepare('SELECT COUNT(*) AS n FROM death_unrated_sessions').first<{ n: number }>())!.n, 0, 'No participant in a stale multi-player menu is reserved');
+  assert.equal(await env.DB.prepare("SELECT * FROM monitor_state WHERE key LIKE 'death_apply:%'").first(), null);
+});
+
+test('swift death verdicts use swift rounds and ACS, stay separate from normal results, and still handle revivals', async () => {
+  const { deathUnratedVerdict } = await import('../src/death-unrated.ts');
+  const { groupNotification } = await import('../src/results.ts');
+  const env = environment(), raw = swiftMatch();
+  const normal = resultMessage(raw, 'user-1', 'A')!, death = resultMessage(raw, 'user-1', 'A', true)!;
+  assert.equal(normal.mode, 'swiftplay'); assert.doesNotMatch(normal.message, /デススイフト|デスアンレ/);
+  assert.equal(death.mode, 'death_swiftplay'); assert.match(death.message, /デススイフト/); assert.match(death.message, /ACS 667/);
+  assert.equal(deathUnratedVerdict(raw, 'user-1').verdict, 'safe');
+  raw.kills[0].round = 8; raw.kills[0].time_in_round_in_ms = 15000;
+  assert.equal(deathUnratedVerdict(raw, 'user-1').lastDeath, true);
+  const notices = ['user-1', 'user-2'].map((puuid, n) => { const result = resultMessage(raw, puuid, 'P' + n, true)!;
+    return { riot_id: ['one#JP1', 'two#JP1'][n], match_id: raw.metadata.match_id, message: result.message, ended_at: result.endedAt,
+      mode: result.mode, act_id: result.actId, act_name: result.actName, outcome: result.outcome, team_id: result.teamId }; });
+  const content = (await groupNotification(env.DB, notices)).content;
+  assert.match(content, /デススイフト判定（2人）/); assert.doesNotMatch(content, /デスアンレ|ACT|連勝|連敗|🤝/);
+});
+
+test('a swift reservation ignores unrated and other queues, consumes one swift, and retries missing details in that same mode', async () => {
+  const { runDeathCommand } = await import('../src/discord-interactions.ts');
+  const env = environment(), original = globalThis.fetch, clock = Date.now;
+  let now = Date.now(); Date.now = () => now;
+  const config = [{ riotId: 'one#JP1', name: 'プレイヤーA' }];
+  await env.DB.prepare('INSERT INTO tracked_players VALUES(?,?,?,?)').bind('one#JP1', 'user-1', 'ap', 0).run();
+  const posts: Array<{ method: string; content: string }> = []; let details = 0;
+  let games: unknown[] = [];
+  const complete = swiftMatch('swift-details');
+  globalThis.fetch = async (url, init) => {
+    if (String(url).includes('/by-puuid/matches/')) return Response.json({ data: games });
+    if (String(url).includes('/valorant/v4/match/')) { details++; return Response.json({ data: complete }); }
+    posts.push({ method: init!.method!, content: JSON.parse(String(init?.body)).content }); return Response.json({ id: '123' });
+  };
+  try {
+    await runDeathCommand(env.DB, deathInteraction('650', 'start', ['one#JP1'], 'swiftplay'), config);
+    now += 5000;
+    const other = unratedMatch('ordinary-unrated'); other.metadata.started_at = new Date(now - 1000).toISOString();
+    games = [other, match('ordinary-tdm', 'hurm', true, now)]; await monitor(env, config);
+    assert.equal((await env.DB.prepare('SELECT match_id FROM death_unrated_sessions WHERE riot_id=?').bind('one#JP1').first<{ match_id: string | null }>())!.match_id, null);
+    assert.ok(posts.every(post => !post.content.includes('デスアンレ') && !post.content.includes('デススイフト')));
+    complete.metadata.started_at = new Date(now).toISOString(); now += 2000;
+    const partial = JSON.parse(JSON.stringify(complete)); delete partial.rounds;
+    games = [partial]; await monitor(env, config); await monitor(env, config);
+    assert.equal(details, 1); assert.match(posts.at(-1)!.content, /デススイフト/); assert.match(posts.at(-1)!.content, /今回はセーフ/);
+    assert.equal(posts.at(-1)!.method, 'PATCH');
+    now += 2000; const next = swiftMatch('next-ordinary-swift'); next.metadata.started_at = new Date(now).toISOString();
+    games = [next]; await monitor(env, config);
+    assert.doesNotMatch(posts.at(-1)!.content, /デススイフト/);
+  } finally { globalThis.fetch = original; Date.now = clock; }
+});
+
+test('cancelled swift reservations suppress pending posts and disappear from the waiting count', async () => {
+  const { runDeathCommand } = await import('../src/discord-interactions.ts');
+  const { runValoCommand } = await import('../src/valo-queries.ts');
+  const env = environment(), original = globalThis.fetch;
+  const config = [{ riotId: 'one#JP1' }];
+  await env.DB.prepare('INSERT INTO tracked_players VALUES(?,?,?,?)').bind('one#JP1', 'user-1', 'ap', 0).run();
+  await runDeathCommand(env.DB, deathInteraction('660', 'start', ['one#JP1'], 'swiftplay'), config);
+  const raw = swiftMatch('cancel-swift'); raw.metadata.started_at = new Date(Date.now() + 10).toISOString();
+  let attempts = 0;
+  globalThis.fetch = async (url) => String(url).includes('api.henrikdev.xyz') ? Response.json({ data: [raw] }) : (++attempts, new Response('', { status: 503 }));
+  try {
+    await monitor(env, config); assert.equal(attempts, 1);
+    await runDeathCommand(env.DB, deathInteraction('661', 'stop'), config);
+    await env.DB.prepare("DELETE FROM monitor_state WHERE key='discord_after'").run();
+    await monitor(env, config); assert.equal(attempts, 1);
+    const state = await runValoCommand(env.DB, { ...deathInteraction('662', 'status'), data: { name: 'valo', options: [{ type: 1, name: 'status' }] } }, config);
+    assert.match(state, /送信待ち：0/);
+  } finally { globalThis.fetch = original; }
+});
 
 test('an unrelated missing death no longer hides a provable non-last-death result', async () => {
   const { lastDeathCheck, deathUnratedVerdict } = await import('../src/death-unrated.ts');
@@ -1096,7 +1283,7 @@ test('Discord HTTP verification rejects invalid signatures, replays, wrong guild
   assert.equal((await discordInteractions(new Request('https://worker.example/interactions'), env, ctx, config)).status, 405);
 });
 
-test('verified Discord commands defer immediately and return the result privately without storing their callback token', async () => {
+test('signed mode menus and selections defer privately, verify permissions, and reserve only after selection without storing callback tokens', async () => {
   const { discordInteractions } = await import('../src/discord-interactions.ts');
   const pair = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']) as CryptoKeyPair;
   const config = { applicationId: '111', guildId: '222', publicKey: Buffer.from(await crypto.subtle.exportKey('raw', pair.publicKey)).toString('hex') };
@@ -1104,7 +1291,7 @@ test('verified Discord commands defer immediately and return the result privatel
   const ctx = { waitUntil(job: Promise<unknown>) { jobs.push(job); } } as ExecutionContext;
   const body = JSON.stringify(deathInteraction('1234', 'start', [configuredPlayers[0].riotId])), timestamp = String(Math.floor(Date.now() / 1000));
   const signature = Buffer.from(await crypto.subtle.sign('Ed25519', pair.privateKey, new TextEncoder().encode(timestamp + body))).toString('hex');
-  const replies: Array<{ method: string; content: string; allowed_mentions: unknown }> = [];
+  const replies: Array<{ method: string; content: string; allowed_mentions: unknown; components?: unknown[] }> = [];
   globalThis.fetch = async (url, init) => {
     assert.match(String(url), /^https:\/\/discord.com\/api\/v10\/webhooks\/111\//);
     replies.push({ method: init!.method!, ...JSON.parse(String(init?.body)) }); return Response.json({ id: '1' });
@@ -1114,10 +1301,28 @@ test('verified Discord commands defer immediately and return the result privatel
     assert.deepEqual(await response.json(), { type: 5, data: { flags: 64 } });
     await Promise.all(jobs);
     assert.equal(replies.length, 1); assert.equal(replies[0].method, 'PATCH');
-    assert.ok(replies[0].content.includes((configuredPlayers[0].name || configuredPlayers[0].riotId.split('#')[0]) + '：次のアンレ1試合だけ対象'));
+    assert.ok(replies[0].content.includes(configuredPlayers[0].name || configuredPlayers[0].riotId.split('#')[0]));
+    assert.match(replies[0].content, /モードを選んで/);
+    assert.equal((await env.DB.prepare('SELECT COUNT(*) AS n FROM death_unrated_sessions').first<{ n: number }>())!.n, 0, 'Opening the mode menu must not reserve a match');
     assert.deepEqual(replies[0].allowed_mentions, { parse: [] });
-    const receipt = await env.DB.prepare('SELECT * FROM discord_command_receipts').first();
-    assert.doesNotMatch(JSON.stringify(receipt), /callback-token/);
+    assert.equal(replies[0].components?.length, 1);
+    const signed = async (payload: unknown) => {
+      const text = JSON.stringify(payload), time = String(Math.floor(Date.now() / 1000));
+      const sig = Buffer.from(await crypto.subtle.sign('Ed25519', pair.privateKey, new TextEncoder().encode(time + text))).toString('hex');
+      return new Request('https://worker.example/interactions', { method: 'POST', body: text, headers: { 'X-Signature-Ed25519': sig, 'X-Signature-Timestamp': time } });
+    };
+    const component = deathSelection('1235', '1234');
+    const noPermission = { ...component, member: { ...component.member, permissions: '0' } };
+    assert.match(JSON.stringify(await (await discordInteractions(await signed(noPermission), env, ctx, config)).json()), /権限/);
+    assert.equal(jobs.length, 1);
+    const tampered = await signed(component); tampered.headers.set('X-Signature-Ed25519', '0'.repeat(128));
+    assert.equal((await discordInteractions(tampered, env, ctx, config)).status, 401);
+    assert.deepEqual(await (await discordInteractions(await signed(component), env, ctx, config)).json(), { type: 6 });
+    await Promise.all(jobs);
+    assert.equal(replies.length, 2); assert.match(replies[1].content, /次のスイフト1試合だけ対象/);
+    assert.deepEqual(replies[1].components, []); assert.deepEqual(replies[1].allowed_mentions, { parse: [] });
+    assert.equal((await env.DB.prepare('SELECT COUNT(*) AS n FROM death_unrated_sessions').first<{ n: number }>())!.n, 1);
+    assert.doesNotMatch(JSON.stringify((await env.DB.prepare('SELECT * FROM discord_command_receipts').all()).results), /callback-token/);
   } finally { globalThis.fetch = original; }
 });
 test('a failed multi-player reservation rolls back every participant and keeps a receipt against stale replay', async () => {
@@ -1188,6 +1393,10 @@ test('slash command definitions preserve death permissions and expose thirteen r
   const commands = discordCommands();
   assert.deepEqual(commands.map(command => command.name), ['death', 'valo']);
   assert.equal(commands[0].default_member_permissions, '32');
+  const deathStart = commands[0].options.find(option => option.name === 'start')!;
+  const deathMode = deathStart.options!.find(option => option.name === 'mode')!;
+  assert.deepEqual(deathMode.choices.map(choice => choice.value), ['unrated', 'swiftplay']);
+  assert.equal(deathMode.required, false, 'Existing /death starts remain usable through the mode menu');
   assert.equal('default_member_permissions' in commands[1], false);
   assert.equal(commands[1].options.length, 13);
   for (const subcommand of commands[1].options) {

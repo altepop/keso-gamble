@@ -1,5 +1,6 @@
 import { claimDeathMatch } from './death-sessions.ts';
 import { lastDeathCheck } from './death-unrated.ts';
+import { isDeathMode, isDeathNotice, sessionModeSQL } from './death-modes.ts';
 import { discordInteractions } from './discord-interactions.ts';
 import configuredPlayers from '../players.json' with { type: 'json' };
 import { resultMessage, groupNotification } from './results.ts';
@@ -95,12 +96,12 @@ async function api<T>(env: Env, path: string): Promise<T> {
 
 
 async function saveMatch(env: Env, match: Match, player: Player, account: Account): Promise<'excluded' | 'beforeMonitoring' | 'newResults' | 'duplicates'> {
-  const unrated = match.metadata?.queue?.id === 'unrated';
+  const mode = match.metadata?.queue?.id;
   const ordinary = resultMessage(match, account.puuid, player.name?.trim() || parseId(player.riotId)[0]);
   if (!ordinary) return 'excluded';
   if (ordinary.endedAt <= account.since) return 'beforeMonitoring';
-  // Normal unrated results never acquire a /death verdict without a reservation.
-  const death = unrated && await claimDeathMatch(env.DB,player.riotId,match.metadata.match_id,Date.parse(match.metadata.started_at),ordinary.endedAt);
+  // Only the selected queue can consume a reservation; normal games stay normal.
+  const death = isDeathMode(mode) && await claimDeathMatch(env.DB,player.riotId,match.metadata.match_id,Date.parse(match.metadata.started_at),ordinary.endedAt,mode);
   let previousLastDeath: boolean | undefined;
   if (death) {
     const check = lastDeathCheck(match, account.puuid);
@@ -126,7 +127,7 @@ async function saveMatch(env: Env, match: Match, player: Player, account: Accoun
       finishToDetectionMs: Math.max(0, Date.now() - result.endedAt) });
     return 'newResults';
   }
-  if (result.mode === 'unrated') await env.DB.prepare('UPDATE notifications SET message=?,outcome=?,sent=0 WHERE riot_id=? AND match_id=? AND message!=?')
+  if (isDeathNotice(result.mode)) await env.DB.prepare('UPDATE notifications SET message=?,outcome=?,sent=0 WHERE riot_id=? AND match_id=? AND message!=?')
     .bind(result.message, result.outcome, player.riotId, match.metadata.match_id, result.message).run();
   return 'duplicates';
 }
@@ -137,12 +138,12 @@ interface DeathDetails {
 }
 
 async function deathDetail(env: Env, match: Match, players: Player[], accounts: Map<string, Account>, details: DeathDetails): Promise<Match | null> {
-  if (match.metadata?.queue?.id !== 'unrated' || !match.metadata.is_completed) return null;
+  if (!isDeathMode(match.metadata?.queue?.id) || !match.metadata.is_completed) return null;
   const matchId = match.metadata.match_id;
   if (details.matches.has(matchId)) return details.matches.get(matchId) ?? null;
   details.matches.set(matchId, null);
-  const sessions = await env.DB.prepare('SELECT riot_id FROM death_unrated_sessions WHERE match_id=? AND cancelled_at IS NULL')
-    .bind(matchId).all<{ riot_id: string }>();
+  const sessions = await env.DB.prepare(`SELECT riot_id FROM death_unrated_sessions s WHERE match_id=? AND cancelled_at IS NULL AND ${sessionModeSQL}=?`)
+    .bind(matchId, match.metadata.queue.id).all<{ riot_id: string }>();
   let unresolved = false;
   for (const session of sessions.results) {
     const account = accounts.get(session.riot_id);
@@ -160,7 +161,7 @@ async function deathDetail(env: Env, match: Match, players: Player[], accounts: 
   await setState(env, 'death_detail_after:' + matchId, Date.now() + 5 * 60_000);
   try {
     const detail = await api<Match>(env, '/valorant/v4/match/' + account.region + '/' + encodeURIComponent(matchId));
-    if (!detail || detail.metadata?.match_id !== matchId || detail.metadata.queue?.id !== 'unrated'
+    if (!detail || detail.metadata?.match_id !== matchId || detail.metadata.queue?.id !== match.metadata.queue.id
       || detail.metadata.is_completed !== true || Date.parse(detail.metadata.started_at) !== Date.parse(match.metadata.started_at)
       || !Number.isFinite(detail.metadata.game_length_in_ms) || detail.metadata.game_length_in_ms <= 0
       || !Array.isArray(detail.teams) || detail.teams.length !== 2
@@ -188,7 +189,7 @@ async function flushNotifications(env: Env, players: Player[]): Promise<void> {
   if (url.protocol !== 'https:' || url.hostname !== 'discord.com' || !url.pathname.startsWith('/api/webhooks/')) throw new Error('Invalid Discord Webhook URL');
   url.searchParams.set('wait', 'true');
   const pending = await env.DB.prepare(`SELECT match_id,MIN(ended_at) AS ended_at FROM notifications
-    WHERE sent=0 AND (mode IS NULL OR mode!='unrated' OR EXISTS(
+    WHERE sent=0 AND (mode IS NULL OR mode NOT IN ('unrated','death_swiftplay') OR EXISTS(
       SELECT 1 FROM death_unrated_sessions s WHERE s.riot_id=notifications.riot_id
       AND s.match_id=notifications.match_id AND s.cancelled_at IS NULL))
     GROUP BY match_id ORDER BY ended_at,match_id LIMIT 10`).all<{ match_id: string }>();
@@ -197,7 +198,7 @@ async function flushNotifications(env: Env, players: Player[]): Promise<void> {
       // Include sent participants when another player's result arrives on a later poll.
       const notices = await env.DB.prepare(`SELECT * FROM notifications WHERE match_id=?
         AND (outcome IS NULL OR outcome!='draw' OR mode!='escalation')
-        AND (mode IS NULL OR mode!='unrated' OR EXISTS(SELECT 1 FROM death_unrated_sessions s
+        AND (mode IS NULL OR mode NOT IN ('unrated','death_swiftplay') OR EXISTS(SELECT 1 FROM death_unrated_sessions s
           WHERE s.riot_id=notifications.riot_id AND s.match_id=notifications.match_id AND s.cancelled_at IS NULL)) ORDER BY riot_id`).bind(pendingMatch.match_id).all<Notice>();
       if (!notices.results.length) continue;
       const payload = await groupNotification(env.DB, notices.results, new Map(players.map(player => [player.riotId, player.name?.trim() || parseId(player.riotId)[0]])));

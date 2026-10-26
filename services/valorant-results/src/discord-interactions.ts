@@ -3,27 +3,28 @@ import storedConfig from '../discord-config.json' with { type: 'json' };
 import configuredPlayers from '../players.json' with { type: 'json' };
 import type { Env, Player } from './index.ts';
 import type { DeathSession } from './death-sessions.ts';
+import { deathActionKey, deathModeKey, deathName, deathQueueName, isDeathMode, sessionModeSQL } from './death-modes.ts';
+import { deathRequest } from './death-request.ts';
+import { deathModePicker, selectDeathMode } from './death-mode-picker.ts';
+import type { ExpectedDeathAction } from './death-modes.ts';
 
 export interface DiscordConfig { applicationId: string; publicKey: string; guildId: string; workerUrl?: string }
 interface Option { type: number; name: string; value?: string; options?: Option[] }
 export interface Interaction {
   id: string; application_id: string; type: number; token?: string; guild_id?: string;
-  member?: { permissions?: string }; data?: { name: string; options?: Option[] };
+  member?: { permissions?: string; user?: { id: string } };
+  data?: { name?: string; options?: Option[]; custom_id?: string; values?: string[]; component_type?: number };
 }
 const respond = (content: string) => Response.json({ type: 4, data: { content, flags: 64, allowed_mentions: { parse: [] } } });
 const unhex = (value: string) => Uint8Array.from(value.match(/../g) ?? [], byte => parseInt(byte, 16));
 const label = (player: Player) => (player.name || player.riotId.split('#')[0]).replace(/[\r\n`*_~|<>]/g, '').slice(0, 80);
 
-export async function runDeathCommand(db: D1Database, interaction: Interaction, players: Player[] = configuredPlayers): Promise<string> {
-  const action = interaction.data?.options?.[0];
-  if (!action || action.type !== 1 || !['start', 'stop', 'status'].includes(action.name)) return '使い方：/death start、/death stop、/death status';
-  const options = action.options ?? [];
-  if (options.some(option => option.type !== 3 || !/^player[2-5]?$/.test(option.name) || typeof option.value !== 'string')) return '対象者は登録済みの選択肢から選んでください。';
-  if (action.name === 'start' && !options.length) return 'playerで対象者を選んでください。';
-  const ids = options.map(option => option.value!);
-  if (ids.some(id => id !== 'all' && !players.some(player => player.riotId === id))) return '登録から外れた対象者が含まれています。コマンドの選択肢を更新してください。';
-  const targets = action.name === 'status' || !ids.length || ids.includes('all') ? players : players.filter(player => ids.includes(player.riotId));
-  if (!targets.length) return '対象者が登録されていません。';
+export async function runDeathCommand(db: D1Database, interaction: Interaction, players: Player[] = configuredPlayers, expectedActions?: ExpectedDeathAction[]): Promise<string> {
+  const request = deathRequest(interaction, players);
+  if ('error' in request) return request.error;
+  const { action, targets } = request, mode = request.mode ?? 'unrated';
+  if (expectedActions && (action !== 'start' || expectedActions.length !== targets.length
+    || targets.some((player, n) => player.riotId !== expectedActions[n].riotId))) return '対象者の登録が変わっています。/death start からやり直してください。';
   const now = Date.now();
   const receipt = await db.prepare('INSERT OR IGNORE INTO discord_command_receipts(interaction_id,expires_at) VALUES(?,?)')
     .bind(interaction.id, now + 86400_000).run();
@@ -32,32 +33,51 @@ export async function runDeathCommand(db: D1Database, interaction: Interaction, 
       .bind(interaction.id).first<{ response: string | null }>())?.response ?? '同じ操作を処理中です。状態は /death status で確認できます。';
   }
   try {
-    if (action.name === 'start') {
+    // The gate and all reservation writes share one transaction. A stop or newer
+    // reservation between menu validation and this batch invalidates the old menu.
+    const gateKey = 'death_apply:' + interaction.id;
+    const gateSQL = expectedActions ? ' AND EXISTS(SELECT 1 FROM monitor_state WHERE key=?)' : '';
+    const gateArgs = expectedActions ? [gateKey] : [];
+    const gate = expectedActions ? [db.prepare(`INSERT OR IGNORE INTO monitor_state(key,value) SELECT ?,'1' WHERE ${expectedActions
+      .map(() => "COALESCE((SELECT value FROM monitor_state WHERE key=?),'')=?").join(' AND ')}`)
+      .bind(gateKey, ...expectedActions.flatMap(entry => [deathActionKey(entry.riotId), entry.value ?? '']))] : [];
+    const marks = () => targets.map(player => db.prepare(`INSERT INTO monitor_state(key,value) SELECT ?,? WHERE 1=1${gateSQL} ON CONFLICT(key) DO UPDATE SET value=excluded.value`)
+      .bind(deathActionKey(player.riotId), interaction.id, ...gateArgs));
+    if (action === 'start') {
       const changes = targets.flatMap(player => [
-        db.prepare(`UPDATE death_unrated_sessions SET cancelled_at=? WHERE riot_id=?
-          AND match_id IS NULL AND cancelled_at IS NULL AND expires_at<?`).bind(now, player.riotId, now),
+        db.prepare(`UPDATE death_unrated_sessions AS s SET cancelled_at=? WHERE riot_id=?
+          AND match_id IS NULL AND cancelled_at IS NULL AND (expires_at<? OR ${sessionModeSQL}!=?)${gateSQL}`).bind(now, player.riotId, now, mode, ...gateArgs),
         db.prepare(`INSERT OR IGNORE INTO death_unrated_sessions(riot_id,session_id,armed_at,expires_at)
-          VALUES(?,?,?,?)`).bind(player.riotId, interaction.id, now, now + 2 * 3600_000),
+          SELECT ?,?,?,? WHERE 1=1${gateSQL}`).bind(player.riotId, interaction.id, now, now + 2 * 3600_000, ...gateArgs),
+        db.prepare(`INSERT OR IGNORE INTO monitor_state(key,value) SELECT ?,? WHERE EXISTS(
+          SELECT 1 FROM death_unrated_sessions WHERE riot_id=? AND session_id=?)${gateSQL}`)
+          .bind(deathModeKey(interaction.id, player.riotId), mode, player.riotId, interaction.id, ...gateArgs),
       ]);
-      await db.batch(changes);
-    } else if (action.name === 'stop') {
-      await db.batch(targets.map(player => db.prepare('UPDATE death_unrated_sessions SET cancelled_at=? WHERE riot_id=? AND cancelled_at IS NULL')
-        .bind(now, player.riotId)));
+      const applied = await db.batch([...gate, ...changes, ...marks(), ...(expectedActions ? [db.prepare('DELETE FROM monitor_state WHERE key=?').bind(gateKey)] : [])]);
+      if (expectedActions && !applied[0].meta.changes) {
+        const changed = '予約状態が変わっています。/death start からやり直してください。';
+        await db.prepare('UPDATE discord_command_receipts SET response=? WHERE interaction_id=?').bind(changed, interaction.id).run();
+        return changed;
+      }
+    } else if (action === 'stop') {
+      await db.batch([...targets.map(player => db.prepare('UPDATE death_unrated_sessions SET cancelled_at=? WHERE riot_id=? AND cancelled_at IS NULL')
+        .bind(now, player.riotId)), ...marks()]);
     }
     const lines = await Promise.all(targets.map(async player => {
-      const session = await db.prepare('SELECT * FROM death_unrated_sessions WHERE riot_id=? ORDER BY armed_at DESC,session_id DESC LIMIT 1')
+      const session = await db.prepare(`SELECT s.*,${sessionModeSQL} AS mode FROM death_unrated_sessions s WHERE riot_id=? ORDER BY armed_at DESC,session_id DESC LIMIT 1`)
         .bind(player.riotId).first<DeathSession>();
-      const state = !session || session.cancelled_at !== null ? '通常アンレ（予約なし）'
-        : session.match_id ? '対象試合は決定済み・次の予約はOFF'
-        : session.expires_at < now ? '通常アンレ（予約期限切れ）'
-        : '次のアンレ1試合だけ対象（' + new Date(session.expires_at + 9 * 3600_000).toISOString().slice(11, 16) + ' JSTまで）';
+      const selected = isDeathMode(session?.mode) ? session.mode : 'unrated';
+      const state = !session || session.cancelled_at !== null ? '通常プレイ（予約なし）'
+        : session.match_id ? deathName(selected) + '：対象試合は決定済み・次の予約はOFF'
+        : session.expires_at < now ? deathName(selected) + '：予約期限切れ'
+        : '次の' + deathQueueName(selected) + '1試合だけ対象（' + new Date(session.expires_at + 9 * 3600_000).toISOString().slice(11, 16) + ' JSTまで）';
       return label(player) + '：' + state;
     }));
-    const content = (action.name === 'start' ? '☠️ デスアンレ予約\n開始操作より後に始めて、期限内に終了する次の1試合だけ判定します。既存の待機予約は維持します。'
-      : action.name === 'stop' ? '🕊️ デスアンレを取り消しました。今後の未送信・追記も停止します。' : '📋 デスアンレの状態')
+    const content = (action === 'start' ? '☠️ ' + deathName(mode) + '予約\n予約確定より後に始めて、期限内に終了する選択モードの次の1試合だけ判定します。同じモードの待機予約は維持し、別モードの待機予約は切り替えます。'
+      : action === 'stop' ? '🕊️ デス予約を取り消しました。今後の未送信・追記も停止します。' : '📋 デス予約の状態')
       + '\n\n' + lines.join('\n');
     await db.prepare('UPDATE discord_command_receipts SET response=? WHERE interaction_id=?').bind(content, interaction.id).run();
-    console.info('death_command', { action: action.name, players: targets.length });
+    console.info('death_command', { action, mode, players: targets.length });
     return content;
   } catch {
     // No credential, interaction token or callback URL is ever printed or stored.
@@ -92,21 +112,26 @@ export async function discordInteractions(request: Request, env: Env, ctx: Execu
   if (interaction.guild_id !== config.guildId) return respond('このサーバーでは利用できません。');
   let permissions = 0n;
   try { permissions = BigInt(interaction.member?.permissions ?? '0'); } catch { /* Deny invalid permission fields. */ }
-  if (interaction.data?.name === 'death' && !(permissions & (8n | 32n))) return respond('開始・終了・状態確認には「管理者」または「サーバー管理」権限が必要です。');
-  if (interaction.type !== 2 || !['death', 'valo'].includes(interaction.data?.name ?? '')) return respond('対応していないコマンドです。');
+  const deathSelect = interaction.type === 3 && /^death_mode:\d+$/.test(interaction.data?.custom_id ?? '');
+  if ((interaction.data?.name === 'death' || deathSelect) && !(permissions & (8n | 32n))) return respond('開始・終了・状態確認には「管理者」または「サーバー管理」権限が必要です。');
+  if (!deathSelect && (interaction.type !== 2 || !['death', 'valo'].includes(interaction.data?.name ?? ''))) return respond('対応していないコマンドです。');
   if (!/^\d+$/.test(interaction.id) || typeof interaction.token !== 'string' || !interaction.token.length || interaction.token.length > 4096) return new Response('Invalid interaction', { status: 400 });
   // Defer immediately so database work never consumes Discord's three-second acknowledgement window.
   ctx.waitUntil((async () => {
-    let content: string;
-    try { content = interaction.data!.name === 'valo' ? await runValoCommand(env.DB, interaction) : await runDeathCommand(env.DB, interaction); }
-    catch { console.warn('discord_command_failed'); content = '操作できませんでした。DBの更新を適用し、/valo status で確認してください。'; }
+    let result: { content: string; components?: unknown[] };
+    try {
+      if (deathSelect) result = { content: await selectDeathMode(env.DB, interaction, configuredPlayers, runDeathCommand), components: [] };
+      else if (interaction.data?.name === 'death' && interaction.data.options?.[0]?.name === 'start'
+        && !interaction.data.options[0].options?.some(option => option.name === 'mode')) result = await deathModePicker(env.DB, interaction, configuredPlayers);
+      else result = { content: interaction.data!.name === 'valo' ? await runValoCommand(env.DB, interaction) : await runDeathCommand(env.DB, interaction) };
+    } catch { console.warn('discord_command_failed'); result = { content: '操作できませんでした。/death status または /valo status で状態を確認してください。', components: [] }; }
     try {
       const response = await fetch('https://discord.com/api/v10/webhooks/' + config.applicationId + '/' + encodeURIComponent(interaction.token!) + '/messages/@original', {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content, allowed_mentions: { parse: [] } }), signal: AbortSignal.timeout(10_000),
+        body: JSON.stringify({ ...result, allowed_mentions: { parse: [] } }), signal: AbortSignal.timeout(10_000),
       });
       if (!response.ok) console.warn('discord_command_reply_failed', { status: response.status });
     } catch { console.warn('discord_command_reply_failed'); }
   })());
-  return Response.json({ type: 5, data: { flags: 64 } });
+  return Response.json(deathSelect ? { type: 6 } : { type: 5, data: { flags: 64 } });
 }
