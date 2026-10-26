@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 1,
+  "checkedOn": "2026-10-26",
+  "sources": {
+    "yokatta": {
+      "url": "https://motonetajp.com/yokatta-konokyoride/",
+      "title": "良かったこの距離での元ネタや意味は？水ダウの松本等しい",
+      "context": "2016年9月21日の水曜日のダウンタウンのモノマネ回として紹介された場面。松本等しいの返し。本人の松本人志と混同しない。",
+      "verification": "secondary-transcription",
+      "note": "解説記事の文字起こしで短い原文を照合。元放送の音声は直接確認していない。表記は引用元に従う。"
+    },
+    "uow": {
+      "url": "https://zawatto.com/meme/uow/",
+      "title": "「うおw」とは？元ネタはもこうの配信コメント説、ヒカキンは2014年に使っていた",
+      "context": "配信コメントの定型とその返答。最初の発言者・発祥配信は確定していない。",
+      "verification": "secondary-usage-record",
+      "note": "記事で用例・返答の文字列を照合。特定人物が最初に発したセリフとは断定しない。"
+    },
+    "gyoza": {
+      "url": "https://motonetajp.com/saigono-gyoza/",
+      "title": "最後の餃子の元ネタは松本人志！意味やもこうの配信で流行した理由",
+      "context": "水曜日のダウンタウンでタイトルコールを譲り合う場面の松本人志のツッコミとして記録。距離のミームと同じ場面ではない。",
+      "verification": "secondary-transcription",
+      "note": "解説記事の短い文字起こしで照合。元放送の音声は直接確認していない。"
+    },
+    "kuiya": {
+      "url": "https://motonetajp.com/kuiya/",
+      "title": "クイヤの元ネタはガキ使の松本人志！もこうの配信でなぜ流行った？",
+      "context": "ガキの使いのなぞなぞへの回答として記録。距離のミームと同じ場面ではない。",
+      "verification": "secondary-transcription",
+      "note": "解説記事の短い文字起こしで照合。元放送の音声は直接確認していない。"
+    }
+  },
+  "quotes": [
+    {
+      "id": "yokatta-kono-kyori",
+      "source": "yokatta",
+      "text": "良かったこの距離で",
+      "groups": ["default", "high_kills", "low_kd", "close_loss", "blowout", "losing_streak", "long_losing_streak", "win", "win_high_kills", "win_low_kd", "close_win", "blowout_win", "winning_streak", "long_winning_streak", "draw", "completed"]
+    },
+    {
+      "id": "niisan-akan",
+      "source": "yokatta",
+      "text": "兄さん…あかーん！",
+      "groups": ["default", "high_kills", "low_kd", "close_loss", "blowout", "losing_streak", "long_losing_streak", "win_low_kd"]
+    },
+    {
+      "id": "uow",
+      "source": "uow",
+      "text": "うおw",
+      "groups": ["default", "high_kills", "low_kd", "close_loss", "blowout", "losing_streak", "long_losing_streak", "win", "win_high_kills", "win_low_kd", "close_win", "blowout_win", "winning_streak", "long_winning_streak", "draw", "completed"]
+    },
+    {
+      "id": "uow-yametene",
+      "source": "uow",
+      "text": "うおwやめてね",
+      "groups": ["default", "high_kills", "low_kd", "close_loss", "blowout", "losing_streak", "long_losing_streak", "win_low_kd"]
+    },
+    {
+      "id": "saigono-gyoza",
+      "source": "gyoza",
+      "text": "最後の餃子か",
+      "groups": ["close_loss", "close_win", "draw"]
+    },
+    {
+      "id": "kuiya",
+      "source": "kuiya",
+      "text": "クイヤ",
+      "groups": ["default", "high_kills", "low_kd", "close_loss", "blowout", "losing_streak", "long_losing_streak", "win", "win_high_kills", "win_low_kd", "close_win", "blowout_win", "winning_streak", "long_winning_streak", "draw", "completed"]
+    }
+  ]
+}
