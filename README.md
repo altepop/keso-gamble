@@ -83,7 +83,7 @@ Discord ActivityのURL MappingはPrefix `/`、Target `altepop.github.io/keso-gam
 ```sh
 cd services/valorant-results
 npm ci
-npm run check  # 型検査・97機能テスト＋6配置設定テスト（ミーム引用42本、6口調・843種類）
+npm run check  # 型検査・100機能テスト＋6配置設定テスト（ミーム引用42本、6口調・843種類）
 npm run build  # 配置せずdry-runのみ
 ```
 
@@ -98,3 +98,7 @@ rootからは `npm run results:check`、`npm run results:build` でも実行で�
 Activityは音声セッション・メディアセッションを読み書きせず、BGM・無音再生・録音・AudioContext・WebRTC接続も作成しません。前版で追加した `ambient` の設定は撤去しました。取引・ルーレット・報酬・指令・画面遷移・再読み込みのブラウザー検証で、音声APIへのアクセスがないことを確認します。
 
 「Activity起動で音が消え、閉じると戻る」という報告は引き続き実機確認が必要です。[Discord SDKの未解決報告 #380](https://github.com/discord/embedded-app-sdk/issues/380)には、iPhoneで空のHTMLでも他の音声が止まる事例があります。これは今回の通話・配信音の原因が確定したという意味ではなく、PC・Androidの再現も未確認です。WebページからDiscord本体の音声処理を復元・強制解除する修正は行いません。
+
+## タイトル画面とKP自動支給の準備
+
+起動時はタイトル画面を表示します。「はじめる」でホームへ進み、タイトルへ戻っても残高や記録は消えません。自動支給はまだ無効です。[金額案・デスマッチの制約・通話記録の接続状況](docs/POINT_REWARDS_PLAN.md)をまとめています。

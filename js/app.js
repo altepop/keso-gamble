@@ -1,13 +1,13 @@
 import { fmt, fmt0 } from './format.js';
 import { submitClaim, approveClaim, issueDirective, completeDirective } from './progression.js';
-import { homeView, playView, directivesView } from './progression-views.js';
+import { titleView, homeView, playView, directivesView } from './progression-views.js?v=20261027-title';
 import { genCandles, movingAverage, svgCandles } from './charts.js';
 import { MARKET, createInitialState, portfolioValue, assets, advanceMarket, trade, spin, grantDemoSalary, cryptoRouletteNumber } from './engine.js';
 import { KEY, LEGACY_KEY } from './storage.js';
 import { createStore } from './store.js';
 const $=(s,el=document)=>el.querySelector(s);
 let state;
-let screen='home';
+let screen='title';
 let activeSymbol=MARKET[0].id;
 let tradeSide='buy';
 let betType='red';
@@ -108,7 +108,7 @@ function detailSheet(){
 }
 
 function render(){
-  const html = screen==='home'?homeView(state,bottomNav()):screen==='play'?playView(state,drafts,bottomNav()):screen==='directives'?directivesView(state,drafts,bottomNav()):screen==='market'?screenMarket():screen==='casino'?screenCasino():screenAssets();
+  const html = screen==='title'?titleView():screen==='home'?homeView(state,bottomNav()):screen==='play'?playView(state,drafts,bottomNav()):screen==='directives'?directivesView(state,drafts,bottomNav()):screen==='market'?screenMarket():screen==='casino'?screenCasino():screenAssets();
   const openDetails=[...app.querySelectorAll('details')].map(el=>el.open);
   const focusedElement=document.activeElement;
   const focused=focusedElement?.id;
