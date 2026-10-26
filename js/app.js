@@ -1,7 +1,7 @@
-import { createKpClient } from './kp-client.js?v=20261027-remember';
+import { createKpClient } from './kp-client.js?v=20261027-permanent';
 import { fmt, fmt0 } from './format.js';
 import { submitClaim, approveClaim, issueDirective, completeDirective } from './progression.js';
-import { titleView, homeView, playView, directivesView } from './progression-views.js?v=20261027-remember';
+import { titleView, homeView, playView, directivesView } from './progression-views.js?v=20261027-permanent';
 import { genCandles, movingAverage, svgCandles } from './charts.js';
 import { MARKET, createInitialState, portfolioValue, assets, advanceMarket, trade, spin, grantDemoSalary, cryptoRouletteNumber } from './engine.js';
 import { KEY, LEGACY_KEY } from './storage.js';
@@ -177,7 +177,7 @@ addEventListener('click',async e=>{
   try{
     if(t.dataset.action==='connect-kp'){state=await wallet.connect($('#kp-connect-code').value);live=true;connectionError='';delete drafts['kp-connect-code'];screen='home';render();toast(wallet.remembered?'接続しました。次回は自動で接続します':'接続しました。この環境では閉じると再接続が必要です');return;}
     if(t.dataset.action==='refresh-kp'){await refreshWallet(true);render();return;}
-    if(t.dataset.action==='disconnect-kp'){wallet.disconnect();live=false;connectionError='';state=store.state;screen='title';render();return;}
+    if(t.dataset.action==='disconnect-kp'){await wallet.disconnect();live=false;connectionError='';state=store.state;screen='title';render();return;}
     if(t.dataset.screen){if(spinLock){toast('抽選中は画面を切り替えられません');return;}detail=null;screen=t.dataset.screen;render();return;}
     if(t.dataset.open){openDetail(t.dataset.kind,t.dataset.open);return;}
     if(t.dataset.orderSymbol){activeSymbol=t.dataset.orderSymbol;detail=null;screen='assets';render();return;}

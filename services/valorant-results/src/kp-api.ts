@@ -1,4 +1,4 @@
-import { initializeKp, exchangeKpCode, kpSession, kpHash } from './kp.ts';
+import { initializeKp, exchangeKpCode, kpSession, revokeKpSession, kpHash } from './kp.ts';
 import type { KpEnv, KpMapping } from './kp.ts';
 import configuredPlayers from '../players.json' with { type: 'json' };
 import discord from '../discord-config.json' with { type: 'json' };
@@ -54,7 +54,7 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping):Promi
     const linked=await env.DB.prepare('SELECT COUNT(*) AS n FROM kp_accounts WHERE guild=?').bind(mapping.guildId).first<{n:number}>();
     const start=await env.DB.prepare("SELECT value FROM kp_settings WHERE key='starts_at'").first<{value:string}>();
     const timing=(await env.DB.prepare("SELECT key,value FROM monitor_state WHERE key IN ('monitor_started','monitor_finished')").all<{key:string;value:string}>()).results;
-    return response({enabled:true,currency:'KP',startsAt:Number(start?.value??0),registered:mapping.accounts.length,linked:linked?.n??0,voiceEnabled:false,monitor:{lastStartedAt:Number(timing.find(r=>r.key==='monitor_started')?.value??0),lastFinishedAt:Number(timing.find(r=>r.key==='monitor_finished')?.value??0)}});
+    return response({enabled:true,currency:'KP',startsAt:Number(start?.value??0),registered:mapping.accounts.length,linked:linked?.n??0,voiceEnabled:false,sessionPolicy:'until_revoked',monitor:{lastStartedAt:Number(timing.find(r=>r.key==='monitor_started')?.value??0),lastFinishedAt:Number(timing.find(r=>r.key==='monitor_finished')?.value??0)}});
   }
   if(request.method==='POST'&&path==='/api/kp/auth'){
    const text=await request.text();if(text.length>1024)return response({error:'コードが長すぎます。'},400);
@@ -64,6 +64,7 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping):Promi
   const token=/^Bearer ([a-f0-9]{48})$/.exec(request.headers.get('Authorization')??'')?.[1];
   const owner=token?await kpSession(env,token):null;
   if(!owner||owner.guild!==mapping.guildId||!mapping.accounts.some(a=>a.discordUserId===owner.user))return response({error:'接続が切れました。/valo status のコードで接続してください。'},401);
+  if(request.method==='POST'&&path==='/api/kp/logout'){await revokeKpSession(env,token!);return response({disconnected:true});}
   if(request.method==='GET'&&path==='/api/kp/state')return response(await readKpState(env,mapping,owner.user));
   if(request.method==='POST'&&path==='/api/kp/operation'){
    const text=await request.text();if(text.length>4096)return response({error:'入力が長すぎます。'},400);
