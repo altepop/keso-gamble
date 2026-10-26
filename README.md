@@ -1,6 +1,8 @@
 # KESO PLAY
 
-仲間内でKPを稼ぎ、増減させ、他人への指名指令に使うゲームのローカル試作版。
+仲間内でKPを稼ぎ、増減させ、他人への指名指令に使うDiscord Activity。サーバー口座と、独立した端末内デモがあります。
+
+本番口座は `/valo status` の接続コードでログイン。コンペ1勝900 KP、コンペ指名2,500 KP。詳細・保留モード・Discord内のURL Mapping設定は [試合KPの運用](docs/POINT_REWARDS_PLAN.md) を参照してください。
 
 ## ゲームの軸
 
@@ -10,7 +12,7 @@
 
 現実の指数・ニュースは表示しない。公営競技型ゲームは今後の拡張候補。
 
-## 試せること
+## デモで試せること
 
 - ホームから「稼ぐ」「勝負」「指令」への導線
 - プレイ・実績の申請 → 確認待ち → デモ確認してKP支給
@@ -25,7 +27,7 @@
 
 ## デモの範囲
 
-**ゲームAPI、Steam認証、Discord認証・Botには接続していない。**
+以下は「デモで試す」で開いた場合の説明。本番口座はVALORANT速報Botへ接続済みで、ブラウザーのデモ資産を使いません。Steam検証は未接続です。
 「デモ確認」は支給・達成の状態遷移を試す操作であり、実際のプレイや実績を検証しない。
 指名相手はデモメンバー。指令を外部に送信したり、相手のゲームを起動したりする機能はない。
 報酬額・指令価格は仮設定で、`js/progression.js` のカタログで変更できる。
@@ -50,6 +52,7 @@ http://localhost:8000 を開く。ES Modulesを使用するのでHTTP経由で�
 npm test                  # Node.js 18以上。ロジック・状態復元・排他保存のテスト
 npm install --no-save playwright  # 任意のブラウザ検証ツール
 npm run test:browser
+node scripts/kp-browser-check.cjs # サーバー口座の接続・再送・画面検証（APIをモック）
 ```
 
 ブラウザ検証はPython 3とChromiumを使用。`/usr/bin/chromium`、`CHROMIUM_PATH`、またはPlaywright管理のChromiumに対応。

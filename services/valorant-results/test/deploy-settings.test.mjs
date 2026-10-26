@@ -46,3 +46,16 @@ test('bad Secrets, remote errors and enabled rewards stop recovery',async t=>{
  writeFileSync(join(dir,'rewards-config.json'),JSON.stringify({enabled:true,startsAt:null,modes:{}}));
  await assert.rejects(prepareLiveSettings(dir,env,()=>{throw Error('must not call');}),/monitor-only/);
 });
+test('wallet deployment requires the already-provisioned key and a matching encrypted mapping',async t=>{
+ const {generateKeyPairSync,createHash,createPublicKey}=await import('node:crypto');
+ const dir=fixture(t),publicKey=generateKeyPairSync('rsa',{modulusLength:2048,publicKeyEncoding:{type:'spki',format:'pem'}}).publicKey;
+ writeFileSync(join(dir,'src/index.ts'),"import {initializeKp} from './kp.ts';");
+ writeFileSync(join(dir,'kp-bootstrap.encrypted.json'),JSON.stringify({version:1,keyFingerprint:'0'.repeat(64),ciphertext:'cipher',wrappedKey:'wrapped'}));
+ await assert.rejects(prepareLiveSettings(dir,env,async()=>Response.json({success:true,result:settings})),/not provisioned/);
+ const active={...settings,bindings:[...settings.bindings,{type:'plain_text',name:'KP_BOOTSTRAP_PUBLIC_KEY',text:publicKey},{type:'secret_text',name:'KP_BOOTSTRAP_PRIVATE_KEY'}]};
+ await assert.rejects(prepareLiveSettings(dir,env,async()=>Response.json({success:true,result:active})),/another key/);
+ const keyFingerprint=createHash('sha256').update(createPublicKey(publicKey).export({type:'spki',format:'der'})).digest('hex');
+ writeFileSync(join(dir,'kp-bootstrap.encrypted.json'),JSON.stringify({version:1,keyFingerprint,ciphertext:'cipher',wrappedKey:'wrapped'}));
+ await prepareLiveSettings(dir,env,async url=>{if(url.endsWith('/content/v2'))return new Response(source,{headers:{'Content-Type':'application/javascript'}});return Response.json({success:true,result:url.endsWith('/schedules')?{schedules}:active});});
+ assert.equal(JSON.parse(readFileSync(join(dir,'wrangler.jsonc'))).vars.KP_BOOTSTRAP_PUBLIC_KEY,publicKey);
+});

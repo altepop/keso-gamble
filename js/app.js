@@ -1,11 +1,15 @@
+import { createKpClient } from './kp-client.js?v=20261027-live';
 import { fmt, fmt0 } from './format.js';
 import { submitClaim, approveClaim, issueDirective, completeDirective } from './progression.js';
-import { titleView, homeView, playView, directivesView } from './progression-views.js?v=20261027-title';
+import { titleView, homeView, playView, directivesView } from './progression-views.js?v=20261027-live';
 import { genCandles, movingAverage, svgCandles } from './charts.js';
 import { MARKET, createInitialState, portfolioValue, assets, advanceMarket, trade, spin, grantDemoSalary, cryptoRouletteNumber } from './engine.js';
 import { KEY, LEGACY_KEY } from './storage.js';
 import { createStore } from './store.js';
 const $=(s,el=document)=>el.querySelector(s);
+const wallet=createKpClient();
+let live=wallet.connected;
+let connectionError=live?'口座を読み込んでいます…':'';
 let state;
 let screen='title';
 let activeSymbol=MARKET[0].id;
@@ -22,11 +26,12 @@ const toastEl=document.createElement('div');toastEl.className='toast';toastEl.se
 
 let sessionOnly=false;
 const store = createStore({
-  onChange(next) { state = next; },
+  onChange(next) { if(!live)state = next; },
   onVolatile() { sessionOnly=true; toast('端末に保存できません。この画面を閉じると変更が失われます'); }
 });
-state = store.state;
+state = live?{...createInitialState(),cash:0,serverWallet:true}:store.state;
 async function commit(update) {
+  if(live)throw Error('本番口座ではこの操作は使えません。');
   try { return await store.transact(update); }
   finally { state = store.state; }
 }
@@ -88,7 +93,7 @@ function screenCasino(){
 }
 
 function screenAssets(){
-  return `<div class="screen"><header class="topbar"><div class="toprow"><h1 class="title">資産</h1><div class="small-actions"><button class="icon-btn" data-action="reset" aria-label="初期化">↺</button></div></div></header><div class="wallet-strip"><div class="wallet-item"><small>保有KP</small><strong>${moneyCompact(state.cash)}</strong></div><div class="wallet-item"><small>株式評価額</small><strong>${moneyCompact(portfolioValue(state))}</strong></div><div class="wallet-item"><small>純資産</small><strong>${moneyCompact(assets(state))}</strong></div></div><div class="market-disclaimer">端末内の仮想口座。通話時間計測・他ユーザーとの共有は未対応</div><details class="panel"><summary class="card-body">開発用：テストKPの補充</summary><div class="action-row"><button class="action-btn" data-action="salary">テスト用KP +600 KP</button></div></details><div class="asset-list"><div class="asset-card"><div class="panel-title" style="margin-bottom:10px">保有銘柄</div>${MARKET.map(s=>`<div class="asset-line"><span>${s.name}</span><strong>${state.holdings[s.id]}株 / ${moneyCompact(state.holdings[s.id]*state.prices[s.id])}</strong></div>`).join('')}</div>${tradePanel()}${tradeHistory()}</div>${bottomNav()}</div>`;
+  return `<div class="screen"><header class="topbar"><div class="toprow"><h1 class="title">資産</h1><div class="small-actions">${live?'':'<button class="icon-btn" data-action="reset" aria-label="初期化">↺</button>'}</div></div></header><div class="wallet-strip"><div class="wallet-item"><small>保有KP</small><strong>${moneyCompact(state.cash)}</strong></div><div class="wallet-item"><small>株式評価額</small><strong>${moneyCompact(portfolioValue(state))}</strong></div><div class="wallet-item"><small>純資産</small><strong>${moneyCompact(assets(state))}</strong></div></div>${live?'<div class="market-disclaimer">サーバー口座 · 試合報酬と決済は全端末で共通です。</div>':'<div class="market-disclaimer">端末内のデモ口座</div>'}${live?'':`<details class="panel"><summary class="card-body">開発用：テストKPの補充</summary><div class="action-row"><button class="action-btn" data-action="salary">テスト用KP +600 KP</button></div></details>`}<div class="asset-list"><div class="asset-card"><div class="panel-title" style="margin-bottom:10px">保有銘柄</div>${MARKET.map(s=>`<div class="asset-line"><span>${s.name}</span><strong>${state.holdings[s.id]}株 / ${moneyCompact(state.holdings[s.id]*state.prices[s.id])}</strong></div>`).join('')}</div>${tradePanel()}${tradeHistory()}</div>${bottomNav()}</div>`;
 }
 
 function bottomNav(){
@@ -108,13 +113,14 @@ function detailSheet(){
 }
 
 function render(){
-  const html = screen==='title'?titleView():screen==='home'?homeView(state,bottomNav()):screen==='play'?playView(state,drafts,bottomNav()):screen==='directives'?directivesView(state,drafts,bottomNav()):screen==='market'?screenMarket():screen==='casino'?screenCasino():screenAssets();
+  const html = screen==='title'?titleView(state):screen==='home'?homeView(state,bottomNav()):screen==='play'?playView(state,drafts,bottomNav()):screen==='directives'?directivesView(state,drafts,bottomNav()):screen==='market'?screenMarket():screen==='casino'?screenCasino():screenAssets();
   const openDetails=[...app.querySelectorAll('details')].map(el=>el.open);
   const focusedElement=document.activeElement;
   const focused=focusedElement?.id;
   const focusData=focusedElement && Object.entries(focusedElement.dataset).find(([key])=>['screen','marketTab','marketMode','tradeSide','bet','action','open'].includes(key));
-  const warning=sessionOnly?'端末に保存できないため、この画面を閉じると変更が失われます。':!navigator.locks?.request?'このブラウザでは安全な保存を利用できません。HTTPS対応の最新ブラウザで開いてください。':'';
-  app.innerHTML = html.replace('<div class="screen">','<div class="screen">'+(warning?`<div class="storage-warning" role="status">${warning}</div>`:'')) + detailSheet();
+  const warning=live?connectionError:sessionOnly?'端末に保存できないため、この画面を閉じると変更が失われます。':!navigator.locks?.request?'このブラウザでは安全な保存を利用できません。HTTPS対応の最新ブラウザで開いてください。':'';
+  const connection=live?`<div class="kp-connection"><span>${wallet.pending?'通信結果の確認待ち':'KP口座 接続中'}</span><button data-action="refresh-kp">${wallet.pending?'通信結果を確認':'残高を更新'}</button><button data-action="disconnect-kp">接続を解除</button></div>`:'';
+  app.innerHTML = connection+html.replace('<div class="screen">','<div class="screen">'+(warning?`<div class="storage-warning" role="status">${warning}</div>`:'')) + detailSheet();
   app.querySelectorAll('details').forEach((el,index)=>{el.open=openDetails[index]??false;});
   for (const [id,value] of Object.entries(drafts)) { const input=document.getElementById(id); if(input) input.value=value; }
   if(focused) document.getElementById(focused)?.focus();
@@ -123,10 +129,22 @@ function render(){
   document.body.style.overflow=detail?'hidden':'';
 }
 
+
+async function refreshWallet(resume=false){
+ try{if(resume&&wallet.pending)await wallet.resume();state=await wallet.state();connectionError='';if(!detail)render();}
+ catch(error){connectionError=error.message;if(!detail)render();if(resume)throw error;}
+}
+async function liveOperation(action,args){
+ if(connectionError)throw Error('残高を更新してから操作してください。');
+ const result=await wallet.operate(action,args);
+ try{state=await wallet.state();connectionError='';}catch{connectionError='決済済みです。残高を更新してください。';}
+ return result;
+}
+
 async function doTrade(){
   const symbol=$('#trade-symbol')?.value || activeSymbol; const qty=Number($('#trade-qty')?.value);
   const side=tradeSide;
-  activeSymbol=symbol; await commit(next => trade(next,symbol,side,qty)); render(); toast(`${MARKET.find(v=>v.id===symbol).name}を${side==='buy'?'買付':'売却'}した`);
+  activeSymbol=symbol; if(live)await liveOperation('trade',{symbol,side,quantity:qty});else await commit(next => trade(next,symbol,side,qty)); render(); toast(`${MARKET.find(v=>v.id===symbol).name}を${side==='buy'?'買付':'売却'}した`);
 }
 async function doSpin(){
   if(spinLock) return;
@@ -135,10 +153,10 @@ async function doSpin(){
   if(!Number.isSafeInteger(amount) || amount<100 || amount>20000 || amount>state.cash) throw new Error('賭け額は100〜20,000 KP（所持金以内）');
   if(betType==='number' && (!Number.isInteger(choice)||choice<0||choice>36)) throw new Error('数字は0〜36で指定');
   const lockedType=betType;
-  const outcome=cryptoRouletteNumber();
+  const outcome=live?null:cryptoRouletteNumber();
   spinLock=true;
   let result;
-  try { result=await commit(next => spin(next,lockedType,amount,choice,outcome)); }
+  try { result=live?await liveOperation('spin',{type:lockedType,amount,choice}):await commit(next => spin(next,lockedType,amount,choice,outcome)); }
   catch(error) { spinLock=false; throw error; }
   const wheel=$('#wheel');
   const button=$('[data-action="spin"]'); if(button) button.disabled=true;
@@ -153,10 +171,13 @@ async function doSpin(){
 
 addEventListener('click',async e=>{
   const t=e.target.closest?.('button,[data-open]'); if(!t) return;
-  const mutates=!!t.dataset.approve || !!t.dataset.complete || ['salary','trade','spin','reset','submit-claim','issue-directive'].includes(t.dataset.action);
+  const mutates=!!t.dataset.approve || !!t.dataset.complete || ['salary','trade','spin','reset','submit-claim','issue-directive','connect-kp','refresh-kp','disconnect-kp'].includes(t.dataset.action);
   if(mutates && mutationPending)return;
   if(mutates)mutationPending=true;
   try{
+    if(t.dataset.action==='connect-kp'){state=await wallet.connect($('#kp-connect-code').value);live=true;connectionError='';delete drafts['kp-connect-code'];screen='home';render();toast('口座に接続しました');return;}
+    if(t.dataset.action==='refresh-kp'){await refreshWallet(true);render();return;}
+    if(t.dataset.action==='disconnect-kp'){wallet.disconnect();live=false;connectionError='';state=store.state;screen='title';render();return;}
     if(t.dataset.screen){if(spinLock){toast('抽選中は画面を切り替えられません');return;}detail=null;screen=t.dataset.screen;render();return;}
     if(t.dataset.open){openDetail(t.dataset.kind,t.dataset.open);return;}
     if(t.dataset.orderSymbol){activeSymbol=t.dataset.orderSymbol;detail=null;screen='assets';render();return;}
@@ -171,7 +192,7 @@ addEventListener('click',async e=>{
     if(t.dataset.approve){const reward=await commit(next=>approveClaim(next,Number(t.dataset.approve)));render();toast(`デモ確認：+${moneyCompact(reward)}`);return;}
     if(t.dataset.action==='issue-directive'){
       const data={target:$('#directive-target').value,task:$('#directive-task').value,game:$('#directive-game')?.value,achievement:$('#directive-achievement')?.value};
-      await commit(next=>issueDirective(next,data));render();toast('デモ指令を発行しました（外部送信なし）');return;
+      if(live)await liveOperation('directive',data);else await commit(next=>issueDirective(next,data));render();toast(live?'指名しました。Discordにも順次お知らせします':'デモ指令を発行しました（外部送信なし）');return;
     }
     if(t.dataset.complete){await commit(next=>completeDirective(next,Number(t.dataset.complete)));render();toast('デモで達成済みにしました');return;}
     if(t.dataset.action==='salary'){await commit(next => grantDemoSalary(next));render();toast('テスト用KP +600 KP');return;}
@@ -179,7 +200,7 @@ addEventListener('click',async e=>{
     if(t.dataset.action==='spin'){await doSpin();return;}
     if(t.dataset.action==='reset'){if(confirm('データを初期化しますか？')){await commit(next => Object.assign(next,createInitialState()));for(const key of Object.keys(drafts))delete drafts[key];render();toast('初期化した')}return;}
 
-  }catch(err){render();toast(err.message||'操作に失敗した');}
+  }catch(err){if(wallet.connected&&!live){live=true;state={...createInitialState(),cash:0,serverWallet:true};connectionError=err.message;}render();toast(err.message||'操作に失敗した');}
   finally { if(mutates)mutationPending=false; }
 });
 
@@ -202,17 +223,18 @@ addEventListener('keydown', e => {
   }
 });
 addEventListener('input', e => {
-  if (['trade-qty','bet-amount','bet-number'].includes(e.target.id)||e.target.id.startsWith('claim-')||e.target.id.startsWith('directive-')) drafts[e.target.id] = e.target.value;
+  if (e.target.id==='kp-connect-code'||['trade-qty','bet-amount','bet-number'].includes(e.target.id)||e.target.id.startsWith('claim-')||e.target.id.startsWith('directive-')) drafts[e.target.id] = e.target.value;
   if(e.target.id==='trade-qty')$('#trade-estimate').innerHTML=tradeEstimate();
 });
 const drafts = {};
 async function refreshMarket() {
-  if(spinLock) return;
+  if(spinLock||mutationPending) return;
+  if(live){await refreshWallet(false);return;}
   try { const steps=await commit(next => advanceMarket(next)); if(steps && !detail)render(); }
   catch(error) { toast(error.message); }
 }
 addEventListener('storage', e => {
-  if(e.key === null || [KEY,LEGACY_KEY].includes(e.key)) {
+  if(!live&&(e.key === null || [KEY,LEGACY_KEY].includes(e.key))) {
     store.refresh();
     if(!spinLock && !detail)render();
   }
