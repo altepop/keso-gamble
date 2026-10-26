@@ -750,6 +750,232 @@ function deathInteraction(id: string, action: string, targets: string[] = []) {
   };
 }
 
+test('an unrelated missing death no longer hides a provable non-last-death result', async () => {
+  const { lastDeathCheck, deathUnratedVerdict } = await import('../src/death-unrated.ts');
+  const raw = unratedMatch();
+  raw.players[3].stats.deaths = 1; // A teammate's event is missing; which round is not known.
+  assert.equal(lastDeathCheck(raw, 'user-1').value, false, 'This player has no final-round death and all their own deaths are present');
+  assert.equal(deathUnratedVerdict(raw, 'user-1').verdict, 'safe');
+  assert.equal(lastDeathCheck(raw, 'user-2').value, null, 'A missing later death could still change who was last');
+  assert.equal(lastDeathCheck(raw, 'user-2').reason, 'missing_team_deaths');
+  raw.kills[0].round = 22; raw.kills[0].time_in_round_in_ms = 5000;
+  assert.equal(lastDeathCheck(raw, 'user-1').reason, 'later_teammate_death');
+  raw.players[0].stats.deaths = 2; // Could have been revived and died again after the visible deaths.
+  assert.equal(lastDeathCheck(raw, 'user-1').value, null);
+  assert.equal(lastDeathCheck(raw, 'user-1').reason, 'missing_personal_deaths');
+});
+
+test('zero deaths, resurrections and one-based rounds keep the last-death rule precise', async () => {
+  const { lastDeathCheck } = await import('../src/death-unrated.ts');
+  const noDeaths = unratedMatch();
+  noDeaths.kills.shift(); noDeaths.players[0].stats.deaths = 0; noDeaths.players[3].stats.deaths = 5;
+  assert.equal(lastDeathCheck(noDeaths, 'user-1').value, false);
+  const revived = unratedMatch();
+  revived.kills[0].round = 22; revived.kills[0].time_in_round_in_ms = 5000;
+  revived.kills.push({ round: 22, time_in_round_in_ms: 15000, victim: { puuid: 'user-1' } });
+  revived.players[0].stats.deaths = 2;
+  assert.equal(lastDeathCheck(revived, 'user-1').value, true);
+  assert.equal(lastDeathCheck(revived, 'user-2').value, false);
+  revived.rounds.forEach(round => round.id++); revived.kills.forEach(kill => kill.round++);
+  assert.equal(lastDeathCheck(revived, 'user-1').value, true);
+});
+
+test('truncated round histories are not treated as a final round and unknown messages explain why', async () => {
+  const { lastDeathCheck } = await import('../src/death-unrated.ts');
+  const truncated = unratedMatch(); truncated.rounds.pop();
+  assert.equal(lastDeathCheck(truncated, 'user-1').value, null);
+  assert.equal(lastDeathCheck(truncated, 'user-1').reason, 'invalid_rounds');
+  assert.match(resultMessage(truncated, 'user-1', 'プレイヤーA', true)!.message, /最終ラウンドを特定できない/);
+  const missing = unratedMatch(); missing.kills.shift();
+  assert.match(resultMessage(missing, 'user-1', 'プレイヤーA', true)!.message, /本人のデス履歴が不足/);
+  const teammate = unratedMatch(); teammate.players[3].stats.deaths = 1;
+  assert.match(resultMessage(teammate, 'user-2', 'プレイヤーB', true)!.message, /味方のデス履歴が不足/);
+});
+
+test('reserved unknown results fetch shared details once, edit the original post and retain verified evidence', async () => {
+  const env = environment(), original = globalThis.fetch;
+  const config = [{ riotId: 'one#JP1', name: 'プレイヤーA' }, { riotId: 'two#JP1', name: 'プレイヤーB' }];
+  for (const [n, player] of config.entries()) {
+    await env.DB.prepare('INSERT INTO tracked_players VALUES(?,?,?,?)').bind(player.riotId, 'user-' + (n + 1), 'ap', 0).run();
+    await env.DB.prepare('INSERT INTO death_unrated_sessions(riot_id,session_id,armed_at,expires_at) VALUES(?,?,?,?)')
+      .bind(player.riotId, 'reserved', Date.now() - 60_000, Date.now() + 3600_000).run();
+  }
+  const complete = unratedMatch('details-fill'); complete.kills[0].round = 22; complete.kills[0].time_in_round_in_ms = 15000;
+  const partial = JSON.parse(JSON.stringify(complete)); delete partial.rounds;
+  let detailRequests = 0;
+  const posts: Array<{ method: string; content: string }> = [];
+  globalThis.fetch = async (url, init) => {
+    if (String(url).includes('/by-puuid/matches/')) return Response.json({ data: [partial] });
+    if (String(url).includes('/valorant/v4/match/')) {
+      detailRequests++;
+      assert.equal(posts.length, 1, 'The initial notification must be delivered before requesting details');
+      return Response.json({ data: complete });
+    }
+    posts.push({ method: init!.method!, content: JSON.parse(String(init?.body)).content });
+    return Response.json({ id: '123' });
+  };
+  try {
+    await monitor(env, config); await monitor(env, config);
+    assert.equal(detailRequests, 1, 'Shared players and repeated history must not refetch resolved details');
+    assert.equal(posts.length, 2); assert.equal(posts[0].method, 'POST'); assert.equal(posts[1].method, 'PATCH');
+    assert.match(posts[0].content, /ラウンド履歴が未取得/);
+    assert.match(posts[1].content, /プレイヤーA、コンペ行き確定/);
+    assert.match(posts[1].content, /プレイヤーB、今回はセーフ/);
+    assert.doesNotMatch(posts[1].content, /データ不足/);
+    assert.equal((await env.DB.prepare('SELECT value FROM monitor_state WHERE key=?').bind('death_last:details-fill:user-1').first<{ value: string }>())!.value, 'true');
+  } finally { globalThis.fetch = original; }
+});
+
+test('detail failures preserve the first post and retry only after the per-match five-minute cooldown', async () => {
+  const env = environment(), original = globalThis.fetch;
+  await env.DB.prepare('INSERT INTO tracked_players VALUES(?,?,?,?)').bind('one#JP1', 'user-1', 'ap', 0).run();
+  await env.DB.prepare('INSERT INTO death_unrated_sessions(riot_id,session_id,armed_at,expires_at) VALUES(?,?,?,?)')
+    .bind('one#JP1', 'reserved', Date.now() - 60_000, Date.now() + 3600_000).run();
+  const complete = unratedMatch('detail-retry'), partial = JSON.parse(JSON.stringify(complete)); delete partial.rounds;
+  let detailRequests = 0; const posts: string[] = [];
+  globalThis.fetch = async (url, init) => {
+    if (String(url).includes('/by-puuid/matches/')) return Response.json({ data: [partial] });
+    if (String(url).includes('/valorant/v4/match/')) return ++detailRequests === 1 ? new Response('', { status: 503 }) : Response.json({ data: complete });
+    posts.push(JSON.parse(String(init?.body)).content); return Response.json({ id: '123' });
+  };
+  try {
+    const config = [{ riotId: 'one#JP1' }];
+    await monitor(env, config); await monitor(env, config);
+    assert.equal(detailRequests, 1); assert.equal(posts.length, 1); assert.match(posts[0], /判定保留/);
+    await env.DB.prepare("UPDATE monitor_state SET value='0' WHERE key=?").bind('death_detail_after:detail-retry').run();
+    await monitor(env, config);
+    assert.equal(detailRequests, 2); assert.equal(posts.length, 2); assert.match(posts[1], /今回はセーフ/);
+  } finally { globalThis.fetch = original; }
+});
+
+test('foreign, unfinished or malformed details cannot resolve a reserved verdict', async () => {
+  const original = globalThis.fetch;
+  try {
+    for (const kind of ['match', 'queue', 'started', 'unfinished', 'player', 'team', 'duplicate-player', 'duration', 'outcome', 'team-list'] as const) {
+      const env = environment();
+      await env.DB.prepare('INSERT INTO tracked_players VALUES(?,?,?,?)').bind('one#JP1', 'user-1', 'ap', 0).run();
+      await env.DB.prepare('INSERT INTO death_unrated_sessions(riot_id,session_id,armed_at,expires_at) VALUES(?,?,?,?)')
+        .bind('one#JP1', 'reserved', Date.now() - 60_000, Date.now() + 3600_000).run();
+      const complete = unratedMatch('foreign-' + kind), partial = JSON.parse(JSON.stringify(complete)); delete partial.rounds;
+      if (kind === 'match') complete.metadata.match_id = 'another-match';
+      if (kind === 'queue') complete.metadata.queue.id = 'competitive';
+      if (kind === 'started') complete.metadata.started_at = new Date(0).toISOString();
+      if (kind === 'unfinished') complete.metadata.is_completed = false;
+      if (kind === 'player') complete.players[0].puuid = 'another-player';
+      if (kind === 'team') complete.players[0].team_id = 'blue';
+      if (kind === 'duplicate-player') complete.players[4].puuid = complete.players[3].puuid;
+      if (kind === 'duration') complete.metadata.game_length_in_ms = 0;
+      if (kind === 'outcome') complete.teams.forEach(team => { team.won = true; });
+      if (kind === 'team-list') complete.teams[1].team_id = complete.teams[0].team_id;
+      const posts: string[] = [];
+      globalThis.fetch = async (url, init) => {
+        if (String(url).includes('/by-puuid/matches/')) return Response.json({ data: [partial] });
+        if (String(url).includes('/valorant/v4/match/')) return Response.json({ data: complete });
+        posts.push(JSON.parse(String(init?.body)).content); return Response.json({ id: '123' });
+      };
+      await monitor(env, [{ riotId: 'one#JP1' }]);
+      assert.equal(posts.length, 1, kind); assert.match(posts[0], /判定保留/, kind);
+      assert.equal(await env.DB.prepare("SELECT value FROM monitor_state WHERE key LIKE 'death_last:%'").first(), null, kind);
+    }
+  } finally { globalThis.fetch = original; }
+});
+
+test('rate-limited details preserve the initial post and pause all polling until the API retry time', async () => {
+  const env = environment(), original = globalThis.fetch;
+  const config = [{ riotId: 'one#JP1' }, { riotId: 'two#JP1' }];
+  for (const [n, player] of config.entries()) {
+    await env.DB.prepare('INSERT INTO tracked_players VALUES(?,?,?,?)').bind(player.riotId, 'user-' + (n + 1), 'ap', 0).run();
+  }
+  await env.DB.prepare('INSERT INTO death_unrated_sessions(riot_id,session_id,armed_at,expires_at) VALUES(?,?,?,?)')
+    .bind('one#JP1', 'reserved', Date.now() - 60_000, Date.now() + 3600_000).run();
+  const partial = JSON.parse(JSON.stringify(unratedMatch('detail-limit'))); delete partial.rounds;
+  const paths: string[] = [], methods: string[] = [];
+  globalThis.fetch = async (url, init) => {
+    const path = String(url);
+    if (path.includes('api.henrikdev.xyz')) {
+      paths.push(path);
+      return path.includes('/valorant/v4/match/') ? new Response('', { status: 429, headers: { 'Retry-After': '90' } }) : Response.json({ data: [partial] });
+    }
+    methods.push(init!.method!); return Response.json({ id: '123' });
+  };
+  try {
+    await monitor(env, config); await monitor(env, config);
+    assert.equal(paths.length, 2, 'The detail limit must stop the next player and the next cron run');
+    assert.deepEqual(methods, ['POST'], 'The reserved and ordinary results are delivered together before the API limit');
+    assert.equal((await env.DB.prepare('SELECT COUNT(*) AS n FROM notifications WHERE sent=1').first<{ n: number }>())!.n, 2);
+    const wait = (await env.DB.prepare("SELECT value FROM monitor_state WHERE key='api_after'").first<{ value: string }>())!;
+    assert.ok(Number(wait.value) > Date.now() + 80_000);
+    assert.equal(await env.DB.prepare("SELECT value FROM monitor_state WHERE key LIKE 'death_last:%'").first(), null);
+  } finally { globalThis.fetch = original; }
+});
+
+test('ordinary, cancelled and already-resolved unrated games never request additional details', async () => {
+  const original = globalThis.fetch;
+  try {
+    for (const kind of ['ordinary', 'cancelled', 'resolved'] as const) {
+      const env = environment();
+      await env.DB.prepare('INSERT INTO tracked_players VALUES(?,?,?,?)').bind('one#JP1', 'user-1', 'ap', 0).run();
+      if (kind !== 'ordinary') await env.DB.prepare('INSERT INTO death_unrated_sessions(riot_id,session_id,armed_at,expires_at,cancelled_at) VALUES(?,?,?,?,?)')
+        .bind('one#JP1', 'reserved', Date.now() - 60_000, Date.now() + 3600_000, kind === 'cancelled' ? Date.now() : null).run();
+      const raw = JSON.parse(JSON.stringify(unratedMatch())); if (kind !== 'resolved') delete raw.rounds;
+      let details = 0;
+      globalThis.fetch = async (url) => {
+        if (String(url).includes('/by-puuid/matches/')) return Response.json({ data: [raw] });
+        if (String(url).includes('/valorant/v4/match/')) { details++; throw new Error('Unexpected details request'); }
+        return Response.json({ id: '123' });
+      };
+      await monitor(env, [{ riotId: 'one#JP1' }]);
+      assert.equal(details, 0, kind);
+    }
+  } finally { globalThis.fetch = original; }
+});
+
+test('only one unresolved match is enriched per monitor run; another reservation can progress on the next run', async () => {
+  const env = environment(), original = globalThis.fetch;
+  const config = [{ riotId: 'one#JP1' }, { riotId: 'two#JP1' }];
+  const games = [unratedMatch('budget-first'), unratedMatch('budget-second')];
+  games.forEach((game, n) => { game.metadata.started_at = new Date(Date.now() - 20_000 + n * 5000).toISOString(); });
+  for (const [n, player] of config.entries()) {
+    await env.DB.prepare('INSERT INTO tracked_players VALUES(?,?,?,?)').bind(player.riotId, 'user-' + (n + 1), 'ap', 0).run();
+    await env.DB.prepare('INSERT INTO death_unrated_sessions(riot_id,session_id,armed_at,expires_at,match_id) VALUES(?,?,?,?,?)')
+      .bind(player.riotId, 'reserved', Date.now() - 60_000, Date.now() + 3600_000, games[n].metadata.match_id).run();
+  }
+  const partial = JSON.parse(JSON.stringify(games)); partial.forEach((game: { rounds?: unknown }) => { delete game.rounds; });
+  const details: string[] = [];
+  globalThis.fetch = async (url) => {
+    if (String(url).includes('/by-puuid/matches/')) return Response.json({ data: partial });
+    if (String(url).includes('/valorant/v4/match/')) {
+      const id = String(url).split('/').at(-1)!; details.push(id); return Response.json({ data: games.find(game => game.metadata.match_id === id) });
+    }
+    return Response.json({ id: '123' });
+  };
+  try {
+    await monitor(env, config); assert.deepEqual(details, ['budget-first']);
+    await monitor(env, config); assert.deepEqual(details, ['budget-first', 'budget-second']);
+  } finally { globalThis.fetch = original; }
+});
+
+test('cancelling a reservation while details are being fetched prevents a late verdict update', async () => {
+  const env = environment(), original = globalThis.fetch;
+  await env.DB.prepare('INSERT INTO tracked_players VALUES(?,?,?,?)').bind('one#JP1', 'user-1', 'ap', 0).run();
+  await env.DB.prepare('INSERT INTO death_unrated_sessions(riot_id,session_id,armed_at,expires_at) VALUES(?,?,?,?)')
+    .bind('one#JP1', 'reserved', Date.now() - 60_000, Date.now() + 3600_000).run();
+  const complete = unratedMatch('detail-cancel'), partial = JSON.parse(JSON.stringify(complete)); delete partial.rounds;
+  const methods: string[] = [];
+  globalThis.fetch = async (url, init) => {
+    if (String(url).includes('/by-puuid/matches/')) return Response.json({ data: [partial] });
+    if (String(url).includes('/valorant/v4/match/')) {
+      await env.DB.prepare('UPDATE death_unrated_sessions SET cancelled_at=?').bind(Date.now()).run();
+      return Response.json({ data: complete });
+    }
+    methods.push(init!.method!); return Response.json({ id: '123' });
+  };
+  try {
+    await monitor(env, [{ riotId: 'one#JP1' }]); assert.deepEqual(methods, ['POST']);
+    assert.equal(await env.DB.prepare("SELECT value FROM monitor_state WHERE key LIKE 'death_last:%'").first(), null);
+  } finally { globalThis.fetch = original; }
+});
+
 test('ordinary unrated is monitored separately; only the first reserved match gets a death verdict', async () => {
   const { runDeathCommand } = await import('../src/discord-interactions.ts');
   const env = environment(); const original = globalThis.fetch; const clock = Date.now;

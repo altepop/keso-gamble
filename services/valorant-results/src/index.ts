@@ -1,4 +1,5 @@
 import { claimDeathMatch } from './death-sessions.ts';
+import { lastDeathCheck } from './death-unrated.ts';
 import { discordInteractions } from './discord-interactions.ts';
 import configuredPlayers from '../players.json' with { type: 'json' };
 import { resultMessage, groupNotification } from './results.ts';
@@ -49,7 +50,7 @@ function diagnosticReason(error: unknown): string {
   if (error.name === 'TimeoutError' || error.name === 'AbortError') return 'request_timeout';
   const known: Record<string, string> = {
     'API cooldown': 'api_cooldown', 'Invalid account': 'invalid_account_data',
-    'Invalid matches': 'invalid_match_list', 'Unexpected API data': 'invalid_api_data',
+    'Invalid matches': 'invalid_match_list', 'Unexpected API data': 'invalid_api_data', 'Invalid match detail': 'invalid_match_detail',
     'Invalid match time': 'invalid_match_time', 'Invalid Discord message ID': 'invalid_discord_response',
   };
   return known[error.message] ?? 'unexpected_error';
@@ -79,7 +80,7 @@ async function api<T>(env: Env, path: string): Promise<T> {
   });
   const remaining = response.headers.get('X-RateLimit-Remaining');
   const headerNumber = (name: string) => { const value = response.headers.get(name); return value !== null && /^\d+(?:\.\d+)?$/.test(value) ? Number(value) : null; };
-  console.info('henrik_response', { endpoint: path.includes('/matches/') ? 'matches' : 'account', status: response.status,
+  console.info('henrik_response', { endpoint: path.includes('/match/') ? 'match_detail' : path.includes('/matches/') ? 'matches' : 'account', status: response.status,
     responseMs: Date.now() - requestedAt, cacheTTL: headerNumber('X-Cache-TTL'), cacheAge: headerNumber('Age'), remaining: headerNumber('X-RateLimit-Remaining') });
   if (response.status === 429 || (remaining !== null && Number(remaining) <= 1)) {
     const retryAt = Date.now() + retryAfter(response);
@@ -100,7 +101,22 @@ async function saveMatch(env: Env, match: Match, player: Player, account: Accoun
   if (ordinary.endedAt <= account.since) return 'beforeMonitoring';
   // Normal unrated results never acquire a /death verdict without a reservation.
   const death = unrated && await claimDeathMatch(env.DB,player.riotId,match.metadata.match_id,Date.parse(match.metadata.started_at),ordinary.endedAt);
-  const result = death ? resultMessage(match,account.puuid,player.name?.trim() || parseId(player.riotId)[0],true)! : ordinary;
+  let previousLastDeath: boolean | undefined;
+  if (death) {
+    const check = lastDeathCheck(match, account.puuid);
+    const key = 'death_last:' + match.metadata.match_id + ':' + account.puuid;
+    if (check.value !== null) {
+      // Persist only the verified boolean, not raw match data. A later partial
+      // history response must not turn a resolved post back into "data missing".
+      await env.DB.prepare('INSERT INTO monitor_state(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value WHERE value!=excluded.value')
+        .bind(key, String(check.value)).run();
+    } else {
+      const saved = await env.DB.prepare('SELECT value FROM monitor_state WHERE key=?').bind(key).first<{ value: string }>();
+      if (saved?.value === 'true' || saved?.value === 'false') previousLastDeath = saved.value === 'true';
+      console.info('death_last_check', { matchId: match.metadata.match_id, reason: check.reason, finalRound: check.finalRound, usingSavedResult: previousLastDeath !== undefined });
+    }
+  }
+  const result = death ? resultMessage(match,account.puuid,player.name?.trim() || parseId(player.riotId)[0],true,previousLastDeath)! : ordinary;
   const inserted = await env.DB.prepare('INSERT OR IGNORE INTO notifications(riot_id,match_id,message,ended_at,mode,act_id,act_name,outcome,sent,team_id) VALUES(?,?,?,?,?,?,?,?,?,?)')
     .bind(player.riotId, match.metadata.match_id, result.message, result.endedAt, result.mode, result.actId, result.actName,
       result.outcome, result.outcome === 'draw' && result.mode === 'escalation' ? 1 : 0, result.teamId).run();
@@ -113,6 +129,54 @@ async function saveMatch(env: Env, match: Match, player: Player, account: Accoun
   if (result.mode === 'unrated') await env.DB.prepare('UPDATE notifications SET message=?,outcome=?,sent=0 WHERE riot_id=? AND match_id=? AND message!=?')
     .bind(result.message, result.outcome, player.riotId, match.metadata.match_id, result.message).run();
   return 'duplicates';
+}
+
+interface DeathDetails {
+  remaining: number;
+  matches: Map<string, Match | null>;
+}
+
+async function deathDetail(env: Env, match: Match, players: Player[], accounts: Map<string, Account>, details: DeathDetails): Promise<Match | null> {
+  if (match.metadata?.queue?.id !== 'unrated' || !match.metadata.is_completed) return null;
+  const matchId = match.metadata.match_id;
+  if (details.matches.has(matchId)) return details.matches.get(matchId) ?? null;
+  details.matches.set(matchId, null);
+  const sessions = await env.DB.prepare('SELECT riot_id FROM death_unrated_sessions WHERE match_id=? AND cancelled_at IS NULL')
+    .bind(matchId).all<{ riot_id: string }>();
+  let unresolved = false;
+  for (const session of sessions.results) {
+    const account = accounts.get(session.riot_id);
+    if (!account || !players.some(player => player.riotId === session.riot_id) || lastDeathCheck(match, account.puuid).value !== null) continue;
+    const saved = await env.DB.prepare('SELECT value FROM monitor_state WHERE key=?')
+      .bind('death_last:' + matchId + ':' + account.puuid).first<{ value: string }>();
+    if (saved?.value !== 'true' && saved?.value !== 'false') unresolved = true;
+  }
+  if (!unresolved || details.remaining <= 0 || await state(env, 'death_detail_after:' + matchId) > Date.now() || await state(env, 'api_after') > Date.now()) return null;
+  const account = players.map(player => accounts.get(player.riotId)).find(account => account && match.players.some(player => player.puuid === account.puuid));
+  if (!account) return null;
+  details.remaining--;
+  // First send the available result; a slow details endpoint must not hold the initial post.
+  await flushNotifications(env, players);
+  await setState(env, 'death_detail_after:' + matchId, Date.now() + 5 * 60_000);
+  try {
+    const detail = await api<Match>(env, '/valorant/v4/match/' + account.region + '/' + encodeURIComponent(matchId));
+    if (!detail || detail.metadata?.match_id !== matchId || detail.metadata.queue?.id !== 'unrated'
+      || detail.metadata.is_completed !== true || Date.parse(detail.metadata.started_at) !== Date.parse(match.metadata.started_at)
+      || !Number.isFinite(detail.metadata.game_length_in_ms) || detail.metadata.game_length_in_ms <= 0
+      || !Array.isArray(detail.teams) || detail.teams.length !== 2
+      || detail.teams.filter(team => team.won === true).length > 1
+      || !detail.teams.every(team => typeof team.won === 'boolean' && match.teams.some(other => other.team_id === team.team_id))
+      || new Set(detail.teams.map(team => team.team_id)).size !== 2
+      || !Array.isArray(detail.players) || detail.players.length !== match.players.length
+      || new Set(detail.players.map(player => player.puuid)).size !== detail.players.length
+      || !match.players.every(player => detail.players.some(other => other.puuid === player.puuid && other.team_id === player.team_id))) throw new Error('Invalid match detail');
+    details.matches.set(matchId, detail);
+    console.info('death_detail_received', { matchId });
+    return detail;
+  } catch (error) {
+    console.warn('death_detail_failed', { matchId, reason: diagnosticReason(error) });
+    return null;
+  }
 }
 
 async function flushNotifications(env: Env, players: Player[]): Promise<void> {
@@ -192,6 +256,8 @@ export async function monitor(env: Env, players: Player[] = configuredPlayers): 
     await env.DB.prepare('DELETE FROM discord_command_receipts WHERE expires_at<?').bind(Date.now()).run();
     const accounts = new Map<string, Account>((await env.DB.prepare('SELECT riot_id,puuid,region,since FROM tracked_players')
       .all<Account & { riot_id: string }>()).results.map(account => [account.riot_id, account]));
+    // Bound extra API traffic: one reserved match per run, one attempt per match per five minutes.
+    const deathDetails: DeathDetails = { remaining: 1, matches: new Map() };
     // Deliver a previously queued result before spending time polling the API again.
     if (players.length) await flushNotifications(env, players);
     const offset = await state(env, 'cursor') % Math.max(1, players.length);
@@ -228,6 +294,11 @@ export async function monitor(env: Env, players: Player[] = configuredPlayers): 
             if (other.riotId === player.riotId) continue;
             const otherAccount = accounts.get(other.riotId);
             if (otherAccount && match.players?.some(member => member.puuid === otherAccount.puuid)) await saveMatch(env, match, other, otherAccount);
+          }
+          const detail = await deathDetail(env, match, players, accounts, deathDetails);
+          if (detail) for (const target of players) {
+            const targetAccount = accounts.get(target.riotId);
+            if (targetAccount && detail.players.some(member => member.puuid === targetAccount.puuid)) await saveMatch(env, detail, target, targetAccount);
           }
         }
         await setState(env, 'checked:' + player.riotId, Date.now());
