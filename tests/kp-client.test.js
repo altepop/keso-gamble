@@ -21,3 +21,21 @@ test('embedded requests use the Discord proxy mapping and auth codes are never p
  const saved=storage(),urls=[];const client=createKpClient({storage:saved,host:'123.discordsays.com',request:async(url,init)=>{urls.push(url);return Response.json(url.endsWith('auth')?{token:'new-session'}:{cash:0});}});
  assert.deepEqual(await client.connect(' c0de '),{cash:0});assert.deepEqual(urls,['/.proxy/kp-api/api/kp/auth','/.proxy/kp-api/api/kp/state']);assert.equal(saved.getItem('keso-kp-session-v1'),'new-session');assert.equal(saved.getItem('c0de'),null);
 });
+test('login survives closing a tab while pending payments remain isolated between tabs',async()=>{
+ const persistent=storage(),tabA=storage(),tabB=storage();
+ const request=async(url)=>Response.json(url.endsWith('/auth')?{token:'remembered-session'}:{cash:900});
+ const first=createKpClient({storage:persistent,temporaryStorage:tabA,request});await first.connect('code');assert.equal(first.remembered,true);
+ assert.equal(persistent.getItem('keso-kp-session-v1'),'remembered-session');assert.equal(tabA.getItem('keso-kp-session-v1'),null);
+ const reopened=createKpClient({storage:persistent,temporaryStorage:tabB,request});assert.equal(reopened.connected,true);assert.equal((await reopened.state()).cash,900);
+ const failed=createKpClient({storage:persistent,temporaryStorage:tabA,request:async()=>{throw Error('offline')},randomId:()=> 'isolated-operation'});await assert.rejects(failed.operate('spin',{amount:100,type:'red'}));assert.equal(failed.pending,true);assert.equal(reopened.pending,false);assert.equal(persistent.getItem('keso-kp-pending-v1'),null);
+ reopened.disconnect();assert.equal(persistent.getItem('keso-kp-session-v1'),null);
+});
+test('an existing temporary login migrates to persistent storage without issuing another code',()=>{
+ const persistent=storage(),temporary=storage();temporary.setItem('keso-kp-session-v1','old-session');temporary.setItem('keso-kp-pending-v1',JSON.stringify({id:'old-operation',action:'spin',args:{amount:100,type:'red'}}));
+ const client=createKpClient({storage:persistent,temporaryStorage:temporary});assert.equal(client.connected,true);assert.equal(client.pending,true);assert.equal(client.remembered,true);assert.equal(persistent.getItem('keso-kp-session-v1'),'old-session');assert.equal(temporary.getItem('keso-kp-session-v1'),null);
+});
+test('blocked persistent storage falls back to temporary login and reports that it cannot remember',async()=>{
+ const blocked={getItem(){throw Error('blocked')},setItem(){throw Error('blocked')},removeItem(){throw Error('blocked')}},temporary=storage();
+ const client=createKpClient({storage:blocked,temporaryStorage:temporary,request:async url=>Response.json(url.endsWith('/auth')?{token:'temporary-session'}:{cash:0})});
+ await client.connect('code');assert.equal(client.connected,true);assert.equal(client.remembered,false);assert.equal(temporary.getItem('keso-kp-session-v1'),'temporary-session');client.disconnect();assert.equal(temporary.getItem('keso-kp-session-v1'),null);
+});
