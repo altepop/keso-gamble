@@ -1,4 +1,5 @@
 import { runValoCommand } from './valo-queries.ts';
+import { initializeKp, issueKpCode } from './kp.ts';
 import storedConfig from '../discord-config.json' with { type: 'json' };
 import configuredPlayers from '../players.json' with { type: 'json' };
 import type { Env, Player } from './index.ts';
@@ -125,6 +126,16 @@ export async function discordInteractions(request: Request, env: Env, ctx: Execu
         && !interaction.data.options[0].options?.some(option => option.name === 'mode')) result = await deathModePicker(env.DB, interaction, configuredPlayers);
       else result = { content: interaction.data!.name === 'valo' ? await runValoCommand(env.DB, interaction) : await runDeathCommand(env.DB, interaction) };
     } catch { console.warn('discord_command_failed'); result = { content: '操作できませんでした。/death status または /valo status で状態を確認してください。', components: [] }; }
+    if (interaction.data?.name === 'valo' && interaction.data.options?.[0]?.name === 'status') {
+      try {
+        const mapping = await initializeKp(env), user = interaction.member?.user?.id;
+        const code = mapping && user ? await issueKpCode(env, mapping, user) : null;
+        if (code && mapping && user) {
+          const wallet = await env.DB.prepare('SELECT balance FROM kp_wallets WHERE guild=? AND user=?').bind(mapping.guildId, user).first<{ balance: number }>();
+          result.content += '\n\n🪙 本番口座：' + (wallet?.balance ?? 0) + ' KP\nActivityのタイトルで「口座を接続」を押し、次のコードを貼り付けてください（10分・1回のみ）。\n`' + code + '`';
+        }
+      } catch { console.warn('kp_login_code_failed'); result.content += '\n\nKP口座を確認できませんでした。少し待って /valo status をもう一度実行してください。'; }
+    }
     try {
       const response = await fetch('https://discord.com/api/v10/webhooks/' + config.applicationId + '/' + encodeURIComponent(interaction.token!) + '/messages/@original', {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },

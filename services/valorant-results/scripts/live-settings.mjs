@@ -58,6 +58,9 @@ export async function prepareLiveSettings(directory,env=process.env,request=fetc
   const policy=JSON.parse(readFileSync(resolve(directory,'rewards-config.json'),'utf8'));
   const entry=readFileSync(resolve(directory,'src/index.ts'),'utf8');
   if (policy.enabled!==false || policy.startsAt!==null || Object.values(policy.modes).some(mode=>mode.participation!==null || mode.winBonus!==null) || /(?:from|import).*['"][^'"]*(?:wallet|reward-accounts|reward-contract)/.test(entry)) throw Error('Automatic configuration recovery is limited to the current monitor-only deployment; explicit private reward mapping is required for wallet integration');
+  const kpConnected=/from ['"]\.\/kp(?:-api)?\.ts['"]/.test(entry);
+  const sealed=kpConnected?JSON.parse(readFileSync(resolve(directory,'kp-bootstrap.encrypted.json'),'utf8')):null;
+  if(kpConnected&&(!sealed||sealed.version!==1||!sealed.ciphertext||!sealed.wrappedKey||!/^[a-f0-9]{64}$/.test(sealed.keyFingerprint)))throw Error('Encrypted private KP bootstrap is required before wallet deployment');
   const base=`https://api.cloudflare.com/client/v4/accounts/${account}/workers/scripts/${worker}`;
   async function get(path,json=true) {
     const response=await request(base+path,{headers:{Authorization:`Bearer ${token}`},signal:AbortSignal.timeout(30000)});
@@ -66,6 +69,12 @@ export async function prepareLiveSettings(directory,env=process.env,request=fetc
     const body=await response.json();if(!body.success || !body.result) throw Error('Cloudflare did not return usable live settings');return body.result;
   }
   const settings=await get('/settings');
+  if(kpConnected){
+    const pub=settings.bindings.find(b=>b.type==='plain_text'&&b.name==='KP_BOOTSTRAP_PUBLIC_KEY')?.text;
+    if(!pub||!settings.bindings.some(b=>b.type==='secret_text'&&b.name==='KP_BOOTSTRAP_PRIVATE_KEY'))throw Error('KP bootstrap key is not provisioned');
+    const {createHash,createPublicKey}=await import('node:crypto');
+    if(createHash('sha256').update(createPublicKey(pub).export({type:'spki',format:'der'})).digest('hex')!==sealed.keyFingerprint)throw Error('KP encrypted mapping uses another key');
+  }
   const scheduleResult=await get('/schedules');
   const content=await get('/content/v2',false);
   let sources=[];

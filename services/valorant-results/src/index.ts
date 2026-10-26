@@ -1,4 +1,6 @@
 import { claimDeathMatch } from './death-sessions.ts';
+import { initializeKp, syncKpAccounts, collectKpMatch, drainKpInbox, flushKpDirectives, kpCreditLine } from './kp.ts';
+import { kpApi } from './kp-api.ts';
 import { lastDeathCheck } from './death-unrated.ts';
 import { isDeathMode, isDeathNotice, sessionModeSQL } from './death-modes.ts';
 import { discordInteractions } from './discord-interactions.ts';
@@ -8,6 +10,8 @@ import type { Match, Notice } from './results.ts';
 export { resultMessage } from './results.ts';
 
 export interface Env {
+  KP_BOOTSTRAP_PRIVATE_KEY?: string;
+  KP_BOOTSTRAP_PUBLIC_KEY?: string;
   DB: D1Database;
   HENRIK_API_KEY: string;
   DISCORD_WEBHOOK_URL: string;
@@ -118,6 +122,17 @@ async function saveMatch(env: Env, match: Match, player: Player, account: Accoun
     }
   }
   const result = death ? resultMessage(match,account.puuid,player.name?.trim() || parseId(player.riotId)[0],true,previousLastDeath)! : ordinary;
+  let kpActive = false;
+  try {
+    const mapping = await initializeKp(env);
+    if (mapping) {
+      kpActive = true;
+      const amount = await collectKpMatch(env, mapping, match, account.puuid);
+      if (amount !== null) {
+        result.message = kpCreditLine(result.message,amount);
+      }
+    }
+  } catch { console.warn('kp_match_pending'); }
   const inserted = await env.DB.prepare('INSERT OR IGNORE INTO notifications(riot_id,match_id,message,ended_at,mode,act_id,act_name,outcome,sent,team_id) VALUES(?,?,?,?,?,?,?,?,?,?)')
     .bind(player.riotId, match.metadata.match_id, result.message, result.endedAt, result.mode, result.actId, result.actName,
       result.outcome, result.outcome === 'draw' && result.mode === 'escalation' ? 1 : 0, result.teamId).run();
@@ -127,8 +142,8 @@ async function saveMatch(env: Env, match: Match, player: Player, account: Accoun
       finishToDetectionMs: Math.max(0, Date.now() - result.endedAt) });
     return 'newResults';
   }
-  if (isDeathNotice(result.mode)) await env.DB.prepare('UPDATE notifications SET message=?,outcome=?,sent=0 WHERE riot_id=? AND match_id=? AND message!=?')
-    .bind(result.message, result.outcome, player.riotId, match.metadata.match_id, result.message).run();
+  if (kpActive || isDeathNotice(result.mode)) await env.DB.prepare("UPDATE notifications SET message=?,outcome=?,sent=CASE WHEN mode='escalation' AND ?='draw' THEN 1 ELSE 0 END WHERE riot_id=? AND match_id=? AND message!=?")
+    .bind(result.message, result.outcome, result.outcome, player.riotId, match.metadata.match_id, result.message).run();
   return 'duplicates';
 }
 
@@ -257,6 +272,8 @@ export async function monitor(env: Env, players: Player[] = configuredPlayers): 
     await env.DB.prepare('DELETE FROM discord_command_receipts WHERE expires_at<?').bind(Date.now()).run();
     const accounts = new Map<string, Account>((await env.DB.prepare('SELECT riot_id,puuid,region,since FROM tracked_players')
       .all<Account & { riot_id: string }>()).results.map(account => [account.riot_id, account]));
+    try { const mapping = await initializeKp(env); if (mapping) { await syncKpAccounts(env, mapping); await drainKpInbox(env); await flushKpDirectives(env,mapping); } }
+    catch { console.warn('kp_setup_pending'); }
     // Bound extra API traffic: one reserved match per run, one attempt per match per five minutes.
     const deathDetails: DeathDetails = { remaining: 1, matches: new Map() };
     // Deliver a previously queued result before spending time polling the API again.
@@ -283,6 +300,8 @@ export async function monitor(env: Env, players: Player[] = configuredPlayers): 
           console.info('player_registered', { player: player.name || player.riotId, since: new Date(account.since).toISOString() });
         }
         accounts.set(player.riotId, account);
+        try { const mapping = await initializeKp(env); if (mapping) await syncKpAccounts(env, mapping); }
+        catch { console.warn('kp_link_pending'); }
         stage = 'match_history';
         const matches = await api<Match[]>(env, `/valorant/v4/by-puuid/matches/${account.region}/pc/${encodeURIComponent(account.puuid)}?size=5`);
         if (!Array.isArray(matches)) throw new Error('Invalid matches');
@@ -309,6 +328,7 @@ export async function monitor(env: Env, players: Player[] = configuredPlayers): 
     }
     if (!players.length) return;
     await flushNotifications(env, players);
+    try {const mapping=await initializeKp(env);if(mapping)await flushKpDirectives(env,mapping);}catch{console.warn('kp_directive_delivery_pending');}
 
   } finally {
     await env.DB.prepare("DELETE FROM monitor_state WHERE key='lock' AND value=?").bind(String(lease)).run();
@@ -318,7 +338,9 @@ export async function monitor(env: Env, players: Player[] = configuredPlayers): 
 }
 
 export default {
-  fetch: discordInteractions,
+  fetch(request: Request, env: Env, ctx: ExecutionContext) {
+    return new URL(request.url).pathname.startsWith('/api/kp/') ? kpApi(request, env) : discordInteractions(request, env, ctx);
+  },
   async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
     ctx.waitUntil(monitor(env));
   },
