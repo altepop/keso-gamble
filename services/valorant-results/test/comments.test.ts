@@ -1,18 +1,21 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import legacy from '../taunts.json' with { type:'json' };
-import {commentTones,commentPools,resultComment,selectedTone} from '../src/comments.ts';
+import {commentTones,commentToneNames,commentPools,resultComment,selectedTone} from '../src/comments.ts';
 import type {CommentGroup,Tone} from '../src/comments.ts';
 
-test('every situation supports all four tones and keeps the original catalogue available',()=>{
- assert.equal(Object.values(commentPools).reduce((sum,lines)=>sum+lines.length,0),592);
+test('every situation supports all five tones and keeps the original catalogue available',()=>{
+ const allLines=Object.values(commentPools).flat();
+ assert.equal(allLines.length,784);
+ assert.equal(new Set(allLines).size,allLines.length,'catalogue must not pad its count with duplicate lines');
+ assert.deepEqual([...commentToneNames].sort(),['dry','hot','meme','normal','roast']);
  for(const group of Object.keys(commentTones) as CommentGroup[]){
-  assert.deepEqual(Object.keys(commentTones[group]).sort(),['dry','hot','normal','roast']);
-  for(const tone of ['dry','hot','normal','roast'] as Tone[])assert.equal(commentTones[group][tone].length,5);
+  assert.deepEqual(Object.keys(commentTones[group]).sort(),['dry','hot','meme','normal','roast']);
+  for(const tone of commentToneNames)assert.equal(commentTones[group][tone].length,tone==='meme'?12:5);
   for(const line of (legacy as Record<string,string[]>)[group]??[])assert.ok(commentPools[group].includes(line));
  }
 });
-test('all four tones and new lines can actually be selected within each situation',()=>{
+test('all five tones and new lines can actually be selected within each situation',()=>{
  for(const group of Object.keys(commentTones) as CommentGroup[]){
   const seen=new Map<Tone,Set<string>>();
   for(let n=0;n<2000;n++){
@@ -22,7 +25,7 @@ test('all four tones and new lines can actually be selected within each situatio
    assert.ok(allowed.some(line=>line.replaceAll('{streak}','7')===text),group+':'+tone);
    if(!seen.has(tone))seen.set(tone,new Set());seen.get(tone)!.add(text);
   }
-  for(const tone of ['dry','hot','normal','roast'] as Tone[])for(const line of commentTones[group][tone])assert.ok(seen.get(tone)?.has(line.replaceAll('{streak}','7')),group+':'+tone);
+  for(const tone of commentToneNames)for(const line of commentTones[group][tone])assert.ok(seen.get(tone)?.has(line.replaceAll('{streak}','7')),group+':'+tone);
  }
 });
 test('tone and wording remain stable on refetches and substitute actual streak counts',()=>{
