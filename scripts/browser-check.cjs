@@ -7,11 +7,31 @@ const path=require('node:path');
 const key='keso-exchange-v0.2';
 const server=spawn('python3',['-m','http.server','8765','--bind','127.0.0.1'],{cwd:path.join(__dirname,'..'),stdio:'ignore'});
 let browser;
+const mediaCalls=[];
+async function auditMedia(context){
+ await context.exposeBinding('__recordMediaUse',(_source,method)=>mediaCalls.push(method));
+ await context.addInitScript(()=>{
+  const pending=[];
+  const record=method=>{const call=window.__recordMediaUse(method);pending.push(call);return call;};
+  window.__flushMediaAudit=()=>Promise.all(pending);
+  const forbidden=method=>function(){record(method);throw Error('Unexpected media activation: '+method);};
+  const session={get type(){return 'auto';},set type(_value){record('audioSession.type=');}};
+  Object.defineProperty(navigator,'audioSession',{configurable:true,get(){record('navigator.audioSession');return session;}});
+  for(const name of ['Audio','AudioContext','webkitAudioContext','RTCPeerConnection'])
+   Object.defineProperty(window,name,{configurable:true,value:forbidden(name)});
+  HTMLMediaElement.prototype.play=forbidden('HTMLMediaElement.play');
+  Object.defineProperty(navigator,'mediaDevices',{configurable:true,value:{
+   getUserMedia:forbidden('getUserMedia'),getDisplayMedia:forbidden('getDisplayMedia'),
+  }});
+  Object.defineProperty(navigator,'mediaSession',{configurable:true,get(){record('navigator.mediaSession');return {};}});
+ });
+}
 (async()=>{
  for(let i=0;i<50;i++){try{const r=await fetch('http://127.0.0.1:8765');if(r.ok)break;}catch{}await new Promise(r=>setTimeout(r,100));}
  const executablePath=process.env.CHROMIUM_PATH || (existsSync('/usr/bin/chromium')?'/usr/bin/chromium':undefined);
  browser=await chromium.launch({executablePath,args:['--no-sandbox']});
  const context=await browser.newContext({viewport:{width:390,height:844}});
+ await auditMedia(context);
  const errors=[];
  context.on('page',p=>p.on('pageerror',e=>errors.push(e.message)));
  const a=await context.newPage();await a.goto('http://127.0.0.1:8765');
@@ -31,8 +51,8 @@ let browser;
  await a.locator('.nav-btn[data-screen=market]').click();await a.locator('[data-screen=casino]').click();await a.locator('[data-action=spin]').click();await a.waitForFunction(k=>JSON.parse(localStorage.getItem(k))?.spins.length===1,key);await a.waitForTimeout(1900);
  await a.clock.install();await a.locator('.nav-btn[data-screen=assets]').click();await a.locator('#trade-qty').fill('3');await a.clock.fastForward(75000);assert.equal(await a.locator('#trade-qty').inputValue(),'3');
  for(const width of [320,390,1280]){await a.setViewportSize({width,height:844});assert.equal(await a.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);}
- const blocked=await browser.newContext();const p=await blocked.newPage();p.on('pageerror',e=>errors.push(e.message));await p.addInitScript(()=>Object.defineProperty(window,'localStorage',{get(){throw Error('blocked')}}));await p.goto('http://127.0.0.1:8765');await p.locator('.nav-btn[data-screen=assets]').click();await p.locator('summary').click();await p.locator('[data-action=salary]').click();await p.locator('.toast').filter({hasText:'テスト用KP'}).waitFor();await p.locator('#trade-qty').fill('1');await p.locator('[data-action=trade]').click();await p.locator('.toast').filter({hasText:'買付した'}).waitFor();
- const gameContext=await browser.newContext({viewport:{width:390,height:844}});const g=await gameContext.newPage();g.on('pageerror',e=>errors.push(e.message));await g.goto('http://127.0.0.1:8765');
+ const blocked=await browser.newContext();await auditMedia(blocked);const p=await blocked.newPage();p.on('pageerror',e=>errors.push(e.message));await p.addInitScript(()=>Object.defineProperty(window,'localStorage',{get(){throw Error('blocked')}}));await p.goto('http://127.0.0.1:8765');await p.locator('.nav-btn[data-screen=assets]').click();await p.locator('summary').click();await p.locator('[data-action=salary]').click();await p.locator('.toast').filter({hasText:'テスト用KP'}).waitFor();await p.locator('#trade-qty').fill('1');await p.locator('[data-action=trade]').click();await p.locator('.toast').filter({hasText:'買付した'}).waitFor();
+ const gameContext=await browser.newContext({viewport:{width:390,height:844}});await auditMedia(gameContext);const g=await gameContext.newPage();g.on('pageerror',e=>errors.push(e.message));await g.goto('http://127.0.0.1:8765');
  assert.match(await g.locator('#app').innerText(),/遊んで稼ぐ/);assert.doesNotMatch(await g.locator('#app').innerText(),/日経|TOPIX/);
  await g.locator('.nav-btn[data-screen=play]').click();await g.locator('#claim-reference').fill('match-001');await g.locator('[data-action=submit-claim]').click();await g.locator('[data-approve]').waitFor();
  let gameState=await g.evaluate(k=>JSON.parse(localStorage.getItem(k)),key);assert.equal(gameState.cash,10000);await g.locator('[data-approve]').click();await g.waitForFunction(k=>JSON.parse(localStorage.getItem(k)).cash===10500,key);
@@ -40,5 +60,11 @@ let browser;
  await g.locator('.nav-btn[data-screen=directives]').click();await g.locator('#directive-target').selectOption('riso');await g.locator('[data-action=issue-directive]').click();await g.locator('[data-complete]').waitFor();gameState=await g.evaluate(k=>JSON.parse(localStorage.getItem(k)),key);assert.equal(gameState.cash,8800);assert.equal(gameState.directives[0].status,'active');
  await g.locator('[data-complete]').click();await g.waitForFunction(k=>JSON.parse(localStorage.getItem(k)).directives[0].status==='completed',key);await g.reload();await g.locator('.nav-btn[data-screen=directives]').click();assert.match(await g.locator('#app').innerText(),/達成済み/);
  for(const screen of ['home','play','market','directives','assets']){await g.locator(`.nav-btn[data-screen=${screen}]`).click();await g.setViewportSize({width:320,height:844});assert.equal(await g.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,screen);}
- assert.deepEqual(errors,[]);console.log('Browser checks passed: play claims and payouts, Steam text escaping, directives and completion persistence, concurrent orders/salaries, storage failure, drafts, chart toggles, keyboard, spin persistence, mobile layouts.');
+ assert.deepEqual(errors,[]);
+ // Confirm the probe is active, so a missing instrumentation hook cannot pass silently.
+ for(const ctx of browser.contexts())for(const page of ctx.pages())await page.evaluate(()=>window.__flushMediaAudit());
+ await g.evaluate(async()=>{const session=navigator.audioSession;session.type='ambient';await window.__flushMediaAudit();});
+ assert.deepEqual(mediaCalls.splice(-2),['navigator.audioSession','audioSession.type=']);
+ assert.deepEqual(mediaCalls,[],'Game flows must not read/change audio sessions, create playback/capture, or open WebRTC');
+ console.log('Browser checks passed: no audio-session access, media playback/capture or WebRTC during game flows; play claims and payouts, Steam text escaping, directives and completion persistence, concurrent orders/salaries, storage failure, drafts, chart toggles, keyboard, spin persistence, mobile layouts.');
 })().catch(e=>{console.error(e);process.exitCode=1;}).finally(async()=>{await browser?.close();server.kill();});
