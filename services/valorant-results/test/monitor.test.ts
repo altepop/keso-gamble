@@ -1,3 +1,4 @@
+import { commentPools } from '../src/comments.ts';
 import configuredPlayers from '../players.json' with { type: 'json' };
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -235,7 +236,7 @@ test('match details calculate KDA, ACS and hit-based HS rate; absent fields neve
 });
 
 test('performance-specific defeat taunts stay separate from win and draw comments', () => {
-  const taunts = JSON.parse(readFileSync(new NodeURL('../taunts.json', import.meta.url), 'utf8')) as Record<string, string[]>;
+  const taunts = commentPools;
   for (const [kind, kills, deaths, ownScore] of [
     ['high_kills', 24, 16, 10], ['low_kd', 5, 20, 10], ['close_loss', 18, 16, 11], ['blowout', 18, 16, 3],
   ] as const) {
@@ -1219,7 +1220,7 @@ test('network delivery failures do not cause an immediate retry for every player
 });
 
 test('all outcome comment pools are populated, short, unique and safe for Discord text', () => {
-  const pools = JSON.parse(readFileSync(new NodeURL('../taunts.json', import.meta.url), 'utf8')) as Record<string, string[]>;
+  const pools = commentPools;
   assert.ok(Object.values(pools).reduce((n, lines) => n + lines.length, 0) >= 270);
   for (const [kind, lines] of Object.entries(pools)) {
     assert.ok(lines.length >= 12, kind);
@@ -1234,7 +1235,7 @@ test('all outcome comment pools are populated, short, unique and safe for Discor
 });
 
 test('wins and draws each select stable comments across many different matches', () => {
-  const pools = JSON.parse(readFileSync(new NodeURL('../taunts.json', import.meta.url), 'utf8')) as Record<string, string[]>;
+  const pools = commentPools;
   for (const outcome of ['win', 'draw'] as const) {
     const seen = new Set<string>();
     for (let n = 0; n < 80; n++) {
@@ -1261,7 +1262,7 @@ test('winning streaks use three/five thresholds, remain stable, and draw resets 
   };
   try {
     const base = Date.now() - 10_000;
-    const pools = JSON.parse(readFileSync(new NodeURL('../taunts.json', import.meta.url), 'utf8')) as Record<string, string[]>;
+    const pools = commentPools;
     for (let n = 1; n <= 5; n++) {
       games = [match('winning-' + n, 'competitive', true, base + n * 1000), ...games].slice(0, 2);
       await monitor(env, [{ riotId: 'player#JP1' }]);
@@ -1284,7 +1285,7 @@ test('winning streaks use three/five thresholds, remain stable, and draw resets 
 });
 
 test('winning performance pools distinguish high kills, team-assisted, close and dominant wins', () => {
-  const pools = JSON.parse(readFileSync(new NodeURL('../taunts.json', import.meta.url), 'utf8')) as Record<string, string[]>;
+  const pools = commentPools;
   for (const [kind,kills,deaths,enemyScore] of [
     ['win_high_kills',24,16,10],['win_low_kd',5,20,10],['close_win',18,16,11],['blowout_win',18,16,3],
   ] as const) {

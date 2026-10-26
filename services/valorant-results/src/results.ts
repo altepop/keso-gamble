@@ -1,6 +1,6 @@
 import { storedMode, modeLabel, isSoloMode } from './modes.ts';
 import { deathUnratedMessage } from './death-unrated.ts';
-import taunts from '../taunts.json' with { type: 'json' };
+import { commentPools as taunts, resultComment } from './comments.ts';
 
 export type Outcome = 'win' | 'loss' | 'draw';
 export interface Match {
@@ -25,16 +25,6 @@ export interface Notice {
 interface Result {
   message: string; endedAt: number; mode: string; outcome: Outcome | null;
   actId: string | null; actName: string | null; teamId: string;
-}
-
-function resultComment(matchId: string, puuid: string, group: keyof typeof taunts = 'default', streak = 0): string {
-  // A seeded choice stays the same across repeated API fetches and delivery retries.
-  let seed = 2166136261;
-  for (const char of matchId + ':' + puuid) {
-    seed = Math.imul(seed ^ char.codePointAt(0)!, 16777619);
-  }
-  const choices = taunts[group].length ? taunts[group] : taunts.default;
-  return choices.length ? '\n💬 ' + choices[(seed >>> 0) % choices.length].replaceAll('{streak}', String(streak)) : '';
 }
 
 export function resultMessage(raw: Match, puuid: string, label: string, deathUnrated = false): Result | null {
@@ -99,7 +89,7 @@ export function resultMessage(raw: Match, puuid: string, label: string, deathUnr
       : mode === 'competitive' && hasScore && ownScore! - enemyScore! >= 8 ? 'blowout_win' : 'win';
   } else if (outcome === 'draw') tauntGroup = 'draw';
   return {
-    message: `${outcome === 'win' ? '🎉' : '📢'} ${name}は${score}${result}（${modeName}）${hasScore ? '' : ' ※スコア未取得'}` + performance + award + (outcome ? resultComment(raw.metadata.match_id, puuid, tauntGroup) : '\n💬 試合お疲れ！ 次の試合まだ？'),
+    message: `${outcome === 'win' ? '🎉' : '📢'} ${name}は${score}${result}（${modeName}）${hasScore ? '' : ' ※スコア未取得'}` + performance + award + (outcome ? resultComment(raw.metadata.match_id, puuid, tauntGroup) : resultComment(raw.metadata.match_id, puuid, 'completed')),
     endedAt: start + duration, mode: storedMode(mode), outcome,
     actId: raw.metadata.season?.id || null, actName: raw.metadata.season?.short || null, teamId: player.team_id || '',
   };
