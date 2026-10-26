@@ -1,0 +1,20 @@
+{
+  "enabled": false,
+  "currency": "KC",
+  "version": "draft-mode-rewards-v1",
+  "modes": {
+    "competitive": {
+      "participation": null,
+      "winBonus": null
+    },
+    "escalation": {
+      "participation": null,
+      "winBonus": null
+    },
+    "unrated": {
+      "participation": null,
+      "winBonus": null
+    }
+  },
+  "startsAt": null
+}

@@ -1,0 +1,36 @@
+{
+  "name": "valorant-discord-bot",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "wrangler dev --test-scheduled",
+    "typecheck": "tsc --noEmit",
+    "test": "node --experimental-strip-types --test test/*.test.ts",
+    "check": "npm run typecheck && npm test && npm run test:deploy",
+    "build": "wrangler deploy --dry-run --outdir dist",
+    "deploy": "wrangler deploy",
+    "db:local": "wrangler d1 migrations apply DB --local",
+    "db:remote": "node scripts/assert-deploy-config.mjs && wrangler d1 migrations apply DB --remote",
+    "discord:setup": "node --experimental-strip-types scripts/setup-discord.mjs",
+    "prepare": "node scripts/prepare-local.mjs",
+    "pretypecheck": "node scripts/prepare-local.mjs",
+    "prebuild": "node scripts/prepare-local.mjs",
+    "predev": "node scripts/prepare-local.mjs",
+    "predeploy": "node scripts/assert-deploy-config.mjs",
+    "test:deploy": "node --test test/deploy-settings.test.mjs"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20261024.1",
+    "@types/node": "^24.0.0",
+    "acorn": "8.15.0",
+    "typescript": "7.0.2",
+    "wrangler": "4.152.0"
+  },
+  "overrides": {
+    "undici": "^7.30.1"
+  }
+}

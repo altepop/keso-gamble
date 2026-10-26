@@ -1,0 +1,83 @@
+name: VALORANT Bot check and deploy
+on:
+  pull_request:
+    paths:
+      - 'services/valorant-results/**'
+      - '.github/workflows/valorant-results.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'services/valorant-results/**'
+      - '.github/workflows/valorant-results.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: valorant-results-${{ github.event_name == 'pull_request' && github.ref || 'production' }}
+  cancel-in-progress: false
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/valorant-results
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: services/valorant-results/package-lock.json
+      - run: npm ci
+      - run: npm run check
+      - run: npm run build
+  deploy:
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: check
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    env:
+      WRANGLER_SEND_METRICS: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Check required deployment Secrets
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          test -n "$CF_TOKEN" || { echo 'Missing CLOUDFLARE_API_TOKEN repository Secret'; exit 1; }
+          test -n "$CF_ACCOUNT" || { echo 'Missing CLOUDFLARE_ACCOUNT_ID repository Secret'; exit 1; }
+      - name: Prepare private runner copy
+        run: |
+          umask 077
+          mkdir -p "$RUNNER_TEMP/valorant-results"
+          cp -R services/valorant-results/. "$RUNNER_TEMP/valorant-results/"
+          cd "$RUNNER_TEMP/valorant-results"
+          npm ci
+      - name: Recover existing Worker configuration
+        working-directory: ${{ runner.temp }}/valorant-results
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          VALORANT_RESULTS_WORKER: valorant-results
+        run: node scripts/live-settings.mjs
+      - name: Validate live configuration and build
+        working-directory: ${{ runner.temp }}/valorant-results
+        run: |
+          node scripts/assert-deploy-config.mjs
+          npm run typecheck
+          npm run build
+      - name: Deploy existing Bot (no migrations or command registration)
+        working-directory: ${{ runner.temp }}/valorant-results
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npm run deploy -- --keep-vars
+      - name: Remove private runner copy
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/valorant-results"

@@ -1,0 +1,6 @@
+[
+  { "riotId": "PlayerA#TEST", "name": "プレイヤーA" },
+  { "riotId": "PlayerB#TEST", "name": "プレイヤーB" },
+  { "riotId": "PlayerC#TEST", "name": "プレイヤーC" },
+  { "riotId": "PlayerD#TEST", "name": "プレイヤーD" }
+]

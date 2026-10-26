@@ -1,0 +1,251 @@
+import { claimDeathMatch } from './death-sessions.ts';
+import { discordInteractions } from './discord-interactions.ts';
+import configuredPlayers from '../players.json' with { type: 'json' };
+import { resultMessage, groupNotification } from './results.ts';
+import type { Match, Notice } from './results.ts';
+export { resultMessage } from './results.ts';
+
+export interface Env {
+  DB: D1Database;
+  HENRIK_API_KEY: string;
+  DISCORD_WEBHOOK_URL: string;
+}
+export interface Player { riotId: string; name?: string }
+interface Account { puuid: string; region: string; since: number }
+
+function parseId(id: string): [string, string] {
+  const split = id.lastIndexOf('#');
+  if (split < 1 || split === id.length - 1) throw new Error('Riot IDは「名前#タグ」で登録してください。');
+  return [id.slice(0, split), id.slice(split + 1)];
+}
+
+function validatePlayers(players: Player[]): void {
+  if (players.length > 5) throw new Error('登録上限は5人です。');
+  const ids = players.map(p => {
+    if (typeof p.riotId !== 'string' || (p.name !== undefined && typeof p.name !== 'string')) throw new Error('players.jsonの形式を確認してください。');
+    parseId(p.riotId);
+    return p.riotId.toLowerCase();
+  });
+  if (new Set(ids).size !== ids.length) throw new Error('Riot IDが重複しています。');
+}
+
+async function state(env: Env, key: string): Promise<number> {
+  const row = await env.DB.prepare('SELECT value FROM monitor_state WHERE key=?').bind(key).first<{ value: string }>();
+  return Number(row?.value ?? 0);
+}
+
+async function setState(env: Env, key: string, value: number | string): Promise<void> {
+  await env.DB.prepare('INSERT INTO monitor_state(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value')
+    .bind(key, String(value)).run();
+}
+
+// Log fixed categories only: fetch errors can contain webhook URLs or credentials.
+function diagnosticReason(error: unknown): string {
+  if (!(error instanceof Error)) return 'unknown_error';
+  const status = /^Match API HTTP (\d{3})$/.exec(error.message);
+  if (status) return 'henrik_http_' + status[1];
+  if (/no such table|no column named|has no column/i.test(error.message)) return 'database_migration_missing';
+  if (/D1_ERROR|SQLITE_/i.test(error.message)) return 'database_error';
+  if (error.name === 'TimeoutError' || error.name === 'AbortError') return 'request_timeout';
+  const known: Record<string, string> = {
+    'API cooldown': 'api_cooldown', 'Invalid account': 'invalid_account_data',
+    'Invalid matches': 'invalid_match_list', 'Unexpected API data': 'invalid_api_data',
+    'Invalid match time': 'invalid_match_time', 'Invalid Discord message ID': 'invalid_discord_response',
+  };
+  return known[error.message] ?? 'unexpected_error';
+}
+
+export function retryAfter(response: Response, now = Date.now()): number {
+  const number = (value: string | null) => value !== null && /^\d+(?:\.\d+)?$/.test(value.trim()) ? Number(value) : NaN;
+  const retry = response.headers.get('Retry-After');
+  let seconds = number(retry);
+  if (!Number.isFinite(seconds) && retry) seconds = (Date.parse(retry) - now) / 1000;
+  if (!Number.isFinite(seconds)) seconds = number(response.headers.get('X-RateLimit-Reset-After'));
+  if (!Number.isFinite(seconds)) {
+    const reset = response.headers.get('X-RateLimit-Reset');
+    const value = number(reset);
+    // Providers use either remaining seconds or an absolute Unix timestamp.
+    seconds = Number.isFinite(value) ? value >= 1e12 ? (value - now) / 1000
+      : value >= 1e9 ? value - now / 1000 : value : reset ? (Date.parse(reset) - now) / 1000 : NaN;
+  }
+  return Math.min(3600, Math.max(1, Number.isFinite(seconds) ? Math.ceil(seconds) : 60)) * 1000;
+}
+
+async function api<T>(env: Env, path: string): Promise<T> {
+  if (await state(env, 'api_after') > Date.now()) throw new Error('API cooldown');
+  const requestedAt = Date.now();
+  const response = await fetch(`https://api.henrikdev.xyz${path}`, {
+    headers: { Authorization: env.HENRIK_API_KEY }, signal: AbortSignal.timeout(10_000),
+  });
+  const remaining = response.headers.get('X-RateLimit-Remaining');
+  const headerNumber = (name: string) => { const value = response.headers.get(name); return value !== null && /^\d+(?:\.\d+)?$/.test(value) ? Number(value) : null; };
+  console.info('henrik_response', { endpoint: path.includes('/matches/') ? 'matches' : 'account', status: response.status,
+    responseMs: Date.now() - requestedAt, cacheTTL: headerNumber('X-Cache-TTL'), cacheAge: headerNumber('Age'), remaining: headerNumber('X-RateLimit-Remaining') });
+  if (response.status === 429 || (remaining !== null && Number(remaining) <= 1)) {
+    const retryAt = Date.now() + retryAfter(response);
+    await setState(env, 'api_after', retryAt);
+    console.info('henrik_wait', { status: response.status, retryAt: new Date(retryAt).toISOString() });
+  }
+  if (!response.ok) throw new Error(`Match API HTTP ${response.status}`);
+  const body = await response.json() as { data: T };
+  if (body.data === undefined) throw new Error('Unexpected API data');
+  return body.data;
+}
+
+
+async function saveMatch(env: Env, match: Match, player: Player, account: Account): Promise<'excluded' | 'beforeMonitoring' | 'newResults' | 'duplicates'> {
+  const unrated = match.metadata?.queue?.id === 'unrated';
+  const result = resultMessage(match, account.puuid, player.name?.trim() || parseId(player.riotId)[0], unrated);
+  if (!result) return 'excluded';
+  if (result.endedAt <= account.since) return 'beforeMonitoring';
+  if (unrated && !await claimDeathMatch(env.DB, player.riotId, match.metadata.match_id, Date.parse(match.metadata.started_at), result.endedAt)) return 'excluded';
+  const inserted = await env.DB.prepare('INSERT OR IGNORE INTO notifications(riot_id,match_id,message,ended_at,mode,act_id,act_name,outcome,sent,team_id) VALUES(?,?,?,?,?,?,?,?,?,?)')
+    .bind(player.riotId, match.metadata.match_id, result.message, result.endedAt, result.mode, result.actId, result.actName,
+      result.outcome, result.outcome === 'draw' && result.mode === 'escalation' ? 1 : 0, result.teamId).run();
+  if (inserted.meta.changes) {
+    await env.DB.prepare('INSERT OR IGNORE INTO monitor_state(key,value) VALUES(?,?)').bind('detected:' + match.metadata.match_id, String(Date.now())).run();
+    console.info('result_saved', { player: player.name || player.riotId, outcome: result.outcome, endedAt: new Date(result.endedAt).toISOString(),
+      finishToDetectionMs: Math.max(0, Date.now() - result.endedAt) });
+    return 'newResults';
+  }
+  if (result.mode === 'unrated') await env.DB.prepare('UPDATE notifications SET message=?,outcome=?,sent=0 WHERE riot_id=? AND match_id=? AND message!=?')
+    .bind(result.message, result.outcome, player.riotId, match.metadata.match_id, result.message).run();
+  return 'duplicates';
+}
+
+async function flushNotifications(env: Env, players: Player[]): Promise<void> {
+  const hasPending = await env.DB.prepare('SELECT 1 AS n FROM notifications WHERE sent=0 LIMIT 1').first();
+  if (!hasPending) return;
+  const discordAfter = await state(env, 'discord_after');
+  if (discordAfter > Date.now()) { console.info('discord_wait', { retryAt: new Date(discordAfter).toISOString() }); return; }
+  const url = new URL(env.DISCORD_WEBHOOK_URL);
+  if (url.protocol !== 'https:' || url.hostname !== 'discord.com' || !url.pathname.startsWith('/api/webhooks/')) throw new Error('Invalid Discord Webhook URL');
+  url.searchParams.set('wait', 'true');
+  const pending = await env.DB.prepare(`SELECT match_id,MIN(ended_at) AS ended_at FROM notifications
+    WHERE sent=0 AND (mode IS NULL OR mode!='unrated' OR EXISTS(
+      SELECT 1 FROM death_unrated_sessions s WHERE s.riot_id=notifications.riot_id
+      AND s.match_id=notifications.match_id AND s.cancelled_at IS NULL))
+    GROUP BY match_id ORDER BY ended_at,match_id LIMIT 10`).all<{ match_id: string }>();
+  for (const pendingMatch of pending.results) {
+    try {
+      // Include sent participants when another player's result arrives on a later poll.
+      const notices = await env.DB.prepare(`SELECT * FROM notifications WHERE match_id=?
+        AND (outcome IS NULL OR outcome!='draw' OR mode IN ('competitive','unrated'))
+        AND (mode IS NULL OR mode!='unrated' OR EXISTS(SELECT 1 FROM death_unrated_sessions s
+          WHERE s.riot_id=notifications.riot_id AND s.match_id=notifications.match_id AND s.cancelled_at IS NULL)) ORDER BY riot_id`).bind(pendingMatch.match_id).all<Notice>();
+      if (!notices.results.length) continue;
+      const payload = await groupNotification(env.DB, notices.results, new Map(players.map(player => [player.riotId, player.name?.trim() || parseId(player.riotId)[0]])));
+      const saved = await env.DB.prepare('SELECT value FROM monitor_state WHERE key=?')
+        .bind('post:' + pendingMatch.match_id).first<{ value: string }>();
+      // Discord snowflakes must stay strings: conversion to Number loses precision.
+      const editUrl = new URL(url);
+      editUrl.pathname = editUrl.pathname.replace(/\/$/, '') + '/messages/' + encodeURIComponent(saved?.value ?? '');
+      editUrl.searchParams.delete('wait');
+      const send = (target: URL, method: string) => fetch(target, {
+        method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), signal: AbortSignal.timeout(10_000),
+      });
+      let response = await send(saved ? editUrl : url, saved ? 'PATCH' : 'POST');
+      // A deleted original message can be replaced when a late result needs to be added.
+      if (saved && response.status === 404) response = await send(url, 'POST');
+      if (!response.ok) {
+        console.warn('discord_post_failed', { status: response.status });
+        await setState(env, 'discord_after', Date.now() + retryAfter(response));
+        break;
+      }
+      const message = await response.json() as { id?: string };
+      if (typeof message.id !== 'string' || !/^\d+$/.test(message.id)) throw new Error('Invalid Discord message ID');
+      await setState(env, 'post:' + pendingMatch.match_id, message.id);
+      await env.DB.prepare('UPDATE notifications SET sent=1 WHERE match_id=?').bind(pendingMatch.match_id).run();
+      let timing = null;
+      try {
+        const detected = await env.DB.prepare('SELECT value FROM monitor_state WHERE key=?')
+          .bind('detected:' + pendingMatch.match_id).first<{ value: string }>();
+        const detectedAt = Number(detected?.value ?? 0), deliveredAt = Date.now();
+        const endedAt = Math.max(...notices.results.map(notice => notice.ended_at));
+        timing = detectedAt > 0 ? { endedAt, detectedAt, deliveredAt,
+          finishToDetectionMs: Math.max(0, detectedAt - endedAt), detectionToDiscordMs: Math.max(0, deliveredAt - detectedAt) } : null;
+        // Late edits must not replace the timing of the initial notification.
+        if (timing && !saved) await setState(env, 'delivery:last', JSON.stringify(timing));
+      } catch { console.warn('delivery_timing_failed'); }
+      console.info('discord_delivered', { matchId: pendingMatch.match_id, players: notices.results.length, updated: Boolean(saved), timing });
+    } catch (error) { console.warn('discord_post_failed', { reason: diagnosticReason(error) }); await setState(env, 'discord_after', Date.now() + 60_000); break; }
+  }
+}
+
+export async function monitor(env: Env, players: Player[] = configuredPlayers): Promise<void> {
+  validatePlayers(players);
+  console.info('monitor_start', { players: players.length, time: new Date().toISOString() });
+  const lease = Date.now() + 5 * 60_000;
+  const lock = await env.DB.prepare(`INSERT INTO monitor_state(key,value) VALUES('lock',?)
+    ON CONFLICT(key) DO UPDATE SET value=excluded.value WHERE CAST(monitor_state.value AS INTEGER)<?`)
+    .bind(String(lease), Date.now()).run();
+  if (!lock.meta.changes) { console.info('monitor_skipped', { reason: 'previous_run_active' }); return; }
+  try {
+    await setState(env, 'monitor_started', Date.now());
+    const marks = players.map(() => '?').join(',');
+    await env.DB.prepare(`DELETE FROM tracked_players${players.length ? ` WHERE riot_id NOT IN (${marks})` : ''}`)
+      .bind(...players.map(p => p.riotId)).run();
+    await env.DB.prepare(`DELETE FROM death_unrated_sessions${players.length ? ` WHERE riot_id NOT IN (${marks})` : ''}`)
+      .bind(...players.map(p => p.riotId)).run();
+    await env.DB.prepare('DELETE FROM discord_command_receipts WHERE expires_at<?').bind(Date.now()).run();
+    const accounts = new Map<string, Account>((await env.DB.prepare('SELECT riot_id,puuid,region,since FROM tracked_players')
+      .all<Account & { riot_id: string }>()).results.map(account => [account.riot_id, account]));
+    // Deliver a previously queued result before spending time polling the API again.
+    if (players.length) await flushNotifications(env, players);
+    const offset = await state(env, 'cursor') % Math.max(1, players.length);
+    // Rotate the first player so a shared API limit cannot starve later players.
+    for (let n = 0; n < players.length; n++) {
+      const index = (offset + n) % players.length;
+      const player = players[index];
+      const apiAfter = await state(env, 'api_after');
+      if (apiAfter > Date.now()) { console.info('henrik_wait', { retryAt: new Date(apiAfter).toISOString() }); break; }
+      await setState(env, 'cursor', (index + 1) % players.length);
+      let stage = 'account';
+      try {
+        let account = await env.DB.prepare('SELECT puuid,region,since FROM tracked_players WHERE riot_id=?')
+          .bind(player.riotId).first<Account>();
+        if (!account) {
+          const [name, tag] = parseId(player.riotId);
+          const found = await api<Account>(env, `/valorant/v2/account/${encodeURIComponent(name)}/${encodeURIComponent(tag)}`);
+          if (!found.puuid || !['ap', 'na', 'eu', 'kr', 'br', 'latam'].includes(found.region)) throw new Error('Invalid account');
+          account = { puuid: found.puuid, region: found.region, since: Date.now() };
+          await env.DB.prepare('INSERT INTO tracked_players(riot_id,puuid,region,since) VALUES(?,?,?,?)')
+            .bind(player.riotId, account.puuid, account.region, account.since).run();
+          console.info('player_registered', { player: player.name || player.riotId, since: new Date(account.since).toISOString() });
+        }
+        accounts.set(player.riotId, account);
+        stage = 'match_history';
+        const matches = await api<Match[]>(env, `/valorant/v4/by-puuid/matches/${account.region}/pc/${encodeURIComponent(account.puuid)}?size=2`);
+        if (!Array.isArray(matches)) throw new Error('Invalid matches');
+        const counts = { fetched: matches.length, newResults: 0, duplicates: 0, beforeMonitoring: 0, excluded: 0 };
+        stage = 'save_result';
+        for (const match of [...matches].sort((a, b) => Date.parse(a.metadata.started_at) - Date.parse(b.metadata.started_at))) {
+          counts[await saveMatch(env, match, player, account)]++;
+          // A full match already contains other registered players; do not wait for their history to catch up.
+          for (const other of players) {
+            if (other.riotId === player.riotId) continue;
+            const otherAccount = accounts.get(other.riotId);
+            if (otherAccount && match.players?.some(member => member.puuid === otherAccount.puuid)) await saveMatch(env, match, other, otherAccount);
+          }
+        }
+        await setState(env, 'checked:' + player.riotId, Date.now());
+        console.info('player_checked', { player: player.name || player.riotId, ...counts });
+      } catch (error) { console.warn('player_poll_failed', { player: player.name || player.riotId, stage, reason: diagnosticReason(error) }); }
+      await flushNotifications(env, players);
+    }
+    if (!players.length) return;
+    await flushNotifications(env, players);
+
+  } finally {
+    await env.DB.prepare("DELETE FROM monitor_state WHERE key='lock' AND value=?").bind(String(lease)).run();
+    await setState(env, 'monitor_finished', Date.now());
+    console.info('monitor_finish');
+  }
+}
+
+export default {
+  fetch: discordInteractions,
+  async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    ctx.waitUntil(monitor(env));
+  },
+};
