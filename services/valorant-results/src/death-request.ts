@@ -10,7 +10,7 @@ export function deathRequest(interaction: Interaction, players: Player[]): { err
   if (new Set(options.map(option => option.name)).size !== options.length || options.some(option => option.type !== 3
     || !(/^player[2-5]?$/.test(option.name) || (action.name === 'start' && option.name === 'mode')) || typeof option.value !== 'string')) return { error: '対象者とモードは選択肢から選んでください。' };
   const mode = options.find(option => option.name === 'mode')?.value;
-  if (mode !== undefined && !isDeathMode(mode)) return { error: 'モードはアンレかスイフトを選んでください。' };
+  if (mode !== undefined && !isDeathMode(mode)) return { error: 'モードは表示された選択肢から選んでください。' };
   const ids = options.filter(option => option.name !== 'mode').map(option => option.value!);
   if (action.name === 'start' && !ids.length) return { error: 'playerで対象者を選んでください。' };
   if (ids.some(id => id !== 'all' && !players.some(player => player.riotId === id))) return { error: '登録から外れた対象者が含まれています。コマンドの選択肢を更新してください。' };

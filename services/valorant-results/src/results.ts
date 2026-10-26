@@ -58,7 +58,7 @@ export function resultMessage(raw: Match, puuid: string, label: string, deathUnr
   if (nonnegative(stats?.kills) && nonnegative(stats?.deaths) && nonnegative(stats?.assists)) {
     details.push(stats.kills + 'K / ' + stats.deaths + 'D / ' + stats.assists + 'A');
   }
-  if (['competitive', 'unrated', 'swiftplay'].includes(mode) && hasScore && nonnegative(stats?.score)) {
+  if (['competitive', 'unrated', 'swiftplay', 'spikerush', 'custom', 'onefa'].includes(mode) && hasScore && nonnegative(stats?.score)) {
     details.push('ACS ' + Math.round(stats.score / (ownScore! + enemyScore!)));
   }
   if (nonnegative(stats?.headshots) && nonnegative(stats?.bodyshots) && nonnegative(stats?.legshots)) {
@@ -194,7 +194,7 @@ export async function groupNotification(db: D1Database, notices: Notice[], label
   const blocks = await Promise.all(notices.map(notice => notificationContent(db, notice)));
   const pairs = await pairSummaries(db, notices, labels);
   const heading = notices.length > 1 ? (notices.every(notice => isDeathNotice(notice.mode))
-    ? '☠️ ' + deathName(notices[0].mode === 'death_swiftplay' ? 'swiftplay' : 'unrated') + '判定（'
+    ? '☠️ ' + deathName(isDeathMode(notices[0].mode?.slice(6)) ? notices[0].mode!.slice(6) as import('./death-modes.ts').DeathMode : 'unrated') + '判定（'
     : '👥 同じ試合の結果（') + notices.length + '人）' : '';
   const pairText = pairs.length ? '\n\n' + pairs.join('\n\n') : '';
   const content = (heading ? heading + '\n\n' : '') + blocks.join('\n\n') + pairText;

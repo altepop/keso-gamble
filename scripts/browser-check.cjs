@@ -1,0 +1,44 @@
+// Optional tooling: npm install --no-save playwright
+const {chromium}=require('playwright');
+const assert=require('node:assert/strict');
+const {spawn}=require('node:child_process');
+const {existsSync}=require('node:fs');
+const path=require('node:path');
+const key='keso-exchange-v0.2';
+const server=spawn('python3',['-m','http.server','8765','--bind','127.0.0.1'],{cwd:path.join(__dirname,'..'),stdio:'ignore'});
+let browser;
+(async()=>{
+ for(let i=0;i<50;i++){try{const r=await fetch('http://127.0.0.1:8765');if(r.ok)break;}catch{}await new Promise(r=>setTimeout(r,100));}
+ const executablePath=process.env.CHROMIUM_PATH || (existsSync('/usr/bin/chromium')?'/usr/bin/chromium':undefined);
+ browser=await chromium.launch({executablePath,args:['--no-sandbox']});
+ const context=await browser.newContext({viewport:{width:390,height:844}});
+ const errors=[];
+ context.on('page',p=>p.on('pageerror',e=>errors.push(e.message)));
+ const a=await context.newPage();await a.goto('http://127.0.0.1:8765');
+ await a.locator('.nav-btn[data-screen=market]').click();
+ await a.locator('[data-open]').first().focus();await a.keyboard.press('Enter');await a.locator('[role=dialog]').waitFor();
+ const ma=a.locator('[data-action=toggle-ma]');await ma.click();await assert.equal(await ma.getAttribute('aria-pressed'),'false');assert.equal(await a.locator('.chart-panel path').count(),0);
+ await a.keyboard.press('Escape');assert.equal(await a.locator('[role=dialog]').count(),0);
+ await a.locator('.nav-btn[data-screen=assets]').click();await a.locator('#trade-qty').fill('4');assert.match(await a.locator('#trade-estimate').innerText(),/4,848 KP/);
+ const b=await context.newPage();await b.goto('http://127.0.0.1:8765');await b.locator('.nav-btn[data-screen=assets]').click();await b.locator('#trade-qty').fill('4');
+ await Promise.all([a.locator('[data-action=trade]').click(),b.locator('[data-action=trade]').click()]);
+ await a.waitForFunction(k=>JSON.parse(localStorage.getItem(k))?.trades.length===2,key,{timeout:8000}).catch(async e=>{console.error({errors,stored:await a.evaluate(k=>localStorage.getItem(k),key),toast:await a.locator('.toast').innerText(),other:await b.locator('.toast').innerText()});throw e});
+ let saved=await a.evaluate(k=>JSON.parse(localStorage.getItem(k)),key);assert.equal(saved.cash,304);assert.equal(saved.holdings.keso,8);
+ await a.locator('#trade-qty').fill('');await a.locator('[data-action=trade]').click();await a.locator('.toast').filter({hasText:'株数は'}).waitFor();saved=await a.evaluate(k=>JSON.parse(localStorage.getItem(k)),key);assert.equal(saved.trades.length,2);
+ await a.locator('summary').click();await b.locator('summary').click();
+ await Promise.all([a.locator('[data-action=salary]').click(),b.locator('[data-action=salary]').click()]);await a.waitForFunction(k=>JSON.parse(localStorage.getItem(k))?.salaryClaims===1,key);
+ saved=await a.evaluate(k=>JSON.parse(localStorage.getItem(k)),key);assert.equal(saved.cash,904);
+ await a.locator('.nav-btn[data-screen=market]').click();await a.locator('[data-screen=casino]').click();await a.locator('[data-action=spin]').click();await a.waitForFunction(k=>JSON.parse(localStorage.getItem(k))?.spins.length===1,key);await a.waitForTimeout(1900);
+ await a.clock.install();await a.locator('.nav-btn[data-screen=assets]').click();await a.locator('#trade-qty').fill('3');await a.clock.fastForward(75000);assert.equal(await a.locator('#trade-qty').inputValue(),'3');
+ for(const width of [320,390,1280]){await a.setViewportSize({width,height:844});assert.equal(await a.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);}
+ const blocked=await browser.newContext();const p=await blocked.newPage();p.on('pageerror',e=>errors.push(e.message));await p.addInitScript(()=>Object.defineProperty(window,'localStorage',{get(){throw Error('blocked')}}));await p.goto('http://127.0.0.1:8765');await p.locator('.nav-btn[data-screen=assets]').click();await p.locator('summary').click();await p.locator('[data-action=salary]').click();await p.locator('.toast').filter({hasText:'テスト用KP'}).waitFor();await p.locator('#trade-qty').fill('1');await p.locator('[data-action=trade]').click();await p.locator('.toast').filter({hasText:'買付した'}).waitFor();
+ const gameContext=await browser.newContext({viewport:{width:390,height:844}});const g=await gameContext.newPage();g.on('pageerror',e=>errors.push(e.message));await g.goto('http://127.0.0.1:8765');
+ assert.match(await g.locator('#app').innerText(),/遊んで稼ぐ/);assert.doesNotMatch(await g.locator('#app').innerText(),/日経|TOPIX/);
+ await g.locator('.nav-btn[data-screen=play]').click();await g.locator('#claim-reference').fill('match-001');await g.locator('[data-action=submit-claim]').click();await g.locator('[data-approve]').waitFor();
+ let gameState=await g.evaluate(k=>JSON.parse(localStorage.getItem(k)),key);assert.equal(gameState.cash,10000);await g.locator('[data-approve]').click();await g.waitForFunction(k=>JSON.parse(localStorage.getItem(k)).cash===10500,key);
+ await g.locator('#claim-activity').selectOption('steam');await g.locator('#claim-game').fill('Portal 2');await g.locator('#claim-achievement').fill('<img src=x onerror=alert(1)>');await g.locator('#claim-reference').fill('proof-001');await g.locator('[data-action=submit-claim]').click();await g.locator('[data-approve]').click();await g.waitForFunction(k=>JSON.parse(localStorage.getItem(k)).cash===11300,key);assert.equal(await g.locator('.history-entry img').count(),0);
+ await g.locator('.nav-btn[data-screen=directives]').click();await g.locator('#directive-target').selectOption('riso');await g.locator('[data-action=issue-directive]').click();await g.locator('[data-complete]').waitFor();gameState=await g.evaluate(k=>JSON.parse(localStorage.getItem(k)),key);assert.equal(gameState.cash,8800);assert.equal(gameState.directives[0].status,'active');
+ await g.locator('[data-complete]').click();await g.waitForFunction(k=>JSON.parse(localStorage.getItem(k)).directives[0].status==='completed',key);await g.reload();await g.locator('.nav-btn[data-screen=directives]').click();assert.match(await g.locator('#app').innerText(),/達成済み/);
+ for(const screen of ['home','play','market','directives','assets']){await g.locator(`.nav-btn[data-screen=${screen}]`).click();await g.setViewportSize({width:320,height:844});assert.equal(await g.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,screen);}
+ assert.deepEqual(errors,[]);console.log('Browser checks passed: play claims and payouts, Steam text escaping, directives and completion persistence, concurrent orders/salaries, storage failure, drafts, chart toggles, keyboard, spin persistence, mobile layouts.');
+})().catch(e=>{console.error(e);process.exitCode=1;}).finally(async()=>{await browser?.close();server.kill();});

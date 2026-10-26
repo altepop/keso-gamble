@@ -27,15 +27,15 @@ export async function deathModePicker(db: D1Database, interaction: Interaction, 
   if (saved.kind !== 'death-mode-picker' || saved.userId !== userId || saved.selected) return { content: used, components: [] };
   const names = saved.targets.map(id => players.find(player => player.riotId === id)).filter((player): player is Player => Boolean(player))
     .map(player => clean(player.name || player.riotId.split('#')[0]));
-  return { content: '☠️ 対象：' + names.join('・') + '\nモードを選んで予約を確定してください（10分以内）。選択するまでは予約されません。',
-    components: [{ type: 1, components: [{ type: 3, custom_id: 'death_mode:' + interaction.id, placeholder: 'アンレ／スイフトを選択', min_values: 1, max_values: 1,
-      options: deathModes.map(mode => ({ label: mode.name, value: mode.value, description: '次の' + mode.queueName + '1試合を判定（予約後2時間以内）' })) }] }] };
+  return { content: '☠️ 対象：' + names.join('・') + '\nモードを選んで予約を確定してください（10分以内）。選択するまでは予約されません。\nカスタム等はAPIの履歴が必要です。最終R・味方5人などが取得できない条件は判定保留になります。',
+    components: [{ type: 1, components: [{ type: 3, custom_id: 'death_mode:' + interaction.id, placeholder: '判定対象のモードを選択', min_values: 1, max_values: 1,
+      options: deathModes.map(mode => ({ label: mode.name, value: mode.value, description: ['unrated','swiftplay','competitive','spikerush','onefa'].includes(mode.value) ? '次の1試合を判定（予約後2時間以内）' : 'APIの履歴が必要。ラウンド・味方情報がない条件は保留' })) }] }] };
 }
 
 export async function selectDeathMode(db: D1Database, interaction: Interaction, players: Player[], apply: (db: D1Database, interaction: Interaction, players: Player[], expectedActions?: ExpectedDeathAction[]) => Promise<string>): Promise<string> {
   const id = /^death_mode:(\d+)$/.exec(interaction.data?.custom_id ?? '')?.[1];
   const mode = interaction.data?.values?.[0];
-  if (!id || interaction.data?.component_type !== 3 || interaction.data.values?.length !== 1 || !isDeathMode(mode)) return 'モードはアンレかスイフトを選んでください。';
+  if (!id || interaction.data?.component_type !== 3 || interaction.data.values?.length !== 1 || !isDeathMode(mode)) return 'モードは表示された選択肢から選んでください。';
   const row = await db.prepare('SELECT response,expires_at FROM discord_command_receipts WHERE interaction_id=?')
     .bind(id).first<{ response: string; expires_at: number }>();
   if (!row || row.expires_at < Date.now()) return expired;

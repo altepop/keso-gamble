@@ -84,7 +84,7 @@ export async function runValoCommand(db: D1Database, interaction: Interaction, p
     const states = (await db.prepare("SELECT key,value FROM monitor_state WHERE key IN ('monitor_started','monitor_finished','api_after','discord_after') OR key LIKE 'checked:%'").all<{ key: string; value: string }>()).results;
     const state = new Map(states.map(row => [row.key, Number(row.value)]));
     const queue = await db.prepare(`SELECT COUNT(DISTINCT match_id) AS n FROM notifications WHERE sent=0 AND
-      (mode IS NULL OR mode NOT IN ('unrated','death_swiftplay') OR EXISTS(SELECT 1 FROM death_unrated_sessions s WHERE s.riot_id=notifications.riot_id
+      (mode IS NULL OR (mode!='unrated' AND substr(mode,1,6)!='death_') OR EXISTS(SELECT 1 FROM death_unrated_sessions s WHERE s.riot_id=notifications.riot_id
       AND s.match_id=notifications.match_id AND s.cancelled_at IS NULL))`).first<{ n: number }>();
     const lines = await Promise.all(players.map(async player => {
       const account = await db.prepare('SELECT since FROM tracked_players WHERE riot_id=?').bind(player.riotId).first<{ since: number }>();

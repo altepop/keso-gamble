@@ -189,7 +189,7 @@ async function flushNotifications(env: Env, players: Player[]): Promise<void> {
   if (url.protocol !== 'https:' || url.hostname !== 'discord.com' || !url.pathname.startsWith('/api/webhooks/')) throw new Error('Invalid Discord Webhook URL');
   url.searchParams.set('wait', 'true');
   const pending = await env.DB.prepare(`SELECT match_id,MIN(ended_at) AS ended_at FROM notifications
-    WHERE sent=0 AND (mode IS NULL OR mode NOT IN ('unrated','death_swiftplay') OR EXISTS(
+    WHERE sent=0 AND (mode IS NULL OR (mode!='unrated' AND substr(mode,1,6)!='death_') OR EXISTS(
       SELECT 1 FROM death_unrated_sessions s WHERE s.riot_id=notifications.riot_id
       AND s.match_id=notifications.match_id AND s.cancelled_at IS NULL))
     GROUP BY match_id ORDER BY ended_at,match_id LIMIT 10`).all<{ match_id: string }>();
@@ -198,7 +198,7 @@ async function flushNotifications(env: Env, players: Player[]): Promise<void> {
       // Include sent participants when another player's result arrives on a later poll.
       const notices = await env.DB.prepare(`SELECT * FROM notifications WHERE match_id=?
         AND (outcome IS NULL OR outcome!='draw' OR mode!='escalation')
-        AND (mode IS NULL OR mode NOT IN ('unrated','death_swiftplay') OR EXISTS(SELECT 1 FROM death_unrated_sessions s
+        AND (mode IS NULL OR (mode!='unrated' AND substr(mode,1,6)!='death_') OR EXISTS(SELECT 1 FROM death_unrated_sessions s
           WHERE s.riot_id=notifications.riot_id AND s.match_id=notifications.match_id AND s.cancelled_at IS NULL)) ORDER BY riot_id`).bind(pendingMatch.match_id).all<Notice>();
       if (!notices.results.length) continue;
       const payload = await groupNotification(env.DB, notices.results, new Map(players.map(player => [player.riotId, player.name?.trim() || parseId(player.riotId)[0]])));

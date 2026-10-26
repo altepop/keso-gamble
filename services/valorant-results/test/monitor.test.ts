@@ -796,7 +796,7 @@ test('choosing another death mode switches a waiting reservation without resetti
   assert.equal(await claimDeathMatch(env.DB, 'one#JP1', 'swift-after-switch', now, now + 1000, 'swiftplay'), true);
   assert.equal((await env.DB.prepare('SELECT COUNT(*) AS n FROM death_unrated_sessions WHERE match_id IS NULL AND cancelled_at IS NULL').first<{ n: number }>())!.n, 0);
   const before = (await env.DB.prepare('SELECT COUNT(*) AS n FROM death_unrated_sessions').first<{ n: number }>())!.n;
-  assert.match(await runDeathCommand(env.DB, deathInteraction('613', 'start', ['one#JP1'], 'deathmatch'), config), /モードは/);
+  assert.match(await runDeathCommand(env.DB, deathInteraction('613', 'start', ['one#JP1'], 'unsupported'), config), /モードは/);
   assert.equal((await env.DB.prepare('SELECT COUNT(*) AS n FROM death_unrated_sessions').first<{ n: number }>())!.n, before);
 });
 
@@ -806,10 +806,10 @@ test('mode menus reserve nothing until selection, bind to their operator, and ca
   const env = environment(), config = [{ riotId: 'one#JP1', name: 'プレイヤーA' }];
   const request = deathInteraction('620', 'start', ['one#JP1']);
   const menu = await deathModePicker(env.DB, request, config);
-  assert.deepEqual(menu.components?.[0]?.components[0].options.map(option => option.value), ['unrated', 'swiftplay']);
+  assert.ok(menu.components?.[0]?.components[0].options.some(option => option.value === 'custom'));
   assert.equal((await env.DB.prepare('SELECT COUNT(*) AS n FROM death_unrated_sessions').first<{ n: number }>())!.n, 0);
   assert.match(await selectDeathMode(env.DB, deathSelection('621', '620', 'swiftplay', '555'), config, runDeathCommand), /本人だけ/);
-  assert.match(await selectDeathMode(env.DB, deathSelection('622', '620', 'deathmatch'), config, runDeathCommand), /モードは/);
+  assert.match(await selectDeathMode(env.DB, deathSelection('622', '620', 'unsupported'), config, runDeathCommand), /モードは/);
   const selection = deathSelection('623', '620');
   const result = await selectDeathMode(env.DB, selection, config, runDeathCommand);
   assert.match(result, /次のスイフト/);
@@ -1395,7 +1395,7 @@ test('slash command definitions preserve death permissions and expose thirteen r
   assert.equal(commands[0].default_member_permissions, '32');
   const deathStart = commands[0].options.find(option => option.name === 'start')!;
   const deathMode = deathStart.options!.find(option => option.name === 'mode')!;
-  assert.deepEqual(deathMode.choices.map(choice => choice.value), ['unrated', 'swiftplay']);
+  assert.ok(deathMode.choices.some(choice => choice.value === 'custom'));
   assert.equal(deathMode.required, false, 'Existing /death starts remain usable through the mode menu');
   assert.equal('default_member_permissions' in commands[1], false);
   assert.equal(commands[1].options.length, 13);
@@ -1753,4 +1753,23 @@ test('a mixed all-mode history is saved and delivered exactly once without consu
  const games=['deathmatch','hurm','swiftplay','spikerush','custom'].map((mode,n)=>match('all-'+n,mode,true,Date.now()-10000+n*1000));games[0].teams=[];
  const messages:string[]=[];globalThis.fetch=async(url,init)=>String(url).includes('api.henrikdev.xyz')?Response.json({data:games}):(messages.push(JSON.parse(String(init?.body)).content),Response.json({id:'123'}));
  try{await monitor(env,[{riotId:'one#JP1'}]);await monitor(env,[{riotId:'one#JP1'}]);assert.equal(messages.length,5);assert.equal((await env.DB.prepare('SELECT COUNT(*) AS n FROM notifications').first<{n:number}>())!.n,5);assert.equal((await env.DB.prepare('SELECT COUNT(*) AS n FROM death_unrated_sessions').first<{n:number}>())!.n,0);assert.match(messages[0],/勝敗判定なし/);assert.doesNotMatch(messages[0],/連勝|連敗/);}finally{globalThis.fetch=original;}
+});
+
+test('custom and non-round death modes are selectable but never invent missing team or final-round data', async () => {
+  const { deathModes, deathStoredMode, isDeathNotice } = await import('../src/death-modes.ts');
+  const { runDeathCommand } = await import('../src/discord-interactions.ts');
+  const { claimDeathMatch } = await import('../src/death-sessions.ts');
+  for (const mode of deathModes) {
+    const env = environment();
+    assert.match(await runDeathCommand(env.DB, deathInteraction('700', 'start', ['one#JP1'], mode.value), [{ riotId: 'one#JP1' }]), /1試合だけ対象/);
+    const now = Date.now() + 1000;
+    assert.equal(await claimDeathMatch(env.DB, 'one#JP1', 'chosen', now, now + 1000, mode.value), true);
+    assert.equal(isDeathNotice(deathStoredMode(mode.value)), true);
+    const raw = unratedMatch('mode-' + mode.value); raw.metadata.queue.id = mode.value;
+    assert.match(resultMessage(raw, 'user-1', 'A', true)!.message, new RegExp(mode.name));
+  }
+  const small = match('small-custom', 'custom');
+  assert.match(resultMessage(small, 'user-1', 'A', true)!.message, /判定保留/);
+  assert.match(resultMessage(small, 'user-1', 'A', true)!.message, /デスカスタム/);
+  assert.doesNotMatch(resultMessage(small, 'user-1', 'A', true)!.message, /今回はセーフ/);
 });

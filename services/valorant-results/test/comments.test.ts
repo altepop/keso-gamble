@@ -9,11 +9,11 @@ const groups = Object.keys(commentTones) as CommentGroup[];
 
 test('all situations keep the original catalogue and separate authored lines from sourced memes', () => {
   // Count distinct wording, not repeated mappings of one quotation to several situations.
-  assert.equal(new Set(Object.values(commentPools).flat()).size, 781);
+  assert.equal(new Set(Object.values(commentPools).flat()).size, 843);
   assert.deepEqual([...commentToneNames].sort(), ['dry', 'hot', 'meme', 'net', 'normal', 'roast']);
   for (const group of groups) {
     assert.deepEqual(Object.keys(commentTones[group]).sort(), [...commentToneNames].sort());
-    for (const tone of ['dry', 'hot', 'normal', 'roast'] as Tone[]) assert.equal(commentTones[group][tone].length, 5);
+    for (const tone of ['dry', 'hot', 'normal', 'roast'] as Tone[]) assert.ok(commentTones[group][tone].length >= 5);
     assert.ok(commentTones[group].net.length >= 9);
     assert.ok(commentTones[group].meme.length > 0);
     for (const line of (legacy as Record<string, string[]>)[group] ?? []) assert.ok(commentPools[group].includes(line));
