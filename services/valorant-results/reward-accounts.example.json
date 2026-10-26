@@ -1,0 +1,22 @@
+{
+  "guildId": "100000000000000100",
+  "accounts": [
+    {
+      "riotId": "PlayerA#TEST",
+      "discordUserId": "100000000000000001"
+    },
+    {
+      "riotId": "PlayerB#TEST",
+      "discordUserId": "100000000000000002"
+    },
+    {
+      "riotId": "PlayerC#TEST",
+      "discordUserId": "100000000000000003"
+    },
+    {
+      "riotId": "PlayerD#TEST",
+      "discordUserId": "100000000000000004"
+    }
+  ],
+  "sampleOnly": true
+}

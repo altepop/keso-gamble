@@ -1,0 +1,18 @@
+node_modules/
+dist/
+.wrangler/
+.env
+.env.*
+!.env.example
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+*.log
+.handoff/
+
+# Real player mappings and deployment settings are private.
+players.json
+reward-accounts.json
+discord-config.json
+wrangler.jsonc
+.private/
