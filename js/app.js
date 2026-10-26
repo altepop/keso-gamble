@@ -1,6 +1,4 @@
 import { fmt, fmt0 } from './format.js';
-import { preserveVoiceAudio } from './audio-session.js';
-preserveVoiceAudio();
 import { submitClaim, approveClaim, issueDirective, completeDirective } from './progression.js';
 import { homeView, playView, directivesView } from './progression-views.js';
 import { genCandles, movingAverage, svgCandles } from './charts.js';
