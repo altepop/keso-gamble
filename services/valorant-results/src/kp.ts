@@ -47,10 +47,19 @@ export async function initializeKp(env:KpEnv,override?:KpMapping):Promise<KpMapp
   const mapping=override??await decryptKpMapping(env.KP_BOOTSTRAP_PRIVATE_KEY!);
   if(!/^\d{15,22}$/.test(mapping.guildId)||(!override&&mapping.guildId!==discord.guildId)||!Array.isArray(mapping.accounts)||!mapping.accounts.length||mapping.accounts.length>5)throw Error('Invalid KP mapping');
   const users=new Set(),riots=new Set();for(const a of mapping.accounts){if(!/^\d{15,22}$/.test(a.discordUserId)||typeof a.riotId!=='string'||(!override&&!configuredPlayers.some(p=>p.riotId.toLowerCase()===a.riotId.toLowerCase()))||users.has(a.discordUserId)||riots.has(a.riotId.toLowerCase()))throw Error('Invalid KP account');users.add(a.discordUserId);riots.add(a.riotId.toLowerCase());}
-  await env.DB.batch(kpSchema.map(sql=>env.DB.prepare(sql)));
-  await env.DB.prepare("INSERT OR IGNORE INTO kp_settings VALUES('starts_at',?)").bind(String(Date.now())).run();
+  const ready=await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='kp_settings'").first();
+  const version=ready?await env.DB.prepare("SELECT value FROM kp_settings WHERE key='schema_version'").first<{value:string}>():null;
+  if(version?.value!=='1'){
+   await env.DB.batch(kpSchema.map(sql=>env.DB.prepare(sql)));
+   await env.DB.batch([
+    env.DB.prepare("INSERT OR IGNORE INTO kp_settings VALUES('starts_at',?)").bind(String(Date.now())),
+    env.DB.prepare("INSERT OR REPLACE INTO kp_settings VALUES('schema_version','1')"),
+   ]);
+  }
   const state={cash:0,serverWallet:true,holdings:{keso:0,riso:0,yuya:0,yano:0},prices:{keso:1200,riso:780,yuya:420,yano:1860},history:{keso:[1200],riso:[780],yuya:[420],yano:[1860]},owned:[],trades:[],spins:[],salaryClaims:0,lastSalaryAt:0,ticks:0,lastMarketAt:Date.now(),seed:7331,claims:[],directives:[],progressSeq:0,version:1};
-  await env.DB.batch(mapping.accounts.flatMap(a=>[
+  const known=new Set((await env.DB.prepare('SELECT user FROM kp_wallets WHERE guild=?').bind(mapping.guildId).all<{user:string}>()).results.map(a=>a.user));
+  const missing=mapping.accounts.filter(a=>!known.has(a.discordUserId));
+  if(missing.length)await env.DB.batch(missing.flatMap(a=>[
    env.DB.prepare('INSERT OR IGNORE INTO kp_wallets(guild,user) VALUES(?,?)').bind(mapping.guildId,a.discordUserId),
    env.DB.prepare('INSERT OR IGNORE INTO kp_state(guild,user,data) VALUES(?,?,?)').bind(mapping.guildId,a.discordUserId,JSON.stringify(state)),
   ]));
@@ -60,7 +69,8 @@ export async function initializeKp(env:KpEnv,override?:KpMapping):Promise<KpMapp
 }
 export async function syncKpAccounts(env:KpEnv,mapping:KpMapping){
  const tracked=(await env.DB.prepare('SELECT riot_id,puuid FROM tracked_players').all<{riot_id:string;puuid:string}>()).results;
- const queries=mapping.accounts.flatMap(a=>{const found=tracked.find(t=>t.riot_id.toLowerCase()===a.riotId.toLowerCase());return found?[env.DB.prepare('INSERT INTO kp_accounts(guild,puuid,user,riot,linked_at) VALUES(?,?,?,?,?) ON CONFLICT(guild,puuid) DO UPDATE SET user=excluded.user,riot=excluded.riot').bind(mapping.guildId,found.puuid,a.discordUserId,a.riotId,Date.now())]:[];});
+ const linked=(await env.DB.prepare('SELECT puuid,user,riot FROM kp_accounts WHERE guild=?').bind(mapping.guildId).all<{puuid:string;user:string;riot:string}>()).results;
+ const queries=mapping.accounts.flatMap(a=>{const found=tracked.find(t=>t.riot_id.toLowerCase()===a.riotId.toLowerCase());const old=found&&linked.find(l=>l.puuid===found.puuid);return found&&(!old||old.user!==a.discordUserId||old.riot!==a.riotId)?[env.DB.prepare('INSERT INTO kp_accounts(guild,puuid,user,riot,linked_at) VALUES(?,?,?,?,?) ON CONFLICT(guild,puuid) DO UPDATE SET user=excluded.user,riot=excluded.riot').bind(mapping.guildId,found.puuid,a.discordUserId,a.riotId,Date.now())]:[];});
  if(queries.length)await env.DB.batch(queries);
 }
 interface KpEvent {id:string;guild:string;user:string;puuid:string;match:string;mode:string;outcome:string|null;amount:number;policy:string;at:number}
@@ -80,12 +90,11 @@ export async function collectKpMatch(env:KpEnv,mapping:KpMapping,raw:Match,puuid
  const rates=policy.modes[status.mode as keyof typeof policy.modes];if(!rates)return null;
  const start=Date.parse(raw.metadata.started_at),duration=raw.metadata.game_length_in_ms;
  if(!Number.isSafeInteger(start)||!Number.isSafeInteger(duration)||duration<=0||start+duration>Date.now()+60000||!raw.metadata.match_id)return null;
- const link=await env.DB.prepare('SELECT user,linked_at FROM kp_accounts WHERE guild=? AND puuid=?').bind(mapping.guildId,puuid).first<{user:string;linked_at:number}>();
- const cutoff=await env.DB.prepare("SELECT value FROM kp_settings WHERE key='starts_at'").first<{value:string}>();
- if(!link||!mapping.accounts.some(a=>a.discordUserId===link.user)||start<Math.max(Number(cutoff?.value??Infinity),link.linked_at))return null;
- await env.DB.prepare("UPDATE kp_directives SET status='completed' WHERE guild=? AND target=? AND task=? AND status='active' AND at<=?").bind(mapping.guildId,link.user,status.mode,start).run();
  const id=kpEventId(mapping.guildId,raw.metadata.match_id,puuid);
- const old=await env.DB.prepare('SELECT amount FROM kp_events WHERE id=?').bind(id).first<{amount:number}>();if(old)return old.amount;
+ const link=await env.DB.prepare(`SELECT a.user,a.linked_at,s.value AS starts_at,e.amount FROM kp_accounts a JOIN kp_settings s ON s.key='starts_at' LEFT JOIN kp_events e ON e.id=? WHERE a.guild=? AND a.puuid=?`).bind(id,mapping.guildId,puuid).first<{user:string;linked_at:number;starts_at:string;amount:number|null}>();
+ if(!link||!mapping.accounts.some(a=>a.discordUserId===link.user)||start<Math.max(Number(link.starts_at),link.linked_at))return null;
+ await env.DB.prepare("UPDATE kp_directives SET status='completed' WHERE guild=? AND target=? AND task=? AND status='active' AND at<=?").bind(mapping.guildId,link.user,status.mode,start).run();
+ if(link.amount!==null)return link.amount;
  const e:KpEvent={id,guild:mapping.guildId,user:link.user,puuid,match:raw.metadata.match_id,mode:status.mode,outcome:status.outcome,amount:rates.participation+(status.outcome==='win'?rates.winBonus:0),policy:policy.version,at:Date.now()};
  await env.DB.prepare('INSERT OR IGNORE INTO kp_inbox VALUES(?,?,?)').bind(id,JSON.stringify(e),Date.now()).run();
  await drainKpInbox(env);
@@ -115,4 +124,11 @@ export async function flushKpDirectives(env:KpEnv & {DISCORD_WEBHOOK_URL:string}
   if(!res.ok){console.warn('kp_directive_delivery_pending');break;}
   await env.DB.prepare('INSERT INTO kp_directive_deliveries VALUES(?,?) ON CONFLICT(id) DO UPDATE SET status=excluded.status').bind(d.id,d.status).run();
  }
+}
+
+export interface KpRun { mapping:KpMapping; startsAt:number; credits:Map<string,number>; messages:Map<string,string> }
+export async function prepareKpRun(env:KpEnv,mapping:KpMapping):Promise<KpRun>{
+ const start=await env.DB.prepare("SELECT value FROM kp_settings WHERE key='starts_at'").first<{value:string}>();
+ const rows=(await env.DB.prepare('SELECT e.id,e.amount,n.message FROM kp_events e JOIN kp_accounts a ON a.guild=e.guild AND a.puuid=e.puuid LEFT JOIN notifications n ON n.riot_id=a.riot AND n.match_id=e.match WHERE e.guild=? ORDER BY e.at DESC LIMIT 200').bind(mapping.guildId).all<{id:string;amount:number;message:string|null}>()).results;
+ return {mapping,startsAt:Number(start?.value??Infinity),credits:new Map(rows.map(r=>[r.id,r.amount])),messages:new Map(rows.filter(r=>r.message!==null).map(r=>[r.id,r.message!]))};
 }
