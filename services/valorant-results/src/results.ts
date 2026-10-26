@@ -1,3 +1,4 @@
+import { storedMode, modeLabel, isSoloMode } from './modes.ts';
 import { deathUnratedMessage } from './death-unrated.ts';
 import taunts from '../taunts.json' with { type: 'json' };
 
@@ -22,7 +23,7 @@ export interface Notice {
   mode: string | null; act_id: string | null; act_name: string | null; outcome: Outcome | null; team_id?: string | null;
 }
 interface Result {
-  message: string; endedAt: number; mode: string; outcome: Outcome;
+  message: string; endedAt: number; mode: string; outcome: Outcome | null;
   actId: string | null; actName: string | null; teamId: string;
 }
 
@@ -38,25 +39,26 @@ function resultComment(matchId: string, puuid: string, group: keyof typeof taunt
 
 export function resultMessage(raw: Match, puuid: string, label: string, deathUnrated = false): Result | null {
   const mode = raw.metadata?.queue?.id;
-  if (!['competitive', 'ggteam', 'escalation', ...(deathUnrated ? ['unrated'] : [])].includes(mode) || raw.metadata.is_completed !== true) return null;
+  if (typeof mode !== 'string' || !/^[a-z0-9_-]{1,64}$/.test(mode) || raw.metadata.is_completed !== true) return null;
   const player = raw.players?.find(p => p.puuid === puuid);
   if (!player) return null;
   const team = raw.teams?.find(t => t.team_id === player.team_id);
   const enemy = raw.teams?.find(t => t.team_id !== player.team_id);
-  if (!team || !enemy || typeof team.won !== 'boolean' || typeof enemy.won !== 'boolean' || (team.won && enemy.won)) return null;
+  if (team?.won && enemy?.won) return null;
   const start = Date.parse(raw.metadata.started_at);
   const duration = raw.metadata.game_length_in_ms;
   if (!raw.metadata.match_id || !Number.isFinite(start) || !Number.isFinite(duration) || duration <= 0) throw new Error('Invalid match time');
   const name = label.replace(/[\r\n`*_~|<>]/g, '').slice(0, 80);
-  const modeName = mode === 'competitive' ? 'コンペ' : 'エスカレーション';
-  const outcome = team.won ? 'win' : enemy.won ? 'loss' : 'draw';
-  const ownScore = team.rounds?.won;
-  const enemyScore = enemy.rounds?.won;
+  const modeName = modeLabel(storedMode(mode));
+  const outcome: Outcome | null = !isSoloMode(mode) && raw.teams?.length === 2 && team && enemy && typeof team.won === 'boolean' && typeof enemy.won === 'boolean'
+    ? team.won ? 'win' : enemy.won ? 'loss' : 'draw' : null;
+  const ownScore = isSoloMode(mode) ? undefined : team?.rounds?.won;
+  const enemyScore = isSoloMode(mode) ? undefined : enemy?.rounds?.won;
   // A reported 0-0 is not an actual final score for a completed match.
   const hasScore = Number.isInteger(ownScore) && Number.isInteger(enemyScore)
     && ownScore! >= 0 && enemyScore! >= 0 && ownScore! + enemyScore! > 0;
   const score = hasScore ? `${ownScore}対${enemyScore}で` : '';
-  const result = outcome === 'win' ? '勝ち！！' : outcome === 'loss' ? '負け！' : '引き分け';
+  const result = outcome === 'win' ? '勝ち！！' : outcome === 'loss' ? '負け！' : outcome === 'draw' ? '引き分け' : '試合終了（勝敗判定なし）';
   const clean = (value?: string) => value?.replace(/[\r\n`*_~|<>]/g, '').slice(0, 80);
   const location = [clean(raw.metadata.map?.name), clean(player.agent?.name)].filter(Boolean).join('｜');
   const stats = player.stats;
@@ -81,10 +83,10 @@ export function resultMessage(raw: Match, puuid: string, label: string, deathUnr
   const award = outcome === 'loss' && topKills
     ? '\n🏅 負けても健闘賞：チーム最多キル' + (tied ? '（同率）' : '') + '！ ようやった、勝ち星だけ迷子や！' : '';
   const performance = (location ? '\n🗺️ ' + location : '') + (details.length ? '\n🔫 ' + details.join('｜') : '');
-  if (mode === 'unrated') return {
+  if (mode === 'unrated' && deathUnrated) return {
     message: deathUnratedMessage(raw, puuid, name) + performance,
     endedAt: start + duration, mode: 'unrated', outcome,
-    actId: raw.metadata.season?.id || null, actName: raw.metadata.season?.short || null, teamId: player.team_id,
+    actId: raw.metadata.season?.id || null, actName: raw.metadata.season?.short || null, teamId: player.team_id || '',
   };
   let tauntGroup: keyof typeof taunts = 'default';
   if (nonnegative(stats?.kills) && nonnegative(stats?.deaths) && stats.kills >= 20 && stats.kills > stats.deaths) tauntGroup = 'high_kills';
@@ -97,9 +99,9 @@ export function resultMessage(raw: Match, puuid: string, label: string, deathUnr
       : mode === 'competitive' && hasScore && ownScore! - enemyScore! >= 8 ? 'blowout_win' : 'win';
   } else if (outcome === 'draw') tauntGroup = 'draw';
   return {
-    message: `${outcome === 'win' ? '🎉' : '📢'} ${name}は${score}${result}（${modeName}）${hasScore ? '' : ' ※スコア未取得'}` + performance + award + resultComment(raw.metadata.match_id, puuid, tauntGroup),
-    endedAt: start + duration, mode: mode === 'competitive' ? 'competitive' : 'escalation', outcome,
-    actId: raw.metadata.season?.id || null, actName: raw.metadata.season?.short || null, teamId: player.team_id,
+    message: `${outcome === 'win' ? '🎉' : '📢'} ${name}は${score}${result}（${modeName}）${hasScore ? '' : ' ※スコア未取得'}` + performance + award + (outcome ? resultComment(raw.metadata.match_id, puuid, tauntGroup) : '\n💬 試合お疲れ！ 次の試合まだ？'),
+    endedAt: start + duration, mode: storedMode(mode), outcome,
+    actId: raw.metadata.season?.id || null, actName: raw.metadata.season?.short || null, teamId: player.team_id || '',
   };
 }
 

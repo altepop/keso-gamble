@@ -95,10 +95,12 @@ async function api<T>(env: Env, path: string): Promise<T> {
 
 async function saveMatch(env: Env, match: Match, player: Player, account: Account): Promise<'excluded' | 'beforeMonitoring' | 'newResults' | 'duplicates'> {
   const unrated = match.metadata?.queue?.id === 'unrated';
-  const result = resultMessage(match, account.puuid, player.name?.trim() || parseId(player.riotId)[0], unrated);
-  if (!result) return 'excluded';
-  if (result.endedAt <= account.since) return 'beforeMonitoring';
-  if (unrated && !await claimDeathMatch(env.DB, player.riotId, match.metadata.match_id, Date.parse(match.metadata.started_at), result.endedAt)) return 'excluded';
+  const ordinary = resultMessage(match, account.puuid, player.name?.trim() || parseId(player.riotId)[0]);
+  if (!ordinary) return 'excluded';
+  if (ordinary.endedAt <= account.since) return 'beforeMonitoring';
+  // Normal unrated results never acquire a /death verdict without a reservation.
+  const death = unrated && await claimDeathMatch(env.DB,player.riotId,match.metadata.match_id,Date.parse(match.metadata.started_at),ordinary.endedAt);
+  const result = death ? resultMessage(match,account.puuid,player.name?.trim() || parseId(player.riotId)[0],true)! : ordinary;
   const inserted = await env.DB.prepare('INSERT OR IGNORE INTO notifications(riot_id,match_id,message,ended_at,mode,act_id,act_name,outcome,sent,team_id) VALUES(?,?,?,?,?,?,?,?,?,?)')
     .bind(player.riotId, match.metadata.match_id, result.message, result.endedAt, result.mode, result.actId, result.actName,
       result.outcome, result.outcome === 'draw' && result.mode === 'escalation' ? 1 : 0, result.teamId).run();
@@ -130,7 +132,7 @@ async function flushNotifications(env: Env, players: Player[]): Promise<void> {
     try {
       // Include sent participants when another player's result arrives on a later poll.
       const notices = await env.DB.prepare(`SELECT * FROM notifications WHERE match_id=?
-        AND (outcome IS NULL OR outcome!='draw' OR mode IN ('competitive','unrated'))
+        AND (outcome IS NULL OR outcome!='draw' OR mode!='escalation')
         AND (mode IS NULL OR mode!='unrated' OR EXISTS(SELECT 1 FROM death_unrated_sessions s
           WHERE s.riot_id=notifications.riot_id AND s.match_id=notifications.match_id AND s.cancelled_at IS NULL)) ORDER BY riot_id`).bind(pendingMatch.match_id).all<Notice>();
       if (!notices.results.length) continue;
@@ -215,7 +217,7 @@ export async function monitor(env: Env, players: Player[] = configuredPlayers): 
         }
         accounts.set(player.riotId, account);
         stage = 'match_history';
-        const matches = await api<Match[]>(env, `/valorant/v4/by-puuid/matches/${account.region}/pc/${encodeURIComponent(account.puuid)}?size=2`);
+        const matches = await api<Match[]>(env, `/valorant/v4/by-puuid/matches/${account.region}/pc/${encodeURIComponent(account.puuid)}?size=5`);
         if (!Array.isArray(matches)) throw new Error('Invalid matches');
         const counts = { fetched: matches.length, newResults: 0, duplicates: 0, beforeMonitoring: 0, excluded: 0 };
         stage = 'save_result';

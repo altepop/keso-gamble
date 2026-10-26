@@ -101,7 +101,7 @@ export async function runValoCommand(db: D1Database, interaction: Interaction, p
       }
     } catch { /* Older deployments may not have timing data yet. */ }
     const waiting = (key: string) => (state.get(key) ?? 0) > Date.now() ? time(state.get(key)!) + 'まで待機' : '待機なし';
-    return `🔎 監視状況（毎分確認）\n最終実行開始：${time(state.get('monitor_started') ?? 0)}\n最終実行終了：${time(state.get('monitor_finished') ?? 0)}\nHenrik API：${waiting('api_after')}\nDiscord送信：${waiting('discord_after')}\n送信待ち：${queue?.n ?? 0}試合\n\n${lines.join('\n')}\n\n${timingText}\n\n最終取得は試合履歴の取得・保存処理を終えた時刻です。API反映待ちで結果が遅れる場合があります。更新直後は時刻が未記録の場合があります。`;
+    return `🔎 監視状況（全モード・毎分確認）\n最終実行開始：${time(state.get('monitor_started') ?? 0)}\n最終実行終了：${time(state.get('monitor_finished') ?? 0)}\nHenrik API：${waiting('api_after')}\nDiscord送信：${waiting('discord_after')}\n送信待ち：${queue?.n ?? 0}試合\n\n${lines.join('\n')}\n\n${timingText}\n\n最終取得は試合履歴の取得・保存処理を終えた時刻です。API反映待ちで結果が遅れる場合があります。更新直後は時刻が未記録の場合があります。`;
   }
   if (action.name === 'recent') {
     const rows = (await db.prepare(`SELECT * FROM notifications WHERE riot_id=? AND mode=? AND outcome IN ('win','loss','draw')
