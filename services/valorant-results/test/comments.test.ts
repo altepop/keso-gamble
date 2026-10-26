@@ -9,7 +9,7 @@ const groups = Object.keys(commentTones) as CommentGroup[];
 
 test('all situations keep the original catalogue and separate authored lines from sourced memes', () => {
   // Count distinct wording, not repeated mappings of one quotation to several situations.
-  assert.equal(new Set(Object.values(commentPools).flat()).size, 745);
+  assert.equal(new Set(Object.values(commentPools).flat()).size, 748);
   assert.deepEqual([...commentToneNames].sort(), ['dry', 'hot', 'meme', 'net', 'normal', 'roast']);
   for (const group of groups) {
     assert.deepEqual(Object.keys(commentTones[group]).sort(), [...commentToneNames].sort());
@@ -55,7 +55,9 @@ test('meme quotations have traceable evidence and invented continuations are abs
   assert.equal(catalogue.schemaVersion, 1);
   assert.equal(new Set(memeQuotes.map(quote => quote.id)).size, memeQuotes.length);
   assert.equal(new Set(memeQuotes.map(quote => quote.text)).size, memeQuotes.length);
-  assert.deepEqual(memeQuotes.filter(quote => quote.source === 'yokatta').map(quote => quote.text), ['良かったこの距離で', '兄さん…あかーん！']);
+  assert.deepEqual(memeQuotes.filter(quote => quote.source === 'yokatta').map(quote => quote.text), [
+    '良かったこの距離で', '兄さん…あかーん！', 'やめろ！そこは…', 'しばくぞ！', 'そこはあかんゆーとるやろ',
+  ]);
   for (const quote of memeQuotes) {
     const source = (catalogue.sources as Record<string, { url: string; verification: string; note: string }>)[quote.source];
     assert.ok(source, quote.id);
