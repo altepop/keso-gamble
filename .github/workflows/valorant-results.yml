@@ -78,6 +78,18 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           VALORANT_RESULTS_WORKER: valorant-results
         run: node scripts/live-settings.mjs
+      - name: Prepare encrypted KP configuration key
+        working-directory: ${{ runner.temp }}/valorant-results
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/provision-kp-key.mjs
+      - name: Retain public encryption key
+        uses: actions/upload-artifact@v4
+        with:
+          name: kp-bootstrap-public-key
+          path: ${{ runner.temp }}/valorant-results/kp-public-key.json
+          retention-days: 30
       - name: Validate live configuration and build
         working-directory: ${{ runner.temp }}/valorant-results
         run: |
