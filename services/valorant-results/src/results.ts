@@ -27,7 +27,7 @@ interface Result {
   actId: string | null; actName: string | null; teamId: string;
 }
 
-export function resultMessage(raw: Match, puuid: string, label: string, deathUnrated = false): Result | null {
+export function resultMessage(raw: Match, puuid: string, label: string, deathUnrated = false, previousLastDeath?: boolean): Result | null {
   const mode = raw.metadata?.queue?.id;
   if (typeof mode !== 'string' || !/^[a-z0-9_-]{1,64}$/.test(mode) || raw.metadata.is_completed !== true) return null;
   const player = raw.players?.find(p => p.puuid === puuid);
@@ -74,7 +74,7 @@ export function resultMessage(raw: Match, puuid: string, label: string, deathUnr
     ? '\n🏅 負けても健闘賞：チーム最多キル' + (tied ? '（同率）' : '') + '！ ようやった、勝ち星だけ迷子や！' : '';
   const performance = (location ? '\n🗺️ ' + location : '') + (details.length ? '\n🔫 ' + details.join('｜') : '');
   if (mode === 'unrated' && deathUnrated) return {
-    message: deathUnratedMessage(raw, puuid, name) + performance,
+    message: deathUnratedMessage(raw, puuid, name, previousLastDeath) + performance,
     endedAt: start + duration, mode: 'unrated', outcome,
     actId: raw.metadata.season?.id || null, actName: raw.metadata.season?.short || null, teamId: player.team_id || '',
   };
