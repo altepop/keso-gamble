@@ -45,6 +45,24 @@
       "groups": ["default", "high_kills", "low_kd", "close_loss", "blowout", "losing_streak", "long_losing_streak", "win_low_kd"]
     },
     {
+      "id": "yamero-sokowa",
+      "source": "yokatta",
+      "text": "やめろ！そこは…",
+      "groups": ["default", "high_kills", "low_kd", "close_loss", "blowout", "losing_streak", "long_losing_streak", "win_low_kd"]
+    },
+    {
+      "id": "shibakuzo",
+      "source": "yokatta",
+      "text": "しばくぞ！",
+      "groups": ["default", "high_kills", "low_kd", "close_loss", "blowout", "losing_streak", "long_losing_streak", "win_low_kd"]
+    },
+    {
+      "id": "sokowa-akan",
+      "source": "yokatta",
+      "text": "そこはあかんゆーとるやろ",
+      "groups": ["default", "high_kills", "low_kd", "close_loss", "blowout", "losing_streak", "long_losing_streak", "win_low_kd"]
+    },
+    {
       "id": "uow",
       "source": "uow",
       "text": "うおw",
