@@ -6,7 +6,7 @@ import {readFileSync,readdirSync} from 'node:fs';
 import {initializeKp,syncKpAccounts} from '../src/kp.ts';
 import type {KpEnv,KpMapping} from '../src/kp.ts';
 import {runKpCommand,slashRace} from '../src/kp-slash.ts';
-import {registerKpCommands,kpCommands} from '../src/kp-command.ts';
+import {registerKpCommands,kpCommands,isKpRanking} from '../src/kp-command.ts';
 const guild='100000000000000100',one='100000000000000101',two='100000000000000102',newUser='100000000000000103';
 const mapping:KpMapping={guildId:guild,accounts:[{riotId:'One#JP1',discordUserId:one},{riotId:'Two#JP1',discordUserId:two}]};
 const T0=Date.parse('2026-10-27T16:05:30+09:00');
@@ -85,4 +85,30 @@ test('signed KP commands acknowledge privately for ordinary members; tampered re
  assert.equal((await discordInteractions(request(body+' '),env,ctx,config)).status,401);assert.equal(queries,0);assert.equal(tasks.length,0);
  assert.deepEqual(await (await discordInteractions(request(),env,ctx,config)).json(),{type:5,data:{flags:64}});
  await Promise.all(tasks);assert.deepEqual(replies[0].allowed_mentions,{parse:[]});assert.equal(queries,0);
+ const rankingBody=JSON.stringify({...payload,data:{name:'kp',options:[{type:1,name:'ranking'}]}});
+ const rankingSignature=Buffer.from(await crypto.subtle.sign('Ed25519',pair.privateKey,new TextEncoder().encode(timestamp+rankingBody))).toString('hex');
+ const rankingRequest=new Request('https://worker/interactions',{method:'POST',body:rankingBody,headers:{'X-Signature-Ed25519':rankingSignature,'X-Signature-Timestamp':timestamp}});
+ assert.deepEqual(await (await discordInteractions(rankingRequest,env,ctx,config)).json(),{type:5,data:{flags:0}});
+ await Promise.all(tasks);assert.deepEqual(replies.at(-1).allowed_mentions,{parse:[]});assert.equal(queries,0);
+});
+
+test('public ranking is one guild snapshot, ties share rank, only top ten are returned and viewing does not open a wallet',async()=>{
+ const f=await fixture();
+ const newcomers=Array.from({length:12},(_,i)=>String(100000000000000200n+BigInt(i)));
+ for(const user of newcomers)f.sql.prepare('INSERT INTO kp_wallets(guild,user,balance) VALUES(?,?,100)').run(guild,user);
+ f.sql.prepare("INSERT INTO kp_ledger VALUES('tie-credit',?,?,10000,'test',0)").run(guild,two);
+ f.sql.prepare('INSERT INTO kp_wallets(guild,user,balance) VALUES(?,?,999999)').run('100000000000000199','100000000000000999');
+ const request={...interaction('kp',newUser),data:{name:'kp',options:[{type:1,name:'ranking'}]}};
+ const before=f.sql.prepare('SELECT COUNT(*) AS n FROM kp_wallets').get()?.n;
+ const text=await runKpCommand(f.env,request,mapping);
+ assert.match(text,new RegExp(`1位　<@${one}>`));assert.match(text,new RegExp(`1位　<@${two}>`));assert.match(text,/3位/);
+ assert.equal(text.includes('999999'),false);assert.equal(text.includes('100000000000000999'),false);
+ assert.equal(text.split('\n').filter(line=>/^\d+位/.test(line)).length,10);assert.match(text,/全14人/);
+ assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM kp_wallets').get()?.n,before);
+ assert.equal(f.sql.prepare('SELECT balance FROM kp_wallets WHERE user=?').get(one)?.balance,10000);
+});
+test('only the exact ranking subcommand is public; balance, legacy KP and malformed options stay private',()=>{
+ assert.equal(isKpRanking({data:{name:'kp',options:[{type:1,name:'ranking'}]}}),true);
+ for(const data of [{name:'kp'},{name:'kp',options:[{type:1,name:'balance'}]},{name:'bet',options:[{type:1,name:'ranking'}]},{name:'kp',options:[{type:3,name:'ranking'}]},{name:'kp',options:[{type:1,name:'ranking',options:[{}]}]},{name:'kp',options:[{type:1,name:'ranking'},{type:1,name:'balance'}]}])assert.equal(isKpRanking({data}),false);
+ assert.deepEqual(kpCommands[0].options?.map(o=>o.name),['balance','ranking']);
 });
