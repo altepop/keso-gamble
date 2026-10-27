@@ -1,0 +1,15 @@
+{
+  "enabled": true,
+  "publicKey": "MCowBQYDK2VwAyEAc97PqSbVOhnsle5w/Cxy3mZ/klx+cPqfE5pZzh8KRq8=",
+  "rates": {
+    "DAILY": 100,
+    "SOLO": 50,
+    "RANKED": 100,
+    "SURVIVAL": 50,
+    "HELL": 50,
+    "ESCALATION": 50,
+    "WHO_AM_I": 50,
+    "TIMELINE": 50,
+    "AGENT": 50
+  }
+}
