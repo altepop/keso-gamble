@@ -1,4 +1,4 @@
-import {ensureQuizKp,receiveQuizKp,isKpParticipant,quizKpRates} from './quiz-kp.ts';
+import {ensureQuizKp,receiveQuizKp,isKpParticipant,quizKpRates,quizKpLimits} from './quiz-kp.ts';
 import {activityAuthAvailable,createActivityChallenge,authenticateActivity}from './discord-activity-auth.ts';
 import { initializeKp, exchangeKpCode, kpSession, revokeKpSession, kpHash } from './kp.ts';
 import type { KpEnv, KpMapping } from './kp.ts';
@@ -13,8 +13,8 @@ export async function readKpState(env:KpEnv,mapping:KpMapping,user:string){
  const state=JSON.parse(row.data);state.cash=wallet.balance;state.serverWallet=true;state.walletVersion=wallet.version;state.stateVersion=row.version;advanceMarket(state);
  const rewards=(await env.DB.prepare('SELECT id,match,mode,amount,at FROM kp_events WHERE guild=? AND user=? ORDER BY at DESC,id LIMIT 100').bind(mapping.guildId,user).all<{id:string;match:string;mode:string;amount:number;at:number}>()).results;
  await ensureQuizKp(env);
- const quiz=(await env.DB.prepare('SELECT id,mode,day,game,amount,completed_at FROM kp_quiz_events WHERE guild=? AND user=? ORDER BY completed_at DESC LIMIT 100').bind(mapping.guildId,user).all<{id:string;mode:string;day:string;game:string;amount:number;completed_at:number}>()).results;
- state.quizRates=quizKpRates;state.quizDay=new Date().toISOString().slice(0,10);state.quizCompleted=quiz.filter(e=>e.day===state.quizDay).map(e=>e.mode);
+ const quiz=(await env.DB.prepare('SELECT id,mode,day,game,amount,completed_at FROM kp_quiz_events WHERE guild=? AND user=? UNION ALL SELECT id,mode,day,game,amount,completed_at FROM kp_quiz_ranked_extra WHERE guild=? AND user=? ORDER BY completed_at DESC LIMIT 100').bind(mapping.guildId,user,mapping.guildId,user).all<{id:string;mode:string;day:string;game:string;amount:number;completed_at:number}>()).results;
+ state.quizRates=quizKpRates;state.quizDay=new Date().toISOString().slice(0,10);state.quizLimits=quizKpLimits;state.quizCounts=Object.fromEntries(Object.keys(quizKpRates).map(mode=>[mode,quiz.filter(e=>e.day===state.quizDay&&e.mode===mode).length]));state.quizCompleted=Object.keys(quizKpLimits).filter(mode=>state.quizCounts[mode]>=quizKpLimits[mode]!);
  state.claims=rewards.map(e=>({id:e.id,activity:e.mode,reference:e.match,reward:e.amount,status:'approved',time:e.at})).concat(quiz.map(e=>({id:e.id,activity:'quiz.'+e.mode,reference:e.game,reward:e.amount,status:'approved',time:e.completed_at}))).sort((a:{time:number},b:{time:number})=>b.time-a.time).slice(0,100);
  state.directives=(await env.DB.prepare('SELECT id,issuer,target,task,game,achievement,cost,status,at AS time FROM kp_directives WHERE guild=? AND (issuer=? OR target=?) ORDER BY at DESC,id LIMIT 100').bind(mapping.guildId,user,user).all()).results;
  state.members=mapping.accounts.map(a=>({id:a.discordUserId,name:configuredPlayers.find(p=>p.riotId.toLowerCase()===a.riotId.toLowerCase())?.name??a.riotId.split('#')[0]}));
