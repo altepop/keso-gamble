@@ -1,14 +1,18 @@
-import { createKpClient } from './kp-client.js?v=20261027-permanent';
+import {connectDiscordActivity,isDiscordActivity}from './discord-activity-auth.js?v=20261027-auto';
+import { createKpClient } from './kp-client.js?v=20261027-auto';
 import { fmt, fmt0 } from './format.js';
 import { submitClaim, approveClaim, issueDirective, completeDirective } from './progression.js';
-import { titleView, homeView, playView, directivesView } from './progression-views.js?v=20261027-permanent';
+import { titleView, homeView, playView, directivesView } from './progression-views.js?v=20261027-auto';
 import { genCandles, movingAverage, svgCandles } from './charts.js';
 import { MARKET, createInitialState, portfolioValue, assets, advanceMarket, trade, spin, grantDemoSalary, cryptoRouletteNumber } from './engine.js';
 import { KEY, LEGACY_KEY } from './storage.js';
 import { createStore } from './store.js';
 const $=(s,el=document)=>el.querySelector(s);
 const wallet=createKpClient();
-let live=wallet.connected;
+const embedded=isDiscordActivity();
+let autoState=embedded?'loading':'idle';
+let autoMessage='';
+let live=wallet.connected&&!embedded;
 let connectionError=live?'口座を読み込んでいます…':'';
 let state;
 let screen='title';
@@ -113,7 +117,7 @@ function detailSheet(){
 }
 
 function render(){
-  const html = screen==='title'?titleView(state,wallet.remembered):screen==='home'?homeView(state,bottomNav()):screen==='play'?playView(state,drafts,bottomNav()):screen==='directives'?directivesView(state,drafts,bottomNav()):screen==='market'?screenMarket():screen==='casino'?screenCasino():screenAssets();
+  const html = screen==='title'?titleView(state,wallet.remembered,autoState,autoMessage):screen==='home'?homeView(state,bottomNav()):screen==='play'?playView(state,drafts,bottomNav()):screen==='directives'?directivesView(state,drafts,bottomNav()):screen==='market'?screenMarket():screen==='casino'?screenCasino():screenAssets();
   const openDetails=[...app.querySelectorAll('details')].map(el=>el.open);
   const focusedElement=document.activeElement;
   const focused=focusedElement?.id;
@@ -171,13 +175,14 @@ async function doSpin(){
 
 addEventListener('click',async e=>{
   const t=e.target.closest?.('button,[data-open]'); if(!t) return;
-  const mutates=!!t.dataset.approve || !!t.dataset.complete || ['salary','trade','spin','reset','submit-claim','issue-directive','connect-kp','refresh-kp','disconnect-kp'].includes(t.dataset.action);
+  const mutates=!!t.dataset.approve || !!t.dataset.complete || ['salary','trade','spin','reset','submit-claim','issue-directive','connect-kp','refresh-kp','disconnect-kp','auto-connect-kp'].includes(t.dataset.action);
   if(mutates && mutationPending)return;
   if(mutates)mutationPending=true;
   try{
-    if(t.dataset.action==='connect-kp'){state=await wallet.connect($('#kp-connect-code').value);live=true;connectionError='';delete drafts['kp-connect-code'];screen='home';render();toast(wallet.remembered?'接続しました。次回は自動で接続します':'接続しました。この環境では閉じると再接続が必要です');return;}
+    if(t.dataset.action==='auto-connect-kp'){await automaticConnect();return;}
+    if(t.dataset.action==='connect-kp'){state=await wallet.connect($('#kp-connect-code').value);live=true;autoState='connected';autoMessage='';connectionError='';delete drafts['kp-connect-code'];screen='home';render();toast(wallet.remembered?'接続しました。次回は自動で接続します':'接続しました。この環境では閉じると再接続が必要です');return;}
     if(t.dataset.action==='refresh-kp'){await refreshWallet(true);render();return;}
-    if(t.dataset.action==='disconnect-kp'){await wallet.disconnect();live=false;connectionError='';state=store.state;screen='title';render();return;}
+    if(t.dataset.action==='disconnect-kp'){await wallet.disconnect();autoState=embedded?'paused':'idle';autoMessage='';live=false;connectionError='';state=store.state;screen='title';render();return;}
     if(t.dataset.screen){if(spinLock){toast('抽選中は画面を切り替えられません');return;}detail=null;screen=t.dataset.screen;render();return;}
     if(t.dataset.open){openDetail(t.dataset.kind,t.dataset.open);return;}
     if(t.dataset.orderSymbol){activeSymbol=t.dataset.orderSymbol;detail=null;screen='assets';render();return;}
@@ -200,7 +205,7 @@ addEventListener('click',async e=>{
     if(t.dataset.action==='spin'){await doSpin();return;}
     if(t.dataset.action==='reset'){if(confirm('データを初期化しますか？')){await commit(next => Object.assign(next,createInitialState()));for(const key of Object.keys(drafts))delete drafts[key];render();toast('初期化した')}return;}
 
-  }catch(err){if(wallet.connected&&!live){live=true;state={...createInitialState(),cash:0,serverWallet:true};connectionError=err.message;}render();toast(err.message||'操作に失敗した');}
+  }catch(err){render();toast(err.message||'操作に失敗した');}
   finally { if(mutates)mutationPending=false; }
 });
 
@@ -228,7 +233,7 @@ addEventListener('input', e => {
 });
 const drafts = {};
 async function refreshMarket() {
-  if(spinLock||mutationPending) return;
+  if(spinLock||mutationPending||autoState==='loading') return;
   if(live){await refreshWallet(false);return;}
   try { const steps=await commit(next => advanceMarket(next)); if(steps && !detail)render(); }
   catch(error) { toast(error.message); }
@@ -241,5 +246,14 @@ addEventListener('storage', e => {
 });
 addEventListener('visibilitychange', () => { if(!document.hidden)refreshMarket(); });
 setInterval(refreshMarket,15000);
+async function automaticConnect(){
+ mutationPending=true;autoState='loading';autoMessage='';connectionError='';screen='title';render();
+ try{
+  const result=await connectDiscordActivity(wallet);
+  if(result.kind==='connected'){state=result.state;live=true;autoState='connected';}
+  else{autoState='manual';if(wallet.connected){state=await wallet.state();live=true;}else{live=false;state=store.state;}}
+ }catch(error){live=false;state=store.state;autoState='error';autoMessage=/[ぁ-んァ-ヶ一-龯]/.test(error?.message??'')?error.message:'Discordに接続できませんでした。もう一度お試しください。';}
+ finally{mutationPending=false;render();}
+}
 render();
-refreshMarket();
+if(embedded)automaticConnect();else refreshMarket();

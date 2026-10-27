@@ -2,7 +2,7 @@
 
 仲間内でKPを稼ぎ、増減させ、他人への指名指令に使うDiscord Activity。サーバー口座と、独立した端末内デモがあります。
 
-本番口座は `/valo status` の接続コードでログイン。コンペ1勝900 KP、コンペ指名2,500 KP。詳細・保留モード・Discord内のURL Mapping設定は [試合KPの運用](docs/POINT_REWARDS_PLAN.md) を参照してください。
+本番口座はDiscord Activity内で自動接続（管理側の初回OAuth設定が必要）。通常ブラウザーでは `/valo status` の接続コードでログイン。コンペ1勝900 KP、コンペ指名2,500 KP。詳細・保留モード・Discord内のURL Mapping設定は [試合KPの運用](docs/POINT_REWARDS_PLAN.md) を参照してください。
 
 ## ゲームの軸
 
@@ -38,7 +38,7 @@ KPは現実のお金・商品と交換できない。端末保存は利用者が
 
 ## 起動・検証
 
-ビルドと実行時パッケージ導入は不要。
+画面は静的ファイルで配信。公式Discord SDKはローカルで事前にバンドルし、成果物を同梱しています。SDKの更新時はNode 24で `npm ci && npm run build:discord` を実行してください。
 
 ```sh
 npm start
@@ -52,6 +52,7 @@ http://localhost:8000 を開く。ES Modulesを使用するのでHTTP経由で�
 npm test                  # Node.js 18以上。ロジック・状態復元・排他保存のテスト
 npm install --no-save playwright  # 任意のブラウザ検証ツール
 npm run test:browser
+node scripts/discord-auth-browser-check.cjs # 公式SDK・Discord RPCとAPIを模擬した自動接続検証
 node scripts/kp-browser-check.cjs # サーバー口座の接続・再送・画面検証（APIをモック）
 ```
 

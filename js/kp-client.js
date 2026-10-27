@@ -17,14 +17,26 @@ export function createKpClient({storage,temporaryStorage,request=globalThis.fetc
   }
   throw Error('口座の接続情報を保存できません。ブラウザーの保存設定を確認してください。');
  }
+ let ownerUserId;
  let token=read(persistent,tokenKey),pending;remembered=!!token;
  if(!token){token=read(temporary,tokenKey);if(token){try{saveToken(token);}catch{}}}
  try{pending=JSON.parse(read(pendingStorage,pendingKey)||'null');}catch{pending=null;}
- async function api(path,body){
-  let response;try{response=await request(root+'/api/kp/'+path,{method:body?'POST':'GET',headers:{...(token?{Authorization:'Bearer '+token}:{}),...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{}),cache:'no-store',signal:AbortSignal.timeout(15000)});}catch{throw Error('通信を確認できません。送信済みの操作は「通信結果を確認」で確認できます。');}
+ async function api(path,body,session=token){
+  let response;try{response=await request(root+'/api/kp/'+path,{method:body?'POST':'GET',headers:{...(session?{Authorization:'Bearer '+session}:{}),...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{}),cache:'no-store',signal:AbortSignal.timeout(15000)});}catch{throw Error('通信を確認できません。送信済みの操作は「通信結果を確認」で確認できます。');}
   let data;try{data=await response.json();}catch{throw Error('応答を確認できません。「通信結果を確認」を押してください。');}
   if(!response.ok){const error=Error(data.error||'処理に失敗しました。');error.status=response.status;error.definitive=data.retryable===false;throw error;}
   return data;
+ }
+ async function readState(){const state=await api('state');ownerUserId=state.selfUserId;return state;}
+ async function acceptSession(candidate,expectedUser){
+  if(typeof candidate!=='string'||!candidate)throw Error('接続情報を確認できません。');
+  const state=await api('state',undefined,candidate);
+  if(expectedUser&&state.selfUserId!==expectedUser)throw Error('接続する口座が一致しません。');
+  if(pending){
+   const previousOwner=pending.owner??ownerUserId??(token? (await api('state')).selfUserId:null);
+   if(!previousOwner||previousOwner!==state.selfUserId)throw Error('別の口座に未確認の操作があります。元のアカウントで通信結果を確認してください。');
+  }
+  saveToken(candidate);token=candidate;ownerUserId=state.selfUserId;return state;
  }
  async function resume(){
   if(!pending)return null;
@@ -33,9 +45,10 @@ export function createKpClient({storage,temporaryStorage,request=globalThis.fetc
  }
  return {
   get connected(){return !!token;},get remembered(){return remembered;},get pending(){return !!pending;},
-  async connect(code){if(pending)throw Error('先に通信結果を確認してください。');const result=await api('auth',{code:code.trim()});saveToken(result.token);token=result.token;return api('state');},
-  state:()=>api('state'),resume,
-  async operate(action,args){if(pending)throw Error('前の通信結果を確認してから操作してください。');pending={id:randomId(),action,args};write(pendingKey,JSON.stringify(pending));return resume();},
+  async connect(code){const result=await api('auth',{code:code.trim()});return acceptSession(result.token);},
+  activityConfig:()=>api('activity/config'),activityChallenge:codeChallenge=>api('activity/challenge',{codeChallenge}),exchangeActivity:input=>api('activity/auth',input),acceptActivitySession:acceptSession,
+  state:readState,resume,
+  async operate(action,args){if(pending)throw Error('前の通信結果を確認してから操作してください。');pending={id:randomId(),action,args,...(ownerUserId?{owner:ownerUserId}:{})};write(pendingKey,JSON.stringify(pending));return resume();},
   discardRejected(){pending=null;write(pendingKey,null);},
   async disconnect(){if(pending)throw Error('先に通信結果を確認してください。');if(token){try{await api('logout',{});}catch(error){if(error.status!==401)throw error;}}saveToken(null);token=null;},
  };

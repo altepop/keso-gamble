@@ -11,6 +11,7 @@ import type { Match, Notice } from './results.ts';
 export { resultMessage } from './results.ts';
 
 export interface Env {
+  DISCORD_CLIENT_SECRET?: string;
   KP_BOOTSTRAP_PRIVATE_KEY?: string;
   KP_BOOTSTRAP_PUBLIC_KEY?: string;
   DB: D1Database;

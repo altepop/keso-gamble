@@ -1,3 +1,4 @@
+import {activityAuthAvailable,createActivityChallenge,authenticateActivity}from './discord-activity-auth.ts';
 import { initializeKp, exchangeKpCode, kpSession, revokeKpSession, kpHash } from './kp.ts';
 import type { KpEnv, KpMapping } from './kp.ts';
 import configuredPlayers from '../players.json' with { type: 'json' };
@@ -54,7 +55,16 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping):Promi
     const linked=await env.DB.prepare('SELECT COUNT(*) AS n FROM kp_accounts WHERE guild=?').bind(mapping.guildId).first<{n:number}>();
     const start=await env.DB.prepare("SELECT value FROM kp_settings WHERE key='starts_at'").first<{value:string}>();
     const timing=(await env.DB.prepare("SELECT key,value FROM monitor_state WHERE key IN ('monitor_started','monitor_finished')").all<{key:string;value:string}>()).results;
-    return response({enabled:true,currency:'KP',startsAt:Number(start?.value??0),registered:mapping.accounts.length,linked:linked?.n??0,voiceEnabled:false,sessionPolicy:'until_revoked',monitor:{lastStartedAt:Number(timing.find(r=>r.key==='monitor_started')?.value??0),lastFinishedAt:Number(timing.find(r=>r.key==='monitor_finished')?.value??0)}});
+    return response({enabled:true,currency:'KP',startsAt:Number(start?.value??0),registered:mapping.accounts.length,linked:linked?.n??0,voiceEnabled:false,sessionPolicy:'until_revoked',activityAuthAvailable:activityAuthAvailable(env),monitor:{lastStartedAt:Number(timing.find(r=>r.key==='monitor_started')?.value??0),lastFinishedAt:Number(timing.find(r=>r.key==='monitor_finished')?.value??0)}});
+  }
+  if(request.method==='GET'&&path==='/api/kp/activity/config')return response({available:activityAuthAvailable(env),applicationId:discord.applicationId});
+  if(request.method==='POST'&&(path==='/api/kp/activity/challenge'||path==='/api/kp/activity/auth')){
+   const text=await request.text();if(text.length>4096)return response({error:'入力が長すぎます。'},400);
+   const body=JSON.parse(text);if(!body||typeof body!=='object'||Array.isArray(body))return response({error:'接続情報が不正です。'},400);
+   const ip=request.headers.get('CF-Connecting-IP')??'unknown';
+   if(path.endsWith('/challenge'))return response(await createActivityChallenge(env,body.codeChallenge,ip));
+   const previous=/^Bearer ([a-f0-9]{48})$/.exec(request.headers.get('Authorization')??'')?.[1];
+   return response(await authenticateActivity(env,mapping,body,ip,previous));
   }
   if(request.method==='POST'&&path==='/api/kp/auth'){
    const text=await request.text();if(text.length>1024)return response({error:'コードが長すぎます。'},400);

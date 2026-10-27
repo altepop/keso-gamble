@@ -1,2 +1,5 @@
 HENRIK_API_KEY="REPLACE_WITH_HENRIKDEV_API_KEY"
 DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/REPLACE_ID/REPLACE_TOKEN"
+
+# Optional: same VCT QUIZ OAuth2 Client Secret, required for automatic Activity login.
+DISCORD_CLIENT_SECRET=
