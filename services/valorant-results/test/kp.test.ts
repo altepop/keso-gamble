@@ -272,3 +272,13 @@ test('voice slots pay once with a daily cap, keep accounts usable, and roll back
  await assert.rejects(creditVoiceSlot(f.env,guild,user,'2026-10-28',1,Date.now()));assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM kp_voice_events WHERE day='2026-10-28'").get()!.n,0);
  f.sql.exec('DROP TRIGGER voice_fixture_fail');await creditVoiceSlot(f.env,guild,user,'2026-10-28',1,Date.now());assert.equal((await readKpState(f.env,mapping,user)).cash,245);
 });
+test('monitor records the agent of each new result for mastery, once',async()=>{
+ const {monitor}=await import('../src/index.ts');const f=await fixture();f.enableHistory();const original=globalThis.fetch;
+ const env={...f.env,HENRIK_API_KEY:'fixture',DISCORD_WEBHOOK_URL:'https://discord.com/api/webhooks/1/fixture'};
+ const raw=game('monitor-agent');(raw.players[0] as {agent?:{name:string}}).agent={name:'ジェット'};
+ globalThis.fetch=async url=>String(url).includes('api.henrikdev.xyz')?Response.json({data:[raw]}):Response.json({id:'100000000000000099'});
+ try{
+  for(let i=0;i<2;i++){await monitor(env,[{riotId:'One#JP1',name:'One'},{riotId:'Two#JP1',name:'Two'}]);f.sql.exec("DELETE FROM monitor_state WHERE key='discord_after'");}
+  assert.deepEqual(f.sql.prepare('SELECT riot_id,match_id,agent,outcome FROM agent_plays').all().map(r=>({...r})),[{riot_id:'One#JP1',match_id:'monitor-agent',agent:'ジェット',outcome:'win'}]);
+ }finally{globalThis.fetch=original;}
+});
