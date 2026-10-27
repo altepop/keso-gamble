@@ -65,3 +65,14 @@ test('voice bootstrap requires a fresh valid signature and the configured guild 
  assert.equal((await voiceControl(request({...body,guildId:'100000000000000199'}),env,pub)).status,400);assert.equal(forwards,0);
  assert.equal((await voiceControl(request(body),env,pub)).status,200);assert.equal(forwards,1);
 });
+test('an invalid Bot credential reports only a fixed status category and is never stored',async()=>{
+ const rsa=generateKeyPairSync('rsa',{modulusLength:3072}),token='fixture-do-not-print-token';const storage=new Memory();
+ const ctx={storage,blockConcurrencyWhile:(fn:()=>Promise<void>)=>fn()} as unknown as DurableObjectState;
+ const original=globalThis.fetch;globalThis.fetch=async()=>new Response('',{status:401});
+ try{
+  const gateway=new VoiceGateway(ctx,{DB:noopDB,KP_BOOTSTRAP_PRIVATE_KEY:rsa.privateKey.export({type:'pkcs8',format:'pem'}).toString()});
+  const encryptedToken=publicEncrypt({key:rsa.publicKey,padding:constants.RSA_PKCS1_OAEP_PADDING,oaepHash:'sha256'},Buffer.from(token)).toString('base64');assert.equal(encryptedToken.length,512);
+  assert.equal((await gateway.fetch(new Request('https://voice/configure',{method:'POST',body:JSON.stringify({guildId:discord.guildId,encryptedToken})}))).status,503);
+  const status=await (await gateway.fetch(new Request('https://voice/status'))).text();assert.match(status,/bot_discord_http_401/);assert.equal(status.includes(token),false);assert.equal(storage.data.has('config'),false);
+ }finally{globalThis.fetch=original;}
+});

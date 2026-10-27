@@ -42,7 +42,7 @@ export class VoiceGateway {
   if(Date.now()<this.apiAfter)throw Error('Discord cooldown');
   const response=await fetch('https://discord.com/api/v10'+path,{headers:{Authorization:'Bot '+token},signal:AbortSignal.timeout(10000)});
   if(response.status===429){const detail=await response.json().catch(()=>null) as {retry_after?:number}|null;const retry=Number(detail?.retry_after??response.headers.get('retry-after'));this.apiAfter=Date.now()+Math.max(1000,(Number.isFinite(retry)&&retry>0?retry:60)*1000);this.nextConnect=Math.max(this.nextConnect,this.apiAfter);throw Error('Discord rate limit');}
-  if(!response.ok)throw Error('Discord metadata unavailable');return await response.json() as any;
+  if(!response.ok)throw Error('discord_http_'+response.status);return await response.json() as any;
  }
  private async connect(){
   if(this.socket||!this.token||this.stopped||Date.now()<this.nextConnect)return;
@@ -102,7 +102,7 @@ export class VoiceGateway {
    }).catch(()=>{this.error='event_retry';console.warn('voice_event_pending');});});
    const closed=(code?:number)=>{if(socket!==this.socket)return;this.disconnect(code===4004?'bot_authentication_failed':'disconnected');if(code===4007||code===4009){this.session='';this.resumeUrl='';this.seq=null;this.voices.clear();}if(code===4008)this.nextConnect=Math.max(this.nextConnect,Date.now()+60000);if([4004,4010,4011,4012,4013,4014].includes(code??0)){this.stopped=true;this.error='bot_configuration_error';}};
    socket.addEventListener('close',e=>closed(e.code));socket.addEventListener('error',()=>closed());
-  }catch{this.error='connection_retry';console.warn('voice_connection_pending');this.nextConnect=Math.max(this.nextConnect,Date.now()+30000);}
+  }catch(error){this.error=error instanceof Error&&/^discord_http_\d{3}$/.test(error.message)?'gateway_'+error.message:'connection_retry';console.warn('voice_connection_pending');this.nextConnect=Math.max(this.nextConnect,Date.now()+30000);}
  }
  async alarm(){await this.init;await this.serial(async()=>{
   try{
@@ -120,11 +120,13 @@ export class VoiceGateway {
   if(url.pathname==='/configure'&&request.method==='POST'){
    const body=await request.json() as {encryptedToken?:string;guildId?:string};
    if(body.guildId!==this.guild||typeof body.encryptedToken!=='string'||body.encryptedToken.length>1024)return new Response('Invalid configuration',{status:400});
-   const token=await decryptVoiceToken(this.env,body.encryptedToken);
+   let token:string;try{token=await decryptVoiceToken(this.env,body.encryptedToken);}catch{this.error='configuration_decrypt_failed';return new Response('Configuration pending',{status:503});}
    if(!token||token.length>256||/\s/.test(token))return new Response('Invalid token',{status:400});
    if(token!==this.token||this.stopped){
-    const bot=await this.api('/users/@me',token),guild=await this.api('/guilds/'+this.guild,token);
-    if(bot.bot!==true||guild.id!==this.guild)return new Response('Bot unavailable',{status:400});
+    let bot:any,guild:any;
+    try{bot=await this.api('/users/@me',token);}catch(error){this.error=error instanceof Error&&/^discord_http_\d{3}$/.test(error.message)?'bot_'+error.message:'bot_check_pending';return new Response('Bot unavailable',{status:503});}
+    try{guild=await this.api('/guilds/'+this.guild,token);}catch(error){this.error=error instanceof Error&&/^discord_http_\d{3}$/.test(error.message)?'guild_'+error.message:'guild_check_pending';return new Response('Guild unavailable',{status:503});}
+    if(bot.bot!==true||guild.id!==this.guild){this.error='bot_or_guild_mismatch';return new Response('Bot unavailable',{status:400});}
     await this.checkpoint();this.disconnect('reconfiguring');this.session='';this.seq=null;this.resumeUrl='';this.voices.clear();
     this.token=token;this.stopped=false;this.nextConnect=0;
    }
