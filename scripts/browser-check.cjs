@@ -62,11 +62,22 @@ async function auditMedia(context){
  for(const screen of ['home','play','market','directives','assets']){await g.locator(`.nav-btn[data-screen=${screen}]`).click();await g.setViewportSize({width:320,height:844});assert.equal(await g.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,screen);}
  await g.locator('.nav-btn[data-screen=home]').click();await g.locator('.title-back').click();await g.locator('.title-screen').waitFor();assert.equal((await g.evaluate(k=>JSON.parse(localStorage.getItem(k)),key)).cash,8800);await g.locator('.title-start').click();
  const resetContext=await browser.newContext();await auditMedia(resetContext);const resetPage=await resetContext.newPage();resetPage.on('pageerror',e=>errors.push(e.message));await resetPage.goto('http://127.0.0.1:8765');await resetPage.locator('.title-start').click();await resetPage.locator('.nav-btn[data-screen=assets]').click();await resetPage.locator('#trade-qty').fill('3');resetPage.once('dialog',dialog=>dialog.accept());await resetPage.locator('[data-action=reset]').click();await resetPage.waitForFunction(()=>document.querySelector('#trade-qty')?.value==='1');
+ const raceContext=await browser.newContext({viewport:{width:390,height:844}});await auditMedia(raceContext);const r=await raceContext.newPage();r.on('pageerror',e=>errors.push(e.message));
+ await r.clock.install({time:new Date('2026-10-27T12:05:30Z')});await r.goto('http://127.0.0.1:8765');await r.locator('.title-start').click();await r.locator('.nav-btn[data-screen=market]').click();await r.locator('.sub-tab[data-screen=race]').click();
+ assert.match(await r.locator('.race-card h3').innerText(),/21:15発走/);assert.equal(await r.locator('[data-race-horse]').count(),8);assert.match(await r.locator('.race-stage').innerText(),/メインレース/);
+ await r.locator('[data-race-horse="3"]').click();await r.locator('#race-amount').fill('150');await r.locator('[data-action=race-bet]').click();await r.locator('.toast').filter({hasText:'100 KP単位'}).waitFor();
+ await r.locator('#race-amount').fill('1000');assert.match(await r.locator('#race-preview').innerText(),/当たれば/);await r.locator('[data-action=race-bet]').click();await r.locator('.toast').filter({hasText:'馬券を買いました'}).waitFor();
+ let raceState=await r.evaluate(k=>JSON.parse(localStorage.getItem(k)),key);assert.equal(raceState.cash,9000);assert.equal(raceState.raceBets[0].status,'pending');assert.equal(raceState.raceBets[0].horse,3);
+ await r.clock.fastForward(9*60000+45000);await r.locator('#race-canvas').waitFor();assert.match(await r.locator('#race-clock').innerText(),/発走から/);
+ await r.clock.fastForward(60000);await r.waitForFunction(k=>JSON.parse(localStorage.getItem(k)).raceBets[0].status!=='pending',key);
+ raceState=await r.evaluate(k=>JSON.parse(localStorage.getItem(k)),key);assert.equal(raceState.cash,9000+raceState.raceBets[0].payout);assert.match(await r.locator('.race-result').innerText(),/着順/);
+ await r.clock.fastForward(15*60000);await r.locator('.race-void').waitFor();
+ for(const width of [320,390,1280]){await r.setViewportSize({width,height:844});assert.equal(await r.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'race '+width);}
  assert.deepEqual(errors,[]);
  // Confirm the probe is active, so a missing instrumentation hook cannot pass silently.
  for(const ctx of browser.contexts())for(const page of ctx.pages())await page.evaluate(()=>window.__flushMediaAudit());
  await g.evaluate(async()=>{const session=navigator.audioSession;session.type='ambient';await window.__flushMediaAudit();});
  assert.deepEqual(mediaCalls.splice(-2),['navigator.audioSession','audioSession.type=']);
  assert.deepEqual(mediaCalls,[],'Game flows must not read/change audio sessions, create playback/capture, or open WebRTC');
- console.log('Browser checks passed: no audio-session access, media playback/capture or WebRTC during game flows; play claims and payouts, Steam text escaping, directives and completion persistence, concurrent orders/salaries, storage failure, drafts, chart toggles, keyboard, spin persistence, mobile layouts.');
+ console.log('Browser checks passed: no audio-session access, media playback/capture or WebRTC during game flows; play claims and payouts, Steam text escaping, directives and completion persistence, concurrent orders/salaries, race bets and settlement, storage failure, drafts, chart toggles, keyboard, spin persistence, mobile layouts.');
 })().catch(e=>{console.error(e);process.exitCode=1;}).finally(async()=>{await browser?.close();server.kill();});
