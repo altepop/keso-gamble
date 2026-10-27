@@ -14,16 +14,33 @@ function literal(node) {
   }));
   throw Error('Deployed configuration is not static JSON');
 }
+const settingNames=['players_default','discord_config_default'];
+// esbuild may emit a JSON module as `var x;` plus one `x = {...}` inside a lazy initializer.
+function assignments(node,out=[]) {
+  if (!node || typeof node.type!=='string') return out;
+  if (node.type==='AssignmentExpression' && node.operator==='=' && node.left.type==='Identifier' && settingNames.includes(node.left.name)) out.push(node);
+  for (const value of Object.values(node)) {
+    if (Array.isArray(value)) for (const child of value) assignments(child,out);
+    else if (value && typeof value.type==='string') assignments(value,out);
+  }
+  return out;
+}
 export function extractSettings(source) {
   const ast=parse(source,{ecmaVersion:'latest',sourceType:'module'});
-  const found=new Map();
+  const found=new Map(),declared=new Set();
   for (const statement of ast.body) {
     if (statement.type!=='VariableDeclaration') continue;
     for (const declaration of statement.declarations) {
-      if (declaration.id.type!=='Identifier' || !['players_default','discord_config_default'].includes(declaration.id.name)) continue;
-      if (!declaration.init || found.has(declaration.id.name)) throw Error('Ambiguous deployed configuration');
-      found.set(declaration.id.name,literal(declaration.init));
+      if (declaration.id.type!=='Identifier' || !settingNames.includes(declaration.id.name)) continue;
+      if (declared.has(declaration.id.name)) throw Error('Ambiguous deployed configuration');
+      declared.add(declaration.id.name);
+      if (declaration.init) found.set(declaration.id.name,literal(declaration.init));
     }
+  }
+  // A name is either initialized where it is declared or assigned exactly once; anything else is ambiguous.
+  for (const node of assignments(ast)) {
+    if (!declared.has(node.left.name) || found.has(node.left.name)) throw Error('Ambiguous deployed configuration');
+    found.set(node.left.name,literal(node.right));
   }
   const players=found.get('players_default'), discord=found.get('discord_config_default');
   if (!Array.isArray(players) || !players.length || players.length>5 || players.some(p=>!p || typeof p.riotId!=='string' || !p.riotId.includes('#') || p.riotId.length>160 || (p.name!==undefined && typeof p.name!=='string'))) throw Error('Cannot safely recover the monitored players');

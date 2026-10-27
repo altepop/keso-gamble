@@ -74,3 +74,13 @@ test('the deploy copy includes every shared browser module the Worker imports',(
  assert.ok(seen.has('racing.js')&&seen.has('engine.js'));
  for(const file of seen)assert.ok(copied(file),`js/${file} is imported by the Worker but not copied for deployment`);
 });
+test('a lazily initialized JSON module is read once, statically; a second assignment is ambiguous',()=>{
+ const lazy=`var players_default;var init_players=__esm({"players.json"(){players_default=${JSON.stringify(players)};}});var discord_config_default;var init_d=__esm({"d.json"(){discord_config_default=${JSON.stringify(discord)};}});`;
+ assert.deepEqual(extractSettings(lazy),{players,discord});
+ assert.throws(()=>extractSettings(lazy+'players_default=[];'),/Ambiguous/);
+ assert.throws(()=>extractSettings(source+`players_default=${JSON.stringify(players)};`),/Ambiguous/);
+ assert.throws(()=>extractSettings(lazy.replace(JSON.stringify(players),'loadPlayers()')),/static JSON/);
+});
+test('Worker sources avoid dynamic imports, which make esbuild lazily initialize the configuration',()=>{
+ for(const name of readdirSync(new URL('../src/',import.meta.url)).filter(n=>n.endsWith('.ts')))assert.doesNotMatch(readFileSync(new URL('../src/'+name,import.meta.url),'utf8'),/(?<!\bas\s)\bimport\(/,name); // type-only `as import(...)` is erased
+});
