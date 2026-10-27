@@ -9,7 +9,7 @@ import type { RoastLevel } from './racing-crowns.ts';
 import type { KpEnv, KpMapping } from './kp.ts';
 export interface PostEnv extends KpEnv { KP_EARNINGS_WEBHOOK_URL?:string }
 interface Bet { id:string; raceId:number; type:'win'|'place'; horse:number; amount:number; odds:number; status:string; payout:number }
-interface Card { id:number; start:number; name:string; size:number; going:number; raceClass:number; horses:Array<{number:number;name:string;ownerName?:string}> }
+interface Card { id:number; start:number; name:string; size:number; going:number; raceClass:number; horses:Array<{number:number;name:string;ownerName?:string;nickname?:string|null;person?:boolean}> }
 export const BIG_WIN=10000, BIG_LOSS=5000;
 const clock=(time:number)=>new Date(time).toLocaleTimeString('ja-JP',{timeZone:'Asia/Tokyo',hour:'2-digit',minute:'2-digit'});
 const kp=(n:number)=>n.toLocaleString('ja-JP')+' KP';
@@ -41,7 +41,7 @@ export function cardPost(card:Card,hash:string){
  const odds=raceOdds(card);
  return [`🏇 **${clean(card.name)}**（${clock(card.start)}発走・${card.size}頭・コース ${GOINGS[card.going].label}）`,
   `締切 ${clock(card.start-CLOSE_BEFORE)}｜倍率は 1着当て / ${placeSlots(card.size)}着以内当て`,
-  ...card.horses.map(h=>`${h.number}. ${clean(h.name)}${h.ownerName?`（馬主 ${clean(h.ownerName)}）`:''}　${odd(odds.win[h.number])} / ${odd(odds.place[h.number])}`),
+  ...card.horses.map(h=>`${h.number}. ${clean(h.name)}${h.nickname?`「${clean(h.nickname)}」`:''}${h.person?'（本人の名前の馬・見舞金つき）':h.ownerName?`（馬主 ${clean(h.ownerName)}）`:''}　${odd(odds.win[h.number])} / ${odd(odds.place[h.number])}`),
   `結果のハッシュ: \`${hash.slice(0,16)}…\`（発走後にシード値を公開）`,
   'KESO PLAY の「勝負 → 競馬」で馬券を買えます。'].join('\n');
 }
