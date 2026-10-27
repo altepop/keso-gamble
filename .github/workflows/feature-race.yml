@@ -1,0 +1,56 @@
+name: Announce the requested 21 JST featured race
+on:
+  push:
+    branches: [ops/earnings-test-20261027]
+    paths: [.github/workflows/feature-race.yml]
+permissions:
+  contents: read
+jobs:
+  featured-race:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm ci --ignore-scripts
+        working-directory: services/valorant-results
+      - name: Reserve the requested race and announce it once
+        run: |
+          node --input-type=module <<'JS'
+          import {extractSettings} from './services/valorant-results/scripts/live-settings.mjs';
+          const base='https://api.cloudflare.com/client/v4/accounts/'+process.env.CF_ACCOUNT;
+          const headers={Authorization:'Bearer '+process.env.CF_TOKEN,'Content-Type':'application/json'};
+          async function api(path,body){const r=await fetch(base+path,{method:body?'POST':'GET',headers,...(body?{body:JSON.stringify(body)}:{})});const d=await r.json();if(!r.ok||!d.success)throw Error('Cloudflare HTTP '+r.status+' codes '+(d.errors??[]).map(e=>e.code).join(','));return d.result;}
+          const settings=await api('/workers/scripts/valorant-results/settings');
+          if(!settings.bindings.some(b=>b.name==='KP_EARNINGS_WEBHOOK_URL'))throw Error('Earnings webhook missing');
+          const db=settings.bindings.find(b=>b.name==='DB'&&b.type==='d1');if(!db)throw Error('DB missing');
+          const query=async(sql,params=[])=>{const result=await api('/d1/database/'+db.id+'/query',{sql,params});return result[0];};
+          const r=await fetch(base+'/workers/scripts/valorant-results/content/v2',{headers});if(!r.ok)throw Error('Cannot read live names');
+          let sources=[];
+          if(r.headers.get('content-type')?.includes('multipart/form-data')){for(const [name,value] of await r.formData())if(/\.(m?js)$/.test(name))sources.push(typeof value==='string'?value:await value.text());}else sources=[await r.text()];
+          if(sources.length!==1)throw Error('Ambiguous live configuration');
+          const {players,discord}=extractSettings(sources[0]),guild=discord.guildId;
+          const race=Date.parse('2026-10-27T21:00:00+09:00'),source='requested-featured-20261027-2100-01',postId='requested-featured-announcement-20261027-2100-01';
+          if(Date.now()>=race-16*60000)throw Error('Betting may already be open; refusing to change a race');
+          const existing=(await query('SELECT name,user,source FROM kp_crowns WHERE guild=? AND race=?',[guild,race])).results[0];
+          if(existing&&existing.source!==source)throw Error('This race already has a crown; preserved the existing name');
+          if((await query('SELECT 1 FROM kp_race_fields WHERE guild=? AND race=?',[guild,race])).results.length)throw Error('Race entries already fixed; preserved the race');
+          const accounts=(await query("SELECT a.user,a.riot FROM kp_accounts a LEFT JOIN kp_state s ON s.guild=a.guild AND s.user=a.user WHERE a.guild=? AND COALESCE(json_extract(s.data,'$.roastLevel'),'full')='full' ORDER BY a.user",[guild])).results;
+          const target=accounts.map(a=>({...a,player:players.find(p=>p.riotId.toLowerCase()===a.riot.toLowerCase())})).find(a=>a.player&&(!existing||a.user===existing.user));
+          if(!target)throw Error('No registered full-banter member available');
+          const person=String(target.player.name??target.riot.split('#')[0]).replace(/[@`*_~<>|\r\n]/g,'');
+          const name=person+'、馬なら勝てるんか記念';
+          await query("INSERT INTO kp_crowns(guild,race,name,user,kind,source,created_at) SELECT ?,?,?,?,'special',?,? WHERE NOT EXISTS(SELECT 1 FROM kp_race_fields WHERE guild=? AND race=?) AND EXISTS(SELECT 1 FROM kp_accounts a LEFT JOIN kp_state s ON s.guild=a.guild AND s.user=a.user WHERE a.guild=? AND a.user=? AND COALESCE(json_extract(s.data,'$.roastLevel'),'full')='full') ON CONFLICT DO NOTHING",[guild,race,name,target.user,source,Date.now(),guild,race,guild,target.user]);
+          const saved=(await query('SELECT name,user,source FROM kp_crowns WHERE guild=? AND race=?',[guild,race])).results[0];
+          if(saved?.source!==source||saved.name!==name||saved.user!==target.user)throw Error('Could not reserve the exact requested race');
+          const content=['🏇 **今夜21:00発走・目玉レース**','**『'+name+'』**',person+'号も出走。エイムで勝てんでも、脚ならワンチャンあるやろ。','馬券は20:45〜20:59。1着当て・3着以内当てで参加できます。','KESO PLAY → 勝負 → 競馬へ。今夜の主役、走って見せてもらおか。'].join('\n');
+          await query('INSERT OR IGNORE INTO kp_posts(id,body,at) VALUES(?,?,?)',[postId,JSON.stringify({content,allowed_mentions:{parse:[]}}),Date.now()]);
+          console.log('Requested 21:00 JST race reserved; one announcement queued. No wallet edits.');
+          for(let i=0;i<18;i++){if((await query('SELECT sent FROM kp_posts WHERE id=?',[postId])).results[0]?.sent===1){console.log('DELIVERED: Discord accepted the featured-race announcement.');process.exit(0);}await new Promise(resolve=>setTimeout(resolve,10000));}
+          throw Error('Announcement still pending. Do not queue another copy.');
+          JS
