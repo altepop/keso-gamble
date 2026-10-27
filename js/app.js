@@ -1,11 +1,11 @@
-import {wheelView,covered,redNumbers,outcomeAngle} from './roulette-view.js?v=20261027-wheel';
-import {connectDiscordActivity,isDiscordActivity}from './discord-activity-auth.js?v=20261027-wheel';
-import { createKpClient } from './kp-client.js?v=20261027-wheel';
+import {wheelView,covered,redNumbers,outcomeAngle} from './roulette-view.js?v=20261027-multi';
+import {connectDiscordActivity,isDiscordActivity}from './discord-activity-auth.js?v=20261027-multi';
+import { createKpClient } from './kp-client.js?v=20261027-multi';
 import { fmt, fmt0 } from './format.js';
-import { submitClaim, approveClaim, issueDirective, completeDirective } from './progression.js?v=20261027-wheel';
-import { titleView, homeView, playView, directivesView } from './progression-views.js?v=20261027-wheel';
+import { submitClaim, approveClaim, issueDirective, completeDirective } from './progression.js?v=20261027-multi';
+import { titleView, homeView, playView, directivesView } from './progression-views.js?v=20261027-multi';
 import { genCandles, movingAverage, svgCandles } from './charts.js';
-import { MARKET, createInitialState, portfolioValue, assets, advanceMarket, trade, spin, grantDemoSalary, cryptoRouletteNumber } from './engine.js?v=20261027-wheel';
+import { MARKET, createInitialState, portfolioValue, assets, advanceMarket, trade, spin, spinNumbers, validateNumberBets, grantDemoSalary, cryptoRouletteNumber } from './engine.js?v=20261027-multi';
 import { KEY, LEGACY_KEY } from './storage.js';
 import { createStore } from './store.js';
 const $=(s,el=document)=>el.querySelector(s);
@@ -21,6 +21,8 @@ let activeSymbol=MARKET[0].id;
 let tradeSide='buy';
 let betType='red';
 let betNumber=7;
+const numberBets=new Map();
+const numberSelected=n=>betType==='number'?numberBets.has(n):covered(betType,betNumber,n);
 
 let rotation=0;
 let spinLock=false;
@@ -97,7 +99,7 @@ function tradePanel(){
 
 function screenCasino(){
   const recent=state.spins[0];
-  return `<div class="screen"><header class="topbar"><div class="toprow"><h1 class="title">ルーレット</h1><div class="small-actions"><span class="badge">所持 ${moneyCompact(state.cash)}</span></div></div></header><div class="sub-tabs"><button class="sub-tab" data-screen="market">架空株</button><button class="sub-tab active" data-screen="casino">カジノ</button></div><div class="center-panel"><div style="position:relative;width:min(320px,86vw);margin:0 auto 18px"><div class="pointer"></div><div class="roulette-board" id="wheel" style="transform:rotate(${rotation|| (recent?outcomeAngle(recent.outcome):0)}deg)">${wheelView(betType,betNumber)}<div class="roulette-center">${recent?recent.outcome:'K'}</div></div></div></div><div class="number-table" aria-label="ルーレットの数字">${Array.from({length:37},(_,n)=>`<button data-number="${n}" aria-pressed="${covered(betType,betNumber,n)}" class="number-cell ${n===0?'green':redNumbers.has(n)?'red':'black'} ${covered(betType,betNumber,n)?'selected':''}">${n}</button>`).join('')}</div><p class="helper">ヨーロピアン式・0は緑。数字36倍／赤黒・偶奇・前半後半2倍／ダズン・列3倍（掛け金込み）。1回につき1種類のベット。</p><div class="bet-grid">${[['red','赤'],['black','黒'],['even','偶数'],['odd','奇数'],['number','数字指定'],['low','1〜18'],['high','19〜36'],['dozen1','1〜12'],['dozen2','13〜24'],['dozen3','25〜36'],['column1','1列目'],['column2','2列目'],['column3','3列目']].map(([id,label])=>`<button data-bet="${id}" class="${betType===id?'active':''}">${label}</button>`).join('')}</div><div class="trade-box"><h3>ベット</h3>${betType==='number'?`<div class="field"><label for="bet-number">数字（0〜36）</label><input id="bet-number" class="input" type="number" min="0" max="36" value="${betNumber}"></div>`:''}<div class="field"><label for="bet-amount">賭け金</label><input id="bet-amount" class="input" type="number" min="100" max="20000" step="1" value="500"></div><div class="action-row"><button class="action-btn primary" data-action="spin" ${spinLock?'disabled':''}>ルーレットを回す</button></div></div><div class="result-panel"><p class="result-title ${recent && recent.payout>0?'negative':recent?'positive':''}">${recent ? (recent.payout>0?'的中':'不的中') : '直近結果'}</p><div class="helper">${recent ? `出目 ${recent.outcome} / 賭け ${moneyCompact(recent.amount)} / 払戻 ${moneyCompact(recent.payout)}` : 'まだ抽選履歴はありません。'}</div></div>${bottomNav()}</div>`;
+  return `<div class="screen"><header class="topbar"><div class="toprow"><h1 class="title">ルーレット</h1><div class="small-actions"><span class="badge">所持 ${moneyCompact(state.cash)}</span></div></div></header><div class="sub-tabs"><button class="sub-tab" data-screen="market">架空株</button><button class="sub-tab active" data-screen="casino">カジノ</button></div><div class="center-panel"><div style="position:relative;width:min(320px,86vw);margin:0 auto 18px"><div class="pointer"></div><div class="roulette-board" id="wheel" style="transform:rotate(${rotation|| (recent?outcomeAngle(recent.outcome):0)}deg)">${wheelView(betType==='number'?'numbers':betType,betNumber,[...numberBets.keys()])}<div class="roulette-center">${recent?recent.outcome:'K'}</div></div></div></div><div class="number-table" aria-label="ルーレットの数字">${Array.from({length:37},(_,n)=>`<button data-number="${n}" aria-pressed="${numberSelected(n)}" class="number-cell ${n===0?'green':redNumbers.has(n)?'red':'black'} ${numberSelected(n)?'selected':''}">${n}${betType==='number'&&numberBets.has(n)?`<small>${numberBets.get(n)} KP</small>`:''}</button>`).join('')}</div><p class="helper">ヨーロピアン式・0は緑。数字36倍／赤黒・偶奇・前半後半2倍／ダズン・列3倍（掛け金込み）。数字は複数選択OK。数字をもう一度タップすると解除。数字ごと100 KP以上、合計20,000 KPまで。</p><div class="bet-grid">${[['red','赤'],['black','黒'],['even','偶数'],['odd','奇数'],['number','数字指定'],['low','1〜18'],['high','19〜36'],['dozen1','1〜12'],['dozen2','13〜24'],['dozen3','25〜36'],['column1','1列目'],['column2','2列目'],['column3','3列目']].map(([id,label])=>`<button data-bet="${id}" class="${betType===id?'active':''}">${label}</button>`).join('')}</div><div class="trade-box"><h3>ベット</h3>${betType==='number'?`<p class="helper">盤面から数字を選んでください。</p>${[...numberBets].map(([n,amount])=>`<div class="field"><label for="number-stake-${n}">${n} の掛け金</label><input id="number-stake-${n}" data-stake="${n}" class="input" type="number" min="100" max="20000" step="1" value="${amount}"></div>`).join('')}<strong>合計 <span id="number-bet-total">${moneyCompact([...numberBets.values()].reduce((a,b)=>a+b,0))}</span></strong>`:`<div class="field"><label for="bet-amount">賭け金</label><input id="bet-amount" class="input" type="number" min="100" max="20000" step="1" value="500"></div>`}<div class="action-row"><button class="action-btn primary" data-action="spin" ${spinLock?'disabled':''}>ルーレットを回す</button></div></div><div class="result-panel"><p class="result-title ${recent && recent.payout>0?'negative':recent?'positive':''}">${recent ? (recent.payout>0?'的中':'不的中') : '直近結果'}</p><div class="helper">${recent ? `出目 ${recent.outcome} / 賭け ${moneyCompact(recent.amount)} / 払戻 ${moneyCompact(recent.payout)}${recent.bets?'<br>'+recent.bets.map(b=>b.number+': '+moneyCompact(b.amount)).join(' · '):''}` : 'まだ抽選履歴はありません。'}</div></div>${bottomNav()}</div>`;
 }
 
 function screenAssets(){
@@ -159,15 +161,16 @@ async function doTrade(){
 }
 async function doSpin(){
   if(spinLock) return;
-  const amount=Number($('#bet-amount')?.value);
-  const choice=betType==='number'?($('#bet-number')?.value === '' ? NaN : Number($('#bet-number')?.value)):0;
+  const bets=[...numberBets].map(([number,amount])=>({number,amount}));
+  const amount=betType==='number'?validateNumberBets(bets).total:Number($('#bet-amount')?.value);
+  const choice=0;
   if(!Number.isSafeInteger(amount) || amount<100 || amount>20000 || amount>state.cash) throw new Error('賭け額は100〜20,000 KP（所持金以内）');
   if(betType==='number' && (!Number.isInteger(choice)||choice<0||choice>36)) throw new Error('数字は0〜36で指定');
-  const lockedType=betType;
+  const lockedType=betType==='number'?'numbers':betType;
   const outcome=live?null:cryptoRouletteNumber();
   spinLock=true;
   let result;
-  try { result=live?await liveOperation('spin',{type:lockedType,amount,choice}):await commit(next => spin(next,lockedType,amount,choice,outcome)); }
+  try { result=live?await liveOperation('spin',{type:lockedType,amount,choice,...(lockedType==='numbers'?{bets}:{})}):await commit(next => lockedType==='numbers'?spinNumbers(next,bets,outcome):spin(next,lockedType,amount,choice,outcome)); }
   catch(error) { spinLock=false; throw error; }
   const wheel=$('#wheel');
   const button=$('[data-action="spin"]'); if(button) button.disabled=true;
@@ -196,7 +199,7 @@ addEventListener('click',async e=>{
     if(t.dataset.close){closeDetail();return;}
     if(t.dataset.action==='toggle-ma'){showMA=!showMA;render();$('[data-action="toggle-ma"]')?.focus();return;}
     if(t.dataset.tradeSide){tradeSide=t.dataset.tradeSide;render();return;}
-    if(t.dataset.number!==undefined){if(spinLock)return;betType='number';betNumber=Number(t.dataset.number);drafts['bet-number']=String(betNumber);render();return;}
+    if(t.dataset.number!==undefined){if(spinLock)return;betType='number';betNumber=Number(t.dataset.number);if(numberBets.has(betNumber))numberBets.delete(betNumber);else numberBets.set(betNumber,100);render();return;}
     if(t.dataset.bet){if(spinLock)return;betType=t.dataset.bet;render();return;}
     if(t.dataset.action==='submit-claim'){
       const data={activity:$('#claim-activity').value,reference:$('#claim-reference').value,game:$('#claim-game')?.value,achievement:$('#claim-achievement')?.value};
@@ -236,8 +239,8 @@ addEventListener('keydown', e => {
   }
 });
 addEventListener('input', e => {
-  if(e.target.id==='bet-number'&&!spinLock){betNumber=e.target.value===''?NaN:Number(e.target.value);drafts['bet-number']=e.target.value;render();}
-  if (e.target.id==='kp-connect-code'||['trade-qty','bet-amount','bet-number'].includes(e.target.id)||e.target.id.startsWith('claim-')||e.target.id.startsWith('directive-')) drafts[e.target.id] = e.target.value;
+  if(e.target.dataset.stake!==undefined&&!spinLock){const n=Number(e.target.dataset.stake),amount=Number(e.target.value);numberBets.set(n,amount);document.querySelector('#number-bet-total').textContent=moneyCompact([...numberBets.values()].reduce((a,b)=>a+b,0));const badge=document.querySelector(`[data-number="${n}"] small`);if(badge)badge.textContent=amount+' KP';}
+  if (e.target.id==='kp-connect-code'||['trade-qty','bet-amount'].includes(e.target.id)||e.target.id.startsWith('claim-')||e.target.id.startsWith('directive-')) drafts[e.target.id] = e.target.value;
   if(e.target.id==='trade-qty')$('#trade-estimate').innerHTML=tradeEstimate();
 });
 const drafts = {};

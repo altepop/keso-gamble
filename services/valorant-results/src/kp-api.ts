@@ -5,7 +5,7 @@ import configuredPlayers from '../players.json' with { type: 'json' };
 import discord from '../discord-config.json' with { type: 'json' };
 import policy from '../kp-policy.json' with { type: 'json' };
 // @ts-expect-error The shared pure browser engine has no TypeScript declarations.
-import { advanceMarket, trade, spin, cryptoRouletteNumber } from '../../../js/engine.js';
+import { advanceMarket, trade, spin, spinNumbers, cryptoRouletteNumber } from '../../../js/engine.js';
 export async function readKpState(env:KpEnv,mapping:KpMapping,user:string){
  const wallet=await env.DB.prepare('SELECT balance,version FROM kp_wallets WHERE guild=? AND user=?').bind(mapping.guildId,user).first<{balance:number;version:number}>();
  const row=await env.DB.prepare('SELECT data,version FROM kp_state WHERE guild=? AND user=?').bind(mapping.guildId,user).first<{data:string;version:number}>();if(!wallet||!row)throw Error('口座が見つかりません。');
@@ -24,7 +24,7 @@ export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:strin
   if(existing){if(existing.request_hash!==requestHash)throw Error('同じ操作IDを別の操作には使えません。');return JSON.parse(existing.response);}
   const state=await readKpState(env,mapping,user),before=state.cash;let result:unknown;let directive:Record<string,unknown>|null=null;
   if(action==='trade')result=trade(state,args.symbol,args.side,args.quantity);
-  else if(action==='spin')result=spin(state,args.type,args.amount,args.choice??0,cryptoRouletteNumber());
+  else if(action==='spin')result=args.type==='numbers'?spinNumbers(state,args.bets,cryptoRouletteNumber()):spin(state,args.type,args.amount,args.choice??0,cryptoRouletteNumber());
   else if(action==='directive'){
    const costs:Record<string,number>={competitive:2500,unrated:1500,solo_competitive:15000,solo_death_unrated:20000},task=String(args.task),target=String(args.target),cost=Object.hasOwn(costs,task)?costs[task]:0;
    if(!cost||!mapping.accounts.some(a=>a.discordUserId===target)||target===user)throw Error('指名する相手と課題を選んでください。');

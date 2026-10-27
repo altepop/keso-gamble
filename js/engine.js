@@ -43,7 +43,7 @@ function hydrateState(raw, now = Date.now()) {
   if (!Number.isSafeInteger(assets(state))) return createInitialState(now);
   state.owned = [...new Set(Array.isArray(raw.owned) ? raw.owned.filter(id => SHOP.some(item => item.id === id)) : [])];
   state.trades = (Array.isArray(raw.trades) ? raw.trades : []).filter(t => t && MARKET.some(s => s.id === t.symbol) && ['buy','sell'].includes(t.side) && validInt(t.quantity, 1) && validInt(t.price, 1) && validInt(t.fee) && validInt(t.time)).slice(0, 50).map(t => ({side:t.side, symbol:t.symbol, quantity:t.quantity, price:t.price, fee:t.fee, time:t.time}));
-  state.spins = (Array.isArray(raw.spins) ? raw.spins : []).filter(t => t && ['red','black','even','odd','number','low','high','dozen1','dozen2','dozen3','column1','column2','column3'].includes(t.type) && validInt(t.choice) && t.choice <= 36 && validInt(t.outcome) && t.outcome <= 36 && validInt(t.amount, 100) && t.amount <= 20000 && validInt(t.payout) && t.payout === roulettePayout(t.type,t.choice,t.outcome,t.amount) && validInt(t.time)).slice(0, 30).map(t => ({type:t.type, choice:t.choice, outcome:t.outcome, amount:t.amount, payout:t.payout, time:t.time}));
+  state.spins = (Array.isArray(raw.spins) ? raw.spins : []).filter(t => t && (validNumberSpin(t)||(['red','black','even','odd','number','low','high','dozen1','dozen2','dozen3','column1','column2','column3'].includes(t.type) && validInt(t.choice) && t.choice <= 36 && validInt(t.outcome) && t.outcome <= 36 && validInt(t.amount, 100) && t.amount <= 20000 && validInt(t.payout) && t.payout === roulettePayout(t.type,t.choice,t.outcome,t.amount) && validInt(t.time)))).slice(0, 30).map(t => ({type:t.type, choice:t.choice, outcome:t.outcome, amount:t.amount, payout:t.payout, time:t.time,...(t.type==='numbers'?{bets:validateNumberBets(t.bets).bets}:{})}));
   for (const key of ['salaryClaims','ticks','seed']) if (validInt(raw[key])) state[key] = raw[key];
   for (const key of ['lastSalaryAt','lastMarketAt']) if (validInt(raw[key]) && raw[key] <= now) state[key] = raw[key];
   Object.assign(state,hydrateProgress(raw));
@@ -124,6 +124,27 @@ function spin(state, type, amount, choice=0, outcome, now=Date.now()) {
   state.spins.unshift(record); state.spins=state.spins.slice(0,30);
   return record;
 }
+export function validateNumberBets(bets){
+ if(!Array.isArray(bets)||bets.length<1||bets.length>37)throw Error('数字を1つ以上選んでください');
+ const seen=new Set();let total=0;
+ const clean=bets.map(b=>{
+  if(!b||!Number.isInteger(b.number)||b.number<0||b.number>36||seen.has(b.number))throw Error('数字は0〜36、重複なしで指定してください');
+  if(!Number.isSafeInteger(b.amount)||b.amount<100||b.amount>20000)throw Error('数字ごとの掛け金は100〜20,000 KP');
+  seen.add(b.number);total+=b.amount;return {number:b.number,amount:b.amount};
+ });
+ if(total>20000)throw Error('1回の掛け金合計は20,000 KPまで');
+ return {bets:clean,total};
+}
+export function spinNumbers(state,bets,outcome,now=Date.now()){
+ const checked=validateNumberBets(bets);
+ if(!Number.isInteger(outcome)||outcome<0||outcome>36)throw Error('抽選結果が必要だ');
+ if(state.cash<checked.total)throw Error('所持KPが不足している');
+ const payout=(checked.bets.find(b=>b.number===outcome)?.amount??0)*36;
+ const cash=checkedCash(state,checkedAdd(state.cash-checked.total,payout));
+ const record={type:'numbers',choice:0,bets:checked.bets,amount:checked.total,outcome,payout,time:now};
+ state.cash=cash;state.spins.unshift(record);state.spins=state.spins.slice(0,30);return record;
+}
+function validNumberSpin(t){try{const c=validateNumberBets(t.bets);return t.type==='numbers'&&Number.isInteger(t.outcome)&&t.outcome>=0&&t.outcome<=36&&t.amount===c.total&&t.payout===(c.bets.find(b=>b.number===t.outcome)?.amount??0)*36&&Number.isSafeInteger(t.time)&&t.time>=0;}catch{return false;}}
 function buyReward(state, itemId) {
   const item=SHOP.find(s=>s.id===itemId);
   if(!item)throw new Error('存在しない商品だ');
