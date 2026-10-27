@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync,mkdirSync,writeFileSync,readFileSync,rmSync } from 'node:fs';
+import { mkdtempSync,mkdirSync,writeFileSync,readFileSync,readdirSync,rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { extractSettings,deploymentConfig,prepareLiveSettings } from '../scripts/live-settings.mjs';
@@ -69,7 +69,7 @@ test('the deploy copy includes every shared browser module the Worker imports',(
  const copy=/cp (.+) "\$RUNNER_TEMP\/kp-app\/js\/"/.exec(workflow)?.[1].split(/\s+/)??[];
  const copied=file=>copy.includes('js/*.js')||copy.includes('js/'+file);
  const pending=[],seen=new Set();
- for(const name of ['index.ts','kp-api.ts','racing-kp.ts'])for(const [,file] of readFileSync(new URL('services/valorant-results/src/'+name,root),'utf8').matchAll(/from '\.\.\/\.\.\/\.\.\/js\/([\w-]+\.js)'/g))pending.push(file);
+ for(const name of readdirSync(new URL('services/valorant-results/src/',root)).filter(n=>n.endsWith('.ts')))for(const [,file] of readFileSync(new URL('services/valorant-results/src/'+name,root),'utf8').matchAll(/from '\.\.\/\.\.\/\.\.\/js\/([\w-]+\.js)'/g))pending.push(file);
  while(pending.length){const file=pending.pop();if(seen.has(file))continue;seen.add(file);for(const [,next] of readFileSync(new URL('js/'+file,root),'utf8').matchAll(/from '\.\/([\w-]+\.js)'/g))pending.push(next);}
  assert.ok(seen.has('racing.js')&&seen.has('engine.js'));
  for(const file of seen)assert.ok(copied(file),`js/${file} is imported by the Worker but not copied for deployment`);

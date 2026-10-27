@@ -127,10 +127,11 @@ export async function kpSession(env:KpEnv,token:string){
 }
 export async function revokeKpSession(env:KpEnv,token:string){await env.DB.prepare('DELETE FROM kp_sessions WHERE hash=?').bind(await kpHash(token)).run();}
 
-export async function flushKpDirectives(env:KpEnv & {DISCORD_WEBHOOK_URL:string},mapping:KpMapping){
+export async function flushKpDirectives(env:KpEnv & {DISCORD_WEBHOOK_URL:string;KP_EARNINGS_WEBHOOK_URL?:string},mapping:KpMapping){
  const rows=(await env.DB.prepare("SELECT d.id,d.issuer,d.target,d.task,d.cost,d.status FROM kp_directives d LEFT JOIN kp_directive_deliveries r ON r.id=d.id WHERE d.guild=? AND (r.status IS NULL OR r.status!=d.status) ORDER BY d.at LIMIT 4").bind(mapping.guildId).all<{id:string;issuer:string;target:string;task:string;cost:number;status:string}>()).results;
  if(!rows.length)return;
- const url=new URL(env.DISCORD_WEBHOOK_URL);if(url.protocol!=='https:'||url.hostname!=='discord.com'||!url.pathname.startsWith('/api/webhooks/'))throw Error('Invalid webhook');
+ // KESO PLAY posts go to the earnings channel once its webhook is set; until then, to the results channel.
+ const url=new URL(env.KP_EARNINGS_WEBHOOK_URL||env.DISCORD_WEBHOOK_URL);if(url.protocol!=='https:'||url.hostname!=='discord.com'||!url.pathname.startsWith('/api/webhooks/'))throw Error('Invalid webhook');
  for(const d of rows){
   const name=(user:string)=>{const a=mapping.accounts.find(a=>a.discordUserId===user);return (configuredPlayers.find(p=>p.riotId.toLowerCase()===a?.riotId.toLowerCase())?.name??'メンバー').replace(/[@`*_~<>]/g,'');};
   const task=d.task==='competitive'?'コンペ':d.task==='unrated'?'アンレ':d.task==='solo_competitive'?'ソロコンペ':d.task==='solo_death_unrated'?'ソロデスアンレ':'実績';
