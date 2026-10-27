@@ -4,6 +4,7 @@ import { claimDeathMatch } from './death-sessions.ts';
 import type { KpRun } from './kp.ts';
 import { initializeKp, syncKpAccounts, collectKpMatch, drainKpInbox, flushKpDirectives, prepareKpRun, kpEventId, kpCreditLine } from './kp.ts';
 import { kpApi } from './kp-api.ts';
+import { settleKpRaces } from './racing-kp.ts';
 import { lastDeathCheck } from './death-unrated.ts';
 import { isDeathMode, isDeathNotice, sessionModeSQL } from './death-modes.ts';
 import { discordInteractions } from './discord-interactions.ts';
@@ -363,5 +364,6 @@ export default {
   async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
     ctx.waitUntil(ensureVoice(env).catch(()=>console.warn('voice_ensure_pending')));
     ctx.waitUntil(monitor(env));
+    ctx.waitUntil(initializeKp(env).then(mapping=>mapping&&settleKpRaces(env,mapping)).catch(()=>console.warn('race_settlement_pending')));
   },
 };

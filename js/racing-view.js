@@ -9,12 +9,14 @@ const badge=n=>`<span class="race-no" style="background:${SILKS[n-1][0]};color:$
 function stage(watch,state){
  const {card,result,runs,odds}=watch;
  const head=`<div class="race-stage-head"><strong>${escapeHTML(card.name)} · ${clock(card.start)}発走</strong><span id="race-clock" class="helper"></span></div>`;
+ if(watch.loading)return `<section class="race-stage">${head}<p class="helper">レース情報を読み込んでいます…</p></section>`;
  if(!runs)return `<section class="race-stage">${head}<p class="race-void">投票がなかったため不成立</p><p class="helper">このゲームでは、誰も馬券を買っていないレースは行いません（大きなレースは別）。次のレースで馬券を買うと、発走後にここで観戦できます。</p></section>`;
  const done=watch.finished;
  const mine=(state.raceBets??[]).filter(b=>b.raceId===card.id);
  const table=done?`<table class="race-table race-result"><caption>着順</caption><thead><tr><th>着</th><th>馬</th><th>1着当て</th></tr></thead><tbody>${result.order.map((n,i)=>`<tr><td>${i+1}</td><td>${badge(n)} ${escapeHTML(card.horses[n-1].name)}</td><td>${odd(odds.win[n])}</td></tr>`).join('')}</tbody></table>`:'';
- const tickets=mine.length?`<p class="helper">あなたの馬券: ${mine.map(b=>`${b.horse}番 ${BET_TYPES[b.type].label} ${kp(b.amount)}${b.status==='won'?` → 的中 ${kp(b.payout)}`:b.status==='lost'?' → 外れ':''}`).join(' / ')}</p>`:'';
- return `<section class="race-stage">${head}<canvas id="race-canvas" class="race-canvas" role="img" aria-label="${escapeHTML(card.name)}の映像。実況と着順は下に文字で表示します"></canvas><ol id="race-commentary" class="race-commentary"></ol>${tickets}${table}</section>`;
+ const tickets=mine.length?`<p class="helper">あなたの馬券: ${mine.map(b=>`${b.horse}番 ${BET_TYPES[b.type].label} ${kp(b.amount)}${b.status==='won'?` → 的中 ${kp(b.payout)}`:b.status==='lost'?' → 外れ':done?' → 精算中（1分ほどで反映）':''}`).join(' / ')}</p>`:'';
+ const proof=watch.hash?`<p class="helper race-proof">${watch.verified===true?'✓ 締切前に公開したハッシュとシード値が一致（結果は後から変えられていません）':watch.verified===false?'⚠ シード値がハッシュと一致しません。管理者に知らせてください':'シード値を確認しています…'}<br><span class="mono">${watch.hash.slice(0,16)}…</span></p>`:'';
+ return `<section class="race-stage">${head}<canvas id="race-canvas" class="race-canvas" role="img" aria-label="${escapeHTML(card.name)}の映像。実況と着順は下に文字で表示します"></canvas><ol id="race-commentary" class="race-commentary"></ol>${tickets}${table}${proof}</section>`;
 }
 
 export function racePreview(card,odds,{type,horse,amount}){
@@ -23,11 +25,11 @@ export function racePreview(card,odds,{type,horse,amount}){
  const value=Number(amount),label=`${horse}番 ${escapeHTML(chosen.name)}の${BET_TYPES[type].label}・${odd(odds[type][horse])}`;
  return `<p class="helper">${label}。${Number.isSafeInteger(value)&&value>=MIN_BET?`当たれば ${kp(payoutFor(value,odds[type][horse]))}`:'金額を入れてください'}</p>`;
 }
-function betPanel(open,odds,draft,state,live,weeklyLeft){
- const {card}=open,type=draft.type,horse=draft.horse;
+function betPanel(open,odds,draft,state,weeklyLeft){
+ const {card,hash}=open,type=draft.type,horse=draft.horse;
  const rows=card.horses.map(h=>`<tr class="${horse===h.number?'selected':''}"><td><button class="race-pick" data-race-horse="${h.number}" aria-pressed="${horse===h.number}">${badge(h.number)}<span>${escapeHTML(h.name)}</span></button></td><td>${STYLES[h.style].label}<br><span class="helper">${CONDITIONS[h.condition].label}</span></td><td>${odd(odds.win[h.number])}</td><td>${odd(odds.place[h.number])}</td></tr>`).join('');
  const preview=racePreview(card,odds,draft);
- const form=live?'<p class="helper">本番口座の馬券は準備中です。いまはタイトルの「デモで試す」で遊べます。</p>':`<div class="segment">${Object.entries(BET_TYPES).map(([id,t])=>`<button data-race-type="${id}" class="${type===id?'active':''}">${t.label}<small>（${t.formal}）</small></button>`).join('')}</div><div class="field"><label for="race-amount">金額（${MIN_BET} KP以上・${BET_STEP} KP単位）</label><input id="race-amount" class="input" type="number" min="${MIN_BET}" step="${BET_STEP}" inputmode="numeric"></div><div id="race-preview">${preview}</div><div class="action-row"><button class="action-btn primary" data-action="race-bet">馬券を買う</button></div><p class="helper">今週あと ${kp(weeklyLeft)} 買えます（1週間 ${kp(WEEKLY_LIMIT)} まで・月曜0時に戻ります）。</p>`;
+ const form=`<div class="segment">${Object.entries(BET_TYPES).map(([id,t])=>`<button data-race-type="${id}" class="${type===id?'active':''}">${t.label}<small>（${t.formal}）</small></button>`).join('')}</div><div class="field"><label for="race-amount">金額（${MIN_BET} KP以上・${BET_STEP} KP単位）</label><input id="race-amount" class="input" type="number" min="${MIN_BET}" step="${BET_STEP}" inputmode="numeric"></div><div id="race-preview">${preview}</div><div class="action-row"><button class="action-btn primary" data-action="race-bet">馬券を買う</button></div><p class="helper">今週あと ${kp(weeklyLeft)} 買えます（1週間 ${kp(WEEKLY_LIMIT)} まで・月曜0時に戻ります）。</p>${hash?`<p class="helper">結果のハッシュ（締切前に公開）: <span class="mono">${hash.slice(0,16)}…</span></p>`:''}`;
  return `<section class="trade-box race-card"><h3>${escapeHTML(card.name)} · ${clock(card.start)}発走</h3><p class="helper">締切まで <span id="race-countdown">--:--</span> · ${card.size}頭 · コース ${GOINGS[card.going].label} · ${COURSE_M}m</p><table class="race-table"><caption>出る馬一覧と倍率</caption><thead><tr><th>馬</th><th>走り方・調子</th><th>1着当て</th><th>${placeSlots(card.size)}着以内当て</th></tr></thead><tbody>${rows}</tbody></table>${form}</section>`;
 }
 
@@ -37,8 +39,8 @@ function history(state){
 }
 
 export function raceScreen({state,live,watch,open,openOdds,draft,weeklyLeft,tabs,nav}){
- const note=live?'本番口座の馬券は準備中です。大きなレース（出勤前・昼休み・メイン・日付またぎ など）だけ観戦できます。':'デモの競馬です。15分おきに発走し、発走1分前に締め切ります。オッズは胴元の取り分なしで、当たる確率どおり。本番口座のKPは使いません。';
- return `<div class="screen"><header class="topbar"><div class="toprow"><h1 class="title">競馬</h1><span class="badge">${kp(state.cash)}</span></div></header>${tabs}<div class="market-disclaimer">${note}</div>${stage(watch,state)}${betPanel(open,openOdds,draft,state,live,weeklyLeft)}${live?'':history(state)}${nav}</div>`;
+ const note=live?'本番口座のKPで遊ぶ競馬です。15分おきに発走し、発走1分前に締め切ります。着順はサーバーが決め、締切前に公開したハッシュで後から検証できます。オッズは胴元の取り分なし。':'デモの競馬です。15分おきに発走し、発走1分前に締め切ります。オッズは胴元の取り分なしで、当たる確率どおり。本番口座のKPは使いません。';
+ return `<div class="screen"><header class="topbar"><div class="toprow"><h1 class="title">競馬</h1><span class="badge">${kp(state.cash)}</span></div></header>${tabs}<div class="market-disclaimer">${note}</div>${stage(watch,state)}${betPanel(open,openOdds,draft,state,weeklyLeft)}${history(state)}${nav}</div>`;
 }
 
 // ---- Canvas playback (side-scrolling, broadcast style) ----
