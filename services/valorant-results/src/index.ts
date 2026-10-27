@@ -1,3 +1,4 @@
+import {monitorMahjong, mahjongStatus} from './mahjong.ts';
 export {VoiceGateway} from './voice-gateway.ts';
 import {ensureVoice} from './voice-api.ts';
 import { claimDeathMatch } from './death-sessions.ts';
@@ -372,9 +373,11 @@ export async function monitor(env: Env, players: Player[] = configuredPlayers): 
 
 export default {
   fetch(request: Request, env: Env, ctx: ExecutionContext) {
+    if(request.method==='GET'&&new URL(request.url).pathname==='/api/mahjong/status')return mahjongStatus(env).then(status=>Response.json(status,{headers:{'Cache-Control':'no-store'}})).catch(()=>Response.json({enabled:false,error:'configuration_unavailable'},{status:503}));
     return new URL(request.url).pathname.startsWith('/api/kp/') ? kpApi(request, env) : discordInteractions(request, env, ctx);
   },
   async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    ctx.waitUntil(monitorMahjong(env).catch(()=>console.warn('mahjong_watch_pending')));
     ctx.waitUntil(ensureVoice(env).catch(()=>console.warn('voice_ensure_pending')));
     ctx.waitUntil(monitor(env));
     ctx.waitUntil((async()=>{
