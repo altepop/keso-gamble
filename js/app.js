@@ -1,12 +1,14 @@
-import {wheelView,covered,redNumbers,outcomeAngle} from './roulette-view.js?v=20261027-voice';
-import {connectDiscordActivity,isDiscordActivity}from './discord-activity-auth.js?v=20261027-voice';
-import { createKpClient } from './kp-client.js?v=20261027-voice';
+import {wheelView,covered,redNumbers,outcomeAngle} from './roulette-view.js?v=20261027-racing';
+import {connectDiscordActivity,isDiscordActivity}from './discord-activity-auth.js?v=20261027-racing';
+import { createKpClient } from './kp-client.js?v=20261027-racing';
 import { fmt, fmt0 } from './format.js';
-import { submitClaim, approveClaim, issueDirective, completeDirective } from './progression.js?v=20261027-voice';
-import { titleView, homeView, playView, directivesView } from './progression-views.js?v=20261027-voice';
+import { submitClaim, approveClaim, issueDirective, completeDirective } from './progression.js?v=20261027-racing';
+import { titleView, homeView, playView, directivesView } from './progression-views.js?v=20261027-racing';
 import { genCandles, movingAverage, svgCandles } from './charts.js';
-import { MARKET, createInitialState, portfolioValue, assets, advanceMarket, trade, spin, spinNumbers, validateNumberBets, grantDemoSalary, cryptoRouletteNumber } from './engine.js?v=20261027-voice';
+import { MARKET, createInitialState, portfolioValue, assets, advanceMarket, trade, spin, spinNumbers, validateNumberBets, grantDemoSalary, cryptoRouletteNumber } from './engine.js?v=20261027-racing';
 import { KEY, LEGACY_KEY } from './storage.js';
+import { RUN_MS, WEEKLY_LIMIT, openRaceStart, latestRaceStart, raceCard, raceOdds, raceResult, raceTimeline, raceCommentary, raceRuns, placeRaceBet, settleRaceBets, weeklySpent } from './racing.js?v=20261027-racing';
+import { raceScreen, racePreview, drawRace, raceElapsed } from './racing-view.js?v=20261027-racing';
 import { createStore } from './store.js';
 const $=(s,el=document)=>el.querySelector(s);
 const wallet=createKpClient();
@@ -76,8 +78,66 @@ function renderRow(item){
   </div>`;
 }
 
+function subTabs(){return `<div class="sub-tabs">${[['market','架空株'],['casino','カジノ'],['race','競馬']].map(([id,label])=>`<button class="sub-tab ${screen===id?'active':''}" data-screen="${id}">${label}</button>`).join('')}</div>`;}
+
+// Race playback state. The card, result and odds are pure functions of the race start time.
+let raceDraft={type:'win',horse:null};
+let raceLoop=0;
+let raceShown='';
+let raceSettling=false;
+const reducedMotion=globalThis.matchMedia?.('(prefers-reduced-motion: reduce)');
+const raceBets=()=>({raceBets:state.raceBets??[]});
+function raceWatch(now){
+  const card=raceCard(latestRaceStart(now));
+  if(!raceRuns(card,raceBets()))return {card,runs:false};
+  const result=raceResult(card),odds=raceOdds(card),timeline=raceTimeline(card,result);
+  return {card,runs:true,result,odds,timeline,commentary:raceCommentary(card,result,timeline,odds),finished:now>=card.start+RUN_MS};
+}
+let watchCache=null;
+function currentWatch(now){
+  const id=latestRaceStart(now);
+  const runs=raceRuns({id,big:false},raceBets());
+  if(!watchCache||watchCache.card.id!==id||(!watchCache.runs&&runs)||(watchCache.runs&&!watchCache.finished&&now>=id+RUN_MS))watchCache=raceWatch(now);
+  return watchCache;
+}
+function screenRace(){
+  const now=Date.now(),open=raceCard(openRaceStart(now)),watch=currentWatch(now);
+  raceShown=`${open.id}:${watch.card.id}:${watch.runs}:${watch.finished}`;
+  const weeklyLeft=live?0:WEEKLY_LIMIT-weeklySpent(state,now);
+  return raceScreen({state,live,watch,open:{card:open},openOdds:raceOdds(open),draft:{...raceDraft,amount:drafts['race-amount']},weeklyLeft,tabs:subTabs(),nav:bottomNav()});
+}
+async function settleRaces(){
+  if(live||raceSettling||!(state.raceBets??[]).some(b=>b.status==='pending'&&Date.now()>=b.raceId+RUN_MS))return;
+  raceSettling=true;
+  try{const settled=await commit(next=>settleRaceBets(next,Date.now()));const won=settled.reduce((sum,b)=>sum+b.payout,0);if(settled.length)toast(won?`馬券的中 +${moneyCompact(won)}`:'馬券は外れました');}
+  catch(error){toast(error.message);}
+  finally{raceSettling=false;render();}
+}
+let lastStill=0;
+function raceFrame(){
+  if(screen!=='race'||detail){raceLoop=0;return;}
+  raceLoop=requestAnimationFrame(raceFrame);
+  const now=Date.now(),watch=currentWatch(now);
+  if(`${openRaceStart(now)}:${watch.card.id}:${watch.runs}:${watch.finished}`!==raceShown){render();settleRaces();return;}
+  const open=raceCard(openRaceStart(now)),left=Math.max(0,open.closeAt-now);
+  const countdown=$('#race-countdown');if(countdown)countdown.textContent=`${Math.floor(left/60000)}:${String(Math.floor(left/1000)%60).padStart(2,'0')}`;
+  if(!watch.runs)return;
+  const t=raceElapsed(watch.card,now);
+  const clockEl=$('#race-clock');if(clockEl)clockEl.textContent=watch.finished?'確定':`発走から ${Math.floor(t/1000)}秒`;
+  const lines=watch.commentary.filter(l=>l.t<=t);
+  const list=$('#race-commentary');
+  if(list&&list.dataset.count!==String(lines.length)){list.dataset.count=lines.length;list.innerHTML=lines.slice(-3).reverse().map(l=>`<li>${l.text}</li>`).join('');}
+  const canvas=$('#race-canvas');
+  if(!canvas)return;
+  // Reduced motion: still frames once a second instead of continuous animation.
+  if(reducedMotion?.matches&&!watch.finished&&now-lastStill<1000&&canvas.dataset.drawn)return;
+  lastStill=now;canvas.dataset.drawn='1';
+  drawRace(canvas,watch.card,watch.timeline,t,new Set(raceBets().raceBets.filter(b=>b.raceId===watch.card.id).map(b=>b.horse)));
+}
+function ensureRaceLoop(){if(screen==='race'&&!detail&&!raceLoop)raceLoop=requestAnimationFrame(raceFrame);}
+
 function screenMarket(){
- return `<div class="screen"><header class="topbar"><div class="toprow"><h1 class="title">KPで勝負</h1><span class="badge">${moneyCompact(state.cash)}</span></div></header><div class="sub-tabs"><button class="sub-tab active" data-screen="market">架空株</button><button class="sub-tab" data-screen="casino">カジノ</button></div><div class="market-disclaimer">架空の銘柄に投資するローカル市場。KPは増えることも、減ることもあります。実際の株価とは連動しません。</div><div class="list">${playerRows().map(v=>renderRow({...v,kind:'stock'})).join('')}</div><div class="action-row"><button class="action-btn primary" data-screen="assets">株を売買する</button></div><div class="panel"><div class="card-body"><h2 class="panel-title">勝負の種目</h2><p>架空株 / ルーレット</p><p class="helper">競馬・競輪・競艇などの公営競技型ゲームは今後の拡張候補です。</p></div></div>${bottomNav()}</div>`;
+ return `<div class="screen"><header class="topbar"><div class="toprow"><h1 class="title">KPで勝負</h1><span class="badge">${moneyCompact(state.cash)}</span></div></header>${subTabs()}<div class="market-disclaimer">架空の銘柄に投資するローカル市場。KPは増えることも、減ることもあります。実際の株価とは連動しません。</div><div class="list">${playerRows().map(v=>renderRow({...v,kind:'stock'})).join('')}</div><div class="action-row"><button class="action-btn primary" data-screen="assets">株を売買する</button></div><div class="panel"><div class="card-body"><h2 class="panel-title">勝負の種目</h2><p>架空株 / ルーレット / 競馬（デモ）</p><p class="helper">競艇・競輪は今後追加します。</p></div></div>${bottomNav()}</div>`;
 }
 
 function tradeEstimate(){
@@ -100,7 +160,7 @@ function tradePanel(){
 
 function screenCasino(){
   const recent=state.spins[0];
-  return `<div class="screen"><header class="topbar"><div class="toprow"><h1 class="title">ルーレット</h1><div class="small-actions"><span class="badge">所持 ${moneyCompact(state.cash)}</span></div></div></header><div class="sub-tabs"><button class="sub-tab" data-screen="market">架空株</button><button class="sub-tab active" data-screen="casino">カジノ</button></div><div class="center-panel"><div style="position:relative;width:min(320px,86vw);margin:0 auto 18px"><div class="pointer"></div><div class="roulette-board" id="wheel" style="transform:rotate(${rotation|| (recent?outcomeAngle(recent.outcome):0)}deg)">${wheelView(betType==='number'?'numbers':betType,betNumber,[...numberBets.keys()])}<div class="roulette-center">${recent?recent.outcome:'K'}</div></div></div></div><div class="number-table" aria-label="ルーレットの数字">${Array.from({length:37},(_,n)=>`<button data-number="${n}" aria-pressed="${numberSelected(n)}" class="number-cell ${n===0?'green':redNumbers.has(n)?'red':'black'} ${numberSelected(n)?'selected':''}">${n}${betType==='number'&&numberBets.has(n)?`<small>${numberBets.get(n)} KP</small>`:''}</button>`).join('')}</div><p class="helper">ヨーロピアン式・0は緑。数字36倍／赤黒・偶奇・前半後半2倍／ダズン・列3倍（掛け金込み）。数字は複数選択OK。数字をもう一度タップすると解除。数字ごと100 KP以上、合計20,000 KPまで。</p><div class="bet-grid">${[['red','赤'],['black','黒'],['even','偶数'],['odd','奇数'],['number','数字指定'],['low','1〜18'],['high','19〜36'],['dozen1','1〜12'],['dozen2','13〜24'],['dozen3','25〜36'],['column1','1列目'],['column2','2列目'],['column3','3列目']].map(([id,label])=>`<button data-bet="${id}" class="${betType===id?'active':''}">${label}</button>`).join('')}</div><div class="trade-box"><h3>ベット</h3>${betType==='number'?`<p class="helper">盤面から数字を選んでください。</p>${[...numberBets].map(([n,amount])=>`<div class="field"><label for="number-stake-${n}">${n} の掛け金</label><input id="number-stake-${n}" data-stake="${n}" class="input" type="number" min="100" max="20000" step="1" value="${amount}"></div>`).join('')}<strong>合計 <span id="number-bet-total">${moneyCompact([...numberBets.values()].reduce((a,b)=>a+b,0))}</span></strong>`:`<div class="field"><label for="bet-amount">賭け金</label><input id="bet-amount" class="input" type="number" min="100" max="20000" step="1" value="500"></div>`}<div class="action-row"><button class="action-btn primary" data-action="spin" ${spinLock?'disabled':''}>ルーレットを回す</button></div></div><div class="result-panel"><p class="result-title ${recent && recent.payout>0?'negative':recent?'positive':''}">${recent ? (recent.payout>0?'的中':'不的中') : '直近結果'}</p><div class="helper">${recent ? `出目 ${recent.outcome} / 賭け ${moneyCompact(recent.amount)} / 払戻 ${moneyCompact(recent.payout)}${recent.bets?'<br>'+recent.bets.map(b=>b.number+': '+moneyCompact(b.amount)).join(' · '):''}` : 'まだ抽選履歴はありません。'}</div></div>${bottomNav()}</div>`;
+  return `<div class="screen"><header class="topbar"><div class="toprow"><h1 class="title">ルーレット</h1><div class="small-actions"><span class="badge">所持 ${moneyCompact(state.cash)}</span></div></div></header>${subTabs()}<div class="center-panel"><div style="position:relative;width:min(320px,86vw);margin:0 auto 18px"><div class="pointer"></div><div class="roulette-board" id="wheel" style="transform:rotate(${rotation|| (recent?outcomeAngle(recent.outcome):0)}deg)">${wheelView(betType==='number'?'numbers':betType,betNumber,[...numberBets.keys()])}<div class="roulette-center">${recent?recent.outcome:'K'}</div></div></div></div><div class="number-table" aria-label="ルーレットの数字">${Array.from({length:37},(_,n)=>`<button data-number="${n}" aria-pressed="${numberSelected(n)}" class="number-cell ${n===0?'green':redNumbers.has(n)?'red':'black'} ${numberSelected(n)?'selected':''}">${n}${betType==='number'&&numberBets.has(n)?`<small>${numberBets.get(n)} KP</small>`:''}</button>`).join('')}</div><p class="helper">ヨーロピアン式・0は緑。数字36倍／赤黒・偶奇・前半後半2倍／ダズン・列3倍（掛け金込み）。数字は複数選択OK。数字をもう一度タップすると解除。数字ごと100 KP以上、合計20,000 KPまで。</p><div class="bet-grid">${[['red','赤'],['black','黒'],['even','偶数'],['odd','奇数'],['number','数字指定'],['low','1〜18'],['high','19〜36'],['dozen1','1〜12'],['dozen2','13〜24'],['dozen3','25〜36'],['column1','1列目'],['column2','2列目'],['column3','3列目']].map(([id,label])=>`<button data-bet="${id}" class="${betType===id?'active':''}">${label}</button>`).join('')}</div><div class="trade-box"><h3>ベット</h3>${betType==='number'?`<p class="helper">盤面から数字を選んでください。</p>${[...numberBets].map(([n,amount])=>`<div class="field"><label for="number-stake-${n}">${n} の掛け金</label><input id="number-stake-${n}" data-stake="${n}" class="input" type="number" min="100" max="20000" step="1" value="${amount}"></div>`).join('')}<strong>合計 <span id="number-bet-total">${moneyCompact([...numberBets.values()].reduce((a,b)=>a+b,0))}</span></strong>`:`<div class="field"><label for="bet-amount">賭け金</label><input id="bet-amount" class="input" type="number" min="100" max="20000" step="1" value="500"></div>`}<div class="action-row"><button class="action-btn primary" data-action="spin" ${spinLock?'disabled':''}>ルーレットを回す</button></div></div><div class="result-panel"><p class="result-title ${recent && recent.payout>0?'negative':recent?'positive':''}">${recent ? (recent.payout>0?'的中':'不的中') : '直近結果'}</p><div class="helper">${recent ? `出目 ${recent.outcome} / 賭け ${moneyCompact(recent.amount)} / 払戻 ${moneyCompact(recent.payout)}${recent.bets?'<br>'+recent.bets.map(b=>b.number+': '+moneyCompact(b.amount)).join(' · '):''}` : 'まだ抽選履歴はありません。'}</div></div>${bottomNav()}</div>`;
 }
 
 function screenAssets(){
@@ -109,7 +169,7 @@ function screenAssets(){
 
 function bottomNav(){
   const items=[['home','⌂','ホーム'],['play','▶','稼ぐ'],['market','↗','勝負'],['directives','⚑','指令'],['assets','◈','資産']];
-  return `<nav class="bottom-nav"><div class="bottom-inner">${items.map(([id,ico,label])=>`<button class="nav-btn ${(screen===id||(id==='market'&&screen==='casino'))?'active':''}" data-screen="${id}"><span class="ico">${ico}</span><span>${label}</span></button>`).join('')}</div></nav>`;
+  return `<nav class="bottom-nav"><div class="bottom-inner">${items.map(([id,ico,label])=>`<button class="nav-btn ${(screen===id||(id==='market'&&['casino','race'].includes(screen)))?'active':''}" data-screen="${id}"><span class="ico">${ico}</span><span>${label}</span></button>`).join('')}</div></nav>`;
 }
 
 function openDetail(kind,id){detail={kind,id};render();$('#modal [data-close]')?.focus();}
@@ -124,11 +184,11 @@ function detailSheet(){
 }
 
 function render(){
-  const html = screen==='title'?titleView(state,wallet.remembered,autoState,autoMessage):screen==='home'?homeView(state,bottomNav()):screen==='play'?playView(state,drafts,bottomNav()):screen==='directives'?directivesView(state,drafts,bottomNav()):screen==='market'?screenMarket():screen==='casino'?screenCasino():screenAssets();
+  const html = screen==='title'?titleView(state,wallet.remembered,autoState,autoMessage):screen==='home'?homeView(state,bottomNav()):screen==='play'?playView(state,drafts,bottomNav()):screen==='directives'?directivesView(state,drafts,bottomNav()):screen==='market'?screenMarket():screen==='casino'?screenCasino():screen==='race'?screenRace():screenAssets();
   const openDetails=[...app.querySelectorAll('details')].map(el=>el.open);
   const focusedElement=document.activeElement;
   const focused=focusedElement?.id;
-  const focusData=focusedElement && Object.entries(focusedElement.dataset).find(([key])=>['screen','marketTab','marketMode','tradeSide','bet','action','open'].includes(key));
+  const focusData=focusedElement && Object.entries(focusedElement.dataset).find(([key])=>['screen','marketTab','marketMode','tradeSide','bet','action','open','raceHorse','raceType'].includes(key));
   const warning=live?connectionError:sessionOnly?'端末に保存できないため、この画面を閉じると変更が失われます。':!navigator.locks?.request?'このブラウザでは安全な保存を利用できません。HTTPS対応の最新ブラウザで開いてください。':'';
   const connection=live?`<div class="kp-connection"><span>${wallet.pending?'通信結果の確認待ち':wallet.remembered?'KP口座 接続中':'KP口座 一時接続'}</span><button data-action="refresh-kp">${wallet.pending?'通信結果を確認':'残高を更新'}</button><button data-action="disconnect-kp">接続を解除</button></div>`:'';
   const withControls=html.includes('</header>')?html.replace('</header>','</header>'+connection):connection+html;
@@ -142,6 +202,7 @@ function render(){
   else if(focusData){const [key,value]=focusData;const match=[...app.querySelectorAll('button,[data-open]')].find(el=>el.dataset[key]===value);match?.focus();}
   if(detail) $('.screen').inert=true;
   document.body.style.overflow=detail?'hidden':'';
+  ensureRaceLoop();
 }
 
 
@@ -187,7 +248,7 @@ async function doSpin(){
 
 addEventListener('click',async e=>{
   const t=e.target.closest?.('button,[data-open]'); if(!t) return;
-  const mutates=!!t.dataset.approve || !!t.dataset.complete || ['salary','trade','spin','reset','submit-claim','issue-directive','connect-kp','refresh-kp','disconnect-kp','auto-connect-kp'].includes(t.dataset.action);
+  const mutates=!!t.dataset.approve || !!t.dataset.complete || ['salary','trade','spin','race-bet','reset','submit-claim','issue-directive','connect-kp','refresh-kp','disconnect-kp','auto-connect-kp'].includes(t.dataset.action);
   if(mutates && mutationPending)return;
   if(mutates)mutationPending=true;
   try{
@@ -195,7 +256,15 @@ addEventListener('click',async e=>{
     if(t.dataset.action==='connect-kp'){state=await wallet.connect($('#kp-connect-code').value);live=true;autoState='connected';autoMessage='';connectionError='';delete drafts['kp-connect-code'];screen='home';render();toast(wallet.remembered?'接続しました。次回は自動で接続します':'接続しました。この環境では閉じると再接続が必要です');return;}
     if(t.dataset.action==='refresh-kp'){await refreshWallet(true);render();return;}
     if(t.dataset.action==='disconnect-kp'){await wallet.disconnect();autoState=embedded?'paused':'idle';autoMessage='';live=false;connectionError='';state=store.state;screen='title';render();return;}
-    if(t.dataset.screen){if(spinLock){toast('抽選中は画面を切り替えられません');return;}detail=null;screen=t.dataset.screen;render();return;}
+    if(t.dataset.screen){if(spinLock){toast('抽選中は画面を切り替えられません');return;}detail=null;screen=t.dataset.screen;render();if(screen==='race')settleRaces();return;}
+    if(t.dataset.raceHorse){raceDraft.horse=Number(t.dataset.raceHorse);render();return;}
+    if(t.dataset.raceType){raceDraft.type=t.dataset.raceType;render();return;}
+    if(t.dataset.action==='race-bet'){
+      if(live)throw Error('本番口座の馬券は準備中です');
+      const now=Date.now(),raceId=openRaceStart(now);
+      const bet=await commit(next=>placeRaceBet(next,{raceId,type:raceDraft.type,horse:raceDraft.horse,amount:Number($('#race-amount')?.value)},now));
+      render();toast(`${bet.horse}番の馬券を買いました（${(bet.odds/10).toFixed(1)}倍）`);return;
+    }
     if(t.dataset.open){openDetail(t.dataset.kind,t.dataset.open);return;}
     if(t.dataset.orderSymbol){activeSymbol=t.dataset.orderSymbol;detail=null;screen='assets';render();return;}
     if(t.dataset.close){closeDetail();return;}
@@ -242,6 +311,7 @@ addEventListener('keydown', e => {
 });
 addEventListener('input', e => {
   if(e.target.dataset.stake!==undefined&&!spinLock){const n=Number(e.target.dataset.stake),amount=Number(e.target.value);numberBets.set(n,amount);document.querySelector('#number-bet-total').textContent=moneyCompact([...numberBets.values()].reduce((a,b)=>a+b,0));const badge=document.querySelector(`[data-number="${n}"] small`);if(badge)badge.textContent=amount+' KP';}
+  if(e.target.id==='race-amount'){drafts['race-amount']=e.target.value;const preview=$('#race-preview');if(preview){const open=raceCard(openRaceStart(Date.now()));preview.innerHTML=racePreview(open,raceOdds(open),{...raceDraft,amount:e.target.value});}}
   if (e.target.id==='kp-connect-code'||['trade-qty','bet-amount'].includes(e.target.id)||e.target.id.startsWith('claim-')||e.target.id.startsWith('directive-')) drafts[e.target.id] = e.target.value;
   if(e.target.id==='trade-qty')$('#trade-estimate').innerHTML=tradeEstimate();
 });
@@ -249,6 +319,7 @@ const drafts = {};
 async function refreshMarket() {
   if(spinLock||mutationPending||autoState==='loading') return;
   if(live){await refreshWallet(false);return;}
+  settleRaces();
   try { const steps=await commit(next => advanceMarket(next)); if(steps && !detail)render(); }
   catch(error) { toast(error.message); }
 }

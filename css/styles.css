@@ -198,3 +198,21 @@ button:disabled{cursor:not-allowed}
 .kp-connection>span{grid-column:1/-1}
 .kp-connection button{min-height:48px;font-size:14px;touch-action:manipulation;background:#1a3456}
 @media(max-width:767px){.discord-activity{--activity-top-inset:max(64px,env(safe-area-inset-top,0px))}}
+.race-stage{margin:12px 16px;padding:12px;border:1px solid var(--line2);border-radius:14px;background:var(--panel)}
+.race-stage-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+.race-canvas{display:block;width:100%;height:240px;border-radius:10px;background:#0d2a5c}
+.race-commentary{list-style:none;margin:10px 0 0;padding:0;line-height:1.5}
+.race-commentary li{padding:2px 0;color:var(--muted)}
+.race-commentary li:first-child{color:var(--text);font-weight:600}
+.race-void{font-size:18px;font-weight:600;margin:8px 0}
+.race-card{margin:12px 16px}
+.race-table{width:100%;border-collapse:collapse;margin:8px 0;font-size:14px}
+.race-table caption{text-align:left;color:var(--muted);font-size:12px;padding-bottom:4px}
+.race-table th{color:var(--muted);font-weight:500;font-size:12px;text-align:left;padding:4px}
+.race-table td{border-top:1px solid var(--line);padding:6px 4px;vertical-align:middle}
+.race-table tr.selected td{background:rgba(45,174,255,.12)}
+.race-table td:nth-child(n+3),.race-table th:nth-child(n+3){text-align:right;white-space:nowrap}
+.race-result td:nth-child(2),.race-result th:nth-child(2){text-align:left}
+.race-pick{appearance:none;background:none;border:0;color:inherit;display:flex;align-items:center;gap:6px;padding:4px 0;min-height:44px;text-align:left;width:100%}
+.race-no{display:inline-grid;place-items:center;min-width:22px;height:22px;border-radius:5px;font-weight:700;font-size:13px;border:1px solid rgba(255,255,255,.25)}
+.race-card .segment button small{font-size:11px;opacity:.75}
