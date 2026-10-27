@@ -64,3 +64,13 @@ test('the one same-Worker voice Durable Object is retained and other bindings ar
  const config=deploymentConfig(bound,schedules,'example');assert.deepEqual(config.durable_objects.bindings,[{name:'VOICE_GATEWAY',class_name:'VoiceGateway'}]);assert.deepEqual(config.migrations,[{tag:'voice-v1',new_sqlite_classes:['VoiceGateway']}]);
  assert.throws(()=>deploymentConfig({...bound,bindings:[...settings.bindings,{type:'durable_object_namespace',name:'VOICE_GATEWAY',class_name:'Other'}]},schedules,'example'),/Unrecognized/);
 });
+test('the deploy copy includes every shared browser module the Worker imports',()=>{
+ const root=new URL('../../../',import.meta.url),workflow=readFileSync(new URL('.github/workflows/valorant-results.yml',root),'utf8');
+ const copy=/cp (.+) "\$RUNNER_TEMP\/kp-app\/js\/"/.exec(workflow)?.[1].split(/\s+/)??[];
+ const copied=file=>copy.includes('js/*.js')||copy.includes('js/'+file);
+ const pending=[],seen=new Set();
+ for(const name of ['index.ts','kp-api.ts','racing-kp.ts'])for(const [,file] of readFileSync(new URL('services/valorant-results/src/'+name,root),'utf8').matchAll(/from '\.\.\/\.\.\/\.\.\/js\/([\w-]+\.js)'/g))pending.push(file);
+ while(pending.length){const file=pending.pop();if(seen.has(file))continue;seen.add(file);for(const [,next] of readFileSync(new URL('js/'+file,root),'utf8').matchAll(/from '\.\/([\w-]+\.js)'/g))pending.push(next);}
+ assert.ok(seen.has('racing.js')&&seen.has('engine.js'));
+ for(const file of seen)assert.ok(copied(file),`js/${file} is imported by the Worker but not copied for deployment`);
+});
