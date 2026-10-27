@@ -5,7 +5,7 @@ const server=spawn('python3',['-m','http.server','8767','--bind','127.0.0.1'],{s
  const {createInitialState}=await import('../js/engine.js');const R=await import('../js/racing.js');
  const T0=Date.parse('2026-10-27T16:05:30+09:00'),RACE=Date.parse('2026-10-27T16:15:00+09:00');
  const seed='server-seed-for-browser-check',hash=createHash('sha256').update(seed).digest('hex'),nextHash='f'.repeat(64);
- const state={...createInitialState(T0),cash:5000,serverWallet:true,selfUserId:'one',members:[{id:'one',name:'本人'}],claims:[],directives:[],racing:{open:{id:RACE,hash,crown:'本人戦犯レース',entries:[{horseId:'horse-1',name:'<img src=x onerror=alert(1)>号',ability:0.4,style:2,owner:'one',ownerName:'本人'}]},watch:{id:RACE-R.RACE_INTERVAL,runs:false}},roastLevel:'full',horses:[],exchange:{day:R.exchangeDay(T0),count:1}};
+ const state={...createInitialState(T0),cash:5000,serverWallet:true,selfUserId:'one',members:[{id:'one',name:'本人'}],claims:[],directives:[],racing:{open:{id:RACE,hash,crown:'本人戦犯レース',entries:[{horseId:'person-two',name:'相手号',ability:-0.9,style:3,owner:'two',ownerName:'相手',person:true},{horseId:'horse-1',name:'<img src=x onerror=alert(1)>号',ability:0.4,style:2,owner:'one',ownerName:'本人',nickname:'歩く戦犯'}]},watch:{id:RACE-R.RACE_INTERVAL,runs:false}},roastLevel:'full',horses:[],exchange:{day:R.exchangeDay(T0),count:1}};
  const bodies=[];const errors=[];let stateCalls=0;
  for(let n=0;n<40;n++){try{if((await fetch('http://127.0.0.1:8767')).ok)break;}catch{}await new Promise(r=>setTimeout(r,100));}
  browser=await chromium.launch({executablePath:process.env.CHROMIUM_PATH||(existsSync('/usr/bin/chromium')?'/usr/bin/chromium':undefined),args:['--no-sandbox']});
@@ -24,8 +24,8 @@ const server=spawn('python3',['-m','http.server','8767','--bind','127.0.0.1'],{s
  await page.locator('.nav-btn[data-screen=market]').click();await page.locator('.sub-tab[data-screen=race]').click();
  assert.match(await page.locator('.race-card').innerText(),new RegExp(hash.slice(0,16)));
  assert.match(await page.locator('.race-card h3').innerText(),/本人戦犯レース/);
- assert.match(await page.locator('.race-card').innerText(),/馬主 本人/);assert.equal(await page.locator('.race-card img').count(),0,'owner-chosen names are escaped');
- const ownedNumber=R.raceCard(RACE,R.PUBLIC_SALT,state.racing.open.entries).horses.find(h=>h.horseId).number;
+ assert.match(await page.locator('.race-card').innerText(),/馬主 本人 ·「歩く戦犯」/);assert.match(await page.locator('.race-card').innerText(),/相手号\s*本人の名前の馬（見舞金つき）/);assert.equal(await page.locator('.race-card img').count(),0,'owner-chosen names are escaped');
+ const ownedNumber=R.raceCard(RACE,R.PUBLIC_SALT,state.racing.open.entries).horses.find(h=>h.horseId==='horse-1').number;
  assert.match(await page.locator(`[data-race-horse="${ownedNumber}"]`).innerText(),/onerror/);
  assert.match(await page.locator('.asset-card').filter({hasText:'馬主'}).innerText(),/今日の交換はあと2回/);
  await page.locator('#horse-name').fill('ケソ号');await page.locator('[data-action=horse-buy][data-box=normal]').click();await page.locator('.toast').filter({hasText:'仲間入り'}).waitFor();

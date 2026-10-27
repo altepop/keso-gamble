@@ -119,3 +119,31 @@ test('a race with an owned horse runs without bets, and bets on it settle agains
  t.mock.timers.setTime(race+RUN_MS+1000);
  assert.equal((await readKpState(f.env,mapping,one)).raceBets[0].status,won?'won':'lost');
 });
+
+test('nicknames come from the run history and show on the owner list and the card', async () => {
+ const f=await fixture(0);addHorse(f.sql,'horse-n',0);
+ f.sql.prepare('UPDATE kp_horses SET races=4,seconds=3 WHERE id=?').run('horse-n');
+ assert.equal((await readKpState(f.env,mapping,one)).horses[0].nickname,'永遠の二番手');
+ for(let i=0;i<5;i++)f.sql.prepare('INSERT INTO kp_horse_runs VALUES(?,?,?,?,?,?,?)').run('r'+i,guild,i,'horse-n',5+i%3,40,0);
+ f.sql.prepare('UPDATE kp_horses SET seconds=0 WHERE id=?').run('horse-n');
+ const race=raceOfClass(0,openRaceStart(T0));
+ const entries=await decideEntries(f.env,mapping,race,race-RACE_INTERVAL,1);
+ assert.equal(entries[0].nickname,'歩く戦犯');
+ assert.equal(raceCard(race,undefined,entries).horses.find((h:{horseId?:string})=>h.horseId==='horse-n').nickname,'歩く戦犯');
+});
+
+test('a crown race runs a horse named after its person, who gets its prize plus 5% of others\' bets on it', async t => {
+ const f=await fixture(100000);
+ const race=raceOfClass(1,openRaceStart(T0)+RACE_INTERVAL);
+ f.sql.exec("CREATE TABLE IF NOT EXISTS kp_crowns(guild TEXT NOT NULL,race INTEGER NOT NULL,name TEXT NOT NULL,user TEXT NOT NULL,kind TEXT NOT NULL,source TEXT NOT NULL UNIQUE,created_at INTEGER NOT NULL,PRIMARY KEY(guild,race))");
+ f.sql.prepare("INSERT INTO kp_crowns VALUES(?,?,?,?,'streak3','s1',0)").run(guild,race,'Two戦犯レース',two);
+ t.mock.timers.enable({apis:['Date'],now:race-RACE_INTERVAL+30000});
+ const entries=(await readKpState(f.env,mapping,one)).racing.open.entries;
+ assert.equal(entries[0].name,'Two号');assert.equal(entries[0].person,true);assert.equal(entries[0].owner,two);
+ const card=raceCard(race,undefined,entries),number=card.horses.find((h:{person?:boolean})=>h.person).number;
+ await operateKp(f.env,mapping,one,'race-bet-person-001','race-bet',{raceId:race,type:'place',horse:number,amount:2000});
+ t.mock.timers.setTime(race+RUN_MS);
+ await settleHorsePrizes(f.env,mapping,race+RUN_MS);await settleHorsePrizes(f.env,mapping,race+RUN_MS+60000);
+ const seed=String(f.sql.prepare('SELECT seed FROM kp_races WHERE id=?').get(race)!.seed),rank=raceResult(card,seed).order.indexOf(number);
+ assert.equal(balance(f.sql,two),prizeFor(card,rank)+100,'prize plus 5% of the 2,000 KP bet');
+});

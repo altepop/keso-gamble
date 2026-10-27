@@ -56,7 +56,7 @@ export function raceCard(start,salt=PUBLIC_SALT,entries=[]){
  if(entries.length){
   const gates=[...horses.keys()],grng=rngFrom(`${salt}:gates:${start}`);
   for(let i=gates.length-1;i>0;i--){const j=Math.floor(grng()*(i+1));[gates[i],gates[j]]=[gates[j],gates[i]];}
-  entries.slice(0,size).forEach((e,i)=>Object.assign(horses[gates[i]],{name:e.name,ability:e.ability,style:e.style,horseId:e.horseId,owner:e.owner,ownerName:e.ownerName}));
+  entries.slice(0,size).forEach((e,i)=>Object.assign(horses[gates[i]],{name:e.name,ability:e.ability,style:e.style,horseId:e.horseId,owner:e.owner,ownerName:e.ownerName,nickname:e.nickname??null,person:!!e.person}));
  }
  const crown=big?null:fillerCrownName(start);
  return {id:start,start,closeAt:start-CLOSE_BEFORE,number:raceNumber(start),name:big??crown??`第${raceNumber(start)}レース`,big:!!big,crown:!!crown,raceClass:cls,size,going:pickWeighted(rng,[5,3,2]),horses};
@@ -250,4 +250,12 @@ export function useExchange(state,now){
  const day=exchangeDay(now),count=state.exchange?.day===day?state.exchange.count:0;
  if(count>=DAILY_EXCHANGES)throw Error(`指令・ボックスなどの交換は1日${DAILY_EXCHANGES}回までです（朝0時に戻ります）`);
  state.exchange={day,count:count+1};
+}
+/** A nickname from a horse's record. `runs` are newest first: {rank, winOdds (tenths), favourite}. */
+export function horseNickname({wins=0,seconds=0},runs=[]){
+ if(runs.some(r=>r.rank===1&&r.winOdds>=200))return '気まぐれの悪魔';
+ if(runs.filter(r=>r.favourite&&r.rank>=4).length>=2)return '人気詐欺';
+ if(wins===0&&seconds>=3)return '永遠の二番手';
+ if(runs.length>=5&&runs.slice(0,5).every(r=>r.rank>=4))return '歩く戦犯';
+ return null;
 }
