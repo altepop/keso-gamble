@@ -1,14 +1,15 @@
-import {wheelView,covered,redNumbers,outcomeAngle} from './roulette-view.js?v=20261027-mastery';
-import {connectDiscordActivity,isDiscordActivity}from './discord-activity-auth.js?v=20261027-mastery';
-import { createKpClient } from './kp-client.js?v=20261027-mastery';
+import {wheelView,covered,redNumbers,outcomeAngle} from './roulette-view.js?v=20261027-luxury';
+import {connectDiscordActivity,isDiscordActivity}from './discord-activity-auth.js?v=20261027-luxury';
+import { createKpClient } from './kp-client.js?v=20261027-luxury';
 import { fmt, fmt0 } from './format.js';
-import { submitClaim, approveClaim, issueDirective, completeDirective } from './progression.js?v=20261027-mastery';
-import { titleView, homeView, playView, directivesView, escapeHTML } from './progression-views.js?v=20261027-mastery';
+import { submitClaim, approveClaim, issueDirective, completeDirective } from './progression.js?v=20261027-luxury';
+import { titleView, homeView, playView, directivesView, escapeHTML } from './progression-views.js?v=20261027-luxury';
 import { genCandles, movingAverage, svgCandles } from './charts.js';
-import { MARKET, createInitialState, portfolioValue, assets, advanceMarket, trade, spin, spinNumbers, validateNumberBets, grantDemoSalary, cryptoRouletteNumber } from './engine.js?v=20261027-mastery';
+import { MARKET, createInitialState, portfolioValue, assets, advanceMarket, trade, spin, spinNumbers, validateNumberBets, grantDemoSalary, cryptoRouletteNumber } from './engine.js?v=20261027-luxury';
 import { KEY, LEGACY_KEY } from './storage.js';
-import { PUBLIC_SALT, RUN_MS, WEEKLY_LIMIT, openRaceStart, latestRaceStart, raceCard, raceOdds, raceResult, raceTimeline, raceCommentary, raceRuns, placeRaceBet, settleRaceBets, weeklySpent } from './racing.js?v=20261027-mastery';
-import { raceScreen, racePreview, drawRace, raceElapsed } from './racing-view.js?v=20261027-mastery';
+import { PUBLIC_SALT, RUN_MS, WEEKLY_LIMIT, openRaceStart, latestRaceStart, raceCard, raceOdds, raceResult, raceTimeline, raceCommentary, raceRuns, placeRaceBet, settleRaceBets, weeklySpent } from './racing.js?v=20261027-luxury';
+import { LUXURY } from './luxury.js?v=20261027-luxury';
+import { raceScreen, racePreview, drawRace, raceElapsed } from './racing-view.js?v=20261027-luxury';
 import { createStore } from './store.js';
 const $=(s,el=document)=>el.querySelector(s);
 const wallet=createKpClient();
@@ -266,7 +267,7 @@ async function doSpin(){
 
 addEventListener('click',async e=>{
   const t=e.target.closest?.('button,[data-open]'); if(!t) return;
-  const mutates=!!t.dataset.approve || !!t.dataset.complete || ['salary','trade','spin','race-bet','roast-level','horse-buy','horse-sell','reset','submit-claim','issue-directive','connect-kp','refresh-kp','disconnect-kp','auto-connect-kp'].includes(t.dataset.action);
+  const mutates=!!t.dataset.approve || !!t.dataset.complete || ['salary','trade','spin','race-bet','roast-level','horse-buy','horse-sell','luxury','reset','submit-claim','issue-directive','connect-kp','refresh-kp','disconnect-kp','auto-connect-kp'].includes(t.dataset.action);
   if(mutates && mutationPending)return;
   if(mutates)mutationPending=true;
   try{
@@ -279,6 +280,11 @@ addEventListener('click',async e=>{
     if(t.dataset.raceType){raceDraft.type=t.dataset.raceType;render();return;}
     if(t.dataset.action==='horse-buy'){const {horse}=await liveOperation('horse-buy',{box:t.dataset.box,name:$('#horse-name')?.value??''});delete drafts['horse-name'];render();toast(`${horse.name}（${horse.gradeLabel}）が仲間入りしました`);return;}
     if(t.dataset.action==='horse-sell'){if(!confirm('この馬を売りますか？売ると戻せません'))return;const {sold}=await liveOperation('horse-sell',{horseId:t.dataset.horse});render();toast(`売却しました（+${moneyCompact(sold.refund)}）`);return;}
+    if(t.dataset.action==='luxury'){
+      const item=LUXURY.find(i=>i.id===t.dataset.item);if(!item||!confirm(`${item.label}を${moneyCompact(item.price)}で買いますか？`))return;
+      await liveOperation('luxury',{item:item.id,target:$('#lux-target')?.value,text:$('#lux-text')?.value,title:$('#lux-title')?.value,horseId:$('#lux-horse')?.value});
+      render();toast(`${item.label}を買いました`);return;
+    }
     if(t.dataset.action==='roast-level'){await liveOperation('roast-level',{level:t.dataset.level});render();toast('煽りレベルを変更しました');return;}
     if(t.dataset.action==='race-bet'){
       const now=Date.now(),raceId=openRaceStart(now),args={raceId,type:raceDraft.type,horse:raceDraft.horse,amount:Number($('#race-amount')?.value)};

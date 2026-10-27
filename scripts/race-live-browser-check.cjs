@@ -5,7 +5,7 @@ const server=spawn('python3',['-m','http.server','8767','--bind','127.0.0.1'],{s
  const {createInitialState}=await import('../js/engine.js');const R=await import('../js/racing.js');
  const T0=Date.parse('2026-10-27T16:05:30+09:00'),RACE=Date.parse('2026-10-27T16:15:00+09:00');
  const seed='server-seed-for-browser-check',hash=createHash('sha256').update(seed).digest('hex'),nextHash='f'.repeat(64);
- const state={...createInitialState(T0),cash:5000,serverWallet:true,selfUserId:'one',members:[{id:'one',name:'本人'}],claims:[],directives:[],racing:{open:{id:RACE,hash,crown:'本人戦犯レース',entries:[{horseId:'person-two',name:'相手号',ability:-0.9,style:3,owner:'two',ownerName:'相手',person:true},{horseId:'horse-1',name:'<img src=x onerror=alert(1)>号',ability:0.4,style:2,owner:'one',ownerName:'本人',nickname:'歩く戦犯'}]},watch:{id:RACE-R.RACE_INTERVAL,runs:false}},roastLevel:'full',horses:[],exchange:{day:R.exchangeDay(T0),count:1}};
+ const state={...createInitialState(T0),cash:5000,serverWallet:true,selfUserId:'one',members:[{id:'one',name:'本人'},{id:'two',name:'相手'}],luxury:{title:null,convicts:[{user:'two',name:'相手<b>x</b>'}],billboard:{horseName:'看板<i>馬</i>',ownerName:'本人',until:T0+86400000},statues:[]},claims:[],directives:[],racing:{open:{id:RACE,hash,crown:'本人戦犯レース',entries:[{horseId:'person-two',name:'相手号',ability:-0.9,style:3,owner:'two',ownerName:'相手',person:true},{horseId:'horse-1',name:'<img src=x onerror=alert(1)>号',ability:0.4,style:2,owner:'one',ownerName:'本人',nickname:'歩く戦犯'}]},watch:{id:RACE-R.RACE_INTERVAL,runs:false}},roastLevel:'full',horses:[],exchange:{day:R.exchangeDay(T0),count:1}};
  const bodies=[];const errors=[];let stateCalls=0;
  for(let n=0;n<40;n++){try{if((await fetch('http://127.0.0.1:8767')).ok)break;}catch{}await new Promise(r=>setTimeout(r,100));}
  browser=await chromium.launch({executablePath:process.env.CHROMIUM_PATH||(existsSync('/usr/bin/chromium')?'/usr/bin/chromium':undefined),args:['--no-sandbox']});
@@ -16,23 +16,27 @@ const server=spawn('python3',['-m','http.server','8767','--bind','127.0.0.1'],{s
   const path=new URL(route.request().url()).pathname;let result;
   if(path.endsWith('auth'))result={token:'a'.repeat(48)};
   else if(path.endsWith('state')){stateCalls++;result=state;}
-  else{const body=route.request().postDataJSON();bodies.push(body);if(body.action==='roast-level'){state.roastLevel=body.args.level;result={result:{roastLevel:body.args.level}};}else if(body.action==='horse-buy'){const horse={id:'horse-2',name:body.args.name,grade:0,gradeLabel:'下級',style:1,races:0,wins:0,seconds:0,thirds:0,earnings:0,sellValue:600,racesLeft:20,retired_at:null};state.horses.push(horse);state.cash-=3000;state.exchange.count++;result={result:{horse}};}else if(body.action==='horse-sell'){state.horses=state.horses.filter(h=>h.id!==body.args.horseId);state.cash+=600;result={result:{sold:{id:body.args.horseId,refund:600}}};}else{assert.equal(body.action,'race-bet');result={result:{bet:R.placeRaceBet(state,body.args,T0+1000,state.racing.open.entries)}};}}
+  else{const body=route.request().postDataJSON();bodies.push(body);if(body.action==='roast-level'){state.roastLevel=body.args.level;result={result:{roastLevel:body.args.level}};}else if(body.action==='horse-buy'){const horse={id:'horse-2',name:body.args.name,grade:0,gradeLabel:'下級',style:1,races:0,wins:0,seconds:0,thirds:0,earnings:0,sellValue:600,racesLeft:20,retired_at:null};state.horses.push(horse);state.cash-=3000;state.exchange.count++;result={result:{horse}};}else if(body.action==='luxury'){state.cash-=50000;state.exchange.count++;result={result:{luxury:{id:'lux-1',item:body.args.item,target:body.args.target}}};}else if(body.action==='horse-sell'){state.horses=state.horses.filter(h=>h.id!==body.args.horseId);state.cash+=600;result={result:{sold:{id:body.args.horseId,refund:600}}};}else{assert.equal(body.action,'race-bet');result={result:{bet:R.placeRaceBet(state,body.args,T0+1000,state.racing.open.entries)}};}}
   await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(result)});
  });
  await page.clock.install({time:T0});
  await page.goto('http://127.0.0.1:8767');await page.locator('#kp-connect-code').fill('c'.repeat(48));await page.locator('[data-action=connect-kp]').click();await page.locator('.kp-connection').waitFor();
+ assert.match(await page.locator('.luxury-banner').innerText(),/本日の戦犯: 相手<b>x<\/b>[\s\S]*今週の看板馬: 看板<i>馬<\/i>（馬主 本人）/);assert.equal(await page.locator('.luxury-banner b, .luxury-banner i').count(),0);
  await page.locator('.nav-btn[data-screen=market]').click();await page.locator('.sub-tab[data-screen=race]').click();
  assert.match(await page.locator('.race-card').innerText(),new RegExp(hash.slice(0,16)));
  assert.match(await page.locator('.race-card h3').innerText(),/本人戦犯レース/);
  assert.match(await page.locator('.race-card').innerText(),/馬主 本人 ·「歩く戦犯」/);assert.match(await page.locator('.race-card').innerText(),/相手号\s*本人の名前の馬（見舞金つき）/);assert.equal(await page.locator('.race-card img').count(),0,'owner-chosen names are escaped');
  const ownedNumber=R.raceCard(RACE,R.PUBLIC_SALT,state.racing.open.entries).horses.find(h=>h.horseId==='horse-1').number;
  assert.match(await page.locator(`[data-race-horse="${ownedNumber}"]`).innerText(),/onerror/);
- assert.match(await page.locator('.asset-card').filter({hasText:'馬主'}).innerText(),/今日の交換はあと2回/);
+ assert.match(await page.locator('.asset-card').filter({hasText:'ボックスを開けると'}).innerText(),/今日の交換はあと2回/);
  await page.locator('#horse-name').fill('ケソ号');await page.locator('[data-action=horse-buy][data-box=normal]').click();await page.locator('.toast').filter({hasText:'仲間入り'}).waitFor();
  assert.deepEqual(bodies.shift().args,{box:'normal',name:'ケソ号'});
- assert.match(await page.locator('.asset-card').filter({hasText:'馬主'}).innerText(),/ケソ号（下級/);assert.match(await page.locator('.asset-card').filter({hasText:'馬主'}).innerText(),/今日の交換はあと1回/);
+ assert.match(await page.locator('.asset-card').filter({hasText:'ボックスを開けると'}).innerText(),/ケソ号（下級/);assert.match(await page.locator('.asset-card').filter({hasText:'ボックスを開けると'}).innerText(),/今日の交換はあと1回/);
  page.once('dialog',d=>d.accept());await page.locator('[data-action=horse-sell]').click();await page.locator('.toast').filter({hasText:'売却'}).waitFor();
  assert.deepEqual(bodies.shift().args,{horseId:'horse-2'});
+ state.cash=100000;await page.locator('[data-action=refresh-kp]').click();
+ await page.locator('#lux-target').selectOption('two');page.once('dialog',d=>d.accept());await page.locator('[data-action=luxury][data-item=convict]').click();await page.locator('.toast').filter({hasText:'戦犯認定を買いました'}).waitFor();
+ const lux=bodies.shift();assert.equal(lux.action,'luxury');assert.equal(lux.args.item,'convict');assert.equal(lux.args.target,'two');
  assert.equal(await page.locator('[data-action=roast-level][aria-pressed=true]').getAttribute('data-level'),'full');
  await page.locator('[data-action=roast-level][data-level=normal]').click();await page.locator('.toast').filter({hasText:'煽りレベル'}).waitFor();
  const roast=bodies.shift();assert.equal(roast.action,'roast-level');assert.deepEqual(roast.args,{level:'normal'});
@@ -41,7 +45,7 @@ const server=spawn('python3',['-m','http.server','8767','--bind','127.0.0.1'],{s
  await page.locator('[data-race-horse="2"]').click();await page.locator('[data-race-type=place]').click();await page.locator('#race-amount').fill('500');await page.locator('[data-action=race-bet]').click();
  await page.locator('.toast').filter({hasText:'馬券を買いました'}).waitFor();
  assert.deepEqual(bodies.map(b=>b.args),[{raceId:RACE,type:'place',horse:2,amount:500}]);
- assert.match(await page.locator('.badge').first().innerText(),/2,100/,'5,000 - box 3,000 + sale 600 - bet 500');
+ assert.match(await page.locator('.badge').first().innerText(),/49,500/,'100,000 - convict 50,000 - bet 500');
  assert.equal(await page.evaluate(()=>localStorage.getItem('keso-exchange-v0.2')),null);
  // The race starts: the server now reveals the seed for it.
  state.racing={open:{id:RACE+R.RACE_INTERVAL,hash:nextHash},watch:{id:RACE,runs:true,hash,seed}};
@@ -58,5 +62,5 @@ const server=spawn('python3',['-m','http.server','8767','--bind','127.0.0.1'],{s
  state.racing.watch={...state.racing.watch,hash:'0'.repeat(64)};await page.locator('[data-action=refresh-kp]').click();
  await page.locator('.race-proof').filter({hasText:'一致しません'}).waitFor();
  for(const width of [320,390,1280]){await page.setViewportSize({width,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);}
- assert.deepEqual(errors,[]);console.log('Live racing flow passed: server bet request, no demo save, hash shown before close, immediate seed fetch at the start, verified proof, settlement display, tampered seed warning, owner names escaped, box purchase and sale, mobile layout.');
+ assert.deepEqual(errors,[]);console.log('Live racing flow passed: server bet request, no demo save, hash shown before close, immediate seed fetch at the start, verified proof, settlement display, tampered seed warning, owner names escaped, box purchase and sale, luxury purchase and banners, mobile layout.');
 })().catch(e=>{console.error(e);process.exitCode=1}).finally(async()=>{await browser?.close();server.kill()});

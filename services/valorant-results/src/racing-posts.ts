@@ -5,6 +5,7 @@ import { BET_TYPES, CLOSE_BEFORE, GOINGS, RACE_INTERVAL, RUN_MS, bigRaceName, la
 import { raceSeed, ensureRacing } from './racing-kp.ts';
 import { crownFor, defaultRoastLevel, validRoastLevel } from './racing-crowns.ts';
 import { raceEntries } from './racing-horses.ts';
+import { titlesOf } from './luxury.ts';
 import type { RoastLevel } from './racing-crowns.ts';
 import type { KpEnv, KpMapping } from './kp.ts';
 export interface PostEnv extends KpEnv { KP_EARNINGS_WEBHOOK_URL?:string }
@@ -45,15 +46,16 @@ export function cardPost(card:Card,hash:string){
   `結果のハッシュ: \`${hash.slice(0,16)}…\`（発走後にシード値を公開）`,
   'KESO PLAY の「勝負 → 競馬」で馬券を買えます。'].join('\n');
 }
-export function resultPost(card:Card,seed:string,bets:Array<Bet&{user:string}>,levelOf:(user:string)=>RoastLevel){
+export function resultPost(card:Card,seed:string,bets:Array<Bet&{user:string}>,levelOf:(user:string)=>RoastLevel,titleOf:(user:string)=>string|undefined=()=>undefined){
  const odds=raceOdds(card),order:number[]=raceResult(card,seed).order;
  const lines=[`🏁 **${clean(card.name)}** 結果（${clock(card.start)}発走）`,
   ...order.slice(0,3).map((n,i)=>{const h=card.horses[n-1];return `${i+1}着 ${n}番 ${clean(h.name)}${h.ownerName?`（馬主 ${clean(h.ownerName)}・賞金 ${kp(prizeFor(card,i))}）`:''}${i===0?`（1着当て ${odd(odds.win[n])}）`:''}`;})];
  const byUser=new Map<string,Array<Bet>>();for(const b of bets)byUser.set(b.user,[...(byUser.get(b.user)??[]),b]);
  for(const [user,list] of byUser){
+  const who=`<@${user}>${titleOf(user)?`「${clean(titleOf(user)!)}」`:''}`;
   const paid=list.reduce((n,b)=>n+b.payout,0),spent=list.reduce((n,b)=>n+b.amount,0),hits=list.filter(b=>b.status==='won');
-  if(hits.length)lines.push(`💰 <@${user}> ${hits.map(b=>`${b.horse}番の${BET_TYPES[b.type].label}（${odd(b.odds)}）`).join('・')} 的中 → +${kp(paid)}${paid>=BIG_WIN?`　${pick(CHEER,user+card.id)}`:''}`);
-  else lines.push(`💸 <@${user}> ${kp(spent)} 外れ。${pick(ROASTS[levelOf(user)],user+card.id)}`);
+  if(hits.length)lines.push(`💰 ${who} ${hits.map(b=>`${b.horse}番の${BET_TYPES[b.type].label}（${odd(b.odds)}）`).join('・')} 的中 → +${kp(paid)}${paid>=BIG_WIN?`　${pick(CHEER,user+card.id)}`:''}`);
+  else lines.push(`💸 ${who} ${kp(spent)} 外れ。${pick(ROASTS[levelOf(user)],user+card.id)}`);
  }
  lines.push(`シード値: \`${seed}\`（締切前のハッシュと一致することを画面で確認できます）`);
  return lines.join('\n');
@@ -93,7 +95,7 @@ export async function queueRacePosts(env:PostEnv,mapping:KpMapping,now=Date.now(
   const card={...raceCard(id,undefined,entries),...(crown?{name:crown.name}:{})};
   const ownerWon=Boolean(seed)&&Boolean(card.horses[raceResult(card,seed!.seed).order[0]-1].ownerName);
   if(!worthPosting(card,bets,Boolean(crown),ownerWon))continue;
-  if(seed)await enqueue(env,'race-result:'+id,resultPost(card,seed.seed,bets,levelOf),now);
+  if(seed){const titles=await titlesOf(env,mapping.guildId);await enqueue(env,'race-result:'+id,resultPost(card,seed.seed,bets,levelOf,u=>titles.get(u)),now);}
  }
 }
 export async function flushRacePosts(env:PostEnv,limit=5){
