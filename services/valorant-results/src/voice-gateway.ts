@@ -56,7 +56,8 @@ export class VoiceGateway {
    }
    const endpoint=new URL(url);if(endpoint.protocol!=='wss:'||!(endpoint.hostname==='gateway.discord.gg'||endpoint.hostname.endsWith('.discord.gg')))throw Error('Invalid Gateway endpoint');
    endpoint.protocol='https:';endpoint.search='?v=10&encoding=json';
-   const response=await fetch(endpoint,{headers:{Upgrade:'websocket'},signal:AbortSignal.timeout(10000)});
+   const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),10000);
+   let response:Response;try{response=await fetch(endpoint,{headers:{Upgrade:'websocket'},signal:controller.signal});}finally{clearTimeout(timeout);}
    const socket=response.webSocket;if(!socket)throw Error('Gateway upgrade failed');
    this.socket=socket;this.ready=false;this.lastAck=0;this.waitingAck=false;this.error='connecting';socket.accept();
    socket.addEventListener('message',event=>{if(socket!==this.socket)return;const receivedAt=Date.now();let packet:Packet;try{packet=JSON.parse(String(event.data));}catch{return;}
