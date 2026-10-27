@@ -1,5 +1,5 @@
 // Register these guild commands individually; never replace /death, /valo or the Activity entry point.
-export const KP_COMMAND_VERSION='kp-slash-v2-ranking';
+export const KP_COMMAND_VERSION='kp-slash-v3-paifu';
 export const kpCommands=[
  {type:1,name:'kp',description:'KESO PLAY｜KP残高・ランキング',options:[
   {type:1,name:'balance',description:'自分の残高と最近の入出金（本人だけに表示）'},
@@ -11,6 +11,11 @@ export const kpCommands=[
   {type:4,name:'horse',description:'馬番',required:true,min_value:1,max_value:10},
   {type:4,name:'amount',description:'掛け金（100 KP以上・100 KP単位）',required:true,min_value:100,max_value:50000},
   {type:3,name:'type',description:'券種',required:true,choices:[{name:'1着当て（単勝）',value:'win'},{name:'3着以内当て（複勝）',value:'place'}]},
+ ]},
+ {type:1,name:'paifu',description:'KESO PLAY｜雀魂の牌譜URLで結果を申請（他のメンバーの承認でKP）',options:[
+  {type:3,name:'url',description:'牌譜の共有URL（game.mahjongsoul.com/?paipu=...）',required:true,max_length:300},
+  {type:3,name:'game',description:'対局の種類',required:true,choices:[{name:'四麻 半荘',value:'4-hanchan'},{name:'四麻 東風',value:'4-tonpu'},{name:'三麻 半荘',value:'3-hanchan'},{name:'三麻 東風',value:'3-tonpu'}]},
+  {type:4,name:'rank',description:'自分の順位',required:true,choices:[1,2,3,4].map(n=>({name:n+'位',value:n}))},
  ]},
 ] as const;
 export async function registerKpCommands(applicationId:string,guildId:string,api:(path:string,method?:string,body?:unknown)=>Promise<any>){

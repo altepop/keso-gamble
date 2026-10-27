@@ -1,5 +1,7 @@
 import {isKpRanking} from './kp-command.ts';
 import { runKpCommand } from './kp-slash.ts';
+import { PAIFU_BUTTON, decidePaifu, paifuRequest, runPaifuCommand } from './mahjong-claims.ts';
+import type { PaifuReply } from './mahjong-claims.ts';
 import { runValoCommand } from './valo-queries.ts';
 import { initializeKp, issueKpCode } from './kp.ts';
 import storedConfig from '../discord-config.json' with { type: 'json' };
@@ -116,19 +118,45 @@ export async function discordInteractions(request: Request, env: Env, ctx: Execu
   let permissions = 0n;
   try { permissions = BigInt(interaction.member?.permissions ?? '0'); } catch { /* Deny invalid permission fields. */ }
   const deathSelect = interaction.type === 3 && /^death_mode:\d+$/.test(interaction.data?.custom_id ?? '');
+  const paifuButton = interaction.type === 3 && PAIFU_BUTTON.test(interaction.data?.custom_id ?? '');
   if ((interaction.data?.name === 'death' || deathSelect) && !(permissions & (8n | 32n))) return respond('開始・終了・状態確認には「管理者」または「サーバー管理」権限が必要です。');
-  if (!deathSelect && (interaction.type !== 2 || !['death', 'valo', 'kp', 'keiba', 'bet'].includes(interaction.data?.name ?? ''))) return respond('対応していないコマンドです。');
+  if (!deathSelect && !paifuButton && (interaction.type !== 2 || !['death', 'valo', 'kp', 'keiba', 'bet', 'paifu'].includes(interaction.data?.name ?? ''))) return respond('対応していないコマンドです。');
   if (!/^\d+$/.test(interaction.id) || typeof interaction.token !== 'string' || !interaction.token.length || interaction.token.length > 4096) return new Response('Invalid interaction', { status: 400 });
+  // A malformed paipu claim is answered privately before the public deferred reply is opened.
+  if (interaction.data?.name === 'paifu' && interaction.type === 2) {
+    try { paifuRequest(interaction, Date.now()); } catch (error) { return respond((error as Error).message); }
+  }
   // Defer immediately so database work never consumes Discord's three-second acknowledgement window.
-  ctx.waitUntil((async () => {
-    let result: { content: string; components?: unknown[] };
+  // Refusals for a button press go only to the person who pressed it.
+  const whisper = async (content: string) => {
     try {
-      if (deathSelect) result = { content: await selectDeathMode(env.DB, interaction, configuredPlayers, runDeathCommand), components: [] };
+      await fetch('https://discord.com/api/v10/webhooks/' + config.applicationId + '/' + encodeURIComponent(interaction.token!), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content, flags: 64, allowed_mentions: { parse: [] } }), signal: AbortSignal.timeout(10_000),
+      });
+    } catch { console.warn('discord_command_reply_failed'); }
+  };
+  ctx.waitUntil((async () => {
+    let result: { content: string; components?: unknown[] }, notice: string | undefined;
+    try {
+      if (paifuButton) {
+        const decided: PaifuReply | null = await decidePaifu(env, interaction);
+        if (!decided) return;
+        ({ notice, ...result } = decided);
+      } else if (interaction.data?.name === 'paifu') result = await runPaifuCommand(env, interaction);
+      else if (deathSelect) result = { content: await selectDeathMode(env.DB, interaction, configuredPlayers, runDeathCommand), components: [] };
       else if (interaction.data?.name === 'death' && interaction.data.options?.[0]?.name === 'start'
         && !interaction.data.options[0].options?.some(option => option.name === 'mode')) result = await deathModePicker(env.DB, interaction, configuredPlayers);
       else if (['kp','keiba','bet'].includes(interaction.data?.name??'')) result = {content:await runKpCommand(env,interaction)};
       else result = { content: interaction.data!.name === 'valo' ? await runValoCommand(env.DB, interaction) : await runDeathCommand(env.DB, interaction) };
-    } catch { console.warn('discord_command_failed'); result = { content: '操作結果を確認できませんでした。KP・馬券は /kp またはActivity、予約は /death status で確認してください。', components: [] }; }
+    } catch {
+      console.warn('discord_command_failed');
+      if (paifuButton) {
+        // Keep the claim message and its buttons; tell only the presser to retry.
+        await whisper('操作結果を確認できませんでした。少し待ってからもう一度押してください。');
+        return;
+      }
+      result = { content: '操作結果を確認できませんでした。KP・馬券は /kp またはActivity、予約は /death status で確認してください。', components: [] }; }
     if (interaction.data?.name === 'valo' && interaction.data.options?.[0]?.name === 'status') {
       try {
         const mapping = await initializeKp(env), user = interaction.member?.user?.id;
@@ -146,6 +174,7 @@ export async function discordInteractions(request: Request, env: Env, ctx: Execu
       });
       if (!response.ok) console.warn('discord_command_reply_failed', { status: response.status });
     } catch { console.warn('discord_command_reply_failed'); }
+    if (notice) await whisper(notice);
   })());
-  return Response.json(deathSelect ? { type: 6 } : { type: 5, data: { flags: isKpRanking(interaction) ? 0 : 64 } });
+  return Response.json(deathSelect || paifuButton ? { type: 6 } : { type: 5, data: { flags: isKpRanking(interaction) || interaction.data?.name === 'paifu' ? 0 : 64 } });
 }

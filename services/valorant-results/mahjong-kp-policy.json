@@ -1,0 +1,12 @@
+{
+  "status": "proposed",
+  "note": "雀魂の牌譜申請（/paifu）で他のメンバーが承認したときに入るKP。金額は提案値で、ユーザーの確認後に変更する。",
+  "dailyClaims": 6,
+  "maxAgeDays": 3,
+  "games": {
+    "4-hanchan": {"label": "四麻 半荘", "rates": [500, 300, 200, 200]},
+    "4-tonpu": {"label": "四麻 東風", "rates": [250, 150, 100, 100]},
+    "3-hanchan": {"label": "三麻 半荘", "rates": [500, 250, 200]},
+    "3-tonpu": {"label": "三麻 東風", "rates": [250, 125, 100]}
+  }
+}
