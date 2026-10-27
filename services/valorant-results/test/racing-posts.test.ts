@@ -105,3 +105,14 @@ test('directive notices move to the earnings channel when its webhook is set', a
  await flushKpDirectives({...f.env,KP_EARNINGS_WEBHOOK_URL:undefined,DISCORD_WEBHOOK_URL:'https://discord.com/api/webhooks/2/results'},mapping);
  assert.equal(urls[1],'https://discord.com/api/webhooks/2/results');
 });
+
+test('the public status says whether the earnings webhook is set, without revealing it', async () => {
+ const {kpApi}=await import('../src/kp-api.ts');
+ for(const set of [true,false]){
+  const f=await fixture(set);
+  const response=await kpApi(new Request('https://worker.example/api/kp/status'),f.env,mapping);
+  const text=await response.text();
+  assert.equal(JSON.parse(text).earningsPostsConfigured,set);
+  assert.doesNotMatch(text,/webhooks|token/);
+ }
+});
