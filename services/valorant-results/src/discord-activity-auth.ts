@@ -28,7 +28,7 @@ async function rateLimit(env:KpEnv,ip:string,kind:string) {
 }
 export async function createActivityChallenge(env:KpEnv,challenge:string,ip:string) {
  if(!activityAuthAvailable(env))throw Error('Discordの自動接続は設定待ちです。接続コードでも入れます。');
- if(!/^[A-Za-z0-9_-]{43}$/.test(challenge))throw Error('接続情報が不正です。Activityを開き直してください。');
+ if(typeof challenge!=='string'||!/^[A-Za-z0-9_-]{43}$/.test(challenge))throw Error('接続情報が不正です。Activityを開き直してください。');
  await rateLimit(env,ip,'challenge');
  const nonce=kpRandom();await env.DB.prepare('INSERT INTO kp_activity_challenges VALUES(?,?,?)').bind(await kpHash(nonce),challenge,Date.now()+5*60000).run();
  return {nonce,applicationId:discord.applicationId};

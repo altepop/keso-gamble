@@ -175,6 +175,12 @@ test('Activity OAuth requires one-use PKCE, verifies the app, scopes and actual 
  const result=(attempts.find(a=>a.status==='fulfilled')as PromiseFulfilledResult<{token:string;userId:string;accessToken:string}>).value;assert.equal(result.userId,one);assert.equal((await kpSession(f.env,result.token))!.user,one);assert.equal(result.accessToken,'sensitive-discord-access');
  const sensitive=JSON.stringify(['kp_activity_challenges','kp_activity_limits','kp_sessions'].map(table=>f.sql.prepare('SELECT * FROM '+table).all()));assert.ok(!sensitive.includes(result.accessToken)&&!sensitive.includes(result.token)&&!sensitive.includes(input.code));assert.equal((await readKpState(f.env,mapping,one)).cash,0);
  await f.module.authenticateActivity(f.env,mapping,await f.input(),'fixture-ip',result.token);assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM kp_sessions').get()!.n,1,'Matching permanent sessions are reused');
+ const origin='https://'+f.applicationId+'.discordsays.com',headers={'Content-Type':'application/json',Origin:origin,Authorization:'Bearer '+result.token};
+ const challengeResponse=await kpApi(new Request('https://worker.example/api/kp/activity/challenge',{method:'POST',headers,body:JSON.stringify({codeChallenge:await f.module.pkceChallenge(f.verifier)})}),f.env,mapping);
+ assert.equal(challengeResponse.status,200);const fresh=await challengeResponse.json()as{nonce:string};
+ const http=await kpApi(new Request('https://worker.example/api/kp/activity/auth',{method:'POST',headers,body:JSON.stringify({...fresh,code:'another-fixture-code',codeVerifier:f.verifier,userId:two})}),f.env,mapping);
+ assert.equal(http.status,200);assert.equal(http.headers.get('Access-Control-Allow-Origin'),origin);assert.equal(http.headers.get('Cache-Control'),'no-store');const connected=await http.json()as{token:string;userId:string};assert.equal(connected.userId,one);assert.equal(connected.token,result.token);
+
  }finally{globalThis.fetch=original;}
 });
 test('Activity authentication fails closed for another app, missing identity scope, unknown account, provider failure and expired challenge',async()=>{
