@@ -310,3 +310,9 @@ RUSTの反応、エリート、王道家、了解お兄さん、気が利くね�
 取得契約の参照元: [牌譜屋のレコード取得処理](https://github.com/SAPikachu/amae-koromo/blob/master/src/data/source/records/loader.ts)、[順位と同点の扱い](https://github.com/SAPikachu/amae-koromo/blob/master/src/data/types/record.ts)、[モードID](https://github.com/SAPikachu/amae-koromo/blob/master/src/data/types/gameMode.ts)。
 
 初回登録は四麻の玉の間（東風・半荘）。三麻も実装上は扱えますが、対象に含める場合は非公開設定の対象モードを追加します。
+
+### 競馬のお知らせの口調
+
+競馬の出走表・冠レース告知・結果は `racing-voice.json` と `src/racing-voice.ts` で管理します。各投稿に「良かったこの距離で」「お祭り男か」のどちらか一つを原文のまま独立した行で出し、別の行にbot独自のツッコミを添えます。語録の出典は既存の `meme-quotes.json` に合わせ、創作のたとえ話を実在人物の発言とは扱いません。
+
+的中・全外れ・的中しても払戻しが購入総額以下の場合で文句を分けます。少額の的中にも反応し、強さは本人の mild / normal / full 設定に従います。99本の創作文を収録し、同じレース・対象者への再生成では同じ文句を選びます。買い目・オッズ・着順・払戻額・締切・検証用ハッシュ／シード値は従来どおり表示します。既に保存された投稿本文の再編集・再送は行いません。
