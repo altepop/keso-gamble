@@ -1,9 +1,10 @@
 // Horse racing on the live KP wallets. Cards and odds are public; each race's result seed is random,
 // stored here, published only as a SHA-256 hash until the start, and revealed after it.
 // @ts-expect-error The shared pure browser engine has no TypeScript declarations.
-import { RUN_MS, bigRaceName, hydrateRacing, isRaceStart, latestRaceStart, openRaceStart, settleRaceBets } from '../../../js/racing.js';
+import { RUN_MS, bigRaceName, fillerCrownName, hydrateRacing, isRaceStart, latestRaceStart, openRaceStart, settleRaceBets } from '../../../js/racing.js';
 import { kpHash, kpRandom } from './kp.ts';
 import type { KpEnv, KpMapping } from './kp.ts';
+import { crownFor } from './racing-crowns.ts';
 interface RaceBet { id:string; raceId:number; status:string; payout:number }
 const initialized=new WeakSet<object>();
 export async function ensureRacing(env:KpEnv){
@@ -22,13 +23,15 @@ export async function raceSeed(env:KpEnv,guild:string,id:number){
 async function raceHasBets(env:KpEnv,guild:string,id:number){
  return Boolean(await env.DB.prepare("SELECT 1 FROM kp_state s,json_each(s.data,'$.raceBets') b WHERE s.guild=? AND json_extract(b.value,'$.raceId')=? LIMIT 1").bind(guild,id).first());
 }
-/** What the Activity needs: the open race's hash, and the latest race's seed once it has started. */
+/** What the Activity needs: the open race's hash, and the latest race's seed once it has started.
+ * Crown races (named after someone's bad day) always run and carry their name. */
 export async function racingView(env:KpEnv,guild:string,now=Date.now()){
  const open=openRaceStart(now),watch=latestRaceStart(now);
- const runs=Boolean(bigRaceName(watch))||await raceHasBets(env,guild,watch);
+ const [openCrown,watchCrown]=[await crownFor(env,guild,open),await crownFor(env,guild,watch)];
+ const runs=Boolean(bigRaceName(watch))||Boolean(fillerCrownName(watch))||Boolean(watchCrown)||await raceHasBets(env,guild,watch);
  const openSeed=await raceSeed(env,guild,open);
  const watched=runs?await raceSeed(env,guild,watch):null;
- return {open:{id:open,hash:openSeed.hash},watch:{id:watch,runs,...(watched?{hash:watched.hash,seed:watched.seed}:{})}};
+ return {open:{id:open,hash:openSeed.hash,...(openCrown?{crown:openCrown.name}:{})},watch:{id:watch,runs,...(watchCrown?{crown:watchCrown.name}:{}),...(watched?{hash:watched.hash,seed:watched.seed}:{})}};
 }
 /** Settles finished races for every wallet with pending bets. Safe to run concurrently and repeatedly. */
 export async function settleKpRaces(env:KpEnv,mapping:KpMapping,now=Date.now()){

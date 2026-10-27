@@ -74,11 +74,11 @@ test('normal races are posted only for a big win or a big loss', () => {
  assert.equal(worthPosting(raceCard(MAIN),[]),true);
 });
 
-test('only registered members get the harsh roast; others get the mild line', async () => {
+test('the roast follows each person\'s level: harsh for full, gentle for mild', async () => {
  const {resultPost}=await import('../src/racing-posts.ts');
  const card=raceCard(NORMAL),seed='fixed',order=raceResult(card,seed).order,loser=order.at(-1);
  const bet=(user:string)=>({id:user,raceId:NORMAL,type:'win' as const,horse:loser,amount:5000,odds:80,status:'lost',payout:0,user});
- const text=resultPost(card,seed,[bet(one),bet(outsider)],user=>user===one);
+ const text=resultPost(card,seed,[bet(one),bet(outsider)],user=>user===one?'full':'mild');
  const [harsh,mild]=[text.split('\n').find(l=>l.includes(one))!,text.split('\n').find(l=>l.includes(outsider))!];
  assert.match(harsh,/やめましょう|反面教師|溶ける|言い訳/);
  assert.match(mild,/次こそ|ドンマイ/);

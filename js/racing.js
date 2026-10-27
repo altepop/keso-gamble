@@ -30,6 +30,16 @@ export function latestRaceStart(now){return Math.floor(now/RACE_INTERVAL)*RACE_I
 /** Monday 0:00 JST, matching `/valo week`. */
 export function weekStart(now){const d=new Date(now+JST);const days=(d.getUTCDay()+6)%7;return Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),d.getUTCDate()-days)-JST;}
 export const placeSlots=size=>size>=8?3:2;
+// Weekend crown races with no person in the name, at :30 from 10:30 to 23:30 (docs/RACING_PLAN.md §3).
+// Races named after someone's bad day come from the Worker (src/racing-crowns.ts) and override the name.
+export const FILLER_CROWNS=['ATMレース','マタマケタ記念レース','ガチャハズレ大会','言い訳選手権','KP溶かし予選','人気詐欺レース','永遠の二番手レース','気まぐれの悪魔レース','反面教師レース','夜ふかし予備軍レース','キャリー待ちレース','現実逃避レース','おやつ抜きレース','寝不足レース'];
+export function fillerCrownName(start){const {day,minutes}=jstParts(start);return (day===0||day===6)&&minutes%60===30&&minutes>=630?FILLER_CROWNS[(start/RACE_INTERVAL)%FILLER_CROWNS.length]:null;}
+/** Slots a crown race may use: weekday nights 19:00-0:45, weekends from 10:00 (members work days). */
+export function crownSlotAllowed(start){
+ if(!isRaceStart(start)||bigRaceName(start)||fillerCrownName(start))return false;
+ const {day,minutes}=jstParts(start);
+ return minutes>=1140||minutes<60||((day===0||day===6)&&minutes>=600);
+}
 
 export function raceCard(start,salt=PUBLIC_SALT){
  if(!isRaceStart(start))throw Error('レースが見つかりません');
@@ -38,7 +48,8 @@ export function raceCard(start,salt=PUBLIC_SALT){
  const names=[...HORSE_NAMES];
  for(let i=names.length-1;i>0;i--){const j=Math.floor(rng()*(i+1));[names[i],names[j]]=[names[j],names[i]];}
  const horses=names.slice(0,size).map((name,i)=>({number:i+1,name,ability:normal(rng)*.55,style:Math.floor(rng()*STYLES.length),condition:pickWeighted(rng,[1,2,4,2,1])}));
- return {id:start,start,closeAt:start-CLOSE_BEFORE,number:raceNumber(start),name:big??`第${raceNumber(start)}レース`,big:!!big,size,going:pickWeighted(rng,[5,3,2]),horses};
+ const crown=big?null:fillerCrownName(start);
+ return {id:start,start,closeAt:start-CLOSE_BEFORE,number:raceNumber(start),name:big??crown??`第${raceNumber(start)}レース`,big:!!big,crown:!!crown,size,going:pickWeighted(rng,[5,3,2]),horses};
 }
 
 // The race model: a Plackett-Luce ranking (each place goes to a remaining horse with probability
@@ -195,5 +206,5 @@ export function settleRaceBets(state,now,seedOf=()=>PUBLIC_SALT){
  }
  return settled;
 }
-/** No-contest rule: a race runs only when someone bet on it (big races always run). */
-export function raceRuns(card,state){return card.big||state.raceBets.some(b=>b.raceId===card.id);}
+/** No-contest rule: a race runs only when someone bet on it (big and crown races always run). */
+export function raceRuns(card,state){return card.big||card.crown||state.raceBets.some(b=>b.raceId===card.id);}

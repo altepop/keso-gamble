@@ -6,6 +6,7 @@ import { initializeKp, syncKpAccounts, collectKpMatch, drainKpInbox, flushKpDire
 import { kpApi } from './kp-api.ts';
 import { settleKpRaces } from './racing-kp.ts';
 import { queueRacePosts, flushRacePosts } from './racing-posts.ts';
+import { scheduleCrowns } from './racing-crowns.ts';
 import { lastDeathCheck } from './death-unrated.ts';
 import { isDeathMode, isDeathNotice, sessionModeSQL } from './death-modes.ts';
 import { discordInteractions } from './discord-interactions.ts';
@@ -370,7 +371,9 @@ export default {
       const mapping=await initializeKp(env);if(!mapping)return;
       try{await settleKpRaces(env,mapping);}catch{console.warn('race_settlement_pending');}
       // Results are queued after settlement in the same run, then sent.
-      try{await queueRacePosts(env,mapping);await flushRacePosts(env);}catch{console.warn('earnings_post_pending');}
+      let crowns:Awaited<ReturnType<typeof scheduleCrowns>>=[];
+      try{crowns=await scheduleCrowns(env,mapping);}catch{console.warn('crown_schedule_pending');}
+      try{await queueRacePosts(env,mapping,Date.now(),crowns);await flushRacePosts(env);}catch{console.warn('earnings_post_pending');}
     })().catch(()=>console.warn('race_settlement_pending')));
   },
 };

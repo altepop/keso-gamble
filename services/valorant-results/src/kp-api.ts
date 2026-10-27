@@ -12,10 +12,11 @@ import { advanceMarket, trade, spin, spinNumbers, cryptoRouletteNumber } from '.
 // @ts-expect-error The shared pure browser engine has no TypeScript declarations.
 import { hydrateRacing, placeRaceBet } from '../../../js/racing.js';
 import { racingView, raceSeed } from './racing-kp.ts';
+import { defaultRoastLevel, validRoastLevel } from './racing-crowns.ts';
 export async function readKpState(env:KpEnv,mapping:KpMapping,user:string){
  const wallet=await env.DB.prepare('SELECT balance,version FROM kp_wallets WHERE guild=? AND user=?').bind(mapping.guildId,user).first<{balance:number;version:number}>();
  const row=await env.DB.prepare('SELECT data,version FROM kp_state WHERE guild=? AND user=?').bind(mapping.guildId,user).first<{data:string;version:number}>();if(!wallet||!row)throw Error('口座が見つかりません。');
- const state=JSON.parse(row.data);state.cash=wallet.balance;state.serverWallet=true;state.walletVersion=wallet.version;state.stateVersion=row.version;advanceMarket(state);Object.assign(state,hydrateRacing(state));state.racing=await racingView(env,mapping.guildId);
+ const state=JSON.parse(row.data);state.cash=wallet.balance;state.serverWallet=true;state.walletVersion=wallet.version;state.stateVersion=row.version;advanceMarket(state);Object.assign(state,hydrateRacing(state));if(!validRoastLevel(state.roastLevel))state.roastLevel=defaultRoastLevel(mapping,user);state.racing=await racingView(env,mapping.guildId);
  const rewards=(await env.DB.prepare('SELECT id,match,mode,amount,at FROM kp_events WHERE guild=? AND user=? ORDER BY at DESC,id LIMIT 100').bind(mapping.guildId,user).all<{id:string;match:string;mode:string;amount:number;at:number}>()).results;
  await ensureQuizKp(env);
  const quiz=(await env.DB.prepare('SELECT id,mode,day,game,amount,completed_at FROM kp_quiz_events WHERE guild=? AND user=? UNION ALL SELECT id,mode,day,game,amount,completed_at FROM kp_quiz_ranked_extra WHERE guild=? AND user=? ORDER BY completed_at DESC LIMIT 100').bind(mapping.guildId,user,mapping.guildId,user).all<{id:string;mode:string;day:string;game:string;amount:number;completed_at:number}>()).results;
@@ -48,6 +49,9 @@ export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:strin
    const bet=placeRaceBet(state,{raceId:args.raceId,type:args.type,horse:args.horse,amount:args.amount},Date.now());
    await raceSeed(env,mapping.guildId,bet.raceId); // the hash is fixed before betting closes
    result={bet};
+  }else if(action==='roast-level'){
+   if(!validRoastLevel(args.level))throw Error('煽りレベルを選んでください。');
+   state.roastLevel=args.level;result={roastLevel:args.level};
   }else throw Error('この操作は本番口座では使えません。');
   const response={result};const safeState={...state,claims:[],directives:[]};delete safeState.members;delete safeState.racing;
   const inserted=await env.DB.prepare(`INSERT INTO kp_operations(id,guild,user,request_hash,response,delta,state,directive,at)
