@@ -15,10 +15,11 @@ import { racingView, raceSeed } from './racing-kp.ts';
 import { defaultRoastLevel, validRoastLevel } from './racing-crowns.ts';
 import { buyHorse, sellHorse, ownedHorses, raceEntries } from './racing-horses.ts';
 import { masteryOf, riotIdOf } from './mastery.ts';
+import { buyLuxury, luxuryPosts, luxuryView } from './luxury.ts';
 export async function readKpState(env:KpEnv,mapping:KpMapping,user:string){
  const wallet=await env.DB.prepare('SELECT balance,version FROM kp_wallets WHERE guild=? AND user=?').bind(mapping.guildId,user).first<{balance:number;version:number}>();
  const row=await env.DB.prepare('SELECT data,version FROM kp_state WHERE guild=? AND user=?').bind(mapping.guildId,user).first<{data:string;version:number}>();if(!wallet||!row)throw Error('口座が見つかりません。');
- const state=JSON.parse(row.data);state.cash=wallet.balance;state.serverWallet=true;state.walletVersion=wallet.version;state.stateVersion=row.version;advanceMarket(state);Object.assign(state,hydrateRacing(state));if(!validRoastLevel(state.roastLevel))state.roastLevel=defaultRoastLevel(mapping,user);state.racing=await racingView(env,mapping);state.horses=await ownedHorses(env,mapping,user);const riotId=riotIdOf(mapping,user);state.mastery=riotId?await masteryOf(env,riotId,state.roastLevel):[];
+ const state=JSON.parse(row.data);state.cash=wallet.balance;state.serverWallet=true;state.walletVersion=wallet.version;state.stateVersion=row.version;advanceMarket(state);Object.assign(state,hydrateRacing(state));if(!validRoastLevel(state.roastLevel))state.roastLevel=defaultRoastLevel(mapping,user);state.racing=await racingView(env,mapping);state.horses=await ownedHorses(env,mapping,user);const riotId=riotIdOf(mapping,user);state.mastery=riotId?await masteryOf(env,riotId,state.roastLevel):[];state.luxury=await luxuryView(env,mapping,user);for(const h of state.horses)h.statue=state.luxury.statues.includes(h.id);
  const rewards=(await env.DB.prepare('SELECT id,match,mode,amount,at FROM kp_events WHERE guild=? AND user=? ORDER BY at DESC,id LIMIT 100').bind(mapping.guildId,user).all<{id:string;match:string;mode:string;amount:number;at:number}>()).results;
  await ensureQuizKp(env);
  const quiz=(await env.DB.prepare('SELECT id,mode,day,game,amount,completed_at FROM kp_quiz_events WHERE guild=? AND user=? UNION ALL SELECT id,mode,day,game,amount,completed_at FROM kp_quiz_ranked_extra WHERE guild=? AND user=? ORDER BY completed_at DESC LIMIT 100').bind(mapping.guildId,user,mapping.guildId,user).all<{id:string;mode:string;day:string;game:string;amount:number;completed_at:number}>()).results;
@@ -57,15 +58,20 @@ export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:strin
    useExchange(state,Date.now());result=await buyHorse(env,mapping,user,state,args);
   }else if(action==='horse-sell'){
    result=await sellHorse(env,mapping,user,state,args);
+  }else if(action==='luxury'){
+   useExchange(state,Date.now());result=await buyLuxury(env,mapping,user,state,args);
   }else if(action==='roast-level'){
    if(!validRoastLevel(args.level))throw Error('煽りレベルを選んでください。');
    state.roastLevel=args.level;result={roastLevel:args.level};
   }else throw Error('この操作は本番口座では使えません。');
-  const response={result};const safeState={...state,claims:[],directives:[]};delete safeState.members;delete safeState.racing;delete safeState.horses;delete safeState.mastery;
+  const response={result};const safeState={...state,claims:[],directives:[]};delete safeState.members;delete safeState.racing;delete safeState.horses;delete safeState.mastery;delete safeState.luxury;
   const inserted=await env.DB.prepare(`INSERT INTO kp_operations(id,guild,user,request_hash,response,delta,state,directive,at)
    SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM kp_wallets w JOIN kp_state s ON w.guild=s.guild AND w.user=s.user WHERE w.guild=? AND w.user=? AND w.version=? AND s.version=?) ON CONFLICT(guild,user,id) DO NOTHING`)
    .bind(id,mapping.guildId,user,requestHash,JSON.stringify(response),state.cash-before,JSON.stringify(safeState),directive?JSON.stringify(directive):null,Date.now(),mapping.guildId,user,state.walletVersion,state.stateVersion).run();
-  if(inserted.meta.changes)return response;
+  if(inserted.meta.changes){
+   if(action==='luxury')try{await luxuryPosts(env,mapping,user,(result as {luxury:Parameters<typeof luxuryPosts>[3]}).luxury);}catch{console.warn('luxury_post_pending');}
+   return response;
+  }
  }
  throw Error('他の操作と重なりました。残高を更新してもう一度お試しください。');
 }
@@ -115,6 +121,6 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping):Promi
   return response({error:'Not found'},404);
  }catch(error){
   const message=error instanceof Error?error.message:'';
-  return response({retryable:!(/[ぁ-んァ-ヶ一-龯]/.test(message)&&!message.includes('SQL')),error:/[ぁ-んァ-ヶ一-龯]/.test(message)&&!message.includes('SQL')?message:message.includes('kp_directive_active')||message.includes('kp_directives.guild, kp_directives.target')?'その相手には実行中の指令があります。':message.includes('kp_horse_limit')?'持てる馬は3頭までです。':message.includes('kp_horse_not_sellable')?'売れる馬が見つかりません。':'処理を確認できませんでした。残高を更新して確認してください。'},400);
+  return response({retryable:!(/[ぁ-んァ-ヶ一-龯]/.test(message)&&!message.includes('SQL')),error:/[ぁ-んァ-ヶ一-龯]/.test(message)&&!message.includes('SQL')?message:message.includes('kp_directive_active')||message.includes('kp_directives.guild, kp_directives.target')?'その相手には実行中の指令があります。':message.includes('kp_horse_limit')?'持てる馬は3頭までです。':message.includes('kp_crowns')?'その枠は埋まりました。もう一度お試しください。':message.includes('kp_horse_not_sellable')?'売れる馬が見つかりません。':'処理を確認できませんでした。残高を更新して確認してください。'},400);
  }
 }
