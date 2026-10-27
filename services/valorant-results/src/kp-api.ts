@@ -1,3 +1,4 @@
+import {kpCommands,KP_COMMAND_VERSION} from './kp-command.ts';
 import {voiceControl,voiceStatus} from './voice-api.ts';
 import {ensureVoiceLedger,voicePolicy} from './voice-rewards.ts';
 import {ensureQuizKp,receiveQuizKp,isKpParticipant,quizKpRates,quizKpLimits} from './quiz-kp.ts';
@@ -81,6 +82,7 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping):Promi
  const headers:Record<string,string>={'Cache-Control':'no-store','Vary':'Origin'};
  if(origin)Object.assign(headers,{'Access-Control-Allow-Origin':origin,'Access-Control-Allow-Headers':'Authorization,Content-Type','Access-Control-Allow-Methods':'GET,POST,OPTIONS'});
  const response=(body:unknown,status=200)=>Response.json(body,{status,headers});
+ if(request.method==='GET'&&new URL(request.url).pathname==='/api/kp/commands')return response({applicationId:discord.applicationId,version:KP_COMMAND_VERSION,commands:kpCommands});
  if(request.method==='OPTIONS')return new Response(null,{status:204,headers});
  try{
   const mapping=await initializeKp(env,override);if(!mapping)return response({error:'口座はまだ準備中です。'},503);
