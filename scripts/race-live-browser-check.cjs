@@ -5,7 +5,7 @@ const server=spawn('python3',['-m','http.server','8767','--bind','127.0.0.1'],{s
  const {createInitialState}=await import('../js/engine.js');const R=await import('../js/racing.js');
  const T0=Date.parse('2026-10-27T16:05:30+09:00'),RACE=Date.parse('2026-10-27T16:15:00+09:00');
  const seed='server-seed-for-browser-check',hash=createHash('sha256').update(seed).digest('hex'),nextHash='f'.repeat(64);
- const state={...createInitialState(T0),cash:5000,serverWallet:true,selfUserId:'one',members:[{id:'one',name:'本人'}],claims:[],directives:[],racing:{open:{id:RACE,hash},watch:{id:RACE-R.RACE_INTERVAL,runs:false}}};
+ const state={...createInitialState(T0),cash:5000,serverWallet:true,selfUserId:'one',members:[{id:'one',name:'本人'}],claims:[],directives:[],racing:{open:{id:RACE,hash,crown:'本人戦犯レース'},watch:{id:RACE-R.RACE_INTERVAL,runs:false}},roastLevel:'full'};
  const bodies=[];const errors=[];let stateCalls=0;
  for(let n=0;n<40;n++){try{if((await fetch('http://127.0.0.1:8767')).ok)break;}catch{}await new Promise(r=>setTimeout(r,100));}
  browser=await chromium.launch({executablePath:process.env.CHROMIUM_PATH||(existsSync('/usr/bin/chromium')?'/usr/bin/chromium':undefined),args:['--no-sandbox']});
@@ -16,13 +16,18 @@ const server=spawn('python3',['-m','http.server','8767','--bind','127.0.0.1'],{s
   const path=new URL(route.request().url()).pathname;let result;
   if(path.endsWith('auth'))result={token:'a'.repeat(48)};
   else if(path.endsWith('state')){stateCalls++;result=state;}
-  else{const body=route.request().postDataJSON();bodies.push(body);assert.equal(body.action,'race-bet');result={result:{bet:R.placeRaceBet(state,body.args,T0+1000)}};}
+  else{const body=route.request().postDataJSON();bodies.push(body);if(body.action==='roast-level'){state.roastLevel=body.args.level;result={result:{roastLevel:body.args.level}};}else{assert.equal(body.action,'race-bet');result={result:{bet:R.placeRaceBet(state,body.args,T0+1000)}};}}
   await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(result)});
  });
  await page.clock.install({time:T0});
  await page.goto('http://127.0.0.1:8767');await page.locator('#kp-connect-code').fill('c'.repeat(48));await page.locator('[data-action=connect-kp]').click();await page.locator('.kp-connection').waitFor();
  await page.locator('.nav-btn[data-screen=market]').click();await page.locator('.sub-tab[data-screen=race]').click();
  assert.match(await page.locator('.race-card').innerText(),new RegExp(hash.slice(0,16)));
+ assert.match(await page.locator('.race-card h3').innerText(),/本人戦犯レース/);
+ assert.equal(await page.locator('[data-action=roast-level][aria-pressed=true]').getAttribute('data-level'),'full');
+ await page.locator('[data-action=roast-level][data-level=normal]').click();await page.locator('.toast').filter({hasText:'煽りレベル'}).waitFor();
+ const roast=bodies.shift();assert.equal(roast.action,'roast-level');assert.deepEqual(roast.args,{level:'normal'});
+ assert.equal(await page.locator('[data-action=roast-level][aria-pressed=true]').getAttribute('data-level'),'normal');
  assert.match(await page.locator('.race-stage').innerText(),/不成立/);
  await page.locator('[data-race-horse="2"]').click();await page.locator('[data-race-type=place]').click();await page.locator('#race-amount').fill('500');await page.locator('[data-action=race-bet]').click();
  await page.locator('.toast').filter({hasText:'馬券を買いました'}).waitFor();

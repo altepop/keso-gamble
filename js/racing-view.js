@@ -1,5 +1,5 @@
-import { BET_TYPES, COURSE_M, CONDITIONS, GOINGS, MIN_BET, BET_STEP, RUN_MS, STYLES, WEEKLY_LIMIT, distanceAt, payoutFor, placeSlots } from './racing.js?v=20261027-racelive';
-import { escapeHTML } from './progression-views.js?v=20261027-racelive';
+import { BET_TYPES, COURSE_M, CONDITIONS, GOINGS, MIN_BET, BET_STEP, RUN_MS, STYLES, WEEKLY_LIMIT, distanceAt, payoutFor, placeSlots } from './racing.js?v=20261027-crowns';
+import { escapeHTML } from './progression-views.js?v=20261027-crowns';
 const kp=n=>n.toLocaleString('ja-JP')+' KP';
 const odd=v=>(v/10).toFixed(1)+'倍';
 export const SILKS=[['#f5f5f5','#111'],['#1f1f1f','#fff'],['#e03131','#fff'],['#1c7ed6','#fff'],['#fcc419','#111'],['#2f9e44','#fff'],['#f76707','#fff'],['#f783ac','#111'],['#845ef7','#fff'],['#20c997','#111']];
@@ -38,9 +38,14 @@ function history(state){
  return `<div class="asset-card"><h2 class="panel-title">自分の馬券</h2>${bets.length?bets.map(b=>`<div class="history-entry"><div>${clock(b.raceId)}発走 · ${b.horse}番 ${BET_TYPES[b.type].label} ${kp(b.amount)}（${odd(b.odds)}）</div><div class="helper">${b.status==='pending'?'結果待ち':b.status==='won'?`的中 +${kp(b.payout)}`:'外れ'}</div></div>`).join(''):'<p class="helper">まだ馬券を買っていません。</p>'}</div>`;
 }
 
+const ROAST_LEVELS=[['mild','控えめ','名前のついたレースを作らず、Botの結果投稿もやさしい言葉'],['normal','標準','「◯◯おつかれレース」など、ゆるい冠レースといじり'],['full','全開','「◯◯戦犯レース」など容赦なし。ゲームの腕・負けっぷり・KPの溶かし方・夜ふかしだけが対象']];
+function roastPanel(state){
+ const level=state.roastLevel??'mild';
+ return `<div class="asset-card"><h2 class="panel-title">煽りレベル</h2><p class="helper">あなたの連敗などで組まれる冠レースの名前と、稼ぎchの結果投稿に使います。いつでも変えられます。</p><div class="segment roast-segment">${ROAST_LEVELS.map(([id,label])=>`<button data-action="roast-level" data-level="${id}" class="${level===id?'active':''}" aria-pressed="${level===id}">${label}</button>`).join('')}</div><p class="helper">${ROAST_LEVELS.find(([id])=>id===level)[2]}</p></div>`;
+}
 export function raceScreen({state,live,watch,open,openOdds,draft,weeklyLeft,tabs,nav}){
  const note=live?'本番口座のKPで遊ぶ競馬です。15分おきに発走し、発走1分前に締め切ります。着順はサーバーが決め、締切前に公開したハッシュで後から検証できます。オッズは胴元の取り分なし。':'デモの競馬です。15分おきに発走し、発走1分前に締め切ります。オッズは胴元の取り分なしで、当たる確率どおり。本番口座のKPは使いません。';
- return `<div class="screen"><header class="topbar"><div class="toprow"><h1 class="title">競馬</h1><span class="badge">${kp(state.cash)}</span></div></header>${tabs}<div class="market-disclaimer">${note}</div>${stage(watch,state)}${betPanel(open,openOdds,draft,state,weeklyLeft)}${history(state)}${nav}</div>`;
+ return `<div class="screen"><header class="topbar"><div class="toprow"><h1 class="title">競馬</h1><span class="badge">${kp(state.cash)}</span></div></header>${tabs}<div class="market-disclaimer">${note}</div>${stage(watch,state)}${betPanel(open,openOdds,draft,state,weeklyLeft)}${history(state)}${live?roastPanel(state):''}${nav}</div>`;
 }
 
 // ---- Canvas playback (side-scrolling, broadcast style) ----

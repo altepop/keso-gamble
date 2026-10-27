@@ -1,14 +1,14 @@
-import {wheelView,covered,redNumbers,outcomeAngle} from './roulette-view.js?v=20261027-racelive';
-import {connectDiscordActivity,isDiscordActivity}from './discord-activity-auth.js?v=20261027-racelive';
-import { createKpClient } from './kp-client.js?v=20261027-racelive';
+import {wheelView,covered,redNumbers,outcomeAngle} from './roulette-view.js?v=20261027-crowns';
+import {connectDiscordActivity,isDiscordActivity}from './discord-activity-auth.js?v=20261027-crowns';
+import { createKpClient } from './kp-client.js?v=20261027-crowns';
 import { fmt, fmt0 } from './format.js';
-import { submitClaim, approveClaim, issueDirective, completeDirective } from './progression.js?v=20261027-racelive';
-import { titleView, homeView, playView, directivesView } from './progression-views.js?v=20261027-racelive';
+import { submitClaim, approveClaim, issueDirective, completeDirective } from './progression.js?v=20261027-crowns';
+import { titleView, homeView, playView, directivesView } from './progression-views.js?v=20261027-crowns';
 import { genCandles, movingAverage, svgCandles } from './charts.js';
-import { MARKET, createInitialState, portfolioValue, assets, advanceMarket, trade, spin, spinNumbers, validateNumberBets, grantDemoSalary, cryptoRouletteNumber } from './engine.js?v=20261027-racelive';
+import { MARKET, createInitialState, portfolioValue, assets, advanceMarket, trade, spin, spinNumbers, validateNumberBets, grantDemoSalary, cryptoRouletteNumber } from './engine.js?v=20261027-crowns';
 import { KEY, LEGACY_KEY } from './storage.js';
-import { PUBLIC_SALT, RUN_MS, WEEKLY_LIMIT, openRaceStart, latestRaceStart, raceCard, raceOdds, raceResult, raceTimeline, raceCommentary, raceRuns, placeRaceBet, settleRaceBets, weeklySpent } from './racing.js?v=20261027-racelive';
-import { raceScreen, racePreview, drawRace, raceElapsed } from './racing-view.js?v=20261027-racelive';
+import { PUBLIC_SALT, RUN_MS, WEEKLY_LIMIT, openRaceStart, latestRaceStart, raceCard, raceOdds, raceResult, raceTimeline, raceCommentary, raceRuns, placeRaceBet, settleRaceBets, weeklySpent } from './racing.js?v=20261027-crowns';
+import { raceScreen, racePreview, drawRace, raceElapsed } from './racing-view.js?v=20261027-crowns';
 import { createStore } from './store.js';
 const $=(s,el=document)=>el.querySelector(s);
 const wallet=createKpClient();
@@ -90,7 +90,7 @@ const raceBets=()=>({raceBets:state.raceBets??[]});
 // Live wallets: the server decides whether the race runs and reveals its seed after the start.
 function liveRace(id){const w=state.racing?.watch;return w?.id===id?w:null;}
 function raceWatch(now,id){
-  const card=raceCard(id),info=live?liveRace(id):null;
+  const info=live?liveRace(id):null,card={...raceCard(id),...(info?.crown?{name:info.crown}:{})};
   if(live&&(!info||(info.runs&&!info.seed)))return {card,runs:false,loading:true};
   if(!(live?info.runs:raceRuns(card,raceBets())))return {card,runs:false};
   const seed=live?info.seed:PUBLIC_SALT,result=raceResult(card,seed),odds=raceOdds(card),timeline=raceTimeline(card,result,seed);
@@ -107,15 +107,15 @@ async function verifySeed(watch,seed,hash){
 let watchCache=null,watchKey='';
 function currentWatch(now){
   const id=latestRaceStart(now),info=live?liveRace(id):null;
-  const key=`${id}:${live?`${info?.runs}:${info?.seed}:${info?.hash}`:raceRuns({id,big:false},raceBets())}:${now>=id+RUN_MS}`;
+  const key=`${id}:${live?`${info?.runs}:${info?.seed}:${info?.hash}:${info?.crown}`:raceRuns({id,big:false},raceBets())}:${now>=id+RUN_MS}`;
   if(key!==watchKey){watchKey=key;watchCache=raceWatch(now,id);}
   return watchCache;
 }
 function screenRace(){
-  const now=Date.now(),open=raceCard(openRaceStart(now)),watch=currentWatch(now);
+  const now=Date.now(),openInfo=live&&state.racing?.open?.id===openRaceStart(now)?state.racing.open:null,open={...raceCard(openRaceStart(now)),...(openInfo?.crown?{name:openInfo.crown}:{})},watch=currentWatch(now);
   raceShown=`${open.id}:${watchKey}`;
   const weeklyLeft=WEEKLY_LIMIT-weeklySpent({raceWeek:state.raceWeek??{start:0,spent:0}},now);
-  return raceScreen({state,live,watch,open:{card:open,hash:live&&state.racing?.open?.id===open.id?state.racing.open.hash:null},openOdds:raceOdds(open),draft:{...raceDraft,amount:drafts['race-amount']},weeklyLeft,tabs:subTabs(),nav:bottomNav()});
+  return raceScreen({state,live,watch,open:{card:open,hash:openInfo?.hash??null},openOdds:raceOdds(open),draft:{...raceDraft,amount:drafts['race-amount']},weeklyLeft,tabs:subTabs(),nav:bottomNav()});
 }
 async function settleRaces(){
   if(live||raceSettling||!(state.raceBets??[]).some(b=>b.status==='pending'&&Date.now()>=b.raceId+RUN_MS))return;
@@ -261,7 +261,7 @@ async function doSpin(){
 
 addEventListener('click',async e=>{
   const t=e.target.closest?.('button,[data-open]'); if(!t) return;
-  const mutates=!!t.dataset.approve || !!t.dataset.complete || ['salary','trade','spin','race-bet','reset','submit-claim','issue-directive','connect-kp','refresh-kp','disconnect-kp','auto-connect-kp'].includes(t.dataset.action);
+  const mutates=!!t.dataset.approve || !!t.dataset.complete || ['salary','trade','spin','race-bet','roast-level','reset','submit-claim','issue-directive','connect-kp','refresh-kp','disconnect-kp','auto-connect-kp'].includes(t.dataset.action);
   if(mutates && mutationPending)return;
   if(mutates)mutationPending=true;
   try{
@@ -272,6 +272,7 @@ addEventListener('click',async e=>{
     if(t.dataset.screen){if(spinLock){toast('抽選中は画面を切り替えられません');return;}detail=null;screen=t.dataset.screen;render();if(screen==='race')settleRaces();return;}
     if(t.dataset.raceHorse){raceDraft.horse=Number(t.dataset.raceHorse);render();return;}
     if(t.dataset.raceType){raceDraft.type=t.dataset.raceType;render();return;}
+    if(t.dataset.action==='roast-level'){await liveOperation('roast-level',{level:t.dataset.level});render();toast('煽りレベルを変更しました');return;}
     if(t.dataset.action==='race-bet'){
       const now=Date.now(),raceId=openRaceStart(now),args={raceId,type:raceDraft.type,horse:raceDraft.horse,amount:Number($('#race-amount')?.value)};
       const bet=live?(await liveOperation('race-bet',args)).bet:await commit(next=>placeRaceBet(next,args,now));
