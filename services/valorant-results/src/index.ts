@@ -8,6 +8,8 @@ import { settleKpRaces } from './racing-kp.ts';
 import { queueRacePosts, flushRacePosts } from './racing-posts.ts';
 import { scheduleCrowns } from './racing-crowns.ts';
 import { decideEntries, settleHorsePrizes } from './racing-horses.ts';
+import { recordMastery } from './mastery.ts';
+import { roastLevelsOf } from './racing-posts.ts';
 // @ts-expect-error The shared pure browser engine has no TypeScript declarations.
 import { openRaceStart } from '../../../js/racing.js';
 import { lastDeathCheck } from './death-unrated.ts';
@@ -157,6 +159,11 @@ async function saveMatch(env: Env, match: Match, player: Player, account: Accoun
   saved.add(savedKey);
   if(kpRun&&kpRun.credits.has(kpId))kpRun.messages.set(kpId,result.message);
   if (inserted.meta.changes) {
+    // Agent mastery counts new results only; a failure never blocks the result post.
+    if (kpRun) try {
+      const subject = match.players.find(p => p.puuid === account.puuid), mapping = kpRun.mapping;
+      await recordMastery(env, mapping, player.riotId, match.metadata.match_id, subject?.agent?.name, result.outcome, result.endedAt, () => roastLevelsOf(env, mapping));
+    } catch { console.warn('mastery_pending'); }
     await env.DB.prepare('INSERT OR IGNORE INTO monitor_state(key,value) VALUES(?,?)').bind('detected:' + match.metadata.match_id, String(Date.now())).run();
     console.info('result_saved', { player: player.name || player.riotId, outcome: result.outcome, endedAt: new Date(result.endedAt).toISOString(),
       finishToDetectionMs: Math.max(0, Date.now() - result.endedAt) });

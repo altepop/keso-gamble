@@ -70,7 +70,7 @@ export async function enqueue(env:KpEnv,id:string,body:string,now:number){await 
 export function crownPost(c:{race:number;name:string;user:string;reason:string}){
  return `🏇 『${clean(c.name)}』開催決定！ ${clock(c.race)}発走（<@${c.user}> の${c.reason}にちなんで）\nKESO PLAY の「勝負 → 競馬」で、発走15分前から馬券を買えます。`;
 }
-async function roastLevelsOf(env:KpEnv,mapping:KpMapping){
+export async function roastLevelsOf(env:KpEnv,mapping:KpMapping){
  const rows=(await env.DB.prepare("SELECT user,json_extract(data,'$.roastLevel') AS level FROM kp_state WHERE guild=?").bind(mapping.guildId).all<{user:string;level:string|null}>()).results;
  return (user:string):RoastLevel=>{const level=rows.find(r=>r.user===user)?.level;return validRoastLevel(level)?level:defaultRoastLevel(mapping,user);};
 }
