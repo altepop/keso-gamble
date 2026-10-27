@@ -1,8 +1,8 @@
-import {connectDiscordActivity,isDiscordActivity}from './discord-activity-auth.js?v=20261027-auto';
-import { createKpClient } from './kp-client.js?v=20261027-auto';
+import {connectDiscordActivity,isDiscordActivity}from './discord-activity-auth.js?v=20261027-touch';
+import { createKpClient } from './kp-client.js?v=20261027-touch';
 import { fmt, fmt0 } from './format.js';
 import { submitClaim, approveClaim, issueDirective, completeDirective } from './progression.js';
-import { titleView, homeView, playView, directivesView } from './progression-views.js?v=20261027-auto';
+import { titleView, homeView, playView, directivesView } from './progression-views.js?v=20261027-touch';
 import { genCandles, movingAverage, svgCandles } from './charts.js';
 import { MARKET, createInitialState, portfolioValue, assets, advanceMarket, trade, spin, grantDemoSalary, cryptoRouletteNumber } from './engine.js';
 import { KEY, LEGACY_KEY } from './storage.js';
@@ -24,6 +24,7 @@ let spinLock=false;
 let mutationPending=false;
 let detail=null;
 let showMA=true;
+let renderedMarkup;
 
 const app=$('#app');
 const toastEl=document.createElement('div');toastEl.className='toast';toastEl.setAttribute('role','status');toastEl.setAttribute('aria-live','polite');document.body.appendChild(toastEl);
@@ -124,7 +125,10 @@ function render(){
   const focusData=focusedElement && Object.entries(focusedElement.dataset).find(([key])=>['screen','marketTab','marketMode','tradeSide','bet','action','open'].includes(key));
   const warning=live?connectionError:sessionOnly?'端末に保存できないため、この画面を閉じると変更が失われます。':!navigator.locks?.request?'このブラウザでは安全な保存を利用できません。HTTPS対応の最新ブラウザで開いてください。':'';
   const connection=live?`<div class="kp-connection"><span>${wallet.pending?'通信結果の確認待ち':wallet.remembered?'KP口座 接続中':'KP口座 一時接続'}</span><button data-action="refresh-kp">${wallet.pending?'通信結果を確認':'残高を更新'}</button><button data-action="disconnect-kp">接続を解除</button></div>`:'';
-  app.innerHTML = connection+html.replace('<div class="screen">','<div class="screen">'+(warning?`<div class="storage-warning" role="status">${warning}</div>`:'')) + detailSheet();
+  const markup=connection+html.replace('<div class="screen">','<div class="screen">'+(warning?`<div class="storage-warning" role="status">${warning}</div>`:''))+detailSheet();
+  // A quote/balance poll must not replace a pressed button when its display is unchanged.
+  if(markup===renderedMarkup)return;
+  app.innerHTML=markup;renderedMarkup=markup;
   app.querySelectorAll('details').forEach((el,index)=>{el.open=openDetails[index]??false;});
   for (const [id,value] of Object.entries(drafts)) { const input=document.getElementById(id); if(input) input.value=value; }
   if(focused) document.getElementById(focused)?.focus();
@@ -203,7 +207,7 @@ addEventListener('click',async e=>{
     if(t.dataset.action==='salary'){await commit(next => grantDemoSalary(next));render();toast('テスト用KP +600 KP');return;}
     if(t.dataset.action==='trade'){await doTrade();return;}
     if(t.dataset.action==='spin'){await doSpin();return;}
-    if(t.dataset.action==='reset'){if(confirm('データを初期化しますか？')){await commit(next => Object.assign(next,createInitialState()));for(const key of Object.keys(drafts))delete drafts[key];render();toast('初期化した')}return;}
+    if(t.dataset.action==='reset'){if(confirm('データを初期化しますか？')){await commit(next => Object.assign(next,createInitialState()));for(const key of Object.keys(drafts))delete drafts[key];renderedMarkup=undefined;render();toast('初期化した')}return;}
 
   }catch(err){render();toast(err.message||'操作に失敗した');}
   finally { if(mutates)mutationPending=false; }
