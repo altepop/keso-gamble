@@ -1,5 +1,5 @@
-import { BET_TYPES, COURSE_M, CONDITIONS, GOINGS, MIN_BET, BET_STEP, RUN_MS, STYLES, WEEKLY_LIMIT, distanceAt, payoutFor, placeSlots } from './racing.js?v=20261027-racing';
-import { escapeHTML } from './progression-views.js?v=20261027-racing';
+import { BET_TYPES, COURSE_M, CONDITIONS, GOINGS, MIN_BET, BET_STEP, RUN_MS, STYLES, WEEKLY_LIMIT, distanceAt, payoutFor, placeSlots } from './racing.js?v=20261027-racelive';
+import { escapeHTML } from './progression-views.js?v=20261027-racelive';
 const kp=n=>n.toLocaleString('ja-JP')+' KP';
 const odd=v=>(v/10).toFixed(1)+'倍';
 export const SILKS=[['#f5f5f5','#111'],['#1f1f1f','#fff'],['#e03131','#fff'],['#1c7ed6','#fff'],['#fcc419','#111'],['#2f9e44','#fff'],['#f76707','#fff'],['#f783ac','#111'],['#845ef7','#fff'],['#20c997','#111']];
