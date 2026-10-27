@@ -1,3 +1,4 @@
+import {KP_COMMAND_VERSION,registerKpCommands} from './kp-command.ts';
 import discord from '../discord-config.json' with {type:'json'};
 import {VoiceClock,eligibleVoice,creditVoiceSlot} from './voice-rewards.ts';
 import type {KpEnv} from './kp.ts';
@@ -15,6 +16,7 @@ export class VoiceGateway {
  private seq:number|null=null;private session='';private resumeUrl='';private ready=false;private lastAck=0;private interval=45000;private waitingAck=false;
  private heartbeatTimer:ReturnType<typeof setInterval>|undefined;private firstHeartbeat:ReturnType<typeof setTimeout>|undefined;
  private voices=new Map<string,string|null>();private bots=new Map<string,boolean>();private channels=new Map<string,number>();private afk:string|null=null;
+ private commandsRegistered=false;private commandsAfter=0;private commandsError='';
  private apiAfter=0;private nextConnect=0;private error='unconfigured';private stopped=false;private tail:Promise<unknown>=Promise.resolve();private init:Promise<void>;private clock:VoiceClock;
  private ctx:DurableObjectState;private env:VoiceEnv;
  constructor(ctx:DurableObjectState,env:VoiceEnv){
@@ -38,9 +40,9 @@ export class VoiceGateway {
   const socket=this.socket;this.socket=null;try{socket?.close(4000,'reconnect');}catch{}
   this.nextConnect=Math.max(this.nextConnect,Date.now()+5000);
  }
- private async api(path:string,token=this.token){
+ private async api(path:string,token=this.token,method='GET',body?:unknown){
   if(Date.now()<this.apiAfter)throw Error('Discord cooldown');
-  const response=await fetch('https://discord.com/api/v10'+path,{headers:{Authorization:'Bot '+token},signal:AbortSignal.timeout(10000)});
+  const response=await fetch('https://discord.com/api/v10'+path,{method,headers:{Authorization:'Bot '+token,...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{}),signal:AbortSignal.timeout(10000)});
   if(response.status===429){const detail=await response.json().catch(()=>null) as {retry_after?:number}|null;const retry=Number(detail?.retry_after??response.headers.get('retry-after'));this.apiAfter=Date.now()+Math.max(1000,(Number.isFinite(retry)&&retry>0?retry:60)*1000);this.nextConnect=Math.max(this.nextConnect,this.apiAfter);throw Error('Discord rate limit');}
   if(!response.ok)throw Error('discord_http_'+response.status);return await response.json() as any;
  }
@@ -112,6 +114,12 @@ export class VoiceGateway {
     try{const member=await this.api('/guilds/'+this.guild+'/members/'+user);if(member.user?.id===user)this.bots.set(user,Boolean(member.user.bot));}catch{break;}
    }
    await this.connect();
+   if(this.token&&!this.stopped&&!this.commandsRegistered&&Date.now()>=this.commandsAfter){
+    try{
+     if(await this.ctx.storage.get('kp_command_version')!==KP_COMMAND_VERSION){await registerKpCommands(discord.applicationId,this.guild,(path,method,body)=>this.api(path,this.token,method,body));await this.ctx.storage.put('kp_command_version',KP_COMMAND_VERSION);}
+     this.commandsRegistered=true;this.commandsError='';
+    }catch{this.commandsError='registration_pending';this.commandsAfter=Date.now()+300000;console.warn('kp_commands_pending');}
+   }
   }catch{console.warn('voice_checkpoint_pending');}
   finally{if(this.token)await this.ctx.storage.setAlarm(Date.now()+30000);}
  });}
@@ -141,5 +149,5 @@ export class VoiceGateway {
   }
   return Response.json(this.status());
  });}
- private status(){return {enabled:Boolean(this.token)&&!this.stopped,connected:this.confirmed(),tracked:this.active().length,lastConfirmedAt:this.lastAck,error:this.error};}
+ private status(){return {enabled:Boolean(this.token)&&!this.stopped,connected:this.confirmed(),tracked:this.active().length,lastConfirmedAt:this.lastAck,error:this.error,commandsRegistered:this.commandsRegistered,commandsError:this.commandsError};}
 }

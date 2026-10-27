@@ -1,3 +1,4 @@
+import { runKpCommand } from './kp-slash.ts';
 import { runValoCommand } from './valo-queries.ts';
 import { initializeKp, issueKpCode } from './kp.ts';
 import storedConfig from '../discord-config.json' with { type: 'json' };
@@ -115,7 +116,7 @@ export async function discordInteractions(request: Request, env: Env, ctx: Execu
   try { permissions = BigInt(interaction.member?.permissions ?? '0'); } catch { /* Deny invalid permission fields. */ }
   const deathSelect = interaction.type === 3 && /^death_mode:\d+$/.test(interaction.data?.custom_id ?? '');
   if ((interaction.data?.name === 'death' || deathSelect) && !(permissions & (8n | 32n))) return respond('開始・終了・状態確認には「管理者」または「サーバー管理」権限が必要です。');
-  if (!deathSelect && (interaction.type !== 2 || !['death', 'valo'].includes(interaction.data?.name ?? ''))) return respond('対応していないコマンドです。');
+  if (!deathSelect && (interaction.type !== 2 || !['death', 'valo', 'kp', 'keiba', 'bet'].includes(interaction.data?.name ?? ''))) return respond('対応していないコマンドです。');
   if (!/^\d+$/.test(interaction.id) || typeof interaction.token !== 'string' || !interaction.token.length || interaction.token.length > 4096) return new Response('Invalid interaction', { status: 400 });
   // Defer immediately so database work never consumes Discord's three-second acknowledgement window.
   ctx.waitUntil((async () => {
@@ -124,8 +125,9 @@ export async function discordInteractions(request: Request, env: Env, ctx: Execu
       if (deathSelect) result = { content: await selectDeathMode(env.DB, interaction, configuredPlayers, runDeathCommand), components: [] };
       else if (interaction.data?.name === 'death' && interaction.data.options?.[0]?.name === 'start'
         && !interaction.data.options[0].options?.some(option => option.name === 'mode')) result = await deathModePicker(env.DB, interaction, configuredPlayers);
+      else if (['kp','keiba','bet'].includes(interaction.data?.name??'')) result = {content:await runKpCommand(env,interaction)};
       else result = { content: interaction.data!.name === 'valo' ? await runValoCommand(env.DB, interaction) : await runDeathCommand(env.DB, interaction) };
-    } catch { console.warn('discord_command_failed'); result = { content: '操作できませんでした。/death status または /valo status で状態を確認してください。', components: [] }; }
+    } catch { console.warn('discord_command_failed'); result = { content: '操作結果を確認できませんでした。KP・馬券は /kp またはActivity、予約は /death status で確認してください。', components: [] }; }
     if (interaction.data?.name === 'valo' && interaction.data.options?.[0]?.name === 'status') {
       try {
         const mapping = await initializeKp(env), user = interaction.member?.user?.id;
