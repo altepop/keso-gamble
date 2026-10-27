@@ -1,0 +1,46 @@
+name: One earnings channel test message
+on:
+  push:
+    branches: [ops/earnings-test-20261027]
+    paths: [.github/workflows/earnings-test.yml]
+permissions:
+  contents: read
+jobs:
+  test-message:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Queue one identified test and verify delivery
+        shell: bash
+        run: |
+          node --input-type=module <<'JS'
+          const base='https://api.cloudflare.com/client/v4/accounts/'+process.env.CF_ACCOUNT;
+          async function api(path,body){
+            const r=await fetch(base+path,{method:body?'POST':'GET',headers:{Authorization:'Bearer '+process.env.CF_TOKEN,'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{})});
+            const data=await r.json();
+            if(!r.ok||!data.success)throw Error('Cloudflare request rejected: HTTP '+r.status+' codes '+(data.errors??[]).map(e=>e.code).join(','));
+            return data.result;
+          }
+          const settings=await api('/workers/scripts/valorant-results/settings');
+          if(!settings.bindings.some(b=>b.name==='KP_EARNINGS_WEBHOOK_URL'&&b.type==='secret_text'))throw Error('Earnings channel webhook is not configured. No message queued.');
+          const db=settings.bindings.find(b=>b.name==='DB'&&b.type==='d1');if(!db)throw Error('Existing DB binding not found');
+          const query=(sql,params=[])=>api('/d1/database/'+db.id+'/query',{sql,params});
+          const id='earnings-smoke-20261027-user-request-01';
+          const schema=await query("SELECT name FROM sqlite_master WHERE type='table' AND name='kp_posts'");
+          if(!schema[0]?.results?.length)throw Error('Existing earnings queue is not initialized. No message queued.');
+          const body=JSON.stringify({content:'🧪 KESO PLAY 稼ぎchの投稿テストです。\n接続確認用のメッセージです。ポイントの増減はありません。',allowed_mentions:{parse:[]}});
+          await query('INSERT OR IGNORE INTO kp_posts(id,body,at) VALUES(?,?,?)',[id,body,Date.now()]);
+          console.log('One test message queued under a fixed unique ID.');
+          for(let i=0;i<18;i++){
+            const rows=await query('SELECT sent FROM kp_posts WHERE id=?',[id]);
+            if(rows[0]?.results?.[0]?.sent===1){console.log('DELIVERED: the production sender received Discord success and marked the test sent.');process.exit(0);}
+            await new Promise(resolve=>setTimeout(resolve,10000));
+          }
+          throw Error('Test remains pending. Do not insert a second test or assume delivery.');
+          JS
