@@ -1,16 +1,17 @@
-import {wheelView,covered,redNumbers,outcomeAngle} from './roulette-view.js?v=20261027-multi';
-import {connectDiscordActivity,isDiscordActivity}from './discord-activity-auth.js?v=20261027-multi';
-import { createKpClient } from './kp-client.js?v=20261027-multi';
+import {wheelView,covered,redNumbers,outcomeAngle} from './roulette-view.js?v=20261027-safe-area';
+import {connectDiscordActivity,isDiscordActivity}from './discord-activity-auth.js?v=20261027-safe-area';
+import { createKpClient } from './kp-client.js?v=20261027-safe-area';
 import { fmt, fmt0 } from './format.js';
-import { submitClaim, approveClaim, issueDirective, completeDirective } from './progression.js?v=20261027-multi';
-import { titleView, homeView, playView, directivesView } from './progression-views.js?v=20261027-multi';
+import { submitClaim, approveClaim, issueDirective, completeDirective } from './progression.js?v=20261027-safe-area';
+import { titleView, homeView, playView, directivesView } from './progression-views.js?v=20261027-safe-area';
 import { genCandles, movingAverage, svgCandles } from './charts.js';
-import { MARKET, createInitialState, portfolioValue, assets, advanceMarket, trade, spin, spinNumbers, validateNumberBets, grantDemoSalary, cryptoRouletteNumber } from './engine.js?v=20261027-multi';
+import { MARKET, createInitialState, portfolioValue, assets, advanceMarket, trade, spin, spinNumbers, validateNumberBets, grantDemoSalary, cryptoRouletteNumber } from './engine.js?v=20261027-safe-area';
 import { KEY, LEGACY_KEY } from './storage.js';
 import { createStore } from './store.js';
 const $=(s,el=document)=>el.querySelector(s);
 const wallet=createKpClient();
 const embedded=isDiscordActivity();
+document.documentElement.classList.toggle('discord-activity',embedded);
 let autoState=embedded?'loading':'idle';
 let autoMessage='';
 let live=wallet.connected&&!embedded;
@@ -130,7 +131,8 @@ function render(){
   const focusData=focusedElement && Object.entries(focusedElement.dataset).find(([key])=>['screen','marketTab','marketMode','tradeSide','bet','action','open'].includes(key));
   const warning=live?connectionError:sessionOnly?'端末に保存できないため、この画面を閉じると変更が失われます。':!navigator.locks?.request?'このブラウザでは安全な保存を利用できません。HTTPS対応の最新ブラウザで開いてください。':'';
   const connection=live?`<div class="kp-connection"><span>${wallet.pending?'通信結果の確認待ち':wallet.remembered?'KP口座 接続中':'KP口座 一時接続'}</span><button data-action="refresh-kp">${wallet.pending?'通信結果を確認':'残高を更新'}</button><button data-action="disconnect-kp">接続を解除</button></div>`:'';
-  const markup=connection+html.replace('<div class="screen">','<div class="screen">'+(warning?`<div class="storage-warning" role="status">${warning}</div>`:''))+detailSheet();
+  const withControls=html.includes('</header>')?html.replace('</header>','</header>'+connection):connection+html;
+  const markup=withControls.replace('<div class="screen">','<div class="screen">'+(warning?`<div class="storage-warning" role="status">${warning}</div>`:''))+detailSheet();
   // A quote/balance poll must not replace a pressed button when its display is unchanged.
   if(markup===renderedMarkup)return;
   app.innerHTML=markup;renderedMarkup=markup;
