@@ -12,3 +12,5 @@
 既存VoiceGatewayが保持するBot認証で、対象アプリとguildを確認し、3コマンドを個別POSTで登録する。既存death/valo/Entry Pointを一括上書きしない。同名の別コマンドは拒否する。成功版をDOに保存し、失敗時は5分後に再試行。登録失敗は通話監視を停止しない。statusのcommandsRegistered/commandsErrorで状況を確認できる。秘密値の追加入力や再発行は不要。
 
 検証はSQLiteメモリDBと模擬Discordのみ。本番でテスト用馬券の購入やKP発行はしない。
+
+`GET /api/kp/commands` は公開コマンド定義と版、アプリIDだけを返す。口座・guild・秘密設定は返さず、DBへアクセスしない。既存QUIZのREST登録処理がこの定義を読み、変更版だけ個別登録するため、通話セッションの更新待ちでもコマンド定義を更新できる。

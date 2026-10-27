@@ -112,3 +112,12 @@ test('only the exact ranking subcommand is public; balance, legacy KP and malfor
  for(const data of [{name:'kp'},{name:'kp',options:[{type:1,name:'balance'}]},{name:'bet',options:[{type:1,name:'ranking'}]},{name:'kp',options:[{type:3,name:'ranking'}]},{name:'kp',options:[{type:1,name:'ranking',options:[{}]}]},{name:'kp',options:[{type:1,name:'ranking'},{type:1,name:'balance'}]}])assert.equal(isKpRanking({data}),false);
  assert.deepEqual(kpCommands[0].options?.map(o=>o.name),['balance','ranking']);
 });
+
+test('public command metadata contains definitions only and does not need or expose wallet configuration',async()=>{
+ const {kpApi}=await import('../src/kp-api.ts');
+ let queries=0;
+ const response=await kpApi(new Request('https://worker/api/kp/commands'),{DB:{prepare(){queries++;throw Error('No DB reads');}},KP_BOOTSTRAP_PRIVATE_KEY:'fixture-secret-must-not-leak'} as unknown as KpEnv);
+ const body=await response.json() as {version:string;commands:unknown[]};
+ assert.equal(response.status,200);assert.equal(body.version,'kp-slash-v2-ranking');assert.equal(body.commands.length,3);assert.equal(queries,0);
+ assert.equal(JSON.stringify(body).includes('fixture-secret'),false);assert.equal(response.headers.get('Cache-Control'),'no-store');
+});
