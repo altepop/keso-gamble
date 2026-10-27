@@ -2,6 +2,7 @@
 // (docs/RACING_PLAN.md §12). Counting starts when this table is first created; no backfill.
 import type { KpEnv, KpMapping } from './kp.ts';
 import type { RoastLevel } from './racing-crowns.ts';
+import { enqueue, ensurePosts } from './racing-posts.ts';
 export const COUNT_TITLES:Array<[number,(a:string)=>string]>=[[100,a=>`まるで${a}`],[60,a=>`${a}の付属品`],[30,a=>`${a}しか友達がいない`],[15,a=>`${a}にすがる人`],[5,a=>`${a}をかじった人`]];
 export const WIN_TITLES:Array<[number,(a:string)=>string]>=[[.65,a=>`${a}以外は使うな`],[.55,a=>`${a}だけはまとも`],[.45,a=>`${a}でも可もなく不可もない人`],[.35,a=>`${a}を使うと負ける人`],[0,a=>`${a}の面汚し`]];
 export const MILESTONES=COUNT_TITLES.map(([n])=>n);
@@ -42,7 +43,7 @@ export async function recordMastery(env:KpEnv&{KP_EARNINGS_WEBHOOK_URL?:string},
  if(!user)return null;
  const games=await recordAgentPlay(env,riotId,matchId,agent,outcome,endedAt);
  if(games===null||!MILESTONES.includes(games)||!env.KP_EARNINGS_WEBHOOK_URL||(await levelOf())(user)==='mild')return games;
- const name=String(agent).trim(),{enqueue,ensurePosts}=await import('./racing-posts.ts');
+ const name=String(agent).trim();
  await ensurePosts(env);
  await enqueue(env,`mastery:${riotId}:${name}:${games}`,`🏅 <@${user}> ${clean(name)} ${games}試合目。称号『${countTitle(name,games)}』を獲得`,Date.now());
  return games;
