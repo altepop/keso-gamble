@@ -59,3 +59,8 @@ test('wallet deployment requires the already-provisioned key and a matching encr
  await prepareLiveSettings(dir,env,async url=>{if(url.endsWith('/content/v2'))return new Response(source,{headers:{'Content-Type':'application/javascript'}});return Response.json({success:true,result:url.endsWith('/schedules')?{schedules}:active});});
  assert.equal(JSON.parse(readFileSync(join(dir,'wrangler.jsonc'))).vars.KP_BOOTSTRAP_PUBLIC_KEY,publicKey);
 });
+test('the one same-Worker voice Durable Object is retained and other bindings are rejected',()=>{
+ const bound={...settings,bindings:[...settings.bindings,{type:'durable_object_namespace',name:'VOICE_GATEWAY',class_name:'VoiceGateway',script_name:'example'}]};
+ const config=deploymentConfig(bound,schedules,'example');assert.deepEqual(config.durable_objects.bindings,[{name:'VOICE_GATEWAY',class_name:'VoiceGateway'}]);assert.deepEqual(config.migrations,[{tag:'voice-v1',new_sqlite_classes:['VoiceGateway']}]);
+ assert.throws(()=>deploymentConfig({...bound,bindings:[...settings.bindings,{type:'durable_object_namespace',name:'VOICE_GATEWAY',class_name:'Other'}]},schedules,'example'),/Unrecognized/);
+});

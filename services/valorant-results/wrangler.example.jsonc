@@ -18,5 +18,21 @@
   ],
   "observability": {
     "enabled": true
-  }
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "VOICE_GATEWAY",
+        "class_name": "VoiceGateway"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "voice-v1",
+      "new_sqlite_classes": [
+        "VoiceGateway"
+      ]
+    }
+  ]
 }

@@ -262,3 +262,13 @@ test('signed quiz completions fund newcomers once per mode and JST 09:00 day, an
  await receiveQuizKp(request('RANKED','2026-10-25','new-reset-day',2),f.env,mapping,publicKey);
  assert.equal((await readKpState(f.env,mapping,user)).cash,1350);
 });
+test('voice slots pay once with a daily cap, keep accounts usable, and roll back failed payments',async()=>{
+ const {creditVoiceSlot}=await import('../src/voice-rewards.ts');const {ensureQuizKp}=await import('../src/quiz-kp.ts');
+ const f=await fixture();await ensureQuizKp(f.env);const user='100000000000000188',day='2026-10-27';
+ for(let slot=1;slot<=48;slot++){await creditVoiceSlot(f.env,guild,user,day,slot,Date.now());await creditVoiceSlot(f.env,guild,user,day,slot,Date.now());}
+ assert.equal((await readKpState(f.env,mapping,user)).cash,240);
+ await assert.rejects(creditVoiceSlot(f.env,guild,user,day,49,Date.now()));assert.equal((await readKpState(f.env,mapping,user)).cash,240);
+ f.sql.exec("CREATE TRIGGER voice_fixture_fail BEFORE INSERT ON kp_ledger WHEN NEW.kind='voice' BEGIN SELECT RAISE(ABORT,'fixture'); END");
+ await assert.rejects(creditVoiceSlot(f.env,guild,user,'2026-10-28',1,Date.now()));assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM kp_voice_events WHERE day='2026-10-28'").get()!.n,0);
+ f.sql.exec('DROP TRIGGER voice_fixture_fail');await creditVoiceSlot(f.env,guild,user,'2026-10-28',1,Date.now());assert.equal((await readKpState(f.env,mapping,user)).cash,245);
+});

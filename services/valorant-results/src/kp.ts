@@ -4,7 +4,7 @@ import configuredPlayers from '../players.json' with { type: 'json' };
 import discord from '../discord-config.json' with { type: 'json' };
 import { assessRewardReadiness } from './reward-readiness.ts';
 import type { Match } from './results.ts';
-export interface KpEnv { DB:D1Database; DISCORD_CLIENT_SECRET?:string; KP_BOOTSTRAP_PRIVATE_KEY?:string; KP_BOOTSTRAP_PUBLIC_KEY?:string }
+export interface KpEnv { VOICE_GATEWAY?:DurableObjectNamespace; DB:D1Database; DISCORD_CLIENT_SECRET?:string; KP_BOOTSTRAP_PRIVATE_KEY?:string; KP_BOOTSTRAP_PUBLIC_KEY?:string }
 export interface KpMapping { guildId:string; accounts:Array<{riotId:string;discordUserId:string}> }
 export const kpSchema=[
  `CREATE TABLE IF NOT EXISTS kp_settings(key TEXT PRIMARY KEY,value TEXT NOT NULL)`,
