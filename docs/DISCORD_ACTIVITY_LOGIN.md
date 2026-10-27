@@ -6,13 +6,15 @@ Activity内で開いたときは公式Embedded App SDKを使って本人確認�
 
 既存のVCT QUIZアプリのOAuth2 Client Secretを、Cloudflareの既存 `valorant-results` Workerへ登録する。
 
-1. Discord Developer Portalで既存VCT QUIZアプリを開く。
-2. OAuth2のClient Secretを表示・コピーする。既存の値を使い、リセットしない。
+1. Render Dashboard → 既存のvalo-quiz → Environmentを開く。
+2. 既存の `DISCORD_CLIENT_SECRET` の値を表示・コピーする。クイズで現在使っている値を流用する。Discord Developer PortalでSecretをリセットしない。
 3. Cloudflare → Workers & Pages → valorant-results → 設定 → 変数とシークレット → 追加。種類をSecret、名前を `DISCORD_CLIENT_SECRET` にし、値へコピーしたClient Secretを入力して保存・配置する。
 
 値をチャット・Git・PR・ログに貼らない。クイズのOAuth RedirectsとActivityの既存URL Mappingを保持する。Bot Tokenの再発行や、アプリの作成し直しは不要。
 
 GitHubの同名Repository Secretが既にある場合、通常の配置が未設定のWorker Secretへ一度だけ供給する。既存のWorker Secretは自動で上書きしない。通常のSecret未設定でも速報Botと接続コード方式は継続する。
+
+この管理設定は一度だけ。利用者ごとにSecretを登録する必要はない。
 
 既存の `/kp-api` → `valorant-results.tealeaforest.workers.dev` を使用するため、追加のURL Mappingは不要。
 
