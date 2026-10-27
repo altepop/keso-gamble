@@ -1,5 +1,5 @@
-import { BET_TYPES, COURSE_M, CONDITIONS, GOINGS, MIN_BET, BET_STEP, RUN_MS, STYLES, WEEKLY_LIMIT, distanceAt, payoutFor, placeSlots } from './racing.js?v=20261027-crowns';
-import { escapeHTML } from './progression-views.js?v=20261027-crowns';
+import { BET_TYPES, BOXES, CLASSES, COURSE_M, CONDITIONS, DAILY_EXCHANGES, GOINGS, MAX_OWNED, MIN_BET, BET_STEP, PRIZES, RETIRE_RACES, RUN_MS, STYLES, WEEKLY_LIMIT, distanceAt, exchangeDay, payoutFor, placeSlots } from './racing.js?v=20261027-owners';
+import { escapeHTML } from './progression-views.js?v=20261027-owners';
 const kp=n=>n.toLocaleString('ja-JP')+' KP';
 const odd=v=>(v/10).toFixed(1)+'倍';
 export const SILKS=[['#f5f5f5','#111'],['#1f1f1f','#fff'],['#e03131','#fff'],['#1c7ed6','#fff'],['#fcc419','#111'],['#2f9e44','#fff'],['#f76707','#fff'],['#f783ac','#111'],['#845ef7','#fff'],['#20c997','#111']];
@@ -27,12 +27,21 @@ export function racePreview(card,odds,{type,horse,amount}){
 }
 function betPanel(open,odds,draft,state,weeklyLeft){
  const {card,hash}=open,type=draft.type,horse=draft.horse;
- const rows=card.horses.map(h=>`<tr class="${horse===h.number?'selected':''}"><td><button class="race-pick" data-race-horse="${h.number}" aria-pressed="${horse===h.number}">${badge(h.number)}<span>${escapeHTML(h.name)}</span></button></td><td>${STYLES[h.style].label}<br><span class="helper">${CONDITIONS[h.condition].label}</span></td><td>${odd(odds.win[h.number])}</td><td>${odd(odds.place[h.number])}</td></tr>`).join('');
+ const rows=card.horses.map(h=>`<tr class="${horse===h.number?'selected':''}"><td><button class="race-pick" data-race-horse="${h.number}" aria-pressed="${horse===h.number}">${badge(h.number)}<span>${escapeHTML(h.name)}${h.ownerName?`<small class="race-owner">馬主 ${escapeHTML(h.ownerName)}</small>`:''}</span></button></td><td>${STYLES[h.style].label}<br><span class="helper">${CONDITIONS[h.condition].label}</span></td><td>${odd(odds.win[h.number])}</td><td>${odd(odds.place[h.number])}</td></tr>`).join('');
  const preview=racePreview(card,odds,draft);
  const form=`<div class="segment">${Object.entries(BET_TYPES).map(([id,t])=>`<button data-race-type="${id}" class="${type===id?'active':''}">${t.label}<small>（${t.formal}）</small></button>`).join('')}</div><div class="field"><label for="race-amount">金額（${MIN_BET} KP以上・${BET_STEP} KP単位）</label><input id="race-amount" class="input" type="number" min="${MIN_BET}" step="${BET_STEP}" inputmode="numeric"></div><div id="race-preview">${preview}</div><div class="action-row"><button class="action-btn primary" data-action="race-bet">馬券を買う</button></div><p class="helper">今週あと ${kp(weeklyLeft)} 買えます（1週間 ${kp(WEEKLY_LIMIT)} まで・月曜0時に戻ります）。</p>${hash?`<p class="helper">結果のハッシュ（締切前に公開）: <span class="mono">${hash.slice(0,16)}…</span></p>`:''}`;
- return `<section class="trade-box race-card"><h3>${escapeHTML(card.name)} · ${clock(card.start)}発走</h3><p class="helper">締切まで <span id="race-countdown">--:--</span> · ${card.size}頭 · コース ${GOINGS[card.going].label} · ${COURSE_M}m</p><table class="race-table"><caption>出る馬一覧と倍率</caption><thead><tr><th>馬</th><th>走り方・調子</th><th>1着当て</th><th>${placeSlots(card.size)}着以内当て</th></tr></thead><tbody>${rows}</tbody></table>${form}</section>`;
+ return `<section class="trade-box race-card"><h3>${escapeHTML(card.name)} · ${clock(card.start)}発走</h3><p class="helper">締切まで <span id="race-countdown">--:--</span> · ${CLASSES[card.raceClass].label}（1着の賞金 ${kp(PRIZES[0]*CLASSES[card.raceClass].mult)}） · ${card.size}頭 · コース ${GOINGS[card.going].label} · ${COURSE_M}m</p><table class="race-table"><caption>出る馬一覧と倍率</caption><thead><tr><th>馬</th><th>走り方・調子</th><th>1着当て</th><th>${placeSlots(card.size)}着以内当て</th></tr></thead><tbody>${rows}</tbody></table>${form}</section>`;
 }
 
+function ownerPanel(state,now){
+ const horses=state.horses??[],active=horses.filter(h=>!h.retired_at),retired=horses.filter(h=>h.retired_at);
+ const left=DAILY_EXCHANGES-(state.exchange?.day===exchangeDay(now)?state.exchange.count:0);
+ const record=h=>`${h.races}戦 ${h.wins}勝・2着${h.seconds}・3着${h.thirds} · 賞金 ${kp(h.earnings)}`;
+ const mine=active.length?active.map(h=>`<div class="history-entry"><div><strong>${escapeHTML(h.name)}</strong>（${h.gradeLabel} · ${STYLES[h.style].label}）</div><div class="helper">${record(h)} · 引退まであと${h.racesLeft}走</div><div class="action-row"><button class="action-btn" data-action="horse-sell" data-horse="${escapeHTML(h.id)}">売る（${kp(h.sellValue)}）</button></div></div>`).join(''):'<p class="helper">まだ馬を持っていません。</p>';
+ const boxes=BOXES.map(b=>`<div class="history-entry"><div><strong>${b.label}</strong> ${kp(b.price)}</div><div class="helper">${b.odds.map((p,i)=>p?`${CLASSES[i].grade} ${p}%`:'').filter(Boolean).join(' · ')}</div><div class="action-row"><button class="action-btn primary" data-action="horse-buy" data-box="${b.id}">${b.label}を開ける</button></div></div>`).join('');
+ const hall=retired.length?`<h3>殿堂</h3>${retired.map(h=>`<div class="history-entry"><div>${escapeHTML(h.name)}（${h.gradeLabel}）</div><div class="helper">${record(h)}</div></div>`).join('')}`:'';
+ return `<div class="asset-card"><h2 class="panel-title">馬主</h2><p class="helper">ボックスを開けると、買うまでわからない等級の馬が出ます。馬は自分と同じ等級のレースにランダムに出走し、3着までに入ると賞金が入ります。${RETIRE_RACES}走で引退して殿堂入り。持てるのは${MAX_OWNED}頭まで（いま${active.length}頭）。</p>${mine}<h3>ボックス</h3><div class="field"><label for="horse-name">馬の名前（1〜12文字。友人の名前は本人の許可を取ってから）</label><input id="horse-name" class="input" maxlength="12" autocomplete="off"></div><p class="helper">今日の交換はあと${Math.max(0,left)}回（指令・ボックス合わせて1日${DAILY_EXCHANGES}回）。</p>${boxes}${hall}</div>`;
+}
 function history(state){
  const bets=(state.raceBets??[]).slice(0,10);
  return `<div class="asset-card"><h2 class="panel-title">自分の馬券</h2>${bets.length?bets.map(b=>`<div class="history-entry"><div>${clock(b.raceId)}発走 · ${b.horse}番 ${BET_TYPES[b.type].label} ${kp(b.amount)}（${odd(b.odds)}）</div><div class="helper">${b.status==='pending'?'結果待ち':b.status==='won'?`的中 +${kp(b.payout)}`:'外れ'}</div></div>`).join(''):'<p class="helper">まだ馬券を買っていません。</p>'}</div>`;
@@ -45,7 +54,7 @@ function roastPanel(state){
 }
 export function raceScreen({state,live,watch,open,openOdds,draft,weeklyLeft,tabs,nav}){
  const note=live?'本番口座のKPで遊ぶ競馬です。15分おきに発走し、発走1分前に締め切ります。着順はサーバーが決め、締切前に公開したハッシュで後から検証できます。オッズは胴元の取り分なし。':'デモの競馬です。15分おきに発走し、発走1分前に締め切ります。オッズは胴元の取り分なしで、当たる確率どおり。本番口座のKPは使いません。';
- return `<div class="screen"><header class="topbar"><div class="toprow"><h1 class="title">競馬</h1><span class="badge">${kp(state.cash)}</span></div></header>${tabs}<div class="market-disclaimer">${note}</div>${stage(watch,state)}${betPanel(open,openOdds,draft,state,weeklyLeft)}${history(state)}${live?roastPanel(state):''}${nav}</div>`;
+ return `<div class="screen"><header class="topbar"><div class="toprow"><h1 class="title">競馬</h1><span class="badge">${kp(state.cash)}</span></div></header>${tabs}<div class="market-disclaimer">${note}</div>${stage(watch,state)}${betPanel(open,openOdds,draft,state,weeklyLeft)}${history(state)}${live?ownerPanel(state,Date.now())+roastPanel(state):''}${nav}</div>`;
 }
 
 // ---- Canvas playback (side-scrolling, broadcast style) ----

@@ -79,9 +79,9 @@ test('crown races run without bets, show their name, and are announced in the ea
  const created=await scheduleCrowns(f.env,mapping,NOW);const race=created[0].race;
  await queueRacePosts(f.env,mapping,NOW,created);
  await queueRacePosts(f.env,mapping,race-10*60000);
- const view=await racingView(f.env,guild,race-10*60000);
+ const view=await racingView(f.env,mapping,race-10*60000);
  assert.equal(view.open.id,race);assert.equal(view.open.crown,'One戦犯レース');
- const running=await racingView(f.env,guild,race+5000);
+ const running=await racingView(f.env,mapping,race+5000);
  assert.equal(running.watch.runs,true);assert.equal(running.watch.crown,'One戦犯レース');assert.match(String(running.watch.seed),/^[0-9a-f]+$/);
  await flushRacePosts(f.env);
  assert.match(sent[0],/『One戦犯レース』開催決定/);assert.match(sent[0],/3連敗/);

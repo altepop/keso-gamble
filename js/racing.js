@@ -41,15 +41,25 @@ export function crownSlotAllowed(start){
  return minutes>=1140||minutes<60||((day===0||day===6)&&minutes>=600);
 }
 
-export function raceCard(start,salt=PUBLIC_SALT){
+// Race classes and horse grades share one ladder. A horse runs in the class of its grade.
+export const CLASSES=[{label:'ザコ戦',grade:'下級',mult:1,mean:-.6},{label:'中堅戦',grade:'中級',mult:3,mean:-.2},{label:'強豪戦',grade:'上級',mult:10,mean:.2},{label:'エリート戦',grade:'エリート級',mult:30,mean:.6},{label:'頂上決戦',grade:'頂上級',mult:100,mean:1}];
+/** Class of a race slot. Big races are one class up. */
+export function raceClass(start){const base=pickWeighted(rngFrom(`class:${start}`),[50,25,15,7,3]);return Math.min(CLASSES.length-1,base+(bigRaceName(start)?1:0));}
+/** A card is public: wild horses come from the race time; owned horses (`entries`) come from the Worker. */
+export function raceCard(start,salt=PUBLIC_SALT,entries=[]){
  if(!isRaceStart(start))throw Error('レースが見つかりません');
  const rng=rngFrom(`${salt}:card:${start}`);
- const big=bigRaceName(start),size=big?10:8;
+ const big=bigRaceName(start),size=big?10:8,cls=raceClass(start);
  const names=[...HORSE_NAMES];
  for(let i=names.length-1;i>0;i--){const j=Math.floor(rng()*(i+1));[names[i],names[j]]=[names[j],names[i]];}
- const horses=names.slice(0,size).map((name,i)=>({number:i+1,name,ability:normal(rng)*.55,style:Math.floor(rng()*STYLES.length),condition:pickWeighted(rng,[1,2,4,2,1])}));
+ const horses=names.slice(0,size).map((name,i)=>({number:i+1,name,ability:CLASSES[cls].mean+normal(rng)*.35,style:Math.floor(rng()*STYLES.length),condition:pickWeighted(rng,[1,2,4,2,1])}));
+ if(entries.length){
+  const gates=[...horses.keys()],grng=rngFrom(`${salt}:gates:${start}`);
+  for(let i=gates.length-1;i>0;i--){const j=Math.floor(grng()*(i+1));[gates[i],gates[j]]=[gates[j],gates[i]];}
+  entries.slice(0,size).forEach((e,i)=>Object.assign(horses[gates[i]],{name:e.name,ability:e.ability,style:e.style,horseId:e.horseId,owner:e.owner,ownerName:e.ownerName}));
+ }
  const crown=big?null:fillerCrownName(start);
- return {id:start,start,closeAt:start-CLOSE_BEFORE,number:raceNumber(start),name:big??crown??`第${raceNumber(start)}レース`,big:!!big,crown:!!crown,size,going:pickWeighted(rng,[5,3,2]),horses};
+ return {id:start,start,closeAt:start-CLOSE_BEFORE,number:raceNumber(start),name:big??crown??`第${raceNumber(start)}レース`,big:!!big,crown:!!crown,raceClass:cls,size,going:pickWeighted(rng,[5,3,2]),horses};
 }
 
 // The race model: a Plackett-Luce ranking (each place goes to a remaining horse with probability
@@ -101,11 +111,12 @@ export function raceResult(card,seed=PUBLIC_SALT){
 export const oddsFromProbability=p=>p>0?Math.max(10,Math.floor(10/p+1e-9)):Number.MAX_SAFE_INTEGER;
 const oddsCache=new Map();
 export function raceOdds(card){
- if(oddsCache.has(card.id))return oddsCache.get(card.id);
+ const key=card.id+':'+card.horses.map(h=>h.horseId??'').join(',');
+ if(oddsCache.has(key))return oddsCache.get(key);
  const {win,place}=finishProbabilities(card),odds={win:{},place:{},winProb:{},placeProb:{}};
  for(const h of card.horses){const i=h.number-1;odds.win[h.number]=oddsFromProbability(win[i]);odds.place[h.number]=oddsFromProbability(place[i]);odds.winProb[h.number]=win[i];odds.placeProb[h.number]=place[i];}
  if(oddsCache.size>32)oddsCache.delete(oddsCache.keys().next().value);
- oddsCache.set(card.id,odds);
+ oddsCache.set(key,odds);
  return odds;
 }
 
@@ -174,10 +185,10 @@ export function hydrateRacing(raw){
  return racing;
 }
 export function weeklySpent(state,now){return state.raceWeek.start===weekStart(now)?state.raceWeek.spent:0;}
-export function placeRaceBet(state,{raceId,type,horse,amount},now){
+export function placeRaceBet(state,{raceId,type,horse,amount},now,entries=[]){
  if(raceId!==openRaceStart(now))throw Error('このレースの馬券は締め切りました');
  if(!Object.hasOwn(BET_TYPES,type))throw Error('券の種類を選んでください');
- const card=raceCard(raceId);
+ const card=raceCard(raceId,PUBLIC_SALT,entries);
  if(!Number.isInteger(horse)||horse<1||horse>card.size)throw Error('馬を選んでください');
  if(!validInt(amount,MIN_BET)||amount%BET_STEP!==0)throw Error(`金額は${MIN_BET} KP以上、${BET_STEP} KP単位です`);
  if(amount>state.cash)throw Error('KPが不足しています');
@@ -194,12 +205,12 @@ export function placeRaceBet(state,{raceId,type,horse,amount},now){
 }
 /** Pays out every pending bet whose race has finished. Odds were fixed when the bet was bought.
  * `seedOf(raceId)` returns the race seed, or null when it is not available yet. */
-export function settleRaceBets(state,now,seedOf=()=>PUBLIC_SALT){
+export function settleRaceBets(state,now,seedOf=()=>PUBLIC_SALT,entriesOf=()=>[]){
  const settled=[];
  for(const bet of state.raceBets){
   if(bet.status!=='pending'||now<bet.raceId+RUN_MS)continue;
   const seed=seedOf(bet.raceId);if(seed===null||seed===undefined)continue;
-  const card=raceCard(bet.raceId),won=betWins(bet.type,bet.horse,raceResult(card,seed),card.size);
+  const card=raceCard(bet.raceId,PUBLIC_SALT,entriesOf(bet.raceId)),won=betWins(bet.type,bet.horse,raceResult(card,seed),card.size);
   const payout=won?payoutFor(bet.amount,bet.odds):0;
   if(!validInt(state.cash+payout))throw Error('KPが上限を超えています');
   state.cash+=payout;bet.status=won?'won':'lost';bet.payout=payout;settled.push(bet);
@@ -208,3 +219,35 @@ export function settleRaceBets(state,now,seedOf=()=>PUBLIC_SALT){
 }
 /** No-contest rule: a race runs only when someone bet on it (big and crown races always run). */
 export function raceRuns(card,state){return card.big||card.crown||state.raceBets.some(b=>b.raceId===card.id);}
+
+// Owners (docs/RACING_PLAN.md §6). The Worker owns horses and prizes; these rules are shared for display.
+export const MAX_OWNED=3,RETIRE_RACES=20,DAILY_EXCHANGES=3,PRIZES=[1000,400,200];
+export const BOXES=[
+ {id:'normal',label:'ノーマル',price:3000,odds:[90,10,0,0,0]},
+ {id:'silver',label:'シルバー',price:15000,odds:[15,75,10,0,0]},
+ {id:'gold',label:'ゴールド',price:60000,odds:[0,15,75,10,0]},
+ {id:'platinum',label:'プラチナ',price:250000,odds:[0,0,30,70,0]},
+ {id:'legend',label:'レジェンド',price:1000000,odds:[0,0,0,70,30]},
+];
+/** A new horse from a box, drawn with the given random source (the Worker uses crypto). */
+export function drawHorse(boxId,rng){
+ const box=BOXES.find(b=>b.id===boxId);if(!box)throw Error('ボックスを選んでください');
+ const grade=pickWeighted(rng,box.odds);
+ return {grade,ability:Math.round((CLASSES[grade].mean+normal(rng)*.25)*1000)/1000,style:Math.floor(rng()*STYLES.length)};
+}
+/** Prize for a finishing place (0-based); grows with the race class. */
+export const prizeFor=(card,rank)=>rank<PRIZES.length?PRIZES[rank]*CLASSES[card.raceClass].mult:0;
+/** Buy-back price: 20% when new, falling to 10% at retirement. */
+export const sellValue=(price,races)=>Math.floor(price*(20-10*Math.min(races,RETIRE_RACES)/RETIRE_RACES)/100);
+export function validHorseName(name){
+ const value=String(name??'').normalize('NFKC').trim();
+ if(value.length<1||value.length>12||/[\u0000-\u001f@#`*_~<>|\\/:]/.test(value)||/https?|www\./i.test(value))throw Error('馬の名前は1〜12文字で、記号やURLは使えません');
+ return value;
+}
+/** One JST day's exchanges (directives, boxes, luxury items). */
+export function exchangeDay(now){return new Date(now+JST).toISOString().slice(0,10);}
+export function useExchange(state,now){
+ const day=exchangeDay(now),count=state.exchange?.day===day?state.exchange.count:0;
+ if(count>=DAILY_EXCHANGES)throw Error(`指令・ボックスなどの交換は1日${DAILY_EXCHANGES}回までです（朝0時に戻ります）`);
+ state.exchange={day,count:count+1};
+}
