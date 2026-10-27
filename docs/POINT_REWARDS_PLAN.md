@@ -27,7 +27,7 @@ Henrik公式仕様: https://api.henrikdev.xyz/openapi.json
 
 ## 本人確認と口座
 
-Discordの署名確認済み `/valo status` に、本人だけが読める接続コードと残高を表示する。コードは10分・1回限り。Activityのタイトルでコードを貼り付けて接続する。接続情報はデモ資産と別のlocalStorageに保存し、Activityを閉じても同じ端末・同じ保存領域では自動復帰する。サーバーの接続期限はなし。`kp_sessions.expires=-1` で無期限を表し、本人の「接続を解除」で該当セッションをサーバーから削除する。有効な旧30日セッションは次の本人確認時に期限なしへ移行するが、既に期限切れ・解除済みのセッションは復活させない。端末変更・保存データ削除・接続解除後は再接続する。保存が禁止されている環境は一時保存へ切り替え、その旨を表示する。未確認の決済IDはタブごとのsessionStorageに保持し、別タブの操作で上書きしない。サーバーにはコードとセッションのハッシュだけを保存。ブラウザーのuserId指定で他人の口座を読めない。
+Discord Activity内では公式SDKで開いた本人を確認し、KP口座へ自動接続する（OAuth2 Client Secretのサーバー設定が必要）。初回はDiscordのidentify許可画面が出る場合がある。通常ブラウザー・設定前・自動接続失敗時には、署名確認済み `/valo status` の本人限定接続コードも使える。コードは10分・1回限り。Activityのタイトルでコードを貼り付けて接続する。接続情報はデモ資産と別のlocalStorageに保存し、Activityを閉じても同じ端末・同じ保存領域では自動復帰する。サーバーの接続期限はなし。`kp_sessions.expires=-1` で無期限を表し、本人の「接続を解除」で該当セッションをサーバーから削除する。有効な旧30日セッションは次の本人確認時に期限なしへ移行するが、既に期限切れ・解除済みのセッションは復活させない。端末変更・保存データ削除・接続解除後は再接続する。保存が禁止されている環境は一時保存へ切り替え、その旨を表示する。未確認の決済IDはタブごとのsessionStorageに保持し、別タブの操作で上書きしない。サーバーにはコードとセッションのハッシュだけを保存。ブラウザーのuserId指定で他人の口座を読めない。
 
 4人の対応表は既存Worker専用RSA公開鍵でAESキーを暗号化した封筒 `kp-bootstrap.encrypted.json` に入れる。秘密鍵はWorker secretのみに保持。公開リポジトリ・ログ・artifactへ平文の対応表を出さない。
 
@@ -48,3 +48,5 @@ Discord内の通信には既存VCT QUIZのActivities → URL Mappingsへ次の1�
 | `/kp-api` | `valorant-results.tealeaforest.workers.dev` |
 
 通常ブラウザーの https://altepop.github.io/keso-gamble/ はWorkerへ直接接続する。Discord内は `/.proxy/kp-api/api/kp/…` を使用。接続失敗時にデモ残高へ自動で切り替えない。
+
+自動接続の初回設定と検証範囲は [Discord Activityの自動接続](DISCORD_ACTIVITY_LOGIN.md) を参照。

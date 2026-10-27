@@ -4,7 +4,7 @@ import configuredPlayers from '../players.json' with { type: 'json' };
 import discord from '../discord-config.json' with { type: 'json' };
 import { assessRewardReadiness } from './reward-readiness.ts';
 import type { Match } from './results.ts';
-export interface KpEnv { DB:D1Database; KP_BOOTSTRAP_PRIVATE_KEY?:string; KP_BOOTSTRAP_PUBLIC_KEY?:string }
+export interface KpEnv { DB:D1Database; DISCORD_CLIENT_SECRET?:string; KP_BOOTSTRAP_PRIVATE_KEY?:string; KP_BOOTSTRAP_PUBLIC_KEY?:string }
 export interface KpMapping { guildId:string; accounts:Array<{riotId:string;discordUserId:string}> }
 export const kpSchema=[
  `CREATE TABLE IF NOT EXISTS kp_settings(key TEXT PRIMARY KEY,value TEXT NOT NULL)`,
@@ -104,6 +104,7 @@ export async function issueKpCode(env:KpEnv,mapping:KpMapping,user:string){
  if(!mapping.accounts.some(a=>a.discordUserId===user))return null;
  const code=kpRandom();await env.DB.prepare('INSERT INTO kp_codes(hash,guild,user,expires) VALUES(?,?,?,?)').bind(await kpHash(code),mapping.guildId,user,Date.now()+10*60000).run();return code;
 }
+export async function createKpSession(env:KpEnv,guild:string,user:string){const token=kpRandom();await env.DB.prepare('INSERT INTO kp_sessions VALUES(?,?,?,-1)').bind(await kpHash(token),guild,user).run();return token;}
 export async function exchangeKpCode(env:KpEnv,code:string){
  const token=kpRandom(),hash=await kpHash(token);
  const owner=await env.DB.prepare('UPDATE kp_codes SET session_hash=? WHERE hash=? AND expires>? AND session_hash IS NULL RETURNING guild,user').bind(hash,await kpHash(code),Date.now()).first<{guild:string;user:string}>();

@@ -156,3 +156,41 @@ test('authenticated logout revokes only that device session and does not touch a
  assert.equal((await kpApi(request('b'.repeat(48)),f.env,mapping)).status,401);
  assert.equal((await kpApi(request(a),f.env,mapping)).status,200);assert.equal(await kpSession(f.env,a),null);assert.equal((await kpSession(f.env,b))!.user,one);assert.equal((await readKpState(f.env,mapping,one)).cash,900);
 });
+
+async function activityFixture(){
+ const f=await fixture();f.env.DISCORD_CLIENT_SECRET='fixture-only-oauth-secret';const module=await import('../src/discord-activity-auth.ts'),config=(await import('../discord-config.json',{with:{type:'json'}})).default;
+ const verifier='v'.repeat(43),challenge=await module.pkceChallenge(verifier);
+ return {...f,module,applicationId:config.applicationId,verifier,async input(){const {nonce}=await module.createActivityChallenge(f.env,challenge,'fixture-ip');return{nonce,code:'fixture-oauth-code',codeVerifier:verifier};}};
+}
+test('Activity OAuth requires one-use PKCE, verifies the app, scopes and actual Discord user, and never trusts a supplied userId',async()=>{
+ const f=await activityFixture(),original=globalThis.fetch;let exchanges=0;
+ globalThis.fetch=async(url,init)=>{
+  if(String(url).endsWith('/oauth2/token')){exchanges++;const body=new URLSearchParams(String(init?.body));assert.equal(body.get('client_id'),f.applicationId);assert.equal(body.get('client_secret'),f.env.DISCORD_CLIENT_SECRET);assert.equal(body.get('code_verifier'),f.verifier);assert.equal(body.has('redirect_uri'),false);return Response.json({access_token:'sensitive-discord-access',token_type:'Bearer'});}
+  if(String(url).endsWith('/oauth2/@me'))return Response.json({application:{id:f.applicationId},scopes:['identify']});
+  assert.ok(String(url).endsWith('/users/@me'));return Response.json({id:one});
+ };
+ try{
+ const input={...await f.input(),userId:two};await assert.rejects(f.module.authenticateActivity(f.env,mapping,{...input,codeVerifier:'x'.repeat(43)},'fixture-ip'),/期限切れか使用済み/);
+ const attempts=await Promise.allSettled([f.module.authenticateActivity(f.env,mapping,input,'fixture-ip'),f.module.authenticateActivity(f.env,mapping,input,'fixture-ip')]);assert.equal(attempts.filter(a=>a.status==='fulfilled').length,1);assert.equal(exchanges,1);
+ const result=(attempts.find(a=>a.status==='fulfilled')as PromiseFulfilledResult<{token:string;userId:string;accessToken:string}>).value;assert.equal(result.userId,one);assert.equal((await kpSession(f.env,result.token))!.user,one);assert.equal(result.accessToken,'sensitive-discord-access');
+ const sensitive=JSON.stringify(['kp_activity_challenges','kp_activity_limits','kp_sessions'].map(table=>f.sql.prepare('SELECT * FROM '+table).all()));assert.ok(!sensitive.includes(result.accessToken)&&!sensitive.includes(result.token)&&!sensitive.includes(input.code));assert.equal((await readKpState(f.env,mapping,one)).cash,0);
+ await f.module.authenticateActivity(f.env,mapping,await f.input(),'fixture-ip',result.token);assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM kp_sessions').get()!.n,1,'Matching permanent sessions are reused');
+ }finally{globalThis.fetch=original;}
+});
+test('Activity authentication fails closed for another app, missing identity scope, unknown account, provider failure and expired challenge',async()=>{
+ const original=globalThis.fetch;
+ try{for(const failure of['app','scope','user','provider','expired']){
+  const f=await activityFixture(),input=await f.input();let calls=0;
+  if(failure==='expired')f.sql.exec('UPDATE kp_activity_challenges SET expires=0');
+  globalThis.fetch=async url=>{calls++;if(failure==='provider')return new Response('never return this secret',{status:500});if(String(url).endsWith('/oauth2/token'))return Response.json({access_token:'private-access',token_type:'Bearer'});if(String(url).endsWith('/oauth2/@me'))return Response.json({application:{id:failure==='app'?'other-app':f.applicationId},scopes:failure==='scope'?[]:['identify']});return Response.json({id:'100000000000000999'});};
+  await assert.rejects(f.module.authenticateActivity(f.env,mapping,input,'fixture-ip'));assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM kp_sessions').get()!.n,0);if(failure==='expired')assert.equal(calls,0);
+ }}finally{globalThis.fetch=original;}
+});
+test('Activity login is optional, rejects untrusted origins, and rate limits challenges without disabling code login',async()=>{
+ const f=await fixture();const config=await kpApi(new Request('https://worker.example/api/kp/activity/config'),f.env,mapping);assert.equal((await config.json()as{available:boolean}).available,false);
+ const module=await import('../src/discord-activity-auth.ts');await assert.rejects(module.createActivityChallenge(f.env,'x'.repeat(43),'ip'),/設定待ち/);
+ f.env.DISCORD_CLIENT_SECRET='fixture-only-secret';for(let i=0;i<30;i++)await module.createActivityChallenge(f.env,'x'.repeat(43),'ip');await assert.rejects(module.createActivityChallenge(f.env,'x'.repeat(43),'ip'),/1分/);
+ await module.createActivityChallenge(f.env,'x'.repeat(43),'another-ip');
+ const bad=await kpApi(new Request('https://worker.example/api/kp/activity/challenge',{method:'POST',headers:{Origin:'https://wrong.example'},body:JSON.stringify({codeChallenge:'x'.repeat(43)})}),f.env,mapping);assert.equal(bad.status,403);
+ const code=await issueKpCode(f.env,mapping,one);assert.ok(code);assert.ok(await exchangeKpCode(f.env,code));
+});

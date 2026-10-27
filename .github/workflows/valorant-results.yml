@@ -9,6 +9,8 @@ on:
       - 'css/**'
       - 'tests/**'
       - 'package.json'
+      - 'package-lock.json'
+      - 'scripts/build-discord-sdk.mjs'
   push:
     branches: [main]
     paths:
@@ -19,6 +21,8 @@ on:
       - 'css/**'
       - 'tests/**'
       - 'package.json'
+      - 'package-lock.json'
+      - 'scripts/build-discord-sdk.mjs'
   workflow_dispatch:
 permissions:
   contents: read
@@ -41,7 +45,10 @@ jobs:
       - run: npm ci
       - run: npm run check
       - name: Check Activity logic
-        run: npm --prefix ../.. test
+        run: |
+          npm --prefix ../.. ci
+          npm --prefix ../.. run check:discord
+          npm --prefix ../.. test
       - run: npm run build
   deploy:
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
@@ -92,6 +99,13 @@ jobs:
           name: kp-bootstrap-public-key
           path: ${{ runner.temp }}/kp-app/services/valorant-results/kp-public-key.json
           retention-days: 30
+      - name: Configure optional Discord Activity login
+        working-directory: ${{ runner.temp }}/kp-app/services/valorant-results
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          DISCORD_CLIENT_SECRET: ${{ secrets.DISCORD_CLIENT_SECRET }}
+        run: node scripts/provision-activity-auth.mjs
       - name: Validate live configuration and build
         working-directory: ${{ runner.temp }}/kp-app/services/valorant-results
         run: |

@@ -7,6 +7,14 @@
     "start": "python3 -m http.server 8000",
     "test:browser": "node scripts/browser-check.cjs",
     "results:check": "npm --prefix services/valorant-results run check",
-    "results:build": "npm --prefix services/valorant-results run build"
+    "results:build": "npm --prefix services/valorant-results run build",
+    "build:discord": "node scripts/build-discord-sdk.mjs",
+    "check:discord": "node scripts/build-discord-sdk.mjs --check"
+  },
+  "dependencies": {
+    "@discord/embedded-app-sdk": "2.5.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
   }
 }
