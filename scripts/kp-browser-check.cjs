@@ -32,6 +32,11 @@ const server=spawn('python3',['-m','http.server','8766','--bind','127.0.0.1'],{s
  await page.locator('.nav-btn[data-screen=directives]').click();await page.locator('#directive-target').selectOption('two');assert.equal(await page.locator('#directive-target b').count(),0);await page.locator('[data-action=issue-directive]').click();await page.locator('.history-entry').waitFor();assert.match(await page.locator('.badge').first().innerText(),/100/);assert.equal(debitCount,2);assert.equal(await page.locator('[data-complete]').count(),0);
  assert.equal(await page.evaluate(()=>localStorage.getItem('keso-exchange-v0.2')),null);
  for(const width of [320,390,1280]){await page.setViewportSize({width,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);}
+ // Simulate Discord/iPhone native chrome covering the top 64 CSS pixels.
+ await page.setViewportSize({width:390,height:844});
+ await page.evaluate(()=>{document.documentElement.classList.add('discord-activity');const chrome=document.createElement('div');chrome.id='native-chrome';Object.assign(chrome.style,{position:'fixed',top:'0',left:'0',right:'0',height:'64px',zIndex:'99999',background:'#000'});document.body.append(chrome);});
+ for(const action of ['refresh-kp','disconnect-kp']){const button=page.locator(`[data-action=${action}]`);await button.scrollIntoViewIfNeeded();const box=await button.boundingBox();assert.ok(box.y>=64&&box.height>=48&&box.x>=0&&box.x+box.width<=390);}
+ await page.locator('[data-action=refresh-kp]').click();
  await page.locator('[data-action=disconnect-kp]').click();await page.locator('#kp-connect-code').waitFor();assert.equal(logouts,1);assert.equal(await page.evaluate(()=>localStorage.getItem('keso-kp-session-v1')),null);
  assert.deepEqual(errors,[]);console.log('Live browser flow passed: private connection survives closing and reopening without another code, server balance, durable lost-reply retry, no demo minting, directive debit, escaped members, mobile layout, server logout, no audio session.');
 })().catch(e=>{console.error(e);process.exitCode=1}).finally(async()=>{await browser?.close();server.kill()});
