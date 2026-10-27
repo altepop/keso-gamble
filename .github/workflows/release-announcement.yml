@@ -1,0 +1,41 @@
+name: Official release announcement
+on:
+  push:
+    branches: [ops/earnings-test-20261027]
+    paths: [.github/workflows/release-announcement.yml]
+permissions:
+  contents: read
+jobs:
+  test-message:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Publish the requested release announcement once
+        shell: bash
+        run: |
+          node --input-type=module <<'JS'
+          const base='https://api.cloudflare.com/client/v4/accounts/'+process.env.CF_ACCOUNT;
+          async function api(path,body){
+            const r=await fetch(base+path,{method:body?'POST':'GET',headers:{Authorization:'Bearer '+process.env.CF_TOKEN,'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{})});
+            const data=await r.json();
+            if(!r.ok||!data.success)throw Error('Cloudflare request rejected: HTTP '+r.status+' codes '+(data.errors??[]).map(e=>e.code).join(','));
+            return data.result;
+          }
+          const settings=await api('/workers/scripts/valorant-results/settings');
+          console.log(JSON.stringify({earningsNamePresent:settings.bindings.some(b=>b.name==='KP_EARNINGS_WEBHOOK_URL'),earningNamePresent:settings.bindings.some(b=>b.name==='KP_EARNING_WEBHOOK_URL')}));
+          if(!settings.bindings.some(b=>b.name==='KP_EARNINGS_WEBHOOK_URL'&&(b.type==='secret_text'||(b.type==='plain_text'&&Boolean(b.text)))))throw Error('Earnings channel webhook is not configured. No message queued.');
+          const db=settings.bindings.find(b=>b.name==='DB'&&b.type==='d1');if(!db)throw Error('Existing DB binding not found');
+          const query=(sql,params=[])=>api('/d1/database/'+db.id+'/query',{sql,params});
+          const posts=["🎉 **KESO PLAY 正式リリース！【1/2】**\n\n通話やゲームで貯まる **KP** が、競馬・ルーレット・架空株・仲間への指令に使えるようになりました。\nVALORANTの登録がない人も、通話とVCT QUIZで参加できます。\n※KPはゲーム内ポイントです。現金・商品には交換できません。\n\n**まず何をすればいい？**\nDiscordの通話からアクティビティを開き、KESO PLAYでDiscord口座へ接続してください。接続後は同じ本人の口座を使います。次回からは自動接続されますが、端末の保存データを消した場合などは再接続が必要です。\n「稼ぐ」で入金履歴、「勝負」で競馬やルーレット、「指令」で仲間への指名を確認できます。\n\n**🪙 KPの貯め方**\n\n📞 **通話：5分で5 KP／1日240 KPまで**\n対象サーバーの通常VCにいると自動加算。Activityを開いておく必要はありません。1人・ミュート中も対象です。Bot・AFKチャンネル・ステージは対象外。\n\n🧠 **VCT QUIZ：Discordログインして最後までプレイ**\n・デイリー：100 KP、1日1回\n・ソロ：50 KP、1日1回\n・ランクマッチ：1回100 KP、1日10回まで\n・イベント：各モード50 KP、それぞれ1日1回\n通話とQUIZの日課は **毎朝9時（日本時間）** に更新します。\n\n🎮 **VALORANT：登録済みアカウントの新しい試合が対象**\n「参加報酬＋勝ったときの追加ボーナス」です。\n・コンペ：300＋勝利600 → 勝てば **900 KP**\n・アンレ：200＋勝利100\n・スイフト／レプリケーション：60＋勝利30\n・スパイクラッシュ：40＋勝利20\n・チーデス／エスカレーション：30＋勝利15\n負け・引き分けも参加報酬あり。コンペ3勝なら2,700 KP、コンペ指令1回分に届きます。試合履歴の反映には約5分かかることがあります。\nデスマッチは完走を確認できるまで報酬保留です。Steam・雀魂・マイクラの自動報酬はまだありません。\n\n🏇 **今夜21時は、さっき告知した目玉レース！**\n馬券は20:45〜20:59。KPの使い道は次の投稿へ。", "🎰 **KESO PLAY｜KPの使い道【2/2】**\n\n**🏇 競馬：「勝負 → 競馬」**\n馬を選び、1着当て（単勝）か3着以内当て（複勝）を選んで馬券を買います。通常8頭なら複勝は3着以内、目玉の10頭レースも3着以内です。\n100 KPから、100 KP単位。表示倍率で払い戻し額を確認できます。外れた馬券は戻りません。\nレースは15分おき、締切は発走1分前。馬券の購入は週50,000 KPまで、月曜0時（日本時間）に更新します。\n\n**🐴 馬主にもなれます**\n競馬画面の「馬主」から、3,000 KP〜のボックスを購入。名前を付けた愛馬が出走し、3着以内なら賞金が入ります。等級や排出率は購入前に画面で確認できます。\n持てるのは3頭、20走で引退して殿堂入り。試合・QUIZ・通話で遊んだ実績が、次に出走する愛馬の調子にもつながります。\n\n**🎲 ルーレット：「勝負 → ルーレット」**\n数字や赤黒などを選んで賭けます。数字は複数選択でき、数字ごとに違うKPを置けます。選んだ場所の点灯と掛け金を確認してから回してください。外れると賭けた分を失います。\n\n**📈 架空株**\nKPで銘柄を売買できます。値動きで資産が増減します。実在株や現実のお金とは関係ありません。\n\n**📣 仲間への指令：「指令」**\n登録メンバーから相手と課題を選んで発行。相手の画面とDiscordに届きます。\n・アンレ1試合：1,500 KP\n・コンペ1試合：2,500 KP\n・ソロコンペ：15,000 KP\n・ソロデスアンレ：20,000 KP\nソロはソロ参加を確認できた試合だけが達成扱い。ソロデスアンレは `/death start` でアンレを予約してから挑戦します。指令の消費KPは返金されません。\n\n**💎 大当たりした人向けの超高級品**\n競馬画面の「KPの使い道」から交換できます。\n・称号 **20,000**：ホームや結果投稿の名前に称号\n・冠レース命名権 **30,000**：好きな名前のレース＋自分の名前の馬\n・特製煽り投稿 **30,000**：稼ぎchに相手宛てのひとこと\n・戦犯認定 **50,000**：相手が当日のホームに登場\n・強制冠レース **150,000**：「○○を笑う会」＋本人の名前の馬\n・殿堂入りの銅像 **300,000**：引退した愛馬を殿堂で目立たせる\n・看板馬 **2,000,000**：1週間、みんなのタイトル画面とホームに愛馬が登場\n\n指令・馬ボックス・高額アイテムの交換は **合計1日3回**。毎日0時（日本時間）に更新します。\n煽りの強さは競馬画面で「控えめ／標準／全開」から選べます。「控えめ」の人には、相手を巻き込む高額アイテムは使えません。\n\nまずは通話かQUIZでKPを貯めて、100 KPの馬券からどうぞ。今夜21時、稼ぎchで。"];
+          const ids=posts.map((_,i)=>'release-20261027-official-'+(i+1));
+          for(let i=0;i<posts.length;i++)await query('INSERT OR IGNORE INTO kp_posts(id,body,at) VALUES(?,?,?)',[ids[i],JSON.stringify({content:posts[i],allowed_mentions:{parse:[]}}),Date.now()+i]);
+          console.log('Two official release messages queued. No balance changes.');
+          for(let i=0;i<18;i++){const rows=await query('SELECT id,sent FROM kp_posts WHERE id IN (?,?)',ids);if(rows[0]?.results?.length===2&&rows[0].results.every(r=>r.sent===1)){console.log('DELIVERED: Discord accepted both release messages.');process.exit(0);}await new Promise(resolve=>setTimeout(resolve,10000));}
+          throw Error('Release delivery still pending; do not insert another copy.');
+          JS
