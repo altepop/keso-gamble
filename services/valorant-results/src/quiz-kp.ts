@@ -7,6 +7,8 @@ export async function ensureQuizKp(env:KpEnv){
  await env.DB.batch([
   env.DB.prepare('CREATE TABLE IF NOT EXISTS kp_participants(guild TEXT NOT NULL,user TEXT NOT NULL,PRIMARY KEY(guild,user))'),
   env.DB.prepare(`CREATE TABLE IF NOT EXISTS kp_quiz_events(id TEXT PRIMARY KEY,guild TEXT NOT NULL,user TEXT NOT NULL,mode TEXT NOT NULL,day TEXT NOT NULL,game TEXT NOT NULL,amount INTEGER NOT NULL CHECK(typeof(amount)='integer' AND amount>=0),completed_at INTEGER NOT NULL,UNIQUE(guild,user,mode,day),UNIQUE(guild,user,game))`),
+  env.DB.prepare(`CREATE TABLE IF NOT EXISTS kp_quiz_ranked_extra(id TEXT PRIMARY KEY,guild TEXT NOT NULL,user TEXT NOT NULL,mode TEXT NOT NULL CHECK(mode='RANKED'),day TEXT NOT NULL,game TEXT NOT NULL,amount INTEGER NOT NULL CHECK(typeof(amount)='integer' AND amount>=0),completed_at INTEGER NOT NULL,slot INTEGER NOT NULL CHECK(slot BETWEEN 2 AND 10),UNIQUE(guild,user,day,slot),UNIQUE(guild,user,game))`),
+  env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS kp_quiz_ranked_apply AFTER INSERT ON kp_quiz_ranked_extra BEGIN INSERT INTO kp_ledger(id,guild,user,delta,kind,at) VALUES(NEW.id,NEW.guild,NEW.user,NEW.amount,'quiz',NEW.completed_at); END`),
   env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS kp_quiz_apply AFTER INSERT ON kp_quiz_events BEGIN INSERT INTO kp_ledger(id,guild,user,delta,kind,at) VALUES(NEW.id,NEW.guild,NEW.user,NEW.amount,'quiz',NEW.completed_at); END`),
  ]);initialized.add(env.DB);
 }
@@ -26,16 +28,19 @@ export async function receiveQuizKp(request:Request,env:KpEnv,mapping:KpMapping,
  }catch{return new Response('Unauthorized',{status:401});}
  let e;try{e=JSON.parse(body);}catch{return new Response('Invalid event',{status:400});}
  const valid=e&&e.kind==='quiz.daily.completed'&&e.version===1&&typeof e.discordUserId==='string'&&/^\d{15,22}$/.test(e.discordUserId)&&typeof e.gameId==='string'&&/^[A-Za-z0-9_-]{1,128}$/.test(e.gameId)&&typeof e.mode==='string'&&Object.hasOwn(policy.rates,e.mode)&&Number.isSafeInteger(e.completedAt)&&e.completedAt>=0&&e.completedAt<=Date.now()+60000&&e.day===new Date(e.completedAt).toISOString().slice(0,10);
- if(!valid)return new Response('Invalid event',{status:400});
+ const slot=e?.slot??1;
+ if(!valid||!Number.isInteger(slot)||slot<1||slot>(e.mode==='RANKED'?10:1))return new Response('Invalid event',{status:400});
  await ensureQuizKp(env);
- const id='quiz:'+mapping.guildId+':'+e.discordUserId+':'+e.mode+':'+e.day;
+ const id='quiz:'+mapping.guildId+':'+e.discordUserId+':'+e.mode+':'+e.day+(slot>1?':'+slot:'');
  const amount=policy.rates[e.mode as keyof typeof policy.rates];
  await env.DB.batch([
   env.DB.prepare('INSERT OR IGNORE INTO kp_participants VALUES(?,?)').bind(mapping.guildId,e.discordUserId),
   env.DB.prepare('INSERT OR IGNORE INTO kp_wallets(guild,user) VALUES(?,?)').bind(mapping.guildId,e.discordUserId),
   env.DB.prepare('INSERT OR IGNORE INTO kp_state(guild,user,data) VALUES(?,?,?)').bind(mapping.guildId,e.discordUserId,JSON.stringify(newKpState())),
-  env.DB.prepare('INSERT INTO kp_quiz_events VALUES(?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING').bind(id,mapping.guildId,e.discordUserId,e.mode,e.day,e.gameId,amount,e.completedAt),
+  (slot===1?env.DB.prepare('INSERT INTO kp_quiz_events SELECT ?,?,?,?,?,?,?,? WHERE NOT EXISTS(SELECT 1 FROM kp_quiz_ranked_extra WHERE guild=? AND user=? AND game=?) ON CONFLICT DO NOTHING').bind(id,mapping.guildId,e.discordUserId,e.mode,e.day,e.gameId,amount,e.completedAt,mapping.guildId,e.discordUserId,e.gameId):env.DB.prepare('INSERT INTO kp_quiz_ranked_extra SELECT ?,?,?,?,?,?,?,?,? WHERE NOT EXISTS(SELECT 1 FROM kp_quiz_events WHERE guild=? AND user=? AND game=?) ON CONFLICT DO NOTHING').bind(id,mapping.guildId,e.discordUserId,e.mode,e.day,e.gameId,amount,e.completedAt,slot,mapping.guildId,e.discordUserId,e.gameId)),
  ]);
  return Response.json({accepted:true},{headers:{'Cache-Control':'no-store'}});
 }
 export const quizKpRates=policy.rates;
+
+export const quizKpLimits=Object.fromEntries(Object.keys(policy.rates).map(mode=>[mode,mode==='RANKED'?10:1]));
