@@ -1,7 +1,7 @@
 const {chromium}=require('playwright');const assert=require('node:assert/strict');const {spawn}=require('node:child_process');const {existsSync}=require('node:fs');
 const server=spawn('python3',['-m','http.server','8766','--bind','127.0.0.1'],{stdio:'ignore'});let browser;
 (async()=>{
- const {createInitialState}=await import('../js/engine.js');const state={...createInitialState(),cash:2700,serverWallet:true,selfUserId:'one',members:[{id:'one',name:'本人'},{id:'two',name:'相手 <b>text</b>'}],rewardRates:{competitive:{participation:300,winBonus:600},teamdeathmatch:{participation:30,winBonus:15}}};
+ const {createInitialState}=await import('../js/engine.js');const state={...createInitialState(),cash:2700,quizRates:{DAILY:100,SOLO:50,AGENT:50},quizCompleted:['DAILY'],serverWallet:true,selfUserId:'one',members:[{id:'one',name:'本人'},{id:'two',name:'相手 <b>text</b>'}],rewardRates:{competitive:{participation:300,winBonus:600},teamdeathmatch:{participation:30,winBonus:15}}};
  let debitCount=0,lost=true,authCalls=0,logouts=0;const results=new Map();const errors=[];
  for(let n=0;n<40;n++){try{if((await fetch('http://127.0.0.1:8766')).ok)break;}catch{}await new Promise(r=>setTimeout(r,100));}
  browser=await chromium.launch({executablePath:process.env.CHROMIUM_PATH||(existsSync('/usr/bin/chromium')?'/usr/bin/chromium':undefined),args:['--no-sandbox']});
@@ -25,7 +25,7 @@ const server=spawn('python3',['-m','http.server','8766','--bind','127.0.0.1'],{s
  await page.goto('http://127.0.0.1:8766');await page.locator('#kp-connect-code').fill('c'.repeat(48));await page.locator('[data-action=connect-kp]').click();await page.locator('.kp-connection').waitFor();
  assert.match(await page.locator('.badge').first().innerText(),/2,700/);
  await page.close();page=await ctx.newPage();page.on('pageerror',e=>errors.push(e.message));await page.goto('http://127.0.0.1:8766');await page.locator('.title-start').filter({hasText:'2,700'}).waitFor();assert.equal(await page.locator('#kp-connect-code').count(),0);assert.equal(authCalls,1);await page.locator('.title-start').click();
- await page.locator('.nav-btn[data-screen=play]').click();assert.equal(await page.locator('[data-approve]').count(),0);assert.equal(await page.locator('#claim-reference').count(),0);assert.match(await page.locator('#app').innerText(),/デスマッチ.*支給保留/);
+ await page.locator('.nav-btn[data-screen=play]').click();assert.equal(await page.locator('[data-approve]').count(),0);assert.match(await page.locator('#app').innerText(),/VCT QUIZで稼ぐ/);assert.match(await page.locator('#app').innerText(),/朝9時/);assert.match(await page.locator('#app').innerText(),/受取済み/);assert.equal(await page.locator('#claim-reference').count(),0);assert.match(await page.locator('#app').innerText(),/デスマッチ.*支給保留/);
  await page.locator('.nav-btn[data-screen=assets]').click();assert.equal(await page.locator('[data-action=salary]').count(),0);assert.equal(await page.locator('[data-action=reset]').count(),0);
  await page.locator('.nav-btn[data-screen=market]').click();await page.locator('[data-screen=casino]').click();await page.locator('#bet-amount').fill('100');await page.locator('[data-action=spin]').click();await page.locator('.kp-connection').filter({hasText:'通信結果'}).waitFor();assert.equal(debitCount,1);
  await page.reload();await page.locator('[data-action=refresh-kp]').click();await page.waitForFunction(()=>!sessionStorage.getItem('keso-kp-pending-v1'));assert.equal(debitCount,1);await page.locator('.title-start').click();assert.match(await page.locator('.badge').first().innerText(),/2,600/);

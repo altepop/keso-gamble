@@ -229,3 +229,23 @@ test('multi-number roulette settles one atomic basket and retries return the sam
  assert.equal((await readKpState(f.env,mapping,one)).cash,balance);
  assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM kp_operations').get()!.n,1);
 });
+test('signed quiz completions fund newcomers once per mode and JST 09:00 day, and their wallet is usable',async()=>{
+ const {receiveQuizKp,isKpParticipant}=await import('../src/quiz-kp.ts');
+ const {createKpSession}=await import('../src/kp.ts');
+ const {sign}=await import('node:crypto');const keys=generateKeyPairSync('ed25519');
+ const publicKey=keys.publicKey.export({type:'spki',format:'der'}).toString('base64');
+ const f=await fixture(),user='100000000000000199';
+ const request=(mode:string,day:string,gameId:string)=>{const completedAt=Date.parse(day+'T00:00:01Z'),body=JSON.stringify({kind:'quiz.daily.completed',version:1,discordUserId:user,mode,day,gameId,completedAt}),time=String(Date.now());return new Request('https://worker/api/kp/quiz/reward',{method:'POST',headers:{'X-Quiz-Time':time,'X-Quiz-Signature':sign(null,Buffer.from(time+'.'+body),keys.privateKey).toString('base64')},body});};
+ for(const [mode,day,game]of [['DAILY','2026-10-25','daily-1'],['DAILY','2026-10-25','daily-1'],['DAILY','2026-10-25','daily-2'],['SOLO','2026-10-25','solo-1'],['DAILY','2026-10-26','daily-1'],['DAILY','2026-10-26','daily-3']])assert.equal((await receiveQuizKp(request(mode!,day!,game!),f.env,mapping,publicKey)).status,200);
+ assert.equal((await readKpState(f.env,mapping,user)).cash,250);
+ assert.equal(await isKpParticipant(f.env,mapping,user),true);
+ const token=await createKpSession(f.env,guild,user);const response=await kpApi(new Request('https://worker/api/kp/state',{headers:{Authorization:'Bearer '+token}}),f.env,mapping);assert.equal(response.status,200);
+ assert.equal((await response.json() as {cash:number}).cash,250);
+ const tampered=request('SOLO','2026-10-25','forged');tampered.headers.set('X-Quiz-Time','1000000000000');assert.equal((await receiveQuizKp(tampered,f.env,mapping,publicKey)).status,401);
+ const badSignature=request('SOLO','2026-10-25','forged');badSignature.headers.set('X-Quiz-Signature','A'.repeat(86)+'==');assert.equal((await receiveQuizKp(badSignature,f.env,mapping,publicKey)).status,401);
+ assert.equal((await readKpState(f.env,mapping,user)).cash,250);
+ f.sql.exec("CREATE TRIGGER fail_quiz_credit BEFORE INSERT ON kp_ledger WHEN NEW.kind='quiz' BEGIN SELECT RAISE(ABORT,'fixture rollback'); END");
+ await assert.rejects(receiveQuizKp(request('RANKED','2026-10-26','ranked-retry'),f.env,mapping,publicKey));
+ assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM kp_quiz_events WHERE mode='RANKED'").get()!.n,0);assert.equal((await readKpState(f.env,mapping,user)).cash,250);
+ f.sql.exec('DROP TRIGGER fail_quiz_credit');await receiveQuizKp(request('RANKED','2026-10-26','ranked-retry'),f.env,mapping,publicKey);assert.equal((await readKpState(f.env,mapping,user)).cash,350);
+});

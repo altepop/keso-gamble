@@ -29,6 +29,7 @@ export const kpSchema=[
  INSERT INTO kp_directives(id,guild,issuer,target,task,game,achievement,cost,at) SELECT NEW.guild||':'||NEW.user||':'||NEW.id,NEW.guild,NEW.user,json_extract(NEW.directive,'$.target'),json_extract(NEW.directive,'$.task'),json_extract(NEW.directive,'$.game'),json_extract(NEW.directive,'$.achievement'),json_extract(NEW.directive,'$.cost'),NEW.at WHERE NEW.directive IS NOT NULL;
  END`,
 ];
+export function newKpState(){return {cash:0,serverWallet:true,holdings:{keso:0,riso:0,yuya:0,yano:0},prices:{keso:1200,riso:780,yuya:420,yano:1860},history:{keso:[1200],riso:[780],yuya:[420],yano:[1860]},owned:[],trades:[],spins:[],salaryClaims:0,lastSalaryAt:0,ticks:0,lastMarketAt:Date.now(),seed:7331,claims:[],directives:[],progressSeq:0,version:1};}
 const b64=(s:string)=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
 export const kpHash=async(s:string)=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s))),x=>x.toString(16).padStart(2,'0')).join('');
 export const kpRandom=()=>Array.from(crypto.getRandomValues(new Uint8Array(24)),n=>n.toString(16).padStart(2,'0')).join('');
@@ -56,7 +57,7 @@ export async function initializeKp(env:KpEnv,override?:KpMapping):Promise<KpMapp
     env.DB.prepare("INSERT OR REPLACE INTO kp_settings VALUES('schema_version','1')"),
    ]);
   }
-  const state={cash:0,serverWallet:true,holdings:{keso:0,riso:0,yuya:0,yano:0},prices:{keso:1200,riso:780,yuya:420,yano:1860},history:{keso:[1200],riso:[780],yuya:[420],yano:[1860]},owned:[],trades:[],spins:[],salaryClaims:0,lastSalaryAt:0,ticks:0,lastMarketAt:Date.now(),seed:7331,claims:[],directives:[],progressSeq:0,version:1};
+  const state=newKpState();
   const known=new Set((await env.DB.prepare('SELECT user FROM kp_wallets WHERE guild=?').bind(mapping.guildId).all<{user:string}>()).results.map(a=>a.user));
   const missing=mapping.accounts.filter(a=>!known.has(a.discordUserId));
   if(missing.length)await env.DB.batch(missing.flatMap(a=>[

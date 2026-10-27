@@ -1,3 +1,4 @@
+import {isKpParticipant} from './quiz-kp.ts';
 import discord from '../discord-config.json' with { type: 'json' };
 import type { KpEnv, KpMapping } from './kp.ts';
 import { createKpSession, kpHash, kpRandom, kpSession } from './kp.ts';
@@ -53,7 +54,7 @@ export async function authenticateActivity(env:KpEnv,mapping:KpMapping,input:Rec
  const app=authorization.application as {id?:unknown}|undefined;
  if(app?.id!==discord.applicationId||!Array.isArray(authorization.scopes)||!authorization.scopes.includes('identify'))throw Error('このActivityの本人確認をやり直してください。');
  const user=await discordJson('/users/@me',{headers});
- if(typeof user.id!=='string'||!mapping.accounts.some(a=>a.discordUserId===user.id))throw Error('このDiscordアカウントのKP口座は登録されていません。');
+ if(typeof user.id!=='string'||!await isKpParticipant(env,mapping,user.id))throw Error('このDiscordアカウントのKP口座は登録されていません。');
  const previous=previousToken?await kpSession(env,previousToken):null;
  const session=previous?.guild===mapping.guildId&&previous.user===user.id?previousToken!:await createKpSession(env,mapping.guildId,user.id);
  // The Discord access token is used only in memory to authenticate the SDK, never stored in D1.
