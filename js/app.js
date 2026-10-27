@@ -1,10 +1,11 @@
-import {connectDiscordActivity,isDiscordActivity}from './discord-activity-auth.js?v=20261027-casino';
-import { createKpClient } from './kp-client.js?v=20261027-casino';
+import {wheelView,covered,redNumbers,outcomeAngle} from './roulette-view.js?v=20261027-wheel';
+import {connectDiscordActivity,isDiscordActivity}from './discord-activity-auth.js?v=20261027-wheel';
+import { createKpClient } from './kp-client.js?v=20261027-wheel';
 import { fmt, fmt0 } from './format.js';
-import { submitClaim, approveClaim, issueDirective, completeDirective } from './progression.js?v=20261027-casino';
-import { titleView, homeView, playView, directivesView } from './progression-views.js?v=20261027-casino';
+import { submitClaim, approveClaim, issueDirective, completeDirective } from './progression.js?v=20261027-wheel';
+import { titleView, homeView, playView, directivesView } from './progression-views.js?v=20261027-wheel';
 import { genCandles, movingAverage, svgCandles } from './charts.js';
-import { MARKET, createInitialState, portfolioValue, assets, advanceMarket, trade, spin, grantDemoSalary, cryptoRouletteNumber } from './engine.js?v=20261027-casino';
+import { MARKET, createInitialState, portfolioValue, assets, advanceMarket, trade, spin, grantDemoSalary, cryptoRouletteNumber } from './engine.js?v=20261027-wheel';
 import { KEY, LEGACY_KEY } from './storage.js';
 import { createStore } from './store.js';
 const $=(s,el=document)=>el.querySelector(s);
@@ -20,7 +21,7 @@ let activeSymbol=MARKET[0].id;
 let tradeSide='buy';
 let betType='red';
 let betNumber=7;
-const redNumbers=new Set([1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36]);
+
 let rotation=0;
 let spinLock=false;
 let mutationPending=false;
@@ -96,7 +97,7 @@ function tradePanel(){
 
 function screenCasino(){
   const recent=state.spins[0];
-  return `<div class="screen"><header class="topbar"><div class="toprow"><h1 class="title">ルーレット</h1><div class="small-actions"><span class="badge">所持 ${moneyCompact(state.cash)}</span></div></div></header><div class="sub-tabs"><button class="sub-tab" data-screen="market">架空株</button><button class="sub-tab active" data-screen="casino">カジノ</button></div><div class="center-panel"><div style="position:relative;width:min(320px,86vw);margin:0 auto 18px"><div class="pointer"></div><div class="roulette-board" id="wheel" style="transform:rotate(${rotation}deg)"><div class="roulette-center">${recent?recent.outcome:'K'}</div></div></div></div><div class="number-table" aria-label="ルーレットの数字">${Array.from({length:37},(_,n)=>`<button data-number="${n}" aria-pressed="${betType==='number'&&betNumber===n}" class="number-cell ${n===0?'green':redNumbers.has(n)?'red':'black'} ${betType==='number'&&betNumber===n?'selected':''}">${n}</button>`).join('')}</div><p class="helper">ヨーロピアン式・0は緑。数字36倍／赤黒・偶奇・前半後半2倍／ダズン・列3倍（掛け金込み）。1回につき1種類のベット。</p><div class="bet-grid">${[['red','赤'],['black','黒'],['even','偶数'],['odd','奇数'],['number','数字指定'],['low','1〜18'],['high','19〜36'],['dozen1','1〜12'],['dozen2','13〜24'],['dozen3','25〜36'],['column1','1列目'],['column2','2列目'],['column3','3列目']].map(([id,label])=>`<button data-bet="${id}" class="${betType===id?'active':''}">${label}</button>`).join('')}</div><div class="trade-box"><h3>ベット</h3>${betType==='number'?`<div class="field"><label for="bet-number">数字（0〜36）</label><input id="bet-number" class="input" type="number" min="0" max="36" value="${betNumber}"></div>`:''}<div class="field"><label for="bet-amount">賭け金</label><input id="bet-amount" class="input" type="number" min="100" max="20000" step="1" value="500"></div><div class="action-row"><button class="action-btn primary" data-action="spin" ${spinLock?'disabled':''}>ルーレットを回す</button></div></div><div class="result-panel"><p class="result-title ${recent && recent.payout>0?'negative':recent?'positive':''}">${recent ? (recent.payout>0?'的中':'不的中') : '直近結果'}</p><div class="helper">${recent ? `出目 ${recent.outcome} / 賭け ${moneyCompact(recent.amount)} / 払戻 ${moneyCompact(recent.payout)}` : 'まだ抽選履歴はありません。'}</div></div>${bottomNav()}</div>`;
+  return `<div class="screen"><header class="topbar"><div class="toprow"><h1 class="title">ルーレット</h1><div class="small-actions"><span class="badge">所持 ${moneyCompact(state.cash)}</span></div></div></header><div class="sub-tabs"><button class="sub-tab" data-screen="market">架空株</button><button class="sub-tab active" data-screen="casino">カジノ</button></div><div class="center-panel"><div style="position:relative;width:min(320px,86vw);margin:0 auto 18px"><div class="pointer"></div><div class="roulette-board" id="wheel" style="transform:rotate(${rotation|| (recent?outcomeAngle(recent.outcome):0)}deg)">${wheelView(betType,betNumber)}<div class="roulette-center">${recent?recent.outcome:'K'}</div></div></div></div><div class="number-table" aria-label="ルーレットの数字">${Array.from({length:37},(_,n)=>`<button data-number="${n}" aria-pressed="${covered(betType,betNumber,n)}" class="number-cell ${n===0?'green':redNumbers.has(n)?'red':'black'} ${covered(betType,betNumber,n)?'selected':''}">${n}</button>`).join('')}</div><p class="helper">ヨーロピアン式・0は緑。数字36倍／赤黒・偶奇・前半後半2倍／ダズン・列3倍（掛け金込み）。1回につき1種類のベット。</p><div class="bet-grid">${[['red','赤'],['black','黒'],['even','偶数'],['odd','奇数'],['number','数字指定'],['low','1〜18'],['high','19〜36'],['dozen1','1〜12'],['dozen2','13〜24'],['dozen3','25〜36'],['column1','1列目'],['column2','2列目'],['column3','3列目']].map(([id,label])=>`<button data-bet="${id}" class="${betType===id?'active':''}">${label}</button>`).join('')}</div><div class="trade-box"><h3>ベット</h3>${betType==='number'?`<div class="field"><label for="bet-number">数字（0〜36）</label><input id="bet-number" class="input" type="number" min="0" max="36" value="${betNumber}"></div>`:''}<div class="field"><label for="bet-amount">賭け金</label><input id="bet-amount" class="input" type="number" min="100" max="20000" step="1" value="500"></div><div class="action-row"><button class="action-btn primary" data-action="spin" ${spinLock?'disabled':''}>ルーレットを回す</button></div></div><div class="result-panel"><p class="result-title ${recent && recent.payout>0?'negative':recent?'positive':''}">${recent ? (recent.payout>0?'的中':'不的中') : '直近結果'}</p><div class="helper">${recent ? `出目 ${recent.outcome} / 賭け ${moneyCompact(recent.amount)} / 払戻 ${moneyCompact(recent.payout)}` : 'まだ抽選履歴はありません。'}</div></div>${bottomNav()}</div>`;
 }
 
 function screenAssets(){
@@ -170,7 +171,7 @@ async function doSpin(){
   catch(error) { spinLock=false; throw error; }
   const wheel=$('#wheel');
   const button=$('[data-action="spin"]'); if(button) button.disabled=true;
-  rotation += 1440 + Math.floor(Math.random()*360);
+  rotation = Math.ceil(rotation/360)*360 + 1440 + outcomeAngle(result.outcome);
   if(wheel) {wheel.style.transition='transform 1.8s cubic-bezier(.15,.82,.14,1)';wheel.style.transform=`rotate(${rotation}deg)`;}
   setTimeout(()=>{try{
       const r=result;
@@ -235,6 +236,7 @@ addEventListener('keydown', e => {
   }
 });
 addEventListener('input', e => {
+  if(e.target.id==='bet-number'&&!spinLock){betNumber=e.target.value===''?NaN:Number(e.target.value);drafts['bet-number']=e.target.value;render();}
   if (e.target.id==='kp-connect-code'||['trade-qty','bet-amount','bet-number'].includes(e.target.id)||e.target.id.startsWith('claim-')||e.target.id.startsWith('directive-')) drafts[e.target.id] = e.target.value;
   if(e.target.id==='trade-qty')$('#trade-estimate').innerHTML=tradeEstimate();
 });
