@@ -46,3 +46,11 @@ test('salary and payout also check total assets before changing wallet',()=>{
  const s=createInitialState();s.cash=Number.MAX_SAFE_INTEGER-1200;s.holdings.keso=1;const before=structuredClone(s);
  assert.throws(()=>grantDemoSalary(s));assert.throws(()=>spin(s,'red',100,0,1));assert.deepEqual(s,before);
 });
+test('European table pays exactly the covered outcomes, zero only wins straight up',()=>{
+ for(const [type,count,mult] of [['low',18,2],['high',18,2],['dozen1',12,3],['dozen2',12,3],['dozen3',12,3],['column1',12,3],['column2',12,3],['column3',12,3]]){
+  const pays=Array.from({length:37},(_,n)=>roulettePayout(type,0,n,100));
+  assert.equal(pays[0],0);assert.equal(pays.filter(Boolean).length,count);assert.ok(pays.every(n=>n===0||n===100*mult));
+  const s=createInitialState();spin(s,type,100,0,1);assert.equal(hydrateState(s).spins[0].type,type);
+ }
+ for(let n=0;n<37;n++)for(let outcome=0;outcome<37;outcome++)assert.equal(roulettePayout('number',n,outcome,100),n===outcome?3600:0);
+});

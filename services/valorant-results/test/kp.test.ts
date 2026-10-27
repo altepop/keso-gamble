@@ -200,3 +200,21 @@ test('Activity login is optional, rejects untrusted origins, and rate limits cha
  const bad=await kpApi(new Request('https://worker.example/api/kp/activity/challenge',{method:'POST',headers:{Origin:'https://wrong.example'},body:JSON.stringify({codeChallenge:'x'.repeat(43)})}),f.env,mapping);assert.equal(bad.status,403);
  const code=await issueKpCode(f.env,mapping,one);assert.ok(code);assert.ok(await exchangeKpCode(f.env,code));
 });
+test('premium solo orders charge once and require verified solo parties and death reservation',async()=>{
+ const f=await fixture();f.enableHistory();seed(f.sql,two,50000);
+ await operateKp(f.env,mapping,two,'premium-solo-order','directive',{target:one,task:'solo_competitive'});
+ await operateKp(f.env,mapping,two,'premium-solo-order','directive',{target:one,task:'solo_competitive'});
+ assert.equal((await readKpState(f.env,mapping,two)).cash,35000);
+ f.sql.exec('UPDATE kp_directives SET at=0');
+ const m=game('solo-check') as ReturnType<typeof game>&{players:Array<{puuid:string;team_id:string;party_id?:string}>};
+ await collectKpMatch(f.env,mapping,m,'p-one');assert.equal(f.sql.prepare('SELECT status FROM kp_directives').get()!.status,'active');
+ m.players[0].party_id='party';m.players.push({puuid:'friend',team_id:'red',party_id:'party'});
+ await collectKpMatch(f.env,mapping,m,'p-one');assert.equal(f.sql.prepare('SELECT status FROM kp_directives').get()!.status,'active');
+ m.players.pop();await collectKpMatch(f.env,mapping,m,'p-one');assert.equal(f.sql.prepare('SELECT status FROM kp_directives').get()!.status,'completed');
+ await operateKp(f.env,mapping,two,'premium-death-order','directive',{target:one,task:'solo_death_unrated'});
+ assert.equal((await readKpState(f.env,mapping,two)).cash,15000);f.sql.exec('UPDATE kp_directives SET at=0');
+ const u={...m,metadata:{...m.metadata,match_id:'death-solo',queue:{id:'unrated'}}};
+ await collectKpMatch(f.env,mapping,u,'p-one');assert.equal(f.sql.prepare("SELECT status FROM kp_directives WHERE task='solo_death_unrated'").get()!.status,'active');
+ f.sql.prepare('INSERT INTO death_unrated_sessions VALUES(?,?,?,?,?,?)').run('One#JP1','premium',1,Date.now()+10000,'death-solo',null);
+ await collectKpMatch(f.env,mapping,u,'p-one');assert.equal(f.sql.prepare("SELECT status FROM kp_directives WHERE task='solo_death_unrated'").get()!.status,'completed');
+});
