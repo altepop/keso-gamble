@@ -28,6 +28,7 @@ jobs:
             return data.result;
           }
           const settings=await api('/workers/scripts/valorant-results/settings');
+          console.log(JSON.stringify({earningsNamePresent:settings.bindings.some(b=>b.name==='KP_EARNINGS_WEBHOOK_URL'),earningNamePresent:settings.bindings.some(b=>b.name==='KP_EARNING_WEBHOOK_URL')}));
           if(!settings.bindings.some(b=>b.name==='KP_EARNINGS_WEBHOOK_URL'&&(b.type==='secret_text'||(b.type==='plain_text'&&Boolean(b.text)))))throw Error('Earnings channel webhook is not configured. No message queued.');
           const db=settings.bindings.find(b=>b.name==='DB'&&b.type==='d1');if(!db)throw Error('Existing DB binding not found');
           const query=(sql,params=[])=>api('/d1/database/'+db.id+'/query',{sql,params});
