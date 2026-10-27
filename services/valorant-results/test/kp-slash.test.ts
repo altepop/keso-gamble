@@ -63,8 +63,8 @@ test('race clocks cross JST midnight safely and are stable on replay',()=>{
 test('command registration never bulk-replaces other commands and refuses a foreign name collision',async()=>{
  const calls:Array<{path:string;method?:string;body?:any}>=[];
  const api=async(path:string,method?:string,body?:unknown)=>{calls.push({path,method,body});return path==='/users/@me'?{id:one,bot:true}:method==='POST'?{...(body as object),id:one}:[{name:'death'},{name:'valo'},{name:'launch',type:4}];};
- assert.equal(await registerKpCommands(one,guild,api),3);
- assert.deepEqual(calls.filter(c=>c.method==='POST').map(c=>c.body.name),['kp','keiba','bet']);
+ assert.equal(await registerKpCommands(one,guild,api),4);
+ assert.deepEqual(calls.filter(c=>c.method==='POST').map(c=>c.body.name),['kp','keiba','bet','paifu']);
  assert.ok(calls.every(c=>c.method!=='PUT'));assert.equal(kpCommands[2].options?.filter(o=>o.required).length,4);
  let writes=0;await assert.rejects(registerKpCommands(one,guild,async(path,method)=>{if(method)writes++;return path==='/users/@me'?{id:one,bot:true}:[{name:'bet',description:'Another bot command'}];}),/conflict/);assert.equal(writes,0);
  await assert.rejects(registerKpCommands(one,guild,async()=>({id:two,bot:true})),/mismatch/);
@@ -118,6 +118,6 @@ test('public command metadata contains definitions only and does not need or exp
  let queries=0;
  const response=await kpApi(new Request('https://worker/api/kp/commands'),{DB:{prepare(){queries++;throw Error('No DB reads');}},KP_BOOTSTRAP_PRIVATE_KEY:'fixture-secret-must-not-leak'} as unknown as KpEnv);
  const body=await response.json() as {version:string;commands:unknown[]};
- assert.equal(response.status,200);assert.equal(body.version,'kp-slash-v2-ranking');assert.equal(body.commands.length,3);assert.equal(queries,0);
+ assert.equal(response.status,200);assert.equal(body.version,'kp-slash-v3-paifu');assert.equal(body.commands.length,4);assert.equal(queries,0);
  assert.equal(JSON.stringify(body).includes('fixture-secret'),false);assert.equal(response.headers.get('Cache-Control'),'no-store');
 });
