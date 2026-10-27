@@ -1,4 +1,5 @@
 import { createProgress, hydrateProgress } from './progression.js';
+import { createRacing, hydrateRacing } from './racing.js';
 /** KESO EXCHANGE - local prototype engine (NOT authoritative for real multiplayer). */
 const SCHEMA_VERSION = 1;
 const MARKET = [
@@ -19,6 +20,7 @@ function createInitialState(now = Date.now()) {
   return {
     version: SCHEMA_VERSION,
     ...createProgress(),
+    ...createRacing(),
     cash: 10000,
     holdings: Object.fromEntries(MARKET.map((stock) => [stock.id, 0])),
     prices: Object.fromEntries(MARKET.map((stock) => [stock.id, stock.initialPrice])),
@@ -46,7 +48,7 @@ function hydrateState(raw, now = Date.now()) {
   state.spins = (Array.isArray(raw.spins) ? raw.spins : []).filter(t => t && (validNumberSpin(t)||(['red','black','even','odd','number','low','high','dozen1','dozen2','dozen3','column1','column2','column3'].includes(t.type) && validInt(t.choice) && t.choice <= 36 && validInt(t.outcome) && t.outcome <= 36 && validInt(t.amount, 100) && t.amount <= 20000 && validInt(t.payout) && t.payout === roulettePayout(t.type,t.choice,t.outcome,t.amount) && validInt(t.time)))).slice(0, 30).map(t => ({type:t.type, choice:t.choice, outcome:t.outcome, amount:t.amount, payout:t.payout, time:t.time,...(t.type==='numbers'?{bets:validateNumberBets(t.bets).bets}:{})}));
   for (const key of ['salaryClaims','ticks','seed']) if (validInt(raw[key])) state[key] = raw[key];
   for (const key of ['lastSalaryAt','lastMarketAt']) if (validInt(raw[key]) && raw[key] <= now) state[key] = raw[key];
-  Object.assign(state,hydrateProgress(raw));
+  Object.assign(state,hydrateProgress(raw),hydrateRacing(raw));
   return state;
 }
 function checkedAdd(value, increment) {
