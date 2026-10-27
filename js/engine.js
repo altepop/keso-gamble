@@ -43,7 +43,7 @@ function hydrateState(raw, now = Date.now()) {
   if (!Number.isSafeInteger(assets(state))) return createInitialState(now);
   state.owned = [...new Set(Array.isArray(raw.owned) ? raw.owned.filter(id => SHOP.some(item => item.id === id)) : [])];
   state.trades = (Array.isArray(raw.trades) ? raw.trades : []).filter(t => t && MARKET.some(s => s.id === t.symbol) && ['buy','sell'].includes(t.side) && validInt(t.quantity, 1) && validInt(t.price, 1) && validInt(t.fee) && validInt(t.time)).slice(0, 50).map(t => ({side:t.side, symbol:t.symbol, quantity:t.quantity, price:t.price, fee:t.fee, time:t.time}));
-  state.spins = (Array.isArray(raw.spins) ? raw.spins : []).filter(t => t && ['red','black','even','odd','number'].includes(t.type) && validInt(t.choice) && t.choice <= 36 && validInt(t.outcome) && t.outcome <= 36 && validInt(t.amount, 100) && t.amount <= 20000 && validInt(t.payout) && t.payout === roulettePayout(t.type,t.choice,t.outcome,t.amount) && validInt(t.time)).slice(0, 30).map(t => ({type:t.type, choice:t.choice, outcome:t.outcome, amount:t.amount, payout:t.payout, time:t.time}));
+  state.spins = (Array.isArray(raw.spins) ? raw.spins : []).filter(t => t && ['red','black','even','odd','number','low','high','dozen1','dozen2','dozen3','column1','column2','column3'].includes(t.type) && validInt(t.choice) && t.choice <= 36 && validInt(t.outcome) && t.outcome <= 36 && validInt(t.amount, 100) && t.amount <= 20000 && validInt(t.payout) && t.payout === roulettePayout(t.type,t.choice,t.outcome,t.amount) && validInt(t.time)).slice(0, 30).map(t => ({type:t.type, choice:t.choice, outcome:t.outcome, amount:t.amount, payout:t.payout, time:t.time}));
   for (const key of ['salaryClaims','ticks','seed']) if (validInt(raw[key])) state[key] = raw[key];
   for (const key of ['lastSalaryAt','lastMarketAt']) if (validInt(raw[key]) && raw[key] <= now) state[key] = raw[key];
   Object.assign(state,hydrateProgress(raw));
@@ -105,13 +105,17 @@ function roulettePayout(type,choice,number,bet) {
   if(type==='even') return number!==0&&number%2===0?bet*2:0;
   if(type==='odd') return number%2===1?bet*2:0;
   if(type==='number')return number===choice?bet*36:0;
+  if(type==='low')return number>=1&&number<=18?bet*2:0;
+  if(type==='high')return number>=19&&number<=36?bet*2:0;
+  if(/^dozen[123]$/.test(type))return number>0&&Math.ceil(number/12)===Number(type.at(-1))?bet*3:0;
+  if(/^column[123]$/.test(type))return number>0&&(number-1)%3+1===Number(type.at(-1))?bet*3:0;
   throw new Error('無効な賭け方だ');
 }
 function spin(state, type, amount, choice=0, outcome, now=Date.now()) {
   if(!Number.isSafeInteger(amount)||amount<100||amount>20000) throw new Error('賭け額は100〜20,000 KP');
   if(state.cash<amount)throw new Error('所持KPが不足している');
   if(type==='number'&&(!Number.isInteger(choice)||choice<0||choice>36))throw new Error('数字は0〜36だ');
-  if(!['red','black','even','odd','number'].includes(type))throw new Error('無効な賭け方だ');
+  if(!['red','black','even','odd','number','low','high','dozen1','dozen2','dozen3','column1','column2','column3'].includes(type))throw new Error('無効な賭け方だ');
   // Demo: browser crypto must supply outcome; engine never uses predictable PRNG for casino.
   if(!Number.isInteger(outcome)||outcome<0||outcome>36)throw new Error('抽選結果が必要だ');
   const payout=roulettePayout(type,choice,outcome,amount);

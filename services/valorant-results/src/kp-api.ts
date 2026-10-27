@@ -26,7 +26,7 @@ export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:strin
   if(action==='trade')result=trade(state,args.symbol,args.side,args.quantity);
   else if(action==='spin')result=spin(state,args.type,args.amount,args.choice??0,cryptoRouletteNumber());
   else if(action==='directive'){
-   const costs:Record<string,number>={competitive:2500,unrated:1500},task=String(args.task),target=String(args.target),cost=Object.hasOwn(costs,task)?costs[task]:0;
+   const costs:Record<string,number>={competitive:2500,unrated:1500,solo_competitive:15000,solo_death_unrated:20000},task=String(args.task),target=String(args.target),cost=Object.hasOwn(costs,task)?costs[task]:0;
    if(!cost||!mapping.accounts.some(a=>a.discordUserId===target)||target===user)throw Error('指名する相手と課題を選んでください。');
    if(state.cash<cost)throw Error('KPが足りません。');
    const game=task==='steam'?String(args.game??'').trim():'',achievement=task==='steam'?String(args.achievement??'').trim():'';
