@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { RACE_INTERVAL, CLOSE_BEFORE, RUN_MS, COURSE_M, WEEKLY_LIMIT, openRaceStart, latestRaceStart, bigRaceName, raceNumber, weekStart, raceCard, raceResult, raceOdds, raceTimeline, raceCommentary, distanceAt, oddsFromCount, payoutFor, betWins, placeRaceBet, settleRaceBets, hydrateRacing, raceRuns } from '../js/racing.js';
+import { RACE_INTERVAL, CLOSE_BEFORE, RUN_MS, COURSE_M, WEEKLY_LIMIT, openRaceStart, latestRaceStart, bigRaceName, raceNumber, weekStart, raceCard, raceResult, raceOdds, raceTimeline, raceCommentary, distanceAt, oddsFromProbability, finishProbabilities, payoutFor, betWins, placeRaceBet, settleRaceBets, hydrateRacing, raceRuns } from '../js/racing.js';
 import { createInitialState, hydrateState } from '../js/engine.js';
 
 const jst=(text)=>Date.parse(text+'+09:00');
@@ -38,7 +38,8 @@ test('cards and results are deterministic for the same race and differ by salt',
   const start=tuesday9pm+RACE_INTERVAL;
   assert.deepEqual(raceCard(start),raceCard(start));
   assert.deepEqual(raceResult(raceCard(start)),raceResult(raceCard(start)));
-  assert.notDeepEqual(raceResult(raceCard(start,'a'),'a').order,raceResult(raceCard(start,'b'),'b').order);
+  assert.notDeepEqual(raceResult(raceCard(start),'secret-a').order,raceResult(raceCard(start),'secret-b').order);
+  assert.deepEqual(raceResult(raceCard(start),'secret-a').order.toSorted((a,b)=>a-b),[1,2,3,4,5,6,7,8]);
   assert.throws(()=>raceCard(start+1),/レース/);
   const names=raceCard(start).horses.map(h=>h.name);
   assert.equal(new Set(names).size,names.length);
@@ -59,29 +60,39 @@ test('playback reaches the post in the result order, moves forward and ends insi
 });
 
 test('odds are 1 / probability rounded down to 0.1x with no house cut', () => {
-  assert.equal(oddsFromCount(25000,50000),20);
-  assert.equal(oddsFromCount(50000,50000),10);
-  assert.equal(oddsFromCount(3,50000),166666);
-  assert.equal(oddsFromCount(0,50000),500000);
+  assert.equal(oddsFromProbability(0.5),20);
+  assert.equal(oddsFromProbability(1),10);
+  assert.equal(oddsFromProbability(0.1),100);
+  assert.equal(oddsFromProbability(0.03),333);
   assert.equal(payoutFor(1000,264),26400);
-  const card=raceCard(tuesday9pm+RACE_INTERVAL),odds=raceOdds(card);
-  const winTotal=card.horses.reduce((sum,h)=>sum+odds.winCount[h.number],0);
-  const placeTotal=card.horses.reduce((sum,h)=>sum+odds.placeCount[h.number],0);
-  assert.equal(winTotal,odds.trials);
-  assert.equal(placeTotal,odds.trials*3);
-  for(const h of card.horses)for(const type of ['win','place']){
-    const p=odds[`${type}Count`][h.number]/odds.trials,expected=p*odds[type][h.number]/10;
-    assert.ok(expected<=1+1e-9&&expected>0.9,`${type} ${h.number}: ${expected}`);
+  for(const start of [tuesday9pm,tuesday9pm+RACE_INTERVAL]){
+    const card=raceCard(start),odds=raceOdds(card),{win,place}=finishProbabilities(card);
+    assert.ok(Math.abs(win.reduce((a,b)=>a+b,0)-1)<1e-9);
+    assert.ok(Math.abs(place.reduce((a,b)=>a+b,0)-3)<1e-9);
+    for(const h of card.horses)for(const type of ['win','place']){
+      const expected=odds[`${type}Prob`][h.number]*odds[type][h.number]/10;
+      assert.ok(expected<=1+1e-9&&expected>0.9,`${type} ${h.number}: ${expected}`);
+    }
+  }
+});
+
+test('exact probabilities match a brute-force count of the same model', () => {
+  const card=raceCard(tuesday9pm+RACE_INTERVAL),{win,place}=finishProbabilities(card),trials=20000;
+  const wins=new Array(card.size).fill(0),places=new Array(card.size).fill(0);
+  for(let i=0;i<trials;i++){const order=raceResult(card,'count-'+i).order;wins[order[0]-1]++;for(const n of order.slice(0,3))places[n-1]++;}
+  for(let i=0;i<card.size;i++){
+    assert.ok(Math.abs(wins[i]/trials-win[i])<4*Math.sqrt(win[i]*(1-win[i])/trials)+1e-3,`win ${i+1}`);
+    assert.ok(Math.abs(places[i]/trials-place[i])<4*Math.sqrt(place[i]*(1-place[i])/trials)+1e-3,`place ${i+1}`);
   }
 });
 
 test('the real run matches the odds: predicted and actual winners agree across many races', () => {
   let predicted=0,actual=0,favPredicted=0,favActual=0;
   for(let k=0;k<1500;k++){
-    const card=raceCard(tuesday9pm+k*RACE_INTERVAL,'calibration'),odds=raceOdds(card,'calibration',4000),winner=raceResult(card,'calibration').order[0];
-    const favourite=card.horses.map(h=>h.number).sort((a,b)=>odds.winCount[b]-odds.winCount[a])[0];
-    favPredicted+=odds.winCount[favourite]/odds.trials;favActual+=favourite===winner?1:0;
-    for(const h of card.horses){const p=odds.winCount[h.number]/odds.trials;if(p<0.1){predicted+=p;actual+=h.number===winner?1:0;}}
+    const card=raceCard(tuesday9pm+k*RACE_INTERVAL),odds=raceOdds(card),winner=raceResult(card,'calibration').order[0];
+    const favourite=card.horses.map(h=>h.number).sort((a,b)=>odds.winProb[b]-odds.winProb[a])[0];
+    favPredicted+=odds.winProb[favourite];favActual+=favourite===winner?1:0;
+    for(const h of card.horses){const p=odds.winProb[h.number];if(p<0.1){predicted+=p;actual+=h.number===winner?1:0;}}
   }
   // Roughly 4 standard deviations: a biased model fails, normal noise passes.
   assert.ok(Math.abs(favActual-favPredicted)<4*Math.sqrt(favPredicted),`favourites ${favActual} vs ${favPredicted}`);
@@ -108,6 +119,12 @@ test('bets use fixed odds, pay once after the run and respect the weekly limit',
   assert.equal(settled.length,2);
   assert.equal(state.cash,8500+payoutFor(1000,odds.win[winner]));
   assert.deepEqual(settleRaceBets(state,raceId+RUN_MS+1),[]);
+  const secret=createInitialState(now);
+  placeRaceBet(secret,{raceId,type:'win',horse:1,amount:100},now);
+  assert.deepEqual(settleRaceBets(secret,raceId+RUN_MS,()=>null),[]);
+  assert.equal(secret.raceBets[0].status,'pending');
+  const seeded=settleRaceBets(secret,raceId+RUN_MS,id=>id===raceId?'server-seed':null)[0];
+  assert.equal(seeded.status,raceResult(card,'server-seed').order[0]===1?'won':'lost');
   assert.equal(betWins('place',result.order[2],result,card.size),true);
   assert.equal(betWins('place',result.order[3],result,card.size),false);
   assert.throws(()=>placeRaceBet(state,{raceId,type:'win',horse:1,amount:100},raceId-CLOSE_BEFORE),/締め切り/);

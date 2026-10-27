@@ -1,8 +1,8 @@
-// Horse racing (demo). Pure logic with no DOM or clock reads, so the Worker can reuse it later.
-// The finishing order and the odds come from the same race model: the odds are counted from
-// many simulated runs, and the real run is one more draw of that model.
+// Horse racing. Pure logic with no DOM or clock reads, shared by the browser and the Worker.
+// Cards and odds are public (PUBLIC_SALT). The run uses a per-race seed: the demo uses the public
+// salt, while the Worker keeps a random seed secret until the start and publishes its hash first.
 export const RACE_INTERVAL=15*60000, CLOSE_BEFORE=60000, RUN_MS=50000, COURSE_M=1600;
-export const ODDS_TRIALS=50000, WEEKLY_LIMIT=50000, MIN_BET=100, BET_STEP=100;
+export const WEEKLY_LIMIT=50000, MIN_BET=100, BET_STEP=100;
 export const PUBLIC_SALT='keso-play-demo-racing-v1';
 export const BET_TYPES={win:{label:'1着当て',formal:'単勝'},place:{label:'3着以内当て',formal:'複勝'}};
 export const STYLES=[{label:'最初から飛ばす',curve:.08},{label:'前の方につける',curve:.03},{label:'後半に追い上げる',curve:-.03},{label:'最後に一気',curve:-.08}];
@@ -41,56 +41,60 @@ export function raceCard(start,salt=PUBLIC_SALT){
  return {id:start,start,closeAt:start-CLOSE_BEFORE,number:raceNumber(start),name:big??`第${raceNumber(start)}レース`,big:!!big,size,going:pickWeighted(rng,[5,3,2]),horses};
 }
 
-// The race model. Both the real run and every odds trial call runRace, so they share one distribution.
+// The race model: a Plackett-Luce ranking (each place goes to a remaining horse with probability
+// proportional to its strength), mixed over five pace scenarios. Exact probabilities are cheap to
+// compute, so the odds have no sampling error and the Worker stays well inside its CPU limit.
+const PACE_POINTS=[-2,-1,0,1,2],PACE_WEIGHTS=[1,4,6,4,1].map(w=>w/16); // mean 0, variance 1
+const BETA=1.6;
 function raceModel(card){
- const front=card.horses.filter(h=>h.style<=1).length;
- return {
-  paceBase:(front-card.size/2)/2,
-  noise:GOINGS[card.going].noise,
-  base:card.horses.map(h=>h.ability+CONDITIONS[h.condition].value*.35+(card.size/2-h.number)*.02),
-  paceFit:card.horses.map(h=>(h.style-1.5)*.2),
- };
+ const front=card.horses.filter(h=>h.style<=1).length,paceBase=(front-card.size/2)/2,sharp=BETA/GOINGS[card.going].noise;
+ return PACE_POINTS.map((point,k)=>{
+  const pace=paceBase+point*.6; // > 0: a fast pace that favours the closers
+  return {weight:PACE_WEIGHTS[k],strength:card.horses.map(h=>Math.exp(sharp*(h.ability+CONDITIONS[h.condition].value*.35+(card.size/2-h.number)*.02+(h.style-1.5)*.2*pace)))};
+ });
 }
-function runRace(model,rng,perf,late){
- const pace=model.paceBase+normal(rng)*.6; // > 0: a fast pace that favours the closers
- for(let i=0;i<model.base.length;i++){
-  late[i]=rng()<.03?1:0;
-  perf[i]=model.base[i]+model.paceFit[i]*pace+normal(rng)*model.noise-late[i];
+/** Exact probability that each horse wins, and finishes inside the paid places. */
+export function finishProbabilities(card){
+ const slots=placeSlots(card.size),win=new Array(card.size).fill(0),place=new Array(card.size).fill(0);
+ for(const {weight,strength} of raceModel(card)){
+  const used=new Uint8Array(card.size);
+  const visit=(depth,prob,rest)=>{
+   for(let j=0;j<card.size;j++){
+    if(used[j])continue;
+    const p=prob*strength[j]/rest;
+    place[j]+=weight*p;if(depth===0)win[j]+=weight*p;
+    if(depth+1<slots){used[j]=1;visit(depth+1,p,rest-strength[j]);used[j]=0;}
+   }
+  };
+  visit(0,1,strength.reduce((a,b)=>a+b,0));
  }
+ return {win,place};
 }
-function finishOrder(perf){return Array.from(perf.keys()).sort((a,b)=>perf[b]-perf[a]);}
 
-export function raceResult(card,salt=PUBLIC_SALT){
- const perf=new Float64Array(card.size),late=new Uint8Array(card.size);
- runRace(raceModel(card),rngFrom(`${salt}:run:${card.id}`),perf,late);
- const runs=finishOrder(perf).map(i=>({number:i+1,perf:perf[i],late:late[i]===1}));
- return {order:runs.map(r=>r.number),runs};
+/** The real run: one draw from the same model, using the race's seed. */
+export function raceResult(card,seed=PUBLIC_SALT){
+ const rng=rngFrom(`${seed}:run:${card.id}`),scenarios=raceModel(card);
+ const {strength}=scenarios[pickWeighted(rng,scenarios.map(s=>s.weight))];
+ const left=card.horses.map(h=>h.number),order=[];
+ while(left.length){
+  let r=rng()*left.reduce((sum,n)=>sum+strength[n-1],0),k=0;
+  for(;k<left.length-1;k++){r-=strength[left[k]-1];if(r<0)break;}
+  order.push(left.splice(k,1)[0]);
+ }
+ // Presentation only: a slow starter is picked among horses that finished in the back half.
+ const late=new Set(order.slice(Math.ceil(order.length/2)).filter(()=>rng()<.06));
+ return {order,runs:order.map(number=>({number,late:late.has(number)}))};
 }
 
 /** Odds in tenths (25 = 2.5x): floor(1 / probability), never below 1.0x. No house cut. */
-export const oddsFromCount=(count,trials)=>Math.max(10,Math.floor(10*trials/Math.max(count,1)));
+export const oddsFromProbability=p=>p>0?Math.max(10,Math.floor(10/p+1e-9)):Number.MAX_SAFE_INTEGER;
 const oddsCache=new Map();
-export function raceOdds(card,salt=PUBLIC_SALT,trials=ODDS_TRIALS){
- const key=`${salt}:${card.id}:${trials}`;
- if(oddsCache.has(key))return oddsCache.get(key);
- const rng=rngFrom(`${salt}:odds:${card.id}`),slots=placeSlots(card.size);
- const win=new Array(card.size+1).fill(0),place=new Array(card.size+1).fill(0);
- const model=raceModel(card),perf=new Float64Array(card.size),late=new Uint8Array(card.size),used=new Uint8Array(card.size);
- for(let i=0;i<trials;i++){
-  runRace(model,rng,perf,late);
-  used.fill(0);
-  for(let k=0;k<slots;k++){ // partial selection of the top `slots`
-   let best=-1;
-   for(let j=0;j<perf.length;j++)if(!used[j]&&(best<0||perf[j]>perf[best]))best=j;
-   used[best]=1;
-   if(k===0)win[best+1]++;
-   place[best+1]++;
-  }
- }
- const odds={trials,win:{},place:{},winCount:{},placeCount:{}};
- for(const h of card.horses){odds.win[h.number]=oddsFromCount(win[h.number],trials);odds.place[h.number]=oddsFromCount(place[h.number],trials);odds.winCount[h.number]=win[h.number];odds.placeCount[h.number]=place[h.number];}
- if(oddsCache.size>16)oddsCache.delete(oddsCache.keys().next().value);
- oddsCache.set(key,odds);
+export function raceOdds(card){
+ if(oddsCache.has(card.id))return oddsCache.get(card.id);
+ const {win,place}=finishProbabilities(card),odds={win:{},place:{},winProb:{},placeProb:{}};
+ for(const h of card.horses){const i=h.number-1;odds.win[h.number]=oddsFromProbability(win[i]);odds.place[h.number]=oddsFromProbability(place[i]);odds.winProb[h.number]=win[i];odds.placeProb[h.number]=place[i];}
+ if(oddsCache.size>32)oddsCache.delete(oddsCache.keys().next().value);
+ oddsCache.set(card.id,odds);
  return odds;
 }
 
@@ -102,11 +106,10 @@ export function betWins(type,horse,result,size){
 export const payoutFor=(amount,odds10)=>Math.floor(amount*odds10/10);
 
 /** Finish times and pace curves for playback. The finish order is the result's order. */
-export function raceTimeline(card,result,salt=PUBLIC_SALT){
- const rng=rngFrom(`${salt}:show:${card.id}`);
- const best=result.runs[0].perf;
+export function raceTimeline(card,result,seed=PUBLIC_SALT){
+ const rng=rngFrom(`${seed}:show:${card.id}`);
  let last=0;
- const raw=result.runs.map((r,i)=>{const t=Math.max(i?last+60:0,(best-r.perf)*900);last=t;return t;});
+ const raw=result.order.map((_,i)=>i?(last+=60+(-Math.log(1-rng()))*330):0);
  const scale=raw.at(-1)>3000?3000/raw.at(-1):1; // the field stays on screen and inside RUN_MS
  const horses={};
  result.runs.forEach((r,i)=>{
@@ -114,7 +117,7 @@ export function raceTimeline(card,result,salt=PUBLIC_SALT){
   const curve=Math.max(-.9,Math.min(.9,STYLES[h.style].curve+(r.late?-.06:0)+(rng()-.5)*.02));
   horses[r.number]={finish:44000+raw[i]*scale,curve,late:r.late,rank:i+1};
  });
- return {horses,photo:result.runs.length>1&&(raw[1]-raw[0])*scale<120};
+ return {horses,photo:result.order.length>1&&(raw[1]-raw[0])*scale<120};
 }
 /** Distance in metres at `t` ms after the start. Keeps moving a little past the post. */
 export function distanceAt(timeline,number,t){
@@ -129,8 +132,8 @@ export function leaderAt(timeline,t){let best=null,dist=-1;for(const n of Object
 const ROAST_LAST=['これは作戦ではありません。実力です','持ち主の生き様を体現しています','エイムと同じで走るラインも定まらない','前の馬に完全にキャリーされています'];
 const ROAST_BOTTOM=['堂々の最下位。お疲れさまでした','最下位。この馬に賭けるのはやめましょう','最下位。言い訳の準備はできています'];
 /** Text commentary (the Activity plays no audio). */
-export function raceCommentary(card,result,timeline,odds,salt=PUBLIC_SALT){
- const rng=rngFrom(`${salt}:talk:${card.id}`),pick=list=>list[Math.floor(rng()*list.length)];
+export function raceCommentary(card,result,timeline,odds,seed=PUBLIC_SALT){
+ const rng=rngFrom(`${seed}:talk:${card.id}`),pick=list=>list[Math.floor(rng()*list.length)];
  const name=n=>`${n}番 ${card.horses[n-1].name}`;
  const lead=timeline.horses[result.order[0]].finish,lines=[{t:0,text:`${card.name}、スタート！`}];
  for(const r of result.runs)if(r.late)lines.push({t:1500,text:`${name(r.number)}、ゲートが開いたことに気付いていません！`});
@@ -160,16 +163,16 @@ export function hydrateRacing(raw){
  return racing;
 }
 export function weeklySpent(state,now){return state.raceWeek.start===weekStart(now)?state.raceWeek.spent:0;}
-export function placeRaceBet(state,{raceId,type,horse,amount},now,salt=PUBLIC_SALT){
+export function placeRaceBet(state,{raceId,type,horse,amount},now){
  if(raceId!==openRaceStart(now))throw Error('このレースの馬券は締め切りました');
  if(!Object.hasOwn(BET_TYPES,type))throw Error('券の種類を選んでください');
- const card=raceCard(raceId,salt);
+ const card=raceCard(raceId);
  if(!Number.isInteger(horse)||horse<1||horse>card.size)throw Error('馬を選んでください');
  if(!validInt(amount,MIN_BET)||amount%BET_STEP!==0)throw Error(`金額は${MIN_BET} KP以上、${BET_STEP} KP単位です`);
  if(amount>state.cash)throw Error('KPが不足しています');
  const spent=weeklySpent(state,now);
  if(spent+amount>WEEKLY_LIMIT)throw Error(`1週間に買える馬券は${WEEKLY_LIMIT.toLocaleString('ja-JP')} KPまでです（残り${(WEEKLY_LIMIT-spent).toLocaleString('ja-JP')} KP）`);
- const odds=raceOdds(card,salt)[type][horse];
+ const odds=raceOdds(card)[type][horse];
  const bet={id:`${now}-${state.raceBets.length}`,raceId,type,horse,amount,odds,status:'pending',payout:0,time:now};
  state.cash-=amount;
  state.raceWeek={start:weekStart(now),spent:spent+amount};
@@ -178,12 +181,14 @@ export function placeRaceBet(state,{raceId,type,horse,amount},now,salt=PUBLIC_SA
  state.raceBets=[...pending,...state.raceBets.filter(b=>b.status!=='pending').slice(0,Math.max(0,60-pending.length))].sort((a,b)=>b.time-a.time);
  return bet;
 }
-/** Pays out every pending bet whose race has finished. Odds were fixed when the bet was bought. */
-export function settleRaceBets(state,now,salt=PUBLIC_SALT){
+/** Pays out every pending bet whose race has finished. Odds were fixed when the bet was bought.
+ * `seedOf(raceId)` returns the race seed, or null when it is not available yet. */
+export function settleRaceBets(state,now,seedOf=()=>PUBLIC_SALT){
  const settled=[];
  for(const bet of state.raceBets){
   if(bet.status!=='pending'||now<bet.raceId+RUN_MS)continue;
-  const card=raceCard(bet.raceId,salt),won=betWins(bet.type,bet.horse,raceResult(card,salt),card.size);
+  const seed=seedOf(bet.raceId);if(seed===null||seed===undefined)continue;
+  const card=raceCard(bet.raceId),won=betWins(bet.type,bet.horse,raceResult(card,seed),card.size);
   const payout=won?payoutFor(bet.amount,bet.odds):0;
   if(!validInt(state.cash+payout))throw Error('KPが上限を超えています');
   state.cash+=payout;bet.status=won?'won':'lost';bet.payout=payout;settled.push(bet);

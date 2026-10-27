@@ -9,10 +9,13 @@ import discord from '../discord-config.json' with { type: 'json' };
 import policy from '../kp-policy.json' with { type: 'json' };
 // @ts-expect-error The shared pure browser engine has no TypeScript declarations.
 import { advanceMarket, trade, spin, spinNumbers, cryptoRouletteNumber } from '../../../js/engine.js';
+// @ts-expect-error The shared pure browser engine has no TypeScript declarations.
+import { hydrateRacing, placeRaceBet } from '../../../js/racing.js';
+import { racingView, raceSeed } from './racing-kp.ts';
 export async function readKpState(env:KpEnv,mapping:KpMapping,user:string){
  const wallet=await env.DB.prepare('SELECT balance,version FROM kp_wallets WHERE guild=? AND user=?').bind(mapping.guildId,user).first<{balance:number;version:number}>();
  const row=await env.DB.prepare('SELECT data,version FROM kp_state WHERE guild=? AND user=?').bind(mapping.guildId,user).first<{data:string;version:number}>();if(!wallet||!row)throw Error('口座が見つかりません。');
- const state=JSON.parse(row.data);state.cash=wallet.balance;state.serverWallet=true;state.walletVersion=wallet.version;state.stateVersion=row.version;advanceMarket(state);
+ const state=JSON.parse(row.data);state.cash=wallet.balance;state.serverWallet=true;state.walletVersion=wallet.version;state.stateVersion=row.version;advanceMarket(state);Object.assign(state,hydrateRacing(state));state.racing=await racingView(env,mapping.guildId);
  const rewards=(await env.DB.prepare('SELECT id,match,mode,amount,at FROM kp_events WHERE guild=? AND user=? ORDER BY at DESC,id LIMIT 100').bind(mapping.guildId,user).all<{id:string;match:string;mode:string;amount:number;at:number}>()).results;
  await ensureQuizKp(env);
  const quiz=(await env.DB.prepare('SELECT id,mode,day,game,amount,completed_at FROM kp_quiz_events WHERE guild=? AND user=? UNION ALL SELECT id,mode,day,game,amount,completed_at FROM kp_quiz_ranked_extra WHERE guild=? AND user=? ORDER BY completed_at DESC LIMIT 100').bind(mapping.guildId,user,mapping.guildId,user).all<{id:string;mode:string;day:string;game:string;amount:number;completed_at:number}>()).results;
@@ -41,8 +44,12 @@ export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:strin
    const game=task==='steam'?String(args.game??'').trim():'',achievement=task==='steam'?String(args.achievement??'').trim():'';
    if(task==='steam'&&(!game||!achievement||game.length>80||achievement.length>120))throw Error('ゲームと実績を入力してください。');
    directive={target,task,game,achievement,cost};state.cash-=cost;result={issued:true};
+  }else if(action==='race-bet'){
+   const bet=placeRaceBet(state,{raceId:args.raceId,type:args.type,horse:args.horse,amount:args.amount},Date.now());
+   await raceSeed(env,mapping.guildId,bet.raceId); // the hash is fixed before betting closes
+   result={bet};
   }else throw Error('この操作は本番口座では使えません。');
-  const response={result};const safeState={...state,claims:[],directives:[]};delete safeState.members;
+  const response={result};const safeState={...state,claims:[],directives:[]};delete safeState.members;delete safeState.racing;
   const inserted=await env.DB.prepare(`INSERT INTO kp_operations(id,guild,user,request_hash,response,delta,state,directive,at)
    SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM kp_wallets w JOIN kp_state s ON w.guild=s.guild AND w.user=s.user WHERE w.guild=? AND w.user=? AND w.version=? AND s.version=?) ON CONFLICT(guild,user,id) DO NOTHING`)
    .bind(id,mapping.guildId,user,requestHash,JSON.stringify(response),state.cash-before,JSON.stringify(safeState),directive?JSON.stringify(directive):null,Date.now(),mapping.guildId,user,state.walletVersion,state.stateVersion).run();

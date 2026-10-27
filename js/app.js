@@ -1,14 +1,14 @@
-import {wheelView,covered,redNumbers,outcomeAngle} from './roulette-view.js?v=20261027-racing';
-import {connectDiscordActivity,isDiscordActivity}from './discord-activity-auth.js?v=20261027-racing';
-import { createKpClient } from './kp-client.js?v=20261027-racing';
+import {wheelView,covered,redNumbers,outcomeAngle} from './roulette-view.js?v=20261027-racelive';
+import {connectDiscordActivity,isDiscordActivity}from './discord-activity-auth.js?v=20261027-racelive';
+import { createKpClient } from './kp-client.js?v=20261027-racelive';
 import { fmt, fmt0 } from './format.js';
-import { submitClaim, approveClaim, issueDirective, completeDirective } from './progression.js?v=20261027-racing';
-import { titleView, homeView, playView, directivesView } from './progression-views.js?v=20261027-racing';
+import { submitClaim, approveClaim, issueDirective, completeDirective } from './progression.js?v=20261027-racelive';
+import { titleView, homeView, playView, directivesView } from './progression-views.js?v=20261027-racelive';
 import { genCandles, movingAverage, svgCandles } from './charts.js';
-import { MARKET, createInitialState, portfolioValue, assets, advanceMarket, trade, spin, spinNumbers, validateNumberBets, grantDemoSalary, cryptoRouletteNumber } from './engine.js?v=20261027-racing';
+import { MARKET, createInitialState, portfolioValue, assets, advanceMarket, trade, spin, spinNumbers, validateNumberBets, grantDemoSalary, cryptoRouletteNumber } from './engine.js?v=20261027-racelive';
 import { KEY, LEGACY_KEY } from './storage.js';
-import { RUN_MS, WEEKLY_LIMIT, openRaceStart, latestRaceStart, raceCard, raceOdds, raceResult, raceTimeline, raceCommentary, raceRuns, placeRaceBet, settleRaceBets, weeklySpent } from './racing.js?v=20261027-racing';
-import { raceScreen, racePreview, drawRace, raceElapsed } from './racing-view.js?v=20261027-racing';
+import { PUBLIC_SALT, RUN_MS, WEEKLY_LIMIT, openRaceStart, latestRaceStart, raceCard, raceOdds, raceResult, raceTimeline, raceCommentary, raceRuns, placeRaceBet, settleRaceBets, weeklySpent } from './racing.js?v=20261027-racelive';
+import { raceScreen, racePreview, drawRace, raceElapsed } from './racing-view.js?v=20261027-racelive';
 import { createStore } from './store.js';
 const $=(s,el=document)=>el.querySelector(s);
 const wallet=createKpClient();
@@ -87,24 +87,35 @@ let raceShown='';
 let raceSettling=false;
 const reducedMotion=globalThis.matchMedia?.('(prefers-reduced-motion: reduce)');
 const raceBets=()=>({raceBets:state.raceBets??[]});
-function raceWatch(now){
-  const card=raceCard(latestRaceStart(now));
-  if(!raceRuns(card,raceBets()))return {card,runs:false};
-  const result=raceResult(card),odds=raceOdds(card),timeline=raceTimeline(card,result);
-  return {card,runs:true,result,odds,timeline,commentary:raceCommentary(card,result,timeline,odds),finished:now>=card.start+RUN_MS};
+// Live wallets: the server decides whether the race runs and reveals its seed after the start.
+function liveRace(id){const w=state.racing?.watch;return w?.id===id?w:null;}
+function raceWatch(now,id){
+  const card=raceCard(id),info=live?liveRace(id):null;
+  if(live&&(!info||(info.runs&&!info.seed)))return {card,runs:false,loading:true};
+  if(!(live?info.runs:raceRuns(card,raceBets())))return {card,runs:false};
+  const seed=live?info.seed:PUBLIC_SALT,result=raceResult(card,seed),odds=raceOdds(card),timeline=raceTimeline(card,result,seed);
+  const watch={card,runs:true,result,odds,timeline,commentary:raceCommentary(card,result,timeline,odds,seed),finished:now>=card.start+RUN_MS,hash:info?.hash};
+  if(info)verifySeed(watch,seed,info.hash);
+  return watch;
 }
-let watchCache=null;
+// Anyone can check that the revealed seed is the one committed before betting closed.
+async function verifySeed(watch,seed,hash){
+  try{const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(seed));watch.verified=[...new Uint8Array(digest)].map(b=>b.toString(16).padStart(2,'0')).join('')===hash;}
+  catch{watch.verified=false;}
+  if(watchCache===watch)render();
+}
+let watchCache=null,watchKey='';
 function currentWatch(now){
-  const id=latestRaceStart(now);
-  const runs=raceRuns({id,big:false},raceBets());
-  if(!watchCache||watchCache.card.id!==id||(!watchCache.runs&&runs)||(watchCache.runs&&!watchCache.finished&&now>=id+RUN_MS))watchCache=raceWatch(now);
+  const id=latestRaceStart(now),info=live?liveRace(id):null;
+  const key=`${id}:${live?`${info?.runs}:${info?.seed}:${info?.hash}`:raceRuns({id,big:false},raceBets())}:${now>=id+RUN_MS}`;
+  if(key!==watchKey){watchKey=key;watchCache=raceWatch(now,id);}
   return watchCache;
 }
 function screenRace(){
   const now=Date.now(),open=raceCard(openRaceStart(now)),watch=currentWatch(now);
-  raceShown=`${open.id}:${watch.card.id}:${watch.runs}:${watch.finished}`;
-  const weeklyLeft=live?0:WEEKLY_LIMIT-weeklySpent(state,now);
-  return raceScreen({state,live,watch,open:{card:open},openOdds:raceOdds(open),draft:{...raceDraft,amount:drafts['race-amount']},weeklyLeft,tabs:subTabs(),nav:bottomNav()});
+  raceShown=`${open.id}:${watchKey}`;
+  const weeklyLeft=WEEKLY_LIMIT-weeklySpent({raceWeek:state.raceWeek??{start:0,spent:0}},now);
+  return raceScreen({state,live,watch,open:{card:open,hash:live&&state.racing?.open?.id===open.id?state.racing.open.hash:null},openOdds:raceOdds(open),draft:{...raceDraft,amount:drafts['race-amount']},weeklyLeft,tabs:subTabs(),nav:bottomNav()});
 }
 async function settleRaces(){
   if(live||raceSettling||!(state.raceBets??[]).some(b=>b.status==='pending'&&Date.now()>=b.raceId+RUN_MS))return;
@@ -113,12 +124,14 @@ async function settleRaces(){
   catch(error){toast(error.message);}
   finally{raceSettling=false;render();}
 }
-let lastStill=0;
+let lastStill=0,lastRaceRefresh=0;
 function raceFrame(){
   if(screen!=='race'||detail){raceLoop=0;return;}
   raceLoop=requestAnimationFrame(raceFrame);
   const now=Date.now(),watch=currentWatch(now);
-  if(`${openRaceStart(now)}:${watch.card.id}:${watch.runs}:${watch.finished}`!==raceShown){render();settleRaces();return;}
+  if(`${openRaceStart(now)}:${watchKey}`!==raceShown){render();settleRaces();}
+  // A new race started: fetch the revealed seed now instead of waiting for the 15-second poll.
+  if(live&&state.racing&&(state.racing.open?.id!==openRaceStart(now)||state.racing.watch?.id!==latestRaceStart(now))&&now-lastRaceRefresh>5000&&!mutationPending){lastRaceRefresh=now;refreshWallet(false);}
   const open=raceCard(openRaceStart(now)),left=Math.max(0,open.closeAt-now);
   const countdown=$('#race-countdown');if(countdown)countdown.textContent=`${Math.floor(left/60000)}:${String(Math.floor(left/1000)%60).padStart(2,'0')}`;
   if(!watch.runs)return;
@@ -260,9 +273,8 @@ addEventListener('click',async e=>{
     if(t.dataset.raceHorse){raceDraft.horse=Number(t.dataset.raceHorse);render();return;}
     if(t.dataset.raceType){raceDraft.type=t.dataset.raceType;render();return;}
     if(t.dataset.action==='race-bet'){
-      if(live)throw Error('本番口座の馬券は準備中です');
-      const now=Date.now(),raceId=openRaceStart(now);
-      const bet=await commit(next=>placeRaceBet(next,{raceId,type:raceDraft.type,horse:raceDraft.horse,amount:Number($('#race-amount')?.value)},now));
+      const now=Date.now(),raceId=openRaceStart(now),args={raceId,type:raceDraft.type,horse:raceDraft.horse,amount:Number($('#race-amount')?.value)};
+      const bet=live?(await liveOperation('race-bet',args)).bet:await commit(next=>placeRaceBet(next,args,now));
       render();toast(`${bet.horse}番の馬券を買いました（${(bet.odds/10).toFixed(1)}倍）`);return;
     }
     if(t.dataset.open){openDetail(t.dataset.kind,t.dataset.open);return;}
