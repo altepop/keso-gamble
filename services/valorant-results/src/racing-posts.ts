@@ -1,11 +1,13 @@
 // Horse racing posts for the earnings channel. Posts are queued once under a fixed ID and sent by
-// the minute cron, so a retry never duplicates a message. Nothing is queued until the webhook is set.
+// the minute cron. Queue IDs deduplicate registration; an interrupted delivery can remain unknown.
+// Nothing is queued until the webhook is set.
 // @ts-expect-error The shared pure browser engine has no TypeScript declarations.
 import { BET_TYPES, CLOSE_BEFORE, GOINGS, RACE_INTERVAL, RUN_MS, bigRaceName, latestRaceStart, openRaceStart, prizeFor, raceCard, raceOdds, raceResult, placeSlots } from '../../../js/racing.js';
 import { raceSeed, ensureRacing } from './racing-kp.ts';
 import { crownFor, defaultRoastLevel, validRoastLevel } from './racing-crowns.ts';
 import { raceEntries } from './racing-horses.ts';
 import { titlesOf } from './luxury.ts';
+import {raceCatchphrase,raceAside,raceBanter} from './racing-voice.ts';
 import type { RoastLevel } from './racing-crowns.ts';
 import type { KpEnv, KpMapping } from './kp.ts';
 export interface PostEnv extends KpEnv { KP_EARNINGS_WEBHOOK_URL?:string }
@@ -16,15 +18,6 @@ const clock=(time:number)=>new Date(time).toLocaleTimeString('ja-JP',{timeZone:'
 const kp=(n:number)=>n.toLocaleString('ja-JP')+' KP';
 const odd=(v:number)=>(v/10).toFixed(1)+'倍';
 const clean=(text:string)=>text.replace(/[@`*_~<>|]/g,'');
-// Lines follow each person's roast level (the members chose "full"; newcomers start at "mild").
-const ROASTS:Record<RoastLevel,string[]>={
- full:['この人に賭けるのはやめましょう。','本日の反面教師です。','KPが溶ける音が聞こえました。','言い訳は馬に聞いてください。'],
- normal:['ちょっと賭けすぎでは？','次は当たるといいね（たぶん）。'],
- mild:['次こそ当たりますように。','ドンマイ、次のレースへ。'],
-};
-const CHEER=['おめでとう！今夜はこの人のおごり。','的中！調子に乗るのは今のうちです。','当てた！明日のレースで返すまでがセット。'];
-const pick=(list:string[],key:string)=>{let h=2166136261;for(const c of key)h=Math.imul(h^c.charCodeAt(0),16777619);return list[(h>>>0)%list.length];};
-
 const initialized=new WeakSet<object>();
 export async function ensurePosts(env:KpEnv){
  if(initialized.has(env.DB))return;
@@ -44,7 +37,8 @@ export function cardPost(card:Card,hash:string){
   `締切 ${clock(card.start-CLOSE_BEFORE)}｜倍率は 1着当て / ${placeSlots(card.size)}着以内当て`,
   ...card.horses.map(h=>`${h.number}. ${clean(h.name)}${h.nickname?`「${clean(h.nickname)}」`:''}${h.person?'（本人の名前の馬・見舞金つき）':h.ownerName?`（馬主 ${clean(h.ownerName)}）`:''}　${odd(odds.win[h.number])} / ${odd(odds.place[h.number])}`),
   `結果のハッシュ: \`${hash.slice(0,16)}…\`（発走後にシード値を公開）`,
-  'KESO PLAY の「勝負 → 競馬」で馬券を買えます。'].join('\n');
+  'KESO PLAY の「勝負 → 競馬」で馬券を買えます。',
+  `💬 ${raceCatchphrase('card',String(card.id))}`,raceAside('card',String(card.id))].join('\n');
 }
 export function resultPost(card:Card,seed:string,bets:Array<Bet&{user:string}>,levelOf:(user:string)=>RoastLevel,titleOf:(user:string)=>string|undefined=()=>undefined){
  const odds=raceOdds(card),order:number[]=raceResult(card,seed).order;
@@ -54,9 +48,10 @@ export function resultPost(card:Card,seed:string,bets:Array<Bet&{user:string}>,l
  for(const [user,list] of byUser){
   const who=`<@${user}>${titleOf(user)?`「${clean(titleOf(user)!)}」`:''}`;
   const paid=list.reduce((n,b)=>n+b.payout,0),spent=list.reduce((n,b)=>n+b.amount,0),hits=list.filter(b=>b.status==='won');
-  if(hits.length)lines.push(`💰 ${who} ${hits.map(b=>`${b.horse}番の${BET_TYPES[b.type].label}（${odd(b.odds)}）`).join('・')} 的中 → +${kp(paid)}${paid>=BIG_WIN?`　${pick(CHEER,user+card.id)}`:''}`);
-  else lines.push(`💸 ${who} ${kp(spent)} 外れ。${pick(ROASTS[levelOf(user)],user+card.id)}`);
+  if(hits.length)lines.push(`💰 ${who} ${hits.map(b=>`${b.horse}番の${BET_TYPES[b.type].label}（${odd(b.odds)}）`).join('・')} 的中 → +${kp(paid)}　${raceBanter(paid>spent?'win':'partial',levelOf(user),user+':'+card.id)}`);
+  else lines.push(`💸 ${who} ${kp(spent)} 外れ。${raceBanter('loss',levelOf(user),user+':'+card.id)}`);
  }
+ lines.push(`💬 ${raceCatchphrase('result',String(card.id))}`,raceAside('result',String(card.id)));
  lines.push(`シード値: \`${seed}\`（締切前のハッシュと一致することを画面で確認できます）`);
  return lines.join('\n');
 }
@@ -70,7 +65,7 @@ async function raceBets(env:KpEnv,guild:string,id:number){
 }
 export async function enqueue(env:KpEnv,id:string,body:string,now:number){await env.DB.prepare('INSERT OR IGNORE INTO kp_posts(id,body,at) VALUES(?,?,?)').bind(id,JSON.stringify({content:body,allowed_mentions:{parse:[]}}),now).run();}
 export function crownPost(c:{race:number;name:string;user:string;reason:string}){
- return `🏇 『${clean(c.name)}』開催決定！ ${clock(c.race)}発走（<@${c.user}> の${c.reason}にちなんで）\nKESO PLAY の「勝負 → 競馬」で、発走15分前から馬券を買えます。`;
+ return `🏇 『${clean(c.name)}』開催決定！ ${clock(c.race)}発走（<@${c.user}> の${c.reason}にちなんで）\nKESO PLAY の「勝負 → 競馬」で、発走15分前から馬券を買えます。\n💬 ${raceCatchphrase('crown',String(c.race))}\n${raceAside('crown',String(c.race))}`;
 }
 export async function roastLevelsOf(env:KpEnv,mapping:KpMapping){
  const rows=(await env.DB.prepare("SELECT user,json_extract(data,'$.roastLevel') AS level FROM kp_state WHERE guild=?").bind(mapping.guildId).all<{user:string;level:string|null}>()).results;

@@ -1,4 +1,5 @@
 import test from 'node:test';
+import voice from '../racing-voice.json' with {type:'json'};
 import { URL as NodeURL } from 'node:url';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
@@ -80,7 +81,7 @@ test('the roast follows each person\'s level: harsh for full, gentle for mild', 
  const bet=(user:string)=>({id:user,raceId:NORMAL,type:'win' as const,horse:loser,amount:5000,odds:80,status:'lost',payout:0,user});
  const text=resultPost(card,seed,[bet(one),bet(outsider)],user=>user===one?'full':'mild');
  const [harsh,mild]=[text.split('\n').find(l=>l.includes(one))!,text.split('\n').find(l=>l.includes(outsider))!];
- assert.match(harsh,/やめましょう|反面教師|溶ける|言い訳/);
+ assert.ok(voice.loss.full.some(line=>harsh.endsWith(line)));
  assert.match(mild,/次こそ|ドンマイ/);
 });
 

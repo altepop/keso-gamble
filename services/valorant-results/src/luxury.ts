@@ -1,3 +1,4 @@
+import {raceCatchphrase,raceAside} from './racing-voice.ts';
 // Luxury items bought with KP. The purchase row (and the crown race, for crown items) is written by a
 // trigger on the same wallet operation insert as the KP debit, so either everything applies or nothing.
 // @ts-expect-error The shared pure browser engine has no TypeScript declarations.
@@ -67,7 +68,7 @@ export async function luxuryPosts(env:KpEnv&{KP_EARNINGS_WEBHOOK_URL?:string},ma
  let text='';
  if(luxury.item==='roast-post'){const level=(await roastLevelsOf(env,mapping))(luxury.target!);text=`📢 <@${luxury.target}> ${pick(ROAST_POSTS[level==='full'?'full':'normal'])}（<@${user}> より）`;}
  if(luxury.item==='convict')text=`🚨 本日の戦犯は <@${luxury.target}> に決定（<@${user}> が認定）`;
- if(luxury.crown)text=`🏇 『${clean(luxury.crown.name)}』開催決定！ ${when(luxury.crown.race)}発走（<@${user}> の冠レース）`;
+ if(luxury.crown)text=`🏇 『${clean(luxury.crown.name)}』開催決定！ ${when(luxury.crown.race)}発走（<@${user}> の冠レース）\n💬 ${raceCatchphrase('crown',String(luxury.crown.race))}\n${raceAside('crown',String(luxury.crown.race))}`;
  if(luxury.item==='billboard')text=`🏆 <@${user}> の馬が今週の看板馬に！`;
  if(luxury.item==='statue')text=`🗿 <@${user}> が愛馬の銅像を殿堂に建てました。`;
  if(text)await enqueue(env,'luxury:'+luxury.id,text,now);
