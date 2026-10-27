@@ -149,5 +149,5 @@ export class VoiceGateway {
   }
   return Response.json(this.status());
  });}
- private status(){return {enabled:Boolean(this.token)&&!this.stopped,connected:this.confirmed(),tracked:this.active().length,lastConfirmedAt:this.lastAck,error:this.error,commandsRegistered:this.commandsRegistered,commandsError:this.commandsError};}
+ private status(){return {enabled:Boolean(this.token)&&!this.stopped,connected:this.confirmed(),tracked:this.active().length,lastConfirmedAt:this.lastAck,error:this.error,commandsRegistered:this.commandsRegistered,commandsVersion:this.commandsRegistered?KP_COMMAND_VERSION:null,commandsError:this.commandsError};}
 }

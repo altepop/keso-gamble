@@ -1,3 +1,4 @@
+import {isKpRanking} from './kp-command.ts';
 import {initializeKp,newKpState} from './kp.ts';
 import type {KpEnv,KpMapping} from './kp.ts';
 import {ensureQuizKp} from './quiz-kp.ts';
@@ -5,7 +6,7 @@ import {operateKp} from './kp-api.ts';
 import {racingView} from './racing-kp.ts';
 // @ts-expect-error Shared browser engine.
 import {openRaceStart,raceCard,raceOdds,placeSlots} from '../../../js/racing.js';
-interface Slash {id:string;guild_id?:string;member?:{user?:{id:string}};data?:{name?:string;options?:Array<{name:string;value?:unknown}>}}
+interface Slash {id:string;guild_id?:string;member?:{user?:{id:string}};data?:{name?:string;options?:Array<{name:string;type?:number;options?:unknown[];value?:unknown}>}}
 const clock=(at:number)=>new Date(at).toLocaleTimeString('ja-JP',{timeZone:'Asia/Tokyo',hour:'2-digit',minute:'2-digit'});
 const clean=(s:string)=>s.replace(/[@`*_~<>|\r\n]/g,'');
 const money=(n:number)=>n.toLocaleString('ja-JP')+' KP';
@@ -20,6 +21,12 @@ export async function runKpCommand(env:KpEnv,interaction:Slash,override?:KpMappi
  const mapping=await initializeKp(env,override),user=interaction.member?.user?.id;
  if(!mapping||interaction.guild_id!==mapping.guildId||!user||!/^\d{15,22}$/.test(user))return 'このサーバーの本人の口座で利用してください。';
  const command=interaction.data?.name;if(!['kp','keiba','bet'].includes(command??''))return '対応していないコマンドです。';
+ if(isKpRanking(interaction)){
+  // A single server-side snapshot: current spendable KP, not stocks or lifetime earnings.
+  const rows=(await env.DB.prepare('SELECT user,balance,RANK() OVER(ORDER BY balance DESC) AS rank,COUNT(*) OVER() AS total FROM kp_wallets WHERE guild=? ORDER BY balance DESC,user ASC LIMIT 10').bind(mapping.guildId).all<{user:string;balance:number;rank:number;total:number}>()).results;
+  return '🏆 **KP残高ランキング**\n'+(rows.length?rows.map(r=>`${r.rank}位　<@${r.user}>　**${money(r.balance)}**`).join('\n'):`まだ口座がありません。`)+'\n\n現在使えるKPの上位10人。同額は同順位。株・馬などの評価額は含みません。'+(rows.length?`（全${rows[0].total}人）`:'');
+ }
+ if(command==='kp'&&interaction.data?.options?.length&&!(interaction.data.options.length===1&&interaction.data.options[0].name==='balance'&&interaction.data.options[0].type===1&&!interaction.data.options[0].options?.length))return '/kp balance または /kp ranking を選んでください。';
  // A verified guild interaction can open an empty wallet, never a starting credit.
  await ensureQuizKp(env);
  await env.DB.batch([

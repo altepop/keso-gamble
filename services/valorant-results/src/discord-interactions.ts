@@ -1,3 +1,4 @@
+import {isKpRanking} from './kp-command.ts';
 import { runKpCommand } from './kp-slash.ts';
 import { runValoCommand } from './valo-queries.ts';
 import { initializeKp, issueKpCode } from './kp.ts';
@@ -146,5 +147,5 @@ export async function discordInteractions(request: Request, env: Env, ctx: Execu
       if (!response.ok) console.warn('discord_command_reply_failed', { status: response.status });
     } catch { console.warn('discord_command_reply_failed'); }
   })());
-  return Response.json(deathSelect ? { type: 6 } : { type: 5, data: { flags: 64 } });
+  return Response.json(deathSelect ? { type: 6 } : { type: 5, data: { flags: isKpRanking(interaction) ? 0 : 64 } });
 }
