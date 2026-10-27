@@ -1,11 +1,11 @@
-import {wheelView,covered,redNumbers,outcomeAngle} from './roulette-view.js?v=20261027-quiz-rank10';
-import {connectDiscordActivity,isDiscordActivity}from './discord-activity-auth.js?v=20261027-quiz-rank10';
-import { createKpClient } from './kp-client.js?v=20261027-quiz-rank10';
+import {wheelView,covered,redNumbers,outcomeAngle} from './roulette-view.js?v=20261027-voice';
+import {connectDiscordActivity,isDiscordActivity}from './discord-activity-auth.js?v=20261027-voice';
+import { createKpClient } from './kp-client.js?v=20261027-voice';
 import { fmt, fmt0 } from './format.js';
-import { submitClaim, approveClaim, issueDirective, completeDirective } from './progression.js?v=20261027-quiz-rank10';
-import { titleView, homeView, playView, directivesView } from './progression-views.js?v=20261027-quiz-rank10';
+import { submitClaim, approveClaim, issueDirective, completeDirective } from './progression.js?v=20261027-voice';
+import { titleView, homeView, playView, directivesView } from './progression-views.js?v=20261027-voice';
 import { genCandles, movingAverage, svgCandles } from './charts.js';
-import { MARKET, createInitialState, portfolioValue, assets, advanceMarket, trade, spin, spinNumbers, validateNumberBets, grantDemoSalary, cryptoRouletteNumber } from './engine.js?v=20261027-quiz-rank10';
+import { MARKET, createInitialState, portfolioValue, assets, advanceMarket, trade, spin, spinNumbers, validateNumberBets, grantDemoSalary, cryptoRouletteNumber } from './engine.js?v=20261027-voice';
 import { KEY, LEGACY_KEY } from './storage.js';
 import { createStore } from './store.js';
 const $=(s,el=document)=>el.querySelector(s);

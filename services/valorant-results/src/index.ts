@@ -1,3 +1,5 @@
+export {VoiceGateway} from './voice-gateway.ts';
+import {ensureVoice} from './voice-api.ts';
 import { claimDeathMatch } from './death-sessions.ts';
 import type { KpRun } from './kp.ts';
 import { initializeKp, syncKpAccounts, collectKpMatch, drainKpInbox, flushKpDirectives, prepareKpRun, kpEventId, kpCreditLine } from './kp.ts';
@@ -11,6 +13,7 @@ import type { Match, Notice } from './results.ts';
 export { resultMessage } from './results.ts';
 
 export interface Env {
+  VOICE_GATEWAY?:DurableObjectNamespace;
   DISCORD_CLIENT_SECRET?: string;
   KP_BOOTSTRAP_PRIVATE_KEY?: string;
   KP_BOOTSTRAP_PUBLIC_KEY?: string;
@@ -358,6 +361,7 @@ export default {
     return new URL(request.url).pathname.startsWith('/api/kp/') ? kpApi(request, env) : discordInteractions(request, env, ctx);
   },
   async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    ctx.waitUntil(ensureVoice(env).catch(()=>console.warn('voice_ensure_pending')));
     ctx.waitUntil(monitor(env));
   },
 };
