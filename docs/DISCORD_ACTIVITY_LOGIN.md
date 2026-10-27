@@ -38,3 +38,9 @@ DiscordアクセストークンはSDKへの認証に一時使用し、localStora
 - ブラウザー: 実際に同梱する公式SDKにDiscord RPCとAPIの応答を模擬し、コード入力なしの初回接続・再起動・キャンセル・設定前の予備手段・口座違いの決済拒否・音声API不使用を確認。
 - 公開の `/api/kp/status` の `activityAuthAvailable`、`/api/kp/activity/config` の `available` は設定の有無。trueだけではClient Secretが正しいことや、実機ログイン成功までを証明しない。
 - 最終確認は実際のDiscord内でActivityを開き、本人の口座へ自動接続されること。Secretは取得・再表示して検証しない。
+
+## サーバー通話から起動したときの操作
+
+認証済みのSDKへ `setConfig({use_interactive_pip:true})` を送り、DiscordのPiP表示でも操作を受け付けるようにする。未対応の古いクライアントでは設定の失敗でログインを止めない。残高の定期確認で表示が変わらないときは、ボタンを含むDOMを作り直さない。
+
+ブラウザー検証ではDM・guild付きモバイル起動と、Discord側のPiP入力制御を模擬する。サーバー起動で「つづける」からホームへ進み、残高の更新とタッチが重なっても次の画面を開けることを確認する。実際のiPhone版Discordでの操作は利用者の端末で確認する。

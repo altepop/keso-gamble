@@ -2,7 +2,7 @@ export const isDiscordActivity=(host=globalThis.location?.hostname??'')=>host.en
 const sdkInstances=new Map();
 async function officialSdk(applicationId){
  if(!sdkInstances.has(applicationId)){
-  const {DiscordSDK}=await import('./vendor/discord-sdk.js?v=20261027-auto');
+  const {DiscordSDK}=await import('./vendor/discord-sdk.js?v=20261027-touch');
   sdkInstances.set(applicationId,new DiscordSDK(applicationId,{disableConsoleLogOverride:true}));
  }
  return sdkInstances.get(applicationId);
@@ -26,6 +26,11 @@ export async function connectDiscordActivity(wallet,{host=globalThis.location?.h
  try{auth=await deadline(sdk.commands.authenticate({access_token:result.accessToken}),15000);}
  catch{throw Error('Discordの接続を確認できませんでした。もう一度お試しください。');}
  if(auth?.user?.id!==result.userId)throw Error('接続するDiscordアカウントが一致しません。Activityを開き直してください。');
+ // Guild-call Activities can be shown in PiP. Discord gates input there by default.
+ // Configure it only after identity is verified; older clients must not lose login.
+ if(typeof sdk.commands.setConfig==='function'){
+  try{await deadline(sdk.commands.setConfig({use_interactive_pip:true}),3000);}catch{ /* Optional on older Discord clients. */ }
+ }
  const state=await wallet.acceptActivitySession(result.token,result.userId);
  return {kind:'connected',state};
 }
