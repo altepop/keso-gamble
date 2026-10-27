@@ -1,0 +1,28 @@
+name: Verify live slash registration
+on:
+  push:
+    branches: [ops/earnings-test-20261027]
+    paths: [.github/workflows/inspect-slash.yml]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    env:
+      CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: |
+          node --input-type=module <<'JS'
+          const root='https://api.cloudflare.com/client/v4/accounts/'+process.env.CF_ACCOUNT+'/workers/scripts/valorant-results',headers={Authorization:'Bearer '+process.env.CF_TOKEN};
+          const settings=await (await fetch(root+'/settings',{headers})).json();
+          console.log('DO_BINDING',JSON.stringify(settings.result.bindings.filter(b=>b.type==='durable_object_namespace').map(b=>({class_name:b.class_name,script_name:b.script_name,environment:b.environment}))));
+          const r=await fetch(root+'/content/v2',{headers});let sources=[];
+          if(r.headers.get('content-type')?.includes('multipart/form-data')){for(const [name,value]of await r.formData())if(/\.(m?js)$/.test(name))sources.push(typeof value==='string'?value:await value.text());}else sources=[await r.text()];
+          console.log('SOURCE_MARKERS',JSON.stringify({slashVersion:sources.some(s=>s.includes('kp-slash-v1')),registration:sources.some(s=>s.includes('commandsRegistered'))}));
+          const status=await (await fetch('https://valorant-results.tealeaforest.workers.dev/api/kp/voice/status?check='+Date.now(),{headers:{'Cache-Control':'no-cache'}})).json();
+          console.log('LIVE_STATUS',JSON.stringify(status));
+          JS
