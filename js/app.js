@@ -1,14 +1,14 @@
-import {wheelView,covered,redNumbers,outcomeAngle} from './roulette-view.js?v=20261027-crowns';
-import {connectDiscordActivity,isDiscordActivity}from './discord-activity-auth.js?v=20261027-crowns';
-import { createKpClient } from './kp-client.js?v=20261027-crowns';
+import {wheelView,covered,redNumbers,outcomeAngle} from './roulette-view.js?v=20261027-owners';
+import {connectDiscordActivity,isDiscordActivity}from './discord-activity-auth.js?v=20261027-owners';
+import { createKpClient } from './kp-client.js?v=20261027-owners';
 import { fmt, fmt0 } from './format.js';
-import { submitClaim, approveClaim, issueDirective, completeDirective } from './progression.js?v=20261027-crowns';
-import { titleView, homeView, playView, directivesView } from './progression-views.js?v=20261027-crowns';
+import { submitClaim, approveClaim, issueDirective, completeDirective } from './progression.js?v=20261027-owners';
+import { titleView, homeView, playView, directivesView, escapeHTML } from './progression-views.js?v=20261027-owners';
 import { genCandles, movingAverage, svgCandles } from './charts.js';
-import { MARKET, createInitialState, portfolioValue, assets, advanceMarket, trade, spin, spinNumbers, validateNumberBets, grantDemoSalary, cryptoRouletteNumber } from './engine.js?v=20261027-crowns';
+import { MARKET, createInitialState, portfolioValue, assets, advanceMarket, trade, spin, spinNumbers, validateNumberBets, grantDemoSalary, cryptoRouletteNumber } from './engine.js?v=20261027-owners';
 import { KEY, LEGACY_KEY } from './storage.js';
-import { PUBLIC_SALT, RUN_MS, WEEKLY_LIMIT, openRaceStart, latestRaceStart, raceCard, raceOdds, raceResult, raceTimeline, raceCommentary, raceRuns, placeRaceBet, settleRaceBets, weeklySpent } from './racing.js?v=20261027-crowns';
-import { raceScreen, racePreview, drawRace, raceElapsed } from './racing-view.js?v=20261027-crowns';
+import { PUBLIC_SALT, RUN_MS, WEEKLY_LIMIT, openRaceStart, latestRaceStart, raceCard, raceOdds, raceResult, raceTimeline, raceCommentary, raceRuns, placeRaceBet, settleRaceBets, weeklySpent } from './racing.js?v=20261027-owners';
+import { raceScreen, racePreview, drawRace, raceElapsed } from './racing-view.js?v=20261027-owners';
 import { createStore } from './store.js';
 const $=(s,el=document)=>el.querySelector(s);
 const wallet=createKpClient();
@@ -90,7 +90,7 @@ const raceBets=()=>({raceBets:state.raceBets??[]});
 // Live wallets: the server decides whether the race runs and reveals its seed after the start.
 function liveRace(id){const w=state.racing?.watch;return w?.id===id?w:null;}
 function raceWatch(now,id){
-  const info=live?liveRace(id):null,card={...raceCard(id),...(info?.crown?{name:info.crown}:{})};
+  const info=live?liveRace(id):null,card={...raceCard(id,PUBLIC_SALT,info?.entries??[]),...(info?.crown?{name:info.crown}:{})};
   if(live&&(!info||(info.runs&&!info.seed)))return {card,runs:false,loading:true};
   if(!(live?info.runs:raceRuns(card,raceBets())))return {card,runs:false};
   const seed=live?info.seed:PUBLIC_SALT,result=raceResult(card,seed),odds=raceOdds(card),timeline=raceTimeline(card,result,seed);
@@ -107,12 +107,17 @@ async function verifySeed(watch,seed,hash){
 let watchCache=null,watchKey='';
 function currentWatch(now){
   const id=latestRaceStart(now),info=live?liveRace(id):null;
-  const key=`${id}:${live?`${info?.runs}:${info?.seed}:${info?.hash}:${info?.crown}`:raceRuns({id,big:false},raceBets())}:${now>=id+RUN_MS}`;
+  const key=`${id}:${live?`${info?.runs}:${info?.seed}:${info?.hash}:${info?.crown}:${(info?.entries??[]).map(e=>e.horseId)}`:raceRuns({id,big:false},raceBets())}:${now>=id+RUN_MS}`;
   if(key!==watchKey){watchKey=key;watchCache=raceWatch(now,id);}
   return watchCache;
 }
+// The race taking bets, with the owned horses and crown name the server fixed for it.
+function openCard(now){
+  const id=openRaceStart(now),info=live&&state.racing?.open?.id===id?state.racing.open:null;
+  return {...raceCard(id,PUBLIC_SALT,info?.entries??[]),...(info?.crown?{name:info.crown}:{})};
+}
 function screenRace(){
-  const now=Date.now(),openInfo=live&&state.racing?.open?.id===openRaceStart(now)?state.racing.open:null,open={...raceCard(openRaceStart(now)),...(openInfo?.crown?{name:openInfo.crown}:{})},watch=currentWatch(now);
+  const now=Date.now(),openInfo=live&&state.racing?.open?.id===openRaceStart(now)?state.racing.open:null,open=openCard(now),watch=currentWatch(now);
   raceShown=`${open.id}:${watchKey}`;
   const weeklyLeft=WEEKLY_LIMIT-weeklySpent({raceWeek:state.raceWeek??{start:0,spent:0}},now);
   return raceScreen({state,live,watch,open:{card:open,hash:openInfo?.hash??null},openOdds:raceOdds(open),draft:{...raceDraft,amount:drafts['race-amount']},weeklyLeft,tabs:subTabs(),nav:bottomNav()});
@@ -139,7 +144,7 @@ function raceFrame(){
   const clockEl=$('#race-clock');if(clockEl)clockEl.textContent=watch.finished?'確定':`発走から ${Math.floor(t/1000)}秒`;
   const lines=watch.commentary.filter(l=>l.t<=t);
   const list=$('#race-commentary');
-  if(list&&list.dataset.count!==String(lines.length)){list.dataset.count=lines.length;list.innerHTML=lines.slice(-3).reverse().map(l=>`<li>${l.text}</li>`).join('');}
+  if(list&&list.dataset.count!==String(lines.length)){list.dataset.count=lines.length;list.innerHTML=lines.slice(-3).reverse().map(l=>`<li>${escapeHTML(l.text)}</li>`).join('');}
   const canvas=$('#race-canvas');
   if(!canvas)return;
   // Reduced motion: still frames once a second instead of continuous animation.
@@ -261,7 +266,7 @@ async function doSpin(){
 
 addEventListener('click',async e=>{
   const t=e.target.closest?.('button,[data-open]'); if(!t) return;
-  const mutates=!!t.dataset.approve || !!t.dataset.complete || ['salary','trade','spin','race-bet','roast-level','reset','submit-claim','issue-directive','connect-kp','refresh-kp','disconnect-kp','auto-connect-kp'].includes(t.dataset.action);
+  const mutates=!!t.dataset.approve || !!t.dataset.complete || ['salary','trade','spin','race-bet','roast-level','horse-buy','horse-sell','reset','submit-claim','issue-directive','connect-kp','refresh-kp','disconnect-kp','auto-connect-kp'].includes(t.dataset.action);
   if(mutates && mutationPending)return;
   if(mutates)mutationPending=true;
   try{
@@ -272,6 +277,8 @@ addEventListener('click',async e=>{
     if(t.dataset.screen){if(spinLock){toast('抽選中は画面を切り替えられません');return;}detail=null;screen=t.dataset.screen;render();if(screen==='race')settleRaces();return;}
     if(t.dataset.raceHorse){raceDraft.horse=Number(t.dataset.raceHorse);render();return;}
     if(t.dataset.raceType){raceDraft.type=t.dataset.raceType;render();return;}
+    if(t.dataset.action==='horse-buy'){const {horse}=await liveOperation('horse-buy',{box:t.dataset.box,name:$('#horse-name')?.value??''});delete drafts['horse-name'];render();toast(`${horse.name}（${horse.gradeLabel}）が仲間入りしました`);return;}
+    if(t.dataset.action==='horse-sell'){if(!confirm('この馬を売りますか？売ると戻せません'))return;const {sold}=await liveOperation('horse-sell',{horseId:t.dataset.horse});render();toast(`売却しました（+${moneyCompact(sold.refund)}）`);return;}
     if(t.dataset.action==='roast-level'){await liveOperation('roast-level',{level:t.dataset.level});render();toast('煽りレベルを変更しました');return;}
     if(t.dataset.action==='race-bet'){
       const now=Date.now(),raceId=openRaceStart(now),args={raceId,type:raceDraft.type,horse:raceDraft.horse,amount:Number($('#race-amount')?.value)};
@@ -324,7 +331,8 @@ addEventListener('keydown', e => {
 });
 addEventListener('input', e => {
   if(e.target.dataset.stake!==undefined&&!spinLock){const n=Number(e.target.dataset.stake),amount=Number(e.target.value);numberBets.set(n,amount);document.querySelector('#number-bet-total').textContent=moneyCompact([...numberBets.values()].reduce((a,b)=>a+b,0));const badge=document.querySelector(`[data-number="${n}"] small`);if(badge)badge.textContent=amount+' KP';}
-  if(e.target.id==='race-amount'){drafts['race-amount']=e.target.value;const preview=$('#race-preview');if(preview){const open=raceCard(openRaceStart(Date.now()));preview.innerHTML=racePreview(open,raceOdds(open),{...raceDraft,amount:e.target.value});}}
+  if(e.target.id==='horse-name')drafts['horse-name']=e.target.value;
+  if(e.target.id==='race-amount'){drafts['race-amount']=e.target.value;const preview=$('#race-preview');if(preview){const open=openCard(Date.now());preview.innerHTML=racePreview(open,raceOdds(open),{...raceDraft,amount:e.target.value});}}
   if (e.target.id==='kp-connect-code'||['trade-qty','bet-amount'].includes(e.target.id)||e.target.id.startsWith('claim-')||e.target.id.startsWith('directive-')) drafts[e.target.id] = e.target.value;
   if(e.target.id==='trade-qty')$('#trade-estimate').innerHTML=tradeEstimate();
 });

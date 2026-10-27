@@ -7,6 +7,9 @@ import { kpApi } from './kp-api.ts';
 import { settleKpRaces } from './racing-kp.ts';
 import { queueRacePosts, flushRacePosts } from './racing-posts.ts';
 import { scheduleCrowns } from './racing-crowns.ts';
+import { decideEntries, settleHorsePrizes } from './racing-horses.ts';
+// @ts-expect-error The shared pure browser engine has no TypeScript declarations.
+import { openRaceStart } from '../../../js/racing.js';
 import { lastDeathCheck } from './death-unrated.ts';
 import { isDeathMode, isDeathNotice, sessionModeSQL } from './death-modes.ts';
 import { discordInteractions } from './discord-interactions.ts';
@@ -369,6 +372,8 @@ export default {
     ctx.waitUntil(monitor(env));
     ctx.waitUntil((async()=>{
       const mapping=await initializeKp(env);if(!mapping)return;
+      // Owned horses run even when nobody opens the Activity.
+      try{await decideEntries(env,mapping,openRaceStart(Date.now()));await settleHorsePrizes(env,mapping);}catch{console.warn('horse_race_pending');}
       try{await settleKpRaces(env,mapping);}catch{console.warn('race_settlement_pending');}
       // Results are queued after settlement in the same run, then sent.
       let crowns:Awaited<ReturnType<typeof scheduleCrowns>>=[];

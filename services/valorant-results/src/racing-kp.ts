@@ -5,6 +5,8 @@ import { RUN_MS, bigRaceName, fillerCrownName, hydrateRacing, isRaceStart, lates
 import { kpHash, kpRandom } from './kp.ts';
 import type { KpEnv, KpMapping } from './kp.ts';
 import { crownFor } from './racing-crowns.ts';
+import { decideEntries, raceEntries } from './racing-horses.ts';
+import type { Entry } from './racing-horses.ts';
 interface RaceBet { id:string; raceId:number; status:string; payout:number }
 const initialized=new WeakSet<object>();
 export async function ensureRacing(env:KpEnv){
@@ -25,13 +27,15 @@ async function raceHasBets(env:KpEnv,guild:string,id:number){
 }
 /** What the Activity needs: the open race's hash, and the latest race's seed once it has started.
  * Crown races (named after someone's bad day) always run and carry their name. */
-export async function racingView(env:KpEnv,guild:string,now=Date.now()){
- const open=openRaceStart(now),watch=latestRaceStart(now);
+export async function racingView(env:KpEnv,mapping:KpMapping,now=Date.now()){
+ const guild=mapping.guildId,open=openRaceStart(now),watch=latestRaceStart(now);
  const [openCrown,watchCrown]=[await crownFor(env,guild,open),await crownFor(env,guild,watch)];
- const runs=Boolean(bigRaceName(watch))||Boolean(fillerCrownName(watch))||Boolean(watchCrown)||await raceHasBets(env,guild,watch);
+ // Owned horses are fixed for a race when its betting opens, before anyone can bet on it.
+ const openEntries=await decideEntries(env,mapping,open,now),watchEntries=await raceEntries(env,mapping,watch);
+ const runs=Boolean(bigRaceName(watch))||Boolean(fillerCrownName(watch))||Boolean(watchCrown)||watchEntries.length>0||await raceHasBets(env,guild,watch);
  const openSeed=await raceSeed(env,guild,open);
  const watched=runs?await raceSeed(env,guild,watch):null;
- return {open:{id:open,hash:openSeed.hash,...(openCrown?{crown:openCrown.name}:{})},watch:{id:watch,runs,...(watchCrown?{crown:watchCrown.name}:{}),...(watched?{hash:watched.hash,seed:watched.seed}:{})}};
+ return {open:{id:open,hash:openSeed.hash,entries:openEntries,...(openCrown?{crown:openCrown.name}:{})},watch:{id:watch,runs,entries:watchEntries,...(watchCrown?{crown:watchCrown.name}:{}),...(watched?{hash:watched.hash,seed:watched.seed}:{})}};
 }
 /** Settles finished races for every wallet with pending bets. Safe to run concurrently and repeatedly. */
 export async function settleKpRaces(env:KpEnv,mapping:KpMapping,now=Date.now()){
@@ -43,7 +47,8 @@ export async function settleKpRaces(env:KpEnv,mapping:KpMapping,now=Date.now()){
   const due=[...new Set((state.raceBets as RaceBet[]).filter(b=>b.status==='pending'&&now>=b.raceId+RUN_MS).map(b=>b.raceId))];
   if(!due.length)continue;
   const seeds=new Map((await env.DB.prepare(`SELECT id,seed FROM kp_races WHERE guild=? AND id IN (${due.map(()=>'?').join(',')})`).bind(mapping.guildId,...due).all<{id:number;seed:string}>()).results.map(r=>[r.id,r.seed]));
-  const before=state.cash,settled:RaceBet[]=settleRaceBets(state,now,(id:number)=>seeds.get(id)??null);
+  const entries=new Map<number,Entry[]>();for(const id of due)entries.set(id,await raceEntries(env,mapping,id));
+  const before=state.cash,settled:RaceBet[]=settleRaceBets(state,now,(id:number)=>seeds.get(id)??null,(id:number)=>entries.get(id)??[]);
   if(!settled.length)continue;
   const id='race-settle:'+settled.map(b=>b.id).join(',');
   const response={result:{settled:settled.map(b=>({id:b.id,status:b.status,payout:b.payout}))}};

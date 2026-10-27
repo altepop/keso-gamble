@@ -217,3 +217,4 @@ button:disabled{cursor:not-allowed}
 .race-no{display:inline-grid;place-items:center;min-width:22px;height:22px;border-radius:5px;font-weight:700;font-size:13px;border:1px solid rgba(255,255,255,.25)}
 .race-card .segment button small{font-size:11px;opacity:.75}
 .roast-segment{grid-template-columns:repeat(3,1fr);padding:8px 0}
+.race-owner{display:block;font-size:11px;color:var(--yellow)}

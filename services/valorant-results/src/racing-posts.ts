@@ -1,14 +1,15 @@
 // Horse racing posts for the earnings channel. Posts are queued once under a fixed ID and sent by
 // the minute cron, so a retry never duplicates a message. Nothing is queued until the webhook is set.
 // @ts-expect-error The shared pure browser engine has no TypeScript declarations.
-import { BET_TYPES, CLOSE_BEFORE, GOINGS, RACE_INTERVAL, RUN_MS, bigRaceName, latestRaceStart, openRaceStart, raceCard, raceOdds, raceResult, placeSlots } from '../../../js/racing.js';
+import { BET_TYPES, CLOSE_BEFORE, GOINGS, RACE_INTERVAL, RUN_MS, bigRaceName, latestRaceStart, openRaceStart, prizeFor, raceCard, raceOdds, raceResult, placeSlots } from '../../../js/racing.js';
 import { raceSeed, ensureRacing } from './racing-kp.ts';
 import { crownFor, defaultRoastLevel, validRoastLevel } from './racing-crowns.ts';
+import { raceEntries } from './racing-horses.ts';
 import type { RoastLevel } from './racing-crowns.ts';
 import type { KpEnv, KpMapping } from './kp.ts';
 export interface PostEnv extends KpEnv { KP_EARNINGS_WEBHOOK_URL?:string }
 interface Bet { id:string; raceId:number; type:'win'|'place'; horse:number; amount:number; odds:number; status:string; payout:number }
-interface Card { id:number; start:number; name:string; size:number; going:number; horses:Array<{number:number;name:string}> }
+interface Card { id:number; start:number; name:string; size:number; going:number; raceClass:number; horses:Array<{number:number;name:string;ownerName?:string}> }
 export const BIG_WIN=10000, BIG_LOSS=5000;
 const clock=(time:number)=>new Date(time).toLocaleTimeString('ja-JP',{timeZone:'Asia/Tokyo',hour:'2-digit',minute:'2-digit'});
 const kp=(n:number)=>n.toLocaleString('ja-JP')+' KP';
@@ -40,14 +41,14 @@ export function cardPost(card:Card,hash:string){
  const odds=raceOdds(card);
  return [`🏇 **${clean(card.name)}**（${clock(card.start)}発走・${card.size}頭・コース ${GOINGS[card.going].label}）`,
   `締切 ${clock(card.start-CLOSE_BEFORE)}｜倍率は 1着当て / ${placeSlots(card.size)}着以内当て`,
-  ...card.horses.map(h=>`${h.number}. ${clean(h.name)}　${odd(odds.win[h.number])} / ${odd(odds.place[h.number])}`),
+  ...card.horses.map(h=>`${h.number}. ${clean(h.name)}${h.ownerName?`（馬主 ${clean(h.ownerName)}）`:''}　${odd(odds.win[h.number])} / ${odd(odds.place[h.number])}`),
   `結果のハッシュ: \`${hash.slice(0,16)}…\`（発走後にシード値を公開）`,
   'KESO PLAY の「勝負 → 競馬」で馬券を買えます。'].join('\n');
 }
 export function resultPost(card:Card,seed:string,bets:Array<Bet&{user:string}>,levelOf:(user:string)=>RoastLevel){
  const odds=raceOdds(card),order:number[]=raceResult(card,seed).order;
  const lines=[`🏁 **${clean(card.name)}** 結果（${clock(card.start)}発走）`,
-  ...order.slice(0,3).map((n,i)=>`${i+1}着 ${n}番 ${clean(card.horses[n-1].name)}${i===0?`（1着当て ${odd(odds.win[n])}）`:''}`)];
+  ...order.slice(0,3).map((n,i)=>{const h=card.horses[n-1];return `${i+1}着 ${n}番 ${clean(h.name)}${h.ownerName?`（馬主 ${clean(h.ownerName)}・賞金 ${kp(prizeFor(card,i))}）`:''}${i===0?`（1着当て ${odd(odds.win[n])}）`:''}`;})];
  const byUser=new Map<string,Array<Bet>>();for(const b of bets)byUser.set(b.user,[...(byUser.get(b.user)??[]),b]);
  for(const [user,list] of byUser){
   const paid=list.reduce((n,b)=>n+b.payout,0),spent=list.reduce((n,b)=>n+b.amount,0),hits=list.filter(b=>b.status==='won');
@@ -58,8 +59,8 @@ export function resultPost(card:Card,seed:string,bets:Array<Bet&{user:string}>,l
  return lines.join('\n');
 }
 /** Normal races are posted only for big wins or big losses; big races and crowns named after someone always. */
-export function worthPosting(card:Card,bets:Bet[],crowned=false){
- if(bigRaceName(card.start)||crowned)return true;
+export function worthPosting(card:Card,bets:Bet[],crowned=false,ownerWon=false){
+ if(bigRaceName(card.start)||crowned||ownerWon)return true;
  return bets.some(b=>b.payout>=BIG_WIN)||bets.some(b=>b.status==='lost'&&b.amount>=BIG_LOSS);
 }
 async function raceBets(env:KpEnv,guild:string,id:number){
@@ -80,16 +81,18 @@ export async function queueRacePosts(env:PostEnv,mapping:KpMapping,now=Date.now(
  for(const c of crowns)await enqueue(env,'race-crown:'+c.race,crownPost(c),now);
  // The card of a big race or a crown named after someone goes out once betting has opened for it.
  const open=openRaceStart(now),openCrown=await crownFor(env,mapping.guildId,open);
- if((bigRaceName(open)||openCrown)&&now>=open-RACE_INTERVAL&&now<open-CLOSE_BEFORE)await enqueue(env,'race-card:'+open,cardPost({...raceCard(open),...(openCrown?{name:openCrown.name}:{})},(await raceSeed(env,mapping.guildId,open)).hash),now);
+ if((bigRaceName(open)||openCrown)&&now>=open-RACE_INTERVAL&&now<open-CLOSE_BEFORE)await enqueue(env,'race-card:'+open,cardPost({...raceCard(open,undefined,await raceEntries(env,mapping,open)),...(openCrown?{name:openCrown.name}:{})},(await raceSeed(env,mapping.guildId,open)).hash),now);
  // Results: the last few races, once every bet on them is settled. Older races are never posted late.
  const latest=latestRaceStart(now),levelOf=await roastLevelsOf(env,mapping);
  for(let id=latest;id>latest-3*RACE_INTERVAL;id-=RACE_INTERVAL){
   if(now<id+RUN_MS)continue;
   const bets=await raceBets(env,mapping.guildId,id);
-  const crown=await crownFor(env,mapping.guildId,id);
-  if(bets.some(b=>b.status==='pending')||(!bets.length&&!bigRaceName(id)&&!crown))continue;
-  const card={...raceCard(id),...(crown?{name:crown.name}:{})};if(!worthPosting(card,bets,Boolean(crown)))continue;
+  const crown=await crownFor(env,mapping.guildId,id),entries=await raceEntries(env,mapping,id);
+  if(bets.some(b=>b.status==='pending')||(!bets.length&&!bigRaceName(id)&&!crown&&!entries.length))continue;
   const seed=await env.DB.prepare('SELECT seed FROM kp_races WHERE guild=? AND id=?').bind(mapping.guildId,id).first<{seed:string}>();
+  const card={...raceCard(id,undefined,entries),...(crown?{name:crown.name}:{})};
+  const ownerWon=Boolean(seed)&&Boolean(card.horses[raceResult(card,seed!.seed).order[0]-1].ownerName);
+  if(!worthPosting(card,bets,Boolean(crown),ownerWon))continue;
   if(seed)await enqueue(env,'race-result:'+id,resultPost(card,seed.seed,bets,levelOf),now);
  }
 }
