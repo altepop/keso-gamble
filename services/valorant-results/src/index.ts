@@ -5,6 +5,7 @@ import type { KpRun } from './kp.ts';
 import { initializeKp, syncKpAccounts, collectKpMatch, drainKpInbox, flushKpDirectives, prepareKpRun, kpEventId, kpCreditLine } from './kp.ts';
 import { kpApi } from './kp-api.ts';
 import { settleKpRaces } from './racing-kp.ts';
+import { queueRacePosts, flushRacePosts } from './racing-posts.ts';
 import { lastDeathCheck } from './death-unrated.ts';
 import { isDeathMode, isDeathNotice, sessionModeSQL } from './death-modes.ts';
 import { discordInteractions } from './discord-interactions.ts';
@@ -21,6 +22,7 @@ export interface Env {
   DB: D1Database;
   HENRIK_API_KEY: string;
   DISCORD_WEBHOOK_URL: string;
+  KP_EARNINGS_WEBHOOK_URL?: string;
 }
 export interface Player { riotId: string; name?: string }
 interface Account { puuid: string; region: string; since: number }
@@ -364,6 +366,11 @@ export default {
   async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
     ctx.waitUntil(ensureVoice(env).catch(()=>console.warn('voice_ensure_pending')));
     ctx.waitUntil(monitor(env));
-    ctx.waitUntil(initializeKp(env).then(mapping=>mapping&&settleKpRaces(env,mapping)).catch(()=>console.warn('race_settlement_pending')));
+    ctx.waitUntil((async()=>{
+      const mapping=await initializeKp(env);if(!mapping)return;
+      try{await settleKpRaces(env,mapping);}catch{console.warn('race_settlement_pending');}
+      // Results are queued after settlement in the same run, then sent.
+      try{await queueRacePosts(env,mapping);await flushRacePosts(env);}catch{console.warn('earnings_post_pending');}
+    })().catch(()=>console.warn('race_settlement_pending')));
   },
 };

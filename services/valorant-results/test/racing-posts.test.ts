@@ -1,0 +1,107 @@
+import test from 'node:test';
+import { URL as NodeURL } from 'node:url';
+import assert from 'node:assert/strict';
+import { DatabaseSync } from 'node:sqlite';
+import { readFileSync, readdirSync } from 'node:fs';
+import { initializeKp, syncKpAccounts } from '../src/kp.ts';
+import type { KpMapping } from '../src/kp.ts';
+import { operateKp } from '../src/kp-api.ts';
+import { settleKpRaces } from '../src/racing-kp.ts';
+import { queueRacePosts, flushRacePosts, worthPosting, BIG_LOSS } from '../src/racing-posts.ts';
+import type { PostEnv } from '../src/racing-posts.ts';
+// @ts-expect-error The shared pure browser engine has no TypeScript declarations.
+import { RUN_MS, RACE_INTERVAL, CLOSE_BEFORE, raceCard, raceResult } from '../../../js/racing.js';
+const guild='100000000000000100',one='100000000000000101',two='100000000000000102',outsider='100000000000000109';
+const mapping:KpMapping={guildId:guild,accounts:[{riotId:'One#JP1',discordUserId:one},{riotId:'Two#JP1',discordUserId:two}]};
+const webhook='https://discord.com/api/webhooks/1/token';
+// Tuesday 2026-10-27. 21:00 JST is the main race (big); 16:15 JST is a normal race.
+const MAIN=Date.parse('2026-10-27T21:00:00+09:00'),NORMAL=Date.parse('2026-10-27T16:15:00+09:00');
+async function fixture(withWebhook=true){
+ const sql=new DatabaseSync(':memory:');
+ for(const file of readdirSync(new NodeURL('../migrations/',import.meta.url)).filter(f=>f.endsWith('.sql')).sort())sql.exec(readFileSync(new NodeURL('../migrations/'+file,import.meta.url),'utf8'));
+ class Query{text:string;values:unknown[];constructor(text:string,values:unknown[]=[]){this.text=text;this.values=values;}bind(...values:unknown[]){return new Query(this.text,values);}first(){return sql.prepare(this.text).get(...this.values as never[])??null;}all(){return {results:sql.prepare(this.text).all(...this.values as never[])};}run(){return {meta:{changes:Number(sql.prepare(this.text).run(...this.values as never[]).changes)}};}}
+ const env:PostEnv={KP_BOOTSTRAP_PRIVATE_KEY:'fixture-key',...(withWebhook?{KP_EARNINGS_WEBHOOK_URL:webhook}:{}),DB:{prepare:(text:string)=>new Query(text),batch:(queries:Query[])=>{sql.exec('BEGIN');try{const rows=queries.map(q=>q.run());sql.exec('COMMIT');return rows;}catch(error){sql.exec('ROLLBACK');throw error;}}}as unknown as D1Database};
+ sql.prepare('INSERT INTO tracked_players VALUES(?,?,?,?)').run('One#JP1','p-one','ap',0);sql.prepare('INSERT INTO tracked_players VALUES(?,?,?,?)').run('Two#JP1','p-two','ap',0);
+ await initializeKp(env,mapping);await syncKpAccounts(env,mapping);
+ sql.prepare("INSERT INTO kp_ledger VALUES('test-credit',?,?,100000,'test',0)").run(guild,one);
+ return {env,sql};
+}
+function captureFetch(t:{mock:{method:(o:object,m:string,f:unknown)=>unknown}},status=()=>200){
+ const sent:Array<{content:string;allowed_mentions:unknown}>=[];
+ t.mock.method(globalThis,'fetch',async(url:URL,init:{body:string})=>{assert.equal(String(url),webhook);const code=status();if(code===200)sent.push(JSON.parse(init.body));return new Response('{}',{status:code});});
+ return sent;
+}
+const posts=(sql:DatabaseSync)=>sql.prepare('SELECT id,sent FROM kp_posts ORDER BY id').all() as Array<{id:string;sent:number}>;
+
+test('the big race card is posted once while it takes bets; normal races get no card', async t => {
+ const f=await fixture(),sent=captureFetch(t);
+ await queueRacePosts(f.env,mapping,MAIN-RACE_INTERVAL-1000);
+ assert.deepEqual(posts(f.sql),[]);
+ await queueRacePosts(f.env,mapping,MAIN-10*60000);await queueRacePosts(f.env,mapping,MAIN-5*60000);
+ assert.equal(await flushRacePosts(f.env),1);assert.equal(await flushRacePosts(f.env),0);
+ assert.match(sent[0].content,/メインレース/);assert.match(sent[0].content,/結果のハッシュ/);
+ assert.equal(sent[0].content.split('\n').filter(l=>/^\d+\. /.test(l)).length,10);
+ assert.deepEqual(sent[0].allowed_mentions,{parse:[]});
+ await queueRacePosts(f.env,mapping,MAIN-CLOSE_BEFORE);
+ await queueRacePosts(f.env,mapping,NORMAL-10*60000);
+ assert.deepEqual(posts(f.sql).map(p=>p.id),['race-card:'+MAIN]);
+});
+
+test('results wait for settlement, then name each bettor with the payout or a roast', async t => {
+ t.mock.timers.enable({apis:['Date'],now:MAIN-10*60000});
+ const f=await fixture(),sent=captureFetch(t);
+ await operateKp(f.env,mapping,one,'race-bet-operation-11','race-bet',{raceId:MAIN,type:'win',horse:1,amount:1000});
+ await operateKp(f.env,mapping,one,'race-bet-operation-12','race-bet',{raceId:MAIN,type:'place',horse:2,amount:1000});
+ await queueRacePosts(f.env,mapping,MAIN+RUN_MS);
+ assert.deepEqual(posts(f.sql),[],'no result while bets are pending, and no card after the start');
+ await settleKpRaces(f.env,mapping,MAIN+RUN_MS);
+ await queueRacePosts(f.env,mapping,MAIN+RUN_MS+60000);await flushRacePosts(f.env);
+ const result=sent.find(p=>p.content.includes('結果'))!;
+ const seed=String(f.sql.prepare('SELECT seed FROM kp_races WHERE id=?').get(MAIN)!.seed),order=raceResult(raceCard(MAIN),seed).order;
+ assert.match(result.content,new RegExp(`1着 ${order[0]}番`));
+ assert.match(result.content,new RegExp(`<@${one}>`));
+ assert.match(result.content,new RegExp(seed));
+ assert.deepEqual(result.allowed_mentions,{parse:[]},'mentions show names but never ping');
+ assert.match(result.content,order[0]===1||order.slice(0,3).includes(2)?/💰/:/💸/);
+});
+
+test('normal races are posted only for a big win or a big loss', () => {
+ const card=raceCard(NORMAL);
+ assert.equal(worthPosting(card,[]),false);
+ assert.equal(worthPosting(card,[{id:'a',raceId:NORMAL,type:'win',horse:1,amount:1000,odds:30,status:'won',payout:3000}]),false);
+ assert.equal(worthPosting(card,[{id:'a',raceId:NORMAL,type:'win',horse:1,amount:BIG_LOSS,odds:30,status:'lost',payout:0}]),true);
+ assert.equal(worthPosting(card,[{id:'a',raceId:NORMAL,type:'win',horse:1,amount:1000,odds:120,status:'won',payout:12000}]),true);
+ assert.equal(worthPosting(raceCard(MAIN),[]),true);
+});
+
+test('only registered members get the harsh roast; others get the mild line', async () => {
+ const {resultPost}=await import('../src/racing-posts.ts');
+ const card=raceCard(NORMAL),seed='fixed',order=raceResult(card,seed).order,loser=order.at(-1);
+ const bet=(user:string)=>({id:user,raceId:NORMAL,type:'win' as const,horse:loser,amount:5000,odds:80,status:'lost',payout:0,user});
+ const text=resultPost(card,seed,[bet(one),bet(outsider)],user=>user===one);
+ const [harsh,mild]=[text.split('\n').find(l=>l.includes(one))!,text.split('\n').find(l=>l.includes(outsider))!];
+ assert.match(harsh,/やめましょう|反面教師|溶ける|言い訳/);
+ assert.match(mild,/次こそ|ドンマイ/);
+});
+
+test('without the webhook nothing is queued; a failed send is retried without duplicates', async t => {
+ const off=await fixture(false);captureFetch(t);
+ await queueRacePosts(off.env,mapping,MAIN-10*60000);
+ assert.equal(off.sql.prepare("SELECT name FROM sqlite_master WHERE name='kp_posts'").get(),undefined);
+ const f=await fixture();let code=500;const sent=captureFetch(t,()=>code);
+ await queueRacePosts(f.env,mapping,MAIN-10*60000);
+ assert.equal(await flushRacePosts(f.env),0);assert.equal(posts(f.sql)[0].sent,0);
+ code=200;assert.equal(await flushRacePosts(f.env),1);assert.equal(await flushRacePosts(f.env),0);assert.equal(sent.length,1);
+});
+
+test('directive notices move to the earnings channel when its webhook is set', async t => {
+ const {flushKpDirectives}=await import('../src/kp.ts');
+ const f=await fixture(),urls:string[]=[];
+ t.mock.method(globalThis,'fetch',async(url:URL)=>{urls.push(String(url));return new Response(null,{status:204});});
+ await operateKp(f.env,mapping,one,'directive-notice-901','directive',{target:two,task:'competitive'});
+ await flushKpDirectives({...f.env,DISCORD_WEBHOOK_URL:'https://discord.com/api/webhooks/2/results'},mapping);
+ assert.deepEqual(urls,[webhook]);
+ f.sql.exec('DELETE FROM kp_directive_deliveries');
+ await flushKpDirectives({...f.env,KP_EARNINGS_WEBHOOK_URL:undefined,DISCORD_WEBHOOK_URL:'https://discord.com/api/webhooks/2/results'},mapping);
+ assert.equal(urls[1],'https://discord.com/api/webhooks/2/results');
+});
