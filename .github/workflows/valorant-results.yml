@@ -77,7 +77,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/kp-app/services/valorant-results"
           cp -R services/valorant-results/. "$RUNNER_TEMP/kp-app/services/valorant-results/"
           mkdir -p "$RUNNER_TEMP/kp-app/js"
-          cp js/engine.js js/progression.js "$RUNNER_TEMP/kp-app/js/"
+          cp js/*.js "$RUNNER_TEMP/kp-app/js/"
           cd "$RUNNER_TEMP/kp-app/services/valorant-results"
           npm ci
       - name: Recover existing Worker configuration
