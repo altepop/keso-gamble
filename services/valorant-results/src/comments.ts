@@ -21,11 +21,14 @@ function hash(key:string):number {
   seed=Math.imul(seed^(seed>>>13),0xc2b2ae35);
   return (seed^(seed>>>16))>>>0;
 }
-export function selectedTone(matchId:string,identity:string):Tone {
-  return commentToneNames[hash('tone:'+matchId+':'+identity)%commentToneNames.length];
+export const winningCommentGroups:CommentGroup[]=['win','win_high_kills','win_low_kd','close_win','blowout_win','winning_streak','long_winning_streak'];
+const winningTones:Tone[]=[...Array<Tone>(50).fill('roast'),...Array<Tone>(20).fill('net'),...Array<Tone>(15).fill('dry'),...Array<Tone>(5).fill('hot'),...Array<Tone>(5).fill('normal'),...Array<Tone>(5).fill('meme')];
+export function selectedTone(matchId:string,identity:string,group:CommentGroup='default'):Tone {
+  const choices=winningCommentGroups.includes(group)?winningTones:commentToneNames;
+  return choices[hash('tone:'+matchId+':'+identity)%choices.length];
 }
 export function resultComment(matchId:string,identity:string,group:CommentGroup='default',streak=0):string {
-  const tone=selectedTone(matchId,identity);
+  const tone=selectedTone(matchId,identity,group);
   const choices=tone==='normal'?[...(old[group]??[]),...commentTones[group].normal]:commentTones[group][tone];
   const line=choices[hash('line:'+matchId+':'+identity)%choices.length];
   return '\n💬 '+(tone==='meme'?line:line.replaceAll('{streak}',String(streak)));
