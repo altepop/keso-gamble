@@ -218,3 +218,14 @@ test('premium solo orders charge once and require verified solo parties and deat
  f.sql.prepare('INSERT INTO death_unrated_sessions VALUES(?,?,?,?,?,?)').run('One#JP1','premium',1,Date.now()+10000,'death-solo',null);
  await collectKpMatch(f.env,mapping,u,'p-one');assert.equal(f.sql.prepare("SELECT status FROM kp_directives WHERE task='solo_death_unrated'").get()!.status,'completed');
 });
+test('multi-number roulette settles one atomic basket and retries return the same draw without charging again',async()=>{
+ const f=await fixture();seed(f.sql,one,20000);
+ const args={type:'numbers',bets:[{number:0,amount:200},{number:7,amount:300}]};
+ const a=await operateKp(f.env,mapping,one,'multi-roulette-001','spin',args);
+ assert.deepEqual(await operateKp(f.env,mapping,one,'multi-roulette-001','spin',args),a);
+ const r=a.result as {outcome:number;payout:number};assert.equal(r.payout,r.outcome===0?7200:r.outcome===7?10800:0);
+ const balance=(await readKpState(f.env,mapping,one)).cash;assert.equal(balance,19500+r.payout);
+ await assert.rejects(operateKp(f.env,mapping,one,'multi-invalid-001','spin',{type:'numbers',bets:[{number:1,amount:100},{number:1,amount:100}]}));
+ assert.equal((await readKpState(f.env,mapping,one)).cash,balance);
+ assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM kp_operations').get()!.n,1);
+});

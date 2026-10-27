@@ -187,3 +187,5 @@ button:disabled{cursor:not-allowed}
 .number-table{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;padding:14px;background:#064e3b;border-radius:16px;margin:12px 0}.number-cell{min-height:44px;border:1px solid #ffffff70;border-radius:6px;color:white;font-weight:800;font-size:18px;touch-action:manipulation}.number-cell.green{grid-column:1/-1;background:#078650}.number-cell.red{background:#b42338}.number-cell.black{background:#111827}.number-cell.selected{outline:3px solid #ffd166;outline-offset:-3px;box-shadow:0 0 12px #ffd16680}
 
 .roulette-board svg{display:block;width:100%;height:100%;overflow:visible}.wheel-pocket path{stroke:#ffffff50;stroke-width:.7}.wheel-pocket text{fill:#fff;font-size:12px;font-weight:800;pointer-events:none}.wheel-pocket.selected path{stroke:#ffd166;stroke-width:2.5;filter:brightness(1.55)}.wheel-pocket.selected text{fill:#fff3b0}.roulette-center{inset:34%;font-size:30px;pointer-events:none}.pointer{z-index:2}.bet-grid button.active{outline:2px solid #ffd166;box-shadow:0 0 14px #ffd16680}
+
+.number-cell small{display:block;font-size:10px;color:#fff3b0;font-weight:600;margin-top:3px}
