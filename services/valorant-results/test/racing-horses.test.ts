@@ -6,7 +6,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { initializeKp, syncKpAccounts } from '../src/kp.ts';
 import type { KpEnv, KpMapping } from '../src/kp.ts';
 import { operateKp, readKpState } from '../src/kp-api.ts';
-import { decideEntries, ensureHorses, settleHorsePrizes } from '../src/racing-horses.ts';
+import { decideEntries, ensureHorses, raceEntries, settleHorsePrizes } from '../src/racing-horses.ts';
 import { raceSeed, settleKpRaces } from '../src/racing-kp.ts';
 // @ts-expect-error The shared pure browser engine has no TypeScript declarations.
 import { BOXES, RACE_INTERVAL, RETIRE_RACES, RUN_MS, openRaceStart, prizeFor, raceCard, raceClass, raceOdds, raceResult } from '../../../js/racing.js';
@@ -80,7 +80,7 @@ test('prizes follow the finishing place and race class, are paid once, and retir
  await decideEntries(f.env,mapping,race,race-RACE_INTERVAL,1);
  const seed=(await raceSeed(f.env,guild,race)).seed;
  assert.equal(await settleHorsePrizes(f.env,mapping,race+RUN_MS-1),0);
- const card=raceCard(race,undefined,[{horseId:'horse-x',name:'horse-x',ability:0.5,style:1,owner:one,ownerName:'One'}]);
+ const card=raceCard(race,undefined,await raceEntries(f.env,mapping,race));
  const rank=raceResult(card,seed).order.indexOf(card.horses.find((h:{horseId?:string})=>h.horseId).number);
  await settleHorsePrizes(f.env,mapping,race+RUN_MS);await settleHorsePrizes(f.env,mapping,race+RUN_MS+60000);
  assert.equal(balance(f.sql),prizeFor(card,rank));
@@ -146,4 +146,19 @@ test('a crown race runs a horse named after its person, who gets its prize plus 
  await settleHorsePrizes(f.env,mapping,race+RUN_MS);await settleHorsePrizes(f.env,mapping,race+RUN_MS+60000);
  const seed=String(f.sql.prepare('SELECT seed FROM kp_races WHERE id=?').get(race)!.seed),rank=raceResult(card,seed).order.indexOf(number);
  assert.equal(balance(f.sql,two),prizeFor(card,rank)+100,'prize plus 5% of the 2,000 KP bet');
+});
+
+test('a horse\'s condition follows its owner\'s play in any game, fixed when the race opens', async () => {
+ const f=await fixture(0);
+ let race=raceOfClass(0,openRaceStart(T0)+3*86400000);
+ addHorse(f.sql,'horse-busy',0);addHorse(f.sql,'horse-idle',0,{owner:two});
+ const at=race-RACE_INTERVAL-3600000;
+ // One: 2 matches, 1 quiz and 3 hours in calls in the last day. Two: nothing for 3 days.
+ for(const [i,kind,amount] of [[1,'match',300],[2,'match',900],[3,'quiz',100],[4,'voice',180]] as Array<[number,string,number]>)f.sql.prepare('INSERT INTO kp_ledger VALUES(?,?,?,?,?,?)').run('act-'+i,guild,one,amount,kind,at);
+ const entries=await decideEntries(f.env,mapping,race,race-RACE_INTERVAL,1);
+ assert.deepEqual(Object.fromEntries(entries.map(e=>[e.horseId,e.condition])),{'horse-busy':4,'horse-idle':0});
+ const card=raceCard(race,undefined,entries);
+ assert.equal(card.horses.find((h:{horseId?:string})=>h.horseId==='horse-busy').condition,4);
+ f.sql.prepare("INSERT INTO kp_ledger VALUES('act-late',?,?,900,'match',?)").run(guild,two,race-RACE_INTERVAL+1000);
+ assert.equal((await raceEntries(f.env,mapping,race)).find(e=>e.horseId==='horse-idle')!.condition,0,'later play does not change a fixed race');
 });

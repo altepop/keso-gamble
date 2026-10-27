@@ -56,7 +56,7 @@ export function raceCard(start,salt=PUBLIC_SALT,entries=[]){
  if(entries.length){
   const gates=[...horses.keys()],grng=rngFrom(`${salt}:gates:${start}`);
   for(let i=gates.length-1;i>0;i--){const j=Math.floor(grng()*(i+1));[gates[i],gates[j]]=[gates[j],gates[i]];}
-  entries.slice(0,size).forEach((e,i)=>Object.assign(horses[gates[i]],{name:e.name,ability:e.ability,style:e.style,horseId:e.horseId,owner:e.owner,ownerName:e.ownerName,nickname:e.nickname??null,person:!!e.person}));
+  entries.slice(0,size).forEach((e,i)=>Object.assign(horses[gates[i]],{name:e.name,ability:e.ability,style:e.style,horseId:e.horseId,owner:e.owner,ownerName:e.ownerName,nickname:e.nickname??null,person:!!e.person},Number.isInteger(e.condition)&&e.condition>=0&&e.condition<CONDITIONS.length?{condition:e.condition}:{}));
  }
  const crown=big?null:fillerCrownName(start);
  return {id:start,start,closeAt:start-CLOSE_BEFORE,number:raceNumber(start),name:big??crown??`第${raceNumber(start)}レース`,big:!!big,crown:!!crown,raceClass:cls,size,going:pickWeighted(rng,[5,3,2]),horses};
@@ -258,4 +258,10 @@ export function horseNickname({wins=0,seconds=0},runs=[]){
  if(wins===0&&seconds>=3)return '永遠の二番手';
  if(runs.length>=5&&runs.slice(0,5).every(r=>r.rank>=4))return '歩く戦犯';
  return null;
+}
+/** An owner's horse condition from their recent play (any game counts the same; docs/RACING_PLAN.md §7).
+ * `recent` is activity in the last 24 hours, `anyIn72h` whether they played at all in 3 days. */
+export function conditionFromActivity(recent,anyIn72h){
+ if(recent>=6)return 4;if(recent>=3)return 3;if(recent>=1)return 2;
+ return anyIn72h?1:0;
 }

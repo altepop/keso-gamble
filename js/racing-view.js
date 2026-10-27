@@ -1,6 +1,6 @@
-import { BET_TYPES, BOXES, CLASSES, COURSE_M, CONDITIONS, DAILY_EXCHANGES, GOINGS, MAX_OWNED, MIN_BET, BET_STEP, PRIZES, RETIRE_RACES, RUN_MS, STYLES, WEEKLY_LIMIT, distanceAt, exchangeDay, payoutFor, placeSlots } from './racing.js?v=20261027-luxury';
-import { LUXURY, TITLES } from './luxury.js?v=20261027-luxury';
-import { escapeHTML } from './progression-views.js?v=20261027-luxury';
+import { BET_TYPES, BOXES, CLASSES, COURSE_M, CONDITIONS, DAILY_EXCHANGES, GOINGS, MAX_OWNED, MIN_BET, BET_STEP, PRIZES, RETIRE_RACES, RUN_MS, STYLES, WEEKLY_LIMIT, distanceAt, exchangeDay, payoutFor, placeSlots } from './racing.js?v=20261027-condition';
+import { LUXURY, TITLES } from './luxury.js?v=20261027-condition';
+import { escapeHTML } from './progression-views.js?v=20261027-condition';
 const kp=n=>n.toLocaleString('ja-JP')+' KP';
 const odd=v=>(v/10).toFixed(1)+'倍';
 export const SILKS=[['#f5f5f5','#111'],['#1f1f1f','#fff'],['#e03131','#fff'],['#1c7ed6','#fff'],['#fcc419','#111'],['#2f9e44','#fff'],['#f76707','#fff'],['#f783ac','#111'],['#845ef7','#fff'],['#20c997','#111']];
@@ -41,7 +41,7 @@ function ownerPanel(state,now){
  const mine=active.length?active.map(h=>`<div class="history-entry"><div><strong>${escapeHTML(h.name)}</strong>${h.nickname?`「${escapeHTML(h.nickname)}」`:''}（${h.gradeLabel} · ${STYLES[h.style].label}）</div><div class="helper">${record(h)} · 引退まであと${h.racesLeft}走</div><div class="action-row"><button class="action-btn" data-action="horse-sell" data-horse="${escapeHTML(h.id)}">売る（${kp(h.sellValue)}）</button></div></div>`).join(''):'<p class="helper">まだ馬を持っていません。</p>';
  const boxes=BOXES.map(b=>`<div class="history-entry"><div><strong>${b.label}</strong> ${kp(b.price)}</div><div class="helper">${b.odds.map((p,i)=>p?`${CLASSES[i].grade} ${p}%`:'').filter(Boolean).join(' · ')}</div><div class="action-row"><button class="action-btn primary" data-action="horse-buy" data-box="${b.id}">${b.label}を開ける</button></div></div>`).join('');
  const hall=retired.length?`<h3>殿堂</h3>${retired.map(h=>`<div class="history-entry"><div>${h.statue?'🗿 ':''}${escapeHTML(h.name)}${h.nickname?`「${escapeHTML(h.nickname)}」`:''}（${h.gradeLabel}）</div><div class="helper">${record(h)}</div></div>`).join('')}`:'';
- return `<div class="asset-card"><h2 class="panel-title">馬主</h2><p class="helper">ボックスを開けると、買うまでわからない等級の馬が出ます。馬は自分と同じ等級のレースにランダムに出走し、3着までに入ると賞金が入ります。${RETIRE_RACES}走で引退して殿堂入り。持てるのは${MAX_OWNED}頭まで（いま${active.length}頭）。</p>${mine}<h3>ボックス</h3><div class="field"><label for="horse-name">馬の名前（1〜12文字。友人の名前は本人の許可を取ってから）</label><input id="horse-name" class="input" maxlength="12" autocomplete="off"></div><p class="helper">今日の交換はあと${Math.max(0,left)}回（指令・ボックス合わせて1日${DAILY_EXCHANGES}回）。</p>${boxes}${hall}</div>`;
+ return `<div class="asset-card"><h2 class="panel-title">馬主</h2><p class="helper">ボックスを開けると、買うまでわからない等級の馬が出ます。馬は自分と同じ等級のレースにランダムに出走し、3着までに入ると賞金が入ります。調子はあなたの直近の遊び（試合・クイズ・通話、どれも同じ）で決まります。${RETIRE_RACES}走で引退して殿堂入り。持てるのは${MAX_OWNED}頭まで（いま${active.length}頭）。</p>${mine}<h3>ボックス</h3><div class="field"><label for="horse-name">馬の名前（1〜12文字。友人の名前は本人の許可を取ってから）</label><input id="horse-name" class="input" maxlength="12" autocomplete="off"></div><p class="helper">今日の交換はあと${Math.max(0,left)}回（指令・ボックス合わせて1日${DAILY_EXCHANGES}回）。</p>${boxes}${hall}</div>`;
 }
 function luxuryPanel(state){
  const members=(state.members??[]).filter(m=>m.id!==state.selfUserId),horses=(state.horses??[]);

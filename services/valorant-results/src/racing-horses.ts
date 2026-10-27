@@ -2,12 +2,12 @@
 // finishing place, retired after RETIRE_RACES and sellable for 10-20% of the price.
 // Buying and selling ride on the wallet operation insert (one transaction with the KP change).
 // @ts-expect-error The shared pure browser engine has no TypeScript declarations.
-import { BOXES, CLASSES, MAX_OWNED, RETIRE_RACES, RUN_MS, drawHorse, horseNickname, prizeFor, raceCard, raceClass, raceOdds, raceResult, sellValue, validHorseName } from '../../../js/racing.js';
+import { BOXES, CLASSES, MAX_OWNED, RETIRE_RACES, RUN_MS, conditionFromActivity, drawHorse, horseNickname, prizeFor, raceCard, raceClass, raceOdds, raceResult, sellValue, validHorseName } from '../../../js/racing.js';
 import { crownFor, ensureCrowns } from './racing-crowns.ts';
 import configuredPlayers from '../players.json' with { type: 'json' };
 import { kpRandom } from './kp.ts';
 import type { KpEnv, KpMapping } from './kp.ts';
-export interface Entry { horseId:string; name:string; ability:number; style:number; owner:string; ownerName:string; nickname?:string|null; person?:boolean }
+export interface Entry { horseId:string; name:string; ability:number; style:number; owner:string; ownerName:string; nickname?:string|null; person?:boolean; condition?:number }
 export interface Horse { id:string; owner:string; name:string; grade:number; ability:number; style:number; box:string; price:number; created_at:number; races:number; wins:number; seconds:number; thirds:number; earnings:number; retired_at:number|null; sold_at:number|null; last_race:number|null }
 export const ENTRY_CHANCE=.4,REST=60*60000,CONSOLATION_RATE=.05;
 const initialized=new WeakSet<object>();
@@ -17,6 +17,7 @@ export async function ensureHorses(env:KpEnv){
   env.DB.prepare(`CREATE TABLE IF NOT EXISTS kp_horses(id TEXT PRIMARY KEY,guild TEXT NOT NULL,owner TEXT NOT NULL,name TEXT NOT NULL,grade INTEGER NOT NULL,ability REAL NOT NULL,style INTEGER NOT NULL,box TEXT NOT NULL,price INTEGER NOT NULL,created_at INTEGER NOT NULL,races INTEGER NOT NULL DEFAULT 0,wins INTEGER NOT NULL DEFAULT 0,seconds INTEGER NOT NULL DEFAULT 0,thirds INTEGER NOT NULL DEFAULT 0,earnings INTEGER NOT NULL DEFAULT 0,retired_at INTEGER,sold_at INTEGER,last_race INTEGER)`),
   env.DB.prepare('CREATE TABLE IF NOT EXISTS kp_race_fields(guild TEXT NOT NULL,race INTEGER NOT NULL,decided_at INTEGER NOT NULL,PRIMARY KEY(guild,race))'),
   env.DB.prepare('CREATE TABLE IF NOT EXISTS kp_race_entries(guild TEXT NOT NULL,race INTEGER NOT NULL,gate_order INTEGER NOT NULL,horse TEXT NOT NULL,PRIMARY KEY(guild,race,horse))'),
+  env.DB.prepare('CREATE TABLE IF NOT EXISTS kp_entry_conditions(guild TEXT NOT NULL,race INTEGER NOT NULL,horse TEXT NOT NULL,condition INTEGER NOT NULL,PRIMARY KEY(guild,race,horse))'),
   env.DB.prepare('CREATE TABLE IF NOT EXISTS kp_horse_runs(id TEXT PRIMARY KEY,guild TEXT NOT NULL,race INTEGER NOT NULL,horse TEXT NOT NULL,rank INTEGER NOT NULL,win_odds INTEGER NOT NULL,favourite INTEGER NOT NULL)'),
   env.DB.prepare('CREATE TABLE IF NOT EXISTS kp_horse_results(id TEXT PRIMARY KEY,guild TEXT NOT NULL,race INTEGER NOT NULL,horse TEXT NOT NULL,owner TEXT NOT NULL,rank INTEGER NOT NULL,prize INTEGER NOT NULL CHECK(typeof(prize)=\'integer\' AND prize>=0),at INTEGER NOT NULL,UNIQUE(guild,race,horse))'),
   // A prize credits the owner's wallet and updates the record in the same statement.
@@ -51,12 +52,25 @@ export function personEntry(mapping:KpMapping,race:number,user:string):Entry{
  const name=memberName(mapping,user);
  return {horseId:'person-'+user,name:name+'号',ability:CLASSES[raceClass(race)].mean-.3,style:3,owner:user,ownerName:name,person:true};
 }
+/** Play in the last 24 hours (each match or quiz reward is 1; each hour in a call is 1) and whether
+ * the person played at all in the last 3 days. Voice is counted per 60 KP so calls do not dominate. */
+export async function activityConditions(env:KpEnv,guild:string,users:string[],now:number){
+ const out=new Map<string,number>();
+ for(const user of new Set(users)){
+  const r=await env.DB.prepare(`SELECT SUM(CASE WHEN at>? AND kind IN ('match','quiz') THEN 1 ELSE 0 END) AS plays,SUM(CASE WHEN at>? AND kind='voice' THEN delta ELSE 0 END) AS voice,SUM(CASE WHEN kind IN ('match','quiz','voice') THEN 1 ELSE 0 END) AS any3 FROM kp_ledger WHERE guild=? AND user=? AND at>? AND at<=?`).bind(now-86400000,now-86400000,guild,user,now-3*86400000,now).first<{plays:number|null;voice:number|null;any3:number|null}>();
+  out.set(user,conditionFromActivity((r?.plays??0)+Math.floor((r?.voice??0)/60),(r?.any3??0)>0));
+ }
+ return out;
+}
 export async function raceEntries(env:KpEnv,mapping:KpMapping,race:number):Promise<Entry[]>{
  await ensureHorses(env);
  const rows=(await env.DB.prepare('SELECT h.id,h.name,h.ability,h.style,h.owner,h.wins,h.seconds FROM kp_race_entries e JOIN kp_horses h ON h.id=e.horse WHERE e.guild=? AND e.race=? ORDER BY e.gate_order').bind(mapping.guildId,race).all<{id:string;name:string;ability:number;style:number;owner:string;wins:number;seconds:number}>()).results;
  const nick=await nicknames(env,rows),crown=await crownFor(env,mapping.guildId,race);
- const owned=rows.map(h=>({horseId:h.id,name:h.name,ability:h.ability,style:h.style,owner:h.owner,ownerName:memberName(mapping,h.owner),nickname:nick.get(h.id)??null}));
- return crown?[personEntry(mapping,race,crown.user),...owned]:owned;
+ // Conditions were fixed when the race opened; races decided before that rule keep the card's own.
+ const fixed=new Map((await env.DB.prepare('SELECT horse,condition FROM kp_entry_conditions WHERE guild=? AND race=?').bind(mapping.guildId,race).all<{horse:string;condition:number}>()).results.map(r=>[r.horse,r.condition]));
+ const owned:Entry[]=rows.map(h=>({horseId:h.id,name:h.name,ability:h.ability,style:h.style,owner:h.owner,ownerName:memberName(mapping,h.owner),nickname:nick.get(h.id)??null}));
+ const all=crown?[personEntry(mapping,race,crown.user),...owned]:owned;
+ return all.map(e=>fixed.has(e.horseId)?{...e,condition:fixed.get(e.horseId)}:e);
 }
 /** Decides once which owned horses run in a race. Called when betting opens, before any bet. */
 export async function decideEntries(env:KpEnv,mapping:KpMapping,race:number,now=Date.now(),chance=ENTRY_CHANCE){
@@ -66,8 +80,14 @@ export async function decideEntries(env:KpEnv,mapping:KpMapping,race:number,now=
  const eligible=(await env.DB.prepare(`SELECT id FROM kp_horses h WHERE guild=? AND grade=? AND sold_at IS NULL AND retired_at IS NULL AND created_at<=?
   AND NOT EXISTS(SELECT 1 FROM kp_race_entries e WHERE e.guild=h.guild AND e.horse=h.id AND e.race>? AND e.race<?)`).bind(mapping.guildId,raceClass(race),now,race-REST,race+REST).all<{id:string}>()).results.map(r=>r.id);
  const picked=eligible.filter(()=>cryptoRng()<chance).map(id=>({id,order:cryptoRng()})).sort((a,b)=>a.order-b.order).slice(0,size);
- // Entries and the marker go in one transaction; a concurrent decision inserts nothing.
+ // Each runner's condition comes from its owner's (or namesake's) play, fixed now with the entries.
+ const owners=new Map((picked.length?(await env.DB.prepare(`SELECT id,owner FROM kp_horses WHERE id IN (${picked.map(()=>'?').join(',')})`).bind(...picked.map(p=>p.id)).all<{id:string;owner:string}>()).results:[]).map(r=>[r.id,r.owner]));
+ const crown=await crownFor(env,mapping.guildId,race);
+ const runners=[...picked.map(p=>({horse:p.id,user:owners.get(p.id)!})),...(crown?[{horse:'person-'+crown.user,user:crown.user}]:[])];
+ const conditions=await activityConditions(env,mapping.guildId,runners.map(r=>r.user),now);
+ // Entries, conditions and the marker go in one transaction; a concurrent decision inserts nothing.
  await env.DB.batch([
+  ...runners.map(r=>env.DB.prepare('INSERT INTO kp_entry_conditions(guild,race,horse,condition) SELECT ?,?,?,? WHERE NOT EXISTS(SELECT 1 FROM kp_race_fields WHERE guild=? AND race=?)').bind(mapping.guildId,race,r.horse,conditions.get(r.user)!,mapping.guildId,race)),
   ...picked.map((p,i)=>env.DB.prepare('INSERT INTO kp_race_entries(guild,race,gate_order,horse) SELECT ?,?,?,? WHERE NOT EXISTS(SELECT 1 FROM kp_race_fields WHERE guild=? AND race=?)').bind(mapping.guildId,race,i,p.id,mapping.guildId,race)),
   env.DB.prepare('INSERT OR IGNORE INTO kp_race_fields(guild,race,decided_at) VALUES(?,?,?)').bind(mapping.guildId,race,now),
  ]);
