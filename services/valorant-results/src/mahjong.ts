@@ -155,7 +155,9 @@ export async function monitorMahjong(env:MahjongEnv,now=Date.now(),override?:Mah
      const id='mahjong:'+p.id+':'+record._id;
      // Only fresh games: a first successful poll returns a week of history, which must not flood the channel.
      if(record.uuid&&record.endTime*1000>now-AUTO_PAIPU_AGE)fresh+=(await env.DB.prepare('INSERT OR IGNORE INTO mahjong_paipu_auto(paipu,account,at) VALUES(?,?,?)').bind(record.uuid,p.id,record.endTime*1000).run()).meta.changes;
-     await env.DB.prepare('INSERT OR IGNORE INTO mahjong_watch_posts(id,body,at) VALUES(?,?,?)').bind(id,JSON.stringify({content:mahjongMessage(record,p.id,p.name||record.players.find(m=>m.accountId===p.id)!.nickname),allowed_mentions:{parse:[]}}),record.endTime*1000).run();
+     const added=await env.DB.prepare('INSERT OR IGNORE INTO mahjong_watch_posts(id,body,at) VALUES(?,?,?)').bind(id,JSON.stringify({content:mahjongMessage(record,p.id,p.name||record.players.find(m=>m.accountId===p.id)!.nickname),allowed_mentions:{parse:[]}}),record.endTime*1000).run();
+     // How long after the game ended it was first seen (provider delay plus the poll gap), for diagnosis.
+     if(added.meta.changes&&record.endTime*1000>now-AUTO_PAIPU_AGE){await save(env,'found_delay_seconds',Math.round((now-record.endTime*1000)/1000));await save(env,'found_game_end_at',record.endTime*1000);}
     }
    }
   }
@@ -171,8 +173,8 @@ export async function monitorMahjong(env:MahjongEnv,now=Date.now(),override?:Mah
 export async function mahjongStatus(env:MahjongEnv){
  const config=await configuration(env);if(!config?.enabled)return {enabled:false};
  await ensure(env);
- const rows=(await env.DB.prepare("SELECT key,value FROM mahjong_watch_state WHERE key IN ('last_attempt_at','last_success_at','last_sent_at','next_poll_at','error','delivery_error','dispatch_error')").all<{key:string;value:string}>()).results;
+ const rows=(await env.DB.prepare("SELECT key,value FROM mahjong_watch_state WHERE key IN ('last_attempt_at','last_success_at','last_sent_at','next_poll_at','error','delivery_error','dispatch_error','found_delay_seconds','found_game_end_at')").all<{key:string;value:string}>()).results;
  const values=Object.fromEntries(rows.map(r=>[r.key,r.value]));
  const counts=await env.DB.prepare('SELECT COUNT(*) AS total,SUM(sent) AS sent FROM mahjong_watch_posts').first<{total:number;sent:number|null}>();
- return {enabled:true,authenticated:Boolean(env.AMAE_KOROMO_TOKEN),registered:config.players.length,modes:WATCHED.map(m=>MODES[m]),startsAt:config.startedAt,intervalMinutes:INTERVAL/60_000,lastAttemptAt:Number(values.last_attempt_at||0),lastSuccessAt:Number(values.last_success_at||0),lastSentAt:Number(values.last_sent_at||0),nextPollAt:Number(values.next_poll_at||0),error:values.error||null,deliveryError:values.delivery_error||null,instantPaipu:Boolean(env.PAIPU_DISPATCH_TOKEN),dispatchError:values.dispatch_error||null,pending:(counts?.total??0)-(counts?.sent??0),sent:counts?.sent??0};
+ return {enabled:true,authenticated:Boolean(env.AMAE_KOROMO_TOKEN),registered:config.players.length,modes:WATCHED.map(m=>MODES[m]),startsAt:config.startedAt,intervalMinutes:INTERVAL/60_000,lastAttemptAt:Number(values.last_attempt_at||0),lastSuccessAt:Number(values.last_success_at||0),lastSentAt:Number(values.last_sent_at||0),nextPollAt:Number(values.next_poll_at||0),error:values.error||null,deliveryError:values.delivery_error||null,instantPaipu:Boolean(env.PAIPU_DISPATCH_TOKEN),dispatchError:values.dispatch_error||null,lastGameEndAt:Number(values.found_game_end_at||0),lastFoundDelaySeconds:values.found_delay_seconds?Number(values.found_delay_seconds):null,pending:(counts?.total??0)-(counts?.sent??0),sent:counts?.sent??0};
 }
