@@ -7,6 +7,7 @@ import {racingView} from './racing-kp.ts';
 import {ML_DATA,closeMl,mlClosed,mlData,mlLineups,mlResults,seasonStats} from './mleague.ts';
 import {enqueue,ensurePosts} from './racing-posts.ts';
 import {ensureMahjongClaims} from './mahjong-claims.ts';
+import {ensureUnite,uniteUid} from './unite.ts';
 // @ts-expect-error Shared browser engine.
 import {mlCard,mlOdds,mlOpen,mlStart} from '../../../js/mleague.js';
 // @ts-expect-error Shared browser engine.
@@ -48,7 +49,7 @@ const discordUser=(value:unknown)=>String(value??'').trim().replace(/^<@!?(\d+)>
 export async function runKpCommand(env:KpEnv,interaction:Slash,override?:KpMapping):Promise<string>{
  const mapping=await initializeKp(env,override),user=interaction.member?.user?.id;
  if(!mapping||interaction.guild_id!==mapping.guildId||!user||!/^\d{15,22}$/.test(user))return 'このサーバーの本人の口座で利用してください。';
- const command=interaction.data?.name;if(!['kp','keiba','bet','mleague','mbet','mclose','kpgrant','paifulink'].includes(command??''))return '対応していないコマンドです。';
+ const command=interaction.data?.name;if(!['kp','keiba','bet','mleague','mbet','mclose','kpgrant','paifulink','unitelink'].includes(command??''))return '対応していないコマンドです。';
  if(isKpRanking(interaction)){
   // A single server-side snapshot: current spendable KP, not stocks or lifetime earnings.
   const rows=(await env.DB.prepare('SELECT user,balance,RANK() OVER(ORDER BY balance DESC) AS rank,COUNT(*) OVER() AS total FROM kp_wallets WHERE guild=? ORDER BY balance DESC,user ASC LIMIT 10').bind(mapping.guildId).all<{user:string;balance:number;rank:number;total:number}>()).results;
@@ -65,10 +66,22 @@ export async function runKpCommand(env:KpEnv,interaction:Slash,override?:KpMappi
  const balance=async()=>Number((await env.DB.prepare('SELECT balance FROM kp_wallets WHERE guild=? AND user=?').bind(mapping.guildId,user).first<{balance:number}>())?.balance??0);
  if(command==='kp'){
   const rows=(await env.DB.prepare('SELECT delta,kind,at FROM kp_ledger WHERE guild=? AND user=? ORDER BY at DESC,id DESC LIMIT 5').bind(mapping.guildId,user).all<{delta:number;kind:string;at:number}>()).results;
-  const kinds:Record<string,string>={voice:'通話',quiz:'QUIZ',match:'試合',operation:'購入・取引',prize:'競馬賞金',mahjong:'雀魂',grant:'手動調整'};
+  const kinds:Record<string,string>={voice:'通話',quiz:'QUIZ',match:'試合',operation:'購入・取引',prize:'競馬賞金',mahjong:'雀魂',grant:'手動調整',unite:'ユナイト'};
   return '🪙 あなたの残高：**'+money(await balance())+'**\n'+(rows.length?'最近の入出金\n'+rows.map(r=>`${clock(r.at)} ${kinds[r.kind]??'口座'} ${r.delta>=0?'+':''}${money(r.delta)}`).join('\n'):'まだ入出金はありません。通話やQUIZで貯められます。')+'\n/keiba で出走表、/bet で馬券を買えます。';
  }
  if(command==='mleague')return mleagueView(env,Date.now());
+ if(command==='unitelink'){
+  // Admin-only. The next reads of the profile only record what is there; later ranked games are posted.
+  const option=(key:string)=>interaction.data?.options?.find(o=>o.name===key)?.value;
+  const target=discordUser(option('user')),uid=uniteUid(option('profile'));
+  if(!/^\d{15,22}$/.test(target)||!uid)return '相手（@メンション か ユーザーID）と、UniteAPI のプロフィールURL（https://uniteapi.dev/p/数字）を指定してください。';
+  await ensureUnite(env);
+  await env.DB.batch([
+   env.DB.prepare('DELETE FROM unite_links WHERE guild=? AND (user=? OR uid=?)').bind(mapping.guildId,target,uid),
+   env.DB.prepare('INSERT INTO unite_links(guild,user,uid) VALUES(?,?,?)').bind(mapping.guildId,target,uid),
+  ]);
+  return `🔗 <@${target}> を UniteAPI（${uid}）と結び付けました。数分後から、ランクマッチの結果をアカンbotで速報し、勝ち +300／負け −150 KP を精算します。プロフィールが非公開だと読めません。`;
+ }
  if(command==='paifulink'){
   // Admin-only. Replaces any earlier link of either side, so a wrong link is fixed by linking again.
   const option=(key:string)=>interaction.data?.options?.find(o=>o.name===key)?.value;

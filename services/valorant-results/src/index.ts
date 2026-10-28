@@ -1,4 +1,5 @@
 import {monitorMahjong, mahjongStatus} from './mahjong.ts';
+import {monitorUnite} from './unite.ts';
 import {paipuApi} from './mahjong-paipu.ts';
 export {VoiceGateway} from './voice-gateway.ts';
 import {ensureVoice} from './voice-api.ts';
@@ -384,6 +385,7 @@ export default {
   },
   async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
     ctx.waitUntil(monitorMahjong(env).catch(()=>console.warn('mahjong_watch_pending')));
+    ctx.waitUntil(monitorUnite(env).catch(()=>console.warn('unite_watch_pending')));
     ctx.waitUntil(ensureVoice(env).catch(()=>console.warn('voice_ensure_pending')));
     ctx.waitUntil(monitor(env));
     ctx.waitUntil((async()=>{
