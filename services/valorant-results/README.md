@@ -322,6 +322,24 @@ RUSTの反応、エリート、王道家、了解お兄さん、気が利くね�
 - 金額は `mahjong-kp-policy.json`（**提案値**）：四麻半荘 500/300/200/200、四麻東風 250/150/100/100、三麻半荘 500/250/200、三麻東風 250/125/100 KP。
 - 牌譜屋のAPIキーが得られて自動判定を有効にする場合は、同じ牌譜IDの申請と二重に付与しないようにすること。
 
+### 牌譜の中身の解析（役・放銃・立直・点数推移）
+
+`/paifu` で申請された牌譜を、GitHub Actions（`.github/workflows/mahjong-paipu.yml`、10分ごと）が雀魂へログインして読み込み、要約をWorkerへ送ります。WorkerのCPU制限では雀魂のprotobufを解読できないため、取得と要約は Actions 側で行います（`scripts/mahjong-paipu.mjs`、`src/mahjong-summary.ts`）。
+
+- 稼ぎchへの投稿：最終順位と点数、役満・メンバーの放銃・メンバーの満貫以上の和了（局名・打点・役）、各メンバーの和了／放銃（点数）／立直（和了）／副露、事実に合わせた煽り（`mahjong-paipu-voice.json`、煽りレベルに従う）。牌譜にない事柄は書きません。
+- 役名は雀魂の設定表（`res/config/lqc.lqbin` の fan シート）から作った `mahjong-fans.json` を使います。役が追加されたら `node scripts/mahjong-fans.mjs` で再生成します。
+- 申請との照合：対局の種類と金額は牌譜の値を使います。初回はメンバーの承認が必要で、承認時にその順位の雀魂アカウントを申請者に紐付けます。紐付け後の申請は牌譜だけで自動承認します。別のメンバーに紐付いた席の申請は承認できません。
+- 署名：Actions と Worker は `MAHJONG_INGEST_KEY` の HMAC-SHA256（時刻・パス・本文、5分以内）で通信します。キューは申請中の牌譜のみ、1回最大10件、失敗は3回まで再試行します。
+- 申請がなければ雀魂へログインしません（依存のインストールも省略）。公開リポジトリのため、ログには件数とエラーコードだけを出します。
+
+設定（リポジトリの Settings → Secrets and variables → Actions）：
+
+1. `MAHJONG_INGEST_KEY`：32文字以上のランダムな文字列。設定後に「VALORANT Bot check and deploy」を手動実行すると、同じ値がWorkerのSecretに入ります（既存のWorker Secretは上書きしません）。
+2. `YOSTAR_UID` / `YOSTAR_TOKEN` / `YOSTAR_DEVICE_ID`：PCのブラウザで `https://game.mahjongsoul.com` にログインする際の開発者ツール（F12 → Network、`yostarplat` で絞り込み）から取得します。`/user/login` か `/user/quick-login` の応答の `Data.UserInfo.ID`（`UID2` ではない）と `Data.UserInfo.Token`、要求ヘッダー `Authorization` 内の `DeviceID` です。
+3. Actions の「Mahjong paipu fetch」を「ログインできるかだけ確認する」にチェックして手動実行し、`login: ok` を確認します。
+
+注意：この値はアカウントへのログイン情報そのものです。チャット・Issue・PRに貼らないでください。非公式の取得方法のため、雀魂の規約上アカウントに不利益が出る可能性があります。牌譜はどのアカウントでも読めるため、サブアカウントの利用を推奨します。ログインに失敗し始めたら値を取り直してください。
+
 ### 競馬のお知らせの口調
 
 競馬の出走表・冠レース告知・結果は `racing-voice.json` と `src/racing-voice.ts` で管理します。各投稿に「良かったこの距離で」「お祭り男か」のどちらか一つを原文のまま独立した行で出し、別の行にbot独自のツッコミを添えます。語録の出典は既存の `meme-quotes.json` に合わせ、創作のたとえ話を実在人物の発言とは扱いません。
