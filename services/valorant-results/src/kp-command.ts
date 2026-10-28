@@ -1,5 +1,5 @@
 // Register these guild commands individually; never replace /death, /valo or the Activity entry point.
-export const KP_COMMAND_VERSION='kp-slash-v4-mleague';
+export const KP_COMMAND_VERSION='kp-slash-v5-mclose';
 export const kpCommands=[
  {type:1,name:'kp',description:'KESO PLAY｜KP残高・ランキング',options:[
   {type:1,name:'balance',description:'自分の残高と最近の入出金（本人だけに表示）'},
@@ -18,6 +18,10 @@ export const kpCommands=[
   {type:4,name:'player',description:'選手番号（/mleague で確認）',required:true,min_value:1,max_value:16},
   {type:3,name:'type',description:'当てるもの',required:true,choices:[{name:'トップ（1着）',value:'top'},{name:'ラス（4着）',value:'last'}]},
   {type:4,name:'amount',description:'掛け金（100 KP以上・100 KP単位）',required:true,min_value:100,max_value:50000},
+ ]},
+ {type:1,name:'mclose',description:'KESO PLAY｜Mリーグ予想：試合が始まったので締め切る（登録メンバー。開始後の予想は返金）',options:[
+  {type:3,name:'match',description:'卓-試合',required:true,choices:['1-1','1-2','2-1','2-2'].map(v=>({name:v.replace(/^(\d)-(\d)$/,'$1卓 第$2試合'),value:v}))},
+  {type:3,name:'at',description:'試合が始まった時刻（例 21:42）。省略すると今',required:false,max_length:5},
  ]},
  {type:1,name:'paifu',description:'KESO PLAY｜雀魂の牌譜URLで結果を申請（他のメンバーの承認でKP）',options:[
   {type:3,name:'url',description:'牌譜の共有URL（game.mahjongsoul.com/?paipu=...）',required:true,max_length:300},

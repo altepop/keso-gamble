@@ -62,14 +62,15 @@ export function placeMlBet(state,{match,player,type,amount},now,data,results,sea
  return bet;
 }
 /** Settles pending bets whose game has an official result: `results` maps a fixture id to {names}
- * in finishing order. A named player who did not play is refunded, as a scratched horse would be. */
+ * in finishing order, and `closedAt` when a member said when the game started (/mclose). A named
+ * player who did not play, and any bet bought at or after the stated start, is refunded. */
 export function settleMlBets(state,results){
  const settled=[];
  for(const bet of state.mlBets){
   const result=bet.status==='pending'?results.get(bet.match):null;
   if(!result)continue;
   const place=result.names.indexOf(bet.player);
-  if(place<0){bet.status='refunded';bet.payout=bet.amount;}
+  if(place<0||(Number.isSafeInteger(result.closedAt)&&bet.time>=result.closedAt)){bet.status='refunded';bet.payout=bet.amount;}
   else{const won=bet.type==='top'?place===0:place===result.names.length-1;bet.status=won?'won':'lost';bet.payout=won?payoutFor(bet.amount,bet.odds):0;}
   if(!validInt(state.cash+bet.payout))throw Error('KPが上限を超えています');
   state.cash+=bet.payout;settled.push(bet);

@@ -14,10 +14,11 @@ import {hydrateRacing} from '../../../js/racing.js';
 export type MlData=typeof data;
 export type Fixture=MlData['fixtures'][number]&{confirmed?:boolean};
 export interface MlView {teams:MlData['teams'];fixtures:Fixture[]}
-export interface MlResult {names:string[];points:number[];at:number}
+export interface MlResult {names:string[];points:number[];at:number;closedAt?:number}
 interface MlBet {id:string;match:string;player:string;type:'top'|'last';amount:number;odds:number;status:string;payout:number;time:number}
 export const ML_DATA:MlData=data;
-const POLL_EVERY=3*60000,RESULT_WINDOW=8*3600000;
+// Every minute: game 2 closes when game 1's result is stored, so a late read keeps betting open longer.
+const POLL_EVERY=60000,RESULT_WINDOW=8*3600000;
 const money=(n:number)=>n.toLocaleString('ja-JP')+' KP';
 const clean=(s:string)=>s.replace(/[@`*_~<>|]/g,'');
 const initialized=new WeakSet<object>();
@@ -27,6 +28,8 @@ export async function ensureMl(env:KpEnv){
   env.DB.prepare('CREATE TABLE IF NOT EXISTS ml_results(match TEXT PRIMARY KEY,names TEXT NOT NULL,points TEXT NOT NULL,at INTEGER NOT NULL)'),
   env.DB.prepare('CREATE TABLE IF NOT EXISTS ml_state(key TEXT PRIMARY KEY,value TEXT NOT NULL)'),
   // The official matchups per date and table (the copied fixture list has mistakes).
+  // A member's word that a game has started (/mclose): betting stops, and later bets are refunded.
+  env.DB.prepare('CREATE TABLE IF NOT EXISTS ml_closed(match TEXT PRIMARY KEY,at INTEGER NOT NULL,user TEXT NOT NULL,created INTEGER NOT NULL)'),
   env.DB.prepare('CREATE TABLE IF NOT EXISTS ml_cards(date TEXT NOT NULL,tbl INTEGER NOT NULL,teams TEXT NOT NULL,at INTEGER NOT NULL,PRIMARY KEY(date,tbl))'),
  ]);initialized.add(env.DB);
 }
@@ -34,7 +37,21 @@ export async function mlResults(env:KpEnv,ids?:string[]){
  await ensureMl(env);
  const rows=ids?(ids.length?(await env.DB.prepare(`SELECT match,names,points,at FROM ml_results WHERE match IN (${ids.map(()=>'?').join(',')})`).bind(...ids).all<{match:string;names:string;points:string;at:number}>()).results:[])
   :(await env.DB.prepare('SELECT match,names,points,at FROM ml_results').all<{match:string;names:string;points:string;at:number}>()).results;
- return new Map<string,MlResult>(rows.map(r=>[r.match,{names:JSON.parse(r.names),points:JSON.parse(r.points),at:r.at}]));
+ const closed=await mlClosed(env);
+ return new Map<string,MlResult>(rows.map(r=>[r.match,{names:JSON.parse(r.names),points:JSON.parse(r.points),at:r.at,...(closed.has(r.match)?{closedAt:closed.get(r.match)!.at}:{})}]));
+}
+export async function mlClosed(env:KpEnv){
+ await ensureMl(env);
+ return new Map((await env.DB.prepare('SELECT match,at,user FROM ml_closed').all<{match:string;at:number;user:string}>()).results.map(r=>[r.match,{at:r.at,user:r.user}]));
+}
+/** A registered member closes a game's betting at the time it started (default: now). The earliest
+ * stated time is kept, so a later, looser call cannot reopen bets that were already late. */
+export async function closeMl(env:KpEnv,mapping:KpMapping,user:string,fixture:Fixture,at:number,now:number){
+ if(!mapping.accounts.some(a=>a.discordUserId===user))throw Error('締め切りできるのは登録メンバーだけです。');
+ if(at<mlStart(fixture)||at>now)throw Error('開始時刻は19:00から今までの時刻で指定してください。');
+ await ensureMl(env);
+ await env.DB.prepare('INSERT INTO ml_closed(match,at,user,created) VALUES(?,?,?,?) ON CONFLICT(match) DO UPDATE SET at=excluded.at,user=excluded.user,created=excluded.created WHERE excluded.at<ml_closed.at').bind(fixture.id,at,user,now).run();
+ return (await mlClosed(env)).get(fixture.id)!;
 }
 /** This season's tops and lasts from stored official results, for the odds. */
 export function seasonStats(results:Map<string,MlResult>){
