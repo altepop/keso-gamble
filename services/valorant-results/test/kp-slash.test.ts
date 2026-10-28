@@ -63,14 +63,14 @@ test('race clocks cross JST midnight safely and are stable on replay',()=>{
 test('command registration never bulk-replaces other commands and refuses a foreign name collision',async()=>{
  const calls:Array<{path:string;method?:string;body?:any}>=[];
  const api=async(path:string,method?:string,body?:unknown)=>{calls.push({path,method,body});return path==='/users/@me'?{id:one,bot:true}:method==='POST'?{...(body as object),id:one}:[{name:'death'},{name:'valo'},{name:'launch',type:4}];};
- assert.equal(await registerKpCommands(one,guild,api,async()=>{}),9);
- assert.deepEqual(calls.filter(c=>c.method==='POST').map(c=>c.body.name),['kp','keiba','bet','mleague','mbet','mclose','kpgrant','paifulink','paifu']);
+ assert.equal(await registerKpCommands(one,guild,api,async()=>{}),10);
+ assert.deepEqual(calls.filter(c=>c.method==='POST').map(c=>c.body.name),['kp','keiba','bet','mleague','mbet','mclose','kpgrant','unitelink','paifulink','paifu']);
  assert.ok(calls.every(c=>c.method!=='PUT'));assert.equal(kpCommands[2].options?.filter(o=>o.required).length,4);
  // Unchanged commands are not written again, and writes are spaced out.
  const waits:number[]=[],posted:string[]=[];
  const stored=[{...kpCommands[0],id:'1',application_id:one,version:'9',description_localizations:null,options:kpCommands[0].options.map(o=>({...o,required:false}))},{...kpCommands[1],id:'2'},{name:'death'}];
- assert.equal(await registerKpCommands(one,guild,async(path,method,body)=>{if(method==='POST'){posted.push((body as {name:string}).name);return {...(body as object),id:one};}return path==='/users/@me'?{id:one,bot:true}:stored;},async ms=>{waits.push(ms);}),7);
- assert.deepEqual(posted,['bet','mleague','mbet','mclose','kpgrant','paifulink','paifu']);assert.deepEqual(waits,[5000,5000,5000,5000,5000,5000],'a gap between writes, none before the first');
+ assert.equal(await registerKpCommands(one,guild,async(path,method,body)=>{if(method==='POST'){posted.push((body as {name:string}).name);return {...(body as object),id:one};}return path==='/users/@me'?{id:one,bot:true}:stored;},async ms=>{waits.push(ms);}),8);
+ assert.deepEqual(posted,['bet','mleague','mbet','mclose','kpgrant','unitelink','paifulink','paifu']);assert.deepEqual(waits,[5000,5000,5000,5000,5000,5000,5000],'a gap between writes, none before the first');
  let writes=0;await assert.rejects(registerKpCommands(one,guild,async(path,method)=>{if(method)writes++;return path==='/users/@me'?{id:one,bot:true}:[{name:'bet',description:'Another bot command'}];}),/conflict/);assert.equal(writes,0);
  await assert.rejects(registerKpCommands(one,guild,async()=>({id:two,bot:true})),/mismatch/);
 });
@@ -123,7 +123,7 @@ test('public command metadata contains definitions only and does not need or exp
  let queries=0;
  const response=await kpApi(new Request('https://worker/api/kp/commands'),{DB:{prepare(){queries++;throw Error('No DB reads');}},KP_BOOTSTRAP_PRIVATE_KEY:'fixture-secret-must-not-leak'} as unknown as KpEnv);
  const body=await response.json() as {version:string;commands:unknown[]};
- assert.equal(response.status,200);assert.equal(body.version,'kp-slash-v8-link');assert.equal(body.commands.length,9);assert.equal(queries,0);
+ assert.equal(response.status,200);assert.equal(body.version,'kp-slash-v9-unite');assert.equal(body.commands.length,10);assert.equal(queries,0);
  assert.equal(JSON.stringify(body).includes('fixture-secret'),false);assert.equal(response.headers.get('Cache-Control'),'no-store');
 });
 

@@ -1,0 +1,75 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {DatabaseSync} from 'node:sqlite';
+import {URL as NodeURL} from 'node:url';
+import {readFileSync,readdirSync} from 'node:fs';
+import {initializeKp,syncKpAccounts} from '../src/kp.ts';
+import type {KpMapping} from '../src/kp.ts';
+import {parseUnite,uniteUid,monitorUnite,UNITE_WIN,UNITE_LOSS} from '../src/unite.ts';
+import type {UniteEnv,UniteMatch} from '../src/unite.ts';
+import {runKpCommand} from '../src/kp-slash.ts';
+const guild='100000000000000100',one='100000000000000101',two='100000000000000102',cat='100000000000000104';
+const mapping:KpMapping={guildId:guild,accounts:[{riotId:'One#JP1',discordUserId:one},{riotId:'Two#JP1',discordUserId:two}]};
+const T0=Date.parse('2026-10-28T22:00:00+09:00'),UID='10715117730671753501';
+/** A UniteAPI match card with the same structure as the live site, made-up values. */
+function card(m:Partial<UniteMatch>&{ago?:string}={}){
+ const v={win:true,surrendered:false,map:'Theia Sky Ruins (Groudon)',party:'Trio',pokemon:'Pikachu',level:14,ours:400,theirs:250,ko:5,ast:7,int:1,dmg:'60k',tkn:'40k',heal:'5k',ago:'3 minutes ago',...m};
+ const stat=(n:string,p:string,l:string)=>`<div class="flex flex-col"><span class="text-sm">${n}</span><span class="text-[10px]">${p}</span><span class="text-[9px]">${l}</span></div>`;
+ return `<div class="group relative w-full min-h-[95px] overflow-hidden px-3 py-3.5 rounded-lg border border-border/40 border-l-[3px] border-l-${v.win?'emerald':'red'}-500 flex"><div class="flex"><div class="flex flex-col"><span class="text-sm font-medium">${v.ago}</span><div><span class="text-xs" title="${v.map}">${v.map}</span></div><div><span class="text-xs">${v.party}</span></div>${v.surrendered?'<span>Surrendered</span>':''}</div><div class="relative"><img alt="${v.pokemon}" src="/x.png"/><div class="absolute">${v.level}</div></div><div><img alt="Skill A" src="/s.png"/></div><div><span>${v.ours}</span><span>vs</span><span>${v.theirs}</span></div><div><span>${v.ko}</span><span>/</span><span>${v.ast}</span><span>/</span><span>${v.int}</span></div><div><span>KO</span><span>AST</span><span>INT</span></div>${stat(v.dmg,'20%','DMG')}${stat(v.tkn,'30%','TKN')}${stat(v.heal,'2%','HEAL')}</div></div>`;
+}
+const page=(cards:string[],name='テスト選手')=>`<html><head><title>${name} - UniteAPI</title></head><body><div>Battles</div>${cards.join('')}</body></html>`;
+async function fixture(){
+ const sql=new DatabaseSync(':memory:');
+ for(const file of readdirSync(new NodeURL('../migrations/',import.meta.url)).filter(f=>f.endsWith('.sql')).sort())sql.exec(readFileSync(new NodeURL('../migrations/'+file,import.meta.url),'utf8'));
+ class Query{text:string;values:unknown[];constructor(text:string,values:unknown[]=[]){this.text=text;this.values=values;}bind(...values:unknown[]){return new Query(this.text,values);}first(){return sql.prepare(this.text).get(...this.values as never[])??null;}all(){return {results:sql.prepare(this.text).all(...this.values as never[])};}run(){return {meta:{changes:Number(sql.prepare(this.text).run(...this.values as never[]).changes)}};}}
+ const env:UniteEnv={KP_BOOTSTRAP_PRIVATE_KEY:'fixture-key',DISCORD_WEBHOOK_URL:'https://discord.com/api/webhooks/9/result',KP_EARNINGS_WEBHOOK_URL:'https://discord.com/api/webhooks/1/token',DB:{prepare:(text:string)=>new Query(text),batch:(queries:Query[])=>{sql.exec('BEGIN');try{const rows=queries.map(q=>q.run());sql.exec('COMMIT');return rows;}catch(error){sql.exec('ROLLBACK');throw error;}}}as unknown as D1Database};
+ sql.prepare('INSERT INTO tracked_players VALUES(?,?,?,?)').run('One#JP1','p-one','ap',0);sql.prepare('INSERT INTO tracked_players VALUES(?,?,?,?)').run('Two#JP1','p-two','ap',0);
+ await initializeKp(env,mapping);await syncKpAccounts(env,mapping);
+ let html=page([card()]);const sent:string[]=[],reads:string[]=[];
+ const request=(async(input:RequestInfo|URL,init?:RequestInit)=>{const url=String(input);
+  if(url.startsWith('https://discord.com/')){sent.push(JSON.parse(String(init?.body)).content);return Response.json({id:'100000000000000001'});}
+  reads.push(url);return new Response(html);}) as typeof fetch;
+ const balance=(user:string)=>Number(sql.prepare('SELECT balance FROM kp_wallets WHERE user=?').get(user)?.balance??0);
+ return {env,sql,request,sent,reads,balance,set:(h:string)=>{html=h;}};
+}
+const link=(f:Awaited<ReturnType<typeof fixture>>,user:string,profile:string,n=1)=>runKpCommand(f.env,{id:String((BigInt(T0)-1420070400000n)<<22n|BigInt(n)),guild_id:guild,member:{user:{id:one}},data:{name:'unitelink',options:[{name:'user',value:user},{name:'profile',value:profile}]}},mapping);
+
+test('profile links and ids are accepted; anything else is not',()=>{
+ assert.equal(uniteUid('https://uniteapi.dev/p/'+UID),UID);assert.equal(uniteUid('https://uniteapi.dev/en/p/'+UID+'/'),UID);assert.equal(uniteUid(UID),UID);
+ for(const bad of ['https://evil.example/p/'+UID,'R63R6P5','','https://uniteapi.dev/p/abc'])assert.equal(uniteUid(bad),null);
+});
+test('the page is read into matches; private and unknown profiles are told apart',()=>{
+ const p=parseUnite(page([card({win:false,surrendered:true,ko:0,pokemon:'Mr. Mime',ago:'21 minutes ago'}),card()]))!;
+ assert.equal(p.name,'テスト選手');assert.equal(p.matches.length,2);
+ assert.deepEqual(p.matches[0],{win:false,surrendered:true,map:'Theia Sky Ruins (Groudon)',party:'Trio',pokemon:'Mr. Mime',level:14,ours:400,theirs:250,ko:0,ast:7,int:1,dmg:'60k',tkn:'40k',heal:'5k'});
+ assert.deepEqual(parseUnite('<title>Private Profile</title>'),{name:'',private:true,matches:[]});
+ assert.equal(parseUnite('<title>Player Not Found - UniteAPI</title>'),null);
+ assert.equal(parseUnite(page([card().replace('<span>vs</span>','')])),null,'a changed layout is not guessed at');
+});
+test('linking records what is already there; later games are posted once and settled in KP',async()=>{
+ const f=await fixture();
+ assert.match(await link(f,'ねこ','x'),/指定してください/);
+ assert.match(await link(f,`<@${cat}>`,'https://uniteapi.dev/p/'+UID,2),/結び付けました/);
+ await monitorUnite(f.env,T0,f.request,mapping);
+ assert.equal(f.reads.length,1);assert.equal(f.sent.length,0,'the first read posts nothing');assert.equal(f.balance(cat),0);
+ await monitorUnite(f.env,T0+60_000,f.request,mapping);assert.equal(f.reads.length,1,'one profile at most every two minutes');
+ f.set(page([card({win:false,surrendered:true,ko:0,ours:150,theirs:380}),card({pokemon:'Absol',ko:12}),card()]));
+ await monitorUnite(f.env,T0+3*60_000,f.request,mapping);
+ assert.equal(f.sent.length,2);
+ assert.match(f.sent[0],/テスト選手｜ポケモンユナイト ランクマ 勝利/);assert.match(f.sent[0],/KO 12。暴れ方/);assert.match(f.sent[0],new RegExp(`\\+${UNITE_WIN} KP`));
+ assert.match(f.sent[1],/敗北\*\*（降参）/);assert.equal(f.sent[1].split('\n').filter(l=>l.startsWith('🗯️')).length,5);
+ assert.match(f.sent[1],new RegExp(`−${UNITE_LOSS} KP`));
+ assert.equal(f.balance(cat),UNITE_WIN-UNITE_LOSS,'the win is credited before the later loss');
+ await monitorUnite(f.env,T0+6*60_000,f.request,mapping);assert.equal(f.sent.length,2,'the same games are not posted again');
+ assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM kp_ledger WHERE kind='unite'").get()!.n,2);
+});
+test('a private profile or a failed read is recorded and posts nothing',async()=>{
+ const f=await fixture();await link(f,cat,UID);f.set('<title>Private Profile</title>');
+ await monitorUnite(f.env,T0,f.request,mapping);
+ assert.equal(f.sql.prepare('SELECT error FROM unite_links').get()!.error,'private_profile');assert.equal(f.sent.length,0);
+});
+test('a loss with nothing in the wallet takes nothing',async()=>{
+ const f=await fixture();await link(f,cat,UID);await monitorUnite(f.env,T0,f.request,mapping);
+ f.set(page([card({win:false}),card()]));await monitorUnite(f.env,T0+3*60_000,f.request,mapping);
+ assert.equal(f.balance(cat),0);assert.equal(f.sent.length,1);assert.doesNotMatch(f.sent[0],/KP\n/,'no KP line when nothing moved');
+});
