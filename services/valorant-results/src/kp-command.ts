@@ -25,14 +25,32 @@ export const kpCommands=[
   {type:4,name:'rank',description:'自分の順位',required:true,choices:[1,2,3,4].map(n=>({name:n+'位',value:n}))},
  ]},
 ] as const;
-export async function registerKpCommands(applicationId:string,guildId:string,api:(path:string,method?:string,body?:unknown)=>Promise<any>){
+/** Compares what Discord stores with a definition, ignoring fields Discord adds (ids, localizations, defaults). */
+function shape(value:any):unknown{
+ if(Array.isArray(value))return value.map(shape);
+ if(!value||typeof value!=='object')return value;
+ const out:Record<string,unknown>={};
+ for(const key of ['type','name','value','description','required','min_value','max_value','max_length','choices','options'])
+  if(value[key]!==undefined&&value[key]!==null&&!(key==='required'&&value[key]===false)&&!(Array.isArray(value[key])&&!value[key].length))out[key]=shape(value[key]);
+ return out;
+}
+export const sameCommand=(stored:unknown,command:unknown)=>Boolean(stored)&&JSON.stringify(shape(stored))===JSON.stringify(shape(command));
+export async function registerKpCommands(applicationId:string,guildId:string,api:(path:string,method?:string,body?:unknown)=>Promise<any>,pause=(ms:number)=>new Promise<void>(done=>setTimeout(done,ms)),gap=5000){
  const me=await api('/users/@me');if(me.id!==applicationId||me.bot!==true)throw Error('kp_command_application_mismatch');
  const path='/applications/'+applicationId+'/guilds/'+guildId+'/commands',existing=await api(path);
  if(!Array.isArray(existing))throw Error('kp_command_list_unavailable');
  // Refuse to take over an unrelated command with the same name.
  for(const command of kpCommands){const old=existing.find(c=>c.name===command.name);if(old&&!String(old.description).startsWith('KESO PLAY｜'))throw Error('kp_command_name_conflict');}
- for(const command of kpCommands){const registered=await api(path,'POST',command);if(registered?.name!==command.name||registered?.type!==1||typeof registered?.id!=='string')throw Error('kp_command_registration_unconfirmed');}
- return kpCommands.length;
+ // Only changed commands are written, a few seconds apart: Discord rate-limits command creation, and a
+ // retry restarts from the first command, so writing all of them every time could never finish.
+ let written=0;
+ for(const command of kpCommands){
+  if(sameCommand(existing.find(c=>c.name===command.name),command))continue;
+  if(written)await pause(gap);
+  const registered=await api(path,'POST',command);written++;
+  if(registered?.name!==command.name||registered?.type!==1||typeof registered?.id!=='string')throw Error('kp_command_registration_unconfirmed');
+ }
+ return written;
 }
 
 /** Only this exact read-only subcommand may produce a public reply. */
