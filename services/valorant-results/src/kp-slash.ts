@@ -6,6 +6,7 @@ import {operateKp} from './kp-api.ts';
 import {racingView} from './racing-kp.ts';
 import {ML_DATA,closeMl,mlClosed,mlData,mlLineups,mlResults,seasonStats} from './mleague.ts';
 import {enqueue,ensurePosts} from './racing-posts.ts';
+import {ensureMahjongClaims} from './mahjong-claims.ts';
 // @ts-expect-error Shared browser engine.
 import {mlCard,mlOdds,mlOpen,mlStart} from '../../../js/mleague.js';
 // @ts-expect-error Shared browser engine.
@@ -42,10 +43,12 @@ async function mleagueView(env:KpEnv,now:number){
  lines.push('\n例：/mbet match:1-1 player:3 amount:500（その選手のラスに賭ける）','第1試合は19:00、第2試合は第1試合の結果が出るまで。始まったら /mclose で締め切り（開始後の予想は返金）。出なかった選手は返金。');
  return lines.join('\n');
 }
+/** A user option given as a mention (<@id>, <@!id>) or a bare ID. */
+const discordUser=(value:unknown)=>String(value??'').trim().replace(/^<@!?(\d+)>$/,'$1');
 export async function runKpCommand(env:KpEnv,interaction:Slash,override?:KpMapping):Promise<string>{
  const mapping=await initializeKp(env,override),user=interaction.member?.user?.id;
  if(!mapping||interaction.guild_id!==mapping.guildId||!user||!/^\d{15,22}$/.test(user))return 'このサーバーの本人の口座で利用してください。';
- const command=interaction.data?.name;if(!['kp','keiba','bet','mleague','mbet','mclose','kpgrant'].includes(command??''))return '対応していないコマンドです。';
+ const command=interaction.data?.name;if(!['kp','keiba','bet','mleague','mbet','mclose','kpgrant','paifulink'].includes(command??''))return '対応していないコマンドです。';
  if(isKpRanking(interaction)){
   // A single server-side snapshot: current spendable KP, not stocks or lifetime earnings.
   const rows=(await env.DB.prepare('SELECT user,balance,RANK() OVER(ORDER BY balance DESC) AS rank,COUNT(*) OVER() AS total FROM kp_wallets WHERE guild=? ORDER BY balance DESC,user ASC LIMIT 10').bind(mapping.guildId).all<{user:string;balance:number;rank:number;total:number}>()).results;
@@ -66,11 +69,23 @@ export async function runKpCommand(env:KpEnv,interaction:Slash,override?:KpMappi
   return '🪙 あなたの残高：**'+money(await balance())+'**\n'+(rows.length?'最近の入出金\n'+rows.map(r=>`${clock(r.at)} ${kinds[r.kind]??'口座'} ${r.delta>=0?'+':''}${money(r.delta)}`).join('\n'):'まだ入出金はありません。通話やQUIZで貯められます。')+'\n/keiba で出走表、/bet で馬券を買えます。';
  }
  if(command==='mleague')return mleagueView(env,Date.now());
+ if(command==='paifulink'){
+  // Admin-only. Replaces any earlier link of either side, so a wrong link is fixed by linking again.
+  const option=(key:string)=>interaction.data?.options?.find(o=>o.name===key)?.value;
+  const target=discordUser(option('user')),account=Number(option('account'));
+  if(!/^\d{15,22}$/.test(target)||!Number.isSafeInteger(account)||account<1)return '相手（@メンション か ユーザーID）と雀魂のアカウントIDを指定してください。';
+  await ensureMahjongClaims(env);
+  await env.DB.batch([
+   env.DB.prepare('DELETE FROM kp_mahjong_links WHERE guild=? AND (user=? OR account=?)').bind(mapping.guildId,target,account),
+   env.DB.prepare('INSERT INTO kp_mahjong_links(guild,user,account) VALUES(?,?,?)').bind(mapping.guildId,target,account),
+  ]);
+  return `🔗 <@${target}> を雀魂アカウント ${account} と結び付けました。これ以降に見つかった対局は自動で精算します。`;
+ }
  if(command==='kpgrant'){
   // Admin-only (checked before deferring). One ledger row per interaction, so a retried delivery
   // cannot pay twice; a negative amount takes no more than the balance (wallets cannot go below 0).
   const value=(key:string)=>interaction.data?.options?.find(o=>o.name===key)?.value;
-  const target=String(value('user')??''),amount=Number(value('amount')),reason=clean(String(value('reason')??'').trim()).slice(0,60);
+  const target=discordUser(value('user')),amount=Number(value('amount')),reason=clean(String(value('reason')??'').trim()).slice(0,60);
   if(!/^\d{15,22}$/.test(target)||!Number.isSafeInteger(amount)||!amount||Math.abs(amount)>100000||!reason)return '相手・0以外のKP（±10万まで）・理由を指定してください。';
   await env.DB.batch([
    env.DB.prepare('INSERT OR IGNORE INTO kp_participants(guild,user) VALUES(?,?)').bind(mapping.guildId,target),

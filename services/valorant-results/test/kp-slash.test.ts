@@ -63,14 +63,14 @@ test('race clocks cross JST midnight safely and are stable on replay',()=>{
 test('command registration never bulk-replaces other commands and refuses a foreign name collision',async()=>{
  const calls:Array<{path:string;method?:string;body?:any}>=[];
  const api=async(path:string,method?:string,body?:unknown)=>{calls.push({path,method,body});return path==='/users/@me'?{id:one,bot:true}:method==='POST'?{...(body as object),id:one}:[{name:'death'},{name:'valo'},{name:'launch',type:4}];};
- assert.equal(await registerKpCommands(one,guild,api,async()=>{}),8);
- assert.deepEqual(calls.filter(c=>c.method==='POST').map(c=>c.body.name),['kp','keiba','bet','mleague','mbet','mclose','kpgrant','paifu']);
+ assert.equal(await registerKpCommands(one,guild,api,async()=>{}),9);
+ assert.deepEqual(calls.filter(c=>c.method==='POST').map(c=>c.body.name),['kp','keiba','bet','mleague','mbet','mclose','kpgrant','paifulink','paifu']);
  assert.ok(calls.every(c=>c.method!=='PUT'));assert.equal(kpCommands[2].options?.filter(o=>o.required).length,4);
  // Unchanged commands are not written again, and writes are spaced out.
  const waits:number[]=[],posted:string[]=[];
  const stored=[{...kpCommands[0],id:'1',application_id:one,version:'9',description_localizations:null,options:kpCommands[0].options.map(o=>({...o,required:false}))},{...kpCommands[1],id:'2'},{name:'death'}];
- assert.equal(await registerKpCommands(one,guild,async(path,method,body)=>{if(method==='POST'){posted.push((body as {name:string}).name);return {...(body as object),id:one};}return path==='/users/@me'?{id:one,bot:true}:stored;},async ms=>{waits.push(ms);}),6);
- assert.deepEqual(posted,['bet','mleague','mbet','mclose','kpgrant','paifu']);assert.deepEqual(waits,[5000,5000,5000,5000,5000],'a gap between writes, none before the first');
+ assert.equal(await registerKpCommands(one,guild,async(path,method,body)=>{if(method==='POST'){posted.push((body as {name:string}).name);return {...(body as object),id:one};}return path==='/users/@me'?{id:one,bot:true}:stored;},async ms=>{waits.push(ms);}),7);
+ assert.deepEqual(posted,['bet','mleague','mbet','mclose','kpgrant','paifulink','paifu']);assert.deepEqual(waits,[5000,5000,5000,5000,5000,5000],'a gap between writes, none before the first');
  let writes=0;await assert.rejects(registerKpCommands(one,guild,async(path,method)=>{if(method)writes++;return path==='/users/@me'?{id:one,bot:true}:[{name:'bet',description:'Another bot command'}];}),/conflict/);assert.equal(writes,0);
  await assert.rejects(registerKpCommands(one,guild,async()=>({id:two,bot:true})),/mismatch/);
 });
@@ -123,28 +123,38 @@ test('public command metadata contains definitions only and does not need or exp
  let queries=0;
  const response=await kpApi(new Request('https://worker/api/kp/commands'),{DB:{prepare(){queries++;throw Error('No DB reads');}},KP_BOOTSTRAP_PRIVATE_KEY:'fixture-secret-must-not-leak'} as unknown as KpEnv);
  const body=await response.json() as {version:string;commands:unknown[]};
- assert.equal(response.status,200);assert.equal(body.version,'kp-slash-v7-grant');assert.equal(body.commands.length,8);assert.equal(queries,0);
+ assert.equal(response.status,200);assert.equal(body.version,'kp-slash-v8-link');assert.equal(body.commands.length,9);assert.equal(queries,0);
  assert.equal(JSON.stringify(body).includes('fixture-secret'),false);assert.equal(response.headers.get('Cache-Control'),'no-store');
 });
 
 test('/kpgrant credits anyone once per interaction, and a negative grant takes no more than the balance',async()=>{
  const f=await fixture(),cat='100000000000000104';
  const grant=(n:number,user:string,amount:number,reason='雀魂 10/28 4位')=>runKpCommand(f.env,{...interaction('kpgrant',one,[{name:'user',value:user},{name:'amount',value:amount},{name:'reason',value:reason}]),id:id(T0,n)},mapping);
- assert.match(await grant(1,cat,100),/<@100000000000000104> に \+100 KP（雀魂 10\/28 4位）。残高 100 KP/);
+ assert.match(await grant(1,`<@${cat}>`,100),/<@100000000000000104> に \+100 KP（雀魂 10\/28 4位）。残高 100 KP/);
  assert.match(await grant(1,cat,100),/残高 100 KP/,'a redelivered interaction does not pay twice');
  assert.match(await grant(2,cat,-500,'取り消し'),/−100 KP（取り消し）。残高 0 KP/);
  assert.match(await grant(3,cat,0),/0以外/);assert.match(await grant(4,'@cat',100),/相手/);assert.match(await grant(5,cat,100,' '),/理由/);
  assert.deepEqual(f.sql.prepare("SELECT delta,kind FROM kp_ledger WHERE user=? ORDER BY id").all(cat).map(r=>[r.delta,r.kind]),[[100,'grant'],[-100,'grant']]);
 });
-test('/kpgrant is refused before any work for members without admin or manage-server',async t=>{
+test('/paifulink links a game account to a member, replacing an earlier link of either side',async()=>{
+ const f=await fixture(),cat='100000000000000104';
+ const link=(n:number,user:unknown,account:unknown)=>runKpCommand(f.env,{...interaction('paifulink',one,[{name:'user',value:user},{name:'account',value:account}]),id:id(T0,n)},mapping);
+ assert.match(await link(1,`<@!${two}>`,104608016),/<@100000000000000102> を雀魂アカウント 104608016 と結び付けました/);
+ assert.match(await link(2,cat,104608016),/<@100000000000000104>/,'a wrong link is fixed by linking again');
+ assert.match(await link(3,cat,555),/555/);
+ assert.match(await link(4,'ねこ',1),/指定してください/);assert.match(await link(5,cat,0),/指定してください/);
+ assert.deepEqual(f.sql.prepare('SELECT user,account FROM kp_mahjong_links ORDER BY user').all().map(r=>[r.user,Number(r.account)]),[[cat,555]]);
+});
+test('/kpgrant and /paifulink are refused before any work for members without admin or manage-server',async t=>{
  const {discordInteractions}=await import('../src/discord-interactions.ts');
  const pair=await crypto.subtle.generateKey({name:'Ed25519'},true,['sign','verify']) as CryptoKeyPair;
  const config={applicationId:one,guildId:guild,publicKey:Buffer.from(await crypto.subtle.exportKey('raw',pair.publicKey)).toString('hex')};
- const body=JSON.stringify({...interaction('kpgrant',two,[{name:'user',value:two},{name:'amount',value:100000},{name:'reason',value:'x'}]),application_id:one,type:2,token:'t',member:{permissions:'0',user:{id:two}}});
+ for(const body of [JSON.stringify({...interaction('kpgrant',two,[{name:'user',value:two},{name:'amount',value:100000},{name:'reason',value:'x'}]),application_id:one,type:2,token:'t',member:{permissions:'0',user:{id:two}}}),JSON.stringify({...interaction('paifulink',two,[{name:'user',value:two},{name:'account',value:1}]),application_id:one,type:2,token:'t',member:{permissions:'0',user:{id:two}}})]){
  const timestamp=String(Math.floor(Date.now()/1000));
  const signature=Buffer.from(await crypto.subtle.sign('Ed25519',pair.privateKey,new TextEncoder().encode(timestamp+body))).toString('hex');
  const tasks:Promise<unknown>[]=[];let queries=0;
  const env={DB:{prepare(){queries++;throw Error('No writes');}}} as unknown as import('../src/index.ts').Env;
  const response=await discordInteractions(new Request('https://worker/interactions',{method:'POST',body,headers:{'X-Signature-Ed25519':signature,'X-Signature-Timestamp':timestamp}}),env,{waitUntil:(p:Promise<unknown>)=>tasks.push(p)} as unknown as ExecutionContext,config);
  assert.match(JSON.stringify(await response.json()),/管理者/);assert.equal(tasks.length,0);assert.equal(queries,0);
+ }
 });
