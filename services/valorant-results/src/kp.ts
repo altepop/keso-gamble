@@ -74,18 +74,23 @@ export async function syncKpAccounts(env:KpEnv,mapping:KpMapping){
  const queries=mapping.accounts.flatMap(a=>{const found=tracked.find(t=>t.riot_id.toLowerCase()===a.riotId.toLowerCase());const old=found&&linked.find(l=>l.puuid===found.puuid);return found&&(!old||old.user!==a.discordUserId||old.riot!==a.riotId)?[env.DB.prepare('INSERT INTO kp_accounts(guild,puuid,user,riot,linked_at) VALUES(?,?,?,?,?) ON CONFLICT(guild,puuid) DO UPDATE SET user=excluded.user,riot=excluded.riot').bind(mapping.guildId,found.puuid,a.discordUserId,a.riotId,Date.now())]:[];});
  if(queries.length)await env.DB.batch(queries);
 }
-interface KpEvent {id:string;guild:string;user:string;puuid:string;match:string;mode:string;outcome:string|null;amount:number;policy:string;at:number}
+interface KpEvent {id:string;guild:string;user:string;puuid:string;match:string;mode:string;outcome:string|null;amount:number;policy:string;at:number;penalty?:number}
 export function kpEventId(guild:string,match:string,puuid:string){return ['match',guild,match,puuid].map(encodeURIComponent).join(':');}
 export async function drainKpInbox(env:KpEnv){
  const rows=(await env.DB.prepare('SELECT id,payload FROM kp_inbox ORDER BY at,id LIMIT 20').all<{id:string;payload:string}>()).results;
- for(const row of rows){try{const e=JSON.parse(row.payload) as KpEvent;if(e.id!==row.id||e.id!==kpEventId(e.guild,e.match,e.puuid)||!Number.isSafeInteger(e.amount)||e.amount<0)throw Error('Invalid KP inbox');
+ for(const row of rows){try{const e=JSON.parse(row.payload) as KpEvent;if(e.id!==row.id||e.id!==kpEventId(e.guild,e.match,e.puuid)||!Number.isSafeInteger(e.amount)||e.amount<0||(e.penalty!==undefined&&(!Number.isSafeInteger(e.penalty)||e.penalty<0)))throw Error('Invalid KP inbox');
   await env.DB.prepare(`INSERT INTO kp_events(id,guild,user,puuid,match,mode,outcome,amount,policy,at) SELECT ?,?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM kp_accounts WHERE guild=? AND puuid=? AND user=?) ON CONFLICT(id) DO NOTHING`).bind(e.id,e.guild,e.user,e.puuid,e.match,e.mode,e.outcome,e.amount,e.policy,Date.now(),e.guild,e.puuid,e.user).run();
+  // Losing as the team's lowest score: a separate debit, never more than the balance (wallets cannot go below 0).
+  if(e.penalty)await env.DB.prepare(`INSERT OR IGNORE INTO kp_ledger(id,guild,user,delta,kind,at) SELECT ?,?,?,-MIN(?,balance),'match',? FROM kp_wallets WHERE guild=? AND user=? AND EXISTS(SELECT 1 FROM kp_events WHERE id=?)`).bind('penalty:'+e.id,e.guild,e.user,e.penalty,Date.now(),e.guild,e.user,e.id).run();
+  const net=await kpMatchNet(env,e.id);
   const notice=await env.DB.prepare('SELECT n.riot_id,n.message FROM notifications n JOIN kp_accounts a ON n.riot_id=a.riot WHERE a.guild=? AND a.puuid=? AND n.match_id=?').bind(e.guild,e.puuid,e.match).first<{riot_id:string;message:string}>();
-  if(notice){const message=kpCreditLine(notice.message,e.amount);await env.DB.prepare("UPDATE notifications SET message=?,sent=CASE WHEN mode='escalation' AND outcome='draw' THEN 1 ELSE 0 END WHERE riot_id=? AND match_id=? AND message!=?").bind(message,notice.riot_id,e.match,message).run();}
+  if(notice&&net!==null){const message=kpCreditLine(notice.message,net,Boolean(e.penalty));await env.DB.prepare("UPDATE notifications SET message=?,sent=CASE WHEN mode='escalation' AND outcome='draw' THEN 1 ELSE 0 END WHERE riot_id=? AND match_id=? AND message!=?").bind(message,notice.riot_id,e.match,message).run();}
   await env.DB.prepare('DELETE FROM kp_inbox WHERE id=? AND EXISTS(SELECT 1 FROM kp_events WHERE id=?)').bind(e.id,e.id).run();
  }catch{console.warn('kp_credit_retry_pending');}}
 }
-export function kpCreditLine(text:string,amount:number){const base=text.replace(/\n🪙 この試合 \+\d+ KP/g,''),split=base.lastIndexOf('\n💬 '),line='\n🪙 この試合 +'+amount+' KP';return split<0?base+line:base.slice(0,split)+line+base.slice(split);}
+/** The match's KP after any bottom-of-team debit; null until the event is recorded. */
+export async function kpMatchNet(env:KpEnv,id:string){const r=await env.DB.prepare("SELECT e.amount+COALESCE((SELECT delta FROM kp_ledger WHERE id='penalty:'||e.id),0) AS net FROM kp_events e WHERE e.id=?").bind(id).first<{net:number}>();return r?Number(r.net):null;}
+export function kpCreditLine(text:string,amount:number,bottom=false){const base=text.replace(/\n🪙 この試合 [+−]\d+ KP[^\n]*/g,''),split=base.lastIndexOf('\n💬 '),line='\n🪙 この試合 '+(amount<0?'−'+(-amount):'+'+amount)+' KP'+(bottom?'（負けて味方最下位）':'');return split<0?base+line:base.slice(0,split)+line+base.slice(split);}
 export async function collectKpMatch(env:KpEnv,mapping:KpMapping,raw:Match,puuid:string):Promise<number|null>{
  const status=assessRewardReadiness(raw,puuid);if(status.status!=='ready')return null;
  const rates=policy.modes[status.mode as keyof typeof policy.modes];if(!rates)return null;
@@ -100,11 +105,15 @@ export async function collectKpMatch(env:KpEnv,mapping:KpMapping,raw:Match,puuid
  const solo=typeof subject?.party_id==='string'&&subject.party_id.length>0&&raw.players.filter(p=>p.team_id===subject.team_id).every(p=>typeof p.party_id==='string'&&p.party_id.length>0)&&raw.players.filter(p=>p.party_id===subject.party_id).length===1;
  if(solo&&status.mode==='competitive')await env.DB.prepare("UPDATE kp_directives SET status='completed' WHERE guild=? AND target=? AND task='solo_competitive' AND status='active' AND at<=?").bind(mapping.guildId,link.user,start).run();
  if(solo&&status.mode==='unrated')await env.DB.prepare("UPDATE kp_directives SET status='completed' WHERE guild=? AND target=? AND task='solo_death_unrated' AND status='active' AND at<=? AND EXISTS(SELECT 1 FROM death_unrated_sessions s WHERE s.riot_id=? AND s.match_id=? AND s.cancelled_at IS NULL AND s.armed_at>=kp_directives.at AND COALESCE((SELECT value FROM monitor_state WHERE key='death_mode:'||s.session_id||':'||s.riot_id),'unrated')='unrated')").bind(mapping.guildId,link.user,start,mapping.accounts.find(a=>a.discordUserId===link.user)!.riotId,raw.metadata.match_id).run();
- if(link.amount!==null)return link.amount;
- const e:KpEvent={id,guild:mapping.guildId,user:link.user,puuid,match:raw.metadata.match_id,mode:status.mode,outcome:status.outcome,amount:rates.participation+(status.outcome==='win'?rates.winBonus:0),policy:policy.version,at:Date.now()};
+ if(link.amount!==null)return kpMatchNet(env,id);
+ // Like last place in Mahjong Soul: losing with the lowest score on a full team costs the participation KP
+ // instead of earning it (competitive −300, unrated −200, …). Ties at the bottom all count; missing stats never do.
+ const team=raw.players.filter(p=>p.team_id===subject?.team_id),scores=team.map(p=>p.stats?.score);
+ const bottom=status.outcome==='loss'&&team.length===5&&scores.every(v=>Number.isSafeInteger(v)&&(v as number)>=0)&&subject?.stats?.score===Math.min(...scores as number[]);
+ const e:KpEvent={id,guild:mapping.guildId,user:link.user,puuid,match:raw.metadata.match_id,mode:status.mode,outcome:status.outcome,amount:bottom?0:rates.participation+(status.outcome==='win'?rates.winBonus:0),policy:policy.version,at:Date.now(),...bottom?{penalty:rates.participation}:{}};
  await env.DB.prepare('INSERT OR IGNORE INTO kp_inbox VALUES(?,?,?)').bind(id,JSON.stringify(e),Date.now()).run();
  await drainKpInbox(env);
- return (await env.DB.prepare('SELECT amount FROM kp_events WHERE id=?').bind(id).first<{amount:number}>())?.amount??null;
+ return kpMatchNet(env,id);
 }
 export async function issueKpCode(env:KpEnv,mapping:KpMapping,user:string){
  if(!mapping.accounts.some(a=>a.discordUserId===user))return null;
