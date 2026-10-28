@@ -4,8 +4,9 @@ import policy from '../mahjong-kp-policy.json' with {type:'json'};
 import {initializeKp,newKpState} from './kp.ts';
 import type {KpEnv,KpMapping} from './kp.ts';
 import {ensureQuizKp} from './quiz-kp.ts';
+import type {PaipuSummary} from './mahjong-summary.ts';
 type Game=keyof typeof policy.games;
-interface Claim {id:string;user:string;link:string;game:Game;rank:number;amount:number;status:'pending'|'approved'|'rejected';decider:string|null;at:number}
+interface Claim {id:string;user:string;paipu:string;link:string;game:Game;rank:number;amount:number;status:'pending'|'approved'|'rejected';decider:string|null;at:number}
 interface PaifuInteraction {id:string;guild_id?:string;member?:{user?:{id:string}};data?:{name?:string;custom_id?:string;options?:Array<{name:string;value?:unknown}>}}
 export interface PaifuReply {content:string;components:unknown[];notice?:string}
 const DAY=86400000,EXPIRES=3*DAY;
@@ -45,18 +46,21 @@ export async function ensureMahjongClaims(env:KpEnv){
   // A rejected claim can be filed again with the correct rank; a live one blocks duplicates.
   env.DB.prepare(`CREATE UNIQUE INDEX IF NOT EXISTS kp_mahjong_claim_user ON kp_mahjong_claims(guild,paipu,user) WHERE status!='rejected'`),
   env.DB.prepare(`CREATE UNIQUE INDEX IF NOT EXISTS kp_mahjong_claim_rank ON kp_mahjong_claims(guild,paipu,rank) WHERE status!='rejected'`),
+  // Summaries fetched from the game (scripts/mahjong-paipu.mjs) and Discord user -> game account links.
+  env.DB.prepare(`CREATE TABLE IF NOT EXISTS kp_mahjong_paipu(guild TEXT NOT NULL,paipu TEXT NOT NULL,summary TEXT,error TEXT,attempts INTEGER NOT NULL DEFAULT 0,at INTEGER NOT NULL,PRIMARY KEY(guild,paipu))`),
+  env.DB.prepare(`CREATE TABLE IF NOT EXISTS kp_mahjong_links(guild TEXT NOT NULL,user TEXT NOT NULL,account INTEGER NOT NULL,PRIMARY KEY(guild,user),UNIQUE(guild,account))`),
   env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS kp_mahjong_apply AFTER UPDATE OF status ON kp_mahjong_claims WHEN OLD.status='pending' AND NEW.status='approved' BEGIN INSERT INTO kp_ledger(id,guild,user,delta,kind,at) VALUES('mahjong:'||NEW.id,NEW.guild,NEW.user,NEW.amount,'mahjong',NEW.decided_at); END`),
  ]);initialized.add(env.DB);
 }
 export function renderClaim(c:Claim,now:number):PaifuReply{
  const head=`🀄 **雀魂の結果申請**\n<@${c.user}>　${policy.games[c.game].label} **${c.rank}位**（${money(c.amount)}）\n牌譜：<${c.link}>`;
- if(c.status==='approved')return {content:`${head}\n✅ <@${c.decider}> が承認。${money(c.amount)} を付与しました。`,components:[]};
+ if(c.status==='approved')return {content:`${head}\n✅ ${c.decider==='paipu'?'牌譜で本人の順位を確認しました。':`<@${c.decider}> が承認。`}${money(c.amount)} を付与しました。`,components:[]};
  if(c.status==='rejected')return {content:`${head}\n❌ ${c.decider===c.user?'申請者が取り下げました。':`<@${c.decider}> が却下しました。`}正しい順位なら /paifu でもう一度申請できます。`,components:[]};
  if(now>c.at+EXPIRES)return {content:`${head}\n⌛ 72時間承認されなかったため期限切れです。`,components:[]};
  return {content:`${head}\n承認待ち：申請者以外の登録メンバーが牌譜を開いて順位を確認し、承認してください（72時間以内）。`,
   components:[{type:1,components:[{type:2,style:3,label:'承認',custom_id:`paifu:ok:${c.id}`},{type:2,style:4,label:'却下・取り下げ',custom_id:`paifu:ng:${c.id}`}]}]};
 }
-const read=(env:KpEnv,guild:string,id:string)=>env.DB.prepare('SELECT id,user,link,game,rank,amount,status,decider,at FROM kp_mahjong_claims WHERE guild=? AND id=?').bind(guild,id).first<Claim>();
+const read=(env:KpEnv,guild:string,id:string)=>env.DB.prepare('SELECT id,user,paipu,link,game,rank,amount,status,decider,at FROM kp_mahjong_claims WHERE guild=? AND id=?').bind(guild,id).first<Claim>();
 /** /paifu: files a pending claim keyed by the interaction id, so a retried delivery shows the same claim. */
 export async function runPaifuCommand(env:KpEnv,interaction:PaifuInteraction,override?:KpMapping):Promise<PaifuReply>{
  const mapping=await initializeKp(env,override),user=interaction.member?.user?.id,now=Date.now();
@@ -92,7 +96,30 @@ export async function decidePaifu(env:KpEnv,interaction:PaifuInteraction,overrid
  if(claim.status!=='pending'||now>claim.at+EXPIRES)return refuse('この申請はもう締め切られています。');
  if(approve&&user===claim.user)return refuse('自分の申請は承認できません。他のメンバーに牌譜を確認してもらってください。');
  if(!member&&user!==claim.user)return refuse('承認・却下できるのは登録メンバーだけです。');
- await env.DB.prepare(`UPDATE kp_mahjong_claims SET status=?,decider=?,decided_at=? WHERE guild=? AND id=? AND status='pending' AND at>?${approve?' AND user!=?':''}`)
-  .bind(approve?'approved':'rejected',user,now,mapping.guildId,claim.id,now-EXPIRES,...(approve?[user]:[])).run();
- return renderClaim((await read(env,mapping.guildId,claim.id))!,now);
+ const check=approve?await paipuCheck(env,mapping.guildId,claim):null;
+ if(check&&'refuse' in check)return refuse(check.refuse);
+ await env.DB.prepare(`UPDATE kp_mahjong_claims SET status=?,decider=?,decided_at=?,game=?,amount=? WHERE guild=? AND id=? AND status='pending' AND at>?${approve?' AND user!=?':''}`)
+  .bind(approve?'approved':'rejected',user,now,check?.game??claim.game,check?.amount??claim.amount,mapping.guildId,claim.id,now-EXPIRES,...(approve?[user]:[])).run();
+ const after=(await read(env,mapping.guildId,claim.id))!;
+ // A member's approval of a fetched paipu also teaches which game account is this person's.
+ if(after.status==='approved'&&check?.account)await env.DB.prepare('INSERT OR IGNORE INTO kp_mahjong_links(guild,user,account) VALUES(?,?,?)').bind(mapping.guildId,claim.user,check.account).run();
+ return renderClaim(after,now);
+}
+export async function paipuSummary(env:KpEnv,guild:string,paipu:string){
+ const row=await env.DB.prepare('SELECT summary FROM kp_mahjong_paipu WHERE guild=? AND paipu=? AND summary IS NOT NULL').bind(guild,paipu).first<{summary:string}>();
+ return row?JSON.parse(row.summary) as PaipuSummary:null;
+}
+/** Compares a claim with the fetched paipu, when there is one. The game type and the amount come
+ * from the paipu; a rank held by someone else's linked account, or a different linked account, is refused. */
+export async function paipuCheck(env:KpEnv,guild:string,claim:Pick<Claim,'user'|'paipu'|'rank'>):Promise<null|{refuse:string}|{game:Game;amount:number;account:number;nickname:string;auto:boolean}>{
+ const summary=await paipuSummary(env,guild,claim.paipu);
+ if(!summary||!Object.hasOwn(policy.games,summary.game))return null;
+ const player=summary.seats.find(s=>s.rank===claim.rank);
+ if(!player)return {refuse:`牌譜は${summary.players}人戦です。順位を確認してください。`};
+ const links=(await env.DB.prepare('SELECT user,account FROM kp_mahjong_links WHERE guild=? AND (user=? OR account=?)').bind(guild,claim.user,player.accountId).all<{user:string;account:number}>()).results;
+ const mine=links.find(l=>l.user===claim.user),owner=links.find(l=>l.account===player.accountId);
+ if(owner&&owner.user!==claim.user)return {refuse:`牌譜の${claim.rank}位は別のメンバーの雀魂アカウントです。`};
+ if(mine&&mine.account!==player.accountId)return {refuse:`牌譜の${claim.rank}位は、登録済みのあなたの雀魂アカウントではありません。`};
+ const game=summary.game as Game;
+ return {game,amount:policy.games[game].rates[claim.rank-1],account:player.accountId,nickname:player.nickname,auto:Boolean(mine)};
 }

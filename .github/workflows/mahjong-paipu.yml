@@ -1,0 +1,59 @@
+name: Mahjong paipu fetch
+
+# Reads the paipu that /paifu claims wait on, using the Mahjong Soul account in the YOSTAR_* Secrets,
+# and sends summaries to the Worker. Logs are public: the script prints counts and error codes only.
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+    inputs:
+      check:
+        description: 'ログインできるかだけ確認する（牌譜は取得しない）'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mahjong-paipu
+  cancel-in-progress: false
+
+jobs:
+  fetch:
+    if: github.repository == 'altepop/keso-gamble'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: services/valorant-results
+    env:
+      MAHJONG_WORKER_URL: https://valorant-results.tealeaforest.workers.dev
+      MAHJONG_INGEST_KEY: ${{ secrets.MAHJONG_INGEST_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Check Secrets and queue
+        id: queue
+        env:
+          YOSTAR_TOKEN: ${{ secrets.YOSTAR_TOKEN }}
+          CHECK: ${{ inputs.check }}
+        run: |
+          if [ -z "$YOSTAR_TOKEN" ] || [ -z "$MAHJONG_INGEST_KEY" ]; then
+            echo 'YOSTAR_* または MAHJONG_INGEST_KEY が未設定のためスキップします。'
+            exit 0
+          fi
+          if [ "$CHECK" = 'true' ]; then echo 'count=check' >> "$GITHUB_OUTPUT"; exit 0; fi
+          node --experimental-strip-types scripts/mahjong-paipu.mjs --queue | tee -a "$GITHUB_OUTPUT"
+      - name: Install
+        if: steps.queue.outputs.count && steps.queue.outputs.count != '0'
+        run: npm ci --ignore-scripts
+      - name: Fetch and summarize paipu
+        if: steps.queue.outputs.count && steps.queue.outputs.count != '0'
+        env:
+          YOSTAR_UID: ${{ secrets.YOSTAR_UID }}
+          YOSTAR_TOKEN: ${{ secrets.YOSTAR_TOKEN }}
+          YOSTAR_DEVICE_ID: ${{ secrets.YOSTAR_DEVICE_ID }}
+        run: node --experimental-strip-types scripts/mahjong-paipu.mjs ${{ steps.queue.outputs.count == 'check' && '--check' || '' }}

@@ -1,4 +1,5 @@
 import {monitorMahjong, mahjongStatus} from './mahjong.ts';
+import {paipuApi} from './mahjong-paipu.ts';
 export {VoiceGateway} from './voice-gateway.ts';
 import {ensureVoice} from './voice-api.ts';
 import { claimDeathMatch } from './death-sessions.ts';
@@ -30,6 +31,7 @@ export interface Env {
   HENRIK_API_KEY: string;
   DISCORD_WEBHOOK_URL: string;
   KP_EARNINGS_WEBHOOK_URL?: string;
+  MAHJONG_INGEST_KEY?: string;
 }
 export interface Player { riotId: string; name?: string }
 interface Account { puuid: string; region: string; since: number }
@@ -374,6 +376,7 @@ export async function monitor(env: Env, players: Player[] = configuredPlayers): 
 export default {
   fetch(request: Request, env: Env, ctx: ExecutionContext) {
     if(request.method==='GET'&&new URL(request.url).pathname==='/api/mahjong/status')return mahjongStatus(env).then(status=>Response.json(status,{headers:{'Cache-Control':'no-store'}})).catch(()=>Response.json({enabled:false,error:'configuration_unavailable'},{status:503}));
+    if(new URL(request.url).pathname.startsWith('/api/mahjong/paipu/'))return paipuApi(request,env).catch(()=>new Response('Unavailable',{status:503}));
     return new URL(request.url).pathname.startsWith('/api/kp/') ? kpApi(request, env) : discordInteractions(request, env, ctx);
   },
   async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
