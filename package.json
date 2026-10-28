@@ -9,7 +9,8 @@
     "results:check": "npm --prefix services/valorant-results run check",
     "results:build": "npm --prefix services/valorant-results run build",
     "build:discord": "node scripts/build-discord-sdk.mjs",
-    "check:discord": "node scripts/build-discord-sdk.mjs --check"
+    "check:discord": "node scripts/build-discord-sdk.mjs --check",
+    "test:casino-browser": "node scripts/casino-browser-check.cjs"
   },
   "dependencies": {
     "@discord/embedded-app-sdk": "2.5.0"

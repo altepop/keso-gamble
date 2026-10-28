@@ -11,7 +11,8 @@ import { PUBLIC_SALT, RUN_MS, WEEKLY_LIMIT, openRaceStart, latestRaceStart, race
 import { LUXURY } from './luxury.js?v=20261028-casino';
 import { raceScreen, racePreview, drawRace, raceElapsed, ownerPanel, luxuryPanel, roastPanel } from './racing-view.js?v=20261028-casino';
 import { createStore } from './store.js';
-import { gamePicker, chinchiroView, blackjackView } from './casino-view.js?v=20261028-casino';
+import { gamePicker, chinchiroView, blackjackView } from './casino-view.js?v=20261028-casino-fx';
+import {casinoFrames} from './casino-animation.js?v=20261028-casino-fx';
 import { playChinchiro, bjStart, bjHit, bjStand, bjDouble, cryptoDie, cryptoCard } from './casino.js?v=20261028-casino';
 const $=(s,el=document)=>el.querySelector(s);
 const wallet=createKpClient();
@@ -185,10 +186,12 @@ function tradePanel(){
 
 // カジノ: one game at a time (ルーレット・チンチロ・ブラックジャック).
 let casinoGame='roulette';
+let casinoBusy=false,casinoPresentation=null,casinoStage={},casinoSkipped=false,skipCasinoPause=null;
 function screenCasino(){
-  const head=`<div class="screen"><header class="topbar"><div class="toprow"><h1 class="title">カジノ</h1><div class="small-actions"><span class="badge">所持 ${moneyCompact(state.cash)}</span></div></div></header>${subTabs()}${gamePicker(casinoGame)}`;
-  if(casinoGame==='chinchiro')return head+chinchiroView(state)+bottomNav()+'</div>';
-  if(casinoGame==='blackjack')return head+blackjackView(state)+bottomNav()+'</div>';
+  const visible=casinoPresentation??state;
+  const head=`<div class="screen"><header class="topbar"><div class="toprow"><h1 class="title">カジノ</h1><div class="small-actions"><span class="badge">所持 ${moneyCompact(visible.cash)}</span></div></div></header>${subTabs()}${gamePicker(casinoGame)}`;
+  if(casinoGame==='chinchiro')return head+chinchiroView(visible,casinoStage,casinoBusy)+bottomNav()+'</div>';
+  if(casinoGame==='blackjack')return head+blackjackView(visible,casinoStage,casinoBusy)+bottomNav()+'</div>';
   const recent=state.spins[0];
   return `${head}<div class="center-panel"><div style="position:relative;width:min(320px,86vw);margin:0 auto 18px"><div class="pointer"></div><div class="roulette-board" id="wheel" style="transform:rotate(${rotation|| (recent?outcomeAngle(recent.outcome):0)}deg)">${wheelView(betType==='number'?'numbers':betType,betNumber,[...numberBets.keys()])}<div class="roulette-center">${recent?recent.outcome:'K'}</div></div></div></div><div class="number-table" aria-label="ルーレットの数字">${Array.from({length:37},(_,n)=>`<button data-number="${n}" aria-pressed="${numberSelected(n)}" class="number-cell ${n===0?'green':redNumbers.has(n)?'red':'black'} ${numberSelected(n)?'selected':''}">${n}${betType==='number'&&numberBets.has(n)?`<small>${numberBets.get(n)} KP</small>`:''}</button>`).join('')}</div><p class="helper">ヨーロピアン式・0は緑。数字36倍／赤黒・偶奇・前半後半2倍／ダズン・列3倍（掛け金込み）。数字は複数選択OK。数字をもう一度タップすると解除。数字ごと100 KP以上、合計20,000 KPまで。</p><div class="bet-grid">${[['red','赤'],['black','黒'],['even','偶数'],['odd','奇数'],['number','数字指定'],['low','1〜18'],['high','19〜36'],['dozen1','1〜12'],['dozen2','13〜24'],['dozen3','25〜36'],['column1','1列目'],['column2','2列目'],['column3','3列目']].map(([id,label])=>`<button data-bet="${id}" class="${betType===id?'active':''}">${label}</button>`).join('')}</div><div class="trade-box"><h3>ベット</h3>${betType==='number'?`<p class="helper">盤面から数字を選んでください。</p>${[...numberBets].map(([n,amount])=>`<div class="field"><label for="number-stake-${n}">${n} の掛け金</label><input id="number-stake-${n}" data-stake="${n}" class="input" type="number" min="100" max="20000" step="1" value="${amount}"></div>`).join('')}<strong>合計 <span id="number-bet-total">${moneyCompact([...numberBets.values()].reduce((a,b)=>a+b,0))}</span></strong>`:`<div class="field"><label for="bet-amount">賭け金</label><input id="bet-amount" class="input" type="number" min="100" max="20000" step="1" value="500"></div>`}<div class="action-row"><button class="action-btn primary" data-action="spin" ${spinLock?'disabled':''}>ルーレットを回す</button></div></div><div class="result-panel"><p class="result-title ${recent && recent.payout>0?'negative':recent?'positive':''}">${recent ? (recent.payout>0?'的中':'不的中') : '直近結果'}</p><div class="helper">${recent ? `出目 ${recent.outcome} / 賭け ${moneyCompact(recent.amount)} / 払戻 ${moneyCompact(recent.payout)}${recent.bets?'<br>'+recent.bets.map(b=>b.number+': '+moneyCompact(b.amount)).join(' · '):''}` : 'まだ抽選履歴はありません。'}</div></div>${bottomNav()}</div>`;
 }
@@ -234,8 +237,8 @@ function render(){
   app.innerHTML=markup;renderedMarkup=markup;
   app.querySelectorAll('details').forEach((el,index)=>{el.open=openDetails[index]??false;});
   for (const [id,value] of Object.entries(drafts)) { const input=document.getElementById(id); if(input) input.value=value; }
-  if(focused) document.getElementById(focused)?.focus();
-  else if(focusData){const [key,value]=focusData;const match=[...app.querySelectorAll('button,[data-open]')].find(el=>el.dataset[key]===value);match?.focus();}
+  if(focused&&!casinoBusy) document.getElementById(focused)?.focus();
+  else if(focusData&&!casinoBusy){const [key,value]=focusData;const match=[...app.querySelectorAll('button,[data-open]')].find(el=>el.dataset[key]===value);match?.focus();}
   if(detail) $('.screen').inert=true;
   document.body.style.overflow=detail?'hidden':'';
   ensureRaceLoop();
@@ -253,11 +256,26 @@ async function doCasino(action){
   const input=action==='chinchiro'?$('#chinchiro-amount'):action==='bj-start'?$('#bj-amount'):null;
   const amount=input?Number(input.value):undefined;
   if(input&&(!Number.isSafeInteger(amount)||amount<100||amount>20000))throw new Error('賭け金は100〜20,000 KPの整数です');
-  const result=live?await liveOperation(action,input?{amount}:{}):await commit(next=>CASINO_DEMO[action](next,amount));
-  render();
-  const signed=n=>(n>0?'+':n<0?'−':'±')+moneyCompact(Math.abs(n));
-  if(action==='chinchiro')toast(`${result.net>0?'勝ち':result.net<0?'負け':'分け'} ${signed(result.net)}`);
-  else if(result.done)toast(`${BJ_RESULTS[result.done.result]??''} ${signed(result.done.net)}`);
+  if(casinoBusy)return;
+  const before=structuredClone({cash:state.cash,chinchiro:state.chinchiro??[],blackjack:state.blackjack??null,bjHistory:state.bjHistory??[]});
+  casinoBusy=true;casinoSkipped=!!reducedMotion?.matches;
+  casinoPresentation={...before,chinchiro:action==='chinchiro'?[]:before.chinchiro,bjHistory:action==='bj-start'?[]:before.bjHistory};
+  casinoStage={phase:'waiting'};render();
+  $('.casino-arena')?.scrollIntoView({block:'start',behavior:'auto'});
+  try{
+    const result=live?await liveOperation(action,input?{amount}:{}):await commit(next=>CASINO_DEMO[action](next,amount));
+    for(const frame of casinoFrames(action,before,result)){
+      if(casinoSkipped)break;
+      casinoPresentation=frame.view;casinoStage=frame.stage;render();
+      await new Promise(resolve=>{const timer=setTimeout(()=>{skipCasinoPause=null;resolve();},frame.ms);skipCasinoPause=()=>{clearTimeout(timer);skipCasinoPause=null;resolve();};});
+    }
+    const signed=n=>(n>0?'+':n<0?'−':'±')+moneyCompact(Math.abs(n));
+    if(action==='chinchiro')toast(`${result.net>0?'勝ち':result.net<0?'負け':'分け'} ${signed(result.net)}`);
+    else if(result.done)toast(`${BJ_RESULTS[result.done.result]??''} ${signed(result.done.net)}`);
+  }finally{casinoBusy=false;casinoPresentation=null;casinoStage={};skipCasinoPause=null;render();
+    const nextAction=action==='chinchiro'?'chinchiro':state.blackjack?'bj-hit':'bj-start';
+    $(`[data-action="${nextAction}"]`)?.focus({preventScroll:true});
+  }
 }
 async function liveOperation(action,args){
  if(connectionError)throw Error('残高を更新してから操作してください。');
@@ -297,6 +315,8 @@ async function doSpin(){
 
 addEventListener('click',async e=>{
   const t=e.target.closest?.('button,[data-open]'); if(!t) return;
+  if(t.dataset.action==='casino-skip'){casinoSkipped=true;skipCasinoPause?.();return;}
+  if(casinoBusy&&(t.dataset.screen||t.dataset.casinoGame)){toast('演出をスキップすると移動できます');return;}
   const mutates=!!t.dataset.approve || !!t.dataset.complete || ['salary','trade','spin','race-bet','roast-level','horse-buy','horse-sell','luxury','reset','submit-claim','issue-directive','connect-kp','refresh-kp','disconnect-kp','auto-connect-kp','chinchiro','bj-start','bj-hit','bj-stand','bj-double'].includes(t.dataset.action);
   if(mutates && mutationPending)return;
   if(mutates)mutationPending=true;
