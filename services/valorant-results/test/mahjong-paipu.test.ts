@@ -61,7 +61,7 @@ test('a first claim is checked against the paipu, corrected to the real game, an
  assert.match(post,/\*\*東3局 1本場\*\*　D ツモ　\*\*役満 32,300点\*\*\n-# 国士無双/);
  assert.match(post,new RegExp(`🪦 \\*\\*4位\\*\\*　Aさん（<@${one}>）　-3,000\\n-# 和了 0回（ツモ0）・放銃 2回（14,000点）・立直 1回（和了0）`));
  assert.match(post,/初回なので他のメンバーの承認を待っています/);
- assert.equal(post.split('\n').filter(l=>l.startsWith('🗯️')).length,2,'two roast lines from the facts');
+ const roast=post.split('\n').filter(l=>l.startsWith('🗯️'));assert.equal(roast.length,5,'last place: the facts first, then last-place lines up to five');assert.equal(new Set(roast).size,5);
  f.sql.prepare("INSERT INTO kp_ledger VALUES('seed-'||?,?,?,1000,'test',0)").run(one,guild,one);
  assert.match((await f.press(two,claimId(mine)))!.content,/ラスなので 300 KP を引きました/);
  assert.equal(f.balance(one),700,'last place costs 300');

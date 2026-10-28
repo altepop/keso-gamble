@@ -62,7 +62,9 @@ function line(kind:Voice,level:RoastLevel,key:string,values:Record<string,string
 export function roastFor(summary:PaipuSummary,seatNo:number,level:RoastLevel,who:(seat:number)=>string){
  const p=summary.seats[seatNo],key=summary.uuid+':'+seatNo,out:string[]=[];
  const wins=summary.rounds.flatMap(r=>r.wins),dealIns=wins.filter(w=>w.from===seatNo).sort((a,b)=>b.value-a.value),mine=wins.filter(w=>w.seat===seatNo).sort((a,b)=>b.value-a.value);
- const add=(kind:Voice,values:Record<string,string|number>)=>{if(out.length<2)out.push(line(kind,level,key,values));};
+ // Last place gets five lines (two for members who asked for mild); everyone else up to two.
+ const last=p.rank===summary.players,limit=last&&level!=='mild'?5:2;
+ const add=(kind:Voice,values:Record<string,string|number>)=>{if(out.length<limit)out.push(line(kind,level,key,values));};
  const yakuman=mine.find(w=>w.yakuman);
  if(p.rank===1){
   // The winner is only praised, extravagantly: their deal-ins and riichi are not brought up.
@@ -81,6 +83,12 @@ export function roastFor(summary:PaipuSummary,seatNo:number,level:RoastLevel,who
  if(p.riichi>=3&&!p.riichiWins)add('riichiNoWin',{n:p.riichi});
  if(!yakuman&&mine[0]&&mine[0].han>=6)add('bigWin',{title:mine[0].title,points:points(mine[0].value)});
  // Nothing special happened: the rank alone still gets a line.
+ if(last){
+  // Fill up with distinct last-place lines, starting from a seat-specific point in the pool.
+  const pool=voice.last[level],start=hash('last:'+level+':'+key)%pool.length;
+  for(let i=0;i<pool.length&&out.length<limit;i++){const text=pool[(start+i)%pool.length].replace(/\{points\}/g,points(p.score));if(!out.includes(text))out.push(text);}
+  return out;
+ }
  if(!out.length)add(p.rank===summary.players?'last':p.rank===2?'second':'third',{points:points(p.score)});
  return out;
 }
