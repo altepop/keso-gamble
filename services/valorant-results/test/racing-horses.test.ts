@@ -136,7 +136,7 @@ test('a crown race runs a horse named after its person, who gets its prize plus 
  const f=await fixture(100000);
  const race=raceOfClass(1,openRaceStart(T0)+RACE_INTERVAL);
  f.sql.exec("CREATE TABLE IF NOT EXISTS kp_crowns(guild TEXT NOT NULL,race INTEGER NOT NULL,name TEXT NOT NULL,user TEXT NOT NULL,kind TEXT NOT NULL,source TEXT NOT NULL UNIQUE,created_at INTEGER NOT NULL,PRIMARY KEY(guild,race))");
- f.sql.prepare("INSERT INTO kp_crowns VALUES(?,?,?,?,'streak3','s1',0)").run(guild,race,'Two戦犯レース',two);
+ f.sql.prepare("INSERT INTO kp_crowns VALUES(?,?,?,?,'streak3','s1',0)").run(guild,race,'Two戦犯レース しばくぞ杯',two);
  t.mock.timers.enable({apis:['Date'],now:race-RACE_INTERVAL+30000});
  const entries=(await readKpState(f.env,mapping,one)).racing.open.entries;
  assert.equal(entries[0].name,'Two号');assert.equal(entries[0].person,true);assert.equal(entries[0].owner,two);

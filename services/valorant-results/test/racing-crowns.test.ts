@@ -38,7 +38,7 @@ test('three losses in a row crown an evening race after the member, once, and no
  const created=await scheduleCrowns(f.env,mapping,NOW);
  assert.equal(created.length,1);
  const [crown]=crowns(f.sql);
- assert.equal(crown.name,'One戦犯レース');assert.equal(crown.user,one);assert.equal(crown.kind,'streak3');
+ assert.equal(crown.name,'One戦犯レース しばくぞ杯');assert.equal(crown.user,one);assert.equal(crown.kind,'streak3');
  assert.ok(jstHour(crown.race)>=19&&crownSlotAllowed(crown.race),'weekday crowns wait for the evening');
  const notice=f.sql.prepare('SELECT message,sent FROM notifications WHERE match_id=?').get(latest) as {message:string;sent:number};
  assert.match(notice.message,/開催決定\n💬/);assert.equal(notice.sent,0,'the sent post is edited');
@@ -48,7 +48,7 @@ test('three losses in a row crown an evening race after the member, once, and no
 });
 
 test('the roast level decides the name; "mild" never renames a race after anyone', async () => {
- assert.equal(crownName('streak3','normal','One'),'Oneおつかれレース');
+ assert.equal(crownName('streak3','normal','One'),'Oneおつかれレース 一旦な杯');
  assert.equal(crownName('streak3','mild','One'),null);
  const f=await fixture();results(f.sql,'One#JP1','LLL');results(f.sql,'Two#JP1','LLL');
  await assert.rejects(operateKp(f.env,mapping,one,'roast-level-op-0001','roast-level',{level:'max'}),/煽りレベル/);
@@ -56,7 +56,7 @@ test('the roast level decides the name; "mild" never renames a race after anyone
  await operateKp(f.env,mapping,two,'roast-level-op-0003','roast-level',{level:'normal'});
  assert.equal((await readKpState(f.env,mapping,one)).roastLevel,'mild');
  await scheduleCrowns(f.env,mapping,NOW);
- assert.deepEqual(crowns(f.sql).map(c=>c.name),['Twoおつかれレース']);
+ assert.deepEqual(crowns(f.sql).map(c=>c.name),['Twoおつかれレース 一旦な杯']);
 });
 
 test('a broken win streak, a long break and a big KP loss also crown races; stale matches do not', async () => {
@@ -70,7 +70,7 @@ test('a broken win streak, a long break and a big KP loss also crown races; stal
  const melt=await fixture(),race=NOW-RACE_INTERVAL*2;
  melt.sql.prepare('UPDATE kp_state SET data=json_set(data,\'$.raceBets\',json(?)) WHERE user=?').run(JSON.stringify([{id:'b1',raceId:race,type:'win',horse:1,amount:12000,odds:30,status:'lost',payout:0,time:race-300000}]),one);
  await scheduleCrowns(melt.env,mapping,NOW);
- assert.deepEqual(crowns(melt.sql).map(c=>c.name),['OneKP溶かし大会']);
+ assert.deepEqual(crowns(melt.sql).map(c=>c.name),['OneKP溶かし大会 5億マジかw杯']);
 });
 
 test('crown races run without bets, show their name, and are announced in the earnings channel', async t => {
@@ -80,12 +80,12 @@ test('crown races run without bets, show their name, and are announced in the ea
  await queueRacePosts(f.env,mapping,NOW,created);
  await queueRacePosts(f.env,mapping,race-10*60000);
  const view=await racingView(f.env,mapping,race-10*60000);
- assert.equal(view.open.id,race);assert.equal(view.open.crown,'One戦犯レース');
+ assert.equal(view.open.id,race);assert.equal(view.open.crown,'One戦犯レース しばくぞ杯');
  const running=await racingView(f.env,mapping,race+5000);
- assert.equal(running.watch.runs,true);assert.equal(running.watch.crown,'One戦犯レース');assert.match(String(running.watch.seed),/^[0-9a-f]+$/);
+ assert.equal(running.watch.runs,true);assert.equal(running.watch.crown,'One戦犯レース しばくぞ杯');assert.match(String(running.watch.seed),/^[0-9a-f]+$/);
  await flushRacePosts(f.env);
- assert.match(sent[0],/『One戦犯レース』開催決定/);assert.match(sent[0],/3連敗/);
- assert.match(sent[1],/One戦犯レース/);assert.match(sent[1],/結果のハッシュ/);
+ assert.match(sent[0],/『One戦犯レース しばくぞ杯』開催決定/);assert.match(sent[0],/3連敗/);
+ assert.match(sent[1],/One戦犯レース しばくぞ杯/);assert.match(sent[1],/結果のハッシュ/);
 });
 
 test('weekend :30 races are crown races in the shared card, and always run', () => {
