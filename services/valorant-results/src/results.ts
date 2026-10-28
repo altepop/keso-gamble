@@ -146,7 +146,7 @@ async function actSummary(db: D1Database, notice: Notice): Promise<{ text: strin
 export async function notificationContent(db: D1Database, notice: Notice): Promise<string> {
   if (isDeathNotice(notice.mode)) return notice.message;
   const summary = await actSummary(db, notice);
-  const split = notice.message.lastIndexOf('\n💬 ');
+  const split = notice.message.indexOf('\n💬 ');
   const base = split < 0 ? notice.message : notice.message.slice(0, split);
   let comment = split < 0 ? '' : notice.message.slice(split);
   if (notice.outcome === 'loss' && summary.streak >= 3) {

@@ -25,7 +25,7 @@ test('every tone and line can be selected within its eligible situation', () => 
     const seen = new Map<Tone, Set<string>>();
     for (let n = 0; n < 40000; n++) {
       const id = 'tone-coverage-' + n, tone = selectedTone(id, 'test-player', group);
-      const text = resultComment(id, 'test-player', group, 7).slice('\n💬 '.length);
+      const text = resultComment(id, 'test-player', group, 7).split('\n💬 ')[1];
       const allowed = [...commentTones[group][tone], ...(tone === 'normal' ? ((legacy as Record<string, string[]>)[group] ?? []) : [])];
       assert.ok(allowed.some(line => line.replaceAll('{streak}', '7') === text), group + ':' + tone);
       if (!seen.has(tone)) seen.set(tone, new Set());
@@ -79,11 +79,11 @@ test('selected meme messages stay verbatim even during streaks, with no count, e
   for (const group of groups) for (let n = 0; n < 12000; n++) {
     const id = 'verbatim-' + n;
     if (selectedTone(id, 'test-player', group) !== 'meme') continue;
-    const text = resultComment(id, 'test-player', group, 99);
-    const quote = memeQuotes.find(candidate => text === '\n💬 ' + candidate.text);
+    const text = resultComment(id, 'test-player', group, 99).split('\n💬 ')[1];
+    const quote = memeQuotes.find(candidate => text === candidate.text);
     assert.ok(quote, text);
     assert.ok(quote.groups.includes(group));
-    assert.equal(resultComment(id, 'test-player', group, 100), text);
+    assert.equal(resultComment(id, 'test-player', group, 100).split('\n💬 ')[1], text);
     seen.add(quote.id);
   }
   assert.deepEqual([...seen].sort(), memeQuotes.map(quote => quote.id).sort());
@@ -112,4 +112,12 @@ test('all outcomes raise verbatim memes to about 30%, and defeats keep almost al
   assert.ok(memes/10000>=0.27&&memes/10000<=0.33,group+':'+memes);
   if(losingCommentGroups.includes(group))assert.ok(sharp/10000>=0.6&&sharp/10000<=0.7,group+':'+sharp);
  }
+});
+
+test('a result gets three different comment lines, stable on refetch, the first being the one chosen before', () => {
+  for (const group of groups) for (let n = 0; n < 300; n++) {
+    const id = 'three-' + n, text = resultComment(id, 'test-player', group, 4), lines = text.split('\n💬 ').slice(1);
+    assert.equal(lines.length, 3, text);assert.equal(new Set(lines).size, 3);assert.ok(text.startsWith('\n💬 '));
+    assert.equal(resultComment(id, 'test-player', group, 4), text);
+  }
 });
