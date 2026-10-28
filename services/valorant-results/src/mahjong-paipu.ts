@@ -86,7 +86,11 @@ export function roastFor(summary:PaipuSummary,seatNo:number,level:RoastLevel,who
 }
 /** The post: final standings, the key hands, each member's numbers and roast. `members` maps seat -> Discord user. */
 export function paipuPost(summary:PaipuSummary,members:Map<number,Member>,levelOf:(user:string)=>RoastLevel,outcomes:string[]=[]){
- const who=(seatNo:number)=>{const m=members.get(seatNo);return m?.user?`<@${m.user}>`:clean(m?.name??summary.seats[seatNo].nickname);};
+ // Names everywhere; each linked member's Discord tag appears once, on their own block.
+ const who=(seatNo:number)=>clean(members.get(seatNo)?.name??summary.seats[seatNo].nickname);
+ const names=new Map([...members.values()].filter(m=>m.user).map(m=>[m.user!,clean(m.name)]));
+ // A first-claim notice keeps its tag: it says which Discord member claimed which in-game name.
+ const untag=(line:string)=>line.replace(/<@!?(\d+)>/g,(tag,id:string)=>names.get(id)??tag);
  const label=policy.games[summary.game as keyof typeof policy.games].label;
  const medal=(rank:number)=>rank===summary.players?'🪦':['🥇','🥈','🥉'][rank-1];
  const standings=[...summary.seats].sort((a,b)=>a.rank-b.rank).map(p=>`${medal(p.rank)} ${p.rank}位　${who(p.seat)}　${points(p.score)}${p.score<0?'（トビ）':''}`);
@@ -105,12 +109,12 @@ export function paipuPost(summary:PaipuSummary,members:Map<number,Member>,levelO
  // Each member's block: rank, numbers in small text, then their lines.
  const blocks=[...members.keys()].sort((a,b)=>summary.seats[a].rank-summary.seats[b].rank).map(seatNo=>{
   const p=summary.seats[seatNo],m=members.get(seatNo)!;
-  return [`${medal(p.rank)} **${p.rank}位**　${who(seatNo)}　${points(p.score)}`,
+  return [`${medal(p.rank)} **${p.rank}位**　${who(seatNo)}${m.user?`（<@${m.user}>）`:''}　${points(p.score)}`,
    `-# 和了 ${p.wins}回（ツモ${p.tsumo}）・放銃 ${p.dealIns}回（${points(p.dealInPoints)}点）・立直 ${p.riichi}回（和了${p.riichiWins}）・副露 ${p.callRounds}/${p.rounds}局`,
    ...roastFor(summary,seatNo,m.user?levelOf(m.user):'normal',who).map(text=>`🗯️ ${text}`)].join('\n');
  });
  const section=(title:string,lines:string[])=>lines.length?[`\n**${title}**`,...lines]:[];
- const parts=[`🀄 **雀魂 ${label}｜牌譜検討**`,...section('順位',standings),...section('KP',outcomes),...section('主な和了',hands),...section('メンバー',blocks.flatMap((b,i)=>i?['',b]:[b]))];
+ const parts=[`🀄 **雀魂 ${label}｜牌譜検討**`,...section('順位',standings),...section('KP',outcomes.map(l=>l.startsWith('🔎')?l:untag(l))),...section('主な和了',hands),...section('メンバー',blocks.flatMap((b,i)=>i?['',b]:[b]))];
  let text='';
  for(const part of parts){if((text+'\n'+part).length>1900)break;text+=(text?'\n':'')+part;}
  return text;
