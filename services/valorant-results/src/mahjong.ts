@@ -3,12 +3,15 @@ import taunts from '../mahjong-taunts.json' with {type:'json'};
 import {decryptKpMapping} from './kp.ts';
 
 export interface MahjongConfig {enabled:boolean;startedAt:number;players:Array<{id:number;name:string}>;modes:number[]}
-export interface MahjongEnv {DB:D1Database;DISCORD_WEBHOOK_URL?:string;KP_BOOTSTRAP_PRIVATE_KEY?:string}
+export interface MahjongEnv {DB:D1Database;DISCORD_WEBHOOK_URL?:string;KP_BOOTSTRAP_PRIVATE_KEY?:string;AMAE_KOROMO_TOKEN?:string}
 interface Member {accountId:number;nickname:string;score:number}
 export interface MahjongRecord {_id:string;modeId:number;startTime:number;endTime:number;players:Member[]}
 const API='https://5-data.amae-koromo.com/api/v2/';
 const MODES:Record<number,string>={11:'四麻・玉の間 東風',12:'四麻・玉の間 半荘',23:'三麻・玉の間 東風',24:'三麻・玉の間 半荘'};
 const INTERVAL=5*60_000,LOOKBACK=7*24*3600_000;
+/** The provider's key comes with a limit of one query per second; requests are spaced a little wider. */
+export const PROVIDER_GAP=1100;
+export const pacing={wait:(ms:number)=>new Promise<void>(done=>setTimeout(done,ms))};
 const initialized=new WeakSet<object>(),configs=new Map<string,Promise<MahjongConfig>>();
 export function validateMahjongConfig(value:unknown):MahjongConfig {
  const c=value as MahjongConfig;
@@ -103,11 +106,14 @@ export async function monitorMahjong(env:MahjongEnv,now=Date.now(),override?:Mah
   if(Number(await state(env,'next_poll_at'))>now)return;
   await save(env,'next_poll_at',now+INTERVAL);await save(env,'last_attempt_at',now);
   const since=Math.max(config.startedAt,now-LOOKBACK),to=Math.ceil(now/INTERVAL)*INTERVAL;
+  const headers:Record<string,string>=env.AMAE_KOROMO_TOKEN?{Authorization:'Bearer '+env.AMAE_KOROMO_TOKEN}:{};
+  let first=true;
   for(const p of config.players){
    for(const table of ['pl4','pl3']){
     const modes=config.modes.filter(m=>(m<20)===(table==='pl4'));if(!modes.length)continue;
     const url=new URL(API+table+'/player_records/'+p.id+'/'+to+'/'+since);url.searchParams.set('mode',modes.join(','));url.searchParams.set('limit','100');url.searchParams.set('descending','true');
-    const response=await request(url,{signal:AbortSignal.timeout(12_000)});
+    if(!first)await pacing.wait(PROVIDER_GAP);first=false;
+    const response=await request(url,{headers,signal:AbortSignal.timeout(12_000)});
     if(!response.ok){
      const reason='provider_http_'+response.status;await save(env,'error',reason);
      // Back off globally. Never rotate mirrors, bypass challenges or busy-poll 429s.
@@ -135,5 +141,5 @@ export async function mahjongStatus(env:MahjongEnv){
  const rows=(await env.DB.prepare("SELECT key,value FROM mahjong_watch_state WHERE key IN ('last_attempt_at','last_success_at','last_sent_at','next_poll_at','error','delivery_error')").all<{key:string;value:string}>()).results;
  const values=Object.fromEntries(rows.map(r=>[r.key,r.value]));
  const counts=await env.DB.prepare('SELECT COUNT(*) AS total,SUM(sent) AS sent FROM mahjong_watch_posts').first<{total:number;sent:number|null}>();
- return {enabled:true,registered:config.players.length,modes:config.modes.map(m=>MODES[m]),startsAt:config.startedAt,intervalMinutes:5,lastAttemptAt:Number(values.last_attempt_at||0),lastSuccessAt:Number(values.last_success_at||0),lastSentAt:Number(values.last_sent_at||0),nextPollAt:Number(values.next_poll_at||0),error:values.error||null,deliveryError:values.delivery_error||null,pending:(counts?.total??0)-(counts?.sent??0),sent:counts?.sent??0};
+ return {enabled:true,authenticated:Boolean(env.AMAE_KOROMO_TOKEN),registered:config.players.length,modes:config.modes.map(m=>MODES[m]),startsAt:config.startedAt,intervalMinutes:5,lastAttemptAt:Number(values.last_attempt_at||0),lastSuccessAt:Number(values.last_success_at||0),lastSentAt:Number(values.last_sent_at||0),nextPollAt:Number(values.next_poll_at||0),error:values.error||null,deliveryError:values.delivery_error||null,pending:(counts?.total??0)-(counts?.sent??0),sent:counts?.sent??0};
 }

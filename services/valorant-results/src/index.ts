@@ -32,6 +32,7 @@ export interface Env {
   DISCORD_WEBHOOK_URL: string;
   KP_EARNINGS_WEBHOOK_URL?: string;
   MAHJONG_INGEST_KEY?: string;
+  AMAE_KOROMO_TOKEN?: string;
 }
 export interface Player { riotId: string; name?: string }
 interface Account { puuid: string; region: string; since: number }
