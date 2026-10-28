@@ -64,6 +64,14 @@ export function roastFor(summary:PaipuSummary,seatNo:number,level:RoastLevel,who
  const wins=summary.rounds.flatMap(r=>r.wins),dealIns=wins.filter(w=>w.from===seatNo).sort((a,b)=>b.value-a.value),mine=wins.filter(w=>w.seat===seatNo).sort((a,b)=>b.value-a.value);
  const add=(kind:Voice,values:Record<string,string|number>)=>{if(out.length<2)out.push(line(kind,level,key,values));};
  const yakuman=mine.find(w=>w.yakuman);
+ if(p.rank===1){
+  // The winner is only praised, extravagantly: their deal-ins and riichi are not brought up.
+  if(yakuman)add('topYakuman',{title:yakuman.title});
+  else if(mine[0]&&mine[0].han>=6)add('topBigWin',{title:mine[0].title,points:points(mine[0].value)});
+  if(p.minScore<=10000)add('comeback',{points:points(p.minScore)});
+  add('top',{points:points(p.score)});
+  return out;
+ }
  if(yakuman)add('yakuman',{title:yakuman.title});
  if(p.score<0)add('bust',{points:points(p.score)});
  if(dealIns[0]&&(dealIns[0].yakuman||dealIns[0].han>=6))add('dealinBig',{title:dealIns[0].title,points:points(dealIns[0].value),winner:who(dealIns[0].seat)});
@@ -71,10 +79,9 @@ export function roastFor(summary:PaipuSummary,seatNo:number,level:RoastLevel,who
  if(p.dealIns>=3)add('dealinMany',{n:p.dealIns,points:points(p.dealInPoints)});
  if(p.bestLead>=15000&&p.rank>=summary.players-1)add('leadLost',{points:points(p.bestLead),n:p.rank});
  if(p.riichi>=3&&!p.riichiWins)add('riichiNoWin',{n:p.riichi});
- if(p.rank===1&&p.minScore<=10000)add('comeback',{points:points(p.minScore)});
  if(!yakuman&&mine[0]&&mine[0].han>=6)add('bigWin',{title:mine[0].title,points:points(mine[0].value)});
  // Nothing special happened: the rank alone still gets a line.
- if(!out.length)add(p.rank===1?'top':p.rank===summary.players?'last':p.rank===2?'second':'third',{points:points(p.score)});
+ if(!out.length)add(p.rank===summary.players?'last':p.rank===2?'second':'third',{points:points(p.score)});
  return out;
 }
 /** The post: final standings, the key hands, each member's numbers and roast. `members` maps seat -> Discord user. */
