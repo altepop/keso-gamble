@@ -3,7 +3,7 @@ import taunts from '../mahjong-taunts.json' with {type:'json'};
 import {decryptKpMapping} from './kp.ts';
 
 export interface MahjongConfig {enabled:boolean;startedAt:number;players:Array<{id:number;name:string}>;modes:number[]}
-export interface MahjongEnv {DB:D1Database;DISCORD_WEBHOOK_URL?:string;KP_BOOTSTRAP_PRIVATE_KEY?:string;AMAE_KOROMO_TOKEN?:string}
+export interface MahjongEnv {DB:D1Database;DISCORD_WEBHOOK_URL?:string;KP_BOOTSTRAP_PRIVATE_KEY?:string;AMAE_KOROMO_TOKEN?:string;PAIPU_DISPATCH_TOKEN?:string}
 interface Member {accountId:number;nickname:string;score:number}
 export interface MahjongRecord {_id:string;uuid?:string;modeId:number;startTime:number;endTime:number;players:Member[]}
 /** The game's own paipu id (not the provider's _id); only this form is passed on to the paipu fetcher. */
@@ -13,7 +13,7 @@ const MODES:Record<number,string>={8:'四麻・金の間 東風',9:'四麻・金
  21:'三麻・金の間 東風',22:'三麻・金の間 半荘',23:'三麻・玉の間 東風',24:'三麻・玉の間 半荘',25:'三麻・王座の間 東風',26:'三麻・王座の間 半荘'};
 /** Every ranked room is watched, whatever the stored config selected: a member's game in any room is news. */
 const WATCHED=Object.keys(MODES).map(Number);
-const INTERVAL=2*60_000,LOOKBACK=7*24*3600_000;
+const INTERVAL=60_000,LOOKBACK=7*24*3600_000;
 /** The provider's key comes with a limit of one query per second; requests are spaced a little wider. */
 export const PROVIDER_GAP=1100;
 export const AUTO_PAIPU_AGE=6*3600_000;
@@ -113,6 +113,16 @@ async function linkedPlayers(env:MahjongEnv,config:MahjongConfig,since:number){
  try{rows=(await env.DB.prepare('SELECT DISTINCT account FROM kp_mahjong_links ORDER BY account').all<{account:number}>()).results;}catch{return [];}
  return rows.map(r=>Number(r.account)).filter(id=>Number.isSafeInteger(id)&&id>0&&!config.players.some(p=>p.id===id)).slice(0,10).map(id=>({id,name:'',since}));
 }
+/** Starts the paipu reader (mahjong-paipu.yml) now instead of at its next scheduled run, so the analysis
+ * and KP follow the result post within minutes. A failure only delays the game to the scheduled run. */
+const DISPATCH='https://api.github.com/repos/altepop/keso-gamble/actions/workflows/mahjong-paipu.yml/dispatches';
+async function dispatchPaipu(env:MahjongEnv,request:typeof fetch){
+ if(!env.PAIPU_DISPATCH_TOKEN)return;
+ try{
+  const response=await request(DISPATCH,{method:'POST',headers:{Authorization:'Bearer '+env.PAIPU_DISPATCH_TOKEN,Accept:'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28','User-Agent':'keso-play-worker','Content-Type':'application/json'},body:JSON.stringify({ref:'main'}),signal:AbortSignal.timeout(10_000)});
+  await save(env,'dispatch_error',response.ok?'':'github_http_'+response.status);
+ }catch{await save(env,'dispatch_error','github_unreachable');}
+}
 export async function monitorMahjong(env:MahjongEnv,now=Date.now(),override?:MahjongConfig,request:typeof fetch=fetch){
  const config=override?validateMahjongConfig(override):await configuration(env);
  if(!config?.enabled||!webhook(env))return;
@@ -127,7 +137,7 @@ export async function monitorMahjong(env:MahjongEnv,now=Date.now(),override?:Mah
   await save(env,'next_poll_at',now+INTERVAL);await save(env,'last_attempt_at',now);
   const since=Math.max(config.startedAt,now-LOOKBACK),to=Math.ceil(now/INTERVAL)*INTERVAL;
   const headers:Record<string,string>=env.AMAE_KOROMO_TOKEN?{Authorization:'Bearer '+env.AMAE_KOROMO_TOKEN}:{};
-  let first=true;
+  let first=true,fresh=0;
   for(const p of [...config.players.map(p=>({...p,since})),...await linkedPlayers(env,config,Math.max(since,now-AUTO_PAIPU_AGE))]){
    for(const table of ['pl4','pl3']){
     const modes=WATCHED.filter(m=>(m<20)===(table==='pl4'));
@@ -144,13 +154,14 @@ export async function monitorMahjong(env:MahjongEnv,now=Date.now(),override?:Mah
     for(const record of records){
      const id='mahjong:'+p.id+':'+record._id;
      // Only fresh games: a first successful poll returns a week of history, which must not flood the channel.
-     if(record.uuid&&record.endTime*1000>now-AUTO_PAIPU_AGE)await env.DB.prepare('INSERT OR IGNORE INTO mahjong_paipu_auto(paipu,account,at) VALUES(?,?,?)').bind(record.uuid,p.id,record.endTime*1000).run();
+     if(record.uuid&&record.endTime*1000>now-AUTO_PAIPU_AGE)fresh+=(await env.DB.prepare('INSERT OR IGNORE INTO mahjong_paipu_auto(paipu,account,at) VALUES(?,?,?)').bind(record.uuid,p.id,record.endTime*1000).run()).meta.changes;
      await env.DB.prepare('INSERT OR IGNORE INTO mahjong_watch_posts(id,body,at) VALUES(?,?,?)').bind(id,JSON.stringify({content:mahjongMessage(record,p.id,p.name||record.players.find(m=>m.accountId===p.id)!.nickname),allowed_mentions:{parse:[]}}),record.endTime*1000).run();
     }
    }
   }
   await save(env,'last_success_at',now);await save(env,'error','');
   await flushMahjongPosts(env,now,request);
+  if(fresh)await dispatchPaipu(env,request);
  }catch{
   await save(env,'error','provider_or_data_unavailable');await save(env,'next_poll_at',now+15*60_000);
  }finally{
@@ -160,8 +171,8 @@ export async function monitorMahjong(env:MahjongEnv,now=Date.now(),override?:Mah
 export async function mahjongStatus(env:MahjongEnv){
  const config=await configuration(env);if(!config?.enabled)return {enabled:false};
  await ensure(env);
- const rows=(await env.DB.prepare("SELECT key,value FROM mahjong_watch_state WHERE key IN ('last_attempt_at','last_success_at','last_sent_at','next_poll_at','error','delivery_error')").all<{key:string;value:string}>()).results;
+ const rows=(await env.DB.prepare("SELECT key,value FROM mahjong_watch_state WHERE key IN ('last_attempt_at','last_success_at','last_sent_at','next_poll_at','error','delivery_error','dispatch_error')").all<{key:string;value:string}>()).results;
  const values=Object.fromEntries(rows.map(r=>[r.key,r.value]));
  const counts=await env.DB.prepare('SELECT COUNT(*) AS total,SUM(sent) AS sent FROM mahjong_watch_posts').first<{total:number;sent:number|null}>();
- return {enabled:true,authenticated:Boolean(env.AMAE_KOROMO_TOKEN),registered:config.players.length,modes:WATCHED.map(m=>MODES[m]),startsAt:config.startedAt,intervalMinutes:INTERVAL/60_000,lastAttemptAt:Number(values.last_attempt_at||0),lastSuccessAt:Number(values.last_success_at||0),lastSentAt:Number(values.last_sent_at||0),nextPollAt:Number(values.next_poll_at||0),error:values.error||null,deliveryError:values.delivery_error||null,pending:(counts?.total??0)-(counts?.sent??0),sent:counts?.sent??0};
+ return {enabled:true,authenticated:Boolean(env.AMAE_KOROMO_TOKEN),registered:config.players.length,modes:WATCHED.map(m=>MODES[m]),startsAt:config.startedAt,intervalMinutes:INTERVAL/60_000,lastAttemptAt:Number(values.last_attempt_at||0),lastSuccessAt:Number(values.last_success_at||0),lastSentAt:Number(values.last_sent_at||0),nextPollAt:Number(values.next_poll_at||0),error:values.error||null,deliveryError:values.delivery_error||null,instantPaipu:Boolean(env.PAIPU_DISPATCH_TOKEN),dispatchError:values.dispatch_error||null,pending:(counts?.total??0)-(counts?.sent??0),sent:counts?.sent??0};
 }

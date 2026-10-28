@@ -113,6 +113,7 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           MAHJONG_INGEST_KEY: ${{ secrets.MAHJONG_INGEST_KEY }}
           AMAE_KOROMO_TOKEN: ${{ secrets.AMAE_KOROMO_TOKEN }}
+          PAIPU_DISPATCH_TOKEN: ${{ secrets.PAIPU_DISPATCH_TOKEN }}
         run: node scripts/provision-mahjong-key.mjs
       - name: Validate live configuration and build
         working-directory: ${{ runner.temp }}/kp-app/services/valorant-results

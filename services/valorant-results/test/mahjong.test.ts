@@ -26,14 +26,16 @@ function fixture(){
 }
 function fakeFetch(records:MahjongRecord[]=[record()]){
  const urls:string[]=[],sent:Array<{content:string;allowed_mentions:unknown}>=[];
+ const dispatches:Array<{url:string;init?:RequestInit}>=[];let dispatchStatus=204;
  const request=(async(input:RequestInfo|URL,init?:RequestInit)=>{
   const url=new URL(String(input));urls.push(String(url));
   if(url.hostname==='discord.com'){sent.push(JSON.parse(String(init?.body)));return Response.json({id:'100000000000000001'});}
+  if(url.hostname==='api.github.com'){dispatches.push({url:String(url),init});return new Response(null,{status:dispatchStatus});}
   assert.equal(url.hostname,'5-data.amae-koromo.com');
   assert.ok(Number(url.pathname.split('/').at(-2))>=Number(url.pathname.split('/').at(-1)));
   return Response.json(url.pathname.includes('/pl3/')?[]:records);
  }) as typeof fetch;
- return {request,urls,sent};
+ return {request,urls,sent,dispatches,failDispatch:(status:number)=>{dispatchStatus=status;}};
 }
 const state=(sql:DatabaseSync,key:string)=>sql.prepare('SELECT value FROM mahjong_watch_state WHERE key=?').get(key)?.value;
 
@@ -73,7 +75,7 @@ test('monitor sends only new records, deduplicates replay/renamed subject and pe
  await monitorMahjong(f.env,now,config,web.request);
  assert.equal(web.sent.length,1);assert.deepEqual(web.sent[0].allowed_mentions,{parse:[]});assert.equal(web.sent[0].content.split('\n').length,6);
  assert.equal(state(f.sql,'last_success_at'),String(now));
- await monitorMahjong(f.env,now+60_000,config,web.request);assert.equal(web.urls.filter(u=>u.includes('player_records')).length,2,'two-minute poll gap');
+ await monitorMahjong(f.env,now+30_000,config,web.request);assert.equal(web.urls.filter(u=>u.includes('player_records')).length,2,'one-minute poll gap');
  await monitorMahjong(f.env,now+5*60_000,{...config,players:[{id:10,name:'renamed'}]},web.request);assert.equal(web.sent.length,1);
  assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM mahjong_watch_posts').get()!.n,1);
 });
@@ -143,4 +145,16 @@ test('every ranked room is watched, and linked members are polled from a recent 
  assert.equal(Number(polls[0].pathname.split('/').at(-1)),now-48*3600_000);assert.equal(Number(polls[2].pathname.split('/').at(-1)),now-6*3600_000);
  assert.deepEqual(web.sent.map(m=>m.content.split('\n')[0]),['🀄 **fixture｜1着／4人**','🀄 **B｜2着／4人**']);
  assert.match(web.sent[0].content,/四麻・金の間 半荘/);
+});
+
+test('a newly found game starts the paipu reader once; without a token or a new game nothing is dispatched',async()=>{
+ const uuid='261028-0123abcd-4567-89ab-cdef-0123456789ab';
+ const f=fixture(),web=fakeFetch([{...record(),uuid}]),env={...f.env,PAIPU_DISPATCH_TOKEN:'fixture-github-token'};
+ await monitorMahjong(env,now,config,web.request);
+ assert.equal(web.dispatches.length,1);assert.match(web.dispatches[0].url,/actions\/workflows\/mahjong-paipu\.yml\/dispatches$/);
+ assert.equal((web.dispatches[0].init?.headers as Record<string,string>).Authorization,'Bearer fixture-github-token');assert.deepEqual(JSON.parse(String(web.dispatches[0].init?.body)),{ref:'main'});
+ await monitorMahjong(env,now+60_000,config,web.request);assert.equal(web.dispatches.length,1,'the same game is not dispatched again');
+ web.failDispatch(403);const g=fixture();await monitorMahjong({...g.env,PAIPU_DISPATCH_TOKEN:'x'},now,config,web.request);
+ assert.equal(state(g.sql,'dispatch_error'),'github_http_403');assert.equal(state(g.sql,'error'),'','the result post is unaffected');
+ const h=fixture(),plain=fakeFetch([{...record(),uuid}]);await monitorMahjong(h.env,now,config,plain.request);assert.equal(plain.dispatches.length,0);
 });
