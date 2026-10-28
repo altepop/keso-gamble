@@ -62,8 +62,8 @@ function line(kind:Voice,level:RoastLevel,key:string,values:Record<string,string
 export function roastFor(summary:PaipuSummary,seatNo:number,level:RoastLevel,who:(seat:number)=>string){
  const p=summary.seats[seatNo],key=summary.uuid+':'+seatNo,out:string[]=[];
  const wins=summary.rounds.flatMap(r=>r.wins),dealIns=wins.filter(w=>w.from===seatNo).sort((a,b)=>b.value-a.value),mine=wins.filter(w=>w.seat===seatNo).sort((a,b)=>b.value-a.value);
- // Last place gets five lines (two for members who asked for mild); everyone else up to two.
- const last=p.rank===summary.players,limit=last&&level!=='mild'?5:2;
+ // Last place gets five lines and third (four players) three, except for members who asked for mild; others up to two.
+ const last=p.rank===summary.players,third=summary.players===4&&p.rank===3,limit=level==='mild'?2:last?5:third?3:2;
  const add=(kind:Voice,values:Record<string,string|number>)=>{if(out.length<limit)out.push(line(kind,level,key,values));};
  const yakuman=mine.find(w=>w.yakuman);
  if(p.rank===1){
@@ -86,6 +86,12 @@ export function roastFor(summary:PaipuSummary,seatNo:number,level:RoastLevel,who
  if(last){
   // Fill up with distinct last-place lines, starting from a seat-specific point in the pool.
   const pool=voice.last[level],start=hash('last:'+level+':'+key)%pool.length;
+  for(let i=0;i<pool.length&&out.length<limit;i++){const text=pool[(start+i)%pool.length].replace(/\{points\}/g,points(p.score));if(!out.includes(text))out.push(text);}
+  return out;
+ }
+ if(third&&level!=='mild'){
+  // Third is roasted harder than second: fill with distinct third-place lines.
+  const pool=voice.third[level],start=hash('third:'+level+':'+key)%pool.length;
   for(let i=0;i<pool.length&&out.length<limit;i++){const text=pool[(start+i)%pool.length].replace(/\{points\}/g,points(p.score));if(!out.includes(text))out.push(text);}
   return out;
  }

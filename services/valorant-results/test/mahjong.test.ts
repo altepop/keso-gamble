@@ -46,9 +46,9 @@ test('rank uses final scores and seat order for ties; three-player second is not
  assert.ok(pools.second.some(lines=>lines.join('\n')===mahjongRoast(sanma,20)));
  assert.ok(pools.last.some(lines=>lines.join('\n')===mahjongRoast(sanma,30)));
 });
-test('every authored roast is three unique nonempty lines (five for last and bust); no fabricated deal-in or yakuman claim',()=>{
+test('every authored roast is three unique nonempty lines (four for third, five for last and bust); no fabricated deal-in or yakuman claim',()=>{
  assert.equal(Object.values(pools).flat().length,25);
- for(const [group,list] of Object.entries(pools))for(const lines of list){const n=group==='last'||group==='bust'?5:3;assert.equal(lines.length,n);assert.equal(new Set(lines).size,n);assert.ok(lines.every(line=>line.length>5&&!line.includes('\n')));assert.doesNotMatch(lines.join(''),/放銃した|役満あが|振り込んだ/);}
+ for(const [group,list] of Object.entries(pools))for(const lines of list){const n=group==='last'||group==='bust'?5:group==='third'?4:3;assert.equal(lines.length,n);assert.equal(new Set(lines).size,n);assert.ok(lines.every(line=>line.length>5&&!line.includes('\n')));assert.doesNotMatch(lines.join(''),/放銃した|役満あが|振り込んだ/);}
  for(let i=0;i<100;i++){assert.equal(mahjongRoast(record({_id:'test-'+i}),10).split('\n').length,3);assert.equal(mahjongRoast(record({_id:'test-'+i}),40).split('\n').length,5);}
  const negative=record();negative.players[0].score=-1000;assert.ok(pools.bust.some(lines=>lines.join('\n')===mahjongRoast(negative,10)));
 });
