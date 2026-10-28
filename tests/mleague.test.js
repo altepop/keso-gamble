@@ -37,23 +37,28 @@ test('odds come from past tops and lasts, shrunk toward one in four; a rookie is
  assert.ok(mlOdds(strong,{強い人:{games:10,top:0,last:10}}).last<o.last,'this season counts too');
 });
 
-test('a bet is fixed at its odds, shares the weekly limit with racing, and is settled from the official order', () => {
+test('only last place is sold; a bet is fixed at its odds, shares the weekly limit with racing and is settled', () => {
  const s=state(),now=jst('2026-10-27T18:00:00'),card=mlCard(data,game1);
- const top=placeMlBet(s,{match:game1.id,player:1,type:'top',amount:1000},now,data,new Map());
- const last=placeMlBet(s,{match:game1.id,player:card[5].name,type:'last',amount:500},now,data,new Map());
- const benched=placeMlBet(s,{match:game1.id,player:9,type:'top',amount:300},now,data,new Map());
+ assert.throws(()=>placeMlBet(s,{match:game1.id,player:1,type:'top',amount:1000},now,data,new Map()),/ラスだけ/);
+ const right=placeMlBet(s,{match:game1.id,player:card[5].name,type:'last',amount:1000},now,data,new Map());
+ const wrong=placeMlBet(s,{match:game1.id,player:1,type:'last',amount:500},now,data,new Map());
+ const benched=placeMlBet(s,{match:game1.id,player:9,type:'last',amount:300},now,data,new Map());
  assert.equal(s.cash,100000-1800);assert.equal(s.raceWeek.spent,1800);
- assert.throws(()=>placeMlBet(s,{match:game1.id,player:17,type:'top',amount:100},now,data,new Map()),/選手を選んで/);
- assert.throws(()=>placeMlBet(s,{match:game1.id,player:1,type:'top',amount:150},now,data,new Map()),/100 KP単位/);
+ assert.throws(()=>placeMlBet(s,{match:game1.id,player:17,type:'last',amount:100},now,data,new Map()),/選手を選んで/);
+ assert.throws(()=>placeMlBet(s,{match:game1.id,player:1,type:'last',amount:150},now,data,new Map()),/100 KP単位/);
  s.raceWeek.spent=WEEKLY_LIMIT-100;
- assert.throws(()=>placeMlBet(s,{match:game1.id,player:1,type:'top',amount:200},now,data,new Map()),/競馬と合算/);
+ assert.throws(()=>placeMlBet(s,{match:game1.id,player:1,type:'last',amount:200},now,data,new Map()),/競馬と合算/);
  const order=[card[0].name,card[4].name,card[12].name,card[5].name];
  const settled=settleMlBets(s,new Map([[game1.id,{names:order}]]));
  assert.equal(settled.length,3);
- assert.deepEqual([top.status,last.status,benched.status],['won','won','refunded']);
- assert.equal(top.payout,Math.floor(1000*top.odds/10));assert.equal(benched.payout,300);
- assert.equal(s.cash,100000-1800+top.payout+last.payout+300);
+ assert.deepEqual([right.status,wrong.status,benched.status],['won','lost','refunded']);
+ assert.equal(right.payout,Math.floor(1000*right.odds/10));assert.equal(benched.payout,300);
+ assert.equal(s.cash,100000-1800+right.payout+300);
  assert.equal(settleMlBets(s,new Map([[game1.id,{names:order}]])).length,0,'settled once');
+ // A top bet bought before last-only still settles.
+ const old=state();old.mlBets=[{id:'old',match:game1.id,player:card[0].name,type:'top',amount:100,odds:30,status:'pending',payout:0,time:1}];
+ Object.assign(old,hydrateMleague(old));settleMlBets(old,new Map([[game1.id,{names:order}]]));
+ assert.equal(old.mlBets[0].status,'won');
 });
 
 test('saved bets survive a reload and junk is dropped', () => {
@@ -64,8 +69,8 @@ test('saved bets survive a reload and junk is dropped', () => {
 
 test('a bet bought at or after the reported start is refunded instead of settled', () => {
  const s=state(),card=mlCard(data,game2);
- const early=placeMlBet(s,{match:game2.id,player:1,type:'top',amount:1000},jst('2026-10-27T21:30:00'),data,new Map());
- const late=placeMlBet(s,{match:game2.id,player:1,type:'top',amount:500},jst('2026-10-27T21:45:00'),data,new Map());
+ const early=placeMlBet(s,{match:game2.id,player:13,type:'last',amount:1000},jst('2026-10-27T21:30:00'),data,new Map());
+ const late=placeMlBet(s,{match:game2.id,player:13,type:'last',amount:500},jst('2026-10-27T21:45:00'),data,new Map());
  const names=[card[0].name,card[4].name,card[8].name,card[12].name];
  settleMlBets(s,new Map([[game2.id,{names,closedAt:jst('2026-10-27T21:42:00')}]]));
  assert.deepEqual([early.status,late.status],['won','refunded']);assert.equal(late.payout,500);
