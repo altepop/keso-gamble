@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { RACE_INTERVAL, CLOSE_BEFORE, RUN_MS, COURSE_M, WEEKLY_LIMIT, openRaceStart, latestRaceStart, bigRaceName, raceNumber, weekStart, raceCard, raceResult, raceOdds, raceTimeline, raceCommentary, distanceAt, oddsFromProbability, finishProbabilities, payoutFor, betWins, placeRaceBet, settleRaceBets, hydrateRacing, raceRuns } from '../js/racing.js';
+import { RACE_INTERVAL, CLOSE_BEFORE, RUN_MS, COURSE_M, WEEKLY_LIMIT, openRaceStart, latestRaceStart, bigRaceName, raceNumber, weekStart, raceCard, raceResult, raceOdds, raceTimeline, raceCommentary, distanceAt, oddsFromProbability, finishProbabilities, payoutFor, betWins, placeRaceBet, settleRaceBets, hydrateRacing, raceRuns, fillerCrownName, crownSlotAllowed } from '../js/racing.js';
 import { createInitialState, hydrateState } from '../js/engine.js';
 
 const jst=(text)=>Date.parse(text+'+09:00');
@@ -156,4 +156,16 @@ test('saved race bets survive reloads and invalid records are dropped', () => {
   const tampered=hydrateRacing({raceBets:[{...state.raceBets[0],status:'won',payout:999999},{...state.raceBets[0],amount:150},{...state.raceBets[0],raceId:raceId+1}],raceWeek:{start:-1,spent:5}});
   assert.deepEqual(tampered,{raceBets:[],raceWeek:{start:0,spent:0}});
   assert.deepEqual(hydrateState(null,now).raceBets,[]);
+});
+
+test('every night has more named races: big ones on the hour and memorial crowns at :30 from 19:30 to 0:30', () => {
+  const tue=t=>jst('2026-10-27T'+t+':00');
+  assert.deepEqual(['20:00','21:00','22:00','23:00'].map(t=>bigRaceName(tue(t))),['ゴールデンタイム記念','メインレース','夜ふかし記念','最終レース']);
+  assert.equal(bigRaceName(jst('2026-10-31T22:00:00')),'夜ふかし記念','weekends too');
+  for(const t of ['19:30','20:30','21:30','22:30','23:30'])assert.ok(fillerCrownName(tue(t)),t);
+  assert.ok(fillerCrownName(jst('2026-10-28T00:30:00')),'0:30 after midnight');
+  for(const t of ['18:30','12:30'])assert.equal(fillerCrownName(tue(t)),null,'weekday daytime stays plain: '+t);
+  assert.ok(fillerCrownName(jst('2026-10-31T12:30:00')),'weekend daytime is unchanged');
+  const free=Array.from({length:24},(_,i)=>tue('19:00')+i*RACE_INTERVAL).filter(crownSlotAllowed);
+  assert.equal(free.length,13,'weekday night still leaves slots for races named after someone');
 });
