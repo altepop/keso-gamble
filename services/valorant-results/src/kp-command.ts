@@ -1,5 +1,5 @@
 // Register these guild commands individually; never replace /death, /valo or the Activity entry point.
-export const KP_COMMAND_VERSION='kp-slash-v10-bet-easy';
+export const KP_COMMAND_VERSION='kp-slash-v11-horsename';
 export const kpCommands=[
  {type:1,name:'kp',description:'KESO PLAY｜KP残高・ランキング',options:[
   {type:1,name:'balance',description:'自分の残高と最近の入出金（本人だけに表示）'},
@@ -10,6 +10,9 @@ export const kpCommands=[
   {type:4,name:'horse',description:'馬（タップすると馬名と倍率の一覧が出ます）',required:true,min_value:1,max_value:10,autocomplete:true},
   {type:4,name:'amount',description:'掛け金（100 KP単位。例 500）',required:true,min_value:100,max_value:50000},
   {type:3,name:'type',description:'券種（選ばなければ1着当て）',required:false,choices:[{name:'1着当て（単勝）',value:'win'},{name:'3着以内当て（複勝・倍率低め）',value:'place'}]},
+ ]},
+ {type:1,name:'horsename',description:'KESO PLAY｜プレゼントでもらった馬に名前を付ける（1回だけ）',options:[
+  {type:3,name:'name',description:'馬の名前（1〜12文字）',required:true,max_length:12},
  ]},
  {type:1,name:'mleague',description:'KESO PLAY｜Mリーグ予想：次の試合の選手番号と倍率を確認'},
  {type:1,name:'mbet',description:'KESO PLAY｜Mリーグ予想：ラスになる選手にKPで賭ける（取消不可）',options:[

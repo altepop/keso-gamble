@@ -144,3 +144,50 @@ export async function sellHorse(env:KpEnv,mapping:KpMapping,user:string,state:{c
  const refund=sellValue(h.price,h.races);state.cash+=refund;
  return {sold:{id:h.id,refund}};
 }
+
+// A very rare gift: each race slot (every 15 minutes) has a GIFT_CHANCE draw, decided once per slot, that gives a
+// random registered member with a free stable place a new horse at no cost (it sells for nothing).
+export const GIFT_CHANCE=.002;
+const GIFT_BOXES=[{id:'normal',weight:50},{id:'silver',weight:30},{id:'gold',weight:15},{id:'platinum',weight:4},{id:'legend',weight:1}];
+/** A gift horse runs under this name until its new owner names it with /horsename. */
+export const GIFT_PLACEHOLDER='ナナシ';
+export async function maybeGiftHorse(env:KpEnv,mapping:KpMapping,slot:number,rng:()=>number=cryptoRng,now=Date.now()){
+ await ensureHorses(env);
+ await ensureGifts(env);
+ // The draw for a slot happens once, even if several cron runs reach it.
+ const claimed=await env.DB.prepare('INSERT OR IGNORE INTO kp_horse_gifts(guild,slot,at) VALUES(?,?,?)').bind(mapping.guildId,slot,now).run();
+ if(!claimed.meta.changes||rng()>=GIFT_CHANCE)return null;
+ const users=[];
+ for(const a of mapping.accounts){
+  const n=await env.DB.prepare('SELECT COUNT(*) AS n FROM kp_horses WHERE guild=? AND owner=? AND sold_at IS NULL AND retired_at IS NULL').bind(mapping.guildId,a.discordUserId).first<{n:number}>();
+  if((n?.n??0)<MAX_OWNED)users.push(a.discordUserId);
+ }
+ if(!users.length)return null;
+ const user=users[Math.floor(rng()*users.length)];
+ let roll=rng()*100,box=GIFT_BOXES[0].id;for(const b of GIFT_BOXES){if(roll<b.weight){box=b.id;break;}roll-=b.weight;}
+ const horse={id:'horse-'+kpRandom(),name:GIFT_PLACEHOLDER,...drawHorse(box,rng),box,price:0};
+ await env.DB.batch([
+  env.DB.prepare('INSERT INTO kp_horses(id,guild,owner,name,grade,ability,style,box,price,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)').bind(horse.id,mapping.guildId,user,horse.name,horse.grade,horse.ability,horse.style,box,0,now),
+  env.DB.prepare('UPDATE kp_horse_gifts SET user=?,horse=? WHERE guild=? AND slot=?').bind(user,horse.id,mapping.guildId,slot),
+ ]);
+ const label=BOXES.find((b:{id:string})=>b.id===box)!.label;
+ return {user,horse:{...horse,gradeLabel:CLASSES[horse.grade].grade},text:`🎁 **馬が空から降ってきた！** <@${user}> に${CLASSES[horse.grade].grade}の馬がプレゼントされました（${label}ボックス相当・この15分の当選確率 ${GIFT_CHANCE*100}%）\n名前はまだありません。\`/horsename\` で好きな名前を付けてください（付けるまでは「${GIFT_PLACEHOLDER}」で走ります）。\n-# 持ち馬に入ります。売っても0 KP、走れば賞金はもらえます。`};
+}
+async function ensureGifts(env:KpEnv){
+ await env.DB.batch([
+  env.DB.prepare('CREATE TABLE IF NOT EXISTS kp_horse_gifts(guild TEXT NOT NULL,slot INTEGER NOT NULL,user TEXT,horse TEXT,at INTEGER NOT NULL,named INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(guild,slot))'),
+ ]);
+}
+/** The recipient names their gift horse once. Returns the reply, and the announcement when it was named. */
+export async function nameGiftHorse(env:KpEnv,mapping:KpMapping,user:string,name:unknown):Promise<{reply:string;post?:string}>{
+ await ensureHorses(env);await ensureGifts(env);
+ let value:string;try{value=validHorseName(name);}catch(error){return {reply:(error as Error).message};}
+ const gift=await env.DB.prepare('SELECT g.slot,g.horse FROM kp_horse_gifts g JOIN kp_horses h ON h.id=g.horse WHERE g.guild=? AND g.user=? AND g.named=0 AND h.sold_at IS NULL ORDER BY g.at LIMIT 1').bind(mapping.guildId,user).first<{slot:number;horse:string}>();
+ if(!gift)return {reply:'名前を付けられるプレゼントの馬はいません。プレゼントの馬は、ごくまれに空から降ってきます。'};
+ const done=await env.DB.batch([
+  env.DB.prepare('UPDATE kp_horse_gifts SET named=1 WHERE guild=? AND slot=? AND named=0').bind(mapping.guildId,gift.slot),
+  env.DB.prepare(`UPDATE kp_horses SET name=? WHERE id=? AND name='${GIFT_PLACEHOLDER}'`).bind(value,gift.horse),
+ ]);
+ if(!done[0].meta.changes)return {reply:'この馬にはもう名前が付いています。'};
+ return {reply:`🐴 プレゼントの馬に「${value}」と名付けました。これから「${value}」として走ります。`,post:`🐴 <@${user}> がプレゼントの馬に「${value}」と名付けました。`};
+}

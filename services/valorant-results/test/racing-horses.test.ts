@@ -162,3 +162,26 @@ test('a horse\'s condition follows its owner\'s play in any game, fixed when the
  f.sql.prepare("INSERT INTO kp_ledger VALUES('act-late',?,?,900,'match',?)").run(guild,two,race-RACE_INTERVAL+1000);
  assert.equal((await raceEntries(f.env,mapping,race)).find(e=>e.horseId==='horse-idle')!.condition,0,'later play does not change a fixed race');
 });
+
+test('a very rare free horse: drawn once per slot, only for members with a free stable place, announced with the odds',async()=>{
+ const {maybeGiftHorse,GIFT_CHANCE}=await import('../src/racing-horses.ts');const f=await fixture();
+ const seq=(...v:number[])=>{let i=0;return ()=>v[Math.min(i++,v.length-1)];};
+ assert.equal(await maybeGiftHorse(f.env,mapping,1000,seq(GIFT_CHANCE)),null,'a miss gives nothing');
+ assert.equal(await maybeGiftHorse(f.env,mapping,1000,seq(0)),null,'the same slot is never drawn twice');
+ const gift=(await maybeGiftHorse(f.env,mapping,2000,seq(0,0.99,0.4,0.5)))!;
+ assert.equal(gift.user,two,'picked among members');assert.equal(gift.horse.box,'normal');assert.equal(gift.horse.price,0);
+ assert.match(gift.text,new RegExp(`🎁 \\*\\*馬が空から降ってきた！\\*\\* <@${two}> に.+の馬がプレゼントされました（ノーマルボックス相当・この15分の当選確率 0.2%）\\n名前はまだありません。\`/horsename\``));
+ assert.equal(gift.horse.name,'ナナシ','no name is chosen for the owner');
+ const {nameGiftHorse}=await import('../src/racing-horses.ts');
+ assert.match((await nameGiftHorse(f.env,mapping,one,'ノロイウマ')).reply,/名前を付けられるプレゼントの馬はいません/,'only the recipient names it');
+ assert.match((await nameGiftHorse(f.env,mapping,two,'@everyone')).reply,/記号/);
+ const named=await nameGiftHorse(f.env,mapping,two,'タナボタオー');
+ assert.match(named.reply,/「タナボタオー」と名付けました/);assert.equal(named.post,`🐴 <@${two}> がプレゼントの馬に「タナボタオー」と名付けました。`);
+ assert.equal(f.sql.prepare('SELECT name FROM kp_horses WHERE id=?').get(gift.horse.id)!.name,'タナボタオー');
+ assert.match((await nameGiftHorse(f.env,mapping,two,'ベツノナマエ')).reply,/いません/,'named once');
+ const row=f.sql.prepare('SELECT owner,price FROM kp_horses WHERE id=?').get(gift.horse.id)!;assert.equal(row.owner,two);assert.equal(row.price,0);
+ for(let i=0;i<3;i++)f.sql.prepare("INSERT INTO kp_horses(id,guild,owner,name,grade,ability,style,box,price,created_at) VALUES(?,?,?,?,0,0,0,'normal',3000,0)").run('full-'+i,guild,one,'x'+i);
+ f.sql.prepare("UPDATE kp_horses SET sold_at=NULL WHERE owner=?").run(two);
+ for(let i=0;i<2;i++)f.sql.prepare("INSERT INTO kp_horses(id,guild,owner,name,grade,ability,style,box,price,created_at) VALUES(?,?,?,?,0,0,0,'normal',3000,0)").run('full2-'+i,guild,two,'y'+i);
+ assert.equal(await maybeGiftHorse(f.env,mapping,3000,seq(0)),null,'nobody with a free place: no gift');
+});
