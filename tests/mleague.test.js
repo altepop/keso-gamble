@@ -60,3 +60,12 @@ test('saved bets survive a reload and junk is dropped', () => {
  const again=hydrateMleague(JSON.parse(JSON.stringify({mlBets:[...s.mlBets,{id:'x',match:'y',player:'z',type:'win',amount:1,odds:0,status:'?',payout:0,time:0}]})));
  assert.deepEqual(again.mlBets,s.mlBets);
 });
+
+test('a bet bought at or after the reported start is refunded instead of settled', () => {
+ const s=state(),card=mlCard(data,game2);
+ const early=placeMlBet(s,{match:game2.id,player:1,type:'top',amount:1000},jst('2026-10-27T21:30:00'),data,new Map());
+ const late=placeMlBet(s,{match:game2.id,player:1,type:'top',amount:500},jst('2026-10-27T21:45:00'),data,new Map());
+ const names=[card[0].name,card[4].name,card[8].name,card[12].name];
+ settleMlBets(s,new Map([[game2.id,{names,closedAt:jst('2026-10-27T21:42:00')}]]));
+ assert.deepEqual([early.status,late.status],['won','refunded']);assert.equal(late.payout,500);
+});

@@ -74,14 +74,14 @@ test('the official calendar replaces a mistaken matchup; until it is read, nothi
  assert.equal(d.fixtures.find(x=>x.id===game1.id)!.confirmed,true);
 });
 
-test('results are fetched only while a started game lacks one, at most every three minutes', async t => {
+test('results are fetched only while a started game lacks one, at most every minute', async t => {
  const f=await fixture(),urls:string[]=[];
  const request=(async(url:string)=>{urls.push(String(url));return new Response(page);}) as unknown as typeof fetch;
  assert.equal(await pollMlResults(f.env,jst('2026-10-27T18:00:00'),request),0);assert.equal(urls.length,0,'before the start nothing is fetched');
  assert.equal(await pollMlResults(f.env,jst('2026-10-27T21:10:00'),request),1);
  assert.deepEqual(urls,['https://m-league.jp/games/?mlm=10&mly=2026']);
- assert.equal(await pollMlResults(f.env,jst('2026-10-27T21:11:00'),request),0);assert.equal(urls.length,1,'three-minute gap');
- await pollMlResults(f.env,jst('2026-10-27T21:14:00'),request);assert.equal(urls.length,2,'game 2 is still awaited');
+ assert.equal(await pollMlResults(f.env,jst('2026-10-27T21:10:30'),request),0);assert.equal(urls.length,1,'one-minute gap');
+ await pollMlResults(f.env,jst('2026-10-27T21:11:00'),request);assert.equal(urls.length,2,'game 2 is still awaited');
  assert.deepEqual((await mlResults(f.env)).get(game1.id)?.names,order);
  t.mock.method(console,'warn',()=>{});
  await pollMlResults(f.env,jst('2026-10-27T21:20:00'),(async()=>new Response('',{status:503})) as unknown as typeof fetch);
@@ -129,4 +129,30 @@ test('/mleague lists numbered players with odds; /mbet buys by table-game code a
  const reply=await runKpCommand(f.env,{id:snowflake,guild_id:guild,member:{user:{id:one}},data:{name:'mbet',options:[{name:'match',value:'1-1'},{name:'player',value:3},{name:'type',value:'last'},{name:'amount',value:200}]}},mapping);
  assert.match(reply,new RegExp(`1卓 第1試合・${card[2].name}のラス`));assert.equal(f.balance(one),99800);
  assert.match(await runKpCommand(f.env,{id:String(BigInt(snowflake)+1n),guild_id:guild,member:{user:{id:one}},data:{name:'mbet',options:[{name:'match',value:'3-1'},{name:'player',value:3},{name:'type',value:'last'},{name:'amount',value:200}]}},mapping),/その試合はありません/);
+});
+
+test('/mclose: a member reports the start; betting stops and later bets are refunded at settlement', async t => {
+ t.mock.timers.enable({apis:['Date'],now:jst('2026-10-27T21:30:00')});
+ const f=await fixture();await storeCards(f.env,parseOfficialCards(page,2026),Date.now());
+ const at=(time:string,n:number)=>String((BigInt(jst('2026-10-27T'+time))-1420070400000n)<<22n|BigInt(n));
+ const close=(user:string,time:string,n:number,options:Array<{name:string;value:string}>=[])=>runKpCommand(f.env,{id:at(time,n),guild_id:guild,member:{user:{id:user}},data:{name:'mclose',options:[{name:'match',value:'1-2'},...options]}},mapping);
+ await operateKp(f.env,mapping,one,op(),'ml-bet',{match:game2.id,player:card.find(p=>p.name===order[0])!.no,type:'top',amount:1000});
+ t.mock.timers.setTime(jst('2026-10-27T21:45:00'));
+ await operateKp(f.env,mapping,two,op(),'ml-bet',{match:game2.id,player:card.find(p=>p.name===order[0])!.no,type:'top',amount:500});
+ assert.match(await close('100000000000000199','21:50:00',1),/登録メンバーだけ/);
+ assert.match(await close(one,'21:50:00',2,[{name:'at',value:'25:00'}]),/21:42 の形/);
+ assert.match(await close(one,'21:50:00',3,[{name:'at',value:'21:55'}]),/今までの時刻/);
+ assert.match(await close(one,'21:50:00',4,[{name:'at',value:'21:42'}]),/21:42 開始として締め切りました/);
+ assert.match(await close(two,'21:51:00',5,[{name:'at',value:'21:48'}]),/21:42 開始/,'the earliest stated start is kept');
+ t.mock.timers.setTime(jst('2026-10-27T21:52:00'));
+ await assert.rejects(operateKp(f.env,mapping,one,op(),'ml-bet',{match:game2.id,player:1,type:'top',amount:100}),/開始を報告/);
+ const view=await runKpCommand(f.env,{id:at('21:52:00',6),guild_id:guild,member:{user:{id:one}},data:{name:'mleague'}},mapping);
+ assert.match(view,/第2試合 締切（開始報告）/);
+ const game2Page=officialPage('2026-10-27',[{game:2,names:order,points:[60.2,10.1,-20.3,-50]}]);
+ t.mock.timers.setTime(jst('2026-10-27T23:40:00'));
+ await pollMlResults(f.env,Date.now(),(async()=>new Response(game2Page)) as unknown as typeof fetch);
+ await settleMl(f.env,mapping);
+ assert.ok(f.balance(one)>99000,'bought before the start: settled normally');
+ assert.equal(f.balance(two),100000,'bought after the reported start: refunded');
+ assert.ok(f.posts().some(p=>/⏰ <@100000000000000101> が 1卓 第2試合の開始（21:42）を報告/.test(p)));
 });
