@@ -124,8 +124,10 @@ export async function runKpCommand(env:KpEnv,interaction:Slash,override?:KpMappi
   const row=await env.DB.prepare('SELECT delta FROM kp_ledger WHERE id=?').bind('grant:'+interaction.id).first<{delta:number}>();
   const moved=Number(row?.delta??0),signed=(moved<0?'−':'+')+money(Math.abs(moved));
   const after=Number((await env.DB.prepare('SELECT balance FROM kp_wallets WHERE guild=? AND user=?').bind(mapping.guildId,target).first<{balance:number}>())?.balance??0);
-  if((env as {KP_EARNINGS_WEBHOOK_URL?:string}).KP_EARNINGS_WEBHOOK_URL){await ensurePosts(env);await enqueue(env,'kp-grant:'+interaction.id,`🎁 <@${target}> に ${signed}（${reason}）`,created(interaction.id));}
-  return `🎁 <@${target}> に ${signed}（${reason}）。残高 ${money(after)}`;
+  // silent: nothing is posted anywhere; the reply is ephemeral like every /kpgrant reply.
+  const silent=value('silent')===true;
+  if(!silent&&(env as {KP_EARNINGS_WEBHOOK_URL?:string}).KP_EARNINGS_WEBHOOK_URL){await ensurePosts(env);await enqueue(env,'kp-grant:'+interaction.id,`🎁 <@${target}> に ${signed}（${reason}）`,created(interaction.id));}
+  return `🎁 <@${target}> に ${signed}（${reason}）。残高 ${money(after)}`+(silent?'\n🤫 通知なし（稼ぎchには投稿していません）':'');
  }
  if(command==='mclose'){
   const value=(key:string)=>interaction.data?.options?.find(o=>o.name===key)?.value;
