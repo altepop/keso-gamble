@@ -9,7 +9,10 @@ export interface MahjongRecord {_id:string;uuid?:string;modeId:number;startTime:
 /** The game's own paipu id (not the provider's _id); only this form is passed on to the paipu fetcher. */
 export const PAIPU_UUID=/^\d{6}-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const API='https://5-data.amae-koromo.com/api/v2/';
-const MODES:Record<number,string>={11:'四麻・玉の間 東風',12:'四麻・玉の間 半荘',23:'三麻・玉の間 東風',24:'三麻・玉の間 半荘'};
+const MODES:Record<number,string>={8:'四麻・金の間 東風',9:'四麻・金の間 半荘',11:'四麻・玉の間 東風',12:'四麻・玉の間 半荘',15:'四麻・王座の間 東風',16:'四麻・王座の間 半荘',
+ 21:'三麻・金の間 東風',22:'三麻・金の間 半荘',23:'三麻・玉の間 東風',24:'三麻・玉の間 半荘',25:'三麻・王座の間 東風',26:'三麻・王座の間 半荘'};
+/** Every ranked room is watched, whatever the stored config selected: a member's game in any room is news. */
+const WATCHED=Object.keys(MODES).map(Number);
 const INTERVAL=5*60_000,LOOKBACK=7*24*3600_000;
 /** The provider's key comes with a limit of one query per second; requests are spaced a little wider. */
 export const PROVIDER_GAP=1100;
@@ -103,6 +106,13 @@ export async function flushMahjongPosts(env:MahjongEnv,now=Date.now(),request:ty
  }
  return sent;
 }
+/** Game accounts linked to members (/paifu approval or /paifulink) are watched too, from a recent start
+ * so a newly linked account does not post a week of history. Names come from each game record. */
+async function linkedPlayers(env:MahjongEnv,config:MahjongConfig,since:number){
+ let rows:Array<{account:number}>=[];
+ try{rows=(await env.DB.prepare('SELECT DISTINCT account FROM kp_mahjong_links ORDER BY account').all<{account:number}>()).results;}catch{return [];}
+ return rows.map(r=>Number(r.account)).filter(id=>Number.isSafeInteger(id)&&id>0&&!config.players.some(p=>p.id===id)).slice(0,10).map(id=>({id,name:'',since}));
+}
 export async function monitorMahjong(env:MahjongEnv,now=Date.now(),override?:MahjongConfig,request:typeof fetch=fetch){
  const config=override?validateMahjongConfig(override):await configuration(env);
  if(!config?.enabled||!webhook(env))return;
@@ -118,10 +128,10 @@ export async function monitorMahjong(env:MahjongEnv,now=Date.now(),override?:Mah
   const since=Math.max(config.startedAt,now-LOOKBACK),to=Math.ceil(now/INTERVAL)*INTERVAL;
   const headers:Record<string,string>=env.AMAE_KOROMO_TOKEN?{Authorization:'Bearer '+env.AMAE_KOROMO_TOKEN}:{};
   let first=true;
-  for(const p of config.players){
+  for(const p of [...config.players.map(p=>({...p,since})),...await linkedPlayers(env,config,Math.max(since,now-AUTO_PAIPU_AGE))]){
    for(const table of ['pl4','pl3']){
-    const modes=config.modes.filter(m=>(m<20)===(table==='pl4'));if(!modes.length)continue;
-    const url=new URL(API+table+'/player_records/'+p.id+'/'+to+'/'+since);url.searchParams.set('mode',modes.join(','));url.searchParams.set('limit','100');url.searchParams.set('descending','true');
+    const modes=WATCHED.filter(m=>(m<20)===(table==='pl4'));
+    const url=new URL(API+table+'/player_records/'+p.id+'/'+to+'/'+p.since);url.searchParams.set('mode',modes.join(','));url.searchParams.set('limit','100');url.searchParams.set('descending','true');
     if(!first)await pacing.wait(PROVIDER_GAP);first=false;
     const response=await request(url,{headers,signal:AbortSignal.timeout(12_000)});
     if(!response.ok){
@@ -130,12 +140,12 @@ export async function monitorMahjong(env:MahjongEnv,now=Date.now(),override?:Mah
      const delay=response.status===429?Math.max(3600_000,Number(response.headers.get('Retry-After'))*1000||0):15*60_000;
      await save(env,'next_poll_at',now+Math.min(24*3600_000,delay));return;
     }
-    const records=parseMahjongRecords(await response.json(),p.id,modes,since,now);
+    const records=parseMahjongRecords(await response.json(),p.id,modes,p.since,now);
     for(const record of records){
      const id='mahjong:'+p.id+':'+record._id;
      // Only fresh games: a first successful poll returns a week of history, which must not flood the channel.
      if(record.uuid&&record.endTime*1000>now-AUTO_PAIPU_AGE)await env.DB.prepare('INSERT OR IGNORE INTO mahjong_paipu_auto(paipu,account,at) VALUES(?,?,?)').bind(record.uuid,p.id,record.endTime*1000).run();
-     await env.DB.prepare('INSERT OR IGNORE INTO mahjong_watch_posts(id,body,at) VALUES(?,?,?)').bind(id,JSON.stringify({content:mahjongMessage(record,p.id,p.name),allowed_mentions:{parse:[]}}),record.endTime*1000).run();
+     await env.DB.prepare('INSERT OR IGNORE INTO mahjong_watch_posts(id,body,at) VALUES(?,?,?)').bind(id,JSON.stringify({content:mahjongMessage(record,p.id,p.name||record.players.find(m=>m.accountId===p.id)!.nickname),allowed_mentions:{parse:[]}}),record.endTime*1000).run();
     }
    }
   }
@@ -153,5 +163,5 @@ export async function mahjongStatus(env:MahjongEnv){
  const rows=(await env.DB.prepare("SELECT key,value FROM mahjong_watch_state WHERE key IN ('last_attempt_at','last_success_at','last_sent_at','next_poll_at','error','delivery_error')").all<{key:string;value:string}>()).results;
  const values=Object.fromEntries(rows.map(r=>[r.key,r.value]));
  const counts=await env.DB.prepare('SELECT COUNT(*) AS total,SUM(sent) AS sent FROM mahjong_watch_posts').first<{total:number;sent:number|null}>();
- return {enabled:true,authenticated:Boolean(env.AMAE_KOROMO_TOKEN),registered:config.players.length,modes:config.modes.map(m=>MODES[m]),startsAt:config.startedAt,intervalMinutes:5,lastAttemptAt:Number(values.last_attempt_at||0),lastSuccessAt:Number(values.last_success_at||0),lastSentAt:Number(values.last_sent_at||0),nextPollAt:Number(values.next_poll_at||0),error:values.error||null,deliveryError:values.delivery_error||null,pending:(counts?.total??0)-(counts?.sent??0),sent:counts?.sent??0};
+ return {enabled:true,authenticated:Boolean(env.AMAE_KOROMO_TOKEN),registered:config.players.length,modes:WATCHED.map(m=>MODES[m]),startsAt:config.startedAt,intervalMinutes:5,lastAttemptAt:Number(values.last_attempt_at||0),lastSuccessAt:Number(values.last_success_at||0),lastSentAt:Number(values.last_sent_at||0),nextPollAt:Number(values.next_poll_at||0),error:values.error||null,deliveryError:values.delivery_error||null,pending:(counts?.total??0)-(counts?.sent??0),sent:counts?.sent??0};
 }

@@ -66,7 +66,7 @@ test('parser rejects absent subject, incomplete/future/bad shape, duplicated pla
 });
 test('config only permits supported Jade modes and numeric unique provider IDs',()=>{
  assert.equal(validateMahjongConfig(config),config);
- for(const c of [{...config,modes:[9]},{...config,players:[...config.players,...config.players]},{...config,startedAt:0}])assert.throws(()=>validateMahjongConfig(c));
+ for(const c of [{...config,modes:[99]},{...config,players:[...config.players,...config.players]},{...config,startedAt:0}])assert.throws(()=>validateMahjongConfig(c));
 });
 test('monitor sends only new records, deduplicates replay/renamed subject and persists three lines without pings',async()=>{
  const f=fixture(),web=fakeFetch([record(),record({startTime:now/1000-4000,_id:'old'})]);
@@ -130,4 +130,17 @@ test('the paipu id is kept only in the game\'s own form and queued for reading',
  const f=fixture(),web=fakeFetch([{...record(),uuid:good},{...record(),_id:'old-game',uuid:old,startTime:now/1000-8*3600,endTime:now/1000-7*3600}]);
  await monitorMahjong(f.env,now,{...config,startedAt:now-24*3600_000},web.request);
  assert.deepEqual(f.sql.prepare('SELECT paipu,account FROM mahjong_paipu_auto').all().map(r=>({...r})),[{paipu:good,account:10}],'games older than six hours are not read automatically');
+});
+test('every ranked room is watched, and linked members are polled from a recent start under their in-game name',async()=>{
+ const f=fixture(),web=fakeFetch([record({modeId:9})]);
+ f.sql.exec('CREATE TABLE kp_mahjong_links(guild TEXT NOT NULL,user TEXT NOT NULL,account INTEGER NOT NULL,PRIMARY KEY(guild,user),UNIQUE(guild,account))');
+ f.sql.prepare('INSERT INTO kp_mahjong_links VALUES(?,?,?)').run('100000000000000100','100000000000000104',20);
+ f.sql.prepare('INSERT INTO kp_mahjong_links VALUES(?,?,?)').run('100000000000000100','100000000000000105',10);
+ await monitorMahjong(f.env,now,{...config,startedAt:now-48*3600_000},web.request);
+ const polls=web.urls.filter(u=>u.includes('player_records')).map(u=>new URL(u));
+ assert.deepEqual(polls.map(u=>u.pathname.split('/').at(-3)),['10','10','20','20'],'a linked registered player is not polled twice');
+ assert.equal(polls[0].searchParams.get('mode'),'8,9,11,12,15,16');assert.equal(polls[1].searchParams.get('mode'),'21,22,23,24,25,26');
+ assert.equal(Number(polls[0].pathname.split('/').at(-1)),now-48*3600_000);assert.equal(Number(polls[2].pathname.split('/').at(-1)),now-6*3600_000);
+ assert.deepEqual(web.sent.map(m=>m.content.split('\n')[0]),['🀄 **fixture｜1着／4人**','🀄 **B｜2着／4人**']);
+ assert.match(web.sent[0].content,/四麻・金の間 半荘/);
 });
