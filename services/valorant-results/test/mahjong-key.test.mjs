@@ -12,9 +12,9 @@ const api=bindings=>{const calls=[];return {calls,request:async(url,init={})=>{c
 test('Mahjong Secrets are copied to the Worker on each deploy and never logged', async t => {
  const log=t.mock.method(console,'log',()=>{});
  const none=api([]);await provisionMahjongKey(dir,{...env,MAHJONG_INGEST_KEY:''},none.request);assert.equal(none.calls.length,0);
- const fresh=api([]);await provisionMahjongKey(dir,{...env,AMAE_KOROMO_TOKEN:'fixture-provider-token-0123'},fresh.request);
- assert.deepEqual(fresh.calls.map(c=>c.method),['GET','PUT','PUT']);
- assert.deepEqual(fresh.calls.slice(1).map(c=>JSON.parse(c.body).name),['MAHJONG_INGEST_KEY','AMAE_KOROMO_TOKEN']);
+ const fresh=api([]);await provisionMahjongKey(dir,{...env,AMAE_KOROMO_TOKEN:'fixture-provider-token-0123',PAIPU_DISPATCH_TOKEN:'fixture-github-token-0123'},fresh.request);
+ assert.deepEqual(fresh.calls.map(c=>c.method),['GET','PUT','PUT','PUT']);
+ assert.deepEqual(fresh.calls.slice(1).map(c=>JSON.parse(c.body).name),['MAHJONG_INGEST_KEY','AMAE_KOROMO_TOKEN','PAIPU_DISPATCH_TOKEN']);
  const rotated=api([{name:'MAHJONG_INGEST_KEY',type:'secret_text'}]);await provisionMahjongKey(dir,env,rotated.request);
  assert.deepEqual(rotated.calls.map(c=>c.method),['GET','PUT'],'a changed repository Secret replaces the Worker Secret');
  await assert.rejects(provisionMahjongKey(dir,env,api([{name:'MAHJONG_INGEST_KEY',type:'plain_text'}]).request),/secret binding/);

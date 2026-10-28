@@ -1,9 +1,10 @@
 import{readFileSync}from'node:fs';import{resolve}from'node:path';import{pathToFileURL}from'node:url';
 // Optional repository Secrets -> Worker Secrets of the same name:
 // MAHJONG_INGEST_KEY (signing key shared with mahjong-paipu.yml) and AMAE_KOROMO_TOKEN (the
-// paipu-ya API key for the result watcher). Values are written on every deploy so a changed
+// paipu-ya API key for the result watcher) and PAIPU_DISPATCH_TOKEN (a GitHub token allowed to start
+// mahjong-paipu.yml when a new game is found). Values are written on every deploy so a changed
 // repository Secret takes effect; they are never read back or logged.
-export const MAHJONG_SECRETS=['MAHJONG_INGEST_KEY','AMAE_KOROMO_TOKEN'];
+export const MAHJONG_SECRETS=['MAHJONG_INGEST_KEY','AMAE_KOROMO_TOKEN','PAIPU_DISPATCH_TOKEN'];
 export async function provisionMahjongKey(directory,env=process.env,request=fetch){
  const present=MAHJONG_SECRETS.filter(name=>env[name]);
  if(!present.length){console.log('Mahjong: no Mahjong Secrets set; existing Worker Secrets are kept.');return;}
