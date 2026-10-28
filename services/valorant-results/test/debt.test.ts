@@ -66,6 +66,14 @@ test('while 借KP is owed nothing can be bought; selling still works and the mon
  assert.equal(await debtOf(f.env,guild,one),0);
  assert.equal((await readKpState(f.env,mapping,one)).debt.amount,0);
 });
+test('while 借KP is owed a roulette bet is refused before the draw, so a winning spin cannot slip through',async()=>{
+ const f=await fixture();f.credit('c1',10000);
+ await settleRankChange(f.env,mapping,two,{before:12,after:11},'m1','p-two',T0);
+ f.credit('c2',10000,two);
+ for(let i=0;i<30;i++)await assert.rejects(operateKp(f.env,mapping,two,'spin-while-owing-'+String(i).padStart(3,'0'),'spin',{type:'red',amount:100,choice:0}),{message:DEBT_BLOCKED});
+ assert.equal(f.balance(two),10000,'not a single spin went through');
+ assert.ok(await operateKp(f.env,mapping,one,'spin-without-debt-001','spin',{type:'red',amount:100,choice:0}),'no debt, no block');
+});
 test('/kp shows 借KP and the repayment row',async()=>{
  const f=await fixture();
  await settleRankChange(f.env,mapping,one,{before:12,after:11},'m1','p-one',T0);
