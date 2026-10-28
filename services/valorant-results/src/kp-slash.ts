@@ -131,11 +131,11 @@ export async function runKpCommand(env:KpEnv,interaction:Slash,override?:KpMappi
  }
  if(command==='keiba'){
   const view=await racingView(env,mapping),open=view.open,card={...raceCard(open.id,undefined,open.entries),...(open.crown?{name:open.crown}:{})},odds=raceOdds(card);
-  return [`🏇 **${clean(card.name)}** ${clock(open.id)}発走／${clock(card.closeAt)}締切`,
-   `倍率：1着当て / ${placeSlots(card.size)}着以内当て`,
-   ...card.horses.map((h:{number:number;name:string})=>`${h.number}番 ${clean(h.name)}　${(odds.win[h.number]/10).toFixed(1)}倍 / ${(odds.place[h.number]/10).toFixed(1)}倍`),
-   `購入例：/bet race:${clock(open.id)} horse:1 amount:100 type:win`,
-   '100 KP単位。購入後は取消できません。返答は本人にだけ表示されます。'].join('\n');
+  return [`🏇 **${clean(card.name)}**`,`-# ${clock(open.id)}発走・${card.size}頭｜締切 ${clock(card.closeAt)}`,
+   '',`**出走馬**　倍率は 1着当て / ${placeSlots(card.size)}着以内当て`,
+   ...card.horses.map((h:{number:number;name:string})=>`\`${String(h.number).padStart(2)}\` ${clean(h.name)}　**${(odds.win[h.number]/10).toFixed(1)}倍** / ${(odds.place[h.number]/10).toFixed(1)}倍`),
+   '',`🎫 **買い方**　\`/bet race:${clock(open.id)} horse:馬番 amount:100 type:1着当て\``,
+   `-# 券種は「1着当て（単勝）」か「${placeSlots(card.size)}着以内当て（複勝）」／100 KP単位・1週間で合計5万KPまで（Mリーグ予想と合算）・購入後の取消不可・この返答は本人にだけ表示`].join('\n');
  }
  const options=interaction.data?.options??[];
  const value=(key:string)=>options.find(o=>o.name===key)?.value;

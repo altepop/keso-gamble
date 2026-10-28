@@ -31,28 +31,35 @@ export function earningsWebhook(env:PostEnv){
  return url;
 }
 
+/** How to buy from Discord, with the race's own start time filled in. */
+const howToBet=(start:number)=>[`🎫 **買い方**　\`/bet race:${clock(start)} horse:馬番 amount:100 type:1着当て\``,
+ '-# /keiba で出走表と倍率を確認／100 KP単位・1週間で合計5万KPまで（Mリーグ予想と合算）・購入後の取消不可・アプリの「勝負 → 競馬」でも買えます'];
 export function cardPost(card:Card,hash:string){
  const odds=raceOdds(card);
- return [`🏇 **${clean(card.name)}**（${clock(card.start)}発走・${card.size}頭・コース ${GOINGS[card.going].label}）`,
-  `締切 ${clock(card.start-CLOSE_BEFORE)}｜倍率は 1着当て / ${placeSlots(card.size)}着以内当て`,
-  ...card.horses.map(h=>`${h.number}. ${clean(h.name)}${h.nickname?`「${clean(h.nickname)}」`:''}${h.person?'（本人の名前の馬・見舞金つき）':h.ownerName?`（馬主 ${clean(h.ownerName)}）`:''}　${odd(odds.win[h.number])} / ${odd(odds.place[h.number])}`),
-  `結果のハッシュ: \`${hash.slice(0,16)}…\`（発走後にシード値を公開）`,
-  'KESO PLAY の「勝負 → 競馬」で馬券を買えます。',
-  `💬 ${raceCatchphrase('card',String(card.id))}`,raceAside('card',String(card.id))].join('\n');
+ return [`🏇 **${clean(card.name)}**`,
+  `-# ${clock(card.start)}発走・${card.size}頭・コース ${GOINGS[card.going].label}｜締切 ${clock(card.start-CLOSE_BEFORE)}`,
+  '',`**出走馬**　倍率は 1着当て / ${placeSlots(card.size)}着以内当て`,
+  ...card.horses.flatMap(h=>[`\`${String(h.number).padStart(2)}\` ${clean(h.name)}${h.nickname?`「${clean(h.nickname)}」`:''}　**${odd(odds.win[h.number])}** / ${odd(odds.place[h.number])}`,
+   ...h.person?['-# 本人の名前の馬・見舞金つき']:h.ownerName?[`-# 馬主 ${clean(h.ownerName)}`]:[]]),
+  '',...howToBet(card.start),
+  '',`💬 ${raceCatchphrase('card',String(card.id))}`,raceAside('card',String(card.id)),
+  `-# 結果のハッシュ: \`${hash.slice(0,16)}…\`（発走後にシード値を公開）`].join('\n');
 }
 export function resultPost(card:Card,seed:string,bets:Array<Bet&{user:string}>,levelOf:(user:string)=>RoastLevel,titleOf:(user:string)=>string|undefined=()=>undefined){
  const odds=raceOdds(card),order:number[]=raceResult(card,seed).order;
- const lines=[`🏁 **${clean(card.name)}** 結果（${clock(card.start)}発走）`,
-  ...order.slice(0,3).map((n,i)=>{const h=card.horses[n-1];return `${i+1}着 ${n}番 ${clean(h.name)}${h.ownerName?`（馬主 ${clean(h.ownerName)}・賞金 ${kp(prizeFor(card,i))}）`:''}${i===0?`（1着当て ${odd(odds.win[n])}）`:''}`;})];
+ const lines=[`🏁 **${clean(card.name)}** 結果`,`-# ${clock(card.start)}発走・${card.size}頭`,'',
+  ...order.slice(0,3).flatMap((n,i)=>{const h=card.horses[n-1];return [`${['🥇','🥈','🥉'][i]} ${i+1}着 ${n}番 **${clean(h.name)}**${i===0?`　1着当て ${odd(odds.win[n])}`:''}`,
+   ...h.ownerName?[`-# 馬主 ${clean(h.ownerName)}・賞金 ${kp(prizeFor(card,i))}`]:[]];})];
  const byUser=new Map<string,Array<Bet>>();for(const b of bets)byUser.set(b.user,[...(byUser.get(b.user)??[]),b]);
+ if(byUser.size)lines.push('','**馬券**');
  for(const [user,list] of byUser){
   const who=`<@${user}>${titleOf(user)?`「${clean(titleOf(user)!)}」`:''}`;
   const paid=list.reduce((n,b)=>n+b.payout,0),spent=list.reduce((n,b)=>n+b.amount,0),hits=list.filter(b=>b.status==='won');
-  if(hits.length)lines.push(`💰 ${who} ${hits.map(b=>`${b.horse}番の${BET_TYPES[b.type].label}（${odd(b.odds)}）`).join('・')} 的中 → +${kp(paid)}　${raceBanter(paid>spent?'win':'partial',levelOf(user),user+':'+card.id)}`);
-  else lines.push(`💸 ${who} ${kp(spent)} 外れ。${raceBanter('loss',levelOf(user),user+':'+card.id)}`);
+  if(hits.length)lines.push(`💰 ${who}　+${kp(paid)}`,`-# ${hits.map(b=>`${b.horse}番の${BET_TYPES[b.type].label}（${odd(b.odds)}）`).join('・')} 的中`,`🗯️ ${raceBanter(paid>spent?'win':'partial',levelOf(user),user+':'+card.id)}`);
+  else lines.push(`💸 ${who}　−${kp(spent)}`,`-# ${list.map(b=>`${b.horse}番の${BET_TYPES[b.type].label}`).join('・')} 外れ`,`🗯️ ${raceBanter('loss',levelOf(user),user+':'+card.id)}`);
  }
- lines.push(`💬 ${raceCatchphrase('result',String(card.id))}`,raceAside('result',String(card.id)));
- lines.push(`シード値: \`${seed}\`（締切前のハッシュと一致することを画面で確認できます）`);
+ lines.push('',`💬 ${raceCatchphrase('result',String(card.id))}`,raceAside('result',String(card.id)));
+ lines.push(`-# シード値: \`${seed}\`（締切前のハッシュと一致することを画面で確認できます）`);
  return lines.join('\n');
 }
 /** Normal races are posted only for big wins or big losses; big races and crowns named after someone always. */
@@ -65,7 +72,7 @@ async function raceBets(env:KpEnv,guild:string,id:number){
 }
 export async function enqueue(env:KpEnv,id:string,body:string,now:number){await env.DB.prepare('INSERT OR IGNORE INTO kp_posts(id,body,at) VALUES(?,?,?)').bind(id,JSON.stringify({content:body,allowed_mentions:{parse:[]}}),now).run();}
 export function crownPost(c:{race:number;name:string;user:string;reason:string}){
- return `🏇 『${clean(c.name)}』開催決定！ ${clock(c.race)}発走（<@${c.user}> の${c.reason}にちなんで）\nKESO PLAY の「勝負 → 競馬」で、発走15分前から馬券を買えます。\n💬 ${raceCatchphrase('crown',String(c.race))}\n${raceAside('crown',String(c.race))}`;
+ return `🏇 『${clean(c.name)}』開催決定！ ${clock(c.race)}発走（<@${c.user}> の${c.reason}にちなんで）\n発走15分前から \`/bet race:${clock(c.race)}\` か、アプリの「勝負 → 競馬」で馬券を買えます。\n💬 ${raceCatchphrase('crown',String(c.race))}\n${raceAside('crown',String(c.race))}`;
 }
 export async function roastLevelsOf(env:KpEnv,mapping:KpMapping){
  const rows=(await env.DB.prepare("SELECT user,json_extract(data,'$.roastLevel') AS level FROM kp_state WHERE guild=?").bind(mapping.guildId).all<{user:string;level:string|null}>()).results;

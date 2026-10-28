@@ -41,7 +41,7 @@ test('the big race card is posted once while it takes bets; normal races get no 
  await queueRacePosts(f.env,mapping,MAIN-10*60000);await queueRacePosts(f.env,mapping,MAIN-5*60000);
  assert.equal(await flushRacePosts(f.env),1);assert.equal(await flushRacePosts(f.env),0);
  assert.match(sent[0].content,/メインレース/);assert.match(sent[0].content,/結果のハッシュ/);
- assert.equal(sent[0].content.split('\n').filter(l=>/^\d+\. /.test(l)).length,10);
+ assert.equal(sent[0].content.split('\n').filter(l=>/^`\s?\d+` /.test(l)).length,10);
  assert.deepEqual(sent[0].allowed_mentions,{parse:[]});
  await queueRacePosts(f.env,mapping,MAIN-CLOSE_BEFORE);
  await queueRacePosts(f.env,mapping,NORMAL-10*60000);
@@ -80,7 +80,7 @@ test('the roast follows each person\'s level: harsh for full, gentle for mild', 
  const card=raceCard(NORMAL),seed='fixed',order=raceResult(card,seed).order,loser=order.at(-1);
  const bet=(user:string)=>({id:user,raceId:NORMAL,type:'win' as const,horse:loser,amount:5000,odds:80,status:'lost',payout:0,user});
  const text=resultPost(card,seed,[bet(one),bet(outsider)],user=>user===one?'full':'mild');
- const [harsh,mild]=[text.split('\n').find(l=>l.includes(one))!,text.split('\n').find(l=>l.includes(outsider))!];
+ const [harsh,mild]=[text.split('\n').map((l,i,a)=>l.includes(one)?a.slice(i,i+3).join('\n'):'').find(Boolean)!,text.split('\n').map((l,i,a)=>l.includes(outsider)?a.slice(i,i+3).join('\n'):'').find(Boolean)!];
  assert.ok(voice.loss.full.some(line=>harsh.endsWith(line)));
  assert.match(mild,/次こそ|ドンマイ/);
 });
