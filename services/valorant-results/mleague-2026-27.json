@@ -1,0 +1,3931 @@
+{
+ "season": "2026-27",
+ "note": "Mリーグ予想用。名簿・日程・過去の着順は altepop/m-league-manager の data から写したもの。日程の座順・卓名は公式では未確認。過去成績は2026-27開幕前のMリーグ合計で、記録のない選手は0試合として扱う。 日程の対戦カードは公式サイトの月間カレンダーで毎日照合し、公式の組み合わせを優先する（手元の日程には ABEMAS と BEAST X の取り違えがある）。",
+ "source": {
+  "repo": "altepop/m-league-manager",
+  "commit": "aeb70dd0f393f6fa6637159feca91b20c4f108be",
+  "files": [
+   "data/roster-2026-27.json",
+   "data/fixtures-2026-27.json",
+   "data/ratings-input.json",
+   "data/people.json"
+  ],
+  "roster": "https://m-league.jp/news202607021500/",
+  "fixtures": "https://m-league.jp/games/",
+  "statsCutoff": "2026-09-01"
+ },
+ "teams": [
+  {
+   "id": "earth-jets",
+   "name": "EARTH JETS",
+   "official": "EARTH JETS",
+   "players": [
+    {
+     "name": "石井一馬",
+     "games": 39,
+     "top": 13,
+     "last": 9
+    },
+    {
+     "name": "三浦智博",
+     "games": 27,
+     "top": 3,
+     "last": 10
+    },
+    {
+     "name": "逢川恵夢",
+     "games": 26,
+     "top": 3,
+     "last": 5
+    },
+    {
+     "name": "HIRO柴田",
+     "games": 28,
+     "top": 3,
+     "last": 10
+    }
+   ]
+  },
+  {
+   "id": "drivens",
+   "name": "赤坂ドリブンズ",
+   "official": "赤坂ドリブンズ",
+   "players": [
+    {
+     "name": "園田賢",
+     "games": 284,
+     "top": 78,
+     "last": 64
+    },
+    {
+     "name": "鈴木たろう",
+     "games": 253,
+     "top": 68,
+     "last": 70
+    },
+    {
+     "name": "浅見真紀",
+     "games": 71,
+     "top": 18,
+     "last": 17
+    },
+    {
+     "name": "渡辺太",
+     "games": 111,
+     "top": 29,
+     "last": 18
+    }
+   ]
+  },
+  {
+   "id": "fuurinkazan",
+   "name": "EX風林火山",
+   "official": "EX風林火山",
+   "players": [
+    {
+     "name": "二階堂亜樹",
+     "games": 236,
+     "top": 53,
+     "last": 56
+    },
+    {
+     "name": "勝又健志",
+     "games": 278,
+     "top": 73,
+     "last": 65
+    },
+    {
+     "name": "永井孝典",
+     "games": 41,
+     "top": 16,
+     "last": 8
+    },
+    {
+     "name": "内川幸太郎",
+     "games": 221,
+     "top": 62,
+     "last": 57
+    }
+   ]
+  },
+  {
+   "id": "sakuraknights",
+   "name": "KADOKAWAサクラナイツ",
+   "official": "KADOKAWAサクラナイツ",
+   "players": [
+    {
+     "name": "岡田紗佳",
+     "games": 167,
+     "top": 36,
+     "last": 48
+    },
+    {
+     "name": "堀慎吾",
+     "games": 216,
+     "top": 60,
+     "last": 55
+    },
+    {
+     "name": "阿久津翔太",
+     "games": 26,
+     "top": 5,
+     "last": 8
+    },
+    {
+     "name": "尻無濱航",
+     "games": 0,
+     "top": 0,
+     "last": 0
+    }
+   ]
+  },
+  {
+   "id": "konami",
+   "name": "KONAMI麻雀格闘倶楽部",
+   "official": "KONAMI麻雀格闘倶楽部",
+   "players": [
+    {
+     "name": "佐々木寿人",
+     "games": 300,
+     "top": 82,
+     "last": 74
+    },
+    {
+     "name": "高宮まり",
+     "games": 214,
+     "top": 42,
+     "last": 52
+    },
+    {
+     "name": "伊達朱里紗",
+     "games": 150,
+     "top": 48,
+     "last": 36
+    },
+    {
+     "name": "滝沢和典",
+     "games": 278,
+     "top": 75,
+     "last": 72
+    }
+   ]
+  },
+  {
+   "id": "abemas",
+   "name": "渋谷ABEMAS",
+   "official": "渋谷ABEMAS",
+   "players": [
+    {
+     "name": "多井隆晴",
+     "games": 266,
+     "top": 70,
+     "last": 57
+    },
+    {
+     "name": "白鳥翔",
+     "games": 259,
+     "top": 73,
+     "last": 56
+    },
+    {
+     "name": "松本吉弘",
+     "games": 254,
+     "top": 54,
+     "last": 67
+    },
+    {
+     "name": "日向藍子",
+     "games": 161,
+     "top": 37,
+     "last": 33
+    }
+   ]
+  },
+  {
+   "id": "phoenix",
+   "name": "セガサミーフェニックス",
+   "official": "セガサミーフェニックス",
+   "players": [
+    {
+     "name": "茅森早香",
+     "games": 221,
+     "top": 49,
+     "last": 59
+    },
+    {
+     "name": "醍醐大",
+     "games": 105,
+     "top": 31,
+     "last": 23
+    },
+    {
+     "name": "竹内元太",
+     "games": 76,
+     "top": 21,
+     "last": 12
+    },
+    {
+     "name": "佐野ひなこ",
+     "games": 0,
+     "top": 0,
+     "last": 0
+    }
+   ]
+  },
+  {
+   "id": "raiden",
+   "name": "TEAM雷電",
+   "official": "TEAM RAIDEN / 雷電",
+   "players": [
+    {
+     "name": "萩原聖人",
+     "games": 234,
+     "top": 39,
+     "last": 74
+    },
+    {
+     "name": "瀬戸熊直樹",
+     "games": 251,
+     "top": 58,
+     "last": 69
+    },
+    {
+     "name": "黒沢咲",
+     "games": 237,
+     "top": 71,
+     "last": 61
+    },
+    {
+     "name": "本田朋広",
+     "games": 174,
+     "top": 45,
+     "last": 36
+    }
+   ]
+  },
+  {
+   "id": "beast",
+   "name": "BEAST X",
+   "official": "BEAST X",
+   "players": [
+    {
+     "name": "鈴木大介",
+     "games": 95,
+     "top": 24,
+     "last": 29
+    },
+    {
+     "name": "中田花奈",
+     "games": 70,
+     "top": 16,
+     "last": 21
+    },
+    {
+     "name": "下石戟",
+     "games": 47,
+     "top": 16,
+     "last": 10
+    },
+    {
+     "name": "東城りお",
+     "games": 102,
+     "top": 27,
+     "last": 28
+    }
+   ]
+  },
+  {
+   "id": "pirates",
+   "name": "U-NEXT Pirates",
+   "official": "U-NEXT Pirates",
+   "players": [
+    {
+     "name": "瑞原明奈",
+     "games": 179,
+     "top": 54,
+     "last": 46
+    },
+    {
+     "name": "鈴木優",
+     "games": 137,
+     "top": 42,
+     "last": 24
+    },
+    {
+     "name": "仲林圭",
+     "games": 137,
+     "top": 36,
+     "last": 28
+    },
+    {
+     "name": "朝倉康心",
+     "games": 106,
+     "top": 22,
+     "last": 27
+    }
+   ]
+  }
+ ],
+ "fixtures": [
+  {
+   "id": "2026-R001",
+   "date": "2026-09-14",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "earth-jets",
+    "konami",
+    "abemas",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R002",
+   "date": "2026-09-14",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "earth-jets",
+    "konami",
+    "abemas",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R003",
+   "date": "2026-09-15",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "drivens",
+    "fuurinkazan",
+    "sakuraknights",
+    "phoenix"
+   ]
+  },
+  {
+   "id": "2026-R004",
+   "date": "2026-09-15",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "drivens",
+    "fuurinkazan",
+    "sakuraknights",
+    "phoenix"
+   ]
+  },
+  {
+   "id": "2026-R005",
+   "date": "2026-09-17",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "earth-jets",
+    "drivens",
+    "raiden",
+    "beast"
+   ]
+  },
+  {
+   "id": "2026-R006",
+   "date": "2026-09-17",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "earth-jets",
+    "drivens",
+    "raiden",
+    "beast"
+   ]
+  },
+  {
+   "id": "2026-R007",
+   "date": "2026-09-18",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "sakuraknights",
+    "konami",
+    "raiden",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R008",
+   "date": "2026-09-18",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "sakuraknights",
+    "konami",
+    "raiden",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R009",
+   "date": "2026-09-21",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "drivens",
+    "sakuraknights",
+    "abemas",
+    "beast"
+   ]
+  },
+  {
+   "id": "2026-R010",
+   "date": "2026-09-21",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "drivens",
+    "sakuraknights",
+    "abemas",
+    "beast"
+   ]
+  },
+  {
+   "id": "2026-R011",
+   "date": "2026-09-21",
+   "table": 2,
+   "game": 1,
+   "teams": [
+    "earth-jets",
+    "fuurinkazan",
+    "phoenix",
+    "raiden"
+   ]
+  },
+  {
+   "id": "2026-R012",
+   "date": "2026-09-21",
+   "table": 2,
+   "game": 2,
+   "teams": [
+    "earth-jets",
+    "fuurinkazan",
+    "phoenix",
+    "raiden"
+   ]
+  },
+  {
+   "id": "2026-R013",
+   "date": "2026-09-22",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "fuurinkazan",
+    "sakuraknights",
+    "abemas",
+    "raiden"
+   ]
+  },
+  {
+   "id": "2026-R014",
+   "date": "2026-09-22",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "fuurinkazan",
+    "sakuraknights",
+    "abemas",
+    "raiden"
+   ]
+  },
+  {
+   "id": "2026-R015",
+   "date": "2026-09-22",
+   "table": 2,
+   "game": 1,
+   "teams": [
+    "konami",
+    "phoenix",
+    "beast",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R016",
+   "date": "2026-09-22",
+   "table": 2,
+   "game": 2,
+   "teams": [
+    "konami",
+    "phoenix",
+    "beast",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R017",
+   "date": "2026-09-24",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "earth-jets",
+    "abemas",
+    "phoenix",
+    "beast"
+   ]
+  },
+  {
+   "id": "2026-R018",
+   "date": "2026-09-24",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "earth-jets",
+    "abemas",
+    "phoenix",
+    "beast"
+   ]
+  },
+  {
+   "id": "2026-R019",
+   "date": "2026-09-24",
+   "table": 2,
+   "game": 1,
+   "teams": [
+    "drivens",
+    "fuurinkazan",
+    "konami",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R020",
+   "date": "2026-09-24",
+   "table": 2,
+   "game": 2,
+   "teams": [
+    "drivens",
+    "fuurinkazan",
+    "konami",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R021",
+   "date": "2026-09-25",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "drivens",
+    "abemas",
+    "raiden",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R022",
+   "date": "2026-09-25",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "drivens",
+    "abemas",
+    "raiden",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R023",
+   "date": "2026-09-25",
+   "table": 2,
+   "game": 1,
+   "teams": [
+    "earth-jets",
+    "fuurinkazan",
+    "sakuraknights",
+    "beast"
+   ]
+  },
+  {
+   "id": "2026-R024",
+   "date": "2026-09-25",
+   "table": 2,
+   "game": 2,
+   "teams": [
+    "earth-jets",
+    "fuurinkazan",
+    "sakuraknights",
+    "beast"
+   ]
+  },
+  {
+   "id": "2026-R025",
+   "date": "2026-09-28",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "earth-jets",
+    "sakuraknights",
+    "phoenix",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R026",
+   "date": "2026-09-28",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "earth-jets",
+    "sakuraknights",
+    "phoenix",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R027",
+   "date": "2026-09-28",
+   "table": 2,
+   "game": 1,
+   "teams": [
+    "fuurinkazan",
+    "konami",
+    "abemas",
+    "beast"
+   ]
+  },
+  {
+   "id": "2026-R028",
+   "date": "2026-09-28",
+   "table": 2,
+   "game": 2,
+   "teams": [
+    "fuurinkazan",
+    "konami",
+    "abemas",
+    "beast"
+   ]
+  },
+  {
+   "id": "2026-R029",
+   "date": "2026-09-29",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "fuurinkazan",
+    "raiden",
+    "beast",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R030",
+   "date": "2026-09-29",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "fuurinkazan",
+    "raiden",
+    "beast",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R031",
+   "date": "2026-09-29",
+   "table": 2,
+   "game": 1,
+   "teams": [
+    "drivens",
+    "konami",
+    "abemas",
+    "phoenix"
+   ]
+  },
+  {
+   "id": "2026-R032",
+   "date": "2026-09-29",
+   "table": 2,
+   "game": 2,
+   "teams": [
+    "drivens",
+    "konami",
+    "abemas",
+    "phoenix"
+   ]
+  },
+  {
+   "id": "2026-R033",
+   "date": "2026-10-01",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "earth-jets",
+    "drivens",
+    "konami",
+    "phoenix"
+   ]
+  },
+  {
+   "id": "2026-R034",
+   "date": "2026-10-01",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "earth-jets",
+    "drivens",
+    "konami",
+    "phoenix"
+   ]
+  },
+  {
+   "id": "2026-R035",
+   "date": "2026-10-01",
+   "table": 2,
+   "game": 1,
+   "teams": [
+    "fuurinkazan",
+    "sakuraknights",
+    "raiden",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R036",
+   "date": "2026-10-01",
+   "table": 2,
+   "game": 2,
+   "teams": [
+    "fuurinkazan",
+    "sakuraknights",
+    "raiden",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R037",
+   "date": "2026-10-02",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "earth-jets",
+    "konami",
+    "raiden",
+    "beast"
+   ]
+  },
+  {
+   "id": "2026-R038",
+   "date": "2026-10-02",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "earth-jets",
+    "konami",
+    "raiden",
+    "beast"
+   ]
+  },
+  {
+   "id": "2026-R039",
+   "date": "2026-10-02",
+   "table": 2,
+   "game": 1,
+   "teams": [
+    "drivens",
+    "sakuraknights",
+    "abemas",
+    "phoenix"
+   ]
+  },
+  {
+   "id": "2026-R040",
+   "date": "2026-10-02",
+   "table": 2,
+   "game": 2,
+   "teams": [
+    "drivens",
+    "sakuraknights",
+    "abemas",
+    "phoenix"
+   ]
+  },
+  {
+   "id": "2026-R041",
+   "date": "2026-10-05",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "earth-jets",
+    "fuurinkazan",
+    "konami",
+    "abemas"
+   ]
+  },
+  {
+   "id": "2026-R042",
+   "date": "2026-10-05",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "earth-jets",
+    "fuurinkazan",
+    "konami",
+    "abemas"
+   ]
+  },
+  {
+   "id": "2026-R043",
+   "date": "2026-10-05",
+   "table": 2,
+   "game": 1,
+   "teams": [
+    "drivens",
+    "phoenix",
+    "beast",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R044",
+   "date": "2026-10-05",
+   "table": 2,
+   "game": 2,
+   "teams": [
+    "drivens",
+    "phoenix",
+    "beast",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R045",
+   "date": "2026-10-06",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "drivens",
+    "fuurinkazan",
+    "phoenix",
+    "raiden"
+   ]
+  },
+  {
+   "id": "2026-R046",
+   "date": "2026-10-06",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "drivens",
+    "fuurinkazan",
+    "phoenix",
+    "raiden"
+   ]
+  },
+  {
+   "id": "2026-R047",
+   "date": "2026-10-06",
+   "table": 2,
+   "game": 1,
+   "teams": [
+    "earth-jets",
+    "sakuraknights",
+    "konami",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R048",
+   "date": "2026-10-06",
+   "table": 2,
+   "game": 2,
+   "teams": [
+    "earth-jets",
+    "sakuraknights",
+    "konami",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R049",
+   "date": "2026-10-08",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "drivens",
+    "fuurinkazan",
+    "sakuraknights",
+    "beast"
+   ]
+  },
+  {
+   "id": "2026-R050",
+   "date": "2026-10-08",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "drivens",
+    "fuurinkazan",
+    "sakuraknights",
+    "beast"
+   ]
+  },
+  {
+   "id": "2026-R051",
+   "date": "2026-10-08",
+   "table": 2,
+   "game": 1,
+   "teams": [
+    "earth-jets",
+    "abemas",
+    "raiden",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R052",
+   "date": "2026-10-08",
+   "table": 2,
+   "game": 2,
+   "teams": [
+    "earth-jets",
+    "abemas",
+    "raiden",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R053",
+   "date": "2026-10-09",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "fuurinkazan",
+    "abemas",
+    "beast",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R054",
+   "date": "2026-10-09",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "fuurinkazan",
+    "abemas",
+    "beast",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R055",
+   "date": "2026-10-09",
+   "table": 2,
+   "game": 1,
+   "teams": [
+    "sakuraknights",
+    "konami",
+    "phoenix",
+    "raiden"
+   ]
+  },
+  {
+   "id": "2026-R056",
+   "date": "2026-10-09",
+   "table": 2,
+   "game": 2,
+   "teams": [
+    "sakuraknights",
+    "konami",
+    "phoenix",
+    "raiden"
+   ]
+  },
+  {
+   "id": "2026-R057",
+   "date": "2026-10-12",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "earth-jets",
+    "sakuraknights",
+    "phoenix",
+    "beast"
+   ]
+  },
+  {
+   "id": "2026-R058",
+   "date": "2026-10-12",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "earth-jets",
+    "sakuraknights",
+    "phoenix",
+    "beast"
+   ]
+  },
+  {
+   "id": "2026-R059",
+   "date": "2026-10-12",
+   "table": 2,
+   "game": 1,
+   "teams": [
+    "drivens",
+    "konami",
+    "abemas",
+    "raiden"
+   ]
+  },
+  {
+   "id": "2026-R060",
+   "date": "2026-10-12",
+   "table": 2,
+   "game": 2,
+   "teams": [
+    "drivens",
+    "konami",
+    "abemas",
+    "raiden"
+   ]
+  },
+  {
+   "id": "2026-R061",
+   "date": "2026-10-13",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "fuurinkazan",
+    "konami",
+    "phoenix",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R062",
+   "date": "2026-10-13",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "fuurinkazan",
+    "konami",
+    "phoenix",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R063",
+   "date": "2026-10-13",
+   "table": 2,
+   "game": 1,
+   "teams": [
+    "sakuraknights",
+    "abemas",
+    "raiden",
+    "beast"
+   ]
+  },
+  {
+   "id": "2026-R064",
+   "date": "2026-10-13",
+   "table": 2,
+   "game": 2,
+   "teams": [
+    "sakuraknights",
+    "abemas",
+    "raiden",
+    "beast"
+   ]
+  },
+  {
+   "id": "2026-R065",
+   "date": "2026-10-15",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "drivens",
+    "konami",
+    "beast",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R066",
+   "date": "2026-10-15",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "drivens",
+    "konami",
+    "beast",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R067",
+   "date": "2026-10-15",
+   "table": 2,
+   "game": 1,
+   "teams": [
+    "earth-jets",
+    "fuurinkazan",
+    "abemas",
+    "phoenix"
+   ]
+  },
+  {
+   "id": "2026-R068",
+   "date": "2026-10-15",
+   "table": 2,
+   "game": 2,
+   "teams": [
+    "earth-jets",
+    "fuurinkazan",
+    "abemas",
+    "phoenix"
+   ]
+  },
+  {
+   "id": "2026-R069",
+   "date": "2026-10-16",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "abemas",
+    "phoenix",
+    "raiden",
+    "beast"
+   ]
+  },
+  {
+   "id": "2026-R070",
+   "date": "2026-10-16",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "abemas",
+    "phoenix",
+    "raiden",
+    "beast"
+   ]
+  },
+  {
+   "id": "2026-R071",
+   "date": "2026-10-16",
+   "table": 2,
+   "game": 1,
+   "teams": [
+    "earth-jets",
+    "drivens",
+    "sakuraknights",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R072",
+   "date": "2026-10-16",
+   "table": 2,
+   "game": 2,
+   "teams": [
+    "earth-jets",
+    "drivens",
+    "sakuraknights",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R073",
+   "date": "2026-10-19",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "sakuraknights",
+    "konami",
+    "beast",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R074",
+   "date": "2026-10-19",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "sakuraknights",
+    "konami",
+    "beast",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R075",
+   "date": "2026-10-19",
+   "table": 2,
+   "game": 1,
+   "teams": [
+    "earth-jets",
+    "drivens",
+    "fuurinkazan",
+    "raiden"
+   ]
+  },
+  {
+   "id": "2026-R076",
+   "date": "2026-10-19",
+   "table": 2,
+   "game": 2,
+   "teams": [
+    "earth-jets",
+    "drivens",
+    "fuurinkazan",
+    "raiden"
+   ]
+  },
+  {
+   "id": "2026-R077",
+   "date": "2026-10-20",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "earth-jets",
+    "drivens",
+    "sakuraknights",
+    "raiden"
+   ]
+  },
+  {
+   "id": "2026-R078",
+   "date": "2026-10-20",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "earth-jets",
+    "drivens",
+    "sakuraknights",
+    "raiden"
+   ]
+  },
+  {
+   "id": "2026-R079",
+   "date": "2026-10-20",
+   "table": 2,
+   "game": 1,
+   "teams": [
+    "fuurinkazan",
+    "konami",
+    "phoenix",
+    "abemas"
+   ]
+  },
+  {
+   "id": "2026-R080",
+   "date": "2026-10-20",
+   "table": 2,
+   "game": 2,
+   "teams": [
+    "fuurinkazan",
+    "konami",
+    "phoenix",
+    "abemas"
+   ]
+  },
+  {
+   "id": "2026-R081",
+   "date": "2026-10-22",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "earth-jets",
+    "beast",
+    "phoenix",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R082",
+   "date": "2026-10-22",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "earth-jets",
+    "beast",
+    "phoenix",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R083",
+   "date": "2026-10-22",
+   "table": 2,
+   "game": 1,
+   "teams": [
+    "fuurinkazan",
+    "sakuraknights",
+    "konami",
+    "abemas"
+   ]
+  },
+  {
+   "id": "2026-R084",
+   "date": "2026-10-22",
+   "table": 2,
+   "game": 2,
+   "teams": [
+    "fuurinkazan",
+    "sakuraknights",
+    "konami",
+    "abemas"
+   ]
+  },
+  {
+   "id": "2026-R085",
+   "date": "2026-10-23",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "drivens",
+    "fuurinkazan",
+    "konami",
+    "beast"
+   ]
+  },
+  {
+   "id": "2026-R086",
+   "date": "2026-10-23",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "drivens",
+    "fuurinkazan",
+    "konami",
+    "beast"
+   ]
+  },
+  {
+   "id": "2026-R087",
+   "date": "2026-10-23",
+   "table": 2,
+   "game": 1,
+   "teams": [
+    "phoenix",
+    "raiden",
+    "abemas",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R088",
+   "date": "2026-10-23",
+   "table": 2,
+   "game": 2,
+   "teams": [
+    "phoenix",
+    "raiden",
+    "abemas",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R089",
+   "date": "2026-10-26",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "drivens",
+    "fuurinkazan",
+    "raiden",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R090",
+   "date": "2026-10-26",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "drivens",
+    "fuurinkazan",
+    "raiden",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R091",
+   "date": "2026-10-26",
+   "table": 2,
+   "game": 1,
+   "teams": [
+    "earth-jets",
+    "sakuraknights",
+    "beast",
+    "abemas"
+   ]
+  },
+  {
+   "id": "2026-R092",
+   "date": "2026-10-26",
+   "table": 2,
+   "game": 2,
+   "teams": [
+    "earth-jets",
+    "sakuraknights",
+    "beast",
+    "abemas"
+   ]
+  },
+  {
+   "id": "2026-R093",
+   "date": "2026-10-27",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "fuurinkazan",
+    "sakuraknights",
+    "phoenix",
+    "raiden"
+   ]
+  },
+  {
+   "id": "2026-R094",
+   "date": "2026-10-27",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "fuurinkazan",
+    "sakuraknights",
+    "phoenix",
+    "raiden"
+   ]
+  },
+  {
+   "id": "2026-R095",
+   "date": "2026-10-27",
+   "table": 2,
+   "game": 1,
+   "teams": [
+    "earth-jets",
+    "drivens",
+    "konami",
+    "abemas"
+   ]
+  },
+  {
+   "id": "2026-R096",
+   "date": "2026-10-27",
+   "table": 2,
+   "game": 2,
+   "teams": [
+    "earth-jets",
+    "drivens",
+    "konami",
+    "abemas"
+   ]
+  },
+  {
+   "id": "2026-R097",
+   "date": "2026-10-29",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "earth-jets",
+    "konami",
+    "phoenix",
+    "raiden"
+   ]
+  },
+  {
+   "id": "2026-R098",
+   "date": "2026-10-29",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "earth-jets",
+    "konami",
+    "phoenix",
+    "raiden"
+   ]
+  },
+  {
+   "id": "2026-R099",
+   "date": "2026-10-29",
+   "table": 2,
+   "game": 1,
+   "teams": [
+    "drivens",
+    "sakuraknights",
+    "beast",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R100",
+   "date": "2026-10-29",
+   "table": 2,
+   "game": 2,
+   "teams": [
+    "drivens",
+    "sakuraknights",
+    "beast",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R101",
+   "date": "2026-10-30",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "sakuraknights",
+    "konami",
+    "beast",
+    "raiden"
+   ]
+  },
+  {
+   "id": "2026-R102",
+   "date": "2026-10-30",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "sakuraknights",
+    "konami",
+    "beast",
+    "raiden"
+   ]
+  },
+  {
+   "id": "2026-R103",
+   "date": "2026-10-30",
+   "table": 2,
+   "game": 1,
+   "teams": [
+    "earth-jets",
+    "fuurinkazan",
+    "abemas",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R104",
+   "date": "2026-10-30",
+   "table": 2,
+   "game": 2,
+   "teams": [
+    "earth-jets",
+    "fuurinkazan",
+    "abemas",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R105",
+   "date": "2026-11-02",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "earth-jets",
+    "drivens",
+    "phoenix",
+    "abemas"
+   ]
+  },
+  {
+   "id": "2026-R106",
+   "date": "2026-11-02",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "earth-jets",
+    "drivens",
+    "phoenix",
+    "abemas"
+   ]
+  },
+  {
+   "id": "2026-R107",
+   "date": "2026-11-02",
+   "table": 2,
+   "game": 1,
+   "teams": [
+    "sakuraknights",
+    "beast",
+    "raiden",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R108",
+   "date": "2026-11-02",
+   "table": 2,
+   "game": 2,
+   "teams": [
+    "sakuraknights",
+    "beast",
+    "raiden",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R109",
+   "date": "2026-11-03",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "fuurinkazan",
+    "sakuraknights",
+    "abemas",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R110",
+   "date": "2026-11-03",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "fuurinkazan",
+    "sakuraknights",
+    "abemas",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R111",
+   "date": "2026-11-03",
+   "table": 2,
+   "game": 1,
+   "teams": [
+    "drivens",
+    "konami",
+    "phoenix",
+    "raiden"
+   ]
+  },
+  {
+   "id": "2026-R112",
+   "date": "2026-11-03",
+   "table": 2,
+   "game": 2,
+   "teams": [
+    "drivens",
+    "konami",
+    "phoenix",
+    "raiden"
+   ]
+  },
+  {
+   "id": "2026-R113",
+   "date": "2026-11-05",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "earth-jets",
+    "sakuraknights",
+    "konami",
+    "raiden"
+   ]
+  },
+  {
+   "id": "2026-R114",
+   "date": "2026-11-05",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "earth-jets",
+    "sakuraknights",
+    "konami",
+    "raiden"
+   ]
+  },
+  {
+   "id": "2026-R115",
+   "date": "2026-11-05",
+   "table": 2,
+   "game": 1,
+   "teams": [
+    "drivens",
+    "fuurinkazan",
+    "beast",
+    "phoenix"
+   ]
+  },
+  {
+   "id": "2026-R116",
+   "date": "2026-11-05",
+   "table": 2,
+   "game": 2,
+   "teams": [
+    "drivens",
+    "fuurinkazan",
+    "beast",
+    "phoenix"
+   ]
+  },
+  {
+   "id": "2026-R117",
+   "date": "2026-11-06",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "drivens",
+    "konami",
+    "beast",
+    "abemas"
+   ]
+  },
+  {
+   "id": "2026-R118",
+   "date": "2026-11-06",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "drivens",
+    "konami",
+    "beast",
+    "abemas"
+   ]
+  },
+  {
+   "id": "2026-R119",
+   "date": "2026-11-06",
+   "table": 2,
+   "game": 1,
+   "teams": [
+    "earth-jets",
+    "fuurinkazan",
+    "phoenix",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R120",
+   "date": "2026-11-06",
+   "table": 2,
+   "game": 2,
+   "teams": [
+    "earth-jets",
+    "fuurinkazan",
+    "phoenix",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R121",
+   "date": "2026-11-09",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "drivens",
+    "sakuraknights",
+    "phoenix",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R122",
+   "date": "2026-11-09",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "drivens",
+    "sakuraknights",
+    "phoenix",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R123",
+   "date": "2026-11-09",
+   "table": 2,
+   "game": 1,
+   "teams": [
+    "fuurinkazan",
+    "konami",
+    "raiden",
+    "abemas"
+   ]
+  },
+  {
+   "id": "2026-R124",
+   "date": "2026-11-09",
+   "table": 2,
+   "game": 2,
+   "teams": [
+    "fuurinkazan",
+    "konami",
+    "raiden",
+    "abemas"
+   ]
+  },
+  {
+   "id": "2026-R125",
+   "date": "2026-11-10",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "drivens",
+    "sakuraknights",
+    "konami",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R126",
+   "date": "2026-11-10",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "drivens",
+    "sakuraknights",
+    "konami",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R127",
+   "date": "2026-11-10",
+   "table": 2,
+   "game": 1,
+   "teams": [
+    "earth-jets",
+    "beast",
+    "raiden",
+    "abemas"
+   ]
+  },
+  {
+   "id": "2026-R128",
+   "date": "2026-11-10",
+   "table": 2,
+   "game": 2,
+   "teams": [
+    "earth-jets",
+    "beast",
+    "raiden",
+    "abemas"
+   ]
+  },
+  {
+   "id": "2026-R129",
+   "date": "2026-11-12",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "konami",
+    "beast",
+    "phoenix",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R130",
+   "date": "2026-11-12",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "konami",
+    "beast",
+    "phoenix",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R131",
+   "date": "2026-11-12",
+   "table": 2,
+   "game": 1,
+   "teams": [
+    "earth-jets",
+    "drivens",
+    "fuurinkazan",
+    "sakuraknights"
+   ]
+  },
+  {
+   "id": "2026-R132",
+   "date": "2026-11-12",
+   "table": 2,
+   "game": 2,
+   "teams": [
+    "earth-jets",
+    "drivens",
+    "fuurinkazan",
+    "sakuraknights"
+   ]
+  },
+  {
+   "id": "2026-R133",
+   "date": "2026-11-13",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "earth-jets",
+    "fuurinkazan",
+    "beast",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R134",
+   "date": "2026-11-13",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "earth-jets",
+    "fuurinkazan",
+    "beast",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R135",
+   "date": "2026-11-13",
+   "table": 2,
+   "game": 1,
+   "teams": [
+    "sakuraknights",
+    "phoenix",
+    "raiden",
+    "abemas"
+   ]
+  },
+  {
+   "id": "2026-R136",
+   "date": "2026-11-13",
+   "table": 2,
+   "game": 2,
+   "teams": [
+    "sakuraknights",
+    "phoenix",
+    "raiden",
+    "abemas"
+   ]
+  },
+  {
+   "id": "2026-R137",
+   "date": "2026-11-16",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "earth-jets",
+    "konami",
+    "phoenix",
+    "abemas"
+   ]
+  },
+  {
+   "id": "2026-R138",
+   "date": "2026-11-16",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "earth-jets",
+    "konami",
+    "phoenix",
+    "abemas"
+   ]
+  },
+  {
+   "id": "2026-R139",
+   "date": "2026-11-16",
+   "table": 2,
+   "game": 1,
+   "teams": [
+    "drivens",
+    "fuurinkazan",
+    "beast",
+    "raiden"
+   ]
+  },
+  {
+   "id": "2026-R140",
+   "date": "2026-11-16",
+   "table": 2,
+   "game": 2,
+   "teams": [
+    "drivens",
+    "fuurinkazan",
+    "beast",
+    "raiden"
+   ]
+  },
+  {
+   "id": "2026-R141",
+   "date": "2026-11-17",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "drivens",
+    "raiden",
+    "abemas",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R142",
+   "date": "2026-11-17",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "drivens",
+    "raiden",
+    "abemas",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R143",
+   "date": "2026-11-17",
+   "table": 2,
+   "game": 1,
+   "teams": [
+    "earth-jets",
+    "sakuraknights",
+    "konami",
+    "beast"
+   ]
+  },
+  {
+   "id": "2026-R144",
+   "date": "2026-11-17",
+   "table": 2,
+   "game": 2,
+   "teams": [
+    "earth-jets",
+    "sakuraknights",
+    "konami",
+    "beast"
+   ]
+  },
+  {
+   "id": "2026-R145",
+   "date": "2026-11-19",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "fuurinkazan",
+    "sakuraknights",
+    "konami",
+    "phoenix"
+   ]
+  },
+  {
+   "id": "2026-R146",
+   "date": "2026-11-19",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "fuurinkazan",
+    "sakuraknights",
+    "konami",
+    "phoenix"
+   ]
+  },
+  {
+   "id": "2026-R147",
+   "date": "2026-11-19",
+   "table": 2,
+   "game": 1,
+   "teams": [
+    "earth-jets",
+    "drivens",
+    "raiden",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R148",
+   "date": "2026-11-19",
+   "table": 2,
+   "game": 2,
+   "teams": [
+    "earth-jets",
+    "drivens",
+    "raiden",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R149",
+   "date": "2026-11-20",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "sakuraknights",
+    "beast",
+    "phoenix",
+    "raiden"
+   ]
+  },
+  {
+   "id": "2026-R150",
+   "date": "2026-11-20",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "sakuraknights",
+    "beast",
+    "phoenix",
+    "raiden"
+   ]
+  },
+  {
+   "id": "2026-R151",
+   "date": "2026-11-20",
+   "table": 2,
+   "game": 1,
+   "teams": [
+    "fuurinkazan",
+    "konami",
+    "abemas",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R152",
+   "date": "2026-11-20",
+   "table": 2,
+   "game": 2,
+   "teams": [
+    "fuurinkazan",
+    "konami",
+    "abemas",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R153",
+   "date": "2026-11-23",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "earth-jets",
+    "drivens",
+    "fuurinkazan",
+    "konami"
+   ]
+  },
+  {
+   "id": "2026-R154",
+   "date": "2026-11-23",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "earth-jets",
+    "drivens",
+    "fuurinkazan",
+    "konami"
+   ]
+  },
+  {
+   "id": "2026-R155",
+   "date": "2026-11-23",
+   "table": 2,
+   "game": 1,
+   "teams": [
+    "beast",
+    "phoenix",
+    "abemas",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R156",
+   "date": "2026-11-23",
+   "table": 2,
+   "game": 2,
+   "teams": [
+    "beast",
+    "phoenix",
+    "abemas",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R157",
+   "date": "2026-11-24",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "fuurinkazan",
+    "beast",
+    "phoenix",
+    "raiden"
+   ]
+  },
+  {
+   "id": "2026-R158",
+   "date": "2026-11-24",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "fuurinkazan",
+    "beast",
+    "phoenix",
+    "raiden"
+   ]
+  },
+  {
+   "id": "2026-R159",
+   "date": "2026-11-24",
+   "table": 2,
+   "game": 1,
+   "teams": [
+    "earth-jets",
+    "drivens",
+    "sakuraknights",
+    "abemas"
+   ]
+  },
+  {
+   "id": "2026-R160",
+   "date": "2026-11-24",
+   "table": 2,
+   "game": 2,
+   "teams": [
+    "earth-jets",
+    "drivens",
+    "sakuraknights",
+    "abemas"
+   ]
+  },
+  {
+   "id": "2026-R161",
+   "date": "2026-11-26",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "fuurinkazan",
+    "sakuraknights",
+    "beast",
+    "abemas"
+   ]
+  },
+  {
+   "id": "2026-R162",
+   "date": "2026-11-26",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "fuurinkazan",
+    "sakuraknights",
+    "beast",
+    "abemas"
+   ]
+  },
+  {
+   "id": "2026-R163",
+   "date": "2026-11-26",
+   "table": 2,
+   "game": 1,
+   "teams": [
+    "earth-jets",
+    "konami",
+    "raiden",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R164",
+   "date": "2026-11-26",
+   "table": 2,
+   "game": 2,
+   "teams": [
+    "earth-jets",
+    "konami",
+    "raiden",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R165",
+   "date": "2026-11-27",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "earth-jets",
+    "phoenix",
+    "abemas",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R166",
+   "date": "2026-11-27",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "earth-jets",
+    "phoenix",
+    "abemas",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R167",
+   "date": "2026-11-27",
+   "table": 2,
+   "game": 1,
+   "teams": [
+    "drivens",
+    "sakuraknights",
+    "konami",
+    "beast"
+   ]
+  },
+  {
+   "id": "2026-R168",
+   "date": "2026-11-27",
+   "table": 2,
+   "game": 2,
+   "teams": [
+    "drivens",
+    "sakuraknights",
+    "konami",
+    "beast"
+   ]
+  },
+  {
+   "id": "2026-R169",
+   "date": "2026-11-30",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "drivens",
+    "fuurinkazan",
+    "raiden",
+    "abemas"
+   ]
+  },
+  {
+   "id": "2026-R170",
+   "date": "2026-11-30",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "drivens",
+    "fuurinkazan",
+    "raiden",
+    "abemas"
+   ]
+  },
+  {
+   "id": "2026-R171",
+   "date": "2026-11-30",
+   "table": 2,
+   "game": 1,
+   "teams": [
+    "earth-jets",
+    "sakuraknights",
+    "beast",
+    "phoenix"
+   ]
+  },
+  {
+   "id": "2026-R172",
+   "date": "2026-11-30",
+   "table": 2,
+   "game": 2,
+   "teams": [
+    "earth-jets",
+    "sakuraknights",
+    "beast",
+    "phoenix"
+   ]
+  },
+  {
+   "id": "2026-R173",
+   "date": "2026-12-01",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "konami",
+    "beast",
+    "raiden",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R174",
+   "date": "2026-12-01",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "konami",
+    "beast",
+    "raiden",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R175",
+   "date": "2026-12-01",
+   "table": 2,
+   "game": 1,
+   "teams": [
+    "earth-jets",
+    "drivens",
+    "fuurinkazan",
+    "phoenix"
+   ]
+  },
+  {
+   "id": "2026-R176",
+   "date": "2026-12-01",
+   "table": 2,
+   "game": 2,
+   "teams": [
+    "earth-jets",
+    "drivens",
+    "fuurinkazan",
+    "phoenix"
+   ]
+  },
+  {
+   "id": "2026-R177",
+   "date": "2026-12-03",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "drivens",
+    "fuurinkazan",
+    "konami",
+    "abemas"
+   ]
+  },
+  {
+   "id": "2026-R178",
+   "date": "2026-12-03",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "drivens",
+    "fuurinkazan",
+    "konami",
+    "abemas"
+   ]
+  },
+  {
+   "id": "2026-R179",
+   "date": "2026-12-03",
+   "table": 2,
+   "game": 1,
+   "teams": [
+    "sakuraknights",
+    "phoenix",
+    "raiden",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R180",
+   "date": "2026-12-03",
+   "table": 2,
+   "game": 2,
+   "teams": [
+    "sakuraknights",
+    "phoenix",
+    "raiden",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R181",
+   "date": "2026-12-04",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "earth-jets",
+    "raiden",
+    "abemas",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R182",
+   "date": "2026-12-04",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "earth-jets",
+    "raiden",
+    "abemas",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R183",
+   "date": "2026-12-04",
+   "table": 2,
+   "game": 1,
+   "teams": [
+    "fuurinkazan",
+    "sakuraknights",
+    "konami",
+    "beast"
+   ]
+  },
+  {
+   "id": "2026-R184",
+   "date": "2026-12-04",
+   "table": 2,
+   "game": 2,
+   "teams": [
+    "fuurinkazan",
+    "sakuraknights",
+    "konami",
+    "beast"
+   ]
+  },
+  {
+   "id": "2026-R185",
+   "date": "2026-12-07",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "earth-jets",
+    "konami",
+    "beast",
+    "phoenix"
+   ]
+  },
+  {
+   "id": "2026-R186",
+   "date": "2026-12-07",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "earth-jets",
+    "konami",
+    "beast",
+    "phoenix"
+   ]
+  },
+  {
+   "id": "2026-R187",
+   "date": "2026-12-07",
+   "table": 2,
+   "game": 1,
+   "teams": [
+    "drivens",
+    "sakuraknights",
+    "raiden",
+    "abemas"
+   ]
+  },
+  {
+   "id": "2026-R188",
+   "date": "2026-12-07",
+   "table": 2,
+   "game": 2,
+   "teams": [
+    "drivens",
+    "sakuraknights",
+    "raiden",
+    "abemas"
+   ]
+  },
+  {
+   "id": "2026-R189",
+   "date": "2026-12-08",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "earth-jets",
+    "fuurinkazan",
+    "sakuraknights",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R190",
+   "date": "2026-12-08",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "earth-jets",
+    "fuurinkazan",
+    "sakuraknights",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R191",
+   "date": "2026-12-08",
+   "table": 2,
+   "game": 1,
+   "teams": [
+    "drivens",
+    "beast",
+    "phoenix",
+    "abemas"
+   ]
+  },
+  {
+   "id": "2026-R192",
+   "date": "2026-12-08",
+   "table": 2,
+   "game": 2,
+   "teams": [
+    "drivens",
+    "beast",
+    "phoenix",
+    "abemas"
+   ]
+  },
+  {
+   "id": "2026-R193",
+   "date": "2026-12-10",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "fuurinkazan",
+    "beast",
+    "raiden",
+    "abemas"
+   ]
+  },
+  {
+   "id": "2026-R194",
+   "date": "2026-12-10",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "fuurinkazan",
+    "beast",
+    "raiden",
+    "abemas"
+   ]
+  },
+  {
+   "id": "2026-R195",
+   "date": "2026-12-10",
+   "table": 2,
+   "game": 1,
+   "teams": [
+    "drivens",
+    "konami",
+    "phoenix",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R196",
+   "date": "2026-12-10",
+   "table": 2,
+   "game": 2,
+   "teams": [
+    "drivens",
+    "konami",
+    "phoenix",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R197",
+   "date": "2026-12-11",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "earth-jets",
+    "drivens",
+    "konami",
+    "raiden"
+   ]
+  },
+  {
+   "id": "2026-R198",
+   "date": "2026-12-11",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "earth-jets",
+    "drivens",
+    "konami",
+    "raiden"
+   ]
+  },
+  {
+   "id": "2026-R199",
+   "date": "2026-12-11",
+   "table": 2,
+   "game": 1,
+   "teams": [
+    "fuurinkazan",
+    "sakuraknights",
+    "phoenix",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R200",
+   "date": "2026-12-11",
+   "table": 2,
+   "game": 2,
+   "teams": [
+    "fuurinkazan",
+    "sakuraknights",
+    "phoenix",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R201",
+   "date": "2026-12-14",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "sakuraknights",
+    "konami",
+    "phoenix",
+    "abemas"
+   ]
+  },
+  {
+   "id": "2026-R202",
+   "date": "2026-12-14",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "sakuraknights",
+    "konami",
+    "phoenix",
+    "abemas"
+   ]
+  },
+  {
+   "id": "2026-R203",
+   "date": "2026-12-14",
+   "table": 2,
+   "game": 1,
+   "teams": [
+    "earth-jets",
+    "drivens",
+    "beast",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R204",
+   "date": "2026-12-14",
+   "table": 2,
+   "game": 2,
+   "teams": [
+    "earth-jets",
+    "drivens",
+    "beast",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R205",
+   "date": "2026-12-15",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "earth-jets",
+    "fuurinkazan",
+    "phoenix",
+    "abemas"
+   ]
+  },
+  {
+   "id": "2026-R206",
+   "date": "2026-12-15",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "earth-jets",
+    "fuurinkazan",
+    "phoenix",
+    "abemas"
+   ]
+  },
+  {
+   "id": "2026-R207",
+   "date": "2026-12-15",
+   "table": 2,
+   "game": 1,
+   "teams": [
+    "drivens",
+    "sakuraknights",
+    "beast",
+    "raiden"
+   ]
+  },
+  {
+   "id": "2026-R208",
+   "date": "2026-12-15",
+   "table": 2,
+   "game": 2,
+   "teams": [
+    "drivens",
+    "sakuraknights",
+    "beast",
+    "raiden"
+   ]
+  },
+  {
+   "id": "2026-R209",
+   "date": "2026-12-17",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "sakuraknights",
+    "beast",
+    "abemas",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R210",
+   "date": "2026-12-17",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "sakuraknights",
+    "beast",
+    "abemas",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R211",
+   "date": "2026-12-17",
+   "table": 2,
+   "game": 1,
+   "teams": [
+    "fuurinkazan",
+    "konami",
+    "phoenix",
+    "raiden"
+   ]
+  },
+  {
+   "id": "2026-R212",
+   "date": "2026-12-17",
+   "table": 2,
+   "game": 2,
+   "teams": [
+    "fuurinkazan",
+    "konami",
+    "phoenix",
+    "raiden"
+   ]
+  },
+  {
+   "id": "2026-R213",
+   "date": "2026-12-18",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "earth-jets",
+    "drivens",
+    "sakuraknights",
+    "konami"
+   ]
+  },
+  {
+   "id": "2026-R214",
+   "date": "2026-12-18",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "earth-jets",
+    "drivens",
+    "sakuraknights",
+    "konami"
+   ]
+  },
+  {
+   "id": "2026-R215",
+   "date": "2026-12-18",
+   "table": 2,
+   "game": 1,
+   "teams": [
+    "fuurinkazan",
+    "beast",
+    "raiden",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R216",
+   "date": "2026-12-18",
+   "table": 2,
+   "game": 2,
+   "teams": [
+    "fuurinkazan",
+    "beast",
+    "raiden",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R217",
+   "date": "2026-12-21",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "drivens",
+    "phoenix",
+    "raiden",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R218",
+   "date": "2026-12-21",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "drivens",
+    "phoenix",
+    "raiden",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R219",
+   "date": "2026-12-21",
+   "table": 2,
+   "game": 1,
+   "teams": [
+    "earth-jets",
+    "fuurinkazan",
+    "konami",
+    "abemas"
+   ]
+  },
+  {
+   "id": "2026-R220",
+   "date": "2026-12-21",
+   "table": 2,
+   "game": 2,
+   "teams": [
+    "earth-jets",
+    "fuurinkazan",
+    "konami",
+    "abemas"
+   ]
+  },
+  {
+   "id": "2026-R221",
+   "date": "2026-12-22",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "earth-jets",
+    "sakuraknights",
+    "phoenix",
+    "raiden"
+   ]
+  },
+  {
+   "id": "2026-R222",
+   "date": "2026-12-22",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "earth-jets",
+    "sakuraknights",
+    "phoenix",
+    "raiden"
+   ]
+  },
+  {
+   "id": "2026-R223",
+   "date": "2026-12-22",
+   "table": 2,
+   "game": 1,
+   "teams": [
+    "konami",
+    "beast",
+    "abemas",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R224",
+   "date": "2026-12-22",
+   "table": 2,
+   "game": 2,
+   "teams": [
+    "konami",
+    "beast",
+    "abemas",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R225",
+   "date": "2026-12-24",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "drivens",
+    "fuurinkazan",
+    "sakuraknights",
+    "beast"
+   ]
+  },
+  {
+   "id": "2026-R226",
+   "date": "2026-12-24",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "drivens",
+    "fuurinkazan",
+    "sakuraknights",
+    "beast"
+   ]
+  },
+  {
+   "id": "2026-R227",
+   "date": "2026-12-24",
+   "table": 2,
+   "game": 1,
+   "teams": [
+    "earth-jets",
+    "konami",
+    "abemas",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R228",
+   "date": "2026-12-24",
+   "table": 2,
+   "game": 2,
+   "teams": [
+    "earth-jets",
+    "konami",
+    "abemas",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R229",
+   "date": "2026-12-25",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "drivens",
+    "fuurinkazan",
+    "abemas",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R230",
+   "date": "2026-12-25",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "drivens",
+    "fuurinkazan",
+    "abemas",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R231",
+   "date": "2026-12-25",
+   "table": 2,
+   "game": 1,
+   "teams": [
+    "earth-jets",
+    "beast",
+    "phoenix",
+    "raiden"
+   ]
+  },
+  {
+   "id": "2026-R232",
+   "date": "2026-12-25",
+   "table": 2,
+   "game": 2,
+   "teams": [
+    "earth-jets",
+    "beast",
+    "phoenix",
+    "raiden"
+   ]
+  },
+  {
+   "id": "2026-R233",
+   "date": "2027-01-04",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "fuurinkazan",
+    "sakuraknights",
+    "konami",
+    "raiden"
+   ]
+  },
+  {
+   "id": "2026-R234",
+   "date": "2027-01-04",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "fuurinkazan",
+    "sakuraknights",
+    "konami",
+    "raiden"
+   ]
+  },
+  {
+   "id": "2026-R235",
+   "date": "2027-01-05",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "earth-jets",
+    "drivens",
+    "beast",
+    "phoenix"
+   ]
+  },
+  {
+   "id": "2026-R236",
+   "date": "2027-01-05",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "earth-jets",
+    "drivens",
+    "beast",
+    "phoenix"
+   ]
+  },
+  {
+   "id": "2026-R237",
+   "date": "2027-01-07",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "fuurinkazan",
+    "phoenix",
+    "abemas",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R238",
+   "date": "2027-01-07",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "fuurinkazan",
+    "phoenix",
+    "abemas",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R239",
+   "date": "2027-01-08",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "drivens",
+    "sakuraknights",
+    "konami",
+    "raiden"
+   ]
+  },
+  {
+   "id": "2026-R240",
+   "date": "2027-01-08",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "drivens",
+    "sakuraknights",
+    "konami",
+    "raiden"
+   ]
+  },
+  {
+   "id": "2026-R241",
+   "date": "2027-01-11",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "earth-jets",
+    "sakuraknights",
+    "raiden",
+    "abemas"
+   ]
+  },
+  {
+   "id": "2026-R242",
+   "date": "2027-01-11",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "earth-jets",
+    "sakuraknights",
+    "raiden",
+    "abemas"
+   ]
+  },
+  {
+   "id": "2026-R243",
+   "date": "2027-01-12",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "fuurinkazan",
+    "konami",
+    "beast",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R244",
+   "date": "2027-01-12",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "fuurinkazan",
+    "konami",
+    "beast",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R245",
+   "date": "2027-01-14",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "drivens",
+    "sakuraknights",
+    "phoenix",
+    "abemas"
+   ]
+  },
+  {
+   "id": "2026-R246",
+   "date": "2027-01-14",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "drivens",
+    "sakuraknights",
+    "phoenix",
+    "abemas"
+   ]
+  },
+  {
+   "id": "2026-R247",
+   "date": "2027-01-15",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "beast",
+    "phoenix",
+    "raiden",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R248",
+   "date": "2027-01-15",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "beast",
+    "phoenix",
+    "raiden",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R249",
+   "date": "2027-01-18",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "earth-jets",
+    "drivens",
+    "fuurinkazan",
+    "konami"
+   ]
+  },
+  {
+   "id": "2026-R250",
+   "date": "2027-01-18",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "earth-jets",
+    "drivens",
+    "fuurinkazan",
+    "konami"
+   ]
+  },
+  {
+   "id": "2026-R251",
+   "date": "2027-01-19",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "konami",
+    "beast",
+    "phoenix",
+    "abemas"
+   ]
+  },
+  {
+   "id": "2026-R252",
+   "date": "2027-01-19",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "konami",
+    "beast",
+    "phoenix",
+    "abemas"
+   ]
+  },
+  {
+   "id": "2026-R253",
+   "date": "2027-01-21",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "drivens",
+    "fuurinkazan",
+    "sakuraknights",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R254",
+   "date": "2027-01-21",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "drivens",
+    "fuurinkazan",
+    "sakuraknights",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R255",
+   "date": "2027-01-22",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "earth-jets",
+    "fuurinkazan",
+    "konami",
+    "raiden"
+   ]
+  },
+  {
+   "id": "2026-R256",
+   "date": "2027-01-22",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "earth-jets",
+    "fuurinkazan",
+    "konami",
+    "raiden"
+   ]
+  },
+  {
+   "id": "2026-R257",
+   "date": "2027-01-25",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "earth-jets",
+    "beast",
+    "abemas",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R258",
+   "date": "2027-01-25",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "earth-jets",
+    "beast",
+    "abemas",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R259",
+   "date": "2027-01-26",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "drivens",
+    "sakuraknights",
+    "phoenix",
+    "raiden"
+   ]
+  },
+  {
+   "id": "2026-R260",
+   "date": "2027-01-26",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "drivens",
+    "sakuraknights",
+    "phoenix",
+    "raiden"
+   ]
+  },
+  {
+   "id": "2026-R261",
+   "date": "2027-01-28",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "sakuraknights",
+    "konami",
+    "beast",
+    "abemas"
+   ]
+  },
+  {
+   "id": "2026-R262",
+   "date": "2027-01-28",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "sakuraknights",
+    "konami",
+    "beast",
+    "abemas"
+   ]
+  },
+  {
+   "id": "2026-R263",
+   "date": "2027-01-29",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "earth-jets",
+    "drivens",
+    "phoenix",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R264",
+   "date": "2027-01-29",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "earth-jets",
+    "drivens",
+    "phoenix",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R265",
+   "date": "2027-02-01",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "fuurinkazan",
+    "konami",
+    "raiden",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R266",
+   "date": "2027-02-01",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "fuurinkazan",
+    "konami",
+    "raiden",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R267",
+   "date": "2027-02-02",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "earth-jets",
+    "drivens",
+    "beast",
+    "raiden"
+   ]
+  },
+  {
+   "id": "2026-R268",
+   "date": "2027-02-02",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "earth-jets",
+    "drivens",
+    "beast",
+    "raiden"
+   ]
+  },
+  {
+   "id": "2026-R269",
+   "date": "2027-02-04",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "fuurinkazan",
+    "sakuraknights",
+    "phoenix",
+    "abemas"
+   ]
+  },
+  {
+   "id": "2026-R270",
+   "date": "2027-02-04",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "fuurinkazan",
+    "sakuraknights",
+    "phoenix",
+    "abemas"
+   ]
+  },
+  {
+   "id": "2026-R271",
+   "date": "2027-02-05",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "drivens",
+    "sakuraknights",
+    "konami",
+    "phoenix"
+   ]
+  },
+  {
+   "id": "2026-R272",
+   "date": "2027-02-05",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "drivens",
+    "sakuraknights",
+    "konami",
+    "phoenix"
+   ]
+  },
+  {
+   "id": "2026-R273",
+   "date": "2027-02-08",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "earth-jets",
+    "fuurinkazan",
+    "beast",
+    "abemas"
+   ]
+  },
+  {
+   "id": "2026-R274",
+   "date": "2027-02-08",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "earth-jets",
+    "fuurinkazan",
+    "beast",
+    "abemas"
+   ]
+  },
+  {
+   "id": "2026-R275",
+   "date": "2027-02-09",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "sakuraknights",
+    "raiden",
+    "abemas",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R276",
+   "date": "2027-02-09",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "sakuraknights",
+    "raiden",
+    "abemas",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R277",
+   "date": "2027-02-11",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "earth-jets",
+    "drivens",
+    "fuurinkazan",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R278",
+   "date": "2027-02-11",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "earth-jets",
+    "drivens",
+    "fuurinkazan",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R279",
+   "date": "2027-02-12",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "konami",
+    "beast",
+    "phoenix",
+    "raiden"
+   ]
+  },
+  {
+   "id": "2026-R280",
+   "date": "2027-02-12",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "konami",
+    "beast",
+    "phoenix",
+    "raiden"
+   ]
+  },
+  {
+   "id": "2026-R281",
+   "date": "2027-02-15",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "earth-jets",
+    "sakuraknights",
+    "konami",
+    "abemas"
+   ]
+  },
+  {
+   "id": "2026-R282",
+   "date": "2027-02-15",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "earth-jets",
+    "sakuraknights",
+    "konami",
+    "abemas"
+   ]
+  },
+  {
+   "id": "2026-R283",
+   "date": "2027-02-16",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "drivens",
+    "fuurinkazan",
+    "beast",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R284",
+   "date": "2027-02-16",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "drivens",
+    "fuurinkazan",
+    "beast",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R285",
+   "date": "2027-02-18",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "earth-jets",
+    "phoenix",
+    "raiden",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R286",
+   "date": "2027-02-18",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "earth-jets",
+    "phoenix",
+    "raiden",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R287",
+   "date": "2027-02-19",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "drivens",
+    "konami",
+    "phoenix",
+    "abemas"
+   ]
+  },
+  {
+   "id": "2026-R288",
+   "date": "2027-02-19",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "drivens",
+    "konami",
+    "phoenix",
+    "abemas"
+   ]
+  },
+  {
+   "id": "2026-R289",
+   "date": "2027-02-22",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "fuurinkazan",
+    "sakuraknights",
+    "beast",
+    "raiden"
+   ]
+  },
+  {
+   "id": "2026-R290",
+   "date": "2027-02-22",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "fuurinkazan",
+    "sakuraknights",
+    "beast",
+    "raiden"
+   ]
+  },
+  {
+   "id": "2026-R291",
+   "date": "2027-02-23",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "earth-jets",
+    "sakuraknights",
+    "beast",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R292",
+   "date": "2027-02-23",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "earth-jets",
+    "sakuraknights",
+    "beast",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R293",
+   "date": "2027-02-25",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "drivens",
+    "konami",
+    "raiden",
+    "abemas"
+   ]
+  },
+  {
+   "id": "2026-R294",
+   "date": "2027-02-25",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "drivens",
+    "konami",
+    "raiden",
+    "abemas"
+   ]
+  },
+  {
+   "id": "2026-R295",
+   "date": "2027-02-26",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "earth-jets",
+    "fuurinkazan",
+    "konami",
+    "phoenix"
+   ]
+  },
+  {
+   "id": "2026-R296",
+   "date": "2027-02-26",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "earth-jets",
+    "fuurinkazan",
+    "konami",
+    "phoenix"
+   ]
+  },
+  {
+   "id": "2026-R297",
+   "date": "2027-03-01",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "sakuraknights",
+    "beast",
+    "phoenix",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R298",
+   "date": "2027-03-01",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "sakuraknights",
+    "beast",
+    "phoenix",
+    "pirates"
+   ]
+  },
+  {
+   "id": "2026-R299",
+   "date": "2027-03-02",
+   "table": 1,
+   "game": 1,
+   "teams": [
+    "drivens",
+    "fuurinkazan",
+    "raiden",
+    "abemas"
+   ]
+  },
+  {
+   "id": "2026-R300",
+   "date": "2027-03-02",
+   "table": 1,
+   "game": 2,
+   "teams": [
+    "drivens",
+    "fuurinkazan",
+    "raiden",
+    "abemas"
+   ]
+  }
+ ]
+}
