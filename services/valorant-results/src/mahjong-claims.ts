@@ -1,6 +1,7 @@
 // Mahjong Soul results by paipu URL (/paifu). The game's data is not fetched; another registered
 // member opens the paipu, checks the rank and presses 承認. Only then is KP credited, once.
 import policy from '../mahjong-kp-policy.json' with {type:'json'};
+import {applyLuck,luckFor,luckLabel} from './luck.ts';
 import {initializeKp,newKpState} from './kp.ts';
 import type {KpEnv,KpMapping} from './kp.ts';
 import {ensureQuizKp} from './quiz-kp.ts';
@@ -121,6 +122,12 @@ export async function paipuSummary(env:KpEnv,guild:string,paipu:string){
 }
 /** Compares a claim with the fetched paipu, when there is one. The game type and the amount come
  * from the paipu; a rank held by someone else's linked account, or a different linked account, is refused. */
+/** The KP moved for a rank after luck (src/luck.ts), as the unsigned amount the claim stores: the trigger makes last
+ * place negative. Luck on last place wipes the loss out; bad luck doubles it. Fixed by the paipu and the account. */
+export function luckyStake(game:Game,rank:number,paipu:string,account:number){
+ const base=stake(game,rank),luck=luckFor('mahjong:'+paipu+':'+account);
+ return {amount:Math.abs(applyLuck(base,luck)),note:luckLabel(luck,base)};
+}
 export async function paipuCheck(env:KpEnv,guild:string,claim:Pick<Claim,'user'|'paipu'|'rank'>):Promise<null|{refuse:string}|{game:Game;amount:number;account:number;nickname:string;auto:boolean}>{
  const summary=await paipuSummary(env,guild,claim.paipu);
  if(!summary||!Object.hasOwn(policy.games,summary.game))return null;
@@ -131,7 +138,7 @@ export async function paipuCheck(env:KpEnv,guild:string,claim:Pick<Claim,'user'|
  if(owner&&owner.user!==claim.user)return {refuse:`牌譜の${claim.rank}位は別のメンバーの雀魂アカウントです。`};
  if(mine&&mine.account!==player.accountId)return {refuse:`牌譜の${claim.rank}位は、登録済みのあなたの雀魂アカウントではありません。`};
  const game=summary.game as Game;
- return {game,amount:Math.abs(stake(game,claim.rank)),account:player.accountId,nickname:player.nickname,auto:Boolean(mine)};
+ return {game,amount:luckyStake(game,claim.rank,claim.paipu,player.accountId).amount,account:player.accountId,nickname:player.nickname,auto:Boolean(mine)};
 }
 
 /** Applies a fetched paipu to one pending claim: auto-approval for a linked account, otherwise the
@@ -158,7 +165,7 @@ export async function autoCredit(env:KpEnv,guild:string,summary:PaipuSummary,now
  for(const seat of summary.seats){
   const link=seat.accountId>0?links.find(l=>l.account===seat.accountId):undefined;
   if(!link)continue;
-  const id=`auto:${summary.uuid}:${link.user}`,amount=Math.abs(stake(game,seat.rank));
+  const id=`auto:${summary.uuid}:${link.user}`,{amount,note}=luckyStake(game,seat.rank,summary.uuid,seat.accountId);
   await env.DB.batch([
    env.DB.prepare('INSERT OR IGNORE INTO kp_wallets(guild,user) VALUES(?,?)').bind(guild,link.user),
    env.DB.prepare('INSERT OR IGNORE INTO kp_state(guild,user,data) VALUES(?,?,?)').bind(guild,link.user,JSON.stringify(newKpState())),
@@ -166,7 +173,7 @@ export async function autoCredit(env:KpEnv,guild:string,summary:PaipuSummary,now
     .bind(id,guild,link.user,summary.uuid,'https://game.mahjongsoul.com/index.html?paipu='+summary.uuid,game,seat.rank,amount,jstDay(summary.end||now),now),
   ]);
   const done=await env.DB.prepare(`UPDATE kp_mahjong_claims SET status='approved',decider='paipu',decided_at=? WHERE guild=? AND id=? AND status='pending'`).bind(now,guild,id).run();
-  if(done.meta.changes){const moved=await paid(env,id);lines.push(`${moved<0||stake(game,seat.rank)<0?'💸':'✅'} <@${link.user}> ${seat.rank}位 ${signed(moved)}（牌譜から自動）`);}
+  if(done.meta.changes){const moved=await paid(env,id);lines.push(`${moved<0||stake(game,seat.rank)<0?'💸':'✅'} <@${link.user}> ${seat.rank}位 ${signed(moved)}（牌譜から自動）${note}`);}
  }
  return lines;
 }

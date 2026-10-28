@@ -46,11 +46,11 @@ test('repeated and concurrent match collection pays once, aliases normalize, and
  assert.equal((await readKpState(f.env,mapping,one)).cash,before);
 });
 test('ledger failure rolls back the credit and leaves a durable retry; recovery edits the existing notice without duplicate minting',async()=>{
- const f=await fixture();f.enableHistory();const raw=game('retry');
+ const f=await fixture();f.enableHistory();const raw=game('retry-match');
  f.sql.exec("CREATE TRIGGER kp_test_fail BEFORE INSERT ON kp_ledger BEGIN SELECT RAISE(ABORT,'test failure'); END;");
  assert.equal(await collectKpMatch(f.env,mapping,raw,'p-one'),null);
  assert.equal((await readKpState(f.env,mapping,one)).cash,0);assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM kp_events').get()!.n,0);assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM kp_inbox').get()!.n,1);
- f.sql.prepare('INSERT INTO notifications(riot_id,match_id,message,ended_at,mode,sent) VALUES(?,?,?,?,?,?)').run('One#JP1','retry','Result\n💬 line',Date.now(),'competitive',1);
+ f.sql.prepare('INSERT INTO notifications(riot_id,match_id,message,ended_at,mode,sent) VALUES(?,?,?,?,?,?)').run('One#JP1','retry-match','Result\n💬 line',Date.now(),'competitive',1);
  f.sql.exec('DROP TRIGGER kp_test_fail');await drainKpInbox(f.env);await drainKpInbox(f.env);
  assert.equal((await readKpState(f.env,mapping,one)).cash,900);assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM kp_ledger').get()!.n,1);
  assert.match(String(f.sql.prepare('SELECT message FROM notifications').get()!.message),/900 KP\n💬 line/);
@@ -297,7 +297,7 @@ test('a loss costs a little and the bottom of a full team more, capped at the ba
  assert.equal(await collectKpMatch(f.env,mapping,team('middle',[4000,3000,1000,5000,6000]),'p-one'),-100,'not the bottom: the plain loss');
  assert.equal(await collectKpMatch(f.env,mapping,team('won-bottom',[1000,3000,4000,5000,6000],true),'p-one'),900,'a win is never charged');
  assert.equal(await collectKpMatch(f.env,mapping,team('gap',[1000,3000,undefined,5000,6000]),'p-one'),-100,'missing stats: the plain loss');
- assert.equal(await collectKpMatch(f.env,mapping,team('short',[1000,3000,4000]),'p-one'),-100,'an incomplete team: the plain loss');
+ assert.equal(await collectKpMatch(f.env,mapping,team('short-team',[1000,3000,4000]),'p-one'),-100,'an incomplete team: the plain loss');
  const cash=(await readKpState(f.env,mapping,one)).cash;
  f.sql.prepare("INSERT INTO kp_ledger VALUES('drain',?,?,?,'test-only',0)").run(guild,one,-cash);
  assert.equal(await collectKpMatch(f.env,mapping,team('broke',[1000,3000,4000,5000,6000]),'p-one'),0,'nothing to take from an empty wallet');
@@ -308,19 +308,30 @@ test('the match line shows the net KP, negative included, and a rewrite replaces
  assert.equal(kpCreditLine(kpCreditLine('結果',-300),900),'結果\n🪙 この試合 +900 KP');
 });
 
-test('deathmatch: K/D below 1 costs 15, first place wins 500 on a fair coin fixed per match, everything else is 0',async()=>{
- const f=await fixture();f.enableHistory();seed(f.sql,one,1000);
+test('deathmatch: K/D below 1 costs 50, first place wins 1,000 on a 30% draw fixed per match, everything else is 0',async()=>{
+ const {valoKp}=await import('../src/kp.ts');const f=await fixture();f.enableHistory();seed(f.sql,one,1000);
  const dm=(id:string,me:{kills?:number;deaths?:number},others:number[]=[10,20])=>{const raw=game(id,'deathmatch') as ReturnType<typeof game>&{players:Array<{puuid:string;team_id:string;stats?:{kills?:number;deaths?:number}}>};
   raw.teams=[];raw.players=[{puuid:'p-one',team_id:'p-one',stats:me},...others.map((k,i)=>({puuid:'x'+i,team_id:'x'+i,stats:{kills:k,deaths:10}}))];return raw;};
- assert.equal(await collectKpMatch(f.env,mapping,dm('dm-low',{kills:9,deaths:10}),'p-one'),-15);
+ assert.equal(await collectKpMatch(f.env,mapping,dm('dm-low',{kills:9,deaths:10}),'p-one'),-50);
  assert.equal(await collectKpMatch(f.env,mapping,dm('dm-even',{kills:10,deaths:10}),'p-one'),0,'exactly 1.0 is not below');
  assert.equal(await collectKpMatch(f.env,mapping,dm('dm-good',{kills:15,deaths:5}),'p-one'),0,'second place with a good K/D');
  assert.equal(await collectKpMatch(f.env,mapping,dm('dm-gap',{kills:15}),'p-one'),0,'missing stats are 0');
- // First place: about half of matches pay 500; the rest fall back to the K/D rule. The draw never changes on replay.
- const firsts=await Promise.all(Array.from({length:40},(_,i)=>collectKpMatch(f.env,mapping,dm('dm-top-'+i,{kills:30,deaths:10}),'p-one')));
- const won=firsts.filter(v=>v===500).length;assert.ok(won>=10&&won<=30,`won ${won} of 40`);assert.ok(firsts.every(v=>v===500||v===0));
- assert.equal(await collectKpMatch(f.env,mapping,dm('dm-top-0',{kills:30,deaths:10}),'p-one'),firsts[0]);
- const tiedLow=await collectKpMatch(f.env,mapping,dm('dm-tie-low',{kills:20,deaths:25}),'p-one');assert.ok(tiedLow===500||tiedLow===-15,'a shared first that misses the draw still has a K/D below 1');
+ // First place: about 30% of matches pay 1,000 before luck; the draw never changes on replay.
+ const bases=Array.from({length:200},(_,i)=>valoKp(dm('dm-top-'+i,{kills:30,deaths:10}),'p-one','deathmatch',null).base);
+ const won=bases.filter(v=>v===1000).length;assert.ok(won>=40&&won<=80,`won ${won} of 200`);assert.ok(bases.every(v=>v===1000||v===0));
+ const first=await collectKpMatch(f.env,mapping,dm('dm-top-0',{kills:30,deaths:10}),'p-one');
+ assert.equal(await collectKpMatch(f.env,mapping,dm('dm-top-0',{kills:30,deaths:10}),'p-one'),first);
+});
+test('escalation: the usual small rate, and on a very rare draw (about 3%) +1,000 for a win or −1,000 for a loss',async()=>{
+ const {valoKp}=await import('../src/kp.ts');
+ const esc=(id:string,mode:string,win:boolean)=>{const raw=game(id,mode,win) as ReturnType<typeof game>&{players:Array<{puuid:string;team_id:string;stats?:{kills?:number;score?:number}}>};
+  raw.players=[{puuid:'p-one',team_id:'red',stats:{kills:30,score:500}},...[10,20,15,5].map((k,i)=>({puuid:'m'+i,team_id:'red',stats:{kills:k,score:100}}))];return raw;};
+ const wins=Array.from({length:2000},(_,i)=>valoKp(esc('e-win'+i,'ggteam',true),'p-one','escalation','win'));
+ const big=wins.filter(r=>r.base===1000);assert.ok(big.length>=30&&big.length<=90,String(big.length));assert.ok(wins.every(r=>r.base===70||r.base===1000));
+ assert.ok(big.every(r=>r.note.startsWith('（🎰 エスカ大勝負）')));
+ const losses=Array.from({length:2000},(_,i)=>valoKp(esc('e-loss'+i,'ggteam',false),'p-one','escalation','loss'));
+ assert.ok(losses.every(r=>r.base===0||r.base===-1000)&&losses.some(r=>r.base===-1000));
+ assert.ok(Array.from({length:200},(_,i)=>valoKp(esc('t-win'+i,'hurm',true),'p-one','teamdeathmatch','win').base).every(v=>v===70),'team deathmatch: no bonus');
 });
 
 test('a competitive demotion is posted with the roast and costs 500 KP once; a promotion is praised and pays 100 KP once',async()=>{
@@ -348,9 +359,9 @@ test('a competitive demotion is posted with the roast and costs 500 KP once; a p
 
 test('a later monitor run shows a loss as its net negative KP, not the zero stored on the event',async()=>{
  const {prepareKpRun}=await import('../src/kp.ts');const f=await fixture();f.enableHistory();seed(f.sql,one,1000);
- assert.equal(await collectKpMatch(f.env,mapping,game('cached-loss','competitive',false),'p-one'),-100);
+ assert.equal(await collectKpMatch(f.env,mapping,game('cached-loss-net','competitive',false),'p-one'),-100);
  const run=await prepareKpRun(f.env,mapping);
- assert.equal(run.credits.get([...run.credits.keys()].find(k=>k.includes('cached-loss'))!),-100);
+ assert.equal(run.credits.get([...run.credits.keys()].find(k=>k.includes('cached-loss-net'))!),-100);
 });
 
 test('a rank change that reaches the history late is still caught on a later run, and the post is updated',async()=>{

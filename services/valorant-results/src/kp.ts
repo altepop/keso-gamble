@@ -1,4 +1,5 @@
 import policy from '../kp-policy.json' with { type: 'json' };
+import { applyLuck, chance, luckFor, luckLabel } from './luck.ts';
 import sealed from '../kp-bootstrap.encrypted.json' with { type: 'json' };
 import configuredPlayers from '../players.json' with { type: 'json' };
 import discord from '../discord-config.json' with { type: 'json' };
@@ -74,7 +75,7 @@ export async function syncKpAccounts(env:KpEnv,mapping:KpMapping){
  const queries=mapping.accounts.flatMap(a=>{const found=tracked.find(t=>t.riot_id.toLowerCase()===a.riotId.toLowerCase());const old=found&&linked.find(l=>l.puuid===found.puuid);return found&&(!old||old.user!==a.discordUserId||old.riot!==a.riotId)?[env.DB.prepare('INSERT INTO kp_accounts(guild,puuid,user,riot,linked_at) VALUES(?,?,?,?,?) ON CONFLICT(guild,puuid) DO UPDATE SET user=excluded.user,riot=excluded.riot').bind(mapping.guildId,found.puuid,a.discordUserId,a.riotId,Date.now())]:[];});
  if(queries.length)await env.DB.batch(queries);
 }
-interface KpEvent {id:string;guild:string;user:string;puuid:string;match:string;mode:string;outcome:string|null;amount:number;policy:string;at:number;penalty?:number}
+interface KpEvent {id:string;guild:string;user:string;puuid:string;match:string;mode:string;outcome:string|null;amount:number;policy:string;at:number;penalty?:number;note?:string}
 export function kpEventId(guild:string,match:string,puuid:string){return ['match',guild,match,puuid].map(encodeURIComponent).join(':');}
 export async function drainKpInbox(env:KpEnv){
  const rows=(await env.DB.prepare('SELECT id,payload FROM kp_inbox ORDER BY at,id LIMIT 20').all<{id:string;payload:string}>()).results;
@@ -84,23 +85,44 @@ export async function drainKpInbox(env:KpEnv){
   if(e.penalty)await env.DB.prepare(`INSERT OR IGNORE INTO kp_ledger(id,guild,user,delta,kind,at) SELECT ?,?,?,-MIN(?,balance),'match',? FROM kp_wallets WHERE guild=? AND user=? AND EXISTS(SELECT 1 FROM kp_events WHERE id=?)`).bind('penalty:'+e.id,e.guild,e.user,e.penalty,Date.now(),e.guild,e.user,e.id).run();
   const net=await kpMatchNet(env,e.id);
   const notice=await env.DB.prepare('SELECT n.riot_id,n.message FROM notifications n JOIN kp_accounts a ON n.riot_id=a.riot WHERE a.guild=? AND a.puuid=? AND n.match_id=?').bind(e.guild,e.puuid,e.match).first<{riot_id:string;message:string}>();
-  if(notice&&net!==null){const message=kpCreditLine(notice.message,net);await env.DB.prepare("UPDATE notifications SET message=?,sent=CASE WHEN mode='escalation' AND outcome='draw' THEN 1 ELSE 0 END WHERE riot_id=? AND match_id=? AND message!=?").bind(message,notice.riot_id,e.match,message).run();}
+  if(notice&&net!==null){const message=kpCreditLine(notice.message,net,typeof e.note==='string'?e.note:'');await env.DB.prepare("UPDATE notifications SET message=?,sent=CASE WHEN mode='escalation' AND outcome='draw' THEN 1 ELSE 0 END WHERE riot_id=? AND match_id=? AND message!=?").bind(message,notice.riot_id,e.match,message).run();}
   await env.DB.prepare('DELETE FROM kp_inbox WHERE id=? AND EXISTS(SELECT 1 FROM kp_events WHERE id=?)').bind(e.id,e.id).run();
  }catch{console.warn('kp_credit_retry_pending');}}
 }
 /** The match's KP after any bottom-of-team debit; null until the event is recorded. */
 export async function kpMatchNet(env:KpEnv,id:string){const r=await env.DB.prepare("SELECT e.amount+COALESCE((SELECT delta FROM kp_ledger WHERE id='penalty:'||e.id),0) AS net FROM kp_events e WHERE e.id=?").bind(id).first<{net:number}>();return r?Number(r.net):null;}
-export function kpCreditLine(text:string,amount:number){const base=text.replace(/\n🪙 この試合 [+−]\d+ KP[^\n]*/g,''),split=base.indexOf('\n💬 '),line='\n🪙 この試合 '+(amount<0?'−'+(-amount):'+'+amount)+' KP';return split<0?base+line:base.slice(0,split)+line+base.slice(split);}
-/** Deathmatch: first place (most kills, ties included) wins 500 KP on a fair 50% draw fixed by the match and player;
- * otherwise a K/D below 1 costs 15 KP and anything else is 0. Missing stats are 0. */
-export async function deathmatchKp(raw:Match,subject:Match['players'][number]|undefined,puuid:string){
- const rule=policy.deathmatch,kills=raw.players.map(p=>p.stats?.kills),mine=subject?.stats;
- if(!mine||!Number.isSafeInteger(mine.kills)||!Number.isSafeInteger(mine.deaths)||mine.kills!<0||mine.deaths!<0)return 0;
- if(kills.every(k=>Number.isSafeInteger(k))&&mine.kills===Math.max(...kills as number[])&&mine.kills!>0){
-  const digest=new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode('deathmatch-first:'+raw.metadata.match_id+':'+puuid)));
-  if(digest[0]*100<rule.firstChancePercent*256)return rule.firstPrize;
+export function kpCreditLine(text:string,amount:number,note=''){const base=text.replace(/\n🪙 この試合 [+−]\d+ KP[^\n]*/g,''),split=base.indexOf('\n💬 '),line='\n🪙 この試合 '+(amount<0?'−'+(-amount):'+'+amount)+' KP'+note;return split<0?base+line:base.slice(0,split)+line+base.slice(split);}
+/** The KP of one VALORANT result before the wallet: the mode's rate, the side bonuses of the easy modes, then luck.
+ * - Deathmatch: first place (most kills, ties included, at least one) wins 1,000 on a 30% draw; otherwise a K/D below 1
+ *   costs 50 and anything else is 0.
+ * - Escalation: the usual small rate, but on a very rare draw (3%) the match becomes all or nothing: +1,000 for a
+ *   win, −1,000 for a loss. Team deathmatch keeps its small rate.
+ * - teamBonus (kp-policy.json) can add a chance bonus to listed modes; none are listed now.
+ * - Every mode: luck (src/luck.ts) may double or triple it, wipe out a loss, or halve a gain / double a loss.
+ * Every draw is fixed by the match and the player. Missing stats never cost anything. */
+export function valoKp(raw:Match,puuid:string,mode:string,outcome:string|null):{base:number;net:number;note:string}{
+ const subject=raw.players.find(p=>p.puuid===puuid),id=raw.metadata.match_id+':'+puuid;
+ let base=0;
+ if(mode==='deathmatch'){
+  const rule=policy.deathmatch,kills=raw.players.map(p=>p.stats?.kills),mine=subject?.stats;
+  if(mine&&Number.isSafeInteger(mine.kills)&&Number.isSafeInteger(mine.deaths)&&mine.kills!>=0&&mine.deaths!>=0){
+   const first=kills.every(k=>Number.isSafeInteger(k))&&mine.kills===Math.max(...kills as number[])&&mine.kills!>0;
+   base=first&&chance('deathmatch-first:'+id,rule.firstChancePercent)?rule.firstPrize:mine.kills!<mine.deaths!?rule.belowOneKd:0;
+  }
+ }else{
+  const rates=policy.modes[mode as keyof typeof policy.modes];
+  // Losing with the lowest score on a full team costs more, like last place in Mahjong Soul.
+  const team=raw.players.filter(p=>p.team_id===subject?.team_id),scores=team.map(p=>p.stats?.score),kills=team.map(p=>p.stats?.kills);
+  const bottom=outcome==='loss'&&team.length===5&&scores.every(v=>Number.isSafeInteger(v)&&(v as number)>=0)&&subject?.stats?.score===Math.min(...scores as number[]);
+  base=outcome==='win'?rates.win:outcome==='loss'?bottom?rates.bottom:rates.loss:0;
+  const bonus=policy.teamBonus,top=kills.every(k=>Number.isSafeInteger(k))&&subject?.stats?.kills===Math.max(...kills as number[]);
+  if((bonus.modes as string[]).includes(mode)&&outcome==='win'&&top&&chance('team-bonus:'+id,bonus.chancePercent))base+=bonus.prize;
  }
- return mine.kills!<mine.deaths!?rule.belowOneKd:0;
+ let jackpot='';
+ const big=policy.escalationJackpot;
+ if(mode==='escalation'&&(outcome==='win'||outcome==='loss')&&chance('escalation-jackpot:'+id,big.chancePercent)){base=outcome==='win'?big.win:big.loss;jackpot='（🎰 エスカ大勝負）';}
+ const luck=luckFor('valo:'+id);
+ return {base,net:applyLuck(base,luck),note:jackpot+luckLabel(luck,base)};
 }
 export async function collectKpMatch(env:KpEnv,mapping:KpMapping,raw:Match,puuid:string):Promise<number|null>{
  const status=assessRewardReadiness(raw,puuid);if(status.status!=='ready')return null;
@@ -117,13 +139,9 @@ export async function collectKpMatch(env:KpEnv,mapping:KpMapping,raw:Match,puuid
  if(solo&&status.mode==='competitive')await env.DB.prepare("UPDATE kp_directives SET status='completed' WHERE guild=? AND target=? AND task='solo_competitive' AND status='active' AND at<=?").bind(mapping.guildId,link.user,start).run();
  if(solo&&status.mode==='unrated')await env.DB.prepare("UPDATE kp_directives SET status='completed' WHERE guild=? AND target=? AND task='solo_death_unrated' AND status='active' AND at<=? AND EXISTS(SELECT 1 FROM death_unrated_sessions s WHERE s.riot_id=? AND s.match_id=? AND s.cancelled_at IS NULL AND s.armed_at>=kp_directives.at AND COALESCE((SELECT value FROM monitor_state WHERE key='death_mode:'||s.session_id||':'||s.riot_id),'unrated')='unrated')").bind(mapping.guildId,link.user,start,mapping.accounts.find(a=>a.discordUserId===link.user)!.riotId,raw.metadata.match_id).run();
  if(link.amount!==null)return kpMatchNet(env,id);
- // A win earns, a loss costs a little, and losing with the lowest score on a full team costs more, like last
- // place in Mahjong Soul. Ties at the bottom all count; missing stats never do. Draws and unknown results are 0.
- const team=raw.players.filter(p=>p.team_id===subject?.team_id),scores=team.map(p=>p.stats?.score);
- const bottom=status.outcome==='loss'&&team.length===5&&scores.every(v=>Number.isSafeInteger(v)&&(v as number)>=0)&&subject?.stats?.score===Math.min(...scores as number[]);
- const net=status.mode==='deathmatch'?await deathmatchKp(raw,subject,puuid):status.outcome==='win'?rates.win:status.outcome==='loss'?bottom?rates.bottom:rates.loss:0;
+ const {net,note}=valoKp(raw,puuid,status.mode,status.outcome);
  // Events hold the earned part (never negative); a cost is a separate debit capped at the balance.
- const e:KpEvent={id,guild:mapping.guildId,user:link.user,puuid,match:raw.metadata.match_id,mode:status.mode,outcome:status.outcome,amount:Math.max(0,net),policy:policy.version,at:Date.now(),...net<0?{penalty:-net}:{}};
+ const e:KpEvent={id,guild:mapping.guildId,user:link.user,puuid,match:raw.metadata.match_id,mode:status.mode,outcome:status.outcome,amount:Math.max(0,net),policy:policy.version,at:Date.now(),...net<0?{penalty:-net}:{},...note?{note}:{}};
  await env.DB.prepare('INSERT OR IGNORE INTO kp_inbox VALUES(?,?,?)').bind(id,JSON.stringify(e),Date.now()).run();
  await drainKpInbox(env);
  return kpMatchNet(env,id);
