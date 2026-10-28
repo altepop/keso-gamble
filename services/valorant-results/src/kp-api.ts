@@ -13,6 +13,9 @@ import { advanceMarket, trade, spin, spinNumbers, cryptoRouletteNumber } from '.
 // @ts-expect-error The shared pure browser engine has no TypeScript declarations.
 import { hydrateRacing, placeRaceBet, useExchange } from '../../../js/racing.js';
 // @ts-expect-error Shared browser engine.
+import { hydrateCasino, playChinchiro, bjStart, bjHit, bjStand, bjDouble, cryptoDie, cryptoCard } from '../../../js/casino.js';
+import { enqueue, ensurePosts } from './racing-posts.ts';
+// @ts-expect-error Shared browser engine.
 import { hydrateMleague, placeMlBet, mlPartner } from '../../../js/mleague.js';
 import { mlClosed, mlData, mlResults, seasonStats } from './mleague.ts';
 import { racingView, raceSeed } from './racing-kp.ts';
@@ -24,7 +27,7 @@ import { buyLuxury, luxuryPosts, luxuryView } from './luxury.ts';
 export async function readKpState(env:KpEnv,mapping:KpMapping,user:string){
  const wallet=await env.DB.prepare('SELECT balance,version FROM kp_wallets WHERE guild=? AND user=?').bind(mapping.guildId,user).first<{balance:number;version:number}>();
  const row=await env.DB.prepare('SELECT data,version FROM kp_state WHERE guild=? AND user=?').bind(mapping.guildId,user).first<{data:string;version:number}>();if(!wallet||!row)throw Error('口座が見つかりません。');
- const state=JSON.parse(row.data);state.cash=wallet.balance;state.serverWallet=true;state.walletVersion=wallet.version;state.stateVersion=row.version;advanceMarket(state);Object.assign(state,hydrateRacing(state),hydrateMleague(state));if(!validRoastLevel(state.roastLevel))state.roastLevel=defaultRoastLevel(mapping,user);state.racing=await racingView(env,mapping);state.horses=await ownedHorses(env,mapping,user);const riotId=riotIdOf(mapping,user);state.mastery=riotId?await masteryOf(env,riotId,state.roastLevel):[];state.luxury=await luxuryView(env,mapping,user);for(const h of state.horses)h.statue=state.luxury.statues.includes(h.id);
+ const state=JSON.parse(row.data);state.cash=wallet.balance;state.serverWallet=true;state.walletVersion=wallet.version;state.stateVersion=row.version;advanceMarket(state);Object.assign(state,hydrateRacing(state),hydrateMleague(state),hydrateCasino(state));if(!validRoastLevel(state.roastLevel))state.roastLevel=defaultRoastLevel(mapping,user);state.racing=await racingView(env,mapping);state.horses=await ownedHorses(env,mapping,user);const riotId=riotIdOf(mapping,user);state.mastery=riotId?await masteryOf(env,riotId,state.roastLevel):[];state.luxury=await luxuryView(env,mapping,user);for(const h of state.horses)h.statue=state.luxury.statues.includes(h.id);
  const rewards=(await env.DB.prepare('SELECT id,match,mode,amount,at FROM kp_events WHERE guild=? AND user=? ORDER BY at DESC,id LIMIT 100').bind(mapping.guildId,user).all<{id:string;match:string;mode:string;amount:number;at:number}>()).results;
  await ensureQuizKp(env);
  const quiz=(await env.DB.prepare('SELECT id,mode,day,game,amount,completed_at FROM kp_quiz_events WHERE guild=? AND user=? UNION ALL SELECT id,mode,day,game,amount,completed_at FROM kp_quiz_ranked_extra WHERE guild=? AND user=? ORDER BY completed_at DESC LIMIT 100').bind(mapping.guildId,user,mapping.guildId,user).all<{id:string;mode:string;day:string;game:string;amount:number;completed_at:number}>()).results;
@@ -37,6 +40,25 @@ export async function readKpState(env:KpEnv,mapping:KpMapping,user:string){
  state.members=mapping.accounts.map(a=>({id:a.discordUserId,name:configuredPlayers.find(p=>p.riotId.toLowerCase()===a.riotId.toLowerCase())?.name??a.riotId.split('#')[0]}));
  state.selfUserId=user;state.rewardRates=policy.modes;state.debt={amount:await debtOf(env,mapping.guildId,user),interestPercent:DEBT_INTEREST_PERCENT,intervalMinutes:DEBT_INTERVAL_MINUTES};return state;
 }
+// Big casino moments go to the earnings channel so others can watch (a ピンゾロ either way, a natural, or ±5,000 KP).
+const yen=(n:number)=>Math.abs(n).toLocaleString('ja-JP')+' KP';
+export function casinoPost(user:string,action:string,result:unknown):string|null{
+ if(action==='chinchiro'){
+  const r=result as {net:number;oya:{hand:{kind:string}};ko:{hand:{kind:string}}|null};
+  if(r.ko?.hand.kind==='pinzoro')return `🎲 <@${user}> チンチロで**ピンゾロ**！ 親から +${yen(r.net)}`;
+  if(r.oya.hand.kind==='pinzoro')return `🎲 <@${user}> チンチロ、親のピンゾロを食らって −${yen(r.net)}`;
+  if(r.net>=5000)return `🎲 <@${user}> チンチロで +${yen(r.net)}`;
+  if(r.net<=-5000)return `🎲 <@${user}> チンチロで −${yen(r.net)} 溶かした`;
+  return null;
+ }
+ if(!action.startsWith('bj-'))return null;
+ const done=(result as {done:{result:string;net:number}|null}).done;
+ if(!done)return null;
+ if(done.result==='blackjack'&&done.net>=1000)return `🃏 <@${user}> ブラックジャック！ +${yen(done.net)}`;
+ if(done.net>=5000)return `🃏 <@${user}> ブラックジャック卓で +${yen(done.net)}`;
+ if(done.net<=-5000)return `🃏 <@${user}> ブラックジャック卓で −${yen(done.net)} 溶かした`;
+ return null;
+}
 export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:string,action:string,args:Record<string,unknown>){
  if(!/^[a-zA-Z0-9-]{16,80}$/.test(id))throw Error('操作IDが不正です。');
  const requestHash=await kpHash(JSON.stringify({action,args}));
@@ -45,8 +67,8 @@ export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:strin
   if(existing){if(existing.request_hash!==requestHash)throw Error('同じ操作IDを別の操作には使えません。');return JSON.parse(existing.response);}
   const state=await readKpState(env,mapping,user),before=state.cash;let result:unknown;let directive:Record<string,unknown>|null=null;
   // 借KP: no bet or purchase at all while any is owed, decided before any draw. Checking the result instead would let a
-  // winning roll through and refuse only the losing one. Selling and settings stay open.
-  const settles=['horse-sell','roast-level'].includes(action)||(action==='trade'&&args.side==='sell');
+  // winning roll through and refuse only the losing one. Selling, finishing a blackjack hand and settings stay open.
+  const settles=['horse-sell','roast-level','bj-hit','bj-stand'].includes(action)||(action==='trade'&&args.side==='sell');
   if(!settles&&await debtOf(env,mapping.guildId,user)>0)throw Error(DEBT_BLOCKED);
   if(action==='trade')result=trade(state,args.symbol,args.side,args.quantity);
   else if(action==='spin')result=args.type==='numbers'?spinNumbers(state,args.bets,cryptoRouletteNumber()):spin(state,args.type,args.amount,args.choice??0,cryptoRouletteNumber());
@@ -77,7 +99,12 @@ export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:strin
    result=await sellHorse(env,mapping,user,state,args);
   }else if(action==='luxury'){
    useExchange(state,Date.now());result=await buyLuxury(env,mapping,user,state,args);
-  }else if(action==='roast-level'){
+  }else if(action==='chinchiro')result=playChinchiro(state,args.amount,cryptoDie);
+  else if(action==='bj-start')result=bjStart(state,args.amount,cryptoCard);
+  else if(action==='bj-hit')result=bjHit(state,cryptoCard);
+  else if(action==='bj-stand')result=bjStand(state,cryptoCard);
+  else if(action==='bj-double')result=bjDouble(state,cryptoCard);
+  else if(action==='roast-level'){
    if(!validRoastLevel(args.level))throw Error('煽りレベルを選んでください。');
    state.roastLevel=args.level;result={roastLevel:args.level};
   }else throw Error('この操作は本番口座では使えません。');
@@ -89,6 +116,8 @@ export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:strin
    .bind(id,mapping.guildId,user,requestHash,JSON.stringify(response),state.cash-before,JSON.stringify(safeState),directive?JSON.stringify(directive):null,Date.now(),mapping.guildId,user,state.walletVersion,state.stateVersion).run();
   if(inserted.meta.changes){
    if(action==='luxury')try{await luxuryPosts(env,mapping,user,(result as {luxury:Parameters<typeof luxuryPosts>[3]}).luxury);}catch{console.warn('luxury_post_pending');}
+   const big=casinoPost(user,action,result);
+   if(big&&(env as {KP_EARNINGS_WEBHOOK_URL?:string}).KP_EARNINGS_WEBHOOK_URL)try{await ensurePosts(env);await enqueue(env,'casino:'+user+':'+id,big,Date.now());}catch{console.warn('casino_post_pending');}
    return response;
   }
  }
