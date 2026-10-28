@@ -1,19 +1,19 @@
 import policy from '../kp-policy.json' with { type: 'json' };
 import type { KpEnv } from './kp.ts';
 // 借KP: a minus the wallet cannot cover is not forgiven. Wallets still stop at 0, and the rest becomes a debt that
-// grows by interest every hour (from the first full hour after it started) and is repaid from KP that comes in.
+// grows by interest every 10 minutes as a penalty (from the first full period after it started) and is repaid from KP that comes in.
 // While any is owed, nothing can be bought (stocks, horses, bets, luxury, directives), so hiding KP before a
 // likely loss no longer dodges it. Every change is a row in kp_debt_events (borrow / interest / repay).
-export const DEBT_INTEREST_PERCENT:number=policy.debt.interestPercentPerHour;
+export const DEBT_INTEREST_PERCENT:number=policy.debt.interestPercent,DEBT_INTERVAL_MINUTES:number=policy.debt.intervalMinutes;
 export const DEBT_BLOCKED='借KPを返すまでKPは使えません（株・馬・馬券・高級品・指名）。入ったKPから自動で返済されます。';
-const HOUR=3600_000;
+const PERIOD=DEBT_INTERVAL_MINUTES*60_000;
 const ready=new WeakSet<object>();
 export async function ensureDebt(env:KpEnv){
  if(ready.has(env.DB))return;
  await env.DB.batch([
   `CREATE TABLE IF NOT EXISTS kp_debts(guild TEXT NOT NULL,user TEXT NOT NULL,amount INTEGER NOT NULL DEFAULT 0 CHECK(typeof(amount)='integer' AND amount>=0),since INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(guild,user))`,
   `CREATE TABLE IF NOT EXISTS kp_debt_events(id TEXT PRIMARY KEY,guild TEXT NOT NULL,user TEXT NOT NULL,amount INTEGER NOT NULL CHECK(typeof(amount)='integer' AND amount!=0),kind TEXT NOT NULL CHECK(kind IN ('borrow','interest','repay')),at INTEGER NOT NULL)`,
-  // since: when the current debt started (interest waits a full hour from then).
+  // since: when the current debt started (interest waits a full period from then).
   `CREATE TRIGGER IF NOT EXISTS kp_debt_apply AFTER INSERT ON kp_debt_events BEGIN
    INSERT OR IGNORE INTO kp_debts(guild,user) VALUES(NEW.guild,NEW.user);
    UPDATE kp_debts SET since=CASE WHEN amount=0 THEN NEW.at ELSE since END,amount=amount+NEW.amount WHERE guild=NEW.guild AND user=NEW.user;
@@ -37,12 +37,12 @@ export async function debtOf(env:KpEnv,guild:string,user:string){
  return Number((await env.DB.prepare('SELECT amount FROM kp_debts WHERE guild=? AND user=?').bind(guild,user).first<{amount:number}>())?.amount??0);
 }
 export const debtNote=(borrowed:number)=>borrowed>0?`（💸 払えない分は借KP +${borrowed.toLocaleString('ja-JP')}）`:'';
-/** Every cron run: first repay from whatever came in, then charge this hour's interest (once per hour, rounded up). */
+/** Every cron run: first repay from whatever came in, then charge this period's interest (once per period, rounded up). */
 export async function settleDebts(env:KpEnv,guild:string,now=Date.now()){
  await ensureDebt(env);
- const hour=Math.floor(now/HOUR);
+ const slot=DEBT_INTERVAL_MINUTES+'m:'+Math.floor(now/PERIOD);
  await env.DB.batch([
   env.DB.prepare(`INSERT OR IGNORE INTO kp_ledger(id,guild,user,delta,kind,at) SELECT 'debt-repay:'||w.guild||':'||w.user||':'||w.version,w.guild,w.user,-MIN(d.amount,w.balance),'debt',? FROM kp_wallets w JOIN kp_debts d ON d.guild=w.guild AND d.user=w.user WHERE w.guild=? AND d.amount>0 AND w.balance>0`).bind(now,guild),
-  env.DB.prepare(`INSERT OR IGNORE INTO kp_debt_events(id,guild,user,amount,kind,at) SELECT 'interest:'||guild||':'||user||':'||?,guild,user,(amount*CAST(? AS INTEGER)+99)/100,'interest',? FROM kp_debts WHERE guild=? AND amount>0 AND since<=?`).bind(hour,DEBT_INTEREST_PERCENT,now,guild,now-HOUR),
+  env.DB.prepare(`INSERT OR IGNORE INTO kp_debt_events(id,guild,user,amount,kind,at) SELECT 'interest:'||guild||':'||user||':'||?,guild,user,(amount*CAST(? AS INTEGER)+99)/100,'interest',? FROM kp_debts WHERE guild=? AND amount>0 AND since<=?`).bind(slot,DEBT_INTEREST_PERCENT,now,guild,now-PERIOD),
  ]);
 }
