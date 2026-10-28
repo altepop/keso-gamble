@@ -13,7 +13,7 @@ import {DEBT_INTEREST_PERCENT,DEBT_INTERVAL_MINUTES,debtOf} from './kp-debt.ts';
 // @ts-expect-error Shared browser engine.
 import {mlCard,mlOdds,mlOpen,mlStart} from '../../../js/mleague.js';
 // @ts-expect-error Shared browser engine.
-import {openRaceStart,raceCard,raceOdds,placeSlots} from '../../../js/racing.js';
+import {openRaceStart,raceCard,raceOdds,placeSlots,payoutFor} from '../../../js/racing.js';
 interface Slash {id:string;guild_id?:string;member?:{user?:{id:string}};data?:{name?:string;options?:Array<{name:string;type?:number;options?:unknown[];value?:unknown}>}}
 const clock=(at:number)=>new Date(at).toLocaleTimeString('ja-JP',{timeZone:'Asia/Tokyo',hour:'2-digit',minute:'2-digit'});
 const clean=(s:string)=>s.replace(/[@`*_~<>|\r\n]/g,'');
@@ -43,7 +43,7 @@ async function mleagueView(env:KpEnv,now:number){
   for(const g of games)if(lineups.has(g.id))lines.push(`第${g.game}試合 出場：${lineups.get(g.id)!.map(clean).join('・')}`);
   for(const p of mlCard(d,games[0])){const o=mlOdds(p,stats);lines.push(`${p.no}. ${clean(p.name)}（${clean(p.teamName)}）ラス ${(o.last/10).toFixed(1)}倍`);}
  }
- lines.push('\n例：/mbet match:1-1 player:3 amount:500（その選手のラスに賭ける）','第1試合は19:00、第2試合は第1試合の結果が出るまで。始まったら /mclose で締め切り（開始後の予想は返金）。出なかった選手は返金。');
+ lines.push('\n買い方：/mbet → matchで試合 → playerで選手名・チーム・ラス倍率を確認 → amountに掛け金（例500）。賭け方はラス（4位）予想のみ。','第1試合は19:00、第2試合は第1試合の結果が出るまで。始まったら /mclose で締め切り（開始後の予想は返金）。出なかった選手は返金。');
  return lines.join('\n');
 }
 /** A user option given as a mention (<@id>, <@!id>) or a bare ID. */
@@ -55,6 +55,30 @@ export async function betChoices(env:KpEnv,interaction:Slash,override?:KpMapping
  const typed=String((interaction.data?.options as Array<{name:string;value?:unknown;focused?:boolean}>|undefined)?.find(o=>o.focused)?.value??'').trim();
  return card.horses.filter((h:{number:number;name:string})=>!typed||String(h.number)===typed||h.name.includes(typed))
   .map((h:{number:number;name:string})=>({name:`${h.number}番 ${h.name}　1着 ${(odds.win[h.number]/10).toFixed(1)}倍・${placeSlots(card.size)}着内 ${(odds.place[h.number]/10).toFixed(1)}倍｜${clock(open.id)}発走`.slice(0,100),value:h.number})).slice(0,25);
+}
+/** Exact fixture IDs keep a selection stable across midnight. Old table-game codes remain readable. */
+function mbetFixture(d:Awaited<ReturnType<typeof mlData>>,value:unknown,day:string|null){
+ const exact=d.fixtures.find(f=>f.id===value);if(exact)return exact;
+ const code=/^([12])-([12])$/.exec(String(value??''));
+ return code?d.fixtures.find(f=>f.date===day&&f.table===Number(code[1])&&f.game===Number(code[2])):undefined;
+}
+const searchMl=(s:unknown)=>String(s??'').normalize('NFKC').replace(/\s+/g,'').toLocaleLowerCase('ja-JP');
+/** Public race information only. Autocomplete never opens a wallet or buys a prediction. */
+export async function mbetChoices(env:KpEnv,interaction:Slash):Promise<Array<{name:string;value:string}>>{
+ const options=interaction.data?.options as Array<{name:string;value?:unknown;focused?:boolean}>|undefined,focused=options?.find(o=>o.focused);
+ if(!focused||!['match','player'].includes(focused.name))return [];
+ const now=Date.now(),day=mlDay(now),d=await mlData(env);
+ const [results,closed,lineups]=await Promise.all([mlResults(env),mlClosed(env),mlLineups(env)]);
+ const open=(f:typeof d.fixtures[number])=>f.confirmed&&!results.has(f.id)&&mlOpen(d,f,now,results)&&!(closed.has(f.id)&&now>=closed.get(f.id)!.at);
+ const typed=searchMl(focused.value).slice(0,100);
+ if(focused.name==='match')return d.fixtures.filter(f=>f.date===day&&open(f)).map(f=>{
+  const teams=f.teams.map(id=>d.teams.find(t=>t.id===id)?.name??id).join('・');
+  return {name:`${Number(f.date.slice(5,7))}/${Number(f.date.slice(8,10))} ${f.table}卓 第${f.game}試合｜${teams}｜ラス予想`.slice(0,100),value:f.id,search:searchMl(`${f.id} ${f.date} ${f.table}-${f.game} ${f.table}卓 第${f.game}試合 ${teams}`)};
+ }).filter(c=>!typed||c.search.includes(typed)).slice(0,25).map(({name,value})=>({name,value}));
+ const fixture=mbetFixture(d,options?.find(o=>o.name==='match')?.value,day);if(!fixture||!open(fixture))return [];
+ const sitting=lineups.get(fixture.id),stats=seasonStats(results);
+ return mlCard(d,fixture).filter((p:{name:string;teamName:string;no:number})=>(!sitting||sitting.includes(p.name))&&(!typed||searchMl(`${p.name} ${p.teamName}`).includes(typed)||String(p.no)===typed))
+  .map((p:{name:string;teamName:string})=>({name:`${p.name}｜${p.teamName}｜ラス ${(mlOdds(p,stats).last/10).toFixed(1)}倍｜${sitting?'出場確定':'出場未確定・不出場は返金'}`.slice(0,100),value:p.name})).slice(0,25);
 }
 export async function runKpCommand(env:KpEnv,interaction:Slash,override?:KpMapping):Promise<string>{
  const mapping=await initializeKp(env,override),user=interaction.member?.user?.id;
@@ -148,13 +172,12 @@ export async function runKpCommand(env:KpEnv,interaction:Slash,override?:KpMappi
  }
  if(command==='mbet'){
   const value=(key:string)=>interaction.data?.options?.find(o=>o.name===key)?.value;
-  const day=mlDay(created(interaction.id)),code=/^([12])-([12])$/.exec(String(value('match')??''));
-  const fixture=day&&code?ML_DATA.fixtures.find(f=>f.date===day&&f.table===Number(code[1])&&f.game===Number(code[2])):null;
+  const d=await mlData(env),fixture=mbetFixture(d,value('match'),mlDay(created(interaction.id)));
   if(!fixture)return 'その試合はありません。/mleague で卓と試合を確認してください。';
   try{
    const {result}=await operateKp(env,mapping,user,interaction.id,'ml-bet',{match:fixture.id,player:value('player'),type:'last',amount:value('amount')}) as {result:{bet:{player:string;type:string;amount:number;odds:number}}};
-   const bet=result.bet;
-   return `🀄 予想を購入しました\n${fixture.table}卓 第${fixture.game}試合・${clean(bet.player)}の${bet.type==='top'?'トップ':'ラス'}\n掛け金 ${money(bet.amount)}／確定倍率 ${(bet.odds/10).toFixed(1)}倍\n残高 ${money(await balance())}\n出場しなかった場合は返金。結果は公式発表後に自動で反映されます。`;
+   const bet=result.bet,team=d.teams.find(t=>t.players.some(p=>p.name===bet.player));
+   return `🀄 ラス予想を購入しました\n${fixture.table}卓 第${fixture.game}試合・${clean(bet.player)}の${bet.type==='top'?'トップ':'ラス'}（4位）\nチーム ${clean(team?.name??'—')}\n掛け金 ${money(bet.amount)}／確定倍率 ${(bet.odds/10).toFixed(1)}倍\n的中時の払戻し ${money(payoutFor(bet.amount,bet.odds))}（掛け金込み）\n残高 ${money(await balance())}\n出場しなかった場合は返金。結果は公式発表後に自動で反映されます。`;
   }catch(error){
    const message=error instanceof Error?error.message:'';
    return /[ぁ-んァ-ヶ一-龯]/.test(message)&&!/SQL|D1_|kp_/.test(message)?message:'購入結果を確認できませんでした。/kp の残高を確認してください。';

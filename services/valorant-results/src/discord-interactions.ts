@@ -1,6 +1,6 @@
 import {activityLaunchComponents} from './activity-link.ts';
 import {isKpRanking} from './kp-command.ts';
-import { betChoices, runKpCommand } from './kp-slash.ts';
+import { betChoices, mbetChoices, runKpCommand } from './kp-slash.ts';
 import { PAIFU_BUTTON, decidePaifu, paifuRequest, runPaifuCommand } from './mahjong-claims.ts';
 import type { PaifuReply } from './mahjong-claims.ts';
 import { runValoCommand } from './valo-queries.ts';
@@ -116,10 +116,10 @@ export async function discordInteractions(request: Request, env: Env, ctx: Execu
   if (interaction.application_id !== config.applicationId) return new Response('Unauthorized', { status: 401 });
   if (interaction.type === 1) return Response.json({ type: 1 });
   if (interaction.guild_id !== config.guildId) return respond('このサーバーでは利用できません。');
-  // /bet's horse list is answered directly (type 8), within Discord's three seconds.
+  // Read-only candidate lists return type 8 directly, without deferring or buying anything.
   if (interaction.type === 4) {
-    if (interaction.data?.name !== 'bet') return Response.json({ type: 8, data: { choices: [] } });
-    const choices = await betChoices(env, interaction).catch(() => []);
+    const name=interaction.data?.name;
+    const choices = await (name==='bet'?betChoices(env,interaction):name==='mbet'?mbetChoices(env,interaction):Promise.resolve([])).catch(() => []);
     return Response.json({ type: 8, data: { choices } });
   }
   let permissions = 0n;
