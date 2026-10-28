@@ -12,10 +12,10 @@ const guild='100000000000000100',one='100000000000000101',two='10000000000000010
 const mapping:KpMapping={guildId:guild,accounts:[{riotId:'One#JP1',discordUserId:one},{riotId:'Two#JP1',discordUserId:two}]};
 const T0=Date.parse('2026-10-28T22:00:00+09:00'),UID='10715117730671753501';
 /** A UniteAPI match card with the same structure as the live site, made-up values. */
-function card(m:Partial<UniteMatch>&{ago?:string}={}){
+function card(m:Partial<UniteMatch>&{ago?:string;purple?:boolean}={}){
  const v={win:true,surrendered:false,map:'Theia Sky Ruins (Groudon)',party:'Trio',pokemon:'Pikachu',level:14,ours:400,theirs:250,ko:5,ast:7,int:1,dmg:'60k',tkn:'40k',heal:'5k',ago:'3 minutes ago',...m};
  const stat=(n:string,p:string,l:string)=>`<div class="flex flex-col"><span class="text-sm">${n}</span><span class="text-[10px]">${p}</span><span class="text-[9px]">${l}</span></div>`;
- return `<div class="group relative w-full min-h-[95px] overflow-hidden px-3 py-3.5 rounded-lg border border-border/40 border-l-[3px] border-l-${v.win?'emerald':'red'}-500 flex"><div class="flex"><div class="flex flex-col"><span class="text-sm font-medium">${v.ago}</span><div><span class="text-xs" title="${v.map}">${v.map}</span></div><div><span class="text-xs">${v.party}</span></div>${v.surrendered?'<span>Surrendered</span>':''}</div><div class="relative"><img alt="${v.pokemon}" src="/x.png"/><div class="absolute">${v.level}</div></div><div><img alt="Skill A" src="/s.png"/></div><div><span>${v.ours}</span><span>vs</span><span>${v.theirs}</span></div><div><span>${v.ko}</span><span>/</span><span>${v.ast}</span><span>/</span><span>${v.int}</span></div><div><span>KO</span><span>AST</span><span>INT</span></div>${stat(v.dmg,'20%','DMG')}${stat(v.tkn,'30%','TKN')}${stat(v.heal,'2%','HEAL')}</div></div>`;
+ return `<div class="group relative w-full min-h-[95px] overflow-hidden px-3 py-3.5 rounded-lg border border-border/40 border-l-[3px] border-l-${v.win?'emerald':'red'}-500 flex"><div class="flex"><div class="flex flex-col"><span class="text-sm font-medium">${v.ago}</span><div><span class="text-xs" title="${v.map}">${v.map}</span></div><div><span class="text-xs">${v.party}</span></div>${v.surrendered?'<span>Surrendered</span>':''}</div><div class="relative"><img alt="${v.pokemon}" src="/x.png"/><div class="absolute">${v.level}</div></div><div><img alt="Skill A" src="/s.png"/></div><div class="flex flex-col">${(v.purple??true)?`<div class="text-sm rounded leading-none ${v.win?'text-purple-400 bg-purple-500/10':'text-muted-foreground'}">${v.ours}</div><div class="text-[10px] leading-none">vs</div><div class="text-sm rounded leading-none ${v.win?'text-muted-foreground':'text-orange-400 bg-orange-500/10'}">${v.theirs}</div>`:`<div class="text-sm rounded leading-none ${v.win?'text-muted-foreground':'text-purple-400 bg-purple-500/10'}">${v.theirs}</div><div class="text-[10px] leading-none">vs</div><div class="text-sm rounded leading-none ${v.win?'text-orange-400 bg-orange-500/10':'text-muted-foreground'}">${v.ours}</div>`}</div><div><span>${v.ko}</span><span>/</span><span>${v.ast}</span><span>/</span><span>${v.int}</span></div><div><span>KO</span><span>AST</span><span>INT</span></div>${stat(v.dmg,'20%','DMG')}${stat(v.tkn,'30%','TKN')}${stat(v.heal,'2%','HEAL')}</div></div>`;
 }
 const page=(cards:string[],name='テスト選手')=>`<html><head><title>${name} - UniteAPI</title></head><body><div>Battles</div>${cards.join('')}</body></html>`;
 async function fixture(){
@@ -44,7 +44,12 @@ test('the page is read into matches; private and unknown profiles are told apart
  assert.deepEqual(p.matches[0],{win:false,surrendered:true,map:'Theia Sky Ruins (Groudon)',party:'Trio',pokemon:'Mr. Mime',level:14,ours:400,theirs:250,ko:0,ast:7,int:1,dmg:'60k',tkn:'40k',heal:'5k'});
  assert.deepEqual(parseUnite('<title>Private Profile</title>'),{name:'',private:true,matches:[]});
  assert.equal(parseUnite('<title>Player Not Found - UniteAPI</title>'),null);
- assert.equal(parseUnite(page([card().replace('<span>vs</span>','')])),null,'a changed layout is not guessed at');
+ assert.equal(parseUnite(page([card().replace('>vs<','><')])),null,'a changed layout is not guessed at');
+ // The page shows purple vs orange with the winner coloured: our side depends on the result, not the order.
+ for(const purple of [true,false])for(const win of [true,false]){
+  const [m]=parseUnite(page([card({win,purple,ours:win?300:120,theirs:win?150:400})]))!.matches;
+  assert.deepEqual([m.ours,m.theirs],[win?300:120,win?150:400],`${purple?'purple':'orange'} ${win?'win':'loss'}`);
+ }
 });
 test('linking records what is already there; later games are posted once and settled in KP',async()=>{
  const f=await fixture();

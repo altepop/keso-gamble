@@ -45,6 +45,11 @@ export function parseUnite(html:string):{name:string;private:boolean;matches:Uni
   const at=(label:string)=>t[t.indexOf(label)-2];
   const m:UniteMatch={win:result==='emerald',surrendered:t.includes('Surrendered'),map:t[when+1]??'',party:t[when+2]??'',pokemon,level:int(t[vs-2]),ours:int(t[vs-1]),theirs:int(t[vs+1]),
    ko:int(t[slash-1]),ast:int(t[slash+1]),int:int(t[slash+3]),dmg:at('DMG')??'',tkn:at('TKN')??'',heal:at('HEAL')??''};
+  // Scores are shown purple vs orange; the winning side is coloured. Ours is the winner's when we won.
+  const scores=[...card.matchAll(/leading-none (text-(?:purple|orange)-400|text-muted-foreground)[^"]*">(\d+)<\/div>/g)];
+  if(scores.length!==2||scores.filter(x=>x[1]!=='text-muted-foreground').length!==1)return null;
+  const winner=scores.findIndex(x=>x[1]!=='text-muted-foreground'),mine=m.win?winner:1-winner;
+  m.ours=int(scores[mine][2]);m.theirs=int(scores[1-mine][2]);
   if(!pokemon||![m.level,m.ours,m.theirs,m.ko,m.ast,m.int].every(Number.isSafeInteger))return null;
   matches.push(m);
  }
