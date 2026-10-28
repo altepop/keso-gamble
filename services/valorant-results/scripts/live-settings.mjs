@@ -54,6 +54,7 @@ export function deploymentConfig(settings,schedules,worker) {
   if (!Array.isArray(bindings)) throw Error('Missing live bindings');
   for (const binding of bindings) {
     if(binding.type==='durable_object_namespace'&&binding.name==='VOICE_GATEWAY'&&binding.class_name==='VoiceGateway'&&(!binding.script_name||binding.script_name===worker))continue;
+    if(binding.type==='durable_object_namespace'&&binding.name==='RACE_BROADCAST'&&binding.class_name==='RaceBroadcaster'&&(!binding.script_name||binding.script_name===worker))continue;
     if (binding.type==='secret_text') continue; // Wrangler preserves existing secrets; never read or rewrite them.
     if (binding.type==='plain_text' && typeof binding.text==='string') { vars[binding.name]=binding.text;continue; }
     if (binding.type==='d1' && binding.name==='DB' && /^[0-9a-f-]{36}$/i.test(binding.id)) {
@@ -67,7 +68,7 @@ export function deploymentConfig(settings,schedules,worker) {
   if (schedules.length!==1 || schedules[0].cron!=='* * * * *') throw Error('Live schedule differs from the handoff; refusing to overwrite it');
   return {name:worker,main:'src/index.ts',compatibility_date:settings.compatibility_date,
     compatibility_flags:settings.compatibility_flags??[],keep_vars:true,vars,
-    durable_objects:{bindings:[{name:'VOICE_GATEWAY',class_name:'VoiceGateway'}]},migrations:[{tag:'voice-v1',new_sqlite_classes:['VoiceGateway']}],
+    durable_objects:{bindings:[{name:'VOICE_GATEWAY',class_name:'VoiceGateway'},{name:'RACE_BROADCAST',class_name:'RaceBroadcaster'}]},migrations:[{tag:'voice-v1',new_sqlite_classes:['VoiceGateway']},{tag:'race-broadcast-v1',new_sqlite_classes:['RaceBroadcaster']}],
     d1_databases:databases,triggers:{crons:schedules.map(s=>s.cron)},
     ...(settings.observability?{observability:settings.observability}:{})};
 }

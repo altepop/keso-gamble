@@ -1,3 +1,6 @@
+import {prepareRaceBroadcast} from './racing-broadcast.ts';
+import {raceVideoApi} from './racing-video.ts';
+export {RaceBroadcaster} from './racing-broadcast.ts';
 import {prepareStocks,queueStockPosts} from './stock-market.ts';
 import {monitorMahjong, mahjongStatus} from './mahjong.ts';
 import {monitorUnite} from './unite.ts';
@@ -31,6 +34,7 @@ export { resultMessage } from './results.ts';
 
 export interface Env {
   VOICE_GATEWAY?:DurableObjectNamespace;
+  RACE_BROADCAST?:DurableObjectNamespace;
   DISCORD_CLIENT_SECRET?: string;
   KP_BOOTSTRAP_PRIVATE_KEY?: string;
   KP_BOOTSTRAP_PUBLIC_KEY?: string;
@@ -420,6 +424,7 @@ export async function monitor(env: Env, players: Player[] = configuredPlayers): 
 
 export default {
   fetch(request: Request, env: Env, ctx: ExecutionContext) {
+    if(new URL(request.url).pathname.startsWith('/api/racing/'))return raceVideoApi(request,env).catch(()=>new Response('Unavailable',{status:503}));
     if(request.method==='GET'&&new URL(request.url).pathname==='/api/mahjong/status')return mahjongStatus(env).then(status=>Response.json(status,{headers:{'Cache-Control':'no-store'}})).catch(()=>Response.json({enabled:false,error:'configuration_unavailable'},{status:503}));
     if(new URL(request.url).pathname.startsWith('/api/mahjong/paipu/'))return paipuApi(request,env).catch(()=>new Response('Unavailable',{status:503}));
     return new URL(request.url).pathname.startsWith('/api/kp/') ? kpApi(request, env) : discordInteractions(request, env, ctx);
@@ -445,6 +450,7 @@ export default {
       // M.LEAGUE: official results, then settlement, then posts (flushed together with the racing ones).
       try{await refreshMlCards(env);await pollMlLineups(env,mapping);await pollMlResults(env);await settleMl(env,mapping);await queueMlPosts(env,mapping);}catch{console.warn('mleague_pending');}
       try{await queueRacePosts(env,mapping,Date.now(),crowns);await flushRacePosts(env);}catch{console.warn('earnings_post_pending');}
+      try{await prepareRaceBroadcast(env,mapping);}catch{console.warn('race_broadcast_pending');}
     })().catch(()=>console.warn('race_settlement_pending')));
   },
 };
