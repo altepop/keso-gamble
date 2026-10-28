@@ -2,7 +2,7 @@
 // profile's recent ranked matches; one profile is read per cron minute, at most every two minutes each.
 // A first read only records what is already there, so linking never posts old games.
 // New games are posted by the result bot (the Mahjong Soul post queue) and settled in KP:
-// a win +300, a loss −150 (never more than the balance).
+// a win +200, a loss −50 (never more than the balance).
 import voice from '../unite-voice.json' with {type:'json'};
 import {initializeKp,newKpState} from './kp.ts';
 import type {KpEnv,KpMapping} from './kp.ts';
@@ -12,7 +12,7 @@ import {enqueue,ensurePosts} from './racing-posts.ts';
 
 export interface UniteEnv extends KpEnv {DISCORD_WEBHOOK_URL?:string;KP_EARNINGS_WEBHOOK_URL?:string}
 export interface UniteMatch {win:boolean;surrendered:boolean;map:string;party:string;pokemon:string;level:number;ours:number;theirs:number;ko:number;ast:number;int:number;dmg:string;tkn:string;heal:string}
-export const UNITE_WIN=300,UNITE_LOSS=150;
+export const UNITE_WIN=200,UNITE_LOSS=50;
 const GAP=2*60_000,PROFILE='https://uniteapi.dev/p/';
 const initialized=new WeakSet<object>();
 export async function ensureUnite(env:KpEnv){

@@ -21,25 +21,25 @@ async function fixture(){
 }
 function game(id:string,queue='competitive',win=true){return {metadata:{match_id:id,is_completed:true,queue:{id:queue},started_at:new Date(Date.now()-10000).toISOString(),game_length_in_ms:1000},players:[{puuid:'p-one',team_id:'red'}],teams:[{team_id:'red',won:win},{team_id:'blue',won:!win}]};}
 function seed(sql:DatabaseSync,user:string,amount:number){sql.prepare('INSERT INTO kp_ledger VALUES(?,?,?,?,?,?)').run('test-'+user,guild,user,amount,'test-only',Date.now());}
-test('activation starts at zero, preserves first linking and cutoff, excludes old matches, and three wins buy a 2500 KP directive',async()=>{
+test('activation starts at zero, preserves first linking and cutoff, excludes old matches, and five wins buy a 4000 KP directive',async()=>{
  const f=await fixture();assert.equal((await readKpState(f.env,mapping,one)).cash,0);
  assert.equal(await collectKpMatch(f.env,mapping,game('old'),'p-one'),null);
  const linked=f.sql.prepare('SELECT linked_at FROM kp_accounts WHERE user=?').get(one)!.linked_at;
  await initializeKp(f.env,mapping);await syncKpAccounts(f.env,mapping);assert.equal(f.sql.prepare('SELECT linked_at FROM kp_accounts WHERE user=?').get(one)!.linked_at,linked);
- f.enableHistory();for(let n=0;n<3;n++)assert.equal(await collectKpMatch(f.env,mapping,game('win-'+n),'p-one'),900);
- assert.equal((await readKpState(f.env,mapping,one)).cash,2700);
+ f.enableHistory();for(let n=0;n<5;n++)assert.equal(await collectKpMatch(f.env,mapping,game('win-'+n),'p-one'),900);
+ assert.equal((await readKpState(f.env,mapping,one)).cash,4500);
  await operateKp(f.env,mapping,one,'directive-operation-001','directive',{target:two,task:'competitive'});
- assert.equal((await readKpState(f.env,mapping,one)).cash,200);assert.equal(f.sql.prepare('SELECT cost FROM kp_directives').get()!.cost,2500);
+ assert.equal((await readKpState(f.env,mapping,one)).cash,500);assert.equal(f.sql.prepare('SELECT cost FROM kp_directives').get()!.cost,4000);
  assert.equal((await readKpState(f.env,mapping,two)).cash,0);
 });
-test('repeated and concurrent match collection pays once, aliases normalize, and unknown wins never get a bonus',async()=>{
+test('repeated and concurrent match collection pays once, aliases normalize, and unknown results earn nothing',async()=>{
  const f=await fixture();f.enableHistory();const raw=game('same');
  await Promise.all(Array.from({length:5},()=>collectKpMatch(f.env,mapping,raw,'p-one')));
  assert.equal((await readKpState(f.env,mapping,one)).cash,900);assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM kp_events').get()!.n,1);
- assert.equal(await collectKpMatch(f.env,mapping,game('loss','competitive',false),'p-one'),300);
- assert.equal(await collectKpMatch(f.env,mapping,game('tdm','hurm'),'p-one'),45);
- assert.equal(await collectKpMatch(f.env,mapping,game('escalation','ggteam'),'p-one'),45);
- const unknown=game('unknown','swiftplay');unknown.teams=[];assert.equal(await collectKpMatch(f.env,mapping,unknown,'p-one'),60);
+ assert.equal(await collectKpMatch(f.env,mapping,game('loss','competitive',false),'p-one'),-100);
+ assert.equal(await collectKpMatch(f.env,mapping,game('tdm','hurm'),'p-one'),70);
+ assert.equal(await collectKpMatch(f.env,mapping,game('escalation','ggteam'),'p-one'),70);
+ const unknown=game('unknown','swiftplay');unknown.teams=[];assert.equal(await collectKpMatch(f.env,mapping,unknown,'p-one'),0);
  const before=(await readKpState(f.env,mapping,one)).cash;
  for(const mode of ['custom','deathmatch','unsupported'])assert.equal(await collectKpMatch(f.env,mapping,game('hold-'+mode,mode),'p-one'),null);
  const unfinished=game('unfinished');unfinished.metadata.is_completed=false;assert.equal(await collectKpMatch(f.env,mapping,unfinished,'p-one'),null);
@@ -115,7 +115,7 @@ test('monitor credits despite a Discord failure; retry edits the notice without 
  }finally{globalThis.fetch=original;}
 });
 test('funded directives reach the target, complete only on the selected subsequent mode, and notify once per status',async()=>{
- const {flushKpDirectives}=await import('../src/kp.ts');const f=await fixture();f.enableHistory();seed(f.sql,one,2700);
+ const {flushKpDirectives}=await import('../src/kp.ts');const f=await fixture();f.enableHistory();seed(f.sql,one,4000);
  await operateKp(f.env,mapping,one,'directive-notice-001','directive',{target:two,task:'competitive'});
  assert.equal((await readKpState(f.env,mapping,two)).directives.length,1);
  const sent:Array<{content:string;allowed_mentions:{parse:string[];users:string[]}}>=[],original=globalThis.fetch;
@@ -201,10 +201,10 @@ test('Activity login is optional, rejects untrusted origins, and rate limits cha
  const code=await issueKpCode(f.env,mapping,one);assert.ok(code);assert.ok(await exchangeKpCode(f.env,code));
 });
 test('premium solo orders charge once and require verified solo parties and death reservation',async()=>{
- const f=await fixture();f.enableHistory();seed(f.sql,two,50000);
+ const f=await fixture();f.enableHistory();seed(f.sql,two,60000);
  await operateKp(f.env,mapping,two,'premium-solo-order','directive',{target:one,task:'solo_competitive'});
  await operateKp(f.env,mapping,two,'premium-solo-order','directive',{target:one,task:'solo_competitive'});
- assert.equal((await readKpState(f.env,mapping,two)).cash,35000);
+ assert.equal((await readKpState(f.env,mapping,two)).cash,35000,'solo competitive costs 25,000');
  f.sql.exec('UPDATE kp_directives SET at=0');
  const m=game('solo-check') as ReturnType<typeof game>&{players:Array<{puuid:string;team_id:string;party_id?:string}>};
  await collectKpMatch(f.env,mapping,m,'p-one');assert.equal(f.sql.prepare('SELECT status FROM kp_directives').get()!.status,'active');
@@ -212,7 +212,7 @@ test('premium solo orders charge once and require verified solo parties and deat
  await collectKpMatch(f.env,mapping,m,'p-one');assert.equal(f.sql.prepare('SELECT status FROM kp_directives').get()!.status,'active');
  m.players.pop();await collectKpMatch(f.env,mapping,m,'p-one');assert.equal(f.sql.prepare('SELECT status FROM kp_directives').get()!.status,'completed');
  await operateKp(f.env,mapping,two,'premium-death-order','directive',{target:one,task:'solo_death_unrated'});
- assert.equal((await readKpState(f.env,mapping,two)).cash,15000);f.sql.exec('UPDATE kp_directives SET at=0');
+ assert.equal((await readKpState(f.env,mapping,two)).cash,5000,'solo death unrated costs 30,000');f.sql.exec('UPDATE kp_directives SET at=0');
  const u={...m,metadata:{...m.metadata,match_id:'death-solo',queue:{id:'unrated'}}};
  await collectKpMatch(f.env,mapping,u,'p-one');assert.equal(f.sql.prepare("SELECT status FROM kp_directives WHERE task='solo_death_unrated'").get()!.status,'active');
  f.sql.prepare('INSERT INTO death_unrated_sessions VALUES(?,?,?,?,?,?)').run('One#JP1','premium',1,Date.now()+10000,'death-solo',null);
@@ -266,11 +266,11 @@ test('voice slots pay once with a daily cap, keep accounts usable, and roll back
  const {creditVoiceSlot}=await import('../src/voice-rewards.ts');const {ensureQuizKp}=await import('../src/quiz-kp.ts');
  const f=await fixture();await ensureQuizKp(f.env);const user='100000000000000188',day='2026-10-27';
  for(let slot=1;slot<=48;slot++){await creditVoiceSlot(f.env,guild,user,day,slot,Date.now());await creditVoiceSlot(f.env,guild,user,day,slot,Date.now());}
- assert.equal((await readKpState(f.env,mapping,user)).cash,240);
- await assert.rejects(creditVoiceSlot(f.env,guild,user,day,49,Date.now()));assert.equal((await readKpState(f.env,mapping,user)).cash,240);
+ assert.equal((await readKpState(f.env,mapping,user)).cash,720,'48 slots of 15 KP (5 + 10 bonus)');
+ await assert.rejects(creditVoiceSlot(f.env,guild,user,day,49,Date.now()));assert.equal((await readKpState(f.env,mapping,user)).cash,720);
  f.sql.exec("CREATE TRIGGER voice_fixture_fail BEFORE INSERT ON kp_ledger WHEN NEW.kind='voice' BEGIN SELECT RAISE(ABORT,'fixture'); END");
  await assert.rejects(creditVoiceSlot(f.env,guild,user,'2026-10-28',1,Date.now()));assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM kp_voice_events WHERE day='2026-10-28'").get()!.n,0);
- f.sql.exec('DROP TRIGGER voice_fixture_fail');await creditVoiceSlot(f.env,guild,user,'2026-10-28',1,Date.now());assert.equal((await readKpState(f.env,mapping,user)).cash,245);
+ f.sql.exec('DROP TRIGGER voice_fixture_fail');await creditVoiceSlot(f.env,guild,user,'2026-10-28',1,Date.now());assert.equal((await readKpState(f.env,mapping,user)).cash,735);
 });
 test('monitor records the agent of each new result for mastery, once',async()=>{
  const {monitor}=await import('../src/index.ts');const f=await fixture();f.enableHistory();const original=globalThis.fetch;
@@ -283,27 +283,27 @@ test('monitor records the agent of each new result for mastery, once',async()=>{
  }finally{globalThis.fetch=original;}
 });
 
-test('losing with the lowest score on a full team costs the participation KP, capped at the balance; ties count, gaps do not',async()=>{
+test('a loss costs a little and the bottom of a full team more, capped at the balance; ties count, gaps do not',async()=>{
  const f=await fixture();f.enableHistory();
  const team=(id:string,scores:Array<number|undefined>,win=false,queue='competitive')=>{const raw=game(id,queue,win) as ReturnType<typeof game>&{players:Array<{puuid:string;team_id:string;stats?:{score?:number}}>};
   raw.players=scores.map((score,i)=>({puuid:i?'mate-'+i:'p-one',team_id:'red',stats:score===undefined?{}:{score}}));return raw;};
  seed(f.sql,one,1000);
- assert.equal(await collectKpMatch(f.env,mapping,team('bottom',[1000,3000,4000,5000,6000]),'p-one'),-300,'competitive: −300 instead of +300');
+ assert.equal(await collectKpMatch(f.env,mapping,team('bottom',[1000,3000,4000,5000,6000]),'p-one'),-300,'competitive bottom: −300');
  assert.equal((await readKpState(f.env,mapping,one)).cash,700);
  assert.equal(await collectKpMatch(f.env,mapping,team('bottom',[1000,3000,4000,5000,6000]),'p-one'),-300,'replays do not charge twice');
  assert.equal((await readKpState(f.env,mapping,one)).cash,700);
  assert.equal(await collectKpMatch(f.env,mapping,team('tie',[2000,2000,4000,5000,6000]),'p-one'),-300,'a shared bottom counts');
  assert.equal(await collectKpMatch(f.env,mapping,team('unrated',[1000,3000,4000,5000,6000],false,'unrated'),'p-one'),-200);
- assert.equal(await collectKpMatch(f.env,mapping,team('middle',[4000,3000,1000,5000,6000]),'p-one'),300,'not the bottom: unchanged');
+ assert.equal(await collectKpMatch(f.env,mapping,team('middle',[4000,3000,1000,5000,6000]),'p-one'),-100,'not the bottom: the plain loss');
  assert.equal(await collectKpMatch(f.env,mapping,team('won-bottom',[1000,3000,4000,5000,6000],true),'p-one'),900,'a win is never charged');
- assert.equal(await collectKpMatch(f.env,mapping,team('gap',[1000,3000,undefined,5000,6000]),'p-one'),300,'missing stats never charge');
- assert.equal(await collectKpMatch(f.env,mapping,team('short',[1000,3000,4000]),'p-one'),300,'an incomplete team never charges');
+ assert.equal(await collectKpMatch(f.env,mapping,team('gap',[1000,3000,undefined,5000,6000]),'p-one'),-100,'missing stats: the plain loss');
+ assert.equal(await collectKpMatch(f.env,mapping,team('short',[1000,3000,4000]),'p-one'),-100,'an incomplete team: the plain loss');
  const cash=(await readKpState(f.env,mapping,one)).cash;
  f.sql.prepare("INSERT INTO kp_ledger VALUES('drain',?,?,?,'test-only',0)").run(guild,one,-cash);
  assert.equal(await collectKpMatch(f.env,mapping,team('broke',[1000,3000,4000,5000,6000]),'p-one'),0,'nothing to take from an empty wallet');
  assert.equal((await readKpState(f.env,mapping,one)).cash,0);
 });
-test('the match line shows the net KP and why it is negative',()=>{
- assert.match(kpCreditLine('結果',-300,true),/🪙 この試合 −300 KP（負けて味方最下位）/);
- assert.equal(kpCreditLine(kpCreditLine('結果',-300,true),900),'結果\n🪙 この試合 +900 KP','a rewrite replaces the old line');
+test('the match line shows the net KP, negative included, and a rewrite replaces it',()=>{
+ assert.match(kpCreditLine('結果',-300),/🪙 この試合 −300 KP/);
+ assert.equal(kpCreditLine(kpCreditLine('結果',-300),900),'結果\n🪙 この試合 +900 KP');
 });

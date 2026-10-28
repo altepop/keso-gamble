@@ -8,10 +8,10 @@ export const ACTIVITIES = [
 ];
 export const MEMBERS=[{id:'riso',name:'リソ（デモ）'},{id:'yuya',name:'ゆーや（デモ）'},{id:'yano',name:'矢野（デモ）'}];
 export const ORDERS=[
-  {id:'solo_competitive',name:'ソロコンペ',cost:15000},
-  {id:'solo_death_unrated',name:'ソロデスアンレ',cost:20000},
-  {id:'competitive',name:'コンペを1試合プレイさせる',cost:2500},
-  {id:'unrated',name:'アンレを1試合プレイさせる',cost:1500},
+  {id:'solo_competitive',name:'ソロコンペ',cost:25000},
+  {id:'solo_death_unrated',name:'ソロデスアンレ',cost:30000},
+  {id:'competitive',name:'コンペを1試合プレイさせる',cost:4000},
+  {id:'unrated',name:'アンレを1試合プレイさせる',cost:2500},
   {id:'steam',name:'指定のSteam実績を解除させる',cost:3500},
 ];
 export function createProgress(){return {claims:[],directives:[],progressSeq:0};}

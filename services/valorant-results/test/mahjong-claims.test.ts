@@ -43,16 +43,16 @@ test('another registered member approves once and KP is credited once; the claim
  t.mock.timers.enable({apis:['Date'],now:T0});
  const f=await fixture();
  const filed=await f.claim(outsider,1);
- assert.match(filed.content,/四麻 半荘 \*\*1位\*\*（\+500 KP）/);assert.match(filed.content,/承認待ち/);
+ assert.match(filed.content,/四麻 半荘 \*\*1位\*\*（\+600 KP）/);assert.match(filed.content,/承認待ち/);
  const id=claimId(filed);
  assert.equal((await f.press(outsider,'ok',id))!.notice,'自分の申請は承認できません。他のメンバーに牌譜を確認してもらってください。');
  assert.equal(f.balance(outsider),0);
  const approved=await f.press(one,'ok',id);
  assert.match(approved!.content,new RegExp(`✅ <@${one}> が承認`));assert.deepEqual(approved!.components,[]);
- assert.equal(f.balance(outsider),500);
+ assert.equal(f.balance(outsider),600);
  assert.match((await f.press(two,'ok',id))!.notice!,/締め切られて/);
- assert.equal(f.balance(outsider),500);
- assert.deepEqual(f.sql.prepare("SELECT kind,delta FROM kp_ledger WHERE user=?").all(outsider).map(r=>({...r})),[{kind:'mahjong',delta:500}]);
+ assert.equal(f.balance(outsider),600);
+ assert.deepEqual(f.sql.prepare("SELECT kind,delta FROM kp_ledger WHERE user=?").all(outsider).map(r=>({...r})),[{kind:'mahjong',delta:600}]);
 });
 
 test('one rank per game and one claim per person; a rejected claim can be filed again', async t => {
@@ -66,7 +66,7 @@ test('one rank per game and one claim per person; a rejected claim can be filed 
  const again=await f.claim(one,3);
  assert.match(again.content,/3位/);
  await f.press(two,'ok',claimId(again));
- assert.equal(f.balance(one),200);
+ assert.equal(f.balance(one),150);
 });
 
 test('retried deliveries show the same claim; the daily cap and the 72-hour expiry hold', async t => {
