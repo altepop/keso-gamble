@@ -229,3 +229,21 @@ button:disabled{cursor:not-allowed}
 /* Long rules and side panels stay folded until opened. */
 details.rules>summary{cursor:pointer;color:#9ab9e5;margin:10px 0;list-style-position:inside}
 details.asset-card.rules{margin:14px}
+/* Casino: game picker, dice and cards. */
+.casino-games{margin:14px 14px 0;padding:0;display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.casino-games button{white-space:nowrap;font-size:13px;padding-left:4px;padding-right:4px}
+.casino-result{margin:14px;padding:14px;border:1px solid rgba(35,61,113,.7);border-radius:14px;background:radial-gradient(circle at 50% 0,#123d2c,#06180f);animation:casino-pop .35s ease-out}
+.casino-result.win{border-color:#3fbf7f}.casino-result.lose{border-color:#a13d4b}
+.casino-net{font-size:20px;font-weight:700;text-align:center;margin:12px 0 0;color:#f4f8ff}
+.casino-result.win .casino-net{color:#7fffb5}.casino-result.lose .casino-net{color:#ff8a98}
+.dice-board{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.dice-side{display:grid;gap:6px;justify-items:center;text-align:center}
+.dice-row{display:flex;gap:4px;opacity:.45}.dice-row.final{opacity:1}
+.die{font-size:34px;line-height:1;color:#fff}
+.bj-table{display:grid;gap:14px}.bj-table>div{display:grid;gap:6px}
+.cards{display:flex;flex-wrap:wrap;gap:6px}
+.playing-card{display:inline-grid;place-items:center;width:46px;height:64px;border-radius:8px;background:#f8f9fb;color:#111;font-weight:700;font-size:18px;line-height:1.1;box-shadow:0 2px 6px rgba(0,0,0,.4)}
+.playing-card small{font-size:14px}.playing-card.red{color:#d6336c}
+.playing-card.back{background:repeating-linear-gradient(45deg,#1c4f9c,#1c4f9c 6px,#163f7d 6px,#163f7d 12px);color:#cfe1ff}
+.bj-actions{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}
+@keyframes casino-pop{from{transform:scale(.97);opacity:.4}to{transform:none;opacity:1}}
+@media (prefers-reduced-motion:reduce){.casino-result{animation:none}}

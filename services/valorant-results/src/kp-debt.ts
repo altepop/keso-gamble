@@ -5,7 +5,7 @@ import type { KpEnv } from './kp.ts';
 // While any is owed, nothing can be bought (stocks, horses, bets, luxury, directives), so hiding KP before a
 // likely loss no longer dodges it. Every change is a row in kp_debt_events (borrow / interest / repay).
 export const DEBT_INTEREST_PERCENT:number=policy.debt.interestPercent,DEBT_INTERVAL_MINUTES:number=policy.debt.intervalMinutes;
-export const DEBT_BLOCKED='借KPを返すまでKPは使えません（株・馬・馬券・高級品・指名）。入ったKPから自動で返済されます。';
+export const DEBT_BLOCKED='借KPを返すまでKPは使えません（株・馬・馬券・カジノ・高級品・指名）。入ったKPから自動で返済されます。';
 const PERIOD=DEBT_INTERVAL_MINUTES*60_000;
 const ready=new WeakSet<object>();
 export async function ensureDebt(env:KpEnv){

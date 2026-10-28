@@ -1,6 +1,6 @@
-import { BET_TYPES, BOXES, CLASSES, COURSE_M, CONDITIONS, DAILY_EXCHANGES, GOINGS, MAX_OWNED, MIN_BET, BET_STEP, PRIZES, RETIRE_RACES, RUN_MS, STYLES, WEEKLY_LIMIT, distanceAt, exchangeDay, payoutFor, placeSlots } from './racing.js?v=20261028-tidy';
-import { LUXURY, TITLES } from './luxury.js?v=20261028-tidy';
-import { escapeHTML } from './progression-views.js?v=20261028-tidy';
+import { BET_TYPES, BOXES, CLASSES, COURSE_M, CONDITIONS, DAILY_EXCHANGES, GOINGS, MAX_OWNED, MIN_BET, BET_STEP, PRIZES, RETIRE_RACES, RUN_MS, STYLES, WEEKLY_LIMIT, distanceAt, exchangeDay, payoutFor, placeSlots } from './racing.js?v=20261028-casino';
+import { LUXURY, TITLES } from './luxury.js?v=20261028-casino';
+import { escapeHTML } from './progression-views.js?v=20261028-casino';
 const kp=n=>n.toLocaleString('ja-JP')+' KP';
 const odd=v=>(v/10).toFixed(1)+'倍';
 export const SILKS=[['#f5f5f5','#111'],['#1f1f1f','#fff'],['#e03131','#fff'],['#1c7ed6','#fff'],['#fcc419','#111'],['#2f9e44','#fff'],['#f76707','#fff'],['#f783ac','#111'],['#845ef7','#fff'],['#20c997','#111']];
