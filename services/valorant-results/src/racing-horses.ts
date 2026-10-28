@@ -144,3 +144,31 @@ export async function sellHorse(env:KpEnv,mapping:KpMapping,user:string,state:{c
  const refund=sellValue(h.price,h.races);state.cash+=refund;
  return {sold:{id:h.id,refund}};
 }
+
+// A very rare gift: each race slot (every 15 minutes) has a GIFT_CHANCE draw, decided once per slot, that gives a
+// random registered member with a free stable place a new horse at no cost (it sells for nothing).
+export const GIFT_CHANCE=.002;
+const GIFT_BOXES=[{id:'normal',weight:50},{id:'silver',weight:30},{id:'gold',weight:15},{id:'platinum',weight:4},{id:'legend',weight:1}];
+const GIFT_NAMES=['テンカラノオクリモノ','タナボタオー','フッテキタウマ','ヒロッタウマ','キセキノイットウ','サンタノワスレモノ','ナゾノプレゼント','ゴホウビダービー','ウマガオチテタ','ラッキーパカパカ'];
+export async function maybeGiftHorse(env:KpEnv,mapping:KpMapping,slot:number,rng:()=>number=cryptoRng,now=Date.now()){
+ await ensureHorses(env);
+ await env.DB.prepare('CREATE TABLE IF NOT EXISTS kp_horse_gifts(guild TEXT NOT NULL,slot INTEGER NOT NULL,user TEXT,horse TEXT,at INTEGER NOT NULL,PRIMARY KEY(guild,slot))').run();
+ // The draw for a slot happens once, even if several cron runs reach it.
+ const claimed=await env.DB.prepare('INSERT OR IGNORE INTO kp_horse_gifts(guild,slot,at) VALUES(?,?,?)').bind(mapping.guildId,slot,now).run();
+ if(!claimed.meta.changes||rng()>=GIFT_CHANCE)return null;
+ const users=[];
+ for(const a of mapping.accounts){
+  const n=await env.DB.prepare('SELECT COUNT(*) AS n FROM kp_horses WHERE guild=? AND owner=? AND sold_at IS NULL AND retired_at IS NULL').bind(mapping.guildId,a.discordUserId).first<{n:number}>();
+  if((n?.n??0)<MAX_OWNED)users.push(a.discordUserId);
+ }
+ if(!users.length)return null;
+ const user=users[Math.floor(rng()*users.length)];
+ let roll=rng()*100,box=GIFT_BOXES[0].id;for(const b of GIFT_BOXES){if(roll<b.weight){box=b.id;break;}roll-=b.weight;}
+ const horse={id:'horse-'+kpRandom(),name:GIFT_NAMES[Math.floor(rng()*GIFT_NAMES.length)],...drawHorse(box,rng),box,price:0};
+ await env.DB.batch([
+  env.DB.prepare('INSERT INTO kp_horses(id,guild,owner,name,grade,ability,style,box,price,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)').bind(horse.id,mapping.guildId,user,horse.name,horse.grade,horse.ability,horse.style,box,0,now),
+  env.DB.prepare('UPDATE kp_horse_gifts SET user=?,horse=? WHERE guild=? AND slot=?').bind(user,horse.id,mapping.guildId,slot),
+ ]);
+ const label=BOXES.find((b:{id:string})=>b.id===box)!.label;
+ return {user,horse:{...horse,gradeLabel:CLASSES[horse.grade].grade},text:`🎁 **馬が空から降ってきた！** <@${user}> に${CLASSES[horse.grade].grade}の「${horse.name}」がプレゼントされました（${label}ボックス相当・この15分の当選確率 ${GIFT_CHANCE*100}%）\n-# 持ち馬に入ります。売っても0 KP、走れば賞金はもらえます。`};
+}

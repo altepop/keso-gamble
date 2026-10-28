@@ -10,10 +10,10 @@ import type { KpRun } from './kp.ts';
 import { initializeKp, syncKpAccounts, collectKpMatch, drainKpInbox, flushKpDirectives, prepareKpRun, kpEventId, kpCreditLine } from './kp.ts';
 import { kpApi } from './kp-api.ts';
 import { settleKpRaces } from './racing-kp.ts';
-import { queueRacePosts, flushRacePosts } from './racing-posts.ts';
+import { queueRacePosts, flushRacePosts, enqueue, ensurePosts } from './racing-posts.ts';
 import { pollMlLineups, pollMlResults, refreshMlCards, settleMl, queueMlPosts } from './mleague.ts';
 import { scheduleCrowns } from './racing-crowns.ts';
-import { decideEntries, settleHorsePrizes } from './racing-horses.ts';
+import { decideEntries, maybeGiftHorse, settleHorsePrizes } from './racing-horses.ts';
 import { recordMastery } from './mastery.ts';
 import { roastLevelsOf } from './racing-posts.ts';
 // @ts-expect-error The shared pure browser engine has no TypeScript declarations.
@@ -413,6 +413,8 @@ export default {
       const mapping=await initializeKp(env);if(!mapping)return;
       // Owned horses run even when nobody opens the Activity.
       try{await decideEntries(env,mapping,openRaceStart(Date.now()));await settleHorsePrizes(env,mapping);}catch{console.warn('horse_race_pending');}
+      // A very rare free horse for someone, drawn once per race slot and announced in the earnings channel.
+      try{const gift=await maybeGiftHorse(env,mapping,openRaceStart(Date.now()));if(gift&&env.KP_EARNINGS_WEBHOOK_URL){await ensurePosts(env);await enqueue(env,'horse-gift:'+gift.horse.id,gift.text,Date.now());}}catch{console.warn('horse_gift_pending');}
       try{await settleKpRaces(env,mapping);}catch{console.warn('race_settlement_pending');}
       // Results are queued after settlement in the same run, then sent.
       let crowns:Awaited<ReturnType<typeof scheduleCrowns>>=[];
