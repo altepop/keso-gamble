@@ -342,4 +342,9 @@ test('a competitive demotion is posted with the roast and costs 500 KP once; a p
   assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM kp_ledger WHERE id LIKE 'rank-down:%'").get()!.n,1,'charged once across runs');
   assert.equal(historyCalls,2,'the history is read once per new result, not on every run');
  }finally{globalThis.fetch=original;}
+test('a later monitor run shows a loss as its net negative KP, not the zero stored on the event',async()=>{
+ const {prepareKpRun}=await import('../src/kp.ts');const f=await fixture();f.enableHistory();seed(f.sql,one,1000);
+ assert.equal(await collectKpMatch(f.env,mapping,game('cached-loss','competitive',false),'p-one'),-100);
+ const run=await prepareKpRun(f.env,mapping);
+ assert.equal(run.credits.get([...run.credits.keys()].find(k=>k.includes('cached-loss'))!),-100);
 });

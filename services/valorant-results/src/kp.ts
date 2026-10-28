@@ -164,9 +164,10 @@ export async function flushKpDirectives(env:KpEnv & {DISCORD_WEBHOOK_URL:string;
  }
 }
 
+/** Per monitor run: each match's net KP (earned part plus any loss debit) and its current post. */
 export interface KpRun { mapping:KpMapping; startsAt:number; credits:Map<string,number>; messages:Map<string,string> }
 export async function prepareKpRun(env:KpEnv,mapping:KpMapping):Promise<KpRun>{
  const start=await env.DB.prepare("SELECT value FROM kp_settings WHERE key='starts_at'").first<{value:string}>();
- const rows=(await env.DB.prepare('SELECT e.id,e.amount,n.message FROM kp_events e JOIN kp_accounts a ON a.guild=e.guild AND a.puuid=e.puuid LEFT JOIN notifications n ON n.riot_id=a.riot AND n.match_id=e.match WHERE e.guild=? ORDER BY e.at DESC LIMIT 200').bind(mapping.guildId).all<{id:string;amount:number;message:string|null}>()).results;
+ const rows=(await env.DB.prepare("SELECT e.id,e.amount+COALESCE((SELECT delta FROM kp_ledger WHERE id='penalty:'||e.id),0) AS amount,n.message FROM kp_events e JOIN kp_accounts a ON a.guild=e.guild AND a.puuid=e.puuid LEFT JOIN notifications n ON n.riot_id=a.riot AND n.match_id=e.match WHERE e.guild=? ORDER BY e.at DESC LIMIT 200").bind(mapping.guildId).all<{id:string;amount:number;message:string|null}>()).results;
  return {mapping,startsAt:Number(start?.value??Infinity),credits:new Map(rows.map(r=>[r.id,r.amount])),messages:new Map(rows.filter(r=>r.message!==null).map(r=>[r.id,r.message!]))};
 }
