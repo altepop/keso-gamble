@@ -5,12 +5,15 @@ import {decryptKpMapping} from './kp.ts';
 export interface MahjongConfig {enabled:boolean;startedAt:number;players:Array<{id:number;name:string}>;modes:number[]}
 export interface MahjongEnv {DB:D1Database;DISCORD_WEBHOOK_URL?:string;KP_BOOTSTRAP_PRIVATE_KEY?:string;AMAE_KOROMO_TOKEN?:string}
 interface Member {accountId:number;nickname:string;score:number}
-export interface MahjongRecord {_id:string;modeId:number;startTime:number;endTime:number;players:Member[]}
+export interface MahjongRecord {_id:string;uuid?:string;modeId:number;startTime:number;endTime:number;players:Member[]}
+/** The game's own paipu id (not the provider's _id); only this form is passed on to the paipu fetcher. */
+export const PAIPU_UUID=/^\d{6}-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const API='https://5-data.amae-koromo.com/api/v2/';
 const MODES:Record<number,string>={11:'四麻・玉の間 東風',12:'四麻・玉の間 半荘',23:'三麻・玉の間 東風',24:'三麻・玉の間 半荘'};
 const INTERVAL=5*60_000,LOOKBACK=7*24*3600_000;
 /** The provider's key comes with a limit of one query per second; requests are spaced a little wider. */
 export const PROVIDER_GAP=1100;
+export const AUTO_PAIPU_AGE=6*3600_000;
 export const pacing={wait:(ms:number)=>new Promise<void>(done=>setTimeout(done,ms))};
 const initialized=new WeakSet<object>(),configs=new Map<string,Promise<MahjongConfig>>();
 export function validateMahjongConfig(value:unknown):MahjongConfig {
@@ -27,10 +30,16 @@ async function configuration(env:MahjongEnv){
  }
  return configs.get(key)!;
 }
+/** Registered players (game account id and display name); empty when the private config is unavailable. */
+export async function mahjongPlayers(env:MahjongEnv){
+ try{return (await configuration(env))?.players??[];}catch{return [];}
+}
 async function ensure(env:MahjongEnv){
  if(initialized.has(env.DB))return;
  await env.DB.batch([
   env.DB.prepare('CREATE TABLE IF NOT EXISTS mahjong_watch_state(key TEXT PRIMARY KEY,value TEXT NOT NULL)'),
+  // Games of registered players that the paipu fetcher reads without a /paifu claim.
+  env.DB.prepare('CREATE TABLE IF NOT EXISTS mahjong_paipu_auto(paipu TEXT PRIMARY KEY,account INTEGER NOT NULL,at INTEGER NOT NULL)'),
   env.DB.prepare("CREATE TABLE IF NOT EXISTS mahjong_watch_posts(id TEXT PRIMARY KEY,body TEXT NOT NULL,at INTEGER NOT NULL,sent INTEGER NOT NULL DEFAULT 0,lease INTEGER NOT NULL DEFAULT 0,message_id TEXT)"),
  ]);initialized.add(env.DB);
 }
@@ -51,7 +60,8 @@ export function parseMahjongRecords(value:unknown,player:number,modes:number[],s
  if(!Array.isArray(value)||value.length>100)throw Error('invalid_mahjong_records');
  return value.map((r:MahjongRecord)=>{
   if(!r||typeof r._id!=='string'||!/^[a-zA-Z0-9_-]{1,160}$/.test(r._id)||!MODES[r.modeId]||!Number.isSafeInteger(r.startTime)||!Number.isSafeInteger(r.endTime)||r.startTime<=0||r.endTime<r.startTime||r.endTime*1000>now+60_000||!Array.isArray(r.players)||r.players.length!==(r.modeId<20?4:3)||r.players.some(p=>!Number.isSafeInteger(p.accountId)||p.accountId<=0||typeof p.nickname!=='string'||!Number.isSafeInteger(p.score)||p.score< -100000||p.score>500000)||new Set(r.players.map(p=>p.accountId)).size!==r.players.length||!r.players.some(p=>p.accountId===player))throw Error('invalid_mahjong_record');
-  return r;
+  const uuid=typeof r.uuid==='string'&&PAIPU_UUID.test(r.uuid)?r.uuid:undefined;
+  return {...r,uuid};
  }).filter(r=>modes.includes(r.modeId)&&r.startTime*1000>=since).sort((a,b)=>a.startTime-b.startTime||a._id.localeCompare(b._id));
 }
 export function mahjongMessage(record:MahjongRecord,player:number,name:string){
@@ -123,6 +133,8 @@ export async function monitorMahjong(env:MahjongEnv,now=Date.now(),override?:Mah
     const records=parseMahjongRecords(await response.json(),p.id,modes,since,now);
     for(const record of records){
      const id='mahjong:'+p.id+':'+record._id;
+     // Only fresh games: a first successful poll returns a week of history, which must not flood the channel.
+     if(record.uuid&&record.endTime*1000>now-AUTO_PAIPU_AGE)await env.DB.prepare('INSERT OR IGNORE INTO mahjong_paipu_auto(paipu,account,at) VALUES(?,?,?)').bind(record.uuid,p.id,record.endTime*1000).run();
      await env.DB.prepare('INSERT OR IGNORE INTO mahjong_watch_posts(id,body,at) VALUES(?,?,?)').bind(id,JSON.stringify({content:mahjongMessage(record,p.id,p.name),allowed_mentions:{parse:[]}}),record.endTime*1000).run();
     }
    }
