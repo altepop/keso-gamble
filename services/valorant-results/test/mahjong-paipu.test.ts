@@ -173,3 +173,10 @@ test('the top is only praised, even with deal-ins and riichi deal-ins on the rec
   for(const l of lines)assert.ok(praise.some((p:string)=>l.includes(p)),l);
  }
 });
+
+test('third place is roasted harder than second: three distinct lines, two for mild members', () => {
+ const third=summary.seats.find(s=>s.rank===3)!,second=summary.seats.find(s=>s.rank===2)!;
+ const roast=(seat:number,level:'full'|'mild')=>paipuPost(summary,new Map([[seat,{user:one,name:'X'}]]),()=>level).split('\n').filter(l=>l.startsWith('🗯️'));
+ assert.equal(new Set(roast(third.seat,'full')).size,3);assert.ok(roast(third.seat,'mild').length<=2);
+ assert.ok(roast(second.seat,'full').length<=2);
+});
