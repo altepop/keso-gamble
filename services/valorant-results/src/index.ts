@@ -1,3 +1,4 @@
+import {prepareStocks,queueStockPosts} from './stock-market.ts';
 import {monitorMahjong, mahjongStatus} from './mahjong.ts';
 import {monitorUnite} from './unite.ts';
 import {settleRankChange,rankChangeBlock,rankChangeFor} from './rank-change.ts';
@@ -430,6 +431,7 @@ export default {
     ctx.waitUntil(monitor(env));
     ctx.waitUntil((async()=>{
       const mapping=await initializeKp(env);if(!mapping)return;
+      try{const market=await prepareStocks(env,mapping.guildId);await queueStockPosts(env,market);}catch{console.warn('stock_market_pending');}
       // Owned horses run even when nobody opens the Activity.
       try{await decideEntries(env,mapping,openRaceStart(Date.now()));await settleHorsePrizes(env,mapping);}catch{console.warn('horse_race_pending');}
       // A very rare free horse for someone, drawn once per race slot and announced in the earnings channel.

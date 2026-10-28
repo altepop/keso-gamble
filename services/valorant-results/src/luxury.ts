@@ -1,3 +1,4 @@
+import {stockDiscount} from './stock-market.ts';
 import {raceCatchphrase,raceAside} from './racing-voice.ts';
 // Luxury items bought with KP. The purchase row (and the crown race, for crown items) is written by a
 // trigger on the same wallet operation insert as the KP debit, so either everything applies or nothing.
@@ -30,10 +31,11 @@ export async function ensureLuxury(env:KpEnv){
  initialized.add(env.DB);
 }
 /** Validates a purchase and returns the result the trigger applies. Debits `state.cash`. */
-export async function buyLuxury(env:KpEnv&{KP_EARNINGS_WEBHOOK_URL?:string},mapping:KpMapping,user:string,state:{cash:number},args:Record<string,unknown>,now=Date.now()){
+export async function buyLuxury(env:KpEnv&{KP_EARNINGS_WEBHOOK_URL?:string},mapping:KpMapping,user:string,state:{cash:number},args:Record<string,unknown>,now=Date.now(),discountPercent=0){
  await ensureLuxury(env);
  const item=(LUXURY as Item[]).find(i=>i.id===args.item);if(!item)throw Error('品目を選んでください。');
- if(state.cash<item.price)throw Error('KPが足りません。');
+ const discount=stockDiscount(item.price,discountPercent);
+ if(state.cash<discount.paid)throw Error('KPが足りません。');
  const luxury:{id:string;item:string;target:string|null;payload:string|null;until:number|null;crown?:{race:number;name:string;user:string}}={id:'lux-'+kpRandom(),item:item.id,target:null,payload:null,until:null};
  if(item.needs==='target'){
   const target=String(args.target??'');
@@ -56,8 +58,8 @@ export async function buyLuxury(env:KpEnv&{KP_EARNINGS_WEBHOOK_URL?:string},mapp
   luxury.payload=horse.id;
   if(item.id==='billboard')luxury.until=now+BILLBOARD_MS;
  }
- state.cash-=item.price;
- return {luxury};
+ state.cash-=discount.paid;
+ return {luxury,discount};
 }
 /** Posts for a completed purchase (after its insert succeeded). Missing webhook means no post. */
 export async function luxuryPosts(env:KpEnv&{KP_EARNINGS_WEBHOOK_URL?:string},mapping:KpMapping,user:string,luxury:{id:string;item:string;target:string|null;payload:string|null;crown?:{race:number;name:string}},now=Date.now()){
