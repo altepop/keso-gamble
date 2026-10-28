@@ -97,6 +97,7 @@ export function kpCreditLine(text:string,amount:number,note=''){const base=text.
  *   costs 50 and anything else is 0.
  * - Escalation: the usual small rate, but on a very rare draw (3%) the match becomes all or nothing: +1,000 for a
  *   win, −1,000 for a loss. Team deathmatch keeps its small rate.
+ * - Team deathmatch and escalation: 35 kills or more add 150 (killBonus in kp-policy.json), win or lose.
  * - teamBonus (kp-policy.json) can add a chance bonus to listed modes; none are listed now.
  * - Every mode: luck (src/luck.ts) may double or triple it, wipe out a loss, or halve a gain / double a loss.
  * Every draw is fixed by the match and the player. Missing stats never cost anything. */
@@ -121,8 +122,11 @@ export function valoKp(raw:Match,puuid:string,mode:string,outcome:string|null):{
  let jackpot='';
  const big=policy.escalationJackpot;
  if(mode==='escalation'&&(outcome==='win'||outcome==='loss')&&chance('escalation-jackpot:'+id,big.chancePercent)){base=outcome==='win'?big.win:big.loss;jackpot='（🎰 エスカ大勝負）';}
+ const kb=policy.killBonus,myKills=subject?.stats?.kills;
+ let killNote='';
+ if((kb.modes as string[]).includes(mode)&&Number.isSafeInteger(myKills)&&myKills!>=kb.kills){base+=kb.prize;killNote=`（🔥 ${myKills}キル +${kb.prize}）`;}
  const luck=luckFor('valo:'+id);
- return {base,net:applyLuck(base,luck),note:jackpot+luckLabel(luck,base)};
+ return {base,net:applyLuck(base,luck),note:jackpot+killNote+luckLabel(luck,base)};
 }
 export async function collectKpMatch(env:KpEnv,mapping:KpMapping,raw:Match,puuid:string):Promise<number|null>{
  const status=assessRewardReadiness(raw,puuid);if(status.status!=='ready')return null;

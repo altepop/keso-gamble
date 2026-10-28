@@ -322,6 +322,19 @@ test('deathmatch: K/D below 1 costs 50, first place wins 1,000 on a 30% draw fix
  const first=await collectKpMatch(f.env,mapping,dm('dm-top-0',{kills:30,deaths:10}),'p-one');
  assert.equal(await collectKpMatch(f.env,mapping,dm('dm-top-0',{kills:30,deaths:10}),'p-one'),first);
 });
+test('team deathmatch and escalation: 35 kills or more add 150, win or lose; 34 kills and other modes add nothing',async()=>{
+ const {valoKp}=await import('../src/kp.ts');
+ const at=(id:string,mode:string,win:boolean,kills:number)=>{const raw=game(id,mode,win) as ReturnType<typeof game>&{players:Array<{puuid:string;team_id:string;stats?:{kills?:number;score?:number}}>};
+  raw.players=[{puuid:'p-one',team_id:'red',stats:{kills,score:500}},...[10,20,15,5].map((k,i)=>({puuid:'m'+i,team_id:'red',stats:{kills:k,score:100}}))];return raw;};
+ // Skip the rare draws (jackpot, luck) by keeping only the plain results.
+ const plain=(rs:Array<{base:number;net:number;note:string}>)=>rs.filter(r=>r.base===r.net&&!r.note.includes('🎰'));
+ const tdmWin=plain(Array.from({length:50},(_,i)=>valoKp(at('kb-tw'+i,'hurm',true,35),'p-one','teamdeathmatch','win')));
+ assert.ok(tdmWin.length>30&&tdmWin.every(r=>r.base===220&&r.note==='（🔥 35キル +150）'));
+ const escLoss=plain(Array.from({length:50},(_,i)=>valoKp(at('kb-el'+i,'ggteam',false,40),'p-one','escalation','loss')));
+ assert.ok(escLoss.length>30&&escLoss.every(r=>r.base===150&&r.note==='（🔥 40キル +150）'));
+ assert.ok(plain(Array.from({length:50},(_,i)=>valoKp(at('kb-34'+i,'hurm',true,34),'p-one','teamdeathmatch','win'))).every(r=>r.base===70&&r.note===''));
+ assert.ok(plain(Array.from({length:50},(_,i)=>valoKp(at('kb-sw'+i,'swiftplay',true,40),'p-one','swiftplay','win'))).every(r=>r.base===180&&r.note===''));
+});
 test('escalation: the usual small rate, and on a very rare draw (about 3%) +1,000 for a win or −1,000 for a loss',async()=>{
  const {valoKp}=await import('../src/kp.ts');
  const esc=(id:string,mode:string,win:boolean)=>{const raw=game(id,mode,win) as ReturnType<typeof game>&{players:Array<{puuid:string;team_id:string;stats?:{kills?:number;score?:number}}>};
