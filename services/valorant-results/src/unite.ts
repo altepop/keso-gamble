@@ -5,6 +5,7 @@
 // a win +200, a loss −50 (never more than the balance).
 import voice from '../unite-voice.json' with {type:'json'};
 import names from '../unite-names.json' with {type:'json'};
+import {applyLuck,luckFor,luckLabel} from './luck.ts';
 import {initializeKp,newKpState} from './kp.ts';
 import type {KpEnv,KpMapping} from './kp.ts';
 import {flushMahjongPosts} from './mahjong.ts';
@@ -68,7 +69,7 @@ export function uniteJa(m:Pick<UniteMatch,'pokemon'|'map'|'party'>):{pokemon:str
  const boss=map.match(/（([^）]+)）/)?.[1]??'終盤のボス';
  return {pokemon,map,party:(names.party as Record<string,string>)[m.party]??m.party,boss};
 }
-export function unitePost(name:string,uid:string,m:UniteMatch,kp:number){
+export function unitePost(name:string,uid:string,m:UniteMatch,kp:number,note=''){
  const ja=uniteJa(m);
  const key=uid+':'+matchKey(m),pick=(list:string[],n:number)=>{const start=hash(key)%list.length;return Array.from({length:Math.min(n,list.length)},(_,i)=>list[(start+i)%list.length]);};
  const one=(list:string[],salt:string)=>list[hash(key+':'+salt)%list.length];
@@ -78,15 +79,17 @@ export function unitePost(name:string,uid:string,m:UniteMatch,kp:number){
   `-# ${clean(ja.pokemon)} Lv${m.level}・${clean(ja.map)}・${clean(ja.party)}`,
   `スコア ${m.ours} vs ${m.theirs}｜KO ${m.ko}・アシスト ${m.ast}・妨害 ${m.int}｜与ダメ ${clean(m.dmg)}・被ダメ ${clean(m.tkn)}・回復 ${clean(m.heal)}`,
   ...lines.map(l=>`🗯️ ${l.replaceAll('{pokemon}',clean(ja.pokemon)).replaceAll('{boss}',clean(ja.boss))}`),
-  ...kp?[`${kp>0?'✅':'💸'} ${kp>0?'+':'−'}${Math.abs(kp).toLocaleString('ja-JP')} KP`]:[],
+  ...kp||note?[`${kp>0?'✅':kp<0?'💸':'🍀'} ${kp>0?'+':kp<0?'−':'±'}${Math.abs(kp).toLocaleString('ja-JP')} KP${note}`]:[],
   `戦績：<${PROFILE}${uid}>`].join('\n');
 }
-async function credit(env:UniteEnv,guild:string,user:string,id:string,win:boolean,now:number){
+async function credit(env:UniteEnv,guild:string,user:string,id:string,win:boolean,now:number,seed:string){
+ // Luck (src/luck.ts) on top of the win/loss amount, fixed by the match.
+ const net=applyLuck(win?UNITE_WIN:-UNITE_LOSS,luckFor('unite:'+seed));
  await env.DB.batch([
   env.DB.prepare('INSERT OR IGNORE INTO kp_wallets(guild,user) VALUES(?,?)').bind(guild,user),
   env.DB.prepare('INSERT OR IGNORE INTO kp_state(guild,user,data) VALUES(?,?,?)').bind(guild,user,JSON.stringify(newKpState())),
-  env.DB.prepare(`INSERT OR IGNORE INTO kp_ledger(id,guild,user,delta,kind,at) SELECT ?,?,?,CASE WHEN ? THEN ? ELSE -MIN(?,balance) END,'unite',? FROM kp_wallets WHERE guild=? AND user=?`)
-   .bind(id,guild,user,win?1:0,UNITE_WIN,UNITE_LOSS,now,guild,user),
+  env.DB.prepare(`INSERT OR IGNORE INTO kp_ledger(id,guild,user,delta,kind,at) SELECT ?,?,?,CASE WHEN ?>=0 THEN ? ELSE -MIN(?,balance) END,'unite',? FROM kp_wallets WHERE guild=? AND user=?`)
+   .bind(id,guild,user,net,net,-net,now,guild,user),
  ]);
  return Number((await env.DB.prepare('SELECT delta FROM kp_ledger WHERE id=?').bind(id).first<{delta:number}>())?.delta??0);
 }
@@ -115,8 +118,8 @@ export async function monitorUnite(env:UniteEnv,now=Date.now(),request:typeof fe
  await env.DB.prepare('UPDATE unite_links SET name=?,seen=?,error=NULL WHERE guild=? AND user=?').bind(page.name,JSON.stringify([...new Set([...keys,...seen??[]])].slice(0,20)),link.guild,link.user).run();
  for(const m of fresh){
   const id='unite:'+link.uid+':'+hash(matchKey(m)).toString(36)+':'+now.toString(36);
-  const kp=await credit(env,link.guild,link.user,id,m.win,now);
-  await env.DB.prepare('INSERT OR IGNORE INTO mahjong_watch_posts(id,body,at) VALUES(?,?,?)').bind(id,JSON.stringify({content:unitePost(page.name,link.uid,m,kp),allowed_mentions:{parse:[]}}),now).run();
+  const seed=link.uid+':'+matchKey(m),kp=await credit(env,link.guild,link.user,id,m.win,now,seed),note=luckLabel(luckFor('unite:'+seed),m.win?UNITE_WIN:-UNITE_LOSS);
+  await env.DB.prepare('INSERT OR IGNORE INTO mahjong_watch_posts(id,body,at) VALUES(?,?,?)').bind(id,JSON.stringify({content:unitePost(page.name,link.uid,m,kp,note),allowed_mentions:{parse:[]}}),now).run();
   if(env.KP_EARNINGS_WEBHOOK_URL&&kp){await ensurePosts(env);await enqueue(env,'kp-'+id,`🎮 <@${link.user}> ユナイト ランクマ${m.win?'勝利':'敗北'} ${kp>0?'+':'−'}${Math.abs(kp).toLocaleString('ja-JP')} KP`,now);}
  }
  if(fresh.length)await flushMahjongPosts(env as unknown as MahjongEnv,now,request);
