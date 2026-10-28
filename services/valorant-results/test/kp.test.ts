@@ -322,3 +322,10 @@ test('deathmatch: K/D below 1 costs 15, first place wins 500 on a fair coin fixe
  assert.equal(await collectKpMatch(f.env,mapping,dm('dm-top-0',{kills:30,deaths:10}),'p-one'),firsts[0]);
  const tiedLow=await collectKpMatch(f.env,mapping,dm('dm-tie-low',{kills:20,deaths:25}),'p-one');assert.ok(tiedLow===500||tiedLow===-15,'a shared first that misses the draw still has a K/D below 1');
 });
+
+test('a later monitor run shows a loss as its net negative KP, not the zero stored on the event',async()=>{
+ const {prepareKpRun}=await import('../src/kp.ts');const f=await fixture();f.enableHistory();seed(f.sql,one,1000);
+ assert.equal(await collectKpMatch(f.env,mapping,game('cached-loss','competitive',false),'p-one'),-100);
+ const run=await prepareKpRun(f.env,mapping);
+ assert.equal(run.credits.get([...run.credits.keys()].find(k=>k.includes('cached-loss'))!),-100);
+});
