@@ -218,3 +218,14 @@ button:disabled{cursor:not-allowed}
 .race-card .segment button small{font-size:11px;opacity:.75}
 .roast-segment{grid-template-columns:repeat(3,1fr);padding:8px 0}
 .race-owner{display:block;font-size:11px;color:var(--yellow)}
+/* Home: balance summary and one tap to every screen. */
+.home-summary{display:flex;flex-wrap:wrap;gap:10px;margin:14px 14px 0}
+.home-summary>div{flex:1 1 140px;border:1px solid rgba(35,61,113,.7);background:linear-gradient(180deg,#08122d,#050d22);border-radius:14px;padding:12px 14px;display:grid;gap:4px}
+.home-summary small{color:#8fa8cf;font-size:12px}.home-summary strong{font-size:22px;color:#f4f8ff}.home-summary strong small{font-size:12px;font-weight:400}
+.home-summary .owed{border-color:#a13d4b;background:#2a0d16}.home-summary .owed strong{color:#ff8a98}
+.shortcut-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px;margin:14px}
+.shortcut{appearance:none;display:grid;gap:4px;justify-items:start;text-align:left;padding:14px;border:1px solid rgba(36,67,120,.72);border-radius:14px;background:#08142d;color:#e7f0ff;cursor:pointer;touch-action:manipulation}
+.shortcut:hover{background:#0d1d3d}.shortcut .ico{font-size:20px}.shortcut strong{font-size:16px}.shortcut small{color:#8fa8cf;font-size:12px}
+/* Long rules and side panels stay folded until opened. */
+details.rules>summary{cursor:pointer;color:#9ab9e5;margin:10px 0;list-style-position:inside}
+details.asset-card.rules{margin:14px}
