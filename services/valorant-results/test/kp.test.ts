@@ -323,7 +323,7 @@ test('deathmatch: K/D below 1 costs 15, first place wins 500 on a fair coin fixe
  const tiedLow=await collectKpMatch(f.env,mapping,dm('dm-tie-low',{kills:20,deaths:25}),'p-one');assert.ok(tiedLow===500||tiedLow===-15,'a shared first that misses the draw still has a K/D below 1');
 });
 
-test('a competitive demotion is posted with the roast and costs 500 KP once; a promotion is praised for free',async()=>{
+test('a competitive demotion is posted with the roast and costs 500 KP once; a promotion is praised and pays 100 KP once',async()=>{
  const {monitor}=await import('../src/index.ts');const f=await fixture();f.enableHistory();seed(f.sql,one,2000);const original=globalThis.fetch;
  const env={...f.env,HENRIK_API_KEY:'fixture',DISCORD_WEBHOOK_URL:'https://discord.com/api/webhooks/1/fixture'};
  const lost=game('rank-down','competitive',false),won=game('rank-up');won.players[0].puuid='p-two';
@@ -337,7 +337,8 @@ test('a competitive demotion is posted with the roast and costs 500 KP once; a p
   for(let i=0;i<3;i++){await monitor(env,[{riotId:'One#JP1',name:'One'},{riotId:'Two#JP1',name:'Two'}]);f.sql.exec("DELETE FROM monitor_state WHERE key='discord_after'");}
   const message=(match:string)=>String(f.sql.prepare('SELECT message FROM notifications WHERE match_id=?').get(match)!.message);
   assert.match(message('rank-down'),/🔻 \*\*降格\*\* プラチナ1 → ゴールド3（−500 KP）/);assert.equal((message('rank-down').match(/^💀 /gm)??[]).length,5);
-  assert.match(message('rank-up'),/🔺 \*\*昇格\*\* シルバー3 → ゴールド1/);
+  assert.match(message('rank-up'),/🔺 \*\*昇格\*\* シルバー3 → ゴールド1（\+100 KP）/);
+  assert.deepEqual(f.sql.prepare("SELECT user,delta FROM kp_ledger WHERE id LIKE 'rank-up:%'").all().map(r=>[r.user,r.delta]),[[two,100]]);
   assert.equal(f.sql.prepare("SELECT delta FROM kp_ledger WHERE id LIKE 'rank-down:%'").get()!.delta,-500);
   assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM kp_ledger WHERE id LIKE 'rank-down:%'").get()!.n,1,'charged once across runs');
   assert.equal(historyCalls,2,'the history is read once per new result, not on every run');

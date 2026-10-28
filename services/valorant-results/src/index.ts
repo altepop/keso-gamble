@@ -1,6 +1,6 @@
 import {monitorMahjong, mahjongStatus} from './mahjong.ts';
 import {monitorUnite} from './unite.ts';
-import {chargeRankDown,rankChangeBlock,rankChangeFor} from './rank-change.ts';
+import {settleRankChange,rankChangeBlock,rankChangeFor} from './rank-change.ts';
 import type {RankChange} from './rank-change.ts';
 import {paipuApi} from './mahjong-paipu.ts';
 export {VoiceGateway} from './voice-gateway.ts';
@@ -173,7 +173,7 @@ async function saveMatch(env: Env, match: Match, player: Player, account: Accoun
       await env.DB.prepare('INSERT INTO monitor_state(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind(key, next).run();
       ranks.set(key, next);
       const user = kpRun.mapping.accounts.find(a => a.riotId === player.riotId)?.discordUserId;
-      if (change && change.after < change.before && user) await chargeRankDown(env, kpRun.mapping, user, match.metadata.match_id, account.puuid, Date.now());
+      if (change && user) await settleRankChange(env, kpRun.mapping, user, change, match.metadata.match_id, account.puuid, Date.now());
       if (change && change.after !== change.before) kpActive = true;
     }
     if (change) result.message += rankChangeBlock(change, match.metadata.match_id + ':' + account.puuid);

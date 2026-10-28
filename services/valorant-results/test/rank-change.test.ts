@@ -18,7 +18,7 @@ test('a demotion gets a heading with the KP and five distinct roasts; a promotio
  assert.equal(lines[0],`🔻 **降格** プラチナ1 → ゴールド3（−${RANK_DOWN_KP} KP）`);
  const roasts=lines.slice(1);assert.equal(roasts.length,5);assert.equal(new Set(roasts).size,5);assert.ok(roasts.every(l=>l.startsWith('💀 ')&&!/\{|\}/.test(l)));
  const up=rankChangeBlock({before:14,after:15},'m:p').split('\n').filter(Boolean);
- assert.equal(up[0],'🔺 **昇格** ゴールド3 → プラチナ1');assert.equal(up.length,3);assert.ok(up.slice(1).every(l=>l.startsWith('🎉 ')));
+ assert.equal(up[0],'🔺 **昇格** ゴールド3 → プラチナ1（+100 KP）');assert.equal(up.length,3);assert.ok(up.slice(1).every(l=>l.startsWith('🎉 ')));
  assert.equal(rankChangeBlock({before:14,after:14},'m:p'),'');
  assert.equal(rankChangeBlock({before:15,after:14},'m:p'),down,'stable for the same match');
 });

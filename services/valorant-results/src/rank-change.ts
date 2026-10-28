@@ -1,9 +1,9 @@
 // Competitive rank changes. After a new competitive result, the player's MMR history (Henrik) tells the tier
-// before and after that match. A demotion is roasted hard and costs KP; a promotion is praised.
+// before and after that match. A demotion is roasted hard and costs 500 KP; a promotion is praised and earns 100 KP.
 import type {KpEnv,KpMapping} from './kp.ts';
 
 export interface RankChange {before:number;after:number}
-export const RANK_DOWN_KP=500;
+export const RANK_DOWN_KP=500,RANK_UP_KP=100;
 const TIERS=['アイアン','ブロンズ','シルバー','ゴールド','プラチナ','ダイヤモンド','アセンダント','イモータル'];
 /** Henrik tier ids: 3-5 Iron 1-3 … 24-26 Immortal 1-3, 27 Radiant. */
 export function tierName(id:number){
@@ -56,10 +56,15 @@ export function rankChangeBlock(change:RankChange,key:string){
  const fill=(s:string)=>s.replaceAll('{before}',tierName(change.before)).replaceAll('{after}',tierName(change.after));
  const lines=Array.from({length:n},(_,i)=>fill(pool[(start+i)%pool.length]));
  return down?`\n🔻 **降格** ${tierName(change.before)} → ${tierName(change.after)}（−${RANK_DOWN_KP} KP）\n`+lines.map(l=>'💀 '+l).join('\n')
-  :`\n🔺 **昇格** ${tierName(change.before)} → ${tierName(change.after)}\n`+lines.map(l=>'🎉 '+l).join('\n');
+  :`\n🔺 **昇格** ${tierName(change.before)} → ${tierName(change.after)}（+${RANK_UP_KP} KP）\n`+lines.map(l=>'🎉 '+l).join('\n');
 }
-/** One debit per demoted match and player, never more than the balance. */
-export async function chargeRankDown(env:KpEnv,mapping:KpMapping,user:string,matchId:string,puuid:string,now:number){
- await env.DB.prepare(`INSERT OR IGNORE INTO kp_ledger(id,guild,user,delta,kind,at) SELECT ?,?,?,-MIN(?,balance),'match',? FROM kp_wallets WHERE guild=? AND user=?`)
-  .bind('rank-down:'+matchId+':'+puuid,mapping.guildId,user,RANK_DOWN_KP,now,mapping.guildId,user).run();
+/** One ledger row per match and player: a demotion takes up to the balance, a promotion pays a bonus. */
+export async function settleRankChange(env:KpEnv,mapping:KpMapping,user:string,change:RankChange,matchId:string,puuid:string,now:number){
+ if(change.after===change.before)return;
+ const down=change.after<change.before;
+ await env.DB.batch([
+  env.DB.prepare('INSERT OR IGNORE INTO kp_wallets(guild,user) VALUES(?,?)').bind(mapping.guildId,user),
+  env.DB.prepare(`INSERT OR IGNORE INTO kp_ledger(id,guild,user,delta,kind,at) SELECT ?,?,?,${down?'-MIN(?,balance)':'?'},'match',? FROM kp_wallets WHERE guild=? AND user=?`)
+   .bind((down?'rank-down:':'rank-up:')+matchId+':'+puuid,mapping.guildId,user,down?RANK_DOWN_KP:RANK_UP_KP,now,mapping.guildId,user),
+ ]);
 }
