@@ -57,7 +57,9 @@ export function mahjongRoast(record:MahjongRecord,player:number){
  const p=record.players.find(p=>p.accountId===player);if(!p)throw Error('mahjong_player_absent');
  const rank=mahjongRank(record,player);
  const group=p.score<0?'bust':rank===1?'first':rank===record.players.length?'last':rank===2?'second':'third';
- return pick(taunts[group],record._id+':'+player).join('\n');
+ // Three-player games add their own lines (北抜き, two opponents) to the shared ones.
+ const all=taunts as Record<string,string[][]>,pool=[...all[group],...record.players.length===3?all[group+'3']??[]:[]];
+ return pick(pool,record._id+':'+player).join('\n');
 }
 export function parseMahjongRecords(value:unknown,player:number,modes:number[],since:number,now:number):MahjongRecord[]{
  if(!Array.isArray(value)||value.length>100)throw Error('invalid_mahjong_records');
