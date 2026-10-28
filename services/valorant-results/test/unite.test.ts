@@ -5,7 +5,7 @@ import {URL as NodeURL} from 'node:url';
 import {readFileSync,readdirSync} from 'node:fs';
 import {initializeKp,syncKpAccounts} from '../src/kp.ts';
 import type {KpMapping} from '../src/kp.ts';
-import {parseUnite,uniteUid,monitorUnite,UNITE_WIN,UNITE_LOSS} from '../src/unite.ts';
+import {parseUnite,uniteUid,monitorUnite,uniteJa,unitePost,UNITE_WIN,UNITE_LOSS} from '../src/unite.ts';
 import type {UniteEnv,UniteMatch} from '../src/unite.ts';
 import {runKpCommand} from '../src/kp-slash.ts';
 const guild='100000000000000100',one='100000000000000101',two='100000000000000102',cat='100000000000000104';
@@ -82,4 +82,12 @@ test('every roast list is distinct, and a loss post never repeats a line',()=>{
  const v=JSON.parse(readFileSync(new NodeURL('../unite-voice.json',import.meta.url),'utf8'));
  for(const key of ['win','loss','surrendered','noKo','bigKo'])assert.equal(new Set(v[key]).size,v[key].length,key);
  assert.ok(v.win.length>=15&&v.loss.length>=30);
+});
+test('posts use Japanese names: Pokemon, stage and party size; roast lines name the Pokemon',()=>{
+ assert.deepEqual(uniteJa({pokemon:'Eldegoss',map:'Theia Sky Ruins (Groudon)',party:'Trio'}),{pokemon:'ワタシラガ',map:'テイア蒼空遺跡（グラードン）',party:'トリオ'});
+ assert.deepEqual(uniteJa({pokemon:'Brand New Mon',map:'New Stadium',party:'Five'}),{pokemon:'Brand New Mon',map:'New Stadium',party:'Five'},'unknown names stay as they are');
+ const [m]=parseUnite(page([card({win:false,pokemon:'Crustle'})]))!.matches;
+ const posts=Array.from({length:40},(_,i)=>unitePost('テスト選手',String(i),m,-50));
+ assert.ok(posts.every(p=>p.includes('-# イワパレス Lv14・テイア蒼空遺跡（グラードン）・トリオ')&&!/\{pokemon\}|Crustle|ザップドス/.test(p)));
+ assert.ok(posts.some(p=>/🗯️ .*イワパレス/.test(p)),'some roast lines name the Pokemon');
 });
