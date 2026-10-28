@@ -41,7 +41,7 @@ test('repeated and concurrent match collection pays once, aliases normalize, and
  assert.equal(await collectKpMatch(f.env,mapping,game('escalation','ggteam'),'p-one'),70);
  const unknown=game('unknown','swiftplay');unknown.teams=[];assert.equal(await collectKpMatch(f.env,mapping,unknown,'p-one'),0);
  const before=(await readKpState(f.env,mapping,one)).cash;
- for(const mode of ['custom','deathmatch','unsupported'])assert.equal(await collectKpMatch(f.env,mapping,game('hold-'+mode,mode),'p-one'),null);
+ for(const mode of ['custom','unsupported'])assert.equal(await collectKpMatch(f.env,mapping,game('hold-'+mode,mode),'p-one'),null);
  const unfinished=game('unfinished');unfinished.metadata.is_completed=false;assert.equal(await collectKpMatch(f.env,mapping,unfinished,'p-one'),null);
  assert.equal((await readKpState(f.env,mapping,one)).cash,before);
 });
@@ -306,4 +306,19 @@ test('a loss costs a little and the bottom of a full team more, capped at the ba
 test('the match line shows the net KP, negative included, and a rewrite replaces it',()=>{
  assert.match(kpCreditLine('結果',-300),/🪙 この試合 −300 KP/);
  assert.equal(kpCreditLine(kpCreditLine('結果',-300),900),'結果\n🪙 この試合 +900 KP');
+});
+
+test('deathmatch: K/D below 1 costs 15, first place wins 500 on a fair coin fixed per match, everything else is 0',async()=>{
+ const f=await fixture();f.enableHistory();seed(f.sql,one,1000);
+ const dm=(id:string,me:{kills?:number;deaths?:number},others:number[]=[10,20])=>{const raw=game(id,'deathmatch') as ReturnType<typeof game>&{players:Array<{puuid:string;team_id:string;stats?:{kills?:number;deaths?:number}}>};
+  raw.teams=[];raw.players=[{puuid:'p-one',team_id:'p-one',stats:me},...others.map((k,i)=>({puuid:'x'+i,team_id:'x'+i,stats:{kills:k,deaths:10}}))];return raw;};
+ assert.equal(await collectKpMatch(f.env,mapping,dm('dm-low',{kills:9,deaths:10}),'p-one'),-15);
+ assert.equal(await collectKpMatch(f.env,mapping,dm('dm-even',{kills:10,deaths:10}),'p-one'),0,'exactly 1.0 is not below');
+ assert.equal(await collectKpMatch(f.env,mapping,dm('dm-good',{kills:15,deaths:5}),'p-one'),0,'second place with a good K/D');
+ assert.equal(await collectKpMatch(f.env,mapping,dm('dm-gap',{kills:15}),'p-one'),0,'missing stats are 0');
+ // First place: about half of matches pay 500; the rest fall back to the K/D rule. The draw never changes on replay.
+ const firsts=await Promise.all(Array.from({length:40},(_,i)=>collectKpMatch(f.env,mapping,dm('dm-top-'+i,{kills:30,deaths:10}),'p-one')));
+ const won=firsts.filter(v=>v===500).length;assert.ok(won>=10&&won<=30,`won ${won} of 40`);assert.ok(firsts.every(v=>v===500||v===0));
+ assert.equal(await collectKpMatch(f.env,mapping,dm('dm-top-0',{kills:30,deaths:10}),'p-one'),firsts[0]);
+ const tiedLow=await collectKpMatch(f.env,mapping,dm('dm-tie-low',{kills:20,deaths:25}),'p-one');assert.ok(tiedLow===500||tiedLow===-15,'a shared first that misses the draw still has a K/D below 1');
 });

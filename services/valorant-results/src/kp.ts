@@ -91,9 +91,20 @@ export async function drainKpInbox(env:KpEnv){
 /** The match's KP after any bottom-of-team debit; null until the event is recorded. */
 export async function kpMatchNet(env:KpEnv,id:string){const r=await env.DB.prepare("SELECT e.amount+COALESCE((SELECT delta FROM kp_ledger WHERE id='penalty:'||e.id),0) AS net FROM kp_events e WHERE e.id=?").bind(id).first<{net:number}>();return r?Number(r.net):null;}
 export function kpCreditLine(text:string,amount:number){const base=text.replace(/\n🪙 この試合 [+−]\d+ KP[^\n]*/g,''),split=base.lastIndexOf('\n💬 '),line='\n🪙 この試合 '+(amount<0?'−'+(-amount):'+'+amount)+' KP';return split<0?base+line:base.slice(0,split)+line+base.slice(split);}
+/** Deathmatch: first place (most kills, ties included) wins 500 KP on a fair 50% draw fixed by the match and player;
+ * otherwise a K/D below 1 costs 15 KP and anything else is 0. Missing stats are 0. */
+export async function deathmatchKp(raw:Match,subject:Match['players'][number]|undefined,puuid:string){
+ const rule=policy.deathmatch,kills=raw.players.map(p=>p.stats?.kills),mine=subject?.stats;
+ if(!mine||!Number.isSafeInteger(mine.kills)||!Number.isSafeInteger(mine.deaths)||mine.kills!<0||mine.deaths!<0)return 0;
+ if(kills.every(k=>Number.isSafeInteger(k))&&mine.kills===Math.max(...kills as number[])&&mine.kills!>0){
+  const digest=new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode('deathmatch-first:'+raw.metadata.match_id+':'+puuid)));
+  if(digest[0]*100<rule.firstChancePercent*256)return rule.firstPrize;
+ }
+ return mine.kills!<mine.deaths!?rule.belowOneKd:0;
+}
 export async function collectKpMatch(env:KpEnv,mapping:KpMapping,raw:Match,puuid:string):Promise<number|null>{
  const status=assessRewardReadiness(raw,puuid);if(status.status!=='ready')return null;
- const rates=policy.modes[status.mode as keyof typeof policy.modes];if(!rates)return null;
+ const rates=status.mode==='deathmatch'?{win:0,loss:0,bottom:0}:policy.modes[status.mode as keyof typeof policy.modes];if(!rates)return null;
  const start=Date.parse(raw.metadata.started_at),duration=raw.metadata.game_length_in_ms;
  if(!Number.isSafeInteger(start)||!Number.isSafeInteger(duration)||duration<=0||start+duration>Date.now()+60000||!raw.metadata.match_id)return null;
  const id=kpEventId(mapping.guildId,raw.metadata.match_id,puuid);
@@ -110,7 +121,7 @@ export async function collectKpMatch(env:KpEnv,mapping:KpMapping,raw:Match,puuid
  // place in Mahjong Soul. Ties at the bottom all count; missing stats never do. Draws and unknown results are 0.
  const team=raw.players.filter(p=>p.team_id===subject?.team_id),scores=team.map(p=>p.stats?.score);
  const bottom=status.outcome==='loss'&&team.length===5&&scores.every(v=>Number.isSafeInteger(v)&&(v as number)>=0)&&subject?.stats?.score===Math.min(...scores as number[]);
- const net=status.outcome==='win'?rates.win:status.outcome==='loss'?bottom?rates.bottom:rates.loss:0;
+ const net=status.mode==='deathmatch'?await deathmatchKp(raw,subject,puuid):status.outcome==='win'?rates.win:status.outcome==='loss'?bottom?rates.bottom:rates.loss:0;
  // Events hold the earned part (never negative); a cost is a separate debit capped at the balance.
  const e:KpEvent={id,guild:mapping.guildId,user:link.user,puuid,match:raw.metadata.match_id,mode:status.mode,outcome:status.outcome,amount:Math.max(0,net),policy:policy.version,at:Date.now(),...net<0?{penalty:-net}:{}};
  await env.DB.prepare('INSERT OR IGNORE INTO kp_inbox VALUES(?,?,?)').bind(id,JSON.stringify(e),Date.now()).run();
