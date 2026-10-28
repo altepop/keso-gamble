@@ -26,9 +26,9 @@ async function fixture(){
  await initializeKp(env,mapping);await syncKpAccounts(env,mapping);
  const claim=(user:string,rank:number,paipu=PAIPU,game='4-tonpu')=>runPaifuCommand(env,{id:snowflake(),guild_id:guild,member:{user:{id:user}},data:{name:'paifu',options:[{name:'url',value:paipu},{name:'game',value:game},{name:'rank',value:rank}]}},mapping);
  const press=(user:string,claimId:string)=>decidePaifu(env,{id:snowflake(),guild_id:guild,member:{user:{id:user}},data:{custom_id:`paifu:ok:${claimId}`}},mapping);
- const call=async(path:string,body?:unknown,key=KEY)=>{
+ const call=async(path:string,body?:unknown,key=KEY,players?:Array<{id:number;name:string}>)=>{
   const time=String(Date.now()),text=body===undefined?'':JSON.stringify(body);
-  return paipuApi(new Request('https://worker'+path,{method:body===undefined?'GET':'POST',body:body===undefined?undefined:text,headers:{'X-Mahjong-Time':time,'X-Mahjong-Signature':sign(key,time,path,text)}}),env,mapping);
+  return paipuApi(new Request('https://worker'+path,{method:body===undefined?'GET':'POST',body:body===undefined?undefined:text,headers:{'X-Mahjong-Time':time,'X-Mahjong-Signature':sign(key,time,path,text)}}),env,mapping,players);
  };
  const balance=(user:string)=>Number(sql.prepare('SELECT balance FROM kp_wallets WHERE user=?').get(user)?.balance??0);
  const posts=()=>(sql.prepare("SELECT body FROM kp_posts WHERE id LIKE 'paipu:%'").all() as Array<{body:string}>).map(r=>JSON.parse(r.body).content as string);
@@ -98,8 +98,35 @@ test('fetch errors are retried three times; malformed summaries are not stored',
 
 test('roast follows the level; mild members get gentle lines; names cannot ping or format', () => {
  const evil={...summary,seats:summary.seats.map(s=>s.seat===1?{...s,nickname:'@everyone **B**'}:s)};
- const harsh=paipuPost(evil,new Map([[0,one]]),()=>'full'),gentle=paipuPost(evil,new Map([[0,one]]),()=>'mild');
+ const harsh=paipuPost(evil,new Map([[0,{user:one,name:'A'}]]),()=>'full'),gentle=paipuPost(evil,new Map([[0,{user:one,name:'A'}]]),()=>'mild');
  assert.doesNotMatch(harsh,/@everyone|\*\*B\*\*/);
  assert.notEqual(harsh.split('🗯️').slice(1).join(),gentle.split('🗯️').slice(1).join());
  assert.ok(harsh.length<=1900);
+});
+
+test('games found by the result watcher are read without /paifu and roast registered players by name', async t => {
+ t.mock.timers.enable({apis:['Date'],now:T0});
+ const f=await fixture();
+ await f.call('/api/mahjong/paipu/queue');
+ f.sql.prepare('INSERT INTO mahjong_paipu_auto VALUES(?,?,?)').run(PAIPU,11,T0);
+ f.sql.prepare('INSERT INTO mahjong_paipu_auto VALUES(?,?,?)').run(PAIPU.replace('cdef-','cde2-'),11,T0-4*86400000);
+ assert.deepEqual(await (await f.call('/api/mahjong/paipu/queue')).json(),{paipu:[PAIPU]},'three days only');
+ await f.call('/api/mahjong/paipu/summaries',{results:[{uuid:PAIPU,summary}]},KEY,[{id:11,name:'けそ'}]);
+ const [post]=f.posts();
+ assert.match(post,/4位 けそ -3,000（トビ）/);assert.match(post,/📊 けそ 和了0回/);assert.match(post,/🗯️ けそ /);
+ assert.doesNotMatch(post,/<@/,'nobody is mentioned before linking');
+ assert.equal(f.balance(one),0,'no KP without a claim');
+});
+
+test('a /paifu claim for a paipu that was already read is settled at once', async t => {
+ t.mock.timers.enable({apis:['Date'],now:T0});
+ const f=await fixture();
+ await f.call('/api/mahjong/paipu/queue');
+ f.sql.prepare('INSERT INTO kp_mahjong_links VALUES(?,?,?)').run(guild,one,11);
+ f.sql.prepare('INSERT INTO mahjong_paipu_auto VALUES(?,?,?)').run(PAIPU,11,T0);
+ await f.call('/api/mahjong/paipu/summaries',{results:[{uuid:PAIPU,summary}]});
+ const reply=await f.claim(one,4);
+ assert.match(reply.content,/牌譜で本人の順位を確認しました。200 KP を付与/);assert.deepEqual(reply.components,[]);
+ assert.equal(f.balance(one),200);
+ assert.match((await f.claim(two,1)).content,/承認待ち/,'unlinked members still need a member to approve');
 });

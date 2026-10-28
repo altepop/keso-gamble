@@ -48,6 +48,7 @@ export async function ensureMahjongClaims(env:KpEnv){
   env.DB.prepare(`CREATE UNIQUE INDEX IF NOT EXISTS kp_mahjong_claim_rank ON kp_mahjong_claims(guild,paipu,rank) WHERE status!='rejected'`),
   // Summaries fetched from the game (scripts/mahjong-paipu.mjs) and Discord user -> game account links.
   env.DB.prepare(`CREATE TABLE IF NOT EXISTS kp_mahjong_paipu(guild TEXT NOT NULL,paipu TEXT NOT NULL,summary TEXT,error TEXT,attempts INTEGER NOT NULL DEFAULT 0,at INTEGER NOT NULL,PRIMARY KEY(guild,paipu))`),
+  env.DB.prepare('CREATE TABLE IF NOT EXISTS mahjong_paipu_auto(paipu TEXT PRIMARY KEY,account INTEGER NOT NULL,at INTEGER NOT NULL)'),
   env.DB.prepare(`CREATE TABLE IF NOT EXISTS kp_mahjong_links(guild TEXT NOT NULL,user TEXT NOT NULL,account INTEGER NOT NULL,PRIMARY KEY(guild,user),UNIQUE(guild,account))`),
   env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS kp_mahjong_apply AFTER UPDATE OF status ON kp_mahjong_claims WHEN OLD.status='pending' AND NEW.status='approved' BEGIN INSERT INTO kp_ledger(id,guild,user,delta,kind,at) VALUES('mahjong:'||NEW.id,NEW.guild,NEW.user,NEW.amount,'mahjong',NEW.decided_at); END`),
  ]);initialized.add(env.DB);
@@ -78,7 +79,8 @@ export async function runPaifuCommand(env:KpEnv,interaction:PaifuInteraction,ove
    .bind(interaction.id,mapping.guildId,user,claim.paipu,claim.link,claim.game,claim.rank,claim.amount,day,now,mapping.guildId,user,day,policy.dailyClaims),
  ]);
  const filed=await read(env,mapping.guildId,interaction.id);
- if(filed)return renderClaim(filed,now);
+ // A paipu already read automatically settles the claim at once.
+ if(filed){await settleClaim(env,mapping.guildId,filed,now);return renderClaim((await read(env,mapping.guildId,interaction.id))!,now);}
  const taken=await env.DB.prepare(`SELECT user,rank FROM kp_mahjong_claims WHERE guild=? AND paipu=? AND status!='rejected' AND (user=? OR rank=?)`).bind(mapping.guildId,claim.paipu,user,claim.rank).first<{user:string;rank:number}>();
  if(taken?.user===user)return {content:'この牌譜はもう申請済みです。',components:[]};
  if(taken)return {content:`この牌譜の${claim.rank}位はもう <@${taken.user}> が申請しています。順位を確認してください。`,components:[]};
@@ -122,4 +124,19 @@ export async function paipuCheck(env:KpEnv,guild:string,claim:Pick<Claim,'user'|
  if(mine&&mine.account!==player.accountId)return {refuse:`牌譜の${claim.rank}位は、登録済みのあなたの雀魂アカウントではありません。`};
  const game=summary.game as Game;
  return {game,amount:policy.games[game].rates[claim.rank-1],account:player.accountId,nickname:player.nickname,auto:Boolean(mine)};
+}
+
+/** Applies a fetched paipu to one pending claim: auto-approval for a linked account, otherwise the
+ * game type and amount are corrected and a member's approval is awaited. Returns a line for the post. */
+export async function settleClaim(env:KpEnv,guild:string,c:Pick<Claim,'id'|'user'|'paipu'|'rank'>&{status:string},now:number):Promise<string|null>{
+ if(c.status!=='pending')return null;
+ const check=await paipuCheck(env,guild,c);
+ if(!check)return null;
+ if('refuse' in check)return `⚠️ <@${c.user}> の${c.rank}位申請：${check.refuse}`;
+ if(check.auto){
+  const done=await env.DB.prepare(`UPDATE kp_mahjong_claims SET status='approved',decider='paipu',decided_at=?,game=?,amount=? WHERE guild=? AND id=? AND status='pending'`).bind(now,check.game,check.amount,guild,c.id).run();
+  return done.meta.changes?`✅ <@${c.user}> ${c.rank}位を牌譜で確認。+${check.amount.toLocaleString('ja-JP')} KP`:null;
+ }
+ await env.DB.prepare(`UPDATE kp_mahjong_claims SET game=?,amount=? WHERE guild=? AND id=? AND status='pending'`).bind(check.game,check.amount,guild,c.id).run();
+ return `🔎 <@${c.user}> の${c.rank}位は牌譜では「${check.nickname.replace(/[@`*_~<>|#\\\[\]()\r\n]/g,'').slice(0,16)}」。初回なので他のメンバーの承認を待っています（承認後は自動確認）。`;
 }

@@ -5,12 +5,15 @@ import voice from '../mahjong-paipu-voice.json' with {type:'json'};
 import policy from '../mahjong-kp-policy.json' with {type:'json'};
 import {initializeKp} from './kp.ts';
 import type {KpEnv,KpMapping} from './kp.ts';
-import {ensureMahjongClaims,paipuCheck} from './mahjong-claims.ts';
+import {ensureMahjongClaims,paipuCheck,settleClaim} from './mahjong-claims.ts';
+import {mahjongPlayers} from './mahjong.ts';
 import type {PaipuSummary,PlayerSummary,Win} from './mahjong-summary.ts';
 import {enqueue,ensurePosts,roastLevelsOf} from './racing-posts.ts';
 import type {RoastLevel} from './racing-crowns.ts';
 
 export interface PaipuEnv extends KpEnv {MAHJONG_INGEST_KEY?:string;KP_EARNINGS_WEBHOOK_URL?:string}
+/** A player the post talks to: mentioned when linked to Discord, otherwise called by the registered name. */
+export interface Member {user?:string;name:string}
 type Voice=Exclude<keyof typeof voice,'note'>;
 const WINDOW=3*86400000,MAX_ATTEMPTS=3,PAIPU=/^\d{6}-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const enc=new TextEncoder();
@@ -25,10 +28,14 @@ export async function verifyIngest(request:Request,env:PaipuEnv,path:string,body
  const hmac=await crypto.subtle.importKey('raw',enc.encode(key),{name:'HMAC',hash:'SHA-256'},false,['verify']);
  return crypto.subtle.verify('HMAC',hmac,Uint8Array.from(signature.match(/../g)!,b=>parseInt(b,16)),enc.encode(`${time}.${path}.${body}`));
 }
+/** Paipu waiting to be read: /paifu claims and games the result watcher found, for three days. */
 export async function paipuQueue(env:KpEnv,guild:string,now=Date.now()){
  await ensureMahjongClaims(env);
- return (await env.DB.prepare(`SELECT DISTINCT c.paipu FROM kp_mahjong_claims c LEFT JOIN kp_mahjong_paipu p ON p.guild=c.guild AND p.paipu=c.paipu
-  WHERE c.guild=? AND c.status!='rejected' AND c.at>? AND p.summary IS NULL AND COALESCE(p.attempts,0)<? ORDER BY c.at LIMIT 10`).bind(guild,now-WINDOW,MAX_ATTEMPTS).all<{paipu:string}>()).results.map(r=>r.paipu);
+ return (await env.DB.prepare(`SELECT w.paipu FROM (
+   SELECT paipu,MIN(at) AS at FROM kp_mahjong_claims WHERE guild=? AND status!='rejected' AND at>? GROUP BY paipu
+   UNION ALL SELECT paipu,at FROM mahjong_paipu_auto WHERE at>?) w
+  LEFT JOIN kp_mahjong_paipu p ON p.guild=? AND p.paipu=w.paipu
+  WHERE p.summary IS NULL AND COALESCE(p.attempts,0)<? GROUP BY w.paipu ORDER BY MIN(w.at) LIMIT 10`).bind(guild,now-WINDOW,now-WINDOW,guild,MAX_ATTEMPTS).all<{paipu:string}>()).results.map(r=>r.paipu);
 }
 const int=(v:unknown,min=-1e7,max=1e7)=>Number.isSafeInteger(v)&&(v as number)>=min&&(v as number)<=max;
 const seat=(v:unknown,players:number)=>int(v,0,players-1);
@@ -69,8 +76,8 @@ export function roastFor(summary:PaipuSummary,seatNo:number,level:RoastLevel,who
  return out;
 }
 /** The post: final standings, the key hands, each member's numbers and roast. `members` maps seat -> Discord user. */
-export function paipuPost(summary:PaipuSummary,members:Map<number,string>,levelOf:(user:string)=>RoastLevel,outcomes:string[]=[]){
- const who=(seatNo:number)=>members.has(seatNo)?`<@${members.get(seatNo)}>`:clean(summary.seats[seatNo].nickname);
+export function paipuPost(summary:PaipuSummary,members:Map<number,Member>,levelOf:(user:string)=>RoastLevel,outcomes:string[]=[]){
+ const who=(seatNo:number)=>{const m=members.get(seatNo);return m?.user?`<@${m.user}>`:clean(m?.name??summary.seats[seatNo].nickname);};
  const label=policy.games[summary.game as keyof typeof policy.games].label;
  const standings=[...summary.seats].sort((a,b)=>a.rank-b.rank).map(p=>`${p.rank}位 ${who(p.seat)} ${points(p.score)}${p.score<0?'（トビ）':''}`).join('　');
  const yaku=(w:Win)=>w.yaku.length?`（${w.yaku.join('・')}）`:'';
@@ -85,33 +92,26 @@ export function paipuPost(summary:PaipuSummary,members:Map<number,string>,levelO
   const p=summary.seats[seatNo];
   return `📊 ${who(seatNo)} 和了${p.wins}回（ツモ${p.tsumo}）／放銃${p.dealIns}回（${points(p.dealInPoints)}点）／立直${p.riichi}回（和了${p.riichiWins}）／副露${p.callRounds}/${p.rounds}局`;
  });
- const roasts=[...members].flatMap(([seatNo,user])=>roastFor(summary,seatNo,levelOf(user),who).map(text=>`🗯️ ${who(seatNo)} ${text}`));
+ const roasts=[...members].flatMap(([seatNo,m])=>roastFor(summary,seatNo,m.user?levelOf(m.user):'normal',who).map(text=>`🗯️ ${who(seatNo)} ${text}`));
  const parts=[`🀄 **雀魂 ${label}** 牌譜より`,standings,...hands,...stats,...outcomes,...roasts];
  let text='';
  for(const part of parts){if((text+'\n'+part).length>1900)break;text+=(text?'\n':'')+part;}
  return text;
 }
-/** Applies one fetched summary: stores it, confirms claims of linked members, queues the post. */
-export async function applySummary(env:PaipuEnv,mapping:KpMapping,summary:PaipuSummary,now=Date.now()){
+/** Applies one fetched summary: stores it, settles /paifu claims, queues the post. `players` are the
+ * registered accounts of the result watcher, roasted by name until they are linked to Discord. */
+export async function applySummary(env:PaipuEnv,mapping:KpMapping,summary:PaipuSummary,now=Date.now(),players:Array<{id:number;name:string}>=[]){
  await env.DB.prepare('INSERT INTO kp_mahjong_paipu(guild,paipu,summary,error,attempts,at) VALUES(?,?,?,NULL,0,?) ON CONFLICT(guild,paipu) DO UPDATE SET summary=excluded.summary,error=NULL,at=excluded.at WHERE kp_mahjong_paipu.summary IS NULL')
   .bind(mapping.guildId,summary.uuid,JSON.stringify(summary),now).run();
- const claims=(await env.DB.prepare(`SELECT id,user,paipu,rank,status,amount FROM kp_mahjong_claims WHERE guild=? AND paipu=? AND status!='rejected'`).bind(mapping.guildId,summary.uuid).all<{id:string;user:string;paipu:string;rank:number;status:string;amount:number}>()).results;
- const members=new Map<number,string>(),outcomes:string[]=[];
+ const claims=(await env.DB.prepare(`SELECT id,user,paipu,rank,status FROM kp_mahjong_claims WHERE guild=? AND paipu=? AND status!='rejected'`).bind(mapping.guildId,summary.uuid).all<{id:string;user:string;paipu:string;rank:number;status:string}>()).results;
+ const members=new Map<number,Member>(),outcomes:string[]=[];
+ for(const p of summary.seats){const r=players.find(x=>x.id===p.accountId&&p.accountId>0);if(r)members.set(p.seat,{name:r.name});}
  const links=(await env.DB.prepare('SELECT user,account FROM kp_mahjong_links WHERE guild=?').bind(mapping.guildId).all<{user:string;account:number}>()).results;
- for(const p of summary.seats){const link=links.find(l=>l.account===p.accountId&&p.accountId>0);if(link)members.set(p.seat,link.user);}
+ for(const p of summary.seats){const link=links.find(l=>l.account===p.accountId&&p.accountId>0);if(link)members.set(p.seat,{user:link.user,name:p.nickname});}
  for(const c of claims){
-  const check=await paipuCheck(env,mapping.guildId,c);
-  const player=summary.seats.find(s=>s.rank===c.rank);
-  if(player&&check&&!('refuse' in check))members.set(player.seat,c.user);
-  if(c.status!=='pending')continue;
-  if(!check||'refuse' in check){outcomes.push(`⚠️ <@${c.user}> の${c.rank}位申請：${check?check.refuse:'牌譜を確認できませんでした。'}`);continue;}
-  if(check.auto){
-   const done=await env.DB.prepare(`UPDATE kp_mahjong_claims SET status='approved',decider='paipu',decided_at=?,game=?,amount=? WHERE guild=? AND id=? AND status='pending'`).bind(now,check.game,check.amount,mapping.guildId,c.id).run();
-   if(done.meta.changes)outcomes.push(`✅ <@${c.user}> ${c.rank}位を牌譜で確認。+${points(check.amount)} KP`);
-  }else{
-   await env.DB.prepare(`UPDATE kp_mahjong_claims SET game=?,amount=? WHERE guild=? AND id=? AND status='pending'`).bind(check.game,check.amount,mapping.guildId,c.id).run();
-   outcomes.push(`🔎 <@${c.user}> の${c.rank}位は牌譜では「${clean(check.nickname)}」。初回なので他のメンバーの承認を待っています（承認後は自動確認）。`);
-  }
+  const check=await paipuCheck(env,mapping.guildId,c),player=summary.seats.find(s=>s.rank===c.rank);
+  if(player&&check&&!('refuse' in check))members.set(player.seat,{user:c.user,name:player.nickname});
+  const line=await settleClaim(env,mapping.guildId,c,now);if(line)outcomes.push(line);
  }
  if(env.KP_EARNINGS_WEBHOOK_URL&&members.size){
   await ensurePosts(env);
@@ -119,7 +119,7 @@ export async function applySummary(env:PaipuEnv,mapping:KpMapping,summary:PaipuS
  }
 }
 /** GET /api/mahjong/paipu/queue and POST /api/mahjong/paipu/summaries, both signed. */
-export async function paipuApi(request:Request,env:PaipuEnv,override?:KpMapping):Promise<Response>{
+export async function paipuApi(request:Request,env:PaipuEnv,override?:KpMapping,playersOverride?:Array<{id:number;name:string}>):Promise<Response>{
  const path=new URL(request.url).pathname,body=request.method==='POST'?await request.text():'';
  if(body.length>512*1024)return new Response('Too large',{status:413});
  if(!await verifyIngest(request,env,path,body))return new Response('Unauthorized',{status:401});
@@ -132,9 +132,10 @@ export async function paipuApi(request:Request,env:PaipuEnv,override?:KpMapping)
  try{results=JSON.parse(body).results;}catch{return new Response('Invalid body',{status:400});}
  if(!Array.isArray(results)||results.length>10)return new Response('Invalid body',{status:400});
  const queued=new Set(await paipuQueue(env,mapping.guildId));let stored=0;
+ const players=playersOverride??(override?[]:await mahjongPlayers(env));
  for(const r of results){
   if(typeof r?.uuid!=='string'||!PAIPU.test(r.uuid)||!queued.has(r.uuid))continue;
-  if(validSummary(r.summary,r.uuid)){await applySummary(env,mapping,r.summary);stored++;continue;}
+  if(validSummary(r.summary,r.uuid)){await applySummary(env,mapping,r.summary,Date.now(),players);stored++;continue;}
   const error=typeof r.error==='string'?r.error.replace(/[^\w:,.-]/g,'').slice(0,80):'invalid_summary';
   await env.DB.prepare('INSERT INTO kp_mahjong_paipu(guild,paipu,error,attempts,at) VALUES(?,?,?,1,?) ON CONFLICT(guild,paipu) DO UPDATE SET error=excluded.error,attempts=attempts+1,at=excluded.at').bind(mapping.guildId,r.uuid,error,Date.now()).run();
  }

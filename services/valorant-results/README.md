@@ -325,12 +325,13 @@ RUSTの反応、エリート、王道家、了解お兄さん、気が利くね�
 
 ### 牌譜の中身の解析（役・放銃・立直・点数推移）
 
-`/paifu` で申請された牌譜を、GitHub Actions（`.github/workflows/mahjong-paipu.yml`、10分ごと）が雀魂へログインして読み込み、要約をWorkerへ送ります。WorkerのCPU制限では雀魂のprotobufを解読できないため、取得と要約は Actions 側で行います（`scripts/mahjong-paipu.mjs`、`src/mahjong-summary.ts`）。
+`/paifu` で申請された牌譜と、牌譜屋の速報が見つけた登録プレイヤーの対局（終了から6時間以内、牌譜屋の `uuid`）を、GitHub Actions（`.github/workflows/mahjong-paipu.yml`、10分ごと）が雀魂へログインして読み込み、要約をWorkerへ送ります。WorkerのCPU制限では雀魂のprotobufを解読できないため、取得と要約は Actions 側で行います（`scripts/mahjong-paipu.mjs`、`src/mahjong-summary.ts`）。
 
 - 稼ぎchへの投稿：最終順位と点数、役満・メンバーの放銃・メンバーの満貫以上の和了（局名・打点・役）、各メンバーの和了／放銃（点数）／立直（和了）／副露、事実に合わせた煽り（`mahjong-paipu-voice.json`、煽りレベルに従う）。牌譜にない事柄は書きません。
 - 役名は雀魂の設定表（`res/config/lqc.lqbin` の fan シート）から作った `mahjong-fans.json` を使います。役が追加されたら `node scripts/mahjong-fans.mjs` で再生成します。
 - 申請との照合：対局の種類と金額は牌譜の値を使います。初回はメンバーの承認が必要で、承認時にその順位の雀魂アカウントを申請者に紐付けます。紐付け後の申請は牌譜だけで自動承認します。別のメンバーに紐付いた席の申請は承認できません。
 - 署名：Actions と Worker は `MAHJONG_INGEST_KEY` の HMAC-SHA256（時刻・パス・本文、5分以内）で通信します。キューは申請中の牌譜のみ、1回最大10件、失敗は3回まで再試行します。
+- 自動で読んだ対局は、Discordと紐付いた人はメンション、紐付け前の登録プレイヤーは登録名で煽ります（煽りの強さは「普通」）。KPは `/paifu` の申請がある場合だけ付与します。読み込み済みの牌譜を後から `/paifu` で申請すると、その場で照合します。
 - 申請がなければ雀魂へログインしません（依存のインストールも省略）。公開リポジトリのため、ログには件数とエラーコードだけを出します。
 
 設定（リポジトリの Settings → Secrets and variables → Actions）：

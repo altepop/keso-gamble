@@ -121,3 +121,13 @@ test('the provider key is sent as a Bearer token and requests stay at most one p
  const g=fixture();seen.length=0;await monitorMahjong(g.env,now,config,request);
  assert.deepEqual(seen,[null,null],'without a key nothing is invented');
 });
+
+test('the paipu id is kept only in the game\'s own form and queued for reading', async () => {
+ const good='261027-0123abcd-4567-89ab-cdef-0123456789ab';
+ const [kept]=parseMahjongRecords([{...record(),uuid:good}],10,[12],config.startedAt,now);assert.equal(kept.uuid,good);
+ const [dropped]=parseMahjongRecords([{...record(),uuid:'../x'}],10,[12],config.startedAt,now);assert.equal(dropped.uuid,undefined);
+ const old='261020-0123abcd-4567-89ab-cdef-0123456789ab';
+ const f=fixture(),web=fakeFetch([{...record(),uuid:good},{...record(),_id:'old-game',uuid:old,startTime:now/1000-8*3600,endTime:now/1000-7*3600}]);
+ await monitorMahjong(f.env,now,{...config,startedAt:now-24*3600_000},web.request);
+ assert.deepEqual(f.sql.prepare('SELECT paipu,account FROM mahjong_paipu_auto').all().map(r=>({...r})),[{paipu:good,account:10}],'games older than six hours are not read automatically');
+});
