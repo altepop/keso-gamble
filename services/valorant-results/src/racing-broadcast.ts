@@ -1,3 +1,4 @@
+import {activityLaunchComponents} from './activity-link.ts';
 import type {KpEnv,KpMapping} from './kp.ts';
 import {earningsWebhook} from './racing-posts.ts';
 import type {PostEnv} from './racing-posts.ts';
@@ -28,10 +29,10 @@ export function liveRacePost(show:RaceShow,now:number){
  const {card,timeline,order}=show,t=Math.max(0,now-card.start),finished=t>=RUN_MS;
  const name=(n:number)=>clean(card.horses.find((h:any)=>h.number===n).name);
  const title=`${finished?'🏁':now<card.start?'🏇':'🔴'} **${clean(card.name)}**`;
- if(now<card.start)return {content:[title,`<t:${Math.floor(card.start/1000)}:t> 発走 · あと<t:${Math.floor(card.start/1000)}:R>`,`締切 <t:${Math.floor((card.start-60000)/1000)}:t>　\`/bet\` で購入`,...card.horses.map((h:any)=>`${h.number}番 ${name(h.number)}　${(show.odds.win[h.number]/10).toFixed(1)}倍`),'この投稿で実況します。Activityを開かなくても観戦できます。'].join('\n'),allowed_mentions:{parse:[]}};
+ if(now<card.start)return {content:[title,`<t:${Math.floor(card.start/1000)}:t> 発走 · あと<t:${Math.floor(card.start/1000)}:R>`,`締切 <t:${Math.floor((card.start-60000)/1000)}:t>　\`/bet\` で購入`,...card.horses.map((h:any)=>`${h.number}番 ${name(h.number)}　${(show.odds.win[h.number]/10).toFixed(1)}倍`),'この投稿で実況します。Activityを開かなくても観戦できます。'].join('\n'),allowed_mentions:{parse:[]},components:activityLaunchComponents()};
  const ranked=[...order].sort((a,b)=>distanceAt(timeline,b,t)-distanceAt(timeline,a,t));
  const line=show.commentary.filter(c=>c.t<=t).at(-1)?.text??'スタート！';
- return {content:[title,finished?'**確定順位**':`発走から${Math.floor(t/1000)}秒 · 残り約${Math.max(0,Math.ceil((COURSE_M-distanceAt(timeline,ranked[0],t))/100))*100}m`,finished?order.slice(0,3).map((n,i)=>`${['🥇','🥈','🥉'][i]} ${i+1}着 ${n}番 **${name(n)}**`).join('\n'):'```\n'+card.horses.map((h:any)=>{const pos=Math.min(14,Math.floor(distanceAt(timeline,h.number,t)/COURSE_M*14));return `${String(h.number).padStart(2)} ${'━'.repeat(pos)}🐎${'─'.repeat(14-pos)} ${name(h.number)}`;}).join('\n')+'\n```',`💬 ${clean(line)}`,finished?'レース動画は生成後にこのチャンネルへ投稿します。配当は既存の口座処理で精算します。':'約5秒ごとに更新します。'].join('\n').slice(0,1950),allowed_mentions:{parse:[]}};
+ return {content:[title,finished?'**確定順位**':`発走から${Math.floor(t/1000)}秒 · 残り約${Math.max(0,Math.ceil((COURSE_M-distanceAt(timeline,ranked[0],t))/100))*100}m`,finished?order.slice(0,3).map((n,i)=>`${['🥇','🥈','🥉'][i]} ${i+1}着 ${n}番 **${name(n)}**`).join('\n'):'```\n'+card.horses.map((h:any)=>{const pos=Math.min(14,Math.floor(distanceAt(timeline,h.number,t)/COURSE_M*14));return `${String(h.number).padStart(2)} ${'━'.repeat(pos)}🐎${'─'.repeat(14-pos)} ${name(h.number)}`;}).join('\n')+'\n```',`💬 ${clean(line)}`,finished?'レース動画は生成後にこのチャンネルへ投稿します。配当は既存の口座処理で精算します。':'約5秒ごとに更新します。'].join('\n').slice(0,1950),allowed_mentions:{parse:[]},components:activityLaunchComponents()};
 }
 /** Cron arms an alarm before the start; no viewer or Activity session is needed. */
 export async function prepareRaceBroadcast(env:BroadcastEnv,mapping:KpMapping,now=Date.now()){
@@ -65,7 +66,7 @@ export class RaceBroadcaster {
   const row=await this.env.DB.prepare("SELECT * FROM race_broadcasts WHERE guild=? AND race>=? AND step<11 AND (message IS NULL OR message NOT IN ('creating','unknown','missing')) ORDER BY race LIMIT 1").bind(guild,now-6*3600000).first<BroadcastRow>();
   if(!row)return;
   if(row.retry_at>now){await this.ctx.storage.setAlarm(row.retry_at);return;}
-  const step=broadcastStep(row.race,now),url=earningsWebhook(this.env);if(!url)return;
+  const step=broadcastStep(row.race,now),url=earningsWebhook(this.env);if(!url)return;url.searchParams.set('with_components','true');
   try{
    if(step>row.step){
     if(row.message==='creating'||row.message==='unknown')return; // Ambiguous creation is never blindly sent again.

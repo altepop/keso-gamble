@@ -33,3 +33,13 @@ Node 24のSQLiteと模擬Discord応答で、無観客での予約、同じ投稿
 `RACE_VIDEO_FONT=/path/to/Japanese-font node scripts/race-video/run.mjs --check` は架空レースの動画だけを生成します。PythonのPillowとffmpegが必要です。Discordには送りません。Actionsの手動実行も `check=true` なら同様で、検査用の架空レース動画だけをartifactに保存します。
 
 ライブ投稿を開始した既存レースを消したり、秘密値やBot Tokenをリセットしたりする作業は不要です。実運用の配送状態はD1の `race_broadcasts` に保持します。
+
+## Activityへのボタン
+
+稼ぎchの通知・観戦投稿・リプレイ動画と、`/kp`・`/keiba`・`/bet`等の返信に「Activityを開く」のリンクボタンを付けます。公式の `https://discord.com/activities/<application_id>` を使い、GitHub Pagesを通常ブラウザーで開くボタンとは分けています。URLにDiscordユーザーID・セッション・秘密値を含めません。
+
+初回の認証や、起動先チャンネルの選択がDiscord側で表示される場合があります。許可画面を飛ばすものではなく、スマホでの最終的な起動動作はDiscordクライアントにも依存します。既存の起動設定・OAuth・URL Mappingは変更しません。以前の通知には追加せず、反映後に送る投稿と実況の編集から表示します。
+
+Webhookは `with_components=true` を指定し、アプリ所有でないWebhookでも許可されるリンクボタンだけを送ります。通常の本文と動画添付を保持するため、Components V2には切り替えません。
+
+公式仕様: [Activity共有リンク](https://docs.discord.com/developers/activities/development-guides/growth-and-referrals)、[Webhookのcomponents](https://docs.discord.com/developers/resources/webhook#execute-webhook)。

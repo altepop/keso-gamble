@@ -1,3 +1,4 @@
+import {activityLaunchComponents} from './activity-link.ts';
 // Horse racing posts for the earnings channel. Posts are queued once under a fixed ID and sent by
 // the minute cron. Queue IDs deduplicate registration; an interrupted delivery can remain unknown.
 // Nothing is queued until the webhook is set.
@@ -102,11 +103,14 @@ export async function queueRacePosts(env:PostEnv,mapping:KpMapping,now=Date.now(
 }
 export async function flushRacePosts(env:PostEnv,limit=5){
  const url=earningsWebhook(env);if(!url)return 0;
+ // Incoming webhooks support link buttons with this flag; custom interaction buttons require app ownership.
+ url.searchParams.set('with_components','true');
  await ensurePosts(env);
  const rows=(await env.DB.prepare('SELECT id,body FROM kp_posts WHERE sent=0 ORDER BY at,id LIMIT ?').bind(limit).all<{id:string;body:string}>()).results;
  let sent=0;
  for(const row of rows){
-  const response=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:row.body,signal:AbortSignal.timeout(10000)});
+  const body=JSON.parse(row.body);if(!body.components?.length)body.components=activityLaunchComponents();
+  const response=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:AbortSignal.timeout(10000)});
   if(!response.ok){console.warn('earnings_post_pending',{status:response.status});break;}
   await env.DB.prepare('UPDATE kp_posts SET sent=1 WHERE id=?').bind(row.id).run();sent++;
  }
