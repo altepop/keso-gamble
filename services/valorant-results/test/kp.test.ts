@@ -341,7 +341,8 @@ test('a competitive demotion is posted with the roast and costs 500 KP once; a p
   assert.deepEqual(f.sql.prepare("SELECT user,delta FROM kp_ledger WHERE id LIKE 'rank-up:%'").all().map(r=>[r.user,r.delta]),[[two,100]]);
   assert.equal(f.sql.prepare("SELECT delta FROM kp_ledger WHERE id LIKE 'rank-down:%'").get()!.delta,-500);
   assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM kp_ledger WHERE id LIKE 'rank-down:%'").get()!.n,1,'charged once across runs');
-  assert.equal(historyCalls,2,'the history is read once per new result, not on every run');
+  assert.equal(historyCalls,2,'once found, the history is not read again');
+  assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM sqlite_master WHERE name='mahjong_watch_posts'").get()!.n===0||f.sql.prepare("SELECT COUNT(*) n FROM mahjong_watch_posts").get()!.n===0,true,'found with the first post: no separate re-announcement');
  }finally{globalThis.fetch=original;}
 });
 
@@ -350,4 +351,26 @@ test('a later monitor run shows a loss as its net negative KP, not the zero stor
  assert.equal(await collectKpMatch(f.env,mapping,game('cached-loss','competitive',false),'p-one'),-100);
  const run=await prepareKpRun(f.env,mapping);
  assert.equal(run.credits.get([...run.credits.keys()].find(k=>k.includes('cached-loss'))!),-100);
+});
+
+test('a rank change that reaches the history late is still caught on a later run, and the post is updated',async()=>{
+ const {monitor}=await import('../src/index.ts');const f=await fixture();f.enableHistory();seed(f.sql,one,2000);const original=globalThis.fetch;
+ const env={...f.env,HENRIK_API_KEY:'fixture',DISCORD_WEBHOOK_URL:'https://discord.com/api/webhooks/1/fixture'};
+ const lost=game('late-down','competitive',false);let ready=false,historyCalls=0;
+ globalThis.fetch=async url=>{const u=String(url);
+  if(u.includes('/mmr-history/')){historyCalls++;return Response.json({data:{history:ready?[{match_id:'older',tier:{id:15},date:'2026-10-28T13:00:00Z'},{match_id:'late-down',tier:{id:14},date:'2026-10-28T14:00:00Z'}]:[{match_id:'older',tier:{id:15},date:'2026-10-28T13:00:00Z'}]}});}
+  if(u.includes('api.henrikdev.xyz'))return Response.json({data:u.includes('p-one')?[lost]:[]});
+  return Response.json({id:'100000000000000099'});};
+ try{
+  const run=async()=>{await monitor(env,[{riotId:'One#JP1',name:'One'},{riotId:'Two#JP1',name:'Two'}]);f.sql.exec("DELETE FROM monitor_state WHERE key='discord_after'");};
+  await run();await run();
+  assert.doesNotMatch(String(f.sql.prepare("SELECT message FROM notifications WHERE match_id='late-down'").get()!.message),/降格/);
+  ready=true;await run();
+  assert.match(String(f.sql.prepare("SELECT message FROM notifications WHERE match_id='late-down'").get()!.message),/🔻 \*\*降格\*\* プラチナ1 → ゴールド3/);
+  assert.equal(f.sql.prepare("SELECT delta FROM kp_ledger WHERE id LIKE 'rank-down:late-down:%'").get()!.delta,-500);
+  const calls=historyCalls;await run();assert.equal(historyCalls,calls,'found: not read again');
+  const repost=JSON.parse(String(f.sql.prepare("SELECT body FROM mahjong_watch_posts WHERE id LIKE 'rank:rank2:late-down:%'").get()!.body));
+  assert.match(repost.content,/^📢 \*\*Oneのランク速報\*\*（\d\d:\d\d 終了のコンペ）\n🔻 \*\*降格\*\* プラチナ1 → ゴールド3/);assert.deepEqual(repost.allowed_mentions,{parse:[]});
+  assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM mahjong_watch_posts WHERE id LIKE 'rank:%'").get()!.n,1,'re-announced once');
+ }finally{globalThis.fetch=original;}
 });
