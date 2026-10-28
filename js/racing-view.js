@@ -1,6 +1,6 @@
-import { BET_TYPES, BOXES, CLASSES, COURSE_M, CONDITIONS, DAILY_EXCHANGES, GOINGS, MAX_OWNED, MIN_BET, BET_STEP, PRIZES, RETIRE_RACES, RUN_MS, STYLES, WEEKLY_LIMIT, distanceAt, exchangeDay, payoutFor, placeSlots } from './racing.js?v=20261027-condition';
-import { LUXURY, TITLES } from './luxury.js?v=20261027-condition';
-import { escapeHTML } from './progression-views.js?v=20261027-condition';
+import { BET_TYPES, BOXES, CLASSES, COURSE_M, CONDITIONS, DAILY_EXCHANGES, GOINGS, MAX_OWNED, MIN_BET, BET_STEP, PRIZES, RETIRE_RACES, RUN_MS, STYLES, WEEKLY_LIMIT, distanceAt, exchangeDay, payoutFor, placeSlots } from './racing.js?v=20261028-tidy';
+import { LUXURY, TITLES } from './luxury.js?v=20261028-tidy';
+import { escapeHTML } from './progression-views.js?v=20261028-tidy';
 const kp=n=>n.toLocaleString('ja-JP')+' KP';
 const odd=v=>(v/10).toFixed(1)+'倍';
 export const SILKS=[['#f5f5f5','#111'],['#1f1f1f','#fff'],['#e03131','#fff'],['#1c7ed6','#fff'],['#fcc419','#111'],['#2f9e44','#fff'],['#f76707','#fff'],['#f783ac','#111'],['#845ef7','#fff'],['#20c997','#111']];
@@ -34,7 +34,7 @@ function betPanel(open,odds,draft,state,weeklyLeft){
  return `<section class="trade-box race-card"><h3>${escapeHTML(card.name)} · ${clock(card.start)}発走</h3><p class="helper">締切まで <span id="race-countdown">--:--</span> · ${CLASSES[card.raceClass].label}（1着の賞金 ${kp(PRIZES[0]*CLASSES[card.raceClass].mult)}） · ${card.size}頭 · コース ${GOINGS[card.going].label} · ${COURSE_M}m</p><table class="race-table"><caption>出る馬一覧と倍率</caption><thead><tr><th>馬</th><th>走り方・調子</th><th>1着当て</th><th>${placeSlots(card.size)}着以内当て</th></tr></thead><tbody>${rows}</tbody></table>${form}</section>`;
 }
 
-function ownerPanel(state,now){
+export function ownerPanel(state,now){
  const horses=state.horses??[],active=horses.filter(h=>!h.retired_at),retired=horses.filter(h=>h.retired_at);
  const left=DAILY_EXCHANGES-(state.exchange?.day===exchangeDay(now)?state.exchange.count:0);
  const record=h=>`${h.races}戦 ${h.wins}勝・2着${h.seconds}・3着${h.thirds} · 賞金 ${kp(h.earnings)}`;
@@ -43,7 +43,7 @@ function ownerPanel(state,now){
  const hall=retired.length?`<h3>殿堂</h3>${retired.map(h=>`<div class="history-entry"><div>${h.statue?'🗿 ':''}${escapeHTML(h.name)}${h.nickname?`「${escapeHTML(h.nickname)}」`:''}（${h.gradeLabel}）</div><div class="helper">${record(h)}</div></div>`).join('')}`:'';
  return `<div class="asset-card"><h2 class="panel-title">馬主</h2><p class="helper">ボックスを開けると、買うまでわからない等級の馬が出ます。馬は自分と同じ等級のレースにランダムに出走し、3着までに入ると賞金が入ります。調子はあなたの直近の遊び（試合・クイズ・通話、どれも同じ）で決まります。${RETIRE_RACES}走で引退して殿堂入り。持てるのは${MAX_OWNED}頭まで（いま${active.length}頭）。</p>${mine}<h3>ボックス</h3><div class="field"><label for="horse-name">馬の名前（1〜12文字。友人の名前は本人の許可を取ってから）</label><input id="horse-name" class="input" maxlength="12" autocomplete="off"></div><p class="helper">今日の交換はあと${Math.max(0,left)}回（指令・ボックス合わせて1日${DAILY_EXCHANGES}回）。</p>${boxes}${hall}</div>`;
 }
-function luxuryPanel(state){
+export function luxuryPanel(state){
  const members=(state.members??[]).filter(m=>m.id!==state.selfUserId),horses=(state.horses??[]);
  const field=(id,label,control)=>`<div class="field"><label for="${id}">${label}</label>${control}</div>`;
  const select=(id,options)=>`<select id="${id}" class="select">${options.map(([v,l])=>`<option value="${escapeHTML(v)}">${escapeHTML(l)}</option>`).join('')}</select>`;
@@ -62,13 +62,13 @@ function history(state){
 }
 
 const ROAST_LEVELS=[['mild','控えめ','名前のついたレースを作らず、Botの結果投稿もやさしい言葉'],['normal','標準','「◯◯おつかれレース」など、ゆるい冠レースといじり'],['full','全開','「◯◯戦犯レース」など容赦なし。ゲームの腕・負けっぷり・KPの溶かし方・夜ふかしだけが対象']];
-function roastPanel(state){
+export function roastPanel(state){
  const level=state.roastLevel??'mild';
  return `<div class="asset-card"><h2 class="panel-title">煽りレベル</h2><p class="helper">あなたの連敗などで組まれる冠レースの名前と、稼ぎchの結果投稿に使います。いつでも変えられます。</p><div class="segment roast-segment">${ROAST_LEVELS.map(([id,label])=>`<button data-action="roast-level" data-level="${id}" class="${level===id?'active':''}" aria-pressed="${level===id}">${label}</button>`).join('')}</div><p class="helper">${ROAST_LEVELS.find(([id])=>id===level)[2]}</p></div>`;
 }
 export function raceScreen({state,live,watch,open,openOdds,draft,weeklyLeft,tabs,nav}){
  const note=live?'本番口座のKPで遊ぶ競馬です。15分おきに発走し、発走1分前に締め切ります。着順はサーバーが決め、締切前に公開したハッシュで後から検証できます。オッズは胴元の取り分なし。':'デモの競馬です。15分おきに発走し、発走1分前に締め切ります。オッズは胴元の取り分なしで、当たる確率どおり。本番口座のKPは使いません。';
- return `<div class="screen"><header class="topbar"><div class="toprow"><h1 class="title">競馬</h1><span class="badge">${kp(state.cash)}</span></div></header>${tabs}<div class="market-disclaimer">${note}</div>${stage(watch,state)}${betPanel(open,openOdds,draft,state,weeklyLeft)}${history(state)}${live?ownerPanel(state,Date.now())+luxuryPanel(state)+roastPanel(state):''}${nav}</div>`;
+ return `<div class="screen"><header class="topbar"><div class="toprow"><h1 class="title">競馬</h1><span class="badge">${kp(state.cash)}</span></div></header>${tabs}<div class="market-disclaimer">${note}</div>${stage(watch,state)}${betPanel(open,openOdds,draft,state,weeklyLeft)}<div class="asset-list">${history(state)}</div>${nav}</div>`;
 }
 
 // ---- Canvas playback (side-scrolling, broadcast style) ----
