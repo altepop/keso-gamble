@@ -24,7 +24,7 @@ function movingAverage(data,n){
   });
 }
 
-function svgCandles(data,w=660,h=560,showMA=true){
+function svgCandles(data,w=660,h=560,showMA=true,label='デモ相場のローソク足チャート'){
   const pad={t:22,r:70,b:36,l:18};
   const plotW=w-pad.l-pad.r, plotH=h-pad.t-pad.b;
   const max=Math.max(...data.map(d=>d.high));
@@ -32,7 +32,7 @@ function svgCandles(data,w=660,h=560,showMA=true){
   const range=max-min||1;
   const y=v=>pad.t + (max-v)/range*plotH;
   const step=plotW/data.length;
-  const body=Math.max(6,step*.56);
+  const body=Math.min(22,Math.max(6,step*.56));
   const ma5=movingAverage(data,5), ma10=movingAverage(data,10), ma25=movingAverage(data,25);
   const maPath=(arr)=>arr.map((v,i)=>`${i?'L':'M'} ${pad.l+step*i+step/2} ${y(v)}`).join(' ');
   const gridY=[0,.25,.5,.75,1].map(r=>min+(range*(1-r)));
@@ -40,10 +40,10 @@ function svgCandles(data,w=660,h=560,showMA=true){
   const lowIdx=data.reduce((m,v,i)=>v.low<data[m].low?i:m,0);
   const highIdx=data.reduce((m,v,i)=>v.high>data[m].high?i:m,0);
   return `
-  <svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" role="img" aria-label="デモ相場のローソク足チャート">
+  <svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" role="img" aria-label="${label}">
     <rect x="0" y="0" width="${w}" height="${h}" fill="#02091f"/>
     ${labelsY.map(v=>`<g><line x1="${pad.l}" x2="${pad.l+plotW}" y1="${y(v)}" y2="${y(v)}" stroke="#263759" stroke-width="1"/><text x="${w-8}" y="${y(v)+5}" text-anchor="end" fill="#eef3ff" font-size="14">${fmt0(v)}</text></g>`).join('')}
-    ${[0,15,30,45].map(i=>`<g><line x1="${pad.l+step*i+step/2}" x2="${pad.l+step*i+step/2}" y1="${pad.t}" y2="${pad.t+plotH}" stroke="#263759" stroke-width="1"/><text x="${pad.l+step*i+step/2}" y="${h-8}" text-anchor="middle" fill="#eef3ff" font-size="14">${data[i].date}</text></g>`).join('')}
+    ${[...new Set(Array.from({length:4},(_,i)=>Math.round((data.length-1)*i/3)))].map(i=>`<g><line x1="${pad.l+step*i+step/2}" x2="${pad.l+step*i+step/2}" y1="${pad.t}" y2="${pad.t+plotH}" stroke="#263759" stroke-width="1"/><text x="${pad.l+step*i+step/2}" y="${h-8}" text-anchor="middle" fill="#eef3ff" font-size="14">${data[i].date}</text></g>`).join('')}
     ${showMA ? `<path d="${maPath(ma5)}" fill="none" stroke="#f0db33" stroke-width="2.5"/>
     <path d="${maPath(ma10)}" fill="none" stroke="#ff7a32" stroke-width="2.5"/>
     <path d="${maPath(ma25)}" fill="none" stroke="#59d3ff" stroke-width="2.5"/>` : ''}

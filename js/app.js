@@ -1,15 +1,16 @@
+import {stockPanel,stockCandles,stockPrice} from './stock-view.js?v=20261028-stocks';
 import {wheelView,covered,redNumbers,outcomeAngle} from './roulette-view.js?v=20261028-casino';
 import {connectDiscordActivity,isDiscordActivity}from './discord-activity-auth.js?v=20261028-casino';
 import { createKpClient } from './kp-client.js?v=20261028-casino';
 import { fmt, fmt0 } from './format.js';
 import { submitClaim, approveClaim, issueDirective, completeDirective } from './progression.js?v=20261028-casino';
-import { titleView, homeView, playView, directivesView, escapeHTML } from './progression-views.js?v=20261028-casino';
-import { genCandles, movingAverage, svgCandles } from './charts.js';
+import { titleView, homeView, playView, directivesView, escapeHTML } from './progression-views.js?v=20261028-stocks';
+import { genCandles, movingAverage, svgCandles } from './charts.js?v=20261028-stocks';
 import { MARKET, createInitialState, portfolioValue, assets, advanceMarket, trade, spin, spinNumbers, validateNumberBets, grantDemoSalary, cryptoRouletteNumber } from './engine.js?v=20261028-casino';
 import { KEY, LEGACY_KEY } from './storage.js';
 import { PUBLIC_SALT, RUN_MS, WEEKLY_LIMIT, openRaceStart, latestRaceStart, raceCard, raceOdds, raceResult, raceTimeline, raceCommentary, raceRuns, placeRaceBet, settleRaceBets, weeklySpent } from './racing.js?v=20261028-casino';
 import { LUXURY } from './luxury.js?v=20261028-casino';
-import { raceScreen, racePreview, drawRace, raceElapsed, ownerPanel, luxuryPanel, roastPanel } from './racing-view.js?v=20261028-casino';
+import { raceScreen, racePreview, drawRace, raceElapsed, ownerPanel, luxuryPanel, roastPanel } from './racing-view.js?v=20261028-stocks';
 import { createStore } from './store.js';
 import { gamePicker, chinchiroView, blackjackView } from './casino-view.js?v=20261028-casino-copy';
 import {casinoFrames} from './casino-animation.js?v=20261028-casino-fx';
@@ -163,7 +164,7 @@ function raceFrame(){
 function ensureRaceLoop(){if(screen==='race'&&!detail&&!raceLoop)raceLoop=requestAnimationFrame(raceFrame);}
 
 function screenMarket(){
- return `<div class="screen"><header class="topbar"><div class="toprow"><h1 class="title">株</h1><span class="badge">${moneyCompact(state.cash)}</span></div></header>${subTabs()}<div class="market-disclaimer">KESO TOWNの架空の銘柄。実際の株価とは連動しません。銘柄をタップするとチャート。</div><div class="list">${playerRows().map(v=>renderRow({...v,kind:'stock'})).join('')}</div>${tradePanel()}<div class="asset-list">${tradeHistory()}</div>${bottomNav()}</div>`;
+ return `<div class="screen"><header class="topbar"><div class="toprow"><h1 class="title">株</h1><span class="badge">${moneyCompact(state.cash)}</span></div></header>${subTabs()}<div class="market-disclaimer">KESO TOWNの架空の銘柄。実際の株価とは連動しません。銘柄をタップするとチャート。</div>${stockPanel(state)}<div class="list">${playerRows().map(v=>renderRow({...v,kind:'stock'})).join('')}</div>${tradePanel()}<div class="asset-list">${tradeHistory()}</div>${bottomNav()}</div>`;
 }
 
 function tradeEstimate(){
@@ -217,9 +218,9 @@ function closeDetail(){const id=detail.id;detail=null;render();document.querySel
 function detailSheet(){
   if(!detail) return '';
   const s=MARKET.find(v=>v.id===detail.id);
-  const item={name:s.name,value:state.prices[s.id],time:new Date().toLocaleDateString('ja-JP'),data:genCandles(state.prices[s.id],s.id)};
+  const item={name:s.name,value:state.prices[s.id],time:new Date().toLocaleDateString('ja-JP'),data:state.stockMarket?stockCandles(state.stockMarket,s.id):genCandles(state.prices[s.id],s.id)};
   const c=item.data.at(-1), ma5=movingAverage(item.data,5).at(-1), ma10=movingAverage(item.data,10).at(-1), ma25=movingAverage(item.data,25).at(-1);
-  return `<div class="modal" id="modal" role="dialog" aria-modal="true" aria-labelledby="detail-title"><div class="sheet"><div class="sheet-header"><h2 class="sheet-title" id="detail-title">${item.name}</h2><button class="icon-btn" data-close="1" aria-label="閉じる">×</button></div><div class="chart-toolbar"><span>日足（疑似データ）</span><button class="toolbar-chip" data-action="toggle-ma" aria-pressed="${showMA}">移動平均線 ${showMA?'表示中':'非表示'}</button></div><div class="chart-stats"><div class="stat">高値 <strong>${fmt(c.high)}</strong><br>安値 <strong>${fmt(c.low)}</strong></div><div class="stat">始値 <strong>${fmt(c.open)}</strong><br>終値 <strong>${fmt(c.close)}</strong></div><div class="stat">出来高 <strong>${fmt0(c.vol)}</strong><br>日時 <strong>${item.time}</strong></div></div><div class="chart-legend"><span class="legend-short">短期:${fmt(ma5)}</span><span class="legend-mid">中期:${fmt(ma10)}</span><span class="legend-long">長期:${fmt(ma25)}</span></div><div class="chart-note">表示価格・日足・移動平均線はデモ用の疑似データ</div><div class="candle-wrap"><div class="chart-panel">${svgCandles(item.data,660,560,showMA)}</div></div>${detail.kind==='stock' ? `<div class="depth-section"><div class="depth-head"><strong>板情報</strong><small>参考気配・疑似注文</small></div><div class="depth-label"><span>売数量</span><span>気配（KP）</span><span>買数量</span></div>${Array.from({length:7},(_,i)=>{const level=3-i;const price=Math.max(1,Math.round(item.value+level));const ask=level>0;const bid=level<0;const aVol=(31+i*13)%79+8,bVol=(43+i*17)%83+9;return `<div class="depth-row"><span class="ask">${ask?fmt0(aVol*10):''}</span><strong>${fmt0(price)}</strong><span class="bid">${bid?fmt0(bVol*10):''}</span></div>`}).join('')}</div><div class="action-row"><button class="action-btn primary" data-order-symbol="${detail.id}">この銘柄を注文</button></div>`:''}<div class="close-row"><button class="close-btn" data-close="1">閉じる</button></div></div></div>`;
+  return `<div class="modal" id="modal" role="dialog" aria-modal="true" aria-labelledby="detail-title"><div class="sheet"><div class="sheet-header"><h2 class="sheet-title" id="detail-title">${item.name}</h2><button class="icon-btn" data-close="1" aria-label="閉じる">×</button></div><div class="chart-toolbar"><span>${state.stockMarket?'共通相場の履歴':'日足（疑似データ）'}</span><button class="toolbar-chip" data-action="toggle-ma" aria-pressed="${showMA}">移動平均線 ${showMA?'表示中':'非表示'}</button></div><div class="chart-stats"><div class="stat">高値 <strong>${fmt(c.high)}</strong><br>安値 <strong>${fmt(c.low)}</strong></div><div class="stat">始値 <strong>${fmt(c.open)}</strong><br>終値 <strong>${fmt(c.close)}</strong></div><div class="stat">出来高 <strong>${state.stockMarket?'—':fmt0(c.vol)}</strong><br>日時 <strong>${item.time}</strong></div></div><div class="chart-legend"><span class="legend-short">短期:${fmt(ma5)}</span><span class="legend-mid">中期:${fmt(ma10)}</span><span class="legend-long">長期:${fmt(ma25)}</span></div><div class="chart-note">${state.stockMarket?'5分ごとの株価を表示しています。':'表示価格・日足・移動平均線はデモ用の疑似データ'}</div><div class="candle-wrap"><div class="chart-panel">${svgCandles(item.data,660,560,showMA,state.stockMarket?'共通株価の履歴':'デモ相場のローソク足チャート')}</div></div>${detail.kind==='stock' ? `${state.stockMarket?'':`<div class="depth-section"><div class="depth-head"><strong>板情報</strong><small>参考気配・疑似注文</small></div><div class="depth-label"><span>売数量</span><span>気配（KP）</span><span>買数量</span></div>${Array.from({length:7},(_,i)=>{const level=3-i;const price=Math.max(1,Math.round(item.value+level));const ask=level>0;const bid=level<0;const aVol=(31+i*13)%79+8,bVol=(43+i*17)%83+9;return `<div class="depth-row"><span class="ask">${ask?fmt0(aVol*10):''}</span><strong>${fmt0(price)}</strong><span class="bid">${bid?fmt0(bVol*10):''}</span></div>`}).join('')}</div>`}<div class="action-row"><button class="action-btn primary" data-order-symbol="${detail.id}">この銘柄を注文</button></div>`:''}<div class="close-row"><button class="close-btn" data-close="1">閉じる</button></div></div></div>`;
 }
 
 function render(){
@@ -332,7 +333,7 @@ addEventListener('click',async e=>{
     if(t.dataset.action==='horse-buy'){const {horse}=await liveOperation('horse-buy',{box:t.dataset.box,name:$('#horse-name')?.value??''});delete drafts['horse-name'];render();toast(`${horse.name}（${horse.gradeLabel}）が仲間入りしました`);return;}
     if(t.dataset.action==='horse-sell'){if(!confirm('この馬を売りますか？売ると戻せません'))return;const {sold}=await liveOperation('horse-sell',{horseId:t.dataset.horse});render();toast(`売却しました（+${moneyCompact(sold.refund)}）`);return;}
     if(t.dataset.action==='luxury'){
-      const item=LUXURY.find(i=>i.id===t.dataset.item);if(!item||!confirm(`${item.label}を${moneyCompact(item.price)}で買いますか？`))return;
+      const item=LUXURY.find(i=>i.id===t.dataset.item);if(!item||!confirm(`${item.label}を${moneyCompact(stockPrice(item.price,state.stockBenefits))}で買いますか？`))return;
       await liveOperation('luxury',{item:item.id,target:$('#lux-target')?.value,text:$('#lux-text')?.value,title:$('#lux-title')?.value,horseId:$('#lux-horse')?.value});
       render();toast(`${item.label}を買いました`);return;
     }

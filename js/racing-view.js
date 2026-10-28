@@ -1,6 +1,7 @@
+import {stockPrice} from './stock-view.js?v=20261028-stocks';
 import { BET_TYPES, BOXES, CLASSES, COURSE_M, CONDITIONS, DAILY_EXCHANGES, GOINGS, MAX_OWNED, MIN_BET, BET_STEP, PRIZES, RETIRE_RACES, RUN_MS, STYLES, WEEKLY_LIMIT, distanceAt, exchangeDay, payoutFor, placeSlots } from './racing.js?v=20261028-casino';
 import { LUXURY, TITLES } from './luxury.js?v=20261028-casino';
-import { escapeHTML } from './progression-views.js?v=20261028-casino';
+import { escapeHTML } from './progression-views.js?v=20261028-stocks';
 const kp=n=>n.toLocaleString('ja-JP')+' KP';
 const odd=v=>(v/10).toFixed(1)+'倍';
 export const SILKS=[['#f5f5f5','#111'],['#1f1f1f','#fff'],['#e03131','#fff'],['#1c7ed6','#fff'],['#fcc419','#111'],['#2f9e44','#fff'],['#f76707','#fff'],['#f783ac','#111'],['#845ef7','#fff'],['#20c997','#111']];
@@ -53,7 +54,7 @@ export function luxuryPanel(state){
   field('lux-title','称号',select('lux-title',TITLES.map(t=>[t,t]))),
   field('lux-horse','馬（銅像・看板馬）',select('lux-horse',horses.map(h=>[h.id,`${h.name}${h.retired_at?'（引退）':''}`]))),
  ].join('');
- const items=LUXURY.map(i=>`<div class="history-entry"><div><strong>${i.label}</strong> ${kp(i.price)}</div><div class="helper">${i.detail}</div><div class="action-row"><button class="action-btn" data-action="luxury" data-item="${i.id}">買う</button></div></div>`).join('');
+ const items=LUXURY.map(i=>`<div class="history-entry"><div><strong>${i.label}</strong> ${kp(stockPrice(i.price,state.stockBenefits))}${state.stockBenefits?.percent?' <small>株主優待</small>':''}</div><div class="helper">${i.detail}</div><div class="action-row"><button class="action-btn" data-action="luxury" data-item="${i.id}">買う</button></div></div>`).join('');
  return `<div class="asset-card"><h2 class="panel-title">KPの使い道（超高級品）</h2><p class="helper">${state.luxury?.title?`あなたの称号:「${escapeHTML(state.luxury.title)}」 · `:''}どれも1日の交換回数（3回）に含みます。相手が「控えめ」の煽りレベルなら、相手を巻き込む品は使えません。</p>${inputs}${items}</div>`;
 }
 function history(state){
