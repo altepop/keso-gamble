@@ -73,7 +73,7 @@ test('monitor sends only new records, deduplicates replay/renamed subject and pe
  await monitorMahjong(f.env,now,config,web.request);
  assert.equal(web.sent.length,1);assert.deepEqual(web.sent[0].allowed_mentions,{parse:[]});assert.equal(web.sent[0].content.split('\n').length,6);
  assert.equal(state(f.sql,'last_success_at'),String(now));
- await monitorMahjong(f.env,now+60_000,config,web.request);assert.equal(web.urls.filter(u=>u.includes('player_records')).length,2,'five-minute poll gap');
+ await monitorMahjong(f.env,now+60_000,config,web.request);assert.equal(web.urls.filter(u=>u.includes('player_records')).length,2,'two-minute poll gap');
  await monitorMahjong(f.env,now+5*60_000,{...config,players:[{id:10,name:'renamed'}]},web.request);assert.equal(web.sent.length,1);
  assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM mahjong_watch_posts').get()!.n,1);
 });
