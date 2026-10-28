@@ -1,9 +1,11 @@
-// M.LEAGUE predictions: name the player who takes 1st (トップ) or 4th (ラス) in an official game.
+// M.LEAGUE predictions: name the player who finishes last (ラス) in an official game.
 // Pure logic with no DOM or clock reads, shared by the browser and the Worker. Results come only from
 // the official site (services/valorant-results/src/mleague.ts); nothing here guesses a result.
 import {WEEKLY_LIMIT,MIN_BET,BET_STEP,oddsFromProbability,payoutFor,weekStart} from './racing.js';
 
 export const ML_TYPES={top:{label:'トップ'},last:{label:'ラス'}};
+/** Only last place is sold (per the owner); 'top' stays readable so bets bought earlier still settle. */
+export const ML_SOLD=['last'];
 /** Every table starts at 19:00 JST (both tables on two-table days, per the owner). */
 export const ML_START='19:00';
 /** Prior strength: rates shrink toward 1 in 4 by this many virtual games, so a rookie is 4.0x. */
@@ -47,7 +49,7 @@ export function placeMlBet(state,{match,player,type,amount},now,data,results,sea
  const fixture=data.fixtures.find(f=>f.id===match);
  if(!fixture)throw Error('試合を選んでください');
  if(!mlOpen(data,fixture,now,results))throw Error(now<at(fixture.date,'00:00')?'この試合はまだ受付前です（当日0時から）':'この試合の予想は締め切りました');
- if(!Object.hasOwn(ML_TYPES,type))throw Error('トップかラスかを選んでください');
+ if(!ML_SOLD.includes(type))throw Error('予想できるのはラスだけです');
  const card=mlCard(data,fixture),pick=card.find(p=>p.no===player||p.name===player);
  if(!pick)throw Error('選手を選んでください');
  if(!validInt(amount,MIN_BET)||amount%BET_STEP!==0)throw Error(`金額は${MIN_BET} KP以上、${BET_STEP} KP単位です`);

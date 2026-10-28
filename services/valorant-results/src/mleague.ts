@@ -229,11 +229,11 @@ async function betsOn(env:KpEnv,guild:string,match:string){
 const clock=(f:Fixture)=>`${Number(f.date.slice(5,7))}/${Number(f.date.slice(8,10))}`;
 const teamName=(id:string)=>data.teams.find(t=>t.id===id)?.name??id;
 export function cardPost(day:Fixture[],results:Map<string,MlResult>,d:MlView=data){
- const stats=seasonStats(results),lines=[`🀄 **Mリーグ予想** ${clock(day[0])} 19:00開始（トップ・ラスの選手を当てる）`];
+ const stats=seasonStats(results),lines=[`🀄 **Mリーグ予想** ${clock(day[0])} 19:00開始（ラスの選手を当てる）`];
  for(const f of day.filter(x=>x.game===1)){
   const card=mlCard(d,f).map((p:{name:string;no:number})=>({...p,odds:mlOdds(p,stats)}));
   const fav=(type:'top'|'last')=>[...card].sort((a,b)=>a.odds[type]-b.odds[type]).slice(0,3).map(p=>`${clean(p.name)} ${(p.odds[type]/10).toFixed(1)}倍`).join('／');
-  lines.push(`**${f.table}卓** ${f.teams.map(teamName).join('・')}`,`　トップ本命：${fav('top')}`,`　ラス本命：${fav('last')}`);
+  lines.push(`**${f.table}卓** ${f.teams.map(teamName).join('・')}`,`　ラス本命：${fav('last')}`);
  }
  lines.push('第1試合は19:00、第2試合は第1試合の結果が出るまで締切。','/mleague で全員の倍率、/mbet で予想。出なかった選手は返金。');
  return lines.join('\n');
