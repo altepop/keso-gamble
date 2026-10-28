@@ -90,7 +90,7 @@ export async function drainKpInbox(env:KpEnv){
 }
 /** The match's KP after any bottom-of-team debit; null until the event is recorded. */
 export async function kpMatchNet(env:KpEnv,id:string){const r=await env.DB.prepare("SELECT e.amount+COALESCE((SELECT delta FROM kp_ledger WHERE id='penalty:'||e.id),0) AS net FROM kp_events e WHERE e.id=?").bind(id).first<{net:number}>();return r?Number(r.net):null;}
-export function kpCreditLine(text:string,amount:number){const base=text.replace(/\n🪙 この試合 [+−]\d+ KP[^\n]*/g,''),split=base.lastIndexOf('\n💬 '),line='\n🪙 この試合 '+(amount<0?'−'+(-amount):'+'+amount)+' KP';return split<0?base+line:base.slice(0,split)+line+base.slice(split);}
+export function kpCreditLine(text:string,amount:number){const base=text.replace(/\n🪙 この試合 [+−]\d+ KP[^\n]*/g,''),split=base.indexOf('\n💬 '),line='\n🪙 この試合 '+(amount<0?'−'+(-amount):'+'+amount)+' KP';return split<0?base+line:base.slice(0,split)+line+base.slice(split);}
 /** Deathmatch: first place (most kills, ties included) wins 500 KP on a fair 50% draw fixed by the match and player;
  * otherwise a K/D below 1 costs 15 KP and anything else is 0. Missing stats are 0. */
 export async function deathmatchKp(raw:Match,subject:Match['players'][number]|undefined,puuid:string){
