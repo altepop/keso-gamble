@@ -164,7 +164,7 @@ test('a player with nothing remarkable still gets a rank line; dealer wins are m
 
 test('the top is only praised, even with deal-ins and riichi deal-ins on the record', () => {
  const voice=JSON.parse(readFileSync(new NodeURL('../mahjong-paipu-voice.json',import.meta.url),'utf8'));
- const praise=['top','comeback','topYakuman','topBigWin'].flatMap(k=>voice[k].full).map((s:string)=>s.split(/\{\w+\}/)[0]);
+ const praise=['top','top3','comeback','topYakuman','topBigWin'].flatMap(k=>voice[k].full).map((s:string)=>s.split(/\{\w+\}/)[0]);
  const top=summary.seats.find(s=>s.rank===1)!;
  const messy={...summary,seats:summary.seats.map(s=>s.seat===top.seat?{...s,dealIns:4,dealInPoints:20000,riichi:4,riichiWins:0,riichiDealIns:2,bestLead:30000}:s)};
  for(const level of ['full','normal','mild'] as const){

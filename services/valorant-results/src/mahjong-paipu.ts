@@ -72,7 +72,8 @@ export function roastFor(summary:PaipuSummary,seatNo:number,level:RoastLevel,who
   if(yakuman)add('topYakuman',{title:yakuman.title});
   else if(mine[0]&&mine[0].han>=6)add('topBigWin',{title:mine[0].title,points:points(mine[0].value)});
   if(p.minScore<=10000)add('comeback',{points:points(p.minScore)});
-  add('top',{points:points(p.score)});
+  // Three-player tops draw half the time from their own lines (北抜き, two opponents).
+  add(summary.players===3&&hash('top3:'+key)%2?'top3':'top',{points:points(p.score)});
   return out;
  }
  if(yakuman)add('yakuman',{title:yakuman.title});
