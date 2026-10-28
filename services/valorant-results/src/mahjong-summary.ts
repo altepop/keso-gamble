@@ -84,10 +84,16 @@ export function summarizePaipu(head:PaipuHead,actions:PaipuAction[]):PaipuSummar
   }else if(name==='RecordAnGangAddGang'||name==='RecordBaBei')lastFrom=data.seat;
   else if(name==='RecordChiPengGang'){if(!round.calls.includes(data.seat)){round.calls.push(data.seat);seats[data.seat].callRounds++;}}
   else if(name==='RecordHule'){
-   for(const h of data.hules??[]){
+   const hules=data.hules??[],delta:number[]=data.delta_scores??[];
+   for(const h of hules){
     const from=h.zimo?null:lastFrom,yakuman=h.yiman?Math.max(1,h.count??1):0;
-    const han=yakuman?0:(h.count||(h.fans??[]).reduce((n:number,f:{val?:number})=>n+(f.val??0),0));
-    const value=h.point_sum||(h.zimo?(h.qinjia?h.point_zimo_xian*(players-1):h.point_zimo_qin+h.point_zimo_xian*(players-2)):h.point_rong)||0;
+    // Han is the sum of the yaku values; HuleInfo.count is not reliable for that.
+    const han=yakuman?0:(h.fans??[]).reduce((n:number,f:{val?:number})=>n+(f.val??0),0);
+    // The points that actually moved, honba included. point_sum is not used: it accumulates over a
+    // dealer's repeats (a 2,900 hand after a 7,700 one reads 10,600). With two winners on one tile
+    // the loser's payment cannot be split, so the hand's own ron value is used.
+    const paid=delta.filter(d=>d<0).reduce((n,d)=>n-d,0);
+    const value=hules.length===1?(from===null?paid:Math.max(0,-(delta[from]??0))):(h.zimo?paid:h.point_rong??0);
     const win:Win={seat:h.seat,from,han,fu:h.fu??0,yakuman,title:handTitle(han,h.fu??0,yakuman),value,yaku:yakuNames(h.fans,Boolean(h.yiman)),riichi:round.riichi.includes(h.seat)};
     round.wins.push(win);
     const s=seats[h.seat];s.wins++;if(h.zimo)s.tsumo++;if(win.riichi)s.riichiWins++;

@@ -152,3 +152,11 @@ test('linked members get KP from an automatically read game, once, without /paif
  for(let i=0;i<6;i++)await f.claim(two,1,PAIPU.replace('cdef-',`cd${i}f-`));
  assert.equal(Number(f.sql.prepare("SELECT COUNT(*) n FROM kp_mahjong_claims WHERE user=? AND id NOT LIKE 'auto:%'").get(two)!.n),6,'automatic credits do not use up the daily /paifu cap');
 });
+
+test('a player with nothing remarkable still gets a rank line; dealer wins are marked', () => {
+ const post=paipuPost(summary,new Map([[2,{name:'しー'}]]),()=>'full');
+ const lines=post.split('\n').filter(l=>l.startsWith('🗯️ しー '));
+ assert.equal(lines.length,1,'second place, no deal-ins: only the rank line');
+ const dealerWin={...summary,rounds:summary.rounds.map((r,i)=>i===2?{...r,dealer:3}:r)};
+ assert.match(paipuPost(dealerWin,new Map([[0,{user:one,name:'A'}]]),()=>'full'),/D（親） ツモ \*\*役満\*\*/);
+});
