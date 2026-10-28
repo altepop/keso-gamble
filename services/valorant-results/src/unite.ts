@@ -61,10 +61,12 @@ export const matchKey=(m:UniteMatch)=>[m.win?'W':'L',m.map,m.pokemon,m.level,m.o
 function hash(s:string){let h=2166136261;for(const c of s)h=Math.imul(h^c.charCodeAt(0),16777619);return h>>>0;}
 const clean=(s:string)=>s.replace(/[@`*_~<>|#\\\[\]()\r\n]/g,'').slice(0,32);
 /** UniteAPI's English names in Japanese; unknown ones stay as they are. */
-export function uniteJa(m:Pick<UniteMatch,'pokemon'|'map'|'party'>){
+export function uniteJa(m:Pick<UniteMatch,'pokemon'|'map'|'party'>):{pokemon:string;map:string;party:string;boss:string}{
  const pokemon=(names.pokemon as Record<string,string>)[m.pokemon]??m.pokemon;
  const map=Object.entries(names.map as Record<string,string>).reduce((s,[en,ja])=>s.replaceAll(en,ja),m.map).replace(/\s*\(([^)]*)\)/,'（$1）');
- return {pokemon,map,party:(names.party as Record<string,string>)[m.party]??m.party};
+ // The legendary of the final stretch, from the stage name, e.g. テイア蒼空遺跡（グラードン）.
+ const boss=map.match(/（([^）]+)）/)?.[1]??'終盤のボス';
+ return {pokemon,map,party:(names.party as Record<string,string>)[m.party]??m.party,boss};
 }
 export function unitePost(name:string,uid:string,m:UniteMatch,kp:number){
  const ja=uniteJa(m);
@@ -75,7 +77,7 @@ export function unitePost(name:string,uid:string,m:UniteMatch,kp:number){
  return [`🎮 **${clean(name)}｜ポケモンユナイト ランクマ ${m.win?'勝利':'敗北'}**${m.surrendered?m.win?'（相手が降参）':'（降参）':''}`,
   `-# ${clean(ja.pokemon)} Lv${m.level}・${clean(ja.map)}・${clean(ja.party)}`,
   `スコア ${m.ours} vs ${m.theirs}｜KO ${m.ko}・アシスト ${m.ast}・妨害 ${m.int}｜与ダメ ${clean(m.dmg)}・被ダメ ${clean(m.tkn)}・回復 ${clean(m.heal)}`,
-  ...lines.map(l=>`🗯️ ${l.replaceAll('{pokemon}',clean(ja.pokemon))}`),
+  ...lines.map(l=>`🗯️ ${l.replaceAll('{pokemon}',clean(ja.pokemon)).replaceAll('{boss}',clean(ja.boss))}`),
   ...kp?[`${kp>0?'✅':'💸'} ${kp>0?'+':'−'}${Math.abs(kp).toLocaleString('ja-JP')} KP`]:[],
   `戦績：<${PROFILE}${uid}>`].join('\n');
 }

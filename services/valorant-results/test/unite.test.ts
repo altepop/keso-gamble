@@ -84,10 +84,10 @@ test('every roast list is distinct, and a loss post never repeats a line',()=>{
  assert.ok(v.win.length>=15&&v.loss.length>=30);
 });
 test('posts use Japanese names: Pokemon, stage and party size; roast lines name the Pokemon',()=>{
- assert.deepEqual(uniteJa({pokemon:'Eldegoss',map:'Theia Sky Ruins (Groudon)',party:'Trio'}),{pokemon:'ワタシラガ',map:'テイア蒼空遺跡（グラードン）',party:'トリオ'});
- assert.deepEqual(uniteJa({pokemon:'Brand New Mon',map:'New Stadium',party:'Five'}),{pokemon:'Brand New Mon',map:'New Stadium',party:'Five'},'unknown names stay as they are');
+ assert.deepEqual(uniteJa({pokemon:'Eldegoss',map:'Theia Sky Ruins (Groudon)',party:'Trio'}),{pokemon:'ワタシラガ',map:'テイア蒼空遺跡（グラードン）',party:'トリオ',boss:'グラードン'});
+ assert.deepEqual(uniteJa({pokemon:'Brand New Mon',map:'New Stadium',party:'Five'}),{pokemon:'Brand New Mon',map:'New Stadium',party:'Five',boss:'終盤のボス'},'unknown names stay as they are');
  const [m]=parseUnite(page([card({win:false,pokemon:'Crustle'})]))!.matches;
  const posts=Array.from({length:40},(_,i)=>unitePost('テスト選手',String(i),m,-50));
- assert.ok(posts.every(p=>p.includes('-# イワパレス Lv14・テイア蒼空遺跡（グラードン）・トリオ')&&!/\{pokemon\}|Crustle|ザップドス/.test(p)));
+ assert.ok(posts.every(p=>p.includes('-# イワパレス Lv14・テイア蒼空遺跡（グラードン）・トリオ')&&!/\{pokemon\}|\{boss\}|Crustle|ザップドス|サンダー|レックウザ|カイオーガ/.test(p)));
  assert.ok(posts.some(p=>/🗯️ .*イワパレス/.test(p)),'some roast lines name the Pokemon');
 });
