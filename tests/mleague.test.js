@@ -75,3 +75,12 @@ test('a bet bought at or after the reported start is refunded instead of settled
  settleMlBets(s,new Map([[game2.id,{names,closedAt:jst('2026-10-27T21:42:00')}]]));
  assert.deepEqual([early.status,late.status],['won','refunded']);assert.equal(late.payout,500);
 });
+
+test('the owner\'s fixed last-place odds replace the computed ones (萩原聖人 and HIRO柴田 at 1.5x)', () => {
+ const fixed=data.teams.flatMap(t=>t.players).filter(p=>p.fixedLast).map(p=>[p.name,p.fixedLast]);
+ assert.deepEqual(fixed,[['HIRO柴田',15],['萩原聖人',15]]);
+ const hiro=data.teams.flatMap(t=>t.players.map(p=>({...p}))).find(p=>p.name==='HIRO柴田');
+ assert.equal(mlOdds(hiro).last,15);assert.equal(mlOdds(hiro,{HIRO柴田:{games:50,top:0,last:0}}).last,15,'this season does not move it');
+ const tables=data.fixtures.filter(f=>f.teams.includes('earth-jets'));
+ assert.equal(mlOdds(mlCard(data,tables[0]).find(p=>p.name==='HIRO柴田')).last,15,'the card carries it');
+});

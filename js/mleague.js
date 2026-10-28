@@ -27,14 +27,15 @@ export function mlOpen(data,fixture,now,results){
 }
 /** The 16 players who may sit at this table, numbered team by team. */
 export function mlCard(data,fixture){
- return fixture.teams.flatMap(id=>{const team=data.teams.find(t=>t.id===id);return team?team.players.map(p=>({name:p.name,team:team.id,teamName:team.name,games:p.games,top:p.top,last:p.last})):[];})
+ return fixture.teams.flatMap(id=>{const team=data.teams.find(t=>t.id===id);return team?team.players.map(p=>({name:p.name,team:team.id,teamName:team.name,games:p.games,top:p.top,last:p.last,...(p.fixedLast?{fixedLast:p.fixedLast}:{})})):[];})
   .map((p,i)=>({no:i+1,...p}));
 }
-/** Odds (in tenths) from past official results plus this season's: (count + 5) / (games + 20). */
+/** Odds (in tenths) from past official results plus this season's: (count + 5) / (games + 20).
+ * A player's `fixedLast` (set by the owner in the data) replaces the computed last-place odds. */
 export function mlOdds(player,season={}){
  const s=season[player.name]??{games:0,top:0,last:0},games=player.games+s.games;
  const rate=count=>(count+ML_PRIOR_GAMES/4)/(games+ML_PRIOR_GAMES);
- return {top:oddsFromProbability(rate(player.top+s.top)),last:oddsFromProbability(rate(player.last+s.last))};
+ return {top:oddsFromProbability(rate(player.top+s.top)),last:Number.isSafeInteger(player.fixedLast)&&player.fixedLast>=10?player.fixedLast:oddsFromProbability(rate(player.last+s.last))};
 }
 export function createMleague(){return {mlBets:[]};}
 function validBet(b){return b&&typeof b.id==='string'&&b.id.length<=60&&typeof b.match==='string'&&b.match.length<=20&&typeof b.player==='string'&&b.player.length<=20&&Object.hasOwn(ML_TYPES,b.type)
