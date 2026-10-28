@@ -158,3 +158,8 @@ test('a newly found game starts the paipu reader once; without a token or a new 
  assert.equal(state(g.sql,'dispatch_error'),'github_http_403');assert.equal(state(g.sql,'error'),'','the result post is unaffected');
  const h=fixture(),plain=fakeFetch([{...record(),uuid}]);await monitorMahjong(h.env,now,config,plain.request);assert.equal(plain.dispatches.length,0);
 });
+
+test('the delay between a game ending and it being found is kept for diagnosis',async()=>{
+ const f=fixture(),web=fakeFetch();await monitorMahjong(f.env,now,config,web.request);
+ assert.equal(state(f.sql,'found_delay_seconds'),'100');assert.equal(state(f.sql,'found_game_end_at'),String(now-100_000));
+});
