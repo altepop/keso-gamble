@@ -1,5 +1,5 @@
 // Register these guild commands individually; never replace /death, /valo or the Activity entry point.
-export const KP_COMMAND_VERSION='kp-slash-v12-silent-grant';
+export const KP_COMMAND_VERSION='kp-slash-v13-mbet-picker';
 export const kpCommands=[
  {type:1,name:'kp',description:'KESO PLAY｜KP残高・ランキング',options:[
   {type:1,name:'balance',description:'自分の残高と最近の入出金（本人だけに表示）'},
@@ -14,11 +14,11 @@ export const kpCommands=[
  {type:1,name:'horsename',description:'KESO PLAY｜プレゼントでもらった馬に名前を付ける（1回だけ）',options:[
   {type:3,name:'name',description:'馬の名前（1〜12文字）',required:true,max_length:12},
  ]},
- {type:1,name:'mleague',description:'KESO PLAY｜Mリーグ予想：次の試合の選手番号と倍率を確認'},
- {type:1,name:'mbet',description:'KESO PLAY｜Mリーグ予想：ラスになる選手にKPで賭ける（取消不可）',options:[
-  {type:3,name:'match',description:'卓-試合（例 1-1 は1卓の第1試合）。/mleague で確認',required:true,choices:['1-1','1-2','2-1','2-2'].map(v=>({name:v.replace(/^(\d)-(\d)$/,'$1卓 第$2試合'),value:v}))},
-  {type:4,name:'player',description:'選手番号（/mleague で確認）',required:true,min_value:1,max_value:16},
-  {type:4,name:'amount',description:'掛け金（100 KP以上・100 KP単位）',required:true,min_value:100,max_value:50000},
+ {type:1,name:'mleague',description:'KESO PLAY｜Mリーグ予想：出場候補・チーム・ラス倍率を確認'},
+ {type:1,name:'mbet',description:'KESO PLAY｜Mリーグのラス予想。試合と選手を名前で選ぶ（取消不可）',options:[
+  {type:3,name:'match',description:'受付中の試合（日付・卓・対戦チーム。候補なしは /mleague）',required:true,autocomplete:true},
+  {type:3,name:'player',description:'ラスになる選手（名前・チーム名で検索。倍率も一覧に表示）',required:true,autocomplete:true},
+  {type:4,name:'amount',description:'掛け金（例 500。100 KP単位・競馬と合計で週5万KPまで）',required:true,min_value:100,max_value:50000},
  ]},
  {type:1,name:'mclose',description:'KESO PLAY｜Mリーグ予想：試合が始まったので締め切る（登録メンバー。開始後の予想は返金）',options:[
   {type:3,name:'match',description:'卓-試合',required:true,choices:['1-1','1-2','2-1','2-2'].map(v=>({name:v.replace(/^(\d)-(\d)$/,'$1卓 第$2試合'),value:v}))},
@@ -49,8 +49,8 @@ function shape(value:any):unknown{
  if(Array.isArray(value))return value.map(shape);
  if(!value||typeof value!=='object')return value;
  const out:Record<string,unknown>={};
- for(const key of ['type','name','value','description','required','min_value','max_value','max_length','choices','options'])
-  if(value[key]!==undefined&&value[key]!==null&&!(key==='required'&&value[key]===false)&&!(Array.isArray(value[key])&&!value[key].length))out[key]=shape(value[key]);
+ for(const key of ['type','name','value','description','required','min_value','max_value','max_length','choices','options','autocomplete'])
+  if(value[key]!==undefined&&value[key]!==null&&!(['required','autocomplete'].includes(key)&&value[key]===false)&&!(Array.isArray(value[key])&&!value[key].length))out[key]=shape(value[key]);
  return out;
 }
 export const sameCommand=(stored:unknown,command:unknown)=>Boolean(stored)&&JSON.stringify(shape(stored))===JSON.stringify(shape(command));

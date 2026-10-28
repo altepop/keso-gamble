@@ -6,7 +6,7 @@ import {readFileSync,readdirSync} from 'node:fs';
 import {initializeKp,syncKpAccounts} from '../src/kp.ts';
 import type {KpEnv,KpMapping} from '../src/kp.ts';
 import {runKpCommand,slashRace,betChoices} from '../src/kp-slash.ts';
-import {registerKpCommands,kpCommands,isKpRanking} from '../src/kp-command.ts';
+import {registerKpCommands,kpCommands,isKpRanking,sameCommand} from '../src/kp-command.ts';
 const guild='100000000000000100',one='100000000000000101',two='100000000000000102',newUser='100000000000000103';
 const mapping:KpMapping={guildId:guild,accounts:[{riotId:'One#JP1',discordUserId:one},{riotId:'Two#JP1',discordUserId:two}]};
 const T0=Date.parse('2026-10-27T16:05:30+09:00');
@@ -123,7 +123,7 @@ test('public command metadata contains definitions only and does not need or exp
  let queries=0;
  const response=await kpApi(new Request('https://worker/api/kp/commands'),{DB:{prepare(){queries++;throw Error('No DB reads');}},KP_BOOTSTRAP_PRIVATE_KEY:'fixture-secret-must-not-leak'} as unknown as KpEnv);
  const body=await response.json() as {version:string;commands:unknown[]};
- assert.equal(response.status,200);assert.equal(body.version,'kp-slash-v12-silent-grant');assert.equal(body.commands.length,11);assert.equal(queries,0);
+ assert.equal(response.status,200);assert.equal(body.version,'kp-slash-v13-mbet-picker');assert.equal(body.commands.length,11);assert.equal(queries,0);
  assert.equal(JSON.stringify(body).includes('fixture-secret'),false);assert.equal(response.headers.get('Cache-Control'),'no-store');
 });
 
@@ -190,4 +190,14 @@ test('the horse list is answered right away as an autocomplete result, and never
   return {json:await response.json(),tasks:tasks.length};};
  assert.deepEqual(await call('bet'),{json:{type:8,data:{choices:[]}},tasks:0},'an unavailable list is empty, not an error');
  assert.deepEqual(await call('kp'),{json:{type:8,data:{choices:[]}},tasks:0});
+ assert.deepEqual(await call('mbet'),{json:{type:8,data:{choices:[]}},tasks:0});
+});
+
+test('autocomplete flags participate in registration, while Discord defaults do not rewrite unchanged commands',async()=>{
+ const mbet=kpCommands.find(c=>c.name==='mbet')!;assert.equal(mbet.options[0].autocomplete,true);assert.equal(mbet.options[1].type,3);assert.equal(mbet.options[1].autocomplete,true);
+ const stored=structuredClone(kpCommands) as unknown as any[];for(const command of stored)for(const option of command.options??[])if(option.autocomplete===undefined)option.autocomplete=false;
+ assert.ok(stored.every((c,i)=>sameCommand(c,kpCommands[i])));
+ const old=stored.find(c=>c.name==='mbet');old.options[1].autocomplete=false;assert.equal(sameCommand(old,mbet),false);
+ const changed:string[]=[];assert.equal(await registerKpCommands(one,guild,async(path,method,body)=>{if(method==='POST'){changed.push((body as any).name);return {...(body as object),id:one};}return path==='/users/@me'?{id:one,bot:true}:stored;},async()=>{}),1);
+ assert.deepEqual(changed,['mbet']);
 });
