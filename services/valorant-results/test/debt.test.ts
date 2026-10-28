@@ -12,7 +12,7 @@ import {ensureMahjongClaims} from '../src/mahjong-claims.ts';
 import {DEBT_BLOCKED,debtOf,settleDebts} from '../src/kp-debt.ts';
 const guild='100000000000000100',one='100000000000000101',two='100000000000000102';
 const mapping:KpMapping={guildId:guild,accounts:[{riotId:'One#JP1',discordUserId:one},{riotId:'Two#JP1',discordUserId:two}]};
-const HOUR=3600_000,T0=Date.parse('2026-10-28T12:10:00+09:00');
+const MIN=60_000,T0=Date.parse('2026-10-28T12:10:00+09:00');
 async function fixture(){
  const sql=new DatabaseSync(':memory:');
  for(const file of readdirSync(new NodeURL('../migrations/',import.meta.url)).filter(f=>f.endsWith('.sql')).sort())sql.exec(readFileSync(new NodeURL('../migrations/'+file,import.meta.url),'utf8'));
@@ -34,22 +34,22 @@ test('a minus the wallet cannot cover becomes 借KP, once per match; the wallet 
  await settleRankChange(f.env,mapping,two,{before:11,after:12},'m1','p-two',T0);
  assert.equal(await debtOf(f.env,guild,two),0,'a promotion owes nothing');
 });
-test('借KP grows 1% an hour (rounded up) from the first full hour, once per hour, and is repaid from KP that comes in',async()=>{
+test('借KP grows 2% every 10 minutes (rounded up) from the first full period, once per period, and is repaid from KP that comes in',async()=>{
  const f=await fixture();
  await settleRankChange(f.env,mapping,one,{before:12,after:11},'m1','p-one',T0);
  assert.equal(await debtOf(f.env,guild,one),500);
- await settleDebts(f.env,guild,T0+30*60_000);assert.equal(await debtOf(f.env,guild,one),500,'no interest within the first hour');
- await settleDebts(f.env,guild,T0+HOUR);await settleDebts(f.env,guild,T0+HOUR+60_000);
- assert.equal(await debtOf(f.env,guild,one),505,'one charge per hour');
- await settleDebts(f.env,guild,T0+2*HOUR);assert.equal(await debtOf(f.env,guild,one),511,'compounds and rounds up: 505 × 1% = 5.05 → 6');
- f.credit('c1',200);await settleDebts(f.env,guild,T0+2*HOUR+60_000);
- assert.equal(f.balance(),0);assert.equal(await debtOf(f.env,guild,one),311,'all of the 200 goes to the debt');
- f.credit('c2',1000);await settleDebts(f.env,guild,T0+2*HOUR+120_000);
- assert.equal(f.balance(),689);assert.equal(await debtOf(f.env,guild,one),0);
- await settleDebts(f.env,guild,T0+5*HOUR);assert.equal(await debtOf(f.env,guild,one),0,'no interest once repaid');
+ await settleDebts(f.env,guild,T0+5*MIN);assert.equal(await debtOf(f.env,guild,one),500,'no interest within the first 10 minutes');
+ await settleDebts(f.env,guild,T0+10*MIN);await settleDebts(f.env,guild,T0+11*MIN);
+ assert.equal(await debtOf(f.env,guild,one),510,'one charge per period');
+ await settleDebts(f.env,guild,T0+20*MIN);assert.equal(await debtOf(f.env,guild,one),521,'compounds and rounds up: 510 × 2% = 10.2 → 11');
+ f.credit('c1',200);await settleDebts(f.env,guild,T0+21*MIN);
+ assert.equal(f.balance(),0);assert.equal(await debtOf(f.env,guild,one),321,'all of the 200 goes to the debt');
+ f.credit('c2',1000);await settleDebts(f.env,guild,T0+22*MIN);
+ assert.equal(f.balance(),679);assert.equal(await debtOf(f.env,guild,one),0);
+ await settleDebts(f.env,guild,T0+120*MIN);assert.equal(await debtOf(f.env,guild,one),0,'no interest once repaid');
  const kinds=f.sql.prepare("SELECT kind,SUM(amount) AS n FROM kp_debt_events WHERE user=? GROUP BY kind ORDER BY kind").all(one).map(r=>[r.kind,Number(r.n)]);
- assert.deepEqual(kinds,[['borrow',500],['interest',11],['repay',-511]]);
- assert.equal(Number(f.sql.prepare("SELECT SUM(delta) AS n FROM kp_ledger WHERE user=? AND kind='debt'").get(one)?.n),-511);
+ assert.deepEqual(kinds,[['borrow',500],['interest',21],['repay',-521]]);
+ assert.equal(Number(f.sql.prepare("SELECT SUM(delta) AS n FROM kp_ledger WHERE user=? AND kind='debt'").get(one)?.n),-521);
 });
 test('while 借KP is owed nothing can be bought; selling still works and the money repays the debt',async()=>{
  const f=await fixture();f.credit('c1',5000);
@@ -70,7 +70,7 @@ test('/kp shows 借KP and the repayment row',async()=>{
  const f=await fixture();
  await settleRankChange(f.env,mapping,one,{before:12,after:11},'m1','p-one',T0);
  const kp=()=>runKpCommand(f.env,{id:String((BigInt(T0)-1420070400000n)<<22n),guild_id:guild,member:{user:{id:one}},data:{name:'kp',options:[]}},mapping);
- assert.match(await kp(),/💸 借KP：\*\*500 KP\*\*（1時間ごとに利子1%/);
+ assert.match(await kp(),/💸 借KP：\*\*500 KP\*\*（10分ごとに利子2%/);
  f.credit('c1',800);await settleDebts(f.env,guild,T0+60_000);
  const after=await kp();assert.doesNotMatch(after,/💸 借KP/);assert.match(after,/借KP返済 -500 KP/);
 });
