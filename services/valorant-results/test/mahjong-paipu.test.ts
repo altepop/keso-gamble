@@ -55,10 +55,10 @@ test('a first claim is checked against the paipu, corrected to the real game, an
  assert.deepEqual({...row},{status:'pending',game:'4-hanchan',amount:300},'the paipu says hanchan, so the hanchan rate (last: −300) applies');
  const [post]=f.posts();
  assert.match(post,/雀魂 四麻 半荘/);
- assert.match(post,new RegExp(`4位 <@${one}> -3,000（トビ）`));
- assert.match(post,new RegExp(`東1局 <@${one}>（立直中） → B に放銃 \\*\\*跳満\\*\\* 12,000点（立直・一発・ドラ3・断幺九）`));
- assert.match(post,/東3局 1本場 D ツモ \*\*役満\*\* 32,300点（国士無双）/);
- assert.match(post,new RegExp(`📊 <@${one}> 和了0回（ツモ0）／放銃2回（14,000点）／立直1回（和了0）`));
+ assert.match(post,new RegExp(`🪦 4位　<@${one}>　-3,000（トビ）`));
+ assert.match(post,new RegExp(`\\*\\*東1局\\*\\*　<@${one}>（立直中） → B に放銃　\\*\\*跳満 12,000点\\*\\*\\n-# 立直・一発・ドラ3・断幺九`));
+ assert.match(post,/\*\*東3局 1本場\*\*　D ツモ　\*\*役満 32,300点\*\*\n-# 国士無双/);
+ assert.match(post,new RegExp(`🪦 \\*\\*4位\\*\\*　<@${one}>　-3,000\\n-# 和了 0回（ツモ0）・放銃 2回（14,000点）・立直 1回（和了0）`));
  assert.match(post,/初回なので他のメンバーの承認を待っています/);
  assert.equal(post.split('\n').filter(l=>l.startsWith('🗯️')).length,2,'two roast lines from the facts');
  f.sql.prepare("INSERT INTO kp_ledger VALUES('seed-'||?,?,?,1000,'test',0)").run(one,guild,one);
@@ -114,7 +114,7 @@ test('games found by the result watcher are read without /paifu and roast regist
  assert.deepEqual(await (await f.call('/api/mahjong/paipu/queue')).json(),{paipu:[PAIPU]},'three days only');
  await f.call('/api/mahjong/paipu/summaries',{results:[{uuid:PAIPU,summary}]},KEY,[{id:11,name:'けそ'}]);
  const [post]=f.posts();
- assert.match(post,/4位 けそ -3,000（トビ）/);assert.match(post,/📊 けそ 和了0回/);assert.match(post,/🗯️ けそ /);
+ assert.match(post,/4位　けそ　-3,000（トビ）/);assert.match(post,/\*\*4位\*\*　けそ　-3,000\n-# 和了 0回/);assert.match(post,/-# 和了 0回.*\n🗯️ /);
  assert.doesNotMatch(post,/<@/,'nobody is mentioned before linking');
  assert.equal(f.balance(one),0,'no KP without a claim');
 });
@@ -155,10 +155,10 @@ test('linked members get KP from an automatically read game, once, without /paif
 
 test('a player with nothing remarkable still gets a rank line; dealer wins are marked', () => {
  const post=paipuPost(summary,new Map([[2,{name:'しー'}]]),()=>'full');
- const lines=post.split('\n').filter(l=>l.startsWith('🗯️ しー '));
+ const lines=post.split('\n\n').find(b=>b.includes('**2位**　しー'))!.split('\n').filter(l=>l.startsWith('🗯️ '));
  assert.equal(lines.length,1,'second place, no deal-ins: only the rank line');
  const dealerWin={...summary,rounds:summary.rounds.map((r,i)=>i===2?{...r,dealer:3}:r)};
- assert.match(paipuPost(dealerWin,new Map([[0,{user:one,name:'A'}]]),()=>'full'),/D（親） ツモ \*\*役満\*\*/);
+ assert.match(paipuPost(dealerWin,new Map([[0,{user:one,name:'A'}]]),()=>'full'),/D（親） ツモ　\*\*役満/);
 });
 
 test('the top is only praised, even with deal-ins and riichi deal-ins on the record', () => {

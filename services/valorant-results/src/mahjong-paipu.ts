@@ -88,21 +88,29 @@ export function roastFor(summary:PaipuSummary,seatNo:number,level:RoastLevel,who
 export function paipuPost(summary:PaipuSummary,members:Map<number,Member>,levelOf:(user:string)=>RoastLevel,outcomes:string[]=[]){
  const who=(seatNo:number)=>{const m=members.get(seatNo);return m?.user?`<@${m.user}>`:clean(m?.name??summary.seats[seatNo].nickname);};
  const label=policy.games[summary.game as keyof typeof policy.games].label;
- const standings=[...summary.seats].sort((a,b)=>a.rank-b.rank).map(p=>`${p.rank}位 ${who(p.seat)} ${points(p.score)}${p.score<0?'（トビ）':''}`).join('　');
- const yaku=(w:Win)=>w.yaku.length?`（${w.yaku.join('・')}）`:'';
+ const medal=(rank:number)=>rank===summary.players?'🪦':['🥇','🥈','🥉'][rank-1];
+ const standings=[...summary.seats].sort((a,b)=>a.rank-b.rank).map(p=>`${medal(p.rank)} ${p.rank}位　${who(p.seat)}　${points(p.score)}${p.score<0?'（トビ）':''}`);
  const events=summary.rounds.flatMap(r=>r.wins.map(w=>({r,w})));
  const pick=[
   ...events.filter(e=>e.w.yakuman),
   ...events.filter(e=>!e.w.yakuman&&e.w.from!==null&&members.has(e.w.from)).sort((a,b)=>b.w.value-a.w.value),
   ...events.filter(e=>!e.w.yakuman&&members.has(e.w.seat)&&e.w.value>=8000).sort((a,b)=>b.w.value-a.w.value),
  ].filter((e,i,all)=>all.indexOf(e)===i).slice(0,6).sort((a,b)=>summary.rounds.indexOf(a.r)-summary.rounds.indexOf(b.r));
- const hands=pick.map(({r,w})=>`・${r.label} ${w.from===null?`${who(w.seat)}${w.seat===r.dealer?'（親）':''} ツモ`:`${who(w.from)}${r.riichi.includes(w.from)?'（立直中）':''} → ${who(w.seat)}${w.seat===r.dealer?'（親）':''} に放銃`} **${w.title}** ${points(w.value)}点${yaku(w)}`);
- const stats=[...members.keys()].sort((a,b)=>summary.seats[a].rank-summary.seats[b].rank).map(seatNo=>{
-  const p=summary.seats[seatNo];
-  return `📊 ${who(seatNo)} 和了${p.wins}回（ツモ${p.tsumo}）／放銃${p.dealIns}回（${points(p.dealInPoints)}点）／立直${p.riichi}回（和了${p.riichiWins}）／副露${p.callRounds}/${p.rounds}局`;
+ // One hand per line, the yaku underneath in Discord's small text.
+ const hands=pick.flatMap(({r,w})=>{
+  const winner=`${who(w.seat)}${w.seat===r.dealer?'（親）':''}`;
+  const how=w.from===null?`${winner} ツモ`:`${who(w.from)}${r.riichi.includes(w.from)?'（立直中）':''} → ${winner} に放銃`;
+  return [`**${r.label}**　${how}　**${w.title} ${points(w.value)}点**`,...w.yaku.length?[`-# ${w.yaku.join('・')}`]:[]];
  });
- const roasts=[...members].flatMap(([seatNo,m])=>roastFor(summary,seatNo,m.user?levelOf(m.user):'normal',who).map(text=>`🗯️ ${who(seatNo)} ${text}`));
- const parts=[`🀄 **雀魂 ${label}** 牌譜より`,standings,...hands,...stats,...outcomes,...roasts];
+ // Each member's block: rank, numbers in small text, then their lines.
+ const blocks=[...members.keys()].sort((a,b)=>summary.seats[a].rank-summary.seats[b].rank).map(seatNo=>{
+  const p=summary.seats[seatNo],m=members.get(seatNo)!;
+  return [`${medal(p.rank)} **${p.rank}位**　${who(seatNo)}　${points(p.score)}`,
+   `-# 和了 ${p.wins}回（ツモ${p.tsumo}）・放銃 ${p.dealIns}回（${points(p.dealInPoints)}点）・立直 ${p.riichi}回（和了${p.riichiWins}）・副露 ${p.callRounds}/${p.rounds}局`,
+   ...roastFor(summary,seatNo,m.user?levelOf(m.user):'normal',who).map(text=>`🗯️ ${text}`)].join('\n');
+ });
+ const section=(title:string,lines:string[])=>lines.length?[`\n**${title}**`,...lines]:[];
+ const parts=[`🀄 **雀魂 ${label}｜牌譜検討**`,...section('順位',standings),...section('KP',outcomes),...section('主な和了',hands),...section('メンバー',blocks.flatMap((b,i)=>i?['',b]:[b]))];
  let text='';
  for(const part of parts){if((text+'\n'+part).length>1900)break;text+=(text?'\n':'')+part;}
  return text;
