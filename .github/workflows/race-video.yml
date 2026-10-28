@@ -1,0 +1,43 @@
+name: Race replay video
+on:
+  schedule:
+    - cron: '2,17,32,47 * * * *'
+  workflow_run:
+    workflows: ['VALORANT Bot check and deploy']
+    branches: [main]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      check:
+        description: '動画生成だけ検査する（Discordには投稿しない）'
+        type: boolean
+        default: false
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: race-video
+  cancel-in-progress: false
+jobs:
+  replay:
+    if: github.repository == 'altepop/keso-gamble' && github.ref == 'refs/heads/main' && (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Prepare video tools
+        run: bash scripts/race-video/prepare.sh
+      - name: Render and deliver completed races
+        env:
+          CHECK: ${{ inputs.check }}
+        run: |
+          if [ "$CHECK" = 'true' ]; then node scripts/race-video/run.mjs --check; else node scripts/race-video/run.mjs; fi
+      - uses: actions/upload-artifact@v4
+        if: inputs.check == true
+        with:
+          name: race-video-check
+          path: ${{ runner.temp }}/keso-race-check.mp4
+          retention-days: 3

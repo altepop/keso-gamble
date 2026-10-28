@@ -11,6 +11,8 @@ on:
       - 'package.json'
       - 'package-lock.json'
       - 'scripts/build-discord-sdk.mjs'
+      - 'scripts/race-video/**'
+      - '.github/workflows/race-video.yml'
   push:
     branches: [main]
     paths:
@@ -23,6 +25,8 @@ on:
       - 'package.json'
       - 'package-lock.json'
       - 'scripts/build-discord-sdk.mjs'
+      - 'scripts/race-video/**'
+      - '.github/workflows/race-video.yml'
   workflow_dispatch:
 permissions:
   contents: read
@@ -50,6 +54,12 @@ jobs:
           npm --prefix ../.. run check:discord
           npm --prefix ../.. test
       - run: npm run build
+      - name: Prepare race video verification
+        working-directory: .
+        run: bash scripts/race-video/prepare.sh
+      - name: Render a fixture replay (no Discord delivery)
+        working-directory: .
+        run: node scripts/race-video/run.mjs --check
   deploy:
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     needs: check
