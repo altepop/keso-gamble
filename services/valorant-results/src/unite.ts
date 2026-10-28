@@ -72,7 +72,7 @@ export function unitePost(name:string,uid:string,m:UniteMatch,kp:number){
  const ja=uniteJa(m);
  const key=uid+':'+matchKey(m),pick=(list:string[],n:number)=>{const start=hash(key)%list.length;return Array.from({length:Math.min(n,list.length)},(_,i)=>list[(start+i)%list.length]);};
  const one=(list:string[],salt:string)=>list[hash(key+':'+salt)%list.length];
- const lines=m.win?pick(voice.win,2):[...m.surrendered?[one(voice.surrendered,'surrender')]:[],...m.ko===0?[one(voice.noKo,'ko')]:[],...pick(voice.loss,5)].slice(0,5);
+ const lines=m.win?pick(voice.win,2):[...m.surrendered?[one(voice.surrendered,'surrender')]:[],...m.ko===0?[one(voice.noKo,'ko')]:[],...pick(voice.loss,3)].slice(0,3);
  if(m.win&&m.ko>=10)lines.unshift(one(voice.bigKo,'big').replace('{n}',String(m.ko)));
  return [`🎮 **${clean(name)}｜ポケモンユナイト ランクマ ${m.win?'勝利':'敗北'}**${m.surrendered?m.win?'（相手が降参）':'（降参）':''}`,
   `-# ${clean(ja.pokemon)} Lv${m.level}・${clean(ja.map)}・${clean(ja.party)}`,
