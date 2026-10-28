@@ -122,11 +122,29 @@ test('a /paifu claim for a paipu that was already read is settled at once', asyn
  t.mock.timers.enable({apis:['Date'],now:T0});
  const f=await fixture();
  await f.call('/api/mahjong/paipu/queue');
- f.sql.prepare('INSERT INTO kp_mahjong_links VALUES(?,?,?)').run(guild,one,11);
  f.sql.prepare('INSERT INTO mahjong_paipu_auto VALUES(?,?,?)').run(PAIPU,11,T0);
  await f.call('/api/mahjong/paipu/summaries',{results:[{uuid:PAIPU,summary}]});
+ // Linked only after the game was read (e.g. through another game's approval).
+ f.sql.prepare('INSERT INTO kp_mahjong_links VALUES(?,?,?)').run(guild,one,11);
  const reply=await f.claim(one,4);
  assert.match(reply.content,/牌譜で本人の順位を確認しました。200 KP を付与/);assert.deepEqual(reply.components,[]);
  assert.equal(f.balance(one),200);
  assert.match((await f.claim(two,1)).content,/承認待ち/,'unlinked members still need a member to approve');
+});
+
+test('linked members get KP from an automatically read game, once, without /paifu', async t => {
+ t.mock.timers.enable({apis:['Date'],now:T0});
+ const f=await fixture();
+ await f.call('/api/mahjong/paipu/queue');
+ f.sql.prepare('INSERT INTO kp_mahjong_links VALUES(?,?,?)').run(guild,one,11);
+ f.sql.prepare('INSERT INTO kp_mahjong_links VALUES(?,?,?)').run(guild,two,22);
+ f.sql.prepare('INSERT INTO mahjong_paipu_auto VALUES(?,?,?)').run(PAIPU,11,T0);
+ await f.call('/api/mahjong/paipu/summaries',{results:[{uuid:PAIPU,summary}]});
+ assert.equal(f.balance(one),200,'4th in hanchan');assert.equal(f.balance(two),500,'1st in hanchan');
+ assert.match(f.posts()[0],new RegExp(`✅ <@${two}> 1位 \\+500 KP（牌譜から自動）`));
+ assert.match((await f.claim(two,1)).content,/自動で付与済み/);
+ await f.call('/api/mahjong/paipu/summaries',{results:[{uuid:PAIPU,summary}]});
+ assert.equal(f.balance(two),500,'a repeated summary credits nothing');
+ for(let i=0;i<6;i++)await f.claim(two,1,PAIPU.replace('cdef-',`cd${i}f-`));
+ assert.equal(Number(f.sql.prepare("SELECT COUNT(*) n FROM kp_mahjong_claims WHERE user=? AND id NOT LIKE 'auto:%'").get(two)!.n),6,'automatic credits do not use up the daily /paifu cap');
 });

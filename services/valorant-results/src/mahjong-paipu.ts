@@ -5,7 +5,7 @@ import voice from '../mahjong-paipu-voice.json' with {type:'json'};
 import policy from '../mahjong-kp-policy.json' with {type:'json'};
 import {initializeKp} from './kp.ts';
 import type {KpEnv,KpMapping} from './kp.ts';
-import {ensureMahjongClaims,paipuCheck,settleClaim} from './mahjong-claims.ts';
+import {autoCredit,ensureMahjongClaims,paipuCheck,settleClaim} from './mahjong-claims.ts';
 import {mahjongPlayers} from './mahjong.ts';
 import type {PaipuSummary,PlayerSummary,Win} from './mahjong-summary.ts';
 import {enqueue,ensurePosts,roastLevelsOf} from './racing-posts.ts';
@@ -113,6 +113,8 @@ export async function applySummary(env:PaipuEnv,mapping:KpMapping,summary:PaipuS
   if(player&&check&&!('refuse' in check))members.set(player.seat,{user:c.user,name:player.nickname});
   const line=await settleClaim(env,mapping.guildId,c,now);if(line)outcomes.push(line);
  }
+ // Linked members who did not claim are credited from the paipu itself.
+ outcomes.push(...await autoCredit(env,mapping.guildId,summary,now));
  if(env.KP_EARNINGS_WEBHOOK_URL&&members.size){
   await ensurePosts(env);
   await enqueue(env,'paipu:'+summary.uuid,paipuPost(summary,members,await roastLevelsOf(env,mapping),outcomes),now);
