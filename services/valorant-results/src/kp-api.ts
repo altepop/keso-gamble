@@ -12,6 +12,9 @@ import policy from '../kp-policy.json' with { type: 'json' };
 import { advanceMarket, trade, spin, spinNumbers, cryptoRouletteNumber } from '../../../js/engine.js';
 // @ts-expect-error The shared pure browser engine has no TypeScript declarations.
 import { hydrateRacing, placeRaceBet, useExchange } from '../../../js/racing.js';
+// @ts-expect-error Shared browser engine.
+import { hydrateMleague, placeMlBet, mlPartner } from '../../../js/mleague.js';
+import { mlData, mlResults, seasonStats } from './mleague.ts';
 import { racingView, raceSeed } from './racing-kp.ts';
 import { defaultRoastLevel, validRoastLevel } from './racing-crowns.ts';
 import { buyHorse, sellHorse, ownedHorses, raceEntries } from './racing-horses.ts';
@@ -20,7 +23,7 @@ import { buyLuxury, luxuryPosts, luxuryView } from './luxury.ts';
 export async function readKpState(env:KpEnv,mapping:KpMapping,user:string){
  const wallet=await env.DB.prepare('SELECT balance,version FROM kp_wallets WHERE guild=? AND user=?').bind(mapping.guildId,user).first<{balance:number;version:number}>();
  const row=await env.DB.prepare('SELECT data,version FROM kp_state WHERE guild=? AND user=?').bind(mapping.guildId,user).first<{data:string;version:number}>();if(!wallet||!row)throw Error('口座が見つかりません。');
- const state=JSON.parse(row.data);state.cash=wallet.balance;state.serverWallet=true;state.walletVersion=wallet.version;state.stateVersion=row.version;advanceMarket(state);Object.assign(state,hydrateRacing(state));if(!validRoastLevel(state.roastLevel))state.roastLevel=defaultRoastLevel(mapping,user);state.racing=await racingView(env,mapping);state.horses=await ownedHorses(env,mapping,user);const riotId=riotIdOf(mapping,user);state.mastery=riotId?await masteryOf(env,riotId,state.roastLevel):[];state.luxury=await luxuryView(env,mapping,user);for(const h of state.horses)h.statue=state.luxury.statues.includes(h.id);
+ const state=JSON.parse(row.data);state.cash=wallet.balance;state.serverWallet=true;state.walletVersion=wallet.version;state.stateVersion=row.version;advanceMarket(state);Object.assign(state,hydrateRacing(state),hydrateMleague(state));if(!validRoastLevel(state.roastLevel))state.roastLevel=defaultRoastLevel(mapping,user);state.racing=await racingView(env,mapping);state.horses=await ownedHorses(env,mapping,user);const riotId=riotIdOf(mapping,user);state.mastery=riotId?await masteryOf(env,riotId,state.roastLevel):[];state.luxury=await luxuryView(env,mapping,user);for(const h of state.horses)h.statue=state.luxury.statues.includes(h.id);
  const rewards=(await env.DB.prepare('SELECT id,match,mode,amount,at FROM kp_events WHERE guild=? AND user=? ORDER BY at DESC,id LIMIT 100').bind(mapping.guildId,user).all<{id:string;match:string;mode:string;amount:number;at:number}>()).results;
  await ensureQuizKp(env);
  const quiz=(await env.DB.prepare('SELECT id,mode,day,game,amount,completed_at FROM kp_quiz_events WHERE guild=? AND user=? UNION ALL SELECT id,mode,day,game,amount,completed_at FROM kp_quiz_ranked_extra WHERE guild=? AND user=? ORDER BY completed_at DESC LIMIT 100').bind(mapping.guildId,user,mapping.guildId,user).all<{id:string;mode:string;day:string;game:string;amount:number;completed_at:number}>()).results;
@@ -54,6 +57,12 @@ export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:strin
    const raceId=Number(args.raceId),entries=Number.isSafeInteger(raceId)?await raceEntries(env,mapping,raceId):[];
    const bet=placeRaceBet(state,{raceId:args.raceId,type:args.type,horse:args.horse,amount:args.amount},Date.now(),entries);
    await raceSeed(env,mapping.guildId,bet.raceId); // the hash is fixed before betting closes
+   result={bet};
+  }else if(action==='ml-bet'){
+   const d=await mlData(env),fixture=d.fixtures.find(f=>f.id===args.match),partner=fixture?mlPartner(d,fixture):null;
+   if(fixture&&!fixture.confirmed)throw Error('公式の対戦カードを確認中です。少し待ってからもう一度お試しください。');
+   // Odds use this season's official results; game 2 closes once game 1's result is stored.
+   const bet=placeMlBet(state,{match:args.match,player:args.player,type:args.type,amount:args.amount},Date.now(),d,await mlResults(env,partner?[partner.id]:[]),seasonStats(await mlResults(env)));
    result={bet};
   }else if(action==='horse-buy'){
    useExchange(state,Date.now());result=await buyHorse(env,mapping,user,state,args);

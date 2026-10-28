@@ -4,6 +4,9 @@ import type {KpEnv,KpMapping} from './kp.ts';
 import {ensureQuizKp} from './quiz-kp.ts';
 import {operateKp} from './kp-api.ts';
 import {racingView} from './racing-kp.ts';
+import {ML_DATA,mlData,mlResults,seasonStats} from './mleague.ts';
+// @ts-expect-error Shared browser engine.
+import {mlCard,mlOdds,mlOpen,mlStart} from '../../../js/mleague.js';
 // @ts-expect-error Shared browser engine.
 import {openRaceStart,raceCard,raceOdds,placeSlots} from '../../../js/racing.js';
 interface Slash {id:string;guild_id?:string;member?:{user?:{id:string}};data?:{name?:string;options?:Array<{name:string;type?:number;options?:unknown[];value?:unknown}>}}
@@ -17,10 +20,30 @@ export function slashRace(time:unknown,id:string){
  const [h,m]=time.split(':').map(Number),today=day+(h*60+m)*60000;
  return today+86400000===openRaceStart(created)?today+86400000:today;
 }
+const jstDate=(at:number)=>new Date(at+9*3600000).toISOString().slice(0,10);
+/** The match day /mleague and /mbet talk about: today until its last game closes (21:00), then the next one. */
+export function mlDay(now:number){
+ const today=jstDate(now);
+ return [...new Set(ML_DATA.fixtures.map(f=>f.date))].sort().find(d=>d>today||(d===today&&now<Date.parse(`${d}T21:00:00+09:00`)))??null;
+}
+const created=(id:string)=>Number((BigInt(id)>>22n)+1420070400000n);
+async function mleagueView(env:KpEnv,now:number){
+ const day=mlDay(now);if(!day)return 'Mリーグのレギュラーシーズン日程は終了しました。';
+ const all=await mlResults(env),stats=seasonStats(all),d=await mlData(env),fixtures=d.fixtures.filter(f=>f.date===day);
+ const lines=[`🀄 **Mリーグ予想** ${Number(day.slice(5,7))}/${Number(day.slice(8,10))} 19:00開始`];
+ for(const table of [...new Set(fixtures.map(f=>f.table))]){
+  const games=fixtures.filter(f=>f.table===table).sort((a,b)=>a.game-b.game);
+  if(!games[0].confirmed){lines.push(`\n**${table}卓**　公式の対戦カードを確認中（確認後に受付開始）`);continue;}
+  lines.push(`\n**${table}卓**　${games.map(g=>`第${g.game}試合 ${all.has(g.id)?'終了':mlOpen(d,g,now,all)?'受付中':now<mlStart(g)-86400000?'前日19:00から':'締切'}`).join('／')}`);
+  for(const p of mlCard(d,games[0])){const o=mlOdds(p,stats);lines.push(`${p.no}. ${clean(p.name)}（${clean(p.teamName)}）トップ ${(o.top/10).toFixed(1)}倍／ラス ${(o.last/10).toFixed(1)}倍`);}
+ }
+ lines.push('\n例：/mbet match:1-1 player:3 type:トップ amount:500','第1試合は19:00、第2試合は第1試合の結果が出るまで（遅くとも21:00）。出なかった選手は返金。');
+ return lines.join('\n');
+}
 export async function runKpCommand(env:KpEnv,interaction:Slash,override?:KpMapping):Promise<string>{
  const mapping=await initializeKp(env,override),user=interaction.member?.user?.id;
  if(!mapping||interaction.guild_id!==mapping.guildId||!user||!/^\d{15,22}$/.test(user))return 'このサーバーの本人の口座で利用してください。';
- const command=interaction.data?.name;if(!['kp','keiba','bet'].includes(command??''))return '対応していないコマンドです。';
+ const command=interaction.data?.name;if(!['kp','keiba','bet','mleague','mbet'].includes(command??''))return '対応していないコマンドです。';
  if(isKpRanking(interaction)){
   // A single server-side snapshot: current spendable KP, not stocks or lifetime earnings.
   const rows=(await env.DB.prepare('SELECT user,balance,RANK() OVER(ORDER BY balance DESC) AS rank,COUNT(*) OVER() AS total FROM kp_wallets WHERE guild=? ORDER BY balance DESC,user ASC LIMIT 10').bind(mapping.guildId).all<{user:string;balance:number;rank:number;total:number}>()).results;
@@ -39,6 +62,21 @@ export async function runKpCommand(env:KpEnv,interaction:Slash,override?:KpMappi
   const rows=(await env.DB.prepare('SELECT delta,kind,at FROM kp_ledger WHERE guild=? AND user=? ORDER BY at DESC,id DESC LIMIT 5').bind(mapping.guildId,user).all<{delta:number;kind:string;at:number}>()).results;
   const kinds:Record<string,string>={voice:'通話',quiz:'QUIZ',match:'試合',operation:'購入・取引',prize:'競馬賞金',mahjong:'雀魂'};
   return '🪙 あなたの残高：**'+money(await balance())+'**\n'+(rows.length?'最近の入出金\n'+rows.map(r=>`${clock(r.at)} ${kinds[r.kind]??'口座'} ${r.delta>=0?'+':''}${money(r.delta)}`).join('\n'):'まだ入出金はありません。通話やQUIZで貯められます。')+'\n/keiba で出走表、/bet で馬券を買えます。';
+ }
+ if(command==='mleague')return mleagueView(env,Date.now());
+ if(command==='mbet'){
+  const value=(key:string)=>interaction.data?.options?.find(o=>o.name===key)?.value;
+  const day=mlDay(created(interaction.id)),code=/^([12])-([12])$/.exec(String(value('match')??''));
+  const fixture=day&&code?ML_DATA.fixtures.find(f=>f.date===day&&f.table===Number(code[1])&&f.game===Number(code[2])):null;
+  if(!fixture)return 'その試合はありません。/mleague で卓と試合を確認してください。';
+  try{
+   const {result}=await operateKp(env,mapping,user,interaction.id,'ml-bet',{match:fixture.id,player:value('player'),type:value('type'),amount:value('amount')}) as {result:{bet:{player:string;type:string;amount:number;odds:number}}};
+   const bet=result.bet;
+   return `🀄 予想を購入しました\n${fixture.table}卓 第${fixture.game}試合・${clean(bet.player)}の${bet.type==='top'?'トップ':'ラス'}\n掛け金 ${money(bet.amount)}／確定倍率 ${(bet.odds/10).toFixed(1)}倍\n残高 ${money(await balance())}\n出場しなかった場合は返金。結果は公式発表後に自動で反映されます。`;
+  }catch(error){
+   const message=error instanceof Error?error.message:'';
+   return /[ぁ-んァ-ヶ一-龯]/.test(message)&&!/SQL|D1_|kp_/.test(message)?message:'購入結果を確認できませんでした。/kp の残高を確認してください。';
+  }
  }
  if(command==='keiba'){
   const view=await racingView(env,mapping),open=view.open,card={...raceCard(open.id,undefined,open.entries),...(open.crown?{name:open.crown}:{})},odds=raceOdds(card);
