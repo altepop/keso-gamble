@@ -282,3 +282,28 @@ test('monitor records the agent of each new result for mastery, once',async()=>{
   assert.deepEqual(f.sql.prepare('SELECT riot_id,match_id,agent,outcome FROM agent_plays').all().map(r=>({...r})),[{riot_id:'One#JP1',match_id:'monitor-agent',agent:'ジェット',outcome:'win'}]);
  }finally{globalThis.fetch=original;}
 });
+
+test('losing with the lowest score on a full team costs the participation KP, capped at the balance; ties count, gaps do not',async()=>{
+ const f=await fixture();f.enableHistory();
+ const team=(id:string,scores:Array<number|undefined>,win=false,queue='competitive')=>{const raw=game(id,queue,win) as ReturnType<typeof game>&{players:Array<{puuid:string;team_id:string;stats?:{score?:number}}>};
+  raw.players=scores.map((score,i)=>({puuid:i?'mate-'+i:'p-one',team_id:'red',stats:score===undefined?{}:{score}}));return raw;};
+ seed(f.sql,one,1000);
+ assert.equal(await collectKpMatch(f.env,mapping,team('bottom',[1000,3000,4000,5000,6000]),'p-one'),-300,'competitive: −300 instead of +300');
+ assert.equal((await readKpState(f.env,mapping,one)).cash,700);
+ assert.equal(await collectKpMatch(f.env,mapping,team('bottom',[1000,3000,4000,5000,6000]),'p-one'),-300,'replays do not charge twice');
+ assert.equal((await readKpState(f.env,mapping,one)).cash,700);
+ assert.equal(await collectKpMatch(f.env,mapping,team('tie',[2000,2000,4000,5000,6000]),'p-one'),-300,'a shared bottom counts');
+ assert.equal(await collectKpMatch(f.env,mapping,team('unrated',[1000,3000,4000,5000,6000],false,'unrated'),'p-one'),-200);
+ assert.equal(await collectKpMatch(f.env,mapping,team('middle',[4000,3000,1000,5000,6000]),'p-one'),300,'not the bottom: unchanged');
+ assert.equal(await collectKpMatch(f.env,mapping,team('won-bottom',[1000,3000,4000,5000,6000],true),'p-one'),900,'a win is never charged');
+ assert.equal(await collectKpMatch(f.env,mapping,team('gap',[1000,3000,undefined,5000,6000]),'p-one'),300,'missing stats never charge');
+ assert.equal(await collectKpMatch(f.env,mapping,team('short',[1000,3000,4000]),'p-one'),300,'an incomplete team never charges');
+ const cash=(await readKpState(f.env,mapping,one)).cash;
+ f.sql.prepare("INSERT INTO kp_ledger VALUES('drain',?,?,?,'test-only',0)").run(guild,one,-cash);
+ assert.equal(await collectKpMatch(f.env,mapping,team('broke',[1000,3000,4000,5000,6000]),'p-one'),0,'nothing to take from an empty wallet');
+ assert.equal((await readKpState(f.env,mapping,one)).cash,0);
+});
+test('the match line shows the net KP and why it is negative',()=>{
+ assert.match(kpCreditLine('結果',-300,true),/🪙 この試合 −300 KP（負けて味方最下位）/);
+ assert.equal(kpCreditLine(kpCreditLine('結果',-300,true),900),'結果\n🪙 この試合 +900 KP','a rewrite replaces the old line');
+});

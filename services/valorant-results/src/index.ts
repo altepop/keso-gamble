@@ -153,7 +153,7 @@ async function saveMatch(env: Env, match: Match, player: Player, account: Accoun
       const amount = kpRun.credits.get(kpId) ?? await collectKpMatch(env,kpRun.mapping,match,account.puuid);
       if (amount !== null) {
         kpRun.credits.set(kpId,amount);
-        result.message=kpCreditLine(result.message,amount);
+        result.message=kpCreditLine(result.message,amount,amount<=0); // Only a bottom-of-team loss nets zero or less.
         kpActive=kpRun.messages.get(kpId)!==result.message;
       }
     }
