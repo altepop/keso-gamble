@@ -4,7 +4,7 @@ import type {KpEnv,KpMapping} from './kp.ts';
 import {ensureQuizKp} from './quiz-kp.ts';
 import {operateKp} from './kp-api.ts';
 import {racingView} from './racing-kp.ts';
-import {ML_DATA,closeMl,mlClosed,mlData,mlResults,seasonStats} from './mleague.ts';
+import {ML_DATA,closeMl,mlClosed,mlData,mlLineups,mlResults,seasonStats} from './mleague.ts';
 import {enqueue,ensurePosts} from './racing-posts.ts';
 // @ts-expect-error Shared browser engine.
 import {mlCard,mlOdds,mlOpen,mlStart} from '../../../js/mleague.js';
@@ -30,12 +30,13 @@ export function mlDay(now:number){
 const created=(id:string)=>Number((BigInt(id)>>22n)+1420070400000n);
 async function mleagueView(env:KpEnv,now:number){
  const day=mlDay(now);if(!day)return 'Mリーグのレギュラーシーズン日程は終了しました。';
- const all=await mlResults(env),stats=seasonStats(all),d=await mlData(env),fixtures=d.fixtures.filter(f=>f.date===day),closed=await mlClosed(env);
+ const all=await mlResults(env),stats=seasonStats(all),d=await mlData(env),fixtures=d.fixtures.filter(f=>f.date===day),closed=await mlClosed(env),lineups=await mlLineups(env);
  const lines=[`🀄 **Mリーグ予想** ${Number(day.slice(5,7))}/${Number(day.slice(8,10))} 19:00開始`];
  for(const table of [...new Set(fixtures.map(f=>f.table))]){
   const games=fixtures.filter(f=>f.table===table).sort((a,b)=>a.game-b.game);
   if(!games[0].confirmed){lines.push(`\n**${table}卓**　公式の対戦カードを確認中（確認後に受付開始）`);continue;}
-  lines.push(`\n**${table}卓**　${games.map(g=>`第${g.game}試合 ${all.has(g.id)?'終了':closed.has(g.id)&&now>=closed.get(g.id)!.at?'締切（開始報告）':mlOpen(d,g,now,all)?'受付中':now<mlStart(g)-86400000?'前日19:00から':'締切'}`).join('／')}`);
+  lines.push(`\n**${table}卓**　${games.map(g=>`第${g.game}試合 ${all.has(g.id)?'終了':closed.has(g.id)&&now>=closed.get(g.id)!.at?'締切（開始報告）':mlOpen(d,g,now,all)?'受付中':now<mlStart(g)-19*3600000?'当日0時から':'締切'}`).join('／')}`);
+  for(const g of games)if(lineups.has(g.id))lines.push(`第${g.game}試合 出場：${lineups.get(g.id)!.map(clean).join('・')}`);
   for(const p of mlCard(d,games[0])){const o=mlOdds(p,stats);lines.push(`${p.no}. ${clean(p.name)}（${clean(p.teamName)}）トップ ${(o.top/10).toFixed(1)}倍／ラス ${(o.last/10).toFixed(1)}倍`);}
  }
  lines.push('\n例：/mbet match:1-1 player:3 type:トップ amount:500','第1試合は19:00、第2試合は第1試合の結果が出るまで。始まったら /mclose で締め切り（開始後の予想は返金）。出なかった選手は返金。');

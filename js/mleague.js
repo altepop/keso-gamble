@@ -15,10 +15,10 @@ export const mlStart=fixture=>at(fixture.date,ML_START);
 export const mlPartner=(data,fixture)=>data.fixtures.find(f=>f.date===fixture.date&&f.table===fixture.table&&f.game!==fixture.game);
 /** Game 1 closes at 19:00. Game 2 closes when game 1's official result is in (no fixed time, per the
  * owner), and in any case when the day ends, so a result that never arrives cannot keep it open until
- * the next morning. Betting opens 24 hours before the start. */
+ * the next morning. Betting opens at midnight on the match day. */
 export function mlOpen(data,fixture,now,results){
  const start=mlStart(fixture);
- if(now<start-86400000)return false;
+ if(now<at(fixture.date,'00:00'))return false;
  if(fixture.game===1)return now<start;
  const first=mlPartner(data,fixture);
  return now<at(fixture.date,'00:00')+86400000&&!(first&&results.has(first.id));
@@ -46,7 +46,7 @@ export function hydrateMleague(raw){
 export function placeMlBet(state,{match,player,type,amount},now,data,results,season={}){
  const fixture=data.fixtures.find(f=>f.id===match);
  if(!fixture)throw Error('試合を選んでください');
- if(!mlOpen(data,fixture,now,results))throw Error(now<mlStart(fixture)-86400000?'この試合はまだ受付前です（前日19:00から）':'この試合の予想は締め切りました');
+ if(!mlOpen(data,fixture,now,results))throw Error(now<at(fixture.date,'00:00')?'この試合はまだ受付前です（当日0時から）':'この試合の予想は締め切りました');
  if(!Object.hasOwn(ML_TYPES,type))throw Error('トップかラスかを選んでください');
  const card=mlCard(data,fixture),pick=card.find(p=>p.no===player||p.name===player);
  if(!pick)throw Error('選手を選んでください');

@@ -6,7 +6,7 @@ import {readFileSync,readdirSync} from 'node:fs';
 import {initializeKp,syncKpAccounts} from '../src/kp.ts';
 import type {KpMapping} from '../src/kp.ts';
 import {operateKp,readKpState} from '../src/kp-api.ts';
-import {ML_DATA,parseOfficialResults,parseOfficialCards,storeCards,mlData,refreshMlCards,matchFixture,pollMlResults,settleMl,queueMlPosts,mlResults} from '../src/mleague.ts';
+import {ML_DATA,KINMA_FEED,parseKinmaLineups,pollMlLineups,mlLineups,parseOfficialResults,parseOfficialCards,storeCards,mlData,refreshMlCards,matchFixture,pollMlResults,settleMl,queueMlPosts,mlResults} from '../src/mleague.ts';
 import type {PostEnv} from '../src/racing-posts.ts';
 import {runKpCommand,mlDay} from '../src/kp-slash.ts';
 // @ts-expect-error Shared browser engine.
@@ -155,4 +155,27 @@ test('/mclose: a member reports the start; betting stops and later bets are refu
  assert.ok(f.balance(one)>99000,'bought before the start: settled normally');
  assert.equal(f.balance(two),100000,'bought after the reported start: refunded');
  assert.ok(f.posts().some(p=>/⏰ <@100000000000000101> が 1卓 第2試合の開始（21:42）を報告/.test(p)));
+});
+
+test('the four who sat are read from キンマweb after the start and announced with the predictions on them', async t => {
+ t.mock.timers.enable({apis:['Date'],now:jst('2026-10-27T18:30:00')});
+ const f=await fixture();await storeCards(f.env,parseOfficialCards(page,2026),Date.now());
+ const benched=card.find(p=>!order.includes(p.name))!;
+ await operateKp(f.env,mapping,one,op(),'ml-bet',{match:game1.id,player:card.find(p=>p.name===order[0])!.no,type:'top',amount:1000});
+ await operateKp(f.env,mapping,two,op(),'ml-bet',{match:game1.id,player:benched.no,type:'last',amount:300});
+ const title=(date:string,game:number,names:string[])=>`<item><title>【Mリーグ2026-27 レギュラーシーズン】${date} 第${game}試合（麻雀ch）【${names.join('・')}】テキスト速報</title><pubDate>Tue, 27 Oct 2026 10:03:35 +0000</pubDate></item>`;
+ const feed=`<rss><channel>${title('10月27日',1,order)}${title('10月27日',2,['知らない人','A','B','C'])}<item><title>麻雀最強戦 テキスト速報</title><pubDate>Tue, 27 Oct 2026 10:00:00 +0000</pubDate></item></channel></rss>`;
+ assert.deepEqual(parseKinmaLineups(feed).map(l=>[l.date,l.game,l.names.length]),[['2026-10-27',1,4],['2026-10-27',2,4]]);
+ const urls:string[]=[];const request=(async(url:string)=>{urls.push(url);return new Response(feed);}) as unknown as typeof fetch;
+ assert.equal(await pollMlLineups(f.env,mapping,jst('2026-10-27T18:59:00'),request),0);assert.equal(urls.length,0,'nothing before the start');
+ assert.equal(await pollMlLineups(f.env,mapping,jst('2026-10-27T19:04:00'),request),1,'only the exact match is stored');
+ assert.deepEqual(urls,[KINMA_FEED]);
+ assert.equal(await pollMlLineups(f.env,mapping,jst('2026-10-27T19:05:00'),request),0);assert.equal(urls.length,1,'two-minute gap');
+ assert.deepEqual((await mlLineups(f.env)).get(game1.id),order);
+ const post=f.posts().find(p=>p.includes('出場決定'))!;
+ assert.match(post,/10\/27 1卓 第1試合 出場決定/);assert.match(post,new RegExp(order.map(n=>`${n}（[^）]+）`).join('・')));
+ assert.match(post,new RegExp(`🎯 <@${one}> ${order[0]}のトップ 1,000 KP`));
+ assert.match(post,new RegExp(`↩️ <@${two}> ${benched.name}のラス 300 KP：出場しないので返金予定`));
+ const view=await runKpCommand(f.env,{id:String((BigInt(jst('2026-10-27T19:06:00'))-1420070400000n)<<22n|1n),guild_id:guild,member:{user:{id:one}},data:{name:'mleague'}},mapping);
+ assert.match(view,new RegExp(`第1試合 出場：${order.join('・')}`));
 });
