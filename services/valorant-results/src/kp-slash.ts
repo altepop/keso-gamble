@@ -8,6 +8,7 @@ import {ML_DATA,closeMl,mlClosed,mlData,mlLineups,mlResults,seasonStats} from '.
 import {enqueue,ensurePosts} from './racing-posts.ts';
 import {ensureMahjongClaims} from './mahjong-claims.ts';
 import {ensureUnite,uniteUid} from './unite.ts';
+import {nameGiftHorse} from './racing-horses.ts';
 // @ts-expect-error Shared browser engine.
 import {mlCard,mlOdds,mlOpen,mlStart} from '../../../js/mleague.js';
 // @ts-expect-error Shared browser engine.
@@ -57,7 +58,7 @@ export async function betChoices(env:KpEnv,interaction:Slash,override?:KpMapping
 export async function runKpCommand(env:KpEnv,interaction:Slash,override?:KpMapping):Promise<string>{
  const mapping=await initializeKp(env,override),user=interaction.member?.user?.id;
  if(!mapping||interaction.guild_id!==mapping.guildId||!user||!/^\d{15,22}$/.test(user))return 'このサーバーの本人の口座で利用してください。';
- const command=interaction.data?.name;if(!['kp','keiba','bet','mleague','mbet','mclose','kpgrant','paifulink','unitelink'].includes(command??''))return '対応していないコマンドです。';
+ const command=interaction.data?.name;if(!['kp','keiba','bet','mleague','mbet','mclose','kpgrant','paifulink','unitelink','horsename'].includes(command??''))return '対応していないコマンドです。';
  if(isKpRanking(interaction)){
   // A single server-side snapshot: current spendable KP, not stocks or lifetime earnings.
   const rows=(await env.DB.prepare('SELECT user,balance,RANK() OVER(ORDER BY balance DESC) AS rank,COUNT(*) OVER() AS total FROM kp_wallets WHERE guild=? ORDER BY balance DESC,user ASC LIMIT 10').bind(mapping.guildId).all<{user:string;balance:number;rank:number;total:number}>()).results;
@@ -78,6 +79,11 @@ export async function runKpCommand(env:KpEnv,interaction:Slash,override?:KpMappi
   return '🪙 あなたの残高：**'+money(await balance())+'**\n'+(rows.length?'最近の入出金\n'+rows.map(r=>`${clock(r.at)} ${kinds[r.kind]??'口座'} ${r.delta>=0?'+':''}${money(r.delta)}`).join('\n'):'まだ入出金はありません。通話やQUIZで貯められます。')+'\n/keiba で出走表、/bet で馬券を買えます。';
  }
  if(command==='mleague')return mleagueView(env,Date.now());
+ if(command==='horsename'){
+  const named=await nameGiftHorse(env,mapping,user,interaction.data?.options?.find(o=>o.name==='name')?.value);
+  if(named.post&&(env as {KP_EARNINGS_WEBHOOK_URL?:string}).KP_EARNINGS_WEBHOOK_URL){await ensurePosts(env);await enqueue(env,'horse-name:'+interaction.id,named.post,created(interaction.id));}
+  return named.reply;
+ }
  if(command==='unitelink'){
   // Admin-only. The next reads of the profile only record what is there; later ranked games are posted.
   const option=(key:string)=>interaction.data?.options?.find(o=>o.name===key)?.value;
