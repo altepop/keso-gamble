@@ -101,7 +101,14 @@ async function captureNews(env:KpEnv,market:Market,now:number){
  // Fixed source tables only; no display names, webhook text or browser-submitted events.
  if(tables.has('kp_events'))await env.DB.prepare(`INSERT OR IGNORE INTO stock_news(guild,id,symbol,label,bps,at) SELECT guild,'valo:'||match||':'||outcome,'keso',CASE WHEN outcome='win' THEN 'VALORANTで勝利' ELSE 'VALORANTで敗戦' END,CASE WHEN outcome='win' THEN 40 ELSE -30 END,MAX(at) FROM kp_events WHERE guild=? AND at>=? AND outcome IN('win','loss') GROUP BY guild,match,outcome`).bind(guild,since).run();
  for(const table of ['kp_quiz_events','kp_quiz_ranked_extra'])if(tables.has(table))await env.DB.prepare(`INSERT OR IGNORE INTO stock_news(guild,id,symbol,label,bps,at) SELECT guild,'quiz:'||game,'riso','QUIZのプレイを記録',15,completed_at FROM ${table} WHERE guild=? AND completed_at>=?`).bind(guild,since).run();
- await env.DB.prepare(`INSERT OR IGNORE INTO stock_news(guild,id,symbol,label,bps,at) SELECT guild,'race:'||user||':'||id,'yuya',CASE WHEN delta>0 THEN '競馬で大きな払戻し' ELSE '競馬で大きな損失' END,CASE WHEN delta>0 THEN 50 ELSE -40 END,at FROM kp_operations WHERE guild=? AND at>=? AND id LIKE 'race-settle:%' AND ABS(delta)>=5000`).bind(guild,since).run();
+ // Settlement delta is gross payout; the stake was debited when the ticket was bought.
+ // Match only the bets settled by this operation, then subtract their stakes.
+ await env.DB.prepare(`INSERT OR IGNORE INTO stock_news(guild,id,symbol,label,bps,at)
+  SELECT guild,'race:'||user||':'||id,'yuya',CASE WHEN net>0 THEN '競馬で大きな利益' ELSE '競馬で大きな損失' END,CASE WHEN net>0 THEN 50 ELSE -40 END,at FROM (
+   SELECT o.guild,o.user,o.id,o.at,SUM(CAST(json_extract(b.value,'$.payout') AS INTEGER)-CAST(json_extract(b.value,'$.amount') AS INTEGER)) AS net
+   FROM kp_operations o JOIN json_each(o.response,'$.result.settled') r JOIN json_each(o.state,'$.raceBets') b ON json_extract(b.value,'$.id')=json_extract(r.value,'$.id')
+   WHERE o.guild=? AND o.at>=? AND o.id LIKE 'race-settle:%' GROUP BY o.guild,o.user,o.id,o.at
+  ) WHERE ABS(net)>=5000`).bind(guild,since).run();
  await env.DB.prepare(`INSERT OR IGNORE INTO stock_news(guild,id,symbol,label,bps,at) SELECT guild,'trades:'||CAST(at/300000 AS INTEGER),'yano','株の売買が活発',15,MAX(at) FROM stock_trades WHERE guild=? AND at>=? GROUP BY guild,CAST(at/300000 AS INTEGER) HAVING COUNT(*)>=5`).bind(guild,since).run();
 }
 export function nextStockPrices(prices:Record<string,number>,news:Array<{symbol:string;bps:number}>,draw:()=>number){

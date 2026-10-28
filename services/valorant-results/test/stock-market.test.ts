@@ -131,3 +131,18 @@ test('ニュースの効果は1銘柄1日3%まで。売買による材料だけ�
  assert.equal(f.sql.prepare("SELECT SUM(ABS(applied_bps)) n FROM stock_news WHERE symbol='keso'").get()!.n,300);
  assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM stock_news WHERE applied_version IS NULL').get()!.n,0,'capped events are consumed, not retried tomorrow');
 });
+
+test('競馬ニュースは払戻額ではなく精算対象馬券の純損益を使い、外れも材料になる',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:T});const f=await fixture();f.credit('fund',100000);const m=await prepareStocks(f.env,guild,one);
+ const add=(id:string,bets:Array<{id:string;amount:number;payout:number}>,ids:string[])=>{
+  const state=JSON.parse(String(f.sql.prepare('SELECT data FROM kp_state WHERE guild=? AND user=?').get(guild,one)!.data));state.raceBets=bets;
+  const settled=bets.filter(b=>ids.includes(b.id));
+  f.sql.prepare('INSERT INTO kp_operations VALUES(?,?,?,?,?,?,?,?,?)').run('race-settle:'+id,guild,one,'fixture',JSON.stringify({result:{settled}}),settled.reduce((s,b)=>s+b.payout,0),JSON.stringify(state),null,T+1000);
+ };
+ add('small',[{id:'a',amount:10000,payout:11000}],['a']);
+ add('win',[{id:'b',amount:10000,payout:16000},{id:'unrelated',amount:90000,payout:0}],['b']);
+ add('loss',[{id:'c',amount:6000,payout:0}],['c']);
+ await tickStocks(f.env,m,T+300000,()=>.5);
+ const news=f.sql.prepare("SELECT label,bps FROM stock_news WHERE symbol='yuya' ORDER BY id").all();
+ assert.deepEqual(news.map(n=>[n.label,n.bps]),[['競馬で大きな損失',-40],['競馬で大きな利益',50]]);
+});
