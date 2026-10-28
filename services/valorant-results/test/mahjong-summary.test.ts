@@ -31,3 +31,18 @@ test('unsupported rules are refused instead of guessed', () => {
  assert.throws(()=>summarizePaipu({...head,config:{mode:{mode:99}}},sample),/unsupported_mode/);
  assert.throws(()=>summarizePaipu({...head,result:{players:[]},accounts:[]},sample),/unsupported_player_count/);
 });
+
+test('points are what actually moved, not the record\'s point_sum (which accumulates over a dealer\'s repeats)', () => {
+ // The real game that exposed it: the dealer (seat 2) rons 7,700, then 2 han 30 fu at 1 honba.
+ const actions=[
+  {name:'RecordNewRound',data:{chang:0,ju:2,ben:0,scores:[25000,25000,25000,25000]}},{name:'RecordDiscardTile',data:{seat:3}},
+  {name:'RecordHule',data:{hules:[{seat:2,zimo:false,count:3,fu:40,point_rong:7700,point_sum:7700,fans:[{id:2,val:1},{id:31,val:1},{id:32,val:1}]}],delta_scores:[0,0,7700,-7700]}},
+  {name:'RecordNewRound',data:{chang:0,ju:2,ben:1,scores:[25000,25000,32700,17300]}},{name:'RecordDiscardTile',data:{seat:3}},
+  {name:'RecordHule',data:{hules:[{seat:2,zimo:false,count:9,fu:30,point_rong:2900,point_sum:10600,fans:[{id:11,val:1},{id:10,val:1}]}],delta_scores:[0,0,3200,-3200]}},
+  {name:'RecordNewRound',data:{chang:1,ju:2,ben:3,scores:[25000,25000,35900,14100]}},{name:'RecordDiscardTile',data:{seat:2}},
+  {name:'RecordHule',data:{hules:[{seat:2,zimo:true,count:5,fu:20,point_sum:99999,fans:[{id:12,val:1},{id:1,val:1},{id:14,val:1},{id:2,val:1},{id:31,val:1}]}],delta_scores:[-4300,-4300,12900,-4300]}},
+ ];
+ const s=summarizePaipu(head,actions);
+ assert.deepEqual(s.rounds.map(r=>[r.wins[0].han,r.wins[0].fu,r.wins[0].title,r.wins[0].value]),[[3,40,'3翻40符',7700],[2,30,'2翻30符',3200],[5,20,'満貫',12900]]);
+ assert.equal(s.seats[3].dealInPoints,10900);
+});

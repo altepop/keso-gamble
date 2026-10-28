@@ -8,7 +8,7 @@ const discard=(seat:number,riichi=false):PaipuAction=>({name:'RecordDiscardTile'
 export const sample:PaipuAction[]=[
  // East 1: A riichi, then deals into B's haneman (riichi, ippatsu, dora 3).
  round(0,0,[25000,25000,25000,25000]),discard(0,true),discard(1),discard(0),
- {name:'RecordHule',data:{hules:[{seat:1,zimo:false,count:6,fu:40,yiman:false,point_sum:12000,fans:[{id:2,val:1},{id:30,val:1},{id:31,val:3},{id:12,val:1}]}],delta_scores:[-13000,13000,0,0]}},
+ {name:'RecordHule',data:{hules:[{seat:1,zimo:false,count:6,fu:40,yiman:false,point_sum:12000,fans:[{id:2,val:1},{id:30,val:1},{id:31,val:3},{id:12,val:1}]}],delta_scores:[-12000,13000,0,0]}},
  // East 2: C calls, exhaustive draw with only C tenpai.
  round(0,1,[12000,38000,25000,25000]),{name:'RecordChiPengGang',data:{seat:2,type:1}},discard(2),
  {name:'RecordNoTile',data:{players:[{tingpai:false},{tingpai:false},{tingpai:true},{tingpai:false}],scores:[{delta_scores:[-1000,-1000,3000,-1000]}]}},

@@ -73,6 +73,8 @@ export function roastFor(summary:PaipuSummary,seatNo:number,level:RoastLevel,who
  if(p.riichi>=3&&!p.riichiWins)add('riichiNoWin',{n:p.riichi});
  if(p.rank===1&&p.minScore<=10000)add('comeback',{points:points(p.minScore)});
  if(!yakuman&&mine[0]&&mine[0].han>=6)add('bigWin',{title:mine[0].title,points:points(mine[0].value)});
+ // Nothing special happened: the rank alone still gets a line.
+ if(!out.length)add(p.rank===1?'top':p.rank===summary.players?'last':p.rank===2?'second':'third',{points:points(p.score)});
  return out;
 }
 /** The post: final standings, the key hands, each member's numbers and roast. `members` maps seat -> Discord user. */
@@ -87,7 +89,7 @@ export function paipuPost(summary:PaipuSummary,members:Map<number,Member>,levelO
   ...events.filter(e=>!e.w.yakuman&&e.w.from!==null&&members.has(e.w.from)).sort((a,b)=>b.w.value-a.w.value),
   ...events.filter(e=>!e.w.yakuman&&members.has(e.w.seat)&&e.w.value>=8000).sort((a,b)=>b.w.value-a.w.value),
  ].filter((e,i,all)=>all.indexOf(e)===i).slice(0,6).sort((a,b)=>summary.rounds.indexOf(a.r)-summary.rounds.indexOf(b.r));
- const hands=pick.map(({r,w})=>`・${r.label} ${w.from===null?`${who(w.seat)} ツモ`:`${who(w.from)}${r.riichi.includes(w.from)?'（立直中）':''} → ${who(w.seat)} に放銃`} **${w.title}** ${points(w.value)}点${yaku(w)}`);
+ const hands=pick.map(({r,w})=>`・${r.label} ${w.from===null?`${who(w.seat)}${w.seat===r.dealer?'（親）':''} ツモ`:`${who(w.from)}${r.riichi.includes(w.from)?'（立直中）':''} → ${who(w.seat)}${w.seat===r.dealer?'（親）':''} に放銃`} **${w.title}** ${points(w.value)}点${yaku(w)}`);
  const stats=[...members.keys()].sort((a,b)=>summary.seats[a].rank-summary.seats[b].rank).map(seatNo=>{
   const p=summary.seats[seatNo];
   return `📊 ${who(seatNo)} 和了${p.wins}回（ツモ${p.tsumo}）／放銃${p.dealIns}回（${points(p.dealInPoints)}点）／立直${p.riichi}回（和了${p.riichiWins}）／副露${p.callRounds}/${p.rounds}局`;
