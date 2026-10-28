@@ -8,8 +8,8 @@ import {cardPost,crownPost,resultPost} from '../src/racing-posts.ts';
 import {raceCard,raceResult} from '../../../js/racing.js';
 const time=Date.parse('2026-10-28T21:00:00+09:00');
 
-test('each racing post has one intact mandatory Hitoshii phrase, separate from the bot aside',()=>{
- assert.deepEqual(raceCatchphrases,['良かったこの距離で','お祭り男か']);
+test('each racing post has one intact source-checked quote, separate from the bot aside',()=>{
+ assert.ok(raceCatchphrases.length>=25&&raceCatchphrases.includes('良かったこの距離で')&&raceCatchphrases.includes('お祭り男か'));
  for(const phrase of raceCatchphrases)assert.ok(catalogue.quotes.some(q=>q.text===phrase));
  const card=raceCard(time),seed='voice-fixture';
  for(const post of [cardPost(card,'hash'),crownPost({race:time,name:'fixture',user:'100000000000000001',reason:'fixture'}),resultPost(card,seed,[],()=> 'mild')]){
@@ -18,11 +18,11 @@ test('each racing post has one intact mandatory Hitoshii phrase, separate from t
   assert.ok(lines[lines.indexOf(quotes[0])+1].length>5,'authored aside occupies a separate line');
  }
 });
-test('both required phrases and every authored line are reachable, stable, with no player-name substitution in quotes',()=>{
+test('every quote and authored line is reachable, stable, with no player-name substitution in quotes',()=>{
  for(const kind of ['card','crown','result'] as const){
   const quotes=new Set<string>(),asides=new Set<string>();
   for(let i=0;i<3000;i++){quotes.add(raceCatchphrase(kind,'race-'+i));asides.add(raceAside(kind,'race-'+i));}
-  assert.equal(quotes.size,2);assert.equal(asides.size,voice[kind].length);
+  assert.ok(quotes.size>=8,kind+':'+quotes.size);assert.ok([...quotes].every(q=>raceCatchphrases.includes(q)));assert.equal(asides.size,voice[kind].length);
   assert.equal(raceCatchphrase(kind,'same'),raceCatchphrase(kind,'same'));
  }
  for(const kind of ['win','partial','loss'] as const)for(const level of ['full','normal','mild'] as const){

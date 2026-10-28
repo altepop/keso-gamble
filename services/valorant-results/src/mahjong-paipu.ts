@@ -2,6 +2,7 @@
 // signed ingestion, automatic confirmation of /paifu claims for linked accounts, and a post that
 // talks about what actually happened in the game. Everything stated comes from the summary.
 import voice from '../mahjong-paipu-voice.json' with {type:'json'};
+import memes from '../meme-quotes.json' with {type:'json'};
 import policy from '../mahjong-kp-policy.json' with {type:'json'};
 import {initializeKp} from './kp.ts';
 import type {KpEnv,KpMapping} from './kp.ts';
@@ -99,6 +100,11 @@ export function roastFor(summary:PaipuSummary,seatNo:number,level:RoastLevel,who
  return out;
 }
 /** The post: final standings, the key hands, each member's numbers and roast. `members` maps seat -> Discord user. */
+const MEME_POOLS:Record<'last'|'top'|'middle',string[]>={
+ last:['niisan-akan','yamero-sokowa','shibakuzo','sokowa-akan','akan-kattana','yokunaiwaa','kiitete-kusa','oniisan-yamero','dokukamo','hantei-okashii','nametemasuka','microsleep-ten','uow-yametene'],
+ top:['yokatta-kono-kyori','tousan-korette','jun-no-kachida','iiwaa','kiga-kikune','umaremo-elite','gooku-majika','bachikon-strike','omatsuri-otoko'],
+ middle:['saigono-gyoza','san-ga-aru','ittanna','daijoubu','maniae','chotto-matte','aji-koi-usui','macchan-imanowha','vtr-don','kuiya'],
+};
 export function paipuPost(summary:PaipuSummary,members:Map<number,Member>,levelOf:(user:string)=>RoastLevel,outcomes:string[]=[]){
  // Names everywhere; each linked member's Discord tag appears once, on their own block.
  const who=(seatNo:number)=>clean(members.get(seatNo)?.name??summary.seats[seatNo].nickname);
@@ -128,7 +134,10 @@ export function paipuPost(summary:PaipuSummary,members:Map<number,Member>,levelO
    ...roastFor(summary,seatNo,m.user?levelOf(m.user):'normal',who).map(text=>`🗯️ ${text}`)].join('\n');
  });
  const section=(title:string,lines:string[])=>lines.length?[`\n**${title}**`,...lines]:[];
- const parts=[`🀄 **雀魂 ${label}｜牌譜検討**`,...section('順位',standings),...section('KP',outcomes.map(l=>l.startsWith('🔎')?l:untag(l))),...section('主な和了',hands),...section('メンバー',blocks.flatMap((b,i)=>i?['',b]:[b]))];
+ // One intact, source-checked quotation, matched to how the members finished.
+ const ranks=[...members.keys()].map(seatNo=>summary.seats[seatNo].rank),pool=MEME_POOLS[ranks.includes(summary.players)?'last':ranks.includes(1)?'top':'middle'];
+ const meme=memes.quotes.find(q=>q.id===pool[hash('paipu-meme:'+summary.uuid)%pool.length])?.text;
+ const parts=[`🀄 **雀魂 ${label}｜牌譜検討**`,...section('順位',standings),...section('KP',outcomes.map(l=>l.startsWith('🔎')?l:untag(l))),...section('主な和了',hands),...section('メンバー',blocks.flatMap((b,i)=>i?['',b]:[b])),...meme?['',`💬 ${meme}`]:[]];
  let text='';
  for(const part of parts){if((text+'\n'+part).length>1900)break;text+=(text?'\n':'')+part;}
  return text;
