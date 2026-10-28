@@ -3,7 +3,9 @@ import {URL as NodeURL} from 'node:url';
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
 import {readFileSync} from 'node:fs';
-import {mahjongRank,mahjongRoast,mahjongMessage,parseMahjongRecords,validateMahjongConfig,monitorMahjong,flushMahjongPosts} from '../src/mahjong.ts';
+import {mahjongRank,mahjongRoast,mahjongMessage,parseMahjongRecords,validateMahjongConfig,monitorMahjong,flushMahjongPosts,pacing,PROVIDER_GAP} from '../src/mahjong.ts';
+// Provider spacing is recorded instead of slept.
+const waits:number[]=[];pacing.wait=async(ms:number)=>{waits.push(ms);};
 import type {MahjongConfig,MahjongEnv,MahjongRecord} from '../src/mahjong.ts';
 const pools=JSON.parse(readFileSync(new NodeURL('../mahjong-taunts.json',import.meta.url),'utf8')) as Record<string,string[][]>;
 const now=Date.parse('2026-10-27T15:00:00Z');
@@ -102,4 +104,20 @@ test('fresh enrollment never makes an inverted API range and malformed data neve
  const f=fixture(),web=fakeFetch([]);await monitorMahjong(f.env,now+123_000,{...config,startedAt:now+100_000},web.request);assert.equal(web.urls.length,2);
  const broken=(async()=>Response.json({result_key:'unresolved'}))as typeof fetch;
  await monitorMahjong(f.env,now+8*60_000,config,broken);assert.equal(state(f.sql,'error'),'provider_or_data_unavailable');assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM mahjong_watch_posts').get()!.n,0);
+});
+
+test('the provider key is sent as a Bearer token and requests stay at most one per second',async()=>{
+ const f=fixture(),seen:Array<string|null>=[];
+ const request=(async(input:RequestInfo|URL,init?:RequestInit)=>{
+  const url=new URL(String(input));
+  if(url.hostname==='discord.com')return Response.json({id:'100000000000000001'});
+  seen.push(new Headers(init?.headers).get('Authorization'));return Response.json([]);
+ }) as typeof fetch;
+ waits.length=0;
+ await monitorMahjong({...f.env,AMAE_KOROMO_TOKEN:'fixture-provider-token'},now,{...config,players:[{id:10,name:'a'},{id:11,name:'b'}]},request);
+ assert.deepEqual(seen,Array(4).fill('Bearer fixture-provider-token'));
+ assert.deepEqual(waits,Array(3).fill(PROVIDER_GAP),'a gap before every request but the first');
+ assert.ok(PROVIDER_GAP>=1000);
+ const g=fixture();seen.length=0;await monitorMahjong(g.env,now,config,request);
+ assert.deepEqual(seen,[null,null],'without a key nothing is invented');
 });

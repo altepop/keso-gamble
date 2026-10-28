@@ -303,6 +303,7 @@ RUSTの反応、エリート、王道家、了解お兄さん、気が利くね�
 
 - 開始日時より前に始まった対局は投稿しません。再取得時は対局の固定IDと対象者IDでキューを重複登録しません。遅れて掲載された対局も直近7日間の再走査で拾います。
 - 投稿キューをD1に永続化し、並行処理は期限付きの取得権で防ぎます。Webhook成功後・D1更新前の障害は配送が確定できないため、完全な一度だけの配送は保証できません。不明時は15分待って再確認・再試行します。
+- 牌譜屋から発行されたAPIキーを Worker Secret `AMAE_KOROMO_TOKEN` に置くと `Authorization: Bearer` で送ります。キーの条件（毎秒1件まで）に合わせ、リクエストの間を1.1秒あけます。`/api/mahjong/status` の `authenticated` で設定の有無だけ確認できます。
 - 429は少なくとも1時間待機します。ミラー切り替えや認証チャレンジの回避はしません。対局データの取得に認証が必要な場合は利用可能な取得方法の確認が必要です。
 - 牌譜屋自体の反映遅延は数分〜数時間です。サイトの集計内容には誤差がある可能性があります。
 - `GET /api/mahjong/status` は人数・対象モード・最終成功時刻・待機理由・配送件数のみを返します。名前・内部ID・Webhook値は返しません。`enabled:true` だけではデータ取得成功を意味しません。`lastSuccessAt` と `error` を確認してください。
@@ -334,9 +335,10 @@ RUSTの反応、エリート、王道家、了解お兄さん、気が利くね�
 
 設定（リポジトリの Settings → Secrets and variables → Actions）：
 
-1. `MAHJONG_INGEST_KEY`：32文字以上のランダムな文字列。設定後に「VALORANT Bot check and deploy」を手動実行すると、同じ値がWorkerのSecretに入ります（既存のWorker Secretは上書きしません）。
+1. `MAHJONG_INGEST_KEY`：32文字以上のランダムな文字列。設定後に「VALORANT Bot check and deploy」を手動実行すると、同じ値がWorkerのSecretに入ります（デプロイのたびにリポジトリの値で更新します）。
 2. `YOSTAR_UID` / `YOSTAR_TOKEN` / `YOSTAR_DEVICE_ID`：PCのブラウザで `https://game.mahjongsoul.com` にログインする際の開発者ツール（F12 → Network、`yostarplat` で絞り込み）から取得します。`/user/login` か `/user/quick-login` の応答の `Data.UserInfo.ID`（`UID2` ではない）と `Data.UserInfo.Token`、要求ヘッダー `Authorization` 内の `DeviceID` です。
-3. Actions の「Mahjong paipu fetch」を「ログインできるかだけ確認する」にチェックして手動実行し、`login: ok` を確認します。
+3. 牌譜屋のAPIキー：`AMAE_KOROMO_TOKEN` に「Bearer 」を除いたトークンだけを登録し、同じくデプロイを実行します。
+4. Actions の「Mahjong paipu fetch」を「ログインできるかだけ確認する」にチェックして手動実行し、`login: ok` を確認します。
 
 注意：この値はアカウントへのログイン情報そのものです。チャット・Issue・PRに貼らないでください。非公式の取得方法のため、雀魂の規約上アカウントに不利益が出る可能性があります。牌譜はどのアカウントでも読めるため、サブアカウントの利用を推奨します。ログインに失敗し始めたら値を取り直してください。
 
