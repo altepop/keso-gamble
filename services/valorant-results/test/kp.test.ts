@@ -38,7 +38,7 @@ test('repeated and concurrent match collection pays once, aliases normalize, and
  assert.equal((await readKpState(f.env,mapping,one)).cash,900);assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM kp_events').get()!.n,1);
  assert.equal(await collectKpMatch(f.env,mapping,game('loss','competitive',false),'p-one'),-100);
  assert.equal(await collectKpMatch(f.env,mapping,game('tdm','hurm'),'p-one'),70);
- assert.equal(await collectKpMatch(f.env,mapping,game('escalation','ggteam'),'p-one'),70);
+ assert.equal(await collectKpMatch(f.env,mapping,game('escalation','ggteam'),'p-one'),1000);
  const unknown=game('unknown','swiftplay');unknown.teams=[];assert.equal(await collectKpMatch(f.env,mapping,unknown,'p-one'),0);
  const before=(await readKpState(f.env,mapping,one)).cash;
  for(const mode of ['custom','unsupported'])assert.equal(await collectKpMatch(f.env,mapping,game('hold-'+mode,mode),'p-one'),null);
@@ -322,16 +322,13 @@ test('deathmatch: K/D below 1 costs 50, first place wins 1,000 on a 30% draw fix
  const first=await collectKpMatch(f.env,mapping,dm('dm-top-0',{kills:30,deaths:10}),'p-one');
  assert.equal(await collectKpMatch(f.env,mapping,dm('dm-top-0',{kills:30,deaths:10}),'p-one'),first);
 });
-test('team deathmatch and escalation: a win as the team top fragger adds 500 on a 20% draw; nothing else does',async()=>{
+test('escalation is all or nothing: +1,000 for a win, −1,000 for a loss; team deathmatch has no bonus',async()=>{
  const {valoKp}=await import('../src/kp.ts');
  const tdm=(id:string,mode:string,win:boolean,mine:number)=>{const raw=game(id,mode,win) as ReturnType<typeof game>&{players:Array<{puuid:string;team_id:string;stats?:{kills?:number;score?:number}}>};
-  raw.players=[{puuid:'p-one',team_id:'red',stats:{kills:mine,score:100}},...[10,20,15,5].map((k,i)=>({puuid:'m'+i,team_id:'red',stats:{kills:k,score:100}}))];return raw;};
- for(const mode of ['hurm','ggteam']){
-  const bases=Array.from({length:200},(_,i)=>valoKp(tdm('t-'+mode+i,mode,true,40),'p-one',mode==='hurm'?'teamdeathmatch':'escalation','win').base);
-  const bonus=bases.filter(v=>v===570).length;assert.ok(bonus>=20&&bonus<=60,mode+':'+bonus);assert.ok(bases.every(v=>v===70||v===570));
- }
- assert.ok(Array.from({length:100},(_,i)=>valoKp(tdm('t-low'+i,'hurm',true,8),'p-one','teamdeathmatch','win').base).every(v=>v===70),'not the top fragger: no bonus');
- assert.ok(Array.from({length:100},(_,i)=>valoKp(tdm('t-loss'+i,'hurm',false,40),'p-one','teamdeathmatch','loss').base).every(v=>v<=0),'a loss: no bonus (a tied bottom still costs 30)');
+  raw.players=[{puuid:'p-one',team_id:'red',stats:{kills:mine,score:500}},...[10,20,15,5].map((k,i)=>({puuid:'m'+i,team_id:'red',stats:{kills:k,score:100}}))];return raw;};
+ assert.ok(Array.from({length:100},(_,i)=>valoKp(tdm('e-win'+i,'ggteam',true,40),'p-one','escalation','win').base).every(v=>v===1000));
+ assert.ok(Array.from({length:100},(_,i)=>valoKp(tdm('e-loss'+i,'ggteam',false,40),'p-one','escalation','loss').base).every(v=>v===-1000));
+ assert.ok(Array.from({length:100},(_,i)=>valoKp(tdm('t-win'+i,'hurm',true,40),'p-one','teamdeathmatch','win').base).every(v=>v===70),'team deathmatch: no bonus');
 });
 
 test('a competitive demotion is posted with the roast and costs 500 KP once; a promotion is praised and pays 100 KP once',async()=>{

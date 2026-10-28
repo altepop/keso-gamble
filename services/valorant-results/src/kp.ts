@@ -95,7 +95,8 @@ export function kpCreditLine(text:string,amount:number,note=''){const base=text.
 /** The KP of one VALORANT result before the wallet: the mode's rate, the side bonuses of the easy modes, then luck.
  * - Deathmatch: first place (most kills, ties included, at least one) wins 1,000 on a 30% draw; otherwise a K/D below 1
  *   costs 50 and anything else is 0.
- * - Team deathmatch and escalation: a win as the team's top fragger adds 500 on a 20% draw.
+ * - Escalation is all or nothing: +1,000 for a win, −1,000 for a loss (kp-policy.json). Team deathmatch keeps its small rate.
+ * - teamBonus (kp-policy.json) can add a chance bonus to listed modes; none are listed now.
  * - Every mode: luck (src/luck.ts) may double or triple it, wipe out a loss, or halve a gain / double a loss.
  * Every draw is fixed by the match and the player. Missing stats never cost anything. */
 export function valoKp(raw:Match,puuid:string,mode:string,outcome:string|null):{base:number;net:number;note:string}{
@@ -114,7 +115,7 @@ export function valoKp(raw:Match,puuid:string,mode:string,outcome:string|null):{
   const bottom=outcome==='loss'&&team.length===5&&scores.every(v=>Number.isSafeInteger(v)&&(v as number)>=0)&&subject?.stats?.score===Math.min(...scores as number[]);
   base=outcome==='win'?rates.win:outcome==='loss'?bottom?rates.bottom:rates.loss:0;
   const bonus=policy.teamBonus,top=kills.every(k=>Number.isSafeInteger(k))&&subject?.stats?.kills===Math.max(...kills as number[]);
-  if(bonus.modes.includes(mode)&&outcome==='win'&&top&&chance('team-bonus:'+id,bonus.chancePercent))base+=bonus.prize;
+  if((bonus.modes as string[]).includes(mode)&&outcome==='win'&&top&&chance('team-bonus:'+id,bonus.chancePercent))base+=bonus.prize;
  }
  const luck=luckFor('valo:'+id);
  return {base,net:applyLuck(base,luck),note:luckLabel(luck,base)};
