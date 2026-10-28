@@ -24,6 +24,7 @@ import { isDeathMode, isDeathNotice, sessionModeSQL } from './death-modes.ts';
 import { discordInteractions } from './discord-interactions.ts';
 import configuredPlayers from '../players.json' with { type: 'json' };
 import { resultMessage, groupNotification } from './results.ts';
+import { settleDebts } from './kp-debt.ts';
 import type { Match, Notice } from './results.ts';
 export { resultMessage } from './results.ts';
 
@@ -434,6 +435,8 @@ export default {
       // A very rare free horse for someone, drawn once per race slot and announced in the earnings channel.
       try{const gift=await maybeGiftHorse(env,mapping,openRaceStart(Date.now()));if(gift&&env.KP_EARNINGS_WEBHOOK_URL){await ensurePosts(env);await enqueue(env,'horse-gift:'+gift.horse.id,gift.text,Date.now());}}catch{console.warn('horse_gift_pending');}
       try{await settleKpRaces(env,mapping);}catch{console.warn('race_settlement_pending');}
+      // 借KP: repay from what came in, then this hour's interest.
+      try{await settleDebts(env,mapping.guildId);}catch{console.warn('debt_settlement_pending');}
       // Results are queued after settlement in the same run, then sent.
       let crowns:Awaited<ReturnType<typeof scheduleCrowns>>=[];
       try{crowns=await scheduleCrowns(env,mapping);}catch{console.warn('crown_schedule_pending');}

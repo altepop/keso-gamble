@@ -11,6 +11,7 @@ import type {KpEnv,KpMapping} from './kp.ts';
 import {flushMahjongPosts} from './mahjong.ts';
 import type {MahjongEnv} from './mahjong.ts';
 import {enqueue,ensurePosts} from './racing-posts.ts';
+import {borrowShortfall,borrowedBy,debtNote,ensureDebt} from './kp-debt.ts';
 
 export interface UniteEnv extends KpEnv {DISCORD_WEBHOOK_URL?:string;KP_EARNINGS_WEBHOOK_URL?:string}
 export interface UniteMatch {win:boolean;surrendered:boolean;map:string;party:string;pokemon:string;level:number;ours:number;theirs:number;ko:number;ast:number;int:number;dmg:string;tkn:string;heal:string}
@@ -79,7 +80,7 @@ export function unitePost(name:string,uid:string,m:UniteMatch,kp:number,note='')
   `-# ${clean(ja.pokemon)} Lv${m.level}・${clean(ja.map)}・${clean(ja.party)}`,
   `スコア ${m.ours} vs ${m.theirs}｜KO ${m.ko}・アシスト ${m.ast}・妨害 ${m.int}｜与ダメ ${clean(m.dmg)}・被ダメ ${clean(m.tkn)}・回復 ${clean(m.heal)}`,
   ...lines.map(l=>`🗯️ ${l.replaceAll('{pokemon}',clean(ja.pokemon)).replaceAll('{boss}',clean(ja.boss))}`),
-  ...kp||note?[`${kp>0?'✅':kp<0?'💸':'🍀'} ${kp>0?'+':kp<0?'−':'±'}${Math.abs(kp).toLocaleString('ja-JP')} KP${note}`]:[],
+  ...kp||note?[`${kp>0?'✅':kp<0||note.includes('借KP')?'💸':'🍀'} ${kp>0?'+':kp<0?'−':'±'}${Math.abs(kp).toLocaleString('ja-JP')} KP${note}`]:[],
   `戦績：<${PROFILE}${uid}>`].join('\n');
 }
 async function credit(env:UniteEnv,guild:string,user:string,id:string,win:boolean,now:number,seed:string){
@@ -91,6 +92,8 @@ async function credit(env:UniteEnv,guild:string,user:string,id:string,win:boolea
   env.DB.prepare(`INSERT OR IGNORE INTO kp_ledger(id,guild,user,delta,kind,at) SELECT ?,?,?,CASE WHEN ?>=0 THEN ? ELSE -MIN(?,balance) END,'unite',? FROM kp_wallets WHERE guild=? AND user=?`)
    .bind(id,guild,user,net,net,-net,now,guild,user),
  ]);
+ // What the wallet could not cover becomes 借KP.
+ if(net<0){await ensureDebt(env);await borrowShortfall(env,id,-net).run();}
  return Number((await env.DB.prepare('SELECT delta FROM kp_ledger WHERE id=?').bind(id).first<{delta:number}>())?.delta??0);
 }
 /** One profile per call: the linked member checked longest ago, if two minutes have passed. */
@@ -118,7 +121,7 @@ export async function monitorUnite(env:UniteEnv,now=Date.now(),request:typeof fe
  await env.DB.prepare('UPDATE unite_links SET name=?,seen=?,error=NULL WHERE guild=? AND user=?').bind(page.name,JSON.stringify([...new Set([...keys,...seen??[]])].slice(0,20)),link.guild,link.user).run();
  for(const m of fresh){
   const id='unite:'+link.uid+':'+hash(matchKey(m)).toString(36)+':'+now.toString(36);
-  const seed=link.uid+':'+matchKey(m),kp=await credit(env,link.guild,link.user,id,m.win,now,seed),note=luckLabel(luckFor('unite:'+seed),m.win?UNITE_WIN:-UNITE_LOSS);
+  const seed=link.uid+':'+matchKey(m),kp=await credit(env,link.guild,link.user,id,m.win,now,seed),note=luckLabel(luckFor('unite:'+seed),m.win?UNITE_WIN:-UNITE_LOSS)+debtNote(await borrowedBy(env,id));
   await env.DB.prepare('INSERT OR IGNORE INTO mahjong_watch_posts(id,body,at) VALUES(?,?,?)').bind(id,JSON.stringify({content:unitePost(page.name,link.uid,m,kp,note),allowed_mentions:{parse:[]}}),now).run();
   if(env.KP_EARNINGS_WEBHOOK_URL&&kp){await ensurePosts(env);await enqueue(env,'kp-'+id,`🎮 <@${link.user}> ユナイト ランクマ${m.win?'勝利':'敗北'} ${kp>0?'+':'−'}${Math.abs(kp).toLocaleString('ja-JP')} KP`,now);}
  }

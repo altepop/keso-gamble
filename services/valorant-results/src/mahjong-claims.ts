@@ -6,6 +6,7 @@ import {initializeKp,newKpState} from './kp.ts';
 import type {KpEnv,KpMapping} from './kp.ts';
 import {ensureQuizKp} from './quiz-kp.ts';
 import type {PaipuSummary} from './mahjong-summary.ts';
+import {borrowedBy,debtNote,ensureDebt} from './kp-debt.ts';
 type Game=keyof typeof policy.games;
 interface Claim {id:string;user:string;paipu:string;link:string;game:Game;rank:number;amount:number;status:'pending'|'approved'|'rejected';decider:string|null;at:number}
 interface PaifuInteraction {id:string;guild_id?:string;member?:{user?:{id:string}};data?:{name?:string;custom_id?:string;options?:Array<{name:string;value?:unknown}>}}
@@ -48,6 +49,7 @@ export function paifuRequest(interaction:PaifuInteraction,now:number){
 const initialized=new WeakSet<object>();
 export async function ensureMahjongClaims(env:KpEnv){
  if(initialized.has(env.DB))return;
+ await ensureDebt(env);
  await env.DB.batch([
   env.DB.prepare(`CREATE TABLE IF NOT EXISTS kp_mahjong_claims(id TEXT PRIMARY KEY,guild TEXT NOT NULL,user TEXT NOT NULL,paipu TEXT NOT NULL,link TEXT NOT NULL,game TEXT NOT NULL,rank INTEGER NOT NULL,amount INTEGER NOT NULL CHECK(typeof(amount)='integer' AND amount>=0),day TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN('pending','approved','rejected')),decider TEXT,at INTEGER NOT NULL,decided_at INTEGER)`),
   // A rejected claim can be filed again with the correct rank; a live one blocks duplicates.
@@ -60,6 +62,8 @@ export async function ensureMahjongClaims(env:KpEnv){
   // v2: last place is a penalty, capped at the balance (wallets cannot go below zero).
   env.DB.prepare('DROP TRIGGER IF EXISTS kp_mahjong_apply'),
   env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS kp_mahjong_apply_v2 AFTER UPDATE OF status ON kp_mahjong_claims WHEN OLD.status='pending' AND NEW.status='approved' BEGIN INSERT INTO kp_ledger(id,guild,user,delta,kind,at) VALUES('mahjong:'||NEW.id,NEW.guild,NEW.user,CASE WHEN NEW.rank=CAST(substr(NEW.game,1,1) AS INTEGER) THEN -MIN(NEW.amount,(SELECT balance FROM kp_wallets WHERE guild=NEW.guild AND user=NEW.user)) ELSE NEW.amount END,'mahjong',NEW.decided_at); END`),
+  // Last place the wallet could not cover becomes 借KP (claims approved before this existed are not touched).
+  env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS kp_mahjong_debt AFTER INSERT ON kp_ledger WHEN NEW.kind='mahjong' AND NEW.delta<=0 BEGIN INSERT OR IGNORE INTO kp_debt_events(id,guild,user,amount,kind,at) SELECT 'borrow:'||NEW.id,NEW.guild,NEW.user,c.amount+NEW.delta,'borrow',NEW.at FROM kp_mahjong_claims c WHERE 'mahjong:'||c.id=NEW.id AND c.rank=CAST(substr(c.game,1,1) AS INTEGER) AND c.amount+NEW.delta>0; END`),
  ]);initialized.add(env.DB);
 }
 export function renderClaim(c:Claim,now:number):PaifuReply{
@@ -150,7 +154,7 @@ export async function settleClaim(env:KpEnv,guild:string,c:Pick<Claim,'id'|'user
  if('refuse' in check)return `⚠️ <@${c.user}> の${c.rank}位申請：${check.refuse}`;
  if(check.auto){
   const done=await env.DB.prepare(`UPDATE kp_mahjong_claims SET status='approved',decider='paipu',decided_at=?,game=?,amount=? WHERE guild=? AND id=? AND status='pending'`).bind(now,check.game,check.amount,guild,c.id).run();
-  return done.meta.changes?`✅ <@${c.user}> ${c.rank}位を牌譜で確認。${signed(await paid(env,c.id))}`:null;
+  return done.meta.changes?`✅ <@${c.user}> ${c.rank}位を牌譜で確認。${signed(await paid(env,c.id))}${debtNote(await borrowedBy(env,'mahjong:'+c.id))}`:null;
  }
  await env.DB.prepare(`UPDATE kp_mahjong_claims SET game=?,amount=? WHERE guild=? AND id=? AND status='pending'`).bind(check.game,check.amount,guild,c.id).run();
  return `🔎 <@${c.user}> の${c.rank}位は牌譜では「${check.nickname.replace(/[@`*_~<>|#\\\[\]()\r\n]/g,'').slice(0,16)}」。初回なので他のメンバーの承認を待っています（承認後は自動確認）。`;
@@ -173,7 +177,7 @@ export async function autoCredit(env:KpEnv,guild:string,summary:PaipuSummary,now
     .bind(id,guild,link.user,summary.uuid,'https://game.mahjongsoul.com/index.html?paipu='+summary.uuid,game,seat.rank,amount,jstDay(summary.end||now),now),
   ]);
   const done=await env.DB.prepare(`UPDATE kp_mahjong_claims SET status='approved',decider='paipu',decided_at=? WHERE guild=? AND id=? AND status='pending'`).bind(now,guild,id).run();
-  if(done.meta.changes){const moved=await paid(env,id);lines.push(`${moved<0||stake(game,seat.rank)<0?'💸':'✅'} <@${link.user}> ${seat.rank}位 ${signed(moved)}（牌譜から自動）${note}`);}
+  if(done.meta.changes){const moved=await paid(env,id);lines.push(`${moved<0||stake(game,seat.rank)<0?'💸':'✅'} <@${link.user}> ${seat.rank}位 ${signed(moved)}（牌譜から自動）${note}${debtNote(await borrowedBy(env,'mahjong:'+id))}`);}
  }
  return lines;
 }

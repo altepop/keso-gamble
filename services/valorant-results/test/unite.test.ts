@@ -73,10 +73,13 @@ test('a private profile or a failed read is recorded and posts nothing',async()=
  await monitorUnite(f.env,T0,f.request,mapping);
  assert.equal(f.sql.prepare('SELECT error FROM unite_links').get()!.error,'private_profile');assert.equal(f.sent.length,0);
 });
-test('a loss with nothing in the wallet takes nothing',async()=>{
+test('a loss with nothing in the wallet takes nothing from it and owes the loss as 借KP',async()=>{
  const f=await fixture();await link(f,cat,UID);await monitorUnite(f.env,T0,f.request,mapping);
  f.set(page([card({win:false}),card()]));await monitorUnite(f.env,T0+3*60_000,f.request,mapping);
- assert.equal(f.balance(cat),0);assert.equal(f.sent.length,1);assert.doesNotMatch(f.sent[0],/KP\n/,'no KP line when nothing moved');
+ assert.equal(f.balance(cat),0);assert.equal(f.sent.length,1);
+ const owed=Number(f.sql.prepare('SELECT amount FROM kp_debts WHERE user=?').get(cat)?.amount??0);
+ assert.ok([0,UNITE_LOSS,UNITE_LOSS*2].includes(owed),String(owed));
+ if(owed)assert.match(f.sent[0],new RegExp(`💸 ±0 KP.*借KP \\+${owed}`));
 });
 test('every roast list is distinct, and a loss post never repeats a line',()=>{
  const v=JSON.parse(readFileSync(new NodeURL('../unite-voice.json',import.meta.url),'utf8'));

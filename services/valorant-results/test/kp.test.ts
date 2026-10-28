@@ -283,7 +283,7 @@ test('monitor records the agent of each new result for mastery, once',async()=>{
  }finally{globalThis.fetch=original;}
 });
 
-test('a loss costs a little and the bottom of a full team more, capped at the balance; ties count, gaps do not',async()=>{
+test('a loss costs a little and the bottom of a full team more, capped at the balance (the rest is 借KP); ties count, gaps do not',async()=>{
  const f=await fixture();f.enableHistory();
  const team=(id:string,scores:Array<number|undefined>,win=false,queue='competitive')=>{const raw=game(id,queue,win) as ReturnType<typeof game>&{players:Array<{puuid:string;team_id:string;stats?:{score?:number}}>};
   raw.players=scores.map((score,i)=>({puuid:i?'mate-'+i:'p-one',team_id:'red',stats:score===undefined?{}:{score}}));return raw;};
@@ -302,6 +302,9 @@ test('a loss costs a little and the bottom of a full team more, capped at the ba
  f.sql.prepare("INSERT INTO kp_ledger VALUES('drain',?,?,?,'test-only',0)").run(guild,one,-cash);
  assert.equal(await collectKpMatch(f.env,mapping,team('broke',[1000,3000,4000,5000,6000]),'p-one'),0,'nothing to take from an empty wallet');
  assert.equal((await readKpState(f.env,mapping,one)).cash,0);
+ assert.equal((await readKpState(f.env,mapping,one)).debt.amount,300,'what the wallet could not cover becomes 借KP');
+ assert.equal(await collectKpMatch(f.env,mapping,team('broke',[1000,3000,4000,5000,6000]),'p-one'),0);
+ assert.equal((await readKpState(f.env,mapping,one)).debt.amount,300,'a replay does not owe twice');
 });
 test('the match line shows the net KP, negative included, and a rewrite replaces it',()=>{
  assert.match(kpCreditLine('結果',-300),/🪙 この試合 −300 KP/);

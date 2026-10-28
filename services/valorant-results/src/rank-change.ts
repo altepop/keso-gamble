@@ -1,6 +1,7 @@
 // Competitive rank changes. After a new competitive result, the player's MMR history (Henrik) tells the tier
 // before and after that match. A demotion is roasted hard and costs 500 KP; a promotion is praised and earns 100 KP.
 import type {KpEnv,KpMapping} from './kp.ts';
+import {borrowShortfall,ensureDebt} from './kp-debt.ts';
 
 export interface RankChange {before:number;after:number}
 export const RANK_DOWN_KP=500,RANK_UP_KP=100;
@@ -61,7 +62,7 @@ export function rankChangeBlock(change:RankChange,key:string){
  return down?`\n🔻 **降格** ${tierName(change.before)} → ${tierName(change.after)}（−${RANK_DOWN_KP} KP）\n`+lines.map(l=>'💀 '+l).join('\n')
   :`\n🔺 **昇格** ${tierName(change.before)} → ${tierName(change.after)}（+${RANK_UP_KP} KP）\n`+lines.map(l=>'🎉 '+l).join('\n');
 }
-/** One ledger row per match and player: a demotion takes up to the balance, a promotion pays a bonus. */
+/** One ledger row per match and player: a demotion takes up to the balance (the rest is 借KP), a promotion pays a bonus. */
 export async function settleRankChange(env:KpEnv,mapping:KpMapping,user:string,change:RankChange,matchId:string,puuid:string,now:number){
  if(change.after===change.before)return;
  const down=change.after<change.before;
@@ -70,4 +71,6 @@ export async function settleRankChange(env:KpEnv,mapping:KpMapping,user:string,c
   env.DB.prepare(`INSERT OR IGNORE INTO kp_ledger(id,guild,user,delta,kind,at) SELECT ?,?,?,${down?'-MIN(?,balance)':'?'},'match',? FROM kp_wallets WHERE guild=? AND user=?`)
    .bind((down?'rank-down:':'rank-up:')+matchId+':'+puuid,mapping.guildId,user,down?RANK_DOWN_KP:RANK_UP_KP,now,mapping.guildId,user),
  ]);
+ // What the wallet could not cover becomes 借KP.
+ if(down){await ensureDebt(env);await borrowShortfall(env,'rank-down:'+matchId+':'+puuid,RANK_DOWN_KP).run();}
 }
