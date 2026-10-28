@@ -119,8 +119,9 @@ export async function discordInteractions(request: Request, env: Env, ctx: Execu
   try { permissions = BigInt(interaction.member?.permissions ?? '0'); } catch { /* Deny invalid permission fields. */ }
   const deathSelect = interaction.type === 3 && /^death_mode:\d+$/.test(interaction.data?.custom_id ?? '');
   const paifuButton = interaction.type === 3 && PAIFU_BUTTON.test(interaction.data?.custom_id ?? '');
+  if (interaction.data?.name === 'kpgrant' && !(permissions & (8n | 32n))) return respond('KPの付与・回収には「管理者」または「サーバー管理」権限が必要です。');
   if ((interaction.data?.name === 'death' || deathSelect) && !(permissions & (8n | 32n))) return respond('開始・終了・状態確認には「管理者」または「サーバー管理」権限が必要です。');
-  if (!deathSelect && !paifuButton && (interaction.type !== 2 || !['death', 'valo', 'kp', 'keiba', 'bet', 'paifu', 'mleague', 'mbet', 'mclose'].includes(interaction.data?.name ?? ''))) return respond('対応していないコマンドです。');
+  if (!deathSelect && !paifuButton && (interaction.type !== 2 || !['death', 'valo', 'kp', 'keiba', 'bet', 'paifu', 'mleague', 'mbet', 'mclose', 'kpgrant'].includes(interaction.data?.name ?? ''))) return respond('対応していないコマンドです。');
   if (!/^\d+$/.test(interaction.id) || typeof interaction.token !== 'string' || !interaction.token.length || interaction.token.length > 4096) return new Response('Invalid interaction', { status: 400 });
   // A malformed paipu claim is answered privately before the public deferred reply is opened.
   if (interaction.data?.name === 'paifu' && interaction.type === 2) {
@@ -147,7 +148,7 @@ export async function discordInteractions(request: Request, env: Env, ctx: Execu
       else if (deathSelect) result = { content: await selectDeathMode(env.DB, interaction, configuredPlayers, runDeathCommand), components: [] };
       else if (interaction.data?.name === 'death' && interaction.data.options?.[0]?.name === 'start'
         && !interaction.data.options[0].options?.some(option => option.name === 'mode')) result = await deathModePicker(env.DB, interaction, configuredPlayers);
-      else if (['kp','keiba','bet','mleague','mbet','mclose'].includes(interaction.data?.name??'')) result = {content:await runKpCommand(env,interaction)};
+      else if (['kp','keiba','bet','mleague','mbet','mclose','kpgrant'].includes(interaction.data?.name??'')) result = {content:await runKpCommand(env,interaction)};
       else result = { content: interaction.data!.name === 'valo' ? await runValoCommand(env.DB, interaction) : await runDeathCommand(env.DB, interaction) };
     } catch {
       console.warn('discord_command_failed');

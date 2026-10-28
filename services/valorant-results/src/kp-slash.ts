@@ -45,7 +45,7 @@ async function mleagueView(env:KpEnv,now:number){
 export async function runKpCommand(env:KpEnv,interaction:Slash,override?:KpMapping):Promise<string>{
  const mapping=await initializeKp(env,override),user=interaction.member?.user?.id;
  if(!mapping||interaction.guild_id!==mapping.guildId||!user||!/^\d{15,22}$/.test(user))return 'このサーバーの本人の口座で利用してください。';
- const command=interaction.data?.name;if(!['kp','keiba','bet','mleague','mbet','mclose'].includes(command??''))return '対応していないコマンドです。';
+ const command=interaction.data?.name;if(!['kp','keiba','bet','mleague','mbet','mclose','kpgrant'].includes(command??''))return '対応していないコマンドです。';
  if(isKpRanking(interaction)){
   // A single server-side snapshot: current spendable KP, not stocks or lifetime earnings.
   const rows=(await env.DB.prepare('SELECT user,balance,RANK() OVER(ORDER BY balance DESC) AS rank,COUNT(*) OVER() AS total FROM kp_wallets WHERE guild=? ORDER BY balance DESC,user ASC LIMIT 10').bind(mapping.guildId).all<{user:string;balance:number;rank:number;total:number}>()).results;
@@ -62,10 +62,29 @@ export async function runKpCommand(env:KpEnv,interaction:Slash,override?:KpMappi
  const balance=async()=>Number((await env.DB.prepare('SELECT balance FROM kp_wallets WHERE guild=? AND user=?').bind(mapping.guildId,user).first<{balance:number}>())?.balance??0);
  if(command==='kp'){
   const rows=(await env.DB.prepare('SELECT delta,kind,at FROM kp_ledger WHERE guild=? AND user=? ORDER BY at DESC,id DESC LIMIT 5').bind(mapping.guildId,user).all<{delta:number;kind:string;at:number}>()).results;
-  const kinds:Record<string,string>={voice:'通話',quiz:'QUIZ',match:'試合',operation:'購入・取引',prize:'競馬賞金',mahjong:'雀魂'};
+  const kinds:Record<string,string>={voice:'通話',quiz:'QUIZ',match:'試合',operation:'購入・取引',prize:'競馬賞金',mahjong:'雀魂',grant:'手動調整'};
   return '🪙 あなたの残高：**'+money(await balance())+'**\n'+(rows.length?'最近の入出金\n'+rows.map(r=>`${clock(r.at)} ${kinds[r.kind]??'口座'} ${r.delta>=0?'+':''}${money(r.delta)}`).join('\n'):'まだ入出金はありません。通話やQUIZで貯められます。')+'\n/keiba で出走表、/bet で馬券を買えます。';
  }
  if(command==='mleague')return mleagueView(env,Date.now());
+ if(command==='kpgrant'){
+  // Admin-only (checked before deferring). One ledger row per interaction, so a retried delivery
+  // cannot pay twice; a negative amount takes no more than the balance (wallets cannot go below 0).
+  const value=(key:string)=>interaction.data?.options?.find(o=>o.name===key)?.value;
+  const target=String(value('user')??''),amount=Number(value('amount')),reason=clean(String(value('reason')??'').trim()).slice(0,60);
+  if(!/^\d{15,22}$/.test(target)||!Number.isSafeInteger(amount)||!amount||Math.abs(amount)>100000||!reason)return '相手・0以外のKP（±10万まで）・理由を指定してください。';
+  await env.DB.batch([
+   env.DB.prepare('INSERT OR IGNORE INTO kp_participants(guild,user) VALUES(?,?)').bind(mapping.guildId,target),
+   env.DB.prepare('INSERT OR IGNORE INTO kp_wallets(guild,user) VALUES(?,?)').bind(mapping.guildId,target),
+   env.DB.prepare('INSERT OR IGNORE INTO kp_state(guild,user,data) VALUES(?,?,?)').bind(mapping.guildId,target,JSON.stringify(newKpState())),
+   env.DB.prepare(`INSERT OR IGNORE INTO kp_ledger(id,guild,user,delta,kind,at) SELECT ?,?,?,CASE WHEN ?<0 THEN -MIN(-?,balance) ELSE ? END,'grant',? FROM kp_wallets WHERE guild=? AND user=?`)
+    .bind('grant:'+interaction.id,mapping.guildId,target,amount,amount,amount,created(interaction.id),mapping.guildId,target),
+  ]);
+  const row=await env.DB.prepare('SELECT delta FROM kp_ledger WHERE id=?').bind('grant:'+interaction.id).first<{delta:number}>();
+  const moved=Number(row?.delta??0),signed=(moved<0?'−':'+')+money(Math.abs(moved));
+  const after=Number((await env.DB.prepare('SELECT balance FROM kp_wallets WHERE guild=? AND user=?').bind(mapping.guildId,target).first<{balance:number}>())?.balance??0);
+  if((env as {KP_EARNINGS_WEBHOOK_URL?:string}).KP_EARNINGS_WEBHOOK_URL){await ensurePosts(env);await enqueue(env,'kp-grant:'+interaction.id,`🎁 <@${target}> に ${signed}（${reason}）`,created(interaction.id));}
+  return `🎁 <@${target}> に ${signed}（${reason}）。残高 ${money(after)}`;
+ }
  if(command==='mclose'){
   const value=(key:string)=>interaction.data?.options?.find(o=>o.name===key)?.value;
   const now=created(interaction.id),day=mlDay(now),code=/^([12])-([12])$/.exec(String(value('match')??''));
