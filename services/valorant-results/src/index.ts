@@ -8,7 +8,7 @@ import { initializeKp, syncKpAccounts, collectKpMatch, drainKpInbox, flushKpDire
 import { kpApi } from './kp-api.ts';
 import { settleKpRaces } from './racing-kp.ts';
 import { queueRacePosts, flushRacePosts } from './racing-posts.ts';
-import { pollMlResults, refreshMlCards, settleMl, queueMlPosts } from './mleague.ts';
+import { pollMlLineups, pollMlResults, refreshMlCards, settleMl, queueMlPosts } from './mleague.ts';
 import { scheduleCrowns } from './racing-crowns.ts';
 import { decideEntries, settleHorsePrizes } from './racing-horses.ts';
 import { recordMastery } from './mastery.ts';
@@ -394,7 +394,7 @@ export default {
       let crowns:Awaited<ReturnType<typeof scheduleCrowns>>=[];
       try{crowns=await scheduleCrowns(env,mapping);}catch{console.warn('crown_schedule_pending');}
       // M.LEAGUE: official results, then settlement, then posts (flushed together with the racing ones).
-      try{await refreshMlCards(env);await pollMlResults(env);await settleMl(env,mapping);await queueMlPosts(env,mapping);}catch{console.warn('mleague_pending');}
+      try{await refreshMlCards(env);await pollMlLineups(env,mapping);await pollMlResults(env);await settleMl(env,mapping);await queueMlPosts(env,mapping);}catch{console.warn('mleague_pending');}
       try{await queueRacePosts(env,mapping,Date.now(),crowns);await flushRacePosts(env);}catch{console.warn('earnings_post_pending');}
     })().catch(()=>console.warn('race_settlement_pending')));
   },

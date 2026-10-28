@@ -18,7 +18,8 @@ test('the data covers ten teams of four, and every fixture seats four known team
 
 test('game 1 closes at 19:00; game 2 when game 1\'s result is in, or at midnight', () => {
  const none=new Map();
- assert.equal(mlOpen(data,game1,jst('2026-10-26T18:59:00'),none),false,'opens 24 hours before');
+ assert.equal(mlOpen(data,game1,jst('2026-10-26T23:59:00'),none),false,'opens at midnight on the match day');
+ assert.equal(mlOpen(data,game1,jst('2026-10-27T00:00:00'),none),true);
  assert.equal(mlOpen(data,game1,jst('2026-10-27T18:59:59'),none),true);
  assert.equal(mlOpen(data,game1,jst('2026-10-27T19:00:00'),none),false);
  assert.equal(mlOpen(data,game2,jst('2026-10-27T20:30:00'),none),true,'bet on game 2 while watching game 1');

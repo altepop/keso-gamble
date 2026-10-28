@@ -29,6 +29,8 @@ export async function ensureMl(env:KpEnv){
   env.DB.prepare('CREATE TABLE IF NOT EXISTS ml_state(key TEXT PRIMARY KEY,value TEXT NOT NULL)'),
   // The official matchups per date and table (the copied fixture list has mistakes).
   // A member's word that a game has started (/mclose): betting stops, and later bets are refunded.
+  // The four who sat, read a few minutes after the start from キンマweb's live-text articles.
+  env.DB.prepare('CREATE TABLE IF NOT EXISTS ml_lineups(match TEXT PRIMARY KEY,names TEXT NOT NULL,at INTEGER NOT NULL)'),
   env.DB.prepare('CREATE TABLE IF NOT EXISTS ml_closed(match TEXT PRIMARY KEY,at INTEGER NOT NULL,user TEXT NOT NULL,created INTEGER NOT NULL)'),
   env.DB.prepare('CREATE TABLE IF NOT EXISTS ml_cards(date TEXT NOT NULL,tbl INTEGER NOT NULL,teams TEXT NOT NULL,at INTEGER NOT NULL,PRIMARY KEY(date,tbl))'),
  ]);initialized.add(env.DB);
@@ -146,6 +148,58 @@ export async function pollMlResults(env:KpEnv,now=Date.now(),request:typeof fetc
   }
  }
  return saved;
+}
+/** The four players of each game, from キンマweb (近代麻雀) live-text article titles such as
+ * 「【Mリーグ2026-27 レギュラーシーズン】10月27日 第1試合（麻雀ch）【永井孝典・黒沢咲・岡田紗佳・醍醐大】テキスト速報」.
+ * Only an announcement: settlement still uses the official results. */
+export const KINMA_FEED='https://kinmaweb.jp/?s=%E3%83%86%E3%82%AD%E3%82%B9%E3%83%88%E9%80%9F%E5%A0%B1&feed=rss2';
+export function parseKinmaLineups(xml:string){
+ const out:Array<{date:string;game:number;names:string[]}>=[];
+ for(const item of xml.split('<item>').slice(1)){
+  const title=/<title>([\s\S]*?)<\/title>/.exec(item)?.[1]??'',published=Date.parse(/<pubDate>([^<]+)<\/pubDate>/.exec(item)?.[1]??'');
+  const m=/Mリーグ[^】]*レギュラーシーズン】\s*(\d{1,2})月(\d{1,2})日\s*第([12])試合[^【]*【([^】]+)】\s*テキスト速報/.exec(title);
+  if(!m||!Number.isFinite(published))continue;
+  const year=new Date(published+9*3600000).getUTCFullYear()-(Number(m[1])===12&&new Date(published+9*3600000).getUTCMonth()===0?1:0);
+  const names=m[4].split('・').map(n=>n.trim());
+  if(names.length!==4)continue;
+  out.push({date:`${year}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}`,game:Number(m[3]),names});
+ }
+ return out;
+}
+export async function mlLineups(env:KpEnv){
+ await ensureMl(env);
+ return new Map((await env.DB.prepare('SELECT match,names FROM ml_lineups').all<{match:string;names:string}>()).results.map(r=>[r.match,JSON.parse(r.names) as string[]]));
+}
+/** While a started game (within five hours) has neither its four players nor a result, reads the
+ * feed every two minutes, stores exact matches and announces them with the predictions on that game. */
+export async function pollMlLineups(env:PostEnv,mapping:KpMapping,now=Date.now(),request:typeof fetch=fetch){
+ await ensureMl(env);
+ const known=await mlLineups(env),results=await mlResults(env),d=await mlData(env);
+ const awaited=d.fixtures.filter(f=>f.confirmed&&mlStart(f)<=now&&now<mlStart(f)+5*3600000&&!known.has(f.id)&&!results.has(f.id));
+ if(!awaited.length)return 0;
+ const next=await env.DB.prepare("SELECT value FROM ml_state WHERE key='next_lineups'").first<{value:string}>();
+ if(Number(next?.value??0)>now)return 0;
+ await env.DB.prepare("INSERT INTO ml_state(key,value) VALUES('next_lineups',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").bind(String(now+2*60000)).run();
+ const response=await request(KINMA_FEED,{headers:{'User-Agent':'KESO PLAY lineup (private Discord bot)'},signal:AbortSignal.timeout(15000)});
+ if(!response.ok){console.warn('mleague_lineup_pending',{status:response.status});return 0;}
+ let saved=0;
+ for(const l of parseKinmaLineups(await response.text())){
+  const fixture=matchFixture(l,d);if(!fixture||!awaited.some(f=>f.id===fixture.id))continue;
+  const done=await env.DB.prepare('INSERT OR IGNORE INTO ml_lineups(match,names,at) VALUES(?,?,?)').bind(fixture.id,JSON.stringify(l.names),now).run();
+  if(!done.meta.changes)continue;
+  saved++;
+  if(earningsWebhook(env)){await ensurePosts(env);await enqueue(env,'ml-lineup:'+fixture.id,lineupPost(fixture,l.names,await betsOn(env,mapping.guildId,fixture.id)),now);}
+ }
+ return saved;
+}
+export function lineupPost(f:Fixture,names:string[],bets:Array<MlBet&{user:string}>){
+ const team=(n:string)=>data.teams.find(t=>t.players.some(p=>p.name===n))?.name??'';
+ const lines=[`🀄 **${clock(f)} ${f.table}卓 第${f.game}試合 出場決定**`,names.map(n=>`${clean(n)}（${clean(team(n))}）`).join('・')];
+ for(const b of bets.filter(x=>x.status==='pending')){
+  const what=`${clean(b.player)}の${ML_TYPES[b.type].label} ${money(b.amount)}`;
+  lines.push(names.includes(b.player)?`🎯 <@${b.user}> ${what}（${(b.odds/10).toFixed(1)}倍）`:`↩️ <@${b.user}> ${what}：出場しないので返金予定`);
+ }
+ return lines.join('\n');
 }
 /** Settles every user's pending predictions that now have an official result (same guarded write as racing). */
 export async function settleMl(env:KpEnv,mapping:KpMapping,now=Date.now()){
