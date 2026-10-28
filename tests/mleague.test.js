@@ -16,14 +16,15 @@ test('the data covers ten teams of four, and every fixture seats four known team
  assert.equal(mlCard(data,game1).length,16);
 });
 
-test('game 1 closes at 19:00; game 2 at the first result or 21:00, whichever is first', () => {
+test('game 1 closes at 19:00; game 2 when game 1\'s result is in, or at midnight', () => {
  const none=new Map();
  assert.equal(mlOpen(data,game1,jst('2026-10-26T18:59:00'),none),false,'opens 24 hours before');
  assert.equal(mlOpen(data,game1,jst('2026-10-27T18:59:59'),none),true);
  assert.equal(mlOpen(data,game1,jst('2026-10-27T19:00:00'),none),false);
  assert.equal(mlOpen(data,game2,jst('2026-10-27T20:30:00'),none),true,'bet on game 2 while watching game 1');
  assert.equal(mlOpen(data,game2,jst('2026-10-27T20:30:00'),new Map([[game1.id,{names:[]}]])),false,'game 1 is over');
- assert.equal(mlOpen(data,game2,jst('2026-10-27T21:00:00'),none),false,'a late official update cannot keep it open');
+ assert.equal(mlOpen(data,game2,jst('2026-10-27T22:30:00'),none),true,'no fixed cutoff while game 1 runs long');
+ assert.equal(mlOpen(data,game2,jst('2026-10-28T00:00:00'),none),false,'a result that never arrives cannot keep it open overnight');
 });
 
 test('odds come from past tops and lasts, shrunk toward one in four; a rookie is 4.0x', () => {

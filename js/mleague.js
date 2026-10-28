@@ -5,7 +5,7 @@ import {WEEKLY_LIMIT,MIN_BET,BET_STEP,oddsFromProbability,payoutFor,weekStart} f
 
 export const ML_TYPES={top:{label:'トップ'},last:{label:'ラス'}};
 /** Every table starts at 19:00 JST (both tables on two-table days, per the owner). */
-export const ML_START='19:00',ML_GAME2_CAP='21:00';
+export const ML_START='19:00';
 /** Prior strength: rates shrink toward 1 in 4 by this many virtual games, so a rookie is 4.0x. */
 export const ML_PRIOR_GAMES=20;
 const at=(date,time)=>Date.parse(`${date}T${time}:00+09:00`);
@@ -13,14 +13,15 @@ const validInt=(v,min=0)=>Number.isSafeInteger(v)&&v>=min;
 export const mlStart=fixture=>at(fixture.date,ML_START);
 /** The other game of the same table on the same day. */
 export const mlPartner=(data,fixture)=>data.fixtures.find(f=>f.date===fixture.date&&f.table===fixture.table&&f.game!==fixture.game);
-/** Game 1 closes at 19:00. Game 2 closes when game 1's official result is in, or at 21:00 at the latest,
- * so nobody bets while game 2 is being played. Betting opens 24 hours before the start. */
+/** Game 1 closes at 19:00. Game 2 closes when game 1's official result is in (no fixed time, per the
+ * owner), and in any case when the day ends, so a result that never arrives cannot keep it open until
+ * the next morning. Betting opens 24 hours before the start. */
 export function mlOpen(data,fixture,now,results){
  const start=mlStart(fixture);
  if(now<start-86400000)return false;
  if(fixture.game===1)return now<start;
  const first=mlPartner(data,fixture);
- return now<at(fixture.date,ML_GAME2_CAP)&&!(first&&results.has(first.id));
+ return now<at(fixture.date,'00:00')+86400000&&!(first&&results.has(first.id));
 }
 /** The 16 players who may sit at this table, numbered team by team. */
 export function mlCard(data,fixture){
