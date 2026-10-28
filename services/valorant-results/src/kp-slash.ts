@@ -21,10 +21,10 @@ export function slashRace(time:unknown,id:string){
  return today+86400000===openRaceStart(created)?today+86400000:today;
 }
 const jstDate=(at:number)=>new Date(at+9*3600000).toISOString().slice(0,10);
-/** The match day /mleague and /mbet talk about: today until its last game closes (21:00), then the next one. */
+/** The match day /mleague and /mbet talk about: today (until midnight), otherwise the next one. */
 export function mlDay(now:number){
  const today=jstDate(now);
- return [...new Set(ML_DATA.fixtures.map(f=>f.date))].sort().find(d=>d>today||(d===today&&now<Date.parse(`${d}T21:00:00+09:00`)))??null;
+ return [...new Set(ML_DATA.fixtures.map(f=>f.date))].sort().find(d=>d>=today)??null;
 }
 const created=(id:string)=>Number((BigInt(id)>>22n)+1420070400000n);
 async function mleagueView(env:KpEnv,now:number){
@@ -37,7 +37,7 @@ async function mleagueView(env:KpEnv,now:number){
   lines.push(`\n**${table}卓**　${games.map(g=>`第${g.game}試合 ${all.has(g.id)?'終了':mlOpen(d,g,now,all)?'受付中':now<mlStart(g)-86400000?'前日19:00から':'締切'}`).join('／')}`);
   for(const p of mlCard(d,games[0])){const o=mlOdds(p,stats);lines.push(`${p.no}. ${clean(p.name)}（${clean(p.teamName)}）トップ ${(o.top/10).toFixed(1)}倍／ラス ${(o.last/10).toFixed(1)}倍`);}
  }
- lines.push('\n例：/mbet match:1-1 player:3 type:トップ amount:500','第1試合は19:00、第2試合は第1試合の結果が出るまで（遅くとも21:00）。出なかった選手は返金。');
+ lines.push('\n例：/mbet match:1-1 player:3 type:トップ amount:500','第1試合は19:00、第2試合は第1試合の結果が出るまで。出なかった選手は返金。');
  return lines.join('\n');
 }
 export async function runKpCommand(env:KpEnv,interaction:Slash,override?:KpMapping):Promise<string>{

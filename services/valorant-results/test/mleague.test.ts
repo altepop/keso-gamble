@@ -121,7 +121,7 @@ test('/mleague lists numbered players with odds; /mbet buys by table-game code a
  const before=await runKpCommand(f.env,{id:String((BigInt(Date.now())-1420070400000n)<<22n|9n),guild_id:guild,member:{user:{id:one}},data:{name:'mleague'}},mapping);
  assert.match(before,/公式の対戦カードを確認中/);
  await storeCards(f.env,parseOfficialCards(page,2026),Date.now());
- assert.equal(mlDay(jst('2026-10-27T18:00:00')),'2026-10-27');assert.equal(mlDay(jst('2026-10-27T21:00:00')),ML_DATA.fixtures.map(x=>x.date).sort().find(d=>d>'2026-10-27'));
+ assert.equal(mlDay(jst('2026-10-27T18:00:00')),'2026-10-27');assert.equal(mlDay(jst('2026-10-28T00:00:00')),ML_DATA.fixtures.map(x=>x.date).sort().find(d=>d>'2026-10-27'));
  const snowflake=String((BigInt(Date.now())-1420070400000n)<<22n|1n);
  const view=await runKpCommand(f.env,{id:snowflake,guild_id:guild,member:{user:{id:one}},data:{name:'mleague'}},mapping);
  assert.match(view,/1卓.*第1試合 受付中/);assert.match(view,new RegExp(`1\\. ${card[0].name}（.+）トップ \\d+\\.\\d倍／ラス \\d+\\.\\d倍`));
