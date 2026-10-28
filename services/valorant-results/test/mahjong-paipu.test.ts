@@ -180,3 +180,12 @@ test('third place is roasted harder than second: three distinct lines, two for m
  assert.equal(new Set(roast(third.seat,'full')).size,3);assert.ok(roast(third.seat,'mild').length<=2);
  assert.ok(roast(second.seat,'full').length<=2);
 });
+
+test('the paipu review ends with one intact source-checked quote that fits how the members finished', () => {
+ const memes=JSON.parse(readFileSync(new NodeURL('../meme-quotes.json',import.meta.url),'utf8')).quotes.map((q:{text:string})=>q.text);
+ for(const rank of [1,2,4]){
+  const seat=summary.seats.find(s=>s.rank===rank)!.seat;
+  const lines=paipuPost(summary,new Map([[seat,{user:one,name:'A'}]]),()=>'full').split('\n'),quotes=lines.filter(l=>l.startsWith('💬 '));
+  assert.equal(quotes.length,1);assert.ok(memes.includes(quotes[0].slice(3)),quotes[0]);assert.equal(lines.at(-1),quotes[0]);
+ }
+});
