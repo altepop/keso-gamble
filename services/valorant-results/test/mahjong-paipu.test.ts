@@ -55,10 +55,11 @@ test('a first claim is checked against the paipu, corrected to the real game, an
  assert.deepEqual({...row},{status:'pending',game:'4-hanchan',amount:300},'the paipu says hanchan, so the hanchan rate (last: −300) applies');
  const [post]=f.posts();
  assert.match(post,/雀魂 四麻 半荘/);
- assert.match(post,new RegExp(`🪦 4位　<@${one}>　-3,000（トビ）`));
- assert.match(post,new RegExp(`\\*\\*東1局\\*\\*　<@${one}>（立直中） → B に放銃　\\*\\*跳満 12,000点\\*\\*\\n-# 立直・一発・ドラ3・断幺九`));
+ assert.match(post,/🪦 4位　Aさん　-3,000（トビ）/);
+ assert.equal(post.split(`<@${one}>`).length-1,2,'tagged on the first-claim notice and their own block only');
+ assert.match(post,new RegExp(`\\*\\*東1局\\*\\*　Aさん（立直中） → B に放銃　\\*\\*跳満 12,000点\\*\\*\\n-# 立直・一発・ドラ3・断幺九`));
  assert.match(post,/\*\*東3局 1本場\*\*　D ツモ　\*\*役満 32,300点\*\*\n-# 国士無双/);
- assert.match(post,new RegExp(`🪦 \\*\\*4位\\*\\*　<@${one}>　-3,000\\n-# 和了 0回（ツモ0）・放銃 2回（14,000点）・立直 1回（和了0）`));
+ assert.match(post,new RegExp(`🪦 \\*\\*4位\\*\\*　Aさん（<@${one}>）　-3,000\\n-# 和了 0回（ツモ0）・放銃 2回（14,000点）・立直 1回（和了0）`));
  assert.match(post,/初回なので他のメンバーの承認を待っています/);
  assert.equal(post.split('\n').filter(l=>l.startsWith('🗯️')).length,2,'two roast lines from the facts');
  f.sql.prepare("INSERT INTO kp_ledger VALUES('seed-'||?,?,?,1000,'test',0)").run(one,guild,one);
@@ -77,7 +78,7 @@ test('once linked, a claim is confirmed by the paipu alone; a rank held by a lin
  const wrong=await f.claim(two,1,PAIPU.replace('cdef-','cde1-'));
  await f.call('/api/mahjong/paipu/summaries',{results:[{uuid:PAIPU,summary}]});
  assert.equal(f.balance(one),500,'1st in hanchan, credited without a button');
- assert.match(f.posts()[0],/✅ <@100000000000000101> 1位を牌譜で確認。\+500 KP/);
+ assert.match(f.posts()[0],/✅ B 1位を牌譜で確認。\+500 KP/);
  assert.equal(f.balance(two),0);
  // Two cannot claim B's seat on another paipu: account 22 is One's.
  await f.call('/api/mahjong/paipu/summaries',{results:[{uuid:PAIPU.replace('cdef-','cde1-'),summary:{...summary,uuid:PAIPU.replace('cdef-','cde1-')}}]});
@@ -144,8 +145,8 @@ test('linked members get KP from an automatically read game, once, without /paif
  f.sql.prepare('INSERT INTO mahjong_paipu_auto VALUES(?,?,?)').run(PAIPU,11,T0);
  await f.call('/api/mahjong/paipu/summaries',{results:[{uuid:PAIPU,summary}]});
  assert.equal(f.balance(one),0,'last place takes −300 but never more than the balance');
- assert.match(f.posts()[0],new RegExp(`💸 <@${one}> 4位 −100 KP（牌譜から自動）`));assert.equal(f.balance(two),500,'1st in hanchan');
- assert.match(f.posts()[0],new RegExp(`✅ <@${two}> 1位 \\+500 KP（牌譜から自動）`));
+ assert.match(f.posts()[0],/💸 Aさん 4位 −100 KP（牌譜から自動）/);assert.equal(f.posts()[0].split('<@').length-1,2,'one tag per linked member');assert.equal(f.balance(two),500,'1st in hanchan');
+ assert.match(f.posts()[0],/✅ B 1位 \+500 KP（牌譜から自動）/);
  assert.match((await f.claim(two,1)).content,/自動で付与済み/);
  await f.call('/api/mahjong/paipu/summaries',{results:[{uuid:PAIPU,summary}]});
  assert.equal(f.balance(two),500,'a repeated summary credits nothing');
