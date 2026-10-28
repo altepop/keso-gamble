@@ -7,7 +7,7 @@ import type {KpEnv,KpMapping} from './kp.ts';
 import {enqueue,ensurePosts,earningsWebhook} from './racing-posts.ts';
 import type {PostEnv} from './racing-posts.ts';
 // @ts-expect-error Shared browser engine.
-import {mlCard,mlOdds,mlStart,settleMlBets,hydrateMleague,ML_TYPES} from '../../../js/mleague.js';
+import {mlCard,mlLineup,mlOdds,mlOpen,mlStart,settleMlBets,hydrateMleague,ML_TYPES} from '../../../js/mleague.js';
 // @ts-expect-error Shared browser engine.
 import {hydrateRacing} from '../../../js/racing.js';
 
@@ -29,6 +29,8 @@ export async function ensureMl(env:KpEnv){
   env.DB.prepare('CREATE TABLE IF NOT EXISTS ml_state(key TEXT PRIMARY KEY,value TEXT NOT NULL)'),
   // The official matchups per date and table (the copied fixture list has mistakes).
   // A member's word that a game has started (/mclose): betting stops, and later bets are refunded.
+  // The four players a member registered once the lineup was announced (/mlineup).
+  env.DB.prepare('CREATE TABLE IF NOT EXISTS ml_lineups(match TEXT PRIMARY KEY,names TEXT NOT NULL,user TEXT NOT NULL,at INTEGER NOT NULL)'),
   env.DB.prepare('CREATE TABLE IF NOT EXISTS ml_closed(match TEXT PRIMARY KEY,at INTEGER NOT NULL,user TEXT NOT NULL,created INTEGER NOT NULL)'),
   env.DB.prepare('CREATE TABLE IF NOT EXISTS ml_cards(date TEXT NOT NULL,tbl INTEGER NOT NULL,teams TEXT NOT NULL,at INTEGER NOT NULL,PRIMARY KEY(date,tbl))'),
  ]);initialized.add(env.DB);
@@ -43,6 +45,23 @@ export async function mlResults(env:KpEnv,ids?:string[]){
 export async function mlClosed(env:KpEnv){
  await ensureMl(env);
  return new Map((await env.DB.prepare('SELECT match,at,user FROM ml_closed').all<{match:string;at:number;user:string}>()).results.map(r=>[r.match,{at:r.at,user:r.user}]));
+}
+export async function mlLineups(env:KpEnv){
+ await ensureMl(env);
+ return new Map((await env.DB.prepare('SELECT match,names,user,at FROM ml_lineups').all<{match:string;names:string;user:string;at:number}>()).results.map(r=>[r.match,{names:JSON.parse(r.names) as string[],user:r.user,at:r.at}]));
+}
+/** A registered member enters the announced four by their /mleague numbers, one per team. It can be
+ * corrected while betting is open; a bet on someone who then does not play is refunded at settlement. */
+export async function setLineup(env:KpEnv,mapping:KpMapping,user:string,d:MlView,fixture:Fixture,numbers:number[],now:number){
+ if(!mapping.accounts.some(a=>a.discordUserId===user))throw Error('出場選手を登録できるのは登録メンバーだけです。');
+ if(!fixture.confirmed)throw Error('公式の対戦カードを確認中です。少し待ってからもう一度お試しください。');
+ const closed=(await mlClosed(env)).get(fixture.id);
+ if(!mlOpen(d,fixture,now,await mlResults(env))||(closed&&now>=closed.at))throw Error('この試合はもう締め切られています。');
+ const card=mlCard(d,fixture) as Array<{no:number;name:string}>,names=numbers.map(n=>card.find(p=>p.no===n)?.name);
+ const lineup=names.every(Boolean)?mlLineup(d,fixture,names):null;
+ if(!lineup)throw Error('4チームから1人ずつ、/mleague の番号で4人を指定してください。');
+ await env.DB.prepare('INSERT INTO ml_lineups(match,names,user,at) VALUES(?,?,?,?) ON CONFLICT(match) DO UPDATE SET names=excluded.names,user=excluded.user,at=excluded.at').bind(fixture.id,JSON.stringify(names),user,now).run();
+ return lineup as Array<{no:number;name:string;teamName:string}>;
 }
 /** A registered member closes a game's betting at the time it started (default: now). The earliest
  * stated time is kept, so a later, looser call cannot reopen bets that were already late. */
@@ -174,15 +193,18 @@ async function betsOn(env:KpEnv,guild:string,match:string){
 }
 const clock=(f:Fixture)=>`${Number(f.date.slice(5,7))}/${Number(f.date.slice(8,10))}`;
 const teamName=(id:string)=>data.teams.find(t=>t.id===id)?.name??id;
-export function cardPost(day:Fixture[],results:Map<string,MlResult>,d:MlView=data){
- const stats=seasonStats(results),lines=[`🀄 **Mリーグ予想** ${clock(day[0])} 19:00開始（トップ・ラスの選手を当てる）`];
- for(const f of day.filter(x=>x.game===1)){
-  const card=mlCard(d,f).map((p:{name:string;no:number})=>({...p,odds:mlOdds(p,stats)}));
-  const fav=(type:'top'|'last')=>[...card].sort((a,b)=>a.odds[type]-b.odds[type]).slice(0,3).map(p=>`${clean(p.name)} ${(p.odds[type]/10).toFixed(1)}倍`).join('／');
-  lines.push(`**${f.table}卓** ${f.teams.map(teamName).join('・')}`,`　トップ本命：${fav('top')}`,`　ラス本命：${fav('last')}`);
- }
- lines.push('第1試合は19:00、第2試合は第1試合の結果が出るまで締切。','/mleague で全員の倍率、/mbet で予想。出なかった選手は返金。');
+export function cardPost(day:Fixture[]){
+ const lines=[`🀄 **Mリーグ予想** ${clock(day[0])} 19:00開始（出場4人のトップ・ラスを当てる）`];
+ for(const f of day.filter(x=>x.game===1))lines.push(`**${f.table}卓** ${f.teams.map(teamName).join('・')}`);
+ lines.push('出場選手が発表されたら、誰か1人が /mlineup で4人を登録すると予想の受付が始まります（番号は /mleague）。','第1試合は19:00、第2試合は第1試合の結果が出るまで締切。');
  return lines.join('\n');
+}
+/** Announces a registered lineup with its odds among the four. */
+export function lineupPost(f:Fixture,lineup:Array<{no:number;name:string;teamName:string}>,stats:ReturnType<typeof seasonStats>,user:string){
+ const odds=mlOdds(lineup,stats);
+ return [`🀄 **${clock(f)} ${f.table}卓 第${f.game}試合 出場決定**（<@${user}> が登録）`,
+  ...lineup.map(p=>`${p.no}. ${clean(p.name)}（${clean(p.teamName)}）トップ ${(odds[p.name].top/10).toFixed(1)}倍／ラス ${(odds[p.name].last/10).toFixed(1)}倍`),
+  `予想は /mbet match:${f.table}-${f.game} player:番号 で。${f.game===1?'19:00締切':'第1試合の結果が出たら締切'}。`].join('\n');
 }
 export function resultPost(f:Fixture,r:MlResult,bets:Array<MlBet&{user:string}>){
  const lines=[`🀄 **Mリーグ ${clock(f)} ${f.table}卓 第${f.game}試合 結果**`,r.names.map((n,i)=>`${i+1}着 ${clean(n)} ${r.points[i]<0?'▲':''}${Math.abs(r.points[i])}pt`).join('　')];
@@ -200,7 +222,7 @@ export async function queueMlPosts(env:PostEnv,mapping:KpMapping,now=Date.now())
  const results=await mlResults(env),today=new Date(now+9*3600000).toISOString().slice(0,10),d=await mlData(env);
  const day=d.fixtures.filter(f=>f.date===today);
  // The card goes out only with the official matchups.
- if(day.length&&day.every(f=>f.confirmed)&&now>=mlStart(day[0])-3600000&&now<mlStart(day[0]))await enqueue(env,'ml-card:'+today,cardPost(day,results,d),now);
+ if(day.length&&day.every(f=>f.confirmed)&&now>=mlStart(day[0])-3600000&&now<mlStart(day[0]))await enqueue(env,'ml-card:'+today,cardPost(day),now);
  for(const f of d.fixtures.filter(x=>results.has(x.id)&&now<mlStart(x)+RESULT_WINDOW*2)){
   const bets=await betsOn(env,mapping.guildId,f.id);
   if(!bets.length||bets.some(b=>b.status==='pending'))continue;

@@ -6,7 +6,7 @@ import {readFileSync,readdirSync} from 'node:fs';
 import {initializeKp,syncKpAccounts} from '../src/kp.ts';
 import type {KpMapping} from '../src/kp.ts';
 import {operateKp,readKpState} from '../src/kp-api.ts';
-import {ML_DATA,parseOfficialResults,parseOfficialCards,storeCards,mlData,refreshMlCards,matchFixture,pollMlResults,settleMl,queueMlPosts,mlResults} from '../src/mleague.ts';
+import {ML_DATA,parseOfficialResults,parseOfficialCards,storeCards,mlData,refreshMlCards,matchFixture,pollMlResults,settleMl,queueMlPosts,mlResults,setLineup} from '../src/mleague.ts';
 import type {PostEnv} from '../src/racing-posts.ts';
 import {runKpCommand,mlDay} from '../src/kp-slash.ts';
 // @ts-expect-error Shared browser engine.
@@ -46,6 +46,9 @@ async function fixture(){
  return {env,sql,balance,posts};
 }
 let n=0;const op=()=>`ml-operation-${String(++n).padStart(6,'0')}`;
+const seatedNos=()=>order.map(name=>card.find(p=>p.name===name)!.no);
+/** Registers the four in `order` as the lineup of a game, as /mlineup does. */
+async function seat(env:PostEnv,fixtureId:string,now:number){const d=await mlData(env);return setLineup(env,mapping,one,d,d.fixtures.find(x=>x.id===fixtureId)!,seatedNos(),now);}
 const page=officialPage('2026-10-27',[{game:1,names:order,points:[60.2,10.1,-20.3,-50]}]);
 
 test('the official page is read per game in rank order; the template and broken blocks are skipped', () => {
@@ -90,32 +93,33 @@ test('results are fetched only while a started game lacks one, at most every min
 test('a prediction is bought through the wallet, settled from the official order and posted', async t => {
  t.mock.timers.enable({apis:['Date'],now:jst('2026-10-27T18:30:00')});
  const f=await fixture();await storeCards(f.env,parseOfficialCards(page,2026),Date.now());
+ await assert.rejects(operateKp(f.env,mapping,one,op(),'ml-bet',{match:game1.id,player:1,type:'top',amount:1000}),/出場選手がまだ登録/);
+ await seat(f.env,game1.id,Date.now());await seat(f.env,game2.id,Date.now());
  const top=await operateKp(f.env,mapping,one,op(),'ml-bet',{match:game1.id,player:card.find(p=>p.name===order[0])!.no,type:'top',amount:1000}) as {result:{bet:{odds:number}}};
  await operateKp(f.env,mapping,two,op(),'ml-bet',{match:game1.id,player:card.find(p=>p.name===order[0])!.no,type:'last',amount:500});
  const benched=card.find(p=>!order.includes(p.name))!;
- await operateKp(f.env,mapping,two,op(),'ml-bet',{match:game1.id,player:benched.no,type:'top',amount:300});
- assert.equal(f.balance(one),99000);assert.equal(f.balance(two),99200);
+ await assert.rejects(operateKp(f.env,mapping,two,op(),'ml-bet',{match:game1.id,player:benched.no,type:'top',amount:300}),/出場する4人の中から/);
+ assert.equal(f.balance(one),99000);assert.equal(f.balance(two),99500);
  assert.equal((await readKpState(f.env,mapping,one)).raceWeek.spent,1000,'shares the weekly limit with racing');
  await queueMlPosts(f.env,mapping,jst('2026-10-27T18:30:00'));
- assert.match(f.posts()[0],/Mリーグ予想.*10\/27 19:00開始/);assert.match(f.posts()[0],/1卓/);assert.match(f.posts()[0],/2卓/);
+ assert.match(f.posts()[0],/Mリーグ予想.*10\/27 19:00開始/);assert.match(f.posts()[0],/\/mlineup/);assert.match(f.posts()[0],/1卓/);assert.match(f.posts()[0],/2卓/);
  t.mock.timers.setTime(jst('2026-10-27T19:00:00'));
  await assert.rejects(operateKp(f.env,mapping,one,op(),'ml-bet',{match:game1.id,player:1,type:'top',amount:100}),/締め切りました/);
- await operateKp(f.env,mapping,one,op(),'ml-bet',{match:game2.id,player:1,type:'top',amount:100});
+ await operateKp(f.env,mapping,one,op(),'ml-bet',{match:game2.id,player:seatedNos()[0],type:'top',amount:100});
  t.mock.timers.setTime(jst('2026-10-27T21:10:00'));
  await pollMlResults(f.env,Date.now(),(async()=>new Response(page)) as unknown as typeof fetch);
- await assert.rejects(operateKp(f.env,mapping,one,op(),'ml-bet',{match:game2.id,player:1,type:'top',amount:100}),/締め切りました/,'game 1 has a result');
- assert.equal(await settleMl(f.env,mapping),3);assert.equal(await settleMl(f.env,mapping),0);
+ await assert.rejects(operateKp(f.env,mapping,one,op(),'ml-bet',{match:game2.id,player:seatedNos()[0],type:'top',amount:100}),/締め切りました/,'game 1 has a result');
+ assert.equal(await settleMl(f.env,mapping),2);assert.equal(await settleMl(f.env,mapping),0);
  assert.equal(f.balance(one),99000-100+Math.floor(1000*top.result.bet.odds/10));
- assert.equal(f.balance(two),99200+300,'the benched player is refunded; the wrong last loses');
+ assert.equal(f.balance(two),99500,'the wrong last loses');
  await queueMlPosts(f.env,mapping,Date.now());
  const result=f.posts().find(p=>p.includes('第1試合 結果'))!;
  assert.match(result,new RegExp(`1着 ${order[0]} 60.2pt`));assert.match(result,/4着 .* ▲50pt/);
  assert.match(result,new RegExp(`💰 <@${one}> ${order[0]}のトップ的中`));
- assert.match(result,new RegExp(`↩️ <@${two}> ${benched.name}のトップは不出場で返金`));
  assert.match(result,new RegExp(`💸 <@${two}> ${order[0]}のラスは外れ`));
 });
 
-test('/mleague lists numbered players with odds; /mbet buys by table-game code and player number', async t => {
+test('/mlineup registers the announced four; /mleague then shows their odds; /mbet buys only among them', async t => {
  t.mock.timers.enable({apis:['Date'],now:jst('2026-10-27T18:00:00')});
  const f=await fixture();
  const before=await runKpCommand(f.env,{id:String((BigInt(Date.now())-1420070400000n)<<22n|9n),guild_id:guild,member:{user:{id:one}},data:{name:'mleague'}},mapping);
@@ -123,11 +127,22 @@ test('/mleague lists numbered players with odds; /mbet buys by table-game code a
  await storeCards(f.env,parseOfficialCards(page,2026),Date.now());
  assert.equal(mlDay(jst('2026-10-27T18:00:00')),'2026-10-27');assert.equal(mlDay(jst('2026-10-28T00:00:00')),ML_DATA.fixtures.map(x=>x.date).sort().find(d=>d>'2026-10-27'));
  const snowflake=String((BigInt(Date.now())-1420070400000n)<<22n|1n);
- const view=await runKpCommand(f.env,{id:snowflake,guild_id:guild,member:{user:{id:one}},data:{name:'mleague'}},mapping);
- assert.match(view,/1卓.*第1試合 受付中/);assert.match(view,new RegExp(`1\\. ${card[0].name}（.+）トップ \\d+\\.\\d倍／ラス \\d+\\.\\d倍`));
- assert.ok(view.length<2000,'fits one Discord message');
- const reply=await runKpCommand(f.env,{id:snowflake,guild_id:guild,member:{user:{id:one}},data:{name:'mbet',options:[{name:'match',value:'1-1'},{name:'player',value:3},{name:'type',value:'last'},{name:'amount',value:200}]}},mapping);
- assert.match(reply,new RegExp(`1卓 第1試合・${card[2].name}のラス`));assert.equal(f.balance(one),99800);
+ const command=(name:string,options:Array<{name:string;value:unknown}>,user=one,k=2)=>runKpCommand(f.env,{id:String(BigInt(snowflake)+BigInt(k)),guild_id:guild,member:{user:{id:user}},data:{name,options}},mapping);
+ const waiting=await runKpCommand(f.env,{id:snowflake,guild_id:guild,member:{user:{id:one}},data:{name:'mleague'}},mapping);
+ assert.match(waiting,/1卓.*第1試合 出場選手の登録待ち/);assert.match(waiting,new RegExp(`1 ${card[0].name}／2 ${card[1].name}`));
+ assert.ok(waiting.length<2000,'fits one Discord message');
+ const nos=seatedNos().join(' ');
+ assert.match(await command('mlineup',[{name:'match',value:'1-1'},{name:'players',value:nos}],'100000000000000199'),/登録メンバーだけ/);
+ assert.match(await command('mlineup',[{name:'match',value:'1-1'},{name:'players',value:'1 2 9 13'}]),/4チームから1人ずつ/);
+ assert.match(await command('mlineup',[{name:'match',value:'1-1'},{name:'players',value:'1 2'}]),/番号を4つ/);
+ const posted=await command('mlineup',[{name:'match',value:'1-1'},{name:'players',value:nos}]);
+ assert.match(posted,/1卓 第1試合 出場決定/);assert.match(posted,new RegExp(`${seatedNos()[0]}\\. ${order[0]}（.+）トップ \\d+\\.\\d倍／ラス \\d+\\.\\d倍`));
+ const view=await command('mleague',[]);
+ assert.match(view,/第1試合 受付中/);assert.match(view,new RegExp(`第1試合 出場：${seatedNos()[0]}\\. ${order[0]} トップ`));
+ const benched=card.find(p=>!order.includes(p.name))!;
+ assert.match(await command('mbet',[{name:'match',value:'1-1'},{name:'player',value:benched.no},{name:'type',value:'last'},{name:'amount',value:200}],one,3),/出場する4人の中から/);
+ const reply=await command('mbet',[{name:'match',value:'1-1'},{name:'player',value:seatedNos()[1]},{name:'type',value:'last'},{name:'amount',value:200}],one,4);
+ assert.match(reply,new RegExp(`1卓 第1試合・${order[1]}のラス`));assert.equal(f.balance(one),99800);
  assert.match(await runKpCommand(f.env,{id:String(BigInt(snowflake)+1n),guild_id:guild,member:{user:{id:one}},data:{name:'mbet',options:[{name:'match',value:'3-1'},{name:'player',value:3},{name:'type',value:'last'},{name:'amount',value:200}]}},mapping),/その試合はありません/);
 });
 
@@ -136,6 +151,7 @@ test('/mclose: a member reports the start; betting stops and later bets are refu
  const f=await fixture();await storeCards(f.env,parseOfficialCards(page,2026),Date.now());
  const at=(time:string,n:number)=>String((BigInt(jst('2026-10-27T'+time))-1420070400000n)<<22n|BigInt(n));
  const close=(user:string,time:string,n:number,options:Array<{name:string;value:string}>=[])=>runKpCommand(f.env,{id:at(time,n),guild_id:guild,member:{user:{id:user}},data:{name:'mclose',options:[{name:'match',value:'1-2'},...options]}},mapping);
+ await seat(f.env,game2.id,Date.now());
  await operateKp(f.env,mapping,one,op(),'ml-bet',{match:game2.id,player:card.find(p=>p.name===order[0])!.no,type:'top',amount:1000});
  t.mock.timers.setTime(jst('2026-10-27T21:45:00'));
  await operateKp(f.env,mapping,two,op(),'ml-bet',{match:game2.id,player:card.find(p=>p.name===order[0])!.no,type:'top',amount:500});
@@ -145,7 +161,7 @@ test('/mclose: a member reports the start; betting stops and later bets are refu
  assert.match(await close(one,'21:50:00',4,[{name:'at',value:'21:42'}]),/21:42 開始として締め切りました/);
  assert.match(await close(two,'21:51:00',5,[{name:'at',value:'21:48'}]),/21:42 開始/,'the earliest stated start is kept');
  t.mock.timers.setTime(jst('2026-10-27T21:52:00'));
- await assert.rejects(operateKp(f.env,mapping,one,op(),'ml-bet',{match:game2.id,player:1,type:'top',amount:100}),/開始を報告/);
+ await assert.rejects(operateKp(f.env,mapping,one,op(),'ml-bet',{match:game2.id,player:seatedNos()[0],type:'top',amount:100}),/開始を報告/);
  const view=await runKpCommand(f.env,{id:at('21:52:00',6),guild_id:guild,member:{user:{id:one}},data:{name:'mleague'}},mapping);
  assert.match(view,/第2試合 締切（開始報告）/);
  const game2Page=officialPage('2026-10-27',[{game:2,names:order,points:[60.2,10.1,-20.3,-50]}]);

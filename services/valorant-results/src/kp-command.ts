@@ -1,5 +1,5 @@
 // Register these guild commands individually; never replace /death, /valo or the Activity entry point.
-export const KP_COMMAND_VERSION='kp-slash-v5-mclose';
+export const KP_COMMAND_VERSION='kp-slash-v6-mlineup';
 export const kpCommands=[
  {type:1,name:'kp',description:'KESO PLAY｜KP残高・ランキング',options:[
   {type:1,name:'balance',description:'自分の残高と最近の入出金（本人だけに表示）'},
@@ -15,9 +15,13 @@ export const kpCommands=[
  {type:1,name:'mleague',description:'KESO PLAY｜Mリーグ予想：次の試合の選手番号と倍率を確認'},
  {type:1,name:'mbet',description:'KESO PLAY｜Mリーグ予想：トップかラスになる選手にKPで賭ける（取消不可）',options:[
   {type:3,name:'match',description:'卓-試合（例 1-1 は1卓の第1試合）。/mleague で確認',required:true,choices:['1-1','1-2','2-1','2-2'].map(v=>({name:v.replace(/^(\d)-(\d)$/,'$1卓 第$2試合'),value:v}))},
-  {type:4,name:'player',description:'選手番号（/mleague で確認）',required:true,min_value:1,max_value:16},
+  {type:4,name:'player',description:'出場4人のうちの選手番号（/mleague で確認）',required:true,min_value:1,max_value:16},
   {type:3,name:'type',description:'当てるもの',required:true,choices:[{name:'トップ（1着）',value:'top'},{name:'ラス（4着）',value:'last'}]},
   {type:4,name:'amount',description:'掛け金（100 KP以上・100 KP単位）',required:true,min_value:100,max_value:50000},
+ ]},
+ {type:1,name:'mlineup',description:'KESO PLAY｜Mリーグ予想：発表された出場4人を登録して受付開始（登録メンバー）',options:[
+  {type:3,name:'match',description:'卓-試合',required:true,choices:['1-1','1-2','2-1','2-2'].map(v=>({name:v.replace(/^(\d)-(\d)$/,'$1卓 第$2試合'),value:v}))},
+  {type:3,name:'players',description:'4人の番号を空白区切りで（/mleague の番号。例 1 6 9 14）',required:true,max_length:20},
  ]},
  {type:1,name:'mclose',description:'KESO PLAY｜Mリーグ予想：試合が始まったので締め切る（登録メンバー。開始後の予想は返金）',options:[
   {type:3,name:'match',description:'卓-試合',required:true,choices:['1-1','1-2','2-1','2-2'].map(v=>({name:v.replace(/^(\d)-(\d)$/,'$1卓 第$2試合'),value:v}))},

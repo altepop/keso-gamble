@@ -14,7 +14,7 @@ import { advanceMarket, trade, spin, spinNumbers, cryptoRouletteNumber } from '.
 import { hydrateRacing, placeRaceBet, useExchange } from '../../../js/racing.js';
 // @ts-expect-error Shared browser engine.
 import { hydrateMleague, placeMlBet, mlPartner } from '../../../js/mleague.js';
-import { mlClosed, mlData, mlResults, seasonStats } from './mleague.ts';
+import { mlClosed, mlData, mlLineups, mlResults, seasonStats } from './mleague.ts';
 import { racingView, raceSeed } from './racing-kp.ts';
 import { defaultRoastLevel, validRoastLevel } from './racing-crowns.ts';
 import { buyHorse, sellHorse, ownedHorses, raceEntries } from './racing-horses.ts';
@@ -64,7 +64,7 @@ export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:strin
    const closed=fixture?(await mlClosed(env)).get(fixture.id):undefined;
    if(closed&&Date.now()>=closed.at)throw Error('この試合の予想は締め切りました（メンバーが試合開始を報告）。');
    // Odds use this season's official results; game 2 closes once game 1's result is stored.
-   const bet=placeMlBet(state,{match:args.match,player:args.player,type:args.type,amount:args.amount},Date.now(),d,await mlResults(env,partner?[partner.id]:[]),seasonStats(await mlResults(env)));
+   const bet=placeMlBet(state,{match:args.match,player:args.player,type:args.type,amount:args.amount},Date.now(),d,await mlResults(env,partner?[partner.id]:[]),seasonStats(await mlResults(env)),fixture?(await mlLineups(env)).get(fixture.id)?.names??null:null);
    result={bet};
   }else if(action==='horse-buy'){
    useExchange(state,Date.now());result=await buyHorse(env,mapping,user,state,args);

@@ -15,10 +15,10 @@ export const mlStart=fixture=>at(fixture.date,ML_START);
 export const mlPartner=(data,fixture)=>data.fixtures.find(f=>f.date===fixture.date&&f.table===fixture.table&&f.game!==fixture.game);
 /** Game 1 closes at 19:00. Game 2 closes when game 1's official result is in (no fixed time, per the
  * owner), and in any case when the day ends, so a result that never arrives cannot keep it open until
- * the next morning. Betting opens 24 hours before the start. */
+ * the next morning. Betting itself opens only once the four players are registered (/mlineup). */
 export function mlOpen(data,fixture,now,results){
  const start=mlStart(fixture);
- if(now<start-86400000)return false;
+ if(now<at(fixture.date,'00:00'))return false;
  if(fixture.game===1)return now<start;
  const first=mlPartner(data,fixture);
  return now<at(fixture.date,'00:00')+86400000&&!(first&&results.has(first.id));
@@ -28,11 +28,26 @@ export function mlCard(data,fixture){
  return fixture.teams.flatMap(id=>{const team=data.teams.find(t=>t.id===id);return team?team.players.map(p=>({name:p.name,team:team.id,teamName:team.name,games:p.games,top:p.top,last:p.last})):[];})
   .map((p,i)=>({no:i+1,...p}));
 }
-/** Odds (in tenths) from past official results plus this season's: (count + 5) / (games + 20). */
-export function mlOdds(player,season={}){
- const s=season[player.name]??{games:0,top:0,last:0},games=player.games+s.games;
- const rate=count=>(count+ML_PRIOR_GAMES/4)/(games+ML_PRIOR_GAMES);
- return {top:oddsFromProbability(rate(player.top+s.top)),last:oddsFromProbability(rate(player.last+s.last))};
+/** A player's strength for top or last from past official results plus this season's: (count + 5) / (games + 20). */
+export function mlRate(player,type,season={}){
+ const s=season[player.name]??{games:0,top:0,last:0};
+ return (player[type]+s[type]+ML_PRIOR_GAMES/4)/(player.games+s.games+ML_PRIOR_GAMES);
+}
+/** Odds (in tenths) among the four players actually seated: each rate divided by the four rates'
+ * sum, so the probabilities add up to 100% (no house cut, as in racing). */
+export function mlOdds(lineup,season={}){
+ const out={};
+ for(const type of ['top','last']){
+  const rates=lineup.map(p=>mlRate(p,type,season)),total=rates.reduce((a,b)=>a+b,0);
+  lineup.forEach((p,i)=>{(out[p.name]??={})[type]=oddsFromProbability(rates[i]/total);});
+ }
+ return out;
+}
+/** The registered four, in card order, or null when the lineup is not (validly) registered. */
+export function mlLineup(data,fixture,names){
+ if(!Array.isArray(names)||names.length!==4)return null;
+ const card=mlCard(data,fixture),seated=names.map(n=>card.find(p=>p.name===n));
+ return seated.every(Boolean)&&new Set(seated.map(p=>p.team)).size===4?seated:null;
 }
 export function createMleague(){return {mlBets:[]};}
 function validBet(b){return b&&typeof b.id==='string'&&b.id.length<=60&&typeof b.match==='string'&&b.match.length<=20&&typeof b.player==='string'&&b.player.length<=20&&Object.hasOwn(ML_TYPES,b.type)
@@ -42,19 +57,22 @@ export function hydrateMleague(raw){
  if(Array.isArray(raw?.mlBets))ml.mlBets=raw.mlBets.filter(validBet).slice(0,60).map(b=>({id:b.id,match:b.match,player:b.player,type:b.type,amount:b.amount,odds:b.odds,status:b.status,payout:b.payout,time:b.time}));
  return ml;
 }
-/** Buys a prediction. Shares the weekly betting limit with horse racing (state.raceWeek). */
-export function placeMlBet(state,{match,player,type,amount},now,data,results,season={}){
+/** Buys a prediction on one of the four registered players. Shares the weekly betting limit with
+ * horse racing (state.raceWeek). `lineupNames` are the four names registered with /mlineup. */
+export function placeMlBet(state,{match,player,type,amount},now,data,results,season={},lineupNames=null){
  const fixture=data.fixtures.find(f=>f.id===match);
  if(!fixture)throw Error('試合を選んでください');
- if(!mlOpen(data,fixture,now,results))throw Error(now<mlStart(fixture)-86400000?'この試合はまだ受付前です（前日19:00から）':'この試合の予想は締め切りました');
+ if(!mlOpen(data,fixture,now,results))throw Error(now<mlStart(fixture)?'この試合はまだ受付前です':'この試合の予想は締め切りました');
+ const lineup=mlLineup(data,fixture,lineupNames);
+ if(!lineup)throw Error('出場選手がまだ登録されていません。発表されたら /mlineup で登録してください。');
  if(!Object.hasOwn(ML_TYPES,type))throw Error('トップかラスかを選んでください');
- const card=mlCard(data,fixture),pick=card.find(p=>p.no===player||p.name===player);
- if(!pick)throw Error('選手を選んでください');
+ const pick=lineup.find(p=>p.no===player||p.name===player);
+ if(!pick)throw Error('出場する4人の中から選んでください（/mleague の番号）');
  if(!validInt(amount,MIN_BET)||amount%BET_STEP!==0)throw Error(`金額は${MIN_BET} KP以上、${BET_STEP} KP単位です`);
  if(amount>state.cash)throw Error('KPが不足しています');
  const week=weekStart(now),spent=state.raceWeek?.start===week?state.raceWeek.spent:0;
  if(spent+amount>WEEKLY_LIMIT)throw Error(`1週間に賭けられるのは${WEEKLY_LIMIT.toLocaleString('ja-JP')} KPまでです（競馬と合算・残り${(WEEKLY_LIMIT-spent).toLocaleString('ja-JP')} KP）`);
- const bet={id:`ml-${now}-${state.mlBets.length}`,match,player:pick.name,type,amount,odds:mlOdds(pick,season)[type],status:'pending',payout:0,time:now};
+ const bet={id:`ml-${now}-${state.mlBets.length}`,match,player:pick.name,type,amount,odds:mlOdds(lineup,season)[pick.name][type],status:'pending',payout:0,time:now};
  state.cash-=amount;state.raceWeek={start:week,spent:spent+amount};
  state.mlBets.unshift(bet);
  const pending=state.mlBets.filter(b=>b.status==='pending');
