@@ -36,7 +36,7 @@ test('repeated and concurrent match collection pays once, aliases normalize, and
  const f=await fixture();f.enableHistory();const raw=game('same');
  await Promise.all(Array.from({length:5},()=>collectKpMatch(f.env,mapping,raw,'p-one')));
  assert.equal((await readKpState(f.env,mapping,one)).cash,900);assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM kp_events').get()!.n,1);
- assert.equal(await collectKpMatch(f.env,mapping,game('loss','competitive',false),'p-one'),-100);
+ assert.equal(await collectKpMatch(f.env,mapping,game('loss','competitive',false),'p-one'),-200);
  assert.equal(await collectKpMatch(f.env,mapping,game('tdm','hurm'),'p-one'),70);
  assert.equal(await collectKpMatch(f.env,mapping,game('escalation','ggteam'),'p-one'),70);
  const unknown=game('unknown','swiftplay');unknown.teams=[];assert.equal(await collectKpMatch(f.env,mapping,unknown,'p-one'),0);
@@ -287,24 +287,24 @@ test('a loss costs a little and the bottom of a full team more, capped at the ba
  const f=await fixture();f.enableHistory();
  const team=(id:string,scores:Array<number|undefined>,win=false,queue='competitive')=>{const raw=game(id,queue,win) as ReturnType<typeof game>&{players:Array<{puuid:string;team_id:string;stats?:{score?:number}}>};
   raw.players=scores.map((score,i)=>({puuid:i?'mate-'+i:'p-one',team_id:'red',stats:score===undefined?{}:{score}}));return raw;};
- seed(f.sql,one,1000);
- assert.equal(await collectKpMatch(f.env,mapping,team('bottom',[1000,3000,4000,5000,6000]),'p-one'),-300,'competitive bottom: −300');
- assert.equal((await readKpState(f.env,mapping,one)).cash,700);
- assert.equal(await collectKpMatch(f.env,mapping,team('bottom',[1000,3000,4000,5000,6000]),'p-one'),-300,'replays do not charge twice');
- assert.equal((await readKpState(f.env,mapping,one)).cash,700);
- assert.equal(await collectKpMatch(f.env,mapping,team('tie',[2000,2000,4000,5000,6000]),'p-one'),-300,'a shared bottom counts');
+ seed(f.sql,one,3000);
+ assert.equal(await collectKpMatch(f.env,mapping,team('bottom',[1000,3000,4000,5000,6000]),'p-one'),-400,'competitive bottom: −400');
+ assert.equal((await readKpState(f.env,mapping,one)).cash,2600);
+ assert.equal(await collectKpMatch(f.env,mapping,team('bottom',[1000,3000,4000,5000,6000]),'p-one'),-400,'replays do not charge twice');
+ assert.equal((await readKpState(f.env,mapping,one)).cash,2600);
+ assert.equal(await collectKpMatch(f.env,mapping,team('tie',[2000,2000,4000,5000,6000]),'p-one'),-400,'a shared bottom counts');
  assert.equal(await collectKpMatch(f.env,mapping,team('unrated',[1000,3000,4000,5000,6000],false,'unrated'),'p-one'),-200);
- assert.equal(await collectKpMatch(f.env,mapping,team('middle',[4000,3000,1000,5000,6000]),'p-one'),-100,'not the bottom: the plain loss');
+ assert.equal(await collectKpMatch(f.env,mapping,team('middle',[4000,3000,1000,5000,6000]),'p-one'),-200,'not the bottom: the plain loss');
  assert.equal(await collectKpMatch(f.env,mapping,team('won-bottom',[1000,3000,4000,5000,6000],true),'p-one'),900,'a win is never charged');
- assert.equal(await collectKpMatch(f.env,mapping,team('gap',[1000,3000,undefined,5000,6000]),'p-one'),-100,'missing stats: the plain loss');
- assert.equal(await collectKpMatch(f.env,mapping,team('short-team',[1000,3000,4000]),'p-one'),-100,'an incomplete team: the plain loss');
+ assert.equal(await collectKpMatch(f.env,mapping,team('gap',[1000,3000,undefined,5000,6000]),'p-one'),-200,'missing stats: the plain loss');
+ assert.equal(await collectKpMatch(f.env,mapping,team('short-team',[1000,3000,4000]),'p-one'),-200,'an incomplete team: the plain loss');
  const cash=(await readKpState(f.env,mapping,one)).cash;
  f.sql.prepare("INSERT INTO kp_ledger VALUES('drain',?,?,?,'test-only',0)").run(guild,one,-cash);
  assert.equal(await collectKpMatch(f.env,mapping,team('broke',[1000,3000,4000,5000,6000]),'p-one'),0,'nothing to take from an empty wallet');
  assert.equal((await readKpState(f.env,mapping,one)).cash,0);
- assert.equal((await readKpState(f.env,mapping,one)).debt.amount,300,'what the wallet could not cover becomes 借KP');
+ assert.equal((await readKpState(f.env,mapping,one)).debt.amount,400,'what the wallet could not cover becomes 借KP');
  assert.equal(await collectKpMatch(f.env,mapping,team('broke',[1000,3000,4000,5000,6000]),'p-one'),0);
- assert.equal((await readKpState(f.env,mapping,one)).debt.amount,300,'a replay does not owe twice');
+ assert.equal((await readKpState(f.env,mapping,one)).debt.amount,400,'a replay does not owe twice');
 });
 test('the match line shows the net KP, negative included, and a rewrite replaces it',()=>{
  assert.match(kpCreditLine('結果',-300),/🪙 この試合 −300 KP/);
@@ -375,9 +375,9 @@ test('a competitive demotion is posted with the roast and costs 500 KP once; a p
 
 test('a later monitor run shows a loss as its net negative KP, not the zero stored on the event',async()=>{
  const {prepareKpRun}=await import('../src/kp.ts');const f=await fixture();f.enableHistory();seed(f.sql,one,1000);
- assert.equal(await collectKpMatch(f.env,mapping,game('cached-loss-net','competitive',false),'p-one'),-100);
+ assert.equal(await collectKpMatch(f.env,mapping,game('cached-loss-net','competitive',false),'p-one'),-200);
  const run=await prepareKpRun(f.env,mapping);
- assert.equal(run.credits.get([...run.credits.keys()].find(k=>k.includes('cached-loss-net'))!),-100);
+ assert.equal(run.credits.get([...run.credits.keys()].find(k=>k.includes('cached-loss-net'))!),-200);
 });
 
 test('a rank change that reaches the history late is still caught on a later run, and the post is updated',async()=>{
