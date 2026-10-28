@@ -272,7 +272,7 @@ test('three and five losses switch taunts, override performance teasing, and sta
       games = [raw, ...games].slice(0, 2);
       await monitor(env, [{ riotId: 'player#JP1' }]);
       const content = deliveries.at(-1)!;
-      assert.equal((content.match(/💬/g) ?? []).length, 1);
+      assert.equal((content.match(/💬/g) ?? []).length, 3);
       if (n >= 3) {
         assert.match(content, new RegExp('現在：' + n + '連敗'));
         const group = n >= 5 ? 'long_losing_streak' : 'losing_streak';
@@ -345,7 +345,7 @@ test('losing-streak recovery celebrates three or more losses once within the sam
       await monitor(env, config);
       if (scenario === 'three' || scenario === 'five') assert.match(deliveries[0], new RegExp('🎊 ' + losses + '連敗ストップ！'));
       else assert.doesNotMatch(deliveries[0], /🎊|連敗ストップ/);
-      assert.equal((deliveries[0].match(/\n💬 /g) ?? []).length, 1);
+      assert.equal((deliveries[0].match(/\n💬 /g) ?? []).length, 3);
       game = { ...game, metadata: { ...game.metadata, match_id: 'next-win', started_at: new Date(base + 11_000).toISOString() } };
       await monitor(env, config);
       assert.doesNotMatch(deliveries[1], /🎊|連敗ストップ/);
@@ -1685,7 +1685,7 @@ test('wins and draws each select stable comments across many different matches',
       assert.equal(first, resultMessage(raw, 'user-1', 'プレイヤーA')!.message);
       const comment = first.split('\n💬 ')[1];
       assert.ok(pools[outcome].includes(comment));seen.add(comment);
-      assert.equal((first.match(/\n💬 /g) ?? []).length, 1);
+      assert.equal((first.match(/\n💬 /g) ?? []).length, 3);
     }
     assert.ok(seen.size >= 12, outcome);
   }
@@ -1710,7 +1710,7 @@ test('winning streaks use three/five thresholds, remain stable, and draw resets 
       const comment = content.split('\n💬 ')[1];
       const group = n >= 5 ? 'long_winning_streak' : n >= 3 ? 'winning_streak' : 'win';
       assert.ok(pools[group].some(line => line.replaceAll('{streak}', String(n)) === comment));
-      assert.equal((content.match(/\n💬 /g) ?? []).length, 1);
+      assert.equal((content.match(/\n💬 /g) ?? []).length, 3);
       const count = deliveries.length;
       await monitor(env, [{ riotId: 'player#JP1' }]);assert.equal(deliveries.length, count);
     }

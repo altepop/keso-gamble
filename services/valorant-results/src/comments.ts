@@ -30,9 +30,15 @@ export function selectedTone(matchId:string,identity:string,group:CommentGroup='
   const choices=winningCommentGroups.includes(group)||losingCommentGroups.includes(group)?tauntingTones:otherTones;
   return choices[hash('tone:'+matchId+':'+identity)%choices.length];
 }
-export function resultComment(matchId:string,identity:string,group:CommentGroup='default',streak=0):string {
-  const tone=selectedTone(matchId,identity,group);
+function commentLine(matchId:string,identity:string,group:CommentGroup,streak:number,salt:string):string {
+  const tone=selectedTone(matchId+salt,identity,group);
   const choices=tone==='normal'?[...(old[group]??[]),...commentTones[group].normal]:commentTones[group][tone];
-  const line=choices[hash('line:'+matchId+':'+identity)%choices.length];
-  return '\n💬 '+(tone==='meme'?line:line.replaceAll('{streak}',String(streak)));
+  const line=choices[hash('line:'+matchId+salt+':'+identity)%choices.length];
+  return tone==='meme'?line:line.replaceAll('{streak}',String(streak));
+}
+/** Three different lines for one result (the first is the one older versions chose), each on its own 💬 line. */
+export function resultComment(matchId:string,identity:string,group:CommentGroup='default',streak=0):string {
+  const lines:string[]=[];
+  for(let i=0;lines.length<3&&i<30;i++){const line=commentLine(matchId,identity,group,streak,i?':'+i:'');if(!lines.includes(line))lines.push(line);}
+  return lines.map(line=>'\n💬 '+line).join('');
 }
