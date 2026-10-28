@@ -46,6 +46,14 @@ async function mleagueView(env:KpEnv,now:number){
 }
 /** A user option given as a mention (<@id>, <@!id>) or a bare ID. */
 const discordUser=(value:unknown)=>String(value??'').trim().replace(/^<@!?(\d+)>$/,'$1');
+/** Choices for /bet's horse field: the open race's horses with their odds, filtered by what was typed. */
+export async function betChoices(env:KpEnv,interaction:Slash,override?:KpMapping):Promise<Array<{name:string;value:number}>>{
+ const mapping=await initializeKp(env,override);if(!mapping)return [];
+ const view=await racingView(env,mapping),open=view.open,card={...raceCard(open.id,undefined,open.entries),...(open.crown?{name:open.crown}:{})},odds=raceOdds(card);
+ const typed=String((interaction.data?.options as Array<{name:string;value?:unknown;focused?:boolean}>|undefined)?.find(o=>o.focused)?.value??'').trim();
+ return card.horses.filter((h:{number:number;name:string})=>!typed||String(h.number)===typed||h.name.includes(typed))
+  .map((h:{number:number;name:string})=>({name:`${h.number}番 ${h.name}　1着 ${(odds.win[h.number]/10).toFixed(1)}倍・${placeSlots(card.size)}着内 ${(odds.place[h.number]/10).toFixed(1)}倍｜${clock(open.id)}発走`.slice(0,100),value:h.number})).slice(0,25);
+}
 export async function runKpCommand(env:KpEnv,interaction:Slash,override?:KpMapping):Promise<string>{
  const mapping=await initializeKp(env,override),user=interaction.member?.user?.id;
  if(!mapping||interaction.guild_id!==mapping.guildId||!user||!/^\d{15,22}$/.test(user))return 'このサーバーの本人の口座で利用してください。';
@@ -147,16 +155,19 @@ export async function runKpCommand(env:KpEnv,interaction:Slash,override?:KpMappi
   return [`🏇 **${clean(card.name)}**`,`-# ${clock(open.id)}発走・${card.size}頭｜締切 ${clock(card.closeAt)}`,
    '',`**出走馬**　倍率は 1着当て / ${placeSlots(card.size)}着以内当て`,
    ...card.horses.map((h:{number:number;name:string})=>`\`${String(h.number).padStart(2)}\` ${clean(h.name)}　**${(odds.win[h.number]/10).toFixed(1)}倍** / ${(odds.place[h.number]/10).toFixed(1)}倍`),
-   '',`🎫 **買い方**　\`/bet race:${clock(open.id)} horse:馬番 amount:100 type:1着当て\``,
-   `-# 券種は「1着当て（単勝）」か「${placeSlots(card.size)}着以内当て（複勝）」／100 KP単位・1週間で合計5万KPまで（Mリーグ予想と合算）・購入後の取消不可・この返答は本人にだけ表示`].join('\n');
+   '',`🎫 **買い方**　\`/bet\` と打って、horse で馬を一覧から選び、amount に掛け金（例 500）を入れて送信`,
+   `-# 券種は選ばなければ1着当て（${placeSlots(card.size)}着以内当てにもできる）／100 KP単位・1週間で合計5万KPまで（Mリーグ予想と合算）・購入後の取消不可・この返答は本人にだけ表示`].join('\n');
  }
  const options=interaction.data?.options??[];
  const value=(key:string)=>options.find(o=>o.name===key)?.value;
  try{
-  const raceId=slashRace(value('race'),interaction.id);
-  const result=await operateKp(env,mapping,user,interaction.id,'race-bet',{raceId,horse:value('horse'),amount:value('amount'),type:value('type')}) as {result:{bet:{raceId:number;horse:number;amount:number;odds:number;type:string}}};
-  const bet=result.result.bet;
-  return `🎫 馬券を購入しました\n${clock(bet.raceId)}発走・${bet.horse}番・${bet.type==='win'?'1着当て':'3着以内当て'}\n掛け金 ${money(bet.amount)}／確定倍率 ${(bet.odds/10).toFixed(1)}倍\n残高 ${money(await balance())}\n購入後の取消はできません。結果と払い戻しは自動で反映されます。`;
+  // The race taking bets when the command was sent; an old client may still send race:HH:MM, which must match it.
+  const raceId=value('race')===undefined?openRaceStart(created(interaction.id)):slashRace(value('race'),interaction.id);
+  const result=await operateKp(env,mapping,user,interaction.id,'race-bet',{raceId,horse:value('horse'),amount:value('amount'),type:value('type')??'win'}) as {result:{bet:{raceId:number;horse:number;amount:number;odds:number;type:string}}};
+  const bet=result.result.bet,view=await racingView(env,mapping,created(interaction.id)),card=raceCard(bet.raceId,undefined,view.open.id===bet.raceId?view.open.entries:undefined);
+  const name=view.open.id===bet.raceId&&view.open.crown?view.open.crown:card.name,horse=card.horses[bet.horse-1]?.name??'';
+  return [`🎫 **馬券を購入しました**`,`${clean(name)}（${clock(bet.raceId)}発走）`,`**${bet.horse}番 ${clean(horse)}** の${bet.type==='win'?'1着当て':placeSlots(card.size)+'着以内当て'}`,
+   `掛け金 ${money(bet.amount)} × 確定倍率 ${(bet.odds/10).toFixed(1)}倍 ＝ 当たれば ${money(Math.floor(bet.amount*bet.odds/10))}`,`残高 ${money(await balance())}`,'-# 購入後の取消はできません。結果と払い戻しは自動で反映されます。'].join('\n');
  }catch(error){
   const message=error instanceof Error?error.message:'';
   return /[ぁ-んァ-ヶ一-龯]/.test(message)&&!/SQL|D1_|kp_/.test(message)?message:'購入結果を確認できませんでした。Activityの馬券履歴と /kp の残高を確認してください。';

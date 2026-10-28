@@ -5,7 +5,7 @@ import {URL as NodeURL} from 'node:url';
 import {readFileSync,readdirSync} from 'node:fs';
 import {initializeKp,syncKpAccounts} from '../src/kp.ts';
 import type {KpEnv,KpMapping} from '../src/kp.ts';
-import {runKpCommand,slashRace} from '../src/kp-slash.ts';
+import {runKpCommand,slashRace,betChoices} from '../src/kp-slash.ts';
 import {registerKpCommands,kpCommands,isKpRanking} from '../src/kp-command.ts';
 const guild='100000000000000100',one='100000000000000101',two='100000000000000102',newUser='100000000000000103';
 const mapping:KpMapping={guildId:guild,accounts:[{riotId:'One#JP1',discordUserId:one},{riotId:'Two#JP1',discordUserId:two}]};
@@ -37,7 +37,7 @@ test('slash race card uses the real entries and never leaks a race seed',async t
  assert.match(message,/16:15発走・\d+頭｜締切 16:14/);assert.match(message,/` 1` /);assert.match(message,/` 8` /);
  const seed=f.sql.prepare('SELECT seed FROM kp_races ORDER BY id DESC LIMIT 1').get()?.seed;
  if(seed)assert.equal(message.includes(String(seed)),false);
- assert.match(message,/race:16:15/);
+ assert.match(message,/`\/bet` と打って、horse で馬を一覧から選び/);
 });
 test('slash bet uses the shared wallet, rejects stale races and invalid stakes, and retries one debit',async t=>{
  t.mock.timers.enable({apis:['Date'],now:T0});const f=await fixture();
@@ -65,7 +65,7 @@ test('command registration never bulk-replaces other commands and refuses a fore
  const api=async(path:string,method?:string,body?:unknown)=>{calls.push({path,method,body});return path==='/users/@me'?{id:one,bot:true}:method==='POST'?{...(body as object),id:one}:[{name:'death'},{name:'valo'},{name:'launch',type:4}];};
  assert.equal(await registerKpCommands(one,guild,api,async()=>{}),10);
  assert.deepEqual(calls.filter(c=>c.method==='POST').map(c=>c.body.name),['kp','keiba','bet','mleague','mbet','mclose','kpgrant','unitelink','paifulink','paifu']);
- assert.ok(calls.every(c=>c.method!=='PUT'));assert.equal(kpCommands[2].options?.filter(o=>o.required).length,4);
+ assert.ok(calls.every(c=>c.method!=='PUT'));assert.deepEqual(kpCommands[2].options?.filter(o=>o.required).map(o=>o.name),['horse','amount']);
  // Unchanged commands are not written again, and writes are spaced out.
  const waits:number[]=[],posted:string[]=[];
  const stored=[{...kpCommands[0],id:'1',application_id:one,version:'9',description_localizations:null,options:kpCommands[0].options.map(o=>({...o,required:false}))},{...kpCommands[1],id:'2'},{name:'death'}];
@@ -123,7 +123,7 @@ test('public command metadata contains definitions only and does not need or exp
  let queries=0;
  const response=await kpApi(new Request('https://worker/api/kp/commands'),{DB:{prepare(){queries++;throw Error('No DB reads');}},KP_BOOTSTRAP_PRIVATE_KEY:'fixture-secret-must-not-leak'} as unknown as KpEnv);
  const body=await response.json() as {version:string;commands:unknown[]};
- assert.equal(response.status,200);assert.equal(body.version,'kp-slash-v9-unite');assert.equal(body.commands.length,10);assert.equal(queries,0);
+ assert.equal(response.status,200);assert.equal(body.version,'kp-slash-v10-bet-easy');assert.equal(body.commands.length,10);assert.equal(queries,0);
  assert.equal(JSON.stringify(body).includes('fixture-secret'),false);assert.equal(response.headers.get('Cache-Control'),'no-store');
 });
 
@@ -157,4 +157,28 @@ test('/kpgrant and /paifulink are refused before any work for members without ad
  const response=await discordInteractions(new Request('https://worker/interactions',{method:'POST',body,headers:{'X-Signature-Ed25519':signature,'X-Signature-Timestamp':timestamp}}),env,{waitUntil:(p:Promise<unknown>)=>tasks.push(p)} as unknown as ExecutionContext,config);
  assert.match(JSON.stringify(await response.json()),/管理者/);assert.equal(tasks.length,0);assert.equal(queries,0);
  }
+});
+
+test('/bet needs only a horse and an amount: the open race and a win bet are assumed, and the receipt names the horse',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:T0});const f=await fixture();
+ const choices=await betChoices(f.env,{...interaction('bet',one,[{name:'horse',value:'',focused:true} as never]),guild_id:guild},mapping);
+ assert.ok(choices.length>=8&&choices.every(c=>c.name.length<=100&&/^\d+番 .+　1着 \d+\.\d倍・\d着内 \d+\.\d倍｜16:15発走$/.test(c.name)),JSON.stringify(choices[0]));
+ const typed=await betChoices(f.env,{...interaction('bet',one,[{name:'horse',value:'2',focused:true} as never])},mapping);
+ assert.deepEqual(typed.map(c=>c.value),[2],'typing a number narrows the list');
+ const receipt=await runKpCommand(f.env,interaction('bet',one,[{name:'horse',value:2},{name:'amount',value:500}]),mapping);
+ assert.match(receipt,/馬券を購入しました/);assert.match(receipt,/16:15発走/);assert.match(receipt,new RegExp(`\\*\\*2番 ${choices[1].name.split('　')[0].replace(/^2番 /,'')}\\*\\* の1着当て`));
+ assert.match(receipt,/掛け金 500 KP × 確定倍率 \d+\.\d倍 ＝ 当たれば [\d,]+ KP/);
+ assert.equal(f.sql.prepare('SELECT balance FROM kp_wallets WHERE user=?').get(one)?.balance,9500);
+});
+test('the horse list is answered right away as an autocomplete result, and never as a command',async()=>{
+ const {discordInteractions}=await import('../src/discord-interactions.ts');
+ const pair=await crypto.subtle.generateKey({name:'Ed25519'},true,['sign','verify']) as CryptoKeyPair;
+ const config={applicationId:one,guildId:guild,publicKey:Buffer.from(await crypto.subtle.exportKey('raw',pair.publicKey)).toString('hex')};
+ const call=async(name:string)=>{const body=JSON.stringify({...interaction(name,one,[{name:'horse',value:'',focused:true} as never]),application_id:one,type:4,token:'t',member:{permissions:'0',user:{id:one}}}),timestamp=String(Math.floor(Date.now()/1000));
+  const signature=Buffer.from(await crypto.subtle.sign('Ed25519',pair.privateKey,new TextEncoder().encode(timestamp+body))).toString('hex');
+  const tasks:Promise<unknown>[]=[];const env={DB:{prepare(){throw Error('unavailable');}}} as unknown as import('../src/index.ts').Env;
+  const response=await discordInteractions(new Request('https://worker/interactions',{method:'POST',body,headers:{'X-Signature-Ed25519':signature,'X-Signature-Timestamp':timestamp}}),env,{waitUntil:(p:Promise<unknown>)=>tasks.push(p)} as unknown as ExecutionContext,config);
+  return {json:await response.json(),tasks:tasks.length};};
+ assert.deepEqual(await call('bet'),{json:{type:8,data:{choices:[]}},tasks:0},'an unavailable list is empty, not an error');
+ assert.deepEqual(await call('kp'),{json:{type:8,data:{choices:[]}},tasks:0});
 });
