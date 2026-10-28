@@ -12,8 +12,8 @@ import { PUBLIC_SALT, RUN_MS, WEEKLY_LIMIT, openRaceStart, latestRaceStart, race
 import { LUXURY } from './luxury.js?v=20261028-casino';
 import { raceScreen, racePreview, drawRace, raceElapsed, ownerPanel, luxuryPanel, roastPanel } from './racing-view.js?v=20261028-stocks';
 import { createStore } from './store.js';
-import { gamePicker, chinchiroView, blackjackView } from './casino-view.js?v=20261028-casino-copy';
-import {casinoFrames} from './casino-animation.js?v=20261028-casino-fx';
+import { gamePicker, chinchiroView, blackjackView } from './casino-view.js?v=20261028-dice-suspense';
+import {casinoFrames} from './casino-animation.js?v=20261028-dice-suspense';
 import { playChinchiro, bjStart, bjHit, bjStand, bjDouble, cryptoDie, cryptoCard } from './casino.js?v=20261028-casino';
 const $=(s,el=document)=>el.querySelector(s);
 const wallet=createKpClient();

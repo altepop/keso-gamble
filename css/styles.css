@@ -296,5 +296,29 @@ details.asset-card.rules{margin:14px}
 @media(max-width:350px){.dice-board{padding-left:10px;padding-right:10px;gap:12px}.dice-row{gap:3px;padding:5px}.die{padding:3px;gap:1px;border-radius:6px}.dice-bowl{min-height:98px;border-width:4px}.casino-masthead{padding-left:14px;padding-right:14px;font-size:9px}.bj-table{padding-left:15px;padding-right:15px}.playing-card{width:52px;height:76px}.cards{gap:6px;min-height:79px}}
 @media(prefers-reduced-motion:reduce){.casino-arena *,.casino-verdict.fresh,.die.tumbling,.playing-card.dealt{animation:none!important;transition:none!important}.casino-sparks{display:none}.die.tumbling{filter:none}}
 .casino-arena{scroll-margin-top:85px}
+.dice-board.in-play{grid-template-columns:minmax(0,1fr);min-height:320px;align-content:start;padding:14px 22px 10px}
+.dice-board.in-play .dice-side.active{order:0;gap:12px}
+.dice-board.in-play .dice-side:not(.active){order:1;flex-direction:row;justify-content:space-between;gap:8px;padding:10px 4px;border-top:1px solid #e3ca8726}
+.dice-board.in-play .dice-side:not(.active) .dice-bowl,.dice-board.in-play .dice-side:not(.active) .dice-previous,.dice-board.in-play .dice-versus{display:none}
+.dice-board.in-play .dice-side:not(.active) .dice-player{display:flex;align-items:center;gap:8px}
+.dice-board.in-play .dice-side:not(.active) .dice-hand{font-size:13px}
+.dice-board.in-play .dice-side.active .dice-bowl{min-height:190px;max-width:420px;border-width:7px;perspective:650px}
+.dice-board.in-play .die{width:50px;--cube-half:25px;margin:0 9px}
+.dice-board.in-play .dice-row{min-height:90px;align-items:center;gap:6px}
+.die.tumbling{display:block;position:relative;padding:0;border:0;background:none;box-shadow:none;filter:none;animation:dice-flight .48s linear infinite;animation-delay:calc(var(--die)*-.13s);will-change:transform}
+.dice-cube{position:absolute;inset:0;transform-style:preserve-3d;animation:dice-spin .58s linear infinite;animation-delay:calc(var(--die)*-.19s)}
+.dice-face{position:absolute;inset:0;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);gap:3px;padding:7px;border:1px solid #fff5db;background:#f5e4c6;border-radius:7px;backface-visibility:hidden;box-shadow:inset 0 0 7px #a66c4430}
+.dice-face i.pip{background:#332b25}.dice-face.red-pips i.pip{background:#bd392e}
+.face-0{transform:translateZ(var(--cube-half))}.face-1{transform:rotateY(180deg) translateZ(var(--cube-half));background:#cfad85}.face-2{transform:rotateY(90deg) translateZ(var(--cube-half));background:#dbc09c}.face-3{transform:rotateY(-90deg) translateZ(var(--cube-half));background:#e9d2b1}.face-4{transform:rotateX(90deg) translateZ(var(--cube-half))}.face-5{transform:rotateX(-90deg) translateZ(var(--cube-half));background:#c8a47f}
+.dice-board.in-play .die.newly-landed{animation:dice-stop .3s cubic-bezier(.2,.9,.3,1.4) both;box-shadow:2px 4px 0 #956947,3px 8px 9px #0008}
+.dice-bowl.suspense{border-color:#f5ca7b;box-shadow:inset 0 9px 16px #160b0990,0 4px 0 #4e3223,0 0 32px #e4a24655}
+.die.tumbling.last-die{animation-duration:.74s}.last-die .dice-cube{animation-duration:1.1s}
+.dice-tension{color:#ffe2a5;text-shadow:0 0 20px #f4bd5566;font-size:18px;animation:dice-breathe .8s ease-in-out infinite alternate}
+.dice-roll-count{position:absolute;bottom:17px;left:0;right:0;font-size:10px;letter-spacing:.15em;color:#fce5c0;pointer-events:none}
+@keyframes dice-flight{0%{transform:translate(-14px,-16px) rotate(-15deg)}25%{transform:translate(9px,10px) rotate(18deg)}50%{transform:translate(15px,-24px) rotate(34deg)}75%{transform:translate(-9px,7px) rotate(-8deg)}100%{transform:translate(-14px,-16px) rotate(-15deg)}}
+@keyframes dice-spin{from{transform:rotateX(15deg) rotateY(0deg) rotateZ(12deg)}to{transform:rotateX(375deg) rotateY(720deg) rotateZ(12deg)}}
+@keyframes dice-stop{0%{transform:translateY(-20px) rotate(-22deg);opacity:.7}55%{transform:translateY(3px) rotate(6deg)}100%{transform:rotate(calc((var(--die) - 1)*9deg));opacity:1}}
+@keyframes dice-breathe{from{opacity:.7}to{opacity:1}}
+@media(max-width:350px){.dice-board.in-play{padding-left:14px;padding-right:14px}.dice-board.in-play .die{width:44px;--cube-half:22px;margin:0 6px}.dice-face{padding:6px;gap:2px}.dice-board.in-play .dice-side.active .dice-bowl{min-height:175px}.dice-tension{font-size:16px}}
 .casino-verdict.big-hand{border:1px solid #e9c66e88;border-radius:14px;background:radial-gradient(ellipse at 50% 50%,#d9a84530,transparent 75%);box-shadow:inset 0 0 25px #efc15a0d}.casino-verdict.big-hand .verdict-note{color:#ffe1a0}
 .stock-panel{margin:14px;padding:18px;background:#09162b;border:1px solid #244064;border-radius:16px}.stock-panel h2{font-size:16px;margin:0 0 10px}.stock-panel-head{display:flex;justify-content:space-between;align-items:center;gap:10px}.stock-panel-head h2{margin:0}.stock-summary{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:16px 0}.stock-summary>div{display:grid;gap:7px;min-width:0}.stock-summary span,.stock-summary small{font-size:11px;color:#9bacc9}.stock-summary strong{font-size:18px;color:#e8d6a4}.stock-summary small{display:block;margin-top:5px}.stock-news{display:flex;align-items:flex-start;gap:10px;padding:12px 0;border-top:1px solid #223757}.stock-news-symbol{flex-shrink:0;border:1px solid #375173;border-radius:6px;font-size:10px;padding:5px;color:#b8cdec}.stock-news strong{font-size:13px}.stock-news small{display:block;font-size:11px;color:#91a3bf;margin-top:6px}

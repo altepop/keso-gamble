@@ -9,11 +9,14 @@ export function casinoFrames(action,before,result){
    if(!result[side])continue;
    shown[side]={rolls:[],hand:null};
    result[side].rolls.forEach((dice,index)=>{
-    add({...base,chinchiro:[shown]},{phase:'rolling',side,round:index+1},600);
+    // Stop each real die separately. The last die stays unreadable until it lands.
+    add({...base,chinchiro:[shown]},{phase:'rolling',side,round:index+1,stopped:[]},index?700:1000);
+    add({...base,chinchiro:[shown]},{phase:'landing',side,round:index+1,stopped:dice.slice(0,1)},index?240:380);
+    add({...base,chinchiro:[shown]},{phase:'landing',side,round:index+1,stopped:dice.slice(0,2)},dice[0]===dice[1]?1100:index?550:800);
     shown[side].rolls.push(copy(dice));
     const final=index===result[side].rolls.length-1;
     if(final)shown[side].hand=copy(result[side].hand);
-    add({...base,chinchiro:[shown]},{phase:final?'hand':'reroll',side,round:index+1},final?650:350);
+    add({...base,chinchiro:[shown]},{phase:final?'hand':'reroll',side,round:index+1},final?750:400);
    });
   }
   add({...base,chinchiro:[result]},{phase:'settled',net:result.net},950);
