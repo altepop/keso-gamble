@@ -32,8 +32,8 @@ export function earningsWebhook(env:PostEnv){
 }
 
 /** How to buy from Discord, with the race's own start time filled in. */
-const howToBet=(start:number)=>[`🎫 **買い方**　\`/bet race:${clock(start)} horse:馬番 amount:100 type:1着当て\``,
- '-# /keiba で出走表と倍率を確認／100 KP単位・1週間で合計5万KPまで（Mリーグ予想と合算）・購入後の取消不可・アプリの「勝負 → 競馬」でも買えます'];
+const howToBet=(start:number)=>[`🎫 **Discordで買える！**　\`/bet\` と打つ → **horse** で馬を一覧から選ぶ → **amount** に掛け金（例 500）→ 送信`,
+ `-# ${clock(start-CLOSE_BEFORE)}まで受付／券種は選ばなければ1着当て／100 KP単位・1週間で合計5万KPまで（Mリーグ予想と合算）・購入後の取消不可・/keiba で出走表、アプリの「勝負 → 競馬」でも買えます`];
 export function cardPost(card:Card,hash:string){
  const odds=raceOdds(card);
  return [`🏇 **${clean(card.name)}**`,
@@ -72,7 +72,7 @@ async function raceBets(env:KpEnv,guild:string,id:number){
 }
 export async function enqueue(env:KpEnv,id:string,body:string,now:number){await env.DB.prepare('INSERT OR IGNORE INTO kp_posts(id,body,at) VALUES(?,?,?)').bind(id,JSON.stringify({content:body,allowed_mentions:{parse:[]}}),now).run();}
 export function crownPost(c:{race:number;name:string;user:string;reason:string}){
- return `🏇 『${clean(c.name)}』開催決定！ ${clock(c.race)}発走（<@${c.user}> の${c.reason}にちなんで）\n発走15分前から \`/bet race:${clock(c.race)}\` か、アプリの「勝負 → 競馬」で馬券を買えます。\n💬 ${raceCatchphrase('crown',String(c.race))}\n${raceAside('crown',String(c.race))}`;
+ return `🏇 『${clean(c.name)}』開催決定！ ${clock(c.race)}発走（<@${c.user}> の${c.reason}にちなんで）\n発走15分前から \`/bet\`（馬を一覧から選んで掛け金を入れるだけ）か、アプリの「勝負 → 競馬」で馬券を買えます。\n💬 ${raceCatchphrase('crown',String(c.race))}\n${raceAside('crown',String(c.race))}`;
 }
 export async function roastLevelsOf(env:KpEnv,mapping:KpMapping){
  const rows=(await env.DB.prepare("SELECT user,json_extract(data,'$.roastLevel') AS level FROM kp_state WHERE guild=?").bind(mapping.guildId).all<{user:string;level:string|null}>()).results;
