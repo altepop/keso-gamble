@@ -1,5 +1,7 @@
 import {monitorMahjong, mahjongStatus} from './mahjong.ts';
 import {monitorUnite} from './unite.ts';
+import {settleRankChange,rankChangeBlock,rankChangeFor} from './rank-change.ts';
+import type {RankChange} from './rank-change.ts';
 import {paipuApi} from './mahjong-paipu.ts';
 export {VoiceGateway} from './voice-gateway.ts';
 import {ensureVoice} from './voice-api.ts';
@@ -109,7 +111,7 @@ async function api<T>(env: Env, path: string): Promise<T> {
   });
   const remaining = response.headers.get('X-RateLimit-Remaining');
   const headerNumber = (name: string) => { const value = response.headers.get(name); return value !== null && /^\d+(?:\.\d+)?$/.test(value) ? Number(value) : null; };
-  console.info('henrik_response', { endpoint: path.includes('/match/') ? 'match_detail' : path.includes('/matches/') ? 'matches' : 'account', status: response.status,
+  console.info('henrik_response', { endpoint: path.includes('/match/') ? 'match_detail' : path.includes('/matches/') ? 'matches' : path.includes('/mmr-history/') ? 'mmr_history' : 'account', status: response.status,
     responseMs: Date.now() - requestedAt, cacheTTL: headerNumber('X-Cache-TTL'), cacheAge: headerNumber('Age'), remaining: headerNumber('X-RateLimit-Remaining') });
   if (response.status === 429 || (remaining !== null && Number(remaining) <= 1)) {
     const retryAt = Date.now() + retryAfter(response);
@@ -123,7 +125,7 @@ async function api<T>(env: Env, path: string): Promise<T> {
 }
 
 
-async function saveMatch(env: Env, match: Match, player: Player, account: Account, kpRun:KpRun|null,reservations:Map<string,string>,saved:Set<string>): Promise<'excluded' | 'beforeMonitoring' | 'newResults' | 'duplicates'> {
+async function saveMatch(env: Env, match: Match, player: Player, account: Account, kpRun:KpRun|null,reservations:Map<string,string>,saved:Set<string>,ranks:Map<string,string>=new Map()): Promise<'excluded' | 'beforeMonitoring' | 'newResults' | 'duplicates'> {
   const mode = match.metadata?.queue?.id;
   const ordinary = resultMessage(match, account.puuid, player.name?.trim() || parseId(player.riotId)[0]);
   if (!ordinary) return 'excluded';
@@ -158,6 +160,24 @@ async function saveMatch(env: Env, match: Match, player: Player, account: Accoun
       }
     }
   } catch { console.warn('kp_match_pending'); }
+  // Competitive rank change from the MMR history: looked up until the match appears there (3 tries),
+  // then kept, so every rewrite of the post carries it. A demotion costs KP once.
+  if (mode === 'competitive' && kpRun) try {
+    const key = 'rank_change:' + match.metadata.match_id + ':' + account.puuid;
+    // Loaded once per run; results posted before this feature (already saved, nothing stored) are left alone.
+    const stored = ranks.get(key), fresh = !saved.has(JSON.stringify([player.riotId, match.metadata.match_id]));
+    let change: RankChange | null = stored?.startsWith('{') ? JSON.parse(stored) as RankChange : null;
+    if ((stored === undefined && fresh) || (stored !== undefined && /^pending:[12]$/.test(stored))) {
+      change = rankChangeFor(await api<unknown>(env, `/valorant/v2/by-puuid/mmr-history/${account.region}/pc/${encodeURIComponent(account.puuid)}`), match.metadata.match_id);
+      const next = change ? JSON.stringify(change) : stored === undefined ? 'pending:1' : stored === 'pending:1' ? 'pending:2' : 'none';
+      await env.DB.prepare('INSERT INTO monitor_state(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind(key, next).run();
+      ranks.set(key, next);
+      const user = kpRun.mapping.accounts.find(a => a.riotId === player.riotId)?.discordUserId;
+      if (change && user) await settleRankChange(env, kpRun.mapping, user, change, match.metadata.match_id, account.puuid, Date.now());
+      if (change && change.after !== change.before) kpActive = true;
+    }
+    if (change) result.message += rankChangeBlock(change, match.metadata.match_id + ':' + account.puuid);
+  } catch { console.warn('rank_change_pending'); }
   const savedKey=JSON.stringify([player.riotId,match.metadata.match_id]);
   if(saved.has(savedKey)&&!kpActive&&!isDeathNotice(result.mode))return 'duplicates';
   const inserted = await env.DB.prepare('INSERT OR IGNORE INTO notifications(riot_id,match_id,message,ended_at,mode,act_id,act_name,outcome,sent,team_id) VALUES(?,?,?,?,?,?,?,?,?,?)')
@@ -314,6 +334,7 @@ export async function monitor(env: Env, players: Player[] = configuredPlayers): 
     // Bound extra API traffic: one reserved match per run, one attempt per match per five minutes.
     const reservations=new Map((await env.DB.prepare(`SELECT s.riot_id,${sessionModeSQL} AS mode FROM death_unrated_sessions s WHERE s.cancelled_at IS NULL`).all<{riot_id:string;mode:string}>()).results.map(r=>[r.riot_id,r.mode]));
     const saved=new Set((await env.DB.prepare('SELECT riot_id,match_id FROM notifications ORDER BY ended_at DESC LIMIT 200').all<{riot_id:string;match_id:string}>()).results.map(r=>JSON.stringify([r.riot_id,r.match_id])));
+    const ranks=new Map((await env.DB.prepare("SELECT key,value FROM monitor_state WHERE key LIKE 'rank_change:%' ORDER BY rowid DESC LIMIT 300").all<{key:string;value:string}>()).results.map(r=>[r.key,r.value]));
     const deathDetails: DeathDetails = { remaining: 1, matches: new Map(),reservations };
     // Deliver a previously queued result before spending time polling the API again.
     if (players.length) await flushNotifications(env, players);
@@ -347,17 +368,17 @@ export async function monitor(env: Env, players: Player[] = configuredPlayers): 
         const counts = { fetched: matches.length, newResults: 0, duplicates: 0, beforeMonitoring: 0, excluded: 0 };
         stage = 'save_result';
         for (const match of [...matches].sort((a, b) => Date.parse(a.metadata.started_at) - Date.parse(b.metadata.started_at))) {
-          counts[await saveMatch(env, match, player, account,kpRun,reservations,saved)]++;
+          counts[await saveMatch(env, match, player, account,kpRun,reservations,saved,ranks)]++;
           // A full match already contains other registered players; do not wait for their history to catch up.
           for (const other of players) {
             if (other.riotId === player.riotId) continue;
             const otherAccount = accounts.get(other.riotId);
-            if (otherAccount && match.players?.some(member => member.puuid === otherAccount.puuid)) await saveMatch(env, match, other, otherAccount,kpRun,reservations,saved);
+            if (otherAccount && match.players?.some(member => member.puuid === otherAccount.puuid)) await saveMatch(env, match, other, otherAccount,kpRun,reservations,saved,ranks);
           }
           const detail = await deathDetail(env, match, players, accounts, deathDetails);
           if (detail) for (const target of players) {
             const targetAccount = accounts.get(target.riotId);
-            if (targetAccount && detail.players.some(member => member.puuid === targetAccount.puuid)) await saveMatch(env, detail, target, targetAccount,kpRun,reservations,saved);
+            if (targetAccount && detail.players.some(member => member.puuid === targetAccount.puuid)) await saveMatch(env, detail, target, targetAccount,kpRun,reservations,saved,ranks);
           }
         }
         await setState(env, 'checked:' + player.riotId, Date.now());
