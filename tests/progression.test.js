@@ -14,7 +14,7 @@ test('Steam achievements require game, achievement and evidence; duplicate title
 });
 test('directives charge once, require a target, prevent stacking, and completion does not refund',()=>{
  const s=createInitialState();assert.throws(()=>issueDirective(s,{target:'self',task:'competitive'}));
- const d=issueDirective(s,{target:'riso',task:'competitive'});assert.equal(s.cash,7500);assert.throws(()=>issueDirective(s,{target:'riso',task:'unrated'}));completeDirective(s,d.id);assert.equal(s.cash,7500);assert.throws(()=>completeDirective(s,d.id));issueDirective(s,{target:'riso',task:'unrated'});assert.equal(s.cash,6000);
+ const d=issueDirective(s,{target:'riso',task:'competitive'});assert.equal(s.cash,6000,'competitive costs 4,000');assert.throws(()=>issueDirective(s,{target:'riso',task:'unrated'}));completeDirective(s,d.id);assert.equal(s.cash,6000);assert.throws(()=>completeDirective(s,d.id));issueDirective(s,{target:'riso',task:'unrated'});assert.equal(s.cash,3500,'unrated costs 2,500');
 });
 test('missing achievement details and insufficient balance never debit',()=>{
  const s=createInitialState();assert.throws(()=>issueDirective(s,{target:'yuya',task:'steam'}));s.cash=100;const before=structuredClone(s);assert.throws(()=>issueDirective(s,{target:'yuya',task:'competitive'}));assert.deepEqual(s,before);

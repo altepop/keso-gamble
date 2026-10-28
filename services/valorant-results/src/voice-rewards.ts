@@ -1,7 +1,9 @@
 import {ensureQuizKp} from './quiz-kp.ts';
 import {newKpState} from './kp.ts';
 import type {KpEnv} from './kp.ts';
-export const voicePolicy={intervalMs:300000,amount:5,dailyCap:240,slots:48};
+/** Each 5-minute slot pays 15 KP: the 5 KP event plus a 10 KP bonus. */
+export const VOICE_BONUS=10;
+export const voicePolicy={intervalMs:300000,amount:5+VOICE_BONUS,dailyCap:48*(5+VOICE_BONUS),slots:48};
 export function voiceSlices(from:number,to:number){
  const slices:Array<{day:string;ms:number}>=[];
  if(!Number.isSafeInteger(from)||!Number.isSafeInteger(to)||to<from)return slices;
@@ -12,6 +14,8 @@ const ready=new WeakSet<object>();
 export async function ensureVoiceLedger(env:KpEnv){if(ready.has(env.DB))return;await env.DB.batch([
  env.DB.prepare(`CREATE TABLE IF NOT EXISTS kp_voice_events(id TEXT PRIMARY KEY,guild TEXT NOT NULL,user TEXT NOT NULL,day TEXT NOT NULL,slot INTEGER NOT NULL CHECK(slot BETWEEN 1 AND 48),amount INTEGER NOT NULL CHECK(amount=5),at INTEGER NOT NULL,UNIQUE(guild,user,day,slot))`),
  env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS kp_voice_apply AFTER INSERT ON kp_voice_events BEGIN INSERT INTO kp_ledger(id,guild,user,delta,kind,at) VALUES(NEW.id,NEW.guild,NEW.user,NEW.amount,'voice',NEW.at); END`),
+ // The stored events keep their original 5 KP (a CHECK in the live table); each slot now adds a 10 KP bonus row.
+ env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS kp_voice_bonus_v2 AFTER INSERT ON kp_voice_events BEGIN INSERT OR IGNORE INTO kp_ledger(id,guild,user,delta,kind,at) VALUES('bonus:'||NEW.id,NEW.guild,NEW.user,${VOICE_BONUS},'voice',NEW.at); END`),
 ]);ready.add(env.DB);}
 export async function creditVoiceSlot(env:KpEnv,guild:string,user:string,day:string,slot:number,at:number){
  if(!/^\d{15,22}$/.test(user)||!/^\d{15,22}$/.test(guild)||!/^\d{4}-\d{2}-\d{2}$/.test(day)||!Number.isInteger(slot)||slot<1||slot>48)throw Error('Invalid voice slot');

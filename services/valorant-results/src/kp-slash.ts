@@ -80,7 +80,7 @@ export async function runKpCommand(env:KpEnv,interaction:Slash,override?:KpMappi
    env.DB.prepare('DELETE FROM unite_links WHERE guild=? AND (user=? OR uid=?)').bind(mapping.guildId,target,uid),
    env.DB.prepare('INSERT INTO unite_links(guild,user,uid) VALUES(?,?,?)').bind(mapping.guildId,target,uid),
   ]);
-  return `🔗 <@${target}> を UniteAPI（${uid}）と結び付けました。数分後から、ランクマッチの結果をアカンbotで速報し、勝ち +300／負け −150 KP を精算します。プロフィールが非公開だと読めません。`;
+  return `🔗 <@${target}> を UniteAPI（${uid}）と結び付けました。数分後から、ランクマッチの結果をアカンbotで速報し、勝ち +200／負け −50 KP を精算します。プロフィールが非公開だと読めません。`;
  }
  if(command==='paifulink'){
   // Admin-only. Replaces any earlier link of either side, so a wrong link is fixed by linking again.

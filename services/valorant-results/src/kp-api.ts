@@ -28,7 +28,7 @@ export async function readKpState(env:KpEnv,mapping:KpMapping,user:string){
  await ensureQuizKp(env);
  const quiz=(await env.DB.prepare('SELECT id,mode,day,game,amount,completed_at FROM kp_quiz_events WHERE guild=? AND user=? UNION ALL SELECT id,mode,day,game,amount,completed_at FROM kp_quiz_ranked_extra WHERE guild=? AND user=? ORDER BY completed_at DESC LIMIT 100').bind(mapping.guildId,user,mapping.guildId,user).all<{id:string;mode:string;day:string;game:string;amount:number;completed_at:number}>()).results;
  await ensureVoiceLedger(env);
- const voice=(await env.DB.prepare('SELECT id,day,slot,amount,at FROM kp_voice_events WHERE guild=? AND user=? ORDER BY at DESC LIMIT 100').bind(mapping.guildId,user).all<{id:string;day:string;slot:number;amount:number;at:number}>()).results;
+ const voice=(await env.DB.prepare("SELECT e.id,e.day,e.slot,e.amount+COALESCE((SELECT delta FROM kp_ledger WHERE id='bonus:'||e.id),0) AS amount,e.at FROM kp_voice_events e WHERE e.guild=? AND e.user=? ORDER BY e.at DESC LIMIT 100").bind(mapping.guildId,user).all<{id:string;day:string;slot:number;amount:number;at:number}>()).results;
  state.voiceRewards={...await voiceStatus(env,user),...voicePolicy,earned:voice.filter(e=>e.day===new Date().toISOString().slice(0,10)).reduce((n,e)=>n+e.amount,0)};
  state.quizRates=quizKpRates;state.quizDay=new Date().toISOString().slice(0,10);state.quizLimits=quizKpLimits;state.quizCounts=Object.fromEntries(Object.keys(quizKpRates).map(mode=>[mode,quiz.filter(e=>e.day===state.quizDay&&e.mode===mode).length]));state.quizCompleted=Object.keys(quizKpLimits).filter(mode=>state.quizCounts[mode]>=quizKpLimits[mode]!);
  state.claims=rewards.map(e=>({id:e.id,activity:e.mode,reference:e.match,reward:e.amount,status:'approved',time:e.at})).concat(quiz.map(e=>({id:e.id,activity:'quiz.'+e.mode,reference:e.game,reward:e.amount,status:'approved',time:e.completed_at}))).concat(voice.map(e=>({id:e.id,activity:'voice',reference:'通話 '+e.slot+'回目',reward:e.amount,status:'approved',time:e.at}))).sort((a:{time:number},b:{time:number})=>b.time-a.time).slice(0,100);
@@ -46,7 +46,7 @@ export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:strin
   if(action==='trade')result=trade(state,args.symbol,args.side,args.quantity);
   else if(action==='spin')result=args.type==='numbers'?spinNumbers(state,args.bets,cryptoRouletteNumber()):spin(state,args.type,args.amount,args.choice??0,cryptoRouletteNumber());
   else if(action==='directive'){
-   const costs:Record<string,number>={competitive:2500,unrated:1500,solo_competitive:15000,solo_death_unrated:20000},task=String(args.task),target=String(args.target),cost=Object.hasOwn(costs,task)?costs[task]:0;
+   const costs:Record<string,number>={competitive:4000,unrated:2500,solo_competitive:25000,solo_death_unrated:30000},task=String(args.task),target=String(args.target),cost=Object.hasOwn(costs,task)?costs[task]:0;
    if(!cost||!mapping.accounts.some(a=>a.discordUserId===target)||target===user)throw Error('指名する相手と課題を選んでください。');
    if(state.cash<cost)throw Error('KPが足りません。');
    useExchange(state,Date.now()); // directives, boxes and luxury items share the daily limit
