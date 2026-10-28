@@ -29,7 +29,7 @@ async function fixture(withWebhook=true){
 }
 function captureFetch(t:{mock:{method:(o:object,m:string,f:unknown)=>unknown}},status=()=>200){
  const sent:Array<{content:string;allowed_mentions:unknown}>=[];
- t.mock.method(globalThis,'fetch',async(url:URL,init:{body:string})=>{assert.equal(String(url),webhook);const code=status();if(code===200)sent.push(JSON.parse(init.body));return new Response('{}',{status:code});});
+ t.mock.method(globalThis,'fetch',async(url:URL,init:{body:string})=>{assert.equal(String(url),webhook+'?with_components=true');const code=status();if(code===200)sent.push(JSON.parse(init.body));return new Response('{}',{status:code});});
  return sent;
 }
 const posts=(sql:DatabaseSync)=>sql.prepare('SELECT id,sent FROM kp_posts ORDER BY id').all() as Array<{id:string;sent:number}>;

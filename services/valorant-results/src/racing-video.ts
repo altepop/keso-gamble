@@ -1,3 +1,4 @@
+import {activityLaunchComponents} from './activity-link.ts';
 import type {BroadcastEnv,BroadcastRow} from './racing-broadcast.ts';
 import {ensureBroadcast} from './racing-broadcast.ts';
 import {earningsWebhook} from './racing-posts.ts';
@@ -56,8 +57,8 @@ export async function raceVideoApi(request:Request,env:BroadcastEnv,identity=vid
  const url=earningsWebhook(env);if(!url)return new Response('Unavailable',{status:503});
  const changed=await env.DB.prepare("UPDATE race_broadcasts SET video='uploading' WHERE guild=? AND race=? AND lease=? AND video='claimed'").bind(row.guild,race,lease).run();if(!changed.meta.changes)return new Response('Already uploading',{status:409});
  const show=JSON.parse(row.snapshot),body=new FormData();
- body.set('payload_json',JSON.stringify({content:`🎬 **${show.card.name.replace(/[@`*_~<>|\r\n]/g,'')}** レース映像\n${row.channel&&row.message&&/^\d+$/.test(row.message)?`実況の投稿：https://discord.com/channels/${row.guild}/${row.channel}/${row.message}`:'確定した着順を再現した映像です。'}`,allowed_mentions:{parse:[]},attachments:[{id:0,filename:'keso-race-'+race+'.mp4'}]}));
- body.set('files[0]',file,'keso-race-'+race+'.mp4');url.searchParams.set('wait','true');
+ body.set('payload_json',JSON.stringify({content:`🎬 **${show.card.name.replace(/[@`*_~<>|\r\n]/g,'')}** レース映像\n${row.channel&&row.message&&/^\d+$/.test(row.message)?`実況の投稿：https://discord.com/channels/${row.guild}/${row.channel}/${row.message}`:'確定した着順を再現した映像です。'}`,allowed_mentions:{parse:[]},components:activityLaunchComponents(),attachments:[{id:0,filename:'keso-race-'+race+'.mp4'}]}));
+ body.set('files[0]',file,'keso-race-'+race+'.mp4');url.searchParams.set('wait','true');url.searchParams.set('with_components','true');
  try{
   const response=await fetch(url,{method:'POST',body,signal:AbortSignal.timeout(30000)});
   if(!response.ok){

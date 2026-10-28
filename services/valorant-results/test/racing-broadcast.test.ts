@@ -32,8 +32,8 @@ test('no viewer is required: cron schedules a major race once and never fabricat
 test('one Discord post is edited at the wall-clock position; repeated alarms do not create or replay messages',async t=>{
  t.mock.timers.enable({apis:['Date'],now:MAIN-180000});const f=await fixture();f.put();const requests:any[]=[];
  t.mock.method(globalThis,'fetch',async(url:URL,init:RequestInit)=>{requests.push({url:String(url),method:init.method,body:JSON.parse(String(init.body))});return Response.json({id:'100000000000000200',channel_id:'100000000000000201'});});
- await f.actor.alarm();await f.actor.alarm();assert.equal(requests.length,1);assert.equal(requests[0].method,'POST');assert.doesNotMatch(requests[0].body.content,/確定順位|🥇/);assert.deepEqual(requests[0].body.allowed_mentions,{parse:[]});
- t.mock.timers.tick(180000+17000);await f.actor.alarm();assert.equal(requests[1].method,'PATCH');assert.match(requests[1].body.content,/発走から17秒/);assert.equal(f.alarm(),Date.now()+5000);
+ await f.actor.alarm();await f.actor.alarm();assert.equal(requests.length,1);assert.equal(requests[0].method,'POST');assert.match(requests[0].url,/with_components=true/);assert.equal(requests[0].body.components[0].components[0].style,5);assert.match(requests[0].body.components[0].components[0].url,/^https:\/\/discord\.com\/activities\/\d+$/);assert.doesNotMatch(requests[0].body.content,/確定順位|🥇/);assert.deepEqual(requests[0].body.allowed_mentions,{parse:[]});
+ t.mock.timers.tick(180000+17000);await f.actor.alarm();assert.equal(requests[1].method,'PATCH');assert.equal(requests[1].body.components[0].components[0].label,'Activityを開く');assert.match(requests[1].body.content,/発走から17秒/);assert.equal(f.alarm(),Date.now()+5000);
  t.mock.timers.tick(40000);await f.actor.alarm();assert.match(requests[2].body.content,/確定順位/);assert.equal(f.sql.prepare('SELECT step FROM race_broadcasts').get()!.step,11);
  await f.actor.alarm();assert.equal(requests.length,3);
 });
@@ -70,7 +70,7 @@ test('valid GitHub OIDC RSA signature is required, not merely a matching JWT pay
 function upload(race:number,lease:string,valid=true){const bytes=new Uint8Array(32);bytes.set(new TextEncoder().encode(valid?'ftyp':'fail'),4);const form=new FormData();form.set('race',String(race));form.set('lease',lease);form.set('video',new File([bytes],'race.mp4',{type:'video/mp4'}));return new Request('https://test/api/racing/video/upload',{method:'POST',body:form});}
 test('only an authorized leased finished race can upload; Discord retries cannot post an already delivered replay twice',async t=>{
  t.mock.timers.enable({apis:['Date'],now:MAIN+60000});const f=await fixture();f.put();let sent=0;
- const [job]=await claimVideoJobs(f.env);t.mock.method(globalThis,'fetch',async(_url:URL,init:RequestInit)=>{sent++;const body=init.body as FormData;assert.ok(body.get('files[0]') instanceof File);assert.deepEqual(JSON.parse(String(body.get('payload_json'))).allowed_mentions,{parse:[]});return Response.json({id:'100000000000000300'});});
+ const [job]=await claimVideoJobs(f.env);t.mock.method(globalThis,'fetch',async(_url:URL,init:RequestInit)=>{assert.match(String(_url),/with_components=true/);sent++;const body=init.body as FormData;assert.ok(body.get('files[0]') instanceof File);assert.equal(JSON.parse(String(body.get('payload_json'))).components[0].components[0].style,5);assert.deepEqual(JSON.parse(String(body.get('payload_json'))).allowed_mentions,{parse:[]});return Response.json({id:'100000000000000300'});});
  assert.equal((await raceVideoApi(upload(MAIN,job.lease),f.env,async()=>false)).status,401);
  assert.equal((await raceVideoApi(upload(MAIN,'wrong'),f.env,async()=>true)).status,409);
  assert.equal((await raceVideoApi(upload(MAIN,job.lease,false),f.env,async()=>true)).status,400);

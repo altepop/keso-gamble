@@ -1,3 +1,4 @@
+import {activityLaunchComponents} from './activity-link.ts';
 import {isKpRanking} from './kp-command.ts';
 import { betChoices, runKpCommand } from './kp-slash.ts';
 import { PAIFU_BUTTON, decidePaifu, paifuRequest, runPaifuCommand } from './mahjong-claims.ts';
@@ -154,7 +155,7 @@ export async function discordInteractions(request: Request, env: Env, ctx: Execu
       else if (deathSelect) result = { content: await selectDeathMode(env.DB, interaction, configuredPlayers, runDeathCommand), components: [] };
       else if (interaction.data?.name === 'death' && interaction.data.options?.[0]?.name === 'start'
         && !interaction.data.options[0].options?.some(option => option.name === 'mode')) result = await deathModePicker(env.DB, interaction, configuredPlayers);
-      else if (['kp','keiba','bet','mleague','mbet','mclose','kpgrant','paifulink','unitelink','horsename'].includes(interaction.data?.name??'')) result = {content:await runKpCommand(env,interaction)};
+      else if (['kp','keiba','bet','mleague','mbet','mclose','kpgrant','paifulink','unitelink','horsename'].includes(interaction.data?.name??'')) result = {content:await runKpCommand(env,interaction),components:activityLaunchComponents(config.applicationId)};
       else result = { content: interaction.data!.name === 'valo' ? await runValoCommand(env.DB, interaction) : await runDeathCommand(env.DB, interaction) };
     } catch {
       console.warn('discord_command_failed');
