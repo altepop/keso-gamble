@@ -8,8 +8,8 @@ export type RoastLevel='mild'|'normal'|'full';
 export const ROAST_LEVELS:RoastLevel[]=['mild','normal','full'];
 export type CrownKind='streak3'|'streak5'|'streak10'|'stopped'|'night'|'back'|'melt';
 const NAMES:Record<Exclude<RoastLevel,'mild'>,Record<CrownKind,(n:string)=>string>>={
- full:{streak3:n=>`${n}戦犯レース`,streak5:n=>`${n}をみんなで介護するレース`,streak10:n=>`${n}そろそろ引退しろレース`,stopped:n=>`${n}調子に乗った罰レース`,night:n=>`${n}もう寝ろレース`,back:n=>`${n}生きてた記念レース`,melt:n=>`${n}KP溶かし大会`},
- normal:{streak3:n=>`${n}おつかれレース`,streak5:n=>`${n}がんばれレース`,streak10:n=>`${n}ひと休みレース`,stopped:n=>`${n}連勝ストップ記念レース`,night:n=>`${n}夜ふかしレース`,back:n=>`${n}おかえりレース`,melt:n=>`${n}ドンマイ大会`},
+ full:{streak3:n=>`${n}戦犯レース しばくぞ杯`,streak5:n=>`${n}をみんなで介護するレース あかんかったなぁ賞`,streak10:n=>`${n}そろそろ引退しろレース 了解お兄さん杯`,stopped:n=>`${n}調子に乗った罰レース 効いてて草賞`,night:n=>`${n}もう寝ろレース マイクロスリープ杯`,back:n=>`${n}生きてた記念レース うおw杯`,melt:n=>`${n}KP溶かし大会 5億マジかw杯`},
+ normal:{streak3:n=>`${n}おつかれレース 一旦な杯`,streak5:n=>`${n}がんばれレース 大丈夫だよ杯`,streak10:n=>`${n}ひと休みレース 次のVTR賞`,stopped:n=>`${n}連勝ストップ記念レース 良かったこの距離で杯`,night:n=>`${n}夜ふかしレース 寝ないチャレンジではない賞`,back:n=>`${n}おかえりレース お祭り男か杯`,melt:n=>`${n}ドンマイ大会 3がある杯`},
 };
 const REASONS:Record<CrownKind,string>={streak3:'3連敗',streak5:'5連敗',streak10:'10連敗',stopped:'連勝ストップ',night:'深夜の連敗',back:'久しぶりの試合',melt:'競馬で大負け'};
 export const MELT_LOSS=10000,BACK_GAP=7*86400000,FRESH=3*3600000;

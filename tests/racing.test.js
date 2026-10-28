@@ -17,12 +17,12 @@ test('races start every 15 minutes and close one minute before the start', () =>
 });
 
 test('big races follow the weekday and weekend timetables in Japan time', () => {
-  assert.equal(bigRaceName(jst('2026-10-27T08:00:00')),'出勤前レース');
-  assert.equal(bigRaceName(jst('2026-10-27T12:30:00')),'昼休みレース');
-  assert.equal(bigRaceName(tuesday9pm),'メインレース');
-  assert.equal(bigRaceName(jst('2026-10-28T00:00:00')),'日付またぎレース');
+  assert.match(bigRaceName(jst('2026-10-27T08:00:00')),/^出勤前レース /);
+  assert.match(bigRaceName(jst('2026-10-27T12:30:00')),/^昼休みレース 最後の餃子/);
+  assert.equal(bigRaceName(tuesday9pm),'KESO TOWN メインレース 松本等しい杯');
+  assert.match(bigRaceName(jst('2026-10-28T00:00:00')),/^日付またぎレース 堀大輔/);
   assert.equal(bigRaceName(jst('2026-10-27T16:00:00')),null);
-  assert.equal(bigRaceName(jst('2026-10-31T16:00:00')),'おやつレース');
+  assert.match(bigRaceName(jst('2026-10-31T16:00:00')),/^おやつレース /);
   assert.equal(bigRaceName(jst('2026-10-31T08:00:00')),null);
   assert.equal(raceCard(tuesday9pm).size,10);
   assert.equal(raceCard(tuesday9pm+RACE_INTERVAL).size,8);
@@ -160,8 +160,9 @@ test('saved race bets survive reloads and invalid records are dropped', () => {
 
 test('every night has more named races: big ones on the hour and memorial crowns at :30 from 19:30 to 0:30', () => {
   const tue=t=>jst('2026-10-27T'+t+':00');
-  assert.deepEqual(['20:00','21:00','22:00','23:00'].map(t=>bigRaceName(tue(t))),['ゴールデンタイム記念','メインレース','夜ふかし記念','最終レース']);
-  assert.equal(bigRaceName(jst('2026-10-31T22:00:00')),'夜ふかし記念','weekends too');
+  assert.deepEqual(['20:00','21:00','22:00','23:00'].map(t=>bigRaceName(tue(t))),['ゴールデンタイム 良かったこの距離で記念','KESO TOWN メインレース 松本等しい杯','夜ふかし バチコーンストライク記念','最終レース 次のVTR行ってみましょか賞']);
+  assert.equal(bigRaceName(jst('2026-10-31T22:00:00')),'夜ふかし バチコーンストライク記念','weekends too');
+  assert.equal(bigRaceName(jst('2026-10-31T08:00:00')),null,'no commute race on weekends');
   for(const t of ['19:30','20:30','21:30','22:30','23:30'])assert.ok(fillerCrownName(tue(t)),t);
   assert.ok(fillerCrownName(jst('2026-10-28T00:30:00')),'0:30 after midnight');
   for(const t of ['18:30','12:30'])assert.equal(fillerCrownName(tue(t)),null,'weekday daytime stays plain: '+t);

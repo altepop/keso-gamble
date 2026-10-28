@@ -11,8 +11,9 @@ export const GOINGS=[{label:'走りやすい',noise:1},{label:'ややぬかる�
 // Fictional names only. Real members' names need their consent (docs/RACING_PLAN.md).
 export const HORSE_NAMES=['ゲートニキヅカナイ','エイムガブレール','キャリーマチ','ランクダケヒクイ','ヨフカシオー','エーティーエム','ニバンテボーイ','ムテキノイイワケ','アンレタイショウ','デスマッチノオウ','フルバイノユメ','エコラウンド','ハナサノマジュツシ','ニンキサギ','キマグレノアクマ','ネオチダービー','ワンタップドリーム','クラッチミス','スモークツカイ','ラストアワー','ゼロキルクイーン','ヤケクソラン','ゴールデンマンジュウ','コタツデネムル','ザンネンカイチョウ','シンヤサンジ','オヤツタイム','カブヲトカシタ','リセットボタン','バクチウチ','ゲンジツトウヒ','ハラペコジョッキー','ウワサノダークホース','オクレテキタヒーロー','イイワケハアトデ','ミチクサオー','タダノウマ','ジツハツヨイ','ガチャハズレ','マタマケタ'];
 const JST=9*3600000;
-const WEEKDAY_BIG={0:'日付またぎレース',480:'出勤前レース',750:'昼休みレース',1200:'ゴールデンタイム記念',1260:'メインレース',1320:'夜ふかし記念',1380:'最終レース'};
-const WEEKEND_BIG={0:'日付またぎレース',600:'朝寝坊レース',720:'昼休みレース',840:'昼下がりレース',960:'おやつレース',1080:'夕方レース',1200:'ゴールデンタイム記念',1260:'メインレース',1320:'夜ふかし記念',1380:'最終レース'};
+// Big races carry the group's memes (MEME_SOURCES.md): 松本等しい, 堀大輔, もこう's stream phrases, KESO TOWN.
+const WEEKDAY_BIG={0:'日付またぎレース 堀大輔マイクロスリープ杯',480:'出勤前レース 寝ないチャレンジではない賞',750:'昼休みレース 最後の餃子ステークス',1200:'ゴールデンタイム 良かったこの距離で記念',1260:'KESO TOWN メインレース 松本等しい杯',1320:'夜ふかし バチコーンストライク記念',1380:'最終レース 次のVTR行ってみましょか賞'};
+const {480:_commute,...NIGHTS}=WEEKDAY_BIG,WEEKEND_BIG={...NIGHTS,600:'朝寝坊レース あの、ナメてます？杯',840:'昼下がりレース 5億マジかwカップ',960:'おやつレース 味濃い薄いあったら言って賞',1080:'夕方レース 生まれもエリート記念'};
 
 // cyrb128 + sfc32: small, fast and identical in browsers and Workers.
 function hash(text){let h1=1779033703,h2=3144134277,h3=1013904242,h4=2773480762;for(let i=0;i<text.length;i++){const k=text.charCodeAt(i);h1=h2^Math.imul(h1^k,597399067);h2=h3^Math.imul(h2^k,2869860233);h3=h4^Math.imul(h3^k,951274213);h4=h1^Math.imul(h4^k,2716044179);}h1=Math.imul(h3^(h1>>>18),597399067);h2=Math.imul(h4^(h2>>>22),2869860233);h3=Math.imul(h1^(h3>>>17),951274213);h4=Math.imul(h2^(h4>>>19),2716044179);return [(h1^h2^h3^h4)>>>0,(h2^h1)>>>0,(h3^h1)>>>0,(h4^h1)>>>0];}
@@ -32,7 +33,7 @@ export function weekStart(now){const d=new Date(now+JST);const days=(d.getUTCDay
 export const placeSlots=size=>size>=8?3:2;
 // Crown races with no person in the name, at :30: every night 19:30-0:30, and weekends from 10:30 (docs/RACING_PLAN.md §3).
 // Races named after someone's bad day come from the Worker (src/racing-crowns.ts) and override the name.
-export const FILLER_CROWNS=['ATMレース','マタマケタ記念レース','ガチャハズレ大会','言い訳選手権','KP溶かし予選','人気詐欺レース','永遠の二番手レース','気まぐれの悪魔レース','反面教師レース','夜ふかし予備軍レース','キャリー待ちレース','現実逃避レース','おやつ抜きレース','寝不足レース','ラストデス記念','寝落ち記念','深夜テンション記念','明日も仕事記念'];
+export const FILLER_CROWNS=['うおw記念','クイヤ記念','お祭り男か記念','しばくぞ記念','あかんかったなぁ記念','了解お兄さん記念','効いてて草記念','一旦な記念','3がある記念','毒かも記念','いいわぁ記念','純の勝ち記念','判定してるやつがおかしい記念','フルタじゃねえわ記念','KESO TOWN町内会杯','ラストデス記念','エコラウンド記念','フルバイの夢記念','ATMレース','KP溶かし予選','ガチャハズレ大会','寝落ち記念'];
 export function fillerCrownName(start){const {day,minutes}=jstParts(start);return minutes%60===30&&(minutes>=1170||minutes<=30||((day===0||day===6)&&minutes>=630))?FILLER_CROWNS[(start/RACE_INTERVAL)%FILLER_CROWNS.length]:null;}
 /** Slots a crown race may use: weekday nights 19:00-0:45, weekends from 10:00 (members work days). */
 export function crownSlotAllowed(start){
