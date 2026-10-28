@@ -44,6 +44,10 @@ export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:strin
   const existing=await env.DB.prepare('SELECT request_hash,response FROM kp_operations WHERE guild=? AND user=? AND id=?').bind(mapping.guildId,user,id).first<{request_hash:string;response:string}>();
   if(existing){if(existing.request_hash!==requestHash)throw Error('同じ操作IDを別の操作には使えません。');return JSON.parse(existing.response);}
   const state=await readKpState(env,mapping,user),before=state.cash;let result:unknown;let directive:Record<string,unknown>|null=null;
+  // 借KP: no bet or purchase at all while any is owed, decided before any draw. Checking the result instead would let a
+  // winning roll through and refuse only the losing one. Selling and settings stay open.
+  const settles=['horse-sell','roast-level'].includes(action)||(action==='trade'&&args.side==='sell');
+  if(!settles&&await debtOf(env,mapping.guildId,user)>0)throw Error(DEBT_BLOCKED);
   if(action==='trade')result=trade(state,args.symbol,args.side,args.quantity);
   else if(action==='spin')result=args.type==='numbers'?spinNumbers(state,args.bets,cryptoRouletteNumber()):spin(state,args.type,args.amount,args.choice??0,cryptoRouletteNumber());
   else if(action==='directive'){
