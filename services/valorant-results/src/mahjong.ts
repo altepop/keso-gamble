@@ -13,7 +13,7 @@ const MODES:Record<number,string>={8:'四麻・金の間 東風',9:'四麻・金
  21:'三麻・金の間 東風',22:'三麻・金の間 半荘',23:'三麻・玉の間 東風',24:'三麻・玉の間 半荘',25:'三麻・王座の間 東風',26:'三麻・王座の間 半荘'};
 /** Every ranked room is watched, whatever the stored config selected: a member's game in any room is news. */
 const WATCHED=Object.keys(MODES).map(Number);
-const INTERVAL=5*60_000,LOOKBACK=7*24*3600_000;
+const INTERVAL=2*60_000,LOOKBACK=7*24*3600_000;
 /** The provider's key comes with a limit of one query per second; requests are spaced a little wider. */
 export const PROVIDER_GAP=1100;
 export const AUTO_PAIPU_AGE=6*3600_000;
@@ -163,5 +163,5 @@ export async function mahjongStatus(env:MahjongEnv){
  const rows=(await env.DB.prepare("SELECT key,value FROM mahjong_watch_state WHERE key IN ('last_attempt_at','last_success_at','last_sent_at','next_poll_at','error','delivery_error')").all<{key:string;value:string}>()).results;
  const values=Object.fromEntries(rows.map(r=>[r.key,r.value]));
  const counts=await env.DB.prepare('SELECT COUNT(*) AS total,SUM(sent) AS sent FROM mahjong_watch_posts').first<{total:number;sent:number|null}>();
- return {enabled:true,authenticated:Boolean(env.AMAE_KOROMO_TOKEN),registered:config.players.length,modes:WATCHED.map(m=>MODES[m]),startsAt:config.startedAt,intervalMinutes:5,lastAttemptAt:Number(values.last_attempt_at||0),lastSuccessAt:Number(values.last_success_at||0),lastSentAt:Number(values.last_sent_at||0),nextPollAt:Number(values.next_poll_at||0),error:values.error||null,deliveryError:values.delivery_error||null,pending:(counts?.total??0)-(counts?.sent??0),sent:counts?.sent??0};
+ return {enabled:true,authenticated:Boolean(env.AMAE_KOROMO_TOKEN),registered:config.players.length,modes:WATCHED.map(m=>MODES[m]),startsAt:config.startedAt,intervalMinutes:INTERVAL/60_000,lastAttemptAt:Number(values.last_attempt_at||0),lastSuccessAt:Number(values.last_success_at||0),lastSentAt:Number(values.last_sent_at||0),nextPollAt:Number(values.next_poll_at||0),error:values.error||null,deliveryError:values.delivery_error||null,pending:(counts?.total??0)-(counts?.sent??0),sent:counts?.sent??0};
 }
