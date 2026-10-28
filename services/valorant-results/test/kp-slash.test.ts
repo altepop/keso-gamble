@@ -123,7 +123,7 @@ test('public command metadata contains definitions only and does not need or exp
  let queries=0;
  const response=await kpApi(new Request('https://worker/api/kp/commands'),{DB:{prepare(){queries++;throw Error('No DB reads');}},KP_BOOTSTRAP_PRIVATE_KEY:'fixture-secret-must-not-leak'} as unknown as KpEnv);
  const body=await response.json() as {version:string;commands:unknown[]};
- assert.equal(response.status,200);assert.equal(body.version,'kp-slash-v11-horsename');assert.equal(body.commands.length,11);assert.equal(queries,0);
+ assert.equal(response.status,200);assert.equal(body.version,'kp-slash-v12-silent-grant');assert.equal(body.commands.length,11);assert.equal(queries,0);
  assert.equal(JSON.stringify(body).includes('fixture-secret'),false);assert.equal(response.headers.get('Cache-Control'),'no-store');
 });
 
@@ -135,6 +135,15 @@ test('/kpgrant credits anyone once per interaction, and a negative grant takes n
  assert.match(await grant(2,cat,-500,'取り消し'),/−100 KP（取り消し）。残高 0 KP/);
  assert.match(await grant(3,cat,0),/0以外/);assert.match(await grant(4,'@cat',100),/相手/);assert.match(await grant(5,cat,100,' '),/理由/);
  assert.deepEqual(f.sql.prepare("SELECT delta,kind FROM kp_ledger WHERE user=? ORDER BY id").all(cat).map(r=>[r.delta,r.kind]),[[100,'grant'],[-100,'grant']]);
+});
+test('/kpgrant silent pays the same but posts nothing; without it the grant is announced',async()=>{
+ const f=await fixture(),cat='100000000000000104';(f.env as {KP_EARNINGS_WEBHOOK_URL?:string}).KP_EARNINGS_WEBHOOK_URL='https://discord.com/api/webhooks/1/x';
+ const grant=(n:number,extra:Array<{name:string;value:unknown}>)=>runKpCommand(f.env,{...interaction('kpgrant',one,[{name:'user',value:cat},{name:'amount',value:5000},{name:'reason',value:'秘密'},...extra]),id:id(T0,n)},mapping);
+ assert.match(await grant(1,[{name:'silent',value:true}]),/\+5,000 KP（秘密）。残高 5,000 KP\n🤫 通知なし/);
+ const posts=()=>{try{return f.sql.prepare("SELECT id FROM kp_posts WHERE id LIKE 'kp-grant:%'").all().length;}catch{return 0;}};
+ assert.equal(posts(),0,'a silent grant leaves no post');
+ assert.doesNotMatch(await grant(2,[{name:'silent',value:false}]),/通知なし/);
+ assert.equal(posts(),1,'an ordinary grant is announced');
 });
 test('/paifulink links a game account to a member, replacing an earlier link of either side',async()=>{
  const f=await fixture(),cat='100000000000000104';

@@ -1,5 +1,5 @@
 // Register these guild commands individually; never replace /death, /valo or the Activity entry point.
-export const KP_COMMAND_VERSION='kp-slash-v11-horsename';
+export const KP_COMMAND_VERSION='kp-slash-v12-silent-grant';
 export const kpCommands=[
  {type:1,name:'kp',description:'KESO PLAY｜KP残高・ランキング',options:[
   {type:1,name:'balance',description:'自分の残高と最近の入出金（本人だけに表示）'},
@@ -24,10 +24,11 @@ export const kpCommands=[
   {type:3,name:'match',description:'卓-試合',required:true,choices:['1-1','1-2','2-1','2-2'].map(v=>({name:v.replace(/^(\d)-(\d)$/,'$1卓 第$2試合'),value:v}))},
   {type:3,name:'at',description:'試合が始まった時刻（例 21:42）。省略すると今',required:false,max_length:5},
  ]},
- {type:1,name:'kpgrant',description:'KESO PLAY｜KPを手動で付与・回収（管理者のみ。稼ぎchに告知）',options:[
+ {type:1,name:'kpgrant',description:'KESO PLAY｜KPを手動で付与・回収（管理者のみ。通常は稼ぎchに告知）',options:[
   {type:3,name:'user',description:'相手（@メンション または DiscordのユーザーID）',required:true,max_length:40},
   {type:4,name:'amount',description:'付与するKP（回収はマイナス）',required:true,min_value:-100000,max_value:100000},
   {type:3,name:'reason',description:'理由（例 雀魂 10/28 4位）',required:true,max_length:60},
+  {type:5,name:'silent',description:'はい なら稼ぎchに告知しない（返信もあなたにだけ見える）',required:false},
  ]},
  {type:1,name:'unitelink',description:'KESO PLAY｜ポケモンユナイトのUniteAPIプロフィールを結び付けて速報・精算（管理者のみ）',options:[
   {type:3,name:'user',description:'相手（@メンション または DiscordのユーザーID）',required:true,max_length:40},
