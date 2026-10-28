@@ -342,6 +342,7 @@ test('a competitive demotion is posted with the roast and costs 500 KP once; a p
   assert.equal(f.sql.prepare("SELECT delta FROM kp_ledger WHERE id LIKE 'rank-down:%'").get()!.delta,-500);
   assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM kp_ledger WHERE id LIKE 'rank-down:%'").get()!.n,1,'charged once across runs');
   assert.equal(historyCalls,2,'once found, the history is not read again');
+  assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM sqlite_master WHERE name='mahjong_watch_posts'").get()!.n===0||f.sql.prepare("SELECT COUNT(*) n FROM mahjong_watch_posts").get()!.n===0,true,'found with the first post: no separate re-announcement');
  }finally{globalThis.fetch=original;}
 });
 
@@ -368,5 +369,8 @@ test('a rank change that reaches the history late is still caught on a later run
   assert.match(String(f.sql.prepare("SELECT message FROM notifications WHERE match_id='late-down'").get()!.message),/🔻 \*\*降格\*\* プラチナ1 → ゴールド3/);
   assert.equal(f.sql.prepare("SELECT delta FROM kp_ledger WHERE id LIKE 'rank-down:late-down:%'").get()!.delta,-500);
   const calls=historyCalls;await run();assert.equal(historyCalls,calls,'found: not read again');
+  const repost=JSON.parse(String(f.sql.prepare("SELECT body FROM mahjong_watch_posts WHERE id LIKE 'rank:rank2:late-down:%'").get()!.body));
+  assert.match(repost.content,/^📢 \*\*Oneのランク速報\*\*（\d\d:\d\d 終了のコンペ）\n🔻 \*\*降格\*\* プラチナ1 → ゴールド3/);assert.deepEqual(repost.allowed_mentions,{parse:[]});
+  assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM mahjong_watch_posts WHERE id LIKE 'rank:%'").get()!.n,1,'re-announced once');
  }finally{globalThis.fetch=original;}
 });

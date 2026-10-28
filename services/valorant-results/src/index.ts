@@ -182,7 +182,16 @@ async function saveMatch(env: Env, match: Match, player: Player, account: Accoun
       ranks.set(key, next);
       const user = kpRun.mapping.accounts.find(a => a.riotId === player.riotId)?.discordUserId;
       if (change && user) await settleRankChange(env, kpRun.mapping, user, change, match.metadata.match_id, account.puuid, Date.now());
-      if (change && change.after !== change.before) kpActive = true;
+      if (change && change.after !== change.before) {
+        kpActive = true;
+        // Found after the result was already posted: announce it again as its own post (result bot webhook).
+        if (saved.has(JSON.stringify([player.riotId, match.metadata.match_id]))) {
+          await env.DB.prepare("CREATE TABLE IF NOT EXISTS mahjong_watch_posts(id TEXT PRIMARY KEY,body TEXT NOT NULL,at INTEGER NOT NULL,sent INTEGER NOT NULL DEFAULT 0,lease INTEGER NOT NULL DEFAULT 0,message_id TEXT)").run();
+          const name = player.name?.trim() || parseId(player.riotId)[0];
+          await env.DB.prepare('INSERT OR IGNORE INTO mahjong_watch_posts(id,body,at) VALUES(?,?,?)').bind('rank:' + key,
+            JSON.stringify({ content: `📢 **${name}のランク速報**（${new Date(result.endedAt + 9 * 3600_000).toISOString().slice(11, 16)} 終了のコンペ）` + rankChangeBlock(change, match.metadata.match_id + ':' + account.puuid), allowed_mentions: { parse: [] } }), now).run();
+        }
+      }
     }
     if (change) result.message += rankChangeBlock(change, match.metadata.match_id + ':' + account.puuid);
   } catch { console.warn('rank_change_pending'); }
