@@ -34,7 +34,7 @@ test('slash balance is private to the guild member; newcomers get zero and no st
 test('slash race card uses the real entries and never leaks a race seed',async t=>{
  t.mock.timers.enable({apis:['Date'],now:T0});const f=await fixture();
  const message=await runKpCommand(f.env,interaction('keiba'),mapping);
- assert.match(message,/16:15発走／16:14締切/);assert.match(message,/1番/);assert.match(message,/8番/);
+ assert.match(message,/16:15発走・\d+頭｜締切 16:14/);assert.match(message,/` 1` /);assert.match(message,/` 8` /);
  const seed=f.sql.prepare('SELECT seed FROM kp_races ORDER BY id DESC LIMIT 1').get()?.seed;
  if(seed)assert.equal(message.includes(String(seed)),false);
  assert.match(message,/race:16:15/);

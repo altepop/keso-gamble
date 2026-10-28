@@ -34,10 +34,10 @@ test('both required phrases and every authored line are reachable, stable, with 
 test('small wins get personality too; a partial payout is never presented as a profitable win',()=>{
  const card=raceCard(time),seed='voice-fixture',winner=raceResult(card,seed).order[0],user='100000000000000001';
  const bet={id:'fixture',raceId:time,type:'win' as const,horse:winner,amount:100,odds:80,status:'won',payout:800,user};
- const winning=resultPost(card,seed,[bet],()=> 'full').split('\n').find(l=>l.includes(user))!;
+ const winning=resultPost(card,seed,[bet],()=> 'full').split('\n').map((l,i,a)=>l.includes(user)?a.slice(i,i+3).join('\n'):'').find(Boolean)!;
  assert.ok(voice.win.full.some(line=>winning.endsWith(line)));assert.match(winning,/\+800 KP/);
  for(const payout of [100,50]){
-  const partial=resultPost(card,seed,[{...bet,payout}],()=> 'full').split('\n').find(l=>l.includes(user))!;
+  const partial=resultPost(card,seed,[{...bet,payout}],()=> 'full').split('\n').map((l,i,a)=>l.includes(user)?a.slice(i,i+3).join('\n'):'').find(Boolean)!;
   assert.ok(voice.partial.full.some(line=>partial.endsWith(line)));assert.ok(!voice.win.full.some(line=>partial.endsWith(line)));
  }
 });
@@ -45,13 +45,13 @@ test('all outcomes respect mild preferences, even when the winning payout is lar
  const card=raceCard(time),seed='voice-fixture',winner=raceResult(card,seed).order[0],loser=raceResult(card,seed).order.at(-1),user='100000000000000001';
  for(const [kind,horse,payout,status] of [['win',winner,10000,'won'],['partial',winner,50,'won'],['loss',loser,0,'lost']] as const){
   const post=resultPost(card,seed,[{id:'fixture',raceId:time,type:'win',horse,amount:100,odds:80,status,payout,user}],()=> 'mild');
-  const line=post.split('\n').find(l=>l.includes(user))!;
+  const line=post.split('\n').map((l,i,a)=>l.includes(user)?a.slice(i,i+3).join('\n'):'').find(Boolean)!;
   assert.ok(voice[kind].mild.some(s=>line.endsWith(s)));assert.doesNotMatch(line,/下手|うんこ|不良品|どひゃー|神の側|寄付/);
  }
 });
 test('racing facts and verification data survive the new voice, with a full field and eight bettors',()=>{
  const card=raceCard(time),seed='fixed-fixture-seed',order=raceResult(card,seed).order;
- const announcement=cardPost(card,'a'.repeat(64));assert.equal(announcement.split('\n').filter(l=>/^\d+\. /.test(l)).length,10);assert.match(announcement,/締切/);assert.match(announcement,/aaaaaaaaaaaaaaaa/);assert.ok(announcement.length<=2000);
+ const announcement=cardPost(card,'a'.repeat(64));assert.equal(announcement.split('\n').filter(l=>/^`\s?\d+` /.test(l)).length,10);assert.match(announcement,/締切/);assert.match(announcement,/aaaaaaaaaaaaaaaa/);assert.ok(announcement.length<=2000);
  const bets=Array.from({length:8},(_,i)=>({id:'b'+i,raceId:time,type:'win' as const,horse:order.at(-1),amount:5000,odds:80,status:'lost',payout:0,user:String(100000000000000000n+BigInt(i))}));
  const post=resultPost(card,seed,bets,()=> 'full');assert.ok(post.length<=2000);assert.match(post,/1着/);assert.ok(post.includes(seed));
  for(const b of bets)assert.ok(post.includes('<@'+b.user+'>'));assert.equal(post.split('\n').filter(l=>l.startsWith('💸 ')).length,8);
