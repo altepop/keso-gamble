@@ -52,7 +52,7 @@ test('a first claim is checked against the paipu, corrected to the real game, an
  assert.deepEqual(await (await f.call('/api/mahjong/paipu/summaries',{results:[{uuid:PAIPU,summary}]})).json(),{stored:1});
  assert.deepEqual(await (await f.call('/api/mahjong/paipu/queue')).json(),{paipu:[]},'fetched paipu leave the queue');
  const row=f.sql.prepare('SELECT status,game,amount FROM kp_mahjong_claims').get() as {status:string;game:string;amount:number};
- assert.deepEqual({...row},{status:'pending',game:'4-hanchan',amount:200},'the paipu says hanchan, so the hanchan rate (last: −200) applies');
+ assert.deepEqual({...row},{status:'pending',game:'4-hanchan',amount:500},'the paipu says hanchan, so the hanchan rate (last: −500) applies');
  const [post]=f.posts();
  assert.match(post,/雀魂 四麻 半荘/);
  assert.match(post,/🪦 4位　Aさん　-3,000（トビ）/);
@@ -63,8 +63,8 @@ test('a first claim is checked against the paipu, corrected to the real game, an
  assert.match(post,/初回なので他のメンバーの承認を待っています/);
  const roast=post.split('\n').filter(l=>l.startsWith('🗯️'));assert.equal(roast.length,5,'last place: the facts first, then last-place lines up to five');assert.equal(new Set(roast).size,5);
  f.sql.prepare("INSERT INTO kp_ledger VALUES('seed-'||?,?,?,1000,'test',0)").run(one,guild,one);
- assert.match((await f.press(two,claimId(mine)))!.content,/ラスなので 200 KP を引きました/);
- assert.equal(f.balance(one),800,'last place costs 200');
+ assert.match((await f.press(two,claimId(mine)))!.content,/ラスなので 500 KP を引きました/);
+ assert.equal(f.balance(one),500,'last place costs 500');
  assert.equal(Number(f.sql.prepare('SELECT account FROM kp_mahjong_links WHERE user=?').get(one)!.account),11,'approval links the game account');
 });
 
@@ -130,8 +130,8 @@ test('a /paifu claim for a paipu that was already read is settled at once', asyn
  f.sql.prepare('INSERT INTO kp_mahjong_links VALUES(?,?,?)').run(guild,one,11);
  f.sql.prepare("INSERT INTO kp_ledger VALUES('seed-'||?,?,?,1000,'test',0)").run(one,guild,one);
  const reply=await f.claim(one,4);
- assert.match(reply.content,/牌譜で本人の順位を確認しました。ラスなので 200 KP を引きました/);assert.deepEqual(reply.components,[]);
- assert.equal(f.balance(one),800);
+ assert.match(reply.content,/牌譜で本人の順位を確認しました。ラスなので 500 KP を引きました/);assert.deepEqual(reply.components,[]);
+ assert.equal(f.balance(one),500);
  assert.match((await f.claim(two,1)).content,/承認待ち/,'unlinked members still need a member to approve');
 });
 
@@ -144,7 +144,7 @@ test('linked members get KP from an automatically read game, once, without /paif
  f.sql.prepare("INSERT INTO kp_ledger VALUES('seed-'||?,?,?,100,'test',0)").run(one,guild,one);
  f.sql.prepare('INSERT INTO mahjong_paipu_auto VALUES(?,?,?)').run(PAIPU,11,T0);
  await f.call('/api/mahjong/paipu/summaries',{results:[{uuid:PAIPU,summary}]});
- assert.equal(f.balance(one),0,'last place takes −200 but never more than the balance');
+ assert.equal(f.balance(one),0,'last place takes −500 but never more than the balance');
  assert.match(f.posts()[0],/💸 Aさん 4位 −100 KP（牌譜から自動）/);assert.equal(f.posts()[0].split('<@').length-1,2,'one tag per linked member');assert.equal(f.balance(two),600,'1st in hanchan');
  assert.match(f.posts()[0],/✅ B 1位 \+600 KP（牌譜から自動）/);
  assert.match((await f.claim(two,1)).content,/自動で付与済み/);
