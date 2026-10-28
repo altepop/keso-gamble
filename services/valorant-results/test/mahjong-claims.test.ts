@@ -43,7 +43,7 @@ test('another registered member approves once and KP is credited once; the claim
  t.mock.timers.enable({apis:['Date'],now:T0});
  const f=await fixture();
  const filed=await f.claim(outsider,1);
- assert.match(filed.content,/四麻 半荘 \*\*1位\*\*（500 KP）/);assert.match(filed.content,/承認待ち/);
+ assert.match(filed.content,/四麻 半荘 \*\*1位\*\*（\+500 KP）/);assert.match(filed.content,/承認待ち/);
  const id=claimId(filed);
  assert.equal((await f.press(outsider,'ok',id))!.notice,'自分の申請は承認できません。他のメンバーに牌譜を確認してもらってください。');
  assert.equal(f.balance(outsider),0);
