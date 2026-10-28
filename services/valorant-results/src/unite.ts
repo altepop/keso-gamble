@@ -61,8 +61,9 @@ function hash(s:string){let h=2166136261;for(const c of s)h=Math.imul(h^c.charCo
 const clean=(s:string)=>s.replace(/[@`*_~<>|#\\\[\]()\r\n]/g,'').slice(0,32);
 export function unitePost(name:string,uid:string,m:UniteMatch,kp:number){
  const key=uid+':'+matchKey(m),pick=(list:string[],n:number)=>{const start=hash(key)%list.length;return Array.from({length:Math.min(n,list.length)},(_,i)=>list[(start+i)%list.length]);};
- const lines=m.win?pick(voice.win,2):[...m.surrendered?[voice.surrendered]:[],...m.ko===0?[voice.noKo]:[],...pick(voice.loss,5)].slice(0,5);
- if(m.win&&m.ko>=10)lines.unshift(voice.bigKo.replace('{n}',String(m.ko)));
+ const one=(list:string[],salt:string)=>list[hash(key+':'+salt)%list.length];
+ const lines=m.win?pick(voice.win,2):[...m.surrendered?[one(voice.surrendered,'surrender')]:[],...m.ko===0?[one(voice.noKo,'ko')]:[],...pick(voice.loss,5)].slice(0,5);
+ if(m.win&&m.ko>=10)lines.unshift(one(voice.bigKo,'big').replace('{n}',String(m.ko)));
  return [`🎮 **${clean(name)}｜ポケモンユナイト ランクマ ${m.win?'勝利':'敗北'}**${m.surrendered?m.win?'（相手が降参）':'（降参）':''}`,
   `-# ${clean(m.pokemon)} Lv${m.level}・${clean(m.map)}・${clean(m.party)}`,
   `スコア ${m.ours} vs ${m.theirs}｜KO ${m.ko}・アシスト ${m.ast}・妨害 ${m.int}｜与ダメ ${clean(m.dmg)}・被ダメ ${clean(m.tkn)}・回復 ${clean(m.heal)}`,

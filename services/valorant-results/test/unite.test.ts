@@ -61,7 +61,7 @@ test('linking records what is already there; later games are posted once and set
  f.set(page([card({win:false,surrendered:true,ko:0,ours:150,theirs:380}),card({pokemon:'Absol',ko:12}),card()]));
  await monitorUnite(f.env,T0+3*60_000,f.request,mapping);
  assert.equal(f.sent.length,2);
- assert.match(f.sent[0],/テスト選手｜ポケモンユナイト ランクマ 勝利/);assert.match(f.sent[0],/KO 12。暴れ方/);assert.match(f.sent[0],new RegExp(`\\+${UNITE_WIN} KP`));
+ assert.match(f.sent[0],/テスト選手｜ポケモンユナイト ランクマ 勝利/);assert.match(f.sent[0],/🗯️ KO 12。/);assert.match(f.sent[0],new RegExp(`\\+${UNITE_WIN} KP`));
  assert.match(f.sent[1],/敗北\*\*（降参）/);assert.equal(f.sent[1].split('\n').filter(l=>l.startsWith('🗯️')).length,5);
  assert.match(f.sent[1],new RegExp(`−${UNITE_LOSS} KP`));
  assert.equal(f.balance(cat),UNITE_WIN-UNITE_LOSS,'the win is credited before the later loss');
@@ -77,4 +77,9 @@ test('a loss with nothing in the wallet takes nothing',async()=>{
  const f=await fixture();await link(f,cat,UID);await monitorUnite(f.env,T0,f.request,mapping);
  f.set(page([card({win:false}),card()]));await monitorUnite(f.env,T0+3*60_000,f.request,mapping);
  assert.equal(f.balance(cat),0);assert.equal(f.sent.length,1);assert.doesNotMatch(f.sent[0],/KP\n/,'no KP line when nothing moved');
+});
+test('every roast list is distinct, and a loss post never repeats a line',()=>{
+ const v=JSON.parse(readFileSync(new NodeURL('../unite-voice.json',import.meta.url),'utf8'));
+ for(const key of ['win','loss','surrendered','noKo','bigKo'])assert.equal(new Set(v[key]).size,v[key].length,key);
+ assert.ok(v.win.length>=15&&v.loss.length>=30);
 });
