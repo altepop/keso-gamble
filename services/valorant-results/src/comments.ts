@@ -23,8 +23,9 @@ function hash(key:string):number {
 }
 export const winningCommentGroups:CommentGroup[]=['win','win_high_kills','win_low_kd','close_win','blowout_win','winning_streak','long_winning_streak'];
 export const losingCommentGroups:CommentGroup[]=['default','high_kills','low_kd','close_loss','blowout','losing_streak','long_losing_streak'];
-// Wins and losses both keep 30% verbatim memes; almost all authored picks are sharp.
-const tauntingTones:Tone[]=[...Array<Tone>(45).fill('roast'),...Array<Tone>(12).fill('net'),...Array<Tone>(8).fill('dry'),...Array<Tone>(3).fill('hot'),...Array<Tone>(2).fill('normal'),...Array<Tone>(30).fill('meme')];
+// Wins are roasted as much as losses (owner, 2026-10-28): sharp tones about 92%, a few verbatim memes,
+// and the cheering tones only rarely.
+const tauntingTones:Tone[]=[...Array<Tone>(70).fill('roast'),...Array<Tone>(14).fill('net'),...Array<Tone>(8).fill('dry'),...Array<Tone>(1).fill('hot'),...Array<Tone>(1).fill('normal'),...Array<Tone>(6).fill('meme')];
 const otherTones:Tone[]=[...Array<Tone>(14).fill('roast'),...Array<Tone>(14).fill('net'),...Array<Tone>(14).fill('dry'),...Array<Tone>(14).fill('hot'),...Array<Tone>(14).fill('normal'),...Array<Tone>(30).fill('meme')];
 export function selectedTone(matchId:string,identity:string,group:CommentGroup='default'):Tone {
   const choices=winningCommentGroups.includes(group)||losingCommentGroups.includes(group)?tauntingTones:otherTones;

@@ -89,19 +89,19 @@ test('selected meme messages stay verbatim even during streaks, with no count, e
   assert.deepEqual([...seen].sort(), memeQuotes.map(quote => quote.id).sort());
 });
 
-test('winning messages favor the three sharper tones while every tone still appears',()=>{
+test('wins are roasted like losses: the sharp tones dominate while every tone can still appear',()=>{
   for(const group of winningCommentGroups){
     let sharp=0;const seen=new Set<Tone>();
     for(let n=0;n<5000;n++){
       const tone=selectedTone('winning-weight-'+n,'fixture',group);seen.add(tone);
       if(['roast','net','dry'].includes(tone))sharp++;
     }
-    assert.ok(sharp/5000>=0.6&&sharp/5000<=0.7,group+':'+sharp);
+    assert.ok(sharp/5000>=0.88&&sharp/5000<=0.96,group+':'+sharp);
     assert.equal(seen.size,6);
   }
 });
 
-test('all outcomes raise verbatim memes to about 30%, and defeats keep almost all remaining picks sharp',()=>{
+test('wins and losses keep verbatim memes rare (about 6%) and almost everything sharp; other results stay mixed',()=>{
  for(const group of groups){
   let memes=0,sharp=0;
   for(let n=0;n<10000;n++){
@@ -109,8 +109,9 @@ test('all outcomes raise verbatim memes to about 30%, and defeats keep almost al
    if(tone==='meme')memes++;
    if(['roast','net','dry'].includes(tone))sharp++;
   }
-  assert.ok(memes/10000>=0.27&&memes/10000<=0.33,group+':'+memes);
-  if(losingCommentGroups.includes(group))assert.ok(sharp/10000>=0.6&&sharp/10000<=0.7,group+':'+sharp);
+  const taunting=losingCommentGroups.includes(group)||winningCommentGroups.includes(group);
+  if(taunting){assert.ok(memes/10000>=0.04&&memes/10000<=0.08,group+':'+memes);assert.ok(sharp/10000>=0.88&&sharp/10000<=0.96,group+':'+sharp);}
+  else assert.ok(memes/10000>=0.27&&memes/10000<=0.33,group+':'+memes);
  }
 });
 
