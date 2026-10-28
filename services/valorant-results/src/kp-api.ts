@@ -46,7 +46,7 @@ export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:strin
   if(action==='trade')result=trade(state,args.symbol,args.side,args.quantity);
   else if(action==='spin')result=args.type==='numbers'?spinNumbers(state,args.bets,cryptoRouletteNumber()):spin(state,args.type,args.amount,args.choice??0,cryptoRouletteNumber());
   else if(action==='directive'){
-   const costs:Record<string,number>={competitive:4000,unrated:2500,solo_competitive:25000,solo_death_unrated:30000},task=String(args.task),target=String(args.target),cost=Object.hasOwn(costs,task)?costs[task]:0;
+   const costs:Record<string,number>={competitive:8000,unrated:2500,solo_competitive:50000,solo_death_unrated:60000},task=String(args.task),target=String(args.target),cost=Object.hasOwn(costs,task)?costs[task]:0;
    if(!cost||!mapping.accounts.some(a=>a.discordUserId===target)||target===user)throw Error('指名する相手と課題を選んでください。');
    if(state.cash<cost)throw Error('KPが足りません。');
    useExchange(state,Date.now()); // directives, boxes and luxury items share the daily limit
