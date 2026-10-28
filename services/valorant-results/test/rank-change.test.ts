@@ -22,3 +22,9 @@ test('a demotion gets a heading with the KP and five distinct roasts; a promotio
  assert.equal(rankChangeBlock({before:14,after:14},'m:p'),'');
  assert.equal(rankChangeBlock({before:15,after:14},'m:p'),down,'stable for the same match');
 });
+test('history order is taken from the dates, so an oldest-first list reads the same',()=>{
+ const newestFirst={history:[{match_id:'m3',tier:{id:14},date:'2026-10-28T15:10:00Z'},{match_id:'m2',tier:{id:15},date:'2026-10-28T14:20:00Z'}]};
+ const oldestFirst={history:[...newestFirst.history].reverse()};
+ assert.deepEqual(rankChangeFor(newestFirst,'m3'),{before:15,after:14});assert.deepEqual(rankChangeFor(oldestFirst,'m3'),{before:15,after:14});
+ assert.deepEqual(rankChangeFor([{match_id:'a',currenttier:14,date_raw:200},{match_id:'b',currenttier:15,date_raw:100}].reverse(),'a'),{before:15,after:14});
+});

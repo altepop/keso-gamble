@@ -11,12 +11,15 @@ export function tierName(id:number){
  const band=TIERS[Math.floor((id-3)/3)];
  return band?`${band}${(id-3)%3+1}`:'ランクなし';
 }
-type Entry={match_id?:string;tier?:{id?:number}|number;currenttier?:number};
+type Entry={match_id?:string;tier?:{id?:number}|number;currenttier?:number;date?:string;date_raw?:number};
 const tierOf=(e:Entry)=>typeof e.tier==='object'?e.tier?.id:typeof e.tier==='number'?e.tier:e.currenttier;
-/** Reads either history shape (v2 `{history:[{match_id,tier:{id}}]}` or v1 `[{match_id,currenttier}]`), newest first. */
+const timeOf=(e:Entry)=>typeof e.date_raw==='number'?e.date_raw*1000:Date.parse(e.date??'');
+/** Reads either history shape (v2 `{history:[{match_id,tier:{id},date}]}` or v1 `[{match_id,currenttier,date_raw}]`).
+ * The order is not assumed: entries are sorted newest first by date when every entry has one. */
 export function rankChangeFor(data:unknown,matchId:string):RankChange|null{
- const list=(Array.isArray(data)?data:(data as {history?:unknown})?.history) as Entry[]|undefined;
- if(!Array.isArray(list))return null;
+ const raw=(Array.isArray(data)?data:(data as {history?:unknown})?.history) as Entry[]|undefined;
+ if(!Array.isArray(raw))return null;
+ const list=raw.every(e=>Number.isFinite(timeOf(e)))?[...raw].sort((a,b)=>timeOf(b)-timeOf(a)):raw;
  const i=list.findIndex(e=>e?.match_id===matchId);
  if(i<0||i+1>=list.length)return null;
  const after=tierOf(list[i]),before=tierOf(list[i+1]);

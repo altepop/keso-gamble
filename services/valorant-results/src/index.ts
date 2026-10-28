@@ -160,17 +160,25 @@ async function saveMatch(env: Env, match: Match, player: Player, account: Accoun
       }
     }
   } catch { console.warn('kp_match_pending'); }
-  // Competitive rank change from the MMR history: looked up until the match appears there (3 tries),
-  // then kept, so every rewrite of the post carries it. A demotion costs KP once.
+  // Competitive rank change from the MMR history. The history can lag the match list, so a match ended in the
+  // last 6 hours is looked up on each run until it appears, and given up 45 minutes after it ended. The result is
+  // kept, so every rewrite of the post carries it. A demotion costs KP once, a promotion pays once.
   if (mode === 'competitive' && kpRun) try {
-    const key = 'rank_change:' + match.metadata.match_id + ':' + account.puuid;
-    // Loaded once per run; results posted before this feature (already saved, nothing stored) are left alone.
-    const stored = ranks.get(key), fresh = !saved.has(JSON.stringify([player.riotId, match.metadata.match_id]));
+    const key = 'rank2:' + match.metadata.match_id + ':' + account.puuid, now = Date.now();
+    const stored = ranks.get(key);
     let change: RankChange | null = stored?.startsWith('{') ? JSON.parse(stored) as RankChange : null;
-    if ((stored === undefined && fresh) || (stored !== undefined && /^pending:[12]$/.test(stored))) {
-      change = rankChangeFor(await api<unknown>(env, `/valorant/v2/by-puuid/mmr-history/${account.region}/pc/${encodeURIComponent(account.puuid)}`), match.metadata.match_id);
-      const next = change ? JSON.stringify(change) : stored === undefined ? 'pending:1' : stored === 'pending:1' ? 'pending:2' : 'none';
-      await env.DB.prepare('INSERT INTO monitor_state(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind(key, next).run();
+    // At most three lookups per run, and one history request per player per run.
+    const lookups = Number(ranks.get('__lookups') ?? 0);
+    if (!change && stored !== 'none' && result.endedAt > now - 6 * 3600_000 && lookups < 3) {
+      ranks.set('__lookups', String(lookups + 1));
+      const cached = ranks.get('__history:' + account.puuid);
+      const history: unknown = cached !== undefined ? JSON.parse(cached) : await api<unknown>(env, `/valorant/v2/by-puuid/mmr-history/${account.region}/pc/${encodeURIComponent(account.puuid)}`);
+      if (cached === undefined) ranks.set('__history:' + account.puuid, JSON.stringify(history));
+      change = rankChangeFor(history, match.metadata.match_id);
+      console.info('rank_change_lookup', { matchId: match.metadata.match_id, found: Boolean(change), before: change?.before, after: change?.after,
+        entries: Array.isArray((history as { history?: unknown[] })?.history) ? (history as { history: unknown[] }).history.length : Array.isArray(history) ? history.length : null });
+      const next = change ? JSON.stringify(change) : now > result.endedAt + 45 * 60_000 ? 'none' : 'pending';
+      if (next !== stored) await env.DB.prepare('INSERT INTO monitor_state(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind(key, next).run();
       ranks.set(key, next);
       const user = kpRun.mapping.accounts.find(a => a.riotId === player.riotId)?.discordUserId;
       if (change && user) await settleRankChange(env, kpRun.mapping, user, change, match.metadata.match_id, account.puuid, Date.now());
@@ -334,7 +342,7 @@ export async function monitor(env: Env, players: Player[] = configuredPlayers): 
     // Bound extra API traffic: one reserved match per run, one attempt per match per five minutes.
     const reservations=new Map((await env.DB.prepare(`SELECT s.riot_id,${sessionModeSQL} AS mode FROM death_unrated_sessions s WHERE s.cancelled_at IS NULL`).all<{riot_id:string;mode:string}>()).results.map(r=>[r.riot_id,r.mode]));
     const saved=new Set((await env.DB.prepare('SELECT riot_id,match_id FROM notifications ORDER BY ended_at DESC LIMIT 200').all<{riot_id:string;match_id:string}>()).results.map(r=>JSON.stringify([r.riot_id,r.match_id])));
-    const ranks=new Map((await env.DB.prepare("SELECT key,value FROM monitor_state WHERE key LIKE 'rank_change:%' ORDER BY rowid DESC LIMIT 300").all<{key:string;value:string}>()).results.map(r=>[r.key,r.value]));
+    const ranks=new Map((await env.DB.prepare("SELECT key,value FROM monitor_state WHERE key LIKE 'rank2:%' ORDER BY rowid DESC LIMIT 300").all<{key:string;value:string}>()).results.map(r=>[r.key,r.value]));
     const deathDetails: DeathDetails = { remaining: 1, matches: new Map(),reservations };
     // Deliver a previously queued result before spending time polling the API again.
     if (players.length) await flushNotifications(env, players);
