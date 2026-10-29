@@ -4,7 +4,10 @@ const server=spawn('python3',['-m','http.server','8813','--bind','127.0.0.1'],{c
 (async()=>{
  for(let i=0;i<50;i++){try{if((await fetch('http://127.0.0.1:8813')).ok)break;}catch{}await new Promise(r=>setTimeout(r,100));}
  const {createInitialState}=await import('../js/engine.js');const state={...createInitialState(),serverWallet:true,cash:0,selfUserId:'fixture-member',members:[],ledger:[]};
- const engine=process.argv[2]||'chromium';browser=await(engine==='webkit'?webkit:chromium).launch(engine==='webkit'?{}:{executablePath:existsSync('/usr/bin/chromium')?'/usr/bin/chromium':undefined,args:['--no-sandbox']});
+ // Use the full Chromium browser in new headless mode, matching the local binary.
+ // The separate headless shell crashes when this cross-origin mobile popup closes in CI.
+ const engine=process.argv[2]||'chromium';browser=await(engine==='webkit'?webkit:chromium).launch(engine==='webkit'?{}:{...(existsSync('/usr/bin/chromium')?{executablePath:'/usr/bin/chromium'}:{channel:'chromium'}),args:['--no-sandbox']});
+ console.log('Steam browser engine:',engine,browser.version());
  const ctx=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true,reducedMotion:'reduce'});await ctx.addInitScript(()=>localStorage.setItem('keso-kp-session-v1','fixture-wallet-secret'));
  const status={available:true,enabled:false,account:null,apps:[{id:123,title:'Game <img src=x onerror=alert(1)>'}],games:[]};const link={state:'fixture-state',url:'https://steamcommunity.com/openid/login?fixture=1'};let verified=false,operations=0,failGame=true;
  await ctx.route('https://steamcommunity.com/**',async route=>{assert(!route.request().headers().authorization);assert(!route.request().url().includes('fixture-wallet-secret'));await route.fulfill({contentType:'text/html',body:'Steam login fixture'});});
