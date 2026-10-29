@@ -31,7 +31,7 @@ import { isDeathMode, isDeathNotice, sessionModeSQL } from './death-modes.ts';
 import { discordInteractions } from './discord-interactions.ts';
 import configuredPlayers from '../players.json' with { type: 'json' };
 import { resultMessage, groupNotification } from './results.ts';
-import { settleDebts } from './kp-debt.ts';
+import { settleDebts, queueDebtPosts } from './kp-debt.ts';
 import { track } from './health.ts';
 import type { Match, Notice } from './results.ts';
 export { resultMessage } from './results.ts';
@@ -478,8 +478,8 @@ export default {
       // A very rare free horse for someone, drawn once per race slot and announced in the earnings channel.
       await track(env,'horse_gift',async()=>{const gift=await maybeGiftHorse(env,mapping,openRaceStart(Date.now()));if(gift&&env.KP_EARNINGS_WEBHOOK_URL){await ensurePosts(env);await enqueue(env,'horse-gift:'+gift.horse.id,gift.text,Date.now());}});
       await track(env,'race_settlement',async()=>{await settleKpRaces(env,mapping);});
-      // 借KP: repay from what came in, then this hour's interest.
-      await track(env,'debt_settlement',async()=>{await settleDebts(env,mapping.guildId);});
+      // 借KP: repay from what came in, then the day's interest. Reaching the cap and paying it all back go to 稼ぎch.
+      await track(env,'debt_settlement',async()=>{await settleDebts(env,mapping.guildId);if(env.KP_EARNINGS_WEBHOOK_URL){await ensurePosts(env);await queueDebtPosts(env,mapping.guildId);}});
       // Results are queued after settlement in the same run, then sent.
       let crowns:Awaited<ReturnType<typeof scheduleCrowns>>=[];
       await track(env,'crown_schedule',async()=>{crowns=await scheduleCrowns(env,mapping);});
