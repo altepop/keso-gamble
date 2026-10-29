@@ -1,4 +1,5 @@
 import {readModeNote} from './mode-rewards.ts';
+import {skirmishResultButtons} from './skirmish.ts';
 import {spikeNote} from './spikerush-growth.ts';
 import {prepareRaceBroadcast} from './racing-broadcast.ts';
 import {raceVideoApi} from './racing-video.ts';
@@ -304,12 +305,27 @@ async function flushNotifications(env: Env, players: Player[]): Promise<void> {
       const editUrl = new URL(url);
       editUrl.pathname = editUrl.pathname.replace(/\/$/, '') + '/messages/' + encodeURIComponent(saved?.value ?? '');
       editUrl.searchParams.delete('wait');
-      const send = (target: URL, method: string) => fetch(target, {
-        method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), signal: AbortSignal.timeout(10_000),
-      });
-      let response = await send(saved ? editUrl : url, saved ? 'PATCH' : 'POST');
+      // A Skirmish win that opened a 受取／続行 choice carries its buttons. Interactive buttons need a webhook owned by the
+      // application; if Discord refuses them, the post goes out without (the result still names /kp balance) for a day.
+      const skirmish = notices.results.some(notice => notice.mode?.startsWith('skirmish'));
+      const buttons = skirmish && await state(env, 'skirmish_buttons_off_until') <= Date.now()
+        ? await skirmishResultButtons(env, pendingMatch.match_id, notices.results, new Map(players.map(player => [player.riotId, player.name?.trim() || parseId(player.riotId)[0]]))) : [];
+      const send = (target: URL, method: string, components?: unknown[]) => {
+        const to = new URL(target);
+        if (components) to.searchParams.set('with_components', 'true');
+        return fetch(to, {
+          method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(components ? { ...payload, components } : payload), signal: AbortSignal.timeout(10_000),
+        });
+      };
+      const components = skirmish ? buttons : undefined;
+      let response = await send(saved ? editUrl : url, saved ? 'PATCH' : 'POST', components);
+      if (buttons.length && response.status === 400) {
+        console.warn('skirmish_buttons_refused');
+        await setState(env, 'skirmish_buttons_off_until', Date.now() + 86400_000);
+        response = await send(saved ? editUrl : url, saved ? 'PATCH' : 'POST', []);
+      }
       // A deleted original message can be replaced when a late result needs to be added.
-      if (saved && response.status === 404) response = await send(url, 'POST');
+      if (saved && response.status === 404) response = await send(url, 'POST', components && (await state(env, 'skirmish_buttons_off_until') <= Date.now() ? components : []));
       if (!response.ok) {
         console.warn('discord_post_failed', { status: response.status });
         await setState(env, 'discord_after', Date.now() + retryAfter(response));

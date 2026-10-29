@@ -1,5 +1,6 @@
 import {settleSkirmishMatch} from './skirmish.ts';
-import {valoKp,ensureModeRewards,MODE_REWARD_VERSION} from './mode-rewards.ts';
+import {valoKp,ensureModeRewards,MODE_REWARD_VERSION,UNRATED_JACKPOT,jackpotPost} from './mode-rewards.ts';
+import {enqueue,ensurePosts} from './racing-posts.ts';
 export {valoKp} from './mode-rewards.ts';
 import {ensureSpikeGrowth,settleSpike,spikeMatch,SPIKE_POLICY} from './spikerush-growth.ts';
 import type {SpikeMatch} from './spikerush-growth.ts';
@@ -84,7 +85,7 @@ export async function syncKpAccounts(env:KpEnv,mapping:KpMapping){
  const queries=mapping.accounts.flatMap(a=>{const found=tracked.find(t=>t.riot_id.toLowerCase()===a.riotId.toLowerCase());const old=found&&linked.find(l=>l.puuid===found.puuid);return found&&(!old||old.user!==a.discordUserId||old.riot!==a.riotId)?[env.DB.prepare('INSERT INTO kp_accounts(guild,puuid,user,riot,linked_at) VALUES(?,?,?,?,?) ON CONFLICT(guild,puuid) DO UPDATE SET user=excluded.user,riot=excluded.riot').bind(mapping.guildId,found.puuid,a.discordUserId,a.riotId,Date.now())]:[];});
  if(queries.length)await env.DB.batch(queries);
 }
-interface KpEvent {id:string;guild:string;user:string;puuid:string;match:string;mode:string;outcome:string|null;amount:number;policy:string;at:number;penalty?:number;note?:string;kind?:'spikerush-growth';spike?:SpikeMatch}
+interface KpEvent {id:string;guild:string;user:string;puuid:string;match:string;mode:string;outcome:string|null;amount:number;policy:string;at:number;penalty?:number;note?:string;kind?:'spikerush-growth';spike?:SpikeMatch;jackpot?:number}
 export function kpEventId(guild:string,match:string,puuid:string){return ['match',guild,match,puuid].map(encodeURIComponent).join(':');}
 export async function drainKpInbox(env:KpEnv){
  const rows=(await env.DB.prepare('SELECT id,payload FROM kp_inbox ORDER BY at,id LIMIT 20').all<{id:string;payload:string}>()).results;
@@ -99,6 +100,10 @@ export async function drainKpInbox(env:KpEnv){
    env.DB.prepare(`INSERT INTO kp_events(id,guild,user,puuid,match,mode,outcome,amount,policy,at) SELECT ?,?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM kp_accounts WHERE guild=? AND puuid=? AND user=?) ON CONFLICT(id) DO NOTHING`).bind(e.id,e.guild,e.user,e.puuid,e.match,e.mode,e.outcome,e.amount,e.policy,Date.now(),e.guild,e.puuid,e.user),
    env.DB.prepare('INSERT OR IGNORE INTO kp_reward_notes(id,note) SELECT ?,? WHERE EXISTS(SELECT 1 FROM kp_events WHERE id=?)').bind(e.id,e.note??'',e.id),
   ]);
+  // A big unrated lottery prize is announced once in 稼ぎch; the post never holds up the credit.
+  if(e.mode==='unrated'&&Number.isSafeInteger(e.jackpot)&&e.jackpot!>=UNRATED_JACKPOT&&await env.DB.prepare('SELECT 1 AS n FROM kp_events WHERE id=?').bind(e.id).first()){
+   try{await ensurePosts(env);await enqueue(env,'jackpot:'+e.id,jackpotPost(e.user,e.jackpot!),Date.now());}catch{console.warn('jackpot_post_pending');}
+  }
   // A loss costs a separate debit, never more than the balance (wallets cannot go below 0); the rest becomes 借KP.
   if(e.penalty)await env.DB.prepare(`INSERT OR IGNORE INTO kp_ledger(id,guild,user,delta,kind,at) SELECT ?,?,?,-MIN(?,balance),'match',? FROM kp_wallets WHERE guild=? AND user=? AND EXISTS(SELECT 1 FROM kp_events WHERE id=?)`).bind('penalty:'+e.id,e.guild,e.user,e.penalty,Date.now(),e.guild,e.user,e.id).run();
   if(e.penalty){await ensureDebt(env);await borrowShortfall(env,'penalty:'+e.id,e.penalty).run();}
@@ -172,9 +177,9 @@ export async function collectKpMatch(env:KpEnv,mapping:KpMapping,raw:Match,puuid
   if(!modern||!['win','loss'].includes(status.outcome??''))return null;
   return (await settleSkirmishMatch(env,{guild:mapping.guildId,puuid,user:link.user,match:raw.metadata.match_id,start,end:start+duration,win:status.outcome==='win',now:Date.now()})).delta;
  }
- const {net,note}=(modern?valoKp:legacyValoKp)(raw,puuid,status.mode,status.outcome);
+ const {net,note,lottery}=modern?valoKp(raw,puuid,status.mode,status.outcome):{...legacyValoKp(raw,puuid,status.mode,status.outcome),lottery:undefined};
  // Events hold the earned part (never negative); a cost is a separate debit capped at the balance.
- const e:KpEvent={id,guild:mapping.guildId,user:link.user,puuid,match:raw.metadata.match_id,mode:status.mode,outcome:status.outcome,amount:Math.max(0,net),policy:modern?MODE_REWARD_VERSION:policy.version,at:Date.now(),...net<0?{penalty:-net}:{},...note?{note}:{},...(spike?{kind:'spikerush-growth' as const,spike,policy:SPIKE_POLICY}:{})};
+ const e:KpEvent={id,guild:mapping.guildId,user:link.user,puuid,match:raw.metadata.match_id,mode:status.mode,outcome:status.outcome,amount:Math.max(0,net),policy:modern?MODE_REWARD_VERSION:policy.version,at:Date.now(),...net<0?{penalty:-net}:{},...note?{note}:{},...lottery!==undefined&&lottery>=UNRATED_JACKPOT?{jackpot:lottery}:{},...(spike?{kind:'spikerush-growth' as const,spike,policy:SPIKE_POLICY}:{})};
  await env.DB.prepare('INSERT OR IGNORE INTO kp_inbox VALUES(?,?,?)').bind(id,JSON.stringify(e),Date.now()).run();
  await drainKpInbox(env);
  return kpMatchNet(env,id);

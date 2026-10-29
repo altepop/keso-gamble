@@ -1,7 +1,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';import {DatabaseSync} from 'node:sqlite';
 import {kpSchema} from '../src/kp.ts';import type {KpEnv} from '../src/kp.ts';
 import {ensureModeRewards} from '../src/mode-rewards.ts';
-import {ensureSkirmish,settleSkirmishMatch,skirmishState,skirmishPrompt,decideSkirmish} from '../src/skirmish.ts';
+import {ensureSkirmish,settleSkirmishMatch,skirmishState,skirmishPrompt,decideSkirmish,skirmishResultButtons,withoutSkirmishButtons} from '../src/skirmish.ts';
 const guild='100000000000000100',user='100000000000000101',other='100000000000000102';
 async function fixture(){
  const sql=new DatabaseSync(':memory:');for(const schema of kpSchema)sql.exec(schema);
@@ -86,4 +86,33 @@ test('signed button handler rejects a different user before opening a reply or t
  let touches=0;const env={DB:{prepare(){touches++;throw Error('forbidden');}}}as unknown as import('../src/index.ts').Env;const tasks:Promise<unknown>[]=[];
  const r=await discordInteractions(new Request('https://worker/interactions',{method:'POST',body,headers:{'X-Signature-Timestamp':timestamp,'X-Signature-Ed25519':signature}}),env,{waitUntil:(p:Promise<unknown>)=>tasks.push(p)}as unknown as ExecutionContext,config);
  assert.deepEqual(await r.json(),{type:4,data:{content:'本人だけが選べます。',flags:64,allowed_mentions:{parse:[]}}});assert.equal(touches,0);assert.equal(tasks.length,0);
+});
+test('the result of a win that opened a choice carries the buttons until the member chooses; 稼ぎch tells the challenge',async()=>{
+ const f=await fixture();f.sql.prepare('INSERT INTO kp_accounts(guild,puuid,user,riot,linked_at) VALUES(?,?,?,?,0)').run(guild,'p1',user,'One#JP1');
+ const notice=[{riot_id:'one#jp1',mode:'skirmish_2v2'},{riot_id:'Two#JP1',mode:'skirmish_2v2'}],names=new Map([['one#jp1','ワン']]);
+ assert.deepEqual(await skirmishResultButtons(f.env,'w1',[{riot_id:'One#JP1',mode:'competitive'}]),[],'other modes never look');
+ await f.game('w1',1000);
+ let rows=await skirmishResultButtons(f.env,'w1',notice,names) as {components:{label:string;custom_id:string}[]}[];
+ assert.equal(rows.length,1,'only the member with an open choice');
+ const v=(await f.state())!.version;
+ assert.deepEqual(rows[0].components.map(c=>[c.label,c.custom_id]),[['ワン：100 KPで降りる',`sk:${user}:${v}:cash`],['ワン：続行（次勝てば250 KP）',`sk:${user}:${v}:continue`]]);
+ assert.deepEqual(withoutSkirmishButtons([...rows,{type:1,components:[{type:2,custom_id:`sk:${other}:1:cash`}]}],user),[{type:1,components:[{type:2,custom_id:`sk:${other}:1:cash`}]}],'a press removes only the presser\'s buttons');
+ await f.choose('continue',1300);
+ assert.deepEqual(await skirmishResultButtons(f.env,'w1',notice,names),[],'chosen: no buttons on later edits');
+ await f.game('w2',2000);await f.choose('cash',2300);
+ await f.game('w3',3000);await f.choose('continue',3300);await f.game('l4',4000,false);
+ const posts=(f.sql.prepare('SELECT body FROM kp_posts ORDER BY at,id').all() as {body:string}[]).map(r=>JSON.parse(r.body));
+ assert.deepEqual(posts.map(p=>p.content),[
+  `🔥 <@${user}> スカーミッシュ1勝、**100 KP** を蹴って続行や！ 次勝ったら 250 KP、負けたら全部パー。`,
+  `💰 <@${user}> スカーミッシュ2勝で降りた。**250 KP**、手堅く回収や。`,
+  `🔥 <@${user}> スカーミッシュ1勝、**100 KP** を蹴って続行や！ 次勝ったら 250 KP、負けたら全部パー。`,
+  `💥 <@${user}> スカーミッシュ2勝目ならず…保留してた **100 KP** は全部パーや。`,
+ ]);
+ assert.ok(posts.every(p=>p.allowed_mentions.parse.length===0),'mentions never ping');
+});
+test('a four-win run is announced once',async()=>{
+ const f=await fixture();
+ for(let n=1;n<=4;n++){await f.game('m'+n,n*1000);if(n<4)await f.choose('continue',n*1000+300);}
+ await f.game('m4',4000);
+ assert.deepEqual((f.sql.prepare("SELECT body FROM kp_posts WHERE id LIKE 'sk-post:match%'").all() as {body:string}[]).map(r=>JSON.parse(r.body).content),[`👑 <@${user}> スカーミッシュ4連勝！ **1,500 KP** 持っていきよった！`]);
 });

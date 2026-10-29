@@ -1773,3 +1773,56 @@ test('custom and non-round death modes are selectable but never invent missing t
   assert.match(resultMessage(small, 'user-1', 'A', true)!.message, /デスカスタム/);
   assert.doesNotMatch(resultMessage(small, 'user-1', 'A', true)!.message, /今回はセーフ/);
 });
+
+test('a Skirmish win that opened a choice is posted with its 受取／続行 buttons; refused buttons fall back to plain text', async () => {
+  const { kpSchema } = await import('../src/kp.ts'); const { ensureModeRewards } = await import('../src/mode-rewards.ts');
+  const { settleSkirmishMatch } = await import('../src/skirmish.ts');
+  for (const refuse of [false, true]) {
+    const env = environment(); const original = globalThis.fetch;
+    let now = Date.now(); const clock = Date.now; Date.now = () => now;
+    for (const schema of kpSchema) await env.DB.prepare(schema).run();
+    await ensureModeRewards(env as never);
+    await env.DB.prepare('INSERT INTO kp_accounts(guild,puuid,user,riot,linked_at) VALUES(?,?,?,?,0)').bind('100000000000000100', 'user-1', '100000000000000101', 'player#JP1').run();
+    await env.DB.prepare('INSERT INTO kp_wallets(guild,user) VALUES(?,?)').bind('100000000000000100', '100000000000000101').run();
+    let games: unknown[] = [];
+    const posts: Array<{ url: string; body: { content: string; components?: { components: { custom_id: string }[] }[] } }> = [];
+    globalThis.fetch = async (url, init) => {
+      if (String(url).includes('/account/')) return Response.json({ data: { puuid: 'user-1', region: 'ap' } });
+      if (String(url).includes('/matches/')) return Response.json({ data: games });
+      const body = JSON.parse(String(init?.body)); posts.push({ url: String(url), body });
+      if (refuse && body.components?.length) return new Response('{"message":"Invalid Form Body"}', { status: 400 });
+      return Response.json({ id: '1' });
+    };
+    try {
+      const config = [{ riotId: 'player#JP1', name: 'たろう' }];
+      await monitor(env, config);
+      now += 60_000; games = [match('sk1', 'skirmish_2v2', true, now)];
+      await settleSkirmishMatch(env as never, { guild: '100000000000000100', puuid: 'user-1', user: '100000000000000101', match: 'sk1', start: now - 1000, end: now, win: true, now });
+      await monitor(env, config);
+      const sent = posts.filter(p => p.url.includes('/webhooks/123/'));
+      assert.match(sent[0].url, /with_components=true/);
+      assert.deepEqual(sent[0].body.components?.[0].components.map(c => c.custom_id.split(':')[3]), ['cash', 'continue']);
+      if (refuse) {
+        assert.equal(sent.length, 2, 'resent once without buttons');
+        assert.deepEqual(sent[1].body.components, []);
+        assert.ok((await env.DB.prepare("SELECT value FROM monitor_state WHERE key='skirmish_buttons_off_until'").first<{ value: string }>())!.value > String(now));
+      } else assert.equal(sent.length, 1);
+    } finally { globalThis.fetch = original; Date.now = clock; }
+  }
+});
+
+test('posts without a Skirmish game never ask for components', async () => {
+  const env = environment(); const original = globalThis.fetch;
+  let now = Date.now(); const clock = Date.now; Date.now = () => now;
+  let games: unknown[] = []; const urls: string[] = [], bodies: Record<string, unknown>[] = [];
+  globalThis.fetch = async (url, init) => {
+    if (String(url).includes('/account/')) return Response.json({ data: { puuid: 'user-1', region: 'ap' } });
+    if (String(url).includes('/matches/')) return Response.json({ data: games });
+    urls.push(String(url)); bodies.push(JSON.parse(String(init?.body))); return Response.json({ id: '1' });
+  };
+  try {
+    const config = [{ riotId: 'player#JP1', name: 'たろう' }];
+    await monitor(env, config); now += 60_000; games = [match('c1', 'competitive', true, now)]; await monitor(env, config);
+    assert.equal(urls.length, 1); assert.doesNotMatch(urls[0], /with_components/); assert.equal('components' in bodies[0], false);
+  } finally { globalThis.fetch = original; Date.now = clock; }
+});

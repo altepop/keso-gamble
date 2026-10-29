@@ -10,7 +10,13 @@ export function unratedLottery(roll:number){
  throw Error('Invalid lottery weights');
 }
 const stat=(n:unknown):n is number=>Number.isSafeInteger(n)&&Number(n)>=0;
-export function valoKp(raw:Match,puuid:string,mode:string,outcome:string|null):{base:number;net:number;note:string}{
+/** Lottery prizes from this size up get their own post in 稼ぎch. */
+export const UNRATED_JACKPOT=10000;
+export function jackpotPost(user:string,amount:number){
+ return amount>=100000?`🚨🎰🚨 <@${user}> アンレ勝利の抽選で **+${amount.toLocaleString('ja-JP')} KP**！！ 0.03%を引きよった、とんでもないことになっとる！`
+  :`🎰💥 <@${user}> アンレ勝利の抽選で **+${amount.toLocaleString('ja-JP')} KP** の大当たりや！`;
+}
+export function valoKp(raw:Match,puuid:string,mode:string,outcome:string|null):{base:number;net:number;note:string;lottery?:number}{
  if(mode==='spikerush'||!['win','loss','draw',null].includes(outcome))return {base:0,net:0,note:''};
  const p=raw.players.find(p=>p.puuid===puuid),s=p?.stats,id=raw.metadata.match_id+':'+puuid;
  let base=0,bonus=0,note='';
@@ -26,7 +32,7 @@ export function valoKp(raw:Match,puuid:string,mode:string,outcome:string|null):{
   base=outcome==='win'?rate.win:outcome==='loss'?(bottom?rate.bottom:rate.loss):0;
   if(mode==='unrated'&&outcome==='win'){
    const picked=unratedLottery(draw('unrated-lottery:'+id));base=rules.unrated.win+picked;
-   return {base,net:base,note:`（アンレ抽選 ${picked>=0?'+':''}${picked.toLocaleString('ja-JP')} KP）`};
+   return {base,net:base,lottery:picked,note:`（アンレ抽選 ${picked>=0?'+':''}${picked.toLocaleString('ja-JP')} KP）`};
   }
   if(mode==='swiftplay'&&outcome==='win'){
    const own=raw.teams?.find(t=>t.team_id===p?.team_id),enemy=raw.teams?.find(t=>t.team_id!==p?.team_id);
