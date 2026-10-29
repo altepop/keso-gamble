@@ -1,8 +1,8 @@
-const{chromium}=require('playwright');const assert=require('node:assert/strict');const{readFileSync,existsSync}=require('node:fs');const{resolve}=require('node:path');const{createHash}=require('node:crypto');
+const engines=require('playwright');const engineName=process.env.PLAYWRIGHT_BROWSER||'chromium';const engine=engines[engineName];if(!['chromium','webkit'].includes(engineName))throw Error('Unsupported browser engine');const assert=require('node:assert/strict');const{readFileSync,existsSync}=require('node:fs');const{resolve}=require('node:path');const{createHash}=require('node:crypto');
 let browser;
 (async()=>{
  const{createInitialState}=await import('../js/engine.js');
- browser=await chromium.launch({executablePath:process.env.CHROMIUM_PATH||(existsSync('/usr/bin/chromium')?'/usr/bin/chromium':undefined),args:['--no-sandbox']});
+ browser=await engine.launch(engineName==='chromium'?{executablePath:process.env.CHROMIUM_PATH||(existsSync('/usr/bin/chromium')?'/usr/bin/chromium':undefined),args:['--no-sandbox']}:{});
  for(const scenario of (process.argv[2]?[process.argv[2]]:['success','dm-touch','dm-refresh-touch','guild-touch','guild-refresh-touch','cancel','unconfigured','different-user'])){
   const errors=[],ctx=await browser.newContext({viewport:{width:390,height:844},isMobile:scenario.includes('touch'),hasTouch:scenario.includes('touch')});let exchanges=0,challenge,operations=0,stateReads=0;
   await ctx.addInitScript(({scenario})=>{
@@ -52,7 +52,7 @@ let browser;
    }
    if(path==='/favicon.ico'){await route.fulfill({status:204});return;}
    const file=resolve(__dirname,'..','.'+(path==='/'?'/index.html':path));assert.ok(file.startsWith(resolve(__dirname,'..')+'/'));
-   await route.fulfill({status:200,contentType:path.endsWith('.js')?'text/javascript':path.endsWith('.css')?'text/css':'text/html',body:readFileSync(file)});
+   await route.fulfill({status:200,contentType:path.endsWith('.js')?'text/javascript':path.endsWith('.css')?'text/css':'text/html',body:process.env.KESO_TEST_REV?require('node:child_process').execFileSync('git',['show',process.env.KESO_TEST_REV+':'+require('node:path').relative(resolve(__dirname,'..'),file)],{cwd:resolve(__dirname,'..')}):readFileSync(file)});
   });
   await page.goto('https://100000000000000000.discordsays.com/?frame_id=frame&instance_id=instance&platform='+(scenario.includes('touch')?'mobile&mobile_app_version=300.0':'desktop')+(scenario.startsWith('guild-')?'&guild_id=100000000000000100&channel_id=100000000000000101':''));
   if(scenario==='success'||scenario.includes('touch')){
@@ -76,7 +76,7 @@ let browser;
    if(scenario==='cancel'){assert.equal(exchanges,0);await page.locator('[data-action=auto-connect-kp]').waitFor();}
    if(scenario==='different-user'){assert.equal(await page.evaluate(()=>localStorage.getItem('keso-kp-session-v1')),'old-wallet-token');assert.match(await page.locator('#app').innerText(),/別の口座/);}
   }
-  assert.deepEqual(errors,[]);console.log('Passed Activity scenario: '+scenario);await ctx.close();
+  assert.deepEqual(errors,[]);console.log('Passed Activity scenario: '+engineName+' '+(process.env.KESO_TEST_REV||'working-tree')+' '+scenario);await ctx.close();
  }
  console.log('Official SDK browser checks passed: automatic PKCE/identify login without a code, reopen, cancellation, unconfigured fallback, account-switch charge protection, mobile layouts and no audio access.');
 })().catch(e=>{console.error(e);process.exitCode=1}).finally(async()=>{await browser?.close()});

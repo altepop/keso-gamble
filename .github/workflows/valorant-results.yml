@@ -69,15 +69,17 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
           cache: npm
       - run: npm ci
-      - name: Install Playwright and Chromium
+      - name: Install Playwright, Chromium and WebKit
         run: |
           npm install --no-save playwright@1.63.0
-          npx playwright install --with-deps chromium
+          npx playwright install --with-deps chromium webkit
       - run: npm run test:browser:all
   deploy:
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
