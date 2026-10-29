@@ -1826,3 +1826,48 @@ test('posts without a Skirmish game never ask for components', async () => {
     assert.equal(urls.length, 1); assert.doesNotMatch(urls[0], /with_components/); assert.equal('components' in bodies[0], false);
   } finally { globalThis.fetch = original; Date.now = clock; }
 });
+
+test('with the owned webhook set up, a Skirmish choice is posted as あかんbot with buttons even after the plain webhook refused them; a deleted owned webhook falls back', async () => {
+  const { kpSchema } = await import('../src/kp.ts'); const { ensureModeRewards } = await import('../src/mode-rewards.ts');
+  const { settleSkirmishMatch } = await import('../src/skirmish.ts');
+  for (const gone of [false, true]) {
+    const env = environment(); const original = globalThis.fetch;
+    let now = Date.now(); const clock = Date.now; Date.now = () => now;
+    for (const schema of kpSchema) await env.DB.prepare(schema).run();
+    await ensureModeRewards(env as never);
+    await env.DB.prepare('INSERT INTO kp_accounts(guild,puuid,user,riot,linked_at) VALUES(?,?,?,?,0)').bind('100000000000000100', 'user-1', '100000000000000101', 'player#JP1').run();
+    await env.DB.prepare('INSERT INTO kp_wallets(guild,user) VALUES(?,?)').bind('100000000000000100', '100000000000000101').run();
+    await env.DB.prepare('CREATE TABLE IF NOT EXISTS app_webhooks(name TEXT PRIMARY KEY,data TEXT NOT NULL,at INTEGER NOT NULL)').run();
+    await env.DB.prepare("INSERT INTO app_webhooks VALUES('akan',?,0)").bind(JSON.stringify({ url: 'https://discord.com/api/webhooks/77/owned', username: 'アカンbot', avatarUrl: 'https://cdn.discordapp.com/avatars/123/abc.png' })).run();
+    await env.DB.prepare("INSERT INTO monitor_state(key,value) VALUES('skirmish_buttons_off_until',?)").bind(String(now + 86400_000)).run();
+    let games: unknown[] = [];
+    const posts: Array<{ url: string; method: string; body: Record<string, unknown> & { components?: unknown[] } }> = [];
+    globalThis.fetch = async (url, init) => {
+      if (String(url).includes('/account/')) return Response.json({ data: { puuid: 'user-1', region: 'ap' } });
+      if (String(url).includes('/matches/')) return Response.json({ data: games });
+      posts.push({ url: String(url), method: String(init?.method), body: JSON.parse(String(init?.body)) });
+      if (gone && String(url).includes('/webhooks/77/')) return new Response('{"message":"Unknown Webhook"}', { status: 404 });
+      return Response.json({ id: '555' });
+    };
+    try {
+      const config = [{ riotId: 'player#JP1', name: 'たろう' }];
+      await monitor(env, config);
+      now += 60_000; games = [match('sk1', 'skirmish_2v2', true, now)];
+      await settleSkirmishMatch(env as never, { guild: '100000000000000100', puuid: 'user-1', user: '100000000000000101', match: 'sk1', start: now - 1000, end: now, win: true, now });
+      await monitor(env, config);
+      const via = (await env.DB.prepare("SELECT value FROM monitor_state WHERE key='via:sk1'").first<{ value: string }>())?.value;
+      if (!gone) {
+        assert.equal(posts.length, 1); assert.match(posts[0].url, /\/webhooks\/77\/owned\?.*with_components=true/);
+        assert.equal(posts[0].body.username, 'アカンbot'); assert.equal(posts[0].body.avatar_url, 'https://cdn.discordapp.com/avatars/123/abc.png');
+        assert.equal((posts[0].body.components as unknown[]).length, 1); assert.equal(via, 'app');
+        // A later edit of the same result goes through the webhook that posted it.
+        await env.DB.prepare("UPDATE notifications SET sent=0 WHERE match_id='sk1'").run();
+        await monitor(env, config);
+        assert.equal(posts.at(-1)!.method, 'PATCH'); assert.match(posts.at(-1)!.url, /\/webhooks\/77\/owned\/messages\/555/);
+      } else {
+        assert.equal(posts.length, 2); assert.match(posts[1].url, /\/webhooks\/123\//); assert.deepEqual(posts[1].body.components, []);
+        assert.equal(via, 'plain'); assert.equal(await env.DB.prepare('SELECT 1 FROM app_webhooks').first(), null, 'the deleted webhook is forgotten');
+      }
+    } finally { globalThis.fetch = original; Date.now = clock; }
+  }
+});

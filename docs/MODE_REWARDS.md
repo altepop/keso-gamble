@@ -25,6 +25,16 @@
 
 速報（あかんbot）に保留額を出し、選択を開いた勝利の速報には本人用の「○KPで降りる／続行」ボタンを付ける（💬の関西弁コメントなど本文はそのまま）。押せるのは本人だけで、押すと本人のボタンだけが消え、結果は本人にだけ返す。ボタン付きの投稿には Webhook がアプリ所有である必要があり、Discord が拒否した場合はボタンなしで送り直して24時間はボタンを付けない（`monitor_state.skirmish_buttons_off_until`）。`/kp balance` の本人にだけ見えるボタンでも選べる。選択前に開始した試合や未選択中の試合を、後から挑戦に追加できない。受取・続行は状態version付きで一度だけ確定。他人のボタン・古いボタンを拒否する。口座と保留額を分離し、敗北による口座の減額はない。保留額に期限は設けない。
 
+### あかんbotの速報にボタンを出す設定（一度だけ）
+
+Discordは、手作りのWebhookからはボタン付きの投稿を受け付けません（2026-10-29の本番で確認）。ボタンはアプリ（KESO PLAY）が作ったWebhookからだけ送れるため、管理者が一度だけ作ります。名前とアイコンはあかんbotのものをそのまま使って投稿します。
+
+1. Discord Developer Portal → KESO PLAY → OAuth2 → Redirects に `https://valorant-results.tealeaforest.workers.dev/api/discord/app-webhook/callback` を追加して保存。
+2. `https://valorant-results.tealeaforest.workers.dev/api/discord/app-webhook/start` を開き、チャンネルに「速報」を選んで承認。
+3. 「設定しました」と出れば完了。このサーバーと、あかんbotと同じチャンネル以外は受け付けません。リンクは10分・1回限りです。
+
+作ったWebhookのURLはD1（`app_webhooks`）にだけ保存し、画面・ログには出しません。DiscordでそのWebhookを消すと、次の投稿で自動的に元のあかんbotのWebhook（ボタンなし）に戻ります。ボタン付きで投稿した速報は、後の編集も同じWebhookで行います（`monitor_state.via:<試合ID>`）。
+
 稼ぎchに挑戦の動きを流す：続行（🔥）、受取（💰）、続行後の敗北で保留を失う（💥）、5連勝（👑）。投稿の失敗は精算に影響しない。
 
 試合の記録・挑戦状態・自動入金は同じトランザクション。途中受取も状態更新と入金が同時に確定する。試合再取得・同時押下・DB失敗で二重入金しない。Discordの応答送信失敗時は `/kp balance` で確定済みの状態を再確認できる。既存コマンドの一括再登録・Bot Token変更は不要。
