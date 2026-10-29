@@ -17,15 +17,10 @@ export function assessRewardReadiness(match: Match, puuid: string): CompletionAs
   if (queue === 'deathmatch') return { status: 'ready', mode: 'deathmatch', outcome: null };
   if (queue === 'custom') return { status: 'hold', reason: 'custom_rules_pending' };
   const mode = queue === 'ggteam' ? 'escalation' : queue === 'hurm' ? 'teamdeathmatch' : queue === 'onefa' ? 'replication' : queue;
-  if(isSkirmishQueue(queue)){
-    const ours=match.teams?.find(t=>t.team_id===players[0].team_id),theirs=match.teams?.find(t=>t.team_id!==players[0].team_id);
-    const score=(n:unknown):n is number=>Number.isSafeInteger(n)&&Number(n)>=0&&Number(n)<=10;
-    if(match.teams?.length!==2||!ours||!theirs||!score(ours.rounds?.won)||!score(theirs.rounds?.won)||!(ours.won===true&&theirs.won===false&&ours.rounds!.won===10&&theirs.rounds!.won<10||theirs.won===true&&ours.won===false&&theirs.rounds!.won===10&&ours.rounds!.won<10))return {status:'hold',reason:'unfinished'};
-    return {status:'ready',mode:'skirmish',outcome:ours.won?'win':'loss'};
-  }
   const team = match.teams?.find(team => team.team_id === players[0].team_id);
   const enemy = match.teams?.find(team => team.team_id !== players[0].team_id);
   const valid = match.teams?.length === 2 && team && enemy && typeof team.won === 'boolean' && typeof enemy.won === 'boolean' && !(team.won && enemy.won);
+  if(isSkirmishQueue(queue))return valid&&(team.won||enemy.won)?{status:'ready',mode:'skirmish',outcome:team.won?'win':'loss'}:{status:'hold',reason:'unfinished'};
   return { status: 'ready', mode, outcome: valid ? team.won ? 'win' : enemy.won ? 'loss' : 'draw' : null };
 }
 

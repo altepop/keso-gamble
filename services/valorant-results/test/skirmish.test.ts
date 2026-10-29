@@ -62,14 +62,16 @@ test('prompt contains owner-bound buttons and shows pending money separately fro
  await f.choose('continue',1500);assert.equal(skirmishPrompt(await f.state()).components.length,0);
 });
 
-test('only verified public queues and a complete ten-round win can pass readiness',async()=>{
+test('only verified public queues and confirmed completed outcomes can pass readiness',async()=>{
  const queues=(await import('../skirmish-queues.json',{with:{type:'json'}})).default;
  const {assessRewardReadiness}=await import('../src/reward-readiness.ts');
  const fixtureQueue='fixture_skirmish_public';(queues.publicQueues as string[]).push(fixtureQueue,'custom');
  try{
   const raw={metadata:{match_id:'fixture',queue:{id:fixtureQueue},is_completed:true,started_at:new Date(1000).toISOString(),game_length_in_ms:100},players:[{puuid:'p1',team_id:'red'}],teams:[{team_id:'red',won:true,rounds:{won:10}},{team_id:'blue',won:false,rounds:{won:9}}]};
   assert.deepEqual(assessRewardReadiness(raw,'p1'),{status:'ready',mode:'skirmish',outcome:'win'});
-  raw.teams[0].rounds.won=9;assert.equal(assessRewardReadiness(raw,'p1').status,'hold');raw.teams[0].rounds.won=10;
+  raw.teams[1].won=true;assert.equal(assessRewardReadiness(raw,'p1').status,'hold');raw.teams[1].won=false;
+  raw.metadata.is_completed=false;assert.equal(assessRewardReadiness(raw,'p1').status,'hold');raw.metadata.is_completed=true;
+  raw.teams[0].won=false;assert.equal(assessRewardReadiness(raw,'p1').status,'hold');raw.teams[0].won=true;
   raw.metadata.queue.id='custom';assert.equal(assessRewardReadiness(raw,'p1').status,'hold');
   raw.metadata.queue.id='unknown_skirmish';assert.equal(assessRewardReadiness(raw,'p1').status,'hold');
  }finally{queues.publicQueues.splice((queues.publicQueues as string[]).indexOf(fixtureQueue),2);}

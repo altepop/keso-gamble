@@ -11,11 +11,3 @@ if(!response.ok)throw Error('Mode inspection request failed ('+response.status+'
 const body=await response.json();if(body.success!==true)throw Error('Mode inspection unavailable');
 const identifiers=body.result.flatMap(r=>r.results??[]).map(r=>r.mode).filter(v=>typeof v==='string'&&/^[a-z0-9_-]{1,64}$/.test(v));
 console.log(JSON.stringify({unclassifiedQueueIdentifiers:identifiers}));
-
-const finish=await fetch(`https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/d1/database/${id}/query`,{
- method:'POST',headers:{Authorization:'Bearer '+process.env.CLOUDFLARE_API_TOKEN,'Content-Type':'application/json'},
- body:JSON.stringify({sql:"SELECT EXISTS(SELECT 1 FROM notifications WHERE mode='skirmish_2v2' AND ((outcome='win' AND message LIKE '%10対%で%') OR (outcome='loss' AND message LIKE '%対10で%'))) AS tenRoundFinishObserved"}),signal:AbortSignal.timeout(15000),
-});
-if(!finish.ok)throw Error('Skirmish score inspection failed ('+finish.status+')');
-const finishBody=await finish.json();if(finishBody.success!==true)throw Error('Skirmish score inspection unavailable');
-console.log(JSON.stringify({skirmishTenRoundFinishObserved:finishBody.result?.[0]?.results?.[0]?.tenRoundFinishObserved===1}));
