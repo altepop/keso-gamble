@@ -84,3 +84,20 @@ test('the owner\'s fixed last-place odds replace the computed ones (萩原聖人
  const tables=data.fixtures.filter(f=>f.teams.includes('earth-jets'));
  assert.equal(mlOdds(mlCard(data,tables[0]).find(p=>p.name==='HIRO柴田')).last,15,'the card carries it');
 });
+
+test('61件買っても、保存データを読み直したときに未精算の予想は1件も消えない（6,100 KP分すべて残る）', () => {
+ const s=state(),now=jst('2026-10-27T18:00:00');
+ for(let i=0;i<61;i++)placeMlBet(s,{match:game1.id,player:1+i%8,type:'last',amount:100},now+i,data,new Map());
+ assert.equal(s.cash,100000-6100);
+ const back=hydrateMleague(JSON.parse(JSON.stringify(s)));
+ assert.equal(back.mlBets.filter(b=>b.status==='pending').length,61);
+ assert.equal(back.mlBets.reduce((n,b)=>n+b.amount,0),6100);
+ // Settled ones are trimmed to fill up to 60, newest first, and never push out an unsettled bet.
+ const mixed={mlBets:[...Array.from({length:70},(_,i)=>({...back.mlBets[0],id:'old-'+i,status:'lost',time:now-1000-i})),...back.mlBets]};
+ const trimmed=hydrateMleague(mixed).mlBets;
+ assert.equal(trimmed.filter(b=>b.status==='pending').length,61);assert.equal(trimmed.length,61);
+ const few={mlBets:[...Array.from({length:70},(_,i)=>({...back.mlBets[0],id:'old-'+i,status:'lost',time:now-1000-i})),...back.mlBets.slice(0,5)]};
+ const kept=hydrateMleague(few).mlBets;
+ assert.equal(kept.length,60);assert.equal(kept.filter(b=>b.status==='pending').length,5);
+ assert.deepEqual(kept.filter(b=>b.status==='lost').map(b=>b.id),Array.from({length:55},(_,i)=>'old-'+i),'the newest settled ones');
+});
