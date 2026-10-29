@@ -1,4 +1,4 @@
-import {SKIRMISH_BUTTON,decideSkirmish} from './skirmish.ts';
+import {SKIRMISH_BUTTON,decideSkirmish,withoutSkirmishButtons} from './skirmish.ts';
 import {activityLaunchComponents} from './activity-link.ts';
 import {isKpRanking} from './kp-command.ts';
 import { MBET_BUTTON, betChoices, mbetChoices, mbetDecide, runKpCommand } from './kp-slash.ts';
@@ -21,6 +21,7 @@ export interface Interaction {
   id: string; application_id: string; type: number; token?: string; guild_id?: string;
   member?: { permissions?: string; user?: { id: string } };
   data?: { name?: string; options?: Option[]; custom_id?: string; values?: string[]; component_type?: number };
+  message?: { flags?: number; components?: unknown[] };
 }
 const respond = (content: string) => Response.json({ type: 4, data: { content, flags: 64, allowed_mentions: { parse: [] } } });
 const unhex = (value: string) => Uint8Array.from(value.match(/../g) ?? [], byte => parseInt(byte, 16));
@@ -153,7 +154,11 @@ export async function discordInteractions(request: Request, env: Env, ctx: Execu
     try {
       if(skirmishButton){
         if(!await initializeKp(env))throw Error('KP unavailable');
-        result=await decideSkirmish(env,config.guildId,interaction.member!.user!.id,interaction.data!.custom_id!);
+        const user=interaction.member!.user!.id,decided=await decideSkirmish(env,config.guildId,user,interaction.data!.custom_id!);
+        // On the public あかんbot result only the presser's buttons go; the choice itself is told to them alone
+        // (稼ぎch announces it). The private /kp balance reply is replaced as before.
+        if(((interaction.message?.flags??0)&64)===0){result={components:withoutSkirmishButtons(interaction.message?.components,user)} as typeof result;notice=decided.content;}
+        else result=decided;
       } else if (mbetButton) {
         const decided = await mbetDecide(env, interaction);
         if (!decided) return;

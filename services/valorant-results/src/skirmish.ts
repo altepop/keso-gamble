@@ -1,5 +1,6 @@
 import type {KpEnv} from './kp.ts';
 import {kpEventId} from './kp.ts';
+import {enqueue,ensurePosts} from './racing-posts.ts';
 export const SKIRMISH_POLICY='skirmish-risk-v1';
 export const SKIRMISH_PRIZES=[0,100,250,600,1500] as const;
 export interface SkirmishState {guild:string;puuid:string;user:string;wins:number;pot:number;phase:'ready'|'choice'|'armed';eligible_after:number;last_end:number;version:number}
@@ -39,9 +40,15 @@ export async function settleSkirmishMatch(env:KpEnv,input:{guild:string;puuid:st
   else {
    const wins=s.wins+1;
    if(wins===4){delta=1500;next.wins=0;next.pot=0;next.phase='ready';next.eligible_after=input.end;note='（4連勝！1,500 KPを自動受取）';}
-   else{next.wins=wins;next.pot=SKIRMISH_PRIZES[wins];next.phase='choice';note=`（${wins}勝・${next.pot} KP保留。次の試合を始める前に /kp balance で受取か続行を選択）`;}
+   else{next.wins=wins;next.pot=SKIRMISH_PRIZES[wins];next.phase='choice';note=`（${wins}勝・${next.pot} KP保留。次の試合を始める前に、速報のボタンか /kp balance で受取か続行を選択）`;}
   }
-  const result=await insert(env,s,next,{id,kind:'match',match:input.match,outcome:input.win?'win':'loss',delta,note,now:input.now});if(result.meta.changes)return {delta,note};
+  const result=await insert(env,s,next,{id,kind:'match',match:input.match,outcome:input.win?'win':'loss',delta,note,now:input.now});
+  if(result.meta.changes){
+   // The challenge in 稼ぎch: a four-win run and a lost pot. Missing a post never undoes the settlement.
+   const post=delta?`👑 <@${input.user}> スカーミッシュ4連勝！ **1,500 KP** 持っていきよった！`:s.phase==='armed'&&!input.win&&s.pot?`💥 <@${input.user}> スカーミッシュ${s.wins+1}勝目ならず…保留してた **${s.pot.toLocaleString('ja-JP')} KP** は全部パーや。`:'';
+   if(post)try{await ensurePosts(env);await enqueue(env,'sk-post:'+id,post,input.now);}catch{console.warn('skirmish_post_pending');}
+   return {delta,note};
+  }
  }
  throw Error('Skirmish settlement pending');
 }
@@ -57,7 +64,35 @@ export async function decideSkirmish(env:KpEnv,guild:string,user:string,custom:s
  const parsed=SKIRMISH_BUTTON.exec(custom);if(!parsed||parsed[1]!==user)return {content:'本人だけが選べます。',components:[]};
  const s=await skirmishState(env,guild,user);if(!s||s.phase!=='choice'||s.version!==Number(parsed[2]))return {content:'この選択は処理済みです。/kp balance で現在の状態を確認してください。',components:[]};
  const cash=parsed[3]==='cash',next={...s,wins:cash?0:s.wins,pot:cash?0:s.pot,phase:cash?'ready' as const:'armed' as const,eligible_after:now};
- const result=await insert(env,s,next,{id:`sk-choice:${guild}:${s.puuid}:${s.version}`,kind:cash?'cash':'continue',delta:cash?s.pot:0,note:'',now});
+ const id=`sk-choice:${guild}:${s.puuid}:${s.version}`;
+ const result=await insert(env,s,next,{id,kind:cash?'cash':'continue',delta:cash?s.pot:0,note:'',now});
  if(!result.meta.changes)return {content:'先に別の選択が確定しました。/kp balance で確認してください。',components:[]};
+ const pot=s.pot.toLocaleString('ja-JP'),prize=SKIRMISH_PRIZES[s.wins+1].toLocaleString('ja-JP');
+ try{await ensurePosts(env);await enqueue(env,'sk-post:'+id,cash?`💰 <@${user}> スカーミッシュ${s.wins}勝で降りた。**${pot} KP**、手堅く回収や。`:`🔥 <@${user}> スカーミッシュ${s.wins}勝、**${pot} KP** を蹴って続行や！ 次勝ったら ${prize} KP、負けたら全部パー。`,now);}catch{console.warn('skirmish_post_pending');}
  return {content:cash?`${s.pot} KPを受け取りました。次の試合から新しく挑戦できます。`:`続行しました。今から始まる次の試合が対象です。勝てば${SKIRMISH_PRIZES[s.wins+1]} KP、負けると保留分は0。`,components:[]};
+}
+const plain=(s:string)=>s.replace(/[\r\n`*_~|<>@]/g,'').slice(0,24);
+/** The あかんbot result of the win that opened a choice carries that member's 受取／続行 buttons, while the choice is
+ * still the one this match opened. Members who already chose (or played on) get none. */
+export async function skirmishResultButtons(env:KpEnv,match:string,notices:{riot_id:string;mode:string|null}[],labels:ReadonlyMap<string,string>=new Map()){
+ const rows:unknown[]=[];
+ if(!notices.some(n=>n.mode?.startsWith('skirmish')))return rows;
+ await ensureSkirmish(env);
+ for(const n of notices){
+  if(!n.mode?.startsWith('skirmish'))continue;
+  const s=await env.DB.prepare(`SELECT s.user,s.wins,s.pot,s.version FROM kp_accounts a JOIN skirmish_state s ON s.guild=a.guild AND s.puuid=a.puuid
+   JOIN skirmish_receipts r ON r.guild=a.guild AND r.puuid=a.puuid AND r.match=? AND r.kind='match' AND r.phase='choice'
+   WHERE lower(a.riot)=lower(?) AND s.user=a.user AND s.phase='choice' AND s.version=r.expected_version+1`).bind(match,n.riot_id).first<{user:string;wins:number;pot:number;version:number}>();
+  if(!s||rows.length>=5)continue;
+  const who=plain(labels.get(n.riot_id)??n.riot_id.split('#')[0]);
+  rows.push({type:1,components:[
+   {type:2,style:3,label:`${who}：${s.pot.toLocaleString('ja-JP')} KPで降りる`,custom_id:`sk:${s.user}:${s.version}:cash`},
+   {type:2,style:4,label:`${who}：続行（次勝てば${SKIRMISH_PRIZES[s.wins+1].toLocaleString('ja-JP')} KP）`,custom_id:`sk:${s.user}:${s.version}:continue`},
+  ]});
+ }
+ return rows;
+}
+/** After a press on a public result: the presser's buttons go, everyone else's stay. */
+export function withoutSkirmishButtons(rows:unknown,user:string){
+ return (Array.isArray(rows)?rows:[]).map((row:{components?:{custom_id?:string}[]})=>({...row,components:(row.components??[]).filter(c=>!String(c.custom_id??'').startsWith(`sk:${user}:`))})).filter(row=>row.components.length);
 }

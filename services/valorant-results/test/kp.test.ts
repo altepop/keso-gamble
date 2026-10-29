@@ -442,3 +442,16 @@ test('Skirmish collection respects account and activation gates before holding r
   assert.equal(await collectKpMatch(f.env,mapping,raw,'p-one'),0);assert.equal((await readKpState(f.env,mapping,one)).cash,100,'reprocessing original win never restarts the challenge');
  }finally{queues.publicQueues.splice((queues.publicQueues as string[]).indexOf(fixtureQueue),1);}
 });
+test('an unrated lottery prize of 10,000 KP or more is announced once in 稼ぎch; smaller prizes are not',async()=>{
+ const {draw}=await import('../src/luck.ts');const {unratedLottery}=await import('../src/mode-rewards.ts');
+ const f=await fixture();f.enableHistory();f.sql.exec("UPDATE kp_settings SET value='0' WHERE key='mode_rewards_started_at'");
+ const prize=(id:string)=>unratedLottery(draw('unrated-lottery:'+id+':p-one'));
+ const big=Array.from({length:5000},(_,i)=>'jp-'+i).find(id=>prize(id)===10000)!,small=Array.from({length:50},(_,i)=>'sm-'+i).find(id=>prize(id)===500)!;
+ assert.equal(await collectKpMatch(f.env,mapping,game(big,'unrated'),'p-one'),10370);
+ await Promise.all([collectKpMatch(f.env,mapping,game(big,'unrated'),'p-one'),drainKpInbox(f.env)]);
+ assert.equal(await collectKpMatch(f.env,mapping,game(small,'unrated'),'p-one'),870);
+ const posts=(f.sql.prepare('SELECT id,body FROM kp_posts').all() as {id:string;body:string}[]);
+ assert.equal(posts.length,1);assert.match(posts[0].id,/^jackpot:/);
+ assert.equal(JSON.parse(posts[0].body).content,`🎰💥 <@${one}> アンレ勝利の抽選で **+10,000 KP** の大当たりや！`);
+ const {jackpotPost}=await import('../src/mode-rewards.ts');assert.match(jackpotPost(one,100000),/^🚨🎰🚨 .*\+100,000 KP.*0\.03%/);
+});
