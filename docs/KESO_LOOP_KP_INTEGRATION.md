@@ -70,3 +70,9 @@ VALORANTの4人以外にも認定済みDiscord本人の口座を作れる。履�
 
 現段階ではLOOP側の変更・本番設定・本番DB操作・Discord通知は行っていない。
 既存QUIZ・VALORANT・通話・Activityの処理は維持する。
+
+## LOOP側の送信経路（追加作業）
+
+https://github.com/altepop/keso-loop/pull/42 （非公開repoの下書き）に、Discord本人確認・guild確認・
+永続的な送信待ち・署名送信・再試行・本人の配送状況表示を追加した。
+認定達成を確定して送信待ちへ追加する入口は未接続。設定・本番配送も未検証のため、この段階では支給しない。
