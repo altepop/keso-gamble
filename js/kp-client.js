@@ -51,6 +51,7 @@ export function createKpClient({storage,temporaryStorage,request=globalThis.fetc
   // Whether anything changed since the last full state (a short string; compare for equality).
   pulse:async()=>(await api('pulse')).pulse,
   health:()=>api('health'),
+  feed:()=>api('feed'),
   async operate(action,args){if(pending)throw Error('前の通信結果を確認してから操作してください。');pending={id:randomId(),action,args,...(ownerUserId?{owner:ownerUserId}:{})};write(pendingKey,JSON.stringify(pending));return resume();},
   discardRejected(){pending=null;write(pendingKey,null);},
   async disconnect(){if(pending)throw Error('先に通信結果を確認してください。');if(token){try{await api('logout',{});}catch(error){if(error.status!==401)throw error;}}saveToken(null);token=null;},

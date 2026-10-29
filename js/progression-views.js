@@ -1,5 +1,5 @@
-import {stockPrice} from './stock-view.js?v=web-42d35d06f0080613';
-import { ACTIVITIES, MEMBERS, ORDERS } from './progression.js?v=web-42d35d06f0080613';
+import {stockPrice} from './stock-view.js?v=web-c1d35d747c168cbe';
+import { ACTIVITIES, MEMBERS, ORDERS } from './progression.js?v=web-c1d35d747c168cbe';
 export const escapeHTML=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const kp=n=>n.toLocaleString('ja-JP')+' KP';
 // A history amount with its own sign: +900 KP / −200 KP / ±0 KP.

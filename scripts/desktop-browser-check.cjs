@@ -17,6 +17,7 @@ let browser;
  await ctx.addInitScript(()=>localStorage.setItem('keso-kp-session-v1','desktop-layout-fixture'));
  let operations=0;
  await ctx.route('https://valorant-results.tealeaforest.workers.dev/api/kp/**',async route=>{
+  if(new URL(route.request().url()).pathname.endsWith('/feed'))return route.fulfill({json:{entries:[]}});
   const path=new URL(route.request().url()).pathname;
   if(path.endsWith('/operation')){operations++;throw Error('Layout verification must not charge a wallet');}
   const result=path.endsWith('/state')?state:path.endsWith('/pulse')?{pulse:'fixed'}:null;

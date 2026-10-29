@@ -1,3 +1,4 @@
+import {communityFeed,publicTrade} from '../src/community-feed.ts';
 import test from 'node:test';
 import { URL as NodeURL } from 'node:url';
 import assert from 'node:assert/strict';
@@ -454,4 +455,37 @@ test('an unrated lottery prize of 10,000 KP or more is announced once in 稼ぎc
  assert.equal(posts.length,1);assert.match(posts[0].id,/^jackpot:/);
  assert.equal(JSON.parse(posts[0].body).content,`🎰💥 <@${one}> アンレ勝利の抽選で **+10,000 KP** の大当たりや！`);
  const {jackpotPost}=await import('../src/mode-rewards.ts');assert.match(jackpotPost(one,100000),/^🚨🎰🚨 .*\+100,000 KP.*0\.03%/);
+});
+
+test('community feed contains only committed guild trades; retries, rejection and rollback cannot add entries',async()=>{
+ const f=await fixture();seed(f.sql,one,10000);seed(f.sql,two,10000);
+ const names=new Map([[one,'One'],[two,'Two']]);
+ const buy={symbol:'keso',side:'buy',quantity:1};
+ await operateKp(f.env,mapping,one,'feed-trade-operation-1','trade',buy);
+ await operateKp(f.env,mapping,one,'feed-trade-operation-1','trade',buy);
+ await operateKp(f.env,mapping,two,'feed-roulette-operation','spin',{type:'number',amount:100,choice:3});
+ await assert.rejects(operateKp(f.env,mapping,two,'feed-rejected-operation','trade',{symbol:'keso',side:'buy',quantity:99999}));
+ const feed=await communityFeed(f.env,guild,names);assert.equal(feed.entries.length,2);
+ const stock=feed.entries.find(e=>e.name==='One')!;assert.equal(stock.label,'株を購入');assert.match(stock.detail,/keso · 1株/);assert.ok(stock.amount>0);
+ const roulette=feed.entries.find(e=>e.name==='Two')!;assert.equal(roulette.amount,100);assert.match(roulette.detail,/3番 →/);
+ const text=JSON.stringify(feed);for(const secret of ['request_hash','holdings','blackjack','cash','balance','session'])assert.ok(!text.includes(secret),secret);
+ assert.equal((await communityFeed(f.env,'other-guild',names)).entries.length,0);
+ f.sql.exec("CREATE TRIGGER feed_fail BEFORE INSERT ON kp_ledger BEGIN SELECT RAISE(ABORT,'feed rollback'); END");
+ await assert.rejects(operateKp(f.env,mapping,one,'feed-rollback-operation','trade',buy));
+ assert.equal((await communityFeed(f.env,guild,names)).entries.length,2);
+ const unauth=await kpApi(new Request('https://example.com/api/kp/feed'),f.env,mapping);assert.equal(unauth.status,401);
+ const code=await issueKpCode(f.env,mapping,one),token=await exchangeKpCode(f.env,code!);
+ const response=await kpApi(new Request('https://example.com/api/kp/feed',{headers:{Authorization:'Bearer '+token}}),f.env,mapping);
+ assert.equal(response.status,200);assert.equal(response.headers.get('Cache-Control'),'no-store');assert.equal(((await response.json()) as any).entries.length,2);
+ f.sql.exec('DROP TRIGGER feed_fail');
+ // There may be many private settings operations: the partial index only visits public rows.
+ const plan=f.sql.prepare("EXPLAIN QUERY PLAN SELECT id FROM kp_operations WHERE guild=? AND (json_extract(response,'$.activity') IS NOT NULL OR json_extract(response,'$.stockTrade') IS NOT NULL) ORDER BY at DESC,user,id LIMIT 40").all(guild);
+ assert.match(JSON.stringify(plan),/kp_public_activity_recent/);
+});
+test('public casino facts never expose in-progress cards and skip private actions',()=>{
+ assert.deepEqual(publicTrade('bj-start',{amount:200},{hand:{bet:200,player:[{r:1,s:1}],dealer:[{r:13,s:1}]},done:null}),{label:'ブラックジャック',detail:'ベット成立',amount:200});
+ assert.equal(publicTrade('bj-hit',{}, {hand:{player:[{r:2,s:1}]},done:null}),null);
+ assert.equal(publicTrade('roast-level',{level:3},{roastLevel:3}),null);
+ assert.deepEqual(publicTrade('chinchiro',{}, {amount:100,net:-500}),{label:'チンチロ',detail:'決着',amount:100,net:-500});
+ assert.deepEqual(publicTrade('ml-bet',{}, {bet:{player:'選手',type:'last',match:'fixture',amount:100}}),{label:'Mリーグにベット',detail:'選手 · ラス · fixture',amount:100});
 });

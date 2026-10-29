@@ -13,6 +13,7 @@ const server=spawn('python3',['-m','http.server',String(port),'--bind','127.0.0.
  await context.addInitScript(()=>localStorage.setItem('keso-kp-session-v1','fixture-session'));
  const page=await context.newPage();page.on('pageerror',e=>{errors.push(e.message);console.error('browser:',e.message);});let fixture;
  await page.route('https://valorant-results.tealeaforest.workers.dev/api/kp/**',async route=>{
+  if(new URL(route.request().url()).pathname.endsWith('/feed'))return route.fulfill({json:{entries:[]}});
   if(route.request().url().includes('/state'))return route.fulfill({json:fixture,headers:{'Access-Control-Allow-Origin':'*'}});
   if(route.request().method()==='OPTIONS')return route.fulfill({status:204,headers:{'Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'*','Access-Control-Allow-Methods':'GET,POST,OPTIONS'}});
   return route.fulfill({json:{error:'fixture: no paid operations'},status:400,headers:{'Access-Control-Allow-Origin':'*'}});

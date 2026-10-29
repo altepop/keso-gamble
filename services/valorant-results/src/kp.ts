@@ -1,3 +1,4 @@
+import {feedIndex} from './community-feed.ts';
 import {settleSkirmishMatch} from './skirmish.ts';
 import {valoKp,ensureModeRewards,MODE_REWARD_VERSION,UNRATED_JACKPOT,jackpotPost} from './mode-rewards.ts';
 import {enqueue,ensurePosts} from './racing-posts.ts';
@@ -65,6 +66,7 @@ export async function initializeKp(env:KpEnv,override?:KpMapping):Promise<KpMapp
     env.DB.prepare("INSERT OR REPLACE INTO kp_settings VALUES('schema_version','1')"),
    ]);
   }
+  await env.DB.prepare(feedIndex).run();
   await ensureDebt(env);
   await ensureSpikeGrowth(env);
   await ensureModeRewards(env);

@@ -19,6 +19,7 @@ const server=spawn('python3',['-m','http.server','8768','--bind','127.0.0.1'],{c
  const ctx=await browser.newContext({viewport:{width:390,height:844}});
  await ctx.addInitScript(()=>{localStorage.setItem('keso-kp-session-v1','a'.repeat(48));for(const name of ['Audio','AudioContext','RTCPeerConnection'])Object.defineProperty(window,name,{value:()=>{throw Error('media requested')}});});
  await ctx.route('https://valorant-results.tealeaforest.workers.dev/api/kp/**',async route=>{
+  if(new URL(route.request().url()).pathname.endsWith('/feed'))return route.fulfill({json:{entries:[]}});
   const p=new URL(route.request().url()).pathname;let result;
   assert.equal(route.request().headers().authorization,'Bearer '+'a'.repeat(48));
   if(p.endsWith('/state')){seen.push('S');result=state;}
