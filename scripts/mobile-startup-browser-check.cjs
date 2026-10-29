@@ -1,9 +1,9 @@
-// Investigation for #138: run the same mobile Activity handshake on each pre-change frontend.
+// WebKit uses the real SDK bundle, with only Discord's native host and wallet replies simulated.
+// CDP-only touch-hold checks remain in the Chromium suite; taps and authentication run here on WebKit.
 const {execFileSync}=require('node:child_process');
-const revisions=['0bbf0af','e84a82b','5932334','955227f','6f64df8','3030900','fc548dc','f099165'];
-let failed=false;
-for(const revision of revisions){
- console.log('Mobile startup baseline: '+revision);
- try{execFileSync(process.execPath,['scripts/discord-auth-browser-check.cjs','guild-touch'],{stdio:'inherit',env:{...process.env,PLAYWRIGHT_BROWSER:'webkit',KESO_TEST_REV:revision}});}catch{failed=true;}
+// Negative control uses the actual affected frontend, not a reimplementation of its imports.
+execFileSync(process.execPath,['scripts/discord-auth-browser-check.cjs','guild-touch'],{stdio:'inherit',env:{...process.env,PLAYWRIGHT_BROWSER:'webkit',KESO_TEST_REV:'0bbf0af',KESO_MIXED_CASINO:'1',KESO_EXPECT_LEGACY_FAILURE:'1'}});
+for(const scenario of ['dm-touch','guild-touch','cancel','unconfigured','config-failure','slow-config','module-failure']){
+ execFileSync(process.execPath,['scripts/discord-auth-browser-check.cjs',scenario],{stdio:'inherit',env:{...process.env,PLAYWRIGHT_BROWSER:'webkit'}});
 }
-if(failed)process.exitCode=1;
+execFileSync(process.execPath,['scripts/discord-auth-browser-check.cjs','guild-touch'],{stdio:'inherit',env:{...process.env,PLAYWRIGHT_BROWSER:'webkit',KESO_MIXED_CASINO:'1'}});

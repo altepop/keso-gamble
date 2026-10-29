@@ -44,7 +44,7 @@ KPは現実のお金・商品と交換できない。端末保存は利用者が
 
 ## 起動・検証
 
-画面は静的ファイルで配信。公式Discord SDKはローカルで事前にバンドルし、成果物を同梱しています。SDKの更新時はNode 24で `npm ci && npm run build:discord` を実行してください。
+画面は静的ファイルで配信。公式Discord SDKはローカルで事前にバンドルし、成果物を同梱しています。SDKの更新時はNode 24で `npm ci && npm run build:discord`、続けて `npm run build:activity` を実行してください。JS/CSSの変更後も `npm run build:activity` で依存ファイル全体の読み込み版を更新し、`npm run check:activity` で確認します。スマホ版Discordの起動処理とWebKit検証は [起動不具合の調査記録](docs/MOBILE_STARTUP.md) を参照してください。
 
 ```sh
 npm start
@@ -63,7 +63,7 @@ node scripts/kp-browser-check.cjs # サーバー口座の接続・再送・画�
 node scripts/race-live-browser-check.cjs # 本番口座の競馬：馬券・シード値の公開と照合・精算表示（APIをモック）
 ```
 
-ブラウザ検証はPython 3とChromiumを使用。`/usr/bin/chromium`、`CHROMIUM_PATH`、またはPlaywright管理のChromiumに対応。
+全ブラウザ検証（`npm run test:browser:all`）はPython 3・PlaywrightのChromiumとWebKitを使用。`npx playwright install --with-deps chromium webkit` で準備します。Chromiumの個別検証は`/usr/bin/chromium`、`CHROMIUM_PATH`、またはPlaywright管理のChromiumに対応。
 後者は `npx playwright install chromium` で導入できる。
 
 ## 構成
