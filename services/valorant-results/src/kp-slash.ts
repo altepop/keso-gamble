@@ -176,7 +176,7 @@ export async function mbetChoices(env:KpEnv,interaction:Slash):Promise<Array<{na
 export async function runKpCommand(env:KpEnv,interaction:Slash,override?:KpMapping,out?:{components?:unknown[]}):Promise<string>{
  const mapping=await initializeKp(env,override),user=interaction.member?.user?.id;
  if(!mapping||interaction.guild_id!==mapping.guildId||!user||!/^\d{15,22}$/.test(user))return 'このサーバーの本人の口座で利用してください。';
- const command=interaction.data?.name;if(!['kp','keiba','bet','mleague','mbet','mclose','kpgrant','paifulink','unitelink','horsename'].includes(command??''))return '対応していないコマンドです。';
+ const command=interaction.data?.name;if(!['kp','keiba','bet','mleague','mbet','mclose','kpgrant','paifulink','unitelink','horsename','give'].includes(command??''))return '対応していないコマンドです。';
  if(isKpRanking(interaction)){
   // A single server-side snapshot: current spendable KP, not stocks or lifetime earnings.
   const rows=(await env.DB.prepare('SELECT user,balance,RANK() OVER(ORDER BY balance DESC) AS rank,COUNT(*) OVER() AS total FROM kp_wallets WHERE guild=? ORDER BY balance DESC,user ASC LIMIT 10').bind(mapping.guildId).all<{user:string;balance:number;rank:number;total:number}>()).results;
@@ -196,7 +196,7 @@ export async function runKpCommand(env:KpEnv,interaction:Slash,override?:KpMappi
  if(command==='kp'){
   const owed=await debtOf(env,mapping.guildId,user);
   const rows=(await env.DB.prepare('SELECT delta,kind,at FROM kp_ledger WHERE guild=? AND user=? ORDER BY at DESC,id DESC LIMIT 5').bind(mapping.guildId,user).all<{delta:number;kind:string;at:number}>()).results;
-  const kinds:Record<string,string>={skirmish:'スカーミッシュの受取',dividend:'株配当','stock-migration':'株の移行端数',voice:'通話',quiz:'QUIZ',match:'試合',operation:'購入・取引',prize:'競馬賞金',mahjong:'雀魂',grant:'手動調整',unite:'ユナイト',debt:'借KP返済'};
+  const kinds:Record<string,string>={skirmish:'スカーミッシュの受取',dividend:'株配当','stock-migration':'株の移行端数',voice:'通話',quiz:'QUIZ',match:'試合',operation:'購入・取引',prize:'競馬賞金',mahjong:'雀魂',grant:'手動調整',unite:'ユナイト',debt:'借KP返済',gift:'プレゼント'};
   const challenge=await skirmishState(env,mapping.guildId,user);const prompt=challenge?skirmishPrompt(challenge):null;if(prompt&&out)out.components=prompt.components;
   return (prompt?prompt.content+'\n\n':'')+'🪙 あなたの残高：**'+money(await balance())+'**\n'+(owed?`💸 借KP：**${money(owed)}**（${DEBT_INTERVAL_MINUTES}分ごとに利子${DEBT_INTEREST_PERCENT}%、上限${money(DEBT_MAX)}。入ったKPから自動で返済。返し終わるまで株・馬・馬券・カジノ・高級品・指名は使えません）\n`:'')+(rows.length?'最近の入出金\n'+rows.map(r=>`${clock(r.at)} ${kinds[r.kind]??'口座'} ${r.delta>=0?'+':''}${money(r.delta)}`).join('\n'):'まだ入出金はありません。通話やQUIZで貯められます。')+'\n/keiba で出走表、/bet で馬券を買えます。';
  }
@@ -205,6 +205,17 @@ export async function runKpCommand(env:KpEnv,interaction:Slash,override?:KpMappi
   const named=await nameGiftHorse(env,mapping,user,interaction.data?.options?.find(o=>o.name==='name')?.value);
   if(named.post&&(env as {KP_EARNINGS_WEBHOOK_URL?:string}).KP_EARNINGS_WEBHOOK_URL){await ensurePosts(env);await enqueue(env,'horse-name:'+interaction.id,named.post,created(interaction.id));}
   return named.reply;
+ }
+ if(command==='give'){
+  // One operation per interaction, so a retried delivery cannot give twice.
+  const value=(key:string)=>interaction.data?.options?.find(o=>o.name===key)?.value;
+  try{
+   const {result}=await operateKp(env,mapping,user,'gift-'+interaction.id,'gift',{to:discordUser(value('user')),amount:value('amount'),message:value('message')??''}) as {result:{gift:{to:string;amount:number}}};
+   return `🎁 <@${result.gift.to}> に **${money(result.gift.amount)}** をプレゼントしました。稼ぎchでもお知らせします。\n残高 ${money(await balance())}`;
+  }catch(error){
+   const message=error instanceof Error?error.message:'';
+   return /[ぁ-んァ-ヶ一-龯]/.test(message)&&!/SQL|D1_|kp_/.test(message)?message:'プレゼントできたか確認できませんでした。/kp の残高を確認してください。';
+  }
  }
  if(command==='unitelink'){
   // Admin-only. The next reads of the profile only record what is there; later ranked games are posted.

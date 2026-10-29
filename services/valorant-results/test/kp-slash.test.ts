@@ -63,14 +63,14 @@ test('race clocks cross JST midnight safely and are stable on replay',()=>{
 test('command registration never bulk-replaces other commands and refuses a foreign name collision',async()=>{
  const calls:Array<{path:string;method?:string;body?:any}>=[];
  const api=async(path:string,method?:string,body?:unknown)=>{calls.push({path,method,body});return path==='/users/@me'?{id:one,bot:true}:method==='POST'?{...(body as object),id:one}:[{name:'death'},{name:'valo'},{name:'launch',type:4}];};
- assert.equal(await registerKpCommands(one,guild,api,async()=>{}),11);
- assert.deepEqual(calls.filter(c=>c.method==='POST').map(c=>c.body.name),['kp','keiba','bet','horsename','mleague','mbet','mclose','kpgrant','unitelink','paifulink','paifu']);
+ assert.equal(await registerKpCommands(one,guild,api,async()=>{}),12);
+ assert.deepEqual(calls.filter(c=>c.method==='POST').map(c=>c.body.name),['kp','keiba','bet','horsename','give','mleague','mbet','mclose','kpgrant','unitelink','paifulink','paifu']);
  assert.ok(calls.every(c=>c.method!=='PUT'));assert.deepEqual(kpCommands[2].options?.filter(o=>o.required).map(o=>o.name),['horse','amount']);
  // Unchanged commands are not written again, and writes are spaced out.
  const waits:number[]=[],posted:string[]=[];
  const stored=[{...kpCommands[0],id:'1',application_id:one,version:'9',description_localizations:null,options:kpCommands[0].options.map(o=>({...o,required:false}))},{...kpCommands[1],id:'2'},{name:'death'}];
- assert.equal(await registerKpCommands(one,guild,async(path,method,body)=>{if(method==='POST'){posted.push((body as {name:string}).name);return {...(body as object),id:one};}return path==='/users/@me'?{id:one,bot:true}:stored;},async ms=>{waits.push(ms);}),9);
- assert.deepEqual(posted,['bet','horsename','mleague','mbet','mclose','kpgrant','unitelink','paifulink','paifu']);assert.deepEqual(waits,[5000,5000,5000,5000,5000,5000,5000,5000],'a gap between writes, none before the first');
+ assert.equal(await registerKpCommands(one,guild,async(path,method,body)=>{if(method==='POST'){posted.push((body as {name:string}).name);return {...(body as object),id:one};}return path==='/users/@me'?{id:one,bot:true}:stored;},async ms=>{waits.push(ms);}),10);
+ assert.deepEqual(posted,['bet','horsename','give','mleague','mbet','mclose','kpgrant','unitelink','paifulink','paifu']);assert.deepEqual(waits,[5000,5000,5000,5000,5000,5000,5000,5000,5000],'a gap between writes, none before the first');
  let writes=0;await assert.rejects(registerKpCommands(one,guild,async(path,method)=>{if(method)writes++;return path==='/users/@me'?{id:one,bot:true}:[{name:'bet',description:'Another bot command'}];}),/conflict/);assert.equal(writes,0);
  await assert.rejects(registerKpCommands(one,guild,async()=>({id:two,bot:true})),/mismatch/);
 });
@@ -124,7 +124,7 @@ test('public command metadata contains definitions only and does not need or exp
  let queries=0;
  const response=await kpApi(new Request('https://worker/api/kp/commands'),{DB:{prepare(){queries++;throw Error('No DB reads');}},KP_BOOTSTRAP_PRIVATE_KEY:'fixture-secret-must-not-leak'} as unknown as KpEnv);
  const body=await response.json() as {version:string;commands:unknown[]};
- assert.equal(response.status,200);assert.equal(body.version,'kp-slash-v14-my-bets');assert.equal(body.commands.length,11);assert.equal(queries,0);
+ assert.equal(response.status,200);assert.equal(body.version,'kp-slash-v15-give');assert.equal(body.commands.length,12);assert.equal(queries,0);
  assert.equal(JSON.stringify(body).includes('fixture-secret'),false);assert.equal(response.headers.get('Cache-Control'),'no-store');
 });
 
@@ -233,4 +233,28 @@ test('/bet autocomplete reads only the open race, and answers with gate numbers 
  t.mock.timers.reset();
  assert.equal(await withinDeadline(Promise.resolve('list'),50,()=>'late'),'list');
  assert.equal(await withinDeadline(new Promise<string>(r=>setTimeout(()=>r('list'),200)),20,()=>'late'),'late');
+});
+
+test('/give moves KP to another member once per interaction, posts to 稼ぎch, and refuses bad requests',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:T0});
+ const f=await fixture();(f.env as {KP_EARNINGS_WEBHOOK_URL?:string}).KP_EARNINGS_WEBHOOK_URL='https://discord.com/api/webhooks/1/x';
+ const bal=(u:string)=>Number(f.sql.prepare('SELECT balance FROM kp_wallets WHERE user=?').get(u)?.balance);
+ const give=(options:Array<{name:string;value:unknown}>,n=1,user=one)=>runKpCommand(f.env,{...interaction('give',user,options),id:id(T0,n)},mapping);
+ assert.match(await give([{name:'user',value:two},{name:'amount',value:1500},{name:'message',value:'@everyone いつもありがとう'}]),/プレゼントしました[\s\S]*残高 8,500 KP/);
+ assert.equal(bal(one),8500);assert.equal(bal(two),1500);
+ await give([{name:'user',value:two},{name:'amount',value:1500}]);
+ assert.equal(bal(one),8500,'a retried delivery of the same interaction gives once');assert.equal(bal(two),1500);
+ const post=f.sql.prepare("SELECT body FROM kp_posts WHERE id LIKE 'gift:%'").all() as Array<{body:string}>;
+ assert.equal(post.length,1);
+ assert.deepEqual(JSON.parse(post[0].body),{content:`🎁 <@${one}> が <@${two}> に **1,500 KP** をプレゼント！\n💬「everyone いつもありがとう」\nええやつやん。`,allowed_mentions:{parse:[]}});
+ assert.equal(f.sql.prepare("SELECT kind FROM kp_ledger WHERE user=? AND delta=1500").get(two)?.kind,'gift');
+ assert.match(await give([{name:'user',value:one},{name:'amount',value:100}],2),/自分以外/);
+ assert.match(await give([{name:'user',value:'100000000000000199'},{name:'amount',value:100}],3),/自分以外/,'not a member');
+ assert.match(await give([{name:'user',value:two},{name:'amount',value:10001}],4),/1〜10,000/);
+ assert.match(await give([{name:'user',value:two},{name:'amount',value:9000}],5),/足りません/);
+ assert.match(await give([{name:'user',value:one},{name:'amount',value:1000}],6,two),/プレゼントしました/,'the receiver can give it on');
+ assert.equal(bal(one),9500);assert.equal(bal(two),500);
+ // 借KP: the giver cannot give while owing.
+ f.sql.prepare('INSERT INTO kp_debts(guild,user,amount,since) VALUES(?,?,300,0)').run(guild,one);
+ assert.match(await give([{name:'user',value:two},{name:'amount',value:100}],7),/借KP/);assert.equal(bal(two),500);
 });
