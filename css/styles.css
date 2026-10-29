@@ -331,3 +331,5 @@ details.asset-card.rules{margin:14px}
 .ml-pick small{display:block;color:#8fa8cf;font-size:11px}.ml-pick b{white-space:nowrap}
 .ml-pick.selected{border-color:#62a9ff;background:#0f2a52}
 .ml-order{margin:14px}.ml-confirm{grid-template-columns:1fr 1fr}
+/* 資産 → システムの状態 */
+.health-row.failing{border-left:3px solid #e8596a;padding-left:8px}.health-row.stale{border-left:3px solid #f0b54a;padding-left:8px}

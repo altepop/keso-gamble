@@ -12,6 +12,7 @@ import { PUBLIC_SALT, RUN_MS, WEEKLY_LIMIT, openRaceStart, latestRaceStart, race
 import { LUXURY } from './luxury.js?v=20261028-casino';
 import { raceScreen, racePreview, drawRace, raceElapsed, ownerPanel, luxuryPanel, roastPanel } from './racing-view.js?v=20261029-history2';
 import { createStore } from './store.js';
+import { healthPanel } from './health-view.js?v=20261029-health';
 import { mleagueScreen, mleaguePreview } from './mleague-view.js?v=20261029-mleague';
 import { gamePicker, chinchiroView, blackjackView } from './casino-view.js?v=20261028-dice-suspense';
 import {casinoFrames} from './casino-animation.js?v=20261028-dice-suspense';
@@ -94,6 +95,8 @@ function subTabs(){return tabsFor('race');}
 let raceDraft={type:'win',horse:null};
 // Mリーグ: the chosen game and player, and whether the confirmation is showing.
 let mlDraft={match:null,player:null,confirm:false};
+// 資産 → システムの状態, loaded only when asked for.
+let health=null,healthLoading=false,healthError='';
 let raceLoop=0;
 let raceShown='';
 let raceSettling=false;
@@ -207,7 +210,7 @@ function screenStable(){return useScreen('馬主',live?ownerPanel(state,Date.now
 function screenShop(){return useScreen('高級品',live?luxuryPanel(state):'');}
 
 function screenAssets(){
-  return `<div class="screen"><header class="topbar"><div class="toprow"><h1 class="title">資産</h1><div class="small-actions">${live?'':'<button class="icon-btn" data-action="reset" aria-label="初期化">↺</button>'}</div></div></header><div class="wallet-strip"><div class="wallet-item"><small>保有KP</small><strong>${moneyCompact(state.cash)}</strong></div><div class="wallet-item"><small>株式評価額</small><strong>${moneyCompact(portfolioValue(state))}</strong></div><div class="wallet-item"><small>純資産</small><strong>${moneyCompact(assets(state))}</strong></div></div>${live?'<div class="market-disclaimer">サーバー口座 · 試合報酬と決済は全端末で共通です。</div>':'<div class="market-disclaimer">端末内のデモ口座</div>'}${live?'':`<details class="panel"><summary class="card-body">開発用：テストKPの補充</summary><div class="action-row"><button class="action-btn" data-action="salary">テスト用KP +600 KP</button></div></details>`}${state.debt?.amount>0?`<div class="market-disclaimer">💸 借KP ${moneyCompact(state.debt.amount)}（${state.debt.intervalMinutes}分ごとに利子${state.debt.interestPercent}%）</div>`:''}<div class="asset-list"><div class="asset-card"><div class="panel-title" style="margin-bottom:10px">保有銘柄</div>${MARKET.map(s=>`<div class="asset-line"><span>${s.name}</span><strong>${state.holdings[s.id]}株 / ${moneyCompact(state.holdings[s.id]*state.prices[s.id])}</strong></div>`).join('')}<div class="action-row"><button class="action-btn" data-screen="market">株を売買する</button></div></div>${tradeHistory()}${live?roastPanel(state):''}<div class="asset-card"><h2 class="panel-title">口座</h2>${live?'<div id="connection-slot"></div>':''}<button class="title-back" data-screen="title">タイトルへ戻る</button></div></div>${bottomNav()}</div>`;
+  return `<div class="screen"><header class="topbar"><div class="toprow"><h1 class="title">資産</h1><div class="small-actions">${live?'':'<button class="icon-btn" data-action="reset" aria-label="初期化">↺</button>'}</div></div></header><div class="wallet-strip"><div class="wallet-item"><small>保有KP</small><strong>${moneyCompact(state.cash)}</strong></div><div class="wallet-item"><small>株式評価額</small><strong>${moneyCompact(portfolioValue(state))}</strong></div><div class="wallet-item"><small>純資産</small><strong>${moneyCompact(assets(state))}</strong></div></div>${live?'<div class="market-disclaimer">サーバー口座 · 試合報酬と決済は全端末で共通です。</div>':'<div class="market-disclaimer">端末内のデモ口座</div>'}${live?'':`<details class="panel"><summary class="card-body">開発用：テストKPの補充</summary><div class="action-row"><button class="action-btn" data-action="salary">テスト用KP +600 KP</button></div></details>`}${state.debt?.amount>0?`<div class="market-disclaimer">💸 借KP ${moneyCompact(state.debt.amount)}（${state.debt.intervalMinutes}分ごとに利子${state.debt.interestPercent}%）</div>`:''}<div class="asset-list"><div class="asset-card"><div class="panel-title" style="margin-bottom:10px">保有銘柄</div>${MARKET.map(s=>`<div class="asset-line"><span>${s.name}</span><strong>${state.holdings[s.id]}株 / ${moneyCompact(state.holdings[s.id]*state.prices[s.id])}</strong></div>`).join('')}<div class="action-row"><button class="action-btn" data-screen="market">株を売買する</button></div></div>${tradeHistory()}${live?roastPanel(state):''}${live?healthPanel(health,healthLoading,healthError):''}<div class="asset-card"><h2 class="panel-title">口座</h2>${live?'<div id="connection-slot"></div>':''}<button class="title-back" data-screen="title">タイトルへ戻る</button></div></div>${bottomNav()}</div>`;
 }
 
 function bottomNav(){
@@ -334,6 +337,7 @@ addEventListener('click',async e=>{
     if(t.dataset.raceHorse){raceDraft.horse=Number(t.dataset.raceHorse);render();return;}
     if(t.dataset.mlPlayer){mlDraft={match:t.dataset.mlMatch,player:t.dataset.mlPlayer,confirm:false};render();$('.ml-order')?.scrollIntoView({block:'center'});$('#ml-amount')?.focus({preventScroll:true});return;}
     if(t.dataset.action==='ml-confirm'){const amount=Number($('#ml-amount')?.value);if(!Number.isSafeInteger(amount)||amount<100||amount%100!==0)throw new Error('金額は100 KP以上、100 KP単位です');drafts['ml-amount']=String(amount);mlDraft.confirm=true;render();$('.ml-order')?.scrollIntoView({block:'center'});return;}
+    if(t.dataset.action==='load-health'){healthLoading=true;healthError='';render();try{health=await wallet.health();}catch(error){healthError=error.message||'状態を確認できませんでした';}finally{healthLoading=false;render();}return;}
     if(t.dataset.action==='ml-cancel'){mlDraft.confirm=false;render();return;}
     if(t.dataset.action==='ml-buy'){
       const f=state.mleague?.fixtures.find(x=>x.id===mlDraft.match),p=f?.players.find(x=>x.name===mlDraft.player);if(!p)throw new Error('選手を選び直してください');

@@ -29,6 +29,7 @@ import { discordInteractions } from './discord-interactions.ts';
 import configuredPlayers from '../players.json' with { type: 'json' };
 import { resultMessage, groupNotification } from './results.ts';
 import { settleDebts } from './kp-debt.ts';
+import { track } from './health.ts';
 import type { Match, Notice } from './results.ts';
 export { resultMessage } from './results.ts';
 
@@ -430,27 +431,27 @@ export default {
     return new URL(request.url).pathname.startsWith('/api/kp/') ? kpApi(request, env) : discordInteractions(request, env, ctx);
   },
   async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
-    ctx.waitUntil(monitorMahjong(env).catch(()=>console.warn('mahjong_watch_pending')));
-    ctx.waitUntil(monitorUnite(env).catch(()=>console.warn('unite_watch_pending')));
-    ctx.waitUntil(ensureVoice(env).catch(()=>console.warn('voice_ensure_pending')));
-    ctx.waitUntil(monitor(env));
+    ctx.waitUntil(track(env,'mahjong_watch',()=>monitorMahjong(env)));
+    ctx.waitUntil(track(env,'unite_watch',()=>monitorUnite(env)));
+    ctx.waitUntil(track(env,'voice',()=>ensureVoice(env)));
+    ctx.waitUntil(track(env,'valorant',()=>monitor(env)));
     ctx.waitUntil((async()=>{
       const mapping=await initializeKp(env);if(!mapping)return;
-      try{const market=await prepareStocks(env,mapping.guildId);await queueStockPosts(env,market);}catch{console.warn('stock_market_pending');}
+      await track(env,'stock_market',async()=>{const market=await prepareStocks(env,mapping.guildId);await queueStockPosts(env,market);});
       // Owned horses run even when nobody opens the Activity.
-      try{await decideEntries(env,mapping,openRaceStart(Date.now()));await settleHorsePrizes(env,mapping);}catch{console.warn('horse_race_pending');}
+      await track(env,'horse_race',async()=>{await decideEntries(env,mapping,openRaceStart(Date.now()));await settleHorsePrizes(env,mapping);});
       // A very rare free horse for someone, drawn once per race slot and announced in the earnings channel.
-      try{const gift=await maybeGiftHorse(env,mapping,openRaceStart(Date.now()));if(gift&&env.KP_EARNINGS_WEBHOOK_URL){await ensurePosts(env);await enqueue(env,'horse-gift:'+gift.horse.id,gift.text,Date.now());}}catch{console.warn('horse_gift_pending');}
-      try{await settleKpRaces(env,mapping);}catch{console.warn('race_settlement_pending');}
+      await track(env,'horse_gift',async()=>{const gift=await maybeGiftHorse(env,mapping,openRaceStart(Date.now()));if(gift&&env.KP_EARNINGS_WEBHOOK_URL){await ensurePosts(env);await enqueue(env,'horse-gift:'+gift.horse.id,gift.text,Date.now());}});
+      await track(env,'race_settlement',async()=>{await settleKpRaces(env,mapping);});
       // 借KP: repay from what came in, then this hour's interest.
-      try{await settleDebts(env,mapping.guildId);}catch{console.warn('debt_settlement_pending');}
+      await track(env,'debt_settlement',async()=>{await settleDebts(env,mapping.guildId);});
       // Results are queued after settlement in the same run, then sent.
       let crowns:Awaited<ReturnType<typeof scheduleCrowns>>=[];
-      try{crowns=await scheduleCrowns(env,mapping);}catch{console.warn('crown_schedule_pending');}
+      await track(env,'crown_schedule',async()=>{crowns=await scheduleCrowns(env,mapping);});
       // M.LEAGUE: official results, then settlement, then posts (flushed together with the racing ones).
-      try{await refreshMlCards(env);await pollMlLineups(env,mapping);await pollMlResults(env);await settleMl(env,mapping);await queueMlPosts(env,mapping);}catch{console.warn('mleague_pending');}
-      try{await queueRacePosts(env,mapping,Date.now(),crowns);await flushRacePosts(env);}catch{console.warn('earnings_post_pending');}
-      try{await prepareRaceBroadcast(env,mapping);}catch{console.warn('race_broadcast_pending');}
+      await track(env,'mleague',async()=>{await refreshMlCards(env);await pollMlLineups(env,mapping);await pollMlResults(env);await settleMl(env,mapping);await queueMlPosts(env,mapping);});
+      await track(env,'earnings_post',async()=>{await queueRacePosts(env,mapping,Date.now(),crowns);await flushRacePosts(env);});
+      await track(env,'race_broadcast',async()=>{await prepareRaceBroadcast(env,mapping);});
     })().catch(()=>console.warn('race_settlement_pending')));
   },
 };
