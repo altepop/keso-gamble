@@ -7,6 +7,7 @@ export function createKpClient({storage,temporaryStorage,request=globalThis.fetc
  const pendingStorage=temporary??persistent;
  let remembered=false;
  const root=host.endsWith('.discordsays.com')?'/.proxy/kp-api':'https://valorant-results.tealeaforest.workers.dev';
+ const steamKey='keso-steam-link-v1';
  const tokenKey='keso-kp-session-v1',pendingKey='keso-kp-pending-v1';
  const read=(store,key)=>{try{return store?.getItem(key)??null;}catch{return null;}};
  const write=(key,value)=>{try{if(!pendingStorage)throw Error('unavailable');value===null?pendingStorage.removeItem(key):pendingStorage.setItem(key,value);}catch{throw Error('操作の確認情報を保存できません。ブラウザーの保存設定を確認してください。');}};
@@ -27,6 +28,8 @@ export function createKpClient({storage,temporaryStorage,request=globalThis.fetc
   if(!response.ok){const error=Error(data.error||'処理に失敗しました。');error.status=response.status;error.definitive=data.retryable===false;throw error;}
   return data;
  }
+ let steamLink;try{steamLink=JSON.parse(read(pendingStorage,steamKey)||'null');}catch{steamLink=null;}
+ const clearSteamLink=()=>{steamLink=null;try{write(steamKey,null);}catch{ /* A storage failure must not undo a confirmed unlink/logout. */ }};
  async function readState(){const state=await api('state');ownerUserId=state.selfUserId;return state;}
  async function acceptSession(candidate,expectedUser){
   if(typeof candidate!=='string'||!candidate)throw Error('接続情報を確認できません。');
@@ -54,8 +57,15 @@ export function createKpClient({storage,temporaryStorage,request=globalThis.fetc
   feed:()=>api('feed'),
   trend:days=>api('trend?days='+days),
   privateRace:()=>api('private/race'),
+  get steamLinkRequest(){return steamLink;},
+  steamStatus:()=>api('steam/status'),
+  async startSteam(){const link=await api('steam/link',{});write(steamKey,JSON.stringify(link));steamLink=link;return link;},
+  steamPending:()=>steamLink?api('steam/pending',{state:steamLink.state}):Promise.resolve(null),
+  async confirmSteam(){if(!steamLink)throw Error('Steam接続をやり直してください。');const result=await api('steam/confirm',{state:steamLink.state});clearSteamLink();return result;},
+  async disconnectSteam(){const result=await api('steam/disconnect',{});clearSteamLink();return result;},
+  steamGame:(app,active)=>api('steam/game',{app,active}),
   async operate(action,args){if(pending)throw Error('前の通信結果を確認してから操作してください。');pending={id:randomId(),action,args,...(ownerUserId?{owner:ownerUserId}:{})};write(pendingKey,JSON.stringify(pending));return resume();},
   discardRejected(){pending=null;write(pendingKey,null);},
-  async disconnect(){if(pending)throw Error('先に通信結果を確認してください。');if(token){try{await api('logout',{});}catch(error){if(error.status!==401)throw error;}}saveToken(null);token=null;},
+  async disconnect(){if(pending)throw Error('先に通信結果を確認してください。');if(token){try{await api('logout',{});}catch(error){if(error.status!==401)throw error;}}saveToken(null);token=null;clearSteamLink();},
  };
 }

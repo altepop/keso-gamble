@@ -1,3 +1,4 @@
+import {steamApi,steamCallback} from './steam-auth.ts';
 import {privateCasinoAllowed,privateCasinoRound} from './private-casino.ts';
 import {memberNames} from './member-names.ts';
 import {kpTrend} from './kp-trend.ts';
@@ -225,6 +226,7 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping):Promi
  if(request.method==='GET'&&new URL(request.url).pathname==='/api/kp/commands')return response({applicationId:discord.applicationId,version:KP_COMMAND_VERSION,commands:kpCommands});
  if(request.method==='OPTIONS')return new Response(null,{status:204,headers});
  try{
+  if(request.method==='GET'&&new URL(request.url).pathname==='/api/kp/steam/callback')return steamCallback(request,env);
   const mapping=await initializeKp(env,override);if(!mapping)return response({error:'口座はまだ準備中です。'},503);
   const path=new URL(request.url).pathname;
   if(path.startsWith('/api/kp/voice/'))return voiceControl(request,env);
@@ -256,6 +258,7 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping):Promi
   const token=/^Bearer ([a-f0-9]{48})$/.exec(request.headers.get('Authorization')??'')?.[1];
   const owner=token?await kpSession(env,token):null;
   if(!owner||owner.guild!==mapping.guildId||!await isKpParticipant(env,mapping,owner.user))return response({error:'接続が切れました。/valo status のコードで接続してください。'},401);
+  if(path.startsWith('/api/kp/steam/')){const r=await steamApi(request,env,owner,token!);return new Response(r.body,{status:r.status,headers:{...Object.fromEntries(r.headers),...headers}});}
   if(request.method==='POST'&&path==='/api/kp/logout'){await revokeKpSession(env,token!);return response({disconnected:true});}
   if(request.method==='GET'&&path==='/api/kp/private/race'){
    if(!await privateCasinoAllowed(env,mapping.guildId,owner.user))return response({error:'この操作は利用できません。'},403);

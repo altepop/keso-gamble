@@ -1,0 +1,25 @@
+{
+  "version": "steam-achievements-v1",
+  "enabled": false,
+  "startsAt": null,
+  "apps": [],
+  "tiers": [
+    {
+      "maxPercent": 0.1,
+      "amount": 5000
+    },
+    {
+      "maxPercent": 1,
+      "amount": 1000
+    },
+    {
+      "maxPercent": 10,
+      "amount": 300
+    },
+    {
+      "maxPercent": 100,
+      "amount": 50
+    }
+  ],
+  "zeroFromPercent": 50
+}
