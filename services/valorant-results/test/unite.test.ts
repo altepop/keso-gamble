@@ -94,3 +94,35 @@ test('posts use Japanese names: Pokemon, stage and party size; roast lines name 
  assert.ok(posts.every(p=>p.includes('-# イワパレス Lv14・テイア蒼空遺跡（グラードン）・トリオ')&&!/\{pokemon\}|\{boss\}|Crustle|ザップドス|サンダー|レックウザ|カイオーガ/.test(p)));
  assert.ok(posts.some(p=>/🗯️ .*イワパレス/.test(p)),'some roast lines name the Pokemon');
 });
+
+test('Unite streak payouts grow to the cap, reset on opposite result, and do not infer missing history',async()=>{
+ const {uniteQuote}=await import('../src/unite-rewards.ts');
+ const {luckFor}=await import('../src/luck.ts');
+ const seed=Array.from({length:100},(_,i)=>'streak-'+i).find(s=>!luckFor('unite:'+s))!;
+ let wins=0,losses=0;
+ for(const expected of [400,500,600,700,800,800]){const q=uniteQuote(true,wins,losses,seed);assert.equal(q.net,expected);({wins,losses}=q);}
+ for(const expected of [-100,-200,-300,-400,-500,-500]){const q=uniteQuote(false,wins,losses,seed);assert.equal(q.net,expected);({wins,losses}=q);}
+ assert.equal(uniteQuote(true,wins,losses,seed).base,400);
+ assert.equal(uniteQuote(true,5,0,seed,true).base,400,'a history gap starts a new observed streak');
+});
+test('failed Unite credit leaves the cursor and streak untouched; retry pays once and queues the post',async()=>{
+ const f=await fixture();await link(f,cat,UID);await monitorUnite(f.env,T0,f.request,mapping);
+ const seen=f.sql.prepare('SELECT seen FROM unite_links').get()!.seen;
+ f.set(page([card({pokemon:'Absol',ko:12}),card()]));
+ f.sql.exec("CREATE TRIGGER unite_fail BEFORE INSERT ON kp_ledger WHEN NEW.kind='unite' BEGIN SELECT RAISE(ABORT,'fixture failure'); END");
+ await assert.rejects(monitorUnite(f.env,T0+3*60000,f.request,mapping));
+ assert.equal(f.sql.prepare('SELECT seen FROM unite_links').get()!.seen,seen);
+ assert.equal(f.sql.prepare('SELECT wins FROM unite_streaks').get()!.wins,0);
+ assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM unite_rewards').get()!.n,0);
+ f.sql.exec('DROP TRIGGER unite_fail');await monitorUnite(f.env,T0+6*60000,f.request,mapping);
+ const balance=f.balance(cat);assert.ok(balance>=200);assert.equal(f.sql.prepare('SELECT wins FROM unite_streaks').get()!.wins,1);
+ await monitorUnite(f.env,T0+9*60000,f.request,mapping);assert.equal(f.balance(cat),balance);assert.equal(f.sent.length,1);
+});
+test('more than three newly observed Unite games are processed oldest first without dropping games',async()=>{
+ const f=await fixture();await link(f,cat,UID);await monitorUnite(f.env,T0,f.request,mapping);
+ f.set(page([card({ko:14}),card({ko:13}),card({ko:12}),card({ko:11}),card()]));
+ await monitorUnite(f.env,T0+3*60000,f.request,mapping);
+ assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM unite_rewards').get()!.n,4);
+ assert.equal(f.sql.prepare('SELECT wins FROM unite_streaks').get()!.wins,4);
+ assert.equal(f.sent.length,4);
+});

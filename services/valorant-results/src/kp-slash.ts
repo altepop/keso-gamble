@@ -196,11 +196,13 @@ export async function runKpCommand(env:KpEnv,interaction:Slash,override?:KpMappi
   const target=discordUser(option('user')),uid=uniteUid(option('profile'));
   if(!/^\d{15,22}$/.test(target)||!uid)return '相手（@メンション か ユーザーID）と、UniteAPI のプロフィールURL（https://uniteapi.dev/p/数字）を指定してください。';
   await ensureUnite(env);
+  const owner=await env.DB.prepare('SELECT user FROM unite_streaks WHERE guild=? AND uid=?').bind(mapping.guildId,uid).first<{user:string}>();
+  if(owner&&owner.user!==target)return 'このプロフィールは別の口座に登録済みです。所有者の変更は自動では行いません。';
   await env.DB.batch([
    env.DB.prepare('DELETE FROM unite_links WHERE guild=? AND (user=? OR uid=?)').bind(mapping.guildId,target,uid),
    env.DB.prepare('INSERT INTO unite_links(guild,user,uid) VALUES(?,?,?)').bind(mapping.guildId,target,uid),
   ]);
-  return `🔗 <@${target}> を UniteAPI（${uid}）と結び付けました。数分後から、ランクマッチの結果をアカンbotで速報し、勝ち +200／負け −50 KP を精算します。プロフィールが非公開だと読めません。`;
+  return `🔗 <@${target}> を UniteAPI（${uid}）と結び付けました。数分後から、ランクマッチの結果をアカンbotで速報し、勝ち +400〜800／負け −100〜500 KP（連勝・連敗で変動）を精算します。プロフィールが非公開だと読めません。`;
  }
  if(command==='paifulink'){
   // Admin-only. Replaces any earlier link of either side, so a wrong link is fixed by linking again.

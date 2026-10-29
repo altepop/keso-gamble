@@ -3,7 +3,7 @@
 // Luck on a loss wipes the loss out; bad luck halves a gain and doubles a loss.
 export type LuckKind='double'|'triple'|'unlucky';
 export const LUCK_PERCENT={triple:1,double:4,unlucky:3} as const;
-function draw(seed:string){
+export function draw(seed:string){
  let h=2166136261;for(const c of seed)h=Math.imul(h^c.charCodeAt(0),16777619);
  h=Math.imul(h^(h>>>16),0x85ebca6b);h=Math.imul(h^(h>>>13),0xc2b2ae35);
  return ((h^(h>>>16))>>>0)%10000;

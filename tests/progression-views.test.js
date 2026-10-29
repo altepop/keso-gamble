@@ -28,5 +28,11 @@ test('スパクラの表向き説明は短く、旧固定額と共通倍率を�
  const html=playView(state,{},'');
  assert.match(html,/スパイクラッシュ<\/span><span class="helper">履歴に応じて補正されます。/);
  assert.doesNotMatch(html,/勝ち \+120 KP|全ゲーム共通で/);
- assert.match(html,/スパイクラッシュ以外の試合は/);
+ assert.match(html,/アンレ勝利とスパイクラッシュ以外の試合は/);
+});
+
+test('モード別の例外を説明し、旧35キル一律ボーナスを案内しない',()=>{
+ const html=playView(live([]),{},'');
+ for(const text of ['40キルでトップ','5対0','味方単独キルトップ','0.03%','連敗で −100','共通倍率の対象外'])assert.ok(html.includes(text));
+ assert.doesNotMatch(html,/勝ち負けに関係なく|勝てばプラス|35キル以上で.*150/);
 });

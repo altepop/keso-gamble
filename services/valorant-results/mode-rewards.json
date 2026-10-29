@@ -1,0 +1,9 @@
+{
+  "version":"mode-rewards-v3",
+  "unrated":{"win":370,"lottery":[{"weight":2000,"amount":-500},{"weight":3000,"amount":-100},{"weight":3797,"amount":0},{"weight":800,"amount":500},{"weight":300,"amount":2000},{"weight":100,"amount":10000},{"weight":3,"amount":100000}]},
+  "swiftplay":{"cleanSweepBonus":400},
+  "teamdeathmatch":{"lowerKills":30,"lowerKd":1.5,"lowerBonus":200,"upperKills":40,"upperKd":2,"upperBonus":500},
+  "escalation":{"lowerKills":30,"lowerKd":1.5,"lowerBonus":200,"upperKills":35,"upperKd":2,"upperBonus":500,"tripleChancePercent":5},
+  "deathmatch":{"requiredKills":40},
+  "unite":{"win":[400,500,600,700,800],"loss":[-100,-200,-300,-400,-500]}
+}

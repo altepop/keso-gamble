@@ -1,6 +1,8 @@
+import {valoKp,ensureModeRewards,MODE_REWARD_VERSION} from './mode-rewards.ts';
+export {valoKp} from './mode-rewards.ts';
 import {ensureSpikeGrowth,settleSpike,spikeMatch,SPIKE_POLICY} from './spikerush-growth.ts';
 import type {SpikeMatch} from './spikerush-growth.ts';
-import policy from '../kp-policy.json' with { type: 'json' };
+import policy from '../legacy-kp-policy.json' with { type: 'json' };
 import { applyLuck, chance, luckFor, luckLabel } from './luck.ts';
 import sealed from '../kp-bootstrap.encrypted.json' with { type: 'json' };
 import configuredPlayers from '../players.json' with { type: 'json' };
@@ -63,6 +65,7 @@ export async function initializeKp(env:KpEnv,override?:KpMapping):Promise<KpMapp
   }
   await ensureDebt(env);
   await ensureSpikeGrowth(env);
+  await ensureModeRewards(env);
   const state=newKpState();
   const known=new Set((await env.DB.prepare('SELECT user FROM kp_wallets WHERE guild=?').bind(mapping.guildId).all<{user:string}>()).results.map(a=>a.user));
   const missing=mapping.accounts.filter(a=>!known.has(a.discordUserId));
@@ -91,7 +94,10 @@ export async function drainKpInbox(env:KpEnv){
    if(!settled){await env.DB.prepare('DELETE FROM kp_inbox WHERE id=?').bind(e.id).run();continue;}
    e={...e,amount:settled.amount,note:settled.note};
   }
-  await env.DB.prepare(`INSERT INTO kp_events(id,guild,user,puuid,match,mode,outcome,amount,policy,at) SELECT ?,?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM kp_accounts WHERE guild=? AND puuid=? AND user=?) ON CONFLICT(id) DO NOTHING`).bind(e.id,e.guild,e.user,e.puuid,e.match,e.mode,e.outcome,e.amount,e.policy,Date.now(),e.guild,e.puuid,e.user).run();
+  await env.DB.batch([
+   env.DB.prepare(`INSERT INTO kp_events(id,guild,user,puuid,match,mode,outcome,amount,policy,at) SELECT ?,?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM kp_accounts WHERE guild=? AND puuid=? AND user=?) ON CONFLICT(id) DO NOTHING`).bind(e.id,e.guild,e.user,e.puuid,e.match,e.mode,e.outcome,e.amount,e.policy,Date.now(),e.guild,e.puuid,e.user),
+   env.DB.prepare('INSERT OR IGNORE INTO kp_reward_notes(id,note) SELECT ?,? WHERE EXISTS(SELECT 1 FROM kp_events WHERE id=?)').bind(e.id,e.note??'',e.id),
+  ]);
   // A loss costs a separate debit, never more than the balance (wallets cannot go below 0); the rest becomes 借KP.
   if(e.penalty)await env.DB.prepare(`INSERT OR IGNORE INTO kp_ledger(id,guild,user,delta,kind,at) SELECT ?,?,?,-MIN(?,balance),'match',? FROM kp_wallets WHERE guild=? AND user=? AND EXISTS(SELECT 1 FROM kp_events WHERE id=?)`).bind('penalty:'+e.id,e.guild,e.user,e.penalty,Date.now(),e.guild,e.user,e.id).run();
   if(e.penalty){await ensureDebt(env);await borrowShortfall(env,'penalty:'+e.id,e.penalty).run();}
@@ -113,7 +119,7 @@ export function kpCreditLine(text:string,amount:number,note=''){const base=text.
  * - teamBonus (kp-policy.json) can add a chance bonus to listed modes; none are listed now.
  * - Every mode: luck (src/luck.ts) may double or triple it, wipe out a loss, or halve a gain / double a loss.
  * Every draw is fixed by the match and the player. Missing stats never cost anything. */
-export function valoKp(raw:Match,puuid:string,mode:string,outcome:string|null):{base:number;net:number;note:string}{
+export function legacyValoKp(raw:Match,puuid:string,mode:string,outcome:string|null):{base:number;net:number;note:string}{
  // Spikerush needs persisted growth, not this stateless win/loss calculation.
  if(mode==='spikerush')return {base:0,net:0,note:''};
  const subject=raw.players.find(p=>p.puuid===puuid),id=raw.metadata.match_id+':'+puuid;
@@ -159,9 +165,11 @@ export async function collectKpMatch(env:KpEnv,mapping:KpMapping,raw:Match,puuid
  if(link.amount!==null)return kpMatchNet(env,id);
  const spike=status.mode==='spikerush'?spikeMatch(raw,puuid):null;
  if(status.mode==='spikerush'&&!spike)return null;
- const {net,note}=valoKp(raw,puuid,status.mode,status.outcome);
+ const modeStart=await env.DB.prepare("SELECT value FROM kp_settings WHERE key='mode_rewards_started_at'").first<{value:string}>();
+ const modern=start>=Number(modeStart?.value??Infinity);
+ const {net,note}=(modern?valoKp:legacyValoKp)(raw,puuid,status.mode,status.outcome);
  // Events hold the earned part (never negative); a cost is a separate debit capped at the balance.
- const e:KpEvent={id,guild:mapping.guildId,user:link.user,puuid,match:raw.metadata.match_id,mode:status.mode,outcome:status.outcome,amount:Math.max(0,net),policy:policy.version,at:Date.now(),...net<0?{penalty:-net}:{},...note?{note}:{},...(spike?{kind:'spikerush-growth' as const,spike,policy:SPIKE_POLICY}:{})};
+ const e:KpEvent={id,guild:mapping.guildId,user:link.user,puuid,match:raw.metadata.match_id,mode:status.mode,outcome:status.outcome,amount:Math.max(0,net),policy:modern?MODE_REWARD_VERSION:policy.version,at:Date.now(),...net<0?{penalty:-net}:{},...note?{note}:{},...(spike?{kind:'spikerush-growth' as const,spike,policy:SPIKE_POLICY}:{})};
  await env.DB.prepare('INSERT OR IGNORE INTO kp_inbox VALUES(?,?,?)').bind(id,JSON.stringify(e),Date.now()).run();
  await drainKpInbox(env);
  return kpMatchNet(env,id);
@@ -203,9 +211,9 @@ export async function flushKpDirectives(env:KpEnv & {DISCORD_WEBHOOK_URL:string;
 }
 
 /** Per monitor run: each match's net KP (earned part plus any loss debit) and its current post. */
-export interface KpRun { mapping:KpMapping; startsAt:number; credits:Map<string,number>; messages:Map<string,string> }
+export interface KpRun { mapping:KpMapping; startsAt:number; credits:Map<string,number>; messages:Map<string,string>; notes?:Map<string,string> }
 export async function prepareKpRun(env:KpEnv,mapping:KpMapping):Promise<KpRun>{
  const start=await env.DB.prepare("SELECT value FROM kp_settings WHERE key='starts_at'").first<{value:string}>();
- const rows=(await env.DB.prepare("SELECT e.id,e.amount+COALESCE((SELECT delta FROM kp_ledger WHERE id='penalty:'||e.id),0) AS amount,n.message FROM kp_events e JOIN kp_accounts a ON a.guild=e.guild AND a.puuid=e.puuid LEFT JOIN notifications n ON n.riot_id=a.riot AND n.match_id=e.match WHERE e.guild=? ORDER BY e.at DESC LIMIT 200").bind(mapping.guildId).all<{id:string;amount:number;message:string|null}>()).results;
- return {mapping,startsAt:Number(start?.value??Infinity),credits:new Map(rows.map(r=>[r.id,r.amount])),messages:new Map(rows.filter(r=>r.message!==null).map(r=>[r.id,r.message!]))};
+ const rows=(await env.DB.prepare("SELECT e.id,e.amount+COALESCE((SELECT delta FROM kp_ledger WHERE id='penalty:'||e.id),0) AS amount,n.message,d.note FROM kp_events e LEFT JOIN kp_reward_notes d ON d.id=e.id JOIN kp_accounts a ON a.guild=e.guild AND a.puuid=e.puuid LEFT JOIN notifications n ON n.riot_id=a.riot AND n.match_id=e.match WHERE e.guild=? ORDER BY e.at DESC LIMIT 200").bind(mapping.guildId).all<{id:string;amount:number;message:string|null;note:string|null}>()).results;
+ return {mapping,startsAt:Number(start?.value??Infinity),credits:new Map(rows.map(r=>[r.id,r.amount])),messages:new Map(rows.filter(r=>r.message!==null).map(r=>[r.id,r.message!])),notes:new Map(rows.map(r=>[r.id,r.note??(/\n🪙 この試合 [^\n]*? KP([^\n]*)/.exec(r.message??'')?.[1]??'')]))};
 }
