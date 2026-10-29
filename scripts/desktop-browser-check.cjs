@@ -33,6 +33,7 @@ let browser;
    const expected=width>=1024?'none':width>=720?'680px':'520px';
    return innerWidth===width&&getComputedStyle(screen).maxWidth===expected&&Math.abs(screen.getBoundingClientRect().width-nav.getBoundingClientRect().width)<2;
   },width);
+  await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
   const sizes=await page.evaluate(()=>({screen:document.querySelector('.screen').getBoundingClientRect().width,nav:document.querySelector('.bottom-inner').getBoundingClientRect().width,client:document.documentElement.clientWidth,overflow:document.documentElement.scrollWidth>innerWidth}));
   if(width>=1024)assert.ok(Math.abs(sizes.screen-sizes.client)<2,view+' fills desktop width '+width);
   else assert.ok(sizes.screen<=(width<720?520:680)+1,view+' keeps its narrow layout');
