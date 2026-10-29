@@ -1,4 +1,4 @@
-import { escapeHTML } from './progression-views.js?v=20261029-mleague';
+import { escapeHTML } from './progression-views.js?v=20261029-stocks2';
 import { payoutFor } from './racing.js?v=20261029-mleague';
 // The Activity's Mリーグ screen: today's (or the next) games from the server, a last-place prediction with a
 // confirmation step, and the member's own predictions. Buying is the wallet operation 'ml-bet' with the shown odds,
