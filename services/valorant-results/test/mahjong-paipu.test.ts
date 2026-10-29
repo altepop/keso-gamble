@@ -6,7 +6,7 @@ import {readFileSync,readdirSync} from 'node:fs';
 import {initializeKp,syncKpAccounts} from '../src/kp.ts';
 import type {KpMapping} from '../src/kp.ts';
 import {runPaifuCommand,decidePaifu} from '../src/mahjong-claims.ts';
-import {paipuApi,validSummary,paipuPost} from '../src/mahjong-paipu.ts';
+import {paipuApi,validSummary,paipuPost,roastFor} from '../src/mahjong-paipu.ts';
 import type {PaipuEnv} from '../src/mahjong-paipu.ts';
 import {summarizePaipu} from '../src/mahjong-summary.ts';
 // @ts-expect-error The Actions fetcher is plain JavaScript; only its signing helper is shared here.
@@ -188,4 +188,19 @@ test('the paipu review ends with one intact source-checked quote that fits how t
   const lines=paipuPost(summary,new Map([[seat,{user:one,name:'A'}]]),()=>'full').split('\n'),quotes=lines.filter(l=>l.startsWith('💬 '));
   assert.equal(quotes.length,1);assert.ok(memes.includes(quotes[0].slice(3)),quotes[0]);assert.equal(lines.at(-1),quotes[0]);
  }
+});
+
+test('sanma wording follows the actual player count and rank, including bust and mild preferences',()=>{
+ const three={...summary,players:3,seats:summary.seats.slice(0,3).map((p,i)=>({...p,seat:i,rank:i+1,score:[50000,35000,20000][i],dealIns:0,riichi:0,riichiWins:0,riichiDealIns:0,bestLead:0})),rounds:[]};
+ const names=(n:number)=>'Player'+n,seen=new Set<string>();
+ for(let i=0;i<1000;i++){
+  const s={...three,uuid:'sanma-lines-'+i};
+  const middle=roastFor(s,1,'full',names);assert.equal(middle.length,1);assert.match(middle[0],/三麻|三人|二人|二着|二位|2着|真ん中|一着|一位|トップ|北|その順位/);assert.doesNotMatch(middle[0],/ラス|トビ|最下位/);
+  const bottom=roastFor(s,2,'full',names);assert.equal(bottom.length,5);assert.equal(new Set(bottom).size,5);assert.doesNotMatch(bottom.join(''),/他の3人|4人/);for(const line of bottom)seen.add(line);
+  const busted={...s,seats:s.seats.map(p=>({...p,score:p.seat===2?-1000:p.score}))};
+  const soft=roastFor(busted,2,'mild',names);assert.ok(soft.length<=2);assert.doesNotMatch(soft.join(''),/どひゃー|下手|生き物|ゴミ|キモ|うんこ/);
+ }
+ assert.ok([...seen].some(line=>/三麻|三人|二人|北/.test(line)),'sanma-only last-place lines are selected');
+ const four={...summary,rounds:[],seats:summary.seats.map((p,i)=>({...p,rank:i+1,score:25000,dealIns:0,riichi:0,riichiWins:0,riichiDealIns:0,bestLead:0}))};
+ for(let i=0;i<100;i++)assert.doesNotMatch(roastFor({...four,uuid:'four-lines-'+i},3,'full',names).join(''),/三麻|三人卓|北抜き/);
 });
