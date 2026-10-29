@@ -252,6 +252,8 @@ test('長い障害の後でも、未精算の予想がある試合は結果を�
  assert.equal(urls.length,1,'nothing unsettled any more: game 2 (no bets) is not read after its window');
  await queueMlPosts(f.env,mapping,back+60000);await queueMlPosts(f.env,mapping,back+120000);
  assert.equal(f.posts().filter(p=>p.includes('第1試合 結果')).length,1,'the late result is posted once');
+});
+
 test('61件買っても未精算は消えず、結果が出たら61件すべて精算される（6,100 KP分）', async t => {
  t.mock.timers.enable({apis:['Date'],now:jst('2026-10-27T18:30:00')});
  const f=await fixture();await storeCards(f.env,parseOfficialCards(page,2026),Date.now());
