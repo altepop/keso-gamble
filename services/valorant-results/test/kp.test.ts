@@ -583,3 +583,14 @@ test('private casino: every hand on the menu pays exactly that hand through the 
  await assert.rejects(operateKp(f.env,mapping,one,'private-hand-bad-02','private-casino',{game:'mines',amount:100,hand:'24x1'}),/役を選び直して/);
  await assert.rejects(operateKp(f.env,mapping,two,'private-hand-bad-03','private-casino',{game:'poker',amount:100,hand:'royal'}),/利用できません/);
 });
+
+test('explicit member IDs use exact matching even when suffixes collide and preserve old aliases',async()=>{
+ const f=await fixture(),collision='200000000000000101';
+ f.sql.prepare('INSERT INTO kp_wallets(guild,user) VALUES(?,?)').run(guild,collision);
+ const base=new Map([[two,'Existing']]);
+ const config={guildId:guild,names:[{userId:one,name:'New display'},{suffix:two.slice(-4),name:'Old alias'}]};
+ const names=await memberNames(f.env,guild,base,config);
+ assert.equal(names.get(one),'New display');assert.equal(names.has(collision),false);assert.equal(names.get(two),'Old alias');assert.equal(base.get(two),'Existing');
+ assert.equal((await memberNames(f.env,'other-guild',base,config)).has(one),false);
+ for(const names of [[{userId:one,suffix:one.slice(-4),name:'Invalid'}],[{userId:'123',name:'Invalid'}],[{userId:one,name:'A'},{userId:one,name:'B'}]])assert.deepEqual(await memberNames(f.env,guild,base,{guildId:guild,names}),base);
+});
