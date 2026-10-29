@@ -9,7 +9,8 @@ import {ML_DATA,closeMl,mlClosed,mlData,mlLineups,mlResults,seasonStats} from '.
 import {enqueue,ensurePosts} from './racing-posts.ts';
 import {ensureMahjongClaims} from './mahjong-claims.ts';
 import {ensureUnite,uniteUid} from './unite.ts';
-import {nameGiftHorse} from './racing-horses.ts';
+import {nameGiftHorse,decideEntries} from './racing-horses.ts';
+import {crownFor} from './racing-crowns.ts';
 import {DEBT_INTEREST_PERCENT,DEBT_INTERVAL_MINUTES,debtOf} from './kp-debt.ts';
 // @ts-expect-error Shared browser engine.
 import {mlCard,mlOdds,mlOpen,mlStart} from '../../../js/mleague.js';
@@ -108,13 +109,26 @@ async function mleagueView(env:KpEnv,now:number){
 }
 /** A user option given as a mention (<@id>, <@!id>) or a bare ID. */
 const discordUser=(value:unknown)=>String(value??'').trim().replace(/^<@!?(\d+)>$/,'$1');
-/** Choices for /bet's horse field: the open race's horses with their odds, filtered by what was typed. */
-export async function betChoices(env:KpEnv,interaction:Slash,override?:KpMapping):Promise<Array<{name:string;value:number}>>{
+/** Choices for /bet's horse field: the open race's horses with their odds, filtered by what was typed. Discord gives an
+ * autocomplete three seconds, so only the open race is read (its crown and runners, side by side), not the whole view. */
+export async function betChoices(env:KpEnv,interaction:Slash,override?:KpMapping,now=Date.now()):Promise<Array<{name:string;value:number}>>{
  const mapping=await initializeKp(env,override);if(!mapping)return [];
- const view=await racingView(env,mapping),open=view.open,card={...raceCard(open.id,undefined,open.entries),...(open.crown?{name:open.crown}:{})},odds=raceOdds(card);
+ const open=openRaceStart(now),[crown,entries]=await Promise.all([crownFor(env,mapping.guildId,open),decideEntries(env,mapping,open,now)]);
+ const card={...raceCard(open,undefined,entries),...(crown?{name:crown.name}:{})},odds=raceOdds(card);
  const typed=String((interaction.data?.options as Array<{name:string;value?:unknown;focused?:boolean}>|undefined)?.find(o=>o.focused)?.value??'').trim();
  return card.horses.filter((h:{number:number;name:string})=>!typed||String(h.number)===typed||h.name.includes(typed))
-  .map((h:{number:number;name:string})=>({name:`${h.number}番 ${h.name}　1着 ${(odds.win[h.number]/10).toFixed(1)}倍・${placeSlots(card.size)}着内 ${(odds.place[h.number]/10).toFixed(1)}倍｜${clock(open.id)}発走`.slice(0,100),value:h.number})).slice(0,25);
+  .map((h:{number:number;name:string})=>({name:`${h.number}番 ${h.name}　1着 ${(odds.win[h.number]/10).toFixed(1)}倍・${placeSlots(card.size)}着内 ${(odds.place[h.number]/10).toFixed(1)}倍｜${clock(open)}発走`.slice(0,100),value:h.number})).slice(0,25);
+}
+/** When the list is not ready in time, the gate numbers alone: the bet itself still checks the horse and fixes the odds. */
+export function betFallbackChoices(now=Date.now()):Array<{name:string;value:number}>{
+ const open=openRaceStart(now),size=raceCard(open).size;
+ return Array.from({length:size},(_,i)=>({name:`${i+1}番（馬名・倍率の読み込みが遅れています。購入時に確定）｜${clock(open)}発走`.slice(0,100),value:i+1}));
+}
+/** An autocomplete answer within Discord's limit: the list if it is ready, otherwise the fallback. */
+export async function withinDeadline<T>(work:Promise<T>,ms:number,fallback:()=>T):Promise<T>{
+ let timer:ReturnType<typeof setTimeout>|undefined;
+ try{return await Promise.race([work,new Promise<T>(resolve=>{timer=setTimeout(()=>resolve(fallback()),ms);})]);}
+ finally{clearTimeout(timer);}
 }
 /** Exact fixture IDs keep a selection stable across midnight. Old table-game codes remain readable. */
 function mbetFixture(d:Awaited<ReturnType<typeof mlData>>,value:unknown,day:string|null){

@@ -1,7 +1,9 @@
 import {SKIRMISH_BUTTON,decideSkirmish,withoutSkirmishButtons} from './skirmish.ts';
 import {activityLaunchComponents} from './activity-link.ts';
 import {isKpRanking} from './kp-command.ts';
-import { MBET_BUTTON, betChoices, mbetChoices, mbetDecide, runKpCommand } from './kp-slash.ts';
+import { MBET_BUTTON, betChoices, betFallbackChoices, mbetChoices, mbetDecide, runKpCommand, withinDeadline } from './kp-slash.ts';
+// Leaves time for the request to reach Discord inside its three seconds.
+const AUTOCOMPLETE_DEADLINE_MS = 2200;
 import { PAIFU_BUTTON, decidePaifu, paifuRequest, runPaifuCommand } from './mahjong-claims.ts';
 import type { PaifuReply } from './mahjong-claims.ts';
 import { runValoCommand } from './valo-queries.ts';
@@ -121,7 +123,10 @@ export async function discordInteractions(request: Request, env: Env, ctx: Execu
   // Read-only candidate lists return type 8 directly, without deferring or buying anything.
   if (interaction.type === 4) {
     const name=interaction.data?.name;
-    const choices = await (name==='bet'?betChoices(env,interaction):name==='mbet'?mbetChoices(env,interaction):Promise.resolve([])).catch(() => []);
+    // Discord drops an answer after three seconds ("オプション読み込み失敗"); a cold start must still answer in time.
+    const choices = await withinDeadline<Array<{ name: string; value: string | number }>>(
+      (name==='bet'?betChoices(env,interaction):name==='mbet'?mbetChoices(env,interaction):Promise.resolve([])).catch(() => []),
+      AUTOCOMPLETE_DEADLINE_MS, () => name==='bet' ? betFallbackChoices() : []);
     return Response.json({ type: 8, data: { choices } });
   }
   let permissions = 0n;

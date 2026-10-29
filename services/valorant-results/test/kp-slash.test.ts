@@ -5,7 +5,7 @@ import {URL as NodeURL} from 'node:url';
 import {readFileSync,readdirSync} from 'node:fs';
 import {initializeKp,syncKpAccounts} from '../src/kp.ts';
 import type {KpEnv,KpMapping} from '../src/kp.ts';
-import {runKpCommand,slashRace,betChoices} from '../src/kp-slash.ts';
+import {runKpCommand,slashRace,betChoices,betFallbackChoices,withinDeadline} from '../src/kp-slash.ts';
 import {registerKpCommands,kpCommands,isKpRanking,sameCommand} from '../src/kp-command.ts';
 const guild='100000000000000100',one='100000000000000101',two='100000000000000102',newUser='100000000000000103';
 const mapping:KpMapping={guildId:guild,accounts:[{riotId:'One#JP1',discordUserId:one},{riotId:'Two#JP1',discordUserId:two}]};
@@ -217,4 +217,20 @@ test('/mbet の「購入する」ボタンは即座に受け付け（type 6）�
  assert.deepEqual(await response.json(),{type:6});assert.equal(tasks.length,1);await Promise.all(tasks);
  assert.equal(sent.length,1);assert.equal(sent[0].method,'PATCH');assert.match(sent[0].url,/messages\/@original$/);
  assert.deepEqual(sent[0].body.components,[],'the buttons are removed');assert.match(sent[0].body.content,/確認できませんでした/);
+});
+
+test('/bet autocomplete reads only the open race, and answers with gate numbers if the list is late',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:T0});const f=await fixture();
+ const ask=()=>betChoices(f.env,{...interaction('bet',one,[{name:'horse',value:'',focused:true} as never]),guild_id:guild},mapping);
+ const first=await ask();
+ let reads=0;const prepare=f.env.DB.prepare.bind(f.env.DB);(f.env.DB as {prepare:unknown}).prepare=(q:string)=>{reads++;return prepare(q);};
+ assert.deepEqual(await ask(),first,'the same list as before');
+ // The test mapping skips the per-isolate setup cache, so its 4 setup reads are counted too.
+ assert.ok(reads<=10,`reads only the open race (was 16 with the whole race view, which also read the race being watched): ${reads}`);
+ const fallback=betFallbackChoices(T0);
+ assert.deepEqual(fallback.map(c=>c.value),first.map(c=>c.value).sort((a,b)=>a-b),'every gate number of the open race');
+ assert.ok(fallback.every(c=>c.name.length<=100&&/^\d+番（.*）｜16:15発走$/.test(c.name)));
+ t.mock.timers.reset();
+ assert.equal(await withinDeadline(Promise.resolve('list'),50,()=>'late'),'list');
+ assert.equal(await withinDeadline(new Promise<string>(r=>setTimeout(()=>r('list'),200)),20,()=>'late'),'late');
 });
