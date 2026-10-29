@@ -1,12 +1,12 @@
 const {chromium,webkit}=require('playwright'),assert=require('node:assert/strict');
-const {spawn}=require('node:child_process'),{existsSync}=require('node:fs');
+const {spawn}=require('node:child_process');
 const server=spawn('python3',['-m','http.server','8813','--bind','127.0.0.1'],{cwd:require('node:path').join(__dirname,'..'),stdio:'ignore'});let browser;
 (async()=>{
  for(let i=0;i<50;i++){try{if((await fetch('http://127.0.0.1:8813')).ok)break;}catch{}await new Promise(r=>setTimeout(r,100));}
  const {createInitialState}=await import('../js/engine.js');const state={...createInitialState(),serverWallet:true,cash:0,selfUserId:'fixture-member',members:[],ledger:[]};
- // Use the full Chromium browser in new headless mode, matching the local binary.
- // The separate headless shell crashes when this cross-origin mobile popup closes in CI.
- const engine=process.argv[2]||'chromium';browser=await(engine==='webkit'?webkit:chromium).launch(engine==='webkit'?{}:{...(existsSync('/usr/bin/chromium')?{executablePath:'/usr/bin/chromium'}:{channel:'chromium'}),args:['--no-sandbox']});
+ // Use the Playwright-pinned full Chromium browser in CI, rather than an arbitrary
+ // preinstalled system build. Local runners can explicitly set CHROMIUM_PATH.
+ const engine=process.argv[2]||'chromium';browser=await(engine==='webkit'?webkit:chromium).launch(engine==='webkit'?{}:{...(process.env.CHROMIUM_PATH?{executablePath:process.env.CHROMIUM_PATH}:{channel:'chromium'}),args:['--no-sandbox']});
  console.log('Steam browser engine:',engine,browser.version());
  const ctx=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true,reducedMotion:'reduce'});await ctx.addInitScript(()=>localStorage.setItem('keso-kp-session-v1','fixture-wallet-secret'));
  const status={available:true,enabled:false,account:null,apps:[{id:123,title:'Game <img src=x onerror=alert(1)>'}],games:[]};const link={state:'fixture-state',url:'https://steamcommunity.com/openid/login?fixture=1'};let verified=false,operations=0,failGame=true;
@@ -28,7 +28,7 @@ const server=spawn('python3',['-m','http.server','8813','--bind','127.0.0.1'],{c
   else throw Error('Unexpected API '+path);
   await route.fulfill({json:result});
  });
- const page=await ctx.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));page.on('dialog',d=>d.accept());await page.goto('http://127.0.0.1:8813');await page.locator('.title-start').click();await page.locator('.nav-btn[data-screen=play]').click();
+ const page=await ctx.newPage(),errors=[];page.on('crash',()=>console.error('Steam fixture Activity renderer crashed'));page.on('pageerror',e=>errors.push(e.message));page.on('dialog',d=>d.accept());await page.goto('http://127.0.0.1:8813');await page.locator('.title-start').click();await page.locator('.nav-btn[data-screen=play]').click();
  await page.locator('[data-action=steam-status]').click();await page.getByText('現在は入金されません。',{exact:false}).waitFor();await page.locator('[data-action=steam-link]').click();
  const popupPromise=page.waitForEvent('popup');await page.locator('[data-action=steam-open]').click();const popup=await popupPromise;await popup.getByText('Steam login fixture',{exact:true}).waitFor();assert.match(popup.url(),/^https:\/\/steamcommunity.com\/openid\/login/);await popup.close();await page.bringToFront();assert.match(page.url(),/^http:\/\/127\.0\.0\.1/);
  // Recover the outstanding challenge across a mobile Activity reload.
