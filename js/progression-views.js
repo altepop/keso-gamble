@@ -1,4 +1,4 @@
-import {stockPrice} from './stock-view.js?v=20261028-stocks';
+import {stockPrice} from './stock-view.js?v=20261029-stocks2';
 import { ACTIVITIES, MEMBERS, ORDERS } from './progression.js?v=20261028-casino';
 export const escapeHTML=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const kp=n=>n.toLocaleString('ja-JP')+' KP';

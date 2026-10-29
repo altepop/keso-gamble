@@ -8,6 +8,16 @@ const MARKET = [
   { id: 'riso', ticker: 'RISO', name: 'リソ寿司', category: '飲食', initialPrice: 780, volatility: 0.054, drift: 0.001, icon: '寿' },
   { id: 'yuya', ticker: 'YUYA', name: 'ゆーやエンタメ', category: '娯楽', initialPrice: 420, volatility: 0.082, drift: 0.002, icon: '★' },
   { id: 'yano', ticker: 'YANO', name: '矢野ファイナンス', category: '金融', initialPrice: 1860, volatility: 0.031, drift: 0.001, icon: '¥' },
+  // 誰かがKPを失うたびに上がり、得るたびに下がる（他人の金で焼肉はその逆）。値動きは件数で決まり、金額は見ない。
+  { id: 'msum', ticker: 'MSUM', name: 'メシウマ食堂', category: '人の不幸', initialPrice: 1000, volatility: 0.04, drift: 0, icon: '飯' },
+  { id: 'tnkn', ticker: 'TNKN', name: '他人の金で焼肉', category: '人の幸運', initialPrice: 1000, volatility: 0.04, drift: 0, icon: '肉' },
+  // 架空の会社（メンバーの名前から）。ときどき架空のニュースで大きく動く。
+  { id: 'komi', ticker: 'KOMI', name: '小路グローバルモーターズ', category: '新興国', initialPrice: 1200, volatility: 0.07, drift: 0.002, icon: '✈' },
+  { id: 'ishi', ticker: 'ISHI', name: '石原エレクトリック', category: '電機', initialPrice: 980, volatility: 0.04, drift: 0.001, icon: '⌘' },
+  { id: 'vdk', ticker: 'VDK', name: 'VDKブラック商事', category: 'グレー', initialPrice: 100, volatility: 0.12, drift: 0, icon: '☠' },
+  { id: 'godo', ticker: 'GODO', name: '神戸（ごうど）ふるさと公社', category: 'ふるさと納税', initialPrice: 1450, volatility: 0.04, drift: 0.001, icon: '印' },
+  { id: 'ngya', ticker: 'NGYA', name: '名古屋ヘンテコ発明所', category: '謎の発明', initialPrice: 777, volatility: 0.08, drift: 0.001, icon: '？' },
+  { id: 'koba', ticker: 'KOBA', name: '小林百貨店', category: '百貨店', initialPrice: 820, volatility: 0.03, drift: 0.001, icon: '百' },
 ];
 const SHOP = [
   { id: 'gold', icon: '✦', name: 'ゴールド称号', detail: 'Activity内で黄金の称号を表示', price: 2200, tier: '装飾' },
@@ -35,11 +45,13 @@ const validInt = (value, min = 0) => Number.isSafeInteger(value) && value >= min
 function hydrateState(raw, now = Date.now()) {
   const state = createInitialState(now);
   if (!raw || raw.version !== SCHEMA_VERSION || !validInt(raw.cash)) return state;
-  if (MARKET.some(({id}) => !validInt(raw.prices?.[id], 1) || !validInt(raw.holdings?.[id]))) return state;
+  // A stock listed after the save simply starts at its listing price with no shares; a broken value still resets.
+  const listed = (value, min) => value === undefined || validInt(value, min);
+  if (MARKET.some(({id}) => !listed(raw.prices?.[id], 1) || !listed(raw.holdings?.[id], 0))) return state;
   state.cash = raw.cash;
   for (const {id} of MARKET) {
-    state.prices[id] = raw.prices[id];
-    state.holdings[id] = raw.holdings[id];
+    state.prices[id] = raw.prices?.[id] ?? state.prices[id];
+    state.holdings[id] = raw.holdings?.[id] ?? 0;
     const history = Array.isArray(raw.history?.[id]) ? raw.history[id].filter(v => validInt(v, 1)).slice(-25) : [];
     if (history.at(-1) !== state.prices[id]) history.push(state.prices[id]);
     state.history[id] = history.length ? history : [state.prices[id]];
@@ -69,6 +81,7 @@ function advanceMarket(state, now = Date.now()) {
   const elapsed = Math.max(0, Math.floor((now - state.lastMarketAt)/60000));
   const steps = Math.min(elapsed, 30); // Demo never performs unbounded offline work.
   if (!steps) return 0;
+  for (const s of MARKET) { state.prices[s.id] ??= s.initialPrice; state.history[s.id] ??= [state.prices[s.id]]; state.holdings[s.id] ??= 0; }
   for (let i=0;i<steps;i++) for(const s of MARKET) {
     const direction = (nextRandom(state)*2-1)*s.volatility + s.drift;
     const newPrice = Math.max(20, Math.round(state.prices[s.id]*(1+direction)));
