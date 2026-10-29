@@ -1,3 +1,4 @@
+import {memberNames} from '../src/member-names.ts';
 import {communityFeed,publicTrade} from '../src/community-feed.ts';
 import test from 'node:test';
 import { URL as NodeURL } from 'node:url';
@@ -488,4 +489,18 @@ test('public casino facts never expose in-progress cards and skip private action
  assert.equal(publicTrade('roast-level',{level:3},{roastLevel:3}),null);
  assert.deepEqual(publicTrade('chinchiro',{}, {amount:100,net:-500}),{label:'チンチロ',detail:'決着',amount:100,net:-500});
  assert.deepEqual(publicTrade('ml-bet',{}, {bet:{player:'選手',type:'last',match:'fixture',amount:100}}),{label:'Mリーグにベット',detail:'選手 · ラス · fixture',amount:100});
+});
+
+test('member name aliases bind a unique guild wallet once, never a colliding or another guild account',async()=>{
+ const f=await fixture(),config={guildId:guild,names:[{suffix:one.slice(-4),name:'表示名'}]};
+ const base=new Map([[two,'Existing']]);
+ const names=await memberNames(f.env,guild,base,config);
+ assert.equal(names.get(one),'表示名');assert.equal(names.get(two),'Existing');assert.equal(base.has(one),false);
+ const collision='200000000000000101';f.sql.prepare('INSERT INTO kp_wallets(guild,user) VALUES(?,?)').run(guild,collision);
+ const again=await memberNames(f.env,guild,base,config);assert.equal(again.get(one),'表示名');assert.equal(again.has(collision),false);
+ assert.equal((await memberNames(f.env,'other-guild',base,config)).has(one),false);
+ f.sql.prepare('DELETE FROM kp_settings WHERE key=?').run('member-name:'+guild+':'+one.slice(-4));
+ assert.equal((await memberNames(f.env,guild,base,config)).has(one),false,'initial collision stays unassigned');
+ assert.equal((await memberNames(f.env,guild,base,{guildId:guild,names:[{suffix:'9999',name:'Absent'}]})).size,1);
+ const renamed=await memberNames(f.env,guild,base,{guildId:guild,names:[{suffix:two.slice(-4),name:'New name'}]});assert.equal(renamed.get(two),'New name');
 });

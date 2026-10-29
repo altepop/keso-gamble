@@ -135,3 +135,5 @@ Activityは音声セッション・メディアセッションを読み書きせ
 `GET /api/kp/feed` は既存の口座セッションと参加者確認を使用します。`kp_operations`の成立済みレスポンス内の公開情報だけを読み、同じ操作の再送・失敗・ロールバックによる重複や架空の履歴は追加しません。保存済みの全状態は取得しません。初期化時にサーバー別・時刻順の部分インデックス `kp_public_activity_recent` を作成し、履歴が増えても取得は最大40件に制限します。
 
 検証: `npm run test:community-browser`（Chromium）、`node scripts/community-browser-check.cjs webkit`（WebKit）。入力欄を交換しない更新、ネットワークの復旧、非表示中の停止、名前のエスケープ、モバイル／PC幅を確認します。
+
+メンバーの表示名は `services/valorant-results/member-names.encrypted.json` に既存のKP公開鍵で暗号化して保持できます。仮名の末尾4桁に一致する口座が同じサーバーに1件だけある場合、初回表示時に完全なDiscord IDへ固定します。0件・複数件なら登録せず、後から末尾が重複する人が参加しても既存の名前を別口座へ移しません。残高・権限・VALORANTの対応表には影響しません。
