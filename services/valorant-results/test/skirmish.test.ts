@@ -14,15 +14,15 @@ async function fixture(){
  const choose=async(action='continue',now=300)=>{const s=(await state())!;return decideSkirmish(env,guild,user,`sk:${user}:${s.version}:${action}`,now);};
  return {env,sql,game,state,balance,choose};
 }
-test('four wins require three explicit continues and pay exactly once; duplicate games cannot change it',async()=>{
+test('five wins require four explicit continues and pay exactly once; duplicate games cannot change it',async()=>{
  const f=await fixture();
- for(let n=1;n<=4;n++){
+ for(let n=1;n<=5;n++){
   const t=n*1000;await Promise.all([f.game('m'+n,t),f.game('m'+n,t)]);
   const s=(await f.state())!;
-  if(n<4){assert.equal(s.pot,[0,50,250,600][n]);assert.equal(s.phase,'choice');assert.equal(f.balance(),500);await f.choose('continue',t+300);}
+  if(n<5){assert.equal(s.pot,[0,50,250,600,1000][n]);assert.equal(s.phase,'choice');assert.equal(f.balance(),500);await f.choose('continue',t+300);}
  }
  assert.equal(f.balance(),2000);assert.equal((await f.state())!.pot,0);
- await f.game('m4',4000);assert.equal(f.balance(),2000);
+ await f.game('m5',5000);assert.equal(f.balance(),2000);
 });
 test('cashout and continue race cannot both win; stale and foreign buttons do not change another wallet',async()=>{
  const f=await fixture();await f.game('first',1000);const s=(await f.state())!,cash=`sk:${user}:${s.version}:cash`,go=`sk:${user}:${s.version}:continue`;
@@ -50,11 +50,11 @@ test('cashout ledger failure rolls state and receipt back so the same choice can
  await assert.rejects(f.choose('cash',1500),/fixture/);assert.deepEqual(await f.state(),before);assert.equal(f.balance(),500);
  f.sql.exec('DROP TRIGGER fail_sk');await f.choose('cash',1600);assert.equal(f.balance(),550);
 });
-test('fourth win ledger failure rolls back the match receipt and streak, retry pays once',async()=>{
- const f=await fixture();for(let n=1;n<=3;n++){await f.game('m'+n,n*1000);await f.choose('continue',n*1000+300);}
+test('fifth win ledger failure rolls back the match receipt and streak, retry pays once',async()=>{
+ const f=await fixture();for(let n=1;n<=4;n++){await f.game('m'+n,n*1000);await f.choose('continue',n*1000+300);}
  const before=await f.state();f.sql.exec("CREATE TRIGGER fail_auto BEFORE INSERT ON kp_ledger WHEN NEW.kind='match' AND NEW.delta>0 BEGIN SELECT RAISE(ABORT,'fixture'); END");
- await assert.rejects(f.game('m4',4000),/fixture/);assert.deepEqual(await f.state(),before);assert.equal(f.balance(),500);
- f.sql.exec('DROP TRIGGER fail_auto');await f.game('m4',4000);assert.equal(f.balance(),2000);
+ await assert.rejects(f.game('m5',5000),/fixture/);assert.deepEqual(await f.state(),before);assert.equal(f.balance(),500);
+ f.sql.exec('DROP TRIGGER fail_auto');await f.game('m5',5000);assert.equal(f.balance(),2000);
 });
 test('prompt contains owner-bound buttons and shows pending money separately from wallet money',async()=>{
  const f=await fixture();await f.game('first',1000);const prompt=skirmishPrompt(await f.state());assert.match(prompt.content,/50 KP保留/);
@@ -110,9 +110,9 @@ test('the result of a win that opened a choice carries the buttons until the mem
  ]);
  assert.ok(posts.every(p=>p.allowed_mentions.parse.length===0),'mentions never ping');
 });
-test('a four-win run is announced once',async()=>{
+test('a five-win run is announced once; the fourth win is held at 1,000',async()=>{
  const f=await fixture();
- for(let n=1;n<=4;n++){await f.game('m'+n,n*1000);if(n<4)await f.choose('continue',n*1000+300);}
- await f.game('m4',4000);
- assert.deepEqual((f.sql.prepare("SELECT body FROM kp_posts WHERE id LIKE 'sk-post:match%'").all() as {body:string}[]).map(r=>JSON.parse(r.body).content),[`👑 <@${user}> スカーミッシュ4連勝！ **1,500 KP** 持っていきよった！`]);
+ for(let n=1;n<=5;n++){await f.game('m'+n,n*1000);if(n===4)assert.equal((await f.state())!.pot,1000);if(n<5)await f.choose('continue',n*1000+300);}
+ await f.game('m5',5000);
+ assert.deepEqual((f.sql.prepare("SELECT body FROM kp_posts WHERE id LIKE 'sk-post:match%'").all() as {body:string}[]).map(r=>JSON.parse(r.body).content),[`👑 <@${user}> スカーミッシュ5連勝！ **1,500 KP** 持っていきよった！`]);
 });

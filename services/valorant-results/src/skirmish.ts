@@ -2,7 +2,9 @@ import type {KpEnv} from './kp.ts';
 import {kpEventId} from './kp.ts';
 import {enqueue,ensurePosts} from './racing-posts.ts';
 export const SKIRMISH_POLICY='skirmish-risk-v1';
-export const SKIRMISH_PRIZES=[0,50,250,600,1500] as const;
+export const SKIRMISH_PRIZES=[0,50,250,600,1000,1500] as const;
+// The last step is paid at once; every step before it is held for 受取／続行.
+const SKIRMISH_TOP=SKIRMISH_PRIZES.length-1;
 export interface SkirmishState {guild:string;puuid:string;user:string;wins:number;pot:number;phase:'ready'|'choice'|'armed';eligible_after:number;last_end:number;version:number}
 const ready=new WeakMap<object,Promise<void>>();
 export async function ensureSkirmish(env:KpEnv){
@@ -39,13 +41,13 @@ export async function settleSkirmishMatch(env:KpEnv,input:{guild:string;puuid:st
   else if(!input.win){next.wins=0;next.pot=0;next.phase='ready';note=s.pot?`（保留 ${s.pot} KPを失いました。口座のKPは減りません）`:'（次の勝利から挑戦開始）';}
   else {
    const wins=s.wins+1;
-   if(wins===4){delta=1500;next.wins=0;next.pot=0;next.phase='ready';next.eligible_after=input.end;note='（4連勝！1,500 KPを自動受取）';}
-   else{next.wins=wins;next.pot=SKIRMISH_PRIZES[wins];next.phase='choice';note=`（${wins}勝・${next.pot} KP保留。次の試合を始める前に、速報のボタンか /kp balance で受取か続行を選択）`;}
+   if(wins===SKIRMISH_TOP){delta=SKIRMISH_PRIZES[SKIRMISH_TOP];next.wins=0;next.pot=0;next.phase='ready';next.eligible_after=input.end;note=`（${SKIRMISH_TOP}連勝！${delta.toLocaleString('ja-JP')} KPを自動受取）`;}
+   else{next.wins=wins;next.pot=SKIRMISH_PRIZES[wins];next.phase='choice';note=`（${wins}勝・${next.pot} KP保留。次の試合を始める前に受取か続行を選択：/kp balance）`;}
   }
   const result=await insert(env,s,next,{id,kind:'match',match:input.match,outcome:input.win?'win':'loss',delta,note,now:input.now});
   if(result.meta.changes){
    // The challenge in 稼ぎch: a four-win run and a lost pot. Missing a post never undoes the settlement.
-   const post=delta?`👑 <@${input.user}> スカーミッシュ4連勝！ **1,500 KP** 持っていきよった！`:s.phase==='armed'&&!input.win&&s.pot?`💥 <@${input.user}> スカーミッシュ${s.wins+1}勝目ならず…保留してた **${s.pot.toLocaleString('ja-JP')} KP** は全部パーや。`:'';
+   const post=delta?`👑 <@${input.user}> スカーミッシュ${SKIRMISH_TOP}連勝！ **${delta.toLocaleString('ja-JP')} KP** 持っていきよった！`:s.phase==='armed'&&!input.win&&s.pot?`💥 <@${input.user}> スカーミッシュ${s.wins+1}勝目ならず…保留してた **${s.pot.toLocaleString('ja-JP')} KP** は全部パーや。`:'';
    if(post)try{await ensurePosts(env);await enqueue(env,'sk-post:'+id,post,input.now);}catch{console.warn('skirmish_post_pending');}
    return {delta,note};
   }
