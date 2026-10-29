@@ -2,7 +2,7 @@ import {isKpRanking} from './kp-command.ts';
 import {initializeKp,newKpState} from './kp.ts';
 import type {KpEnv,KpMapping} from './kp.ts';
 import {ensureQuizKp} from './quiz-kp.ts';
-import {operateKp} from './kp-api.ts';
+import {operateKp,previewMlBet} from './kp-api.ts';
 import {racingView} from './racing-kp.ts';
 import {ML_DATA,closeMl,mlClosed,mlData,mlLineups,mlResults,seasonStats} from './mleague.ts';
 import {enqueue,ensurePosts} from './racing-posts.ts';
@@ -32,6 +32,43 @@ export function mlDay(now:number){
  return [...new Set(ML_DATA.fixtures.map(f=>f.date))].sort().find(d=>d>=today)??null;
 }
 const created=(id:string)=>Number((BigInt(id)>>22n)+1420070400000n);
+const friendlyError=(error:unknown,fallback:string)=>{const message=error instanceof Error?error.message:'';return /[ぁ-んァ-ヶ一-龯]/.test(message)&&!/SQL|D1_|kp_/.test(message)?message:fallback;};
+// ---- /mbet: preview → 購入する / やめる ----
+export const MBET_BUTTON=/^mbet:(buy|no):(\d{15,22})$/;
+const MBET_TTL_MIN=10;
+const draftsReady=new WeakSet<object>();
+async function ensureMbetDrafts(env:KpEnv){
+ if(draftsReady.has(env.DB))return;
+ await env.DB.prepare("CREATE TABLE IF NOT EXISTS ml_bet_drafts(id TEXT PRIMARY KEY,guild TEXT NOT NULL,user TEXT NOT NULL,match TEXT NOT NULL,player TEXT NOT NULL,amount INTEGER NOT NULL,odds INTEGER NOT NULL,created INTEGER NOT NULL,status TEXT NOT NULL DEFAULT 'open')").run();
+ draftsReady.add(env.DB);
+}
+function betLines(d:Awaited<ReturnType<typeof mlData>>,fixture:{date:string;table:number;game:number},bet:{player:string;amount:number;odds:number}){
+ const team=d.teams.find(t=>t.players.some(p=>p.name===bet.player));
+ return `${Number(fixture.date.slice(5,7))}/${Number(fixture.date.slice(8,10))} ${fixture.table}卓 第${fixture.game}試合・**${clean(bet.player)}**のラス（4位）\nチーム ${clean(team?.name??'—')}\n掛け金 ${money(bet.amount)}／倍率 ${(bet.odds/10).toFixed(1)}倍\n的中時の払戻し ${money(payoutFor(bet.amount,bet.odds))}（掛け金込み）`;
+}
+/** A press on the /mbet preview. Buying uses the preview's id as the operation id, so a double press buys once. */
+export async function mbetDecide(env:KpEnv,interaction:Slash&{data?:{custom_id?:string}},override?:KpMapping):Promise<{content:string;components:unknown[]}|null>{
+ const m=MBET_BUTTON.exec(interaction.data?.custom_id??''),presser=interaction.member?.user?.id;if(!m||!presser)return null;
+ const mapping=await initializeKp(env,override);if(!mapping||interaction.guild_id!==mapping.guildId)return null;
+ await ensureMbetDrafts(env);
+ const draft=await env.DB.prepare('SELECT id,user,match,player,amount,odds,created,status FROM ml_bet_drafts WHERE id=? AND guild=?').bind(m[2],mapping.guildId).first<{id:string;user:string;match:string;player:string;amount:number;odds:number;created:number;status:string}>();
+ if(!draft||draft.user!==presser)return null;
+ const d=await mlData(env),fixture=d.fixtures.find(f=>f.id===draft.match);
+ const lines=fixture?betLines(d,fixture,draft):'';
+ if(m[1]==='no'){
+  await env.DB.prepare("UPDATE ml_bet_drafts SET status='cancelled' WHERE id=? AND status='open'").bind(draft.id).run();
+  const now=await env.DB.prepare('SELECT status FROM ml_bet_drafts WHERE id=?').bind(draft.id).first<{status:string}>();
+  if(now?.status!=='bought')return {content:`↩️ 購入をやめました（KPは使っていません）\n${lines}`,components:[]};
+ }
+ if(draft.status==='cancelled')return {content:`↩️ この予想はやめています（KPは使っていません）。買う場合はもう一度 /mbet を実行してください。`,components:[]};
+ if(draft.status==='open'&&Date.now()>draft.created+MBET_TTL_MIN*60000)return {content:`⌛ 確認から${MBET_TTL_MIN}分を過ぎたので購入していません。もう一度 /mbet を実行してください。`,components:[]};
+ try{
+  const {result}=await operateKp(env,mapping,presser,'mbet-'+draft.id,'ml-bet',{match:draft.match,player:draft.player,type:'last',amount:draft.amount,odds:draft.odds}) as {result:{bet:{player:string;amount:number;odds:number}}};
+  await env.DB.prepare("UPDATE ml_bet_drafts SET status='bought' WHERE id=?").bind(draft.id).run();
+  const balance=Number((await env.DB.prepare('SELECT balance FROM kp_wallets WHERE guild=? AND user=?').bind(mapping.guildId,presser).first<{balance:number}>())?.balance??0);
+  return {content:[`🀄 **ラス予想を購入しました**`,fixture?betLines(d,fixture,result.bet):'',`残高 ${money(balance)}`,'出場しなかった場合は返金。結果は公式発表後に自動で反映されます。'].join('\n'),components:[]};
+ }catch(error){return {content:'⚠️ '+friendlyError(error,'購入結果を確認できませんでした。/kp の残高を確認してください。'),components:[]};}
+}
 async function mleagueView(env:KpEnv,now:number){
  const day=mlDay(now);if(!day)return 'Mリーグのレギュラーシーズン日程は終了しました。';
  const all=await mlResults(env),stats=seasonStats(all),d=await mlData(env),fixtures=d.fixtures.filter(f=>f.date===day),closed=await mlClosed(env),lineups=await mlLineups(env);
@@ -43,7 +80,7 @@ async function mleagueView(env:KpEnv,now:number){
   for(const g of games)if(lineups.has(g.id))lines.push(`第${g.game}試合 出場：${lineups.get(g.id)!.map(clean).join('・')}`);
   for(const p of mlCard(d,games[0])){const o=mlOdds(p,stats);lines.push(`${p.no}. ${clean(p.name)}（${clean(p.teamName)}）ラス ${(o.last/10).toFixed(1)}倍`);}
  }
- lines.push('\n買い方：/mbet → matchで試合 → playerで選手名・チーム・ラス倍率を確認 → amountに掛け金（例500）。賭け方はラス（4位）予想のみ。','第1試合は19:00、第2試合は第1試合の結果が出るまで。始まったら /mclose で締め切り（開始後の予想は返金）。出なかった選手は返金。');
+ lines.push('\n買い方：/mbet → matchで試合 → playerで選手名・チーム・ラス倍率を確認 → amountに掛け金（例500）→ 確認画面で「購入する」。賭け方はラス（4位）予想のみ。','第1試合は19:00、第2試合は第1試合の結果が出るまで。始まったら /mclose で締め切り（開始後の予想は返金）。出なかった選手は返金。');
  return lines.join('\n');
 }
 /** A user option given as a mention (<@id>, <@!id>) or a bare ID. */
@@ -80,7 +117,7 @@ export async function mbetChoices(env:KpEnv,interaction:Slash):Promise<Array<{na
  return mlCard(d,fixture).filter((p:{name:string;teamName:string;no:number})=>(!sitting||sitting.includes(p.name))&&(!typed||searchMl(`${p.name} ${p.teamName}`).includes(typed)||String(p.no)===typed))
   .map((p:{name:string;teamName:string})=>({name:`${p.name}｜${p.teamName}｜ラス ${(mlOdds(p,stats).last/10).toFixed(1)}倍｜${sitting?'出場確定':'出場未確定・不出場は返金'}`.slice(0,100),value:p.name})).slice(0,25);
 }
-export async function runKpCommand(env:KpEnv,interaction:Slash,override?:KpMapping):Promise<string>{
+export async function runKpCommand(env:KpEnv,interaction:Slash,override?:KpMapping,out?:{components?:unknown[]}):Promise<string>{
  const mapping=await initializeKp(env,override),user=interaction.member?.user?.id;
  if(!mapping||interaction.guild_id!==mapping.guildId||!user||!/^\d{15,22}$/.test(user))return 'このサーバーの本人の口座で利用してください。';
  const command=interaction.data?.name;if(!['kp','keiba','bet','mleague','mbet','mclose','kpgrant','paifulink','unitelink','horsename'].includes(command??''))return '対応していないコマンドです。';
@@ -171,17 +208,17 @@ export async function runKpCommand(env:KpEnv,interaction:Slash,override?:KpMappi
   }catch(error){const message=error instanceof Error?error.message:'';return /[ぁ-んァ-ヶ一-龯]/.test(message)?message:'締め切りを確認できませんでした。もう一度お試しください。';}
  }
  if(command==='mbet'){
+  // A preview first: nothing is bought until the member presses 購入する on it (mbetDecide).
   const value=(key:string)=>interaction.data?.options?.find(o=>o.name===key)?.value;
   const d=await mlData(env),fixture=mbetFixture(d,value('match'),mlDay(created(interaction.id)));
   if(!fixture)return 'その試合はありません。/mleague で卓と試合を確認してください。';
   try{
-   const {result}=await operateKp(env,mapping,user,interaction.id,'ml-bet',{match:fixture.id,player:value('player'),type:'last',amount:value('amount')}) as {result:{bet:{player:string;type:string;amount:number;odds:number}}};
-   const bet=result.bet,team=d.teams.find(t=>t.players.some(p=>p.name===bet.player));
-   return `🀄 ラス予想を購入しました\n${fixture.table}卓 第${fixture.game}試合・${clean(bet.player)}の${bet.type==='top'?'トップ':'ラス'}（4位）\nチーム ${clean(team?.name??'—')}\n掛け金 ${money(bet.amount)}／確定倍率 ${(bet.odds/10).toFixed(1)}倍\n的中時の払戻し ${money(payoutFor(bet.amount,bet.odds))}（掛け金込み）\n残高 ${money(await balance())}\n出場しなかった場合は返金。結果は公式発表後に自動で反映されます。`;
-  }catch(error){
-   const message=error instanceof Error?error.message:'';
-   return /[ぁ-んァ-ヶ一-龯]/.test(message)&&!/SQL|D1_|kp_/.test(message)?message:'購入結果を確認できませんでした。/kp の残高を確認してください。';
-  }
+   const {bet,balanceAfter}=await previewMlBet(env,mapping,user,{match:fixture.id,player:value('player'),type:'last',amount:value('amount')});
+   await ensureMbetDrafts(env);
+   await env.DB.prepare('INSERT OR IGNORE INTO ml_bet_drafts(id,guild,user,match,player,amount,odds,created) VALUES(?,?,?,?,?,?,?,?)').bind(interaction.id,mapping.guildId,user,fixture.id,bet.player,bet.amount,bet.odds,created(interaction.id)).run();
+   if(out)out.components=[{type:1,components:[{type:2,style:3,label:'購入する',custom_id:`mbet:buy:${interaction.id}`},{type:2,style:2,label:'やめる',custom_id:`mbet:no:${interaction.id}`}]}];
+   return [`🀄 **ラス予想の確認**（まだ購入していません）`,betLines(d,fixture,bet),`購入後の残高 ${money(balanceAfter)}`,`-# ${MBET_TTL_MIN}分以内に「購入する」を押してください。購入後の取消はできません。倍率が変わっていたら購入せずにお知らせします。`].join('\n');
+  }catch(error){return friendlyError(error,'予想の内容を確認できませんでした。少し待ってからもう一度 /mbet を実行してください。');}
  }
  if(command==='keiba'){
   const view=await racingView(env,mapping),open=view.open,card={...raceCard(open.id,undefined,open.entries),...(open.crown?{name:open.crown}:{})},odds=raceOdds(card);
