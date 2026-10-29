@@ -326,3 +326,25 @@ test('/mbet の候補が出ない理由：次の開催日・受付前を案内�
  const reply=await runKpCommand(f.env,{...pickInput('none'),data:{name:'mbet',options:[{name:'match',value:'none'},{name:'player',value:'none'},{name:'amount',value:500}]}},mapping);
  assert.match(reply,/予想できる候補がありません/);assert.equal(f.balance(one),100000);
 });
+
+test('Activity の Mリーグ画面：今日の試合の状態・選手・倍率を返し、表示した倍率で買う（変わっていたら買わない）', async t => {
+ t.mock.timers.enable({apis:['Date'],now:jst('2026-10-27T18:00:00')});
+ const f=await fixture();
+ let view=(await readKpState(f.env,mapping,one)).mleague;
+ assert.equal(view.day,'2026-10-27');assert.ok(view.fixtures.every((x:{status:string})=>x.status==='unconfirmed'));
+ await storeCards(f.env,parseOfficialCards(page,2026),Date.now());
+ view=(await readKpState(f.env,mapping,one)).mleague;
+ const g1=view.fixtures.find((x:{id:string})=>x.id===game1.id);
+ assert.equal(g1.status,'open');assert.equal(g1.players.length,16);assert.ok(g1.players.every((p:{odds:number;sitting:unknown})=>Number.isInteger(p.odds)&&p.sitting===null));
+ const pick=g1.players[0];
+ await assert.rejects(operateKp(f.env,mapping,one,op(),'ml-bet',{match:game1.id,player:pick.name,type:'last',amount:500,odds:pick.odds+1}),/倍率が .* に変わったので購入していません/);
+ assert.equal(f.balance(one),100000);
+ await operateKp(f.env,mapping,one,op(),'ml-bet',{match:game1.id,player:pick.name,type:'last',amount:500,odds:pick.odds});
+ assert.equal(f.balance(one),99500);
+ const saved=JSON.parse(String(f.sql.prepare('SELECT data FROM kp_state WHERE user=?').get(one)!.data));
+ assert.equal(saved.mleague,undefined,'the screen data is not saved in the wallet');
+ t.mock.timers.setTime(jst('2026-10-27T21:10:00'));
+ await pollMlResults(f.env,Date.now(),(async()=>new Response(page)) as unknown as typeof fetch);
+ view=(await readKpState(f.env,mapping,one)).mleague;
+ assert.deepEqual(view.fixtures.find((x:{id:string})=>x.id===game1.id).result.names,order);
+});
