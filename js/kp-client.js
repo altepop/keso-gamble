@@ -52,6 +52,7 @@ export function createKpClient({storage,temporaryStorage,request=globalThis.fetc
   pulse:async()=>(await api('pulse')).pulse,
   health:()=>api('health'),
   feed:()=>api('feed'),
+  trend:days=>api('trend?days='+days),
   privateRace:()=>api('private/race'),
   async operate(action,args){if(pending)throw Error('前の通信結果を確認してから操作してください。');pending={id:randomId(),action,args,...(ownerUserId?{owner:ownerUserId}:{})};write(pendingKey,JSON.stringify(pending));return resume();},
   discardRejected(){pending=null;write(pendingKey,null);},

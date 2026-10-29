@@ -1,5 +1,6 @@
 import {privateCasinoAllowed,privateCasinoRound} from './private-casino.ts';
 import {memberNames} from './member-names.ts';
+import {kpTrend} from './kp-trend.ts';
 import {communityFeed,publicTrade} from './community-feed.ts';
 import skirmishQueues from '../skirmish-queues.json' with {type:'json'};
 import {SKIRMISH_POLICY} from './skirmish.ts';
@@ -259,7 +260,9 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping):Promi
    const view=await racingView(env,mapping),card=raceCard(view.open.id,undefined,view.open.entries),seed=await raceSeed(env,mapping.guildId,view.open.id),result=raceResult(card,seed.seed),odds=raceOdds(card);
    return response({id:card.id,name:card.name,closeAt:card.closeAt,hash:seed.hash,order:result.order.map((n:number)=>({number:n,name:card.horses.find((h:{number:number})=>h.number===n)?.name,win:odds.win[n],place:odds.place[n]}))});
   }
-  if(request.method==='GET'&&path==='/api/kp/feed')return response(await communityFeed(env,mapping.guildId,await memberNames(env,mapping.guildId,new Map(mapping.accounts.map(a=>[a.discordUserId,configuredPlayers.find(p=>p.riotId.toLowerCase()===a.riotId.toLowerCase())?.name??a.riotId.split('#')[0]])))));
+  const names=()=>memberNames(env,mapping.guildId,new Map(mapping.accounts.map(a=>[a.discordUserId,configuredPlayers.find(p=>p.riotId.toLowerCase()===a.riotId.toLowerCase())?.name??a.riotId.split('#')[0]])));
+  if(request.method==='GET'&&path==='/api/kp/feed')return response(await communityFeed(env,mapping.guildId,await names()));
+  if(request.method==='GET'&&path==='/api/kp/trend')return response(await kpTrend(env,mapping.guildId,await names(),Number(new URL(request.url).searchParams.get('days')??7)));
   if(request.method==='GET'&&path==='/api/kp/state')return response(await readKpState(env,mapping,owner.user));
   // 監視状態: members only, aggregates only.
   if(request.method==='GET'&&path==='/api/kp/health')return response(await healthReport(env,mapping.guildId));

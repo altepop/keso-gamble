@@ -403,3 +403,26 @@ button.vp-card{cursor:pointer}.vp-card.held{background:#e9c66e26;outline:1px sol
 .community-status{font-size:12px;color:var(--muted);margin:10px 0}.community-entries{list-style:none;margin:0;padding:0;max-height:300px;overflow:auto;overscroll-behavior:contain}
 .community-entry{padding:12px 0;border-top:1px solid var(--line);overflow-wrap:anywhere}.community-entry>div{display:flex;justify-content:space-between;gap:12px}.community-entry time{font-size:12px;color:var(--muted);flex-shrink:0}.community-entry p{margin:6px 0}.community-entry small{display:block;color:var(--muted)}
 @media(min-width:1024px){.screen>.community-feed{margin:0;grid-column:1/-1}.community-entries{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0 24px}}
+/* メンバーのKP推移 */
+.trend-card .segment{margin:8px 0;padding:0}
+.trend-card .trend-sort{grid-template-columns:repeat(3,1fr)}
+.trend-card .segment button{padding:8px 0;font-size:13px}
+.trend-chart{display:block;width:100%;height:auto;margin:6px 0 2px;touch-action:pan-y}
+.trend-grid{stroke:#1a2b4d;stroke-width:1}
+.trend-zero{stroke:#3a4f78;stroke-width:1}
+.trend-cross{stroke:#8b9ab8;stroke-width:1;stroke-dasharray:3 3}
+.trend-axis{fill:var(--muted);font-size:10px}
+.trend-readout{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:12px;color:var(--text);margin:4px 0 8px;min-height:20px}
+.trend-readout strong{width:100%}
+.trend-readout .dim{opacity:.45}
+.trend-key{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px;flex:none}
+.trend-list{display:grid;gap:2px;margin-top:4px}
+.trend-row{display:grid;grid-template-columns:20px 14px minmax(0,1fr) auto auto;align-items:center;gap:6px;width:100%;padding:9px 6px;border:0;border-bottom:1px solid var(--line);background:none;color:var(--text);text-align:left;border-radius:8px}
+.trend-row.active{background:#0d1f42}
+.trend-row.dim{opacity:.55}
+.trend-rank{color:var(--muted);font-size:12px;text-align:right}
+.trend-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.trend-name small{color:var(--muted);font-size:11px}
+.trend-change{font-size:12px;color:var(--muted);min-width:56px;text-align:right}
+.trend-change.up{color:var(--green)}
+.trend-change.down{color:var(--red)}
