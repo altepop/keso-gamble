@@ -58,7 +58,10 @@ export function mahjongRoast(record:MahjongRecord,player:number){
  const rank=mahjongRank(record,player);
  const group=p.score<0?'bust':rank===1?'first':rank===record.players.length?'last':rank===2?'second':'third';
  // Three-player games add their own lines (北抜き, two opponents) to the shared ones.
- const all=taunts as Record<string,string[][]>,pool=[...all[group],...record.players.length===3?all[group+'3']??[]:[]];
+ const all=taunts as Record<string,string[][]>;
+ // Legacy shared sets that explicitly name three opponents belong to four-player tables only.
+ const shared=record.players.length===3?all[group].filter(lines=>!lines.some(line=>/他の3人|4人おって/.test(line))):all[group];
+ const pool=[...shared,...record.players.length===3?all[group+'3']??[]:[]];
  return pick(pool,record._id+':'+player).join('\n');
 }
 export function parseMahjongRecords(value:unknown,player:number,modes:number[],since:number,now:number):MahjongRecord[]{
