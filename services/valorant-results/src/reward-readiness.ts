@@ -1,3 +1,5 @@
+import skirmishQueues from '../skirmish-queues.json' with {type:'json'};
+export const isSkirmishQueue=(id:string)=>(skirmishQueues.publicQueues as string[]).includes(id)&&id!=='custom';
 import type { Match } from './results.ts';
 
 // Internal assessment only. Neither an HTTP payload nor this assessment grants KP.
@@ -9,12 +11,18 @@ export function assessRewardReadiness(match: Match, puuid: string): CompletionAs
   const players = match.players?.filter(player => player.puuid === puuid) ?? [];
   if (players.length !== 1) return { status: 'hold', reason: 'missing_player' };
   const queue = match.metadata.queue?.id;
-  if (!queues.has(queue)) return { status: 'hold', reason: 'unknown_mode' };
+  if (!queues.has(queue)&&!isSkirmishQueue(queue)) return { status: 'hold', reason: 'unknown_mode' };
   // Deathmatch has no teams: it is settled by K/D and first place (src/kp.ts), not by an outcome.
   // v4 has no personal finish/exit flag, so someone who leaves early is settled on the stats they had (owner's call, 2026-10-28).
   if (queue === 'deathmatch') return { status: 'ready', mode: 'deathmatch', outcome: null };
   if (queue === 'custom') return { status: 'hold', reason: 'custom_rules_pending' };
   const mode = queue === 'ggteam' ? 'escalation' : queue === 'hurm' ? 'teamdeathmatch' : queue === 'onefa' ? 'replication' : queue;
+  if(isSkirmishQueue(queue)){
+    const ours=match.teams?.find(t=>t.team_id===players[0].team_id),theirs=match.teams?.find(t=>t.team_id!==players[0].team_id);
+    const score=(n:unknown):n is number=>Number.isSafeInteger(n)&&Number(n)>=0&&Number(n)<=10;
+    if(match.teams?.length!==2||!ours||!theirs||!score(ours.rounds?.won)||!score(theirs.rounds?.won)||!(ours.won===true&&theirs.won===false&&ours.rounds!.won===10&&theirs.rounds!.won<10||theirs.won===true&&ours.won===false&&theirs.rounds!.won===10&&ours.rounds!.won<10))return {status:'hold',reason:'unfinished'};
+    return {status:'ready',mode:'skirmish',outcome:ours.won?'win':'loss'};
+  }
   const team = match.teams?.find(team => team.team_id === players[0].team_id);
   const enemy = match.teams?.find(team => team.team_id !== players[0].team_id);
   const valid = match.teams?.length === 2 && team && enemy && typeof team.won === 'boolean' && typeof enemy.won === 'boolean' && !(team.won && enemy.won);
