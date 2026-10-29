@@ -115,7 +115,8 @@ test('public ranking is one guild snapshot, ties share rank, only top ten are re
 test('only the exact ranking subcommand is public; balance, legacy KP and malformed options stay private',()=>{
  assert.equal(isKpRanking({data:{name:'kp',options:[{type:1,name:'ranking'}]}}),true);
  for(const data of [{name:'kp'},{name:'kp',options:[{type:1,name:'balance'}]},{name:'bet',options:[{type:1,name:'ranking'}]},{name:'kp',options:[{type:3,name:'ranking'}]},{name:'kp',options:[{type:1,name:'ranking',options:[{}]}]},{name:'kp',options:[{type:1,name:'ranking'},{type:1,name:'balance'}]}])assert.equal(isKpRanking({data}),false);
- assert.deepEqual(kpCommands[0].options?.map(o=>o.name),['balance','ranking']);
+ assert.deepEqual(kpCommands[0].options?.map(o=>o.name),['balance','ranking','bets']);
+ assert.equal(isKpRanking({data:{name:'kp',options:[{type:1,name:'bets'}]}}),false,'/kp bets stays private');
 });
 
 test('public command metadata contains definitions only and does not need or expose wallet configuration',async()=>{
@@ -123,7 +124,7 @@ test('public command metadata contains definitions only and does not need or exp
  let queries=0;
  const response=await kpApi(new Request('https://worker/api/kp/commands'),{DB:{prepare(){queries++;throw Error('No DB reads');}},KP_BOOTSTRAP_PRIVATE_KEY:'fixture-secret-must-not-leak'} as unknown as KpEnv);
  const body=await response.json() as {version:string;commands:unknown[]};
- assert.equal(response.status,200);assert.equal(body.version,'kp-slash-v13-mbet-picker');assert.equal(body.commands.length,11);assert.equal(queries,0);
+ assert.equal(response.status,200);assert.equal(body.version,'kp-slash-v14-my-bets');assert.equal(body.commands.length,11);assert.equal(queries,0);
  assert.equal(JSON.stringify(body).includes('fixture-secret'),false);assert.equal(response.headers.get('Cache-Control'),'no-store');
 });
 

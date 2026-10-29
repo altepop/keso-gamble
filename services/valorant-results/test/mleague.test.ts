@@ -295,3 +295,24 @@ test('/mbet の確認：やめる・二度押し・他人の押下・期限切�
  f.sql.prepare("INSERT INTO kp_debt_events VALUES('borrow:x',?,?,500,'borrow',0)").run(guild,one);
  assert.match((await preview()).content,/借KP/);
 });
+
+test('/kp bets：自分の未精算と最近の精算（的中・外れ・返金）を本人に見せる', async t => {
+ t.mock.timers.enable({apis:['Date'],now:jst('2026-10-27T18:30:00')});
+ const f=await fixture();await storeCards(f.env,parseOfficialCards(page,2026),Date.now());
+ const bets=(user=one)=>runKpCommand(f.env,{id:String((BigInt(Date.now())-1420070400000n)<<22n|77n),guild_id:guild,member:{user:{id:user}},data:{name:'kp',options:[{name:'bets',type:1}]}},mapping);
+ assert.match(await bets(),/未精算\*\* 0件[\s\S]*なし[\s\S]*まだありません/);
+ const benched=card.find(p=>!order.includes(p.name))!;
+ await operateKp(f.env,mapping,one,op(),'ml-bet',{match:game1.id,player:card.find(p=>p.name===order[3])!.no,type:'last',amount:1000});
+ await operateKp(f.env,mapping,one,op(),'ml-bet',{match:game1.id,player:card.find(p=>p.name===order[0])!.no,type:'last',amount:500});
+ await operateKp(f.env,mapping,one,op(),'ml-bet',{match:game1.id,player:benched.no,type:'last',amount:300});
+ await operateKp(f.env,mapping,one,op(),'ml-bet',{match:game2.id,player:1,type:'last',amount:200});
+ const before=await bets();
+ assert.match(before,/未精算\*\* 4件・合計 2,000 KP/);assert.match(before,new RegExp(`Mリーグ 10/27 1卓 第1試合・${order[3]}のラス　1,000 KP`));
+ t.mock.timers.setTime(jst('2026-10-27T21:10:00'));
+ await pollMlResults(f.env,Date.now(),(async()=>new Response(page)) as unknown as typeof fetch);await settleMl(f.env,mapping);
+ const after=await bets();
+ assert.match(after,/未精算\*\* 1件・合計 200 KP/);
+ assert.match(after,new RegExp(`✅ .*${order[3]}のラス　的中 \\+`));assert.match(after,new RegExp(`❌ .*${order[0]}のラス　外れ −500 KP`));assert.match(after,new RegExp(`↩️ .*${benched.name}のラス　返金 300 KP`));
+ assert.match(await bets(two),/未精算\*\* 0件/,'only your own');
+ assert.ok(after.length<2000);
+});

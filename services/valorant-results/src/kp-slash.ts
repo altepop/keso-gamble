@@ -2,7 +2,7 @@ import {isKpRanking} from './kp-command.ts';
 import {initializeKp,newKpState} from './kp.ts';
 import type {KpEnv,KpMapping} from './kp.ts';
 import {ensureQuizKp} from './quiz-kp.ts';
-import {operateKp,previewMlBet} from './kp-api.ts';
+import {operateKp,previewMlBet,readKpState} from './kp-api.ts';
 import {racingView} from './racing-kp.ts';
 import {ML_DATA,closeMl,mlClosed,mlData,mlLineups,mlResults,seasonStats} from './mleague.ts';
 import {enqueue,ensurePosts} from './racing-posts.ts';
@@ -45,6 +45,28 @@ async function ensureMbetDrafts(env:KpEnv){
 function betLines(d:Awaited<ReturnType<typeof mlData>>,fixture:{date:string;table:number;game:number},bet:{player:string;amount:number;odds:number}){
  const team=d.teams.find(t=>t.players.some(p=>p.name===bet.player));
  return `${Number(fixture.date.slice(5,7))}/${Number(fixture.date.slice(8,10))} ${fixture.table}卓 第${fixture.game}試合・**${clean(bet.player)}**のラス（4位）\nチーム ${clean(team?.name??'—')}\n掛け金 ${money(bet.amount)}／倍率 ${(bet.odds/10).toFixed(1)}倍\n的中時の払戻し ${money(payoutFor(bet.amount,bet.odds))}（掛け金込み）`;
+}
+// ---- /kp bets: the member's own predictions and tickets ----
+type OwnBet={match?:string;raceId?:number;player?:string;horse?:number;type:string;amount:number;odds:number;status:string;payout:number;time:number};
+const md=(date:string)=>`${Number(date.slice(5,7))}/${Number(date.slice(8,10))}`;
+async function myBets(env:KpEnv,mapping:KpMapping,user:string){
+ const state=await readKpState(env,mapping,user),d=await mlData(env);
+ const label=(b:OwnBet)=>{
+  if(b.match){const f=d.fixtures.find(x=>x.id===b.match);return `Mリーグ ${f?`${md(f.date)} ${f.table}卓 第${f.game}試合`:'試合'}・${clean(b.player??'')}の${b.type==='top'?'トップ':'ラス'}`;}
+  const day=new Date((b.raceId??0)+9*3600000).toISOString();return `競馬 ${md(day.slice(0,10))} ${clock(b.raceId??0)}発走 ${b.horse}番 ${b.type==='place'?'複勝':'単勝'}`;
+ };
+ const all:OwnBet[]=[...(state.mlBets??[]),...(state.raceBets??[])].sort((a:OwnBet,b:OwnBet)=>b.time-a.time);
+ const pending=all.filter(b=>b.status==='pending'),done=all.filter(b=>b.status!=='pending').slice(0,10);
+ const odd=(b:OwnBet)=>`${(b.odds/10).toFixed(1)}倍`;
+ const lines=[`🎫 **あなたの予想・馬券**`,'',`**未精算** ${pending.length}件・合計 ${money(pending.reduce((n,b)=>n+b.amount,0))}`];
+ lines.push(...pending.slice(0,15).map(b=>`・${label(b)}　${money(b.amount)}（${odd(b)}・当たれば ${money(payoutFor(b.amount,b.odds))}）`));
+ if(pending.length>15)lines.push(`・ほか ${pending.length-15}件`);
+ if(!pending.length)lines.push('・なし');
+ lines.push('',`**最近の精算**`);
+ lines.push(...done.map(b=>b.status==='won'?`✅ ${label(b)}　的中 +${money(b.payout-b.amount)}（払戻し ${money(b.payout)}）`:b.status==='refunded'?`↩️ ${label(b)}　返金 ${money(b.payout)}`:`❌ ${label(b)}　外れ −${money(b.amount)}`));
+ if(!done.length)lines.push('・まだありません');
+ lines.push('','-# Mリーグは公式の結果発表後、競馬はゴールの約1分後に自動で精算されます。');
+ return lines.join('\n').slice(0,1990);
 }
 /** A press on the /mbet preview. Buying uses the preview's id as the operation id, so a double press buys once. */
 export async function mbetDecide(env:KpEnv,interaction:Slash&{data?:{custom_id?:string}},override?:KpMapping):Promise<{content:string;components:unknown[]}|null>{
@@ -126,7 +148,8 @@ export async function runKpCommand(env:KpEnv,interaction:Slash,override?:KpMappi
   const rows=(await env.DB.prepare('SELECT user,balance,RANK() OVER(ORDER BY balance DESC) AS rank,COUNT(*) OVER() AS total FROM kp_wallets WHERE guild=? ORDER BY balance DESC,user ASC LIMIT 10').bind(mapping.guildId).all<{user:string;balance:number;rank:number;total:number}>()).results;
   return '🏆 **KP残高ランキング**\n'+(rows.length?rows.map(r=>`${r.rank}位　<@${r.user}>　**${money(r.balance)}**`).join('\n'):`まだ口座がありません。`)+'\n\n現在使えるKPの上位10人。同額は同順位。株・馬などの評価額は含みません。'+(rows.length?`（全${rows[0].total}人）`:'');
  }
- if(command==='kp'&&interaction.data?.options?.length&&!(interaction.data.options.length===1&&interaction.data.options[0].name==='balance'&&interaction.data.options[0].type===1&&!interaction.data.options[0].options?.length))return '/kp balance または /kp ranking を選んでください。';
+ const sub=interaction.data?.options?.length===1&&interaction.data.options[0].type===1&&!interaction.data.options[0].options?.length?interaction.data.options[0].name:null;
+ if(command==='kp'&&interaction.data?.options?.length&&!['balance','bets'].includes(sub??''))return '/kp balance・/kp bets・/kp ranking から選んでください。';
  // A verified guild interaction can open an empty wallet, never a starting credit.
  await ensureQuizKp(env);
  await env.DB.batch([
@@ -135,6 +158,7 @@ export async function runKpCommand(env:KpEnv,interaction:Slash,override?:KpMappi
   env.DB.prepare('INSERT OR IGNORE INTO kp_state(guild,user,data) VALUES(?,?,?)').bind(mapping.guildId,user,JSON.stringify(newKpState())),
  ]);
  const balance=async()=>Number((await env.DB.prepare('SELECT balance FROM kp_wallets WHERE guild=? AND user=?').bind(mapping.guildId,user).first<{balance:number}>())?.balance??0);
+ if(command==='kp'&&sub==='bets')return myBets(env,mapping,user);
  if(command==='kp'){
   const owed=await debtOf(env,mapping.guildId,user);
   const rows=(await env.DB.prepare('SELECT delta,kind,at FROM kp_ledger WHERE guild=? AND user=? ORDER BY at DESC,id DESC LIMIT 5').bind(mapping.guildId,user).all<{delta:number;kind:string;at:number}>()).results;
