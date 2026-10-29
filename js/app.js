@@ -409,9 +409,20 @@ addEventListener('input', e => {
   if(e.target.id==='trade-qty')$('#trade-estimate').innerHTML=tradeEstimate();
 });
 const drafts = {};
+// Live wallets: every 15 s only a tiny "did anything change?" check; the full state is fetched when it changed, and at
+// least once a minute (race card, Mリーグ status and voice status move with time). Nothing is fetched while hidden.
+const FULL_EVERY=60000;let lastPulse=null,lastFull=0;
+async function refreshLive(){
+  if(document.hidden)return;
+  let pulse=null;
+  try{pulse=await wallet.pulse();}catch{/* an older server or a network blip: fall back to the full state */}
+  if(pulse!==null&&pulse===lastPulse&&Date.now()-lastFull<FULL_EVERY&&!connectionError)return;
+  await refreshWallet(false);
+  if(!connectionError){lastPulse=pulse;lastFull=Date.now();}
+}
 async function refreshMarket() {
   if(spinLock||mutationPending||autoState==='loading') return;
-  if(live){await refreshWallet(false);return;}
+  if(live){await refreshLive();return;}
   settleRaces();
   try { const steps=await commit(next => advanceMarket(next)); if(steps && !detail)render(); }
   catch(error) { toast(error.message); }
