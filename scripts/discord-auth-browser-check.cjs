@@ -35,7 +35,7 @@ let browser;
    }}});
   },{scenario});
   const page=await ctx.newPage();page.on('pageerror',e=>errors.push(e.message));
-  const state={...createInitialState(),cash:900,serverWallet:true,selfUserId:'user-one',members:[{id:'user-one',name:'本人'}],rewardRates:{competitive:{participation:300,winBonus:600}}};
+  const state={...createInitialState(),cash:900,serverWallet:true,selfUserId:'user-one',members:[{id:'user-one',name:'本人'}],rewardRates:{competitive:{win:900,loss:-200,bottom:-400}}};
   await ctx.route('https://100000000000000000.discordsays.com/**',async route=>{
    const path=new URL(route.request().url()).pathname;
    if(path.startsWith('/.proxy/kp-api/api/kp/')){
@@ -44,6 +44,8 @@ let browser;
     else if(path.endsWith('/activity/challenge')){challenge=route.request().postDataJSON().codeChallenge;result={nonce:'a'.repeat(48)};}
     else if(path.endsWith('/activity/auth')){exchanges++;const body=route.request().postDataJSON();assert.equal(body.code,'native-sdk-code');assert.equal(createHash('sha256').update(body.codeVerifier).digest('base64url'),challenge);result={token:'b'.repeat(48),userId:'user-one',accessToken:'ephemeral-discord-access'};}
     else if(path.endsWith('/state')){stateReads++;assert.equal(route.request().headers().authorization,'Bearer '+'b'.repeat(48));result=state;}
+    // The 15-second check: report a change every time, so the touch scenario still sees a full refresh mid-tap.
+    else if(path.endsWith('/pulse')){assert.equal(route.request().headers().authorization,'Bearer '+'b'.repeat(48));result={pulse:String(Date.now())+Math.random()};}
     else if(path.endsWith('/operation')){operations++;throw Error('Unexpected charge during login');}
     else throw Error('Unexpected endpoint '+path);
     await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(result)});return;
