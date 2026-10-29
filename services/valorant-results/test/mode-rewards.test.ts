@@ -42,3 +42,12 @@ test('deathmatch jackpot needs 40 kills, not merely a sub-40 lead',()=>{
  const q=Array.from({length:1000},(_,i)=>valoKp(game('dm40'+i,'deathmatch',true,40,10),'me','deathmatch',null));
  const wins=q.filter(q=>q.base===1000);assert.ok(wins.length>240&&wins.length<360);
 });
+test('competitive: a loss pays +200 like a small win, only the team bottom on a loss costs −400, and luck applies to both',()=>{
+ for(let n=0;n<60;n++){
+  const plain=game('cl'+n,'competitive',false),q=valoKp(plain,'me','competitive','loss');
+  assert.equal(q.base,200);assert.equal(q.net,applyLuck(200,luckFor('valo:cl'+n+':me')));
+  const low=game('cb'+n,'competitive',false);low.players[0].stats!.score=50;
+  const b=valoKp(low,'me','competitive','loss');assert.equal(b.base,-400);assert.equal(b.net,applyLuck(-400,luckFor('valo:cb'+n+':me')));
+  assert.equal(valoKp(game('cw'+n,'competitive',true),'me','competitive','win').base,900);
+ }
+});

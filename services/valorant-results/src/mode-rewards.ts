@@ -3,7 +3,7 @@ import {applyLuck,chance,draw,luckFor,luckLabel} from './luck.ts';
 import type {Match} from './results.ts';
 import type {KpEnv} from './kp.ts';
 export const MODE_REWARD_VERSION=rules.version;
-const rates:Record<string,{win:number;loss:number;bottom:number}>={competitive:{win:900,loss:-200,bottom:-400},unrated:{win:450,loss:-50,bottom:-200},swiftplay:{win:180,loss:-20,bottom:-60},teamdeathmatch:{win:70,loss:0,bottom:-30},escalation:{win:70,loss:0,bottom:-30},replication:{win:180,loss:-20,bottom:-60}};
+const rates:Record<string,{win:number;loss:number;bottom:number}>={competitive:{win:900,loss:200,bottom:-400},unrated:{win:450,loss:-50,bottom:-200},swiftplay:{win:180,loss:-20,bottom:-60},teamdeathmatch:{win:70,loss:0,bottom:-30},escalation:{win:70,loss:0,bottom:-30},replication:{win:180,loss:-20,bottom:-60}};
 export function unratedLottery(roll:number){
  if(!Number.isInteger(roll)||roll<0||roll>=10000)throw Error('Invalid lottery roll');
  let end=0;for(const band of rules.unrated.lottery){end+=band.weight;if(roll<end)return band.amount;}
