@@ -111,6 +111,18 @@ test('public ranking is one guild snapshot, ties share rank, only top ten are re
  assert.equal(text.split('\n').filter(line=>/^\d+位/.test(line)).length,10);assert.match(text,/全14人/);
  assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM kp_wallets').get()?.n,before);
  assert.equal(f.sql.prepare('SELECT balance FROM kp_wallets WHERE user=?').get(one)?.balance,10000);
+ assert.match(text,/💸 \*\*借KP\*\*\nいま借KPのある人はいません。/);
+});
+test('public ranking lists everyone who owes 借KP, largest first, and marks it next to their rank',async()=>{
+ const f=await fixture();const {ensureDebt}=await import('../src/kp-debt.ts');await ensureDebt(f.env);
+ f.sql.prepare('INSERT INTO kp_debts(guild,user,amount,since) VALUES(?,?,300,0)').run(guild,two);
+ f.sql.prepare('INSERT INTO kp_debts(guild,user,amount,since) VALUES(?,?,1000,0)').run(guild,newUser);
+ f.sql.prepare('INSERT INTO kp_debts(guild,user,amount,since) VALUES(?,?,0,0)').run(guild,one);
+ f.sql.prepare('INSERT INTO kp_debts(guild,user,amount,since) VALUES(?,?,500,0)').run('100000000000000199','100000000000000999');
+ const text=await runKpCommand(f.env,{...interaction('kp',one),data:{name:'kp',options:[{type:1,name:'ranking'}]}},mapping);
+ assert.match(text,new RegExp(`2位　<@${two}>　\\*\\*0 KP\\*\\*　💸借KP 300 KP`));
+ assert.match(text,new RegExp(`💸 \\*\\*借KP\\*\\*\\n<@${newUser}>　\\*\\*1,000 KP\\*\\*\\n<@${two}>　\\*\\*300 KP\\*\\*$`));
+ assert.equal(text.includes('100000000000000999'),false,'other servers stay out');
 });
 test('only the exact ranking subcommand is public; balance, legacy KP and malformed options stay private',()=>{
  assert.equal(isKpRanking({data:{name:'kp',options:[{type:1,name:'ranking'}]}}),true);
@@ -124,7 +136,7 @@ test('public command metadata contains definitions only and does not need or exp
  let queries=0;
  const response=await kpApi(new Request('https://worker/api/kp/commands'),{DB:{prepare(){queries++;throw Error('No DB reads');}},KP_BOOTSTRAP_PRIVATE_KEY:'fixture-secret-must-not-leak'} as unknown as KpEnv);
  const body=await response.json() as {version:string;commands:unknown[]};
- assert.equal(response.status,200);assert.equal(body.version,'kp-slash-v15-give');assert.equal(body.commands.length,12);assert.equal(queries,0);
+ assert.equal(response.status,200);assert.equal(body.version,'kp-slash-v16-ranking-debt');assert.equal(body.commands.length,12);assert.equal(queries,0);
  assert.equal(JSON.stringify(body).includes('fixture-secret'),false);assert.equal(response.headers.get('Cache-Control'),'no-store');
 });
 
