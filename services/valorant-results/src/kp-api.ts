@@ -1,4 +1,4 @@
-import {prepareStocks,stockView,stockBenefits,stockDiscount} from './stock-market.ts';
+import {STOCK_INTERVAL,prepareStocks,stockView,stockBenefits,stockDiscount} from './stock-market.ts';
 import {kpCommands,KP_COMMAND_VERSION} from './kp-command.ts';
 import {voiceControl,voiceStatus} from './voice-api.ts';
 import {ensureVoiceLedger,voicePolicy} from './voice-rewards.ts';
@@ -26,6 +26,14 @@ import { buyHorse, sellHorse, ownedHorses, raceEntries } from './racing-horses.t
 import { masteryOf, riotIdOf } from './mastery.ts';
 import {DEBT_BLOCKED,DEBT_INTEREST_PERCENT,DEBT_INTERVAL_MINUTES,debtOf} from './kp-debt.ts';
 import { buyLuxury, luxuryPosts, luxuryView } from './luxury.ts';
+/** A few tiny reads that change whenever the full state would: the wallet and saved state versions (every ledger
+ * row bumps the wallet), 借KP, directives naming the member, and the 5-minute stock tick. The Activity polls this
+ * every 15 seconds and fetches the full state only when it changes (or once a minute for time-based screens). */
+export async function kpPulse(env:KpEnv,guild:string,user:string,now=Date.now()){
+ const row=await env.DB.prepare("SELECT w.version AS w,s.version AS s,(SELECT COUNT(*)||'-'||COALESCE(MAX(at),0)||'-'||SUM(status='active') FROM kp_directives WHERE guild=w.guild AND (issuer=w.user OR target=w.user)) AS d FROM kp_wallets w JOIN kp_state s ON s.guild=w.guild AND s.user=w.user WHERE w.guild=? AND w.user=?").bind(guild,user).first<{w:number;s:number;d:string}>();
+ if(!row)throw Error('口座が見つかりません。');
+ return `${row.w}.${row.s}.${row.d}.${await debtOf(env,guild,user)}.${Math.floor(now/STOCK_INTERVAL)}`;
+}
 export async function readKpState(env:KpEnv,mapping:KpMapping,user:string){
  const market=await prepareStocks(env,mapping.guildId,user);
  const wallet=await env.DB.prepare('SELECT balance,version FROM kp_wallets WHERE guild=? AND user=?').bind(mapping.guildId,user).first<{balance:number;version:number}>();
@@ -185,6 +193,7 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping):Promi
   if(!owner||owner.guild!==mapping.guildId||!await isKpParticipant(env,mapping,owner.user))return response({error:'接続が切れました。/valo status のコードで接続してください。'},401);
   if(request.method==='POST'&&path==='/api/kp/logout'){await revokeKpSession(env,token!);return response({disconnected:true});}
   if(request.method==='GET'&&path==='/api/kp/state')return response(await readKpState(env,mapping,owner.user));
+  if(request.method==='GET'&&path==='/api/kp/pulse')return response({pulse:await kpPulse(env,mapping.guildId,owner.user)});
   if(request.method==='POST'&&path==='/api/kp/operation'){
    const text=await request.text();if(text.length>4096)return response({error:'入力が長すぎます。'},400);
    const body=JSON.parse(text);if(typeof body.id!=='string'||typeof body.action!=='string'||!body.args||typeof body.args!=='object'||Array.isArray(body.args))return response({error:'操作内容が不正です。'},400);
