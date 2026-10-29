@@ -9,16 +9,16 @@ const MARKET = [
   { id: 'riso', ticker: 'RISO', name: 'リソ寿司', category: '飲食', initialPrice: 780, volatility: 0.054, drift: 0.001, icon: '寿' },
   { id: 'yuya', ticker: 'YUYA', name: 'ゆーやエンタメ', category: '娯楽', initialPrice: 420, volatility: 0.082, drift: 0.002, icon: '★' },
   { id: 'yano', ticker: 'YANO', name: '矢野ファイナンス', category: '金融', initialPrice: 1860, volatility: 0.031, drift: 0.001, icon: '¥' },
-  // 誰かがKPを失うたびに上がり、得るたびに下がる（おこぼれ商事はその逆）。値動きは件数で決まり、金額は見ない。
-  { id: 'mitu', ticker: 'MITU', name: 'ミツノアジ証券', category: '人の不幸', initialPrice: 1000, volatility: 0.04, drift: 0, icon: '蜜' },
-  { id: 'okbr', ticker: 'OKBR', name: 'おこぼれ商事', category: '人の幸運', initialPrice: 1000, volatility: 0.04, drift: 0, icon: '福' },
-  // 架空の会社。ときどき架空のニュースで大きく動く。
-  { id: 'komi', ticker: 'KOMI', name: '小路宇宙開発', category: '宇宙', initialPrice: 300, volatility: 0.12, drift: 0.002, icon: '☄' },
-  { id: 'ishi', ticker: 'ISHI', name: '石原製薬', category: '製薬', initialPrice: 640, volatility: 0.06, drift: 0.001, icon: '✚' },
-  { id: 'vdk', ticker: 'VDK', name: 'VDK運輸', category: '物流', initialPrice: 950, volatility: 0.018, drift: 0.001, icon: '◎' },
-  { id: 'godo', ticker: 'GODO', name: '神戸鉱山', category: '資源', initialPrice: 1450, volatility: 0.04, drift: 0.001, icon: '▲' },
-  { id: 'ngya', ticker: 'NGYA', name: '名古屋電力', category: '電力', initialPrice: 1100, volatility: 0.025, drift: 0.001, icon: 'ϟ' },
-  { id: 'hori', ticker: 'HORI', name: '堀建設', category: '建設', initialPrice: 820, volatility: 0.05, drift: 0.001, icon: '▣' },
+  // 誰かがKPを失うたびに上がり、得るたびに下がる（他人の金で焼肉はその逆）。値動きは件数で決まり、金額は見ない。
+  { id: 'msum', ticker: 'MSUM', name: 'メシウマ食堂', category: '人の不幸', initialPrice: 1000, volatility: 0.04, drift: 0, icon: '飯' },
+  { id: 'tnkn', ticker: 'TNKN', name: '他人の金で焼肉', category: '人の幸運', initialPrice: 1000, volatility: 0.04, drift: 0, icon: '肉' },
+  // 架空の会社（メンバーの名前から）。ときどき架空のニュースで大きく動く。
+  { id: 'komi', ticker: 'KOMI', name: '小路グローバルモーターズ', category: '新興国', initialPrice: 1200, volatility: 0.07, drift: 0.002, icon: '✈' },
+  { id: 'ishi', ticker: 'ISHI', name: '石原エレクトリック', category: '電機', initialPrice: 980, volatility: 0.04, drift: 0.001, icon: '⌘' },
+  { id: 'vdk', ticker: 'VDK', name: 'VDKブラック商事', category: 'グレー', initialPrice: 100, volatility: 0.12, drift: 0, icon: '☠' },
+  { id: 'godo', ticker: 'GODO', name: '神戸（ごうど）市役所', category: '公共', initialPrice: 1450, volatility: 0.012, drift: 0.001, icon: '印' },
+  { id: 'ngya', ticker: 'NGYA', name: '名古屋しゃちほこ発電', category: '謎エネルギー', initialPrice: 777, volatility: 0.08, drift: 0.001, icon: '鯱' },
+  { id: 'koba', ticker: 'KOBA', name: '小林百貨店', category: '百貨店', initialPrice: 820, volatility: 0.03, drift: 0.001, icon: '百' },
 ];
 const SHOP = [
   { id: 'gold', icon: '✦', name: 'ゴールド称号', detail: 'Activity内で黄金の称号を表示', price: 2200, tier: '装飾' },

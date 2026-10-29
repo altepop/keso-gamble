@@ -101,7 +101,7 @@ test('保存済みの試合とQUIZが株ニュースに一度だけ反映され�
  f.sql.prepare('INSERT INTO kp_quiz_events VALUES(?,?,?,?,?,?,?,?)').run('new-quiz',guild,one,'SOLO','2026-10-28','new-game',50,T+2000);
  const next=await tickStocks(f.env,m,T+300000,()=>.5);assert.equal(next.prices.keso,1205);assert.equal(next.prices.riso,781);assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM stock_news WHERE symbol IN ('keso','riso')").get()!.n,2);
  // The win also counts once for the luck stocks (the old one, before the market, does not).
- assert.deepEqual(f.sql.prepare("SELECT symbol,bps FROM stock_news WHERE symbol IN ('mitu','okbr') ORDER BY symbol").all().map(r=>[r.symbol,r.bps]),[['mitu',-20],['okbr',20]]);
+ assert.deepEqual(f.sql.prepare("SELECT symbol,bps FROM stock_news WHERE symbol IN ('msum','tnkn') ORDER BY symbol").all().map(r=>[r.symbol,r.bps]),[['msum',-20],['tnkn',20]]);
  const again=await tickStocks(f.env,next,T+600000,()=>.5);assert.equal(again.prices.keso,next.prices.keso);assert.equal(again.prices.riso,next.prices.riso);
 });
 test('相場更新の競合で履歴やニュースを二重に進めず、ニュースの影響も上限がある',async t=>{
@@ -153,18 +153,18 @@ test('新しく上場した銘柄：前からある相場と口座はそのま�
  t.mock.timers.enable({apis:['Date'],now:T});const f=await fixture();f.credit('fund',10000);await prepareStocks(f.env,guild,one);
  // The market and the wallet as saved before the listing: only the first four stocks.
  const old=['keso','riso','yuya','yano'];
- f.sql.prepare("UPDATE stock_markets SET prices=json_remove(prices,'$.mitu','$.okbr','$.komi','$.ishi','$.vdk','$.godo','$.ngya','$.hori'),history=json_remove(history,'$.mitu','$.okbr','$.komi','$.ishi','$.vdk','$.godo','$.ngya','$.hori')").run();
- f.sql.prepare("UPDATE kp_state SET data=json_remove(data,'$.holdings.komi','$.holdings.mitu') WHERE user=?").run(one);
+ f.sql.prepare("UPDATE stock_markets SET prices=json_remove(prices,'$.msum','$.tnkn','$.komi','$.ishi','$.vdk','$.godo','$.ngya','$.koba'),history=json_remove(history,'$.msum','$.tnkn','$.komi','$.ishi','$.vdk','$.godo','$.ngya','$.koba')").run();
+ f.sql.prepare("UPDATE kp_state SET data=json_remove(data,'$.holdings.vdk','$.holdings.msum') WHERE user=?").run(one);
  const state=await readKpState(f.env,mapping,one);
- assert.equal(state.prices.komi,300);assert.equal(state.holdings.komi,0);assert.equal(state.cash,10000);
+ assert.equal(state.prices.vdk,100);assert.equal(state.holdings.vdk,0);assert.equal(state.cash,10000);
  for(const id of old)assert.ok(Number.isSafeInteger(state.prices[id]));
- await trade(f,'listing-buy-komi','buy',10,'komi');
- assert.equal(f.cash(),10000-3000-30);assert.equal((await readKpState(f.env,mapping,one)).holdings.komi,10);
+ await trade(f,'listing-buy-vdk-01','buy',10,'vdk');
+ assert.equal(f.cash(),10000-1000-10);assert.equal((await readKpState(f.env,mapping,one)).holdings.vdk,10);
  const m=await tickStocks(f.env,await prepareStocks(f.env,guild,one),T+300000,()=>.5);
  assert.ok(Number.isSafeInteger(JSON.parse(String(f.sql.prepare('SELECT prices FROM stock_markets').get()!.prices)).komi),'saved on the next tick');
- assert.ok(m.prices.hori>0);
+ assert.ok(m.prices.koba>0);
 });
-test('ミツノアジ証券・おこぼれ商事は、誰かがKPを失った回数・得た回数で動く（金額は見ない、QUIZ・購入は数えない）',async t=>{
+test('メシウマ食堂・他人の金で焼肉は、誰かがKPを失った回数・得た回数で動く（金額は見ない、QUIZ・購入は数えない）',async t=>{
  t.mock.timers.enable({apis:['Date'],now:T});const f=await fixture();const m=await prepareStocks(f.env,guild,one);
  const ledger=(id:string,delta:number,kind:string)=>f.sql.prepare('INSERT INTO kp_ledger VALUES(?,?,?,?,?,?)').run(id,guild,one,delta,kind,T+1000);
  const op=(id:string,response:object)=>f.sql.prepare("INSERT INTO kp_operations(id,guild,user,request_hash,response,delta,state,at) VALUES(?,?,?,'h',?,0,'{}',?)").run(id,guild,two,JSON.stringify(response),T+2000);
@@ -175,14 +175,14 @@ test('ミツノアジ証券・おこぼれ商事は、誰かがKPを失った回
  assert.deepEqual(await fortuneCounts(f.env,guild,T,T+300000),{minus:5,plus:3});
  assert.deepEqual(await fortuneCounts(f.env,guild,T+300000,T+600000),{minus:0,plus:0},'only since the last tick');
  const next=await tickStocks(f.env,m,T+300000,()=>.5);
- assert.deepEqual(f.sql.prepare("SELECT symbol,bps,label FROM stock_news WHERE symbol IN ('mitu','okbr') ORDER BY symbol").all().map(r=>[r.symbol,r.bps,r.label]),[['mitu',40,'直近でKPを失った5回・得た3回'],['okbr',-40,'直近でKPを失った5回・得た3回']]);
- assert.ok(next.prices.mitu>1000&&next.prices.okbr<1000);
- await tickStocks(f.env,next,T+300000,()=>.5);assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM stock_news WHERE symbol='mitu'").get()!.n,1,'a repeated tick adds nothing');
+ assert.deepEqual(f.sql.prepare("SELECT symbol,bps,label FROM stock_news WHERE symbol IN ('msum','tnkn') ORDER BY symbol").all().map(r=>[r.symbol,r.bps,r.label]),[['msum',40,'直近でKPを失った5回・得た3回'],['tnkn',-40,'直近でKPを失った5回・得た3回']]);
+ assert.ok(next.prices.msum>1000&&next.prices.tnkn<1000);
+ await tickStocks(f.env,next,T+300000,()=>.5);assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM stock_news WHERE symbol='msum'").get()!.n,1,'a repeated tick adds nothing');
 });
 test('架空の会社はたまに架空ニュースで大きく動く。外れの抽選ではニュースなし',()=>{
  assert.deepEqual(fictionNews(()=>.5),[]);
- const seq=[0,0.2,0,  0.9,  0,0.9,0,  0.9,0.9,0.9];let i=0;
+ const seq=[0,0.2,0,  0,0.9,0,  0.9,0.9,0.9,0.9];let i=0;
  const news=fictionNews(()=>seq[i++]);
- assert.deepEqual(news.map(n=>[n.symbol,n.bps]),[['komi',250],['ishi',-180]]);
+ assert.deepEqual(news.map(n=>[n.symbol,n.bps]),[['komi',200],['ishi',-150]]);
  assert.ok(news.every(n=>n.label.length>0));
 });
