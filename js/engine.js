@@ -12,10 +12,10 @@ const MARKET = [
   { id: 'mitu', ticker: 'MITU', name: 'ミツノアジ証券', category: '人の不幸', initialPrice: 1000, volatility: 0.04, drift: 0, icon: '蜜' },
   { id: 'okbr', ticker: 'OKBR', name: 'おこぼれ商事', category: '人の幸運', initialPrice: 1000, volatility: 0.04, drift: 0, icon: '福' },
   // 架空の会社。ときどき架空のニュースで大きく動く。
-  { id: 'koji', ticker: 'KOJI', name: '小路宇宙開発', category: '宇宙', initialPrice: 300, volatility: 0.12, drift: 0.002, icon: '☄' },
+  { id: 'komi', ticker: 'KOMI', name: '小路宇宙開発', category: '宇宙', initialPrice: 300, volatility: 0.12, drift: 0.002, icon: '☄' },
   { id: 'ishi', ticker: 'ISHI', name: '石原製薬', category: '製薬', initialPrice: 640, volatility: 0.06, drift: 0.001, icon: '✚' },
   { id: 'vdk', ticker: 'VDK', name: 'VDK運輸', category: '物流', initialPrice: 950, volatility: 0.018, drift: 0.001, icon: '◎' },
-  { id: 'kobe', ticker: 'KOBE', name: '神戸鉱山', category: '資源', initialPrice: 1450, volatility: 0.04, drift: 0.001, icon: '▲' },
+  { id: 'godo', ticker: 'GODO', name: '神戸鉱山', category: '資源', initialPrice: 1450, volatility: 0.04, drift: 0.001, icon: '▲' },
   { id: 'ngya', ticker: 'NGYA', name: '名古屋電力', category: '電力', initialPrice: 1100, volatility: 0.025, drift: 0.001, icon: 'ϟ' },
   { id: 'hori', ticker: 'HORI', name: '堀建設', category: '建設', initialPrice: 820, volatility: 0.05, drift: 0.001, icon: '▣' },
 ];
