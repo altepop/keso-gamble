@@ -5,7 +5,7 @@ import type { KpEnv } from './kp.ts';
 // so one game is one line with its net amount.
 export interface HistoryEntry {id:string;kind:string;label:string;detail:string;delta:number;time:number}
 const MODES:Record<string,string>={skirmish:'スカーミッシュ',competitive:'コンペ',unrated:'アンレ',swiftplay:'スイフト',spikerush:'スパイクラッシュ',deathmatch:'デスマッチ',teamdeathmatch:'チームデスマッチ',escalation:'エスカレーション',replication:'レプリケーション'};
-const KINDS:Record<string,string>={gift:'KPのプレゼント（もらった）',skirmish:'スカーミッシュの受取',quiz:'VCT QUIZ',voice:'通話',mahjong:'雀魂',unite:'ポケモンユナイト',grant:'手動調整',prize:'競馬の賞金（馬主）',debt:'借KP返済',dividend:'株の配当','stock-migration':'株の移行端数',test:'テスト'};
+const KINDS:Record<string,string>={loop:'KESO LOOP',gift:'KPのプレゼント（もらった）',skirmish:'スカーミッシュの受取',quiz:'VCT QUIZ',voice:'通話',mahjong:'雀魂',unite:'ポケモンユナイト',grant:'手動調整',prize:'競馬の賞金（馬主）',debt:'借KP返済',dividend:'株の配当','stock-migration':'株の移行端数',test:'テスト'};
 function gameLabel(id:string){
  const op=id.split(':').slice(3).join(':')||id;
  if(op.startsWith('race-settle:'))return '競馬の払戻し';

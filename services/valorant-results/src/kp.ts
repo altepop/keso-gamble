@@ -13,7 +13,7 @@ import discord from '../discord-config.json' with { type: 'json' };
 import { assessRewardReadiness } from './reward-readiness.ts';
 import { borrowShortfall, borrowedBy, debtNote, ensureDebt } from './kp-debt.ts';
 import type { Match } from './results.ts';
-export interface KpEnv { KP_PRIVATE_CASINO_CONFIG?:string; RACE_BROADCAST?:DurableObjectNamespace; VOICE_GATEWAY?:DurableObjectNamespace; DB:D1Database; DISCORD_CLIENT_SECRET?:string; KP_BOOTSTRAP_PRIVATE_KEY?:string; KP_BOOTSTRAP_PUBLIC_KEY?:string }
+export interface KpEnv { KP_LOOP_REWARDS_CONFIG?:string; KP_PRIVATE_CASINO_CONFIG?:string; RACE_BROADCAST?:DurableObjectNamespace; VOICE_GATEWAY?:DurableObjectNamespace; DB:D1Database; DISCORD_CLIENT_SECRET?:string; KP_BOOTSTRAP_PRIVATE_KEY?:string; KP_BOOTSTRAP_PUBLIC_KEY?:string }
 export interface KpMapping { guildId:string; accounts:Array<{riotId:string;discordUserId:string}> }
 export const kpSchema=[
  `CREATE TABLE IF NOT EXISTS kp_settings(key TEXT PRIMARY KEY,value TEXT NOT NULL)`,
