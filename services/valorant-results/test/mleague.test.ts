@@ -240,6 +240,24 @@ test('signed /mbet autocomplete returns the named candidates immediately without
  assert.equal(tasks.length,0);assert.equal(f.balance(two),100000);assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM kp_operations').get()!.n,0);
 });
 
+test('長い障害の後でも、未精算の予想がある試合は結果を取りに行き、1回だけ精算・投稿する', async t => {
+ t.mock.timers.enable({apis:['Date'],now:jst('2026-10-27T18:30:00')});
+ const f=await fixture();await storeCards(f.env,parseOfficialCards(page,2026),Date.now());
+ const won=await operateKp(f.env,mapping,one,op(),'ml-bet',{match:game1.id,player:card.find(p=>p.name===order[3])!.no,type:'last',amount:1000}) as {result:{bet:{odds:number}}};
+ const urls:string[]=[],request=(async(url:string)=>{urls.push(String(url));return new Response(page);}) as unknown as typeof fetch;
+ // The Worker was down from before the start until two days later.
+ const back=jst('2026-10-29T12:00:00');
+ assert.equal(await pollMlResults(f.env,back,request),1,'game 1 has an unsettled bet: its result is read');
+ assert.equal(urls.length,1);
+ assert.equal(await pollMlResults(f.env,back+60000,request),0);assert.equal(urls.length,1,'only stale games left: every 10 minutes, not every minute');
+ assert.equal(await settleMl(f.env,mapping),1);assert.equal(await settleMl(f.env,mapping),0,'settled once');
+ const paid=100000-1000+Math.floor(1000*won.result.bet.odds/10);assert.equal(f.balance(one),paid);
+ await pollMlResults(f.env,back+600000,request);await settleMl(f.env,mapping);assert.equal(f.balance(one),paid,'a later read changes nothing');
+ assert.equal(urls.length,1,'nothing unsettled any more: game 2 (no bets) is not read after its window');
+ await queueMlPosts(f.env,mapping,back+60000);await queueMlPosts(f.env,mapping,back+120000);
+ assert.equal(f.posts().filter(p=>p.includes('第1試合 結果')).length,1,'the late result is posted once');
+});
+
 test('61件買っても未精算は消えず、結果が出たら61件すべて精算される（6,100 KP分）', async t => {
  t.mock.timers.enable({apis:['Date'],now:jst('2026-10-27T18:30:00')});
  const f=await fixture();await storeCards(f.env,parseOfficialCards(page,2026),Date.now());

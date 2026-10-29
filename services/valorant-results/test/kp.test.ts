@@ -37,6 +37,7 @@ test('repeated and concurrent match collection pays once, aliases normalize, and
  await Promise.all(Array.from({length:5},()=>collectKpMatch(f.env,mapping,raw,'p-one')));
  assert.equal((await readKpState(f.env,mapping,one)).cash,900);assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM kp_events').get()!.n,1);
  assert.equal(await collectKpMatch(f.env,mapping,game('loss','competitive',false),'p-one'),-200);
+ assert.equal((await readKpState(f.env,mapping,one)).claims.find((c:{reference:string})=>c.reference==='loss')?.reward,-200,'the history shows the loss as −200, not +0');
  assert.equal(await collectKpMatch(f.env,mapping,game('tdm','hurm'),'p-one'),70);
  assert.equal(await collectKpMatch(f.env,mapping,game('escalation','ggteam'),'p-one'),70);
  const unknown=game('unknown','swiftplay');unknown.teams=[];assert.equal(await collectKpMatch(f.env,mapping,unknown,'p-one'),0);

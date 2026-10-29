@@ -18,7 +18,9 @@ export interface MlResult {names:string[];points:number[];at:number;closedAt?:nu
 interface MlBet {id:string;match:string;player:string;type:'top'|'last';amount:number;odds:number;status:string;payout:number;time:number}
 export const ML_DATA:MlData=data;
 // Every minute: game 2 closes when game 1's result is stored, so a late read keeps betting open longer.
-const POLL_EVERY=60000,RESULT_WINDOW=8*3600000;
+// Results are read every minute for 8 hours after a start. After that, a game somebody still has an unsettled bet on
+// (an outage, a late official page) keeps being read every 10 minutes until its result arrives.
+const POLL_EVERY=60000,STALE_POLL_EVERY=600000,RESULT_WINDOW=8*3600000;
 const money=(n:number)=>n.toLocaleString('ja-JP')+' KP';
 const clean=(s:string)=>s.replace(/[@`*_~<>|]/g,'');
 const initialized=new WeakSet<object>();
@@ -126,16 +128,25 @@ export function matchFixture(parsed:{date:string;game:number;names:string[]},d:M
  return d.fixtures.find(f=>f.date===parsed.date&&f.game===parsed.game&&f.teams.every(t=>teams.includes(t)))??null;
 }
 /** Fixtures that have started within the last eight hours and still lack a result. */
-export function awaitedFixtures(now:number,known:Map<string,MlResult>,d:{fixtures:Fixture[]}=data){
- return d.fixtures.filter(f=>mlStart(f)<=now&&now<mlStart(f)+RESULT_WINDOW&&!known.has(f.id));
+export function awaitedFixtures(now:number,known:Map<string,MlResult>,d:{fixtures:Fixture[]}=data,unsettled:Set<string>=new Set()){
+ return d.fixtures.filter(f=>mlStart(f)<=now&&!known.has(f.id)&&(now<mlStart(f)+RESULT_WINDOW||unsettled.has(f.id)));
+}
+/** Games that some saved wallet still has an unsettled prediction on. */
+export async function unsettledMlMatches(env:KpEnv){
+ const rows=(await env.DB.prepare(`SELECT data FROM kp_state WHERE data LIKE '%"mlBets"%' AND data LIKE '%"status":"pending"%'`).all<{data:string}>()).results;
+ const matches=new Set<string>();
+ for(const row of rows){try{for(const b of (JSON.parse(row.data).mlBets??[]) as MlBet[])if(b?.status==='pending'&&typeof b.match==='string')matches.add(b.match);}catch{console.warn('ml_state_unreadable');}}
+ return matches;
 }
 /** Polls the official page every three minutes while a started game has no result. */
 export async function pollMlResults(env:KpEnv,now=Date.now(),request:typeof fetch=fetch){
  await ensureMl(env);
- const awaited=awaitedFixtures(now,await mlResults(env),await mlData(env));if(!awaited.length)return 0;
+ const d0=await mlData(env),unsettled=await unsettledMlMatches(env);
+ const awaited=awaitedFixtures(now,await mlResults(env),d0,unsettled);if(!awaited.length)return 0;
+ const recent=awaited.some(f=>now<mlStart(f)+RESULT_WINDOW);
  const next=await env.DB.prepare("SELECT value FROM ml_state WHERE key='next_poll'").first<{value:string}>();
  if(Number(next?.value??0)>now)return 0;
- await env.DB.prepare("INSERT INTO ml_state(key,value) VALUES('next_poll',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").bind(String(now+POLL_EVERY)).run();
+ await env.DB.prepare("INSERT INTO ml_state(key,value) VALUES('next_poll',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").bind(String(now+(recent?POLL_EVERY:STALE_POLL_EVERY))).run();
  let saved=0;
  for(const month of new Set(awaited.map(f=>f.date.slice(0,7)))){
   const [y,m]=month.split('-').map(Number);
@@ -255,7 +266,8 @@ export async function queueMlPosts(env:PostEnv,mapping:KpMapping,now=Date.now())
  const day=d.fixtures.filter(f=>f.date===today);
  // The card goes out only with the official matchups.
  if(day.length&&day.every(f=>f.confirmed)&&now>=mlStart(day[0])-3600000&&now<mlStart(day[0]))await enqueue(env,'ml-card:'+today,cardPost(day,results,d),now);
- for(const f of d.fixtures.filter(x=>results.has(x.id)&&now<mlStart(x)+RESULT_WINDOW*2)){
+ // A result read late (after an outage) is still posted for a while after it arrived; the post id keeps it to one.
+ for(const f of d.fixtures.filter(x=>results.has(x.id)&&now<Math.max(mlStart(x)+RESULT_WINDOW*2,results.get(x.id)!.at+RESULT_WINDOW))){
   const bets=await betsOn(env,mapping.guildId,f.id);
   if(!bets.length||bets.some(b=>b.status==='pending'))continue;
   await enqueue(env,'ml-result:'+f.id,resultPost(f,results.get(f.id)!,bets),now);
