@@ -1,9 +1,9 @@
 // Register these guild commands individually; never replace /death, /valo or the Activity entry point.
-export const KP_COMMAND_VERSION='kp-slash-v15-give';
+export const KP_COMMAND_VERSION='kp-slash-v16-ranking-debt';
 export const kpCommands=[
  {type:1,name:'kp',description:'KESO PLAY｜KP残高・ランキング',options:[
   {type:1,name:'balance',description:'自分の残高と最近の入出金（本人だけに表示）'},
-  {type:1,name:'ranking',description:'サーバーのKP残高ランキング上位10人をチャットへ公開'},
+  {type:1,name:'ranking',description:'サーバーのKP残高ランキング上位10人と借KPをチャットへ公開'},
   {type:1,name:'bets',description:'自分のMリーグ予想・馬券と精算結果（本人だけに表示）'},
  ]},
  {type:1,name:'keiba',description:'KESO PLAY｜受付中のレース・馬番・倍率を確認'},

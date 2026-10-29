@@ -11,7 +11,7 @@ import {ensureMahjongClaims} from './mahjong-claims.ts';
 import {ensureUnite,uniteUid} from './unite.ts';
 import {nameGiftHorse,decideEntries} from './racing-horses.ts';
 import {crownFor} from './racing-crowns.ts';
-import {DEBT_INTEREST_TEXT,DEBT_MAX,debtOf} from './kp-debt.ts';
+import {DEBT_INTEREST_TEXT,DEBT_MAX,debtOf,ensureDebt} from './kp-debt.ts';
 // @ts-expect-error Shared browser engine.
 import {mlCard,mlOdds,mlOpen,mlStart} from '../../../js/mleague.js';
 // @ts-expect-error Shared browser engine.
@@ -180,7 +180,12 @@ export async function runKpCommand(env:KpEnv,interaction:Slash,override?:KpMappi
  if(isKpRanking(interaction)){
   // A single server-side snapshot: current spendable KP, not stocks or lifetime earnings.
   const rows=(await env.DB.prepare('SELECT user,balance,RANK() OVER(ORDER BY balance DESC) AS rank,COUNT(*) OVER() AS total FROM kp_wallets WHERE guild=? ORDER BY balance DESC,user ASC LIMIT 10').bind(mapping.guildId).all<{user:string;balance:number;rank:number;total:number}>()).results;
-  return '🏆 **KP残高ランキング**\n'+(rows.length?rows.map(r=>`${r.rank}位　<@${r.user}>　**${money(r.balance)}**`).join('\n'):`まだ口座がありません。`)+'\n\n現在使えるKPの上位10人。同額は同順位。株・馬などの評価額は含みません。'+(rows.length?`（全${rows[0].total}人）`:'');
+  // 借KP: everyone who owes, largest first (they sit at 0 KP, so most are below the top ten).
+  await ensureDebt(env);
+  const debts=(await env.DB.prepare('SELECT user,amount FROM kp_debts WHERE guild=? AND amount>0 ORDER BY amount DESC,user ASC LIMIT 10').bind(mapping.guildId).all<{user:string;amount:number}>()).results;
+  const owed=new Map(debts.map(d=>[d.user,d.amount]));
+  return '🏆 **KP残高ランキング**\n'+(rows.length?rows.map(r=>`${r.rank}位　<@${r.user}>　**${money(r.balance)}**${owed.has(r.user)?`　💸借KP ${money(owed.get(r.user)!)}`:''}`).join('\n'):`まだ口座がありません。`)+'\n\n現在使えるKPの上位10人。同額は同順位。株・馬などの評価額は含みません。'+(rows.length?`（全${rows[0].total}人）`:'')
+   +'\n\n💸 **借KP**\n'+(debts.length?debts.map(d=>`<@${d.user}>　**${money(d.amount)}**`).join('\n'):'いま借KPのある人はいません。');
  }
  const sub=interaction.data?.options?.length===1&&interaction.data.options[0].type===1&&!interaction.data.options[0].options?.length?interaction.data.options[0].name:null;
  if(command==='kp'&&interaction.data?.options?.length&&!['balance','bets'].includes(sub??''))return '/kp balance・/kp bets・/kp ranking から選んでください。';
