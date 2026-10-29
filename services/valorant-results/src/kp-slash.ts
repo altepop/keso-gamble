@@ -130,14 +130,33 @@ export async function mbetChoices(env:KpEnv,interaction:Slash):Promise<Array<{na
  const [results,closed,lineups]=await Promise.all([mlResults(env),mlClosed(env),mlLineups(env)]);
  const open=(f:typeof d.fixtures[number])=>f.confirmed&&!results.has(f.id)&&mlOpen(d,f,now,results)&&!(closed.has(f.id)&&now>=closed.get(f.id)!.at);
  const typed=searchMl(focused.value).slice(0,100);
- if(focused.name==='match')return d.fixtures.filter(f=>f.date===day&&open(f)).map(f=>{
-  const teams=f.teams.map(id=>d.teams.find(t=>t.id===id)?.name??id).join('・');
-  return {name:`${Number(f.date.slice(5,7))}/${Number(f.date.slice(8,10))} ${f.table}卓 第${f.game}試合｜${teams}｜ラス予想`.slice(0,100),value:f.id,search:searchMl(`${f.id} ${f.date} ${f.table}-${f.game} ${f.table}卓 第${f.game}試合 ${teams}`)};
- }).filter(c=>!typed||c.search.includes(typed)).slice(0,25).map(({name,value})=>({name,value}));
- const fixture=mbetFixture(d,options?.find(o=>o.name==='match')?.value,day);if(!fixture||!open(fixture))return [];
+ // An empty list says why in its only entry (value 'none'), instead of leaving the member guessing.
+ const why=(name:string)=>[{name:('ℹ️ '+name).slice(0,100),value:'none'}];
+ const today=new Date(now+9*3600000).toISOString().slice(0,10);
+ if(focused.name==='match'){
+  const day_=d.fixtures.filter(f=>f.date===day);
+  const list=day_.filter(f=>open(f)).map(f=>{
+   const teams=f.teams.map(id=>d.teams.find(t=>t.id===id)?.name??id).join('・');
+   return {name:`${Number(f.date.slice(5,7))}/${Number(f.date.slice(8,10))} ${f.table}卓 第${f.game}試合｜${teams}｜ラス予想`.slice(0,100),value:f.id,search:searchMl(`${f.id} ${f.date} ${f.table}-${f.game} ${f.table}卓 第${f.game}試合 ${teams}`)};
+  });
+  const hits=list.filter(c=>!typed||c.search.includes(typed)).slice(0,25).map(({name,value})=>({name,value}));
+  if(hits.length)return hits;
+  if(list.length)return why(`「${String(focused.value).slice(0,20)}」に合う試合がありません。消して一覧から選んでください`);
+  if(!day||!day_.length)return why('今シーズンの受付できる試合はありません');
+  const md_=`${Number(day.slice(5,7))}/${Number(day.slice(8,10))}`;
+  if(day>today)return why(`次の試合は ${md_}。受付は当日0時から（/mleague で出場候補を確認できます）`);
+  if(!day_.every(f=>f.confirmed))return why('公式の対戦カードを確認中です。少し待ってからもう一度タップしてください');
+  return why('今日の試合はすべて締め切りました（開始済み・結果待ち・開始報告あり）');
+ }
+ const chosen=options?.find(o=>o.name==='match')?.value;
+ if(!chosen||chosen==='none')return why('先に match で試合を選んでください');
+ const fixture=mbetFixture(d,chosen,day);if(!fixture)return why('その試合は見つかりません。match を選び直してください');
+ if(!open(fixture))return why('この試合は締め切りました。match で別の試合を選んでください');
  const sitting=lineups.get(fixture.id),stats=seasonStats(results);
- return mlCard(d,fixture).filter((p:{name:string;teamName:string;no:number})=>(!sitting||sitting.includes(p.name))&&(!typed||searchMl(`${p.name} ${p.teamName}`).includes(typed)||String(p.no)===typed))
+ const players=mlCard(d,fixture).filter((p:{name:string})=>!sitting||sitting.includes(p.name));
+ const hits=players.filter((p:{name:string;teamName:string;no:number})=>!typed||searchMl(`${p.name} ${p.teamName}`).includes(typed)||String(p.no)===typed)
   .map((p:{name:string;teamName:string})=>({name:`${p.name}｜${p.teamName}｜ラス ${(mlOdds(p,stats).last/10).toFixed(1)}倍｜${sitting?'出場確定':'出場未確定・不出場は返金'}`.slice(0,100),value:p.name})).slice(0,25);
+ return hits.length?hits:why(`「${String(focused.value).slice(0,20)}」に合う選手がいません。名前かチーム名の一部で探してください`);
 }
 export async function runKpCommand(env:KpEnv,interaction:Slash,override?:KpMapping,out?:{components?:unknown[]}):Promise<string>{
  const mapping=await initializeKp(env,override),user=interaction.member?.user?.id;
@@ -235,6 +254,7 @@ export async function runKpCommand(env:KpEnv,interaction:Slash,override?:KpMappi
   // A preview first: nothing is bought until the member presses 購入する on it (mbetDecide).
   const value=(key:string)=>interaction.data?.options?.find(o=>o.name===key)?.value;
   const d=await mlData(env),fixture=mbetFixture(d,value('match'),mlDay(created(interaction.id)));
+  if(value('match')==='none'||value('player')==='none')return 'いまは予想できる候補がありません。候補の一覧に出ていた理由（ℹ️）を確認してください。受付状況は /mleague で見られます。';
   if(!fixture)return 'その試合はありません。/mleague で卓と試合を確認してください。';
   try{
    const {bet,balanceAfter}=await previewMlBet(env,mapping,user,{match:fixture.id,player:value('player'),type:'last',amount:value('amount')});
