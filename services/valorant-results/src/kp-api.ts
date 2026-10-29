@@ -18,7 +18,7 @@ import { hydrateCasino, playChinchiro, bjStart, bjHit, bjStand, bjDouble, crypto
 import { enqueue, ensurePosts } from './racing-posts.ts';
 // @ts-expect-error Shared browser engine.
 import { hydrateMleague, placeMlBet, mlPartner } from '../../../js/mleague.js';
-import { mlClosed, mlData, mlResults, seasonStats } from './mleague.ts';
+import { mlActivityView, mlClosed, mlData, mlResults, seasonStats } from './mleague.ts';
 import { racingView, raceSeed } from './racing-kp.ts';
 import { defaultRoastLevel, validRoastLevel } from './racing-crowns.ts';
 import { buyHorse, sellHorse, ownedHorses, raceEntries } from './racing-horses.ts';
@@ -42,6 +42,8 @@ export async function readKpState(env:KpEnv,mapping:KpMapping,user:string){
  state.claims.push(...state.stockMarket.dividends.map((d:{day:string;amount:number;at:number})=>({id:'dividend:'+d.day,activity:'株配当',reference:d.day,reward:d.amount,status:'approved',time:d.at})));state.claims.sort((a:{time:number},b:{time:number})=>b.time-a.time);
  state.directives=(await env.DB.prepare('SELECT id,issuer,target,task,game,achievement,cost,status,at AS time FROM kp_directives WHERE guild=? AND (issuer=? OR target=?) ORDER BY at DESC,id LIMIT 100').bind(mapping.guildId,user,user).all()).results;
  state.members=mapping.accounts.map(a=>({id:a.discordUserId,name:configuredPlayers.find(p=>p.riotId.toLowerCase()===a.riotId.toLowerCase())?.name??a.riotId.split('#')[0]}));
+ // The Mリーグ screen; a failure here never blocks the wallet.
+ try{state.mleague=await mlActivityView(env);}catch{console.warn('ml_view_pending');state.mleague=null;}
  state.selfUserId=user;state.rewardRates=policy.modes;state.debt={amount:await debtOf(env,mapping.guildId,user),interestPercent:DEBT_INTEREST_PERCENT,intervalMinutes:DEBT_INTERVAL_MINUTES};return state;
 }
 // Big casino moments go to the earnings channel so others can watch (a ピンゾロ either way, a natural, or ±5,000 KP).
@@ -128,7 +130,7 @@ export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:strin
   }else throw Error('この操作は本番口座では使えません。');
   // 借KP: nothing that costs KP while any is owed (the database refuses it too).
   if(state.cash<before&&await debtOf(env,mapping.guildId,user)>0)throw Error(DEBT_BLOCKED);
-  const response={result,...(stockTrade?{stockTrade}:{})};const safeState={...state,claims:[],directives:[]};delete safeState.debt;delete safeState.members;delete safeState.racing;delete safeState.horses;delete safeState.mastery;delete safeState.luxury;delete safeState.stockMarket;delete safeState.stockBenefits;
+  const response={result,...(stockTrade?{stockTrade}:{})};const safeState={...state,claims:[],directives:[]};delete safeState.debt;delete safeState.mleague;delete safeState.members;delete safeState.racing;delete safeState.horses;delete safeState.mastery;delete safeState.luxury;delete safeState.stockMarket;delete safeState.stockBenefits;
   const inserted=await env.DB.prepare(`INSERT INTO kp_operations(id,guild,user,request_hash,response,delta,state,directive,at)
    SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM kp_wallets w JOIN kp_state s ON w.guild=s.guild AND w.user=s.user WHERE w.guild=? AND w.user=? AND w.version=? AND s.version=?) AND (?=0 OR EXISTS(SELECT 1 FROM stock_markets WHERE guild=? AND version=?)) ON CONFLICT(guild,user,id) DO NOTHING`)
    .bind(id,mapping.guildId,user,requestHash,JSON.stringify(response),state.cash-before,JSON.stringify(safeState),directive?JSON.stringify(directive):null,Date.now(),mapping.guildId,user,state.walletVersion,state.stateVersion,['trade','directive','luxury'].includes(action)?1:0,mapping.guildId,state.stockMarket.version).run();

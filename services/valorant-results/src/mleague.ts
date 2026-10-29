@@ -7,7 +7,7 @@ import type {KpEnv,KpMapping} from './kp.ts';
 import {enqueue,ensurePosts,earningsWebhook} from './racing-posts.ts';
 import type {PostEnv} from './racing-posts.ts';
 // @ts-expect-error Shared browser engine.
-import {mlCard,mlOdds,mlStart,settleMlBets,hydrateMleague,ML_TYPES} from '../../../js/mleague.js';
+import {mlCard,mlOdds,mlOpen,mlStart,settleMlBets,hydrateMleague,ML_TYPES} from '../../../js/mleague.js';
 // @ts-expect-error Shared browser engine.
 import {hydrateRacing} from '../../../js/racing.js';
 
@@ -176,6 +176,21 @@ export function parseKinmaLineups(xml:string){
   out.push({date:`${year}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}`,game:Number(m[3]),names});
  }
  return out;
+}
+/** The Activity's Mリーグ screen: the match day (today, else the next one), each game's state, players and odds.
+ * Public information only; buying goes through the wallet operation 'ml-bet' with the same checks as /mbet. */
+export async function mlActivityView(env:KpEnv,now=Date.now()){
+ const d=await mlData(env),today=new Date(now+9*3600000).toISOString().slice(0,10);
+ const day=[...new Set(d.fixtures.map(f=>f.date))].sort().find(x=>x>=today)??null;
+ if(!day)return {day:null,fixtures:[]};
+ const [results,closed,lineups]=await Promise.all([mlResults(env),mlClosed(env),mlLineups(env)]),stats=seasonStats(results);
+ const fixtures=d.fixtures.filter(f=>f.date===day).sort((a,b)=>a.table-b.table||a.game-b.game).map(f=>{
+  const result=results.get(f.id),report=closed.get(f.id),sitting=lineups.get(f.id);
+  const status=result?'result':!f.confirmed?'unconfirmed':now<Date.parse(day+'T00:00:00+09:00')?'before':report&&now>=report.at?'closed':mlOpen(d,f,now,results)?'open':'closed';
+  const players=(mlCard(d,f) as Array<{no:number;name:string;teamName:string}>).map(p=>({no:p.no,name:p.name,teamName:p.teamName,odds:mlOdds(p,stats).last as number,sitting:sitting?sitting.includes(p.name):null}));
+  return {id:f.id,date:f.date,table:f.table,game:f.game,start:mlStart(f) as number,teams:f.teams.map(id=>d.teams.find(t=>t.id===id)?.name??id),status,players,...(result?{result:{names:result.names,points:result.points}}:{})};
+ });
+ return {day,fixtures};
 }
 export async function mlLineups(env:KpEnv){
  await ensureMl(env);
