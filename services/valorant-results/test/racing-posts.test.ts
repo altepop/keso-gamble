@@ -8,7 +8,7 @@ import { initializeKp, syncKpAccounts } from '../src/kp.ts';
 import type { KpMapping } from '../src/kp.ts';
 import { operateKp } from '../src/kp-api.ts';
 import { settleKpRaces } from '../src/racing-kp.ts';
-import { queueRacePosts, flushRacePosts, worthPosting, BIG_LOSS } from '../src/racing-posts.ts';
+import { queueRacePosts, flushRacePosts, worthPosting } from '../src/racing-posts.ts';
 import type { PostEnv } from '../src/racing-posts.ts';
 // @ts-expect-error The shared pure browser engine has no TypeScript declarations.
 import { RUN_MS, RACE_INTERVAL, CLOSE_BEFORE, raceCard, raceResult } from '../../../js/racing.js';
@@ -66,13 +66,22 @@ test('results wait for settlement, then name each bettor with the payout or a ro
  assert.match(result.content,order[0]===1||order.slice(0,3).includes(2)?/💰/:/💸/);
 });
 
-test('normal races are posted only for a big win or a big loss', () => {
+test('a normal race gets its result post whenever someone bet on it, however small; without bets only big races do', () => {
  const card=raceCard(NORMAL);
- assert.equal(worthPosting(card,[]),false);
- assert.equal(worthPosting(card,[{id:'a',raceId:NORMAL,type:'win',horse:1,amount:1000,odds:30,status:'won',payout:3000}]),false);
- assert.equal(worthPosting(card,[{id:'a',raceId:NORMAL,type:'win',horse:1,amount:BIG_LOSS,odds:30,status:'lost',payout:0}]),true);
- assert.equal(worthPosting(card,[{id:'a',raceId:NORMAL,type:'win',horse:1,amount:1000,odds:120,status:'won',payout:12000}]),true);
+ assert.equal(worthPosting(card,[]),false,'nobody bet: the live broadcast alone');
+ assert.equal(worthPosting(card,[{id:'a',raceId:NORMAL,type:'win',horse:1,amount:100,odds:30,status:'lost',payout:0}]),true);
+ assert.equal(worthPosting(card,[{id:'a',raceId:NORMAL,type:'place',horse:1,amount:100,odds:21,status:'won',payout:210}]),true);
  assert.equal(worthPosting(raceCard(MAIN),[]),true);
+});
+test('a small bet on a normal race is posted with the bettor and a roast once settled', async t => {
+ t.mock.timers.enable({apis:['Date'],now:NORMAL-10*60000});
+ const f=await fixture(),sent=captureFetch(t);
+ await operateKp(f.env,mapping,one,'race-bet-operation-31','race-bet',{raceId:NORMAL,type:'win',horse:1,amount:100});
+ await queueRacePosts(f.env,mapping,NORMAL+RUN_MS);assert.deepEqual(posts(f.sql),[],'not before settlement');
+ await settleKpRaces(f.env,mapping,NORMAL+RUN_MS);await queueRacePosts(f.env,mapping,NORMAL+RUN_MS+60000);await queueRacePosts(f.env,mapping,NORMAL+RUN_MS+120000);
+ assert.deepEqual(posts(f.sql).map(p=>p.id),['race-result:'+NORMAL],'once');
+ await flushRacePosts(f.env);
+ assert.match(sent[0].content,/結果/);assert.match(sent[0].content,new RegExp(`<@${one}>`));assert.match(sent[0].content,/🗯️ /);assert.match(sent[0].content,/(💰|💸)/);
 });
 
 test('the roast follows each person\'s level: harsh for full, gentle for mild', async () => {
