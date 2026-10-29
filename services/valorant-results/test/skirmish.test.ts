@@ -19,7 +19,7 @@ test('four wins require three explicit continues and pay exactly once; duplicate
  for(let n=1;n<=4;n++){
   const t=n*1000;await Promise.all([f.game('m'+n,t),f.game('m'+n,t)]);
   const s=(await f.state())!;
-  if(n<4){assert.equal(s.pot,[0,100,250,600][n]);assert.equal(s.phase,'choice');assert.equal(f.balance(),500);await f.choose('continue',t+300);}
+  if(n<4){assert.equal(s.pot,[0,50,250,600][n]);assert.equal(s.phase,'choice');assert.equal(f.balance(),500);await f.choose('continue',t+300);}
  }
  assert.equal(f.balance(),2000);assert.equal((await f.state())!.pot,0);
  await f.game('m4',4000);assert.equal(f.balance(),2000);
@@ -28,15 +28,15 @@ test('cashout and continue race cannot both win; stale and foreign buttons do no
  const f=await fixture();await f.game('first',1000);const s=(await f.state())!,cash=`sk:${user}:${s.version}:cash`,go=`sk:${user}:${s.version}:continue`;
  assert.match((await decideSkirmish(f.env,guild,other,cash,1500)).content,/本人/);
  await Promise.all([decideSkirmish(f.env,guild,user,cash,1500),decideSkirmish(f.env,guild,user,go,1500)]);
- assert.equal(f.balance(),600);assert.equal((await f.state())!.phase,'ready');
- await decideSkirmish(f.env,guild,user,cash,1500);assert.equal(f.balance(),600);
+ assert.equal(f.balance(),550);assert.equal((await f.state())!.phase,'ready');
+ await decideSkirmish(f.env,guild,user,cash,1500);assert.equal(f.balance(),550);
  assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM skirmish_receipts WHERE kind='cash'").get()!.n,1);
 });
 test('an unchosen or already-started next game cannot be selected retrospectively',async()=>{
  const f=await fixture();await f.game('win1',1000);await f.game('ignored',2000);
- assert.equal((await f.state())!.pot,100);assert.equal((await f.state())!.wins,1);
+ assert.equal((await f.state())!.pot,50);assert.equal((await f.state())!.wins,1);
  await f.choose('continue',3000);await f.game('started-before-choice',2900);
- assert.equal((await f.state())!.phase,'armed');assert.equal((await f.state())!.pot,100);
+ assert.equal((await f.state())!.phase,'armed');assert.equal((await f.state())!.pot,50);
  await f.game('after-choice',4000);assert.equal((await f.state())!.pot,250);
 });
 test('losing a continued game clears only pending winnings; no wallet loss or luck draw',async()=>{
@@ -48,7 +48,7 @@ test('cashout ledger failure rolls state and receipt back so the same choice can
  const f=await fixture();await f.game('win',1000);const before=await f.state();
  f.sql.exec("CREATE TRIGGER fail_sk BEFORE INSERT ON kp_ledger WHEN NEW.kind='skirmish' BEGIN SELECT RAISE(ABORT,'fixture'); END");
  await assert.rejects(f.choose('cash',1500),/fixture/);assert.deepEqual(await f.state(),before);assert.equal(f.balance(),500);
- f.sql.exec('DROP TRIGGER fail_sk');await f.choose('cash',1600);assert.equal(f.balance(),600);
+ f.sql.exec('DROP TRIGGER fail_sk');await f.choose('cash',1600);assert.equal(f.balance(),550);
 });
 test('fourth win ledger failure rolls back the match receipt and streak, retry pays once',async()=>{
  const f=await fixture();for(let n=1;n<=3;n++){await f.game('m'+n,n*1000);await f.choose('continue',n*1000+300);}
@@ -57,7 +57,7 @@ test('fourth win ledger failure rolls back the match receipt and streak, retry p
  f.sql.exec('DROP TRIGGER fail_auto');await f.game('m4',4000);assert.equal(f.balance(),2000);
 });
 test('prompt contains owner-bound buttons and shows pending money separately from wallet money',async()=>{
- const f=await fixture();await f.game('first',1000);const prompt=skirmishPrompt(await f.state());assert.match(prompt.content,/100 KP保留/);
+ const f=await fixture();await f.game('first',1000);const prompt=skirmishPrompt(await f.state());assert.match(prompt.content,/50 KP保留/);
  assert.equal(prompt.components[0].components.length,2);assert.match(prompt.components[0].components[1].custom_id,new RegExp('^sk:'+user+':'));
  await f.choose('continue',1500);assert.equal(skirmishPrompt(await f.state()).components.length,0);
 });
@@ -95,7 +95,7 @@ test('the result of a win that opened a choice carries the buttons until the mem
  let rows=await skirmishResultButtons(f.env,'w1',notice,names) as {components:{label:string;custom_id:string}[]}[];
  assert.equal(rows.length,1,'only the member with an open choice');
  const v=(await f.state())!.version;
- assert.deepEqual(rows[0].components.map(c=>[c.label,c.custom_id]),[['ワン：100 KPで降りる',`sk:${user}:${v}:cash`],['ワン：続行（次勝てば250 KP）',`sk:${user}:${v}:continue`]]);
+ assert.deepEqual(rows[0].components.map(c=>[c.label,c.custom_id]),[['ワン：50 KPで降りる',`sk:${user}:${v}:cash`],['ワン：続行（次勝てば250 KP）',`sk:${user}:${v}:continue`]]);
  assert.deepEqual(withoutSkirmishButtons([...rows,{type:1,components:[{type:2,custom_id:`sk:${other}:1:cash`}]}],user),[{type:1,components:[{type:2,custom_id:`sk:${other}:1:cash`}]}],'a press removes only the presser\'s buttons');
  await f.choose('continue',1300);
  assert.deepEqual(await skirmishResultButtons(f.env,'w1',notice,names),[],'chosen: no buttons on later edits');
@@ -103,10 +103,10 @@ test('the result of a win that opened a choice carries the buttons until the mem
  await f.game('w3',3000);await f.choose('continue',3300);await f.game('l4',4000,false);
  const posts=(f.sql.prepare('SELECT body FROM kp_posts ORDER BY at,id').all() as {body:string}[]).map(r=>JSON.parse(r.body));
  assert.deepEqual(posts.map(p=>p.content),[
-  `🔥 <@${user}> スカーミッシュ1勝、**100 KP** を蹴って続行や！ 次勝ったら 250 KP、負けたら全部パー。`,
+  `🔥 <@${user}> スカーミッシュ1勝、**50 KP** を蹴って続行や！ 次勝ったら 250 KP、負けたら全部パー。`,
   `💰 <@${user}> スカーミッシュ2勝で降りた。**250 KP**、手堅く回収や。`,
-  `🔥 <@${user}> スカーミッシュ1勝、**100 KP** を蹴って続行や！ 次勝ったら 250 KP、負けたら全部パー。`,
-  `💥 <@${user}> スカーミッシュ2勝目ならず…保留してた **100 KP** は全部パーや。`,
+  `🔥 <@${user}> スカーミッシュ1勝、**50 KP** を蹴って続行や！ 次勝ったら 250 KP、負けたら全部パー。`,
+  `💥 <@${user}> スカーミッシュ2勝目ならず…保留してた **50 KP** は全部パーや。`,
  ]);
  assert.ok(posts.every(p=>p.allowed_mentions.parse.length===0),'mentions never ping');
 });

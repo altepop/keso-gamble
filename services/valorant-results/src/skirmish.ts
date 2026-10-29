@@ -2,7 +2,7 @@ import type {KpEnv} from './kp.ts';
 import {kpEventId} from './kp.ts';
 import {enqueue,ensurePosts} from './racing-posts.ts';
 export const SKIRMISH_POLICY='skirmish-risk-v1';
-export const SKIRMISH_PRIZES=[0,100,250,600,1500] as const;
+export const SKIRMISH_PRIZES=[0,50,250,600,1500] as const;
 export interface SkirmishState {guild:string;puuid:string;user:string;wins:number;pot:number;phase:'ready'|'choice'|'armed';eligible_after:number;last_end:number;version:number}
 const ready=new WeakMap<object,Promise<void>>();
 export async function ensureSkirmish(env:KpEnv){
