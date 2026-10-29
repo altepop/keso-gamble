@@ -558,3 +558,28 @@ test('private race preview returns the committed order only to the authorized ow
  assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM kp_operations').get()!.n,0);
  assert.equal((await kpApi(request(ownerToken),f.env,mapping)).status,200);assert.equal(f.sql.prepare('SELECT hash FROM kp_races WHERE guild=? AND id=?').get(guild,preview.id)!.hash,saved.hash);
 });
+test('private casino: every hand on the menu pays exactly that hand through the ordinary game; unknown hands are refused',async()=>{
+ // @ts-expect-error Shared table of the private menu's hands.
+ const {PRIVATE_HANDS}=await import('../../../js/private-casino-rules.js');
+ const f=await fixture();configurePrivateCasino(f.env);seed(f.sql,one,500000);
+ const nets:Record<string,number>={pinzoro:500,'zoro-2':300,'zoro-3':300,'zoro-4':300,'zoro-5':300,'zoro-6':300,shigoro:200,hifumi:200,'me-6':100,'me-5':100,'me-4':100,'me-3':100,'me-2':100,
+  blackjack:150,seven:9900,star:3900,bell:1900,lemon:900,cherry:400,cherry2:50,
+  royal:24900,'straight-flush':4900,four:2400,'full-house':700,flush:400,straight:300,three:200,'two-pair':100,jacks:0,player:100,banker:95,tie:800};
+ // @ts-expect-error Shared pure browser engine.
+ const {minesMultiplier}=await import('../../../js/casino-more.js');
+ let cash=500000,n=0;
+ for(const [game,hands] of Object.entries(PRIVATE_HANDS) as [string,[string,string][]][]){
+  for(const [hand] of hands){
+   const expected=game==='mines'?(()=>{const [m,k]=hand.split('x').map(Number);return Math.floor(100*minesMultiplier(m,k))-100;})():nets[hand];
+   const result=await operateKp(f.env,mapping,one,`private-hand-${String(++n).padStart(3,'0')}`,'private-casino',{game,amount:100,hand}) as {result:{net?:number;done?:{net:number;hand?:string;winner?:string}};operationSource:string};
+   const net=result.result.net??result.result.done!.net;
+   assert.equal(net,expected,`${game} ${hand}`);cash+=net;assert.equal((await readKpState(f.env,mapping,one)).cash,cash,`${game} ${hand} wallet`);
+   if(game==='poker')assert.equal(result.result.done!.hand,hand);
+   if(game==='baccarat')assert.equal(result.result.done!.winner,hand);
+  }
+ }
+ const state=await readKpState(f.env,mapping,one);assert.equal(state.mines,null);assert.equal(state.vp,null,'no game is left open');
+ await assert.rejects(operateKp(f.env,mapping,one,'private-hand-bad-01','private-casino',{game:'slot',amount:100,hand:'diamond'}),/役を選び直して/);
+ await assert.rejects(operateKp(f.env,mapping,one,'private-hand-bad-02','private-casino',{game:'mines',amount:100,hand:'24x1'}),/役を選び直して/);
+ await assert.rejects(operateKp(f.env,mapping,two,'private-hand-bad-03','private-casino',{game:'poker',amount:100,hand:'royal'}),/利用できません/);
+});

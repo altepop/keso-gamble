@@ -1,26 +1,26 @@
-import {privateCasinoPanel} from './private-casino-view.js?v=web-54654f6c63bad4a7';
-import {communityPanel,communityRows} from './community-feed.js?v=web-54654f6c63bad4a7';
-import {stockPanel,stockCandles,stockPrice} from './stock-view.js?v=web-54654f6c63bad4a7';
-import {wheelView,covered,redNumbers,outcomeAngle} from './roulette-view.js?v=web-54654f6c63bad4a7';
-import {connectDiscordActivity,isDiscordActivity}from './discord-activity-auth.js?v=web-54654f6c63bad4a7';
-import { createKpClient } from './kp-client.js?v=web-54654f6c63bad4a7';
-import { fmt, fmt0 } from './format.js?v=web-54654f6c63bad4a7';
-import { submitClaim, approveClaim, issueDirective, completeDirective } from './progression.js?v=web-54654f6c63bad4a7';
-import { titleView, homeView, playView, directivesView, escapeHTML } from './progression-views.js?v=web-54654f6c63bad4a7';
-import { genCandles, movingAverage, svgCandles } from './charts.js?v=web-54654f6c63bad4a7';
-import { MARKET, createInitialState, portfolioValue, assets, advanceMarket, trade, spin, spinNumbers, validateNumberBets, grantDemoSalary, cryptoRouletteNumber } from './engine.js?v=web-54654f6c63bad4a7';
-import { KEY, LEGACY_KEY } from './storage.js?v=web-54654f6c63bad4a7';
-import { PUBLIC_SALT, RUN_MS, WEEKLY_LIMIT, openRaceStart, latestRaceStart, raceCard, raceOdds, raceResult, raceTimeline, raceCommentary, raceRuns, placeRaceBet, settleRaceBets, weeklySpent } from './racing.js?v=web-54654f6c63bad4a7';
-import { LUXURY } from './luxury.js?v=web-54654f6c63bad4a7';
-import { raceScreen, racePreview, drawRace, raceElapsed, ownerPanel, luxuryPanel, roastPanel } from './racing-view.js?v=web-54654f6c63bad4a7';
-import { createStore } from './store.js?v=web-54654f6c63bad4a7';
-import { healthPanel } from './health-view.js?v=web-54654f6c63bad4a7';
-import { mleagueScreen, mleaguePreview } from './mleague-view.js?v=web-54654f6c63bad4a7';
-import { gamePicker, chinchiroView, blackjackView } from './casino-view.js?v=web-54654f6c63bad4a7';
-import {casinoFrames} from './casino-animation.js?v=web-54654f6c63bad4a7';
-import { playChinchiro, bjStart, bjHit, bjStand, bjDouble, cryptoDie, cryptoCard, cryptoInt } from './casino.js?v=web-54654f6c63bad4a7';
-import { minesStart, minesPick, minesCashout, playSlot, vpDeal, vpDraw, playBaccarat, VP_NAMES } from './casino-more.js?v=web-54654f6c63bad4a7';
-import { minesView, slotView, videoPokerView, baccaratView } from './casino-more-view.js?v=web-54654f6c63bad4a7';
+import {privateCasinoPanel} from './private-casino-view.js?v=web-1d4154a85bafe2e9';
+import {communityPanel,communityRows} from './community-feed.js?v=web-1d4154a85bafe2e9';
+import {stockPanel,stockCandles,stockPrice} from './stock-view.js?v=web-1d4154a85bafe2e9';
+import {wheelView,covered,redNumbers,outcomeAngle} from './roulette-view.js?v=web-1d4154a85bafe2e9';
+import {connectDiscordActivity,isDiscordActivity}from './discord-activity-auth.js?v=web-1d4154a85bafe2e9';
+import { createKpClient } from './kp-client.js?v=web-1d4154a85bafe2e9';
+import { fmt, fmt0 } from './format.js?v=web-1d4154a85bafe2e9';
+import { submitClaim, approveClaim, issueDirective, completeDirective } from './progression.js?v=web-1d4154a85bafe2e9';
+import { titleView, homeView, playView, directivesView, escapeHTML } from './progression-views.js?v=web-1d4154a85bafe2e9';
+import { genCandles, movingAverage, svgCandles } from './charts.js?v=web-1d4154a85bafe2e9';
+import { MARKET, createInitialState, portfolioValue, assets, advanceMarket, trade, spin, spinNumbers, validateNumberBets, grantDemoSalary, cryptoRouletteNumber } from './engine.js?v=web-1d4154a85bafe2e9';
+import { KEY, LEGACY_KEY } from './storage.js?v=web-1d4154a85bafe2e9';
+import { PUBLIC_SALT, RUN_MS, WEEKLY_LIMIT, openRaceStart, latestRaceStart, raceCard, raceOdds, raceResult, raceTimeline, raceCommentary, raceRuns, placeRaceBet, settleRaceBets, weeklySpent } from './racing.js?v=web-1d4154a85bafe2e9';
+import { LUXURY } from './luxury.js?v=web-1d4154a85bafe2e9';
+import { raceScreen, racePreview, drawRace, raceElapsed, ownerPanel, luxuryPanel, roastPanel } from './racing-view.js?v=web-1d4154a85bafe2e9';
+import { createStore } from './store.js?v=web-1d4154a85bafe2e9';
+import { healthPanel } from './health-view.js?v=web-1d4154a85bafe2e9';
+import { mleagueScreen, mleaguePreview } from './mleague-view.js?v=web-1d4154a85bafe2e9';
+import { gamePicker, chinchiroView, blackjackView } from './casino-view.js?v=web-1d4154a85bafe2e9';
+import {casinoFrames} from './casino-animation.js?v=web-1d4154a85bafe2e9';
+import { playChinchiro, bjStart, bjHit, bjStand, bjDouble, cryptoDie, cryptoCard, cryptoInt } from './casino.js?v=web-1d4154a85bafe2e9';
+import { minesStart, minesPick, minesCashout, playSlot, vpDeal, vpDraw, playBaccarat, VP_NAMES } from './casino-more.js?v=web-1d4154a85bafe2e9';
+import { minesView, slotView, videoPokerView, baccaratView } from './casino-more-view.js?v=web-1d4154a85bafe2e9';
 const $=(s,el=document)=>el.querySelector(s);
 const wallet=createKpClient();
 const embedded=isDiscordActivity();
@@ -365,7 +365,7 @@ addEventListener('click',async e=>{
     if(t.dataset.action==='connect-kp'){state=await wallet.connect($('#kp-connect-code').value);live=true;autoState='connected';autoMessage='';connectionError='';delete drafts['kp-connect-code'];screen='home';render();toast(wallet.remembered?'接続しました。次回は自動で接続します':'接続しました。この環境では閉じると再接続が必要です');return;}
     if(t.dataset.action==='private-round'){
       if(!live||!state.privateCasino)throw Error('この操作は利用できません。');
-      const args={game:$('#private-game').value,amount:Number($('#private-amount').value),number:Number($('#private-number').value)};
+      const game=$('#private-game').value,args=game==='roulette'?{game,amount:Number($('#private-amount').value),number:Number($('#private-number').value)}:{game,amount:Number($('#private-amount').value),hand:$('#private-hand').value};
       const result=await liveOperation('private-casino',args),net=result.net??result.done?.net??(result.payout-result.amount);
       privateRoundMessage=(net>=0?'+':'')+moneyCompact(net);render();toast(privateRoundMessage);return;
     }
@@ -452,7 +452,8 @@ addEventListener('keydown', e => {
 });
 addEventListener('input', e => {
   if(e.target.dataset.stake!==undefined&&!spinLock){const n=Number(e.target.dataset.stake),amount=Number(e.target.value);numberBets.set(n,amount);document.querySelector('#number-bet-total').textContent=moneyCompact([...numberBets.values()].reduce((a,b)=>a+b,0));const badge=document.querySelector(`[data-number="${n}"] small`);if(badge)badge.textContent=amount+' KP';}
-  if(['private-game','private-amount','private-number'].includes(e.target.id))drafts[e.target.id]=e.target.value;
+  if(['private-game','private-amount','private-number','private-hand'].includes(e.target.id))drafts[e.target.id]=e.target.value;
+  if(e.target.id==='private-game'){delete drafts['private-hand'];render();}
   if(e.target.id==='horse-name')drafts['horse-name']=e.target.value;
   if(e.target.id==='ml-amount'){drafts['ml-amount']=e.target.value;const preview=$('#ml-preview');if(preview)preview.textContent=mleaguePreview(state,{...mlDraft,amount:e.target.value});}
   if(e.target.id==='race-amount'){drafts['race-amount']=e.target.value;const preview=$('#race-preview');if(preview){const open=openCard(Date.now());preview.innerHTML=racePreview(open,raceOdds(open),{...raceDraft,amount:e.target.value});}}
