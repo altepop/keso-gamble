@@ -66,6 +66,9 @@ node scripts/race-live-browser-check.cjs # 本番口座の競馬：馬券・シ�
 全ブラウザ検証（`npm run test:browser:all`）はPython 3・PlaywrightのChromiumとWebKitを使用。`npx playwright install --with-deps chromium webkit` で準備します。Chromiumの個別検証は`/usr/bin/chromium`、`CHROMIUM_PATH`、またはPlaywright管理のChromiumに対応。
 後者は `npx playwright install chromium` で導入できる。
 
+
+表示幅が1,024 CSS px以上の場合はActivity内の横幅いっぱいを使い、競馬・カジノ・株・指名を複数列に配置します。別アプリやPC専用URLは不要です。幅を狭めると同じ画面がスマホ向けの縦並びに戻ります。検証は `npm run test:desktop-browser`（Chromium）、`node scripts/desktop-browser-check.cjs webkit`（WebKit）で実行できます。
+
 ## 構成
 
 - `index.html` / `css/styles.css`: エントリー・画面スタイル
