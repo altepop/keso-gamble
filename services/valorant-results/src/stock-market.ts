@@ -6,7 +6,7 @@ interface Stock {id:string;name:string;initialPrice:number}
 const STOCKS=MARKET as Stock[];
 const IDS=STOCKS.map(s=>s.id);
 // A day's news can move a stock at most this far (bps); the luck stocks move with every game, so they get more room.
-const DAY_BUDGET:Record<string,number>={mitu:800,okbr:800,komi:600};
+const DAY_BUDGET:Record<string,number>={msum:800,tnkn:800,vdk:800};
 export const STOCK_INTERVAL=5*60_000,STOCK_HOLD=86400000,DIVIDEND_CAP=500;
 export interface Market {guild:string;version:number;prices:Record<string,number>;history:Record<string,number[]>;at:number;startedAt:number;token:string}
 export interface StockBenefits {eligibleValue:number;percent:number;heldHours:number}
@@ -117,9 +117,9 @@ async function captureNews(env:KpEnv,market:Market,now:number){
    WHERE o.guild=? AND o.at>=? AND o.id LIKE 'race-settle:%' GROUP BY o.guild,o.user,o.id,o.at
   ) WHERE ABS(net)>=5000`).bind(guild,since).run();
  await env.DB.prepare(`INSERT OR IGNORE INTO stock_news(guild,id,symbol,label,bps,at) SELECT guild,'trades:'||CAST(at/300000 AS INTEGER),'yano','株の売買が活発',15,MAX(at) FROM stock_trades WHERE guild=? AND at>=? GROUP BY guild,CAST(at/300000 AS INTEGER) HAVING COUNT(*)>=5`).bind(guild,since).run();
- // ミツノアジ証券／おこぼれ商事: how many times someone lost or won KP since the last tick, whatever the amounts.
+ // メシウマ食堂／他人の金で焼肉: how many times someone lost or won KP since the last tick, whatever the amounts.
  const {minus,plus}=await fortuneCounts(env,guild,market.at,now);
- if(minus||plus)for(const [symbol,sign] of [['mitu',1],['okbr',-1]] as const){
+ if(minus||plus)for(const [symbol,sign] of [['msum',1],['tnkn',-1]] as const){
   const bps=sign*FORTUNE_BPS*(minus-plus);if(!bps)continue;
   await env.DB.prepare('INSERT OR IGNORE INTO stock_news(guild,id,symbol,label,bps,at) VALUES(?,?,?,?,?,?)').bind(guild,`fortune:${symbol}:${market.version}`,symbol,`直近でKPを失った${minus}回・得た${plus}回`,bps,now).run();
  }
@@ -139,12 +139,12 @@ export async function fortuneCounts(env:KpEnv,guild:string,from:number,to:number
 }
 // 架空の会社のニュース: on a tick, each has a small chance of a headline that moves it a lot.
 const FICTION:Record<string,{chance:number;bps:number;up:string[];down:string[]}>={
- komi:{chance:0.04,bps:250,up:['ロケット打ち上げ成功','月面に支店を出店','宇宙人と業務提携'],down:['ロケットが発射台で爆発','打ち上げ延期（3回目）','人工衛星が行方不明']},
- vdk:{chance:0.02,bps:80,up:['大型の物流契約を受注','新型トラックを導入'],down:['配送センターが大渋滞','燃料費が高騰']},
- ishi:{chance:0.03,bps:180,up:['新薬の治験で大成功','風邪薬が大ヒット'],down:['主力薬の特許切れ','治験が予定より遅れる']},
- godo:{chance:0.03,bps:150,up:['新しい金脈を発見','金の値段が急騰'],down:['掘ったら温泉が出た','落盤で一時操業停止']},
- ngya:{chance:0.02,bps:100,up:['新しい発電所が稼働','電気代の値上げが認可'],down:['発電所が一時停止','猛暑で電力がひっ迫']},
- hori:{chance:0.03,bps:150,up:['大型ビルの工事を受注','万博会場の工事を受注'],down:['資材費が高騰','工期が大幅に遅れる']},
+ komi:{chance:0.04,bps:200,up:['パキスタンでバイクが爆売れ','社長がまた海外出張で大型契約','新興国に現地工場が完成'],down:['出張先の税関で足止め','為替で大損','現地でバイクが盗まれまくる']},
+ ishi:{chance:0.03,bps:150,up:['官公庁の大型システムを受注','スパコンが世界一に','新型ノートPCが軽すぎると話題'],down:['システム障害で窓口が止まる','新型PCが重すぎる','納期がまた延びる']},
+ vdk:{chance:0.04,bps:300,up:['情報商材が飛ぶように売れる','怪しいセミナーが満員御礼','謎の投資話で大儲け'],down:['当局の立ち入り検査','被害者の会が発足','社長が雲隠れ']},
+ godo:{chance:0.02,bps:60,up:['予算が満額で通る','定時退庁を全員が達成','ハンコ廃止で業務効率アップ'],down:['ハンコが足りない','窓口が昼休みで大行列','前例がないので見送り']},
+ ngya:{chance:0.03,bps:200,up:['金のしゃちほこで発電に成功','味噌カツ燃料が実用化','手羽先タービンが稼働'],down:['しゃちほこが盗まれる','発電所が味噌まみれ','エビフライ発電が失敗']},
+ koba:{chance:0.03,bps:120,up:['北海道物産展が大盛況','福袋が即完売','屋上遊園地が復活'],down:['閉店セールが1年続いている','外商の顧客が全員引退','エスカレーターが逆走']},
 };
 export function fictionNews(draw:()=>number){
  const out:Array<{symbol:string;label:string;bps:number}>=[];
@@ -156,7 +156,7 @@ export function fictionNews(draw:()=>number){
  return out;
 }
 export function nextStockPrices(prices:Record<string,number>,news:Array<{symbol:string;bps:number}>,draw:()=>number){
- const volatility:Record<string,number>={keso:60,riso:100,yuya:200,yano:50,mitu:40,okbr:40,komi:300,ishi:120,vdk:30,godo:80,ngya:50,hori:100};
+ const volatility:Record<string,number>={keso:60,riso:100,yuya:200,yano:50,msum:40,tnkn:40,komi:150,ishi:80,vdk:250,godo:20,ngya:150,koba:60};
  return Object.fromEntries(IDS.map(id=>{
   const impact=Math.max(-250,Math.min(250,news.filter(n=>n.symbol===id).reduce((sum,n)=>sum+n.bps,0)));
   const noise=Math.round((draw()*2-1)*volatility[id]);
