@@ -1,3 +1,4 @@
+import {privateCasinoAllowed} from '../src/private-casino.ts';
 import {memberNames} from '../src/member-names.ts';
 import {communityFeed,publicTrade} from '../src/community-feed.ts';
 import test from 'node:test';
@@ -503,4 +504,57 @@ test('member name aliases bind a unique guild wallet once, never a colliding or 
  assert.equal((await memberNames(f.env,guild,base,config)).has(one),false,'initial collision stays unassigned');
  assert.equal((await memberNames(f.env,guild,base,{guildId:guild,names:[{suffix:'9999',name:'Absent'}]})).size,1);
  const renamed=await memberNames(f.env,guild,base,{guildId:guild,names:[{suffix:two.slice(-4),name:'New name'}]});assert.equal(renamed.get(two),'New name');
+});
+
+function configurePrivateCasino(env:KpEnv,owner=one){
+ const pair=generateKeyPairSync('rsa',{modulusLength:2048,privateKeyEncoding:{type:'pkcs8',format:'pem'},publicKeyEncoding:{type:'spki',format:'pem'}}),key=randomBytes(32),iv=randomBytes(12),c=createCipheriv('aes-256-gcm',key,iv);
+ const ciphertext=Buffer.concat([c.update(JSON.stringify({enabled:true,guildId:guild,ownerId:owner})),c.final(),c.getAuthTag()]).toString('base64');
+ env.KP_BOOTSTRAP_PRIVATE_KEY=pair.privateKey;env.KP_PRIVATE_CASINO_CONFIG=JSON.stringify({version:1,keyFingerprint:'fixture',iv:iv.toString('base64'),wrappedKey:publicEncrypt({key:pair.publicKey,oaepHash:'sha256'},key).toString('base64'),ciphertext});
+}
+test('private casino is server-authorized by guild and exact Discord ID; normal public records have accurate amounts',async()=>{
+ const f=await fixture();configurePrivateCasino(f.env);seed(f.sql,one,50000);seed(f.sql,two,50000);
+ assert.equal(await privateCasinoAllowed(f.env,guild,one),true);assert.equal(await privateCasinoAllowed(f.env,guild,two),false);assert.equal(await privateCasinoAllowed(f.env,'other-guild',one),false);
+ assert.equal((await readKpState(f.env,mapping,one)).privateCasino,true);assert.equal(Object.hasOwn(await readKpState(f.env,mapping,two),'privateCasino'),false);
+ await assert.rejects(operateKp(f.env,mapping,two,'private-rejected-01','private-casino',{game:'roulette',amount:100,number:3,user:one,privateCasino:true}),/利用できません/);
+ let cash=50000;
+ for(const [game,net] of [['roulette',3500],['chinchiro',500],['blackjack',150],['slot',9900]] as const){
+  const args={game,amount:100,number:3},id='private-fixture-'+game;
+  const result=await operateKp(f.env,mapping,one,id,'private-casino',args);cash+=net;
+  assert.equal(result.operationSource,'owner-casino');assert.equal((await readKpState(f.env,mapping,one)).cash,cash);
+  assert.deepEqual(await operateKp(f.env,mapping,one,id,'private-casino',args),result);assert.equal((await readKpState(f.env,mapping,one)).cash,cash);
+  const saved=f.sql.prepare('SELECT data FROM kp_state WHERE user=?').get(one)!;assert.equal(Object.hasOwn(JSON.parse(String(saved.data)),'privateCasino'),false);
+ }
+ assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM kp_operations').get()!.n,4);
+ assert.equal((await readKpState(f.env,mapping,two)).cash,50000);
+ const feed=await communityFeed(f.env,guild,new Map([[one,'Owner']]));assert.equal(feed.entries.length,4);assert.deepEqual(new Set(feed.entries.map(e=>e.label)),new Set(['ルーレット','チンチロ','ブラックジャック','スロット']));assert.ok(!JSON.stringify(feed).includes('owner-casino'));assert.ok(!JSON.stringify(feed).includes('privateCasino'));
+ const stock=await readKpState(f.env,mapping,one);assert.equal(stock.jackpot.amount,10003,'777 does not consume the shared diamond pool');
+ await assert.rejects(operateKp(f.env,mapping,one,'private-invalid-01','private-casino',{game:'roulette',amount:100,number:37}));
+ await assert.rejects(operateKp(f.env,mapping,one,'private-invalid-02','private-casino',{game:'slot',amount:20001}));
+ await assert.rejects(operateKp(f.env,mapping,one,'private-invalid-03','private-casino',{game:'unknown',amount:100}));
+ f.sql.exec("CREATE TRIGGER private_fail BEFORE INSERT ON kp_ledger BEGIN SELECT RAISE(ABORT,'private rollback'); END");
+ await assert.rejects(operateKp(f.env,mapping,one,'private-rollback-01','private-casino',{game:'roulette',amount:100,number:3}));
+ assert.equal((await readKpState(f.env,mapping,one)).cash,cash);assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM kp_operations').get()!.n,4);
+ f.sql.exec('DROP TRIGGER private_fail');
+ f.sql.prepare('INSERT OR REPLACE INTO kp_debts(guild,user,amount,since) VALUES(?,?,?,?)').run(guild,one,100,Date.now());
+ await assert.rejects(operateKp(f.env,mapping,one,'private-debt-test-01','private-casino',{game:'roulette',amount:100,number:3}),/借KP/);
+ f.env.KP_PRIVATE_CASINO_CONFIG='invalid';assert.equal(await privateCasinoAllowed(f.env,guild,one),false);assert.equal(Object.hasOwn(await readKpState(f.env,mapping,one),'privateCasino'),false);
+});
+test('private race preview returns the committed order only to the authorized owner, without exposing the seed',async()=>{
+ const f=await fixture();configurePrivateCasino(f.env);
+ const tokenFor=async(user:string)=>exchangeKpCode(f.env,(await issueKpCode(f.env,mapping,user))!);
+ const ownerToken=await tokenFor(one),otherToken=await tokenFor(two);
+ const request=(token:string|null)=>new Request('https://worker/api/kp/private/race',{headers:token?{Authorization:'Bearer '+token}:{}});
+ assert.equal((await kpApi(request(null),f.env,mapping)).status,401);assert.equal((await kpApi(request(otherToken),f.env,mapping)).status,403);
+ const response=await kpApi(request(ownerToken),f.env,mapping);assert.equal(response.status,200);assert.equal(response.headers.get('Cache-Control'),'no-store');
+ const preview=await response.json() as any;
+ // @ts-expect-error Shared pure browser engine.
+ const {raceCard,raceResult,raceOdds}=await import('../../../js/racing.js');
+ const {raceEntries}=await import('../src/racing-horses.ts');
+ const saved=f.sql.prepare('SELECT seed,hash FROM kp_races WHERE guild=? AND id=?').get(guild,preview.id)!;
+ const card=raceCard(preview.id,undefined,await raceEntries(f.env,mapping,preview.id)),odds=raceOdds(card);
+ assert.deepEqual(preview.order.map((h:any)=>h.number),raceResult(card,String(saved.seed)).order);assert.equal(preview.hash,saved.hash);assert.equal(Object.hasOwn(preview,'seed'),false);
+ for(const h of preview.order){assert.equal(h.win,odds.win[h.number]);assert.equal(h.place,odds.place[h.number]);}
+ const publicView=(await readKpState(f.env,mapping,two)).racing.open;assert.equal(Object.hasOwn(publicView,'seed'),false);assert.equal(Object.hasOwn(publicView,'order'),false);
+ assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM kp_operations').get()!.n,0);
+ assert.equal((await kpApi(request(ownerToken),f.env,mapping)).status,200);assert.equal(f.sql.prepare('SELECT hash FROM kp_races WHERE guild=? AND id=?').get(guild,preview.id)!.hash,saved.hash);
 });
