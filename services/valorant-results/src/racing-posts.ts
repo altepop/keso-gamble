@@ -14,7 +14,6 @@ import type { KpEnv, KpMapping } from './kp.ts';
 export interface PostEnv extends KpEnv { KP_EARNINGS_WEBHOOK_URL?:string }
 interface Bet { id:string; raceId:number; type:'win'|'place'; horse:number; amount:number; odds:number; status:string; payout:number }
 interface Card { id:number; start:number; name:string; size:number; going:number; raceClass:number; horses:Array<{number:number;name:string;ownerName?:string;nickname?:string|null;person?:boolean}> }
-export const BIG_WIN=10000, BIG_LOSS=5000;
 const clock=(time:number)=>new Date(time).toLocaleTimeString('ja-JP',{timeZone:'Asia/Tokyo',hour:'2-digit',minute:'2-digit'});
 const kp=(n:number)=>n.toLocaleString('ja-JP')+' KP';
 const odd=(v:number)=>(v/10).toFixed(1)+'倍';
@@ -63,10 +62,11 @@ export function resultPost(card:Card,seed:string,bets:Array<Bet&{user:string}>,l
  lines.push(`-# シード値: \`${seed}\`（締切前のハッシュと一致することを画面で確認できます）`);
  return lines.join('\n');
 }
-/** Normal races are posted only for big wins or big losses; big races and crowns named after someone always. */
+/** The result (with every bettor's payout or loss and a roast) goes out for any race someone bet on, and always for
+ * big races, crowns named after someone and an owner's win. The live broadcast shows the order only, so this is where
+ * the bets are told; a race nobody bet on stays with the broadcast alone. */
 export function worthPosting(card:Card,bets:Bet[],crowned=false,ownerWon=false){
- if(bigRaceName(card.start)||crowned||ownerWon)return true;
- return bets.some(b=>b.payout>=BIG_WIN)||bets.some(b=>b.status==='lost'&&b.amount>=BIG_LOSS);
+ return Boolean(bigRaceName(card.start)||crowned||ownerWon||bets.length);
 }
 async function raceBets(env:KpEnv,guild:string,id:number){
  return (await env.DB.prepare("SELECT s.user,b.value FROM kp_state s,json_each(s.data,'$.raceBets') b WHERE s.guild=? AND json_extract(b.value,'$.raceId')=?").bind(guild,id).all<{user:string;value:string}>()).results.map(r=>({...JSON.parse(r.value) as Bet,user:r.user}));
