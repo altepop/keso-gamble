@@ -11,6 +11,7 @@ on:
       - 'package.json'
       - 'package-lock.json'
       - 'scripts/build-discord-sdk.mjs'
+      - 'scripts/*browser-check.cjs'
       - 'scripts/race-video/**'
       - '.github/workflows/race-video.yml'
   push:
@@ -25,6 +26,7 @@ on:
       - 'package.json'
       - 'package-lock.json'
       - 'scripts/build-discord-sdk.mjs'
+      - 'scripts/*browser-check.cjs'
       - 'scripts/race-video/**'
       - '.github/workflows/race-video.yml'
   workflow_dispatch:
@@ -60,9 +62,26 @@ jobs:
       - name: Render a fixture replay (no Discord delivery)
         working-directory: .
         run: node scripts/race-video/run.mjs --check
+  # Activity flows in a real browser against mocked Worker answers (demo, live wallet, racing, Discord login,
+  # casino, stocks, Mリーグ/履歴/pulse). No secrets and no network beyond the runner.
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - name: Install Playwright and Chromium
+        run: |
+          npm install --no-save playwright@1.63.0
+          npx playwright install --with-deps chromium
+      - run: npm run test:browser:all
   deploy:
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-    needs: check
+    needs: [check, browser]
     runs-on: ubuntu-latest
     defaults:
       run:
