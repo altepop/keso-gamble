@@ -1,25 +1,26 @@
-import {communityPanel,communityRows} from './community-feed.js?v=web-c1d35d747c168cbe';
-import {stockPanel,stockCandles,stockPrice} from './stock-view.js?v=web-c1d35d747c168cbe';
-import {wheelView,covered,redNumbers,outcomeAngle} from './roulette-view.js?v=web-c1d35d747c168cbe';
-import {connectDiscordActivity,isDiscordActivity}from './discord-activity-auth.js?v=web-c1d35d747c168cbe';
-import { createKpClient } from './kp-client.js?v=web-c1d35d747c168cbe';
-import { fmt, fmt0 } from './format.js?v=web-c1d35d747c168cbe';
-import { submitClaim, approveClaim, issueDirective, completeDirective } from './progression.js?v=web-c1d35d747c168cbe';
-import { titleView, homeView, playView, directivesView, escapeHTML } from './progression-views.js?v=web-c1d35d747c168cbe';
-import { genCandles, movingAverage, svgCandles } from './charts.js?v=web-c1d35d747c168cbe';
-import { MARKET, createInitialState, portfolioValue, assets, advanceMarket, trade, spin, spinNumbers, validateNumberBets, grantDemoSalary, cryptoRouletteNumber } from './engine.js?v=web-c1d35d747c168cbe';
-import { KEY, LEGACY_KEY } from './storage.js?v=web-c1d35d747c168cbe';
-import { PUBLIC_SALT, RUN_MS, WEEKLY_LIMIT, openRaceStart, latestRaceStart, raceCard, raceOdds, raceResult, raceTimeline, raceCommentary, raceRuns, placeRaceBet, settleRaceBets, weeklySpent } from './racing.js?v=web-c1d35d747c168cbe';
-import { LUXURY } from './luxury.js?v=web-c1d35d747c168cbe';
-import { raceScreen, racePreview, drawRace, raceElapsed, ownerPanel, luxuryPanel, roastPanel } from './racing-view.js?v=web-c1d35d747c168cbe';
-import { createStore } from './store.js?v=web-c1d35d747c168cbe';
-import { healthPanel } from './health-view.js?v=web-c1d35d747c168cbe';
-import { mleagueScreen, mleaguePreview } from './mleague-view.js?v=web-c1d35d747c168cbe';
-import { gamePicker, chinchiroView, blackjackView } from './casino-view.js?v=web-c1d35d747c168cbe';
-import {casinoFrames} from './casino-animation.js?v=web-c1d35d747c168cbe';
-import { playChinchiro, bjStart, bjHit, bjStand, bjDouble, cryptoDie, cryptoCard, cryptoInt } from './casino.js?v=web-c1d35d747c168cbe';
-import { minesStart, minesPick, minesCashout, playSlot, vpDeal, vpDraw, playBaccarat, VP_NAMES } from './casino-more.js?v=web-c1d35d747c168cbe';
-import { minesView, slotView, videoPokerView, baccaratView } from './casino-more-view.js?v=web-c1d35d747c168cbe';
+import {privateCasinoPanel} from './private-casino-view.js?v=web-f7a99b81c62f4f36';
+import {communityPanel,communityRows} from './community-feed.js?v=web-f7a99b81c62f4f36';
+import {stockPanel,stockCandles,stockPrice} from './stock-view.js?v=web-f7a99b81c62f4f36';
+import {wheelView,covered,redNumbers,outcomeAngle} from './roulette-view.js?v=web-f7a99b81c62f4f36';
+import {connectDiscordActivity,isDiscordActivity}from './discord-activity-auth.js?v=web-f7a99b81c62f4f36';
+import { createKpClient } from './kp-client.js?v=web-f7a99b81c62f4f36';
+import { fmt, fmt0 } from './format.js?v=web-f7a99b81c62f4f36';
+import { submitClaim, approveClaim, issueDirective, completeDirective } from './progression.js?v=web-f7a99b81c62f4f36';
+import { titleView, homeView, playView, directivesView, escapeHTML } from './progression-views.js?v=web-f7a99b81c62f4f36';
+import { genCandles, movingAverage, svgCandles } from './charts.js?v=web-f7a99b81c62f4f36';
+import { MARKET, createInitialState, portfolioValue, assets, advanceMarket, trade, spin, spinNumbers, validateNumberBets, grantDemoSalary, cryptoRouletteNumber } from './engine.js?v=web-f7a99b81c62f4f36';
+import { KEY, LEGACY_KEY } from './storage.js?v=web-f7a99b81c62f4f36';
+import { PUBLIC_SALT, RUN_MS, WEEKLY_LIMIT, openRaceStart, latestRaceStart, raceCard, raceOdds, raceResult, raceTimeline, raceCommentary, raceRuns, placeRaceBet, settleRaceBets, weeklySpent } from './racing.js?v=web-f7a99b81c62f4f36';
+import { LUXURY } from './luxury.js?v=web-f7a99b81c62f4f36';
+import { raceScreen, racePreview, drawRace, raceElapsed, ownerPanel, luxuryPanel, roastPanel } from './racing-view.js?v=web-f7a99b81c62f4f36';
+import { createStore } from './store.js?v=web-f7a99b81c62f4f36';
+import { healthPanel } from './health-view.js?v=web-f7a99b81c62f4f36';
+import { mleagueScreen, mleaguePreview } from './mleague-view.js?v=web-f7a99b81c62f4f36';
+import { gamePicker, chinchiroView, blackjackView } from './casino-view.js?v=web-f7a99b81c62f4f36';
+import {casinoFrames} from './casino-animation.js?v=web-f7a99b81c62f4f36';
+import { playChinchiro, bjStart, bjHit, bjStand, bjDouble, cryptoDie, cryptoCard, cryptoInt } from './casino.js?v=web-f7a99b81c62f4f36';
+import { minesStart, minesPick, minesCashout, playSlot, vpDeal, vpDraw, playBaccarat, VP_NAMES } from './casino-more.js?v=web-f7a99b81c62f4f36';
+import { minesView, slotView, videoPokerView, baccaratView } from './casino-more-view.js?v=web-f7a99b81c62f4f36';
 const $=(s,el=document)=>el.querySelector(s);
 const wallet=createKpClient();
 const embedded=isDiscordActivity();
@@ -218,7 +219,7 @@ function screenStable(){return useScreen('馬主',live?ownerPanel(state,Date.now
 function screenShop(){return useScreen('高級品',live?luxuryPanel(state):'');}
 
 function screenAssets(){
-  return `<div class="screen"><header class="topbar"><div class="toprow"><h1 class="title">資産</h1><div class="small-actions">${live?'':'<button class="icon-btn" data-action="reset" aria-label="初期化">↺</button>'}</div></div></header><div class="wallet-strip"><div class="wallet-item"><small>保有KP</small><strong>${moneyCompact(state.cash)}</strong></div><div class="wallet-item"><small>株式評価額</small><strong>${moneyCompact(portfolioValue(state))}</strong></div><div class="wallet-item"><small>純資産</small><strong>${moneyCompact(assets(state))}</strong></div></div>${live?'<div class="market-disclaimer">サーバー口座 · 試合報酬と決済は全端末で共通です。</div>':'<div class="market-disclaimer">端末内のデモ口座</div>'}${live?'':`<details class="panel"><summary class="card-body">開発用：テストKPの補充</summary><div class="action-row"><button class="action-btn" data-action="salary">テスト用KP +600 KP</button></div></details>`}${state.debt?.amount>0?`<div class="market-disclaimer">💸 借KP ${moneyCompact(state.debt.amount)}（${state.debt.intervalMinutes}分ごとに利子${state.debt.interestPercent}%）</div>`:''}<div class="asset-list"><div class="asset-card"><div class="panel-title" style="margin-bottom:10px">保有銘柄</div>${MARKET.map(s=>`<div class="asset-line"><span>${s.name}</span><strong>${state.holdings[s.id]}株 / ${moneyCompact(state.holdings[s.id]*state.prices[s.id])}</strong></div>`).join('')}<div class="action-row"><button class="action-btn" data-screen="market">株を売買する</button></div></div>${tradeHistory()}${live?roastPanel(state):''}${live?healthPanel(health,healthLoading,healthError):''}<div class="asset-card"><h2 class="panel-title">口座</h2>${live?'<div id="connection-slot"></div>':''}<button class="title-back" data-screen="title">タイトルへ戻る</button></div></div>${bottomNav()}</div>`;
+  return `<div class="screen"><header class="topbar"><div class="toprow"><h1 class="title">資産</h1><div class="small-actions">${live?'':'<button class="icon-btn" data-action="reset" aria-label="初期化">↺</button>'}</div></div></header><div class="wallet-strip"><div class="wallet-item"><small>保有KP</small><strong>${moneyCompact(state.cash)}</strong></div><div class="wallet-item"><small>株式評価額</small><strong>${moneyCompact(portfolioValue(state))}</strong></div><div class="wallet-item"><small>純資産</small><strong>${moneyCompact(assets(state))}</strong></div></div>${live?'<div class="market-disclaimer">サーバー口座 · 試合報酬と決済は全端末で共通です。</div>':'<div class="market-disclaimer">端末内のデモ口座</div>'}${live?'':`<details class="panel"><summary class="card-body">開発用：テストKPの補充</summary><div class="action-row"><button class="action-btn" data-action="salary">テスト用KP +600 KP</button></div></details>`}${state.debt?.amount>0?`<div class="market-disclaimer">💸 借KP ${moneyCompact(state.debt.amount)}（${state.debt.intervalMinutes}分ごとに利子${state.debt.interestPercent}%）</div>`:''}<div class="asset-list">${live&&state.privateCasino?privateCasinoPanel(drafts,privateRacePreview,privateRoundMessage):''}<div class="asset-card"><div class="panel-title" style="margin-bottom:10px">保有銘柄</div>${MARKET.map(s=>`<div class="asset-line"><span>${s.name}</span><strong>${state.holdings[s.id]}株 / ${moneyCompact(state.holdings[s.id]*state.prices[s.id])}</strong></div>`).join('')}<div class="action-row"><button class="action-btn" data-screen="market">株を売買する</button></div></div>${tradeHistory()}${live?roastPanel(state):''}${live?healthPanel(health,healthLoading,healthError):''}<div class="asset-card"><h2 class="panel-title">口座</h2>${live?'<div id="connection-slot"></div>':''}<button class="title-back" data-screen="title">タイトルへ戻る</button></div></div>${bottomNav()}</div>`;
 }
 
 function bottomNav(){
@@ -356,14 +357,24 @@ addEventListener('click',async e=>{
   const t=e.target.closest?.('button,[data-open]'); if(!t) return;
   if(t.dataset.action==='casino-skip'){casinoSkipped=true;skipCasinoPause?.();return;}
   if(casinoBusy&&(t.dataset.screen||t.dataset.casinoGame)){toast('演出をスキップすると移動できます');return;}
-  const mutates=!!t.dataset.approve || !!t.dataset.complete || ['salary','trade','spin','race-bet','roast-level','horse-buy','horse-sell','luxury','reset','submit-claim','issue-directive','connect-kp','refresh-kp','disconnect-kp','auto-connect-kp','ml-buy','chinchiro','bj-start','bj-hit','bj-stand','bj-double','mines-start','mines-pick','mines-cashout','slot','vp-deal','vp-draw','baccarat'].includes(t.dataset.action);
+  const mutates=!!t.dataset.approve || !!t.dataset.complete || ['salary','trade','spin','race-bet','roast-level','horse-buy','horse-sell','luxury','reset','submit-claim','issue-directive','connect-kp','refresh-kp','disconnect-kp','auto-connect-kp','ml-buy','chinchiro','bj-start','bj-hit','bj-stand','bj-double','mines-start','mines-pick','mines-cashout','slot','vp-deal','vp-draw','baccarat','private-round','private-race'].includes(t.dataset.action);
   if(mutates && mutationPending)return;
   if(mutates)mutationPending=true;
   try{
     if(t.dataset.action==='auto-connect-kp'){await automaticConnect();return;}
     if(t.dataset.action==='connect-kp'){state=await wallet.connect($('#kp-connect-code').value);live=true;autoState='connected';autoMessage='';connectionError='';delete drafts['kp-connect-code'];screen='home';render();toast(wallet.remembered?'接続しました。次回は自動で接続します':'接続しました。この環境では閉じると再接続が必要です');return;}
+    if(t.dataset.action==='private-round'){
+      if(!live||!state.privateCasino)throw Error('この操作は利用できません。');
+      const args={game:$('#private-game').value,amount:Number($('#private-amount').value),number:Number($('#private-number').value)};
+      const result=await liveOperation('private-casino',args),net=result.net??result.done?.net??(result.payout-result.amount);
+      privateRoundMessage=(net>=0?'+':'')+moneyCompact(net);render();toast(privateRoundMessage);return;
+    }
+    if(t.dataset.action==='private-race'){
+      if(!live||!state.privateCasino)throw Error('この操作は利用できません。');
+      privateRacePreview=await wallet.privateRace();render();return;
+    }
     if(t.dataset.action==='refresh-kp'){await refreshWallet(true);render();return;}
-    if(t.dataset.action==='disconnect-kp'){await wallet.disconnect();autoState=embedded?'paused':'idle';autoMessage='';live=false;connectionError='';state=store.state;screen='title';render();return;}
+    if(t.dataset.action==='disconnect-kp'){await wallet.disconnect();autoState=embedded?'paused':'idle';autoMessage='';live=false;privateRacePreview=null;privateRoundMessage='';connectionError='';state=store.state;screen='title';render();return;}
     if(t.dataset.casinoGame){if(spinLock){toast('抽選中は切り替えられません');return;}casinoGame=t.dataset.casinoGame;render();return;}
     if(t.dataset.screen){if(spinLock){toast('抽選中は画面を切り替えられません');return;}detail=null;screen=t.dataset.screen;render();if(screen==='race')settleRaces();return;}
     if(t.dataset.raceHorse){raceDraft.horse=Number(t.dataset.raceHorse);render();return;}
@@ -441,6 +452,7 @@ addEventListener('keydown', e => {
 });
 addEventListener('input', e => {
   if(e.target.dataset.stake!==undefined&&!spinLock){const n=Number(e.target.dataset.stake),amount=Number(e.target.value);numberBets.set(n,amount);document.querySelector('#number-bet-total').textContent=moneyCompact([...numberBets.values()].reduce((a,b)=>a+b,0));const badge=document.querySelector(`[data-number="${n}"] small`);if(badge)badge.textContent=amount+' KP';}
+  if(['private-game','private-amount','private-number'].includes(e.target.id))drafts[e.target.id]=e.target.value;
   if(e.target.id==='horse-name')drafts['horse-name']=e.target.value;
   if(e.target.id==='ml-amount'){drafts['ml-amount']=e.target.value;const preview=$('#ml-preview');if(preview)preview.textContent=mleaguePreview(state,{...mlDraft,amount:e.target.value});}
   if(e.target.id==='race-amount'){drafts['race-amount']=e.target.value;const preview=$('#race-preview');if(preview){const open=openCard(Date.now());preview.innerHTML=racePreview(open,raceOdds(open),{...raceDraft,amount:e.target.value});}}
@@ -448,6 +460,7 @@ addEventListener('input', e => {
   if(e.target.id==='trade-qty')$('#trade-estimate').innerHTML=tradeEstimate();
 });
 const drafts = {};
+let privateRacePreview=null,privateRoundMessage='';
 // Live wallets: every 15 s only a tiny "did anything change?" check; the full state is fetched when it changed, and at
 // least once a minute (race card, Mリーグ status and voice status move with time). Nothing is fetched while hidden.
 // This small read is independent of wallet/animation polling and never replaces the game form.

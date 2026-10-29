@@ -1,3 +1,4 @@
+import {privateCasinoAllowed,privateCasinoRound} from './private-casino.ts';
 import {memberNames} from './member-names.ts';
 import {communityFeed,publicTrade} from './community-feed.ts';
 import skirmishQueues from '../skirmish-queues.json' with {type:'json'};
@@ -18,7 +19,7 @@ import policy from '../kp-policy.json' with { type: 'json' };
 // @ts-expect-error The shared pure browser engine has no TypeScript declarations.
 import { trade, spin, spinNumbers, cryptoRouletteNumber, MARKET } from '../../../js/engine.js';
 // @ts-expect-error The shared pure browser engine has no TypeScript declarations.
-import { hydrateRacing, placeRaceBet, useExchange } from '../../../js/racing.js';
+import { hydrateRacing, placeRaceBet, useExchange, raceCard, raceOdds, raceResult } from '../../../js/racing.js';
 // @ts-expect-error Shared browser engine.
 import { hydrateCasino, playChinchiro, bjStart, bjHit, bjStand, bjDouble, cryptoDie, cryptoCard, cryptoInt } from '../../../js/casino.js';
 // @ts-expect-error Shared pure browser module.
@@ -65,6 +66,7 @@ export async function readKpState(env:KpEnv,mapping:KpMapping,user:string){
  state.ledger=await ledgerHistory(env,mapping.guildId,user);
  // The Mリーグ screen; a failure here never blocks the wallet.
  try{state.mleague=await mlActivityView(env);}catch{console.warn('ml_view_pending');state.mleague=null;}
+ if(await privateCasinoAllowed(env,mapping.guildId,user))state.privateCasino=true;else delete state.privateCasino;
  state.selfUserId=user;state.rewardRates={...policy.modes,unrated:{...policy.modes.unrated,win:modeRewards.unrated.win}};state.modeRewards=modeRewards;state.debt={amount:await debtOf(env,mapping.guildId,user),interestPercent:DEBT_INTEREST_PERCENT,intervalMinutes:DEBT_INTERVAL_MINUTES};return state;
 }
 // Big casino moments go to the earnings channel so others can watch (a ピンゾロ either way, a natural, or ±5,000 KP).
@@ -125,8 +127,13 @@ export async function previewMlBet(env:KpEnv,mapping:KpMapping,user:string,args:
 }
 export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:string,action:string,args:Record<string,unknown>){
  if(!/^[a-zA-Z0-9-]{16,80}$/.test(id))throw Error('操作IDが不正です。');
- const requestHash=await kpHash(JSON.stringify({action,args}));
+ const sourceAction=action;
+ const ownerRound=action==='private-casino';
+ if(ownerRound&&!await privateCasinoAllowed(env,mapping.guildId,user))throw Error('この操作は利用できません。');
+ const requestHash=await kpHash(JSON.stringify({action:sourceAction,args}));
+ const sourceArgs=args;
  for(let attempt=0;attempt<4;attempt++){
+  action=sourceAction;args=sourceArgs;
   const existing=await env.DB.prepare('SELECT request_hash,response FROM kp_operations WHERE guild=? AND user=? AND id=?').bind(mapping.guildId,user,id).first<{request_hash:string;response:string}>();
   if(existing){if(existing.request_hash!==requestHash)throw Error('同じ操作IDを別の操作には使えません。');return JSON.parse(existing.response);}
   const state=await readKpState(env,mapping,user),before=state.cash;let result:unknown;let directive:Record<string,unknown>|null=null;let stockTrade:Record<string,unknown>|undefined;
@@ -134,7 +141,8 @@ export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:strin
   // winning roll through and refuse only the losing one. Selling, finishing a blackjack hand and settings stay open.
   const settles=['horse-sell','roast-level','bj-hit','bj-stand','mines-pick','mines-cashout','vp-draw'].includes(action)||(action==='trade'&&args.side==='sell');
   if(!settles&&await debtOf(env,mapping.guildId,user)>0)throw Error(DEBT_BLOCKED);
-  if(action==='trade'){result=trade(state,args.symbol,args.side,args.quantity);stockTrade={symbol:args.symbol,side:args.side,quantity:args.quantity,price:state.prices[String(args.symbol)]};}
+  if(ownerRound){const round=privateCasinoRound(state,args);action=round.action;args=round.args;result=round.result;}
+  else if(action==='trade'){result=trade(state,args.symbol,args.side,args.quantity);stockTrade={symbol:args.symbol,side:args.side,quantity:args.quantity,price:state.prices[String(args.symbol)]};}
   else if(action==='spin')result=args.type==='numbers'?spinNumbers(state,args.bets,cryptoRouletteNumber()):spin(state,args.type,args.amount,args.choice??0,cryptoRouletteNumber());
   else if(action==='directive'){
    const costs:Record<string,number>={competitive:8000,unrated:2500,solo_competitive:50000,solo_death_unrated:60000},task=String(args.task),target=String(args.target),base=Object.hasOwn(costs,task)?costs[task]:0;
@@ -180,7 +188,7 @@ export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:strin
   // 借KP: nothing that costs KP while any is owed (the database refuses it too).
   if(state.cash<before&&await debtOf(env,mapping.guildId,user)>0)throw Error(DEBT_BLOCKED);
   const activity=publicTrade(action,args,result);
-  const response={result,...(stockTrade?{stockTrade}:{}),...(activity?{activity}:{})};const safeState={...state,claims:[],directives:[]};delete safeState.debt;delete safeState.jackpot;delete safeState.mleague;delete safeState.ledger;delete safeState.members;delete safeState.racing;delete safeState.horses;delete safeState.mastery;delete safeState.luxury;delete safeState.stockMarket;delete safeState.stockBenefits;
+  const response={result,...(ownerRound?{operationSource:'owner-casino'}:{}),...(stockTrade?{stockTrade}:{}),...(activity?{activity}:{})};const safeState={...state,claims:[],directives:[]};delete safeState.privateCasino;delete safeState.debt;delete safeState.jackpot;delete safeState.mleague;delete safeState.ledger;delete safeState.members;delete safeState.racing;delete safeState.horses;delete safeState.mastery;delete safeState.luxury;delete safeState.stockMarket;delete safeState.stockBenefits;
   let inserted;
   try{
    inserted=await env.DB.prepare(`INSERT INTO kp_operations(id,guild,user,request_hash,response,delta,state,directive,at)
@@ -240,6 +248,11 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping):Promi
   const owner=token?await kpSession(env,token):null;
   if(!owner||owner.guild!==mapping.guildId||!await isKpParticipant(env,mapping,owner.user))return response({error:'接続が切れました。/valo status のコードで接続してください。'},401);
   if(request.method==='POST'&&path==='/api/kp/logout'){await revokeKpSession(env,token!);return response({disconnected:true});}
+  if(request.method==='GET'&&path==='/api/kp/private/race'){
+   if(!await privateCasinoAllowed(env,mapping.guildId,owner.user))return response({error:'この操作は利用できません。'},403);
+   const view=await racingView(env,mapping),card=raceCard(view.open.id,undefined,view.open.entries),seed=await raceSeed(env,mapping.guildId,view.open.id),result=raceResult(card,seed.seed),odds=raceOdds(card);
+   return response({id:card.id,name:card.name,closeAt:card.closeAt,hash:seed.hash,order:result.order.map((n:number)=>({number:n,name:card.horses.find((h:{number:number})=>h.number===n)?.name,win:odds.win[n],place:odds.place[n]}))});
+  }
   if(request.method==='GET'&&path==='/api/kp/feed')return response(await communityFeed(env,mapping.guildId,await memberNames(env,mapping.guildId,new Map(mapping.accounts.map(a=>[a.discordUserId,configuredPlayers.find(p=>p.riotId.toLowerCase()===a.riotId.toLowerCase())?.name??a.riotId.split('#')[0]])))));
   if(request.method==='GET'&&path==='/api/kp/state')return response(await readKpState(env,mapping,owner.user));
   // 監視状態: members only, aggregates only.
