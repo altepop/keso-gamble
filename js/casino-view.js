@@ -1,7 +1,7 @@
-import { CASINO_MIN, CASINO_MAX, CHINCHIRO_HANDS, RANKS, SUITS, bjTotal } from './casino.js?v=20261028-casino-fx';
+import { CASINO_MIN, CASINO_MAX, CHINCHIRO_HANDS, RANKS, SUITS, bjTotal } from './casino.js?v=20261029-casino-more';
 const kp=n=>Math.abs(n).toLocaleString('ja-JP')+' KP';
 const signed=n=>(n>0?'+':n<0?'−':'±')+kp(n);
-export const CASINO_GAMES=[['roulette','ルーレット'],['chinchiro','チンチロ'],['blackjack','ブラックジャック']];
+export const CASINO_GAMES=[['roulette','ルーレット'],['chinchiro','チンチロ'],['blackjack','ブラックジャック'],['mines','マインズ'],['slot','スロット'],['poker','ポーカー'],['baccarat','バカラ']];
 export function gamePicker(game){return `<div class="segment casino-games" role="tablist">${CASINO_GAMES.map(([id,label])=>`<button role="tab" data-casino-game="${id}" class="${game===id?'active':''}" aria-selected="${game===id}">${label}</button>`).join('')}</div>`;}
 const stakeField=(id,label='賭け金')=>`<div class="field"><label for="${id}">${label}（${CASINO_MIN}〜${CASINO_MAX.toLocaleString('ja-JP')} KP）</label><input id="${id}" class="input" type="number" min="${CASINO_MIN}" max="${CASINO_MAX}" step="100" value="500" inputmode="numeric"></div>`;
 const skip=busy=>busy?'<button class="casino-skip" data-action="casino-skip">演出をスキップ ›</button>':'';
