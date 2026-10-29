@@ -4,7 +4,7 @@ import {connectDiscordActivity,isDiscordActivity}from './discord-activity-auth.j
 import { createKpClient } from './kp-client.js?v=20261028-casino';
 import { fmt, fmt0 } from './format.js';
 import { submitClaim, approveClaim, issueDirective, completeDirective } from './progression.js?v=20261028-casino';
-import { titleView, homeView, playView, directivesView, escapeHTML } from './progression-views.js?v=20261029-stocks2';
+import { titleView, homeView, playView, directivesView, escapeHTML } from './progression-views.js?v=20261029-skirmish50b';
 import { genCandles, movingAverage, svgCandles } from './charts.js?v=20261028-stocks';
 import { MARKET, createInitialState, portfolioValue, assets, advanceMarket, trade, spin, spinNumbers, validateNumberBets, grantDemoSalary, cryptoRouletteNumber } from './engine.js?v=20261029-casino-more';
 import { KEY, LEGACY_KEY } from './storage.js';
