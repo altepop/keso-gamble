@@ -19,6 +19,7 @@ import { enqueue, ensurePosts } from './racing-posts.ts';
 // @ts-expect-error Shared browser engine.
 import { hydrateMleague, placeMlBet, mlPartner } from '../../../js/mleague.js';
 import { ledgerHistory } from './kp-history.ts';
+import { healthReport } from './health.ts';
 import { mlActivityView, mlClosed, mlData, mlResults, seasonStats } from './mleague.ts';
 import { racingView, raceSeed } from './racing-kp.ts';
 import { defaultRoastLevel, validRoastLevel } from './racing-crowns.ts';
@@ -193,6 +194,8 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping):Promi
   if(!owner||owner.guild!==mapping.guildId||!await isKpParticipant(env,mapping,owner.user))return response({error:'接続が切れました。/valo status のコードで接続してください。'},401);
   if(request.method==='POST'&&path==='/api/kp/logout'){await revokeKpSession(env,token!);return response({disconnected:true});}
   if(request.method==='GET'&&path==='/api/kp/state')return response(await readKpState(env,mapping,owner.user));
+  // 監視状態: members only, aggregates only.
+  if(request.method==='GET'&&path==='/api/kp/health')return response(await healthReport(env,mapping.guildId));
   if(request.method==='GET'&&path==='/api/kp/pulse')return response({pulse:await kpPulse(env,mapping.guildId,owner.user)});
   if(request.method==='POST'&&path==='/api/kp/operation'){
    const text=await request.text();if(text.length>4096)return response({error:'入力が長すぎます。'},400);

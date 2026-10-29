@@ -23,6 +23,7 @@ const server=spawn('python3',['-m','http.server','8768','--bind','127.0.0.1'],{c
   assert.equal(route.request().headers().authorization,'Bearer '+'a'.repeat(48));
   if(p.endsWith('/state')){seen.push('S');result=state;}
   else if(p.endsWith('/pulse')){seen.push('p');result={pulse};}
+  else if(p.endsWith('/health')){seen.push('h');result={at:T0,features:[{feature:'mleague',label:'Mリーグの結果・精算',status:'failing',lastOk:T0-3600000,lastError:T0-60000,error:'Error: timeout',failures:2},{feature:'voice',label:'通話の計測',status:'ok',lastOk:T0,lastError:null,error:null,failures:0}],backlog:{mleagueBets:1,mleagueMatches:1,raceBets:0,mahjongClaims:0,debts:0,earningsPosts:0,alertPosts:0,kpInbox:0}};}
   else if(p.endsWith('/operation')){const body=route.request().postDataJSON();ops.push(body);assert.equal(body.action,'ml-bet');
    const pick=state.mleague.fixtures[1].players.find(x=>x.name===body.args.player);
    if(body.args.odds!==pick.odds){await route.fulfill({status:400,contentType:'application/json',body:JSON.stringify({error:'倍率が変わったので購入していません。'})});return;}
@@ -65,7 +66,11 @@ const server=spawn('python3',['-m','http.server','8768','--bind','127.0.0.1'],{c
  assert.equal(seen.slice(start).filter(x=>x==='p').length,8,ticks.join(' '));
  const full=seen.slice(start).filter(x=>x==='S').length;assert.ok(full>=2&&full<=3,'full refreshes: once a minute and on the change, not every 15 s: '+ticks.join(' '));
  assert.ok(ticks[5].includes('S'),'a changed pulse fetches the state at once');
+ // 資産 → システムの状態: loaded only when asked for.
+ await page.locator('.nav-btn[data-screen=assets]').click();assert.equal(seen.filter(x=>x==='h').length,0);
+ await page.locator('[data-action=load-health]').click();await page.locator('.health-card').filter({hasText:'1件の処理に問題があります'}).waitFor();
+ assert.match(await page.locator('.health-card').innerText(),/Mリーグの結果・精算\s*失敗中[\s\S]*連続失敗 2回[\s\S]*Mリーグの未精算の予想\s*1件/);
  for(const width of [320,390,1280]){await page.setViewportSize({width,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'width '+width);}
  assert.deepEqual(errors,[]);
- console.log('Live Activity passed: full ledger history with signs and escaping, Mリーグ result/open/closed games, confirm-then-buy at the shown odds, refused price change, own predictions, pulse polling ('+ticks.join(' ')+'), mobile layouts.');
+ console.log('Live Activity passed: full ledger history with signs and escaping, Mリーグ result/open/closed games, confirm-then-buy at the shown odds, refused price change, own predictions, pulse polling ('+ticks.join(' ')+'), システムの状態, mobile layouts.');
 })().catch(e=>{console.error(e);process.exitCode=1}).finally(async()=>{await browser?.close();server.kill()});
