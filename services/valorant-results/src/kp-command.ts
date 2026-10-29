@@ -1,5 +1,5 @@
 // Register these guild commands individually; never replace /death, /valo or the Activity entry point.
-export const KP_COMMAND_VERSION='kp-slash-v14-my-bets';
+export const KP_COMMAND_VERSION='kp-slash-v15-give';
 export const kpCommands=[
  {type:1,name:'kp',description:'KESO PLAY｜KP残高・ランキング',options:[
   {type:1,name:'balance',description:'自分の残高と最近の入出金（本人だけに表示）'},
@@ -14,6 +14,11 @@ export const kpCommands=[
  ]},
  {type:1,name:'horsename',description:'KESO PLAY｜プレゼントでもらった馬に名前を付ける（1回だけ）',options:[
   {type:3,name:'name',description:'馬の名前（1〜12文字）',required:true,max_length:12},
+ ]},
+ {type:1,name:'give',description:'KESO PLAY｜メンバーにKPをプレゼント（取消不可・稼ぎchでお知らせ）',options:[
+  {type:6,name:'user',description:'贈る相手',required:true},
+  {type:4,name:'amount',description:'贈るKP（1〜10,000）',required:true,min_value:1,max_value:10000},
+  {type:3,name:'message',description:'ひとこと（任意・60文字まで）',required:false,max_length:60},
  ]},
  {type:1,name:'mleague',description:'KESO PLAY｜Mリーグ予想：出場候補・チーム・ラス倍率を確認'},
  {type:1,name:'mbet',description:'KESO PLAY｜Mリーグのラス予想。試合と選手を名前で選ぶ（取消不可）',options:[

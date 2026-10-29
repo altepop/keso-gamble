@@ -37,6 +37,7 @@ import { buyHorse, sellHorse, ownedHorses, raceEntries } from './racing-horses.t
 import { masteryOf, riotIdOf } from './mastery.ts';
 import {DEBT_BLOCKED,DEBT_INTEREST_PERCENT,DEBT_INTEREST_TEXT,DEBT_INTERVAL_MINUTES,DEBT_MAX,debtOf} from './kp-debt.ts';
 import { buyLuxury, luxuryPosts, luxuryView } from './luxury.ts';
+import { applyGift, ensureGift, giftPost } from './kp-gift.ts';
 /** A few tiny reads that change whenever the full state would: the wallet and saved state versions (every ledger
  * row bumps the wallet), 借KP, directives naming the member, and the 5-minute stock tick. The Activity polls this
  * every 15 seconds and fetches the full state only when it changes (or once a minute for time-based screens). */
@@ -136,6 +137,7 @@ export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:strin
   action=sourceAction;args=sourceArgs;
   const existing=await env.DB.prepare('SELECT request_hash,response FROM kp_operations WHERE guild=? AND user=? AND id=?').bind(mapping.guildId,user,id).first<{request_hash:string;response:string}>();
   if(existing){if(existing.request_hash!==requestHash)throw Error('同じ操作IDを別の操作には使えません。');return JSON.parse(existing.response);}
+  const knownGiftTarget=action==='gift'&&/^\d{15,22}$/.test(String(args.to??''))&&await isKpParticipant(env,mapping,String(args.to))&&Boolean(await env.DB.prepare('SELECT 1 FROM kp_wallets WHERE guild=? AND user=?').bind(mapping.guildId,String(args.to)).first());
   const state=await readKpState(env,mapping,user),before=state.cash;let result:unknown;let directive:Record<string,unknown>|null=null;let stockTrade:Record<string,unknown>|undefined;
   // 借KP: no bet or purchase at all while any is owed, decided before any draw. Checking the result instead would let a
   // winning roll through and refuse only the losing one. Selling, finishing a blackjack hand and settings stay open.
@@ -169,6 +171,9 @@ export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:strin
    result=await sellHorse(env,mapping,user,state,args);
   }else if(action==='luxury'){
    useExchange(state,Date.now());result=await buyLuxury(env,mapping,user,state,args,Date.now(),state.stockBenefits.percent);
+  }else if(action==='gift'){
+   const to=String(args.to??'');await ensureGift(env);
+   result=applyGift(state,user,args,id=>id===to&&knownGiftTarget);
   }else if(action==='chinchiro')result=playChinchiro(state,args.amount,cryptoDie);
   else if(action==='bj-start')result=bjStart(state,args.amount,cryptoCard);
   else if(action==='bj-hit')result=bjHit(state,cryptoCard);
@@ -201,6 +206,7 @@ export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:strin
   }
   if(inserted.meta.changes){
    if(action==='luxury')try{await luxuryPosts(env,mapping,user,(result as {luxury:Parameters<typeof luxuryPosts>[3]}).luxury);}catch{console.warn('luxury_post_pending');}
+   if(action==='gift'&&(env as {KP_EARNINGS_WEBHOOK_URL?:string}).KP_EARNINGS_WEBHOOK_URL)try{await ensurePosts(env);await enqueue(env,'gift:'+user+':'+id,giftPost(user,(result as ReturnType<typeof applyGift>).gift),Date.now());}catch{console.warn('gift_post_pending');}
    const big=casinoPost(user,action,result);
    if(big&&(env as {KP_EARNINGS_WEBHOOK_URL?:string}).KP_EARNINGS_WEBHOOK_URL)try{await ensurePosts(env);await enqueue(env,'casino:'+user+':'+id,big,Date.now());}catch{console.warn('casino_post_pending');}
    return response;
