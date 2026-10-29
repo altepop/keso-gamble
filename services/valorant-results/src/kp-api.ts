@@ -1,3 +1,5 @@
+import skirmishQueues from '../skirmish-queues.json' with {type:'json'};
+import {SKIRMISH_POLICY} from './skirmish.ts';
 import modeRewards from '../mode-rewards.json' with {type:'json'};
 import {SPIKE_POLICY,SPIKE_ROSTER} from './spikerush-growth.ts';
 import {STOCK_INTERVAL,prepareStocks,stockView,stockBenefits,stockDiscount} from './stock-market.ts';
@@ -176,7 +178,8 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping):Promi
     const start=await env.DB.prepare("SELECT value FROM kp_settings WHERE key='starts_at'").first<{value:string}>();
     const timing=(await env.DB.prepare("SELECT key,value FROM monitor_state WHERE key IN ('monitor_started','monitor_finished')").all<{key:string;value:string}>()).results;
     const spikeStart=await env.DB.prepare("SELECT value FROM kp_settings WHERE key='spikerush_growth_started_at'").first<{value:string}>();
-    return response({spikerushGrowth:{version:SPIKE_POLICY,rosterVersion:SPIKE_ROSTER.version,startsAt:Number(spikeStart?.value??0)},enabled:true,currency:'KP',startsAt:Number(start?.value??0),registered:mapping.accounts.length,linked:linked?.n??0,voiceEnabled:(await voiceStatus(env)).enabled,earningsPostsConfigured:Boolean((env as {KP_EARNINGS_WEBHOOK_URL?:string}).KP_EARNINGS_WEBHOOK_URL),sessionPolicy:'until_revoked',activityAuthAvailable:activityAuthAvailable(env),monitor:{lastStartedAt:Number(timing.find(r=>r.key==='monitor_started')?.value??0),lastFinishedAt:Number(timing.find(r=>r.key==='monitor_finished')?.value??0)}});
+    const modeStart=await env.DB.prepare("SELECT value FROM kp_settings WHERE key='mode_rewards_started_at'").first<{value:string}>();
+    return response({modeRewards:{version:modeRewards.version,startsAt:Number(modeStart?.value??0)},skirmish:{version:SKIRMISH_POLICY,enabled:skirmishQueues.publicQueues.length>0},spikerushGrowth:{version:SPIKE_POLICY,rosterVersion:SPIKE_ROSTER.version,startsAt:Number(spikeStart?.value??0)},enabled:true,currency:'KP',startsAt:Number(start?.value??0),registered:mapping.accounts.length,linked:linked?.n??0,voiceEnabled:(await voiceStatus(env)).enabled,earningsPostsConfigured:Boolean((env as {KP_EARNINGS_WEBHOOK_URL?:string}).KP_EARNINGS_WEBHOOK_URL),sessionPolicy:'until_revoked',activityAuthAvailable:activityAuthAvailable(env),monitor:{lastStartedAt:Number(timing.find(r=>r.key==='monitor_started')?.value??0),lastFinishedAt:Number(timing.find(r=>r.key==='monitor_finished')?.value??0)}});
   }
   if(request.method==='GET'&&path==='/api/kp/activity/config')return response({available:activityAuthAvailable(env),applicationId:discord.applicationId});
   if(request.method==='POST'&&(path==='/api/kp/activity/challenge'||path==='/api/kp/activity/auth')){

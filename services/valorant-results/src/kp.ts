@@ -1,3 +1,4 @@
+import {settleSkirmishMatch} from './skirmish.ts';
 import {valoKp,ensureModeRewards,MODE_REWARD_VERSION} from './mode-rewards.ts';
 export {valoKp} from './mode-rewards.ts';
 import {ensureSpikeGrowth,settleSpike,spikeMatch,SPIKE_POLICY} from './spikerush-growth.ts';
@@ -150,7 +151,7 @@ export function legacyValoKp(raw:Match,puuid:string,mode:string,outcome:string|n
 }
 export async function collectKpMatch(env:KpEnv,mapping:KpMapping,raw:Match,puuid:string):Promise<number|null>{
  const status=assessRewardReadiness(raw,puuid);if(status.status!=='ready')return null;
- const rates=status.mode==='deathmatch'?{win:0,loss:0,bottom:0}:policy.modes[status.mode as keyof typeof policy.modes];if(!rates)return null;
+ const rates=['deathmatch','skirmish'].includes(status.mode)?{win:0,loss:0,bottom:0}:policy.modes[status.mode as keyof typeof policy.modes];if(!rates)return null;
  const start=Date.parse(raw.metadata.started_at),duration=raw.metadata.game_length_in_ms;
  if(!Number.isSafeInteger(start)||!Number.isSafeInteger(duration)||duration<=0||start+duration>Date.now()+60000||!raw.metadata.match_id)return null;
  const id=kpEventId(mapping.guildId,raw.metadata.match_id,puuid);
@@ -167,6 +168,10 @@ export async function collectKpMatch(env:KpEnv,mapping:KpMapping,raw:Match,puuid
  if(status.mode==='spikerush'&&!spike)return null;
  const modeStart=await env.DB.prepare("SELECT value FROM kp_settings WHERE key='mode_rewards_started_at'").first<{value:string}>();
  const modern=start>=Number(modeStart?.value??Infinity);
+ if(status.mode==='skirmish'){
+  if(!modern||!['win','loss'].includes(status.outcome??''))return null;
+  return (await settleSkirmishMatch(env,{guild:mapping.guildId,puuid,user:link.user,match:raw.metadata.match_id,start,end:start+duration,win:status.outcome==='win',now:Date.now()})).delta;
+ }
  const {net,note}=(modern?valoKp:legacyValoKp)(raw,puuid,status.mode,status.outcome);
  // Events hold the earned part (never negative); a cost is a separate debit capped at the balance.
  const e:KpEvent={id,guild:mapping.guildId,user:link.user,puuid,match:raw.metadata.match_id,mode:status.mode,outcome:status.outcome,amount:Math.max(0,net),policy:modern?MODE_REWARD_VERSION:policy.version,at:Date.now(),...net<0?{penalty:-net}:{},...note?{note}:{},...(spike?{kind:'spikerush-growth' as const,spike,policy:SPIKE_POLICY}:{})};

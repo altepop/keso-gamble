@@ -427,3 +427,18 @@ test('unrated lottery can debit a win once and pays a jackpot once without anoth
  assert.equal(await collectKpMatch(f.env,mapping,jackpot,'p-one'),100370);assert.equal(await collectKpMatch(f.env,mapping,jackpot,'p-one'),100370);
  assert.equal((await readKpState(f.env,mapping,one)).cash,110240);
 });
+
+test('Skirmish collection respects account and activation gates before holding rewards, then cashes out through the same wallet',async()=>{
+ const queues=(await import('../skirmish-queues.json',{with:{type:'json'}})).default;
+ const fixtureQueue='fixture_skirmish_public';(queues.publicQueues as string[]).push(fixtureQueue);
+ try{
+  const {decideSkirmish,skirmishState}=await import('../src/skirmish.ts');const f=await fixture();f.enableHistory();
+  const raw=game('sk-verified',fixtureQueue) as ReturnType<typeof game>&{teams:Array<{team_id:string;won:boolean;rounds?:{won:number}}>};raw.teams[0].rounds={won:10};raw.teams[1].rounds={won:8};
+  assert.equal(await collectKpMatch(f.env,mapping,raw,'p-one'),null,'new challenge does not backpay pre-activation matches');
+  f.sql.exec("UPDATE kp_settings SET value='0' WHERE key='mode_rewards_started_at'");
+  assert.equal(await collectKpMatch(f.env,mapping,raw,'p-one'),0,'first win is pending, not spendable');assert.equal((await readKpState(f.env,mapping,one)).cash,0);
+  const s=(await skirmishState(f.env,guild,one))!;assert.equal(s.pot,100);
+  await decideSkirmish(f.env,guild,one,`sk:${one}:${s.version}:cash`);assert.equal((await readKpState(f.env,mapping,one)).cash,100);
+  assert.equal(await collectKpMatch(f.env,mapping,raw,'p-one'),0);assert.equal((await readKpState(f.env,mapping,one)).cash,100,'reprocessing original win never restarts the challenge');
+ }finally{queues.publicQueues.splice((queues.publicQueues as string[]).indexOf(fixtureQueue),1);}
+});
