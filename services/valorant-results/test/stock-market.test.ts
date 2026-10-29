@@ -6,7 +6,7 @@ import {URL as NodeURL} from 'node:url';
 import {initializeKp,syncKpAccounts} from '../src/kp.ts';
 import type {KpEnv,KpMapping} from '../src/kp.ts';
 import {operateKp,readKpState} from '../src/kp-api.ts';
-import {prepareStocks,payStockDividends,stockBenefits,stockDiscount,convertStocks,tickStocks,nextStockPrices,queueStockPosts,STOCK_HOLD} from '../src/stock-market.ts';
+import {prepareStocks,payStockDividends,stockBenefits,stockDiscount,convertStocks,tickStocks,nextStockPrices,queueStockPosts,STOCK_HOLD,fortuneCounts,fictionNews} from '../src/stock-market.ts';
 const guild='100000000000000100',one='100000000000000101',two='100000000000000102';
 const mapping:KpMapping={guildId:guild,accounts:[{riotId:'One#JP1',discordUserId:one},{riotId:'Two#JP1',discordUserId:two}]};
 const T=Date.parse('2026-10-28T09:00:00+09:00'),DAY=STOCK_HOLD;
@@ -99,7 +99,9 @@ test('保存済みの試合とQUIZが株ニュースに一度だけ反映され�
  f.sql.prepare('INSERT INTO kp_events VALUES(?,?,?,?,?,?,?,?,?,?)').run('new-win',guild,one,'p1','new-match','competitive','win',900,'fixture',T+1000);
  f.sql.prepare('INSERT INTO kp_events VALUES(?,?,?,?,?,?,?,?,?,?)').run('old-win',guild,one,'p1','old-match','competitive','win',900,'fixture',T-1000);
  f.sql.prepare('INSERT INTO kp_quiz_events VALUES(?,?,?,?,?,?,?,?)').run('new-quiz',guild,one,'SOLO','2026-10-28','new-game',50,T+2000);
- const next=await tickStocks(f.env,m,T+300000,()=>.5);assert.equal(next.prices.keso,1205);assert.equal(next.prices.riso,781);assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM stock_news').get()!.n,2);
+ const next=await tickStocks(f.env,m,T+300000,()=>.5);assert.equal(next.prices.keso,1205);assert.equal(next.prices.riso,781);assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM stock_news WHERE symbol IN ('keso','riso')").get()!.n,2);
+ // The win also counts once for the luck stocks (the old one, before the market, does not).
+ assert.deepEqual(f.sql.prepare("SELECT symbol,bps FROM stock_news WHERE symbol IN ('msum','tnkn') ORDER BY symbol").all().map(r=>[r.symbol,r.bps]),[['msum',-20],['tnkn',20]]);
  const again=await tickStocks(f.env,next,T+600000,()=>.5);assert.equal(again.prices.keso,next.prices.keso);assert.equal(again.prices.riso,next.prices.riso);
 });
 test('相場更新の競合で履歴やニュースを二重に進めず、ニュースの影響も上限がある',async t=>{
@@ -145,4 +147,42 @@ test('競馬ニュースは払戻額ではなく精算対象馬券の純損益�
  await tickStocks(f.env,m,T+300000,()=>.5);
  const news=f.sql.prepare("SELECT label,bps FROM stock_news WHERE symbol='yuya' ORDER BY id").all();
  assert.deepEqual(news.map(n=>[n.label,n.bps]),[['競馬で大きな損失',-40],['競馬で大きな利益',50]]);
+});
+
+test('新しく上場した銘柄：前からある相場と口座はそのまま、上場価格から売買できる',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:T});const f=await fixture();f.credit('fund',10000);await prepareStocks(f.env,guild,one);
+ // The market and the wallet as saved before the listing: only the first four stocks.
+ const old=['keso','riso','yuya','yano'];
+ f.sql.prepare("UPDATE stock_markets SET prices=json_remove(prices,'$.msum','$.tnkn','$.komi','$.ishi','$.vdk','$.godo','$.ngya','$.koba'),history=json_remove(history,'$.msum','$.tnkn','$.komi','$.ishi','$.vdk','$.godo','$.ngya','$.koba')").run();
+ f.sql.prepare("UPDATE kp_state SET data=json_remove(data,'$.holdings.vdk','$.holdings.msum') WHERE user=?").run(one);
+ const state=await readKpState(f.env,mapping,one);
+ assert.equal(state.prices.vdk,100);assert.equal(state.holdings.vdk,0);assert.equal(state.cash,10000);
+ for(const id of old)assert.ok(Number.isSafeInteger(state.prices[id]));
+ await trade(f,'listing-buy-vdk-01','buy',10,'vdk');
+ assert.equal(f.cash(),10000-1000-10);assert.equal((await readKpState(f.env,mapping,one)).holdings.vdk,10);
+ const m=await tickStocks(f.env,await prepareStocks(f.env,guild,one),T+300000,()=>.5);
+ assert.ok(Number.isSafeInteger(JSON.parse(String(f.sql.prepare('SELECT prices FROM stock_markets').get()!.prices)).komi),'saved on the next tick');
+ assert.ok(m.prices.koba>0);
+});
+test('メシウマ食堂・他人の金で焼肉は、誰かがKPを失った回数・得た回数で動く（金額は見ない、QUIZ・購入は数えない）',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:T});const f=await fixture();const m=await prepareStocks(f.env,guild,one);
+ const ledger=(id:string,delta:number,kind:string)=>f.sql.prepare('INSERT INTO kp_ledger VALUES(?,?,?,?,?,?)').run(id,guild,one,delta,kind,T+1000);
+ const op=(id:string,response:object)=>f.sql.prepare("INSERT INTO kp_operations(id,guild,user,request_hash,response,delta,state,at) VALUES(?,?,?,'h',?,0,'{}',?)").run(id,guild,two,JSON.stringify(response),T+2000);
+ ledger('l1',50000,'test');ledger('penalty:x',-200,'match');ledger('u1',-100,'unite');ledger('m1',-30000,'mahjong');ledger('q1',50,'quiz');ledger('v1',30,'voice');
+ op('chin',{result:{units:-2,net:-200}});op('bj',{result:{hand:null,done:{net:15000}}});op('spin',{result:{type:'red',outcome:3,amount:100,payout:200}});
+ op('bet',{result:{bet:{amount:500}}});op('buy',{result:{symbol:'keso',side:'buy',quantity:1,price:1200}});
+ op('race-settle:a,b',{result:{settled:[{id:'a',status:'lost',payout:0},{id:'b',status:'won',payout:900}]}});op('ml-settle:c',{result:{settled:[{id:'c',status:'refunded',payout:100}]}});
+ assert.deepEqual(await fortuneCounts(f.env,guild,T,T+300000),{minus:5,plus:3});
+ assert.deepEqual(await fortuneCounts(f.env,guild,T+300000,T+600000),{minus:0,plus:0},'only since the last tick');
+ const next=await tickStocks(f.env,m,T+300000,()=>.5);
+ assert.deepEqual(f.sql.prepare("SELECT symbol,bps,label FROM stock_news WHERE symbol IN ('msum','tnkn') ORDER BY symbol").all().map(r=>[r.symbol,r.bps,r.label]),[['msum',40,'直近でKPを失った5回・得た3回'],['tnkn',-40,'直近でKPを失った5回・得た3回']]);
+ assert.ok(next.prices.msum>1000&&next.prices.tnkn<1000);
+ await tickStocks(f.env,next,T+300000,()=>.5);assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM stock_news WHERE symbol='msum'").get()!.n,1,'a repeated tick adds nothing');
+});
+test('架空の会社はたまに架空ニュースで大きく動く。外れの抽選ではニュースなし',()=>{
+ assert.deepEqual(fictionNews(()=>.5),[]);
+ const seq=[0,0.2,0,  0,0.9,0,  0.9,0.9,0.9,0.9];let i=0;
+ const news=fictionNews(()=>seq[i++]);
+ assert.deepEqual(news.map(n=>[n.symbol,n.bps]),[['komi',200],['ishi',-150]]);
+ assert.ok(news.every(n=>n.label.length>0));
 });

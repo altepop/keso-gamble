@@ -7,7 +7,7 @@ function checkStake(state,amount,reserve=amount){
  if(!validInt(amount,CASINO_MIN)||amount>CASINO_MAX)throw Error(`賭け金は${CASINO_MIN}〜${CASINO_MAX.toLocaleString('ja-JP')} KPの整数です。`);
  if(!validInt(state.cash)||state.cash<reserve)throw Error(reserve>amount?`チンチロは最大で賭け金の5倍負けるので、所持KPが ${reserve.toLocaleString('ja-JP')} KP 以上必要です。`:'所持KPが不足しています。');
 }
-function cryptoInt(n){
+export function cryptoInt(n){
  if(!globalThis.crypto?.getRandomValues)throw Error('この環境では暗号学的乱数を利用できません。');
  const v=new Uint32Array(1),max=Math.floor(4294967296/n)*n;
  do globalThis.crypto.getRandomValues(v);while(v[0]>=max);
@@ -57,7 +57,7 @@ export function playChinchiro(state,amount,die,now=Date.now()){
 // ディーラーはソフト17で止まる。ブラックジャックは3:2。ダブルは最初の2枚だけ。スプリットなし。
 // ディーラーがブラックジャックのとき、ダブルで足した分は返す（負けは最初の賭け金だけ）。
 export const SUITS=['♠','♥','♦','♣'],RANKS=['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
-const validCard=c=>c&&validInt(c.r,1)&&c.r<=13&&validInt(c.s)&&c.s<=3;
+export const validCard=c=>c&&validInt(c.r,1)&&c.r<=13&&validInt(c.s)&&c.s<=3;
 export function bjTotal(cards){
  let total=0,aces=0;for(const c of cards){total+=c.r===1?11:Math.min(c.r,10);if(c.r===1)aces++;}
  while(total>21&&aces){total-=10;aces--;}

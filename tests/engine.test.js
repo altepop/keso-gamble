@@ -54,3 +54,15 @@ test('European table pays exactly the covered outcomes, zero only wins straight 
  }
  for(let n=0;n<37;n++)for(let outcome=0;outcome<37;outcome++)assert.equal(roulettePayout('number',n,outcome,100),n===outcome?3600:0);
 });
+test('a save from before new stocks were listed keeps its cash and shares; new stocks start at the listing price', () => {
+  const now = Date.now(), saved = createInitialState(now);
+  saved.cash = 4321; saved.holdings.keso = 7;
+  for (const id of ['msum','tnkn','komi','ishi','vdk','godo','ngya','koba']) { delete saved.prices[id]; delete saved.holdings[id]; delete saved.history[id]; }
+  const state = hydrateState(JSON.parse(JSON.stringify(saved)), now);
+  assert.equal(state.cash, 4321); assert.equal(state.holdings.keso, 7);
+  assert.equal(state.prices.komi, 1200); assert.equal(state.holdings.komi, 0);
+  const broken = JSON.parse(JSON.stringify(saved)); broken.holdings.komi = -1;
+  assert.equal(hydrateState(broken, now).cash, 10000, 'a broken value still resets');
+  const legacy = JSON.parse(JSON.stringify(saved)); legacy.lastMarketAt = now - 5 * 60000;
+  assert.equal(advanceMarket(legacy, now), 5); assert.equal(legacy.history.vdk.length, 6, 'a stock missing from an old state is priced, not crashed');
+});

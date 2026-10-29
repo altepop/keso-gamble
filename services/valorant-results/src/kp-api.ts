@@ -14,11 +14,14 @@ import configuredPlayers from '../players.json' with { type: 'json' };
 import discord from '../discord-config.json' with { type: 'json' };
 import policy from '../kp-policy.json' with { type: 'json' };
 // @ts-expect-error The shared pure browser engine has no TypeScript declarations.
-import { trade, spin, spinNumbers, cryptoRouletteNumber } from '../../../js/engine.js';
+import { trade, spin, spinNumbers, cryptoRouletteNumber, MARKET } from '../../../js/engine.js';
 // @ts-expect-error The shared pure browser engine has no TypeScript declarations.
 import { hydrateRacing, placeRaceBet, useExchange } from '../../../js/racing.js';
 // @ts-expect-error Shared browser engine.
-import { hydrateCasino, playChinchiro, bjStart, bjHit, bjStand, bjDouble, cryptoDie, cryptoCard } from '../../../js/casino.js';
+import { hydrateCasino, playChinchiro, bjStart, bjHit, bjStand, bjDouble, cryptoDie, cryptoCard, cryptoInt } from '../../../js/casino.js';
+// @ts-expect-error Shared pure browser module.
+import { hydrateMoreCasino, minesStart, minesPick, minesCashout, playSlot, vpDeal, vpDraw, playBaccarat, VP_NAMES } from '../../../js/casino-more.js';
+import {jackpotOf} from './casino-jackpot.ts';
 import { enqueue, ensurePosts } from './racing-posts.ts';
 // @ts-expect-error Shared browser engine.
 import { hydrateMleague, placeMlBet, mlPartner } from '../../../js/mleague.js';
@@ -43,7 +46,7 @@ export async function readKpState(env:KpEnv,mapping:KpMapping,user:string){
  const market=await prepareStocks(env,mapping.guildId,user);
  const wallet=await env.DB.prepare('SELECT balance,version FROM kp_wallets WHERE guild=? AND user=?').bind(mapping.guildId,user).first<{balance:number;version:number}>();
  const row=await env.DB.prepare('SELECT data,version FROM kp_state WHERE guild=? AND user=?').bind(mapping.guildId,user).first<{data:string;version:number}>();if(!wallet||!row)throw Error('口座が見つかりません。');
- const state=JSON.parse(row.data);state.cash=wallet.balance;state.serverWallet=true;state.walletVersion=wallet.version;state.stateVersion=row.version;state.prices=market.prices;state.history=market.history;state.lastMarketAt=market.at;state.stockMarket=await stockView(env,market,user);state.stockBenefits=await stockBenefits(env,market,user);Object.assign(state,hydrateRacing(state),hydrateMleague(state),hydrateCasino(state));if(!validRoastLevel(state.roastLevel))state.roastLevel=defaultRoastLevel(mapping,user);state.racing=await racingView(env,mapping);state.horses=await ownedHorses(env,mapping,user);const riotId=riotIdOf(mapping,user);state.mastery=riotId?await masteryOf(env,riotId,state.roastLevel):[];state.luxury=await luxuryView(env,mapping,user);for(const h of state.horses)h.statue=state.luxury.statues.includes(h.id);
+ const state=JSON.parse(row.data);state.cash=wallet.balance;state.serverWallet=true;state.walletVersion=wallet.version;state.stateVersion=row.version;state.prices=market.prices;state.history=market.history;state.holdings={...Object.fromEntries((MARKET as {id:string}[]).map(s=>[s.id,0])),...state.holdings};state.lastMarketAt=market.at;state.stockMarket=await stockView(env,market,user);state.stockBenefits=await stockBenefits(env,market,user);Object.assign(state,hydrateRacing(state),hydrateMleague(state),hydrateCasino(state),hydrateMoreCasino(state));state.jackpot=await jackpotOf(env,mapping.guildId);if(!validRoastLevel(state.roastLevel))state.roastLevel=defaultRoastLevel(mapping,user);state.racing=await racingView(env,mapping);state.horses=await ownedHorses(env,mapping,user);const riotId=riotIdOf(mapping,user);state.mastery=riotId?await masteryOf(env,riotId,state.roastLevel):[];state.luxury=await luxuryView(env,mapping,user);for(const h of state.horses)h.statue=state.luxury.statues.includes(h.id);
  // A VALORANT result shows what it really did to the wallet: the credit plus its separate loss debit (penalty:<id>).
  const rewards=(await env.DB.prepare("SELECT e.id,e.match,e.mode,e.amount+COALESCE((SELECT delta FROM kp_ledger WHERE id='penalty:'||e.id),0) AS amount,e.at FROM kp_events e WHERE e.guild=? AND e.user=? ORDER BY e.at DESC,e.id LIMIT 100").bind(mapping.guildId,user).all<{id:string;match:string;mode:string;amount:number;at:number}>()).results;
  await ensureQuizKp(env);
@@ -71,6 +74,27 @@ export function casinoPost(user:string,action:string,result:unknown):string|null
   if(r.oya.hand.kind==='pinzoro')return `🎲 <@${user}> チンチロ、親のピンゾロを食らって −${yen(r.net)}`;
   if(r.net>=5000)return `🎲 <@${user}> チンチロで +${yen(r.net)}`;
   if(r.net<=-5000)return `🎲 <@${user}> チンチロで −${yen(r.net)} 溶かした`;
+  return null;
+ }
+ const finished=(result as {done?:{game?:string;net:number;payout:number;bet:number;jackpot?:number;hand?:string;multiplier?:number;reels?:string[]}|null})?.done;
+ if(finished?.game==='slot'){
+  if(finished.jackpot)return `💎💎💎 <@${user}> スロットで**ジャックポット**！！ +${yen(finished.jackpot)}（合計 +${yen(finished.net)}）`;
+  if(finished.net>=5000)return `🎰 <@${user}> スロットで ${finished.reels!.map(r=>({seven:'7️⃣',diamond:'💎',star:'⭐',bell:'🔔',lemon:'🍋',cherry:'🍒'} as Record<string,string>)[r]).join('')} +${yen(finished.net)}`;
+  return null;
+ }
+ if(finished?.game==='mines'){
+  if(finished.net>=5000)return `💣 <@${user}> マインズで ${finished.multiplier}倍まで粘って +${yen(finished.net)}`;
+  if(finished.net<=-5000)return `💥 <@${user}> マインズで地雷を踏んで −${yen(finished.net)}`;
+  return null;
+ }
+ if(finished?.game==='video-poker'){
+  if(['royal','straight-flush','four'].includes(finished.hand!))return `🃏 <@${user}> ビデオポーカーで**${VP_NAMES[finished.hand!]}**！ +${yen(finished.net)}`;
+  if(finished.net>=5000)return `🃏 <@${user}> ビデオポーカーで +${yen(finished.net)}`;
+  return null;
+ }
+ if(finished?.game==='baccarat'){
+  if(finished.net>=5000)return `🎴 <@${user}> バカラで +${yen(finished.net)}`;
+  if(finished.net<=-5000)return `🎴 <@${user}> バカラで −${yen(finished.net)} 溶かした`;
   return null;
  }
  if(!action.startsWith('bj-'))return null;
@@ -106,7 +130,7 @@ export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:strin
   const state=await readKpState(env,mapping,user),before=state.cash;let result:unknown;let directive:Record<string,unknown>|null=null;let stockTrade:Record<string,unknown>|undefined;
   // 借KP: no bet or purchase at all while any is owed, decided before any draw. Checking the result instead would let a
   // winning roll through and refuse only the losing one. Selling, finishing a blackjack hand and settings stay open.
-  const settles=['horse-sell','roast-level','bj-hit','bj-stand'].includes(action)||(action==='trade'&&args.side==='sell');
+  const settles=['horse-sell','roast-level','bj-hit','bj-stand','mines-pick','mines-cashout','vp-draw'].includes(action)||(action==='trade'&&args.side==='sell');
   if(!settles&&await debtOf(env,mapping.guildId,user)>0)throw Error(DEBT_BLOCKED);
   if(action==='trade'){result=trade(state,args.symbol,args.side,args.quantity);stockTrade={symbol:args.symbol,side:args.side,quantity:args.quantity,price:state.prices[String(args.symbol)]};}
   else if(action==='spin')result=args.type==='numbers'?spinNumbers(state,args.bets,cryptoRouletteNumber()):spin(state,args.type,args.amount,args.choice??0,cryptoRouletteNumber());
@@ -140,16 +164,30 @@ export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:strin
   else if(action==='bj-hit')result=bjHit(state,cryptoCard);
   else if(action==='bj-stand')result=bjStand(state,cryptoCard);
   else if(action==='bj-double')result=bjDouble(state,cryptoCard);
+  else if(action==='mines-start')result=minesStart(state,args.amount,args.mines);
+  else if(action==='mines-pick')result=minesPick(state,args.cell,cryptoInt);
+  else if(action==='mines-cashout')result=minesCashout(state,cryptoInt);
+  else if(action==='slot')result=playSlot(state,args.amount,cryptoInt,{amount:state.jackpot.amount,version:state.jackpot.version});
+  else if(action==='vp-deal')result=vpDeal(state,args.amount,cryptoInt);
+  else if(action==='vp-draw')result=vpDraw(state,args.hold,cryptoInt);
+  else if(action==='baccarat')result=playBaccarat(state,args.amount,args.side,cryptoCard);
   else if(action==='roast-level'){
    if(!validRoastLevel(args.level))throw Error('煽りレベルを選んでください。');
    state.roastLevel=args.level;result={roastLevel:args.level};
   }else throw Error('この操作は本番口座では使えません。');
   // 借KP: nothing that costs KP while any is owed (the database refuses it too).
   if(state.cash<before&&await debtOf(env,mapping.guildId,user)>0)throw Error(DEBT_BLOCKED);
-  const response={result,...(stockTrade?{stockTrade}:{})};const safeState={...state,claims:[],directives:[]};delete safeState.debt;delete safeState.mleague;delete safeState.ledger;delete safeState.members;delete safeState.racing;delete safeState.horses;delete safeState.mastery;delete safeState.luxury;delete safeState.stockMarket;delete safeState.stockBenefits;
-  const inserted=await env.DB.prepare(`INSERT INTO kp_operations(id,guild,user,request_hash,response,delta,state,directive,at)
+  const response={result,...(stockTrade?{stockTrade}:{})};const safeState={...state,claims:[],directives:[]};delete safeState.debt;delete safeState.jackpot;delete safeState.mleague;delete safeState.ledger;delete safeState.members;delete safeState.racing;delete safeState.horses;delete safeState.mastery;delete safeState.luxury;delete safeState.stockMarket;delete safeState.stockBenefits;
+  let inserted;
+  try{
+   inserted=await env.DB.prepare(`INSERT INTO kp_operations(id,guild,user,request_hash,response,delta,state,directive,at)
    SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM kp_wallets w JOIN kp_state s ON w.guild=s.guild AND w.user=s.user WHERE w.guild=? AND w.user=? AND w.version=? AND s.version=?) AND (?=0 OR EXISTS(SELECT 1 FROM stock_markets WHERE guild=? AND version=?)) ON CONFLICT(guild,user,id) DO NOTHING`)
    .bind(id,mapping.guildId,user,requestHash,JSON.stringify(response),state.cash-before,JSON.stringify(safeState),directive?JSON.stringify(directive):null,Date.now(),mapping.guildId,user,state.walletVersion,state.stateVersion,['trade','directive','luxury'].includes(action)?1:0,mapping.guildId,state.stockMarket.version).run();
+  }catch(error){
+   // Someone else's 💎💎💎 changed the shared pool after this spin was drawn: nothing was saved, so draw again.
+   if(action==='slot'&&String((error as Error)?.message).includes('Jackpot changed'))continue;
+   throw error;
+  }
   if(inserted.meta.changes){
    if(action==='luxury')try{await luxuryPosts(env,mapping,user,(result as {luxury:Parameters<typeof luxuryPosts>[3]}).luxury);}catch{console.warn('luxury_post_pending');}
    const big=casinoPost(user,action,result);

@@ -1,22 +1,24 @@
-import {stockPanel,stockCandles,stockPrice} from './stock-view.js?v=20261028-stocks';
-import {wheelView,covered,redNumbers,outcomeAngle} from './roulette-view.js?v=20261028-casino';
+import {stockPanel,stockCandles,stockPrice} from './stock-view.js?v=20261029-stocks2';
+import {wheelView,covered,redNumbers,outcomeAngle} from './roulette-view.js?v=20261029-stocks2';
 import {connectDiscordActivity,isDiscordActivity}from './discord-activity-auth.js?v=20261028-casino';
 import { createKpClient } from './kp-client.js?v=20261028-casino';
 import { fmt, fmt0 } from './format.js';
 import { submitClaim, approveClaim, issueDirective, completeDirective } from './progression.js?v=20261028-casino';
-import { titleView, homeView, playView, directivesView, escapeHTML } from './progression-views.js?v=20261029-spike-growth';
+import { titleView, homeView, playView, directivesView, escapeHTML } from './progression-views.js?v=20261029-stocks2';
 import { genCandles, movingAverage, svgCandles } from './charts.js?v=20261028-stocks';
-import { MARKET, createInitialState, portfolioValue, assets, advanceMarket, trade, spin, spinNumbers, validateNumberBets, grantDemoSalary, cryptoRouletteNumber } from './engine.js?v=20261029-pending';
+import { MARKET, createInitialState, portfolioValue, assets, advanceMarket, trade, spin, spinNumbers, validateNumberBets, grantDemoSalary, cryptoRouletteNumber } from './engine.js?v=20261029-casino-more';
 import { KEY, LEGACY_KEY } from './storage.js';
 import { PUBLIC_SALT, RUN_MS, WEEKLY_LIMIT, openRaceStart, latestRaceStart, raceCard, raceOdds, raceResult, raceTimeline, raceCommentary, raceRuns, placeRaceBet, settleRaceBets, weeklySpent } from './racing.js?v=20261029-pending';
 import { LUXURY } from './luxury.js?v=20261028-casino';
-import { raceScreen, racePreview, drawRace, raceElapsed, ownerPanel, luxuryPanel, roastPanel } from './racing-view.js?v=20261029-history2';
-import { createStore } from './store.js';
-import { healthPanel } from './health-view.js?v=20261029-unite-gap';
-import { mleagueScreen, mleaguePreview } from './mleague-view.js?v=20261029-mleague';
-import { gamePicker, chinchiroView, blackjackView } from './casino-view.js?v=20261028-dice-suspense';
-import {casinoFrames} from './casino-animation.js?v=20261028-dice-suspense';
-import { playChinchiro, bjStart, bjHit, bjStand, bjDouble, cryptoDie, cryptoCard } from './casino.js?v=20261028-casino';
+import { raceScreen, racePreview, drawRace, raceElapsed, ownerPanel, luxuryPanel, roastPanel } from './racing-view.js?v=20261029-stocks2';
+import { createStore } from './store.js?v=20261029-stocks2';
+import { healthPanel } from './health-view.js?v=20261029-stocks2';
+import { mleagueScreen, mleaguePreview } from './mleague-view.js?v=20261029-stocks2';
+import { gamePicker, chinchiroView, blackjackView } from './casino-view.js?v=20261029-casino-more';
+import {casinoFrames} from './casino-animation.js?v=20261029-casino-more';
+import { playChinchiro, bjStart, bjHit, bjStand, bjDouble, cryptoDie, cryptoCard, cryptoInt } from './casino.js?v=20261029-casino-more';
+import { minesStart, minesPick, minesCashout, playSlot, vpDeal, vpDraw, playBaccarat, VP_NAMES } from './casino-more.js?v=20261029-casino-more';
+import { minesView, slotView, videoPokerView, baccaratView } from './casino-more-view.js?v=20261029-casino-more';
 const $=(s,el=document)=>el.querySelector(s);
 const wallet=createKpClient();
 const embedded=isDiscordActivity();
@@ -194,11 +196,16 @@ function tradePanel(){
 // カジノ: one game at a time (ルーレット・チンチロ・ブラックジャック).
 let casinoGame='roulette';
 let casinoBusy=false,casinoPresentation=null,casinoStage={},casinoSkipped=false,skipCasinoPause=null;
+let minesCount=3,vpHold=[false,false,false,false,false];
 function screenCasino(){
   const visible=casinoPresentation??state;
   const head=`<div class="screen"><header class="topbar"><div class="toprow"><h1 class="title">カジノ</h1><div class="small-actions"><span class="badge">所持 ${moneyCompact(visible.cash)}</span></div></div></header>${subTabs()}${gamePicker(casinoGame)}`;
   if(casinoGame==='chinchiro')return head+chinchiroView(visible,casinoStage,casinoBusy)+bottomNav()+'</div>';
   if(casinoGame==='blackjack')return head+blackjackView(visible,casinoStage,casinoBusy)+bottomNav()+'</div>';
+  if(casinoGame==='mines')return head+minesView(visible,{busy:casinoBusy,count:minesCount,drafts})+bottomNav()+'</div>';
+  if(casinoGame==='slot')return head+slotView(visible,{busy:casinoBusy,jackpot:live?state.jackpot:null,drafts})+bottomNav()+'</div>';
+  if(casinoGame==='poker')return head+videoPokerView(visible,{busy:casinoBusy,hold:vpHold,drafts})+bottomNav()+'</div>';
+  if(casinoGame==='baccarat')return head+baccaratView(visible,{busy:casinoBusy,drafts})+bottomNav()+'</div>';
   const recent=state.spins[0];
   return `${head}<div class="center-panel"><div style="position:relative;width:min(320px,86vw);margin:0 auto 18px"><div class="pointer"></div><div class="roulette-board" id="wheel" style="transform:rotate(${rotation|| (recent?outcomeAngle(recent.outcome):0)}deg)">${wheelView(betType==='number'?'numbers':betType,betNumber,[...numberBets.keys()])}<div class="roulette-center">${recent?recent.outcome:'K'}</div></div></div></div><div class="number-table" aria-label="ルーレットの数字">${Array.from({length:37},(_,n)=>`<button data-number="${n}" aria-pressed="${numberSelected(n)}" class="number-cell ${n===0?'green':redNumbers.has(n)?'red':'black'} ${numberSelected(n)?'selected':''}">${n}${betType==='number'&&numberBets.has(n)?`<small>${numberBets.get(n)} KP</small>`:''}</button>`).join('')}</div><p class="helper">ヨーロピアン式・0は緑。数字36倍／赤黒・偶奇・前半後半2倍／ダズン・列3倍（掛け金込み）。数字は複数選択OK。数字をもう一度タップすると解除。数字ごと100 KP以上、合計20,000 KPまで。</p><div class="bet-grid">${[['red','赤'],['black','黒'],['even','偶数'],['odd','奇数'],['number','数字指定'],['low','1〜18'],['high','19〜36'],['dozen1','1〜12'],['dozen2','13〜24'],['dozen3','25〜36'],['column1','1列目'],['column2','2列目'],['column3','3列目']].map(([id,label])=>`<button data-bet="${id}" class="${betType===id?'active':''}">${label}</button>`).join('')}</div><div class="trade-box"><h3>ベット</h3>${betType==='number'?`<p class="helper">盤面から数字を選んでください。</p>${[...numberBets].map(([n,amount])=>`<div class="field"><label for="number-stake-${n}">${n} の掛け金</label><input id="number-stake-${n}" data-stake="${n}" class="input" type="number" min="100" max="20000" step="1" value="${amount}"></div>`).join('')}<strong>合計 <span id="number-bet-total">${moneyCompact([...numberBets.values()].reduce((a,b)=>a+b,0))}</span></strong>`:`<div class="field"><label for="bet-amount">賭け金</label><input id="bet-amount" class="input" type="number" min="100" max="20000" step="1" value="500"></div>`}<div class="action-row"><button class="action-btn primary" data-action="spin" ${spinLock?'disabled':''}>ルーレットを回す</button></div></div><div class="result-panel"><p class="result-title ${recent && recent.payout>0?'negative':recent?'positive':''}">${recent ? (recent.payout>0?'的中':'不的中') : '直近結果'}</p><div class="helper">${recent ? `出目 ${recent.outcome} / 賭け ${moneyCompact(recent.amount)} / 払戻 ${moneyCompact(recent.payout)}${recent.bets?'<br>'+recent.bets.map(b=>b.number+': '+moneyCompact(b.amount)).join(' · '):''}` : 'まだ抽選履歴はありません。'}</div></div>${bottomNav()}</div>`;
 }
@@ -284,6 +291,28 @@ async function doCasino(action){
     $(`[data-action="${nextAction}"]`)?.focus({preventScroll:true});
   }
 }
+// マインズ・スロット・ビデオポーカー・バカラ: the server draws for live wallets, the browser's crypto for the demo.
+const MORE_DEMO={'mines-start':(s,a)=>minesStart(s,a.amount,a.mines),'mines-pick':(s,a)=>minesPick(s,a.cell,cryptoInt),'mines-cashout':s=>minesCashout(s,cryptoInt),
+ slot:(s,a)=>playSlot(s,a.amount,cryptoInt),'vp-deal':(s,a)=>vpDeal(s,a.amount,cryptoInt),'vp-draw':(s,a)=>vpDraw(s,a.hold,cryptoInt),baccarat:(s,a)=>playBaccarat(s,a.amount,a.side,cryptoCard)};
+const MORE_STAKE={'mines-start':'#mines-amount',slot:'#slot-amount','vp-deal':'#vp-amount',baccarat:'#baccarat-amount'};
+async function doMoreCasino(action,extra={}){
+  if(casinoBusy)return;
+  const args={...extra};
+  if(MORE_STAKE[action]){const amount=Number($(MORE_STAKE[action])?.value);if(!Number.isSafeInteger(amount)||amount<100||amount>20000)throw new Error('賭け金は100〜20,000 KPの整数です');args.amount=amount;drafts[MORE_STAKE[action].slice(1)]=String(amount);}
+  if(action==='mines-start')args.mines=minesCount;
+  if(action==='vp-draw')args.hold=[...vpHold];
+  const slow=['slot','baccarat'].includes(action)&&!reducedMotion?.matches;
+  casinoBusy=slow;if(slow)render();
+  try{
+    const started=Date.now();
+    const result=live?await liveOperation(action,args):await commit(next=>MORE_DEMO[action](next,args));
+    if(slow)await new Promise(resolve=>setTimeout(resolve,Math.max(0,(action==='slot'?1100:700)-(Date.now()-started))));
+    if(action==='vp-deal'||action==='vp-draw')vpHold=[false,false,false,false,false];
+    const done=result?.done;
+    if(done){const signed=n=>(n>0?'+':n<0?'−':'±')+moneyCompact(Math.abs(n));
+      toast(done.game==='slot'&&done.jackpot?`ジャックポット！ ${signed(done.net)}`:done.game==='video-poker'?`${VP_NAMES[done.hand]} ${signed(done.net)}`:done.game==='mines'&&done.net<0?`地雷… ${signed(done.net)}`:`${done.net>0?'勝ち':done.net<0?'負け':'分け'} ${signed(done.net)}`);}
+  }finally{casinoBusy=false;render();}
+}
 async function liveOperation(action,args){
  if(connectionError)throw Error('残高を更新してから操作してください。');
  const result=await wallet.operate(action,args);
@@ -324,7 +353,7 @@ addEventListener('click',async e=>{
   const t=e.target.closest?.('button,[data-open]'); if(!t) return;
   if(t.dataset.action==='casino-skip'){casinoSkipped=true;skipCasinoPause?.();return;}
   if(casinoBusy&&(t.dataset.screen||t.dataset.casinoGame)){toast('演出をスキップすると移動できます');return;}
-  const mutates=!!t.dataset.approve || !!t.dataset.complete || ['salary','trade','spin','race-bet','roast-level','horse-buy','horse-sell','luxury','reset','submit-claim','issue-directive','connect-kp','refresh-kp','disconnect-kp','auto-connect-kp','ml-buy','chinchiro','bj-start','bj-hit','bj-stand','bj-double'].includes(t.dataset.action);
+  const mutates=!!t.dataset.approve || !!t.dataset.complete || ['salary','trade','spin','race-bet','roast-level','horse-buy','horse-sell','luxury','reset','submit-claim','issue-directive','connect-kp','refresh-kp','disconnect-kp','auto-connect-kp','ml-buy','chinchiro','bj-start','bj-hit','bj-stand','bj-double','mines-start','mines-pick','mines-cashout','slot','vp-deal','vp-draw','baccarat'].includes(t.dataset.action);
   if(mutates && mutationPending)return;
   if(mutates)mutationPending=true;
   try{
@@ -380,6 +409,9 @@ addEventListener('click',async e=>{
     if(t.dataset.action==='trade'){await doTrade();return;}
     if(t.dataset.action==='spin'){await doSpin();return;}
     if(['chinchiro','bj-start','bj-hit','bj-stand','bj-double'].includes(t.dataset.action)){await doCasino(t.dataset.action);return;}
+    if(t.dataset.minesCount){minesCount=Number(t.dataset.minesCount);render();return;}
+    if(t.dataset.vpHold){const i=Number(t.dataset.vpHold);vpHold[i]=!vpHold[i];render();return;}
+    if(['mines-start','mines-pick','mines-cashout','slot','vp-deal','vp-draw','baccarat'].includes(t.dataset.action)){await doMoreCasino(t.dataset.action,t.dataset.action==='mines-pick'?{cell:Number(t.dataset.cell)}:t.dataset.action==='baccarat'?{side:t.dataset.side}:{});return;}
     if(t.dataset.action==='reset'){if(confirm('データを初期化しますか？')){await commit(next => Object.assign(next,createInitialState()));for(const key of Object.keys(drafts))delete drafts[key];renderedMarkup=undefined;render();toast('初期化した')}return;}
 
   }catch(err){render();toast(err.message||'操作に失敗した');}
@@ -409,7 +441,7 @@ addEventListener('input', e => {
   if(e.target.id==='horse-name')drafts['horse-name']=e.target.value;
   if(e.target.id==='ml-amount'){drafts['ml-amount']=e.target.value;const preview=$('#ml-preview');if(preview)preview.textContent=mleaguePreview(state,{...mlDraft,amount:e.target.value});}
   if(e.target.id==='race-amount'){drafts['race-amount']=e.target.value;const preview=$('#race-preview');if(preview){const open=openCard(Date.now());preview.innerHTML=racePreview(open,raceOdds(open),{...raceDraft,amount:e.target.value});}}
-  if (e.target.id==='kp-connect-code'||['trade-qty','bet-amount','chinchiro-amount','bj-amount'].includes(e.target.id)||e.target.id.startsWith('claim-')||e.target.id.startsWith('directive-')) drafts[e.target.id] = e.target.value;
+  if (e.target.id==='kp-connect-code'||['trade-qty','bet-amount','chinchiro-amount','bj-amount','mines-amount','slot-amount','vp-amount','baccarat-amount'].includes(e.target.id)||e.target.id.startsWith('claim-')||e.target.id.startsWith('directive-')) drafts[e.target.id] = e.target.value;
   if(e.target.id==='trade-qty')$('#trade-estimate').innerHTML=tradeEstimate();
 });
 const drafts = {};
