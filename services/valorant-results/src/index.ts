@@ -1,3 +1,4 @@
+import {readModeNote} from './mode-rewards.ts';
 import {spikeNote} from './spikerush-growth.ts';
 import {prepareRaceBroadcast} from './racing-broadcast.ts';
 import {raceVideoApi} from './racing-video.ts';
@@ -12,8 +13,7 @@ export {VoiceGateway} from './voice-gateway.ts';
 import {ensureVoice} from './voice-api.ts';
 import { claimDeathMatch } from './death-sessions.ts';
 import type { KpRun } from './kp.ts';
-import { initializeKp, syncKpAccounts, collectKpMatch, drainKpInbox, flushKpDirectives, prepareKpRun, kpEventId, kpCreditLine, valoKp } from './kp.ts';
-import { assessRewardReadiness } from './reward-readiness.ts';
+import { initializeKp, syncKpAccounts, collectKpMatch, drainKpInbox, flushKpDirectives, prepareKpRun, kpEventId, kpCreditLine } from './kp.ts';
 import { kpApi } from './kp-api.ts';
 import { settleKpRaces } from './racing-kp.ts';
 import { queueRacePosts, flushRacePosts, enqueue, ensurePosts } from './racing-posts.ts';
@@ -164,7 +164,7 @@ async function saveMatch(env: Env, match: Match, player: Player, account: Accoun
       const amount = kpRun.credits.get(kpId) ?? await collectKpMatch(env,kpRun.mapping,match,account.puuid);
       if (amount !== null) {
         kpRun.credits.set(kpId,amount);
-        result.message=kpCreditLine(result.message,amount,mode==='spikerush'?await spikeNote(env,kpId):(()=>{const s=assessRewardReadiness(match,account.puuid);return s.status==='ready'?valoKp(match,account.puuid,s.mode,s.outcome).note:'';})());
+        result.message=kpCreditLine(result.message,amount,mode==='spikerush'?await spikeNote(env,kpId):(kpRun.notes?.get(kpId)??await readModeNote(env,kpId)));
         kpActive=kpRun.messages.get(kpId)!==result.message;
       }
     }

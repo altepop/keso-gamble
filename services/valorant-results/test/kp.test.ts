@@ -312,8 +312,8 @@ test('the match line shows the net KP, negative included, and a rewrite replaces
  assert.equal(kpCreditLine(kpCreditLine('結果',-300),900),'結果\n🪙 この試合 +900 KP');
 });
 
-test('deathmatch: K/D below 1 costs 50, first place wins 1,000 on a 30% draw fixed per match, everything else is 0',async()=>{
- const {valoKp}=await import('../src/kp.ts');const f=await fixture();f.enableHistory();seed(f.sql,one,1000);
+test('legacy policy deathmatch: K/D below 1 costs 50, first place wins 1,000 on a 30% draw fixed per match, everything else is 0',async()=>{
+ const {legacyValoKp:valoKp}=await import('../src/kp.ts');const f=await fixture();f.enableHistory();seed(f.sql,one,1000);
  const dm=(id:string,me:{kills?:number;deaths?:number},others:number[]=[10,20])=>{const raw=game(id,'deathmatch') as ReturnType<typeof game>&{players:Array<{puuid:string;team_id:string;stats?:{kills?:number;deaths?:number}}>};
   raw.teams=[];raw.players=[{puuid:'p-one',team_id:'p-one',stats:me},...others.map((k,i)=>({puuid:'x'+i,team_id:'x'+i,stats:{kills:k,deaths:10}}))];return raw;};
  assert.equal(await collectKpMatch(f.env,mapping,dm('dm-low',{kills:9,deaths:10}),'p-one'),-50);
@@ -326,8 +326,8 @@ test('deathmatch: K/D below 1 costs 50, first place wins 1,000 on a 30% draw fix
  const first=await collectKpMatch(f.env,mapping,dm('dm-top-0',{kills:30,deaths:10}),'p-one');
  assert.equal(await collectKpMatch(f.env,mapping,dm('dm-top-0',{kills:30,deaths:10}),'p-one'),first);
 });
-test('team deathmatch and escalation: 35 kills or more add 150, win or lose; 34 kills and other modes add nothing',async()=>{
- const {valoKp}=await import('../src/kp.ts');
+test('legacy policy team deathmatch and escalation: 35 kills or more add 150, win or lose; 34 kills and other modes add nothing',async()=>{
+ const {legacyValoKp:valoKp}=await import('../src/kp.ts');
  const at=(id:string,mode:string,win:boolean,kills:number)=>{const raw=game(id,mode,win) as ReturnType<typeof game>&{players:Array<{puuid:string;team_id:string;stats?:{kills?:number;score?:number}}>};
   raw.players=[{puuid:'p-one',team_id:'red',stats:{kills,score:500}},...[10,20,15,5].map((k,i)=>({puuid:'m'+i,team_id:'red',stats:{kills:k,score:100}}))];return raw;};
  // Skip the rare draws (jackpot, luck) by keeping only the plain results.
@@ -401,4 +401,29 @@ test('a rank change that reaches the history late is still caught on a later run
   assert.match(repost.content,/^📢 \*\*Oneのランク速報\*\*（\d\d:\d\d 終了のコンペ）\n🔻 \*\*降格\*\* プラチナ1 → ゴールド3/);assert.deepEqual(repost.allowed_mentions,{parse:[]});
   assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM mahjong_watch_posts WHERE id LIKE 'rank:%'").get()!.n,1,'re-announced once');
  }finally{globalThis.fetch=original;}
+});
+
+test('new mode cutoff preserves legacy games and retries retain original net and explanation',async()=>{
+ const {valoKp,readModeNote}=await import('../src/mode-rewards.ts');
+ const f=await fixture();f.enableHistory();seed(f.sql,one,10000);
+ const raw=game('modern-swift','swiftplay') as ReturnType<typeof game>&{teams:Array<{team_id:string;won:boolean;rounds?:{won:number}}>};raw.teams[0].rounds={won:5};raw.teams[1].rounds={won:0};
+ const start=Date.parse(raw.metadata.started_at);f.sql.prepare("UPDATE kp_settings SET value=? WHERE key='mode_rewards_started_at'").run(String(start+1));
+ assert.equal(await collectKpMatch(f.env,mapping,raw,'p-one'),(await import('../src/kp.ts')).legacyValoKp(raw,'p-one','swiftplay','win').net);
+ f.sql.prepare("UPDATE kp_settings SET value=? WHERE key='mode_rewards_started_at'").run(String(start));raw.metadata.match_id='modern-swift-2';
+ const quote=valoKp(raw,'p-one','swiftplay','win');assert.equal(quote.base,580);
+ const net=await collectKpMatch(f.env,mapping,raw,'p-one');assert.equal(net,quote.net);
+ const id=f.sql.prepare("SELECT id FROM kp_events WHERE match='modern-swift-2'").get()!.id as string;
+ assert.equal(await readModeNote(f.env,id),quote.note);
+ raw.teams[1].rounds={won:3};assert.equal(await collectKpMatch(f.env,mapping,raw,'p-one'),net);
+ assert.equal(await readModeNote(f.env,id),quote.note);
+});
+test('unrated lottery can debit a win once and pays a jackpot once without another luck multiplier',async()=>{
+ const {valoKp}=await import('../src/mode-rewards.ts');const f=await fixture();f.enableHistory();seed(f.sql,one,10000);
+ f.sql.exec("UPDATE kp_settings SET value='0' WHERE key='mode_rewards_started_at'");
+ let negative:ReturnType<typeof game>|undefined,jackpot:ReturnType<typeof game>|undefined;
+ for(let i=0;i<100000&&(!negative||!jackpot);i++){const r=game('unrated-band-'+i,'unrated');const q=valoKp(r,'p-one','unrated','win');if(q.net===-130)negative=r;if(q.net===100370)jackpot=r;}
+ assert.ok(negative&&jackpot);
+ assert.equal(await collectKpMatch(f.env,mapping,negative,'p-one'),-130);assert.equal(await collectKpMatch(f.env,mapping,negative,'p-one'),-130);
+ assert.equal(await collectKpMatch(f.env,mapping,jackpot,'p-one'),100370);assert.equal(await collectKpMatch(f.env,mapping,jackpot,'p-one'),100370);
+ assert.equal((await readKpState(f.env,mapping,one)).cash,110240);
 });

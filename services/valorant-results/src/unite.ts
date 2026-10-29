@@ -1,21 +1,21 @@
+import {ensureUniteRewards,settleUnite} from './unite-rewards.ts';
 // Pokémon UNITE results for members linked with /unitelink. UniteAPI (uniteapi.dev) shows a public
 // profile's recent ranked matches; one profile is read per cron minute, at most every two minutes each.
 // A first read only records what is already there, so linking never posts old games.
 // New games are posted by the result bot (the Mahjong Soul post queue) and settled in KP:
-// a win +200, a loss −50 (never more than the balance).
+// Wins grow from +400 to +800, losses from -100 to -500; gaps reset the streak.
 import voice from '../unite-voice.json' with {type:'json'};
 import names from '../unite-names.json' with {type:'json'};
-import {applyLuck,luckFor,luckLabel} from './luck.ts';
-import {initializeKp,newKpState} from './kp.ts';
+import {initializeKp,newKpState,kpHash} from './kp.ts';
 import type {KpEnv,KpMapping} from './kp.ts';
 import {flushMahjongPosts} from './mahjong.ts';
 import type {MahjongEnv} from './mahjong.ts';
 import {enqueue,ensurePosts} from './racing-posts.ts';
-import {borrowShortfall,borrowedBy,debtNote,ensureDebt} from './kp-debt.ts';
+import {borrowedBy,debtNote} from './kp-debt.ts';
 
 export interface UniteEnv extends KpEnv {DISCORD_WEBHOOK_URL?:string;KP_EARNINGS_WEBHOOK_URL?:string}
 export interface UniteMatch {win:boolean;surrendered:boolean;map:string;party:string;pokemon:string;level:number;ours:number;theirs:number;ko:number;ast:number;int:number;dmg:string;tkn:string;heal:string}
-export const UNITE_WIN=200,UNITE_LOSS=50;
+export const UNITE_WIN=400,UNITE_LOSS=100;
 const GAP=2*60_000,PROFILE='https://uniteapi.dev/p/';
 const initialized=new WeakSet<object>();
 export async function ensureUnite(env:KpEnv){
@@ -24,7 +24,7 @@ export async function ensureUnite(env:KpEnv){
   env.DB.prepare('CREATE TABLE IF NOT EXISTS unite_links(guild TEXT NOT NULL,user TEXT NOT NULL,uid TEXT NOT NULL,name TEXT,seen TEXT,checked_at INTEGER NOT NULL DEFAULT 0,error TEXT,PRIMARY KEY(guild,user),UNIQUE(guild,uid))'),
   // Same queue as the Mahjong Soul result posts: sent to the result bot's webhook.
   env.DB.prepare("CREATE TABLE IF NOT EXISTS mahjong_watch_posts(id TEXT PRIMARY KEY,body TEXT NOT NULL,at INTEGER NOT NULL,sent INTEGER NOT NULL DEFAULT 0,lease INTEGER NOT NULL DEFAULT 0,message_id TEXT)"),
- ]);initialized.add(env.DB);
+ ]);await ensureUniteRewards(env);initialized.add(env.DB);
 }
 /** A UniteAPI profile link or its numeric id. */
 export function uniteUid(value:unknown){
@@ -83,19 +83,6 @@ export function unitePost(name:string,uid:string,m:UniteMatch,kp:number,note='')
   ...kp||note?[`${kp>0?'✅':kp<0||note.includes('借KP')?'💸':'🍀'} ${kp>0?'+':kp<0?'−':'±'}${Math.abs(kp).toLocaleString('ja-JP')} KP${note}`]:[],
   `戦績：<${PROFILE}${uid}>`].join('\n');
 }
-async function credit(env:UniteEnv,guild:string,user:string,id:string,win:boolean,now:number,seed:string){
- // Luck (src/luck.ts) on top of the win/loss amount, fixed by the match.
- const net=applyLuck(win?UNITE_WIN:-UNITE_LOSS,luckFor('unite:'+seed));
- await env.DB.batch([
-  env.DB.prepare('INSERT OR IGNORE INTO kp_wallets(guild,user) VALUES(?,?)').bind(guild,user),
-  env.DB.prepare('INSERT OR IGNORE INTO kp_state(guild,user,data) VALUES(?,?,?)').bind(guild,user,JSON.stringify(newKpState())),
-  env.DB.prepare(`INSERT OR IGNORE INTO kp_ledger(id,guild,user,delta,kind,at) SELECT ?,?,?,CASE WHEN ?>=0 THEN ? ELSE -MIN(?,balance) END,'unite',? FROM kp_wallets WHERE guild=? AND user=?`)
-   .bind(id,guild,user,net,net,-net,now,guild,user),
- ]);
- // What the wallet could not cover becomes 借KP.
- if(net<0){await ensureDebt(env);await borrowShortfall(env,id,-net).run();}
- return Number((await env.DB.prepare('SELECT delta FROM kp_ledger WHERE id=?').bind(id).first<{delta:number}>())?.delta??0);
-}
 /** One profile per call: the linked member checked longest ago, if two minutes have passed. */
 export async function monitorUnite(env:UniteEnv,now=Date.now(),request:typeof fetch=fetch,override?:KpMapping){
  if(!await initializeKp(env,override))return;
@@ -115,15 +102,30 @@ export async function monitorUnite(env:UniteEnv,now=Date.now(),request:typeof fe
  }
  if(!page||page.private){await env.DB.prepare('UPDATE unite_links SET error=? WHERE guild=? AND user=?').bind(page?'private_profile':'unreadable_profile',link.guild,link.user).run();return;}
  const keys=page.matches.map(matchKey),seen:string[]|null=link.seen?JSON.parse(link.seen):null;
- // Matches above the newest one seen before (at most three, oldest first); none on the first read.
- const known=seen?keys.findIndex(k=>seen.includes(k)):0;
- const fresh=page.matches.slice(0,known===-1?page.matches.length:known).slice(0,3).reverse();
- await env.DB.prepare('UPDATE unite_links SET name=?,seen=?,error=NULL WHERE guild=? AND user=?').bind(page.name,JSON.stringify([...new Set([...keys,...seen??[]])].slice(0,20)),link.guild,link.user).run();
- for(const m of fresh){
-  const id='unite:'+link.uid+':'+hash(matchKey(m)).toString(36)+':'+now.toString(36);
-  const seed=link.uid+':'+matchKey(m),kp=await credit(env,link.guild,link.user,id,m.win,now,seed),note=luckLabel(luckFor('unite:'+seed),m.win?UNITE_WIN:-UNITE_LOSS)+debtNote(await borrowedBy(env,id));
-  await env.DB.prepare('INSERT OR IGNORE INTO mahjong_watch_posts(id,body,at) VALUES(?,?,?)').bind(id,JSON.stringify({content:unitePost(page.name,link.uid,m,kp,note),allowed_mentions:{parse:[]}}),now).run();
-  if(env.KP_EARNINGS_WEBHOOK_URL&&kp){await ensurePosts(env);await enqueue(env,'kp-'+id,`🎮 <@${link.user}> ユナイト ランクマ${m.win?'勝利':'敗北'} ${kp>0?'+':'−'}${Math.abs(kp).toLocaleString('ja-JP')} KP`,now);}
+ const owner=await env.DB.prepare('SELECT user FROM unite_streaks WHERE guild=? AND uid=?').bind(link.guild,link.uid).first<{user:string}>();
+ if(owner&&owner.user!==link.user){await env.DB.prepare('UPDATE unite_links SET error=? WHERE guild=? AND user=?').bind('owner_mismatch',link.guild,link.user).run();return;}
+ // First observation of this policy establishes a baseline, never a retrospective streak.
+ if(!owner||!seen){
+  await env.DB.batch([
+   env.DB.prepare('INSERT INTO unite_streaks(guild,uid,user) VALUES(?,?,?) ON CONFLICT(guild,uid) DO UPDATE SET wins=0,losses=0,version=version+1').bind(link.guild,link.uid,link.user),
+   env.DB.prepare('UPDATE unite_links SET name=?,seen=?,error=NULL WHERE guild=? AND user=?').bind(page.name,JSON.stringify(keys.slice(0,100)),link.guild,link.user),
+  ]);return;
  }
+ if(keys.length>100||new Set(keys).size!==keys.length){await env.DB.prepare('UPDATE unite_links SET error=? WHERE guild=? AND user=?').bind('ambiguous_history',link.guild,link.user).run();return;}
+ const known=keys.findIndex(k=>seen.includes(k));
+ const fresh=page.matches.slice(0,known===-1?page.matches.length:known).reverse();
+ await env.DB.batch([
+  env.DB.prepare('INSERT OR IGNORE INTO kp_wallets(guild,user) VALUES(?,?)').bind(link.guild,link.user),
+  env.DB.prepare('INSERT OR IGNORE INTO kp_state(guild,user,data) VALUES(?,?,?)').bind(link.guild,link.user,JSON.stringify(newKpState())),
+ ]);
+ for(let i=0;i<fresh.length;i++){
+  const m=fresh[i],fingerprint=matchKey(m),seed=link.uid+':'+fingerprint,id='unite-v3:'+await kpHash(link.guild+':'+seed);
+  const settled=await settleUnite(env,{id,guild:link.guild,user:link.user,uid:link.uid,fingerprint,seed,win:m.win,now,reset:known===-1&&i===0});
+  const kp=settled.delta,note=settled.note+debtNote(await borrowedBy(env,id));
+  await env.DB.prepare('INSERT OR IGNORE INTO mahjong_watch_posts(id,body,at) VALUES(?,?,?)').bind(id,JSON.stringify({content:unitePost(page.name,link.uid,m,kp,note),allowed_mentions:{parse:[]}}),now).run();
+  if(env.KP_EARNINGS_WEBHOOK_URL){await ensurePosts(env);await enqueue(env,'kp-'+id,`🎮 <@${link.user}> ユナイト ランクマ${m.win?'勝利':'敗北'} ${kp>0?'+':'−'}${Math.abs(kp).toLocaleString('ja-JP')} KP${settled.note}`,now);}
+ }
+ // Advance only after all new records have been settled and queued. Failures keep the old cursor for a safe retry.
+ await env.DB.prepare('UPDATE unite_links SET name=?,seen=?,error=NULL WHERE guild=? AND user=?').bind(page.name,JSON.stringify([...new Set([...keys,...seen])].slice(0,100)),link.guild,link.user).run();
  if(fresh.length)await flushMahjongPosts(env as unknown as MahjongEnv,now,request);
 }

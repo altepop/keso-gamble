@@ -1,3 +1,4 @@
+import modeRewards from '../mode-rewards.json' with {type:'json'};
 import {SPIKE_POLICY,SPIKE_ROSTER} from './spikerush-growth.ts';
 import {STOCK_INTERVAL,prepareStocks,stockView,stockBenefits,stockDiscount} from './stock-market.ts';
 import {kpCommands,KP_COMMAND_VERSION} from './kp-command.ts';
@@ -57,7 +58,7 @@ export async function readKpState(env:KpEnv,mapping:KpMapping,user:string){
  state.ledger=await ledgerHistory(env,mapping.guildId,user);
  // The Mリーグ screen; a failure here never blocks the wallet.
  try{state.mleague=await mlActivityView(env);}catch{console.warn('ml_view_pending');state.mleague=null;}
- state.selfUserId=user;state.rewardRates=policy.modes;state.debt={amount:await debtOf(env,mapping.guildId,user),interestPercent:DEBT_INTEREST_PERCENT,intervalMinutes:DEBT_INTERVAL_MINUTES};return state;
+ state.selfUserId=user;state.rewardRates={...policy.modes,unrated:{...policy.modes.unrated,win:modeRewards.unrated.win}};state.modeRewards=modeRewards;state.debt={amount:await debtOf(env,mapping.guildId,user),interestPercent:DEBT_INTEREST_PERCENT,intervalMinutes:DEBT_INTERVAL_MINUTES};return state;
 }
 // Big casino moments go to the earnings channel so others can watch (a ピンゾロ either way, a natural, or ±5,000 KP).
 const yen=(n:number)=>Math.abs(n).toLocaleString('ja-JP')+' KP';
