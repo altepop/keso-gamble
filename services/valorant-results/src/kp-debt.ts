@@ -1,10 +1,10 @@
 import policy from '../kp-policy.json' with { type: 'json' };
 import type { KpEnv } from './kp.ts';
 // 借KP: a minus the wallet cannot cover is not forgiven. Wallets still stop at 0, and the rest becomes a debt that
-// grows by interest every 10 minutes as a penalty (from the first full period after it started) and is repaid from KP that comes in.
+// grows by interest every 10 minutes as a penalty, up to DEBT_MAX, (from the first full period after it started) and is repaid from KP that comes in.
 // While any is owed, nothing can be bought (stocks, horses, bets, luxury, directives), so hiding KP before a
 // likely loss no longer dodges it. Every change is a row in kp_debt_events (borrow / interest / repay).
-export const DEBT_INTEREST_PERCENT:number=policy.debt.interestPercent,DEBT_INTERVAL_MINUTES:number=policy.debt.intervalMinutes;
+export const DEBT_INTEREST_PERCENT:number=policy.debt.interestPercent,DEBT_INTERVAL_MINUTES:number=policy.debt.intervalMinutes,DEBT_MAX:number=policy.debt.maxAmount;
 export const DEBT_BLOCKED='借KPを返すまでKPは使えません（株・馬・馬券・カジノ・高級品・指名）。入ったKPから自動で返済されます。';
 const PERIOD=DEBT_INTERVAL_MINUTES*60_000;
 const ready=new WeakSet<object>();
@@ -14,10 +14,18 @@ export async function ensureDebt(env:KpEnv){
   `CREATE TABLE IF NOT EXISTS kp_debts(guild TEXT NOT NULL,user TEXT NOT NULL,amount INTEGER NOT NULL DEFAULT 0 CHECK(typeof(amount)='integer' AND amount>=0),since INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(guild,user))`,
   `CREATE TABLE IF NOT EXISTS kp_debt_events(id TEXT PRIMARY KEY,guild TEXT NOT NULL,user TEXT NOT NULL,amount INTEGER NOT NULL CHECK(typeof(amount)='integer' AND amount!=0),kind TEXT NOT NULL CHECK(kind IN ('borrow','interest','repay')),at INTEGER NOT NULL)`,
   // since: when the current debt started (interest waits a full period from then).
-  `CREATE TRIGGER IF NOT EXISTS kp_debt_apply AFTER INSERT ON kp_debt_events BEGIN
+  // 借KP never goes above DEBT_MAX. Every way of borrowing (a loss, ユナイト, 雀魂, interest) inserts an event here, so the
+  // cap is applied once, in the event itself: it keeps only what fits (or is removed when nothing does), and the debt
+  // moves by exactly what the event records. Repayments are never capped.
+  'DROP TRIGGER IF EXISTS kp_debt_apply',
+  `CREATE TRIGGER IF NOT EXISTS kp_debt_apply_capped AFTER INSERT ON kp_debt_events BEGIN
    INSERT OR IGNORE INTO kp_debts(guild,user) VALUES(NEW.guild,NEW.user);
-   UPDATE kp_debts SET since=CASE WHEN amount=0 THEN NEW.at ELSE since END,amount=amount+NEW.amount WHERE guild=NEW.guild AND user=NEW.user;
+   DELETE FROM kp_debt_events WHERE id=NEW.id AND NEW.amount>0 AND (SELECT amount FROM kp_debts WHERE guild=NEW.guild AND user=NEW.user)>=${DEBT_MAX};
+   UPDATE kp_debt_events SET amount=MIN(NEW.amount,${DEBT_MAX}-(SELECT amount FROM kp_debts WHERE guild=NEW.guild AND user=NEW.user)) WHERE id=NEW.id AND NEW.amount>0;
+   UPDATE kp_debts SET since=CASE WHEN amount=0 THEN NEW.at ELSE since END,amount=amount+COALESCE((SELECT amount FROM kp_debt_events WHERE id=NEW.id),0) WHERE guild=NEW.guild AND user=NEW.user;
   END`,
+  // Debts from before the cap come down to it once.
+  `UPDATE kp_debts SET amount=${DEBT_MAX} WHERE amount>${DEBT_MAX}`,
   // A repayment is a wallet debit (kind 'debt') and the matching debt event, in one statement.
   `CREATE TRIGGER IF NOT EXISTS kp_debt_repay AFTER INSERT ON kp_ledger WHEN NEW.kind='debt' BEGIN INSERT INTO kp_debt_events(id,guild,user,amount,kind,at) VALUES('repay:'||NEW.id,NEW.guild,NEW.user,NEW.delta,'repay',NEW.at); END`,
   `CREATE TRIGGER IF NOT EXISTS kp_debt_blocks_spending BEFORE INSERT ON kp_operations WHEN NEW.delta<0 AND EXISTS(SELECT 1 FROM kp_debts WHERE guild=NEW.guild AND user=NEW.user AND amount>0) BEGIN SELECT RAISE(ABORT,'${DEBT_BLOCKED}'); END`,

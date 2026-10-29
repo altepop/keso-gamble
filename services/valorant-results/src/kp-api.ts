@@ -35,7 +35,7 @@ import { racingView, raceSeed } from './racing-kp.ts';
 import { defaultRoastLevel, validRoastLevel } from './racing-crowns.ts';
 import { buyHorse, sellHorse, ownedHorses, raceEntries } from './racing-horses.ts';
 import { masteryOf, riotIdOf } from './mastery.ts';
-import {DEBT_BLOCKED,DEBT_INTEREST_PERCENT,DEBT_INTERVAL_MINUTES,debtOf} from './kp-debt.ts';
+import {DEBT_BLOCKED,DEBT_INTEREST_PERCENT,DEBT_INTERVAL_MINUTES,DEBT_MAX,debtOf} from './kp-debt.ts';
 import { buyLuxury, luxuryPosts, luxuryView } from './luxury.ts';
 /** A few tiny reads that change whenever the full state would: the wallet and saved state versions (every ledger
  * row bumps the wallet), 借KP, directives naming the member, and the 5-minute stock tick. The Activity polls this
@@ -67,7 +67,7 @@ export async function readKpState(env:KpEnv,mapping:KpMapping,user:string){
  // The Mリーグ screen; a failure here never blocks the wallet.
  try{state.mleague=await mlActivityView(env);}catch{console.warn('ml_view_pending');state.mleague=null;}
  if(await privateCasinoAllowed(env,mapping.guildId,user))state.privateCasino=true;else delete state.privateCasino;
- state.selfUserId=user;state.rewardRates={...policy.modes,unrated:{...policy.modes.unrated,win:modeRewards.unrated.win}};state.modeRewards=modeRewards;state.debt={amount:await debtOf(env,mapping.guildId,user),interestPercent:DEBT_INTEREST_PERCENT,intervalMinutes:DEBT_INTERVAL_MINUTES};return state;
+ state.selfUserId=user;state.rewardRates={...policy.modes,unrated:{...policy.modes.unrated,win:modeRewards.unrated.win}};state.modeRewards=modeRewards;state.debt={amount:await debtOf(env,mapping.guildId,user),interestPercent:DEBT_INTEREST_PERCENT,intervalMinutes:DEBT_INTERVAL_MINUTES,max:DEBT_MAX};return state;
 }
 // Big casino moments go to the earnings channel so others can watch (a ピンゾロ either way, a natural, or ±5,000 KP).
 const yen=(n:number)=>Math.abs(n).toLocaleString('ja-JP')+' KP';
