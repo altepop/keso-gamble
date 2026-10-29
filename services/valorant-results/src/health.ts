@@ -61,6 +61,7 @@ export async function healthReport(env:KpEnv,guild:string,now=Date.now()){
   earningsPosts:await count(env,'SELECT COUNT(*) AS n FROM kp_posts WHERE sent=0'),
   alertPosts:await count(env,'SELECT COUNT(*) AS n FROM mahjong_watch_posts WHERE sent=0'),
   kpInbox:await count(env,'SELECT COUNT(*) AS n FROM kp_inbox'),
+  uniteErrors:await count(env,'SELECT COUNT(*) AS n FROM unite_links WHERE guild=? AND error IS NOT NULL',guild),
  };
  return {at:now,features,backlog};
 }

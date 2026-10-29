@@ -12,7 +12,7 @@ import { PUBLIC_SALT, RUN_MS, WEEKLY_LIMIT, openRaceStart, latestRaceStart, race
 import { LUXURY } from './luxury.js?v=20261028-casino';
 import { raceScreen, racePreview, drawRace, raceElapsed, ownerPanel, luxuryPanel, roastPanel } from './racing-view.js?v=20261029-history2';
 import { createStore } from './store.js';
-import { healthPanel } from './health-view.js?v=20261029-health';
+import { healthPanel } from './health-view.js?v=20261029-unite-gap';
 import { mleagueScreen, mleaguePreview } from './mleague-view.js?v=20261029-mleague';
 import { gamePicker, chinchiroView, blackjackView } from './casino-view.js?v=20261028-dice-suspense';
 import {casinoFrames} from './casino-animation.js?v=20261028-dice-suspense';
