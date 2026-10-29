@@ -58,7 +58,7 @@ export function createKpClient({storage,temporaryStorage,request=globalThis.fetc
   trend:days=>api('trend?days='+days),
   privateRace:()=>api('private/race'),
   get steamLinkRequest(){return steamLink;},
-  steamStatus:()=>api('steam/status'),
+  steamStatus:()=>api('steam/status'),steamLibrary:()=>api('steam/library'),
   async startSteam(){const link=await api('steam/link',{});write(steamKey,JSON.stringify(link));steamLink=link;return link;},
   steamPending:()=>steamLink?api('steam/pending',{state:steamLink.state}):Promise.resolve(null),
   async confirmSteam(){if(!steamLink)throw Error('Steam接続をやり直してください。');const result=await api('steam/confirm',{state:steamLink.state});clearSteamLink();return result;},

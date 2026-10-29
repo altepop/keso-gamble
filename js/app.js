@@ -1,27 +1,27 @@
-import {privateCasinoPanel} from './private-casino-view.js?v=web-3dc5f314a73b3f83';
-import {communityPanel,communityRows} from './community-feed.js?v=web-3dc5f314a73b3f83';
-import {stockPanel,stockCandles,stockPrice} from './stock-view.js?v=web-3dc5f314a73b3f83';
-import {wheelView,covered,redNumbers,outcomeAngle} from './roulette-view.js?v=web-3dc5f314a73b3f83';
-import {connectDiscordActivity,isDiscordActivity,openSteamLogin}from './discord-activity-auth.js?v=web-3dc5f314a73b3f83';
-import { createKpClient } from './kp-client.js?v=web-3dc5f314a73b3f83';
-import { fmt, fmt0 } from './format.js?v=web-3dc5f314a73b3f83';
-import { submitClaim, approveClaim, issueDirective, completeDirective } from './progression.js?v=web-3dc5f314a73b3f83';
-import { titleView, homeView, playView, directivesView, escapeHTML } from './progression-views.js?v=web-3dc5f314a73b3f83';
-import { genCandles, movingAverage, svgCandles } from './charts.js?v=web-3dc5f314a73b3f83';
-import { MARKET, createInitialState, portfolioValue, assets, advanceMarket, trade, spin, spinNumbers, validateNumberBets, grantDemoSalary, cryptoRouletteNumber } from './engine.js?v=web-3dc5f314a73b3f83';
-import { KEY, LEGACY_KEY } from './storage.js?v=web-3dc5f314a73b3f83';
-import { PUBLIC_SALT, RUN_MS, WEEKLY_LIMIT, openRaceStart, latestRaceStart, raceCard, raceOdds, raceResult, raceTimeline, raceCommentary, raceRuns, placeRaceBet, settleRaceBets, weeklySpent } from './racing.js?v=web-3dc5f314a73b3f83';
-import { LUXURY } from './luxury.js?v=web-3dc5f314a73b3f83';
-import { raceScreen, racePreview, drawRace, raceElapsed, ownerPanel, luxuryPanel, roastPanel } from './racing-view.js?v=web-3dc5f314a73b3f83';
-import { createStore } from './store.js?v=web-3dc5f314a73b3f83';
-import { healthPanel } from './health-view.js?v=web-3dc5f314a73b3f83';
-import { trendPanel } from './trend-view.js?v=web-3dc5f314a73b3f83';
-import { mleagueScreen, mleaguePreview } from './mleague-view.js?v=web-3dc5f314a73b3f83';
-import { gamePicker, chinchiroView, blackjackView } from './casino-view.js?v=web-3dc5f314a73b3f83';
-import {casinoFrames} from './casino-animation.js?v=web-3dc5f314a73b3f83';
-import { playChinchiro, bjStart, bjHit, bjStand, bjDouble, cryptoDie, cryptoCard, cryptoInt } from './casino.js?v=web-3dc5f314a73b3f83';
-import { minesStart, minesPick, minesCashout, playSlot, vpDeal, vpDraw, playBaccarat, VP_NAMES } from './casino-more.js?v=web-3dc5f314a73b3f83';
-import { minesView, slotView, videoPokerView, baccaratView } from './casino-more-view.js?v=web-3dc5f314a73b3f83';
+import {privateCasinoPanel} from './private-casino-view.js?v=web-d2f34f566250e53f';
+import {communityPanel,communityRows} from './community-feed.js?v=web-d2f34f566250e53f';
+import {stockPanel,stockCandles,stockPrice} from './stock-view.js?v=web-d2f34f566250e53f';
+import {wheelView,covered,redNumbers,outcomeAngle} from './roulette-view.js?v=web-d2f34f566250e53f';
+import {connectDiscordActivity,isDiscordActivity,openSteamLogin}from './discord-activity-auth.js?v=web-d2f34f566250e53f';
+import { createKpClient } from './kp-client.js?v=web-d2f34f566250e53f';
+import { fmt, fmt0 } from './format.js?v=web-d2f34f566250e53f';
+import { submitClaim, approveClaim, issueDirective, completeDirective } from './progression.js?v=web-d2f34f566250e53f';
+import { titleView, homeView, playView, directivesView, escapeHTML } from './progression-views.js?v=web-d2f34f566250e53f';
+import { genCandles, movingAverage, svgCandles } from './charts.js?v=web-d2f34f566250e53f';
+import { MARKET, createInitialState, portfolioValue, assets, advanceMarket, trade, spin, spinNumbers, validateNumberBets, grantDemoSalary, cryptoRouletteNumber } from './engine.js?v=web-d2f34f566250e53f';
+import { KEY, LEGACY_KEY } from './storage.js?v=web-d2f34f566250e53f';
+import { PUBLIC_SALT, RUN_MS, WEEKLY_LIMIT, openRaceStart, latestRaceStart, raceCard, raceOdds, raceResult, raceTimeline, raceCommentary, raceRuns, placeRaceBet, settleRaceBets, weeklySpent } from './racing.js?v=web-d2f34f566250e53f';
+import { LUXURY } from './luxury.js?v=web-d2f34f566250e53f';
+import { raceScreen, racePreview, drawRace, raceElapsed, ownerPanel, luxuryPanel, roastPanel } from './racing-view.js?v=web-d2f34f566250e53f';
+import { createStore } from './store.js?v=web-d2f34f566250e53f';
+import { healthPanel } from './health-view.js?v=web-d2f34f566250e53f';
+import { trendPanel } from './trend-view.js?v=web-d2f34f566250e53f';
+import { mleagueScreen, mleaguePreview } from './mleague-view.js?v=web-d2f34f566250e53f';
+import { gamePicker, chinchiroView, blackjackView } from './casino-view.js?v=web-d2f34f566250e53f';
+import {casinoFrames} from './casino-animation.js?v=web-d2f34f566250e53f';
+import { playChinchiro, bjStart, bjHit, bjStand, bjDouble, cryptoDie, cryptoCard, cryptoInt } from './casino.js?v=web-d2f34f566250e53f';
+import { minesStart, minesPick, minesCashout, playSlot, vpDeal, vpDraw, playBaccarat, VP_NAMES } from './casino-more.js?v=web-d2f34f566250e53f';
+import { minesView, slotView, videoPokerView, baccaratView } from './casino-more-view.js?v=web-d2f34f566250e53f';
 const $=(s,el=document)=>el.querySelector(s);
 const wallet=createKpClient();
 const embedded=isDiscordActivity();
@@ -371,7 +371,7 @@ addEventListener('click',async e=>{
   const t=e.target.closest?.('button,[data-open]'); if(!t) return;
   if(t.dataset.action==='casino-skip'){casinoSkipped=true;skipCasinoPause?.();return;}
   if(casinoBusy&&(t.dataset.screen||t.dataset.casinoGame)){toast('演出をスキップすると移動できます');return;}
-  const mutates=!!t.dataset.approve || !!t.dataset.complete || ['steam-status','steam-link','steam-open','steam-confirm','steam-disconnect','steam-game','salary','trade','spin','race-bet','roast-level','horse-buy','horse-sell','luxury','reset','submit-claim','issue-directive','connect-kp','refresh-kp','disconnect-kp','auto-connect-kp','ml-buy','chinchiro','bj-start','bj-hit','bj-stand','bj-double','mines-start','mines-pick','mines-cashout','slot','vp-deal','vp-draw','baccarat','private-round','private-race'].includes(t.dataset.action);
+  const mutates=!!t.dataset.approve || !!t.dataset.complete || ['steam-library','steam-status','steam-link','steam-open','steam-confirm','steam-disconnect','steam-game','salary','trade','spin','race-bet','roast-level','horse-buy','horse-sell','luxury','reset','submit-claim','issue-directive','connect-kp','refresh-kp','disconnect-kp','auto-connect-kp','ml-buy','chinchiro','bj-start','bj-hit','bj-stand','bj-double','mines-start','mines-pick','mines-cashout','slot','vp-deal','vp-draw','baccarat','private-round','private-race'].includes(t.dataset.action);
   if(mutates && mutationPending)return;
   if(mutates)mutationPending=true;
   try{
@@ -380,11 +380,12 @@ addEventListener('click',async e=>{
       if(!live||!wallet.connected)throw Error('先にKP口座へ接続してください。');
       const action=t.dataset.action;try{
         if(action==='steam-open'){if(!wallet.steamLinkRequest)throw Error('Steam接続をやり直してください。');await openSteamLogin(wallet.steamLinkRequest.url);return;}
+        if(action==='steam-library'){const library=await wallet.steamLibrary();steamView={...(steamView??{}),library:library.games};}
         if(action==='steam-link')await wallet.startSteam();
         if(action==='steam-confirm')await wallet.confirmSteam();
         if(action==='steam-disconnect'){if(!confirm('Steamの監視を止めますか？ 入金済みのKPと支給記録は残ります。'))return;await wallet.disconnectSteam();}
         if(action==='steam-game')await wallet.steamGame(Number(t.dataset.app),t.dataset.active==='true');
-        const status=await wallet.steamStatus(),pending=await wallet.steamPending();steamView={status,pending,link:wallet.steamLinkRequest,error:''};
+        const status=await wallet.steamStatus(),pending=await wallet.steamPending();steamView={...(steamView??{}),status,pending,link:wallet.steamLinkRequest,error:''};
       }catch(error){steamView={...(steamView??{}),link:wallet.steamLinkRequest,error:error.message||'Steam接続を確認できません。'};}
       render();return;
     }
@@ -486,6 +487,7 @@ addEventListener('input', e => {
   if(e.target.id==='horse-name')drafts['horse-name']=e.target.value;
   if(e.target.id==='ml-amount'){drafts['ml-amount']=e.target.value;const preview=$('#ml-preview');if(preview)preview.textContent=mleaguePreview(state,{...mlDraft,amount:e.target.value});}
   if(e.target.id==='race-amount'){drafts['race-amount']=e.target.value;const preview=$('#race-preview');if(preview){const open=openCard(Date.now());preview.innerHTML=racePreview(open,raceOdds(open),{...raceDraft,amount:e.target.value});}}
+  if(e.target.id==='steam-game-search'){if(steamView){steamView.search=e.target.value;render();}return;}
   if (e.target.id==='kp-connect-code'||['trade-qty','bet-amount','chinchiro-amount','bj-amount','mines-amount','slot-amount','vp-amount','baccarat-amount'].includes(e.target.id)||e.target.id.startsWith('claim-')||e.target.id.startsWith('directive-')) drafts[e.target.id] = e.target.value;
   if(e.target.id==='trade-qty')$('#trade-estimate').innerHTML=tradeEstimate();
 });

@@ -30,7 +30,7 @@ export async function ledgerHistory(env:KpEnv,guild:string,user:string,limit=100
  }
  const steamDetails=new Map<string,string>();
  const steamIds=rows.filter(r=>r.kind==='steam').map(r=>r.id);
- for(let i=0;i<steamIds.length;i+=50){const ids=steamIds.slice(i,i+50);for(const e of (await env.DB.prepare(`SELECT id,app,title,percent FROM kp_steam_events WHERE guild=? AND user=? AND id IN (${ids.map(()=>'?').join(',')})`).bind(guild,user,...ids).all<{id:string;app:number;title:string;percent:number}>()).results)steamDetails.set(e.id,e.title+'（App '+e.app+'・解除率 '+e.percent+'%）');}
+ for(let i=0;i<steamIds.length;i+=50){const ids=steamIds.slice(i,i+50);for(const e of (await env.DB.prepare(`SELECT id,app,title,percent,requested,amount FROM kp_steam_events WHERE guild=? AND user=? AND id IN (${ids.map(()=>'?').join(',')})`).bind(guild,user,...ids).all<{id:string;app:number;title:string;percent:number;requested:number;amount:number}>()).results)steamDetails.set(e.id,e.title+'（App '+e.app+'・解除率 '+e.percent+'%'+(e.amount<e.requested?'・日上限により'+e.requested+'→'+e.amount+' KP':'')+'）');}
  const out:HistoryEntry[]=[],byEvent=new Map<string,HistoryEntry>();
  for(const r of rows){
   if(r.kind==='match'&&(events.has(r.id)||r.id.startsWith('penalty:'))){

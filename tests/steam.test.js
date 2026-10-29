@@ -19,7 +19,7 @@ test('Steam official login opens via the Discord SDK without navigating the Acti
 test('Steam panel escapes provider/game errors and clearly distinguishes no credit, inactive configuration and approval',()=>{
  const status={available:true,enabled:false,account:{steamId:'76561198000000001',active:true},apps:[{id:123,title:'<img src=x onerror=alert(1)>'}],games:[]};
  const html=steamPanel({status,error:'<script>x</script>',pending:{verified:true,steamId:'76561198000000001'}});
- assert(!html.includes('<img'));assert(!html.includes('<script>'));assert.match(html,/50%以上 0 KP/);assert.match(html,/現在は入金されません/);assert.match(html,/data-action="steam-confirm"/);assert(!steamPanel({status:{...status,available:false}}).includes('data-action="steam-link"'));
+ assert(!html.includes('<img'));assert(!html.includes('<script>'));assert.match(html,/10%超 100 KP/);assert.match(html,/現在は入金されません/);assert.match(html,/data-action="steam-confirm"/);assert(!steamPanel({status:{...status,available:false}}).includes('data-action="steam-link"'));
 });
 test('a browser storage cleanup failure cannot block KP logout when Steam was never used',async()=>{
  const saved=storage();saved.setItem('keso-kp-session-v1','fixture');saved.removeItem=()=>{throw Error('storage revoked');};

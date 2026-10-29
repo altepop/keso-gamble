@@ -1,5 +1,5 @@
 import {kpHash,kpRandom} from './kp.ts';
-import {chooseSteamGame,ensureSteam,steamConfig,steamLimit,steamView,validSteamId} from './steam-rewards.ts';
+import {chooseSteamGame,ensureSteam,ownedSteamGames,steamConfig,steamLimit,steamView,validSteamId} from './steam-rewards.ts';
 import type {SteamEnv,SteamOwner} from './steam-rewards.ts';
 
 const origin='https://valorant-results.tealeaforest.workers.dev';
@@ -56,6 +56,10 @@ export async function confirmSteamLink(env:SteamEnv,owner:SteamOwner,session:str
 export async function steamApi(request:Request,env:SteamEnv,owner:SteamOwner,session:string):Promise<Response>{
  const path=new URL(request.url).pathname;const json=(v:unknown,status=200)=>Response.json(v,{status,headers:noStore});await ensureSteam(env);
  if(request.method==='GET'&&path==='/api/kp/steam/status')return json(await steamView(env,owner));
+ if(request.method==='GET'&&path==='/api/kp/steam/library'){
+  const account=await env.DB.prepare('SELECT steam FROM kp_steam_accounts WHERE guild=? AND user=? AND active=1').bind(owner.guild,owner.user).first<{steam:string}>();if(!account)throw Error('先にSteamアカウントを接続してください。');
+  await steamLimit(env,owner,'library',5);return json({games:await ownedSteamGames(env,account.steam)});
+ }
  if(request.method!=='POST')return json({error:'Not found'},404);
  // The outer KP router already validates Origin and the authenticated bearer, never ambient cookies.
  const reader=request.body?.getReader();if(!reader)return json({error:'操作内容が不正です。'},400);const chunks:Uint8Array[]=[];let size=0;while(true){const n=await reader.read();if(n.done)break;size+=n.value.length;if(size>1024){await reader.cancel();return json({error:'入力が長すぎます。'},400);}chunks.push(n.value);}const bytes=new Uint8Array(size);let at=0;for(const chunk of chunks){bytes.set(chunk,at);at+=chunk.length;}const body=JSON.parse(new TextDecoder().decode(bytes));if(!body||typeof body!=='object'||Array.isArray(body))return json({error:'操作内容が不正です。'},400);

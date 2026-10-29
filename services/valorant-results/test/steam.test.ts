@@ -13,7 +13,7 @@ async function fixture(){
  const sql=new DatabaseSync(':memory:');for(const s of kpSchema)sql.exec(s);
  class Q {text:string;values:unknown[];constructor(text:string,values:unknown[]=[]){this.text=text;this.values=values;}bind(...v:unknown[]){return new Q(this.text,v);}async first(){return sql.prepare(this.text).get(...this.values as never[])??null;}async all(){return {results:sql.prepare(this.text).all(...this.values as never[])};}async run(){return {meta:{changes:Number(sql.prepare(this.text).run(...this.values as never[]).changes)}};}}
  const DB={prepare:(s:string)=>new Q(s),batch:async(qs:Q[])=>{sql.exec('BEGIN');try{const rows=[];for(const q of qs)rows.push(await q.run());sql.exec('COMMIT');return rows;}catch(e){sql.exec('ROLLBACK');throw e;}}} as unknown as D1Database;
- const now=Date.now();const c={...steamConfig({DB}),enabled:true,startsAt:now-300000,apps:[{id:app,title:'Test Game'}]};
+ const now=Date.now();const c={...steamConfig({DB}),enabled:true,startsAt:now-300000};
  const env:SteamEnv={DB,KP_STEAM_CONFIG:JSON.stringify(c),STEAM_WEB_API_KEY:'test-key-never-public'};await ensureSteam(env);
  sql.prepare('INSERT INTO kp_wallets(guild,user) VALUES(?,?)').run(guild,user);sql.prepare('INSERT INTO kp_state(guild,user,data) VALUES(?,?,?)').run(guild,user,'{}');
  const session=await createKpSession(env,guild,user);return {sql,env,c,now,session};
@@ -37,10 +37,10 @@ function mock(f:Awaited<ReturnType<typeof fixture>>,list:Ach[],percent=0.1,hook?
 function unlocked(f:Awaited<ReturnType<typeof fixture>>,name='new',offset=-10000):Ach{return {apiname:name,achieved:1,unlocktime:Math.floor((f.now+offset)/1000)};}
 const due=(f:Awaited<ReturnType<typeof fixture>>)=>f.sql.exec('UPDATE kp_steam_games SET next_at=0,lease_until=0');
 
-test('approved rarity tiers include exact 50% exclusion and reject invalid percentages',async()=>{
- const f=await fixture(),c=steamConfig(f.env);for(const [p,n] of [[0,5000],[0.1,5000],[0.100001,1000],[1,1000],[1.001,300],[10,300],[10.001,50],[49.999,50],[50,0],[100,0]])assert.equal(steamAmount(c,p!),n);
+test('approved rarity tiers include exact 50% boundary and reject invalid percentages',async()=>{
+ const f=await fixture(),c=steamConfig(f.env);for(const [p,n] of [[0,5000],[0.1,5000],[0.100001,1000],[1,1000],[1.001,300],[10,300],[10.001,100],[49.999,100],[50,100],[100,100]])assert.equal(steamAmount(c,p!),n);
  for(const p of [NaN,Infinity,-1,100.1])assert.throws(()=>steamAmount(c,p));
- for(const extra of [{enabled:true,startsAt:null},{enabled:true,apps:[]},{zeroFromPercent:51},{tiers:[]}])assert.throws(()=>steamConfig({...f.env,KP_STEAM_CONFIG:JSON.stringify({...f.c,...extra})}));
+ for(const extra of [{enabled:true,startsAt:null},{dailyCap:5001},{tiers:[]}])assert.throws(()=>steamConfig({...f.env,KP_STEAM_CONFIG:JSON.stringify({...f.c,...extra})}));
 });
 test('disabled or missing-key collection never contacts Steam or creates events',async()=>{
  const f=await fixture();linked(f);const fail=(async()=>{throw Error('must not fetch');}) as typeof fetch;
@@ -52,10 +52,10 @@ test('new API-confirmed achievement credits the real ledger once; edits, resets 
  const history=await ledgerHistory(f.env,guild,user);assert.equal(history[0]!.label,'Steam実績');assert.match(history[0]!.detail,/達成 new/);
  due(f);await monitorSteam(f.env,guild,mock(f,list,49),()=>f.now);assert.equal(earned(f),5000);assert.equal(f.sql.prepare('SELECT count(*) AS n FROM kp_steam_events').get()!.n,1);
 });
-test('50%-plus achievements are recorded without adding a wallet ledger row, even if rarity later falls',async()=>{
- const f=await fixture();linked(f);await monitorSteam(f.env,guild,mock(f,[unlocked(f)],50),()=>f.now);assert.equal(earned(f),0);
- assert.equal(f.sql.prepare('SELECT count(*) AS n FROM kp_ledger').get()!.n,0);assert.equal(f.sql.prepare('SELECT amount FROM kp_steam_events').get()!.amount,0);
- due(f);await monitorSteam(f.env,guild,mock(f,[unlocked(f)],0.1),()=>f.now);assert.equal(earned(f),0);
+test('common achievements pay 100 KP once, even if rarity later falls',async()=>{
+ const f=await fixture();linked(f);await monitorSteam(f.env,guild,mock(f,[unlocked(f)],50),()=>f.now);assert.equal(earned(f),100);
+ assert.equal(f.sql.prepare('SELECT count(*) AS n FROM kp_ledger').get()!.n,1);assert.equal(f.sql.prepare('SELECT amount FROM kp_steam_events').get()!.amount,100);
+ due(f);await monitorSteam(f.env,guild,mock(f,[unlocked(f)],0.1),()=>f.now);assert.equal(earned(f),100);
 });
 test('pre-link, pre-baseline, pre-policy, future and missing unlock times never pay',async()=>{
  const f=await fixture();linked(f);const list=[unlocked(f,'pre',-400000),unlocked(f,'baseline',-130000),unlocked(f,'future',120000),{apiname:'unknown',achieved:1,unlocktime:0}];
@@ -85,7 +85,7 @@ test('overlapping collectors only fetch once and unlink during fetch prevents cr
 });
 test('game selection verifies ownership and snapshots old achievements; stopping/reselecting takes a new baseline',async()=>{
  const f=await fixture();f.sql.prepare('INSERT INTO kp_steam_accounts VALUES(?,?,?,?,1,?)').run(guild,user,steam,f.now-180000,f.now-180000);
- await assert.rejects(chooseSteamGame(f.env,owner,999,true,mock(f,[])),/対象/);
+ await assert.rejects(chooseSteamGame(f.env,owner,999,true,mock(f,[])),/所持/);
  await assert.rejects(chooseSteamGame(f.env,owner,app,true,(async()=>Response.json({response:{}})) as typeof fetch),/公開/);
  await chooseSteamGame(f.env,owner,app,true,mock(f,[unlocked(f)]));assert.deepEqual(JSON.parse(f.sql.prepare('SELECT baseline FROM kp_steam_games').get()!.baseline as string),['new']);
  await chooseSteamGame(f.env,owner,app,false);await chooseSteamGame(f.env,owner,app,true,mock(f,[unlocked(f),unlocked(f,'later')]));assert.equal(JSON.parse(f.sql.prepare('SELECT baseline FROM kp_steam_games').get()!.baseline as string).length,2);assert.equal(earned(f),0);
@@ -127,15 +127,66 @@ test('public KP routes require the real bearer, preserve CORS and never accept a
  assert.equal(r.status,200);assert.equal(r.headers.get('Access-Control-Allow-Origin'),origin);assert.equal((await r.json() as any).account.steamId,steam);
  assert.equal((await kpApi(new Request(url,{headers:{Origin:'https://evil.example',Authorization:'Bearer '+f.session}}),f.env,mapping)).status,403);
 });
-test('Steam game selection is bounded to five active games and 0 KP never creates a zero ledger flood',async()=>{
+test('Steam game selection is bounded to five active games and common payouts resume in bounded batches',async()=>{
  const f=await fixture();linked(f);for(let i=1;i<=4;i++)f.sql.prepare('INSERT INTO kp_steam_games(guild,user,app) VALUES(?,?,?)').run(guild,user,app+i);
  assert.throws(()=>f.sql.prepare('INSERT INTO kp_steam_games(guild,user,app) VALUES(?,?,?)').run(guild,user,app+5),/limit/);
  const list=Array.from({length:25},(_,i)=>unlocked(f,'common-'+i));await monitorSteam(f.env,guild,mock(f,list,60),()=>f.now);assert.equal(f.sql.prepare('SELECT count(*) AS n FROM kp_steam_events').get()!.n,20);
- due(f);await monitorSteam(f.env,guild,mock(f,list,60),()=>f.now);assert.equal(f.sql.prepare('SELECT count(*) AS n FROM kp_steam_events').get()!.n,25);assert.equal(f.sql.prepare('SELECT count(*) AS n FROM kp_ledger').get()!.n,0);
+ due(f);await monitorSteam(f.env,guild,mock(f,list,60),()=>f.now);assert.equal(f.sql.prepare('SELECT count(*) AS n FROM kp_steam_events').get()!.n,25);assert.equal(f.sql.prepare('SELECT count(*) AS n FROM kp_ledger').get()!.n,25);assert.equal(earned(f),2500);
 });
 test('rate limits stop authenticated API-key abuse before further Steam requests',async()=>{
  const f=await fixture();for(let i=0;i<5;i++)await startSteamLink(f.env,owner,f.session);await assert.rejects(startSteamLink(f.env,owner,f.session),/10分/);
- linked(f);let calls=0;const api=mock(f,[],0.1,()=>{calls++;});
+ linked(f);let calls=0;const api=mock(f,[unlocked(f)],0.1,()=>{calls++;});
  for(let i=0;i<10;i++)await chooseSteamGame(f.env,owner,app,true,api);
  const before=calls;await assert.rejects(chooseSteamGame(f.env,owner,app,true,api),/10分/);assert.equal(calls,before);
+});
+test('all Steam games share the daily cap; a reward crossing 5,000 pays the remainder and never carries the shortfall',async()=>{
+ const f=await fixture();linked(f);const list=Array.from({length:49},(_,i)=>unlocked(f,'medium-'+i));
+ for(let i=0;i<3;i++){due(f);await monitorSteam(f.env,guild,mock(f,list,20),()=>f.now);}
+ assert.equal(earned(f),4900);due(f);list.push(unlocked(f,'rare'));await monitorSteam(f.env,guild,mock(f,list,0.1),()=>f.now);
+ assert.equal(earned(f),5000);const record=f.sql.prepare("SELECT requested,amount FROM kp_steam_events WHERE achievement='rare'").get()!;assert.equal(record.requested,5000);assert.equal(record.amount,100);
+ const view=await steamView(f.env,owner,f.now);assert.equal(view.earnedToday,5000);assert.equal(view.remainingToday,0);
+ const history=await ledgerHistory(f.env,guild,user);assert.match(history.find(r=>r.detail.includes('達成 rare'))!.detail,/5000→100/);
+ due(f);list.push(unlocked(f,'at-cap'));await monitorSteam(f.env,guild,mock(f,list,60),()=>f.now);assert.equal(earned(f),5000);assert.equal(f.sql.prepare("SELECT amount FROM kp_steam_events WHERE achievement='at-cap'").get()!.amount,0);
+ due(f);await monitorSteam(f.env,guild,mock(f,list,0.1),()=>f.now+86400000);assert.equal(earned(f),5000,'partial and zero settlements do not get the rest tomorrow');
+});
+test('concurrent games cannot spend the same daily allowance twice',async()=>{
+ const f=await fixture();linked(f);
+ f.sql.prepare('INSERT INTO kp_steam_games(guild,user,app,baseline_at) VALUES(?,?,?,?)').run(guild,user,app+1,f.now-120000);
+ let arrivals=0,release:()=>void=()=>{};const barrier=new Promise<void>(r=>release=r);
+ const send=mock(f,[unlocked(f)],0.1,async url=>{if(url.pathname.includes('GetPlayerAchievements')){arrivals++;if(arrivals===2)release();await barrier;}});
+ await Promise.all([monitorSteam(f.env,guild,send,()=>f.now),monitorSteam(f.env,guild,send,()=>f.now)]);
+ assert.equal(arrivals,2);assert.equal(earned(f),5000);assert.equal(f.sql.prepare('SELECT count(*) AS n FROM kp_steam_events').get()!.n,2);assert.equal(f.sql.prepare('SELECT sum(amount) AS n FROM kp_steam_daily').get()!.n,5000);
+ const rows=f.sql.prepare('SELECT amount FROM kp_steam_events ORDER BY amount').all();assert.deepEqual(rows.map(r=>r.amount),[0,5000]);
+});
+test('daily cap resets at 09:00 JST, with delayed credit counted on its actual settlement day',async()=>{
+ const f=await fixture();const midnight=Math.floor(f.now/86400000)*86400000+86400000,before=midnight-1000,after=midnight+1000;f.now=before;linked(f);
+ const first=unlocked(f,'before',-1000);await monitorSteam(f.env,guild,mock(f,[first]),()=>before);assert.equal(earned(f),5000);assert.equal((await steamView(f.env,owner,before)).remainingToday,0);
+ assert.equal((await steamView(f.env,owner,after)).remainingToday,5000);due(f);f.now=after;await monitorSteam(f.env,guild,mock(f,[first,unlocked(f,'after',0)]),()=>after);
+ assert.equal(earned(f),10000);assert.deepEqual(f.sql.prepare('SELECT amount FROM kp_steam_daily ORDER BY day').all().map(r=>r.amount),[5000,5000]);
+});
+test('a failed ledger insertion rolls back the daily allowance as well as the achievement',async()=>{
+ const f=await fixture();linked(f);f.sql.exec("CREATE TRIGGER fail_daily BEFORE INSERT ON kp_ledger WHEN NEW.kind='steam' BEGIN SELECT RAISE(ABORT,'test'); END");
+ await monitorSteam(f.env,guild,mock(f,[unlocked(f)]),()=>f.now);assert.equal(f.sql.prepare('SELECT count(*) AS n FROM kp_steam_daily').get()!.n,0);
+ f.sql.exec('DROP TRIGGER fail_daily');due(f);await monitorSteam(f.env,guild,mock(f,[unlocked(f)]),()=>f.now);assert.equal(earned(f),5000);assert.equal(f.sql.prepare('SELECT amount FROM kp_steam_daily').get()!.amount,5000);
+});
+test('any API-confirmed owned title can be selected without an administrator list',async()=>{
+ const f=await fixture();linked(f);f.sql.exec('UPDATE kp_steam_games SET active=0');
+ const original=mock(f,[unlocked(f)]),send=(async(input:any,init:any)=>String(input).includes('GetOwnedGames')?Response.json({response:{games:[{appid:999,name:'Any owned title'}]}}):original(input,init)) as typeof fetch;
+ await chooseSteamGame(f.env,owner,999,true,send);const view=await steamView(f.env,owner);assert.deepEqual(view.apps.find(a=>a.id===999),{id:999,title:'Any owned title'});
+ const later=f.now+60000;await monitorSteam(f.env,guild,mock(f,[unlocked(f),{apiname:'new-in-arbitrary-title',achieved:1,unlocktime:Math.floor((later-10000)/1000)}],60),()=>later);
+ assert.equal(earned(f),100);assert.equal(f.sql.prepare('SELECT app FROM kp_steam_events').get()!.app,999);
+});
+test('library requests use the linked owner, ignore supplied Steam IDs and stop after five requests',async()=>{
+ const f=await fixture();linked(f);const original=globalThis.fetch;let calls=0;
+ try{
+  globalThis.fetch=(async(input:any)=>{calls++;const url=new URL(String(input));assert.equal(url.searchParams.get('steamid'),steam);return Response.json({response:{games:[{appid:999,name:'Some Game'}]}});}) as typeof fetch;
+  for(let i=0;i<5;i++){const r=await steamApi(new Request('https://worker.example/api/kp/steam/library?steamid='+otherSteam),f.env,owner,f.session);assert.equal(r.status,200);assert.deepEqual((await r.json() as any).games,[{id:999,title:'Some Game'}]);}
+  await assert.rejects(steamApi(new Request('https://worker.example/api/kp/steam/library'),f.env,owner,f.session),/10分/);assert.equal(calls,5);
+ }finally{globalThis.fetch=original;}
+});
+test('an API request spanning 09:00 charges the day of settlement rather than the cron start',async()=>{
+ const f=await fixture(),midnight=Math.floor(f.now/86400000)*86400000+86400000;f.now=midnight-1000;linked(f);let clock=f.now;
+ const send=mock(f,[unlocked(f)],0.1,url=>{if(url.pathname.includes('GetGlobalAchievement'))clock=midnight+1000;});
+ await monitorSteam(f.env,guild,send,()=>clock);const row=f.sql.prepare('SELECT day,amount FROM kp_steam_daily').get()!;
+ assert.equal(row.day,new Date(midnight).toISOString().slice(0,10));assert.equal(row.amount,5000);assert.equal((await steamView(f.env,owner,clock)).remainingToday,0);
 });

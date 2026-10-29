@@ -1,8 +1,7 @@
 {
-  "version": "steam-achievements-v1",
+  "version": "steam-achievements-v2",
   "enabled": false,
   "startsAt": null,
-  "apps": [],
   "tiers": [
     {
       "maxPercent": 0.1,
@@ -18,8 +17,8 @@
     },
     {
       "maxPercent": 100,
-      "amount": 50
+      "amount": 100
     }
   ],
-  "zeroFromPercent": 50
+  "dailyCap": 5000
 }
