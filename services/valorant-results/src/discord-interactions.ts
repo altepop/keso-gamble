@@ -1,6 +1,6 @@
 import {activityLaunchComponents} from './activity-link.ts';
 import {isKpRanking} from './kp-command.ts';
-import { betChoices, mbetChoices, runKpCommand } from './kp-slash.ts';
+import { MBET_BUTTON, betChoices, mbetChoices, mbetDecide, runKpCommand } from './kp-slash.ts';
 import { PAIFU_BUTTON, decidePaifu, paifuRequest, runPaifuCommand } from './mahjong-claims.ts';
 import type { PaifuReply } from './mahjong-claims.ts';
 import { runValoCommand } from './valo-queries.ts';
@@ -126,9 +126,10 @@ export async function discordInteractions(request: Request, env: Env, ctx: Execu
   try { permissions = BigInt(interaction.member?.permissions ?? '0'); } catch { /* Deny invalid permission fields. */ }
   const deathSelect = interaction.type === 3 && /^death_mode:\d+$/.test(interaction.data?.custom_id ?? '');
   const paifuButton = interaction.type === 3 && PAIFU_BUTTON.test(interaction.data?.custom_id ?? '');
+  const mbetButton = interaction.type === 3 && MBET_BUTTON.test(interaction.data?.custom_id ?? '');
   if (['kpgrant','paifulink','unitelink'].includes(interaction.data?.name ?? '') && !(permissions & (8n | 32n))) return respond('このコマンドには「管理者」または「サーバー管理」権限が必要です。');
   if ((interaction.data?.name === 'death' || deathSelect) && !(permissions & (8n | 32n))) return respond('開始・終了・状態確認には「管理者」または「サーバー管理」権限が必要です。');
-  if (!deathSelect && !paifuButton && (interaction.type !== 2 || !['death', 'valo', 'kp', 'keiba', 'bet', 'paifu', 'mleague', 'mbet', 'mclose', 'kpgrant', 'paifulink', 'unitelink', 'horsename'].includes(interaction.data?.name ?? ''))) return respond('対応していないコマンドです。');
+  if (!deathSelect && !paifuButton && !mbetButton && (interaction.type !== 2 || !['death', 'valo', 'kp', 'keiba', 'bet', 'paifu', 'mleague', 'mbet', 'mclose', 'kpgrant', 'paifulink', 'unitelink', 'horsename'].includes(interaction.data?.name ?? ''))) return respond('対応していないコマンドです。');
   if (!/^\d+$/.test(interaction.id) || typeof interaction.token !== 'string' || !interaction.token.length || interaction.token.length > 4096) return new Response('Invalid interaction', { status: 400 });
   // A malformed paipu claim is answered privately before the public deferred reply is opened.
   if (interaction.data?.name === 'paifu' && interaction.type === 2) {
@@ -147,7 +148,11 @@ export async function discordInteractions(request: Request, env: Env, ctx: Execu
   ctx.waitUntil((async () => {
     let result: { content: string; components?: unknown[] }, notice: string | undefined;
     try {
-      if (paifuButton) {
+      if (mbetButton) {
+        const decided = await mbetDecide(env, interaction);
+        if (!decided) return;
+        result = decided;
+      } else if (paifuButton) {
         const decided: PaifuReply | null = await decidePaifu(env, interaction);
         if (!decided) return;
         ({ notice, ...result } = decided);
@@ -155,7 +160,7 @@ export async function discordInteractions(request: Request, env: Env, ctx: Execu
       else if (deathSelect) result = { content: await selectDeathMode(env.DB, interaction, configuredPlayers, runDeathCommand), components: [] };
       else if (interaction.data?.name === 'death' && interaction.data.options?.[0]?.name === 'start'
         && !interaction.data.options[0].options?.some(option => option.name === 'mode')) result = await deathModePicker(env.DB, interaction, configuredPlayers);
-      else if (['kp','keiba','bet','mleague','mbet','mclose','kpgrant','paifulink','unitelink','horsename'].includes(interaction.data?.name??'')) result = {content:await runKpCommand(env,interaction),components:activityLaunchComponents(config.applicationId)};
+      else if (['kp','keiba','bet','mleague','mbet','mclose','kpgrant','paifulink','unitelink','horsename'].includes(interaction.data?.name??'')) {const out:{components?:unknown[]}={};result = {content:await runKpCommand(env,interaction,undefined,out)};result.components=out.components??activityLaunchComponents(config.applicationId);}
       else result = { content: interaction.data!.name === 'valo' ? await runValoCommand(env.DB, interaction) : await runDeathCommand(env.DB, interaction) };
     } catch {
       console.warn('discord_command_failed');
@@ -184,5 +189,5 @@ export async function discordInteractions(request: Request, env: Env, ctx: Execu
     } catch { console.warn('discord_command_reply_failed'); }
     if (notice) await whisper(notice);
   })());
-  return Response.json(deathSelect || paifuButton ? { type: 6 } : { type: 5, data: { flags: isKpRanking(interaction) || interaction.data?.name === 'paifu' ? 0 : 64 } });
+  return Response.json(deathSelect || paifuButton || mbetButton ? { type: 6 } : { type: 5, data: { flags: isKpRanking(interaction) || interaction.data?.name === 'paifu' ? 0 : 64 } });
 }

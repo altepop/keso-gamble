@@ -8,7 +8,7 @@ import type {KpMapping} from '../src/kp.ts';
 import {operateKp,readKpState} from '../src/kp-api.ts';
 import {ML_DATA,KINMA_FEED,parseKinmaLineups,pollMlLineups,mlLineups,parseOfficialResults,parseOfficialCards,storeCards,mlData,refreshMlCards,matchFixture,pollMlResults,settleMl,queueMlPosts,mlResults} from '../src/mleague.ts';
 import type {PostEnv} from '../src/racing-posts.ts';
-import {runKpCommand,mlDay,mbetChoices} from '../src/kp-slash.ts';
+import {runKpCommand,mlDay,mbetChoices,mbetDecide} from '../src/kp-slash.ts';
 // @ts-expect-error Shared browser engine.
 import {mlCard} from '../../../js/mleague.js';
 const guild='100000000000000100',one='100000000000000101',two='100000000000000102';
@@ -128,7 +128,9 @@ test('/mleague lists numbered players with odds; /mbet buys by table-game code a
  assert.match(view,/1卓.*第1試合 受付中/);assert.match(view,new RegExp(`1\\. ${card[0].name}（.+）ラス \\d+\\.\\d倍$`,'m'));
  assert.ok(view.length<2000,'fits one Discord message');
  const reply=await runKpCommand(f.env,{id:snowflake,guild_id:guild,member:{user:{id:one}},data:{name:'mbet',options:[{name:'match',value:'1-1'},{name:'player',value:3},{name:'amount',value:200}]}},mapping);
- assert.match(reply,new RegExp(`1卓 第1試合・${card[2].name}のラス`));assert.equal(f.balance(one),99800);
+ assert.match(reply,new RegExp(`1卓 第1試合・\\*\\*${card[2].name}\\*\\*のラス`));assert.match(reply,/まだ購入していません/);assert.equal(f.balance(one),100000,'the preview buys nothing');
+ const bought=await mbetDecide(f.env,{id:String(BigInt(snowflake)+5n),guild_id:guild,member:{user:{id:one}},data:{custom_id:`mbet:buy:${snowflake}`}},mapping);
+ assert.match(bought!.content,/ラス予想を購入しました/);assert.equal(f.balance(one),99800);
  assert.match(await runKpCommand(f.env,{id:String(BigInt(snowflake)+1n),guild_id:guild,member:{user:{id:one}},data:{name:'mbet',options:[{name:'match',value:'3-1'},{name:'player',value:3},{name:'amount',value:200}]}},mapping),/その試合はありません/);
 });
 
@@ -213,8 +215,10 @@ test('/mbet named selections follow the official corrected teams, settle once an
  const d=await mlData(f.env),selectedFixture=d.fixtures.find(g=>g.id===game1.id)!,players=mlCard(d,selectedFixture),picked=players[2];
  const choices=await mbetChoices(f.env,pickInput(game1.id));assert.ok(choices.some(c=>c.value===picked.name&&c.name.includes(picked.teamName)));
  const input=pickInput(game1.id);input.data.options=[{name:'match',value:game1.id,focused:false},{name:'player',value:picked.name,focused:false},{name:'amount',value:500,focused:false}];
- const message=await runKpCommand(f.env,input,mapping);assert.match(message,/ラス予想を購入しました/);assert.ok(message.includes('チーム '+picked.teamName));assert.match(message,/的中時の払戻し [\d,]+ KP（掛け金込み）/);
- assert.equal(f.balance(one),99500);await runKpCommand(f.env,input,mapping);assert.equal(f.balance(one),99500);
+ const preview=await runKpCommand(f.env,input,mapping);assert.match(preview,/まだ購入していません/);assert.ok(preview.includes('チーム '+picked.teamName));
+ const buy=()=>mbetDecide(f.env,{...input,id:String(BigInt(input.id)+7n),data:{custom_id:`mbet:buy:${input.id}`}},mapping).then(r=>r!.content);
+ const message=await buy();assert.match(message,/ラス予想を購入しました/);assert.ok(message.includes('チーム '+picked.teamName));assert.match(message,/的中時の払戻し [\d,]+ KP（掛け金込み）/);
+ assert.equal(f.balance(one),99500);await buy();assert.equal(f.balance(one),99500);
  const saved=JSON.parse(String(f.sql.prepare('SELECT data FROM kp_state WHERE user=?').get(one)!.data));assert.equal(saved.mlBets[0].player,picked.name);assert.equal(saved.mlBets[0].type,'last');
 });
 test('/mbet revalidates the selection after autocomplete; an expired game ID never becomes tomorrow game',async t=>{
@@ -267,4 +271,27 @@ test('61件買っても未精算は消えず、結果が出たら61件すべて�
  const state=await readKpState(f.env,mapping,one);
  assert.equal(state.mlBets.filter((b:{status:string})=>b.status==='pending').length,0);
  assert.equal(f.balance(one),100000-6100+61*Math.floor(100*state.mlBets[0].odds/10));
+});
+
+test('/mbet の確認：やめる・二度押し・他人の押下・期限切れ・倍率の変化・借KP', async t => {
+ t.mock.timers.enable({apis:['Date'],now:jst('2026-10-27T18:00:00')});
+ const f=await fixture();await storeCards(f.env,parseOfficialCards(page,2026),Date.now());
+ let n=0n;const sid=()=>String((BigInt(Date.now())-1420070400000n)<<22n|(++n));
+ const preview=async(amount=200,user=one)=>{const id=sid(),out:{components?:Array<{components:Array<{custom_id:string}>}>}={};const content=await runKpCommand(f.env,{id,guild_id:guild,member:{user:{id:user}},data:{name:'mbet',options:[{name:'match',value:'1-1'},{name:'player',value:3},{name:'amount',value:amount}]}},mapping,out);return {id,content,out};};
+ const press=(id:string,kind:'buy'|'no',user=one)=>mbetDecide(f.env,{id:sid(),guild_id:guild,member:{user:{id:user}},data:{custom_id:`mbet:${kind}:${id}`}},mapping);
+ const a=await preview();
+ assert.deepEqual(a.out.components![0].components.map(c=>c.custom_id),[`mbet:buy:${a.id}`,`mbet:no:${a.id}`]);
+ assert.equal(await press(a.id,'buy',two),null,'someone else cannot press it');
+ assert.match((await press(a.id,'no'))!.content,/購入をやめました/);
+ assert.match((await press(a.id,'buy'))!.content,/やめています/);assert.equal(f.balance(one),100000);
+ const b=await preview();
+ assert.match((await press(b.id,'buy'))!.content,/購入しました/);assert.match((await press(b.id,'buy'))!.content,/購入しました/);
+ assert.equal(f.balance(one),99800,'a double press buys once');
+ const c=await preview();t.mock.timers.setTime(Date.now()+11*60000);
+ assert.match((await press(c.id,'buy'))!.content,/10分を過ぎた/);assert.equal(f.balance(one),99800);
+ const d=await preview();f.sql.prepare('UPDATE ml_bet_drafts SET odds=odds+5 WHERE id=?').run(d.id);
+ assert.match((await press(d.id,'buy'))!.content,/倍率が .* に変わったので購入していません/);assert.equal(f.balance(one),99800);
+ assert.match((await preview(9999900)).content,/KPが不足/,'checked like a purchase');
+ f.sql.prepare("INSERT INTO kp_debt_events VALUES('borrow:x',?,?,500,'borrow',0)").run(guild,one);
+ assert.match((await preview()).content,/借KP/);
 });

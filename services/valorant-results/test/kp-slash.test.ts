@@ -201,3 +201,19 @@ test('autocomplete flags participate in registration, while Discord defaults do 
  const changed:string[]=[];assert.equal(await registerKpCommands(one,guild,async(path,method,body)=>{if(method==='POST'){changed.push((body as any).name);return {...(body as object),id:one};}return path==='/users/@me'?{id:one,bot:true}:stored;},async()=>{}),1);
  assert.deepEqual(changed,['mbet']);
 });
+
+test('/mbet の「購入する」ボタンは即座に受け付け（type 6）、元の確認メッセージを結果に書き換えてボタンを消す',async t=>{
+ const {discordInteractions}=await import('../src/discord-interactions.ts');
+ const pair=await crypto.subtle.generateKey({name:'Ed25519'},true,['sign','verify']) as CryptoKeyPair;
+ const config={applicationId:one,guildId:guild,publicKey:Buffer.from(await crypto.subtle.exportKey('raw',pair.publicKey)).toString('hex')};
+ const body=JSON.stringify({id:id(T0,5),guild_id:guild,application_id:one,type:3,token:'t',member:{permissions:'0',user:{id:one}},data:{custom_id:`mbet:buy:${id(T0,4)}`}}),timestamp=String(Math.floor(Date.now()/1000));
+ const signature=Buffer.from(await crypto.subtle.sign('Ed25519',pair.privateKey,new TextEncoder().encode(timestamp+body))).toString('hex');
+ const sent:Array<{url:string;method:string;body:{content:string;components?:unknown[]}}>=[];
+ t.mock.method(globalThis,'fetch',async(url:string,init:{method:string;body:string})=>{sent.push({url:String(url),method:init.method,body:JSON.parse(init.body)});return new Response('{}');});
+ t.mock.method(console,'warn',()=>{});
+ const tasks:Promise<unknown>[]=[];const env={KP_BOOTSTRAP_PRIVATE_KEY:'fixture-key',DB:{prepare(){throw Error('unavailable');},batch(){throw Error('unavailable');}}} as unknown as import('../src/index.ts').Env;
+ const response=await discordInteractions(new Request('https://worker/interactions',{method:'POST',body,headers:{'X-Signature-Ed25519':signature,'X-Signature-Timestamp':timestamp}}),env,{waitUntil:(p:Promise<unknown>)=>tasks.push(p)} as unknown as ExecutionContext,config);
+ assert.deepEqual(await response.json(),{type:6});assert.equal(tasks.length,1);await Promise.all(tasks);
+ assert.equal(sent.length,1);assert.equal(sent[0].method,'PATCH');assert.match(sent[0].url,/messages\/@original$/);
+ assert.deepEqual(sent[0].body.components,[],'the buttons are removed');assert.match(sent[0].body.content,/確認できませんでした/);
+});
