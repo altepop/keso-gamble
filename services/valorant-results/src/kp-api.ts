@@ -1,3 +1,4 @@
+import {SPIKE_POLICY,SPIKE_ROSTER} from './spikerush-growth.ts';
 import {STOCK_INTERVAL,prepareStocks,stockView,stockBenefits,stockDiscount} from './stock-market.ts';
 import {kpCommands,KP_COMMAND_VERSION} from './kp-command.ts';
 import {voiceControl,voiceStatus} from './voice-api.ts';
@@ -173,7 +174,8 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping):Promi
     const linked=await env.DB.prepare('SELECT COUNT(*) AS n FROM kp_accounts WHERE guild=?').bind(mapping.guildId).first<{n:number}>();
     const start=await env.DB.prepare("SELECT value FROM kp_settings WHERE key='starts_at'").first<{value:string}>();
     const timing=(await env.DB.prepare("SELECT key,value FROM monitor_state WHERE key IN ('monitor_started','monitor_finished')").all<{key:string;value:string}>()).results;
-    return response({enabled:true,currency:'KP',startsAt:Number(start?.value??0),registered:mapping.accounts.length,linked:linked?.n??0,voiceEnabled:(await voiceStatus(env)).enabled,earningsPostsConfigured:Boolean((env as {KP_EARNINGS_WEBHOOK_URL?:string}).KP_EARNINGS_WEBHOOK_URL),sessionPolicy:'until_revoked',activityAuthAvailable:activityAuthAvailable(env),monitor:{lastStartedAt:Number(timing.find(r=>r.key==='monitor_started')?.value??0),lastFinishedAt:Number(timing.find(r=>r.key==='monitor_finished')?.value??0)}});
+    const spikeStart=await env.DB.prepare("SELECT value FROM kp_settings WHERE key='spikerush_growth_started_at'").first<{value:string}>();
+    return response({spikerushGrowth:{version:SPIKE_POLICY,rosterVersion:SPIKE_ROSTER.version,startsAt:Number(spikeStart?.value??0)},enabled:true,currency:'KP',startsAt:Number(start?.value??0),registered:mapping.accounts.length,linked:linked?.n??0,voiceEnabled:(await voiceStatus(env)).enabled,earningsPostsConfigured:Boolean((env as {KP_EARNINGS_WEBHOOK_URL?:string}).KP_EARNINGS_WEBHOOK_URL),sessionPolicy:'until_revoked',activityAuthAvailable:activityAuthAvailable(env),monitor:{lastStartedAt:Number(timing.find(r=>r.key==='monitor_started')?.value??0),lastFinishedAt:Number(timing.find(r=>r.key==='monitor_finished')?.value??0)}});
   }
   if(request.method==='GET'&&path==='/api/kp/activity/config')return response({available:activityAuthAvailable(env),applicationId:discord.applicationId});
   if(request.method==='POST'&&(path==='/api/kp/activity/challenge'||path==='/api/kp/activity/auth')){

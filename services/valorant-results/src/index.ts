@@ -1,3 +1,4 @@
+import {spikeNote} from './spikerush-growth.ts';
 import {prepareRaceBroadcast} from './racing-broadcast.ts';
 import {raceVideoApi} from './racing-video.ts';
 export {RaceBroadcaster} from './racing-broadcast.ts';
@@ -163,7 +164,7 @@ async function saveMatch(env: Env, match: Match, player: Player, account: Accoun
       const amount = kpRun.credits.get(kpId) ?? await collectKpMatch(env,kpRun.mapping,match,account.puuid);
       if (amount !== null) {
         kpRun.credits.set(kpId,amount);
-        result.message=kpCreditLine(result.message,amount,(()=>{const s=assessRewardReadiness(match,account.puuid);return s.status==='ready'?valoKp(match,account.puuid,s.mode,s.outcome).note:'';})());
+        result.message=kpCreditLine(result.message,amount,mode==='spikerush'?await spikeNote(env,kpId):(()=>{const s=assessRewardReadiness(match,account.puuid);return s.status==='ready'?valoKp(match,account.puuid,s.mode,s.outcome).note:'';})());
         kpActive=kpRun.messages.get(kpId)!==result.message;
       }
     }

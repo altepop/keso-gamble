@@ -1,3 +1,5 @@
+import {ensureSpikeGrowth,settleSpike,spikeMatch,SPIKE_POLICY} from './spikerush-growth.ts';
+import type {SpikeMatch} from './spikerush-growth.ts';
 import policy from '../kp-policy.json' with { type: 'json' };
 import { applyLuck, chance, luckFor, luckLabel } from './luck.ts';
 import sealed from '../kp-bootstrap.encrypted.json' with { type: 'json' };
@@ -60,6 +62,7 @@ export async function initializeKp(env:KpEnv,override?:KpMapping):Promise<KpMapp
    ]);
   }
   await ensureDebt(env);
+  await ensureSpikeGrowth(env);
   const state=newKpState();
   const known=new Set((await env.DB.prepare('SELECT user FROM kp_wallets WHERE guild=?').bind(mapping.guildId).all<{user:string}>()).results.map(a=>a.user));
   const missing=mapping.accounts.filter(a=>!known.has(a.discordUserId));
@@ -77,11 +80,17 @@ export async function syncKpAccounts(env:KpEnv,mapping:KpMapping){
  const queries=mapping.accounts.flatMap(a=>{const found=tracked.find(t=>t.riot_id.toLowerCase()===a.riotId.toLowerCase());const old=found&&linked.find(l=>l.puuid===found.puuid);return found&&(!old||old.user!==a.discordUserId||old.riot!==a.riotId)?[env.DB.prepare('INSERT INTO kp_accounts(guild,puuid,user,riot,linked_at) VALUES(?,?,?,?,?) ON CONFLICT(guild,puuid) DO UPDATE SET user=excluded.user,riot=excluded.riot').bind(mapping.guildId,found.puuid,a.discordUserId,a.riotId,Date.now())]:[];});
  if(queries.length)await env.DB.batch(queries);
 }
-interface KpEvent {id:string;guild:string;user:string;puuid:string;match:string;mode:string;outcome:string|null;amount:number;policy:string;at:number;penalty?:number;note?:string}
+interface KpEvent {id:string;guild:string;user:string;puuid:string;match:string;mode:string;outcome:string|null;amount:number;policy:string;at:number;penalty?:number;note?:string;kind?:'spikerush-growth';spike?:SpikeMatch}
 export function kpEventId(guild:string,match:string,puuid:string){return ['match',guild,match,puuid].map(encodeURIComponent).join(':');}
 export async function drainKpInbox(env:KpEnv){
  const rows=(await env.DB.prepare('SELECT id,payload FROM kp_inbox ORDER BY at,id LIMIT 20').all<{id:string;payload:string}>()).results;
- for(const row of rows){try{const e=JSON.parse(row.payload) as KpEvent;if(e.id!==row.id||e.id!==kpEventId(e.guild,e.match,e.puuid)||!Number.isSafeInteger(e.amount)||e.amount<0||(e.penalty!==undefined&&(!Number.isSafeInteger(e.penalty)||e.penalty<0)))throw Error('Invalid KP inbox');
+ for(const row of rows){try{let e=JSON.parse(row.payload) as KpEvent;if(e.id!==row.id||e.id!==kpEventId(e.guild,e.match,e.puuid)||!Number.isSafeInteger(e.amount)||e.amount<0||(e.penalty!==undefined&&(!Number.isSafeInteger(e.penalty)||e.penalty<0)))throw Error('Invalid KP inbox');
+  if(e.kind==='spikerush-growth'){
+   if(e.mode!=='spikerush'||e.policy!==SPIKE_POLICY||!e.spike||e.penalty)throw Error('Invalid spike inbox');
+   const settled=await settleSpike(env,{...e,spike:e.spike});
+   if(!settled){await env.DB.prepare('DELETE FROM kp_inbox WHERE id=?').bind(e.id).run();continue;}
+   e={...e,amount:settled.amount,note:settled.note};
+  }
   await env.DB.prepare(`INSERT INTO kp_events(id,guild,user,puuid,match,mode,outcome,amount,policy,at) SELECT ?,?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM kp_accounts WHERE guild=? AND puuid=? AND user=?) ON CONFLICT(id) DO NOTHING`).bind(e.id,e.guild,e.user,e.puuid,e.match,e.mode,e.outcome,e.amount,e.policy,Date.now(),e.guild,e.puuid,e.user).run();
   // A loss costs a separate debit, never more than the balance (wallets cannot go below 0); the rest becomes 借KP.
   if(e.penalty)await env.DB.prepare(`INSERT OR IGNORE INTO kp_ledger(id,guild,user,delta,kind,at) SELECT ?,?,?,-MIN(?,balance),'match',? FROM kp_wallets WHERE guild=? AND user=? AND EXISTS(SELECT 1 FROM kp_events WHERE id=?)`).bind('penalty:'+e.id,e.guild,e.user,e.penalty,Date.now(),e.guild,e.user,e.id).run();
@@ -105,6 +114,8 @@ export function kpCreditLine(text:string,amount:number,note=''){const base=text.
  * - Every mode: luck (src/luck.ts) may double or triple it, wipe out a loss, or halve a gain / double a loss.
  * Every draw is fixed by the match and the player. Missing stats never cost anything. */
 export function valoKp(raw:Match,puuid:string,mode:string,outcome:string|null):{base:number;net:number;note:string}{
+ // Spikerush needs persisted growth, not this stateless win/loss calculation.
+ if(mode==='spikerush')return {base:0,net:0,note:''};
  const subject=raw.players.find(p=>p.puuid===puuid),id=raw.metadata.match_id+':'+puuid;
  let base=0;
  if(mode==='deathmatch'){
@@ -146,9 +157,11 @@ export async function collectKpMatch(env:KpEnv,mapping:KpMapping,raw:Match,puuid
  if(solo&&status.mode==='competitive')await env.DB.prepare("UPDATE kp_directives SET status='completed' WHERE guild=? AND target=? AND task='solo_competitive' AND status='active' AND at<=?").bind(mapping.guildId,link.user,start).run();
  if(solo&&status.mode==='unrated')await env.DB.prepare("UPDATE kp_directives SET status='completed' WHERE guild=? AND target=? AND task='solo_death_unrated' AND status='active' AND at<=? AND EXISTS(SELECT 1 FROM death_unrated_sessions s WHERE s.riot_id=? AND s.match_id=? AND s.cancelled_at IS NULL AND s.armed_at>=kp_directives.at AND COALESCE((SELECT value FROM monitor_state WHERE key='death_mode:'||s.session_id||':'||s.riot_id),'unrated')='unrated')").bind(mapping.guildId,link.user,start,mapping.accounts.find(a=>a.discordUserId===link.user)!.riotId,raw.metadata.match_id).run();
  if(link.amount!==null)return kpMatchNet(env,id);
+ const spike=status.mode==='spikerush'?spikeMatch(raw,puuid):null;
+ if(status.mode==='spikerush'&&!spike)return null;
  const {net,note}=valoKp(raw,puuid,status.mode,status.outcome);
  // Events hold the earned part (never negative); a cost is a separate debit capped at the balance.
- const e:KpEvent={id,guild:mapping.guildId,user:link.user,puuid,match:raw.metadata.match_id,mode:status.mode,outcome:status.outcome,amount:Math.max(0,net),policy:policy.version,at:Date.now(),...net<0?{penalty:-net}:{},...note?{note}:{}};
+ const e:KpEvent={id,guild:mapping.guildId,user:link.user,puuid,match:raw.metadata.match_id,mode:status.mode,outcome:status.outcome,amount:Math.max(0,net),policy:policy.version,at:Date.now(),...net<0?{penalty:-net}:{},...note?{note}:{},...(spike?{kind:'spikerush-growth' as const,spike,policy:SPIKE_POLICY}:{})};
  await env.DB.prepare('INSERT OR IGNORE INTO kp_inbox VALUES(?,?,?)').bind(id,JSON.stringify(e),Date.now()).run();
  await drainKpInbox(env);
  return kpMatchNet(env,id);

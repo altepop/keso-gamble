@@ -12,7 +12,7 @@ export interface Match {
     map?: { name?: string } | null;
   };
   players: Array<{
-    puuid: string; team_id: string; party_id?: string | null; agent?: { name?: string } | null;
+    puuid: string; team_id: string; party_id?: string | null; agent?: { id?: string; name?: string } | null;
     stats?: { kills?: number; deaths?: number; assists?: number; score?: number; headshots?: number; bodyshots?: number; legshots?: number } | null;
   }>;
   rounds?: Array<{ id: number }>;
