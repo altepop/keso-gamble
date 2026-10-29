@@ -235,3 +235,18 @@ test('signed /mbet autocomplete returns the named candidates immediately without
  const data=await response.json() as {type:number;data:{choices:Array<{name:string;value:string}>}};assert.equal(data.type,8);assert.equal(data.data.choices.length,16);assert.ok(data.data.choices.every(c=>card.some(p=>p.name===c.value)));
  assert.equal(tasks.length,0);assert.equal(f.balance(two),100000);assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM kp_operations').get()!.n,0);
 });
+
+test('61件買っても未精算は消えず、結果が出たら61件すべて精算される（6,100 KP分）', async t => {
+ t.mock.timers.enable({apis:['Date'],now:jst('2026-10-27T18:30:00')});
+ const f=await fixture();await storeCards(f.env,parseOfficialCards(page,2026),Date.now());
+ const loser=card.find(p=>p.name===order[3])!.no;
+ for(let i=0;i<61;i++){t.mock.timers.setTime(jst('2026-10-27T18:30:00')+i*1000);await operateKp(f.env,mapping,one,op(),'ml-bet',{match:game1.id,player:loser,type:'last',amount:100});}
+ assert.equal(f.balance(one),100000-6100);
+ assert.equal((await readKpState(f.env,mapping,one)).mlBets.filter((b:{status:string})=>b.status==='pending').length,61,'a re-read keeps all of them');
+ t.mock.timers.setTime(jst('2026-10-27T21:10:00'));
+ await pollMlResults(f.env,Date.now(),(async()=>new Response(page)) as unknown as typeof fetch);
+ assert.equal(await settleMl(f.env,mapping),61);
+ const state=await readKpState(f.env,mapping,one);
+ assert.equal(state.mlBets.filter((b:{status:string})=>b.status==='pending').length,0);
+ assert.equal(f.balance(one),100000-6100+61*Math.floor(100*state.mlBets[0].odds/10));
+});
