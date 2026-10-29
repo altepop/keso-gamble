@@ -25,3 +25,10 @@ test('a browser storage cleanup failure cannot block KP logout when Steam was ne
  const saved=storage();saved.setItem('keso-kp-session-v1','fixture');saved.removeItem=()=>{throw Error('storage revoked');};
  const client=createKpClient({storage:saved,request:async()=>Response.json({disconnected:true})});await client.disconnect();assert.equal(client.connected,false);
 });
+test('owned-game buttons are enabled only when Steam confirms at least 120 minutes',()=>{
+ const status={available:true,enabled:false,account:{steamId:'76561198000000001',active:true},apps:[],games:[],minPlaytimeMinutes:120};
+ const html=steamPanel({status,library:[{id:1,title:'Below',playtimeMinutes:119},{id:2,title:'Eligible',playtimeMinutes:120},{id:3,title:'Unknown',playtimeMinutes:null},{id:4,title:'Forged',playtimeMinutes:'120'}]});
+ assert.match(html,/累計2時間（120分）以上/);assert.match(html,/あと1分/);
+ for(const id of [1,3,4])assert.match(html,new RegExp('data-app="'+id+'"[^>]*disabled'));
+ assert.doesNotMatch(html,/data-app="2"[^>]*disabled/);
+});

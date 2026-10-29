@@ -1,5 +1,5 @@
 {
-  "version": "steam-achievements-v2",
+  "version": "steam-achievements-v3",
   "enabled": false,
   "startsAt": null,
   "tiers": [
@@ -20,5 +20,6 @@
       "amount": 100
     }
   ],
-  "dailyCap": 5000
+  "dailyCap": 5000,
+  "minPlaytimeMinutes": 120
 }

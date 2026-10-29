@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
 import {kpSchema,kpHash,createKpSession} from '../src/kp.ts';
-import {steamAmount,steamConfig,ensureSteam,monitorSteam,chooseSteamGame,steamView} from '../src/steam-rewards.ts';
+import {steamAmount,steamConfig,ensureSteam,monitorSteam,chooseSteamGame,steamView,ownedSteamGames} from '../src/steam-rewards.ts';
 import type {SteamEnv} from '../src/steam-rewards.ts';
 import {startSteamLink,steamCallback,confirmSteamLink,steamApi} from '../src/steam-auth.ts';
 import {ledgerHistory} from '../src/kp-history.ts';
@@ -27,7 +27,7 @@ type Ach={apiname:string;achieved:number;unlocktime:number};
 function mock(f:Awaited<ReturnType<typeof fixture>>,list:Ach[],percent=0.1,hook?:(url:URL)=>void|Promise<void>){
  return (async(input:string|URL|Request)=>{
   const url=new URL(String(input));assert.equal(url.origin,'https://api.steampowered.com');assert.equal(url.searchParams.get('key'),f.env.STEAM_WEB_API_KEY);await hook?.(url);
-  if(url.pathname.includes('GetOwnedGames'))return Response.json({response:{games:[{appid:app}]}});
+  if(url.pathname.includes('GetOwnedGames'))return Response.json({response:{games:[{appid:app,playtime_forever:120},{appid:app+1,playtime_forever:120}]}});
   if(url.pathname.includes('GetPlayerAchievements'))return Response.json({playerstats:{success:true,steamID:steam,achievements:list}});
   if(url.pathname.includes('GetSchemaForGame'))return Response.json({game:{availableGameStats:{achievements:list.map(a=>({name:a.apiname,displayName:'達成 '+a.apiname}))}}});
   if(url.pathname.includes('GetGlobalAchievement'))return Response.json({achievementpercentages:{achievements:list.map(a=>({name:a.apiname,percent}))}});
@@ -40,7 +40,7 @@ const due=(f:Awaited<ReturnType<typeof fixture>>)=>f.sql.exec('UPDATE kp_steam_g
 test('approved rarity tiers include exact 50% boundary and reject invalid percentages',async()=>{
  const f=await fixture(),c=steamConfig(f.env);for(const [p,n] of [[0,5000],[0.1,5000],[0.100001,1000],[1,1000],[1.001,300],[10,300],[10.001,100],[49.999,100],[50,100],[100,100]])assert.equal(steamAmount(c,p!),n);
  for(const p of [NaN,Infinity,-1,100.1])assert.throws(()=>steamAmount(c,p));
- for(const extra of [{enabled:true,startsAt:null},{dailyCap:5001},{tiers:[]}])assert.throws(()=>steamConfig({...f.env,KP_STEAM_CONFIG:JSON.stringify({...f.c,...extra})}));
+ for(const extra of [{enabled:true,startsAt:null},{dailyCap:5001},{minPlaytimeMinutes:119},{minPlaytimeMinutes:null},{tiers:[]}])assert.throws(()=>steamConfig({...f.env,KP_STEAM_CONFIG:JSON.stringify({...f.c,...extra})}));
 });
 test('disabled or missing-key collection never contacts Steam or creates events',async()=>{
  const f=await fixture();linked(f);const fail=(async()=>{throw Error('must not fetch');}) as typeof fetch;
@@ -70,7 +70,7 @@ test('Steam errors and missing rarity retain retryability; recovery credits once
 });
 test('bad or private player responses cannot establish a baseline or issue credit',async()=>{
  const f=await fixture();linked(f);for(const body of [{playerstats:{success:false}},{playerstats:{success:true,steamID:otherSteam,achievements:[]}},{playerstats:{success:true,steamID:steam,achievements:[unlocked(f),unlocked(f)]}}]){
-  due(f);await monitorSteam(f.env,guild,(async()=>Response.json(body)) as typeof fetch,()=>f.now);assert.equal(earned(f),0);assert.equal(f.sql.prepare('SELECT error FROM kp_steam_games').get()!.error,'private_or_unavailable');
+  due(f);const base=mock(f,[]);await monitorSteam(f.env,guild,(async(u:any,init:any)=>String(u).includes('GetPlayerAchievements')?Response.json(body):base(u,init)) as typeof fetch,()=>f.now);assert.equal(earned(f),0);assert.equal(f.sql.prepare('SELECT error FROM kp_steam_games').get()!.error,'private_or_unavailable');
  }
 });
 test('ledger failure rolls back the event, releases the lease and succeeds on retry',async()=>{
@@ -80,7 +80,7 @@ test('ledger failure rolls back the event, releases the lease and succeeds on re
 });
 test('overlapping collectors only fetch once and unlink during fetch prevents credit',async()=>{
  const f=await fixture();linked(f);let calls=0;const base=mock(f,[unlocked(f)],0.1,async()=>{calls++;if(calls===1)await monitorSteam(f.env,guild,mock(f,[unlocked(f)]),()=>f.now);});
- await monitorSteam(f.env,guild,base,()=>f.now);assert.equal(calls,3);assert.equal(earned(f),5000);
+ await monitorSteam(f.env,guild,base,()=>f.now);assert.equal(calls,4);assert.equal(earned(f),5000);
  due(f);await monitorSteam(f.env,guild,mock(f,[unlocked(f,'second')],0.1,async url=>{if(url.pathname.includes('GetPlayerAchievements'))f.sql.exec('UPDATE kp_steam_accounts SET active=0');}),()=>f.now);assert.equal(earned(f),5000);
 });
 test('game selection verifies ownership and snapshots old achievements; stopping/reselecting takes a new baseline',async()=>{
@@ -171,16 +171,16 @@ test('a failed ledger insertion rolls back the daily allowance as well as the ac
 });
 test('any API-confirmed owned title can be selected without an administrator list',async()=>{
  const f=await fixture();linked(f);f.sql.exec('UPDATE kp_steam_games SET active=0');
- const original=mock(f,[unlocked(f)]),send=(async(input:any,init:any)=>String(input).includes('GetOwnedGames')?Response.json({response:{games:[{appid:999,name:'Any owned title'}]}}):original(input,init)) as typeof fetch;
+ const original=mock(f,[unlocked(f)]),send=(async(input:any,init:any)=>String(input).includes('GetOwnedGames')?Response.json({response:{games:[{appid:999,name:'Any owned title',playtime_forever:120}]}}):original(input,init)) as typeof fetch;
  await chooseSteamGame(f.env,owner,999,true,send);const view=await steamView(f.env,owner);assert.deepEqual(view.apps.find(a=>a.id===999),{id:999,title:'Any owned title'});
- const later=f.now+60000;await monitorSteam(f.env,guild,mock(f,[unlocked(f),{apiname:'new-in-arbitrary-title',achieved:1,unlocktime:Math.floor((later-10000)/1000)}],60),()=>later);
+ const later=f.now+60000,base=mock(f,[unlocked(f),{apiname:'new-in-arbitrary-title',achieved:1,unlocktime:Math.floor((later-10000)/1000)}],60);const collect=(async(u:any,init:any)=>String(u).includes('GetOwnedGames')?Response.json({response:{games:[{appid:999,name:'Any owned title',playtime_forever:120}]}}):base(u,init)) as typeof fetch;await monitorSteam(f.env,guild,collect,()=>later);
  assert.equal(earned(f),100);assert.equal(f.sql.prepare('SELECT app FROM kp_steam_events').get()!.app,999);
 });
 test('library requests use the linked owner, ignore supplied Steam IDs and stop after five requests',async()=>{
  const f=await fixture();linked(f);const original=globalThis.fetch;let calls=0;
  try{
-  globalThis.fetch=(async(input:any)=>{calls++;const url=new URL(String(input));assert.equal(url.searchParams.get('steamid'),steam);return Response.json({response:{games:[{appid:999,name:'Some Game'}]}});}) as typeof fetch;
-  for(let i=0;i<5;i++){const r=await steamApi(new Request('https://worker.example/api/kp/steam/library?steamid='+otherSteam),f.env,owner,f.session);assert.equal(r.status,200);assert.deepEqual((await r.json() as any).games,[{id:999,title:'Some Game'}]);}
+  globalThis.fetch=(async(input:any)=>{calls++;const url=new URL(String(input));assert.equal(url.searchParams.get('steamid'),steam);return Response.json({response:{games:[{appid:999,name:'Some Game',playtime_forever:120}]}});}) as typeof fetch;
+  for(let i=0;i<5;i++){const r=await steamApi(new Request('https://worker.example/api/kp/steam/library?steamid='+otherSteam),f.env,owner,f.session);assert.equal(r.status,200);assert.deepEqual((await r.json() as any).games,[{id:999,title:'Some Game',playtimeMinutes:120}]);}
   await assert.rejects(steamApi(new Request('https://worker.example/api/kp/steam/library'),f.env,owner,f.session),/10分/);assert.equal(calls,5);
  }finally{globalThis.fetch=original;}
 });
@@ -189,4 +189,44 @@ test('an API request spanning 09:00 charges the day of settlement rather than th
  const send=mock(f,[unlocked(f)],0.1,url=>{if(url.pathname.includes('GetGlobalAchievement'))clock=midnight+1000;});
  await monitorSteam(f.env,guild,send,()=>clock);const row=f.sql.prepare('SELECT day,amount FROM kp_steam_daily').get()!;
  assert.equal(row.day,new Date(midnight).toISOString().slice(0,10));assert.equal(row.amount,5000);assert.equal((await steamView(f.env,owner,clock)).remainingToday,0);
+});
+test('Steam playtime must be at least 120 integer minutes before a game can be selected',async()=>{
+ for(const minutes of [0,119,120,121,undefined,null,'120',-1,120.5]){
+  const f=await fixture();linked(f);const original=mock(f,[unlocked(f)]);let reads=0;
+  const send=(async(u:any,init:any)=>{reads++;return String(u).includes('GetOwnedGames')?Response.json({response:{games:[{appid:app,name:'Game',playtime_forever:minutes}]}}):original(u,init);}) as typeof fetch;
+  if(minutes===120||minutes===121){await chooseSteamGame(f.env,owner,app,true,send);assert.equal(reads,2);}
+  else{await assert.rejects(chooseSteamGame(f.env,owner,app,true,send),/累計|プレイ時間/);assert.equal(reads,1);}
+  assert.equal(earned(f),0);
+ }
+});
+test('every collection rechecks current Steam playtime, fails closed, and leaves both credit and daily allowance untouched',async()=>{
+ for(const minutes of [0,119,120,121,undefined,null,'120',-1,120.5]){
+  const f=await fixture();linked(f);const original=mock(f,[unlocked(f)]);let reads=0;
+  const send=(async(u:any,init:any)=>{reads++;return String(u).includes('GetOwnedGames')?Response.json({response:{games:[{appid:app,playtime_forever:minutes}]}}):original(u,init);}) as typeof fetch;
+  await monitorSteam(f.env,guild,send,()=>f.now);
+  if(minutes===120||minutes===121){assert.equal(earned(f),5000);assert.equal(reads,4);}
+  else{assert.equal(earned(f),0);assert.equal(reads,1);assert.equal(f.sql.prepare('SELECT count(*) AS n FROM kp_steam_events').get()!.n,0);assert.equal(f.sql.prepare('SELECT count(*) AS n FROM kp_steam_daily').get()!.n,0);assert.match(f.sql.prepare('SELECT error FROM kp_steam_games').get()!.error as string,/playtime_required|playtime_unavailable/);}
+ }
+});
+test('an active watch cannot use an old playtime confirmation, and a later valid response can release its pending reward once',async()=>{
+ const f=await fixture();linked(f);await monitorSteam(f.env,guild,mock(f,[unlocked(f)],60),()=>f.now);assert.equal(earned(f),100);
+ const list=[unlocked(f),unlocked(f,'second')],original=mock(f,list,60);
+ for(const games of [undefined,[],[{appid:app,playtime_forever:119}],[{appid:app,playtime_forever:null}]]){
+  due(f);const send=(async(u:any,init:any)=>String(u).includes('GetOwnedGames')?Response.json({response:{games}}):original(u,init)) as typeof fetch;
+  await monitorSteam(f.env,guild,send,()=>f.now);assert.equal(earned(f),100);assert.equal(f.sql.prepare('SELECT count(*) AS n FROM kp_steam_events').get()!.n,1);
+ }
+ due(f);await monitorSteam(f.env,guild,original,()=>f.now);assert.equal(earned(f),200);due(f);await monitorSteam(f.env,guild,original,()=>f.now);assert.equal(earned(f),200);
+});
+test('browser-supplied playtime cannot bypass Steam ownership and playtime verification',async()=>{
+ const f=await fixture();linked(f);const original=globalThis.fetch;
+ try{
+  globalThis.fetch=(async()=>Response.json({response:{games:[{appid:app,playtime_forever:119}]}})) as typeof fetch;
+  await assert.rejects(steamApi(new Request('https://worker.example/api/kp/steam/game',{method:'POST',body:JSON.stringify({app,active:true,playtimeMinutes:9999,playtime_forever:9999})}),f.env,owner,f.session),/累計2時間/);
+  assert.equal(earned(f),0);
+ }finally{globalThis.fetch=original;}
+});
+test('owned library represents missing, malformed and private playtime as unknown rather than treating it as eligible',async()=>{
+ const f=await fixture(),input=[120,119,null,'120',-1,120.1,undefined];
+ const games=await ownedSteamGames(f.env,steam,(async()=>Response.json({response:{games:input.map((m,i)=>({appid:app+i,name:String(i),playtime_forever:m}))}})) as typeof fetch);
+ assert.deepEqual(games.map(g=>g.playtimeMinutes),[120,119,null,null,null,null,null]);assert.equal((await steamView(f.env,owner)).minPlaytimeMinutes,120);
 });

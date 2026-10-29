@@ -2,7 +2,8 @@ import defaults from '../steam-rewards.json' with {type:'json'};
 import {kpHash,kpRandom} from './kp.ts';
 import type {KpEnv} from './kp.ts';
 
-export interface SteamConfig {version:string;dailyCap:number;enabled:boolean;startsAt:number|null;tiers:Array<{maxPercent:number;amount:number}>}
+export const STEAM_MIN_PLAYTIME_MINUTES=120;
+export interface SteamConfig {version:string;dailyCap:number;minPlaytimeMinutes:number;enabled:boolean;startsAt:number|null;tiers:Array<{maxPercent:number;amount:number}>}
 export type SteamEnv=KpEnv & {STEAM_WEB_API_KEY?:string;KP_STEAM_CONFIG?:string};
 export interface SteamOwner {guild:string;user:string}
 const ready=new WeakMap<object,Promise<void>>();
@@ -32,7 +33,7 @@ export async function steamLimit(env:SteamEnv,owner:SteamOwner,action:string,lim
 }
 export function steamConfig(env:SteamEnv):SteamConfig{
  const c=env.KP_STEAM_CONFIG?JSON.parse(env.KP_STEAM_CONFIG):defaults;
- if(!c||c.dailyCap!==5000||typeof c.enabled!=='boolean'||typeof c.version!=='string'||! /^[a-zA-Z0-9._-]{1,64}$/.test(c.version)||!(c.startsAt===null||Number.isSafeInteger(c.startsAt)&&c.startsAt>0)||!Array.isArray(c.tiers)||c.tiers.length!==4||c.tiers.some((t:{maxPercent:number;amount:number},i:number)=>!t||t.maxPercent!==[0.1,1,10,100][i]||!Number.isSafeInteger(t.amount)||t.amount<=0||t.amount>1000000)||c.enabled&&!c.startsAt)throw Error('Steamの報酬設定を確認してください。');
+ if(!c||c.dailyCap!==5000||c.minPlaytimeMinutes!==STEAM_MIN_PLAYTIME_MINUTES||typeof c.enabled!=='boolean'||typeof c.version!=='string'||! /^[a-zA-Z0-9._-]{1,64}$/.test(c.version)||!(c.startsAt===null||Number.isSafeInteger(c.startsAt)&&c.startsAt>0)||!Array.isArray(c.tiers)||c.tiers.length!==4||c.tiers.some((t:{maxPercent:number;amount:number},i:number)=>!t||t.maxPercent!==[0.1,1,10,100][i]||!Number.isSafeInteger(t.amount)||t.amount<=0||t.amount>1000000)||c.enabled&&!c.startsAt)throw Error('Steamの報酬設定を確認してください。');
  return c;
 }
 export function steamAmount(c:SteamConfig,percent:number){if(!Number.isFinite(percent)||percent<0||percent>100)throw Error('Invalid Steam rarity');return c.tiers.find(t=>percent<=t.maxPercent)!.amount;}
@@ -46,11 +47,12 @@ export async function steamJson(path:string,params:Record<string,string|number>,
  try{while(true){const n=await reader.read();if(n.done)break;size+=n.value.length;if(size>2*1024*1024){await reader.cancel();throw Error('large');}chunks.push(n.value);}const bytes=new Uint8Array(size);let at=0;for(const b of chunks){bytes.set(b,at);at+=b.length;}return JSON.parse(new TextDecoder('utf-8',{fatal:true,ignoreBOM:true}).decode(bytes));}catch{throw new SteamReadError('invalid_response');}
 }
 export interface SteamAchievement {apiname:string;achieved:number;unlocktime:number}
-export async function ownedSteamGames(env:SteamEnv,steam:string,send:typeof fetch=fetch):Promise<Array<{id:number;title:string}>>{
+export interface OwnedSteamGame {id:number;title:string;playtimeMinutes:number|null}
+export async function ownedSteamGames(env:SteamEnv,steam:string,send:typeof fetch=fetch):Promise<OwnedSteamGame[]>{
  const data=await steamJson('IPlayerService/GetOwnedGames/v1/',{steamid:steam,include_appinfo:1,include_played_free_games:1,include_free_sub:1},env,send);
  const games=data?.response?.games??(data?.response?.game_count===0?[]:null);
  if(!Array.isArray(games)||games.length>20000||games.some(g=>!Number.isSafeInteger(g?.appid)||g.appid<=0)||new Set(games.map(g=>g.appid)).size!==games.length)throw Error('Steamのゲーム詳細を公開し、しばらくしてから試してください。');
- return games.map(g=>({id:g.appid,title:typeof g.name==='string'&&g.name.trim()?g.name.replace(/[\x00-\x1f\x7f]/g,'').trim().slice(0,120):'Steam App '+g.appid})).sort((a,b)=>a.title.localeCompare(b.title,'ja'));
+ return games.map(g=>({id:g.appid,title:typeof g.name==='string'&&g.name.trim()?g.name.replace(/[\x00-\x1f\x7f]/g,'').trim().slice(0,120):'Steam App '+g.appid,playtimeMinutes:Number.isSafeInteger(g.playtime_forever)&&g.playtime_forever>=0?g.playtime_forever:null})).sort((a,b)=>a.title.localeCompare(b.title,'ja'));
 }
 export async function playerAchievements(env:SteamEnv,steam:string,app:number,send:typeof fetch=fetch):Promise<SteamAchievement[]>{
  const data=await steamJson('ISteamUserStats/GetPlayerAchievements/v1/',{steamid:steam,appid:app,l:'japanese'},env,send);const p=data?.playerstats;
@@ -61,7 +63,7 @@ export async function steamView(env:SteamEnv,owner:SteamOwner,now=Date.now()){
  const account=await env.DB.prepare('SELECT steam,active FROM kp_steam_accounts WHERE guild=? AND user=?').bind(owner.guild,owner.user).first<{steam:string;active:number}>();
  const day=new Date(now).toISOString().slice(0,10),daily=await env.DB.prepare('SELECT amount FROM kp_steam_daily WHERE guild=? AND user=? AND day=?').bind(owner.guild,owner.user,day).first<{amount:number}>();
  const games=(await env.DB.prepare('SELECT app,title,active,baseline_at AS baselineAt,last_checked AS lastChecked,error FROM kp_steam_games WHERE guild=? AND user=?').bind(owner.guild,owner.user).all<{app:number;title:string;active:number;baselineAt:number;lastChecked:number;error:string|null}>()).results;
- return {available:Boolean(env.STEAM_WEB_API_KEY),enabled:c.enabled&&!!env.STEAM_WEB_API_KEY,account:account?{steamId:account.steam,active:!!account.active}:null,apps:games.map(g=>({id:g.app,title:g.title||'Steam App '+g.app})),tiers:c.tiers,dailyCap:c.dailyCap,earnedToday:daily?.amount??0,remainingToday:Math.max(0,c.dailyCap-(daily?.amount??0)),day,games};
+ return {available:Boolean(env.STEAM_WEB_API_KEY),enabled:c.enabled&&!!env.STEAM_WEB_API_KEY,account:account?{steamId:account.steam,active:!!account.active}:null,apps:games.map(g=>({id:g.app,title:g.title||'Steam App '+g.app})),tiers:c.tiers,dailyCap:c.dailyCap,minPlaytimeMinutes:c.minPlaytimeMinutes,earnedToday:daily?.amount??0,remainingToday:Math.max(0,c.dailyCap-(daily?.amount??0)),day,games};
 }
 export async function chooseSteamGame(env:SteamEnv,owner:SteamOwner,app:number,active:boolean,send:typeof fetch=fetch){
  steamConfig(env);if(!Number.isSafeInteger(app)||app<=0)throw Error('Steamゲームを選んでください。');await ensureSteam(env);
@@ -70,6 +72,8 @@ export async function chooseSteamGame(env:SteamEnv,owner:SteamOwner,app:number,a
  await steamLimit(env,owner,'game',10);
  // A newly selected or resumed game gets a fresh server snapshot. Old achievements never become a windfall.
  const selected=(await ownedSteamGames(env,account.steam,send)).find(g=>g.id===app);if(!selected)throw Error('Steamのゲーム詳細を公開し、所持しているゲームを選んでください。');
+ if(selected.playtimeMinutes===null)throw Error('Steamの累計プレイ時間を確認できません。プレイ時間の公開設定を確認してください。');
+ if(selected.playtimeMinutes<STEAM_MIN_PLAYTIME_MINUTES)throw Error('Steamで累計2時間（120分）以上を確認できるゲームだけを監視できます。');
  let achievements:SteamAchievement[];try{achievements=await playerAchievements(env,account.steam,app,send);}catch{throw Error('Steamの実績を取得できません。プロフィールとゲーム詳細の公開設定を確認し、しばらくしてから試してください。');}
  if(!achievements.length)throw Error('このゲームの実績を取得できません。実績対応のゲームを選んでください。');
  const now=Date.now(),baseline=JSON.stringify(achievements.filter(a=>a.achieved===1).map(a=>a.apiname));
@@ -77,13 +81,20 @@ export async function chooseSteamGame(env:SteamEnv,owner:SteamOwner,app:number,a
  try{await env.DB.prepare(`INSERT INTO kp_steam_games(guild,user,app,title,baseline_at,baseline,next_at) SELECT ?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM kp_steam_accounts WHERE guild=? AND user=? AND active=1 AND steam=?) ON CONFLICT(guild,user,app) DO UPDATE SET active=1,title=excluded.title,baseline_at=excluded.baseline_at,baseline=excluded.baseline,next_at=excluded.next_at,error=NULL,lease=NULL,lease_until=0 WHERE kp_steam_games.active=0`).bind(owner.guild,owner.user,app,selected.title,now,baseline,now,owner.guild,owner.user,account.steam).run();}catch{throw Error('監視できるSteamゲームは同時に5本までです。');}
 }
 interface GameJob {guild:string;user:string;app:number;baseline_at:number;baseline:string;steam:string;linked_at:number;resumed_at:number}
-/** One game per cron: at most 3 Web API calls; leases make overlapping crons safe. */
+/** One game per cron: at most 4 Web API calls, including a fresh playtime check. */
 export async function monitorSteam(env:SteamEnv,guild:string,send:typeof fetch=fetch,clock=Date.now){
  const c=steamConfig(env);if(!c.enabled||!c.startsAt||!env.STEAM_WEB_API_KEY)return;await ensureSteam(env);
  const now=clock(),lease=kpRandom();
  const row=await env.DB.prepare(`UPDATE kp_steam_games SET lease=?,lease_until=? WHERE (guild,user,app)=(SELECT g.guild,g.user,g.app FROM kp_steam_games g JOIN kp_steam_accounts a ON a.guild=g.guild AND a.user=g.user WHERE g.guild=? AND g.active=1 AND a.active=1 AND g.next_at<=? AND g.lease_until<? ORDER BY g.next_at,g.user,g.app LIMIT 1) RETURNING guild,user,app,baseline_at,baseline`).bind(lease,now+120000,guild,now,now).first<Omit<GameJob,'steam'|'linked_at'|'resumed_at'>>();if(!row)return;
  try{
   const a=await env.DB.prepare('SELECT steam,linked_at,resumed_at FROM kp_steam_accounts WHERE guild=? AND user=? AND active=1').bind(guild,row.user).first<{steam:string;linked_at:number;resumed_at:number}>();if(!a)throw new SteamReadError('disconnected');const job={...row,...a};
+  // Never trust the browser or the playtime captured at selection. Recheck the linked owner's library.
+  let owned:OwnedSteamGame[];
+  try{owned=await ownedSteamGames(env,a.steam,send);}catch(e){if(e instanceof SteamReadError)throw e;throw new SteamReadError('playtime_unavailable');}
+  const selected=owned.find(g=>g.id===job.app);
+  if(!selected)throw new SteamReadError('game_not_owned');
+  if(selected.playtimeMinutes===null)throw new SteamReadError('playtime_unavailable');
+  if(selected.playtimeMinutes<STEAM_MIN_PLAYTIME_MINUTES)throw new SteamReadError('playtime_required');
   const list=await playerAchievements(env,a.steam,job.app,send),baseline=new Set<string>(JSON.parse(job.baseline));
   if(!job.baseline_at)throw new SteamReadError('baseline_required');
   const cutoff=Math.max(c.startsAt,a.linked_at,a.resumed_at,job.baseline_at);
