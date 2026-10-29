@@ -1,3 +1,4 @@
+import {memberNames} from './member-names.ts';
 import {communityFeed,publicTrade} from './community-feed.ts';
 import skirmishQueues from '../skirmish-queues.json' with {type:'json'};
 import {SKIRMISH_POLICY} from './skirmish.ts';
@@ -239,7 +240,7 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping):Promi
   const owner=token?await kpSession(env,token):null;
   if(!owner||owner.guild!==mapping.guildId||!await isKpParticipant(env,mapping,owner.user))return response({error:'接続が切れました。/valo status のコードで接続してください。'},401);
   if(request.method==='POST'&&path==='/api/kp/logout'){await revokeKpSession(env,token!);return response({disconnected:true});}
-  if(request.method==='GET'&&path==='/api/kp/feed')return response(await communityFeed(env,mapping.guildId,new Map(mapping.accounts.map(a=>[a.discordUserId,configuredPlayers.find(p=>p.riotId.toLowerCase()===a.riotId.toLowerCase())?.name??a.riotId.split('#')[0]]))));
+  if(request.method==='GET'&&path==='/api/kp/feed')return response(await communityFeed(env,mapping.guildId,await memberNames(env,mapping.guildId,new Map(mapping.accounts.map(a=>[a.discordUserId,configuredPlayers.find(p=>p.riotId.toLowerCase()===a.riotId.toLowerCase())?.name??a.riotId.split('#')[0]])))));
   if(request.method==='GET'&&path==='/api/kp/state')return response(await readKpState(env,mapping,owner.user));
   // 監視状態: members only, aggregates only.
   if(request.method==='GET'&&path==='/api/kp/health')return response(await healthReport(env,mapping.guildId));
