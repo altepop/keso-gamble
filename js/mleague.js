@@ -38,11 +38,13 @@ export function mlOdds(player,season={}){
  return {top:oddsFromProbability(rate(player.top+s.top)),last:Number.isSafeInteger(player.fixedLast)&&player.fixedLast>=10?player.fixedLast:oddsFromProbability(rate(player.last+s.last))};
 }
 export function createMleague(){return {mlBets:[]};}
+function keepPending(bets){const pending=bets.filter(b=>b.status==='pending');return [...pending,...bets.filter(b=>b.status!=='pending').sort((a,b)=>b.time-a.time).slice(0,Math.max(0,60-pending.length))].sort((a,b)=>b.time-a.time);}
 function validBet(b){return b&&typeof b.id==='string'&&b.id.length<=60&&typeof b.match==='string'&&b.match.length<=20&&typeof b.player==='string'&&b.player.length<=20&&Object.hasOwn(ML_TYPES,b.type)
  &&validInt(b.amount,MIN_BET)&&validInt(b.odds,10)&&['pending','won','lost','refunded'].includes(b.status)&&validInt(b.payout)&&validInt(b.time);}
 export function hydrateMleague(raw){
  const ml=createMleague();
- if(Array.isArray(raw?.mlBets))ml.mlBets=raw.mlBets.filter(validBet).slice(0,60).map(b=>({id:b.id,match:b.match,player:b.player,type:b.type,amount:b.amount,odds:b.odds,status:b.status,payout:b.payout,time:b.time}));
+ // Every unsettled bet stays (its KP is already paid); settled ones fill the rest of the 60 shown, newest first.
+ if(Array.isArray(raw?.mlBets))ml.mlBets=keepPending(raw.mlBets.filter(validBet)).map(b=>({id:b.id,match:b.match,player:b.player,type:b.type,amount:b.amount,odds:b.odds,status:b.status,payout:b.payout,time:b.time}));
  return ml;
 }
 /** Buys a prediction. Shares the weekly betting limit with horse racing (state.raceWeek). */
@@ -60,8 +62,7 @@ export function placeMlBet(state,{match,player,type,amount},now,data,results,sea
  const bet={id:`ml-${now}-${state.mlBets.length}`,match,player:pick.name,type,amount,odds:mlOdds(pick,season)[type],status:'pending',payout:0,time:now};
  state.cash-=amount;state.raceWeek={start:week,spent:spent+amount};
  state.mlBets.unshift(bet);
- const pending=state.mlBets.filter(b=>b.status==='pending');
- state.mlBets=[...pending,...state.mlBets.filter(b=>b.status!=='pending').slice(0,Math.max(0,60-pending.length))].sort((a,b)=>b.time-a.time);
+ state.mlBets=keepPending(state.mlBets);
  return bet;
 }
 /** Settles pending bets whose game has an official result: `results` maps a fixture id to {names}
