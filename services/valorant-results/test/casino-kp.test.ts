@@ -63,3 +63,42 @@ test('稼ぎchに流すのは大きな場面だけ',()=>{
  assert.equal(casinoPost(one,'bj-hit',{done:null}),null);
  assert.match(casinoPost(one,'bj-stand',{done:{result:'lose',net:-8000}})!,/−8,000 KP 溶かした/);
 });
+
+test('マインズ：開始で賭け金を引き、開けたマスと結果だけを保存（地雷の位置は勝負中どこにも無い）。降りれば払戻し',async()=>{
+ const f=await fixture();f.credit('m1',10000);
+ await operateKp(f.env,mapping,one,'mines-start-operation-1','mines-start',{amount:1000,mines:3});assert.equal(f.balance(),9000);
+ assert.doesNotMatch(String(f.sql.prepare('SELECT data FROM kp_state WHERE user=?').get(one)!.data),/bombs/);
+ await assert.rejects(operateKp(f.env,mapping,one,'mines-start-operation-2','mines-start',{amount:1000,mines:3}),/勝負中/);
+ const pick=await operateKp(f.env,mapping,one,'mines-pick-operation-01','mines-pick',{cell:12}) as {result:{done:{net:number}|null}};
+ const done=pick.result.done??(await operateKp(f.env,mapping,one,'mines-cash-operation-1','mines-cashout',{}) as {result:{done:{net:number}}}).result.done;
+ assert.equal(f.balance(),10000+done.net);assert.ok(done.net===-1000||done.net===Math.floor(1000*1.1)-1000);
+ assert.equal((await readKpState(f.env,mapping,one)).mines,null);
+});
+test('スロット：💎💎💎で共有ジャックポット。同時に当たっても同じプールを二重に払わない',async t=>{
+ const f=await fixture();f.credit('s1',50000);f.credit('s2',50000,two);
+ const before=(await readKpState(f.env,mapping,one)).jackpot;assert.equal(before.amount,10000);
+ t.mock.method((globalThis as unknown as {crypto:Crypto}).crypto,'getRandomValues',((a:Uint32Array)=>{a.fill(20);return a;}) as never); // 20 of 21: 💎 on every reel
+ const [a,b]=await Promise.all([operateKp(f.env,mapping,one,'slot-operation-one-01','slot',{amount:1000}),operateKp(f.env,mapping,two,'slot-operation-two-01','slot',{amount:1000})]) as {result:{done:{jackpot:number;payout:number}}}[];
+ t.mock.restoreAll();
+ const won=[a.result.done.jackpot,b.result.done.jackpot].sort((x,y)=>x-y);
+ assert.equal(won[0],10000,'the first winner takes the pool');assert.equal(won[1],10030,'the second wins the pool refilled after the first');
+ const pool=f.sql.prepare('SELECT amount,version FROM casino_jackpots').get()!;assert.equal(pool.version,2);assert.equal(pool.amount,10030);
+ assert.equal(f.balance()+f.balance(two),100000-2000+2*300000+won[0]+won[1]);
+ assert.match(casinoPost(one,'slot',a.result)!,/ジャックポット/);
+ // An ordinary spin adds its 3% to the pool.
+ await operateKp(f.env,mapping,one,'slot-operation-one-02','slot',{amount:1000});
+ assert.equal(f.sql.prepare('SELECT amount FROM casino_jackpots').get()!.amount,10060);
+});
+test('ビデオポーカー・バカラ：サーバーが配り、交換は借KP中でもできる（新しい勝負はできない）',async()=>{
+ const f=await fixture();f.credit('v1',10000);
+ const dealt=await operateKp(f.env,mapping,one,'vp-deal-operation-001','vp-deal',{amount:500}) as {result:{hand:{cards:unknown[]}}};
+ assert.equal(dealt.result.hand.cards.length,5);assert.equal(f.balance(),9500);
+ f.sql.prepare("INSERT INTO kp_debt_events VALUES('borrow:fixture',?,?,500,'borrow',0)").run(guild,one);
+ const drawn=await operateKp(f.env,mapping,one,'vp-draw-operation-001','vp-draw',{hold:[true,false,true,false,true]}) as {result:{done:{net:number;cards:unknown[]}}};
+ assert.equal(drawn.result.done.cards.length,5);
+ await assert.rejects(operateKp(f.env,mapping,one,'baccarat-operation-01','baccarat',{amount:500,side:'banker'}),new RegExp(DEBT_BLOCKED.slice(0,6)));
+ f.sql.exec('DELETE FROM kp_debt_events');f.sql.exec('DELETE FROM kp_debts');
+ const before=f.balance();
+ const bac=await operateKp(f.env,mapping,one,'baccarat-operation-02','baccarat',{amount:500,side:'player'}) as {result:{done:{net:number;winner:string}}};
+ assert.equal(f.balance(),before+bac.result.done.net);assert.ok(['player','banker','tie'].includes(bac.result.done.winner));
+});

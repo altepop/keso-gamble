@@ -333,3 +333,23 @@ details.asset-card.rules{margin:14px}
 .ml-order{margin:14px}.ml-confirm{grid-template-columns:1fr 1fr}
 /* 資産 → システムの状態 */
 .health-row.failing{border-left:3px solid #e8596a;padding-left:8px}.health-row.stale{border-left:3px solid #f0b54a;padding-left:8px}
+/* マインズ・スロット・ビデオポーカー・バカラ */
+.mines-info{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:0 18px 8px;color:#e4d9ba;font-size:13px}.mines-info strong{color:#ffe3a1;font-size:15px}
+.mines-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:7px;padding:4px 16px 16px}
+.mines-cell{aspect-ratio:1;display:grid;place-items:center;border-radius:10px;border:1px solid #d2af6440;background:linear-gradient(160deg,#1d3a30,#0e221b);font-size:22px;color:#fff;min-width:0;padding:0}
+button.mines-cell{cursor:pointer;box-shadow:inset 0 -3px 0 #0006}button.mines-cell:hover:not(:disabled){border-color:#e4c77f;background:linear-gradient(160deg,#27503f,#13302a)}
+.mines-cell.safe{background:radial-gradient(circle,#1f6b54,#0f3a2e);border-color:#58d6a0}.mines-cell.bomb{background:radial-gradient(circle,#7d2430,#3a0f15);border-color:#ff8a98}
+.mines-count{margin:10px 0 0;display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.slot-jackpot{display:grid;justify-items:center;gap:3px;margin:0 16px 12px;padding:10px;border:1px solid #e9c66e66;border-radius:14px;background:radial-gradient(ellipse at 50% 0,#d9a84533,transparent 70%);text-align:center}
+.slot-jackpot span{font-size:11px;letter-spacing:.08em;color:#d4bc83}.slot-jackpot strong{font-size:24px;color:#ffe08a;text-shadow:0 0 12px #ffcf5a66}.slot-jackpot small{font-size:11px;color:#b6b6a5}.slot-jackpot.demo strong{display:none}
+.slot-window{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:0 16px 8px;padding:10px;border-radius:16px;background:#050c0a;border:2px solid #715938;box-shadow:inset 0 0 20px #000}
+.slot-reel{aspect-ratio:1/1.1;display:grid;place-items:center;border-radius:10px;background:linear-gradient(#f8f4e7,#d9d2bd);font-size:40px;overflow:hidden}
+.slot-reel.spinning b{animation:slot-spin .12s linear infinite;filter:blur(1px)}@keyframes slot-spin{from{transform:translateY(-60%)}to{transform:translateY(60%)}}
+.vp-hand{display:flex;justify-content:center;flex-wrap:wrap;gap:6px;padding:6px 10px 12px}
+.vp-card{display:grid;justify-items:center;gap:4px;background:none;border:0;padding:4px 2px;border-radius:10px;color:#e4d9ba;font-size:11px;min-width:0}
+button.vp-card{cursor:pointer}.vp-card.held{background:#e9c66e26;outline:1px solid #e9c66e}.vp-card.held span{color:#ffe08a;font-weight:700}
+.vp-card .playing-card{width:54px;height:77px}
+.bac-table{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:4px 14px 10px}.bac-side{display:grid;gap:6px;padding:8px;border-radius:12px;border:1px solid #d2af6430;min-width:0}
+.bac-side.won{border-color:#e9c66e;background:#e9c66e14}.bac-side .cards{display:flex;gap:4px;min-height:70px}.bac-side .playing-card{width:44px;height:63px}
+@media(max-width:350px){.vp-card .playing-card{width:46px;height:66px}.slot-reel{font-size:32px}.mines-cell{font-size:18px}}
+@media(prefers-reduced-motion:reduce){.slot-reel.spinning b{animation:none;filter:none}}
