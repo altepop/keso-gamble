@@ -36,3 +36,7 @@ test('モード別の例外を説明し、旧35キル一律ボーナスを案内
  for(const text of ['40キルでトップ','5対0','味方単独キルトップ','0.03%','連敗で −100','共通倍率の対象外'])assert.ok(html.includes(text));
  assert.doesNotMatch(html,/勝ち負けに関係なく|勝てばプラス|35キル以上で.*150/);
 });
+test('報酬の表：コンペの負けがプラスなら「負け +200 KP」と出す（最下位はマイナスのまま）',()=>{
+ const html=playView({...live([]),rewardRates:{competitive:{win:900,loss:200,bottom:-400}}});
+ assert.match(html,/勝ち \+900 KP<br>負け \+200 KP／最下位 −400 KP/);
+});
