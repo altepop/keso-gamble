@@ -14,7 +14,19 @@ const port=18769,server=spawn('python3',['-m','http.server',String(port),'--bind
  const cashIs=n=>until(async()=>await cash()===n,`cash ${n}`);
  const count=(selector,n)=>until(async()=>await page.locator(selector).count()===n,`${selector} ×${n}`);
  const game=id=>page.locator(`[data-casino-game=${id}]`).click();
- const noOverflow=async label=>{for(const width of [320,390,1280]){await page.setViewportSize({width,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,`${label} at ${width}px`);}await page.setViewportSize({width:390,height:844});};
+ const noOverflow=async label=>{
+  for(const width of [320,390,1280]){
+   await page.setViewportSize({width,height:844});
+   // A viewport change may finish before its media queries have been painted.
+   await page.waitForFunction(width=>{
+    const screen=document.querySelector('.screen'),nav=document.querySelector('.bottom-inner');
+    return innerWidth===width&&getComputedStyle(screen).maxWidth===(width>=1024?'none':'520px')&&Math.abs(screen.getBoundingClientRect().width-nav.getBoundingClientRect().width)<2;
+   },width);
+   await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,`${label} at ${width}px`);
+  }
+  await page.setViewportSize({width:390,height:844});
+ };
  await page.goto(`http://127.0.0.1:${port}`);await page.locator('.title-start').click();
  await page.locator('.nav-btn[data-screen=race]').click();await page.locator('.sub-tab[data-screen=casino]').click();
  assert.equal(await page.locator('[data-casino-game]').count(),7);
