@@ -1,3 +1,4 @@
+import {communityFeed,publicTrade} from './community-feed.ts';
 import skirmishQueues from '../skirmish-queues.json' with {type:'json'};
 import {SKIRMISH_POLICY} from './skirmish.ts';
 import modeRewards from '../mode-rewards.json' with {type:'json'};
@@ -177,7 +178,8 @@ export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:strin
   }else throw Error('この操作は本番口座では使えません。');
   // 借KP: nothing that costs KP while any is owed (the database refuses it too).
   if(state.cash<before&&await debtOf(env,mapping.guildId,user)>0)throw Error(DEBT_BLOCKED);
-  const response={result,...(stockTrade?{stockTrade}:{})};const safeState={...state,claims:[],directives:[]};delete safeState.debt;delete safeState.jackpot;delete safeState.mleague;delete safeState.ledger;delete safeState.members;delete safeState.racing;delete safeState.horses;delete safeState.mastery;delete safeState.luxury;delete safeState.stockMarket;delete safeState.stockBenefits;
+  const activity=publicTrade(action,args,result);
+  const response={result,...(stockTrade?{stockTrade}:{}),...(activity?{activity}:{})};const safeState={...state,claims:[],directives:[]};delete safeState.debt;delete safeState.jackpot;delete safeState.mleague;delete safeState.ledger;delete safeState.members;delete safeState.racing;delete safeState.horses;delete safeState.mastery;delete safeState.luxury;delete safeState.stockMarket;delete safeState.stockBenefits;
   let inserted;
   try{
    inserted=await env.DB.prepare(`INSERT INTO kp_operations(id,guild,user,request_hash,response,delta,state,directive,at)
@@ -237,6 +239,7 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping):Promi
   const owner=token?await kpSession(env,token):null;
   if(!owner||owner.guild!==mapping.guildId||!await isKpParticipant(env,mapping,owner.user))return response({error:'接続が切れました。/valo status のコードで接続してください。'},401);
   if(request.method==='POST'&&path==='/api/kp/logout'){await revokeKpSession(env,token!);return response({disconnected:true});}
+  if(request.method==='GET'&&path==='/api/kp/feed')return response(await communityFeed(env,mapping.guildId,new Map(mapping.accounts.map(a=>[a.discordUserId,configuredPlayers.find(p=>p.riotId.toLowerCase()===a.riotId.toLowerCase())?.name??a.riotId.split('#')[0]]))));
   if(request.method==='GET'&&path==='/api/kp/state')return response(await readKpState(env,mapping,owner.user));
   // 監視状態: members only, aggregates only.
   if(request.method==='GET'&&path==='/api/kp/health')return response(await healthReport(env,mapping.guildId));

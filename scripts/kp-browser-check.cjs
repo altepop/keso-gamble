@@ -9,6 +9,7 @@ const server=spawn('python3',['-m','http.server','8766','--bind','127.0.0.1'],{s
  await ctx.addInitScript(()=>{for(const name of ['Audio','AudioContext','RTCPeerConnection'])Object.defineProperty(window,name,{value:()=>{throw Error('media requested')}});Object.defineProperty(navigator,'audioSession',{get(){throw Error('audio session requested')}});});
  let page=await ctx.newPage();page.on('pageerror',e=>errors.push(e.message));
  await ctx.route('https://valorant-results.tealeaforest.workers.dev/api/kp/**',async route=>{
+  if(new URL(route.request().url()).pathname.endsWith('/feed'))return route.fulfill({json:{entries:[]}});
   const path=new URL(route.request().url()).pathname;let result;
   if(path.endsWith('auth')){authCalls++;result={token:'a'.repeat(48)};}
   else {assert.equal(route.request().headers().authorization,'Bearer '+'a'.repeat(48));

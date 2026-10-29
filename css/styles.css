@@ -397,3 +397,9 @@ button.vp-card{cursor:pointer}.vp-card.held{background:#e9c66e26;outline:1px sol
   .sheet{width:min(1040px,calc(100% - 48px));border-radius:18px;margin-bottom:24px}
   .metric-grid,.inventory-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
 }
+
+.community-feed{margin:14px;border:1px solid var(--line2);border-radius:14px;background:var(--panel);padding:14px 16px;min-width:0}
+.community-feed summary{cursor:pointer;font-weight:700;padding:4px 0}.community-feed summary small{font-size:12px;color:var(--muted);font-weight:400;margin-left:8px}
+.community-status{font-size:12px;color:var(--muted);margin:10px 0}.community-entries{list-style:none;margin:0;padding:0;max-height:300px;overflow:auto;overscroll-behavior:contain}
+.community-entry{padding:12px 0;border-top:1px solid var(--line);overflow-wrap:anywhere}.community-entry>div{display:flex;justify-content:space-between;gap:12px}.community-entry time{font-size:12px;color:var(--muted);flex-shrink:0}.community-entry p{margin:6px 0}.community-entry small{display:block;color:var(--muted)}
+@media(min-width:1024px){.screen>.community-feed{margin:0;grid-column:1/-1}.community-entries{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0 24px}}

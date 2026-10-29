@@ -40,6 +40,7 @@ let browser;
   await ctx.route('https://100000000000000000.discordsays.com/**',async route=>{
    const path=new URL(route.request().url()).pathname;
    if(path.startsWith('/.proxy/kp-api/api/kp/')){
+    if(path.endsWith('/feed')){await route.fulfill({json:{entries:[]}});return;}
     let result;
     if(path.endsWith('/activity/config')){
      if(scenario==='slow-config')await configGate;
