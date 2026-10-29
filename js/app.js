@@ -4,13 +4,13 @@ import {connectDiscordActivity,isDiscordActivity}from './discord-activity-auth.j
 import { createKpClient } from './kp-client.js?v=20261028-casino';
 import { fmt, fmt0 } from './format.js';
 import { submitClaim, approveClaim, issueDirective, completeDirective } from './progression.js?v=20261028-casino';
-import { titleView, homeView, playView, directivesView, escapeHTML } from './progression-views.js?v=20261028-stocks';
+import { titleView, homeView, playView, directivesView, escapeHTML } from './progression-views.js?v=20261029-history';
 import { genCandles, movingAverage, svgCandles } from './charts.js?v=20261028-stocks';
 import { MARKET, createInitialState, portfolioValue, assets, advanceMarket, trade, spin, spinNumbers, validateNumberBets, grantDemoSalary, cryptoRouletteNumber } from './engine.js?v=20261028-casino';
 import { KEY, LEGACY_KEY } from './storage.js';
 import { PUBLIC_SALT, RUN_MS, WEEKLY_LIMIT, openRaceStart, latestRaceStart, raceCard, raceOdds, raceResult, raceTimeline, raceCommentary, raceRuns, placeRaceBet, settleRaceBets, weeklySpent } from './racing.js?v=20261028-casino';
 import { LUXURY } from './luxury.js?v=20261028-casino';
-import { raceScreen, racePreview, drawRace, raceElapsed, ownerPanel, luxuryPanel, roastPanel } from './racing-view.js?v=20261028-stocks';
+import { raceScreen, racePreview, drawRace, raceElapsed, ownerPanel, luxuryPanel, roastPanel } from './racing-view.js?v=20261029-history';
 import { createStore } from './store.js';
 import { gamePicker, chinchiroView, blackjackView } from './casino-view.js?v=20261028-dice-suspense';
 import {casinoFrames} from './casino-animation.js?v=20261028-dice-suspense';
