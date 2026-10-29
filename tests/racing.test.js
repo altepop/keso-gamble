@@ -170,3 +170,13 @@ test('every night has more named races: big ones on the hour and memorial crowns
   const free=Array.from({length:24},(_,i)=>tue('19:00')+i*RACE_INTERVAL).filter(crownSlotAllowed);
   assert.equal(free.length,13,'weekday night still leaves slots for races named after someone');
 });
+
+test('61枚買っても、保存データを読み直したときに未精算の馬券は1枚も消えない', () => {
+  const now=jst('2026-10-27T21:05:30'),state=createInitialState(now),raceId=openRaceStart(now);
+  for(let i=0;i<61;i++)placeRaceBet(state,{raceId,type:'win',horse:1+i%8,amount:100},now+i);
+  assert.equal(state.cash,10000-6100);
+  const back=hydrateState(JSON.parse(JSON.stringify(state)),now+100);
+  assert.equal(back.raceBets.filter(b=>b.status==='pending').length,61);
+  assert.equal(back.cash,10000-6100);
+  assert.equal(settleRaceBets(back,raceId+RUN_MS).length,61,'every ticket is settled');
+});

@@ -177,11 +177,13 @@ export function raceCommentary(card,result,timeline,odds,seed=PUBLIC_SALT){
 
 // Demo wallet state. The server will own these in production.
 export function createRacing(){return {raceBets:[],raceWeek:{start:0,spent:0}};}
+function keepPending(bets){const pending=bets.filter(b=>b.status==='pending');return [...pending,...bets.filter(b=>b.status!=='pending').sort((a,b)=>b.time-a.time).slice(0,Math.max(0,60-pending.length))].sort((a,b)=>b.time-a.time);}
 const validInt=(v,min=0)=>Number.isSafeInteger(v)&&v>=min;
 function validBet(b){return b&&typeof b.id==='string'&&b.id.length<=40&&isRaceStart(b.raceId)&&Object.hasOwn(BET_TYPES,b.type)&&validInt(b.horse,1)&&b.horse<=10&&validInt(b.amount,MIN_BET)&&b.amount%BET_STEP===0&&validInt(b.odds,10)&&validInt(b.time)&&(b.status==='pending'?b.payout===0:['won','lost'].includes(b.status)&&validInt(b.payout)&&(b.status==='lost'?b.payout===0:b.payout===payoutFor(b.amount,b.odds)));}
 export function hydrateRacing(raw){
  const racing=createRacing();
- if(Array.isArray(raw?.raceBets))racing.raceBets=raw.raceBets.filter(validBet).slice(0,60).map(b=>({id:b.id,raceId:b.raceId,type:b.type,horse:b.horse,amount:b.amount,odds:b.odds,status:b.status,payout:b.payout,time:b.time}));
+ // Every unsettled ticket stays (its KP is already paid); settled ones fill the rest of the 60 shown, newest first.
+ if(Array.isArray(raw?.raceBets))racing.raceBets=keepPending(raw.raceBets.filter(validBet)).map(b=>({id:b.id,raceId:b.raceId,type:b.type,horse:b.horse,amount:b.amount,odds:b.odds,status:b.status,payout:b.payout,time:b.time}));
  if(validInt(raw?.raceWeek?.start)&&validInt(raw.raceWeek.spent))racing.raceWeek={start:raw.raceWeek.start,spent:raw.raceWeek.spent};
  return racing;
 }
@@ -200,8 +202,7 @@ export function placeRaceBet(state,{raceId,type,horse,amount},now,entries=[]){
  state.cash-=amount;
  state.raceWeek={start:weekStart(now),spent:spent+amount};
  state.raceBets.unshift(bet);
- const pending=state.raceBets.filter(b=>b.status==='pending');
- state.raceBets=[...pending,...state.raceBets.filter(b=>b.status!=='pending').slice(0,Math.max(0,60-pending.length))].sort((a,b)=>b.time-a.time);
+ state.raceBets=keepPending(state.raceBets);
  return bet;
 }
 /** Pays out every pending bet whose race has finished. Odds were fixed when the bet was bought.
