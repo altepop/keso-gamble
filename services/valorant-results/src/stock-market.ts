@@ -5,12 +5,19 @@ import {MARKET,advanceMarket} from '../../../js/engine.js';
 interface Stock {id:string;name:string;initialPrice:number}
 const STOCKS=MARKET as Stock[];
 const IDS=STOCKS.map(s=>s.id);
+// A day's news can move a stock at most this far (bps); the luck stocks move with every game, so they get more room.
+const DAY_BUDGET:Record<string,number>={mitu:800,okbr:800,nani:600};
 export const STOCK_INTERVAL=5*60_000,STOCK_HOLD=86400000,DIVIDEND_CAP=500;
 export interface Market {guild:string;version:number;prices:Record<string,number>;history:Record<string,number[]>;at:number;startedAt:number;token:string}
 export interface StockBenefits {eligibleValue:number;percent:number;heldHours:number}
 interface RawMarket {guild:string;version:number;prices:string;history:string;at:number;started_at:number;token:string}
 const ready=new WeakSet<object>();
-const parse=(r:RawMarket):Market=>({guild:r.guild,version:r.version,prices:JSON.parse(r.prices),history:JSON.parse(r.history),at:r.at,startedAt:r.started_at,token:r.token});
+// A stock listed after the market started trades from its listing price; the next tick saves it.
+const parse=(r:RawMarket):Market=>{
+ const prices=JSON.parse(r.prices),history=JSON.parse(r.history);
+ for(const s of STOCKS)if(!Number.isSafeInteger(prices[s.id])){prices[s.id]=s.initialPrice;history[s.id]=[s.initialPrice];}
+ return {guild:r.guild,version:r.version,prices,history,at:r.at,startedAt:r.started_at,token:r.token};
+};
 export function stockDiscount(base:number,percent:number){
  if(!Number.isSafeInteger(base)||base<0||![0,3,5].includes(percent))throw Error('Invalid stock discount');
  const saved=Math.min(2000,Math.floor(base*percent/100));return {base,percent,saved,paid:base-saved};
@@ -110,9 +117,44 @@ async function captureNews(env:KpEnv,market:Market,now:number){
    WHERE o.guild=? AND o.at>=? AND o.id LIKE 'race-settle:%' GROUP BY o.guild,o.user,o.id,o.at
   ) WHERE ABS(net)>=5000`).bind(guild,since).run();
  await env.DB.prepare(`INSERT OR IGNORE INTO stock_news(guild,id,symbol,label,bps,at) SELECT guild,'trades:'||CAST(at/300000 AS INTEGER),'yano','株の売買が活発',15,MAX(at) FROM stock_trades WHERE guild=? AND at>=? GROUP BY guild,CAST(at/300000 AS INTEGER) HAVING COUNT(*)>=5`).bind(guild,since).run();
+ // ミツノアジ証券／おこぼれ商事: how many times someone lost or won KP since the last tick, whatever the amounts.
+ const {minus,plus}=await fortuneCounts(env,guild,market.at,now);
+ if(minus||plus)for(const [symbol,sign] of [['mitu',1],['okbr',-1]] as const){
+  const bps=sign*FORTUNE_BPS*(minus-plus);if(!bps)continue;
+  await env.DB.prepare('INSERT OR IGNORE INTO stock_news(guild,id,symbol,label,bps,at) VALUES(?,?,?,?,?,?)').bind(guild,`fortune:${symbol}:${market.version}`,symbol,`直近でKPを失った${minus}回・得た${plus}回`,bps,now).run();
+ }
+}
+export const FORTUNE_BPS=20;
+// A win or loss from play: VALORANT, ユナイト, 雀魂 (the ledger), casino rounds, and each settled race or Mリーグ ticket.
+// Rewards that only ever add (QUIZ, 通話, 配当) and purchases are not luck, so they do not count.
+const CASINO_NET=`CASE WHEN json_type(response,'$.result.units') IS NOT NULL THEN json_extract(response,'$.result.net')
+ WHEN json_type(response,'$.result.done.net') IS NOT NULL THEN json_extract(response,'$.result.done.net')
+ WHEN json_type(response,'$.result.outcome')='integer' AND json_type(response,'$.result.payout')='integer' THEN json_extract(response,'$.result.payout')-json_extract(response,'$.result.amount') END`;
+export async function fortuneCounts(env:KpEnv,guild:string,from:number,to:number){
+ const count=(sign:'<'|'>',status:string)=>`(SELECT COUNT(*) FROM kp_ledger WHERE guild=?1 AND at>=?2 AND at<?3 AND kind IN('match','unite','mahjong') AND delta${sign}0)
+  +(SELECT COUNT(*) FROM kp_operations WHERE guild=?1 AND at>=?2 AND at<?3 AND ${CASINO_NET}${sign}0)
+  +(SELECT COUNT(*) FROM kp_operations o,json_each(o.response,'$.result.settled') b WHERE o.guild=?1 AND o.at>=?2 AND o.at<?3 AND (o.id LIKE 'race-settle:%' OR o.id LIKE 'ml-settle:%') AND json_extract(b.value,'$.status')='${status}')`;
+ const row=await env.DB.prepare(`SELECT ${count('<','lost')} AS minus,${count('>','won')} AS plus`).bind(guild,from,to).first<{minus:number;plus:number}>();
+ return {minus:Number(row?.minus??0),plus:Number(row?.plus??0)};
+}
+// 架空の会社のニュース: on a tick, each has a small chance of a headline that moves it a lot.
+const FICTION:Record<string,{chance:number;bps:number;up:string[];down:string[]}>={
+ nani:{chance:0.04,bps:250,up:['ロケット打ち上げ成功','月面にたこ焼き屋を出店','宇宙人と業務提携'],down:['ロケットが発射台で爆発','社長が宇宙で迷子','打ち上げ延期（3回目）']},
+ tako:{chance:0.02,bps:80,up:['大阪万博の物流を受注','新型たこ焼き保冷車を導入'],down:['ソースの在庫切れ','配送トラックがたこ焼き渋滞']},
+ neko:{chance:0.03,bps:180,up:['ネコの手から新薬を発見','治験で大成功'],down:['治験が猫にバレる','主力薬の特許切れ']},
+ kgne:{chance:0.03,bps:150,up:['新しい金脈を発見','金の値段が急騰'],down:['掘ったら温泉が出た','落盤で一時操業停止']},
+};
+export function fictionNews(draw:()=>number){
+ const out:Array<{symbol:string;label:string;bps:number}>=[];
+ for(const [symbol,f] of Object.entries(FICTION)){
+  if(draw()>=f.chance)continue;
+  const up=draw()<0.5,pool=up?f.up:f.down;
+  out.push({symbol,label:pool[Math.min(pool.length-1,Math.floor(draw()*pool.length))],bps:up?f.bps:-f.bps});
+ }
+ return out;
 }
 export function nextStockPrices(prices:Record<string,number>,news:Array<{symbol:string;bps:number}>,draw:()=>number){
- const volatility:Record<string,number>={keso:60,riso:100,yuya:200,yano:50};
+ const volatility:Record<string,number>={keso:60,riso:100,yuya:200,yano:50,mitu:40,okbr:40,nani:300,tako:30,neko:120,kgne:80};
  return Object.fromEntries(IDS.map(id=>{
   const impact=Math.max(-250,Math.min(250,news.filter(n=>n.symbol===id).reduce((sum,n)=>sum+n.bps,0)));
   const noise=Math.round((draw()*2-1)*volatility[id]);
@@ -123,9 +165,10 @@ const random=()=>{const v=new Uint32Array(1);crypto.getRandomValues(v);return v[
 export async function tickStocks(env:KpEnv,market:Market,now=Date.now(),draw:()=>number=random){
  if(now-market.at<STOCK_INTERVAL)return market;
  await captureNews(env,market,now);
+ for(const n of fictionNews(draw))await env.DB.prepare('INSERT OR IGNORE INTO stock_news(guild,id,symbol,label,bps,at) VALUES(?,?,?,?,?,?)').bind(market.guild,`fiction:${n.symbol}:${market.version}`,n.symbol,n.label,n.bps,now).run();
  const pending=(await env.DB.prepare('SELECT id,symbol,label,bps,at FROM stock_news WHERE guild=? AND applied_version IS NULL ORDER BY at,id LIMIT 40').bind(market.guild).all<{id:string;symbol:string;label:string;bps:number;at:number}>()).results;
  const used=(await env.DB.prepare("SELECT symbol,SUM(ABS(applied_bps)) AS total,SUM(CASE WHEN id LIKE 'trades:%' THEN ABS(applied_bps) ELSE 0 END) AS trades FROM stock_news WHERE guild=? AND applied_at>=? GROUP BY symbol").bind(market.guild,Math.floor(now/STOCK_HOLD)*STOCK_HOLD).all<{symbol:string;total:number;trades:number}>()).results;
- const budgets=new Map(IDS.map(id=>[id,{day:300-(used.find(r=>r.symbol===id)?.total??0),tick:250,trades:30-(used.find(r=>r.symbol===id)?.trades??0)}]));
+ const budgets=new Map(IDS.map(id=>[id,{day:(DAY_BUDGET[id]??300)-(used.find(r=>r.symbol===id)?.total??0),tick:250,trades:30-(used.find(r=>r.symbol===id)?.trades??0)}]));
  const effective=pending.map(n=>{const b=budgets.get(n.symbol);if(!b)return {...n,bps:0};const trading=n.id.startsWith('trades:');const size=Math.max(0,Math.min(Math.abs(n.bps),b.day,b.tick,trading?b.trades:Infinity));b.day-=size;b.tick-=size;if(trading)b.trades-=size;return {...n,bps:Math.sign(n.bps)*size};});
  const prices=nextStockPrices(market.prices,effective,draw),history=Object.fromEntries(IDS.map(id=>[id,[...(market.history[id]??[]),prices[id]].slice(-48)]));
  const token=crypto.randomUUID(),version=market.version+1,guard='EXISTS(SELECT 1 FROM stock_markets WHERE guild=? AND token=?)';
