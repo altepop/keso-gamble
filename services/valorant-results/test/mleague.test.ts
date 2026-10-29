@@ -186,7 +186,7 @@ test('the four who sat are read from キンマweb after the start and announced 
 const pickInput=(match:unknown,focused='player',typed:unknown='')=>({id:String((BigInt(Date.now())-1420070400000n)<<22n|99n),guild_id:guild,member:{user:{id:one}},data:{name:'mbet',options:[{name:'match',value:focused==='match'?typed:match,focused:focused==='match'},{name:'player',value:typed,focused:focused==='player'}]}});
 test('/mbet offers confirmed open matches and player names with teams and last-place odds without spending KP',async t=>{
  t.mock.timers.enable({apis:['Date'],now:jst('2026-10-27T18:00:00')});const f=await fixture();
- assert.deepEqual(await mbetChoices(f.env,pickInput(null,'match')),[],'unconfirmed cards are never offered');
+ assert.deepEqual(await mbetChoices(f.env,pickInput(null,'match')),[{name:'ℹ️ 公式の対戦カードを確認中です。少し待ってからもう一度タップしてください',value:'none'}],'unconfirmed cards are never offered; the reason is shown');
  await storeCards(f.env,parseOfficialCards(page,2026),Date.now());
  const matches=await mbetChoices(f.env,pickInput(null,'match'));assert.equal(matches.length,4);
  assert.ok(matches.every(c=>c.name.length<=100&&/10\/27 [12]卓 第[12]試合/.test(c.name)&&ML_DATA.fixtures.some(g=>g.id===c.value)));
@@ -195,7 +195,8 @@ test('/mbet offers confirmed open matches and player names with teams and last-p
  const team=ML_DATA.teams.find(team=>team.id===game1.teams[0])!;
  assert.deepEqual((await mbetChoices(f.env,pickInput(game1.id,'player',team.name.toLowerCase()))).map(c=>c.value),team.players.map(p=>p.name));
  assert.deepEqual((await mbetChoices(f.env,pickInput(game1.id,'player',team.players[0].name.split('').join('　')))).map(c=>c.value),[team.players[0].name]);
- assert.deepEqual(await mbetChoices(f.env,pickInput(undefined)),[]);assert.deepEqual(await mbetChoices(f.env,pickInput('missing')),[]);
+ assert.match((await mbetChoices(f.env,pickInput(undefined)))[0].name,/先に match で試合を選んで/);assert.match((await mbetChoices(f.env,pickInput('missing')))[0].name,/見つかりません/);
+ assert.match((await mbetChoices(f.env,pickInput(null,'match','存在しないチーム')))[0].name,/に合う試合がありません/);assert.match((await mbetChoices(f.env,pickInput(game1.id,'player','ああああ')))[0].name,/に合う選手がいません/);
  assert.equal(f.balance(one),100000);assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM kp_operations').get()!.n,0);
 });
 test('/mbet narrows confirmed lineups and removes manual/automatic closures and completed games',async t=>{
@@ -203,11 +204,11 @@ test('/mbet narrows confirmed lineups and removes manual/automatic closures and 
  f.sql.prepare('INSERT INTO ml_lineups VALUES(?,?,?)').run(game2.id,JSON.stringify(order),Date.now());
  assert.deepEqual((await mbetChoices(f.env,pickInput(game2.id))).map(c=>c.value).sort(),[...order].sort());
  assert.ok((await mbetChoices(f.env,pickInput(game2.id))).every(c=>c.name.includes('出場確定')));
- t.mock.timers.tick(3600000);assert.deepEqual(await mbetChoices(f.env,pickInput(game1.id)),[],'game1 closes at19:00');
+ t.mock.timers.tick(3600000);assert.deepEqual(await mbetChoices(f.env,pickInput(game1.id)),[{name:'ℹ️ この試合は締め切りました。match で別の試合を選んでください',value:'none'}],'game1 closes at19:00');
  assert.equal((await mbetChoices(f.env,pickInput(game2.id))).length,4,'game2 still follows the existing result-based window');
- f.sql.prepare('INSERT INTO ml_closed VALUES(?,?,?,?)').run(game2.id,Date.now(),one,Date.now());assert.deepEqual(await mbetChoices(f.env,pickInput(game2.id)),[]);
+ f.sql.prepare('INSERT INTO ml_closed VALUES(?,?,?,?)').run(game2.id,Date.now(),one,Date.now());assert.match((await mbetChoices(f.env,pickInput(game2.id)))[0].name,/締め切りました/);
  f.sql.prepare('DELETE FROM ml_closed').run();f.sql.prepare('INSERT INTO ml_results VALUES(?,?,?,?)').run(game1.id,JSON.stringify(order),JSON.stringify([50,0,-10,-40]),Date.now());
- assert.deepEqual(await mbetChoices(f.env,pickInput(game2.id)),[],'game1 result closes game2');
+ assert.match((await mbetChoices(f.env,pickInput(game2.id)))[0].name,/締め切りました/,'game1 result closes game2');
  assert.ok(!(await mbetChoices(f.env,pickInput(null,'match'))).some(c=>c.value===game1.id||c.value===game2.id));
 });
 test('/mbet named selections follow the official corrected teams, settle once and show team and gross payout',async t=>{
@@ -315,4 +316,13 @@ test('/kp bets：自分の未精算と最近の精算（的中・外れ・返金
  assert.match(after,new RegExp(`✅ .*${order[3]}のラス　的中 \\+`));assert.match(after,new RegExp(`❌ .*${order[0]}のラス　外れ −500 KP`));assert.match(after,new RegExp(`↩️ .*${benched.name}のラス　返金 300 KP`));
  assert.match(await bets(two),/未精算\*\* 0件/,'only your own');
  assert.ok(after.length<2000);
+});
+
+test('/mbet の候補が出ない理由：次の開催日・受付前を案内し、理由の行を選んで送っても何も買わない', async t => {
+ t.mock.timers.enable({apis:['Date'],now:jst('2026-10-28T12:00:00')});
+ const f=await fixture();await storeCards(f.env,parseOfficialCards(page,2026),Date.now());
+ const day=mlDay(Date.now())!;assert.ok(day>'2026-10-28','10/28 has no games');
+ assert.match((await mbetChoices(f.env,pickInput(null,'match')))[0].name,new RegExp(`次の試合は ${Number(day.slice(5,7))}/${Number(day.slice(8,10))}。受付は当日0時から`));
+ const reply=await runKpCommand(f.env,{...pickInput('none'),data:{name:'mbet',options:[{name:'match',value:'none'},{name:'player',value:'none'},{name:'amount',value:500}]}},mapping);
+ assert.match(reply,/予想できる候補がありません/);assert.equal(f.balance(one),100000);
 });
