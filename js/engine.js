@@ -15,8 +15,8 @@ const MARKET = [
   { id: 'komi', ticker: 'KOMI', name: '小路グローバルモーターズ', category: '新興国', initialPrice: 1200, volatility: 0.07, drift: 0.002, icon: '✈' },
   { id: 'ishi', ticker: 'ISHI', name: '石原エレクトリック', category: '電機', initialPrice: 980, volatility: 0.04, drift: 0.001, icon: '⌘' },
   { id: 'vdk', ticker: 'VDK', name: 'VDKブラック商事', category: 'グレー', initialPrice: 100, volatility: 0.12, drift: 0, icon: '☠' },
-  { id: 'godo', ticker: 'GODO', name: '神戸（ごうど）市役所', category: '公共', initialPrice: 1450, volatility: 0.012, drift: 0.001, icon: '印' },
-  { id: 'ngya', ticker: 'NGYA', name: '名古屋しゃちほこ発電', category: '謎エネルギー', initialPrice: 777, volatility: 0.08, drift: 0.001, icon: '鯱' },
+  { id: 'godo', ticker: 'GODO', name: '神戸（ごうど）ふるさと公社', category: 'ふるさと納税', initialPrice: 1450, volatility: 0.04, drift: 0.001, icon: '印' },
+  { id: 'ngya', ticker: 'NGYA', name: '名古屋ヘンテコ発明所', category: '謎の発明', initialPrice: 777, volatility: 0.08, drift: 0.001, icon: '？' },
   { id: 'koba', ticker: 'KOBA', name: '小林百貨店', category: '百貨店', initialPrice: 820, volatility: 0.03, drift: 0.001, icon: '百' },
 ];
 const SHOP = [

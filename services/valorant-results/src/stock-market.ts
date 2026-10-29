@@ -142,8 +142,8 @@ const FICTION:Record<string,{chance:number;bps:number;up:string[];down:string[]}
  komi:{chance:0.04,bps:200,up:['パキスタンでバイクが爆売れ','社長がまた海外出張で大型契約','新興国に現地工場が完成'],down:['出張先の税関で足止め','為替で大損','現地でバイクが盗まれまくる']},
  ishi:{chance:0.03,bps:150,up:['官公庁の大型システムを受注','スパコンが世界一に','新型ノートPCが軽すぎると話題'],down:['システム障害で窓口が止まる','新型PCが重すぎる','納期がまた延びる']},
  vdk:{chance:0.04,bps:300,up:['情報商材が飛ぶように売れる','怪しいセミナーが満員御礼','謎の投資話で大儲け'],down:['当局の立ち入り検査','被害者の会が発足','社長が雲隠れ']},
- godo:{chance:0.02,bps:60,up:['予算が満額で通る','定時退庁を全員が達成','ハンコ廃止で業務効率アップ'],down:['ハンコが足りない','窓口が昼休みで大行列','前例がないので見送り']},
- ngya:{chance:0.03,bps:200,up:['金のしゃちほこで発電に成功','味噌カツ燃料が実用化','手羽先タービンが稼働'],down:['しゃちほこが盗まれる','発電所が味噌まみれ','エビフライ発電が失敗']},
+ godo:{chance:0.04,bps:200,up:['返礼品の和牛がバズる','ふるさと納税が過去最高','ゆるキャラがグランプリ受賞'],down:['返礼品の規制が強化','ゆるキャラの中の人が退職','予算が議会で否決']},
+ ngya:{chance:0.03,bps:200,up:['自動で謝るロボットが大ヒット','空気の缶詰が完売','猫語翻訳機がなぜか売れる'],down:['全自動ふとん叩き機が暴走','発明品が全部リコール','また誰も使わない機械を作った']},
  koba:{chance:0.03,bps:120,up:['北海道物産展が大盛況','福袋が即完売','屋上遊園地が復活'],down:['閉店セールが1年続いている','外商の顧客が全員引退','エスカレーターが逆走']},
 };
 export function fictionNews(draw:()=>number){
@@ -156,7 +156,7 @@ export function fictionNews(draw:()=>number){
  return out;
 }
 export function nextStockPrices(prices:Record<string,number>,news:Array<{symbol:string;bps:number}>,draw:()=>number){
- const volatility:Record<string,number>={keso:60,riso:100,yuya:200,yano:50,msum:40,tnkn:40,komi:150,ishi:80,vdk:250,godo:20,ngya:150,koba:60};
+ const volatility:Record<string,number>={keso:60,riso:100,yuya:200,yano:50,msum:40,tnkn:40,komi:150,ishi:80,vdk:250,godo:80,ngya:150,koba:60};
  return Object.fromEntries(IDS.map(id=>{
   const impact=Math.max(-250,Math.min(250,news.filter(n=>n.symbol===id).reduce((sum,n)=>sum+n.bps,0)));
   const noise=Math.round((draw()*2-1)*volatility[id]);
