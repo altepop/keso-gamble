@@ -51,8 +51,8 @@ export async function mlClosed(env:KpEnv){
 /** A registered member closes a game's betting at the time it started (default: now). The earliest
  * stated time is kept, so a later, looser call cannot reopen bets that were already late. */
 export async function closeMl(env:KpEnv,mapping:KpMapping,user:string,fixture:Fixture,at:number,now:number){
- if(!mapping.accounts.some(a=>a.discordUserId===user))throw Error('締め切りできるのは登録メンバーだけです。');
- if(at<mlStart(fixture)||at>now)throw Error('開始時刻は19:00から今までの時刻で指定してください。');
+ if(!mapping.accounts.some(a=>a.discordUserId===user))throw Error('締め切りできるんは登録メンバーだけやで。');
+ if(at<mlStart(fixture)||at>now)throw Error('開始時刻は19:00から今までの時刻で入れてな。');
  await ensureMl(env);
  await env.DB.prepare('INSERT INTO ml_closed(match,at,user,created) VALUES(?,?,?,?) ON CONFLICT(match) DO UPDATE SET at=excluded.at,user=excluded.user,created=excluded.created WHERE excluded.at<ml_closed.at').bind(fixture.id,at,user,now).run();
  return (await mlClosed(env)).get(fixture.id)!;
@@ -220,10 +220,10 @@ export async function pollMlLineups(env:PostEnv,mapping:KpMapping,now=Date.now()
 }
 export function lineupPost(f:Fixture,names:string[],bets:Array<MlBet&{user:string}>){
  const team=(n:string)=>data.teams.find(t=>t.players.some(p=>p.name===n))?.name??'';
- const lines=[`🀄 **${clock(f)} ${f.table}卓 第${f.game}試合 出場決定**`,names.map(n=>`${clean(n)}（${clean(team(n))}）`).join('・')];
+ const lines=[`🀄 **${clock(f)} ${f.table}卓 第${f.game}試合 出場決定や！**`,names.map(n=>`${clean(n)}（${clean(team(n))}）`).join('・')];
  for(const b of bets.filter(x=>x.status==='pending')){
   const what=`${clean(b.player)}の${ML_TYPES[b.type].label} ${money(b.amount)}`;
-  lines.push(names.includes(b.player)?`🎯 <@${b.user}> ${what}（${(b.odds/10).toFixed(1)}倍）`:`↩️ <@${b.user}> ${what}：出場しないので返金予定`);
+  lines.push(names.includes(b.player)?`🎯 <@${b.user}> ${what}（${(b.odds/10).toFixed(1)}倍）`:`↩️ <@${b.user}> ${what}：出えへんから返金予定やで`);
  }
  return lines.join('\n');
 }
@@ -255,21 +255,22 @@ async function betsOn(env:KpEnv,guild:string,match:string){
 const clock=(f:Fixture)=>`${Number(f.date.slice(5,7))}/${Number(f.date.slice(8,10))}`;
 const teamName=(id:string)=>data.teams.find(t=>t.id===id)?.name??id;
 export function cardPost(day:Fixture[],results:Map<string,MlResult>,d:MlView=data){
- const stats=seasonStats(results),lines=[`🀄 **Mリーグ予想** ${clock(day[0])} 19:00開始（ラスの選手を当てる）`];
+ const stats=seasonStats(results),lines=[`🀄 **Mリーグ予想** ${clock(day[0])} 19:00開始（誰がラスになるか当ててみい！）`];
+ lines.push('ちゃんとBETしてや！ 眺めてるだけやとKPは増えへんで。');
  for(const f of day.filter(x=>x.game===1)){
   const card=mlCard(d,f).map((p:{name:string;no:number})=>({...p,odds:mlOdds(p,stats)}));
   const fav=(type:'top'|'last')=>[...card].sort((a,b)=>a.odds[type]-b.odds[type]).slice(0,3).map(p=>`${clean(p.name)} ${(p.odds[type]/10).toFixed(1)}倍`).join('／');
   lines.push(`**${f.table}卓** ${f.teams.map(teamName).join('・')}`,`　ラス本命：${fav('last')}`);
  }
- lines.push('第1試合は19:00、第2試合は第1試合の結果が出るまで締切。','/mleague で全員の倍率、/mbet で予想。出なかった選手は返金。');
+ lines.push('第1試合は19:00で締切や。第2試合は第1試合の結果が出たら締切やで。','/mleague で倍率を見て、/mbet でラス予想を買うてな。出えへんかった選手の分は返金するで。');
  return lines.join('\n');
 }
 export function resultPost(f:Fixture,r:MlResult,bets:Array<MlBet&{user:string}>){
- const lines=[`🀄 **Mリーグ ${clock(f)} ${f.table}卓 第${f.game}試合 結果**`,r.names.map((n,i)=>`${i+1}着 ${clean(n)} ${r.points[i]<0?'▲':''}${Math.abs(r.points[i])}pt`).join('　')];
+ const lines=[`🀄 **Mリーグ ${clock(f)} ${f.table}卓 第${f.game}試合 結果出たで！**`,r.names.map((n,i)=>`${i+1}着 ${clean(n)} ${r.points[i]<0?'▲':''}${Math.abs(r.points[i])}pt`).join('　')];
  for(const b of bets){
   const what=`${clean(b.player)}の${ML_TYPES[b.type].label}`;
-  lines.push(b.status==='won'?`💰 <@${b.user}> ${what}的中！ ${money(b.amount)} → ${money(b.payout)}（${(b.odds/10).toFixed(1)}倍）`
-   :b.status==='refunded'?`↩️ <@${b.user}> ${what}は不出場で返金（${money(b.amount)}）`:`💸 <@${b.user}> ${what}は外れ（−${money(b.amount)}）`);
+  lines.push(b.status==='won'?`💰 <@${b.user}> ${what}的中や！ ${money(b.amount)} → ${money(b.payout)}（${(b.odds/10).toFixed(1)}倍）`
+   :b.status==='refunded'?`↩️ <@${b.user}> ${what}は出場せえへんかったから返金や（${money(b.amount)}）`:`💸 <@${b.user}> ${what}は外れや（−${money(b.amount)}）`);
  }
  return lines.join('\n');
 }

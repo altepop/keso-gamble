@@ -84,9 +84,9 @@ export function casinoPost(user:string,action:string,result:unknown):string|null
 /** The /mbet checks and the bet itself on a wallet state (the caller decides whether the state is saved). */
 async function applyMlBet(env:KpEnv,state:Record<string,unknown>,args:Record<string,unknown>){
  const d=await mlData(env),fixture=d.fixtures.find(f=>f.id===args.match),partner=fixture?mlPartner(d,fixture):null;
- if(fixture&&!fixture.confirmed)throw Error('公式の対戦カードを確認中です。少し待ってからもう一度お試しください。');
+ if(fixture&&!fixture.confirmed)throw Error('公式の対戦カードを確認中や。ちょっと待って、もう一度試してな。');
  const closed=fixture?(await mlClosed(env)).get(fixture.id):undefined;
- if(closed&&Date.now()>=closed.at)throw Error('この試合の予想は締め切りました（メンバーが試合開始を報告）。');
+ if(closed&&Date.now()>=closed.at)throw Error('この試合の予想は締め切ったで（メンバーが試合開始を報告）。');
  // Odds use this season's official results; game 2 closes once game 1's result is stored.
  return placeMlBet(state,{match:args.match,player:args.player,type:args.type,amount:args.amount},Date.now(),d,await mlResults(env,partner?[partner.id]:[]),seasonStats(await mlResults(env))) as {player:string;type:string;amount:number;odds:number};
 }
@@ -127,7 +127,7 @@ export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:strin
   }else if(action==='ml-bet'){
    const bet=await applyMlBet(env,state,args);
    // A purchase confirmed on a preview (/mbet) is bought only at the odds the member saw.
-   if(args.odds!==undefined&&args.odds!==bet.odds)throw Error(`倍率が ${(Number(args.odds)/10).toFixed(1)}倍 から ${(bet.odds/10).toFixed(1)}倍 に変わったので購入していません。もう一度 /mbet で確認してください。`);
+   if(args.odds!==undefined&&args.odds!==bet.odds)throw Error(`倍率が ${(Number(args.odds)/10).toFixed(1)}倍 から ${(bet.odds/10).toFixed(1)}倍 に変わったから買うてへんで。もう一度 /mbet で確かめてな。`);
    result={bet};
   }else if(action==='horse-buy'){
    useExchange(state,Date.now());result=await buyHorse(env,mapping,user,state,args);

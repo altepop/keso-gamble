@@ -171,7 +171,7 @@ export async function maybeGiftHorse(env:KpEnv,mapping:KpMapping,slot:number,rng
   env.DB.prepare('UPDATE kp_horse_gifts SET user=?,horse=? WHERE guild=? AND slot=?').bind(user,horse.id,mapping.guildId,slot),
  ]);
  const label=BOXES.find((b:{id:string})=>b.id===box)!.label;
- return {user,horse:{...horse,gradeLabel:CLASSES[horse.grade].grade},text:`🎁 **馬が空から降ってきた！** <@${user}> に${CLASSES[horse.grade].grade}の馬がプレゼントされました（${label}ボックス相当・この15分の当選確率 ${GIFT_CHANCE*100}%）\n名前はまだありません。\`/horsename\` で好きな名前を付けてください（付けるまでは「${GIFT_PLACEHOLDER}」で走ります）。\n-# 持ち馬に入ります。売っても0 KP、走れば賞金はもらえます。`};
+ return {user,horse:{...horse,gradeLabel:CLASSES[horse.grade].grade},text:`🎁 **馬が空から降ってきたで！** <@${user}> に${CLASSES[horse.grade].grade}の馬が届いたで！（${label}ボックス相当・この15分の当選確率 ${GIFT_CHANCE*100}%）\n名前はまだないで。\`/horsename\` で好きな名前を付けてな（付けるまでは「${GIFT_PLACEHOLDER}」で走るで）。\n-# 持ち馬に入るで。売っても0 KPやけど、走ったら賞金はもらえるで。`};
 }
 async function ensureGifts(env:KpEnv){
  await env.DB.batch([
@@ -183,11 +183,11 @@ export async function nameGiftHorse(env:KpEnv,mapping:KpMapping,user:string,name
  await ensureHorses(env);await ensureGifts(env);
  let value:string;try{value=validHorseName(name);}catch(error){return {reply:(error as Error).message};}
  const gift=await env.DB.prepare('SELECT g.slot,g.horse FROM kp_horse_gifts g JOIN kp_horses h ON h.id=g.horse WHERE g.guild=? AND g.user=? AND g.named=0 AND h.sold_at IS NULL ORDER BY g.at LIMIT 1').bind(mapping.guildId,user).first<{slot:number;horse:string}>();
- if(!gift)return {reply:'名前を付けられるプレゼントの馬はいません。プレゼントの馬は、ごくまれに空から降ってきます。'};
+ if(!gift)return {reply:'名前を付けられるプレゼントの馬はおらへんで。ごくまれに空から降ってくるから待っといてな。'};
  const done=await env.DB.batch([
   env.DB.prepare('UPDATE kp_horse_gifts SET named=1 WHERE guild=? AND slot=? AND named=0').bind(mapping.guildId,gift.slot),
   env.DB.prepare(`UPDATE kp_horses SET name=? WHERE id=? AND name='${GIFT_PLACEHOLDER}'`).bind(value,gift.horse),
  ]);
- if(!done[0].meta.changes)return {reply:'この馬にはもう名前が付いています。'};
- return {reply:`🐴 プレゼントの馬に「${value}」と名付けました。これから「${value}」として走ります。`,post:`🐴 <@${user}> がプレゼントの馬に「${value}」と名付けました。`};
+ if(!done[0].meta.changes)return {reply:'この馬にはもう名前が付いてるで。'};
+ return {reply:`🐴 プレゼントの馬に「${value}」と名付けたで！ これから「${value}」として走るで。`,post:`🐴 <@${user}> がプレゼントの馬に「${value}」と名付けたで！`};
 }
