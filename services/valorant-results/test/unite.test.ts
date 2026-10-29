@@ -126,3 +126,27 @@ test('more than three newly observed Unite games are processed oldest first with
  assert.equal(f.sql.prepare('SELECT wins FROM unite_streaks').get()!.wins,4);
  assert.equal(f.sent.length,4);
 });
+test('a page that no longer matches the saved history pays nothing and starts a new baseline',async()=>{
+ const f=await fixture();await link(f,cat,UID);await monitorUnite(f.env,T0,f.request,mapping);
+ // The old card is gone and five unknown games appear (a format change or replaced history): none of them is paid.
+ f.set(page([card({ko:21}),card({ko:22}),card({ko:23}),card({ko:24}),card({ko:25})]));
+ await monitorUnite(f.env,T0+3*60000,f.request,mapping);
+ assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM unite_rewards').get()!.n,0);assert.equal(f.balance(cat),0);assert.equal(f.sent.length,0);
+ assert.equal(f.sql.prepare('SELECT error FROM unite_links').get()!.error,'history_gap');
+ const {healthReport}=await import('../src/health.ts');assert.equal((await healthReport(f.env,guild,T0)).backlog.uniteErrors,1);
+ // The next real game after the new baseline is paid as the first of a streak, and the gap mark clears.
+ f.set(page([card({ko:26}),card({ko:21}),card({ko:22}),card({ko:23}),card({ko:24})]));
+ await monitorUnite(f.env,T0+6*60000,f.request,mapping);
+ assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM unite_rewards').get()!.n,1);assert.equal(f.sql.prepare('SELECT wins FROM unite_streaks').get()!.wins,1);
+ assert.equal(f.sql.prepare('SELECT error FROM unite_links').get()!.error,null);
+});
+test('two games with identical stats do not stop the profile; each fingerprint is paid once',async()=>{
+ const f=await fixture();await link(f,cat,UID);await monitorUnite(f.env,T0,f.request,mapping);
+ f.set(page([card({ko:31}),card({ko:0,ast:0}),card({ko:0,ast:0}),card()]));
+ await monitorUnite(f.env,T0+3*60000,f.request,mapping);
+ assert.equal(f.sql.prepare('SELECT error FROM unite_links').get()!.error,null);
+ assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM unite_rewards').get()!.n,2);assert.equal(f.sent.length,2);
+ f.set(page([card({ko:32}),card({ko:31}),card({ko:0,ast:0}),card({ko:0,ast:0}),card()]));
+ await monitorUnite(f.env,T0+6*60000,f.request,mapping);
+ assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM unite_rewards').get()!.n,3,'later reads keep going');
+});

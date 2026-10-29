@@ -111,21 +111,30 @@ export async function monitorUnite(env:UniteEnv,now=Date.now(),request:typeof fe
    env.DB.prepare('UPDATE unite_links SET name=?,seen=?,error=NULL WHERE guild=? AND user=?').bind(page.name,JSON.stringify(keys.slice(0,100)),link.guild,link.user),
   ]);return;
  }
- if(keys.length>100||new Set(keys).size!==keys.length){await env.DB.prepare('UPDATE unite_links SET error=? WHERE guild=? AND user=?').bind('ambiguous_history',link.guild,link.user).run();return;}
  const known=keys.findIndex(k=>seen.includes(k));
- const fresh=page.matches.slice(0,known===-1?page.matches.length:known).reverse();
+ // Nothing on the page matches what was read before: the page format changed or the history was replaced. Paying
+ // the whole page would credit old games again (at streak rates), so start a new baseline and show the gap instead.
+ if(known===-1){
+  await env.DB.batch([
+   env.DB.prepare('UPDATE unite_streaks SET wins=0,losses=0,version=version+1 WHERE guild=? AND uid=? AND user=?').bind(link.guild,link.uid,link.user),
+   env.DB.prepare('UPDATE unite_links SET name=?,seen=?,error=? WHERE guild=? AND user=?').bind(page.name,JSON.stringify([...new Set(keys)].slice(0,100)),'history_gap',link.guild,link.user),
+  ]);return;
+ }
+ // Two games with identical stats share a fingerprint and are settled once; they never stop the profile.
+ const fresh=[...new Map(page.matches.slice(0,known).map(m=>[matchKey(m),m])).values()].reverse();
  await env.DB.batch([
   env.DB.prepare('INSERT OR IGNORE INTO kp_wallets(guild,user) VALUES(?,?)').bind(link.guild,link.user),
   env.DB.prepare('INSERT OR IGNORE INTO kp_state(guild,user,data) VALUES(?,?,?)').bind(link.guild,link.user,JSON.stringify(newKpState())),
  ]);
  for(let i=0;i<fresh.length;i++){
   const m=fresh[i],fingerprint=matchKey(m),seed=link.uid+':'+fingerprint,id='unite-v3:'+await kpHash(link.guild+':'+seed);
-  const settled=await settleUnite(env,{id,guild:link.guild,user:link.user,uid:link.uid,fingerprint,seed,win:m.win,now,reset:known===-1&&i===0});
+  const settled=await settleUnite(env,{id,guild:link.guild,user:link.user,uid:link.uid,fingerprint,seed,win:m.win,now});
   const kp=settled.delta,note=settled.note+debtNote(await borrowedBy(env,id));
   await env.DB.prepare('INSERT OR IGNORE INTO mahjong_watch_posts(id,body,at) VALUES(?,?,?)').bind(id,JSON.stringify({content:unitePost(page.name,link.uid,m,kp,note),allowed_mentions:{parse:[]}}),now).run();
   if(env.KP_EARNINGS_WEBHOOK_URL){await ensurePosts(env);await enqueue(env,'kp-'+id,`🎮 <@${link.user}> ユナイト ランクマ${m.win?'勝利':'敗北'} ${kp>0?'+':'−'}${Math.abs(kp).toLocaleString('ja-JP')} KP${settled.note}`,now);}
  }
  // Advance only after all new records have been settled and queued. Failures keep the old cursor for a safe retry.
- await env.DB.prepare('UPDATE unite_links SET name=?,seen=?,error=NULL WHERE guild=? AND user=?').bind(page.name,JSON.stringify([...new Set([...keys,...seen])].slice(0,100)),link.guild,link.user).run();
+ // A history gap stays visible on システムの状態 until the next game is settled.
+ await env.DB.prepare("UPDATE unite_links SET name=?,seen=?,error=CASE WHEN ?=0 AND error='history_gap' THEN error ELSE NULL END WHERE guild=? AND user=?").bind(page.name,JSON.stringify([...new Set([...keys,...seen])].slice(0,100)),fresh.length,link.guild,link.user).run();
  if(fresh.length)await flushMahjongPosts(env as unknown as MahjongEnv,now,request);
 }
