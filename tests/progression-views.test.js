@@ -22,3 +22,11 @@ test('入出金履歴は台帳の全種類（雀魂・ユナイト・手動調�
  assert.match(html,/VALORANT &lt;コンペ&gt;/,'labels are escaped');
  assert.match(playView({...live([]),ledger:[]},{},''),/まだ入出金はありません/);
 });
+
+test('スパクラの表向き説明は短く、旧固定額と共通倍率を案内しない',()=>{
+ const state={...live([]),rewardRates:{spikerush:{win:120,loss:-10,bottom:-40}}};
+ const html=playView(state,{},'');
+ assert.match(html,/スパイクラッシュ<\/span><span class="helper">履歴に応じて補正されます。/);
+ assert.doesNotMatch(html,/勝ち \+120 KP|全ゲーム共通で/);
+ assert.match(html,/スパイクラッシュ以外の試合は/);
+});

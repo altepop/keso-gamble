@@ -1,3 +1,4 @@
+import {ensureSpikeGrowth} from './spikerush-growth.ts';
 import type { KpEnv } from './kp.ts';
 // The Activity's 入出金履歴: every wallet movement from the ledger (VALORANT, QUIZ, 通話, 雀魂, ユナイト, 手動調整,
 // 賞金, 借KP返済, 配当, Activityの操作…), newest first. A VALORANT loss debit (penalty:<id>) is folded into its match
@@ -20,12 +21,18 @@ export async function ledgerHistory(env:KpEnv,guild:string,user:string,limit=100
   const ids=matchIds.slice(i,i+50);
   for(const e of (await env.DB.prepare(`SELECT id,mode,match FROM kp_events WHERE id IN (${ids.map(()=>'?').join(',')})`).bind(...ids).all<{id:string;mode:string;match:string}>()).results)events.set(e.id,e);
  }
+ const spikeNotes=new Map<string,string>();
+ const spikeIds=[...events].filter(([,e])=>e.mode==='spikerush').map(([id])=>id);
+ if(spikeIds.length){
+  await ensureSpikeGrowth(env);
+  for(let i=0;i<spikeIds.length;i+=50){const ids=spikeIds.slice(i,i+50);for(const r of (await env.DB.prepare(`SELECT id,note FROM spike_rewards WHERE id IN (${ids.map(()=>'?').join(',')}) AND guild=? AND user=?`).bind(...ids,guild,user).all<{id:string;note:string}>()).results)spikeNotes.set(r.id,r.note);}
+ }
  const out:HistoryEntry[]=[],byEvent=new Map<string,HistoryEntry>();
  for(const r of rows){
   if(r.kind==='match'&&(events.has(r.id)||r.id.startsWith('penalty:'))){
    const key=r.id.replace(/^penalty:/,''),e=events.get(key),seen=byEvent.get(key);
    if(seen){seen.delta+=Number(r.delta);seen.time=Math.max(seen.time,r.at);continue;}
-   const entry={id:key,kind:'match',label:'VALORANT '+(e?MODES[e.mode]??e.mode:'試合'),detail:e?.match??'',delta:Number(r.delta),time:r.at};
+   const entry={id:key,kind:'match',label:'VALORANT '+(e?MODES[e.mode]??e.mode:'試合'),detail:(e?.match??'')+(spikeNotes.has(key)?' '+spikeNotes.get(key):''),delta:Number(r.delta),time:r.at};
    byEvent.set(key,entry);out.push(entry);continue;
   }
   const label=r.kind==='match'?(r.id.startsWith('rank-down:')?'VALORANT ランク降格':r.id.startsWith('rank-up:')?'VALORANT ランク昇格':'VALORANT'):r.kind==='game'?gameLabel(r.id):KINDS[r.kind]??r.kind;
