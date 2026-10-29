@@ -1,5 +1,6 @@
 import {readModeNote} from './mode-rewards.ts';
 import {skirmishResultButtons} from './skirmish.ts';
+import {appWebhook,appWebhookApi,forgetAppWebhook} from './app-webhook.ts';
 import {spikeNote} from './spikerush-growth.ts';
 import {prepareRaceBroadcast} from './racing-broadcast.ts';
 import {raceVideoApi} from './racing-video.ts';
@@ -302,30 +303,45 @@ async function flushNotifications(env: Env, players: Player[]): Promise<void> {
       const saved = await env.DB.prepare('SELECT value FROM monitor_state WHERE key=?')
         .bind('post:' + pendingMatch.match_id).first<{ value: string }>();
       // Discord snowflakes must stay strings: conversion to Number loses precision.
-      const editUrl = new URL(url);
-      editUrl.pathname = editUrl.pathname.replace(/\/$/, '') + '/messages/' + encodeURIComponent(saved?.value ?? '');
-      editUrl.searchParams.delete('wait');
       // A Skirmish win that opened a 受取／続行 choice carries its buttons. Interactive buttons need a webhook owned by the
-      // application; if Discord refuses them, the post goes out without (the result still names /kp balance) for a day.
+      // application: the one set up through /api/discord/app-webhook/start, posting as あかんbot. Without it the plain
+      // webhook is tried; if Discord refuses the buttons, the post goes out without (it still names /kp balance) for a day.
       const skirmish = notices.results.some(notice => notice.mode?.startsWith('skirmish'));
-      const buttons = skirmish && await state(env, 'skirmish_buttons_off_until') <= Date.now()
+      const owned = skirmish ? await appWebhook(env) : null;
+      const via = saved ? (await env.DB.prepare('SELECT value FROM monitor_state WHERE key=?').bind('via:' + pendingMatch.match_id).first<{ value: string }>())?.value : undefined;
+      const buttons = skirmish && (owned || await state(env, 'skirmish_buttons_off_until') <= Date.now())
         ? await skirmishResultButtons(env, pendingMatch.match_id, notices.results, new Map(players.map(player => [player.riotId, player.name?.trim() || parseId(player.riotId)[0]]))) : [];
+      // A message is always edited through the webhook that posted it.
+      let useOwned = Boolean(owned && (saved ? via === 'app' : buttons.length));
+      const base = () => { const target = new URL(useOwned ? owned!.url : url); target.searchParams.set('wait', 'true'); return target; };
+      const edit = () => { const target = base(); target.pathname = target.pathname.replace(/\/$/, '') + '/messages/' + encodeURIComponent(saved?.value ?? ''); target.searchParams.delete('wait'); return target; };
       const send = (target: URL, method: string, components?: unknown[]) => {
         const to = new URL(target);
         if (components) to.searchParams.set('with_components', 'true');
+        const identity = useOwned && method === 'POST' ? { ...(owned!.username ? { username: owned!.username } : {}), ...(owned!.avatarUrl ? { avatar_url: owned!.avatarUrl } : {}) } : {};
         return fetch(to, {
-          method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(components ? { ...payload, components } : payload), signal: AbortSignal.timeout(10_000),
+          method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...payload, ...identity, ...(components ? { components } : {}) }), signal: AbortSignal.timeout(10_000),
         });
       };
       const components = skirmish ? buttons : undefined;
-      let response = await send(saved ? editUrl : url, saved ? 'PATCH' : 'POST', components);
-      if (buttons.length && response.status === 400) {
+      let response = await send(saved ? edit() : base(), saved ? 'PATCH' : 'POST', components);
+      if (useOwned && !saved && (response.status === 401 || response.status === 404)) {
+        // The owned webhook was deleted in Discord: back to the plain webhook, without buttons.
+        console.warn('app_webhook_gone');
+        await forgetAppWebhook(env);
+        useOwned = false;
+        response = await send(base(), 'POST', []);
+      }
+      if (buttons.length && !useOwned && response.status === 400) {
         console.warn('skirmish_buttons_refused');
         await setState(env, 'skirmish_buttons_off_until', Date.now() + 86400_000);
-        response = await send(saved ? editUrl : url, saved ? 'PATCH' : 'POST', []);
+        response = await send(saved ? edit() : base(), saved ? 'PATCH' : 'POST', []);
       }
       // A deleted original message can be replaced when a late result needs to be added.
-      if (saved && response.status === 404) response = await send(url, 'POST', components && (await state(env, 'skirmish_buttons_off_until') <= Date.now() ? components : []));
+      if (saved && response.status === 404) {
+        useOwned = Boolean(owned && buttons.length);
+        response = await send(base(), 'POST', components && (useOwned || await state(env, 'skirmish_buttons_off_until') <= Date.now() ? components : []));
+      }
       if (!response.ok) {
         console.warn('discord_post_failed', { status: response.status });
         await setState(env, 'discord_after', Date.now() + retryAfter(response));
@@ -334,6 +350,7 @@ async function flushNotifications(env: Env, players: Player[]): Promise<void> {
       const message = await response.json() as { id?: string };
       if (typeof message.id !== 'string' || !/^\d+$/.test(message.id)) throw new Error('Invalid Discord message ID');
       await setState(env, 'post:' + pendingMatch.match_id, message.id);
+      if (skirmish) await setState(env, 'via:' + pendingMatch.match_id, useOwned ? 'app' : 'plain');
       await env.DB.prepare('UPDATE notifications SET sent=1 WHERE match_id=?').bind(pendingMatch.match_id).run();
       let timing = null;
       try {
@@ -444,6 +461,7 @@ export default {
   fetch(request: Request, env: Env, ctx: ExecutionContext) {
     if(new URL(request.url).pathname.startsWith('/api/racing/'))return raceVideoApi(request,env).catch(()=>new Response('Unavailable',{status:503}));
     if(request.method==='GET'&&new URL(request.url).pathname==='/api/mahjong/status')return mahjongStatus(env).then(status=>Response.json(status,{headers:{'Cache-Control':'no-store'}})).catch(()=>Response.json({enabled:false,error:'configuration_unavailable'},{status:503}));
+    if(new URL(request.url).pathname.startsWith('/api/discord/app-webhook/'))return appWebhookApi(request,env).catch(()=>new Response('Unavailable',{status:503}));
     if(new URL(request.url).pathname.startsWith('/api/mahjong/paipu/'))return paipuApi(request,env).catch(()=>new Response('Unavailable',{status:503}));
     return new URL(request.url).pathname.startsWith('/api/kp/') ? kpApi(request, env) : discordInteractions(request, env, ctx);
   },
