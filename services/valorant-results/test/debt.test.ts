@@ -9,10 +9,11 @@ import {operateKp,readKpState} from '../src/kp-api.ts';
 import {runKpCommand} from '../src/kp-slash.ts';
 import {settleRankChange} from '../src/rank-change.ts';
 import {ensureMahjongClaims} from '../src/mahjong-claims.ts';
-import {DEBT_BLOCKED,debtOf,settleDebts} from '../src/kp-debt.ts';
+import {DEBT_BLOCKED,debtOf,settleDebts,queueDebtPosts} from '../src/kp-debt.ts';
+import {ensurePosts} from '../src/racing-posts.ts';
 const guild='100000000000000100',one='100000000000000101',two='100000000000000102';
 const mapping:KpMapping={guildId:guild,accounts:[{riotId:'One#JP1',discordUserId:one},{riotId:'Two#JP1',discordUserId:two}]};
-const MIN=60_000,T0=Date.parse('2026-10-28T12:10:00+09:00');
+const MIN=60_000,DAY=1440*MIN,T0=Date.parse('2026-10-28T12:10:00+09:00');
 async function fixture(){
  const sql=new DatabaseSync(':memory:');
  for(const file of readdirSync(new NodeURL('../migrations/',import.meta.url)).filter(f=>f.endsWith('.sql')).sort())sql.exec(readFileSync(new NodeURL('../migrations/'+file,import.meta.url),'utf8'));
@@ -34,22 +35,27 @@ test('a minus the wallet cannot cover becomes 借KP, once per match; the wallet 
  await settleRankChange(f.env,mapping,two,{before:11,after:12},'m1','p-two',T0);
  assert.equal(await debtOf(f.env,guild,two),0,'a promotion owes nothing');
 });
-test('借KP grows 2% every 10 minutes (rounded up) from the first full period, once per period, and is repaid from KP that comes in',async()=>{
+test('借KP grows 1% a day (rounded up) from the first full day, once per day, and is repaid from KP that comes in',async()=>{
  const f=await fixture();
  await settleRankChange(f.env,mapping,one,{before:12,after:11},'m1','p-one',T0);
  assert.equal(await debtOf(f.env,guild,one),500);
- await settleDebts(f.env,guild,T0+5*MIN);assert.equal(await debtOf(f.env,guild,one),500,'no interest within the first 10 minutes');
- await settleDebts(f.env,guild,T0+10*MIN);await settleDebts(f.env,guild,T0+11*MIN);
- assert.equal(await debtOf(f.env,guild,one),510,'one charge per period');
- await settleDebts(f.env,guild,T0+20*MIN);assert.equal(await debtOf(f.env,guild,one),521,'compounds and rounds up: 510 × 2% = 10.2 → 11');
- f.credit('c1',200);await settleDebts(f.env,guild,T0+21*MIN);
- assert.equal(f.balance(),0);assert.equal(await debtOf(f.env,guild,one),321,'all of the 200 goes to the debt');
- f.credit('c2',1000);await settleDebts(f.env,guild,T0+22*MIN);
- assert.equal(f.balance(),679);assert.equal(await debtOf(f.env,guild,one),0);
- await settleDebts(f.env,guild,T0+120*MIN);assert.equal(await debtOf(f.env,guild,one),0,'no interest once repaid');
+ await settleDebts(f.env,guild,T0+23*60*MIN);assert.equal(await debtOf(f.env,guild,one),500,'no interest within the first day');
+ await settleDebts(f.env,guild,T0+DAY);await settleDebts(f.env,guild,T0+DAY+MIN);
+ assert.equal(await debtOf(f.env,guild,one),505,'one charge per day');
+ await settleDebts(f.env,guild,T0+2*DAY);assert.equal(await debtOf(f.env,guild,one),511,'compounds and rounds up: 505 × 1% = 5.05 → 6');
+ f.credit('c1',200);await settleDebts(f.env,guild,T0+2*DAY+MIN);
+ assert.equal(f.balance(),0);assert.equal(await debtOf(f.env,guild,one),311,'all of the 200 goes to the debt');
+ f.credit('c2',1000);await settleDebts(f.env,guild,T0+2*DAY+2*MIN);
+ assert.equal(f.balance(),689);assert.equal(await debtOf(f.env,guild,one),0);
+ await settleDebts(f.env,guild,T0+5*DAY);assert.equal(await debtOf(f.env,guild,one),0,'no interest once repaid');
  const kinds=f.sql.prepare("SELECT kind,SUM(amount) AS n FROM kp_debt_events WHERE user=? GROUP BY kind ORDER BY kind").all(one).map(r=>[r.kind,Number(r.n)]);
- assert.deepEqual(kinds,[['borrow',500],['interest',21],['repay',-521]]);
- assert.equal(Number(f.sql.prepare("SELECT SUM(delta) AS n FROM kp_ledger WHERE user=? AND kind='debt'").get(one)?.n),-521);
+ assert.deepEqual(kinds,[['borrow',500],['interest',11],['repay',-511]]);
+ assert.equal(Number(f.sql.prepare("SELECT SUM(delta) AS n FROM kp_ledger WHERE user=? AND kind='debt'").get(one)?.n),-511);
+ await ensurePosts(f.env);await queueDebtPosts(f.env,guild,T0+2*DAY+3*MIN);await queueDebtPosts(f.env,guild,T0+2*DAY+4*MIN);
+ const posts=f.sql.prepare("SELECT id,body FROM kp_posts WHERE id LIKE 'debt-%'").all() as Array<{id:string;body:string}>;
+ assert.equal(posts.length,1,'paying it all back is posted once; 500 never reached the cap');
+ assert.match(posts[0].id,/^debt-clear:repay:debt-repay:/);
+ assert.deepEqual(JSON.parse(posts[0].body),{content:`🎉 <@${one}> が借KPを完済！やっと自由の身や。\nまた株も馬券もカジノも使えるで。`,allowed_mentions:{parse:[]}});
 });
 test('while 借KP is owed nothing can be bought; selling still works and the money repays the debt',async()=>{
  const f=await fixture();f.credit('c1',5000);
@@ -78,7 +84,7 @@ test('/kp shows 借KP and the repayment row',async()=>{
  const f=await fixture();
  await settleRankChange(f.env,mapping,one,{before:12,after:11},'m1','p-one',T0);
  const kp=()=>runKpCommand(f.env,{id:String((BigInt(T0)-1420070400000n)<<22n),guild_id:guild,member:{user:{id:one}},data:{name:'kp',options:[]}},mapping);
- assert.match(await kp(),/💸 借KP：\*\*500 KP\*\*（10分ごとに利子2%/);
+ assert.match(await kp(),/💸 借KP：\*\*500 KP\*\*（1日ごとに利子1%、上限1,000 KP/);
  f.credit('c1',800);await settleDebts(f.env,guild,T0+60_000);
  const after=await kp();assert.doesNotMatch(after,/💸 借KP/);assert.match(after,/借KP返済 -500 KP/);
 });
@@ -103,11 +109,23 @@ test('借KP stops at 1,000: a loss, interest and other borrowing only add what f
  assert.equal(await borrowedBy(f.env,'loss-2'),200,'the post says what was really borrowed');
  await owe('loss-3',500);assert.equal(await debtOf(f.env,guild,one),1000);assert.equal(await borrowedBy(f.env,'loss-3'),0,'nothing fits: no event, no note');
  await owe('loss-3',500);assert.equal(await debtOf(f.env,guild,one),1000,'a retry at the cap stays at the cap');
- await settleDebts(f.env,guild,T0+30*MIN);assert.equal(await debtOf(f.env,guild,one),1000,'interest stops at the cap too');
- // Repayment is not capped. The period's interest, which found no room at the cap, is charged once there is room (2% of 700).
- f.credit('in-1',300);await settleDebts(f.env,guild,T0+31*MIN);assert.equal(await debtOf(f.env,guild,one),714);
- await settleDebts(f.env,guild,T0+32*MIN);assert.equal(await debtOf(f.env,guild,one),714,'once per period');
- const sum=Number(f.sql.prepare('SELECT SUM(amount) n FROM kp_debt_events WHERE user=?').get(one)!.n);assert.equal(sum,714,'the events add up to the debt');
+ await settleDebts(f.env,guild,T0+DAY);assert.equal(await debtOf(f.env,guild,one),1000,'interest stops at the cap too');
+ // Repayment is not capped. The period's interest, which found no room at the cap, is charged once there is room (1% of 700).
+ f.credit('in-1',300);await settleDebts(f.env,guild,T0+DAY+MIN);assert.equal(await debtOf(f.env,guild,one),707);
+ await settleDebts(f.env,guild,T0+DAY+2*MIN);assert.equal(await debtOf(f.env,guild,one),707,'once per period');
+ const sum=Number(f.sql.prepare('SELECT SUM(amount) n FROM kp_debt_events WHERE user=?').get(one)!.n);assert.equal(sum,707,'the events add up to the debt');
+ // 稼ぎch: the cap is announced once (loss-2 reached it; the retries and the interest at the cap add nothing), and
+ // reaching it again after some repayment is a new post. Nothing is posted until it is all paid back.
+ await ensurePosts(f.env);
+ const full=()=>(f.sql.prepare("SELECT id,body FROM kp_posts WHERE id LIKE 'debt-full:%' ORDER BY id").all() as Array<{id:string;body:string}>);
+ assert.deepEqual(full(),[],'nothing is posted until the cron queues it');
+ await queueDebtPosts(f.env,guild,T0+DAY+3*MIN);
+ assert.deepEqual(full(),[],'a notice older than a day is not posted late');
+ await queueDebtPosts(f.env,guild,T0+MIN);
+ assert.deepEqual(full().map(p=>p.id),['debt-full:borrow:loss-2']);
+ assert.equal(JSON.parse(full()[0].body).content,`💸 <@${one}> の借KPが上限の1,000 KPに到達！もう満タンや。\n入ったKPから自動で返すまで、株も馬券もカジノも使えへんで。`);
+ await owe('loss-4',400);await queueDebtPosts(f.env,guild,T0+MIN);assert.deepEqual(full().map(p=>p.id),['debt-full:borrow:loss-2','debt-full:borrow:loss-4']);
+ assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM kp_posts WHERE id LIKE 'debt-clear:%'").get()!.n,0);
  // A debt from before the cap comes down to it when the Worker starts.
  f.sql.prepare('UPDATE kp_debts SET amount=5000 WHERE user=?').run(one);
  await ensureDebt({...f.env,DB:{prepare:f.env.DB.prepare,batch:f.env.DB.batch}} as KpEnv);

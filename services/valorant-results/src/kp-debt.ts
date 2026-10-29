@@ -1,12 +1,20 @@
 import policy from '../kp-policy.json' with { type: 'json' };
 import type { KpEnv } from './kp.ts';
 // 借KP: a minus the wallet cannot cover is not forgiven. Wallets still stop at 0, and the rest becomes a debt that
-// grows by interest every 10 minutes as a penalty, up to DEBT_MAX, (from the first full period after it started) and is repaid from KP that comes in.
+// grows by a small daily interest, up to DEBT_MAX, (from the first full period after it started) and is repaid from KP that comes in.
 // While any is owed, nothing can be bought (stocks, horses, bets, luxury, directives), so hiding KP before a
 // likely loss no longer dodges it. Every change is a row in kp_debt_events (borrow / interest / repay).
 export const DEBT_INTEREST_PERCENT:number=policy.debt.interestPercent,DEBT_INTERVAL_MINUTES:number=policy.debt.intervalMinutes,DEBT_MAX:number=policy.debt.maxAmount;
 export const DEBT_BLOCKED='借KPを返すまでKPは使えません（株・馬・馬券・カジノ・高級品・指名）。入ったKPから自動で返済されます。';
 const PERIOD=DEBT_INTERVAL_MINUTES*60_000;
+const every=(m:number)=>m%1440===0?(m===1440?'1日':`${m/1440}日`):m%60===0?`${m/60}時間`:`${m}分`;
+/** e.g. 「1日ごとに利子1%」 for /kp and the Activity. */
+export const DEBT_INTEREST_TEXT=`${every(DEBT_INTERVAL_MINUTES)}ごとに利子${DEBT_INTEREST_PERCENT}%`;
+// 稼ぎch posts when someone's 借KP hits the cap and when it is all paid back. No mention pings (allowed_mentions parse []).
+const cap=DEBT_MAX.toLocaleString('ja-JP');
+export const debtPost=(kind:'full'|'clear',user:string)=>kind==='full'
+ ?`💸 <@${user}> の借KPが上限の${cap} KPに到達！もう満タンや。\n入ったKPから自動で返すまで、株も馬券もカジノも使えへんで。`
+ :`🎉 <@${user}> が借KPを完済！やっと自由の身や。\nまた株も馬券もカジノも使えるで。`;
 const ready=new WeakSet<object>();
 export async function ensureDebt(env:KpEnv){
  if(ready.has(env.DB))return;
@@ -18,11 +26,18 @@ export async function ensureDebt(env:KpEnv){
   // cap is applied once, in the event itself: it keeps only what fits (or is removed when nothing does), and the debt
   // moves by exactly what the event records. Repayments are never capped.
   'DROP TRIGGER IF EXISTS kp_debt_apply',
-  `CREATE TRIGGER IF NOT EXISTS kp_debt_apply_capped AFTER INSERT ON kp_debt_events BEGIN
+  'DROP TRIGGER IF EXISTS kp_debt_apply_capped',
+  `CREATE TABLE IF NOT EXISTS kp_debt_notices(id TEXT PRIMARY KEY,guild TEXT NOT NULL,user TEXT NOT NULL,kind TEXT NOT NULL CHECK(kind IN ('full','clear')),at INTEGER NOT NULL)`,
+  // Reaching the cap and paying everything back are noted once per event that caused them (queueDebtPosts posts them).
+  `CREATE TRIGGER IF NOT EXISTS kp_debt_apply_posts AFTER INSERT ON kp_debt_events BEGIN
    INSERT OR IGNORE INTO kp_debts(guild,user) VALUES(NEW.guild,NEW.user);
    DELETE FROM kp_debt_events WHERE id=NEW.id AND NEW.amount>0 AND (SELECT amount FROM kp_debts WHERE guild=NEW.guild AND user=NEW.user)>=${DEBT_MAX};
    UPDATE kp_debt_events SET amount=MIN(NEW.amount,${DEBT_MAX}-(SELECT amount FROM kp_debts WHERE guild=NEW.guild AND user=NEW.user)) WHERE id=NEW.id AND NEW.amount>0;
    UPDATE kp_debts SET since=CASE WHEN amount=0 THEN NEW.at ELSE since END,amount=amount+COALESCE((SELECT amount FROM kp_debt_events WHERE id=NEW.id),0) WHERE guild=NEW.guild AND user=NEW.user;
+   INSERT OR IGNORE INTO kp_debt_notices(id,guild,user,kind,at) SELECT 'debt-full:'||NEW.id,NEW.guild,NEW.user,'full',NEW.at
+    WHERE NEW.amount>0 AND EXISTS(SELECT 1 FROM kp_debt_events WHERE id=NEW.id) AND (SELECT amount FROM kp_debts WHERE guild=NEW.guild AND user=NEW.user)>=${DEBT_MAX};
+   INSERT OR IGNORE INTO kp_debt_notices(id,guild,user,kind,at) SELECT 'debt-clear:'||NEW.id,NEW.guild,NEW.user,'clear',NEW.at
+    WHERE NEW.amount<0 AND (SELECT amount FROM kp_debts WHERE guild=NEW.guild AND user=NEW.user)=0;
   END`,
   // Debts from before the cap come down to it once.
   `UPDATE kp_debts SET amount=${DEBT_MAX} WHERE amount>${DEBT_MAX}`,
@@ -53,4 +68,11 @@ export async function settleDebts(env:KpEnv,guild:string,now=Date.now()){
   env.DB.prepare(`INSERT OR IGNORE INTO kp_ledger(id,guild,user,delta,kind,at) SELECT 'debt-repay:'||w.guild||':'||w.user||':'||w.version,w.guild,w.user,-MIN(d.amount,w.balance),'debt',? FROM kp_wallets w JOIN kp_debts d ON d.guild=w.guild AND d.user=w.user WHERE w.guild=? AND d.amount>0 AND w.balance>0`).bind(now,guild),
   env.DB.prepare(`INSERT OR IGNORE INTO kp_debt_events(id,guild,user,amount,kind,at) SELECT 'interest:'||guild||':'||user||':'||?,guild,user,(amount*CAST(? AS INTEGER)+99)/100,'interest',? FROM kp_debts WHERE guild=? AND amount>0 AND since<=?`).bind(slot,DEBT_INTEREST_PERCENT,now,guild,now-PERIOD),
  ]);
+}
+/** Queue the day's cap / paid-back notices for 稼ぎch (kp_posts must exist: only called when the webhook is set).
+ * Older ones are not posted late, e.g. after the webhook is first set. Retries find the same post IDs. */
+export async function queueDebtPosts(env:KpEnv,guild:string,now=Date.now()){
+ await ensureDebt(env);
+ const rows=(await env.DB.prepare('SELECT id,user,kind,at FROM kp_debt_notices WHERE guild=? AND at>? ORDER BY at,id').bind(guild,now-86_400_000).all<{id:string;user:string;kind:'full'|'clear';at:number}>()).results;
+ for(const r of rows)await env.DB.prepare('INSERT OR IGNORE INTO kp_posts(id,body,at) VALUES(?,?,?)').bind(r.id,JSON.stringify({content:debtPost(r.kind,r.user),allowed_mentions:{parse:[]}}),r.at).run();
 }
