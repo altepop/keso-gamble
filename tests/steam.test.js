@@ -32,3 +32,7 @@ test('owned-game buttons are enabled only when Steam confirms at least 120 minut
  for(const id of [1,3,4])assert.match(html,new RegExp('data-app="'+id+'"[^>]*disabled'));
  assert.doesNotMatch(html,/data-app="2"[^>]*disabled/);
 });
+test('Steam panel explains paid eligibility and shows automatic free-game pauses without offering a cash refund',()=>{
+ const status={available:true,enabled:true,account:{steamId:'76561198000000001',active:true},apps:[{id:1,title:'Paused Game'}],games:[{app:1,active:false,error:'free_game'}]};
+ const html=steamPanel({status,library:[]});assert.match(html,/無料・基本無料・無料配布中のゲームは対象外/);assert.match(html,/有料販売の確認は選択時/);assert.match(html,/監視停止：無料・基本無料ゲームは対象外/);assert.match(html,/再開前の解除済み実績は支給しません/);assert.match(html,/翌日へ繰り越しません/);
+});
