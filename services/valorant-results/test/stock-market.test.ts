@@ -153,16 +153,16 @@ test('新しく上場した銘柄：前からある相場と口座はそのま�
  t.mock.timers.enable({apis:['Date'],now:T});const f=await fixture();f.credit('fund',10000);await prepareStocks(f.env,guild,one);
  // The market and the wallet as saved before the listing: only the first four stocks.
  const old=['keso','riso','yuya','yano'];
- f.sql.prepare("UPDATE stock_markets SET prices=json_remove(prices,'$.mitu','$.okbr','$.nani','$.tako','$.neko','$.kgne'),history=json_remove(history,'$.mitu','$.okbr','$.nani','$.tako','$.neko','$.kgne')").run();
- f.sql.prepare("UPDATE kp_state SET data=json_remove(data,'$.holdings.nani','$.holdings.mitu') WHERE user=?").run(one);
+ f.sql.prepare("UPDATE stock_markets SET prices=json_remove(prices,'$.mitu','$.okbr','$.koji','$.ishi','$.vdk','$.kobe','$.ngya','$.hori'),history=json_remove(history,'$.mitu','$.okbr','$.koji','$.ishi','$.vdk','$.kobe','$.ngya','$.hori')").run();
+ f.sql.prepare("UPDATE kp_state SET data=json_remove(data,'$.holdings.koji','$.holdings.mitu') WHERE user=?").run(one);
  const state=await readKpState(f.env,mapping,one);
- assert.equal(state.prices.nani,300);assert.equal(state.holdings.nani,0);assert.equal(state.cash,10000);
+ assert.equal(state.prices.koji,300);assert.equal(state.holdings.koji,0);assert.equal(state.cash,10000);
  for(const id of old)assert.ok(Number.isSafeInteger(state.prices[id]));
- await trade(f,'listing-buy-nani','buy',10,'nani');
- assert.equal(f.cash(),10000-3000-30);assert.equal((await readKpState(f.env,mapping,one)).holdings.nani,10);
+ await trade(f,'listing-buy-koji','buy',10,'koji');
+ assert.equal(f.cash(),10000-3000-30);assert.equal((await readKpState(f.env,mapping,one)).holdings.koji,10);
  const m=await tickStocks(f.env,await prepareStocks(f.env,guild,one),T+300000,()=>.5);
- assert.ok(Number.isSafeInteger(JSON.parse(String(f.sql.prepare('SELECT prices FROM stock_markets').get()!.prices)).nani),'saved on the next tick');
- assert.ok(m.prices.kgne>0);
+ assert.ok(Number.isSafeInteger(JSON.parse(String(f.sql.prepare('SELECT prices FROM stock_markets').get()!.prices)).koji),'saved on the next tick');
+ assert.ok(m.prices.hori>0);
 });
 test('ミツノアジ証券・おこぼれ商事は、誰かがKPを失った回数・得た回数で動く（金額は見ない、QUIZ・購入は数えない）',async t=>{
  t.mock.timers.enable({apis:['Date'],now:T});const f=await fixture();const m=await prepareStocks(f.env,guild,one);
@@ -181,8 +181,8 @@ test('ミツノアジ証券・おこぼれ商事は、誰かがKPを失った回
 });
 test('架空の会社はたまに架空ニュースで大きく動く。外れの抽選ではニュースなし',()=>{
  assert.deepEqual(fictionNews(()=>.5),[]);
- const seq=[0,0.2,0,  0.9,  0,0.9,0,  0.9];let i=0;
+ const seq=[0,0.2,0,  0.9,  0,0.9,0,  0.9,0.9,0.9];let i=0;
  const news=fictionNews(()=>seq[i++]);
- assert.deepEqual(news.map(n=>[n.symbol,n.bps]),[['nani',250],['neko',-180]]);
+ assert.deepEqual(news.map(n=>[n.symbol,n.bps]),[['koji',250],['ishi',-180]]);
  assert.ok(news.every(n=>n.label.length>0));
 });
