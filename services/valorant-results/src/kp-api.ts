@@ -10,6 +10,7 @@ import {STOCK_INTERVAL,prepareStocks,stockView,stockBenefits,stockDiscount} from
 import {kpCommands,KP_COMMAND_VERSION} from './kp-command.ts';
 import {voiceControl,voiceStatus} from './voice-api.ts';
 import {ensureVoiceLedger,voicePolicy} from './voice-rewards.ts';
+import {receiveLoopKp} from './loop-kp.ts';
 import {ensureQuizKp,receiveQuizKp,isKpParticipant,quizKpRates,quizKpLimits} from './quiz-kp.ts';
 import {activityAuthAvailable,createActivityChallenge,authenticateActivity}from './discord-activity-auth.ts';
 import { initializeKp, exchangeKpCode, kpSession, revokeKpSession, kpHash } from './kp.ts';
@@ -227,6 +228,7 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping):Promi
   const mapping=await initializeKp(env,override);if(!mapping)return response({error:'口座はまだ準備中です。'},503);
   const path=new URL(request.url).pathname;
   if(path.startsWith('/api/kp/voice/'))return voiceControl(request,env);
+  if(request.method==='POST'&&path==='/api/kp/loop/reward')return receiveLoopKp(request,env,mapping);
   if(request.method==='POST'&&path==='/api/kp/quiz/reward')return receiveQuizKp(request,env,mapping);
   if(request.method==='GET'&&path==='/api/kp/market'){const market=await prepareStocks(env,mapping.guildId);return response({...await stockView(env,market),prices:market.prices,history:market.history});}
   if(request.method==='GET'&&path==='/api/kp/status') {
