@@ -93,3 +93,23 @@ test('Mahjong Soul: last place the wallet cannot cover becomes 借KP; other rank
  claim('b',2,0);claim('c',1,500);
  assert.equal(await debtOf(f.env,guild,one),700);assert.equal(f.balance(),500);
 });
+test('借KP stops at 1,000: a loss, interest and other borrowing only add what fits, repayment still works, older debts come down to it',async()=>{
+ const {borrowShortfall,borrowedBy,ensureDebt,DEBT_MAX}=await import('../src/kp-debt.ts');
+ assert.equal(DEBT_MAX,1000);
+ const f=await fixture();
+ const owe=(id:string,amount:number)=>{f.sql.prepare("INSERT OR IGNORE INTO kp_ledger VALUES(?,?,?,0,'match',?)").run(id,guild,one,T0);return borrowShortfall(f.env,id,amount).run();};
+ await owe('loss-1',800);assert.equal(await debtOf(f.env,guild,one),800);
+ await owe('loss-2',700);assert.equal(await debtOf(f.env,guild,one),1000,'only 200 of 700 fits');
+ assert.equal(await borrowedBy(f.env,'loss-2'),200,'the post says what was really borrowed');
+ await owe('loss-3',500);assert.equal(await debtOf(f.env,guild,one),1000);assert.equal(await borrowedBy(f.env,'loss-3'),0,'nothing fits: no event, no note');
+ await owe('loss-3',500);assert.equal(await debtOf(f.env,guild,one),1000,'a retry at the cap stays at the cap');
+ await settleDebts(f.env,guild,T0+30*MIN);assert.equal(await debtOf(f.env,guild,one),1000,'interest stops at the cap too');
+ // Repayment is not capped. The period's interest, which found no room at the cap, is charged once there is room (2% of 700).
+ f.credit('in-1',300);await settleDebts(f.env,guild,T0+31*MIN);assert.equal(await debtOf(f.env,guild,one),714);
+ await settleDebts(f.env,guild,T0+32*MIN);assert.equal(await debtOf(f.env,guild,one),714,'once per period');
+ const sum=Number(f.sql.prepare('SELECT SUM(amount) n FROM kp_debt_events WHERE user=?').get(one)!.n);assert.equal(sum,714,'the events add up to the debt');
+ // A debt from before the cap comes down to it when the Worker starts.
+ f.sql.prepare('UPDATE kp_debts SET amount=5000 WHERE user=?').run(one);
+ await ensureDebt({...f.env,DB:{prepare:f.env.DB.prepare,batch:f.env.DB.batch}} as KpEnv);
+ assert.equal(await debtOf(f.env,guild,one),1000);
+});

@@ -11,7 +11,7 @@ import {ensureMahjongClaims} from './mahjong-claims.ts';
 import {ensureUnite,uniteUid} from './unite.ts';
 import {nameGiftHorse,decideEntries} from './racing-horses.ts';
 import {crownFor} from './racing-crowns.ts';
-import {DEBT_INTEREST_PERCENT,DEBT_INTERVAL_MINUTES,debtOf} from './kp-debt.ts';
+import {DEBT_INTEREST_PERCENT,DEBT_INTERVAL_MINUTES,DEBT_MAX,debtOf} from './kp-debt.ts';
 // @ts-expect-error Shared browser engine.
 import {mlCard,mlOdds,mlOpen,mlStart} from '../../../js/mleague.js';
 // @ts-expect-error Shared browser engine.
@@ -198,7 +198,7 @@ export async function runKpCommand(env:KpEnv,interaction:Slash,override?:KpMappi
   const rows=(await env.DB.prepare('SELECT delta,kind,at FROM kp_ledger WHERE guild=? AND user=? ORDER BY at DESC,id DESC LIMIT 5').bind(mapping.guildId,user).all<{delta:number;kind:string;at:number}>()).results;
   const kinds:Record<string,string>={skirmish:'スカーミッシュの受取',dividend:'株配当','stock-migration':'株の移行端数',voice:'通話',quiz:'QUIZ',match:'試合',operation:'購入・取引',prize:'競馬賞金',mahjong:'雀魂',grant:'手動調整',unite:'ユナイト',debt:'借KP返済'};
   const challenge=await skirmishState(env,mapping.guildId,user);const prompt=challenge?skirmishPrompt(challenge):null;if(prompt&&out)out.components=prompt.components;
-  return (prompt?prompt.content+'\n\n':'')+'🪙 あなたの残高：**'+money(await balance())+'**\n'+(owed?`💸 借KP：**${money(owed)}**（${DEBT_INTERVAL_MINUTES}分ごとに利子${DEBT_INTEREST_PERCENT}%。入ったKPから自動で返済。返し終わるまで株・馬・馬券・カジノ・高級品・指名は使えません）\n`:'')+(rows.length?'最近の入出金\n'+rows.map(r=>`${clock(r.at)} ${kinds[r.kind]??'口座'} ${r.delta>=0?'+':''}${money(r.delta)}`).join('\n'):'まだ入出金はありません。通話やQUIZで貯められます。')+'\n/keiba で出走表、/bet で馬券を買えます。';
+  return (prompt?prompt.content+'\n\n':'')+'🪙 あなたの残高：**'+money(await balance())+'**\n'+(owed?`💸 借KP：**${money(owed)}**（${DEBT_INTERVAL_MINUTES}分ごとに利子${DEBT_INTEREST_PERCENT}%、上限${money(DEBT_MAX)}。入ったKPから自動で返済。返し終わるまで株・馬・馬券・カジノ・高級品・指名は使えません）\n`:'')+(rows.length?'最近の入出金\n'+rows.map(r=>`${clock(r.at)} ${kinds[r.kind]??'口座'} ${r.delta>=0?'+':''}${money(r.delta)}`).join('\n'):'まだ入出金はありません。通話やQUIZで貯められます。')+'\n/keiba で出走表、/bet で馬券を買えます。';
  }
  if(command==='mleague')return mleagueView(env,Date.now());
  if(command==='horsename'){
