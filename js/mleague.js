@@ -50,15 +50,15 @@ export function hydrateMleague(raw){
 /** Buys a prediction. Shares the weekly betting limit with horse racing (state.raceWeek). */
 export function placeMlBet(state,{match,player,type,amount},now,data,results,season={}){
  const fixture=data.fixtures.find(f=>f.id===match);
- if(!fixture)throw Error('試合を選んでください');
- if(!mlOpen(data,fixture,now,results))throw Error(now<at(fixture.date,'00:00')?'この試合はまだ受付前です（当日0時から）':'この試合の予想は締め切りました');
- if(!ML_SOLD.includes(type))throw Error('予想できるのはラスだけです');
+ if(!fixture)throw Error('試合を選んでな');
+ if(!mlOpen(data,fixture,now,results))throw Error(now<at(fixture.date,'00:00')?'この試合はまだ受付前やで（当日0時から）':'この試合の予想は締め切ったで');
+ if(!ML_SOLD.includes(type))throw Error('予想できるんはラスだけやで');
  const card=mlCard(data,fixture),pick=card.find(p=>p.no===player||p.name===player);
- if(!pick)throw Error('選手を選んでください');
- if(!validInt(amount,MIN_BET)||amount%BET_STEP!==0)throw Error(`金額は${MIN_BET} KP以上、${BET_STEP} KP単位です`);
- if(amount>state.cash)throw Error('KPが不足しています');
+ if(!pick)throw Error('選手を選んでな');
+ if(!validInt(amount,MIN_BET)||amount%BET_STEP!==0)throw Error(`金額は${MIN_BET} KP以上、${BET_STEP} KP単位やで`);
+ if(amount>state.cash)throw Error('KPが足らへんで');
  const week=weekStart(now),spent=state.raceWeek?.start===week?state.raceWeek.spent:0;
- if(spent+amount>WEEKLY_LIMIT)throw Error(`1週間に賭けられるのは${WEEKLY_LIMIT.toLocaleString('ja-JP')} KPまでです（競馬と合算・残り${(WEEKLY_LIMIT-spent).toLocaleString('ja-JP')} KP）`);
+ if(spent+amount>WEEKLY_LIMIT)throw Error(`1週間に賭けられるのは${WEEKLY_LIMIT.toLocaleString('ja-JP')} KPまでやで（競馬と合算・残り${(WEEKLY_LIMIT-spent).toLocaleString('ja-JP')} KP）`);
  const bet={id:`ml-${now}-${state.mlBets.length}`,match,player:pick.name,type,amount,odds:mlOdds(pick,season)[type],status:'pending',payout:0,time:now};
  state.cash-=amount;state.raceWeek={start:week,spent:spent+amount};
  state.mlBets.unshift(bet);
@@ -76,7 +76,7 @@ export function settleMlBets(state,results){
   const place=result.names.indexOf(bet.player);
   if(place<0||(Number.isSafeInteger(result.closedAt)&&bet.time>=result.closedAt)){bet.status='refunded';bet.payout=bet.amount;}
   else{const won=bet.type==='top'?place===0:place===result.names.length-1;bet.status=won?'won':'lost';bet.payout=won?payoutFor(bet.amount,bet.odds):0;}
-  if(!validInt(state.cash+bet.payout))throw Error('KPが上限を超えています');
+  if(!validInt(state.cash+bet.payout))throw Error('KPが上限を超えてるで');
   state.cash+=bet.payout;settled.push(bet);
  }
  return settled;

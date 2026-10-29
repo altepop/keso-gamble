@@ -98,13 +98,13 @@ test('a prediction is bought through the wallet, settled from the official order
  assert.equal(f.balance(one),99000);assert.equal(f.balance(two),99200);
  assert.equal((await readKpState(f.env,mapping,one)).raceWeek.spent,1000,'shares the weekly limit with racing');
  await queueMlPosts(f.env,mapping,jst('2026-10-27T18:30:00'));
- assert.match(f.posts()[0],/Mリーグ予想.*10\/27 19:00開始（ラスの選手を当てる）/);assert.doesNotMatch(f.posts()[0],/トップ本命/);assert.match(f.posts()[0],/1卓/);assert.match(f.posts()[0],/2卓/);
+ assert.match(f.posts()[0],/Mリーグ予想.*10\/27 19:00開始（誰がラスになるか当ててみい！）/);assert.doesNotMatch(f.posts()[0],/トップ本命/);assert.match(f.posts()[0],/1卓/);assert.match(f.posts()[0],/2卓/);
  t.mock.timers.setTime(jst('2026-10-27T19:00:00'));
- await assert.rejects(operateKp(f.env,mapping,one,op(),'ml-bet',{match:game1.id,player:1,type:'last',amount:100}),/締め切りました/);
+ await assert.rejects(operateKp(f.env,mapping,one,op(),'ml-bet',{match:game1.id,player:1,type:'last',amount:100}),/締め切ったで/);
  await operateKp(f.env,mapping,one,op(),'ml-bet',{match:game2.id,player:1,type:'last',amount:100});
  t.mock.timers.setTime(jst('2026-10-27T21:10:00'));
  await pollMlResults(f.env,Date.now(),(async()=>new Response(page)) as unknown as typeof fetch);
- await assert.rejects(operateKp(f.env,mapping,one,op(),'ml-bet',{match:game2.id,player:1,type:'last',amount:100}),/締め切りました/,'game 1 has a result');
+ await assert.rejects(operateKp(f.env,mapping,one,op(),'ml-bet',{match:game2.id,player:1,type:'last',amount:100}),/締め切ったで/,'game 1 has a result');
  assert.equal(await settleMl(f.env,mapping),3);assert.equal(await settleMl(f.env,mapping),0);
  assert.equal(f.balance(one),99000-100+Math.floor(1000*won.result.bet.odds/10));
  assert.equal(f.balance(two),99200+300,'the benched player is refunded; the wrong last loses');
@@ -112,7 +112,7 @@ test('a prediction is bought through the wallet, settled from the official order
  const result=f.posts().find(p=>p.includes('第1試合 結果'))!;
  assert.match(result,new RegExp(`1着 ${order[0]} 60.2pt`));assert.match(result,/4着 .* ▲50pt/);
  assert.match(result,new RegExp(`💰 <@${one}> ${order[3]}のラス的中`));
- assert.match(result,new RegExp(`↩️ <@${two}> ${benched.name}のラスは不出場で返金`));
+ assert.match(result,new RegExp(`↩️ <@${two}> ${benched.name}のラスは出場せえへんかったから返金や`));
  assert.match(result,new RegExp(`💸 <@${two}> ${order[0]}のラスは外れ`));
 });
 
@@ -128,10 +128,10 @@ test('/mleague lists numbered players with odds; /mbet buys by table-game code a
  assert.match(view,/1卓.*第1試合 受付中/);assert.match(view,new RegExp(`1\\. ${card[0].name}（.+）ラス \\d+\\.\\d倍$`,'m'));
  assert.ok(view.length<2000,'fits one Discord message');
  const reply=await runKpCommand(f.env,{id:snowflake,guild_id:guild,member:{user:{id:one}},data:{name:'mbet',options:[{name:'match',value:'1-1'},{name:'player',value:3},{name:'amount',value:200}]}},mapping);
- assert.match(reply,new RegExp(`1卓 第1試合・\\*\\*${card[2].name}\\*\\*のラス`));assert.match(reply,/まだ購入していません/);assert.equal(f.balance(one),100000,'the preview buys nothing');
+ assert.match(reply,new RegExp(`1卓 第1試合・\\*\\*${card[2].name}\\*\\*のラス`));assert.match(reply,/まだ購入してへんで/);assert.equal(f.balance(one),100000,'the preview buys nothing');
  const bought=await mbetDecide(f.env,{id:String(BigInt(snowflake)+5n),guild_id:guild,member:{user:{id:one}},data:{custom_id:`mbet:buy:${snowflake}`}},mapping);
- assert.match(bought!.content,/ラス予想を購入しました/);assert.equal(f.balance(one),99800);
- assert.match(await runKpCommand(f.env,{id:String(BigInt(snowflake)+1n),guild_id:guild,member:{user:{id:one}},data:{name:'mbet',options:[{name:'match',value:'3-1'},{name:'player',value:3},{name:'amount',value:200}]}},mapping),/その試合はありません/);
+ assert.match(bought!.content,/ラス予想を購入したで/);assert.equal(f.balance(one),99800);
+ assert.match(await runKpCommand(f.env,{id:String(BigInt(snowflake)+1n),guild_id:guild,member:{user:{id:one}},data:{name:'mbet',options:[{name:'match',value:'3-1'},{name:'player',value:3},{name:'amount',value:200}]}},mapping),/その試合はないで/);
 });
 
 test('/mclose: a member reports the start; betting stops and later bets are refunded at settlement', async t => {
@@ -143,9 +143,9 @@ test('/mclose: a member reports the start; betting stops and later bets are refu
  t.mock.timers.setTime(jst('2026-10-27T21:45:00'));
  await operateKp(f.env,mapping,two,op(),'ml-bet',{match:game2.id,player:card.find(p=>p.name===order[3])!.no,type:'last',amount:500});
  assert.match(await close('100000000000000199','21:50:00',1),/登録メンバーだけ/);
- assert.match(await close(one,'21:50:00',2,[{name:'at',value:'25:00'}]),/21:42 の形/);
+ assert.match(await close(one,'21:50:00',2,[{name:'at',value:'25:00'}]),/21:42 みたいに/);
  assert.match(await close(one,'21:50:00',3,[{name:'at',value:'21:55'}]),/今までの時刻/);
- assert.match(await close(one,'21:50:00',4,[{name:'at',value:'21:42'}]),/21:42 開始として締め切りました/);
+ assert.match(await close(one,'21:50:00',4,[{name:'at',value:'21:42'}]),/21:42 開始として締め切ったで/);
  assert.match(await close(two,'21:51:00',5,[{name:'at',value:'21:48'}]),/21:42 開始/,'the earliest stated start is kept');
  t.mock.timers.setTime(jst('2026-10-27T21:52:00'));
  await assert.rejects(operateKp(f.env,mapping,one,op(),'ml-bet',{match:game2.id,player:1,type:'last',amount:100}),/開始を報告/);
@@ -178,7 +178,7 @@ test('the four who sat are read from キンマweb after the start and announced 
  const post=f.posts().find(p=>p.includes('出場決定'))!;
  assert.match(post,/10\/27 1卓 第1試合 出場決定/);assert.match(post,new RegExp(order.map(n=>`${n}（[^）]+）`).join('・')));
  assert.match(post,new RegExp(`🎯 <@${one}> ${order[0]}のラス 1,000 KP`));
- assert.match(post,new RegExp(`↩️ <@${two}> ${benched.name}のラス 300 KP：出場しないので返金予定`));
+ assert.match(post,new RegExp(`↩️ <@${two}> ${benched.name}のラス 300 KP：出えへんから返金予定やで`));
  const view=await runKpCommand(f.env,{id:String((BigInt(jst('2026-10-27T19:06:00'))-1420070400000n)<<22n|1n),guild_id:guild,member:{user:{id:one}},data:{name:'mleague'}},mapping);
  assert.match(view,new RegExp(`第1試合 出場：${order.join('・')}`));
 });
@@ -186,7 +186,7 @@ test('the four who sat are read from キンマweb after the start and announced 
 const pickInput=(match:unknown,focused='player',typed:unknown='')=>({id:String((BigInt(Date.now())-1420070400000n)<<22n|99n),guild_id:guild,member:{user:{id:one}},data:{name:'mbet',options:[{name:'match',value:focused==='match'?typed:match,focused:focused==='match'},{name:'player',value:typed,focused:focused==='player'}]}});
 test('/mbet offers confirmed open matches and player names with teams and last-place odds without spending KP',async t=>{
  t.mock.timers.enable({apis:['Date'],now:jst('2026-10-27T18:00:00')});const f=await fixture();
- assert.deepEqual(await mbetChoices(f.env,pickInput(null,'match')),[{name:'ℹ️ 公式の対戦カードを確認中です。少し待ってからもう一度タップしてください',value:'none'}],'unconfirmed cards are never offered; the reason is shown');
+ assert.deepEqual(await mbetChoices(f.env,pickInput(null,'match')),[{name:'ℹ️ 公式の対戦カードを確認中や。ちょっと待って、もう一度タップしてな',value:'none'}],'unconfirmed cards are never offered; the reason is shown');
  await storeCards(f.env,parseOfficialCards(page,2026),Date.now());
  const matches=await mbetChoices(f.env,pickInput(null,'match'));assert.equal(matches.length,4);
  assert.ok(matches.every(c=>c.name.length<=100&&/10\/27 [12]卓 第[12]試合/.test(c.name)&&ML_DATA.fixtures.some(g=>g.id===c.value)));
@@ -195,8 +195,8 @@ test('/mbet offers confirmed open matches and player names with teams and last-p
  const team=ML_DATA.teams.find(team=>team.id===game1.teams[0])!;
  assert.deepEqual((await mbetChoices(f.env,pickInput(game1.id,'player',team.name.toLowerCase()))).map(c=>c.value),team.players.map(p=>p.name));
  assert.deepEqual((await mbetChoices(f.env,pickInput(game1.id,'player',team.players[0].name.split('').join('　')))).map(c=>c.value),[team.players[0].name]);
- assert.match((await mbetChoices(f.env,pickInput(undefined)))[0].name,/先に match で試合を選んで/);assert.match((await mbetChoices(f.env,pickInput('missing')))[0].name,/見つかりません/);
- assert.match((await mbetChoices(f.env,pickInput(null,'match','存在しないチーム')))[0].name,/に合う試合がありません/);assert.match((await mbetChoices(f.env,pickInput(game1.id,'player','ああああ')))[0].name,/に合う選手がいません/);
+ assert.match((await mbetChoices(f.env,pickInput(undefined)))[0].name,/先に match で試合を選んで/);assert.match((await mbetChoices(f.env,pickInput('missing')))[0].name,/見つからへん/);
+ assert.match((await mbetChoices(f.env,pickInput(null,'match','存在しないチーム')))[0].name,/に合う試合がないで/);assert.match((await mbetChoices(f.env,pickInput(game1.id,'player','ああああ')))[0].name,/に合う選手がおらへんで/);
  assert.equal(f.balance(one),100000);assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM kp_operations').get()!.n,0);
 });
 test('/mbet narrows confirmed lineups and removes manual/automatic closures and completed games',async t=>{
@@ -204,11 +204,11 @@ test('/mbet narrows confirmed lineups and removes manual/automatic closures and 
  f.sql.prepare('INSERT INTO ml_lineups VALUES(?,?,?)').run(game2.id,JSON.stringify(order),Date.now());
  assert.deepEqual((await mbetChoices(f.env,pickInput(game2.id))).map(c=>c.value).sort(),[...order].sort());
  assert.ok((await mbetChoices(f.env,pickInput(game2.id))).every(c=>c.name.includes('出場確定')));
- t.mock.timers.tick(3600000);assert.deepEqual(await mbetChoices(f.env,pickInput(game1.id)),[{name:'ℹ️ この試合は締め切りました。match で別の試合を選んでください',value:'none'}],'game1 closes at19:00');
+ t.mock.timers.tick(3600000);assert.deepEqual(await mbetChoices(f.env,pickInput(game1.id)),[{name:'ℹ️ この試合は締め切ったで。match で別の試合を選んでな',value:'none'}],'game1 closes at19:00');
  assert.equal((await mbetChoices(f.env,pickInput(game2.id))).length,4,'game2 still follows the existing result-based window');
- f.sql.prepare('INSERT INTO ml_closed VALUES(?,?,?,?)').run(game2.id,Date.now(),one,Date.now());assert.match((await mbetChoices(f.env,pickInput(game2.id)))[0].name,/締め切りました/);
+ f.sql.prepare('INSERT INTO ml_closed VALUES(?,?,?,?)').run(game2.id,Date.now(),one,Date.now());assert.match((await mbetChoices(f.env,pickInput(game2.id)))[0].name,/締め切ったで/);
  f.sql.prepare('DELETE FROM ml_closed').run();f.sql.prepare('INSERT INTO ml_results VALUES(?,?,?,?)').run(game1.id,JSON.stringify(order),JSON.stringify([50,0,-10,-40]),Date.now());
- assert.match((await mbetChoices(f.env,pickInput(game2.id)))[0].name,/締め切りました/,'game1 result closes game2');
+ assert.match((await mbetChoices(f.env,pickInput(game2.id)))[0].name,/締め切ったで/,'game1 result closes game2');
  assert.ok(!(await mbetChoices(f.env,pickInput(null,'match'))).some(c=>c.value===game1.id||c.value===game2.id));
 });
 test('/mbet named selections follow the official corrected teams, settle once and show team and gross payout',async t=>{
@@ -216,9 +216,9 @@ test('/mbet named selections follow the official corrected teams, settle once an
  const d=await mlData(f.env),selectedFixture=d.fixtures.find(g=>g.id===game1.id)!,players=mlCard(d,selectedFixture),picked=players[2];
  const choices=await mbetChoices(f.env,pickInput(game1.id));assert.ok(choices.some(c=>c.value===picked.name&&c.name.includes(picked.teamName)));
  const input=pickInput(game1.id);input.data.options=[{name:'match',value:game1.id,focused:false},{name:'player',value:picked.name,focused:false},{name:'amount',value:500,focused:false}];
- const preview=await runKpCommand(f.env,input,mapping);assert.match(preview,/まだ購入していません/);assert.ok(preview.includes('チーム '+picked.teamName));
+ const preview=await runKpCommand(f.env,input,mapping);assert.match(preview,/まだ購入してへんで/);assert.ok(preview.includes('チーム '+picked.teamName));
  const buy=()=>mbetDecide(f.env,{...input,id:String(BigInt(input.id)+7n),data:{custom_id:`mbet:buy:${input.id}`}},mapping).then(r=>r!.content);
- const message=await buy();assert.match(message,/ラス予想を購入しました/);assert.ok(message.includes('チーム '+picked.teamName));assert.match(message,/的中時の払戻し [\d,]+ KP（掛け金込み）/);
+ const message=await buy();assert.match(message,/ラス予想を購入したで/);assert.ok(message.includes('チーム '+picked.teamName));assert.match(message,/的中時の払戻し [\d,]+ KP（掛け金込み）/);
  assert.equal(f.balance(one),99500);await buy();assert.equal(f.balance(one),99500);
  const saved=JSON.parse(String(f.sql.prepare('SELECT data FROM kp_state WHERE user=?').get(one)!.data));assert.equal(saved.mlBets[0].player,picked.name);assert.equal(saved.mlBets[0].type,'last');
 });
@@ -283,16 +283,16 @@ test('/mbet の確認：やめる・二度押し・他人の押下・期限切�
  const a=await preview();
  assert.deepEqual(a.out.components![0].components.map(c=>c.custom_id),[`mbet:buy:${a.id}`,`mbet:no:${a.id}`]);
  assert.equal(await press(a.id,'buy',two),null,'someone else cannot press it');
- assert.match((await press(a.id,'no'))!.content,/購入をやめました/);
- assert.match((await press(a.id,'buy'))!.content,/やめています/);assert.equal(f.balance(one),100000);
+ assert.match((await press(a.id,'no'))!.content,/購入はやめといたで/);
+ assert.match((await press(a.id,'buy'))!.content,/やめといたで/);assert.equal(f.balance(one),100000);
  const b=await preview();
- assert.match((await press(b.id,'buy'))!.content,/購入しました/);assert.match((await press(b.id,'buy'))!.content,/購入しました/);
+ assert.match((await press(b.id,'buy'))!.content,/購入したで/);assert.match((await press(b.id,'buy'))!.content,/購入したで/);
  assert.equal(f.balance(one),99800,'a double press buys once');
  const c=await preview();t.mock.timers.setTime(Date.now()+11*60000);
  assert.match((await press(c.id,'buy'))!.content,/10分を過ぎた/);assert.equal(f.balance(one),99800);
  const d=await preview();f.sql.prepare('UPDATE ml_bet_drafts SET odds=odds+5 WHERE id=?').run(d.id);
- assert.match((await press(d.id,'buy'))!.content,/倍率が .* に変わったので購入していません/);assert.equal(f.balance(one),99800);
- assert.match((await preview(9999900)).content,/KPが不足/,'checked like a purchase');
+ assert.match((await press(d.id,'buy'))!.content,/倍率が .* に変わったから買うてへんで/);assert.equal(f.balance(one),99800);
+ assert.match((await preview(9999900)).content,/KPが足らへん/,'checked like a purchase');
  f.sql.prepare("INSERT INTO kp_debt_events VALUES('borrow:x',?,?,500,'borrow',0)").run(guild,one);
  assert.match((await preview()).content,/借KP/);
 });
@@ -322,9 +322,9 @@ test('/mbet の候補が出ない理由：次の開催日・受付前を案内�
  t.mock.timers.enable({apis:['Date'],now:jst('2026-10-28T12:00:00')});
  const f=await fixture();await storeCards(f.env,parseOfficialCards(page,2026),Date.now());
  const day=mlDay(Date.now())!;assert.ok(day>'2026-10-28','10/28 has no games');
- assert.match((await mbetChoices(f.env,pickInput(null,'match')))[0].name,new RegExp(`次の試合は ${Number(day.slice(5,7))}/${Number(day.slice(8,10))}。受付は当日0時から`));
+ assert.match((await mbetChoices(f.env,pickInput(null,'match')))[0].name,new RegExp(`次の試合は ${Number(day.slice(5,7))}/${Number(day.slice(8,10))}やで。受付は当日0時から`));
  const reply=await runKpCommand(f.env,{...pickInput('none'),data:{name:'mbet',options:[{name:'match',value:'none'},{name:'player',value:'none'},{name:'amount',value:500}]}},mapping);
- assert.match(reply,/予想できる候補がありません/);assert.equal(f.balance(one),100000);
+ assert.match(reply,/予想できる候補がないで/);assert.equal(f.balance(one),100000);
 });
 
 test('Activity の Mリーグ画面：今日の試合の状態・選手・倍率を返し、表示した倍率で買う（変わっていたら買わない）', async t => {
@@ -337,7 +337,7 @@ test('Activity の Mリーグ画面：今日の試合の状態・選手・倍率
  const g1=view.fixtures.find((x:{id:string})=>x.id===game1.id);
  assert.equal(g1.status,'open');assert.equal(g1.players.length,16);assert.ok(g1.players.every((p:{odds:number;sitting:unknown})=>Number.isInteger(p.odds)&&p.sitting===null));
  const pick=g1.players[0];
- await assert.rejects(operateKp(f.env,mapping,one,op(),'ml-bet',{match:game1.id,player:pick.name,type:'last',amount:500,odds:pick.odds+1}),/倍率が .* に変わったので購入していません/);
+ await assert.rejects(operateKp(f.env,mapping,one,op(),'ml-bet',{match:game1.id,player:pick.name,type:'last',amount:500,odds:pick.odds+1}),/倍率が .* に変わったから買うてへんで/);
  assert.equal(f.balance(one),100000);
  await operateKp(f.env,mapping,one,op(),'ml-bet',{match:game1.id,player:pick.name,type:'last',amount:500,odds:pick.odds});
  assert.equal(f.balance(one),99500);

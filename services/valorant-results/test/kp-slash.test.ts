@@ -37,7 +37,7 @@ test('slash race card uses the real entries and never leaks a race seed',async t
  assert.match(message,/16:15発走・\d+頭｜締切 16:14/);assert.match(message,/` 1` /);assert.match(message,/` 8` /);
  const seed=f.sql.prepare('SELECT seed FROM kp_races ORDER BY id DESC LIMIT 1').get()?.seed;
  if(seed)assert.equal(message.includes(String(seed)),false);
- assert.match(message,/`\/bet` と打って、horse で馬を一覧から選び/);
+ assert.match(message,/`\/bet` と打って、horse で馬を選んでな/);
 });
 test('slash bet uses the shared wallet, rejects stale races and invalid stakes, and retries one debit',async t=>{
  t.mock.timers.enable({apis:['Date'],now:T0});const f=await fixture();
@@ -176,7 +176,7 @@ test('/bet needs only a horse and an amount: the open race and a win bet are ass
  const typed=await betChoices(f.env,{...interaction('bet',one,[{name:'horse',value:'2',focused:true} as never])},mapping);
  assert.deepEqual(typed.map(c=>c.value),[2],'typing a number narrows the list');
  const receipt=await runKpCommand(f.env,interaction('bet',one,[{name:'horse',value:2},{name:'amount',value:500}]),mapping);
- assert.match(receipt,/馬券を購入しました/);assert.match(receipt,/16:15発走/);assert.match(receipt,new RegExp(`\\*\\*2番 ${choices[1].name.split('　')[0].replace(/^2番 /,'')}\\*\\* の1着当て`));
+ assert.match(receipt,/馬券を購入したで/);assert.match(receipt,/16:15発走/);assert.match(receipt,new RegExp(`\\*\\*2番 ${choices[1].name.split('　')[0].replace(/^2番 /,'')}\\*\\* の1着当て`));
  assert.match(receipt,/掛け金 500 KP × 確定倍率 \d+\.\d倍 ＝ 当たれば [\d,]+ KP/);
  assert.equal(f.sql.prepare('SELECT balance FROM kp_wallets WHERE user=?').get(one)?.balance,9500);
 });
