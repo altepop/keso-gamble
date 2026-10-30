@@ -1,0 +1,40 @@
+name: Temporary read-only D1 Insights diagnostic
+on:
+  push:
+    branches:
+      - diagnostics/d1-readonly-insights-20261031
+permissions:
+  contents: read
+jobs:
+  insights:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install pinned Wrangler locally (no deploy)
+        run: npm ci --prefix services/valorant-results
+      - name: Read analytics only (never query or alter D1 production data)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        working-directory: services/valorant-results
+        run: |
+          test -n "$CLOUDFLARE_API_TOKEN" || { echo "Cloudflare deploy token missing"; exit 1; }
+          test -n "$CLOUDFLARE_ACCOUNT_ID" || { echo "Cloudflare account ID missing"; exit 1; }
+          ./node_modules/.bin/wrangler d1 insights valorant-results --sort-by=reads --sort-type=sum --time-period=1d --limit=20 --json > "$RUNNER_TEMP/d1-insights.json"
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const input=JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP+'/d1-insights.json','utf8'));
+          const queries=Array.isArray(input)?input:(input.queries??input.insights??input.results??[]);
+          console.log('ANALYTICS READ-ONLY QUERY SUMMARY (SQL query text withheld)');
+          if(!Array.isArray(queries)) {console.log('Unexpected response format: '+Object.keys(input).join(','));process.exit(2);}
+          const cleaned=queries.map((q,i)=>{
+            const sql=String(q.query??'');
+            const tables=[...new Set([...sql.matchAll(/\\b(?:FROM|JOIN|UPDATE|INTO)\\s+["`]?([A-Za-z_][A-Za-z0-9_]*)/gi)].map(m=>m[1]))].slice(0,5);
+            return {rank:i+1,kind:sql.trim().split(/\\s+/)[0],tables,reads:Number(q.totalRowsRead??0),times:Number(q.numberOfTimesRun??0),avgRowsRead:Number(q.avgRowsRead??0),avgMs:Number(q.avgDurationMs??0)};
+          });
+          for(const x of cleaned) console.log(JSON.stringify(x));
+          console.log('TOP20_SUM_READS '+cleaned.reduce((n,x)=>n+x.reads,0));
+          NODE
