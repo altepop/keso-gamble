@@ -5,7 +5,7 @@ import {readFileSync,readdirSync} from 'node:fs';
 import {URL as NodeURL} from 'node:url';
 import {initializeKp,syncKpAccounts} from '../src/kp.ts';
 import type {KpEnv,KpMapping} from '../src/kp.ts';
-import {operateKp,readKpState} from '../src/kp-api.ts';
+import {operateKp,readKpState,kpPulse} from '../src/kp-api.ts';
 import {prepareStocks,payStockDividends,stockBenefits,stockDiscount,convertStocks,tickStocks,nextStockPrices,queueStockPosts,STOCK_HOLD,fortuneCounts,fictionNews} from '../src/stock-market.ts';
 const guild='100000000000000100',one='100000000000000101',two='100000000000000102';
 const mapping:KpMapping={guildId:guild,accounts:[{riotId:'One#JP1',discordUserId:one},{riotId:'Two#JP1',discordUserId:two}]};
@@ -22,7 +22,7 @@ async function fixture(){
  const credit=(id:string,n:number,u=one)=>sql.prepare("INSERT INTO kp_ledger VALUES(?,?,?,?,'test',?)").run(id,guild,u,n,Date.now());
  return {env,sql,cash,credit,setIntercept:(f:typeof intercept)=>{intercept=f;}};
 }
-const trade=(f:Awaited<ReturnType<typeof fixture>>,id:string,side:string,quantity:number,symbol='keso',user=one)=>operateKp(f.env,mapping,user,id,'trade',{symbol,side,quantity});
+const trade=(f:Awaited<ReturnType<typeof fixture>>,id:string,side:string,quantity:number,symbol='keso',user=one)=>operateKp(f.env,mapping,user,id,'trade',{symbol,side,quantity,pricingVersion:1,limit:side==='buy'?Number.MAX_SAFE_INTEGER:0});
 
 test('共通価格は口座のseedや個別価格と無関係。移行で評価額と端数を保存し、再実行で増えない',async t=>{
  t.mock.timers.enable({apis:['Date'],now:T});const f=await fixture();f.credit('start',1000);
@@ -45,8 +45,8 @@ test('移行の台帳が失敗したら保有株も移行マーカーも全体�
 });
 test('株取引は共有価格で1回だけ精算し、買い増しは新しい保有期間になる。売却は古い株から',async t=>{
  t.mock.timers.enable({apis:['Date'],now:T});const f=await fixture();f.credit('fund',100000);
- await trade(f,'stock-buy-operation-01','buy',10);assert.equal(f.cash(),87880);
- await trade(f,'stock-buy-operation-01','buy',10);assert.equal(f.cash(),87880);
+ await trade(f,'stock-buy-operation-01','buy',10);assert.equal(f.cash(),87807);
+ await trade(f,'stock-buy-operation-01','buy',10);assert.equal(f.cash(),87807);
  t.mock.timers.tick(DAY+1000);await trade(f,'stock-buy-operation-02','buy',5);
  const m=await prepareStocks(f.env,guild,one);const benefit=await stockBenefits(f.env,m,one);
  assert.equal(benefit.eligibleValue,10*m.prices.keso);
@@ -59,12 +59,12 @@ test('ロット更新が失敗した場合は買付・KP・操作IDを全体ロ�
  t.mock.timers.enable({apis:['Date'],now:T});const f=await fixture();f.credit('fund',10000);await prepareStocks(f.env,guild,one);
  f.sql.exec("CREATE TRIGGER buy_fail BEFORE INSERT ON stock_lots WHEN NEW.id LIKE 'stock:%' BEGIN SELECT RAISE(ABORT,'fixture');END");
  await assert.rejects(trade(f,'stock-rollback-buy-01','buy',2));assert.equal(f.cash(),10000);assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM kp_operations').get()!.n,0);
- f.sql.exec('DROP TRIGGER buy_fail');await trade(f,'stock-rollback-buy-01','buy',2);assert.equal(f.cash(),7576);
+ f.sql.exec('DROP TRIGGER buy_fail');await trade(f,'stock-rollback-buy-01','buy',2);assert.equal(f.cash(),7572);
 });
 test('共有相場のversionが競合したら最新価格でやり直す。古い価格は約定しない',async t=>{
  t.mock.timers.enable({apis:['Date'],now:T});const f=await fixture();f.credit('fund',10000);await prepareStocks(f.env,guild,one);
  let changed=false;f.setIntercept(text=>{if(!changed&&text.startsWith('INSERT INTO kp_operations')){changed=true;f.sql.prepare("UPDATE stock_markets SET version=version+1,prices=json_set(prices,'$.keso',1500) WHERE guild=?").run(guild);}});
- await trade(f,'stock-price-conflict-1','buy',2);assert.equal(f.cash(),6970);assert.equal(f.sql.prepare('SELECT price FROM stock_trades').get()!.price,1500);
+ await trade(f,'stock-price-conflict-1','buy',2);assert.equal(f.cash(),6966);assert.equal(f.sql.prepare('SELECT price FROM stock_trades').get()!.price,1501.5);
 });
 test('配当はJST9時の24時間以上保有分のみ。銘柄合算で日500KPまで。同時再試行も1回',async t=>{
  t.mock.timers.enable({apis:['Date'],now:T+3600000});const f=await fixture();f.credit('fund',1000000);await trade(f,'dividend-buy-operation','buy',100);
@@ -108,7 +108,7 @@ test('相場更新の競合で履歴やニュースを二重に進めず、ニ�
  t.mock.timers.enable({apis:['Date'],now:T});const f=await fixture();const m=await prepareStocks(f.env,guild,one);
  await Promise.all([tickStocks(f.env,m,T+300000,()=>.5),tickStocks(f.env,m,T+300000,()=>1)]);
  const row=f.sql.prepare('SELECT version,history FROM stock_markets').get()!;assert.equal(row.version,1);assert.equal(JSON.parse(String(row.history)).keso.length,2);assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM stock_ticks').get()!.n,1);
- const p={keso:1000,riso:1000,yuya:1000,yano:1000};assert.equal(nextStockPrices(p,Array.from({length:100},()=>({symbol:'keso',bps:40})),()=>1).keso,1031);
+ const p={keso:1000,riso:1000,yuya:1000,yano:1000};assert.equal(nextStockPrices(p,Array.from({length:100},()=>({symbol:'keso',bps:40})),()=>1).keso,1038);
 });
 test('急騰・急落は稼ぎchへキュー登録。同じ更新を繰り返しても1件で個人の名前は出さない',async t=>{
  t.mock.timers.enable({apis:['Date'],now:T});const f=await fixture();const m=await prepareStocks(f.env,guild,one);m.version=1;m.prices.keso=1300;
@@ -159,7 +159,7 @@ test('新しく上場した銘柄：前からある相場と口座はそのま�
  assert.equal(state.prices.vdk,100);assert.equal(state.holdings.vdk,0);assert.equal(state.cash,10000);
  for(const id of old)assert.ok(Number.isSafeInteger(state.prices[id]));
  await trade(f,'listing-buy-vdk-01','buy',10,'vdk');
- assert.equal(f.cash(),10000-1000-10);assert.equal((await readKpState(f.env,mapping,one)).holdings.vdk,10);
+ assert.equal(f.cash(),10000-1050-11);assert.equal((await readKpState(f.env,mapping,one)).holdings.vdk,10);
  const m=await tickStocks(f.env,await prepareStocks(f.env,guild,one),T+300000,()=>.5);
  assert.ok(Number.isSafeInteger(JSON.parse(String(f.sql.prepare('SELECT prices FROM stock_markets').get()!.prices)).komi),'saved on the next tick');
  assert.ok(m.prices.koba>0);
@@ -185,4 +185,57 @@ test('架空の会社はたまに架空ニュースで大きく動く。外れ�
  const news=fictionNews(()=>seq[i++]);
  assert.deepEqual(news.map(n=>[n.symbol,n.bps]),[['komi',200],['ishi',-150]]);
  assert.ok(news.every(n=>n.label.length>0));
+});
+
+test('全銘柄の買付は共通価格を上げ、売却は下げる。再送では価格もKPも再更新しない',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:T});const f=await fixture();f.credit('order-fund',10000000);
+ const initial=await readKpState(f.env,mapping,one),ids=Object.keys(initial.prices);
+ for(const symbol of ids){
+  const before=await readKpState(f.env,mapping,one),id='demand-buy-operation-'+symbol;
+  const response=await trade(f,id,'buy',2,symbol);const bought=await readKpState(f.env,mapping,one),other=await readKpState(f.env,mapping,two);
+  assert(bought.prices[symbol]>before.prices[symbol]);assert.equal(other.prices[symbol],bought.prices[symbol]);
+  const cash=f.cash(),version=bought.stockMarket.version;assert.deepEqual(await trade(f,id,'buy',2,symbol),response);assert.equal(f.cash(),cash);assert.equal((await readKpState(f.env,mapping,one)).stockMarket.version,version);
+  await trade(f,'demand-sell-operation-'+symbol,'sell',2,symbol);const sold=await readKpState(f.env,mapping,one);
+  assert(sold.prices[symbol]<bought.prices[symbol]);assert.equal(sold.stockMarket.orderQuotes[symbol],before.stockMarket.orderQuotes[symbol]);assert(sold.cash<before.cash);
+ }
+ assert.equal(f.sql.prepare('SELECT at FROM stock_markets').get()!.at,T,'orders do not postpone regular market ticks');
+});
+test('別ユーザーの売買でpulseも変わり、同時買付は後の注文ほど高い価格になる',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:T});const f=await fixture();f.credit('fund-one',1000000);f.credit('fund-two',1000000,two);await readKpState(f.env,mapping,one);
+ const pulse=await kpPulse(f.env,guild,two,T);
+ await Promise.all([trade(f,'parallel-stock-buy-one','buy',10,'keso',one),trade(f,'parallel-stock-buy-two','buy',10,'keso',two)]);
+ assert.notEqual(await kpPulse(f.env,guild,two,T),pulse);
+ const trades=f.sql.prepare('SELECT price FROM stock_trades ORDER BY price').all();assert(Number(trades[1]!.price)>Number(trades[0]!.price));
+ const state=await readKpState(f.env,mapping,one);assert.equal(state.stockMarket.orderQuotes.keso,1228.8*1000000);assert.equal(state.stockMarket.ticks.length,3);
+ const m=await tickStocks(f.env,await prepareStocks(f.env,guild,one),T+300000,()=>.5);assert.equal(m.version,state.stockMarket.version+1);assert.equal(m.at,T+300000);
+});
+test('確認した額より不利な価格では約定せず、古いクライアントの注文も課金しない',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:T});const f=await fixture();f.credit('guard-one',1000000);f.credit('guard-two',1000000,two);
+ await assert.rejects(operateKp(f.env,mapping,one,'old-client-buy-request','trade',{symbol:'keso',side:'buy',quantity:10}),/Activityを開き直/);assert.equal(f.cash(),1000000);
+ await trade(f,'guard-other-user-buy','buy',10,'keso',two);
+ await assert.rejects(operateKp(f.env,mapping,one,'guard-stale-buy-quote','trade',{symbol:'keso',side:'buy',quantity:10,pricingVersion:1,limit:12193}),/株価が変わった/);assert.equal(f.cash(),1000000);
+ assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM kp_operations WHERE user=?').get(one)!.n,0);
+});
+test('株価反映やロットで失敗した売買は価格・履歴・精度・財布を全体ロールバック',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:T});const f=await fixture();f.credit('atomic-fund',1000000);const before=await readKpState(f.env,mapping,one);
+ f.sql.exec("CREATE TRIGGER impact_fail BEFORE INSERT ON stock_ticks WHEN NEW.version>0 BEGIN SELECT RAISE(ABORT,'impact failed'); END");
+ await assert.rejects(trade(f,'rollback-impact-buy','buy',10),/impact failed/);assert.equal(f.cash(),1000000);
+ const after=await readKpState(f.env,mapping,one);assert.deepEqual(after.prices,before.prices);assert.deepEqual(after.holdings,before.holdings);assert.deepEqual(after.stockMarket.orderQuotes,before.stockMarket.orderQuotes);assert.equal(after.stockMarket.version,before.stockMarket.version);
+ assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM stock_trades').get()!.n,0);assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM stock_order_quotes').get()!.n,0);
+ f.sql.exec('DROP TRIGGER impact_fail');await trade(f,'rollback-impact-buy','buy',10);assert((await readKpState(f.env,mapping,one)).prices.keso>1200);
+});
+
+test('全銘柄の通常変動幅は旧設定より大きく、上げ下げの対数幅は対称',()=>{
+ const previous={keso:60,riso:100,yuya:200,yano:50,msum:40,tnkn:40,komi:150,ishi:80,vdk:250,godo:80,ngya:150,koba:60};
+ const base=Object.fromEntries(Object.keys(previous).map(id=>[id,1000000]));
+ const up=nextStockPrices(base,[],()=>1),down=nextStockPrices(base,[],()=>0);
+ for(const [id,bps] of Object.entries(previous)){assert(up[id]!>1000000*(1+bps/10000));assert(down[id]!<1000000*(1-bps/10000));assert(Math.abs(Math.log(up[id]!/1000000)+Math.log(down[id]!/1000000))<0.000002);}
+});
+
+test('売却の受取額も確認した下限を守り、不利な価格では保有株を減らさない',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:T});const f=await fixture();f.credit('sell-limit-fund',1000000);
+ f.sql.prepare("UPDATE kp_state SET data=json_set(data,'$.holdings.keso',20,'$.prices.keso',1200) WHERE user=?").run(two);await readKpState(f.env,mapping,two);
+ await trade(f,'sell-limit-buy-first','buy',10);const cash=f.cash();await trade(f,'sell-limit-other-sell','sell',10,'keso',two);
+ await assert.rejects(operateKp(f.env,mapping,one,'sell-limit-stale-order','trade',{symbol:'keso',side:'sell',quantity:10,pricingVersion:1,limit:11951}),/株価が変わった/);
+ assert.equal(f.cash(),cash);assert.equal((await readKpState(f.env,mapping,one)).holdings.keso,10);
 });

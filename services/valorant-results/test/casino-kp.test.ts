@@ -47,10 +47,10 @@ test('ブラックジャック：配ると賭け金が引かれ、見えるの�
 });
 test('借KPがある間はカジノもルーレットも賭けられない（勝つ目でも抽選前に止める）。株を売るのはできる',async()=>{
  const f=await fixture();f.credit('c1',10000);
- await operateKp(f.env,mapping,one,'trade-before-the-debt','trade',{symbol:'keso',side:'buy',quantity:1});
+ await operateKp(f.env,mapping,one,'trade-before-the-debt','trade',{symbol:'keso',side:'buy',quantity:1,pricingVersion:1,limit:Number.MAX_SAFE_INTEGER});
  f.sql.prepare("INSERT INTO kp_debt_events VALUES('borrow:x',?,?,500,'borrow',0)").run(guild,one);
  for(let i=0;i<20;i++)await assert.rejects(operateKp(f.env,mapping,one,'spin-while-owing-'+String(i).padStart(3,'0'),'spin',{type:'red',amount:100,choice:0}),{message:DEBT_BLOCKED});
- assert.ok(await operateKp(f.env,mapping,one,'sell-while-owing-001','trade',{symbol:'keso',side:'sell',quantity:1}));
+ assert.ok(await operateKp(f.env,mapping,one,'sell-while-owing-001','trade',{symbol:'keso',side:'sell',quantity:1,pricingVersion:1,limit:0}));
  await assert.rejects(operateKp(f.env,mapping,one,'chinchiro-operation-03','chinchiro',{amount:1000}),{message:DEBT_BLOCKED});
  await assert.rejects(operateKp(f.env,mapping,one,'blackjack-operation-4','bj-start',{amount:1000}),{message:DEBT_BLOCKED});
 });

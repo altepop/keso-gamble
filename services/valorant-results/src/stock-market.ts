@@ -1,3 +1,5 @@
+// @ts-expect-error Shared browser quote arithmetic.
+import {stockOrderQuote,STOCK_ORDER_VERSION,STOCK_PRICE_SCALE} from '../../../js/stock-order.js';
 // One server market per guild. Quotes, dividends, lots and benefits never use the demo PRNG.
 import type {KpEnv} from './kp.ts';
 // @ts-expect-error Shared pure browser engine.
@@ -26,6 +28,7 @@ export async function ensureStocks(env:KpEnv){
  if(ready.has(env.DB))return;
  await env.DB.batch([
  `CREATE TABLE IF NOT EXISTS stock_markets(guild TEXT PRIMARY KEY,version INTEGER NOT NULL,prices TEXT NOT NULL,history TEXT NOT NULL,at INTEGER NOT NULL,started_at INTEGER NOT NULL,token TEXT NOT NULL)`,
+ `CREATE TABLE IF NOT EXISTS stock_order_quotes(guild TEXT NOT NULL,symbol TEXT NOT NULL,units INTEGER NOT NULL,tick_at INTEGER NOT NULL,PRIMARY KEY(guild,symbol))`,
  `CREATE TABLE IF NOT EXISTS stock_accounts(guild TEXT NOT NULL,user TEXT NOT NULL,source_version INTEGER NOT NULL,holdings TEXT NOT NULL,old_value INTEGER NOT NULL,new_value INTEGER NOT NULL,refund INTEGER NOT NULL CHECK(refund>=0),at INTEGER NOT NULL,PRIMARY KEY(guild,user))`,
  `CREATE TABLE IF NOT EXISTS stock_lots(id TEXT PRIMARY KEY,guild TEXT NOT NULL,user TEXT NOT NULL,symbol TEXT NOT NULL,quantity INTEGER NOT NULL CHECK(quantity>=0),remaining INTEGER NOT NULL CHECK(remaining BETWEEN 0 AND quantity),price INTEGER NOT NULL CHECK(price>0),at INTEGER NOT NULL)`,
  `CREATE INDEX IF NOT EXISTS stock_lots_owner ON stock_lots(guild,user,symbol,at,id)`,
@@ -48,6 +51,14 @@ export async function ensureStocks(env:KpEnv){
  END`,
  `CREATE TRIGGER IF NOT EXISTS stock_dividend_apply AFTER INSERT ON stock_dividends BEGIN
   INSERT INTO kp_ledger(id,guild,user,delta,kind,at) VALUES('stock-dividend:'||NEW.guild||':'||NEW.user||':'||NEW.day,NEW.guild,NEW.user,NEW.amount,'dividend',NEW.at);
+ END`,
+ // Apply the shared quote, precision and chart in the same operation transaction as the wallet/lots.
+ `CREATE TRIGGER IF NOT EXISTS stock_order_impact AFTER INSERT ON kp_operations WHEN json_extract(NEW.response,'$.stockTrade.pricingVersion')=1 BEGIN
+  INSERT OR IGNORE INTO stock_ticks(guild,version,prices,at) SELECT guild,version,prices,at FROM stock_markets WHERE guild=NEW.guild;
+  UPDATE stock_markets SET prices=json_set(prices,'$.'||json_extract(NEW.response,'$.stockTrade.symbol'),json_extract(NEW.response,'$.stockTrade.priceAfter')),history=json_set(history,'$.'||json_extract(NEW.response,'$.stockTrade.symbol'),json(json_extract(NEW.response,'$.stockTrade.history'))),version=version+1,token='trade:'||NEW.user||':'||NEW.id WHERE guild=NEW.guild AND version=json_extract(NEW.response,'$.stockTrade.marketVersion');
+  SELECT CASE WHEN changes()!=1 THEN RAISE(ABORT,'Stock quote changed') END;
+  INSERT INTO stock_order_quotes(guild,symbol,units,tick_at) SELECT NEW.guild,json_extract(NEW.response,'$.stockTrade.symbol'),json_extract(NEW.response,'$.stockTrade.afterUnits'),at FROM stock_markets WHERE guild=NEW.guild ON CONFLICT(guild,symbol) DO UPDATE SET units=excluded.units,tick_at=excluded.tick_at;
+  INSERT INTO stock_ticks(guild,version,prices,at) SELECT guild,version,prices,NEW.at FROM stock_markets WHERE guild=NEW.guild;
  END`,
  // The existing operation insert is already guarded by both wallet and state versions.
  // The market version is checked there too. Lots and the wallet settle in that same SQL statement.
@@ -156,11 +167,11 @@ export function fictionNews(draw:()=>number){
  return out;
 }
 export function nextStockPrices(prices:Record<string,number>,news:Array<{symbol:string;bps:number}>,draw:()=>number){
- const volatility:Record<string,number>={keso:60,riso:100,yuya:200,yano:50,msum:40,tnkn:40,komi:150,ishi:80,vdk:250,godo:80,ngya:150,koba:60};
+ const volatility:Record<string,number>={keso:120,riso:200,yuya:400,yano:100,msum:80,tnkn:80,komi:300,ishi:160,vdk:500,godo:160,ngya:300,koba:120};
  return Object.fromEntries(IDS.map(id=>{
   const impact=Math.max(-250,Math.min(250,news.filter(n=>n.symbol===id).reduce((sum,n)=>sum+n.bps,0)));
   const noise=Math.round((draw()*2-1)*volatility[id]);
-  return [id,Math.max(20,Math.min(10000000,Math.round(prices[id]*(10000+impact+noise)/10000)))];
+  return [id,Math.max(20,Math.min(10000000,Math.round(prices[id]*Math.exp((impact+noise)/10000))))];
  }));
 }
 const random=()=>{const v=new Uint32Array(1);crypto.getRandomValues(v);return v[0]/4294967296;};
@@ -197,12 +208,29 @@ export async function stockBenefits(env:KpEnv,market:Market,user:string,now=Date
  const value=lots.reduce((sum,l)=>sum+l.remaining*market.prices[l.symbol],0);
  return {eligibleValue:value,percent:value>=50000?5:value>=10000?3:0,heldHours:24};
 }
+export function applyStockOrder(state:Record<string,any>,args:Record<string,unknown>){
+ const stock=STOCKS.find(s=>s.id===args.symbol);if(!stock)throw Error('存在しない銘柄です。');
+ if(args.pricingVersion!==STOCK_ORDER_VERSION||!Number.isSafeInteger(args.limit)||Number(args.limit)<0)throw Error('株式売買の仕様が更新されました。Activityを開き直してください。');
+ const quote=stockOrderQuote({priceUnits:state.stockMarket.orderQuotes[stock.id],initialPrice:stock.initialPrice,side:args.side,quantity:args.quantity});
+ const quantity=Number(args.quantity),buy=args.side==='buy';
+ if(buy&&quote.total>Number(args.limit)||!buy&&quote.total<Number(args.limit))throw Error('株価が変わったため注文していません。最新の見込額を確認して、もう一度注文してください。');
+ if(buy&&state.cash<quote.total)throw Error('保有KPが不足しています。');
+ if(!buy&&state.holdings[stock.id]<quantity)throw Error('保有株数が不足しています。');
+ const cash=state.cash+(buy?-quote.total:quote.total),holdings=state.holdings[stock.id]+(buy?quantity:-quantity);
+ if(!Number.isSafeInteger(cash)||cash<0||!Number.isSafeInteger(holdings)||holdings<0)throw Error('取引額が大きすぎます。');
+ state.cash=cash;state.holdings[stock.id]=holdings;state.prices[stock.id]=quote.priceAfter;
+ state.history[stock.id]=[...(state.history[stock.id]??[]),quote.priceAfter].slice(-48);
+ state.trades.unshift({id:crypto.randomUUID(),symbol:stock.id,side:args.side,quantity,price:quote.price,fee:quote.fee,gross:quote.gross,time:Date.now()});state.trades=state.trades.slice(0,50);
+ return {result:quote,stockTrade:{symbol:stock.id,side:args.side,quantity,...quote,pricingVersion:STOCK_ORDER_VERSION,marketVersion:state.stockMarket.version,history:state.history[stock.id]}};
+}
 export async function stockView(env:KpEnv,market:Market,user?:string,now=Date.now()){
+ const quotes=(await env.DB.prepare('SELECT symbol,units,tick_at FROM stock_order_quotes WHERE guild=?').bind(market.guild).all<{symbol:string;units:number;tick_at:number}>()).results;
+ const orderQuotes=Object.fromEntries(STOCKS.map(s=>{const row=quotes.find(q=>q.symbol===s.id&&q.tick_at===market.at&&Math.round(q.units/STOCK_PRICE_SCALE)===market.prices[s.id]);return [s.id,row?.units??market.prices[s.id]*STOCK_PRICE_SCALE];}));
  const news=(await env.DB.prepare('SELECT symbol,label,applied_bps AS bps,at FROM stock_news WHERE guild=? AND applied_version IS NOT NULL AND applied_bps!=0 ORDER BY at DESC,id DESC LIMIT 12').bind(market.guild).all()).results;
  const ticks=(await env.DB.prepare('SELECT prices,at FROM stock_ticks WHERE guild=? ORDER BY version DESC LIMIT 48').bind(market.guild).all<{prices:string;at:number}>()).results.reverse().map(r=>({prices:JSON.parse(r.prices),at:r.at}));
  if(!ticks.length)ticks.push({prices:market.prices,at:market.at});
  const dividends=user?(await env.DB.prepare('SELECT day,amount,eligible_value AS eligibleValue,at FROM stock_dividends WHERE guild=? AND user=? ORDER BY day DESC LIMIT 7').bind(market.guild,user).all()).results:[];
- return {version:market.version,at:market.at,startedAt:market.startedAt,intervalMinutes:5,dividendPercent:1,dividendCap:DIVIDEND_CAP,holdHours:24,discountCap:2000,ticks,news,dividends};
+ return {orderQuotes,pricingVersion:STOCK_ORDER_VERSION,volatilityMultiplier:2,version:market.version,at:Math.max(market.at,...ticks.map(t=>t.at)),startedAt:market.startedAt,intervalMinutes:5,dividendPercent:1,dividendCap:DIVIDEND_CAP,holdHours:24,discountCap:2000,ticks,news,dividends};
 }
 export async function queueStockPosts(env:KpEnv&{KP_EARNINGS_WEBHOOK_URL?:string},market:Market,now=Date.now()){
  if(!env.KP_EARNINGS_WEBHOOK_URL||market.version===0)return;

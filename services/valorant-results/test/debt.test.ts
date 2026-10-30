@@ -59,14 +59,14 @@ test('借KP grows 1% a day (rounded up) from the first full day, once per day, a
 });
 test('while 借KP is owed nothing can be bought; selling still works and the money repays the debt',async()=>{
  const f=await fixture();f.credit('c1',5000);
- await operateKp(f.env,mapping,one,'trade-before-the-debt','trade',{symbol:'keso',side:'buy',quantity:2});
+ await operateKp(f.env,mapping,one,'trade-before-the-debt','trade',{symbol:'keso',side:'buy',quantity:2,pricingVersion:1,limit:Number.MAX_SAFE_INTEGER});
  const cash=f.balance();f.credit('drain',-cash);
  await settleRankChange(f.env,mapping,one,{before:12,after:11},'m1','p-one',T0);
  assert.equal(await debtOf(f.env,guild,one),500);
  f.credit('c2',3000);
- await assert.rejects(operateKp(f.env,mapping,one,'trade-while-owing-001','trade',{symbol:'keso',side:'buy',quantity:1}),{message:DEBT_BLOCKED});
+ await assert.rejects(operateKp(f.env,mapping,one,'trade-while-owing-001','trade',{symbol:'keso',side:'buy',quantity:1,pricingVersion:1,limit:Number.MAX_SAFE_INTEGER}),{message:DEBT_BLOCKED});
  assert.throws(()=>f.sql.prepare("INSERT INTO kp_operations(id,guild,user,request_hash,response,delta,state,at) VALUES('x',?,?,'h','{}',-1,'{}',0)").run(guild,one),/借KP/,'the database refuses it too');
- const sold=await operateKp(f.env,mapping,one,'sell-while-owing-001','trade',{symbol:'keso',side:'sell',quantity:2}) as {result:unknown};
+ const sold=await operateKp(f.env,mapping,one,'sell-while-owing-001','trade',{symbol:'keso',side:'sell',quantity:2,pricingVersion:1,limit:0}) as {result:unknown};
  assert.ok(sold.result);
  await settleDebts(f.env,guild,T0+60_000);
  assert.equal(await debtOf(f.env,guild,one),0);
