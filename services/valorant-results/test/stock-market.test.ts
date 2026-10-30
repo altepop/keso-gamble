@@ -7,6 +7,7 @@ import {initializeKp,syncKpAccounts} from '../src/kp.ts';
 import type {KpEnv,KpMapping} from '../src/kp.ts';
 import {operateKp,readKpState,kpPulse} from '../src/kp-api.ts';
 import {prepareStocks,payStockDividends,stockBenefits,stockDiscount,convertStocks,tickStocks,nextStockPrices,queueStockPosts,STOCK_HOLD,fortuneCounts,fictionNews} from '../src/stock-market.ts';
+import {applyStockShock,stockShockPrice} from '../src/stock-admin.ts';
 const guild='100000000000000100',one='100000000000000101',two='100000000000000102';
 const mapping:KpMapping={guildId:guild,accounts:[{riotId:'One#JP1',discordUserId:one},{riotId:'Two#JP1',discordUserId:two}]};
 const T=Date.parse('2026-10-28T09:00:00+09:00'),DAY=STOCK_HOLD;
@@ -238,4 +239,49 @@ test('売却の受取額も確認した下限を守り、不利な価格では�
  await trade(f,'sell-limit-buy-first','buy',10);const cash=f.cash();await trade(f,'sell-limit-other-sell','sell',10,'keso',two);
  await assert.rejects(operateKp(f.env,mapping,one,'sell-limit-stale-order','trade',{symbol:'keso',side:'sell',quantity:10,pricingVersion:1,limit:11951}),/株価が変わった/);
  assert.equal(f.cash(),cash);assert.equal((await readKpState(f.env,mapping,one)).holdings.keso,10);
+});
+
+test('運営の株価操作は共通相場で累積し、履歴・ニュース・注文単価に同期する',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:T});const f=await fixture();f.credit('admin-test-cash',100000);
+ const original=await readKpState(f.env,mapping,one);
+ assert.equal(original.prices.keso,1200);
+ const up=await applyStockShock(f.env,guild,one,'stock-shock-test-0001',{symbol:'keso',direction:'up',strength:25},T);
+ assert.equal(up.before,1200);assert.equal(up.after,1500);
+ const down=await applyStockShock(f.env,guild,one,'stock-shock-test-0002',{symbol:'keso',direction:'down',strength:50},T);
+ assert.equal(down.before,1500);assert.equal(down.after,750);
+ const repeat=await applyStockShock(f.env,guild,one,'stock-shock-test-0002',{symbol:'keso',direction:'down',strength:50},T);
+ assert.equal(repeat.replayed,true);assert.equal(repeat.after,750);
+ await assert.rejects(applyStockShock(f.env,guild,one,'stock-shock-test-0002',{symbol:'yuya',direction:'down',strength:50},T),/操作ID/);
+ const a=await readKpState(f.env,mapping,one),b=await readKpState(f.env,mapping,two);
+ assert.equal(a.prices.keso,750);assert.equal(b.prices.keso,750);
+ assert.deepEqual(a.history.keso.slice(-3),[1200,1500,750]);
+ assert.equal(a.stockMarket.orderQuotes.keso,750000000);
+ assert.equal(a.cash,original.cash,'no KP was created or removed');
+ assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM stock_admin_moves').get()!.n,2);
+ assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM stock_news WHERE id LIKE \'admin:%\'').get()!.n,2);
+ assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM stock_ticks').get()!.n,3);
+ await assert.rejects(operateKp(f.env,mapping,one,'stock-shock-denied-01','stock-shock',{symbol:'keso',direction:'up',strength:25}),/利用できません/);
+ assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM stock_admin_moves').get()!.n,2);
+});
+test('運営操作の保存失敗は株価・ニュース・履歴をすべて戻す',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:T});const f=await fixture();
+ await prepareStocks(f.env,guild);
+ f.sql.exec("CREATE TRIGGER stock_shock_fail BEFORE INSERT ON stock_news WHEN NEW.id LIKE 'admin:%' BEGIN SELECT RAISE(ABORT,'fixture');END");
+ await assert.rejects(applyStockShock(f.env,guild,one,'stock-shock-rollback-01',{symbol:'keso',direction:'up',strength:25},T));
+ assert.equal((await readKpState(f.env,mapping,one)).prices.keso,1200);
+ assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM stock_admin_moves').get()!.n,0);
+ assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM stock_ticks').get()!.n,0);
+ f.sql.exec('DROP TRIGGER stock_shock_fail');
+ assert.equal((await applyStockShock(f.env,guild,one,'stock-shock-rollback-01',{symbol:'keso',direction:'up',strength:25},T)).after,1500);
+});
+test('管理者入力は銘柄・方向・変動率を厳格検証し値幅制限がある',async t=>{
+ assert.equal(stockShockPrice(1000,'up',25),1250);
+ assert.equal(stockShockPrice(1250,'down',50),625);
+ assert.equal(stockShockPrice(20,'down',50),20);
+ assert.equal(stockShockPrice(10000000,'up',50),10000000);
+ assert.throws(()=>stockShockPrice(1200,'up',100),/変動内容/);
+ assert.throws(()=>stockShockPrice(1200,'sideways',25),/変動内容/);
+ t.mock.timers.enable({apis:['Date'],now:T});const f=await fixture();
+ await assert.rejects(applyStockShock(f.env,guild,one,'stock-shock-invalid-01',{symbol:'nonexistent',direction:'up',strength:25},T),/銘柄/);
+ await assert.rejects(applyStockShock(f.env,guild,one,'stock-shock-invalid-01',{symbol:'keso',direction:'up',strength:100},T),/銘柄/);
 });
