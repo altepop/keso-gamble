@@ -49,3 +49,23 @@ export async function openSteamLogin(url,{host=globalThis.location?.hostname??''
  if(isDiscordActivity(host)){const id=/^(\d{15,22})\.discordsays\.com$/.exec(host)?.[1];if(!id)throw Error('Discordの接続を確認してください。');const sdk=await sdkFactory(id);await deadline(sdk.ready(),15000);const result=await deadline(sdk.commands.openExternalLink({url:target.toString()}),15000);if(result?.opened===false)throw Error('Steamのログイン画面を開けませんでした。');}
  else {const tab=open?.(target.toString(),'_blank');if(!tab)throw Error('新しいウィンドウを許可して、もう一度押してください。');try{tab.opener=null;}catch{}}
 }
+
+// Discord Activities cannot open ordinary <a target="_blank"> links. Use the native host command.
+// Only these two fixed, public companion destinations are allowed; never forward arbitrary URLs.
+const COMPANION_GAMES=Object.freeze({loop:'https://keso-loop.tealeaforest.workers.dev/',quiz:'https://valo-quiz.onrender.com/'});
+export async function openCompanionGame(game,{host=globalThis.location?.hostname??'',sdkFactory=officialSdk,open=globalThis.open?.bind(globalThis)}={}){
+ const url=COMPANION_GAMES[game];
+ if(!url)throw Error('リンク先を確認できません。');
+ if(isDiscordActivity(host)){
+  const id=/^(\\d{15,22})\\.discordsays\\.com$/.exec(host)?.[1];
+  if(!id)throw Error('Discordの接続を確認してください。');
+  const sdk=await sdkFactory(id);
+  await deadline(sdk.ready(),15000);
+  const result=await deadline(sdk.commands.openExternalLink({url}),15000);
+  if(result?.opened===false)throw Error('外部サイトを開けませんでした。Discordの確認画面を確認してください。');
+ }else{
+  const tab=open?.(url,'_blank');
+  if(!tab)throw Error('新しいウィンドウを許可して、もう一度押してください。');
+  try{tab.opener=null;}catch{}
+ }
+}
