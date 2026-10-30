@@ -45,7 +45,7 @@ const server=spawn('python3',['-m','http.server','8794','--bind','127.0.0.1'],{c
  await page.locator('#admin-stock-direction').selectOption('down');
  await page.locator('#admin-stock-strength').selectOption('50');
  await page.locator('[data-action=stock-shock]').click();
- await page.waitForFunction(()=>document.querySelector('.wallet-strip')?.textContent&&document.querySelector('#app')?.textContent?.includes('600 KP'));
+ await page.waitForFunction(()=>document.querySelector('.toast')?.textContent?.includes('600 KP'));
  assert.deepEqual(shocks.map(({id,...args})=>args),[{symbol:'keso',direction:'down',strength:50}]);
  assert.equal(state.cash,152000,'admin stock action cannot credit the wallet');
  for(const width of [320,390,1440]){await page.setViewportSize({width,height:844});await page.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))));assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);}
