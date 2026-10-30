@@ -1,3 +1,4 @@
+import {queueSteamPosts} from './steam-posts.ts';
 import {monitorSteam} from './steam-rewards.ts';
 import {readModeNote} from './mode-rewards.ts';
 import {skirmishResultButtons} from './skirmish.ts';
@@ -7,7 +8,7 @@ import {prepareRaceBroadcast} from './racing-broadcast.ts';
 import {raceVideoApi} from './racing-video.ts';
 export {RaceBroadcaster} from './racing-broadcast.ts';
 import {prepareStocks,queueStockPosts} from './stock-market.ts';
-import {monitorMahjong, mahjongStatus} from './mahjong.ts';
+import {monitorMahjong, mahjongStatus, flushMahjongPosts} from './mahjong.ts';
 import {monitorUnite} from './unite.ts';
 import {settleRankChange,rankChangeBlock,rankChangeFor} from './rank-change.ts';
 import type {RankChange} from './rank-change.ts';
@@ -473,6 +474,7 @@ export default {
     ctx.waitUntil(track(env,'unite_watch',()=>monitorUnite(env)));
     ctx.waitUntil(track(env,'voice',()=>ensureVoice(env)));
     ctx.waitUntil(track(env,'steam',async()=>{const mapping=await initializeKp(env);if(mapping)await monitorSteam(env,mapping.guildId);}));
+    ctx.waitUntil(track(env,'steam_posts',async()=>{const mapping=await initializeKp(env);if(!mapping)return;await queueSteamPosts(env,mapping.guildId);await flushMahjongPosts(env);}));
     ctx.waitUntil(track(env,'valorant',()=>monitor(env)));
     ctx.waitUntil((async()=>{
       const mapping=await initializeKp(env);if(!mapping)return;
