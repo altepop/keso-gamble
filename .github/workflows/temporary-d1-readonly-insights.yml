@@ -29,11 +29,11 @@ jobs:
           const dbs=JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP+'/d1-list.json','utf8'));
           console.log('VISIBLE_DATABASES '+JSON.stringify((Array.isArray(dbs)?dbs:[]).map(x=>x.name||x.database_name)));
           NODE
-          ./node_modules/.bin/wrangler d1 insights --sort-by=reads --sort-type=sum --time-period=7d --limit=20 --json > "$RUNNER_TEMP/insights-all.json"
+          ./node_modules/.bin/wrangler d1 insights valorant-results --sort-by=count --sort-type=sum --time-period=7d --limit=20 --json > "$RUNNER_TEMP/insights-count.json"
           node --input-type=module <<'NODE'
           import fs from 'node:fs';
-          const all=JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP+'/insights-all.json','utf8'));
-          console.log('ACCOUNT_INSIGHTS_7D '+JSON.stringify(Array.isArray(all)?{type:'array',length:all.length}:{type:'object',keys:Object.keys(all)}));
+          const all=JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP+'/insights-count.json','utf8'));
+          console.log('DB_INSIGHTS_BY_COUNT_7D '+JSON.stringify(Array.isArray(all)?{type:'array',length:all.length}:{type:'object',keys:Object.keys(all)}));
           NODE
           ./node_modules/.bin/wrangler d1 insights valorant-results --sort-by=reads --sort-type=sum --time-period=7d --limit=20 --json > "$RUNNER_TEMP/d1-insights.json"
           node --input-type=module <<'NODE'
