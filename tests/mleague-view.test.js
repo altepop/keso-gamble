@@ -24,3 +24,10 @@ test('Mリーグ画面：デモや読み込み失敗では買えない。自分�
  const mine=mleagueScreen({state:state({mlBets:[{match:'g2',player:'選手A',amount:500,odds:52,status:'pending',payout:0},{match:'g1',player:'選手B',amount:1000,odds:31,status:'won',payout:3100}]}),live:true,draft:{},tabs:'',nav:''});
  assert.match(mine,/結果待ち · 当たれば 2,600 KP/);assert.match(mine,/的中 \+2,100 KP（払戻し 3,100 KP）/);
 });
+
+test('second-game cards show the lineup-based deadline and explain the rule before confirmation',()=>{
+ const confirmed=Date.parse('2026-10-27T21:00:00+09:00'),open=fixture('game2','open',{lineupConfirmedAt:confirmed,closeAt:confirmed+15*60000});
+ const base={cash:10000,mleague:{day:'2026-10-27',fixtures:[open]},mlBets:[]};
+ const html=mleagueScreen({state:base,live:true,draft:{},tabs:'',nav:''});assert.match(html,/予想締切 21:15/);assert.match(html,/検知から15分/);
+ const waiting=mleagueScreen({state:{...base,mleague:{...base.mleague,fixtures:[fixture('game2','open')]}},live:true,draft:{},tabs:'',nav:''});assert.match(waiting,/選手確定の検知から15分後/);
+});

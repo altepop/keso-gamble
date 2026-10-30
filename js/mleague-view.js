@@ -1,5 +1,5 @@
-import { escapeHTML } from './progression-views.js?v=web-fbdbe83640a6b754';
-import { payoutFor } from './racing.js?v=web-fbdbe83640a6b754';
+import { escapeHTML } from './progression-views.js?v=web-dbfe61df043dd3df';
+import { payoutFor } from './racing.js?v=web-dbfe61df043dd3df';
 // The Activity's Mリーグ screen: today's (or the next) games from the server, a last-place prediction with a
 // confirmation step, and the member's own predictions. Buying is the wallet operation 'ml-bet' with the shown odds,
 // so a changed price is refused by the server instead of bought.
@@ -9,7 +9,8 @@ const md=date=>`${Number(date.slice(5,7))}/${Number(date.slice(8,10))}`;
 const clock=t=>new Date(t).toLocaleTimeString('ja-JP',{timeZone:'Asia/Tokyo',hour:'2-digit',minute:'2-digit'});
 const STATUS={open:'受付中',closed:'締切',result:'結果',unconfirmed:'カード確認中',before:'受付前'};
 function fixtureCard(f,draft){
- const head=`<div class="ml-head"><strong>${f.table}卓 第${f.game}試合</strong><span class="badge ml-${f.status}">${STATUS[f.status]}</span></div><p class="helper">${clock(f.start)}開始 · ${f.teams.map(escapeHTML).join('・')}</p>`;
+ const deadline=f.game===2?(Number.isSafeInteger(f.lineupConfirmedAt)&&Number.isSafeInteger(f.closeAt)?`予想締切 ${clock(f.closeAt)}（${f.closeAt===f.lineupConfirmedAt+15*60000?'選手確定の検知から15分':'開始報告・日付変更による締切'}）`:'予想は選手確定の検知から15分後に締切'):'';
+ const head=`<div class="ml-head"><strong>${f.table}卓 第${f.game}試合</strong><span class="badge ml-${f.status}">${STATUS[f.status]}</span></div><p class="helper">${f.game===1?clock(f.start)+'開始':'第1試合終了後'} · ${f.teams.map(escapeHTML).join('・')}</p>${deadline?`<p class="helper">${deadline}</p>`:''}`;
  if(f.result)return `<section class="asset-card ml-card">${head}<ol class="ml-result">${f.result.names.map((n,i)=>`<li>${i+1}着 ${escapeHTML(n)}　${f.result.points[i]>0?'+':''}${f.result.points[i]}pt</li>`).join('')}</ol></section>`;
  if(f.status!=='open')return `<section class="asset-card ml-card">${head}<p class="helper">${f.status==='before'?'受付は当日0時から。':f.status==='unconfirmed'?'公式の対戦カードを確認中です。':'この試合の予想は締め切りました。'}</p></section>`;
  const players=f.players.filter(p=>p.sitting!==false).map(p=>`<button class="ml-pick ${draft.match===f.id&&draft.player===p.name?'selected':''}" data-ml-match="${escapeHTML(f.id)}" data-ml-player="${escapeHTML(p.name)}" aria-pressed="${draft.match===f.id&&draft.player===p.name}"><span>${escapeHTML(p.name)}<small>${escapeHTML(p.teamName)}${p.sitting?' · 出場確定':''}</small></span><b>${odd(p.odds)}</b></button>`).join('');
