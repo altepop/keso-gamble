@@ -323,3 +323,36 @@ test('過去の市場ニュースは最新の12件を部分インデックスで
  const plans=f.sql.prepare("EXPLAIN QUERY PLAN SELECT symbol,label,applied_bps AS bps,at FROM stock_news WHERE guild=? AND applied_version IS NOT NULL AND applied_bps!=0 ORDER BY at DESC,id DESC LIMIT 12").all(guild);
  assert.match(plans.map(x=>x.detail).join(' '),/stock_news_recent_public/);
 });
+
+test('裏モードの急落後に通常の買付・株価更新・再急騰を挟んでも共有価格と履歴が一致する',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:T});const f=await fixture();f.credit('stock-owner-fund',1000000);f.credit('stock-other-fund',1000000,two);
+ const start=await readKpState(f.env,mapping,one),balance=f.cash();
+ const down=await applyStockShock(f.env,guild,one,'shock-integration-down-0001',{symbol:'keso',direction:'down',strength:50},T);
+ assert.equal(down.before,1200);assert.equal(down.after,600);assert.equal(f.cash(),balance);
+ const b=await readKpState(f.env,mapping,two);
+ assert.equal(b.prices.keso,600);assert.equal(b.stockMarket.orderQuotes.keso,600000000);
+ assert.notEqual(await kpPulse(f.env,guild,two,T),await kpPulse(f.env,guild,two,T+STOCK_HOLD),'market pulse remains live');
+ await trade(f,'shock-following-market-buy-001','buy',1,'keso',two);
+ const priceAfterTrade=(await readKpState(f.env,mapping,one)).prices.keso;
+ assert(priceAfterTrade>600);
+ const up=await applyStockShock(f.env,guild,one,'shock-integration-up-0002',{symbol:'keso',direction:'up',strength:25},T);
+ assert.equal(up.before,priceAfterTrade);assert.equal(up.after,Math.round(priceAfterTrade*1.25));
+ const current=await readKpState(f.env,mapping,two);
+ assert.equal(current.prices.keso,up.after);
+ assert.equal(current.stockMarket.ticks.at(-1)!.prices.keso,up.after);
+ assert.equal((await applyStockShock(f.env,guild,one,'shock-integration-up-0002',{symbol:'keso',direction:'up',strength:25},T)).replayed,true);
+ const beforeTick=current.stockMarket.version;
+ const next=await tickStocks(f.env,await prepareStocks(f.env,guild),T+300000,()=>0.5);
+ assert.equal(next.version,beforeTick+1);
+ assert.equal((await readKpState(f.env,mapping,one)).prices.keso,next.prices.keso);
+ assert.equal(f.sql.prepare("SELECT COUNT(*) AS n FROM stock_admin_moves WHERE guild=?").get(guild)!.n,2);
+ assert.equal(f.sql.prepare("SELECT COUNT(*) AS n FROM stock_news WHERE id LIKE 'admin:%'").get()!.n,2);
+});
+test('裏モードの同一操作を並行送信しても株価は一度しか変わらない',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:T});const f=await fixture();
+ const opts={symbol:'keso',direction:'up',strength:50};
+ const results=await Promise.all([applyStockShock(f.env,guild,one,'shock-concurrent-retry-0001',opts,T),applyStockShock(f.env,guild,one,'shock-concurrent-retry-0001',opts,T)]);
+ assert.deepEqual(results.map(r=>r.after),[1800,1800]);
+ assert.equal((await readKpState(f.env,mapping,two)).prices.keso,1800);
+ assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM stock_admin_moves').get()!.n,1);
+});
