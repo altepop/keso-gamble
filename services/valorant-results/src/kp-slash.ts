@@ -5,7 +5,7 @@ import type {KpEnv,KpMapping} from './kp.ts';
 import {ensureQuizKp} from './quiz-kp.ts';
 import {operateKp,previewMlBet,readKpState} from './kp-api.ts';
 import {racingView} from './racing-kp.ts';
-import {ML_DATA,closeMl,mlClosed,mlData,mlLineups,mlResults,seasonStats} from './mleague.ts';
+import {ML_DATA,closeMl,mlClosed,mlData,mlLineups,mlLineupTimes,mlResults,seasonStats} from './mleague.ts';
 import {enqueue,ensurePosts} from './racing-posts.ts';
 import {ensureMahjongClaims} from './mahjong-claims.ts';
 import {ensureUnite,uniteUid} from './unite.ts';
@@ -13,7 +13,7 @@ import {nameGiftHorse,decideEntries} from './racing-horses.ts';
 import {crownFor} from './racing-crowns.ts';
 import {DEBT_INTEREST_TEXT,DEBT_MAX,debtOf,ensureDebt} from './kp-debt.ts';
 // @ts-expect-error Shared browser engine.
-import {mlCard,mlOdds,mlOpen,mlStart} from '../../../js/mleague.js';
+import {mlCard,mlOdds,mlOpen,mlClosesAt,mlStart} from '../../../js/mleague.js';
 // @ts-expect-error Shared browser engine.
 import {openRaceStart,raceCard,raceOdds,placeSlots,payoutFor} from '../../../js/racing.js';
 interface Slash {id:string;guild_id?:string;member?:{user?:{id:string}};data?:{name?:string;options?:Array<{name:string;type?:number;options?:unknown[];value?:unknown}>}}
@@ -95,12 +95,12 @@ export async function mbetDecide(env:KpEnv,interaction:Slash&{data?:{custom_id?:
 }
 async function mleagueView(env:KpEnv,now:number){
  const day=mlDay(now);if(!day)return 'Mリーグのレギュラーシーズン日程は終了しました。';
- const all=await mlResults(env),stats=seasonStats(all),d=await mlData(env),fixtures=d.fixtures.filter(f=>f.date===day),closed=await mlClosed(env),lineups=await mlLineups(env);
+ const all=await mlResults(env),stats=seasonStats(all),d=await mlData(env),fixtures=d.fixtures.filter(f=>f.date===day),closed=await mlClosed(env),lineups=await mlLineups(env),times=await mlLineupTimes(env);
  const lines=[`🀄 **Mリーグ予想** ${Number(day.slice(5,7))}/${Number(day.slice(8,10))} 19:00開始`];
  for(const table of [...new Set(fixtures.map(f=>f.table))]){
   const games=fixtures.filter(f=>f.table===table).sort((a,b)=>a.game-b.game);
   if(!games[0].confirmed){lines.push(`\n**${table}卓**　公式の対戦カードを確認中（確認後に受付開始）`);continue;}
-  lines.push(`\n**${table}卓**　${games.map(g=>`第${g.game}試合 ${all.has(g.id)?'終了':closed.has(g.id)&&now>=closed.get(g.id)!.at?'締切（開始報告）':mlOpen(d,g,now,all)?'受付中':now<mlStart(g)-19*3600000?'当日0時から':'締切'}`).join('／')}`);
+  lines.push(`\n**${table}卓**　${games.map(g=>`第${g.game}試合 ${all.has(g.id)?'終了':closed.has(g.id)&&now>=closed.get(g.id)!.at?'締切（開始報告）':mlOpen(d,g,now,all,times)?`受付中${mlClosesAt(g,times)!==null?`（${clock(mlClosesAt(g,times)!)}まで）`:''}`:now<mlStart(g)-19*3600000?'当日0時から':'締切'}`).join('／')}`);
   for(const g of games)if(lineups.has(g.id))lines.push(`第${g.game}試合 出場：${lineups.get(g.id)!.map(clean).join('・')}`);
   for(const p of mlCard(d,games[0])){const o=mlOdds(p,stats);lines.push(`${p.no}. ${clean(p.name)}（${clean(p.teamName)}）ラス ${(o.last/10).toFixed(1)}倍`);}
  }
@@ -142,8 +142,8 @@ export async function mbetChoices(env:KpEnv,interaction:Slash):Promise<Array<{na
  const options=interaction.data?.options as Array<{name:string;value?:unknown;focused?:boolean}>|undefined,focused=options?.find(o=>o.focused);
  if(!focused||!['match','player'].includes(focused.name))return [];
  const now=Date.now(),day=mlDay(now),d=await mlData(env);
- const [results,closed,lineups]=await Promise.all([mlResults(env),mlClosed(env),mlLineups(env)]);
- const open=(f:typeof d.fixtures[number])=>f.confirmed&&!results.has(f.id)&&mlOpen(d,f,now,results)&&!(closed.has(f.id)&&now>=closed.get(f.id)!.at);
+ const [results,closed,lineups,times]=await Promise.all([mlResults(env),mlClosed(env),mlLineups(env),mlLineupTimes(env)]);
+ const open=(f:typeof d.fixtures[number])=>f.confirmed&&!results.has(f.id)&&mlOpen(d,f,now,results,times)&&!(closed.has(f.id)&&now>=closed.get(f.id)!.at);
  const typed=searchMl(focused.value).slice(0,100);
  // An empty list says why in its only entry (value 'none'), instead of leaving the member guessing.
  const why=(name:string)=>[{name:('ℹ️ '+name).slice(0,100),value:'none'}];

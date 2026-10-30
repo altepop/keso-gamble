@@ -1,5 +1,5 @@
-import { escapeHTML } from './progression-views.js?v=web-fbdbe83640a6b754';
-import { payoutFor } from './racing.js?v=web-fbdbe83640a6b754';
+import { escapeHTML } from './progression-views.js?v=web-bd8803787b467985';
+import { payoutFor } from './racing.js?v=web-bd8803787b467985';
 // The Activity's Mリーグ screen: today's (or the next) games from the server, a last-place prediction with a
 // confirmation step, and the member's own predictions. Buying is the wallet operation 'ml-bet' with the shown odds,
 // so a changed price is refused by the server instead of bought.
@@ -13,7 +13,7 @@ function fixtureCard(f,draft){
  if(f.result)return `<section class="asset-card ml-card">${head}<ol class="ml-result">${f.result.names.map((n,i)=>`<li>${i+1}着 ${escapeHTML(n)}　${f.result.points[i]>0?'+':''}${f.result.points[i]}pt</li>`).join('')}</ol></section>`;
  if(f.status!=='open')return `<section class="asset-card ml-card">${head}<p class="helper">${f.status==='before'?'受付は当日0時から。':f.status==='unconfirmed'?'公式の対戦カードを確認中です。':'この試合の予想は締め切りました。'}</p></section>`;
  const players=f.players.filter(p=>p.sitting!==false).map(p=>`<button class="ml-pick ${draft.match===f.id&&draft.player===p.name?'selected':''}" data-ml-match="${escapeHTML(f.id)}" data-ml-player="${escapeHTML(p.name)}" aria-pressed="${draft.match===f.id&&draft.player===p.name}"><span>${escapeHTML(p.name)}<small>${escapeHTML(p.teamName)}${p.sitting?' · 出場確定':''}</small></span><b>${odd(p.odds)}</b></button>`).join('');
- return `<section class="asset-card ml-card">${head}<p class="helper">ラス（4位）になる選手を選ぶ。${f.players.some(p=>p.sitting)?'':'出場が決まっていない選手は、出なければ返金。'}</p><div class="ml-players">${players}</div></section>`;
+ return `<section class="asset-card ml-card">${head}<p class="helper">ラス（4位）になる選手を選ぶ。${f.players.some(p=>p.sitting)?'':'出場が決まっていない選手は、出なければ返金。'}${f.closesAt?`出場が決まったので、${clock(f.closesAt)}に締め切ります。`:f.game===2?'出場が決まると、その15分後に締め切ります。':''}</p><div class="ml-players">${players}</div></section>`;
 }
 function orderPanel(view,draft,state){
  const f=view.fixtures.find(x=>x.id===draft.match),p=f?.players.find(x=>x.name===draft.player);

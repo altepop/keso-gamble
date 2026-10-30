@@ -30,10 +30,10 @@ import { hydrateMoreCasino, minesStart, minesPick, minesCashout, playSlot, vpDea
 import {jackpotOf} from './casino-jackpot.ts';
 import { enqueue, ensurePosts } from './racing-posts.ts';
 // @ts-expect-error Shared browser engine.
-import { hydrateMleague, placeMlBet, mlPartner } from '../../../js/mleague.js';
+import { hydrateMleague, placeMlBet } from '../../../js/mleague.js';
 import { ledgerHistory } from './kp-history.ts';
 import { healthReport } from './health.ts';
-import { mlActivityView, mlClosed, mlData, mlResults, seasonStats } from './mleague.ts';
+import { mlActivityView, mlClosed, mlData, mlLineupTimes, mlResults, seasonStats } from './mleague.ts';
 import { racingView, raceSeed } from './racing-kp.ts';
 import { defaultRoastLevel, validRoastLevel } from './racing-crowns.ts';
 import { buyHorse, sellHorse, ownedHorses, raceEntries } from './racing-horses.ts';
@@ -116,12 +116,12 @@ export function casinoPost(user:string,action:string,result:unknown):string|null
 }
 /** The /mbet checks and the bet itself on a wallet state (the caller decides whether the state is saved). */
 async function applyMlBet(env:KpEnv,state:Record<string,unknown>,args:Record<string,unknown>){
- const d=await mlData(env),fixture=d.fixtures.find(f=>f.id===args.match),partner=fixture?mlPartner(d,fixture):null;
+ const d=await mlData(env),fixture=d.fixtures.find(f=>f.id===args.match);
  if(fixture&&!fixture.confirmed)throw Error('公式の対戦カードを確認中です。少し待ってからもう一度お試しください。');
  const closed=fixture?(await mlClosed(env)).get(fixture.id):undefined;
  if(closed&&Date.now()>=closed.at)throw Error('この試合の予想は締め切りました（メンバーが試合開始を報告）。');
- // Odds use this season's official results; game 2 closes once game 1's result is stored.
- return placeMlBet(state,{match:args.match,player:args.player,type:args.type,amount:args.amount},Date.now(),d,await mlResults(env,partner?[partner.id]:[]),seasonStats(await mlResults(env))) as {player:string;type:string;amount:number;odds:number};
+ // Odds use this season's official results; game 2 closes 15 minutes after its players are confirmed (or with its own result).
+ return placeMlBet(state,{match:args.match,player:args.player,type:args.type,amount:args.amount},Date.now(),d,await mlResults(env,fixture?[fixture.id]:[]),seasonStats(await mlResults(env)),await mlLineupTimes(env)) as {player:string;type:string;amount:number;odds:number};
 }
 /** What an /mbet would buy, checked exactly like the purchase (balance, weekly limit, 借KP, closing) but never saved. */
 export async function previewMlBet(env:KpEnv,mapping:KpMapping,user:string,args:Record<string,unknown>){

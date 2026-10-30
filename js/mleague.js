@@ -1,7 +1,7 @@
 // M.LEAGUE predictions: name the player who finishes last (ラス) in an official game.
 // Pure logic with no DOM or clock reads, shared by the browser and the Worker. Results come only from
 // the official site (services/valorant-results/src/mleague.ts); nothing here guesses a result.
-import {WEEKLY_LIMIT,MIN_BET,BET_STEP,oddsFromProbability,payoutFor,weekStart} from './racing.js?v=web-fbdbe83640a6b754';
+import {WEEKLY_LIMIT,MIN_BET,BET_STEP,oddsFromProbability,payoutFor,weekStart} from './racing.js?v=web-bd8803787b467985';
 
 export const ML_TYPES={top:{label:'トップ'},last:{label:'ラス'}};
 /** Only last place is sold (per the owner); 'top' stays readable so bets bought earlier still settle. */
@@ -15,15 +15,24 @@ const validInt=(v,min=0)=>Number.isSafeInteger(v)&&v>=min;
 export const mlStart=fixture=>at(fixture.date,ML_START);
 /** The other game of the same table on the same day. */
 export const mlPartner=(data,fixture)=>data.fixtures.find(f=>f.date===fixture.date&&f.table===fixture.table&&f.game!==fixture.game);
-/** Game 1 closes at 19:00. Game 2 closes when game 1's official result is in (no fixed time, per the
- * owner), and in any case when the day ends, so a result that never arrives cannot keep it open until
- * the next morning. Betting opens at midnight on the match day. */
-export function mlOpen(data,fixture,now,results){
+/** Game 2 closes this long after its four players are confirmed (the owner's rule, 2026-10-30). */
+export const ML_G2_CLOSE_AFTER=15*60000;
+/** Game 1 closes at 19:00. Game 2 closes 15 minutes after its four players are confirmed (`lineups`: game id →
+ * when they were confirmed), or when its own result is in. Until the players are confirmed it stays open, but never
+ * past the end of the day, so a lineup that never arrives cannot keep it open until the next morning. Betting opens
+ * at midnight on the match day. */
+export function mlOpen(data,fixture,now,results,lineups=new Map()){
  const start=mlStart(fixture);
  if(now<at(fixture.date,'00:00'))return false;
  if(fixture.game===1)return now<start;
- const first=mlPartner(data,fixture);
- return now<at(fixture.date,'00:00')+86400000&&!(first&&results.has(first.id));
+ if(results.has(fixture.id))return false;
+ const confirmed=mlClosesAt(fixture,lineups);
+ return confirmed===null?now<at(fixture.date,'00:00')+86400000:now<confirmed;
+}
+/** When game 2's predictions end, once its players are confirmed; otherwise null. */
+export function mlClosesAt(fixture,lineups=new Map()){
+ const confirmed=fixture.game===2?lineups.get(fixture.id):undefined;
+ return Number.isSafeInteger(confirmed)?confirmed+ML_G2_CLOSE_AFTER:null;
 }
 /** The 16 players who may sit at this table, numbered team by team. */
 export function mlCard(data,fixture){
@@ -48,10 +57,10 @@ export function hydrateMleague(raw){
  return ml;
 }
 /** Buys a prediction. Shares the weekly betting limit with horse racing (state.raceWeek). */
-export function placeMlBet(state,{match,player,type,amount},now,data,results,season={}){
+export function placeMlBet(state,{match,player,type,amount},now,data,results,season={},lineups=new Map()){
  const fixture=data.fixtures.find(f=>f.id===match);
  if(!fixture)throw Error('試合を選んでください');
- if(!mlOpen(data,fixture,now,results))throw Error(now<at(fixture.date,'00:00')?'この試合はまだ受付前です（当日0時から）':'この試合の予想は締め切りました');
+ if(!mlOpen(data,fixture,now,results,lineups))throw Error(now<at(fixture.date,'00:00')?'この試合はまだ受付前です（当日0時から）':'この試合の予想は締め切りました');
  if(!ML_SOLD.includes(type))throw Error('予想できるのはラスだけです');
  const card=mlCard(data,fixture),pick=card.find(p=>p.no===player||p.name===player);
  if(!pick)throw Error('選手を選んでください');
