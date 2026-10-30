@@ -57,7 +57,7 @@ export async function openCompanionGame(game,{host=globalThis.location?.hostname
  const url=Object.hasOwn(COMPANION_GAMES,game)?COMPANION_GAMES[game]:null;
  if(!url)throw Error('リンク先を確認できません。');
  if(isDiscordActivity(host)){
-  const id=/^(\\d{15,22})\\.discordsays\\.com$/.exec(host)?.[1];
+ const id=/^(\d{15,22})\.discordsays\.com$/.exec(host)?.[1];
   if(!id)throw Error('Discordの接続を確認してください。');
   const sdk=await sdkFactory(id);
   await deadline(sdk.ready(),15000);
