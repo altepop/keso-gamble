@@ -56,6 +56,8 @@ jobs:
         run: |
           npm --prefix ../.. ci
           npm --prefix ../.. run check:discord
+          # Keep direct GitHub web edits from blocking Worker deployment.
+          npm --prefix ../.. run build:activity
           npm --prefix ../.. run check:activity
           npm --prefix ../.. test
       - run: npm run build
@@ -79,6 +81,8 @@ jobs:
           node-version: '24'
           cache: npm
       - run: npm ci
+      - name: Refresh Activity cache versions for browser tests
+        run: npm run build:activity
       - name: Install Playwright, Chromium and WebKit
         run: |
           npm install --no-save playwright@1.63.0
