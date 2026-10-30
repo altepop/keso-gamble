@@ -300,7 +300,7 @@ test('配当済みの日は大量の保有ロットを再集計せず、処理�
 });
 test('旧バージョンで配当日だけ作成されていた場合も支給を復旧できる',async t=>{
  t.mock.timers.enable({apis:['Date'],now:T});const f=await fixture();f.credit('fund',100000);
- await trade(f,'legacy-day-buy','buy',5);
+ await trade(f,'legacy-day-buy-operation-01','buy',5);
  const market=await prepareStocks(f.env,guild,one);
  const day=new Date(Math.floor((T+DAY)/DAY)*DAY).toISOString().slice(0,10);
  f.sql.prepare('INSERT INTO stock_dividend_days(guild,day,prices,at) VALUES(?,?,?,?)').run(guild,day,JSON.stringify(market.prices),T+DAY);
