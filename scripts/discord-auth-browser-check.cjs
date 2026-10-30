@@ -13,7 +13,7 @@ let browser;
    if(scenario==='different-user'){
     localStorage.setItem('keso-kp-session-v1','old-wallet-token');sessionStorage.setItem('keso-kp-pending-v1',JSON.stringify({id:'old-operation-id',owner:'old-user',action:'spin',args:{amount:100,type:'red'}}));
    }
-   window.__sdkCommands=[];
+   window.__sdkCommands=[];window.__externalUrls=[];
    // Model Discord's documented noninteractive PiP input gate for guild calls.
    if(scenario.startsWith('guild-'))document.addEventListener('DOMContentLoaded',()=>{
     if(window.__interactivePip)return;const shield=document.createElement('div');shield.id='discord-host-input-shield';shield.style.cssText='position:fixed;inset:0;z-index:2147483647';document.body.appendChild(shield);
@@ -27,6 +27,10 @@ let browser;
     if(payload.cmd==='AUTHORIZE'){
      if(scenario==='cancel'){queueMicrotask(()=>send({cmd:payload.cmd,evt:'ERROR',nonce:payload.nonce,data:{code:4000,message:'cancelled'}}));return;}
      window.__authorizeArgs=payload.args;queueMicrotask(()=>send({cmd:payload.cmd,evt:null,nonce:payload.nonce,data:{code:'native-sdk-code'}}));return;
+    }
+    if(payload.cmd==='OPEN_EXTERNAL_LINK'){
+     window.__externalUrls.push(payload.args.url);
+     queueMicrotask(()=>send({cmd:payload.cmd,evt:null,nonce:payload.nonce,data:{opened:true}}));return;
     }
     if(payload.cmd==='SET_CONFIG'){
      window.__interactivePip=payload.args.use_interactive_pip===true;document.getElementById('discord-host-input-shield')?.remove();queueMicrotask(()=>send({cmd:payload.cmd,evt:null,nonce:payload.nonce,data:{use_interactive_pip:window.__interactivePip}}));return;
@@ -94,6 +98,15 @@ let browser;
      await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
     }else await page.locator('.title-start').tap({timeout:2500});
     await page.locator('.nav-btn[data-screen=play]').waitFor({timeout:2500});await page.locator('.nav-btn[data-screen=play]').tap();assert.match(await page.locator('#app').innerText(),/プレイで稼ぐ/);
+   }
+   if(scenario==='success'){
+    await page.locator('.title-start').filter({hasText:'900'}).click();
+    await page.locator('.nav-btn[data-screen=play]').click();
+    const loop=page.locator('[data-companion=loop]');await loop.waitFor();
+    await loop.click();
+    await page.waitForFunction(()=>window.__externalUrls.includes('https://keso-loop.tealeaforest.workers.dev/'));
+    assert.deepEqual(await page.evaluate(()=>window.__externalUrls),['https://keso-loop.tealeaforest.workers.dev/']);
+    assert.equal(operations,0,'opening a companion website cannot change a KP wallet');
    }
    await page.reload();await page.locator('.title-start').filter({hasText:'900'}).waitFor();assert.equal(exchanges,2);assert.equal(operations,0);
    for(const width of[320,390,1280]){await page.setViewportSize({width,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);}
