@@ -54,7 +54,7 @@ export async function openSteamLogin(url,{host=globalThis.location?.hostname??''
 // Only these two fixed, public companion destinations are allowed; never forward arbitrary URLs.
 const COMPANION_GAMES=Object.freeze({loop:'https://keso-loop.tealeaforest.workers.dev/',quiz:'https://valo-quiz.onrender.com/'});
 export async function openCompanionGame(game,{host=globalThis.location?.hostname??'',sdkFactory=officialSdk,open=globalThis.open?.bind(globalThis)}={}){
- const url=COMPANION_GAMES[game];
+ const url=Object.hasOwn(COMPANION_GAMES,game)?COMPANION_GAMES[game]:null;
  if(!url)throw Error('リンク先を確認できません。');
  if(isDiscordActivity(host)){
   const id=/^(\\d{15,22})\\.discordsays\\.com$/.exec(host)?.[1];
