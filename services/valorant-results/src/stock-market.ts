@@ -35,6 +35,9 @@ export async function ensureStocks(env:KpEnv){
  `CREATE TABLE IF NOT EXISTS stock_trades(id TEXT PRIMARY KEY,guild TEXT NOT NULL,user TEXT NOT NULL,symbol TEXT NOT NULL,side TEXT NOT NULL CHECK(side IN ('buy','sell')),quantity INTEGER NOT NULL CHECK(quantity>0),price INTEGER NOT NULL,at INTEGER NOT NULL)`,
  `CREATE TABLE IF NOT EXISTS stock_sale_lots(sale TEXT NOT NULL,lot TEXT NOT NULL,quantity INTEGER NOT NULL CHECK(quantity>0),PRIMARY KEY(sale,lot))`,
  `CREATE TABLE IF NOT EXISTS stock_dividend_days(guild TEXT NOT NULL,day TEXT NOT NULL,prices TEXT NOT NULL,at INTEGER NOT NULL,PRIMARY KEY(guild,day))`,
+ // Separate completion marker: a previous release could save a dividend-day snapshot
+ // but fail while crediting the wallets. Never mistake that snapshot for completion.
+ `CREATE TABLE IF NOT EXISTS stock_dividend_runs(guild TEXT NOT NULL,day TEXT NOT NULL,PRIMARY KEY(guild,day))`,
  `CREATE TABLE IF NOT EXISTS stock_dividends(guild TEXT NOT NULL,user TEXT NOT NULL,day TEXT NOT NULL,amount INTEGER NOT NULL CHECK(amount BETWEEN 1 AND 500),eligible_value INTEGER NOT NULL,at INTEGER NOT NULL,PRIMARY KEY(guild,user,day))`,
  `CREATE TABLE IF NOT EXISTS stock_news(guild TEXT NOT NULL,id TEXT NOT NULL,symbol TEXT NOT NULL,label TEXT NOT NULL,bps INTEGER NOT NULL,at INTEGER NOT NULL,applied_version INTEGER,applied_bps INTEGER NOT NULL DEFAULT 0,applied_at INTEGER,PRIMARY KEY(guild,id))`,
  `CREATE INDEX IF NOT EXISTS stock_news_pending ON stock_news(guild,applied_version,at)`,
@@ -112,9 +115,10 @@ export async function payStockDividends(env:KpEnv,market:Market,now=Date.now()){
  const day=new Date(boundary).toISOString().slice(0,10);
  // Every open Activity previously rescanned *all* historical stock lots for today's
  // dividend, even after it had already been settled. A primary-key lookup now
- // skips repeat work. Keep both writes in one atomic batch so a failed dividend
- // distribution never leaves a day marker that would suppress the retry.
- if(await env.DB.prepare('SELECT 1 FROM stock_dividend_days WHERE guild=? AND day=?').bind(market.guild,day).first())return;
+ // skips repeat work. Keep the snapshot, payouts and completion marker in
+ // a single atomic batch so a failed dividend
+ // distribution never leaves a completion marker that suppresses a retry.
+ if(await env.DB.prepare('SELECT 1 FROM stock_dividend_runs WHERE guild=? AND day=?').bind(market.guild,day).first())return;
  await env.DB.batch([
   env.DB.prepare('INSERT OR IGNORE INTO stock_dividend_days VALUES(?,?,?,?)').bind(market.guild,day,JSON.stringify(market.prices),now),
   env.DB.prepare(`INSERT OR IGNORE INTO stock_dividends(guild,user,day,amount,eligible_value,at)
@@ -123,6 +127,7 @@ export async function payStockDividends(env:KpEnv,market:Market,now=Date.now()){
    WHERE l.guild=? AND l.remaining>0 AND l.at<=?
    GROUP BY l.guild,l.user HAVING SUM(l.remaining*CAST(json_extract(m.prices,'$.'||l.symbol) AS INTEGER))>=100`)
    .bind(day,now,day,market.guild,boundary-STOCK_HOLD),
+  env.DB.prepare('INSERT OR IGNORE INTO stock_dividend_runs(guild,day) VALUES(?,?)').bind(market.guild,day),
  ]);
 }
 async function captureNews(env:KpEnv,market:Market,now:number){
