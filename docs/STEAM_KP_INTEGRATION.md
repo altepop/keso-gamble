@@ -64,3 +64,15 @@ Workerのログは `steam_callback_failed` と固定コード（HTTP拒否時は
 Cloudflare workerdは`redirect: "error"`を受け付けず、Steamへアクセスする前にTypeErrorになる。Steamの署名照合とWeb API・ストア取得は`redirect: "manual"`を使い、3xxを成功として扱わない。転送先へ認証用の本文やAPIキーを送らない。署名照合のPOSTはContent-Typeをapplication/x-www-form-urlencoded;charset=UTF-8と明示する。
 
 `test/steam-worker.test.mjs`は実際のworkerdで旧設定の例外を再現し、本体のsteamCallback・steamJson・requirePaidSteamGameを模擬上流に接続する。正常応答と301/302/303/307/308での拒否を確認する。Nodeのfetchモックだけではこの互換性問題を検出できない。実SteamがCloudflareからの要求を別途拒否するかは本番で確認し、ST_HTTPが出ても署名検証の省略や未知の中継先への転送はしない。
+
+## アカンbotの実績通知・Steam対応プレス
+
+Steam報酬が有効でAPIキー・DISCORD_WEBHOOK_URLが設定済みなら、対応プレスを固定IDで一度だけ登録する。文面はSTEAM_RELEASE_20261030.md。稼ぎchの競馬用Webhookとは分け、VALORANT・雀魂・ユナイトと同じ速報用Webhookへ送る。
+
+新しい実績の入金判定をkp_steam_eventsへ保存すると、同じSQLiteトランザクションのトリガーでkp_steam_notice_itemsへ通知候補を残す。金額0の判定も件数へ含む。支給処理がロールバックした場合は通知候補も残らない。既存の過去イベントを遡って通知しない。
+
+本人ごとに全ゲームをまとめ、最後の判定から2分待って通知する。1回20件の収集上限で続きがある間はbatch_remainingを残して待つ。55個の一斉解除を3回で収集しても1通にまとめる。長時間の保留で知らせが消えないよう、最初の判定から30分経過した場合は確認済み分を送る。後から解除された新しい実績は次の通知へ残す。
+
+本文には本人・ゲーム別件数・実際の獲得KP・最大8件の実績名を載せ、超過分は残り件数で表示する。日上限で減額された場合は本来の額と実額を区別する。本文を2,000文字以内に収め、ゲーム名・実績名を整形し、allowed_mentions.parseを空にして勝手なメンションを防ぐ。入出金履歴は従来どおり正の支給額を記録する。
+
+通知候補の連番範囲を固定して、共有のmahjong_watch_postsへの登録と候補の削除を同じDB.batchで行う。重複cron・登録失敗・途中で新しいイベントが来た場合にも候補を失わない。既存のアカンbot送信処理がleaseを取って配信し、送信失敗は再試行する。送信の成功・失敗でKPは変えない。既存の送信処理では応答不明時に15分後の再試行があるため、Discordへの到達後に応答だけ失ったケースの厳密な一度限りの配信は保証できない。

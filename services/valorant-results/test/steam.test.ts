@@ -1,3 +1,5 @@
+import {queueSteamPosts,steamReleasePost,steamAchievementPost,STEAM_NOTICE_QUIET,STEAM_NOTICE_MAX_WAIT} from '../src/steam-posts.ts';
+import {flushMahjongPosts} from '../src/mahjong.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
@@ -331,4 +333,94 @@ test('Steam callback masks unexpected database exceptions and rejects wrong call
  const url=new URL(request.url);url.hostname='evil.example';assert.match(await(await steamCallback(new Request(url),f.env,yes)).text(),/ST_ORIGIN/);
  const broken={...f.env,DB:{...f.env.DB,prepare:()=>{throw Error('secret SQL '+f.session);}}} as unknown as SteamEnv;
  const response=await steamCallback(request,broken,yes),html=await response.text();assert.equal(response.status,400);assert.match(html,/ST_INTERNAL/);assert(!html.includes(f.session));assert(!html.includes('secret SQL'));
+});
+
+const postEnv=(f:Awaited<ReturnType<typeof fixture>>)=>({...f.env,DISCORD_WEBHOOK_URL:'https://discord.com/api/webhooks/123456789012345678/fixture'});
+const achievementPosts=(f:Awaited<ReturnType<typeof fixture>>)=>f.sql.prepare("SELECT * FROM mahjong_watch_posts WHERE id LIKE 'steam-achievements:%'").all();
+test('Steam release is queued once only when rewards, key and the result bot webhook are configured',async()=>{
+ const f=await fixture(),env=postEnv(f);
+ for(const missing of [{...env,STEAM_WEB_API_KEY:undefined},{...env,DISCORD_WEBHOOK_URL:undefined},{...env,KP_STEAM_CONFIG:JSON.stringify({...f.c,enabled:false})}])assert.equal(await queueSteamPosts(missing,guild,f.now),0);
+ assert.equal(f.sql.prepare("SELECT count(*) AS n FROM sqlite_master WHERE name='mahjong_watch_posts'").get()!.n,0);
+ await queueSteamPosts(env,guild,f.now);await queueSteamPosts(env,guild,f.now+60000);
+ const posts=f.sql.prepare('SELECT body FROM mahjong_watch_posts').all();assert.equal(posts.length,1);const body=JSON.parse(posts[0]!.body as string);assert.match(body.content,/SteamでもKP/);assert.deepEqual(body.allowed_mentions,{parse:[]});assert.equal(earned(f),0);assert(body.content.length<2000);
+ for(const required of ['累計2時間','有料','翌日へ繰り越さ','登録前','毎朝9時','5,000 KP','現金や商品との交換はできへん'])assert(body.content.includes(required));
+});
+test('a settled Steam achievement waits for the quiet period, then queues once without changing KP',async()=>{
+ const f=await fixture(),env=postEnv(f);linked(f);await monitorSteam(env,guild,mock(f,[unlocked(f)],60),()=>f.now);
+ assert.equal(f.sql.prepare('SELECT count(*) AS n FROM kp_steam_notice_items').get()!.n,1);
+ assert.equal(await queueSteamPosts(env,guild,f.now),0);assert.equal(await queueSteamPosts(env,guild,f.now+STEAM_NOTICE_QUIET-1),0);
+ assert.equal(await queueSteamPosts(env,guild,f.now+STEAM_NOTICE_QUIET),1);assert.equal(achievementPosts(f).length,1);assert.equal(earned(f),100);
+ const body=JSON.parse(achievementPosts(f)[0]!.body as string);assert.match(body.content,/実績 1個解除/);assert.match(body.content,/100 KP/);assert.deepEqual(body.allowed_mentions,{parse:[]});
+ due(f);await monitorSteam(env,guild,mock(f,[unlocked(f)],60),()=>f.now+180000);assert.equal(await queueSteamPosts(env,guild,f.now+300000),0);assert.equal(achievementPosts(f).length,1);assert.equal(earned(f),100);
+});
+test('55 simultaneous Steam achievements spanning three collection runs become one capped summary',async()=>{
+ const f=await fixture(),env=postEnv(f);linked(f);const list=Array.from({length:55},(_,i)=>unlocked(f,'burst-'+i));
+ for(let n=0;n<3;n++){
+  due(f);await monitorSteam(env,guild,mock(f,list,60),()=>f.now+n*60000);assert.equal(await queueSteamPosts(env,guild,f.now+n*60000),0);
+  if(n<2)assert.equal(f.sql.prepare('SELECT error FROM kp_steam_games').get()!.error,'batch_remaining');
+ }
+ assert.equal(f.sql.prepare('SELECT count(*) AS n FROM kp_steam_events').get()!.n,55);assert.equal(earned(f),5000);
+ assert.equal(await queueSteamPosts(env,guild,f.now+4*60000),1);const rows=achievementPosts(f);assert.equal(rows.length,1);
+ const content=JSON.parse(rows[0]!.body as string).content;assert.match(content,/実績 55個解除/);assert.match(content,/5,000 KP/);assert.match(content,/ほか47個/);assert.match(content,/本来の報酬 5,500 KP/);assert(content.length<=2000);assert.equal(f.sql.prepare('SELECT count(*) AS n FROM kp_steam_notice_items').get()!.n,0);
+});
+test('unfinished Steam batches wait beyond the quiet period but do not wait forever',async()=>{
+ const f=await fixture(),env=postEnv(f);linked(f);const list=Array.from({length:25},(_,i)=>unlocked(f,'held-'+i));await monitorSteam(env,guild,mock(f,list,60),()=>f.now);
+ assert.equal(await queueSteamPosts(env,guild,f.now+5*60000),0);assert.equal(await queueSteamPosts(env,guild,f.now+STEAM_NOTICE_MAX_WAIT),1);assert.equal(achievementPosts(f).length,1);assert.equal(earned(f),2000);
+});
+test('Steam notice registration and consumption roll back together and retry without another payment',async()=>{
+ const f=await fixture(),env=postEnv(f);linked(f);await monitorSteam(env,guild,mock(f,[unlocked(f)],60),()=>f.now);await queueSteamPosts(env,guild,f.now);
+ f.sql.exec("CREATE TRIGGER fail_steam_notice BEFORE DELETE ON kp_steam_notice_items BEGIN SELECT RAISE(ABORT,'fixture notice failure'); END");
+ await assert.rejects(queueSteamPosts(env,guild,f.now+STEAM_NOTICE_QUIET),/fixture notice failure/);assert.equal(achievementPosts(f).length,0);assert.equal(f.sql.prepare('SELECT count(*) AS n FROM kp_steam_notice_items').get()!.n,1);assert.equal(earned(f),100);
+ f.sql.exec('DROP TRIGGER fail_steam_notice');assert.equal(await queueSteamPosts(env,guild,f.now+STEAM_NOTICE_QUIET),1);assert.equal(earned(f),100);
+});
+test('Steam notifications are not created when a payment insert rolls back',async()=>{
+ const f=await fixture();linked(f);f.sql.exec("CREATE TRIGGER no_wallet_credit BEFORE INSERT ON kp_ledger WHEN NEW.kind='steam' BEGIN SELECT RAISE(ABORT,'no credit'); END");
+ await monitorSteam(f.env,guild,mock(f,[unlocked(f)],60),()=>f.now);assert.equal(earned(f),0);assert.equal(f.sql.prepare('SELECT count(*) AS n FROM kp_steam_notice_items').get()!.n,0);
+});
+test('Steam notifications use the result bot queue and survive a Discord HTTP failure independently of KP',async()=>{
+ const f=await fixture(),env=postEnv(f);linked(f);await monitorSteam(env,guild,mock(f,[unlocked(f)],60),()=>f.now);await queueSteamPosts(env,guild,f.now+STEAM_NOTICE_QUIET);
+ let calls=0;const failed=(async()=>{calls++;return new Response('',{status:429,headers:{'Retry-After':'1'}});}) as typeof fetch;
+ assert.equal(await flushMahjongPosts(env,f.now+STEAM_NOTICE_QUIET,failed),0);assert.equal(calls,1);assert.equal(earned(f),100);
+ const bodies:unknown[]=[];const success=(async(url:any,options:any)=>{assert.match(String(url),/^https:\/\/discord.com\/api\/webhooks\//);assert(!String(url).includes('fixture-api-key'));const body=JSON.parse(options.body);assert.deepEqual(body.allowed_mentions,{parse:[]});bodies.push(body);return Response.json({id:'123456789012345679'});}) as typeof fetch;
+ assert.equal(await flushMahjongPosts(env,f.now+STEAM_NOTICE_QUIET+120000,success),2);assert.equal(bodies.length,2);assert.equal(await flushMahjongPosts(env,f.now+STEAM_NOTICE_QUIET+240000,success),0);assert.equal(earned(f),100);
+});
+test('Steam summaries bound message size, sanitize untrusted titles and show zero credit honestly',()=>{
+ const group={user:'200000000000000001',first:1,last:100,count:100,amount:0,requested:10000};
+ const content=steamAchievementPost(group,Array.from({length:6},()=>({title:'@everyone **'+ '悪'.repeat(250),count:20})),Array.from({length:8},()=>({title:'@everyone <img> **'+ '悪'.repeat(250),amount:0,requested:100,percent:0.1})));
+ assert(content.length<=2000);assert(!content.includes('@everyone'));assert(!content.includes('<img>'));assert.match(content,/今回の獲得 \*\*\+0 KP/);assert.match(content,/使い切っとる/);assert.match(content,/ほか92個/);
+});
+
+test('overlapping Steam notice cron runs register one summary and consume its items once',async()=>{
+ const f=await fixture();linked(f);await monitorSteam(f.env,guild,mock(f,[unlocked(f)],60),()=>f.now);
+ let previous=Promise.resolve<unknown>(null);const original=f.env.DB;
+ const DB={prepare:original.prepare.bind(original),batch:(queries:D1PreparedStatement[])=>{const job=previous.then(()=>original.batch(queries));previous=job.catch(()=>null);return job;}} as unknown as D1Database;
+ const env={...postEnv(f),DB};await queueSteamPosts(env,guild,f.now);
+ const results=await Promise.all([queueSteamPosts(env,guild,f.now+STEAM_NOTICE_QUIET),queueSteamPosts(env,guild,f.now+STEAM_NOTICE_QUIET)]);
+ assert.equal(results.reduce((a,b)=>a+b,0),1);assert.equal(achievementPosts(f).length,1);assert.equal(f.sql.prepare('SELECT count(*) AS n FROM kp_steam_notice_items').get()!.n,0);assert.equal(earned(f),100);
+});
+test('a Steam event arriving after a notification snapshot is retained for the next summary',async()=>{
+ const f=await fixture();linked(f);await monitorSteam(f.env,guild,mock(f,[unlocked(f)],60),()=>f.now);await queueSteamPosts(postEnv(f),guild,f.now);
+ let inserted=false;const original=f.env.DB;
+ const DB={prepare:original.prepare.bind(original),batch:async(queries:D1PreparedStatement[])=>{
+  if(!inserted&&(queries[0] as unknown as {text:string}).text.startsWith('INSERT OR IGNORE INTO mahjong_watch_posts')){
+   inserted=true;f.sql.prepare("INSERT INTO kp_steam_events SELECT 'arrived-later',guild,user,steam,app,'arrived-later',title,percent,requested,amount,policy,unlocked_at,? FROM kp_steam_events LIMIT 1").run(f.now+STEAM_NOTICE_QUIET);
+  }
+  return original.batch(queries);
+ }} as unknown as D1Database;
+ const env={...postEnv(f),DB};assert.equal(await queueSteamPosts(env,guild,f.now+STEAM_NOTICE_QUIET),1);assert.equal(inserted,true);assert.equal(f.sql.prepare('SELECT count(*) AS n FROM kp_steam_notice_items').get()!.n,1);
+ assert.equal(await queueSteamPosts(env,guild,f.now+2*STEAM_NOTICE_QUIET),1);assert.equal(achievementPosts(f).length,2);assert.equal(earned(f),200);
+ for(const row of achievementPosts(f))assert.match(JSON.parse(row.body as string).content,/実績 1個解除/);
+});
+test('Steam summaries combine multiple games for one member but never mix different recipients',async()=>{
+ const f=await fixture(),env=postEnv(f);linked(f);await monitorSteam(env,guild,mock(f,[unlocked(f)],60),()=>f.now);
+ f.sql.prepare("INSERT INTO kp_steam_events SELECT 'second-game',guild,user,steam,124,'second-game',title,percent,requested,amount,policy,unlocked_at,at FROM kp_steam_events LIMIT 1").run();
+ const another='200000000000000002';f.sql.prepare('INSERT INTO kp_wallets(guild,user) VALUES(?,?)').run(guild,another);
+ f.sql.prepare("INSERT INTO kp_steam_events SELECT 'other-user',guild,?, ?,125,'other-user',title,percent,requested,amount,policy,unlocked_at,at FROM kp_steam_events LIMIT 1").run(another,otherSteam);
+ assert.equal(await queueSteamPosts(env,guild,f.now+STEAM_NOTICE_QUIET),2);const posts=achievementPosts(f).map(r=>JSON.parse(r.body as string).content);
+ const own=posts.find(p=>p.includes('<@'+user+'>'));assert.match(own,/実績 2個解除/);assert.match(own,/200 KP/);assert(!own.includes(another));
+ const other=posts.find(p=>p.includes('<@'+another+'>'));assert.match(other,/実績 1個解除/);assert(!other.includes(user));
+});
+test('installing Steam notifications does not retroactively announce already settled achievements',async()=>{
+ const f=await fixture(),env=postEnv(f);linked(f);f.sql.exec('DROP TRIGGER kp_steam_notice');await monitorSteam(env,guild,mock(f,[unlocked(f)],60),()=>f.now);
+ const fresh={...env,DB:Object.assign({},env.DB)};await ensureSteam(fresh);assert.equal(await queueSteamPosts(fresh,guild,f.now+STEAM_NOTICE_QUIET),0);assert.equal(achievementPosts(f).length,0);assert.equal(earned(f),100);
 });

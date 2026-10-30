@@ -18,6 +18,9 @@ export const steamSchema=[
  `CREATE TRIGGER IF NOT EXISTS kp_steam_game_resume_limit BEFORE UPDATE OF active ON kp_steam_games WHEN NEW.active=1 AND OLD.active=0 AND (SELECT count(*) FROM kp_steam_games WHERE guild=NEW.guild AND user=NEW.user AND active=1)>=5 BEGIN SELECT RAISE(ABORT,'Steam game limit'); END`,
  `CREATE TABLE IF NOT EXISTS kp_steam_daily(guild TEXT NOT NULL,user TEXT NOT NULL,day TEXT NOT NULL,amount INTEGER NOT NULL CHECK(typeof(amount)='integer' AND amount BETWEEN 0 AND 5000),PRIMARY KEY(guild,user,day))`,
  `CREATE TABLE IF NOT EXISTS kp_steam_events(id TEXT PRIMARY KEY,guild TEXT NOT NULL,user TEXT NOT NULL,steam TEXT NOT NULL,app INTEGER NOT NULL,achievement TEXT NOT NULL,title TEXT NOT NULL,percent REAL NOT NULL CHECK(percent BETWEEN 0 AND 100),requested INTEGER NOT NULL CHECK(typeof(requested)='integer' AND requested>0),amount INTEGER NOT NULL CHECK(typeof(amount)='integer' AND amount BETWEEN 0 AND requested),policy TEXT NOT NULL,unlocked_at INTEGER NOT NULL,at INTEGER NOT NULL,UNIQUE(guild,steam,app,achievement))`,
+ `CREATE TABLE IF NOT EXISTS kp_steam_notice_items(seq INTEGER PRIMARY KEY AUTOINCREMENT,event TEXT NOT NULL UNIQUE,guild TEXT NOT NULL,user TEXT NOT NULL,at INTEGER NOT NULL)`,
+ `CREATE INDEX IF NOT EXISTS kp_steam_notice_user ON kp_steam_notice_items(guild,user,seq)`,
+ `CREATE TRIGGER IF NOT EXISTS kp_steam_notice AFTER INSERT ON kp_steam_events BEGIN INSERT INTO kp_steam_notice_items(event,guild,user,at) VALUES(NEW.id,NEW.guild,NEW.user,NEW.at); END`,
  `CREATE INDEX IF NOT EXISTS kp_steam_history ON kp_steam_events(guild,user,at DESC)`,
  `CREATE TRIGGER IF NOT EXISTS kp_steam_cap_guard BEFORE INSERT ON kp_steam_events WHEN NEW.amount!=min(NEW.requested,max(0,5000-COALESCE((SELECT amount FROM kp_steam_daily WHERE guild=NEW.guild AND user=NEW.user AND day=strftime('%Y-%m-%d',NEW.at/1000,'unixepoch')),0))) BEGIN SELECT RAISE(ABORT,'Steam daily cap'); END`,
  `CREATE TRIGGER IF NOT EXISTS kp_steam_apply AFTER INSERT ON kp_steam_events WHEN NEW.amount>0 BEGIN INSERT INTO kp_steam_daily(guild,user,day,amount) VALUES(NEW.guild,NEW.user,strftime('%Y-%m-%d',NEW.at/1000,'unixepoch'),NEW.amount) ON CONFLICT(guild,user,day) DO UPDATE SET amount=amount+excluded.amount; INSERT INTO kp_ledger(id,guild,user,delta,kind,at) VALUES(NEW.id,NEW.guild,NEW.user,NEW.amount,'steam',NEW.at); END`,
@@ -131,17 +134,17 @@ export async function monitorSteam(env:SteamEnv,guild:string,send:typeof fetch=f
    for(const x of schema.game.availableGameStats.achievements)if(typeof x.name==='string'&&typeof x.displayName==='string')names.set(x.name,x.displayName.slice(0,200));
    for(const x of rarity.achievementpercentages.achievements)if(typeof x.name==='string'&&(typeof x.percent==='number'||typeof x.percent==='string'&&/^\d+(\.\d+)?$/.test(x.percent))&&Number.isFinite(Number(x.percent))&&Number(x.percent)>=0&&Number(x.percent)<=100)rates.set(x.name,Number(x.percent));
    const awarded=new Set((await env.DB.prepare('SELECT achievement FROM kp_steam_events WHERE guild=? AND steam=? AND app=?').bind(guild,a.steam,job.app).all<{achievement:string}>()).results.map(e=>e.achievement));
-   let incomplete=false;const paid=[];
+   let incomplete=false,more=false;const paid=[];
    for(const achievement of candidates){
     if(!names.has(achievement.apiname)||!rates.has(achievement.apiname)){incomplete=true;continue;}
     const percent=rates.get(achievement.apiname)!,id='steam:'+guild+':'+a.steam+':'+job.app+':'+await kpHash(achievement.apiname);
     if(awarded.has(achievement.apiname))continue;
-    if(paid.length>=20){incomplete=true;break;}
+    if(paid.length>=20){incomplete=true;more=true;break;}
     const settledAt=clock();
     // The insert guard and ledger trigger share a transaction. Unlink/stop during an API call cancels credit.
     await env.DB.prepare(`INSERT INTO kp_steam_events SELECT ?,?,?,?,?,?,?,?,?,min(?,max(0,5000-COALESCE((SELECT amount FROM kp_steam_daily WHERE guild=? AND user=? AND day=?),0))),?,?,? WHERE EXISTS(SELECT 1 FROM kp_steam_games g JOIN kp_steam_accounts a ON a.guild=g.guild AND a.user=g.user WHERE g.guild=? AND g.user=? AND g.app=? AND g.active=1 AND a.active=1 AND a.steam=? AND g.lease=? AND g.lease_until>=?) ON CONFLICT(guild,steam,app,achievement) DO NOTHING`).bind(id,guild,job.user,a.steam,job.app,achievement.apiname,names.get(achievement.apiname)!,percent,steamAmount(c,percent),steamAmount(c,percent),guild,job.user,new Date(settledAt).toISOString().slice(0,10),c.version,achievement.unlocktime*1000,settledAt,guild,job.user,job.app,a.steam,lease,settledAt).run();paid.push(id);
    }
-   await env.DB.prepare('UPDATE kp_steam_games SET next_at=?,last_checked=?,error=?,lease=NULL,lease_until=0 WHERE guild=? AND user=? AND app=? AND lease=?').bind(now+(incomplete?60000:15*60000),now,incomplete?'missing_or_pending':null,guild,job.user,job.app,lease).run();
+   await env.DB.prepare('UPDATE kp_steam_games SET next_at=?,last_checked=?,error=?,lease=NULL,lease_until=0 WHERE guild=? AND user=? AND app=? AND lease=?').bind(now+(incomplete?60000:15*60000),now,more?'batch_remaining':incomplete?'missing_or_pending':null,guild,job.user,job.app,lease).run();
   }else await env.DB.prepare('UPDATE kp_steam_games SET next_at=?,last_checked=?,error=NULL,lease=NULL,lease_until=0 WHERE guild=? AND user=? AND app=? AND lease=?').bind(now+15*60000,now,guild,job.user,job.app,lease).run();
  }catch(e){const error=e instanceof SteamReadError?e:new SteamReadError('retry_pending');await env.DB.prepare('UPDATE kp_steam_games SET next_at=?,error=?,active=CASE WHEN ? THEN 0 ELSE active END,lease=NULL,lease_until=0 WHERE guild=? AND user=? AND app=? AND lease=?').bind(now+error.delay,error.code,Number(knownFreeOrNotGame(error.code)),guild,row.user,row.app,lease).run();}
 }
