@@ -285,3 +285,41 @@ test('管理者入力は銘柄・方向・変動率を厳格検証し値幅制�
  await assert.rejects(applyStockShock(f.env,guild,one,'stock-shock-invalid-01',{symbol:'nonexistent',direction:'up',strength:25},T),/銘柄/);
  await assert.rejects(applyStockShock(f.env,guild,one,'stock-shock-invalid-01',{symbol:'keso',direction:'up',strength:100},T),/銘柄/);
 });
+
+test('配当済みの日は大量の保有ロットを再集計せず、処理済みマーカーを再利用する',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:T});const f=await fixture();f.credit('fund',100000);
+ await trade(f,'one-time-dividend-buy','buy',5);
+ const market=await prepareStocks(f.env,guild,one);
+ let calculations=0;
+ f.setIntercept(sql=>{if(sql.includes('INSERT OR IGNORE INTO stock_dividends('))calculations++;});
+ await payStockDividends(f.env,market,T+DAY);
+ for(let i=0;i<8;i++)await payStockDividends(f.env,market,T+DAY+60000*i);
+ assert.equal(calculations,1,'one shared daily dividend scan regardless of Activity refresh count');
+ assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM stock_dividend_runs').get()!.n,1);
+ assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM stock_dividend_days').get()!.n,1);
+});
+test('旧バージョンで配当日だけ作成されていた場合も支給を復旧できる',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:T});const f=await fixture();f.credit('fund',100000);
+ await trade(f,'legacy-day-buy','buy',5);
+ const market=await prepareStocks(f.env,guild,one);
+ const day=new Date(Math.floor((T+DAY)/DAY)*DAY).toISOString().slice(0,10);
+ f.sql.prepare('INSERT INTO stock_dividend_days(guild,day,prices,at) VALUES(?,?,?,?)').run(guild,day,JSON.stringify(market.prices),T+DAY);
+ const before=f.cash();
+ await payStockDividends(f.env,market,T+DAY);
+ assert(f.cash()>before,'existing snapshot must not suppress an owed dividend');
+ assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM stock_dividend_runs').get()!.n,1);
+});
+test('既に存在する共通相場を毎回INSERTしない',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:T});const f=await fixture();
+ await prepareStocks(f.env,guild);
+ let ignoredMarketWrites=0;
+ f.setIntercept(sql=>{if(sql.startsWith('INSERT OR IGNORE INTO stock_markets VALUES'))ignoredMarketWrites++;});
+ for(let i=0;i<5;i++)await prepareStocks(f.env,guild);
+ assert.equal(ignoredMarketWrites,0);
+});
+test('過去の市場ニュースは最新の12件を部分インデックスで探す',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:T});const f=await fixture();
+ await prepareStocks(f.env,guild);
+ const plans=f.sql.prepare("EXPLAIN QUERY PLAN SELECT symbol,label,applied_bps AS bps,at FROM stock_news WHERE guild=? AND applied_version IS NOT NULL AND applied_bps!=0 ORDER BY at DESC,id DESC LIMIT 12").all(guild);
+ assert.match(plans.map(x=>x.detail).join(' '),/stock_news_recent_public/);
+});
