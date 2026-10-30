@@ -1,0 +1,41 @@
+name: Temporary private stock operator verification
+on:
+  push:
+    branches:
+      - feat/private-stock-operator-20261031
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/private-stock-operator-20261031
+          persist-credentials: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Sync frontend cache and run browser-side unit tests
+        run: |
+          npm ci
+          npm run build:activity
+          npm run check:activity
+          npm test
+      - name: Install Worker dependencies and verify stock market
+        run: |
+          npm ci --prefix services/valorant-results
+          npm --prefix services/valorant-results run typecheck
+          npm --prefix services/valorant-results run test
+      - name: Commit generated versioned browser imports
+        run: |
+          if git diff --quiet -- js css index.html; then
+            echo "Already in sync"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add js css index.html
+          git commit -m "build: sync browser release versions for private stock operator"
+          git push origin HEAD:refs/heads/feat/private-stock-operator-20261031
