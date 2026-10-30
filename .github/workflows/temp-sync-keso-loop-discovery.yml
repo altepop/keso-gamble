@@ -1,0 +1,36 @@
+name: Temporary sync KESO LOOP Activity cache
+on:
+  push:
+    branches:
+      - feat/keso-loop-rewards-discovery-20261030
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/keso-loop-rewards-discovery-20261030
+          persist-credentials: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Refresh Activity module versions
+        run: |
+          npm ci
+          npm run build:activity
+          npm run check:activity
+          npm test
+      - name: Commit synchronized cache
+        run: |
+          if git diff --quiet -- js css index.html; then
+            echo "Already in sync"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add js css index.html
+          git commit -m "build: synchronize Activity cache for LOOP rewards"
+          git push origin HEAD:refs/heads/feat/keso-loop-rewards-discovery-20261030
