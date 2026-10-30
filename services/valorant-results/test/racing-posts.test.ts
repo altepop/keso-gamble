@@ -63,7 +63,15 @@ test('results wait for settlement, then name each bettor with the payout or a ro
  assert.match(result.content,new RegExp(`<@${one}>`));
  assert.match(result.content,new RegExp(seed));
  assert.deepEqual(result.allowed_mentions,{parse:[]},'mentions show names but never ping');
- assert.match(result.content,order[0]===1||order.slice(0,3).includes(2)?/💰/:/💸/);
+ const saved=JSON.parse(String(f.sql.prepare('SELECT data FROM kp_state WHERE guild=? AND user=?').get(guild,one)!.data));
+ const tickets=saved.raceBets.filter((b:{raceId:number})=>b.raceId===MAIN);
+ const invested=tickets.reduce((n:number,b:{amount:number})=>n+b.amount,0);
+ const returned=tickets.reduce((n:number,b:{payout:number})=>n+b.payout,0);
+ const net=returned-invested;
+ const icon=net>0?'💰':net<0?'💸':'⚖️';
+ assert.ok(result.content.includes(`${icon} <@${one}>　収支 `),'post must classify the entire race, not just the hit');
+ assert.ok(result.content.includes(`購入 ${invested.toLocaleString('ja-JP')} KP / 払戻 ${returned.toLocaleString('ja-JP')} KP`));
+ assert.match(result.content,/単勝[○×]/);assert.match(result.content,/複勝[○×]/);
 });
 
 test('a normal race gets its result post whenever someone bet on it, however small; without bets only big races do', () => {

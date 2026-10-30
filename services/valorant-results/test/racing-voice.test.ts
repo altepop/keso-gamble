@@ -35,11 +35,30 @@ test('small wins get personality too; a partial payout is never presented as a p
  const card=raceCard(time),seed='voice-fixture',winner=raceResult(card,seed).order[0],user='100000000000000001';
  const bet={id:'fixture',raceId:time,type:'win' as const,horse:winner,amount:100,odds:80,status:'won',payout:800,user};
  const winning=resultPost(card,seed,[bet],()=> 'full').split('\n').map((l,i,a)=>l.includes(user)?a.slice(i,i+3).join('\n'):'').find(Boolean)!;
- assert.ok(voice.win.full.some(line=>winning.endsWith(line)));assert.match(winning,/\+800 KP/);
+ assert.ok(voice.win.full.some(line=>winning.endsWith(line)));assert.match(winning,/収支 \+700 KP/);assert.match(winning,/購入 100 KP \/ 払戻 800 KP/);
  for(const payout of [100,50]){
   const partial=resultPost(card,seed,[{...bet,payout}],()=> 'full').split('\n').map((l,i,a)=>l.includes(user)?a.slice(i,i+3).join('\n'):'').find(Boolean)!;
   assert.ok(voice.partial.full.some(line=>partial.endsWith(line)));assert.ok(!voice.win.full.some(line=>partial.endsWith(line)));
  }
+});
+test('a winning place ticket never hides losing win tickets or a negative total',()=>{
+ const card=raceCard(time),seed='voice-fixture',order=raceResult(card,seed).order;
+ const user='100000000000000001',winner=order[0],loser=order.at(-1);
+ const first={id:'losing-win',raceId:time,type:'win' as const,horse:loser,amount:5000,odds:80,status:'lost',payout:0,user};
+ const second={id:'winning-place',raceId:time,type:'place' as const,horse:winner,amount:1000,odds:19,status:'won',payout:1900,user};
+ const post=resultPost(card,seed,[first,second],()=> 'normal');
+ assert.match(post,/💸 <@100000000000000001>　収支 −4,100 KP（購入 6,000 KP \/ 払戻 1,900 KP）/);
+ assert.match(post,new RegExp(`内訳 ${loser}番単勝×・${winner}番`));
+ assert.match(post,/複勝○/);
+ assert.ok(!post.includes('💰 <@'+user+'>'),'partial payout must never be promoted to a win');
+ const userLines=post.split('\n').map((line,i,all)=>line.includes(user)?all.slice(i,i+3).join('\n'):'').find(Boolean)!;
+ assert.ok(voice.partial.normal.some(line=>userLines.endsWith(line)));
+ const positive=resultPost(card,seed,[{...second,amount:100,payout:190}],()=> 'normal');
+ assert.match(positive,/収支 \+90 KP（購入 100 KP \/ 払戻 190 KP）/);
+ assert.match(positive,/💰 /);
+ const even=resultPost(card,seed,[{...second,payout:100,amount:100}],()=> 'normal');
+ assert.match(even,/⚖️ .*収支 ±0 KP/);
+ assert.doesNotMatch(even,/💰 <@/);
 });
 test('all outcomes respect mild preferences, even when the winning payout is large',()=>{
  const card=raceCard(time),seed='voice-fixture',winner=raceResult(card,seed).order[0],loser=raceResult(card,seed).order.at(-1),user='100000000000000001';
