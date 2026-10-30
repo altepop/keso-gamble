@@ -1,7 +1,7 @@
 // Server-only operator control for the fictional shared KESO PLAY stock market.
 // Authentication + owner authorization are enforced in kp-api.ts, never by the UI.
 import type {KpEnv} from './kp.ts';
-import {prepareStocks,STOCK_INTERVAL} from './stock-market.ts';
+import {prepareStocks} from './stock-market.ts';
 // @ts-expect-error Shared browser's stock table.
 import {MARKET} from '../../../js/engine.js';
 
