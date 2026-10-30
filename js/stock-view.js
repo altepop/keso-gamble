@@ -12,3 +12,17 @@ export function stockCandles(market,symbol){
  const rows=(market?.ticks??[]).filter(r=>Number.isSafeInteger(r.prices?.[symbol]));
  return rows.map((r,i)=>{const close=r.prices[symbol],open=i?rows[i-1].prices[symbol]:close;return {open,close,high:Math.max(open,close),low:Math.min(open,close),vol:0,date:new Date(r.at).toLocaleTimeString('ja-JP',{timeZone:'Asia/Tokyo',hour:'2-digit',minute:'2-digit'})};});
 }
+
+// Only render this control for the server-confirmed private casino owner.
+// Stock prices are shared by the whole guild. Administrative moves are audited by the Worker.
+export function privateStockOperator(market){
+ const rows=market.map(s=>`<option value="${esc(s.id)}">${esc(s.name)} (${esc(s.ticker)})</option>`).join('');
+ return `<details class="asset-card rules"><summary class="panel-title">🔒 裏モード：株価オペレーター</summary>
+  <p class="helper">自分だけが使える運営メニュー。操作は全員共通の株価に即時反映され、チャート・運営イベント履歴に残ります。保有KP・株数は直接増減しません。</p>
+  <div class="field"><label for="admin-stock-symbol">操作する銘柄</label><select id="admin-stock-symbol" class="select">${rows}</select></div>
+  <div class="field"><label for="admin-stock-direction">方向</label><select id="admin-stock-direction" class="select"><option value="up">📈 急騰させる</option><option value="down">📉 急落させる</option></select></div>
+  <div class="field"><label for="admin-stock-strength">1回の変動幅</label><select id="admin-stock-strength" class="select"><option value="10">10%</option><option value="25" selected>25%</option><option value="50">50%</option></select></div>
+  <p class="helper">毎回、直前の現在値を基準に変動。連続で押すと上昇・下落が累積します。株価は20〜10,000,000 KPに制限されます。</p>
+  <div class="action-row"><button type="button" class="action-btn primary" data-action="stock-shock">株価操作を実行</button></div>
+ </details>`;
+}
