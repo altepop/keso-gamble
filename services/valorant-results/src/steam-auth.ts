@@ -7,6 +7,25 @@ const callback=origin+'/api/kp/steam/callback';
 const provider='https://steamcommunity.com/openid/login';
 const ns='http://specs.openid.net/auth/2.0';
 const noStore={'Cache-Control':'no-store','Referrer-Policy':'no-referrer'};
+const callbackErrors={
+ ST_ORIGIN:'Steamの接続先を確認できません。KESO PLAYから接続をやり直してください。',
+ ST_INPUT:'Steamの返答形式を確認できません。KESO PLAYから接続をやり直してください。',
+ ST_EXPIRED:'接続リンクの有効期限（10分）が切れたか、新しいリンクに更新されています。KESO PLAYでSteam接続をやり直してください。',
+ ST_ALREADY:'Steamでの確認はすでに受け付けています。KESO PLAYに戻り、「接続を確認」へ進んでください。',
+ ST_SESSION:'KP口座の接続が切れています。KESO PLAYで口座へ接続し直してから、Steam接続をやり直してください。',
+ ST_CANCELLED:'Steamでのログインがキャンセルされました。KESO PLAYから接続をやり直してください。',
+ ST_IDENTITY:'Steamアカウントの返答を確認できません。KESO PLAYから接続をやり直してください。',
+ ST_RETURN:'Steamからの戻り先が一致しません。KESO PLAYから接続をやり直してください。',
+ ST_NONCE:'Steamの返答時刻を確認できないか、有効期限が切れています。KESO PLAYから接続をやり直してください。',
+ ST_SIGNED:'Steamの署名対象を確認できません。管理者へ確認コードを伝えてください。',
+ ST_NETWORK:'Steamへの確認通信に失敗しました。少し待ってからKESO PLAYで接続をやり直してください。',
+ ST_HTTP:'Steam側が確認通信を受け付けませんでした。少し待ってからKESO PLAYで接続をやり直してください。',
+ ST_SIGNATURE:'Steam側で署名を確認できませんでした。KESO PLAYから接続をやり直してください。',
+ ST_INTERNAL:'接続確認の保存処理に失敗しました。管理者へ確認コードを伝えてください。',
+} as const;
+type CallbackCode=keyof typeof callbackErrors;
+class SteamCallbackError extends Error {readonly code:CallbackCode;readonly status?:number;constructor(code:CallbackCode,status?:number){super(code);this.code=code;this.status=status;}}
+function callbackFail(code:CallbackCode):never{throw new SteamCallbackError(code);}
 interface Pending {hash:string;guild:string;user:string;session_hash:string;expires:number;steam:string|null;confirmed:number}
 const pendingFor=async(env:SteamEnv,owner:SteamOwner,session:string,state:string)=>env.DB.prepare('SELECT * FROM kp_steam_pending WHERE hash=? AND guild=? AND user=? AND session_hash=? AND expires>?').bind(await kpHash(state),owner.guild,owner.user,await kpHash(session),Date.now()).first<Pending>();
 /** Activity bearer tokens never leave the Activity. Only a short-lived random OpenID state enters the browser. */
@@ -21,28 +40,42 @@ export async function startSteamLink(env:SteamEnv,owner:SteamOwner,session:strin
  return {state,url:url.toString(),expiresAt:now+10*60000};
 }
 async function verifyAssertion(request:Request,env:SteamEnv,send:typeof fetch){
- if(request.url.length>16384||new URL(request.url).origin!==origin)throw Error('Invalid callback origin');
+ if(request.url.length>16384||new URL(request.url).origin!==origin)callbackFail('ST_ORIGIN');
  const query=new URL(request.url).searchParams,state=query.get('state')??'';
- if(!/^[a-f0-9]{48}$/.test(state)||[...query.keys()].some(k=>query.getAll(k).length!==1||k!=='state'&&!k.startsWith('openid.')))throw Error('Invalid assertion');
- await ensureSteam(env);const pending=await env.DB.prepare('SELECT * FROM kp_steam_pending WHERE hash=? AND expires>? AND steam IS NULL AND confirmed=0').bind(await kpHash(state),Date.now()).first<Pending>();if(!pending)throw Error('Expired callback');
+ if(!/^[a-f0-9]{48}$/.test(state)||[...query.keys()].some(k=>query.getAll(k).length!==1||k!=='state'&&!k.startsWith('openid.')))callbackFail('ST_INPUT');
+ if(query.get('openid.mode')==='cancel')callbackFail('ST_CANCELLED');
+ await ensureSteam(env);const pending=await env.DB.prepare('SELECT * FROM kp_steam_pending WHERE hash=? AND expires>? ').bind(await kpHash(state),Date.now()).first<Pending>();if(!pending)callbackFail('ST_EXPIRED');
+ if(pending.steam!==null||pending.confirmed)callbackFail('ST_ALREADY');
  // A revoked/expired KP session cannot be used to finish an abandoned link.
- const session=await env.DB.prepare('SELECT user FROM kp_sessions WHERE hash=? AND guild=? AND user=? AND (expires=-1 OR expires>?)').bind(pending.session_hash,pending.guild,pending.user,Date.now()).first();if(!session)throw Error('Expired session');
+ const session=await env.DB.prepare('SELECT user FROM kp_sessions WHERE hash=? AND guild=? AND user=? AND (expires=-1 OR expires>?)').bind(pending.session_hash,pending.guild,pending.user,Date.now()).first();if(!session)callbackFail('ST_SESSION');
  const identity=query.get('openid.claimed_id')??'',steam=identity.replace('https://steamcommunity.com/openid/id/','');
  const nonce=query.get('openid.response_nonce')??'',stamp=/^(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ).{1,128}$/.exec(nonce)?.[1],at=stamp?Date.parse(stamp):NaN;
  const signed=(query.get('openid.signed')??'').split(',');
- if(query.get('openid.ns')!==ns||query.get('openid.mode')!=='id_res'||query.get('openid.op_endpoint')!==provider||!validSteamId(steam)||identity!=='https://steamcommunity.com/openid/id/'+steam||query.get('openid.identity')!==identity||query.get('openid.return_to')!==callback+'?state='+state||!Number.isFinite(at)||Math.abs(Date.now()-at)>10*60000||!query.get('openid.sig')||!['op_endpoint','claimed_id','identity','return_to','response_nonce','assoc_handle'].every(k=>signed.includes(k)))throw Error('Invalid assertion');
+ if(query.get('openid.ns')!==ns||query.get('openid.mode')!=='id_res'||query.get('openid.op_endpoint')!==provider)callbackFail('ST_INPUT');
+ if(!validSteamId(steam)||identity!=='https://steamcommunity.com/openid/id/'+steam||query.get('openid.identity')!==identity)callbackFail('ST_IDENTITY');
+ if(query.get('openid.return_to')!==callback+'?state='+state)callbackFail('ST_RETURN');
+ if(!Number.isFinite(at)||Math.abs(Date.now()-at)>10*60000)callbackFail('ST_NONCE');
+ if(!query.get('openid.sig')||!['op_endpoint','claimed_id','identity','return_to','response_nonce','assoc_handle'].every(k=>signed.includes(k)))callbackFail('ST_SIGNED');
  const fields=new URLSearchParams();for(const [k,v] of query)if(k.startsWith('openid.'))fields.set(k,v);fields.set('openid.mode','check_authentication');
- const verified=await send(provider,{method:'POST',body:fields,redirect:'error',signal:AbortSignal.timeout(10000)});
- if(!verified.ok||!/^is_valid:true\r?$/m.test((await verified.text()).slice(0,4096)))throw Error('Steam verification failed');
+ let verified:Response,reply:string;
+ try{verified=await send(provider,{method:'POST',body:fields,redirect:'error',signal:AbortSignal.timeout(10000)});reply=verified.ok?(await verified.text()).slice(0,4096):'';}catch{callbackFail('ST_NETWORK');}
+ if(!verified.ok)throw new SteamCallbackError('ST_HTTP',verified.status);
+ if(!/^is_valid:true\r?$/m.test(reply))callbackFail('ST_SIGNATURE');
  await env.DB.batch([
   env.DB.prepare('INSERT INTO kp_steam_nonces VALUES(?,?)').bind(await kpHash(nonce),Date.now()+15*60000),
   env.DB.prepare('UPDATE kp_steam_pending SET steam=? WHERE hash=? AND steam IS NULL AND confirmed=0 AND expires>?').bind(steam,pending.hash,Date.now()),
  ]);
 }
 export async function steamCallback(request:Request,env:SteamEnv,send:typeof fetch=fetch){
- let ok=false;try{await verifyAssertion(request,env,send);ok=true;}catch{/* Never echo an assertion, URL, identity or authentication error. */}
- const message=ok?'Steamでの確認が終わりました。KESO PLAYに戻り、「接続を確認」からアカウントを確認してください。':'接続を確認できませんでした。KESO PLAYに戻って、Steam接続をやり直してください。';
- return new Response(`<!doctype html><html lang="ja"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Steam接続</title><body><h1>Steam接続</h1><p>${message}</p></body></html>`,{status:ok?200:400,headers:{...noStore,'Content-Type':'text/html; charset=utf-8','Content-Security-Policy':"default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'",'X-Content-Type-Options':'nosniff'}});
+ let ok=false,code:CallbackCode|null=null;
+ try{await verifyAssertion(request,env,send);ok=true;}catch(error){
+  code=error instanceof SteamCallbackError?error.code:'ST_INTERNAL';
+  // Never log request URLs, OpenID assertions, Steam IDs, sessions or exception messages.
+  console.warn(JSON.stringify({event:'steam_callback_failed',code,...(error instanceof SteamCallbackError&&error.status?{httpStatus:error.status}:{})}));
+ }
+ const message=ok?'Steamでの確認が終わりました。KESO PLAYに戻り、「接続を確認」からアカウントを確認してください。':callbackErrors[code!];
+ const diagnostic=code?`<p>確認コード：${code}</p>`:'';
+ return new Response(`<!doctype html><html lang="ja"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Steam接続</title><body><h1>Steam接続</h1><p>${message}</p>${diagnostic}</body></html>`,{status:ok?200:400,headers:{...noStore,'Content-Type':'text/html; charset=utf-8','Content-Security-Policy':"default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'",'X-Content-Type-Options':'nosniff'}});
 }
 export async function confirmSteamLink(env:SteamEnv,owner:SteamOwner,session:string,state:string){
  const p=await pendingFor(env,owner,session,state);if(!p?.steam||!validSteamId(p.steam))throw Error('Steamで確認してから接続してください。');

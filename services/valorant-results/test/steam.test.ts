@@ -294,3 +294,41 @@ test('browser-supplied store price or free flags cannot enable a free title',asy
   await assert.rejects(steamApi(new Request('https://worker.example/api/kp/steam/game',{method:'POST',body:JSON.stringify({app,active:true,is_free:false,price_overview:{final:9999},paidGamesOnly:false})}),f.env,owner,f.session),/無料/);assert.equal(earned(f),0);
  }finally{globalThis.fetch=original;}
 });
+
+test('Steam callback shows bounded safe reasons without leaking OpenID or account data',async()=>{
+ const f=await fixture(),warnings:string[]=[],warn=console.warn;console.warn=(...args:unknown[])=>warnings.push(args.join(' '));
+ try{
+  const cases:Array<{code:string;edit?:(q:URLSearchParams)=>void;send?:typeof fetch}>=[
+   {code:'ST_INPUT',edit:q=>q.set('openid.op_endpoint','https://evil.example')},
+   {code:'ST_CANCELLED',edit:q=>q.set('openid.mode','cancel')},
+   {code:'ST_IDENTITY',edit:q=>q.set('openid.identity','https://evil.example/'+steam)},
+   {code:'ST_RETURN',edit:q=>q.set('openid.return_to','https://evil.example')},
+   {code:'ST_NONCE',edit:q=>q.set('openid.response_nonce','2020-01-01T00:00:00Zold')},
+   {code:'ST_SIGNED',edit:q=>q.set('openid.signed','identity')},
+   {code:'ST_NETWORK',send:(async()=>{throw Error('private-key '+f.env.STEAM_WEB_API_KEY);}) as typeof fetch},
+   {code:'ST_HTTP',send:(async()=>new Response('sensitive upstream response',{status:403})) as typeof fetch},
+   {code:'ST_SIGNATURE',send:(async()=>new Response('is_valid:false\nsensitive upstream response')) as typeof fetch},
+  ];
+  for(const row of cases){
+   f.sql.exec('DELETE FROM kp_steam_limits');const link=await startSteamLink(f.env,owner,f.session),url=new URL((await assertion(f,link.state)).url);row.edit?.(url.searchParams);
+   const response=await steamCallback(new Request(url),f.env,row.send??yes),html=await response.text();assert.equal(response.status,400);assert.match(html,new RegExp('確認コード：'+row.code));
+   const logged=JSON.parse(warnings.at(-1)!);assert.equal(logged.code,row.code);assert.equal(logged.event,'steam_callback_failed');assert.deepEqual(Object.keys(logged).sort(),row.code==='ST_HTTP'?['code','event','httpStatus']:['code','event']);if(row.code==='ST_HTTP')assert.equal(logged.httpStatus,403);
+   for(const value of [link.state,f.session,steam,guild,user,f.env.STEAM_WEB_API_KEY!,'provider-signature','sensitive upstream response','https://evil.example']){assert(!html.includes(value));assert(!warnings.at(-1)!.includes(value));}
+   assert.equal(f.sql.prepare('SELECT steam FROM kp_steam_pending WHERE hash=?').get(await kpHash(link.state))!.steam,null);assert.equal(f.sql.prepare('SELECT count(*) AS n FROM kp_steam_accounts').get()!.n,0);
+  }
+ }finally{console.warn=warn;}
+});
+test('Steam callback distinguishes expired links, completed checks and revoked sessions',async()=>{
+ const f=await fixture();let calls=0;const send=(async(...args:Parameters<typeof fetch>)=>{calls++;return yes(...args);}) as typeof fetch;
+ let link=await startSteamLink(f.env,owner,f.session);f.sql.prepare('UPDATE kp_steam_pending SET expires=0').run();assert.match(await(await steamCallback(await assertion(f,link.state),f.env,send)).text(),/ST_EXPIRED/);assert.equal(calls,0);
+ link=await startSteamLink(f.env,owner,f.session);assert.equal((await steamCallback(await assertion(f,link.state),f.env,send)).status,200);assert.equal(calls,1);
+ assert.match(await(await steamCallback(await assertion(f,link.state),f.env,send)).text(),/ST_ALREADY/);assert.equal(calls,1);assert.equal(f.sql.prepare('SELECT count(*) AS n FROM kp_steam_accounts').get()!.n,0);
+ await confirmSteamLink(f.env,owner,f.session,link.state);assert.equal((await steamView(f.env,owner)).account!.steamId,steam);
+ link=await startSteamLink(f.env,owner,f.session);f.sql.prepare('DELETE FROM kp_sessions').run();assert.match(await(await steamCallback(await assertion(f,link.state),f.env,send)).text(),/ST_SESSION/);assert.equal(calls,1);
+});
+test('Steam callback masks unexpected database exceptions and rejects wrong callback origins',async()=>{
+ const f=await fixture(),link=await startSteamLink(f.env,owner,f.session),request=await assertion(f,link.state);
+ const url=new URL(request.url);url.hostname='evil.example';assert.match(await(await steamCallback(new Request(url),f.env,yes)).text(),/ST_ORIGIN/);
+ const broken={...f.env,DB:{...f.env.DB,prepare:()=>{throw Error('secret SQL '+f.session);}}} as unknown as SteamEnv;
+ const response=await steamCallback(request,broken,yes),html=await response.text();assert.equal(response.status,400);assert.match(html,/ST_INTERNAL/);assert(!html.includes(f.session));assert(!html.includes('secret SQL'));
+});
