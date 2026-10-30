@@ -58,7 +58,7 @@ async function verifyAssertion(request:Request,env:SteamEnv,send:typeof fetch){
  if(!query.get('openid.sig')||!['op_endpoint','claimed_id','identity','return_to','response_nonce','assoc_handle'].every(k=>signed.includes(k)))callbackFail('ST_SIGNED');
  const fields=new URLSearchParams();for(const [k,v] of query)if(k.startsWith('openid.'))fields.set(k,v);fields.set('openid.mode','check_authentication');
  let verified:Response,reply:string;
- try{verified=await send(provider,{method:'POST',body:fields,redirect:'error',signal:AbortSignal.timeout(10000)});reply=verified.ok?(await verified.text()).slice(0,4096):'';}catch{callbackFail('ST_NETWORK');}
+ try{verified=await send(provider,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'},body:fields,redirect:'manual',signal:AbortSignal.timeout(10000)});reply=verified.ok?(await verified.text()).slice(0,4096):'';}catch{callbackFail('ST_NETWORK');}
  if(!verified.ok)throw new SteamCallbackError('ST_HTTP',verified.status);
  if(!/^is_valid:true\r?$/m.test(reply))callbackFail('ST_SIGNATURE');
  await env.DB.batch([
