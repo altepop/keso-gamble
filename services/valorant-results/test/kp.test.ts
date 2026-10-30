@@ -63,15 +63,15 @@ test('ledger failure rolls back the credit and leaves a durable retry; recovery 
 });
 test('operations cannot double spend, reuse IDs with new inputs, set balances, or manufacture the roulette outcome',async()=>{
  const f=await fixture();seed(f.sql,one,1500);
- const responses=await Promise.allSettled(['trade-operation-one','trade-operation-two'].map(id=>operateKp(f.env,mapping,one,id,'trade',{symbol:'keso',side:'buy',quantity:1})));
- assert.equal(responses.filter(r=>r.status==='fulfilled').length,1);const state=await readKpState(f.env,mapping,one);assert.equal(state.cash,288);assert.equal(state.holdings.keso,1);
+ const responses=await Promise.allSettled(['trade-operation-one','trade-operation-two'].map(id=>operateKp(f.env,mapping,one,id,'trade',{symbol:'keso',side:'buy',quantity:1,pricingVersion:1,limit:Number.MAX_SAFE_INTEGER})));
+ assert.equal(responses.filter(r=>r.status==='fulfilled').length,1);const state=await readKpState(f.env,mapping,one);assert.equal(state.cash,286);assert.equal(state.holdings.keso,1);
  const row=f.sql.prepare('SELECT id FROM kp_operations').get()!;
- await operateKp(f.env,mapping,one,String(row.id),'trade',{symbol:'keso',side:'buy',quantity:1});assert.equal((await readKpState(f.env,mapping,one)).cash,288);
- await assert.rejects(operateKp(f.env,mapping,one,String(row.id),'trade',{symbol:'keso',side:'buy',quantity:2}),/同じ操作ID/);
+ await operateKp(f.env,mapping,one,String(row.id),'trade',{symbol:'keso',side:'buy',quantity:1,pricingVersion:1,limit:Number.MAX_SAFE_INTEGER});assert.equal((await readKpState(f.env,mapping,one)).cash,286);
+ await assert.rejects(operateKp(f.env,mapping,one,String(row.id),'trade',{symbol:'keso',side:'buy',quantity:2,pricingVersion:1,limit:Number.MAX_SAFE_INTEGER}),/同じ操作ID/);
  await assert.rejects(operateKp(f.env,mapping,one,'salary-operation-1','salary',{cash:100000}),/本番口座/);
  const played=await operateKp(f.env,mapping,one,'roulette-operation','spin',{type:'number',amount:100,choice:3,outcome:3,cash:999999});
  const result=played.result as {outcome:number;payout:number};assert.ok(Number.isInteger(result.outcome)&&result.outcome>=0&&result.outcome<=36);assert.equal(result.payout,result.outcome===3?3600:0);
- assert.equal((await readKpState(f.env,mapping,one)).cash,188+result.payout);
+ assert.equal((await readKpState(f.env,mapping,one)).cash,186+result.payout);
 });
 test('a duplicate active directive rolls back payment for all issuers and ownership cannot silently change',async()=>{
  const f=await fixture();seed(f.sql,one,20000);seed(f.sql,two,20000);
@@ -462,11 +462,11 @@ test('an unrated lottery prize of 10,000 KP or more is announced once in 稼ぎc
 test('community feed contains only committed guild trades; retries, rejection and rollback cannot add entries',async()=>{
  const f=await fixture();seed(f.sql,one,10000);seed(f.sql,two,10000);
  const names=new Map([[one,'One'],[two,'Two']]);
- const buy={symbol:'keso',side:'buy',quantity:1};
+ const buy={symbol:'keso',side:'buy',quantity:1,pricingVersion:1,limit:Number.MAX_SAFE_INTEGER};
  await operateKp(f.env,mapping,one,'feed-trade-operation-1','trade',buy);
  await operateKp(f.env,mapping,one,'feed-trade-operation-1','trade',buy);
  await operateKp(f.env,mapping,two,'feed-roulette-operation','spin',{type:'number',amount:100,choice:3});
- await assert.rejects(operateKp(f.env,mapping,two,'feed-rejected-operation','trade',{symbol:'keso',side:'buy',quantity:99999}));
+ await assert.rejects(operateKp(f.env,mapping,two,'feed-rejected-operation','trade',{symbol:'keso',side:'buy',quantity:99999,pricingVersion:1,limit:Number.MAX_SAFE_INTEGER}));
  const feed=await communityFeed(f.env,guild,names);assert.equal(feed.entries.length,2);
  const stock=feed.entries.find(e=>e.name==='One')!;assert.equal(stock.label,'株を購入');assert.match(stock.detail,/keso · 1株/);assert.ok(stock.amount>0);
  const roulette=feed.entries.find(e=>e.name==='Two')!;assert.equal(roulette.amount,100);assert.match(roulette.detail,/3番 →/);

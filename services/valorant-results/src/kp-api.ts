@@ -7,7 +7,7 @@ import skirmishQueues from '../skirmish-queues.json' with {type:'json'};
 import {SKIRMISH_POLICY} from './skirmish.ts';
 import modeRewards from '../mode-rewards.json' with {type:'json'};
 import {SPIKE_POLICY,SPIKE_ROSTER} from './spikerush-growth.ts';
-import {STOCK_INTERVAL,prepareStocks,stockView,stockBenefits,stockDiscount} from './stock-market.ts';
+import {STOCK_INTERVAL,prepareStocks,stockView,stockBenefits,stockDiscount,applyStockOrder,ensureStocks} from './stock-market.ts';
 import {kpCommands,KP_COMMAND_VERSION} from './kp-command.ts';
 import {voiceControl,voiceStatus} from './voice-api.ts';
 import {ensureVoiceLedger,voicePolicy} from './voice-rewards.ts';
@@ -20,7 +20,7 @@ import configuredPlayers from '../players.json' with { type: 'json' };
 import discord from '../discord-config.json' with { type: 'json' };
 import policy from '../kp-policy.json' with { type: 'json' };
 // @ts-expect-error The shared pure browser engine has no TypeScript declarations.
-import { trade, spin, spinNumbers, cryptoRouletteNumber, MARKET } from '../../../js/engine.js';
+import { spin, spinNumbers, cryptoRouletteNumber, MARKET } from '../../../js/engine.js';
 // @ts-expect-error The shared pure browser engine has no TypeScript declarations.
 import { hydrateRacing, placeRaceBet, useExchange, raceCard, raceOdds, raceResult } from '../../../js/racing.js';
 // @ts-expect-error Shared browser engine.
@@ -45,9 +45,10 @@ import { applyGift, ensureGift, giftPost } from './kp-gift.ts';
  * row bumps the wallet), 借KP, directives naming the member, and the 5-minute stock tick. The Activity polls this
  * every 15 seconds and fetches the full state only when it changes (or once a minute for time-based screens). */
 export async function kpPulse(env:KpEnv,guild:string,user:string,now=Date.now()){
- const row=await env.DB.prepare("SELECT w.version AS w,s.version AS s,(SELECT COUNT(*)||'-'||COALESCE(MAX(at),0)||'-'||SUM(status='active') FROM kp_directives WHERE guild=w.guild AND (issuer=w.user OR target=w.user)) AS d FROM kp_wallets w JOIN kp_state s ON s.guild=w.guild AND s.user=w.user WHERE w.guild=? AND w.user=?").bind(guild,user).first<{w:number;s:number;d:string}>();
+ await ensureStocks(env);
+ const row=await env.DB.prepare("SELECT w.version AS w,s.version AS s,(SELECT version FROM stock_markets WHERE guild=w.guild) AS m,(SELECT COUNT(*)||'-'||COALESCE(MAX(at),0)||'-'||SUM(status='active') FROM kp_directives WHERE guild=w.guild AND (issuer=w.user OR target=w.user)) AS d FROM kp_wallets w JOIN kp_state s ON s.guild=w.guild AND s.user=w.user WHERE w.guild=? AND w.user=?").bind(guild,user).first<{w:number;s:number;d:string;m:number|null}>();
  if(!row)throw Error('口座が見つかりません。');
- return `${row.w}.${row.s}.${row.d}.${await debtOf(env,guild,user)}.${Math.floor(now/STOCK_INTERVAL)}`;
+ return `${row.w}.${row.s}.${row.d}.${await debtOf(env,guild,user)}.${row.m??0}.${Math.floor(now/STOCK_INTERVAL)}`;
 }
 export async function readKpState(env:KpEnv,mapping:KpMapping,user:string){
  const market=await prepareStocks(env,mapping.guildId,user);
@@ -147,7 +148,7 @@ export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:strin
   const settles=['horse-sell','roast-level','bj-hit','bj-stand','mines-pick','mines-cashout','vp-draw'].includes(action)||(action==='trade'&&args.side==='sell');
   if(!settles&&await debtOf(env,mapping.guildId,user)>0)throw Error(DEBT_BLOCKED);
   if(ownerRound){const round=privateCasinoRound(state,args);action=round.action;args=round.args;result=round.result;}
-  else if(action==='trade'){result=trade(state,args.symbol,args.side,args.quantity);stockTrade={symbol:args.symbol,side:args.side,quantity:args.quantity,price:state.prices[String(args.symbol)]};}
+  else if(action==='trade'){const order=applyStockOrder(state,args);result=order.result;stockTrade=order.stockTrade;}
   else if(action==='spin')result=args.type==='numbers'?spinNumbers(state,args.bets,cryptoRouletteNumber()):spin(state,args.type,args.amount,args.choice??0,cryptoRouletteNumber());
   else if(action==='directive'){
    const costs:Record<string,number>={competitive:8000,unrated:2500,solo_competitive:50000,solo_death_unrated:60000},task=String(args.task),target=String(args.target),base=Object.hasOwn(costs,task)?costs[task]:0;
