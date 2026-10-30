@@ -52,3 +52,9 @@ Steam Web APIのGetPlayerAchievements / GetSchemaForGame / GetGlobalAchievementP
 ローカルでは公式OpenID応答とSteam Web APIを模擬し、実際の支給コード＋SQLiteの口座・台帳で検証する。実Steamログイン・実APIキーによる取得・D1実機・Discordスマホからの外部ブラウザー往復は本番設定後の確認事項。模擬試験の成功を本番の稼働済みとは扱わない。
 
 参考: [Steam OpenID](https://steamcommunity.com/dev)、[User Authentication and Ownership](https://partner.steamgames.com/doc/features/auth)、[ISteamUserStats](https://partner.steamgames.com/doc/webapi/ISteamUserStats)、[IPlayerService](https://partner.steamgames.com/doc/webapi/IPlayerService)。
+
+## Steamから戻った画面で確認に失敗した場合
+
+callbackは期限切れ・KPセッション切断・返答形式・署名検証拒否・Steamへの通信失敗を区別した固定の確認コードを表示する。`ST_EXPIRED`ならKESO PLAYで新しい接続を開始し、10分以内にSteamで承認する。`ST_ALREADY`なら同じ戻りURLを再読み込みせず、KESO PLAYの「接続を確認」へ戻る。再読み込みでSteamの署名を再使用して接続を確定することはしない。`ST_NETWORK` / `ST_HTTP` / `ST_SIGNATURE`は新しく接続をやり直しても続く場合に確認コードを管理者へ伝える。
+
+Workerのログは `steam_callback_failed` と固定コード（HTTP拒否時はステータス番号）だけを記録する。コールバックURL、state、nonce、署名、Steam ID、KPセッション、APIキー、例外本文・Steamの応答本文はアプリの診断ログ・画面へ出さない。調査のためにコールバックURLや認証情報をチャットへ貼る必要はない。確認コードの追加は原因の確定・Steam側との実通信の成功を意味しない。
