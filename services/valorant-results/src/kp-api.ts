@@ -47,9 +47,9 @@ import { applyGift, ensureGift, giftPost } from './kp-gift.ts';
  * every 15 seconds and fetches the full state only when it changes (or once a minute for time-based screens). */
 export async function kpPulse(env:KpEnv,guild:string,user:string,now=Date.now()){
  await ensureStocks(env);
- const row=await env.DB.prepare("SELECT w.version AS w,s.version AS s,(SELECT version FROM stock_markets WHERE guild=w.guild) AS m,(SELECT COUNT(*)||'-'||COALESCE(MAX(at),0)||'-'||SUM(status='active') FROM kp_directives WHERE guild=w.guild AND (issuer=w.user OR target=w.user)) AS d FROM kp_wallets w JOIN kp_state s ON s.guild=w.guild AND s.user=w.user WHERE w.guild=? AND w.user=?").bind(guild,user).first<{w:number;s:number;d:string;m:number|null}>();
+ const row=await env.DB.prepare("SELECT w.version AS w,s.version AS s,(SELECT version FROM stock_markets WHERE guild=w.guild) AS m,(SELECT amount FROM kp_debts WHERE guild=w.guild AND user=w.user) AS debt,(SELECT COUNT(*)||'-'||COALESCE(MAX(at),0)||'-'||SUM(status='active') FROM kp_directives WHERE guild=w.guild AND (issuer=w.user OR target=w.user)) AS d FROM kp_wallets w JOIN kp_state s ON s.guild=w.guild AND s.user=w.user WHERE w.guild=? AND w.user=?").bind(guild,user).first<{w:number;s:number;d:string;m:number|null;debt:number|null}>();
  if(!row)throw Error('口座が見つかりません。');
- return `${row.w}.${row.s}.${row.d}.${await debtOf(env,guild,user)}.${row.m??0}.${Math.floor(now/STOCK_INTERVAL)}`;
+ return `${row.w}.${row.s}.${row.d}.${row.debt??0}.${row.m??0}.${Math.floor(now/STOCK_INTERVAL)}`;
 }
 export async function readKpState(env:KpEnv,mapping:KpMapping,user:string){
  const market=await prepareStocks(env,mapping.guildId,user);
