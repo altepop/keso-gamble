@@ -1,4 +1,4 @@
-import { escapeHTML } from './progression-views.js?v=web-164dd15e39a98feb';
+import { escapeHTML } from './progression-views.js?v=web-efc83c89afcf9cd1';
 // 資産 → メンバーのKP推移: everyone's KP (KP − 借KP) at the end of each day, from /api/kp/trend. The chart draws one
 // line per member (loaded when a period is chosen, like システムの状態); the list below sorts by person (今のKP・期間の増減・名前) and picks whose line stands out.
 // Colors follow the member (fixed order by account), never their rank, so re-sorting never repaints a line.

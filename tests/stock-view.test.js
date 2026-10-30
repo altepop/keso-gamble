@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {stockPanel,stockPrice,stockCandles} from '../js/stock-view.js';
+import {stockPanel,stockPrice,stockCandles,privateStockOperator} from '../js/stock-view.js';
 import {directivesView} from '../js/progression-views.js';
 import {svgCandles} from '../js/charts.js';
 import {createInitialState} from '../js/engine.js';
@@ -20,3 +20,14 @@ test('the common-market chart uses stored quote timestamps and prices, without i
 });
 
 test('the chart renders the first one or two real quotes without reading nonexistent demo dates',()=>{for(const size of [1,2]){const data=stockCandles({ticks:Array.from({length:size},(_,i)=>({at:i*300000,prices:{keso:1200+i}}))},'keso');const svg=svgCandles(data);assert.doesNotMatch(svg,/undefined|NaN/);}});
+
+test('owner stock operator offers fixed symbols, direction and magnitude without unsafe HTML',()=>{
+ const html=privateStockOperator([{id:'keso',ticker:'KESO',name:'KESOホールディングス'},{id:'evil',ticker:'<script>',name:'<img src=x>'}]);
+ assert.match(html,/裏モード：株価オペレーター/);
+ assert.match(html,/data-action="stock-shock"/);
+ assert.match(html,/option value="10"/);
+ assert.match(html,/option value="25" selected/);
+ assert.match(html,/option value="50"/);
+ assert.match(html,/value="down"/);
+ assert.doesNotMatch(html,/<script>|<img/);
+});

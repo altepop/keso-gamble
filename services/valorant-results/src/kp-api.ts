@@ -8,6 +8,7 @@ import {SKIRMISH_POLICY} from './skirmish.ts';
 import modeRewards from '../mode-rewards.json' with {type:'json'};
 import {SPIKE_POLICY,SPIKE_ROSTER} from './spikerush-growth.ts';
 import {STOCK_INTERVAL,prepareStocks,stockView,stockBenefits,stockDiscount,applyStockOrder,ensureStocks} from './stock-market.ts';
+import {applyStockShock} from './stock-admin.ts';
 import {kpCommands,KP_COMMAND_VERSION} from './kp-command.ts';
 import {voiceControl,voiceStatus} from './voice-api.ts';
 import {ensureVoiceLedger,voicePolicy} from './voice-rewards.ts';
@@ -132,6 +133,12 @@ export async function previewMlBet(env:KpEnv,mapping:KpMapping,user:string,args:
 }
 export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:string,action:string,args:Record<string,unknown>){
  if(!/^[a-zA-Z0-9-]{16,80}$/.test(id))throw Error('操作IDが不正です。');
+ // Owner-only stock manipulation is a market event, not a wallet transaction.
+ // Keep the ordinary operation ID, allowing retry after lost responses without doubling the shock.
+ if(action==='stock-shock'){
+  if(!await privateCasinoAllowed(env,mapping.guildId,user))throw Error('この操作は利用できません。');
+  return {result:await applyStockShock(env,mapping.guildId,user,id,args)};
+ }
  const sourceAction=action;
  const ownerRound=action==='private-casino';
  if(ownerRound&&!await privateCasinoAllowed(env,mapping.guildId,user))throw Error('この操作は利用できません。');
