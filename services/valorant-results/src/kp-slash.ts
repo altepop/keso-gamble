@@ -13,7 +13,7 @@ import {nameGiftHorse,decideEntries} from './racing-horses.ts';
 import {crownFor} from './racing-crowns.ts';
 import {DEBT_INTEREST_TEXT,DEBT_MAX,debtOf,ensureDebt} from './kp-debt.ts';
 // @ts-expect-error Shared browser engine.
-import {mlCard,mlOdds,mlOpen,mlStart} from '../../../js/mleague.js';
+import {mlCard,mlOdds,mlOpen,mlStart,mlCloseAt} from '../../../js/mleague.js';
 // @ts-expect-error Shared browser engine.
 import {openRaceStart,raceCard,raceOdds,placeSlots,payoutFor} from '../../../js/racing.js';
 interface Slash {id:string;guild_id?:string;member?:{user?:{id:string}};data?:{name?:string;options?:Array<{name:string;type?:number;options?:unknown[];value?:unknown}>}}
@@ -101,10 +101,10 @@ async function mleagueView(env:KpEnv,now:number){
   const games=fixtures.filter(f=>f.table===table).sort((a,b)=>a.game-b.game);
   if(!games[0].confirmed){lines.push(`\n**${table}卓**　公式の対戦カードを確認中（確認後に受付開始）`);continue;}
   lines.push(`\n**${table}卓**　${games.map(g=>`第${g.game}試合 ${all.has(g.id)?'終了':closed.has(g.id)&&now>=closed.get(g.id)!.at?'締切（開始報告）':mlOpen(d,g,now,all)?'受付中':now<mlStart(g)-19*3600000?'当日0時から':'締切'}`).join('／')}`);
-  for(const g of games)if(lineups.has(g.id))lines.push(`第${g.game}試合 出場：${lineups.get(g.id)!.map(clean).join('・')}`);
+  for(const g of games)if(lineups.has(g.id)){lines.push(`第${g.game}試合 出場：${lineups.get(g.id)!.map(clean).join('・')}`);if(g.game===2)lines.push(`第2試合の予想締切：${new Date(Math.min(mlCloseAt(g),closed.get(g.id)?.at??Infinity)).toLocaleTimeString('ja-JP',{timeZone:'Asia/Tokyo',hour:'2-digit',minute:'2-digit'})}`);}
   for(const p of mlCard(d,games[0])){const o=mlOdds(p,stats);lines.push(`${p.no}. ${clean(p.name)}（${clean(p.teamName)}）ラス ${(o.last/10).toFixed(1)}倍`);}
  }
- lines.push('\n買い方：/mbet → matchで試合 → playerで選手名・チーム・ラス倍率を確認 → amountに掛け金（例500）→ 確認画面で「購入する」。賭け方はラス（4位）予想のみ。','第1試合は19:00、第2試合は第1試合の結果が出るまで。始まったら /mclose で締め切り（開始後の予想は返金）。出なかった選手は返金。');
+ lines.push('\n買い方：/mbet → matchで試合 → playerで選手名・チーム・ラス倍率を確認 → amountに掛け金（例500）→ 確認画面で「購入する」。賭け方はラス（4位）予想のみ。','第1試合は19:00締切や。第2試合は選手確定を検知してから15分後やで。始まったら /mclose で締め切り（開始後の予想は返金）。出なかった選手は返金。');
  return lines.join('\n');
 }
 /** A user option given as a mention (<@id>, <@!id>) or a bare ID. */

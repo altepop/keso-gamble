@@ -1,7 +1,7 @@
 // M.LEAGUE predictions: name the player who finishes last (ラス) in an official game.
 // Pure logic with no DOM or clock reads, shared by the browser and the Worker. Results come only from
 // the official site (services/valorant-results/src/mleague.ts); nothing here guesses a result.
-import {WEEKLY_LIMIT,MIN_BET,BET_STEP,oddsFromProbability,payoutFor,weekStart} from './racing.js?v=web-fbdbe83640a6b754';
+import {WEEKLY_LIMIT,MIN_BET,BET_STEP,oddsFromProbability,payoutFor,weekStart} from './racing.js?v=web-dbfe61df043dd3df';
 
 export const ML_TYPES={top:{label:'トップ'},last:{label:'ラス'}};
 /** Only last place is sold (per the owner); 'top' stays readable so bets bought earlier still settle. */
@@ -15,15 +15,17 @@ const validInt=(v,min=0)=>Number.isSafeInteger(v)&&v>=min;
 export const mlStart=fixture=>at(fixture.date,ML_START);
 /** The other game of the same table on the same day. */
 export const mlPartner=(data,fixture)=>data.fixtures.find(f=>f.date===fixture.date&&f.table===fixture.table&&f.game!==fixture.game);
-/** Game 1 closes at 19:00. Game 2 closes when game 1's official result is in (no fixed time, per the
- * owner), and in any case when the day ends, so a result that never arrives cannot keep it open until
- * the next morning. Betting opens at midnight on the match day. */
+/** Game 2's immutable first lineup-confirmation time is stored by the server. */
+export const ML_SECOND_WINDOW=15*60000;
+export function mlCloseAt(fixture){
+ if(fixture.game===1)return mlStart(fixture);
+ const day=at(fixture.date,'00:00'),end=day+86400000;
+ return Number.isSafeInteger(fixture.lineupConfirmedAt)&&fixture.lineupConfirmedAt>=day?Math.min(end,fixture.lineupConfirmedAt+ML_SECOND_WINDOW):end;
+}
+/** Game 1 closes at 19:00. Game 2 closes 15 minutes after its lineup is first confirmed,
+ * or at midnight as the existing safety cutoff. An actual result always closes that game. */
 export function mlOpen(data,fixture,now,results){
- const start=mlStart(fixture);
- if(now<at(fixture.date,'00:00'))return false;
- if(fixture.game===1)return now<start;
- const first=mlPartner(data,fixture);
- return now<at(fixture.date,'00:00')+86400000&&!(first&&results.has(first.id));
+ return now>=at(fixture.date,'00:00')&&now<mlCloseAt(fixture)&&!results.has(fixture.id);
 }
 /** The 16 players who may sit at this table, numbered team by team. */
 export function mlCard(data,fixture){

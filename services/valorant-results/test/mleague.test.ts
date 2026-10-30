@@ -5,8 +5,8 @@ import {URL as NodeURL} from 'node:url';
 import {readFileSync,readdirSync} from 'node:fs';
 import {initializeKp,syncKpAccounts} from '../src/kp.ts';
 import type {KpMapping} from '../src/kp.ts';
-import {operateKp,readKpState} from '../src/kp-api.ts';
-import {ML_DATA,KINMA_FEED,parseKinmaLineups,pollMlLineups,mlLineups,parseOfficialResults,parseOfficialCards,storeCards,mlData,refreshMlCards,matchFixture,pollMlResults,settleMl,queueMlPosts,mlResults} from '../src/mleague.ts';
+import {operateKp,readKpState,previewMlBet} from '../src/kp-api.ts';
+import {ML_DATA,KINMA_FEED,mlActivityView,parseKinmaLineups,pollMlLineups,mlLineups,parseOfficialResults,parseOfficialCards,storeCards,mlData,refreshMlCards,matchFixture,pollMlResults,settleMl,queueMlPosts,mlResults} from '../src/mleague.ts';
 import type {PostEnv} from '../src/racing-posts.ts';
 import {runKpCommand,mlDay,mbetChoices,mbetDecide} from '../src/kp-slash.ts';
 // @ts-expect-error Shared browser engine.
@@ -104,7 +104,7 @@ test('a prediction is bought through the wallet, settled from the official order
  await operateKp(f.env,mapping,one,op(),'ml-bet',{match:game2.id,player:1,type:'last',amount:100});
  t.mock.timers.setTime(jst('2026-10-27T21:10:00'));
  await pollMlResults(f.env,Date.now(),(async()=>new Response(page)) as unknown as typeof fetch);
- await assert.rejects(operateKp(f.env,mapping,one,op(),'ml-bet',{match:game2.id,player:1,type:'last',amount:100}),/締め切りました/,'game 1 has a result');
+ assert.equal((await previewMlBet(f.env,mapping,one,{match:game2.id,player:1,type:'last',amount:100})).bet.amount,100,'game 1 result no longer closes game 2');
  assert.equal(await settleMl(f.env,mapping),3);assert.equal(await settleMl(f.env,mapping),0);
  assert.equal(f.balance(one),99000-100+Math.floor(1000*won.result.bet.odds/10));
  assert.equal(f.balance(two),99200+300,'the benched player is refunded; the wrong last loses');
@@ -205,10 +205,12 @@ test('/mbet narrows confirmed lineups and removes manual/automatic closures and 
  assert.deepEqual((await mbetChoices(f.env,pickInput(game2.id))).map(c=>c.value).sort(),[...order].sort());
  assert.ok((await mbetChoices(f.env,pickInput(game2.id))).every(c=>c.name.includes('出場確定')));
  t.mock.timers.tick(3600000);assert.deepEqual(await mbetChoices(f.env,pickInput(game1.id)),[{name:'ℹ️ この試合は締め切りました。match で別の試合を選んでください',value:'none'}],'game1 closes at19:00');
- assert.equal((await mbetChoices(f.env,pickInput(game2.id))).length,4,'game2 still follows the existing result-based window');
+ assert.match((await mbetChoices(f.env,pickInput(game2.id)))[0].name,/締め切りました/,'the 18:00 lineup window has elapsed');
+ f.sql.prepare('UPDATE ml_lineups SET at=? WHERE match=?').run(Date.now(),game2.id);assert.equal((await mbetChoices(f.env,pickInput(game2.id))).length,4);
  f.sql.prepare('INSERT INTO ml_closed VALUES(?,?,?,?)').run(game2.id,Date.now(),one,Date.now());assert.match((await mbetChoices(f.env,pickInput(game2.id)))[0].name,/締め切りました/);
  f.sql.prepare('DELETE FROM ml_closed').run();f.sql.prepare('INSERT INTO ml_results VALUES(?,?,?,?)').run(game1.id,JSON.stringify(order),JSON.stringify([50,0,-10,-40]),Date.now());
- assert.match((await mbetChoices(f.env,pickInput(game2.id)))[0].name,/締め切りました/,'game1 result closes game2');
+ assert.equal((await mbetChoices(f.env,pickInput(game2.id))).length,4,'game1 result does not close game2');
+ t.mock.timers.tick(15*60000);assert.match((await mbetChoices(f.env,pickInput(game2.id)))[0].name,/締め切りました/);
  assert.ok(!(await mbetChoices(f.env,pickInput(null,'match'))).some(c=>c.value===game1.id||c.value===game2.id));
 });
 test('/mbet named selections follow the official corrected teams, settle once and show team and gross payout',async t=>{
@@ -347,4 +349,31 @@ test('Activity の Mリーグ画面：今日の試合の状態・選手・倍率
  await pollMlResults(f.env,Date.now(),(async()=>new Response(page)) as unknown as typeof fetch);
  view=(await readKpState(f.env,mapping,one)).mleague;
  assert.deepEqual(view.fixtures.find((x:{id:string})=>x.id===game1.id).result.names,order);
+});
+
+test('第2試合は出場確定の検知から15分ちょうどでActivity・API・/mbetを締め切る',async t=>{
+ const at=jst('2026-10-27T21:00:00');t.mock.timers.enable({apis:['Date'],now:at});const f=await fixture();await storeCards(f.env,parseOfficialCards(page,2026),at);
+ f.sql.prepare('INSERT INTO ml_lineups VALUES(?,?,?)').run(game2.id,JSON.stringify(order),at);
+ f.sql.prepare('INSERT INTO ml_results VALUES(?,?,?,?)').run(game1.id,JSON.stringify(order),JSON.stringify([50,0,-10,-40]),at);
+ const args={match:game2.id,player:order[0],type:'last',amount:100};
+ t.mock.timers.setTime(at+15*60000-1);assert.equal((await mlActivityView(f.env)).fixtures.find(x=>x.id===game2.id)!.status,'open');
+ await operateKp(f.env,mapping,one,op(),'ml-bet',args);const paid=f.balance(one);
+ const view=(await mlActivityView(f.env)).fixtures.find(x=>x.id===game2.id)!;assert.equal(view.closeAt,at+15*60000);assert.equal(view.lineupConfirmedAt,at);
+ t.mock.timers.setTime(at+15*60000);assert.equal((await mlActivityView(f.env)).fixtures.find(x=>x.id===game2.id)!.status,'closed');assert.match((await mbetChoices(f.env,pickInput(game2.id)))[0].name,/締め切りました/);
+ await assert.rejects(previewMlBet(f.env,mapping,one,args),/締め切りました/);await assert.rejects(operateKp(f.env,mapping,one,op(),'ml-bet',args),/締め切りました/);assert.equal(f.balance(one),paid);
+});
+test('15分の締切前に作った/mbet確認ボタンも、締切後は課金しない',async t=>{
+ const at=jst('2026-10-27T21:00:00');t.mock.timers.enable({apis:['Date'],now:at});const f=await fixture();await storeCards(f.env,parseOfficialCards(page,2026),at);f.sql.prepare('INSERT INTO ml_lineups VALUES(?,?,?)').run(game2.id,JSON.stringify(order),at);
+ t.mock.timers.setTime(at+14*60000+30000);const id=String((BigInt(Date.now())-1420070400000n)<<22n|33n),out:{components?:unknown[]}={};
+ const preview=await runKpCommand(f.env,{id,guild_id:guild,member:{user:{id:one}},data:{name:'mbet',options:[{name:'match',value:game2.id},{name:'player',value:order[0]},{name:'amount',value:500}]}},mapping,out);assert.match(preview,/購入する/);assert(out.components?.length);
+ const balance=f.balance(one);t.mock.timers.setTime(at+15*60000);const result=await mbetDecide(f.env,{id:String(BigInt(id)+1n),guild_id:guild,member:{user:{id:one}},data:{custom_id:'mbet:buy:'+id}},mapping);assert.match(result!.content,/締め切りました/);assert.equal(f.balance(one),balance);
+});
+test('第2試合の締切は卓ごとに独立し、同じ選手発表の再取得で延長しない',async t=>{
+ const at=jst('2026-10-27T21:00:00');t.mock.timers.enable({apis:['Date'],now:at});const f=await fixture();await storeCards(f.env,parseOfficialCards(page,2026),at);
+ const feed=`<rss><channel><item><title>【Mリーグ2026-27 レギュラーシーズン】10月27日 第2試合（麻雀ch）【${order.join('・')}】テキスト速報</title><pubDate>Tue, 27 Oct 2026 12:00:00 +0000</pubDate></item></channel></rss>`;
+ const request=(async()=>new Response(feed)) as typeof fetch;assert.equal(await pollMlLineups(f.env,mapping,at,request),1);
+ assert.match(f.posts().find(p=>p.includes('出場決定'))!,/21:15締切/);
+ const another=ML_DATA.fixtures.find(x=>x.date===game2.date&&x.table===2&&x.game===2)!;f.sql.prepare('INSERT INTO ml_lineups VALUES(?,?,?)').run(another.id,JSON.stringify([]),at+10*60000);
+ await pollMlLineups(f.env,mapping,at+10*60000,request);assert.equal((await mlData(f.env)).fixtures.find(x=>x.id===game2.id)!.lineupConfirmedAt,at);
+ const view=await mlActivityView(f.env,at+15*60000);assert.equal(view.fixtures.find(x=>x.id===game2.id)!.status,'closed');assert.equal(view.fixtures.find(x=>x.id===another.id)!.status,'open');assert.equal(view.fixtures.find(x=>x.id===another.id)!.closeAt,at+25*60000);
 });

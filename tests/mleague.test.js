@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { mlOpen, mlCard, mlOdds, mlPartner, placeMlBet, settleMlBets, hydrateMleague, ML_PRIOR_GAMES } from '../js/mleague.js';
+import { mlOpen, mlCard, mlOdds, mlPartner, placeMlBet, settleMlBets, hydrateMleague, ML_PRIOR_GAMES, mlCloseAt } from '../js/mleague.js';
 import { hydrateRacing, WEEKLY_LIMIT } from '../js/racing.js';
 
 const data=JSON.parse(readFileSync(new URL('../services/valorant-results/mleague-2026-27.json',import.meta.url),'utf8'));
@@ -16,14 +16,14 @@ test('the data covers ten teams of four, and every fixture seats four known team
  assert.equal(mlCard(data,game1).length,16);
 });
 
-test('game 1 closes at 19:00; game 2 when game 1\'s result is in, or at midnight', () => {
+test('game 1 closes at 19:00; game 2 closes 15 minutes after its lineup confirmation', () => {
  const none=new Map();
  assert.equal(mlOpen(data,game1,jst('2026-10-26T23:59:00'),none),false,'opens at midnight on the match day');
  assert.equal(mlOpen(data,game1,jst('2026-10-27T00:00:00'),none),true);
  assert.equal(mlOpen(data,game1,jst('2026-10-27T18:59:59'),none),true);
  assert.equal(mlOpen(data,game1,jst('2026-10-27T19:00:00'),none),false);
  assert.equal(mlOpen(data,game2,jst('2026-10-27T20:30:00'),none),true,'bet on game 2 while watching game 1');
- assert.equal(mlOpen(data,game2,jst('2026-10-27T20:30:00'),new Map([[game1.id,{names:[]}]])),false,'game 1 is over');
+ assert.equal(mlOpen(data,game2,jst('2026-10-27T20:30:00'),new Map([[game1.id,{names:[]}]])),true,'game 1 result does not close game 2');
  assert.equal(mlOpen(data,game2,jst('2026-10-27T22:30:00'),none),true,'no fixed cutoff while game 1 runs long');
  assert.equal(mlOpen(data,game2,jst('2026-10-28T00:00:00'),none),false,'a result that never arrives cannot keep it open overnight');
 });
@@ -100,4 +100,14 @@ test('61件買っても、保存データを読み直したときに未精算の
  const kept=hydrateMleague(few).mlBets;
  assert.equal(kept.length,60);assert.equal(kept.filter(b=>b.status==='pending').length,5);
  assert.deepEqual(kept.filter(b=>b.status==='lost').map(b=>b.id),Array.from({length:55},(_,i)=>'old-'+i),'the newest settled ones');
+});
+
+test('second-game cutoff is exact and independent of other tables and first-game results',()=>{
+ const confirmed=jst('2026-10-27T21:00:00'),second={...game2,lineupConfirmedAt:confirmed};
+ assert.equal(mlCloseAt(second),confirmed+15*60000);
+ assert.equal(mlOpen(data,second,confirmed+15*60000-1,new Map([[game1.id,{}]])),true);
+ assert.equal(mlOpen(data,second,confirmed+15*60000,new Map()),false);
+ assert.equal(mlOpen(data,second,confirmed+1,new Map([[game2.id,{}]])),false);
+ assert.equal(mlCloseAt({...game1,lineupConfirmedAt:confirmed}),jst('2026-10-27T19:00:00'));
+ assert.equal(mlCloseAt({...game2,lineupConfirmedAt:jst('2026-10-27T23:55:00')}),jst('2026-10-28T00:00:00'),'existing midnight safety cutoff');
 });
