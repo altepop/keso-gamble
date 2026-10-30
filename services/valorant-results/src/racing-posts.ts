@@ -51,12 +51,17 @@ export function resultPost(card:Card,seed:string,bets:Array<Bet&{user:string}>,l
   ...order.slice(0,3).flatMap((n,i)=>{const h=card.horses[n-1];return [`${['🥇','🥈','🥉'][i]} ${i+1}着 ${n}番 **${clean(h.name)}**${i===0?`　1着当て ${odd(odds.win[n])}`:''}`,
    ...h.ownerName?[`-# 馬主 ${clean(h.ownerName)}・賞金 ${kp(prizeFor(card,i))}`]:[]];})];
  const byUser=new Map<string,Array<Bet>>();for(const b of bets)byUser.set(b.user,[...(byUser.get(b.user)??[]),b]);
- if(byUser.size)lines.push('','**馬券**');
+ if(byUser.size)lines.push('','**馬券（同レースの全購入分を合算した収支）**');
  for(const [user,list] of byUser){
   const who=`<@${user}>${titleOf(user)?`「${clean(titleOf(user)!)}」`:''}`;
-  const paid=list.reduce((n,b)=>n+b.payout,0),spent=list.reduce((n,b)=>n+b.amount,0),hits=list.filter(b=>b.status==='won');
-  if(hits.length)lines.push(`💰 ${who}　+${kp(paid)}`,`-# ${hits.map(b=>`${b.horse}番の${BET_TYPES[b.type].label}（${odd(b.odds)}）`).join('・')} 的中`,`🗯️ ${raceBanter(paid>spent?'win':'partial',levelOf(user),user+':'+card.id)}`);
-  else lines.push(`💸 ${who}　−${kp(spent)}`,`-# ${list.map(b=>`${b.horse}番の${BET_TYPES[b.type].label}`).join('・')} 外れ`,`🗯️ ${raceBanter('loss',levelOf(user),user+':'+card.id)}`);
+  const paid=list.reduce((n,b)=>n+b.payout,0),spent=list.reduce((n,b)=>n+b.amount,0);
+  const profit=paid-spent,hits=list.filter(b=>b.status==='won');
+  const balance=profit>0?`+${kp(profit)}`:profit<0?`−${kp(-profit)}`:'±0 KP';
+  const icon=profit>0?'💰':profit<0?'💸':'⚖️';
+  // Show losing tickets as well as winners; a winning place bet is not a profitable race by itself.
+  const tickets=list.map(b=>`${b.horse}番${BET_TYPES[b.type].label}${b.status==='won'?'○':'×'}`).join('・');
+  const tone=hits.length?(profit>0?'win':'partial'):'loss';
+  lines.push(`${icon} ${who}　収支 ${balance}（購入 ${kp(spent)} / 払戻 ${kp(paid)}）`,`-# 内訳 ${tickets}`,`🗯️ ${raceBanter(tone,levelOf(user),user+':'+card.id)}`);
  }
  lines.push('',`💬 ${raceCatchphrase('result',String(card.id))}`,raceAside('result',String(card.id)));
  lines.push(`-# シード値: \`${seed}\`（締切前のハッシュと一致することを画面で確認できます）`);
