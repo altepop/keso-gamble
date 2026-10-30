@@ -2,7 +2,7 @@
 // random number comes from the caller (`rand(n)`: an integer 0..n-1, the server's crypto draw for live wallets), and a
 // game that is not finished keeps nothing secret in the state, so the saved state never reveals what comes next.
 // A finished round always returns {done:{game,…,net}} (net = what the round did to the wallet).
-import { CASINO_MIN, CASINO_MAX, validCard } from './casino.js?v=web-7384c361c5d7c279';
+import { CASINO_MIN, CASINO_MAX, validCard } from './casino.js?v=web-48b3831496d98224';
 const validInt=(v,min=0)=>Number.isSafeInteger(v)&&v>=min;
 function stake(state,amount){
  if(!validInt(amount,CASINO_MIN)||amount>CASINO_MAX)throw Error(`賭け金は${CASINO_MIN}〜${CASINO_MAX.toLocaleString('ja-JP')} KPの整数です。`);

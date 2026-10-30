@@ -40,7 +40,7 @@ export function steamAmount(c:SteamConfig,percent:number){if(!Number.isFinite(pe
 export function validSteamId(id:unknown):id is string{return typeof id==='string'&&/^\d{17}$/.test(id)&&BigInt(id)>=76561197960265728n&&BigInt(id)<=76561202255233023n;}
 export class SteamReadError extends Error {code:string;delay:number;constructor(code:string,delay=15*60000){super(code);this.code=code;this.delay=delay;}}
 async function steamFetchJson(url:URL,send:typeof fetch,httpError='private_or_unavailable'){
- let r:Response;try{r=await send(url.toString(),{redirect:'error',signal:AbortSignal.timeout(10000)});}catch{throw new SteamReadError('network');}
+ let r:Response;try{r=await send(url.toString(),{redirect:'manual',signal:AbortSignal.timeout(10000)});}catch{throw new SteamReadError('network');}
  if(r.status===429)throw new SteamReadError('rate_limited',60*60000);if(!r.ok)throw new SteamReadError(httpError);
  const reader=r.body?.getReader();if(!reader)throw new SteamReadError('invalid_response');const chunks:Uint8Array[]=[];let size=0;
  try{while(true){const n=await reader.read();if(n.done)break;size+=n.value.length;if(size>2*1024*1024){await reader.cancel();throw Error('large');}chunks.push(n.value);}const bytes=new Uint8Array(size);let at=0;for(const b of chunks){bytes.set(b,at);at+=b.length;}return JSON.parse(new TextDecoder('utf-8',{fatal:true,ignoreBOM:true}).decode(bytes));}catch{throw new SteamReadError('invalid_response');}

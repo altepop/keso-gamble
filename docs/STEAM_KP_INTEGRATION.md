@@ -58,3 +58,9 @@ Steam Web APIのGetPlayerAchievements / GetSchemaForGame / GetGlobalAchievementP
 callbackは期限切れ・KPセッション切断・返答形式・署名検証拒否・Steamへの通信失敗を区別した固定の確認コードを表示する。`ST_EXPIRED`ならKESO PLAYで新しい接続を開始し、10分以内にSteamで承認する。`ST_ALREADY`なら同じ戻りURLを再読み込みせず、KESO PLAYの「接続を確認」へ戻る。再読み込みでSteamの署名を再使用して接続を確定することはしない。`ST_NETWORK` / `ST_HTTP` / `ST_SIGNATURE`は新しく接続をやり直しても続く場合に確認コードを管理者へ伝える。
 
 Workerのログは `steam_callback_failed` と固定コード（HTTP拒否時はステータス番号）だけを記録する。コールバックURL、state、nonce、署名、Steam ID、KPセッション、APIキー、例外本文・Steamの応答本文はアプリの診断ログ・画面へ出さない。調査のためにコールバックURLや認証情報をチャットへ貼る必要はない。確認コードの追加は原因の確定・Steam側との実通信の成功を意味しない。
+
+### CloudflareでのSteam通信
+
+Cloudflare workerdは`redirect: "error"`を受け付けず、Steamへアクセスする前にTypeErrorになる。Steamの署名照合とWeb API・ストア取得は`redirect: "manual"`を使い、3xxを成功として扱わない。転送先へ認証用の本文やAPIキーを送らない。署名照合のPOSTはContent-Typeをapplication/x-www-form-urlencoded;charset=UTF-8と明示する。
+
+`test/steam-worker.test.mjs`は実際のworkerdで旧設定の例外を再現し、本体のsteamCallback・steamJson・requirePaidSteamGameを模擬上流に接続する。正常応答と301/302/303/307/308での拒否を確認する。Nodeのfetchモックだけではこの互換性問題を検出できない。実SteamがCloudflareからの要求を別途拒否するかは本番で確認し、ST_HTTPが出ても署名検証の省略や未知の中継先への転送はしない。

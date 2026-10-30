@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createKpClient} from '../js/kp-client.js';
 import {openSteamLogin} from '../js/discord-activity-auth.js';
-import {steamPanel} from '../js/steam-view.js';
+import {steamPanel,steamConnectionMessage} from '../js/steam-view.js';
 const storage=()=>{const m=new Map();return {getItem:k=>m.get(k)??null,setItem:(k,v)=>m.set(k,v),removeItem:k=>m.delete(k)};};
 test('Steam linking keeps only a short-lived challenge in tab storage and recovers it after reload',async()=>{
  const persistent=storage(),tab=storage();persistent.setItem('keso-kp-session-v1','wallet-secret');const calls=[],link={state:'abc',url:'https://steamcommunity.com/openid/login?state=abc'};
@@ -35,4 +35,15 @@ test('owned-game buttons are enabled only when Steam confirms at least 120 minut
 test('Steam panel explains paid eligibility and shows automatic free-game pauses without offering a cash refund',()=>{
  const status={available:true,enabled:true,account:{steamId:'76561198000000001',active:true},apps:[{id:1,title:'Paused Game'}],games:[{app:1,active:false,error:'free_game'}]};
  const html=steamPanel({status,library:[]});assert.match(html,/無料・基本無料・無料配布中のゲームは対象外/);assert.match(html,/有料販売の確認は選択時/);assert.match(html,/監視停止：無料・基本無料ゲームは対象外/);assert.match(html,/再開前の解除済み実績は支給しません/);assert.match(html,/翌日へ繰り越しません/);
+});
+
+test('Steam status checks explain unfinished verification and keep feedback next to the retry button',()=>{
+ const status={available:true,enabled:true,account:null,apps:[],games:[]};
+ const pending=steamConnectionMessage(status,{verified:false},{state:'challenge'});assert.match(pending,/本人確認はまだ届いていません/);assert.match(pending,/新しいリンク/);
+ const html=steamPanel({status,notice:pending});assert.match(html,/role="status" aria-live="polite"/);assert(html.indexOf(pending)<html.indexOf('<div class="action-row">'));assert.doesNotMatch(html,/data-action="steam-confirm"/);
+ assert.match(steamConnectionMessage(status,null,null),/未接続/);
+ assert.match(steamConnectionMessage(status,{verified:true,confirmed:false},{}),/このSteamアカウントを接続/);
+ assert.match(steamConnectionMessage({...status,account:{active:true}},null,null),/接続は完了/);
+ const busy=steamPanel({status,loading:true});assert.match(busy,/data-action="steam-status" disabled aria-busy="true"/);assert.match(busy,/確認中…/);
+ const error=steamPanel({status,error:'<img src=x>',loading:false});assert.equal((error.match(/&lt;img src=x&gt;/g)||[]).length,1);assert.doesNotMatch(error,/<img/);assert.doesNotMatch(error,/aria-busy="true"/);
 });
