@@ -59,7 +59,7 @@ export function resultPost(card:Card,seed:string,bets:Array<Bet&{user:string}>,l
   const balance=profit>0?`+${kp(profit)}`:profit<0?`−${kp(-profit)}`:'±0 KP';
   const icon=profit>0?'💰':profit<0?'💸':'⚖️';
   // Show losing tickets as well as winners; a winning place bet is not a profitable race by itself.
-  const tickets=list.map(b=>`${b.horse}番${BET_TYPES[b.type].label}${b.status==='won'?'○':'×'}`).join('・');
+  const tickets=list.map(b=>`${b.horse}番${BET_TYPES[b.type].formal}${b.status==='won'?'○':'×'}`).join('・');
   const tone=hits.length?(profit>0?'win':'partial'):'loss';
   lines.push(`${icon} ${who}　収支 ${balance}（購入 ${kp(spent)} / 払戻 ${kp(paid)}）`,`-# 内訳 ${tickets}`,`🗯️ ${raceBanter(tone,levelOf(user),user+':'+card.id)}`);
  }
