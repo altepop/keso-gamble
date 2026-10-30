@@ -4,7 +4,7 @@ import {privateCasinoPanel} from './private-casino-view.js?v=web-e82514bf5b54320
 import {communityPanel,communityRows} from './community-feed.js?v=web-e82514bf5b54320b';
 import {stockPanel,stockCandles,stockPrice} from './stock-view.js?v=web-e82514bf5b54320b';
 import {wheelView,covered,redNumbers,outcomeAngle} from './roulette-view.js?v=web-e82514bf5b54320b';
-import {connectDiscordActivity,isDiscordActivity,openSteamLogin}from './discord-activity-auth.js?v=web-e82514bf5b54320b';
+import {connectDiscordActivity,isDiscordActivity,openSteamLogin,openCompanionGame}from './discord-activity-auth.js?v=web-e82514bf5b54320b';
 import { createKpClient } from './kp-client.js?v=web-e82514bf5b54320b';
 import { fmt, fmt0 } from './format.js?v=web-e82514bf5b54320b';
 import { submitClaim, approveClaim, issueDirective, completeDirective } from './progression.js?v=web-e82514bf5b54320b';
@@ -378,6 +378,7 @@ addEventListener('click',async e=>{
   if(mutates && mutationPending)return;
   if(mutates)mutationPending=true;
   try{
+    if(t.dataset.companion){await openCompanionGame(t.dataset.companion);return;}
     if(t.dataset.action==='auto-connect-kp'){await automaticConnect();return;}
     if(t.dataset.action?.startsWith('steam-')){
       if(!live||!wallet.connected)throw Error('先にKP口座へ接続してください。');
