@@ -27,6 +27,7 @@ jobs:
           node --input-type=module <<'NODE'
           import fs from 'node:fs';
           const input=JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP+'/d1-insights.json','utf8'));
+          console.log('RESPONSE_KEYS '+JSON.stringify(Array.isArray(input)?{type:'array',length:input.length}:{type:'object',keys:Object.keys(input),subkeys:Object.fromEntries(Object.entries(input).slice(0,7).map(([k,v])=>[k,Array.isArray(v)?'array:'+v.length:(v&&typeof v==='object')?Object.keys(v):typeof v]))}));
           const queries=Array.isArray(input)?input:(input.queries??input.insights??input.results??[]);
           console.log('ANALYTICS READ-ONLY QUERY SUMMARY (SQL query text withheld)');
           if(!Array.isArray(queries)) {console.log('Unexpected response format: '+Object.keys(input).join(','));process.exit(2);}
