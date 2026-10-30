@@ -1,4 +1,4 @@
-import { escapeHTML } from './progression-views.js?v=web-655e63d5d0bc71e1';
+import { escapeHTML } from './progression-views.js?v=web-7384c361c5d7c279';
 // 資産 → システムの状態: each scheduled job (正常・停止気味・失敗中・未記録) and what is waiting to be settled or posted.
 // Loaded on demand from /api/kp/health (members only, counts only).
 const ago=(at,now)=>{if(!at)return '記録なし';const m=Math.max(0,Math.round((now-at)/60000));return m<1?'1分以内':m<60?`${m}分前`:m<1440?`${Math.round(m/60)}時間前`:`${Math.round(m/1440)}日前`;};

@@ -2,7 +2,7 @@ export const isDiscordActivity=(host=globalThis.location?.hostname??'')=>host.en
 const sdkInstances=new Map();
 async function officialSdk(applicationId){
  if(!sdkInstances.has(applicationId)){
-  const {DiscordSDK}=await import('./vendor/discord-sdk.js?v=web-655e63d5d0bc71e1');
+  const {DiscordSDK}=await import('./vendor/discord-sdk.js?v=web-7384c361c5d7c279');
   sdkInstances.set(applicationId,new DiscordSDK(applicationId,{disableConsoleLogOverride:true}));
  }
  return sdkInstances.get(applicationId);
@@ -41,4 +41,11 @@ export async function connectDiscordActivity(wallet,{host=globalThis.location?.h
  }
  const state=await wallet.acceptActivitySession(result.token,result.userId);
  return {kind:'connected',state};
+}
+
+// Steam linking uses a real external browser. Never navigate the Activity iframe to the provider.
+export async function openSteamLogin(url,{host=globalThis.location?.hostname??'',sdkFactory=officialSdk,open=globalThis.open?.bind(globalThis)}={}){
+ const target=new URL(url);if(target.origin!=='https://steamcommunity.com'||target.pathname!=='/openid/login')throw Error('Steamの接続先を確認できません。');
+ if(isDiscordActivity(host)){const id=/^(\d{15,22})\.discordsays\.com$/.exec(host)?.[1];if(!id)throw Error('Discordの接続を確認してください。');const sdk=await sdkFactory(id);await deadline(sdk.ready(),15000);const result=await deadline(sdk.commands.openExternalLink({url:target.toString()}),15000);if(result?.opened===false)throw Error('Steamのログイン画面を開けませんでした。');}
+ else {const tab=open?.(target.toString(),'_blank');if(!tab)throw Error('新しいウィンドウを許可して、もう一度押してください。');try{tab.opener=null;}catch{}}
 }

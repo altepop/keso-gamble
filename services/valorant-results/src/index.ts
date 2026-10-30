@@ -1,3 +1,4 @@
+import {monitorSteam} from './steam-rewards.ts';
 import {readModeNote} from './mode-rewards.ts';
 import {skirmishResultButtons} from './skirmish.ts';
 import {appWebhook,appWebhookApi,forgetAppWebhook} from './app-webhook.ts';
@@ -37,6 +38,8 @@ import type { Match, Notice } from './results.ts';
 export { resultMessage } from './results.ts';
 
 export interface Env {
+  STEAM_WEB_API_KEY?:string;
+  KP_STEAM_CONFIG?:string;
   VOICE_GATEWAY?:DurableObjectNamespace;
   RACE_BROADCAST?:DurableObjectNamespace;
   DISCORD_CLIENT_SECRET?: string;
@@ -469,6 +472,7 @@ export default {
     ctx.waitUntil(track(env,'mahjong_watch',()=>monitorMahjong(env)));
     ctx.waitUntil(track(env,'unite_watch',()=>monitorUnite(env)));
     ctx.waitUntil(track(env,'voice',()=>ensureVoice(env)));
+    ctx.waitUntil(track(env,'steam',async()=>{const mapping=await initializeKp(env);if(mapping)await monitorSteam(env,mapping.guildId);}));
     ctx.waitUntil(track(env,'valorant',()=>monitor(env)));
     ctx.waitUntil((async()=>{
       const mapping=await initializeKp(env);if(!mapping)return;

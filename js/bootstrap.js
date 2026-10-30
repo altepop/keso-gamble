@@ -1,12 +1,12 @@
 // Complete Discord's initial handshake before the full app's module graph is loaded.
 // A broken/old game module must not leave Discord's native loading cover on screen.
-import {prepareDiscordActivity} from './discord-activity-auth.js?v=web-655e63d5d0bc71e1';
+import {prepareDiscordActivity} from './discord-activity-auth.js?v=web-7384c361c5d7c279';
 const root=document.getElementById('app');
 let stage='Discordの起動確認';
 try{
  await prepareDiscordActivity();
  stage='画面の読み込み';
- await import('./app.js?v=web-655e63d5d0bc71e1');
+ await import('./app.js?v=web-7384c361c5d7c279');
 }catch(error){
  console.error('KESO startup failed at '+stage,error);
  root.replaceChildren();
