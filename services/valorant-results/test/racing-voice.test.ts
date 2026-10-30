@@ -48,10 +48,10 @@ test('a winning place ticket never hides losing win tickets or a negative total'
  const second={id:'winning-place',raceId:time,type:'place' as const,horse:winner,amount:1000,odds:19,status:'won',payout:1900,user};
  const post=resultPost(card,seed,[first,second],()=> 'normal');
  assert.match(post,/💸 <@100000000000000001>　収支 −4,100 KP（購入 6,000 KP \/ 払戻 1,900 KP）/);
- assert.match(post,new RegExp(`内訳 ${loser}番1着当て×・${winner}番`));
- assert.match(post,/着以内当て○/);
+ assert.match(post,new RegExp(`内訳 ${loser}番単勝×・${winner}番`));
+ assert.match(post,/複勝○/);
  assert.ok(!post.includes('💰 <@'+user+'>'),'partial payout must never be promoted to a win');
- const userLines=post.split('\\n').map((line,i,all)=>line.includes(user)?all.slice(i,i+3).join('\\n'):'').find(Boolean)!;
+ const userLines=post.split('\n').map((line,i,all)=>line.includes(user)?all.slice(i,i+3).join('\n'):'').find(Boolean)!;
  assert.ok(voice.partial.normal.some(line=>userLines.endsWith(line)));
  const positive=resultPost(card,seed,[{...second,amount:100,payout:190}],()=> 'normal');
  assert.match(positive,/収支 \+90 KP（購入 100 KP \/ 払戻 190 KP）/);
