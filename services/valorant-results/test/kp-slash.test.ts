@@ -275,7 +275,7 @@ test('private /spike status and /spike hint select the requested role and charge
  const f=await fixture();
  const status={...interaction('spike'),data:{name:'spike',options:[{type:1,name:'status'}]}};
  const view=await runKpCommand(f.env,status,mapping);
- assert.match(view,/Duelist 0\/16/);assert.match(view,/🔒 未公開/);
+ assert.match(view,/\*\*Duelist\*\* 0\/16/);assert.match(view,/🔒 未公開/);
  assert.doesNotMatch(view,/12キル以上/);
  const hint={...interaction('spike'),data:{name:'spike',options:[{type:1,name:'hint',options:[{name:'role',type:3,value:'Duelist'}]}]}};
  const first=await runKpCommand(f.env,hint,mapping);
