@@ -17,7 +17,7 @@ function gameLabel(id:string){
 }
 export async function ledgerHistory(env:KpEnv,guild:string,user:string,limit=100):Promise<HistoryEntry[]>{
  const rows=(await env.DB.prepare('SELECT id,delta,kind,at FROM kp_ledger WHERE guild=? AND user=? ORDER BY at DESC,id DESC LIMIT ?').bind(guild,user,limit+20).all<{id:string;delta:number;kind:string;at:number}>()).results;
- const matchIds=[...new Set(rows.filter(r=>r.kind==='match').map(r=>r.id.replace(/^penalty:/,'')))];
+ const matchIds=[...new Set(rows.filter(r=>r.kind==='match').map(r=>r.id.replace(/^(penalty:|esc-extra:)/,'')))];
  const events=new Map<string,{mode:string;match:string}>();
  for(let i=0;i<matchIds.length;i+=50){
   const ids=matchIds.slice(i,i+50);
@@ -34,8 +34,8 @@ export async function ledgerHistory(env:KpEnv,guild:string,user:string,limit=100
  for(let i=0;i<steamIds.length;i+=50){const ids=steamIds.slice(i,i+50);for(const e of (await env.DB.prepare(`SELECT id,app,title,percent,requested,amount FROM kp_steam_events WHERE guild=? AND user=? AND id IN (${ids.map(()=>'?').join(',')})`).bind(guild,user,...ids).all<{id:string;app:number;title:string;percent:number;requested:number;amount:number}>()).results)steamDetails.set(e.id,e.title+'（App '+e.app+'・解除率 '+e.percent+'%'+(e.amount<e.requested?'・日上限により'+e.requested+'→'+e.amount+' KP':'')+'）');}
  const out:HistoryEntry[]=[],byEvent=new Map<string,HistoryEntry>();
  for(const r of rows){
-  if(r.kind==='match'&&(events.has(r.id)||r.id.startsWith('penalty:'))){
-   const key=r.id.replace(/^penalty:/,''),e=events.get(key),seen=byEvent.get(key);
+  if(r.kind==='match'&&(events.has(r.id)||r.id.startsWith('penalty:')||r.id.startsWith('esc-extra:'))){
+   const key=r.id.replace(/^(penalty:|esc-extra:)/,''),e=events.get(key),seen=byEvent.get(key);
    if(seen){seen.delta+=Number(r.delta);seen.time=Math.max(seen.time,r.at);continue;}
    const entry={id:key,kind:'match',label:'VALORANT '+(e?MODES[e.mode]??e.mode:'試合'),detail:(e?.match??'')+(spikeNotes.has(key)?' '+spikeNotes.get(key):''),delta:Number(r.delta),time:r.at};
    byEvent.set(key,entry);out.push(entry);continue;
