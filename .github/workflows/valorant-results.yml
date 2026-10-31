@@ -165,6 +165,17 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: npm run deploy -- --keep-vars
+      - name: Update existing Discord Activity entry point after successful Worker deploy
+        working-directory: ${{ runner.temp }}/kp-app/services/valorant-results
+        env:
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          ENTRYPOINT_MODE: ${{ vars.DISCORD_ACTIVITY_ENTRYPOINT_MODE || 'apply' }}
+        run: |
+          case "$ENTRYPOINT_MODE" in
+            apply|rollback|status) ;;
+            *) echo 'Invalid Activity entry mode'; exit 1 ;;
+          esac
+          node scripts/activity-entry-handler.mjs "--$ENTRYPOINT_MODE"
       - name: Inspect unclassified queue identifiers (no account or match data)
         continue-on-error: true
         working-directory: ${{ runner.temp }}/kp-app/services/valorant-results
