@@ -1,0 +1,33 @@
+name: Temporary D1 SQL structure diagnostics
+on:
+  push:
+    branches: [diag/d1-sql-structure-20261031]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/valorant-results
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm ci --ignore-scripts
+      - name: Print bounded, sanitized query shapes only (no user data)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -e
+          ./node_modules/.bin/wrangler d1 insights bf23ab40-814f-4626-9e0b-36739ac41750 --sort-by=reads --time-period=1h --limit=25 --json > /tmp/sql-insights.json
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          const data=JSON.parse(fs.readFileSync('/tmp/sql-insights.json','utf8'));
+          for(const [i,row] of data.entries()){
+            const text=String(row.query??'').replace(/'(?:''|[^'])*'/g,'?').replace(/"(?:[^"]|"")*"/g,'IDENT').replace(/\b\d{2,}\b/g,'#').replace(/\s+/g,' ').slice(0,460);
+            process.stdout.write(JSON.stringify({rank:i+1,reads:row.totalRowsRead,avg:row.avgRowsRead,calls:row.numberOfTimesRun,shape:text})+'\n');
+          }
+          JS
