@@ -84,10 +84,11 @@ export async function runGuerrillaMarket(env:KpEnv&{KP_EARNINGS_WEBHOOK_URL?:str
   return null;
  }
  if(!config.enabled||now<config.next_at)return null;
+ // The story-history table is created only when an event is actually due.
+ await ensureStockOperator(env);
  const previous=await env.DB.prepare('SELECT symbol,headline,direction,at FROM stock_event_headlines WHERE guild=? ORDER BY at DESC LIMIT 1')
   .bind(guild).first<{symbol:string;headline:string;direction:string;at:number}>();
  const plan=planGuerrilla(draw,previous??undefined,now);
- await ensureStockOperator(env);
  const market=await prepareStocks(env,guild,undefined,now);
  const session=crypto.randomUUID(),nextAt=nextGuerrillaAt(now,draw),impacts:Array<{name:string;symbol:string;before:number;after:number}>=[];
  for(const change of plan.moves){
