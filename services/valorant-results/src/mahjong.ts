@@ -46,6 +46,9 @@ async function ensure(env:MahjongEnv){
   env.DB.prepare("CREATE TABLE IF NOT EXISTS mahjong_watch_posts(id TEXT PRIMARY KEY,body TEXT NOT NULL,at INTEGER NOT NULL,sent INTEGER NOT NULL DEFAULT 0,lease INTEGER NOT NULL DEFAULT 0,message_id TEXT)"),
   // Pending messages are selected oldest-first; sent messages should not be rescanned.
   env.DB.prepare('CREATE INDEX IF NOT EXISTS mahjong_watch_ready ON mahjong_watch_posts(at,id,lease) WHERE sent=0'),
+  // Lease-first lookup skips future retries before scanning chronological posts.
+  // In D1 Insights, the old at-first order read 75 rows/call when 4 or fewer were due.
+  env.DB.prepare('CREATE INDEX IF NOT EXISTS mahjong_watch_due ON mahjong_watch_posts(lease,at,id) WHERE sent=0'),
  ]);initialized.add(env.DB);
 }
 const clean=(s:string)=>s.replace(/[@`*_~<>|\r\n]/g,'');
@@ -89,7 +92,7 @@ function webhook(env:MahjongEnv){
 }
 export async function flushMahjongPosts(env:MahjongEnv,now=Date.now(),request:typeof fetch=fetch){
  const url=webhook(env);if(!url)return 0;await ensure(env);
- const rows=(await env.DB.prepare('SELECT id,body FROM mahjong_watch_posts WHERE sent=0 AND lease<=? ORDER BY at,id LIMIT 4').bind(now).all<{id:string;body:string}>()).results;
+ const rows=(await env.DB.prepare('SELECT id,body FROM mahjong_watch_posts WHERE sent=0 AND lease<=? ORDER BY lease,at,id LIMIT 4').bind(now).all<{id:string;body:string}>()).results;
  let sent=0;
  for(const row of rows){
   const lease=now+120_000;
