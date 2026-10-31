@@ -45,3 +45,14 @@ test('disconnect revokes the server session before forgetting the device, and a 
  await assert.rejects(client.disconnect(),/通信/);assert.equal(client.connected,true);assert.equal(saved.getItem('keso-kp-session-v1'),'session');
  await client.disconnect();assert.equal(client.connected,false);assert.equal(saved.getItem('keso-kp-session-v1'),null);assert.equal(calls,2);
 });
+
+test('public feed cursor is encoded, authenticated and leaves full refresh available',async()=>{
+ const saved=storage();saved.setItem('keso-kp-session-v1','session');
+ const urls=[];
+ const request=async(url,opts)=>{urls.push(url);assert.equal(opts.headers.Authorization,'Bearer session');return Response.json({cursor:'1700000000:111:op',entries:[]});};
+ const client=createKpClient({storage:saved,request});
+ await client.feed();
+ await client.feed('1700000000:111:op');
+ assert.ok(urls[0].endsWith('/api/kp/feed'));
+ assert.ok(urls[1].endsWith('/api/kp/feed?cursor=1700000000%3A111%3Aop'));
+});
