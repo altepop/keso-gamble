@@ -2,6 +2,7 @@
 import {stockOrderQuote,STOCK_ORDER_VERSION,STOCK_PRICE_SCALE} from '../../../js/stock-order.js';
 // One server market per guild. Quotes, dividends, lots and benefits never use the demo PRNG.
 import type {KpEnv} from './kp.ts';
+import {availableStockNewsTables} from './stock-news-sources.ts';
 // @ts-expect-error Shared pure browser engine.
 import {MARKET,advanceMarket} from '../../../js/engine.js';
 interface Stock {id:string;name:string;initialPrice:number}
@@ -138,7 +139,7 @@ export async function payStockDividends(env:KpEnv,market:Market,now=Date.now()){
 }
 async function captureNews(env:KpEnv,market:Market,now:number){
  const since=Math.max(market.startedAt,now-86400000),guild=market.guild;
- const tables=new Set((await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table'").all<{name:string}>()).results.map(r=>r.name));
+ const tables=await availableStockNewsTables(env.DB);
  // Fixed source tables only; no display names, webhook text or browser-submitted events.
  if(tables.has('kp_events'))await env.DB.prepare(`INSERT OR IGNORE INTO stock_news(guild,id,symbol,label,bps,at) SELECT guild,'valo:'||match||':'||outcome,'keso',CASE WHEN outcome='win' THEN 'VALORANTで勝利' ELSE 'VALORANTで敗戦' END,CASE WHEN outcome='win' THEN 40 ELSE -30 END,MAX(at) FROM kp_events WHERE guild=? AND at>=? AND outcome IN('win','loss') GROUP BY guild,match,outcome`).bind(guild,since).run();
  for(const table of ['kp_quiz_events','kp_quiz_ranked_extra'])if(tables.has(table))await env.DB.prepare(`INSERT OR IGNORE INTO stock_news(guild,id,symbol,label,bps,at) SELECT guild,'quiz:'||game,'riso','QUIZのプレイを記録',15,completed_at FROM ${table} WHERE guild=? AND completed_at>=?`).bind(guild,since).run();
