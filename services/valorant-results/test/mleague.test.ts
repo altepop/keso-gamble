@@ -48,6 +48,20 @@ async function fixture(){
 let n=0;const op=()=>`ml-operation-${String(++n).padStart(6,'0')}`;
 const page=officialPage('2026-10-27',[{game:1,names:order,points:[60.2,10.1,-20.3,-50]}]);
 
+test('five-second M.LEAGUE card cache saves repeated cron reads and invalidates on official updates',async()=>{
+ const f=await fixture();
+ const db=f.env.DB,original=db.prepare.bind(db);let reads=0;
+ db.prepare=((sql:string)=>{if(sql==='SELECT date,tbl,teams FROM ml_cards')reads++;return original(sql);}) as typeof db.prepare;
+ const [a,b,c]=await Promise.all([mlData(f.env),mlData(f.env),mlData(f.env)]);
+ assert.equal(reads,1,'parallel consumers share one D1 read');
+ assert.strictEqual(a,b);assert.strictEqual(b,c);
+ assert.equal(a.fixtures.find(x=>x.id===game1.id)?.confirmed,false);
+ await storeCards(f.env,parseOfficialCards(page,2026),Date.now());
+ const updated=await mlData(f.env);
+ assert.equal(reads,2,'saving official cards must invalidate the cached snapshot');
+ assert.equal(updated.fixtures.find(x=>x.id===game1.id)?.confirmed,true);
+ assert.strictEqual(await mlData(f.env),updated,'unchanged rows reuse cached data');
+});
 test('the official page is read per game in rank order; the template and broken blocks are skipped', () => {
  const parsed=parseOfficialResults(page);
  assert.deepEqual(parsed,[{date:'2026-10-27',game:1,names:order,points:[60.2,10.1,-20.3,-50]}]);
