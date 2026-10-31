@@ -1,4 +1,4 @@
-import { minesMultiplier, MINES_CELLS } from './casino-more.js?v=web-26dd3adca2291bb4';
+import { minesMultiplier, MINES_CELLS } from './casino-more.js?v=web-0b87418966ddda71';
 // 専用メニューで選べる役。画面の選択肢とサーバーの判定が同じ表を使う。出目・カードは役ごとに決まった並びで、
 // 掛け金・残高・記録は通常のゲームの関数がそのまま扱う。
 const mines=[[1,10],[3,5],[3,10],[5,5],[5,10],[10,3],[10,6]];
