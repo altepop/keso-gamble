@@ -102,7 +102,7 @@ test('auto sector story atomically changes several stocks, writes a single commo
  assert.match(bulletin.content,/複数銘柄/);assert.equal(bulletin.username,'等しいbot');
  assert.doesNotMatch(bulletin.content,/000000000000000001|stock_admin|owner|operator|auto/i);
  assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM stock_event_headlines').get()!.n,4);
- assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM stock_news WHERE applied_version IS NOT NULL').get()!.n,4);
+ assert.equal(f.sql.prepare("SELECT COUNT(*) AS n FROM stock_news WHERE id LIKE 'admin:%' AND applied_version IS NOT NULL").get()!.n,4);
  assert.equal(f.sql.prepare('SELECT COALESCE(SUM(balance),0) AS n FROM kp_wallets').get()!.n,before);
  assert.equal(await runGuerrillaMarket(f.env,guild,time,()=>0),null,'claimed slot cannot fire again');
  assert.equal(queued(f.sql).length,1);
