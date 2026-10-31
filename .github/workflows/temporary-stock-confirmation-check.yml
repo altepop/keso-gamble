@@ -25,6 +25,7 @@ jobs:
           npm test
       - name: Browser test on mobile-size Chromium and WebKit
         run: |
+          npm install --no-save playwright@1.63.0
           npx playwright install --with-deps chromium webkit
           node scripts/private-casino-browser-check.cjs chromium
           node scripts/private-casino-browser-check.cjs webkit
