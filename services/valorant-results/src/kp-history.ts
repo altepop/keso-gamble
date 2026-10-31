@@ -1,11 +1,12 @@
 import {ensureSpikeGrowth} from './spikerush-growth.ts';
+import {ensureSpikeAwakening} from './spike-awakening.ts';
 import type { KpEnv } from './kp.ts';
 // The Activity's 入出金履歴: every wallet movement from the ledger (VALORANT, QUIZ, 通話, 雀魂, ユナイト, 手動調整,
 // 賞金, 借KP返済, 配当, Activityの操作…), newest first. A VALORANT loss debit (penalty:<id>) is folded into its match
 // so one game is one line with its net amount.
 export interface HistoryEntry {id:string;kind:string;label:string;detail:string;delta:number;time:number}
 const MODES:Record<string,string>={skirmish:'スカーミッシュ',competitive:'コンペ',unrated:'アンレ',swiftplay:'スイフト',spikerush:'スパイクラッシュ',deathmatch:'デスマッチ',teamdeathmatch:'チームデスマッチ',escalation:'エスカレーション',replication:'レプリケーション'};
-const KINDS:Record<string,string>={steam:'Steam実績',loop:'KESO LOOP',gift:'KPのプレゼント（もらった）',skirmish:'スカーミッシュの受取',quiz:'VCT QUIZ',voice:'通話',mahjong:'雀魂',unite:'ポケモンユナイト',grant:'手動調整',prize:'競馬の賞金（馬主）',debt:'借KP返済',dividend:'株の配当','stock-migration':'株の移行端数',test:'テスト'};
+const KINDS:Record<string,string>={steam:'Steam実績',loop:'KESO LOOP',gift:'KPのプレゼント（もらった）',skirmish:'スカーミッシュの受取',quiz:'VCT QUIZ',voice:'通話',mahjong:'雀魂',unite:'ポケモンユナイト',grant:'手動調整',prize:'競馬の賞金（馬主）',debt:'借KP返済',dividend:'株の配当','stock-migration':'株の移行端数','spike-hint':'スパイク覚醒ヒント',test:'テスト'};
 function gameLabel(id:string){
  const op=id.split(':').slice(3).join(':')||id;
  if(op.startsWith('race-settle:'))return '競馬の払戻し';
@@ -25,8 +26,8 @@ export async function ledgerHistory(env:KpEnv,guild:string,user:string,limit=100
  const spikeNotes=new Map<string,string>();
  const spikeIds=[...events].filter(([,e])=>e.mode==='spikerush').map(([id])=>id);
  if(spikeIds.length){
-  await ensureSpikeGrowth(env);
-  for(let i=0;i<spikeIds.length;i+=50){const ids=spikeIds.slice(i,i+50);for(const r of (await env.DB.prepare(`SELECT id,note FROM spike_rewards WHERE id IN (${ids.map(()=>'?').join(',')}) AND guild=? AND user=?`).bind(...ids,guild,user).all<{id:string;note:string}>()).results)spikeNotes.set(r.id,r.note);}
+  await ensureSpikeGrowth(env);await ensureSpikeAwakening(env);
+  for(let i=0;i<spikeIds.length;i+=50){const ids=spikeIds.slice(i,i+50);for(const r of (await env.DB.prepare(`SELECT id,note FROM (SELECT id,note,guild,user FROM spike_rewards UNION ALL SELECT id,note,guild,user FROM spike_overdrive_rewards) WHERE id IN (${ids.map(()=>'?').join(',')}) AND guild=? AND user=?`).bind(...ids,guild,user).all<{id:string;note:string}>()).results)spikeNotes.set(r.id,r.note);}
  }
  const steamDetails=new Map<string,string>();
  const steamIds=rows.filter(r=>r.kind==='steam').map(r=>r.id);

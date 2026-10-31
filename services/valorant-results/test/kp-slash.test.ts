@@ -63,14 +63,14 @@ test('race clocks cross JST midnight safely and are stable on replay',()=>{
 test('command registration never bulk-replaces other commands and refuses a foreign name collision',async()=>{
  const calls:Array<{path:string;method?:string;body?:any}>=[];
  const api=async(path:string,method?:string,body?:unknown)=>{calls.push({path,method,body});return path==='/users/@me'?{id:one,bot:true}:method==='POST'?{...(body as object),id:one}:[{name:'death'},{name:'valo'},{name:'launch',type:4}];};
- assert.equal(await registerKpCommands(one,guild,api,async()=>{}),12);
- assert.deepEqual(calls.filter(c=>c.method==='POST').map(c=>c.body.name),['kp','keiba','bet','horsename','give','mleague','mbet','mclose','kpgrant','unitelink','paifulink','paifu']);
- assert.ok(calls.every(c=>c.method!=='PUT'));assert.deepEqual(kpCommands[2].options?.filter(o=>o.required).map(o=>o.name),['horse','amount']);
+ assert.equal(await registerKpCommands(one,guild,api,async()=>{}),13);
+ assert.deepEqual(calls.filter(c=>c.method==='POST').map(c=>c.body.name),['kp','spike','keiba','bet','horsename','give','mleague','mbet','mclose','kpgrant','unitelink','paifulink','paifu']);
+ assert.ok(calls.every(c=>c.method!=='PUT'));assert.deepEqual(kpCommands[3].options?.filter(o=>o.required).map(o=>o.name),['horse','amount']);
  // Unchanged commands are not written again, and writes are spaced out.
  const waits:number[]=[],posted:string[]=[];
- const stored=[{...kpCommands[0],id:'1',application_id:one,version:'9',description_localizations:null,options:kpCommands[0].options.map(o=>({...o,required:false}))},{...kpCommands[1],id:'2'},{name:'death'}];
- assert.equal(await registerKpCommands(one,guild,async(path,method,body)=>{if(method==='POST'){posted.push((body as {name:string}).name);return {...(body as object),id:one};}return path==='/users/@me'?{id:one,bot:true}:stored;},async ms=>{waits.push(ms);}),10);
- assert.deepEqual(posted,['bet','horsename','give','mleague','mbet','mclose','kpgrant','unitelink','paifulink','paifu']);assert.deepEqual(waits,[5000,5000,5000,5000,5000,5000,5000,5000,5000],'a gap between writes, none before the first');
+ const stored=[{...kpCommands[0],id:'1',application_id:one,version:'9',description_localizations:null,options:kpCommands[0].options.map(o=>({...o,required:false}))},{...kpCommands[2],id:'2'},{name:'death'}];
+ assert.equal(await registerKpCommands(one,guild,async(path,method,body)=>{if(method==='POST'){posted.push((body as {name:string}).name);return {...(body as object),id:one};}return path==='/users/@me'?{id:one,bot:true}:stored;},async ms=>{waits.push(ms);}),11);
+ assert.deepEqual(posted,['spike','bet','horsename','give','mleague','mbet','mclose','kpgrant','unitelink','paifulink','paifu']);assert.deepEqual(waits,[5000,5000,5000,5000,5000,5000,5000,5000,5000,5000],'a gap between writes, none before the first');
  let writes=0;await assert.rejects(registerKpCommands(one,guild,async(path,method)=>{if(method)writes++;return path==='/users/@me'?{id:one,bot:true}:[{name:'bet',description:'Another bot command'}];}),/conflict/);assert.equal(writes,0);
  await assert.rejects(registerKpCommands(one,guild,async()=>({id:two,bot:true})),/mismatch/);
 });
@@ -136,7 +136,7 @@ test('public command metadata contains definitions only and does not need or exp
  let queries=0;
  const response=await kpApi(new Request('https://worker/api/kp/commands'),{DB:{prepare(){queries++;throw Error('No DB reads');}},KP_BOOTSTRAP_PRIVATE_KEY:'fixture-secret-must-not-leak'} as unknown as KpEnv);
  const body=await response.json() as {version:string;commands:unknown[]};
- assert.equal(response.status,200);assert.equal(body.version,'kp-slash-v16-ranking-debt');assert.equal(body.commands.length,12);assert.equal(queries,0);
+ assert.equal(response.status,200);assert.equal(body.version,'kp-slash-v17-spike-overdrive');assert.equal(body.commands.length,13);assert.equal(queries,0);
  assert.equal(JSON.stringify(body).includes('fixture-secret'),false);assert.equal(response.headers.get('Cache-Control'),'no-store');
 });
 
@@ -269,4 +269,22 @@ test('/give moves KP to another member once per interaction, posts to 稼ぎch, 
  // 借KP: the giver cannot give while owing.
  f.sql.prepare('INSERT INTO kp_debts(guild,user,amount,since) VALUES(?,?,300,0)').run(guild,one);
  assert.match(await give([{name:'user',value:two},{name:'amount',value:100}],7),/借KP/);assert.equal(bal(two),500);
+});
+
+test('private /spike status and /spike hint select the requested role and charge exactly once',async()=>{
+ const f=await fixture();
+ const status={...interaction('spike'),data:{name:'spike',options:[{type:1,name:'status'}]}};
+ const view=await runKpCommand(f.env,status,mapping);
+ assert.match(view,/\*\*Duelist\*\* 0\/16/);assert.match(view,/🔒 未公開/);
+ assert.doesNotMatch(view,/12キル以上/);
+ const hint={...interaction('spike'),data:{name:'spike',options:[{type:1,name:'hint',options:[{name:'role',type:3,value:'Duelist'}]}]}};
+ const first=await runKpCommand(f.env,hint,mapping);
+ assert.match(first,/10,000 KP/);
+ assert.equal(f.sql.prepare('SELECT balance FROM kp_wallets WHERE user=?').get(one)?.balance,0);
+ const repeated=await runKpCommand(f.env,hint,mapping);
+ assert.match(repeated,/購入済み/);
+ assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM kp_ledger WHERE kind='spike-hint'").get()?.n,1);
+ const after=await runKpCommand(f.env,status,mapping);
+ assert.match(after,/12キル以上/);
+ assert.doesNotMatch(after,/7アシスト以上/,'unbought role condition stays hidden');
 });
