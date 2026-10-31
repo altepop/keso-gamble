@@ -1,3 +1,4 @@
+import {EXTRA_HORSE_NAMES,EXTRA_CROWN_NAMES,REGULAR_RACE_NAMES} from './racing-name-catalog.js';
 // Horse racing. Pure logic with no DOM or clock reads, shared by the browser and the Worker.
 // Cards and odds are public (PUBLIC_SALT). The run uses a per-race seed: the demo uses the public
 // salt, while the Worker keeps a random seed secret until the start and publishes its hash first.
@@ -9,7 +10,12 @@ export const STYLES=[{label:'最初から飛ばす',curve:.08},{label:'前の方
 export const CONDITIONS=[{label:'絶不調',value:-1},{label:'不調',value:-.5},{label:'普通',value:0},{label:'好調',value:.5},{label:'絶好調',value:1}];
 export const GOINGS=[{label:'走りやすい',noise:1},{label:'ややぬかるみ',noise:1.15},{label:'ぬかるんでいる',noise:1.3}];
 // Fictional names only. Real members' names need their consent (docs/RACING_PLAN.md).
-export const HORSE_NAMES=['ゲートニキヅカナイ','エイムガブレール','キャリーマチ','ランクダケヒクイ','ヨフカシオー','エーティーエム','ニバンテボーイ','ムテキノイイワケ','アンレタイショウ','デスマッチノオウ','フルバイノユメ','エコラウンド','ハナサノマジュツシ','ニンキサギ','キマグレノアクマ','ネオチダービー','ワンタップドリーム','クラッチミス','スモークツカイ','ラストアワー','ゼロキルクイーン','ヤケクソラン','ゴールデンマンジュウ','コタツデネムル','ザンネンカイチョウ','シンヤサンジ','オヤツタイム','カブヲトカシタ','リセットボタン','バクチウチ','ゲンジツトウヒ','ハラペコジョッキー','ウワサノダークホース','オクレテキタヒーロー','イイワケハアトデ','ミチクサオー','タダノウマ','ジツハツヨイ','ガチャハズレ','マタマケタ','デスアンレ','ヒトシイマツモト','ダイスキミヤガワ','エスカレーター','カチカク','トケルバター','オモシロインデス','ニシフハカイガイ','デスレ','カガワケンミン','ケーピートカシ','ドワー','ヤリラフィー'];
+const LEGACY_HORSE_NAMES=['ゲートニキヅカナイ','エイムガブレール','キャリーマチ','ランクダケヒクイ','ヨフカシオー','エーティーエム','ニバンテボーイ','ムテキノイイワケ','アンレタイショウ','デスマッチノオウ','フルバイノユメ','エコラウンド','ハナサノマジュツシ','ニンキサギ','キマグレノアクマ','ネオチダービー','ワンタップドリーム','クラッチミス','スモークツカイ','ラストアワー','ゼロキルクイーン','ヤケクソラン','ゴールデンマンジュウ','コタツデネムル','ザンネンカイチョウ','シンヤサンジ','オヤツタイム','カブヲトカシタ','リセットボタン','バクチウチ','ゲンジツトウヒ','ハラペコジョッキー','ウワサノダークホース','オクレテキタヒーロー','イイワケハアトデ','ミチクサオー','タダノウマ','ジツハツヨイ','ガチャハズレ','マタマケタ','デスアンレ','ヒトシイマツモト','ダイスキミヤガワ','エスカレーター','カチカク','トケルバター','オモシロインデス','ニシフハカイガイ','デスレ','カガワケンミン','ケーピートカシ','ドワー','ヤリラフィー'];
+// Introducing names changes the number of shuffled items and therefore the
+// random draws used for horse abilities, odds and archived race replays.
+// Keep old race cards byte-for-byte identical; activate only for future starts.
+export const NAME_EXPANSION_FROM=Date.parse('2026-11-03T00:00:00+09:00');
+export const HORSE_NAMES=[...LEGACY_HORSE_NAMES,...EXTRA_HORSE_NAMES];
 const JST=9*3600000;
 // Big races carry the group's memes (MEME_SOURCES.md): 松本等しい, 堀大輔, もこう's stream phrases, KESO TOWN.
 const WEEKDAY_BIG={0:'日付またぎレース 堀大輔マイクロスリープ杯',480:'出勤前レース 寝ないチャレンジではない賞',750:'昼休みレース 最後の餃子ステークス',1200:'ゴールデンタイム 良かったこの距離で記念',1260:'KESO TOWN メインレース 松本等しい杯',1320:'夜ふかし バチコーンストライク記念',1380:'最終レース 次のVTR行ってみましょか賞'};
@@ -33,8 +39,14 @@ export function weekStart(now){const d=new Date(now+JST);const days=(d.getUTCDay
 export const placeSlots=size=>size>=8?3:2;
 // Crown races with no person in the name, at :30: every night 19:30-0:30, and weekends from 10:30 (docs/RACING_PLAN.md §3).
 // Races named after someone's bad day come from the Worker (src/racing-crowns.ts) and override the name.
-export const FILLER_CROWNS=['うおw記念','クイヤ記念','お祭り男か記念','しばくぞ記念','あかんかったなぁ記念','了解お兄さん記念','効いてて草記念','一旦な記念','3がある記念','毒かも記念','いいわぁ記念','純の勝ち記念','判定してるやつがおかしい記念','フルタじゃねえわ記念','KESO TOWN町内会杯','ラストデス記念','エコラウンド記念','フルバイの夢記念','ATMレース','KP溶かし予選','ガチャハズレ大会','寝落ち記念'];
-export function fillerCrownName(start){const {day,minutes}=jstParts(start);return minutes%60===30&&(minutes>=1170||minutes<=30||((day===0||day===6)&&minutes>=630))?FILLER_CROWNS[(start/RACE_INTERVAL)%FILLER_CROWNS.length]:null;}
+const LEGACY_FILLER_CROWNS=['うおw記念','クイヤ記念','お祭り男か記念','しばくぞ記念','あかんかったなぁ記念','了解お兄さん記念','効いてて草記念','一旦な記念','3がある記念','毒かも記念','いいわぁ記念','純の勝ち記念','判定してるやつがおかしい記念','フルタじゃねえわ記念','KESO TOWN町内会杯','ラストデス記念','エコラウンド記念','フルバイの夢記念','ATMレース','KP溶かし予選','ガチャハズレ大会','寝落ち記念'];
+export const FILLER_CROWNS=[...LEGACY_FILLER_CROWNS,...EXTRA_CROWN_NAMES];
+export function fillerCrownName(start){const {day,minutes}=jstParts(start);if(!(minutes%60===30&&(minutes>=1170||minutes<=30||((day===0||day===6)&&minutes>=630))))return null;
+ if(start<NAME_EXPANSION_FROM)return LEGACY_FILLER_CROWNS[(start/RACE_INTERVAL)%LEGACY_FILLER_CROWNS.length];
+ return FILLER_CROWNS[Math.floor(rngFrom(`filler:${start}`)()*FILLER_CROWNS.length)];
+}
+/** Ordinary races gain a distinct fictional name without claiming an extra crown slot. */
+export function regularRaceName(start){return REGULAR_RACE_NAMES[Math.floor(rngFrom(`ordinary:${start}`)()*REGULAR_RACE_NAMES.length)];}
 /** Slots a crown race may use: weekday nights 19:00-0:45, weekends from 10:00 (members work days). */
 export function crownSlotAllowed(start){
  if(!isRaceStart(start)||bigRaceName(start)||fillerCrownName(start))return false;
@@ -51,7 +63,7 @@ export function raceCard(start,salt=PUBLIC_SALT,entries=[]){
  if(!isRaceStart(start))throw Error('レースが見つかりません');
  const rng=rngFrom(`${salt}:card:${start}`);
  const big=bigRaceName(start),size=big?10:8,cls=raceClass(start);
- const names=[...HORSE_NAMES];
+ const names=start<NAME_EXPANSION_FROM?[...LEGACY_HORSE_NAMES]:[...HORSE_NAMES];
  for(let i=names.length-1;i>0;i--){const j=Math.floor(rng()*(i+1));[names[i],names[j]]=[names[j],names[i]];}
  const horses=names.slice(0,size).map((name,i)=>({number:i+1,name,ability:CLASSES[cls].mean+normal(rng)*.35,style:Math.floor(rng()*STYLES.length),condition:pickWeighted(rng,[1,2,4,2,1])}));
  if(entries.length){
@@ -60,7 +72,7 @@ export function raceCard(start,salt=PUBLIC_SALT,entries=[]){
   entries.slice(0,size).forEach((e,i)=>Object.assign(horses[gates[i]],{name:e.name,ability:e.ability,style:e.style,horseId:e.horseId,owner:e.owner,ownerName:e.ownerName,nickname:e.nickname??null,person:!!e.person},Number.isInteger(e.condition)&&e.condition>=0&&e.condition<CONDITIONS.length?{condition:e.condition}:{}));
  }
  const crown=big?null:fillerCrownName(start);
- return {id:start,start,closeAt:start-CLOSE_BEFORE,number:raceNumber(start),name:big??crown??`第${raceNumber(start)}レース`,big:!!big,crown:!!crown,raceClass:cls,size,going:pickWeighted(rng,[5,3,2]),horses};
+ return {id:start,start,closeAt:start-CLOSE_BEFORE,number:raceNumber(start),name:big??crown??(start<NAME_EXPANSION_FROM?`第${raceNumber(start)}レース`:`第${raceNumber(start)}レース ${regularRaceName(start)}`),big:!!big,crown:!!crown,raceClass:cls,size,going:pickWeighted(rng,[5,3,2]),horses};
 }
 
 // The race model: a Plackett-Luce ranking (each place goes to a remaining horse with probability
