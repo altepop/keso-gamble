@@ -2,7 +2,7 @@ import {steamApi,steamCallback} from './steam-auth.ts';
 import {privateCasinoAllowed,privateCasinoRound} from './private-casino.ts';
 import {memberNames} from './member-names.ts';
 import {kpTrend} from './kp-trend.ts';
-import {communityFeed,publicTrade} from './community-feed.ts';
+import {communityFeed,feedRevision,publicTrade} from './community-feed.ts';
 import skirmishQueues from '../skirmish-queues.json' with {type:'json'};
 import {SKIRMISH_POLICY} from './skirmish.ts';
 import modeRewards from '../mode-rewards.json' with {type:'json'};
@@ -274,7 +274,16 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping):Promi
    return response({id:card.id,name:card.name,closeAt:card.closeAt,hash:seed.hash,order:result.order.map((n:number)=>({number:n,name:card.horses.find((h:{number:number})=>h.number===n)?.name,win:odds.win[n],place:odds.place[n]}))});
   }
   const names=()=>memberNames(env,mapping.guildId,new Map(mapping.accounts.map(a=>[a.discordUserId,configuredPlayers.find(p=>p.riotId.toLowerCase()===a.riotId.toLowerCase())?.name??a.riotId.split('#')[0]])));
-  if(request.method==='GET'&&path==='/api/kp/feed')return response(await communityFeed(env,mapping.guildId,await names()));
+  if(request.method==='GET'&&path==='/api/kp/feed'){
+   // Authorization above is required even for unchanged feeds. The client
+   // polls every five seconds, but the forty latest actions need no re-read
+   // when no new operation was committed since its previous response.
+   const revision=await feedRevision(env);
+   const since=new URL(request.url).searchParams.get('revision');
+   if(since!==null&&/^\\d{1,16}$/.test(since)&&Number(since)===revision)
+    return response({unchanged:true,revision});
+   return response({...await communityFeed(env,mapping.guildId,await names()),revision});
+  }
   if(request.method==='GET'&&path==='/api/kp/trend')return response(await kpTrend(env,mapping.guildId,await names(),Number(new URL(request.url).searchParams.get('days')??7)));
   if(request.method==='GET'&&path==='/api/kp/state')return response(await readKpState(env,mapping,owner.user));
   // 監視状態: members only, aggregates only.
