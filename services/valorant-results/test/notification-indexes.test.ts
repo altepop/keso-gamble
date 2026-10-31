@@ -17,11 +17,15 @@ test('D1 notification queue and racing match scans use indexes without dropping 
   batch:async(items:Array<{run:()=>unknown}>)=>{for(const item of items)item.run();return [];}} as unknown as D1Database;
  await ensureNotificationReadIndexes(db);
  await ensureNotificationReadIndexes(db);
- assert.equal(calls,3,'avoid repeating CREATE INDEX on every poll within an isolate');
+ assert.equal(calls,4,'avoid repeating CREATE INDEX on every poll within an isolate');
  const explain=(q:string,...args:unknown[])=>sql.prepare('EXPLAIN QUERY PLAN '+q).all(...args as never[]).map(x=>String(x.detail)).join('; ');
  const queue='SELECT 1 AS n FROM notifications WHERE sent=0 LIMIT 1';
  const rank='SELECT match_id,outcome,ended_at FROM notifications WHERE riot_id=? AND outcome IN (\'win\',\'loss\') ORDER BY ended_at DESC,match_id DESC LIMIT 40';
  assert.match(explain(queue),/notifications_pending_match/);
+ const recent='SELECT riot_id,match_id FROM notifications ORDER BY ended_at DESC LIMIT 200';
+ assert.match(explain(recent),/COVERING INDEX notifications_recent_saved/);
+ assert.doesNotMatch(explain(recent),/USE TEMP B-TREE/);
+ assert.equal((sql.prepare(recent).all() as Array<{match_id:string}>)[0].match_id,'match-249');
  assert.match(explain(rank,'One#JP1'),/notifications_crown_history/);
  assert.doesNotMatch(explain(rank,'One#JP1'),/USE TEMP B-TREE/);
  const members="SELECT * FROM notifications WHERE match_id=? AND (outcome IS NULL OR outcome!='draw' OR mode!='escalation') ORDER BY riot_id";
