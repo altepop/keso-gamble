@@ -59,3 +59,13 @@ Discord公式のPrimary Entry Pointは、デフォルトの `DISCORD_LAUNCH_ACTI
 **実機での未検証事項：** Primary Entry Pointのhandler変更は公式仕様で自動招待投稿を抑止できるが、共有リンク経由・古いDiscordクライアント・iOS/Android/Webの動作が同じとは限らない。バックエンドの模擬Interactionとブラウザ試験ではDiscordクライアント自体が生成する表示を再現できない。実機では (1)通話非参加 (2)起動できる (3)テキストチャンネルに招待カードが残らない (4)口座へ接続できる (5)リンク起動も維持、をiOS/Android/Webごとに確認すること。
 
 公式仕様：[Primary Entry Point handler](https://docs.discord.com/developers/interactions/application-commands#entry-point-handlers)、[Interaction LAUNCH_ACTIVITY](https://docs.discord.com/developers/interactions/receiving-and-responding#interaction-response)。
+
+### 既存WorkerのOAuth Secretによる自動切り替え（追加のBot Token不要）
+
+Repository Secret `DISCORD_BOT_TOKEN` がなくても、既存のWorker `DISCORD_CLIENT_SECRET` が有効なら、Discord公式OAuth2 client credentials grantの `applications.commands.update` スコープで自動切り替えできる。既存のゲーム用cronから**独立して**非同期実行し、既存のグローバルPrimary Entry PointのみをGETして `handler=1` にPATCH、GETで確認する。シークレットとアクセストークンはWorker外・D1・ログへ保存・送信しない。
+
+初回にD1 `monitor_state` へ10分の期限付きロックを1件作り、成功後は `done` を永続化する。失敗時は1時間の再試行待ちを保存し、通常のゲーム処理は止めない。同一Workerインスタンスでは状態確認を1回に抑えるので、毎分のcronでD1に新しい負荷を発生させない。
+
+状況確認用の公開読み取り専用URLは `GET /api/discord/activity-entry/status`。値は `handlerConfirmed` と `clientCredentialsConfigured` の真偽のみであり、資格情報やDiscord管理者情報は含まない。 `handlerConfirmed: true` はDiscord APIでhandler1への更新を確認し、その結果をD1へ記録したことを示す（現在のDiscord実機UIや共有リンクで投稿が起こらないことまでは保証しない）。
+
+既存Bot TokenがGitHub Secretにある場合のデプロイ後PATCHは引き続き使用する。OAuthによるバックエンド自動切り替えは、Secret未設定で同処理がスキップされた場合の安全な代替経路だ。

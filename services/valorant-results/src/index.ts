@@ -9,6 +9,7 @@ import {prepareRaceBroadcast} from './racing-broadcast.ts';
 import {raceVideoApi} from './racing-video.ts';
 export {RaceBroadcaster} from './racing-broadcast.ts';
 import {prepareStocks,queueStockPosts} from './stock-market.ts';
+import {migrateSilentEntryPoint,silentEntryStatus} from './discord-silent-entry.ts';
 import {runGuerrillaMarket} from './stock-guerrilla.ts';
 import {monitorMahjong, mahjongStatus, flushMahjongPosts} from './mahjong.ts';
 import {monitorUnite} from './unite.ts';
@@ -468,6 +469,7 @@ export default {
   fetch(request: Request, env: Env, ctx: ExecutionContext) {
     if(new URL(request.url).pathname.startsWith('/api/racing/'))return raceVideoApi(request,env).catch(()=>new Response('Unavailable',{status:503}));
     if(request.method==='GET'&&new URL(request.url).pathname==='/api/mahjong/status')return mahjongStatus(env).then(status=>Response.json(status,{headers:{'Cache-Control':'no-store'}})).catch(()=>Response.json({enabled:false,error:'configuration_unavailable'},{status:503}));
+    if(request.method==='GET'&&new URL(request.url).pathname==='/api/discord/activity-entry/status')return silentEntryStatus(env).then(info=>Response.json(info,{headers:{'Cache-Control':'no-store'}})).catch(()=>Response.json({handlerConfirmed:false},{status:503}));
     if(new URL(request.url).pathname.startsWith('/api/discord/app-webhook/'))return appWebhookApi(request,env).catch(()=>new Response('Unavailable',{status:503}));
     if(new URL(request.url).pathname.startsWith('/api/mahjong/paipu/'))return paipuApi(request,env).catch(()=>new Response('Unavailable',{status:503}));
     return new URL(request.url).pathname.startsWith('/api/kp/') ? kpApi(request, env) : discordInteractions(request, env, ctx);
@@ -481,6 +483,8 @@ export default {
     ctx.waitUntil(track(env,'valorant',()=>monitor(env)));
     ctx.waitUntil((async()=>{
       const mapping=await initializeKp(env);if(!mapping)return;
+      // Independent one-shot OAuth credential migration; never delays race or wallet jobs.
+      ctx.waitUntil(migrateSilentEntryPoint(env).catch(()=>console.warn('discord_entrypoint_pending')));
       await track(env,'stock_market',async()=>{await runGuerrillaMarket(env,mapping.guildId);const market=await prepareStocks(env,mapping.guildId);await queueStockPosts(env,market);});
       // Owned horses run even when nobody opens the Activity.
       await track(env,'horse_race',async()=>{await decideEntries(env,mapping,openRaceStart(Date.now()));await settleHorsePrizes(env,mapping);});
