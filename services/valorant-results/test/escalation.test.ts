@@ -83,6 +83,8 @@ test('a super lucky credits a one-time prize, persists replay data, and queues o
 });
 test('a super unlucky halves only available KP and leaves stock holdings unchanged, with no debt',async()=>{
  const f=await fixture();f.seed(9999);
+ // Finish legacy stock migration before altering a holding; the super event itself must not touch it.
+ await readKpState(f.env,mapping,user);
  f.sql.prepare("UPDATE kp_state SET data=json_set(data,'$.holdings.keso',7)").run();
  const {id}=find('super-unlucky');const q=valoKp(match(id),puuid,'escalation','win');
  await collectKpMatch(f.env,mapping,match(id),puuid);
