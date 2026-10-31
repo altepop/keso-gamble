@@ -280,7 +280,7 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping):Promi
    // when no new operation was committed since its previous response.
    const revision=await feedRevision(env);
    const since=new URL(request.url).searchParams.get('revision');
-   if(since!==null&&/^\\d{1,16}$/.test(since)&&Number(since)===revision)
+   if(since!==null&&/^\d{1,16}$/.test(since)&&Number(since)===revision)
     return response({unchanged:true,revision});
    return response({...await communityFeed(env,mapping.guildId,await names()),revision});
   }
