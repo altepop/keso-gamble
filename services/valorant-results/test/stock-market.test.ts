@@ -6,7 +6,7 @@ import {URL as NodeURL} from 'node:url';
 import {initializeKp,syncKpAccounts} from '../src/kp.ts';
 import type {KpEnv,KpMapping} from '../src/kp.ts';
 import {operateKp,readKpState,kpPulse} from '../src/kp-api.ts';
-import {prepareStocks,payStockDividends,stockBenefits,stockDiscount,convertStocks,tickStocks,nextStockPrices,queueStockPosts,STOCK_HOLD,fortuneCounts,fictionNews} from '../src/stock-market.ts';
+import {prepareStocks,payStockDividends,stockBenefits,stockDiscount,convertStocks,tickStocks,raceNewsSince,nextStockPrices,queueStockPosts,STOCK_HOLD,fortuneCounts,fictionNews} from '../src/stock-market.ts';
 import {applyStockShock,stockShockPrice} from '../src/stock-admin.ts';
 const guild='100000000000000100',one='100000000000000101',two='100000000000000102';
 const mapping:KpMapping={guildId:guild,accounts:[{riotId:'One#JP1',discordUserId:one},{riotId:'Two#JP1',discordUserId:two}]};
@@ -133,6 +133,16 @@ test('ニュースの効果は1銘柄1日3%まで。売買による材料だけ�
  }
  assert.equal(f.sql.prepare("SELECT SUM(ABS(applied_bps)) n FROM stock_news WHERE symbol='keso'").get()!.n,300);
  assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM stock_news WHERE applied_version IS NULL').get()!.n,0,'capped events are consumed, not retried tomorrow');
+});
+
+test('race news expands only recent operations, yet still catches backlog after a long outage',()=>{
+ const now=Date.parse('2026-11-01T00:00:00Z'),day=86400000,hour=3600000;
+ assert.equal(raceNewsSince({startedAt:now-2*day,at:now-300000},now),now-hour-300000,
+  'healthy 5-minute ticks revisit at most 65 minutes, not 24 hours of JSON operations');
+ assert.equal(raceNewsSince({startedAt:now-2*day,at:now-2*day},now),now-day,
+  'after an outage, preserve the original 24h catch-up horizon');
+ assert.equal(raceNewsSince({startedAt:now-120000,at:now-60000},now),now-120000,
+  'a newly started market never imports operations from before listing');
 });
 
 test('race-settlement news reads only the indexed race operations, not all game operations',async t=>{
