@@ -1,5 +1,6 @@
 import rules from '../mode-rewards.json' with {type:'json'};
 import {applyLuck,chance,draw,luckFor,luckLabel} from './luck.ts';
+import {escalationBigNote} from './escalation-messages.ts';
 import type {Match} from './results.ts';
 import type {KpEnv} from './kp.ts';
 export const MODE_REWARD_VERSION=rules.version;
@@ -63,7 +64,7 @@ export function valoKp(raw:Match,puuid:string,mode:string,outcome:string|null,es
   }
   if(mode==='escalation'&&escalationV5){
    escalation=escalationFor(id,outcome);
-   if(escalation?.kind==='big'){base=escalation.award;note=`（🎰 エスカ大勝負 第${escalation.tier}段階 ${base>0?'+':''}${base} KP）`;}
+   if(escalation?.kind==='big'){base=escalation.award;note=escalationBigNote(escalation.tier,escalation.award);}
    if(escalation?.kind==='super-lucky')note=`（📩 超ラッキー +${escalation.award.toLocaleString('ja-JP')} KP）`;
    if(escalation?.kind==='super-unlucky')note='（📩 超アンラッキー：手持ちKP半額）';
   }
