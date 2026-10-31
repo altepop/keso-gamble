@@ -68,6 +68,7 @@ test('stale and valid old upload requests fail closed before authentication, for
  assert.equal((await raceVideoApi(new Request('https://test/api/racing/video/upload',{method:'GET'}),f.env)).status,410);
  assert.equal(fetches,0);
  assert.equal(f.sql.prepare('SELECT video FROM race_broadcasts').get()!.video,'pending');
+ f.env.RACE_BROADCAST={idFromName:()=>guild,get:()=>({fetch:async()=>Response.json({armed:true})})} as unknown as DurableObjectNamespace;
  const status=await raceVideoApi(new Request('https://test/api/racing/status'),f.env);
  const body=await status.json() as {enabled:boolean;videoPostingEnabled:boolean;pendingVideos:number;races:number};
  assert.equal(status.status,200);
