@@ -56,3 +56,31 @@ test('stock operation needs an explicit inline confirmation and safely escapes i
  assert.match(html,/&lt;img/);
  assert.doesNotMatch(privateStockOperator([{id:'x',name:'X',ticker:'X'}]),/data-action="stock-shock-approve"/);
 });
+
+
+test('fictional stock alerts show a detailed story and escape malicious markup',()=>{
+ const m={at:Date.now(),news:[
+  {symbol:'riso',label:'リソ寿司、新開発が大ヒット\\n客が100倍に増えたという珍事件。',bps:2500,at:Date.now()},
+  {symbol:'keso',label:'<img src=x onerror=alert(1)>\\n<script>alert(2)</script>',bps:-5000,at:Date.now()}
+ ],dividends:[]};
+ const html=stockPanel({stockMarket:m,stockBenefits:{percent:0,eligibleValue:0}});
+ assert.match(html,/リソ寿司、新開発が大ヒット/);
+ assert.match(html,/客が100倍に増えたという珍事件/);
+ assert.match(html,/class="stock-news-detail"/);
+ assert.doesNotMatch(html,/<img src|<script>/);
+ assert.match(html,/&lt;img/);
+});
+test('stock operator offers per-company absurd news, random announcements, manual stories and escaped preview',()=>{
+ const stocks=[{id:'riso',ticker:'RISO',name:'リソ寿司'}];
+ const one=privateStockOperator(stocks,{selection:{symbol:'riso',direction:'down',strength:50,eventId:'riso-down-2'}});
+ assert.match(one,/マイナス4皿/);
+ assert.match(one,/value="riso-down-2" selected/);
+ assert.match(one,/value="custom"/);
+ assert.match(one,/おまかせ/);
+ const manual=privateStockOperator(stocks,{selection:{symbol:'riso',direction:'up',strength:25,eventId:'custom',headline:'テスト<見出し>',body:'本文に<script>が混入'}});
+ assert.match(manual,/id="admin-stock-headline"/);assert.match(manual,/id="admin-stock-body"/);
+ assert.doesNotMatch(manual,/<script>/);
+ const confirm=privateStockOperator(stocks,{confirmation:{symbol:'riso',strength:25,direction:'up',headline:'<script>事件',body:'詳しくは<script>へ'}});
+ assert.match(confirm,/【架空速報】/);assert.match(confirm,/&lt;script&gt;/);
+ assert.doesNotMatch(confirm,/<script>/);
+});
