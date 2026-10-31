@@ -45,3 +45,14 @@ test('stock operator retains selected controls and presents escaped, accessible 
  assert.match(html,/&lt;script&gt;/);
  assert.match(privateStockOperator(stocks),/id="stock-shock-notice"[^>]* hidden>/);
 });
+
+test('stock operation needs an explicit inline confirmation and safely escapes its stock name',()=>{
+ const html=privateStockOperator([{id:'x',name:'<img src=x onerror=alert(1)>',ticker:'X'}],{selection:{symbol:'x',direction:'down',strength:50},confirmation:{symbol:'x',direction:'down',strength:50}});
+ assert.match(html,/data-action="stock-shock-approve"/);
+ assert.match(html,/data-action="stock-shock-cancel"/);
+ assert.match(html,/50%急落/);
+ assert.match(html,/role="group" aria-label="株価操作の最終確認"/);
+ assert.doesNotMatch(html,/<img src=/);
+ assert.match(html,/&lt;img/);
+ assert.doesNotMatch(privateStockOperator([{id:'x',name:'X',ticker:'X'}]),/data-action="stock-shock-approve"/);
+});
