@@ -46,6 +46,7 @@ let rotation=0;
 let spinLock=false;
 let mutationPending=false;
 let stockShockNotice=null;
+let stockShockConfirmation=null;
 let stockShockSelection={symbol:MARKET[0].id,direction:'up',strength:25};
 let detail=null;
 let showMA=true;
@@ -234,7 +235,7 @@ function screenStable(){return useScreen('馬主',live?ownerPanel(state,Date.now
 function screenShop(){return useScreen('高級品',live?luxuryPanel(state):'');}
 
 function screenAssets(){
-  return `<div class="screen"><header class="topbar"><div class="toprow"><h1 class="title">資産</h1><div class="small-actions">${live?'':'<button class="icon-btn" data-action="reset" aria-label="初期化">↺</button>'}</div></div></header><div class="wallet-strip"><div class="wallet-item"><small>保有KP</small><strong>${moneyCompact(state.cash)}</strong></div><div class="wallet-item"><small>株式評価額</small><strong>${moneyCompact(portfolioValue(state))}</strong></div><div class="wallet-item"><small>純資産</small><strong>${moneyCompact(assets(state))}</strong></div></div>${live?'<div class="market-disclaimer">サーバー口座 · 試合報酬と決済は全端末で共通です。</div>':'<div class="market-disclaimer">端末内のデモ口座</div>'}${live?'':`<details class="panel"><summary class="card-body">開発用：テストKPの補充</summary><div class="action-row"><button class="action-btn" data-action="salary">テスト用KP +600 KP</button></div></details>`}${state.debt?.amount>0?`<div class="market-disclaimer">💸 借KP ${moneyCompact(state.debt.amount)}（${state.debt.intervalMinutes}分ごとに利子${state.debt.interestPercent}%）</div>`:''}<div class="asset-list">${live&&state.privateCasino?privateStockOperator(MARKET,{selection:stockShockSelection,notice:stockShockNotice}):''}${live&&state.privateCasino?privateCasinoPanel(drafts,privateRacePreview,privateRoundMessage):''}<div class="asset-card"><div class="panel-title" style="margin-bottom:10px">保有銘柄</div>${MARKET.map(s=>`<div class="asset-line"><span>${s.name}</span><strong>${state.holdings[s.id]}株 / ${moneyCompact(state.holdings[s.id]*state.prices[s.id])}</strong></div>`).join('')}<div class="action-row"><button class="action-btn" data-screen="market">株を売買する</button></div></div>${tradeHistory()}${live?roastPanel(state):''}${live?trendPanel(trend,trendView):''}${live?healthPanel(health,healthLoading,healthError):''}<div class="asset-card"><h2 class="panel-title">口座</h2>${live?'<div id="connection-slot"></div>':''}<button class="title-back" data-screen="title">タイトルへ戻る</button></div></div>${bottomNav()}</div>`;
+  return `<div class="screen"><header class="topbar"><div class="toprow"><h1 class="title">資産</h1><div class="small-actions">${live?'':'<button class="icon-btn" data-action="reset" aria-label="初期化">↺</button>'}</div></div></header><div class="wallet-strip"><div class="wallet-item"><small>保有KP</small><strong>${moneyCompact(state.cash)}</strong></div><div class="wallet-item"><small>株式評価額</small><strong>${moneyCompact(portfolioValue(state))}</strong></div><div class="wallet-item"><small>純資産</small><strong>${moneyCompact(assets(state))}</strong></div></div>${live?'<div class="market-disclaimer">サーバー口座 · 試合報酬と決済は全端末で共通です。</div>':'<div class="market-disclaimer">端末内のデモ口座</div>'}${live?'':`<details class="panel"><summary class="card-body">開発用：テストKPの補充</summary><div class="action-row"><button class="action-btn" data-action="salary">テスト用KP +600 KP</button></div></details>`}${state.debt?.amount>0?`<div class="market-disclaimer">💸 借KP ${moneyCompact(state.debt.amount)}（${state.debt.intervalMinutes}分ごとに利子${state.debt.interestPercent}%）</div>`:''}<div class="asset-list">${live&&state.privateCasino?privateStockOperator(MARKET,{selection:stockShockSelection,notice:stockShockNotice,confirmation:stockShockConfirmation}):''}${live&&state.privateCasino?privateCasinoPanel(drafts,privateRacePreview,privateRoundMessage):''}<div class="asset-card"><div class="panel-title" style="margin-bottom:10px">保有銘柄</div>${MARKET.map(s=>`<div class="asset-line"><span>${s.name}</span><strong>${state.holdings[s.id]}株 / ${moneyCompact(state.holdings[s.id]*state.prices[s.id])}</strong></div>`).join('')}<div class="action-row"><button class="action-btn" data-screen="market">株を売買する</button></div></div>${tradeHistory()}${live?roastPanel(state):''}${live?trendPanel(trend,trendView):''}${live?healthPanel(health,healthLoading,healthError):''}<div class="asset-card"><h2 class="panel-title">口座</h2>${live?'<div id="connection-slot"></div>':''}<button class="title-back" data-screen="title">タイトルへ戻る</button></div></div>${bottomNav()}</div>`;
 }
 
 function bottomNav(){
@@ -376,19 +377,37 @@ addEventListener('click',async e=>{
   const t=e.target.closest?.('button,[data-open]'); if(!t) return;
   if(t.dataset.action==='casino-skip'){casinoSkipped=true;skipCasinoPause?.();return;}
   if(casinoBusy&&(t.dataset.screen||t.dataset.casinoGame)){toast('演出をスキップすると移動できます');return;}
-  const mutates=!!t.dataset.approve || !!t.dataset.complete || ['steam-library','steam-status','steam-link','steam-open','steam-confirm','steam-disconnect','steam-game','salary','trade','spin','race-bet','roast-level','horse-buy','horse-sell','luxury','reset','submit-claim','issue-directive','connect-kp','refresh-kp','disconnect-kp','auto-connect-kp','ml-buy','chinchiro','bj-start','bj-hit','bj-stand','bj-double','mines-start','mines-pick','mines-cashout','slot','vp-deal','vp-draw','baccarat','private-round','private-race','stock-shock'].includes(t.dataset.action);
+  const mutates=!!t.dataset.approve || !!t.dataset.complete || ['steam-library','steam-status','steam-link','steam-open','steam-confirm','steam-disconnect','steam-game','salary','trade','spin','race-bet','roast-level','horse-buy','horse-sell','luxury','reset','submit-claim','issue-directive','connect-kp','refresh-kp','disconnect-kp','auto-connect-kp','ml-buy','chinchiro','bj-start','bj-hit','bj-stand','bj-double','mines-start','mines-pick','mines-cashout','slot','vp-deal','vp-draw','baccarat','private-round','private-race','stock-shock','stock-shock-approve'].includes(t.dataset.action);
   if(mutates && mutationPending)return;
   if(mutates)mutationPending=true;
   try{
     if(t.dataset.companion){await openCompanionGame(t.dataset.companion);return;}
-    if(t.dataset.action==='stock-shock'){
+    if(t.dataset.action==='stock-shock-cancel'){
+      stockShockConfirmation=null;
+      stockShockNotice=null;
+      render();
+      return;
+    }
+    if(t.dataset.action==='stock-shock'||t.dataset.action==='stock-shock-approve'){
       if(!live||!state.privateCasino)throw Error('この操作は利用できません。');
       const symbol=$('#admin-stock-symbol')?.value,direction=$('#admin-stock-direction')?.value,strength=Number($('#admin-stock-strength')?.value);
       const stock=MARKET.find(s=>s.id===symbol);
       if(!stock||!['up','down'].includes(direction)||![10,25,50].includes(strength))throw Error('操作内容を確認してください。');
       const label=direction==='up'?'上昇':'下落';
-      if(!confirm(`${stock.name} の株価を${strength}%${label}させます。全メンバーの共通相場が即時変動し、履歴にも残ります。実行しますか？`))return;
       stockShockSelection={symbol,direction,strength};
+      // Discord iOS embeds may silently suppress native window.confirm.
+      // Always require explicit in-page confirmation before the network mutation.
+      if(t.dataset.action==='stock-shock'){
+        stockShockConfirmation={symbol,direction,strength};
+        stockShockNotice=null;
+        render();
+        $('.stock-shock-confirmation')?.scrollIntoView({block:'nearest',behavior:'auto'});
+        return;
+      }
+      if(!stockShockConfirmation||stockShockConfirmation.symbol!==symbol||
+         stockShockConfirmation.direction!==direction||stockShockConfirmation.strength!==strength)
+        throw Error('操作条件が変更されました。もう一度確認してください。');
+      stockShockConfirmation=null;
       t.disabled=true;t.textContent='送信中…';
       const pendingNotice=$('#stock-shock-notice');
       if(pendingNotice){pendingNotice.hidden=false;pendingNotice.className='stock-shock-notice waiting';pendingNotice.textContent='株価操作を送信しています…';}
@@ -505,6 +524,8 @@ addEventListener('change',e=>{
  if(['admin-stock-symbol','admin-stock-direction','admin-stock-strength'].includes(e.target.id)){
   stockShockSelection={symbol:$('#admin-stock-symbol')?.value,direction:$('#admin-stock-direction')?.value,strength:Number($('#admin-stock-strength')?.value)};
   stockShockNotice=null;
+  stockShockConfirmation=null;
+  const approval=$('.stock-shock-confirmation');if(approval)approval.remove();
   const notice=$('#stock-shock-notice');if(notice){notice.textContent='';notice.hidden=true;}
  }
  if(e.target.id==='trade-symbol'){activeSymbol=e.target.value;render();}
