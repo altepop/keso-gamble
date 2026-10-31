@@ -60,8 +60,8 @@ test('stock operation needs an explicit inline confirmation and safely escapes i
 
 test('fictional stock alerts show a detailed story and escape malicious markup',()=>{
  const m={at:Date.now(),news:[
-  {symbol:'riso',label:'リソ寿司、新開発が大ヒット\\n客が100倍に増えたという珍事件。',bps:2500,at:Date.now()},
-  {symbol:'keso',label:'<img src=x onerror=alert(1)>\\n<script>alert(2)</script>',bps:-5000,at:Date.now()}
+  {symbol:'riso',label:'リソ寿司、新開発が大ヒット\n客が100倍に増えたという珍事件。',bps:2500,at:Date.now()},
+  {symbol:'keso',label:'<img src=x onerror=alert(1)>\n<script>alert(2)</script>',bps:-5000,at:Date.now()}
  ],dividends:[]};
  const html=stockPanel({stockMarket:m,stockBenefits:{percent:0,eligibleValue:0}});
  assert.match(html,/リソ寿司、新開発が大ヒット/);
