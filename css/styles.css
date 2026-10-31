@@ -139,6 +139,12 @@ button{cursor:pointer}
 .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
 .toast{position:fixed;left:50%;bottom:102px;transform:translateX(-50%);background:rgba(15,20,36,.95);border:1px solid rgba(60,87,134,.8);color:#fff;padding:12px 14px;border-radius:12px;font-size:14px;z-index:50;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(-4px)}
+.stock-shock-notice{margin:4px 16px 18px;padding:13px 15px;border:1px solid #577ca8;background:#142544;border-radius:12px;color:#e6f0ff;line-height:1.65;font-size:14px;overflow-wrap:anywhere;white-space:pre-line}
+.stock-shock-notice.success{border-color:#32966f;background:#0b2e28;color:#e0fff2}
+.stock-shock-notice.warning{border-color:#c29b46;background:#362a15;color:#fff0c9}
+.stock-shock-notice.error{border-color:#bb5867;background:#3c1d2a;color:#ffe5ec}
+.stock-shock-notice[hidden]{display:none}
+
 @media (min-width: 720px){
   .screen{max-width:680px}
   .bottom-inner{max-width:680px}

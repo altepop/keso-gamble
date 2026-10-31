@@ -6,10 +6,10 @@ const server=spawn('python3',['-m','http.server','8794','--bind','127.0.0.1'],{c
  const {createInitialState}=await import('../js/engine.js');const state={...createInitialState(),serverWallet:true,privateCasino:true,cash:10000,selfUserId:'owner',members:[],ledger:[]};
  const engine=process.argv[2]||'chromium';browser=await(engine==='webkit'?webkit:chromium).launch(engine==='webkit'?{}:{executablePath:existsSync('/usr/bin/chromium')?'/usr/bin/chromium':undefined,args:['--no-sandbox']});
  const ctx=await browser.newContext({viewport:{width:390,height:844},reducedMotion:'reduce'});await ctx.addInitScript(()=>localStorage.setItem('keso-kp-session-v1','fixture'));
- let ops=0;const errors=[],bodies=[],shocks=[];
+ let ops=0,rejectNextShock=false,failNextState=false;const errors=[],bodies=[],shocks=[];
  await ctx.route('https://valorant-results.tealeaforest.workers.dev/api/kp/**',async route=>{
   const path=new URL(route.request().url()).pathname;let result;
-  if(path.endsWith('/state'))result=state;
+  if(path.endsWith('/state')){if(failNextState){failNextState=false;await route.fulfill({status:503,json:{error:'一時的に更新できません',retryable:true}});return;}result=state;}
   else if(path.endsWith('/pulse'))result={pulse:'fixed'};
   else if(path.endsWith('/feed'))result={entries:[]};
   else if(path.endsWith('/private/race')){
@@ -17,6 +17,7 @@ const server=spawn('python3',['-m','http.server','8794','--bind','127.0.0.1'],{c
   }else if(path.endsWith('/operation')){
    const body=route.request().postDataJSON();
    if(body.action==='stock-shock'){
+    if(rejectNextShock){rejectNextShock=false;await route.fulfill({status:403,json:{error:'操作権限を確認できません',retryable:false}});return;}
     const {symbol,direction,strength}=body.args;shocks.push({...body.args,id:body.id});
     const before=state.prices[symbol],after=Math.round(before*(direction==='up'?1+strength/100:1-strength/100));
     state.prices[symbol]=after;
@@ -45,9 +46,32 @@ const server=spawn('python3',['-m','http.server','8794','--bind','127.0.0.1'],{c
  await page.locator('#admin-stock-direction').selectOption('down');
  await page.locator('#admin-stock-strength').selectOption('50');
  await page.locator('[data-action=stock-shock]').click();
- await page.waitForFunction(()=>document.querySelector('.toast')?.textContent?.includes('600 KP'));
+ await page.waitForFunction(()=>document.querySelector('#stock-shock-notice')?.textContent?.includes('株価操作を受け付けました'));
+
+ assert.match(await page.locator('#stock-shock-notice').innerText(),/50%下落.*1,200 KP → 600 KP/);
+ assert.equal(await page.locator('#stock-shock-direction').count(),0,'the operator should use the admin-stock-direction field');
+ assert.equal(await page.locator('#admin-stock-direction').inputValue(),'down');
+ assert.equal(await page.locator('#admin-stock-strength').inputValue(),'50');
  assert.deepEqual(shocks.map(({id,...args})=>args),[{symbol:'keso',direction:'down',strength:50}]);
  assert.equal(state.cash,152000,'admin stock action cannot credit the wallet');
+ // Success should remain readable even after the 1.8-second toast disappears.
+ await page.waitForTimeout(2000);
+ assert.match(await page.locator('#stock-shock-notice').innerText(),/株価操作を受け付けました/);
+ // Definitively rejected operations must never show a new success acknowledgement.
+ await page.locator('#admin-stock-direction').selectOption('up');
+ await page.locator('#admin-stock-strength').selectOption('10');
+ rejectNextShock=true;
+ await page.locator('[data-action=stock-shock]').click();
+ await page.waitForFunction(()=>document.querySelector('#stock-shock-notice')?.textContent?.includes('受け付けられませんでした'));
+ assert.equal(await page.locator('#stock-shock-notice').evaluate(el=>el.classList.contains('error')),true);
+ assert.equal(state.prices.keso,600,'rejected operation cannot change the market');
+ // Operation success followed by a failed state refresh must still be acknowledged.
+ failNextState=true;
+ await page.locator('[data-action=stock-shock]').click();
+ await page.waitForFunction(()=>document.querySelector('#stock-shock-notice')?.textContent?.includes('再取得に失敗しました'));
+ assert.match(await page.locator('#stock-shock-notice').innerText(),/株価操作を受け付けました/);
+ assert.equal(state.prices.keso,660);
+ assert.equal(await page.locator('#stock-shock-notice').evaluate(el=>el.classList.contains('warning')),true);
  for(const width of [320,390,1440]){await page.setViewportSize({width,height:844});await page.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))));assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);}
  delete state.privateCasino;state.selfUserId='other';await page.reload();await page.locator('.title-start').click();await page.locator('.nav-btn[data-screen=assets]').click();assert.equal(await page.locator('.private-casino').count(),0);assert.equal(await page.locator('#private-number').count(),0);assert.equal(await page.locator('[data-action=stock-shock]').count(),0);assert.deepEqual(errors,[]);
  console.log('Private casino passed ('+engine+'): owner controls, exact request, double-click guard, draft preservation, escaped race preview, no menu for other users, mobile/desktop. Fixture balances only.');
