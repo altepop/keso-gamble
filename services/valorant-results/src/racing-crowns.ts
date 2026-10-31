@@ -37,7 +37,10 @@ interface Event { kind:CrownKind; user:string; source:string; match?:string; rio
 export async function crownEvents(env:KpEnv,mapping:KpMapping,now:number):Promise<Event[]>{
  const events:Event[]=[];
  for(const account of mapping.accounts){
-  const rows=(await env.DB.prepare("SELECT match_id,outcome,ended_at FROM notifications WHERE riot_id=? AND outcome IN ('win','loss') ORDER BY ended_at DESC,match_id DESC LIMIT 40").bind(account.riotId).all<{match_id:string;outcome:string;ended_at:number}>()).results;
+  // Ten straight losses is the largest threshold. An eleventh prior result
+  // distinguishes exactly ten from eleven-plus, while 3 preceding wins fit.
+  // Reading 40 matches per player every monitor run is unnecessary.
+  const rows=(await env.DB.prepare("SELECT match_id,outcome,ended_at FROM notifications WHERE riot_id=? AND outcome IN ('win','loss') ORDER BY ended_at DESC,match_id DESC LIMIT 11").bind(account.riotId).all<{match_id:string;outcome:string;ended_at:number}>()).results;
   const latest=rows[0];if(!latest||latest.ended_at<now-FRESH)continue;
   const at=(kind:CrownKind,source=`${kind}:${account.riotId}:${latest.match_id}`)=>events.push({kind,user:account.discordUserId,source,match:latest.match_id,riotId:account.riotId});
   if(rows[1]&&latest.ended_at-rows[1].ended_at>=BACK_GAP)at('back');
