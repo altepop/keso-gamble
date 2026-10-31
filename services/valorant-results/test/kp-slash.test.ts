@@ -63,14 +63,14 @@ test('race clocks cross JST midnight safely and are stable on replay',()=>{
 test('command registration never bulk-replaces other commands and refuses a foreign name collision',async()=>{
  const calls:Array<{path:string;method?:string;body?:any}>=[];
  const api=async(path:string,method?:string,body?:unknown)=>{calls.push({path,method,body});return path==='/users/@me'?{id:one,bot:true}:method==='POST'?{...(body as object),id:one}:[{name:'death'},{name:'valo'},{name:'launch',type:4}];};
- assert.equal(await registerKpCommands(one,guild,api,async()=>{}),12);
- assert.deepEqual(calls.filter(c=>c.method==='POST').map(c=>c.body.name),['kp','keiba','bet','horsename','give','mleague','mbet','mclose','kpgrant','unitelink','paifulink','paifu']);
- assert.ok(calls.every(c=>c.method!=='PUT'));assert.deepEqual(kpCommands[2].options?.filter(o=>o.required).map(o=>o.name),['horse','amount']);
+ assert.equal(await registerKpCommands(one,guild,api,async()=>{}),13);
+ assert.deepEqual(calls.filter(c=>c.method==='POST').map(c=>c.body.name),['kp','spike','keiba','bet','horsename','give','mleague','mbet','mclose','kpgrant','unitelink','paifulink','paifu']);
+ assert.ok(calls.every(c=>c.method!=='PUT'));assert.deepEqual(kpCommands[3].options?.filter(o=>o.required).map(o=>o.name),['horse','amount']);
  // Unchanged commands are not written again, and writes are spaced out.
  const waits:number[]=[],posted:string[]=[];
- const stored=[{...kpCommands[0],id:'1',application_id:one,version:'9',description_localizations:null,options:kpCommands[0].options.map(o=>({...o,required:false}))},{...kpCommands[1],id:'2'},{name:'death'}];
+ const stored=[{...kpCommands[0],id:'1',application_id:one,version:'9',description_localizations:null,options:kpCommands[0].options.map(o=>({...o,required:false}))},{...kpCommands[2],id:'2'},{name:'death'}];
  assert.equal(await registerKpCommands(one,guild,async(path,method,body)=>{if(method==='POST'){posted.push((body as {name:string}).name);return {...(body as object),id:one};}return path==='/users/@me'?{id:one,bot:true}:stored;},async ms=>{waits.push(ms);}),10);
- assert.deepEqual(posted,['bet','horsename','give','mleague','mbet','mclose','kpgrant','unitelink','paifulink','paifu']);assert.deepEqual(waits,[5000,5000,5000,5000,5000,5000,5000,5000,5000],'a gap between writes, none before the first');
+ assert.deepEqual(posted,['spike','bet','horsename','give','mleague','mbet','mclose','kpgrant','unitelink','paifulink','paifu']);assert.deepEqual(waits,[5000,5000,5000,5000,5000,5000,5000,5000,5000,5000],'a gap between writes, none before the first');
  let writes=0;await assert.rejects(registerKpCommands(one,guild,async(path,method)=>{if(method)writes++;return path==='/users/@me'?{id:one,bot:true}:[{name:'bet',description:'Another bot command'}];}),/conflict/);assert.equal(writes,0);
  await assert.rejects(registerKpCommands(one,guild,async()=>({id:two,bot:true})),/mismatch/);
 });
