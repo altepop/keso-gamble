@@ -39,6 +39,15 @@ export const kpSchema=[
  END`,
 ];
 export const kpMatchRewardHistoryIndex='CREATE INDEX IF NOT EXISTS kp_events_member_latest ON kp_events(guild,user,at DESC,id ASC)';
+// Apply only when the reward history is requested, not on every unrelated KP command.
+const matchRewardIndexReady=new WeakMap<object,Promise<void>>();
+export async function ensureKpMatchRewardIndex(env:KpEnv):Promise<void>{
+ const ready=matchRewardIndexReady.get(env.DB);
+ if(ready)return ready;
+ const job=env.DB.prepare(kpMatchRewardHistoryIndex).run().then(()=>{});
+ matchRewardIndexReady.set(env.DB,job);
+ try{await job;}catch(error){matchRewardIndexReady.delete(env.DB);throw error;}
+}
 export function newKpState(){return {cash:0,serverWallet:true,holdings:{keso:0,riso:0,yuya:0,yano:0},prices:{keso:1200,riso:780,yuya:420,yano:1860},history:{keso:[1200],riso:[780],yuya:[420],yano:[1860]},owned:[],trades:[],spins:[],salaryClaims:0,lastSalaryAt:0,ticks:0,lastMarketAt:Date.now(),seed:7331,claims:[],directives:[],progressSeq:0,version:1};}
 const b64=(s:string)=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
 export const kpHash=async(s:string)=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s))),x=>x.toString(16).padStart(2,'0')).join('');
@@ -73,9 +82,6 @@ export async function initializeKp(env:KpEnv,override?:KpMapping):Promise<KpMapp
   // ledgerHistory without limiting or changing any historical transactions.
   // Existing schema_version=1 databases must receive this index too.
   await env.DB.prepare('CREATE INDEX IF NOT EXISTS kp_ledger_member_latest ON kp_ledger(guild,user,at DESC,id DESC)').run();
-  // Reward claims fetch a member's most recent VALORANT events, not all guild events.
-  // Existing schema_version=1 databases need this index without rewriting events.
-  await env.DB.prepare(kpMatchRewardHistoryIndex).run();
   await ensureDebt(env);
   await ensureSpikeGrowth(env);
   await ensureModeRewards(env);
