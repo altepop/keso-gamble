@@ -28,7 +28,7 @@ export function privateStockOperator(market,{selection={},notice=null,confirmati
  const message=notice?.text?esc(notice.text):'';
  return `<details class="asset-card rules"><summary class="panel-title">🔒 裏モード：株価オペレーター</summary>
   <p class="helper">自分だけが使える運営メニュー。操作は全員共通の株価に即時反映され、チャート・運営イベント履歴に残ります。保有KP・株数は直接増減しません。</p>
-  <div class="stock-story-preview"><strong>🗞️ 等しいbotの経済速報</strong>
+  <div class="market-disclaimer market-guerrilla-panel"><strong>🗞️ 等しいbotの経済速報</strong>
   <p>手動操作と自動ゲリライベントは同じ速報形式。裏モードの操作主はニュース・公開API・Discord投稿には表示しません。内部の管理記録は残ります。</p>
   <p>自動ゲリライベント：<strong>${events?.enabled===false?'停止中':'有効'}</strong> ／ 重大ニュースは低確率。既存の通常値動きは停止しません。</p>
   <div class="action-row"><button type="button" class="action-btn" data-action="stock-guerrilla-toggle">${events?.enabled===false?'自動ニュースを有効にする':'自動ニュースを一時停止'}</button></div></div>
