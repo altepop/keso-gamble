@@ -4,7 +4,8 @@ import {privateCasinoPanel} from './private-casino-view.js?v=web-e054fc2bb05b5f3
 import {communityPanel,communityRows} from './community-feed.js?v=web-e054fc2bb05b5f3f';
 import {stockPanel,stockCandles,stockPrice,privateStockOperator} from './stock-view.js?v=web-e054fc2bb05b5f3f';
 import {stockStoryChoices,validateCustomStory} from './stock-stories.js?v=web-e054fc2bb05b5f3f';
-import {wheelView,covered,redNumbers,outcomeAngle} from './roulette-view.js?v=web-e054fc2bb05b5f3f';
+import {wheelView,covered,redNumbers,outcomeAngle} from './roulette-view.js?v=web-e054fc2bb05b5f';
+import {makeEscalationWheel} from './escalation-roulette.js?v=web-e054fc2bb05b5f';
 import {connectDiscordActivity,isDiscordActivity,openSteamLogin,openCompanionGame}from './discord-activity-auth.js?v=web-e054fc2bb05b5f3f';
 import { createKpClient } from './kp-client.js?v=web-e054fc2bb05b5f3f';
 import { fmt, fmt0 } from './format.js?v=web-e054fc2bb05b5f3f';
@@ -52,6 +53,28 @@ let stockShockSelection={symbol:MARKET[0].id,direction:'up',strength:25,eventId:
 let detail=null;
 let showMA=true;
 let renderedMarkup;
+let activeEscalationOverlay=null;
+const escalationSeen=new Set();
+function seenEscalationKey(spin){return 'keso:esc-seen:'+state.selfUserId+':'+spin.id;}
+function isEscalationSeen(spin){
+ const key=seenEscalationKey(spin);
+ try{return localStorage.getItem(key)==='1'||escalationSeen.has(key);}catch{return escalationSeen.has(key);}
+}
+function markEscalationSeen(spin){
+ const key=seenEscalationKey(spin);escalationSeen.add(key);
+ try{localStorage.setItem(key,'1');}catch{/* A replay stays available in the history on storage-restricted devices. */}
+}
+function showEscalationWheel(spin){
+ if(activeEscalationOverlay)return;
+ markEscalationSeen(spin);
+ activeEscalationOverlay=makeEscalationWheel(spin,()=>{activeEscalationOverlay=null;queueMicrotask(maybeAutoEscalation);});
+}
+function maybeAutoEscalation(){
+ if(activeEscalationOverlay||!live||screen==='title'||document.hidden||mutationPending||spinLock)return;
+ const current=Date.now();
+ const spin=state.escalationSpins?.find(s=>current-s.at>=0&&current-s.at<48*3600000&&!isEscalationSeen(s));
+ if(spin)showEscalationWheel(spin);
+}
 
 const app=$('#app');
 const toastEl=document.createElement('div');toastEl.className='toast';toastEl.setAttribute('role','status');toastEl.setAttribute('aria-live','polite');document.body.appendChild(toastEl);
@@ -277,6 +300,7 @@ function render(){
   document.body.style.overflow=detail?'hidden':'';
   paintCommunity();
   ensureRaceLoop();
+  if(live&&screen!=='title'&&Array.isArray(state.escalationSpins))queueMicrotask(maybeAutoEscalation);
 }
 
 
@@ -382,6 +406,11 @@ addEventListener('click',async e=>{
   if(mutates && mutationPending)return;
   if(mutates)mutationPending=true;
   try{
+    if(t.dataset.escSpin){
+      const spin=state.escalationSpins?.find(s=>s.id===t.dataset.escSpin);
+      if(spin)showEscalationWheel(spin);
+      return;
+    }
     if(t.dataset.companion){await openCompanionGame(t.dataset.companion);return;}
     if(t.dataset.action==='stock-guerrilla-toggle'){
       if(!live||!state.privateCasino)throw Error('この操作は利用できません。');
