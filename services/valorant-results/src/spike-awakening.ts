@@ -95,7 +95,7 @@ export async function purchaseSpikeHint(env:KpEnv,guild:string,user:string,role:
  const linked=await env.DB.prepare('SELECT puuid FROM kp_accounts WHERE guild=? AND user=?').bind(guild,user).first<{puuid:string}>();
  if(!linked)return 'Riotアカウントの紐付けが必要です。';
  const already=await env.DB.prepare('SELECT 1 AS owned FROM spike_hint_unlocks WHERE guild=? AND puuid=? AND role=?').bind(guild,linked.puuid,role).first();
- if(already)return `🔓 ${role} のヒントは購入済みです。\n${SPIKE_HINTS[role]}`;
+ if(already)return `🔓 ${role} のヒントは購入済みです。\n${SPIKE_HINTS[role as SpikeRole]}`;
  if(await debtOf(env,guild,user)>0)return '借KPを完済するまでヒントを購入できません。';
  const result=await env.DB.prepare(`INSERT INTO spike_hint_unlocks(guild,puuid,user,role,at)
  SELECT ?,?,?,?,? FROM kp_accounts a JOIN kp_wallets w ON w.guild=a.guild AND w.user=a.user
@@ -105,7 +105,7 @@ export async function purchaseSpikeHint(env:KpEnv,guild:string,user:string,role:
   .bind(guild,linked.puuid,user,role,at,guild,user,linked.puuid,SPIKE_HINT_COST,guild,linked.puuid,role).run();
  if(!result.meta.changes){
   const check=await env.DB.prepare('SELECT 1 FROM spike_hint_unlocks WHERE guild=? AND puuid=? AND role=?').bind(guild,linked.puuid,role).first();
-  return check?`🔓 ${role} のヒントは購入済みです。\n${SPIKE_HINTS[role]}`:'KPが不足しています。ヒントには10,000 KPが必要です。';
+  return check?`🔓 ${role} のヒントは購入済みです。\n${SPIKE_HINTS[role as SpikeRole]}`:'KPが不足しています。ヒントには10,000 KPが必要です。';
  }
- return `💰 **10,000 KPで${role}のヒントを解放！**\n${SPIKE_HINTS[role]}\n/spike status で進捗を確認できます。`;
+ return `💰 **10,000 KPで${role}のヒントを解放！**\n${SPIKE_HINTS[role as SpikeRole]}\n/spike status で進捗を確認できます。`;
 }
