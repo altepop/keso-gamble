@@ -379,12 +379,13 @@ test('相場更新の履歴集計はギルドと時刻のインデックスを�
 
 
 test('架空ニュースは12銘柄の上昇/下落に各3件あり、操作IDの再送でも同じ事件を選ぶ',async t=>{
- const {stockStoryChoices,resolveStockStory,validateCustomStory}=await import('../../../js/stock-stories.js') as typeof import('../../../js/stock-stories.js');
+ // @ts-expect-error JS catalog shared with the Activity; no TypeScript declaration file.
+ const {stockStoryChoices,resolveStockStory,validateCustomStory}=await import('../../../js/stock-stories.js');
  for(const symbol of ['keso','riso','yuya','yano','msum','tnkn','komi','ishi','vdk','godo','ngya','koba']){
   for(const direction of ['up','down']){
    const choices=stockStoryChoices(symbol,direction);
    assert.equal(choices.length,3,symbol+' '+direction);
-   assert(choices.every(e=>e.headline.length>10&&e.body.length>=12));
+   assert(choices.every((e:{headline:string;body:string})=>e.headline.length>10&&e.body.length>=12));
    const key='random-news-operation-0001';
    assert.deepEqual(resolveStockStory(symbol,direction,'auto',key),resolveStockStory(symbol,direction,'auto',key));
    assert.deepEqual(resolveStockStory(symbol,direction,choices[2].id,'ignored'),choices[2]);
@@ -398,14 +399,14 @@ test('架空ニュースは12銘柄の上昇/下落に各3件あり、操作ID�
  const outcome=await applyStockShock(f.env,guild,one,'news-operator-test-0001',{symbol:'riso',direction:'down',strength:25,eventId:story.id},T);
  assert.equal(outcome.headline,story.headline);assert.equal(outcome.body,story.body);assert.equal(outcome.after,585);
  const saved=f.sql.prepare("SELECT label,applied_bps AS bps FROM stock_news WHERE id LIKE 'admin:%'").get() as {label:string;bps:number};
- assert.equal(saved.label,story.headline+'\\n'+story.body);
+ assert.equal(saved.label,story.headline+'\n'+story.body);
  assert.equal(saved.bps,-2500);
  const audit=f.sql.prepare('SELECT history FROM stock_admin_moves WHERE guild=? AND user=?').get(guild,one) as {history:string};
  assert.deepEqual(JSON.parse(audit.history).prices.slice(-2),[780,585]);
  assert.equal(JSON.parse(audit.history).eventId,story.id);
  const other=await readKpState(f.env,mapping,two);
  assert.equal(other.prices.riso,585);
- assert(other.stockMarket.news.some(n=>n.label.includes(story.headline)&&n.label.includes(story.body)));
+ assert(other.stockMarket.news.some((n:{label:string})=>n.label.includes(story.headline)&&n.label.includes(story.body)));
  const repeated=await applyStockShock(f.env,guild,one,'news-operator-test-0001',{symbol:'riso',direction:'down',strength:25,eventId:story.id},T);
  assert.equal(repeated.replayed,true);
  assert.equal(repeated.headline,story.headline);
