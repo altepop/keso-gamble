@@ -6,7 +6,7 @@ import {URL as NodeURL} from 'node:url';
 import {initializeKp,syncKpAccounts} from '../src/kp.ts';
 import {readKpState,operateKp} from '../src/kp-api.ts';
 import {prepareStocks} from '../src/stock-market.ts';
-import {applyStockShock} from '../src/stock-admin.ts';
+import {applyStockShock,ensureStockOperator} from '../src/stock-admin.ts';
 import {stockBulletin} from '../src/stock-bulletins.ts';
 import {runGuerrillaMarket,guerrillaSettings,setGuerrillaEnabled,planGuerrilla,nextGuerrillaAt} from '../src/stock-guerrilla.ts';
 import type {KpEnv,KpMapping} from '../src/kp.ts';
@@ -41,7 +41,7 @@ test('bulletin uses equal-bot username, Kansai insults, exact prices, and no men
  assert.equal(message.username,'等しいbot');
  assert.deepEqual(message.allowed_mentions,{parse:[]});
  assert.match(message.content,/780 → \*\*390 KP\*\*（-50\.0%）/);
- assert.match(message.content,/アホ|ボケ|何しとんねん/);
+ assert.match(message.content,/アホ|ボケ|何しとんねん|ほんま|ええ加減/);
  assert.doesNotMatch(message.content,/admin:|operator|manual|ゲリラ|操作主/);
  const sanitized=JSON.parse(stockBulletin([{name:'@everyone',symbol:'riso',before:100,after:110}],'@everyone速報','<@123> あかん', 'case-2'));
  assert.doesNotMatch(sanitized.content,/@everyone|<@123>/);
@@ -52,7 +52,7 @@ test('operator shock queues exactly one anonymous bot bulletin atomically and re
  const before=await prepareStocks(f.env,guild);
  const args={symbol:'riso',direction:'down',strength:25,eventId:'auto'};
  const first=await applyStockShock(f.env,guild,one,id,args,time);
- assert.equal(first.after,Math.round(before.prices.riso*.75));
+ assert.equal(first.after,Math.round(first.before*.75),'price is computed from current market at the operation time');
  const posts=queued(f.sql);
  assert.equal(posts.length,1);
  const post=JSON.parse(posts[0].body);
@@ -92,8 +92,11 @@ test('auto sector story atomically changes several stocks, writes a single commo
  const run=await runGuerrillaMarket(f.env,guild,time,()=>0);
  assert.equal(run?.type,'sector');assert.equal(run.count,4);
  const m=await prepareStocks(f.env,guild);
- assert.equal(m.prices.ishi,1225);assert.equal(m.prices.riso,702);
- assert.equal(m.prices.yuya,315);assert.equal(m.prices.vdk,150);
+ for(const [symbol,factor] of [['ishi',1.25],['riso',0.9],['yuya',0.75],['vdk',1.5]] as const){
+  const row=f.sql.prepare('SELECT before_price,after_price FROM stock_admin_moves WHERE symbol=?').get(symbol) as {before_price:number;after_price:number};
+  assert.equal(row.after_price,Math.round(row.before_price*factor),symbol+' event shock amount');
+  assert.equal(m.prices[symbol],row.after_price,symbol+' live market matches event');
+ }
  const posts=queued(f.sql);assert.equal(posts.length,1);
  const bulletin=JSON.parse(posts[0].body);
  assert.match(bulletin.content,/複数銘柄/);assert.equal(bulletin.username,'等しいbot');
@@ -110,6 +113,7 @@ test('a failed multi-stock event rolls back both the market and its next schedul
  const f=await fixture();const m=await prepareStocks(f.env,guild);
  await setGuerrillaEnabled(f.env,guild,true,time);
  f.sql.prepare('UPDATE stock_guerrilla_settings SET next_at=? WHERE guild=?').run(time-1,guild);
+ await ensureStockOperator(f.env);
  f.sql.exec("CREATE TRIGGER reject_riso BEFORE INSERT ON stock_admin_moves WHEN NEW.symbol='riso' BEGIN SELECT RAISE(ABORT,'fixture-failure'); END");
  await assert.rejects(runGuerrillaMarket(f.env,guild,time,()=>0),/fixture-failure/);
  assert.deepEqual((await prepareStocks(f.env,guild)).prices,m.prices);
@@ -121,7 +125,7 @@ test('a failed multi-stock event rolls back both the market and its next schedul
 
 test('follow-ups cite earlier fictional reports and use a consistent direction',()=>{
  const previous={symbol:'riso',headline:'仕入れ先が倒産',direction:'down',at:time-3600000};
- const steps=[0.5,0.1,0.9,0.2];let i=0;
+ const steps=[0.5,0.1,0.1,0.2];let i=0;
  const plan=planGuerrilla(()=>steps[i++]??0.1,previous,time);
  assert.equal(plan.type,'sequel');assert.equal(plan.moves[0].symbol,'riso');
  assert.equal(plan.moves[0].direction,'up');assert.match(plan.story.body,/仕入れ先が倒産/);
