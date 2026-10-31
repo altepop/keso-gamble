@@ -1,6 +1,7 @@
 import {feedIndex} from './community-feed.ts';
 import {settleSkirmishMatch} from './skirmish.ts';
 import {valoKp,ensureModeRewards,MODE_REWARD_VERSION,UNRATED_JACKPOT,jackpotPost} from './mode-rewards.ts';
+import type {EscalationSpin} from './mode-rewards.ts';
 import {enqueue,ensurePosts} from './racing-posts.ts';
 export {valoKp} from './mode-rewards.ts';
 import {ensureSpikeGrowth,settleSpike,spikeMatch,SPIKE_POLICY} from './spikerush-growth.ts';
@@ -102,7 +103,7 @@ export async function syncKpAccounts(env:KpEnv,mapping:KpMapping){
  const queries=mapping.accounts.flatMap(a=>{const found=tracked.find(t=>t.riot_id.toLowerCase()===a.riotId.toLowerCase());const old=found&&linked.find(l=>l.puuid===found.puuid);return found&&(!old||old.user!==a.discordUserId||old.riot!==a.riotId)?[env.DB.prepare('INSERT INTO kp_accounts(guild,puuid,user,riot,linked_at) VALUES(?,?,?,?,?) ON CONFLICT(guild,puuid) DO UPDATE SET user=excluded.user,riot=excluded.riot').bind(mapping.guildId,found.puuid,a.discordUserId,a.riotId,Date.now())]:[];});
  if(queries.length)await env.DB.batch(queries);
 }
-interface KpEvent {id:string;guild:string;user:string;puuid:string;match:string;mode:string;outcome:string|null;amount:number;policy:string;at:number;penalty?:number;note?:string;kind?:'spikerush-growth';spike?:SpikeMatch;jackpot?:number}
+interface KpEvent {id:string;guild:string;user:string;puuid:string;match:string;mode:string;outcome:string|null;amount:number;policy:string;at:number;penalty?:number;note?:string;kind?:'spikerush-growth';spike?:SpikeMatch;jackpot?:number;escalation?:EscalationSpin}
 export function kpEventId(guild:string,match:string,puuid:string){return ['match',guild,match,puuid].map(encodeURIComponent).join(':');}
 export async function drainKpInbox(env:KpEnv){
  const rows=(await env.DB.prepare('SELECT id,payload FROM kp_inbox ORDER BY at,id LIMIT 20').all<{id:string;payload:string}>()).results;
@@ -124,6 +125,31 @@ export async function drainKpInbox(env:KpEnv){
   // A loss costs a separate debit, never more than the balance (wallets cannot go below 0); the rest becomes 借KP.
   if(e.penalty)await env.DB.prepare(`INSERT OR IGNORE INTO kp_ledger(id,guild,user,delta,kind,at) SELECT ?,?,?,-MIN(?,balance),'match',? FROM kp_wallets WHERE guild=? AND user=? AND EXISTS(SELECT 1 FROM kp_events WHERE id=?)`).bind('penalty:'+e.id,e.guild,e.user,e.penalty,Date.now(),e.guild,e.user,e.id).run();
   if(e.penalty){await ensureDebt(env);await borrowShortfall(env,'penalty:'+e.id,e.penalty).run();}
+  if(e.mode==='escalation'&&e.escalation){
+   await ensureModeRewards(env);
+   const spin=e.escalation;
+   if(!['big','super-lucky','super-unlucky'].includes(spin.kind)||!Number.isSafeInteger(spin.award)||spin.tier<0||spin.tier>5)throw Error('Invalid escalation spin');
+   // The insert and the ledger debit/credit trigger form ONE atomic statement.
+   // Retrying an inbox event cannot double the bonus or halve the wallet twice.
+   await env.DB.prepare(`INSERT OR IGNORE INTO kp_escalation_spins(id,guild,user,kind,tier,award,balance_before,balance_after,at)
+    SELECT ?,w.guild,w.user,?,?,?,w.balance,
+      CASE WHEN ?='super-unlucky' THEN CAST(w.balance/2 AS INTEGER)
+           WHEN ?='super-lucky' THEN w.balance+? ELSE w.balance END,?
+    FROM kp_wallets w WHERE w.guild=? AND w.user=? AND EXISTS(SELECT 1 FROM kp_events WHERE id=? AND guild=w.guild AND user=w.user)`)
+    .bind(e.id,spin.kind,spin.tier,spin.award,spin.kind,spin.kind,spin.award,Date.now(),e.guild,e.user,e.id).run();
+   if(spin.kind!=='big'){
+    const settled=await env.DB.prepare('SELECT kind,award,balance_before,balance_after FROM kp_escalation_spins WHERE id=? AND guild=? AND user=?')
+      .bind(e.id,e.guild,e.user).first<{kind:string;award:number;balance_before:number;balance_after:number}>();
+    if(!settled)throw Error('Escalation settlement missing');
+    const fmt=(n:number)=>n.toLocaleString('ja-JP');
+    const lucky=settled.kind==='super-lucky';
+    const notice=lucky
+      ? `📩 **1通のお知らせです。**\n\n平素よりKESO PLAYをご利用いただき、誠にありがとうございます。\n\n<@${e.user}> 様、エスカレーションの抽選結果をご案内いたします。\n\n🌈 **【超ラッキー】**\n**+${fmt(settled.award)} KP** が当選しました。\n\n手持ちKP：${fmt(settled.balance_before)} → **${fmt(settled.balance_after)} KP**\n\n今後ともKESO PLAYをよろしくお願いいたします。\n― 等しいbot`
+      : `📩 **1通のお知らせです。**\n\n平素よりKESO PLAYをご利用いただき、誠にありがとうございます。\n\n<@${e.user}> 様、KP口座について重要なお知らせがございます。\n\n💀 **【超アンラッキー】**\n誠に残念ながら、手持ちKPを半額とさせていただきました。\n\n手持ちKP：${fmt(settled.balance_before)} → **${fmt(settled.balance_after)} KP**\n差引：**−${fmt(settled.balance_before-settled.balance_after)} KP**\n\nなお、本件に関する異議申し立ては受け付けておりません。\n今後ともKESO PLAYをよろしくお願いいたします。\n― 等しいbot`;
+    // A failed post enqueue keeps the inbox event pending, so it is retried safely.
+    await ensurePosts(env);await enqueue(env,'esc-notice:'+e.id,notice,Date.now());
+   }
+  }
   const net=await kpMatchNet(env,e.id),owed=e.penalty?await borrowedBy(env,'penalty:'+e.id):0;
   const notice=await env.DB.prepare('SELECT n.riot_id,n.message FROM notifications n JOIN kp_accounts a ON n.riot_id=a.riot WHERE a.guild=? AND a.puuid=? AND n.match_id=?').bind(e.guild,e.puuid,e.match).first<{riot_id:string;message:string}>();
   if(notice&&net!==null){const message=kpCreditLine(notice.message,net,(typeof e.note==='string'?e.note:'')+debtNote(owed));await env.DB.prepare("UPDATE notifications SET message=?,sent=CASE WHEN mode='escalation' AND outcome='draw' THEN 1 ELSE 0 END WHERE riot_id=? AND match_id=? AND message!=?").bind(message,notice.riot_id,e.match,message).run();}
@@ -131,7 +157,7 @@ export async function drainKpInbox(env:KpEnv){
  }catch{console.warn('kp_credit_retry_pending');}}
 }
 /** The match's KP after any bottom-of-team debit; null until the event is recorded. */
-export async function kpMatchNet(env:KpEnv,id:string){const r=await env.DB.prepare("SELECT e.amount+COALESCE((SELECT delta FROM kp_ledger WHERE id='penalty:'||e.id),0) AS net FROM kp_events e WHERE e.id=?").bind(id).first<{net:number}>();return r?Number(r.net):null;}
+export async function kpMatchNet(env:KpEnv,id:string){const r=await env.DB.prepare("SELECT e.amount+COALESCE((SELECT delta FROM kp_ledger WHERE id='penalty:'||e.id),0)+COALESCE((SELECT delta FROM kp_ledger WHERE id='esc-extra:'||e.id),0) AS net FROM kp_events e WHERE e.id=?").bind(id).first<{net:number}>();return r?Number(r.net):null;}
 export function kpCreditLine(text:string,amount:number,note=''){const base=text.replace(/\n🪙 この試合 [+−]\d+ KP[^\n]*/g,''),split=base.indexOf('\n💬 '),line='\n🪙 この試合 '+(amount<0?'−'+(-amount):'+'+amount)+' KP'+note;return split<0?base+line:base.slice(0,split)+line+base.slice(split);}
 /** The KP of one VALORANT result before the wallet: the mode's rate, the side bonuses of the easy modes, then luck.
  * - Deathmatch: first place (most kills, ties included, at least one) wins 1,000 on a 30% draw; otherwise a K/D below 1
@@ -194,9 +220,9 @@ export async function collectKpMatch(env:KpEnv,mapping:KpMapping,raw:Match,puuid
   if(!modern||!['win','loss'].includes(status.outcome??''))return null;
   return (await settleSkirmishMatch(env,{guild:mapping.guildId,puuid,user:link.user,match:raw.metadata.match_id,start,end:start+duration,win:status.outcome==='win',now:Date.now()})).delta;
  }
- const {net,note,lottery}=modern?valoKp(raw,puuid,status.mode,status.outcome):{...legacyValoKp(raw,puuid,status.mode,status.outcome),lottery:undefined};
+ const {net,note,lottery,escalation}=modern?valoKp(raw,puuid,status.mode,status.outcome):{...legacyValoKp(raw,puuid,status.mode,status.outcome),lottery:undefined,escalation:undefined};
  // Events hold the earned part (never negative); a cost is a separate debit capped at the balance.
- const e:KpEvent={id,guild:mapping.guildId,user:link.user,puuid,match:raw.metadata.match_id,mode:status.mode,outcome:status.outcome,amount:Math.max(0,net),policy:modern?MODE_REWARD_VERSION:policy.version,at:Date.now(),...net<0?{penalty:-net}:{},...note?{note}:{},...lottery!==undefined&&lottery>=UNRATED_JACKPOT?{jackpot:lottery}:{},...(spike?{kind:'spikerush-growth' as const,spike,policy:SPIKE_POLICY}:{})};
+ const e:KpEvent={id,guild:mapping.guildId,user:link.user,puuid,match:raw.metadata.match_id,mode:status.mode,outcome:status.outcome,amount:Math.max(0,net),policy:modern?MODE_REWARD_VERSION:policy.version,at:Date.now(),...net<0?{penalty:-net}:{},...note?{note}:{},...lottery!==undefined&&lottery>=UNRATED_JACKPOT?{jackpot:lottery}:{},...(spike?{kind:'spikerush-growth' as const,spike,policy:SPIKE_POLICY}:{}),...(escalation?{escalation}:{})};
  await env.DB.prepare('INSERT OR IGNORE INTO kp_inbox VALUES(?,?,?)').bind(id,JSON.stringify(e),Date.now()).run();
  await drainKpInbox(env);
  return kpMatchNet(env,id);
