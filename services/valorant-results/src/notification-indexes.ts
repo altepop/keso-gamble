@@ -10,7 +10,10 @@ export async function ensureNotificationReadIndexes(db:D1Database):Promise<void>
    db.prepare("CREATE INDEX IF NOT EXISTS notifications_crown_history ON notifications(riot_id,ended_at DESC,match_id DESC,outcome) WHERE outcome IN ('win','loss')"),
    // A match's participants are read together for a single Discord post; the
    // existing primary key (riot_id,match_id) cannot seek by match alone.
-   db.prepare('CREATE INDEX IF NOT EXISTS notifications_match_members ON notifications(match_id,riot_id)')
+   db.prepare('CREATE INDEX IF NOT EXISTS notifications_match_members ON notifications(match_id,riot_id)'),
+   // Per-minute monitor reads 200 most recent match IDs. A covering recent index
+   // avoids sorting/scanning the entire growing notification history every minute.
+   db.prepare('CREATE INDEX IF NOT EXISTS notifications_recent_saved ON notifications(ended_at DESC,riot_id,match_id)')
   ]);
  })();
  ready.set(db,job);
