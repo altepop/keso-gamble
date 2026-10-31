@@ -34,7 +34,8 @@ function db(){
  let ops=0;
  class Query{
   values:unknown[]=[];
-  constructor(readonly command:string){}
+  command:string;
+  constructor(command:string){this.command=command;}
   bind(...values:unknown[]){const q=new Query(this.command);q.values=values;return q;}
   async first(){ops++;return sql.prepare(this.command).get(...this.values as never[])??null;}
   async run(){ops++;return {meta:{changes:Number(sql.prepare(this.command).run(...this.values as never[]).changes)}};}
