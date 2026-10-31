@@ -41,7 +41,7 @@ export const SPIKE_HINTS:Record<SpikeRole,string>={
 const ready=new WeakMap<object,Promise<void>>();
 export async function ensureSpikeAwakening(env:KpEnv){
  const cached=ready.get(env.DB);if(cached)return cached;
- const task=env.DB.batch([
+ const task=Promise.resolve(env.DB.batch([
  env.DB.prepare(`CREATE TABLE IF NOT EXISTS spike_hint_unlocks(
  guild TEXT NOT NULL,puuid TEXT NOT NULL,user TEXT NOT NULL,role TEXT NOT NULL CHECK(role IN ('Duelist','Initiator','Controller','Sentinel')),at INTEGER NOT NULL,
  PRIMARY KEY(guild,puuid,role))`),
@@ -65,7 +65,7 @@ export async function ensureSpikeAwakening(env:KpEnv){
  INSERT INTO kp_events(id,guild,user,puuid,match,mode,outcome,amount,policy,at)
  VALUES(NEW.id,NEW.guild,NEW.user,NEW.puuid,NEW.match,'spikerush',json_extract(NEW.detail,'$.outcome'),NEW.amount,'spikerush-overdrive-v2',NEW.at);
  END`)
- ]).then(()=>{});
+ ])).then(()=>{});
  ready.set(env.DB,task);
  try{await task;}catch(e){ready.delete(env.DB);throw e;}
 }
