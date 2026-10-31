@@ -1,0 +1,41 @@
+name: Temporary verify stock operator confirmation
+on:
+  push:
+    branches:
+      - feat/stock-operator-confirmation-20261031
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/stock-operator-confirmation-20261031
+          persist-credentials: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Build Activity and run frontend tests
+        run: |
+          npm ci
+          npm run build:activity
+          npm run check:activity
+          npm test
+      - name: Browser test on mobile-size Chromium and WebKit
+        run: |
+          npx playwright install --with-deps chromium webkit
+          node scripts/private-casino-browser-check.cjs chromium
+          node scripts/private-casino-browser-check.cjs webkit
+      - name: Save versioned imports for GitHub Pages
+        run: |
+          if git diff --quiet -- js css index.html; then
+            echo "Cache metadata already updated"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add js css index.html
+          git commit -m "build: refresh Activity cache for stock operator receipt"
+          git push origin HEAD:refs/heads/feat/stock-operator-confirmation-20261031
