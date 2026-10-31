@@ -81,7 +81,8 @@ export async function spikeStatus(env:KpEnv,guild:string,user:string){
   const suffix=r.awakened?'✨覚醒済み':r.unlocked?'通常育成完了':'育成中';
   const trial=shown.has(r.role)?`\n　特殊試練：${SPIKE_HINTS[r.role]}\n　達成状況：${r.role==='Controller'?safeTrials(p).controllerWins.length+'/5':r.trialDone?'達成':'未達成'}`:
    `\n　特殊試練：🔒 未公開（/spike hint ${r.role}｜10,000 KP）${r.trialDone?' ※実績取得済み':''}`;
-  return `**${r.role}** ${r.used}/${r.required}｜${suffix}${trial}`;
+  const agents=roster.agents.filter(a=>a.role===r.role).map(a=>`${a.name} ${Math.min(2,p.counts[a.id]??0)}/2`).join('・');
+  return `**${r.role}** ${r.used}/${r.required}｜${suffix}\n　使用：${agents}${trial}`;
  });
  return ['🧬 **SPIKE 育成状況**',`通算：${p.games}試合｜覚醒：${progress.filter(x=>x.awakened).length}/4`,
   `👑 OVERDRIVE：${isOverdrive(p)?'**発動中｜標準的な戦績で平均約800KP/試合**':'未解放'}`,
