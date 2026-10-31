@@ -6,7 +6,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { initializeKp, syncKpAccounts } from '../src/kp.ts';
 import type { KpMapping } from '../src/kp.ts';
 import { operateKp, readKpState } from '../src/kp-api.ts';
-import { scheduleCrowns, crownName, BACK_GAP } from '../src/racing-crowns.ts';
+import { scheduleCrowns, crownEvents, crownName, BACK_GAP } from '../src/racing-crowns.ts';
 import { racingView } from '../src/racing-kp.ts';
 import { queueRacePosts, flushRacePosts } from '../src/racing-posts.ts';
 import type { PostEnv } from '../src/racing-posts.ts';
@@ -94,4 +94,15 @@ test('weekend :30 races are crown races in the shared card, and always run', () 
  assert.equal(raceRuns(card,{raceBets:[]}),true);
  assert.equal(raceCard(Date.parse('2026-10-27T15:30:00+09:00')).crown,false);
  assert.equal(crownSlotAllowed(sat),false,'a filler slot is not given to a person');
+});
+
+test('streak detection remains identical with exactly ten and over-ten losses, reading only 11 rows',async()=>{
+ const ten=await fixture();results(ten.sql,'One#JP1','W'+'L'.repeat(10));
+ const tenEvents=await crownEvents(ten.env,mapping,NOW);
+ assert(tenEvents.some(e=>e.kind==='streak10'));
+ const eleven=await fixture();results(eleven.sql,'One#JP1','W'+'L'.repeat(11));
+ const elevenEvents=await crownEvents(eleven.env,mapping,NOW);
+ assert(!elevenEvents.some(e=>e.kind==='streak10'),'11 losses must not be mislabeled as exactly 10');
+ const streak=await fixture();results(streak.sql,'One#JP1','W'.repeat(20)+'L');
+ assert((await crownEvents(streak.env,mapping,NOW)).some(e=>e.kind==='stopped'),'3+ wins followed by a loss still creates stopped crown');
 });
