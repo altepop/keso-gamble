@@ -31,3 +31,17 @@ test('owner stock operator offers fixed symbols, direction and magnitude without
  assert.match(html,/value="down"/);
  assert.doesNotMatch(html,/<script>|<img/);
 });
+
+test('stock operator retains selected controls and presents escaped, accessible confirmation',()=>{
+ const stocks=[{id:'keso',ticker:'KESO',name:'KESOホールディングス'},{id:'evil',ticker:'EVIL',name:'悪意の銘柄'}];
+ const html=privateStockOperator(stocks,{selection:{symbol:'evil',direction:'down',strength:50},notice:{kind:'success',text:'✅ 株価操作を受け付けました <script>alert(1)</script>'}});
+ assert.match(html,/value="evil" selected/);
+ assert.match(html,/value="down" selected/);
+ assert.match(html,/value="50" selected/);
+ assert.match(html,/role="status" aria-live="polite"/);
+ assert.match(html,/class="stock-shock-notice success"/);
+ assert.match(html,/株価操作を受け付けました/);
+ assert.doesNotMatch(html,/<script>/);
+ assert.match(html,/&lt;script&gt;/);
+ assert.match(privateStockOperator(stocks),/id="stock-shock-notice"[^>]* hidden>/);
+});
