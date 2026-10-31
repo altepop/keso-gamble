@@ -38,6 +38,9 @@ if(!process.env.CLOUDFLARE_API_TOKEN||!process.env.CLOUDFLARE_ACCOUNT_ID){
    detail.push('| '+[period,label,index+1,tables,
     fmt(num(row.numberOfTimesRun)),fmt(num(row.totalRowsRead)),
     fmt(Math.round(num(row.avgRowsRead))),op].join(' | ')+' |');
+   if(period==='1d')console.log('D1_READ_TOP_24H '+label+' rank='+(index+1)+
+    ' op='+op+' tables='+tables.replace(/\\s/g,'_')+' calls='+num(row.numberOfTimesRun)+
+    ' rows='+num(row.totalRowsRead)+' avg='+Math.round(num(row.avgRowsRead)));
   }
   console.log('D1_READ_AUDIT '+period+' '+label+' top='+rows.length+
    ' calls='+totalCalls+' read_lower_bound='+totalRead);
