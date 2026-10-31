@@ -135,6 +135,26 @@ test('ニュースの効果は1銘柄1日3%まで。売買による材料だけ�
  assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM stock_news WHERE applied_version IS NULL').get()!.n,0,'capped events are consumed, not retried tomorrow');
 });
 
+test('race-settlement news reads only the indexed race operations, not all game operations',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:T});const f=await fixture();
+ await prepareStocks(f.env,guild,one);
+ // This is the actual FROM/WHERE structure used by captureNews.
+ const query=`SELECT o.guild,o.user,o.id,o.at,SUM(CAST(json_extract(b.value,'$.payout') AS INTEGER)-CAST(json_extract(b.value,'$.amount') AS INTEGER)) AS net
+  FROM kp_operations o INDEXED BY kp_operations_race_news JOIN json_each(o.response,'$.result.settled') r JOIN json_each(o.state,'$.raceBets') b ON json_extract(b.value,'$.id')=json_extract(r.value,'$.id')
+  WHERE o.guild=? AND o.at>=? AND o.id LIKE 'race-settle:%' AND substr(lower(o.id),1,12)='race-settle:' GROUP BY o.guild,o.user,o.id,o.at`;
+ const plan=f.sql.prepare('EXPLAIN QUERY PLAN '+query).all(guild,T).map(x=>String(x.detail)).join(' | ');
+ assert.match(plan,/SEARCH o USING INDEX kp_operations_race_news \(guild=\? AND at>\?\)/);
+ // Case-insensitive matching of the established race-settle prefix is preserved.
+ const add=f.sql.prepare("INSERT INTO kp_operations(id,guild,user,request_hash,response,delta,state,at) VALUES(?,?,?,'test',?,0,?,?)");
+ const response=JSON.stringify({result:{settled:[{id:'b',status:'won'}]}}),state=JSON.stringify({raceBets:[{id:'b',payout:6000,amount:1000}]});
+ add.run('race-settle:normal',guild,one,response,state,T+1000);
+ add.run('RACE-SETTLE:uppercase',guild,one,response,state,T+1000);
+ add.run('roulette:ignored',guild,one,response,state,T+1000);
+ const results=f.sql.prepare(query).all(guild,T) as Array<{id:string;net:number}>;
+ assert.deepEqual(results.map(x=>x.id),['RACE-SETTLE:uppercase','race-settle:normal']);
+ assert.ok(results.every(x=>x.net===5000));
+});
+
 test('競馬ニュースは払戻額ではなく精算対象馬券の純損益を使い、外れも材料になる',async t=>{
  t.mock.timers.enable({apis:['Date'],now:T});const f=await fixture();f.credit('fund',100000);const m=await prepareStocks(f.env,guild,one);
  const add=(id:string,bets:Array<{id:string;amount:number;payout:number}>,ids:string[])=>{
