@@ -606,3 +606,33 @@ test('定期的なコミュニティ表示の名前解決は保存済みの複�
  assert.equal(names.get(two),'二号');
  assert.equal(f.queries(),1,'two persisted names must be fetched in one indexed SELECT');
 });
+
+test('5秒ごとのコミュニティ更新は新着だけ読み、変更がないと表示名SQLも走らない',async()=>{
+ const f=await fixture();seed(f.sql,one,10000);
+ await operateKp(f.env,mapping,one,'feed-delta-roulette-0001','spin',{type:'number',amount:100,choice:3});
+ const names=new Map([[one,'One'],[two,'Two']]);
+ let aliases=0;const resolve=async()=>{aliases++;return names;};
+ const full=await communityFeed(f.env,guild,resolve);
+ assert.equal(full.incremental,false);assert.equal(full.entries.length,1);assert.equal(aliases,1);
+ const cursor=full.entries[0]!.time;
+ f.resetQueries();const empty=await communityFeed(f.env,guild,resolve,cursor+1);
+ assert.equal(empty.incremental,true);assert.deepEqual(empty.entries,[]);
+ assert.equal(f.queries(),1,'no more than one indexed D1 query when no activity changed');
+ assert.equal(aliases,1,'do not look up names without new entries');
+ // Events at an identical millisecond remain visible and are de-duplicated by the browser.
+ const overlap=await communityFeed(f.env,guild,resolve,cursor);
+ assert.equal(overlap.entries.length,1);assert.equal(overlap.entries[0]!.id,full.entries[0]!.id);
+ assert.equal(aliases,2);
+ // A new committed operation (possibly sharing the same timestamp) is returned.
+ await operateKp(f.env,mapping,two,'feed-delta-roulette-0002','spin',{type:'number',amount:100,choice:3}).catch(()=>{});
+ const next=await communityFeed(f.env,guild,resolve,cursor);
+ assert(next.entries.length>=1);
+ const plan=f.sql.prepare("EXPLAIN QUERY PLAN SELECT id FROM kp_operations WHERE guild=? AND (json_extract(response,'$.activity') IS NOT NULL OR json_extract(response,'$.stockTrade') IS NOT NULL) AND at>=? ORDER BY at DESC,user,id LIMIT 40").all(guild,cursor);
+ assert.match(JSON.stringify(plan),/kp_public_activity_recent/,'date-filtered query must use the existing partial index');
+ const token=await exchangeKpCode(f.env,(await issueKpCode(f.env,mapping,one))!);
+ const endpoint=(since:string)=>new Request('https://example.com/api/kp/feed?since='+since,{headers:{Authorization:'Bearer '+token}});
+ const http=await kpApi(endpoint(String(cursor)),f.env,mapping);
+ assert.equal(http.status,200);assert.equal((await http.json() as {incremental:boolean}).incremental,true);
+ for(const invalid of ['-1','foo','1e4','9999999999999999'])assert.equal((await kpApi(endpoint(invalid),f.env,mapping)).status,400);
+ assert.equal((await kpApi(new Request('https://example.com/api/kp/feed?since='+cursor),f.env,mapping)).status,401);
+});
