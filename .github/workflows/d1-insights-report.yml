@@ -7,6 +7,7 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/d1-insights-report.yml'
+      - 'scripts/d1-read-audit.mjs'
   workflow_dispatch:
 
 permissions:
@@ -86,3 +87,8 @@ jobs:
           }
           appendFileSync(process.env.GITHUB_STEP_SUMMARY,summary.join('\n')+'\n');
           NODE
+
+      - name: Inspect 24h vs 1h top-fifty SQL read patterns
+        run: |
+          node --check scripts/d1-read-audit.mjs
+          node scripts/d1-read-audit.mjs
