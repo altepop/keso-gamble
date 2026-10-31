@@ -3,6 +3,7 @@ import {steamConnectionMessage} from './steam-view.js?v=web-006591321c248406';
 import {privateCasinoPanel} from './private-casino-view.js?v=web-006591321c248406';
 import {communityPanel,communityRows} from './community-feed.js?v=web-006591321c248406';
 import {stockPanel,stockCandles,stockPrice,privateStockOperator} from './stock-view.js?v=web-006591321c248406';
+import {stockStoryChoices,validateCustomStory} from './stock-stories.js?v=web-006591321c248406';
 import {wheelView,covered,redNumbers,outcomeAngle} from './roulette-view.js?v=web-006591321c248406';
 import {connectDiscordActivity,isDiscordActivity,openSteamLogin,openCompanionGame}from './discord-activity-auth.js?v=web-006591321c248406';
 import { createKpClient } from './kp-client.js?v=web-006591321c248406';
@@ -47,7 +48,7 @@ let spinLock=false;
 let mutationPending=false;
 let stockShockNotice=null;
 let stockShockConfirmation=null;
-let stockShockSelection={symbol:MARKET[0].id,direction:'up',strength:25};
+let stockShockSelection={symbol:MARKET[0].id,direction:'up',strength:25,eventId:'auto',headline:'',body:''};
 let detail=null;
 let showMA=true;
 let renderedMarkup;
@@ -394,19 +395,33 @@ addEventListener('click',async e=>{
       const stock=MARKET.find(s=>s.id===symbol);
       if(!stock||!['up','down'].includes(direction)||![10,25,50].includes(strength))throw Error('操作内容を確認してください。');
       const label=direction==='up'?'上昇':'下落';
-      stockShockSelection={symbol,direction,strength};
+      const mode=$('#admin-stock-news')?.value??'auto';
+      const headline=$('#admin-stock-headline')?.value??stockShockSelection.headline??'';
+      const body=$('#admin-stock-body')?.value??stockShockSelection.body??'';
+      stockShockSelection={symbol,direction,strength,eventId:mode,headline,body};
       // Discord iOS embeds may silently suppress native window.confirm.
-      // Always require explicit in-page confirmation before the network mutation.
+      // The operator always previews the *actual* fictional bulletin in-page
+      // before the server mutates the shared market.
       if(t.dataset.action==='stock-shock'){
-        stockShockConfirmation={symbol,direction,strength};
+        const choices=stockStoryChoices(symbol,direction);
+        const chosen=mode==='custom'
+          ?{eventId:'custom',...validateCustomStory(headline,body)}
+          :(()=>{const selected=mode==='auto'?choices[Math.floor(Math.random()*choices.length)]:choices.find(v=>v.id===mode);
+             if(!selected)throw Error('ニュースを選び直してください。');
+             return {eventId:selected.id,headline:selected.headline,body:selected.body};})();
+        stockShockConfirmation={symbol,direction,strength,...chosen,mode};
         stockShockNotice=null;
         render();
         $('.stock-shock-confirmation')?.scrollIntoView({block:'nearest',behavior:'auto'});
         return;
       }
       if(!stockShockConfirmation||stockShockConfirmation.symbol!==symbol||
-         stockShockConfirmation.direction!==direction||stockShockConfirmation.strength!==strength)
+         stockShockConfirmation.direction!==direction||stockShockConfirmation.strength!==strength||
+         stockShockConfirmation.mode!==mode||
+         (mode==='custom'&&(stockShockConfirmation.headline!==validateCustomStory(headline,body).headline||
+          stockShockConfirmation.body!==validateCustomStory(headline,body).body)))
         throw Error('操作条件が変更されました。もう一度確認してください。');
+      const bulletin=stockShockConfirmation;
       stockShockConfirmation=null;
       t.disabled=true;t.textContent='送信中…';
       const pendingNotice=$('#stock-shock-notice');
@@ -414,8 +429,8 @@ addEventListener('click',async e=>{
       try{
         // "受け付けました" is shown only after the Worker confirms the durable write.
         // If the follow-up state refresh fails, the operation was still successful.
-        const result=await wallet.operate('stock-shock',{symbol,direction,strength});
-        const completed=`✅ 株価操作を受け付けました。${stock.name}を${strength}%${label}：${moneyCompact(result.before)} → ${moneyCompact(result.after)}`;
+        const result=await wallet.operate('stock-shock',{symbol,direction,strength,eventId:bulletin.eventId,...(bulletin.eventId==='custom'?{headline:bulletin.headline,body:bulletin.body}:{})});
+        const completed=`✅ 株価操作を受け付けました。${stock.name}を${strength}%${label}：${moneyCompact(result.before)} → ${moneyCompact(result.after)}\n【架空速報】${result.headline??bulletin.headline}`;
         stockShockNotice={kind:'success',text:completed};
         try{state=await wallet.state();connectionError='';}
         catch{connectionError='株価操作は完了していますが、最新の状態を取得できませんでした。残高を更新してください。';
@@ -520,13 +535,26 @@ addEventListener('click',async e=>{
   finally { if(mutates)mutationPending=false; }
 });
 
+addEventListener('input',e=>{
+ if(e.target.id==='admin-stock-headline'||e.target.id==='admin-stock-body'){
+  stockShockSelection[e.target.id==='admin-stock-headline'?'headline':'body']=e.target.value;
+  stockShockConfirmation=null;$('.stock-shock-confirmation')?.remove();
+ }
+});
 addEventListener('change',e=>{
- if(['admin-stock-symbol','admin-stock-direction','admin-stock-strength'].includes(e.target.id)){
-  stockShockSelection={symbol:$('#admin-stock-symbol')?.value,direction:$('#admin-stock-direction')?.value,strength:Number($('#admin-stock-strength')?.value)};
-  stockShockNotice=null;
-  stockShockConfirmation=null;
-  const approval=$('.stock-shock-confirmation');if(approval)approval.remove();
-  const notice=$('#stock-shock-notice');if(notice){notice.textContent='';notice.hidden=true;}
+ if(['admin-stock-symbol','admin-stock-direction','admin-stock-strength','admin-stock-news','admin-stock-headline','admin-stock-body'].includes(e.target.id)){
+  const needsRender=['admin-stock-symbol','admin-stock-direction','admin-stock-news'].includes(e.target.id);
+  const symbol=$('#admin-stock-symbol')?.value,direction=$('#admin-stock-direction')?.value;
+  stockShockSelection={symbol,direction,strength:Number($('#admin-stock-strength')?.value),
+   eventId:['admin-stock-symbol','admin-stock-direction'].includes(e.target.id)?'auto':$('#admin-stock-news')?.value,
+   headline:$('#admin-stock-headline')?.value??stockShockSelection.headline??'',
+   body:$('#admin-stock-body')?.value??stockShockSelection.body??''};
+  stockShockNotice=null;stockShockConfirmation=null;
+  if(needsRender)render();
+  else{
+   $('.stock-shock-confirmation')?.remove();
+   const notice=$('#stock-shock-notice');if(notice){notice.textContent='';notice.hidden=true;}
+  }
  }
  if(e.target.id==='trade-symbol'){activeSymbol=e.target.value;render();}
  if(['claim-activity','directive-task','directive-target'].includes(e.target.id)){drafts[e.target.id]=e.target.value;render();}
