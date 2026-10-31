@@ -95,3 +95,16 @@ test('a super unlucky halves only available KP and leaves stock holdings unchang
  await collectKpMatch(f.env,mapping,match(id),puuid);
  assert.equal((await readKpState(f.env,mapping,user)).cash,expected);
 });
+
+test('matches started before the v5 cutoff keep original escalation odds and never activate the new special event',async()=>{
+ const f=await fixture();f.seed(25000);
+ f.sql.prepare("UPDATE kp_settings SET value=? WHERE key='escalation_v5_started_at'").run(String(Date.now()+60000));
+ const {id}=find('super-unlucky');
+ const classic=valoKp(match(id),puuid,'escalation','win',false);
+ const actual=await collectKpMatch(f.env,mapping,match(id),puuid);
+ assert.equal(actual,classic.net);
+ assert.equal((await readKpState(f.env,mapping,user)).cash,25000+classic.net);
+ assert.equal((f.sql.prepare('SELECT COUNT(*) n FROM kp_escalation_spins').get() as {n:number}).n,0);
+ assert.equal((f.sql.prepare("SELECT COUNT(*) n FROM kp_posts WHERE id LIKE 'esc-notice:%'").get() as {n:number}).n,0);
+ assert.equal((f.sql.prepare('SELECT policy FROM kp_events WHERE match=?').get(id) as {policy:string}).policy,'mode-rewards-v4');
+});
