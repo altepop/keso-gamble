@@ -22,7 +22,7 @@ interface Option { type: number; name: string; value?: string; options?: Option[
 export interface Interaction {
   id: string; application_id: string; type: number; token?: string; guild_id?: string;
   member?: { permissions?: string; user?: { id: string } };
-  data?: { name?: string; options?: Option[]; custom_id?: string; values?: string[]; component_type?: number };
+  data?: { type?: number; name?: string; options?: Option[]; custom_id?: string; values?: string[]; component_type?: number };
   message?: { flags?: number; components?: unknown[] };
 }
 const respond = (content: string) => Response.json({ type: 4, data: { content, flags: 64, allowed_mentions: { parse: [] } } });
@@ -120,6 +120,16 @@ export async function discordInteractions(request: Request, env: Env, ctx: Execu
   if (interaction.application_id !== config.applicationId) return new Response('Unauthorized', { status: 401 });
   if (interaction.type === 1) return Response.json({ type: 1 });
   if (interaction.guild_id !== config.guildId) return respond('このサーバーでは利用できません。');
+  // Primary Entry Point with handler=APP_HANDLER (1): launch directly without
+  // any channel message, webhook, mention, DB touch or deferred follow-up.
+  // IMPORTANT: INTERACTION type 2 / DATA type 4, not autocomplete type 4.
+  // Deploy this signed handler BEFORE changing Discord's global command.
+  if (interaction.type === 2 && interaction.data?.type === 4) {
+    if (!/^\d{15,22}$/.test(interaction.id)
+        || typeof interaction.token !== 'string' || !interaction.token.length
+        || interaction.token.length > 4096) return new Response('Invalid interaction',{status:400});
+    return Response.json({type:12});
+  }
   // Read-only candidate lists return type 8 directly, without deferring or buying anything.
   if (interaction.type === 4) {
     const name=interaction.data?.name;

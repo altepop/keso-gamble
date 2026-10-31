@@ -44,3 +44,18 @@ DiscordアクセストークンはSDKへの認証に一時使用し、localStora
 認証済みのSDKへ `setConfig({use_interactive_pip:true})` を送り、DiscordのPiP表示でも操作を受け付けるようにする。未対応の古いクライアントでは設定の失敗でログインを止めない。残高の定期確認で表示が変わらないときは、ボタンを含むDOMを作り直さない。
 
 ブラウザー検証ではDM・guild付きモバイル起動と、Discord側のPiP入力制御を模擬する。サーバー起動で「つづける」からホームへ進み、残高の更新とタッチが重なっても次の画面を開けることを確認する。実際のiPhone版Discordでの操作は利用者の端末で確認する。
+
+## 招待を自動投稿しないActivity起動（Issue #193）
+
+Discord公式のPrimary Entry Pointは、デフォルトの `DISCORD_LAUNCH_ACTIVITY`（handler=2）では**Discord自身がチャンネルへゲーム招待を投稿する**。この投稿はWebhook本文や通知音の変更では止められない。アプリ側で制御できる `APP_HANDLER`（handler=1）に切り替え、署名済みInteractionの `type=2` ＋ `data.type=4` を受け取ったら、本文・follow-upなしの `{ "type": 12 }`（LAUNCH_ACTIVITY）を直ちに返す。
+
+- 切り替えは**必ずWorkerの更新と署名検証テストが成功した後**に行う。既存スラッシュコマンドの登録・権限・口座認証は変更しない。
+- 本番のGitHub Actionsは、既存のPrivate Worker設定からApplication IDを復元し、Repository Secret `DISCORD_BOT_TOKEN` が設定済みの場合に限り、Discord Global Commandsを**GET** → 既存のPrimary Entry Point 1件を確定 → その**IDにhandlerのみPATCH** → GET検証を行う。別のコマンドやSlash Commandsを上書き・再登録しない。
+- GitHub Secretがない場合には**変更をスキップ**し、Actionsにその旨を表示する。元からhandler=2の場合はDiscord側の自動招待が続く。値そのものをチャット、Issue、ログ、PRに送らないこと。
+- 設定の確認：本番Workerに配置済みの私有設定がある環境で `node scripts/activity-entry-handler.mjs --status`。切り替え：`--apply`、元のDiscord動作への復旧：`--rollback`。いずれも当該実行環境に既存の `DISCORD_BOT_TOKEN` がある場合だけAPIを変更・照会する。
+- 次回の自動デプロイでも旧ハンドラへ戻したい場合、GitHubリポジトリ変数 `DISCORD_ACTIVITY_ENTRYPOINT_MODE` を `rollback` に設定する（通常は `apply`）。不審な応答や起動不良があれば、まず `rollback` にしてワークフローを再実行する。
+- 通話に入らない通常テキストチャンネルからの起動を対象とし、SDK認証・KP・競馬・株式・Mリーグは維持する。リンク `https://discord.com/activities/<application_id>` と既存の「Activityを開く」ボタンは削除しない。
+
+**実機での未検証事項：** Primary Entry Pointのhandler変更は公式仕様で自動招待投稿を抑止できるが、共有リンク経由・古いDiscordクライアント・iOS/Android/Webの動作が同じとは限らない。バックエンドの模擬Interactionとブラウザ試験ではDiscordクライアント自体が生成する表示を再現できない。実機では (1)通話非参加 (2)起動できる (3)テキストチャンネルに招待カードが残らない (4)口座へ接続できる (5)リンク起動も維持、をiOS/Android/Webごとに確認すること。
+
+公式仕様：[Primary Entry Point handler](https://docs.discord.com/developers/interactions/application-commands#entry-point-handlers)、[Interaction LAUNCH_ACTIVITY](https://docs.discord.com/developers/interactions/receiving-and-responding#interaction-response)。
