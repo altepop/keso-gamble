@@ -39,6 +39,22 @@ function fakeFetch(records:MahjongRecord[]=[record()]){
 }
 const state=(sql:DatabaseSync,key:string)=>sql.prepare('SELECT value FROM mahjong_watch_state WHERE key=?').get(key)?.value;
 
+test('unsent mahjong posts use a partial chronological index without changing leasing or delivery order',async()=>{
+ const f=fixture();
+ assert.equal(await flushMahjongPosts(f.env,now),0);
+ const insert=f.sql.prepare('INSERT INTO mahjong_watch_posts(id,body,at,sent,lease) VALUES(?,?,?,?,?)');
+ for(let i=0;i<500;i++)insert.run('delivered:'+i,'{}',i,1,0);
+ insert.run('eligible:a','{}',1000,0,0);
+ insert.run('eligible:b','{}',1000,0,now-1);
+ insert.run('locked','{}',800,0,now+120000);
+ const query='SELECT id,body FROM mahjong_watch_posts WHERE sent=0 AND lease<=? ORDER BY at,id LIMIT 4';
+ const plan=f.sql.prepare('EXPLAIN QUERY PLAN '+query).all(now).map(x=>String(x.detail)).join(' | ');
+ assert.match(plan,/mahjong_watch_ready/);
+ assert.doesNotMatch(plan,/USE TEMP B-TREE/);
+ assert.deepEqual((f.sql.prepare(query).all(now) as Array<{id:string}>).map(x=>x.id),['eligible:a','eligible:b']);
+ assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM mahjong_watch_posts').get()!.n,503);
+});
+
 test('rank uses final scores and seat order for ties; three-player second is not last',()=>{
  assert.equal(mahjongRank(record(),10),1);assert.equal(mahjongRank(record(),40),4);
  const tied=record();tied.players[0].score=30000;assert.equal(mahjongRank(tied,10),1);assert.equal(mahjongRank(tied,20),2);
