@@ -22,6 +22,8 @@ const initialized=new WeakSet<object>();
 export async function ensurePosts(env:KpEnv){
  if(initialized.has(env.DB))return;
  await env.DB.prepare('CREATE TABLE IF NOT EXISTS kp_posts(id TEXT PRIMARY KEY,body TEXT NOT NULL,at INTEGER NOT NULL,sent INTEGER NOT NULL DEFAULT 0)').run();
+ // Keep the delivery cursor on unsent posts; a growing history must not be rescanned.
+ await env.DB.prepare('CREATE INDEX IF NOT EXISTS kp_posts_ready ON kp_posts(at,id) WHERE sent=0').run();
  initialized.add(env.DB);
 }
 export function earningsWebhook(env:PostEnv){
