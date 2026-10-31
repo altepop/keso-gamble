@@ -6,6 +6,7 @@ import {URL} from 'node:url';
 import {escalationFor,valoKp} from '../src/mode-rewards.ts';
 import {collectKpMatch,initializeKp,syncKpAccounts,drainKpInbox} from '../src/kp.ts';
 import {readKpState} from '../src/kp-api.ts';
+import {ensurePosts} from '../src/racing-posts.ts';
 import type {KpEnv,KpMapping} from '../src/kp.ts';
 
 const guild='100000000000000100',user='100000000000000101',puuid='escalation-test-puuid';
@@ -120,7 +121,7 @@ function findBigTier(tier:number,win=true){
  throw Error('Could not locate deterministic big tier fixture');
 }
 test('standard bot report has a unique tier and outcome line; only IV/V create distinct equal-bot posts',async()=>{
- const f=await fixture();f.seed(35000);
+ const f=await fixture();f.seed(35000);await ensurePosts(f.env);
  const low=findBigTier(2);
  const lowExpected=valoKp(match(low.id),puuid,'escalation','win');
  assert.match(lowExpected.note,/エスカ大勝負 Ⅱ：勝利 \+1,000 KP/);
