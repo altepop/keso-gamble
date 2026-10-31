@@ -38,6 +38,16 @@ export const kpSchema=[
  INSERT INTO kp_directives(id,guild,issuer,target,task,game,achievement,cost,at) SELECT NEW.guild||':'||NEW.user||':'||NEW.id,NEW.guild,NEW.user,json_extract(NEW.directive,'$.target'),json_extract(NEW.directive,'$.task'),json_extract(NEW.directive,'$.game'),json_extract(NEW.directive,'$.achievement'),json_extract(NEW.directive,'$.cost'),NEW.at WHERE NEW.directive IS NOT NULL;
  END`,
 ];
+export const kpMatchRewardHistoryIndex='CREATE INDEX IF NOT EXISTS kp_events_member_latest ON kp_events(guild,user,at DESC,id ASC)';
+// Apply only when the reward history is requested, not on every unrelated KP command.
+const matchRewardIndexReady=new WeakMap<object,Promise<void>>();
+export async function ensureKpMatchRewardIndex(env:KpEnv):Promise<void>{
+ const ready=matchRewardIndexReady.get(env.DB);
+ if(ready)return ready;
+ const job=(async()=>{await env.DB.prepare(kpMatchRewardHistoryIndex).run();})();
+ matchRewardIndexReady.set(env.DB,job);
+ try{await job;}catch(error){matchRewardIndexReady.delete(env.DB);throw error;}
+}
 export function newKpState(){return {cash:0,serverWallet:true,holdings:{keso:0,riso:0,yuya:0,yano:0},prices:{keso:1200,riso:780,yuya:420,yano:1860},history:{keso:[1200],riso:[780],yuya:[420],yano:[1860]},owned:[],trades:[],spins:[],salaryClaims:0,lastSalaryAt:0,ticks:0,lastMarketAt:Date.now(),seed:7331,claims:[],directives:[],progressSeq:0,version:1};}
 const b64=(s:string)=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
 export const kpHash=async(s:string)=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s))),x=>x.toString(16).padStart(2,'0')).join('');
