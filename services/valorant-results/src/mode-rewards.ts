@@ -35,7 +35,7 @@ export function jackpotPost(user:string,amount:number){
  return amount>=100000?`🚨🎰🚨 <@${user}> アンレ勝利の抽選で **+${amount.toLocaleString('ja-JP')} KP**！！ 0.03%を引きよった、とんでもないことになっとる！`
   :`🎰💥 <@${user}> アンレ勝利の抽選で **+${amount.toLocaleString('ja-JP')} KP** の大当たりや！`;
 }
-export function valoKp(raw:Match,puuid:string,mode:string,outcome:string|null):{base:number;net:number;note:string;lottery?:number;escalation?:EscalationSpin}{
+export function valoKp(raw:Match,puuid:string,mode:string,outcome:string|null,escalationV5=true):{base:number;net:number;note:string;lottery?:number;escalation?:EscalationSpin}{
  if(mode==='spikerush'||!['win','loss','draw',null].includes(outcome))return {base:0,net:0,note:''};
  const p=raw.players.find(p=>p.puuid===puuid),s=p?.stats,id=raw.metadata.match_id+':'+puuid;
  let base=0,bonus=0,note='';
@@ -58,7 +58,10 @@ export function valoKp(raw:Match,puuid:string,mode:string,outcome:string|null):{
    const own=raw.teams?.find(t=>t.team_id===p?.team_id),enemy=raw.teams?.find(t=>t.team_id!==p?.team_id);
    if(raw.teams?.length===2&&own?.won===true&&enemy?.won===false&&own.rounds?.won===5&&enemy.rounds?.won===0){base+=rules.swiftplay.cleanSweepBonus;note='（5対0 +400 KP）';}
   }
-  if(mode==='escalation'){
+  if(mode==='escalation'&&!escalationV5&&(outcome==='win'||outcome==='loss')&&chance('escalation-jackpot:'+id,3)){
+   base=outcome==='win'?1000:-1000;note='（🎰 エスカ大勝負）';
+  }
+  if(mode==='escalation'&&escalationV5){
    escalation=escalationFor(id,outcome);
    if(escalation?.kind==='big'){base=escalation.award;note=`（🎰 エスカ大勝負 第${escalation.tier}段階 ${base>0?'+':''}${base} KP）`;}
    if(escalation?.kind==='super-lucky')note=`（📩 超ラッキー +${escalation.award.toLocaleString('ja-JP')} KP）`;
@@ -92,6 +95,7 @@ export async function ensureModeRewards(env:KpEnv){
     VALUES('esc-extra:'||NEW.id,NEW.guild,NEW.user,NEW.balance_after-NEW.balance_before,'match',NEW.at);
     END`),
   ]);
+  await env.DB.prepare("INSERT OR IGNORE INTO kp_settings(key,value) VALUES('escalation_v5_started_at',?)").bind(String(Date.now())).run();
   if(active)return;
   await env.DB.batch([
    env.DB.prepare('CREATE TABLE IF NOT EXISTS kp_reward_notes(id TEXT PRIMARY KEY,note TEXT NOT NULL)'),
