@@ -437,3 +437,13 @@ button.vp-card{cursor:pointer}.vp-card.held{background:#e9c66e26;outline:1px sol
 .trend-change{font-size:12px;color:var(--muted);min-width:56px;text-align:right}
 .trend-change.up{color:var(--green)}
 .trend-change.down{color:var(--red)}
+
+
+/* Fictional stock bulletin: clear, readable in Discord's narrow mobile embed. */
+.stock-story-preview{padding:13px 14px;margin:12px 10px 14px;border:1px solid #4f6f9a;border-radius:12px;background:#0e2140;color:#dbe9ff;font-size:13px;line-height:1.7;overflow-wrap:anywhere}
+.stock-story-preview strong{color:#f0d58a;font-size:14px}
+.stock-story-preview p{margin:7px 0 0}
+.stock-news-detail{margin:6px 0;color:var(--text);opacity:.88;font-size:13px;line-height:1.6;white-space:normal;overflow-wrap:anywhere}
+#admin-stock-body,#admin-stock-headline{display:block;box-sizing:border-box;width:100%;max-width:100%;padding:12px;border:1px solid #41618f;border-radius:10px;background:#0c1933;color:#eef4ff;font:inherit;line-height:1.55}
+#admin-stock-body{resize:vertical;min-height:100px}
+#admin-stock-news{max-width:100%;text-overflow:ellipsis}
