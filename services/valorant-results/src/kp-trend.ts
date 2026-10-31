@@ -3,11 +3,25 @@ import type {KpEnv} from './kp.ts';
 // 資産 → メンバーのKP推移: everyone's KP at the end of each JST day (KP − 借KP, so a debt shows below 0), worked back
 // from today's balances through the ledger and the debt events. Members only, read only.
 const DAY=86_400_000,JST=9*3_600_000;
+const trendIndexJobs=new WeakMap<object,Promise<unknown>>();
+async function ensureTrendReadIndex(env:KpEnv){
+ let job=trendIndexJobs.get(env.DB);
+ if(!job){
+  // Existing per-member history index begins (guild,user), so a *whole-guild*
+  // time-window query on (guild,at) otherwise scans old transactions.
+  job=env.DB.prepare('CREATE INDEX IF NOT EXISTS kp_ledger_trend_window ON kp_ledger(guild,at,user)').run();
+  trendIndexJobs.set(env.DB,job);
+  job.catch(()=>trendIndexJobs.delete(env.DB));
+ }
+ await job;
+}
+
 export const TREND_DAYS=[7,30] as const;
 export interface TrendMember {id:string;name:string;balance:number;debt:number;points:number[]}
 export async function kpTrend(env:KpEnv,guild:string,names:Map<string,string>,days:number,now=Date.now()){
  if(!TREND_DAYS.includes(days as 7|30))days=7;
  await ensureDebt(env);
+ await ensureTrendReadIndex(env);
  const today=Math.floor((now+JST)/DAY);
  const first=today-days+1,since=(first+1)*DAY-JST; // only what came after the first day's end changes the points
  const [wallets,debts,moves,owes]=await Promise.all([
