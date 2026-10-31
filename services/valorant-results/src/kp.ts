@@ -44,7 +44,7 @@ const matchRewardIndexReady=new WeakMap<object,Promise<void>>();
 export async function ensureKpMatchRewardIndex(env:KpEnv):Promise<void>{
  const ready=matchRewardIndexReady.get(env.DB);
  if(ready)return ready;
- const job=env.DB.prepare(kpMatchRewardHistoryIndex).run().then(()=>{});
+ const job=(async()=>{await env.DB.prepare(kpMatchRewardHistoryIndex).run();})();
  matchRewardIndexReady.set(env.DB,job);
  try{await job;}catch(error){matchRewardIndexReady.delete(env.DB);throw error;}
 }
