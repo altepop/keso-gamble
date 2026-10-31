@@ -1,5 +1,5 @@
-import { hydrateState } from './engine.js?v=web-26dd3adca2291bb4';
-import { loadState, saveState } from './storage.js?v=web-26dd3adca2291bb4';
+import { hydrateState } from './engine.js?v=web-a0530d2dcea516c9';
+import { loadState, saveState } from './storage.js?v=web-a0530d2dcea516c9';
 
 // Read, modify and save under the same origin-wide lock. Never save a stale view.
 export function createStore({load = loadState, save = saveState, locks = globalThis.navigator?.locks, onChange = () => {}, onVolatile = () => {}} = {}) {
