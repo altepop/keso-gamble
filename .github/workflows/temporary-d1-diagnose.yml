@@ -1,0 +1,43 @@
+name: Temporary D1 read-only diagnostic (2026-10-31)
+on:
+  push:
+    branches:
+      - diag/d1-query-insights-20261031
+permissions:
+  contents: read
+jobs:
+  insights:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/valorant-results
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install pinned Wrangler
+        run: npm ci --ignore-scripts
+      - name: Analyze last-hour D1 read volume without printing SQL, tokens or bound values
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -e
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          for DBID in 93625c27-74b4-4154-a0a5-2d7485083f33 bf23ab40-814f-4626-9e0b-36739ac41750; do
+            echo "--- DB ${DBID} ---"
+            ./node_modules/.bin/wrangler d1 insights "$DBID" --sort-by=reads --time-period=1h --limit=20 --json > /tmp/d1-insights.json
+            node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          const data=JSON.parse(fs.readFileSync('/tmp/d1-insights.json','utf8'));
+          const rows=Array.isArray(data)?data:Array.isArray(data.results)?data.results:Array.isArray(data.queries)?data.queries:Array.isArray(data.data)?data.data:[];
+          if(!rows.length){process.stdout.write('INSIGHTS_UNAVAILABLE_OR_EMPTY. Root keys: '+Object.keys(data).join(',')+'\n');process.exit(0);}
+          for(let i=0;i<rows.length;i++){
+            const row=rows[i],sql=String(row.query??'');
+            const words=[...sql.matchAll(/\b(?:FROM|JOIN|UPDATE|INTO)\s+["'`]?([A-Za-z_][A-Za-z_0-9]*)/gi)].map(m=>m[1]);
+            process.stdout.write(JSON.stringify({rank:i+1,tables:[...new Set(words)].slice(0,8),kind:(/^\s*(SELECT|INSERT|UPDATE|DELETE|CREATE|PRAGMA)/i.exec(sql)?.[1]??'OTHER').toUpperCase(),totalRowsRead:row.totalRowsRead??null,avgRowsRead:row.avgRowsRead??null,calls:row.numberOfTimesRun??null,totalRowsWritten:row.totalRowsWritten??null})+'\n');
+          }
+          JS
+          done
