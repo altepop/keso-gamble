@@ -23,6 +23,7 @@ const magnitude=(draw:()=>number):10|25|50=>{const n=draw();return n<0.72?10:n<0
 const NEXT_MIN=3*HOUR,NEXT_SPAN=17*HOUR;
 export const nextGuerrillaAt=(now:number,draw:()=>number)=> {
  let at=now+NEXT_MIN+Math.floor(draw()*NEXT_SPAN);
+ if(draw()<0.18)at+=24*HOUR+Math.floor(draw()*16*HOUR);
  const jstHour=new Date(at+9*HOUR).getUTCHours();
  if(jstHour<8)at+=(8-jstHour)*HOUR+Math.floor(draw()*HOUR);
  return Math.ceil(at/SLOT)*SLOT;
