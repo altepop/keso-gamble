@@ -562,6 +562,8 @@ let privateRacePreview=null,privateRoundMessage='';
 // least once a minute (race card, Mリーグ status and voice status move with time). Nothing is fetched while hidden.
 // This small read is independent of wallet/animation polling and never replaces the game form.
 let communityEntries=[],communityBusy=false,communityOwner=null,communityStatus='確認中…';
+// Keep five-second freshness checks, but download the 40-row feed only on change.
+let communityRevision=null,communityFullAt=0;
 function paintCommunity(){
  const list=$('.community-entries'),status=$('.community-status');
  if(!list)return;
@@ -572,12 +574,20 @@ function paintCommunity(){
 async function refreshCommunity(){
  if(document.hidden||!live||!wallet.connected||communityBusy)return;
  const owner=state.selfUserId;
- if(communityOwner!==owner){communityEntries=[];communityOwner=owner;}
+ if(communityOwner!==owner){communityEntries=[];communityOwner=owner;communityRevision=null;communityFullAt=0;}
  communityBusy=true;
  try{
-  const data=await wallet.feed();
+  // Force a full fetch each minute so renamed members and older servers
+  // are handled even when no wallet operation has been appended.
+  const since=communityRevision!==null&&Date.now()-communityFullAt<60000?communityRevision:undefined;
+  const data=await wallet.feed(since);
   if(!live||state.selfUserId!==owner)return;
-  communityEntries=data.entries;communityStatus='更新 '+new Date().toLocaleTimeString('ja-JP');
+  if(!data.unchanged){
+    communityEntries=data.entries;
+    communityRevision=Number.isSafeInteger(data.revision)?data.revision:null;
+    communityFullAt=Date.now();
+  }
+  communityStatus='更新 '+new Date().toLocaleTimeString('ja-JP');
  }catch{communityStatus='更新が止まっています。自動で再接続します。';}
  finally{communityBusy=false;paintCommunity();}
 }
