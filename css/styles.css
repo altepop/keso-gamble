@@ -447,3 +447,44 @@ button.vp-card{cursor:pointer}.vp-card.held{background:#e9c66e26;outline:1px sol
 #admin-stock-body,#admin-stock-headline{display:block;box-sizing:border-box;width:100%;max-width:100%;padding:12px;border:1px solid #41618f;border-radius:10px;background:#0c1933;color:#eef4ff;font:inherit;line-height:1.55}
 #admin-stock-body{resize:vertical;min-height:100px}
 #admin-stock-news{max-width:100%;text-overflow:ellipsis}
+
+
+/* Server-settled Escalation: the prize wheel is a replay, not an input mechanism. */
+body.esc-wheel-open{overflow:hidden!important}
+.esc-roulette-backdrop{position:fixed;inset:0;z-index:120;display:flex;justify-content:center;align-items:center;padding:16px;background:rgba(2,5,16,.88);backdrop-filter:blur(8px);overflow-y:auto}
+.esc-roulette-card{width:min(460px,100%);max-height:calc(100dvh - 32px);overflow:auto;overscroll-behavior:contain;border-radius:22px;border:1px solid #be9c55;background:radial-gradient(ellipse at top,#2a2851 0%,#0b1732 55%,#050b18 100%);box-shadow:0 25px 80px #000b,0 0 40px #c48f3333;padding:17px 16px 21px;color:#f4f7ff;text-align:center}
+.esc-roulette-card.danger{border-color:#b23a56;background:radial-gradient(ellipse at top,#491c36 0%,#170e23 56%,#090914 100%);box-shadow:0 25px 80px #000b,0 0 40px #b31b4b33}
+.esc-roulette-head{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.esc-roulette-kicker{font-size:13px;letter-spacing:.06em;font-weight:800;color:#f4d899}
+.esc-roulette-close{font-size:27px;border:1px solid #ffffff4d;color:#fff;background:#ffffff12;border-radius:12px;width:40px;height:40px;cursor:pointer}
+.esc-roulette-card h2{font-size:clamp(25px,7vw,36px);line-height:1.1;margin:10px 0 6px;color:#fff;font-weight:900}
+.esc-roulette-sub{font-size:12px;color:#bac5e4;line-height:1.6;margin:0}
+.esc-wheel-stage{width:min(78vw,340px);height:min(78vw,340px);max-width:340px;max-height:340px;margin:22px auto 12px;position:relative;isolation:isolate}
+.esc-wheel-spinner{position:absolute;inset:0;border-radius:50%;border:8px solid #e2c778;box-shadow:0 0 0 4px #151626,0 0 0 7px #d2a75c,0 0 30px #e6b75588,inset 0 0 24px #000c;transform:rotate(0deg);will-change:transform}
+.esc-roulette-card.danger .esc-wheel-spinner{border-color:#d95974;box-shadow:0 0 0 4px #151626,0 0 0 7px #a92b4a,0 0 30px #d1334caa,inset 0 0 24px #000c}
+.esc-wheel-spinner:before{content:"";position:absolute;inset:8px;border-radius:50%;border:1px solid #ffffff57;pointer-events:none}
+.esc-wheel-label{position:absolute;transform:translate(-50%,-50%);font-size:clamp(8px,2.8vw,12px);color:white;text-shadow:0 2px 4px #000b;font-weight:900;white-space:nowrap;letter-spacing:-.04em}
+.esc-wheel-core{position:absolute;inset:34%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border-radius:50%;border:3px solid #f3da8c;background:radial-gradient(circle at 35% 20%,#303b6e,#080c1b 75%);box-shadow:0 0 14px #000a;letter-spacing:.16em}
+.esc-wheel-core span{font-size:clamp(11px,3vw,18px);font-weight:900}.esc-wheel-core b{font-size:clamp(8px,2vw,12px);color:#eacb78}
+.esc-wheel-pointer{position:absolute;z-index:5;top:-17px;left:50%;transform:translateX(-50%);width:0;height:0;border:17px solid transparent;border-top:30px solid #fff2b7;filter:drop-shadow(0 3px 3px #0009)}
+.esc-wheel-ball-orbit{position:absolute;inset:0;z-index:4;pointer-events:none;transform:rotate(0deg);will-change:transform}
+.esc-wheel-ball{position:absolute;top:4px;left:50%;height:18px;width:18px;margin-left:-9px;border-radius:50%;background:radial-gradient(circle at 35% 25%,white,#bed5ea 40%,#52708e 80%);box-shadow:0 2px 5px #0009,0 0 14px #fff8}
+.esc-wheel-phase{min-height:22px;color:#ecd18e;font-weight:700;margin:12px 0}
+.esc-roulette-result{padding:12px 10px;border-radius:14px;background:#ffffff0c;border:1px solid #ffffff3b;animation:esc-prize-pop .55s ease-out both}
+.esc-roulette-result[hidden]{display:none}
+.esc-roulette-result small{display:block;color:#f2d799;font-size:12px}
+.esc-roulette-result strong{display:block;font-size:clamp(28px,9vw,43px);font-variant-numeric:tabular-nums;color:#fff3b4;letter-spacing:-.04em}
+.esc-roulette-card.danger .esc-roulette-result strong{color:#ff8ba3}
+.esc-roulette-result p{font-size:13px;margin:6px 0 0;color:#e5eaff}
+.esc-roulette-footer{display:flex;justify-content:center;gap:10px;margin:14px 0}
+.esc-roulette-footer button{min-height:44px;min-width:145px;padding:10px 15px;border-radius:11px;font-weight:800;cursor:pointer;border:1px solid #c3a15b;background:#efcf77;color:#15182b}
+.esc-roulette-footer button[hidden]{display:none}
+.esc-wheel-disclaimer{font-size:10px;line-height:1.6;color:#aebcda;margin:10px 0 0}
+.esc-rewards-list{padding:10px 16px}
+.esc-reward-row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:8px;padding:11px;border-radius:12px;border:1px solid #2c436b;background:#0a1933}
+.esc-reward-row .esc-reward-meta{font-size:12px;line-height:1.55;min-width:0}
+.esc-reward-row .esc-reward-meta b{display:block;font-size:15px}
+.esc-reward-row button{min-height:38px;flex:none;border:1px solid #deb866;border-radius:8px;background:#2e2b27;color:#ffe5aa;padding:7px 11px;font-size:12px;font-weight:800}
+@keyframes esc-prize-pop{from{opacity:0;transform:scale(.8)}to{opacity:1;transform:scale(1)}}
+@media(max-height:730px){.esc-wheel-stage{width:min(65vw,275px);height:min(65vw,275px);margin:12px auto 5px}.esc-roulette-card{padding:12px}.esc-wheel-disclaimer{font-size:9px}}
+@media(prefers-reduced-motion:reduce){.esc-roulette-result{animation:none}}
