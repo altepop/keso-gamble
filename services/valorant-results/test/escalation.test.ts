@@ -110,3 +110,42 @@ test('matches started before the v5 cutoff keep original escalation odds and nev
  assert.equal((f.sql.prepare("SELECT COUNT(*) n FROM kp_posts WHERE id LIKE 'esc-notice:%'").get() as {n:number}).n,0);
  assert.equal((f.sql.prepare('SELECT policy FROM kp_events WHERE match=?').get(id) as {policy:string}).policy,'mode-rewards-v4');
 });
+
+function findBigTier(tier:number,win=true){
+ for(let i=0;i<300000;i++){
+  const id='escalation-tier-'+tier+'-'+(win?'win':'loss')+'-'+i;
+  const spin=escalationFor(id+':'+puuid,win?'win':'loss');
+  if(spin?.kind==='big'&&spin.tier===tier)return {id,spin};
+ }
+ throw Error('Could not locate deterministic big tier fixture');
+}
+test('standard bot report has a unique tier and outcome line; only IV/V create distinct equal-bot posts',async()=>{
+ const f=await fixture();f.seed(35000);
+ const low=findBigTier(2);
+ const lowExpected=valoKp(match(low.id),puuid,'escalation','win');
+ assert.match(lowExpected.note,/エスカ大勝負 Ⅱ：勝利 \+1,000 KP/);
+ await collectKpMatch(f.env,mapping,match(low.id),puuid);
+ assert.equal((f.sql.prepare("SELECT COUNT(*) n FROM kp_posts WHERE id LIKE 'esc-big:%'").get() as {n:number}).n,0);
+ const high=findBigTier(4);
+ const highExpected=valoKp(match(high.id),puuid,'escalation','win');
+ assert.match(highExpected.note,/エスカ大勝負 Ⅳ：勝利 \+5,000 KP/);
+ const credited=await collectKpMatch(f.env,mapping,match(high.id),puuid);
+ const onePost=f.sql.prepare("SELECT id,body FROM kp_posts WHERE id LIKE 'esc-big:%'").get() as {id:string;body:string};
+ assert.ok(onePost);
+ const parsed=JSON.parse(onePost.body)as{content:string;allowed_mentions:{parse:string[]}};
+ assert.match(parsed.content,/エスカ大勝負・Ⅳ 当選/);
+ assert.match(parsed.content,/第Ⅳ段階.*基準額 \+5,000 KP/);
+ assert.match(parsed.content,/この試合の口座増減/);
+ assert.ok(parsed.content.includes(Math.abs(credited!).toLocaleString('ja-JP')));
+ assert.deepEqual(parsed.allowed_mentions.parse,[]);
+ await collectKpMatch(f.env,mapping,match(high.id),puuid);
+ await drainKpInbox(f.env);
+ assert.equal((f.sql.prepare("SELECT COUNT(*) n FROM kp_posts WHERE id LIKE 'esc-big:%'").get() as {n:number}).n,1);
+ const loss=findBigTier(5,false);
+ const lossExpected=valoKp(match(loss.id,false),puuid,'escalation','loss');
+ assert.match(lossExpected.note,/エスカ大勝負 Ⅴ：敗北 −15,000 KP/);
+ await collectKpMatch(f.env,mapping,match(loss.id,false),puuid);
+ const all=(f.sql.prepare("SELECT body FROM kp_posts WHERE id LIKE 'esc-big:%' ORDER BY id").all()as {body:string}[]).map(x=>JSON.parse(x.body).content as string);
+ assert.equal(all.length,2);
+ assert.ok(all.some(x=>/第Ⅴ段階/.test(x)&&/敗北/.test(x)));
+});
