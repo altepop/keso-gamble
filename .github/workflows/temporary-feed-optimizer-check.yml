@@ -1,0 +1,36 @@
+name: Temporary D1 Feed Optimization Preflight
+on:
+  push:
+    branches:
+      - perf/d1-feed-revision-shortcircuit-20261031
+permissions:
+  contents: write
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: perf/d1-feed-revision-shortcircuit-20261031
+          persist-credentials: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Check frontend and Worker without touching production
+        run: |
+          npm ci
+          npm run build:activity
+          npm run check:activity
+          npm test
+          npm ci --prefix services/valorant-results
+          npm --prefix services/valorant-results run check
+      - name: Commit versioned Activity assets
+        run: |
+          if git diff --quiet -- js css index.html; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add js css index.html
+          git commit -m "build: version new feed conditional request and title optimization"
+          git push origin HEAD:refs/heads/perf/d1-feed-revision-shortcircuit-20261031
