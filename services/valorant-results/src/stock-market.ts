@@ -37,6 +37,9 @@ export async function ensureStocks(env:KpEnv){
  // Without these indexes, each tick can scan the full historical ledger/operation tables.
  `CREATE INDEX IF NOT EXISTS kp_ledger_guild_at ON kp_ledger(guild,at)`,
  `CREATE INDEX IF NOT EXISTS kp_operations_guild_at ON kp_operations(guild,at)`,
+ // Only settlement operations produce racing market news; avoid expanding JSON from
+ // unrelated casino, trade and other operations on every five-minute tick.
+ `CREATE INDEX IF NOT EXISTS kp_operations_race_news ON kp_operations(guild,at) WHERE substr(lower(id),1,12)='race-settle:'`,
  `CREATE INDEX IF NOT EXISTS kp_events_guild_at ON kp_events(guild,at)`,
  `CREATE INDEX IF NOT EXISTS stock_trades_guild_at ON stock_trades(guild,at)`,
  `CREATE TABLE IF NOT EXISTS stock_sale_lots(sale TEXT NOT NULL,lot TEXT NOT NULL,quantity INTEGER NOT NULL CHECK(quantity>0),PRIMARY KEY(sale,lot))`,
@@ -147,8 +150,8 @@ async function captureNews(env:KpEnv,market:Market,now:number){
  await env.DB.prepare(`INSERT OR IGNORE INTO stock_news(guild,id,symbol,label,bps,at)
   SELECT guild,'race:'||user||':'||id,'yuya',CASE WHEN net>0 THEN '競馬で大きな利益' ELSE '競馬で大きな損失' END,CASE WHEN net>0 THEN 50 ELSE -40 END,at FROM (
    SELECT o.guild,o.user,o.id,o.at,SUM(CAST(json_extract(b.value,'$.payout') AS INTEGER)-CAST(json_extract(b.value,'$.amount') AS INTEGER)) AS net
-   FROM kp_operations o JOIN json_each(o.response,'$.result.settled') r JOIN json_each(o.state,'$.raceBets') b ON json_extract(b.value,'$.id')=json_extract(r.value,'$.id')
-   WHERE o.guild=? AND o.at>=? AND o.id LIKE 'race-settle:%' GROUP BY o.guild,o.user,o.id,o.at
+   FROM kp_operations o INDEXED BY kp_operations_race_news JOIN json_each(o.response,'$.result.settled') r JOIN json_each(o.state,'$.raceBets') b ON json_extract(b.value,'$.id')=json_extract(r.value,'$.id')
+   WHERE o.guild=? AND o.at>=? AND o.id LIKE 'race-settle:%' AND substr(lower(o.id),1,12)='race-settle:' GROUP BY o.guild,o.user,o.id,o.at
   ) WHERE ABS(net)>=5000`).bind(guild,since).run();
  await env.DB.prepare(`INSERT OR IGNORE INTO stock_news(guild,id,symbol,label,bps,at) SELECT guild,'trades:'||CAST(at/300000 AS INTEGER),'yano','株の売買が活発',15,MAX(at) FROM stock_trades WHERE guild=? AND at>=? GROUP BY guild,CAST(at/300000 AS INTEGER) HAVING COUNT(*)>=5`).bind(guild,since).run();
  // メシウマ食堂／他人の金で焼肉: how many times someone lost or won KP since the last tick, whatever the amounts.
