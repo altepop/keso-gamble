@@ -35,9 +35,15 @@ export async function ensureStocks(env:KpEnv){
  `CREATE TABLE IF NOT EXISTS stock_trades(id TEXT PRIMARY KEY,guild TEXT NOT NULL,user TEXT NOT NULL,symbol TEXT NOT NULL,side TEXT NOT NULL CHECK(side IN ('buy','sell')),quantity INTEGER NOT NULL CHECK(quantity>0),price INTEGER NOT NULL,at INTEGER NOT NULL)`,
  `CREATE TABLE IF NOT EXISTS stock_sale_lots(sale TEXT NOT NULL,lot TEXT NOT NULL,quantity INTEGER NOT NULL CHECK(quantity>0),PRIMARY KEY(sale,lot))`,
  `CREATE TABLE IF NOT EXISTS stock_dividend_days(guild TEXT NOT NULL,day TEXT NOT NULL,prices TEXT NOT NULL,at INTEGER NOT NULL,PRIMARY KEY(guild,day))`,
+ // Separate completion marker: a previous release could save a dividend-day snapshot
+ // but fail while crediting the wallets. Never mistake that snapshot for completion.
+ `CREATE TABLE IF NOT EXISTS stock_dividend_runs(guild TEXT NOT NULL,day TEXT NOT NULL,PRIMARY KEY(guild,day))`,
  `CREATE TABLE IF NOT EXISTS stock_dividends(guild TEXT NOT NULL,user TEXT NOT NULL,day TEXT NOT NULL,amount INTEGER NOT NULL CHECK(amount BETWEEN 1 AND 500),eligible_value INTEGER NOT NULL,at INTEGER NOT NULL,PRIMARY KEY(guild,user,day))`,
  `CREATE TABLE IF NOT EXISTS stock_news(guild TEXT NOT NULL,id TEXT NOT NULL,symbol TEXT NOT NULL,label TEXT NOT NULL,bps INTEGER NOT NULL,at INTEGER NOT NULL,applied_version INTEGER,applied_bps INTEGER NOT NULL DEFAULT 0,applied_at INTEGER,PRIMARY KEY(guild,id))`,
  `CREATE INDEX IF NOT EXISTS stock_news_pending ON stock_news(guild,applied_version,at)`,
+ // A partial time-sorted index supports the 12 newest public headlines without
+ // scanning and sorting every historical market event on each wallet refresh.
+ `CREATE INDEX IF NOT EXISTS stock_news_recent_public ON stock_news(guild,at DESC,id DESC) WHERE applied_version IS NOT NULL AND applied_bps!=0`,
  `CREATE TABLE IF NOT EXISTS stock_ticks(guild TEXT NOT NULL,version INTEGER NOT NULL,prices TEXT NOT NULL,at INTEGER NOT NULL,PRIMARY KEY(guild,version))`,
  `CREATE TABLE IF NOT EXISTS stock_announcements(guild TEXT NOT NULL,symbol TEXT NOT NULL,slot INTEGER NOT NULL,at INTEGER NOT NULL,PRIMARY KEY(guild,symbol,slot))`,
  `CREATE TABLE IF NOT EXISTS kp_posts(id TEXT PRIMARY KEY,body TEXT NOT NULL,at INTEGER NOT NULL,sent INTEGER NOT NULL DEFAULT 0)`,
@@ -107,11 +113,22 @@ export async function payStockDividends(env:KpEnv,market:Market,now=Date.now()){
  const boundary=Math.floor(now/STOCK_HOLD)*STOCK_HOLD;
  if(boundary<=market.startedAt)return;
  const day=new Date(boundary).toISOString().slice(0,10);
- await env.DB.prepare('INSERT OR IGNORE INTO stock_dividend_days VALUES(?,?,?,?)').bind(market.guild,day,JSON.stringify(market.prices),now).run();
- await env.DB.prepare(`INSERT OR IGNORE INTO stock_dividends(guild,user,day,amount,eligible_value,at)
-  SELECT l.guild,l.user,?,MIN(500,CAST(SUM(l.remaining*CAST(json_extract(m.prices,'$.'||l.symbol) AS INTEGER))/100 AS INTEGER)),SUM(l.remaining*CAST(json_extract(m.prices,'$.'||l.symbol) AS INTEGER)),?
-  FROM stock_lots l JOIN stock_dividend_days m ON m.guild=l.guild AND m.day=? WHERE l.guild=? AND l.remaining>0 AND l.at<=? GROUP BY l.guild,l.user HAVING SUM(l.remaining*CAST(json_extract(m.prices,'$.'||l.symbol) AS INTEGER))>=100`)
-  .bind(day,now,day,market.guild,boundary-STOCK_HOLD).run();
+ // Every open Activity previously rescanned *all* historical stock lots for today's
+ // dividend, even after it had already been settled. A primary-key lookup now
+ // skips repeat work. Keep the snapshot, payouts and completion marker in
+ // a single atomic batch so a failed dividend
+ // distribution never leaves a completion marker that suppresses a retry.
+ if(await env.DB.prepare('SELECT 1 FROM stock_dividend_runs WHERE guild=? AND day=?').bind(market.guild,day).first())return;
+ await env.DB.batch([
+  env.DB.prepare('INSERT OR IGNORE INTO stock_dividend_days VALUES(?,?,?,?)').bind(market.guild,day,JSON.stringify(market.prices),now),
+  env.DB.prepare(`INSERT OR IGNORE INTO stock_dividends(guild,user,day,amount,eligible_value,at)
+   SELECT l.guild,l.user,?,MIN(500,CAST(SUM(l.remaining*CAST(json_extract(m.prices,'$.'||l.symbol) AS INTEGER))/100 AS INTEGER)),SUM(l.remaining*CAST(json_extract(m.prices,'$.'||l.symbol) AS INTEGER)),?
+   FROM stock_lots l JOIN stock_dividend_days m ON m.guild=l.guild AND m.day=?
+   WHERE l.guild=? AND l.remaining>0 AND l.at<=?
+   GROUP BY l.guild,l.user HAVING SUM(l.remaining*CAST(json_extract(m.prices,'$.'||l.symbol) AS INTEGER))>=100`)
+   .bind(day,now,day,market.guild,boundary-STOCK_HOLD),
+  env.DB.prepare('INSERT OR IGNORE INTO stock_dividend_runs(guild,day) VALUES(?,?)').bind(market.guild,day),
+ ]);
 }
 async function captureNews(env:KpEnv,market:Market,now:number){
  const since=Math.max(market.startedAt,now-86400000),guild=market.guild;
@@ -194,8 +211,11 @@ export async function tickStocks(env:KpEnv,market:Market,now=Date.now(),draw:()=
 export async function prepareStocks(env:KpEnv,guild:string,user?:string,now=Date.now()){
  await ensureStocks(env);
  const prices=Object.fromEntries(STOCKS.map(s=>[s.id,s.initialPrice])),history=Object.fromEntries(STOCKS.map(s=>[s.id,[s.initialPrice]]));
- await env.DB.prepare('INSERT OR IGNORE INTO stock_markets VALUES(?,0,?,?,?,?,?)').bind(guild,JSON.stringify(prices),JSON.stringify(history),now,now,'initial').run();
- let market=await read(env,guild);
+ // Common case: the shared market already exists. Do not issue an ignored
+ // INSERT on every 1-minute full-state refresh or scheduled stock update.
+ const existing=await env.DB.prepare('SELECT * FROM stock_markets WHERE guild=?').bind(guild).first<RawMarket>();
+ if(!existing)await env.DB.prepare('INSERT OR IGNORE INTO stock_markets VALUES(?,0,?,?,?,?,?)').bind(guild,JSON.stringify(prices),JSON.stringify(history),now,now,'initial').run();
+ let market=existing?parse(existing):await read(env,guild);
  const missing=(await env.DB.prepare('SELECT s.user FROM kp_state s LEFT JOIN stock_accounts a ON a.guild=s.guild AND a.user=s.user WHERE s.guild=? AND a.user IS NULL LIMIT 25').bind(guild).all<{user:string}>()).results;
  for(const row of missing)await migrateStocks(env,market,row.user,now);
  if(user&&!missing.some(r=>r.user===user))await migrateStocks(env,market,user,now);
