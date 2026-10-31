@@ -46,7 +46,8 @@ const server=spawn('python3',['-m','http.server','8794','--bind','127.0.0.1'],{c
  await page.locator('#admin-stock-direction').selectOption('down');
  await page.locator('#admin-stock-strength').selectOption('50');
  await page.locator('[data-action=stock-shock]').click();
- await page.locator('#stock-shock-notice').getByText('株価操作を受け付けました',{exact:false}).waitFor();
+ await page.waitForFunction(()=>document.querySelector('#stock-shock-notice')?.textContent?.includes('株価操作を受け付けました'));
+
  assert.match(await page.locator('#stock-shock-notice').innerText(),/50%下落.*1,200 KP → 600 KP/);
  assert.equal(await page.locator('#stock-shock-direction').count(),0,'the operator should use the admin-stock-direction field');
  assert.equal(await page.locator('#admin-stock-direction').inputValue(),'down');
