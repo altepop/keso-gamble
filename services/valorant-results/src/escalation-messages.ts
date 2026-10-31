@@ -30,8 +30,8 @@ export function escalationBigNote(tier:number,award:number){
 }
 /** Separate equal-bot notices are reserved for IV/V: at 15% bet odds,
  * posting every tier would needlessly flood the earnings channel. */
-export function escalationBigPost(user:string,tier:number,award:number,net:number){
- if(!/^\d{15,22}$/.test(user)||!Number.isSafeInteger(net))throw Error('Invalid escalation announcement');
+export function escalationBigPost(user:string,tier:number,award:number,net:number,owed=0){
+ if(!/^\d{15,22}$/.test(user)||!Number.isSafeInteger(net)||!Number.isSafeInteger(owed)||owed<0)throw Error('Invalid escalation announcement');
  const d=escalationBigCopy(tier,award);
  if(tier<4)return null;
  return [
@@ -39,9 +39,10 @@ export function escalationBigPost(user:string,tier:number,award:number,net:numbe
   `<@${user}> のエスカレーションで特別抽選が発生したで。`,
   '',
   `**抽選：第${d.tierLabel}段階／${d.outcome==='win'?'勝利':'敗北'}／基準額 ${award>0?'+':'−'}${d.nominal} KP**`,
-  `**この試合の精算：${net>0?'+':net<0?'−':'±'}${fmt(Math.abs(net))} KP**`,
+  `**この試合の口座増減：${net>0?'+':net<0?'−':'±'}${fmt(Math.abs(net))} KP**`,
+  ...(owed>0?[`**借KPに計上：+${fmt(owed)} KP**`]:[]),
   '',
   `💬 ${d.comment}`,
-  '-# 実際の精算は共通ラッキー倍率・成績ボーナス・残高不足による減額上限等で変わる場合があります。大勝負は通常の基本報酬の置き換えです。',
+  '-# 大勝負は通常の基本報酬の置き換えです。実際の口座増減は共通ラッキー倍率・成績ボーナス・残高不足による差引上限などで変動します。',
  ].join('\n');
 }
