@@ -8,7 +8,7 @@ import { initializeKp, syncKpAccounts } from '../src/kp.ts';
 import type { KpMapping } from '../src/kp.ts';
 import { operateKp } from '../src/kp-api.ts';
 import { settleKpRaces } from '../src/racing-kp.ts';
-import { queueRacePosts, flushRacePosts, worthPosting } from '../src/racing-posts.ts';
+import { queueRacePosts, flushRacePosts, worthPosting, ensurePosts } from '../src/racing-posts.ts';
 import type { PostEnv } from '../src/racing-posts.ts';
 // @ts-expect-error The shared pure browser engine has no TypeScript declarations.
 import { RUN_MS, RACE_INTERVAL, CLOSE_BEFORE, raceCard, raceResult } from '../../../js/racing.js';
@@ -33,6 +33,20 @@ function captureFetch(t:{mock:{method:(o:object,m:string,f:unknown)=>unknown}},s
  return sent;
 }
 const posts=(sql:DatabaseSync)=>sql.prepare('SELECT id,sent FROM kp_posts ORDER BY id').all() as Array<{id:string;sent:number}>;
+
+test('earnings queue uses a sent-only chronological index and preserves pending posts',async()=>{
+ const f=await fixture();
+ await ensurePosts(f.env);
+ const add=f.sql.prepare('INSERT INTO kp_posts(id,body,at,sent) VALUES(?,?,?,?)');
+ for(let i=0;i<450;i++)add.run('delivered:'+i,'{}',i,1);
+ add.run('pending:b','{}',500,0);add.run('pending:a','{}',500,0);add.run('pending:c','{}',600,0);
+ const query='SELECT id,body FROM kp_posts WHERE sent=0 ORDER BY at,id LIMIT ?';
+ const plan=f.sql.prepare('EXPLAIN QUERY PLAN '+query).all(5).map(x=>String(x.detail)).join(' | ');
+ assert.match(plan,/kp_posts_ready/);
+ assert.doesNotMatch(plan,/USE TEMP B-TREE/);
+ assert.deepEqual((f.sql.prepare(query).all(5) as Array<{id:string}>).map(x=>x.id),['pending:a','pending:b','pending:c']);
+ assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM kp_posts').get()!.n,453);
+});
 
 test('the big race card is posted once while it takes bets; normal races get no card', async t => {
  const f=await fixture(),sent=captureFetch(t);
