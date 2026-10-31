@@ -562,6 +562,7 @@ let privateRacePreview=null,privateRoundMessage='';
 // least once a minute (race card, Mリーグ status and voice status move with time). Nothing is fetched while hidden.
 // This small read is independent of wallet/animation polling and never replaces the game form.
 let communityEntries=[],communityBusy=false,communityOwner=null,communityStatus='確認中…';
+let communityCursor=null,communityLastFull=0;
 function paintCommunity(){
  const list=$('.community-entries'),status=$('.community-status');
  if(!list)return;
@@ -570,14 +571,23 @@ function paintCommunity(){
  if(status)status.textContent=communityStatus;
 }
 async function refreshCommunity(){
- if(document.hidden||!live||!wallet.connected||communityBusy)return;
+ // The title has no community component, so querying D1 here is wasted.
+ if(document.hidden||screen==='title'||!live||!wallet.connected||communityBusy)return;
  const owner=state.selfUserId;
- if(communityOwner!==owner){communityEntries=[];communityOwner=owner;}
+ if(communityOwner!==owner){communityEntries=[];communityOwner=owner;communityCursor=null;communityLastFull=0;}
  communityBusy=true;
  try{
-  const data=await wallet.feed();
+  // Poll every five seconds, but re-download the full feed only on changes.
+  // Once a minute refresh the full list to catch out-of-order writes or aliases.
+  const cursor=Date.now()-communityLastFull<60000?communityCursor:null;
+  const data=await wallet.feed(cursor);
   if(!live||state.selfUserId!==owner)return;
-  communityEntries=data.entries;communityStatus='更新 '+new Date().toLocaleTimeString('ja-JP');
+  if(!data.unchanged){
+   communityEntries=data.entries;
+   communityCursor=typeof data.cursor==='string'?data.cursor:null;
+   communityLastFull=Date.now();
+  }
+  communityStatus='更新 '+new Date().toLocaleTimeString('ja-JP');
  }catch{communityStatus='更新が止まっています。自動で再接続します。';}
  finally{communityBusy=false;paintCommunity();}
 }
