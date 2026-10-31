@@ -21,10 +21,10 @@ function network({handler=2,scope='applications.commands.update',fail=false,appI
    assert.deepEqual(JSON.parse(body),{handler:1});
    if(fail)return Response.json({message:'not allowed'},{status:403});
    current=1;
-   return Response.json({id:entry,type:4,application_id:app,handler:current});
+   return Response.json({id:entry,type:4,application_id:appId,handler:current});
   }
   if(target.endsWith('/commands/'+entry)&&method==='GET')
-   return Response.json({id:entry,type:4,application_id:app,handler:current});
+   return Response.json({id:entry,type:4,application_id:appId,handler:current});
   throw Error('unexpected mocked request');
  }) as typeof fetch;
  return {request,calls,current:()=>current};
