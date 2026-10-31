@@ -608,7 +608,7 @@ test('定期的なコミュニティ表示の名前解決は保存済みの複�
 });
 
 test('5秒ごとのコミュニティ更新は新着だけ読み、変更がないと表示名SQLも走らない',async()=>{
- const f=await fixture();seed(f.sql,one,10000);
+ const f=await fixture();seed(f.sql,one,10000);seed(f.sql,two,10000);
  await operateKp(f.env,mapping,one,'feed-delta-roulette-0001','spin',{type:'number',amount:100,choice:3});
  const names=new Map([[one,'One'],[two,'Two']]);
  let aliases=0;const resolve=async()=>{aliases++;return names;};
@@ -624,9 +624,9 @@ test('5秒ごとのコミュニティ更新は新着だけ読み、変更がな�
  assert.equal(overlap.entries.length,1);assert.equal(overlap.entries[0]!.id,full.entries[0]!.id);
  assert.equal(aliases,2);
  // A new committed operation (possibly sharing the same timestamp) is returned.
- await operateKp(f.env,mapping,two,'feed-delta-roulette-0002','spin',{type:'number',amount:100,choice:3}).catch(()=>{});
+ await operateKp(f.env,mapping,two,'feed-delta-roulette-0002','spin',{type:'number',amount:100,choice:3});
  const next=await communityFeed(f.env,guild,resolve,cursor);
- assert(next.entries.length>=1);
+ assert.equal(next.entries.length,2);
  const plan=f.sql.prepare("EXPLAIN QUERY PLAN SELECT id FROM kp_operations WHERE guild=? AND (json_extract(response,'$.activity') IS NOT NULL OR json_extract(response,'$.stockTrade') IS NOT NULL) AND at>=? ORDER BY at DESC,user,id LIMIT 40").all(guild,cursor);
  assert.match(JSON.stringify(plan),/kp_public_activity_recent/,'date-filtered query must use the existing partial index');
  const token=await exchangeKpCode(f.env,(await issueKpCode(f.env,mapping,one))!);
