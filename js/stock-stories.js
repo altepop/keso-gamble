@@ -383,8 +383,8 @@ export function resolveStockStory(symbol,direction,eventId='auto',seed=''){
 }
 export function validateCustomStory(headline,body){
  if(typeof headline!=='string'||typeof body!=='string')throw Error('ニュースの見出しと本文を入力してください。');
- const clean=s=>s.trim().replace(/[\\r\\n\\t]+/g,' ').replace(/\\s{2,}/g,' ');
+ const clean=s=>s.trim().replace(/[\r\n\t]+/g,' ').replace(/\s{2,}/g,' ');
  const title=clean(headline),text=clean(body);
- if(title.length<6||title.length>72||text.length<12||text.length>200||/[<>\\u0000-\\u001f]/.test(title+text))throw Error('見出しは6〜72字、本文は12〜200字で入力してください。');
+ if(title.length<6||title.length>72||text.length<12||text.length>200||/[<>\u0000-\u001f]/.test(title+text))throw Error('見出しは6〜72字、本文は12〜200字で入力してください。');
  return {headline:title,body:text};
 }
