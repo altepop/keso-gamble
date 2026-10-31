@@ -36,7 +36,7 @@ async function fixture(){
  sql.prepare('INSERT INTO tracked_players VALUES(?,?,?,?)').run('One#JP1',puuid,'ap',0);
  await initializeKp(env,mapping);
  await syncKpAccounts(env,mapping);
- sql.exec("UPDATE kp_settings SET value='0' WHERE key='starts_at';UPDATE kp_accounts SET linked_at=0");
+ sql.exec("UPDATE kp_settings SET value='0' WHERE key IN ('starts_at','mode_rewards_started_at','escalation_v5_started_at');UPDATE kp_accounts SET linked_at=0");
  return {env,sql,seed:(n:number)=>sql.prepare('INSERT INTO kp_ledger VALUES(?,?,?,?,?,?)').run('seed-'+n,guild,user,n,'test',Date.now())};
 }
 test('exclusive rarity draws are deterministic, with stage weights and both super outcomes',()=>{
