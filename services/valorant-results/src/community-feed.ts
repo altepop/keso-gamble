@@ -16,6 +16,16 @@ export function publicTrade(action:string,args:Record<string,unknown>,result:any
  return null;
 }
 export const feedIndex=`CREATE INDEX IF NOT EXISTS kp_public_activity_recent ON kp_operations(guild,at DESC,user,id) WHERE json_extract(response,'$.activity') IS NOT NULL OR json_extract(response,'$.stockTrade') IS NOT NULL`;
+/** Cheap monotonic change marker for append-only activity records.
+ * MAX(rowid) is a fast lookup in SQLite's table B-tree, independent of the
+ * number of historical rows. False positives (other guild/private actions)
+ * just cause an extra full refresh; false negatives are avoided for inserts.
+ * The client also forces a full refresh every 60 seconds for changed aliases.
+ */
+export async function feedRevision(env:KpEnv):Promise<number>{
+ const row=await env.DB.prepare('SELECT MAX(rowid) AS latest FROM kp_operations').first<{latest:number|null}>();
+ return row?.latest??0;
+}
 export async function communityFeed(env:KpEnv,guild:string,names:Map<string,string>){
  const rows=(await env.DB.prepare(`SELECT id,user,at,json_extract(response,'$.activity') AS activity,json_extract(response,'$.stockTrade') AS stock FROM kp_operations WHERE guild=? AND (json_extract(response,'$.activity') IS NOT NULL OR json_extract(response,'$.stockTrade') IS NOT NULL) ORDER BY at DESC,user,id LIMIT 40`).bind(guild).all<{id:string;user:string;at:number;activity:string|null;stock:string|null}>()).results;
  return {entries:rows.map(r=>{
