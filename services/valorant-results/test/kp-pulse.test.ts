@@ -29,7 +29,7 @@ test('pulse：何も変わらなければ同じ値。入出金・口座の操作
  let reads=0;const env={...f.env,DB:{prepare:(q:string)=>{reads++;return (f.env.DB as unknown as {prepare:(q:string)=>unknown}).prepare(q);},batch:(f.env.DB as unknown as {batch:unknown}).batch}} as unknown as typeof f.env;
  const T=Date.parse('2026-10-29T12:01:00+09:00');
  await kpPulse(env,guild,one,T);reads=0;
- const a=await kpPulse(env,guild,one,T);assert.ok(reads<=2,'after the first call: two small reads, not the full state ('+reads+')');
+ const a=await kpPulse(env,guild,one,T);assert.equal(reads,1,'after warm-up, one combined pulse query replaces a separate debt read ('+reads+')');
  assert.equal(await kpPulse(f.env,guild,one,T+60000),a,'nothing changed');
  f.credit('c2',100);const b=await kpPulse(f.env,guild,one,T);assert.notEqual(b,a,'a ledger row');
  await operateKp(f.env,mapping,one,'roast-level-change-01','roast-level',{level:'normal'});const c=await kpPulse(f.env,guild,one,T);assert.notEqual(c,b,'a saved-state change');

@@ -594,3 +594,15 @@ test('explicit member IDs use exact matching even when suffixes collide and pres
  assert.equal((await memberNames(f.env,'other-guild',base,config)).has(one),false);
  for(const names of [[{userId:one,suffix:one.slice(-4),name:'Invalid'}],[{userId:'123',name:'Invalid'}],[{userId:one,name:'A'},{userId:one,name:'B'}]])assert.deepEqual(await memberNames(f.env,guild,base,{guildId:guild,names}),base);
 });
+
+test('定期的なコミュニティ表示の名前解決は保存済みの複数名を1回で取得する',async()=>{
+ const f=await fixture();
+ const config={guildId:guild,names:[{suffix:one.slice(-4),name:'一号'},{suffix:two.slice(-4),name:'二号'}]};
+ const base=new Map<string,string>();
+ await memberNames(f.env,guild,base,config);
+ f.resetQueries();
+ const names=await memberNames(f.env,guild,base,config);
+ assert.equal(names.get(one),'一号');
+ assert.equal(names.get(two),'二号');
+ assert.equal(f.queries(),1,'two persisted names must be fetched in one indexed SELECT');
+});

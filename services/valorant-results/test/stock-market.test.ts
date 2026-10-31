@@ -286,6 +286,77 @@ test('管理者入力は銘柄・方向・変動率を厳格検証し値幅制�
  await assert.rejects(applyStockShock(f.env,guild,one,'stock-shock-invalid-01',{symbol:'keso',direction:'up',strength:100},T),/銘柄/);
 });
 
+test('配当済みの日は大量の保有ロットを再集計せず、処理済みマーカーを再利用する',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:T});const f=await fixture();f.credit('fund',100000);
+ await trade(f,'one-time-dividend-buy','buy',5);
+ const market=await prepareStocks(f.env,guild,one);
+ let calculations=0;
+ f.setIntercept(sql=>{if(sql.includes('INSERT OR IGNORE INTO stock_dividends('))calculations++;});
+ await payStockDividends(f.env,market,T+DAY);
+ for(let i=0;i<8;i++)await payStockDividends(f.env,market,T+DAY+60000*i);
+ assert.equal(calculations,1,'one shared daily dividend scan regardless of Activity refresh count');
+ assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM stock_dividend_runs').get()!.n,1);
+ assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM stock_dividend_days').get()!.n,1);
+});
+test('旧バージョンで配当日だけ作成されていた場合も支給を復旧できる',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:T});const f=await fixture();f.credit('fund',100000);
+ await trade(f,'legacy-day-buy-operation-01','buy',5);
+ const market=await prepareStocks(f.env,guild,one);
+ const day=new Date(Math.floor((T+DAY)/DAY)*DAY).toISOString().slice(0,10);
+ f.sql.prepare('INSERT INTO stock_dividend_days(guild,day,prices,at) VALUES(?,?,?,?)').run(guild,day,JSON.stringify(market.prices),T+DAY);
+ const before=f.cash();
+ await payStockDividends(f.env,market,T+DAY);
+ assert(f.cash()>before,'existing snapshot must not suppress an owed dividend');
+ assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM stock_dividend_runs').get()!.n,1);
+});
+test('既に存在する共通相場を毎回INSERTしない',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:T});const f=await fixture();
+ await prepareStocks(f.env,guild);
+ let ignoredMarketWrites=0;
+ f.setIntercept(sql=>{if(sql.startsWith('INSERT OR IGNORE INTO stock_markets VALUES'))ignoredMarketWrites++;});
+ for(let i=0;i<5;i++)await prepareStocks(f.env,guild);
+ assert.equal(ignoredMarketWrites,0);
+});
+test('過去の市場ニュースは最新の12件を部分インデックスで探す',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:T});const f=await fixture();
+ await prepareStocks(f.env,guild);
+ const plans=f.sql.prepare("EXPLAIN QUERY PLAN SELECT symbol,label,applied_bps AS bps,at FROM stock_news WHERE guild=? AND applied_version IS NOT NULL AND applied_bps!=0 ORDER BY at DESC,id DESC LIMIT 12").all(guild);
+ assert.match(plans.map(x=>x.detail).join(' '),/stock_news_recent_public/);
+});
+
+test('裏モードの急落後に通常の買付・株価更新・再急騰を挟んでも共有価格と履歴が一致する',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:T});const f=await fixture();f.credit('stock-owner-fund',1000000);f.credit('stock-other-fund',1000000,two);
+ const start=await readKpState(f.env,mapping,one),balance=f.cash();
+ const down=await applyStockShock(f.env,guild,one,'shock-integration-down-0001',{symbol:'keso',direction:'down',strength:50},T);
+ assert.equal(down.before,1200);assert.equal(down.after,600);assert.equal(f.cash(),balance);
+ const b=await readKpState(f.env,mapping,two);
+ assert.equal(b.prices.keso,600);assert.equal(b.stockMarket.orderQuotes.keso,600000000);
+ assert.notEqual(await kpPulse(f.env,guild,two,T),await kpPulse(f.env,guild,two,T+STOCK_HOLD),'market pulse remains live');
+ await trade(f,'shock-following-market-buy-001','buy',1,'keso',two);
+ const priceAfterTrade=(await readKpState(f.env,mapping,one)).prices.keso;
+ assert(priceAfterTrade>600);
+ const up=await applyStockShock(f.env,guild,one,'shock-integration-up-0002',{symbol:'keso',direction:'up',strength:25},T);
+ assert.equal(up.before,priceAfterTrade);assert.equal(up.after,Math.round(priceAfterTrade*1.25));
+ const current=await readKpState(f.env,mapping,two);
+ assert.equal(current.prices.keso,up.after);
+ assert.equal(current.stockMarket.ticks.at(-1)!.prices.keso,up.after);
+ assert.equal((await applyStockShock(f.env,guild,one,'shock-integration-up-0002',{symbol:'keso',direction:'up',strength:25},T)).replayed,true);
+ const beforeTick=current.stockMarket.version;
+ const next=await tickStocks(f.env,await prepareStocks(f.env,guild),T+300000,()=>0.5);
+ assert.equal(next.version,beforeTick+1);
+ assert.equal((await readKpState(f.env,mapping,one)).prices.keso,next.prices.keso);
+ assert.equal(f.sql.prepare("SELECT COUNT(*) AS n FROM stock_admin_moves WHERE guild=?").get(guild)!.n,2);
+ assert.equal(f.sql.prepare("SELECT COUNT(*) AS n FROM stock_news WHERE id LIKE 'admin:%'").get()!.n,2);
+});
+test('裏モードの同一操作を並行送信しても株価は一度しか変わらない',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:T});const f=await fixture();
+ const opts={symbol:'keso',direction:'up',strength:50};
+ const results=await Promise.all([applyStockShock(f.env,guild,one,'shock-concurrent-retry-0001',opts,T),applyStockShock(f.env,guild,one,'shock-concurrent-retry-0001',opts,T)]);
+ assert.deepEqual(results.map(r=>r.after),[1800,1800]);
+ assert.equal((await readKpState(f.env,mapping,two)).prices.keso,1800);
+ assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM stock_admin_moves').get()!.n,1);
+});
+
 test('相場更新の履歴集計はギルドと時刻のインデックスを利用し、全履歴走査を避ける',async t=>{
  t.mock.timers.enable({apis:['Date'],now:T});const f=await fixture();
  await prepareStocks(f.env,guild);
@@ -304,3 +375,4 @@ test('相場更新の履歴集計はギルドと時刻のインデックスを�
  const after=await readKpState(f.env,mapping,one);
  assert.equal(after.stockMarket.version,before.stockMarket.version+1);
 });
+
