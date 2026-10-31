@@ -67,6 +67,11 @@ export async function initializeKp(env:KpEnv,override?:KpMapping):Promise<KpMapp
    ]);
   }
   await env.DB.prepare(feedIndex).run();
+  // The personal wallet ledger previously scanned ~1,137 rows per request
+  // (D1 Insights, 2026-10-31). Optimize the exact WHERE and ORDER BY of
+  // ledgerHistory without limiting or changing any historical transactions.
+  // Existing schema_version=1 databases must receive this index too.
+  await env.DB.prepare('CREATE INDEX IF NOT EXISTS kp_ledger_member_latest ON kp_ledger(guild,user,at DESC,id DESC)').run();
   await ensureDebt(env);
   await ensureSpikeGrowth(env);
   await ensureModeRewards(env);

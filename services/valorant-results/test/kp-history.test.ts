@@ -42,3 +42,23 @@ test('入出金履歴：台帳の全種類を新しい順に出し、VALORANTの
  assert.deepEqual((await readKpState(f.env,mapping,one)).ledger.slice(0,2).map((e:{label:string})=>e.label),['VALORANT ランク降格','Activityの操作（株・馬券・カジノなど）']);
  assert.deepEqual(await ledgerHistory(f.env,guild,two),[],'only your own');
 });
+
+test('D1最適化：個人のKP履歴はギルド・ユーザー・日時の複合索引で取得する',async()=>{
+ const f=await fixture();
+ // Mix operations from multiple members so an unindexed guild scan would
+ // inspect the other wallet's records on each history request.
+ for(let i=0;i<200;i++){
+  const user=i%2?two:one;
+  f.sql.prepare('INSERT INTO kp_ledger VALUES(?,?,?,?,?,?)').run('history-index-'+i,guild,user,1,'test',i);
+ }
+ const sql='SELECT id,delta,kind,at FROM kp_ledger WHERE guild=? AND user=? ORDER BY at DESC,id DESC LIMIT ?';
+ const plans=f.sql.prepare('EXPLAIN QUERY PLAN '+sql).all(guild,one,120) as Array<{detail:string}>;
+ const queryPlan=plans.map(p=>p.detail).join('; ');
+ assert.match(queryPlan,/kp_ledger_member_latest/,'expected per-member index, not a full guild-wide scan');
+ assert.doesNotMatch(queryPlan,/USE TEMP B-TREE/,'index order should eliminate a temporary sort');
+ const history=await ledgerHistory(f.env,guild,one,100);
+ assert.equal(history.length,100);
+ assert.equal(history[0]?.id,'history-index-198');
+ assert.equal(history[99]?.id,'history-index-0');
+ assert.deepEqual((await ledgerHistory(f.env,guild,two,3)).map(e=>e.id),['history-index-199','history-index-197','history-index-195']);
+});
