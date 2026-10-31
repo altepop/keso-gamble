@@ -15,7 +15,7 @@ export function stockCandles(market,symbol){
 
 // Only render this control for the server-confirmed private casino owner.
 // Stock prices are shared by the whole guild. Administrative moves are audited by the Worker.
-export function privateStockOperator(market,{selection={},notice=null}={}){
+export function privateStockOperator(market,{selection={},notice=null,confirmation=null}={}){
  const rows=market.map(s=>`<option value="${esc(s.id)}" ${selection.symbol===s.id?'selected':''}>${esc(s.name)} (${esc(s.ticker)})</option>`).join('');
  const option=(value,label,selected)=>`<option value="${esc(value)}" ${value===selected?'selected':''}>${label}</option>`;
  const kind=['success','warning','error'].includes(notice?.kind)?notice.kind:'';
@@ -27,6 +27,11 @@ export function privateStockOperator(market,{selection={},notice=null}={}){
   <div class="field"><label for="admin-stock-strength">1回の変動幅</label><select id="admin-stock-strength" class="select">${option('10','10%',String(selection.strength??25))}${option('25','25%',String(selection.strength??25))}${option('50','50%',String(selection.strength??25))}</select></div>
   <p class="helper">毎回、直前の現在値を基準に変動。連続で押すと上昇・下落が累積します。株価は20〜10,000,000 KPに制限されます。</p>
   <div class="action-row"><button type="button" class="action-btn primary" data-action="stock-shock">株価操作を実行</button></div>
+  ${confirmation?`<div class="stock-shock-confirmation" role="group" aria-label="株価操作の最終確認">
+    <strong>株価操作の最終確認</strong>
+    <p>${esc(market.find(s=>s.id===confirmation.symbol)?.name??'選択銘柄')}の共通株価を${confirmation.strength}%${confirmation.direction==='up'?'急騰':'急落'}させる。全メンバーに影響し、操作履歴に記録される。</p>
+    <div class="action-row"><button type="button" class="action-btn primary" data-action="stock-shock-approve">この内容で実行する</button><button type="button" class="action-btn" data-action="stock-shock-cancel">キャンセル</button></div>
+  </div>`:''}
   <div id="stock-shock-notice" class="stock-shock-notice ${kind}" role="status" aria-live="polite" ${message?'':'hidden'}>${message}</div>
  </details>`;
 }
