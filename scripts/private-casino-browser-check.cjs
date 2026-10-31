@@ -21,7 +21,7 @@ const server=spawn('python3',['-m','http.server','8794','--bind','127.0.0.1'],{c
     const {symbol,direction,strength}=body.args;shocks.push({...body.args,id:body.id});
     const before=state.prices[symbol],after=Math.round(before*(direction==='up'?1+strength/100:1-strength/100));
     state.prices[symbol]=after;
-    await route.fulfill({json:{result:{symbol,direction,strength,before,after,version:shocks.length,replayed:false}}});return;
+    await route.fulfill({json:{result:{symbol,direction,strength,before,after,version:shocks.length,headline:body.args.headline??(body.args.eventId==='keso-down-1'?'本社の唯一のWi-Fiが電子レンジに敗北、決算発表中断':'架空ニュース'),replayed:false}}});return;
    }
    assert.equal(body.action,'private-casino');bodies.push(body.args);if(body.args.game!=='roulette'){state.cash+=124500;await route.fulfill({json:{result:{hand:null,done:{game:'video-poker',bet:500,hand:'royal',payout:125000,net:124500}},operationSource:'owner-casino'}});return;}assert.deepEqual(body.args,{game:'roulette',amount:500,number:7});ops++;await new Promise(r=>setTimeout(r,250));state.cash+=17500;result={result:{type:'number',choice:7,outcome:7,amount:500,payout:18000},operationSource:'owner-casino'};
   }else throw Error('Unexpected API '+path);
@@ -45,11 +45,14 @@ const server=spawn('python3',['-m','http.server','8794','--bind','127.0.0.1'],{c
  await page.locator('#admin-stock-symbol').selectOption('keso');
  await page.locator('#admin-stock-direction').selectOption('down');
  await page.locator('#admin-stock-strength').selectOption('50');
+ await page.locator('#admin-stock-news').selectOption('keso-down-1');
+ assert.match(await page.locator('.stock-story-preview').first().innerText(),/電子レンジ/);
  await page.locator('[data-action=stock-shock]').click();
  await page.locator('.stock-shock-confirmation').waitFor();
  assert.equal(shocks.length,0,'first tap must not send a stock mutation');
  assert.equal(nativeDialogs,0,'stock action must not trigger native confirm in Discord iOS');
  assert.match(await page.locator('.stock-shock-confirmation').innerText(),/50%急落/);
+ assert.match(await page.locator('.stock-shock-confirmation').innerText(),/Wi-Fi/);
  await page.locator('[data-action=stock-shock-cancel]').click();
  assert.equal(await page.locator('.stock-shock-confirmation').count(),0,'cancel must not send a stock mutation');
  assert.equal(shocks.length,0);
@@ -61,7 +64,8 @@ const server=spawn('python3',['-m','http.server','8794','--bind','127.0.0.1'],{c
  assert.equal(await page.locator('#stock-shock-direction').count(),0,'the operator should use the admin-stock-direction field');
  assert.equal(await page.locator('#admin-stock-direction').inputValue(),'down');
  assert.equal(await page.locator('#admin-stock-strength').inputValue(),'50');
- assert.deepEqual(shocks.map(({id,...args})=>args),[{symbol:'keso',direction:'down',strength:50}]);
+ assert.deepEqual(shocks.map(({id,...args})=>args),[{symbol:'keso',direction:'down',strength:50,eventId:'keso-down-1'}]);
+ assert.match(await page.locator('#stock-shock-notice').innerText(),/Wi-Fi/);
  assert.equal(state.cash,152000,'admin stock action cannot credit the wallet');
  // Success should remain readable even after the 1.8-second toast disappears.
  await page.waitForTimeout(2000);
@@ -83,6 +87,20 @@ const server=spawn('python3',['-m','http.server','8794','--bind','127.0.0.1'],{c
  assert.match(await page.locator('#stock-shock-notice').innerText(),/株価操作を受け付けました/);
  assert.equal(state.prices.keso,660);
  assert.equal(await page.locator('#stock-shock-notice').evaluate(el=>el.classList.contains('warning')),true);
+ // Custom absurd bulletin is sent only once and its text survives confirmation.
+ await page.locator('#admin-stock-news').selectOption('custom');
+ await page.locator('#admin-stock-headline').fill('リソ寿司、月面で回転寿司を開業');
+ await page.locator('#admin-stock-body').fill('月面に寿司レーンを設置したところ、皿が無重力で飛び回り、宇宙飛行士に大人気となった。');
+ await page.locator('#admin-stock-symbol').selectOption('riso');
+ await page.locator('#admin-stock-news').selectOption('custom');
+ await page.locator('#admin-stock-headline').fill('リソ寿司、月面で回転寿司を開業');
+ await page.locator('#admin-stock-body').fill('月面に寿司レーンを設置したところ、皿が無重力で飛び回り、宇宙飛行士に大人気となった。');
+ await page.locator('[data-action=stock-shock]').click();
+ await page.waitForFunction(()=>document.querySelector('.stock-shock-confirmation')?.textContent?.includes('月面で回転寿司'));
+ await page.locator('[data-action=stock-shock-approve]').click();
+ await page.waitForFunction(()=>document.querySelector('#stock-shock-notice')?.textContent?.includes('月面で回転寿司'));
+ assert.deepEqual(shocks.at(-1).headline,'リソ寿司、月面で回転寿司を開業');
+ assert.equal(shocks.at(-1).eventId,'custom');
  for(const width of [320,390,1440]){await page.setViewportSize({width,height:844});await page.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))));assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);}
  delete state.privateCasino;state.selfUserId='other';await page.reload();await page.locator('.title-start').click();await page.locator('.nav-btn[data-screen=assets]').click();assert.equal(await page.locator('.private-casino').count(),0);assert.equal(await page.locator('#private-number').count(),0);assert.equal(await page.locator('[data-action=stock-shock]').count(),0);assert.deepEqual(errors,[]);
  console.log('Private casino passed ('+engine+'): owner controls, exact request, double-click guard, draft preservation, escaped race preview, no menu for other users, mobile/desktop. Fixture balances only.');
