@@ -6,6 +6,13 @@ import {fileURLToPath} from 'node:url';
 import {raceCard,raceResult,raceTimeline,raceOdds,raceCommentary} from '../../js/racing.js';
 const base='https://valorant-results.tealeaforest.workers.dev',args=process.argv.slice(2),check=args.includes('--check'),claim=args.includes('--claim');
 const jobsIndex=args.indexOf('--jobs-file'),jobsFile=jobsIndex<0?null:args[jobsIndex+1];
+// Issue #194: this CLI may only render its fixed, offline synthetic fixture.
+// Explicitly fail closed for all legacy --claim, --jobs-file and direct calls.
+// Crucially, this executes before fetching OIDC identity or touching the D1 queue.
+if(!check||claim||jobsIndex>=0||args.some(a=>a!=='--check')){
+ console.error('race_video_delivery_disabled');
+ process.exit(2);
+}
 const folder=await mkdtemp(join(tmpdir(),'keso-video-'));
 async function identity(){
  const url=new URL(process.env.ACTIONS_ID_TOKEN_REQUEST_URL);url.searchParams.set('audience','keso-race-video');
