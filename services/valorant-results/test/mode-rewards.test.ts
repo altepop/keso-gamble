@@ -30,8 +30,9 @@ test('escalation needs an untied top, 30/35 kills and K/D, and only the performa
   for(let i=0;i<150;i++){
    const r=game('esc'+i,'ggteam',true,kills,deaths),q=valoKp(r,'me','escalation','win');
    const rawBonus=q.note.includes('成績ボーナス3倍')?bonus*3:bonus;
-   assert.equal(q.base-(q.note.includes('大勝負')?1000:70),rawBonus);
-   assert.equal(q.net,applyLuck(q.note.includes('大勝負')?1000:70,luckFor('valo:esc'+i+':me'))+rawBonus);
+   const prize=q.escalation?.kind==='big'?q.escalation.award:70;
+   assert.equal(q.base-prize,rawBonus);
+   assert.equal(q.net,applyLuck(prize,luckFor('valo:esc'+i+':me'))+rawBonus);
   }
  }
  const tied=game('tied','ggteam',true,35,1);tied.players[1].stats!.kills=35;assert.doesNotMatch(valoKp(tied,'me','escalation','win').note,/成績ボーナス/);
