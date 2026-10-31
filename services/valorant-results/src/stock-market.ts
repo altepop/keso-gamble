@@ -140,8 +140,15 @@ export async function payStockDividends(env:KpEnv,market:Market,now=Date.now()){
   env.DB.prepare('INSERT OR IGNORE INTO stock_dividend_runs(guild,day) VALUES(?,?)').bind(market.guild,day),
  ]);
 }
+/** Race settlement operations are recorded at processing time. Re-reading 24h of
+ * growing operations on every 5-minute tick expanded JSON needlessly (21k D1
+ * rows/hour in 2026-10-31 Insights). Retain a 1h overlap behind the last
+ * successful tick; after a long outage still honor the original last-24h cap. */
+export function raceNewsSince(market:Pick<Market,'startedAt'|'at'>,now:number){
+ return Math.max(market.startedAt,now-86400000,market.at-3600000);
+}
 async function captureNews(env:KpEnv,market:Market,now:number){
- const since=Math.max(market.startedAt,now-86400000),guild=market.guild;
+ const since=Math.max(market.startedAt,now-86400000),raceSince=raceNewsSince(market,now),guild=market.guild;
  const tables=await availableStockNewsTables(env.DB);
  // Fixed source tables only; no display names, webhook text or browser-submitted events.
  if(tables.has('kp_events'))await env.DB.prepare(`INSERT OR IGNORE INTO stock_news(guild,id,symbol,label,bps,at) SELECT guild,'valo:'||match||':'||outcome,'keso',CASE WHEN outcome='win' THEN 'VALORANTで勝利' ELSE 'VALORANTで敗戦' END,CASE WHEN outcome='win' THEN 40 ELSE -30 END,MAX(at) FROM kp_events WHERE guild=? AND at>=? AND outcome IN('win','loss') GROUP BY guild,match,outcome`).bind(guild,since).run();
@@ -153,7 +160,7 @@ async function captureNews(env:KpEnv,market:Market,now:number){
    SELECT o.guild,o.user,o.id,o.at,SUM(CAST(json_extract(b.value,'$.payout') AS INTEGER)-CAST(json_extract(b.value,'$.amount') AS INTEGER)) AS net
    FROM kp_operations o INDEXED BY kp_operations_race_news JOIN json_each(o.response,'$.result.settled') r JOIN json_each(o.state,'$.raceBets') b ON json_extract(b.value,'$.id')=json_extract(r.value,'$.id')
    WHERE o.guild=? AND o.at>=? AND o.id LIKE 'race-settle:%' AND substr(lower(o.id),1,12)='race-settle:' GROUP BY o.guild,o.user,o.id,o.at
-  ) WHERE ABS(net)>=5000`).bind(guild,since).run();
+  ) WHERE ABS(net)>=5000`).bind(guild,raceSince).run();
  await env.DB.prepare(`INSERT OR IGNORE INTO stock_news(guild,id,symbol,label,bps,at) SELECT guild,'trades:'||CAST(at/300000 AS INTEGER),'yano','株の売買が活発',15,MAX(at) FROM stock_trades WHERE guild=? AND at>=? GROUP BY guild,CAST(at/300000 AS INTEGER) HAVING COUNT(*)>=5`).bind(guild,since).run();
  // メシウマ食堂／他人の金で焼肉: how many times someone lost or won KP since the last tick, whatever the amounts.
  const {minus,plus}=await fortuneCounts(env,guild,market.at,now);
