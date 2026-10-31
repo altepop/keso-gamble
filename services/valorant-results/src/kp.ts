@@ -2,6 +2,7 @@ import {feedIndex} from './community-feed.ts';
 import {settleSkirmishMatch} from './skirmish.ts';
 import {valoKp,ensureModeRewards,MODE_REWARD_VERSION,UNRATED_JACKPOT,jackpotPost} from './mode-rewards.ts';
 import type {EscalationSpin} from './mode-rewards.ts';
+import {escalationBigPost} from './escalation-messages.ts';
 import {enqueue,ensurePosts} from './racing-posts.ts';
 export {valoKp} from './mode-rewards.ts';
 import {ensureSpikeGrowth,settleSpike,spikeMatch,SPIKE_POLICY} from './spikerush-growth.ts';
@@ -151,6 +152,13 @@ export async function drainKpInbox(env:KpEnv){
    }
   }
   const net=await kpMatchNet(env,e.id),owed=e.penalty?await borrowedBy(env,'penalty:'+e.id):0;
+  // Only rare IV/V events get a second equal-bot post: I-III already have a
+  // witty description in the existing VALORANT result. Stable post IDs prevent
+  // duplicate messages on inbox retry, and failed delivery never re-settles KP.
+  if(e.mode==='escalation'&&e.escalation?.kind==='big'&&e.escalation.tier>=4&&net!==null){
+   const post=escalationBigPost(e.user,e.escalation.tier,e.escalation.award,net,owed);
+   if(post){try{await ensurePosts(env);await enqueue(env,'esc-big:'+e.id,post,Date.now());}catch{console.warn('escalation_big_post_pending');}}
+  }
   const notice=await env.DB.prepare('SELECT n.riot_id,n.message FROM notifications n JOIN kp_accounts a ON n.riot_id=a.riot WHERE a.guild=? AND a.puuid=? AND n.match_id=?').bind(e.guild,e.puuid,e.match).first<{riot_id:string;message:string}>();
   if(notice&&net!==null){const message=kpCreditLine(notice.message,net,(typeof e.note==='string'?e.note:'')+debtNote(owed));await env.DB.prepare("UPDATE notifications SET message=?,sent=CASE WHEN mode='escalation' AND outcome='draw' THEN 1 ELSE 0 END WHERE riot_id=? AND match_id=? AND message!=?").bind(message,notice.riot_id,e.match,message).run();}
   await env.DB.prepare('DELETE FROM kp_inbox WHERE id=? AND EXISTS(SELECT 1 FROM kp_events WHERE id=?)').bind(e.id,e.id).run();

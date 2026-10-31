@@ -350,7 +350,7 @@ test('escalation: 15% big draws use five tiers while super events remain mutuall
  const big=wins.filter(r=>r.escalation?.kind==='big');assert.ok(big.length>=250&&big.length<=350,String(big.length));
  const winTiers=new Set([500,1000,2500,5000,15000]);
  assert.ok(wins.every(r=>r.base===70||winTiers.has(r.base)));
- assert.ok(big.every(r=>r.note.startsWith('（🎰 エスカ大勝負 第')));
+ assert.ok(big.every(r=>r.note.startsWith('（🎰 エスカ大勝負 ')&&r.note.includes('KP／')));
  const losses=Array.from({length:2000},(_,i)=>valoKp(esc('e-loss'+i,'ggteam',false),'p-one','escalation','loss'));
  assert.ok(losses.every(r=>r.base===0||winTiers.has(-r.base)));
  assert.ok(losses.some(r=>r.escalation?.kind==='big'&&r.base<0));
