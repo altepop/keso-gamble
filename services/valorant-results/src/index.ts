@@ -1,4 +1,5 @@
 import {queueSteamPosts} from './steam-posts.ts';
+import {ensureNotificationReadIndexes} from './notification-indexes.ts';
 import {monitorSteam} from './steam-rewards.ts';
 import {readModeNote} from './mode-rewards.ts';
 import {skirmishResultButtons} from './skirmish.ts';
@@ -283,6 +284,7 @@ async function deathDetail(env: Env, match: Match, players: Player[], accounts: 
 }
 
 async function flushNotifications(env: Env, players: Player[]): Promise<void> {
+  await ensureNotificationReadIndexes(env.DB);
   const hasPending = await env.DB.prepare('SELECT 1 AS n FROM notifications WHERE sent=0 LIMIT 1').first();
   if (!hasPending) return;
   const discordAfter = await state(env, 'discord_after');
