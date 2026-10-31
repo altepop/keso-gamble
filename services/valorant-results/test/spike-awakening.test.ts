@@ -36,7 +36,7 @@ async function fixture(){
   bind(...v:unknown[]){return new Query(this.text,v);}
   first(){return sql.prepare(this.text).get(...this.values as never[])??null;}
   all(){return {results:sql.prepare(this.text).all(...this.values as never[])};}
-  run(){return {meta:{changes:Number(sql.prepare(this.text).run(...this.values as never[]).changes)}};
+  run(){return {meta:{changes:Number(sql.prepare(this.text).run(...this.values as never[]).changes)}};}
  }
  const env:KpEnv={DB:{prepare:(x:string)=>new Query(x),batch:(xs:Query[])=>{
   sql.exec('BEGIN');try{const result=xs.map(x=>x.run());sql.exec('COMMIT');return result;}catch(e){sql.exec('ROLLBACK');throw e;}
