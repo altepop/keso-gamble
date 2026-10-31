@@ -110,7 +110,7 @@ test('auto sector story atomically changes several stocks, writes a single commo
 });
 
 test('a failed multi-stock event rolls back both the market and its next scheduled time',async()=>{
- const f=await fixture();const m=await prepareStocks(f.env,guild);
+ const f=await fixture();const m=await prepareStocks(f.env,guild,undefined,time);
  await setGuerrillaEnabled(f.env,guild,true,time);
  f.sql.prepare('UPDATE stock_guerrilla_settings SET next_at=? WHERE guild=?').run(time-1,guild);
  await ensureStockOperator(f.env);
