@@ -13,7 +13,7 @@ import type {Match} from '../src/results.ts';
 const guild='100000000000000100',one='100000000000000101';
 const mapping:KpMapping={guildId:guild,accounts:[{riotId:'One#JP1',discordUserId:one}]};
 const duelist=SPIKE_ROSTER.agents.find(a=>a.role==='Duelist')!,initiator=SPIKE_ROSTER.agents.find(a=>a.role==='Initiator')!,controller=SPIKE_ROSTER.agents.find(a=>a.role==='Controller')!,sentinel=SPIKE_ROSTER.agents.find(a=>a.role==='Sentinel')!;
-const START=Date.parse('2026-11-01T10:00:00Z');
+const START=Date.parse('2026-10-29T03:00:00Z');
 const m=(agent=duelist.id,extra:Partial<SpikeMatch>={}):SpikeMatch=>({agent,kills:6,assists:2,deaths:6,win:true,startedAt:START,endedAt:START+8*60000,...extra});
 const complete=():SpikeProfile=>({...initialSpikeProfile(),games:60,
  counts:Object.fromEntries(SPIKE_ROSTER.agents.map(a=>[a.id,2])),
@@ -79,7 +79,7 @@ test('fully awakened matches average 800 KP and never fatigue after 10 or repeat
 test('hidden trial clues cost 10k once per role and reveal private exact progress',async()=>{
  const f=await fixture();f.seed(complete());
  const invisible=await spikeStatus(f.env,guild,one);
- assert.match(invisible,/29/); // includes all 29 individual agent progress counters?
+ assert.match(invisible,/Duelist/);assert.match(invisible,/Controller/);
  assert.match(invisible,/🔒 未公開/);assert.doesNotMatch(invisible,/12キル以上|7アシスト以上|異なるコントローラー5人/);
  assert.equal(invisible.length<1950,true,'Discord body must fit');
  f.credit(10000);
