@@ -262,7 +262,9 @@ export async function stockView(env:KpEnv,market:Market,user?:string,now=Date.no
  return {orderQuotes,pricingVersion:STOCK_ORDER_VERSION,volatilityMultiplier:2,version:market.version,at:Math.max(market.at,...ticks.map(t=>t.at)),startedAt:market.startedAt,intervalMinutes:5,dividendPercent:1,dividendCap:DIVIDEND_CAP,holdHours:24,discountCap:2000,ticks,news,dividends};
 }
 export async function queueStockPosts(env:KpEnv&{KP_EARNINGS_WEBHOOK_URL?:string},market:Market,now=Date.now()){
- if(!env.KP_EARNINGS_WEBHOOK_URL||market.version===0)return;
+ // A dedicated breaking bulletin already covers a special price shock.
+ // The generic ±3% alert must not duplicate it or consume the daily alert quota.
+ if(!env.KP_EARNINGS_WEBHOOK_URL||market.version===0||market.token.startsWith('admin:'))return;
  const previous=await env.DB.prepare('SELECT prices FROM stock_ticks WHERE guild=? AND version=?').bind(market.guild,market.version-1).first<{prices:string}>();
  const old=previous?JSON.parse(previous.prices):Object.fromEntries(STOCKS.map(s=>[s.id,s.initialPrice]));
  const slot=Math.floor(now/(30*60_000));

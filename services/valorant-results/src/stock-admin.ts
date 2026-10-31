@@ -2,12 +2,14 @@
 // Authentication + owner authorization are enforced in kp-api.ts, never by the UI.
 import type {KpEnv} from './kp.ts';
 import {prepareStocks} from './stock-market.ts';
+import {stockBulletin} from './stock-bulletins.ts';
 // @ts-expect-error Browser and Worker share the same fictional news catalog.
 import {resolveStockStory,validateCustomStory} from '../../../js/stock-stories.js';
 // @ts-expect-error Shared browser's stock table.
 import {MARKET} from '../../../js/engine.js';
 
-const IDS=new Set((MARKET as Array<{id:string}>).map(s=>s.id));
+const STOCKS=MARKET as Array<{id:string;name:string}>;
+const IDS=new Set(STOCKS.map(s=>s.id));
 const STRENGTHS=[10,25,50];
 const MIN=20,MAX=10_000_000;
 let ready=new WeakSet<object>();
@@ -29,7 +31,10 @@ export async function ensureStockOperator(env:KpEnv){
   // Reinstall atomically on the first operator action per Worker instance.
   // Older databases already have this trigger with a hard-coded generic title.
   // Bundling DROP + CREATE in one D1 batch keeps market updates atomic.
-  env.DB.prepare('DROP TRIGGER IF EXISTS stock_admin_move_apply'),
+  // Only public, fictional story details go here; this index is also the sequel lookup.
+  env.DB.prepare('CREATE TABLE IF NOT EXISTS stock_event_headlines(id TEXT PRIMARY KEY,guild TEXT NOT NULL,symbol TEXT NOT NULL,headline TEXT NOT NULL,body TEXT NOT NULL,direction TEXT NOT NULL,at INTEGER NOT NULL)'),
+  env.DB.prepare('CREATE INDEX IF NOT EXISTS stock_event_headlines_recent ON stock_event_headlines(guild,at DESC)'),
+    env.DB.prepare('DROP TRIGGER IF EXISTS stock_admin_move_apply'),
   env.DB.prepare(`CREATE TRIGGER stock_admin_move_apply AFTER INSERT ON stock_admin_moves BEGIN
    INSERT OR IGNORE INTO stock_ticks(guild,version,prices,at)
     SELECT guild,version,prices,at FROM stock_markets WHERE guild=NEW.guild;
@@ -46,6 +51,15 @@ export async function ensureStockOperator(env:KpEnv){
     VALUES(NEW.guild,'admin:'||NEW.user||':'||NEW.id,NEW.symbol,json_extract(NEW.history,'$.headline')||char(10)||json_extract(NEW.history,'$.body'),
        ROUND(10000.0*(NEW.after_price-NEW.before_price)/NEW.before_price),NEW.at,
        NEW.market_version+1,ROUND(10000.0*(NEW.after_price-NEW.before_price)/NEW.before_price),NEW.at);
+   INSERT OR IGNORE INTO stock_event_headlines(id,guild,symbol,headline,body,direction,at)
+    SELECT json_extract(NEW.history,'$.publicId'),NEW.guild,NEW.symbol,
+      json_extract(NEW.history,'$.headline'),json_extract(NEW.history,'$.body'),NEW.direction,NEW.at
+    WHERE json_extract(NEW.history,'$.publicId') IS NOT NULL;
+   INSERT OR IGNORE INTO kp_posts(id,body,at)
+    SELECT 'market-bulletin:'||json_extract(NEW.history,'$.publicId'),
+      json_extract(NEW.history,'$.bulletin'),NEW.at
+    WHERE json_extract(NEW.history,'$.bulletin') IS NOT NULL
+      AND COALESCE(json_extract(NEW.history,'$.silent'),0)=0;
   END`)
  ]);
  ready.add(env.DB);
@@ -77,11 +91,14 @@ export async function applyStockShock(env:KpEnv,guild:string,user:string,id:stri
   const before=market.prices[symbol],after=stockShockPrice(before,direction,strength);
   if(after===before)throw Error('株価が上限または下限に達しています。');
   const history=[...(market.history[symbol]??[]),after].slice(-48);
+  const publicId=crypto.randomUUID();
+  const bulletin=(env as KpEnv&{KP_EARNINGS_WEBHOOK_URL?:string}).KP_EARNINGS_WEBHOOK_URL
+   ?stockBulletin([{symbol,name:STOCKS.find(s=>s.id===symbol)!.name,before,after}],story.headline,story.body,publicId):null;
   try{
    const result=await env.DB.prepare(`INSERT INTO stock_admin_moves(guild,user,id,symbol,direction,strength,before_price,after_price,market_version,history,at)
     SELECT ?,?,?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM stock_markets WHERE guild=? AND version=?)
     ON CONFLICT(guild,user,id) DO NOTHING`)
-    .bind(guild,user,id,symbol,direction,strength,before,after,market.version,JSON.stringify({prices:history,headline:story.headline,body:story.body,eventId}),now,guild,market.version).run();
+    .bind(guild,user,id,symbol,direction,strength,before,after,market.version,JSON.stringify({prices:history,headline:story.headline,body:story.body,eventId,publicId,bulletin}),now,guild,market.version).run();
    if(result.meta.changes)return {symbol,direction,strength,before,after,version:market.version+1,headline:story.headline,body:story.body,replayed:false};
   }catch(error){
    if(!String((error as Error)?.message).includes('Stock market changed'))throw error;

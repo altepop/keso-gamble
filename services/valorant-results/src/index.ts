@@ -9,6 +9,7 @@ import {prepareRaceBroadcast} from './racing-broadcast.ts';
 import {raceVideoApi} from './racing-video.ts';
 export {RaceBroadcaster} from './racing-broadcast.ts';
 import {prepareStocks,queueStockPosts} from './stock-market.ts';
+import {runGuerrillaMarket} from './stock-guerrilla.ts';
 import {monitorMahjong, mahjongStatus, flushMahjongPosts} from './mahjong.ts';
 import {monitorUnite} from './unite.ts';
 import {settleRankChange,rankChangeBlock,rankChangeFor} from './rank-change.ts';
@@ -480,7 +481,7 @@ export default {
     ctx.waitUntil(track(env,'valorant',()=>monitor(env)));
     ctx.waitUntil((async()=>{
       const mapping=await initializeKp(env);if(!mapping)return;
-      await track(env,'stock_market',async()=>{const market=await prepareStocks(env,mapping.guildId);await queueStockPosts(env,market);});
+      await track(env,'stock_market',async()=>{await runGuerrillaMarket(env,mapping.guildId);const market=await prepareStocks(env,mapping.guildId);await queueStockPosts(env,market);});
       // Owned horses run even when nobody opens the Activity.
       await track(env,'horse_race',async()=>{await decideEntries(env,mapping,openRaceStart(Date.now()));await settleHorsePrizes(env,mapping);});
       // A very rare free horse for someone, drawn once per race slot and announced in the earnings channel.

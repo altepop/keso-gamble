@@ -9,6 +9,7 @@ import modeRewards from '../mode-rewards.json' with {type:'json'};
 import {SPIKE_POLICY,SPIKE_ROSTER} from './spikerush-growth.ts';
 import {STOCK_INTERVAL,prepareStocks,stockView,stockBenefits,stockDiscount,applyStockOrder,ensureStocks} from './stock-market.ts';
 import {applyStockShock} from './stock-admin.ts';
+import {guerrillaSettings,setGuerrillaEnabled} from './stock-guerrilla.ts';
 import {kpCommands,KP_COMMAND_VERSION} from './kp-command.ts';
 import {voiceControl,voiceStatus} from './voice-api.ts';
 import {ensureVoiceLedger,voicePolicy} from './voice-rewards.ts';
@@ -73,7 +74,7 @@ export async function readKpState(env:KpEnv,mapping:KpMapping,user:string){
  state.ledger=await ledgerHistory(env,mapping.guildId,user);
  // The Mリーグ screen; a failure here never blocks the wallet.
  try{state.mleague=await mlActivityView(env);}catch{console.warn('ml_view_pending');state.mleague=null;}
- if(await privateCasinoAllowed(env,mapping.guildId,user))state.privateCasino=true;else delete state.privateCasino;
+ if(await privateCasinoAllowed(env,mapping.guildId,user)){state.privateCasino=true;state.marketEvents=await guerrillaSettings(env,mapping.guildId);}else{delete state.privateCasino;delete state.marketEvents;}
  state.selfUserId=user;state.rewardRates={...policy.modes,unrated:{...policy.modes.unrated,win:modeRewards.unrated.win}};state.modeRewards=modeRewards;state.debt={amount:await debtOf(env,mapping.guildId,user),interestPercent:DEBT_INTEREST_PERCENT,intervalMinutes:DEBT_INTERVAL_MINUTES,interestText:DEBT_INTEREST_TEXT,max:DEBT_MAX};return state;
 }
 // Big casino moments go to the earnings channel so others can watch (a ピンゾロ either way, a natural, or ±5,000 KP).
@@ -136,6 +137,10 @@ export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:strin
  if(!/^[a-zA-Z0-9-]{16,80}$/.test(id))throw Error('操作IDが不正です。');
  // Owner-only stock manipulation is a market event, not a wallet transaction.
  // Keep the ordinary operation ID, allowing retry after lost responses without doubling the shock.
+ if(action==='stock-guerrilla-toggle'){
+  if(!await privateCasinoAllowed(env,mapping.guildId,user))throw Error('この操作は利用できません。');
+  return {result:await setGuerrillaEnabled(env,mapping.guildId,args.enabled)};
+ }
  if(action==='stock-shock'){
   if(!await privateCasinoAllowed(env,mapping.guildId,user))throw Error('この操作は利用できません。');
   return {result:await applyStockShock(env,mapping.guildId,user,id,args)};
