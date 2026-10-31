@@ -1,29 +1,29 @@
-import {stockOrderQuote,STOCK_ORDER_VERSION,STOCK_PRICE_SCALE} from './stock-order.js?v=web-26dd3adca2291bb4';
-import {steamConnectionMessage} from './steam-view.js?v=web-26dd3adca2291bb4';
-import {privateCasinoPanel} from './private-casino-view.js?v=web-26dd3adca2291bb4';
-import {communityPanel,communityRows} from './community-feed.js?v=web-26dd3adca2291bb4';
-import {stockPanel,stockCandles,stockPrice,privateStockOperator} from './stock-view.js?v=web-26dd3adca2291bb4';
-import {wheelView,covered,redNumbers,outcomeAngle} from './roulette-view.js?v=web-26dd3adca2291bb4';
-import {connectDiscordActivity,isDiscordActivity,openSteamLogin,openCompanionGame}from './discord-activity-auth.js?v=web-26dd3adca2291bb4';
-import { createKpClient } from './kp-client.js?v=web-26dd3adca2291bb4';
-import { fmt, fmt0 } from './format.js?v=web-26dd3adca2291bb4';
-import { submitClaim, approveClaim, issueDirective, completeDirective } from './progression.js?v=web-26dd3adca2291bb4';
-import { titleView, homeView, playView, directivesView, escapeHTML } from './progression-views.js?v=web-26dd3adca2291bb4';
-import { genCandles, movingAverage, svgCandles } from './charts.js?v=web-26dd3adca2291bb4';
-import { MARKET, createInitialState, portfolioValue, assets, advanceMarket, trade, spin, spinNumbers, validateNumberBets, grantDemoSalary, cryptoRouletteNumber } from './engine.js?v=web-26dd3adca2291bb4';
-import { KEY, LEGACY_KEY } from './storage.js?v=web-26dd3adca2291bb4';
-import { PUBLIC_SALT, RUN_MS, WEEKLY_LIMIT, openRaceStart, latestRaceStart, raceCard, raceOdds, raceResult, raceTimeline, raceCommentary, raceRuns, placeRaceBet, settleRaceBets, weeklySpent } from './racing.js?v=web-26dd3adca2291bb4';
-import { LUXURY } from './luxury.js?v=web-26dd3adca2291bb4';
-import { raceScreen, racePreview, drawRace, raceElapsed, ownerPanel, luxuryPanel, roastPanel } from './racing-view.js?v=web-26dd3adca2291bb4';
-import { createStore } from './store.js?v=web-26dd3adca2291bb4';
-import { healthPanel } from './health-view.js?v=web-26dd3adca2291bb4';
-import { trendPanel } from './trend-view.js?v=web-26dd3adca2291bb4';
-import { mleagueScreen, mleaguePreview } from './mleague-view.js?v=web-26dd3adca2291bb4';
-import { gamePicker, chinchiroView, blackjackView } from './casino-view.js?v=web-26dd3adca2291bb4';
-import {casinoFrames} from './casino-animation.js?v=web-26dd3adca2291bb4';
-import { playChinchiro, bjStart, bjHit, bjStand, bjDouble, cryptoDie, cryptoCard, cryptoInt } from './casino.js?v=web-26dd3adca2291bb4';
-import { minesStart, minesPick, minesCashout, playSlot, vpDeal, vpDraw, playBaccarat, VP_NAMES } from './casino-more.js?v=web-26dd3adca2291bb4';
-import { minesView, slotView, videoPokerView, baccaratView } from './casino-more-view.js?v=web-26dd3adca2291bb4';
+import {stockOrderQuote,STOCK_ORDER_VERSION,STOCK_PRICE_SCALE} from './stock-order.js?v=web-006591321c248406';
+import {steamConnectionMessage} from './steam-view.js?v=web-006591321c248406';
+import {privateCasinoPanel} from './private-casino-view.js?v=web-006591321c248406';
+import {communityPanel,communityRows} from './community-feed.js?v=web-006591321c248406';
+import {stockPanel,stockCandles,stockPrice,privateStockOperator} from './stock-view.js?v=web-006591321c248406';
+import {wheelView,covered,redNumbers,outcomeAngle} from './roulette-view.js?v=web-006591321c248406';
+import {connectDiscordActivity,isDiscordActivity,openSteamLogin,openCompanionGame}from './discord-activity-auth.js?v=web-006591321c248406';
+import { createKpClient } from './kp-client.js?v=web-006591321c248406';
+import { fmt, fmt0 } from './format.js?v=web-006591321c248406';
+import { submitClaim, approveClaim, issueDirective, completeDirective } from './progression.js?v=web-006591321c248406';
+import { titleView, homeView, playView, directivesView, escapeHTML } from './progression-views.js?v=web-006591321c248406';
+import { genCandles, movingAverage, svgCandles } from './charts.js?v=web-006591321c248406';
+import { MARKET, createInitialState, portfolioValue, assets, advanceMarket, trade, spin, spinNumbers, validateNumberBets, grantDemoSalary, cryptoRouletteNumber } from './engine.js?v=web-006591321c248406';
+import { KEY, LEGACY_KEY } from './storage.js?v=web-006591321c248406';
+import { PUBLIC_SALT, RUN_MS, WEEKLY_LIMIT, openRaceStart, latestRaceStart, raceCard, raceOdds, raceResult, raceTimeline, raceCommentary, raceRuns, placeRaceBet, settleRaceBets, weeklySpent } from './racing.js?v=web-006591321c248406';
+import { LUXURY } from './luxury.js?v=web-006591321c248406';
+import { raceScreen, racePreview, drawRace, raceElapsed, ownerPanel, luxuryPanel, roastPanel } from './racing-view.js?v=web-006591321c248406';
+import { createStore } from './store.js?v=web-006591321c248406';
+import { healthPanel } from './health-view.js?v=web-006591321c248406';
+import { trendPanel } from './trend-view.js?v=web-006591321c248406';
+import { mleagueScreen, mleaguePreview } from './mleague-view.js?v=web-006591321c248406';
+import { gamePicker, chinchiroView, blackjackView } from './casino-view.js?v=web-006591321c248406';
+import {casinoFrames} from './casino-animation.js?v=web-006591321c248406';
+import { playChinchiro, bjStart, bjHit, bjStand, bjDouble, cryptoDie, cryptoCard, cryptoInt } from './casino.js?v=web-006591321c248406';
+import { minesStart, minesPick, minesCashout, playSlot, vpDeal, vpDraw, playBaccarat, VP_NAMES } from './casino-more.js?v=web-006591321c248406';
+import { minesView, slotView, videoPokerView, baccaratView } from './casino-more-view.js?v=web-006591321c248406';
 const $=(s,el=document)=>el.querySelector(s);
 const wallet=createKpClient();
 const embedded=isDiscordActivity();
@@ -562,6 +562,8 @@ let privateRacePreview=null,privateRoundMessage='';
 // least once a minute (race card, Mリーグ status and voice status move with time). Nothing is fetched while hidden.
 // This small read is independent of wallet/animation polling and never replaces the game form.
 let communityEntries=[],communityBusy=false,communityOwner=null,communityStatus='確認中…';
+// Keep five-second freshness checks, but download the 40-row feed only on change.
+let communityRevision=null,communityFullAt=0;
 function paintCommunity(){
  const list=$('.community-entries'),status=$('.community-status');
  if(!list)return;
@@ -570,14 +572,23 @@ function paintCommunity(){
  if(status)status.textContent=communityStatus;
 }
 async function refreshCommunity(){
- if(document.hidden||!live||!wallet.connected||communityBusy)return;
+ // The title screen has no community panel; never poll the DB for an invisible feed.
+ if(document.hidden||screen==='title'||!live||!wallet.connected||communityBusy)return;
  const owner=state.selfUserId;
- if(communityOwner!==owner){communityEntries=[];communityOwner=owner;}
+ if(communityOwner!==owner){communityEntries=[];communityOwner=owner;communityRevision=null;communityFullAt=0;}
  communityBusy=true;
  try{
-  const data=await wallet.feed();
+  // Force a full fetch each minute so renamed members and older servers
+  // are handled even when no wallet operation has been appended.
+  const since=communityRevision!==null&&Date.now()-communityFullAt<60000?communityRevision:undefined;
+  const data=await wallet.feed(since);
   if(!live||state.selfUserId!==owner)return;
-  communityEntries=data.entries;communityStatus='更新 '+new Date().toLocaleTimeString('ja-JP');
+  if(!data.unchanged){
+    communityEntries=data.entries;
+    communityRevision=Number.isSafeInteger(data.revision)?data.revision:null;
+    communityFullAt=Date.now();
+  }
+  communityStatus='更新 '+new Date().toLocaleTimeString('ja-JP');
  }catch{communityStatus='更新が止まっています。自動で再接続します。';}
  finally{communityBusy=false;paintCommunity();}
 }
