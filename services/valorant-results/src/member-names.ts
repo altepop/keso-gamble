@@ -20,11 +20,18 @@ export async function memberNames(env:KpEnv,guild:string,base:Map<string,string>
   }
  }catch{return names;}
  if(config.guildId!==guild)return names;
- for(const alias of config.names){
-  if(alias.userId)continue;
+ // A public feed is polled every 5 seconds. Resolve all persisted suffix
+ // bindings in one indexed read rather than one SQL request per alias.
+ // The fallback below still validates previously unseen suffixes and locks
+ // each one to an exact wallet identity (including the collision rules).
+ const suffixes=config.names.filter(n=>n.userId===undefined);
+ const keys=suffixes.map(n=>'member-name:'+guild+':'+n.suffix);
+ const existing=keys.length?(await env.DB.prepare('SELECT key,value FROM kp_settings WHERE key IN ('+keys.map(()=>'?').join(',')+')').bind(...keys).all<{key:string;value:string}>()).results:[];
+ const bound=new Map(existing.map(row=>[row.key,row.value]));
+ for(const alias of suffixes){
   const suffix=alias.suffix!;
   const key='member-name:'+guild+':'+suffix;
-  let saved=await env.DB.prepare('SELECT value FROM kp_settings WHERE key=?').bind(key).first<{value:string}>();
+  let saved=bound.has(key)?{value:bound.get(key)!}:null;
   if(!saved){
    const matches=(await env.DB.prepare('SELECT user FROM kp_wallets WHERE guild=? AND substr(user,-4)=? ORDER BY user LIMIT 2').bind(guild,suffix).all<{user:string}>()).results;
    if(matches.length!==1)continue;
