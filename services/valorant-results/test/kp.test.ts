@@ -1,6 +1,6 @@
 import {privateCasinoAllowed} from '../src/private-casino.ts';
 import {memberNames} from '../src/member-names.ts';
-import {communityFeed,publicTrade} from '../src/community-feed.ts';
+import {communityFeed,communityFeedHead,publicTrade} from '../src/community-feed.ts';
 import test from 'node:test';
 import { URL as NodeURL } from 'node:url';
 import assert from 'node:assert/strict';
@@ -483,6 +483,35 @@ test('community feed contains only committed guild trades; retries, rejection an
  // There may be many private settings operations: the partial index only visits public rows.
  const plan=f.sql.prepare("EXPLAIN QUERY PLAN SELECT id FROM kp_operations WHERE guild=? AND (json_extract(response,'$.activity') IS NOT NULL OR json_extract(response,'$.stockTrade') IS NOT NULL) ORDER BY at DESC,user,id LIMIT 40").all(guild);
  assert.match(JSON.stringify(plan),/kp_public_activity_recent/);
+});
+test('five-second conditional community refresh reads one indexed row and does not resolve names when unchanged',async()=>{
+ const f=await fixture();seed(f.sql,one,10000);seed(f.sql,two,10000);
+ const code=await issueKpCode(f.env,mapping,one),token=await exchangeKpCode(f.env,code!);
+ const auth={Authorization:'Bearer '+token};
+ const get=async(cursor?:string)=>kpApi(new Request('https://worker.example/api/kp/feed'+(cursor===undefined?'':'?cursor='+encodeURIComponent(cursor)),{headers:auth}),f.env,mapping);
+ const initial=await get();
+ const empty=await initial.json() as {cursor:string;entries:unknown[]};
+ assert.equal(empty.cursor,'empty');assert.deepEqual(empty.entries,[]);
+ f.resetQueries();
+ const nothing=await get('empty');
+ assert.deepEqual(await nothing.json(),{unchanged:true,cursor:'empty'});
+ assert.ok(f.queries()<=2,'unchanged request should only verify session and head of public index, not read names/history: '+f.queries());
+ await operateKp(f.env,mapping,one,'feed-cursor-new-purchase-001','trade',{symbol:'keso',side:'buy',quantity:1,pricingVersion:1,limit:Number.MAX_SAFE_INTEGER});
+ const fresh=await get(empty.cursor),full=await fresh.json() as {cursor:string;entries:Array<{name:string}>};
+ assert.equal(fresh.status,200);assert.notEqual(full.cursor,'empty');assert.equal(full.entries.length,1);
+ // A second account can use the same cursor, but must pass its own authentication.
+ const otherCode=await issueKpCode(f.env,mapping,two),otherToken=await exchangeKpCode(f.env,otherCode!);
+ const other=await kpApi(new Request('https://worker.example/api/kp/feed?cursor='+encodeURIComponent(full.cursor),{headers:{Authorization:'Bearer '+otherToken}}),f.env,mapping);
+ assert.deepEqual(await other.json(),{unchanged:true,cursor:full.cursor});
+ f.resetQueries();
+ const same=await get(full.cursor);assert.equal(same.status,200);
+ assert.deepEqual(await same.json(),{unchanged:true,cursor:full.cursor});
+ assert.ok(f.queries()<=2,'no history or alias scan should run on unchanged feed: '+f.queries());
+ assert.equal((await kpApi(new Request('https://worker.example/api/kp/feed?cursor='+encodeURIComponent(full.cursor)),f.env,mapping)).status,401);
+ assert.equal((await kpApi(new Request('https://worker.example/api/kp/feed?cursor='+encodeURIComponent('x'.repeat(201)),{headers:auth}),f.env,mapping)).status,400);
+ const plan=f.sql.prepare("EXPLAIN QUERY PLAN SELECT at,user,id FROM kp_operations WHERE guild=? AND (json_extract(response,'$.activity') IS NOT NULL OR json_extract(response,'$.stockTrade') IS NOT NULL) ORDER BY at DESC,user,id LIMIT 1").all(guild);
+ assert.match(JSON.stringify(plan),/kp_public_activity_recent/);
+ assert.equal(await communityFeedHead(f.env,'another-guild'),'empty');
 });
 test('public casino facts never expose in-progress cards and skip private actions',()=>{
  assert.deepEqual(publicTrade('bj-start',{amount:200},{hand:{bet:200,player:[{r:1,s:1}],dealer:[{r:13,s:1}]},done:null}),{label:'ブラックジャック',detail:'ベット成立',amount:200});
