@@ -9,7 +9,7 @@ async function ensureTrendReadIndex(env:KpEnv){
  if(!job){
   // Existing per-member history index begins (guild,user), so a *whole-guild*
   // time-window query on (guild,at) otherwise scans old transactions.
-  job=env.DB.prepare('CREATE INDEX IF NOT EXISTS kp_ledger_trend_window ON kp_ledger(guild,at,user)').run();
+  job=Promise.resolve(env.DB.prepare('CREATE INDEX IF NOT EXISTS kp_ledger_trend_window ON kp_ledger(guild,at,user)').run());
   trendIndexJobs.set(env.DB,job);
   job.catch(()=>trendIndexJobs.delete(env.DB));
  }
