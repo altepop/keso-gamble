@@ -1,0 +1,88 @@
+name: D1 read-only insights report
+
+# Manual re-runs require no terminal or Cloudflare credential on the user's phone.
+# The first merge executes once as a push; later runs are manual only.
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/d1-insights-report.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: d1-insights-report
+  cancel-in-progress: false
+
+jobs:
+  inspect:
+    if: github.repository == 'altepop/keso-gamble' && (github.event_name == 'push' || github.actor == 'altepop')
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      WRANGLER_SEND_METRICS: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: services/valorant-results/package-lock.json
+      - name: Install existing Wrangler dependency
+        run: npm ci --ignore-scripts --prefix services/valorant-results
+      - name: Summarize top D1 reads (sanitized SQL, no query values or secrets)
+        run: |
+          node --input-type=module <<'NODE'
+          import {execFileSync} from 'node:child_process';
+          import {appendFileSync} from 'node:fs';
+          import {createHash} from 'node:crypto';
+
+          const summary = ['# D1 read-only insights (last hour)', '',
+            'No database writes are performed. Queries are not printed verbatim in this public repository.', '',
+            '| D1 | # | SQL type | Table names | Calls | Rows read | Avg. rows | Query fingerprint |',
+            '|:---|---:|:---|:---|---:|---:|---:|:---|'];
+          const databases = [
+            ['D1-A','93625c27-74b4-4154-a0a5-2d7485083f33'],
+            ['D1-B','bf23ab40-814f-4626-9e0b-36739ac41750']
+          ];
+          if(!process.env.CLOUDFLARE_API_TOKEN || !process.env.CLOUDFLARE_ACCOUNT_ID){
+            console.log('D1_INSIGHTS_UNAVAILABLE: existing Cloudflare deployment credentials are missing');
+            summary.push('| Both | - | Credentials missing | - | - | - | - | - |');
+          } else for(const [label,id] of databases){
+            try{
+              const stdout=execFileSync('npx',[
+                '--no-install','wrangler','d1','insights',id,
+                '--time-period=1h','--sort-by=reads','--sort-type=sum',
+                '--sort-direction=DESC','--limit=15','--json'
+              ],{cwd:'services/valorant-results',encoding:'utf8',timeout:90000,
+                 env:process.env,stdio:['ignore','pipe','pipe']});
+              const list=JSON.parse(stdout);
+              if(!Array.isArray(list))throw Error('unexpected response structure');
+              for(const [i,row] of list.entries()){
+                const sql=String(row.query??'');
+                const operation=(sql.match(/^\s*(SELECT|INSERT|UPDATE|DELETE|CREATE|REPLACE|WITH|PRAGMA)\b/i)?.[1]??'OTHER').toUpperCase();
+                const tables=[...sql.matchAll(/\b(?:FROM|JOIN|UPDATE|INTO)\s+["`]?([A-Za-z_][\w]*)/gi)]
+                  .map(x=>x[1]).filter((x,i,a)=>a.indexOf(x)===i).slice(0,5).join(', ')||'-';
+                const fingerprint=createHash('sha256').update(sql).digest('hex').slice(0,10);
+                const numeric=k=>Number.isFinite(Number(row[k]))?Math.round(Number(row[k])):0;
+                const cells=[label,i+1,operation,tables,numeric('numberOfTimesRun'),
+                  numeric('totalRowsRead'),numeric('avgRowsRead'),fingerprint];
+                summary.push('| '+cells.join(' | ')+' |');
+                console.log('D1_INSIGHT '+cells.join(' / '));
+              }
+              console.log('D1_INSIGHTS_OK '+label+' count='+list.length);
+            }catch(error){
+              const stderr=String(error?.stderr??'');
+              const reason=/permission|forbidden|unauthoriz|403|10000|authentication/i.test(stderr)
+                ?'Account Analytics Read permission may be missing from existing token'
+                :'Wrangler insights failed (see Cloudflare token permissions or output format)';
+              console.log('D1_INSIGHTS_UNAVAILABLE '+label+': '+reason);
+              summary.push('| '+label+' | - | '+reason+' | - | - | - | - | - |');
+            }
+          }
+          appendFileSync(process.env.GITHUB_STEP_SUMMARY,summary.join('\n')+'\n');
+          NODE
