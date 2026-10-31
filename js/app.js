@@ -572,7 +572,8 @@ function paintCommunity(){
  if(status)status.textContent=communityStatus;
 }
 async function refreshCommunity(){
- if(document.hidden||!live||!wallet.connected||communityBusy)return;
+ // The title screen has no community panel; never poll the DB for an invisible feed.
+ if(document.hidden||screen==='title'||!live||!wallet.connected||communityBusy)return;
  const owner=state.selfUserId;
  if(communityOwner!==owner){communityEntries=[];communityOwner=owner;communityRevision=null;communityFullAt=0;}
  communityBusy=true;
