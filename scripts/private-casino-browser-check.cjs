@@ -27,7 +27,7 @@ const server=spawn('python3',['-m','http.server','8794','--bind','127.0.0.1'],{c
   }else throw Error('Unexpected API '+path);
   await route.fulfill({json:result});
  });
- const page=await ctx.newPage();page.on('pageerror',e=>errors.push(e.message));page.on('dialog',d=>d.accept());await page.goto('http://127.0.0.1:8794');await page.locator('.title-start').click();await page.locator('.nav-btn[data-screen=assets]').click();
+ const page=await ctx.newPage();page.on('pageerror',e=>errors.push(e.message));let nativeDialogs=0;page.on('dialog',d=>{nativeDialogs++;d.accept();});await page.goto('http://127.0.0.1:8794');await page.locator('.title-start').click();await page.locator('.nav-btn[data-screen=assets]').click();
  await page.locator('.private-casino summary').click();await page.locator('#private-amount').fill('500');await page.locator('#private-number').fill('7');
  const button=page.locator('[data-action=private-round]');await button.evaluate(el=>{el.click();el.click();});await page.waitForFunction(()=>document.querySelector('.wallet-strip').textContent.includes('27,500'));assert.equal(ops,1);
  assert.equal(await page.locator('#private-amount').inputValue(),'500');assert.equal(await page.locator('#private-number').inputValue(),'7');
@@ -46,6 +46,15 @@ const server=spawn('python3',['-m','http.server','8794','--bind','127.0.0.1'],{c
  await page.locator('#admin-stock-direction').selectOption('down');
  await page.locator('#admin-stock-strength').selectOption('50');
  await page.locator('[data-action=stock-shock]').click();
+ await page.locator('.stock-shock-confirmation').waitFor();
+ assert.equal(shocks.length,0,'first tap must not send a stock mutation');
+ assert.equal(nativeDialogs,0,'stock action must not trigger native confirm in Discord iOS');
+ assert.match(await page.locator('.stock-shock-confirmation').innerText(),/50%急落/);
+ await page.locator('[data-action=stock-shock-cancel]').click();
+ assert.equal(await page.locator('.stock-shock-confirmation').count(),0,'cancel must not send a stock mutation');
+ assert.equal(shocks.length,0);
+ await page.locator('[data-action=stock-shock]').click();
+ await page.locator('[data-action=stock-shock-approve]').click();
  await page.waitForFunction(()=>document.querySelector('#stock-shock-notice')?.textContent?.includes('株価操作を受け付けました'));
 
  assert.match(await page.locator('#stock-shock-notice').innerText(),/50%下落.*1,200 KP → 600 KP/);
@@ -62,12 +71,14 @@ const server=spawn('python3',['-m','http.server','8794','--bind','127.0.0.1'],{c
  await page.locator('#admin-stock-strength').selectOption('10');
  rejectNextShock=true;
  await page.locator('[data-action=stock-shock]').click();
+ await page.locator('[data-action=stock-shock-approve]').click();
  await page.waitForFunction(()=>document.querySelector('#stock-shock-notice')?.textContent?.includes('受け付けられませんでした'));
  assert.equal(await page.locator('#stock-shock-notice').evaluate(el=>el.classList.contains('error')),true);
  assert.equal(state.prices.keso,600,'rejected operation cannot change the market');
  // Operation success followed by a failed state refresh must still be acknowledged.
  failNextState=true;
  await page.locator('[data-action=stock-shock]').click();
+ await page.locator('[data-action=stock-shock-approve]').click();
  await page.waitForFunction(()=>document.querySelector('#stock-shock-notice')?.textContent?.includes('再取得に失敗しました'));
  assert.match(await page.locator('#stock-shock-notice').innerText(),/株価操作を受け付けました/);
  assert.equal(state.prices.keso,660);

@@ -139,6 +139,11 @@ button{cursor:pointer}
 .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
 .toast{position:fixed;left:50%;bottom:102px;transform:translateX(-50%);background:rgba(15,20,36,.95);border:1px solid rgba(60,87,134,.8);color:#fff;padding:12px 14px;border-radius:12px;font-size:14px;z-index:50;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(-4px)}
+.stock-shock-confirmation{margin:8px 16px 16px;padding:15px;border:2px solid #638fe1;background:#142747;border-radius:13px;color:#f2f7ff;line-height:1.6;overflow-wrap:anywhere}
+.stock-shock-confirmation strong{display:block;font-size:16px;margin-bottom:6px}
+.stock-shock-confirmation p{font-size:14px;margin:0 0 14px}
+.stock-shock-confirmation .action-row{display:flex;flex-wrap:wrap;gap:9px}
+.stock-shock-confirmation .action-btn{min-width:115px;flex:1}
 .stock-shock-notice{margin:4px 16px 18px;padding:13px 15px;border:1px solid #577ca8;background:#142544;border-radius:12px;color:#e6f0ff;line-height:1.65;font-size:14px;overflow-wrap:anywhere;white-space:pre-line}
 .stock-shock-notice.success{border-color:#32966f;background:#0b2e28;color:#e0fff2}
 .stock-shock-notice.warning{border-color:#c29b46;background:#362a15;color:#fff0c9}
