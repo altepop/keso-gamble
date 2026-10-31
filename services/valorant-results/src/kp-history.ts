@@ -26,7 +26,7 @@ export async function ledgerHistory(env:KpEnv,guild:string,user:string,limit=100
  const spikeIds=[...events].filter(([,e])=>e.mode==='spikerush').map(([id])=>id);
  if(spikeIds.length){
   await ensureSpikeGrowth(env);
-  for(let i=0;i<spikeIds.length;i+=50){const ids=spikeIds.slice(i,i+50);for(const r of (await env.DB.prepare(`SELECT id,note FROM spike_rewards WHERE id IN (${ids.map(()=>'?').join(',')}) AND guild=? AND user=?`).bind(...ids,guild,user).all<{id:string;note:string}>()).results)spikeNotes.set(r.id,r.note);}
+  for(let i=0;i<spikeIds.length;i+=50){const ids=spikeIds.slice(i,i+50);for(const r of (await env.DB.prepare(`SELECT id,note FROM (SELECT id,note,guild,user FROM spike_rewards UNION ALL SELECT id,note,guild,user FROM spike_overdrive_rewards) WHERE id IN (${ids.map(()=>'?').join(',')}) AND guild=? AND user=?`).bind(...ids,guild,user).all<{id:string;note:string}>()).results)spikeNotes.set(r.id,r.note);}
  }
  const steamDetails=new Map<string,string>();
  const steamIds=rows.filter(r=>r.kind==='steam').map(r=>r.id);
