@@ -220,7 +220,12 @@ export async function collectKpMatch(env:KpEnv,mapping:KpMapping,raw:Match,puuid
   if(!modern||!['win','loss'].includes(status.outcome??''))return null;
   return (await settleSkirmishMatch(env,{guild:mapping.guildId,puuid,user:link.user,match:raw.metadata.match_id,start,end:start+duration,win:status.outcome==='win',now:Date.now()})).delta;
  }
- const {net,note,lottery,escalation}=modern?valoKp(raw,puuid,status.mode,status.outcome):{...legacyValoKp(raw,puuid,status.mode,status.outcome),lottery:undefined,escalation:undefined};
+ // Older pending results keep the old 3%/±1,000 escalation rules; the new draw
+ // may only apply to games started after the first v5 schema initialization.
+ const escalationStart=status.mode==='escalation'&&modern
+   ?await env.DB.prepare("SELECT value FROM kp_settings WHERE key='escalation_v5_started_at'").first<{value:string}>():null;
+ const escalationV5=status.mode!=='escalation'||start>=Number(escalationStart?.value??Infinity);
+ const {net,note,lottery,escalation}=modern?valoKp(raw,puuid,status.mode,status.outcome,escalationV5):{...legacyValoKp(raw,puuid,status.mode,status.outcome),lottery:undefined,escalation:undefined};
  // Events hold the earned part (never negative); a cost is a separate debit capped at the balance.
  const e:KpEvent={id,guild:mapping.guildId,user:link.user,puuid,match:raw.metadata.match_id,mode:status.mode,outcome:status.outcome,amount:Math.max(0,net),policy:modern?MODE_REWARD_VERSION:policy.version,at:Date.now(),...net<0?{penalty:-net}:{},...note?{note}:{},...lottery!==undefined&&lottery>=UNRATED_JACKPOT?{jackpot:lottery}:{},...(spike?{kind:'spikerush-growth' as const,spike,policy:SPIKE_POLICY}:{}),...(escalation?{escalation}:{})};
  await env.DB.prepare('INSERT OR IGNORE INTO kp_inbox VALUES(?,?,?)').bind(id,JSON.stringify(e),Date.now()).run();
