@@ -23,7 +23,8 @@ async function fixture(){
  const sql=new DatabaseSync(':memory:');
  for(const f of readdirSync(new URL('../migrations/',import.meta.url)).filter(s=>s.endsWith('.sql')).sort())sql.exec(readFileSync(new URL('../migrations/'+f,import.meta.url),'utf8'));
  class Query {
-  constructor(public text:string,public args:unknown[]=[]){}
+  public text:string;public args:unknown[];
+  constructor(text:string,args:unknown[]=[]){this.text=text;this.args=args;}
   bind(...args:unknown[]){return new Query(this.text,args);}
   first(){return sql.prepare(this.text).get(...this.args as never[])??null;}
   all(){return {results:sql.prepare(this.text).all(...this.args as never[])};}
