@@ -10,9 +10,11 @@ export function voiceSlices(from:number,to:number){
  for(let cursor=from;cursor<to;){const end=Math.min(to,(Math.floor(cursor/86400000)+1)*86400000);slices.push({day:new Date(cursor).toISOString().slice(0,10),ms:end-cursor});cursor=end;}
  return slices;
 }
+export const voiceRewardHistoryIndex='CREATE INDEX IF NOT EXISTS kp_voice_events_member_latest ON kp_voice_events(guild,user,at DESC)';
 const ready=new WeakSet<object>();
 export async function ensureVoiceLedger(env:KpEnv){if(ready.has(env.DB))return;await env.DB.batch([
  env.DB.prepare(`CREATE TABLE IF NOT EXISTS kp_voice_events(id TEXT PRIMARY KEY,guild TEXT NOT NULL,user TEXT NOT NULL,day TEXT NOT NULL,slot INTEGER NOT NULL CHECK(slot BETWEEN 1 AND 48),amount INTEGER NOT NULL CHECK(amount=5),at INTEGER NOT NULL,UNIQUE(guild,user,day,slot))`),
+ env.DB.prepare(voiceRewardHistoryIndex),
  env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS kp_voice_apply AFTER INSERT ON kp_voice_events BEGIN INSERT INTO kp_ledger(id,guild,user,delta,kind,at) VALUES(NEW.id,NEW.guild,NEW.user,NEW.amount,'voice',NEW.at); END`),
  // The stored events keep their original 5 KP (a CHECK in the live table); each slot now adds a 10 KP bonus row.
  env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS kp_voice_bonus_v2 AFTER INSERT ON kp_voice_events BEGIN INSERT OR IGNORE INTO kp_ledger(id,guild,user,delta,kind,at) VALUES('bonus:'||NEW.id,NEW.guild,NEW.user,${VOICE_BONUS},'voice',NEW.at); END`),
