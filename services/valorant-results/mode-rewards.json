@@ -56,23 +56,23 @@
     "superChanceEachBps": 10,
     "bigTiers": [
       {
-        "weight": 4000,
+        "weight": 4500,
         "amount": 500
       },
       {
-        "weight": 3000,
+        "weight": 3500,
         "amount": 1000
       },
       {
-        "weight": 2000,
+        "weight": 1790,
         "amount": 2500
       },
       {
-        "weight": 800,
+        "weight": 200,
         "amount": 5000
       },
       {
-        "weight": 200,
+        "weight": 10,
         "amount": 15000
       }
     ],
