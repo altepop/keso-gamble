@@ -31,7 +31,7 @@ export function escalationBigNote(tier:number,award:number){
 /** Separate equal-bot notices are reserved for IV/V: at 15% bet odds,
  * posting every tier would needlessly flood the earnings channel. */
 export function escalationBigPost(user:string,tier:number,award:number,net:number){
- if(!/^\\d{15,22}$/.test(user)||!Number.isSafeInteger(net))throw Error('Invalid escalation announcement');
+ if(!/^\d{15,22}$/.test(user)||!Number.isSafeInteger(net))throw Error('Invalid escalation announcement');
  const d=escalationBigCopy(tier,award);
  if(tier<4)return null;
  return [
@@ -43,5 +43,5 @@ export function escalationBigPost(user:string,tier:number,award:number,net:numbe
   '',
   `💬 ${d.comment}`,
   '-# 実際の精算は共通ラッキー倍率・成績ボーナス・残高不足による減額上限等で変わる場合があります。大勝負は通常の基本報酬の置き換えです。',
- ].join('\\n');
+ ].join('\n');
 }
