@@ -356,3 +356,23 @@ test('裏モードの同一操作を並行送信しても株価は一度しか�
  assert.equal((await readKpState(f.env,mapping,two)).prices.keso,1800);
  assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM stock_admin_moves').get()!.n,1);
 });
+
+test('相場更新の履歴集計はギルドと時刻のインデックスを利用し、全履歴走査を避ける',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:T});const f=await fixture();
+ await prepareStocks(f.env,guild);
+ for(const [table,index] of [
+  ['kp_ledger','kp_ledger_guild_at'],
+  ['kp_operations','kp_operations_guild_at'],
+  ['kp_events','kp_events_guild_at'],
+  ['stock_trades','stock_trades_guild_at'],
+ ]){
+  const rows=f.sql.prepare(`EXPLAIN QUERY PLAN SELECT COUNT(*) FROM ${table} WHERE guild=? AND at>=? AND at<?`).all(guild,T,T+300000);
+  const detail=rows.map(r=>String(r.detail)).join(' ');
+  assert.match(detail,new RegExp(index),'expected '+table+' query to seek via time index: '+detail);
+ }
+ const before=await readKpState(f.env,mapping,one);
+ await tickStocks(f.env,await prepareStocks(f.env,guild),T+300000,()=>0.5);
+ const after=await readKpState(f.env,mapping,one);
+ assert.equal(after.stockMarket.version,before.stockMarket.version+1);
+});
+

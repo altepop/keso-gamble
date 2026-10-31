@@ -33,6 +33,12 @@ export async function ensureStocks(env:KpEnv){
  `CREATE TABLE IF NOT EXISTS stock_lots(id TEXT PRIMARY KEY,guild TEXT NOT NULL,user TEXT NOT NULL,symbol TEXT NOT NULL,quantity INTEGER NOT NULL CHECK(quantity>=0),remaining INTEGER NOT NULL CHECK(remaining BETWEEN 0 AND quantity),price INTEGER NOT NULL CHECK(price>0),at INTEGER NOT NULL)`,
  `CREATE INDEX IF NOT EXISTS stock_lots_owner ON stock_lots(guild,user,symbol,at,id)`,
  `CREATE TABLE IF NOT EXISTS stock_trades(id TEXT PRIMARY KEY,guild TEXT NOT NULL,user TEXT NOT NULL,symbol TEXT NOT NULL,side TEXT NOT NULL CHECK(side IN ('buy','sell')),quantity INTEGER NOT NULL CHECK(quantity>0),price INTEGER NOT NULL,at INTEGER NOT NULL)`,
+ // Five-minute stock market scans use guild + event time, not account-owner primary keys.
+ // Without these indexes, each tick can scan the full historical ledger/operation tables.
+ `CREATE INDEX IF NOT EXISTS kp_ledger_guild_at ON kp_ledger(guild,at)`,
+ `CREATE INDEX IF NOT EXISTS kp_operations_guild_at ON kp_operations(guild,at)`,
+ `CREATE INDEX IF NOT EXISTS kp_events_guild_at ON kp_events(guild,at)`,
+ `CREATE INDEX IF NOT EXISTS stock_trades_guild_at ON stock_trades(guild,at)`,
  `CREATE TABLE IF NOT EXISTS stock_sale_lots(sale TEXT NOT NULL,lot TEXT NOT NULL,quantity INTEGER NOT NULL CHECK(quantity>0),PRIMARY KEY(sale,lot))`,
  `CREATE TABLE IF NOT EXISTS stock_dividend_days(guild TEXT NOT NULL,day TEXT NOT NULL,prices TEXT NOT NULL,at INTEGER NOT NULL,PRIMARY KEY(guild,day))`,
  // Separate completion marker: a previous release could save a dividend-day snapshot
