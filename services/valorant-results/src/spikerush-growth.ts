@@ -1,6 +1,8 @@
 import roster from '../spikerush-roster.json' with {type:'json'};
 import type {KpEnv} from './kp.ts';
 import type {Match} from './results.ts';
+import {nextSpikeTrials,trialComplete,SPIKE_AWAKENING_BONUS,SPIKE_OVERDRIVE_BONUS,SPIKE_MAX_REWARD,ensureSpikeAwakening} from './spike-awakening.ts';
+import type {SpikeTrials} from './spike-awakening.ts';
 export const SPIKE_POLICY='spikerush-growth-v1';
 export const SPIKE_ROLES=['Duelist','Initiator','Controller','Sentinel'] as const;
 type Role=typeof SPIKE_ROLES[number];
@@ -15,7 +17,7 @@ const add=(a:Fraction,b:Fraction)=>fraction(a.n*b.d+b.n*a.d,a.d*b.d);
 const mul=(a:Fraction,b:Fraction)=>fraction(a.n*b.n,a.d*b.d);
 const sub=(a:Fraction,b:Fraction)=>fraction(a.n*b.d-b.n*a.d,a.d*b.d);
 const display=(a:Fraction)=>Number(a.n)/Number(a.d);
-export interface SpikeProfile {games:number;counts:Record<string,number>;unlocked:Role[];recent:string[];carryN:string;carryD:string}
+export interface SpikeProfile {games:number;counts:Record<string,number>;unlocked:Role[];recent:string[];carryN:string;carryD:string;trials?:SpikeTrials}
 export const initialSpikeProfile=():SpikeProfile=>({games:0,counts:{},unlocked:[],recent:[],carryN:'0',carryD:'1'});
 function checkProfile(p:SpikeProfile){
  if(!p||!Number.isSafeInteger(p.games)||p.games<0||p.games>=Number.MAX_SAFE_INTEGER||!p.counts||typeof p.counts!=='object'||Array.isArray(p.counts)||!Array.isArray(p.unlocked)||p.unlocked.some(r=>!SPIKE_ROLES.includes(r))||!Array.isArray(p.recent)||p.recent.length>4||p.recent.some(a=>typeof a!=='string')||!/^\d{1,2048}$/.test(p.carryN)||!/^\d{1,2048}$/.test(p.carryD))throw Error('Invalid spike profile');
@@ -24,7 +26,7 @@ function checkProfile(p:SpikeProfile){
 }
 export function spikeProgress(p:SpikeProfile){
  checkProfile(p);
- return SPIKE_ROLES.map(role=>{const agents=roster.agents.filter(a=>a.role===role),used=agents.reduce((n,a)=>n+(p.counts[a.id]??0),0);return {role,used,required:agents.length*2,unlocked:p.unlocked.includes(role)||used===agents.length*2};});
+ return SPIKE_ROLES.map(role=>{const agents=roster.agents.filter(a=>a.role===role),used=agents.reduce((n,a)=>n+(p.counts[a.id]??0),0),unlocked=p.unlocked.includes(role)||used===agents.length*2,trialDone=trialComplete(p,role);return {role,used,required:agents.length*2,unlocked,trialDone,awakened:unlocked&&trialDone};});
 }
 export interface SpikeMatch {agent:string;kills:number;assists:number;deaths:number;win:boolean;startedAt:number;endedAt:number}
 /** A completed game alone does not prove the person's finish. Missing/abnormal results wait. */
@@ -57,16 +59,20 @@ export function quoteSpike(p:SpikeProfile,m:SpikeMatch,dayGame:number){
  const z=mul(add(mul(fraction(10),c[3]),fraction(10*u[3])),efficiency);
  const boost=add(fraction(1),mul(h,add(mul(fraction(1,10),c[2]),fraction(3*u[2],20))));
  const grown=mul(add(fraction(base),mul(h,add(fraction(80),add(x,add(y,z))))),boost);
- const fatigue=dayGame<=10?fraction(1):dayGame<=15?fraction(1,2):fraction(1,10);
- const same=1+p.recent.filter(a=>a===m.agent).length,repeat=fraction(same<=2?10:same===3?8:same===4?6:4,10);
- const exact=add(fraction(base),mul(mul(fatigue,repeat),sub(grown,fraction(base))));
+ const awakenings=progress.filter(r=>r.awakened).length,overdrive=awakenings===4;
+ // Only fully awakened users bypass all daily/repeated-agent growth attenuation.
+ // With 6K/2A/6D and 50% wins, all four awakenings average ~800 KP per game.
+ const enhanced=add(grown,fraction(awakenings*SPIKE_AWAKENING_BONUS+(overdrive?SPIKE_OVERDRIVE_BONUS:0)));
+ const fatigue=overdrive?fraction(1):dayGame<=10?fraction(1):dayGame<=15?fraction(1,2):fraction(1,10);
+ const same=1+p.recent.filter(a=>a===m.agent).length,repeat=overdrive?fraction(1):fraction(same<=2?10:same===3?8:same===4?6:4,10);
+ const exact=add(fraction(base),mul(mul(fatigue,repeat),sub(enhanced,fraction(base))));
  const total=add(exact,fraction(BigInt(p.carryN),BigInt(p.carryD))),whole=total.n/total.d;
- if(whole<0n||whole>425n)throw Error('Spike reward exceeds bound');
- const remainder=fraction(total.n%total.d,total.d),next:SpikeProfile={games:p.games+1,counts:{...p.counts,[m.agent]:Math.min(2,(p.counts[m.agent]??0)+1)},unlocked:progress.filter(r=>r.unlocked).map(r=>r.role),recent:[m.agent,...p.recent].slice(0,4),carryN:String(remainder.n),carryD:String(remainder.d)};
+ if(whole<0n||whole>BigInt(awakenings?SPIKE_MAX_REWARD:425))throw Error('Spike reward exceeds bound');
+ const remainder=fraction(total.n%total.d,total.d),next:SpikeProfile={games:p.games+1,counts:{...p.counts,[m.agent]:Math.min(2,(p.counts[m.agent]??0)+1)},unlocked:progress.filter(r=>r.unlocked).map(r=>r.role),recent:[m.agent,...p.recent].slice(0,4),carryN:String(remainder.n),carryD:String(remainder.d),trials:nextSpikeTrials(p,m)};
  next.unlocked=spikeProgress(next).filter(r=>r.unlocked).map(r=>r.role);
  const amount=Number(whole),growth=Number(display(sub(exact,fraction(base))).toFixed(4));
- const breakdown={base,growth,dayGame,dailyFactor:display(fatigue),repeatFactor:display(repeat),carryBefore:p.carryN+'/'+p.carryD,carryAfter:next.carryN+'/'+next.carryD,gamesBefore:p.games,rolesBefore:progress,unlockedNow:next.unlocked.filter(r=>!progress.find(v=>v.role===r)?.unlocked)};
- const note=`（基礎${base}・補正${Number(growth.toFixed(2))}・端数精算 ${amount} KP）`;
+ const breakdown={base,growth,dayGame,dailyFactor:display(fatigue),repeatFactor:display(repeat),overdrive,awakenings,carryBefore:p.carryN+'/'+p.carryD,carryAfter:next.carryN+'/'+next.carryD,gamesBefore:p.games,rolesBefore:progress,unlockedNow:next.unlocked.filter(r=>!progress.find(v=>v.role===r)?.unlocked),awakenedNow:spikeProgress(next).filter(r=>r.awakened&&!progress.find(x=>x.role===r.role)?.awakened).map(r=>r.role)};
+ const note=`（${overdrive?'👑 OVERDRIVE・':''}基礎${base}・補正${Number(growth.toFixed(2))}・端数精算 ${amount} KP）`;
  return {amount,next,note,breakdown};
 }
 export interface SpikeEvent {id:string;guild:string;user:string;puuid:string;match:string;spike:SpikeMatch}
@@ -95,9 +101,9 @@ export async function ensureSpikeGrowth(env:KpEnv){
 export async function settleSpike(env:KpEnv,e:SpikeEvent){
  checkMatch(e.spike);
  if(e.id!==['match',e.guild,e.match,e.puuid].map(encodeURIComponent).join(':'))throw Error('Invalid spike identity');
- await ensureSpikeGrowth(env);
+ await ensureSpikeGrowth(env);await ensureSpikeAwakening(env);
  for(let attempt=0;attempt<5;attempt++){
-  const existing=await env.DB.prepare('SELECT e.amount,e.user,s.note FROM kp_events e LEFT JOIN spike_rewards s ON s.id=e.id WHERE e.id=?').bind(e.id).first<{amount:number;user:string;note:string|null}>();
+  const existing=await env.DB.prepare('SELECT e.amount,e.user,COALESCE(s.note,v.note) AS note FROM kp_events e LEFT JOIN spike_rewards s ON s.id=e.id LEFT JOIN spike_overdrive_rewards v ON v.id=e.id WHERE e.id=?').bind(e.id).first<{amount:number;user:string;note:string|null}>();
   if(existing){if(existing.user!==e.user)throw Error('Spike owner mismatch');return {amount:existing.amount,note:existing.note??''};}
   const link=await env.DB.prepare("SELECT a.user,a.linked_at,s.value AS starts FROM kp_accounts a JOIN kp_settings s ON s.key='spikerush_growth_started_at' WHERE a.guild=? AND a.puuid=?").bind(e.guild,e.puuid).first<{user:string;linked_at:number;starts:string}>();
   if(!link||link.user!==e.user||e.spike.startedAt<Math.max(Number(link.starts),link.linked_at))return null;
@@ -106,10 +112,11 @@ export async function settleSpike(env:KpEnv,e:SpikeEvent){
   if(!profile||profile.user!==e.user)throw Error('Spike profile owner mismatch');
   // UTC midnight is 09:00 JST. Late arrivals use their match day and current committed growth.
   const day=new Date(e.spike.endedAt).toISOString().slice(0,10);
-  const count=await env.DB.prepare('SELECT COUNT(*) AS n FROM spike_rewards WHERE guild=? AND puuid=? AND day=?').bind(e.guild,e.puuid,day).first<{n:number}>();
+  const count=await env.DB.prepare('SELECT (SELECT COUNT(*) FROM spike_rewards WHERE guild=? AND puuid=? AND day=?)+(SELECT COUNT(*) FROM spike_overdrive_rewards WHERE guild=? AND puuid=? AND day=?) AS n').bind(e.guild,e.puuid,day,e.guild,e.puuid,day).first<{n:number}>();
   const quote=quoteSpike(JSON.parse(profile.data),e.spike,Number(count?.n??0)+1);
   const detail={...quote.breakdown,outcome:e.spike.win?'win':'loss',policy:SPIKE_POLICY,roster:roster.version,matchEndedAt:e.spike.endedAt};
-  const written=await env.DB.prepare(`INSERT INTO spike_rewards(id,guild,puuid,user,match,day,agent,amount,note,detail,next_profile,expected_version,at)
+  const destination=quote.amount>425?'spike_overdrive_rewards':'spike_rewards';
+  const written=await env.DB.prepare(`INSERT INTO ${destination}(id,guild,puuid,user,match,day,agent,amount,note,detail,next_profile,expected_version,at)
    SELECT ?,?,?,?,?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM spike_profiles WHERE guild=? AND puuid=? AND user=? AND version=?)
    AND NOT EXISTS(SELECT 1 FROM kp_events WHERE id=?) ON CONFLICT(id) DO NOTHING`)
    .bind(e.id,e.guild,e.puuid,e.user,e.match,day,e.spike.agent,quote.amount,quote.note,JSON.stringify(detail),JSON.stringify(quote.next),profile.version,Date.now(),e.guild,e.puuid,e.user,profile.version,e.id).run();
