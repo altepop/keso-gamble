@@ -3,8 +3,9 @@ import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
 import {applySilentEntryWithOAuth,migrateSilentEntryPoint,silentEntryStatus} from '../src/discord-silent-entry.ts';
 import type {Env} from '../src/index.ts';
+import discord from '../discord-config.json' with {type:'json'};
 const app='1556902772362969088',entry='1556902772362969089',secret='fixture-client-secret';
-function network({handler=2,scope='applications.commands.update',fail=false}={}){
+function network({handler=2,scope='applications.commands.update',fail=false,appId=app}={}){
  let current=handler;const calls:Array<{method:string;url:string;body:string}>=[];
  const request=(async(url:string|URL|Request,init:RequestInit={})=>{
   const target=String(url),method=init.method??'GET',body=String(init.body??'');
@@ -13,8 +14,8 @@ function network({handler=2,scope='applications.commands.update',fail=false}={})
    assert.equal(method,'POST');assert.equal(new URLSearchParams(body).get('scope'),'applications.commands.update');
    return Response.json({token_type:'Bearer',access_token:'oauth-fixture-access',scope});
   }
-  if(target.endsWith('/applications/'+app+'/commands')&&method==='GET'){
-   return Response.json([{id:entry,application_id:app,type:4,handler:current,name:'launch'},{id:'1556902772362969090',application_id:app,type:1,name:'kp'}]);
+  if(target.endsWith('/applications/'+appId+'/commands')&&method==='GET'){
+   return Response.json([{id:entry,application_id:appId,type:4,handler:current,name:'launch'},{id:'1556902772362969090',application_id:appId,type:1,name:'kp'}]);
   }
   if(target.endsWith('/commands/'+entry)&&method==='PATCH'){
    assert.deepEqual(JSON.parse(body),{handler:1});
@@ -58,7 +59,7 @@ test('existing APP_HANDLER is idempotent; wrong OAuth scope is refused without a
  assert.deepEqual(wrong.calls.map(x=>x.method),['POST']);
 });
 test('one-shot scheduled migration persists completion and avoids extra D1 reads on same isolate',async()=>{
- const f=db(),n=network(),now=Date.parse('2026-11-04T21:00:00+09:00');
+ const f=db(),n=network({appId:discord.applicationId}),now=Date.parse('2026-11-04T21:00:00+09:00');
  const result=await migrateSilentEntryPoint(f.env,now,n.request);
  assert.equal(result,'activated');assert.equal((await silentEntryStatus(f.env)).handlerConfirmed,true);
  const before=f.count();const count=n.calls.length;
@@ -67,7 +68,7 @@ test('one-shot scheduled migration persists completion and avoids extra D1 reads
  f.close();
 });
 test('failed Discord PATCH is retried only after durable backoff, no repeated changes to game tables',async()=>{
- const f=db(),n=network({fail:true}),now=Date.parse('2026-11-04T21:00:00+09:00');
+ const f=db(),n=network({fail:true,appId:discord.applicationId}),now=Date.parse('2026-11-04T21:00:00+09:00');
  assert.equal(await migrateSilentEntryPoint(f.env,now,n.request),'pending');
  const row=f.sql.prepare('SELECT value FROM monitor_state').get() as {value:string};
  assert.equal(Number(row.value),now+3600000);
