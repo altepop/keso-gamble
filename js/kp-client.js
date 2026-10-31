@@ -54,7 +54,7 @@ export function createKpClient({storage,temporaryStorage,request=globalThis.fetc
   // Whether anything changed since the last full state (a short string; compare for equality).
   pulse:async()=>(await api('pulse')).pulse,
   health:()=>api('health'),
-  feed:()=>api('feed'),
+  feed:(since=null)=>api('feed'+(Number.isSafeInteger(since)&&since>=0?'?since='+since:'')),
   trend:days=>api('trend?days='+days),
   privateRace:()=>api('private/race'),
   get steamLinkRequest(){return steamLink;},
