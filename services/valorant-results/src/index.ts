@@ -9,6 +9,7 @@ import {prepareRaceBroadcast} from './racing-broadcast.ts';
 import {raceVideoApi} from './racing-video.ts';
 export {RaceBroadcaster} from './racing-broadcast.ts';
 import {prepareStocks,queueStockPosts} from './stock-market.ts';
+import {runGuerrillaMarket} from './stock-guerrilla.ts';
 import {monitorMahjong, mahjongStatus, flushMahjongPosts} from './mahjong.ts';
 import {monitorUnite} from './unite.ts';
 import {settleRankChange,rankChangeBlock,rankChangeFor} from './rank-change.ts';
