@@ -16,11 +16,21 @@ export function publicTrade(action:string,args:Record<string,unknown>,result:any
  return null;
 }
 export const feedIndex=`CREATE INDEX IF NOT EXISTS kp_public_activity_recent ON kp_operations(guild,at DESC,user,id) WHERE json_extract(response,'$.activity') IS NOT NULL OR json_extract(response,'$.stockTrade') IS NOT NULL`;
-export async function communityFeed(env:KpEnv,guild:string,names:Map<string,string>){
- const rows=(await env.DB.prepare(`SELECT id,user,at,json_extract(response,'$.activity') AS activity,json_extract(response,'$.stockTrade') AS stock FROM kp_operations WHERE guild=? AND (json_extract(response,'$.activity') IS NOT NULL OR json_extract(response,'$.stockTrade') IS NOT NULL) ORDER BY at DESC,user,id LIMIT 40`).bind(guild).all<{id:string;user:string;at:number;activity:string|null;stock:string|null}>()).results;
- return {entries:rows.map(r=>{
+export async function communityFeed(env:KpEnv,guild:string,names:Map<string,string>|(()=>Promise<Map<string,string>>),since:number|null=null){
+ // The Activity polls every 5s. The first fetch reads up to 40 activities;
+ // follow-up fetches use the existing (guild,at DESC,user,id) partial index
+ // to read only new rows instead of re-reading the same 40 rows each time.
+ // Include the last timestamp (>=, not >) so same-millisecond events cannot
+ // be lost. The browser de-duplicates by the stable user:operation ID.
+ const condition="(json_extract(response,'$.activity') IS NOT NULL OR json_extract(response,'$.stockTrade') IS NOT NULL)";
+ const query=`SELECT id,user,at,json_extract(response,'$.activity') AS activity,json_extract(response,'$.stockTrade') AS stock FROM kp_operations WHERE guild=? AND ${condition} ${since===null?'':'AND at>=?'} ORDER BY at DESC,user,id LIMIT 40`;
+ const statement=env.DB.prepare(query);
+ const rows=(await (since===null?statement.bind(guild):statement.bind(guild,since)).all<{id:string;user:string;at:number;activity:string|null;stock:string|null}>()).results;
+ // Do not resolve names or read kp_settings at all if no new activity.
+ const resolved=rows.length?(typeof names==='function'?await names():names):new Map<string,string>();
+ return {incremental:since!==null,entries:rows.map(r=>{
   const stock=r.stock?JSON.parse(r.stock):null,activity:PublicTrade=r.activity?JSON.parse(r.activity):{label:stock.side==='buy'?'株を購入':'株を売却',detail:`${stock.symbol} · ${stock.quantity}株`,amount:0};
   if(stock){activity.detail=`${stock.symbol} · ${stock.quantity}株 × ${stock.price.toLocaleString('ja-JP')} KP`;activity.amount=stock.gross??stock.quantity*stock.price;}
-  return {id:r.user+':'+r.id,name:names.get(r.user)??'メンバー '+r.user.slice(-4),time:r.at,...activity};
+  return {id:r.user+':'+r.id,name:resolved.get(r.user)??'メンバー '+r.user.slice(-4),time:r.at,...activity};
  })};
 }
