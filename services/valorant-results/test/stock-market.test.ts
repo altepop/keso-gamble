@@ -376,3 +376,52 @@ test('相場更新の履歴集計はギルドと時刻のインデックスを�
  assert.equal(after.stockMarket.version,before.stockMarket.version+1);
 });
 
+
+
+test('架空ニュースは12銘柄の上昇/下落に各3件あり、操作IDの再送でも同じ事件を選ぶ',async t=>{
+ const {stockStoryChoices,resolveStockStory,validateCustomStory}=await import('../../../js/stock-stories.js') as typeof import('../../../js/stock-stories.js');
+ for(const symbol of ['keso','riso','yuya','yano','msum','tnkn','komi','ishi','vdk','godo','ngya','koba']){
+  for(const direction of ['up','down']){
+   const choices=stockStoryChoices(symbol,direction);
+   assert.equal(choices.length,3,symbol+' '+direction);
+   assert(choices.every(e=>e.headline.length>10&&e.body.length>=12));
+   const key='random-news-operation-0001';
+   assert.deepEqual(resolveStockStory(symbol,direction,'auto',key),resolveStockStory(symbol,direction,'auto',key));
+   assert.deepEqual(resolveStockStory(symbol,direction,choices[2].id,'ignored'),choices[2]);
+  }
+ }
+ assert.deepEqual(validateCustomStory('  見出し6文字以上  ','  本文は12文字以上必要である   '),{headline:'見出し6文字以上',body:'本文は12文字以上必要である'});
+ assert.throws(()=>validateCustomStory('<script>alert(1)</script>','本文は12文字以上必要である'),/見出し/);
+ assert.throws(()=>resolveStockStory('keso','down','riso-up-1'),/選択/);
+ t.mock.timers.enable({apis:['Date'],now:T});const f=await fixture();
+ const story=stockStoryChoices('riso','down')[2];
+ const outcome=await applyStockShock(f.env,guild,one,'news-operator-test-0001',{symbol:'riso',direction:'down',strength:25,eventId:story.id},T);
+ assert.equal(outcome.headline,story.headline);assert.equal(outcome.body,story.body);assert.equal(outcome.after,585);
+ const saved=f.sql.prepare("SELECT label,applied_bps AS bps FROM stock_news WHERE id LIKE 'admin:%'").get() as {label:string;bps:number};
+ assert.equal(saved.label,story.headline+'\\n'+story.body);
+ assert.equal(saved.bps,-2500);
+ const audit=f.sql.prepare('SELECT history FROM stock_admin_moves WHERE guild=? AND user=?').get(guild,one) as {history:string};
+ assert.deepEqual(JSON.parse(audit.history).prices.slice(-2),[780,585]);
+ assert.equal(JSON.parse(audit.history).eventId,story.id);
+ const other=await readKpState(f.env,mapping,two);
+ assert.equal(other.prices.riso,585);
+ assert(other.stockMarket.news.some(n=>n.label.includes(story.headline)&&n.label.includes(story.body)));
+ const repeated=await applyStockShock(f.env,guild,one,'news-operator-test-0001',{symbol:'riso',direction:'down',strength:25,eventId:story.id},T);
+ assert.equal(repeated.replayed,true);
+ assert.equal(repeated.headline,story.headline);
+ await assert.rejects(applyStockShock(f.env,guild,one,'news-operator-test-0001',{symbol:'riso',direction:'down',strength:25,eventId:stockStoryChoices('riso','down')[0].id},T),/操作ID/);
+ assert.equal(f.sql.prepare("SELECT COUNT(*) AS n FROM stock_news WHERE id LIKE 'admin:%'").get()!.n,1);
+});
+test('オーナー自作ニュースは確定時の内容をそのまま保存し、不正入力は株価を動かさない',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:T});const f=await fixture();const before=(await readKpState(f.env,mapping,two)).prices.keso;
+ const text={symbol:'keso',direction:'up',strength:10,eventId:'custom',
+  headline:'管理人の冷蔵庫から金塊が見つかる',body:'夕食の残りを探した管理人が冷凍庫から金塊100本を発見。警備員は理由を説明できず、買い注文が増えた。'};
+ const result=await applyStockShock(f.env,guild,one,'news-custom-test-0001',text,T);
+ assert.equal(result.after,1320);
+ assert.equal(result.headline,text.headline);
+ const row=f.sql.prepare("SELECT label FROM stock_news WHERE id LIKE 'admin:%'").get() as {label:string};
+ assert(row.label.includes(text.body));
+ await assert.rejects(applyStockShock(f.env,guild,one,'news-custom-test-0001',{...text,headline:'別のニュースにすり替えた'},T),/操作ID/);
+ await assert.rejects(applyStockShock(f.env,guild,one,'news-custom-test-0002',{...text,headline:'<img src=x onerror=alert(1)>'},T),/見出し/);
+ assert.equal((await readKpState(f.env,mapping,two)).prices.keso,Math.round(before*1.1));
+});
