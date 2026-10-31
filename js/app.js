@@ -1,7 +1,7 @@
 import {stockOrderQuote,STOCK_ORDER_VERSION,STOCK_PRICE_SCALE} from './stock-order.js?v=web-26dd3adca2291bb4';
 import {steamConnectionMessage} from './steam-view.js?v=web-26dd3adca2291bb4';
 import {privateCasinoPanel} from './private-casino-view.js?v=web-26dd3adca2291bb4';
-import {communityPanel,communityRows} from './community-feed.js?v=web-26dd3adca2291bb4';
+import {communityPanel,communityRows,mergeCommunityEntries} from './community-feed.js?v=web-26dd3adca2291bb4';
 import {stockPanel,stockCandles,stockPrice,privateStockOperator} from './stock-view.js?v=web-26dd3adca2291bb4';
 import {wheelView,covered,redNumbers,outcomeAngle} from './roulette-view.js?v=web-26dd3adca2291bb4';
 import {connectDiscordActivity,isDiscordActivity,openSteamLogin,openCompanionGame}from './discord-activity-auth.js?v=web-26dd3adca2291bb4';
@@ -561,7 +561,7 @@ let privateRacePreview=null,privateRoundMessage='';
 // Live wallets: every 15 s only a tiny "did anything change?" check; the full state is fetched when it changed, and at
 // least once a minute (race card, Mリーグ status and voice status move with time). Nothing is fetched while hidden.
 // This small read is independent of wallet/animation polling and never replaces the game form.
-let communityEntries=[],communityBusy=false,communityOwner=null,communityStatus='確認中…';
+let communityEntries=[],communityBusy=false,communityOwner=null,communityStatus='確認中…',communityLastFull=0;
 function paintCommunity(){
  const list=$('.community-entries'),status=$('.community-status');
  if(!list)return;
@@ -570,14 +570,19 @@ function paintCommunity(){
  if(status)status.textContent=communityStatus;
 }
 async function refreshCommunity(){
- if(document.hidden||!live||!wallet.connected||communityBusy)return;
+ // The title has no community feed; never poll D1 for an invisible widget.
+ if(document.hidden||screen==='title'||!live||!wallet.connected||communityBusy)return;
  const owner=state.selfUserId;
- if(communityOwner!==owner){communityEntries=[];communityOwner=owner;}
+ if(communityOwner!==owner){communityEntries=[];communityLastFull=0;communityOwner=owner;}
+ const full=Date.now()-communityLastFull>=5*60_000||communityEntries.length===0;
+ const since=full?null:communityEntries[0].time;
  communityBusy=true;
  try{
-  const data=await wallet.feed();
+  const data=await wallet.feed(since);
   if(!live||state.selfUserId!==owner)return;
-  communityEntries=data.entries;communityStatus='更新 '+new Date().toLocaleTimeString('ja-JP');
+  communityEntries=mergeCommunityEntries(communityEntries,data.entries,data.incremental===true);
+  if(!data.incremental)communityLastFull=Date.now();
+  communityStatus='更新 '+new Date().toLocaleTimeString('ja-JP');
  }catch{communityStatus='更新が止まっています。自動で再接続します。';}
  finally{communityBusy=false;paintCommunity();}
 }
