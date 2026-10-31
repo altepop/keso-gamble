@@ -2,6 +2,8 @@
 // Authentication + owner authorization are enforced in kp-api.ts, never by the UI.
 import type {KpEnv} from './kp.ts';
 import {prepareStocks} from './stock-market.ts';
+// @ts-expect-error Browser and Worker share the same fictional news catalog.
+import {resolveStockStory,validateCustomStory} from '../../../js/stock-stories.js';
 // @ts-expect-error Shared browser's stock table.
 import {MARKET} from '../../../js/engine.js';
 
@@ -24,12 +26,16 @@ export async function ensureStockOperator(env:KpEnv){
    before_price INTEGER NOT NULL,after_price INTEGER NOT NULL,market_version INTEGER NOT NULL,
    history TEXT NOT NULL,at INTEGER NOT NULL,PRIMARY KEY(guild,user,id)
   )`),
-  env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS stock_admin_move_apply AFTER INSERT ON stock_admin_moves BEGIN
+  // Reinstall atomically on the first operator action per Worker instance.
+  // Older databases already have this trigger with a hard-coded generic title.
+  // Bundling DROP + CREATE in one D1 batch keeps market updates atomic.
+  env.DB.prepare('DROP TRIGGER IF EXISTS stock_admin_move_apply'),
+  env.DB.prepare(`CREATE TRIGGER stock_admin_move_apply AFTER INSERT ON stock_admin_moves BEGIN
    INSERT OR IGNORE INTO stock_ticks(guild,version,prices,at)
     SELECT guild,version,prices,at FROM stock_markets WHERE guild=NEW.guild;
    UPDATE stock_markets
     SET prices=json_set(prices,'$.'||NEW.symbol,NEW.after_price),
-        history=json_set(history,'$.'||NEW.symbol,json(NEW.history)),
+        history=json_set(history,'$.'||NEW.symbol,json_extract(NEW.history,'$.prices')),
         version=version+1,token='admin:'||NEW.user||':'||NEW.id
     WHERE guild=NEW.guild AND version=NEW.market_version;
    SELECT CASE WHEN changes()!=1 THEN RAISE(ABORT,'Stock market changed') END;
@@ -37,7 +43,7 @@ export async function ensureStockOperator(env:KpEnv){
    INSERT INTO stock_ticks(guild,version,prices,at)
     SELECT guild,version,prices,NEW.at FROM stock_markets WHERE guild=NEW.guild;
    INSERT OR IGNORE INTO stock_news(guild,id,symbol,label,bps,at,applied_version,applied_bps,applied_at)
-    VALUES(NEW.guild,'admin:'||NEW.user||':'||NEW.id,NEW.symbol,'運営による特別相場イベント',
+    VALUES(NEW.guild,'admin:'||NEW.user||':'||NEW.id,NEW.symbol,json_extract(NEW.history,'$.headline')||char(10)||json_extract(NEW.history,'$.body'),
        ROUND(10000.0*(NEW.after_price-NEW.before_price)/NEW.before_price),NEW.at,
        NEW.market_version+1,ROUND(10000.0*(NEW.after_price-NEW.before_price)/NEW.before_price),NEW.at);
   END`)
@@ -48,15 +54,24 @@ export async function applyStockShock(env:KpEnv,guild:string,user:string,id:stri
  if(!/^[a-zA-Z0-9-]{16,80}$/.test(id))throw Error('操作IDが不正です。');
  if(!/^\d{15,22}$/.test(user)||!/^\d{15,22}$/.test(guild))throw Error('接続情報が不正です。');
  const symbol=args.symbol,direction=args.direction,strength=args.strength;
+ const eventId=typeof args.eventId==='string'?args.eventId:'auto';
+ // The server independently selects/validates the announcement. Do not trust
+ // a client-provided preset text. Custom stories are restricted to the owner.
+ const story=eventId==='custom'?validateCustomStory(args.headline,args.body)
+  :resolveStockStory(symbol as string,direction as string,eventId,id);
+
  if(typeof symbol!=='string'||!IDS.has(symbol)||!['up','down'].includes(direction as string)||!STRENGTHS.includes(strength as number))
   throw Error('銘柄・方向・強さを確認してください。');
  await ensureStockOperator(env);
  for(let attempt=0;attempt<5;attempt++){
-  const previous=await env.DB.prepare('SELECT symbol,direction,strength,before_price,after_price,market_version FROM stock_admin_moves WHERE guild=? AND user=? AND id=?')
-   .bind(guild,user,id).first<{symbol:string;direction:string;strength:number;before_price:number;after_price:number;market_version:number}>();
+  const previous=await env.DB.prepare('SELECT symbol,direction,strength,before_price,after_price,market_version,history FROM stock_admin_moves WHERE guild=? AND user=? AND id=?')
+   .bind(guild,user,id).first<{symbol:string;direction:string;strength:number;before_price:number;after_price:number;market_version:number;history:string}>();
   if(previous){
-   if(previous.symbol!==symbol||previous.direction!==direction||previous.strength!==strength)throw Error('操作IDが重複しています。');
-   return {symbol,direction,strength,before:previous.before_price,after:previous.after_price,version:previous.market_version+1,replayed:true};
+   const stored=JSON.parse(previous.history) as {headline?:string;body?:string;eventId?:string};
+   if(previous.symbol!==symbol||previous.direction!==direction||previous.strength!==strength||
+      (stored.headline!==undefined&&(stored.headline!==story.headline||stored.body!==story.body||stored.eventId!==eventId)))
+     throw Error('操作IDが重複しています。');
+   return {symbol,direction,strength,before:previous.before_price,after:previous.after_price,version:previous.market_version+1,headline:stored.headline??'運営による特別相場イベント',body:stored.body??'',replayed:true};
   }
   const market=await prepareStocks(env,guild,undefined,now);
   const before=market.prices[symbol],after=stockShockPrice(before,direction,strength);
@@ -66,8 +81,8 @@ export async function applyStockShock(env:KpEnv,guild:string,user:string,id:stri
    const result=await env.DB.prepare(`INSERT INTO stock_admin_moves(guild,user,id,symbol,direction,strength,before_price,after_price,market_version,history,at)
     SELECT ?,?,?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM stock_markets WHERE guild=? AND version=?)
     ON CONFLICT(guild,user,id) DO NOTHING`)
-    .bind(guild,user,id,symbol,direction,strength,before,after,market.version,JSON.stringify(history),now,guild,market.version).run();
-   if(result.meta.changes)return {symbol,direction,strength,before,after,version:market.version+1,replayed:false};
+    .bind(guild,user,id,symbol,direction,strength,before,after,market.version,JSON.stringify({prices:history,headline:story.headline,body:story.body,eventId}),now,guild,market.version).run();
+   if(result.meta.changes)return {symbol,direction,strength,before,after,version:market.version+1,headline:story.headline,body:story.body,replayed:false};
   }catch(error){
    if(!String((error as Error)?.message).includes('Stock market changed'))throw error;
   }
