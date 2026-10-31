@@ -1,13 +1,13 @@
 import {privateCasinoAllowed} from '../src/private-casino.ts';
 import {memberNames} from '../src/member-names.ts';
-import {communityFeed,publicTrade} from '../src/community-feed.ts';
+import {communityFeed,feedRevision,publicTrade} from '../src/community-feed.ts';
 import test from 'node:test';
 import { URL as NodeURL } from 'node:url';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import {readFileSync,readdirSync}from'node:fs';
 import {generateKeyPairSync,randomBytes,createCipheriv,publicEncrypt}from'node:crypto';
-import {initializeKp,syncKpAccounts,collectKpMatch,drainKpInbox,issueKpCode,exchangeKpCode,kpSession,decryptKpMapping,kpCreditLine}from'../src/kp.ts';
+import {initializeKp,syncKpAccounts,collectKpMatch,drainKpInbox,issueKpCode,exchangeKpCode,kpSession,decryptKpMapping,kpCreditLine,createKpSession}from'../src/kp.ts';
 import type{KpEnv,KpMapping}from'../src/kp.ts';
 import {readKpState,operateKp,kpApi}from'../src/kp-api.ts';
 const guild='100000000000000100',one='100000000000000101',two='100000000000000102';
@@ -605,4 +605,47 @@ test('定期的なコミュニティ表示の名前解決は保存済みの複�
  assert.equal(names.get(one),'一号');
  assert.equal(names.get(two),'二号');
  assert.equal(f.queries(),1,'two persisted names must be fetched in one indexed SELECT');
+});
+
+test('5秒コミュニティ更新は変更がない場合に40件の履歴を再読込しない。新規投稿は即反映し、権限も維持',async()=>{
+ const f=await fixture();
+ const token=await createKpSession(f.env,guild,one);
+ const db=f.env.DB as unknown as {prepare:(text:string)=>unknown};
+ const raw=db.prepare;
+ let feedScans=0,markerReads=0;
+ db.prepare=((text:string)=>{
+  if(text.includes('SELECT id,user,at,json_extract(response'))feedScans++;
+  if(text.includes('SELECT MAX(rowid) AS latest FROM kp_operations'))markerReads++;
+  return raw(text);
+ }) as typeof db.prepare;
+ const get=(revision?:number,authorized=true)=>kpApi(new Request('https://example.test/api/kp/feed'+(revision===undefined?'':'?revision='+revision),{headers:authorized?{Authorization:'Bearer '+token}:{}}),f.env,mapping);
+ try{
+  const initial=await get();
+  assert.equal(initial.status,200);
+  const first=await initial.json() as {entries:Array<unknown>;revision:number;unchanged?:boolean};
+  assert.deepEqual(first.entries,[]);
+  assert.equal(first.revision,0);
+  assert.equal(feedScans,1);
+  const same=await get(first.revision);
+  assert.deepEqual(await same.json(),{unchanged:true,revision:0});
+  assert.equal(feedScans,1,'no full read for unchanged operations');
+  assert.equal(markerReads,2,'only a cheap one-row max() lookup for each poll');
+  const forbidden=await get(first.revision,false);
+  assert.equal(forbidden.status,401,'conditional requests must still authenticate');
+  assert.equal(feedScans,1);
+  f.sql.prepare("INSERT INTO kp_ledger VALUES(?,?,?,?,?,?)").run('feed-credit',guild,one,1000,'test',Date.now());
+  await operateKp(f.env,mapping,one,'feed-new-activity-0001','spin',{type:'red',amount:100});
+  const changed=await get(first.revision);
+  const latest=await changed.json() as {entries:Array<{label:string}>;revision:number};
+  assert(latest.revision>first.revision);
+  assert(latest.entries.length>=1);
+  assert.equal(feedScans,2,'new activity fetches the full feed promptly');
+  const still=await get(latest.revision);
+  assert.equal((await still.json() as {unchanged:boolean}).unchanged,true);
+  assert.equal(feedScans,2);
+  const force=await get();
+  assert.equal((await force.json() as {entries:unknown[]}).entries.length,latest.entries.length);
+  assert.equal(feedScans,3,'the client can force a full refresh for renamed members');
+  assert.equal(await feedRevision(f.env),latest.revision);
+ }finally{db.prepare=raw;}
 });
