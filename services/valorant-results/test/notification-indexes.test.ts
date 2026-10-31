@@ -17,13 +17,17 @@ test('D1 notification queue and racing match scans use indexes without dropping 
   batch:async(items:Array<{run:()=>unknown}>)=>{for(const item of items)item.run();return [];}} as unknown as D1Database;
  await ensureNotificationReadIndexes(db);
  await ensureNotificationReadIndexes(db);
- assert.equal(calls,2,'avoid repeating CREATE INDEX on every poll within an isolate');
+ assert.equal(calls,3,'avoid repeating CREATE INDEX on every poll within an isolate');
  const explain=(q:string,...args:unknown[])=>sql.prepare('EXPLAIN QUERY PLAN '+q).all(...args as never[]).map(x=>String(x.detail)).join('; ');
  const queue='SELECT 1 AS n FROM notifications WHERE sent=0 LIMIT 1';
  const rank='SELECT match_id,outcome,ended_at FROM notifications WHERE riot_id=? AND outcome IN (\'win\',\'loss\') ORDER BY ended_at DESC,match_id DESC LIMIT 40';
  assert.match(explain(queue),/notifications_pending_match/);
  assert.match(explain(rank,'One#JP1'),/notifications_crown_history/);
  assert.doesNotMatch(explain(rank,'One#JP1'),/USE TEMP B-TREE/);
+ const members="SELECT * FROM notifications WHERE match_id=? AND (outcome IS NULL OR outcome!='draw' OR mode!='escalation') ORDER BY riot_id";
+ assert.match(explain(members,'match-249'),/notifications_match_members/);
+ assert.doesNotMatch(explain(members,'match-249'),/USE TEMP B-TREE/);
+ assert.equal(sql.prepare(members).all('match-249').length,1);
  const before=sql.prepare('SELECT COUNT(*) AS c FROM notifications').get() as {c:number};
  assert.equal(before.c,250);
  assert.equal((sql.prepare(queue).get() as {n:number}).n,1);
