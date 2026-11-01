@@ -8,6 +8,7 @@ import {wheelView,covered,redNumbers,outcomeAngle} from './roulette-view.js?v=we
 import {makeEscalationWheel} from './escalation-roulette.js?v=web-e054fc2bb05b5f';
 import {connectDiscordActivity,isDiscordActivity,openSteamLogin,openCompanionGame}from './discord-activity-auth.js?v=web-e054fc2bb05b5f3f';
 import { createKpClient } from './kp-client.js?v=web-e054fc2bb05b5f3f';
+import { fullRefreshInterval } from './live-refresh-policy.js';
 import { fmt, fmt0 } from './format.js?v=web-e054fc2bb05b5f3f';
 import { submitClaim, approveClaim, issueDirective, completeDirective } from './progression.js?v=web-e054fc2bb05b5f3f';
 import { titleView, homeView, playView, directivesView, escapeHTML } from './progression-views.js?v=web-e054fc2bb05b5f3f';
@@ -623,8 +624,10 @@ addEventListener('input', e => {
 });
 const drafts = {};
 let privateRacePreview=null,privateRoundMessage='';
-// Live wallets: every 15 s only a tiny "did anything change?" check; the full state is fetched when it changed, and at
-// least once a minute (race card, Mリーグ status and voice status move with time). Nothing is fetched while hidden.
+// Live wallets: a cheap 15-second change pulse always updates KP when it changes.
+// Only race/Mリーグ/market/stable require 60s full refresh; other screens force
+// it every 120s, reducing heavy D1 reads while preserving reactive balances.
+// Nothing is fetched while hidden.
 // This small read is independent of wallet/animation polling and never replaces the game form.
 let communityEntries=[],communityBusy=false,communityOwner=null,communityStatus='確認中…';
 // Keep five-second freshness checks, but download the 40-row feed only on change.
@@ -659,12 +662,12 @@ async function refreshCommunity(){
 }
 setInterval(refreshCommunity,5000);
 addEventListener('visibilitychange',()=>{if(!document.hidden)refreshCommunity();});
-const FULL_EVERY=60000;let lastPulse=null,lastFull=0;
+let lastPulse=null,lastFull=0;
 async function refreshLive(){
   if(document.hidden)return;
   let pulse=null;
   try{pulse=await wallet.pulse();}catch{/* an older server or a network blip: fall back to the full state */}
-  if(pulse!==null&&pulse===lastPulse&&Date.now()-lastFull<FULL_EVERY&&!connectionError)return;
+  if(pulse!==null&&pulse===lastPulse&&Date.now()-lastFull<fullRefreshInterval(screen)&&!connectionError)return;
   await refreshWallet(false);
   if(!connectionError){lastPulse=pulse;lastFull=Date.now();}
 }
