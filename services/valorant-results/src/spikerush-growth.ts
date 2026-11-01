@@ -129,3 +129,32 @@ export async function spikeNote(env:KpEnv,id:string){
  await ensureSpikeGrowth(env);
  return (await env.DB.prepare('SELECT note FROM spike_rewards WHERE id=?').bind(id).first<{note:string}>())?.note??'';
 }
+
+/** Queue public milestone announcements through the existing results-bot webhook.
+ * Individual trial completion and trial requirements are strictly private.
+ * The stable event and role keys make inbox retries idempotent. */
+export async function queueSpikeMilestoneNotices(env:KpEnv,e:Pick<SpikeEvent,'id'|'guild'|'user'>){
+ const row=await env.DB.prepare("SELECT detail FROM spike_rewards WHERE id=? AND guild=? AND user=? UNION ALL SELECT detail FROM spike_overdrive_rewards WHERE id=? AND guild=? AND user=?")
+  .bind(e.id,e.guild,e.user,e.id,e.guild,e.user).first<{detail:string}>();
+ if(!row)return;
+ const detail=JSON.parse(row.detail) as {awakenedNow?:unknown;awakenings?:unknown};
+ const roles=Array.isArray(detail.awakenedNow)?detail.awakenedNow.filter((role:unknown):role is Role=>typeof role==='string'&&SPIKE_ROLES.includes(role as Role)):[];
+ if(!roles.length)return;
+ const before=Number(detail.awakenings);
+ if(!Number.isInteger(before)||before<0||before>=4||before+roles.length>4)return;
+ const labels:Record<Role,string>={Duelist:'デュエリスト',Initiator:'イニシエーター',Controller:'コントローラー',Sentinel:'センチネル'};
+ const now=Date.now();
+ const queue=async(id:string,content:string)=>{
+  await env.DB.prepare('INSERT OR IGNORE INTO mahjong_watch_posts(id,body,at) VALUES(?,?,?)')
+   .bind(id,JSON.stringify({content,allowed_mentions:{parse:[]}}),now).run();
+ };
+ for(let i=0;i<roles.length;i++){
+  const role=roles[i],total=before+i+1;
+  await queue('spike-awaken:'+e.id+':'+role,
+   '✨ **【SPIKE｜'+labels[role]+'覚醒】**\n<@'+e.user+'> が **'+labels[role]+'** を覚醒！\n🌟 覚醒ロール：**'+total+'/4**\n💰 次のスパイクラッシュから覚醒ボーナスが適用される。');
+ }
+ if(before+roles.length===4){
+  await queue('spike-overdrive:'+e.id,
+   '👑 **【SPIKE｜OVERDRIVE解放】**\n<@'+e.user+'> がついに **全4ロール覚醒！**\n🔥 **OVERDRIVE発動**\n💰 次の試合から、標準的な戦績で平均約800KP/試合へ。');
+ }
+}

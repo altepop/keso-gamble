@@ -18,7 +18,7 @@ const m=(agent=duelist.id,extra:Partial<SpikeMatch>={}):SpikeMatch=>({agent,kill
 const complete=():SpikeProfile=>({...initialSpikeProfile(),games:60,
  counts:Object.fromEntries(SPIKE_ROSTER.agents.map(a=>[a.id,2])),
  unlocked:['Duelist','Initiator','Controller','Sentinel'],
- trials:{duelist:true,initiator:true,controllerWins:SPIKE_ROSTER.agents.filter(a=>a.role==='Controller').map(a=>a.id),controllerWinCounts:Object.fromEntries(SPIKE_ROSTER.agents.filter(a=>a.role==='Controller').map(a=>[a.id,3])),sentinel:true}});
+ trials:{duelist:true,initiator:true,controllerWins:SPIKE_ROSTER.agents.filter(a=>a.role==='Controller').map(a=>a.id),controllerWinCounts:Object.fromEntries(SPIKE_ROSTER.agents.filter(a=>a.role==='Controller').map(a=>[a.id,3])),controllerKdAgents:SPIKE_ROSTER.agents.filter(a=>a.role==='Controller').map(a=>a.id),sentinel:true}});
 const raw=(id:string,extra:Partial<SpikeMatch>={}):Match=>{
  const v=m(duelist.id,extra);
  return {metadata:{match_id:id,is_completed:true,queue:{id:'spikerush'},started_at:new Date(v.startedAt).toISOString(),game_length_in_ms:v.endedAt-v.startedAt},
@@ -56,17 +56,17 @@ test('each of four trials has a unique verifiable achievement and old profiles r
  p.trials=nextSpikeTrials(p,m(initiator.id,{assists:7}));assert.equal(p.trials.initiator,true);
  p.trials=nextSpikeTrials(p,m(sentinel.id,{kills:5,deaths:0}));assert.equal(p.trials.sentinel,true);
  const controllers=SPIKE_ROSTER.agents.filter(a=>a.role==='Controller');
- for(const agent of controllers)p.trials=nextSpikeTrials(p,m(agent.id,{win:true}));
- assert.equal(p.trials.controllerWins.length,7);
- assert.equal(isOverdrive(p),false,'one win each is insufficient');
- for(const agent of controllers)p.trials=nextSpikeTrials(p,m(agent.id,{win:true}));
- assert.equal(isOverdrive(p),false,'two wins each are insufficient');
- for(const agent of controllers.slice(0,6))p.trials=nextSpikeTrials(p,m(agent.id,{win:true}));
- assert.equal(isOverdrive(p),false,'the seventh controller also needs three wins');
- p.trials=nextSpikeTrials(p,m(controllers[6].id,{win:true}));
- assert.equal(isOverdrive(p),true);
- p.trials=nextSpikeTrials(p,m(controllers[0].id,{win:true}));
- assert.equal(p.trials.controllerWinCounts![controllers[0].id],3,'victories cap at three');
+ for(const agent of controllers)p.trials=nextSpikeTrials(p,m(agent.id,{win:true,kills:3,deaths:2}));
+ assert.equal(p.trials.controllerKdAgents?.length,0,'K/D below 2 never qualifies, even with a win');
+ for(const agent of controllers.slice(0,6))p.trials=nextSpikeTrials(p,m(agent.id,{win:false,kills:4,deaths:2}));
+ assert.equal(p.trials.controllerKdAgents?.length,6);
+ assert.equal(isOverdrive(p),false,'all seven different controllers must qualify');
+ p.trials=nextSpikeTrials(p,m(controllers[6].id,{win:false,kills:1,deaths:0}));
+ assert.equal(isOverdrive(p),true,'positive kills with zero deaths qualify');
+ p.trials=nextSpikeTrials(p,m(controllers[0].id,{win:true,kills:6,deaths:3}));
+ assert.equal(p.trials.controllerKdAgents?.length,7,'repeated qualifying games do not add duplicates');
+ const zero=nextSpikeTrials({...p,trials:blankTrials()},m(controllers[0].id,{kills:0,deaths:0,assists:2}));
+ assert.equal(zero.controllerKdAgents?.length,0,'zero kills and zero deaths do not qualify');
  const old=complete();delete old.trials;assert.equal(isOverdrive(old),false,'old stored data does not silently gain new trials');
 });
 test('fully awakened matches average 800 KP and never fatigue after 10 or repeat agents',()=>{
@@ -118,7 +118,7 @@ test('hidden trial clues cost 10k once per role and reveal private exact progres
  const f=await fixture();f.seed(complete());
  const invisible=await spikeStatus(f.env,guild,one);
  assert.match(invisible,/Duelist/);assert.match(invisible,/Controller/);
- assert.match(invisible,/🔒 未公開/);assert.doesNotMatch(invisible,/12キル以上|7アシスト以上|7人全員のコントローラー/);
+ assert.match(invisible,/🔒 未公開/);assert.doesNotMatch(invisible,/12キル以上|7アシスト以上|7人のコントローラー全員/);
  assert.equal(invisible.length<1950,true,'Discord body must fit');
  f.credit(10000);
  const pay=await purchaseSpikeHint(f.env,guild,one,'Duelist',START);
@@ -159,5 +159,33 @@ test('overdrive transaction failure leaves wallet, profile, receipt and day coun
  f.sql.exec('DROP TRIGGER fail_overdrive');
  assert.equal(await collectKpMatch(f.env,mapping,raw('failed-event'),'p-one'),813);
  assert.equal(f.balance(),813);
+ f.close();
+});
+
+test('secret controller trial progress never creates a public notification',async()=>{
+ const f=await fixture();
+ assert.equal(await collectKpMatch(f.env,mapping,raw('secret-controller',{agent:controller.id,kills:4,deaths:2,win:false}),'p-one'),20);
+ assert.deepEqual(f.sql.prepare('SELECT id FROM mahjong_watch_posts').all(),[]);
+ assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM spike_profiles').get()!.n,1);
+ assert.equal(String(f.sql.prepare('SELECT data FROM spike_profiles').get()!.data).includes(controller.id),true);
+ f.close();
+});
+
+test('new role awakening and overdrive produce only two sanitized, once-only result-bot messages',async()=>{
+ const f=await fixture(),p=complete();
+ p.trials!.initiator=false;
+ f.seed(p);
+ const match=raw('spike-last-awakening',{agent:initiator.id,kills:3,assists:7,deaths:2,win:true});
+ const payout=await collectKpMatch(f.env,mapping,match,'p-one');
+ assert.ok(typeof payout==='number'&&payout>0);
+ const posts=f.sql.prepare("SELECT id,body FROM mahjong_watch_posts WHERE id LIKE 'spike-%' ORDER BY id").all() as Array<{id:string;body:string}>;
+ assert.equal(posts.length,2,'role awakening and overdrive each have their own post');
+ const messages=posts.map(x=>JSON.parse(x.body).content as string);
+ assert.ok(messages.some(x=>x.includes('イニシエーター覚醒')));
+ assert.ok(messages.some(x=>x.includes('OVERDRIVE解放')));
+ for(const message of messages)assert.doesNotMatch(message,/7アシスト|12キル|K\/D|試練|3勝|21勝|2回使用/);
+ for(const entry of posts)assert.deepEqual(JSON.parse(entry.body).allowed_mentions,{parse:[]});
+ assert.equal(await collectKpMatch(f.env,mapping,match,'p-one'),payout,'repeated settlement returns same reward');
+ assert.equal(f.sql.prepare("SELECT COUNT(*) AS n FROM mahjong_watch_posts WHERE id LIKE 'spike-%'").get()!.n,2,'no duplicated milestones');
  f.close();
 });
