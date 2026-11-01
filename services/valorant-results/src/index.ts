@@ -143,6 +143,15 @@ async function api<T>(env: Env, path: string): Promise<T> {
 }
 
 
+/** Per-cron rank lookup is indexed by monitor_state's key PRIMARY KEY.
+ * A per-run map caches negative results too; future runs always recheck DB. */
+export async function monitorRankState(db:D1Database,cache:Map<string,string>,key:string):Promise<string|undefined>{
+ if(!cache.has(key)){
+  const row=await db.prepare('SELECT value FROM monitor_state WHERE key=?').bind(key).first<{value:string}>();
+  cache.set(key,row?.value??'');
+ }
+ return cache.get(key);
+}
 async function saveMatch(env: Env, match: Match, player: Player, account: Account, kpRun:KpRun|null,reservations:Map<string,string>,saved:Set<string>,ranks:Map<string,string>=new Map()): Promise<'excluded' | 'beforeMonitoring' | 'newResults' | 'duplicates'> {
   const mode = match.metadata?.queue?.id;
   const ordinary = resultMessage(match, account.puuid, player.name?.trim() || parseId(player.riotId)[0]);
@@ -187,11 +196,7 @@ async function saveMatch(env: Env, match: Match, player: Player, account: Accoun
     // The previous cron read up to 300 historic rank rows every minute even
     // when no one played (224,483 D1 rows/day across monitor_state queries).
     // Cache misses within the run; a later cron reloads durable changes.
-    if(!ranks.has(key)){
-      const row=await env.DB.prepare('SELECT value FROM monitor_state WHERE key=?').bind(key).first<{value:string}>();
-      ranks.set(key,row?.value??'');
-    }
-    const stored = ranks.get(key);
+    const stored = await monitorRankState(env.DB,ranks,key);
     let change: RankChange | null = stored?.startsWith('{') ? JSON.parse(stored) as RankChange : null;
     // At most three lookups per run, and one history request per player per run.
     const lookups = Number(ranks.get('__lookups') ?? 0);
