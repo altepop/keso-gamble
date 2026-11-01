@@ -56,10 +56,14 @@ export function luxuryPanel(state,{readonly=false,confirmation=null}={}){
  ].join('');
  const items=LUXURY.map(i=>`<div class="history-entry"><div><strong>${i.label}</strong> ${kp(stockPrice(i.price,state.stockBenefits))}${state.stockBenefits?.percent?' <small>株主優待</small>':''}</div><div class="helper">${i.detail}</div><div class="action-row"><button type="button" class="action-btn" data-action="luxury" data-item="${i.id}" ${readonly?'disabled title="本番KP口座への接続が必要"':''}>${readonly?'本番口座で購入':'買う'}</button></div></div>`).join('');
  const selected=LUXURY.find(i=>i.id===confirmation?.item);
- const detail=selected&&confirmation?.args?selected.needs==='target'?(members.find(m=>m.id===confirmation.args.target)?.name??'未選択'):
-  selected.needs==='text'?confirmation.args.text:selected.needs==='title'?confirmation.args.title:
-  ['horse','retired'].includes(selected.needs)?(horses.find(h=>String(h.id)===String(confirmation.args.horseId))?.name??'未選択'):null;
- const approval=selected&&!readonly?`<div class="luxury-confirmation" role="group" aria-label="高級品の購入確認">
+ let detail=null;
+ if(selected&&confirmation?.args){
+  if(selected.needs==='target')detail=members.find(m=>m.id===confirmation.args.target)?.name??'未選択';
+  else if(selected.needs==='text')detail=confirmation.args.text;
+  else if(selected.needs==='title')detail=confirmation.args.title;
+  else if(['horse','retired'].includes(selected.needs))detail=horses.find(h=>String(h.id)===String(confirmation.args.horseId))?.name??'未選択';
+ }
+ const approval=selected&&!readonly?`<div class="luxury-confirmation stock-shock-confirmation" role="group" aria-label="高級品の購入確認">
  <h3>購入の最終確認</h3><p><strong>${escapeHTML(selected.label)}</strong>を <strong>${kp(confirmation.price)}</strong> で購入します。</p>
  ${detail!==null?`<p class="helper">指定内容：${escapeHTML(detail)}</p>`:''}
  <p class="helper">確定すると本番口座からKPが減る。入力内容を変更した場合は、もう一度確認してください。</p>
