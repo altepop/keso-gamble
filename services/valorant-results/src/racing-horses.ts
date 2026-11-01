@@ -16,12 +16,12 @@ export async function ensureHorses(env:KpEnv){
  await env.DB.batch([
   env.DB.prepare(`CREATE TABLE IF NOT EXISTS kp_horses(id TEXT PRIMARY KEY,guild TEXT NOT NULL,owner TEXT NOT NULL,name TEXT NOT NULL,grade INTEGER NOT NULL,ability REAL NOT NULL,style INTEGER NOT NULL,box TEXT NOT NULL,price INTEGER NOT NULL,created_at INTEGER NOT NULL,races INTEGER NOT NULL DEFAULT 0,wins INTEGER NOT NULL DEFAULT 0,seconds INTEGER NOT NULL DEFAULT 0,thirds INTEGER NOT NULL DEFAULT 0,earnings INTEGER NOT NULL DEFAULT 0,retired_at INTEGER,sold_at INTEGER,last_race INTEGER)`),
   env.DB.prepare('CREATE TABLE IF NOT EXISTS kp_race_fields(guild TEXT NOT NULL,race INTEGER NOT NULL,decided_at INTEGER NOT NULL,PRIMARY KEY(guild,race))'),
-  // D1 Insights 24h: 4,177 nickname-history reads / 260,611 scanned rows.
-  // The PK is by id; this covering seek stops full history scans for each horse.
-  env.DB.prepare('CREATE INDEX IF NOT EXISTS kp_horse_runs_horse_recent ON kp_horse_runs(horse,race DESC,rank,win_odds,favourite)'),
   env.DB.prepare('CREATE TABLE IF NOT EXISTS kp_race_entries(guild TEXT NOT NULL,race INTEGER NOT NULL,gate_order INTEGER NOT NULL,horse TEXT NOT NULL,PRIMARY KEY(guild,race,horse))'),
   env.DB.prepare('CREATE TABLE IF NOT EXISTS kp_entry_conditions(guild TEXT NOT NULL,race INTEGER NOT NULL,horse TEXT NOT NULL,condition INTEGER NOT NULL,PRIMARY KEY(guild,race,horse))'),
   env.DB.prepare('CREATE TABLE IF NOT EXISTS kp_horse_runs(id TEXT PRIMARY KEY,guild TEXT NOT NULL,race INTEGER NOT NULL,horse TEXT NOT NULL,rank INTEGER NOT NULL,win_odds INTEGER NOT NULL,favourite INTEGER NOT NULL)'),
+  // D1 Insights 24h: 4,177 nickname-history reads / 260,611 scanned rows.
+  // The PK is by id; this covering seek stops full history scans for each horse.
+  env.DB.prepare('CREATE INDEX IF NOT EXISTS kp_horse_runs_horse_recent ON kp_horse_runs(horse,race DESC,rank,win_odds,favourite)'),
   env.DB.prepare('CREATE TABLE IF NOT EXISTS kp_horse_results(id TEXT PRIMARY KEY,guild TEXT NOT NULL,race INTEGER NOT NULL,horse TEXT NOT NULL,owner TEXT NOT NULL,rank INTEGER NOT NULL,prize INTEGER NOT NULL CHECK(typeof(prize)=\'integer\' AND prize>=0),at INTEGER NOT NULL,UNIQUE(guild,race,horse))'),
   // A prize credits the owner's wallet and updates the record in the same statement.
   env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS kp_horse_result_apply AFTER INSERT ON kp_horse_results BEGIN
