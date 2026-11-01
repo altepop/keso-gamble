@@ -71,7 +71,7 @@ export function quoteSpike(p:SpikeProfile,m:SpikeMatch,dayGame:number){
  const remainder=fraction(total.n%total.d,total.d),next:SpikeProfile={games:p.games+1,counts:{...p.counts,[m.agent]:Math.min(2,(p.counts[m.agent]??0)+1)},unlocked:progress.filter(r=>r.unlocked).map(r=>r.role),recent:[m.agent,...p.recent].slice(0,4),carryN:String(remainder.n),carryD:String(remainder.d),trials:nextSpikeTrials(p,m)};
  next.unlocked=spikeProgress(next).filter(r=>r.unlocked).map(r=>r.role);
  const amount=Number(whole),growth=Number(display(sub(exact,fraction(base))).toFixed(4));
- const breakdown={base,growth,dayGame,dailyFactor:display(fatigue),repeatFactor:display(repeat),overdrive,awakenings,carryBefore:p.carryN+'/'+p.carryD,carryAfter:next.carryN+'/'+next.carryD,gamesBefore:p.games,rolesBefore:progress,unlockedNow:next.unlocked.filter(r=>!progress.find(v=>v.role===r)?.unlocked),awakenedNow:spikeProgress(next).filter(r=>r.awakened&&!progress.find(x=>x.role===r.role)?.awakened).map(r=>r.role)};
+ const breakdown={base,growth,dayGame,dailyFactor:display(fatigue),repeatFactor:display(repeat),overdrive,awakenings,carryBefore:p.carryN+'/'+p.carryD,carryAfter:next.carryN+'/'+next.carryD,gamesBefore:p.games,agentUsesBefore:p.counts[m.agent]??0,rolesBefore:progress,unlockedNow:next.unlocked.filter(r=>!progress.find(v=>v.role===r)?.unlocked),awakenedNow:spikeProgress(next).filter(r=>r.awakened&&!progress.find(x=>x.role===r.role)?.awakened).map(r=>r.role)};
  const note=`（${overdrive?'👑 OVERDRIVE・':''}基礎${base}・補正${Number(growth.toFixed(2))}・端数精算 ${amount} KP）`;
  return {amount,next,note,breakdown};
 }
@@ -133,21 +133,28 @@ export async function spikeNote(env:KpEnv,id:string){
 /** Queue public milestone announcements through the existing results-bot webhook.
  * Individual trial completion and trial requirements are strictly private.
  * The stable event and role keys make inbox retries idempotent. */
-export async function queueSpikeMilestoneNotices(env:KpEnv,e:Pick<SpikeEvent,'id'|'guild'|'user'>){
- const row=await env.DB.prepare("SELECT detail FROM spike_rewards WHERE id=? AND guild=? AND user=? UNION ALL SELECT detail FROM spike_overdrive_rewards WHERE id=? AND guild=? AND user=?")
-  .bind(e.id,e.guild,e.user,e.id,e.guild,e.user).first<{detail:string}>();
+export async function queueSpikeMilestoneNotices(env:KpEnv,e:Pick<SpikeEvent,'id'|'guild'|'puuid'|'user'>){
+ const row=await env.DB.prepare("SELECT agent,detail FROM spike_rewards WHERE id=? AND guild=? AND puuid=? AND user=? UNION ALL SELECT agent,detail FROM spike_overdrive_rewards WHERE id=? AND guild=? AND puuid=? AND user=?")
+  .bind(e.id,e.guild,e.puuid,e.user,e.id,e.guild,e.puuid,e.user).first<{agent:string;detail:string}>();
  if(!row)return;
- const detail=JSON.parse(row.detail) as {awakenedNow?:unknown;awakenings?:unknown};
+ const detail=JSON.parse(row.detail) as {agentUsesBefore?:unknown;awakenedNow?:unknown;awakenings?:unknown};
  const roles=Array.isArray(detail.awakenedNow)?detail.awakenedNow.filter((role:unknown):role is Role=>typeof role==='string'&&SPIKE_ROLES.includes(role as Role)):[];
- if(!roles.length)return;
- const before=Number(detail.awakenings);
- if(!Number.isInteger(before)||before<0||before>=4||before+roles.length>4)return;
- const labels:Record<Role,string>={Duelist:'デュエリスト',Initiator:'イニシエーター',Controller:'コントローラー',Sentinel:'センチネル'};
  const now=Date.now();
  const queue=async(id:string,content:string)=>{
   await env.DB.prepare('INSERT OR IGNORE INTO mahjong_watch_posts(id,body,at) VALUES(?,?,?)')
    .bind(id,JSON.stringify({content,allowed_mentions:{parse:[]}}),now).run();
  };
+ // Announce only the transition 1 -> 2. Older match records have no marker,
+ // so deploying this feature cannot retroactively flood the results channel.
+ const agent=roster.agents.find(a=>a.id===row.agent);
+ if(detail.agentUsesBefore===1&&agent){
+  await queue('spike-agent:'+e.guild+':'+e.puuid+':'+agent.id,
+   '✅ **【SPIKE｜エージェント育成完了】**\n<@'+e.user+'> が **'+agent.name+'** の通常育成を完了！\n🧬 使用回数：**2/2**');
+ }
+ if(!roles.length)return;
+ const before=Number(detail.awakenings);
+ if(!Number.isInteger(before)||before<0||before>=4||before+roles.length>4)return;
+ const labels:Record<Role,string>={Duelist:'デュエリスト',Initiator:'イニシエーター',Controller:'コントローラー',Sentinel:'センチネル'};
  for(let i=0;i<roles.length;i++){
   const role=roles[i],total=before+i+1;
   await queue('spike-awaken:'+e.id+':'+role,
