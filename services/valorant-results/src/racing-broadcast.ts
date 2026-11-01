@@ -18,10 +18,20 @@ export async function ensureBroadcast(env:KpEnv){
   env.DB.prepare('CREATE INDEX IF NOT EXISTS race_broadcast_video ON race_broadcasts(video,race)'),
  ]);ready.add(env.DB);
 }
-export function raceShow(card:any,seed:string):RaceShow{
+export function raceShow(card:any,seed:string,special=false):RaceShow{
  const result=raceResult(card,seed),timeline=raceTimeline(card,result,seed);
+ const regular=raceCommentary(card,result,timeline,raceOdds(card),seed);
+ // Narrative only: horses, odds, seed, race order and actual KP remain unchanged.
+ const vdk=special?[
+  {t:0,text:'VDK、0デスを守ったまま試合終了目前！競馬場も祝勝会の準備です！'},
+  {t:10000,text:'残りわずか、あとは終わるだけ。ここから死ぬなんてこと、まさかありませんよね？'},
+  {t:20000,text:'0デスを失う可能性はない！……いや、まだ試合は終わっていません！'},
+  {t:32000,text:'最終直線！VDK、今こそ生き残るとき！絶対に振り返るな！'},
+  {t:42000,text:'あああああ！終了間際に1デス！0デスの夢、ゴール直前で粉砕！'},
+  {t:49000,text:'0デスで伝説になるはずが、1デスで伝説に！VDK、歴史的やらかし達成！'},
+ ]:[];
  // Renderer receives no seed, owner IDs, account balances or private API credentials.
- return {card:{id:card.id,start:card.start,name:card.name,size:card.size,horses:card.horses.map((h:any)=>({number:h.number,name:h.name}))},timeline,order:result.order,commentary:raceCommentary(card,result,timeline,raceOdds(card),seed),odds:raceOdds(card)};
+ return {card:{id:card.id,start:card.start,name:card.name,size:card.size,horses:card.horses.map((h:any)=>({number:h.number,name:h.name}))},timeline,order:result.order,commentary:[...regular,...vdk].sort((a,b)=>a.t-b.t),odds:raceOdds(card)};
 }
 const clean=(s:string)=>s.replace(/[@`*_~<>|\r\n]/g,'').slice(0,65);
 export const broadcastStep=(start:number,now:number)=>now<start?0:now>=start+RUN_MS?11:1+Math.floor((now-start)/5000);
@@ -46,7 +56,7 @@ export async function prepareRaceBroadcast(env:BroadcastEnv,mapping:KpMapping,no
   if(!bigRaceName(id)&&!fillerCrownName(id)&&!crown&&!entries.length&&!bets)continue;
   const card={...raceCard(id,undefined,entries),...(crown?{name:crown.name}:{})};
   const {seed}=await raceSeed(env,mapping.guildId,id);
-  await env.DB.prepare('INSERT OR IGNORE INTO race_broadcasts(guild,race,snapshot) VALUES(?,?,?)').bind(mapping.guildId,id,JSON.stringify(raceShow(card,seed))).run();
+  await env.DB.prepare('INSERT OR IGNORE INTO race_broadcasts(guild,race,snapshot) VALUES(?,?,?)').bind(mapping.guildId,id,JSON.stringify(raceShow(card,seed,crown?.kind==='vdklastdeath'))).run();
  }
  await env.RACE_BROADCAST.get(env.RACE_BROADCAST.idFromName('guild:'+mapping.guildId)).fetch('https://race/ensure',{method:'POST',body:JSON.stringify({guild:mapping.guildId})});
 }
