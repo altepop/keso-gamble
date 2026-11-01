@@ -549,7 +549,7 @@ test('member name aliases bind a unique guild wallet once, never a colliding or 
  assert.equal((await memberNames(f.env,'other-guild',base,config)).has(one),false);
  f.sql.prepare('DELETE FROM kp_settings WHERE key=?').run('member-name:'+guild+':'+one.slice(-4));
  assert.equal((await memberNames(f.env,guild,base,config)).has(one),false,'initial collision stays unassigned');
- assert.equal((await memberNames(f.env,guild,base,{guildId:guild,names:[{suffix:'9999',name:'Absent'}]})).size,1);
+ assert.deepEqual((await memberNames(f.env,guild,base,{guildId:guild,names:[{suffix:'9999',name:'Absent'}]})),new Map([...base,['827801943928995840','小林']]));
  const renamed=await memberNames(f.env,guild,base,{guildId:guild,names:[{suffix:two.slice(-4),name:'New name'}]});assert.equal(renamed.get(two),'New name');
 });
 
@@ -639,7 +639,7 @@ test('explicit member IDs use exact matching even when suffixes collide and pres
  const names=await memberNames(f.env,guild,base,config);
  assert.equal(names.get(one),'New display');assert.equal(names.has(collision),false);assert.equal(names.get(two),'Old alias');assert.equal(base.get(two),'Existing');
  assert.equal((await memberNames(f.env,'other-guild',base,config)).has(one),false);
- for(const names of [[{userId:one,suffix:one.slice(-4),name:'Invalid'}],[{userId:'123',name:'Invalid'}],[{userId:one,name:'A'},{userId:one,name:'B'}]])assert.deepEqual(await memberNames(f.env,guild,base,{guildId:guild,names}),base);
+ for(const names of [[{userId:one,suffix:one.slice(-4),name:'Invalid'}],[{userId:'123',name:'Invalid'}],[{userId:one,name:'A'},{userId:one,name:'B'}]])assert.deepEqual(await memberNames(f.env,guild,base,{guildId:guild,names}),new Map([...base,['827801943928995840','小林']]));
 });
 
 test('定期的なコミュニティ表示の名前解決は保存済みの複数名を1回で取得する',async()=>{
