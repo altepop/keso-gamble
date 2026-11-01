@@ -5,7 +5,6 @@ import {enqueue,ensurePosts} from './racing-posts.ts';
 
 export const DM_CHALLENGE_PRIZE=5000;
 export const DM_CHALLENGE_POLICY='dm-daily-40k-v1';
-const DAY_MS=86_400_000;
 export const dmDay=(at:number)=>new Date(at+9*3_600_000).toISOString().slice(0,10);
 const ready=new WeakMap<object,Promise<void>>();
 
@@ -13,6 +12,7 @@ const ready=new WeakMap<object,Promise<void>>();
 export async function ensureDmChallenge(env:KpEnv){
  const cached=ready.get(env.DB);if(cached)return cached;
  const task=Promise.resolve(env.DB.batch([
+  env.DB.prepare("INSERT OR IGNORE INTO kp_settings(key,value) VALUES('dm_challenge_started_at',?)").bind(String(Date.now())),
   env.DB.prepare(`CREATE TABLE IF NOT EXISTS dm_challenges(
    guild TEXT NOT NULL,user TEXT NOT NULL,puuid TEXT NOT NULL,day TEXT NOT NULL,
    armed_at INTEGER NOT NULL,match TEXT,award INTEGER,
