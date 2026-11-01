@@ -18,7 +18,7 @@ const m=(agent=duelist.id,extra:Partial<SpikeMatch>={}):SpikeMatch=>({agent,kill
 const complete=():SpikeProfile=>({...initialSpikeProfile(),games:60,
  counts:Object.fromEntries(SPIKE_ROSTER.agents.map(a=>[a.id,2])),
  unlocked:['Duelist','Initiator','Controller','Sentinel'],
- trials:{duelist:true,initiator:true,controllerWins:SPIKE_ROSTER.agents.filter(a=>a.role==='Controller').map(a=>a.id),controllerWinCounts:Object.fromEntries(SPIKE_ROSTER.agents.filter(a=>a.role==='Controller').map(a=>[a.id,3])),sentinel:true}});
+ trials:{duelist:true,initiator:true,controllerWins:SPIKE_ROSTER.agents.filter(a=>a.role==='Controller').map(a=>a.id),controllerWinCounts:Object.fromEntries(SPIKE_ROSTER.agents.filter(a=>a.role==='Controller').map(a=>[a.id,3])),controllerKdAgents:SPIKE_ROSTER.agents.filter(a=>a.role==='Controller').map(a=>a.id),sentinel:true}});
 const raw=(id:string,extra:Partial<SpikeMatch>={}):Match=>{
  const v=m(duelist.id,extra);
  return {metadata:{match_id:id,is_completed:true,queue:{id:'spikerush'},started_at:new Date(v.startedAt).toISOString(),game_length_in_ms:v.endedAt-v.startedAt},
@@ -56,17 +56,17 @@ test('each of four trials has a unique verifiable achievement and old profiles r
  p.trials=nextSpikeTrials(p,m(initiator.id,{assists:7}));assert.equal(p.trials.initiator,true);
  p.trials=nextSpikeTrials(p,m(sentinel.id,{kills:5,deaths:0}));assert.equal(p.trials.sentinel,true);
  const controllers=SPIKE_ROSTER.agents.filter(a=>a.role==='Controller');
- for(const agent of controllers)p.trials=nextSpikeTrials(p,m(agent.id,{win:true}));
- assert.equal(p.trials.controllerWins.length,7);
- assert.equal(isOverdrive(p),false,'one win each is insufficient');
- for(const agent of controllers)p.trials=nextSpikeTrials(p,m(agent.id,{win:true}));
- assert.equal(isOverdrive(p),false,'two wins each are insufficient');
- for(const agent of controllers.slice(0,6))p.trials=nextSpikeTrials(p,m(agent.id,{win:true}));
- assert.equal(isOverdrive(p),false,'the seventh controller also needs three wins');
- p.trials=nextSpikeTrials(p,m(controllers[6].id,{win:true}));
- assert.equal(isOverdrive(p),true);
- p.trials=nextSpikeTrials(p,m(controllers[0].id,{win:true}));
- assert.equal(p.trials.controllerWinCounts![controllers[0].id],3,'victories cap at three');
+ for(const agent of controllers)p.trials=nextSpikeTrials(p,m(agent.id,{win:true,kills:3,deaths:2}));
+ assert.equal(p.trials.controllerKdAgents?.length,0,'K/D below 2 never qualifies, even with a win');
+ for(const agent of controllers.slice(0,6))p.trials=nextSpikeTrials(p,m(agent.id,{win:false,kills:4,deaths:2}));
+ assert.equal(p.trials.controllerKdAgents?.length,6);
+ assert.equal(isOverdrive(p),false,'all seven different controllers must qualify');
+ p.trials=nextSpikeTrials(p,m(controllers[6].id,{win:false,kills:1,deaths:0}));
+ assert.equal(isOverdrive(p),true,'positive kills with zero deaths qualify');
+ p.trials=nextSpikeTrials(p,m(controllers[0].id,{win:true,kills:6,deaths:3}));
+ assert.equal(p.trials.controllerKdAgents?.length,7,'repeated qualifying games do not add duplicates');
+ const zero=nextSpikeTrials({...p,trials:blankTrials()},m(controllers[0].id,{kills:0,deaths:0,assists:2}));
+ assert.equal(zero.controllerKdAgents?.length,0,'zero kills and zero deaths do not qualify');
  const old=complete();delete old.trials;assert.equal(isOverdrive(old),false,'old stored data does not silently gain new trials');
 });
 test('fully awakened matches average 800 KP and never fatigue after 10 or repeat agents',()=>{
@@ -118,7 +118,7 @@ test('hidden trial clues cost 10k once per role and reveal private exact progres
  const f=await fixture();f.seed(complete());
  const invisible=await spikeStatus(f.env,guild,one);
  assert.match(invisible,/Duelist/);assert.match(invisible,/Controller/);
- assert.match(invisible,/🔒 未公開/);assert.doesNotMatch(invisible,/12キル以上|7アシスト以上|7人全員のコントローラー/);
+ assert.match(invisible,/🔒 未公開/);assert.doesNotMatch(invisible,/12キル以上|7アシスト以上|7人のコントローラー全員/);
  assert.equal(invisible.length<1950,true,'Discord body must fit');
  f.credit(10000);
  const pay=await purchaseSpikeHint(f.env,guild,one,'Duelist',START);
