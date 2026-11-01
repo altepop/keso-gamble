@@ -49,8 +49,14 @@ test('exclusive rarity draws are deterministic, with stage weights and both supe
  }
  assert.ok(counts.big>3900&&counts.big<4400,'v6 big bet must occur approximately 1 in 24 games');
  let oldBig=0;
- for(let i=0;i<100000;i++)if(escalationFor('distribution-'+i+':'+puuid,'win',false)?.kind==='big')oldBig++;
+ const oldTiers=[0,0,0,0,0];
+ for(let i=0;i<100000;i++){
+  const old=escalationFor('distribution-'+i+':'+puuid,'win',false);
+  if(old?.kind==='big'){oldBig++;oldTiers[old.tier-1]++;}
+ }
  assert.ok(oldBig>14000&&oldBig<16000,'existing v5 games retain their 15% odds');
+ const originalShares=[0.4,0.3,0.2,0.08,0.02];
+ for(let i=0;i<5;i++)assert.ok(Math.abs(oldTiers[i]/oldBig-originalShares[i])<0.015,`v5 tier ${i+1}: ${oldTiers[i]}/${oldBig}`);
  assert.ok(counts['super-lucky']>60&&counts['super-lucky']<150);
  assert.ok(counts['super-unlucky']>60&&counts['super-unlucky']<150);
  // v6 tiers: 35/28/20/13/4 of all big bets, without altering the jackpot amounts.
