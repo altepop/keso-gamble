@@ -16,7 +16,8 @@ function game(id:string,kills=40,first=true,at=start+60000):Match{
 async function fixture(){
  const db=new DatabaseSync(':memory:');for(const item of kpSchema)db.exec(item);
  class Query {
-  constructor(public sql:string,public args:unknown[]=[]){}
+  sql:string;args:unknown[];
+  constructor(sql:string,args:unknown[]=[]){this.sql=sql;this.args=args;}
   bind(...args:unknown[]){return new Query(this.sql,args);}
   run(){const r=db.prepare(this.sql).run(...this.args as never[]);return {meta:{changes:Number(r.changes)}};}
   first<T>(){return db.prepare(this.sql).get(...this.args as never[]) as T|null;}
