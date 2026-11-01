@@ -50,9 +50,16 @@ export function nextSpikeTrials(p:SpikeProfile,m:SpikeMatch):SpikeTrials {
  if(role==='Duelist'&&m.kills>=12)t.duelist=true;
  if(role==='Initiator'&&m.assists>=7)t.initiator=true;
  if(role==='Sentinel'&&m.kills>=5&&m.deaths===0)t.sentinel=true;
- if(role==='Controller'&&m.win){
-  t.controllerWinCounts![m.agent]=Math.min(3,(t.controllerWinCounts?.[m.agent]??0)+1);
-  if(!t.controllerWins.includes(m.agent))t.controllerWins.push(m.agent);
+ if(role==='Controller'){
+  // One qualifying match with each controller. At 0 deaths, positive kills qualify.
+  // 0 kills / 0 deaths does not count as K/D 2.0.
+  if(m.kills>0&&(m.deaths===0||m.kills>=2*m.deaths)&&!t.controllerKdAgents!.includes(m.agent))
+   t.controllerKdAgents!.push(m.agent);
+  // Retain past win stats, but wins no longer unlock this trial.
+  if(m.win){
+   t.controllerWinCounts![m.agent]=Math.min(3,(t.controllerWinCounts?.[m.agent]??0)+1);
+   if(!t.controllerWins.includes(m.agent))t.controllerWins.push(m.agent);
+  }
  }
  return t;
 }
