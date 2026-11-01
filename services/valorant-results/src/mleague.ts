@@ -74,16 +74,31 @@ export function parseOfficialCards(html:string,year:number,d:MlData=data){
  }
  return out;
 }
+// M.LEAGUE calls mlData in several functions of the same minute-long cron run.
+// D1 Insights: 6,992 reads/day * 36 scanned rows for ml_cards alone.
+// Share a snapshot for 5 seconds in one Worker isolate, not across processes.
+// Updating the official calendar invalidates it before and after the writes.
+const mlViewCache=new WeakMap<object,{created:number;promise:Promise<MlView>}>();
+const ML_VIEW_TTL=5000;
 export async function storeCards(env:KpEnv,cards:ReturnType<typeof parseOfficialCards>,now:number){
+ mlViewCache.delete(env.DB);
  await ensureMl(env);
- for(const c of cards)await env.DB.prepare('INSERT INTO ml_cards(date,tbl,teams,at) VALUES(?,?,?,?) ON CONFLICT(date,tbl) DO UPDATE SET teams=excluded.teams,at=excluded.at WHERE ml_cards.teams!=excluded.teams').bind(c.date,c.table,JSON.stringify(c.teams),now).run();
+ try{
+  for(const c of cards)await env.DB.prepare('INSERT INTO ml_cards(date,tbl,teams,at) VALUES(?,?,?,?) ON CONFLICT(date,tbl) DO UPDATE SET teams=excluded.teams,at=excluded.at WHERE ml_cards.teams!=excluded.teams').bind(c.date,c.table,JSON.stringify(c.teams),now).run();
+ }finally{mlViewCache.delete(env.DB);}
 }
 /** The fixtures with official teams where the calendar has been read; only those are open for betting. */
 export async function mlData(env:KpEnv):Promise<MlView>{
  await ensureMl(env);
- const cards=(await env.DB.prepare('SELECT date,tbl,teams FROM ml_cards').all<{date:string;tbl:number;teams:string}>()).results;
- const official=new Map(cards.map(c=>[c.date+'#'+c.tbl,JSON.parse(c.teams) as string[]]));
- return {teams:data.teams,fixtures:data.fixtures.map(f=>{const teams=official.get(f.date+'#'+f.table);return teams?{...f,teams,confirmed:true}:{...f,confirmed:false};})};
+ const current=Date.now(),cached=mlViewCache.get(env.DB);
+ if(cached&&current-cached.created>=0&&current-cached.created<ML_VIEW_TTL)return cached.promise;
+ const promise=(async()=>{
+  const cards=(await env.DB.prepare('SELECT date,tbl,teams FROM ml_cards').all<{date:string;tbl:number;teams:string}>()).results;
+  const official=new Map(cards.map(c=>[c.date+'#'+c.tbl,JSON.parse(c.teams) as string[]])); 
+  return {teams:data.teams,fixtures:data.fixtures.map(f=>{const teams=official.get(f.date+'#'+f.table);return teams?{...f,teams,confirmed:true}:{...f,confirmed:false};})};
+ })();
+ mlViewCache.set(env.DB,{created:current,promise});
+ try{return await promise;}catch(error){if(mlViewCache.get(env.DB)?.promise===promise)mlViewCache.delete(env.DB);throw error;}
 }
 const monthPage=(y:number,m:number)=>`https://m-league.jp/games/?mlm=${m}&mly=${y}`;
 async function fetchMonth(env:KpEnv,y:number,m:number,now:number,request:typeof fetch){
