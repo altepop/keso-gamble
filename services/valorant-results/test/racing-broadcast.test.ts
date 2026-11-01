@@ -85,6 +85,15 @@ test('live frames and replay use the canonical order without leaking finish info
  assert.doesNotMatch(liveRacePost(show,MAIN+50000).content,/レース動画は生成後/);
 });
 
+test('VDK roast commentary changes neither race odds nor outcomes',()=>{
+ const race=Date.parse('2026-11-02T01:30:00+09:00');
+ const card={...raceCard(race),name:'VDK 0デス完走目前・終了間際の1デス葬儀杯'};
+ const regular=raceShow(card,'fixture'),special=raceShow(card,'fixture',true);
+ assert.deepEqual(special.order,regular.order);assert.deepEqual(special.odds,regular.odds);assert.deepEqual(special.timeline,regular.timeline);
+ assert.ok(special.commentary.length>regular.commentary.length);
+ assert.match(liveRacePost(special,race+43000).content,/終了間際に1デス/);
+ assert.match(liveRacePost(special,race+50000).content,/VDK、歴史的やらかし/);
+});
 test('deleted live race post is not recreated and video status stays disabled',async t=>{
  t.mock.timers.enable({apis:['Date'],now:MAIN+60000});
  const f=await fixture();f.put();

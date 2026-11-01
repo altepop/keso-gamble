@@ -74,7 +74,16 @@ async function raceBets(env:KpEnv,guild:string,id:number){
  return (await env.DB.prepare("SELECT s.user,b.value FROM kp_state s,json_each(s.data,'$.raceBets') b WHERE s.guild=? AND json_extract(b.value,'$.raceId')=?").bind(guild,id).all<{user:string;value:string}>()).results.map(r=>({...JSON.parse(r.value) as Bet,user:r.user}));
 }
 export async function enqueue(env:KpEnv,id:string,body:string,now:number){await env.DB.prepare('INSERT OR IGNORE INTO kp_posts(id,body,at) VALUES(?,?,?)').bind(id,JSON.stringify({content:body,allowed_mentions:{parse:[]}}),now).run();}
-export function crownPost(c:{race:number;name:string;user:string;reason:string}){
+export function crownPost(c:{race:number;name:string;user:string;reason:string;special?:boolean}){
+ if(c.special)return [
+  '🏇 **緊急特別開催｜VDKやらかし追悼レース**',
+  '『'+clean(c.name)+'』',
+  clock(c.race)+'発走（0デスチャレンジ、試合終了直前に1デスで完全崩壊）',
+  '🪦 0デスのまま終わるはずが、最後の最後に見事な1デスを献上。競馬場まで葬儀会場になりました。',
+  '🎙️「守り抜いた0デス！……試合が終わるまで守れとは言ってへん！」',
+  '馬券は発走15分前から /bet またはKESO PLAYの「勝負 → 競馬」で購入可能。無料特別開催でKP購入費はありません。',
+  '※VDK本人の試合報酬や履歴は変更しません。',
+ ].join('\n');
  return `🏇 『${clean(c.name)}』開催決定！ ${clock(c.race)}発走（<@${c.user}> の${c.reason}にちなんで）\n発走15分前から \`/bet\`（馬を一覧から選んで掛け金を入れるだけ）か、アプリの「勝負 → 競馬」で馬券を買えます。\n💬 ${raceCatchphrase('crown',String(c.race))}\n${raceAside('crown',String(c.race))}`;
 }
 export async function roastLevelsOf(env:KpEnv,mapping:KpMapping){
