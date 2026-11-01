@@ -20,7 +20,7 @@ export {VoiceGateway} from './voice-gateway.ts';
 import {ensureVoice} from './voice-api.ts';
 import { claimDeathMatch } from './death-sessions.ts';
 import type { KpRun } from './kp.ts';
-import { initializeKp, syncKpAccounts, collectKpMatch, drainKpInbox, flushKpDirectives, prepareKpRun, kpEventId, kpCreditLine } from './kp.ts';
+import { initializeKp, syncKpAccounts, collectKpMatch, drainKpInbox, flushKpDirectives, prepareKpRun, loadKpRunMatch, kpEventId, kpCreditLine } from './kp.ts';
 import { kpApi } from './kp-api.ts';
 import { settleKpRaces } from './racing-kp.ts';
 import { queueRacePosts, flushRacePosts, enqueue, ensurePosts } from './racing-posts.ts';
@@ -170,6 +170,7 @@ async function saveMatch(env: Env, match: Match, player: Player, account: Accoun
   const kpId=kpRun?kpEventId(kpRun.mapping.guildId,match.metadata.match_id,account.puuid):'';
   try {
     if (kpRun && Date.parse(match.metadata.started_at)>=kpRun.startsAt) {
+      await loadKpRunMatch(env,kpRun,kpId);
       const amount = kpRun.credits.get(kpId) ?? await collectKpMatch(env,kpRun.mapping,match,account.puuid);
       if (amount !== null) {
         kpRun.credits.set(kpId,amount);

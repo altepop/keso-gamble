@@ -276,10 +276,25 @@ export async function flushKpDirectives(env:KpEnv & {DISCORD_WEBHOOK_URL:string;
  }
 }
 
-/** Per monitor run: each match's net KP (earned part plus any loss debit) and its current post. */
-export interface KpRun { mapping:KpMapping; startsAt:number; credits:Map<string,number>; messages:Map<string,string>; notes?:Map<string,string> }
+/** Per monitor run: lazily load only the exact matches Henrik returned.
+ * The old cron preloaded a 200-result 5-table JOIN every minute even if no game
+ * was played: 451,540 D1 rows/day (2026-11-01 Insights). */
+export interface KpRun { mapping:KpMapping; startsAt:number; credits:Map<string,number>; messages:Map<string,string>; notes?:Map<string,string>; loaded:Set<string> }
 export async function prepareKpRun(env:KpEnv,mapping:KpMapping):Promise<KpRun>{
  const start=await env.DB.prepare("SELECT value FROM kp_settings WHERE key='starts_at'").first<{value:string}>();
- const rows=(await env.DB.prepare("SELECT e.id,e.amount+COALESCE((SELECT delta FROM kp_ledger WHERE id='penalty:'||e.id),0) AS amount,n.message,d.note FROM kp_events e LEFT JOIN kp_reward_notes d ON d.id=e.id JOIN kp_accounts a ON a.guild=e.guild AND a.puuid=e.puuid LEFT JOIN notifications n ON n.riot_id=a.riot AND n.match_id=e.match WHERE e.guild=? ORDER BY e.at DESC LIMIT 200").bind(mapping.guildId).all<{id:string;amount:number;message:string|null;note:string|null}>()).results;
- return {mapping,startsAt:Number(start?.value??Infinity),credits:new Map(rows.map(r=>[r.id,r.amount])),messages:new Map(rows.filter(r=>r.message!==null).map(r=>[r.id,r.message!])),notes:new Map(rows.map(r=>[r.id,r.note??(/\n🪙 この試合 [^\n]*? KP([^\n]*)/.exec(r.message??'')?.[1]??'')]))};
+ return {mapping,startsAt:Number(start?.value??Infinity),credits:new Map(),messages:new Map(),notes:new Map(),loaded:new Set()};
+}
+/** Indexed id lookup: preserves old-match payouts, edited result messages and
+ * delayed KP recovery without scanning all historic results for every poll.
+ * The loaded set is only per cron run, so other workers never share stale data. */
+export async function loadKpRunMatch(env:KpEnv,run:KpRun,id:string):Promise<void>{
+ if(run.loaded.has(id))return;
+ const row=await env.DB.prepare("SELECT e.amount+COALESCE((SELECT delta FROM kp_ledger WHERE id='penalty:'||e.id),0) AS amount,n.message,d.note FROM kp_events e LEFT JOIN kp_reward_notes d ON d.id=e.id LEFT JOIN kp_accounts a ON a.guild=e.guild AND a.puuid=e.puuid LEFT JOIN notifications n ON n.riot_id=a.riot AND n.match_id=e.match WHERE e.id=? AND e.guild=? LIMIT 1")
+  .bind(id,run.mapping.guildId).first<{amount:number;message:string|null;note:string|null}>();
+ if(row){
+  run.credits.set(id,row.amount);
+  if(row.message!==null)run.messages.set(id,row.message);
+  run.notes?.set(id,row.note??(/\n🪙 この試合 [^\n]*? KP([^\n]*)/.exec(row.message??'')?.[1]??''));
+ }
+ run.loaded.add(id);
 }
