@@ -68,6 +68,14 @@ test('only games started after the arm count, and a later registration never pay
  assert.equal(f.balance(),5000);
  assert.equal(await kpMatchNet(f.env,kpEventId(guild,'before',puuid)),0);
 });
+test('missing match stats do not consume the only daily attempt',async()=>{
+ const f=await fixture();await startDmChallenge(f.env,guild,user,start);
+ const partial=game('partial',40,true);delete partial.players[1].stats;
+ assert.equal(await f.settle(partial,start+60000),null);
+ assert.match(await dmChallengeStatus(f.env,guild,user,start+60001),/待機中/);
+ assert.equal(await f.settle(game('partial'),start+60000),5000);
+ assert.equal(f.balance(),5000);
+});
 test('Japan midnight resets the daily slot without letting yesterday\'s reservation span midnight',async()=>{
  const f=await fixture();
  const late=Date.parse('2026-11-01T23:59:40+09:00');
