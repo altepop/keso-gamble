@@ -44,7 +44,9 @@ const server=spawn('python3',['-m','http.server','8766','--bind','127.0.0.1'],{s
  await page.evaluate(()=>{window.confirm=()=>{throw Error('native confirm must not be used for luxury');};});
  await page.locator('#lux-title').selectOption('KP長者');
  await page.locator('[data-action=luxury][data-item=title]').click();
- assert.match(await page.locator('.luxury-confirmation').innerText(),/KP長者[\s\S]*20,000 KP/);
+ const confirmationText=await page.locator('.luxury-confirmation').innerText();
+ assert.match(confirmationText,/20,000 KP/);
+ assert.match(confirmationText,/指定内容：KP長者/);
  assert.equal(debitCount,2,'opening the in-page review must not debit the wallet');
  await page.locator('[data-action=luxury-cancel]').click();
  assert.equal(await page.locator('.luxury-confirmation').count(),0);
