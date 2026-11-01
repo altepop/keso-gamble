@@ -1,5 +1,5 @@
 // Register these guild commands individually; never replace /death, /valo or the Activity entry point.
-export const KP_COMMAND_VERSION='kp-slash-v18-weekly-bet-80k';
+export const KP_COMMAND_VERSION='kp-slash-v19-dm-daily-40k';
 export const kpCommands=[
  {type:1,name:'kp',description:'KESO PLAY｜KP残高・ランキング',options:[
   {type:1,name:'balance',description:'自分の残高と最近の入出金（本人だけに表示）'},
@@ -12,6 +12,10 @@ export const kpCommands=[
    {type:3,name:'role',description:'ヒントを解放するロール（各10,000 KP）',required:true,
     choices:[{name:'デュエリスト',value:'Duelist'},{name:'イニシエーター',value:'Initiator'},{name:'コントローラー',value:'Controller'},{name:'センチネル',value:'Sentinel'}]},
   ]},
+ ]},
+ {type:1,name:'dm',description:'KESO PLAY｜デスマッチ1日1回の40キル・5,000KPチャレンジ',options:[
+  {type:1,name:'start',description:'次に始めるデスマッチ1試合に挑戦（成功5,000KP／失敗0KP）'},
+  {type:1,name:'status',description:'今日の挑戦権・結果を確認'},
  ]},
  {type:1,name:'keiba',description:'KESO PLAY｜受付中のレース・馬番・倍率を確認'},
  {type:1,name:'bet',description:'KESO PLAY｜今受付中のレースの馬券を買う（馬は一覧から選ぶだけ・取消不可）',options:[

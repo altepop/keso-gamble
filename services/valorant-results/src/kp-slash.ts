@@ -1,4 +1,5 @@
 import {skirmishState,skirmishPrompt} from './skirmish.ts';
+import {startDmChallenge,dmChallengeStatus} from './dm-challenge.ts';
 import {isKpRanking} from './kp-command.ts';
 import {spikeStatus,purchaseSpikeHint} from './spike-awakening.ts';
 import {initializeKp,newKpState} from './kp.ts';
@@ -184,7 +185,7 @@ export async function mbetChoices(env:KpEnv,interaction:Slash):Promise<Array<{na
 export async function runKpCommand(env:KpEnv,interaction:Slash,override?:KpMapping,out?:{components?:unknown[]}):Promise<string>{
  const mapping=await initializeKp(env,override),user=interaction.member?.user?.id;
  if(!mapping||interaction.guild_id!==mapping.guildId||!user||!/^\d{15,22}$/.test(user))return 'このサーバーの本人の口座で利用してください。';
- const command=interaction.data?.name;if(!['kp','spike','keiba','bet','mleague','mbet','mclose','kpgrant','paifulink','unitelink','horsename','give'].includes(command??''))return '対応していないコマンドです。';
+ const command=interaction.data?.name;if(!['kp','spike','dm','keiba','bet','mleague','mbet','mclose','kpgrant','paifulink','unitelink','horsename','give'].includes(command??''))return '対応していないコマンドです。';
  if(isKpRanking(interaction)){
   // A single server-side snapshot: current spendable KP, not stocks or lifetime earnings.
   const rows=(await env.DB.prepare('SELECT user,balance,RANK() OVER(ORDER BY balance DESC) AS rank,COUNT(*) OVER() AS total FROM kp_wallets WHERE guild=? ORDER BY balance DESC,user ASC LIMIT 10').bind(mapping.guildId).all<{user:string;balance:number;rank:number;total:number}>()).results;
@@ -205,6 +206,11 @@ export async function runKpCommand(env:KpEnv,interaction:Slash,override?:KpMappi
   env.DB.prepare('INSERT OR IGNORE INTO kp_state(guild,user,data) VALUES(?,?,?)').bind(mapping.guildId,user,JSON.stringify(newKpState())),
  ]);
  const balance=async()=>Number((await env.DB.prepare('SELECT balance FROM kp_wallets WHERE guild=? AND user=?').bind(mapping.guildId,user).first<{balance:number}>())?.balance??0);
+ if(command==='dm'){
+  const opts=interaction.data?.options;
+  if(!opts||opts.length!==1||opts[0].type!==1||opts[0].options?.length)return '利用できる操作は /dm start と /dm status だ。';
+  return opts[0].name==='start'?startDmChallenge(env,mapping.guildId,user):opts[0].name==='status'?dmChallengeStatus(env,mapping.guildId,user):'利用できる操作は /dm start と /dm status だ。';
+ }
  if(command==='spike'){
   const raw=interaction.data?.options;
   if(!raw||raw.length!==1||raw[0].type!==1)return '/spike status で育成状況を確認するか /spike hint でヒントを購入してください。';
