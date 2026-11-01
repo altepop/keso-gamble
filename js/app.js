@@ -17,7 +17,7 @@ import { MARKET, createInitialState, portfolioValue, assets, advanceMarket, trad
 import { KEY, LEGACY_KEY } from './storage.js?v=web-e054fc2bb05b5f3f';
 import { PUBLIC_SALT, RUN_MS, WEEKLY_LIMIT, openRaceStart, latestRaceStart, raceCard, raceOdds, raceResult, raceTimeline, raceCommentary, raceRuns, placeRaceBet, settleRaceBets, weeklySpent } from './racing.js?v=web-e054fc2bb05b5f3f';
 import { LUXURY } from './luxury.js?v=web-e054fc2bb05b5f3f';
-import { raceScreen, racePreview, drawRace, raceElapsed, ownerPanel, luxuryPanel, roastPanel } from './racing-view.js?v=web-e054fc2bb05b5f3f';
+import { raceScreen, racePreview, drawRace, raceElapsed, ownerPanel, luxuryPanel, roastPanel } from './racing-view.js?v=web-luxuryfix-20261101';
 import { createStore } from './store.js?v=web-e054fc2bb05b5f3f';
 import { healthPanel } from './health-view.js?v=web-e054fc2bb05b5f3f';
 import { trendPanel } from './trend-view.js?v=web-e054fc2bb05b5f3f';
