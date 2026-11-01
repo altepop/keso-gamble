@@ -69,9 +69,11 @@ export function dmChallengeWon(raw:Match,puuid:string){
    &&(p.puuid===puuid||p.stats!.kills!<40));
 }
 /** Returns the settled wallet delta. Matches without a pre-armed challenge are 0 KP, not a repeatable farm. */
-export async function settleDmMatch(env:KpEnv,input:{guild:string;user:string;puuid:string;raw:Match;start:number;now:number}):Promise<number>{
+export async function settleDmMatch(env:KpEnv,input:{guild:string;user:string;puuid:string;raw:Match;start:number;now:number}):Promise<number|null>{
  const {guild,user,puuid,raw,start,now}=input;
  if(raw.metadata.queue.id!=='deathmatch'||!raw.metadata.is_completed||!Number.isSafeInteger(start)||!Number.isSafeInteger(now)||start>now+60_000)throw Error('Invalid DM match');
+ // Incomplete Henrik stats must not burn the day's only attempt. Retry the match when data is complete.
+ if(raw.players.length<2||!raw.players.some(p=>p.puuid===puuid)||raw.players.some(p=>!Number.isSafeInteger(p.stats?.kills)||p.stats!.kills!<0))return null;
  await ensureDmChallenge(env);
  const id=kpEventId(guild,raw.metadata.match_id,puuid),day=dmDay(start);
  const current=await env.DB.prepare('SELECT match,armed_at FROM dm_challenges WHERE guild=? AND user=? AND puuid=? AND day=?')
