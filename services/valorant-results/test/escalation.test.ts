@@ -53,6 +53,10 @@ test('exclusive rarity draws are deterministic, with stage weights and both supe
  assert.ok(oldBig>14000&&oldBig<16000,'existing v5 games retain their 15% odds');
  assert.ok(counts['super-lucky']>60&&counts['super-lucky']<150);
  assert.ok(counts['super-unlucky']>60&&counts['super-unlucky']<150);
+ // v6 tiers: 35/28/20/13/4 of all big bets, without altering the jackpot amounts.
+ const expected=[0.35,0.28,0.20,0.13,0.04];
+ for(let i=0;i<5;i++)assert.ok(Math.abs(tiers[i]/counts.big-expected[i])<0.025,`tier ${i+1}: ${tiers[i]}/${counts.big}`);
+ assert.equal(tiers.reduce((a,b)=>a+b,0),counts.big);
  assert.ok(tiers[0]>tiers[1]&&tiers[1]>tiers[2]&&tiers[2]>tiers[3]&&tiers[3]>tiers[4]);
  assert.equal(escalationFor('draw-test','draw'),null);
 });
