@@ -12,6 +12,11 @@ const initialized=new WeakSet<object>();
 export async function ensureRacing(env:KpEnv){
  if(initialized.has(env.DB))return;
  await env.DB.prepare('CREATE TABLE IF NOT EXISTS kp_races(guild TEXT NOT NULL,id INTEGER NOT NULL,seed TEXT NOT NULL,hash TEXT NOT NULL,created_at INTEGER NOT NULL,PRIMARY KEY(guild,id))').run();
+ // A narrow partial index keeps the minute cron from reading every JSON wallet.
+ // SQLite instr() is deterministic: matching the exact JSON property/status tokens
+ // preserves the old LIKE prefilter without inspecting settled-only wallets.
+ await env.DB.prepare(`CREATE INDEX IF NOT EXISTS kp_state_pending_race ON kp_state(guild,user)
+  WHERE instr(data,'"raceBets"')>0 AND instr(data,'"pending"')>0`).run();
  initialized.add(env.DB);
 }
 /** The race's seed row. Created on first use; an existing seed is never replaced. */
@@ -40,7 +45,7 @@ export async function racingView(env:KpEnv,mapping:KpMapping,now=Date.now()){
 /** Settles finished races for every wallet with pending bets. Safe to run concurrently and repeatedly. */
 export async function settleKpRaces(env:KpEnv,mapping:KpMapping,now=Date.now()){
  await ensureRacing(env);
- const rows=(await env.DB.prepare(`SELECT w.user,w.balance,w.version AS wallet_version,s.data,s.version AS state_version FROM kp_wallets w JOIN kp_state s ON s.guild=w.guild AND s.user=w.user WHERE w.guild=? AND s.data LIKE '%"raceBets"%' AND s.data LIKE '%"pending"%'`).bind(mapping.guildId).all<{user:string;balance:number;wallet_version:number;data:string;state_version:number}>()).results;
+ const rows=(await env.DB.prepare(`SELECT w.user,w.balance,w.version AS wallet_version,s.data,s.version AS state_version FROM kp_state s INDEXED BY kp_state_pending_race JOIN kp_wallets w ON s.guild=w.guild AND s.user=w.user WHERE s.guild=? AND instr(s.data,'"raceBets"')>0 AND instr(s.data,'"pending"')>0`).bind(mapping.guildId).all<{user:string;balance:number;wallet_version:number;data:string;state_version:number}>()).results;
  let count=0;
  for(const row of rows){
   const state=JSON.parse(row.data);Object.assign(state,hydrateRacing(state));state.cash=row.balance;

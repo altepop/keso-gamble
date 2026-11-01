@@ -97,3 +97,22 @@ test('the next races are not affected: a later race has its own seed and no bets
  assert.equal(next.open.id,RACE+RACE_INTERVAL);assert.equal(next.watch.runs,false);
  assert.notEqual(f.sql.prepare('SELECT hash FROM kp_races WHERE id=?').get(RACE)!.hash,f.sql.prepare('SELECT hash FROM kp_races WHERE id=?').get(RACE+RACE_INTERVAL)!.hash);
 });
+
+
+test('idle race checks use the partial pending-bets index without losing an unsettled ticket',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:T0});
+ const f=await fixture();
+ // Ensure the index exists even when the racing cron starts with no bettors.
+ assert.equal(await settleKpRaces(f.env,mapping,T0),0);
+ const query=`SELECT w.user FROM kp_state s INDEXED BY kp_state_pending_race
+  JOIN kp_wallets w ON s.guild=w.guild AND s.user=w.user
+  WHERE s.guild=? AND instr(s.data,'"raceBets"')>0 AND instr(s.data,'"pending"')>0`;
+ const plan=f.sql.prepare('EXPLAIN QUERY PLAN '+query).all(guild) as {detail:string}[];
+ assert.ok(plan.some(row=>row.detail.includes('kp_state_pending_race')),JSON.stringify(plan));
+ assert.equal(f.sql.prepare(query).all(guild).length,0);
+ await operateKp(f.env,mapping,one,'race-pending-index-test','race-bet',{raceId:RACE,type:'win',horse:2,amount:100});
+ assert.deepEqual((f.sql.prepare(query).all(guild) as {user:string}[]).map(x=>x.user),[one]);
+ assert.equal(await settleKpRaces(f.env,mapping,RACE+RUN_MS),1);
+ assert.equal(f.sql.prepare(query).all(guild).length,0);
+ assert.equal(await settleKpRaces(f.env,mapping,RACE+RUN_MS+60000),0);
+});

@@ -384,12 +384,12 @@ test('legacy policy team deathmatch and escalation: 35 kills or more add 150, wi
  assert.ok(plain(Array.from({length:50},(_,i)=>valoKp(at('kb-34'+i,'hurm',true,34),'p-one','teamdeathmatch','win'))).every(r=>r.base===70&&r.note===''));
  assert.ok(plain(Array.from({length:50},(_,i)=>valoKp(at('kb-sw'+i,'swiftplay',true,40),'p-one','swiftplay','win'))).every(r=>r.base===180&&r.note===''));
 });
-test('escalation: 15% big draws use five tiers while super events remain mutually exclusive',async()=>{
+test('escalation: 1-in-24 big draws use five tiers while super events remain mutually exclusive',async()=>{
  const {valoKp}=await import('../src/kp.ts');
  const esc=(id:string,mode:string,win:boolean)=>{const raw=game(id,mode,win) as ReturnType<typeof game>&{players:Array<{puuid:string;team_id:string;stats?:{kills?:number;score?:number}}>};
   raw.players=[{puuid:'p-one',team_id:'red',stats:{kills:30,score:500}},...[10,20,15,5].map((k,i)=>({puuid:'m'+i,team_id:'red',stats:{kills:k,score:100}}))];return raw;};
  const wins=Array.from({length:2000},(_,i)=>valoKp(esc('e-win'+i,'ggteam',true),'p-one','escalation','win'));
- const big=wins.filter(r=>r.escalation?.kind==='big');assert.ok(big.length>=250&&big.length<=350,String(big.length));
+ const big=wins.filter(r=>r.escalation?.kind==='big');assert.ok(big.length>=60&&big.length<=110,String(big.length));
  const winTiers=new Set([500,1000,2500,5000,15000]);
  assert.ok(wins.every(r=>r.base===70||winTiers.has(r.base)));
  assert.ok(big.every(r=>r.note.startsWith('（🎰 エスカ大勝負 ')&&r.note.includes('KP／')));
