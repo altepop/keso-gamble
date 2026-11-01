@@ -31,6 +31,23 @@ test('slash balance is private to the guild member; newcomers get zero and no st
  assert.match(await runKpCommand(f.env,{...interaction('kp'),guild_id:'100000000000000199'},mapping),/このサーバー/);
  assert.match(await runKpCommand(f.env,{...interaction('kp'),member:undefined},mapping),/このサーバー/);
 });
+test('/kp bets reads only saved predictions, never full stocks, ledger, horses or activity histories',async()=>{
+ const f=await fixture();
+ const raw=JSON.parse(String(f.sql.prepare('SELECT data FROM kp_state WHERE guild=? AND user=?').get(guild,one)!.data));
+ const raceId=Date.parse('2026-10-27T16:15:00+09:00');
+ raw.raceBets=[{id:'saved-race-1',raceId,horse:1,type:'win',amount:300,odds:20,status:'pending',payout:0,time:T0}];
+ f.sql.prepare('UPDATE kp_state SET data=? WHERE guild=? AND user=?').run(JSON.stringify(raw),guild,one);
+ const prepare=f.env.DB.prepare.bind(f.env.DB),reads:string[]=[];
+ f.env.DB.prepare=((sql:string)=>{reads.push(sql);return prepare(sql);}) as typeof f.env.DB.prepare;
+ const text=await runKpCommand(f.env,{...interaction('kp'),data:{name:'kp',options:[{type:1,name:'bets'}]}},mapping);
+ assert.match(text,/競馬.*16:15発走/);
+ assert.match(text,/未精算.*1件・合計 300 KP/);
+ assert.ok(reads.includes('SELECT data FROM kp_state WHERE guild=? AND user=?'));
+ assert.ok(!reads.some(q=>/FROM kp_events|FROM kp_voice_events|FROM kp_ledger|FROM stock_markets|FROM stock_news|FROM kp_horse_runs|FROM ml_cards/.test(q)),
+   'Discord bet slips must not fetch irrelevant Activity summaries');
+ const ranking=await runKpCommand(f.env,{...interaction('kp'),data:{name:'kp',options:[{type:1,name:'ranking'}]}},mapping);
+ assert.match(ranking,new RegExp(`1位　<@${one}>`),'the public /kp ranking still reads the latest wallet balance');
+});
 test('slash race card uses the real entries and never leaks a race seed',async t=>{
  t.mock.timers.enable({apis:['Date'],now:T0});const f=await fixture();
  const message=await runKpCommand(f.env,interaction('keiba'),mapping);
