@@ -57,8 +57,8 @@ test('queued or delivered race results never rescan every member wallet on later
   ins.run('race-result:'+id,'{}',now,Number(id===latest));
  const oldPrepare=f.env.DB.prepare.bind(f.env.DB);
  f.env.DB.prepare=((query:string)=>{
-  if(query.includes("json_each(s.data,'$.raceBets')"))
-   throw Error('Already queued result must not re-expand wallet raceBets');
+  if(query.includes("json_each(s.data,'$.raceBets')")||query.includes("json_extract(data,'$.roastLevel')"))
+   throw Error('Already queued result must not re-expand wallet bets or reread all roast levels');
   return oldPrepare(query);
  }) as typeof f.env.DB.prepare;
  await queueRacePosts(f.env,mapping,now);
