@@ -81,7 +81,7 @@ export const isOverdrive=(p:SpikeProfile)=>spikeProgress(p).every(r=>r.awakened)
 export const SPIKE_HINTS:Record<SpikeRole,string>={
  Duelist:'🔥 決定力の証：デュエリストで、1試合に15キル以上を記録せよ。',
  Initiator:'👁️ 支援の証：イニシエーターで、1試合に7アシスト以上を記録せよ。',
- Controller:'🌌 指揮の証：スパイクラッシュで7人の異なるコントローラーを1人ずつ選び、7試合連続勝利せよ。全試合K/D 2.0以上が必要。敗北・K/D未達・キャラ重複・他ロール使用で連勝は途切れる。',
+ Controller:'🌌 指揮の証：教えないよ〜ん！ 10,000 KP払えば教えてもらえると思った？残念でした〜！😝\n💸 Controllerのヒント代10,000 KPは、運営への返金申請があった場合に全額返金します（自動返金ではありません）。',
  Sentinel:'🏰 不落の証：センチネルで、1試合5キル以上かつデス0を記録せよ。'
 };
 const ready=new WeakMap<object,Promise<void>>();
@@ -127,7 +127,7 @@ export async function spikeStatus(env:KpEnv,guild:string,user:string){
  const controllerTrials=safeTrials(p),controllerStreakCount=controllerTrials.controllerGrandfathered?SPIKE_CONTROLLER_STREAK_REQUIRED:controllerTrials.controllerStreak?.length??0;
  const details=progress.map((r)=>{
   const suffix=r.awakened?'✨覚醒済み':r.unlocked?'通常育成完了':'育成中';
-  const trial=shown.has(r.role)?`\n　特殊試練：${SPIKE_HINTS[r.role]}\n　達成状況：${r.role==='Controller'?`連勝 ${controllerStreakCount}/${SPIKE_CONTROLLER_STREAK_REQUIRED}試合${controllerTrials.controllerGrandfathered?'（旧条件達成を継承）':''}`:r.trialDone?'達成':'未達成'}`:
+  const trial=shown.has(r.role)?`\n　特殊試練：${SPIKE_HINTS[r.role]}\n　達成状況：${r.role==='Controller'?`試練進捗 ${controllerStreakCount}/${SPIKE_CONTROLLER_STREAK_REQUIRED}${controllerTrials.controllerGrandfathered?'（旧条件達成を継承）':''}`:r.trialDone?'達成':'未達成'}`:
    `\n　特殊試練：🔒 未公開（/spike hint ${r.role}｜10,000 KP）${r.trialDone?' ※実績取得済み':''}`;
   const agents=roster.agents.filter(a=>a.role===r.role).map(a=>`${a.name} ${Math.min(2,p.counts[a.id]??0)}/2`).join('・');
   return `**${r.role}** ${r.used}/${r.required}｜${suffix}\n　使用：${agents}${trial}`;
@@ -135,7 +135,8 @@ export async function spikeStatus(env:KpEnv,guild:string,user:string){
  return ['🧬 **SPIKE 育成状況**',`通算：${p.games}試合｜覚醒：${progress.filter(x=>x.awakened).length}/4`,
   `👑 OVERDRIVE：${isOverdrive(p)?'**発動中｜標準的な戦績で平均約800KP/試合**':'未解放'}`,
   ...details,'','ヒントは**ロールごと1万KP・買い切り**。購入しなくても試練は裏で記録され、条件を満たせば覚醒できる。',
-  '覚醒・OVERDRIVEの効果は**達成した次の試合から**適用される。'].join('\n\n');
+  'Controllerのヒントは内容非公開。購入後でも、運営へ申請すればヒント代10,000 KPを全額返金します（手動対応）。',
+   '覚醒・OVERDRIVEの効果は**達成した次の試合から**適用される。'].join('\n\n');
 }
 export async function purchaseSpikeHint(env:KpEnv,guild:string,user:string,role:unknown,at=Date.now()){
  if(typeof role!=='string'||!SPIKE_ROLES.some(x=>x===role))return 'ロールをDuelist / Initiator / Controller / Sentinelから選んでください。';
