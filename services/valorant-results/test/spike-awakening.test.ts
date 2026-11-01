@@ -161,3 +161,31 @@ test('overdrive transaction failure leaves wallet, profile, receipt and day coun
  assert.equal(f.balance(),813);
  f.close();
 });
+
+test('secret controller trial progress never creates a public notification',async()=>{
+ const f=await fixture();
+ assert.equal(await collectKpMatch(f.env,mapping,raw('secret-controller',{agent:controller.id,kills:4,deaths:2,win:false}),'p-one'),20);
+ assert.deepEqual(f.sql.prepare('SELECT id FROM mahjong_watch_posts').all(),[]);
+ assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM spike_profiles').get()!.n,1);
+ assert.equal(f.sql.prepare('SELECT data FROM spike_profiles').get()!.data.includes(controller.id),true);
+ f.close();
+});
+
+test('new role awakening and overdrive produce only two sanitized, once-only result-bot messages',async()=>{
+ const f=await fixture(),p=complete();
+ p.trials!.initiator=false;
+ f.seed(p);
+ const match=raw('spike-last-awakening',{agent:initiator.id,kills:3,assists:7,deaths:2,win:true});
+ const payout=await collectKpMatch(f.env,mapping,match,'p-one');
+ assert.ok(typeof payout==='number'&&payout>0);
+ const posts=f.sql.prepare("SELECT id,body FROM mahjong_watch_posts WHERE id LIKE 'spike-%' ORDER BY id").all() as Array<{id:string;body:string}>;
+ assert.equal(posts.length,2,'role awakening and overdrive each have their own post');
+ const messages=posts.map(x=>JSON.parse(x.body).content as string);
+ assert.ok(messages.some(x=>x.includes('イニシエーター覚醒')));
+ assert.ok(messages.some(x=>x.includes('OVERDRIVE解放')));
+ for(const message of messages)assert.doesNotMatch(message,/7アシスト|12キル|K\/D|試練|3勝|21勝|2回使用/);
+ for(const entry of posts)assert.deepEqual(JSON.parse(entry.body).allowed_mentions,{parse:[]});
+ assert.equal(await collectKpMatch(f.env,mapping,match,'p-one'),payout,'repeated settlement returns same reward');
+ assert.equal(f.sql.prepare("SELECT COUNT(*) AS n FROM mahjong_watch_posts WHERE id LIKE 'spike-%'").get()!.n,2,'no duplicated milestones');
+ f.close();
+});
