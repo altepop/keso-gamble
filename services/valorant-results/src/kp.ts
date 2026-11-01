@@ -69,8 +69,16 @@ export async function initializeKp(env:KpEnv,override?:KpMapping):Promise<KpMapp
   const mapping=override??await decryptKpMapping(env.KP_BOOTSTRAP_PRIVATE_KEY!);
   if(!/^\d{15,22}$/.test(mapping.guildId)||(!override&&mapping.guildId!==discord.guildId)||!Array.isArray(mapping.accounts)||!mapping.accounts.length||mapping.accounts.length>5)throw Error('Invalid KP mapping');
   const users=new Set(),riots=new Set();for(const a of mapping.accounts){if(!/^\d{15,22}$/.test(a.discordUserId)||typeof a.riotId!=='string'||(!override&&!configuredPlayers.some(p=>p.riotId.toLowerCase()===a.riotId.toLowerCase()))||users.has(a.discordUserId)||riots.has(a.riotId.toLowerCase()))throw Error('Invalid KP account');users.add(a.discordUserId);riots.add(a.riotId.toLowerCase());}
-  const ready=await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='kp_settings'").first();
-  const version=ready?await env.DB.prepare("SELECT value FROM kp_settings WHERE key='schema_version'").first<{value:string}>():null;
+  // D1 Insights 2026-11-01: sqlite_master probes cost 270 rows per cold init.
+  // Query the known PK directly instead. Only treat the *specific missing table*
+  // as a fresh database; network, syntax or permission errors must propagate.
+  let version:{value:string}|null=null;
+  try{
+   version=await env.DB.prepare("SELECT value FROM kp_settings WHERE key='schema_version'").first<{value:string}>();
+  }catch(error){
+   const message=error instanceof Error?error.message:String(error);
+   if(!/no such table:\\s*(?:main\\.)?kp_settings\\b/i.test(message))throw error;
+  }
   if(version?.value!=='1'){
    await env.DB.batch(kpSchema.map(sql=>env.DB.prepare(sql)));
    await env.DB.batch([
