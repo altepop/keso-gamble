@@ -95,6 +95,21 @@ test('売却直後に優待は減る。他人の保有やクライアント指�
  await trade(f,'benefit-ownership-sell','sell',50);assert.equal((await readKpState(f.env,mapping,one)).stockBenefits.percent,0);
  const before=f.cash(two);await operateKp(f.env,mapping,two,'benefit-foreign-direct','directive',{target:one,task:'competitive',percent:100,discount:8000});assert.equal(f.cash(two),before-8000);
 });
+test('daily news budget uses a covering time-range index and ignores thousands of historical events',async()=>{
+ const f=await fixture();await prepareStocks(f.env,guild,one,T);
+ const insert=f.sql.prepare('INSERT INTO stock_news(guild,id,symbol,label,bps,at,applied_version,applied_bps,applied_at) VALUES(?,?,?,?,?,?,?,?,?)');
+ const day=Math.floor(T/STOCK_HOLD)*STOCK_HOLD;
+ f.sql.exec('BEGIN');
+ for(let i=0;i<2400;i++)insert.run(guild,'old-news-'+i,'keso','historical news',10,day-STOCK_HOLD+i,1,10,day-STOCK_HOLD+i);
+ for(let i=0;i<8;i++)insert.run(guild,'today-news-'+i,i%2?'keso':'riso','current news',10,day+i,2,i%2?-20:30,day+i);
+ f.sql.exec('COMMIT');
+ const budgetSql="SELECT symbol,SUM(ABS(applied_bps)) AS total,SUM(CASE WHEN id LIKE 'trades:%' THEN ABS(applied_bps) ELSE 0 END) AS trades FROM stock_news WHERE guild=? AND applied_at>=? AND id NOT LIKE 'admin:%' GROUP BY symbol";
+ const plan=f.sql.prepare('EXPLAIN QUERY PLAN '+budgetSql).all(guild,day).map(row=>String(row.detail)).join(';');
+ assert.match(plan,/USING COVERING INDEX stock_news_daily_budget/,'day-range query must not read old stock-news table rows');
+ const results=f.sql.prepare(budgetSql).all(guild,day);
+ assert.deepEqual(results.map(row=>[row.symbol,row.total,row.trades]),[['keso',80,0],['riso',120,0]]);
+ assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM stock_news').get()!.n,2408,'all financial news remains saved');
+});
 test('保存済みの試合とQUIZが株ニュースに一度だけ反映される。過去分を遡って材料にしない',async t=>{
  t.mock.timers.enable({apis:['Date'],now:T});const f=await fixture();await readKpState(f.env,mapping,one);const m=await prepareStocks(f.env,guild,one);
  f.sql.prepare('INSERT INTO kp_events VALUES(?,?,?,?,?,?,?,?,?,?)').run('new-win',guild,one,'p1','new-match','competitive','win',900,'fixture',T+1000);
