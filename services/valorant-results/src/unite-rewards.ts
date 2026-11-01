@@ -3,7 +3,7 @@ import {applyLuck,luckFor,luckLabel} from './luck.ts';
 import type {KpEnv} from './kp.ts';
 /** Only public, individually verified rank-match stats grant a performance bonus. */
 export interface UnitePerformance {
- pokemon?:string;ko:number;ast:number;ours:number;theirs:number;heal:string;tkn:string;surrendered:boolean;
+ pokemon?:string;rockBuild?:boolean;ko:number;ast:number;int?:number;ours:number;theirs:number;dmg?:string;heal:string;tkn:string;surrendered:boolean;
 }
 function damageNumber(raw:string){
  if(typeof raw!=='string')return 0;
@@ -12,35 +12,39 @@ function damageNumber(raw:string){
  const n=Number(m[1])*(m[2].toLowerCase()==='m'?1_000_000:m[2]?1_000:1);
  return Number.isFinite(n)&&n>=0?n:0;
 }
-/** Contribution is exclusive across roles: high KO or strong support, never both. */
+/** All build-specific bonuses are inferred from verified public match contribution.
+ * Rock Tomb / Stealth Rock is only claimed when both move labels exist in UniteAPI.
+ * Other Crustle players still qualify by assists, interrupts, damage and durability. */
 function performanceBonus(win:boolean,p:UnitePerformance|null|undefined){
  if(!p||![p.ko,p.ast,p.ours,p.theirs].every(n=>Number.isSafeInteger(n)&&n>=0))return {bonus:0,note:''};
- const actions=p.ko+p.ast,heal=damageNumber(p.heal),taken=damageNumber(p.tkn);
+ const actions=p.ko+p.ast,heal=damageNumber(p.heal),taken=damageNumber(p.tkn),dealt=damageNumber(p.dmg??'');
+ const disrupt=Number.isSafeInteger(p.int)&&p.int!>=0?p.int!:0;
  const high=actions>=25||p.ast>=16||heal>=100_000||taken>=120_000;
  const active=high||actions>=18||p.ast>=11||heal>=60_000||taken>=85_000;
- // Crustle-only specialties use objective match results, NOT player identity.
- // Tanking requires assists to avoid rewarding damage taken without team play.
- // Offensive builds can qualify through high KO plus team participation.
  const crustle=p.pokemon==='Crustle';
- const fortress=crustle&&taken>=85_000&&p.ast>=7;
- const sturdy=crustle&&taken>=50_000&&p.ast>=4;
- const rockOffense=crustle&&p.ko>=12&&actions>=20;
- const rockPressure=crustle&&p.ko>=8&&actions>=14;
- const crustleElite=fortress||rockOffense;
- const crustleSolid=sturdy||rockPressure||crustleElite;
+ const stoneAssist=crustle&&p.ast>=4&&(taken>=50_000||disrupt>=1||dealt>=40_000);
+ const zoneElite=crustle&&p.ast>=7&&(taken>=80_000||(disrupt>=2&&dealt>=40_000)||dealt>=65_000);
+ const rockBuild=crustle&&p.rockBuild===true;
+ const wallAndRocks=rockBuild&&p.ast>=3&&(disrupt>=1||dealt>=35_000);
+ const fullLock=rockBuild&&p.ast>=7&&dealt>=50_000&&(disrupt>=2||taken>=50_000);
  if(win){
-  const contribution=crustleElite?380:crustleSolid?240:high?300:active?160:0;
+  const normal=high?300:active?160:0;
+  const special=fullLock?460:wallAndRocks?300:zoneElite?380:stoneAssist?240:0;
+  const contribution=Math.max(normal,special);
   const margin=p.ours-p.theirs>=200?120:0;
-  const title=crustleElite?(fortress?'🪨 鉄壁イワパレス':'🪨 岩石ラッシュ')
-   :crustleSolid?(sturdy?'🪨 頼れる岩壁':'🪨 攻めのイワパレス')
-   :high?'大活躍':'チーム貢献';
-  const parts=[...contribution?[title]:[],...margin?['大差勝利']:[]];
+  const name=contribution===460?'🪨 がんせき封鎖・ステロ制圧'
+   :rockBuild&&contribution===300&&wallAndRocks?'🪨 岩壁＆ステロ支援'
+   :contribution===380&&zoneElite?'🪨 鉄壁のイワパレス'
+   :contribution===240&&stoneAssist?'🪨 岩壁サポート'
+   :contribution===300?'大活躍':'チーム貢献';
+  const parts=[...contribution?[name]:[],...margin?['大差勝利']:[]];
   return {bonus:contribution+margin,note:parts.length?`（${parts.join('・')} +${contribution+margin} KP）`:''};
  }
- // A loss cannot earn positive KP; meaningful defense can only reduce the cost.
+ // Losses can only be eased; a defeat can never pay positive KP.
  const close=!p.surrendered&&p.theirs>=p.ours&&p.theirs-p.ours<=80;
- const bonus=(active||crustleSolid?100:0)+(crustleElite?100:0)+(close?100:0);
- const parts=[...crustleElite?['🪨 イワパレス奮闘']:active||crustleSolid?['奮闘']:[],...close?['接戦']:[]];
+ const rockContribution=crustle&&(stoneAssist||zoneElite||wallAndRocks||fullLock);
+ const bonus=(active||rockContribution?100:0)+(fullLock?100:0)+(close?100:0);
+ const parts=[...rockContribution?['🪨 岩壁で奮闘']:active?['奮闘']:[],...close?['接戦']:[]];
  return {bonus,note:bonus?`（${parts.join('・')}）`:''};
 }
 export function uniteQuote(win:boolean,wins:number,losses:number,seed:string,reset=false,performance?:UnitePerformance){
