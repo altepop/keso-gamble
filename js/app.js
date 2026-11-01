@@ -129,6 +129,8 @@ function subTabs(){return tabsFor('race');}
 
 // Race playback state. The card, result and odds are pure functions of the race start time.
 let raceDraft={type:'win',horse:null};
+// Native confirmation dialogs can silently fail in Discord's iOS webview.
+let pendingHorseSale=null;
 // Mリーグ: the chosen game and player, and whether the confirmation is showing.
 let mlDraft={match:null,player:null,confirm:false};
 // 資産 → システムの状態, loaded only when asked for.
@@ -256,7 +258,7 @@ function screenCasino(){
 function useScreen(title,body){
   return `<div class="screen"><header class="topbar"><div class="toprow"><h1 class="title">${title}</h1><span class="badge">${moneyCompact(state.cash)}</span></div></header>${tabsFor('directives')}${live?`<div class="asset-list">${body}</div>`:'<div class="market-disclaimer">本番のKP口座をつなぐと使えます。</div>'}${bottomNav()}</div>`;
 }
-function screenStable(){return useScreen('馬主',live?ownerPanel(state,Date.now()):'');}
+function screenStable(){return useScreen('馬主',live?ownerPanel(state,Date.now(),pendingHorseSale):'');}
 function screenShop(){return useScreen('高級品',live?luxuryPanel(state):'');}
 
 function screenAssets(){
@@ -408,7 +410,7 @@ addEventListener('click',async e=>{
   const t=e.target.closest?.('button,[data-open]'); if(!t) return;
   if(t.dataset.action==='casino-skip'){casinoSkipped=true;skipCasinoPause?.();return;}
   if(casinoBusy&&(t.dataset.screen||t.dataset.casinoGame)){toast('演出をスキップすると移動できます');return;}
-  const mutates=!!t.dataset.approve || !!t.dataset.complete || ['steam-library','steam-status','steam-link','steam-open','steam-confirm','steam-disconnect','steam-game','salary','trade','spin','race-bet','roast-level','horse-buy','horse-sell','luxury','reset','submit-claim','issue-directive','connect-kp','refresh-kp','disconnect-kp','auto-connect-kp','ml-buy','chinchiro','bj-start','bj-hit','bj-stand','bj-double','mines-start','mines-pick','mines-cashout','slot','vp-deal','vp-draw','baccarat','private-round','private-race','stock-shock','stock-shock-approve','stock-guerrilla-toggle'].includes(t.dataset.action);
+  const mutates=!!t.dataset.approve || !!t.dataset.complete || ['steam-library','steam-status','steam-link','steam-open','steam-confirm','steam-disconnect','steam-game','salary','trade','spin','race-bet','roast-level','horse-buy','horse-sell-approve','luxury','reset','submit-claim','issue-directive','connect-kp','refresh-kp','disconnect-kp','auto-connect-kp','ml-buy','chinchiro','bj-start','bj-hit','bj-stand','bj-double','mines-start','mines-pick','mines-cashout','slot','vp-deal','vp-draw','baccarat','private-round','private-race','stock-shock','stock-shock-approve','stock-guerrilla-toggle'].includes(t.dataset.action);
   if(mutates && mutationPending)return;
   if(mutates)mutationPending=true;
   try{
@@ -519,7 +521,7 @@ addEventListener('click',async e=>{
     if(t.dataset.action==='refresh-kp'){await refreshWallet(true);render();return;}
     if(t.dataset.action==='disconnect-kp'){await wallet.disconnect();autoState=embedded?'paused':'idle';autoMessage='';live=false;trend=null;trendView={...trendView,error:'',focus:null,day:null};privateRacePreview=null;privateRoundMessage='';steamView=null;connectionError='';state=store.state;screen='title';render();return;}
     if(t.dataset.casinoGame){if(spinLock){toast('抽選中は切り替えられません');return;}casinoGame=t.dataset.casinoGame;render();return;}
-    if(t.dataset.screen){if(spinLock){toast('抽選中は画面を切り替えられません');return;}detail=null;screen=t.dataset.screen;render();if(screen==='race')settleRaces();return;}
+    if(t.dataset.screen){if(spinLock){toast('抽選中は画面を切り替えられません');return;}detail=null;pendingHorseSale=null;screen=t.dataset.screen;render();if(screen==='race')settleRaces();return;}
     if(t.dataset.action==='load-trend'){await loadTrend(Number(t.dataset.days));return;}
     if(t.dataset.trendSort){const key=t.dataset.trendSort;trendView.dir=trendView.sort===key?-trendView.dir:1;trendView.sort=key;render();return;}
     if(t.dataset.trendFocus){trendView.focus=trendView.focus===t.dataset.trendFocus?null:t.dataset.trendFocus;render();return;}
@@ -535,8 +537,19 @@ addEventListener('click',async e=>{
       mlDraft={match:null,player:null,confirm:false};delete drafts['ml-amount'];render();toast(`${bet.player}のラスを買いました（${(bet.odds/10).toFixed(1)}倍）`);return;
     }
     if(t.dataset.raceType){raceDraft.type=t.dataset.raceType;render();return;}
-    if(t.dataset.action==='horse-buy'){const {horse}=await liveOperation('horse-buy',{box:t.dataset.box,name:$('#horse-name')?.value??''});delete drafts['horse-name'];render();toast(`${horse.name}（${horse.gradeLabel}）が仲間入りしました`);return;}
-    if(t.dataset.action==='horse-sell'){if(!confirm('この馬を売りますか？売ると戻せません'))return;const {sold}=await liveOperation('horse-sell',{horseId:t.dataset.horse});render();toast(`売却しました（+${moneyCompact(sold.refund)}）`);return;}
+    if(t.dataset.action==='horse-buy'){const {horse}=await liveOperation('horse-buy',{box:t.dataset.box,name:$('#horse-name')?.value??''});delete drafts['horse-name'];pendingHorseSale=null;render();toast(`${horse.name}（${horse.gradeLabel}）が仲間入りしました`);return;}
+    if(t.dataset.action==='horse-sell'){
+      const horse=state.horses?.find(h=>h.id===t.dataset.horse&&!h.retired_at);
+      if(!live||!horse)throw Error('売れる馬が見つかりません。');
+      pendingHorseSale=horse.id;render();return;
+    }
+    if(t.dataset.action==='horse-sell-cancel'){pendingHorseSale=null;render();return;}
+    if(t.dataset.action==='horse-sell-approve'){
+      const horse=state.horses?.find(h=>h.id===pendingHorseSale&&!h.retired_at);
+      if(!live||!horse||horse.id!==t.dataset.horse)throw Error('売れる馬が見つかりません。');
+      const {sold}=await liveOperation('horse-sell',{horseId:horse.id});
+      pendingHorseSale=null;render();toast(`売却しました（+${moneyCompact(sold.refund)}）`);return;
+    }
     if(t.dataset.action==='luxury'){
       const item=LUXURY.find(i=>i.id===t.dataset.item);if(!item||!confirm(`${item.label}を${moneyCompact(stockPrice(item.price,state.stockBenefits))}で買いますか？`))return;
       await liveOperation('luxury',{item:item.id,target:$('#lux-target')?.value,text:$('#lux-text')?.value,title:$('#lux-title')?.value,horseId:$('#lux-horse')?.value});
