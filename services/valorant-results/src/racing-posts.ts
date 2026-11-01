@@ -88,11 +88,21 @@ export async function queueRacePosts(env:PostEnv,mapping:KpMapping,now=Date.now(
  for(const c of crowns)await enqueue(env,'race-crown:'+c.race,crownPost(c),now);
  // The card of a big race or a crown named after someone goes out once betting has opened for it.
  const open=openRaceStart(now),openCrown=await crownFor(env,mapping.guildId,open);
- if((bigRaceName(open)||openCrown)&&now>=open-RACE_INTERVAL&&now<open-CLOSE_BEFORE)await enqueue(env,'race-card:'+open,cardPost({...raceCard(open,undefined,await raceEntries(env,mapping,open)),...(openCrown?{name:openCrown.name}:{})},(await raceSeed(env,mapping.guildId,open)).hash),now);
+ if((bigRaceName(open)||openCrown)&&now>=open-RACE_INTERVAL&&now<open-CLOSE_BEFORE){
+  // A card is immutable once enqueued; skip expensive horse/seed reads
+  // rather than reconstruct it every minute until betting closes.
+  const present=await env.DB.prepare('SELECT 1 AS n FROM kp_posts WHERE id=?').bind('race-card:'+open).first();
+  if(!present)await enqueue(env,'race-card:'+open,cardPost({...raceCard(open,undefined,await raceEntries(env,mapping,open)),...(openCrown?{name:openCrown.name}:{})},(await raceSeed(env,mapping.guildId,open)).hash),now);
+ }
  // Results: the last few races, once every bet on them is settled. Older races are never posted late.
  const latest=latestRaceStart(now),levelOf=await roastLevelsOf(env,mapping);
  for(let id=latest;id>latest-3*RACE_INTERVAL;id-=RACE_INTERVAL){
   if(now<id+RUN_MS)continue;
+  // INSERT OR IGNORE keeps the published result immutable. Once this ID is
+  // already queued (even if Discord delivery is pending), rebuilding the
+  // exact same post cannot change it; skip the wallet JSON expansion.
+  const already=await env.DB.prepare('SELECT 1 AS n FROM kp_posts WHERE id=?').bind('race-result:'+id).first();
+  if(already)continue;
   const bets=await raceBets(env,mapping.guildId,id);
   const crown=await crownFor(env,mapping.guildId,id),entries=await raceEntries(env,mapping,id);
   if(bets.some(b=>b.status==='pending')||(!bets.length&&!bigRaceName(id)&&!crown&&!entries.length))continue;
