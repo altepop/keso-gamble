@@ -54,6 +54,14 @@ async function auditMedia(context){
  for(const width of [320,390,1280]){await a.setViewportSize({width,height:844});assert.equal(await a.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);}
  const blocked=await browser.newContext();await auditMedia(blocked);const p=await blocked.newPage();p.on('pageerror',e=>errors.push(e.message));await p.addInitScript(()=>Object.defineProperty(window,'localStorage',{get(){throw Error('blocked')}}));await p.goto('http://127.0.0.1:8765');await p.locator('.title-start').click();await p.locator('.nav-btn[data-screen=assets]').click();await p.locator('summary').click();await p.locator('[data-action=salary]').click();await p.locator('.toast').filter({hasText:'テスト用KP'}).waitFor();await p.locator('.nav-btn[data-screen=race]').click();await p.locator('.sub-tab[data-screen=market]').click();await p.locator('#trade-qty').fill('1');await p.locator('[data-action=trade]').click();await p.locator('.toast').filter({hasText:'買付した'}).waitFor();
  const gameContext=await browser.newContext({viewport:{width:390,height:844}});await auditMedia(gameContext);const g=await gameContext.newPage();g.on('pageerror',e=>errors.push(e.message));await g.goto('http://127.0.0.1:8765');await g.locator('.title-start').click();
+ // Luxury is discoverable in demo mode, but purchases never touch the demo wallet.
+ await g.locator('.nav-btn[data-screen=directives]').click();
+ await g.locator('.sub-tab[data-screen=shop]').click();
+ assert.equal(await g.locator('.screen').getAttribute('data-view'),'shop');
+ assert.equal(await g.locator('[data-action=luxury]').count(),7);
+ assert.equal(await g.locator('[data-action=luxury]:disabled').count(),7);
+ assert.match(await g.locator('.asset-card').innerText(),/商品一覧のプレビュー/);
+ await g.locator('.sub-tab[data-screen=directives]').click();
  assert.match(await g.locator('#app').innerText(),/保有KP[\s\S]*発令中の指令/);assert.doesNotMatch(await g.locator('#app').innerText(),/日経|TOPIX/);
  await g.locator('.nav-btn[data-screen=play]').click();await g.locator('#claim-reference').fill('match-001');await g.locator('[data-action=submit-claim]').click();await g.locator('[data-approve]').waitFor();
  let gameState=await g.evaluate(k=>JSON.parse(localStorage.getItem(k)),key);assert.equal(gameState.cash,10000);await g.locator('[data-approve]').click();await g.waitForFunction(k=>JSON.parse(localStorage.getItem(k)).cash===10500,key);
