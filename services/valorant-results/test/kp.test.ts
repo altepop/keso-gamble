@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import {readFileSync,readdirSync}from'node:fs';
 import {generateKeyPairSync,randomBytes,createCipheriv,publicEncrypt}from'node:crypto';
-import {initializeKp,syncKpAccounts,collectKpMatch,drainKpInbox,issueKpCode,exchangeKpCode,kpSession,decryptKpMapping,kpCreditLine,createKpSession}from'../src/kp.ts';
+import {initializeKp,syncKpAccounts,collectKpMatch,drainKpInbox,issueKpCode,exchangeKpCode,kpSession,decryptKpMapping,kpCreditLine,createKpSession,prepareKpRun,loadKpRunMatch,kpEventId}from'../src/kp.ts';
 import type{KpEnv,KpMapping}from'../src/kp.ts';
 import {readKpState,operateKp,kpApi}from'../src/kp-api.ts';
 const guild='100000000000000100',one='100000000000000101',two='100000000000000102';
@@ -24,6 +24,35 @@ async function fixture(){
 }
 function game(id:string,queue='competitive',win=true){return {metadata:{match_id:id,is_completed:true,queue:{id:queue},started_at:new Date(Date.now()-10000).toISOString(),game_length_in_ms:1000},players:[{puuid:'p-one',team_id:'red'}],teams:[{team_id:'red',won:win},{team_id:'blue',won:!win}]};}
 function seed(sql:DatabaseSync,user:string,amount:number){sql.prepare('INSERT INTO kp_ledger VALUES(?,?,?,?,?,?)').run('test-'+user,guild,user,amount,'test-only',Date.now());}
+test('per-minute KP monitor avoids scanning all rewards and lazily reads only requested match IDs',async()=>{
+ const f=await fixture();f.enableHistory();
+ const old=game('historical-001');
+ assert.equal(await collectKpMatch(f.env,mapping,old,'p-one'),900);
+ const eventId=kpEventId(guild,'historical-001','p-one');
+ f.sql.prepare('INSERT INTO notifications(riot_id,match_id,message,ended_at,mode,sent) VALUES(?,?,?,?,?,1)')
+  .run('One#JP1','historical-001','試合結果\\n🪙 この試合 +900 KP（既存）',Date.now(),'competitive');
+ // Extra historic events must not cause the prepare path to scan 200 rows.
+ f.resetQueries();
+ const run=await prepareKpRun(f.env,mapping);
+ assert.equal(f.queries(),1,'prepare performs only the schema setting point lookup');
+ assert.equal(run.credits.size,0,'preloading historical events is forbidden');
+ await loadKpRunMatch(f.env,run,eventId);
+ assert.equal(run.credits.get(eventId),900);
+ assert.match(run.messages.get(eventId)??'',/試合結果/);
+ assert.equal(run.notes?.get(eventId),'（既存）');
+ const oneRead=f.queries();
+ await loadKpRunMatch(f.env,run,eventId);
+ assert.equal(f.queries(),oneRead,'repeated instances of the same match do not read DB again');
+ const absent=kpEventId(guild,'unknown-001','p-one');
+ await loadKpRunMatch(f.env,run,absent);
+ assert.equal(run.credits.has(absent),false);
+ const queries=f.queries();await loadKpRunMatch(f.env,run,absent);
+ assert.equal(f.queries(),queries,'missing matches are cached for one cron run only');
+ const next=await prepareKpRun(f.env,mapping);
+ await loadKpRunMatch(f.env,next,eventId);
+ assert.equal(next.credits.get(eventId),900,'a new invocation always checks durable state');
+ assert.equal(f.sql.prepare("SELECT COUNT(*) AS n FROM kp_ledger WHERE kind='match'").get()!.n,1,'no credits are duplicated');
+});
 test('activation starts at zero, preserves first linking and cutoff, excludes old matches, and nine wins buy an 8000 KP directive',async()=>{
  const f=await fixture();assert.equal((await readKpState(f.env,mapping,one)).cash,0);
  assert.equal(await collectKpMatch(f.env,mapping,game('old'),'p-one'),null);
