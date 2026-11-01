@@ -19,6 +19,7 @@ const server=spawn('python3',['-m','http.server','8766','--bind','127.0.0.1'],{s
    else{const body=route.request().postDataJSON();if(!results.has(body.id)){
     debitCount++;if(body.action==='spin'){state.cash-=100;state.spins=[{outcome:0,amount:100,payout:0}];results.set(body.id,{result:{outcome:0,payout:0}});}
     else if(body.action==='directive'){state.cash-=2500;state.directives.push({id:body.id,target:'two',task:'unrated',cost:2500,status:'active',time:Date.now()});results.set(body.id,{result:{issued:true}});}
+    else if(body.action==='luxury'){assert.equal(body.args.item,'title');assert.equal(body.args.title,'KP長者');state.cash-=20000;state.luxury={title:body.args.title,convicts:[],billboard:null,statues:[]};results.set(body.id,{result:{luxury:{item:'title',id:'test-luxury'}}});}
     else throw Error('unexpected action');
    }result=results.get(body.id);if(body.action==='spin'&&lost){lost=false;await route.abort();return;}}
   }
@@ -34,6 +35,29 @@ const server=spawn('python3',['-m','http.server','8766','--bind','127.0.0.1'],{s
  await page.locator('.nav-btn[data-screen=race]').click();await page.locator('.sub-tab[data-screen=casino]').click();await page.locator('#bet-amount').fill('100');await page.locator('[data-action=spin]').click();await page.locator('.kp-connection').filter({hasText:'通信結果'}).waitFor();assert.equal(debitCount,1);
  await page.reload();await page.locator('[data-action=refresh-kp]').click();await page.waitForFunction(()=>!sessionStorage.getItem('keso-kp-pending-v1'));assert.equal(debitCount,1);await page.locator('.title-start').click();assert.match(await page.locator('.badge').first().innerText(),/2,600/);
  await page.locator('.nav-btn[data-screen=directives]').click();await page.locator('#directive-target').selectOption('two');await page.locator('#directive-task').selectOption('unrated');assert.equal(await page.locator('#directive-target b').count(),0);await page.locator('[data-action=issue-directive]').click();await page.locator('.history-entry').waitFor();assert.match(await page.locator('.badge').first().innerText(),/100/);assert.equal(debitCount,2);assert.equal(await page.locator('[data-complete]').count(),0);
+ // A native confirm is blocked by some Discord/iOS embeds. The shop must not need it.
+ state.cash=30000;
+ await page.locator('.nav-btn[data-screen=assets]').click();await page.locator('[data-action=refresh-kp]').click();
+ await page.locator('.nav-btn[data-screen=directives]').click();await page.locator('.sub-tab[data-screen=shop]').click();
+ assert.equal(await page.locator('.screen').getAttribute('data-view'),'shop');
+ assert.equal(await page.locator('[data-action=luxury]').count(),7);
+ await page.evaluate(()=>{window.confirm=()=>{throw Error('native confirm must not be used for luxury');};});
+ await page.locator('#lux-title').selectOption('KP長者');
+ await page.locator('[data-action=luxury][data-item=title]').click();
+ const confirmationText=await page.locator('.luxury-confirmation').innerText();
+ assert.match(confirmationText,/20,000 KP/);
+ assert.match(confirmationText,/指定内容：KP長者/);
+ assert.equal(debitCount,2,'opening the in-page review must not debit the wallet');
+ await page.locator('[data-action=luxury-cancel]').click();
+ assert.equal(await page.locator('.luxury-confirmation').count(),0);
+ assert.equal(debitCount,2,'cancellation must not debit the wallet');
+ await page.locator('[data-action=luxury][data-item=title]').click();
+ await page.locator('[data-action=luxury-approve]').click();
+ // Click dispatch does not wait for the async server debit + refreshed state.
+ await page.locator('.luxury-confirmation').waitFor({state:'detached',timeout:8000});
+ await page.locator('.asset-card').filter({hasText:'あなたの称号:「KP長者」'}).waitFor();
+ assert.equal(debitCount,3,'one approved luxury purchase debits the server once');
+ assert.equal(await page.locator('.luxury-confirmation').count(),0);
  assert.equal(await page.evaluate(()=>localStorage.getItem('keso-exchange-v0.2')),null);
  for(const width of [320,390,1280]){await page.setViewportSize({width,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);}
  // The account controls live on 資産.
