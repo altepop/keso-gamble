@@ -61,7 +61,7 @@ test('linking records what is already there; later games are posted once and set
  f.set(page([card({win:false,surrendered:true,ko:0,ours:150,theirs:380}),card({pokemon:'Absol',ko:12}),card()]));
  await monitorUnite(f.env,T0+3*60_000,f.request,mapping);
  assert.equal(f.sent.length,2);
- assert.match(f.sent[0],/\+560 KP/);assert.match(f.sent[0],/チーム貢献 \+160 KP/);
+ assert.match(f.sent[0],/テスト選手｜ポケモンユナイト ランクマ 勝利/);assert.match(f.sent[0],/🗯️ KO 12。/);assert.match(f.sent[0],/\+560 KP/);assert.match(f.sent[0],/チーム貢献 \+160 KP/);
  assert.match(f.sent[1],/敗北\*\*（降参）/);assert.equal(f.sent[1].split('\n').filter(l=>l.startsWith('🗯️')).length,3);
  assert.match(f.sent[1],new RegExp(`−${UNITE_LOSS} KP`));
  assert.equal(f.balance(cat),UNITE_WIN+160-UNITE_LOSS,'the performance-boosted win is credited before the later loss');
