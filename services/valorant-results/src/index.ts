@@ -516,7 +516,8 @@ export default {
       // The main cron still runs every minute, but M.LEAGUE only needs DB
       // reads around its 19:00 JST matches. A single 18:00 check also catches
       // stale results and seeds next-day cards following an off-day.
-      if(shouldRunMlCron(Date.now()))
+      // Cloudflare may execute a cron a little late; use its intended minute for the 18:00 catch-up.
+      if(shouldRunMlCron(_event.scheduledTime??Date.now()))
         await track(env,'mleague',async()=>{await refreshMlCards(env);await pollMlLineups(env,mapping);await pollMlResults(env);await settleMl(env,mapping);await queueMlPosts(env,mapping);});
       await track(env,'earnings_post',async()=>{await queueRacePosts(env,mapping,Date.now(),crowns);await flushRacePosts(env);});
       await track(env,'race_broadcast',async()=>{await prepareRaceBroadcast(env,mapping);});
