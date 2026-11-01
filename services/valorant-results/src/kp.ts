@@ -77,7 +77,7 @@ export async function initializeKp(env:KpEnv,override?:KpMapping):Promise<KpMapp
    version=await env.DB.prepare("SELECT value FROM kp_settings WHERE key='schema_version'").first<{value:string}>();
   }catch(error){
    const message=error instanceof Error?error.message:String(error);
-   if(!/no such table:\\s*(?:main\\.)?kp_settings\\b/i.test(message))throw error;
+   if(!/no such table:\s*(?:main\.)?kp_settings\b/i.test(message))throw error;
   }
   if(version?.value!=='1'){
    await env.DB.batch(kpSchema.map(sql=>env.DB.prepare(sql)));
