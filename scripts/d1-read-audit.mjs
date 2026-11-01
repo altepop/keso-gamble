@@ -12,7 +12,10 @@ const out=['# D1 1-hour and 24-hour read audit','','Values are sourced from Clou
 '|:---|:---|---:|---:|---:|---:|'];
 const detail=['','## Top 20 shapes per window','','| Window | Database | Rank | Tables | Calls | Rows read | Rows/call | SQL type |','|:---|:---|---:|:---|---:|---:|---:|:---|'];
 const fmt=n=>Number(n).toLocaleString('en-US');
-let errors=0,success=0;
+// 80k Rows read/h is an early-warning ceiling (~1.92M/day if sustained).
+// It is not Cloudflare's 5M hard quota, and Insights top-50 undercounts totals.
+let errors=0,success=0,read1h=0,oneHourOk=0;
+const WARN_ROWS_PER_HOUR=80000;
 if(!process.env.CLOUDFLARE_API_TOKEN||!process.env.CLOUDFLARE_ACCOUNT_ID){
  console.log('D1_READ_REPORT_UNAVAILABLE: Cloudflare Analytics credentials absent');
  out.push('| Both | Both | no analytics credentials | - | - | - |');
@@ -27,6 +30,7 @@ if(!process.env.CLOUDFLARE_API_TOKEN||!process.env.CLOUDFLARE_ACCOUNT_ID){
   const num=(value)=>Number.isFinite(Number(value))?Number(value):0;
   const totalRead=rows.reduce((n,x)=>n+num(x.totalRowsRead),0);
   const totalCalls=rows.reduce((n,x)=>n+num(x.numberOfTimesRun),0);
+  if(period==='1h'){read1h+=totalRead;oneHourOk++;}
   out.push('| '+[period,label,rows.length,fmt(totalCalls),fmt(totalRead),
    totalCalls?fmt(Math.round(totalRead/totalCalls)):'0'].join(' | ')+' |');
   for(const [index,row] of rows.slice(0,20).entries()){
@@ -53,7 +57,16 @@ if(!process.env.CLOUDFLARE_API_TOKEN||!process.env.CLOUDFLARE_ACCOUNT_ID){
   console.warn('D1_READ_AUDIT_UNAVAILABLE '+period+' '+label+': '+reason);
  }
 }
+
+if(oneHourOk===databases.length){
+ out.push('','**1h account top-50 lower bound:** '+fmt(read1h)+' / early-warning '+fmt(WARN_ROWS_PER_HOUR)+' Rows read/h. Goal: maintain substantial headroom below Cloudflare\'s 5M daily limit.');
+ if(read1h>WARN_ROWS_PER_HOUR){
+  console.error('::error::D1 read budget warning: top-50 SQL already read '+read1h+' rows in 1h across D1 databases, exceeding the 80,000-row early-warning threshold.');
+  process.exitCode=2;
+ }else console.log('D1_READ_BUDGET_OK 1h_lower_bound='+read1h+' threshold='+WARN_ROWS_PER_HOUR);
+}
+console.log('D1_READ_AUDIT_DONE successes='+success+' errors='+errors);
+if(!success||oneHourOk<databases.length)process.exitCode=1;
+
 if(process.env.GITHUB_STEP_SUMMARY)
  appendFileSync(process.env.GITHUB_STEP_SUMMARY,out.concat(detail).join('\n')+'\n');
-console.log('D1_READ_AUDIT_DONE successes='+success+' errors='+errors);
-if(!success)process.exitCode=1;
