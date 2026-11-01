@@ -43,7 +43,8 @@ test('cached voice history is reused until wallet version changes; failover and 
  sql.exec('CREATE TABLE kp_ledger(id TEXT PRIMARY KEY,guild TEXT,user TEXT,delta INTEGER,kind TEXT,at INTEGER)');
  let historyReads=0,failNext=false;
  class Query{
-  constructor(readonly text:string,readonly values:unknown[]=[]){}
+  readonly text:string;readonly values:unknown[];
+  constructor(text:string,values:unknown[]=[]){this.text=text;this.values=values;}
   bind(...values:unknown[]){return new Query(this.text,values);}
   async all(){
    if(this.text.startsWith('SELECT e.id,e.day,e.slot,e.amount+COALESCE(')){
