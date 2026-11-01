@@ -1,7 +1,7 @@
 import roster from '../spikerush-roster.json' with {type:'json'};
 import type {KpEnv} from './kp.ts';
 import type {Match} from './results.ts';
-import {nextSpikeTrials,trialComplete,SPIKE_AWAKENING_BONUS,SPIKE_OVERDRIVE_BONUS,SPIKE_MAX_REWARD,ensureSpikeAwakening} from './spike-awakening.ts';
+import {nextSpikeTrials,trialComplete,SPIKE_AWAKENING_REWARD_TOTAL,SPIKE_MAX_REWARD,ensureSpikeAwakening,hydrateSpikeControllerHistory} from './spike-awakening.ts';
 import type {SpikeTrials} from './spike-awakening.ts';
 export const SPIKE_POLICY='spikerush-growth-v1';
 export const SPIKE_ROLES=['Duelist','Initiator','Controller','Sentinel'] as const;
@@ -62,7 +62,7 @@ export function quoteSpike(p:SpikeProfile,m:SpikeMatch,dayGame:number){
  const awakenings=progress.filter(r=>r.awakened).length,overdrive=awakenings===4;
  // Only fully awakened users bypass all daily/repeated-agent growth attenuation.
  // With 6K/2A/6D and 50% wins, all four awakenings average ~800 KP per game.
- const enhanced=add(grown,fraction(awakenings*SPIKE_AWAKENING_BONUS+(overdrive?SPIKE_OVERDRIVE_BONUS:0)));
+ const enhanced=add(grown,fraction(awakenings*SPIKE_AWAKENING_REWARD_TOTAL,SPIKE_ROLES.length));
  const fatigue=overdrive?fraction(1):dayGame<=10?fraction(1):dayGame<=15?fraction(1,2):fraction(1,10);
  const same=1+p.recent.filter(a=>a===m.agent).length,repeat=overdrive?fraction(1):fraction(same<=2?10:same===3?8:same===4?6:4,10);
  const exact=add(fraction(base),mul(mul(fatigue,repeat),sub(enhanced,fraction(base))));
@@ -113,7 +113,8 @@ export async function settleSpike(env:KpEnv,e:SpikeEvent){
   // UTC midnight is 09:00 JST. Late arrivals use their match day and current committed growth.
   const day=new Date(e.spike.endedAt).toISOString().slice(0,10);
   const count=await env.DB.prepare('SELECT (SELECT COUNT(*) FROM spike_rewards WHERE guild=? AND puuid=? AND day=?)+(SELECT COUNT(*) FROM spike_overdrive_rewards WHERE guild=? AND puuid=? AND day=?) AS n').bind(e.guild,e.puuid,day,e.guild,e.puuid,day).first<{n:number}>();
-  const quote=quoteSpike(JSON.parse(profile.data),e.spike,Number(count?.n??0)+1);
+  const previous=await hydrateSpikeControllerHistory(env,e.guild,e.puuid,JSON.parse(profile.data) as SpikeProfile);
+  const quote=quoteSpike(previous,e.spike,Number(count?.n??0)+1);
   const detail={...quote.breakdown,outcome:e.spike.win?'win':'loss',policy:SPIKE_POLICY,roster:roster.version,matchEndedAt:e.spike.endedAt};
   const destination=quote.amount>425?'spike_overdrive_rewards':'spike_rewards';
   const written=await env.DB.prepare(`INSERT INTO ${destination}(id,guild,puuid,user,match,day,agent,amount,note,detail,next_profile,expected_version,at)
