@@ -31,6 +31,17 @@ function addHorse(sql:DatabaseSync,id:string,grade:number,extra:Record<string,un
 /** The next race at or after `from` whose class is `grade`. */
 function raceOfClass(grade:number,from:number){for(let r=from;;r+=RACE_INTERVAL)if(raceClass(r)===grade)return r;}
 
+test('horse nickname history uses a covering index for newest 20 runs, even with growing race history',async()=>{
+ const f=await fixture(0);addHorse(f.sql,'history-horse',0);
+ const insert=f.sql.prepare('INSERT INTO kp_horse_runs(id,guild,race,horse,rank,win_odds,favourite) VALUES(?,?,?,?,?,?,?)');
+ for(let i=0;i<180;i++)insert.run('run-'+i,guild,i*60000,'history-horse',1,220,1);
+ const query='SELECT rank,win_odds AS winOdds,favourite FROM kp_horse_runs WHERE horse=? ORDER BY race DESC LIMIT 20';
+ const plan=f.sql.prepare('EXPLAIN QUERY PLAN '+query).all('history-horse').map(x=>String(x.detail)).join('; ');
+ assert.match(plan,/COVERING INDEX kp_horse_runs_horse_recent/);
+ assert.doesNotMatch(plan,/SCAN kp_horse_runs|USE TEMP B-TREE/);
+ assert.equal((f.sql.prepare(query).all('history-horse') as unknown[]).length,20);
+ assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM kp_horse_runs").get()!.n,180,'the index must not remove old results');
+});
 test('a box costs its price, makes a named horse of a drawn grade, and counts as an exchange', async t => {
  t.mock.timers.enable({apis:['Date'],now:T0});
  const f=await fixture();
