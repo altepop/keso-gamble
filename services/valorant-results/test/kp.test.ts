@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import {readFileSync,readdirSync}from'node:fs';
 import {generateKeyPairSync,randomBytes,createCipheriv,publicEncrypt}from'node:crypto';
-import {initializeKp,syncKpAccounts,collectKpMatch,drainKpInbox,issueKpCode,exchangeKpCode,kpSession,decryptKpMapping,kpCreditLine,createKpSession,prepareKpRun,loadKpRunMatch,kpEventId}from'../src/kp.ts';
+import {initializeKp,syncKpAccounts,collectKpMatch,drainKpInbox,issueKpCode,exchangeKpCode,kpSession,decryptKpMapping,kpCreditLine,createKpSession,prepareKpRun,loadKpRunMatch,kpEventId,kpSchemaVersion}from'../src/kp.ts';
 import type{KpEnv,KpMapping}from'../src/kp.ts';
 import {readKpState,operateKp,kpApi}from'../src/kp-api.ts';
 const guild='100000000000000100',one='100000000000000101',two='100000000000000102';
@@ -53,6 +53,18 @@ test('per-minute KP monitor avoids scanning all rewards and lazily reads only re
  await loadKpRunMatch(f.env,next,eventId);
  assert.equal(next.credits.get(eventId),900,'a new invocation always checks durable state');
  assert.equal(f.sql.prepare("SELECT COUNT(*) AS n FROM kp_ledger WHERE kind='match'").get()!.n,1,'no credits are duplicated');
+});
+test('schema version cold check reads one exact key and handles only missing kp_settings',async()=>{
+ const f=await fixture();
+ const calls:string[]=[];
+ const base=f.env.DB.prepare.bind(f.env.DB);
+ const checked={...f.env,DB:{...f.env.DB,prepare:(sql:string)=>{calls.push(sql);return base(sql);}} as D1Database};
+ assert.equal((await kpSchemaVersion(checked))?.value,'1');
+ assert.deepEqual(calls,["SELECT value FROM kp_settings WHERE key='schema_version'"]);
+ const noTable={...f.env,DB:{prepare:()=>({first:async()=>{throw Error('D1_ERROR: no such table: main.kp_settings');}})} as unknown as D1Database};
+ assert.equal(await kpSchemaVersion(noTable),null,'fresh install is permitted');
+ const failed={...f.env,DB:{prepare:()=>({first:async()=>{throw Error('D1_ERROR: database unavailable');}})} as unknown as D1Database};
+ await assert.rejects(kpSchemaVersion(failed),/database unavailable/,'a transient D1 error must not bootstrap');
 });
 test('activation starts at zero, preserves first linking and cutoff, excludes old matches, and nine wins buy an 8000 KP directive',async()=>{
  const f=await fixture();assert.equal((await readKpState(f.env,mapping,one)).cash,0);
