@@ -634,7 +634,7 @@ let privateRacePreview=null,privateRoundMessage='';
 // it every 120s, reducing heavy D1 reads while preserving reactive balances.
 // Nothing is fetched while hidden.
 // This small read is independent of wallet/animation polling and never replaces the game form.
-let communityEntries=[],communityBusy=false,communityOwner=null,communityStatus='確認中…',lastCommunityPoll=0;
+let communityEntries=[],communityBusy=false,communityOwner=null,communityStatus='確認中…',lastCommunityPoll=0,communityConserveUntil=0;
 // Keep five-second freshness checks, but download the 40-row feed only on change.
 let communityRevision=null,communityFullAt=0;
 function paintCommunity(){
@@ -649,7 +649,7 @@ async function refreshCommunity(){
  if(communityBusy||!live||!communityRefreshEnabled(screen,document.querySelector('details.community-feed')?.open,!document.hidden,wallet.connected))return;
  const owner=state.selfUserId;
  if(communityOwner!==owner){communityEntries=[];communityOwner=owner;communityRevision=null;communityFullAt=0;lastCommunityPoll=0;}
- if(Date.now()-lastCommunityPoll<COMMUNITY_REFRESH_INTERVAL)return;
+ if(Date.now()<communityConserveUntil||Date.now()-lastCommunityPoll<COMMUNITY_REFRESH_INTERVAL)return;
  lastCommunityPoll=Date.now();communityBusy=true;
  try{
   // Force a full fetch each minute so renamed members and older servers
@@ -662,7 +662,15 @@ async function refreshCommunity(){
     communityRevision=Number.isSafeInteger(data.revision)?data.revision:null;
     communityFullAt=Date.now();
   }
-  communityStatus='更新 '+new Date().toLocaleTimeString('ja-JP');
+  if(data.conserve){
+   // D1 soft budget mode explicitly only pauses optional community history.
+   // Do not retry the endpoint every ten seconds until the quota resets.
+   communityConserveUntil=Date.now()+60000;
+   communityStatus='D1節約モード：取引履歴の自動取得を一時停止中。KPとランキングは通常どおり更新';
+  }else{
+   communityConserveUntil=0;
+   communityStatus='更新 '+new Date().toLocaleTimeString('ja-JP');
+  }
  }catch{communityStatus='更新が止まっています。自動で再接続します。';}
  finally{communityBusy=false;paintCommunity();}
 }
