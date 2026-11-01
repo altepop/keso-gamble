@@ -1,6 +1,6 @@
 import {feedIndex} from './community-feed.ts';
 import {settleSkirmishMatch} from './skirmish.ts';
-import {settleDmMatch} from './dm-challenge.ts';
+import {settleDmMatch,ensureDmChallenge} from './dm-challenge.ts';
 import {valoKp,ensureModeRewards,MODE_REWARD_VERSION,UNRATED_JACKPOT,jackpotPost} from './mode-rewards.ts';
 import type {EscalationSpin} from './mode-rewards.ts';
 import {escalationBigPost} from './escalation-messages.ts';
@@ -99,6 +99,7 @@ export async function initializeKp(env:KpEnv,override?:KpMapping):Promise<KpMapp
   await ensureDebt(env);
   await ensureSpikeGrowth(env);
   await ensureModeRewards(env);
+  await ensureDmChallenge(env);
   const state=newKpState();
   const known=new Set((await env.DB.prepare('SELECT user FROM kp_wallets WHERE guild=?').bind(mapping.guildId).all<{user:string}>()).results.map(a=>a.user));
   const missing=mapping.accounts.filter(a=>!known.has(a.discordUserId));
@@ -233,7 +234,10 @@ export async function collectKpMatch(env:KpEnv,mapping:KpMapping,raw:Match,puuid
  if(solo&&status.mode==='competitive')await env.DB.prepare("UPDATE kp_directives SET status='completed' WHERE guild=? AND target=? AND task='solo_competitive' AND status='active' AND at<=?").bind(mapping.guildId,link.user,start).run();
  if(solo&&status.mode==='unrated')await env.DB.prepare("UPDATE kp_directives SET status='completed' WHERE guild=? AND target=? AND task='solo_death_unrated' AND status='active' AND at<=? AND EXISTS(SELECT 1 FROM death_unrated_sessions s WHERE s.riot_id=? AND s.match_id=? AND s.cancelled_at IS NULL AND s.armed_at>=kp_directives.at AND COALESCE((SELECT value FROM monitor_state WHERE key='death_mode:'||s.session_id||':'||s.riot_id),'unrated')='unrated')").bind(mapping.guildId,link.user,start,mapping.accounts.find(a=>a.discordUserId===link.user)!.riotId,raw.metadata.match_id).run();
  if(link.amount!==null)return kpMatchNet(env,id);
- if(status.mode==='deathmatch')return settleDmMatch(env,{guild:mapping.guildId,user:link.user,puuid,raw,start,now:Date.now()});
+ if(status.mode==='deathmatch'){
+  const policy=await env.DB.prepare("SELECT value FROM kp_settings WHERE key='dm_challenge_started_at'").first<{value:string}>();
+  if(start>=Number(policy?.value??Infinity))return settleDmMatch(env,{guild:mapping.guildId,user:link.user,puuid,raw,start,now:Date.now()});
+ }
  const spike=status.mode==='spikerush'?spikeMatch(raw,puuid):null;
  if(status.mode==='spikerush'&&!spike)return null;
  const modeStart=await env.DB.prepare("SELECT value FROM kp_settings WHERE key='mode_rewards_started_at'").first<{value:string}>();
