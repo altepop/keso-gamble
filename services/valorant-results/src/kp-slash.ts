@@ -4,7 +4,7 @@ import {spikeStatus,purchaseSpikeHint} from './spike-awakening.ts';
 import {initializeKp,newKpState} from './kp.ts';
 import type {KpEnv,KpMapping} from './kp.ts';
 import {ensureQuizKp} from './quiz-kp.ts';
-import {operateKp,previewMlBet,readKpState} from './kp-api.ts';
+import {operateKp,previewMlBet} from './kp-api.ts';
 import {racingView} from './racing-kp.ts';
 import {ML_DATA,closeMl,mlClosed,mlData,mlLineups,mlLineupTimes,mlResults,seasonStats} from './mleague.ts';
 import {enqueue,ensurePosts} from './racing-posts.ts';
@@ -14,9 +14,9 @@ import {nameGiftHorse,decideEntries} from './racing-horses.ts';
 import {crownFor} from './racing-crowns.ts';
 import {DEBT_INTEREST_TEXT,DEBT_MAX,debtOf,ensureDebt} from './kp-debt.ts';
 // @ts-expect-error Shared browser engine.
-import {mlCard,mlOdds,mlOpen,mlClosesAt,mlStart} from '../../../js/mleague.js';
+import {mlCard,mlOdds,mlOpen,mlClosesAt,mlStart,hydrateMleague} from '../../../js/mleague.js';
 // @ts-expect-error Shared browser engine.
-import {openRaceStart,raceCard,raceOdds,placeSlots,payoutFor} from '../../../js/racing.js';
+import {openRaceStart,raceCard,raceOdds,placeSlots,payoutFor,hydrateRacing} from '../../../js/racing.js';
 interface Slash {id:string;guild_id?:string;member?:{user?:{id:string}};data?:{name?:string;options?:Array<{name:string;type?:number;options?:unknown[];value?:unknown}>}}
 const clock=(at:number)=>new Date(at).toLocaleTimeString('ja-JP',{timeZone:'Asia/Tokyo',hour:'2-digit',minute:'2-digit'});
 const clean=(s:string)=>s.replace(/[@`*_~<>|\r\n]/g,'');
@@ -53,9 +53,16 @@ function betLines(d:Awaited<ReturnType<typeof mlData>>,fixture:{date:string;tabl
 type OwnBet={match?:string;raceId?:number;player?:string;horse?:number;type:string;amount:number;odds:number;status:string;payout:number;time:number};
 const md=(date:string)=>`${Number(date.slice(5,7))}/${Number(date.slice(8,10))}`;
 async function myBets(env:KpEnv,mapping:KpMapping,user:string){
- const state=await readKpState(env,mapping,user),d=await mlData(env);
+ // /kp bets only needs this member's saved bet slips. A full Activity
+ // snapshot would also read stocks, 100-row KP/voice histories, all horses,
+ // mastery, notices and M.LEAGUE views on *every* Discord invocation.
+ const row=await env.DB.prepare('SELECT data FROM kp_state WHERE guild=? AND user=?').bind(mapping.guildId,user).first<{data:string}>();
+ if(!row)return 'まだ予想・馬券はありません。';
+ const raw=JSON.parse(row.data),state={...hydrateRacing(raw),...hydrateMleague(raw)};
+ // A user with no M.LEAGUE bets does not need the official card D1 read.
+ const d=state.mlBets.length?await mlData(env):null;
  const label=(b:OwnBet)=>{
-  if(b.match){const f=d.fixtures.find(x=>x.id===b.match);return `Mリーグ ${f?`${md(f.date)} ${f.table}卓 第${f.game}試合`:'試合'}・${clean(b.player??'')}の${b.type==='top'?'トップ':'ラス'}`;}
+  if(b.match){const f=d?.fixtures.find(x=>x.id===b.match);return `Mリーグ ${f?`${md(f.date)} ${f.table}卓 第${f.game}試合`:'試合'}・${clean(b.player??'')}の${b.type==='top'?'トップ':'ラス'}`;}
   const day=new Date((b.raceId??0)+9*3600000).toISOString();return `競馬 ${md(day.slice(0,10))} ${clock(b.raceId??0)}発走 ${b.horse}番 ${b.type==='place'?'複勝':'単勝'}`;
  };
  const all:OwnBet[]=[...(state.mlBets??[]),...(state.raceBets??[])].sort((a:OwnBet,b:OwnBet)=>b.time-a.time);
