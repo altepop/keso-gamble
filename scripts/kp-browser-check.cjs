@@ -53,8 +53,10 @@ const server=spawn('python3',['-m','http.server','8766','--bind','127.0.0.1'],{s
  assert.equal(debitCount,2,'cancellation must not debit the wallet');
  await page.locator('[data-action=luxury][data-item=title]').click();
  await page.locator('[data-action=luxury-approve]').click();
+ // Click dispatch does not wait for the async server debit + refreshed state.
+ await page.locator('.luxury-confirmation').waitFor({state:'detached',timeout:8000});
+ await page.locator('.asset-card').filter({hasText:'あなたの称号:「KP長者」'}).waitFor();
  assert.equal(debitCount,3,'one approved luxury purchase debits the server once');
- assert.match(await page.locator('.asset-card').innerText(),/あなたの称号:「KP長者」/);
  assert.equal(await page.locator('.luxury-confirmation').count(),0);
  assert.equal(await page.evaluate(()=>localStorage.getItem('keso-exchange-v0.2')),null);
  for(const width of [320,390,1280]){await page.setViewportSize({width,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);}
