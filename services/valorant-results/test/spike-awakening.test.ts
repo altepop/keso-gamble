@@ -65,12 +65,43 @@ test('each of four trials has a unique verifiable achievement and old profiles r
  assert.equal(p.trials.controllerKdAgents?.length,6);
  assert.equal(isOverdrive(p),false,'all seven different controllers must qualify');
  p.trials=nextSpikeTrials(p,m(controllers[6].id,{win:false,kills:1,deaths:0}));
- assert.equal(isOverdrive(p),true,'positive kills with zero deaths qualify');
+ assert.equal(isOverdrive(p),false,'7 K/D-only agents are no longer sufficient under v2');
+ p.trials=nextSpikeTrials(p,m(controllers[0].id,{win:true,kills:4,deaths:0}));
+ p.trials=nextSpikeTrials(p,m(controllers[0].id,{win:true,kills:5,deaths:3}));
+ p.trials=nextSpikeTrials(p,m(controllers[0].id,{win:false,kills:5,deaths:2}));
+ assert.equal(p.trials.controllerMasteryAgents?.length,0,'must win with 5+ kills and K/D >=2 in the same game');
+ for(const agent of controllers.slice(0,3))p.trials=nextSpikeTrials(p,m(agent.id,{win:true,kills:5,deaths:2}));
+ assert.equal(p.trials.controllerMasteryAgents?.length,3);
+ assert.equal(isOverdrive(p),false,'four distinct agents are required');
+ p.trials=nextSpikeTrials(p,m(controllers[0].id,{win:true,kills:7,deaths:0}));
+ assert.equal(p.trials.controllerMasteryAgents?.length,3,'one agent cannot fill multiple mastery slots');
+ p.trials=nextSpikeTrials(p,m(controllers[3].id,{win:true,kills:5,deaths:0}));
+ assert.equal(p.trials.controllerMasteryAgents?.length,4);
+ assert.equal(isOverdrive(p),true,'7 K/D agents plus 4 distinct mastery victories unlock OVERDRIVE');
  p.trials=nextSpikeTrials(p,m(controllers[0].id,{win:true,kills:6,deaths:3}));
  assert.equal(p.trials.controllerKdAgents?.length,7,'repeated qualifying games do not add duplicates');
  const zero=nextSpikeTrials({...p,trials:blankTrials()},m(controllers[0].id,{kills:0,deaths:0,assists:2}));
  assert.equal(zero.controllerKdAgents?.length,0,'zero kills and zero deaths do not qualify');
  const old=complete();delete old.trials;assert.equal(isOverdrive(old),false,'old stored data does not silently gain new trials');
+});
+test('old completed Controller awakening survives migration, while unfinished v1 progress needs new mastery',()=>{
+ const a=SPIKE_ROSTER.agents.filter(v=>v.role==='Controller');
+ const completed=complete();
+ assert.equal(isOverdrive(completed),true,'historical seven-agent K/D trial remains valid');
+ const migrated=nextSpikeTrials(completed,m(duelist.id));
+ assert.equal(migrated.controllerTrialVersion,2);
+ assert.equal(migrated.controllerGrandfathered,true);
+ assert.equal(isOverdrive({...completed,trials:migrated}),true,'unrelated matches cannot revoke OVERDRIVE');
+ const incomplete=complete();
+ incomplete.trials={...incomplete.trials!,controllerKdAgents:a.slice(0,6).map(v=>v.id)};
+ assert.equal(isOverdrive(incomplete),false);
+ const updated=nextSpikeTrials(incomplete,m(duelist.id));
+ assert.equal(updated.controllerTrialVersion,2);
+ assert.equal(updated.controllerGrandfathered,false);
+ const oneMore=nextSpikeTrials({...incomplete,trials:updated},m(a[6].id,{win:false,kills:2,deaths:0}));
+ assert.equal(oneMore.controllerKdAgents?.length,7);
+ assert.equal(oneMore.controllerGrandfathered,false);
+ assert.equal(isOverdrive({...incomplete,trials:oneMore}),false,'v2 cannot grandfather newly completed old conditions');
 });
 test('fully awakened matches average 800 KP and never fatigue after 10 or repeat agents',()=>{
  const p=complete();
@@ -132,6 +163,19 @@ test('hidden trial clues cost 10k once per role and reveal private exact progres
  assert.equal(f.balance(),0);assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM kp_ledger WHERE kind='spike-hint'").get()!.n,1);
  assert.match(await purchaseSpikeHint(f.env,guild,one,'Initiator',START+2),/不足/);
  assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM spike_hint_unlocks').get()!.n,1);
+ f.close();
+});
+test('paid Controller hint reports both progress counters without extra history scanning',async()=>{
+ const f=await fixture();
+ const all=SPIKE_ROSTER.agents.filter(a=>a.role==='Controller').map(a=>a.id);
+ const p=complete();
+ p.trials={...blankTrials(),duelist:true,initiator:true,sentinel:true,controllerKdAgents:all,controllerMasteryAgents:all.slice(0,2)};
+ f.seed(p);f.credit(10000);
+ await purchaseSpikeHint(f.env,guild,one,'Controller',START);
+ const view=await spikeStatus(f.env,guild,one);
+ assert.match(view,/K\/D 7\/7人・実戦 2\/4人/);
+ assert.match(view,/異なる4人/);
+ assert.doesNotMatch(view,/旧条件達成を継承/);
  f.close();
 });
 test('legacy 425 check survives, OVERDRIVE gets a separate atomic 813/788 ledger and one game receipt',async()=>{
