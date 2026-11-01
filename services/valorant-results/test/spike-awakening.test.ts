@@ -167,7 +167,7 @@ test('secret controller trial progress never creates a public notification',asyn
  assert.equal(await collectKpMatch(f.env,mapping,raw('secret-controller',{agent:controller.id,kills:4,deaths:2,win:false}),'p-one'),20);
  assert.deepEqual(f.sql.prepare('SELECT id FROM mahjong_watch_posts').all(),[]);
  assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM spike_profiles').get()!.n,1);
- assert.equal(f.sql.prepare('SELECT data FROM spike_profiles').get()!.data.includes(controller.id),true);
+ assert.equal(String(f.sql.prepare('SELECT data FROM spike_profiles').get()!.data).includes(controller.id),true);
  f.close();
 });
 
