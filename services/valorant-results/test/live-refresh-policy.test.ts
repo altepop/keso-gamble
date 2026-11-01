@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+// @ts-expect-error Shared browser policy has no TypeScript declaration.
 import {fullRefreshInterval} from '../../../js/live-refresh-policy.js';
 
 test('financial and match-clock screens retain sixty-second live-state refresh',()=>{
