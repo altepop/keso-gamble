@@ -181,6 +181,13 @@ test('/kpgrant and /paifulink are refused before any work for members without ad
  }
 });
 
+test('Discord slash command betting limits match the relaxed shared 80,000 KP weekly cap',()=>{
+ const bet=kpCommands.find(c=>c.name==='bet')!;
+ const mbet=kpCommands.find(c=>c.name==='mbet')!;
+ assert.equal(bet.options.find(o=>o.name==='amount')?.max_value,80000);
+ assert.equal(mbet.options.find(o=>o.name==='amount')?.max_value,80000);
+ assert.match(mbet.options.find(o=>o.name==='amount')!.description,/週8万KP/);
+});
 test('/bet needs only a horse and an amount: the open race and a win bet are assumed, and the receipt names the horse',async t=>{
  t.mock.timers.enable({apis:['Date'],now:T0});const f=await fixture();
  const choices=await betChoices(f.env,{...interaction('bet',one,[{name:'horse',value:'',focused:true} as never]),guild_id:guild},mapping);
