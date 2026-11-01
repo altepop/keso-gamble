@@ -98,6 +98,8 @@ jobs:
           node --check scripts/d1-read-audit.mjs
           node scripts/d1-read-audit.mjs
       - name: Protect optional Activity histories when account D1 estimate exceeds 4M in UTC day
+        # The preceding 1-hour SQL audit may warn (exit 2); protection still must run.
+        if: always()
         run: |
           node --test scripts/d1-daily-guard.test.mjs
           node scripts/d1-daily-guard.mjs
