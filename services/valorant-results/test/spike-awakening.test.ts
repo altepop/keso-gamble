@@ -52,9 +52,9 @@ async function fixture(){
 test('each of four trials has a unique verifiable achievement and old profiles remain safe',()=>{
  let p=complete();p.trials=blankTrials();
  assert.equal(spikeProgress(p).filter(x=>x.awakened).length,0);
- p.trials=nextSpikeTrials(p,m(duelist.id,{kills:15}));assert.equal(p.trials.duelist,false,'15 kills no longer suffice');
- p.trials=nextSpikeTrials(p,m(duelist.id,{kills:17}));assert.equal(p.trials.duelist,false,'17 kills do not suffice');
- p.trials=nextSpikeTrials(p,m(duelist.id,{kills:18,win:false}));assert.equal(p.trials.duelist,true,'18 kills qualify even in a loss');
+ p.trials=nextSpikeTrials(p,m(duelist.id,{kills:12}));assert.equal(p.trials.duelist,false,'12 kills no longer suffice');
+ p.trials=nextSpikeTrials(p,m(duelist.id,{kills:14}));assert.equal(p.trials.duelist,false,'14 kills do not suffice');
+ p.trials=nextSpikeTrials(p,m(duelist.id,{kills:15,win:false}));assert.equal(p.trials.duelist,true,'15 kills qualify even in a loss');
  p.trials=nextSpikeTrials(p,m(duelist.id,{kills:1,assists:2}));assert.equal(p.trials.duelist,true,'previously completed trials remain complete');
  p.trials=nextSpikeTrials(p,m(initiator.id,{assists:7}));assert.equal(p.trials.initiator,true);
  p.trials=nextSpikeTrials(p,m(sentinel.id,{kills:5,deaths:0}));assert.equal(p.trials.sentinel,true);
