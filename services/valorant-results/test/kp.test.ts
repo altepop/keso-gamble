@@ -29,6 +29,7 @@ test('per-minute KP monitor avoids scanning all rewards and lazily reads only re
  const old=game('historical-001');
  assert.equal(await collectKpMatch(f.env,mapping,old,'p-one'),900);
  const eventId=kpEventId(guild,'historical-001','p-one');
+ f.sql.prepare('INSERT INTO kp_reward_notes(id,note) VALUES(?,?) ON CONFLICT(id) DO UPDATE SET note=excluded.note').run(eventId,'（既存）');
  f.sql.prepare('INSERT INTO notifications(riot_id,match_id,message,ended_at,mode,sent) VALUES(?,?,?,?,?,1)')
   .run('One#JP1','historical-001','試合結果\\n🪙 この試合 +900 KP（既存）',Date.now(),'competitive');
  // Extra historic events must not cause the prepare path to scan 200 rows.
@@ -413,7 +414,9 @@ test('a later monitor run shows a loss as its net negative KP, not the zero stor
  const {prepareKpRun}=await import('../src/kp.ts');const f=await fixture();f.enableHistory();seed(f.sql,one,1000);
  assert.equal(await collectKpMatch(f.env,mapping,game('cached-loss-net','competitive',false),'p-one'),-200);
  const run=await prepareKpRun(f.env,mapping);
- assert.equal(run.credits.get([...run.credits.keys()].find(k=>k.includes('cached-loss-net'))!),-200);
+ const id=kpEventId(guild,'cached-loss-net','p-one');
+ await loadKpRunMatch(f.env,run,id);
+ assert.equal(run.credits.get(id),-200);
 });
 
 test('a rank change that reaches the history late is still caught on a later run, and the post is updated',async()=>{
