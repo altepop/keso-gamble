@@ -14,7 +14,7 @@ import {enqueue,ensurePosts} from './racing-posts.ts';
 import {borrowedBy,debtNote} from './kp-debt.ts';
 
 export interface UniteEnv extends KpEnv {DISCORD_WEBHOOK_URL?:string;KP_EARNINGS_WEBHOOK_URL?:string}
-export interface UniteMatch {win:boolean;surrendered:boolean;map:string;party:string;pokemon:string;level:number;ours:number;theirs:number;ko:number;ast:number;int:number;dmg:string;tkn:string;heal:string}
+export interface UniteMatch {win:boolean;surrendered:boolean;map:string;party:string;pokemon:string;level:number;ours:number;theirs:number;ko:number;ast:number;int:number;dmg:string;tkn:string;heal:string;rockBuild?:boolean}
 export const UNITE_WIN=400,UNITE_LOSS=100;
 const GAP=2*60_000,PROFILE='https://uniteapi.dev/p/';
 const initialized=new WeakSet<object>();
@@ -45,9 +45,12 @@ export function parseUnite(html:string):{name:string;private:boolean;matches:Uni
   const t=text(card),vs=t.indexOf('vs'),slash=t.indexOf('/'),when=t.findIndex(s=>/\bago$|^just now$/i.test(s));
   if(!result||when<0||vs<when+3||slash<0||t[slash+2]!=='/')return null;
   const pokemon=card.match(/<img alt="([^"]+)"/)?.[1]??'';
+  // Recognize the exact move combination when both names appear in UniteAPI's card.
+  const moves=[...card.matchAll(/<img\b[^>]*\balt="([^"]+)"/gi)].map(m=>m[1].trim().replace(/\+$/,''));
+  const rockBuild=pokemon==='Crustle'&&moves.some(x=>/^(Rock Tomb|がんせきふうじ)$/i.test(x))&&moves.some(x=>/^(Stealth Rock|ステルスロック)$/i.test(x));
   const at=(label:string)=>t[t.indexOf(label)-2];
   const m:UniteMatch={win:result==='emerald',surrendered:t.includes('Surrendered'),map:t[when+1]??'',party:t[when+2]??'',pokemon,level:int(t[vs-2]),ours:int(t[vs-1]),theirs:int(t[vs+1]),
-   ko:int(t[slash-1]),ast:int(t[slash+1]),int:int(t[slash+3]),dmg:at('DMG')??'',tkn:at('TKN')??'',heal:at('HEAL')??''};
+   ko:int(t[slash-1]),ast:int(t[slash+1]),int:int(t[slash+3]),dmg:at('DMG')??'',tkn:at('TKN')??'',heal:at('HEAL')??'',...(rockBuild?{rockBuild:true}:{})};
   // Scores are shown purple vs orange; the winning side is coloured. Ours is the winner's when we won.
   const scores=[...card.matchAll(/leading-none (text-(?:purple|orange)-400|text-muted-foreground)[^"]*">(\d+)<\/div>/g)];
   if(scores.length!==2||scores.filter(x=>x[1]!=='text-muted-foreground').length!==1)return null;
@@ -128,7 +131,7 @@ export async function monitorUnite(env:UniteEnv,now=Date.now(),request:typeof fe
  ]);
  for(let i=0;i<fresh.length;i++){
   const m=fresh[i],fingerprint=matchKey(m),seed=link.uid+':'+fingerprint,id='unite-v3:'+await kpHash(link.guild+':'+seed);
-  const settled=await settleUnite(env,{id,guild:link.guild,user:link.user,uid:link.uid,fingerprint,seed,win:m.win,now,performance:{ko:m.ko,ast:m.ast,ours:m.ours,theirs:m.theirs,heal:m.heal,tkn:m.tkn,surrendered:m.surrendered}});
+  const settled=await settleUnite(env,{id,guild:link.guild,user:link.user,uid:link.uid,fingerprint,seed,win:m.win,now,performance:{pokemon:m.pokemon,rockBuild:m.rockBuild===true,ko:m.ko,ast:m.ast,int:m.int,ours:m.ours,theirs:m.theirs,dmg:m.dmg,heal:m.heal,tkn:m.tkn,surrendered:m.surrendered}});
   const kp=settled.delta,note=settled.note+debtNote(await borrowedBy(env,id));
   await env.DB.prepare('INSERT OR IGNORE INTO mahjong_watch_posts(id,body,at) VALUES(?,?,?)').bind(id,JSON.stringify({content:unitePost(page.name,link.uid,m,kp,note),allowed_mentions:{parse:[]}}),now).run();
   if(env.KP_EARNINGS_WEBHOOK_URL){await ensurePosts(env);await enqueue(env,'kp-'+id,`🎮 <@${link.user}> ユナイト ランクマ${m.win?'勝利':'敗北'} ${kp>0?'+':'−'}${Math.abs(kp).toLocaleString('ja-JP')} KP${settled.note}`,now);}
