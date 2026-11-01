@@ -198,3 +198,45 @@ test('Unite performance bonus settles and retries once without extra wallet muta
  assert.equal(f.balance(cat),first,'same match is not paid again');
  assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM unite_rewards").get()!.n,1);
 });
+
+test('Rock Tomb + Stealth Rock build is only recognized from both UniteAPI move labels',()=>{
+ const selected=card({pokemon:'Crustle',ast:8,ko:1,int:2,dmg:'51k'}).replace('<img alt="Skill A" src="/s.png"/>','<img alt="Rock Tomb+" src="/r.png"/><img alt="Stealth Rock+" src="/s.png"/>');
+ const one=parseUnite(page([selected]))!.matches[0];
+ assert.equal(one.pokemon,'Crustle');
+ assert.equal(one.rockBuild,true,'both move labels must be verified');
+ assert.equal(parseUnite(page([selected.replace('Stealth Rock+','X-Scissor')]))!.matches[0].rockBuild,undefined);
+ assert.equal(parseUnite(page([selected.replace('Rock Tomb+','Shell Smash')]))!.matches[0].rockBuild,undefined);
+ assert.equal(parseUnite(page([selected.replace('Crustle','Pikachu')]))!.matches[0].rockBuild,undefined);
+ assert.equal(parseUnite(page([selected.replace('Rock Tomb+','がんせきふうじ').replace('Stealth Rock+','ステルスロック')]))!.matches[0].rockBuild,true);
+});
+test('Crustle rock-wall and stealth-zone support earn KP even when KOs are few',async()=>{
+ const {uniteQuote}=await import('../src/unite-rewards.ts');
+ const {luckFor}=await import('../src/luck.ts');
+ const seed=Array.from({length:300},(_,i)=>'rockbuild-'+i).find(x=>!luckFor('unite:'+x))!;
+ const support={pokemon:'Crustle',rockBuild:true,ko:1,ast:5,int:1,ours:350,theirs:250,dmg:'36k',tkn:'45k',heal:'4k',surrendered:false};
+ const wall=uniteQuote(true,0,0,seed,false,support);
+ assert.equal(wall.net,700,'400 base + 300 for team control; low KO is fine');
+ assert.match(wall.note,/岩壁＆ステロ支援/);
+ const elite=uniteQuote(true,0,0,seed,false,{...support,ko:2,ast:9,int:2,dmg:'55k',tkn:'62k',ours:520,theirs:250});
+ assert.equal(elite.net,980,'400 base + 460 zone control + 120 victory margin');
+ assert.match(elite.note,/がんせき封鎖・ステロ制圧/);
+ const ordinaryCrustle=uniteQuote(true,0,0,seed,false,{...support,rockBuild:false});
+ assert.equal(ordinaryCrustle.net,640,'when moves are unknown, verified defensive stats still earn +240');
+ const other=uniteQuote(true,0,0,seed,false,{...support,pokemon:'Pikachu'});
+ assert.equal(other.net,400,'specialist bonuses do not leak to other Pokemon');
+ const lost=uniteQuote(false,0,4,seed,false,{...support,ast:9,int:2,dmg:'55k',tkn:'62k',ours:220,theirs:280});
+ assert.equal(lost.net,-200,'loss -500 reduced by 100 contribution, 100 rock skill, 100 close match');
+ assert.ok(lost.net<0,'loss never pays out');
+});
+test('verified Crustle move build goes through monitoring and remains exactly-once',async()=>{
+ const f=await fixture();await link(f,cat,UID);await monitorUnite(f.env,T0,f.request,mapping);
+ const game=card({pokemon:'Crustle',ko:1,ast:9,int:2,dmg:'55k',tkn:'63k',ours:520,theirs:250}).replace('<img alt="Skill A" src="/s.png"/>','<img alt="Rock Tomb" src="/r.png"/><img alt="Stealth Rock" src="/s.png"/>');
+ f.set(page([game,card()]));
+ await monitorUnite(f.env,T0+3*60000,f.request,mapping);
+ assert.match(f.sent[0],/がんせき封鎖・ステロ制圧/);
+ assert.ok(f.balance(cat)>=980,'specialist bonus paid through settlement');
+ const before=f.balance(cat);
+ await monitorUnite(f.env,T0+6*60000,f.request,mapping);
+ assert.equal(f.balance(cat),before);
+ assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM unite_rewards").get()!.n,1);
+});
