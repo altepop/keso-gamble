@@ -5,7 +5,7 @@ import {readdirSync,readFileSync} from 'node:fs';
 import {URL as NodeURL} from 'node:url';
 import {initialSpikeProfile,quoteSpike,spikeProgress,SPIKE_ROSTER} from '../src/spikerush-growth.ts';
 import type {SpikeProfile,SpikeMatch} from '../src/spikerush-growth.ts';
-import {blankTrials,isOverdrive,nextSpikeTrials,purchaseSpikeHint,spikeStatus,ensureSpikeAwakening, SPIKE_HINT_COST} from '../src/spike-awakening.ts';
+import {blankTrials,safeTrials,isOverdrive,nextSpikeTrials,purchaseSpikeHint,spikeStatus,ensureSpikeAwakening,hydrateSpikeControllerHistory, SPIKE_HINT_COST} from '../src/spike-awakening.ts';
 import {initializeKp,syncKpAccounts,collectKpMatch,kpEventId} from '../src/kp.ts';
 import type {KpEnv,KpMapping} from '../src/kp.ts';
 import {ledgerHistory} from '../src/kp-history.ts';
@@ -18,7 +18,7 @@ const m=(agent=duelist.id,extra:Partial<SpikeMatch>={}):SpikeMatch=>({agent,kill
 const complete=():SpikeProfile=>({...initialSpikeProfile(),games:60,
  counts:Object.fromEntries(SPIKE_ROSTER.agents.map(a=>[a.id,2])),
  unlocked:['Duelist','Initiator','Controller','Sentinel'],
- trials:{duelist:true,initiator:true,controllerWins:SPIKE_ROSTER.agents.filter(a=>a.role==='Controller').slice(0,5).map(a=>a.id),sentinel:true}});
+ trials:{duelist:true,initiator:true,controllerWins:SPIKE_ROSTER.agents.filter(a=>a.role==='Controller').map(a=>a.id),controllerWinCounts:Object.fromEntries(SPIKE_ROSTER.agents.filter(a=>a.role==='Controller').map(a=>[a.id,3])),sentinel:true}});
 const raw=(id:string,extra:Partial<SpikeMatch>={}):Match=>{
  const v=m(duelist.id,extra);
  return {metadata:{match_id:id,is_completed:true,queue:{id:'spikerush'},started_at:new Date(v.startedAt).toISOString(),game_length_in_ms:v.endedAt-v.startedAt},
@@ -56,9 +56,17 @@ test('each of four trials has a unique verifiable achievement and old profiles r
  p.trials=nextSpikeTrials(p,m(initiator.id,{assists:7}));assert.equal(p.trials.initiator,true);
  p.trials=nextSpikeTrials(p,m(sentinel.id,{kills:5,deaths:0}));assert.equal(p.trials.sentinel,true);
  const controllers=SPIKE_ROSTER.agents.filter(a=>a.role==='Controller');
- for(const agent of controllers.slice(0,5))p.trials=nextSpikeTrials(p,m(agent.id,{win:true}));
- assert.equal(p.trials.controllerWins.length,5);assert.equal(isOverdrive(p),true);
- p.trials=nextSpikeTrials(p,m(controllers[0].id,{win:true}));assert.equal(p.trials.controllerWins.length,5);
+ for(const agent of controllers)p.trials=nextSpikeTrials(p,m(agent.id,{win:true}));
+ assert.equal(p.trials.controllerWins.length,7);
+ assert.equal(isOverdrive(p),false,'one win each is insufficient');
+ for(const agent of controllers)p.trials=nextSpikeTrials(p,m(agent.id,{win:true}));
+ assert.equal(isOverdrive(p),false,'two wins each are insufficient');
+ for(const agent of controllers.slice(0,6))p.trials=nextSpikeTrials(p,m(agent.id,{win:true}));
+ assert.equal(isOverdrive(p),false,'the seventh controller also needs three wins');
+ p.trials=nextSpikeTrials(p,m(controllers[6].id,{win:true}));
+ assert.equal(isOverdrive(p),true);
+ p.trials=nextSpikeTrials(p,m(controllers[0].id,{win:true}));
+ assert.equal(p.trials.controllerWinCounts![controllers[0].id],3,'victories cap at three');
  const old=complete();delete old.trials;assert.equal(isOverdrive(old),false,'old stored data does not silently gain new trials');
 });
 test('fully awakened matches average 800 KP and never fatigue after 10 or repeat agents',()=>{
@@ -74,13 +82,43 @@ test('fully awakened matches average 800 KP and never fatigue after 10 or repeat
  assert.equal(quoteSpike(p,m(duelist.id,{kills:1000,assists:1000,deaths:0}),1).amount,980);
  const almost={...p,trials:{...p.trials!,duelist:false}};
  assert.equal(spikeProgress(almost).filter(r=>r.awakened).length,3);
- assert.equal(quoteSpike(almost,m(),1).amount<500,true);
+ assert.ok(quoteSpike(almost,m(),1).amount>600&&quoteSpike(almost,m(),1).amount<800,'three awakenings each grant a quarter of the boost');
 });
+
+test('each awakened role earns an equal quarter of the 555 KP bonus',()=>{
+ const p=complete();
+ const stages=[blankTrials(),
+  {...blankTrials(),duelist:true},
+  {...blankTrials(),duelist:true,initiator:true},
+  {...blankTrials(),duelist:true,initiator:true,sentinel:true},
+  p.trials!];
+ const quoted=stages.map(trials=>quoteSpike({...p,trials,carryN:'0',carryD:'1'},m(),1));
+ assert.deepEqual(quoted.map(q=>q.breakdown.awakenings),[0,1,2,3,4]);
+ const exact=quoted.map(q=>q.amount+Number(q.next.carryN)/Number(q.next.carryD));
+ for(let i=1;i<exact.length;i++)assert.ok(Math.abs(exact[i]-exact[i-1]-138.75)<1e-8);
+ assert.equal(quoted[4].amount,813);
+});
+
+test('legacy controller wins are backfilled from rewarded matches without changing other trials',async()=>{
+ const a=SPIKE_ROSTER.agents.filter(v=>v.role==='Controller');
+ const original=complete();
+ original.trials={duelist:true,initiator:true,controllerWins:[a[0].id,a[1].id],sentinel:true};
+ const env={DB:{prepare:()=>({bind:()=>({all:async()=>({results:[{agent:a[0].id,wins:3},{agent:a[1].id,wins:2},{agent:a[2].id,wins:1}]})})})}} as unknown as KpEnv;
+ const fixed=await hydrateSpikeControllerHistory(env,guild,'p-one',original);
+ assert.equal(safeTrials(fixed).controllerWinCounts?.[a[0].id],3);
+ assert.equal(safeTrials(fixed).controllerWinCounts?.[a[1].id],2);
+ assert.equal(safeTrials(fixed).controllerWinCounts?.[a[2].id],1);
+ assert.equal(safeTrials(fixed).initiator,true);
+ assert.equal(spikeProgress(fixed).find(x=>x.role==='Controller')?.awakened,false);
+ const again=await hydrateSpikeControllerHistory({DB:{prepare:()=>{throw Error('unexpected scan');}}} as unknown as KpEnv,guild,'p-one',fixed);
+ assert.equal(again,fixed);
+});
+
 test('hidden trial clues cost 10k once per role and reveal private exact progress',async()=>{
  const f=await fixture();f.seed(complete());
  const invisible=await spikeStatus(f.env,guild,one);
  assert.match(invisible,/Duelist/);assert.match(invisible,/Controller/);
- assert.match(invisible,/🔒 未公開/);assert.doesNotMatch(invisible,/12キル以上|7アシスト以上|異なるコントローラー5人/);
+ assert.match(invisible,/🔒 未公開/);assert.doesNotMatch(invisible,/12キル以上|7アシスト以上|7人全員のコントローラー/);
  assert.equal(invisible.length<1950,true,'Discord body must fit');
  f.credit(10000);
  const pay=await purchaseSpikeHint(f.env,guild,one,'Duelist',START);

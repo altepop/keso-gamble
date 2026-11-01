@@ -5,37 +5,61 @@ import {initialSpikeProfile,spikeProgress} from './spikerush-growth.ts';
 import {ensureDebt,debtOf} from './kp-debt.ts';
 
 export const SPIKE_HINT_COST=10000;
-export const SPIKE_OVERDRIVE_BONUS=415;
-export const SPIKE_AWAKENING_BONUS=35;
+// The former 35 KP per awakening + 415 KP for the fourth awakening
+// is now shared equally: 555 / 4 = 138.75 KP per awakened role.
+export const SPIKE_AWAKENING_REWARD_TOTAL=555;
 export const SPIKE_MAX_REWARD=1000;
 export const SPIKE_ROLES=['Duelist','Initiator','Controller','Sentinel'] as const;
 export type SpikeRole=typeof SPIKE_ROLES[number];
-export interface SpikeTrials {duelist:boolean;initiator:boolean;controllerWins:string[];sentinel:boolean}
-export const blankTrials=():SpikeTrials=>({duelist:false,initiator:false,controllerWins:[],sentinel:false});
+export interface SpikeTrials {duelist:boolean;initiator:boolean;controllerWins:string[];controllerWinCounts?:Record<string,number>;sentinel:boolean}
+export const blankTrials=():SpikeTrials=>({duelist:false,initiator:false,controllerWins:[],controllerWinCounts:{},sentinel:false});
+const controllers=roster.agents.filter(a=>a.role==='Controller');
+const controllerIds=new Set(controllers.map(a=>a.id));
 export function safeTrials(p:SpikeProfile):SpikeTrials {
- const x=p.trials;return x?{
-  duelist:x.duelist===true,initiator:x.initiator===true,
-  controllerWins:Array.isArray(x.controllerWins)?[...new Set(x.controllerWins.filter(id=>roster.agents.some(a=>a.id===id&&a.role==='Controller')))].slice(0,7):[],
-  sentinel:x.sentinel===true
- }:blankTrials();
+ const x=p.trials;if(!x)return blankTrials();
+ const legacy=Array.isArray(x.controllerWins)?[...new Set(x.controllerWins.filter(id=>controllerIds.has(id)))]:[];
+ const counts:Record<string,number>={};
+ for(const [id,n] of Object.entries(x.controllerWinCounts??{}))
+  if(controllerIds.has(id)&&Number.isSafeInteger(n)&&n>0)counts[id]=Math.min(3,n);
+ // Every historically recorded unique win is worth at least one victory.
+ for(const id of legacy)counts[id]=Math.max(1,counts[id]??0);
+ return {duelist:x.duelist===true,initiator:x.initiator===true,
+  controllerWins:[...new Set([...legacy,...Object.keys(counts)])],controllerWinCounts:counts,
+  sentinel:x.sentinel===true};
+}
+/** One-time, read-only backfill for legacy profiles that stored only unique winners.
+ * Uses indexed (guild,puuid) reward history; thereafter the compact counts
+ * live in the profile and no further historical scans are necessary. */
+export async function hydrateSpikeControllerHistory(env:KpEnv,guild:string,puuid:string,p:SpikeProfile):Promise<SpikeProfile>{
+ if(p.games===0||p.trials?.controllerWinCounts)return p;
+ const rows=(await env.DB.prepare("SELECT agent,COUNT(*) AS wins FROM (SELECT agent FROM spike_rewards WHERE guild=? AND puuid=? AND json_extract(detail,'$.outcome')='win' UNION ALL SELECT agent FROM spike_overdrive_rewards WHERE guild=? AND puuid=? AND json_extract(detail,'$.outcome')='win') GROUP BY agent").bind(guild,puuid,guild,puuid).all<{agent:string;wins:number}>()).results;
+ const trials=safeTrials(p);
+ for(const row of rows)if(controllerIds.has(row.agent)&&Number.isSafeInteger(row.wins)&&row.wins>0){
+  trials.controllerWinCounts![row.agent]=Math.max(trials.controllerWinCounts![row.agent]??0,Math.min(3,row.wins));
+  if(!trials.controllerWins.includes(row.agent))trials.controllerWins.push(row.agent);
+ }
+ return {...p,trials};
 }
 export function trialComplete(p:SpikeProfile,role:SpikeRole){
  const t=safeTrials(p);
- return role==='Duelist'?t.duelist:role==='Initiator'?t.initiator:role==='Sentinel'?t.sentinel:t.controllerWins.length>=5;
+ return role==='Duelist'?t.duelist:role==='Initiator'?t.initiator:role==='Sentinel'?t.sentinel:controllers.every(a=>(t.controllerWinCounts?.[a.id]??0)>=3);
 }
 export function nextSpikeTrials(p:SpikeProfile,m:SpikeMatch):SpikeTrials {
  const t=safeTrials(p),role=roster.agents.find(a=>a.id===m.agent)?.role;
  if(role==='Duelist'&&m.kills>=12)t.duelist=true;
  if(role==='Initiator'&&m.assists>=7)t.initiator=true;
  if(role==='Sentinel'&&m.kills>=5&&m.deaths===0)t.sentinel=true;
- if(role==='Controller'&&m.win&&!t.controllerWins.includes(m.agent))t.controllerWins.push(m.agent);
+ if(role==='Controller'&&m.win){
+  t.controllerWinCounts![m.agent]=Math.min(3,(t.controllerWinCounts?.[m.agent]??0)+1);
+  if(!t.controllerWins.includes(m.agent))t.controllerWins.push(m.agent);
+ }
  return t;
 }
 export const isOverdrive=(p:SpikeProfile)=>spikeProgress(p).every(r=>r.awakened);
 export const SPIKE_HINTS:Record<SpikeRole,string>={
  Duelist:'🔥 決定力の証：デュエリストで、1試合に12キル以上を記録せよ。',
  Initiator:'👁️ 支援の証：イニシエーターで、1試合に7アシスト以上を記録せよ。',
- Controller:'🌌 指揮の証：異なるコントローラー5人で、それぞれ1勝を挙げよ。',
+ Controller:'🌌 指揮の証：7人全員のコントローラーで、それぞれ3勝を挙げよ（計21勝）。',
  Sentinel:'🏰 不落の証：センチネルで、1試合5キル以上かつデス0を記録せよ。'
 };
 const ready=new WeakMap<object,Promise<void>>();
@@ -74,12 +98,13 @@ export async function spikeStatus(env:KpEnv,guild:string,user:string){
  const member=await env.DB.prepare('SELECT a.puuid,s.data FROM kp_accounts a LEFT JOIN spike_profiles s ON s.guild=a.guild AND s.puuid=a.puuid AND s.user=a.user WHERE a.guild=? AND a.user=?')
   .bind(guild,user).first<{puuid:string;data:string|null}>();
  if(!member)return '🔒 Riotアカウントが紐付いていないため、/spike status は利用できません。';
- const p:SpikeProfile=member.data?JSON.parse(member.data):initialSpikeProfile();
+ const p=await hydrateSpikeControllerHistory(env,guild,member.puuid,member.data?JSON.parse(member.data) as SpikeProfile:initialSpikeProfile());
  const unlocks=(await env.DB.prepare('SELECT role FROM spike_hint_unlocks WHERE guild=? AND puuid=?').bind(guild,member.puuid).all<{role:string}>()).results;
  const shown=new Set(unlocks.map(x=>x.role)),progress=spikeProgress(p);
+ const controllerWins=controllers.reduce((n,a)=>n+(safeTrials(p).controllerWinCounts?.[a.id]??0),0);
  const details=progress.map((r)=>{
   const suffix=r.awakened?'✨覚醒済み':r.unlocked?'通常育成完了':'育成中';
-  const trial=shown.has(r.role)?`\n　特殊試練：${SPIKE_HINTS[r.role]}\n　達成状況：${r.role==='Controller'?safeTrials(p).controllerWins.length+'/5':r.trialDone?'達成':'未達成'}`:
+  const trial=shown.has(r.role)?`\n　特殊試練：${SPIKE_HINTS[r.role]}\n　達成状況：${r.role==='Controller'?controllerWins+'/21勝（7人×3勝）':r.trialDone?'達成':'未達成'}`:
    `\n　特殊試練：🔒 未公開（/spike hint ${r.role}｜10,000 KP）${r.trialDone?' ※実績取得済み':''}`;
   const agents=roster.agents.filter(a=>a.role===r.role).map(a=>`${a.name} ${Math.min(2,p.counts[a.id]??0)}/2`).join('・');
   return `**${r.role}** ${r.used}/${r.required}｜${suffix}\n　使用：${agents}${trial}`;
