@@ -7,13 +7,13 @@ const server=spawn('python3',['-m','http.server','8793','--bind','127.0.0.1'],{c
  const {createInitialState}=await import('../js/engine.js'),state={...createInitialState(),serverWallet:true,cash:24000,selfUserId:'one',members:[],ledger:[]};
  const engine=process.argv[2]||'chromium';browser=await(engine==='webkit'?webkit:chromium).launch(engine==='webkit'?{}:{executablePath:existsSync('/usr/bin/chromium')?'/usr/bin/chromium':undefined,args:['--no-sandbox']});
  const ctx=await browser.newContext({viewport:{width:390,height:844},reducedMotion:'reduce'});await ctx.addInitScript(()=>localStorage.setItem('keso-kp-session-v1','a'.repeat(48)));
- let calls=0,fail=false,ops=0,revision=0,fullReads=0,unchangedResponses=0;const entries=[];
+ let calls=0,fail=false,conserve=false,ops=0,revision=0,fullReads=0,unchangedResponses=0;const entries=[];
  await ctx.route('https://valorant-results.tealeaforest.workers.dev/api/kp/**',async route=>{
   assert.equal(route.request().headers().authorization,'Bearer '+'a'.repeat(48));const path=new URL(route.request().url()).pathname;
   let result;
   if(path.endsWith('/state'))result=state;
   else if(path.endsWith('/pulse'))result={pulse:'fixed'};
-  else if(path.endsWith('/feed')){calls++;if(fail)return route.fulfill({status:503,json:{error:'一時停止'}});const seen=new URL(route.request().url()).searchParams.get('revision');if(seen===String(revision)){unchangedResponses++;result={unchanged:true,revision};}else{fullReads++;result={entries,revision};}}
+  else if(path.endsWith('/feed')){calls++;if(fail)return route.fulfill({status:503,json:{error:'一時停止'}});if(conserve)return route.fulfill({json:{unchanged:true,conserve:true}});const seen=new URL(route.request().url()).searchParams.get('revision');if(seen===String(revision)){unchangedResponses++;result={unchanged:true,revision};}else{fullReads++;result={entries,revision};}}
   else{ops++;throw Error('Unexpected endpoint '+path);}
   await route.fulfill({json:result});
  });
@@ -39,6 +39,12 @@ const server=spawn('python3',['-m','http.server','8793','--bind','127.0.0.1'],{c
  await page.evaluate(()=>Object.defineProperty(document,'hidden',{configurable:true,value:true}));const before=calls;await page.clock.fastForward(10000);assert.equal(calls,before);
  const resumed=page.waitForResponse(r=>new URL(r.url()).pathname.endsWith('/feed'));await page.evaluate(()=>{Object.defineProperty(document,'hidden',{configurable:true,value:false});document.dispatchEvent(new Event('visibilitychange'));});await resumed;
  for(const width of [320,390,1440]){await page.setViewportSize({width,height:844});await page.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))));assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);}
+ conserve=true;
+ await page.clock.fastForward(10000);
+ await page.locator('.community-status').filter({hasText:'D1節約モード'}).waitFor();
+ const pausedCalls=calls;
+ await page.clock.fastForward(50000);
+ assert.equal(calls,pausedCalls,'conserve mode must skip background feed requests for 60 seconds');
  await page.locator('.community-feed > summary').click();const beforeFolded=calls;await page.clock.fastForward(30000);assert.equal(calls,beforeFolded,'manual collapse stops all background polling');
  assert.equal(ops,0);assert.deepEqual(errors,[]);console.log('Community feed passed ('+engine+'): expanded-only 10-second updates, no D1 calls while collapsed, escaped names, unchanged order input, network recovery, hidden pause, mobile/desktop, no charges.');
 })().catch(e=>{console.error(e);process.exitCode=1}).finally(async()=>{await browser?.close();server.kill();});
