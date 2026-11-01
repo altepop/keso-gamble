@@ -234,7 +234,11 @@ test('verified Crustle move build goes through monitoring and remains exactly-on
  f.set(page([game,card()]));
  await monitorUnite(f.env,T0+3*60000,f.request,mapping);
  assert.match(f.sent[0],/がんせき封鎖・ステロ制圧/);
- assert.ok(f.balance(cat)>=980,'specialist bonus paid through settlement');
+ const {uniteQuote}=await import('../src/unite-rewards.ts');
+ const {matchKey}=await import('../src/unite.ts');
+ const m=parseUnite(page([game]))!.matches[0];
+ const expected=uniteQuote(true,0,0,UID+':'+matchKey(m),false,{pokemon:m.pokemon,rockBuild:m.rockBuild===true,ko:m.ko,ast:m.ast,int:m.int,ours:m.ours,theirs:m.theirs,dmg:m.dmg,heal:m.heal,tkn:m.tkn,surrendered:m.surrendered});
+ assert.equal(f.balance(cat),expected.net,'settlement applies the build bonus once, even if common luck applies');
  const before=f.balance(cat);
  await monitorUnite(f.env,T0+6*60000,f.request,mapping);
  assert.equal(f.balance(cat),before);
