@@ -24,7 +24,7 @@ import { initializeKp, syncKpAccounts, collectKpMatch, drainKpInbox, flushKpDire
 import { kpApi } from './kp-api.ts';
 import { settleKpRaces } from './racing-kp.ts';
 import { queueRacePosts, flushRacePosts, enqueue, ensurePosts } from './racing-posts.ts';
-import { pollMlLineups, pollMlResults, refreshMlCards, settleMl, queueMlPosts } from './mleague.ts';
+import { pollMlLineups, pollMlResults, refreshMlCards, settleMl, queueMlPosts, shouldRunMlCron } from './mleague.ts';
 import { scheduleCrowns } from './racing-crowns.ts';
 import { decideEntries, maybeGiftHorse, settleHorsePrizes } from './racing-horses.ts';
 import { recordMastery } from './mastery.ts';
@@ -513,7 +513,11 @@ export default {
       let crowns:Awaited<ReturnType<typeof scheduleCrowns>>=[];
       await track(env,'crown_schedule',async()=>{crowns=await scheduleCrowns(env,mapping);});
       // M.LEAGUE: official results, then settlement, then posts (flushed together with the racing ones).
-      await track(env,'mleague',async()=>{await refreshMlCards(env);await pollMlLineups(env,mapping);await pollMlResults(env);await settleMl(env,mapping);await queueMlPosts(env,mapping);});
+      // The main cron still runs every minute, but M.LEAGUE only needs DB
+      // reads around its 19:00 JST matches. A single 18:00 check also catches
+      // stale results and seeds next-day cards following an off-day.
+      if(shouldRunMlCron(Date.now()))
+        await track(env,'mleague',async()=>{await refreshMlCards(env);await pollMlLineups(env,mapping);await pollMlResults(env);await settleMl(env,mapping);await queueMlPosts(env,mapping);});
       await track(env,'earnings_post',async()=>{await queueRacePosts(env,mapping,Date.now(),crowns);await flushRacePosts(env);});
       await track(env,'race_broadcast',async()=>{await prepareRaceBroadcast(env,mapping);});
     })().catch(()=>console.warn('race_settlement_pending')));
