@@ -300,7 +300,7 @@ test('private /spike status and /spike hint select the requested role and charge
  const status={...interaction('spike'),data:{name:'spike',options:[{type:1,name:'status'}]}};
  const view=await runKpCommand(f.env,status,mapping);
  assert.match(view,/\*\*Duelist\*\* 0\/16/);assert.match(view,/🔒 未公開/);
- assert.doesNotMatch(view,/12キル以上/);
+ assert.doesNotMatch(view,/15キル以上/);
  const hint={...interaction('spike'),data:{name:'spike',options:[{type:1,name:'hint',options:[{name:'role',type:3,value:'Duelist'}]}]}};
  const first=await runKpCommand(f.env,hint,mapping);
  assert.match(first,/10,000 KP/);
@@ -309,6 +309,6 @@ test('private /spike status and /spike hint select the requested role and charge
  assert.match(repeated,/購入済み/);
  assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM kp_ledger WHERE kind='spike-hint'").get()?.n,1);
  const after=await runKpCommand(f.env,status,mapping);
- assert.match(after,/12キル以上/);
+ assert.match(after,/15キル以上/);
  assert.doesNotMatch(after,/7アシスト以上/,'unbought role condition stays hidden');
 });
