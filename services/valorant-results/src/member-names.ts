@@ -1,7 +1,16 @@
 import sealed from '../member-names.encrypted.json' with {type:'json'};
+import discord from '../discord-config.json' with {type:'json'};
 import {decryptKpMapping} from './kp.ts';
 import type {KpEnv} from './kp.ts';
 export interface MemberNames {guildId:string;names:Array<{suffix?:string;userId?:string;name:string}>}
+/** Display-only exact-ID aliases; never assign a name by matching four trailing digits. */
+export const MEMBER_NAME_OVERRIDES:Readonly<Record<string,string>>={
+ '827801943928995840':'小林',
+};
+function withExplicitAliases(names:Map<string,string>,guild:string){
+ if(guild===discord.guildId)for(const [user,name] of Object.entries(MEMBER_NAME_OVERRIDES))names.set(user,name);
+ return names;
+}
 const configs=new Map<string,Promise<MemberNames>>();
 function validate(value:unknown):MemberNames{
  const config=value as MemberNames;
@@ -14,12 +23,12 @@ export async function memberNames(env:KpEnv,guild:string,base:Map<string,string>
  try{
   if(override)config=validate(override);
   else{
-   const key=env.KP_BOOTSTRAP_PRIVATE_KEY;if(!key)return names;
+   const key=env.KP_BOOTSTRAP_PRIVATE_KEY;if(!key)return withExplicitAliases(names,guild);
    if(!configs.has(key))configs.set(key,decryptKpMapping(key,sealed).then(validate));
    config=await configs.get(key)!;
   }
- }catch{return names;}
- if(config.guildId!==guild)return names;
+ }catch{return withExplicitAliases(names,guild);}
+ if(config.guildId!==guild)return withExplicitAliases(names,guild);
  // A public feed is polled every 5 seconds. Resolve all persisted suffix
  // bindings in one indexed read rather than one SQL request per alias.
  // The fallback below still validates previously unseen suffixes and locks
@@ -43,5 +52,5 @@ export async function memberNames(env:KpEnv,guild:string,base:Map<string,string>
  }
  // A supplied full ID is authoritative; never resolve it by its last four digits.
  for(const alias of config.names)if(alias.userId)names.set(alias.userId,alias.name.trim());
- return names;
+ return withExplicitAliases(names,guild);
 }
