@@ -57,7 +57,11 @@ test('cold start, growth boundaries and full role unlock use the previous match 
 });
 test('daily 10/11/15/16 and the last-five same-agent rule affect growth, never erase unlocks',()=>{
  const p=full(),q=(day:number,r=0)=>quoteSpike({...p,recent:Array(r).fill(agent.id)},m(),day);
- assert.equal(q(10).amount,258);assert.equal(q(11).amount,149);assert.equal(q(15).amount,149);assert.equal(q(16).amount,61);
+ assert.equal(q(10).amount,258);assert.equal(q(11).amount,149);assert.equal(q(15).amount,149);
+ assert.equal(q(16).amount,105);assert.equal(q(21).amount,105);assert.equal(q(100).amount,105);
+ assert.equal(q(10).breakdown.dailyFactor,1);assert.equal(q(11).breakdown.dailyFactor,0.5);
+ assert.equal(q(15).breakdown.dailyFactor,0.5);assert.equal(q(16).breakdown.dailyFactor,0.3);
+ assert.equal(q(21).breakdown.dailyFactor,0.3);assert.equal(q(100).breakdown.dailyFactor,0.3);
  assert.equal(q(1,1).amount,258);assert.ok(q(1,2).amount<258);assert.equal(q(1,4).amount,127);
  assert.equal(quoteSpike({...p,recent:[agent.id,'other',agent.id,agent.id]},m(),1).breakdown.repeatFactor,.6);
  assert.equal(q(16,4).next.unlocked.length,4);

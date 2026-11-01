@@ -63,7 +63,8 @@ export function quoteSpike(p:SpikeProfile,m:SpikeMatch,dayGame:number){
  // Only fully awakened users bypass all daily/repeated-agent growth attenuation.
  // With 6K/2A/6D and 50% wins, all four awakenings average ~800 KP per game.
  const enhanced=add(grown,fraction(awakenings*SPIKE_AWAKENING_REWARD_TOTAL,SPIKE_ROLES.length));
- const fatigue=overdrive?fraction(1):dayGame<=10?fraction(1):dayGame<=15?fraction(1,2):fraction(1,10);
+ // From match 16 onward, grant 30% of the growth component (base KP remains intact).
+ const fatigue=overdrive?fraction(1):dayGame<=10?fraction(1):dayGame<=15?fraction(1,2):fraction(3,10);
  const same=1+p.recent.filter(a=>a===m.agent).length,repeat=overdrive?fraction(1):fraction(same<=2?10:same===3?8:same===4?6:4,10);
  const exact=add(fraction(base),mul(mul(fatigue,repeat),sub(enhanced,fraction(base))));
  const total=add(exact,fraction(BigInt(p.carryN),BigInt(p.carryD))),whole=total.n/total.d;
