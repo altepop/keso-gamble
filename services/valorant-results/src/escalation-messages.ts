@@ -28,7 +28,7 @@ export function escalationBigNote(tier:number,award:number){
  const d=escalationBigCopy(tier,award);
  return `（🎰 エスカ大勝負 ${d.tierLabel}：${d.outcome==='win'?'勝利 +':'敗北 −'}${d.nominal} KP／${d.comment}）`;
 }
-/** Separate equal-bot notices are reserved for IV/V: at 15% bet odds,
+/** Separate equal-bot notices are reserved for IV/V: at the configured low-frequency bet odds,
  * posting every tier would needlessly flood the earnings channel. */
 export function escalationBigPost(user:string,tier:number,award:number,net:number,owed=0){
  if(!/^\d{15,22}$/.test(user)||!Number.isSafeInteger(net)||!Number.isSafeInteger(owed)||owed<0)throw Error('Invalid escalation announcement');
