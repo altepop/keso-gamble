@@ -2,6 +2,7 @@ import {steamApi,steamCallback} from './steam-auth.ts';
 import {privateCasinoAllowed,privateCasinoRound} from './private-casino.ts';
 import {memberNames} from './member-names.ts';
 import {kpTrend} from './kp-trend.ts';
+import {d1OptionalMode} from './d1-optional-mode.ts';
 import {communityFeed,feedRevision,publicTrade} from './community-feed.ts';
 import skirmishQueues from '../skirmish-queues.json' with {type:'json'};
 import {SKIRMISH_POLICY} from './skirmish.ts';
@@ -280,6 +281,9 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping):Promi
   }
   const names=()=>memberNames(env,mapping.guildId,new Map(mapping.accounts.map(a=>[a.discordUserId,configuredPlayers.find(p=>p.riotId.toLowerCase()===a.riotId.toLowerCase())?.name??a.riotId.split('#')[0]])));
   if(request.method==='GET'&&path==='/api/kp/feed'){
+   // Soft D1 safety mode skips OPTIONAL community histories only.
+   // Wallets, bets, cron settlements and public /kp ranking remain live.
+   if(await d1OptionalMode(env))return response({unchanged:true,conserve:true});
    // Authorization above is required even for unchanged feeds. The client
    // polls every five seconds, but the forty latest actions need no re-read
    // when no new operation was committed since its previous response.
@@ -289,7 +293,10 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping):Promi
     return response({unchanged:true,revision});
    return response({...await communityFeed(env,mapping.guildId,await names()),revision});
   }
-  if(request.method==='GET'&&path==='/api/kp/trend')return response(await kpTrend(env,mapping.guildId,await names(),Number(new URL(request.url).searchParams.get('days')??7)));
+  if(request.method==='GET'&&path==='/api/kp/trend'){
+   if(await d1OptionalMode(env))return Response.json({error:'D1節約モード中です。資産推移は次のリセット後に確認できます。'},{status:429,headers:{...headers,'Retry-After':'120'}});
+   return response(await kpTrend(env,mapping.guildId,await names(),Number(new URL(request.url).searchParams.get('days')??7)));
+  }
   if(request.method==='GET'&&path==='/api/kp/state')return response(await readKpState(env,mapping,owner.user));
   // 監視状態: members only, aggregates only.
   if(request.method==='GET'&&path==='/api/kp/health')return response(await healthReport(env,mapping.guildId));
