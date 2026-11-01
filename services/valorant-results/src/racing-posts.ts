@@ -95,7 +95,10 @@ export async function queueRacePosts(env:PostEnv,mapping:KpMapping,now=Date.now(
   if(!present)await enqueue(env,'race-card:'+open,cardPost({...raceCard(open,undefined,await raceEntries(env,mapping,open)),...(openCrown?{name:openCrown.name}:{})},(await raceSeed(env,mapping.guildId,open)).hash),now);
  }
  // Results: the last few races, once every bet on them is settled. Older races are never posted late.
- const latest=latestRaceStart(now),levelOf=await roastLevelsOf(env,mapping);
+ const latest=latestRaceStart(now);
+ // Roast preferences only matter if a result is actually being queued.
+ // Loading every wallet's roast level on idle ticks would scan kp_state.
+ let levelOf:Awaited<ReturnType<typeof roastLevelsOf>>|null=null;
  for(let id=latest;id>latest-3*RACE_INTERVAL;id-=RACE_INTERVAL){
   if(now<id+RUN_MS)continue;
   // INSERT OR IGNORE keeps the published result immutable. Once this ID is
@@ -110,7 +113,7 @@ export async function queueRacePosts(env:PostEnv,mapping:KpMapping,now=Date.now(
   const card={...raceCard(id,undefined,entries),...(crown?{name:crown.name}:{})};
   const ownerWon=Boolean(seed)&&Boolean(card.horses[raceResult(card,seed!.seed).order[0]-1].ownerName);
   if(!worthPosting(card,bets,Boolean(crown),ownerWon))continue;
-  if(seed){const titles=await titlesOf(env,mapping.guildId);await enqueue(env,'race-result:'+id,resultPost(card,seed.seed,bets,levelOf,u=>titles.get(u)),now);}
+  if(seed){levelOf??=await roastLevelsOf(env,mapping);const titles=await titlesOf(env,mapping.guildId);await enqueue(env,'race-result:'+id,resultPost(card,seed.seed,bets,levelOf,u=>titles.get(u)),now);}
  }
 }
 export async function flushRacePosts(env:PostEnv,limit=5){
