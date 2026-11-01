@@ -12,6 +12,14 @@ export function unratedLottery(roll:number){
 }
 export type EscalationKind='big'|'super-lucky'|'super-unlucky';
 export interface EscalationSpin { kind:EscalationKind; tier:number; award:number }
+// Games started before v6 must keep both the old 15% trigger AND the old tier odds.
+const V5_BIG_TIERS=[
+ {weight:4000,amount:500},
+ {weight:3000,amount:1000},
+ {weight:2000,amount:2500},
+ {weight:800,amount:5000},
+ {weight:200,amount:15000},
+] as const;
 function weightedTier(roll:number,tiers:readonly {weight:number;amount:number}[]){
  let limit=0;
  for(let i=0;i<tiers.length;i++){limit+=tiers[i].weight;if(roll<limit)return {tier:i+1,amount:tiers[i].amount};}
@@ -30,7 +38,7 @@ export function escalationFor(id:string,outcome:string|null,oddsV6=true):Escalat
  if(roll<2*each*scale)return {kind:'super-unlucky',tier:0,award:0};
  const bigRange=oddsV6?100000000/rules.escalation.bigChanceDenominator:rules.escalation.bigChancePercent*100;
  if(roll<2*each*scale+bigRange){
-  const prize=weightedTier(draw('escalation-big:'+id),rules.escalation.bigTiers);
+  const prize=weightedTier(draw('escalation-big:'+id),oddsV6?rules.escalation.bigTiers:V5_BIG_TIERS);
   return {kind:'big',tier:prize.tier,award:outcome==='win'?prize.amount:-prize.amount};
  }
  return null;
