@@ -44,7 +44,7 @@ export function ownerPanel(state,now){
  const hall=retired.length?`<h3>殿堂</h3>${retired.map(h=>`<div class="history-entry"><div>${h.statue?'🗿 ':''}${escapeHTML(h.name)}${h.nickname?`「${escapeHTML(h.nickname)}」`:''}（${h.gradeLabel}）</div><div class="helper">${record(h)}</div></div>`).join('')}`:'';
  return `<div class="asset-card"><h2 class="panel-title">馬主</h2><p class="helper">ボックスを開けると、買うまでわからない等級の馬が出ます。馬は自分と同じ等級のレースにランダムに出走し、3着までに入ると賞金が入ります。調子はあなたの直近の遊び（試合・クイズ・通話、どれも同じ）で決まります。${RETIRE_RACES}走で引退して殿堂入り。持てるのは${MAX_OWNED}頭まで（いま${active.length}頭）。</p>${mine}<h3>ボックス</h3><div class="field"><label for="horse-name">馬の名前（1〜12文字。友人の名前は本人の許可を取ってから）</label><input id="horse-name" class="input" maxlength="12" autocomplete="off"></div><p class="helper">今日の交換はあと${Math.max(0,left)}回（指令・ボックス合わせて1日${DAILY_EXCHANGES}回）。</p>${boxes}${hall}</div>`;
 }
-export function luxuryPanel(state){
+export function luxuryPanel(state,{readonly=false,confirmation=null}={}){
  const members=(state.members??[]).filter(m=>m.id!==state.selfUserId),horses=(state.horses??[]);
  const field=(id,label,control)=>`<div class="field"><label for="${id}">${label}</label>${control}</div>`;
  const select=(id,options)=>`<select id="${id}" class="select">${options.map(([v,l])=>`<option value="${escapeHTML(v)}">${escapeHTML(l)}</option>`).join('')}</select>`;
@@ -54,8 +54,17 @@ export function luxuryPanel(state){
   field('lux-title','称号',select('lux-title',TITLES.map(t=>[t,t]))),
   field('lux-horse','馬（銅像・看板馬）',select('lux-horse',horses.map(h=>[h.id,`${h.name}${h.retired_at?'（引退）':''}`]))),
  ].join('');
- const items=LUXURY.map(i=>`<div class="history-entry"><div><strong>${i.label}</strong> ${kp(stockPrice(i.price,state.stockBenefits))}${state.stockBenefits?.percent?' <small>株主優待</small>':''}</div><div class="helper">${i.detail}</div><div class="action-row"><button class="action-btn" data-action="luxury" data-item="${i.id}">買う</button></div></div>`).join('');
- return `<div class="asset-card"><h2 class="panel-title">KPの使い道（超高級品）</h2><p class="helper">${state.luxury?.title?`あなたの称号:「${escapeHTML(state.luxury.title)}」 · `:''}どれも1日の交換回数（3回）に含みます。相手が「控えめ」の煽りレベルなら、相手を巻き込む品は使えません。</p>${inputs}${items}</div>`;
+ const items=LUXURY.map(i=>`<div class="history-entry"><div><strong>${i.label}</strong> ${kp(stockPrice(i.price,state.stockBenefits))}${state.stockBenefits?.percent?' <small>株主優待</small>':''}</div><div class="helper">${i.detail}</div><div class="action-row"><button type="button" class="action-btn" data-action="luxury" data-item="${i.id}" ${readonly?'disabled title="本番KP口座への接続が必要"':''}>${readonly?'本番口座で購入':'買う'}</button></div></div>`).join('');
+ const selected=LUXURY.find(i=>i.id===confirmation?.item);
+ const detail=selected&&confirmation?.args?selected.needs==='target'?(members.find(m=>m.id===confirmation.args.target)?.name??'未選択'):
+  selected.needs==='text'?confirmation.args.text:selected.needs==='title'?confirmation.args.title:
+  ['horse','retired'].includes(selected.needs)?(horses.find(h=>String(h.id)===String(confirmation.args.horseId))?.name??'未選択'):null;
+ const approval=selected&&!readonly?`<div class="luxury-confirmation" role="group" aria-label="高級品の購入確認">
+ <h3>購入の最終確認</h3><p><strong>${escapeHTML(selected.label)}</strong>を <strong>${kp(confirmation.price)}</strong> で購入します。</p>
+ ${detail!==null?`<p class="helper">指定内容：${escapeHTML(detail)}</p>`:''}
+ <p class="helper">確定すると本番口座からKPが減る。入力内容を変更した場合は、もう一度確認してください。</p>
+ <div class="action-row"><button type="button" class="action-btn primary" data-action="luxury-approve">この内容で購入を確定</button><button type="button" class="action-btn" data-action="luxury-cancel">キャンセル</button></div></div>`:'';
+ return `<div class="asset-card"><h2 class="panel-title">KPの使い道（超高級品）</h2>${readonly?'<p class="market-disclaimer">商品一覧のプレビューです。本番KP口座に接続すると購入できます。デモKPでは購入できません。</p>':''}<p class="helper">${state.luxury?.title?`あなたの称号:「${escapeHTML(state.luxury.title)}」 · `:''}どれも1日の交換回数（3回）に含みます。相手が「控えめ」の煽りレベルなら、相手を巻き込む品は使えません。</p>${inputs}${approval}${items}</div>`;
 }
 function history(state){
  const bets=(state.raceBets??[]).slice(0,10);
