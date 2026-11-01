@@ -44,8 +44,9 @@ export async function voiceRewardHistory(env:KpEnv,guild:string,user:string,wall
  if(!entries){entries=new Map();voiceHistoryCache.set(env.DB,entries);}
  const key=guild+':'+user,cached=entries.get(key);
  if(cached&&cached.version===walletVersion&&now>=cached.at&&now-cached.at<VOICE_HISTORY_TTL)return cached.promise;
- const promise=env.DB.prepare("SELECT e.id,e.day,e.slot,e.amount+COALESCE((SELECT delta FROM kp_ledger WHERE id='bonus:'||e.id),0) AS amount,e.at FROM kp_voice_events e WHERE e.guild=? AND e.user=? ORDER BY e.at DESC LIMIT 100")
-  .bind(guild,user).all<VoiceRewardEntry>().then(row=>row.results);
+ // D1 returns a Promise; the in-memory SQL fixtures return an object directly.
+ const promise=Promise.resolve(env.DB.prepare("SELECT e.id,e.day,e.slot,e.amount+COALESCE((SELECT delta FROM kp_ledger WHERE id='bonus:'||e.id),0) AS amount,e.at FROM kp_voice_events e WHERE e.guild=? AND e.user=? ORDER BY e.at DESC LIMIT 100")
+  .bind(guild,user).all<VoiceRewardEntry>()).then(row=>row.results);
  entries.set(key,{version:walletVersion,at:now,promise});
  if(entries.size>8)entries.delete(entries.keys().next().value!);
  try{return await promise;}catch(error){if(entries.get(key)?.promise===promise)entries.delete(key);throw error;}
