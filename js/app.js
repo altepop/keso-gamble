@@ -8,7 +8,7 @@ import {wheelView,covered,redNumbers,outcomeAngle} from './roulette-view.js?v=we
 import {makeEscalationWheel} from './escalation-roulette.js?v=web-e054fc2bb05b5f';
 import {connectDiscordActivity,isDiscordActivity,openSteamLogin,openCompanionGame}from './discord-activity-auth.js?v=web-e054fc2bb05b5f3f';
 import { createKpClient } from './kp-client.js?v=web-e054fc2bb05b5f3f';
-import { fullRefreshInterval } from './live-refresh-policy.js';
+import { fullRefreshInterval, communityRefreshEnabled, COMMUNITY_REFRESH_INTERVAL } from './live-refresh-policy.js';
 import { fmt, fmt0 } from './format.js?v=web-e054fc2bb05b5f3f';
 import { submitClaim, approveClaim, issueDirective, completeDirective } from './progression.js?v=web-e054fc2bb05b5f3f';
 import { titleView, homeView, playView, directivesView, escapeHTML } from './progression-views.js?v=web-e054fc2bb05b5f3f';
@@ -281,7 +281,11 @@ function detailSheet(){
 
 function render(){
   const html = screen==='title'?titleView(state,wallet.remembered,autoState,autoMessage):screen==='home'?homeView(state,bottomNav()):screen==='play'?playView(state,drafts,bottomNav(),steamView):screen==='directives'?directivesView(state,drafts,bottomNav(),tabsFor('directives')):screen==='stable'?screenStable():screen==='shop'?screenShop():screen==='market'?screenMarket():screen==='casino'?screenCasino():screen==='mleague'?mleagueScreen({state,live,draft:{...mlDraft,amount:drafts['ml-amount']},tabs:subTabs(),nav:bottomNav()}):screen==='race'?screenRace():screenAssets();
-  const openDetails=[...app.querySelectorAll('details')].map(el=>el.open);
+  const previousView=app.querySelector('.screen')?.dataset.view;
+  // Do not carry an expanded home feed into a different screen: closed
+  // disclosures must not trigger 10-second D1 polling in the background.
+  const communityOpen=previousView===screen?app.querySelector('details.community-feed')?.open:undefined;
+  const openDetails=[...app.querySelectorAll('details:not(.community-feed)')].map(el=>el.open);
   const focusedElement=document.activeElement;
   const focused=focusedElement?.id;
   const focusData=focusedElement && Object.entries(focusedElement.dataset).find(([key])=>['screen','marketTab','marketMode','tradeSide','bet','action','open','raceHorse','raceType'].includes(key));
@@ -293,7 +297,8 @@ function render(){
   // A quote/balance poll must not replace a pressed button when its display is unchanged.
   if(markup===renderedMarkup)return;
   app.innerHTML=markup;renderedMarkup=markup;
-  app.querySelectorAll('details').forEach((el,index)=>{el.open=openDetails[index]??el.open;});
+  app.querySelectorAll('details:not(.community-feed)').forEach((el,index)=>{el.open=openDetails[index]??el.open;});
+  if(communityOpen!==undefined){const feed=app.querySelector('details.community-feed');if(feed)feed.open=communityOpen;}
   for (const [id,value] of Object.entries(drafts)) { const input=document.getElementById(id); if(input) input.value=value; }
   if(focused&&!casinoBusy) document.getElementById(focused)?.focus();
   else if(focusData&&!casinoBusy){const [key,value]=focusData;const match=[...app.querySelectorAll('button,[data-open]')].find(el=>el.dataset[key]===value);match?.focus();}
@@ -629,7 +634,7 @@ let privateRacePreview=null,privateRoundMessage='';
 // it every 120s, reducing heavy D1 reads while preserving reactive balances.
 // Nothing is fetched while hidden.
 // This small read is independent of wallet/animation polling and never replaces the game form.
-let communityEntries=[],communityBusy=false,communityOwner=null,communityStatus='確認中…';
+let communityEntries=[],communityBusy=false,communityOwner=null,communityStatus='確認中…',lastCommunityPoll=0;
 // Keep five-second freshness checks, but download the 40-row feed only on change.
 let communityRevision=null,communityFullAt=0;
 function paintCommunity(){
@@ -641,10 +646,11 @@ function paintCommunity(){
 }
 async function refreshCommunity(){
  // The title screen has no community panel; never poll the DB for an invisible feed.
- if(document.hidden||screen==='title'||!live||!wallet.connected||communityBusy)return;
+ if(communityBusy||!live||!communityRefreshEnabled(screen,document.querySelector('details.community-feed')?.open,!document.hidden,wallet.connected))return;
  const owner=state.selfUserId;
- if(communityOwner!==owner){communityEntries=[];communityOwner=owner;communityRevision=null;communityFullAt=0;}
- communityBusy=true;
+ if(communityOwner!==owner){communityEntries=[];communityOwner=owner;communityRevision=null;communityFullAt=0;lastCommunityPoll=0;}
+ if(Date.now()-lastCommunityPoll<COMMUNITY_REFRESH_INTERVAL)return;
+ lastCommunityPoll=Date.now();communityBusy=true;
  try{
   // Force a full fetch each minute so renamed members and older servers
   // are handled even when no wallet operation has been appended.
@@ -660,7 +666,10 @@ async function refreshCommunity(){
  }catch{communityStatus='更新が止まっています。自動で再接続します。';}
  finally{communityBusy=false;paintCommunity();}
 }
-setInterval(refreshCommunity,5000);
+// Poll only while the user is actually looking at the community feed.
+// The closed disclosure on other screens causes ZERO feed requests.
+setInterval(refreshCommunity,COMMUNITY_REFRESH_INTERVAL);
+addEventListener('click',e=>{if(e.target.closest?.('.community-feed > summary'))setTimeout(refreshCommunity,0);});
 addEventListener('visibilitychange',()=>{if(!document.hidden)refreshCommunity();});
 let lastPulse=null,lastFull=0;
 async function refreshLive(){
