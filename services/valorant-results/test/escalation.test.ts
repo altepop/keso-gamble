@@ -37,7 +37,7 @@ async function fixture(){
  sql.prepare('INSERT INTO tracked_players VALUES(?,?,?,?)').run('One#JP1',puuid,'ap',0);
  await initializeKp(env,mapping);
  await syncKpAccounts(env,mapping);
- sql.exec("UPDATE kp_settings SET value='0' WHERE key IN ('starts_at','mode_rewards_started_at','escalation_v5_started_at');UPDATE kp_accounts SET linked_at=0");
+ sql.exec("UPDATE kp_settings SET value='0' WHERE key IN ('starts_at','mode_rewards_started_at','escalation_v5_started_at','escalation_v6_started_at');UPDATE kp_accounts SET linked_at=0");
  return {env,sql,seed:(n:number)=>sql.prepare('INSERT INTO kp_ledger VALUES(?,?,?,?,?,?)').run('seed-'+n,guild,user,n,'test',Date.now())};
 }
 test('exclusive rarity draws are deterministic, with stage weights and both super outcomes',()=>{
@@ -47,11 +47,38 @@ test('exclusive rarity draws are deterministic, with stage weights and both supe
   if(!s)counts.none++;else{counts[s.kind]++;if(s.kind==='big')tiers[s.tier-1]++;}
   assert.deepEqual(escalationFor('distribution-'+i+':'+puuid,'win'),s);
  }
- assert.ok(counts.big>14000&&counts.big<16000);
+ assert.ok(counts.big>3900&&counts.big<4400,'v6 big bet must occur approximately 1 in 24 games');
+ let oldBig=0;
+ const oldTiers=[0,0,0,0,0];
+ for(let i=0;i<100000;i++){
+  const old=escalationFor('distribution-'+i+':'+puuid,'win',false);
+  if(old?.kind==='big'){oldBig++;oldTiers[old.tier-1]++;}
+ }
+ assert.ok(oldBig>14000&&oldBig<16000,'existing v5 games retain their 15% odds');
+ const originalShares=[0.4,0.3,0.2,0.08,0.02];
+ for(let i=0;i<5;i++)assert.ok(Math.abs(oldTiers[i]/oldBig-originalShares[i])<0.015,`v5 tier ${i+1}: ${oldTiers[i]}/${oldBig}`);
  assert.ok(counts['super-lucky']>60&&counts['super-lucky']<150);
  assert.ok(counts['super-unlucky']>60&&counts['super-unlucky']<150);
+ // v6 tiers: 35/28/20/13/4 of all big bets, without altering the jackpot amounts.
+ const expected=[0.35,0.28,0.20,0.13,0.04];
+ for(let i=0;i<5;i++)assert.ok(Math.abs(tiers[i]/counts.big-expected[i])<0.025,`tier ${i+1}: ${tiers[i]}/${counts.big}`);
+ assert.equal(tiers.reduce((a,b)=>a+b,0),counts.big);
  assert.ok(tiers[0]>tiers[1]&&tiers[1]>tiers[2]&&tiers[2]>tiers[3]&&tiers[3]>tiers[4]);
  assert.equal(escalationFor('draw-test','draw'),null);
+});
+test('already started v5 games keep 15% while new games use 1-in-24',async()=>{
+ const f=await fixture();f.seed(20000);
+ f.sql.prepare("UPDATE kp_settings SET value=? WHERE key='escalation_v6_started_at'").run(String(Date.now()+60000));
+ let oldOnly:string|null=null;
+ for(let i=0;i<10000;i++){
+  const id='pending-v5-'+i+':'+puuid;
+  if(escalationFor(id,'win',false)?.kind==='big'&&escalationFor(id,'win',true)?.kind!=='big'){oldOnly='pending-v5-'+i;break;}
+ }
+ assert.ok(oldOnly);
+ const expected=valoKp(match(oldOnly!),puuid,'escalation','win',true,false);
+ assert.equal(expected.escalation?.kind,'big');
+ assert.equal(await collectKpMatch(f.env,mapping,match(oldOnly!),puuid),expected.net);
+ assert.equal((f.sql.prepare('SELECT policy FROM kp_events WHERE match=?').get(oldOnly!) as {policy:string}).policy,'mode-rewards-v5');
 });
 test('the five-tier big bet replaces normal base and is positive on win, negative on loss',()=>{
  const winner=find('big'),loser=find('big',false);

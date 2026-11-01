@@ -1,11 +1,11 @@
 // Visual-only replay of a server-settled VALORANT Escalation reward.
 // The roulette NEVER submits, chooses or changes KP. Replays cannot pay twice.
 export const BIG_ESC_TIERS=[
- {weight:4000,amount:500,color:'#206e91'},
- {weight:3000,amount:1000,color:'#3654a5'},
+ {weight:3500,amount:500,color:'#206e91'},
+ {weight:2800,amount:1000,color:'#3654a5'},
  {weight:2000,amount:2500,color:'#673db4'},
- {weight:800,amount:5000,color:'#b77927'},
- {weight:200,amount:15000,color:'#efc65b'},
+ {weight:1300,amount:5000,color:'#b77927'},
+ {weight:400,amount:15000,color:'#efc65b'},
 ];
 export const SUPER_ESC_TIERS=[
  {weight:5000,amount:10000,color:'#245c9d'},

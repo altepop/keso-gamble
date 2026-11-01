@@ -241,12 +241,14 @@ export async function collectKpMatch(env:KpEnv,mapping:KpMapping,raw:Match,puuid
  }
  // Older pending results keep the old 3%/±1,000 escalation rules; the new draw
  // may only apply to games started after the first v5 schema initialization.
- const escalationStart=status.mode==='escalation'&&modern
-   ?await env.DB.prepare("SELECT value FROM kp_settings WHERE key='escalation_v5_started_at'").first<{value:string}>():null;
- const escalationV5=status.mode!=='escalation'||start>=Number(escalationStart?.value??Infinity);
- const {net,note,lottery,escalation}=modern?valoKp(raw,puuid,status.mode,status.outcome,escalationV5):{...legacyValoKp(raw,puuid,status.mode,status.outcome),lottery:undefined,escalation:undefined};
+ const escalationStarts=status.mode==='escalation'&&modern
+   ?(await env.DB.prepare("SELECT key,value FROM kp_settings WHERE key IN ('escalation_v5_started_at','escalation_v6_started_at')").all<{key:string;value:string}>()).results:[];
+ const cutoff=(key:string)=>Number(escalationStarts.find(x=>x.key===key)?.value??Infinity);
+ const escalationV5=status.mode!=='escalation'||start>=cutoff('escalation_v5_started_at');
+ const escalationV6=status.mode!=='escalation'||start>=cutoff('escalation_v6_started_at');
+ const {net,note,lottery,escalation}=modern?valoKp(raw,puuid,status.mode,status.outcome,escalationV5,escalationV6):{...legacyValoKp(raw,puuid,status.mode,status.outcome),lottery:undefined,escalation:undefined};
  // Events hold the earned part (never negative); a cost is a separate debit capped at the balance.
- const e:KpEvent={id,guild:mapping.guildId,user:link.user,puuid,match:raw.metadata.match_id,mode:status.mode,outcome:status.outcome,amount:Math.max(0,net),policy:modern?(status.mode==='escalation'&&!escalationV5?'mode-rewards-v4':MODE_REWARD_VERSION):policy.version,at:Date.now(),...net<0?{penalty:-net}:{},...note?{note}:{},...lottery!==undefined&&lottery>=UNRATED_JACKPOT?{jackpot:lottery}:{},...(spike?{kind:'spikerush-growth' as const,spike,policy:SPIKE_POLICY}:{}),...(escalation?{escalation}:{})};
+ const e:KpEvent={id,guild:mapping.guildId,user:link.user,puuid,match:raw.metadata.match_id,mode:status.mode,outcome:status.outcome,amount:Math.max(0,net),policy:modern?(status.mode==='escalation'&&!escalationV5?'mode-rewards-v4':status.mode==='escalation'&&!escalationV6?'mode-rewards-v5':MODE_REWARD_VERSION):policy.version,at:Date.now(),...net<0?{penalty:-net}:{},...note?{note}:{},...lottery!==undefined&&lottery>=UNRATED_JACKPOT?{jackpot:lottery}:{},...(spike?{kind:'spikerush-growth' as const,spike,policy:SPIKE_POLICY}:{}),...(escalation?{escalation}:{})};
  await env.DB.prepare('INSERT OR IGNORE INTO kp_inbox VALUES(?,?,?)').bind(id,JSON.stringify(e),Date.now()).run();
  await drainKpInbox(env);
  return kpMatchNet(env,id);

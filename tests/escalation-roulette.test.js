@@ -4,7 +4,9 @@ import {wheelSectors,targetRotation,escalationWheelModel,BIG_ESC_TIERS,SUPER_ESC
 test('visible wheel sectors reflect actual tier odds, including the rare half-percent slice',()=>{
  const big=wheelSectors(BIG_ESC_TIERS),lucky=wheelSectors(SUPER_ESC_TIERS);
  assert.equal(big.length,5);assert.equal(lucky.length,5);
- assert.equal(big[0].end-big[0].start,144);
+ assert.deepEqual(BIG_ESC_TIERS.map(t=>t.weight),[3500,2800,2000,1300,400]);
+ assert.deepEqual(big.map(b=>Number((b.end-b.start).toFixed(3))),[126,100.8,72,46.8,14.4]);
+ assert.deepEqual(big.map(b=>b.amount),[500,1000,2500,5000,15000]);
  assert.ok(Math.abs(lucky[4].end-lucky[4].start-1.8)<1e-6);
  for(const sectors of [big,lucky]){
   assert.equal(sectors[0].start,0);assert.equal(sectors.at(-1).end,360);
