@@ -3,7 +3,7 @@ import {applyLuck,luckFor,luckLabel} from './luck.ts';
 import type {KpEnv} from './kp.ts';
 /** Only public, individually verified rank-match stats grant a performance bonus. */
 export interface UnitePerformance {
- ko:number;ast:number;ours:number;theirs:number;heal:string;tkn:string;surrendered:boolean;
+ pokemon?:string;ko:number;ast:number;ours:number;theirs:number;heal:string;tkn:string;surrendered:boolean;
 }
 function damageNumber(raw:string){
  if(typeof raw!=='string')return 0;
@@ -18,16 +18,30 @@ function performanceBonus(win:boolean,p:UnitePerformance|null|undefined){
  const actions=p.ko+p.ast,heal=damageNumber(p.heal),taken=damageNumber(p.tkn);
  const high=actions>=25||p.ast>=16||heal>=100_000||taken>=120_000;
  const active=high||actions>=18||p.ast>=11||heal>=60_000||taken>=85_000;
+ // Crustle-only specialties use objective match results, NOT player identity.
+ // Tanking requires assists to avoid rewarding damage taken without team play.
+ // Offensive builds can qualify through high KO plus team participation.
+ const crustle=p.pokemon==='Crustle';
+ const fortress=crustle&&taken>=85_000&&p.ast>=7;
+ const sturdy=crustle&&taken>=50_000&&p.ast>=4;
+ const rockOffense=crustle&&p.ko>=12&&actions>=20;
+ const rockPressure=crustle&&p.ko>=8&&actions>=14;
+ const crustleElite=fortress||rockOffense;
+ const crustleSolid=sturdy||rockPressure||crustleElite;
  if(win){
-  const contribution=high?300:active?160:0;
+  const contribution=crustleElite?380:crustleSolid?240:high?300:active?160:0;
   const margin=p.ours-p.theirs>=200?120:0;
-  const parts=[...contribution?[high?'大活躍':'チーム貢献']:[],...margin?['大差勝利']:[]];
+  const title=crustleElite?(fortress?'🪨 鉄壁イワパレス':'🪨 岩石ラッシュ')
+   :crustleSolid?(sturdy?'🪨 頼れる岩壁':'🪨 攻めのイワパレス')
+   :high?'大活躍':'チーム貢献';
+  const parts=[...contribution?[title]:[],...margin?['大差勝利']:[]];
   return {bonus:contribution+margin,note:parts.length?`（${parts.join('・')} +${contribution+margin} KP）`:''};
  }
- // There is no positive settlement for intentionally losing, even after shared luck.
+ // A loss cannot earn positive KP; meaningful defense can only reduce the cost.
  const close=!p.surrendered&&p.theirs>=p.ours&&p.theirs-p.ours<=80;
- const bonus=(active?100:0)+(close?100:0);
- return {bonus,note:bonus?`（${[...active?['奮闘']:[],...close?['接戦']:[]].join('・')}）`:''};
+ const bonus=(active||crustleSolid?100:0)+(crustleElite?100:0)+(close?100:0);
+ const parts=[...crustleElite?['🪨 イワパレス奮闘']:active||crustleSolid?['奮闘']:[],...close?['接戦']:[]];
+ return {bonus,note:bonus?`（${parts.join('・')}）`:''};
 }
 export function uniteQuote(win:boolean,wins:number,losses:number,seed:string,reset=false,performance?:UnitePerformance){
  if(![wins,losses].every(n=>Number.isSafeInteger(n)&&n>=0&&n<=5))throw Error('Invalid Unite streak');
