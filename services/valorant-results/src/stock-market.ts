@@ -51,6 +51,11 @@ export async function ensureStocks(env:KpEnv){
  `CREATE TABLE IF NOT EXISTS stock_dividends(guild TEXT NOT NULL,user TEXT NOT NULL,day TEXT NOT NULL,amount INTEGER NOT NULL CHECK(amount BETWEEN 1 AND 500),eligible_value INTEGER NOT NULL,at INTEGER NOT NULL,PRIMARY KEY(guild,user,day))`,
  `CREATE TABLE IF NOT EXISTS stock_news(guild TEXT NOT NULL,id TEXT NOT NULL,symbol TEXT NOT NULL,label TEXT NOT NULL,bps INTEGER NOT NULL,at INTEGER NOT NULL,applied_version INTEGER,applied_bps INTEGER NOT NULL DEFAULT 0,applied_at INTEGER,PRIMARY KEY(guild,id))`,
  `CREATE INDEX IF NOT EXISTS stock_news_pending ON stock_news(guild,applied_version,at)`,
+ // The per-symbol daily impact budget used to scan *all historical news*
+ // once per tick (539 rows/query in the 2026-11-01 13:55 D1 Insights).
+ // Range on applied_at limits reads to today's events, with the remaining
+ // GROUP BY fields inside a covering index; old history is not deleted.
+ `CREATE INDEX IF NOT EXISTS stock_news_daily_budget ON stock_news(guild,applied_at,symbol,applied_bps,id)`,
  // A partial time-sorted index supports the 12 newest public headlines without
  // scanning and sorting every historical market event on each wallet refresh.
  `CREATE INDEX IF NOT EXISTS stock_news_recent_public ON stock_news(guild,at DESC,id DESC) WHERE applied_version IS NOT NULL AND applied_bps!=0`,
