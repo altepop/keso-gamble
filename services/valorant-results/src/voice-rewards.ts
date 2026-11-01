@@ -30,6 +30,26 @@ export async function creditVoiceSlot(env:KpEnv,guild:string,user:string,day:str
   env.DB.prepare('INSERT INTO kp_voice_events VALUES(?,?,?,?,?,5,?) ON CONFLICT DO NOTHING').bind('voice:'+guild+':'+user+':'+day+':'+slot,guild,user,day,slot,at),
  ]);
 }
+export interface VoiceRewardEntry {id:string;day:string;slot:number;amount:number;at:number}
+/** A member's last 100 voice rewards don't change unless a new ledger row
+ * is added. Every ledger INSERT advances kp_wallets.version, including
+ * voice slots and bonuses. Use that version plus a 2-minute safety TTL
+ * to reuse an expensive 100-row/subquery history across Activity refreshes.
+ * Entries are scoped to the D1 binding and user; only eight are retained. */
+const voiceHistoryCache=new WeakMap<object,Map<string,{version:number;at:number;promise:Promise<VoiceRewardEntry[]>}>>();
+const VOICE_HISTORY_TTL=120_000;
+export async function voiceRewardHistory(env:KpEnv,guild:string,user:string,walletVersion:number,now=Date.now()){
+ await ensureVoiceLedger(env);
+ let entries=voiceHistoryCache.get(env.DB);
+ if(!entries){entries=new Map();voiceHistoryCache.set(env.DB,entries);}
+ const key=guild+':'+user,cached=entries.get(key);
+ if(cached&&cached.version===walletVersion&&now>=cached.at&&now-cached.at<VOICE_HISTORY_TTL)return cached.promise;
+ const promise=env.DB.prepare("SELECT e.id,e.day,e.slot,e.amount+COALESCE((SELECT delta FROM kp_ledger WHERE id='bonus:'||e.id),0) AS amount,e.at FROM kp_voice_events e WHERE e.guild=? AND e.user=? ORDER BY e.at DESC LIMIT 100")
+  .bind(guild,user).all<VoiceRewardEntry>().then(row=>row.results);
+ entries.set(key,{version:walletVersion,at:now,promise});
+ if(entries.size>8)entries.delete(entries.keys().next().value!);
+ try{return await promise;}catch(error){if(entries.get(key)?.promise===promise)entries.delete(key);throw error;}
+}
 export interface VoiceRecord {user:string;day:string;ms:number;paid:number}
 export interface VoiceStore {get<T>(key:string):Promise<T|undefined>;put<T>(key:string,value:T):Promise<void>;list<T>(options:{prefix:string}):Promise<Map<string,T>>;delete(key:string):Promise<unknown>}
 export class VoiceClock {
