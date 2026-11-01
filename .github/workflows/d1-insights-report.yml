@@ -1,7 +1,8 @@
 name: D1 read-only insights report
 
-# Manual re-runs require no terminal or Cloudflare credential on the user's phone.
-# The first merge executes once as a push; later runs are manual only.
+# Cloudflare D1 free-tier Rows read resets at 00:00 UTC (09:00 JST).
+# Hourly windows are read-only analytics and do not consume D1 Rows read.
+# Scheduled every two hours to catch approaching the limit well before exhaustion.
 on:
   push:
     branches: [main]
@@ -9,6 +10,8 @@ on:
       - '.github/workflows/d1-insights-report.yml'
       - 'scripts/d1-read-audit.mjs'
   workflow_dispatch:
+  schedule:
+    - cron: '17 */2 * * *'
 
 permissions:
   contents: read
@@ -19,7 +22,7 @@ concurrency:
 
 jobs:
   inspect:
-    if: github.repository == 'altepop/keso-gamble' && (github.event_name == 'push' || github.actor == 'altepop')
+    if: github.repository == 'altepop/keso-gamble' && (github.event_name == 'push' || github.event_name == 'schedule' || github.actor == 'altepop')
     runs-on: ubuntu-latest
     timeout-minutes: 8
     env:
