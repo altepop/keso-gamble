@@ -16,7 +16,7 @@ import {voiceRewardHistory,voicePolicy} from './voice-rewards.ts';
 import {receiveLoopKp} from './loop-kp.ts';
 import {ensureQuizKp,receiveQuizKp,isKpParticipant,quizKpRates,quizKpLimits} from './quiz-kp.ts';
 import {activityAuthAvailable,createActivityChallenge,authenticateActivity}from './discord-activity-auth.ts';
-import { initializeKp, exchangeKpCode, kpSession, revokeKpSession, kpHash, ensureKpMatchRewardIndex } from './kp.ts';
+import { initializeKp, exchangeKpCode, kpSession, revokeKpSession, kpHash } from './kp.ts';
 import type { KpEnv, KpMapping } from './kp.ts';
 import configuredPlayers from '../players.json' with { type: 'json' };
 import discord from '../discord-config.json' with { type: 'json' };
@@ -33,7 +33,7 @@ import {jackpotOf} from './casino-jackpot.ts';
 import { enqueue, ensurePosts } from './racing-posts.ts';
 // @ts-expect-error Shared browser engine.
 import { hydrateMleague, placeMlBet } from '../../../js/mleague.js';
-import { ledgerHistory } from './kp-history.ts';
+import { kpRewardHistory } from './kp-reward-history.ts';
 import { healthReport } from './health.ts';
 import { mlActivityView, mlClosed, mlData, mlLineupTimes, mlResults, seasonStats } from './mleague.ts';
 import { racingView, raceSeed } from './racing-kp.ts';
@@ -57,11 +57,10 @@ export async function readKpState(env:KpEnv,mapping:KpMapping,user:string){
  const wallet=await env.DB.prepare('SELECT balance,version FROM kp_wallets WHERE guild=? AND user=?').bind(mapping.guildId,user).first<{balance:number;version:number}>();
  const row=await env.DB.prepare('SELECT data,version FROM kp_state WHERE guild=? AND user=?').bind(mapping.guildId,user).first<{data:string;version:number}>();if(!wallet||!row)throw Error('口座が見つかりません。');
  const state=JSON.parse(row.data);state.cash=wallet.balance;state.serverWallet=true;state.walletVersion=wallet.version;state.stateVersion=row.version;state.prices=market.prices;state.history=market.history;state.holdings={...Object.fromEntries((MARKET as {id:string}[]).map(s=>[s.id,0])),...state.holdings};state.lastMarketAt=market.at;state.stockMarket=await stockView(env,market,user);state.stockBenefits=await stockBenefits(env,market,user);Object.assign(state,hydrateRacing(state),hydrateMleague(state),hydrateCasino(state),hydrateMoreCasino(state));state.jackpot=await jackpotOf(env,mapping.guildId);if(!validRoastLevel(state.roastLevel))state.roastLevel=defaultRoastLevel(mapping,user);state.racing=await racingView(env,mapping);state.horses=await ownedHorses(env,mapping,user);const riotId=riotIdOf(mapping,user);state.mastery=riotId?await masteryOf(env,riotId,state.roastLevel):[];state.luxury=await luxuryView(env,mapping,user);for(const h of state.horses)h.statue=state.luxury.statues.includes(h.id);
- await ensureKpMatchRewardIndex(env);
- // A VALORANT result shows what it really did to the wallet: the credit plus its separate loss debit (penalty:<id>).
- const rewards=(await env.DB.prepare("SELECT e.id,e.match,e.mode,e.amount+COALESCE((SELECT delta FROM kp_ledger WHERE id='penalty:'||e.id),0)+COALESCE((SELECT delta FROM kp_ledger WHERE id='esc-extra:'||e.id),0) AS amount,e.at FROM kp_events e WHERE e.guild=? AND e.user=? ORDER BY e.at DESC,e.id LIMIT 100").bind(mapping.guildId,user).all<{id:string;match:string;mode:string;amount:number;at:number}>()).results;
- await ensureQuizKp(env);
- const quiz=(await env.DB.prepare('SELECT id,mode,day,game,amount,completed_at FROM kp_quiz_events WHERE guild=? AND user=? UNION ALL SELECT id,mode,day,game,amount,completed_at FROM kp_quiz_ranked_extra WHERE guild=? AND user=? ORDER BY completed_at DESC LIMIT 100').bind(mapping.guildId,user,mapping.guildId,user).all<{id:string;mode:string;day:string;game:string;amount:number;completed_at:number}>()).results;
+ // Immutable match/quiz/ledger history is cached across an isolate only
+ // while kp_wallets.version is unchanged. Recalculate day-specific counters
+ // below on every request to handle midnight without a D1 history scan.
+ const {rewards,quiz,ledger}=await kpRewardHistory(env,mapping.guildId,user,wallet.version);
  const voice=await voiceRewardHistory(env,mapping.guildId,user,wallet.version);
  state.voiceRewards={...await voiceStatus(env,user),...voicePolicy,earned:voice.filter(e=>e.day===new Date().toISOString().slice(0,10)).reduce((n,e)=>n+e.amount,0)};
  state.quizRates=quizKpRates;state.quizDay=new Date().toISOString().slice(0,10);state.quizLimits=quizKpLimits;state.quizCounts=Object.fromEntries(Object.keys(quizKpRates).map(mode=>[mode,quiz.filter(e=>e.day===state.quizDay&&e.mode===mode).length]));state.quizCompleted=Object.keys(quizKpLimits).filter(mode=>state.quizCounts[mode]>=quizKpLimits[mode]!);
@@ -71,7 +70,7 @@ export async function readKpState(env:KpEnv,mapping:KpMapping,user:string){
  state.members=mapping.accounts.map(a=>({id:a.discordUserId,name:configuredPlayers.find(p=>p.riotId.toLowerCase()===a.riotId.toLowerCase())?.name??a.riotId.split('#')[0]}));
  state.escalationSpins=(await env.DB.prepare("SELECT id,kind,tier,award,balance_before AS beforeBalance,balance_after AS afterBalance,at FROM kp_escalation_spins WHERE guild=? AND user=? ORDER BY at DESC LIMIT 12").bind(mapping.guildId,user).all()).results;
  // Every wallet movement, for the 入出金履歴 (claims stay for the older views).
- state.ledger=await ledgerHistory(env,mapping.guildId,user);
+ state.ledger=ledger;
  // The Mリーグ screen; a failure here never blocks the wallet.
  try{state.mleague=await mlActivityView(env);}catch{console.warn('ml_view_pending');state.mleague=null;}
  if(await privateCasinoAllowed(env,mapping.guildId,user)){state.privateCasino=true;state.marketEvents=await guerrillaSettings(env,mapping.guildId);}else{delete state.privateCasino;delete state.marketEvents;}
