@@ -17,6 +17,30 @@ export interface MlView {teams:MlData['teams'];fixtures:Fixture[]}
 export interface MlResult {names:string[];points:number[];at:number;closedAt?:number}
 interface MlBet {id:string;match:string;player:string;type:'top'|'last';amount:number;odds:number;status:string;payout:number;time:number}
 export const ML_DATA:MlData=data;
+/** Pure schedule gate for the every-minute Worker cron.
+ * 18:00 JST daily: one catch-up for delayed official results, settlement and
+ * tomorrow's match cards, even on off-days.
+ * 18:01–23:59: only when today has a listed match.
+ * 00:00–03:59: only when yesterday had a listed match (late game 2/results).
+ * 04:00–17:59: zero M.LEAGUE cron queries, including on match days.
+ *
+ * Manual /mleague, /mbet and Activity reads are intentionally unaffected.
+ * This does not alter how official results are verified or bets are settled.
+ */
+export function shouldRunMlCron(now:number,fixtures:ReadonlyArray<Pick<Fixture,'date'>>=data.fixtures):boolean{
+ if(!Number.isFinite(now))return false;
+ const local=new Date(now+9*3600000);
+ const hour=local.getUTCHours(),minute=local.getUTCMinutes();
+ const today=local.toISOString().slice(0,10);
+ const hasDate=(date:string)=>fixtures.some(f=>f.date===date);
+ if(hour===18&&minute===0)return true;
+ if(hour>=18)return hasDate(today);
+ if(hour<4){
+  const yesterday=new Date(now+9*3600000-86400000).toISOString().slice(0,10);
+  return hasDate(yesterday);
+ }
+ return false;
+}
 // Every minute: game 2 closes when game 1's result is stored, so a late read keeps betting open longer.
 // Results are read every minute for 8 hours after a start. After that, a game somebody still has an unsettled bet on
 // (an outage, a late official page) keeps being read every 10 minutes until its result arrives.
