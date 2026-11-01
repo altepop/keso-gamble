@@ -136,7 +136,7 @@ test('public command metadata contains definitions only and does not need or exp
  let queries=0;
  const response=await kpApi(new Request('https://worker/api/kp/commands'),{DB:{prepare(){queries++;throw Error('No DB reads');}},KP_BOOTSTRAP_PRIVATE_KEY:'fixture-secret-must-not-leak'} as unknown as KpEnv);
  const body=await response.json() as {version:string;commands:unknown[]};
- assert.equal(response.status,200);assert.equal(body.version,'kp-slash-v17-spike-overdrive');assert.equal(body.commands.length,13);assert.equal(queries,0);
+ assert.equal(response.status,200);assert.equal(body.version,'kp-slash-v18-weekly-bet-80k');assert.equal(body.commands.length,13);assert.equal(queries,0);
  assert.equal(JSON.stringify(body).includes('fixture-secret'),false);assert.equal(response.headers.get('Cache-Control'),'no-store');
 });
 
@@ -181,6 +181,13 @@ test('/kpgrant and /paifulink are refused before any work for members without ad
  }
 });
 
+test('Discord slash command betting limits match the relaxed shared 80,000 KP weekly cap',()=>{
+ const bet=kpCommands.find(c=>c.name==='bet')!;
+ const mbet=kpCommands.find(c=>c.name==='mbet')!;
+ assert.equal(bet.options.find(o=>o.name==='amount')?.max_value,80000);
+ assert.equal(mbet.options.find(o=>o.name==='amount')?.max_value,80000);
+ assert.match(mbet.options.find(o=>o.name==='amount')!.description,/週8万KP/);
+});
 test('/bet needs only a horse and an amount: the open race and a win bet are assumed, and the receipt names the horse',async t=>{
  t.mock.timers.enable({apis:['Date'],now:T0});const f=await fixture();
  const choices=await betChoices(f.env,{...interaction('bet',one,[{name:'horse',value:'',focused:true} as never]),guild_id:guild},mapping);

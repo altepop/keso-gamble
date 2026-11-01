@@ -45,6 +45,16 @@ test('odds come from past tops and lasts, shrunk toward one in four; a rookie is
  assert.ok(mlOdds(strong,{強い人:{games:10,top:0,last:10}}).last<o.last,'this season counts too');
 });
 
+test('horse tickets and M.LEAGUE predictions share the relaxed 80k weekly cap',()=>{
+ const now=jst('2026-10-27T18:00:00'),s=state(1_000_000);
+ assert.equal(WEEKLY_LIMIT,80_000);
+ // The same wallet week stores purchases made from the horse-racing screen.
+ s.raceWeek={start:jst('2026-10-26T00:00:00'),spent:50_000};
+ const first=placeMlBet(s,{match:game1.id,player:mlCard(data,game1)[0].name,type:'last',amount:30_000},now,data,new Map());
+ assert.equal(first.amount,30_000);
+ assert.equal(s.raceWeek.spent,80_000);
+ assert.throws(()=>placeMlBet(s,{match:game1.id,player:mlCard(data,game1)[0].name,type:'last',amount:100},now,data,new Map()),/競馬と合算・残り0 KP/);
+});
 test('only last place is sold; a bet is fixed at its odds, shares the weekly limit with racing and is settled', () => {
  const s=state(),now=jst('2026-10-27T18:00:00'),card=mlCard(data,game1);
  assert.throws(()=>placeMlBet(s,{match:game1.id,player:1,type:'top',amount:1000},now,data,new Map()),/ラスだけ/);

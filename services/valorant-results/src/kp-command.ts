@@ -1,5 +1,5 @@
 // Register these guild commands individually; never replace /death, /valo or the Activity entry point.
-export const KP_COMMAND_VERSION='kp-slash-v17-spike-overdrive';
+export const KP_COMMAND_VERSION='kp-slash-v18-weekly-bet-80k';
 export const kpCommands=[
  {type:1,name:'kp',description:'KESO PLAY｜KP残高・ランキング',options:[
   {type:1,name:'balance',description:'自分の残高と最近の入出金（本人だけに表示）'},
@@ -16,7 +16,7 @@ export const kpCommands=[
  {type:1,name:'keiba',description:'KESO PLAY｜受付中のレース・馬番・倍率を確認'},
  {type:1,name:'bet',description:'KESO PLAY｜今受付中のレースの馬券を買う（馬は一覧から選ぶだけ・取消不可）',options:[
   {type:4,name:'horse',description:'馬（タップすると馬名と倍率の一覧が出ます）',required:true,min_value:1,max_value:10,autocomplete:true},
-  {type:4,name:'amount',description:'掛け金（100 KP単位。例 500）',required:true,min_value:100,max_value:50000},
+  {type:4,name:'amount',description:'掛け金（100 KP単位。例 500）',required:true,min_value:100,max_value:80000},
   {type:3,name:'type',description:'券種（選ばなければ1着当て）',required:false,choices:[{name:'1着当て（単勝）',value:'win'},{name:'3着以内当て（複勝・倍率低め）',value:'place'}]},
  ]},
  {type:1,name:'horsename',description:'KESO PLAY｜プレゼントでもらった馬に名前を付ける（1回だけ）',options:[
@@ -31,7 +31,7 @@ export const kpCommands=[
  {type:1,name:'mbet',description:'KESO PLAY｜Mリーグのラス予想。試合と選手を名前で選ぶ（取消不可）',options:[
   {type:3,name:'match',description:'受付中の試合（日付・卓・対戦チーム。候補なしは /mleague）',required:true,autocomplete:true},
   {type:3,name:'player',description:'ラスになる選手（名前・チーム名で検索。倍率も一覧に表示）',required:true,autocomplete:true},
-  {type:4,name:'amount',description:'掛け金（例 500。100 KP単位・競馬と合計で週5万KPまで）',required:true,min_value:100,max_value:50000},
+  {type:4,name:'amount',description:'掛け金（例 500。100 KP単位・競馬と合計で週8万KPまで）',required:true,min_value:100,max_value:80000},
  ]},
  {type:1,name:'mclose',description:'KESO PLAY｜Mリーグ予想：試合が始まったので締め切る（登録メンバー。開始後の予想は返金）',options:[
   {type:3,name:'match',description:'卓-試合',required:true,choices:['1-1','1-2','2-1','2-2'].map(v=>({name:v.replace(/^(\d)-(\d)$/,'$1卓 第$2試合'),value:v}))},
