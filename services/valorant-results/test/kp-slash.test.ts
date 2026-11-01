@@ -136,7 +136,7 @@ test('public command metadata contains definitions only and does not need or exp
  let queries=0;
  const response=await kpApi(new Request('https://worker/api/kp/commands'),{DB:{prepare(){queries++;throw Error('No DB reads');}},KP_BOOTSTRAP_PRIVATE_KEY:'fixture-secret-must-not-leak'} as unknown as KpEnv);
  const body=await response.json() as {version:string;commands:unknown[]};
- assert.equal(response.status,200);assert.equal(body.version,'kp-slash-v17-spike-overdrive');assert.equal(body.commands.length,13);assert.equal(queries,0);
+ assert.equal(response.status,200);assert.equal(body.version,'kp-slash-v18-weekly-bet-80k');assert.equal(body.commands.length,13);assert.equal(queries,0);
  assert.equal(JSON.stringify(body).includes('fixture-secret'),false);assert.equal(response.headers.get('Cache-Control'),'no-store');
 });
 
