@@ -45,7 +45,13 @@ const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
  }
  // All ten sessions remain visible. A static pulse should not cause ten
  // heavy full-state snapshots on each 15-second tick.
- await Promise.all(pages.map(page=>page.clock.runFor(30_000)));
+ // Split the mock minutes into individual ticks. The Chromium runner may
+ // still be delivering a response from one client while other pages advance
+ // their virtual clocks; wait for those async routes to drain between ticks.
+ for(let tick=0;tick<2;tick++){
+  await Promise.all(pages.map(page=>page.clock.runFor(15_000)));
+  await sleep(500);
+ }
  for(let i=0;i<10;i++){
   const member=identities[i];
   assert.ok(member.pulseReads>=2&&member.pulseReads<=3,'2 fifteen-second pulses per active client: '+i+' actual '+member.pulseReads);
@@ -59,6 +65,7 @@ const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
  identities[0].state.cash+=500;
  identities[0].pulse='version-2';
  await Promise.all(pages.map(page=>page.clock.runFor(15_000)));
+ await sleep(300);
  assert.equal(identities[0].stateReads,before[0]+1,'external wallet change is reflected by next 15-second pulse');
  for(let i=1;i<10;i++)assert.equal(identities[i].stateReads,before[i],'unchanged member '+i+' does not reload');
  for(const size of [1,3,5,10]){
