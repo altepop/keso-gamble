@@ -41,3 +41,9 @@ The read-only GitHub Actions monitor runs each hour using Cloudflare GraphQL `d1
 - Test ten concurrent Activity clients with **fixtures** first; production load tests should be explicitly controlled to avoid consuming the free quota.
 - Monitor account-wide *UTC-day* GraphQL estimates and official Cloudflare Dashboard billing totals. The top-50 `wrangler d1 insights` is only a **lower bound**, not a reliable quota counter.
 - If a non-essential feature behaves incorrectly in conserve mode, clear the single UTC-day key or revert the soft-mode code. Do not change existing wallet history or debt balances during rollback.
+
+## Race settlement query optimization (2026-11-01)
+
+- `settleKpRaces` keeps its every-minute scheduling, but uses the partial index `kp_state_pending_race` instead of scanning all `kp_state` JSON rows on idle ticks.
+- Index predicate: both exact JSON tokens `"raceBets"` and `"pending"` occur in the stored state. The settlement code still checks the actual ticket status and due time after reading the indexed candidates. Existing KP version guards, double-payment protections and race frequency are unchanged.
+- The index is maintained on `kp_state` writes, so compare live D1 total Rows read **and written** during real play with pre-change baseline. Confirm via official Cloudflare Metrics; SQLite `EXPLAIN QUERY PLAN` alone does not prove Cloudflare-billed Rows savings.
