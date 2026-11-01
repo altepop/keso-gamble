@@ -5,7 +5,7 @@ import type {EscalationSpin} from './mode-rewards.ts';
 import {escalationBigPost} from './escalation-messages.ts';
 import {enqueue,ensurePosts} from './racing-posts.ts';
 export {valoKp} from './mode-rewards.ts';
-import {ensureSpikeGrowth,settleSpike,spikeMatch,SPIKE_POLICY} from './spikerush-growth.ts';
+import {ensureSpikeGrowth,settleSpike,spikeMatch,SPIKE_POLICY,queueSpikeMilestoneNotices} from './spikerush-growth.ts';
 import type {SpikeMatch} from './spikerush-growth.ts';
 import policy from '../legacy-kp-policy.json' with { type: 'json' };
 import { applyLuck, chance, luckFor, luckLabel } from './luck.ts';
@@ -163,6 +163,7 @@ export async function drainKpInbox(env:KpEnv){
    }
   }
   const net=await kpMatchNet(env,e.id),owed=e.penalty?await borrowedBy(env,'penalty:'+e.id):0;
+  if(e.kind==='spikerush-growth'&&net!==null)await queueSpikeMilestoneNotices(env,e);
   // Only rare IV/V events get a second equal-bot post: I-III already have a
   // witty description in the existing VALORANT result. Stable post IDs prevent
   // duplicate messages on inbox retry, and failed delivery never re-settles KP.
