@@ -6,7 +6,8 @@ export interface UnitePerformance {
  ko:number;ast:number;ours:number;theirs:number;heal:string;tkn:string;surrendered:boolean;
 }
 function damageNumber(raw:string){
- const m=raw.trim().replaceAll(',','').match(/^(\\d+(?:\\.\\d+)?)([kKmM]?)$/);
+ if(typeof raw!=='string')return 0;
+ const m=raw.trim().replaceAll(',','').match(/^(\d+(?:\.\d+)?)([kKmM]?)$/);
  if(!m)return 0;
  const n=Number(m[1])*(m[2].toLowerCase()==='m'?1_000_000:m[2]?1_000:1);
  return Number.isFinite(n)&&n>=0?n:0;
