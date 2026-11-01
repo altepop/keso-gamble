@@ -12,11 +12,12 @@
     "check:discord": "node scripts/build-discord-sdk.mjs --check",
     "test:casino-browser": "node scripts/casino-browser-check.cjs",
     "test:stock-browser": "node scripts/stock-browser-check.cjs",
-    "test:browser:all": "node scripts/steam-browser-check.cjs && node scripts/steam-browser-check.cjs webkit && node scripts/browser-check.cjs && node scripts/kp-browser-check.cjs && node scripts/race-live-browser-check.cjs && node scripts/discord-auth-browser-check.cjs && node scripts/casino-browser-check.cjs && node scripts/stock-browser-check.cjs && node scripts/activity-live-browser-check.cjs && node scripts/casino-more-browser-check.cjs && node scripts/trend-browser-check.cjs && node scripts/mobile-startup-browser-check.cjs && node scripts/desktop-browser-check.cjs && node scripts/desktop-browser-check.cjs webkit && node scripts/community-browser-check.cjs && node scripts/community-browser-check.cjs webkit && node scripts/private-casino-browser-check.cjs && node scripts/private-casino-browser-check.cjs webkit",
+    "test:browser:all": "node scripts/steam-browser-check.cjs && node scripts/steam-browser-check.cjs webkit && node scripts/browser-check.cjs && node scripts/kp-browser-check.cjs && node scripts/race-live-browser-check.cjs && node scripts/discord-auth-browser-check.cjs && node scripts/casino-browser-check.cjs && node scripts/stock-browser-check.cjs && node scripts/activity-live-browser-check.cjs && node scripts/casino-more-browser-check.cjs && node scripts/trend-browser-check.cjs && node scripts/mobile-startup-browser-check.cjs && node scripts/desktop-browser-check.cjs && node scripts/desktop-browser-check.cjs webkit && node scripts/community-browser-check.cjs && node scripts/community-browser-check.cjs webkit && node scripts/private-casino-browser-check.cjs && node scripts/private-casino-browser-check.cjs webkit && node scripts/d1-ten-user-browser-check.cjs",
     "build:activity": "node scripts/build-activity.mjs",
     "check:activity": "node scripts/build-activity.mjs --check",
     "test:desktop-browser": "node scripts/desktop-browser-check.cjs",
     "test:community-browser": "node scripts/community-browser-check.cjs",
+    "test:d1-ten-user": "node scripts/d1-ten-user-browser-check.cjs",
     "test:private-casino-browser": "node scripts/private-casino-browser-check.cjs",
     "test:steam-browser": "node scripts/steam-browser-check.cjs"
   },
