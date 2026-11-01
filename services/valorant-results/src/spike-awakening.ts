@@ -5,15 +5,15 @@ import {initialSpikeProfile,spikeProgress} from './spikerush-growth.ts';
 import {ensureDebt,debtOf} from './kp-debt.ts';
 
 export const SPIKE_HINT_COST=10000;
-export const SPIKE_CONTROLLER_MASTERY_REQUIRED=4;
+export const SPIKE_CONTROLLER_STREAK_REQUIRED=7;
 // The former 35 KP per awakening + 415 KP for the fourth awakening
 // is now shared equally: 555 / 4 = 138.75 KP per awakened role.
 export const SPIKE_AWAKENING_REWARD_TOTAL=555;
 export const SPIKE_MAX_REWARD=1000;
 export const SPIKE_ROLES=['Duelist','Initiator','Controller','Sentinel'] as const;
 export type SpikeRole=typeof SPIKE_ROLES[number];
-export interface SpikeTrials {duelist:boolean;initiator:boolean;controllerWins:string[];controllerWinCounts?:Record<string,number>;controllerKdAgents?:string[];controllerMasteryAgents?:string[];controllerTrialVersion?:2;controllerGrandfathered?:boolean;sentinel:boolean}
-export const blankTrials=():SpikeTrials=>({duelist:false,initiator:false,controllerWins:[],controllerWinCounts:{},controllerKdAgents:[],controllerMasteryAgents:[],controllerTrialVersion:2,sentinel:false});
+export interface SpikeTrials {duelist:boolean;initiator:boolean;controllerWins:string[];controllerWinCounts?:Record<string,number>;controllerKdAgents?:string[];controllerStreak?:string[];controllerTrialVersion?:3;controllerGrandfathered?:boolean;sentinel:boolean}
+export const blankTrials=():SpikeTrials=>({duelist:false,initiator:false,controllerWins:[],controllerWinCounts:{},controllerKdAgents:[],controllerStreak:[],controllerTrialVersion:3,sentinel:false});
 const controllers=roster.agents.filter(a=>a.role==='Controller');
 const controllerIds=new Set(controllers.map(a=>a.id));
 export function safeTrials(p:SpikeProfile):SpikeTrials {
@@ -25,13 +25,13 @@ export function safeTrials(p:SpikeProfile):SpikeTrials {
  // Every historically recorded unique win is worth at least one victory.
  for(const id of legacy)counts[id]=Math.max(1,counts[id]??0);
  const kd=Array.isArray(x.controllerKdAgents)?[...new Set(x.controllerKdAgents.filter(id=>typeof id==='string'&&controllerIds.has(id)))]:[];
- const mastery=Array.isArray(x.controllerMasteryAgents)?[...new Set(x.controllerMasteryAgents.filter(id=>typeof id==='string'&&controllerIds.has(id)))]:[];
- // Already earned the 7-Agent K/D trial under v1? Carry that achievement forward.
- // Once a profile enters v2, an unfinished v1 trial cannot later grandfather itself.
- const grandfathered=x.controllerGrandfathered===true||(x.controllerTrialVersion!==2&&controllers.every(a=>kd.includes(a.id)));
+ const streak=Array.isArray(x.controllerStreak)?[...new Set(x.controllerStreak.filter(id=>typeof id==='string'&&controllerIds.has(id)))].slice(0,SPIKE_CONTROLLER_STREAK_REQUIRED):[];
+ // Preserve seven-agent K/D awakenings previously earned under the deployed v1 rule.
+ // New attempts get v3 on the first settled match and cannot grandfather old progress later.
+ const grandfathered=x.controllerGrandfathered===true||(x.controllerTrialVersion!==3&&controllers.every(a=>kd.includes(a.id)));
  return {duelist:x.duelist===true,initiator:x.initiator===true,
   controllerWins:[...new Set([...legacy,...Object.keys(counts)])],controllerWinCounts:counts,
-  controllerKdAgents:kd,controllerMasteryAgents:mastery,controllerTrialVersion:2,
+  controllerKdAgents:kd,controllerStreak:streak,controllerTrialVersion:3,
   controllerGrandfathered:grandfathered,sentinel:x.sentinel===true};
 }
 /** One-time, read-only backfill for legacy profiles that stored only unique winners.
@@ -50,34 +50,38 @@ export async function hydrateSpikeControllerHistory(env:KpEnv,guild:string,puuid
 export function trialComplete(p:SpikeProfile,role:SpikeRole){
  const t=safeTrials(p);
  return role==='Duelist'?t.duelist:role==='Initiator'?t.initiator:role==='Sentinel'?t.sentinel:
-  controllers.every(a=>t.controllerKdAgents?.includes(a.id))&&(t.controllerGrandfathered===true||(t.controllerMasteryAgents?.length??0)>=SPIKE_CONTROLLER_MASTERY_REQUIRED);
+  t.controllerGrandfathered===true||(t.controllerStreak?.length??0)===SPIKE_CONTROLLER_STREAK_REQUIRED;
 }
 export function nextSpikeTrials(p:SpikeProfile,m:SpikeMatch):SpikeTrials {
  const t=safeTrials(p),role=roster.agents.find(a=>a.id===m.agent)?.role;
  if(role==='Duelist'&&m.kills>=15)t.duelist=true;
  if(role==='Initiator'&&m.assists>=7)t.initiator=true;
  if(role==='Sentinel'&&m.kills>=5&&m.deaths===0)t.sentinel=true;
+ // The seven consecutive eligible Spike Rush games must each be a Controller
+ // victory with K/D >=2 and a different agent from the other six.
+ // A failed/repeated match breaks the run; a qualifying repeated Controller
+ // can count as the first match of a fresh run.
+ // Completed streaks and legacy awakenings are permanent.
+ const complete=t.controllerGrandfathered===true||t.controllerStreak!.length===SPIKE_CONTROLLER_STREAK_REQUIRED;
  if(role==='Controller'){
-  // All seven agents still need a K/D 2.0 match; four DISTINCT agents additionally
-  // need at least five kills, K/D 2.0, and victory IN THE SAME completed match.
-  // Zero deaths with positive kills qualify; 0/0 does not.
   const kd=m.kills>0&&(m.deaths===0||m.kills>=2*m.deaths);
   if(kd&&!t.controllerKdAgents!.includes(m.agent))t.controllerKdAgents!.push(m.agent);
-  if(kd&&m.win&&m.kills>=5&&!t.controllerMasteryAgents!.includes(m.agent))
-   t.controllerMasteryAgents!.push(m.agent);
-  // Retain past win stats, but wins alone never unlock this trial.
+  if(!complete){
+   t.controllerStreak=m.win&&kd?(t.controllerStreak!.includes(m.agent)?[m.agent]:[...t.controllerStreak!,m.agent]):[];
+  }
+  // Retain legacy win stats, but they do not unlock the v3 trial.
   if(m.win){
    t.controllerWinCounts![m.agent]=Math.min(3,(t.controllerWinCounts?.[m.agent]??0)+1);
    if(!t.controllerWins.includes(m.agent))t.controllerWins.push(m.agent);
   }
- }
+ }else if(!complete)t.controllerStreak=[];
  return t;
 }
 export const isOverdrive=(p:SpikeProfile)=>spikeProgress(p).every(r=>r.awakened);
 export const SPIKE_HINTS:Record<SpikeRole,string>={
  Duelist:'🔥 決定力の証：デュエリストで、1試合に15キル以上を記録せよ。',
  Initiator:'👁️ 支援の証：イニシエーターで、1試合に7アシスト以上を記録せよ。',
- Controller:'🌌 指揮の証：7人のコントローラー全員で各1回K/D 2.0以上。さらに異なる4人で、同一試合に5キル以上・K/D 2.0以上・勝利を達成せよ。',
+ Controller:'🌌 指揮の証：スパイクラッシュで7人の異なるコントローラーを1人ずつ選び、7試合連続勝利せよ。全試合K/D 2.0以上が必要。敗北・K/D未達・キャラ重複・他ロール使用で連勝は途切れる。',
  Sentinel:'🏰 不落の証：センチネルで、1試合5キル以上かつデス0を記録せよ。'
 };
 const ready=new WeakMap<object,Promise<void>>();
@@ -120,11 +124,10 @@ export async function spikeStatus(env:KpEnv,guild:string,user:string){
  const p=await hydrateSpikeControllerHistory(env,guild,member.puuid,member.data?JSON.parse(member.data) as SpikeProfile:initialSpikeProfile());
  const unlocks=(await env.DB.prepare('SELECT role FROM spike_hint_unlocks WHERE guild=? AND puuid=?').bind(guild,member.puuid).all<{role:string}>()).results;
  const shown=new Set(unlocks.map(x=>x.role)),progress=spikeProgress(p);
- const controllerTrials=safeTrials(p),controllerKdCount=controllerTrials.controllerKdAgents?.length??0;
- const controllerMasteryCount=controllerTrials.controllerGrandfathered?SPIKE_CONTROLLER_MASTERY_REQUIRED:controllerTrials.controllerMasteryAgents?.length??0;
+ const controllerTrials=safeTrials(p),controllerStreakCount=controllerTrials.controllerGrandfathered?SPIKE_CONTROLLER_STREAK_REQUIRED:controllerTrials.controllerStreak?.length??0;
  const details=progress.map((r)=>{
   const suffix=r.awakened?'✨覚醒済み':r.unlocked?'通常育成完了':'育成中';
-  const trial=shown.has(r.role)?`\n　特殊試練：${SPIKE_HINTS[r.role]}\n　達成状況：${r.role==='Controller'?`K/D ${controllerKdCount}/7人・実戦 ${controllerMasteryCount}/${SPIKE_CONTROLLER_MASTERY_REQUIRED}人${controllerTrials.controllerGrandfathered?'（旧条件達成を継承）':''}`:r.trialDone?'達成':'未達成'}`:
+  const trial=shown.has(r.role)?`\n　特殊試練：${SPIKE_HINTS[r.role]}\n　達成状況：${r.role==='Controller'?`連勝 ${controllerStreakCount}/${SPIKE_CONTROLLER_STREAK_REQUIRED}試合${controllerTrials.controllerGrandfathered?'（旧条件達成を継承）':''}`:r.trialDone?'達成':'未達成'}`:
    `\n　特殊試練：🔒 未公開（/spike hint ${r.role}｜10,000 KP）${r.trialDone?' ※実績取得済み':''}`;
   const agents=roster.agents.filter(a=>a.role===r.role).map(a=>`${a.name} ${Math.min(2,p.counts[a.id]??0)}/2`).join('・');
   return `**${r.role}** ${r.used}/${r.required}｜${suffix}\n　使用：${agents}${trial}`;
