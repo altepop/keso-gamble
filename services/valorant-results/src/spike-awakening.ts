@@ -89,6 +89,7 @@ export async function ensureSpikeAwakening(env:KpEnv){
  note TEXT NOT NULL,detail TEXT NOT NULL CHECK(json_valid(detail)),next_profile TEXT NOT NULL CHECK(json_valid(next_profile)),
  expected_version INTEGER NOT NULL,at INTEGER NOT NULL,UNIQUE(guild,match,puuid))`),
  env.DB.prepare('CREATE INDEX IF NOT EXISTS spike_overdrive_rewards_day ON spike_overdrive_rewards(guild,puuid,day)'),
+ env.DB.prepare('CREATE TABLE IF NOT EXISTS mahjong_watch_posts(id TEXT PRIMARY KEY,body TEXT NOT NULL,at INTEGER NOT NULL,sent INTEGER NOT NULL DEFAULT 0,lease INTEGER NOT NULL DEFAULT 0,message_id TEXT)'),
  env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS spike_overdrive_apply AFTER INSERT ON spike_overdrive_rewards BEGIN
  SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM kp_accounts WHERE guild=NEW.guild AND puuid=NEW.puuid AND user=NEW.user) THEN RAISE(ABORT,'Spike account mismatch') END;
  UPDATE spike_profiles SET data=NEW.next_profile,version=version+1
