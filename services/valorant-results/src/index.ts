@@ -183,6 +183,14 @@ async function saveMatch(env: Env, match: Match, player: Player, account: Accoun
   // kept, so every rewrite of the post carries it. A demotion costs KP once, a promotion pays once.
   if (mode === 'competitive' && kpRun) try {
     const key = 'rank2:' + match.metadata.match_id + ':' + account.puuid, now = Date.now();
+    // Load only ranks belonging to a match actually seen in this monitor run.
+    // The previous cron read up to 300 historic rank rows every minute even
+    // when no one played (224,483 D1 rows/day across monitor_state queries).
+    // Cache misses within the run; a later cron reloads durable changes.
+    if(!ranks.has(key)){
+      const row=await env.DB.prepare('SELECT value FROM monitor_state WHERE key=?').bind(key).first<{value:string}>();
+      ranks.set(key,row?.value??'');
+    }
     const stored = ranks.get(key);
     let change: RankChange | null = stored?.startsWith('{') ? JSON.parse(stored) as RankChange : null;
     // At most three lookups per run, and one history request per player per run.
@@ -401,7 +409,9 @@ export async function monitor(env: Env, players: Player[] = configuredPlayers): 
     // Bound extra API traffic: one reserved match per run, one attempt per match per five minutes.
     const reservations=new Map((await env.DB.prepare(`SELECT s.riot_id,${sessionModeSQL} AS mode FROM death_unrated_sessions s WHERE s.cancelled_at IS NULL`).all<{riot_id:string;mode:string}>()).results.map(r=>[r.riot_id,r.mode]));
     const saved=new Set((await env.DB.prepare('SELECT riot_id,match_id FROM notifications ORDER BY ended_at DESC LIMIT 200').all<{riot_id:string;match_id:string}>()).results.map(r=>JSON.stringify([r.riot_id,r.match_id])));
-    const ranks=new Map((await env.DB.prepare("SELECT key,value FROM monitor_state WHERE key LIKE 'rank2:%' ORDER BY rowid DESC LIMIT 300").all<{key:string;value:string}>()).results.map(r=>[r.key,r.value]));
+    // Never read a growing rank-history table eagerly. Competitive matches
+    // load only their own rank2:<match>:<puuid> via indexed key lookup.
+    const ranks=new Map<string,string>();
     const deathDetails: DeathDetails = { remaining: 1, matches: new Map(),reservations };
     // Deliver a previously queued result before spending time polling the API again.
     if (players.length) await flushNotifications(env, players);
