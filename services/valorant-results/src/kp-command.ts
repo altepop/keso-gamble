@@ -6,6 +6,10 @@ export const kpCommands=[
   {type:1,name:'ranking',description:'サーバーのKP残高ランキング上位10人と借KPをチャットへ公開'},
   {type:1,name:'bets',description:'自分のMリーグ予想・馬券と精算結果（本人だけに表示）'},
  ]},
+ {type:1,name:'dm',description:'KESO PLAY｜デスマッチ1日1回の40キル・5,000KPチャレンジ',options:[
+  {type:1,name:'start',description:'次に始めるデスマッチ1試合に挑戦（成功5,000KP／失敗0KP）'},
+  {type:1,name:'status',description:'今日の挑戦権・結果を確認'},
+ ]},
  {type:1,name:'spike',description:'KESO PLAY｜スパイクラッシュの育成と覚醒',options:[
   {type:1,name:'status',description:'自分の育成進捗・覚醒状況（試練内容はヒント購入で解禁）'},
   {type:1,name:'hint',description:'特殊な覚醒条件のヒントを10,000 KPで買い切り解放',options:[
