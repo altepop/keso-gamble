@@ -121,13 +121,13 @@ test('hidden trial clues cost 10k once per role and reveal private exact progres
  const f=await fixture();f.seed(complete());
  const invisible=await spikeStatus(f.env,guild,one);
  assert.match(invisible,/Duelist/);assert.match(invisible,/Controller/);
- assert.match(invisible,/🔒 未公開/);assert.doesNotMatch(invisible,/12キル以上|7アシスト以上|7人のコントローラー全員/);
+ assert.match(invisible,/🔒 未公開/);assert.doesNotMatch(invisible,/15キル以上|7アシスト以上|7人のコントローラー全員/);
  assert.equal(invisible.length<1950,true,'Discord body must fit');
  f.credit(10000);
  const pay=await purchaseSpikeHint(f.env,guild,one,'Duelist',START);
  assert.match(pay,/10,000 KP/);assert.equal(f.balance(),0);
  const learned=await spikeStatus(f.env,guild,one);
- assert.match(learned,/12キル以上/);assert.doesNotMatch(learned,/7アシスト以上/);
+ assert.match(learned,/15キル以上/);assert.doesNotMatch(learned,/7アシスト以上/);
  assert.match(await purchaseSpikeHint(f.env,guild,one,'Duelist',START+1),/購入済み/);
  assert.equal(f.balance(),0);assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM kp_ledger WHERE kind='spike-hint'").get()!.n,1);
  assert.match(await purchaseSpikeHint(f.env,guild,one,'Initiator',START+2),/不足/);
@@ -186,7 +186,7 @@ test('new role awakening and overdrive produce only two sanitized, once-only res
  const messages=posts.map(x=>JSON.parse(x.body).content as string);
  assert.ok(messages.some(x=>x.includes('イニシエーター覚醒')));
  assert.ok(messages.some(x=>x.includes('OVERDRIVE解放')));
- for(const message of messages)assert.doesNotMatch(message,/7アシスト|12キル|K\/D|試練|3勝|21勝|2回使用/);
+ for(const message of messages)assert.doesNotMatch(message,/7アシスト|15キル|K\/D|試練|3勝|21勝|2回使用/);
  for(const entry of posts)assert.deepEqual(JSON.parse(entry.body).allowed_mentions,{parse:[]});
  assert.equal(await collectKpMatch(f.env,mapping,match,'p-one'),payout,'repeated settlement returns same reward');
  assert.equal(f.sql.prepare("SELECT COUNT(*) AS n FROM mahjong_watch_posts WHERE id LIKE 'spike-%'").get()!.n,2,'no duplicated milestones');
@@ -204,7 +204,7 @@ test('the second use of each agent posts once, never revealing hidden trials',as
  assert.match(message.content,/エージェント育成完了/);
  assert.match(message.content,/2\/2/);
  assert.match(message.content,new RegExp(duelist.name));
- assert.doesNotMatch(message.content,/特殊試練|7アシスト|12キル|K\/D|達成条件/);
+ assert.doesNotMatch(message.content,/特殊試練|7アシスト|15キル|K\/D|達成条件/);
  assert.deepEqual(message.allowed_mentions,{parse:[]});
  assert.equal(await collectKpMatch(f.env,mapping,raw('usage-three'),'p-one'),40);
  assert.equal(rows().length,1,'third use must not create another announcement');
