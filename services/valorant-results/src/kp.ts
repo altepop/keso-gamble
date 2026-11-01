@@ -61,6 +61,18 @@ export async function decryptKpMapping(privateKey:string,envelope=sealed):Promis
  const aes=await crypto.subtle.importKey('raw',key,'AES-GCM',false,['decrypt']);
  return JSON.parse(new TextDecoder().decode(await crypto.subtle.decrypt({name:'AES-GCM',iv:b64(envelope.iv)},aes,b64(envelope.ciphertext))));
 }
+/** One indexed settings read on known DBs; never scan sqlite_master. */
+export async function kpSchemaVersion(env:KpEnv):Promise<{value:string}|null>{
+ try{
+  return await env.DB.prepare("SELECT value FROM kp_settings WHERE key='schema_version'").first<{value:string}>();
+ }catch(error){
+  const message=error instanceof Error?error.message:String(error);
+  // Only the specific expected first-install failure triggers schema creation.
+  // Authentication or transient D1 failures must never be treated as an empty DB.
+  if(!/no such table:\s*(?:main\.)?kp_settings\b/i.test(message))throw error;
+  return null;
+ }
+}
 const setups=new WeakMap<object,Promise<KpMapping|null>>();
 export async function initializeKp(env:KpEnv,override?:KpMapping):Promise<KpMapping|null>{
  if(!policy.enabled||(!env.KP_BOOTSTRAP_PRIVATE_KEY&&!override))return null;
@@ -69,16 +81,7 @@ export async function initializeKp(env:KpEnv,override?:KpMapping):Promise<KpMapp
   const mapping=override??await decryptKpMapping(env.KP_BOOTSTRAP_PRIVATE_KEY!);
   if(!/^\d{15,22}$/.test(mapping.guildId)||(!override&&mapping.guildId!==discord.guildId)||!Array.isArray(mapping.accounts)||!mapping.accounts.length||mapping.accounts.length>5)throw Error('Invalid KP mapping');
   const users=new Set(),riots=new Set();for(const a of mapping.accounts){if(!/^\d{15,22}$/.test(a.discordUserId)||typeof a.riotId!=='string'||(!override&&!configuredPlayers.some(p=>p.riotId.toLowerCase()===a.riotId.toLowerCase()))||users.has(a.discordUserId)||riots.has(a.riotId.toLowerCase()))throw Error('Invalid KP account');users.add(a.discordUserId);riots.add(a.riotId.toLowerCase());}
-  // D1 Insights 2026-11-01: sqlite_master probes cost 270 rows per cold init.
-  // Query the known PK directly instead. Only treat the *specific missing table*
-  // as a fresh database; network, syntax or permission errors must propagate.
-  let version:{value:string}|null=null;
-  try{
-   version=await env.DB.prepare("SELECT value FROM kp_settings WHERE key='schema_version'").first<{value:string}>();
-  }catch(error){
-   const message=error instanceof Error?error.message:String(error);
-   if(!/no such table:\s*(?:main\.)?kp_settings\b/i.test(message))throw error;
-  }
+  const version=await kpSchemaVersion(env);
   if(version?.value!=='1'){
    await env.DB.batch(kpSchema.map(sql=>env.DB.prepare(sql)));
    await env.DB.batch([
