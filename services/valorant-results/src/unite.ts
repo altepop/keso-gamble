@@ -3,7 +3,7 @@ import {ensureUniteRewards,settleUnite} from './unite-rewards.ts';
 // profile's recent ranked matches; one profile is read per cron minute, at most every two minutes each.
 // A first read only records what is already there, so linking never posts old games.
 // New games are posted by the result bot (the Mahjong Soul post queue) and settled in KP:
-// Wins grow from +400 to +800, losses from -100 to -500; gaps reset the streak.
+// Wins grow from +400 to +800, losses from -100 to -500; verified contribution/close games add a bounded bonus, and gaps reset the streak.
 import voice from '../unite-voice.json' with {type:'json'};
 import names from '../unite-names.json' with {type:'json'};
 import {initializeKp,newKpState,kpHash} from './kp.ts';
@@ -128,7 +128,7 @@ export async function monitorUnite(env:UniteEnv,now=Date.now(),request:typeof fe
  ]);
  for(let i=0;i<fresh.length;i++){
   const m=fresh[i],fingerprint=matchKey(m),seed=link.uid+':'+fingerprint,id='unite-v3:'+await kpHash(link.guild+':'+seed);
-  const settled=await settleUnite(env,{id,guild:link.guild,user:link.user,uid:link.uid,fingerprint,seed,win:m.win,now});
+  const settled=await settleUnite(env,{id,guild:link.guild,user:link.user,uid:link.uid,fingerprint,seed,win:m.win,now,performance:{ko:m.ko,ast:m.ast,ours:m.ours,theirs:m.theirs,heal:m.heal,tkn:m.tkn,surrendered:m.surrendered}});
   const kp=settled.delta,note=settled.note+debtNote(await borrowedBy(env,id));
   await env.DB.prepare('INSERT OR IGNORE INTO mahjong_watch_posts(id,body,at) VALUES(?,?,?)').bind(id,JSON.stringify({content:unitePost(page.name,link.uid,m,kp,note),allowed_mentions:{parse:[]}}),now).run();
   if(env.KP_EARNINGS_WEBHOOK_URL){await ensurePosts(env);await enqueue(env,'kp-'+id,`🎮 <@${link.user}> ユナイト ランクマ${m.win?'勝利':'敗北'} ${kp>0?'+':'−'}${Math.abs(kp).toLocaleString('ja-JP')} KP${settled.note}`,now);}
