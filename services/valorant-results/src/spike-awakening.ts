@@ -47,7 +47,7 @@ export function trialComplete(p:SpikeProfile,role:SpikeRole){
 }
 export function nextSpikeTrials(p:SpikeProfile,m:SpikeMatch):SpikeTrials {
  const t=safeTrials(p),role=roster.agents.find(a=>a.id===m.agent)?.role;
- if(role==='Duelist'&&m.kills>=12)t.duelist=true;
+ if(role==='Duelist'&&m.kills>=15)t.duelist=true;
  if(role==='Initiator'&&m.assists>=7)t.initiator=true;
  if(role==='Sentinel'&&m.kills>=5&&m.deaths===0)t.sentinel=true;
  if(role==='Controller'){
@@ -65,7 +65,7 @@ export function nextSpikeTrials(p:SpikeProfile,m:SpikeMatch):SpikeTrials {
 }
 export const isOverdrive=(p:SpikeProfile)=>spikeProgress(p).every(r=>r.awakened);
 export const SPIKE_HINTS:Record<SpikeRole,string>={
- Duelist:'🔥 決定力の証：デュエリストで、1試合に12キル以上を記録せよ。',
+ Duelist:'🔥 決定力の証：デュエリストで、1試合に15キル以上を記録せよ。',
  Initiator:'👁️ 支援の証：イニシエーターで、1試合に7アシスト以上を記録せよ。',
  Controller:'🌌 指揮の証：7人のコントローラー全員で、それぞれ1試合以上K/D 2.0以上を記録せよ。',
  Sentinel:'🏰 不落の証：センチネルで、1試合5キル以上かつデス0を記録せよ。'
