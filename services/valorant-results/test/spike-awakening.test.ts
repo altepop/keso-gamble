@@ -189,3 +189,27 @@ test('new role awakening and overdrive produce only two sanitized, once-only res
  assert.equal(f.sql.prepare("SELECT COUNT(*) AS n FROM mahjong_watch_posts WHERE id LIKE 'spike-%'").get()!.n,2,'no duplicated milestones');
  f.close();
 });
+
+test('the second use of each agent posts once, never revealing hidden trials',async()=>{
+ const f=await fixture();
+ const rows=()=>f.sql.prepare("SELECT id,body FROM mahjong_watch_posts WHERE id LIKE 'spike-agent:%' ORDER BY id").all() as Array<{id:string;body:string}>;
+ assert.equal(await collectKpMatch(f.env,mapping,raw('usage-one'),'p-one'),40);
+ assert.equal(rows().length,0,'first use must not produce a completion announcement');
+ assert.equal(await collectKpMatch(f.env,mapping,raw('usage-two'),'p-one'),40);
+ assert.equal(rows().length,1,'second use produces one announcement');
+ const message=JSON.parse(rows()[0].body) as {content:string;allowed_mentions:{parse:string[]}};
+ assert.match(message.content,/エージェント育成完了/);
+ assert.match(message.content,/2\/2/);
+ assert.match(message.content,new RegExp(duelist.name));
+ assert.doesNotMatch(message.content,/特殊試練|7アシスト|12キル|K\/D|達成条件/);
+ assert.deepEqual(message.allowed_mentions,{parse:[]});
+ assert.equal(await collectKpMatch(f.env,mapping,raw('usage-three'),'p-one'),40);
+ assert.equal(rows().length,1,'third use must not create another announcement');
+ assert.equal(await collectKpMatch(f.env,mapping,raw('usage-two'),'p-one'),40);
+ assert.equal(rows().length,1,'duplicate match must not duplicate notices');
+ const another=SPIKE_ROSTER.agents.find(a=>a.id!==duelist.id)!;
+ await collectKpMatch(f.env,mapping,raw('other-one',{agent:another.id}),'p-one');
+ await collectKpMatch(f.env,mapping,raw('other-two',{agent:another.id}),'p-one');
+ assert.equal(rows().length,2,'each agent has its own independent milestone');
+ f.close();
+});
