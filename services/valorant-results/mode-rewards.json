@@ -1,5 +1,5 @@
 {
-  "version": "mode-rewards-v5",
+  "version": "mode-rewards-v6",
   "unrated": {
     "win": 370,
     "lottery": [
@@ -53,6 +53,7 @@
     "upperBonus": 500,
     "tripleChancePercent": 5,
     "bigChancePercent": 15,
+    "bigChanceDenominator": 24,
     "superChanceEachBps": 10,
     "bigTiers": [
       {
