@@ -62,6 +62,8 @@ async function auditMedia(context){
  assert.equal(await g.locator('[data-action=luxury]:disabled').count(),7);
  assert.match(await g.locator('.asset-card').innerText(),/商品一覧のプレビュー/);
  await g.locator('.sub-tab[data-screen=directives]').click();
+ assert.equal(await g.locator('.screen').getAttribute('data-view'),'directives');
+ await g.locator('.nav-btn[data-screen=home]').click();
  assert.match(await g.locator('#app').innerText(),/保有KP[\s\S]*発令中の指令/);assert.doesNotMatch(await g.locator('#app').innerText(),/日経|TOPIX/);
  await g.locator('.nav-btn[data-screen=play]').click();await g.locator('#claim-reference').fill('match-001');await g.locator('[data-action=submit-claim]').click();await g.locator('[data-approve]').waitFor();
  let gameState=await g.evaluate(k=>JSON.parse(localStorage.getItem(k)),key);assert.equal(gameState.cash,10000);await g.locator('[data-approve]').click();await g.waitForFunction(k=>JSON.parse(localStorage.getItem(k)).cash===10500,key);
