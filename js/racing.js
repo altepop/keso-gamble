@@ -9,6 +9,38 @@ export const BET_TYPES={win:{label:'1着当て',formal:'単勝'},place:{label:'3
 export const STYLES=[{label:'最初から飛ばす',curve:.08},{label:'前の方につける',curve:.03},{label:'後半に追い上げる',curve:-.03},{label:'最後に一気',curve:-.08}];
 export const CONDITIONS=[{label:'絶不調',value:-1},{label:'不調',value:-.5},{label:'普通',value:0},{label:'好調',value:.5},{label:'絶好調',value:1}];
 export const GOINGS=[{label:'走りやすい',noise:1},{label:'ややぬかるみ',noise:1.15},{label:'ぬかるんでいる',noise:1.3}];
+
+/** New information-rich market, future races only. Old tickets and archived results are immutable. */
+export const FORM_REFORM_FROM=Date.parse('2026-11-04T00:00:00+09:00');
+export const TRACK_BIAS_LABELS=['内枠有利','枠の偏りなし','外枠有利'];
+// Suitability follows the horse's identity, so a returning named or owned horse keeps its preference.
+export function groundAffinity(h){
+ const id=String(h.horseId??h.name);
+ const roll=rngFrom('ground-affinity:'+id)();
+ return roll<.35?0:roll<.65?1:2; // 0 firm, 1 flexible, 2 mud
+}
+export const AFFINITY_LABELS=['良馬場巧者','オールラウンダー','道悪巧者'];
+export function runningNotes(card,h){
+ const approx=h.ability-CLASSES[card.raceClass].mean;
+ const training=approx>=.46?'A':approx>=.17?'B':approx>=-.16?'C':approx>=-.42?'D':'E';
+ const apt=groundAffinity(h);
+ const trackFit=card.going===1?(apt===1?'◎':'○'):apt===card.going?'◎':apt===1?'○':'△';
+ return {training,apt,aptitude:AFFINITY_LABELS[apt],trackFit,form:h.record??null,recentRanks:h.recentRanks??[]};
+}
+export function raceBrief(card){
+ const front=card.horses.filter(h=>h.style<=1).length;
+ const pace=front>=Math.ceil(card.size*.6)?'ハイペース（差し馬注目）':front<=Math.floor(card.size*.35)?'スローペース（先行馬注目）':'平均ペース（展開次第）';
+ return {pace,front,bias:TRACK_BIAS_LABELS[card.trackBias??1],hint:'オッズは市場の概算評価。ペース・当日の枠傾向・馬場適性・特別ルールの影響を十分に反映しない。'};
+}
+function fieldContextBonus(card,h){
+ if(card.start<FORM_REFORM_FROM)return 0;
+ const apt=groundAffinity(h);
+ const ground=card.going===1?(apt===1?.09:0):apt===card.going?.26:apt===1?.07:-.20;
+ const mid=(h.number-.5)/card.size-.5;
+ const gate=card.trackBias===0?-mid*.50:card.trackBias===2?mid*.50:0;
+ return ground+gate;
+}
+
 // Fictional names only. Real members' names need their consent (docs/RACING_PLAN.md).
 const LEGACY_HORSE_NAMES=['ゲートニキヅカナイ','エイムガブレール','キャリーマチ','ランクダケヒクイ','ヨフカシオー','エーティーエム','ニバンテボーイ','ムテキノイイワケ','アンレタイショウ','デスマッチノオウ','フルバイノユメ','エコラウンド','ハナサノマジュツシ','ニンキサギ','キマグレノアクマ','ネオチダービー','ワンタップドリーム','クラッチミス','スモークツカイ','ラストアワー','ゼロキルクイーン','ヤケクソラン','ゴールデンマンジュウ','コタツデネムル','ザンネンカイチョウ','シンヤサンジ','オヤツタイム','カブヲトカシタ','リセットボタン','バクチウチ','ゲンジツトウヒ','ハラペコジョッキー','ウワサノダークホース','オクレテキタヒーロー','イイワケハアトデ','ミチクサオー','タダノウマ','ジツハツヨイ','ガチャハズレ','マタマケタ','デスアンレ','ヒトシイマツモト','ダイスキミヤガワ','エスカレーター','カチカク','トケルバター','オモシロインデス','ニシフハカイガイ','デスレ','カガワケンミン','ケーピートカシ','ドワー','ヤリラフィー'];
 // Introducing names changes the number of shuffled items and therefore the
@@ -95,10 +127,10 @@ export function raceCard(start,salt=PUBLIC_SALT,entries=[]){
  if(entries.length){
   const gates=[...horses.keys()],grng=rngFrom(`${salt}:gates:${start}`);
   for(let i=gates.length-1;i>0;i--){const j=Math.floor(grng()*(i+1));[gates[i],gates[j]]=[gates[j],gates[i]];}
-  entries.slice(0,size).forEach((e,i)=>Object.assign(horses[gates[i]],{name:e.name,ability:e.ability,style:e.style,horseId:e.horseId,owner:e.owner,ownerName:e.ownerName,nickname:e.nickname??null,person:!!e.person},Number.isInteger(e.condition)&&e.condition>=0&&e.condition<CONDITIONS.length?{condition:e.condition}:{}));
+  entries.slice(0,size).forEach((e,i)=>Object.assign(horses[gates[i]],{name:e.name,ability:e.ability,style:e.style,horseId:e.horseId,owner:e.owner,ownerName:e.ownerName,nickname:e.nickname??null,person:!!e.person,...(start>=FORM_REFORM_FROM&&e.record?{record:e.record,recentRanks:e.recentRanks??[]}:{})},Number.isInteger(e.condition)&&e.condition>=0&&e.condition<CONDITIONS.length?{condition:e.condition}:{}));
  }
  const crown=big?null:fillerCrownName(start),event=raceEvent(start);
- return {id:start,start,closeAt:start-CLOSE_BEFORE,number:raceNumber(start),name:event?`第${raceNumber(start)}レース ${event.name}杯`:big??crown??(start<NAME_EXPANSION_FROM?`第${raceNumber(start)}レース`:`第${raceNumber(start)}レース ${regularRaceName(start)}`),big:!!big,crown:!!crown,raceClass:cls,size,going:pickWeighted(rng,[5,3,2]),horses,...(event?{event}:{})};
+ return {id:start,start,closeAt:start-CLOSE_BEFORE,number:raceNumber(start),name:event?`第${raceNumber(start)}レース ${event.name}杯`:big??crown??(start<NAME_EXPANSION_FROM?`第${raceNumber(start)}レース`:`第${raceNumber(start)}レース ${regularRaceName(start)}`),big:!!big,crown:!!crown,raceClass:cls,size,going:pickWeighted(rng,[5,3,2]),horses,...(event?{event}:{}),...(start>=FORM_REFORM_FROM?{trackBias:Math.floor(rngFrom('track-bias:'+start)()*3)}:{})};
 }
 
 // The race model: a Plackett-Luce ranking (each place goes to a remaining horse with probability
@@ -106,18 +138,18 @@ export function raceCard(start,salt=PUBLIC_SALT,entries=[]){
 // compute, so the odds have no sampling error and the Worker stays well inside its CPU limit.
 const PACE_POINTS=[-2,-1,0,1,2],PACE_WEIGHTS=[1,4,6,4,1].map(w=>w/16); // mean 0, variance 1
 const BETA=1.6;
-function raceModel(card){
+function raceModel(card,market=false){
  const front=card.horses.filter(h=>h.style<=1).length,paceBase=(front-card.size/2)/2,sharp=BETA/GOINGS[card.going].noise;
  const avgAbility=card.event?card.horses.reduce((sum,h)=>sum+h.ability,0)/card.size:0;
  return PACE_POINTS.map((point,k)=>{
-  const pace=paceBase+point*.6; // > 0: a fast pace that favours the closers
-  return {weight:PACE_WEIGHTS[k],strength:card.horses.map(h=>Math.exp(sharp*(h.ability+CONDITIONS[h.condition].value*.35+(card.size/2-h.number)*.02+(h.style-1.5)*.2*pace+chaosStrengthBonus(h,avgAbility,card.event))))};
+  const pace=market?0:paceBase+point*.6; // bookmaker predicts neutral pace, actual racing draws a pace scenario
+  return {weight:PACE_WEIGHTS[k],strength:card.horses.map(h=>Math.exp(sharp*(h.ability*(market?.87:1)+CONDITIONS[h.condition].value*(market?.24:.35)+(card.size/2-h.number)*.02+(h.style-1.5)*.2*pace+(market?0:chaosStrengthBonus(h,avgAbility,card.event)+fieldContextBonus(card,h))))) };
  });
 }
 /** Exact probability that each horse wins, and finishes inside the paid places. */
-export function finishProbabilities(card){
+function calculateProbabilities(card,market=false){
  const slots=placeSlots(card.size),win=new Array(card.size).fill(0),place=new Array(card.size).fill(0);
- for(const {weight,strength} of raceModel(card)){
+ for(const {weight,strength} of raceModel(card,market)){
   const used=new Uint8Array(card.size);
   const visit=(depth,prob,rest)=>{
    for(let j=0;j<card.size;j++){
@@ -131,6 +163,9 @@ export function finishProbabilities(card){
  }
  return {win,place};
 }
+export function finishProbabilities(card){return calculateProbabilities(card,false);}
+/** Estimated by the market without complete live form; NOT the true winning probability. */
+export function marketProbabilities(card){return card.start>=FORM_REFORM_FROM?calculateProbabilities(card,true):finishProbabilities(card);}
 
 /** The real run: one draw from the same model, using the race's seed. */
 export function raceResult(card,seed=PUBLIC_SALT){
@@ -153,8 +188,9 @@ const oddsCache=new Map();
 export function raceOdds(card){
  const key=card.id+':'+card.horses.map(h=>h.horseId??'').join(',');
  if(oddsCache.has(key))return oddsCache.get(key);
- const {win,place}=finishProbabilities(card),odds={win:{},place:{},winProb:{},placeProb:{}};
- for(const h of card.horses){const i=h.number-1;odds.win[h.number]=oddsFromProbability(win[i]);odds.place[h.number]=oddsFromProbability(place[i]);odds.winProb[h.number]=win[i];odds.placeProb[h.number]=place[i];}
+ const {win,place}=marketProbabilities(card),odds={win:{},place:{},winProb:{},placeProb:{}};
+ const margin=card.start>=FORM_REFORM_FROM?1.05:1;
+ for(const h of card.horses){const i=h.number-1;odds.win[h.number]=oddsFromProbability(win[i]*margin);odds.place[h.number]=oddsFromProbability(place[i]*margin);odds.winProb[h.number]=win[i];odds.placeProb[h.number]=place[i];}
  if(oddsCache.size>32)oddsCache.delete(oddsCache.keys().next().value);
  oddsCache.set(key,odds);
  return odds;
