@@ -3,6 +3,7 @@
 // @ts-expect-error The shared pure browser engine has no TypeScript declarations.
 import { RUN_MS, bigRaceName, fillerCrownName, raceEvent, hydrateRacing, isRaceStart, latestRaceStart, openRaceStart, settleRaceBets } from '../../../js/racing.js';
 import { kpHash, kpRandom } from './kp.ts';
+import {nativeRelicBonus} from './relics.ts';
 import type { KpEnv, KpMapping } from './kp.ts';
 import { crownFor } from './racing-crowns.ts';
 import { decideEntries, raceEntries } from './racing-horses.ts';
