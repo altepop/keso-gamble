@@ -72,7 +72,7 @@ export function relicsPanel(state,{proofs=null,notice='',loading=false,view={},r
  </div></section>
  <section class="panel"><div class="card-body"><h2 class="panel-title">📚 モード別・特殊遺物全${catalog.length||140}種類</h2><p class="helper">全20系統×7レアリティ。低レアにも「素数」「連続する数字」「25の倍数」などの一発逆転条件がある。違う能力が同時発動し、受取KPが7の倍数なら共鳴で効果が上がる。KP支給の共通上限は変わらない。</p>${grouped||'<p class="helper">データ取得中。再度この画面を開いてください。</p>'}</div></section>
  <section class="panel"><div class="card-body"><h2 class="panel-title">🟦 Steam限定遺物</h2>
-   <p class="helper">監視登録後に新しく解除し、サーバーが検証した実績だけが対象だ。世界解除率25%以上は「旅路」、10%超〜25%未満は「挑戦」。それ以下の実績はより希少な区分となる。過去の実績には干渉しない。Steam実績のKP報酬は変更しない。</p>
+   <p class="helper">監視登録以降に新規解除し、サーバーが検証した実績だけが対象だ。世界解除率25%以上は「旅路」、10%超〜25%未満は「挑戦」。それ以下の実績はより希少な区分となる。過去の実績には干渉しない。Steam実績のKP報酬は変更しない。</p>
    ${!state.serverWallet?'<p class="helper">本番KP口座へ接続してください。</p>':loading?'<p class="helper">達成記録を確認中…</p>':proofs?.steam?.length?proofs.steam.map(e=>`<div class="asset-line"><span>${esc(e.title)}<br><small>${steamGrade(e.percent)}の遺物 · 世界解除率 ${yen(e.percent)}%</small></span><button type="button" class="action-btn" data-action="relic-claim-steam" data-event="${esc(e.id)}" ${owned('steam.'+e.id)?'disabled':''}>${owned('steam.'+e.id)?'受取済み':'獲得'}</button></div>`).join(''):'<p class="helper">監視開始後の新規実績の記録がまだない。監視前の実績は遡及しない。</p>'}
  </div></section>
  <section class="panel"><div class="card-body"><h2 class="panel-title">🟨 ポケモンユナイト限定遺物</h2>
