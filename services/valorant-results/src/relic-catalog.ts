@@ -29,6 +29,7 @@ export type NormalRelicRarity = typeof RELIC_RARITIES[number];
 export interface NormalRelicDefinition {
   id:string; name:string; mode:RelicMode; rarity:NormalRelicRarity;
   power:number; skill:string; ability:string; percent:number; cap:number;
+ short:string; trait?:string;
 }
 const names:ReadonlyArray<readonly [RelicMode,readonly string[]]> = [
   [
@@ -480,10 +481,25 @@ export const NORMAL_RELICS:ReadonlyArray<NormalRelicDefinition> = names.flatMap(
     const unusual=chosenSkill==='lucky7'?'対象額の一の位が7なら':chosenSkill==='odd'?'対象額が奇数なら':null;
     const compatible=['marketplus','racingplus','casinoplus','finance'].includes(mode);
     const explanation=TACTICAL_HINTS[chosenSkill]??unusual??conditions[chosenSkill]??conditions[rule.key];
+    const skillShort:Record<string,string>={
+      spark:'報酬獲得時',rescue:`${low}KP以下の報酬`,advance:`${low}KP以上の報酬`,
+      highroll:`${high}KP以上の報酬`,surge:`${low}KP以上の報酬`,
+      master:isNative?'精算時':'勝利・達成時',
+      sovereign:isNative?'精算時':'勝利・達成時',
+      even:'偶数KPの報酬',odd:'奇数KPの報酬',prime:'素数KPの報酬',
+      square:'平方数KPの報酬',quarter:'25の倍数KPの報酬',
+      mod11:'11の倍数KPの報酬',mod13:'13の倍数KPの報酬',
+      digit7:'各桁合計が7の倍数',double:'数字が2つ連続',
+      reverse:'左右対称の数字',near:'基準額+50KP以内',thin:'基準額未満',
+      heavy:'高額ラインの2倍以上',triple:'3の倍数KPの報酬',
+      lucky7:'末尾7の報酬',lucky77:'77を含む報酬'
+    };
+    const trait=rarity==='ancient'?'刻印連鎖：他の遺物も発動すると追加KP':rarity==='transcendent'?'運命突破：発動条件を外しても固定KPを獲得':undefined;
+    const short=`${skillShort[chosenSkill]??'条件達成時'}：KP報酬＋${chosenPercent}%`;
     const extraCeiling=compatible?'（取引系共通：対象額1%・合計1日120KP以内）':ceiling;
     return {
       id,name,mode,rarity,power:power[rarityIndex]!,skill:chosenSkill,percent:chosenPercent,
-      cap:chosenCap,ability:`${RELIC_MODE_NAMES[mode]}の報酬で「${explanation}」という条件を満たすと、対象KPの${chosenPercent}%を追加（この遺物単独で最大${chosenCap}KP）。${extraCeiling}`,
+      cap:chosenCap,short,trait,ability:`${RELIC_MODE_NAMES[mode]}の報酬で「${explanation}」という条件を満たすと、対象KPの${chosenPercent}%を追加（この遺物単独で最大${chosenCap}KP）。${trait?trait+"。":""}${extraCeiling}`,
     };
     /*
     return {
