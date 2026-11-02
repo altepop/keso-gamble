@@ -52,8 +52,11 @@ export async function prepareRaceBroadcast(env:BroadcastEnv,mapping:KpMapping,no
  for(const id of [latest,latest+RACE_INTERVAL]){
   if(now<id-180000||now>=id+RUN_MS)continue; // Never replay an old race as a live race.
   const crown=await crownFor(env,mapping.guildId,id),entries=await raceEntries(env,mapping,id);
-  const bets=await env.DB.prepare("SELECT 1 FROM kp_state s,json_each(s.data,'$.raceBets') b WHERE s.guild=? AND json_extract(b.value,'$.raceId')=? LIMIT 1").bind(mapping.guildId,id).first();
-  if(!bigRaceName(id)&&!fillerCrownName(id)&&!raceEvent(id)&&!crown&&!entries.length&&!bets)continue;
+  // Guaranteed-to-run races and registered horses don't need the costly JSON wallet scan.
+  if(!bigRaceName(id)&&!fillerCrownName(id)&&!raceEvent(id)&&!crown&&!entries.length){
+   const bets=await env.DB.prepare("SELECT 1 FROM kp_state s INDEXED BY kp_state_pending_race,json_each(s.data,'$.raceBets') b WHERE s.guild=? AND instr(s.data,'\"raceBets\"')>0 AND instr(s.data,'\"pending\"')>0 AND json_extract(b.value,'$.raceId')=? AND json_extract(b.value,'$.status')='pending' LIMIT 1").bind(mapping.guildId,id).first();
+   if(!bets)continue;
+  }
   const card={...raceCard(id,undefined,entries),...(crown?{name:crown.name}:{})};
   const {seed}=await raceSeed(env,mapping.guildId,id);
   await env.DB.prepare('INSERT OR IGNORE INTO race_broadcasts(guild,race,snapshot) VALUES(?,?,?)').bind(mapping.guildId,id,JSON.stringify(raceShow(card,seed,crown?.kind==='vdklastdeath'))).run();
