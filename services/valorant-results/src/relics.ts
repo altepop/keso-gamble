@@ -137,20 +137,32 @@ export function modeRelicBonus(
  const bounds=thresholds[mode];if(!bounds)return{bonus:0,skills:[]};
  let total=0;const activated:string[]=[];
  for(const id of collection.equipped){
-  const def=NORMAL_RELIC_BY_ID.get(id);
-  if(!def||def.mode!==mode||!collection.items[id])continue;
-  const skill=def.skill;
+  const def=NORMAL_RELIC_BY_ID.get(id),item=collection.items[id];
+  if(!item)continue;
+  const sourceMode=def?.mode??item.mode;
+  const compatible=sourceMode===mode||sourceMode==='universal'||
+   sourceMode==='fortune'||
+   (sourceMode==='finance'&&['casino','market','racing','mleague'].includes(mode))||
+   (sourceMode==='marketplus'&&mode==='market')||
+   (sourceMode==='racingplus'&&mode==='racing')||
+   (sourceMode==='casinoplus'&&mode==='casino');
+  if(!compatible)continue;
+  const skill=def?.skill??item.skill;
   const eligible=skill==='spark'
    ||(skill==='rescue'&&event.amount<=bounds[0])
    ||(skill==='advance'&&event.amount>=bounds[0])
    ||(skill==='highroll'&&event.amount>=bounds[1])
    ||(skill==='surge'&&event.amount>=bounds[0])
+   ||(skill==='lucky7'&&event.amount%10===7)
+   ||(skill==='odd'&&event.amount%2===1)
    ||((skill==='master'||skill==='sovereign')&&event.win);
   if(!eligible)continue;
-  const duplicateBoost=Math.min(5,Math.floor(Math.log2(Math.max(1,collection.items[id]!.count))));
-  const contribution=Math.min(def.cap,Math.max(1,Math.floor(event.amount*(def.percent+duplicateBoost)/100)));
+  const duplicateBoost=item.origin==='normal'?Math.min(5,Math.floor(Math.log2(Math.max(1,item.count)))):0;
+  const cap=def?.cap??item.cap??0,percent=def?.percent??item.percent??0;
+  if(!cap||!percent)continue;
+  const contribution=Math.min(cap,Math.max(1,Math.floor(event.amount*(percent+duplicateBoost)/100)));
   total+=contribution;
-  activated.push(def.name);
+  activated.push(def?.name??item.name);
  }
  return{bonus:Math.min(total,80,Math.floor(event.amount*0.15)),skills:activated};
 }
