@@ -42,6 +42,7 @@ test('報酬の表：コンペの負けがプラスなら「負け +200 KP」と
 });
 
 test('LOOP chapter clear rewards show the 10x first-clear amounts',()=>{
+ assert.match(playView(live([])),/最初の通常周回で第1ステージ突破 <strong>\+1,000 KP<\/strong>/);
  const html=playView(live([]));
  assert.match(html,/第一章の初クリア <strong>\+50,000 KP<\/strong>/);
  assert.match(html,/第二章の初クリア <strong>\+300,000 KP<\/strong>/);
