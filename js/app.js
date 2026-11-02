@@ -35,6 +35,7 @@ let autoState=embedded?'loading':'idle';
 let autoMessage='';
 let live=wallet.connected&&!embedded;
 let steamView=null;
+let hoyoView=null;
 let connectionError=live?'口座を読み込んでいます…':'';
 let state;
 let screen='title';
@@ -282,7 +283,7 @@ function detailSheet(){
 }
 
 function render(){
-  const html = screen==='title'?titleView(state,wallet.remembered,autoState,autoMessage):screen==='home'?homeView(state,bottomNav()):screen==='play'?playView(state,drafts,bottomNav(),steamView):screen==='directives'?directivesView(state,drafts,bottomNav(),tabsFor('directives')):screen==='stable'?screenStable():screen==='shop'?screenShop():screen==='market'?screenMarket():screen==='casino'?screenCasino():screen==='mleague'?mleagueScreen({state,live,draft:{...mlDraft,amount:drafts['ml-amount']},tabs:subTabs(),nav:bottomNav()}):screen==='race'?screenRace():screenAssets();
+  const html = screen==='title'?titleView(state,wallet.remembered,autoState,autoMessage):screen==='home'?homeView(state,bottomNav()):screen==='play'?playView(state,drafts,bottomNav(),steamView,hoyoView):screen==='directives'?directivesView(state,drafts,bottomNav(),tabsFor('directives')):screen==='stable'?screenStable():screen==='shop'?screenShop():screen==='market'?screenMarket():screen==='casino'?screenCasino():screen==='mleague'?mleagueScreen({state,live,draft:{...mlDraft,amount:drafts['ml-amount']},tabs:subTabs(),nav:bottomNav()}):screen==='race'?screenRace():screenAssets();
   const previousView=app.querySelector('.screen')?.dataset.view;
   // Do not carry an expanded home feed into a different screen: closed
   // disclosures must not trigger 10-second D1 polling in the background.
@@ -410,7 +411,7 @@ addEventListener('click',async e=>{
   const t=e.target.closest?.('button,[data-open]'); if(!t) return;
   if(t.dataset.action==='casino-skip'){casinoSkipped=true;skipCasinoPause?.();return;}
   if(casinoBusy&&(t.dataset.screen||t.dataset.casinoGame)){toast('演出をスキップすると移動できます');return;}
-  const mutates=!!t.dataset.approve || !!t.dataset.complete || ['steam-library','steam-status','steam-link','steam-open','steam-confirm','steam-disconnect','steam-game','salary','trade','spin','race-bet','roast-level','horse-buy','horse-sell-approve','luxury','reset','submit-claim','issue-directive','connect-kp','refresh-kp','disconnect-kp','auto-connect-kp','ml-buy','chinchiro','bj-start','bj-hit','bj-stand','bj-double','mines-start','mines-pick','mines-cashout','slot','vp-deal','vp-draw','baccarat','private-round','private-race','stock-shock','stock-shock-approve','stock-guerrilla-toggle'].includes(t.dataset.action);
+  const mutates=!!t.dataset.approve || !!t.dataset.complete || ['hoyo-status','hoyo-link','hoyo-refresh','hoyo-unlink','steam-library','steam-status','steam-link','steam-open','steam-confirm','steam-disconnect','steam-game','salary','trade','spin','race-bet','roast-level','horse-buy','horse-sell-approve','luxury','reset','submit-claim','issue-directive','connect-kp','refresh-kp','disconnect-kp','auto-connect-kp','ml-buy','chinchiro','bj-start','bj-hit','bj-stand','bj-double','mines-start','mines-pick','mines-cashout','slot','vp-deal','vp-draw','baccarat','private-round','private-race','stock-shock','stock-shock-approve','stock-guerrilla-toggle'].includes(t.dataset.action);
   if(mutates && mutationPending)return;
   if(mutates)mutationPending=true;
   try{
@@ -492,6 +493,21 @@ addEventListener('click',async e=>{
       return;
     }
     if(t.dataset.action==='auto-connect-kp'){await automaticConnect();return;}
+    if(t.dataset.action?.startsWith('hoyo-')){
+      if(!live||!wallet.connected)throw Error('先にKP口座へ接続してください。');
+      const action=t.dataset.action,game=t.dataset.game;
+      hoyoView={...(hoyoView??{}),loading:true,error:'',notice:''};render();
+      try{
+        let result;
+        if(action==='hoyo-link')result=await wallet.hoyoLink(game,drafts['hoyo-uid-'+game]??'');
+        else if(action==='hoyo-refresh')result=await wallet.hoyoRefresh(game);
+        else if(action==='hoyo-unlink')result=await wallet.hoyoUnlink(game);
+        else result=await wallet.hoyoStatus();
+        hoyoView={loading:false,profiles:result.profiles??[],error:'',notice:result.cached?'取得元のキャッシュ期間中です。前回の内容を表示しています。':action==='hoyo-link'?'公開プロフィールを登録しました。本人確認やKP支給は行いません。':action==='hoyo-unlink'?'登録を解除しました。':'登録状況を更新しました。'};
+        if(action==='hoyo-link')delete drafts['hoyo-uid-'+game];
+      }catch(error){hoyoView={...(hoyoView??{}),loading:false,error:error.message||'公開情報を確認できませんでした。',notice:''};}
+      render();return;
+    }
     if(t.dataset.action?.startsWith('steam-')){
       if(!live||!wallet.connected)throw Error('先にKP口座へ接続してください。');
       const action=t.dataset.action;try{
@@ -519,7 +535,7 @@ addEventListener('click',async e=>{
       privateRacePreview=await wallet.privateRace();render();return;
     }
     if(t.dataset.action==='refresh-kp'){await refreshWallet(true);render();return;}
-    if(t.dataset.action==='disconnect-kp'){await wallet.disconnect();autoState=embedded?'paused':'idle';autoMessage='';live=false;trend=null;trendView={...trendView,error:'',focus:null,day:null};privateRacePreview=null;privateRoundMessage='';steamView=null;connectionError='';state=store.state;screen='title';render();return;}
+    if(t.dataset.action==='disconnect-kp'){await wallet.disconnect();autoState=embedded?'paused':'idle';autoMessage='';live=false;trend=null;trendView={...trendView,error:'',focus:null,day:null};privateRacePreview=null;privateRoundMessage='';steamView=null;hoyoView=null;connectionError='';state=store.state;screen='title';render();return;}
     if(t.dataset.casinoGame){if(spinLock){toast('抽選中は切り替えられません');return;}casinoGame=t.dataset.casinoGame;render();return;}
     if(t.dataset.screen){if(spinLock){toast('抽選中は画面を切り替えられません');return;}detail=null;pendingHorseSale=null;screen=t.dataset.screen;render();if(screen==='race')settleRaces();return;}
     if(t.dataset.action==='load-trend'){await loadTrend(Number(t.dataset.days));return;}
@@ -637,6 +653,7 @@ addEventListener('input', e => {
   if(e.target.id==='ml-amount'){drafts['ml-amount']=e.target.value;const preview=$('#ml-preview');if(preview)preview.textContent=mleaguePreview(state,{...mlDraft,amount:e.target.value});}
   if(e.target.id==='race-amount'){drafts['race-amount']=e.target.value;const preview=$('#race-preview');if(preview){const open=openCard(Date.now());preview.innerHTML=racePreview(open,raceOdds(open),{...raceDraft,amount:e.target.value});}}
   if(e.target.id==='steam-game-search'){if(steamView){steamView.search=e.target.value;render();}return;}
+  if (e.target.id?.startsWith('hoyo-uid-')){drafts[e.target.id]=e.target.value;return;}
   if (e.target.id==='kp-connect-code'||['trade-qty','bet-amount','chinchiro-amount','bj-amount','mines-amount','slot-amount','vp-amount','baccarat-amount'].includes(e.target.id)||e.target.id.startsWith('claim-')||e.target.id.startsWith('directive-')) drafts[e.target.id] = e.target.value;
   if(e.target.id==='trade-qty')$('#trade-estimate').innerHTML=tradeEstimate();
 });
