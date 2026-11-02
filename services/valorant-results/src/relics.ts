@@ -42,7 +42,7 @@ export function relicCollection(state: {relics?: RelicCollection}): RelicCollect
   if (!state.relics) state.relics = {totalSummons: 0, items: {}, equipped: []};
   return state.relics;
 }
-export const summonLevel = (total: number) => Math.min(10, 1 + Math.floor(total / 500));
+export const summonLevel = (total: number) => Math.min(10, 1 + Math.floor(total / 200));
 export function rarityForRoll(roll: number, level: number): RelicRarity {
   if (!Number.isInteger(roll) || roll < 0 || roll >= 1_000_000) throw Error('Invalid relic roll');
   // Transcendent starts at 0.001%, reaches 0.01% at level 10, never guaranteed.
