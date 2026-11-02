@@ -42,6 +42,8 @@ export const STEAM_RELIC_TIERS=[
 ] as const;
 export function steamRelicTier(percent:number){
  if(!Number.isFinite(percent)||percent<0||percent>100)throw Error('Steamの実績解除率を確認できません。');
+ // 25% exactly belongs to the new widely obtainable 25%+ tier.
+ if(percent>=25)return STEAM_RELIC_TIERS[6]!;
  return STEAM_RELIC_TIERS.find(t=>percent<=t.max)!;
 }
 export const STEAM_RELIC_ARCHETYPES=[
