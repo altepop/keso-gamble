@@ -148,7 +148,8 @@ test('Steam relic tiers include ordinary achievements at >=25% and a separate 10
  for(const percent of [0,0.01,0.1,1,5,10,10.01,25,25.01,30,75,100])
   assert.ok(steamRelicTier(percent).label);
  assert.equal(steamRelicTier(10.01).label,'挑戦');
- assert.equal(steamRelicTier(25).label,'挑戦');
+ assert.equal(steamRelicTier(24.99).label,'挑戦');
+ assert.equal(steamRelicTier(25).label,'旅路');
  assert.equal(steamRelicTier(25.01).label,'旅路');
  assert.equal(steamRelicTier(30).label,'旅路');
  assert.throws(()=>steamRelicTier(100.1),/確認/);
