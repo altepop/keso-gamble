@@ -1,7 +1,7 @@
 // Horse racing on the live KP wallets. Cards and odds are public; each race's result seed is random,
 // stored here, published only as a SHA-256 hash until the start, and revealed after it.
 // @ts-expect-error The shared pure browser engine has no TypeScript declarations.
-import { RUN_MS, bigRaceName, fillerCrownName, hydrateRacing, isRaceStart, latestRaceStart, openRaceStart, settleRaceBets } from '../../../js/racing.js';
+import { RUN_MS, bigRaceName, fillerCrownName, raceEvent, hydrateRacing, isRaceStart, latestRaceStart, openRaceStart, settleRaceBets } from '../../../js/racing.js';
 import { kpHash, kpRandom } from './kp.ts';
 import type { KpEnv, KpMapping } from './kp.ts';
 import { crownFor } from './racing-crowns.ts';
@@ -37,7 +37,7 @@ export async function racingView(env:KpEnv,mapping:KpMapping,now=Date.now()){
  const [openCrown,watchCrown]=[await crownFor(env,guild,open),await crownFor(env,guild,watch)];
  // Owned horses are fixed for a race when its betting opens, before anyone can bet on it.
  const openEntries=await decideEntries(env,mapping,open,now),watchEntries=await raceEntries(env,mapping,watch);
- const runs=Boolean(bigRaceName(watch))||Boolean(fillerCrownName(watch))||Boolean(watchCrown)||watchEntries.length>0||await raceHasBets(env,guild,watch);
+ const runs=Boolean(bigRaceName(watch))||Boolean(fillerCrownName(watch))||Boolean(raceEvent(watch))||Boolean(watchCrown)||watchEntries.length>0||await raceHasBets(env,guild,watch);
  const openSeed=await raceSeed(env,guild,open);
  const watched=runs?await raceSeed(env,guild,watch):null;
  return {open:{id:open,hash:openSeed.hash,entries:openEntries,...(openCrown?{crown:openCrown.name}:{})},watch:{id:watch,runs,entries:watchEntries,...(watchCrown?{crown:watchCrown.name}:{}),...(watched?{hash:watched.hash,seed:watched.seed}:{})}};
