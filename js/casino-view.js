@@ -1,4 +1,4 @@
-import { CASINO_MIN, CASINO_MAX, CHINCHIRO_HANDS, RANKS, SUITS, bjTotal } from './casino.js?v=web-15a6f7d4d4f49d8d';
+import { CASINO_MIN, CASINO_MAX, CHINCHIRO_HANDS, RANKS, SUITS, bjTotal } from './casino.js?v=web-a5cbf7bc3d2f6ba9';
 const kp=n=>Math.abs(n).toLocaleString('ja-JP')+' KP';
 const signed=n=>(n>0?'+':n<0?'−':'±')+kp(n);
 export const CASINO_GAMES=[['roulette','ルーレット'],['chinchiro','チンチロ'],['blackjack','ブラックジャック'],['mines','マインズ'],['slot','スロット'],['poker','ポーカー'],['baccarat','バカラ']];
