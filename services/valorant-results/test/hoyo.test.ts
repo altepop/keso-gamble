@@ -17,7 +17,7 @@ test('Star Rail response and ZZZ nested showcase are handled separately',()=>{
 test('showcase changes do not claim new characters were acquired',()=>{
  const old={nickname:'Player',accountLevel:56,achievements:100,characters:[{id:'1001',level:60,promotion:0,copies:0}]};
  const next={nickname:'Player',accountLevel:57,achievements:105,characters:[{id:'1001',level:70,promotion:0,copies:1},{id:'1002',level:90,promotion:0,copies:0}]};
- assert.deepEqual(changesHoyo(old,next),['プレイヤーレベル 56 → 57','公開実績数 +5','キャラ 1002 が公開欄に登場','キャラ 1001 Lv.60 → 70','キャラ 1001 凸数 0 → 1']);
+ assert.deepEqual(changesHoyo(old,next),['プレイヤーレベル 56 → 57','公開実績数 +5','キャラ 1001 Lv.60 → 70','キャラ 1001 凸数 0 → 1','展示キャラ 1002 が公開欄に登場']);
 });
 test('invalid source and mismatching UID must not be accepted',()=>{
  assert.throws(()=>normalizeHoyo('genshin','618285856',{uid:618285857,playerInfo:{nickname:'wrong'}}),/UID/);
