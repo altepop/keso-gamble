@@ -60,7 +60,8 @@ test('equipment is optional for both sources; no hardcoded combination or earnin
  summonRelics(x,10,new Uint32Array(20).fill(999999));
  const common=Object.keys(x.relics!.items)[0]!;
  let r=equipRelic(x,common,0);
- assert.equal(r.power,10);
+ assert.equal(r.power,25);
+ assert.equal(x.relics!.items[common]!.count,10);
  assert.deepEqual(equipRelic(x,'',0).equipped,['']);
  assert.equal(x.cash,0);
 });
