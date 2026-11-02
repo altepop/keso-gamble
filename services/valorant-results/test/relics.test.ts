@@ -19,7 +19,7 @@ test('200KP per roll, valid batch sizes, never overspends or draws entropy for r
 });
 test('transcendent is low probability from first roll, 1/10000 at maximum level',()=>{
   assert.equal(summonLevel(0),1);
-  assert.equal(summonLevel(4500),10);
+  assert.equal(summonLevel(1800),10);
   assert.equal(rarityForRoll(9,1),'transcendent');
   assert.equal(rarityForRoll(10,1),'ancient');
   assert.equal(rarityForRoll(99,10),'transcendent');
