@@ -215,7 +215,7 @@ export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:strin
    result=grantSteamRelic(state,proof);
   }else if(action==='relic-claim-unite'){
    const tier=String(args.tier??'') as UniteRelicId,required=UNITE_REQUIREMENTS[tier];
-   if(!required)throw Error('ユナイト遺物を選んでください。');
+   if(!Object.hasOwn(UNITE_REQUIREMENTS,tier))throw Error('ユナイト遺物を選んでください。');
    // Uses only a previously settled ranked match; a browser cannot submit its own win streak.
    const proof=await env.DB.prepare('SELECT wins FROM unite_rewards WHERE guild=? AND user=? AND win=1 AND wins>=? LIMIT 1')
     .bind(mapping.guildId,user,required).first<{wins:number}>();
