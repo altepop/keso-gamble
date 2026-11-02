@@ -571,3 +571,35 @@ body.esc-wheel-open{overflow:hidden!important}
 @keyframes relic-title{from{opacity:0;letter-spacing:.25em;transform:translateY(15px)}to{opacity:1;letter-spacing:normal;transform:none}}
 @media(max-width:360px){.relic-filter-grid{grid-template-columns:1fr}.relic-pagination .action-btn{font-size:11px}}
 @media(prefers-reduced-motion:reduce){.relic-summon-orb,.relic-reveal,.relic-reveal h2,.relic-progress-rail>span{animation:none;transition:none}}
+
+/* V5: show the real effective KP gain, not only rarity or raw power. */
+.relic-card-effect{font-size:15px;color:#f4f8ff}
+.relic-percent-stat b{font-size:15px;color:#91edc4}
+.relic-trait{padding:8px 10px;border-radius:9px;background:#32264d;color:#f0d9ff}
+.relic-preview-controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin:14px 0}
+.relic-preview-controls label{min-width:0;font-size:12px;color:#c9d9ee}
+.relic-preview-controls select{display:block;width:100%;min-width:0;margin-top:5px;min-height:44px;font-size:14px}
+.relic-preview-total{border:1px solid #69bbdd;border-radius:13px;padding:13px;background:linear-gradient(120deg,#133d5b,#0d2243);display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.relic-preview-total>div{min-width:0}
+.relic-preview-total small{display:block;font-size:11px;color:#c2e2ff;margin-bottom:3px}
+.relic-preview-total b{font-size:clamp(21px,5.9vw,29px);font-weight:900;color:#a5f5d8;overflow-wrap:anywhere}
+.relic-preview-total p{grid-column:1/-1;font-size:13px;line-height:1.6;border-top:1px solid #47748c;margin:0;padding-top:9px}
+.relic-preview-total p strong{color:#fff5b5}
+.relic-cap-note{font-size:12px;color:#d1dff6;line-height:1.6;margin:11px 0}
+.relic-readout-title{font-size:14px;margin:16px 0 9px}
+.relic-preview-row{display:flex;gap:10px;align-items:start;justify-content:space-between;border:1px solid #31456f;border-radius:10px;margin:8px 0;padding:10px;background:#091832}
+.relic-preview-row>div:first-child{min-width:0;flex:1}
+.relic-preview-row b{display:block;font-size:13px;color:#fff;overflow-wrap:anywhere}
+.relic-preview-row small{display:block;font-size:11px;color:#b2c6e7;margin-top:5px}
+.relic-preview-stats{min-width:92px;text-align:right}
+.relic-preview-stats strong{font-size:16px;color:#a8f4cf;display:block}
+.relic-preview-stats span{display:block;font-size:12px;color:#e1f0ff;margin-top:4px}
+.relic-preview-stats small{color:#ffdf91}
+.relic-trait-tag{display:inline-block;font-size:10px;font-weight:800;background:#32264c;color:#e6c6ff;border:1px solid #77539e;border-radius:5px;padding:3px 6px;margin-top:6px}
+.relic-example-note{display:block;font-size:11px;line-height:1.6;color:#bdcce3;margin:12px 0}
+.relic-last-real{border-top:1px solid #334f79;padding:13px 0 3px;margin-top:16px;display:grid;gap:7px}
+.relic-last-real>b{font-size:13px}
+.relic-last-real span{font-size:13px}
+.relic-last-real strong{color:#a5f5d8}
+.relic-last-real small{font-size:11px;line-height:1.5;color:#b5c6df}
+@media(max-width:360px){.relic-preview-controls{grid-template-columns:1fr}.relic-preview-stats{min-width:78px}}
