@@ -3,6 +3,7 @@
 // number and the four teams; anything that does not match exactly is ignored, never guessed.
 import data from '../mleague-2026-27.json' with {type:'json'};
 import {kpHash} from './kp.ts';
+import {nativeRelicBonus} from './relics.ts';
 import type {KpEnv,KpMapping} from './kp.ts';
 import {enqueue,ensurePosts,earningsWebhook} from './racing-posts.ts';
 import type {PostEnv} from './racing-posts.ts';
