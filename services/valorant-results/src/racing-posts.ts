@@ -3,7 +3,7 @@ import {activityLaunchComponents} from './activity-link.ts';
 // the minute cron. Queue IDs deduplicate registration; an interrupted delivery can remain unknown.
 // Nothing is queued until the webhook is set.
 // @ts-expect-error The shared pure browser engine has no TypeScript declarations.
-import { BET_TYPES, CLOSE_BEFORE, GOINGS, RACE_INTERVAL, RUN_MS, bigRaceName, latestRaceStart, openRaceStart, prizeFor, raceCard, raceOdds, raceResult, placeSlots } from '../../../js/racing.js';
+import { BET_TYPES, CLOSE_BEFORE, GOINGS, RACE_INTERVAL, RUN_MS, bigRaceName, latestRaceStart, openRaceStart, prizeFor, raceCard, raceOdds, raceResult, placeSlots, raceEvent } from '../../../js/racing.js';
 import { raceSeed, ensureRacing } from './racing-kp.ts';
 import { crownFor, defaultRoastLevel, validRoastLevel } from './racing-crowns.ts';
 import { raceEntries } from './racing-horses.ts';
@@ -13,7 +13,7 @@ import type { RoastLevel } from './racing-crowns.ts';
 import type { KpEnv, KpMapping } from './kp.ts';
 export interface PostEnv extends KpEnv { KP_EARNINGS_WEBHOOK_URL?:string }
 interface Bet { id:string; raceId:number; type:'win'|'place'; horse:number; amount:number; odds:number; status:string; payout:number }
-interface Card { id:number; start:number; name:string; size:number; going:number; raceClass:number; horses:Array<{number:number;name:string;ownerName?:string;nickname?:string|null;person?:boolean}> }
+interface Card { id:number; start:number; name:string; size:number; going:number; raceClass:number; event?:{id:string;name:string;effect:string;desc:string}; horses:Array<{number:number;name:string;ownerName?:string;nickname?:string|null;person?:boolean}> }
 const clock=(time:number)=>new Date(time).toLocaleTimeString('ja-JP',{timeZone:'Asia/Tokyo',hour:'2-digit',minute:'2-digit'});
 const kp=(n:number)=>n.toLocaleString('ja-JP')+' KP';
 const odd=(v:number)=>(v/10).toFixed(1)+'倍';
@@ -43,13 +43,14 @@ export function cardPost(card:Card,hash:string){
   '',`**出走馬**　倍率は 1着当て / ${placeSlots(card.size)}着以内当て`,
   ...card.horses.flatMap(h=>[`\`${String(h.number).padStart(2)}\` ${clean(h.name)}${h.nickname?`「${clean(h.nickname)}」`:''}　**${odd(odds.win[h.number])}** / ${odd(odds.place[h.number])}`,
    ...h.person?['-# 本人の名前の馬・見舞金つき']:h.ownerName?[`-# 馬主 ${clean(h.ownerName)}`]:[]]),
+  ...(card.event?['',`🌪️ **特別ルール：${clean(card.event.name)}**`,`🎯 ${clean(card.event.effect)}`,`-# ${clean(card.event.desc)}／補正込みの確率でオッズ計算済み`]:[]),
   '',...howToBet(card.start),
   '',`💬 ${raceCatchphrase('card',String(card.id))}`,raceAside('card',String(card.id)),
   `-# 結果のハッシュ: \`${hash.slice(0,16)}…\`（発走後にシード値を公開）`].join('\n');
 }
 export function resultPost(card:Card,seed:string,bets:Array<Bet&{user:string}>,levelOf:(user:string)=>RoastLevel,titleOf:(user:string)=>string|undefined=()=>undefined){
  const odds=raceOdds(card),order:number[]=raceResult(card,seed).order;
- const lines=[`🏁 **${clean(card.name)}** 結果`,`-# ${clock(card.start)}発走・${card.size}頭`,'',
+ const lines=[`🏁 **${clean(card.name)}** 結果`,`-# ${clock(card.start)}発走・${card.size}頭`,...(card.event?[`🌪️ 特別ルール：${clean(card.event.name)}（${clean(card.event.effect)}）`]:[]),'',
   ...order.slice(0,3).flatMap((n,i)=>{const h=card.horses[n-1];return [`${['🥇','🥈','🥉'][i]} ${i+1}着 ${n}番 **${clean(h.name)}**${i===0?`　1着当て ${odd(odds.win[n])}`:''}`,
    ...h.ownerName?[`-# 馬主 ${clean(h.ownerName)}・賞金 ${kp(prizeFor(card,i))}`]:[]];})];
  const byUser=new Map<string,Array<Bet>>();for(const b of bets)byUser.set(b.user,[...(byUser.get(b.user)??[]),b]);
@@ -60,6 +61,11 @@ export function resultPost(card:Card,seed:string,bets:Array<Bet&{user:string}>,l
   if(hits.length)lines.push(`💰 ${who}　+${kp(paid)}`,`-# ${hits.map(b=>`${b.horse}番の${BET_TYPES[b.type].label}（${odd(b.odds)}）`).join('・')} 的中`,`🗯️ ${raceBanter(paid>spent?'win':'partial',levelOf(user),user+':'+card.id)}`);
   else lines.push(`💸 ${who}　−${kp(spent)}`,`-# ${list.map(b=>`${b.horse}番の${BET_TYPES[b.type].label}`).join('・')} 外れ`,`🗯️ ${raceBanter('loss',levelOf(user),user+':'+card.id)}`);
  }
+ if(card.event){
+  const winner=order[0],fav=card.horses.reduce((best,h)=>odds.win[h.number]<odds.win[best]?h.number:best,1);
+  if(winner!==fav)lines.push('',`🎲 **${clean(card.event.name)}・波乱発生！** 1番人気の${clean(card.horses[fav-1].name)}は${order.indexOf(fav)+1}着。勝者${clean(card.horses[winner-1].name)}の単勝${odd(odds.win[winner])}！`);
+  else lines.push('','🏆 **特別ルールでも1番人気が勝利！** 波乱の看板に騙されなかった強さ。');
+ }
  lines.push('',`💬 ${raceCatchphrase('result',String(card.id))}`,raceAside('result',String(card.id)));
  lines.push(`-# シード値: \`${seed}\`（締切前のハッシュと一致することを画面で確認できます）`);
  return lines.join('\n');
@@ -68,7 +74,7 @@ export function resultPost(card:Card,seed:string,bets:Array<Bet&{user:string}>,l
  * big races, crowns named after someone and an owner's win. The live broadcast shows the order only, so this is where
  * the bets are told; a race nobody bet on stays with the broadcast alone. */
 export function worthPosting(card:Card,bets:Bet[],crowned=false,ownerWon=false){
- return Boolean(bigRaceName(card.start)||crowned||ownerWon||bets.length);
+ return Boolean(bigRaceName(card.start)||card.event||crowned||ownerWon||bets.length);
 }
 async function raceBets(env:KpEnv,guild:string,id:number){
  return (await env.DB.prepare("SELECT s.user,b.value FROM kp_state s,json_each(s.data,'$.raceBets') b WHERE s.guild=? AND json_extract(b.value,'$.raceId')=?").bind(guild,id).all<{user:string;value:string}>()).results.map(r=>({...JSON.parse(r.value) as Bet,user:r.user}));
@@ -97,7 +103,7 @@ export async function queueRacePosts(env:PostEnv,mapping:KpMapping,now=Date.now(
  for(const c of crowns)await enqueue(env,'race-crown:'+c.race,crownPost(c),now);
  // The card of a big race or a crown named after someone goes out once betting has opened for it.
  const open=openRaceStart(now),openCrown=await crownFor(env,mapping.guildId,open);
- if((bigRaceName(open)||openCrown)&&now>=open-RACE_INTERVAL&&now<open-CLOSE_BEFORE){
+ if((bigRaceName(open)||openCrown||raceEvent(open))&&now>=open-RACE_INTERVAL&&now<open-CLOSE_BEFORE){
   // A card is immutable once enqueued; skip expensive horse/seed reads
   // rather than reconstruct it every minute until betting closes.
   const present=await env.DB.prepare('SELECT 1 AS n FROM kp_posts WHERE id=?').bind('race-card:'+open).first();
@@ -117,7 +123,7 @@ export async function queueRacePosts(env:PostEnv,mapping:KpMapping,now=Date.now(
   if(already)continue;
   const bets=await raceBets(env,mapping.guildId,id);
   const crown=await crownFor(env,mapping.guildId,id),entries=await raceEntries(env,mapping,id);
-  if(bets.some(b=>b.status==='pending')||(!bets.length&&!bigRaceName(id)&&!crown&&!entries.length))continue;
+  if(bets.some(b=>b.status==='pending')||(!bets.length&&!bigRaceName(id)&&!raceEvent(id)&&!crown&&!entries.length))continue;
   const seed=await env.DB.prepare('SELECT seed FROM kp_races WHERE guild=? AND id=?').bind(mapping.guildId,id).first<{seed:string}>();
   const card={...raceCard(id,undefined,entries),...(crown?{name:crown.name}:{})};
   const ownerWon=Boolean(seed)&&Boolean(card.horses[raceResult(card,seed!.seed).order[0]-1].ownerName);

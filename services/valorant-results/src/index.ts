@@ -1,3 +1,4 @@
+import {queueCommunityNews} from './community-news.ts';
 import {queueVdkPearlRoast} from './vdk-pearl-roast.ts';
 import {queueSteamPosts} from './steam-posts.ts';
 import {ensureNotificationReadIndexes} from './notification-indexes.ts';
@@ -520,7 +521,7 @@ export default {
       // Cloudflare may execute a cron a little late; use its intended minute for the 18:00 catch-up.
       if(shouldRunMlCron(_event.scheduledTime??Date.now()))
         await track(env,'mleague',async()=>{await refreshMlCards(env);await pollMlLineups(env,mapping);await pollMlResults(env);await settleMl(env,mapping);await queueMlPosts(env,mapping);});
-      await track(env,'earnings_post',async()=>{await queueRacePosts(env,mapping,Date.now(),crowns);await queueVdkPearlRoast(env,mapping).catch(()=>console.warn('vdk_pearl_roast_pending'));await flushRacePosts(env);});
+      await track(env,'earnings_post',async()=>{await queueRacePosts(env,mapping,Date.now(),crowns);await queueVdkPearlRoast(env,mapping).catch(()=>console.warn('vdk_pearl_roast_pending'));await queueCommunityNews(env).catch(()=>console.warn('community_news_pending'));await flushRacePosts(env);});
       await track(env,'race_broadcast',async()=>{await prepareRaceBroadcast(env,mapping);});
     })().catch(()=>console.warn('race_settlement_pending')));
   },

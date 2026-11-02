@@ -488,3 +488,8 @@ body.esc-wheel-open{overflow:hidden!important}
 @keyframes esc-prize-pop{from{opacity:0;transform:scale(.8)}to{opacity:1;transform:scale(1)}}
 @media(max-height:730px){.esc-wheel-stage{width:min(65vw,275px);height:min(65vw,275px);margin:12px auto 5px}.esc-roulette-card{padding:12px}.esc-wheel-disclaimer{font-size:9px}}
 @media(prefers-reduced-motion:reduce){.esc-roulette-result{animation:none}}
+
+/* Special-race mechanics are visible before buying a ticket, on mobile and desktop. */
+.race-event-note{margin:12px 14px;padding:12px 14px;border:1px solid rgba(248,198,63,.65);border-radius:12px;background:linear-gradient(120deg,rgba(248,198,63,.18),rgba(30,62,110,.28));box-shadow:inset 0 0 0 1px rgba(248,198,63,.09)}
+.race-event-note strong{display:block;color:#ffe69a;font-size:15px;margin-bottom:6px}
+.race-event-note .helper{line-height:1.55;margin:0;color:#e4ebff}
