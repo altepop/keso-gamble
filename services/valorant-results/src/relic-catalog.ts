@@ -15,7 +15,13 @@ export const RELIC_MODE_NAMES = {
   "market": "株式市場",
   "mleague": "Mリーグ",
   "quiz": "VCT QUIZ",
-  "voice": "Discord通話"
+  "voice": "Discord通話",
+  "universal": "全ゲーム共通",
+  "finance": "経済横断",
+  "marketplus": "株式・裏戦略",
+  "racingplus": "競馬・裏戦略",
+  "casinoplus": "カジノ・裏戦略",
+  "fortune": "特殊条件"
 } as const;
 export type RelicMode = keyof typeof RELIC_MODE_NAMES;
 export const RELIC_RARITIES = ['common','uncommon','rare','legendary','mythic','ancient','transcendent'] as const;
@@ -192,7 +198,13 @@ const names:ReadonlyArray<readonly [RelicMode,readonly string[]]> = [
       "不滅の通話石",
       "千夜を繋ぐ声"
     ]
-  ]
+  ],
+  ["universal",["どこでも効く銅貨","小さき者の王笏","全局面の方位磁針","遍在の銀時計","四面の宝珠","万象連結の理","世界に干渉する鍵"]],
+  ["finance",["帳簿の栞","両建ての羽根","四市場の鋼心","損益の盲点","黒字への階段","経済循環の瞳","黄金経済圏の心臓"]],
+  ["marketplus",["端数を拾う猫","急落待ちの蜘蛛","逆張りの鉄則","株価の七番目","薄利千金の短剣","市場閉鎖の前夜","価格の外側に立つ者"]],
+  ["racingplus",["複勝拾いの蹄鉄","人気薄の笛","払戻しの仕掛け","七番人気の魔符","馬券師の罠","万馬券への片道切符","砂塵の勝利法則"]],
+  ["casinoplus",["一枚のチップ","傷んだジョーカー","偶数の銀盃","七の目の契約","低配当の怪物","大勝の先読み","悪魔の取り分"]],
+  ["fortune",["七秒の砂時計","細い勝ち筋","敗者の宝石","端数の魔導書","薄氷の勝利札","奇数の支配者","確率の裏口"]]
 ];
 const power=[10,24,55,110,180,260,350];
 /** Each tier is a different standalone passive, not a generic +KP% stat.
@@ -226,6 +238,9 @@ export const NORMAL_RELICS:ReadonlyArray<NormalRelicDefinition> = names.flatMap(
       teamdeathmatch:[50,100],escalation:[50,150],deathmatch:[50,500],skirmish:[50,250],
       racing:[100,500],casino:[100,500],market:[50,200],mleague:[100,500],
       quiz:[30,100],voice:[10,15],
+      universal:[100,400],finance:[100,500],
+      marketplus:[50,200],racingplus:[100,500],casinoplus:[100,500],
+      fortune:[50,200],
     };
     const [low,high]=base[mode]!;
     const isNative=['racing','casino','market','mleague'].includes(mode);
@@ -240,10 +255,37 @@ export const NORMAL_RELICS:ReadonlyArray<NormalRelicDefinition> = names.flatMap(
       sovereign:isNative?'対象の精算が確定':'対象の勝利・達成が確定',
     };
     const ceiling=isNative?'（取引系共通：対象額1%・合計1日120KP以内）':'（対象額15%・1件合計80KP以内）';
+    // Situational specialists deliberately break the simple "higher rarity wins" hierarchy.
+    // Rare or uncommon items can match a transcendental's effectiveness under narrow conditions.
+    const special:Record<string,{skills:readonly string[];boost:readonly number[];caps:readonly number[]}>={
+      universal:{skills:['spark','rescue','advance','lucky7','surge','master','sovereign'],
+        boost:[2,8,8,10,7,9,12],caps:[8,32,44,64,42,55,70]},
+      finance:{skills:['spark','rescue','advance','lucky7','surge','master','sovereign'],
+        boost:[4,9,11,16,7,9,15],caps:[10,30,54,80,42,55,80]},
+      marketplus:{skills:['spark','rescue','advance','lucky7','highroll','master','sovereign'],
+        boost:[3,14,17,20,8,10,15],caps:[8,60,70,80,50,55,80]},
+      racingplus:{skills:['spark','rescue','advance','lucky7','highroll','master','sovereign'],
+        boost:[3,14,17,20,8,10,15],caps:[8,60,70,80,50,55,80]},
+      casinoplus:{skills:['spark','rescue','advance','lucky7','highroll','master','sovereign'],
+        boost:[3,14,17,20,8,10,15],caps:[8,60,70,80,50,55,80]},
+      fortune:{skills:['lucky7','rescue','lucky7','odd','advance','master','sovereign'],
+        boost:[5,11,16,17,12,9,15],caps:[14,38,80,75,62,55,80]},
+    };
+    const specialDef=special[mode],chosenSkill=specialDef?.skills[rarityIndex]??rule.key;
+    const chosenPercent=specialDef?.boost[rarityIndex]??rule.percent;
+    const chosenCap=specialDef?.caps[rarityIndex]??rule.cap;
+    const unusual=chosenSkill==='lucky7'?'対象額の一の位が7なら':chosenSkill==='odd'?'対象額が奇数なら':null;
+    const compatible=['marketplus','racingplus','casinoplus','finance'].includes(mode);
+    const explanation=unusual??conditions[chosenSkill]??conditions[rule.key];
+    const extraCeiling=compatible?'（取引系共通：対象額1%・合計1日120KP以内）':ceiling;
+    return {
+      id,name,mode,rarity,power:power[rarityIndex]!,skill:chosenSkill,percent:chosenPercent,
+      cap:chosenCap,ability:`${RELIC_MODE_NAMES[mode]}特化「${name}」：${explanation}に発動。追加KP最大${chosenPercent}%・単独上限${chosenCap}KP${extraCeiling}。`,
+    };
+    /*
     return {
       id,name,mode,rarity,power:power[rarityIndex]!,skill:rule.key,percent:rule.percent,
-      cap:rule.cap,ability:`${RELIC_MODE_NAMES[mode]}特化「${rule.label}」：${conditions[rule.key]}に発動。${source[mode]??'検証済み試合'}の追加KP最大${rule.percent}%・単独上限${rule.cap}KP${ceiling}。`,
-    };
+*/
   }),
 );
 export const NORMAL_RELIC_BY_ID = new Map(NORMAL_RELICS.map(x=>[x.id,x]));

@@ -15,7 +15,7 @@ import {kpCommands,KP_COMMAND_VERSION} from './kp-command.ts';
 import {voiceControl,voiceStatus} from './voice-api.ts';
 import {voiceRewardHistory,voicePolicy} from './voice-rewards.ts';
 import {receiveLoopKp} from './loop-kp.ts';
-import {summonRelics,grantSteamRelic,grantUniteRelic,equipRelic,nativeRelicBonus,rarityRatesForLevel,summonLevel,UNITE_REQUIREMENTS,type UniteRelicId} from './relics.ts';
+import {summonRelics,grantSteamRelic,grantUniteRelic,equipRelic,nativeRelicBonus,rarityRatesForLevel,summonLevel,UNITE,UNITE_REQUIREMENTS,UNITE_STREAK_IDS,STEAM_RELIC_TIERS,type UniteRelicId} from './relics.ts';
 import {NORMAL_RELICS,RELIC_MODE_NAMES} from './relic-catalog.ts';
 import {ensureQuizKp,receiveQuizKp,isKpParticipant,quizKpRates,quizKpLimits} from './quiz-kp.ts';
 import {activityAuthAvailable,createActivityChallenge,authenticateActivity}from './discord-activity-auth.ts';
@@ -210,18 +210,27 @@ export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:strin
   else if(action==='relic-claim-steam'){
    const event=String(args.event??'');
    if(event.length<20||event.length>250||!event.startsWith('steam:'))throw Error('Steam実績を選んでください。');
-   const proof=await env.DB.prepare('SELECT id,app,achievement,title,percent FROM kp_steam_events WHERE id=? AND guild=? AND user=? AND percent<=10')
+   const proof=await env.DB.prepare('SELECT id,app,achievement,title,percent FROM kp_steam_events WHERE id=? AND guild=? AND user=?')
     .bind(event,mapping.guildId,user).first<{id:string;app:number;achievement:string;title:string;percent:number}>();
-   if(!proof)throw Error('連携後のSteam希少実績を確認できません。');
+   if(!proof)throw Error('監視開始後のSteam実績を確認できません。過去の実績は対象外です。');
    result=grantSteamRelic(state,proof);
   }else if(action==='relic-claim-unite'){
    const tier=String(args.tier??'') as UniteRelicId,required=UNITE_REQUIREMENTS[tier];
    if(!Object.hasOwn(UNITE_REQUIREMENTS,tier))throw Error('ユナイト遺物を選んでください。');
-   // Uses only a previously settled ranked match; a browser cannot submit its own win streak.
-   const proof=await env.DB.prepare('SELECT wins FROM unite_rewards WHERE guild=? AND user=? AND win=1 AND wins>=? LIMIT 1')
-    .bind(mapping.guildId,user,required).first<{wins:number}>();
-   if(!proof)throw Error('ユナイトの連勝記録がまだありません。');
-   result=grantUniteRelic(state,tier,proof.wins);
+   // Only already-settled, server-verified ranked-match records count. The
+   // Unite streak itself is capped at five; career tiers count individual verified wins.
+   let confirmedWins=0;
+   if(UNITE_STREAK_IDS.has(tier)){
+    const proof=await env.DB.prepare('SELECT wins FROM unite_rewards WHERE guild=? AND user=? AND win=1 AND wins>=? LIMIT 1')
+     .bind(mapping.guildId,user,required).first<{wins:number}>();
+    confirmedWins=proof?.wins??0;
+   }else{
+    const proof=await env.DB.prepare('SELECT COUNT(*) AS n FROM unite_rewards WHERE guild=? AND user=? AND win=1')
+     .bind(mapping.guildId,user).first<{n:number}>();
+    confirmedWins=proof?.n??0;
+   }
+   if(confirmedWins<required)throw Error('ユナイトの検証済み勝利記録がまだ足りません。');
+   result=grantUniteRelic(state,tier,confirmedWins);
   }
   else if(action==='roast-level'){
    if(!validRoastLevel(args.level))throw Error('煽りレベルを選んでください。');
@@ -331,11 +340,11 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping):Promi
   }
   if(request.method==='GET'&&path==='/api/kp/relics'){
    // Called only when the relic screen opens. No new cron or D1 scan on regular wallet polling.
-   const steam=await env.DB.prepare('SELECT id,title,percent,app FROM kp_steam_events WHERE guild=? AND user=? AND percent<=10 ORDER BY at DESC LIMIT 40')
+   const steam=await env.DB.prepare('SELECT id,title,percent,app FROM kp_steam_events WHERE guild=? AND user=? ORDER BY CASE WHEN percent<=10 THEN 0 WHEN percent<=25 THEN 1 ELSE 2 END,at DESC LIMIT 100')
     .bind(mapping.guildId,owner.user).all<{id:string;title:string;percent:number;app:number}>().then(r=>r.results).catch(()=>[]);
    const row=await env.DB.prepare('SELECT data FROM kp_state WHERE guild=? AND user=?').bind(mapping.guildId,owner.user).first<{data:string}>();
    const level=summonLevel((JSON.parse(row?.data??'{}') as {relics?:{totalSummons:number}}).relics?.totalSummons??0);
-   return response({price:200,steam,unite:['unite.first_win','unite.three_wins','unite.five_wins'],level,
+   return response({price:200,steam,unite:Object.entries(UNITE).map(([id,d])=>({id,name:d.name,power:d.power,condition:id.startsWith('unite.career_')?'累計'+d.wins+'勝':d.wins+'連勝'})),steamTiers:STEAM_RELIC_TIERS,level,
     rates:rarityRatesForLevel(level),maxRates:rarityRatesForLevel(10),ratesByLevel:Array.from({length:10},(_,i)=>rarityRatesForLevel(i+1)),
     modeNames:RELIC_MODE_NAMES,catalog:NORMAL_RELICS});
   }
