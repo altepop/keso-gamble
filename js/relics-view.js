@@ -19,7 +19,7 @@ export function relicsPanel(state,{proofs=null,notice='',loading=false}={}){
    <button type="button" class="action-btn" data-action="relic-equip" data-relic="${esc(item.id)}">指定枠に装備</button></article>`;
  const sorted=[...items].sort((a,b)=>b.power-a.power);
  return `<section class="panel"><div class="card-body"><h2 class="panel-title">🔮 遺物召喚</h2>
-   <p><strong>200 KP／1回</strong> · 召喚レベル ${Math.min(10,1+Math.floor(collection.totalSummons/500))} · 累計 ${yen(collection.totalSummons)}回</p>
+   <p><strong>200 KP／1回</strong> · 召喚レベル ${Math.min(10,1+Math.floor(collection.totalSummons/200))} · 累計 ${yen(collection.totalSummons)}回</p>
    <p class="helper">超越は最初から超低確率で排出され、召喚レベル10で0.01%。確定天井はなし。重複は自動的に蓄積される。10連・100連・1000連に割引なし。</p>
    <div class="action-row">${[1,10,100,1000].map(n=>`<button type="button" class="action-btn ${n===10?'primary':''}" data-action="relic-summon" data-count="${n}" ${state.cash<200*n||!state.serverWallet?'disabled':''}>${n}連 · ${yen(200*n)} KP</button>`).join('')}</div>
    ${notice?`<p class="market-disclaimer" role="status">${esc(notice)}</p>`:''}
