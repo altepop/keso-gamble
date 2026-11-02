@@ -283,8 +283,9 @@ export async function settleMl(env:KpEnv,mapping:KpMapping,now=Date.now()){
   if(!due.length)continue;
   const settled:MlBet[]=settleMlBets(state,await mlResults(env,due));
   if(!settled.length)continue;
+  const relicBonus=nativeRelicBonus(state,'mleague',Math.max(0,state.cash-row.balance),now);
   const id='ml-settle:'+settled.map(b=>b.id).join(',');
-  const response={result:{settled:settled.map(b=>({id:b.id,status:b.status,payout:b.payout}))}};
+  const response={result:{settled:settled.map(b=>({id:b.id,status:b.status,payout:b.payout})),relicBonus}};
   const inserted=await env.DB.prepare(`INSERT INTO kp_operations(id,guild,user,request_hash,response,delta,state,directive,at)
    SELECT ?,?,?,?,?,?,?,NULL,? WHERE EXISTS(SELECT 1 FROM kp_wallets w JOIN kp_state s ON w.guild=s.guild AND w.user=s.user WHERE w.guild=? AND w.user=? AND w.version=? AND s.version=?) ON CONFLICT(guild,user,id) DO NOTHING`)
    .bind(id,mapping.guildId,row.user,await kpHash(id),JSON.stringify(response),state.cash-row.balance,JSON.stringify(state),now,mapping.guildId,row.user,row.wallet_version,row.state_version).run();
