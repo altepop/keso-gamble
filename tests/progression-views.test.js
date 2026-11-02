@@ -40,3 +40,9 @@ test('報酬の表：コンペの負けがプラスなら「負け +200 KP」と
  const html=playView({...live([]),rewardRates:{competitive:{win:900,loss:200,bottom:-400}}});
  assert.match(html,/勝ち \+900 KP<br>負け \+200 KP／最下位 −400 KP/);
 });
+
+test('LOOP chapter clear rewards show the 10x first-clear amounts',()=>{
+ const html=playView(live([]));
+ assert.match(html,/第一章の初クリア <strong>\+50,000 KP<\/strong>/);
+ assert.match(html,/第二章の初クリア <strong>\+300,000 KP<\/strong>/);
+});

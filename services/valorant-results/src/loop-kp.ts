@@ -5,6 +5,9 @@ import type {KpEnv,KpMapping} from './kp.ts';
 // Deliberately unavailable until LOOP verifies identity and game progress on its server.
 // Configuration belongs on the receiving Worker, never in the browser or event payload.
 export interface LoopRewardConfig {enabled:boolean;startsAt:number;publicKey:string;rates:Record<string,number>}
+// Chapter clear payouts are authoritative in the receiver, even if a deployed environment still has old rates.
+// These are first-clear-only rewards; already recorded milestones keep their original amounts.
+export const LOOP_CHAPTER_CLEAR_REWARDS:Readonly<Record<string,number>>=Object.freeze({'chapter.1':50000,'chapter.2':300000});
 const initialized=new WeakMap<object,Promise<void>>();
 export function ensureLoopKp(env:KpEnv):Promise<void>{
  const existing=initialized.get(env.DB);if(existing)return existing;
@@ -49,7 +52,7 @@ export async function receiveLoopKp(request:Request,env:KpEnv,mapping:KpMapping)
   env.DB.prepare('INSERT OR IGNORE INTO kp_participants(guild,user) VALUES(?,?)').bind(mapping.guildId,e.discordUserId),
   env.DB.prepare('INSERT OR IGNORE INTO kp_wallets(guild,user) VALUES(?,?)').bind(mapping.guildId,e.discordUserId),
   env.DB.prepare('INSERT OR IGNORE INTO kp_state(guild,user,data) VALUES(?,?,?)').bind(mapping.guildId,e.discordUserId,JSON.stringify(newKpState())),
-  env.DB.prepare('INSERT INTO kp_loop_events VALUES(?,?,?,?,?,?,?) ON CONFLICT(guild,user,milestone) DO NOTHING').bind(id,mapping.guildId,e.discordUserId,e.milestone,e.evidenceId,config.rates[e.milestone],e.completedAt),
+  env.DB.prepare('INSERT INTO kp_loop_events VALUES(?,?,?,?,?,?,?) ON CONFLICT(guild,user,milestone) DO NOTHING').bind(id,mapping.guildId,e.discordUserId,e.milestone,e.evidenceId,LOOP_CHAPTER_CLEAR_REWARDS[e.milestone]??config.rates[e.milestone],e.completedAt),
  ]);
  const saved=await env.DB.prepare('SELECT amount FROM kp_loop_events WHERE id=?').bind(id).first<{amount:number}>();
  return response({accepted:true,id,amount:saved!.amount});
