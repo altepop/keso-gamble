@@ -1,0 +1,66 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {RELIC_SUMMON_COST,rarityForRoll,summonLevel,summonRelics,grantSteamRelic,grantUniteRelic,equipRelic} from '../src/relics.ts';
+test('200KP per roll, valid batch sizes, never overspends or draws entropy for rejected input',()=>{
+  assert.equal(RELIC_SUMMON_COST,200);
+  const x={cash:351000};
+  assert.throws(()=>summonRelics(x,10000000),/1・10・100・1000/);
+  assert.throws(()=>summonRelics(x,2000),/1・10・100・1000/);
+  const outcome=summonRelics(x,1000,new Uint32Array(2000).fill(900000));
+  assert.equal(outcome.count,1000);
+  assert.equal(outcome.cost,200000);
+  assert.equal(x.cash,151000);
+  assert.equal(outcome.summary.common,1000);
+  assert.equal(x.relics!.totalSummons,1000);
+  assert.equal(Object.values(x.relics!.items).reduce((n,i)=>n+i.count,0),1000);
+  assert.equal(outcome.level,3);
+  assert.throws(()=>summonRelics(x,1000),/KPが足りません/);
+  assert.equal(x.cash,151000);
+});
+test('transcendent is low probability from first roll, 1/10000 at maximum level',()=>{
+  assert.equal(summonLevel(0),1);
+  assert.equal(summonLevel(4500),10);
+  assert.equal(rarityForRoll(9,1),'transcendent');
+  assert.equal(rarityForRoll(10,1),'ancient');
+  assert.equal(rarityForRoll(99,10),'transcendent');
+  assert.equal(rarityForRoll(100,10),'ancient');
+  assert.equal(rarityForRoll(999999,10),'common');
+  const x={cash:200};
+  const o=summonRelics(x,1,new Uint32Array([0,0]));
+  assert.equal(o.summary.transcendent,1);
+  assert.equal(Object.values(x.relics!.items)[0]?.power,350);
+});
+test('verified Steam record grants a one-of-one, not tradable exclusive with no Unite prerequisites',()=>{
+  const x={relics:undefined};
+  const proof={id:'steam:1:76561199999999999:123:abc',app:123,achievement:'ACH_WIN',title:'極限クリア',percent:0.06};
+  const r=grantSteamRelic(x,proof);
+  assert.equal(r.item.origin,'steam');
+  assert.equal(r.item.power,220);
+  assert.match(r.item.name,/極限クリア/);
+  assert.throws(()=>grantSteamRelic(x,proof),/受け取り済み/);
+  assert.throws(()=>grantSteamRelic(x,{...proof,id:'steam:fake',percent:11}),/確認できません/);
+});
+test('Unite relics are individually extremely strong and have no cross-source dependency',()=>{
+  const x={relics:undefined};
+  assert.throws(()=>grantUniteRelic(x,'unite.five_wins',4),/確認できません/);
+  const a=grantUniteRelic(x,'unite.first_win',1).item;
+  const b=grantUniteRelic(x,'unite.three_wins',3).item;
+  const c=grantUniteRelic(x,'unite.five_wins',5).item;
+  assert.deepEqual([a.power,b.power,c.power],[390,480,620]);
+  assert.equal(a.origin,'unite');
+  assert.equal(Object.values(x.relics!.items).some(item=>item.origin==='steam'),false);
+  assert.throws(()=>grantUniteRelic(x,'unite.five_wins',5),/受け取り済み/);
+  const result=equipRelic(x,'unite.five_wins',0);
+  assert.equal(result.power,620);
+  assert.deepEqual(result.equipped,['unite.five_wins']);
+  assert.throws(()=>equipRelic(x,'unite.missing',0),/所持していない/);
+});
+test('equipment is optional for both sources; no hardcoded combination or earnings multiplier',()=>{
+ const x={cash:2000};
+ summonRelics(x,10,new Uint32Array(20).fill(999999));
+ const common=Object.keys(x.relics!.items)[0]!;
+ let r=equipRelic(x,common,0);
+ assert.equal(r.power,10);
+ assert.deepEqual(equipRelic(x,'',0).equipped,['']);
+ assert.equal(x.cash,0);
+});
