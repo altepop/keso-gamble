@@ -119,7 +119,9 @@ test('existing 21 relic ids preserve all copies and become named mode skills',()
 });
 test('mode specialists activate only their own verified mode and cannot multiply arbitrary rewards',()=>{
  const x:{cash:number;relics?:RelicCollection}={cash:4000};
- summonRelics(x,10,new Uint32Array(20).fill(999999));
+ const draws=new Uint32Array(20).fill(999999);
+ for(let n=1;n<draws.length;n+=2)draws[n]=0;
+ summonRelics(x,10,draws);
  const common=Object.keys(x.relics!.items)[0]!;
  const mode=x.relics!.items[common]!.mode!;
  equipRelic(x,common,0);
