@@ -59,8 +59,11 @@ export function rarityForRoll(roll: number, level: number): RelicRarity {
 }
 function store(c: RelicCollection, item: RelicItem) {
   const old = c.items[item.id];
-  if (old) old.count += 1;
-  else c.items[item.id] = item;
+  if (old) {
+    old.count += 1;
+    // Each repeated find grows a common relic gradually, without granting additional KP.
+    if (item.origin === 'normal') old.power = item.power + Math.min(60, Math.floor(Math.log2(old.count)) * 5);
+  } else c.items[item.id] = item;
 }
 export function summonRelics(
   state: {cash: number; relics?: RelicCollection},
