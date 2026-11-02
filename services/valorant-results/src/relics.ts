@@ -174,7 +174,7 @@ export function modeRelicBonus(
    ||(skill==='mod11'&&a%11===0)
    ||(skill==='mod13'&&a%13===0)
    ||(skill==='digit7'&&digitSum%7===0)
-   ||(skill==='double'&&/(\\d)\\1/.test(String(a)))
+   ||(skill==='double'&&/(\d)\1/.test(String(a)))
    ||(skill==='reverse'&&String(a)===String(a).split('').reverse().join(''))
    ||(skill==='near'&&a>=bounds[0]&&a<=bounds[0]+50)
    ||(skill==='thin'&&a<bounds[0])
