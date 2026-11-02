@@ -50,17 +50,29 @@ export function relicItemCard(item,source,modeNames,equipped){
  const label=relicRarityNames[rarity],name=def?.name??item.name;
  const mode=displayMode(item,source,modeNames);
  const effect=def?.ability??item.ability??'効果未設定';
- const initial=effect.split('。')[0].replace(/単独で最大.*/,'').trim();
+ const conditions={spark:'報酬獲得時',rescue:'少額報酬時',advance:'基準額以上',surge:'基準額以上',
+ highroll:'高額報酬時',master:'勝利・達成時',sovereign:'勝利・達成時',
+ lucky7:'末尾7の報酬',odd:'奇数KPの報酬',even:'偶数KPの報酬',prime:'素数KPの報酬',
+ square:'平方数KPの報酬',quarter:'25の倍数KPの報酬',mod11:'11の倍数KPの報酬',
+ mod13:'13の倍数KPの報酬',digit7:'桁の合計が7の倍数',double:'数字が2つ連続',
+ reverse:'左右対称の数字',near:'基準額+50以内',thin:'基準額未満',heavy:'高額ラインの2倍以上',
+ triple:'3の倍数',lucky77:'数字に77を含む'};
+ const base=Number(def?.percent??item.percent??0);
+ const duplicates=item.origin==='normal'?Math.min(5,Math.floor(Math.log2(Math.max(1,Number(item.count)||1)))):0;
+ const effective=base+duplicates;
+ const headline=def?.short??(conditions[item.skill]??'条件を満たした時')+'：KP報酬＋'+base+'%';
+ const cap=Number(def?.cap??item.cap??0);
+ const trait=def?.trait??(item.origin==='steam'||item.origin==='unite'?'出自の加護：条件達成時に固定KPを追加':'');
  const title=item.origin==='unite'?'ユナイト限定':item.origin==='steam'?'Steam実績限定':'通常召喚';
  const isEquipped=equipped.includes(item.id);
  const count=Number(item.count)||1;
  return '<article class="relic-card relic-rarity-'+rarity+(isEquipped?' relic-equipped':'')+'">'+
   '<div class="relic-card-top"><span class="relic-rarity-badge">'+esc(label)+'</span><span class="relic-mode">'+esc(mode)+'</span></div>'+
   '<strong class="relic-card-title">'+esc(name)+'</strong>'+
-  '<p class="relic-card-effect">'+esc(initial||effect)+'</p>'+
-  '<div class="relic-card-stats"><span>戦力 <b>'+number(item.power)+'</b></span><span>所持 <b>'+number(count)+'</b></span>'+(isEquipped?'<span class="relic-current">● 装備中</span>':'')+'</div>'+
+  '<p class="relic-card-effect"><b>'+esc(headline)+'</b></p>'+
+  '<div class="relic-card-stats"><span class="relic-percent-stat">設定 <b>＋'+esc(effective)+'%</b></span><span>個別上限 <b>'+number(cap)+' KP</b></span><span>戦力 <b>'+number(item.power)+'</b></span><span>所持 <b>'+number(count)+'</b></span>'+(isEquipped?'<span class="relic-current">● 装備中</span>':'')+'</div>'+
   '<details class="relic-card-detail"><summary>効果の詳細・装備</summary>'+
-  '<p>入手方法：'+esc(title)+'</p><p>対象：'+esc(mode)+'</p><p>'+esc(effect)+'</p>'+
+  '<p>入手方法：'+esc(title)+'</p><p>対象：'+esc(mode)+'</p><p>元の効果：＋'+esc(base)+'%'+(duplicates?' ／ 重複強化：＋'+duplicates+'ポイント':'')+'</p>'+(trait?'<p class="relic-trait">★ '+esc(trait)+'</p>':'')+'<p>'+esc(effect)+'</p>'+
   (item.origin==='normal'?'<p>重ねて入手すると戦力が成長する。現在の育成段階：'+number(1+Math.floor(Math.log2(count)))+'</p>':'')+
   '<button type="button" class="action-btn" data-action="relic-equip" data-relic="'+esc(item.id)+'">'+(isEquipped?'別の枠に装備':'指定枠に装備')+'</button></details></article>';
 }
@@ -86,4 +98,52 @@ export function relicRevealPanel(reveal){
   '<div class="relic-result-breakdown">'+breakdown+'</div>'+
   '<button type="button" class="action-btn primary relic-reveal-close" data-action="relic-reveal-close">結果を確認する・演出をスキップ</button>'+
   '<p class="relic-reveal-footnote">抽選はサーバーで確定済み。演出を閉じても獲得結果は変わらない。</p></div></div>';
+}
+
+
+/** Pure HTML view of server-generated examples: no KP or outcome is decided in the browser. */
+export function relicBonusDashboard(state,proofs,view={}){
+ const previews=Array.isArray(proofs?.previews)?proofs.previews:[];
+ const modes=proofs?.modeNames??{};
+ const mode=String(view.previewMode??'competitive');
+ const amount=Number(view.previewAmount??500);
+ const current=previews.find(x=>x.mode===mode&&x.amount===amount);
+ const select=(id,value,options)=>'<select class="select" data-relic-preview="'+id+'" id="relic-preview-'+id+'">'+
+  options.map(([key,label])=>'<option value="'+esc(key)+'"'+(String(key)===String(value)?' selected':'')+'>'+esc(label)+'</option>').join('')+'</select>';
+ const availableModes=[...new Set(previews.map(x=>x.mode))];
+ const controls='<div class="relic-preview-controls"><label>対象ゲーム'+
+  select('mode',mode,availableModes.map(x=>[x,modes[x]??x]))+'</label><label>報酬の例'+
+  select('amount',amount,[[100,'100 KP'],[500,'500 KP'],[900,'900 KP'],[5000,'5,000 KP']])+'</label></div>';
+ const last=proofs?.lastNativeEffect;
+ const lastHtml=last&&Number.isFinite(last.bonus)
+   ?'<div class="relic-last-real"><b>直近の実支給</b><span>'+esc(modes[last.mode]??last.mode)+
+    '：'+number(last.amount)+' KPに対し <strong>＋'+number(last.bonus)+' KP（実効＋'+esc(last.percent)+'%）</strong></span>'+
+    '<small>'+esc((last.names??[]).join('・'))+'</small></div>'
+   :'<p class="helper">取引系の追加KPが確定すると、ここに直近の実績が表示される。</p>';
+ if(!current)return '<section class="panel"><div class="card-body"><h2 class="panel-title">📊 遺物の効果を数値で見る</h2>'+
+  '<p class="helper">効果一覧は本番KP口座から取得する。装備中の倍率と実際の受取額を表示する。</p>'+lastHtml+'</div></section>';
+ const lines=current.lines??[];
+ const items=lines.map(line=>{
+  const label=line.trait?' <span class="relic-trait-tag">'+esc(line.trait)+'</span>':'';
+  const active=Number(line.base??0)+Number(line.exotic??0);
+  return '<div class="relic-preview-row"><div><b>'+esc(line.name)+'</b>'+label+
+   '<small>'+esc(line.reason)+'</small></div><div class="relic-preview-stats"><strong>＋'+esc(line.effectivePercent)+'%</strong>'+
+   '<span>実例 '+(active?'+':'')+number(active)+' KP</span>'+
+   (line.exotic?'<small>特殊効果 ＋'+number(line.exotic)+' KP</small>':'')+'</div></div>';
+ }).join('');
+ const realPercent=Number(current.effectivePercent)||0;
+ const cap=Number(current.cap)||0;
+ return '<section class="panel"><div class="card-body"><h2 class="panel-title">📊 今の装備で何％増える？</h2>'+
+  '<p class="helper">装備中の4枠をサーバーで計算する。勝利・達成時（取引系は精算時）の報酬を例にした試算だ。</p>'+
+  controls+
+  '<div class="relic-preview-total"><div><small>発動中の倍率合計</small><b>＋'+esc(current.percent)+'%</b></div>'+
+  '<div><small>上限を反映した追加報酬</small><b>＋'+number(current.bonus)+' KP</b></div>'+
+  '<p>元の報酬 '+number(amount)+' KP → 遺物込み <strong>'+number(amount+current.bonus)+' KP</strong>（実効＋'+esc(realPercent)+'%）</p></div>'+
+  '<p class="relic-cap-note">個別効果の合計 '+number(current.gross)+' KP → 共通上限 '+number(cap)+' KPを適用'+
+  (Number(current.resonance)>0?' ／ 七重共鳴 ＋'+number(current.resonance)+' KPを含む':'')+
+  '。'+(['casino','racing','market','mleague'].includes(mode)?'取引系は対象額の1%・1日合計120KP以内。':'試合などは対象額の15%・1件80KP以内。')+'</p>'+
+  '<h3 class="relic-readout-title">装備別の効果</h3>'+
+  (lines.length?lines:'<p class="helper">遺物を装備すると、ここに各遺物の倍率が表示される。</p>')+
+  '<small class="relic-example-note">「設定＋%」はその遺物の倍率だ。条件未達・支給上限により実際の増加率は小さくなる。試算はKPを消費しない。</small>'+
+  lastHtml+'</div></section>';
 }
