@@ -6,7 +6,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { initializeKp, syncKpAccounts } from '../src/kp.ts';
 import type { KpEnv, KpMapping } from '../src/kp.ts';
 import { operateKp, readKpState } from '../src/kp-api.ts';
-import { decideEntries, ensureHorses, raceEntries, settleHorsePrizes, shouldSettleHorsePrizes, horsePrizeLookback } from '../src/racing-horses.ts';
+import { decideEntries, ensureRaceField, ensureHorses, raceEntries, settleHorsePrizes, shouldSettleHorsePrizes, horsePrizeLookback } from '../src/racing-horses.ts';
 import { raceSeed, settleKpRaces } from '../src/racing-kp.ts';
 // @ts-expect-error The shared pure browser engine has no TypeScript declarations.
 import { BOXES, RACE_INTERVAL, RETIRE_RACES, RUN_MS, openRaceStart, prizeFor, raceCard, raceClass, raceOdds, raceResult } from '../../../js/racing.js';
@@ -226,4 +226,22 @@ test('D1: old unpaid owned-horse race is recovered on the six-hour backlog sweep
  await settleHorsePrizes(f.env,mapping,deep);
  assert.equal(Number(f.sql.prepare('SELECT COUNT(*) AS n FROM kp_horse_results').get()!.n),1);
  assert.equal(await settleHorsePrizes(f.env,mapping,deep+60000),0,'no double-award on repeated retry');
+});
+
+test('D1: minute cron checks only race field marker once decided, without nickname-history re-reads',async()=>{
+ const f=await fixture(0);
+ addHorse(f.sql,'field-horse',0);
+ const race=raceOfClass(0,openRaceStart(T0));
+ assert.equal(await ensureRaceField(f.env,mapping,race,race-RACE_INTERVAL),true);
+ assert.equal(Number(f.sql.prepare('SELECT COUNT(*) n FROM kp_race_fields WHERE guild=? AND race=?').get(guild,race)!.n),1);
+ const db=f.env.DB as unknown as {prepare:(sql:string)=>unknown};
+ const original=db.prepare;
+ const sqls:string[]=[];
+ db.prepare=(sql:string)=>{sqls.push(sql);return original(sql);};
+ try{
+  assert.equal(await ensureRaceField(f.env,mapping,race,race-RACE_INTERVAL+60_000),false);
+ }finally{db.prepare=original;}
+ assert.equal(sqls.length,1,'a decided field requires just one indexed marker lookup');
+ assert.match(sqls[0],/FROM kp_race_fields WHERE guild=\? AND race=\?/);
+ assert.ok(!sqls.some(sql=>sql.includes('kp_horse_runs')),'no wasted last-20 form/nickname reads');
 });

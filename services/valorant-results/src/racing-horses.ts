@@ -107,6 +107,15 @@ export async function decideEntries(env:KpEnv,mapping:KpMapping,race:number,now=
  ]);
  return raceEntries(env,mapping,race);
 }
+/** Minute cron only needs to ensure the race field exists; it never consumes the entries.
+ * A decided field's immutable marker avoids repeated nickname/last-20 history queries. */
+export async function ensureRaceField(env:KpEnv,mapping:KpMapping,race:number,now=Date.now()){
+ await ensureHorses(env);
+ const existing=await env.DB.prepare('SELECT 1 FROM kp_race_fields WHERE guild=? AND race=?').bind(mapping.guildId,race).first();
+ if(existing)return false;
+ await decideEntries(env,mapping,race,now);
+ return true;
+}
 /** Prizes for finished races with owned or person-named horses. Each horse is paid once per race.
  * A person-named horse also brings its namesake a consolation: 5% of what others bet on it. */
 export async function settleHorsePrizes(env:KpEnv,mapping:KpMapping,now=Date.now()){
