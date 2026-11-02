@@ -126,7 +126,7 @@ export async function ownedHorses(env:KpEnv,mapping:KpMapping,user:string){
  await ensureHorses(env);
  const rows=(await env.DB.prepare('SELECT id,name,grade,ability,style,box,price,created_at,races,wins,seconds,thirds,earnings,retired_at FROM kp_horses WHERE guild=? AND owner=? AND sold_at IS NULL ORDER BY retired_at IS NOT NULL,created_at DESC LIMIT 30').bind(mapping.guildId,user).all<Horse>()).results;
  const nick=await nicknames(env,rows);
- return rows.map(h=>({...h,nickname:nick.get(h.id)??null,gradeLabel:CLASSES[h.grade].grade,sellValue:h.retired_at?0:sellValue(h.price,h.races),racesLeft:Math.max(0,RETIRE_RACES-h.races)}));
+ return rows.map(h=>({...h,nickname:nick.get(h.id)?.nickname??null,gradeLabel:CLASSES[h.grade].grade,sellValue:h.retired_at?0:sellValue(h.price,h.races),racesLeft:Math.max(0,RETIRE_RACES-h.races)}));
 }
 /** Wallet operation bodies. They change `state` and return the result the triggers apply. */
 export async function buyHorse(env:KpEnv,mapping:KpMapping,user:string,state:{cash:number},args:Record<string,unknown>){
