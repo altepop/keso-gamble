@@ -15,7 +15,7 @@ import {kpCommands,KP_COMMAND_VERSION} from './kp-command.ts';
 import {voiceControl,voiceStatus} from './voice-api.ts';
 import {voiceRewardHistory,voicePolicy} from './voice-rewards.ts';
 import {receiveLoopKp} from './loop-kp.ts';
-import {summonRelics,grantSteamRelic,grantUniteRelic,equipRelic,autoEquipRelics,nativeRelicBonus,rarityRatesForLevel,summonLevel,SUMMON_MILESTONES,UNITE,UNITE_REQUIREMENTS,UNITE_STREAK_IDS,STEAM_RELIC_TIERS,type UniteRelicId} from './relics.ts';
+import {summonRelics,grantSteamRelic,grantUniteRelic,equipRelic,autoEquipRelics,nativeRelicBonus,evaluateRelicBonus,rarityRatesForLevel,summonLevel,SUMMON_MILESTONES,UNITE,UNITE_REQUIREMENTS,UNITE_STREAK_IDS,STEAM_RELIC_TIERS,type UniteRelicId} from './relics.ts';
 import {NORMAL_RELICS,RELIC_MODE_NAMES} from './relic-catalog.ts';
 import {ensureQuizKp,receiveQuizKp,isKpParticipant,quizKpRates,quizKpLimits} from './quiz-kp.ts';
 import {activityAuthAvailable,createActivityChallenge,authenticateActivity}from './discord-activity-auth.ts';
@@ -344,10 +344,19 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping):Promi
    const steam=await env.DB.prepare('SELECT id,title,percent,app FROM kp_steam_events WHERE guild=? AND user=? ORDER BY CASE WHEN percent<=10 THEN 0 WHEN percent<=25 THEN 1 ELSE 2 END,at DESC LIMIT 100')
     .bind(mapping.guildId,owner.user).all<{id:string;title:string;percent:number;app:number}>().then(r=>r.results).catch(()=>[]);
    const row=await env.DB.prepare('SELECT data FROM kp_state WHERE guild=? AND user=?').bind(mapping.guildId,owner.user).first<{data:string}>();
-   const level=summonLevel((JSON.parse(row?.data??'{}') as {relics?:{totalSummons:number}}).relics?.totalSummons??0);
+   const ownedState=JSON.parse(row?.data??'{}') as {relics?:{totalSummons:number;items:Record<string,import('./relics.ts').RelicItem>;equipped:string[];dailyNativeBonus?:{day:string;amount:number};lastNativeEffect?:{mode:string;amount:number;bonus:number;percent:number;at:number;names:string[]}}};
+   const level=summonLevel(ownedState.relics?.totalSummons??0);
+   const nativeModes=new Set(['casino','market','racing','mleague']);
+   const currentDay=new Date().toISOString().slice(0,10);
+   const usedToday=ownedState.relics?.dailyNativeBonus?.day===currentDay?ownedState.relics.dailyNativeBonus.amount:0;
+   const previewModes=['competitive','unrated','swiftplay','spikerush','teamdeathmatch','escalation','deathmatch','skirmish','racing','casino','market','mleague','quiz','voice'];
+   // Computed from the exact same pure function as real KP payouts, with no extra DB queries.
+   const previews=previewModes.flatMap(mode=>[100,500,900,5000].map(amount=>({
+    mode,amount,...evaluateRelicBonus(ownedState.relics as import('./relics.ts').RelicCollection|undefined,mode,{amount,win:true},nativeModes.has(mode)?120-usedToday:120)
+   })));
    return response({price:200,steam,unite:Object.entries(UNITE).map(([id,d])=>({id,name:d.name,power:d.power,condition:id.startsWith('unite.career_')?'累計'+d.wins+'勝':d.wins+'連勝'})),steamTiers:STEAM_RELIC_TIERS,level,
     rates:rarityRatesForLevel(level),maxRates:rarityRatesForLevel(10),ratesByLevel:Array.from({length:10},(_,i)=>rarityRatesForLevel(i+1)),
-    modeNames:RELIC_MODE_NAMES,catalog:NORMAL_RELICS,milestones:SUMMON_MILESTONES});
+    modeNames:RELIC_MODE_NAMES,catalog:NORMAL_RELICS,milestones:SUMMON_MILESTONES,previews,lastNativeEffect:ownedState.relics?.lastNativeEffect??null,nativeRemaining:120-usedToday});
   }
   if(request.method==='GET'&&path==='/api/kp/state')return response(await readKpState(env,mapping,owner.user));
   // 監視状態: members only, aggregates only.
