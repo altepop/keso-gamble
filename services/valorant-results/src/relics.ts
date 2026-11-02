@@ -243,6 +243,7 @@ export function modeRelicBonus(
  mode:string,
  event:{amount:number;win:boolean},
 ):{bonus:number;skills:string[]} {
+ if(!Number.isSafeInteger(event.amount)||event.amount<=0)return {bonus:0,skills:[]};
  const result=evaluateRelicBonus(collection,mode,event);
  // Preserve the original public contract for callers and tests.
  return {bonus:Math.min(result.gross,80,Math.floor(event.amount*.15)),skills:result.skills};
