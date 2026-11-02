@@ -116,9 +116,9 @@ test('existing 21 relic ids preserve all copies and become named mode skills',()
  assert.equal(c.items['normal.copper']?.count,8);
  assert.equal(c.items['normal.copper']?.power,25);
  assert.equal(c.items['normal.copper']?.mode,'competitive');
- assert.match(c.items['normal.copper']!.ability,/コンペで/);
+ assert.match(c.items['normal.copper']!.ability,/コンペの報酬で/);
  assert.equal(c.items['normal.rainbow']?.origin,'normal');
- assert.match(c.items['normal.rainbow']!.ability,/コンペで/);
+ assert.match(c.items['normal.rainbow']!.ability,/コンペの報酬で/);
 });
 test('mode specialists activate only their own verified mode and cannot multiply arbitrary rewards',()=>{
  const x:{cash:number;relics?:RelicCollection}={cash:4000};
