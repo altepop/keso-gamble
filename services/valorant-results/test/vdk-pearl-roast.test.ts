@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {VDK_PEARL_MATCH,VDK_PEARL_RIOT,VDK_PEARL_RECEIPT,vdkPearlPayload,findVdkPearlAccount,isVerifiedVdkPearlNotice,queueVdkPearlRoast} from '../src/vdk-pearl-roast.ts';
+import {VDK_PEARL_MATCH,VDK_PEARL_RIOT,VDK_PEARL_RECEIPT,VDK_PEARL_OLD_WRONG_RECEIPT,vdkPearlPayload,findVdkPearlAccount,isVerifiedVdkPearlNotice,queueVdkPearlRoast} from '../src/vdk-pearl-roast.ts';
 
 const MATCH_WIN = {outcome:'win',mode:'spikerush',message:'🎉 VDKは4対1で勝ち！！（スパイクラッシュ）\n🗺️ Pearl｜Chamber\n🔫 7K / 1D / 0A｜ACS 367'};
 const USER='123456789012345678';
@@ -9,7 +9,8 @@ const mapping={guildId:'987654321098765432',accounts:[{riotId:'Dolly#SDGs',disco
 test('roast corrects VDK to winning Dolly and safely mentions only one user',()=>{
   assert.equal(VDK_PEARL_MATCH,'db6a45fe-7699-4fb3-b4b8-0d7499b26412');
   assert.equal(VDK_PEARL_RIOT,'dolly#sdgs');
-  assert.match(VDK_PEARL_RECEIPT,/^oneoff:vdk-pearl-chamber:/);
+  assert.match(VDK_PEARL_RECEIPT,/^oneoff:vdk-pearl-zero-death-corrected:/);
+  assert.match(VDK_PEARL_OLD_WRONG_RECEIPT,/^oneoff:vdk-pearl-chamber:/);
   const payload=vdkPearlPayload(USER);
   assert.equal(payload.username,'等しいbot');
   assert.deepEqual(payload.allowed_mentions,{parse:[],users:[USER]});
@@ -55,6 +56,7 @@ test('verified notice queues once, mistaken loss never queues, and event expires
           return {
             first:async()=>{
               if(sql.startsWith('SELECT 1 FROM kp_posts'))return posts.has(String(params[0]))?{exists:1}:null;
+              if(sql.startsWith('SELECT sent FROM kp_posts'))return posts.has(String(params[0]))?{sent:0}:null;
               if(sql.startsWith('SELECT outcome,mode,message FROM notifications')) {
                 assert.equal(params[0],VDK_PEARL_MATCH);
                 assert.equal(params[1],'Dolly#SDGs');
@@ -63,6 +65,7 @@ test('verified notice queues once, mistaken loss never queues, and event expires
               return null;
             },
             run:async()=>{
+              if(sql.startsWith('DELETE FROM kp_posts')){const did=posts.delete(String(params[0]));return {meta:{changes:did?1:0}};}
               if(sql.startsWith('INSERT OR IGNORE INTO kp_posts')){
                 const key=String(params[0]);
                 if(posts.has(key))return {meta:{changes:0}};
@@ -82,7 +85,9 @@ test('verified notice queues once, mistaken loss never queues, and event expires
   const now=Date.parse('2026-11-02T12:35:00+09:00');
   const okay=fakeDB(MATCH_WIN);
   const env={...envBase,DB:okay.db} as unknown as Parameters<typeof queueVdkPearlRoast>[0];
+  okay.posts.set(VDK_PEARL_OLD_WRONG_RECEIPT,'previous wrong message');
   assert.equal(await queueVdkPearlRoast(env,mapping,now),true);
+  assert.equal(okay.posts.has(VDK_PEARL_OLD_WRONG_RECEIPT),false,'old undelivered roast must be cancelled');
   assert.equal(await queueVdkPearlRoast(env,mapping,now+60000),false);
   assert.equal(okay.posts.size,1);
   const posted=JSON.parse(okay.posts.get(VDK_PEARL_RECEIPT)!);
