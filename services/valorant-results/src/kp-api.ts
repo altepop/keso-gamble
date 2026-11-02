@@ -15,7 +15,8 @@ import {kpCommands,KP_COMMAND_VERSION} from './kp-command.ts';
 import {voiceControl,voiceStatus} from './voice-api.ts';
 import {voiceRewardHistory,voicePolicy} from './voice-rewards.ts';
 import {receiveLoopKp} from './loop-kp.ts';
-import {summonRelics,grantSteamRelic,grantUniteRelic,equipRelic,nativeRelicBonus,UNITE_REQUIREMENTS,type UniteRelicId} from './relics.ts';
+import {summonRelics,grantSteamRelic,grantUniteRelic,equipRelic,nativeRelicBonus,rarityRatesForLevel,summonLevel,UNITE_REQUIREMENTS,type UniteRelicId} from './relics.ts';
+import {NORMAL_RELICS,RELIC_MODE_NAMES} from './relic-catalog.ts';
 import {ensureQuizKp,receiveQuizKp,isKpParticipant,quizKpRates,quizKpLimits} from './quiz-kp.ts';
 import {activityAuthAvailable,createActivityChallenge,authenticateActivity}from './discord-activity-auth.ts';
 import { initializeKp, exchangeKpCode, kpSession, revokeKpSession, kpHash } from './kp.ts';
@@ -332,7 +333,11 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping):Promi
    // Called only when the relic screen opens. No new cron or D1 scan on regular wallet polling.
    const steam=await env.DB.prepare('SELECT id,title,percent,app FROM kp_steam_events WHERE guild=? AND user=? AND percent<=10 ORDER BY at DESC LIMIT 40')
     .bind(mapping.guildId,owner.user).all<{id:string;title:string;percent:number;app:number}>().then(r=>r.results).catch(()=>[]);
-   return response({price:200,steam,unite:['unite.first_win','unite.three_wins','unite.five_wins']});
+   const row=await env.DB.prepare('SELECT data FROM kp_state WHERE guild=? AND user=?').bind(mapping.guildId,owner.user).first<{data:string}>();
+   const level=summonLevel((JSON.parse(row?.data??'{}') as {relics?:{totalSummons:number}}).relics?.totalSummons??0);
+   return response({price:200,steam,unite:['unite.first_win','unite.three_wins','unite.five_wins'],level,
+    rates:rarityRatesForLevel(level),maxRates:rarityRatesForLevel(10),
+    modeNames:RELIC_MODE_NAMES,catalog:NORMAL_RELICS});
   }
   if(request.method==='GET'&&path==='/api/kp/state')return response(await readKpState(env,mapping,owner.user));
   // 監視状態: members only, aggregates only.
