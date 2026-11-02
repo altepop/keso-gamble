@@ -221,9 +221,28 @@ export const NORMAL_RELICS:ReadonlyArray<NormalRelicDefinition> = names.flatMap(
     const rule=skills[rarityIndex]!;
     const legacy=modeIndex<3?LEGACY_RELIC_SLUGS[rarityIndex]![modeIndex]:undefined;
     const id='normal.'+(legacy??mode+'.'+rarity);
+    const base:Record<string,readonly [number,number]>={
+      competitive:[200,400],unrated:[200,400],swiftplay:[70,180],spikerush:[40,100],
+      teamdeathmatch:[50,100],escalation:[50,150],deathmatch:[50,500],skirmish:[50,250],
+      racing:[100,500],casino:[100,500],market:[50,200],mleague:[100,500],
+      quiz:[30,100],voice:[10,15],
+    };
+    const [low,high]=base[mode]!;
+    const isNative=['racing','casino','market','mleague'].includes(mode);
+    const source:Record<string,string>={
+      racing:'馬券購入・確定配当',casino:'カジノでのプラス精算',market:'株の買付',mleague:'予想購入・確定配当',
+      quiz:'クイズ完走',voice:'通話20分ごとの確定枠',skirmish:'スカーミッシュのKP受取',
+    };
+    const conditions:Record<string,string>={
+      spark:'対象額が1KP以上',rescue:`対象額が${low}KP以下`,advance:`対象額が${low}KP以上`,
+      highroll:`対象額が${high}KP以上`,surge:`対象額が${low}KP以上`,
+      master:isNative?'対象の精算が確定':'対象の勝利・達成が確定',
+      sovereign:isNative?'対象の精算が確定':'対象の勝利・達成が確定',
+    };
+    const ceiling=isNative?'（取引系共通：対象額1%・合計1日120KP以内）':'（対象額15%・1件合計80KP以内）';
     return {
       id,name,mode,rarity,power:power[rarityIndex]!,skill:rule.key,percent:rule.percent,
-      cap:rule.cap,ability:`${RELIC_MODE_NAMES[mode]}専用「${rule.label}」：${rule.condition}、対象報酬に最大${rule.percent}%の追加効果（上限${rule.cap}KP／件）。`,
+      cap:rule.cap,ability:`${RELIC_MODE_NAMES[mode]}特化「${rule.label}」：${conditions[rule.key]}に発動。${source[mode]??'検証済み試合'}の追加KP最大${rule.percent}%・単独上限${rule.cap}KP${ceiling}。`,
     };
   }),
 );
