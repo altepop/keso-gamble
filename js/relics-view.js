@@ -1,4 +1,4 @@
-import {relicInventory,relicFilterControls,relicItemCard,relicInventoryPages,relicRevealPanel} from './relics-v4.js';
+import {relicInventory,relicFilterControls,relicItemCard,relicInventoryPages,relicRevealPanel} from './relics-v4.js?v=web-e145e833c76b0dca';
 // Three independent origins: common summons, Steam achievements, and Unite results.
 // Never recommend cross-game combinations or require another game's relic for an upgrade.
 const esc=s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
