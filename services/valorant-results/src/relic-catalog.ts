@@ -227,6 +227,208 @@ export const LEGACY_RELIC_SLUGS:readonly (readonly string[])[]=[
   ['crown','hourglass','comet'],['void','fortune','archive'],['abyss','origin','eternity'],
   ['rainbow','end','zero'],
 ];
+/** Twenty mode-specific tactical matrices; the lower rarities are deliberately
+ * useful for tailored receipts instead of simply being weaker % bonuses. */
+const TACTICAL_SKILLS:Readonly<Record<RelicMode,readonly string[]>> = {
+  'competitive': [
+    'odd',
+    'near',
+    'prime',
+    'mod11',
+    'advance',
+    'master',
+    'sovereign'
+  ],
+  'unrated': [
+    'even',
+    'thin',
+    'lucky7',
+    'double',
+    'surge',
+    'highroll',
+    'sovereign'
+  ],
+  'swiftplay': [
+    'triple',
+    'quarter',
+    'digit7',
+    'prime',
+    'advance',
+    'master',
+    'sovereign'
+  ],
+  'spikerush': [
+    'lucky7',
+    'even',
+    'mod13',
+    'near',
+    'surge',
+    'master',
+    'sovereign'
+  ],
+  'teamdeathmatch': [
+    'odd',
+    'triple',
+    'double',
+    'quarter',
+    'heavy',
+    'master',
+    'sovereign'
+  ],
+  'escalation': [
+    'even',
+    'mod11',
+    'prime',
+    'digit7',
+    'highroll',
+    'master',
+    'sovereign'
+  ],
+  'deathmatch': [
+    'thin',
+    'lucky7',
+    'square',
+    'triple',
+    'advance',
+    'highroll',
+    'sovereign'
+  ],
+  'skirmish': [
+    'triple',
+    'odd',
+    'near',
+    'prime',
+    'surge',
+    'master',
+    'sovereign'
+  ],
+  'racing': [
+    'quarter',
+    'lucky7',
+    'mod13',
+    'double',
+    'highroll',
+    'master',
+    'sovereign'
+  ],
+  'casino': [
+    'odd',
+    'prime',
+    'digit7',
+    'lucky77',
+    'highroll',
+    'master',
+    'sovereign'
+  ],
+  'market': [
+    'even',
+    'thin',
+    'mod11',
+    'quarter',
+    'advance',
+    'master',
+    'sovereign'
+  ],
+  'mleague': [
+    'lucky7',
+    'triple',
+    'square',
+    'mod13',
+    'highroll',
+    'master',
+    'sovereign'
+  ],
+  'quiz': [
+    'odd',
+    'digit7',
+    'prime',
+    'double',
+    'advance',
+    'master',
+    'sovereign'
+  ],
+  'voice': [
+    'triple',
+    'even',
+    'near',
+    'quarter',
+    'surge',
+    'master',
+    'sovereign'
+  ],
+  'universal': [
+    'even',
+    'thin',
+    'lucky7',
+    'prime',
+    'surge',
+    'master',
+    'sovereign'
+  ],
+  'finance': [
+    'quarter',
+    'odd',
+    'mod11',
+    'lucky7',
+    'advance',
+    'master',
+    'sovereign'
+  ],
+  'marketplus': [
+    'prime',
+    'square',
+    'quarter',
+    'digit7',
+    'highroll',
+    'master',
+    'sovereign'
+  ],
+  'racingplus': [
+    'odd',
+    'double',
+    'mod13',
+    'lucky77',
+    'surge',
+    'master',
+    'sovereign'
+  ],
+  'casinoplus': [
+    'triple',
+    'even',
+    'reverse',
+    'prime',
+    'highroll',
+    'master',
+    'sovereign'
+  ],
+  'fortune': [
+    'lucky77',
+    'square',
+    'prime',
+    'reverse',
+    'digit7',
+    'master',
+    'sovereign'
+  ]
+};
+const TACTICAL_HINTS:Readonly<Record<string,string>> = {
+  'even': '受け取るKPが偶数',
+  'odd': '受け取るKPが奇数',
+  'prime': '受け取るKPが素数（2・3・5・7など）',
+  'square': '受け取るKPが平方数（25・100・144など）',
+  'quarter': '受け取るKPが25の倍数',
+  'mod11': '受け取るKPが11の倍数',
+  'mod13': '受け取るKPが13の倍数',
+  'digit7': '受け取るKPの各桁の合計が7の倍数',
+  'double': '受け取るKPに同じ数字が2桁以上並ぶ（11・100・277など）',
+  'reverse': '受け取るKPが左右対称の数字（11・121・303など）',
+  'near': '受け取るKPが対象モードの基本ライン+50KP以内',
+  'thin': '受け取るKPが対象モードの基本ライン未満',
+  'heavy': '受け取るKPが対象モードの高額ラインの2倍以上',
+  'triple': '受け取るKPが3の倍数',
+  'lucky77': '受け取るKPの数字に「77」が含まれる'
+};
+const TACTICAL_SPECIAL = new Set(['prime','square','quarter','mod11','mod13','digit7','double','reverse','near','lucky77']);
 export const NORMAL_RELICS:ReadonlyArray<NormalRelicDefinition> = names.flatMap(([mode,items],modeIndex)=>
   items.map((name,rarityIndex)=>{
     const rarity=RELIC_RARITIES[rarityIndex]!;
@@ -271,16 +473,17 @@ export const NORMAL_RELICS:ReadonlyArray<NormalRelicDefinition> = names.flatMap(
       fortune:{skills:['lucky7','rescue','lucky7','odd','advance','master','sovereign'],
         boost:[5,11,16,17,12,9,15],caps:[14,38,80,75,62,55,80]},
     };
-    const specialDef=special[mode],chosenSkill=specialDef?.skills[rarityIndex]??rule.key;
-    const chosenPercent=specialDef?.boost[rarityIndex]??rule.percent;
-    const chosenCap=specialDef?.caps[rarityIndex]??rule.cap;
+    const specialDef=special[mode],chosenSkill=TACTICAL_SKILLS[mode][rarityIndex]??rule.key;
+    const tactical=TACTICAL_SPECIAL.has(chosenSkill);
+    const chosenPercent=tactical?Math.max(specialDef?.boost[rarityIndex]??rule.percent,[12,14,16,19,22,25,28][rarityIndex]!):(specialDef?.boost[rarityIndex]??rule.percent);
+    const chosenCap=tactical?Math.max(specialDef?.caps[rarityIndex]??rule.cap,[18,28,42,58,68,75,80][rarityIndex]!):(specialDef?.caps[rarityIndex]??rule.cap);
     const unusual=chosenSkill==='lucky7'?'対象額の一の位が7なら':chosenSkill==='odd'?'対象額が奇数なら':null;
     const compatible=['marketplus','racingplus','casinoplus','finance'].includes(mode);
-    const explanation=unusual??conditions[chosenSkill]??conditions[rule.key];
+    const explanation=TACTICAL_HINTS[chosenSkill]??unusual??conditions[chosenSkill]??conditions[rule.key];
     const extraCeiling=compatible?'（取引系共通：対象額1%・合計1日120KP以内）':ceiling;
     return {
       id,name,mode,rarity,power:power[rarityIndex]!,skill:chosenSkill,percent:chosenPercent,
-      cap:chosenCap,ability:`${RELIC_MODE_NAMES[mode]}特化「${name}」：${explanation}に発動。追加KP最大${chosenPercent}%・単独上限${chosenCap}KP${extraCeiling}。`,
+      cap:chosenCap,ability:`${RELIC_MODE_NAMES[mode]}で、${explanation}ときに発動。対象KPの${chosenPercent}%を追加（この遺物単独で最大${chosenCap}KP）。${extraCeiling}`,
     };
     /*
     return {
