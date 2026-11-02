@@ -11,6 +11,7 @@ const unite=[
 export function relicsPanel(state,{proofs=null,notice='',loading=false}={}){
  const collection=state.relics??{totalSummons:0,items:{},equipped:[]};
  const items=Object.values(collection.items??{});
+ const owned=count=>items.some(x=>x.id===count);
  const catalog=Array.isArray(proofs?.catalog)?proofs.catalog:[];
  const source=new Map(catalog.map(def=>[def.id,def]));
  const level=Math.min(10,1+Math.floor(collection.totalSummons/200));
@@ -29,7 +30,7 @@ export function relicsPanel(state,{proofs=null,notice='',loading=false}={}){
     <small>${esc(def.ability)}</small></div><span>${owned(def.id)?'✅ 所持':'未所持'}</span></div>`).join('')}</details>`;
  }).join('');
 
- const owned=count=>items.some(x=>x.id===count);
+
  const power=collection.equipped.reduce((n,id)=>n+(collection.items[id]?.power??0),0);
  const card=item=>`<article class="history-entry"><span class="badge">${esc(names[item.rarity]??item.rarity)}</span>
    <strong>${esc(source.get(item.id)?.name??item.name)}</strong><p class="helper">${esc(item.origin==='unite'?'ユナイト限定':item.origin==='steam'?'Steam限定':'通常召喚'+(source.get(item.id)?.mode?'・'+(proofs?.modeNames?.[source.get(item.id).mode]??source.get(item.id).mode)+'特化':''))} ・ 戦力 ${yen(item.power)} ・ 所持${yen(item.count)}${item.origin==='normal'?'（育成Lv'+(1+Math.floor(Math.log2(item.count)))+'）':''}</p>
