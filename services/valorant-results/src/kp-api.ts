@@ -15,7 +15,7 @@ import {kpCommands,KP_COMMAND_VERSION} from './kp-command.ts';
 import {voiceControl,voiceStatus} from './voice-api.ts';
 import {voiceRewardHistory,voicePolicy} from './voice-rewards.ts';
 import {receiveLoopKp} from './loop-kp.ts';
-import {summonRelics,grantSteamRelic,grantUniteRelic,equipRelic,UNITE_REQUIREMENTS,type UniteRelicId} from './relics.ts';
+import {summonRelics,grantSteamRelic,grantUniteRelic,equipRelic,nativeRelicBonus,UNITE_REQUIREMENTS,type UniteRelicId} from './relics.ts';
 import {ensureQuizKp,receiveQuizKp,isKpParticipant,quizKpRates,quizKpLimits} from './quiz-kp.ts';
 import {activityAuthAvailable,createActivityChallenge,authenticateActivity}from './discord-activity-auth.ts';
 import { initializeKp, exchangeKpCode, kpSession, revokeKpSession, kpHash } from './kp.ts';
@@ -226,6 +226,18 @@ export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:strin
    if(!validRoastLevel(args.level))throw Error('煽りレベルを選んでください。');
    state.roastLevel=args.level;result={roastLevel:args.level};
   }else throw Error('この操作は本番口座では使えません。');
+  // Bounded, same-transaction native relic perks: never modify casino odds, market prices, race
+  // results or M.LEAGUE odds. These are tiny post-result bonuses / purchase rebates only.
+  let relicBonus=0;
+  const casino=['spin','chinchiro','bj-hit','bj-stand','bj-double','mines-cashout','slot','vp-draw','baccarat'].includes(action);
+  if(casino&&state.cash>before)relicBonus=nativeRelicBonus(state,'casino',state.cash-before);
+  else if(action==='trade'&&args.side==='buy'&&state.cash<before)
+    relicBonus=nativeRelicBonus(state,'market',before-state.cash);
+  else if(action==='race-bet'&&state.cash<before)
+    relicBonus=nativeRelicBonus(state,'racing',before-state.cash);
+  else if(action==='ml-bet'&&state.cash<before)
+    relicBonus=nativeRelicBonus(state,'mleague',before-state.cash);
+  if(relicBonus&&result&&typeof result==='object')result={...result,relicBonus};
   // 借KP: nothing that costs KP while any is owed (the database refuses it too).
   if(state.cash<before&&await debtOf(env,mapping.guildId,user)>0)throw Error(DEBT_BLOCKED);
   const activity=publicTrade(action,args,result);
