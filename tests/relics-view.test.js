@@ -25,3 +25,20 @@ test('Steam receipts and Unite claims correctly switch to received for owned exc
  assert.match(html,/data-action="relic-summon" data-count="10" disabled/);
  assert.match(html,/data-action="relic-summon" data-count="1"/);
 });
+
+test('Steam common 25%+ and challenge 10–25% are visible without historical imports',()=>{
+ const html=relicsPanel({cash:2000,serverWallet:true,relics:{totalSummons:0,items:{},equipped:[]}},{
+  proofs:{steam:[{id:'steam:recent30',title:'新しいZup!実績',percent:30,app:1},
+                  {id:'steam:recent15',title:'別の実績',percent:15,app:2},
+                  {id:'steam:recent5',title:'希少実績',percent:5,app:3}],
+   unite:[{id:'unite.career_25',name:'二十五戦の灯台',power:510,condition:'累計25勝'}],
+   catalog:[{id:'normal.universal.rare',name:'全局面の方位磁針',rarity:'rare',mode:'universal',ability:'全体効果'}],
+   modeNames:{universal:'全ゲーム共通'} }});
+ assert.match(html,/旅路の遺物 · 世界解除率 30%/);
+ assert.match(html,/挑戦の遺物 · 世界解除率 15%/);
+ assert.match(html,/偉業の遺物 · 世界解除率 5%/);
+ assert.match(html,/二十五戦の灯台/);
+ assert.match(html,/全局面の方位磁針/);
+ assert.match(html,/監視登録以降に新規解除/);
+ assert.match(html,/過去の実績には干渉しない/);
+});
