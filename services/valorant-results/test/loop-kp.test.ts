@@ -35,6 +35,22 @@ test('chapter amounts are fixed at 10x even when legacy production config still 
  assert.equal(balance(f.sql),350000);
  assert.equal(f.sql.prepare('SELECT count(*) AS n FROM kp_loop_events').get()!.n,2);
 });
+test('server-certified onboarding first stage pays 1,000 KP once even with a legacy chapter-only receiver config',async()=>{
+ const f=fixture();
+ const claimed=event({milestone:'onboarding.first_stage',evidenceId:'stage_123',amount:1000000});
+ const first=await receiveLoopKp(await request(claimed),f.env,mapping);
+ assert.equal(first.status,200);
+ assert.equal((await first.json() as {amount:number}).amount,1000);
+ assert.equal(balance(f.sql),1000);
+ const retry=await receiveLoopKp(await request(event({milestone:'onboarding.first_stage',evidenceId:'stage_999'})),f.env,mapping);
+ assert.equal(retry.status,200);
+ assert.equal((await retry.json() as {amount:number}).amount,1000);
+ assert.equal(balance(f.sql),1000);
+ const chapter=await receiveLoopKp(await request(event()),f.env,mapping);
+ assert.equal((await chapter.json() as {amount:number}).amount,50000);
+ assert.equal(balance(f.sql),51000);
+ assert.equal(f.sql.prepare('SELECT count(*) AS n FROM kp_loop_events').get()!.n,2);
+});
 test('LOOP is unavailable without an explicitly valid receiver configuration',async()=>{
  const f=fixture();for(const config of [undefined,'{}','bad',JSON.stringify({...f.config,enabled:false}),JSON.stringify({...f.config,rates:{'chapter.1':null}}),JSON.stringify({...f.config,rates:{'chapter.1':-1}})]){
  f.env.KP_LOOP_REWARDS_CONFIG=config;assert.equal((await receiveLoopKp(await request(event()),f.env,mapping)).status,503);
