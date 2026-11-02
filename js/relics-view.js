@@ -1,4 +1,4 @@
-import {relicInventory,relicFilterControls,relicItemCard,relicInventoryPages,relicRevealPanel} from './relics-v4.js?v=web-e145e833c76b0dca';
+import {relicInventory,relicFilterControls,relicItemCard,relicInventoryPages,relicRevealPanel,relicBonusDashboard} from './relics-v4.js?v=web-e145e833c76b0dca';
 // Three independent origins: common summons, Steam achievements, and Unite results.
 // Never recommend cross-game combinations or require another game's relic for an upgrade.
 const esc=s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -41,7 +41,7 @@ export function relicsPanel(state,{proofs=null,notice='',loading=false,view={},r
   const defs=catalog.filter(item=>item.mode===id);
   return `<details class="rules"><summary>${esc(label)} ／ ${defs.length}種類</summary>
    ${defs.map(def=>`<div class="asset-line"><div><span class="badge">${esc(names[def.rarity]??def.rarity)}</span> <strong>${esc(def.name)}</strong><br>
-    <small>${esc(def.ability)}</small></div><span>${owned(def.id)?'✅ 所持':'未所持'}</span></div>`).join('')}</details>`;
+    <small><b>${esc(def.short??def.ability)}</b>${def.trait?' ／ '+esc(def.trait):''}</small></div><span>${owned(def.id)?'✅ 所持':'未所持'}</span></div>`).join('')}</details>`;
  }).join('');
 
 
@@ -51,6 +51,7 @@ export function relicsPanel(state,{proofs=null,notice='',loading=false,view={},r
  const cards=inv.matches.map(item=>relicItemCard(item,source,proofs?.modeNames,equipped)).join('');
  const filterHtml=relicFilterControls(view,proofs?.modeNames,inv);
  const pagesHtml=relicInventoryPages(inv);
+ const bonusDashboard=relicBonusDashboard(state,proofs,view);
  return relicRevealPanel(reveal)+`<section class="panel"><div class="card-body"><h2 class="panel-title">🔮 遺物召喚</h2>
    <p><strong>200 KP／1回</strong> · 召喚レベル ${level} · 累計 ${yen(collection.totalSummons)}回</p>
    <div class="relic-level-progress"><strong>${nextMilestone===null?'Lv10到達！':'次のLvまで あと'+yen(toNext)+'回'}</strong><div class="relic-progress-rail"><span style="width:${nextMilestone===null?100:Math.floor(100*(collection.totalSummons-milestones[level-1])/(nextMilestone-milestones[level-1]))}%"></span></div><small>段階別の累計目標：${milestones.map((n,i)=>'Lv'+(i+1)+' '+yen(n)+'回').join(' / ')}</small></div>
@@ -60,13 +61,14 @@ export function relicsPanel(state,{proofs=null,notice='',loading=false,view={},r
    ${notice?`<p class="market-disclaimer" role="status">${esc(notice)}</p>`:''}
  </div></section>
  <section class="panel"><div class="card-body"><h2 class="panel-title">🧰 装備</h2>
-   <p class="helper">4枠の戦力合計：<strong>${yen(power)}</strong>。遺物ごとの戦力は単独で決まり、他ゲームの遺物を要求する組み合わせ効果はない。</p>
+   <p class="helper">4枠の戦力合計：<strong>${yen(power)}</strong>。戦力はKP増加率ではない。実際の倍率と上限後の受取額は下の「今の装備で何％増える？」で確認できる。</p>
    <div class="field"><label for="relic-slot">装備先</label><select id="relic-slot" class="select">${[0,1,2,3].map(n=>`<option value="${n}">枠 ${n+1}：${esc(collection.items[collection.equipped[n]]?.name??'未装備')}</option>`).join('')}</select></div>
    <div class="relic-auto-box"><h3>⚡ おまかせ装備</h3><p class="helper">選んだゲームで発動しやすい遺物を4枠に自動編成する。強さだけでなく、条件の組み合わせも考慮する。</p>
    <select class="select" id="relic-goal"><option value="all">どのゲームでも使いやすく</option>${Object.entries(proofs?.modeNames??{}).filter(([id])=>!['universal','finance','fortune','marketplus','racingplus','casinoplus'].includes(id)).map(([id,name])=>`<option value="${esc(id)}">${esc(name)}中心</option>`).join('')}</select>
    <button type="button" class="action-btn primary" data-action="relic-auto-equip" ${!state.serverWallet?'disabled':''}>おすすめ4枠に装備</button></div>
    <button type="button" class="action-btn" data-action="relic-equip" data-relic="">指定枠を外す</button>
  </div></section>
+ ${bonusDashboard}
  <section class="panel"><div class="card-body"><h2 class="panel-title">🎒 遺物図鑑（${yen(items.length)}種）</h2>
    ${filterHtml}${cards||'<p class="helper">条件に合う遺物がない。絞り込みを変更してみよう。</p>'}${pagesHtml}
  </div></section>
