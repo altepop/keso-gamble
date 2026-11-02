@@ -65,18 +65,19 @@ function store(c: RelicCollection, item: RelicItem) {
 export function summonRelics(
   state: {cash: number; relics?: RelicCollection},
   count: number,
-  numbers: Uint32Array = crypto.getRandomValues(new Uint32Array(count * 2)),
+  numbers?: Uint32Array,
 ) {
   if (!RELIC_SUMMON_SIZES.includes(count as (typeof RELIC_SUMMON_SIZES)[number])) throw Error('召喚は1・10・100・1000連から選んでください。');
   const price = count * RELIC_SUMMON_COST;
   if (state.cash < price) throw Error('召喚に必要なKPが足りません。');
-  if (numbers.length !== count * 2) throw Error('Invalid random draw');
+  const entropy = numbers ?? crypto.getRandomValues(new Uint32Array(count * 2));
+  if (entropy.length !== count * 2) throw Error('Invalid random draw');
   const c = relicCollection(state), summary: Record<string, number> = {};
   const highlights: Array<{name:string;rarity:string;id:string}> = [];
   for (let n = 0; n < count; n++) {
-    const rarity = rarityForRoll(numbers[n * 2]! % 1_000_000, summonLevel(c.totalSummons));
+    const rarity = rarityForRoll(entropy[n * 2]! % 1_000_000, summonLevel(c.totalSummons));
     const [tier, power, templates] = NORMAL.find(t => t[0] === rarity)!;
-    const [slug, name, ability] = templates[numbers[n * 2 + 1]! % templates.length]!;
+    const [slug, name, ability] = templates[entropy[n * 2 + 1]! % templates.length]!;
     const id = 'normal.' + slug;
     store(c, {id, name, origin:'normal', rarity:tier, power, ability, count:1});
     c.totalSummons += 1;
