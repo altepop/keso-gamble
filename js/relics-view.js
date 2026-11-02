@@ -37,7 +37,7 @@ export function relicsPanel(state,{proofs=null,notice='',loading=false}={}){
    ${!state.serverWallet?'<p class="helper">本番KP口座へ接続してください。</p>':loading?'<p class="helper">達成記録を確認中…</p>':proofs?.steam?.length?proofs.steam.map(e=>`<div class="asset-line"><span>${esc(e.title)}<br><small>世界解除率 ${yen(e.percent)}%</small></span><button type="button" class="action-btn" data-action="relic-claim-steam" data-event="${esc(e.id)}" ${owned('steam.'+e.id)?'disabled':''}>${owned('steam.'+e.id)?'受取済み':'獲得'}</button></div>`).join(''):'<p class="helper">希少実績の支給記録はまだない。既存のSteam実績を遡ってKP支給する仕組みではない。</p>'}
  </div></section>
  <section class="panel"><div class="card-body"><h2 class="panel-title">🟨 ポケモンユナイト限定遺物</h2>
-   <p class="helper">サーバーが確定したランク戦の勝利・連勝記録から獲得。単体で最強格の戦力を持つ。ガチャ排出・売買・他遺物の解放条件にはしない。</p>
+   <p class="helper">サーバーが確定したランク戦の勝利・連勝記録から獲得。単体で最強格の戦力を持つ。同時装備は1個まで。ガチャ排出・売買・他遺物の解放条件にはしない。</p>
    ${unite.map(([id,name,power,condition])=>`<div class="asset-line"><span><strong>${esc(name)}</strong><br><small>${esc(condition)} ・ 戦力 ${yen(power)}</small></span><button type="button" class="action-btn" data-action="relic-claim-unite" data-tier="${esc(id)}" ${!state.serverWallet||owned(id)?'disabled':''}>${owned(id)?'受取済み':'獲得を確認'}</button></div>`).join('')}
  </div></section>
  <p class="helper">※遺物の戦力は現在、コレクションと装備評価に使う。VALORANTやユナイト等の既存KP報酬を増幅する効果は追加していない。KESO LOOP限定遺物も未実装。</p>`;
