@@ -106,6 +106,8 @@ async function limit(env:HoyoEnv,owner:HoyoOwner){
  const hour=Math.floor(Date.now()/3600000);
  const row=await env.DB.prepare('INSERT INTO kp_hoyo_limits(guild,user,window,hits) VALUES(?,?,?,1) ON CONFLICT(guild,user,window) DO UPDATE SET hits=hits+1 RETURNING hits').bind(owner.guild,owner.user,hour).first<{hits:number}>();
  if(!row||row.hits>8)throw Error('確認回数が多いため、1時間ほど待ってください。');
+ // One cleanup per user/hour, not per page view or cron tick.
+ if(row.hits===1)await env.DB.prepare('DELETE FROM kp_hoyo_limits WHERE guild=? AND user=? AND window<?').bind(owner.guild,owner.user,hour-48).run();
 }
 type LinkRow={game:HoyoGame;uid:string;snapshot:string;changes:string;updated_at:number;next_at:number};
 function present(row:LinkRow):HoyoLink{
