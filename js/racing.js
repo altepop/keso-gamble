@@ -37,6 +37,32 @@ export function latestRaceStart(now){return Math.floor(now/RACE_INTERVAL)*RACE_I
 /** Monday 0:00 JST, matching `/valo week`. */
 export function weekStart(now){const d=new Date(now+JST);const days=(d.getUTCDay()+6)%7;return Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),d.getUTCDate()-days)-JST;}
 export const placeSlots=size=>size>=8?3:2;
+// Only FUTURE slots change race physics. Historical cards/odds/settlements must stay identical.
+export const CHAOS_RACES_FROM=Date.parse('2026-11-04T00:00:00+09:00');
+export const CHAOS_RACE_TYPES=[
+ {id:'front',name:'逃げ馬天国',effect:'先行・逃げ脚質が有利',desc:'序盤から飛ばす馬に追い風。好スタートがいつも以上に重要。'},
+ {id:'close',name:'末脚解放',effect:'差し・追い込み脚質が有利',desc:'最後方からの逆転が狙いやすい。先行馬は油断禁物。'},
+ {id:'upset',name:'下剋上',effect:'能力の低い馬にハンデ補正',desc:'格上馬の独走を許さない。普段の人気馬ほど安全ではない。'},
+ {id:'condition',name:'体調最優先',effect:'好調馬がさらに有利・不調馬は苦戦',desc:'コンディションの差が普段より大きく着順へ響く。'},
+];
+export function raceEvent(start){
+ if(!isRaceStart(start)||start<CHAOS_RACES_FROM)return null;
+ const {day,minutes}=jstParts(start);
+ const eligible=minutes===1095||minutes===1275||minutes===1395||((day===0||day===6)&&(minutes===735||minutes===975));
+ if(!eligible)return null;
+ return CHAOS_RACE_TYPES[Math.floor(rngFrom('chaos-race:'+start)()*CHAOS_RACE_TYPES.length)];
+}
+function chaosStrengthBonus(h,avg,event){
+ if(!event)return 0;
+ switch(event.id){
+  case 'front':return h.style<=1?.4:-.10;
+  case 'close':return h.style>=2?.4:-.10;
+  case 'upset':return Math.max(-.45,Math.min(.45,(avg-h.ability)*.72));
+  case 'condition':return (h.condition-2)*.2;
+  default:return 0;
+ }
+}
+
 // Crown races with no person in the name, at :30: every night 19:30-0:30, and weekends from 10:30 (docs/RACING_PLAN.md §3).
 // Races named after someone's bad day come from the Worker (src/racing-crowns.ts) and override the name.
 const LEGACY_FILLER_CROWNS=['うおw記念','クイヤ記念','お祭り男か記念','しばくぞ記念','あかんかったなぁ記念','了解お兄さん記念','効いてて草記念','一旦な記念','3がある記念','毒かも記念','いいわぁ記念','純の勝ち記念','判定してるやつがおかしい記念','フルタじゃねえわ記念','KESO TOWN町内会杯','ラストデス記念','エコラウンド記念','フルバイの夢記念','ATMレース','KP溶かし予選','ガチャハズレ大会','寝落ち記念'];
@@ -71,8 +97,8 @@ export function raceCard(start,salt=PUBLIC_SALT,entries=[]){
   for(let i=gates.length-1;i>0;i--){const j=Math.floor(grng()*(i+1));[gates[i],gates[j]]=[gates[j],gates[i]];}
   entries.slice(0,size).forEach((e,i)=>Object.assign(horses[gates[i]],{name:e.name,ability:e.ability,style:e.style,horseId:e.horseId,owner:e.owner,ownerName:e.ownerName,nickname:e.nickname??null,person:!!e.person},Number.isInteger(e.condition)&&e.condition>=0&&e.condition<CONDITIONS.length?{condition:e.condition}:{}));
  }
- const crown=big?null:fillerCrownName(start);
- return {id:start,start,closeAt:start-CLOSE_BEFORE,number:raceNumber(start),name:big??crown??(start<NAME_EXPANSION_FROM?`第${raceNumber(start)}レース`:`第${raceNumber(start)}レース ${regularRaceName(start)}`),big:!!big,crown:!!crown,raceClass:cls,size,going:pickWeighted(rng,[5,3,2]),horses};
+ const crown=big?null:fillerCrownName(start),event=raceEvent(start);
+ return {id:start,start,closeAt:start-CLOSE_BEFORE,number:raceNumber(start),name:event?`第${raceNumber(start)}レース ${event.name}杯`:big??crown??(start<NAME_EXPANSION_FROM?`第${raceNumber(start)}レース`:`第${raceNumber(start)}レース ${regularRaceName(start)}`),big:!!big,crown:!!crown,raceClass:cls,size,going:pickWeighted(rng,[5,3,2]),horses,...(event?{event}:{})};
 }
 
 // The race model: a Plackett-Luce ranking (each place goes to a remaining horse with probability
@@ -82,9 +108,10 @@ const PACE_POINTS=[-2,-1,0,1,2],PACE_WEIGHTS=[1,4,6,4,1].map(w=>w/16); // mean 0
 const BETA=1.6;
 function raceModel(card){
  const front=card.horses.filter(h=>h.style<=1).length,paceBase=(front-card.size/2)/2,sharp=BETA/GOINGS[card.going].noise;
+ const avgAbility=card.event?card.horses.reduce((sum,h)=>sum+h.ability,0)/card.size:0;
  return PACE_POINTS.map((point,k)=>{
   const pace=paceBase+point*.6; // > 0: a fast pace that favours the closers
-  return {weight:PACE_WEIGHTS[k],strength:card.horses.map(h=>Math.exp(sharp*(h.ability+CONDITIONS[h.condition].value*.35+(card.size/2-h.number)*.02+(h.style-1.5)*.2*pace)))};
+  return {weight:PACE_WEIGHTS[k],strength:card.horses.map(h=>Math.exp(sharp*(h.ability+CONDITIONS[h.condition].value*.35+(card.size/2-h.number)*.02+(h.style-1.5)*.2*pace+chaosStrengthBonus(h,avgAbility,card.event))))};
  });
 }
 /** Exact probability that each horse wins, and finishes inside the paid places. */
