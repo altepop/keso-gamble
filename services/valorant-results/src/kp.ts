@@ -1,5 +1,5 @@
 import {feedIndex} from './community-feed.ts';
-import {modeRelicBonus} from './relics.ts';
+import {creditVerifiedRelicBonus} from './relics.ts';
 import {settleSkirmishMatch} from './skirmish.ts';
 import {settleDmMatch,ensureDmChallenge} from './dm-challenge.ts';
 import {valoKp,ensureModeRewards,MODE_REWARD_VERSION,UNRATED_JACKPOT,jackpotPost} from './mode-rewards.ts';
@@ -133,19 +133,10 @@ export async function drainKpInbox(env:KpEnv){
    env.DB.prepare(`INSERT INTO kp_events(id,guild,user,puuid,match,mode,outcome,amount,policy,at) SELECT ?,?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM kp_accounts WHERE guild=? AND puuid=? AND user=?) ON CONFLICT(id) DO NOTHING`).bind(e.id,e.guild,e.user,e.puuid,e.match,e.mode,e.outcome,e.amount,e.policy,Date.now(),e.guild,e.puuid,e.user),
    env.DB.prepare('INSERT OR IGNORE INTO kp_reward_notes(id,note) SELECT ?,? WHERE EXISTS(SELECT 1 FROM kp_events WHERE id=?)').bind(e.id,e.note??'',e.id),
   ]);
-  // Only a newly certified win can trigger a relic bonus. Retries or changing
-  // equipment AFTER settlement must never mint additional KP.
-  if((settledRows[0]?.meta?.changes??0)>0 && e.amount>0){
-   const saved=await env.DB.prepare('SELECT data FROM kp_state WHERE guild=? AND user=?').bind(e.guild,e.user).first<{data:string}>();
-   if(saved){
-    const relics=(JSON.parse(saved.data) as {relics?:import('./relics.ts').RelicCollection}).relics;
-    const {bonus}=modeRelicBonus(relics,e.mode,{amount:e.amount,win:e.outcome==='win'});
-    if(bonus>0)await env.DB.prepare(`INSERT OR IGNORE INTO kp_ledger(id,guild,user,delta,kind,at)
-      SELECT ?,?,?,?,'relic',? WHERE EXISTS(SELECT 1 FROM kp_events WHERE id=? AND guild=? AND user=?)`)
-      .bind('relic:'+e.id,e.guild,e.user,bonus,Date.now(),e.id,e.guild,e.user).run();
-   }
-  }
-
+  // Proven match receipt must be newly committed; retries or re-equipping never backpay.
+  if((settledRows[0]?.meta?.changes??0)>0 && e.amount>0)
+   try { await creditVerifiedRelicBonus(env,e.guild,e.user,e.id,e.mode,e.amount,e.outcome==='win'); }
+   catch { console.warn('relic_match_bonus_pending'); }
   // A big unrated lottery prize is announced once in 稼ぎch; the post never holds up the credit.
   if(e.mode==='unrated'&&Number.isSafeInteger(e.jackpot)&&e.jackpot!>=UNRATED_JACKPOT&&await env.DB.prepare('SELECT 1 AS n FROM kp_events WHERE id=?').bind(e.id).first()){
    try{await ensurePosts(env);await enqueue(env,'jackpot:'+e.id,jackpotPost(e.user,e.jackpot!),Date.now());}catch{console.warn('jackpot_post_pending');}
