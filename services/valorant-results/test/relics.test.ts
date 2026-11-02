@@ -1,6 +1,7 @@
+import {NORMAL_RELICS,RELIC_CATALOG_COUNT,RELIC_RARITIES,RELIC_MODE_NAMES} from '../src/relic-catalog.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {RELIC_SUMMON_COST,rarityForRoll,summonLevel,summonRelics,grantSteamRelic,grantUniteRelic,equipRelic,type RelicCollection} from '../src/relics.ts';
+import {RELIC_SUMMON_COST,rarityForRoll,rarityRatesForLevel,modeRelicBonus,nativeRelicBonus,relicCollection,summonLevel,summonRelics,grantSteamRelic,grantUniteRelic,equipRelic,type RelicCollection} from '../src/relics.ts';
 test('200KP per roll, valid batch sizes, never overspends or draws entropy for rejected input',()=>{
   assert.equal(RELIC_SUMMON_COST,200);
   const x:{cash:number;relics?:RelicCollection}={cash:351000};
@@ -24,7 +25,7 @@ test('transcendent is low probability from first roll, 1/10000 at maximum level'
   assert.equal(rarityForRoll(10,1),'ancient');
   assert.equal(rarityForRoll(99,10),'transcendent');
   assert.equal(rarityForRoll(100,10),'ancient');
-  assert.equal(rarityForRoll(999999,10),'common');
+  assert.equal(rarityForRoll(999999,10),'uncommon');
   const x:{cash:number;relics?:RelicCollection}={cash:200};
   const o=summonRelics(x,1,new Uint32Array([0,0]));
   assert.equal(o.summary.transcendent,1);
@@ -67,4 +68,73 @@ test('equipment is optional for both sources; no hardcoded combination or earnin
  assert.equal(x.relics!.items[common]!.count,10);
  assert.deepEqual(equipRelic(x,'',0).equipped,['']);
  assert.equal(x.cash,0);
+});
+
+test('all 10 summon tiers add up to 100% and level 10 completely eliminates common',()=>{
+ assert.equal(RELIC_CATALOG_COUNT,98);
+ assert.equal(new Set(NORMAL_RELICS.map(r=>r.id)).size,98);
+ assert.equal(new Set(NORMAL_RELICS.map(r=>r.name)).size,98);
+ assert.equal(Object.keys(RELIC_MODE_NAMES).length,14);
+ for(const tier of RELIC_RARITIES) assert.equal(NORMAL_RELICS.filter(r=>r.rarity===tier).length,14);
+ const checks=[1,2,3,4,5,6,7,8,9,10];
+ for(const lvl of checks){
+  const rates=rarityRatesForLevel(lvl);
+  assert.ok(Math.abs(Object.values(rates).reduce((n,v)=>n+v,0)-100)<0.000001);
+  if(lvl>1){
+   assert.ok(rates.common<rarityRatesForLevel(lvl-1).common);
+   assert.ok(rates.legendary>rarityRatesForLevel(lvl-1).legendary);
+   assert.ok(rates.ancient>rarityRatesForLevel(lvl-1).ancient);
+  }
+ }
+ assert.equal(rarityRatesForLevel(10).common,0);
+ assert.equal(rarityRatesForLevel(10).uncommon,4);
+ assert.equal(rarityRatesForLevel(10).rare,30);
+ assert.equal(rarityRatesForLevel(10).legendary,40);
+ assert.equal(rarityRatesForLevel(10).mythic,21);
+ assert.equal(rarityRatesForLevel(10).ancient,4.99);
+ assert.equal(rarityRatesForLevel(10).transcendent,0.01);
+ assert.equal(rarityForRoll(0,10),'transcendent');
+ assert.equal(rarityForRoll(99,10),'transcendent');
+ assert.equal(rarityForRoll(100,10),'ancient');
+ assert.equal(rarityForRoll(999999,10),'uncommon');
+});
+test('existing 21 relic ids preserve all copies and become named mode skills',()=>{
+ const state:{relics?:RelicCollection}={relics:{totalSummons:450,items:{
+  'normal.copper':{id:'normal.copper',name:'くすんだ銅貨',origin:'normal',rarity:'common',ability:'蓄積',power:10,count:8},
+  'normal.rainbow':{id:'normal.rainbow',name:'万象を超える賽',origin:'normal',rarity:'transcendent',ability:'超越',power:350,count:2},
+ },equipped:['normal.copper','normal.rainbow']}};
+ const c=relicCollection(state);
+ assert.equal(c.totalSummons,450);
+ assert.deepEqual(c.equipped,['normal.copper','normal.rainbow']);
+ assert.equal(c.items['normal.copper']?.count,8);
+ assert.equal(c.items['normal.copper']?.power,25);
+ assert.equal(c.items['normal.copper']?.mode,'competitive');
+ assert.match(c.items['normal.copper']!.ability,/コンペ専用/);
+ assert.equal(c.items['normal.rainbow']?.origin,'normal');
+ assert.match(c.items['normal.rainbow']!.ability,/コンペ専用/);
+});
+test('mode specialists activate only their own verified mode and cannot multiply arbitrary rewards',()=>{
+ const x:{cash:number;relics?:RelicCollection}={cash:4000};
+ summonRelics(x,10,new Uint32Array(20).fill(999999));
+ const common=Object.keys(x.relics!.items)[0]!;
+ const mode=x.relics!.items[common]!.mode!;
+ equipRelic(x,common,0);
+ const off=mode==='competitive'?'unrated':'competitive';
+ assert.equal(modeRelicBonus(x.relics,off,{amount:500,win:true}).bonus,0);
+ const on=modeRelicBonus(x.relics,mode,{amount:500,win:true});
+ assert.ok(on.bonus>0);
+ assert.ok(on.bonus<=80);
+ assert.ok(on.bonus<=500*0.15);
+ assert.equal(modeRelicBonus(x.relics,mode,{amount:0,win:true}).bonus,0);
+});
+test('native earnings are capped to 1% of source and 120KP per day, including repeats',()=>{
+ const def=NORMAL_RELICS.find(r=>r.mode==='market'&&r.rarity==='transcendent')!;
+ const item={id:def.id,name:def.name,origin:'normal' as const,rarity:def.rarity,ability:def.ability,mode:def.mode,
+  skill:def.skill,power:def.power,count:10};
+ const state:{cash:number;relics?:RelicCollection}={cash:1000,relics:{totalSummons:4000,items:{[def.id]:item},equipped:[def.id]}};
+ assert.equal(nativeRelicBonus(state,'market',100000,Date.parse('2026-11-02')),80);
+ assert.equal(nativeRelicBonus(state,'market',100000,Date.parse('2026-11-02')),40);
+ assert.equal(nativeRelicBonus(state,'market',100000,Date.parse('2026-11-02')),0);
+ assert.equal(state.cash,1120);
+ assert.equal(state.relics?.dailyNativeBonus?.amount,120);
 });
