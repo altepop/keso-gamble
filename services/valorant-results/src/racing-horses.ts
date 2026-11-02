@@ -2,7 +2,7 @@
 // finishing place, retired after RETIRE_RACES and sellable for 10-20% of the price.
 // Buying and selling ride on the wallet operation insert (one transaction with the KP change).
 // @ts-expect-error The shared pure browser engine has no TypeScript declarations.
-import { BOXES, CLASSES, MAX_OWNED, RETIRE_RACES, RUN_MS, conditionFromActivity, drawHorse, horseNickname, prizeFor, raceCard, raceClass, raceOdds, raceResult, sellValue, validHorseName } from '../../../js/racing.js';
+import { BOXES, CLASSES, MAX_OWNED, RETIRE_RACES, RACE_INTERVAL, RUN_MS, conditionFromActivity, drawHorse, horseNickname, prizeFor, raceCard, raceClass, raceOdds, raceResult, sellValue, validHorseName } from '../../../js/racing.js';
 import { crownFor, ensureCrowns } from './racing-crowns.ts';
 import configuredPlayers from '../players.json' with { type: 'json' };
 import { kpRandom } from './kp.ts';
@@ -10,6 +10,17 @@ import type { KpEnv, KpMapping } from './kp.ts';
 export interface Entry { horseId:string; name:string; ability:number; style:number; owner:string; ownerName:string; nickname?:string|null; person?:boolean; condition?:number; record?:{races:number;wins:number;seconds:number;thirds:number}; recentRanks?:number[] }
 export interface Horse { id:string; owner:string; name:string; grade:number; ability:number; style:number; box:string; price:number; created_at:number; races:number; wins:number; seconds:number; thirds:number; earnings:number; retired_at:number|null; sold_at:number|null; last_race:number|null }
 export const ENTRY_CHANCE=.4,REST=60*60000,CONSOLATION_RATE=.05;
+// Prioritize the four minutes after a finish. Hourly retry preserves eventual settlement.
+export function shouldSettleHorsePrizes(now:number){
+ if(!Number.isSafeInteger(now)||now<0)return false;
+ const elapsed=((now-RUN_MS)%RACE_INTERVAL+RACE_INTERVAL)%RACE_INTERVAL;
+ return elapsed<4*60000||now%(3600000)<60000;
+}
+// Avoid full-history anti-join scans each minute. Every six hours run a full backlog sweep.
+export function horsePrizeLookback(now:number){
+ if(!Number.isSafeInteger(now)||now<0)throw Error('Invalid settlement time');
+ return now%(6*3600000)<60000?0:Math.max(0,now-48*3600000);
+}
 const initialized=new WeakSet<object>();
 export async function ensureHorses(env:KpEnv){
  if(initialized.has(env.DB))return;
@@ -100,8 +111,10 @@ export async function decideEntries(env:KpEnv,mapping:KpMapping,race:number,now=
  * A person-named horse also brings its namesake a consolation: 5% of what others bet on it. */
 export async function settleHorsePrizes(env:KpEnv,mapping:KpMapping,now=Date.now()){
  await ensureHorses(env);await ensureCrowns(env);
- const races=(await env.DB.prepare(`SELECT race FROM (SELECT e.race FROM kp_race_entries e WHERE e.guild=? AND NOT EXISTS(SELECT 1 FROM kp_horse_results r WHERE r.guild=e.guild AND r.race=e.race AND r.horse=e.horse)
-  UNION SELECT c.race FROM kp_crowns c WHERE c.guild=? AND NOT EXISTS(SELECT 1 FROM kp_horse_results r WHERE r.guild=c.guild AND r.race=c.race AND r.horse='person-'||c.user)) WHERE race<=? ORDER BY race LIMIT 20`).bind(mapping.guildId,mapping.guildId,now-RUN_MS).all<{race:number}>()).results.map(r=>r.race);
+ const from=horsePrizeLookback(now),before=now-RUN_MS;
+ const races=(await env.DB.prepare(`SELECT race FROM (SELECT e.race FROM kp_race_entries e WHERE e.guild=? AND e.race>=? AND e.race<=? AND NOT EXISTS(SELECT 1 FROM kp_horse_results r WHERE r.guild=e.guild AND r.race=e.race AND r.horse=e.horse)
+  UNION SELECT c.race FROM kp_crowns c WHERE c.guild=? AND c.race>=? AND c.race<=? AND NOT EXISTS(SELECT 1 FROM kp_horse_results r WHERE r.guild=c.guild AND r.race=c.race AND r.horse='person-'||c.user)) ORDER BY race LIMIT 20`)
+  .bind(mapping.guildId,from,before,mapping.guildId,from,before).all<{race:number}>()).results.map(r=>r.race);
  let paid=0;
  for(const race of races){
   const seed=await env.DB.prepare('SELECT seed FROM kp_races WHERE guild=? AND id=?').bind(mapping.guildId,race).first<{seed:string}>();

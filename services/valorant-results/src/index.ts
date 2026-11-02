@@ -28,7 +28,7 @@ import { settleKpRaces } from './racing-kp.ts';
 import { queueRacePosts, flushRacePosts, enqueue, ensurePosts } from './racing-posts.ts';
 import { pollMlLineups, pollMlResults, refreshMlCards, settleMl, queueMlPosts, shouldRunMlCron } from './mleague.ts';
 import { scheduleCrowns } from './racing-crowns.ts';
-import { decideEntries, maybeGiftHorse, settleHorsePrizes } from './racing-horses.ts';
+import { decideEntries, maybeGiftHorse, settleHorsePrizes, shouldSettleHorsePrizes } from './racing-horses.ts';
 import { recordMastery } from './mastery.ts';
 import { roastLevelsOf } from './racing-posts.ts';
 // @ts-expect-error The shared pure browser engine has no TypeScript declarations.
@@ -505,7 +505,7 @@ export default {
       ctx.waitUntil(migrateSilentEntryPoint(env).catch(()=>console.warn('discord_entrypoint_pending')));
       await track(env,'stock_market',async()=>{await runGuerrillaMarket(env,mapping.guildId);const market=await prepareStocks(env,mapping.guildId);await queueStockPosts(env,market);});
       // Owned horses run even when nobody opens the Activity.
-      await track(env,'horse_race',async()=>{await decideEntries(env,mapping,openRaceStart(Date.now()));await settleHorsePrizes(env,mapping);});
+      await track(env,'horse_race',async()=>{const now=Date.now();await decideEntries(env,mapping,openRaceStart(now),now);if(shouldSettleHorsePrizes(now))await settleHorsePrizes(env,mapping,now);});
       // A very rare free horse for someone, drawn once per race slot and announced in the earnings channel.
       await track(env,'horse_gift',async()=>{const gift=await maybeGiftHorse(env,mapping,openRaceStart(Date.now()));if(gift&&env.KP_EARNINGS_WEBHOOK_URL){await ensurePosts(env);await enqueue(env,'horse-gift:'+gift.horse.id,gift.text,Date.now());}});
       await track(env,'race_settlement',async()=>{await settleKpRaces(env,mapping);});

@@ -6,7 +6,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { initializeKp, syncKpAccounts } from '../src/kp.ts';
 import type { KpEnv, KpMapping } from '../src/kp.ts';
 import { operateKp, readKpState } from '../src/kp-api.ts';
-import { decideEntries, ensureHorses, raceEntries, settleHorsePrizes } from '../src/racing-horses.ts';
+import { decideEntries, ensureHorses, raceEntries, settleHorsePrizes, shouldSettleHorsePrizes, horsePrizeLookback } from '../src/racing-horses.ts';
 import { raceSeed, settleKpRaces } from '../src/racing-kp.ts';
 // @ts-expect-error The shared pure browser engine has no TypeScript declarations.
 import { BOXES, RACE_INTERVAL, RETIRE_RACES, RUN_MS, openRaceStart, prizeFor, raceCard, raceClass, raceOdds, raceResult } from '../../../js/racing.js';
@@ -195,4 +195,35 @@ test('a very rare free horse: drawn once per slot, only for members with a free 
  f.sql.prepare("UPDATE kp_horses SET sold_at=NULL WHERE owner=?").run(two);
  for(let i=0;i<2;i++)f.sql.prepare("INSERT INTO kp_horses(id,guild,owner,name,grade,ability,style,box,price,created_at) VALUES(?,?,?,?,0,0,0,'normal',3000,0)").run('full2-'+i,guild,two,'y'+i);
  assert.equal(await maybeGiftHorse(f.env,mapping,3000,seq(0)),null,'nobody with a free place: no gift');
+});
+
+test('D1: settlement check runs immediately after finish, retries each hour, skips idle minutes',()=>{
+ const race=Date.parse('2026-11-04T12:15:00Z');
+ assert.equal(shouldSettleHorsePrizes(race+RUN_MS),true);
+ assert.equal(shouldSettleHorsePrizes(race+RUN_MS+3*60000),true);
+ assert.equal(shouldSettleHorsePrizes(race+RUN_MS+5*60000),false);
+ assert.equal(shouldSettleHorsePrizes(Date.parse('2026-11-04T13:00:20Z')),true,'hourly fallback');
+ assert.equal(shouldSettleHorsePrizes(-1),false);
+ const hour=Date.parse('2026-11-04T18:00:30Z');
+ assert.equal(horsePrizeLookback(hour),0,'unbounded backlog sweep every six hours');
+ assert.equal(horsePrizeLookback(hour+2*60000),hour+2*60000-48*3600000,'bounded 48h hot path');
+});
+
+test('D1: old unpaid owned-horse race is recovered on the six-hour backlog sweep',async()=>{
+ const f=await fixture(0);
+ addHorse(f.sql,'late-horse',0);
+ const race=raceOfClass(0,openRaceStart(T0));
+ await decideEntries(f.env,mapping,race,race-RACE_INTERVAL,1);
+ await raceSeed(f.env,guild,race);
+ const stale=race+48*3600000+5*60000;
+ // Choose a regular time so that this does not accidentally run the deep fallback.
+ const regular=Math.ceil(stale/60000)*60000;
+ assert.ok(horsePrizeLookback(regular)>race);
+ assert.equal(await settleHorsePrizes(f.env,mapping,regular),0);
+ assert.equal(Number(f.sql.prepare('SELECT COUNT(*) AS n FROM kp_horse_results').get()!.n),0);
+ const deep=Math.ceil(stale/(6*3600000))*(6*3600000);
+ assert.equal(horsePrizeLookback(deep),0);
+ await settleHorsePrizes(f.env,mapping,deep);
+ assert.equal(Number(f.sql.prepare('SELECT COUNT(*) AS n FROM kp_horse_results').get()!.n),1);
+ assert.equal(await settleHorsePrizes(f.env,mapping,deep+60000),0,'no double-award on repeated retry');
 });
