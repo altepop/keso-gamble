@@ -113,7 +113,7 @@ export function grantSteamRelic(
 }
 export function grantUniteRelic(state:{relics?:RelicCollection}, id:UniteRelicId, wins:number) {
   const required = UNITE_REQUIREMENTS[id];
-  if (!required || !Number.isSafeInteger(wins) || wins < required) throw Error('ユナイトの達成記録を確認できません。');
+  if (!Object.hasOwn(UNITE_REQUIREMENTS,id) || !Number.isSafeInteger(wins) || wins < required) throw Error('ユナイトの達成記録を確認できません。');
   const c = relicCollection(state);
   if (c.items[id]) throw Error('このユナイト遺物は受け取り済みです。');
   const def = UNITE[id];
@@ -125,7 +125,7 @@ export function grantUniteRelic(state:{relics?:RelicCollection}, id:UniteRelicId
 export function equipRelic(state:{relics?:RelicCollection},id:string,slot:number) {
   const c = relicCollection(state);
   if (!Number.isInteger(slot)||slot<0||slot>=RELIC_SLOTS) throw Error('装備枠を選んでください。');
-  if (id !== '' && !c.items[id]) throw Error('所持していない遺物です。');
+  if (id !== '' && !Object.hasOwn(c.items,id)) throw Error('所持していない遺物です。');
   const next = [...c.equipped];
   for (let n=0;n<RELIC_SLOTS;n++) if (next[n]===id && n!==slot) next[n]='';
   next[slot]=id;
