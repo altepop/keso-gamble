@@ -132,6 +132,24 @@ export function nativeRelicBonus(
  }
  return payout;
 }
+/** Caller MUST confirm a new, immutable server-verified receipt before invoking.
+ * This is not a public API; browsers can never request a bonus for arbitrary evidence.
+ */
+export async function creditVerifiedRelicBonus(
+ env:{DB:D1Database},guild:string,user:string,receipt:string,mode:string,amount:number,win:boolean,at=Date.now(),
+):Promise<number> {
+ if(!Number.isSafeInteger(amount)||amount<=0||!receipt||receipt.length>350)return 0;
+ const row=await env.DB.prepare('SELECT data FROM kp_state WHERE guild=? AND user=?')
+  .bind(guild,user).first<{data:string}>();
+ if(!row)return 0;
+ const state=JSON.parse(row.data) as {relics?:RelicCollection};
+ const {bonus}=modeRelicBonus(state.relics,mode,{amount,win});
+ if(!bonus)return 0;
+ const id='relic:'+receipt;
+ const saved=await env.DB.prepare('INSERT OR IGNORE INTO kp_ledger(id,guild,user,delta,kind,at) VALUES(?,?,?,?,?,?)')
+  .bind(id,guild,user,bonus,'relic',at).run();
+ return saved.meta.changes?bonus:0;
+}
 function store(c: RelicCollection, item: RelicItem) {
   const old = c.items[item.id];
   if (old) {
