@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {CHAOS_RACES_FROM,CHAOS_RACE_TYPES,raceEvent,raceCard,finishProbabilities,raceOdds,raceResult,betWins,placeSlots} from '../js/racing.js';
+import {CHAOS_RACES_FROM,CHAOS_RACE_TYPES,raceEvent,raceCard,finishProbabilities,raceOdds,raceResult,raceRuns,betWins,placeSlots} from '../js/racing.js';
 
 const toTime=(d,t)=>Date.parse(d+'T'+t+':00+09:00');
 test('chaos races are only eligible after activation at explicit hours, never retroactively',()=>{
@@ -16,6 +16,7 @@ test('chaos races are only eligible after activation at explicit hours, never re
   assert.equal(raceEvent(toTime('2026-11-05','12:15')),null);
   assert.equal(raceEvent(toTime('2026-11-07','12:16')),null);
   assert.equal('event' in raceCard(toTime('2026-11-03','21:15')),false);
+  assert.equal(raceRuns(raceCard(toTime('2026-11-03','21:15')),{raceBets:[]}),false,'old ordinary races still require a bet');
 });
 
 test('event cards and odds are deterministic, unbiased probabilities sum to one',()=>{
@@ -25,6 +26,7 @@ test('event cards and odds are deterministic, unbiased probabilities sum to one'
     const event=raceEvent(start);assert.ok(event);
     seen.add(event.id);
     const card=raceCard(start);
+    assert.equal(raceRuns(card,{raceBets:[]}),true,'a special race runs even without bets');
     assert.equal(card.event?.id,event.id);
     assert.equal(card.name.includes(event.name),true);
     assert.deepEqual(raceCard(start),card);
