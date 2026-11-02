@@ -98,12 +98,19 @@ export function relicCollection(state: {relics?: RelicCollection}): RelicCollect
   }
   return state.relics;
 }
-export const summonLevel = (total: number) => Math.min(10, 1 + Math.floor(total / 200));
+// A long-term progression curve. Counts are lifetime summons; existing relics are never removed.
+export const SUMMON_MILESTONES = [0,300,750,1350,2100,3000,4050,5250,6600,8100] as const;
+export const summonLevel = (total:number) => Math.max(1,SUMMON_MILESTONES.filter(n=>total>=n).length);
+export function summonProgress(total:number){
+ const level=summonLevel(total),current=SUMMON_MILESTONES[level-1]!;
+ const next=level<10?SUMMON_MILESTONES[level]!:null;
+ return {level,total,current,next,remaining:next===null?0:Math.max(0,next-total)};
+}
 /** Exact ticket odds (one million possible outcomes), interpolated at each level.
  * Lv10 intentionally has ZERO common artifacts, but transcendents remain a very rare direct draw.
  */
-const START_RATES = [520090,280000,130000,50000,17500,2400,10] as const;
-const END_RATES = [0,40000,300000,400000,210000,49900,100] as const;
+const START_RATES = [520092,280000,130000,50000,17500,2400,8] as const;
+const END_RATES = [0,40000,300000,400000,210000,49970,30] as const;
 export function rarityRatesForLevel(level:number):Readonly<Record<NormalRelicRarity,number>> {
   if (!Number.isInteger(level)||level<1||level>10) throw Error('召喚レベルが不正です。');
   const rates=RELIC_RARITIES.map((_,i)=>START_RATES[i]!+Math.round((END_RATES[i]!-START_RATES[i]!)*(level-1)/9));
@@ -150,13 +157,30 @@ export function modeRelicBonus(
    (sourceMode==='casinoplus'&&mode==='casino');
   if(!compatible)continue;
   const skill=def?.skill??item.skill;
+  const a=event.amount;
+  const digitSum=String(a).split('').reduce((sum,d)=>sum+Number(d),0);
+  const isPrime=(n:number)=>{if(n<2)return false;for(let i=2;i*i<=n;i++)if(n%i===0)return false;return true;};
   const eligible=skill==='spark'
    ||(skill==='rescue'&&event.amount<=bounds[0])
    ||(skill==='advance'&&event.amount>=bounds[0])
    ||(skill==='highroll'&&event.amount>=bounds[1])
    ||(skill==='surge'&&event.amount>=bounds[0])
    ||(skill==='lucky7'&&event.amount%10===7)
-   ||(skill==='odd'&&event.amount%2===1)
+   ||(skill==='odd'&&a%2===1)
+   ||(skill==='even'&&a%2===0)
+   ||(skill==='prime'&&isPrime(a))
+   ||(skill==='square'&&Math.floor(Math.sqrt(a))**2===a)
+   ||(skill==='quarter'&&a%25===0)
+   ||(skill==='mod11'&&a%11===0)
+   ||(skill==='mod13'&&a%13===0)
+   ||(skill==='digit7'&&digitSum%7===0)
+   ||(skill==='double'&&/(\\d)\\1/.test(String(a)))
+   ||(skill==='reverse'&&String(a)===String(a).split('').reverse().join(''))
+   ||(skill==='near'&&a>=bounds[0]&&a<=bounds[0]+50)
+   ||(skill==='thin'&&a<bounds[0])
+   ||(skill==='heavy'&&a>=bounds[1]*2)
+   ||(skill==='triple'&&a%3===0)
+   ||(skill==='lucky77'&&String(a).includes('77'))
    ||((skill==='master'||skill==='sovereign')&&event.win);
   if(!eligible)continue;
   const duplicateBoost=item.origin==='normal'?Math.min(5,Math.floor(Math.log2(Math.max(1,item.count)))):0;
@@ -165,6 +189,13 @@ export function modeRelicBonus(
   const contribution=Math.min(cap,Math.max(1,Math.floor(event.amount*(percent+duplicateBoost)/100)));
   total+=contribution;
   activated.push(def?.name??item.name);
+ }
+ // A genuine cross-item tactical trigger, without rerolling games or touching outcomes.
+ // Combining at least two DIFFERENT active skills on a multiple-of-seven reward
+ // unlocks resonance. The same hard per-receipt and daily caps still apply.
+ if(activated.length>=2 && event.amount%7===0){
+  const keys=new Set(collection.equipped.filter(id=>collection.items[id]).map(id=>NORMAL_RELIC_BY_ID.get(id)?.skill??collection.items[id]?.skill));
+  if(keys.size>=2){total+=Math.floor(total*0.2);activated.push('七重共鳴（発動効果+20%）');}
  }
  return{bonus:Math.min(total,80,Math.floor(event.amount*0.15)),skills:activated};
 }
@@ -292,4 +323,51 @@ export function equipRelic(state:{relics?:RelicCollection},id:string,slot:number
   next[slot]=id;
   c.equipped=next;
   return {equipped:next,power:next.reduce((n,key)=>n+(c.items[key]?.power??0),0)};
+}
+
+/** Four server-authoritative slots in one idempotent KP operation, never a chain
+ * of client-side equip calls. No DB reads beyond the already loaded wallet state. */
+export function autoEquipRelics(state:{relics?:RelicCollection},goal:string='all'){
+ const modes=['all','competitive','unrated','swiftplay','spikerush','teamdeathmatch','escalation',
+  'deathmatch','skirmish','racing','casino','market','mleague','quiz','voice'];
+ if(!modes.includes(goal))throw Error('おまかせ装備の目的を選んでください。');
+ const c=relicCollection(state),items=Object.values(c.items);
+ const applicable=(i:RelicItem)=>{
+  const mode=NORMAL_RELIC_BY_ID.get(i.id)?.mode??i.mode??'universal';
+  return goal==='all'||mode===goal||mode==='universal'||mode==='fortune'||
+   (['market','casino','racing','mleague'].includes(goal)&&mode==='finance')||
+   (goal==='market'&&mode==='marketplus')||(goal==='racing'&&mode==='racingplus')||
+   (goal==='casino'&&mode==='casinoplus');
+ };
+ const skillOdds:Record<string,number>={spark:1,rescue:.4,advance:.75,highroll:.18,surge:.7,master:.7,
+  sovereign:.7,lucky7:.1,lucky77:.04,odd:.5,even:.5,prime:.15,square:.06,quarter:.04,mod11:.09,
+  mod13:.075,digit7:.15,double:.27,reverse:.025,near:.18,thin:.3,heavy:.08,triple:.33};
+ const score=(i:RelicItem,selected:RelicItem[])=>{
+  const def=NORMAL_RELIC_BY_ID.get(i.id),mode=def?.mode??i.mode??'universal',skill=def?.skill??i.skill??'spark';
+  const percent=def?.percent??i.percent??0,cap=def?.cap??i.cap??0;
+  const trigger=skillOdds[skill]??.4;
+  // Favor useful activation and useful niche items, not raw rarity/power alone.
+  let value=(Math.min(50,percent*2)+Math.min(50,cap*.4))*trigger+Math.min(12,i.power/60);
+  if(goal==='all'){
+   if(mode==='universal')value*=1.75;
+   else if(mode==='fortune'||mode==='finance')value*=1.4;
+   else value*=.42;
+  }else if(mode===goal)value*=1.65;
+  else if(mode==='universal')value*=1.12;
+  else if(mode==='fortune')value*=.95;
+  if(selected.some(x=>(NORMAL_RELIC_BY_ID.get(x.id)?.mode??x.mode)===mode))value*=.84;
+  if(selected.some(x=>(NORMAL_RELIC_BY_ID.get(x.id)?.skill??x.skill)===skill))value*=.75;
+  if(selected.length&&selected.some(x=>(NORMAL_RELIC_BY_ID.get(x.id)?.skill??x.skill)!==skill))value+=2;
+  return value;
+ };
+ const selected:RelicItem[]=[];
+ while(selected.length<RELIC_SLOTS){
+  const options=items.filter(i=>!selected.includes(i)&&applicable(i)&&!(i.origin==='unite'&&selected.some(s=>s.origin==='unite')));
+  if(!options.length)break;
+  options.sort((a,b)=>score(b,selected)-score(a,selected)||b.power-a.power||a.id.localeCompare(b.id));
+  selected.push(options[0]!);
+ }
+ const ids=selected.map(i=>i.id);
+ c.equipped=ids;
+ return {equipped:ids,power:ids.reduce((n,id)=>n+(c.items[id]?.power??0),0),goal};
 }
