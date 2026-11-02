@@ -1,3 +1,5 @@
+> **更新：通常遺物98種・全レアリティのLv別排出率・モード別実能力は [RELICS_V2_MODE_SYSTEM.md](./RELICS_V2_MODE_SYSTEM.md) を参照。本書は旧MVP時点の記録だ。**
+
 # KESO遺物 MVP（200KP召喚、Steam・ユナイト限定）
 
 ## 方針（2026-11-02）

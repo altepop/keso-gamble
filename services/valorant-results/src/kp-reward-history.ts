@@ -29,7 +29,7 @@ export async function kpRewardHistory(env:KpEnv,guild:string,user:string,version
  const job=(async()=>{
   await Promise.all([ensureKpMatchRewardIndex(env),ensureQuizKp(env)]);
   const [matches,quizzes,ledger]=await Promise.all([
-   env.DB.prepare("SELECT e.id,e.match,e.mode,e.amount+COALESCE((SELECT delta FROM kp_ledger WHERE id='penalty:'||e.id),0)+COALESCE((SELECT delta FROM kp_ledger WHERE id='esc-extra:'||e.id),0) AS amount,e.at FROM kp_events e WHERE e.guild=? AND e.user=? ORDER BY e.at DESC,e.id LIMIT 100").bind(guild,user).all<MatchReward>(),
+   env.DB.prepare("SELECT e.id,e.match,e.mode,e.amount+COALESCE((SELECT delta FROM kp_ledger WHERE id='penalty:'||e.id),0)+COALESCE((SELECT delta FROM kp_ledger WHERE id='esc-extra:'||e.id),0)+COALESCE((SELECT delta FROM kp_ledger WHERE id='relic:'||e.id),0) AS amount,e.at FROM kp_events e WHERE e.guild=? AND e.user=? ORDER BY e.at DESC,e.id LIMIT 100").bind(guild,user).all<MatchReward>(),
    env.DB.prepare('SELECT id,mode,day,game,amount,completed_at FROM kp_quiz_events WHERE guild=? AND user=? UNION ALL SELECT id,mode,day,game,amount,completed_at FROM kp_quiz_ranked_extra WHERE guild=? AND user=? ORDER BY completed_at DESC LIMIT 100').bind(guild,user,guild,user).all<QuizReward>(),
    ledgerHistory(env,guild,user),
   ]);
