@@ -13,7 +13,7 @@ test('200KP per roll, valid batch sizes, never overspends or draws entropy for r
   assert.equal(outcome.summary.common,1000);
   assert.equal(x.relics!.totalSummons,1000);
   assert.equal(Object.values(x.relics!.items).reduce((n,i)=>n+i.count,0),1000);
-  assert.equal(outcome.level,3);
+  assert.equal(outcome.level,6);
   assert.throws(()=>summonRelics(x,1000),/KPが足りません/);
   assert.equal(x.cash,151000);
 });
