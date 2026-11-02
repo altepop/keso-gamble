@@ -15,6 +15,8 @@ export interface RelicItem {
   ability: string;
   mode?: RelicMode;
   skill?: string;
+  percent?: number;
+  cap?: number;
   count: number;
   // External evidence is bound to existing certified receipts, not a browser claim.
   source?: string;
@@ -26,15 +28,59 @@ export interface RelicCollection {
   dailyNativeBonus?: {day:string;amount:number};
 }
 export const RELIC_SLOTS = 4;
-const UNITE = {
-  'unite.first_win': {name:'テイアの守護核', power:390, ability:'単独効果・守護の極致'},
-  'unite.three_wins': {name:'伝説を奪う手', power:480, ability:'単独効果・逆転の支配'},
-  'unite.five_wins': {name:'レックウザの逆鱗', power:620, ability:'単独効果・戦局を覆す威圧'},
+/** Achievements are granted only from monitored, already certified kp_steam_events.
+ * This catalog does not fetch the user's historical achievements.
+ */
+export const STEAM_RELIC_TIERS=[
+  {max:0.01,label:'異界',power:335,percent:15,cap:75},
+  {max:0.1,label:'深淵',power:285,percent:11,cap:58},
+  {max:1,label:'神話',power:235,percent:9,cap:45},
+  {max:5,label:'偉業',power:175,percent:7,cap:34},
+  {max:10,label:'熟練',power:135,percent:6,cap:27},
+  {max:25,label:'挑戦',power:95,percent:4,cap:19},
+  {max:100,label:'旅路',power:65,percent:2,cap:12},
+] as const;
+export function steamRelicTier(percent:number){
+ if(!Number.isFinite(percent)||percent<0||percent>100)throw Error('Steamの実績解除率を確認できません。');
+ return STEAM_RELIC_TIERS.find(t=>percent<=t.max)!;
+}
+export const STEAM_RELIC_ARCHETYPES=[
+ {name:'冒険の羅針盤',mode:'universal',skill:'spark',ability:'全体への追い風'},
+ {name:'勝負師の証',mode:'casino',skill:'highroll',ability:'カジノの大勝負'},
+ {name:'馬群を裂く勲章',mode:'racing',skill:'advance',ability:'競馬の勝負所'},
+ {name:'相場の残響',mode:'market',skill:'rescue',ability:'株の小さな取引'},
+ {name:'知識の紋章',mode:'quiz',skill:'master',ability:'VCT QUIZの完走'},
+ {name:'戦場の記憶',mode:'competitive',skill:'sovereign',ability:'コンペ勝利'},
+ {name:'卓上の誓い',mode:'mleague',skill:'highroll',ability:'Mリーグ予想'},
+ {name:'夜話の灯火',mode:'voice',skill:'spark',ability:'通話への参加'},
+ {name:'七番目の勝負符',mode:'fortune',skill:'lucky7',ability:'報酬の末尾が7の時に輝く'},
+ {name:'循環の金貨',mode:'finance',skill:'advance',ability:'株・競馬・カジノ・Mリーグ'},
+ {name:'薄氷の護符',mode:'universal',skill:'rescue',ability:'全体の低額獲得を補助'},
+ {name:'突破者の楯',mode:'unrated',skill:'master',ability:'アンレの勝利'},
+] as const;
+export function steamRelicArchetype(app:number,achievement:string){
+ // Fixed FNV-1a; independent of the order in which monitored achievements are claimed.
+ let h=(2166136261^app)>>>0;
+ for(let i=0;i<achievement.length;i++)h=Math.imul(h^achievement.charCodeAt(i),16777619)>>>0;
+ return STEAM_RELIC_ARCHETYPES[h%STEAM_RELIC_ARCHETYPES.length]!;
+}
+export const UNITE = {
+ 'unite.first_win':{name:'テイアの守護核',power:390,ability:'全モードの達成に寄り添う堅守',mode:'universal',skill:'spark',percent:10,cap:36,wins:1},
+ 'unite.two_wins':{name:'エオスの双星',power:425,ability:'全モードの少額報酬に効く逆境効果',mode:'universal',skill:'rescue',percent:12,cap:40,wins:2},
+ 'unite.three_wins':{name:'伝説を奪う手',power:480,ability:'カジノの大勝負で単体発動',mode:'casino',skill:'highroll',percent:16,cap:58,wins:3},
+ 'unite.four_wins':{name:'テイアの不落城',power:545,ability:'株式の買付に単体発動',mode:'market',skill:'advance',percent:18,cap:65,wins:4},
+ 'unite.five_wins':{name:'レックウザの逆鱗',power:620,ability:'検証済みの勝利で全モードに効果',mode:'universal',skill:'sovereign',percent:20,cap:80,wins:5},
+ 'unite.career_10':{name:'十勝の結晶',power:445,ability:'競馬の確定配当を補助',mode:'racing',skill:'master',percent:12,cap:55,wins:10},
+ 'unite.career_25':{name:'二十五戦の灯台',power:510,ability:'カジノの小さな勝利を補助',mode:'casino',skill:'rescue',percent:16,cap:60,wins:25},
+ 'unite.career_50':{name:'五十勝の栄光',power:570,ability:'株式市場と競馬の双方に作用',mode:'finance',skill:'advance',percent:18,cap:70,wins:50},
+ 'unite.career_100':{name:'百戦の星冠',power:650,ability:'全モードの高額な報酬へ単体効果',mode:'universal',skill:'highroll',percent:22,cap:80,wins:100},
+ 'unite.career_200':{name:'無窮のエオス',power:710,ability:'全モードで特別な勝利効果',mode:'universal',skill:'sovereign',percent:25,cap:80,wins:200},
 } as const;
-export type UniteRelicId = keyof typeof UNITE;
-export const UNITE_REQUIREMENTS: Readonly<Record<UniteRelicId, number>> = {
-  'unite.first_win': 1, 'unite.three_wins': 3, 'unite.five_wins': 5,
-};
+export type UniteRelicId=keyof typeof UNITE;
+export const UNITE_REQUIREMENTS:Readonly<Record<UniteRelicId,number>>=Object.fromEntries(
+ Object.entries(UNITE).map(([id,def])=>[id,def.wins]),
+) as Record<UniteRelicId,number>;
+export const UNITE_STREAK_IDS:ReadonlySet<string>=new Set(Object.keys(UNITE).filter(k=>!k.startsWith('unite.career_')));
 export function relicCollection(state: {relics?: RelicCollection}): RelicCollection {
   if (!state.relics) state.relics = {totalSummons: 0, items: {}, equipped: []};
   // Old items keep their original ids, duplicate counts and equipped slots.
@@ -184,25 +230,28 @@ export function summonRelics(
   return {cost:price,count,level:summonLevel(c.totalSummons),summary,highlights:highlights.slice(0,30)};
 }
 export function grantSteamRelic(
-  state: {relics?: RelicCollection},
-  proof: {id:string;app:number;achievement:string;title:string;percent:number},
+ state:{relics?:RelicCollection},
+ proof:{id:string;app:number;achievement:string;title:string;percent:number},
 ) {
-  if (!Number.isFinite(proof.percent) || proof.percent > 10 || proof.percent < 0 ||
-      !Number.isSafeInteger(proof.app) || proof.app <= 0 ||
-      typeof proof.id !== 'string' || !proof.id.startsWith('steam:')) throw Error('Steamの希少実績を確認できません。');
-  const c = relicCollection(state);
-  const id = 'steam.' + proof.id;
-  if (c.items[id]) throw Error('この実績遺物は受け取り済みです。');
-  if (Object.keys(c.items).filter(k=>k.startsWith('steam.')).length >= 200) throw Error('Steam遺物の保有枠は200個までです。');
-  const tier = proof.percent <= 0.01 ? 5 : proof.percent <= 0.1 ? 4 : proof.percent <= 1 ? 3 : proof.percent <= 5 ? 2 : 1;
-  const power = [0, 75, 105, 150, 220, 320][tier]!;
-  const item: RelicItem = {
-    id, name:'実績の証：' + proof.title.slice(0,72),origin:'steam',rarity:'exclusive',
-    power,ability:['','収集の証','熟練の証','偉業の証','神話の証','異界の偉業'][tier]!,
-    count:1,source:'steam app ' + proof.app + ' / ' + proof.achievement.slice(0,90),
-  };
-  store(c,item);
-  return {item};
+ const tier=steamRelicTier(proof.percent);
+ if(!Number.isSafeInteger(proof.app)||proof.app<=0||
+  typeof proof.id!=='string'||!proof.id.startsWith('steam:')||
+  typeof proof.achievement!=='string'||!proof.achievement||
+  typeof proof.title!=='string')throw Error('Steamの実績を確認できません。');
+ const c=relicCollection(state);
+ const id='steam.'+proof.id;
+ if(Object.hasOwn(c.items,id))throw Error('この実績遺物は受け取り済みです。');
+ if(Object.keys(c.items).filter(k=>k.startsWith('steam.')).length>=200)throw Error('Steam遺物の保有枠は200個までです。');
+ const archetype=steamRelicArchetype(proof.app,proof.achievement);
+ const item:RelicItem={
+  id,name:tier.label+'の'+archetype.name+'：'+proof.title.slice(0,55),
+  origin:'steam',rarity:'exclusive',power:tier.power,
+  ability:tier.label+'・'+archetype.ability+'／'+archetype.skill+' 最大'+tier.percent+'%・'+tier.cap+'KP（共通上限内）',
+  mode:archetype.mode,skill:archetype.skill,percent:tier.percent,cap:tier.cap,
+  count:1,source:'steam app '+proof.app+' / '+proof.achievement.slice(0,90),
+ };
+ store(c,item);
+ return{item};
 }
 export function grantUniteRelic(state:{relics?:RelicCollection}, id:UniteRelicId, wins:number) {
   const required = UNITE_REQUIREMENTS[id];
@@ -210,8 +259,10 @@ export function grantUniteRelic(state:{relics?:RelicCollection}, id:UniteRelicId
   const c = relicCollection(state);
   if (c.items[id]) throw Error('このユナイト遺物は受け取り済みです。');
   const def = UNITE[id];
+  const condition=id.startsWith('unite.career_')?'検証済みランク戦の累計'+required+'勝':'検証済みランク戦'+required+'連勝';
   const item:RelicItem = {id,name:def.name,origin:'unite',rarity:'exclusive',
-    power:def.power,ability:def.ability,count:1,source:required+'連勝到達'};
+   power:def.power,ability:def.ability,mode:def.mode,skill:def.skill,
+   percent:def.percent,cap:def.cap,count:1,source:condition};
   store(c,item);
   return {item};
 }
