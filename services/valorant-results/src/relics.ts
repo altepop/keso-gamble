@@ -127,6 +127,9 @@ export function equipRelic(state:{relics?:RelicCollection},id:string,slot:number
   if (!Number.isInteger(slot)||slot<0||slot>=RELIC_SLOTS) throw Error('装備枠を選んでください。');
   if (id !== '' && !Object.hasOwn(c.items,id)) throw Error('所持していない遺物です。');
   const next = [...c.equipped];
+  // Unite is a powerful standalone trophy, not an entire mandatory stack of three.
+  if (id && c.items[id]?.origin === 'unite')
+    for (let n=0;n<RELIC_SLOTS;n++) if (c.items[next[n]]?.origin === 'unite') next[n] = '';
   for (let n=0;n<RELIC_SLOTS;n++) if (next[n]===id && n!==slot) next[n]='';
   next[slot]=id;
   c.equipped=next;
