@@ -53,6 +53,9 @@ test('Unite relics are individually extremely strong and have no cross-source de
   const result=equipRelic(x,'unite.five_wins',0);
   assert.equal(result.power,620);
   assert.deepEqual(result.equipped,['unite.five_wins']);
+  const switched=equipRelic(x,'unite.first_win',1);
+  assert.equal(switched.power,390);
+  assert.deepEqual(switched.equipped,['','unite.first_win']);
   assert.throws(()=>equipRelic(x,'unite.missing',0),/所持していない/);
 });
 test('equipment is optional for both sources; no hardcoded combination or earnings multiplier',()=>{
