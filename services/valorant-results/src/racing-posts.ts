@@ -37,7 +37,7 @@ export function earningsWebhook(env:PostEnv){
 const howToBet=(start:number)=>[`🎫 **Discordで買える！**　\`/bet\` と打つ → **horse** で馬を一覧から選ぶ → **amount** に掛け金（例 500）→ 送信`,
  `-# ${clock(start-CLOSE_BEFORE)}まで受付／券種は選ばなければ1着当て／100 KP単位・1週間で合計5万KPまで（Mリーグ予想と合算）・購入後の取消不可・/keiba で出走表、アプリの「勝負 → 競馬」でも買えます`];
 export function cardPost(card:Card,hash:string){
- const odds=raceOdds(card);
+ const odds=raceOdds(card),brief=card.start>=FORM_REFORM_FROM?raceBrief(card):null;
  return [`🏇 **${clean(card.name)}**`,
   `-# ${clock(card.start)}発走・${card.size}頭・コース ${GOINGS[card.going].label}｜締切 ${clock(card.start-CLOSE_BEFORE)}`,
    ...(brief?[`🧠 ${clean(brief.pace)}｜${clean(brief.bias)}`,`-# 市場オッズは参考値。馬場適性、展開、特別ルールを十分に織り込まない。`]:[]),
