@@ -7,7 +7,7 @@ import { crownFor, ensureCrowns } from './racing-crowns.ts';
 import configuredPlayers from '../players.json' with { type: 'json' };
 import { kpRandom } from './kp.ts';
 import type { KpEnv, KpMapping } from './kp.ts';
-export interface Entry { horseId:string; name:string; ability:number; style:number; owner:string; ownerName:string; nickname?:string|null; person?:boolean; condition?:number }
+export interface Entry { horseId:string; name:string; ability:number; style:number; owner:string; ownerName:string; nickname?:string|null; person?:boolean; condition?:number; record?:{races:number;wins:number;seconds:number;thirds:number}; recentRanks?:number[] }
 export interface Horse { id:string; owner:string; name:string; grade:number; ability:number; style:number; box:string; price:number; created_at:number; races:number; wins:number; seconds:number; thirds:number; earnings:number; retired_at:number|null; sold_at:number|null; last_race:number|null }
 export const ENTRY_CHANCE=.4,REST=60*60000,CONSOLATION_RATE=.05;
 const initialized=new WeakSet<object>();
@@ -43,10 +43,10 @@ const memberName=(mapping:KpMapping,user:string)=>{const a=mapping.accounts.find
 const cryptoRng=()=>crypto.getRandomValues(new Uint32Array(1))[0]/4294967296;
 
 async function nicknames(env:KpEnv,horses:Array<{id:string;wins:number;seconds:number}>){
- const out=new Map<string,string|null>();
+ const out=new Map<string,{nickname:string|null;recentRanks:number[]}>();
  for(const h of horses){
   const runs=(await env.DB.prepare('SELECT rank,win_odds AS winOdds,favourite FROM kp_horse_runs WHERE horse=? ORDER BY race DESC LIMIT 20').bind(h.id).all<{rank:number;winOdds:number;favourite:number}>()).results;
-  out.set(h.id,horseNickname(h,runs.map(r=>({...r,favourite:r.favourite===1}))));
+  out.set(h.id,{nickname:horseNickname(h,runs.map(r=>({...r,favourite:r.favourite===1}))),recentRanks:runs.slice(0,5).map(r=>r.rank)});
  }
  return out;
 }
@@ -67,11 +67,11 @@ export async function activityConditions(env:KpEnv,guild:string,users:string[],n
 }
 export async function raceEntries(env:KpEnv,mapping:KpMapping,race:number):Promise<Entry[]>{
  await ensureHorses(env);
- const rows=(await env.DB.prepare('SELECT h.id,h.name,h.ability,h.style,h.owner,h.wins,h.seconds FROM kp_race_entries e JOIN kp_horses h ON h.id=e.horse WHERE e.guild=? AND e.race=? ORDER BY e.gate_order').bind(mapping.guildId,race).all<{id:string;name:string;ability:number;style:number;owner:string;wins:number;seconds:number}>()).results;
+ const rows=(await env.DB.prepare('SELECT h.id,h.name,h.ability,h.style,h.owner,h.races,h.wins,h.seconds,h.thirds FROM kp_race_entries e JOIN kp_horses h ON h.id=e.horse WHERE e.guild=? AND e.race=? ORDER BY e.gate_order').bind(mapping.guildId,race).all<{id:string;name:string;ability:number;style:number;owner:string;races:number;wins:number;seconds:number;thirds:number}>()).results;
  const nick=await nicknames(env,rows),crown=await crownFor(env,mapping.guildId,race);
  // Conditions were fixed when the race opened; races decided before that rule keep the card's own.
  const fixed=new Map((await env.DB.prepare('SELECT horse,condition FROM kp_entry_conditions WHERE guild=? AND race=?').bind(mapping.guildId,race).all<{horse:string;condition:number}>()).results.map(r=>[r.horse,r.condition]));
- const owned:Entry[]=rows.map(h=>({horseId:h.id,name:h.name,ability:h.ability,style:h.style,owner:h.owner,ownerName:memberName(mapping,h.owner),nickname:nick.get(h.id)??null}));
+ const owned:Entry[]=rows.map(h=>({horseId:h.id,name:h.name,ability:h.ability,style:h.style,owner:h.owner,ownerName:memberName(mapping,h.owner),nickname:nick.get(h.id)?.nickname??null,record:{races:h.races,wins:h.wins,seconds:h.seconds,thirds:h.thirds},recentRanks:nick.get(h.id)?.recentRanks??[]}));
  const all=crown?[personEntry(mapping,race,crown.user),...owned]:owned;
  return all.map(e=>fixed.has(e.horseId)?{...e,condition:fixed.get(e.horseId)}:e);
 }
