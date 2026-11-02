@@ -24,7 +24,8 @@ export function runningNotes(card,h){
  const approx=h.ability-CLASSES[card.raceClass].mean;
  const training=approx>=.46?'A':approx>=.17?'B':approx>=-.16?'C':approx>=-.42?'D':'E';
  const apt=groundAffinity(h);
- return {training,apt,aptitude:AFFINITY_LABELS[apt],form:h.record??null};
+ const trackFit=card.going===1?(apt===1?'◎':'○'):apt===card.going?'◎':apt===1?'○':'△';
+ return {training,apt,aptitude:AFFINITY_LABELS[apt],trackFit,form:h.record??null,recentRanks:h.recentRanks??[]};
 }
 export function raceBrief(card){
  const front=card.horses.filter(h=>h.style<=1).length;
@@ -126,7 +127,7 @@ export function raceCard(start,salt=PUBLIC_SALT,entries=[]){
  if(entries.length){
   const gates=[...horses.keys()],grng=rngFrom(`${salt}:gates:${start}`);
   for(let i=gates.length-1;i>0;i--){const j=Math.floor(grng()*(i+1));[gates[i],gates[j]]=[gates[j],gates[i]];}
-  entries.slice(0,size).forEach((e,i)=>Object.assign(horses[gates[i]],{name:e.name,ability:e.ability,style:e.style,horseId:e.horseId,owner:e.owner,ownerName:e.ownerName,nickname:e.nickname??null,person:!!e.person},Number.isInteger(e.condition)&&e.condition>=0&&e.condition<CONDITIONS.length?{condition:e.condition}:{}));
+  entries.slice(0,size).forEach((e,i)=>Object.assign(horses[gates[i]],{name:e.name,ability:e.ability,style:e.style,horseId:e.horseId,owner:e.owner,ownerName:e.ownerName,nickname:e.nickname??null,person:!!e.person,...(start>=FORM_REFORM_FROM&&e.record?{record:e.record,recentRanks:e.recentRanks??[]}:{})},Number.isInteger(e.condition)&&e.condition>=0&&e.condition<CONDITIONS.length?{condition:e.condition}:{}));
  }
  const crown=big?null:fillerCrownName(start),event=raceEvent(start);
  return {id:start,start,closeAt:start-CLOSE_BEFORE,number:raceNumber(start),name:event?`第${raceNumber(start)}レース ${event.name}杯`:big??crown??(start<NAME_EXPANSION_FROM?`第${raceNumber(start)}レース`:`第${raceNumber(start)}レース ${regularRaceName(start)}`),big:!!big,crown:!!crown,raceClass:cls,size,going:pickWeighted(rng,[5,3,2]),horses,...(event?{event}:{}),...(start>=FORM_REFORM_FROM?{trackBias:Math.floor(rngFrom('track-bias:'+start)()*3)}:{})};
