@@ -56,6 +56,7 @@ export function createKpClient({storage,temporaryStorage,request=globalThis.fetc
   health:()=>api('health'),
   feed:revision=>api('feed'+(Number.isSafeInteger(revision)&&revision>=0?'?revision='+revision:'')),
   trend:days=>api('trend?days='+days),
+  relics:()=>api('relics'),
   privateRace:()=>api('private/race'),
   get steamLinkRequest(){return steamLink;},
   steamStatus:()=>api('steam/status'),steamLibrary:()=>api('steam/library'),

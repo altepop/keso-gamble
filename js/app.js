@@ -1,5 +1,6 @@
 import {stockOrderQuote,STOCK_ORDER_VERSION,STOCK_PRICE_SCALE} from './stock-order.js?v=web-15a6f7d4d4f49d8d';
 import {steamConnectionMessage} from './steam-view.js?v=web-15a6f7d4d4f49d8d';
+import {relicsPanel} from './relics-view.js?v=web-15a6f7d4d4f49d8d';
 import {privateCasinoPanel} from './private-casino-view.js?v=web-15a6f7d4d4f49d8d';
 import {communityPanel,communityRows} from './community-feed.js?v=web-15a6f7d4d4f49d8d';
 import {stockPanel,stockCandles,stockPrice,privateStockOperator} from './stock-view.js?v=web-15a6f7d4d4f49d8d';
@@ -35,6 +36,7 @@ let autoState=embedded?'loading':'idle';
 let autoMessage='';
 let live=wallet.connected&&!embedded;
 let steamView=null;
+let relicProofs=null,relicNotice='',relicLoading=false;
 let connectionError=live?'口座を読み込んでいます…':'';
 let state;
 let screen='title';
@@ -122,7 +124,7 @@ function renderRow(item){
 }
 
 // Bottom tabs and the screens under each. 遊ぶ = 競馬・カジノ・株、使う = 指名・馬主・高級品.
-const GROUPS={race:[['race','競馬'],['mleague','Mリーグ'],['casino','カジノ'],['market','株']],directives:[['directives','指名'],['stable','馬主'],['shop','高級品']]};
+const GROUPS={race:[['race','競馬'],['mleague','Mリーグ'],['casino','カジノ'],['market','株']],directives:[['directives','指名'],['stable','馬主'],['shop','高級品'],['relics','遺物']]};
 const groupOf=id=>Object.keys(GROUPS).find(g=>GROUPS[g].some(([s])=>s===id))??id;
 function tabsFor(group){return `<div class="sub-tabs">${GROUPS[group].map(([id,label])=>`<button class="sub-tab ${screen===id?'active':''}" data-screen="${id}">${label}</button>`).join('')}</div>`;}
 function subTabs(){return tabsFor('race');}
@@ -260,6 +262,7 @@ function useScreen(title,body){
 }
 function screenStable(){return useScreen('馬主',live?ownerPanel(state,Date.now(),pendingHorseSale):'');}
 function screenShop(){return useScreen('高級品',live?luxuryPanel(state):'');}
+function screenRelics(){return useScreen('遺物',relicsPanel(state,{proofs:relicProofs,notice:relicNotice,loading:relicLoading}));}
 
 function screenAssets(){
   return `<div class="screen"><header class="topbar"><div class="toprow"><h1 class="title">資産</h1><div class="small-actions">${live?'':'<button class="icon-btn" data-action="reset" aria-label="初期化">↺</button>'}</div></div></header><div class="wallet-strip"><div class="wallet-item"><small>保有KP</small><strong>${moneyCompact(state.cash)}</strong></div><div class="wallet-item"><small>株式評価額</small><strong>${moneyCompact(portfolioValue(state))}</strong></div><div class="wallet-item"><small>純資産</small><strong>${moneyCompact(assets(state))}</strong></div></div>${live?'<div class="market-disclaimer">サーバー口座 · 試合報酬と決済は全端末で共通です。</div>':'<div class="market-disclaimer">端末内のデモ口座</div>'}${live?'':`<details class="panel"><summary class="card-body">開発用：テストKPの補充</summary><div class="action-row"><button class="action-btn" data-action="salary">テスト用KP +600 KP</button></div></details>`}${state.debt?.amount>0?`<div class="market-disclaimer">💸 借KP ${moneyCompact(state.debt.amount)}（${state.debt.intervalMinutes}分ごとに利子${state.debt.interestPercent}%）</div>`:''}<div class="asset-list">${live&&state.privateCasino?privateStockOperator(MARKET,{selection:stockShockSelection,notice:stockShockNotice,confirmation:stockShockConfirmation,events:state.marketEvents}):''}${live&&state.privateCasino?privateCasinoPanel(drafts,privateRacePreview,privateRoundMessage):''}<div class="asset-card"><div class="panel-title" style="margin-bottom:10px">保有銘柄</div>${MARKET.map(s=>`<div class="asset-line"><span>${s.name}</span><strong>${state.holdings[s.id]}株 / ${moneyCompact(state.holdings[s.id]*state.prices[s.id])}</strong></div>`).join('')}<div class="action-row"><button class="action-btn" data-screen="market">株を売買する</button></div></div>${tradeHistory()}${live?roastPanel(state):''}${live?trendPanel(trend,trendView):''}${live?healthPanel(health,healthLoading,healthError):''}<div class="asset-card"><h2 class="panel-title">口座</h2>${live?'<div id="connection-slot"></div>':''}<button class="title-back" data-screen="title">タイトルへ戻る</button></div></div>${bottomNav()}</div>`;
@@ -282,7 +285,7 @@ function detailSheet(){
 }
 
 function render(){
-  const html = screen==='title'?titleView(state,wallet.remembered,autoState,autoMessage):screen==='home'?homeView(state,bottomNav()):screen==='play'?playView(state,drafts,bottomNav(),steamView):screen==='directives'?directivesView(state,drafts,bottomNav(),tabsFor('directives')):screen==='stable'?screenStable():screen==='shop'?screenShop():screen==='market'?screenMarket():screen==='casino'?screenCasino():screen==='mleague'?mleagueScreen({state,live,draft:{...mlDraft,amount:drafts['ml-amount']},tabs:subTabs(),nav:bottomNav()}):screen==='race'?screenRace():screenAssets();
+  const html = screen==='title'?titleView(state,wallet.remembered,autoState,autoMessage):screen==='home'?homeView(state,bottomNav()):screen==='play'?playView(state,drafts,bottomNav(),steamView):screen==='directives'?directivesView(state,drafts,bottomNav(),tabsFor('directives')):screen==='stable'?screenStable():screen==='shop'?screenShop():screen==='relics'?screenRelics():screen==='market'?screenMarket():screen==='casino'?screenCasino():screen==='mleague'?mleagueScreen({state,live,draft:{...mlDraft,amount:drafts['ml-amount']},tabs:subTabs(),nav:bottomNav()}):screen==='race'?screenRace():screenAssets();
   const previousView=app.querySelector('.screen')?.dataset.view;
   // Do not carry an expanded home feed into a different screen: closed
   // disclosures must not trigger 10-second D1 polling in the background.
@@ -410,7 +413,7 @@ addEventListener('click',async e=>{
   const t=e.target.closest?.('button,[data-open]'); if(!t) return;
   if(t.dataset.action==='casino-skip'){casinoSkipped=true;skipCasinoPause?.();return;}
   if(casinoBusy&&(t.dataset.screen||t.dataset.casinoGame)){toast('演出をスキップすると移動できます');return;}
-  const mutates=!!t.dataset.approve || !!t.dataset.complete || ['steam-library','steam-status','steam-link','steam-open','steam-confirm','steam-disconnect','steam-game','salary','trade','spin','race-bet','roast-level','horse-buy','horse-sell-approve','luxury','reset','submit-claim','issue-directive','connect-kp','refresh-kp','disconnect-kp','auto-connect-kp','ml-buy','chinchiro','bj-start','bj-hit','bj-stand','bj-double','mines-start','mines-pick','mines-cashout','slot','vp-deal','vp-draw','baccarat','private-round','private-race','stock-shock','stock-shock-approve','stock-guerrilla-toggle'].includes(t.dataset.action);
+  const mutates=!!t.dataset.approve || !!t.dataset.complete || ['steam-library','steam-status','steam-link','steam-open','steam-confirm','steam-disconnect','steam-game','salary','trade','spin','race-bet','roast-level','horse-buy','horse-sell-approve','luxury','reset','submit-claim','issue-directive','connect-kp','refresh-kp','disconnect-kp','auto-connect-kp','ml-buy','chinchiro','bj-start','bj-hit','bj-stand','bj-double','mines-start','mines-pick','mines-cashout','slot','vp-deal','vp-draw','baccarat','private-round','private-race','stock-shock','stock-shock-approve','stock-guerrilla-toggle','relic-summon','relic-equip','relic-claim-steam','relic-claim-unite'].includes(t.dataset.action);
   if(mutates && mutationPending)return;
   if(mutates)mutationPending=true;
   try{
@@ -420,6 +423,14 @@ addEventListener('click',async e=>{
       return;
     }
     if(t.dataset.companion){await openCompanionGame(t.dataset.companion);return;}
+    if(t.dataset.action?.startsWith('relic-')){
+      if(!live||!wallet.connected)throw Error('遺物は本番KP口座への接続が必要です。');
+      const action=t.dataset.action;
+      const args=action==='relic-summon'?{count:Number(t.dataset.count)}:action==='relic-equip'?{relic:t.dataset.relic??'',slot:Number($('#relic-slot')?.value??0)}:action==='relic-claim-steam'?{event:t.dataset.event}:{tier:t.dataset.tier};
+      const result=await liveOperation(action,args);
+      relicNotice=action==='relic-summon'?`${result.count}連召喚：${result.cost.toLocaleString('ja-JP')} KPを使用。${result.highlights?.length?'大当たり '+result.highlights.map(v=>v.name).join('、'):'獲得遺物を図鑑に追加した。'}`:action==='relic-equip'?`装備変更完了。戦力 ${result.power}`:`${result.item.name} を獲得した。`;
+      render();toast(relicNotice);return;
+    }
     if(t.dataset.action==='stock-guerrilla-toggle'){
       if(!live||!state.privateCasino)throw Error('この操作は利用できません。');
       const enabled=state.marketEvents?.enabled===false;
@@ -519,9 +530,9 @@ addEventListener('click',async e=>{
       privateRacePreview=await wallet.privateRace();render();return;
     }
     if(t.dataset.action==='refresh-kp'){await refreshWallet(true);render();return;}
-    if(t.dataset.action==='disconnect-kp'){await wallet.disconnect();autoState=embedded?'paused':'idle';autoMessage='';live=false;trend=null;trendView={...trendView,error:'',focus:null,day:null};privateRacePreview=null;privateRoundMessage='';steamView=null;connectionError='';state=store.state;screen='title';render();return;}
+    if(t.dataset.action==='disconnect-kp'){await wallet.disconnect();autoState=embedded?'paused':'idle';autoMessage='';live=false;trend=null;trendView={...trendView,error:'',focus:null,day:null};privateRacePreview=null;privateRoundMessage='';steamView=null;relicProofs=null;relicNotice='';connectionError='';state=store.state;screen='title';render();return;}
     if(t.dataset.casinoGame){if(spinLock){toast('抽選中は切り替えられません');return;}casinoGame=t.dataset.casinoGame;render();return;}
-    if(t.dataset.screen){if(spinLock){toast('抽選中は画面を切り替えられません');return;}detail=null;pendingHorseSale=null;screen=t.dataset.screen;render();if(screen==='race')settleRaces();return;}
+    if(t.dataset.screen){if(spinLock){toast('抽選中は画面を切り替えられません');return;}detail=null;pendingHorseSale=null;screen=t.dataset.screen;render();if(screen==='relics'&&live){relicLoading=true;render();try{relicProofs=await wallet.relics();}catch(error){relicNotice='実績データの取得に失敗した。'+(error.message??'');}finally{relicLoading=false;render();}}if(screen==='race')settleRaces();return;}
     if(t.dataset.action==='load-trend'){await loadTrend(Number(t.dataset.days));return;}
     if(t.dataset.trendSort){const key=t.dataset.trendSort;trendView.dir=trendView.sort===key?-trendView.dir:1;trendView.sort=key;render();return;}
     if(t.dataset.trendFocus){trendView.focus=trendView.focus===t.dataset.trendFocus?null:t.dataset.trendFocus;render();return;}

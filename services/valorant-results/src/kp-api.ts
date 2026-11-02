@@ -15,6 +15,7 @@ import {kpCommands,KP_COMMAND_VERSION} from './kp-command.ts';
 import {voiceControl,voiceStatus} from './voice-api.ts';
 import {voiceRewardHistory,voicePolicy} from './voice-rewards.ts';
 import {receiveLoopKp} from './loop-kp.ts';
+import {summonRelics,grantSteamRelic,grantUniteRelic,equipRelic,UNITE_REQUIREMENTS,type UniteRelicId} from './relics.ts';
 import {ensureQuizKp,receiveQuizKp,isKpParticipant,quizKpRates,quizKpLimits} from './quiz-kp.ts';
 import {activityAuthAvailable,createActivityChallenge,authenticateActivity}from './discord-activity-auth.ts';
 import { initializeKp, exchangeKpCode, kpSession, revokeKpSession, kpHash } from './kp.ts';
@@ -158,7 +159,7 @@ export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:strin
   const state=await readKpState(env,mapping,user),before=state.cash;let result:unknown;let directive:Record<string,unknown>|null=null;let stockTrade:Record<string,unknown>|undefined;
   // 借KP: no bet or purchase at all while any is owed, decided before any draw. Checking the result instead would let a
   // winning roll through and refuse only the losing one. Selling, finishing a blackjack hand and settings stay open.
-  const settles=['horse-sell','roast-level','bj-hit','bj-stand','mines-pick','mines-cashout','vp-draw'].includes(action)||(action==='trade'&&args.side==='sell');
+  const settles=['horse-sell','roast-level','bj-hit','bj-stand','mines-pick','mines-cashout','vp-draw','relic-equip','relic-claim-steam','relic-claim-unite'].includes(action)||(action==='trade'&&args.side==='sell');
   if(!settles&&await debtOf(env,mapping.guildId,user)>0)throw Error(DEBT_BLOCKED);
   if(ownerRound){const round=privateCasinoRound(state,args);action=round.action;args=round.args;result=round.result;}
   else if(action==='trade'){const order=applyStockOrder(state,args);result=order.result;stockTrade=order.stockTrade;}
@@ -203,6 +204,24 @@ export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:strin
   else if(action==='vp-deal')result=vpDeal(state,args.amount,cryptoInt);
   else if(action==='vp-draw')result=vpDraw(state,args.hold,cryptoInt);
   else if(action==='baccarat')result=playBaccarat(state,args.amount,args.side,cryptoCard);
+  else if(action==='relic-summon') result=summonRelics(state,Number(args.count));
+  else if(action==='relic-equip') result=equipRelic(state,String(args.relic??''),Number(args.slot));
+  else if(action==='relic-claim-steam'){
+   const event=String(args.event??'');
+   if(event.length<20||event.length>250||!event.startsWith('steam:'))throw Error('Steam実績を選んでください。');
+   const proof=await env.DB.prepare('SELECT id,app,achievement,title,percent FROM kp_steam_events WHERE id=? AND guild=? AND user=? AND percent<=10')
+    .bind(event,mapping.guildId,user).first<{id:string;app:number;achievement:string;title:string;percent:number}>();
+   if(!proof)throw Error('連携後のSteam希少実績を確認できません。');
+   result=grantSteamRelic(state,proof);
+  }else if(action==='relic-claim-unite'){
+   const tier=String(args.tier??'') as UniteRelicId,required=UNITE_REQUIREMENTS[tier];
+   if(!Object.hasOwn(UNITE_REQUIREMENTS,tier))throw Error('ユナイト遺物を選んでください。');
+   // Uses only a previously settled ranked match; a browser cannot submit its own win streak.
+   const proof=await env.DB.prepare('SELECT wins FROM unite_rewards WHERE guild=? AND user=? AND win=1 AND wins>=? LIMIT 1')
+    .bind(mapping.guildId,user,required).first<{wins:number}>();
+   if(!proof)throw Error('ユナイトの連勝記録がまだありません。');
+   result=grantUniteRelic(state,tier,proof.wins);
+  }
   else if(action==='roast-level'){
    if(!validRoastLevel(args.level))throw Error('煽りレベルを選んでください。');
    state.roastLevel=args.level;result={roastLevel:args.level};
@@ -296,6 +315,12 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping):Promi
   if(request.method==='GET'&&path==='/api/kp/trend'){
    if(await d1OptionalMode(env))return Response.json({error:'D1節約モード中です。資産推移は次のリセット後に確認できます。'},{status:429,headers:{...headers,'Retry-After':'120'}});
    return response(await kpTrend(env,mapping.guildId,await names(),Number(new URL(request.url).searchParams.get('days')??7)));
+  }
+  if(request.method==='GET'&&path==='/api/kp/relics'){
+   // Called only when the relic screen opens. No new cron or D1 scan on regular wallet polling.
+   const steam=await env.DB.prepare('SELECT id,title,percent,app FROM kp_steam_events WHERE guild=? AND user=? AND percent<=10 ORDER BY at DESC LIMIT 40')
+    .bind(mapping.guildId,owner.user).all<{id:string;title:string;percent:number;app:number}>().then(r=>r.results).catch(()=>[]);
+   return response({price:200,steam,unite:['unite.first_win','unite.three_wins','unite.five_wins']});
   }
   if(request.method==='GET'&&path==='/api/kp/state')return response(await readKpState(env,mapping,owner.user));
   // 監視状態: members only, aggregates only.
