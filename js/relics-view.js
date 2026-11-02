@@ -14,7 +14,7 @@ export function relicsPanel(state,{proofs=null,notice='',loading=false}={}){
  const owned=count=>items.some(x=>x.id===count);
  const power=collection.equipped.reduce((n,id)=>n+(collection.items[id]?.power??0),0);
  const card=item=>`<article class="history-entry"><span class="badge">${esc(names[item.rarity]??item.rarity)}</span>
-   <strong>${esc(item.name)}</strong><p class="helper">${esc(item.origin==='unite'?'ユナイト限定':item.origin==='steam'?'Steam限定':'通常召喚')} ・ 戦力 ${yen(item.power)} ・ 所持${yen(item.count)}</p>
+   <strong>${esc(item.name)}</strong><p class="helper">${esc(item.origin==='unite'?'ユナイト限定':item.origin==='steam'?'Steam限定':'通常召喚')} ・ 戦力 ${yen(item.power)} ・ 所持${yen(item.count)}${item.origin==='normal'?'（育成Lv'+(1+Math.floor(Math.log2(item.count)))+'）':''}</p>
    <p class="helper">${esc(item.ability)}</p>
    <button type="button" class="action-btn" data-action="relic-equip" data-relic="${esc(item.id)}">指定枠に装備</button></article>`;
  const sorted=[...items].sort((a,b)=>b.power-a.power);
