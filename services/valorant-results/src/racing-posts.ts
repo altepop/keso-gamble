@@ -3,7 +3,7 @@ import {activityLaunchComponents} from './activity-link.ts';
 // the minute cron. Queue IDs deduplicate registration; an interrupted delivery can remain unknown.
 // Nothing is queued until the webhook is set.
 // @ts-expect-error The shared pure browser engine has no TypeScript declarations.
-import { BET_TYPES, CLOSE_BEFORE, GOINGS, RACE_INTERVAL, RUN_MS, bigRaceName, latestRaceStart, openRaceStart, prizeFor, raceCard, raceOdds, raceResult, placeSlots, raceEvent } from '../../../js/racing.js';
+import { BET_TYPES, CLOSE_BEFORE, GOINGS, RACE_INTERVAL, RUN_MS, bigRaceName, latestRaceStart, openRaceStart, prizeFor, raceCard, raceOdds, raceResult, placeSlots, raceEvent, FORM_REFORM_FROM, runningNotes, raceBrief } from '../../../js/racing.js';
 import { raceSeed, ensureRacing } from './racing-kp.ts';
 import { crownFor, defaultRoastLevel, validRoastLevel } from './racing-crowns.ts';
 import { raceEntries } from './racing-horses.ts';
@@ -13,7 +13,7 @@ import type { RoastLevel } from './racing-crowns.ts';
 import type { KpEnv, KpMapping } from './kp.ts';
 export interface PostEnv extends KpEnv { KP_EARNINGS_WEBHOOK_URL?:string }
 interface Bet { id:string; raceId:number; type:'win'|'place'; horse:number; amount:number; odds:number; status:string; payout:number }
-interface Card { id:number; start:number; name:string; size:number; going:number; raceClass:number; event?:{id:string;name:string;effect:string;desc:string}; horses:Array<{number:number;name:string;ownerName?:string;nickname?:string|null;person?:boolean}> }
+interface Card { id:number; start:number; name:string; size:number; going:number; raceClass:number; trackBias?:number; event?:{id:string;name:string;effect:string;desc:string}; horses:Array<{number:number;name:string;ability:number;style:number;condition:number;horseId?:string;ownerName?:string;nickname?:string|null;person?:boolean;record?:{races:number;wins:number;seconds:number;thirds:number};recentRanks?:number[]}> }
 const clock=(time:number)=>new Date(time).toLocaleTimeString('ja-JP',{timeZone:'Asia/Tokyo',hour:'2-digit',minute:'2-digit'});
 const kp=(n:number)=>n.toLocaleString('ja-JP')+' KP';
 const odd=(v:number)=>(v/10).toFixed(1)+'倍';
@@ -40,10 +40,11 @@ export function cardPost(card:Card,hash:string){
  const odds=raceOdds(card);
  return [`🏇 **${clean(card.name)}**`,
   `-# ${clock(card.start)}発走・${card.size}頭・コース ${GOINGS[card.going].label}｜締切 ${clock(card.start-CLOSE_BEFORE)}`,
+   ...(brief?[`🧠 ${clean(brief.pace)}｜${clean(brief.bias)}`,`-# 市場オッズは参考値。馬場適性、展開、特別ルールを十分に織り込まない。`]:[]),
   '',`**出走馬**　倍率は 1着当て / ${placeSlots(card.size)}着以内当て`,
-  ...card.horses.flatMap(h=>[`\`${String(h.number).padStart(2)}\` ${clean(h.name)}${h.nickname?`「${clean(h.nickname)}」`:''}　**${odd(odds.win[h.number])}** / ${odd(odds.place[h.number])}`,
-   ...h.person?['-# 本人の名前の馬・見舞金つき']:h.ownerName?[`-# 馬主 ${clean(h.ownerName)}`]:[]]),
-  ...(card.event?['',`🌪️ **特別ルール：${clean(card.event.name)}**`,`🎯 ${clean(card.event.effect)}`,`-# ${clean(card.event.desc)}／補正込みの確率でオッズ計算済み`]:[]),
+  ...card.horses.flatMap(h=>[`\`${String(h.number).padStart(2)}\` ${clean(h.name)}${h.nickname?`「${clean(h.nickname)}」`:''}　**${odd(odds.win[h.number])}** / ${odd(odds.place[h.number])}${brief?`｜調教${runningNotes(card,h).training}・馬場${runningNotes(card,h).trackFit}`:''}`,
+   ...h.person?['-# 本人の名前の馬・見舞金つき']:h.ownerName?[`-# 馬主 ${clean(h.ownerName)}${brief&&h.record?`｜${h.record.races}戦${h.record.wins}勝 近走${(h.recentRanks??[]).slice(0,5).join('-')||'初出走'}`:''}`]:[]]),
+  ...(card.event?['',`🌪️ **特別ルール：${clean(card.event.name)}**`,`🎯 ${clean(card.event.effect)}`,`-# ${clean(card.event.desc)}／市場倍率はこの有利不利を完全には織り込まない`]:[]),
   '',...howToBet(card.start),
   '',`💬 ${raceCatchphrase('card',String(card.id))}`,raceAside('card',String(card.id)),
   `-# 結果のハッシュ: \`${hash.slice(0,16)}…\`（発走後にシード値を公開）`].join('\n');
