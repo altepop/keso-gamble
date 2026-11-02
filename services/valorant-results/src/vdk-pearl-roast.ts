@@ -5,7 +5,8 @@ import { earningsWebhook, ensurePosts } from './racing-posts.ts';
 
 export const VDK_PEARL_MATCH = 'db6a45fe-7699-4fb3-b4b8-0d7499b26412';
 export const VDK_PEARL_RIOT = 'dolly#sdgs';
-export const VDK_PEARL_RECEIPT = 'oneoff:vdk-pearl-chamber:' + VDK_PEARL_MATCH;
+export const VDK_PEARL_OLD_WRONG_RECEIPT = 'oneoff:vdk-pearl-chamber:' + VDK_PEARL_MATCH;
+export const VDK_PEARL_RECEIPT = 'oneoff:vdk-pearl-zero-death-corrected:' + VDK_PEARL_MATCH;
 const FROM = Date.parse('2026-11-02T00:45:00+09:00');
 const UNTIL = Date.parse('2026-11-03T00:00:00+09:00');
 
@@ -58,6 +59,9 @@ export function isVerifiedVdkPearlNotice(notice: {outcome: string | null; mode: 
 export async function queueVdkPearlRoast(env: PostEnv, mapping: KpMapping, now = Date.now()) {
   if (now < FROM || now >= UNTIL || !earningsWebhook(env)) return false;
   await ensurePosts(env);
+  // Previous deployed version misidentified the losing Chamber. Cancel any undelivered copy.
+  const oldQueued = await env.DB.prepare('SELECT sent FROM kp_posts WHERE id=?').bind(VDK_PEARL_OLD_WRONG_RECEIPT).first<{sent:number}>();
+  if (oldQueued?.sent === 0) await env.DB.prepare('DELETE FROM kp_posts WHERE id=? AND sent=0').bind(VDK_PEARL_OLD_WRONG_RECEIPT).run();
   const existing = await env.DB.prepare('SELECT 1 FROM kp_posts WHERE id=?').bind(VDK_PEARL_RECEIPT).first();
   if (existing) return false;
   const account = findVdkPearlAccount(mapping);
