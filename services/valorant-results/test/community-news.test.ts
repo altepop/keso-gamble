@@ -2,7 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {COMMUNITY_NEWS_STORIES,communityNewsPayload,communityNewsSlot,queueCommunityNews} from '../src/community-news.ts';
 
-const jst=(d,t)=>Date.parse(d+'T'+t+':00+09:00');
+const jst=(d:string,t:string)=>Date.parse(d+'T'+t+':00+09:00');
 
 test('fictional newspaper only publishes three slots per JST day and avoids false financial claims',()=>{
   assert.ok(COMMUNITY_NEWS_STORIES.length>=50);
