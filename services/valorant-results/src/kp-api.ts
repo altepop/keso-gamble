@@ -336,7 +336,7 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping):Promi
    const row=await env.DB.prepare('SELECT data FROM kp_state WHERE guild=? AND user=?').bind(mapping.guildId,owner.user).first<{data:string}>();
    const level=summonLevel((JSON.parse(row?.data??'{}') as {relics?:{totalSummons:number}}).relics?.totalSummons??0);
    return response({price:200,steam,unite:['unite.first_win','unite.three_wins','unite.five_wins'],level,
-    rates:rarityRatesForLevel(level),maxRates:rarityRatesForLevel(10),
+    rates:rarityRatesForLevel(level),maxRates:rarityRatesForLevel(10),ratesByLevel:Array.from({length:10},(_,i)=>rarityRatesForLevel(i+1)),
     modeNames:RELIC_MODE_NAMES,catalog:NORMAL_RELICS});
   }
   if(request.method==='GET'&&path==='/api/kp/state')return response(await readKpState(env,mapping,owner.user));
