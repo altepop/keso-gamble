@@ -1,3 +1,4 @@
+import {relicInventory,relicFilterControls,relicItemCard,relicInventoryPages,relicRevealPanel} from './relics-v4.js?v=web-e145e833c76b0dca';
 // Three independent origins: common summons, Steam achievements, and Unite results.
 // Never recommend cross-game combinations or require another game's relic for an upgrade.
 const esc=s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -11,7 +12,7 @@ const unite=[
  ['unite.career_50','五十勝の栄光',570,'累計50勝'],['unite.career_100','百戦の星冠',650,'累計100勝'],
  ['unite.career_200','無窮のエオス',710,'累計200勝'],
 ];
-export function relicsPanel(state,{proofs=null,notice='',loading=false}={}){
+export function relicsPanel(state,{proofs=null,notice='',loading=false,view={},reveal=null}={}){
  const collection=state.relics??{totalSummons:0,items:{},equipped:[]};
  const items=Object.values(collection.items??{});
  const uniteList=Array.isArray(proofs?.unite)&&proofs.unite.length?proofs.unite.map(u=>[u.id,u.name,u.power,u.condition]):unite;
@@ -24,7 +25,10 @@ export function relicsPanel(state,{proofs=null,notice='',loading=false}={}){
  const owned=count=>items.some(x=>x.id===count);
  const catalog=Array.isArray(proofs?.catalog)?proofs.catalog:[];
  const source=new Map(catalog.map(def=>[def.id,def]));
- const level=Math.min(10,1+Math.floor(collection.totalSummons/200));
+ const milestones=proofs?.milestones??[0,300,750,1350,2100,3000,4050,5250,6600,8100];
+ const level=milestones.filter(n=>collection.totalSummons>=n).length;
+ const nextMilestone=milestones[level]??null;
+ const toNext=nextMilestone===null?0:Math.max(0,nextMilestone-collection.totalSummons);
  const levels=Array.isArray(proofs?.ratesByLevel)?proofs.ratesByLevel:[];
  const displayedRates=levels[level-1]??proofs?.rates??null;
  const maxRates=levels[9]??proofs?.maxRates??null;
@@ -32,7 +36,7 @@ export function relicsPanel(state,{proofs=null,notice='',loading=false}={}){
  const ratesTable=displayedRates&&maxRates?`<details class="rules"><summary>全レアリティの排出率（現在Lv${level}／最大Lv10）</summary>
  <div class="asset-line"><strong>レアリティ</strong><strong>現在 ／ Lv10</strong></div>
  ${rateOrder.map(id=>`<div class="asset-line"><span>${esc(names[id])}</span><strong>${Number(displayedRates[id]??0).toFixed(3)}% ／ ${Number(maxRates[id]??0).toFixed(3)}%</strong></div>`).join('')}
- <p class="helper">Lv10では一般0%。上質も4%。確定天井はなく、超越はLv10でも0.01%。</p></details>`:'<p class="helper">排出率表はKP口座への接続後、遺物画面を開くと確認できる。</p>';
+ <p class="helper">Lv10では一般0%。上質も4%。確定天井はなく、超越はLv10でも0.003%（約33,333回に1回）。</p></details>`:'<p class="helper">排出率表はKP口座への接続後、遺物画面を開くと確認できる。</p>';
  const grouped=Object.entries(proofs?.modeNames??{}).map(([id,label])=>{
   const defs=catalog.filter(item=>item.mode===id);
   return `<details class="rules"><summary>${esc(label)} ／ ${defs.length}種類</summary>
@@ -42,14 +46,15 @@ export function relicsPanel(state,{proofs=null,notice='',loading=false}={}){
 
 
  const power=collection.equipped.reduce((n,id)=>n+(collection.items[id]?.power??0),0);
- const card=item=>`<article class="history-entry"><span class="badge">${esc(names[item.rarity]??item.rarity)}</span>
-   <strong>${esc(source.get(item.id)?.name??item.name)}</strong><p class="helper">${esc(item.origin==='unite'?'ユナイト限定':item.origin==='steam'?'Steam限定':'通常召喚'+(source.get(item.id)?.mode?'・'+(proofs?.modeNames?.[source.get(item.id).mode]??source.get(item.id).mode)+'特化':''))} ・ 戦力 ${yen(item.power)} ・ 所持${yen(item.count)}${item.origin==='normal'?'（育成Lv'+(1+Math.floor(Math.log2(item.count)))+'）':''}</p>
-   <p class="helper">${esc(source.get(item.id)?.ability??item.ability)}</p>
-   <button type="button" class="action-btn" data-action="relic-equip" data-relic="${esc(item.id)}">指定枠に装備</button></article>`;
- const sorted=[...items].sort((a,b)=>b.power-a.power);
- return `<section class="panel"><div class="card-body"><h2 class="panel-title">🔮 遺物召喚</h2>
+ const inv=relicInventory(items,source,proofs?.modeNames,view);
+ const equipped=collection.equipped??[];
+ const cards=inv.matches.map(item=>relicItemCard(item,source,proofs?.modeNames,equipped)).join('');
+ const filterHtml=relicFilterControls(view,proofs?.modeNames,inv);
+ const pagesHtml=relicInventoryPages(inv);
+ return relicRevealPanel(reveal)+`<section class="panel"><div class="card-body"><h2 class="panel-title">🔮 遺物召喚</h2>
    <p><strong>200 KP／1回</strong> · 召喚レベル ${level} · 累計 ${yen(collection.totalSummons)}回</p>
-   <p class="helper">200連ごとに召喚レベル上昇。上がるほど一般・上質が減り、希少〜古代が増える。Lv10は一般0%、上質4%。超越の天井はない。重複すると能力と戦力が強化される。</p>
+   <div class="relic-level-progress"><strong>${nextMilestone===null?'Lv10到達！':'次のLvまで あと'+yen(toNext)+'回'}</strong><div class="relic-progress-rail"><span style="width:${nextMilestone===null?100:Math.floor(100*(collection.totalSummons-milestones[level-1])/(nextMilestone-milestones[level-1]))}%"></span></div><small>段階別の累計目標：${milestones.map((n,i)=>'Lv'+(i+1)+' '+yen(n)+'回').join(' / ')}</small></div>
+   <p class="helper">召喚した累計回数でレベルが上昇する。Lv10到達は累計8,100回。以前の召喚回数・獲得遺物はそのまま残る。Lv10では一般0%、上質4%、超越0.003%。超越の確定天井はない。</p>
    ${ratesTable}
    <div class="action-row">${[1,10,100,1000].map(n=>`<button type="button" class="action-btn ${n===10?'primary':''}" data-action="relic-summon" data-count="${n}" ${state.cash<200*n||!state.serverWallet?'disabled':''}>${n}連 · ${yen(200*n)} KP</button>`).join('')}</div>
    ${notice?`<p class="market-disclaimer" role="status">${esc(notice)}</p>`:''}
@@ -57,14 +62,17 @@ export function relicsPanel(state,{proofs=null,notice='',loading=false}={}){
  <section class="panel"><div class="card-body"><h2 class="panel-title">🧰 装備</h2>
    <p class="helper">4枠の戦力合計：<strong>${yen(power)}</strong>。遺物ごとの戦力は単独で決まり、他ゲームの遺物を要求する組み合わせ効果はない。</p>
    <div class="field"><label for="relic-slot">装備先</label><select id="relic-slot" class="select">${[0,1,2,3].map(n=>`<option value="${n}">枠 ${n+1}：${esc(collection.items[collection.equipped[n]]?.name??'未装備')}</option>`).join('')}</select></div>
+   <div class="relic-auto-box"><h3>⚡ おまかせ装備</h3><p class="helper">選んだゲームで発動しやすい遺物を4枠に自動編成する。強さだけでなく、条件の組み合わせも考慮する。</p>
+   <select class="select" id="relic-goal"><option value="all">どのゲームでも使いやすく</option>${Object.entries(proofs?.modeNames??{}).filter(([id])=>!['universal','finance','fortune','marketplus','racingplus','casinoplus'].includes(id)).map(([id,name])=>`<option value="${esc(id)}">${esc(name)}中心</option>`).join('')}</select>
+   <button type="button" class="action-btn primary" data-action="relic-auto-equip" ${!state.serverWallet?'disabled':''}>おすすめ4枠に装備</button></div>
    <button type="button" class="action-btn" data-action="relic-equip" data-relic="">指定枠を外す</button>
  </div></section>
  <section class="panel"><div class="card-body"><h2 class="panel-title">🎒 遺物図鑑（${yen(items.length)}種）</h2>
-   ${sorted.length?sorted.map(card).join(''):'<p class="helper">まだ遺物を持っていない。通常ガチャから始められる。</p>'}
+   ${filterHtml}${cards||'<p class="helper">条件に合う遺物がない。絞り込みを変更してみよう。</p>'}${pagesHtml}
  </div></section>
- <section class="panel"><div class="card-body"><h2 class="panel-title">📚 モード別・特殊遺物全${catalog.length||140}種類</h2><p class="helper">14モード＋全体・経済・特殊6系統×各7レアリティ。モードを開くと固有能力と所持状況を確認できる。ユナイト限定は他の遺物の解放条件にならない。</p>${grouped||'<p class="helper">データ取得中。再度この画面を開いてください。</p>'}</div></section>
+ <section class="panel"><div class="card-body"><h2 class="panel-title">📚 モード別・特殊遺物全${catalog.length||140}種類</h2><p class="helper">全20系統×7レアリティ。低レアにも「素数」「連続する数字」「25の倍数」などの一発逆転条件がある。違う能力が同時発動し、受取KPが7の倍数なら共鳴で効果が上がる。KP支給の共通上限は変わらない。</p>${grouped||'<p class="helper">データ取得中。再度この画面を開いてください。</p>'}</div></section>
  <section class="panel"><div class="card-body"><h2 class="panel-title">🟦 Steam限定遺物</h2>
-   <p class="helper">監視登録以降に新規解除し、サーバーが記録した有料ゲーム実績は解除率25%以上も対象。10〜25%は「挑戦」、25%以上は「旅路」。10%未満は従来どおり希少区分。過去の実績には干渉しない。KP報酬も据え置き。売買不可。</p>
+   <p class="helper">監視登録以降に新規解除し、サーバーが検証した実績だけが対象だ。世界解除率25%以上は「旅路」、10%超〜25%未満は「挑戦」。それ以下の実績はより希少な区分となる。過去の実績には干渉しない。Steam実績のKP報酬は変更しない。</p>
    ${!state.serverWallet?'<p class="helper">本番KP口座へ接続してください。</p>':loading?'<p class="helper">達成記録を確認中…</p>':proofs?.steam?.length?proofs.steam.map(e=>`<div class="asset-line"><span>${esc(e.title)}<br><small>${steamGrade(e.percent)}の遺物 · 世界解除率 ${yen(e.percent)}%</small></span><button type="button" class="action-btn" data-action="relic-claim-steam" data-event="${esc(e.id)}" ${owned('steam.'+e.id)?'disabled':''}>${owned('steam.'+e.id)?'受取済み':'獲得'}</button></div>`).join(''):'<p class="helper">監視開始後の新規実績の記録がまだない。監視前の実績は遡及しない。</p>'}
  </div></section>
  <section class="panel"><div class="card-body"><h2 class="panel-title">🟨 ポケモンユナイト限定遺物</h2>

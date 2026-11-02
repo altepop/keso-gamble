@@ -500,3 +500,74 @@ body.esc-wheel-open{overflow:hidden!important}
 .race-intelligence>div{font-size:14px;color:#e4f2ff;margin:4px 0}
 .race-intelligence p{color:#b4d4ef;margin:10px 0 0;font-size:13px;line-height:1.55}
 .race-form{display:block;color:#b8dfbc;font-size:11px;line-height:1.45;margin-top:3px;white-space:normal}
+
+
+/* KESO RELICS V4 — mobile-first collection, readable strategy and ceremony. */
+.relic-level-progress{padding:12px;border:1px solid #244b83;border-radius:12px;background:linear-gradient(125deg,#112e53,#081631);margin:12px 0}
+.relic-level-progress strong{display:block;color:#ffe5a0;font-size:14px}
+.relic-level-progress small{display:block;margin-top:7px;color:#b9c6e0;font-size:11px;line-height:1.6}
+.relic-progress-rail{height:9px;border-radius:99px;background:#20304e;overflow:hidden;margin-top:9px}
+.relic-progress-rail>span{display:block;height:100%;background:linear-gradient(90deg,#31c9ee,#986aff,#efc56f);border-radius:99px;transition:width .35s}
+.relic-auto-box{margin:12px 0;padding:13px;border:1px solid #5b64a9;background:linear-gradient(145deg,#1c2856,#13172f);border-radius:13px}
+.relic-auto-box h3{font-size:17px;margin:0 0 5px;color:#f3e4ff}
+.relic-auto-box .select{width:100%;margin:10px 0;min-height:42px}
+.relic-auto-box>.action-btn{width:100%;min-height:44px}
+.relic-controls{margin:12px 0;padding:12px;border:1px solid #2f4675;border-radius:13px;background:#0b1833}
+.relic-search-label{font-size:12px;color:#d6e4ff}
+.relic-search{display:block;width:100%;min-height:42px;border-radius:9px;padding:10px 11px;margin:7px 0 11px;border:1px solid #41669b;background:#061028;color:#f3f7ff;font-size:15px}
+.relic-search::placeholder{color:#a4b1ca}
+.relic-filter-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.relic-filter-grid label{min-width:0;font-size:11px;color:#bdccef}
+.relic-filter-grid select{display:block;width:100%;min-width:0;margin-top:5px;font-size:12px;min-height:40px;color:#f4f6ff}
+.relic-found{color:#dceafa;font-size:12px;margin:12px 0 0}
+.relic-card{--relic-accent:#7c8ca5;--relic-surface:#132139;--relic-glow:rgba(112,140,177,.12);
+ margin:10px 0;border:1px solid var(--relic-accent);border-left-width:5px;border-radius:13px;padding:12px 12px 11px;background:linear-gradient(125deg,var(--relic-surface),#061125 84%);box-shadow:inset 0 0 16px var(--relic-glow),0 2px 11px rgba(0,0,0,.18);overflow:hidden}
+.relic-card-top{display:flex;justify-content:space-between;align-items:center;gap:7px;margin-bottom:8px}
+.relic-rarity-badge{display:inline-flex;min-width:55px;justify-content:center;padding:4px 11px;border-radius:999px;border:1px solid var(--relic-accent);background:var(--relic-glow);color:var(--relic-accent);font-weight:900;font-size:12px;letter-spacing:.09em;text-shadow:0 1px 9px var(--relic-glow)}
+.relic-mode{color:#d6def0;font-size:11px;max-width:60%;text-align:right}
+.relic-card-title{display:block;font-size:17px;line-height:1.4;color:#fff;letter-spacing:.012em}
+.relic-card-effect{font-size:13px;line-height:1.55;color:#d7e2ff;margin:8px 0;overflow-wrap:anywhere}
+.relic-card-stats{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12px;color:#b9c7df}
+.relic-card-stats b{color:#fff}
+.relic-current{color:#7ff9c6;font-weight:800}
+.relic-card-detail{border-top:1px solid rgba(255,255,255,.15);margin-top:10px;padding-top:7px;font-size:12px;line-height:1.6;color:#e6edff}
+.relic-card-detail summary{font-size:13px;color:#a9dcff;cursor:pointer;min-height:28px}
+.relic-card-detail p{margin:7px 0;overflow-wrap:anywhere}
+.relic-card-detail .action-btn{min-height:42px}
+.relic-equipped{outline:1px solid #62e3a9}
+.relic-rarity-common{--relic-accent:#c1c8d4;--relic-surface:#1e2939;--relic-glow:rgba(173,184,204,.14)}
+.relic-rarity-uncommon{--relic-accent:#54e9a6;--relic-surface:#12372d;--relic-glow:rgba(21,196,123,.2)}
+.relic-rarity-rare{--relic-accent:#64c2ff;--relic-surface:#113a61;--relic-glow:rgba(33,154,255,.23)}
+.relic-rarity-legendary{--relic-accent:#dd92ff;--relic-surface:#412660;--relic-glow:rgba(182,77,244,.25)}
+.relic-rarity-mythic{--relic-accent:#ff82b2;--relic-surface:#5b2249;--relic-glow:rgba(255,85,162,.28)}
+.relic-rarity-ancient{--relic-accent:#ffd86e;--relic-surface:#55421e;--relic-glow:rgba(255,184,49,.3)}
+.relic-rarity-transcendent{--relic-accent:#faffcc;--relic-surface:#323168;--relic-glow:rgba(190,159,255,.39);border-width:2px 2px 2px 6px;border-image:none;box-shadow:0 0 18px rgba(133,109,255,.35),inset 0 0 18px rgba(123,173,255,.28)}
+.relic-rarity-transcendent .relic-rarity-badge{background:linear-gradient(95deg,#ff83b6,#ffdd75,#72ffe0,#aaa1ff);color:#15132d;border-color:#fff;text-shadow:none}
+.relic-rarity-exclusive{--relic-accent:#ffa56f;--relic-surface:#48301c;--relic-glow:rgba(255,133,71,.24)}
+.relic-pagination{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-top:13px}
+.relic-pagination .action-btn{font-size:12px;padding:8px;min-height:38px}
+.relic-pagination span{font-size:12px;color:#d5ddf2;white-space:nowrap}
+.relic-reveal{position:fixed;inset:0;z-index:180;overflow-y:auto;display:flex;align-items:center;justify-content:center;padding:18px 14px 30px;background:radial-gradient(circle at 50% 40%,#203e75 0,#08142e 58%,#020511 100%);animation:relic-show .35s both}
+.relic-reveal-legendary{background:radial-gradient(circle,#4b306b,#0a112c 63%,#020511)}
+.relic-reveal-mythic{background:radial-gradient(circle,#6a2252,#0a112c 63%,#020511)}
+.relic-reveal-ancient{background:radial-gradient(circle,#725422,#1c1727 60%,#020511)}
+.relic-reveal-transcendent{background:conic-gradient(from 35deg at 50% 50%,#392a79,#204c86,#3d7355,#95613d,#6e3f86,#392a79)}
+.relic-reveal-content{width:min(100%,460px);border:1px solid rgba(255,255,255,.32);padding:23px 16px 18px;text-align:center;border-radius:24px;background:rgba(5,11,32,.88);box-shadow:0 0 45px rgba(0,0,0,.6)}
+.relic-summon-orb{width:142px;height:142px;margin:0 auto 15px;border:3px solid rgba(255,255,255,.75);border-radius:50%;display:grid;place-items:center;background:radial-gradient(circle,#ffe7ad 0,#6e89df 35%,#2f2f82 75%,transparent 77%);box-shadow:0 0 30px rgba(115,163,255,.55);animation:relic-orb 1.65s ease-in-out 1 both}
+.relic-summon-orb span{font-size:55px;color:#fff;filter:drop-shadow(0 0 10px white)}
+.relic-reveal-transcendent .relic-summon-orb{background:conic-gradient(#fd9ac0,#fff2a7,#71fff2,#b39dff,#fd9ac0);box-shadow:0 0 55px #e5b9ff,0 0 100px rgba(100,202,255,.55)}
+.relic-reveal-ancient .relic-summon-orb{background:radial-gradient(circle,#fff6c0,#e5b03d,#673c12);box-shadow:0 0 60px rgba(255,190,70,.7)}
+.relic-reveal-overline{font-size:13px;color:#b7cef3;margin:0 0 5px}
+.relic-reveal h2{font-size:clamp(23px,6vw,34px);color:#fff2ad;margin:7px 0 13px;animation:relic-title 1.15s ease-out both}
+.relic-highlight{display:grid;gap:7px;margin:10px 0}
+.relic-highlight strong{display:block;padding:9px;border-radius:10px;background:#1b2455;border:1px solid #f5d98c;color:#fff6db;overflow-wrap:anywhere}
+.relic-reveal-note{font-size:13px;color:#c9d8ff}
+.relic-result-breakdown{display:flex;justify-content:center;flex-wrap:wrap;gap:7px;margin:17px 0}
+.relic-result-pill{border:1px solid var(--relic-accent,#9bb7f2);background:var(--relic-surface,#1a2a48);color:var(--relic-accent,#edf);font-size:12px;font-weight:700;padding:6px 10px;border-radius:99px}
+.relic-reveal-close{width:100%;min-height:47px;font-size:15px}
+.relic-reveal-footnote{font-size:10px;line-height:1.5;color:#aebcda;margin:10px 0 0}
+@keyframes relic-show{from{opacity:0}to{opacity:1}}
+@keyframes relic-orb{0%{transform:translateY(-15px) scale(.45) rotate(-110deg);filter:brightness(1.8);opacity:.2}45%{transform:translateY(5px) scale(1.07) rotate(180deg);filter:brightness(1.4);opacity:1}100%{transform:none;filter:none}}
+@keyframes relic-title{from{opacity:0;letter-spacing:.25em;transform:translateY(15px)}to{opacity:1;letter-spacing:normal;transform:none}}
+@media(max-width:360px){.relic-filter-grid{grid-template-columns:1fr}.relic-pagination .action-btn{font-size:11px}}
+@media(prefers-reduced-motion:reduce){.relic-summon-orb,.relic-reveal,.relic-reveal h2,.relic-progress-rail>span{animation:none;transition:none}}

@@ -1,0 +1,89 @@
+// Presentation-only helpers; KP, ownership and equipped slots stay server authoritative.
+const esc=x=>String(x??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+const number=x=>Number(x??0).toLocaleString('ja-JP');
+export const relicRarityNames={common:'一般',uncommon:'上質',rare:'希少',legendary:'伝説',mythic:'神話',ancient:'古代',transcendent:'超越',exclusive:'限定'};
+export const relicDefaultView=()=>({query:'',source:'all',rarity:'all',mode:'all',sort:'power',page:0});
+const displayMode=(item,source,modeNames)=>{
+ const mode=source.get(item.id)?.mode??item.mode??'universal';
+ return modeNames?.[mode]??(item.origin==='steam'?'Steam実績':item.origin==='unite'?'ユナイト':'全ゲーム共通');
+};
+export function relicInventory(items,source,modeNames,view={}){
+ const v={...relicDefaultView(),...view};
+ const q=String(v.query||'').trim().toLocaleLowerCase('ja-JP');
+ const matching=items.filter(i=>{
+  const def=source.get(i.id);
+  const mode=def?.mode??i.mode??'universal';
+  if(v.source!=='all'&&v.source!==i.origin)return false;
+  if(v.rarity!=='all'&&v.rarity!==i.rarity)return false;
+  if(v.mode!=='all'&&v.mode!==mode)return false;
+  if(!q)return true;
+  return [i.name,def?.name,i.ability,def?.ability,displayMode(i,source,modeNames),relicRarityNames[i.rarity]].some(x=>String(x??'').toLocaleLowerCase('ja-JP').includes(q));
+ });
+ matching.sort((a,b)=>{
+  const aDef=source.get(a.id),bDef=source.get(b.id);
+  if(v.sort==='copies')return b.count-a.count||b.power-a.power;
+  if(v.sort==='rarity'){
+   const seq=Object.keys(relicRarityNames);
+   return seq.indexOf(b.rarity)-seq.indexOf(a.rarity)||b.power-a.power;
+  }
+  if(v.sort==='name')return (aDef?.name??a.name).localeCompare(bDef?.name??b.name,'ja');
+  return b.power-a.power||(aDef?.name??a.name).localeCompare(bDef?.name??b.name,'ja');
+ });
+ const perPage=12,totalPages=Math.max(1,Math.ceil(matching.length/perPage));
+ const page=Math.max(0,Math.min(totalPages-1,Number(v.page)||0));
+ return {matches:matching.slice(page*perPage,(page+1)*perPage),matching:matching.length,page,totalPages,all:items.length};
+}
+const options=(items,value)=>items.map(([id,label])=>'<option value="'+esc(id)+'"'+(id===value?' selected':'')+'>'+esc(label)+'</option>').join('');
+export function relicFilterControls(view,modeNames,inv){
+ const v={...relicDefaultView(),...view};
+ return '<div class="relic-controls"><label class="relic-search-label" for="relic-search">遺物を検索</label>'+
+  '<input id="relic-search" class="relic-search" type="search" data-relic-filter="query" placeholder="名前・能力・対象ゲーム" autocomplete="off" value="'+esc(v.query)+'">'+
+  '<div class="relic-filter-grid">'+
+  '<label>入手元<select class="select" data-relic-filter="source" id="relic-source">'+options([['all','すべて'],['normal','通常召喚'],['steam','Steam'],['unite','ユナイト']],v.source)+'</select></label>'+
+  '<label>レアリティ<select class="select" data-relic-filter="rarity" id="relic-rarity">'+options([['all','すべて'],...Object.entries(relicRarityNames)],v.rarity)+'</select></label>'+
+  '<label>ゲーム・効果先<select class="select" data-relic-filter="mode" id="relic-mode">'+options([['all','すべて'],...Object.entries(modeNames??{})],v.mode)+'</select></label>'+
+  '<label>並べ替え<select class="select" data-relic-filter="sort" id="relic-sort">'+options([['power','戦力が高い順'],['rarity','レア度が高い順'],['copies','所持数が多い順'],['name','名前順']],v.sort)+'</select></label></div>'+
+  '<p class="relic-found">一致 '+number(inv.matching)+'種類 / 所持 '+number(inv.all)+'種類 · '+(inv.page+1)+'/'+inv.totalPages+'ページ</p></div>';
+}
+export function relicItemCard(item,source,modeNames,equipped){
+ const def=source.get(item.id),rarity=Object.hasOwn(relicRarityNames,item.rarity)?item.rarity:'exclusive';
+ const label=relicRarityNames[rarity],name=def?.name??item.name;
+ const mode=displayMode(item,source,modeNames);
+ const effect=def?.ability??item.ability??'効果未設定';
+ const initial=effect.split('。')[0].replace(/単独で最大.*/,'').trim();
+ const title=item.origin==='unite'?'ユナイト限定':item.origin==='steam'?'Steam実績限定':'通常召喚';
+ const isEquipped=equipped.includes(item.id);
+ const count=Number(item.count)||1;
+ return '<article class="relic-card relic-rarity-'+rarity+(isEquipped?' relic-equipped':'')+'">'+
+  '<div class="relic-card-top"><span class="relic-rarity-badge">'+esc(label)+'</span><span class="relic-mode">'+esc(mode)+'</span></div>'+
+  '<strong class="relic-card-title">'+esc(name)+'</strong>'+
+  '<p class="relic-card-effect">'+esc(initial||effect)+'</p>'+
+  '<div class="relic-card-stats"><span>戦力 <b>'+number(item.power)+'</b></span><span>所持 <b>'+number(count)+'</b></span>'+(isEquipped?'<span class="relic-current">● 装備中</span>':'')+'</div>'+
+  '<details class="relic-card-detail"><summary>効果の詳細・装備</summary>'+
+  '<p>入手方法：'+esc(title)+'</p><p>対象：'+esc(mode)+'</p><p>'+esc(effect)+'</p>'+
+  (item.origin==='normal'?'<p>重ねて入手すると戦力が成長する。現在の育成段階：'+number(1+Math.floor(Math.log2(count)))+'</p>':'')+
+  '<button type="button" class="action-btn" data-action="relic-equip" data-relic="'+esc(item.id)+'">'+(isEquipped?'別の枠に装備':'指定枠に装備')+'</button></details></article>';
+}
+export function relicInventoryPages(inv){
+ return '<div class="relic-pagination"><button type="button" class="action-btn" data-action="relic-page" data-page="'+(inv.page-1)+'"'+(inv.page===0?' disabled':'')+'>← 前の12件</button>'+
+  '<span>'+(inv.page+1)+' / '+inv.totalPages+'</span>'+
+  '<button type="button" class="action-btn" data-action="relic-page" data-page="'+(inv.page+1)+'"'+(inv.page+1===inv.totalPages?' disabled':'')+'>次の12件 →</button></div>';
+}
+export function relicRevealPanel(reveal){
+ if(!reveal)return '';
+ const summary=reveal.summary??{},highlights=Array.isArray(reveal.highlights)?reveal.highlights:[];
+ const rank=['transcendent','ancient','mythic','legendary','rare','uncommon','common'];
+ const rare=rank.find(x=>Number(summary[x])>0)??'common';
+ const top=highlights.filter(x=>x.rarity===rare).slice(0,5);
+ const label=relicRarityNames[rare]??rare;
+ const breakdown=rank.filter(k=>Number(summary[k])>0).map(k=>'<span class="relic-result-pill relic-rarity-'+k+'">'+esc(relicRarityNames[k])+' × '+number(summary[k])+'</span>').join('');
+ return '<div class="relic-reveal relic-reveal-'+rare+'" role="dialog" aria-modal="true" aria-labelledby="relic-result-title">'+
+  '<div class="relic-reveal-content"><div class="relic-summon-orb"><span>✦</span></div>'+
+  '<p class="relic-reveal-overline">'+number(reveal.count)+'連召喚 · '+number(reveal.cost)+' KP</p>'+
+  '<h2 id="relic-result-title">'+(rare==='transcendent'?'🌈 超越、降臨':rare==='ancient'?'✴ 古代遺物、覚醒':'召喚完了 · '+esc(label))+'</h2>'+
+  (top.length?'<div class="relic-highlight">'+top.map(x=>'<strong>'+esc(x.name)+'</strong>').join('')+'</div>':
+   '<p class="relic-reveal-note">獲得した遺物は図鑑に追加された。</p>')+
+  '<div class="relic-result-breakdown">'+breakdown+'</div>'+
+  '<button type="button" class="action-btn primary relic-reveal-close" data-action="relic-reveal-close">結果を確認する・演出をスキップ</button>'+
+  '<p class="relic-reveal-footnote">抽選はサーバーで確定済み。演出を閉じても獲得結果は変わらない。</p></div></div>';
+}
