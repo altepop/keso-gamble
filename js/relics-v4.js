@@ -143,7 +143,7 @@ export function relicBonusDashboard(state,proofs,view={}){
   (Number(current.resonance)>0?' ／ 七重共鳴 ＋'+number(current.resonance)+' KPを含む':'')+
   '。'+(['casino','racing','market','mleague'].includes(mode)?'取引系は対象額の1%・1日合計120KP以内。':'試合などは対象額の15%・1件80KP以内。')+'</p>'+
   '<h3 class="relic-readout-title">装備別の効果</h3>'+
-  (lines.length?lines:'<p class="helper">遺物を装備すると、ここに各遺物の倍率が表示される。</p>')+
+  (lines.length?items:'<p class="helper">遺物を装備すると、ここに各遺物の倍率が表示される。</p>')+
   '<small class="relic-example-note">「設定＋%」はその遺物の倍率だ。条件未達・支給上限により実際の増加率は小さくなる。試算はKPを消費しない。</small>'+
   lastHtml+'</div></section>';
 }
