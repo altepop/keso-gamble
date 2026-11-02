@@ -19,7 +19,7 @@ export function relicsPanel(state,{proofs=null,notice='',loading=false}={}){
   const value=Number(percent);
   if(value<=0.01)return'異界';if(value<=0.1)return'深淵';if(value<=1)return'神話';
   if(value<=5)return'偉業';if(value<=10)return'熟練';
-  if(value<=25)return'挑戦';return'旅路';
+  if(value<25)return'挑戦';return'旅路';
  };
  const owned=count=>items.some(x=>x.id===count);
  const catalog=Array.isArray(proofs?.catalog)?proofs.catalog:[];
