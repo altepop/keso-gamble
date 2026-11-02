@@ -38,7 +38,7 @@ let autoMessage='';
 let live=wallet.connected&&!embedded;
 let steamView=null;
 let relicProofs=null,relicNotice='',relicLoading=false;
-let relicView=relicDefaultView(),relicReveal=null;
+let relicView={...relicDefaultView(),previewMode:'competitive',previewAmount:500},relicReveal=null;
 let connectionError=live?'口座を読み込んでいます…':'';
 let state;
 let screen='title';
@@ -413,6 +413,15 @@ addEventListener('click',trendDay);
 addEventListener('pointermove',e=>{if(e.pointerType==='mouse')trendDay(e);});
 // Client-only filter state; no D1 requests for typing or paging.
 for(const eventName of ['input','change'])addEventListener(eventName,e=>{
+ const preview=e.target.closest?.('[data-relic-preview]');
+ if(preview&&screen==='relics'&&eventName==='change'){
+  const key=preview.dataset.relicPreview;
+  if(key==='mode'||key==='amount'){
+   relicView={...relicView,[key==='mode'?'previewMode':'previewAmount']:key==='mode'?preview.value:Number(preview.value)};
+   render();
+  }
+  return;
+ }
  const el=e.target.closest?.('[data-relic-filter]');
  if(!el||screen!=='relics')return;
  const key=el.dataset.relicFilter;
@@ -443,6 +452,9 @@ addEventListener('click',async e=>{
       const action=t.dataset.action;
       const args=action==='relic-summon'?{count:Number(t.dataset.count)}:action==='relic-equip'?{relic:t.dataset.relic??'',slot:Number($('#relic-slot')?.value??0)}:action==='relic-auto-equip'?{goal:$('#relic-goal')?.value??'all'}:action==='relic-claim-steam'?{event:t.dataset.event}:{tier:t.dataset.tier};
       const result=await liveOperation(action,args);
+      if(['relic-equip','relic-auto-equip','relic-claim-steam','relic-claim-unite'].includes(action)){
+       try{relicProofs=await wallet.relics();}catch(error){relicNotice='装備は更新したが、効果一覧を再取得できなかった。'+(error.message??'');}
+      }
       if(action==='relic-summon')relicReveal=result;
       relicNotice=action==='relic-auto-equip'?`おまかせ装備完了。4枠の合計戦力 ${result.power}`:action==='relic-summon'?`${result.count}連召喚：${result.cost.toLocaleString('ja-JP')} KPを使用。${result.highlights?.length?'大当たり '+result.highlights.map(v=>v.name).join('、'):'獲得遺物を図鑑に追加した。'}`:action==='relic-equip'?`装備変更完了。戦力 ${result.power}`:`${result.item.name} を獲得した。`;
       render();toast(relicNotice);return;
@@ -546,7 +558,7 @@ addEventListener('click',async e=>{
       privateRacePreview=await wallet.privateRace();render();return;
     }
     if(t.dataset.action==='refresh-kp'){await refreshWallet(true);render();return;}
-    if(t.dataset.action==='disconnect-kp'){await wallet.disconnect();autoState=embedded?'paused':'idle';autoMessage='';live=false;trend=null;trendView={...trendView,error:'',focus:null,day:null};privateRacePreview=null;privateRoundMessage='';steamView=null;relicProofs=null;relicNotice='';relicReveal=null;relicView=relicDefaultView();connectionError='';state=store.state;screen='title';render();return;}
+    if(t.dataset.action==='disconnect-kp'){await wallet.disconnect();autoState=embedded?'paused':'idle';autoMessage='';live=false;trend=null;trendView={...trendView,error:'',focus:null,day:null};privateRacePreview=null;privateRoundMessage='';steamView=null;relicProofs=null;relicNotice='';relicReveal=null;relicView={...relicDefaultView(),previewMode:'competitive',previewAmount:500};connectionError='';state=store.state;screen='title';render();return;}
     if(t.dataset.casinoGame){if(spinLock){toast('抽選中は切り替えられません');return;}casinoGame=t.dataset.casinoGame;render();return;}
     if(t.dataset.screen){if(spinLock){toast('抽選中は画面を切り替えられません');return;}detail=null;pendingHorseSale=null;screen=t.dataset.screen;render();if(screen==='relics'&&live){relicLoading=true;render();try{relicProofs=await wallet.relics();}catch(error){relicNotice='実績データの取得に失敗した。'+(error.message??'');}finally{relicLoading=false;render();}}if(screen==='race')settleRaces();return;}
     if(t.dataset.action==='load-trend'){await loadTrend(Number(t.dataset.days));return;}
