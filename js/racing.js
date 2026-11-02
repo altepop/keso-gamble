@@ -259,7 +259,7 @@ export function settleRaceBets(state,now,seedOf=()=>PUBLIC_SALT,entriesOf=()=>[]
  return settled;
 }
 /** No-contest rule: a race runs only when someone bet on it (big and crown races always run). */
-export function raceRuns(card,state){return card.big||card.crown||state.raceBets.some(b=>b.raceId===card.id);}
+export function raceRuns(card,state){return card.big||card.crown||!!card.event||state.raceBets.some(b=>b.raceId===card.id);}
 
 // Owners (docs/RACING_PLAN.md §6). The Worker owns horses and prizes; these rules are shared for display.
 export const MAX_OWNED=3,RETIRE_RACES=20,DAILY_EXCHANGES=3,PRIZES=[1000,400,200];
