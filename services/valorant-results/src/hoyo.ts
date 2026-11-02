@@ -99,7 +99,7 @@ async function readUpstream(game:HoyoGame,uid:string,send:typeof fetch=fetch) {
   }
   const bytes=new Uint8Array(size);let offset=0;
   for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.byteLength;}
-  return normalizeHoyo(game,uid,JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(bytes)));
+  return normalizeHoyo(game,uid,JSON.parse(new TextDecoder('utf-8',{fatal:true,ignoreBOM:true}).decode(bytes)));
  }catch(error){if(error instanceof Error&&/[ぁ-んァ-ヶ一-龯]/.test(error.message))throw error;throw Error('公開プロフィールの形式を読み取れません。');}
 }
 async function limit(env:HoyoEnv,owner:HoyoOwner){
