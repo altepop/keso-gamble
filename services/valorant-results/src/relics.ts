@@ -23,6 +23,7 @@ export interface RelicCollection {
   totalSummons: number;
   items: Record<string, RelicItem>;
   equipped: string[];
+  dailyNativeBonus?: {day:string;amount:number};
 }
 export const RELIC_SLOTS = 4;
 const UNITE = {
@@ -100,11 +101,36 @@ export function modeRelicBonus(
    ||(skill==='surge'&&event.amount>=bounds[0])
    ||((skill==='master'||skill==='sovereign')&&event.win);
   if(!eligible)continue;
-  const contribution=Math.min(def.cap,Math.max(1,Math.floor(event.amount*def.percent/100)));
+  const duplicateBoost=Math.min(5,Math.floor(Math.log2(Math.max(1,collection.items[id]!.count))));
+  const contribution=Math.min(def.cap,Math.max(1,Math.floor(event.amount*(def.percent+duplicateBoost)/100)));
   total+=contribution;
   activated.push(def.name);
  }
  return{bonus:Math.min(total,80,Math.floor(event.amount*0.15)),skills:activated};
+}
+/** Native KESO PLAY operations use a 120KP/day shared ceiling for all supported native modes.
+ * The ceiling is persisted inside the same state/operation transaction as the KP amount.
+ * It rules out profitable looping of risk-free trades or tiny bets.
+ */
+export function nativeRelicBonus(
+ state:{cash:number;relics?:RelicCollection},
+ mode:'casino'|'market'|'racing'|'mleague',
+ amount:number,
+ now=Date.now(),
+):number {
+ if(!state.relics||!Number.isSafeInteger(amount)||amount<=0)return 0;
+ const provisional=modeRelicBonus(state.relics,mode,{amount,win:true}).bonus;
+ if(!provisional)return 0;
+ const day=new Date(now).toISOString().slice(0,10);
+ const previous=state.relics.dailyNativeBonus?.day===day?state.relics.dailyNativeBonus.amount:0;
+ // Casino bonuses on positive realized returns, and stake refunds on other native modes,
+ // cannot exceed 1% of the source value. Same-day 120KP cap is independent of balances.
+ const payout=Math.max(0,Math.min(provisional,Math.floor(amount*0.01),120-previous));
+ if(payout>0){
+  state.cash+=payout;
+  state.relics.dailyNativeBonus={day,amount:previous+payout};
+ }
+ return payout;
 }
 function store(c: RelicCollection, item: RelicItem) {
   const old = c.items[item.id];
