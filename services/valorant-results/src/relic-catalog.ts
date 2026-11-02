@@ -238,6 +238,9 @@ export const NORMAL_RELICS:ReadonlyArray<NormalRelicDefinition> = names.flatMap(
       teamdeathmatch:[50,100],escalation:[50,150],deathmatch:[50,500],skirmish:[50,250],
       racing:[100,500],casino:[100,500],market:[50,200],mleague:[100,500],
       quiz:[30,100],voice:[10,15],
+      universal:[100,400],finance:[100,500],
+      marketplus:[50,200],racingplus:[100,500],casinoplus:[100,500],
+      fortune:[50,200],
     };
     const [low,high]=base[mode]!;
     const isNative=['racing','casino','market','mleague'].includes(mode);
