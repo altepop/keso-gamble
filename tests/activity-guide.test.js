@@ -5,7 +5,7 @@ import {CATEGORIES,TOPICS,TOUR,CASINO_GAME_IDS,topicById,guideTopicForScreen} fr
 
 const topicIds=new Set(TOPICS.map(t=>t.id));
 test('all Activity screens and casino modes have a tutorial',()=>{
- for(const id of ['intro','kp','home','earn','race','mleague','casino','market','directives','stable','shop','relics','assets',...CASINO_GAME_IDS]){
+ for(const id of ['intro','kp','home','earn','voice','valorant','spike','death','escalation','quiz','steam','loop','unite','skirmish','others','race','mleague','casino','market','directives','stable','shop','relics','assets',...CASINO_GAME_IDS]){
   assert.ok(topicIds.has(id),'missing guide: '+id);
  }
  assert.equal(topicIds.size,TOPICS.length,'duplicate topic IDs');
