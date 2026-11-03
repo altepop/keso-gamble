@@ -8,11 +8,11 @@ export const ACTIVITIES = [
 ];
 export const MEMBERS=[{id:'riso',name:'リソ（デモ）'},{id:'yuya',name:'ゆーや（デモ）'},{id:'yano',name:'矢野（デモ）'}];
 export const ORDERS=[
-  {id:'solo_competitive',name:'ソロコンペ',cost:50000},
-  {id:'solo_death_unrated',name:'ソロデスアンレ',cost:60000},
-  {id:'competitive',name:'コンペを1試合プレイさせる',cost:8000},
+  {id:'solo_competitive',name:'ソロコンペ',cost:1250000},
+  {id:'solo_death_unrated',name:'ソロデスアンレ',cost:300000},
+  {id:'competitive',name:'コンペを1試合プレイさせる',cost:40000},
   {id:'unrated',name:'アンレを1試合プレイさせる',cost:2500},
-  {id:'steam',name:'指定のSteam実績を解除させる',cost:3500},
+  {id:'steam',name:'指定のSteam実績を解除させる',cost:17500},
 ];
 export function createProgress(){return {claims:[],directives:[],progressSeq:0};}
 function text(value,label,max=160){if(typeof value!=='string'||!value.trim()||value.trim().length>max)throw Error(`${label}を1〜${max}文字で入力してください`);return value.trim();}
@@ -62,7 +62,7 @@ export function hydrateProgress(raw){
  for(const d of (Array.isArray(raw.directives)?raw.directives:[]).slice(0,500-result.claims.length)){
   try{if(!d||!int(d.id)||d.id===0||ids.has(d.id)||!int(d.time)||!['active','completed'].includes(d.status))continue;
    const temp={...createProgress(),cash:Number.MAX_SAFE_INTEGER};const checked=issueDirective(temp,d,d.time);
-   if(d.cost!==checked.cost||(d.status==='completed'&&!int(d.completedAt)))continue;
+   if((d.cost!==checked.cost&&!({competitive:8000,unrated:2500,solo_competitive:50000,solo_death_unrated:60000,steam:3500}[d.task]===d.cost))||(d.status==='completed'&&!int(d.completedAt)))continue;
    if(d.status==='active'&&result.directives.some(x=>x.target===d.target&&x.status==='active'))continue;
    const record={...checked,id:d.id,status:d.status};if(d.status==='completed')record.completedAt=d.completedAt;
    result.directives.push(record);ids.add(d.id);
