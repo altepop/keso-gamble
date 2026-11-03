@@ -84,6 +84,25 @@ async function auditMedia(context){
  raceState=await r.evaluate(k=>JSON.parse(localStorage.getItem(k)),key);assert.equal(raceState.cash,9000+raceState.raceBets[0].payout);assert.match(await r.locator('.race-result').innerText(),/着順/);
  await r.clock.fastForward(15*60000);await r.locator('.race-stage').filter({hasText:'21:30発走'}).waitFor(); // the next race (a named night race runs even without bets)
  for(const width of [320,390,1280]){await r.setViewportSize({width,height:844});assert.equal(await r.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'race '+width);}
+ // After the 11/4 reform, mobile race cards should remain compact and details must not bet.
+ const future=await raceContext.newPage();future.on('pageerror',e=>errors.push(e.message));
+ await future.clock.install({time:new Date('2026-11-04T09:02:00Z')});
+ await future.goto('http://127.0.0.1:8765');await future.locator('.title-start').click();
+ await future.locator('.nav-btn[data-screen=race]').click();await future.locator('.sub-tab[data-screen=market]').click();await future.locator('.sub-tab[data-screen=race]').click();
+ await future.locator('.race-intelligence summary').waitFor();
+ assert.ok(await future.locator('.race-horse-detail').count()>0,'each horse exposes optional form');
+ assert.equal(await future.locator('.race-intelligence').evaluate(el=>el.open),false,'forecast starts folded');
+ await future.locator('.race-intelligence summary').click();
+ assert.equal(await future.locator('.race-intelligence').evaluate(el=>el.open),true,'forecast expands without a handler');
+ assert.equal(await future.locator('.race-event-note').count(),1,'18:15 is a special race');
+ await future.locator('.race-event-note summary').click();
+ assert.equal(await future.locator('.race-event-note').evaluate(el=>el.open),true);
+ await future.locator('.race-horse-detail summary').first().click();
+ assert.match(await future.locator('.race-horse-detail-body').first().innerText(),/馬場適性/);
+ await future.locator('[data-race-horse="2"]').click();
+ assert.equal(await future.locator('[data-race-horse="2"]').getAttribute('aria-pressed'),'true','selection still works');
+ assert.match(await future.locator('#race-preview').innerText(),/2番/);
+ for(const width of [320,390]){await future.setViewportSize({width,height:844});assert.equal(await future.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'reform race '+width);}
  assert.deepEqual(errors,[]);
  // Confirm the probe is active, so a missing instrumentation hook cannot pass silently.
  for(const ctx of browser.contexts())for(const page of ctx.pages())await page.evaluate(()=>window.__flushMediaAudit());
