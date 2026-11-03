@@ -4,6 +4,7 @@
 import { RUN_MS, bigRaceName, fillerCrownName, raceEvent, hydrateRacing, isRaceStart, latestRaceStart, openRaceStart, settleRaceBets } from '../../../js/racing.js';
 import { kpHash, kpRandom } from './kp.ts';
 import {nativeRelicBonus} from './relics.ts';
+import {verifiedBetProfit} from './relic-profit.ts';
 import type { KpEnv, KpMapping } from './kp.ts';
 import { crownFor } from './racing-crowns.ts';
 import { decideEntries, raceEntries } from './racing-horses.ts';
@@ -56,7 +57,7 @@ export async function settleKpRaces(env:KpEnv,mapping:KpMapping,now=Date.now()){
   const entries=new Map<number,Entry[]>();for(const id of due)entries.set(id,await raceEntries(env,mapping,id));
   const before=state.cash,settled:RaceBet[]=settleRaceBets(state,now,(id:number)=>seeds.get(id)??null,(id:number)=>entries.get(id)??[]);
   if(!settled.length)continue;
-  const gain=Math.max(0,settled.reduce((net,b)=>net+b.payout-b.amount,0)); // positive realized return after stakes
+  const gain=verifiedBetProfit(settled); // positive realized profit after stakes
   const relicBonus=nativeRelicBonus(state,'racing',gain,now);
   const id='race-settle:'+settled.map(b=>b.id).join(',');
   const response={result:{settled:settled.map(b=>({id:b.id,status:b.status,payout:b.payout})),relicBonus}};
