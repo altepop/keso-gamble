@@ -1,3 +1,4 @@
+import {relicBuildSection,relicPresetsSection,relicSummonHistorySection,relicSpecialSection,relicEffectLogSection,relicEconomySection} from './relics-v7.js';
 import {relicInventory,relicFilterControls,relicItemCard,relicInventoryPages,relicRevealPanel,relicBonusDashboard} from './relics-v4.js?v=web-b56e03e0c4e900e4';
 // Three independent origins: common summons, Steam achievements, and Unite results.
 // Never recommend cross-game combinations or require another game's relic for an upgrade.
@@ -52,6 +53,7 @@ export function relicsPanel(state,{proofs=null,notice='',loading=false,view={},r
  const filterHtml=relicFilterControls(view,proofs?.modeNames,inv);
  const pagesHtml=relicInventoryPages(inv);
  const bonusDashboard=relicBonusDashboard(state,proofs,view);
+ const advanced=relicBuildSection(proofs)+relicPresetsSection(collection,proofs)+relicSummonHistorySection(collection)+relicSpecialSection(collection)+relicEffectLogSection(collection,proofs)+relicEconomySection(collection,proofs);
  return relicRevealPanel(reveal)+`<section class="panel"><div class="card-body"><h2 class="panel-title">🔮 遺物召喚</h2>
    <p><strong>200 KP／1回</strong> · 召喚レベル ${level} · 累計 ${yen(collection.totalSummons)}回</p>
    <div class="relic-level-progress"><strong>${nextMilestone===null?'Lv10到達！':'次のLvまで あと'+yen(toNext)+'回'}</strong><div class="relic-progress-rail"><span style="width:${nextMilestone===null?100:Math.floor(100*(collection.totalSummons-milestones[level-1])/(nextMilestone-milestones[level-1]))}%"></span></div><small>段階別の累計目標：${milestones.map((n,i)=>'Lv'+(i+1)+' '+yen(n)+'回').join(' / ')}</small></div>
@@ -69,6 +71,7 @@ export function relicsPanel(state,{proofs=null,notice='',loading=false,view={},r
    <button type="button" class="action-btn" data-action="relic-equip" data-relic="">指定枠を外す</button>
  </div></section>
  ${bonusDashboard}
+ ${advanced}
  <section class="panel"><div class="card-body"><h2 class="panel-title">🎒 遺物図鑑（${yen(items.length)}種）</h2>
    ${filterHtml}${cards||'<p class="helper">条件に合う遺物がない。絞り込みを変更してみよう。</p>'}${pagesHtml}
  </div></section>
