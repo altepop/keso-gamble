@@ -1,20 +1,23 @@
 import {skirmishState,skirmishPrompt} from './skirmish.ts';
+import {startDmChallenge,dmChallengeStatus} from './dm-challenge.ts';
 import {isKpRanking} from './kp-command.ts';
+import {spikeStatus,purchaseSpikeHint} from './spike-awakening.ts';
 import {initializeKp,newKpState} from './kp.ts';
 import type {KpEnv,KpMapping} from './kp.ts';
 import {ensureQuizKp} from './quiz-kp.ts';
-import {operateKp,previewMlBet,readKpState} from './kp-api.ts';
+import {operateKp,previewMlBet} from './kp-api.ts';
 import {racingView} from './racing-kp.ts';
-import {ML_DATA,closeMl,mlClosed,mlData,mlLineups,mlResults,seasonStats} from './mleague.ts';
+import {ML_DATA,closeMl,mlClosed,mlData,mlLineups,mlLineupTimes,mlResults,seasonStats} from './mleague.ts';
 import {enqueue,ensurePosts} from './racing-posts.ts';
 import {ensureMahjongClaims} from './mahjong-claims.ts';
 import {ensureUnite,uniteUid} from './unite.ts';
-import {nameGiftHorse} from './racing-horses.ts';
-import {DEBT_INTEREST_PERCENT,DEBT_INTERVAL_MINUTES,debtOf} from './kp-debt.ts';
+import {nameGiftHorse,decideEntries} from './racing-horses.ts';
+import {crownFor} from './racing-crowns.ts';
+import {DEBT_INTEREST_TEXT,DEBT_MAX,debtOf,ensureDebt} from './kp-debt.ts';
 // @ts-expect-error Shared browser engine.
-import {mlCard,mlOdds,mlOpen,mlStart} from '../../../js/mleague.js';
+import {mlCard,mlOdds,mlOpen,mlClosesAt,mlStart,hydrateMleague} from '../../../js/mleague.js';
 // @ts-expect-error Shared browser engine.
-import {openRaceStart,raceCard,raceOdds,placeSlots,payoutFor} from '../../../js/racing.js';
+import {openRaceStart,raceCard,raceOdds,placeSlots,payoutFor,hydrateRacing} from '../../../js/racing.js';
 interface Slash {id:string;guild_id?:string;member?:{user?:{id:string}};data?:{name?:string;options?:Array<{name:string;type?:number;options?:unknown[];value?:unknown}>}}
 const clock=(at:number)=>new Date(at).toLocaleTimeString('ja-JP',{timeZone:'Asia/Tokyo',hour:'2-digit',minute:'2-digit'});
 const clean=(s:string)=>s.replace(/[@`*_~<>|\r\n]/g,'');
@@ -51,9 +54,16 @@ function betLines(d:Awaited<ReturnType<typeof mlData>>,fixture:{date:string;tabl
 type OwnBet={match?:string;raceId?:number;player?:string;horse?:number;type:string;amount:number;odds:number;status:string;payout:number;time:number};
 const md=(date:string)=>`${Number(date.slice(5,7))}/${Number(date.slice(8,10))}`;
 async function myBets(env:KpEnv,mapping:KpMapping,user:string){
- const state=await readKpState(env,mapping,user),d=await mlData(env);
+ // /kp bets only needs this member's saved bet slips. A full Activity
+ // snapshot would also read stocks, 100-row KP/voice histories, all horses,
+ // mastery, notices and M.LEAGUE views on *every* Discord invocation.
+ const row=await env.DB.prepare('SELECT data FROM kp_state WHERE guild=? AND user=?').bind(mapping.guildId,user).first<{data:string}>();
+ if(!row)return 'まだ予想・馬券はありません。';
+ const raw=JSON.parse(row.data),state={...hydrateRacing(raw),...hydrateMleague(raw)};
+ // A user with no M.LEAGUE bets does not need the official card D1 read.
+ const d=state.mlBets.length?await mlData(env):null;
  const label=(b:OwnBet)=>{
-  if(b.match){const f=d.fixtures.find(x=>x.id===b.match);return `Mリーグ ${f?`${md(f.date)} ${f.table}卓 第${f.game}試合`:'試合'}・${clean(b.player??'')}の${b.type==='top'?'トップ':'ラス'}`;}
+  if(b.match){const f=d?.fixtures.find(x=>x.id===b.match);return `Mリーグ ${f?`${md(f.date)} ${f.table}卓 第${f.game}試合`:'試合'}・${clean(b.player??'')}の${b.type==='top'?'トップ':'ラス'}`;}
   const day=new Date((b.raceId??0)+9*3600000).toISOString();return `競馬 ${md(day.slice(0,10))} ${clock(b.raceId??0)}発走 ${b.horse}番 ${b.type==='place'?'複勝':'単勝'}`;
  };
  const all:OwnBet[]=[...(state.mlBets??[]),...(state.raceBets??[])].sort((a:OwnBet,b:OwnBet)=>b.time-a.time);
@@ -94,12 +104,12 @@ export async function mbetDecide(env:KpEnv,interaction:Slash&{data?:{custom_id?:
 }
 async function mleagueView(env:KpEnv,now:number){
  const day=mlDay(now);if(!day)return 'Mリーグのレギュラーシーズンは全部終わったで。';
- const all=await mlResults(env),stats=seasonStats(all),d=await mlData(env),fixtures=d.fixtures.filter(f=>f.date===day),closed=await mlClosed(env),lineups=await mlLineups(env);
+ const all=await mlResults(env),stats=seasonStats(all),d=await mlData(env),fixtures=d.fixtures.filter(f=>f.date===day),closed=await mlClosed(env),lineups=await mlLineups(env),times=await mlLineupTimes(env);
  const lines=[`🀄 **Mリーグ予想** ${Number(day.slice(5,7))}/${Number(day.slice(8,10))} 19:00開始`];
  for(const table of [...new Set(fixtures.map(f=>f.table))]){
   const games=fixtures.filter(f=>f.table===table).sort((a,b)=>a.game-b.game);
   if(!games[0].confirmed){lines.push(`\n**${table}卓**　公式の対戦カードを確認中や（確認できたら受付開始やで）`);continue;}
-  lines.push(`\n**${table}卓**　${games.map(g=>`第${g.game}試合 ${all.has(g.id)?'終了':closed.has(g.id)&&now>=closed.get(g.id)!.at?'締切（開始報告）':mlOpen(d,g,now,all)?'受付中':now<mlStart(g)-19*3600000?'当日0時から':'締切'}`).join('／')}`);
+  lines.push(`\n**${table}卓**　${games.map(g=>`第${g.game}試合 ${all.has(g.id)?'終了':closed.has(g.id)&&now>=closed.get(g.id)!.at?'締切（開始報告）':mlOpen(d,g,now,all,times)?`受付中${mlClosesAt(g,times)!==null?`（${clock(mlClosesAt(g,times)!)}まで）`:''}`:now<mlStart(g)-19*3600000?'当日0時から':'締切'}`).join('／')}`);
   for(const g of games)if(lineups.has(g.id))lines.push(`第${g.game}試合 出場：${lineups.get(g.id)!.map(clean).join('・')}`);
   for(const p of mlCard(d,games[0])){const o=mlOdds(p,stats);lines.push(`${p.no}. ${clean(p.name)}（${clean(p.teamName)}）ラス ${(o.last/10).toFixed(1)}倍`);}
  }
@@ -108,13 +118,26 @@ async function mleagueView(env:KpEnv,now:number){
 }
 /** A user option given as a mention (<@id>, <@!id>) or a bare ID. */
 const discordUser=(value:unknown)=>String(value??'').trim().replace(/^<@!?(\d+)>$/,'$1');
-/** Choices for /bet's horse field: the open race's horses with their odds, filtered by what was typed. */
-export async function betChoices(env:KpEnv,interaction:Slash,override?:KpMapping):Promise<Array<{name:string;value:number}>>{
+/** Choices for /bet's horse field: the open race's horses with their odds, filtered by what was typed. Discord gives an
+ * autocomplete three seconds, so only the open race is read (its crown and runners, side by side), not the whole view. */
+export async function betChoices(env:KpEnv,interaction:Slash,override?:KpMapping,now=Date.now()):Promise<Array<{name:string;value:number}>>{
  const mapping=await initializeKp(env,override);if(!mapping)return [];
- const view=await racingView(env,mapping),open=view.open,card={...raceCard(open.id,undefined,open.entries),...(open.crown?{name:open.crown}:{})},odds=raceOdds(card);
+ const open=openRaceStart(now),[crown,entries]=await Promise.all([crownFor(env,mapping.guildId,open),decideEntries(env,mapping,open,now)]);
+ const card={...raceCard(open,undefined,entries),...(crown?{name:crown.name}:{})},odds=raceOdds(card);
  const typed=String((interaction.data?.options as Array<{name:string;value?:unknown;focused?:boolean}>|undefined)?.find(o=>o.focused)?.value??'').trim();
  return card.horses.filter((h:{number:number;name:string})=>!typed||String(h.number)===typed||h.name.includes(typed))
-  .map((h:{number:number;name:string})=>({name:`${h.number}番 ${h.name}　1着 ${(odds.win[h.number]/10).toFixed(1)}倍・${placeSlots(card.size)}着内 ${(odds.place[h.number]/10).toFixed(1)}倍｜${clock(open.id)}発走`.slice(0,100),value:h.number})).slice(0,25);
+  .map((h:{number:number;name:string})=>({name:`${h.number}番 ${h.name}　1着 ${(odds.win[h.number]/10).toFixed(1)}倍・${placeSlots(card.size)}着内 ${(odds.place[h.number]/10).toFixed(1)}倍｜${clock(open)}発走`.slice(0,100),value:h.number})).slice(0,25);
+}
+/** When the list is not ready in time, the gate numbers alone: the bet itself still checks the horse and fixes the odds. */
+export function betFallbackChoices(now=Date.now()):Array<{name:string;value:number}>{
+ const open=openRaceStart(now),size=raceCard(open).size;
+ return Array.from({length:size},(_,i)=>({name:`${i+1}番（馬名・倍率の読み込みが遅れています。購入時に確定）｜${clock(open)}発走`.slice(0,100),value:i+1}));
+}
+/** An autocomplete answer within Discord's limit: the list if it is ready, otherwise the fallback. */
+export async function withinDeadline<T>(work:Promise<T>,ms:number,fallback:()=>T):Promise<T>{
+ let timer:ReturnType<typeof setTimeout>|undefined;
+ try{return await Promise.race([work,new Promise<T>(resolve=>{timer=setTimeout(()=>resolve(fallback()),ms);})]);}
+ finally{clearTimeout(timer);}
 }
 /** Exact fixture IDs keep a selection stable across midnight. Old table-game codes remain readable. */
 function mbetFixture(d:Awaited<ReturnType<typeof mlData>>,value:unknown,day:string|null){
@@ -128,8 +151,8 @@ export async function mbetChoices(env:KpEnv,interaction:Slash):Promise<Array<{na
  const options=interaction.data?.options as Array<{name:string;value?:unknown;focused?:boolean}>|undefined,focused=options?.find(o=>o.focused);
  if(!focused||!['match','player'].includes(focused.name))return [];
  const now=Date.now(),day=mlDay(now),d=await mlData(env);
- const [results,closed,lineups]=await Promise.all([mlResults(env),mlClosed(env),mlLineups(env)]);
- const open=(f:typeof d.fixtures[number])=>f.confirmed&&!results.has(f.id)&&mlOpen(d,f,now,results)&&!(closed.has(f.id)&&now>=closed.get(f.id)!.at);
+ const [results,closed,lineups,times]=await Promise.all([mlResults(env),mlClosed(env),mlLineups(env),mlLineupTimes(env)]);
+ const open=(f:typeof d.fixtures[number])=>f.confirmed&&!results.has(f.id)&&mlOpen(d,f,now,results,times)&&!(closed.has(f.id)&&now>=closed.get(f.id)!.at);
  const typed=searchMl(focused.value).slice(0,100);
  // An empty list says why in its only entry (value 'none'), instead of leaving the member guessing.
  const why=(name:string)=>[{name:('ℹ️ '+name).slice(0,100),value:'none'}];
@@ -162,11 +185,16 @@ export async function mbetChoices(env:KpEnv,interaction:Slash):Promise<Array<{na
 export async function runKpCommand(env:KpEnv,interaction:Slash,override?:KpMapping,out?:{components?:unknown[]}):Promise<string>{
  const mapping=await initializeKp(env,override),user=interaction.member?.user?.id;
  if(!mapping||interaction.guild_id!==mapping.guildId||!user||!/^\d{15,22}$/.test(user))return 'このサーバーの本人の口座で利用してください。';
- const command=interaction.data?.name;if(!['kp','keiba','bet','mleague','mbet','mclose','kpgrant','paifulink','unitelink','horsename'].includes(command??''))return '対応していないコマンドです。';
+ const command=interaction.data?.name;if(!['kp','spike','dm','keiba','bet','mleague','mbet','mclose','kpgrant','paifulink','unitelink','horsename','give'].includes(command??''))return '対応していないコマンドです。';
  if(isKpRanking(interaction)){
   // A single server-side snapshot: current spendable KP, not stocks or lifetime earnings.
   const rows=(await env.DB.prepare('SELECT user,balance,RANK() OVER(ORDER BY balance DESC) AS rank,COUNT(*) OVER() AS total FROM kp_wallets WHERE guild=? ORDER BY balance DESC,user ASC LIMIT 10').bind(mapping.guildId).all<{user:string;balance:number;rank:number;total:number}>()).results;
-  return '🏆 **KP残高ランキング**\n'+(rows.length?rows.map(r=>`${r.rank}位　<@${r.user}>　**${money(r.balance)}**`).join('\n'):`まだ口座がありません。`)+'\n\n現在使えるKPの上位10人。同額は同順位。株・馬などの評価額は含みません。'+(rows.length?`（全${rows[0].total}人）`:'');
+  // 借KP: everyone who owes, largest first (they sit at 0 KP, so most are below the top ten).
+  await ensureDebt(env);
+  const debts=(await env.DB.prepare('SELECT user,amount FROM kp_debts WHERE guild=? AND amount>0 ORDER BY amount DESC,user ASC LIMIT 10').bind(mapping.guildId).all<{user:string;amount:number}>()).results;
+  const owed=new Map(debts.map(d=>[d.user,d.amount]));
+  return '🏆 **KP残高ランキング**\n'+(rows.length?rows.map(r=>`${r.rank}位　<@${r.user}>　**${money(r.balance)}**${owed.has(r.user)?`　💸借KP ${money(owed.get(r.user)!)}`:''}`).join('\n'):`まだ口座がありません。`)+'\n\n現在使えるKPの上位10人。同額は同順位。株・馬などの評価額は含みません。'+(rows.length?`（全${rows[0].total}人）`:'')
+   +'\n\n💸 **借KP**\n'+(debts.length?debts.map(d=>`<@${d.user}>　**${money(d.amount)}**`).join('\n'):'いま借KPのある人はいません。');
  }
  const sub=interaction.data?.options?.length===1&&interaction.data.options[0].type===1&&!interaction.data.options[0].options?.length?interaction.data.options[0].name:null;
  if(command==='kp'&&interaction.data?.options?.length&&!['balance','bets'].includes(sub??''))return '/kp balance・/kp bets・/kp ranking から選んでください。';
@@ -178,19 +206,46 @@ export async function runKpCommand(env:KpEnv,interaction:Slash,override?:KpMappi
   env.DB.prepare('INSERT OR IGNORE INTO kp_state(guild,user,data) VALUES(?,?,?)').bind(mapping.guildId,user,JSON.stringify(newKpState())),
  ]);
  const balance=async()=>Number((await env.DB.prepare('SELECT balance FROM kp_wallets WHERE guild=? AND user=?').bind(mapping.guildId,user).first<{balance:number}>())?.balance??0);
+ if(command==='dm'){
+  const opts=interaction.data?.options;
+  if(!opts||opts.length!==1||opts[0].type!==1||opts[0].options?.length)return '利用できる操作は /dm start と /dm status だ。';
+  return opts[0].name==='start'?startDmChallenge(env,mapping.guildId,user):opts[0].name==='status'?dmChallengeStatus(env,mapping.guildId,user):'利用できる操作は /dm start と /dm status だ。';
+ }
+ if(command==='spike'){
+  const raw=interaction.data?.options;
+  if(!raw||raw.length!==1||raw[0].type!==1)return '/spike status で育成状況を確認するか /spike hint でヒントを購入してください。';
+  if(raw[0].name==='status'&&(!raw[0].options||!raw[0].options.length))return spikeStatus(env,mapping.guildId,user);
+  if(raw[0].name==='hint'){
+   const opts=raw[0].options as Array<{name?:string;type?:number;value?:unknown}>|undefined;
+   if(!opts||opts.length!==1||opts[0].name!=='role'||opts[0].type!==3)return 'ヒントを解放するロールを指定してください。';
+   return purchaseSpikeHint(env,mapping.guildId,user,opts[0].value);
+  }
+  return '利用できる操作は /spike status と /spike hint です。';
+ }
  if(command==='kp'&&sub==='bets')return myBets(env,mapping,user);
  if(command==='kp'){
   const owed=await debtOf(env,mapping.guildId,user);
   const rows=(await env.DB.prepare('SELECT delta,kind,at FROM kp_ledger WHERE guild=? AND user=? ORDER BY at DESC,id DESC LIMIT 5').bind(mapping.guildId,user).all<{delta:number;kind:string;at:number}>()).results;
-  const kinds:Record<string,string>={skirmish:'スカーミッシュの受取',dividend:'株配当','stock-migration':'株の移行端数',voice:'通話',quiz:'QUIZ',match:'試合',operation:'購入・取引',prize:'競馬賞金',mahjong:'雀魂',grant:'手動調整',unite:'ユナイト',debt:'借KP返済'};
+  const kinds:Record<string,string>={skirmish:'スカーミッシュの受取',dividend:'株配当','stock-migration':'株の移行端数',voice:'通話',quiz:'QUIZ',match:'試合',operation:'購入・取引',prize:'競馬賞金',mahjong:'雀魂',grant:'手動調整',unite:'ユナイト',debt:'借KP返済',gift:'プレゼント'};
   const challenge=await skirmishState(env,mapping.guildId,user);const prompt=challenge?skirmishPrompt(challenge):null;if(prompt&&out)out.components=prompt.components;
-  return (prompt?prompt.content+'\n\n':'')+'🪙 あなたの残高：**'+money(await balance())+'**\n'+(owed?`💸 借KP：**${money(owed)}**（${DEBT_INTERVAL_MINUTES}分ごとに利子${DEBT_INTEREST_PERCENT}%。入ったKPから自動で返済。返し終わるまで株・馬・馬券・カジノ・高級品・指名は使えません）\n`:'')+(rows.length?'最近の入出金\n'+rows.map(r=>`${clock(r.at)} ${kinds[r.kind]??'口座'} ${r.delta>=0?'+':''}${money(r.delta)}`).join('\n'):'まだ入出金はありません。通話やQUIZで貯められます。')+'\n/keiba で出走表、/bet で馬券を買えます。';
+  return (prompt?prompt.content+'\n\n':'')+'🪙 あなたの残高：**'+money(await balance())+'**\n'+(owed?`💸 借KP：**${money(owed)}**（${DEBT_INTEREST_TEXT}、上限${money(DEBT_MAX)}。入ったKPから自動で返済。返し終わるまで株・馬・馬券・カジノ・高級品・指名は使えません）\n`:'')+(rows.length?'最近の入出金\n'+rows.map(r=>`${clock(r.at)} ${kinds[r.kind]??'口座'} ${r.delta>=0?'+':''}${money(r.delta)}`).join('\n'):'まだ入出金はありません。通話やQUIZで貯められます。')+'\n/keiba で出走表、/bet で馬券を買えます。';
  }
  if(command==='mleague')return mleagueView(env,Date.now());
  if(command==='horsename'){
   const named=await nameGiftHorse(env,mapping,user,interaction.data?.options?.find(o=>o.name==='name')?.value);
   if(named.post&&(env as {KP_EARNINGS_WEBHOOK_URL?:string}).KP_EARNINGS_WEBHOOK_URL){await ensurePosts(env);await enqueue(env,'horse-name:'+interaction.id,named.post,created(interaction.id));}
   return named.reply;
+ }
+ if(command==='give'){
+  // One operation per interaction, so a retried delivery cannot give twice.
+  const value=(key:string)=>interaction.data?.options?.find(o=>o.name===key)?.value;
+  try{
+   const {result}=await operateKp(env,mapping,user,'gift-'+interaction.id,'gift',{to:discordUser(value('user')),amount:value('amount'),message:value('message')??''}) as {result:{gift:{to:string;amount:number}}};
+   return `🎁 <@${result.gift.to}> に **${money(result.gift.amount)}** をプレゼントしました。稼ぎchでもお知らせします。\n残高 ${money(await balance())}`;
+  }catch(error){
+   const message=error instanceof Error?error.message:'';
+   return /[ぁ-んァ-ヶ一-龯]/.test(message)&&!/SQL|D1_|kp_/.test(message)?message:'プレゼントできたか確認できませんでした。/kp の残高を確認してください。';
+  }
  }
  if(command==='unitelink'){
   // Admin-only. The next reads of the profile only record what is there; later ranked games are posted.

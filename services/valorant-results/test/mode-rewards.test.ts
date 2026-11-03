@@ -30,8 +30,9 @@ test('escalation needs an untied top, 30/35 kills and K/D, and only the performa
   for(let i=0;i<150;i++){
    const r=game('esc'+i,'ggteam',true,kills,deaths),q=valoKp(r,'me','escalation','win');
    const rawBonus=q.note.includes('成績ボーナス3倍')?bonus*3:bonus;
-   assert.equal(q.base-(q.note.includes('大勝負')?1000:70),rawBonus);
-   assert.equal(q.net,applyLuck(q.note.includes('大勝負')?1000:70,luckFor('valo:esc'+i+':me'))+rawBonus);
+   const prize=q.escalation?.kind==='big'?q.escalation.award:70;
+   assert.equal(q.base-prize,rawBonus);
+   assert.equal(q.net,applyLuck(prize,luckFor('valo:esc'+i+':me'))+rawBonus);
   }
  }
  const tied=game('tied','ggteam',true,35,1);tied.players[1].stats!.kills=35;assert.doesNotMatch(valoKp(tied,'me','escalation','win').note,/成績ボーナス/);
@@ -41,4 +42,13 @@ test('deathmatch jackpot needs 40 kills, not merely a sub-40 lead',()=>{
  for(let i=0;i<300;i++)assert.equal(valoKp(game('dm'+i,'deathmatch',true,39,10),'me','deathmatch',null).base,0);
  const q=Array.from({length:1000},(_,i)=>valoKp(game('dm40'+i,'deathmatch',true,40,10),'me','deathmatch',null));
  const wins=q.filter(q=>q.base===1000);assert.ok(wins.length>240&&wins.length<360);
+});
+test('competitive: a loss pays +200 like a small win, only the team bottom on a loss costs −400, and luck applies to both',()=>{
+ for(let n=0;n<60;n++){
+  const plain=game('cl'+n,'competitive',false),q=valoKp(plain,'me','competitive','loss');
+  assert.equal(q.base,200);assert.equal(q.net,applyLuck(200,luckFor('valo:cl'+n+':me')));
+  const low=game('cb'+n,'competitive',false);low.players[0].stats!.score=50;
+  const b=valoKp(low,'me','competitive','loss');assert.equal(b.base,-400);assert.equal(b.net,applyLuck(-400,luckFor('valo:cb'+n+':me')));
+  assert.equal(valoKp(game('cw'+n,'competitive',true),'me','competitive','win').base,900);
+ }
 });

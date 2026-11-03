@@ -3,7 +3,7 @@ import {ensureUniteRewards,settleUnite} from './unite-rewards.ts';
 // profile's recent ranked matches; one profile is read per cron minute, at most every two minutes each.
 // A first read only records what is already there, so linking never posts old games.
 // New games are posted by the result bot (the Mahjong Soul post queue) and settled in KP:
-// Wins grow from +400 to +800, losses from -100 to -500; gaps reset the streak.
+// Wins grow from +400 to +800, losses from -100 to -500; verified contribution/close games add a bounded bonus, and gaps reset the streak.
 import voice from '../unite-voice.json' with {type:'json'};
 import names from '../unite-names.json' with {type:'json'};
 import {initializeKp,newKpState,kpHash} from './kp.ts';
@@ -14,7 +14,7 @@ import {enqueue,ensurePosts} from './racing-posts.ts';
 import {borrowedBy,debtNote} from './kp-debt.ts';
 
 export interface UniteEnv extends KpEnv {DISCORD_WEBHOOK_URL?:string;KP_EARNINGS_WEBHOOK_URL?:string}
-export interface UniteMatch {win:boolean;surrendered:boolean;map:string;party:string;pokemon:string;level:number;ours:number;theirs:number;ko:number;ast:number;int:number;dmg:string;tkn:string;heal:string}
+export interface UniteMatch {win:boolean;surrendered:boolean;map:string;party:string;pokemon:string;level:number;ours:number;theirs:number;ko:number;ast:number;int:number;dmg:string;tkn:string;heal:string;rockBuild?:boolean}
 export const UNITE_WIN=400,UNITE_LOSS=100;
 const GAP=2*60_000,PROFILE='https://uniteapi.dev/p/';
 const initialized=new WeakSet<object>();
@@ -45,9 +45,12 @@ export function parseUnite(html:string):{name:string;private:boolean;matches:Uni
   const t=text(card),vs=t.indexOf('vs'),slash=t.indexOf('/'),when=t.findIndex(s=>/\bago$|^just now$/i.test(s));
   if(!result||when<0||vs<when+3||slash<0||t[slash+2]!=='/')return null;
   const pokemon=card.match(/<img alt="([^"]+)"/)?.[1]??'';
+  // Recognize the exact move combination when both names appear in UniteAPI's card.
+  const moves=[...card.matchAll(/<img\b[^>]*\balt="([^"]+)"/gi)].map(m=>m[1].trim().replace(/\+$/,''));
+  const rockBuild=pokemon==='Crustle'&&moves.some(x=>/^(Rock Tomb|がんせきふうじ)$/i.test(x))&&moves.some(x=>/^(Stealth Rock|ステルスロック)$/i.test(x));
   const at=(label:string)=>t[t.indexOf(label)-2];
   const m:UniteMatch={win:result==='emerald',surrendered:t.includes('Surrendered'),map:t[when+1]??'',party:t[when+2]??'',pokemon,level:int(t[vs-2]),ours:int(t[vs-1]),theirs:int(t[vs+1]),
-   ko:int(t[slash-1]),ast:int(t[slash+1]),int:int(t[slash+3]),dmg:at('DMG')??'',tkn:at('TKN')??'',heal:at('HEAL')??''};
+   ko:int(t[slash-1]),ast:int(t[slash+1]),int:int(t[slash+3]),dmg:at('DMG')??'',tkn:at('TKN')??'',heal:at('HEAL')??'',...(rockBuild?{rockBuild:true}:{})};
   // Scores are shown purple vs orange; the winning side is coloured. Ours is the winner's when we won.
   const scores=[...card.matchAll(/leading-none (text-(?:purple|orange)-400|text-muted-foreground)[^"]*">(\d+)<\/div>/g)];
   if(scores.length!==2||scores.filter(x=>x[1]!=='text-muted-foreground').length!==1)return null;
@@ -111,21 +114,30 @@ export async function monitorUnite(env:UniteEnv,now=Date.now(),request:typeof fe
    env.DB.prepare('UPDATE unite_links SET name=?,seen=?,error=NULL WHERE guild=? AND user=?').bind(page.name,JSON.stringify(keys.slice(0,100)),link.guild,link.user),
   ]);return;
  }
- if(keys.length>100||new Set(keys).size!==keys.length){await env.DB.prepare('UPDATE unite_links SET error=? WHERE guild=? AND user=?').bind('ambiguous_history',link.guild,link.user).run();return;}
  const known=keys.findIndex(k=>seen.includes(k));
- const fresh=page.matches.slice(0,known===-1?page.matches.length:known).reverse();
+ // Nothing on the page matches what was read before: the page format changed or the history was replaced. Paying
+ // the whole page would credit old games again (at streak rates), so start a new baseline and show the gap instead.
+ if(known===-1){
+  await env.DB.batch([
+   env.DB.prepare('UPDATE unite_streaks SET wins=0,losses=0,version=version+1 WHERE guild=? AND uid=? AND user=?').bind(link.guild,link.uid,link.user),
+   env.DB.prepare('UPDATE unite_links SET name=?,seen=?,error=? WHERE guild=? AND user=?').bind(page.name,JSON.stringify([...new Set(keys)].slice(0,100)),'history_gap',link.guild,link.user),
+  ]);return;
+ }
+ // Two games with identical stats share a fingerprint and are settled once; they never stop the profile.
+ const fresh=[...new Map(page.matches.slice(0,known).map(m=>[matchKey(m),m])).values()].reverse();
  await env.DB.batch([
   env.DB.prepare('INSERT OR IGNORE INTO kp_wallets(guild,user) VALUES(?,?)').bind(link.guild,link.user),
   env.DB.prepare('INSERT OR IGNORE INTO kp_state(guild,user,data) VALUES(?,?,?)').bind(link.guild,link.user,JSON.stringify(newKpState())),
  ]);
  for(let i=0;i<fresh.length;i++){
   const m=fresh[i],fingerprint=matchKey(m),seed=link.uid+':'+fingerprint,id='unite-v3:'+await kpHash(link.guild+':'+seed);
-  const settled=await settleUnite(env,{id,guild:link.guild,user:link.user,uid:link.uid,fingerprint,seed,win:m.win,now,reset:known===-1&&i===0});
+  const settled=await settleUnite(env,{id,guild:link.guild,user:link.user,uid:link.uid,fingerprint,seed,win:m.win,now,performance:{pokemon:m.pokemon,rockBuild:m.rockBuild===true,ko:m.ko,ast:m.ast,int:m.int,ours:m.ours,theirs:m.theirs,dmg:m.dmg,heal:m.heal,tkn:m.tkn,surrendered:m.surrendered}});
   const kp=settled.delta,note=settled.note+debtNote(await borrowedBy(env,id));
   await env.DB.prepare('INSERT OR IGNORE INTO mahjong_watch_posts(id,body,at) VALUES(?,?,?)').bind(id,JSON.stringify({content:unitePost(page.name,link.uid,m,kp,note),allowed_mentions:{parse:[]}}),now).run();
   if(env.KP_EARNINGS_WEBHOOK_URL){await ensurePosts(env);await enqueue(env,'kp-'+id,`🎮 <@${link.user}> ユナイト ランクマ${m.win?'勝利':'敗北'} ${kp>0?'+':'−'}${Math.abs(kp).toLocaleString('ja-JP')} KP${settled.note}`,now);}
  }
  // Advance only after all new records have been settled and queued. Failures keep the old cursor for a safe retry.
- await env.DB.prepare('UPDATE unite_links SET name=?,seen=?,error=NULL WHERE guild=? AND user=?').bind(page.name,JSON.stringify([...new Set([...keys,...seen])].slice(0,100)),link.guild,link.user).run();
+ // A history gap stays visible on システムの状態 until the next game is settled.
+ await env.DB.prepare("UPDATE unite_links SET name=?,seen=?,error=CASE WHEN ?=0 AND error='history_gap' THEN error ELSE NULL END WHERE guild=? AND user=?").bind(page.name,JSON.stringify([...new Set([...keys,...seen])].slice(0,100)),fresh.length,link.guild,link.user).run();
  if(fresh.length)await flushMahjongPosts(env as unknown as MahjongEnv,now,request);
 }

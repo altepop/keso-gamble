@@ -1,10 +1,20 @@
+import {queueCommunityNews} from './community-news.ts';
+import {queueRelicPress} from './relic-press.ts';
+import {queueVdkPearlRoast} from './vdk-pearl-roast.ts';
+import {queueSteamPosts} from './steam-posts.ts';
+import {ensureNotificationReadIndexes} from './notification-indexes.ts';
+import {monitorSteam} from './steam-rewards.ts';
 import {readModeNote} from './mode-rewards.ts';
+import {skirmishResultButtons} from './skirmish.ts';
+import {appWebhook,appWebhookApi,forgetAppWebhook} from './app-webhook.ts';
 import {spikeNote} from './spikerush-growth.ts';
 import {prepareRaceBroadcast} from './racing-broadcast.ts';
 import {raceVideoApi} from './racing-video.ts';
 export {RaceBroadcaster} from './racing-broadcast.ts';
 import {prepareStocks,queueStockPosts} from './stock-market.ts';
-import {monitorMahjong, mahjongStatus} from './mahjong.ts';
+import {migrateSilentEntryPoint,silentEntryStatus} from './discord-silent-entry.ts';
+import {runGuerrillaMarket} from './stock-guerrilla.ts';
+import {monitorMahjong, mahjongStatus, flushMahjongPosts} from './mahjong.ts';
 import {monitorUnite} from './unite.ts';
 import {settleRankChange,rankChangeBlock,rankChangeFor} from './rank-change.ts';
 import type {RankChange} from './rank-change.ts';
@@ -13,13 +23,13 @@ export {VoiceGateway} from './voice-gateway.ts';
 import {ensureVoice} from './voice-api.ts';
 import { claimDeathMatch } from './death-sessions.ts';
 import type { KpRun } from './kp.ts';
-import { initializeKp, syncKpAccounts, collectKpMatch, drainKpInbox, flushKpDirectives, prepareKpRun, kpEventId, kpCreditLine } from './kp.ts';
+import { initializeKp, syncKpAccounts, collectKpMatch, drainKpInbox, flushKpDirectives, prepareKpRun, loadKpRunMatch, kpEventId, kpCreditLine, kpRelicBonus } from './kp.ts';
 import { kpApi } from './kp-api.ts';
-import { settleKpRaces } from './racing-kp.ts';
+import { raceSeed,settleKpRaces } from './racing-kp.ts';
 import { queueRacePosts, flushRacePosts, enqueue, ensurePosts } from './racing-posts.ts';
-import { pollMlLineups, pollMlResults, refreshMlCards, settleMl, queueMlPosts } from './mleague.ts';
+import { pollMlLineups, pollMlResults, refreshMlCards, settleMl, queueMlPosts, shouldRunMlCron } from './mleague.ts';
 import { scheduleCrowns } from './racing-crowns.ts';
-import { decideEntries, maybeGiftHorse, settleHorsePrizes } from './racing-horses.ts';
+import { ensureRaceField, maybeGiftHorse, settleHorsePrizes, shouldSettleHorsePrizes } from './racing-horses.ts';
 import { recordMastery } from './mastery.ts';
 import { roastLevelsOf } from './racing-posts.ts';
 // @ts-expect-error The shared pure browser engine has no TypeScript declarations.
@@ -29,12 +39,14 @@ import { isDeathMode, isDeathNotice, sessionModeSQL } from './death-modes.ts';
 import { discordInteractions } from './discord-interactions.ts';
 import configuredPlayers from '../players.json' with { type: 'json' };
 import { resultMessage, groupNotification } from './results.ts';
-import { settleDebts } from './kp-debt.ts';
+import { settleDebts, queueDebtPosts } from './kp-debt.ts';
 import { track } from './health.ts';
 import type { Match, Notice } from './results.ts';
 export { resultMessage } from './results.ts';
 
 export interface Env {
+  STEAM_WEB_API_KEY?:string;
+  KP_STEAM_CONFIG?:string;
   VOICE_GATEWAY?:DurableObjectNamespace;
   RACE_BROADCAST?:DurableObjectNamespace;
   DISCORD_CLIENT_SECRET?: string;
@@ -134,6 +146,15 @@ async function api<T>(env: Env, path: string): Promise<T> {
 }
 
 
+/** Per-cron rank lookup is indexed by monitor_state's key PRIMARY KEY.
+ * A per-run map caches negative results too; future runs always recheck DB. */
+export async function monitorRankState(db:D1Database,cache:Map<string,string>,key:string):Promise<string|undefined>{
+ if(!cache.has(key)){
+  const row=await db.prepare('SELECT value FROM monitor_state WHERE key=?').bind(key).first<{value:string}>();
+  cache.set(key,row?.value??'');
+ }
+ return cache.get(key);
+}
 async function saveMatch(env: Env, match: Match, player: Player, account: Account, kpRun:KpRun|null,reservations:Map<string,string>,saved:Set<string>,ranks:Map<string,string>=new Map()): Promise<'excluded' | 'beforeMonitoring' | 'newResults' | 'duplicates'> {
   const mode = match.metadata?.queue?.id;
   const ordinary = resultMessage(match, account.puuid, player.name?.trim() || parseId(player.riotId)[0]);
@@ -161,10 +182,19 @@ async function saveMatch(env: Env, match: Match, player: Player, account: Accoun
   const kpId=kpRun?kpEventId(kpRun.mapping.guildId,match.metadata.match_id,account.puuid):'';
   try {
     if (kpRun && Date.parse(match.metadata.started_at)>=kpRun.startsAt) {
+      await loadKpRunMatch(env,kpRun,kpId);
       const amount = kpRun.credits.get(kpId) ?? await collectKpMatch(env,kpRun.mapping,match,account.puuid);
       if (amount !== null) {
         kpRun.credits.set(kpId,amount);
-        result.message=kpCreditLine(result.message,amount,mode==='spikerush'?await spikeNote(env,kpId):(kpRun.notes?.get(kpId)??await readModeNote(env,kpId)));
+        // Existing events already have the relic delta in loadKpRunMatch.
+        // A brand-new credit has no preloaded event: fetch its receipt once
+        // by primary key AFTER settlement and reuse within this monitor run.
+        let relic=kpRun.relicBonuses.get(kpId);
+        if(relic===undefined){
+          relic=await kpRelicBonus(env,kpRun.mapping.guildId,kpRun.mapping.accounts.find(a=>a.riotId===player.riotId)?.discordUserId??'',kpId);
+          kpRun.relicBonuses.set(kpId,relic);
+        }
+        result.message=kpCreditLine(result.message,amount,mode==='spikerush'?await spikeNote(env,kpId):(kpRun.notes?.get(kpId)??await readModeNote(env,kpId)),relic);
         kpActive=kpRun.messages.get(kpId)!==result.message;
       }
     }
@@ -174,7 +204,11 @@ async function saveMatch(env: Env, match: Match, player: Player, account: Accoun
   // kept, so every rewrite of the post carries it. A demotion costs KP once, a promotion pays once.
   if (mode === 'competitive' && kpRun) try {
     const key = 'rank2:' + match.metadata.match_id + ':' + account.puuid, now = Date.now();
-    const stored = ranks.get(key);
+    // Load only ranks belonging to a match actually seen in this monitor run.
+    // The previous cron read up to 300 historic rank rows every minute even
+    // when no one played (224,483 D1 rows/day across monitor_state queries).
+    // Cache misses within the run; a later cron reloads durable changes.
+    const stored = await monitorRankState(env.DB,ranks,key);
     let change: RankChange | null = stored?.startsWith('{') ? JSON.parse(stored) as RankChange : null;
     // At most three lookups per run, and one history request per player per run.
     const lookups = Number(ranks.get('__lookups') ?? 0);
@@ -277,6 +311,7 @@ async function deathDetail(env: Env, match: Match, players: Player[], accounts: 
 }
 
 async function flushNotifications(env: Env, players: Player[]): Promise<void> {
+  await ensureNotificationReadIndexes(env.DB);
   const hasPending = await env.DB.prepare('SELECT 1 AS n FROM notifications WHERE sent=0 LIMIT 1').first();
   if (!hasPending) return;
   const discordAfter = await state(env, 'discord_after');
@@ -301,15 +336,45 @@ async function flushNotifications(env: Env, players: Player[]): Promise<void> {
       const saved = await env.DB.prepare('SELECT value FROM monitor_state WHERE key=?')
         .bind('post:' + pendingMatch.match_id).first<{ value: string }>();
       // Discord snowflakes must stay strings: conversion to Number loses precision.
-      const editUrl = new URL(url);
-      editUrl.pathname = editUrl.pathname.replace(/\/$/, '') + '/messages/' + encodeURIComponent(saved?.value ?? '');
-      editUrl.searchParams.delete('wait');
-      const send = (target: URL, method: string) => fetch(target, {
-        method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), signal: AbortSignal.timeout(10_000),
-      });
-      let response = await send(saved ? editUrl : url, saved ? 'PATCH' : 'POST');
+      // A Skirmish win that opened a 受取／続行 choice carries its buttons. Interactive buttons need a webhook owned by the
+      // application: the one set up through /api/discord/app-webhook/start, posting as あかんbot. Without it the plain
+      // webhook is tried; if Discord refuses the buttons, the post goes out without (it still names /kp balance) for a day.
+      const skirmish = notices.results.some(notice => notice.mode?.startsWith('skirmish'));
+      const owned = skirmish ? await appWebhook(env) : null;
+      const via = saved ? (await env.DB.prepare('SELECT value FROM monitor_state WHERE key=?').bind('via:' + pendingMatch.match_id).first<{ value: string }>())?.value : undefined;
+      const buttons = skirmish && (owned || await state(env, 'skirmish_buttons_off_until') <= Date.now())
+        ? await skirmishResultButtons(env, pendingMatch.match_id, notices.results, new Map(players.map(player => [player.riotId, player.name?.trim() || parseId(player.riotId)[0]]))) : [];
+      // A message is always edited through the webhook that posted it.
+      let useOwned = Boolean(owned && (saved ? via === 'app' : buttons.length));
+      const base = () => { const target = new URL(useOwned ? owned!.url : url); target.searchParams.set('wait', 'true'); return target; };
+      const edit = () => { const target = base(); target.pathname = target.pathname.replace(/\/$/, '') + '/messages/' + encodeURIComponent(saved?.value ?? ''); target.searchParams.delete('wait'); return target; };
+      const send = (target: URL, method: string, components?: unknown[]) => {
+        const to = new URL(target);
+        if (components) to.searchParams.set('with_components', 'true');
+        const identity = useOwned && method === 'POST' ? { ...(owned!.username ? { username: owned!.username } : {}), ...(owned!.avatarUrl ? { avatar_url: owned!.avatarUrl } : {}) } : {};
+        return fetch(to, {
+          method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...payload, ...identity, ...(components ? { components } : {}) }), signal: AbortSignal.timeout(10_000),
+        });
+      };
+      const components = skirmish ? buttons : undefined;
+      let response = await send(saved ? edit() : base(), saved ? 'PATCH' : 'POST', components);
+      if (useOwned && !saved && (response.status === 401 || response.status === 404)) {
+        // The owned webhook was deleted in Discord: back to the plain webhook, without buttons.
+        console.warn('app_webhook_gone');
+        await forgetAppWebhook(env);
+        useOwned = false;
+        response = await send(base(), 'POST', []);
+      }
+      if (buttons.length && !useOwned && response.status === 400) {
+        console.warn('skirmish_buttons_refused');
+        await setState(env, 'skirmish_buttons_off_until', Date.now() + 86400_000);
+        response = await send(saved ? edit() : base(), saved ? 'PATCH' : 'POST', []);
+      }
       // A deleted original message can be replaced when a late result needs to be added.
-      if (saved && response.status === 404) response = await send(url, 'POST');
+      if (saved && response.status === 404) {
+        useOwned = Boolean(owned && buttons.length);
+        response = await send(base(), 'POST', components && (useOwned || await state(env, 'skirmish_buttons_off_until') <= Date.now() ? components : []));
+      }
       if (!response.ok) {
         console.warn('discord_post_failed', { status: response.status });
         await setState(env, 'discord_after', Date.now() + retryAfter(response));
@@ -318,6 +383,7 @@ async function flushNotifications(env: Env, players: Player[]): Promise<void> {
       const message = await response.json() as { id?: string };
       if (typeof message.id !== 'string' || !/^\d+$/.test(message.id)) throw new Error('Invalid Discord message ID');
       await setState(env, 'post:' + pendingMatch.match_id, message.id);
+      if (skirmish) await setState(env, 'via:' + pendingMatch.match_id, useOwned ? 'app' : 'plain');
       await env.DB.prepare('UPDATE notifications SET sent=1 WHERE match_id=?').bind(pendingMatch.match_id).run();
       let timing = null;
       try {
@@ -360,7 +426,9 @@ export async function monitor(env: Env, players: Player[] = configuredPlayers): 
     // Bound extra API traffic: one reserved match per run, one attempt per match per five minutes.
     const reservations=new Map((await env.DB.prepare(`SELECT s.riot_id,${sessionModeSQL} AS mode FROM death_unrated_sessions s WHERE s.cancelled_at IS NULL`).all<{riot_id:string;mode:string}>()).results.map(r=>[r.riot_id,r.mode]));
     const saved=new Set((await env.DB.prepare('SELECT riot_id,match_id FROM notifications ORDER BY ended_at DESC LIMIT 200').all<{riot_id:string;match_id:string}>()).results.map(r=>JSON.stringify([r.riot_id,r.match_id])));
-    const ranks=new Map((await env.DB.prepare("SELECT key,value FROM monitor_state WHERE key LIKE 'rank2:%' ORDER BY rowid DESC LIMIT 300").all<{key:string;value:string}>()).results.map(r=>[r.key,r.value]));
+    // Never read a growing rank-history table eagerly. Competitive matches
+    // load only their own rank2:<match>:<puuid> via indexed key lookup.
+    const ranks=new Map<string,string>();
     const deathDetails: DeathDetails = { remaining: 1, matches: new Map(),reservations };
     // Deliver a previously queued result before spending time polling the API again.
     if (players.length) await flushNotifications(env, players);
@@ -428,30 +496,47 @@ export default {
   fetch(request: Request, env: Env, ctx: ExecutionContext) {
     if(new URL(request.url).pathname.startsWith('/api/racing/'))return raceVideoApi(request,env).catch(()=>new Response('Unavailable',{status:503}));
     if(request.method==='GET'&&new URL(request.url).pathname==='/api/mahjong/status')return mahjongStatus(env).then(status=>Response.json(status,{headers:{'Cache-Control':'no-store'}})).catch(()=>Response.json({enabled:false,error:'configuration_unavailable'},{status:503}));
+    if(request.method==='GET'&&new URL(request.url).pathname==='/api/discord/activity-entry/status')return silentEntryStatus(env).then(info=>Response.json(info,{headers:{'Cache-Control':'no-store'}})).catch(()=>Response.json({handlerConfirmed:false},{status:503}));
+    if(new URL(request.url).pathname.startsWith('/api/discord/app-webhook/'))return appWebhookApi(request,env).catch(()=>new Response('Unavailable',{status:503}));
     if(new URL(request.url).pathname.startsWith('/api/mahjong/paipu/'))return paipuApi(request,env).catch(()=>new Response('Unavailable',{status:503}));
-    return new URL(request.url).pathname.startsWith('/api/kp/') ? kpApi(request, env) : discordInteractions(request, env, ctx);
+    return new URL(request.url).pathname.startsWith('/api/kp/') ? kpApi(request, env, undefined, job=>ctx.waitUntil(job)) : discordInteractions(request, env, ctx);
   },
   async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
     ctx.waitUntil(track(env,'mahjong_watch',()=>monitorMahjong(env)));
     ctx.waitUntil(track(env,'unite_watch',()=>monitorUnite(env)));
     ctx.waitUntil(track(env,'voice',()=>ensureVoice(env)));
+    ctx.waitUntil(track(env,'steam',async()=>{const mapping=await initializeKp(env);if(mapping)await monitorSteam(env,mapping.guildId);}));
+    ctx.waitUntil(track(env,'steam_posts',async()=>{const mapping=await initializeKp(env);if(!mapping)return;await queueSteamPosts(env,mapping.guildId);await flushMahjongPosts(env);}));
     ctx.waitUntil(track(env,'valorant',()=>monitor(env)));
     ctx.waitUntil((async()=>{
       const mapping=await initializeKp(env);if(!mapping)return;
-      await track(env,'stock_market',async()=>{const market=await prepareStocks(env,mapping.guildId);await queueStockPosts(env,market);});
+      // Independent one-shot OAuth credential migration; never delays race or wallet jobs.
+      ctx.waitUntil(migrateSilentEntryPoint(env).catch(()=>console.warn('discord_entrypoint_pending')));
+      await track(env,'stock_market',async()=>{await runGuerrillaMarket(env,mapping.guildId);const market=await prepareStocks(env,mapping.guildId);await queueStockPosts(env,market);});
       // Owned horses run even when nobody opens the Activity.
-      await track(env,'horse_race',async()=>{await decideEntries(env,mapping,openRaceStart(Date.now()));await settleHorsePrizes(env,mapping);});
+      await track(env,'horse_race',async()=>{const now=Date.now(),open=openRaceStart(now);
+       // A horse can run without anyone opening the Activity. Lock its random
+       // seed when its field opens, never only when a viewer/bettor is present.
+       const created=await ensureRaceField(env,mapping,open,now);
+       if(created)await raceSeed(env,mapping.guildId,open);
+       if(shouldSettleHorsePrizes(now))await settleHorsePrizes(env,mapping,now);
+      });
       // A very rare free horse for someone, drawn once per race slot and announced in the earnings channel.
       await track(env,'horse_gift',async()=>{const gift=await maybeGiftHorse(env,mapping,openRaceStart(Date.now()));if(gift&&env.KP_EARNINGS_WEBHOOK_URL){await ensurePosts(env);await enqueue(env,'horse-gift:'+gift.horse.id,gift.text,Date.now());}});
       await track(env,'race_settlement',async()=>{await settleKpRaces(env,mapping);});
-      // 借KP: repay from what came in, then this hour's interest.
-      await track(env,'debt_settlement',async()=>{await settleDebts(env,mapping.guildId);});
+      // 借KP: repay from what came in, then the day's interest. Reaching the cap and paying it all back go to 稼ぎch.
+      await track(env,'debt_settlement',async()=>{await settleDebts(env,mapping.guildId);if(env.KP_EARNINGS_WEBHOOK_URL){await ensurePosts(env);await queueDebtPosts(env,mapping.guildId);}});
       // Results are queued after settlement in the same run, then sent.
       let crowns:Awaited<ReturnType<typeof scheduleCrowns>>=[];
       await track(env,'crown_schedule',async()=>{crowns=await scheduleCrowns(env,mapping);});
       // M.LEAGUE: official results, then settlement, then posts (flushed together with the racing ones).
-      await track(env,'mleague',async()=>{await refreshMlCards(env);await pollMlLineups(env,mapping);await pollMlResults(env);await settleMl(env,mapping);await queueMlPosts(env,mapping);});
-      await track(env,'earnings_post',async()=>{await queueRacePosts(env,mapping,Date.now(),crowns);await flushRacePosts(env);});
+      // The main cron still runs every minute, but M.LEAGUE only needs DB
+      // reads around its 19:00 JST matches. A single 18:00 check also catches
+      // stale results and seeds next-day cards following an off-day.
+      // Cloudflare may execute a cron a little late; use its intended minute for the 18:00 catch-up.
+      if(shouldRunMlCron(_event.scheduledTime??Date.now()))
+        await track(env,'mleague',async()=>{await refreshMlCards(env);await pollMlLineups(env,mapping);await pollMlResults(env);await settleMl(env,mapping);await queueMlPosts(env,mapping);});
+      await track(env,'earnings_post',async()=>{await queueRacePosts(env,mapping,Date.now(),crowns);await queueVdkPearlRoast(env,mapping).catch(()=>console.warn('vdk_pearl_roast_pending'));await queueCommunityNews(env).catch(()=>console.warn('community_news_pending'));await queueRelicPress(env).catch(()=>console.warn('relic_press_pending'));await flushRacePosts(env);});
       await track(env,'race_broadcast',async()=>{await prepareRaceBroadcast(env,mapping);});
     })().catch(()=>console.warn('race_settlement_pending')));
   },

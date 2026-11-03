@@ -77,7 +77,7 @@ export function roastFor(summary:PaipuSummary,seatNo:number,level:RoastLevel,who
   return out;
  }
  if(yakuman)add('yakuman',{title:yakuman.title});
- if(p.score<0)add('bust',{points:points(p.score)});
+ if(p.score<0)add(summary.players===3?'bust3':'bust',{points:points(p.score)});
  if(dealIns[0]&&(dealIns[0].yakuman||dealIns[0].han>=6))add('dealinBig',{title:dealIns[0].title,points:points(dealIns[0].value),winner:who(dealIns[0].seat)});
  if(p.riichiDealIns)add('riichiDealin',{points:points(dealIns[0]?.value??0)});
  if(p.dealIns>=3)add('dealinMany',{n:p.dealIns,points:points(p.dealInPoints)});
@@ -87,7 +87,7 @@ export function roastFor(summary:PaipuSummary,seatNo:number,level:RoastLevel,who
  // Nothing special happened: the rank alone still gets a line.
  if(last){
   // Fill up with distinct last-place lines, starting from a seat-specific point in the pool.
-  const pool=voice.last[level],start=hash('last:'+level+':'+key)%pool.length;
+  const pool=summary.players===3?[...voice.last[level],...voice.last3[level]]:voice.last[level],start=hash('last:'+level+':'+key)%pool.length;
   for(let i=0;i<pool.length&&out.length<limit;i++){const text=pool[(start+i)%pool.length].replace(/\{points\}/g,points(p.score));if(!out.includes(text))out.push(text);}
   return out;
  }
@@ -97,7 +97,7 @@ export function roastFor(summary:PaipuSummary,seatNo:number,level:RoastLevel,who
   for(let i=0;i<pool.length&&out.length<limit;i++){const text=pool[(start+i)%pool.length].replace(/\{points\}/g,points(p.score));if(!out.includes(text))out.push(text);}
   return out;
  }
- if(!out.length)add(p.rank===summary.players?'last':p.rank===2?'second':'third',{points:points(p.score)});
+ if(!out.length)add(p.rank===summary.players?'last':p.rank===2?(summary.players===3?'second3':'second'):'third',{points:points(p.score)});
  return out;
 }
 /** The post: final standings, the key hands, each member's numbers and roast. `members` maps seat -> Discord user. */

@@ -1,22 +1,35 @@
-import {stockPanel,stockCandles,stockPrice} from './stock-view.js?v=20261028-stocks';
-import {wheelView,covered,redNumbers,outcomeAngle} from './roulette-view.js?v=20261028-casino';
-import {connectDiscordActivity,isDiscordActivity}from './discord-activity-auth.js?v=20261028-casino';
-import { createKpClient } from './kp-client.js?v=20261028-casino';
-import { fmt, fmt0 } from './format.js';
-import { submitClaim, approveClaim, issueDirective, completeDirective } from './progression.js?v=20261028-casino';
-import { titleView, homeView, playView, directivesView, escapeHTML } from './progression-views.js?v=20261029-spike-growth';
-import { genCandles, movingAverage, svgCandles } from './charts.js?v=20261028-stocks';
-import { MARKET, createInitialState, portfolioValue, assets, advanceMarket, trade, spin, spinNumbers, validateNumberBets, grantDemoSalary, cryptoRouletteNumber } from './engine.js?v=20261029-pending';
-import { KEY, LEGACY_KEY } from './storage.js';
-import { PUBLIC_SALT, RUN_MS, WEEKLY_LIMIT, openRaceStart, latestRaceStart, raceCard, raceOdds, raceResult, raceTimeline, raceCommentary, raceRuns, placeRaceBet, settleRaceBets, weeklySpent } from './racing.js?v=20261029-pending';
-import { LUXURY } from './luxury.js?v=20261028-casino';
-import { raceScreen, racePreview, drawRace, raceElapsed, ownerPanel, luxuryPanel, roastPanel } from './racing-view.js?v=20261029-history2';
-import { createStore } from './store.js';
-import { healthPanel } from './health-view.js?v=20261029-health';
-import { mleagueScreen, mleaguePreview } from './mleague-view.js?v=20261029-mleague';
-import { gamePicker, chinchiroView, blackjackView } from './casino-view.js?v=20261028-dice-suspense';
-import {casinoFrames} from './casino-animation.js?v=20261028-dice-suspense';
-import { playChinchiro, bjStart, bjHit, bjStand, bjDouble, cryptoDie, cryptoCard } from './casino.js?v=20261028-casino';
+import {stockOrderQuote,STOCK_ORDER_VERSION,STOCK_PRICE_SCALE} from './stock-order.js?v=web-06733520f64a1841';
+import {steamConnectionMessage} from './steam-view.js?v=web-06733520f64a1841';
+import {relicsPanel} from './relics-view.js?v=web-06733520f64a1841';
+import {primeRelicAudio,playRelicSound,previewRelicSound,stopRelicSound,setRelicSoundVolume,toggleRelicSound} from './relics-audio.js?v=web-06733520f64a1841';
+import {relicDefaultView} from './relics-v4.js?v=web-06733520f64a1841';
+import {privateCasinoPanel} from './private-casino-view.js?v=web-06733520f64a1841';
+import {communityPanel,communityRows} from './community-feed.js?v=web-06733520f64a1841';
+import {stockPanel,stockCandles,stockPrice,privateStockOperator} from './stock-view.js?v=web-06733520f64a1841';
+import {stockStoryChoices,validateCustomStory} from './stock-stories.js?v=web-06733520f64a1841';
+import {wheelView,covered,redNumbers,outcomeAngle} from './roulette-view.js?v=web-06733520f64a1841';
+import {makeEscalationWheel} from './escalation-roulette.js?v=web-06733520f64a1841';
+import {connectDiscordActivity,isDiscordActivity,openSteamLogin,openCompanionGame}from './discord-activity-auth.js?v=web-06733520f64a1841';
+import { createKpClient } from './kp-client.js?v=web-06733520f64a1841';
+import { fullRefreshInterval, communityRefreshEnabled, COMMUNITY_REFRESH_INTERVAL } from './live-refresh-policy.js?v=web-06733520f64a1841';
+import { fmt, fmt0 } from './format.js?v=web-06733520f64a1841';
+import { submitClaim, approveClaim, issueDirective, completeDirective } from './progression.js?v=web-06733520f64a1841';
+import { titleView, homeView, playView, directivesView, escapeHTML } from './progression-views.js?v=web-06733520f64a1841';
+import { genCandles, movingAverage, svgCandles } from './charts.js?v=web-06733520f64a1841';
+import { MARKET, createInitialState, portfolioValue, assets, advanceMarket, trade, spin, spinNumbers, validateNumberBets, grantDemoSalary, cryptoRouletteNumber } from './engine.js?v=web-06733520f64a1841';
+import { KEY, LEGACY_KEY } from './storage.js?v=web-06733520f64a1841';
+import { PUBLIC_SALT, RUN_MS, WEEKLY_LIMIT, openRaceStart, latestRaceStart, raceCard, raceOdds, raceResult, raceTimeline, raceCommentary, raceRuns, placeRaceBet, settleRaceBets, weeklySpent } from './racing.js?v=web-06733520f64a1841';
+import { LUXURY } from './luxury.js?v=web-06733520f64a1841';
+import { raceScreen, racePreview, drawRace, raceElapsed, ownerPanel, luxuryPanel, roastPanel } from './racing-view.js?v=web-06733520f64a1841';
+import { createStore } from './store.js?v=web-06733520f64a1841';
+import { healthPanel } from './health-view.js?v=web-06733520f64a1841';
+import { trendPanel } from './trend-view.js?v=web-06733520f64a1841';
+import { mleagueScreen, mleaguePreview } from './mleague-view.js?v=web-06733520f64a1841';
+import { gamePicker, chinchiroView, blackjackView } from './casino-view.js?v=web-06733520f64a1841';
+import {casinoFrames} from './casino-animation.js?v=web-06733520f64a1841';
+import { playChinchiro, bjStart, bjHit, bjStand, bjDouble, cryptoDie, cryptoCard, cryptoInt } from './casino.js?v=web-06733520f64a1841';
+import { minesStart, minesPick, minesCashout, playSlot, vpDeal, vpDraw, playBaccarat, VP_NAMES } from './casino-more.js?v=web-06733520f64a1841';
+import { minesView, slotView, videoPokerView, baccaratView } from './casino-more-view.js?v=web-06733520f64a1841';
 const $=(s,el=document)=>el.querySelector(s);
 const wallet=createKpClient();
 const embedded=isDiscordActivity();
@@ -24,6 +37,13 @@ document.documentElement.classList.toggle('discord-activity',embedded);
 let autoState=embedded?'loading':'idle';
 let autoMessage='';
 let live=wallet.connected&&!embedded;
+let steamView=null;
+let relicProofs=null,relicNotice='',relicLoading=false;
+// Each tap is one paid purchase. Never queue taps while a request or reveal is active.
+let relicSummonBusy=false,lastRelicSummonTap=0,lastSummonBlockToast=0;
+const RELIC_SUMMON_TAP_GAP_MS=1200;
+let lastRelicLedgerId=null;
+let relicView={...relicDefaultView(),previewMode:'competitive',previewAmount:500},relicReveal=null;
 let connectionError=live?'口座を読み込んでいます…':'';
 let state;
 let screen='title';
@@ -37,9 +57,34 @@ const numberSelected=n=>betType==='number'?numberBets.has(n):covered(betType,bet
 let rotation=0;
 let spinLock=false;
 let mutationPending=false;
+let stockShockNotice=null;
+let stockShockConfirmation=null;
+let stockShockSelection={symbol:MARKET[0].id,direction:'up',strength:25,eventId:'auto',headline:'',body:''};
 let detail=null;
 let showMA=true;
 let renderedMarkup;
+let activeEscalationOverlay=null;
+const escalationSeen=new Set();
+function seenEscalationKey(spin){return 'keso:esc-seen:'+state.selfUserId+':'+spin.id;}
+function isEscalationSeen(spin){
+ const key=seenEscalationKey(spin);
+ try{return localStorage.getItem(key)==='1'||escalationSeen.has(key);}catch{return escalationSeen.has(key);}
+}
+function markEscalationSeen(spin){
+ const key=seenEscalationKey(spin);escalationSeen.add(key);
+ try{localStorage.setItem(key,'1');}catch{/* A replay stays available in the history on storage-restricted devices. */}
+}
+function showEscalationWheel(spin){
+ if(activeEscalationOverlay)return;
+ markEscalationSeen(spin);
+ activeEscalationOverlay=makeEscalationWheel(spin,()=>{activeEscalationOverlay=null;queueMicrotask(maybeAutoEscalation);});
+}
+function maybeAutoEscalation(){
+ if(activeEscalationOverlay||!live||screen==='title'||document.hidden||mutationPending||spinLock)return;
+ const current=Date.now();
+ const spin=state.escalationSpins?.find(s=>current-s.at>=0&&current-s.at<48*3600000&&!isEscalationSeen(s));
+ if(spin)showEscalationWheel(spin);
+}
 
 const app=$('#app');
 const toastEl=document.createElement('div');toastEl.className='toast';toastEl.setAttribute('role','status');toastEl.setAttribute('aria-live','polite');document.body.appendChild(toastEl);
@@ -86,17 +131,27 @@ function renderRow(item){
 }
 
 // Bottom tabs and the screens under each. 遊ぶ = 競馬・カジノ・株、使う = 指名・馬主・高級品.
-const GROUPS={race:[['race','競馬'],['mleague','Mリーグ'],['casino','カジノ'],['market','株']],directives:[['directives','指名'],['stable','馬主'],['shop','高級品']]};
+const GROUPS={race:[['race','競馬'],['mleague','Mリーグ'],['casino','カジノ'],['market','株']],directives:[['directives','指名'],['stable','馬主'],['shop','高級品'],['relics','遺物']]};
 const groupOf=id=>Object.keys(GROUPS).find(g=>GROUPS[g].some(([s])=>s===id))??id;
 function tabsFor(group){return `<div class="sub-tabs">${GROUPS[group].map(([id,label])=>`<button class="sub-tab ${screen===id?'active':''}" data-screen="${id}">${label}</button>`).join('')}</div>`;}
 function subTabs(){return tabsFor('race');}
 
 // Race playback state. The card, result and odds are pure functions of the race start time.
 let raceDraft={type:'win',horse:null};
+// Native confirmation dialogs can silently fail in Discord's iOS webview.
+let pendingHorseSale=null;
 // Mリーグ: the chosen game and player, and whether the confirmation is showing.
 let mlDraft={match:null,player:null,confirm:false};
 // 資産 → システムの状態, loaded only when asked for.
 let health=null,healthLoading=false,healthError='';
+// メンバーのKP推移 (資産): loaded when the screen opens; sort, highlight and the tapped day are view-only.
+let trend=null,trendView={loading:false,error:'',days:7,sort:'now',dir:1,focus:null,day:null};
+async function loadTrend(days=trendView.days){
+  if(!live||trendView.loading)return;
+  trendView={...trendView,loading:true,error:'',days};if(trend&&trend.days.length!==days)trend=null;render();
+  try{trend=await wallet.trend(days);if(!trend.members.some(m=>m.id===trendView.focus))trendView.focus=null;trendView.day=null;}catch(error){trendView.error=error.message||'推移を読み込めませんでした';}
+  finally{trendView.loading=false;render();}
+}
 let raceLoop=0;
 let raceShown='';
 let raceSettling=false;
@@ -176,14 +231,15 @@ function screenMarket(){
 function tradeEstimate(){
   const qty=Number(drafts['trade-qty'] ?? 1);
   const price=state.prices[activeSymbol];
-  const gross=qty*price,fee=Math.ceil(gross/100);
+  let quote;try{if(live)quote=stockOrderQuote({priceUnits:state.stockMarket?.orderQuotes?.[activeSymbol]??price*STOCK_PRICE_SCALE,initialPrice:MARKET.find(s=>s.id===activeSymbol).initialPrice,side:tradeSide,quantity:qty});}catch(error){return escapeHTML(error.message);}
+  const gross=quote?.gross??qty*price,fee=quote?.fee??Math.ceil(gross/100);
   if(!Number.isSafeInteger(qty)||qty<1||qty>100000||!Number.isSafeInteger(gross))return '数量は1〜100,000株の整数で入力してください';
-  const total=tradeSide==='buy'?gross+fee:gross-fee;
+  const total=quote?.total??(tradeSide==='buy'?gross+fee:gross-fee);
   const enough=tradeSide==='buy'?total<=state.cash:qty<=state.holdings[activeSymbol];
-  return `<div class="asset-line"><span>保有 / 保有KP</span><strong>${state.holdings[activeSymbol]}株 / ${moneyCompact(state.cash)}</strong></div><div class="asset-line"><span>手数料（1%）</span><strong>${moneyCompact(fee)}</strong></div><div class="asset-line"><span>${tradeSide==='buy'?'支払':'受取'}見込</span><strong>${moneyCompact(total)}</strong></div>${enough?'':'<p class="helper">'+(tradeSide==='buy'?'保有KP':'保有株数')+'が不足しています</p>'}<p class="helper">約定時の最新価格で計算します。</p>`;
+  return `<div class="asset-line"><span>保有 / 保有KP</span><strong>${state.holdings[activeSymbol]}株 / ${moneyCompact(state.cash)}</strong></div><div class="asset-line"><span>手数料（1%）</span><strong>${moneyCompact(fee)}</strong></div><div class="asset-line"><span>${tradeSide==='buy'?'支払':'受取'}見込</span><strong>${moneyCompact(total)}</strong></div>${enough?'':'<p class="helper">'+(tradeSide==='buy'?'保有KP':'保有株数')+'が不足しています</p>'}${quote?`<p class="helper">注文後の目安 ${moneyCompact(quote.priceAfter)}。数量による値動きを含む合計です。表示額より支払が増える・受取が減る場合は注文を止めます。</p>`:'<p class="helper">約定時の最新価格で計算します。</p>'}`;
 }
 function tradeHistory(){
-  return `<div class="asset-card"><h2 class="panel-title">取引履歴</h2>${state.trades.length?state.trades.map(t=>`<div class="history-entry"><div>${MARKET.find(s=>s.id===t.symbol).name} ${t.side==='buy'?'買付':'売却'} ${fmt0(t.quantity)}株</div><div class="helper">${new Date(t.time).toLocaleString('ja-JP')} / 単価 ${moneyCompact(t.price)} / 手数料 ${moneyCompact(t.fee)}</div></div>`).join(''):'<p class="helper">まだ取引はありません。</p>'}</div>`;
+  return `<div class="asset-card"><h2 class="panel-title">取引履歴</h2>${state.trades.length?state.trades.map(t=>`<div class="history-entry"><div>${MARKET.find(s=>s.id===t.symbol).name} ${t.side==='buy'?'買付':'売却'} ${fmt0(t.quantity)}株</div><div class="helper">${new Date(t.time).toLocaleString('ja-JP')} / ${t.gross!==undefined?'平均単価':'単価'} ${moneyCompact(t.price)}${t.gross!==undefined?' / 約定額 '+moneyCompact(t.gross):''} / 手数料 ${moneyCompact(t.fee)}</div></div>`).join(''):'<p class="helper">まだ取引はありません。</p>'}</div>`;
 }
 
 function tradePanel(){
@@ -194,23 +250,29 @@ function tradePanel(){
 // カジノ: one game at a time (ルーレット・チンチロ・ブラックジャック).
 let casinoGame='roulette';
 let casinoBusy=false,casinoPresentation=null,casinoStage={},casinoSkipped=false,skipCasinoPause=null;
+let minesCount=3,vpHold=[false,false,false,false,false];
 function screenCasino(){
   const visible=casinoPresentation??state;
   const head=`<div class="screen"><header class="topbar"><div class="toprow"><h1 class="title">カジノ</h1><div class="small-actions"><span class="badge">所持 ${moneyCompact(visible.cash)}</span></div></div></header>${subTabs()}${gamePicker(casinoGame)}`;
   if(casinoGame==='chinchiro')return head+chinchiroView(visible,casinoStage,casinoBusy)+bottomNav()+'</div>';
   if(casinoGame==='blackjack')return head+blackjackView(visible,casinoStage,casinoBusy)+bottomNav()+'</div>';
+  if(casinoGame==='mines')return head+minesView(visible,{busy:casinoBusy,count:minesCount,drafts})+bottomNav()+'</div>';
+  if(casinoGame==='slot')return head+slotView(visible,{busy:casinoBusy,jackpot:live?state.jackpot:null,drafts})+bottomNav()+'</div>';
+  if(casinoGame==='poker')return head+videoPokerView(visible,{busy:casinoBusy,hold:vpHold,drafts})+bottomNav()+'</div>';
+  if(casinoGame==='baccarat')return head+baccaratView(visible,{busy:casinoBusy,drafts})+bottomNav()+'</div>';
   const recent=state.spins[0];
-  return `${head}<div class="center-panel"><div style="position:relative;width:min(320px,86vw);margin:0 auto 18px"><div class="pointer"></div><div class="roulette-board" id="wheel" style="transform:rotate(${rotation|| (recent?outcomeAngle(recent.outcome):0)}deg)">${wheelView(betType==='number'?'numbers':betType,betNumber,[...numberBets.keys()])}<div class="roulette-center">${recent?recent.outcome:'K'}</div></div></div></div><div class="number-table" aria-label="ルーレットの数字">${Array.from({length:37},(_,n)=>`<button data-number="${n}" aria-pressed="${numberSelected(n)}" class="number-cell ${n===0?'green':redNumbers.has(n)?'red':'black'} ${numberSelected(n)?'selected':''}">${n}${betType==='number'&&numberBets.has(n)?`<small>${numberBets.get(n)} KP</small>`:''}</button>`).join('')}</div><p class="helper">ヨーロピアン式・0は緑。数字36倍／赤黒・偶奇・前半後半2倍／ダズン・列3倍（掛け金込み）。数字は複数選択OK。数字をもう一度タップすると解除。数字ごと100 KP以上、合計20,000 KPまで。</p><div class="bet-grid">${[['red','赤'],['black','黒'],['even','偶数'],['odd','奇数'],['number','数字指定'],['low','1〜18'],['high','19〜36'],['dozen1','1〜12'],['dozen2','13〜24'],['dozen3','25〜36'],['column1','1列目'],['column2','2列目'],['column3','3列目']].map(([id,label])=>`<button data-bet="${id}" class="${betType===id?'active':''}">${label}</button>`).join('')}</div><div class="trade-box"><h3>ベット</h3>${betType==='number'?`<p class="helper">盤面から数字を選んでください。</p>${[...numberBets].map(([n,amount])=>`<div class="field"><label for="number-stake-${n}">${n} の掛け金</label><input id="number-stake-${n}" data-stake="${n}" class="input" type="number" min="100" max="20000" step="1" value="${amount}"></div>`).join('')}<strong>合計 <span id="number-bet-total">${moneyCompact([...numberBets.values()].reduce((a,b)=>a+b,0))}</span></strong>`:`<div class="field"><label for="bet-amount">賭け金</label><input id="bet-amount" class="input" type="number" min="100" max="20000" step="1" value="500"></div>`}<div class="action-row"><button class="action-btn primary" data-action="spin" ${spinLock?'disabled':''}>ルーレットを回す</button></div></div><div class="result-panel"><p class="result-title ${recent && recent.payout>0?'negative':recent?'positive':''}">${recent ? (recent.payout>0?'的中':'不的中') : '直近結果'}</p><div class="helper">${recent ? `出目 ${recent.outcome} / 賭け ${moneyCompact(recent.amount)} / 払戻 ${moneyCompact(recent.payout)}${recent.bets?'<br>'+recent.bets.map(b=>b.number+': '+moneyCompact(b.amount)).join(' · '):''}` : 'まだ抽選履歴はありません。'}</div></div>${bottomNav()}</div>`;
+  return `${head}<div class="center-panel"><div style="position:relative;width:var(--roulette-size,min(320px,86vw));margin:0 auto 18px"><div class="pointer"></div><div class="roulette-board" id="wheel" style="transform:rotate(${rotation|| (recent?outcomeAngle(recent.outcome):0)}deg)">${wheelView(betType==='number'?'numbers':betType,betNumber,[...numberBets.keys()])}<div class="roulette-center">${recent?recent.outcome:'K'}</div></div></div></div><div class="number-table" aria-label="ルーレットの数字">${Array.from({length:37},(_,n)=>`<button data-number="${n}" aria-pressed="${numberSelected(n)}" class="number-cell ${n===0?'green':redNumbers.has(n)?'red':'black'} ${numberSelected(n)?'selected':''}">${n}${betType==='number'&&numberBets.has(n)?`<small>${numberBets.get(n)} KP</small>`:''}</button>`).join('')}</div><p class="helper">ヨーロピアン式・0は緑。数字36倍／赤黒・偶奇・前半後半2倍／ダズン・列3倍（掛け金込み）。数字は複数選択OK。数字をもう一度タップすると解除。数字ごと100 KP以上、合計20,000 KPまで。</p><div class="bet-grid">${[['red','赤'],['black','黒'],['even','偶数'],['odd','奇数'],['number','数字指定'],['low','1〜18'],['high','19〜36'],['dozen1','1〜12'],['dozen2','13〜24'],['dozen3','25〜36'],['column1','1列目'],['column2','2列目'],['column3','3列目']].map(([id,label])=>`<button data-bet="${id}" class="${betType===id?'active':''}">${label}</button>`).join('')}</div><div class="trade-box"><h3>ベット</h3>${betType==='number'?`<p class="helper">盤面から数字を選んでください。</p>${[...numberBets].map(([n,amount])=>`<div class="field"><label for="number-stake-${n}">${n} の掛け金</label><input id="number-stake-${n}" data-stake="${n}" class="input" type="number" min="100" max="20000" step="1" value="${amount}"></div>`).join('')}<strong>合計 <span id="number-bet-total">${moneyCompact([...numberBets.values()].reduce((a,b)=>a+b,0))}</span></strong>`:`<div class="field"><label for="bet-amount">賭け金</label><input id="bet-amount" class="input" type="number" min="100" max="20000" step="1" value="500"></div>`}<div class="action-row"><button class="action-btn primary" data-action="spin" ${spinLock?'disabled':''}>ルーレットを回す</button></div></div><div class="result-panel"><p class="result-title ${recent && recent.payout>0?'negative':recent?'positive':''}">${recent ? (recent.payout>0?'的中':'不的中') : '直近結果'}</p><div class="helper">${recent ? `出目 ${recent.outcome} / 賭け ${moneyCompact(recent.amount)} / 払戻 ${moneyCompact(recent.payout)}${recent.bets?'<br>'+recent.bets.map(b=>b.number+': '+moneyCompact(b.amount)).join(' · '):''}` : 'まだ抽選履歴はありません。'}</div></div>${bottomNav()}</div>`;
 }
 
 function useScreen(title,body){
   return `<div class="screen"><header class="topbar"><div class="toprow"><h1 class="title">${title}</h1><span class="badge">${moneyCompact(state.cash)}</span></div></header>${tabsFor('directives')}${live?`<div class="asset-list">${body}</div>`:'<div class="market-disclaimer">本番のKP口座をつなぐと使えます。</div>'}${bottomNav()}</div>`;
 }
-function screenStable(){return useScreen('馬主',live?ownerPanel(state,Date.now()):'');}
+function screenStable(){return useScreen('馬主',live?ownerPanel(state,Date.now(),pendingHorseSale):'');}
 function screenShop(){return useScreen('高級品',live?luxuryPanel(state):'');}
+function screenRelics(){return useScreen('遺物',relicsPanel(state,{proofs:relicProofs,notice:relicNotice,loading:relicLoading,view:relicView,reveal:relicReveal,summonBusy:relicSummonBusy||wallet.pending}));}
 
 function screenAssets(){
-  return `<div class="screen"><header class="topbar"><div class="toprow"><h1 class="title">資産</h1><div class="small-actions">${live?'':'<button class="icon-btn" data-action="reset" aria-label="初期化">↺</button>'}</div></div></header><div class="wallet-strip"><div class="wallet-item"><small>保有KP</small><strong>${moneyCompact(state.cash)}</strong></div><div class="wallet-item"><small>株式評価額</small><strong>${moneyCompact(portfolioValue(state))}</strong></div><div class="wallet-item"><small>純資産</small><strong>${moneyCompact(assets(state))}</strong></div></div>${live?'<div class="market-disclaimer">サーバー口座 · 試合報酬と決済は全端末で共通です。</div>':'<div class="market-disclaimer">端末内のデモ口座</div>'}${live?'':`<details class="panel"><summary class="card-body">開発用：テストKPの補充</summary><div class="action-row"><button class="action-btn" data-action="salary">テスト用KP +600 KP</button></div></details>`}${state.debt?.amount>0?`<div class="market-disclaimer">💸 借KP ${moneyCompact(state.debt.amount)}（${state.debt.intervalMinutes}分ごとに利子${state.debt.interestPercent}%）</div>`:''}<div class="asset-list"><div class="asset-card"><div class="panel-title" style="margin-bottom:10px">保有銘柄</div>${MARKET.map(s=>`<div class="asset-line"><span>${s.name}</span><strong>${state.holdings[s.id]}株 / ${moneyCompact(state.holdings[s.id]*state.prices[s.id])}</strong></div>`).join('')}<div class="action-row"><button class="action-btn" data-screen="market">株を売買する</button></div></div>${tradeHistory()}${live?roastPanel(state):''}${live?healthPanel(health,healthLoading,healthError):''}<div class="asset-card"><h2 class="panel-title">口座</h2>${live?'<div id="connection-slot"></div>':''}<button class="title-back" data-screen="title">タイトルへ戻る</button></div></div>${bottomNav()}</div>`;
+  return `<div class="screen"><header class="topbar"><div class="toprow"><h1 class="title">資産</h1><div class="small-actions">${live?'':'<button class="icon-btn" data-action="reset" aria-label="初期化">↺</button>'}</div></div></header><div class="wallet-strip"><div class="wallet-item"><small>保有KP</small><strong>${moneyCompact(state.cash)}</strong></div><div class="wallet-item"><small>株式評価額</small><strong>${moneyCompact(portfolioValue(state))}</strong></div><div class="wallet-item"><small>純資産</small><strong>${moneyCompact(assets(state))}</strong></div></div>${live?'<div class="market-disclaimer">サーバー口座 · 試合報酬と決済は全端末で共通です。</div>':'<div class="market-disclaimer">端末内のデモ口座</div>'}${live?'':`<details class="panel"><summary class="card-body">開発用：テストKPの補充</summary><div class="action-row"><button class="action-btn" data-action="salary">テスト用KP +600 KP</button></div></details>`}${state.debt?.amount>0?`<div class="market-disclaimer">💸 借KP ${moneyCompact(state.debt.amount)}（${state.debt.intervalMinutes}分ごとに利子${state.debt.interestPercent}%）</div>`:''}<div class="asset-list">${live&&state.privateCasino?privateStockOperator(MARKET,{selection:stockShockSelection,notice:stockShockNotice,confirmation:stockShockConfirmation,events:state.marketEvents}):''}${live&&state.privateCasino?privateCasinoPanel(drafts,privateRacePreview,privateRoundMessage):''}<div class="asset-card"><div class="panel-title" style="margin-bottom:10px">保有銘柄</div>${MARKET.map(s=>`<div class="asset-line"><span>${s.name}</span><strong>${state.holdings[s.id]}株 / ${moneyCompact(state.holdings[s.id]*state.prices[s.id])}</strong></div>`).join('')}<div class="action-row"><button class="action-btn" data-screen="market">株を売買する</button></div></div>${tradeHistory()}${live?roastPanel(state):''}${live?trendPanel(trend,trendView):''}${live?healthPanel(health,healthLoading,healthError):''}<div class="asset-card"><h2 class="panel-title">口座</h2>${live?'<div id="connection-slot"></div>':''}<button class="title-back" data-screen="title">タイトルへ戻る</button></div></div>${bottomNav()}</div>`;
 }
 
 function bottomNav(){
@@ -230,30 +292,58 @@ function detailSheet(){
 }
 
 function render(){
-  const html = screen==='title'?titleView(state,wallet.remembered,autoState,autoMessage):screen==='home'?homeView(state,bottomNav()):screen==='play'?playView(state,drafts,bottomNav()):screen==='directives'?directivesView(state,drafts,bottomNav(),tabsFor('directives')):screen==='stable'?screenStable():screen==='shop'?screenShop():screen==='market'?screenMarket():screen==='casino'?screenCasino():screen==='mleague'?mleagueScreen({state,live,draft:{...mlDraft,amount:drafts['ml-amount']},tabs:subTabs(),nav:bottomNav()}):screen==='race'?screenRace():screenAssets();
-  const openDetails=[...app.querySelectorAll('details')].map(el=>el.open);
+  const html = screen==='title'?titleView(state,wallet.remembered,autoState,autoMessage,wallet.connected):screen==='home'?homeView(state,bottomNav()):screen==='play'?playView(state,drafts,bottomNav(),steamView):screen==='directives'?directivesView(state,drafts,bottomNav(),tabsFor('directives')):screen==='stable'?screenStable():screen==='shop'?screenShop():screen==='relics'?screenRelics():screen==='market'?screenMarket():screen==='casino'?screenCasino():screen==='mleague'?mleagueScreen({state,live,draft:{...mlDraft,amount:drafts['ml-amount']},tabs:subTabs(),nav:bottomNav()}):screen==='race'?screenRace():screenAssets();
+  const previousView=app.querySelector('.screen')?.dataset.view;
+  // Do not carry an expanded home feed into a different screen: closed
+  // disclosures must not trigger 10-second D1 polling in the background.
+  const communityOpen=previousView===screen?app.querySelector('details.community-feed')?.open:undefined;
+  const openDetails=[...app.querySelectorAll('details:not(.community-feed)')].map(el=>el.open);
   const focusedElement=document.activeElement;
   const focused=focusedElement?.id;
   const focusData=focusedElement && Object.entries(focusedElement.dataset).find(([key])=>['screen','marketTab','marketMode','tradeSide','bet','action','open','raceHorse','raceType'].includes(key));
   const warning=live?connectionError:sessionOnly?'端末に保存できないため、この画面を閉じると変更が失われます。':!navigator.locks?.request?'このブラウザでは安全な保存を利用できません。HTTPS対応の最新ブラウザで開いてください。':'';
   const connection=live?`<div class="kp-connection"><span>${wallet.pending?'通信結果の確認待ち':wallet.remembered?'KP口座 接続中':'KP口座 一時接続'}</span><button data-action="refresh-kp">${wallet.pending?'通信結果を確認':'残高を更新'}</button><button data-action="disconnect-kp">接続を解除</button></div>`:'';
   const withControls=html.includes('<div id="connection-slot"></div>')?html.replace('<div id="connection-slot"></div>',connection):wallet.pending?(html.includes('</header>')?html.replace('</header>','</header>'+connection):connection+html):html; // an unconfirmed payment is shown on every screen, the title included
-  const markup=withControls.replace('<div class="screen">','<div class="screen">'+(warning?`<div class="storage-warning" role="status">${warning}</div>`:''))+detailSheet();
+  const withFeed=live&&screen!=='title'?withControls.replace('</header>','</header>'+communityPanel([],screen==='home')):withControls;
+  const markup=withFeed.replace('<div class="screen">','<div class="screen" data-view="'+screen+'">'+(warning?`<div class="storage-warning" role="status">${warning}</div>`:''))+detailSheet();
   // A quote/balance poll must not replace a pressed button when its display is unchanged.
   if(markup===renderedMarkup)return;
   app.innerHTML=markup;renderedMarkup=markup;
-  app.querySelectorAll('details').forEach((el,index)=>{el.open=openDetails[index]??false;});
+  app.querySelectorAll('details:not(.community-feed)').forEach((el,index)=>{el.open=openDetails[index]??el.open;});
+  if(communityOpen!==undefined){const feed=app.querySelector('details.community-feed');if(feed)feed.open=communityOpen;}
   for (const [id,value] of Object.entries(drafts)) { const input=document.getElementById(id); if(input) input.value=value; }
   if(focused&&!casinoBusy) document.getElementById(focused)?.focus();
   else if(focusData&&!casinoBusy){const [key,value]=focusData;const match=[...app.querySelectorAll('button,[data-open]')].find(el=>el.dataset[key]===value);match?.focus();}
   if(detail) $('.screen').inert=true;
   document.body.style.overflow=detail?'hidden':'';
+  paintCommunity();
   ensureRaceLoop();
+  if(live&&screen!=='title'&&Array.isArray(state.escalationSpins))queueMicrotask(maybeAutoEscalation);
 }
 
 
+function showRelicReward(bonus,base=0,names=[]){
+ if(!Number.isFinite(bonus)||bonus<=0)return;
+ document.getElementById('relic-kp-award')?.remove();
+ const el=document.createElement('div');el.id='relic-kp-award';el.className='relic-kp-award';
+ el.setAttribute('role','status');el.setAttribute('aria-live','polite');
+ const title=document.createElement('strong');title.textContent='✦ 遺物ボーナス ＋'+Math.floor(bonus).toLocaleString('ja-JP')+' KP';
+ const info=document.createElement('span');info.textContent=base>0?'報酬 '+Math.floor(base).toLocaleString('ja-JP')+' KP → 合計 '+Math.floor(base+bonus).toLocaleString('ja-JP')+' KP':'確定済みの追加KPを獲得';
+ const source=document.createElement('small');source.textContent=(names??[]).slice(0,3).join(' ／ ');
+ const close=document.createElement('button');close.type='button';close.textContent='閉じる';close.addEventListener('click',()=>el.remove());
+ el.append(title,info,source,close);document.body.appendChild(el);
+ setTimeout(()=>el.remove(),6500);
+}
+function observeRelicLedger(){
+ const latest=Array.isArray(state?.ledger)?state.ledger.find(row=>row.kind==='relic'):null;
+ if(!latest)return;
+ const id=String(latest.id??latest.at??'');
+ if(lastRelicLedgerId!==null&&id&&lastRelicLedgerId!==id&&Number(latest.delta)>0)showRelicReward(Number(latest.delta));
+ lastRelicLedgerId=id;
+}
+
 async function refreshWallet(resume=false){
- try{if(resume&&wallet.pending)await wallet.resume();state=await wallet.state();connectionError='';if(!detail)render();}
+ try{if(resume&&wallet.pending)await wallet.resume();state=await wallet.state();observeRelicLedger();connectionError='';if(!detail)render();}
  catch(error){connectionError=error.message;if(!detail)render();if(resume)throw error;}
 }
 // Live wallets: the server rolls the dice and draws the cards. The demo uses the same rules with the browser's crypto.
@@ -284,17 +374,43 @@ async function doCasino(action){
     $(`[data-action="${nextAction}"]`)?.focus({preventScroll:true});
   }
 }
+// マインズ・スロット・ビデオポーカー・バカラ: the server draws for live wallets, the browser's crypto for the demo.
+const MORE_DEMO={'mines-start':(s,a)=>minesStart(s,a.amount,a.mines),'mines-pick':(s,a)=>minesPick(s,a.cell,cryptoInt),'mines-cashout':s=>minesCashout(s,cryptoInt),
+ slot:(s,a)=>playSlot(s,a.amount,cryptoInt),'vp-deal':(s,a)=>vpDeal(s,a.amount,cryptoInt),'vp-draw':(s,a)=>vpDraw(s,a.hold,cryptoInt),baccarat:(s,a)=>playBaccarat(s,a.amount,a.side,cryptoCard)};
+const MORE_STAKE={'mines-start':'#mines-amount',slot:'#slot-amount','vp-deal':'#vp-amount',baccarat:'#baccarat-amount'};
+async function doMoreCasino(action,extra={}){
+  if(casinoBusy)return;
+  const args={...extra};
+  if(MORE_STAKE[action]){const amount=Number($(MORE_STAKE[action])?.value);if(!Number.isSafeInteger(amount)||amount<100||amount>20000)throw new Error('賭け金は100〜20,000 KPの整数です');args.amount=amount;drafts[MORE_STAKE[action].slice(1)]=String(amount);}
+  if(action==='mines-start')args.mines=minesCount;
+  if(action==='vp-draw')args.hold=[...vpHold];
+  const slow=['slot','baccarat'].includes(action)&&!reducedMotion?.matches;
+  casinoBusy=slow;if(slow)render();
+  try{
+    const started=Date.now();
+    const result=live?await liveOperation(action,args):await commit(next=>MORE_DEMO[action](next,args));
+    if(slow)await new Promise(resolve=>setTimeout(resolve,Math.max(0,(action==='slot'?1100:700)-(Date.now()-started))));
+    if(action==='vp-deal'||action==='vp-draw')vpHold=[false,false,false,false,false];
+    const done=result?.done;
+    if(done){const signed=n=>(n>0?'+':n<0?'−':'±')+moneyCompact(Math.abs(n));
+      toast(done.game==='slot'&&done.jackpot?`ジャックポット！ ${signed(done.net)}`:done.game==='video-poker'?`${VP_NAMES[done.hand]} ${signed(done.net)}`:done.game==='mines'&&done.net<0?`地雷… ${signed(done.net)}`:`${done.net>0?'勝ち':done.net<0?'負け':'分け'} ${signed(done.net)}`);}
+  }finally{casinoBusy=false;render();}
+}
 async function liveOperation(action,args){
  if(connectionError)throw Error('残高を更新してから操作してください。');
  const result=await wallet.operate(action,args);
- try{state=await wallet.state();connectionError='';}catch{connectionError='決済済みです。残高を更新してください。';}
+ try{state=await wallet.state();observeRelicLedger();connectionError='';}catch{connectionError='決済済みです。残高を更新してください。';}
+ if(Number(result?.relicBonus)>0){
+  const actual=state?.relics?.lastNativeEffect;
+  showRelicReward(Number(result.relicBonus),Number(actual?.amount??0),actual?.names??[]);
+ }
  return result;
 }
 
 async function doTrade(){
   const symbol=$('#trade-symbol')?.value || activeSymbol; const qty=Number($('#trade-qty')?.value);
   const side=tradeSide;
-  activeSymbol=symbol; if(live)await liveOperation('trade',{symbol,side,quantity:qty});else await commit(next => trade(next,symbol,side,qty)); render(); toast(`${MARKET.find(v=>v.id===symbol).name}を${side==='buy'?'買付':'売却'}した`);
+  activeSymbol=symbol; if(live){const quote=stockOrderQuote({priceUnits:state.stockMarket?.orderQuotes?.[symbol]??state.prices[symbol]*STOCK_PRICE_SCALE,initialPrice:MARKET.find(s=>s.id===symbol).initialPrice,side,quantity:qty});try{await liveOperation('trade',{symbol,side,quantity:qty,pricingVersion:STOCK_ORDER_VERSION,limit:quote.total});}catch(error){if(error.message?.includes('株価が変わった')){try{state=await wallet.state();render();}catch{connectionError='株価を更新できません。残高を更新してください。';render();}}throw error;}}else await commit(next => trade(next,symbol,side,qty)); render(); toast(`${MARKET.find(v=>v.id===symbol).name}を${side==='buy'?'買付':'売却'}した`);
 }
 async function doSpin(){
   if(spinLock) return;
@@ -320,20 +436,249 @@ async function doSpin(){
   },1800);
 }
 
+// メンバーのKP推移: tapping (or hovering on a mouse) a day on the chart shows everyone's KP that day.
+const trendDay=e=>{const hit=e.target.closest?.('[data-trend-day]');if(!hit)return;const day=Number(hit.dataset.trendDay);if(trendView.day!==day){trendView.day=day;render();}};
+addEventListener('click',trendDay);
+addEventListener('pointermove',e=>{if(e.pointerType==='mouse')trendDay(e);});
+// Client-only filter state; no D1 requests for typing or paging.
+for(const eventName of ['input','change'])addEventListener(eventName,e=>{
+ const audioVolume=e.target.closest?.('[data-relic-sound-volume]');
+ if(audioVolume&&screen==='relics'){
+  if(eventName==='input'){
+   const n=setRelicSoundVolume(audioVolume.value);
+   const output=document.querySelector('#relic-v9-volume-value');
+   if(output)output.textContent=n+'%';
+  }
+  return;
+ }
+ const preview=e.target.closest?.('[data-relic-preview]');
+ if(preview&&screen==='relics'&&eventName==='change'){
+  const key=preview.dataset.relicPreview;
+  if(key==='mode'||key==='amount'){
+   relicView=key==='mode'
+    ?{...relicView,previewMode:preview.value,previewAmount:preview.value==='spikerush'?40:500}
+    :{...relicView,previewAmount:Number(preview.value)};
+   render();
+  }
+  return;
+ }
+ const el=e.target.closest?.('[data-relic-filter]');
+ if(!el||screen!=='relics')return;
+ const key=el.dataset.relicFilter;
+ if(!['query','source','rarity','mode','sort'].includes(key))return;
+ if(eventName==='input'&&key!=='query')return;
+ if(eventName==='change'&&key==='query')return;
+ const caret=key==='query'?[el.selectionStart,el.selectionEnd]:null;
+ relicView={...relicView,[key]:el.value,page:0};
+ render();
+ if(caret){
+  const field=document.querySelector('#relic-search');
+  field?.focus({preventScroll:true});
+  if(caret[0]!==null&&caret[1]!==null)field?.setSelectionRange(caret[0],caret[1]);
+ }
+});
 addEventListener('click',async e=>{
   const t=e.target.closest?.('button,[data-open]'); if(!t) return;
   if(t.dataset.action==='casino-skip'){casinoSkipped=true;skipCasinoPause?.();return;}
   if(casinoBusy&&(t.dataset.screen||t.dataset.casinoGame)){toast('演出をスキップすると移動できます');return;}
-  const mutates=!!t.dataset.approve || !!t.dataset.complete || ['salary','trade','spin','race-bet','roast-level','horse-buy','horse-sell','luxury','reset','submit-claim','issue-directive','connect-kp','refresh-kp','disconnect-kp','auto-connect-kp','ml-buy','chinchiro','bj-start','bj-hit','bj-stand','bj-double'].includes(t.dataset.action);
-  if(mutates && mutationPending)return;
+  const mutates=!!t.dataset.approve || !!t.dataset.complete || ['steam-library','steam-status','steam-link','steam-open','steam-confirm','steam-disconnect','steam-game','salary','trade','spin','race-bet','roast-level','horse-buy','horse-sell-approve','luxury','reset','submit-claim','issue-directive','connect-kp','restore-kp','refresh-kp','disconnect-kp','auto-connect-kp','ml-buy','chinchiro','bj-start','bj-hit','bj-stand','bj-double','mines-start','mines-pick','mines-cashout','slot','vp-deal','vp-draw','baccarat','private-round','private-race','stock-shock','stock-shock-approve','stock-guerrilla-toggle','relic-summon','relic-equip','relic-auto-equip','relic-save-preset','relic-overwrite-preset','relic-load-preset','relic-remove-preset','relic-rename-preset','relic-claim-steam','relic-claim-unite'].includes(t.dataset.action);
+  if(mutates && mutationPending){
+    if(t.dataset.action==='relic-summon'&&Date.now()-lastSummonBlockToast>1200){toast('召喚結果を確認中。連打しても追加購入されません');lastSummonBlockToast=Date.now();}
+    return;
+  }
   if(mutates)mutationPending=true;
   try{
+    if(t.dataset.escSpin){
+      const spin=state.escalationSpins?.find(s=>s.id===t.dataset.escSpin);
+      if(spin)showEscalationWheel(spin);
+      return;
+    }
+    if(t.dataset.companion){await openCompanionGame(t.dataset.companion);return;}
+    if(t.dataset.action==='relic-tab'){
+      if(!['collection','gear','summon','records'].includes(t.dataset.tab))return;
+      relicView={...relicView,section:t.dataset.tab};
+      render();
+      document.querySelector('.relic-v8-nav')?.scrollIntoView({block:'start',behavior:'auto'});
+      return;
+    }
+    if(t.dataset.action==='relic-layout'){
+      relicView={...relicView,layout:t.dataset.layout==='list'?'list':'grid',page:0};
+      render();
+      return;
+    }
+    if(t.dataset.action==='relic-equipped-only'){
+      relicView={...relicView,equippedOnly:!relicView.equippedOnly,page:0};
+      render();
+      return;
+    }
+    if(t.dataset.action==='relic-sound-toggle'){
+      toggleRelicSound();render();return;
+    }
+    if(t.dataset.action==='relic-sound-preview'){
+      // No KP operation or D1 read. The trusted preview tap also unlocks iOS sound.
+      if(!primeRelicAudio()){toast('効果音をオンにして音量を上げてください。');return;}
+      if(!previewRelicSound(t.dataset.tier))toast('音声の自動再生が制限された場合は、もう一度試聴をタップしてください。');
+      return;
+    }
+    if(t.dataset.action==='relic-reveal-skip'){
+      const panel=app.querySelector('.relic-reveal');
+      panel?.classList.add('relic-reveal-instant');
+      stopRelicSound();
+      panel?.querySelector('[data-action="relic-reveal-close"]')?.focus();
+      return;
+    }
+    if(t.dataset.action==='relic-reveal-sound'){
+      primeRelicAudio();if(!playRelicSound(relicReveal))toast('端末の制限で音を再生できない場合がある。サウンド設定を確認してください。');
+      return;
+    }
+    if(t.dataset.action==='relic-reveal-close'){stopRelicSound();relicReveal=null;render();return;}
+    if(t.dataset.action==='relic-page'){relicView.page=Number(t.dataset.page)||0;render();document.querySelector('.relic-v8-viewbar')?.scrollIntoView({block:'start',behavior:'auto'});return;}
+    if(t.dataset.action==='relic-replay'){
+      const idx=Number(t.dataset.historyIndex);
+      const history=state.relics?.summonHistory;
+      if(Array.isArray(history)&&Number.isInteger(idx)&&history[idx]){
+        primeRelicAudio();relicReveal=history[idx];render();playRelicSound(relicReveal);
+      }
+      return;
+    }
+    if(t.dataset.action?.startsWith('relic-')){
+      if(!live||!wallet.connected)throw Error('遺物は本番KP口座への接続が必要です。');
+      const action=t.dataset.action;
+      if(action==='relic-summon'){
+        if(relicReveal){toast('召喚結果を閉じてから次を引いてください');return;}
+        const now=Date.now();
+        if(relicSummonBusy||now-lastRelicSummonTap<RELIC_SUMMON_TAP_GAP_MS){toast('連打防止中。少し間を空けてください');return;}
+        lastRelicSummonTap=now;
+        primeRelicAudio(); // iOS: unlock sound during the trusted tap.
+        relicSummonBusy=true;
+        render(); // immediately disable purchase buttons and show the pending state.
+      }
+      const presetSelected=$('#relic-preset')?.value??'';
+      const presetName=$('#relic-preset-name')?.value??'';
+      const args=action==='relic-summon'?{count:Number(t.dataset.count)}:
+       action==='relic-equip'?{relic:t.dataset.relic??'',slot:Number((relicView.section==='collection'?$('#relic-slot-gallery')?.value:$('#relic-slot')?.value)??0)}:
+       action==='relic-auto-equip'?{goal:$('#relic-goal')?.value??'all'}:
+       action==='relic-save-preset'?{preset:presetName}:
+       action==='relic-overwrite-preset'?{preset:presetSelected}:
+       action==='relic-rename-preset'?{preset:presetSelected,newName:presetName}:
+       ['relic-load-preset','relic-remove-preset'].includes(action)?{preset:presetSelected}:
+       action==='relic-claim-steam'?{event:t.dataset.event}:{tier:t.dataset.tier};
+      const result=await liveOperation(action,args);
+      if(['relic-equip','relic-auto-equip','relic-save-preset','relic-overwrite-preset','relic-load-preset','relic-remove-preset','relic-rename-preset','relic-claim-steam','relic-claim-unite'].includes(action)){
+       try{relicProofs=await wallet.relics();}catch(error){relicNotice='装備は更新したが、効果一覧を再取得できなかった。'+(error.message??'');}
+      }
+      if(action==='relic-summon')relicReveal=result;
+      relicNotice=action==='relic-save-preset'?'「'+result.name+'」を保存した。':action==='relic-overwrite-preset'?'「'+result.name+'」を上書きした。':action==='relic-rename-preset'?'「'+result.name+'」に改名した。':action==='relic-load-preset'?'装備をプリセットから復元した。':action==='relic-remove-preset'?'プリセットを削除した。':action==='relic-auto-equip'?`おまかせ装備完了。4枠の合計戦力 ${result.power}`:action==='relic-summon'?`${result.count}連召喚：${result.cost.toLocaleString('ja-JP')} KPを使用。${result.highlights?.length?'大当たり '+result.highlights.map(v=>v.name).join('、'):'獲得遺物を図鑑に追加した。'}`:action==='relic-equip'?`装備変更完了。戦力 ${result.power}`:`${result.item.name} を獲得した。`;
+      render();
+      if(action==='relic-summon')playRelicSound(relicReveal);
+      toast(relicNotice);return;
+    }
+    if(t.dataset.action==='stock-guerrilla-toggle'){
+      if(!live||!state.privateCasino)throw Error('この操作は利用できません。');
+      const enabled=state.marketEvents?.enabled===false;
+      const result=await wallet.operate('stock-guerrilla-toggle',{enabled});
+      state=await wallet.state();render();
+      toast(result.enabled?'自動ゲリライベントを有効にしました':'自動ゲリライベントを停止しました');
+      return;
+    }
+    if(t.dataset.action==='stock-shock-cancel'){
+      stockShockConfirmation=null;
+      stockShockNotice=null;
+      render();
+      return;
+    }
+    if(t.dataset.action==='stock-shock'||t.dataset.action==='stock-shock-approve'){
+      if(!live||!state.privateCasino)throw Error('この操作は利用できません。');
+      const symbol=$('#admin-stock-symbol')?.value,direction=$('#admin-stock-direction')?.value,strength=Number($('#admin-stock-strength')?.value);
+      const stock=MARKET.find(s=>s.id===symbol);
+      if(!stock||!['up','down'].includes(direction)||![10,25,50].includes(strength))throw Error('操作内容を確認してください。');
+      const label=direction==='up'?'上昇':'下落';
+      const mode=$('#admin-stock-news')?.value??'auto';
+      const headline=$('#admin-stock-headline')?.value??stockShockSelection.headline??'';
+      const body=$('#admin-stock-body')?.value??stockShockSelection.body??'';
+      stockShockSelection={symbol,direction,strength,eventId:mode,headline,body};
+      // Discord iOS embeds may silently suppress native window.confirm.
+      // The operator always previews the *actual* fictional bulletin in-page
+      // before the server mutates the shared market.
+      if(t.dataset.action==='stock-shock'){
+        const choices=stockStoryChoices(symbol,direction);
+        const chosen=mode==='custom'
+          ?{eventId:'custom',...validateCustomStory(headline,body)}
+          :(()=>{const selected=mode==='auto'?choices[Math.floor(Math.random()*choices.length)]:choices.find(v=>v.id===mode);
+             if(!selected)throw Error('ニュースを選び直してください。');
+             return {eventId:selected.id,headline:selected.headline,body:selected.body};})();
+        stockShockConfirmation={symbol,direction,strength,...chosen,mode};
+        stockShockNotice=null;
+        render();
+        $('.stock-shock-confirmation')?.scrollIntoView({block:'nearest',behavior:'auto'});
+        return;
+      }
+      if(!stockShockConfirmation||stockShockConfirmation.symbol!==symbol||
+         stockShockConfirmation.direction!==direction||stockShockConfirmation.strength!==strength||
+         stockShockConfirmation.mode!==mode||
+         (mode==='custom'&&(stockShockConfirmation.headline!==validateCustomStory(headline,body).headline||
+          stockShockConfirmation.body!==validateCustomStory(headline,body).body)))
+        throw Error('操作条件が変更されました。もう一度確認してください。');
+      const bulletin=stockShockConfirmation;
+      stockShockConfirmation=null;
+      t.disabled=true;t.textContent='送信中…';
+      const pendingNotice=$('#stock-shock-notice');
+      if(pendingNotice){pendingNotice.hidden=false;pendingNotice.className='stock-shock-notice waiting';pendingNotice.textContent='株価操作を送信しています…';}
+      try{
+        // "受け付けました" is shown only after the Worker confirms the durable write.
+        // If the follow-up state refresh fails, the operation was still successful.
+        const result=await wallet.operate('stock-shock',{symbol,direction,strength,eventId:bulletin.eventId,...(bulletin.eventId==='custom'?{headline:bulletin.headline,body:bulletin.body}:{})});
+        const completed=`✅ 株価操作を受け付けました。${stock.name}を${strength}%${label}：${moneyCompact(result.before)} → ${moneyCompact(result.after)}\n【架空速報】${result.headline??bulletin.headline}`;
+        stockShockNotice={kind:'success',text:completed};
+        try{state=await wallet.state();connectionError='';}
+        catch{connectionError='株価操作は完了していますが、最新の状態を取得できませんでした。残高を更新してください。';
+          stockShockNotice={kind:'warning',text:completed+'。ただし最新の株価の再取得に失敗しました。残高を更新してください。'};}
+        render();toast('株価操作を受け付けました');
+      }catch(error){
+        // A timeout may occur after the Worker committed the event. Never claim a
+        // failed operation or offer a second shock until the pending ID is checked.
+        stockShockNotice=wallet.pending
+          ?{kind:'warning',text:'⚠️ 通信結果を確認できませんでした。操作済みの可能性があります。もう一度実行せず、「通信結果を確認」で確かめてください。'}
+          :{kind:'error',text:'❌ 株価操作は受け付けられませんでした。'+(error.message||'操作内容を確認してください。')};
+        render();toast(stockShockNotice.text);
+      }
+      return;
+    }
     if(t.dataset.action==='auto-connect-kp'){await automaticConnect();return;}
+    if(t.dataset.action?.startsWith('steam-')){
+      if(!live||!wallet.connected)throw Error('先にKP口座へ接続してください。');
+      const action=t.dataset.action;try{
+        if(action==='steam-open'){if(!wallet.steamLinkRequest)throw Error('Steam接続をやり直してください。');await openSteamLogin(wallet.steamLinkRequest.url);return;}
+        if(action==='steam-disconnect'&&!confirm('Steamの監視を止めますか？ 入金済みのKPと支給記録は残ります。'))return;
+        steamView={...(steamView??{}),loading:true,error:'',notice:''};render();
+        if(action==='steam-library'){const library=await wallet.steamLibrary();steamView={...(steamView??{}),library:library.games};}
+        if(action==='steam-link')await wallet.startSteam();
+        if(action==='steam-confirm')await wallet.confirmSteam();
+        if(action==='steam-disconnect')await wallet.disconnectSteam();
+        if(action==='steam-game')await wallet.steamGame(Number(t.dataset.app),t.dataset.active==='true');
+        const status=await wallet.steamStatus(),pending=await wallet.steamPending();const notice=action==='steam-status'?steamConnectionMessage(status,pending,wallet.steamLinkRequest):'';steamView={...(steamView??{}),status,pending,link:wallet.steamLinkRequest,error:'',notice,loading:false};if(notice)toast(status.account?.active?'Steam接続済みです。':pending?.verified?'Steamの本人確認が届きました。':'Steamはまだ接続できていません。画面の案内をご確認ください。');
+      }catch(error){steamView={...(steamView??{}),link:wallet.steamLinkRequest,error:error.message||'Steam接続を確認できません。',notice:'',loading:false};toast('Steam接続を確認できません。画面の案内をご確認ください。');}
+      render();return;
+    }
+    if(t.dataset.action==='restore-kp'){state=await wallet.restoreStoredSession();live=true;autoState='connected';autoMessage='';connectionError='';screen='home';render();toast('保存済みのKP口座に再接続しました');return;}
     if(t.dataset.action==='connect-kp'){state=await wallet.connect($('#kp-connect-code').value);live=true;autoState='connected';autoMessage='';connectionError='';delete drafts['kp-connect-code'];screen='home';render();toast(wallet.remembered?'接続しました。次回は自動で接続します':'接続しました。この環境では閉じると再接続が必要です');return;}
+    if(t.dataset.action==='private-round'){
+      if(!live||!state.privateCasino)throw Error('この操作は利用できません。');
+      const game=$('#private-game').value,args=game==='roulette'?{game,amount:Number($('#private-amount').value),number:Number($('#private-number').value)}:{game,amount:Number($('#private-amount').value),hand:$('#private-hand').value};
+      const result=await liveOperation('private-casino',args),net=result.net??result.done?.net??(result.payout-result.amount);
+      privateRoundMessage=(net>=0?'+':'')+moneyCompact(net);render();toast(privateRoundMessage);return;
+    }
+    if(t.dataset.action==='private-race'){
+      if(!live||!state.privateCasino)throw Error('この操作は利用できません。');
+      privateRacePreview=await wallet.privateRace();render();return;
+    }
     if(t.dataset.action==='refresh-kp'){await refreshWallet(true);render();return;}
-    if(t.dataset.action==='disconnect-kp'){await wallet.disconnect();autoState=embedded?'paused':'idle';autoMessage='';live=false;connectionError='';state=store.state;screen='title';render();return;}
+    if(t.dataset.action==='disconnect-kp'){await wallet.disconnect();autoState=embedded?'paused':'idle';autoMessage='';live=false;trend=null;trendView={...trendView,error:'',focus:null,day:null};privateRacePreview=null;privateRoundMessage='';steamView=null;relicProofs=null;relicNotice='';stopRelicSound();relicReveal=null;relicView={...relicDefaultView(),previewMode:'competitive',previewAmount:500};connectionError='';state=store.state;screen='title';render();return;}
     if(t.dataset.casinoGame){if(spinLock){toast('抽選中は切り替えられません');return;}casinoGame=t.dataset.casinoGame;render();return;}
-    if(t.dataset.screen){if(spinLock){toast('抽選中は画面を切り替えられません');return;}detail=null;screen=t.dataset.screen;render();if(screen==='race')settleRaces();return;}
+    if(t.dataset.screen){if(spinLock){toast('抽選中は画面を切り替えられません');return;}detail=null;pendingHorseSale=null;screen=t.dataset.screen;render();if(screen==='relics'&&live){relicLoading=true;render();try{relicProofs=await wallet.relics();}catch(error){relicNotice='実績データの取得に失敗した。'+(error.message??'');}finally{relicLoading=false;render();}}if(screen==='race')settleRaces();return;}
+    if(t.dataset.action==='load-trend'){await loadTrend(Number(t.dataset.days));return;}
+    if(t.dataset.trendSort){const key=t.dataset.trendSort;trendView.dir=trendView.sort===key?-trendView.dir:1;trendView.sort=key;render();return;}
+    if(t.dataset.trendFocus){trendView.focus=trendView.focus===t.dataset.trendFocus?null:t.dataset.trendFocus;render();return;}
     if(t.dataset.raceHorse){raceDraft.horse=Number(t.dataset.raceHorse);render();return;}
     if(t.dataset.mlPlayer){mlDraft={match:t.dataset.mlMatch,player:t.dataset.mlPlayer,confirm:false};render();$('.ml-order')?.scrollIntoView({block:'center'});$('#ml-amount')?.focus({preventScroll:true});return;}
     if(t.dataset.action==='ml-confirm'){const amount=Number($('#ml-amount')?.value);if(!Number.isSafeInteger(amount)||amount<100||amount%100!==0)throw new Error('金額は100 KP以上、100 KP単位です');drafts['ml-amount']=String(amount);mlDraft.confirm=true;render();$('.ml-order')?.scrollIntoView({block:'center'});return;}
@@ -346,8 +691,19 @@ addEventListener('click',async e=>{
       mlDraft={match:null,player:null,confirm:false};delete drafts['ml-amount'];render();toast(`${bet.player}のラスを買いました（${(bet.odds/10).toFixed(1)}倍）`);return;
     }
     if(t.dataset.raceType){raceDraft.type=t.dataset.raceType;render();return;}
-    if(t.dataset.action==='horse-buy'){const {horse}=await liveOperation('horse-buy',{box:t.dataset.box,name:$('#horse-name')?.value??''});delete drafts['horse-name'];render();toast(`${horse.name}（${horse.gradeLabel}）が仲間入りしました`);return;}
-    if(t.dataset.action==='horse-sell'){if(!confirm('この馬を売りますか？売ると戻せません'))return;const {sold}=await liveOperation('horse-sell',{horseId:t.dataset.horse});render();toast(`売却しました（+${moneyCompact(sold.refund)}）`);return;}
+    if(t.dataset.action==='horse-buy'){const {horse}=await liveOperation('horse-buy',{box:t.dataset.box,name:$('#horse-name')?.value??''});delete drafts['horse-name'];pendingHorseSale=null;render();toast(`${horse.name}（${horse.gradeLabel}）が仲間入りしました`);return;}
+    if(t.dataset.action==='horse-sell'){
+      const horse=state.horses?.find(h=>h.id===t.dataset.horse&&!h.retired_at);
+      if(!live||!horse)throw Error('売れる馬が見つかりません。');
+      pendingHorseSale=horse.id;render();return;
+    }
+    if(t.dataset.action==='horse-sell-cancel'){pendingHorseSale=null;render();return;}
+    if(t.dataset.action==='horse-sell-approve'){
+      const horse=state.horses?.find(h=>h.id===pendingHorseSale&&!h.retired_at);
+      if(!live||!horse||horse.id!==t.dataset.horse)throw Error('売れる馬が見つかりません。');
+      const {sold}=await liveOperation('horse-sell',{horseId:horse.id});
+      pendingHorseSale=null;render();toast(`売却しました（+${moneyCompact(sold.refund)}）`);return;
+    }
     if(t.dataset.action==='luxury'){
       const item=LUXURY.find(i=>i.id===t.dataset.item);if(!item||!confirm(`${item.label}を${moneyCompact(stockPrice(item.price,state.stockBenefits))}で買いますか？`))return;
       await liveOperation('luxury',{item:item.id,target:$('#lux-target')?.value,text:$('#lux-text')?.value,title:$('#lux-title')?.value,horseId:$('#lux-horse')?.value});
@@ -380,13 +736,38 @@ addEventListener('click',async e=>{
     if(t.dataset.action==='trade'){await doTrade();return;}
     if(t.dataset.action==='spin'){await doSpin();return;}
     if(['chinchiro','bj-start','bj-hit','bj-stand','bj-double'].includes(t.dataset.action)){await doCasino(t.dataset.action);return;}
+    if(t.dataset.minesCount){minesCount=Number(t.dataset.minesCount);render();return;}
+    if(t.dataset.vpHold){const i=Number(t.dataset.vpHold);vpHold[i]=!vpHold[i];render();return;}
+    if(['mines-start','mines-pick','mines-cashout','slot','vp-deal','vp-draw','baccarat'].includes(t.dataset.action)){await doMoreCasino(t.dataset.action,t.dataset.action==='mines-pick'?{cell:Number(t.dataset.cell)}:t.dataset.action==='baccarat'?{side:t.dataset.side}:{});return;}
     if(t.dataset.action==='reset'){if(confirm('データを初期化しますか？')){await commit(next => Object.assign(next,createInitialState()));for(const key of Object.keys(drafts))delete drafts[key];renderedMarkup=undefined;render();toast('初期化した')}return;}
 
   }catch(err){render();toast(err.message||'操作に失敗した');}
-  finally { if(mutates)mutationPending=false; }
+  finally { if(mutates)mutationPending=false;
+    if(t.dataset.action==='relic-summon'){relicSummonBusy=false;render();}
+  }
 });
 
+addEventListener('input',e=>{
+ if(e.target.id==='admin-stock-headline'||e.target.id==='admin-stock-body'){
+  stockShockSelection[e.target.id==='admin-stock-headline'?'headline':'body']=e.target.value;
+  stockShockConfirmation=null;$('.stock-shock-confirmation')?.remove();
+ }
+});
 addEventListener('change',e=>{
+ if(['admin-stock-symbol','admin-stock-direction','admin-stock-strength','admin-stock-news','admin-stock-headline','admin-stock-body'].includes(e.target.id)){
+  const needsRender=['admin-stock-symbol','admin-stock-direction','admin-stock-news'].includes(e.target.id);
+  const symbol=$('#admin-stock-symbol')?.value,direction=$('#admin-stock-direction')?.value;
+  stockShockSelection={symbol,direction,strength:Number($('#admin-stock-strength')?.value),
+   eventId:['admin-stock-symbol','admin-stock-direction'].includes(e.target.id)?'auto':$('#admin-stock-news')?.value,
+   headline:$('#admin-stock-headline')?.value??stockShockSelection.headline??'',
+   body:$('#admin-stock-body')?.value??stockShockSelection.body??''};
+  stockShockNotice=null;stockShockConfirmation=null;
+  if(needsRender)render();
+  else{
+   $('.stock-shock-confirmation')?.remove();
+   const notice=$('#stock-shock-notice');if(notice){notice.textContent='';notice.hidden=true;}
+  }
+ }
  if(e.target.id==='trade-symbol'){activeSymbol=e.target.value;render();}
  if(['claim-activity','directive-task','directive-target'].includes(e.target.id)){drafts[e.target.id]=e.target.value;render();}
 })
@@ -406,21 +787,73 @@ addEventListener('keydown', e => {
 });
 addEventListener('input', e => {
   if(e.target.dataset.stake!==undefined&&!spinLock){const n=Number(e.target.dataset.stake),amount=Number(e.target.value);numberBets.set(n,amount);document.querySelector('#number-bet-total').textContent=moneyCompact([...numberBets.values()].reduce((a,b)=>a+b,0));const badge=document.querySelector(`[data-number="${n}"] small`);if(badge)badge.textContent=amount+' KP';}
+  if(['private-game','private-amount','private-number','private-hand'].includes(e.target.id))drafts[e.target.id]=e.target.value;
+  if(e.target.id==='private-game'){delete drafts['private-hand'];render();}
   if(e.target.id==='horse-name')drafts['horse-name']=e.target.value;
   if(e.target.id==='ml-amount'){drafts['ml-amount']=e.target.value;const preview=$('#ml-preview');if(preview)preview.textContent=mleaguePreview(state,{...mlDraft,amount:e.target.value});}
   if(e.target.id==='race-amount'){drafts['race-amount']=e.target.value;const preview=$('#race-preview');if(preview){const open=openCard(Date.now());preview.innerHTML=racePreview(open,raceOdds(open),{...raceDraft,amount:e.target.value});}}
-  if (e.target.id==='kp-connect-code'||['trade-qty','bet-amount','chinchiro-amount','bj-amount'].includes(e.target.id)||e.target.id.startsWith('claim-')||e.target.id.startsWith('directive-')) drafts[e.target.id] = e.target.value;
+  if(e.target.id==='steam-game-search'){if(steamView){steamView.search=e.target.value;render();}return;}
+  if (e.target.id==='kp-connect-code'||['trade-qty','bet-amount','chinchiro-amount','bj-amount','mines-amount','slot-amount','vp-amount','baccarat-amount'].includes(e.target.id)||e.target.id.startsWith('claim-')||e.target.id.startsWith('directive-')) drafts[e.target.id] = e.target.value;
   if(e.target.id==='trade-qty')$('#trade-estimate').innerHTML=tradeEstimate();
 });
 const drafts = {};
-// Live wallets: every 15 s only a tiny "did anything change?" check; the full state is fetched when it changed, and at
-// least once a minute (race card, Mリーグ status and voice status move with time). Nothing is fetched while hidden.
-const FULL_EVERY=60000;let lastPulse=null,lastFull=0;
+let privateRacePreview=null,privateRoundMessage='';
+// Live wallets: a cheap 15-second change pulse always updates KP when it changes.
+// Only race/Mリーグ/market/stable require 60s full refresh; other screens force
+// it every 120s, reducing heavy D1 reads while preserving reactive balances.
+// Nothing is fetched while hidden.
+// This small read is independent of wallet/animation polling and never replaces the game form.
+let communityEntries=[],communityBusy=false,communityOwner=null,communityStatus='確認中…',lastCommunityPoll=0,communityConserveUntil=0;
+// Keep five-second freshness checks, but download the 40-row feed only on change.
+let communityRevision=null,communityFullAt=0;
+function paintCommunity(){
+ const list=$('.community-entries'),status=$('.community-status');
+ if(!list)return;
+ const html=communityRows(communityEntries);
+ if(list.innerHTML!==html)list.innerHTML=html;
+ if(status)status.textContent=communityStatus;
+}
+async function refreshCommunity(){
+ // The title screen has no community panel; never poll the DB for an invisible feed.
+ if(communityBusy||!live||!communityRefreshEnabled(screen,document.querySelector('details.community-feed')?.open,!document.hidden,wallet.connected))return;
+ const owner=state.selfUserId;
+ if(communityOwner!==owner){communityEntries=[];communityOwner=owner;communityRevision=null;communityFullAt=0;lastCommunityPoll=0;}
+ if(Date.now()<communityConserveUntil||Date.now()-lastCommunityPoll<COMMUNITY_REFRESH_INTERVAL)return;
+ lastCommunityPoll=Date.now();communityBusy=true;
+ try{
+  // Force a full fetch each minute so renamed members and older servers
+  // are handled even when no wallet operation has been appended.
+  const since=communityRevision!==null&&Date.now()-communityFullAt<60000?communityRevision:undefined;
+  const data=await wallet.feed(since);
+  if(!live||state.selfUserId!==owner)return;
+  if(!data.unchanged){
+    communityEntries=data.entries;
+    communityRevision=Number.isSafeInteger(data.revision)?data.revision:null;
+    communityFullAt=Date.now();
+  }
+  if(data.conserve){
+   // D1 soft budget mode explicitly only pauses optional community history.
+   // Do not retry the endpoint every ten seconds until the quota resets.
+   communityConserveUntil=Date.now()+60000;
+   communityStatus='D1節約モード：取引履歴の自動取得を一時停止中。KPとランキングは通常どおり更新';
+  }else{
+   communityConserveUntil=0;
+   communityStatus='更新 '+new Date().toLocaleTimeString('ja-JP');
+  }
+ }catch{communityStatus='更新が止まっています。自動で再接続します。';}
+ finally{communityBusy=false;paintCommunity();}
+}
+// Poll only while the user is actually looking at the community feed.
+// The closed disclosure on other screens causes ZERO feed requests.
+setInterval(refreshCommunity,COMMUNITY_REFRESH_INTERVAL);
+addEventListener('click',e=>{if(e.target.closest?.('.community-feed > summary'))setTimeout(refreshCommunity,0);});
+addEventListener('visibilitychange',()=>{if(!document.hidden)refreshCommunity();});
+let lastPulse=null,lastFull=0;
 async function refreshLive(){
   if(document.hidden)return;
   let pulse=null;
   try{pulse=await wallet.pulse();}catch{/* an older server or a network blip: fall back to the full state */}
-  if(pulse!==null&&pulse===lastPulse&&Date.now()-lastFull<FULL_EVERY&&!connectionError)return;
+  if(pulse!==null&&pulse===lastPulse&&Date.now()-lastFull<fullRefreshInterval(screen)&&!connectionError)return;
   await refreshWallet(false);
   if(!connectionError){lastPulse=pulse;lastFull=Date.now();}
 }

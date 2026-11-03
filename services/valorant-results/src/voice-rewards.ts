@@ -1,5 +1,6 @@
 import {ensureQuizKp} from './quiz-kp.ts';
 import {newKpState} from './kp.ts';
+import {creditVerifiedRelicBonus} from './relics.ts';
 import type {KpEnv} from './kp.ts';
 /** Each 5-minute slot pays 15 KP: the 5 KP event plus a 10 KP bonus. */
 export const VOICE_BONUS=10;
@@ -10,9 +11,11 @@ export function voiceSlices(from:number,to:number){
  for(let cursor=from;cursor<to;){const end=Math.min(to,(Math.floor(cursor/86400000)+1)*86400000);slices.push({day:new Date(cursor).toISOString().slice(0,10),ms:end-cursor});cursor=end;}
  return slices;
 }
+export const voiceRewardHistoryIndex='CREATE INDEX IF NOT EXISTS kp_voice_events_member_latest ON kp_voice_events(guild,user,at DESC)';
 const ready=new WeakSet<object>();
 export async function ensureVoiceLedger(env:KpEnv){if(ready.has(env.DB))return;await env.DB.batch([
  env.DB.prepare(`CREATE TABLE IF NOT EXISTS kp_voice_events(id TEXT PRIMARY KEY,guild TEXT NOT NULL,user TEXT NOT NULL,day TEXT NOT NULL,slot INTEGER NOT NULL CHECK(slot BETWEEN 1 AND 48),amount INTEGER NOT NULL CHECK(amount=5),at INTEGER NOT NULL,UNIQUE(guild,user,day,slot))`),
+ env.DB.prepare(voiceRewardHistoryIndex),
  env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS kp_voice_apply AFTER INSERT ON kp_voice_events BEGIN INSERT INTO kp_ledger(id,guild,user,delta,kind,at) VALUES(NEW.id,NEW.guild,NEW.user,NEW.amount,'voice',NEW.at); END`),
  // The stored events keep their original 5 KP (a CHECK in the live table); each slot now adds a 10 KP bonus row.
  env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS kp_voice_bonus_v2 AFTER INSERT ON kp_voice_events BEGIN INSERT OR IGNORE INTO kp_ledger(id,guild,user,delta,kind,at) VALUES('bonus:'||NEW.id,NEW.guild,NEW.user,${VOICE_BONUS},'voice',NEW.at); END`),
@@ -21,12 +24,36 @@ export async function creditVoiceSlot(env:KpEnv,guild:string,user:string,day:str
  if(!/^\d{15,22}$/.test(user)||!/^\d{15,22}$/.test(guild)||!/^\d{4}-\d{2}-\d{2}$/.test(day)||!Number.isInteger(slot)||slot<1||slot>48)throw Error('Invalid voice slot');
  await ensureQuizKp(env);await ensureVoiceLedger(env);
  // Participant/wallet/state and credit are one atomic D1 batch, including new members.
- await env.DB.batch([
+ const settledRows=await env.DB.batch([
   env.DB.prepare('INSERT OR IGNORE INTO kp_participants VALUES(?,?)').bind(guild,user),
   env.DB.prepare('INSERT OR IGNORE INTO kp_wallets(guild,user) VALUES(?,?)').bind(guild,user),
   env.DB.prepare('INSERT OR IGNORE INTO kp_state(guild,user,data) VALUES(?,?,?)').bind(guild,user,JSON.stringify(newKpState())),
   env.DB.prepare('INSERT INTO kp_voice_events VALUES(?,?,?,?,?,5,?) ON CONFLICT DO NOTHING').bind('voice:'+guild+':'+user+':'+day+':'+slot,guild,user,day,slot,at),
  ]);
+ // Once every fourth genuine 5-minute slot: 12 bonus checks/day max, no extra idle cron reads.
+ if(slot%4===0&&(settledRows[3]?.meta?.changes??0)>0)
+  try{await creditVerifiedRelicBonus(env,guild,user,'voice:'+guild+':'+user+':'+day+':'+slot,'voice',voicePolicy.amount,true,at);}catch{console.warn('relic_voice_bonus_pending');}
+}
+export interface VoiceRewardEntry {id:string;day:string;slot:number;amount:number;at:number}
+/** A member's last 100 voice rewards don't change unless a new ledger row
+ * is added. Every ledger INSERT advances kp_wallets.version, including
+ * voice slots and bonuses. Use that version plus a 2-minute safety TTL
+ * to reuse an expensive 100-row/subquery history across Activity refreshes.
+ * Entries are scoped to the D1 binding and user; only eight are retained. */
+const voiceHistoryCache=new WeakMap<object,Map<string,{version:number;at:number;promise:Promise<VoiceRewardEntry[]>}>>();
+const VOICE_HISTORY_TTL=120_000;
+export async function voiceRewardHistory(env:KpEnv,guild:string,user:string,walletVersion:number,now=Date.now()){
+ await ensureVoiceLedger(env);
+ let entries=voiceHistoryCache.get(env.DB);
+ if(!entries){entries=new Map();voiceHistoryCache.set(env.DB,entries);}
+ const key=guild+':'+user,cached=entries.get(key);
+ if(cached&&cached.version===walletVersion&&now>=cached.at&&now-cached.at<VOICE_HISTORY_TTL)return cached.promise;
+ // D1 returns a Promise; the in-memory SQL fixtures return an object directly.
+ const promise=Promise.resolve(env.DB.prepare("SELECT e.id,e.day,e.slot,e.amount+COALESCE((SELECT delta FROM kp_ledger WHERE id='bonus:'||e.id),0) AS amount,e.at FROM kp_voice_events e WHERE e.guild=? AND e.user=? ORDER BY e.at DESC LIMIT 100")
+  .bind(guild,user).all<VoiceRewardEntry>()).then(row=>row.results);
+ entries.set(key,{version:walletVersion,at:now,promise});
+ if(entries.size>8)entries.delete(entries.keys().next().value!);
+ try{return await promise;}catch(error){if(entries.get(key)?.promise===promise)entries.delete(key);throw error;}
 }
 export interface VoiceRecord {user:string;day:string;ms:number;paid:number}
 export interface VoiceStore {get<T>(key:string):Promise<T|undefined>;put<T>(key:string,value:T):Promise<void>;list<T>(options:{prefix:string}):Promise<Map<string,T>>;delete(key:string):Promise<unknown>}

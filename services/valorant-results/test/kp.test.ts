@@ -1,10 +1,13 @@
+import {privateCasinoAllowed} from '../src/private-casino.ts';
+import {memberNames} from '../src/member-names.ts';
+import {communityFeed,feedRevision,publicTrade} from '../src/community-feed.ts';
 import test from 'node:test';
 import { URL as NodeURL } from 'node:url';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import {readFileSync,readdirSync}from'node:fs';
 import {generateKeyPairSync,randomBytes,createCipheriv,publicEncrypt}from'node:crypto';
-import {initializeKp,syncKpAccounts,collectKpMatch,drainKpInbox,issueKpCode,exchangeKpCode,kpSession,decryptKpMapping,kpCreditLine}from'../src/kp.ts';
+import {initializeKp,syncKpAccounts,collectKpMatch,drainKpInbox,issueKpCode,exchangeKpCode,kpSession,decryptKpMapping,kpCreditLine,createKpSession,prepareKpRun,loadKpRunMatch,kpEventId,kpSchemaVersion,kpRelicBonus}from'../src/kp.ts';
 import type{KpEnv,KpMapping}from'../src/kp.ts';
 import {readKpState,operateKp,kpApi}from'../src/kp-api.ts';
 const guild='100000000000000100',one='100000000000000101',two='100000000000000102';
@@ -21,6 +24,48 @@ async function fixture(){
 }
 function game(id:string,queue='competitive',win=true){return {metadata:{match_id:id,is_completed:true,queue:{id:queue},started_at:new Date(Date.now()-10000).toISOString(),game_length_in_ms:1000},players:[{puuid:'p-one',team_id:'red'}],teams:[{team_id:'red',won:win},{team_id:'blue',won:!win}]};}
 function seed(sql:DatabaseSync,user:string,amount:number){sql.prepare('INSERT INTO kp_ledger VALUES(?,?,?,?,?,?)').run('test-'+user,guild,user,amount,'test-only',Date.now());}
+test('per-minute KP monitor avoids scanning all rewards and lazily reads only requested match IDs',async()=>{
+ const f=await fixture();f.enableHistory();
+ const old=game('historical-001');
+ assert.equal(await collectKpMatch(f.env,mapping,old,'p-one'),900);
+ const eventId=kpEventId(guild,'historical-001','p-one');
+ f.sql.prepare('INSERT INTO kp_reward_notes(id,note) VALUES(?,?) ON CONFLICT(id) DO UPDATE SET note=excluded.note').run(eventId,'（既存）');
+ f.sql.prepare('INSERT INTO notifications(riot_id,match_id,message,ended_at,mode,sent) VALUES(?,?,?,?,?,1)')
+  .run('One#JP1','historical-001','試合結果\\n🪙 この試合 +900 KP（既存）',Date.now(),'competitive');
+ // Extra historic events must not cause the prepare path to scan 200 rows.
+ f.resetQueries();
+ const run=await prepareKpRun(f.env,mapping);
+ assert.equal(f.queries(),1,'prepare performs only the schema setting point lookup');
+ assert.equal(run.credits.size,0,'preloading historical events is forbidden');
+ await loadKpRunMatch(f.env,run,eventId);
+ assert.equal(run.credits.get(eventId),900);
+ assert.match(run.messages.get(eventId)??'',/試合結果/);
+ assert.equal(run.notes?.get(eventId),'（既存）');
+ const oneRead=f.queries();
+ await loadKpRunMatch(f.env,run,eventId);
+ assert.equal(f.queries(),oneRead,'repeated instances of the same match do not read DB again');
+ const absent=kpEventId(guild,'unknown-001','p-one');
+ await loadKpRunMatch(f.env,run,absent);
+ assert.equal(run.credits.has(absent),false);
+ const queries=f.queries();await loadKpRunMatch(f.env,run,absent);
+ assert.equal(f.queries(),queries,'missing matches are cached for one cron run only');
+ const next=await prepareKpRun(f.env,mapping);
+ await loadKpRunMatch(f.env,next,eventId);
+ assert.equal(next.credits.get(eventId),900,'a new invocation always checks durable state');
+ assert.equal(f.sql.prepare("SELECT COUNT(*) AS n FROM kp_ledger WHERE kind='match'").get()!.n,1,'no credits are duplicated');
+});
+test('schema version cold check reads one exact key and handles only missing kp_settings',async()=>{
+ const f=await fixture();
+ const calls:string[]=[];
+ const base=f.env.DB.prepare.bind(f.env.DB);
+ const checked={...f.env,DB:{...f.env.DB,prepare:(sql:string)=>{calls.push(sql);return base(sql);}} as D1Database};
+ assert.equal((await kpSchemaVersion(checked))?.value,'1');
+ assert.deepEqual(calls,["SELECT value FROM kp_settings WHERE key='schema_version'"]);
+ const noTable={...f.env,DB:{prepare:()=>({first:async()=>{throw Error('D1_ERROR: no such table: main.kp_settings');}})} as unknown as D1Database};
+ assert.equal(await kpSchemaVersion(noTable),null,'fresh install is permitted');
+ const failed={...f.env,DB:{prepare:()=>({first:async()=>{throw Error('D1_ERROR: database unavailable');}})} as unknown as D1Database};
+ await assert.rejects(kpSchemaVersion(failed),/database unavailable/,'a transient D1 error must not bootstrap');
+});
 test('activation starts at zero, preserves first linking and cutoff, excludes old matches, and nine wins buy an 8000 KP directive',async()=>{
  const f=await fixture();assert.equal((await readKpState(f.env,mapping,one)).cash,0);
  assert.equal(await collectKpMatch(f.env,mapping,game('old'),'p-one'),null);
@@ -60,15 +105,15 @@ test('ledger failure rolls back the credit and leaves a durable retry; recovery 
 });
 test('operations cannot double spend, reuse IDs with new inputs, set balances, or manufacture the roulette outcome',async()=>{
  const f=await fixture();seed(f.sql,one,1500);
- const responses=await Promise.allSettled(['trade-operation-one','trade-operation-two'].map(id=>operateKp(f.env,mapping,one,id,'trade',{symbol:'keso',side:'buy',quantity:1})));
- assert.equal(responses.filter(r=>r.status==='fulfilled').length,1);const state=await readKpState(f.env,mapping,one);assert.equal(state.cash,288);assert.equal(state.holdings.keso,1);
+ const responses=await Promise.allSettled(['trade-operation-one','trade-operation-two'].map(id=>operateKp(f.env,mapping,one,id,'trade',{symbol:'keso',side:'buy',quantity:1,pricingVersion:1,limit:Number.MAX_SAFE_INTEGER})));
+ assert.equal(responses.filter(r=>r.status==='fulfilled').length,1);const state=await readKpState(f.env,mapping,one);assert.equal(state.cash,286);assert.equal(state.holdings.keso,1);
  const row=f.sql.prepare('SELECT id FROM kp_operations').get()!;
- await operateKp(f.env,mapping,one,String(row.id),'trade',{symbol:'keso',side:'buy',quantity:1});assert.equal((await readKpState(f.env,mapping,one)).cash,288);
- await assert.rejects(operateKp(f.env,mapping,one,String(row.id),'trade',{symbol:'keso',side:'buy',quantity:2}),/同じ操作ID/);
+ await operateKp(f.env,mapping,one,String(row.id),'trade',{symbol:'keso',side:'buy',quantity:1,pricingVersion:1,limit:Number.MAX_SAFE_INTEGER});assert.equal((await readKpState(f.env,mapping,one)).cash,286);
+ await assert.rejects(operateKp(f.env,mapping,one,String(row.id),'trade',{symbol:'keso',side:'buy',quantity:2,pricingVersion:1,limit:Number.MAX_SAFE_INTEGER}),/同じ操作ID/);
  await assert.rejects(operateKp(f.env,mapping,one,'salary-operation-1','salary',{cash:100000}),/本番口座/);
  const played=await operateKp(f.env,mapping,one,'roulette-operation','spin',{type:'number',amount:100,choice:3,outcome:3,cash:999999});
  const result=played.result as {outcome:number;payout:number};assert.ok(Number.isInteger(result.outcome)&&result.outcome>=0&&result.outcome<=36);assert.equal(result.payout,result.outcome===3?3600:0);
- assert.equal((await readKpState(f.env,mapping,one)).cash,188+result.payout);
+ assert.equal((await readKpState(f.env,mapping,one)).cash,186+result.payout);
 });
 test('a duplicate active directive rolls back payment for all issuers and ownership cannot silently change',async()=>{
  const f=await fixture();seed(f.sql,one,20000);seed(f.sql,two,20000);
@@ -136,7 +181,7 @@ test('four players with cached five-match histories avoid repeating wallet setup
  const histories=new Map<string,ReturnType<typeof game>[]>();
  for(let i=0;i<4;i++){const games=Array.from({length:5},(_,n)=>{const raw=game('cached-'+i+'-'+n);raw.players[0].puuid=puuids[i];f.sql.prepare('INSERT INTO notifications(riot_id,match_id,message,ended_at,mode,sent) VALUES(?,?,?,?,?,1)').run(names[i]+'#JP1',raw.metadata.match_id,'fixture',Date.now()-9000,'competitive');return raw;});histories.set(puuids[i],games);}
  globalThis.fetch=async url=>{const target=String(url).split('/').at(-1)!.split('?')[0];return Response.json({data:histories.get(target)??[]});};
- try{f.resetQueries();await monitor({...f.env,HENRIK_API_KEY:'fixture',DISCORD_WEBHOOK_URL:'https://discord.com/api/webhooks/1/fixture'},names.map(name=>({riotId:name+'#JP1'})));assert.ok(f.queries()+3<=50,`queries including three cold-initialization reads: ${f.queries()+3}`);}
+ try{f.resetQueries();await monitor({...f.env,HENRIK_API_KEY:'fixture',DISCORD_WEBHOOK_URL:'https://discord.com/api/webhooks/1/fixture'},names.map(name=>({riotId:name+'#JP1'})));assert.ok(f.queries()+3<=75,`queries including three cold-initialization reads and per-match indexed rank lookups: ${f.queries()+3}`);}
  finally{globalThis.fetch=original;}
 });
 
@@ -339,15 +384,18 @@ test('legacy policy team deathmatch and escalation: 35 kills or more add 150, wi
  assert.ok(plain(Array.from({length:50},(_,i)=>valoKp(at('kb-34'+i,'hurm',true,34),'p-one','teamdeathmatch','win'))).every(r=>r.base===70&&r.note===''));
  assert.ok(plain(Array.from({length:50},(_,i)=>valoKp(at('kb-sw'+i,'swiftplay',true,40),'p-one','swiftplay','win'))).every(r=>r.base===180&&r.note===''));
 });
-test('escalation: the usual small rate, and on a very rare draw (about 3%) +1,000 for a win or −1,000 for a loss',async()=>{
+test('escalation: 1-in-24 big draws use five tiers while super events remain mutually exclusive',async()=>{
  const {valoKp}=await import('../src/kp.ts');
  const esc=(id:string,mode:string,win:boolean)=>{const raw=game(id,mode,win) as ReturnType<typeof game>&{players:Array<{puuid:string;team_id:string;stats?:{kills?:number;score?:number}}>};
   raw.players=[{puuid:'p-one',team_id:'red',stats:{kills:30,score:500}},...[10,20,15,5].map((k,i)=>({puuid:'m'+i,team_id:'red',stats:{kills:k,score:100}}))];return raw;};
  const wins=Array.from({length:2000},(_,i)=>valoKp(esc('e-win'+i,'ggteam',true),'p-one','escalation','win'));
- const big=wins.filter(r=>r.base===1000);assert.ok(big.length>=30&&big.length<=90,String(big.length));assert.ok(wins.every(r=>r.base===70||r.base===1000));
- assert.ok(big.every(r=>r.note.startsWith('（🎰 エスカ大勝負）')));
+ const big=wins.filter(r=>r.escalation?.kind==='big');assert.ok(big.length>=60&&big.length<=110,String(big.length));
+ const winTiers=new Set([500,1000,2500,5000,15000]);
+ assert.ok(wins.every(r=>r.base===70||winTiers.has(r.base)));
+ assert.ok(big.every(r=>r.note.startsWith('（🎰 エスカ大勝負 ')&&r.note.includes('KP／')));
  const losses=Array.from({length:2000},(_,i)=>valoKp(esc('e-loss'+i,'ggteam',false),'p-one','escalation','loss'));
- assert.ok(losses.every(r=>r.base===0||r.base===-1000)&&losses.some(r=>r.base===-1000));
+ assert.ok(losses.every(r=>r.base===0||winTiers.has(-r.base)));
+ assert.ok(losses.some(r=>r.escalation?.kind==='big'&&r.base<0));
  assert.ok(Array.from({length:200},(_,i)=>valoKp(esc('t-win'+i,'hurm',true),'p-one','teamdeathmatch','win').base).every(v=>v===70),'team deathmatch: no bonus');
 });
 
@@ -378,7 +426,9 @@ test('a later monitor run shows a loss as its net negative KP, not the zero stor
  const {prepareKpRun}=await import('../src/kp.ts');const f=await fixture();f.enableHistory();seed(f.sql,one,1000);
  assert.equal(await collectKpMatch(f.env,mapping,game('cached-loss-net','competitive',false),'p-one'),-200);
  const run=await prepareKpRun(f.env,mapping);
- assert.equal(run.credits.get([...run.credits.keys()].find(k=>k.includes('cached-loss-net'))!),-200);
+ const id=kpEventId(guild,'cached-loss-net','p-one');
+ await loadKpRunMatch(f.env,run,id);
+ assert.equal(run.credits.get(id),-200);
 });
 
 test('a rank change that reaches the history late is still caught on a later run, and the post is updated',async()=>{
@@ -437,8 +487,245 @@ test('Skirmish collection respects account and activation gates before holding r
   assert.equal(await collectKpMatch(f.env,mapping,raw,'p-one'),null,'new challenge does not backpay pre-activation matches');
   f.sql.exec("UPDATE kp_settings SET value='0' WHERE key='mode_rewards_started_at'");
   assert.equal(await collectKpMatch(f.env,mapping,raw,'p-one'),0,'first win is pending, not spendable');assert.equal((await readKpState(f.env,mapping,one)).cash,0);
-  const s=(await skirmishState(f.env,guild,one))!;assert.equal(s.pot,100);
-  await decideSkirmish(f.env,guild,one,`sk:${one}:${s.version}:cash`);assert.equal((await readKpState(f.env,mapping,one)).cash,100);
-  assert.equal(await collectKpMatch(f.env,mapping,raw,'p-one'),0);assert.equal((await readKpState(f.env,mapping,one)).cash,100,'reprocessing original win never restarts the challenge');
+  const s=(await skirmishState(f.env,guild,one))!;assert.equal(s.pot,50);
+  await decideSkirmish(f.env,guild,one,`sk:${one}:${s.version}:cash`);assert.equal((await readKpState(f.env,mapping,one)).cash,50);
+  assert.equal(await collectKpMatch(f.env,mapping,raw,'p-one'),0);assert.equal((await readKpState(f.env,mapping,one)).cash,50,'reprocessing original win never restarts the challenge');
  }finally{queues.publicQueues.splice((queues.publicQueues as string[]).indexOf(fixtureQueue),1);}
+});
+test('an unrated lottery prize of 10,000 KP or more is announced once in 稼ぎch; smaller prizes are not',async()=>{
+ const {draw}=await import('../src/luck.ts');const {unratedLottery}=await import('../src/mode-rewards.ts');
+ const f=await fixture();f.enableHistory();f.sql.exec("UPDATE kp_settings SET value='0' WHERE key='mode_rewards_started_at'");
+ const prize=(id:string)=>unratedLottery(draw('unrated-lottery:'+id+':p-one'));
+ const big=Array.from({length:5000},(_,i)=>'jp-'+i).find(id=>prize(id)===10000)!,small=Array.from({length:50},(_,i)=>'sm-'+i).find(id=>prize(id)===500)!;
+ assert.equal(await collectKpMatch(f.env,mapping,game(big,'unrated'),'p-one'),10370);
+ await Promise.all([collectKpMatch(f.env,mapping,game(big,'unrated'),'p-one'),drainKpInbox(f.env)]);
+ assert.equal(await collectKpMatch(f.env,mapping,game(small,'unrated'),'p-one'),870);
+ const posts=(f.sql.prepare('SELECT id,body FROM kp_posts').all() as {id:string;body:string}[]);
+ assert.equal(posts.length,1);assert.match(posts[0].id,/^jackpot:/);
+ assert.equal(JSON.parse(posts[0].body).content,`🎰💥 <@${one}> アンレ勝利の抽選で **+10,000 KP** の大当たりや！`);
+ const {jackpotPost}=await import('../src/mode-rewards.ts');assert.match(jackpotPost(one,100000),/^🚨🎰🚨 .*\+100,000 KP.*0\.03%/);
+});
+
+test('community feed contains only committed guild trades; retries, rejection and rollback cannot add entries',async()=>{
+ const f=await fixture();seed(f.sql,one,10000);seed(f.sql,two,10000);
+ const names=new Map([[one,'One'],[two,'Two']]);
+ const buy={symbol:'keso',side:'buy',quantity:1,pricingVersion:1,limit:Number.MAX_SAFE_INTEGER};
+ await operateKp(f.env,mapping,one,'feed-trade-operation-1','trade',buy);
+ await operateKp(f.env,mapping,one,'feed-trade-operation-1','trade',buy);
+ await operateKp(f.env,mapping,two,'feed-roulette-operation','spin',{type:'number',amount:100,choice:3});
+ await assert.rejects(operateKp(f.env,mapping,two,'feed-rejected-operation','trade',{symbol:'keso',side:'buy',quantity:99999,pricingVersion:1,limit:Number.MAX_SAFE_INTEGER}));
+ const feed=await communityFeed(f.env,guild,names);assert.equal(feed.entries.length,2);
+ const stock=feed.entries.find(e=>e.name==='One')!;assert.equal(stock.label,'株を購入');assert.match(stock.detail,/keso · 1株/);assert.ok(stock.amount>0);
+ const roulette=feed.entries.find(e=>e.name==='Two')!;assert.equal(roulette.amount,100);assert.match(roulette.detail,/3番 →/);
+ const text=JSON.stringify(feed);for(const secret of ['request_hash','holdings','blackjack','cash','balance','session'])assert.ok(!text.includes(secret),secret);
+ assert.equal((await communityFeed(f.env,'other-guild',names)).entries.length,0);
+ f.sql.exec("CREATE TRIGGER feed_fail BEFORE INSERT ON kp_ledger BEGIN SELECT RAISE(ABORT,'feed rollback'); END");
+ await assert.rejects(operateKp(f.env,mapping,one,'feed-rollback-operation','trade',buy));
+ assert.equal((await communityFeed(f.env,guild,names)).entries.length,2);
+ const unauth=await kpApi(new Request('https://example.com/api/kp/feed'),f.env,mapping);assert.equal(unauth.status,401);
+ const code=await issueKpCode(f.env,mapping,one),token=await exchangeKpCode(f.env,code!);
+ const response=await kpApi(new Request('https://example.com/api/kp/feed',{headers:{Authorization:'Bearer '+token}}),f.env,mapping);
+ assert.equal(response.status,200);assert.equal(response.headers.get('Cache-Control'),'no-store');assert.equal(((await response.json()) as any).entries.length,2);
+ f.sql.exec('DROP TRIGGER feed_fail');
+ // There may be many private settings operations: the partial index only visits public rows.
+ const plan=f.sql.prepare("EXPLAIN QUERY PLAN SELECT id FROM kp_operations WHERE guild=? AND (json_extract(response,'$.activity') IS NOT NULL OR json_extract(response,'$.stockTrade') IS NOT NULL) ORDER BY at DESC,user,id LIMIT 40").all(guild);
+ assert.match(JSON.stringify(plan),/kp_public_activity_recent/);
+});
+test('public casino facts never expose in-progress cards and skip private actions',()=>{
+ assert.deepEqual(publicTrade('bj-start',{amount:200},{hand:{bet:200,player:[{r:1,s:1}],dealer:[{r:13,s:1}]},done:null}),{label:'ブラックジャック',detail:'ベット成立',amount:200});
+ assert.equal(publicTrade('bj-hit',{}, {hand:{player:[{r:2,s:1}]},done:null}),null);
+ assert.equal(publicTrade('roast-level',{level:3},{roastLevel:3}),null);
+ assert.deepEqual(publicTrade('chinchiro',{}, {amount:100,net:-500}),{label:'チンチロ',detail:'決着',amount:100,net:-500});
+ assert.deepEqual(publicTrade('ml-bet',{}, {bet:{player:'選手',type:'last',match:'fixture',amount:100}}),{label:'Mリーグにベット',detail:'選手 · ラス · fixture',amount:100});
+});
+
+test('member name aliases bind a unique guild wallet once, never a colliding or another guild account',async()=>{
+ const f=await fixture(),config={guildId:guild,names:[{suffix:one.slice(-4),name:'表示名'}]};
+ const base=new Map([[two,'Existing']]);
+ const names=await memberNames(f.env,guild,base,config);
+ assert.equal(names.get(one),'表示名');assert.equal(names.get(two),'Existing');assert.equal(base.has(one),false);
+ const collision='200000000000000101';f.sql.prepare('INSERT INTO kp_wallets(guild,user) VALUES(?,?)').run(guild,collision);
+ const again=await memberNames(f.env,guild,base,config);assert.equal(again.get(one),'表示名');assert.equal(again.has(collision),false);
+ assert.equal((await memberNames(f.env,'other-guild',base,config)).has(one),false);
+ f.sql.prepare('DELETE FROM kp_settings WHERE key=?').run('member-name:'+guild+':'+one.slice(-4));
+ assert.equal((await memberNames(f.env,guild,base,config)).has(one),false,'initial collision stays unassigned');
+ assert.deepEqual((await memberNames(f.env,guild,base,{guildId:guild,names:[{suffix:'9999',name:'Absent'}]})),new Map([...base,['827801943928995840','小林']]));
+ const renamed=await memberNames(f.env,guild,base,{guildId:guild,names:[{suffix:two.slice(-4),name:'New name'}]});assert.equal(renamed.get(two),'New name');
+});
+
+function configurePrivateCasino(env:KpEnv,owner=one){
+ const pair=generateKeyPairSync('rsa',{modulusLength:2048,privateKeyEncoding:{type:'pkcs8',format:'pem'},publicKeyEncoding:{type:'spki',format:'pem'}}),key=randomBytes(32),iv=randomBytes(12),c=createCipheriv('aes-256-gcm',key,iv);
+ const ciphertext=Buffer.concat([c.update(JSON.stringify({enabled:true,guildId:guild,ownerId:owner})),c.final(),c.getAuthTag()]).toString('base64');
+ env.KP_BOOTSTRAP_PRIVATE_KEY=pair.privateKey;env.KP_PRIVATE_CASINO_CONFIG=JSON.stringify({version:1,keyFingerprint:'fixture',iv:iv.toString('base64'),wrappedKey:publicEncrypt({key:pair.publicKey,oaepHash:'sha256'},key).toString('base64'),ciphertext});
+}
+test('private casino is server-authorized by guild and exact Discord ID; normal public records have accurate amounts',async()=>{
+ const f=await fixture();configurePrivateCasino(f.env);seed(f.sql,one,50000);seed(f.sql,two,50000);
+ assert.equal(await privateCasinoAllowed(f.env,guild,one),true);assert.equal(await privateCasinoAllowed(f.env,guild,two),false);assert.equal(await privateCasinoAllowed(f.env,'other-guild',one),false);
+ assert.equal((await readKpState(f.env,mapping,one)).privateCasino,true);assert.equal(Object.hasOwn(await readKpState(f.env,mapping,two),'privateCasino'),false);
+ await assert.rejects(operateKp(f.env,mapping,two,'private-rejected-01','private-casino',{game:'roulette',amount:100,number:3,user:one,privateCasino:true}),/利用できません/);
+ let cash=50000;
+ for(const [game,net] of [['roulette',3500],['chinchiro',500],['blackjack',150],['slot',9900]] as const){
+  const args={game,amount:100,number:3},id='private-fixture-'+game;
+  const result=await operateKp(f.env,mapping,one,id,'private-casino',args);cash+=net;
+  assert.equal(result.operationSource,'owner-casino');assert.equal((await readKpState(f.env,mapping,one)).cash,cash);
+  assert.deepEqual(await operateKp(f.env,mapping,one,id,'private-casino',args),result);assert.equal((await readKpState(f.env,mapping,one)).cash,cash);
+  const saved=f.sql.prepare('SELECT data FROM kp_state WHERE user=?').get(one)!;assert.equal(Object.hasOwn(JSON.parse(String(saved.data)),'privateCasino'),false);
+ }
+ assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM kp_operations').get()!.n,4);
+ assert.equal((await readKpState(f.env,mapping,two)).cash,50000);
+ const feed=await communityFeed(f.env,guild,new Map([[one,'Owner']]));assert.equal(feed.entries.length,4);assert.deepEqual(new Set(feed.entries.map(e=>e.label)),new Set(['ルーレット','チンチロ','ブラックジャック','スロット']));assert.ok(!JSON.stringify(feed).includes('owner-casino'));assert.ok(!JSON.stringify(feed).includes('privateCasino'));
+ const stock=await readKpState(f.env,mapping,one);assert.equal(stock.jackpot.amount,10003,'777 does not consume the shared diamond pool');
+ await assert.rejects(operateKp(f.env,mapping,one,'private-invalid-01','private-casino',{game:'roulette',amount:100,number:37}));
+ await assert.rejects(operateKp(f.env,mapping,one,'private-invalid-02','private-casino',{game:'slot',amount:20001}));
+ await assert.rejects(operateKp(f.env,mapping,one,'private-invalid-03','private-casino',{game:'unknown',amount:100}));
+ f.sql.exec("CREATE TRIGGER private_fail BEFORE INSERT ON kp_ledger BEGIN SELECT RAISE(ABORT,'private rollback'); END");
+ await assert.rejects(operateKp(f.env,mapping,one,'private-rollback-01','private-casino',{game:'roulette',amount:100,number:3}));
+ assert.equal((await readKpState(f.env,mapping,one)).cash,cash);assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM kp_operations').get()!.n,4);
+ f.sql.exec('DROP TRIGGER private_fail');
+ f.sql.prepare('INSERT OR REPLACE INTO kp_debts(guild,user,amount,since) VALUES(?,?,?,?)').run(guild,one,100,Date.now());
+ await assert.rejects(operateKp(f.env,mapping,one,'private-debt-test-01','private-casino',{game:'roulette',amount:100,number:3}),/借KP/);
+ f.env.KP_PRIVATE_CASINO_CONFIG='invalid';assert.equal(await privateCasinoAllowed(f.env,guild,one),false);assert.equal(Object.hasOwn(await readKpState(f.env,mapping,one),'privateCasino'),false);
+});
+test('private race preview returns the committed order only to the authorized owner, without exposing the seed',async()=>{
+ const f=await fixture();configurePrivateCasino(f.env);
+ const tokenFor=async(user:string)=>exchangeKpCode(f.env,(await issueKpCode(f.env,mapping,user))!);
+ const ownerToken=await tokenFor(one),otherToken=await tokenFor(two);
+ const request=(token:string|null)=>new Request('https://worker/api/kp/private/race',{headers:token?{Authorization:'Bearer '+token}:{}});
+ assert.equal((await kpApi(request(null),f.env,mapping)).status,401);assert.equal((await kpApi(request(otherToken),f.env,mapping)).status,403);
+ const response=await kpApi(request(ownerToken),f.env,mapping);assert.equal(response.status,200);assert.equal(response.headers.get('Cache-Control'),'no-store');
+ const preview=await response.json() as any;
+ // @ts-expect-error Shared pure browser engine.
+ const {raceCard,raceResult,raceOdds}=await import('../../../js/racing.js');
+ const {raceEntries}=await import('../src/racing-horses.ts');
+ const saved=f.sql.prepare('SELECT seed,hash FROM kp_races WHERE guild=? AND id=?').get(guild,preview.id)!;
+ const card=raceCard(preview.id,undefined,await raceEntries(f.env,mapping,preview.id)),odds=raceOdds(card);
+ assert.deepEqual(preview.order.map((h:any)=>h.number),raceResult(card,String(saved.seed)).order);assert.equal(preview.hash,saved.hash);assert.equal(Object.hasOwn(preview,'seed'),false);
+ for(const h of preview.order){assert.equal(h.win,odds.win[h.number]);assert.equal(h.place,odds.place[h.number]);}
+ const publicView=(await readKpState(f.env,mapping,two)).racing.open;assert.equal(Object.hasOwn(publicView,'seed'),false);assert.equal(Object.hasOwn(publicView,'order'),false);
+ assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM kp_operations').get()!.n,0);
+ assert.equal((await kpApi(request(ownerToken),f.env,mapping)).status,200);assert.equal(f.sql.prepare('SELECT hash FROM kp_races WHERE guild=? AND id=?').get(guild,preview.id)!.hash,saved.hash);
+});
+test('private casino: every hand on the menu pays exactly that hand through the ordinary game; unknown hands are refused',async()=>{
+ // @ts-expect-error Shared table of the private menu's hands.
+ const {PRIVATE_HANDS}=await import('../../../js/private-casino-rules.js');
+ const f=await fixture();configurePrivateCasino(f.env);seed(f.sql,one,500000);
+ const nets:Record<string,number>={pinzoro:500,'zoro-2':300,'zoro-3':300,'zoro-4':300,'zoro-5':300,'zoro-6':300,shigoro:200,hifumi:200,'me-6':100,'me-5':100,'me-4':100,'me-3':100,'me-2':100,
+  blackjack:150,seven:9900,star:3900,bell:1900,lemon:900,cherry:400,cherry2:50,
+  royal:24900,'straight-flush':4900,four:2400,'full-house':700,flush:400,straight:300,three:200,'two-pair':100,jacks:0,player:100,banker:95,tie:800};
+ // @ts-expect-error Shared pure browser engine.
+ const {minesMultiplier}=await import('../../../js/casino-more.js');
+ let cash=500000,n=0;
+ for(const [game,hands] of Object.entries(PRIVATE_HANDS) as [string,[string,string][]][]){
+  for(const [hand] of hands){
+   const expected=game==='mines'?(()=>{const [m,k]=hand.split('x').map(Number);return Math.floor(100*minesMultiplier(m,k))-100;})():nets[hand];
+   const result=await operateKp(f.env,mapping,one,`private-hand-${String(++n).padStart(3,'0')}`,'private-casino',{game,amount:100,hand}) as {result:{net?:number;done?:{net:number;hand?:string;winner?:string}};operationSource:string};
+   const net=result.result.net??result.result.done!.net;
+   assert.equal(net,expected,`${game} ${hand}`);cash+=net;assert.equal((await readKpState(f.env,mapping,one)).cash,cash,`${game} ${hand} wallet`);
+   if(game==='poker')assert.equal(result.result.done!.hand,hand);
+   if(game==='baccarat')assert.equal(result.result.done!.winner,hand);
+  }
+ }
+ const state=await readKpState(f.env,mapping,one);assert.equal(state.mines,null);assert.equal(state.vp,null,'no game is left open');
+ await assert.rejects(operateKp(f.env,mapping,one,'private-hand-bad-01','private-casino',{game:'slot',amount:100,hand:'diamond'}),/役を選び直して/);
+ await assert.rejects(operateKp(f.env,mapping,one,'private-hand-bad-02','private-casino',{game:'mines',amount:100,hand:'24x1'}),/役を選び直して/);
+ await assert.rejects(operateKp(f.env,mapping,two,'private-hand-bad-03','private-casino',{game:'poker',amount:100,hand:'royal'}),/利用できません/);
+});
+
+test('explicit member IDs use exact matching even when suffixes collide and preserve old aliases',async()=>{
+ const f=await fixture(),collision='200000000000000101';
+ f.sql.prepare('INSERT INTO kp_wallets(guild,user) VALUES(?,?)').run(guild,collision);
+ const base=new Map([[two,'Existing']]);
+ const config={guildId:guild,names:[{userId:one,name:'New display'},{suffix:two.slice(-4),name:'Old alias'}]};
+ const names=await memberNames(f.env,guild,base,config);
+ assert.equal(names.get(one),'New display');assert.equal(names.has(collision),false);assert.equal(names.get(two),'Old alias');assert.equal(base.get(two),'Existing');
+ assert.equal((await memberNames(f.env,'other-guild',base,config)).has(one),false);
+ for(const names of [[{userId:one,suffix:one.slice(-4),name:'Invalid'}],[{userId:'123',name:'Invalid'}],[{userId:one,name:'A'},{userId:one,name:'B'}]])assert.deepEqual(await memberNames(f.env,guild,base,{guildId:guild,names}),new Map([...base,['827801943928995840','小林']]));
+});
+
+test('定期的なコミュニティ表示の名前解決は保存済みの複数名を1回で取得する',async()=>{
+ const f=await fixture();
+ const config={guildId:guild,names:[{suffix:one.slice(-4),name:'一号'},{suffix:two.slice(-4),name:'二号'}]};
+ const base=new Map<string,string>();
+ await memberNames(f.env,guild,base,config);
+ f.resetQueries();
+ const names=await memberNames(f.env,guild,base,config);
+ assert.equal(names.get(one),'一号');
+ assert.equal(names.get(two),'二号');
+ assert.equal(f.queries(),1,'two persisted names must be fetched in one indexed SELECT');
+});
+
+test('5秒コミュニティ更新は変更がない場合に40件の履歴を再読込しない。新規投稿は即反映し、権限も維持',async()=>{
+ const f=await fixture();
+ const token=await createKpSession(f.env,guild,one);
+ const db=f.env.DB as unknown as {prepare:(text:string)=>unknown};
+ const raw=db.prepare;
+ let feedScans=0,markerReads=0;
+ db.prepare=((text:string)=>{
+  if(text.includes('SELECT id,user,at,json_extract(response'))feedScans++;
+  if(text.includes('SELECT MAX(rowid) AS latest FROM kp_operations'))markerReads++;
+  return raw(text);
+ }) as typeof db.prepare;
+ const get=(revision?:number,authorized=true)=>kpApi(new Request('https://example.test/api/kp/feed'+(revision===undefined?'':'?revision='+revision),{headers:authorized?{Authorization:'Bearer '+token}:{}}),f.env,mapping);
+ try{
+  const initial=await get();
+  assert.equal(initial.status,200);
+  const first=await initial.json() as {entries:Array<unknown>;revision:number;unchanged?:boolean};
+  assert.deepEqual(first.entries,[]);
+  assert.equal(first.revision,0);
+  assert.equal(feedScans,1);
+  const same=await get(first.revision);
+  assert.deepEqual(await same.json(),{unchanged:true,revision:0});
+  assert.equal(feedScans,1,'no full read for unchanged operations');
+  assert.equal(markerReads,2,'only a cheap one-row max() lookup for each poll');
+  const forbidden=await get(first.revision,false);
+  assert.equal(forbidden.status,401,'conditional requests must still authenticate');
+  assert.equal(feedScans,1);
+  f.sql.prepare("INSERT INTO kp_ledger VALUES(?,?,?,?,?,?)").run('feed-credit',guild,one,1000,'test',Date.now());
+  await operateKp(f.env,mapping,one,'feed-new-activity-0001','spin',{type:'red',amount:100});
+  const changed=await get(first.revision);
+  const latest=await changed.json() as {entries:Array<{label:string}>;revision:number};
+  assert(latest.revision>first.revision);
+  assert(latest.entries.length>=1);
+  assert.equal(feedScans,2,'new activity fetches the full feed promptly');
+  const still=await get(latest.revision);
+  assert.equal((await still.json() as {unchanged:boolean}).unchanged,true);
+  assert.equal(feedScans,2);
+  const force=await get();
+  assert.equal((await force.json() as {entries:unknown[]}).entries.length,latest.entries.length);
+  assert.equal(feedScans,3,'the client can force a full refresh for renamed members');
+  assert.equal(await feedRevision(f.env),latest.revision);
+ }finally{db.prepare=raw;}
+});
+
+test('あかんbot shows server-verified relic KP inside total breakdown and replaces the line on edit',async()=>{
+ const base='🎉 ほげは勝ち！（スパイクラッシュ）\\n💬 ナイス！'.replace('\\n','\n');
+ const label='（基礎40・補正0・端数精算 40 KP）';
+ const first=kpCreditLine(base,90,label,50);
+ assert.match(first,/🪙 この試合 \+90 KP\n  ↳ 試合報酬 \+40 KP （基礎40・補正0・端数精算 40 KP）\n  ↳ 🧿 遺物補正 \+50 KP/);
+ assert.match(first,/\n💬 ナイス！/);
+ assert.equal(kpCreditLine(first,90,label,50),first,'a repeated post update must not duplicate the relic item');
+ assert.equal((first.match(/🧿 遺物補正/g)??[]).length,1);
+ assert.equal(kpCreditLine(first,40,label,0),kpCreditLine(base,40,label),'a rollback or changed result removes stale relic items');
+ assert.match(kpCreditLine('Result',111,'',11),/この試合 \+111 KP\n  ↳ 試合報酬 \+100 KP\n  ↳ 🧿 遺物補正 \+11 KP/);
+ assert.match(kpCreditLine('Result',300,'（勝利）',50),/この試合 \+300 KP\n  ↳ 試合報酬 \+250 KP （勝利）\n  ↳ 🧿 遺物補正 \+50 KP/);
+});
+test('あかんbot reads relic bonuses from the real verified ledger and includes them in one cached match read',async()=>{
+ const f=await fixture();f.enableHistory();
+ const match='breakdown-relic',id=kpEventId(guild,match,'p-one');
+ f.sql.prepare('INSERT INTO kp_events(id,guild,user,puuid,match,mode,outcome,amount,policy,at) VALUES(?,?,?,?,?,?,?,?,?,?)')
+  .run(id,guild,one,'p-one',match,'spikerush','win',40,'fixture',Date.now());
+ f.sql.prepare('INSERT INTO kp_ledger(id,guild,user,delta,kind,at) VALUES(?,?,?,?,?,?)')
+  .run('relic:'+id,guild,one,50,'relic',Date.now());
+ const run=await prepareKpRun(f.env,mapping);
+ f.resetQueries();
+ await loadKpRunMatch(f.env,run,id);
+ assert.equal(f.queries(),1,'preloaded event and relic are read with one indexed query');
+ assert.equal(run.credits.get(id),90);
+ assert.equal(run.relicBonuses.get(id),50);
+ assert.equal(kpCreditLine('Result',run.credits.get(id)!, '（基礎40・補正0・端数精算 40 KP）',run.relicBonuses.get(id)), 'Result\n🪙 この試合 +90 KP\n  ↳ 試合報酬 +40 KP （基礎40・補正0・端数精算 40 KP）\n  ↳ 🧿 遺物補正 +50 KP');
+ assert.equal(await kpRelicBonus(f.env,guild,one,id),50);
+ assert.equal(await kpRelicBonus(f.env,guild,two,id),0,'another account cannot query this receipt as their own');
+ assert.equal(await kpRelicBonus(f.env,guild,one,'forged'),0);
+ const newRun=await prepareKpRun(f.env,mapping);await loadKpRunMatch(f.env,newRun,id);
+ assert.equal(newRun.relicBonuses.get(id),50,'restarts and later bot edits show the same settled proof');
 });

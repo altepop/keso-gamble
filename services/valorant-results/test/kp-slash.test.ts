@@ -5,7 +5,7 @@ import {URL as NodeURL} from 'node:url';
 import {readFileSync,readdirSync} from 'node:fs';
 import {initializeKp,syncKpAccounts} from '../src/kp.ts';
 import type {KpEnv,KpMapping} from '../src/kp.ts';
-import {runKpCommand,slashRace,betChoices} from '../src/kp-slash.ts';
+import {runKpCommand,slashRace,betChoices,betFallbackChoices,withinDeadline} from '../src/kp-slash.ts';
 import {registerKpCommands,kpCommands,isKpRanking,sameCommand} from '../src/kp-command.ts';
 const guild='100000000000000100',one='100000000000000101',two='100000000000000102',newUser='100000000000000103';
 const mapping:KpMapping={guildId:guild,accounts:[{riotId:'One#JP1',discordUserId:one},{riotId:'Two#JP1',discordUserId:two}]};
@@ -30,6 +30,23 @@ test('slash balance is private to the guild member; newcomers get zero and no st
  assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM kp_ledger WHERE user=?').get(newUser)?.n,0);
  assert.match(await runKpCommand(f.env,{...interaction('kp'),guild_id:'100000000000000199'},mapping),/このサーバー/);
  assert.match(await runKpCommand(f.env,{...interaction('kp'),member:undefined},mapping),/このサーバー/);
+});
+test('/kp bets reads only saved predictions, never full stocks, ledger, horses or activity histories',async()=>{
+ const f=await fixture();
+ const raw=JSON.parse(String(f.sql.prepare('SELECT data FROM kp_state WHERE guild=? AND user=?').get(guild,one)!.data));
+ const raceId=Date.parse('2026-10-27T16:15:00+09:00');
+ raw.raceBets=[{id:'saved-race-1',raceId,horse:1,type:'win',amount:300,odds:20,status:'pending',payout:0,time:T0}];
+ f.sql.prepare('UPDATE kp_state SET data=? WHERE guild=? AND user=?').run(JSON.stringify(raw),guild,one);
+ const prepare=f.env.DB.prepare.bind(f.env.DB),reads:string[]=[];
+ f.env.DB.prepare=((sql:string)=>{reads.push(sql);return prepare(sql);}) as typeof f.env.DB.prepare;
+ const text=await runKpCommand(f.env,{...interaction('kp'),data:{name:'kp',options:[{type:1,name:'bets'}]}},mapping);
+ assert.match(text,/競馬.*16:15発走/);
+ assert.match(text,/未精算.*1件・合計 300 KP/);
+ assert.ok(reads.includes('SELECT data FROM kp_state WHERE guild=? AND user=?'));
+ assert.ok(!reads.some(q=>/FROM kp_events|FROM kp_voice_events|FROM kp_ledger|FROM stock_markets|FROM stock_news|FROM kp_horse_runs|FROM ml_cards/.test(q)),
+   'Discord bet slips must not fetch irrelevant Activity summaries');
+ const ranking=await runKpCommand(f.env,{...interaction('kp'),data:{name:'kp',options:[{type:1,name:'ranking'}]}},mapping);
+ assert.match(ranking,new RegExp(`1位　<@${one}>`),'the public /kp ranking still reads the latest wallet balance');
 });
 test('slash race card uses the real entries and never leaks a race seed',async t=>{
  t.mock.timers.enable({apis:['Date'],now:T0});const f=await fixture();
@@ -63,14 +80,14 @@ test('race clocks cross JST midnight safely and are stable on replay',()=>{
 test('command registration never bulk-replaces other commands and refuses a foreign name collision',async()=>{
  const calls:Array<{path:string;method?:string;body?:any}>=[];
  const api=async(path:string,method?:string,body?:unknown)=>{calls.push({path,method,body});return path==='/users/@me'?{id:one,bot:true}:method==='POST'?{...(body as object),id:one}:[{name:'death'},{name:'valo'},{name:'launch',type:4}];};
- assert.equal(await registerKpCommands(one,guild,api,async()=>{}),11);
- assert.deepEqual(calls.filter(c=>c.method==='POST').map(c=>c.body.name),['kp','keiba','bet','horsename','mleague','mbet','mclose','kpgrant','unitelink','paifulink','paifu']);
- assert.ok(calls.every(c=>c.method!=='PUT'));assert.deepEqual(kpCommands[2].options?.filter(o=>o.required).map(o=>o.name),['horse','amount']);
+ assert.equal(await registerKpCommands(one,guild,api,async()=>{}),14);
+ assert.deepEqual(calls.filter(c=>c.method==='POST').map(c=>c.body.name),['kp','spike','dm','keiba','bet','horsename','give','mleague','mbet','mclose','kpgrant','unitelink','paifulink','paifu']);
+ assert.ok(calls.every(c=>c.method!=='PUT'));assert.deepEqual(kpCommands[4].options?.filter(o=>o.required).map(o=>o.name),['horse','amount']);
  // Unchanged commands are not written again, and writes are spaced out.
  const waits:number[]=[],posted:string[]=[];
- const stored=[{...kpCommands[0],id:'1',application_id:one,version:'9',description_localizations:null,options:kpCommands[0].options.map(o=>({...o,required:false}))},{...kpCommands[1],id:'2'},{name:'death'}];
- assert.equal(await registerKpCommands(one,guild,async(path,method,body)=>{if(method==='POST'){posted.push((body as {name:string}).name);return {...(body as object),id:one};}return path==='/users/@me'?{id:one,bot:true}:stored;},async ms=>{waits.push(ms);}),9);
- assert.deepEqual(posted,['bet','horsename','mleague','mbet','mclose','kpgrant','unitelink','paifulink','paifu']);assert.deepEqual(waits,[5000,5000,5000,5000,5000,5000,5000,5000],'a gap between writes, none before the first');
+ const stored=[{...kpCommands[0],id:'1',application_id:one,version:'9',description_localizations:null,options:kpCommands[0].options.map(o=>({...o,required:false}))},{...kpCommands[3],id:'2'},{name:'death'}];
+ assert.equal(await registerKpCommands(one,guild,async(path,method,body)=>{if(method==='POST'){posted.push((body as {name:string}).name);return {...(body as object),id:one};}return path==='/users/@me'?{id:one,bot:true}:stored;},async ms=>{waits.push(ms);}),12);
+ assert.deepEqual(posted,['spike','dm','bet','horsename','give','mleague','mbet','mclose','kpgrant','unitelink','paifulink','paifu']);assert.deepEqual(waits,[5000,5000,5000,5000,5000,5000,5000,5000,5000,5000,5000],'a gap between writes, none before the first');
  let writes=0;await assert.rejects(registerKpCommands(one,guild,async(path,method)=>{if(method)writes++;return path==='/users/@me'?{id:one,bot:true}:[{name:'bet',description:'Another bot command'}];}),/conflict/);assert.equal(writes,0);
  await assert.rejects(registerKpCommands(one,guild,async()=>({id:two,bot:true})),/mismatch/);
 });
@@ -111,6 +128,18 @@ test('public ranking is one guild snapshot, ties share rank, only top ten are re
  assert.equal(text.split('\n').filter(line=>/^\d+位/.test(line)).length,10);assert.match(text,/全14人/);
  assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM kp_wallets').get()?.n,before);
  assert.equal(f.sql.prepare('SELECT balance FROM kp_wallets WHERE user=?').get(one)?.balance,10000);
+ assert.match(text,/💸 \*\*借KP\*\*\nいま借KPのある人はいません。/);
+});
+test('public ranking lists everyone who owes 借KP, largest first, and marks it next to their rank',async()=>{
+ const f=await fixture();const {ensureDebt}=await import('../src/kp-debt.ts');await ensureDebt(f.env);
+ f.sql.prepare('INSERT INTO kp_debts(guild,user,amount,since) VALUES(?,?,300,0)').run(guild,two);
+ f.sql.prepare('INSERT INTO kp_debts(guild,user,amount,since) VALUES(?,?,1000,0)').run(guild,newUser);
+ f.sql.prepare('INSERT INTO kp_debts(guild,user,amount,since) VALUES(?,?,0,0)').run(guild,one);
+ f.sql.prepare('INSERT INTO kp_debts(guild,user,amount,since) VALUES(?,?,500,0)').run('100000000000000199','100000000000000999');
+ const text=await runKpCommand(f.env,{...interaction('kp',one),data:{name:'kp',options:[{type:1,name:'ranking'}]}},mapping);
+ assert.match(text,new RegExp(`2位　<@${two}>　\\*\\*0 KP\\*\\*　💸借KP 300 KP`));
+ assert.match(text,new RegExp(`💸 \\*\\*借KP\\*\\*\\n<@${newUser}>　\\*\\*1,000 KP\\*\\*\\n<@${two}>　\\*\\*300 KP\\*\\*$`));
+ assert.equal(text.includes('100000000000000999'),false,'other servers stay out');
 });
 test('only the exact ranking subcommand is public; balance, legacy KP and malformed options stay private',()=>{
  assert.equal(isKpRanking({data:{name:'kp',options:[{type:1,name:'ranking'}]}}),true);
@@ -124,7 +153,7 @@ test('public command metadata contains definitions only and does not need or exp
  let queries=0;
  const response=await kpApi(new Request('https://worker/api/kp/commands'),{DB:{prepare(){queries++;throw Error('No DB reads');}},KP_BOOTSTRAP_PRIVATE_KEY:'fixture-secret-must-not-leak'} as unknown as KpEnv);
  const body=await response.json() as {version:string;commands:unknown[]};
- assert.equal(response.status,200);assert.equal(body.version,'kp-slash-v14-my-bets');assert.equal(body.commands.length,11);assert.equal(queries,0);
+ assert.equal(response.status,200);assert.equal(body.version,'kp-slash-v19-dm-daily-40k');assert.equal(body.commands.length,14);assert.equal(queries,0);
  assert.equal(JSON.stringify(body).includes('fixture-secret'),false);assert.equal(response.headers.get('Cache-Control'),'no-store');
 });
 
@@ -169,6 +198,13 @@ test('/kpgrant and /paifulink are refused before any work for members without ad
  }
 });
 
+test('Discord slash command betting limits match the relaxed shared 80,000 KP weekly cap',()=>{
+ const bet=kpCommands.find(c=>c.name==='bet')!;
+ const mbet=kpCommands.find(c=>c.name==='mbet')!;
+ assert.equal(bet.options.find(o=>o.name==='amount')?.max_value,80000);
+ assert.equal(mbet.options.find(o=>o.name==='amount')?.max_value,80000);
+ assert.match(mbet.options.find(o=>o.name==='amount')!.description,/週8万KP/);
+});
 test('/bet needs only a horse and an amount: the open race and a win bet are assumed, and the receipt names the horse',async t=>{
  t.mock.timers.enable({apis:['Date'],now:T0});const f=await fixture();
  const choices=await betChoices(f.env,{...interaction('bet',one,[{name:'horse',value:'',focused:true} as never]),guild_id:guild},mapping);
@@ -217,4 +253,62 @@ test('/mbet の「購入する」ボタンは即座に受け付け（type 6）�
  assert.deepEqual(await response.json(),{type:6});assert.equal(tasks.length,1);await Promise.all(tasks);
  assert.equal(sent.length,1);assert.equal(sent[0].method,'PATCH');assert.match(sent[0].url,/messages\/@original$/);
  assert.deepEqual(sent[0].body.components,[],'the buttons are removed');assert.match(sent[0].body.content,/確認できませんでした/);
+});
+
+test('/bet autocomplete reads only the open race, and answers with gate numbers if the list is late',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:T0});const f=await fixture();
+ const ask=()=>betChoices(f.env,{...interaction('bet',one,[{name:'horse',value:'',focused:true} as never]),guild_id:guild},mapping);
+ const first=await ask();
+ let reads=0;const prepare=f.env.DB.prepare.bind(f.env.DB);(f.env.DB as {prepare:unknown}).prepare=(q:string)=>{reads++;return prepare(q);};
+ assert.deepEqual(await ask(),first,'the same list as before');
+ // The test mapping skips the per-isolate setup cache, so its 4 setup reads are counted too.
+ assert.ok(reads<=10,`reads only the open race (was 16 with the whole race view, which also read the race being watched): ${reads}`);
+ const fallback=betFallbackChoices(T0);
+ assert.deepEqual(fallback.map(c=>c.value),first.map(c=>c.value).sort((a,b)=>a-b),'every gate number of the open race');
+ assert.ok(fallback.every(c=>c.name.length<=100&&/^\d+番（.*）｜16:15発走$/.test(c.name)));
+ t.mock.timers.reset();
+ assert.equal(await withinDeadline(Promise.resolve('list'),50,()=>'late'),'list');
+ assert.equal(await withinDeadline(new Promise<string>(r=>setTimeout(()=>r('list'),200)),20,()=>'late'),'late');
+});
+
+test('/give moves KP to another member once per interaction, posts to 稼ぎch, and refuses bad requests',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:T0});
+ const f=await fixture();(f.env as {KP_EARNINGS_WEBHOOK_URL?:string}).KP_EARNINGS_WEBHOOK_URL='https://discord.com/api/webhooks/1/x';
+ const bal=(u:string)=>Number(f.sql.prepare('SELECT balance FROM kp_wallets WHERE user=?').get(u)?.balance);
+ const give=(options:Array<{name:string;value:unknown}>,n=1,user=one)=>runKpCommand(f.env,{...interaction('give',user,options),id:id(T0,n)},mapping);
+ assert.match(await give([{name:'user',value:two},{name:'amount',value:1500},{name:'message',value:'@everyone いつもありがとう'}]),/プレゼントしました[\s\S]*残高 8,500 KP/);
+ assert.equal(bal(one),8500);assert.equal(bal(two),1500);
+ await give([{name:'user',value:two},{name:'amount',value:1500}]);
+ assert.equal(bal(one),8500,'a retried delivery of the same interaction gives once');assert.equal(bal(two),1500);
+ const post=f.sql.prepare("SELECT body FROM kp_posts WHERE id LIKE 'gift:%'").all() as Array<{body:string}>;
+ assert.equal(post.length,1);
+ assert.deepEqual(JSON.parse(post[0].body),{content:`🎁 <@${one}> が <@${two}> に **1,500 KP** をプレゼント！\n💬「everyone いつもありがとう」\nええやつやん。`,allowed_mentions:{parse:[]}});
+ assert.equal(f.sql.prepare("SELECT kind FROM kp_ledger WHERE user=? AND delta=1500").get(two)?.kind,'gift');
+ assert.match(await give([{name:'user',value:one},{name:'amount',value:100}],2),/自分以外/);
+ assert.match(await give([{name:'user',value:'100000000000000199'},{name:'amount',value:100}],3),/自分以外/,'not a member');
+ assert.match(await give([{name:'user',value:two},{name:'amount',value:10001}],4),/1〜10,000/);
+ assert.match(await give([{name:'user',value:two},{name:'amount',value:9000}],5),/足りません/);
+ assert.match(await give([{name:'user',value:one},{name:'amount',value:1000}],6,two),/プレゼントしました/,'the receiver can give it on');
+ assert.equal(bal(one),9500);assert.equal(bal(two),500);
+ // 借KP: the giver cannot give while owing.
+ f.sql.prepare('INSERT INTO kp_debts(guild,user,amount,since) VALUES(?,?,300,0)').run(guild,one);
+ assert.match(await give([{name:'user',value:two},{name:'amount',value:100}],7),/借KP/);assert.equal(bal(two),500);
+});
+
+test('private /spike status and /spike hint select the requested role and charge exactly once',async()=>{
+ const f=await fixture();
+ const status={...interaction('spike'),data:{name:'spike',options:[{type:1,name:'status'}]}};
+ const view=await runKpCommand(f.env,status,mapping);
+ assert.match(view,/\*\*Duelist\*\* 0\/16/);assert.match(view,/🔒 未公開/);
+ assert.doesNotMatch(view,/15キル以上/);
+ const hint={...interaction('spike'),data:{name:'spike',options:[{type:1,name:'hint',options:[{name:'role',type:3,value:'Duelist'}]}]}};
+ const first=await runKpCommand(f.env,hint,mapping);
+ assert.match(first,/10,000 KP/);
+ assert.equal(f.sql.prepare('SELECT balance FROM kp_wallets WHERE user=?').get(one)?.balance,0);
+ const repeated=await runKpCommand(f.env,hint,mapping);
+ assert.match(repeated,/購入済み/);
+ assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM kp_ledger WHERE kind='spike-hint'").get()?.n,1);
+ const after=await runKpCommand(f.env,status,mapping);
+ assert.match(after,/15キル以上/);
+ assert.doesNotMatch(after,/7アシスト以上/,'unbought role condition stays hidden');
 });

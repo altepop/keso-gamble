@@ -1,7 +1,9 @@
-import {SKIRMISH_BUTTON,decideSkirmish} from './skirmish.ts';
+import {SKIRMISH_BUTTON,decideSkirmish,withoutSkirmishButtons} from './skirmish.ts';
 import {activityLaunchComponents} from './activity-link.ts';
 import {isKpRanking} from './kp-command.ts';
-import { MBET_BUTTON, betChoices, mbetChoices, mbetDecide, runKpCommand } from './kp-slash.ts';
+import { MBET_BUTTON, betChoices, betFallbackChoices, mbetChoices, mbetDecide, runKpCommand, withinDeadline } from './kp-slash.ts';
+// Leaves time for the request to reach Discord inside its three seconds.
+const AUTOCOMPLETE_DEADLINE_MS = 2200;
 import { PAIFU_BUTTON, decidePaifu, paifuRequest, runPaifuCommand } from './mahjong-claims.ts';
 import type { PaifuReply } from './mahjong-claims.ts';
 import { runValoCommand } from './valo-queries.ts';
@@ -20,7 +22,8 @@ interface Option { type: number; name: string; value?: string; options?: Option[
 export interface Interaction {
   id: string; application_id: string; type: number; token?: string; guild_id?: string;
   member?: { permissions?: string; user?: { id: string } };
-  data?: { name?: string; options?: Option[]; custom_id?: string; values?: string[]; component_type?: number };
+  data?: { type?: number; name?: string; options?: Option[]; custom_id?: string; values?: string[]; component_type?: number };
+  message?: { flags?: number; components?: unknown[] };
 }
 const respond = (content: string) => Response.json({ type: 4, data: { content, flags: 64, allowed_mentions: { parse: [] } } });
 const unhex = (value: string) => Uint8Array.from(value.match(/../g) ?? [], byte => parseInt(byte, 16));
@@ -116,11 +119,29 @@ export async function discordInteractions(request: Request, env: Env, ctx: Execu
   try { interaction = JSON.parse(body) as Interaction; } catch { return new Response('Invalid JSON', { status: 400 }); }
   if (interaction.application_id !== config.applicationId) return new Response('Unauthorized', { status: 401 });
   if (interaction.type === 1) return Response.json({ type: 1 });
+  // A Primary Entry Point can be invoked from a DM, where Discord omits
+  // guild_id. Only command / data type 4 can launch there; other gameplay
+  // commands still require the configured guild below.
+  // Primary Entry Point with handler=APP_HANDLER (1): launch directly without
+  // any channel message, webhook, mention, DB touch or deferred follow-up.
+  // IMPORTANT: INTERACTION type 2 / DATA type 4, not autocomplete type 4.
+  // Deploy this signed handler BEFORE changing Discord's global command.
+  if (interaction.type === 2 && interaction.data?.type === 4) {
+    if (interaction.guild_id && interaction.guild_id !== config.guildId)
+      return respond('このサーバーでは利用できません。');
+    if (!/^\d{15,22}$/.test(interaction.id)
+        || typeof interaction.token !== 'string' || !interaction.token.length
+        || interaction.token.length > 4096) return new Response('Invalid interaction',{status:400});
+    return Response.json({type:12});
+  }
   if (interaction.guild_id !== config.guildId) return respond('このサーバーでは利用できません。');
   // Read-only candidate lists return type 8 directly, without deferring or buying anything.
   if (interaction.type === 4) {
     const name=interaction.data?.name;
-    const choices = await (name==='bet'?betChoices(env,interaction):name==='mbet'?mbetChoices(env,interaction):Promise.resolve([])).catch(() => []);
+    // Discord drops an answer after three seconds ("オプション読み込み失敗"); a cold start must still answer in time.
+    const choices = await withinDeadline<Array<{ name: string; value: string | number }>>(
+      (name==='bet'?betChoices(env,interaction):name==='mbet'?mbetChoices(env,interaction):Promise.resolve([])).catch(() => []),
+      AUTOCOMPLETE_DEADLINE_MS, () => name==='bet' ? betFallbackChoices() : []);
     return Response.json({ type: 8, data: { choices } });
   }
   let permissions = 0n;
@@ -132,7 +153,7 @@ export async function discordInteractions(request: Request, env: Env, ctx: Execu
   const mbetButton = interaction.type === 3 && MBET_BUTTON.test(interaction.data?.custom_id ?? '');
   if (['kpgrant','paifulink','unitelink'].includes(interaction.data?.name ?? '') && !(permissions & (8n | 32n))) return respond('このコマンドには「管理者」または「サーバー管理」権限が必要です。');
   if ((interaction.data?.name === 'death' || deathSelect) && !(permissions & (8n | 32n))) return respond('開始・終了・状態確認には「管理者」または「サーバー管理」権限が必要です。');
-  if (!deathSelect && !paifuButton && !mbetButton && !skirmishButton && (interaction.type !== 2 || !['death', 'valo', 'kp', 'keiba', 'bet', 'paifu', 'mleague', 'mbet', 'mclose', 'kpgrant', 'paifulink', 'unitelink', 'horsename'].includes(interaction.data?.name ?? ''))) return respond('対応していないコマンドです。');
+  if (!deathSelect && !paifuButton && !mbetButton && !skirmishButton && (interaction.type !== 2 || !['death', 'valo', 'kp', 'spike', 'dm', 'keiba', 'bet', 'paifu', 'mleague', 'mbet', 'mclose', 'kpgrant', 'paifulink', 'unitelink', 'horsename', 'give'].includes(interaction.data?.name ?? ''))) return respond('対応していないコマンドです。');
   if (!/^\d+$/.test(interaction.id) || typeof interaction.token !== 'string' || !interaction.token.length || interaction.token.length > 4096) return new Response('Invalid interaction', { status: 400 });
   // A malformed paipu claim is answered privately before the public deferred reply is opened.
   if (interaction.data?.name === 'paifu' && interaction.type === 2) {
@@ -153,7 +174,11 @@ export async function discordInteractions(request: Request, env: Env, ctx: Execu
     try {
       if(skirmishButton){
         if(!await initializeKp(env))throw Error('KP unavailable');
-        result=await decideSkirmish(env,config.guildId,interaction.member!.user!.id,interaction.data!.custom_id!);
+        const user=interaction.member!.user!.id,decided=await decideSkirmish(env,config.guildId,user,interaction.data!.custom_id!);
+        // On the public あかんbot result only the presser's buttons go; the choice itself is told to them alone
+        // (稼ぎch announces it). The private /kp balance reply is replaced as before.
+        if(((interaction.message?.flags??0)&64)===0){result={components:withoutSkirmishButtons(interaction.message?.components,user)} as typeof result;notice=decided.content;}
+        else result=decided;
       } else if (mbetButton) {
         const decided = await mbetDecide(env, interaction);
         if (!decided) return;
@@ -166,7 +191,7 @@ export async function discordInteractions(request: Request, env: Env, ctx: Execu
       else if (deathSelect) result = { content: await selectDeathMode(env.DB, interaction, configuredPlayers, runDeathCommand), components: [] };
       else if (interaction.data?.name === 'death' && interaction.data.options?.[0]?.name === 'start'
         && !interaction.data.options[0].options?.some(option => option.name === 'mode')) result = await deathModePicker(env.DB, interaction, configuredPlayers);
-      else if (['kp','keiba','bet','mleague','mbet','mclose','kpgrant','paifulink','unitelink','horsename'].includes(interaction.data?.name??'')) {const out:{components?:unknown[]}={};result = {content:await runKpCommand(env,interaction,undefined,out)};result.components=out.components??activityLaunchComponents(config.applicationId);}
+      else if (['kp','spike','dm','keiba','bet','mleague','mbet','mclose','kpgrant','paifulink','unitelink','horsename','give'].includes(interaction.data?.name??'')) {const out:{components?:unknown[]}={};result = {content:await runKpCommand(env,interaction,undefined,out)};result.components=out.components??activityLaunchComponents(config.applicationId);}
       else result = { content: interaction.data!.name === 'valo' ? await runValoCommand(env.DB, interaction) : await runDeathCommand(env.DB, interaction) };
     } catch {
       console.warn('discord_command_failed');

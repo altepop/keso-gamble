@@ -6,7 +6,7 @@ import {raceSeed} from './racing-kp.ts';
 import {raceEntries} from './racing-horses.ts';
 import {crownFor} from './racing-crowns.ts';
 // @ts-expect-error Shared deterministic race model.
-import {RACE_INTERVAL,RUN_MS,COURSE_M,bigRaceName,fillerCrownName,raceCard,raceResult,raceTimeline,raceOdds,raceCommentary,distanceAt} from '../../../js/racing.js';
+import {RACE_INTERVAL,RUN_MS,COURSE_M,bigRaceName,fillerCrownName,raceCard,raceResult,raceTimeline,raceOdds,raceCommentary,distanceAt,raceEvent} from '../../../js/racing.js';
 export type BroadcastEnv=PostEnv&{RACE_BROADCAST?:DurableObjectNamespace};
 export interface RaceShow {card:any;timeline:any;order:number[];commentary:Array<{t:number;text:string}>;odds:any}
 export interface BroadcastRow {guild:string;race:number;snapshot:string;message:string|null;channel:string|null;step:number;retry_at:number;video:string;lease:string|null;lease_until:number;video_message:string|null}
@@ -18,10 +18,20 @@ export async function ensureBroadcast(env:KpEnv){
   env.DB.prepare('CREATE INDEX IF NOT EXISTS race_broadcast_video ON race_broadcasts(video,race)'),
  ]);ready.add(env.DB);
 }
-export function raceShow(card:any,seed:string):RaceShow{
+export function raceShow(card:any,seed:string,special=false):RaceShow{
  const result=raceResult(card,seed),timeline=raceTimeline(card,result,seed);
+ const regular=raceCommentary(card,result,timeline,raceOdds(card),seed);
+ // Narrative only: horses, odds, seed, race order and actual KP remain unchanged.
+ const vdk=special?[
+  {t:0,text:'VDK、0デスを守ったまま試合終了目前！競馬場も祝勝会の準備です！'},
+  {t:10000,text:'残りわずか、あとは終わるだけ。ここから死ぬなんてこと、まさかありませんよね？'},
+  {t:20000,text:'0デスを失う可能性はない！……いや、まだ試合は終わっていません！'},
+  {t:32000,text:'最終直線！VDK、今こそ生き残るとき！絶対に振り返るな！'},
+  {t:42000,text:'あああああ！終了間際に1デス！0デスの夢、ゴール直前で粉砕！'},
+  {t:49000,text:'0デスで伝説になるはずが、1デスで伝説に！VDK、歴史的やらかし達成！'},
+ ]:[];
  // Renderer receives no seed, owner IDs, account balances or private API credentials.
- return {card:{id:card.id,start:card.start,name:card.name,size:card.size,horses:card.horses.map((h:any)=>({number:h.number,name:h.name}))},timeline,order:result.order,commentary:raceCommentary(card,result,timeline,raceOdds(card),seed),odds:raceOdds(card)};
+ return {card:{id:card.id,start:card.start,name:card.name,size:card.size,...(card.event?{event:card.event}:{}),horses:card.horses.map((h:any)=>({number:h.number,name:h.name}))},timeline,order:result.order,commentary:[...regular,...vdk].sort((a,b)=>a.t-b.t),odds:raceOdds(card)};
 }
 const clean=(s:string)=>s.replace(/[@`*_~<>|\r\n]/g,'').slice(0,65);
 export const broadcastStep=(start:number,now:number)=>now<start?0:now>=start+RUN_MS?11:1+Math.floor((now-start)/5000);
@@ -29,10 +39,10 @@ export function liveRacePost(show:RaceShow,now:number){
  const {card,timeline,order}=show,t=Math.max(0,now-card.start),finished=t>=RUN_MS;
  const name=(n:number)=>clean(card.horses.find((h:any)=>h.number===n).name);
  const title=`${finished?'🏁':now<card.start?'🏇':'🔴'} **${clean(card.name)}**`;
- if(now<card.start)return {content:[title,`<t:${Math.floor(card.start/1000)}:t> 発走 · あと<t:${Math.floor(card.start/1000)}:R>`,`締切 <t:${Math.floor((card.start-60000)/1000)}:t>　\`/bet\` で購入`,...card.horses.map((h:any)=>`${h.number}番 ${name(h.number)}　${(show.odds.win[h.number]/10).toFixed(1)}倍`),'ここで実況するで！ Activityを開かんでも観戦できるから、そのまま見といてな。'].join('\n'),allowed_mentions:{parse:[]},components:activityLaunchComponents()};
+ if(now<card.start)return {content:[title,`<t:${Math.floor(card.start/1000)}:t> 発走 · あと<t:${Math.floor(card.start/1000)}:R>`,`締切 <t:${Math.floor((card.start-60000)/1000)}:t>　\`/bet\` で購入`,...(card.event?[`🌪️ 特別ルール：${clean(card.event.name)}｜${clean(card.event.effect)}`]:[]),...card.horses.map((h:any)=>`${h.number}番 ${name(h.number)}　${(show.odds.win[h.number]/10).toFixed(1)}倍`),'ここで実況するで！ Activityを開かんでも観戦できるから、そのまま見といてな。'].join('\n'),allowed_mentions:{parse:[]},components:activityLaunchComponents()};
  const ranked=[...order].sort((a,b)=>distanceAt(timeline,b,t)-distanceAt(timeline,a,t));
  const line=show.commentary.filter(c=>c.t<=t).at(-1)?.text??'スタート！';
- return {content:[title,finished?'**確定順位**':`発走から${Math.floor(t/1000)}秒 · 残り約${Math.max(0,Math.ceil((COURSE_M-distanceAt(timeline,ranked[0],t))/100))*100}m`,finished?order.slice(0,3).map((n,i)=>`${['🥇','🥈','🥉'][i]} ${i+1}着 ${n}番 **${name(n)}**`).join('\n'):'```\n'+card.horses.map((h:any)=>{const pos=Math.min(14,Math.floor(distanceAt(timeline,h.number,t)/COURSE_M*14));return `${String(h.number).padStart(2)} ${'━'.repeat(pos)}🐎${'─'.repeat(14-pos)} ${name(h.number)}`;}).join('\n')+'\n```',`💬 ${clean(line)}`,finished?'レース動画はでき次第ここに出すで。払戻しは口座に自動で入るから待っといてな。':'約5秒ごとに更新するで。'].join('\n').slice(0,1950),allowed_mentions:{parse:[]},components:activityLaunchComponents()};
+ return {content:[title,finished?'**確定順位**':`発走から${Math.floor(t/1000)}秒 · 残り約${Math.max(0,Math.ceil((COURSE_M-distanceAt(timeline,ranked[0],t))/100))*100}m`,finished?order.slice(0,3).map((n,i)=>`${['🥇','🥈','🥉'][i]} ${i+1}着 ${n}番 **${name(n)}**`).join('\n'):'```\n'+card.horses.map((h:any)=>{const pos=Math.min(14,Math.floor(distanceAt(timeline,h.number,t)/COURSE_M*14));return `${String(h.number).padStart(2)} ${'━'.repeat(pos)}🐎${'─'.repeat(14-pos)} ${name(h.number)}`;}).join('\n')+'\n```',`💬 ${clean(line)}`,finished?'レースは確定や。払戻しは口座に自動で入るから待っといてな。':'約5秒ごとに更新するで。'].join('\n').slice(0,1950),allowed_mentions:{parse:[]},components:activityLaunchComponents()};
 }
 /** Cron arms an alarm before the start; no viewer or Activity session is needed. */
 export async function prepareRaceBroadcast(env:BroadcastEnv,mapping:KpMapping,now=Date.now()){
@@ -42,11 +52,14 @@ export async function prepareRaceBroadcast(env:BroadcastEnv,mapping:KpMapping,no
  for(const id of [latest,latest+RACE_INTERVAL]){
   if(now<id-180000||now>=id+RUN_MS)continue; // Never replay an old race as a live race.
   const crown=await crownFor(env,mapping.guildId,id),entries=await raceEntries(env,mapping,id);
-  const bets=await env.DB.prepare("SELECT 1 FROM kp_state s,json_each(s.data,'$.raceBets') b WHERE s.guild=? AND json_extract(b.value,'$.raceId')=? LIMIT 1").bind(mapping.guildId,id).first();
-  if(!bigRaceName(id)&&!fillerCrownName(id)&&!crown&&!entries.length&&!bets)continue;
+  // Guaranteed-to-run races and registered horses don't need the costly JSON wallet scan.
+  if(!bigRaceName(id)&&!fillerCrownName(id)&&!raceEvent(id)&&!crown&&!entries.length){
+   const bets=await env.DB.prepare("SELECT 1 FROM kp_state s INDEXED BY kp_state_pending_race,json_each(s.data,'$.raceBets') b WHERE s.guild=? AND instr(s.data,'\"raceBets\"')>0 AND instr(s.data,'\"pending\"')>0 AND json_extract(b.value,'$.raceId')=? AND json_extract(b.value,'$.status')='pending' LIMIT 1").bind(mapping.guildId,id).first();
+   if(!bets)continue;
+  }
   const card={...raceCard(id,undefined,entries),...(crown?{name:crown.name}:{})};
   const {seed}=await raceSeed(env,mapping.guildId,id);
-  await env.DB.prepare('INSERT OR IGNORE INTO race_broadcasts(guild,race,snapshot) VALUES(?,?,?)').bind(mapping.guildId,id,JSON.stringify(raceShow(card,seed))).run();
+  await env.DB.prepare('INSERT OR IGNORE INTO race_broadcasts(guild,race,snapshot) VALUES(?,?,?)').bind(mapping.guildId,id,JSON.stringify(raceShow(card,seed,crown?.kind==='vdklastdeath'))).run();
  }
  await env.RACE_BROADCAST.get(env.RACE_BROADCAST.idFromName('guild:'+mapping.guildId)).fetch('https://race/ensure',{method:'POST',body:JSON.stringify({guild:mapping.guildId})});
 }
