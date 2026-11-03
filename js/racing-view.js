@@ -1,5 +1,5 @@
 import {stockPrice} from './stock-view.js?v=web-5bfb3e191c5a1e21';
-import { BET_TYPES, BOXES, CLASSES, COURSE_M, CONDITIONS, DAILY_EXCHANGES, GOINGS, MAX_OWNED, MIN_BET, BET_STEP, MAX_RACE_BET, PRIZES, RETIRE_RACES, RUN_MS, STYLES, WEEKLY_LIMIT, FORM_REFORM_FROM, runningNotes, raceBrief, distanceAt, exchangeDay, payoutFor, placeSlots, trifectaOdds } from './racing.js?v=web-5bfb3e191c5a1e21';
+import { BET_TYPES, BOXES, CLASSES, COURSE_M, CONDITIONS, DAILY_EXCHANGES, GOINGS, MAX_OWNED, MIN_BET, BET_STEP, MAX_RACE_BET, PRIZES, RETIRE_RACES, RUN_MS, STYLES, WEEKLY_LIMIT, FORM_REFORM_FROM, runningNotes, raceBrief, distanceAt, exchangeDay, payoutFor, placeSlots, trifectaOdds } from './racing.js?v=web-market-20261103';
 import { LUXURY, TITLES } from './luxury.js?v=web-5bfb3e191c5a1e21';
 import { escapeHTML } from './progression-views.js?v=web-5bfb3e191c5a1e21';
 const kp=n=>n.toLocaleString('ja-JP')+' KP';
