@@ -11,10 +11,10 @@ test('入出金履歴：減額は「減額」と −、入金は「入金」と 
  assert.match(html,/<span class="badge">入金<\/span><h3>コンペ<\/h3>.*?<strong>\+900 KP<\/strong>/s);
  assert.match(html,/<span class="badge">±0<\/span>.*?<strong>±0 KP<\/strong>/s);
 });
-test('指名の説明は今の価格（コンペ8,000 KP＝9勝ぶん）とタイトル・本番画面で一致する',()=>{
- const cost=ORDERS.find(o=>o.id==='competitive').cost;assert.equal(cost,8000);
+test('指名の説明は今の価格（コンペ40,000 KP＝45勝ぶん）とタイトル・本番画面で一致する',()=>{
+ const cost=ORDERS.find(o=>o.id==='competitive').cost;assert.equal(cost,40000);
  const title=titleView({}),play=playView(live([]),{},'');
- for(const html of [title,play]){assert.match(html,/仲間をコンペに指名するのは 8,000 KP（9勝ぶん）/);assert.doesNotMatch(html,/3勝ぶん/);}
+ for(const html of [title,play]){assert.match(html,/仲間をコンペに指名するのは 40,000 KP（45勝ぶん）/);assert.doesNotMatch(html,/3勝ぶん/);}
 });
 test('入出金履歴は台帳の全種類（雀魂・ユナイト・手動調整・返済など）を、ラベルと符号つきで出す',()=>{
  const html=playView({...live([]),ledger:[{id:'a',kind:'mahjong',label:'雀魂',detail:'',delta:-600,time:3},{id:'b',kind:'unite',label:'ポケモンユナイト',detail:'',delta:200,time:2},{id:'c',kind:'grant',label:'手動調整',detail:'',delta:0,time:1},{id:'d',kind:'match',label:'VALORANT <コンペ>',detail:'m1',delta:-200,time:0}]},{},'');
