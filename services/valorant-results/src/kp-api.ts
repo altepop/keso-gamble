@@ -139,7 +139,7 @@ export async function previewMlBet(env:KpEnv,mapping:KpMapping,user:string,args:
  const bet=await applyMlBet(env,state,args);
  return {bet,balanceAfter:before-bet.amount};
 }
-export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:string,action:string,args:Record<string,unknown>){
+export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:string,action:string,args:Record<string,unknown>,deferPostCommit?:(job:Promise<void>)=>void){
  if(!/^[a-zA-Z0-9-]{16,80}$/.test(id))throw Error('操作IDが不正です。');
  // Owner-only stock manipulation is a market event, not a wallet transaction.
  // Keep the ordinary operation ID, allowing retry after lost responses without doubling the shock.
@@ -288,6 +288,9 @@ export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:strin
    throw error;
   }
   if(inserted.meta.changes){
+   // An operation is already durable. Large win announcements are supplementary:
+   // waiting for their D1 queue must not hold the settled bet response open.
+   const postNotices=async()=>{
    if(action==='relic-summon'&&(env as {KP_EARNINGS_WEBHOOK_URL?:string}).KP_EARNINGS_WEBHOOK_URL){
     const summoned=result as ReturnType<typeof summonRelics>;
     const top=summoned.highlights.find(h=>h.rarity==='transcendent'||h.rarity==='ancient');
@@ -304,6 +307,11 @@ export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:strin
    if(action==='gift'&&(env as {KP_EARNINGS_WEBHOOK_URL?:string}).KP_EARNINGS_WEBHOOK_URL)try{await ensurePosts(env);await enqueue(env,'gift:'+user+':'+id,giftPost(user,(result as ReturnType<typeof applyGift>).gift),Date.now());}catch{console.warn('gift_post_pending');}
    const big=casinoPost(user,action,result);
    if(big&&(env as {KP_EARNINGS_WEBHOOK_URL?:string}).KP_EARNINGS_WEBHOOK_URL)try{await ensurePosts(env);await enqueue(env,'casino:'+user+':'+id,big,Date.now());}catch{console.warn('casino_post_pending');}
+   };
+   if(deferPostCommit){
+    try{deferPostCommit(postNotices().catch(()=>console.warn('kp_post_pending')));}
+    catch{console.warn('kp_post_schedule_failed');}
+   }else await postNotices();
    return response;
   }
   // The daily limit may have filled after we loaded the proof. Do not write
@@ -315,7 +323,7 @@ export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:strin
  }
  throw Error('他の操作と重なりました。残高を更新してもう一度お試しください。');
 }
-export async function kpApi(request:Request,env:KpEnv,override?:KpMapping):Promise<Response>{
+export async function kpApi(request:Request,env:KpEnv,override?:KpMapping,deferPostCommit?:(job:Promise<void>)=>void):Promise<Response>{
  const origin=request.headers.get('Origin');const origins=['https://altepop.github.io','https://'+discord.applicationId+'.discordsays.com'];
  if(origin&&!origins.includes(origin))return new Response('Forbidden origin',{status:403});
  const headers:Record<string,string>={'Cache-Control':'no-store','Vary':'Origin'};
@@ -427,8 +435,18 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping):Promi
   if(request.method==='POST'&&path==='/api/kp/operation'){
    const text=await request.text();if(text.length>4096)return response({error:'入力が長すぎます。'},400);
    const body=JSON.parse(text);if(typeof body.id!=='string'||typeof body.action!=='string'||!body.args||typeof body.args!=='object'||Array.isArray(body.args))return response({error:'操作内容が不正です。'},400);
-   if(!await allowedKpOperation(env,mapping.guildId,owner.user))return response({error:'操作回数が多すぎます。1分後に再試行してください。'},429);
-   const result=await operateKp(env,mapping,owner.user,body.id,body.action,body.args);
+   if(!await allowedKpOperation(env,mapping.guildId,owner.user)){
+    // Return the exact persisted receipt during a quota burst. This is a
+    // read-only lookup; never reroll or charge a second time.
+    const prior=await env.DB.prepare('SELECT request_hash,response FROM kp_operations WHERE guild=? AND user=? AND id=?')
+     .bind(mapping.guildId,owner.user,body.id).first<{request_hash:string;response:string}>();
+    if(prior&&prior.request_hash===await kpHash(JSON.stringify({action:body.action,args:body.args})))
+     return response(JSON.parse(prior.response));
+    // The operation has not been accepted: the client must not retain a
+    // phantom "payment pending" that locks all subsequent play.
+    return response({error:'操作回数が多すぎます。1分後に再試行してください。',retryable:false},429);
+   }
+   const result=await operateKp(env,mapping,owner.user,body.id,body.action,body.args,deferPostCommit);
    return response(result);
   }
   return response({error:'Not found'},404);
