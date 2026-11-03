@@ -136,9 +136,11 @@ export function relicBonusDashboard(state,proofs,view={}){
  const lines=current.lines??[];
  const items=lines.map(line=>{
   const label=line.trait?' <span class="relic-trait-tag">'+esc(line.trait)+'</span>':'';
+  const pact=(proofs?.catalog??[]).find(item=>item.id===line.id);
+  const drawback=pact?.drawback?'<small class="relic-risk-notice">⚠ '+esc(pact.drawback)+'</small>':'';
   const active=Number(line.base??0)+Number(line.exotic??0);
   return '<div class="relic-preview-row"><div><b>'+esc(line.name)+'</b>'+label+
-   '<small>'+esc(line.reason)+'</small></div><div class="relic-preview-stats"><strong>＋'+esc(line.effectivePercent)+'%</strong>'+
+   '<small>'+esc(line.reason)+'</small>'+drawback+'</div><div class="relic-preview-stats"><strong>＋'+esc(line.effectivePercent)+'%</strong>'+
    '<span>実例 '+(active?'+':'')+number(active)+' KP ／ 実効 '+(Number(amount)>0?((active/amount)*100).toFixed(1):'0')+'%</span>'+
    (line.exotic?'<small>特殊効果 ＋'+number(line.exotic)+' KP</small>':'')+'</div></div>';
  }).join('');
