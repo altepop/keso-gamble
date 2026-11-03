@@ -19,8 +19,8 @@ function fixture(){
   (db.prepare(STEAM_RELIC_PROOF_SQL).get(onDay,id,guild,who)??null) as SteamRelicEvidence|null;
  // Exactly the same gate injected into wallet's commit-time INSERT ... SELECT.
  const commit=(id:string,event:string,who=user,onDay=day,steamAction=true)=>{
-  const q='INSERT INTO kp_operations(id,guild,user) SELECT ?,?,? WHERE 1=1 '+STEAM_RELIC_COMMIT_GUARD+' ON CONFLICT DO NOTHING';
-  return db.prepare(q).run(id,guild,who,steamAction?1:0,event,guild,who,guild,who,onDay).changes;
+  const q='INSERT INTO kp_operations(id,guild,user) SELECT ?,?,? WHERE 1=1 '+(steamAction?STEAM_RELIC_COMMIT_GUARD:'')+' ON CONFLICT DO NOTHING';
+  return db.prepare(q).run(id,guild,who,...(steamAction?[event,guild,who,guild,who,onDay]:[])).changes;
  };
  return{db,day,evidence,commit};
 }
@@ -71,4 +71,11 @@ test('a forged receipt or other member cannot claim, while non-Steam operations 
  assert.equal(f.commit('unowned',credited,other),0);
  assert.equal(f.commit('fabricated','steam:unknown'),0);
  assert.equal(f.commit('non-steam','',other,f.day,false),1);
+});
+
+test('non-Steam KP operations work even when no Steam integration tables exist',()=>{
+ const f=fixture();
+ f.db.exec('DROP TABLE kp_steam_events; DROP TABLE kp_steam_daily');
+ assert.equal(f.commit('normal-market-order','',user,f.day,false),1);
+ assert.equal(f.commit('normal-market-order','',user,f.day,false),0);
 });
