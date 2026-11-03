@@ -64,6 +64,7 @@ test('shard pick changes only shard extraction and preserves last relic + equipp
  assert.equal(state.relics.items[base.id]!.count,1);
  assert.equal(state.relics.items[pick]!.count,1);
  assert.equal(result([pick],'quiz',100).bonus,0);
+ assert.equal(evaluateRelicBonus(equip(pick),'spikerush',{amount:20,win:false,spikeGamesBefore:0}).bonus,0);
 });
 test('ability-only relics do not silently mutate into percent amplifiers via summon variants',()=>{
  const d=ABILITY_RELICS[0]!;
