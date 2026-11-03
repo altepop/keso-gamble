@@ -1,3 +1,4 @@
+import {relicSoundEnabled} from './relics-audio.js';
 import {relicBuildSection,relicPresetsSection,relicSummonHistorySection,relicSpecialSection,relicEffectLogSection,relicEconomySection} from './relics-v7.js?v=web-7063014c96efd008';
 import {relicInventory,relicFilterControls,relicItemCard,relicInventoryPages,relicRevealPanel,relicBonusDashboard} from './relics-v4.js?v=web-7063014c96efd008';
 // Three independent origins: common summons, Steam achievements, and Unite results.
@@ -47,21 +48,31 @@ export function relicsPanel(state,{proofs=null,notice='',loading=false,view={},r
 
 
  const power=collection.equipped.reduce((n,id)=>n+(collection.items[id]?.power??0),0);
- const inv=relicInventory(items,source,proofs?.modeNames,view);
+ const inv=relicInventory(items,source,proofs?.modeNames,view,collection.equipped??[]);
  const equipped=collection.equipped??[];
  const cards=inv.matches.map(item=>relicItemCard(item,source,proofs?.modeNames,equipped)).join('');
  const filterHtml=relicFilterControls(view,proofs?.modeNames,inv);
  const pagesHtml=relicInventoryPages(inv);
  const bonusDashboard=relicBonusDashboard(state,proofs,view);
- const advanced=relicBuildSection(proofs)+relicPresetsSection(collection,proofs)+relicSummonHistorySection(collection)+relicSpecialSection(collection)+relicEffectLogSection(collection,proofs)+relicEconomySection(collection,proofs);
- return relicRevealPanel(reveal)+`<section class="panel"><div class="card-body"><h2 class="panel-title">🔮 遺物召喚</h2>
+ const buildTools=relicPresetsSection(collection,proofs)+relicBuildSection(proofs);
+ const advanced=relicSummonHistorySection(collection)+relicSpecialSection(collection)+relicEffectLogSection(collection,proofs)+relicEconomySection(collection,proofs);
+ const section=['collection','gear','summon','records'].includes(view.section)?view.section:'collection';
+ const tabs=[['collection','🎒 図鑑'],['gear','🧰 装備・診断'],['summon','🔮 召喚'],['records','📊 記録・限定']];
+ const nav='<nav class="relic-v8-nav" aria-label="遺物画面の切替">'+tabs.map(([id,label])=>
+  '<button type="button" class="relic-v8-tab'+(section===id?' active':'')+'" data-action="relic-tab" data-tab="'+id+'" aria-current="'+(section===id?'page':'false')+'">'+label+'</button>').join('')+'</nav>';
+ const pane=(id)=>'<div class="relic-v8-pane'+(section===id?' active':'')+'" data-pane="'+id+'">';
+ return relicRevealPanel(reveal)+nav+pane('summon')+`<section class="panel"><div class="card-body"><h2 class="panel-title">🔮 遺物召喚</h2>
    <p><strong>200 KP／1回</strong> · 召喚レベル ${level} · 累計 ${yen(collection.totalSummons)}回</p>
    <div class="relic-level-progress"><strong>${nextMilestone===null?'Lv10到達！':'次のLvまで あと'+yen(toNext)+'回'}</strong><div class="relic-progress-rail"><span style="width:${nextMilestone===null?100:Math.floor(100*(collection.totalSummons-milestones[level-1])/(nextMilestone-milestones[level-1]))}%"></span></div><small>段階別の累計目標：${milestones.map((n,i)=>'Lv'+(i+1)+' '+yen(n)+'回').join(' / ')}</small></div>
    <p class="helper">召喚した累計回数でレベルが上昇する。Lv10到達は累計8,100回。以前の召喚回数・獲得遺物はそのまま残る。Lv10では一般0%、上質4%、超越0.003%。超越の確定天井はない。</p>
    ${ratesTable}
+   <p class="helper">🔊 召喚結果の効果音は自動再生が基本だ。いつでも消音できる。</p>
+   <button type="button" class="action-btn relic-v8-audio-toggle" data-action="relic-sound-toggle" aria-pressed="${relicSoundEnabled()?'true':'false'}">${relicSoundEnabled()?'🔊 効果音：オン（タップで消音）':'🔇 効果音：オフ（タップで有効化）'}</button>
    <div class="action-row">${[1,10,100,1000].map(n=>`<button type="button" class="action-btn ${n===10?'primary':''}" data-action="relic-summon" data-count="${n}" ${state.cash<200*n||!state.serverWallet?'disabled':''}>${n}連 · ${yen(200*n)} KP</button>`).join('')}</div>
    ${notice?`<p class="market-disclaimer" role="status">${esc(notice)}</p>`:''}
  </div></section>
+ </div>
+ ${pane('gear')}
  <section class="panel"><div class="card-body"><h2 class="panel-title">🧰 装備</h2>
    <p class="helper">4枠の戦力合計：<strong>${yen(power)}</strong>。戦力はKP増加率ではない。装備効果は上限なしで合算する。赤い「代償」を持つ遺物は、ほかの遺物を弱体化させることがある。下で実効倍率を確認できる。</p>
    <div class="field"><label for="relic-slot">装備先</label><select id="relic-slot" class="select">${[0,1,2,3].map(n=>`<option value="${n}">枠 ${n+1}：${esc(collection.items[collection.equipped[n]]?.name??'未装備')}</option>`).join('')}</select></div>
@@ -71,10 +82,23 @@ export function relicsPanel(state,{proofs=null,notice='',loading=false,view={},r
    <button type="button" class="action-btn" data-action="relic-equip" data-relic="">指定枠を外す</button>
  </div></section>
  ${bonusDashboard}
- ${advanced}
+ ${buildTools}
+ </div>
+ ${pane('collection')}
  <section class="panel"><div class="card-body"><h2 class="panel-title">🎒 遺物図鑑（${yen(items.length)}種）</h2>
-   ${filterHtml}${cards||'<p class="helper">条件に合う遺物がない。絞り込みを変更してみよう。</p>'}${pagesHtml}
+   <p class="helper">2列表示で所持品を比較できる。タップすると詳細と装備を確認できる。</p>
+   ${filterHtml}
+   <div class="relic-v8-viewbar">
+    <button type="button" class="action-btn ${view.layout!=='list'?'active':''}" data-action="relic-layout" data-layout="grid">▦ 2列</button>
+    <button type="button" class="action-btn ${view.layout==='list'?'active':''}" data-action="relic-layout" data-layout="list">☰ 1列</button>
+    <button type="button" class="action-btn ${view.equippedOnly?'active':''}" data-action="relic-equipped-only">● 装備中だけ</button>
+   </div>
+   <div class="${view.layout==='list'?'relic-v8-list':'relic-v8-grid'}">${cards||'<p class="helper">条件に合う遺物がない。絞り込みを変更してみよう。</p>'}</div>
+   ${pagesHtml}
  </div></section>
+ </div>
+ ${pane('records')}
+ ${advanced}
  <section class="panel"><div class="card-body"><h2 class="panel-title">📚 モード別・特殊遺物全${catalog.length||148}種類</h2><p class="helper">従来の140種類に加え、新たに代償付きの8種類を追加した。倍率は上限なしで合算し、共鳴も発動する。一方で代償を持つ遺物は他の効果を減らすため、単純に高レアを並べるだけでは最強とは限らない。</p>${grouped||'<p class="helper">データ取得中。再度この画面を開いてください。</p>'}</div></section>
  <section class="panel"><div class="card-body"><h2 class="panel-title">🟦 Steam限定遺物</h2>
    <p class="helper">監視登録以降に新規解除し、サーバーが検証した実績だけが対象だ。世界解除率25%以上は「旅路」、10%超〜25%未満は「挑戦」。それ以下の実績はより希少な区分となる。過去の実績には干渉しない。Steam実績のKP報酬は変更しない。</p>
@@ -84,5 +108,5 @@ export function relicsPanel(state,{proofs=null,notice='',loading=false,view={},r
    <p class="helper">サーバーが確定したランク戦の1〜5連勝、または累計10・25・50・100・200勝から獲得。単体で強力な固有能力を持つ。同時装備は1個まで。ガチャ排出・売買・他遺物の解放条件にはしない。</p>
    ${uniteList.map(([id,name,power,condition])=>`<div class="asset-line"><span><strong>${esc(name)}</strong><br><small>${esc(condition)} ・ 戦力 ${yen(power)}</small></span><button type="button" class="action-btn" data-action="relic-claim-unite" data-tier="${esc(id)}" ${!state.serverWallet||owned(id)?'disabled':''}>${owned(id)?'受取済み':'獲得を確認'}</button></div>`).join('')}
  </div></section>
- <p class="helper">※KP上乗せの合算上限は撤廃。VALORANTやクイズ・通話などは検証済みの確定報酬に限る。カジノはプラス精算、株は原価を超えた売却益、競馬とMリーグは賭け金を差し引いた的中利益だけが対象。購入しただけでは報酬を発生させない。KESO LOOP限定遺物は未実装。</p>`;
+ <p class="helper">※KP上乗せの合算上限は撤廃。VALORANTやクイズ・通話などは検証済みの確定報酬に限る。カジノはプラス精算、株は原価を超えた売却益、競馬とMリーグは賭け金を差し引いた的中利益だけが対象。購入しただけでは報酬を発生させない。KESO LOOP限定遺物は未実装。</p></div>`;
 }
