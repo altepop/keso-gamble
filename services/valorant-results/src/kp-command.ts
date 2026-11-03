@@ -1,5 +1,5 @@
 // Register these guild commands individually; never replace /death, /valo or the Activity entry point.
-export const KP_COMMAND_VERSION='kp-slash-v19-dm-daily-40k';
+export const KP_COMMAND_VERSION='kp-slash-v20-spike-admin-status';
 export const kpCommands=[
  {type:1,name:'kp',description:'KESO PLAY｜KP残高・ランキング',options:[
   {type:1,name:'balance',description:'自分の残高と最近の入出金（本人だけに表示）'},
@@ -7,7 +7,9 @@ export const kpCommands=[
   {type:1,name:'bets',description:'自分のMリーグ予想・馬券と精算結果（本人だけに表示）'},
  ]},
  {type:1,name:'spike',description:'KESO PLAY｜スパイクラッシュの育成と覚醒',options:[
-  {type:1,name:'status',description:'自分の育成進捗・覚醒状況（試練内容はヒント購入で解禁）'},
+  {type:1,name:'status',description:'自分の育成進捗・覚醒状況（試練内容はヒント購入で解禁）',options:[
+   {type:6,name:'user',description:'（管理者のみ）他のメンバーの育成状況と試練の判定を見る',required:false},
+  ]},
   {type:1,name:'hint',description:'特殊な覚醒条件のヒントを10,000 KPで買い切り解放',options:[
    {type:3,name:'role',description:'ヒントを解放するロール（各10,000 KP）',required:true,
     choices:[{name:'デュエリスト',value:'Duelist'},{name:'イニシエーター',value:'Initiator'},{name:'コントローラー',value:'Controller'},{name:'センチネル',value:'Sentinel'}]},

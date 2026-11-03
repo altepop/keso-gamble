@@ -45,16 +45,38 @@ test('KP推移: each JST day ends at its balance, worked back from today; 借KP 
  assert.equal((await kpTrend(f.env,'100000000000000199',new Map(),7,NOW)).members.length,0,'other servers stay out');
 });
 
-test('D1最適化：複数人のKP推移集計はギルド別・日時順の索引を利用',async()=>{
+test('D1最適化：KP推移は日別の集計表だけを読み、台帳を読み直さない',async()=>{
  const f=await fixture();
  for(let i=0;i<200;i++)f.credit('trend-'+i,i%2?one:two,1,day(20)+i*60_000);
  await kpTrend(f.env,guild,new Map(),7,NOW);
- const statement='SELECT user,CAST((at+?)/? AS INTEGER) AS day,SUM(delta) AS n FROM kp_ledger WHERE guild=? AND at>=? GROUP BY user,day';
- const plan=f.sql.prepare('EXPLAIN QUERY PLAN '+statement).all(9*3600000,86400000,guild,day(25)) as Array<{detail:string}>;
- assert.match(plan.map(x=>x.detail).join(';'),/kp_ledger_trend_window/);
- // No change to money history, user isolation, or time-window accounting.
+ const plan=f.sql.prepare('EXPLAIN QUERY PLAN SELECT user,day,net FROM kp_trend_days WHERE guild=? AND day>?').all(guild,20000) as Array<{detail:string}>;
+ assert.match(plan.map(x=>x.detail).join(';'),/SEARCH kp_trend_days USING PRIMARY KEY \(guild=\? AND day>\?\)/);
+ assert.equal(Number(f.sql.prepare('SELECT COUNT(*) n FROM kp_trend_days WHERE guild=?').get(guild)!.n),2,'one row per member per day: 200 credits on one day are two rows, not 200');
  const seven=await kpTrend(f.env,guild,new Map(),7,NOW);
  assert.equal(seven.days.length,7);
  assert.equal(seven.members.find(m=>m.id===one)?.balance,100);
  assert.equal(seven.members.find(m=>m.id===two)?.balance,100);
+});
+
+test('KP推移の集計表：作成後の台帳・借KP（上限で削られた分も）はトリガーで反映され、作り直しても二重にならない',async()=>{
+ const {borrowShortfall,ensureDebt}=await import('../src/kp-debt.ts');
+ const f=await fixture();await ensureDebt(f.env);
+ f.credit('before',one,1000,day(24));
+ const first=await kpTrend(f.env,guild,new Map(),7,NOW); // builds the table from the history so far
+ // After the table exists: a credit, a loss that borrows, a second loss whose debt is cut down by the 1,000 cap,
+ // and one that is dropped entirely at the cap.
+ f.credit('after',one,500,day(26));
+ const owe=(id:string,amount:number,at:number)=>{f.sql.prepare("INSERT INTO kp_ledger VALUES(?,?,?,0,'match',?)").run(id,guild,two,at);return borrowShortfall(f.env,id,amount).run();};
+ await owe('l1',800,day(27));await owe('l2',700,day(28));await owe('l3',500,day(28));
+ const live=await kpTrend(f.env,guild,new Map(),7,NOW);
+ assert.deepEqual(first.members.find(m=>m.id===one)!.points,[0,1000,1000,1000,1000,1000,1000]);
+ assert.deepEqual(live.members.find(m=>m.id===one)!.points,[0,1000,1000,1500,1500,1500,1500]);
+ assert.deepEqual(live.members.find(m=>m.id===two)!.points,[0,0,0,0,-800,-1000,-1000],'only what fits under the cap counts');
+ // Rebuilding from the full history gives exactly the same table (no double counting).
+ const before=JSON.stringify(f.sql.prepare('SELECT * FROM kp_trend_days ORDER BY guild,day,user').all());
+ f.sql.prepare("DELETE FROM kp_settings WHERE key='kp_trend_days_v1'").run();
+ const {ensureTrendDays}=await import('../src/kp-trend.ts');
+ await ensureTrendDays({...f.env,DB:{prepare:f.env.DB.prepare,batch:f.env.DB.batch}} as KpEnv);
+ assert.equal(JSON.stringify(f.sql.prepare('SELECT * FROM kp_trend_days ORDER BY guild,day,user').all()),before);
+ assert.deepEqual((await kpTrend(f.env,guild,new Map(),7,NOW)).members,live.members);
 });

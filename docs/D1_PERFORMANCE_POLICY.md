@@ -48,6 +48,13 @@ The read-only GitHub Actions monitor runs each hour using Cloudflare GraphQL `d1
 - Index predicate: both exact JSON tokens `"raceBets"` and `"pending"` occur in the stored state. The settlement code still checks the actual ticket status and due time after reading the indexed candidates. Existing KP version guards, double-payment protections and race frequency are unchanged.
 - The index is maintained on `kp_state` writes, so compare live D1 total Rows read **and written** during real play with pre-change baseline. Confirm via official Cloudflare Metrics; SQLite `EXPLAIN QUERY PLAN` alone does not prove Cloudflare-billed Rows savings.
 
+## KP trend daily totals (2026-11-03)
+
+- On 2026-11-03 the KP trend graph was the top D1 reader of the hour: each 30-day open read every ledger row of the window (about 9,800 rows; 9 opens ≈ 88,000 rows).
+- `kp_trend_days(guild, day, user, net)` now keeps each member's daily change of KP − 借KP (JST day). Triggers on `kp_ledger` inserts and on `kp_debt_events` insert / update / delete keep it current; the debt triggers add up correctly whatever order they run in with the cap trigger.
+- The graph reads only `members × shown days` rows from the primary key `(guild, day, user)`, plus `kp_wallets` and `kp_debts`. The old `kp_ledger_trend_window` index is dropped (no longer used; saves its write cost).
+- The table is built once from the full history the first time the graph is opened (one full read of the ledger and debt events), guarded by `kp_settings.kp_trend_days_v1`. A rebuild deletes and recomputes in one batch, so running it twice never double counts.
+- Ledger history itself is unchanged; the table can always be rebuilt from it by removing the settings key.
 ## Heavy reads found on 2026-11-03 (24h top list)
 
 | Was | Change |
