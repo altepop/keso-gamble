@@ -191,6 +191,10 @@ test('real trigger-created Spike results credit opening relic KP from match 1, w
  state.relics=collection;
  f.sql.prepare('UPDATE kp_state SET data=? WHERE guild=? AND user=?').run(JSON.stringify(state),guild,one);
  const id=kpEventId(guild,'relic-first','p-one');
+ // A result already sent by the bot must be edited after the verified
+ // Spike receipt, including the newly minted relic ledger amount.
+ f.sql.prepare('INSERT INTO notifications(riot_id,match_id,message,ended_at,mode,sent) VALUES(?,?,?,?,?,1)')
+  .run('One#JP1','relic-first','📢 試合結果\n💬 ナイス！',at,'spikerush');
  const match=raw('relic-first');
  assert.equal(await collectKpMatch(f.env,mapping,match,'p-one'),90,'40 base + 50 opening even though luck7 did not trigger');
  assert.equal(f.balance(),90);
@@ -198,6 +202,10 @@ test('real trigger-created Spike results credit opening relic KP from match 1, w
  assert.equal((f.sql.prepare("SELECT COUNT(*) AS n FROM kp_ledger WHERE id=? AND kind='relic'").get('relic:'+id) as {n:number}).n,1);
  const log=f.sql.prepare('SELECT base,bonus,details FROM relic_effect_logs WHERE id=?').get('relic:'+id) as {base:number;bonus:number;details:string};
  assert.equal(log.base,40);assert.equal(log.bonus,50);
+ const bot=String((f.sql.prepare("SELECT message FROM notifications WHERE match_id='relic-first'").get() as {message:string}).message);
+ assert.match(bot,/この試合 \+90 KP/);
+ assert.match(bot,/基礎40.*端数精算 40 KP・🧿遺物補正＋50 KP/);
+ assert.equal((bot.match(/🧿遺物補正/g)??[]).length,1);
  assert.equal(JSON.parse(log.details).spikeOpening.flatPerRelic,50);
  assert.equal(JSON.parse(log.details).spikeOpening.game,1);
  await drainKpInbox(f.env);await collectKpMatch(f.env,mapping,match,'p-one');
