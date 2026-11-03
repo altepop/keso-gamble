@@ -41,7 +41,8 @@ test('presets save, load, remove, reject missing, and enforce Unite singleton at
  assert.deepEqual(loadRelicPreset(state,'valorant').equipped,[first.id,second.id]);
  assert.deepEqual(c.equipped,[first.id,second.id]);
  assert.throws(()=>loadRelicPreset(state,'risk'),/保存/);
- assert.throws(()=>saveRelicPreset(state,'bad'),/選択/);
+ assert.deepEqual(saveRelicPreset(state,'自作ビルド').equipped,[first.id,second.id]);
+ assert.throws(()=>saveRelicPreset(state,' '),/1〜24文字/);
  removeRelicPreset(state,'valorant');
  assert.throws(()=>loadRelicPreset(state,'valorant'),/保存/);
 });
