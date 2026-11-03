@@ -127,7 +127,7 @@ export function relicBonusDashboard(state,proofs,view={}){
  const availableModes=[...new Set(previews.map(x=>x.mode))];
  const controls='<div class="relic-preview-controls"><label>対象ゲーム'+
   select('mode',mode,availableModes.map(x=>[x,modes[x]??x]))+'</label><label>報酬の例'+
-  select('amount',amount,[[100,'100 KP'],[500,'500 KP'],[900,'900 KP'],[5000,'5,000 KP']])+'</label></div>';
+  select('amount',amount,(mode==='spikerush'?[20,40,100,500]:[100,500,900,5000]).map(x=>[x,number(x)+' KP']))+'</label></div>';
  const recent=(Array.isArray(state?.ledger)?state.ledger:[]).filter(x=>x.kind==='relic').slice(0,3);
  const recentHtml=recent.length?'<div class="relic-last-real"><b>確定済みの遺物ボーナス（最新3件）</b>'+
   recent.map(x=>'<span>実際に付与：<strong>＋'+number(x.delta)+' KP</strong></span>').join('')+
@@ -153,9 +153,17 @@ export function relicBonusDashboard(state,proofs,view={}){
  }).join('');
  const realPercent=Number(current.effectivePercent)||0;
  const cap=Number(current.cap)||0;
+ const spikeCount=Number(proofs?.spikeGamesBefore??0);
+ const opening=current.spikeOpening;
+ const spikeHeadline=mode==='spikerush'
+  ?'<div class="relic-spike-kick"><strong>⚡ スパイクラッシュ初動強化｜通算'+number(spikeCount+1)+'試合目</strong>'+
+    (opening?'<p>対象遺物 <b>'+number(opening.eligible)+'個</b> · 1個ごとに固定 <b>＋'+number(opening.flatPerRelic)+'KP</b> · 倍率分 <b>×'+opening.multiplier+'</b></p>':
+    '<p>41試合目以降は通常の遺物倍率。対象遺物が装備されていれば引き続き発動する。</p>')+
+    '<small>初動の追加効果はスパイクラッシュ対応遺物と全モード対応遺物だけ。装備していない遺物・他ゲーム専用遺物には乗らない。</small></div>'
+  :'';
  return '<section class="panel"><div class="card-body"><h2 class="panel-title">📊 今の装備で何％増える？</h2>'+
   '<p class="helper">装備中の4枠をサーバーで計算する。勝利・達成時（取引系は精算時）の報酬を例にした試算だ。</p>'+
-  controls+
+  controls+spikeHeadline+
   '<div class="relic-preview-total"><div><small>発動した設定倍率（デメリット適用前）</small><b>＋'+esc(current.percent)+'%</b></div>'+
   '<div><small>上限を反映した追加報酬</small><b>＋'+number(current.bonus)+' KP</b></div>'+
   '<p>元の報酬 '+number(amount)+' KP → 遺物込み <strong>'+number(amount+current.bonus)+' KP</strong>（実効＋'+esc(realPercent)+'%）</p></div>'+
