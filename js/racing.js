@@ -3,7 +3,7 @@ import {EXTRA_HORSE_NAMES,EXTRA_CROWN_NAMES,REGULAR_RACE_NAMES} from './racing-n
 // Cards and odds are public (PUBLIC_SALT). The run uses a per-race seed: the demo uses the public
 // salt, while the Worker keeps a random seed secret until the start and publishes its hash first.
 export const RACE_INTERVAL=15*60000, CLOSE_BEFORE=60000, RUN_MS=50000, COURSE_M=1600;
-export const WEEKLY_LIMIT=80000, MIN_BET=100, BET_STEP=100;
+export const WEEKLY_LIMIT=400000, MIN_BET=100, BET_STEP=100, MAX_RACE_BET=100000;
 export const PUBLIC_SALT='keso-play-demo-racing-v1';
 export const BET_TYPES={win:{label:'1着当て',formal:'単勝'},place:{label:'3着以内当て',formal:'複勝'},trifecta:{label:'1〜3着を順番通り',formal:'3連単'}};
 export const STYLES=[{label:'最初から飛ばす',curve:.08},{label:'前の方につける',curve:.03},{label:'後半に追い上げる',curve:-.03},{label:'最後に一気',curve:-.08}];
@@ -281,6 +281,7 @@ export function placeRaceBet(state,{raceId,type,horse,amount},now,entries=[]){
  const card=raceCard(raceId,PUBLIC_SALT,entries);
  if(type==='trifecta'?(!Array.isArray(horse)||horse.length!==3||new Set(horse).size!==3||horse.some(n=>!Number.isInteger(n)||n<1||n>card.size)):(!Number.isInteger(horse)||horse<1||horse>card.size))throw Error('馬を選んでください（3連単は異なる3頭を着順通りに）。');
  if(!validInt(amount,MIN_BET)||amount%BET_STEP!==0)throw Error(`金額は${MIN_BET} KP以上、${BET_STEP} KP単位です`);
+ if(amount>MAX_RACE_BET)throw Error('馬券は1枚100,000 KPまでです。');
  if(amount>state.cash)throw Error('KPが不足しています');
  const spent=weeklySpent(state,now);
  if(spent+amount>WEEKLY_LIMIT)throw Error(`1週間に買える馬券は${WEEKLY_LIMIT.toLocaleString('ja-JP')} KPまでです（残り${(WEEKLY_LIMIT-spent).toLocaleString('ja-JP')} KP）`);
