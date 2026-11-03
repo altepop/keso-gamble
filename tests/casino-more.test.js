@@ -98,5 +98,5 @@ test('勝負中の手と履歴は保存・復元され、壊れた値は捨て�
   assert.deepEqual(back.mines, s.mines); assert.deepEqual(back.vp, s.vp); assert.equal(back.slots.length, 1);
   assert.deepEqual(hydrateMoreCasino({ mines: { bet: 500, mines: 3, opened: [1, 1], time: 1 }, vp: { bet: 50, cards: [], time: 1 } }), createMoreCasino());
   assert.throws(() => playSlot(wallet(50), 100, seq([0, 0, 0])), /不足/);
-  assert.throws(() => playSlot(wallet(50000), 20100, seq([0, 0, 0])), /100〜20,000/);
+  assert.throws(() => playSlot(wallet(200000), 100100, seq([0, 0, 0])), /100〜100,000/);
 });
