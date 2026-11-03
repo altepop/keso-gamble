@@ -80,7 +80,7 @@ function oscillator(c,target,freq,at,duration,{type='sine',amp=.25,attack=.01,ho
  if(freq<=0||duration<=0)return;
  const o=c.createOscillator(),g=c.createGain();
  o.type=type;o.frequency.value=freq;
- if(detune)o.detune.value=detune;
+ if(detune&&o.detune)o.detune.value=detune;
  if(sweep){
   param(o.frequency,Math.max(25,freq),at);
   param(o.frequency,Math.max(25,freq*sweep),at+duration,'exp');
