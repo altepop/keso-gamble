@@ -26,6 +26,7 @@ export interface RelicCollection {
   items: Record<string, RelicItem>;
   equipped: string[];
   dailyNativeBonus?: {day:string;amount:number};
+  lastNativeEffect?: {mode:string;amount:number;bonus:number;percent:number;at:number;names:string[]};
 }
 export const RELIC_SLOTS = 4;
 /** Achievements are granted only from monitored, already certified kp_steam_events.
@@ -131,73 +132,121 @@ export function rarityForRoll(roll:number,level:number):RelicRarity {
  * Bonuses are independent, bounded, and never grant another game's relic or advantage.
  * This function does NOT decide whether evidence is real; callers use certified results.
  */
+/** A shared, pure evaluation for both real credited KP and the visible simulator.
+ * Special axes: ancient = chain seal; transcendental = missed-condition breakthrough;
+ * Steam/Unite = flat origin seal. None can exceed existing award ceilings.
+ */
+export type RelicBonusLine={
+ id:string;name:string;mode:string;short:string;percent:number;effectivePercent:number;
+ cap:number;active:boolean;triggered:boolean;base:number;exotic:number;trait:string;reason:string;
+};
+export type RelicBonusResult={
+ bonus:number;gross:number;cap:number;percent:number;effectivePercent:number;
+ skills:string[];lines:RelicBonusLine[];resonance:number;
+};
+const RELIC_NATIVE_MODES=new Set(['casino','market','racing','mleague']);
+const MODE_THRESHOLDS:Record<string,readonly [number,number]>={
+ competitive:[200,400],unrated:[200,400],swiftplay:[70,180],spikerush:[40,100],
+ teamdeathmatch:[50,100],escalation:[50,150],deathmatch:[50,500],skirmish:[50,250],
+ racing:[100,500],casino:[100,500],market:[50,200],mleague:[100,500],
+ quiz:[30,100],voice:[10,15],
+};
+const compatibleRelic=(sourceMode:string|undefined,mode:string)=>sourceMode===mode||
+ sourceMode==='universal'||sourceMode==='fortune'||
+ (sourceMode==='finance'&&RELIC_NATIVE_MODES.has(mode))||
+ (sourceMode==='marketplus'&&mode==='market')||
+ (sourceMode==='racingplus'&&mode==='racing')||
+ (sourceMode==='casinoplus'&&mode==='casino');
+const hasPrimeAmount=(n:number)=>{if(n<2)return false;for(let k=2;k*k<=n;k++)if(n%k===0)return false;return true;};
+const relicTrigger=(skill:string|undefined,amount:number,win:boolean,bounds:readonly[number,number]):boolean=>{
+ const sum=String(amount).split('').reduce((a,v)=>a+Number(v),0);
+ switch(skill){
+  case 'spark':return true;
+  case 'rescue':return amount<=bounds[0];
+  case 'advance':case 'surge':return amount>=bounds[0];
+  case 'highroll':return amount>=bounds[1];
+  case 'lucky7':return amount%10===7;
+  case 'odd':return amount%2===1;
+  case 'even':return amount%2===0;
+  case 'prime':return hasPrimeAmount(amount);
+  case 'square':return Math.floor(Math.sqrt(amount))**2===amount;
+  case 'quarter':return amount%25===0;
+  case 'mod11':return amount%11===0;
+  case 'mod13':return amount%13===0;
+  case 'digit7':return sum%7===0;
+  case 'double':return /(\d)\1/.test(String(amount));
+  case 'reverse':return String(amount)===String(amount).split('').reverse().join('');
+  case 'near':return amount>=bounds[0]&&amount<=bounds[0]+50;
+  case 'thin':return amount<bounds[0];
+  case 'heavy':return amount>=bounds[1]*2;
+  case 'triple':return amount%3===0;
+  case 'lucky77':return String(amount).includes('77');
+  case 'master':case 'sovereign':return win;
+  default:return false;
+ }
+};
+export function evaluateRelicBonus(
+ collection:RelicCollection|undefined,mode:string,event:{amount:number;win:boolean},
+ nativeRemaining=120,
+):RelicBonusResult{
+ const empty:RelicBonusResult={bonus:0,gross:0,cap:0,percent:0,effectivePercent:0,skills:[],lines:[],resonance:0};
+ const amount=event.amount,bounds=MODE_THRESHOLDS[mode];
+ if(!collection||!bounds||!Number.isSafeInteger(amount)||amount<=0)return empty;
+ const lines:RelicBonusLine[]=[];
+ const equipped=new Set(collection.equipped.slice(0,RELIC_SLOTS));
+ for(const id of equipped){
+  const item=collection.items[id],def=NORMAL_RELIC_BY_ID.get(id);
+  if(!item)continue;
+  const sourceMode=def?.mode??item.mode??'universal';
+  const skill=def?.skill??item.skill;
+  const basePercent=def?.percent??item.percent??0,cap=def?.cap??item.cap??0;
+  const boosted=item.origin==='normal'?Math.min(5,Math.floor(Math.log2(Math.max(1,item.count)))):0;
+  const percent=basePercent+boosted;
+  const active=compatibleRelic(sourceMode,mode);
+  const triggered=active&&!!cap&&!!percent&&relicTrigger(skill,amount,event.win,bounds);
+  const base=triggered?Math.min(cap,Math.max(1,Math.floor(amount*percent/100))):0;
+  const trait=item.rarity==='ancient'?'刻印連鎖':item.rarity==='transcendent'?'運命突破':item.origin==='steam'||item.origin==='unite'?'出自の加護':'';
+  const exotic=trait==='運命突破'&&active&&!triggered&&cap>0
+   ?Math.min(cap,Math.max(1,Math.floor(item.power/70))):0;
+  lines.push({id,name:def?.name??item.name,mode:sourceMode,
+   short:def?.short??item.ability,percent:basePercent,effectivePercent:percent,
+   cap,active,triggered,base,exotic,trait,
+   reason:!active?'対象ゲーム外':triggered?'条件達成':exotic?'運命突破が発動':'条件未達'});
+ }
+ const activated=lines.filter(l=>l.triggered);
+ for(const line of lines){
+  if(line.trait==='刻印連鎖'&&line.triggered){
+   const other=activated.filter(x=>x.id!==line.id).length;
+   line.exotic=Math.min(Math.max(0,line.cap-line.base),other*4,12);
+  }else if(line.trait==='出自の加護'&&line.triggered){
+   line.exotic=Math.min(Math.max(0,line.cap-line.base),Math.max(1,Math.floor((collection.items[line.id]?.power??0)/110)));
+  }
+ }
+ let gross=lines.reduce((n,l)=>n+l.base+l.exotic,0);
+ let resonance=0;
+ if(activated.length>=2&&amount%7===0){
+  const skillKinds=new Set(activated.map(l=>NORMAL_RELIC_BY_ID.get(l.id)?.skill??collection.items[l.id]?.skill));
+  if(skillKinds.size>=2){resonance=Math.floor(gross*.2);gross+=resonance;}
+ }
+ const hardCap=Math.min(80,Math.floor(amount*.15));
+ const cap=RELIC_NATIVE_MODES.has(mode)
+  ?Math.max(0,Math.min(hardCap,Math.floor(amount*.01),Math.max(0,Math.floor(nativeRemaining))))
+  :hardCap;
+ const bonus=Math.min(gross,cap);
+ const percent=lines.filter(l=>l.triggered).reduce((n,l)=>n+l.effectivePercent,0);
+ return {bonus,gross,cap,percent,effectivePercent:Math.round(10000*bonus/amount)/100,
+  lines,resonance,
+  skills:[...lines.filter(l=>l.base+l.exotic>0).map(l=>l.name),...(resonance?['七重共鳴']:[])]};
+}
 export function modeRelicBonus(
  collection:RelicCollection|undefined,
  mode:string,
  event:{amount:number;win:boolean},
 ):{bonus:number;skills:string[]} {
- if(!collection||!Number.isSafeInteger(event.amount)||event.amount<=0)return{bonus:0,skills:[]};
- const thresholds:Record<string,readonly [number,number]>={
-  competitive:[200,400],unrated:[200,400],swiftplay:[70,180],spikerush:[40,100],
-  teamdeathmatch:[50,100],escalation:[50,150],deathmatch:[50,500],skirmish:[50,250],
-  racing:[100,500],casino:[100,500],market:[50,200],mleague:[100,500],
-  quiz:[30,100],voice:[10,15],
- };
- const bounds=thresholds[mode];if(!bounds)return{bonus:0,skills:[]};
- let total=0;const activated:string[]=[];
- for(const id of collection.equipped){
-  const def=NORMAL_RELIC_BY_ID.get(id),item=collection.items[id];
-  if(!item)continue;
-  const sourceMode=def?.mode??item.mode;
-  const compatible=sourceMode===mode||sourceMode==='universal'||
-   sourceMode==='fortune'||
-   (sourceMode==='finance'&&['casino','market','racing','mleague'].includes(mode))||
-   (sourceMode==='marketplus'&&mode==='market')||
-   (sourceMode==='racingplus'&&mode==='racing')||
-   (sourceMode==='casinoplus'&&mode==='casino');
-  if(!compatible)continue;
-  const skill=def?.skill??item.skill;
-  const a=event.amount;
-  const digitSum=String(a).split('').reduce((sum,d)=>sum+Number(d),0);
-  const isPrime=(n:number)=>{if(n<2)return false;for(let i=2;i*i<=n;i++)if(n%i===0)return false;return true;};
-  const eligible=skill==='spark'
-   ||(skill==='rescue'&&event.amount<=bounds[0])
-   ||(skill==='advance'&&event.amount>=bounds[0])
-   ||(skill==='highroll'&&event.amount>=bounds[1])
-   ||(skill==='surge'&&event.amount>=bounds[0])
-   ||(skill==='lucky7'&&event.amount%10===7)
-   ||(skill==='odd'&&a%2===1)
-   ||(skill==='even'&&a%2===0)
-   ||(skill==='prime'&&isPrime(a))
-   ||(skill==='square'&&Math.floor(Math.sqrt(a))**2===a)
-   ||(skill==='quarter'&&a%25===0)
-   ||(skill==='mod11'&&a%11===0)
-   ||(skill==='mod13'&&a%13===0)
-   ||(skill==='digit7'&&digitSum%7===0)
-   ||(skill==='double'&&/(\d)\1/.test(String(a)))
-   ||(skill==='reverse'&&String(a)===String(a).split('').reverse().join(''))
-   ||(skill==='near'&&a>=bounds[0]&&a<=bounds[0]+50)
-   ||(skill==='thin'&&a<bounds[0])
-   ||(skill==='heavy'&&a>=bounds[1]*2)
-   ||(skill==='triple'&&a%3===0)
-   ||(skill==='lucky77'&&String(a).includes('77'))
-   ||((skill==='master'||skill==='sovereign')&&event.win);
-  if(!eligible)continue;
-  const duplicateBoost=item.origin==='normal'?Math.min(5,Math.floor(Math.log2(Math.max(1,item.count)))):0;
-  const cap=def?.cap??item.cap??0,percent=def?.percent??item.percent??0;
-  if(!cap||!percent)continue;
-  const contribution=Math.min(cap,Math.max(1,Math.floor(event.amount*(percent+duplicateBoost)/100)));
-  total+=contribution;
-  activated.push(def?.name??item.name);
- }
- // A genuine cross-item tactical trigger, without rerolling games or touching outcomes.
- // Combining at least two DIFFERENT active skills on a multiple-of-seven reward
- // unlocks resonance. The same hard per-receipt and daily caps still apply.
- if(activated.length>=2 && event.amount%7===0){
-  const keys=new Set(collection.equipped.filter(id=>collection.items[id]).map(id=>NORMAL_RELIC_BY_ID.get(id)?.skill??collection.items[id]?.skill));
-  if(keys.size>=2){total+=Math.floor(total*0.2);activated.push('七重共鳴（発動効果+20%）');}
- }
- return{bonus:Math.min(total,80,Math.floor(event.amount*0.15)),skills:activated};
+ if(!Number.isSafeInteger(event.amount)||event.amount<=0)return {bonus:0,skills:[]};
+ const result=evaluateRelicBonus(collection,mode,event);
+ // Preserve the original public contract for callers and tests.
+ return {bonus:Math.min(result.gross,80,Math.floor(event.amount*.15)),skills:result.skills};
 }
 /** Native KESO PLAY operations use a 120KP/day shared ceiling for all supported native modes.
  * The ceiling is persisted inside the same state/operation transaction as the KP amount.
@@ -210,7 +259,8 @@ export function nativeRelicBonus(
  now=Date.now(),
 ):number {
  if(!state.relics||!Number.isSafeInteger(amount)||amount<=0)return 0;
- const provisional=modeRelicBonus(state.relics,mode,{amount,win:true}).bonus;
+ const detail=evaluateRelicBonus(state.relics,mode,{amount,win:true});
+ const provisional=detail.bonus;
  if(!provisional)return 0;
  const day=new Date(now).toISOString().slice(0,10);
  const previous=state.relics.dailyNativeBonus?.day===day?state.relics.dailyNativeBonus.amount:0;
@@ -220,6 +270,7 @@ export function nativeRelicBonus(
  if(payout>0){
   state.cash+=payout;
   state.relics.dailyNativeBonus={day,amount:previous+payout};
+  state.relics.lastNativeEffect={mode,amount,bonus:payout,percent:Math.round(payout/amount*10000)/100,at:now,names:detail.skills.slice(0,4)};
  }
  return payout;
 }
