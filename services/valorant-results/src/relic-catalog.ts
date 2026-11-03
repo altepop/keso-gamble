@@ -34,7 +34,7 @@ export type NormalRelicRarity = typeof RELIC_RARITIES[number];
 export interface NormalRelicDefinition {
   id:string; name:string; mode:RelicMode; rarity:NormalRelicRarity;
   power:number; skill:string; ability:string; percent:number; cap:number;
- short:string; trait?:string; tradeoff?:'solo'|'coinflip'|'bloodmoon'|'allin'|'void'|'chain'|'eclipse'|'frenzy'; drawback?:string;
+ short:string; trait?:string; special?:'shards'|'fixed'|'digits'|'root'|'comeback'|'echo'|'threshold'; tradeoff?:'solo'|'coinflip'|'bloodmoon'|'allin'|'void'|'chain'|'eclipse'|'frenzy'; drawback?:string;
 }
 const names:ReadonlyArray<readonly [RelicMode,readonly string[]]> = [
   [
@@ -553,7 +553,25 @@ export const RISK_RELICS:ReadonlyArray<NormalRelicDefinition>=[
   percent:900,cap:0,tradeoff:'frenzy',drawback:'素数KP以外の報酬では、ほかの遺物の追加分が90%減',
   short:'素数KPの報酬：＋900%',trait:'確率暴走',ability:'素数KPの報酬なら＋900%。それ以外はほかの遺物の上乗せKPが90%減る。'},
 ];
-export const ALL_NORMAL_RELICS:ReadonlyArray<NormalRelicDefinition>=[...NORMAL_RELICS,...RISK_RELICS];
+/** Seven ability-first relics: zero %-multiplier and an independently visible rule.
+ * IDs are appended to preserve every previously-owned item and summon result. */
+export const ABILITY_RELICS:ReadonlyArray<NormalRelicDefinition>=[
+ {id:'normal.ability.shard_pick',name:'欠片掘りの鑿',mode:'universal',rarity:'common',power:18,skill:'spark',percent:0,cap:0,special:'shards',
+  short:'重複遺物の欠片化で1個につき＋1欠片',trait:'採掘',ability:'装備中、通常遺物を欠片化するたびに余剰1個につき＋1欠片。KP報酬への直接効果はない。'},
+ {id:'normal.ability.small_bell',name:'無名の残響鈴',mode:'universal',rarity:'uncommon',power:50,skill:'spark',percent:0,cap:0,special:'fixed',
+  short:'検証済みの報酬1件につき固定＋6KP',trait:'固定加算',ability:'対象の検証済みプラス報酬1件につき、倍率とは別に固定＋6KP。カジノ・株などの取引系には効かない。'},
+ {id:'normal.ability.digits',name:'桁を喰らう魔灯',mode:'universal',rarity:'rare',power:83,skill:'spark',percent:0,cap:0,special:'digits',
+  short:'検証済み報酬の各桁の数字の合計×2KP',trait:'数字抽出',ability:'元の確定報酬の十進数各桁を足して、合計×2KPを固定追加。取引系には効かない。'},
+ {id:'normal.ability.root',name:'平方根の旅靴',mode:'universal',rarity:'legendary',power:134,skill:'spark',percent:0,cap:0,special:'root',
+  short:'検証済み報酬の平方根（切り捨て）×3KP',trait:'平方根変換',ability:'元の確定報酬の平方根を切り捨てて×3KP。元の額に比例する％効果ではない。取引系には効かない。'},
+ {id:'normal.ability.comeback',name:'敗走者の赤い旗',mode:'universal',rarity:'mythic',power:207,skill:'spark',percent:0,cap:0,special:'comeback',
+  short:'負けてもプラスの報酬が確定した場合に固定＋50KP',trait:'不屈',ability:'勝利扱いでない検証済みのプラス報酬1件につき固定＋50KP。無報酬や負の結果では発動しない。'},
+ {id:'normal.ability.echo',name:'四重奏の指揮杖',mode:'universal',rarity:'ancient',power:295,skill:'spark',percent:0,cap:0,special:'echo',
+  short:'ほかに発動した遺物1つにつき固定＋40KP',trait:'連結',ability:'検証済み報酬で、同時装備のほかの遺物が効果を発動するたび＋40KP。単独では発動しない。'},
+ {id:'normal.ability.threshold',name:'千里眼の凱旋門',mode:'universal',rarity:'transcendent',power:440,skill:'spark',percent:0,cap:0,special:'threshold',
+  short:'500KP以上の検証済み報酬で固定＋250KP',trait:'到達報酬',ability:'確定した元の報酬が500KP以上なら固定＋250KPを上乗せ。勝敗・賭け・抽選を変更せず、取引系では発動しない。'},
+];
+export const ALL_NORMAL_RELICS:ReadonlyArray<NormalRelicDefinition>=[...NORMAL_RELICS,...RISK_RELICS,...ABILITY_RELICS];
 export const NORMAL_RELIC_BY_ID = new Map(ALL_NORMAL_RELICS.map(x=>[x.id,x]));
 export const NORMAL_RELIC_BY_RARITY:ReadonlyMap<NormalRelicRarity,ReadonlyArray<NormalRelicDefinition>>=
   new Map(RELIC_RARITIES.map(r=>[r,ALL_NORMAL_RELICS.filter(item=>item.rarity===r)]));
