@@ -57,7 +57,11 @@ const server=spawn('python3',['-m','http.server','8767','--bind','127.0.0.1'],{s
  const sale=bodies.shift();assert.equal(sale.action,'horse-sell');assert.deepEqual(sale.args,{horseId:'horse-2'});
  await page.evaluate(()=>{window.confirm=()=>true;}); // Other purchase dialogs remain unchanged.
  state.cash=100000;await refresh(toShop);
- await page.locator('#lux-target').selectOption('two');page.once('dialog',d=>d.accept());await page.locator('[data-action=luxury][data-item=convict]').click();await page.locator('.toast').filter({hasText:'戦犯認定を買いました'}).waitFor();
+ await page.locator('#lux-target').selectOption('two');
+ await page.locator('[data-action=luxury][data-item=convict]').click();
+ await page.locator('.luxury-confirmation').filter({hasText:'戦犯認定'}).waitFor();
+ await page.locator('[data-action=luxury-approve]').click();
+ await page.locator('.toast').filter({hasText:'戦犯認定を買いました'}).waitFor();
  const lux=bodies.shift();assert.equal(lux.action,'luxury');assert.equal(lux.args.item,'convict');assert.equal(lux.args.target,'two');
  await toAssets();
  assert.equal(await page.locator('[data-action=roast-level][aria-pressed=true]').getAttribute('data-level'),'full');

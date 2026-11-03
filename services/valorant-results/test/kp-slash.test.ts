@@ -153,7 +153,7 @@ test('public command metadata contains definitions only and does not need or exp
  let queries=0;
  const response=await kpApi(new Request('https://worker/api/kp/commands'),{DB:{prepare(){queries++;throw Error('No DB reads');}},KP_BOOTSTRAP_PRIVATE_KEY:'fixture-secret-must-not-leak'} as unknown as KpEnv);
  const body=await response.json() as {version:string;commands:unknown[]};
- assert.equal(response.status,200);assert.equal(body.version,'kp-slash-v19-dm-daily-40k');assert.equal(body.commands.length,14);assert.equal(queries,0);
+ assert.equal(response.status,200);assert.equal(body.version,'kp-slash-v20-spike-admin-status');assert.equal(body.commands.length,14);assert.equal(queries,0);
  assert.equal(JSON.stringify(body).includes('fixture-secret'),false);assert.equal(response.headers.get('Cache-Control'),'no-store');
 });
 
@@ -311,4 +311,29 @@ test('private /spike status and /spike hint select the requested role and charge
  const after=await runKpCommand(f.env,status,mapping);
  assert.match(after,/15キル以上/);
  assert.doesNotMatch(after,/7アシスト以上/,'unbought role condition stays hidden');
+});
+
+test('/spike status user: only administrators see another member, with every real trial and the Controller run',async()=>{
+ const f=await fixture();
+ const {ensureSpikeAwakening}=await import('../src/spike-awakening.ts');await ensureSpikeAwakening(f.env);
+ const {initialSpikeProfile}=await import('../src/spikerush-growth.ts');
+ const roster=(await import('../spikerush-roster.json',{with:{type:'json'}})).default as {agents:Array<{id:string;name:string;role:string}>};
+ const controllers=roster.agents.filter(a=>a.role==='Controller');
+ const profile={...initialSpikeProfile(),games:3,trials:{duelist:false,initiator:true,controllerWins:[],controllerWinCounts:{},controllerKdAgents:[],controllerStreak:[controllers[0].id,controllers[1].id],controllerTrialVersion:3,sentinel:false}};
+ const puuid=String(f.sql.prepare('SELECT puuid FROM kp_accounts WHERE user=?').get(two)!.puuid);
+ f.sql.prepare('INSERT INTO spike_profiles(guild,puuid,user,data,version) VALUES(?,?,?,?,1)').run(guild,puuid,two,JSON.stringify(profile));
+ const look=(permissions:string,target:string=two)=>runKpCommand(f.env,{...interaction('spike'),member:{permissions,user:{id:one}},data:{name:'spike',options:[{type:1,name:'status',options:[{name:'user',type:6,value:target}]}]}},mapping);
+ assert.match(await look('0'),/管理者.*権限のある人だけ/,'a member cannot look at someone else');
+ assert.match(await look(String(1n<<11n)),/権限のある人だけ/,'unrelated permissions are not enough');
+ const view=await look('8');
+ assert.match(view,new RegExp(`管理者ビュー.*<@${two}>`));
+ assert.ok(view.length<1950,'fits in one Discord message');
+ assert.match(view,/15キル以上/,'every real trial is shown even without hints');
+ assert.match(view,new RegExp(`判定：2/7（連続中：${controllers[0].name}→${controllers[1].name}）`));
+ assert.match(view,new RegExp(`残りのコントローラー：${controllers.slice(2).map(a=>a.name).join('・')}`));
+ assert.match(view,/Initiator[\s\S]*判定：達成/);
+ assert.match(await look('32'),/管理者ビュー/,'Manage Server is enough');
+ assert.match(await look('8','100000000000000199'),/紐付いていない/);
+ assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM spike_hint_unlocks').get()!.n,0,'nothing is bought or changed');
+ assert.equal(f.sql.prepare('SELECT version FROM spike_profiles WHERE puuid=?').get(puuid)!.version,1);
 });

@@ -1,7 +1,7 @@
 import {skirmishState,skirmishPrompt} from './skirmish.ts';
 import {startDmChallenge,dmChallengeStatus} from './dm-challenge.ts';
 import {isKpRanking} from './kp-command.ts';
-import {spikeStatus,purchaseSpikeHint} from './spike-awakening.ts';
+import {spikeStatus,spikeAdminStatus,purchaseSpikeHint} from './spike-awakening.ts';
 import {initializeKp,newKpState} from './kp.ts';
 import type {KpEnv,KpMapping} from './kp.ts';
 import {ensureQuizKp} from './quiz-kp.ts';
@@ -18,7 +18,7 @@ import {DEBT_INTEREST_TEXT,DEBT_MAX,debtOf,ensureDebt} from './kp-debt.ts';
 import {mlCard,mlOdds,mlOpen,mlClosesAt,mlStart,hydrateMleague} from '../../../js/mleague.js';
 // @ts-expect-error Shared browser engine.
 import {openRaceStart,raceCard,raceOdds,placeSlots,payoutFor,hydrateRacing} from '../../../js/racing.js';
-interface Slash {id:string;guild_id?:string;member?:{user?:{id:string}};data?:{name?:string;options?:Array<{name:string;type?:number;options?:unknown[];value?:unknown}>}}
+interface Slash {id:string;guild_id?:string;member?:{permissions?:string;user?:{id:string}};data?:{name?:string;options?:Array<{name:string;type?:number;options?:unknown[];value?:unknown}>}}
 const clock=(at:number)=>new Date(at).toLocaleTimeString('ja-JP',{timeZone:'Asia/Tokyo',hour:'2-digit',minute:'2-digit'});
 const clean=(s:string)=>s.replace(/[@`*_~<>|\r\n]/g,'');
 const money=(n:number)=>n.toLocaleString('ja-JP')+' KP';
@@ -215,6 +215,14 @@ export async function runKpCommand(env:KpEnv,interaction:Slash,override?:KpMappi
   const raw=interaction.data?.options;
   if(!raw||raw.length!==1||raw[0].type!==1)return '/spike status で育成状況を確認するか /spike hint でヒントを購入してください。';
   if(raw[0].name==='status'&&(!raw[0].options||!raw[0].options.length))return spikeStatus(env,mapping.guildId,user);
+  // An administrator may look at another member's progress (private reply; read only).
+  if(raw[0].name==='status'){
+   const opts=raw[0].options as Array<{name?:string;type?:number;value?:unknown}>;
+   if(opts.length!==1||opts[0].name!=='user'||opts[0].type!==6||typeof opts[0].value!=='string'||!/^\d{15,22}$/.test(opts[0].value))return '見たいメンバーを user で選んでください。';
+   let permissions=0n;try{permissions=BigInt(interaction.member?.permissions??'0');}catch{permissions=0n;}
+   if(!(permissions&(8n|32n)))return '他のメンバーの育成状況は「管理者」または「サーバー管理」権限のある人だけが見られます。自分の状況は /spike status で確認できます。';
+   return spikeAdminStatus(env,mapping.guildId,opts[0].value);
+  }
   if(raw[0].name==='hint'){
    const opts=raw[0].options as Array<{name?:string;type?:number;value?:unknown}>|undefined;
    if(!opts||opts.length!==1||opts[0].name!=='role'||opts[0].type!==3)return 'ヒントを解放するロールを指定してください。';
