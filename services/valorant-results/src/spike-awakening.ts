@@ -116,6 +116,36 @@ export async function ensureSpikeAwakening(env:KpEnv){
  ready.set(env.DB,task);
  try{await task;}catch(e){ready.delete(env.DB);throw e;}
 }
+// What each trial really asks, for the administrator view only (members see SPIKE_HINTS after buying a hint).
+const TRIAL_RULES:Record<SpikeRole,string>={
+ Duelist:'デュエリストで1試合15キル以上',
+ Initiator:'イニシエーターで1試合7アシスト以上',
+ Controller:`コントローラーで「勝利＋K/D 2.0以上（デス0なら1キル以上）」を、毎回違うコントローラーで${SPIKE_CONTROLLER_STREAK_REQUIRED}試合連続（他ロール・負け・K/D不足で0に戻る、同じエージェントの再使用は1から）`,
+ Sentinel:'センチネルで1試合5キル以上かつデス0',
+};
+/** /spike status user:@someone (administrators only): the member's growth and every trial's real condition and
+ * progress, whether or not they bought hints. Read only; nothing is charged or changed. */
+export async function spikeAdminStatus(env:KpEnv,guild:string,target:string){
+ await ensureSpikeAwakening(env);
+ const member=await env.DB.prepare('SELECT a.puuid,a.riot,s.data FROM kp_accounts a LEFT JOIN spike_profiles s ON s.guild=a.guild AND s.puuid=a.puuid AND s.user=a.user WHERE a.guild=? AND a.user=?')
+  .bind(guild,target).first<{puuid:string;riot:string;data:string|null}>();
+ if(!member)return `🔒 <@${target}> はRiotアカウントがKP口座に紐付いていないため、スパイクラッシュの判定対象外です。`;
+ const p=await hydrateSpikeControllerHistory(env,guild,member.puuid,member.data?JSON.parse(member.data) as SpikeProfile:initialSpikeProfile());
+ const unlocks=new Set((await env.DB.prepare('SELECT role FROM spike_hint_unlocks WHERE guild=? AND puuid=?').bind(guild,member.puuid).all<{role:string}>()).results.map(x=>x.role));
+ const t=safeTrials(p),name=(id:string)=>roster.agents.find(a=>a.id===id)?.name??id;
+ const lines=spikeProgress(p).map(r=>{
+  const done=r.role==='Controller'?(t.controllerGrandfathered?`達成（旧条件を継承）`:`${t.controllerStreak!.length}/${SPIKE_CONTROLLER_STREAK_REQUIRED}${t.controllerStreak!.length?`（連続中：${t.controllerStreak!.map(name).join('→')}）`:''}`):r.trialDone?'達成':'未達成';
+  const rest=r.role==='Controller'&&!r.trialDone?`
+　残りのコントローラー：${controllers.filter(a=>!t.controllerStreak!.includes(a.id)).map(a=>a.name).join('・')}`:'';
+  return `**${r.role}** ${r.used}/${r.required}｜${r.awakened?'✨覚醒済み':r.unlocked?'通常育成完了':'育成中'}
+　試練：${TRIAL_RULES[r.role]}
+　判定：${done}${rest}
+　ヒント：${unlocks.has(r.role)?'購入済み':'未購入'}`;
+ });
+ const riot=member.riot.replace(/[@`*_~<>|\r\n]/g,'');
+ return [`🛠️ **管理者ビュー｜SPIKE 育成状況** <@${target}>（${riot}）`,`通算：${p.games}試合｜覚醒：${spikeProgress(p).filter(x=>x.awakened).length}/4｜OVERDRIVE：${isOverdrive(p)?'発動中':'未解放'}`,
+  ...lines,'-# この返信はあなたにだけ表示されています。本人の口座・試練は変更していません。'].join('\n\n');
+}
 export async function spikeStatus(env:KpEnv,guild:string,user:string){
  await ensureSpikeAwakening(env);
  const member=await env.DB.prepare('SELECT a.puuid,s.data FROM kp_accounts a LEFT JOIN spike_profiles s ON s.guild=a.guild AND s.puuid=a.puuid AND s.user=a.user WHERE a.guild=? AND a.user=?')
