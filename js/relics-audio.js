@@ -136,7 +136,7 @@ function noise(c){
  const data=buffer.getChannelData(0);
  // Pseudorandom from a fixed seed; there is no use of gameplay or KP RNG.
  let seed=14799831;
- for(let i=0;i<data.length;i++){seed=(Math.imul(seed,1664525)+1013904223)|0;data[i]=((seed>>>8)/0x7fffff-1)*.75;}
+ for(let i=0;i<data.length;i++){seed=(Math.imul(seed,1664525)+1013904223)|0;data[i]=((seed>>>0)/4294967295*2-1)*.75;}
  cachedNoiseCtx=c;cachedNoise=buffer;return buffer;
 }
 function burst(c,bus,at,len,amp=.16,{cutoff=1500,type='lowpass',rising=false}={}){
