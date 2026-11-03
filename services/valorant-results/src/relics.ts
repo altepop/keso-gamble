@@ -286,7 +286,7 @@ export function evaluateRelicBonus(
  // Therefore a match-1 loss with 20 KP still benefits visibly from equipment.
  const opening=mode==='spikerush'&&event.spikeGamesBefore!==undefined
   ?spikeOpeningTier(event.spikeGamesBefore):null;
- const openingEligible=opening?lines.filter(l=>l.active):[];
+ const openingEligible=opening?lines.filter(l=>l.active&&NORMAL_RELIC_BY_ID.get(l.id)?.special!=='shards'):[];
  if(opening)for(const line of openingEligible){
   line.base=safeReward(line.base*opening.multiplier);
   line.exotic=safeReward(line.exotic+opening.flatPerRelic);
