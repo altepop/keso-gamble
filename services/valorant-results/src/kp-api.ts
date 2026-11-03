@@ -44,6 +44,7 @@ import { mlActivityView, mlClosed, mlData, mlLineupTimes, mlResults, seasonStats
 import { racingView, raceSeed } from './racing-kp.ts';
 import { defaultRoastLevel, validRoastLevel } from './racing-crowns.ts';
 import { buyHorse, sellHorse, ownedHorses, raceEntries } from './racing-horses.ts';
+import {allowedKpOperation} from './kp-operation-limit.ts';
 import { masteryOf, riotIdOf } from './mastery.ts';
 import {DEBT_BLOCKED,DEBT_INTEREST_PERCENT,DEBT_INTEREST_TEXT,DEBT_INTERVAL_MINUTES,DEBT_MAX,debtOf} from './kp-debt.ts';
 import { buyLuxury, luxuryPosts, luxuryView } from './luxury.ts';
@@ -407,6 +408,7 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping):Promi
   if(request.method==='POST'&&path==='/api/kp/operation'){
    const text=await request.text();if(text.length>4096)return response({error:'入力が長すぎます。'},400);
    const body=JSON.parse(text);if(typeof body.id!=='string'||typeof body.action!=='string'||!body.args||typeof body.args!=='object'||Array.isArray(body.args))return response({error:'操作内容が不正です。'},400);
+   if(!await allowedKpOperation(env,mapping.guildId,owner.user))return response({error:'操作回数が多すぎます。1分後に再試行してください。'},429);
    const result=await operateKp(env,mapping,owner.user,body.id,body.action,body.args);
    return response(result);
   }
