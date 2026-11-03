@@ -12,6 +12,7 @@ let browser;
  const engine=process.argv[2]==='webkit'?webkit:chromium;
  browser=await engine.launch(engine===chromium?{executablePath:process.env.CHROMIUM_PATH||(existsSync('/usr/bin/chromium')?'/usr/bin/chromium':undefined),args:['--no-sandbox']}:{});
  const ctx=await browser.newContext({viewport:{width:390,height:844},reducedMotion:'reduce'});
+ await ctx.addInitScript(()=>{window.__kesoGuideTestTour=true;});
  const page=await ctx.newPage(),errors=[];
  page.on('pageerror',error=>errors.push(error.message));
  let writes=0;
