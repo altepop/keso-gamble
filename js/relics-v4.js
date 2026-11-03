@@ -149,5 +149,5 @@ export function relicBonusDashboard(state,proofs,view={}){
   '<h3 class="relic-readout-title">装備別の効果</h3>'+
   (lines.length?items:'<p class="helper">遺物を装備すると、ここに各遺物の倍率が表示される。</p>')+
   '<small class="relic-example-note">「設定＋%」はその遺物の倍率だ。条件未達・支給上限により実際の増加率は小さくなる。試算はKPを消費しない。</small>'+
-  lastHtml+'</div></section>';
+  lastHtml+recentHtml+'</div></section>';
 }
