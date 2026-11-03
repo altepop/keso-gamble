@@ -372,7 +372,7 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping):Promi
    const steam=await env.DB.prepare('SELECT id,title,percent,app FROM kp_steam_events WHERE guild=? AND user=? ORDER BY CASE WHEN percent<=10 THEN 0 WHEN percent<=25 THEN 1 ELSE 2 END,at DESC LIMIT 100')
     .bind(mapping.guildId,owner.user).all<{id:string;title:string;percent:number;app:number}>().then(r=>r.results).catch(()=>[]);
    const row=await env.DB.prepare('SELECT data FROM kp_state WHERE guild=? AND user=?').bind(mapping.guildId,owner.user).first<{data:string}>();
-   const ownedState=JSON.parse(row?.data??'{}') as {relics?:{totalSummons:number;items:Record<string,RelicItem>;equipped:string[];dailyNativeBonus?:{day:string;amount:number};lastNativeEffect?:{mode:string;amount:number;bonus:number;percent:number;at:number;names:string[]}}};
+   const ownedState=JSON.parse(row?.data??'{}') as {relics?:RelicCollection};
    const level=summonLevel(ownedState.relics?.totalSummons??0);
    const nativeModes=new Set(['casino','market','racing','mleague']); // retained for UI grouping
    const currentDay=new Date().toISOString().slice(0,10);
