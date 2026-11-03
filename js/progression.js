@@ -64,7 +64,7 @@ export function hydrateProgress(raw){
    const temp={...createProgress(),cash:Number.MAX_SAFE_INTEGER};const checked=issueDirective(temp,d,d.time);
    if((d.cost!==checked.cost&&!({competitive:8000,unrated:2500,solo_competitive:50000,solo_death_unrated:60000,steam:3500}[d.task]===d.cost))||(d.status==='completed'&&!int(d.completedAt)))continue;
    if(d.status==='active'&&result.directives.some(x=>x.target===d.target&&x.status==='active'))continue;
-   const record={...checked,id:d.id,status:d.status};if(d.status==='completed')record.completedAt=d.completedAt;
+   const record={...checked,id:d.id,status:d.status,cost:d.cost};if(d.status==='completed')record.completedAt=d.completedAt;
    result.directives.push(record);ids.add(d.id);
   }catch{/* Drop malformed records. */}
  }
