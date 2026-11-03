@@ -1,7 +1,7 @@
 import {NORMAL_RELICS,RELIC_CATALOG_COUNT,RELIC_RARITIES,RELIC_MODE_NAMES} from '../src/relic-catalog.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {RELIC_SUMMON_COST,rarityForRoll,rarityRatesForLevel,modeRelicBonus,nativeRelicBonus,relicCollection,summonLevel,summonRelics,grantSteamRelic,grantUniteRelic,equipRelic,autoEquipRelics,SUMMON_MILESTONES,summonProgress,steamRelicTier,steamRelicArchetype,STEAM_RELIC_TIERS,UNITE,UNITE_REQUIREMENTS,UNITE_STREAK_IDS,type RelicCollection} from '../src/relics.ts';
+import {RELIC_SUMMON_COST,rarityForRoll,rarityRatesForLevel,modeRelicBonus,evaluateRelicBonus,nativeRelicBonus,relicCollection,summonLevel,summonRelics,grantSteamRelic,grantUniteRelic,equipRelic,autoEquipRelics,SUMMON_MILESTONES,summonProgress,steamRelicTier,steamRelicArchetype,STEAM_RELIC_TIERS,UNITE,UNITE_REQUIREMENTS,UNITE_STREAK_IDS,type RelicCollection} from '../src/relics.ts';
 test('200KP per roll, valid batch sizes, never overspends or draws entropy for rejected input',()=>{
   assert.equal(RELIC_SUMMON_COST,200);
   const x:{cash:number;relics?:RelicCollection}={cash:351000};
@@ -231,4 +231,79 @@ test('tactical triggers differentiate rarities instead of rewarding all amounts'
  const x:{relics?:RelicCollection}={relics:{totalSummons:0,items:{[rare.id]:{...rare,origin:'normal',count:1}},equipped:[rare.id]}};
  assert.equal(modeRelicBonus(x.relics,'competitive',{amount:300,win:true}).bonus,0);
  assert.ok(modeRelicBonus(x.relics,'competitive',{amount:307,win:true}).bonus>0);
+});
+
+
+test('short headlines say bonus KP percentage directly, and preserve ancient/transcendental identity',()=>{
+ assert.equal(NORMAL_RELICS.length,140);
+ assert.ok(NORMAL_RELICS.every(x=>x.short.includes('KP報酬＋')&&x.short.includes('%')));
+ const mastery=NORMAL_RELICS.find(x=>x.mode==='competitive'&&x.rarity==='ancient')!;
+ assert.match(mastery.short,/勝利・達成時：KP報酬＋9%/);
+ assert.match(mastery.trait??'',/刻印連鎖/);
+ const transcendent=NORMAL_RELICS.find(x=>x.rarity==='transcendent')!;
+ assert.match(transcendent.trait??'',/運命突破/);
+ const legacy:{relics?:RelicCollection}={relics:{totalSummons:250,items:{
+  'normal.origin':{id:'normal.origin',name:'古い遺物',rarity:'ancient',origin:'normal',count:4,power:260,ability:'旧表示'}
+ },equipped:['normal.origin']}};
+ relicCollection(legacy);
+ assert.equal(legacy.relics!.items['normal.origin']?.count,4);
+ assert.equal(legacy.relics!.equipped[0],'normal.origin');
+});
+test('ancient chain seal adds a distinct KP component without exceeding global cap',()=>{
+ const ancient=NORMAL_RELICS.find(x=>x.mode==='competitive'&&x.rarity==='ancient')!;
+ const universal=NORMAL_RELICS.find(x=>x.mode==='universal'&&x.rarity==='rare')!;
+ const fortune=NORMAL_RELICS.find(x=>x.mode==='fortune'&&x.rarity==='rare')!;
+ const items=Object.fromEntries([ancient,universal,fortune].map(x=>[x.id,{...x,origin:'normal' as const,count:1}]));
+ const x:RelicCollection={totalSummons:0,items,equipped:[ancient.id,universal.id,fortune.id]};
+ const r=evaluateRelicBonus(x,'competitive',{amount:107,win:true});
+ const a=r.lines.find(x=>x.id===ancient.id)!;
+ assert.equal(a.trait,'刻印連鎖');
+ assert.equal(a.exotic,8);
+ assert.ok(r.gross>r.bonus);
+ assert.ok(r.bonus<=Math.floor(107*.15));
+ assert.equal(r.percent,a.effectivePercent+universal.percent+fortune.percent);
+});
+test('transcendental fate breakthrough pays fixed KP when conditions fail',()=>{
+ const transcend=NORMAL_RELICS.find(x=>x.mode==='competitive'&&x.rarity==='transcendent')!;
+ const x:RelicCollection={totalSummons:0,items:{[transcend.id]:{...transcend,origin:'normal',count:1}},equipped:[transcend.id]};
+ const r=evaluateRelicBonus(x,'competitive',{amount:500,win:false});
+ assert.equal(r.percent,0);
+ assert.equal(r.lines[0]?.triggered,false);
+ assert.equal(r.lines[0]?.trait,'運命突破');
+ assert.ok(r.lines[0]!.exotic>0);
+ assert.ok(r.bonus>0);
+ assert.equal(modeRelicBonus(x,'competitive',{amount:500,win:false}).bonus,r.bonus);
+});
+test('both Steam and Unite exclusives receive additional flat origin seal under the shared hard cap',()=>{
+ const x:{relics?:RelicCollection}={};
+ grantUniteRelic(x,'unite.first_win',1);
+ const r=evaluateRelicBonus(x.relics,'competitive',{amount:100,win:true});
+ assert.equal(r.bonus,0); // none is equipped
+ equipRelic(x,'unite.first_win',0);
+ const withUnite=evaluateRelicBonus(x.relics,'competitive',{amount:100,win:true});
+ assert.equal(withUnite.lines[0]?.trait,'出自の加護');
+ assert.ok(withUnite.lines[0]!.exotic>0);
+ assert.ok(withUnite.bonus<=15);
+ const steam={id:'steam:g:76561199999999999:123:EX',app:123,achievement:'EX',title:'達成',percent:30};
+ const claimed=grantSteamRelic(x,steam).item;
+ equipRelic(x,claimed.id,1);
+ const withSteam=evaluateRelicBonus(x.relics,'competitive',{amount:100,win:true});
+ assert.ok(withSteam.lines.some(l=>l.id===claimed.id&&l.trait==='出自の加護'));
+ assert.ok(withSteam.bonus<=15);
+});
+test('native simulator reports real final percentage and never credits fake KP',()=>{
+ const def=NORMAL_RELICS.find(x=>x.mode==='market'&&x.rarity==='ancient')!;
+ const state:{cash:number;relics?:RelicCollection}={cash:100,relics:{totalSummons:1,items:{[def.id]:{...def,origin:'normal',count:1}},equipped:[def.id]}};
+ const before=JSON.stringify(state);
+ const x=evaluateRelicBonus(state.relics,'market',{amount:5000,win:true},120);
+ assert.equal(x.bonus,50);
+ assert.equal(x.effectivePercent,1);
+ assert.equal(JSON.stringify(state),before);
+ const actual=nativeRelicBonus(state,'market',5000,Date.UTC(2026,10,3));
+ assert.equal(actual,x.bonus);
+ assert.equal(state.cash,150);
+ assert.equal(state.relics?.lastNativeEffect?.bonus,50);
+ assert.equal(state.relics?.lastNativeEffect?.percent,1);
+ const capped=evaluateRelicBonus(state.relics,'market',{amount:5000,win:true},70);
+ assert.equal(capped.bonus,50);
 });
