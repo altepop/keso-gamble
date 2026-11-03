@@ -483,6 +483,11 @@ addEventListener('click',async e=>{
       render();
       return;
     }
+    if(t.dataset.action==='relic-equipped-only'){
+      relicView={...relicView,equippedOnly:!relicView.equippedOnly,page:0};
+      render();
+      return;
+    }
     if(t.dataset.action==='relic-sound-toggle'){
       toggleRelicSound();render();return;
     }
@@ -524,9 +529,11 @@ addEventListener('click',async e=>{
       if(['relic-equip','relic-auto-equip','relic-save-preset','relic-overwrite-preset','relic-load-preset','relic-remove-preset','relic-rename-preset','relic-claim-steam','relic-claim-unite'].includes(action)){
        try{relicProofs=await wallet.relics();}catch(error){relicNotice='装備は更新したが、効果一覧を再取得できなかった。'+(error.message??'');}
       }
-      if(action==='relic-summon'){relicReveal=result;playRelicSound(relicReveal);}
+      if(action==='relic-summon')relicReveal=result;
       relicNotice=action==='relic-save-preset'?'「'+result.name+'」を保存した。':action==='relic-overwrite-preset'?'「'+result.name+'」を上書きした。':action==='relic-rename-preset'?'「'+result.name+'」に改名した。':action==='relic-load-preset'?'装備をプリセットから復元した。':action==='relic-remove-preset'?'プリセットを削除した。':action==='relic-auto-equip'?`おまかせ装備完了。4枠の合計戦力 ${result.power}`:action==='relic-summon'?`${result.count}連召喚：${result.cost.toLocaleString('ja-JP')} KPを使用。${result.highlights?.length?'大当たり '+result.highlights.map(v=>v.name).join('、'):'獲得遺物を図鑑に追加した。'}`:action==='relic-equip'?`装備変更完了。戦力 ${result.power}`:`${result.item.name} を獲得した。`;
-      render();toast(relicNotice);return;
+      render();
+      if(action==='relic-summon')playRelicSound(relicReveal);
+      toast(relicNotice);return;
     }
     if(t.dataset.action==='stock-guerrilla-toggle'){
       if(!live||!state.privateCasino)throw Error('この操作は利用できません。');
