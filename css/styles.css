@@ -750,3 +750,6 @@ body.esc-wheel-open{overflow:hidden!important}
 .relic-v8-audio-toggle{width:100%;min-height:44px;font-size:13px;margin:6px 0 13px}
 @media(min-width:850px){.relic-v8-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.relic-v8-tab{font-size:14px}}
 @media(max-width:340px){.relic-v8-grid{gap:6px}.relic-v8-grid .relic-card{padding:7px 5px}.relic-v8-grid .relic-card-effect{font-size:10px}.relic-v8-nav{gap:3px}}
+
+.relic-v8-slot-picker{display:block;margin:10px 0 8px;padding:10px 11px;border:1px solid #355d8a;border-radius:10px;background:#102440;color:#d7e6ff;font-size:12px}
+.relic-v8-slot-picker select{display:block;width:100%;min-height:42px;margin-top:7px;font-size:13px}
