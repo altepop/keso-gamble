@@ -114,6 +114,10 @@ export function relicBonusDashboard(state,proofs,view={}){
  const controls='<div class="relic-preview-controls"><label>対象ゲーム'+
   select('mode',mode,availableModes.map(x=>[x,modes[x]??x]))+'</label><label>報酬の例'+
   select('amount',amount,[[100,'100 KP'],[500,'500 KP'],[900,'900 KP'],[5000,'5,000 KP']])+'</label></div>';
+ const recent=(Array.isArray(state?.ledger)?state.ledger:[]).filter(x=>x.kind==='relic').slice(0,3);
+ const recentHtml=recent.length?'<div class="relic-last-real"><b>確定済みの遺物ボーナス（最新3件）</b>'+
+  recent.map(x=>'<span>実際に付与：<strong>＋'+number(x.delta)+' KP</strong></span>').join('')+
+  '</div>':'';
  const last=proofs?.lastNativeEffect;
  const lastHtml=last&&Number.isFinite(last.bonus)
    ?'<div class="relic-last-real"><b>直近の実支給</b><span>'+esc(modes[last.mode]??last.mode)+
@@ -121,7 +125,7 @@ export function relicBonusDashboard(state,proofs,view={}){
     '<small>'+esc((last.names??[]).join('・'))+'</small></div>'
    :'<p class="helper">取引系の追加KPが確定すると、ここに直近の実績が表示される。</p>';
  if(!current)return '<section class="panel"><div class="card-body"><h2 class="panel-title">📊 遺物の効果を数値で見る</h2>'+
-  '<p class="helper">効果一覧は本番KP口座から取得する。装備中の倍率と実際の受取額を表示する。</p>'+lastHtml+'</div></section>';
+  '<p class="helper">効果一覧は本番KP口座から取得する。装備中の倍率と実際の受取額を表示する。</p>'+lastHtml+recentHtml+'</div></section>'
  const lines=current.lines??[];
  const items=lines.map(line=>{
   const label=line.trait?' <span class="relic-trait-tag">'+esc(line.trait)+'</span>':'';
