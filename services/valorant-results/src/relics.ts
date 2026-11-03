@@ -18,6 +18,8 @@ export interface RelicItem {
   percent?: number;
   cap?: number;
   count: number;
+  mutation?:{kind:'prism'|'risk'|'comeback';percent:number;at:number};
+  foil?:{kind:'holographic'|'starlit'|'abyss';percent:number;at:number};
   // External evidence is bound to existing certified receipts, not a browser claim.
   source?: string;
 }
@@ -26,9 +28,29 @@ export interface RelicCollection {
   items: Record<string, RelicItem>;
   equipped: string[];
   dailyNativeBonus?: {day:string;amount:number};
-  lastNativeEffect?: {mode:string;amount:number;bonus:number;percent:number;at:number;names:string[]};
+  lastNativeEffect?: {mode:string;amount:number;bonus:number;percent:number;at:number;names:string[];lines?:RelicBonusLine[];sets?:{name:string;bonus:number}[]};
+  summonHistory?:SummonHistoryEntry[];
+  presets?:Record<string,string[]>;
+  nativeEffects?:RelicEffectRecord[];
+  nativeEarned?:number;
+  nativeCount?:number;
+  mutatedCount?:number;
+  foilCount?:number;
 }
 export const RELIC_SLOTS = 4;
+export const RELIC_PRESETS:ReadonlyArray<{id:string;name:string}>=[
+ {id:'balanced',name:'バランス'}, {id:'valorant',name:'VALORANT'},
+ {id:'racing',name:'競馬'}, {id:'casino',name:'カジノ'},
+ {id:'market',name:'株式'}, {id:'risk',name:'危険なビルド'},
+];
+export type SummonHistoryEntry={
+ at:number;start:number;end:number;count:number;cost:number;summary:Record<string,number>;
+ highlights:Array<{id:string;name:string;rarity:string}>;mutations:string[];foils:string[];
+};
+export type RelicEffectRecord={
+ id:string;mode:string;amount:number;bonus:number;at:number;origin:'native'|'verified';
+ lines:RelicBonusLine[];sets:{name:string;bonus:number}[];resonance:number;
+};
 /** Achievements are granted only from monitored, already certified kp_steam_events.
  * This catalog does not fetch the user's historical achievements.
  */
@@ -140,6 +162,7 @@ export type RelicBonusLine={
 export type RelicBonusResult={
  bonus:number;gross:number;cap:number;percent:number;effectivePercent:number;
  skills:string[];lines:RelicBonusLine[];resonance:number;
+ sets:{name:string;bonus:number}[];curseReversed:boolean;
 };
 const RELIC_NATIVE_MODES=new Set(['casino','market','racing','mleague']);
 const safeReward=(n:number)=>Number.isFinite(n)?Math.max(0,Math.min(Number.MAX_SAFE_INTEGER-1,Math.floor(n))):0;
@@ -188,7 +211,7 @@ export function evaluateRelicBonus(
  collection:RelicCollection|undefined,mode:string,event:{amount:number;win:boolean},
  _nativeRemaining=120,
 ):RelicBonusResult{
- const empty:RelicBonusResult={bonus:0,gross:0,cap:0,percent:0,effectivePercent:0,skills:[],lines:[],resonance:0};
+ const empty:RelicBonusResult={bonus:0,gross:0,cap:0,percent:0,effectivePercent:0,skills:[],lines:[],resonance:0,sets:[],curseReversed:false};
  const amount=event.amount,bounds=MODE_THRESHOLDS[mode];
  if(!collection||!bounds||!Number.isSafeInteger(amount)||amount<=0)return empty;
  const lines:RelicBonusLine[]=[];
@@ -200,7 +223,9 @@ export function evaluateRelicBonus(
   const skill=def?.skill??item.skill;
   const basePercent=def?.percent??item.percent??0,cap=def?.cap??item.cap??0;
   const boosted=item.origin==='normal'?Math.min(5,Math.floor(Math.log2(Math.max(1,item.count)))):0;
-  const percent=basePercent+boosted;
+  const mutation=item.mutation;
+  const mutationBonus=mutation?(mutation.kind==='prism'||(mutation.kind==='risk'&&amount%2===0)||(mutation.kind==='comeback'&&!event.win)?mutation.percent:0):0;
+  const percent=basePercent+boosted+mutationBonus+(item.foil?.percent??0);
   const active=compatibleRelic(sourceMode,mode);
   const triggered=active&&percent>0&&relicTrigger(skill,amount,event.win,bounds);
   const base=triggered?safeReward(amount*percent/100):0;
@@ -222,6 +247,8 @@ export function evaluateRelicBonus(
   }
  }
 
+ const pactIds=new Set(lines.map(x=>x.id));
+ const curseReversed=pactIds.has('normal.pact.void')&&pactIds.has('normal.pact.coinflip')&&amount%7===0;
  // Risk pacts are independently rolled normal relics, NEVER Steam/Unite upgrades.
  // Drawbacks suppress bonus from OTHER relics only, not the verified base KP reward.
  let suppressResonance=false;
@@ -236,10 +263,10 @@ export function evaluateRelicBonus(
    }
   };
   if(pact==='solo'&&line.triggered)suppress(.2);
-  if(pact==='coinflip'&&amount%2!==0)suppress(.4);
+  if(pact==='coinflip'&&amount%2!==0)suppress(curseReversed?1.25:.4);
   if(pact==='bloodmoon'&&amount<400)suppress(.3);
   if(pact==='allin'&&amount%10!==7)suppress(.5);
-  if(pact==='void'){suppress(.25);suppressResonance=true;}
+  if(pact==='void'){suppress(curseReversed?1.25:.25);suppressResonance=!curseReversed;}
   if(pact==='eclipse'&&!(event.win&&amount>=400))suppress(0);
   if(pact==='frenzy'&&!hasPrimeAmount(amount))suppress(.1);
   if(pact==='chain'){
@@ -250,6 +277,18 @@ export function evaluateRelicBonus(
  }
  const effective=lines.filter(l=>l.triggered);
  let gross=safeReward(lines.reduce((n,l)=>n+l.base+l.exotic,0));
+ const sets:{name:string;bonus:number}[]=[];
+ const activatedItems=lines.filter(l=>l.base+l.exotic>0);
+ const applySet=(name:string,ratio:number)=>{
+  const bonus=safeReward(gross*ratio);
+  if(bonus){sets.push({name,bonus});gross=safeReward(gross+bonus);}
+ };
+ const modes=activatedItems.map(l=>l.mode);
+ const rarities=activatedItems.map(l=>collection.items[l.id]?.rarity);
+ if(modes.some(m=>modes.filter(x=>x===m).length>=2))applySet('同系統の絆（+10%）',.10);
+ if(new Set(modes).size>=3)applySet('異界旅団（+15%）',.15);
+ if(rarities.some(r=>rarities.filter(x=>x===r).length>=3))applySet('同格の誓い（+25%）',.25);
+ if(curseReversed)sets.push({name:'呪い反転（虚無＋銀貨＋7の倍数）',bonus:0});
  let resonance=0;
  if(!suppressResonance&&effective.length>=2&&amount%7===0){
   const skillKinds=new Set(effective.map(l=>NORMAL_RELIC_BY_ID.get(l.id)?.skill??collection.items[l.id]?.skill));
@@ -260,8 +299,8 @@ export function evaluateRelicBonus(
  const bonus=gross;
  const percent=effective.reduce((n,l)=>n+l.effectivePercent,0);
  return {bonus,gross,cap:0,percent,effectivePercent:Math.round(10000*bonus/amount)/100,
-  lines,resonance,
-  skills:[...lines.filter(l=>l.base+l.exotic>0).map(l=>l.name),...(resonance?['七重共鳴']:[])]};
+  lines,resonance,sets,curseReversed,
+  skills:[...lines.filter(l=>l.base+l.exotic>0).map(l=>l.name),...sets.map(x=>x.name),...(resonance?['七重共鳴']:[])]};
 }
 export function modeRelicBonus(
  collection:RelicCollection|undefined,
@@ -287,7 +326,11 @@ export function nativeRelicBonus(
  const payout=Math.min(detail.bonus,Math.max(0,Number.MAX_SAFE_INTEGER-1-state.cash));
  if(!payout)return 0;
  state.cash+=payout;
- state.relics.lastNativeEffect={mode,amount,bonus:payout,percent:Math.round(payout/amount*10000)/100,at:now,names:detail.skills.slice(0,4)};
+ state.relics.lastNativeEffect={mode,amount,bonus:payout,percent:Math.round(payout/amount*10000)/100,at:now,names:detail.skills.slice(0,4),lines:detail.lines,sets:detail.sets};
+ state.relics.nativeEarned=(state.relics.nativeEarned??0)+payout;
+ state.relics.nativeCount=(state.relics.nativeCount??0)+1;
+ const record:RelicEffectRecord={id:'native:'+now+':'+(state.relics.nativeCount??0),mode,amount,bonus:payout,at:now,origin:'native',lines:detail.lines,sets:detail.sets,resonance:detail.resonance};
+ state.relics.nativeEffects=[record,...(state.relics.nativeEffects??[])].slice(0,30);
  return payout;
 }
 /** Caller MUST confirm a new, immutable server-verified receipt before invoking.
@@ -301,11 +344,18 @@ export async function creditVerifiedRelicBonus(
   .bind(guild,user).first<{data:string}>();
  if(!row)return 0;
  const state=JSON.parse(row.data) as {relics?:RelicCollection};
- const {bonus}=modeRelicBonus(state.relics,mode,{amount,win});
+ const detail=evaluateRelicBonus(state.relics,mode,{amount,win});
+ const bonus=detail.bonus;
  if(!bonus)return 0;
  const id='relic:'+receipt;
  const saved=await env.DB.prepare('INSERT OR IGNORE INTO kp_ledger(id,guild,user,delta,kind,at) VALUES(?,?,?,?,?,?)')
   .bind(id,guild,user,bonus,'relic',at).run();
+ // Log only real credited receipts; write is independently idempotent on retries.
+ try{
+  await env.DB.prepare(
+   'INSERT OR IGNORE INTO relic_effect_logs(id,guild,user,mode,base,bonus,details,at) SELECT ?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM kp_ledger WHERE id=? AND guild=? AND user=?)'
+  ).bind(id,guild,user,mode,amount,bonus,JSON.stringify({lines:detail.lines,sets:detail.sets,resonance:detail.resonance,curseReversed:detail.curseReversed}),at,id,guild,user).run();
+ }catch{console.warn('relic_effect_log_pending');}
  return saved.meta.changes?bonus:0;
 }
 function store(c: RelicCollection, item: RelicItem) {
@@ -327,13 +377,33 @@ export function summonRelics(
   const entropy = numbers ?? crypto.getRandomValues(new Uint32Array(count * 2));
   if (entropy.length !== count * 2) throw Error('Invalid random draw');
   const c = relicCollection(state), summary: Record<string, number> = {};
+  const startCount=c.totalSummons;
   const highlights: Array<{name:string;rarity:string;id:string}> = [];
+  const mutations:string[]=[],foils:string[]=[];
+  // Independent cryptographic draws for variants. Explicit test entropy suppresses
+  // rare random mutations to make deterministic original unit tests stable.
+  const variants = numbers ? new Uint32Array(count*2).fill(0xffffffff) : crypto.getRandomValues(new Uint32Array(count*2));
   for (let n = 0; n < count; n++) {
     const rarity = rarityForRoll(entropy[n * 2]! % 1_000_000, summonLevel(c.totalSummons));
     const candidates=NORMAL_RELIC_BY_RARITY.get(rarity as NormalRelicRarity)!;
     const chosen=candidates[entropy[n * 2 + 1]!%candidates.length]!;
     const {id,name,mode,skill,ability,power}=chosen;
+    const duplicate=Boolean(c.items[id]);
     store(c,{id,name,origin:'normal',rarity,mode,skill,power,ability,count:1});
+    const item=c.items[id]!;
+    // 1/4096 duplicate evolution, once per relic ID; 1/40000 cosmetic foil,
+    // also once per relic ID. Different source/Steam history is untouched.
+    if(duplicate&&!item.mutation&&variants[n*2]!%4096===0){
+     const kinds=['prism','risk','comeback'] as const;
+     const kind=kinds[variants[n*2+1]!%kinds.length]!;
+     item.mutation={kind,percent:kind==='risk'?24:kind==='comeback'?17:12,at:Date.now()};
+     mutations.push(name);c.mutatedCount=(c.mutatedCount??0)+1;
+    }
+    if(!item.foil&&variants[n*2+1]!%40000===0){
+     const kinds=['holographic','starlit','abyss'] as const;
+     item.foil={kind:kinds[(variants[n*2]!>>>8)%3]!,percent:3,at:Date.now()};
+     foils.push(name);c.foilCount=(c.foilCount??0)+1;
+    }
     c.totalSummons += 1;
     summary[rarity] = (summary[rarity] ?? 0) + 1;
     if (['legendary','mythic','ancient','transcendent'].includes(rarity)) highlights.push({id,name,rarity});
@@ -341,7 +411,9 @@ export function summonRelics(
   state.cash -= price;
   const rank:Record<string,number>={transcendent:4,ancient:3,mythic:2,legendary:1};
   highlights.sort((a,b)=>(rank[b.rarity]??0)-(rank[a.rarity]??0));
-  return {cost:price,count,level:summonLevel(c.totalSummons),summary,highlights:highlights.slice(0,12)};
+  const entry:SummonHistoryEntry={at:Date.now(),start:startCount+1,end:c.totalSummons,count,cost:price,summary,highlights:highlights.slice(0,12),mutations:mutations.slice(0,15),foils:foils.slice(0,15)};
+  c.summonHistory=[entry,...(c.summonHistory??[])].slice(0,30);
+  return {...entry,level:summonLevel(c.totalSummons)};
 }
 export function grantSteamRelic(
  state:{relics?:RelicCollection},
@@ -442,4 +514,41 @@ export function autoEquipRelics(state:{relics?:RelicCollection},goal:string='all
  const ids=selected.map(i=>i.id);
  c.equipped=ids;
  return {equipped:ids,power:ids.reduce((n,id)=>n+(c.items[id]?.power??0),0),goal};
+}
+
+
+export function saveRelicPreset(state:{relics?:RelicCollection},name:string){
+ if(!RELIC_PRESETS.some(x=>x.id===name))throw Error('装備プリセットを選択してください。');
+ const c=relicCollection(state);
+ c.presets={...c.presets,[name]:[...c.equipped.slice(0,RELIC_SLOTS)]};
+ return {name,equipped:c.presets[name]};
+}
+export function loadRelicPreset(state:{relics?:RelicCollection},name:string){
+ if(!RELIC_PRESETS.some(x=>x.id===name))throw Error('装備プリセットを選択してください。');
+ const c=relicCollection(state),ids=c.presets?.[name];
+ if(!ids)throw Error('このプリセットには装備が保存されていません。');
+ if(ids.some(id=>id&&!c.items[id]))throw Error('所持していない遺物が含まれています。');
+ if(ids.filter(id=>id&&c.items[id]?.origin==='unite').length>1)throw Error('ユナイト遺物は同時に1個までです。');
+ if(new Set(ids.filter(Boolean)).size!==ids.filter(Boolean).length)throw Error('遺物の重複装備はできません。');
+ c.equipped=ids.slice(0,RELIC_SLOTS);
+ return {name,equipped:c.equipped,power:c.equipped.reduce((sum,id)=>sum+(c.items[id]?.power??0),0)};
+}
+export function removeRelicPreset(state:{relics?:RelicCollection},name:string){
+ if(!RELIC_PRESETS.some(x=>x.id===name))throw Error('装備プリセットを選択してください。');
+ const c=relicCollection(state);if(c.presets)delete c.presets[name];
+ return {name,deleted:true};
+}
+/** A compact, reproducible model; no random events or D1 lookups involved. */
+export function diagnoseRelicBuild(collection:RelicCollection|undefined){
+ const modes=['competitive','unrated','swiftplay','spikerush','racing','casino','market','mleague','quiz','voice'];
+ const scores=modes.map(mode=>{
+  const trials=[100,500,900,5000].flatMap(amount=>[true,false].map(win=>evaluateRelicBonus(collection,mode,{amount,win}).effectivePercent));
+  const average=trials.reduce((a,b)=>a+b,0)/trials.length;
+  return {mode,average:Math.round(average*10)/10,max:Math.max(...trials),min:Math.min(...trials)};
+ });
+ const sorted=[...scores].sort((a,b)=>b.average-a.average);
+ const average=scores.reduce((a,b)=>a+b.average,0)/scores.length;
+ const volatility=sorted[0]!.max-sorted[0]!.min;
+ const style=volatility>150?'一撃必殺型':volatility>45?'ハイリスク型':average>45?'万能強化型':'安定型';
+ return {style,average:Math.round(average*10)/10,volatility:Math.round(volatility*10)/10,best:sorted.slice(0,4),worst:sorted.slice(-2),sample:'各モードで100/500/900/5000KP、勝敗それぞれを試算'};
 }
