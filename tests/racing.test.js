@@ -107,18 +107,18 @@ test('commentary is text only, ordered, and names the winner and the last horse'
   assert.ok(lines.some(l=>l.text.includes(card.horses[result.order.at(-1)-1].name)&&l.text.includes('最下位')));
 });
 
-test('weekly ticket purchase cap is 80,000 KP, and existing 50k spent gains 30k of headroom',()=>{
+test('weekly ticket purchase cap is 400,000 KP, and existing 370k spent gains 30k of headroom',()=>{
  const now=jst('2026-10-27T21:05:30'),raceId=openRaceStart(now);
  const state={...createInitialState(now),cash:1_000_000};
- assert.equal(WEEKLY_LIMIT,80_000);
- state.raceWeek={start:weekStart(now),spent:50_000};
+ assert.equal(WEEKLY_LIMIT,400_000);
+ state.raceWeek={start:weekStart(now),spent:370_000};
  placeRaceBet(state,{raceId,type:'win',horse:1,amount:30_000},now);
- assert.equal(state.raceWeek.spent,80_000);
- assert.throws(()=>placeRaceBet(state,{raceId,type:'win',horse:1,amount:100},now),/80,000 KP.*残り0 KP/);
- assert.equal(state.raceWeek.spent,80_000,'rejected bets never spend the week allowance');
+ assert.equal(state.raceWeek.spent,400_000);
+ assert.throws(()=>placeRaceBet(state,{raceId,type:'win',horse:1,amount:100},now),/400,000 KP.*残り0 KP/);
+ assert.equal(state.raceWeek.spent,400_000,'rejected bets never spend the week allowance');
  // A winning result does not replenish purchase allowance; only next Monday does.
  settleRaceBets(state,raceId+RUN_MS);
- assert.equal(state.raceWeek.spent,80_000);
+ assert.equal(state.raceWeek.spent,400_000);
  const nextMonday=jst('2026-11-02T00:05:00');
  placeRaceBet(state,{raceId:openRaceStart(nextMonday),type:'place',horse:1,amount:100},nextMonday);
  assert.equal(state.raceWeek.spent,100);
@@ -149,7 +149,7 @@ test('bets use fixed odds, pay once after the run and respect the weekly limit',
   assert.throws(()=>placeRaceBet(state,{raceId,type:'win',horse:9,amount:100},now),/馬を選んで/);
   assert.throws(()=>placeRaceBet(state,{raceId,type:'exacta',horse:1,amount:100},now),/券の種類/);
   const rich={...createInitialState(now),cash:1000000};
-  placeRaceBet(rich,{raceId,type:'win',horse:1,amount:WEEKLY_LIMIT},now);
+  for(let i=0;i<4;i++)placeRaceBet(rich,{raceId,type:'win',horse:1,amount:100_000},now);
   assert.throws(()=>placeRaceBet(rich,{raceId,type:'win',horse:1,amount:100},now),/1週間/);
   const nextWeek=jst('2026-11-02T09:00:00');
   placeRaceBet(rich,{raceId:openRaceStart(nextWeek),type:'win',horse:1,amount:100},nextWeek);
