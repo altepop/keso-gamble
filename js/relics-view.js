@@ -117,7 +117,7 @@ export function relicsPanel(state,{proofs=null,notice='',loading=false,view={},r
  </div>
  ${pane('records')}
  ${advanced}
- <section class="panel"><div class="card-body"><h2 class="panel-title">📚 モード別・特殊遺物全${catalog.length||148}種類</h2><p class="helper">従来の140種類に加え、新たに代償付きの8種類を追加した。倍率は上限なしで合算し、共鳴も発動する。一方で代償を持つ遺物は他の効果を減らすため、単純に高レアを並べるだけでは最強とは限らない。</p>${grouped||'<p class="helper">データ取得中。再度この画面を開いてください。</p>'}</div></section>
+ <section class="panel"><div class="card-body"><h2 class="panel-title">📚 モード別・特殊遺物全${catalog.length||190}種類</h2><p class="helper">通常175種・代償付き8種・固有能力7種を収録した。倍率は上限なしで合算し、共鳴も発動する。一方で代償を持つ遺物は他の効果を減らすため、単純に高レアを並べるだけでは最強とは限らない。</p>${grouped||'<p class="helper">データ取得中。再度この画面を開いてください。</p>'}</div></section>
  <section class="panel"><div class="card-body"><h2 class="panel-title">🟦 Steam限定遺物</h2>
    <p class="helper">監視登録以降に新規解除し、サーバーが検証して<strong>実際にKPを支給した実績</strong>だけが対象だ。当日（9時〜翌9時）にSteamで5,000KPを稼いだ後は、新しいSteam限定遺物を受け取れない。0KPで記録された実績は翌日も対象外。既に受取済みの遺物は保持する。</p>
    ${proofs?.steam?.some(e=>Number(e.earnedToday)>=5000)?'<p class="relic-steam-cap-alert" role="status">🔒 本日のSteam報酬は5,000／5,000KP。限定遺物の新規受け取りは翌朝9時まで停止中だ。</p>':''}

@@ -33,7 +33,8 @@ export function recycleNormalRelic(state:{relics?:RelicCollection},id:string,num
   throw Error('欠片にできるのは通常召喚の遺物だけです。');
  if(!Number.isSafeInteger(item.count)||item.count<=numberOfCopies)
   throw Error('最後の1個は残してください。');
- const shards=numberOfCopies*SHARD_YIELDS[def.rarity];
+ const miner=c.equipped.slice(0,4).some(key=>key==='normal.ability.shard_pick'&&c.items[key]?.origin==='normal'&&c.items[key]!.count>=1);
+ const shards=numberOfCopies*(SHARD_YIELDS[def.rarity]+(miner?1:0));
  if(!Number.isSafeInteger(shards+(c.shards??0)))throw Error('欠片の所持上限に達しました。');
  item.count-=numberOfCopies;
  item.power=def.power+Math.min(60,Math.floor(Math.log2(item.count))*5);

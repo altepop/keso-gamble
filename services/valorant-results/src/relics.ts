@@ -168,6 +168,9 @@ export type RelicBonusResult={
  spikeOpening?:{game:number;multiplier:number;flatPerRelic:number;eligible:number};
 };
 const RELIC_NATIVE_MODES=new Set(['casino','market','racing','mleague']);
+/** Only certified game receipts get a flat ability; no native casino/stocks arbitrage. */
+const RELIC_ABILITY_MODES=new Set(['competitive','unrated','swiftplay','spikerush','teamdeathmatch',
+ 'escalation','deathmatch','skirmish','quiz','voice','mahjong','unite','steam','loop','dmchallenge']);
 const safeReward=(n:number)=>Number.isFinite(n)?Math.max(0,Math.min(Number.MAX_SAFE_INTEGER-1,Math.floor(n))):0;
 const MODE_THRESHOLDS:Record<string,readonly [number,number]>={
  competitive:[200,400],unrated:[200,400],swiftplay:[70,180],spikerush:[40,100],
@@ -235,23 +238,40 @@ export function evaluateRelicBonus(
   const sourceMode=def?.mode??item.mode??'universal';
   const skill=def?.skill??item.skill;
   const basePercent=def?.percent??item.percent??0,cap=def?.cap??item.cap??0;
-  const boosted=item.origin==='normal'?Math.min(5,Math.floor(Math.log2(Math.max(1,item.count)))):0;
+  const special=def?.special;
+  const boosted=item.origin==='normal'&&!special?Math.min(5,Math.floor(Math.log2(Math.max(1,item.count)))):0;
   const mutation=item.mutation;
-  const mutationBonus=mutation?(mutation.kind==='prism'||(mutation.kind==='risk'&&amount%2===0)||(mutation.kind==='comeback'&&!event.win)?mutation.percent:0):0;
-  const percent=basePercent+boosted+mutationBonus+(item.foil?.percent??0);
+  const mutationBonus=mutation&&!special?(mutation.kind==='prism'||(mutation.kind==='risk'&&amount%2===0)||(mutation.kind==='comeback'&&!event.win)?mutation.percent:0):0;
+  const percent=basePercent+boosted+mutationBonus+(!special?(item.foil?.percent??0):0);
   const active=compatibleRelic(sourceMode,mode);
-  const triggered=active&&percent>0&&relicTrigger(skill,amount,event.win,bounds);
+  const eligible=Boolean(special)&&special!=='shards'&&RELIC_ABILITY_MODES.has(mode);
+  const specialCondition=special==='comeback'?!event.win:special==='threshold'?amount>=500:true;
+  const triggered=active&&((eligible&&specialCondition)||(!special&&percent>0&&relicTrigger(skill,amount,event.win,bounds)));
   const base=triggered?safeReward(amount*percent/100):0;
   const trait=def?.trait??(item.rarity==='ancient'?'刻印連鎖':item.rarity==='transcendent'?'運命突破':item.origin==='steam'||item.origin==='unite'?'出自の加護':'');
-  const exotic=trait.startsWith('運命突破')&&active&&!triggered
+  let exotic=trait.startsWith('運命突破')&&active&&!triggered
    ?Math.max(1,Math.floor(item.power/70)):0;
+  if(triggered){
+   if(special==='fixed')exotic=6;
+   else if(special==='digits')exotic=String(amount).split('').reduce((sum,d)=>sum+Number(d),0)*2;
+   else if(special==='root')exotic=Math.floor(Math.sqrt(amount))*3;
+   else if(special==='comeback')exotic=50;
+   else if(special==='threshold')exotic=250;
+  }
   lines.push({id,name:def?.name??item.name,mode:sourceMode,
    short:def?.short??item.ability,percent:basePercent,effectivePercent:percent,
-   cap,active,triggered,base,exotic,trait,
-   reason:!active?'対象ゲーム外':triggered?'条件達成':exotic?'運命突破が発動':'条件未達'});
+   cap,active,triggered,base,exotic:safeReward(exotic),trait,
+   reason:!active?'対象ゲーム外':special==='shards'?'欠片化でのみ発動':
+    special&&!eligible?'取引系では固有能力は無効':
+    triggered?(special?'固有能力が発動':'条件達成'):exotic?'運命突破が発動':'条件未達'});
  }
  const activated=lines.filter(l=>l.triggered);
  for(const line of lines){
+  if(NORMAL_RELIC_BY_ID.get(line.id)?.special==='echo'&&line.triggered){
+   const other=activated.filter(x=>x.id!==line.id).length;
+   if(other)line.exotic=other*40;
+   else{line.triggered=false;line.reason='ほかの遺物が発動せず、連結不成立';}
+  }
   if(line.trait.startsWith('刻印連鎖')&&line.triggered){
    const other=activated.filter(x=>x.id!==line.id).length;
    line.exotic=other*4;
@@ -266,7 +286,7 @@ export function evaluateRelicBonus(
  // Therefore a match-1 loss with 20 KP still benefits visibly from equipment.
  const opening=mode==='spikerush'&&event.spikeGamesBefore!==undefined
   ?spikeOpeningTier(event.spikeGamesBefore):null;
- const openingEligible=opening?lines.filter(l=>l.active):[];
+ const openingEligible=opening?lines.filter(l=>l.active&&NORMAL_RELIC_BY_ID.get(l.id)?.special!=='shards'):[];
  if(opening)for(const line of openingEligible){
   line.base=safeReward(line.base*opening.multiplier);
   line.exotic=safeReward(line.exotic+opening.flatPerRelic);
@@ -434,13 +454,13 @@ export function summonRelics(
     const item=c.items[id]!;
     // 1/4096 duplicate evolution, once per relic ID; 1/40000 cosmetic foil,
     // also once per relic ID. Different source/Steam history is untouched.
-    if(duplicate&&!item.mutation&&variants[n*2]!%4096===0){
+    if(!chosen.special&&duplicate&&!item.mutation&&variants[n*2]!%4096===0){
      const kinds=['prism','risk','comeback'] as const;
      const kind=kinds[variants[n*2+1]!%kinds.length]!;
      item.mutation={kind,percent:kind==='risk'?24:kind==='comeback'?17:12,at:Date.now()};
      mutations.push(name);c.mutatedCount=(c.mutatedCount??0)+1;
     }
-    if(!item.foil&&variants[n*2+1]!%40000===0){
+    if(!chosen.special&&!item.foil&&variants[n*2+1]!%40000===0){
      const kinds=['holographic','starlit','abyss'] as const;
      item.foil={kind:kinds[(variants[n*2]!>>>8)%3]!,percent:3,at:Date.now()};
      foils.push(name);c.foilCount=(c.foilCount??0)+1;
