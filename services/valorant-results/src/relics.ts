@@ -230,7 +230,10 @@ export function evaluateRelicBonus(
   if(!line.active||!pact)continue;
   const others=lines.filter(l=>l.id!==line.id);
   const suppress=(factor:number)=>{
-   for(const other of others){other.base=safeReward(other.base*factor);other.exotic=safeReward(other.exotic*factor);}
+   for(const other of others){
+    if(other.triggered||other.exotic>0)other.reason+='／'+line.name+'の代償で'+Math.round((1-factor)*100)+'%減';
+    other.base=safeReward(other.base*factor);other.exotic=safeReward(other.exotic*factor);
+   }
   };
   if(pact==='solo'&&line.triggered)suppress(.2);
   if(pact==='coinflip'&&amount%2!==0)suppress(.4);
