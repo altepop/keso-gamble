@@ -81,7 +81,8 @@ let browser;
   if(scenario==='module-failure'){
    await page.getByRole('alert').filter({hasText:'画面を開けませんでした'}).waitFor();
    assert.deepEqual(await page.evaluate(()=>window.__sdkCommands),['READY']);assert.equal(exchanges,0);assert.equal(operations,0);
-   assert.equal(await page.locator('button').count(),1);failedModule=false;await page.getByRole('button',{name:'もう一度開く'}).click();
+   // Only the retry button (the always-available 遊び方 guide button from #283 is not part of the fallback).
+   assert.equal(await page.locator('button:not(#keso-guide-trigger)').count(),1);failedModule=false;await page.getByRole('button',{name:'もう一度開く'}).click();
    await page.locator('.title-start').filter({hasText:'900'}).waitFor();assert.equal(exchanges,1);assert.equal(operations,0);assert.deepEqual(errors,[]);
    console.log('Passed module failure: native READY before module loading, visible fallback and retry without a charge ('+engineName+')');await ctx.close();continue;
   }
