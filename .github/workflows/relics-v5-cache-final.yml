@@ -1,0 +1,31 @@
+name: Relics V5 final browser cache preparation
+on:
+  push:
+    branches:
+      - feat/relics-v5-readable-bonuses-and-exotics
+    paths:
+      - 'js/**'
+      - 'css/**'
+      - 'index.html'
+      - '.github/workflows/relics-v5-cache-final.yml'
+permissions:
+  contents: write
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run build:activity
+      - run: |
+          if ! git diff --quiet -- index.html js css; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add index.html js css
+            git commit -m "build(activity): regenerate final V5 browser cache"
+            git push origin HEAD:feat/relics-v5-readable-bonuses-and-exotics
+          fi
