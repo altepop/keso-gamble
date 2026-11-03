@@ -273,11 +273,15 @@ export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:strin
   const response={result,...(ownerRound?{operationSource:'owner-casino'}:{}),...(stockTrade?{stockTrade}:{}),...(activity?{activity}:{})};const safeState={...state,claims:[],directives:[]};delete safeState.privateCasino;delete safeState.debt;delete safeState.jackpot;delete safeState.mleague;delete safeState.ledger;delete safeState.members;delete safeState.racing;delete safeState.horses;delete safeState.mastery;delete safeState.luxury;delete safeState.stockMarket;delete safeState.stockBenefits;
   let inserted;
   try{
+   // Do not mention optional Steam tables in other actions' SQL. SQLite
+   // resolves every table at prepare time even if a boolean branch is false.
+   const steamClaim=action==='relic-claim-steam';
+   const commitGuard=steamClaim?STEAM_RELIC_COMMIT_GUARD:'';
+   const commitArgs=steamClaim?[String(sourceArgs.event??''),mapping.guildId,user,mapping.guildId,user,steamRelicDay()]:[];
    inserted=await env.DB.prepare(`INSERT INTO kp_operations(id,guild,user,request_hash,response,delta,state,directive,at)
-   SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM kp_wallets w JOIN kp_state s ON w.guild=s.guild AND w.user=s.user WHERE w.guild=? AND w.user=? AND w.version=? AND s.version=?) AND (?=0 OR EXISTS(SELECT 1 FROM stock_markets WHERE guild=? AND version=?)) ${STEAM_RELIC_COMMIT_GUARD} ON CONFLICT(guild,user,id) DO NOTHING`)
+   SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM kp_wallets w JOIN kp_state s ON w.guild=s.guild AND w.user=s.user WHERE w.guild=? AND w.user=? AND w.version=? AND s.version=?) AND (?=0 OR EXISTS(SELECT 1 FROM stock_markets WHERE guild=? AND version=?)) ${commitGuard} ON CONFLICT(guild,user,id) DO NOTHING`)
    .bind(id,mapping.guildId,user,requestHash,JSON.stringify(response),state.cash-before,JSON.stringify(safeState),directive?JSON.stringify(directive):null,Date.now(),mapping.guildId,user,state.walletVersion,state.stateVersion,['trade','directive','luxury'].includes(action)?1:0,mapping.guildId,state.stockMarket.version,
-    action==='relic-claim-steam'?1:0,action==='relic-claim-steam'?String(sourceArgs.event??''):'',mapping.guildId,user,
-    mapping.guildId,user,steamRelicDay()).run();
+    ...commitArgs).run();
   }catch(error){
    // Someone else's 💎💎💎 changed the shared pool after this spin was drawn: nothing was saved, so draw again.
    if(action==='slot'&&String((error as Error)?.message).includes('Jackpot changed'))continue;
