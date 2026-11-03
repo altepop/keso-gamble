@@ -242,8 +242,16 @@ export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:strin
   // Stock buys and ticket purchases cannot manufacture KP via repeat buys/sells.
   // These mechanics never touch game RNG, odds, or past results.
   let relicBonus=0;
-  const casino=['spin','chinchiro','bj-hit','bj-stand','bj-double','mines-cashout','slot','vp-draw','baccarat'].includes(action);
-  if(casino&&state.cash>before)relicBonus=nativeRelicBonus(state,'casino',state.cash-before);
+  const casino=['spin','chinchiro','bj-start','bj-hit','bj-stand','bj-double','mines-cashout','slot','vp-draw','baccarat'].includes(action);
+  if(casino&&result&&typeof result==='object'){
+   const round=result as {net?:unknown;done?:{net?:unknown};payout?:unknown;amount?:unknown};
+   // Blackjack and multi-step games credit gross payout in a later operation.
+   // Use the game's CERTIFIED net, not balance delta, or a loss could generate KP.
+   const net=Number.isSafeInteger(round.done?.net)?Number(round.done!.net):
+    Number.isSafeInteger(round.net)?Number(round.net):
+    Number.isSafeInteger(round.payout)&&Number.isSafeInteger(round.amount)?Number(round.payout)-Number(round.amount):0;
+   if(net>0)relicBonus=nativeRelicBonus(state,'casino',net);
+  }
   // Selling shares only grants bonuses on REALIZED positive FIFO profit, never
   // from the gross proceeds or repeated buys. One owner-indexed query on sells.
   if(action==='trade'&&args.side==='sell'&&stockTrade){
