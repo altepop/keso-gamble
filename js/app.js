@@ -445,6 +445,32 @@ addEventListener('click',async e=>{
       return;
     }
     if(t.dataset.companion){await openCompanionGame(t.dataset.companion);return;}
+    if(t.dataset.action==='relic-reveal-skip'){
+      const panel=app.querySelector('.relic-reveal');
+      panel?.classList.add('relic-reveal-instant');
+      panel?.querySelector('[data-action="relic-reveal-close"]')?.focus();
+      return;
+    }
+    if(t.dataset.action==='relic-reveal-sound'){
+      const Audio=window.AudioContext||window.webkitAudioContext;
+      if(!Audio){toast('この端末では効果音を再生できません');return;}
+      const ctx=new Audio(),rarity=Object.keys(relicReveal?.summary??{}).find(key=>key==='transcendent'&&relicReveal.summary[key]>0)||'ancient';
+      try{
+        await ctx.resume();
+        const tones=rarity==='transcendent'?[392,587.33,783.99,1174.66]:[293.66,440,587.33,880];
+        tones.forEach((frequency,n)=>{
+          const oscillator=ctx.createOscillator(),gain=ctx.createGain();
+          oscillator.type='sine';oscillator.frequency.value=frequency;
+          gain.gain.setValueAtTime(0.0001,ctx.currentTime+n*.13);
+          gain.gain.exponentialRampToValueAtTime(.035,ctx.currentTime+n*.13+.04);
+          gain.gain.exponentialRampToValueAtTime(.0001,ctx.currentTime+n*.13+.28);
+          oscillator.connect(gain);gain.connect(ctx.destination);
+          oscillator.start(ctx.currentTime+n*.13);oscillator.stop(ctx.currentTime+n*.13+.29);
+        });
+        setTimeout(()=>ctx.close().catch(()=>{}),1100);
+      }catch{ctx.close().catch(()=>{});toast('この端末では効果音を再生できません');}
+      return;
+    }
     if(t.dataset.action==='relic-reveal-close'){relicReveal=null;render();return;}
     if(t.dataset.action==='relic-page'){relicView.page=Number(t.dataset.page)||0;render();return;}
     if(t.dataset.action?.startsWith('relic-')){
