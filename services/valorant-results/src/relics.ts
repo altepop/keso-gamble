@@ -205,7 +205,7 @@ export function evaluateRelicBonus(
   const triggered=active&&percent>0&&relicTrigger(skill,amount,event.win,bounds);
   const base=triggered?safeReward(amount*percent/100):0;
   const trait=def?.trait??(item.rarity==='ancient'?'刻印連鎖':item.rarity==='transcendent'?'運命突破':item.origin==='steam'||item.origin==='unite'?'出自の加護':'');
-  const exotic=trait==='運命突破'&&active&&!triggered
+  const exotic=trait.startsWith('運命突破')&&active&&!triggered
    ?Math.max(1,Math.floor(item.power/70)):0;
   lines.push({id,name:def?.name??item.name,mode:sourceMode,
    short:def?.short??item.ability,percent:basePercent,effectivePercent:percent,
@@ -214,10 +214,10 @@ export function evaluateRelicBonus(
  }
  const activated=lines.filter(l=>l.triggered);
  for(const line of lines){
-  if(line.trait==='刻印連鎖'&&line.triggered){
+  if(line.trait.startsWith('刻印連鎖')&&line.triggered){
    const other=activated.filter(x=>x.id!==line.id).length;
    line.exotic=other*4;
-  }else if(line.trait==='出自の加護'&&line.triggered){
+  }else if(line.trait.startsWith('出自の加護')&&line.triggered){
    line.exotic=Math.max(1,Math.floor((collection.items[line.id]?.power??0)/110));
   }
  }
