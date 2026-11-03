@@ -324,7 +324,7 @@ test('/mbet の確認：やめる・二度押し・他人の押下・期限切�
  assert.match((await press(c.id,'buy'))!.content,/10分を過ぎた/);assert.equal(f.balance(one),99800);
  const d=await preview();f.sql.prepare('UPDATE ml_bet_drafts SET odds=odds+5 WHERE id=?').run(d.id);
  assert.match((await press(d.id,'buy'))!.content,/倍率が .* に変わったから買うてへんで/);assert.equal(f.balance(one),99800);
- assert.match((await preview(9999900)).content,/KPが足らへん/,'checked like a purchase');
+ assert.match((await preview(99900)).content,/KPが足らへん/,'checked like a purchase');
  f.sql.prepare("INSERT INTO kp_debt_events VALUES('borrow:x',?,?,500,'borrow',0)").run(guild,one);
  assert.match((await preview()).content,/借KP/);
 });

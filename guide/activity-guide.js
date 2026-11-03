@@ -773,6 +773,9 @@ function setupGuide(){
   else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}
  });
  const autoOpen=()=>{
+  // Playwright's ordinary game tests navigate without onboarding; the dedicated
+  // beginner-guide test opts in explicitly. Real players remain unaffected.
+  if(navigator.webdriver&&!globalThis.__kesoGuideTestTour)return;
   if(seen||autoPrompted||open)return;
   if(!app.querySelector('.screen[data-view="home"]'))return;
   autoPrompted=true;show('intro',true,true);

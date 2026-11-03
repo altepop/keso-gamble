@@ -1,7 +1,7 @@
-import { createProgress, hydrateProgress } from './progression.js?v=web-5bfb3e191c5a1e21';
-import { createRacing, hydrateRacing } from './racing.js?v=web-5bfb3e191c5a1e21';
-import { createCasino, hydrateCasino } from './casino.js?v=web-5bfb3e191c5a1e21';
-import { createMoreCasino, hydrateMoreCasino } from './casino-more.js?v=web-5bfb3e191c5a1e21';
+import { createProgress, hydrateProgress } from './progression.js?v=web-market-20261103';
+import { createRacing, hydrateRacing } from './racing.js?v=web-market-20261103';
+import { createCasino, hydrateCasino } from './casino.js?v=web-market-20261103';
+import { createMoreCasino, hydrateMoreCasino } from './casino-more.js?v=web-market-20261103';
 /** KESO EXCHANGE - local prototype engine (NOT authoritative for real multiplayer). */
 const SCHEMA_VERSION = 1;
 const MARKET = [
@@ -61,7 +61,7 @@ function hydrateState(raw, now = Date.now()) {
   if (!Number.isSafeInteger(assets(state))) return createInitialState(now);
   state.owned = [...new Set(Array.isArray(raw.owned) ? raw.owned.filter(id => SHOP.some(item => item.id === id)) : [])];
   state.trades = (Array.isArray(raw.trades) ? raw.trades : []).filter(t => t && MARKET.some(s => s.id === t.symbol) && ['buy','sell'].includes(t.side) && validInt(t.quantity, 1) && validInt(t.price, 1) && validInt(t.fee) && validInt(t.time)).slice(0, 50).map(t => ({side:t.side, symbol:t.symbol, quantity:t.quantity, price:t.price, fee:t.fee, time:t.time}));
-  state.spins = (Array.isArray(raw.spins) ? raw.spins : []).filter(t => t && (validNumberSpin(t)||(['red','black','even','odd','number','low','high','dozen1','dozen2','dozen3','column1','column2','column3'].includes(t.type) && validInt(t.choice) && t.choice <= 36 && validInt(t.outcome) && t.outcome <= 36 && validInt(t.amount, 100) && t.amount <= 20000 && validInt(t.payout) && t.payout === roulettePayout(t.type,t.choice,t.outcome,t.amount) && validInt(t.time)))).slice(0, 30).map(t => ({type:t.type, choice:t.choice, outcome:t.outcome, amount:t.amount, payout:t.payout, time:t.time,...(t.type==='numbers'?{bets:validateNumberBets(t.bets).bets}:{})}));
+  state.spins = (Array.isArray(raw.spins) ? raw.spins : []).filter(t => t && (validNumberSpin(t)||(['red','black','even','odd','number','low','high','dozen1','dozen2','dozen3','column1','column2','column3'].includes(t.type) && validInt(t.choice) && t.choice <= 36 && validInt(t.outcome) && t.outcome <= 36 && validInt(t.amount, 100) && t.amount <= 100000 && validInt(t.payout) && t.payout === roulettePayout(t.type,t.choice,t.outcome,t.amount) && validInt(t.time)))).slice(0, 30).map(t => ({type:t.type, choice:t.choice, outcome:t.outcome, amount:t.amount, payout:t.payout, time:t.time,...(t.type==='numbers'?{bets:validateNumberBets(t.bets).bets}:{})}));
   for (const key of ['salaryClaims','ticks','seed']) if (validInt(raw[key])) state[key] = raw[key];
   for (const key of ['lastSalaryAt','lastMarketAt']) if (validInt(raw[key]) && raw[key] <= now) state[key] = raw[key];
   Object.assign(state,hydrateProgress(raw),hydrateRacing(raw),hydrateCasino(raw),hydrateMoreCasino(raw));
@@ -131,7 +131,7 @@ function roulettePayout(type,choice,number,bet) {
   throw new Error('無効な賭け方だ');
 }
 function spin(state, type, amount, choice=0, outcome, now=Date.now()) {
-  if(!Number.isSafeInteger(amount)||amount<100||amount>20000) throw new Error('賭け額は100〜20,000 KP');
+  if(!Number.isSafeInteger(amount)||amount<100||amount>100000) throw new Error('賭け額は100〜100,000 KP');
   if(state.cash<amount)throw new Error('所持KPが不足している');
   if(type==='number'&&(!Number.isInteger(choice)||choice<0||choice>36))throw new Error('数字は0〜36だ');
   if(!['red','black','even','odd','number','low','high','dozen1','dozen2','dozen3','column1','column2','column3'].includes(type))throw new Error('無効な賭け方だ');
@@ -148,10 +148,10 @@ export function validateNumberBets(bets){
  const seen=new Set();let total=0;
  const clean=bets.map(b=>{
   if(!b||!Number.isInteger(b.number)||b.number<0||b.number>36||seen.has(b.number))throw Error('数字は0〜36、重複なしで指定してください');
-  if(!Number.isSafeInteger(b.amount)||b.amount<100||b.amount>20000)throw Error('数字ごとの掛け金は100〜20,000 KP');
+  if(!Number.isSafeInteger(b.amount)||b.amount<100||b.amount>100000)throw Error('数字ごとの掛け金は100〜100,000 KP');
   seen.add(b.number);total+=b.amount;return {number:b.number,amount:b.amount};
  });
- if(total>20000)throw Error('1回の掛け金合計は20,000 KPまで');
+ if(total>100000)throw Error('1回の掛け金合計は100,000 KPまで');
  return {bets:clean,total};
 }
 export function spinNumbers(state,bets,outcome,now=Date.now()){

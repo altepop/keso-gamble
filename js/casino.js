@@ -1,6 +1,6 @@
 // Casino games beside the roulette: チンチロ and ブラックジャック. Pure functions on the wallet state; the dice and
 // cards come from the caller (the server's crypto draw for live wallets), so a result cannot be picked by the player.
-export const CASINO_MIN=100,CASINO_MAX=20000;
+export const CASINO_MIN=100,CASINO_MAX=100000;
 const validInt=(v,min=0)=>Number.isSafeInteger(v)&&v>=min;
 export function createCasino(){return {chinchiro:[],blackjack:null,bjHistory:[]};}
 function checkStake(state,amount,reserve=amount){

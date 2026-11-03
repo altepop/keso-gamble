@@ -1,5 +1,5 @@
 import {stockPrice} from './stock-view.js?v=web-5bfb3e191c5a1e21';
-import { BET_TYPES, BOXES, CLASSES, COURSE_M, CONDITIONS, DAILY_EXCHANGES, GOINGS, MAX_OWNED, MIN_BET, BET_STEP, PRIZES, RETIRE_RACES, RUN_MS, STYLES, WEEKLY_LIMIT, FORM_REFORM_FROM, runningNotes, raceBrief, distanceAt, exchangeDay, payoutFor, placeSlots } from './racing.js?v=web-5bfb3e191c5a1e21';
+import { BET_TYPES, BOXES, CLASSES, COURSE_M, CONDITIONS, DAILY_EXCHANGES, GOINGS, MAX_OWNED, MIN_BET, BET_STEP, MAX_RACE_BET, PRIZES, RETIRE_RACES, RUN_MS, STYLES, WEEKLY_LIMIT, FORM_REFORM_FROM, runningNotes, raceBrief, distanceAt, exchangeDay, payoutFor, placeSlots, trifectaOdds } from './racing.js?v=web-market-20261103';
 import { LUXURY, TITLES } from './luxury.js?v=web-5bfb3e191c5a1e21';
 import { escapeHTML } from './progression-views.js?v=web-5bfb3e191c5a1e21';
 const kp=n=>n.toLocaleString('ja-JP')+' KP';
@@ -16,15 +16,23 @@ function stage(watch,state){
  const done=watch.finished;
  const mine=(state.raceBets??[]).filter(b=>b.raceId===card.id);
  const table=done?`<table class="race-table race-result"><caption>着順</caption><thead><tr><th>着</th><th>馬</th><th>1着当て</th></tr></thead><tbody>${result.order.map((n,i)=>`<tr><td>${i+1}</td><td>${badge(n)} ${escapeHTML(card.horses[n-1].name)}</td><td>${odd(odds.win[n])}</td></tr>`).join('')}</tbody></table>`:'';
- const tickets=mine.length?`<p class="helper">あなたの馬券: ${mine.map(b=>`${b.horse}番 ${BET_TYPES[b.type].label} ${kp(b.amount)}${b.status==='won'?` → 的中 ${kp(b.payout)}`:b.status==='lost'?' → 外れ':done?' → 精算中（1分ほどで反映）':''}`).join(' / ')}</p>`:'';
+ const tickets=mine.length?`<p class="helper">あなたの馬券: ${mine.map(b=>`${Array.isArray(b.horse)?b.horse.join('→')+' 3連単':b.horse+'番 '+BET_TYPES[b.type].label} ${kp(b.amount)}${b.status==='won'?` → 的中 ${kp(b.payout)}`:b.status==='lost'?' → 外れ':done?' → 精算中（1分ほどで反映）':''}`).join(' / ')}</p>`:'';
  const proof=watch.hash?`<p class="helper race-proof">${watch.verified===true?'✓ 締切前に公開したハッシュとシード値が一致（結果は後から変えられていません）':watch.verified===false?'⚠ シード値がハッシュと一致しません。管理者に知らせてください':'シード値を確認しています…'}<br><span class="mono">${watch.hash.slice(0,16)}…</span></p>`:'';
  return `<section class="race-stage">${head}<canvas id="race-canvas" class="race-canvas" role="img" aria-label="${escapeHTML(card.name)}の映像。実況と着順は下に文字で表示します"></canvas><ol id="race-commentary" class="race-commentary"></ol>${tickets}${table}${proof}</section>`;
 }
 
-export function racePreview(card,odds,{type,horse,amount}){
+export function racePreview(card,odds,{type,horse,amount,order=[]}){
+ const value=Number(amount);
+ if(type==='trifecta'){
+  const picks=order.map(Number);
+  const multiplier=trifectaOdds(card,picks);
+  if(!multiplier)return '<p class="helper">3連単は1着・2着・3着をそれぞれ異なる馬から指定してください。</p>';
+  return '<p class="helper">3連単 '+picks.join(' → ')+' ／ '+odd(multiplier)+'。'+
+   (Number.isSafeInteger(value)&&value>=MIN_BET?'当たれば '+kp(payoutFor(value,multiplier)):'金額を入れてください')+'</p>';
+ }
  const chosen=horse&&card.horses[horse-1];
  if(!chosen)return '<p class="helper">出る馬一覧から馬を選んでください。</p>';
- const value=Number(amount),label=`${horse}番 ${escapeHTML(chosen.name)}の${BET_TYPES[type].label}・${odd(odds[type][horse])}`;
+ const label=`${horse}番 ${escapeHTML(chosen.name)}の${BET_TYPES[type]?.label??''}・${odd(odds[type][horse])}`;
  return `<p class="helper">${label}。${Number.isSafeInteger(value)&&value>=MIN_BET?`当たれば ${kp(payoutFor(value,odds[type][horse]))}`:'金額を入れてください'}</p>`;
 }
 function betPanel(open,odds,draft,state,weeklyLeft){
@@ -40,7 +48,9 @@ function betPanel(open,odds,draft,state,weeklyLeft){
  const brief=card.start>=FORM_REFORM_FROM?raceBrief(card):null;
  const forecast=brief?`<details class="race-intelligence"><summary><span class="race-intelligence-head">🧠 ${escapeHTML(brief.pace)} · ${escapeHTML(brief.bias)}</span><span class="race-intelligence-toggle">詳しく</span></summary><div class="race-intelligence-body"><div>🏇 逃げ・先行 ${brief.front}/${card.size}頭</div><div>🛤️ ${escapeHTML(brief.bias)}｜馬場 ${GOINGS[card.going].label}</div><p>${escapeHTML(brief.hint)} 調教評価・馬場適性・近走成績を見比べて狙い馬を探そう。</p></div></details>`:'';
  const preview=racePreview(card,odds,draft);
- const form=`<div class="segment">${Object.entries(BET_TYPES).map(([id,t])=>`<button data-race-type="${id}" class="${type===id?'active':''}">${t.label}<small>（${t.formal}）</small></button>`).join('')}</div><div class="field"><label for="race-amount">金額（${MIN_BET} KP以上・${BET_STEP} KP単位）</label><input id="race-amount" class="input" type="number" min="${MIN_BET}" step="${BET_STEP}" inputmode="numeric"></div><div id="race-preview">${preview}</div><div class="action-row"><button class="action-btn primary" data-action="race-bet">馬券を買う</button></div><p class="helper">今週あと ${kp(weeklyLeft)} 買えます（1週間 ${kp(WEEKLY_LIMIT)} まで・月曜0時に戻ります）。</p>${hash?`<p class="helper">結果のハッシュ（締切前に公開）: <span class="mono">${hash.slice(0,16)}…</span></p>`:''}`;
+ const picks=Array.isArray(draft.order)?draft.order:[];
+ const tri=type==='trifecta'?'<div class="race-trifecta-grid">'+['1着','2着','3着'].map((name,i)=>'<div class="field"><label for="race-order-'+i+'">'+name+'</label><select class="select" id="race-order-'+i+'" data-race-order="'+i+'"><option value="">馬を選択</option>'+card.horses.map(h=>'<option value="'+h.number+'" '+(picks[i]===h.number?'selected':'')+'>'+h.number+'番 '+escapeHTML(h.name)+'</option>').join('')+'</select></div>').join('')+'</div><p class="helper">順序が完全に一致した場合のみ的中。高倍率だが難易度が高い。週の購入上限は他の券種と共通。</p>':'';
+ const form=`<div class="segment">${Object.entries(BET_TYPES).map(([id,t])=>`<button data-race-type="${id}" class="${type===id?'active':''}">${t.label}<small>（${t.formal}）</small></button>`).join('')}</div>${tri}<div class="field"><label for="race-amount">金額（${MIN_BET} KP以上・${BET_STEP} KP単位）</label><input id="race-amount" class="input" type="number" min="${MIN_BET}" step="${BET_STEP}" max="${MAX_RACE_BET}" inputmode="numeric"></div><div id="race-preview">${preview}</div><div class="action-row"><button class="action-btn primary" data-action="race-bet">馬券を買う</button></div><p class="helper">今週あと ${kp(weeklyLeft)} 買えます（1週間 ${kp(WEEKLY_LIMIT)} まで・月曜0時に戻ります）。</p>${hash?`<p class="helper">結果のハッシュ（締切前に公開）: <span class="mono">${hash.slice(0,16)}…</span></p>`:''}`;
  return `<section class="trade-box race-card"><h3>${escapeHTML(card.name)} · ${clock(card.start)}発走</h3><p class="helper">締切まで <span id="race-countdown">--:--</span> · ${CLASSES[card.raceClass].label}（1着の賞金 ${kp(PRIZES[0]*CLASSES[card.raceClass].mult)}） · ${card.size}頭 · コース ${GOINGS[card.going].label} · ${COURSE_M}m</p>${card.event?`<details class="race-event-note"><summary>🌪️ ${escapeHTML(card.event.name)}：${escapeHTML(card.event.effect)}<span class="race-event-toggle">詳しく</span></summary><p class="helper">${escapeHTML(card.event.desc)}<br>市場オッズは特別ルールの補正を完全には織り込まない。</p></details>`:''}${forecast}<table class="race-table"><caption>出る馬一覧と倍率</caption><thead><tr><th>馬</th><th>走り方・調子</th><th>1着当て</th><th>${placeSlots(card.size)}着以内当て</th></tr></thead><tbody>${rows}</tbody></table>${form}</section>`;
 }
 
@@ -83,7 +93,7 @@ export function luxuryPanel(state,{readonly=false,confirmation=null}={}){
 }
 function history(state){
  const bets=(state.raceBets??[]).slice(0,10);
- return `<div class="asset-card"><h2 class="panel-title">自分の馬券</h2>${bets.length?bets.map(b=>`<div class="history-entry"><div>${clock(b.raceId)}発走 · ${b.horse}番 ${BET_TYPES[b.type].label} ${kp(b.amount)}（${odd(b.odds)}）</div><div class="helper">${b.status==='pending'?'結果待ち':b.status==='won'?`的中 +${kp(b.payout)}`:'外れ'}</div></div>`).join(''):'<p class="helper">まだ馬券を買っていません。</p>'}</div>`;
+ return `<div class="asset-card"><h2 class="panel-title">自分の馬券</h2>${bets.length?bets.map(b=>`<div class="history-entry"><div>${clock(b.raceId)}発走 · ${Array.isArray(b.horse)?b.horse.join('→')+' 3連単':b.horse+'番 '+BET_TYPES[b.type].label} ${kp(b.amount)}（${odd(b.odds)}）</div><div class="helper">${b.status==='pending'?'結果待ち':b.status==='won'?`的中 +${kp(b.payout)}`:'外れ'}</div></div>`).join(''):'<p class="helper">まだ馬券を買っていません。</p>'}</div>`;
 }
 
 const ROAST_LEVELS=[['mild','控えめ','名前のついたレースを作らず、Botの結果投稿もやさしい言葉'],['normal','標準','「◯◯おつかれレース」など、ゆるい冠レースといじり'],['full','全開','「◯◯戦犯レース」など容赦なし。ゲームの腕・負けっぷり・KPの溶かし方・夜ふかしだけが対象']];

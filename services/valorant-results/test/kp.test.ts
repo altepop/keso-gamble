@@ -66,15 +66,16 @@ test('schema version cold check reads one exact key and handles only missing kp_
  const failed={...f.env,DB:{prepare:()=>({first:async()=>{throw Error('D1_ERROR: database unavailable');}})} as unknown as D1Database};
  await assert.rejects(kpSchemaVersion(failed),/database unavailable/,'a transient D1 error must not bootstrap');
 });
-test('activation starts at zero, preserves first linking and cutoff, excludes old matches, and nine wins buy an 8000 KP directive',async()=>{
+test('activation starts at zero, preserves first linking and cutoff, excludes old matches, and nine wins need extra KP for the 40000 KP directive',async()=>{
  const f=await fixture();assert.equal((await readKpState(f.env,mapping,one)).cash,0);
  assert.equal(await collectKpMatch(f.env,mapping,game('old'),'p-one'),null);
  const linked=f.sql.prepare('SELECT linked_at FROM kp_accounts WHERE user=?').get(one)!.linked_at;
  await initializeKp(f.env,mapping);await syncKpAccounts(f.env,mapping);assert.equal(f.sql.prepare('SELECT linked_at FROM kp_accounts WHERE user=?').get(one)!.linked_at,linked);
  f.enableHistory();for(let n=0;n<9;n++)assert.equal(await collectKpMatch(f.env,mapping,game('win-'+n),'p-one'),900);
  assert.equal((await readKpState(f.env,mapping,one)).cash,8100);
+ seed(f.sql,one,31900);
  await operateKp(f.env,mapping,one,'directive-operation-001','directive',{target:two,task:'competitive'});
- assert.equal((await readKpState(f.env,mapping,one)).cash,100);assert.equal(f.sql.prepare('SELECT cost FROM kp_directives').get()!.cost,8000);
+ assert.equal((await readKpState(f.env,mapping,one)).cash,0);assert.equal(f.sql.prepare('SELECT cost FROM kp_directives').get()!.cost,40000);
  assert.equal((await readKpState(f.env,mapping,two)).cash,0);
 });
 test('repeated and concurrent match collection pays once, aliases normalize, and unknown results earn nothing',async()=>{
@@ -116,7 +117,7 @@ test('operations cannot double spend, reuse IDs with new inputs, set balances, o
  assert.equal((await readKpState(f.env,mapping,one)).cash,186+result.payout);
 });
 test('a duplicate active directive rolls back payment for all issuers and ownership cannot silently change',async()=>{
- const f=await fixture();seed(f.sql,one,20000);seed(f.sql,two,20000);
+ const f=await fixture();seed(f.sql,one,50000);seed(f.sql,two,50000);
  await operateKp(f.env,mapping,one,'first-directive-001','directive',{target:two,task:'competitive'});
  const before=(await readKpState(f.env,mapping,one)).cash;
  await assert.rejects(operateKp(f.env,mapping,one,'second-directive-01','directive',{target:two,task:'competitive'}));
@@ -161,7 +162,7 @@ test('monitor credits despite a Discord failure; retry edits the notice without 
  }finally{globalThis.fetch=original;}
 });
 test('funded directives reach the target, complete only on the selected subsequent mode, and notify once per status',async()=>{
- const {flushKpDirectives}=await import('../src/kp.ts');const f=await fixture();f.enableHistory();seed(f.sql,one,8000);
+ const {flushKpDirectives}=await import('../src/kp.ts');const f=await fixture();f.enableHistory();seed(f.sql,one,40000);
  await operateKp(f.env,mapping,one,'directive-notice-001','directive',{target:two,task:'competitive'});
  assert.equal((await readKpState(f.env,mapping,two)).directives.length,1);
  const sent:Array<{content:string;allowed_mentions:{parse:string[];users:string[]}}>=[],original=globalThis.fetch;
@@ -247,10 +248,10 @@ test('Activity login is optional, rejects untrusted origins, and rate limits cha
  const code=await issueKpCode(f.env,mapping,one);assert.ok(code);assert.ok(await exchangeKpCode(f.env,code));
 });
 test('premium solo orders charge once and require verified solo parties and death reservation',async()=>{
- const f=await fixture();f.enableHistory();seed(f.sql,two,120000);
+ const f=await fixture();f.enableHistory();seed(f.sql,two,600000);
  await operateKp(f.env,mapping,two,'premium-solo-order','directive',{target:one,task:'solo_competitive'});
  await operateKp(f.env,mapping,two,'premium-solo-order','directive',{target:one,task:'solo_competitive'});
- assert.equal((await readKpState(f.env,mapping,two)).cash,70000,'solo competitive costs 50,000');
+ assert.equal((await readKpState(f.env,mapping,two)).cash,350000,'solo competitive costs 250,000');
  f.sql.exec('UPDATE kp_directives SET at=0');
  const m=game('solo-check') as ReturnType<typeof game>&{players:Array<{puuid:string;team_id:string;party_id?:string}>};
  await collectKpMatch(f.env,mapping,m,'p-one');assert.equal(f.sql.prepare('SELECT status FROM kp_directives').get()!.status,'active');
@@ -258,7 +259,7 @@ test('premium solo orders charge once and require verified solo parties and deat
  await collectKpMatch(f.env,mapping,m,'p-one');assert.equal(f.sql.prepare('SELECT status FROM kp_directives').get()!.status,'active');
  m.players.pop();await collectKpMatch(f.env,mapping,m,'p-one');assert.equal(f.sql.prepare('SELECT status FROM kp_directives').get()!.status,'completed');
  await operateKp(f.env,mapping,two,'premium-death-order','directive',{target:one,task:'solo_death_unrated'});
- assert.equal((await readKpState(f.env,mapping,two)).cash,10000,'solo death unrated costs 60,000');f.sql.exec('UPDATE kp_directives SET at=0');
+ assert.equal((await readKpState(f.env,mapping,two)).cash,50000,'solo death unrated costs 300,000');f.sql.exec('UPDATE kp_directives SET at=0');
  const u={...m,metadata:{...m.metadata,match_id:'death-solo',queue:{id:'unrated'}}};
  await collectKpMatch(f.env,mapping,u,'p-one');assert.equal(f.sql.prepare("SELECT status FROM kp_directives WHERE task='solo_death_unrated'").get()!.status,'active');
  f.sql.prepare('INSERT INTO death_unrated_sessions VALUES(?,?,?,?,?,?)').run('One#JP1','premium',1,Date.now()+10000,'death-solo',null);
@@ -576,7 +577,7 @@ test('private casino is server-authorized by guild and exact Discord ID; normal 
  const feed=await communityFeed(f.env,guild,new Map([[one,'Owner']]));assert.equal(feed.entries.length,4);assert.deepEqual(new Set(feed.entries.map(e=>e.label)),new Set(['ルーレット','チンチロ','ブラックジャック','スロット']));assert.ok(!JSON.stringify(feed).includes('owner-casino'));assert.ok(!JSON.stringify(feed).includes('privateCasino'));
  const stock=await readKpState(f.env,mapping,one);assert.equal(stock.jackpot.amount,10003,'777 does not consume the shared diamond pool');
  await assert.rejects(operateKp(f.env,mapping,one,'private-invalid-01','private-casino',{game:'roulette',amount:100,number:37}));
- await assert.rejects(operateKp(f.env,mapping,one,'private-invalid-02','private-casino',{game:'slot',amount:20001}));
+ await assert.rejects(operateKp(f.env,mapping,one,'private-invalid-02','private-casino',{game:'slot',amount:100001}));
  await assert.rejects(operateKp(f.env,mapping,one,'private-invalid-03','private-casino',{game:'unknown',amount:100}));
  f.sql.exec("CREATE TRIGGER private_fail BEFORE INSERT ON kp_ledger BEGIN SELECT RAISE(ABORT,'private rollback'); END");
  await assert.rejects(operateKp(f.env,mapping,one,'private-rollback-01','private-casino',{game:'roulette',amount:100,number:3}));

@@ -86,14 +86,14 @@ test('24時間の優待が指名と高級品に適用され、再送・残高不
  assert.equal((await readKpState(f.env,mapping,one)).stockBenefits.percent,0);
  t.mock.timers.tick(DAY+1);const s=await readKpState(f.env,mapping,one);assert.equal(s.stockBenefits.percent,5);
  const before=f.cash();const r=await operateKp(f.env,mapping,one,'benefit-directive-one','directive',{target:two,task:'competitive'}) as {result:{discount:{paid:number}}};
- assert.equal(r.result.discount.paid,7600);assert.equal(f.cash(),before-7600);await operateKp(f.env,mapping,one,'benefit-directive-one','directive',{target:two,task:'competitive'});assert.equal(f.cash(),before-7600);
+ assert.equal(r.result.discount.paid,38000);assert.equal(f.cash(),before-38000);await operateKp(f.env,mapping,one,'benefit-directive-one','directive',{target:two,task:'competitive'});assert.equal(f.cash(),before-38000);
  const luxury=await operateKp(f.env,mapping,one,'benefit-luxury-title-1','luxury',{item:'title',title:'KP長者'}) as {result:{discount:{paid:number}}};assert.equal(luxury.result.discount.paid,19000);
  assert.deepEqual(stockDiscount(2000000,5),{base:2000000,percent:5,saved:2000,paid:1998000});assert.throws(()=>stockDiscount(100,50));
 });
 test('売却直後に優待は減る。他人の保有やクライアント指定の割引率は使えない',async t=>{
- t.mock.timers.enable({apis:['Date'],now:T});const f=await fixture();f.credit('fund',100000);f.credit('fund2',20000,two);await trade(f,'benefit-ownership-buy','buy',50);t.mock.timers.tick(DAY+1);
+ t.mock.timers.enable({apis:['Date'],now:T});const f=await fixture();f.credit('fund',100000);f.credit('fund2',50000,two);await trade(f,'benefit-ownership-buy','buy',50);t.mock.timers.tick(DAY+1);
  await trade(f,'benefit-ownership-sell','sell',50);assert.equal((await readKpState(f.env,mapping,one)).stockBenefits.percent,0);
- const before=f.cash(two);await operateKp(f.env,mapping,two,'benefit-foreign-direct','directive',{target:one,task:'competitive',percent:100,discount:8000});assert.equal(f.cash(two),before-8000);
+ const before=f.cash(two);await operateKp(f.env,mapping,two,'benefit-foreign-direct','directive',{target:one,task:'competitive',percent:100,discount:8000});assert.equal(f.cash(two),before-40000);
 });
 test('daily news budget uses a covering time-range index and ignores thousands of historical events',async()=>{
  const f=await fixture();await prepareStocks(f.env,guild,one,T);

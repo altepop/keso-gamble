@@ -1,7 +1,7 @@
 // M.LEAGUE predictions: name the player who finishes last (ラス) in an official game.
 // Pure logic with no DOM or clock reads, shared by the browser and the Worker. Results come only from
 // the official site (services/valorant-results/src/mleague.ts); nothing here guesses a result.
-import {WEEKLY_LIMIT,MIN_BET,BET_STEP,oddsFromProbability,payoutFor,weekStart} from './racing.js?v=web-5bfb3e191c5a1e21';
+import {WEEKLY_LIMIT,MIN_BET,BET_STEP,oddsFromProbability,payoutFor,weekStart} from './racing.js?v=web-market-20261103';
 
 export const ML_TYPES={top:{label:'トップ'},last:{label:'ラス'}};
 /** Only last place is sold (per the owner); 'top' stays readable so bets bought earlier still settle. */
@@ -65,6 +65,7 @@ export function placeMlBet(state,{match,player,type,amount},now,data,results,sea
  const card=mlCard(data,fixture),pick=card.find(p=>p.no===player||p.name===player);
  if(!pick)throw Error('選手を選んでな');
  if(!validInt(amount,MIN_BET)||amount%BET_STEP!==0)throw Error(`金額は${MIN_BET} KP以上、${BET_STEP} KP単位やで`);
+ if(amount>100000)throw Error('1枚の予想は100,000 KPまでやで');
  if(amount>state.cash)throw Error('KPが足らへんで');
  const week=weekStart(now),spent=state.raceWeek?.start===week?state.raceWeek.spent:0;
  if(spent+amount>WEEKLY_LIMIT)throw Error(`1週間に賭けられるのは${WEEKLY_LIMIT.toLocaleString('ja-JP')} KPまでやで（競馬と合算・残り${(WEEKLY_LIMIT-spent).toLocaleString('ja-JP')} KP）`);
