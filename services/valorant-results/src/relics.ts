@@ -169,6 +169,7 @@ export type RelicBonusResult={
 };
 const RELIC_NATIVE_MODES=new Set(['casino','market','racing','mleague']);
 /** Only certified game receipts get a flat ability; no native casino/stocks arbitrage. */
+const HIDDEN_VOICE_GEARS=['normal.voice.riddle.three','normal.voice.riddle.five','normal.voice.riddle.fifteen'] as const;
 const RELIC_ABILITY_MODES=new Set(['competitive','unrated','swiftplay','spikerush','teamdeathmatch',
  'escalation','deathmatch','skirmish','quiz','voice','mahjong','unite','steam','loop','dmchallenge']);
 const safeReward=(n:number)=>Number.isFinite(n)?Math.max(0,Math.min(Number.MAX_SAFE_INTEGER-1,Math.floor(n))):0;
@@ -245,7 +246,9 @@ export function evaluateRelicBonus(
   const percent=basePercent+boosted+mutationBonus+(!special?(item.foil?.percent??0):0);
   const active=compatibleRelic(sourceMode,mode);
   const eligible=Boolean(special)&&special!=='shards'&&RELIC_ABILITY_MODES.has(mode);
-  const specialCondition=special==='comeback'?!event.win:special==='threshold'?amount>=500:true;
+  const specialCondition=special==='comeback'?!event.win:special==='threshold'?amount>=500:
+   special==='voice_key'?mode==='voice'&&(id.endsWith('.three')?amount%3===0:id.endsWith('.five')?amount%5===0:amount%15===0):
+   special==='voice_ritual'?mode==='voice'&&amount%15===0&&HIDDEN_VOICE_GEARS.every(key=>equipped.has(key)&&collection.items[key]?.count>0):true;
   const triggered=active&&((eligible&&specialCondition)||(!special&&percent>0&&relicTrigger(skill,amount,event.win,bounds)));
   const base=triggered?safeReward(amount*percent/100):0;
   const trait=def?.trait??(item.rarity==='ancient'?'刻印連鎖':item.rarity==='transcendent'?'運命突破':item.origin==='steam'||item.origin==='unite'?'出自の加護':'');
@@ -257,6 +260,8 @@ export function evaluateRelicBonus(
    else if(special==='root')exotic=Math.floor(Math.sqrt(amount))*3;
    else if(special==='comeback')exotic=50;
    else if(special==='threshold')exotic=250;
+   else if(special==='voice_key')exotic=id.endsWith('.three')?1:id.endsWith('.five')?3:9;
+   else if(special==='voice_ritual')exotic=900;
   }
   lines.push({id,name:def?.name??item.name,mode:sourceMode,
    short:def?.short??item.ability,percent:basePercent,effectivePercent:percent,
