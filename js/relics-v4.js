@@ -103,7 +103,7 @@ export function relicRevealPanel(reveal){
   (top.length?'<div class="relic-highlight">'+top.map((x,i)=>'<strong class="relic-reveal-hit relic-reveal-hit-'+rarity+'" style="--hit:'+i+'">'+esc(x.name)+'</strong>').join('')+'</div>':
    '<p class="relic-reveal-note">獲得した遺物は図鑑に追加された。</p>')+
   '<div class="relic-result-breakdown">'+breakdown+'</div>'+
-  (big?'<button type="button" class="action-btn relic-skip-btn" data-action="relic-reveal-skip">演出をスキップして結果を見る</button>':'')+
+  (big?'<div class="relic-reveal-actions"><button type="button" class="action-btn relic-skip-btn" data-action="relic-reveal-skip">演出をスキップ</button><button type="button" class="action-btn relic-sound-btn" data-action="relic-reveal-sound">♫ 効果音を再生</button></div>':'')+
   '<button type="button" class="action-btn primary relic-reveal-close" data-action="relic-reveal-close">結果を確認して図鑑へ</button>'+
   '<p class="relic-reveal-footnote">抽選はサーバーで確定済み。スキップしても獲得結果は変わらない。動きの軽減設定にも対応。</p></div></div>';
 }
