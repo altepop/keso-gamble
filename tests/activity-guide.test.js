@@ -41,13 +41,14 @@ test('遺物の遊び方は図鑑からの装備とビルドでの試算を案�
  const guide=topicById('relics');
  const steps=guide.steps.join('\n');
  assert.match(guide.title,/図鑑で装備/);
- assert.match(steps,/「図鑑」で効果を比べ/);
+ assert.match(steps,/「図鑑・装備」で効果を比べ/);
  assert.match(steps,/「効果の詳細・装備」を開き、「指定枠に装備」を押す/);
+ assert.match(steps,/上部には「図鑑・装備」「ビルド・試算」/);
  assert.match(steps,/「ビルド・試算」で現在の4枠と追加KPを確認/);
  assert.match(steps,/おまかせ装備、プリセットの保存・切替/);
  assert.match(steps,/欠片・交換所/);
  assert.doesNotMatch(steps,/装備・診断/);
  const manual=readFileSync(new URL('../docs/ACTIVITY_TUTORIAL.md',import.meta.url),'utf8');
- assert.match(manual,/「図鑑」で効果を比べ/);
+ assert.match(manual,/「図鑑・装備」で効果を比べ/);
  assert.match(manual,/「ビルド・試算」で現在の4枠と追加KPを確認/);
 });
