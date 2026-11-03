@@ -257,12 +257,12 @@ test('ancient chain seal is added without a global cap',()=>{
  const fortune=NORMAL_RELICS.find(x=>x.mode==='fortune'&&x.rarity==='rare')!;
  const items=Object.fromEntries([ancient,universal,fortune].map(x=>[x.id,{...x,origin:'normal' as const,count:1}]));
  const x:RelicCollection={totalSummons:0,items,equipped:[ancient.id,universal.id,fortune.id]};
- const r=evaluateRelicBonus(x,'competitive',{amount:107,win:true});
+ const r=evaluateRelicBonus(x,'competitive',{amount:307,win:true});
  const a=r.lines.find(x=>x.id===ancient.id)!;
  assert.ok(a.trait.startsWith('刻印連鎖'));
  assert.equal(a.exotic,8);
  assert.equal(r.gross,r.bonus);
- assert.ok(r.bonus>Math.floor(107*.15));
+ assert.ok(r.bonus>Math.floor(307*.15));
  assert.equal(r.percent,a.effectivePercent+universal.percent+fortune.percent);
 });
 test('transcendental fate breakthrough pays fixed KP when conditions fail',()=>{
