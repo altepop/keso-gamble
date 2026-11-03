@@ -282,16 +282,16 @@ test('Steam and Unite fixed seals also stack without a shared cap',()=>{
  const r=evaluateRelicBonus(x.relics,'competitive',{amount:100,win:true});
  assert.equal(r.bonus,0); // none is equipped
  equipRelic(x,'unite.first_win',0);
- const withUnite=evaluateRelicBonus(x.relics,'competitive',{amount:100,win:true});
+ const withUnite=evaluateRelicBonus(x.relics,'competitive',{amount:1000,win:true});
  assert.equal(withUnite.lines[0]?.trait,'出自の加護');
  assert.ok(withUnite.lines[0]!.exotic>0);
- assert.ok(withUnite.bonus>15);
+ assert.ok(withUnite.bonus>80);
  const steam={id:'steam:g:76561199999999999:123:EX',app:123,achievement:'EX',title:'達成',percent:30};
  const claimed=grantSteamRelic(x,steam).item;
  equipRelic(x,claimed.id,1);
- const withSteam=evaluateRelicBonus(x.relics,'competitive',{amount:100,win:true});
+ const withSteam=evaluateRelicBonus(x.relics,'competitive',{amount:1000,win:true});
  assert.ok(withSteam.lines.some(l=>l.id===claimed.id&&l.trait==='出自の加護'));
- assert.ok(withSteam.bonus>15);
+ assert.ok(withSteam.bonus>80);
 });
 test('native simulator reports real final percentage and never credits fake KP',()=>{
  const def=NORMAL_RELICS.find(x=>x.mode==='market'&&x.rarity==='ancient')!;
@@ -347,7 +347,7 @@ test('prime-only frenzy also creates a genuine dead draw with other skills weake
 test('chains require other triggers and preserve an intelligible actual percentage',()=>{
  const pact=RISK_RELICS.find(x=>x.tradeoff==='chain')!;
  const rare=NORMAL_RELICS.find(x=>x.mode==='universal'&&x.rarity==='rare')!;
- const common=NORMAL_RELICS.find(x=>x.mode==='universal'&&x.rarity==='common')!;
+ const common=NORMAL_RELICS.find(x=>x.mode==='competitive'&&x.rarity==='rare')!;
  const items=Object.fromEntries([pact,rare,common].map(i=>[i.id,{...i,origin:'normal' as const,count:1}]));
  const coll:RelicCollection={totalSummons:0,items,equipped:[pact.id]};
  assert.equal(evaluateRelicBonus(coll,'competitive',{amount:307,win:true}).bonus,0);
