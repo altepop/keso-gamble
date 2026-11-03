@@ -21,6 +21,12 @@ export function primeRelicAudio(){
   // This method is deliberately synchronous with the trusted click handler;
   // awaiting the KP request first would violate autoplay rules on iOS.
   void audioContext.resume().catch(()=>{});
+  // WebKit may require a sound source to START during the user gesture, not
+  // merely AudioContext.resume(). A fully muted ~10ms oscillator unlocks it.
+  const silence=audioContext.createOscillator(),mute=audioContext.createGain();
+  mute.gain.value=0;
+  silence.connect(mute);mute.connect(audioContext.destination);
+  silence.start();silence.stop(audioContext.currentTime+.01);
   return true;
  }catch{return false;}
 }
