@@ -56,6 +56,9 @@ jobs:
         run: |
           npm --prefix ../.. ci
           npm --prefix ../.. run check:discord
+          # GitHub Pages serves the committed files, so a pull request must commit the rebuilt ?v= versions:
+          # stale versions let a phone's WebView mix old cached modules with new ones (#138).
+          if [ "${{ github.event_name }}" = pull_request ]; then npm --prefix ../.. run check:activity; fi
           # Keep direct GitHub web edits from blocking Worker deployment.
           npm --prefix ../.. run build:activity
           npm --prefix ../.. run check:activity

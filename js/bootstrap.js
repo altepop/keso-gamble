@@ -14,6 +14,6 @@ try{
  const title=document.createElement('h1');title.textContent='KESO PLAY';
  const message=document.createElement('p');message.className='title-note';message.setAttribute('role','alert');message.textContent='画面を開けませんでした。少し待ってから、もう一度開いてください。';
  const detail=document.createElement('p');detail.className='title-note';detail.textContent=`${stage} / ${document.querySelector('meta[name="keso-release"]')?.content??'unknown'}`;
- const retry=document.createElement('button');retry.className='title-start';retry.textContent='もう一度開く';retry.addEventListener('click',()=>location.reload());
+ const retry=document.createElement('button');retry.className='title-start';retry.textContent='もう一度開く';retry.addEventListener('click',()=>globalThis.kesoRetry?globalThis.kesoRetry():location.reload());
  main.append(title,message,detail,retry);root.append(main);
 }
