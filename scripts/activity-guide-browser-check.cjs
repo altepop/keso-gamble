@@ -31,7 +31,7 @@ let browser;
  assert.ok(all.some(x=>x.includes('Mリーグ')));
  assert.ok(all.some(x=>x.includes('遺物')));
  assert.ok(all.some(x=>x.includes('マインズ')));
- assert.equal(all.length,20);
+ assert.equal(all.length,31);
  await page.locator('#keso-guide-select').selectOption('mines');
  assert.match(await modal.textContent(),/5×5の盤面/);
  await page.locator('[data-guide-go="mines"]').click();
