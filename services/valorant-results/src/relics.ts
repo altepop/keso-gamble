@@ -333,10 +333,12 @@ export function summonRelics(
     store(c,{id,name,origin:'normal',rarity,mode,skill,power,ability,count:1});
     c.totalSummons += 1;
     summary[rarity] = (summary[rarity] ?? 0) + 1;
-    if (rarity === 'transcendent' || rarity === 'ancient') highlights.push({id,name,rarity});
+    if (['legendary','mythic','ancient','transcendent'].includes(rarity)) highlights.push({id,name,rarity});
   }
   state.cash -= price;
-  return {cost:price,count,level:summonLevel(c.totalSummons),summary,highlights:highlights.slice(0,30)};
+  const rank:Record<string,number>={transcendent:4,ancient:3,mythic:2,legendary:1};
+  highlights.sort((a,b)=>(rank[b.rarity]??0)-(rank[a.rarity]??0));
+  return {cost:price,count,level:summonLevel(c.totalSummons),summary,highlights:highlights.slice(0,12)};
 }
 export function grantSteamRelic(
  state:{relics?:RelicCollection},
