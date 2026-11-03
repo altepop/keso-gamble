@@ -8,7 +8,7 @@ import type { KpEnv, KpMapping } from './kp.ts';
 import { crownFor } from './racing-crowns.ts';
 import { decideEntries, raceEntries } from './racing-horses.ts';
 import type { Entry } from './racing-horses.ts';
-interface RaceBet { id:string; raceId:number; status:string; payout:number }
+interface RaceBet { id:string; raceId:number; status:string; payout:number; amount:number }
 const initialized=new WeakSet<object>();
 export async function ensureRacing(env:KpEnv){
  if(initialized.has(env.DB))return;
@@ -56,7 +56,7 @@ export async function settleKpRaces(env:KpEnv,mapping:KpMapping,now=Date.now()){
   const entries=new Map<number,Entry[]>();for(const id of due)entries.set(id,await raceEntries(env,mapping,id));
   const before=state.cash,settled:RaceBet[]=settleRaceBets(state,now,(id:number)=>seeds.get(id)??null,(id:number)=>entries.get(id)??[]);
   if(!settled.length)continue;
-  const gain=Math.max(0,state.cash-before);
+  const gain=Math.max(0,settled.reduce((net,b)=>net+b.payout-b.amount,0)); // positive realized return after stakes
   const relicBonus=nativeRelicBonus(state,'racing',gain,now);
   const id='race-settle:'+settled.map(b=>b.id).join(',');
   const response={result:{settled:settled.map(b=>({id:b.id,status:b.status,payout:b.payout})),relicBonus}};
