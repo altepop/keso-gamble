@@ -121,6 +121,8 @@ export async function ensureRaceField(env:KpEnv,mapping:KpMapping,race:number,no
  * A person-named horse also brings its namesake a consolation: 5% of what others bet on it. */
 export async function settleHorsePrizes(env:KpEnv,mapping:KpMapping,now=Date.now()){
  await ensureHorses(env);await ensureCrowns(env);
+ const racing=await import('./racing-kp.ts');
+ await racing.ensureRacing(env); // even an unattended field needs a persistent seed table
  const from=horsePrizeLookback(now),before=now-RUN_MS;
  const races=(await env.DB.prepare(`SELECT race FROM (SELECT e.race FROM kp_race_entries e WHERE e.guild=? AND e.race>=? AND e.race<=? AND NOT EXISTS(SELECT 1 FROM kp_horse_results r WHERE r.guild=e.guild AND r.race=e.race AND r.horse=e.horse)
   UNION SELECT c.race FROM kp_crowns c WHERE c.guild=? AND c.race>=? AND c.race<=? AND NOT EXISTS(SELECT 1 FROM kp_horse_results r WHERE r.guild=c.guild AND r.race=c.race AND r.horse='person-'||c.user)) ORDER BY race LIMIT 20`)
@@ -131,7 +133,6 @@ export async function settleHorsePrizes(env:KpEnv,mapping:KpMapping,now=Date.now
   if(!seed){
    // Historic cron fixed fields without seeds when nobody opened the Activity.
    // raceSeed atomically INSERT OR IGNOREs one result for all competing workers.
-   const racing=await import('./racing-kp.ts');
    seed=await racing.raceSeed(env,mapping.guildId,race);
   }
   const entries=await raceEntries(env,mapping,race),card=raceCard(race,undefined,entries),order:number[]=raceResult(card,seed.seed).order;
