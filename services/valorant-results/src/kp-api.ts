@@ -18,7 +18,7 @@ import {receiveLoopKp} from './loop-kp.ts';
 import {summonRelics,grantSteamRelic,grantUniteRelic,equipRelic,autoEquipRelics,saveRelicPreset,loadRelicPreset,removeRelicPreset,renameRelicPreset,listRelicPresets,diagnoseRelicBuild,nativeRelicBonus,evaluateRelicBonus,rarityRatesForLevel,summonLevel,SUMMON_MILESTONES,UNITE,UNITE_REQUIREMENTS,UNITE_STREAK_IDS,STEAM_RELIC_TIERS,type UniteRelicId} from './relics.ts';
 import {ALL_NORMAL_RELICS,RELIC_MODE_NAMES} from './relic-catalog.ts';
 import {verifiedCasinoProfit,verifiedStockProfit} from './relic-profit.ts';
-import {STEAM_RELIC_PROOF_SQL,STEAM_RELIC_LIST_SQL,STEAM_RELIC_COMMIT_GUARD,steamRelicDay,requireSteamRelicEligibility} from './steam-relic-eligibility.ts';
+import {STEAM_RELIC_PROOF_SQL,STEAM_RELIC_LIST_SQL,STEAM_RELIC_COMMIT_GUARD,steamRelicDay,requireSteamRelicEligibility,type SteamRelicEvidence} from './steam-relic-eligibility.ts';
 import type {RelicCollection,RelicItem} from './relics.ts';
 import {ensureQuizKp,receiveQuizKp,isKpParticipant,quizKpRates,quizKpLimits} from './quiz-kp.ts';
 import {activityAuthAvailable,createActivityChallenge,authenticateActivity}from './discord-activity-auth.ts';
@@ -220,7 +220,7 @@ export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:strin
    const event=String(args.event??'');
    if(event.length<20||event.length>250||!event.startsWith('steam:'))throw Error('Steam実績を選んでください。');
    const receipt=await env.DB.prepare(STEAM_RELIC_PROOF_SQL)
-    .bind(steamRelicDay(),event,mapping.guildId,user).first<import('./steam-relic-eligibility.ts').SteamRelicEvidence>();
+    .bind(steamRelicDay(),event,mapping.guildId,user).first<SteamRelicEvidence>();
    result=grantSteamRelic(state,requireSteamRelicEligibility(receipt));
   }else if(action==='relic-claim-unite'){
    const tier=String(args.tier??'') as UniteRelicId,required=UNITE_REQUIREMENTS[tier];
@@ -309,7 +309,7 @@ export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:strin
   // The daily limit may have filled after we loaded the proof. Do not write
   // the item if it became ineligible while awaiting another worker's credit.
   if(action==='relic-claim-steam'){
-   const updated=await env.DB.prepare(STEAM_RELIC_PROOF_SQL).bind(steamRelicDay(),String(sourceArgs.event??''),mapping.guildId,user).first<import('./steam-relic-eligibility.ts').SteamRelicEvidence>();
+   const updated=await env.DB.prepare(STEAM_RELIC_PROOF_SQL).bind(steamRelicDay(),String(sourceArgs.event??''),mapping.guildId,user).first<SteamRelicEvidence>();
    requireSteamRelicEligibility(updated);
   }
  }
@@ -384,7 +384,7 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping):Promi
   if(request.method==='GET'&&path==='/api/kp/relics'){
    // Called only when the relic screen opens. No new cron or D1 scan on regular wallet polling.
    const steam=await env.DB.prepare(STEAM_RELIC_LIST_SQL)
-    .bind(steamRelicDay(),mapping.guildId,owner.user).all<import('./steam-relic-eligibility.ts').SteamRelicEvidence>().then(r=>r.results).catch(()=>[]);
+    .bind(steamRelicDay(),mapping.guildId,owner.user).all<SteamRelicEvidence>().then(r=>r.results).catch(()=>[]);
    const row=await env.DB.prepare('SELECT data FROM kp_state WHERE guild=? AND user=?').bind(mapping.guildId,owner.user).first<{data:string}>();
    const ownedState=JSON.parse(row?.data??'{}') as {relics?:RelicCollection};
    const level=summonLevel(ownedState.relics?.totalSummons??0);
