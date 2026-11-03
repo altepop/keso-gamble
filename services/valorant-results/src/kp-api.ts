@@ -244,6 +244,22 @@ export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:strin
   let relicBonus=0;
   const casino=['spin','chinchiro','bj-hit','bj-stand','bj-double','mines-cashout','slot','vp-draw','baccarat'].includes(action);
   if(casino&&state.cash>before)relicBonus=nativeRelicBonus(state,'casino',state.cash-before);
+  // Selling shares only grants bonuses on REALIZED positive FIFO profit, never
+  // from the gross proceeds or repeated buys. One owner-indexed query on sells.
+  if(action==='trade'&&args.side==='sell'&&stockTrade){
+   const sale=stockTrade as {symbol:string;quantity:number;total:number};
+   const lots=await env.DB.prepare(`WITH eligible AS (
+     SELECT remaining,price,COALESCE(SUM(remaining) OVER (ORDER BY at,id ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING),0) AS already
+     FROM stock_lots WHERE guild=? AND user=? AND symbol=? AND remaining>0)
+     SELECT COALESCE(SUM(MIN(remaining,MAX(0,? - already))),0) AS shares,
+            COALESCE(SUM(MIN(remaining,MAX(0,? - already))*price),0) AS cost FROM eligible`)
+    .bind(mapping.guildId,user,sale.symbol,sale.quantity,sale.quantity).first<{shares:number;cost:number}>();
+   if(Number(lots?.shares)===sale.quantity){
+    // Acquired stock paid at least a 1% fee; include it in the break-even check.
+    const profit=Math.max(0,Math.floor(sale.total-Math.ceil(Number(lots?.cost??0)*1.01)));
+    if(profit>0)relicBonus=nativeRelicBonus(state,'market',profit);
+   }
+  }
   if(relicBonus&&result&&typeof result==='object')result={...result,relicBonus};
   // 借KP: nothing that costs KP while any is owed (the database refuses it too).
   if(state.cash<before&&await debtOf(env,mapping.guildId,user)>0)throw Error(DEBT_BLOCKED);
