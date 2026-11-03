@@ -499,7 +499,7 @@ export const NORMAL_RELICS:ReadonlyArray<NormalRelicDefinition> = names.flatMap(
     const extraCeiling=compatible?'（取引系共通：対象額1%・合計1日120KP以内）':ceiling;
     return {
       id,name,mode,rarity,power:power[rarityIndex]!,skill:chosenSkill,percent:chosenPercent,
-      cap:chosenCap,short,trait,ability:`${RELIC_MODE_NAMES[mode]}の報酬で「${explanation}」という条件を満たすと、対象KPの${chosenPercent}%を追加（この遺物単独で最大${chosenCap}KP）。${trait?trait+"。":""}${extraCeiling}`,
+      cap:chosenCap,short,trait,ability:`${RELIC_MODE_NAMES[mode]}で「${explanation}」を満たすと報酬が＋${chosenPercent}%。${trait?trait+'。':''}ほかの遺物と上限なしで合算。`,
     };
     /*
     return {
