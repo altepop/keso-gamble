@@ -204,8 +204,8 @@ test('real trigger-created Spike results credit opening relic KP from match 1, w
  assert.equal(log.base,40);assert.equal(log.bonus,50);
  const bot=String((f.sql.prepare("SELECT message FROM notifications WHERE match_id='relic-first'").get() as {message:string}).message);
  assert.match(bot,/この試合 \+90 KP/);
- assert.match(bot,/基礎40.*端数精算 40 KP・🧿遺物補正＋50 KP/);
- assert.equal((bot.match(/🧿遺物補正/g)??[]).length,1);
+ assert.match(bot,/試合報酬 \+40 KP （基礎40・補正0・端数精算 40 KP）\n  ↳ 🧿 遺物補正 \+50 KP/);
+ assert.equal((bot.match(/🧿 遺物補正/g)??[]).length,1);
  assert.equal(JSON.parse(log.details).spikeOpening.flatPerRelic,50);
  assert.equal(JSON.parse(log.details).spikeOpening.game,1);
  await drainKpInbox(f.env);await collectKpMatch(f.env,mapping,match,'p-one');

@@ -701,13 +701,13 @@ test('あかんbot shows server-verified relic KP inside total breakdown and rep
  const base='🎉 ほげは勝ち！（スパイクラッシュ）\\n💬 ナイス！'.replace('\\n','\n');
  const label='（基礎40・補正0・端数精算 40 KP）';
  const first=kpCreditLine(base,90,label,50);
- assert.match(first,/🪙 この試合 \+90 KP（基礎40・補正0・端数精算 40 KP・🧿遺物補正＋50 KP）/);
+ assert.match(first,/🪙 この試合 \+90 KP\n  ↳ 試合報酬 \+40 KP （基礎40・補正0・端数精算 40 KP）\n  ↳ 🧿 遺物補正 \+50 KP/);
  assert.match(first,/\n💬 ナイス！/);
  assert.equal(kpCreditLine(first,90,label,50),first,'a repeated post update must not duplicate the relic item');
- assert.equal((first.match(/🧿遺物補正/g)??[]).length,1);
+ assert.equal((first.match(/🧿 遺物補正/g)??[]).length,1);
  assert.equal(kpCreditLine(first,40,label,0),kpCreditLine(base,40,label),'a rollback or changed result removes stale relic items');
- assert.match(kpCreditLine('Result',111,'',11),/この試合 \+111 KP（🧿遺物補正＋11 KP）/);
- assert.match(kpCreditLine('Result',300,'（勝利）',50),/この試合 \+300 KP（勝利・🧿遺物補正＋50 KP）/);
+ assert.match(kpCreditLine('Result',111,'',11),/この試合 \+111 KP\n  ↳ 試合報酬 \+100 KP\n  ↳ 🧿 遺物補正 \+11 KP/);
+ assert.match(kpCreditLine('Result',300,'（勝利）',50),/この試合 \+300 KP\n  ↳ 試合報酬 \+250 KP （勝利）\n  ↳ 🧿 遺物補正 \+50 KP/);
 });
 test('あかんbot reads relic bonuses from the real verified ledger and includes them in one cached match read',async()=>{
  const f=await fixture();f.enableHistory();
@@ -722,7 +722,7 @@ test('あかんbot reads relic bonuses from the real verified ledger and include
  assert.equal(f.queries(),1,'preloaded event and relic are read with one indexed query');
  assert.equal(run.credits.get(id),90);
  assert.equal(run.relicBonuses.get(id),50);
- assert.equal(kpCreditLine('Result',run.credits.get(id)!, '（基礎40・補正0・端数精算 40 KP）',run.relicBonuses.get(id)), 'Result\n🪙 この試合 +90 KP（基礎40・補正0・端数精算 40 KP・🧿遺物補正＋50 KP）');
+ assert.equal(kpCreditLine('Result',run.credits.get(id)!, '（基礎40・補正0・端数精算 40 KP）',run.relicBonuses.get(id)), 'Result\n🪙 この試合 +90 KP\n  ↳ 試合報酬 +40 KP （基礎40・補正0・端数精算 40 KP）\n  ↳ 🧿 遺物補正 +50 KP');
  assert.equal(await kpRelicBonus(f.env,guild,one,id),50);
  assert.equal(await kpRelicBonus(f.env,guild,two,id),0,'another account cannot query this receipt as their own');
  assert.equal(await kpRelicBonus(f.env,guild,one,'forged'),0);
