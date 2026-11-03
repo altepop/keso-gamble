@@ -7,7 +7,7 @@ test('server-side account budget is fail-closed, independent per member and rene
  const db=new DatabaseSync(':memory:');
  db.exec('CREATE TABLE kp_operation_limits(guild TEXT NOT NULL,user TEXT NOT NULL,minute INTEGER NOT NULL,count INTEGER NOT NULL,PRIMARY KEY(guild,user,minute))');
  class Query{
-  constructor(public sql:string,public args:unknown[]=[]){}
+  sql:string;args:unknown[];constructor(sql:string,args:unknown[]=[]){this.sql=sql;this.args=args;}
   bind(...xs:unknown[]){return new Query(this.sql,xs);}
   first(){return db.prepare(this.sql).get(...this.args as never[])??null;}
   run(){return {meta:{changes:Number(db.prepare(this.sql).run(...this.args as never[]).changes)}};}
@@ -26,7 +26,7 @@ test('server-side account budget is fail-closed, independent per member and rene
 test('an authenticated user cannot exhaust other users rate budget',async()=>{
  const db=new DatabaseSync(':memory:');db.exec('CREATE TABLE kp_operation_limits(guild TEXT,user TEXT,minute INTEGER,count INTEGER,PRIMARY KEY(guild,user,minute))');
  class Query{
-  constructor(public sql:string,public args:unknown[]=[]){}
+  sql:string;args:unknown[];constructor(sql:string,args:unknown[]=[]){this.sql=sql;this.args=args;}
   bind(...xs:unknown[]){return new Query(this.sql,xs);}
   first(){return db.prepare(this.sql).get(...this.args as never[])??null;}
   run(){db.prepare(this.sql).run(...this.args as never[]);return {};}
