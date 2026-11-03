@@ -62,11 +62,12 @@ test('図鑑を装備の入口とし、ビルド・試算は装備確認と効�
  const state={cash:2000,serverWallet:true,relics:{totalSummons:1,items:{[item.id]:item},equipped:[item.id]}};
  const html=relicsPanel(state,{proofs:{modeNames:{universal:'全ゲーム共通'}}});
  assert.match(html,/data-tab="gear"[^>]*>📊 ビルド・試算<\/button>/);
+ assert.match(html,/data-tab="collection"[^>]*>🎒 図鑑・装備<\/button>/);
  assert.doesNotMatch(html,/装備・診断/);
  assert.match(html,/① 装備する枠を選ぶ/);
  assert.match(html,/② 遺物カードの「効果の詳細・装備」を開く/);
  assert.match(html,/data-action="relic-equip" data-relic="normal.universal.common"/);
- assert.match(html,/data-action="relic-tab" data-tab="collection">🎒 図鑑で遺物を選ぶ/);
+ assert.match(html,/data-action="relic-tab" data-tab="collection">🎒 図鑑・装備へ/);
  assert.match(html,/📊 現在のビルド/);
  assert.match(html,/装備を外す枠/);
 });

@@ -58,7 +58,7 @@ export function relicsPanel(state,{proofs=null,notice='',loading=false,view={},r
  const buildTools=relicPresetsSection(collection,proofs)+relicBuildSection(proofs);
  const advanced=relicSummonHistorySection(collection)+relicSpecialSection(collection)+relicEffectLogSection(collection,proofs)+relicEconomySection(collection,proofs);
  const section=['collection','gear','summon','records','exchange'].includes(view.section)?view.section:'collection';
- const tabs=[['collection','🎒 図鑑'],['gear','📊 ビルド・試算'],['summon','🔮 召喚'],['exchange','🧩 欠片・交換所'],['records','📊 記録・限定']];
+ const tabs=[['collection','🎒 図鑑・装備'],['gear','📊 ビルド・試算'],['summon','🔮 召喚'],['exchange','🧩 欠片・交換所'],['records','📊 記録・限定']];
  const nav='<nav class="relic-v8-nav" aria-label="遺物画面の切替">'+tabs.map(([id,label])=>
   '<button type="button" class="relic-v8-tab'+(section===id?' active':'')+'" data-action="relic-tab" data-tab="'+id+'" aria-current="'+(section===id?'page':'false')+'">'+label+'</button>').join('')+'</nav>';
  const pane=(id)=>'<div class="relic-v8-pane'+(section===id?' active':'')+'" data-pane="'+id+'">';
@@ -87,7 +87,7 @@ export function relicsPanel(state,{proofs=null,notice='',loading=false,view={},r
  ${pane('gear')}
  <section class="panel"><div class="card-body"><h2 class="panel-title">📊 現在のビルド</h2>
    <p class="helper">遺物を比べて装備する場所は「図鑑」だ。ここでは現在の4枠を確認し、おまかせ装備・プリセット・獲得KPの試算を行える。</p>
-   <button type="button" class="action-btn" data-action="relic-tab" data-tab="collection">🎒 図鑑で遺物を選ぶ</button>
+   <button type="button" class="action-btn" data-action="relic-tab" data-tab="collection">🎒 図鑑・装備へ</button>
    <p class="helper">4枠の戦力合計：<strong>${yen(power)}</strong>。戦力はKP増加率ではない。装備効果は上限なしで合算する。赤い「代償」を持つ遺物は、ほかの遺物を弱体化させることがある。下で実効倍率を確認できる。</p>
    <div class="field"><label for="relic-slot">装備を外す枠</label><select id="relic-slot" class="select">${[0,1,2,3].map(n=>`<option value="${n}">枠 ${n+1}：${esc(collection.items[collection.equipped[n]]?.name??'未装備')}</option>`).join('')}</select></div>
    <div class="relic-auto-box"><h3>⚡ おまかせ装備</h3><p class="helper">選んだゲームで発動しやすい遺物を4枠に自動編成する。強さだけでなく、条件の組み合わせも考慮する。</p>
@@ -99,7 +99,7 @@ export function relicsPanel(state,{proofs=null,notice='',loading=false,view={},r
  ${buildTools}
  </div>
  ${pane('collection')}
- <section class="panel"><div class="card-body"><h2 class="panel-title">🎒 遺物図鑑（${yen(items.length)}種）</h2>
+ <section class="panel"><div class="card-body"><h2 class="panel-title">🎒 図鑑・装備（${yen(items.length)}種）</h2>
    <p class="helper">ここで所持品の効果を比較して装備する。まず枠を選び、気になる遺物の詳細を開こう。装備後の追加KPは「ビルド・試算」で確認できる。</p>
    ${filterHtml}
    <label class="relic-v8-slot-picker">① 装備する枠を選ぶ
