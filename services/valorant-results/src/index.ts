@@ -24,7 +24,7 @@ import { claimDeathMatch } from './death-sessions.ts';
 import type { KpRun } from './kp.ts';
 import { initializeKp, syncKpAccounts, collectKpMatch, drainKpInbox, flushKpDirectives, prepareKpRun, loadKpRunMatch, kpEventId, kpCreditLine } from './kp.ts';
 import { kpApi } from './kp-api.ts';
-import { settleKpRaces } from './racing-kp.ts';
+import { raceSeed,settleKpRaces } from './racing-kp.ts';
 import { queueRacePosts, flushRacePosts, enqueue, ensurePosts } from './racing-posts.ts';
 import { pollMlLineups, pollMlResults, refreshMlCards, settleMl, queueMlPosts, shouldRunMlCron } from './mleague.ts';
 import { scheduleCrowns } from './racing-crowns.ts';
