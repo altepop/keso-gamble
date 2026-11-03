@@ -357,7 +357,7 @@ export function grantSteamRelic(
  const item:RelicItem={
   id,name:tier.label+'の'+archetype.name+'：'+proof.title.slice(0,55),
   origin:'steam',rarity:'exclusive',power:tier.power,
-  ability:tier.label+'・'+archetype.ability+'／'+archetype.skill+' 最大'+tier.percent+'%・'+tier.cap+'KP（共通上限内）',
+  ability:tier.label+'／'+archetype.ability+'：報酬＋'+tier.percent+'%。追加KPはほかの遺物と上限なしで合算。',
   mode:archetype.mode,skill:archetype.skill,percent:tier.percent,cap:tier.cap,
   count:1,source:'steam app '+proof.app+' / '+proof.achievement.slice(0,90),
  };
@@ -428,7 +428,10 @@ export function autoEquipRelics(state:{relics?:RelicCollection},goal:string='all
  };
  const selected:RelicItem[]=[];
  while(selected.length<RELIC_SLOTS){
-  const options=items.filter(i=>!selected.includes(i)&&applicable(i)&&!(i.origin==='unite'&&selected.some(s=>s.origin==='unite')));
+  const normalOptions=items.filter(i=>!selected.includes(i)&&applicable(i)&&!(i.origin==='unite'&&selected.some(s=>s.origin==='unite')));
+  // Risk pacts can silence the user's other items. Never auto-select a pact
+  // until the player opts in deliberately via manual equipment.
+  const options=normalOptions.filter(i=>!NORMAL_RELIC_BY_ID.get(i.id)?.tradeoff);
   if(!options.length)break;
   options.sort((a,b)=>score(b,selected)-score(a,selected)||b.power-a.power||a.id.localeCompare(b.id));
   selected.push(options[0]!);
