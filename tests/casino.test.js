@@ -33,7 +33,7 @@ test('チンチロ1回：親が目、子が3回目でシゴロ → 2倍勝ち。
  assert.equal(r.net,2000);assert.equal(s.cash,12000);assert.equal(s.chinchiro.length,1);
  const p=playChinchiro(s,1000,seq([1,1,1]),6);assert.equal(p.ko,null);assert.equal(p.net,-5000);assert.equal(s.cash,7000);
  assert.throws(()=>playChinchiro(wallet(4999),1000,seq([1,1,1])),/5倍/);
- assert.throws(()=>playChinchiro(s,50,seq([1,1,1])),/100〜20,000/);
+ assert.throws(()=>playChinchiro(s,50,seq([1,1,1])),/100〜100,000/);
  assert.throws(()=>playChinchiro(s,1000,seq([0,1,1])),/不正/);
 });
 test('ブラックジャックの合計：エースは11、超えたら1',()=>{
