@@ -21,6 +21,7 @@ export async function ensureRelicMarket(env:KpEnv){
    price INTEGER NOT NULL CHECK(price BETWEEN 100 AND 100000000),status TEXT NOT NULL DEFAULT 'active'
    CHECK(status IN ('active','sold','cancelled')),at INTEGER NOT NULL,buyer TEXT,updated_at INTEGER)`),
   env.DB.prepare("CREATE INDEX IF NOT EXISTS kp_relic_listings_active ON kp_relic_listings(guild,status,at DESC)"),
+  env.DB.prepare("CREATE INDEX IF NOT EXISTS kp_relic_listings_seller ON kp_relic_listings(guild,seller,status)"),
   env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS kp_relic_listing_create AFTER INSERT ON kp_operations
    WHEN json_extract(NEW.response,'$.result.relicMarket.action')='list' BEGIN
     INSERT INTO kp_relic_listings(id,guild,seller,relic,price,status,at)
