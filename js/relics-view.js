@@ -1,4 +1,4 @@
-import {relicInventory,relicFilterControls,relicItemCard,relicInventoryPages,relicRevealPanel,relicBonusDashboard} from './relics-v4.js?v=web-b9947ae729a8efb8';
+import {relicInventory,relicFilterControls,relicItemCard,relicInventoryPages,relicRevealPanel,relicBonusDashboard} from './relics-v4.js?v=web-b56e03e0c4e900e4';
 // Three independent origins: common summons, Steam achievements, and Unite results.
 // Never recommend cross-game combinations or require another game's relic for an upgrade.
 const esc=s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -61,7 +61,7 @@ export function relicsPanel(state,{proofs=null,notice='',loading=false,view={},r
    ${notice?`<p class="market-disclaimer" role="status">${esc(notice)}</p>`:''}
  </div></section>
  <section class="panel"><div class="card-body"><h2 class="panel-title">🧰 装備</h2>
-   <p class="helper">4枠の戦力合計：<strong>${yen(power)}</strong>。戦力はKP増加率ではない。実際の倍率と上限後の受取額は下の「今の装備で何％増える？」で確認できる。</p>
+   <p class="helper">4枠の戦力合計：<strong>${yen(power)}</strong>。戦力はKP増加率ではない。装備効果は上限なしで合算する。赤い「代償」を持つ遺物は、ほかの遺物を弱体化させることがある。下で実効倍率を確認できる。</p>
    <div class="field"><label for="relic-slot">装備先</label><select id="relic-slot" class="select">${[0,1,2,3].map(n=>`<option value="${n}">枠 ${n+1}：${esc(collection.items[collection.equipped[n]]?.name??'未装備')}</option>`).join('')}</select></div>
    <div class="relic-auto-box"><h3>⚡ おまかせ装備</h3><p class="helper">選んだゲームで発動しやすい遺物を4枠に自動編成する。強さだけでなく、条件の組み合わせも考慮する。</p>
    <select class="select" id="relic-goal"><option value="all">どのゲームでも使いやすく</option>${Object.entries(proofs?.modeNames??{}).filter(([id])=>!['universal','finance','fortune','marketplus','racingplus','casinoplus'].includes(id)).map(([id,name])=>`<option value="${esc(id)}">${esc(name)}中心</option>`).join('')}</select>
@@ -72,7 +72,7 @@ export function relicsPanel(state,{proofs=null,notice='',loading=false,view={},r
  <section class="panel"><div class="card-body"><h2 class="panel-title">🎒 遺物図鑑（${yen(items.length)}種）</h2>
    ${filterHtml}${cards||'<p class="helper">条件に合う遺物がない。絞り込みを変更してみよう。</p>'}${pagesHtml}
  </div></section>
- <section class="panel"><div class="card-body"><h2 class="panel-title">📚 モード別・特殊遺物全${catalog.length||140}種類</h2><p class="helper">全20系統×7レアリティ。低レアにも「素数」「連続する数字」「25の倍数」などの一発逆転条件がある。違う能力が同時発動し、受取KPが7の倍数なら共鳴で効果が上がる。KP支給の共通上限は変わらない。</p>${grouped||'<p class="helper">データ取得中。再度この画面を開いてください。</p>'}</div></section>
+ <section class="panel"><div class="card-body"><h2 class="panel-title">📚 モード別・特殊遺物全${catalog.length||148}種類</h2><p class="helper">従来の140種類に加え、新たに代償付きの8種類を追加した。倍率は上限なしで合算し、共鳴も発動する。一方で代償を持つ遺物は他の効果を減らすため、単純に高レアを並べるだけでは最強とは限らない。</p>${grouped||'<p class="helper">データ取得中。再度この画面を開いてください。</p>'}</div></section>
  <section class="panel"><div class="card-body"><h2 class="panel-title">🟦 Steam限定遺物</h2>
    <p class="helper">監視登録以降に新規解除し、サーバーが検証した実績だけが対象だ。世界解除率25%以上は「旅路」、10%超〜25%未満は「挑戦」。それ以下の実績はより希少な区分となる。過去の実績には干渉しない。Steam実績のKP報酬は変更しない。</p>
    ${!state.serverWallet?'<p class="helper">本番KP口座へ接続してください。</p>':loading?'<p class="helper">達成記録を確認中…</p>':proofs?.steam?.length?proofs.steam.map(e=>`<div class="asset-line"><span>${esc(e.title)}<br><small>${steamGrade(e.percent)}の遺物 · 世界解除率 ${yen(e.percent)}%</small></span><button type="button" class="action-btn" data-action="relic-claim-steam" data-event="${esc(e.id)}" ${owned('steam.'+e.id)?'disabled':''}>${owned('steam.'+e.id)?'受取済み':'獲得'}</button></div>`).join(''):'<p class="helper">監視開始後の新規実績の記録がまだない。監視前の実績は遡及しない。</p>'}
@@ -81,5 +81,5 @@ export function relicsPanel(state,{proofs=null,notice='',loading=false,view={},r
    <p class="helper">サーバーが確定したランク戦の1〜5連勝、または累計10・25・50・100・200勝から獲得。単体で強力な固有能力を持つ。同時装備は1個まで。ガチャ排出・売買・他遺物の解放条件にはしない。</p>
    ${uniteList.map(([id,name,power,condition])=>`<div class="asset-line"><span><strong>${esc(name)}</strong><br><small>${esc(condition)} ・ 戦力 ${yen(power)}</small></span><button type="button" class="action-btn" data-action="relic-claim-unite" data-tier="${esc(id)}" ${!state.serverWallet||owned(id)?'disabled':''}>${owned(id)?'受取済み':'獲得を確認'}</button></div>`).join('')}
  </div></section>
- <p class="helper">※対象モードの検証済みプレイ・取引には、装備遺物の条件付き追加KPが発生する。VALORANT系は1件最大80KPかつ元報酬の15%まで。カジノ・株・競馬・Mリーグなどの取引系は最大1%・1日合計120KPまで。クイズ・通話も確認済み記録のみで判定する。KESO LOOP限定遺物は未実装。</p>`;
+ <p class="helper">※KP上乗せの合算上限は撤廃。VALORANTやクイズ・通話などは検証済みの確定報酬に限る。カジノはプラス精算、株は原価を超えた売却益、競馬とMリーグは賭け金を差し引いた的中利益だけが対象。購入しただけでは報酬を発生させない。KESO LOOP限定遺物は未実装。</p>`;
 }

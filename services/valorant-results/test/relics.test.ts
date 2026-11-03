@@ -1,4 +1,4 @@
-import {NORMAL_RELICS,RELIC_CATALOG_COUNT,RELIC_RARITIES,RELIC_MODE_NAMES} from '../src/relic-catalog.ts';
+import {NORMAL_RELICS,RISK_RELICS,ALL_NORMAL_RELICS,RELIC_CATALOG_COUNT,RELIC_RARITIES,RELIC_MODE_NAMES} from '../src/relic-catalog.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {RELIC_SUMMON_COST,rarityForRoll,rarityRatesForLevel,modeRelicBonus,evaluateRelicBonus,nativeRelicBonus,relicCollection,summonLevel,summonRelics,grantSteamRelic,grantUniteRelic,equipRelic,autoEquipRelics,SUMMON_MILESTONES,summonProgress,steamRelicTier,steamRelicArchetype,STEAM_RELIC_TIERS,UNITE,UNITE_REQUIREMENTS,UNITE_STREAK_IDS,type RelicCollection} from '../src/relics.ts';
@@ -78,7 +78,9 @@ test('equipment is optional for both sources; no hardcoded combination or earnin
 });
 
 test('all 10 summon tiers add up to 100% and level 10 completely eliminates common',()=>{
- assert.equal(RELIC_CATALOG_COUNT,140);
+ assert.equal(RELIC_CATALOG_COUNT,148);
+ assert.equal(RISK_RELICS.length,8);
+ assert.equal(new Set(ALL_NORMAL_RELICS.map(r=>r.id)).size,148);
  assert.equal(new Set(NORMAL_RELICS.map(r=>r.id)).size,140);
  assert.equal(new Set(NORMAL_RELICS.map(r=>r.name)).size,140);
  assert.equal(Object.keys(RELIC_MODE_NAMES).length,20);
@@ -116,9 +118,9 @@ test('existing 21 relic ids preserve all copies and become named mode skills',()
  assert.equal(c.items['normal.copper']?.count,8);
  assert.equal(c.items['normal.copper']?.power,25);
  assert.equal(c.items['normal.copper']?.mode,'competitive');
- assert.match(c.items['normal.copper']!.ability,/コンペの報酬で/);
+ assert.match(c.items['normal.copper']!.ability,/コンペで/);
  assert.equal(c.items['normal.rainbow']?.origin,'normal');
- assert.match(c.items['normal.rainbow']!.ability,/コンペの報酬で/);
+ assert.match(c.items['normal.rainbow']!.ability,/コンペで/);
 });
 test('mode specialists activate only their own verified mode and cannot multiply arbitrary rewards',()=>{
  const x:{cash:number;relics?:RelicCollection}={cash:4000};
@@ -132,20 +134,20 @@ test('mode specialists activate only their own verified mode and cannot multiply
  assert.equal(modeRelicBonus(x.relics,off,{amount:500,win:true}).bonus,0);
  const on=modeRelicBonus(x.relics,mode,{amount:507,win:true});
  assert.ok(on.bonus>0);
- assert.ok(on.bonus<=80);
- assert.ok(on.bonus<=500*0.15);
+ assert.equal(on.bonus,evaluateRelicBonus(x.relics,mode,{amount:507,win:true}).bonus);
  assert.equal(modeRelicBonus(x.relics,mode,{amount:0,win:true}).bonus,0);
 });
-test('native earnings are capped to 1% of source and 120KP per day, including repeats',()=>{
+test('native confirmed positive payouts stack forever without old daily or percent limits',()=>{
  const def=NORMAL_RELICS.find(r=>r.mode==='market'&&r.rarity==='transcendent')!;
- const item={id:def.id,name:def.name,origin:'normal' as const,rarity:def.rarity,ability:def.ability,mode:def.mode,
-  skill:def.skill,power:def.power,count:10};
+ const item={...def,origin:'normal' as const,count:10};
  const state:{cash:number;relics?:RelicCollection}={cash:1000,relics:{totalSummons:4000,items:{[def.id]:item},equipped:[def.id]}};
- assert.equal(nativeRelicBonus(state,'market',100000,Date.parse('2026-11-02')),80);
- assert.equal(nativeRelicBonus(state,'market',100000,Date.parse('2026-11-02')),40);
- assert.equal(nativeRelicBonus(state,'market',100000,Date.parse('2026-11-02')),0);
- assert.equal(state.cash,1120);
- assert.equal(state.relics?.dailyNativeBonus?.amount,120);
+ const expected=evaluateRelicBonus(state.relics,'market',{amount:100000,win:true}).bonus;
+ assert.ok(expected>120);
+ assert.equal(nativeRelicBonus(state,'market',100000,Date.parse('2026-11-02')),expected);
+ assert.equal(nativeRelicBonus(state,'market',100000,Date.parse('2026-11-02')),expected);
+ assert.equal(nativeRelicBonus(state,'market',100000,Date.parse('2026-11-02')),expected);
+ assert.equal(state.cash,1000+expected*3);
+ assert.equal(state.relics?.dailyNativeBonus,undefined);
 });
 
 test('Steam relic tiers include ordinary achievements at >=25% and a separate 10–25% band without backfilling',()=>{
@@ -206,7 +208,7 @@ test('meta-capable lower rarity, universal and specialist normal relics are effe
  const no=modeRelicBonus(x.relics,'competitive',{amount:500,win:true});
  assert.ok(!no.skills.includes(c.name));
  const granted={cash:0,relics:x.relics};
- assert.ok(nativeRelicBonus(granted,'market',500,Date.UTC(2026,10,3))<=5);
+ assert.ok(nativeRelicBonus(granted,'market',500,Date.UTC(2026,10,3))>5);
 });
 
 test('auto equipment selects owned relics and obeys four slots and Unite singleton',()=>{
@@ -249,18 +251,18 @@ test('short headlines say bonus KP percentage directly, and preserve ancient/tra
  assert.equal(legacy.relics!.items['normal.origin']?.count,4);
  assert.equal(legacy.relics!.equipped[0],'normal.origin');
 });
-test('ancient chain seal adds a distinct KP component without exceeding global cap',()=>{
+test('ancient chain seal is added without a global cap',()=>{
  const ancient=NORMAL_RELICS.find(x=>x.mode==='competitive'&&x.rarity==='ancient')!;
  const universal=NORMAL_RELICS.find(x=>x.mode==='universal'&&x.rarity==='rare')!;
  const fortune=NORMAL_RELICS.find(x=>x.mode==='fortune'&&x.rarity==='rare')!;
  const items=Object.fromEntries([ancient,universal,fortune].map(x=>[x.id,{...x,origin:'normal' as const,count:1}]));
  const x:RelicCollection={totalSummons:0,items,equipped:[ancient.id,universal.id,fortune.id]};
- const r=evaluateRelicBonus(x,'competitive',{amount:107,win:true});
+ const r=evaluateRelicBonus(x,'competitive',{amount:307,win:true});
  const a=r.lines.find(x=>x.id===ancient.id)!;
- assert.equal(a.trait,'刻印連鎖');
+ assert.ok(a.trait.startsWith('刻印連鎖'));
  assert.equal(a.exotic,8);
- assert.ok(r.gross>r.bonus);
- assert.ok(r.bonus<=Math.floor(107*.15));
+ assert.equal(r.gross,r.bonus);
+ assert.ok(r.bonus>Math.floor(307*.15));
  assert.equal(r.percent,a.effectivePercent+universal.percent+fortune.percent);
 });
 test('transcendental fate breakthrough pays fixed KP when conditions fail',()=>{
@@ -269,41 +271,98 @@ test('transcendental fate breakthrough pays fixed KP when conditions fail',()=>{
  const r=evaluateRelicBonus(x,'competitive',{amount:500,win:false});
  assert.equal(r.percent,0);
  assert.equal(r.lines[0]?.triggered,false);
- assert.equal(r.lines[0]?.trait,'運命突破');
+ assert.ok(r.lines[0]?.trait.startsWith('運命突破'));
  assert.ok(r.lines[0]!.exotic>0);
  assert.ok(r.bonus>0);
  assert.equal(modeRelicBonus(x,'competitive',{amount:500,win:false}).bonus,r.bonus);
 });
-test('both Steam and Unite exclusives receive additional flat origin seal under the shared hard cap',()=>{
+test('Steam and Unite fixed seals also stack without a shared cap',()=>{
  const x:{relics?:RelicCollection}={};
  grantUniteRelic(x,'unite.first_win',1);
  const r=evaluateRelicBonus(x.relics,'competitive',{amount:100,win:true});
  assert.equal(r.bonus,0); // none is equipped
  equipRelic(x,'unite.first_win',0);
- const withUnite=evaluateRelicBonus(x.relics,'competitive',{amount:100,win:true});
+ const withUnite=evaluateRelicBonus(x.relics,'competitive',{amount:1000,win:true});
  assert.equal(withUnite.lines[0]?.trait,'出自の加護');
  assert.ok(withUnite.lines[0]!.exotic>0);
- assert.ok(withUnite.bonus<=15);
+ assert.ok(withUnite.bonus>80);
  const steam={id:'steam:g:76561199999999999:123:EX',app:123,achievement:'EX',title:'達成',percent:30};
  const claimed=grantSteamRelic(x,steam).item;
  equipRelic(x,claimed.id,1);
- const withSteam=evaluateRelicBonus(x.relics,'competitive',{amount:100,win:true});
+ const withSteam=evaluateRelicBonus(x.relics,'competitive',{amount:1000,win:true});
  assert.ok(withSteam.lines.some(l=>l.id===claimed.id&&l.trait==='出自の加護'));
- assert.ok(withSteam.bonus<=15);
+ assert.ok(withSteam.bonus>80);
 });
 test('native simulator reports real final percentage and never credits fake KP',()=>{
  const def=NORMAL_RELICS.find(x=>x.mode==='market'&&x.rarity==='ancient')!;
  const state:{cash:number;relics?:RelicCollection}={cash:100,relics:{totalSummons:1,items:{[def.id]:{...def,origin:'normal',count:1}},equipped:[def.id]}};
  const before=JSON.stringify(state);
  const x=evaluateRelicBonus(state.relics,'market',{amount:5000,win:true},120);
- assert.equal(x.bonus,50);
- assert.equal(x.effectivePercent,1);
+ assert.equal(x.bonus,450);
+ assert.equal(x.effectivePercent,9);
  assert.equal(JSON.stringify(state),before);
  const actual=nativeRelicBonus(state,'market',5000,Date.UTC(2026,10,3));
  assert.equal(actual,x.bonus);
- assert.equal(state.cash,150);
- assert.equal(state.relics?.lastNativeEffect?.bonus,50);
- assert.equal(state.relics?.lastNativeEffect?.percent,1);
+ assert.equal(state.cash,550);
+ assert.equal(state.relics?.lastNativeEffect?.bonus,450);
+ assert.equal(state.relics?.lastNativeEffect?.percent,9);
  const capped=evaluateRelicBonus(state.relics,'market',{amount:5000,win:true},70);
- assert.equal(capped.bonus,50);
+ assert.equal(capped.bonus,450);
+});
+
+
+test('all eight new risk pacts are normal-summon only, with new stable IDs and visible drawbacks',()=>{
+ assert.equal(RISK_RELICS.length,8);
+ for(const item of RISK_RELICS){
+  assert.equal(item.id.startsWith('normal.pact.'),true);
+  assert.ok(item.tradeoff);
+  assert.ok((item.drawback?.length??0)>10);
+  assert.ok(['legendary','mythic','ancient','transcendent'].includes(item.rarity));
+ }
+ assert.equal(RISK_RELICS.filter(x=>x.rarity==='transcendent').length,2);
+});
+test('the lonely crown grants huge bonus but silences the second relic by 80 percent',()=>{
+ const pact=RISK_RELICS.find(x=>x.tradeoff==='solo')!;
+ const other=NORMAL_RELICS.find(x=>x.mode==='competitive'&&x.rarity==='ancient')!;
+ const items=Object.fromEntries([pact,other].map(i=>[i.id,{...i,origin:'normal' as const,count:1}]));
+ const result=evaluateRelicBonus({totalSummons:0,items,equipped:[pact.id,other.id]},'competitive',{amount:900,win:true});
+ assert.ok(result.bonus>1000);
+ const crown=result.lines.find(x=>x.id===pact.id)!;
+ const muted=result.lines.find(x=>x.id===other.id)!;
+ assert.equal(crown.base,1575);
+ assert.equal(muted.base,16); // original 9% of 900 =81, *0.2 =16
+ assert.equal(result.cap,0);
+});
+test('prime-only frenzy also creates a genuine dead draw with other skills weakened',()=>{
+ const pact=RISK_RELICS.find(x=>x.tradeoff==='frenzy')!;
+ const other=NORMAL_RELICS.find(x=>x.mode==='universal'&&x.rarity==='rare')!;
+ const items=Object.fromEntries([pact,other].map(i=>[i.id,{...i,origin:'normal' as const,count:1}]));
+ const coll:RelicCollection={totalSummons:0,items,equipped:[pact.id,other.id]};
+ const prime=evaluateRelicBonus(coll,'competitive',{amount:307,win:true});
+ assert.equal(prime.lines[0]?.base,2763);
+ const fail=evaluateRelicBonus(coll,'competitive',{amount:300,win:true});
+ assert.equal(fail.lines[0]?.base,0);
+ assert.ok(fail.bonus<prime.bonus/20);
+});
+test('chains require other triggers and preserve an intelligible actual percentage',()=>{
+ const pact=RISK_RELICS.find(x=>x.tradeoff==='chain')!;
+ const rare=NORMAL_RELICS.find(x=>x.mode==='universal'&&x.rarity==='rare')!;
+ const common=NORMAL_RELICS.find(x=>x.mode==='competitive'&&x.rarity==='rare')!;
+ const items=Object.fromEntries([pact,rare,common].map(i=>[i.id,{...i,origin:'normal' as const,count:1}]));
+ const coll:RelicCollection={totalSummons:0,items,equipped:[pact.id]};
+ assert.equal(evaluateRelicBonus(coll,'competitive',{amount:307,win:true}).bonus,0);
+ coll.equipped=[pact.id,rare.id,common.id];
+ const result=evaluateRelicBonus(coll,'competitive',{amount:307,win:true});
+ assert.ok(result.lines[0]!.base>307*2.6);
+ assert.equal(result.lines[0]!.reason.startsWith('連鎖成功'),true);
+ assert.ok(result.effectivePercent>260);
+});
+test('summon 1000 highlights rarest first even if final rare pull appears late',()=>{
+ const state:{cash:number;relics?:RelicCollection}={cash:210000};
+ const rolls=new Uint32Array(2000).fill(700000);
+ rolls[1998]=0;rolls[1999]=1;
+ const result=summonRelics(state,1000,rolls);
+ assert.equal(result.summary.transcendent,1);
+ assert.equal(result.highlights[0]?.rarity,'transcendent');
+ assert.ok(result.highlights.length<=12);
 });

@@ -16,7 +16,8 @@ import {voiceControl,voiceStatus} from './voice-api.ts';
 import {voiceRewardHistory,voicePolicy} from './voice-rewards.ts';
 import {receiveLoopKp} from './loop-kp.ts';
 import {summonRelics,grantSteamRelic,grantUniteRelic,equipRelic,autoEquipRelics,nativeRelicBonus,evaluateRelicBonus,rarityRatesForLevel,summonLevel,SUMMON_MILESTONES,UNITE,UNITE_REQUIREMENTS,UNITE_STREAK_IDS,STEAM_RELIC_TIERS,type UniteRelicId} from './relics.ts';
-import {NORMAL_RELICS,RELIC_MODE_NAMES} from './relic-catalog.ts';
+import {ALL_NORMAL_RELICS,RELIC_MODE_NAMES} from './relic-catalog.ts';
+import {verifiedCasinoProfit,verifiedStockProfit} from './relic-profit.ts';
 import type {RelicCollection,RelicItem} from './relics.ts';
 import {ensureQuizKp,receiveQuizKp,isKpParticipant,quizKpRates,quizKpLimits} from './quiz-kp.ts';
 import {activityAuthAvailable,createActivityChallenge,authenticateActivity}from './discord-activity-auth.ts';
@@ -238,17 +239,28 @@ export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:strin
    if(!validRoastLevel(args.level))throw Error('煽りレベルを選んでください。');
    state.roastLevel=args.level;result={roastLevel:args.level};
   }else throw Error('この操作は本番口座では使えません。');
-  // Bounded, same-transaction native relic perks: never modify casino odds, market prices, race
-  // results or M.LEAGUE odds. These are tiny post-result bonuses / purchase rebates only.
+  // Unlimited stacking only on completed, positive, server-determined outcomes.
+  // Stock buys and ticket purchases cannot manufacture KP via repeat buys/sells.
+  // These mechanics never touch game RNG, odds, or past results.
   let relicBonus=0;
-  const casino=['spin','chinchiro','bj-hit','bj-stand','bj-double','mines-cashout','slot','vp-draw','baccarat'].includes(action);
-  if(casino&&state.cash>before)relicBonus=nativeRelicBonus(state,'casino',state.cash-before);
-  else if(action==='trade'&&args.side==='buy'&&state.cash<before)
-    relicBonus=nativeRelicBonus(state,'market',before-state.cash);
-  else if(action==='race-bet'&&state.cash<before)
-    relicBonus=nativeRelicBonus(state,'racing',before-state.cash);
-  else if(action==='ml-bet'&&state.cash<before)
-    relicBonus=nativeRelicBonus(state,'mleague',before-state.cash);
+  const casino=['spin','chinchiro','bj-start','bj-hit','bj-stand','bj-double','mines-cashout','slot','vp-draw','baccarat'].includes(action);
+  if(casino){const profit=verifiedCasinoProfit(result);if(profit>0)relicBonus=nativeRelicBonus(state,'casino',profit);}
+  // Selling shares only grants bonuses on REALIZED positive FIFO profit, never
+  // from the gross proceeds or repeated buys. One owner-indexed query on sells.
+  if(action==='trade'&&args.side==='sell'&&stockTrade){
+   const sale=stockTrade as {symbol:string;quantity:number;total:number};
+   const lots=await env.DB.prepare(`WITH eligible AS (
+     SELECT remaining,price,COALESCE(SUM(remaining) OVER (ORDER BY at,id ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING),0) AS already
+     FROM stock_lots WHERE guild=? AND user=? AND symbol=? AND remaining>0)
+     SELECT COALESCE(SUM(MIN(remaining,MAX(0,? - already))),0) AS shares,
+            COALESCE(SUM(MIN(remaining,MAX(0,? - already))*price),0) AS cost FROM eligible`)
+    .bind(mapping.guildId,user,sale.symbol,sale.quantity,sale.quantity).first<{shares:number;cost:number}>();
+   if(Number(lots?.shares)===sale.quantity){
+    // Acquired stock paid at least a 1% fee; include it in the break-even check.
+    const profit=verifiedStockProfit(sale.total,Number(lots?.cost??0),Number(lots?.shares??0),sale.quantity);
+    if(profit>0)relicBonus=nativeRelicBonus(state,'market',profit);
+   }
+  }
   if(relicBonus&&result&&typeof result==='object')result={...result,relicBonus};
   // 借KP: nothing that costs KP while any is owed (the database refuses it too).
   if(state.cash<before&&await debtOf(env,mapping.guildId,user)>0)throw Error(DEBT_BLOCKED);
@@ -347,17 +359,17 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping):Promi
    const row=await env.DB.prepare('SELECT data FROM kp_state WHERE guild=? AND user=?').bind(mapping.guildId,owner.user).first<{data:string}>();
    const ownedState=JSON.parse(row?.data??'{}') as {relics?:{totalSummons:number;items:Record<string,RelicItem>;equipped:string[];dailyNativeBonus?:{day:string;amount:number};lastNativeEffect?:{mode:string;amount:number;bonus:number;percent:number;at:number;names:string[]}}};
    const level=summonLevel(ownedState.relics?.totalSummons??0);
-   const nativeModes=new Set(['casino','market','racing','mleague']);
+   const nativeModes=new Set(['casino','market','racing','mleague']); // retained for UI grouping
    const currentDay=new Date().toISOString().slice(0,10);
    const usedToday=ownedState.relics?.dailyNativeBonus?.day===currentDay?ownedState.relics.dailyNativeBonus.amount:0;
    const previewModes=['competitive','unrated','swiftplay','spikerush','teamdeathmatch','escalation','deathmatch','skirmish','racing','casino','market','mleague','quiz','voice'];
    // Computed from the exact same pure function as real KP payouts, with no extra DB queries.
    const previews=previewModes.flatMap(mode=>[100,500,900,5000].map(amount=>({
-    mode,amount,...evaluateRelicBonus(ownedState.relics as RelicCollection|undefined,mode,{amount,win:true},nativeModes.has(mode)?120-usedToday:120)
+    mode,amount,...evaluateRelicBonus(ownedState.relics as RelicCollection|undefined,mode,{amount,win:true},0)
    })));
    return response({price:200,steam,unite:Object.entries(UNITE).map(([id,d])=>({id,name:d.name,power:d.power,condition:id.startsWith('unite.career_')?'累計'+d.wins+'勝':d.wins+'連勝'})),steamTiers:STEAM_RELIC_TIERS,level,
     rates:rarityRatesForLevel(level),maxRates:rarityRatesForLevel(10),ratesByLevel:Array.from({length:10},(_,i)=>rarityRatesForLevel(i+1)),
-    modeNames:RELIC_MODE_NAMES,catalog:NORMAL_RELICS,milestones:SUMMON_MILESTONES,previews,lastNativeEffect:ownedState.relics?.lastNativeEffect??null,nativeRemaining:120-usedToday});
+    modeNames:RELIC_MODE_NAMES,catalog:ALL_NORMAL_RELICS,milestones:SUMMON_MILESTONES,previews,lastNativeEffect:ownedState.relics?.lastNativeEffect??null,nativeRemaining:null});
   }
   if(request.method==='GET'&&path==='/api/kp/state')return response(await readKpState(env,mapping,owner.user));
   // 監視状態: members only, aggregates only.

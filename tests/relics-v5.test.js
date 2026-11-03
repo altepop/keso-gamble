@@ -20,7 +20,7 @@ test('authoritative preview shows raw configured percentages, realized amount an
      {id:'steam.demo',name:'刻印',effectivePercent:9,base:20,exotic:5,reason:'条件達成',trait:'出自の加護'}]}],
   lastNativeEffect:{mode:'market',amount:1000,bonus:10,percent:1,names:['刻印'],at:Date.now()}};
  const html=relicBonusDashboard({},proofs,{previewMode:'competitive',previewAmount:500});
- for(const part of ['発動中の倍率合計','＋18%','＋70 KP','実効＋14%','指揮官の剣','出自の加護','直近の実支給','＋10 KP'])assert.ok(html.includes(part),part);
+ for(const part of ['発動した設定倍率（デメリット適用前）','＋18%','＋70 KP','実効＋14%','指揮官の剣','出自の加護','直近の実支給','＋10 KP'])assert.ok(html.includes(part),part);
  assert.match(html,/data-relic-preview="mode"/);
  assert.match(html,/data-relic-preview="amount"/);
  assert.ok(html.includes('500 KP → 遺物込み <strong>570 KP'));

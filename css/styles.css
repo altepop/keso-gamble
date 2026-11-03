@@ -603,3 +603,53 @@ body.esc-wheel-open{overflow:hidden!important}
 .relic-last-real strong{color:#a5f5d8}
 .relic-last-real small{font-size:11px;line-height:1.5;color:#b5c6df}
 @media(max-width:360px){.relic-preview-controls{grid-template-columns:1fr}.relic-preview-stats{min-width:78px}}
+
+
+/* Relic V6: legendary+ ceremony. CSS only, no media downloads or frame polling. */
+.relic-drawback{background:rgba(114,29,48,.35);border:1px solid #f97f9b;border-radius:10px;padding:10px;color:#ffccd8;font-weight:800}
+.relic-card:has(.relic-drawback){border-style:double;border-width:2px 2px 2px 6px}
+.relic-reveal-cinematic{--relic-ceremony:#d6b6ff}
+.relic-reveal-legendary{--relic-ceremony:#c79cff}
+.relic-reveal-mythic{--relic-ceremony:#ff85bc}
+.relic-reveal-ancient{--relic-ceremony:#ffda7a}
+.relic-reveal-transcendent{--relic-ceremony:#bafaff}
+.relic-reveal-cinematic .relic-reveal-content{border:2px solid var(--relic-ceremony);box-shadow:0 0 34px color-mix(in srgb,var(--relic-ceremony) 40%,transparent),inset 0 0 35px rgba(35,31,94,.65);max-width:470px;overflow:hidden;position:relative;animation:relic-ceremony-card 2.1s ease-out both}
+.relic-cinematic-ceremony{position:relative;isolation:isolate;width:min(180px,60vw);height:min(180px,60vw);margin:6px auto 20px;pointer-events:none}
+.relic-reveal-cinematic .relic-summon-orb{position:absolute;inset:13%;width:74%;height:74%;margin:0;z-index:3;border-width:4px;animation:relic-ceremony-core 2.15s cubic-bezier(.18,.88,.3,1) both}
+.relic-reveal-cinematic .relic-summon-orb span{animation:relic-ceremony-symbol 2.4s ease-out both}
+.relic-cinematic-rings{position:absolute;inset:0;z-index:2;animation:relic-ceremony-open 2.15s ease-out both}
+.relic-cinematic-rings>i{position:absolute;inset:4%;border:2px dashed var(--relic-ceremony);border-radius:50%;opacity:.95;animation:relic-ceremony-spin 5s linear infinite}
+.relic-cinematic-rings>i:nth-child(2){inset:-10%;border-width:1px;border-style:double;animation-duration:7s;animation-direction:reverse;opacity:.6}
+.relic-cinematic-rings>i:nth-child(3){inset:16%;border-width:3px;border-style:dotted;animation-duration:3s;opacity:.8}
+.relic-cinematic-rays{position:absolute;inset:0;z-index:1}
+.relic-cinematic-rays>i{position:absolute;left:48%;top:48%;width:3px;height:100%;background:linear-gradient(to top,transparent,var(--relic-ceremony),transparent);transform:rotate(calc(var(--ray-index) * 45deg));transform-origin:center 1%;opacity:0;animation:relic-ceremony-ray 2.1s ease-out both}
+.relic-cinematic-runes{position:absolute;inset:0;z-index:4;animation:relic-ceremony-runes 2.1s ease-out both}
+.relic-cinematic-runes>span{position:absolute;left:42%;top:40%;color:var(--relic-ceremony);font-size:26px;text-shadow:0 0 10px currentColor;transform:rotate(calc(var(--rune-index) * 45deg)) translateY(-91px) rotate(calc(var(--rune-index) * -45deg))}
+.relic-cinematic-flash{position:absolute;inset:-30%;border-radius:50%;z-index:6;pointer-events:none;animation:relic-ceremony-flash 2.4s ease-out both}
+.relic-cinematic-subtitle{color:var(--relic-ceremony);font-size:12px;letter-spacing:.12em;margin:0 0 8px;animation:relic-ceremony-text 2.1s ease-out both}
+.relic-reveal-cinematic #relic-result-title{color:var(--relic-ceremony);text-shadow:0 0 12px var(--relic-ceremony);animation:relic-ceremony-text 2.1s ease-out both}
+.relic-reveal-cinematic .relic-highlight{animation:relic-ceremony-text 2.25s ease-out both}
+.relic-reveal-cinematic .relic-reveal-hit{border:2px solid var(--relic-ceremony);background:linear-gradient(115deg,rgba(35,31,70,.95),rgba(53,50,95,.78));box-shadow:0 0 15px rgba(190,173,255,.18)}
+.relic-reveal-cinematic .relic-result-breakdown{animation:relic-ceremony-text 2.35s ease-out both}
+.relic-skip-btn{display:block;margin:4px auto 10px;min-height:44px;max-width:100%;background:rgba(5,13,39,.8);border:1px solid #8da8d6;color:#e8f0ff}
+.relic-reveal-instant .relic-cinematic-ceremony{display:none}
+.relic-reveal-instant .relic-cinematic-flash,.relic-reveal-instant .relic-cinematic-rays,.relic-reveal-instant .relic-cinematic-runes,.relic-reveal-instant .relic-cinematic-rings{display:none}
+.relic-reveal-instant .relic-reveal-content,.relic-reveal-instant h2,.relic-reveal-instant .relic-cinematic-subtitle,.relic-reveal-instant .relic-highlight,.relic-reveal-instant .relic-result-breakdown{animation:none}
+.relic-reveal-instant .relic-skip-btn{display:none}
+@keyframes relic-ceremony-card{0%{opacity:.6;filter:brightness(.55)}32%{filter:brightness(.75)}72%{opacity:1;filter:brightness(1.5)}100%{filter:none}}
+@keyframes relic-ceremony-core{0%{opacity:.15;transform:scale(.08) rotate(-270deg);filter:brightness(2)}35%{opacity:1;transform:scale(.65) rotate(-40deg);filter:brightness(.8)}70%{transform:scale(1.2) rotate(175deg);filter:brightness(2)}85%{transform:scale(.92) rotate(360deg)}100%{transform:none;filter:none}}
+@keyframes relic-ceremony-symbol{0%,35%{opacity:0;transform:scale(.05)}70%{opacity:1;transform:scale(1.8);filter:brightness(2)}100%{opacity:1;transform:none}}
+@keyframes relic-ceremony-spin{to{transform:rotate(360deg)}}
+@keyframes relic-ceremony-ray{0%,32%{opacity:0;transform:rotate(calc(var(--ray-index) * 45deg)) scaleY(.05)}60%{opacity:.9}100%{opacity:0;transform:rotate(calc(var(--ray-index) * 45deg)) scaleY(1.35)}}
+@keyframes relic-ceremony-open{0%{opacity:0;transform:scale(.2)}40%{opacity:1;transform:scale(.85)}80%{opacity:1;transform:scale(1.07)}100%{opacity:1;transform:none}}
+@keyframes relic-ceremony-runes{0%,22%{opacity:0;transform:scale(.15) rotate(-90deg)}58%{opacity:1;transform:scale(1.03) rotate(90deg)}100%{opacity:1;transform:none}}
+@keyframes relic-ceremony-flash{0%,60%,100%{opacity:0}70%{opacity:.85;background:radial-gradient(circle,white,transparent 66%)}}
+@keyframes relic-ceremony-text{0%,62%{opacity:0;transform:translateY(12px)}80%{opacity:.85;transform:translateY(-2px)}100%{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){.relic-reveal-cinematic *{animation:none!important;transition:none!important}.relic-cinematic-flash,.relic-cinematic-rays,.relic-cinematic-runes,.relic-cinematic-rings{display:none}}
+
+.relic-reveal-actions{display:flex;justify-content:center;flex-wrap:wrap;gap:8px;margin:10px 0}
+.relic-reveal-actions>.action-btn{min-height:44px;flex:1 1 135px;font-size:12px}
+.relic-sound-btn{background:rgba(22,38,69,.85);border:1px solid #a6c3f4;color:#e5edff}
+.relic-reveal-instant .relic-sound-btn{display:inline-flex}
+
+.relic-risk-notice{color:#ffacc3!important;font-weight:700;line-height:1.45}

@@ -128,13 +128,10 @@ export function rarityForRoll(roll:number,level:number):RelicRarity {
   }
   throw Error('Relic chance table is invalid');
 }
-/** A skill activates only for the corresponding verified game mode.
- * Bonuses are independent, bounded, and never grant another game's relic or advantage.
- * This function does NOT decide whether evidence is real; callers use certified results.
- */
+/** Effects do not modify results or RNG. Only certified receipts may award KP. */
 /** A shared, pure evaluation for both real credited KP and the visible simulator.
  * Special axes: ancient = chain seal; transcendental = missed-condition breakthrough;
- * Steam/Unite = flat origin seal. None can exceed existing award ceilings.
+ * Steam/Unite = flat origin seal. No artificial stacking or daily payout ceilings.
  */
 export type RelicBonusLine={
  id:string;name:string;mode:string;short:string;percent:number;effectivePercent:number;
@@ -145,6 +142,7 @@ export type RelicBonusResult={
  skills:string[];lines:RelicBonusLine[];resonance:number;
 };
 const RELIC_NATIVE_MODES=new Set(['casino','market','racing','mleague']);
+const safeReward=(n:number)=>Number.isFinite(n)?Math.max(0,Math.min(Number.MAX_SAFE_INTEGER-1,Math.floor(n))):0;
 const MODE_THRESHOLDS:Record<string,readonly [number,number]>={
  competitive:[200,400],unrated:[200,400],swiftplay:[70,180],spikerush:[40,100],
  teamdeathmatch:[50,100],escalation:[50,150],deathmatch:[50,500],skirmish:[50,250],
@@ -182,12 +180,13 @@ const relicTrigger=(skill:string|undefined,amount:number,win:boolean,bounds:read
   case 'triple':return amount%3===0;
   case 'lucky77':return String(amount).includes('77');
   case 'master':case 'sovereign':return win;
+  case 'victory_high':return win&&amount>=400;
   default:return false;
  }
 };
 export function evaluateRelicBonus(
  collection:RelicCollection|undefined,mode:string,event:{amount:number;win:boolean},
- nativeRemaining=120,
+ _nativeRemaining=120,
 ):RelicBonusResult{
  const empty:RelicBonusResult={bonus:0,gross:0,cap:0,percent:0,effectivePercent:0,skills:[],lines:[],resonance:0};
  const amount=event.amount,bounds=MODE_THRESHOLDS[mode];
@@ -203,11 +202,11 @@ export function evaluateRelicBonus(
   const boosted=item.origin==='normal'?Math.min(5,Math.floor(Math.log2(Math.max(1,item.count)))):0;
   const percent=basePercent+boosted;
   const active=compatibleRelic(sourceMode,mode);
-  const triggered=active&&!!cap&&!!percent&&relicTrigger(skill,amount,event.win,bounds);
-  const base=triggered?Math.min(cap,Math.max(1,Math.floor(amount*percent/100))):0;
-  const trait=item.rarity==='ancient'?'刻印連鎖':item.rarity==='transcendent'?'運命突破':item.origin==='steam'||item.origin==='unite'?'出自の加護':'';
-  const exotic=trait==='運命突破'&&active&&!triggered&&cap>0
-   ?Math.min(cap,Math.max(1,Math.floor(item.power/70))):0;
+  const triggered=active&&percent>0&&relicTrigger(skill,amount,event.win,bounds);
+  const base=triggered?safeReward(amount*percent/100):0;
+  const trait=def?.trait??(item.rarity==='ancient'?'刻印連鎖':item.rarity==='transcendent'?'運命突破':item.origin==='steam'||item.origin==='unite'?'出自の加護':'');
+  const exotic=trait.startsWith('運命突破')&&active&&!triggered
+   ?Math.max(1,Math.floor(item.power/70)):0;
   lines.push({id,name:def?.name??item.name,mode:sourceMode,
    short:def?.short??item.ability,percent:basePercent,effectivePercent:percent,
    cap,active,triggered,base,exotic,trait,
@@ -215,26 +214,52 @@ export function evaluateRelicBonus(
  }
  const activated=lines.filter(l=>l.triggered);
  for(const line of lines){
-  if(line.trait==='刻印連鎖'&&line.triggered){
+  if(line.trait.startsWith('刻印連鎖')&&line.triggered){
    const other=activated.filter(x=>x.id!==line.id).length;
-   line.exotic=Math.min(Math.max(0,line.cap-line.base),other*4,12);
-  }else if(line.trait==='出自の加護'&&line.triggered){
-   line.exotic=Math.min(Math.max(0,line.cap-line.base),Math.max(1,Math.floor((collection.items[line.id]?.power??0)/110)));
+   line.exotic=other*4;
+  }else if(line.trait.startsWith('出自の加護')&&line.triggered){
+   line.exotic=Math.max(1,Math.floor((collection.items[line.id]?.power??0)/110));
   }
  }
- let gross=lines.reduce((n,l)=>n+l.base+l.exotic,0);
- let resonance=0;
- if(activated.length>=2&&amount%7===0){
-  const skillKinds=new Set(activated.map(l=>NORMAL_RELIC_BY_ID.get(l.id)?.skill??collection.items[l.id]?.skill));
-  if(skillKinds.size>=2){resonance=Math.floor(gross*.2);gross+=resonance;}
+
+ // Risk pacts are independently rolled normal relics, NEVER Steam/Unite upgrades.
+ // Drawbacks suppress bonus from OTHER relics only, not the verified base KP reward.
+ let suppressResonance=false;
+ for(const line of lines){
+  const pact=NORMAL_RELIC_BY_ID.get(line.id)?.tradeoff;
+  if(!line.active||!pact)continue;
+  const others=lines.filter(l=>l.id!==line.id);
+  const suppress=(factor:number)=>{
+   for(const other of others){
+    if(other.triggered||other.exotic>0)other.reason+='／'+line.name+'の代償で'+Math.round((1-factor)*100)+'%減';
+    other.base=safeReward(other.base*factor);other.exotic=safeReward(other.exotic*factor);
+   }
+  };
+  if(pact==='solo'&&line.triggered)suppress(.2);
+  if(pact==='coinflip'&&amount%2!==0)suppress(.4);
+  if(pact==='bloodmoon'&&amount<400)suppress(.3);
+  if(pact==='allin'&&amount%10!==7)suppress(.5);
+  if(pact==='void'){suppress(.25);suppressResonance=true;}
+  if(pact==='eclipse'&&!(event.win&&amount>=400))suppress(0);
+  if(pact==='frenzy'&&!hasPrimeAmount(amount))suppress(.1);
+  if(pact==='chain'){
+   const otherCount=others.filter(l=>l.triggered).length;
+   if(otherCount<2){line.base=0;line.triggered=false;line.reason='連鎖不成立（ほか2個の発動が必要）';}
+   else{line.effectivePercent+=60*otherCount;line.base=safeReward(amount*line.effectivePercent/100);line.reason='連鎖成功：ほか'+otherCount+'個の効果と連動';}
+  }
  }
- const hardCap=Math.min(80,Math.floor(amount*.15));
- const cap=RELIC_NATIVE_MODES.has(mode)
-  ?Math.max(0,Math.min(hardCap,Math.floor(amount*.01),Math.max(0,Math.floor(nativeRemaining))))
-  :hardCap;
- const bonus=Math.min(gross,cap);
- const percent=lines.filter(l=>l.triggered).reduce((n,l)=>n+l.effectivePercent,0);
- return {bonus,gross,cap,percent,effectivePercent:Math.round(10000*bonus/amount)/100,
+ const effective=lines.filter(l=>l.triggered);
+ let gross=safeReward(lines.reduce((n,l)=>n+l.base+l.exotic,0));
+ let resonance=0;
+ if(!suppressResonance&&effective.length>=2&&amount%7===0){
+  const skillKinds=new Set(effective.map(l=>NORMAL_RELIC_BY_ID.get(l.id)?.skill??collection.items[l.id]?.skill));
+  if(skillKinds.size>=2){resonance=safeReward(gross*.2);gross=safeReward(gross+resonance);}
+ }
+ // Unbounded percentage stacking, no per-receipt, individual, or daily soft cap.
+ // The Number.MAX_SAFE_INTEGER boundary is purely an integer-integrity guard.
+ const bonus=gross;
+ const percent=effective.reduce((n,l)=>n+l.effectivePercent,0);
+ return {bonus,gross,cap:0,percent,effectivePercent:Math.round(10000*bonus/amount)/100,
   lines,resonance,
   skills:[...lines.filter(l=>l.base+l.exotic>0).map(l=>l.name),...(resonance?['七重共鳴']:[])]};
 }
@@ -246,12 +271,11 @@ export function modeRelicBonus(
  if(!Number.isSafeInteger(event.amount)||event.amount<=0)return {bonus:0,skills:[]};
  const result=evaluateRelicBonus(collection,mode,event);
  // Preserve the original public contract for callers and tests.
- return {bonus:Math.min(result.gross,80,Math.floor(event.amount*.15)),skills:result.skills};
+ return {bonus:result.bonus,skills:result.skills};
 }
-/** Native KESO PLAY operations use a 120KP/day shared ceiling for all supported native modes.
- * The ceiling is persisted inside the same state/operation transaction as the KP amount.
- * It rules out profitable looping of risk-free trades or tiny bets.
- */
+/** Paid only after a verified positive realized casino outcome. Never from placing
+ * a stake, purchasing a stock, or buying a ticket. Idempotency is guaranteed by
+ * the parent operation transaction. This blocks unlimited risk-free buy loops. */
 export function nativeRelicBonus(
  state:{cash:number;relics?:RelicCollection},
  mode:'casino'|'market'|'racing'|'mleague',
@@ -260,18 +284,10 @@ export function nativeRelicBonus(
 ):number {
  if(!state.relics||!Number.isSafeInteger(amount)||amount<=0)return 0;
  const detail=evaluateRelicBonus(state.relics,mode,{amount,win:true});
- const provisional=detail.bonus;
- if(!provisional)return 0;
- const day=new Date(now).toISOString().slice(0,10);
- const previous=state.relics.dailyNativeBonus?.day===day?state.relics.dailyNativeBonus.amount:0;
- // Casino bonuses on positive realized returns, and stake refunds on other native modes,
- // cannot exceed 1% of the source value. Same-day 120KP cap is independent of balances.
- const payout=Math.max(0,Math.min(provisional,Math.floor(amount*0.01),120-previous));
- if(payout>0){
-  state.cash+=payout;
-  state.relics.dailyNativeBonus={day,amount:previous+payout};
-  state.relics.lastNativeEffect={mode,amount,bonus:payout,percent:Math.round(payout/amount*10000)/100,at:now,names:detail.skills.slice(0,4)};
- }
+ const payout=Math.min(detail.bonus,Math.max(0,Number.MAX_SAFE_INTEGER-1-state.cash));
+ if(!payout)return 0;
+ state.cash+=payout;
+ state.relics.lastNativeEffect={mode,amount,bonus:payout,percent:Math.round(payout/amount*10000)/100,at:now,names:detail.skills.slice(0,4)};
  return payout;
 }
 /** Caller MUST confirm a new, immutable server-verified receipt before invoking.
@@ -320,10 +336,12 @@ export function summonRelics(
     store(c,{id,name,origin:'normal',rarity,mode,skill,power,ability,count:1});
     c.totalSummons += 1;
     summary[rarity] = (summary[rarity] ?? 0) + 1;
-    if (rarity === 'transcendent' || rarity === 'ancient') highlights.push({id,name,rarity});
+    if (['legendary','mythic','ancient','transcendent'].includes(rarity)) highlights.push({id,name,rarity});
   }
   state.cash -= price;
-  return {cost:price,count,level:summonLevel(c.totalSummons),summary,highlights:highlights.slice(0,30)};
+  const rank:Record<string,number>={transcendent:4,ancient:3,mythic:2,legendary:1};
+  highlights.sort((a,b)=>(rank[b.rarity]??0)-(rank[a.rarity]??0));
+  return {cost:price,count,level:summonLevel(c.totalSummons),summary,highlights:highlights.slice(0,12)};
 }
 export function grantSteamRelic(
  state:{relics?:RelicCollection},
@@ -342,7 +360,7 @@ export function grantSteamRelic(
  const item:RelicItem={
   id,name:tier.label+'の'+archetype.name+'：'+proof.title.slice(0,55),
   origin:'steam',rarity:'exclusive',power:tier.power,
-  ability:tier.label+'・'+archetype.ability+'／'+archetype.skill+' 最大'+tier.percent+'%・'+tier.cap+'KP（共通上限内）',
+  ability:tier.label+'／'+archetype.ability+'：報酬＋'+tier.percent+'%。追加KPはほかの遺物と上限なしで合算。',
   mode:archetype.mode,skill:archetype.skill,percent:tier.percent,cap:tier.cap,
   count:1,source:'steam app '+proof.app+' / '+proof.achievement.slice(0,90),
  };
@@ -413,7 +431,10 @@ export function autoEquipRelics(state:{relics?:RelicCollection},goal:string='all
  };
  const selected:RelicItem[]=[];
  while(selected.length<RELIC_SLOTS){
-  const options=items.filter(i=>!selected.includes(i)&&applicable(i)&&!(i.origin==='unite'&&selected.some(s=>s.origin==='unite')));
+  const normalOptions=items.filter(i=>!selected.includes(i)&&applicable(i)&&!(i.origin==='unite'&&selected.some(s=>s.origin==='unite')));
+  // Risk pacts can silence the user's other items. Never auto-select a pact
+  // until the player opts in deliberately via manual equipment.
+  const options=normalOptions.filter(i=>!NORMAL_RELIC_BY_ID.get(i.id)?.tradeoff);
   if(!options.length)break;
   options.sort((a,b)=>score(b,selected)-score(a,selected)||b.power-a.power||a.id.localeCompare(b.id));
   selected.push(options[0]!);
