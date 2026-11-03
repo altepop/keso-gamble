@@ -753,3 +753,20 @@ body.esc-wheel-open{overflow:hidden!important}
 
 .relic-v8-slot-picker{display:block;margin:10px 0 8px;padding:10px 11px;border:1px solid #355d8a;border-radius:10px;background:#102440;color:#d7e6ff;font-size:12px}
 .relic-v8-slot-picker select{display:block;width:100%;min-height:42px;margin-top:7px;font-size:13px}
+
+/* Relic V9: listen to all seven cinematic soundtracks before spending KP. */
+.relic-v9-sound-studio{padding:14px 11px;border:1px solid #4c73ad;border-radius:14px;background:linear-gradient(130deg,#0e2546,#171936);margin:10px 0 15px}
+.relic-v9-volume-row{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:13px;font-weight:750;color:#e1ecff}
+#relic-v9-volume-value{font-size:14px;color:#bbffe7;font-weight:900;min-width:44px;text-align:right}
+#relic-v9-volume{display:block;accent-color:#9dc6ff;width:100%;height:28px;margin:5px 0 8px;cursor:pointer}
+.relic-v9-tier-audition{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:11px}
+.relic-v9-tier-button{min-width:0;display:flex;flex-direction:column;align-items:flex-start;gap:3px;min-height:84px;text-align:left;border:1px solid var(--relic-accent,#9daac5);border-left:4px solid var(--relic-accent,#9daac5);border-radius:10px;padding:9px;color:#fff;background:linear-gradient(115deg,var(--relic-surface,#16243c),#10182b);box-shadow:inset 0 0 12px var(--relic-glow,transparent);cursor:pointer;touch-action:manipulation}
+.relic-v9-tier-button strong{font-size:14px;color:var(--relic-accent,#d6e6ff);line-height:1.25}
+.relic-v9-tier-button small{display:block;font-size:11px;color:#e0e9f8;line-height:1.35;flex:1}
+.relic-v9-tier-button span{font-size:11px;font-weight:800;color:#fff4c7}
+.relic-v9-tier-button:active{transform:scale(.97)}
+.relic-v9-tier-button:focus-visible{outline:3px solid #fff;outline-offset:2px}
+.relic-v9-tier-button.relic-rarity-transcendent{grid-column:1/-1;border-image:none;border:2px solid #ffdc87;background:linear-gradient(105deg,#382d75,#264a72,#265f50,#382d75);box-shadow:0 0 16px rgba(159,155,255,.25)}
+.relic-v9-tier-button.relic-rarity-transcendent strong{font-size:17px;background:linear-gradient(90deg,#ffe58c,#a7ffe7,#e4adff);background-clip:text;-webkit-background-clip:text;color:transparent}
+@media(min-width:700px){.relic-v9-tier-audition{grid-template-columns:repeat(3,minmax(0,1fr))}.relic-v9-tier-button.relic-rarity-transcendent{grid-column:span 3;min-height:80px}}
+@media(prefers-reduced-motion:reduce){.relic-v9-tier-button:active{transform:none}}

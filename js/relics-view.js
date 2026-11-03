@@ -1,6 +1,6 @@
-import {relicSoundEnabled} from './relics-audio.js?v=web-c26e3116d1c9b64f';
-import {relicBuildSection,relicPresetsSection,relicSummonHistorySection,relicSpecialSection,relicEffectLogSection,relicEconomySection} from './relics-v7.js?v=web-c26e3116d1c9b64f';
-import {relicInventory,relicFilterControls,relicItemCard,relicInventoryPages,relicRevealPanel,relicBonusDashboard} from './relics-v4.js?v=web-c26e3116d1c9b64f';
+import {relicSoundEnabled,relicSoundVolume,RELIC_SOUND_DESIGNS} from './relics-audio.js?v=web-196b9199ce61c58e';
+import {relicBuildSection,relicPresetsSection,relicSummonHistorySection,relicSpecialSection,relicEffectLogSection,relicEconomySection} from './relics-v7.js?v=web-196b9199ce61c58e';
+import {relicInventory,relicFilterControls,relicItemCard,relicInventoryPages,relicRevealPanel,relicBonusDashboard} from './relics-v4.js?v=web-196b9199ce61c58e';
 // Three independent origins: common summons, Steam achievements, and Unite results.
 // Never recommend cross-game combinations or require another game's relic for an upgrade.
 const esc=s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -67,7 +67,17 @@ export function relicsPanel(state,{proofs=null,notice='',loading=false,view={},r
    <p class="helper">召喚した累計回数でレベルが上昇する。Lv10到達は累計8,100回。以前の召喚回数・獲得遺物はそのまま残る。Lv10では一般0%、上質4%、超越0.003%。超越の確定天井はない。</p>
    ${ratesTable}
    <p class="helper">🔊 召喚結果の効果音は自動再生が基本だ。いつでも消音できる。</p>
-   <button type="button" class="action-btn relic-v8-audio-toggle" data-action="relic-sound-toggle" aria-pressed="${relicSoundEnabled()?'true':'false'}">${relicSoundEnabled()?'🔊 効果音：オン（タップで消音）':'🔇 効果音：オフ（タップで有効化）'}</button>
+   <button type="button" class="action-btn relic-v8-audio-toggle" data-action="relic-sound-toggle" aria-pressed="${relicSoundEnabled()?'true':'false'}">${relicSoundEnabled()?'🔊 自動効果音：オン':'🔇 自動効果音：オフ'}</button>
+   <div class="relic-v9-sound-studio">
+    <div class="relic-v9-volume-row"><label for="relic-v9-volume">🎚 効果音の音量</label><output id="relic-v9-volume-value" for="relic-v9-volume">${relicSoundVolume()}%</output></div>
+    <input id="relic-v9-volume" data-relic-sound-volume type="range" min="0" max="100" step="5" value="${relicSoundVolume()}" aria-label="召喚効果音の音量">
+    <p class="helper">レア度が上がるほど、音の厚み・楽器・盛り上がり・残響が増す。どの音もKPを使わず試聴できる。</p>
+    <div class="relic-v9-tier-audition">
+     ${Object.entries(RELIC_SOUND_DESIGNS).map(([tier,info])=>`<button type="button" class="relic-v9-tier-button relic-rarity-${tier}" data-action="relic-sound-preview" data-tier="${tier}" aria-label="${info.name}の召喚音を試聴">
+       <strong>${info.name}</strong><small>${info.description}</small><span>♫ ${info.duration.toFixed(1)}秒　試聴</span>
+      </button>`).join('')}
+    </div>
+   </div>
    <div class="action-row">${[1,10,100,1000].map(n=>`<button type="button" class="action-btn ${n===10?'primary':''}" data-action="relic-summon" data-count="${n}" ${state.cash<200*n||!state.serverWallet?'disabled':''}>${n}連 · ${yen(200*n)} KP</button>`).join('')}</div>
    ${notice?`<p class="market-disclaimer" role="status">${esc(notice)}</p>`:''}
  </div></section>
