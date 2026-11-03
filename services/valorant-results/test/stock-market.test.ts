@@ -471,3 +471,15 @@ test('オーナー自作ニュースは確定時の内容をそのまま保存�
  await assert.rejects(applyStockShock(f.env,guild,one,'news-custom-test-0002',{...text,headline:'<img src=x onerror=alert(1)>'},T),/見出し/);
  assert.equal((await readKpState(f.env,mapping,two)).prices.keso,Math.round(before*1.1));
 });
+
+test('D1: the last 48 ticks are read once per market version, not on every wallet read',async t=>{
+ const {stockView}=await import('../src/stock-market.ts');
+ t.mock.timers.enable({apis:['Date'],now:T});const f=await fixture();
+ const market=await prepareStocks(f.env,guild);
+ const db=f.env.DB,original=db.prepare.bind(db);let reads=0;
+ db.prepare=((sql:string)=>{if(sql.startsWith('SELECT prices,at FROM stock_ticks'))reads++;return original(sql);}) as typeof db.prepare;
+ const a=await stockView(f.env,market),b=await stockView(f.env,market);
+ assert.equal(reads,1);assert.deepEqual(a.ticks,b.ticks);
+ await stockView(f.env,{...market,version:market.version+1});
+ assert.equal(reads,2,'a new market version reads again');
+});

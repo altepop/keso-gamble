@@ -62,6 +62,19 @@ test('five-second M.LEAGUE card cache saves repeated cron reads and invalidates 
  assert.equal(updated.fixtures.find(x=>x.id===game1.id)?.confirmed,true);
  assert.strictEqual(await mlData(f.env),updated,'unchanged rows reuse cached data');
 });
+test('after the 5 seconds, M.LEAGUE cards are re-read only when another Worker has changed them',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:jst('2026-10-27T18:00:00')});
+ const f=await fixture();await storeCards(f.env,parseOfficialCards(page,2026),Date.now());
+ const db=f.env.DB,original=db.prepare.bind(db);let reads=0;
+ db.prepare=((sql:string)=>{if(sql==='SELECT date,tbl,teams FROM ml_cards')reads++;return original(sql);}) as typeof db.prepare;
+ const first=await mlData(f.env);assert.equal(reads,1);
+ t.mock.timers.tick(60_000);
+ assert.strictEqual(await mlData(f.env),first,'same version: no card read');assert.equal(reads,1);
+ // Another isolate stored a changed card (its own cache is not ours): the version moved.
+ f.sql.prepare("UPDATE ml_state SET value='other-isolate' WHERE key='cards_version'").run();
+ t.mock.timers.tick(60_000);
+ assert.notStrictEqual(await mlData(f.env),first);assert.equal(reads,2);
+});
 test('the official page is read per game in rank order; the template and broken blocks are skipped', () => {
  const parsed=parseOfficialResults(page);
  assert.deepEqual(parsed,[{date:'2026-10-27',game:1,names:order,points:[60.2,10.1,-20.3,-50]}]);

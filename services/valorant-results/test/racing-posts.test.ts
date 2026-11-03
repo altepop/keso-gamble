@@ -159,3 +159,32 @@ test('the public status says whether the earnings webhook is set, without reveal
   assert.doesNotMatch(text,/webhooks|token/);
  }
 });
+
+test('a finished race with nothing to post is remembered, so later minutes do not rescan every wallet for it',async()=>{
+ const f=await fixture();
+ const now=NORMAL+RUN_MS+60000;
+ await queueRacePosts(f.env,mapping,now); // normal races without bets, crowns or owned horses: nothing to post
+ assert.deepEqual(posts(f.sql).filter(p=>p.id.startsWith('race-result:')),[]);
+ const skipped=Number(f.sql.prepare('SELECT COUNT(*) n FROM kp_race_post_skips WHERE guild=?').get(guild)!.n);
+ assert.ok(skipped>=1,'the finished races are remembered as not posted');
+ const oldPrepare=f.env.DB.prepare.bind(f.env.DB);
+ f.env.DB.prepare=((query:string)=>{
+  if(query.includes("json_each(s.data,'$.raceBets')"))throw Error('A remembered race must not re-expand wallet bets');
+  return oldPrepare(query);
+ }) as typeof f.env.DB.prepare;
+ await queueRacePosts(f.env,mapping,now+60000);
+});
+
+test('a 10,000 KP loss on one race is recorded for its melt crown when the race settles; a win is not',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:NORMAL-10*60000});
+ const f=await fixture();
+ const {ensureRacing}=await import('../src/racing-kp.ts');await ensureRacing(f.env);
+ f.sql.prepare('INSERT INTO kp_races(guild,id,seed,hash,created_at) VALUES(?,?,?,?,?)').run(guild,NORMAL,'melt-seed','h',0);
+ const order=raceResult(raceCard(NORMAL),'melt-seed').order;
+ await operateKp(f.env,mapping,one,'race-bet-melt-0001','race-bet',{raceId:NORMAL,type:'win',horse:order.at(-1),amount:6000});
+ await operateKp(f.env,mapping,one,'race-bet-melt-0002','race-bet',{raceId:NORMAL,type:'win',horse:order.at(-2),amount:4000});
+ await settleKpRaces(f.env,mapping,NORMAL+RUN_MS);
+ assert.deepEqual(f.sql.prepare('SELECT user,race,lost FROM kp_crown_melts').all().map(r=>({...r})),[{user:one,race:NORMAL,lost:10000}]);
+ await settleKpRaces(f.env,mapping,NORMAL+RUN_MS+60000);
+ assert.equal(Number(f.sql.prepare('SELECT COUNT(*) n FROM kp_crown_melts').get()!.n),1,'settling again records nothing new');
+});

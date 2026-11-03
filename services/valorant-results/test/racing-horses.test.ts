@@ -206,7 +206,7 @@ test('D1: settlement check runs immediately after finish, retries each hour, ski
  assert.equal(shouldSettleHorsePrizes(-1),false);
  const hour=Date.parse('2026-11-04T18:00:30Z');
  assert.equal(horsePrizeLookback(hour),0,'unbounded backlog sweep every six hours');
- assert.equal(horsePrizeLookback(hour+2*60000),hour+2*60000-48*3600000,'bounded 48h hot path');
+ assert.equal(horsePrizeLookback(hour+2*60000),hour+2*60000-6*3600000,'bounded 6h hot path');
 });
 
 test('D1: old unpaid owned-horse race is recovered on the six-hour backlog sweep',async()=>{

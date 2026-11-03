@@ -6,7 +6,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { initializeKp, syncKpAccounts } from '../src/kp.ts';
 import type { KpMapping } from '../src/kp.ts';
 import { operateKp, readKpState } from '../src/kp-api.ts';
-import { scheduleCrowns, crownEvents, crownName, BACK_GAP, VDK_SPECIAL_NAME, VDK_SPECIAL_SOURCE } from '../src/racing-crowns.ts';
+import { scheduleCrowns, crownEvents, recordMelts, crownName, BACK_GAP, VDK_SPECIAL_NAME, VDK_SPECIAL_SOURCE } from '../src/racing-crowns.ts';
 import { racingView } from '../src/racing-kp.ts';
 import { queueRacePosts, flushRacePosts } from '../src/racing-posts.ts';
 import type { PostEnv } from '../src/racing-posts.ts';
@@ -68,7 +68,8 @@ test('a broken win streak, a long break and a big KP loss also crown races; stal
  const stale=await fixture();results(stale.sql,'One#JP1','LLL',NOW-5*3600000);
  assert.equal((await scheduleCrowns(stale.env,mapping,NOW)).length,0);
  const melt=await fixture(),race=NOW-RACE_INTERVAL*2;
- melt.sql.prepare('UPDATE kp_state SET data=json_set(data,\'$.raceBets\',json(?)) WHERE user=?').run(JSON.stringify([{id:'b1',raceId:race,type:'win',horse:1,amount:12000,odds:30,status:'lost',payout:0,time:race-300000}]),one);
+ await recordMelts(melt.env,mapping.guildId,one,[{raceId:race,amount:7000,status:'lost'},{raceId:race,amount:5000,status:'lost'},{raceId:race-RACE_INTERVAL,amount:9999,status:'lost'}]);
+ await recordMelts(melt.env,mapping.guildId,two,[{raceId:race,amount:20000,status:'won'}]);
  await scheduleCrowns(melt.env,mapping,NOW);
  assert.deepEqual(crowns(melt.sql).map(c=>c.name),['OneKP溶かし大会 5億マジかw杯']);
 });

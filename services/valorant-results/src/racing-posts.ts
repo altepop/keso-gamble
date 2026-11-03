@@ -120,15 +120,19 @@ export async function queueRacePosts(env:PostEnv,mapping:KpMapping,now=Date.now(
   // INSERT OR IGNORE keeps the published result immutable. Once this ID is
   // already queued (even if Discord delivery is pending), rebuilding the
   // exact same post cannot change it; skip the wallet JSON expansion.
-  const already=await env.DB.prepare('SELECT 1 AS n FROM kp_posts WHERE id=?').bind('race-result:'+id).first();
+  // A race decided not to be posted is remembered too, so its bets (a scan of every wallet's JSON) are not read
+  // again every minute for the next 45 minutes.
+  const already=await env.DB.prepare('SELECT 1 AS n FROM kp_posts WHERE id=? UNION ALL SELECT 1 FROM kp_race_post_skips WHERE guild=? AND race=?').bind('race-result:'+id,mapping.guildId,id).first();
   if(already)continue;
   const bets=await raceBets(env,mapping.guildId,id);
+  if(bets.some(b=>b.status==='pending'))continue; // settled within a minute or two; check again
+  const skip=()=>env.DB.prepare('INSERT OR IGNORE INTO kp_race_post_skips(guild,race) VALUES(?,?)').bind(mapping.guildId,id).run();
   const crown=await crownFor(env,mapping.guildId,id),entries=await raceEntries(env,mapping,id);
-  if(bets.some(b=>b.status==='pending')||(!bets.length&&!bigRaceName(id)&&!raceEvent(id)&&!crown&&!entries.length))continue;
+  if(!bets.length&&!bigRaceName(id)&&!raceEvent(id)&&!crown&&!entries.length){await skip();continue;}
   const seed=await env.DB.prepare('SELECT seed FROM kp_races WHERE guild=? AND id=?').bind(mapping.guildId,id).first<{seed:string}>();
   const card={...raceCard(id,undefined,entries),...(crown?{name:crown.name}:{})};
   const ownerWon=Boolean(seed)&&Boolean(card.horses[raceResult(card,seed!.seed).order[0]-1].ownerName);
-  if(!worthPosting(card,bets,Boolean(crown),ownerWon))continue;
+  if(!worthPosting(card,bets,Boolean(crown),ownerWon)){await skip();continue;}
   if(seed){levelOf??=await roastLevelsOf(env,mapping);const titles=await titlesOf(env,mapping.guildId);await enqueue(env,'race-result:'+id,resultPost(card,seed.seed,bets,levelOf,u=>titles.get(u)),now);}
  }
 }

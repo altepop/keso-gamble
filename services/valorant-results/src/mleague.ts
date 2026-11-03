@@ -2,7 +2,7 @@
 // Results are read only from the official "日程・結果" page and matched to the fixture by date, game
 // number and the four teams; anything that does not match exactly is ignored, never guessed.
 import data from '../mleague-2026-27.json' with {type:'json'};
-import {kpHash} from './kp.ts';
+import {kpHash,kpRandom} from './kp.ts';
 import {nativeRelicBonus} from './relics.ts';
 import {verifiedBetProfit} from './relic-profit.ts';
 import type {KpEnv,KpMapping} from './kp.ts';
@@ -104,13 +104,17 @@ export function parseOfficialCards(html:string,year:number,d:MlData=data){
 // D1 Insights: 6,992 reads/day * 36 scanned rows for ml_cards alone.
 // Share a snapshot for 5 seconds in one Worker isolate, not across processes.
 // Updating the official calendar invalidates it before and after the writes.
-const mlViewCache=new WeakMap<object,{created:number;promise:Promise<MlView>}>();
+// After the 5 seconds, a one-row version check (bumped whenever a card changes) decides whether the cards are read
+// again, instead of reading every stored card (~2,000 times a day before).
+const mlViewCache=new WeakMap<object,{created:number;version:string;promise:Promise<MlView>}>();
 const ML_VIEW_TTL=5000;
 export async function storeCards(env:KpEnv,cards:ReturnType<typeof parseOfficialCards>,now:number){
  mlViewCache.delete(env.DB);
  await ensureMl(env);
  try{
-  for(const c of cards)await env.DB.prepare('INSERT INTO ml_cards(date,tbl,teams,at) VALUES(?,?,?,?) ON CONFLICT(date,tbl) DO UPDATE SET teams=excluded.teams,at=excluded.at WHERE ml_cards.teams!=excluded.teams').bind(c.date,c.table,JSON.stringify(c.teams),now).run();
+  let changed=0;
+  for(const c of cards)changed+=(await env.DB.prepare('INSERT INTO ml_cards(date,tbl,teams,at) VALUES(?,?,?,?) ON CONFLICT(date,tbl) DO UPDATE SET teams=excluded.teams,at=excluded.at WHERE ml_cards.teams!=excluded.teams').bind(c.date,c.table,JSON.stringify(c.teams),now).run()).meta.changes;
+  if(changed)await env.DB.prepare("INSERT INTO ml_state(key,value) VALUES('cards_version',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").bind(kpRandom()).run();
  }finally{mlViewCache.delete(env.DB);}
 }
 /** The fixtures with official teams where the calendar has been read; only those are open for betting. */
@@ -118,12 +122,18 @@ export async function mlData(env:KpEnv):Promise<MlView>{
  await ensureMl(env);
  const current=Date.now(),cached=mlViewCache.get(env.DB);
  if(cached&&current-cached.created>=0&&current-cached.created<ML_VIEW_TTL)return cached.promise;
- const promise=(async()=>{
+ // Parallel callers share one check: the entry is cached before anything is awaited.
+ const entry={created:current,version:'',promise:undefined as unknown as Promise<MlView>};
+ entry.promise=(async()=>{
+  const version=(await env.DB.prepare("SELECT value FROM ml_state WHERE key='cards_version'").first<{value:string}>())?.value??'';
+  entry.version=version;
+  if(cached&&cached.version===version)return cached.promise;
   const cards=(await env.DB.prepare('SELECT date,tbl,teams FROM ml_cards').all<{date:string;tbl:number;teams:string}>()).results;
-  const official=new Map(cards.map(c=>[c.date+'#'+c.tbl,JSON.parse(c.teams) as string[]])); 
+  const official=new Map(cards.map(c=>[c.date+'#'+c.tbl,JSON.parse(c.teams) as string[]]));
   return {teams:data.teams,fixtures:data.fixtures.map(f=>{const teams=official.get(f.date+'#'+f.table);return teams?{...f,teams,confirmed:true}:{...f,confirmed:false};})};
  })();
- mlViewCache.set(env.DB,{created:current,promise});
+ mlViewCache.set(env.DB,entry);
+ const promise=entry.promise;
  try{return await promise;}catch(error){if(mlViewCache.get(env.DB)?.promise===promise)mlViewCache.delete(env.DB);throw error;}
 }
 const monthPage=(y:number,m:number)=>`https://m-league.jp/games/?mlm=${m}&mly=${y}`;
