@@ -399,9 +399,9 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping):Promi
    const currentDay=new Date().toISOString().slice(0,10);
    const usedToday=ownedState.relics?.dailyNativeBonus?.day===currentDay?ownedState.relics.dailyNativeBonus.amount:0;
    const logs=(await env.DB.prepare('SELECT id,mode,base,bonus,details,at FROM relic_effect_logs WHERE guild=? AND user=? ORDER BY at DESC,id DESC LIMIT 30').bind(mapping.guildId,owner.user).all<{id:string;mode:string;base:number;bonus:number;details:string;at:number}>().then(r=>r.results).catch(()=>[])).map(entry=>{
-    let detail:{lines?:unknown[];sets?:unknown[];resonance?:number}={};
+    let detail:{lines?:unknown[];sets?:unknown[];resonance?:number;spikeOpening?:{game:number;multiplier:number;flatPerRelic:number;eligible:number}}={};
     try{detail=JSON.parse(entry.details);}catch{}
-    return {id:entry.id,mode:entry.mode,amount:entry.base,bonus:entry.bonus,at:entry.at,origin:'verified',lines:detail.lines??[],sets:detail.sets??[],resonance:detail.resonance??0};
+    return {id:entry.id,mode:entry.mode,amount:entry.base,bonus:entry.bonus,at:entry.at,origin:'verified',lines:detail.lines??[],sets:detail.sets??[],resonance:detail.resonance??0,spikeOpening:detail.spikeOpening??null};
    });
    const ownEconomy=await env.DB.prepare("SELECT COUNT(*) AS n,COALESCE(SUM(delta),0) AS total FROM kp_ledger WHERE guild=? AND user=? AND kind='relic'").bind(mapping.guildId,owner.user).first<{n:number;total:number}>().catch(()=>null);
    const guildEconomy=await env.DB.prepare("SELECT COUNT(*) AS n,COUNT(DISTINCT user) AS players,COALESCE(SUM(delta),0) AS total FROM kp_ledger WHERE guild=? AND kind='relic'").bind(mapping.guildId).first<{n:number;players:number;total:number}>().catch(()=>null);
