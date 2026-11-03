@@ -38,9 +38,14 @@ async function fixture(){
  return {env,sql,enable,profile,balance,seed,conflict(){conflict=true;}};
 }
 
-test('the pinned roster has four roles, unique canonical IDs, and no unpublished Hush',()=>{
- assert.equal(SPIKE_ROSTER.agents.length,29);assert.equal(new Set(SPIKE_ROSTER.agents.map(a=>a.id)).size,29);
- assert.ok(!SPIKE_ROSTER.agents.some(a=>a.name==='Hush'));
+test('the pinned roster has four roles, unique canonical IDs, and Hush as a Duelist (added 2026-11-03)',()=>{
+ assert.equal(SPIKE_ROSTER.agents.length,30);assert.equal(new Set(SPIKE_ROSTER.agents.map(a=>a.id)).size,30);
+ assert.deepEqual(SPIKE_ROSTER.agents.find(a=>a.name==='Hush'),{id:'ddd5a15c-4fbe-42fa-3789-11a55ca5ee04',name:'Hush',role:'Duelist'});
+ // A Hush game is now counted, and a Duelist role unlocked before Hush existed stays unlocked.
+ const hush=raw();(hush.players[0].agent as {id?:string;name?:string})={id:'DDD5A15C-4FBE-42FA-3789-11A55CA5EE04',name:'Hush'};
+ assert.equal(spikeMatch(hush,'p-one')?.agent,'ddd5a15c-4fbe-42fa-3789-11a55ca5ee04');
+ const before={...initialSpikeProfile(),unlocked:['Duelist'] as SpikeProfile['unlocked']};
+ assert.equal(spikeProgress(before).find(r=>r.role==='Duelist')?.unlocked,true);
  for(const role of SPIKE_ROLES)assert.ok(SPIKE_ROSTER.agents.filter(a=>a.role===role).length>0);
 });
 test('cold start, growth boundaries and full role unlock use the previous match snapshot',()=>{
@@ -155,18 +160,18 @@ test('daily count uses match end with 09:00 JST boundary; a duplicate never cons
  assert.equal(f.profile().games,62);
 });
 
-test('all 29 agents twice really unlock four roles; payouts remain exact and different players stay separate',async()=>{
+test('all 30 agents twice really unlock four roles; payouts remain exact and different players stay separate',async()=>{
  const f=await fixture();f.enable();
  for(let i=0;i<SPIKE_ROSTER.agents.length*2;i++){
   const r=raw('roster-'+i,{agent:SPIKE_ROSTER.agents[i%SPIKE_ROSTER.agents.length].id});
   assert.ok((await collectKpMatch(f.env,mapping,r,'p-one'))!>0);
  }
- assert.equal(f.profile().games,58);assert.equal(f.profile().unlocked.length,4);
+ assert.equal(f.profile().games,SPIKE_ROSTER.agents.length*2);assert.equal(f.profile().unlocked.length,4);
  assert.ok(Object.values(f.profile().counts).every(n=>n===2));
  const other=raw('other-player');other.players[0].puuid='p-two';
  assert.equal(await collectKpMatch(f.env,mapping,other,'p-two'),40);
  assert.equal(JSON.parse(String(f.sql.prepare('SELECT data FROM spike_profiles WHERE puuid=?').get('p-two')!.data)).games,1);
- assert.equal(f.profile().games,58);
+ assert.equal(f.profile().games,SPIKE_ROSTER.agents.length*2);
  const paid=Number(f.sql.prepare('SELECT SUM(amount) n FROM spike_rewards WHERE user=?').get(one)!.n);
  assert.equal(f.balance(),paid);
 });

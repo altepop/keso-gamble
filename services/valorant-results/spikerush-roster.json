@@ -1,6 +1,6 @@
 {
-  "version": "spikerush-roster-20261029-v1",
-  "verifiedAt": "2026-10-29",
+  "version": "spikerush-roster-20261103-v2",
+  "verifiedAt": "2026-11-03",
   "sources": [
     "https://playvalorant.com/en-us/agents/",
     "https://valorant-api.com/v1/agents?isPlayableCharacter=true&language=en-US"
@@ -55,6 +55,11 @@
       "id": "95b78ed7-4637-86d9-7e41-71ba8c293152",
       "name": "Harbor",
       "role": "Controller"
+    },
+    {
+      "id": "ddd5a15c-4fbe-42fa-3789-11a55ca5ee04",
+      "name": "Hush",
+      "role": "Duelist"
     },
     {
       "id": "0e38b510-41a8-5780-5e8f-568b2a4f2d6c",
