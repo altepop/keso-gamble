@@ -9,6 +9,8 @@ import {initializeKp,syncKpAccounts,collectKpMatch,drainKpInbox,kpEventId} from 
 import type {KpEnv,KpMapping} from '../src/kp.ts';
 import type {Match} from '../src/results.ts';
 import {ledgerHistory} from '../src/kp-history.ts';
+import {NORMAL_RELICS} from '../src/relic-catalog.ts';
+import type {RelicCollection} from '../src/relics.ts';
 const guild='100000000000000100',one='100000000000000101',two='100000000000000102';
 const mapping:KpMapping={guildId:guild,accounts:[{riotId:'One#JP1',discordUserId:one},{riotId:'Two#JP1',discordUserId:two}]};
 const agent=SPIKE_ROSTER.agents[0],at=Date.parse('2026-10-28T03:00:00Z');
@@ -177,4 +179,41 @@ test('wallet overflow rolls back the reward and growth, and recovery pays once',
  f.sql.prepare('INSERT INTO kp_ledger VALUES(?,?,?,?,?,?)').run('space',guild,one,-100,'test',at);
  await drainKpInbox(f.env);await drainKpInbox(f.env);
  assert.equal(f.balance(),Number.MAX_SAFE_INTEGER-60);assert.equal(f.profile().games,1);
+});
+
+
+test('real trigger-created Spike results credit opening relic KP from match 1, without double payout on retry',async()=>{
+ const f=await fixture();f.enable();
+ const def=NORMAL_RELICS.find(x=>x.mode==='spikerush'&&x.rarity==='common')!;
+ const collection:RelicCollection={totalSummons:1,items:{[def.id]:{...def,origin:'normal',count:1}},equipped:[def.id]};
+ const prior=f.sql.prepare('SELECT data FROM kp_state WHERE guild=? AND user=?').get(guild,one) as {data:string};
+ const state=JSON.parse(prior.data) as {relics?:RelicCollection};
+ state.relics=collection;
+ f.sql.prepare('UPDATE kp_state SET data=? WHERE guild=? AND user=?').run(JSON.stringify(state),guild,one);
+ const id=kpEventId(guild,'relic-first','p-one');
+ const match=raw('relic-first');
+ assert.equal(await collectKpMatch(f.env,mapping,match,'p-one'),90,'40 base + 50 opening even though luck7 did not trigger');
+ assert.equal(f.balance(),90);
+ assert.equal(f.profile().games,1);
+ assert.equal((f.sql.prepare("SELECT COUNT(*) AS n FROM kp_ledger WHERE id=? AND kind='relic'").get('relic:'+id) as {n:number}).n,1);
+ const log=f.sql.prepare('SELECT base,bonus,details FROM relic_effect_logs WHERE id=?').get('relic:'+id) as {base:number;bonus:number;details:string};
+ assert.equal(log.base,40);assert.equal(log.bonus,50);
+ assert.equal(JSON.parse(log.details).spikeOpening.flatPerRelic,50);
+ assert.equal(JSON.parse(log.details).spikeOpening.game,1);
+ await drainKpInbox(f.env);await collectKpMatch(f.env,mapping,match,'p-one');
+ assert.equal(f.balance(),90,'verified receipt is idempotent even when inbox or match is reprocessed');
+ assert.equal((f.sql.prepare("SELECT COUNT(*) AS n FROM kp_ledger WHERE kind='relic'").get() as {n:number}).n,1);
+});
+test('an archived match without a pending inbox is never backpaid when relics are newly equipped',async()=>{
+ const f=await fixture();f.enable();
+ const old=raw('old-without-relic');
+ assert.equal(await collectKpMatch(f.env,mapping,old,'p-one'),40);
+ const def=NORMAL_RELICS.find(x=>x.mode==='spikerush'&&x.rarity==='common')!;
+ const prior=f.sql.prepare('SELECT data FROM kp_state WHERE guild=? AND user=?').get(guild,one) as {data:string};
+ const state=JSON.parse(prior.data) as {relics?:RelicCollection};
+ state.relics={totalSummons:1,items:{[def.id]:{...def,origin:'normal',count:1}},equipped:[def.id]};
+ f.sql.prepare('UPDATE kp_state SET data=? WHERE guild=? AND user=?').run(JSON.stringify(state),guild,one);
+ await drainKpInbox(f.env);
+ assert.equal(f.balance(),40);
+ assert.equal((f.sql.prepare("SELECT COUNT(*) AS n FROM kp_ledger WHERE kind='relic'").get() as {n:number}).n,0);
 });

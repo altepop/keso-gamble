@@ -1,7 +1,7 @@
-import {stockPrice} from './stock-view.js?v=web-1765d774a0b2abca';
-import { BET_TYPES, BOXES, CLASSES, COURSE_M, CONDITIONS, DAILY_EXCHANGES, GOINGS, MAX_OWNED, MIN_BET, BET_STEP, PRIZES, RETIRE_RACES, RUN_MS, STYLES, WEEKLY_LIMIT, FORM_REFORM_FROM, runningNotes, raceBrief, distanceAt, exchangeDay, payoutFor, placeSlots } from './racing.js?v=web-1765d774a0b2abca';
-import { LUXURY, TITLES } from './luxury.js?v=web-1765d774a0b2abca';
-import { escapeHTML } from './progression-views.js?v=web-1765d774a0b2abca';
+import {stockPrice} from './stock-view.js?v=web-5a106056b664234a';
+import { BET_TYPES, BOXES, CLASSES, COURSE_M, CONDITIONS, DAILY_EXCHANGES, GOINGS, MAX_OWNED, MIN_BET, BET_STEP, PRIZES, RETIRE_RACES, RUN_MS, STYLES, WEEKLY_LIMIT, FORM_REFORM_FROM, runningNotes, raceBrief, distanceAt, exchangeDay, payoutFor, placeSlots } from './racing.js?v=web-5a106056b664234a';
+import { LUXURY, TITLES } from './luxury.js?v=web-5a106056b664234a';
+import { escapeHTML } from './progression-views.js?v=web-5a106056b664234a';
 const kp=n=>n.toLocaleString('ja-JP')+' KP';
 const odd=v=>(v/10).toFixed(1)+'倍';
 export const SILKS=[['#f5f5f5','#111'],['#1f1f1f','#fff'],['#e03131','#fff'],['#1c7ed6','#fff'],['#fcc419','#111'],['#2f9e44','#fff'],['#f76707','#fff'],['#f783ac','#111'],['#845ef7','#fff'],['#20c997','#111']];
