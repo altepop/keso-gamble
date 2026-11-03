@@ -17,6 +17,7 @@ import {voiceRewardHistory,voicePolicy} from './voice-rewards.ts';
 import {receiveLoopKp} from './loop-kp.ts';
 import {summonRelics,grantSteamRelic,grantUniteRelic,equipRelic,autoEquipRelics,nativeRelicBonus,evaluateRelicBonus,rarityRatesForLevel,summonLevel,SUMMON_MILESTONES,UNITE,UNITE_REQUIREMENTS,UNITE_STREAK_IDS,STEAM_RELIC_TIERS,type UniteRelicId} from './relics.ts';
 import {ALL_NORMAL_RELICS,RELIC_MODE_NAMES} from './relic-catalog.ts';
+import {verifiedCasinoProfit,verifiedStockProfit} from './relic-profit.ts';
 import type {RelicCollection,RelicItem} from './relics.ts';
 import {ensureQuizKp,receiveQuizKp,isKpParticipant,quizKpRates,quizKpLimits} from './quiz-kp.ts';
 import {activityAuthAvailable,createActivityChallenge,authenticateActivity}from './discord-activity-auth.ts';
@@ -243,15 +244,7 @@ export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:strin
   // These mechanics never touch game RNG, odds, or past results.
   let relicBonus=0;
   const casino=['spin','chinchiro','bj-start','bj-hit','bj-stand','bj-double','mines-cashout','slot','vp-draw','baccarat'].includes(action);
-  if(casino&&result&&typeof result==='object'){
-   const round=result as {net?:unknown;done?:{net?:unknown};payout?:unknown;amount?:unknown};
-   // Blackjack and multi-step games credit gross payout in a later operation.
-   // Use the game's CERTIFIED net, not balance delta, or a loss could generate KP.
-   const net=Number.isSafeInteger(round.done?.net)?Number(round.done!.net):
-    Number.isSafeInteger(round.net)?Number(round.net):
-    Number.isSafeInteger(round.payout)&&Number.isSafeInteger(round.amount)?Number(round.payout)-Number(round.amount):0;
-   if(net>0)relicBonus=nativeRelicBonus(state,'casino',net);
-  }
+  if(casino){const profit=verifiedCasinoProfit(result);if(profit>0)relicBonus=nativeRelicBonus(state,'casino',profit);}
   // Selling shares only grants bonuses on REALIZED positive FIFO profit, never
   // from the gross proceeds or repeated buys. One owner-indexed query on sells.
   if(action==='trade'&&args.side==='sell'&&stockTrade){
@@ -264,7 +257,7 @@ export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:strin
     .bind(mapping.guildId,user,sale.symbol,sale.quantity,sale.quantity).first<{shares:number;cost:number}>();
    if(Number(lots?.shares)===sale.quantity){
     // Acquired stock paid at least a 1% fee; include it in the break-even check.
-    const profit=Math.max(0,Math.floor(sale.total-Math.ceil(Number(lots?.cost??0)*1.01)));
+    const profit=verifiedStockProfit(sale.total,Number(lots?.cost??0),Number(lots?.shares??0),sale.quantity);
     if(profit>0)relicBonus=nativeRelicBonus(state,'market',profit);
    }
   }
