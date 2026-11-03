@@ -5,7 +5,8 @@ import {allowedKpOperation,MAX_KP_OPERATIONS_PER_MINUTE} from '../src/kp-operati
 import type {KpEnv} from '../src/kp.ts';
 test('server-side account budget is fail-closed, independent per member and renews each minute',async()=>{
  const db=new DatabaseSync(':memory:');
- db.exec('CREATE TABLE kp_operation_limits(guild TEXT NOT NULL,user TEXT NOT NULL,minute INTEGER NOT NULL,count INTEGER NOT NULL,PRIMARY KEY(guild,user,minute))');
+ // Existing schema_version=1 installations do NOT have this table yet.
+ // First authenticated write must migrate safely without a global reinstall.
  class Query{
   sql:string;args:unknown[];constructor(sql:string,args:unknown[]=[]){this.sql=sql;this.args=args;}
   bind(...xs:unknown[]){return new Query(this.sql,xs);}
