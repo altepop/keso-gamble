@@ -4,12 +4,13 @@ let browser;
 (async()=>{
  const{createInitialState}=await import('../js/engine.js');
  browser=await engine.launch(engineName==='chromium'?{executablePath:process.env.CHROMIUM_PATH||(existsSync('/usr/bin/chromium')?'/usr/bin/chromium':undefined),args:['--no-sandbox']}:{});
- for(const scenario of (process.argv[2]?[process.argv[2]]:['success','dm-touch','dm-refresh-touch','guild-touch','guild-refresh-touch','cancel','unconfigured','different-user'])){
+ for(const scenario of (process.argv[2]?[process.argv[2]]:['success','dm-touch','dm-refresh-touch','guild-touch','guild-refresh-touch','cancel','cancel-saved','unconfigured','different-user'])){
   const errors=[],ctx=await browser.newContext({viewport:{width:390,height:844},isMobile:engineName==='webkit'||scenario.includes('touch'),hasTouch:engineName==='webkit'||scenario.includes('touch')});let exchanges=0,challenge,operations=0,stateReads=0,failedModule=scenario==='module-failure';const bareModules=[];let releaseConfig;const configGate=new Promise(resolve=>{releaseConfig=resolve;});
   await ctx.addInitScript(({scenario})=>{
    for(const name of ['Audio','AudioContext','webkitAudioContext','RTCPeerConnection'])Object.defineProperty(window,name,{value:function(){throw Error('Unexpected media activation '+name);}});
    Object.defineProperty(navigator,'audioSession',{get(){throw Error('Unexpected audioSession access');}});
    HTMLMediaElement.prototype.play=()=>{throw Error('Unexpected playback')};Object.defineProperty(navigator,'mediaDevices',{value:{getUserMedia(){throw Error('Unexpected capture')},getDisplayMedia(){throw Error('Unexpected capture')}}});
+   if(scenario==='cancel-saved'){localStorage.setItem('keso-kp-session-v1','b'.repeat(48));}
    if(scenario==='different-user'){
     localStorage.setItem('keso-kp-session-v1','old-wallet-token');sessionStorage.setItem('keso-kp-pending-v1',JSON.stringify({id:'old-operation-id',owner:'old-user',action:'spin',args:{amount:100,type:'red'}}));
    }
@@ -25,7 +26,7 @@ let browser;
     if(op!==1)return;
     window.__sdkCommands.push(payload.cmd);
     if(payload.cmd==='AUTHORIZE'){
-     if(scenario==='cancel'){queueMicrotask(()=>send({cmd:payload.cmd,evt:'ERROR',nonce:payload.nonce,data:{code:4000,message:'cancelled'}}));return;}
+     if(scenario==='cancel'||scenario==='cancel-saved'){queueMicrotask(()=>send({cmd:payload.cmd,evt:'ERROR',nonce:payload.nonce,data:{code:4000,message:'cancelled'}}));return;}
      window.__authorizeArgs=payload.args;queueMicrotask(()=>send({cmd:payload.cmd,evt:null,nonce:payload.nonce,data:{code:'native-sdk-code'}}));return;
     }
     if(payload.cmd==='OPEN_EXTERNAL_LINK'){
@@ -113,7 +114,13 @@ let browser;
   }else{
    await page.locator('#kp-connect-code').waitFor();assert.equal(await page.locator('.kp-connection').count(),0);assert.equal(operations,0);
    if(scenario==='unconfigured'||scenario==='config-failure'){assert.deepEqual(await page.evaluate(()=>window.__sdkCommands),['READY']);assert.equal(exchanges,0);}
-   if(scenario==='cancel'){assert.equal(exchanges,0);await page.locator('[data-action=auto-connect-kp]').waitFor();}
+   if(scenario==='cancel'||scenario==='cancel-saved'){assert.equal(exchanges,0);await page.locator('[data-action=auto-connect-kp]').waitFor();}
+   if(scenario==='cancel-saved'){
+    await page.locator('[data-action=restore-kp]').click();
+    await page.locator('.nav-btn[data-screen=home]').waitFor();
+    assert.equal(exchanges,0,'recovery must not repeat Discord authorization');
+    assert.equal(operations,0,'recovery must never reissue a casino charge');
+   }
    if(scenario==='different-user'){assert.equal(await page.evaluate(()=>localStorage.getItem('keso-kp-session-v1')),'old-wallet-token');assert.match(await page.locator('#app').innerText(),/別の口座/);}
   }
   assert.deepEqual(errors,[]);console.log('Passed Activity scenario: '+engineName+' '+scenario);await ctx.close();

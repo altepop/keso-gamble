@@ -1,4 +1,4 @@
-import { fmt, fmt0 } from './format.js?v=web-5a106056b664234a';
+import { fmt, fmt0 } from './format.js?v=web-b403f140046cbd65';
 function genCandles(base,id){
   const out=[];let close=base*0.98;let seed=id.split('').reduce((a,c)=>a+c.charCodeAt(0),0)+77;
   const rand=()=>{seed=(seed*1664525+1013904223)>>>0;return seed/4294967296};
