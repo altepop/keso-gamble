@@ -5,8 +5,9 @@ let browser;
  const{createInitialState}=await import('../js/engine.js');
  browser=await engine.launch(engineName==='chromium'?{executablePath:process.env.CHROMIUM_PATH||(existsSync('/usr/bin/chromium')?'/usr/bin/chromium':undefined),args:['--no-sandbox']}:{});
  for(const scenario of (process.argv[2]?[process.argv[2]]:['success','dm-touch','dm-refresh-touch','guild-touch','guild-refresh-touch','cancel','cancel-saved','unconfigured','different-user'])){
-  const errors=[],ctx=await browser.newContext({viewport:{width:390,height:844},isMobile:engineName==='webkit'||scenario.includes('touch'),hasTouch:engineName==='webkit'||scenario.includes('touch')});let exchanges=0,challenge,operations=0,stateReads=0,failedModule=scenario==='module-failure';const bareModules=[];let releaseConfig;const configGate=new Promise(resolve=>{releaseConfig=resolve;});
+  const errors=[],ctx=await browser.newContext({viewport:{width:390,height:844},isMobile:engineName==='webkit'||scenario.includes('touch'),hasTouch:engineName==='webkit'||scenario.includes('touch')});let exchanges=0,challenge,operations=0,stateReads=0,failedModule=scenario==='module-failure',failedBootstrap=scenario==='bootstrap-failure';const bareModules=[];let releaseApp;const appGate=scenario==='stalled-module'?new Promise(resolve=>{releaseApp=resolve;}):null;let releaseConfig;const configGate=new Promise(resolve=>{releaseConfig=resolve;});
   await ctx.addInitScript(({scenario})=>{
+   if(scenario==='stalled-module')window.kesoBootWatchdogMs=1500;
    for(const name of ['Audio','AudioContext','webkitAudioContext','RTCPeerConnection'])Object.defineProperty(window,name,{value:function(){throw Error('Unexpected media activation '+name);}});
    Object.defineProperty(navigator,'audioSession',{get(){throw Error('Unexpected audioSession access');}});
    HTMLMediaElement.prototype.play=()=>{throw Error('Unexpected playback')};Object.defineProperty(navigator,'mediaDevices',{value:{getUserMedia(){throw Error('Unexpected capture')},getDisplayMedia(){throw Error('Unexpected capture')}}});
@@ -65,6 +66,8 @@ let browser;
    const file=resolve(__dirname,'..','.'+(path==='/'?'/index.html':path));assert.ok(file.startsWith(resolve(__dirname,'..')+'/'));
    if(path.endsWith('.js')&&!new URL(route.request().url()).search)bareModules.push(path);
    if(path==='/js/casino-more.js'&&failedModule){await route.abort('failed');return;}
+   if(path==='/js/discord-activity-auth.js'&&failedBootstrap){await route.abort('failed');return;}
+   if(path==='/js/app.js'&&appGate)await appGate;
    const legacy=process.env.KESO_MIXED_CASINO&&path==='/js/casino.js'&&!new URL(route.request().url()).search;
    const body=legacy?readFileSync(resolve(__dirname,'../tests/fixtures/legacy-casino.js')):revision?require('node:child_process').execFileSync('git',['show',revision+':'+require('node:path').relative(resolve(__dirname,'..'),file)],{cwd:resolve(__dirname,'..')}):readFileSync(file);
    await route.fulfill({status:200,contentType:path.endsWith('.js')?'text/javascript':path.endsWith('.css')?'text/css':'text/html',body});
@@ -82,6 +85,23 @@ let browser;
    assert.equal(await page.locator('button:not(#keso-guide-trigger)').count(),1);failedModule=false;await page.getByRole('button',{name:'もう一度開く'}).click();
    await page.locator('.title-start').filter({hasText:'900'}).waitFor();assert.equal(exchanges,1);assert.equal(operations,0);assert.deepEqual(errors,[]);
    console.log('Passed module failure: native READY before module loading, visible fallback and retry without a charge ('+engineName+')');await ctx.close();continue;
+  }
+  // #138: the first module never loads (static import of the entry fails) — the inline watchdog shows a retry at once.
+  if(scenario==='bootstrap-failure'){
+   await page.getByRole('alert').filter({hasText:'画面を開けませんでした'}).waitFor({timeout:5000});
+   assert.equal(await page.locator('button:not(#keso-guide-trigger)').count(),1);assert.equal(exchanges,0);assert.equal(operations,0);
+   failedBootstrap=false;await page.getByRole('button',{name:'もう一度開く'}).click();
+   await page.locator('.title-start').filter({hasText:'900'}).waitFor();assert.match(page.url(),/[?&]keso_retry=\d+/);assert.match(page.url(),/frame_id=frame/);
+   assert.equal(exchanges,1);assert.equal(operations,0);assert.deepEqual(errors,[]);
+   console.log('Passed bootstrap failure: inline retry without the module graph, cache-busting reload keeps Discord parameters ('+engineName+')');await ctx.close();continue;
+  }
+  // #138: an import that stalls on a phone network shows a retry after the watchdog, and the app still replaces it when it arrives.
+  if(scenario==='stalled-module'){
+   await page.getByRole('alert').filter({hasText:'画面を開けませんでした'}).waitFor({timeout:8000});
+   assert.deepEqual(await page.evaluate(()=>window.__sdkCommands),['READY']);
+   releaseApp();await page.locator('.title-start').filter({hasText:'900'}).waitFor();
+   assert.equal(await page.getByRole('alert').filter({hasText:'画面を開けませんでした'}).count(),0);assert.equal(exchanges,1);assert.equal(operations,0);assert.deepEqual(errors,[]);
+   console.log('Passed stalled module: watchdog retry instead of endless loading, replaced by the app once it loads ('+engineName+')');await ctx.close();continue;
   }
   if(scenario==='slow-config'){
    await page.waitForFunction(()=>window.__sdkCommands.includes('READY'));

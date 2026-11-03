@@ -4,14 +4,29 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="theme-color" content="#050b1e" />
-  <meta name="keso-release" content="web-e834154bdcdbf9c4" />
+  <meta name="keso-release" content="web-9a8b796626f485bd" />
   <title>KESO PLAY</title>
-  <link rel="stylesheet" href="./css/styles.css?v=web-e834154bdcdbf9c4" />
+  <link rel="stylesheet" href="./css/styles.css?v=web-9a8b796626f485bd" />
   <link rel="stylesheet" href="./guide/guide.css?v=guide-20261103-v1" />
 </head>
 <body>
   <div id="app"></div>
-  <script type="module" src="./js/bootstrap.js?v=web-e834154bdcdbf9c4"></script>
+  <script>
+   // #138: when the app never draws (a module that fails to load, or an import that stalls on a phone), show a retry
+   // instead of an endless loading screen. The app's first draw replaces this; it is never shown over a drawn screen.
+   (function(){
+    var shown=false;
+    window.kesoRetry=function(){var url=new URL(location.href);url.searchParams.set('keso_retry',String(Date.now()));location.replace(url.href);};
+    function show(){
+     var root=document.getElementById('app');if(shown||!root||root.childElementCount)return;shown=true;
+     root.innerHTML='<main class="title-screen"><h1>KESO PLAY</h1><p class="title-note" role="alert">画面を開けませんでした。通信を確認して、もう一度開いてください。</p><p class="title-note">起動スクリプト / '+(document.querySelector('meta[name="keso-release"]')||{}).content+'</p><button class="title-start" type="button">もう一度開く</button></main>';
+     root.querySelector('button').addEventListener('click',window.kesoRetry);
+    }
+    addEventListener('error',function(event){var target=event.target;if(target&&target.tagName==='SCRIPT'&&/\/js\/bootstrap\.js/.test(target.src))show();},true);
+    setTimeout(show,window.kesoBootWatchdogMs||20000);
+   })();
+  </script>
+  <script type="module" src="./js/bootstrap.js?v=web-9a8b796626f485bd"></script>
   <script type="module" src="./guide/activity-guide.js?v=guide-20261103-v3"></script>
 </body>
 </html>
