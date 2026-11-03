@@ -454,8 +454,14 @@ for(const eventName of ['input','change'])addEventListener(eventName,e=>{
  if(!['query','source','rarity','mode','sort'].includes(key))return;
  if(eventName==='input'&&key!=='query')return;
  if(eventName==='change'&&key==='query')return;
+ const caret=key==='query'?[el.selectionStart,el.selectionEnd]:null;
  relicView={...relicView,[key]:el.value,page:0};
  render();
+ if(caret){
+  const field=document.querySelector('#relic-search');
+  field?.focus({preventScroll:true});
+  if(caret[0]!==null&&caret[1]!==null)field?.setSelectionRange(caret[0],caret[1]);
+ }
 });
 addEventListener('click',async e=>{
   const t=e.target.closest?.('button,[data-open]'); if(!t) return;
@@ -502,7 +508,7 @@ addEventListener('click',async e=>{
       return;
     }
     if(t.dataset.action==='relic-reveal-close'){relicReveal=null;render();return;}
-    if(t.dataset.action==='relic-page'){relicView.page=Number(t.dataset.page)||0;render();return;}
+    if(t.dataset.action==='relic-page'){relicView.page=Number(t.dataset.page)||0;render();document.querySelector('.relic-v8-viewbar')?.scrollIntoView({block:'start',behavior:'auto'});return;}
     if(t.dataset.action==='relic-replay'){
       const idx=Number(t.dataset.historyIndex);
       const history=state.relics?.summonHistory;
@@ -518,7 +524,7 @@ addEventListener('click',async e=>{
       const presetSelected=$('#relic-preset')?.value??'';
       const presetName=$('#relic-preset-name')?.value??'';
       const args=action==='relic-summon'?{count:Number(t.dataset.count)}:
-       action==='relic-equip'?{relic:t.dataset.relic??'',slot:Number($('#relic-slot')?.value??0)}:
+       action==='relic-equip'?{relic:t.dataset.relic??'',slot:Number((relicView.section==='collection'?$('#relic-slot-gallery')?.value:$('#relic-slot')?.value)??0)}:
        action==='relic-auto-equip'?{goal:$('#relic-goal')?.value??'all'}:
        action==='relic-save-preset'?{preset:presetName}:
        action==='relic-overwrite-preset'?{preset:presetSelected}:
