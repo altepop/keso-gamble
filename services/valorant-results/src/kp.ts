@@ -189,13 +189,33 @@ export async function drainKpInbox(env:KpEnv){
    if(post){try{await ensurePosts(env);await enqueue(env,'esc-big:'+e.id,post,Date.now());}catch{console.warn('escalation_big_post_pending');}}
   }
   const notice=await env.DB.prepare('SELECT n.riot_id,n.message FROM notifications n JOIN kp_accounts a ON n.riot_id=a.riot WHERE a.guild=? AND a.puuid=? AND n.match_id=?').bind(e.guild,e.puuid,e.match).first<{riot_id:string;message:string}>();
-  if(notice&&net!==null){const message=kpCreditLine(notice.message,net,(typeof e.note==='string'?e.note:'')+debtNote(owed));await env.DB.prepare("UPDATE notifications SET message=?,sent=CASE WHEN mode='escalation' AND outcome='draw' THEN 1 ELSE 0 END WHERE riot_id=? AND match_id=? AND message!=?").bind(message,notice.riot_id,e.match,message).run();}
+  if(notice&&net!==null){
+   const relic=await kpRelicBonus(env,e.guild,e.user,e.id);
+   const message=kpCreditLine(notice.message,net,(typeof e.note==='string'?e.note:'')+debtNote(owed),relic);
+   await env.DB.prepare("UPDATE notifications SET message=?,sent=CASE WHEN mode='escalation' AND outcome='draw' THEN 1 ELSE 0 END WHERE riot_id=? AND match_id=? AND message!=?").bind(message,notice.riot_id,e.match,message).run();
+  }
   await env.DB.prepare('DELETE FROM kp_inbox WHERE id=? AND EXISTS(SELECT 1 FROM kp_events WHERE id=?)').bind(e.id,e.id).run();
  }catch{console.warn('kp_credit_retry_pending');}}
 }
 /** The match's KP after any bottom-of-team debit; null until the event is recorded. */
 export async function kpMatchNet(env:KpEnv,id:string){const r=await env.DB.prepare("SELECT e.amount+COALESCE((SELECT delta FROM kp_ledger WHERE id='penalty:'||e.id),0)+COALESCE((SELECT delta FROM kp_ledger WHERE id='esc-extra:'||e.id),0)+COALESCE((SELECT delta FROM kp_ledger WHERE id='relic:'||e.id),0) AS net FROM kp_events e WHERE e.id=?").bind(id).first<{net:number}>();return r?Number(r.net):null;}
-export function kpCreditLine(text:string,amount:number,note=''){const base=text.replace(/\n🪙 この試合 [+−]\d+ KP[^\n]*/g,''),split=base.indexOf('\n💬 '),line='\n🪙 この試合 '+(amount<0?'−'+(-amount):'+'+amount)+' KP'+note;return split<0?base+line:base.slice(0,split)+line+base.slice(split);}
+/** Verified receipt-only relic delta; never take the display amount from user input.
+ * The primary-key lookup is invoked only for a new/loaded match notification. */
+export async function kpRelicBonus(env:KpEnv,guild:string,user:string,id:string):Promise<number>{
+ const hit=await env.DB.prepare("SELECT delta FROM kp_ledger WHERE id=? AND guild=? AND user=? AND kind='relic'")
+  .bind('relic:'+id,guild,user).first<{delta:number}>();
+ return Math.max(0,Number(hit?.delta??0));
+}
+/** A single line shows BOTH the actual wallet total and a clear breakdown.
+ * Reformatting a delivered notification replaces the old line, never repeats it.
+ * The earned relic KP is inside the Spike breakdown parentheses where possible. */
+export function kpCreditLine(text:string,amount:number,note='',relic=0){
+ const base=text.replace(/\n🪙 この試合 [+−]\d+ KP[^\n]*/g,''),split=base.indexOf('\n💬 ');
+ const relicLabel=Number.isSafeInteger(relic)&&relic>0?'🧿遺物補正＋'+relic+' KP':'';
+ const tail=!relicLabel?note:note.endsWith('）')?note.slice(0,-1)+'・'+relicLabel+'）':note?note+'（'+relicLabel+'）':'（'+relicLabel+'）';
+ const line='\n🪙 この試合 '+(amount<0?'−'+(-amount):'+'+amount)+' KP'+tail;
+ return split<0?base+line:base.slice(0,split)+line+base.slice(split);
+}
 /** The KP of one VALORANT result before the wallet: the mode's rate, the side bonuses of the easy modes, then luck.
  * - Deathmatch: first place (most kills, ties included, at least one) wins 1,000 on a 30% draw; otherwise a K/D below 1
  *   costs 50 and anything else is 0.
@@ -314,20 +334,21 @@ export async function flushKpDirectives(env:KpEnv & {DISCORD_WEBHOOK_URL:string;
 /** Per monitor run: lazily load only the exact matches Henrik returned.
  * The old cron preloaded a 200-result 5-table JOIN every minute even if no game
  * was played: 451,540 D1 rows/day (2026-11-01 Insights). */
-export interface KpRun { mapping:KpMapping; startsAt:number; credits:Map<string,number>; messages:Map<string,string>; notes?:Map<string,string>; loaded:Set<string> }
+export interface KpRun { mapping:KpMapping; startsAt:number; credits:Map<string,number>; relicBonuses:Map<string,number>; messages:Map<string,string>; notes?:Map<string,string>; loaded:Set<string> }
 export async function prepareKpRun(env:KpEnv,mapping:KpMapping):Promise<KpRun>{
  const start=await env.DB.prepare("SELECT value FROM kp_settings WHERE key='starts_at'").first<{value:string}>();
- return {mapping,startsAt:Number(start?.value??Infinity),credits:new Map(),messages:new Map(),notes:new Map(),loaded:new Set()};
+ return {mapping,startsAt:Number(start?.value??Infinity),credits:new Map(),relicBonuses:new Map(),messages:new Map(),notes:new Map(),loaded:new Set()};
 }
 /** Indexed id lookup: preserves old-match payouts, edited result messages and
  * delayed KP recovery without scanning all historic results for every poll.
  * The loaded set is only per cron run, so other workers never share stale data. */
 export async function loadKpRunMatch(env:KpEnv,run:KpRun,id:string):Promise<void>{
  if(run.loaded.has(id))return;
- const row=await env.DB.prepare("SELECT e.amount+COALESCE((SELECT delta FROM kp_ledger WHERE id='penalty:'||e.id),0)+COALESCE((SELECT delta FROM kp_ledger WHERE id='relic:'||e.id),0) AS amount,n.message,d.note FROM kp_events e LEFT JOIN kp_reward_notes d ON d.id=e.id LEFT JOIN kp_accounts a ON a.guild=e.guild AND a.puuid=e.puuid LEFT JOIN notifications n ON n.riot_id=a.riot AND n.match_id=e.match WHERE e.id=? AND e.guild=? LIMIT 1")
-  .bind(id,run.mapping.guildId).first<{amount:number;message:string|null;note:string|null}>();
+ const row=await env.DB.prepare("SELECT e.amount+COALESCE((SELECT delta FROM kp_ledger WHERE id='penalty:'||e.id),0)+COALESCE((SELECT delta FROM kp_ledger WHERE id='relic:'||e.id),0) AS amount,COALESCE((SELECT delta FROM kp_ledger WHERE id='relic:'||e.id),0) AS relic,n.message,d.note FROM kp_events e LEFT JOIN kp_reward_notes d ON d.id=e.id LEFT JOIN kp_accounts a ON a.guild=e.guild AND a.puuid=e.puuid LEFT JOIN notifications n ON n.riot_id=a.riot AND n.match_id=e.match WHERE e.id=? AND e.guild=? LIMIT 1")
+  .bind(id,run.mapping.guildId).first<{amount:number;relic:number;message:string|null;note:string|null}>();
  if(row){
   run.credits.set(id,row.amount);
+  run.relicBonuses.set(id,Math.max(0,Number(row.relic??0)));
   if(row.message!==null)run.messages.set(id,row.message);
   run.notes?.set(id,row.note??(/\n🪙 この試合 [^\n]*? KP([^\n]*)/.exec(row.message??'')?.[1]??''));
  }
