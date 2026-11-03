@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { mlOpen, mlCard, mlOdds, mlPartner, placeMlBet, settleMlBets, hydrateMleague, ML_PRIOR_GAMES } from '../js/mleague.js';
+import { mlOpen, mlClosesAt, mlCard, mlOdds, mlPartner, placeMlBet, settleMlBets, hydrateMleague, ML_PRIOR_GAMES } from '../js/mleague.js';
 import { hydrateRacing, WEEKLY_LIMIT } from '../js/racing.js';
 
 const data=JSON.parse(readFileSync(new URL('../services/valorant-results/mleague-2026-27.json',import.meta.url),'utf8'));
@@ -23,8 +23,16 @@ test('game 1 closes at 19:00; game 2 when game 1\'s result is in, or at midnight
  assert.equal(mlOpen(data,game1,jst('2026-10-27T18:59:59'),none),true);
  assert.equal(mlOpen(data,game1,jst('2026-10-27T19:00:00'),none),false);
  assert.equal(mlOpen(data,game2,jst('2026-10-27T20:30:00'),none),true,'bet on game 2 while watching game 1');
- assert.equal(mlOpen(data,game2,jst('2026-10-27T20:30:00'),new Map([[game1.id,{names:[]}]])),false,'game 1 is over');
- assert.equal(mlOpen(data,game2,jst('2026-10-27T22:30:00'),none),true,'no fixed cutoff while game 1 runs long');
+ assert.equal(mlOpen(data,game2,jst('2026-10-27T20:30:00'),new Map([[game1.id,{names:[]}]])),true,'game 1 being over no longer closes game 2');
+ assert.equal(mlOpen(data,game2,jst('2026-10-27T22:30:00'),none),true,'no fixed cutoff while the players are not confirmed');
+ // Game 2 closes 15 minutes after its players are confirmed, or with its own result; game 1 is not affected by it.
+ const confirmed=jst('2026-10-27T21:30:00'),lineups=new Map([[game2.id,confirmed]]);
+ assert.equal(mlOpen(data,game2,confirmed+14*60000+59000,none,lineups),true,'14:59 after the players are confirmed');
+ assert.equal(mlOpen(data,game2,confirmed+15*60000,none,lineups),false,'15:00 after');
+ assert.equal(mlClosesAt(game2,lineups),confirmed+15*60000);assert.equal(mlClosesAt(game2,new Map()),null);assert.equal(mlClosesAt(game1,new Map([[game1.id,confirmed]])),null,'only game 2');
+ assert.equal(mlOpen(data,game2,confirmed+60000,new Map([[game2.id,{names:[]}]]),lineups),false,'its own result closes it');
+ assert.equal(mlOpen(data,game1,jst('2026-10-27T18:59:59'),none,lineups),true,'game 1 still closes at 19:00 only');
+ assert.equal(mlOpen(data,game2,confirmed-3600000,none,lineups),true,'a confirmation seen later does not matter for earlier times');
  assert.equal(mlOpen(data,game2,jst('2026-10-28T00:00:00'),none),false,'a result that never arrives cannot keep it open overnight');
 });
 
@@ -37,6 +45,16 @@ test('odds come from past tops and lasts, shrunk toward one in four; a rookie is
  assert.ok(mlOdds(strong,{強い人:{games:10,top:0,last:10}}).last<o.last,'this season counts too');
 });
 
+test('horse tickets and M.LEAGUE predictions share the relaxed 80k weekly cap',()=>{
+ const now=jst('2026-10-27T18:00:00'),s=state(1_000_000);
+ assert.equal(WEEKLY_LIMIT,80_000);
+ // The same wallet week stores purchases made from the horse-racing screen.
+ s.raceWeek={start:jst('2026-10-26T00:00:00'),spent:50_000};
+ const first=placeMlBet(s,{match:game1.id,player:mlCard(data,game1)[0].name,type:'last',amount:30_000},now,data,new Map());
+ assert.equal(first.amount,30_000);
+ assert.equal(s.raceWeek.spent,80_000);
+ assert.throws(()=>placeMlBet(s,{match:game1.id,player:mlCard(data,game1)[0].name,type:'last',amount:100},now,data,new Map()),/競馬と合算・残り0 KP/);
+});
 test('only last place is sold; a bet is fixed at its odds, shares the weekly limit with racing and is settled', () => {
  const s=state(),now=jst('2026-10-27T18:00:00'),card=mlCard(data,game1);
  assert.throws(()=>placeMlBet(s,{match:game1.id,player:1,type:'top',amount:1000},now,data,new Map()),/ラスだけ/);

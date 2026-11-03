@@ -6,7 +6,7 @@ import {readFileSync,readdirSync} from 'node:fs';
 import {initializeKp,syncKpAccounts} from '../src/kp.ts';
 import type {KpMapping} from '../src/kp.ts';
 import {operateKp,readKpState} from '../src/kp-api.ts';
-import {ML_DATA,KINMA_FEED,parseKinmaLineups,pollMlLineups,mlLineups,parseOfficialResults,parseOfficialCards,storeCards,mlData,refreshMlCards,matchFixture,pollMlResults,settleMl,queueMlPosts,mlResults} from '../src/mleague.ts';
+import {ML_DATA,KINMA_FEED,parseKinmaLineups,pollMlLineups,mlLineups,parseOfficialResults,parseOfficialCards,storeCards,mlData,refreshMlCards,matchFixture,pollMlResults,settleMl,queueMlPosts,mlResults,mlActivityView} from '../src/mleague.ts';
 import type {PostEnv} from '../src/racing-posts.ts';
 import {runKpCommand,mlDay,mbetChoices,mbetDecide} from '../src/kp-slash.ts';
 // @ts-expect-error Shared browser engine.
@@ -48,6 +48,20 @@ async function fixture(){
 let n=0;const op=()=>`ml-operation-${String(++n).padStart(6,'0')}`;
 const page=officialPage('2026-10-27',[{game:1,names:order,points:[60.2,10.1,-20.3,-50]}]);
 
+test('five-second M.LEAGUE card cache saves repeated cron reads and invalidates on official updates',async()=>{
+ const f=await fixture();
+ const db=f.env.DB,original=db.prepare.bind(db);let reads=0;
+ db.prepare=((sql:string)=>{if(sql==='SELECT date,tbl,teams FROM ml_cards')reads++;return original(sql);}) as typeof db.prepare;
+ const [a,b,c]=await Promise.all([mlData(f.env),mlData(f.env),mlData(f.env)]);
+ assert.equal(reads,1,'parallel consumers share one D1 read');
+ assert.strictEqual(a,b);assert.strictEqual(b,c);
+ assert.equal(a.fixtures.find(x=>x.id===game1.id)?.confirmed,false);
+ await storeCards(f.env,parseOfficialCards(page,2026),Date.now());
+ const updated=await mlData(f.env);
+ assert.equal(reads,2,'saving official cards must invalidate the cached snapshot');
+ assert.equal(updated.fixtures.find(x=>x.id===game1.id)?.confirmed,true);
+ assert.strictEqual(await mlData(f.env),updated,'unchanged rows reuse cached data');
+});
 test('the official page is read per game in rank order; the template and broken blocks are skipped', () => {
  const parsed=parseOfficialResults(page);
  assert.deepEqual(parsed,[{date:'2026-10-27',game:1,names:order,points:[60.2,10.1,-20.3,-50]}]);
@@ -104,7 +118,10 @@ test('a prediction is bought through the wallet, settled from the official order
  await operateKp(f.env,mapping,one,op(),'ml-bet',{match:game2.id,player:1,type:'last',amount:100});
  t.mock.timers.setTime(jst('2026-10-27T21:10:00'));
  await pollMlResults(f.env,Date.now(),(async()=>new Response(page)) as unknown as typeof fetch);
- await assert.rejects(operateKp(f.env,mapping,one,op(),'ml-bet',{match:game2.id,player:1,type:'last',amount:100}),/締め切りました/,'game 1 has a result');
+ // Game 1's result no longer closes game 2: it closes 15 minutes after its players are confirmed.
+ f.sql.prepare('INSERT INTO ml_lineups VALUES(?,?,?)').run(game2.id,JSON.stringify(order),Date.now());
+ t.mock.timers.setTime(jst('2026-10-27T21:25:00'));
+ await assert.rejects(operateKp(f.env,mapping,one,op(),'ml-bet',{match:game2.id,player:1,type:'last',amount:100}),/締め切りました/,'15 minutes after the players are confirmed');
  assert.equal(await settleMl(f.env,mapping),3);assert.equal(await settleMl(f.env,mapping),0);
  assert.equal(f.balance(one),99000-100+Math.floor(1000*won.result.bet.odds/10));
  assert.equal(f.balance(two),99200+300,'the benched player is refunded; the wrong last loses');
@@ -201,14 +218,16 @@ test('/mbet offers confirmed open matches and player names with teams and last-p
 });
 test('/mbet narrows confirmed lineups and removes manual/automatic closures and completed games',async t=>{
  t.mock.timers.enable({apis:['Date'],now:jst('2026-10-27T18:00:00')});const f=await fixture();await storeCards(f.env,parseOfficialCards(page,2026),Date.now());
- f.sql.prepare('INSERT INTO ml_lineups VALUES(?,?,?)').run(game2.id,JSON.stringify(order),Date.now());
+ f.sql.prepare('INSERT INTO ml_lineups VALUES(?,?,?)').run(game2.id,JSON.stringify(order),jst('2026-10-27T19:30:00'));
  assert.deepEqual((await mbetChoices(f.env,pickInput(game2.id))).map(c=>c.value).sort(),[...order].sort());
  assert.ok((await mbetChoices(f.env,pickInput(game2.id))).every(c=>c.name.includes('出場確定')));
  t.mock.timers.tick(3600000);assert.deepEqual(await mbetChoices(f.env,pickInput(game1.id)),[{name:'ℹ️ この試合は締め切りました。match で別の試合を選んでください',value:'none'}],'game1 closes at19:00');
- assert.equal((await mbetChoices(f.env,pickInput(game2.id))).length,4,'game2 still follows the existing result-based window');
+ assert.equal((await mbetChoices(f.env,pickInput(game2.id))).length,4,'game2 stays open until 15 minutes after its players are confirmed');
  f.sql.prepare('INSERT INTO ml_closed VALUES(?,?,?,?)').run(game2.id,Date.now(),one,Date.now());assert.match((await mbetChoices(f.env,pickInput(game2.id)))[0].name,/締め切りました/);
  f.sql.prepare('DELETE FROM ml_closed').run();f.sql.prepare('INSERT INTO ml_results VALUES(?,?,?,?)').run(game1.id,JSON.stringify(order),JSON.stringify([50,0,-10,-40]),Date.now());
- assert.match((await mbetChoices(f.env,pickInput(game2.id)))[0].name,/締め切りました/,'game1 result closes game2');
+ assert.equal((await mbetChoices(f.env,pickInput(game2.id))).length,4,"game 1's result no longer closes game 2");
+ t.mock.timers.setTime(jst('2026-10-27T19:45:00'));
+ assert.match((await mbetChoices(f.env,pickInput(game2.id)))[0].name,/締め切りました/,'15 minutes after the players are confirmed');
  assert.ok(!(await mbetChoices(f.env,pickInput(null,'match'))).some(c=>c.value===game1.id||c.value===game2.id));
 });
 test('/mbet named selections follow the official corrected teams, settle once and show team and gross payout',async t=>{
@@ -347,4 +366,18 @@ test('Activity の Mリーグ画面：今日の試合の状態・選手・倍率
  await pollMlResults(f.env,Date.now(),(async()=>new Response(page)) as unknown as typeof fetch);
  view=(await readKpState(f.env,mapping,one)).mleague;
  assert.deepEqual(view.fixtures.find((x:{id:string})=>x.id===game1.id).result.names,order);
+});
+
+test('game 2 closes 15 minutes after its players are confirmed, and the Discord and Activity screens say when',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:jst('2026-10-27T21:00:00')});const f=await fixture();await storeCards(f.env,parseOfficialCards(page,2026),Date.now());
+ const view=(time:number)=>{t.mock.timers.setTime(time);return runKpCommand(f.env,{id:String((BigInt(time)-1420070400000n)<<22n|7n),guild_id:guild,member:{user:{id:one}},data:{name:'mleague'}},mapping);};
+ const game2View=async(time:number)=>(await mlActivityView(f.env,time)).fixtures.find(x=>x.id===game2.id)!;
+ // Players not confirmed yet: open, and nothing says when it closes.
+ assert.match(await view(Date.now()),/第2試合 受付中(?!（)/);assert.equal((await game2View(Date.now())).status,'open');assert.equal((await game2View(Date.now())).closesAt,undefined);
+ f.sql.prepare('INSERT INTO ml_lineups VALUES(?,?,?)').run(game2.id,JSON.stringify(order),jst('2026-10-27T21:30:00'));
+ assert.match(await view(jst('2026-10-27T21:40:00')),/第2試合 受付中（21:45まで）/);
+ const open=await game2View(jst('2026-10-27T21:44:59'));assert.equal(open.status,'open');assert.equal(open.closesAt,jst('2026-10-27T21:45:00'));
+ assert.match(await view(jst('2026-10-27T21:45:00')),/第2試合 締切/);assert.equal((await game2View(jst('2026-10-27T21:45:00'))).status,'closed');
+ // Game 1 is not affected by game 2's players.
+ assert.equal((await mlActivityView(f.env,jst('2026-10-27T21:44:00'))).fixtures.find(x=>x.id===game1.id)!.closesAt,undefined);
 });

@@ -6,7 +6,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { initializeKp, syncKpAccounts } from '../src/kp.ts';
 import type { KpMapping } from '../src/kp.ts';
 import { operateKp, readKpState } from '../src/kp-api.ts';
-import { scheduleCrowns, crownName, BACK_GAP } from '../src/racing-crowns.ts';
+import { scheduleCrowns, crownEvents, crownName, BACK_GAP, VDK_SPECIAL_NAME, VDK_SPECIAL_SOURCE } from '../src/racing-crowns.ts';
 import { racingView } from '../src/racing-kp.ts';
 import { queueRacePosts, flushRacePosts } from '../src/racing-posts.ts';
 import type { PostEnv } from '../src/racing-posts.ts';
@@ -88,10 +88,38 @@ test('crown races run without bets, show their name, and are announced in the ea
  assert.match(sent[1],/One戦犯レース しばくぞ杯/);assert.match(sent[1],/結果のハッシュ/);
 });
 
+test('one free VDK near-zero-death memorial race schedules idempotently, runs and posts a special roast',async t=>{
+ const now=Date.parse('2026-11-02T00:55:00+09:00'),f=await fixture(true),sent:string[]=[];
+ t.mock.method(globalThis,'fetch',async(_url:URL,init:{body:string})=>{sent.push(JSON.parse(init.body).content);return new Response('{}');});
+ const created=await scheduleCrowns(f.env,mapping,now);
+ assert.equal(created.length,1);assert.equal(created[0].name,VDK_SPECIAL_NAME);assert.equal(created[0].special,true);
+ const race=created[0].race;assert.equal(race,Date.parse('2026-11-02T01:30:00+09:00'));
+ assert.equal(f.sql.prepare('SELECT source FROM kp_crowns WHERE race=?').get(race)!.source,VDK_SPECIAL_SOURCE);
+ assert.equal((await scheduleCrowns(f.env,mapping,now+60000)).length,0);
+ assert.equal((await scheduleCrowns(f.env,mapping,Date.parse('2026-11-03T00:00:00+09:00'))).length,0);
+ await queueRacePosts(f.env,mapping,now,created);
+ await queueRacePosts(f.env,mapping,race-10*60000);
+ const view=await racingView(f.env,mapping,race+5000);
+ assert.equal(view.watch.runs,true);assert.equal(view.watch.crown,VDK_SPECIAL_NAME);
+ await flushRacePosts(f.env);
+ assert.match(sent[0],/VDKやらかし追悼レース/);assert.match(sent[0],/終了直前に1デス/);
+ assert.doesNotMatch(sent[0],/<@VDK>/);assert.match(sent[1],/VDK 0デス完走目前/);
+});
 test('weekend :30 races are crown races in the shared card, and always run', () => {
  const sat=Date.parse('2026-10-31T15:30:00+09:00'),card=raceCard(sat);
  assert.equal(card.crown,true);assert.notEqual(card.name,`第${card.number}レース`);
  assert.equal(raceRuns(card,{raceBets:[]}),true);
  assert.equal(raceCard(Date.parse('2026-10-27T15:30:00+09:00')).crown,false);
  assert.equal(crownSlotAllowed(sat),false,'a filler slot is not given to a person');
+});
+
+test('streak detection remains identical with exactly ten and over-ten losses, reading only 11 rows',async()=>{
+ const ten=await fixture();results(ten.sql,'One#JP1','W'+'L'.repeat(10));
+ const tenEvents=await crownEvents(ten.env,mapping,NOW);
+ assert(tenEvents.some(e=>e.kind==='streak10'));
+ const eleven=await fixture();results(eleven.sql,'One#JP1','W'+'L'.repeat(11));
+ const elevenEvents=await crownEvents(eleven.env,mapping,NOW);
+ assert(!elevenEvents.some(e=>e.kind==='streak10'),'11 losses must not be mislabeled as exactly 10');
+ const streak=await fixture();results(streak.sql,'One#JP1','W'.repeat(20)+'L');
+ assert((await crownEvents(streak.env,mapping,NOW)).some(e=>e.kind==='stopped'),'3+ wins followed by a loss still creates stopped crown');
 });

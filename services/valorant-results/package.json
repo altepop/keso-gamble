@@ -10,7 +10,7 @@
     "dev": "wrangler dev --test-scheduled",
     "typecheck": "tsc --noEmit",
     "test": "node --experimental-strip-types --test test/*.test.ts",
-    "check": "npm run typecheck && npm test && npm run test:deploy",
+    "check": "npm run typecheck && npm test && npm run test:deploy && npm run test:budget",
     "build": "wrangler deploy --dry-run --outdir dist",
     "deploy": "wrangler deploy",
     "db:local": "wrangler d1 migrations apply DB --local",
@@ -21,7 +21,8 @@
     "prebuild": "node scripts/prepare-local.mjs",
     "predev": "node scripts/prepare-local.mjs",
     "predeploy": "node scripts/assert-deploy-config.mjs",
-    "test:deploy": "node --test test/*.test.mjs"
+    "test:deploy": "node --test test/*.test.mjs",
+    "test:budget": "node --test ../../scripts/d1-daily-guard.test.mjs"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "5.20261024.1",

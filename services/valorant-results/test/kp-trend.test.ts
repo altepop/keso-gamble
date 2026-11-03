@@ -44,3 +44,17 @@ test('KP推移: each JST day ends at its balance, worked back from today; 借KP 
  assert.equal((await kpTrend(f.env,guild,new Map(),9999,NOW)).days.length,7);
  assert.equal((await kpTrend(f.env,'100000000000000199',new Map(),7,NOW)).members.length,0,'other servers stay out');
 });
+
+test('D1最適化：複数人のKP推移集計はギルド別・日時順の索引を利用',async()=>{
+ const f=await fixture();
+ for(let i=0;i<200;i++)f.credit('trend-'+i,i%2?one:two,1,day(20)+i*60_000);
+ await kpTrend(f.env,guild,new Map(),7,NOW);
+ const statement='SELECT user,CAST((at+?)/? AS INTEGER) AS day,SUM(delta) AS n FROM kp_ledger WHERE guild=? AND at>=? GROUP BY user,day';
+ const plan=f.sql.prepare('EXPLAIN QUERY PLAN '+statement).all(9*3600000,86400000,guild,day(25)) as Array<{detail:string}>;
+ assert.match(plan.map(x=>x.detail).join(';'),/kp_ledger_trend_window/);
+ // No change to money history, user isolation, or time-window accounting.
+ const seven=await kpTrend(f.env,guild,new Map(),7,NOW);
+ assert.equal(seven.days.length,7);
+ assert.equal(seven.members.find(m=>m.id===one)?.balance,100);
+ assert.equal(seven.members.find(m=>m.id===two)?.balance,100);
+});

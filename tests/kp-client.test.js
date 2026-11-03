@@ -45,3 +45,20 @@ test('disconnect revokes the server session before forgetting the device, and a 
  await assert.rejects(client.disconnect(),/通信/);assert.equal(client.connected,true);assert.equal(saved.getItem('keso-kp-session-v1'),'session');
  await client.disconnect();assert.equal(client.connected,false);assert.equal(saved.getItem('keso-kp-session-v1'),null);assert.equal(calls,2);
 });
+
+test('stored-session recovery validates the pending owner and never submits a pending charge',async()=>{
+ const saved=storage(),temporary=storage(),operations=[];
+ saved.setItem('keso-kp-session-v1','remembered');
+ const request=async(url,init)=>{
+  if(url.endsWith('/operation'))operations.push(init.body);
+  return Response.json({selfUserId:'real-owner',cash:22000});
+ };
+ const reloaded=createKpClient({storage:saved,temporaryStorage:temporary,request});
+ assert.deepEqual(await reloaded.restoreStoredSession(),{selfUserId:'real-owner',cash:22000});
+ assert.equal(operations.length,0);
+ temporary.setItem('keso-kp-pending-v1',JSON.stringify({id:'unfinished',owner:'other-user',action:'slot',args:{amount:20000}}));
+ const wrong=createKpClient({storage:saved,temporaryStorage:temporary,request});
+ await assert.rejects(wrong.restoreStoredSession(),/別の口座/);
+ assert.equal(wrong.pending,true);
+ assert.equal(operations.length,0);
+});

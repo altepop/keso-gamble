@@ -3,3 +3,6 @@ DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/REPLACE_ID/REPLACE_TOKEN"
 
 # Optional: same VCT QUIZ OAuth2 Client Secret, required for automatic Activity login.
 DISCORD_CLIENT_SECRET=
+
+# Optional: Steam Web API key (server only). KP_STEAM_CONFIG overrides steam-rewards.json.
+STEAM_WEB_API_KEY=

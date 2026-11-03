@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
 import {URL as NodeURL} from 'node:url';
 import {readFileSync,readdirSync} from 'node:fs';
-import {initializeKp,syncKpAccounts} from '../src/kp.ts';
+import {initializeKp,syncKpAccounts,createKpSession} from '../src/kp.ts';
 import type {KpEnv,KpMapping} from '../src/kp.ts';
-import {operateKp,readKpState,casinoPost} from '../src/kp-api.ts';
+import {operateKp,readKpState,casinoPost,kpApi} from '../src/kp-api.ts';
 import {settleRankChange} from '../src/rank-change.ts';
 import {DEBT_BLOCKED} from '../src/kp-debt.ts';
 const guild='100000000000000100',one='100000000000000101',two='100000000000000102';
@@ -47,10 +47,10 @@ test('ブラックジャック：配ると賭け金が引かれ、見えるの�
 });
 test('借KPがある間はカジノもルーレットも賭けられない（勝つ目でも抽選前に止める）。株を売るのはできる',async()=>{
  const f=await fixture();f.credit('c1',10000);
- await operateKp(f.env,mapping,one,'trade-before-the-debt','trade',{symbol:'keso',side:'buy',quantity:1});
+ await operateKp(f.env,mapping,one,'trade-before-the-debt','trade',{symbol:'keso',side:'buy',quantity:1,pricingVersion:1,limit:Number.MAX_SAFE_INTEGER});
  f.sql.prepare("INSERT INTO kp_debt_events VALUES('borrow:x',?,?,500,'borrow',0)").run(guild,one);
  for(let i=0;i<20;i++)await assert.rejects(operateKp(f.env,mapping,one,'spin-while-owing-'+String(i).padStart(3,'0'),'spin',{type:'red',amount:100,choice:0}),{message:DEBT_BLOCKED});
- assert.ok(await operateKp(f.env,mapping,one,'sell-while-owing-001','trade',{symbol:'keso',side:'sell',quantity:1}));
+ assert.ok(await operateKp(f.env,mapping,one,'sell-while-owing-001','trade',{symbol:'keso',side:'sell',quantity:1,pricingVersion:1,limit:0}));
  await assert.rejects(operateKp(f.env,mapping,one,'chinchiro-operation-03','chinchiro',{amount:1000}),{message:DEBT_BLOCKED});
  await assert.rejects(operateKp(f.env,mapping,one,'blackjack-operation-4','bj-start',{amount:1000}),{message:DEBT_BLOCKED});
 });
@@ -101,4 +101,47 @@ test('ビデオポーカー・バカラ：サーバーが配り、交換は借KP
  const before=f.balance();
  const bac=await operateKp(f.env,mapping,one,'baccarat-operation-02','baccarat',{amount:500,side:'player'}) as {result:{done:{net:number;winner:string}}};
  assert.equal(f.balance(),before+bac.result.done.net);assert.ok(['player','banker','tie'].includes(bac.result.done.winner));
+});
+
+test('20,000 KP slot jackpot streak settles atomically, queues notices off the critical path and replays without double credit',async t=>{
+ const f=await fixture();f.credit('high-win-seed',100000);
+ (f.env as KpEnv & {KP_EARNINGS_WEBHOOK_URL:string}).KP_EARNINGS_WEBHOOK_URL='https://discord.com/api/webhooks/fixture';
+ t.mock.method((globalThis as unknown as {crypto:Crypto}).crypto,'getRandomValues',((a:Uint32Array)=>{a.fill(20);return a;}) as never);
+ const jobs:Promise<void>[]=[];
+ let expected=100000;
+ for(let n=0;n<8;n++){
+  const id='slot-high-win-'+String(n).padStart(6,'0');
+  const bet=await operateKp(f.env,mapping,one,id,'slot',{amount:20000},job=>jobs.push(job)) as {result:{done:{payout:number;jackpot:number;net:number}}};
+  assert.equal(bet.result.done.payout,6000000+bet.result.done.jackpot);
+  expected+=bet.result.done.net;
+  assert.equal(f.balance(),expected,'each payout and wallet ledger settle together');
+  const replay=await operateKp(f.env,mapping,one,id,'slot',{amount:20000},job=>jobs.push(job)) as typeof bet;
+  assert.deepEqual(replay,bet,'repeated operation ID cannot spin again or add new posts');
+  assert.equal(f.balance(),expected);
+ }
+ t.mock.restoreAll();
+ await Promise.all(jobs);
+ assert.equal(jobs.length,8,'one post-commit job per successful spin, none for replays');
+ assert.equal(f.sql.prepare("SELECT COUNT(*) AS n FROM kp_operations WHERE guild=? AND user=?").get(guild,one)!.n,8);
+ assert.equal(f.sql.prepare("SELECT COUNT(*) AS n FROM kp_posts WHERE id LIKE 'casino:%'").get()!.n,8);
+ assert.equal((await readKpState(f.env,mapping,one)).cash,expected);
+});
+
+test('quota rejection is final and already-settled jackpot receipts remain retrievable without another spin',async()=>{
+ const f=await fixture();f.credit('quota-seed',100000);
+ const token=await createKpSession(f.env,guild,one);
+ const id='quota-slot-repeat-001',args={amount:20000};
+ const first=await operateKp(f.env,mapping,one,id,'slot',args);
+ const before=f.balance();
+ f.sql.prepare('INSERT INTO kp_operation_limits(guild,user,minute,count) VALUES(?,?,?,120)').run(guild,one,Math.floor(Date.now()/60000));
+ const req=(opId:string)=>new Request('https://worker.example/api/kp/operation',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({id:opId,action:'slot',args})});
+ const replay=await kpApi(req(id),f.env,mapping);assert.equal(replay.status,200);
+ assert.deepEqual(await replay.json(),first);
+ assert.equal(f.balance(),before);
+ const denied=await kpApi(req('quota-new-bet-001'),f.env,mapping);
+ assert.equal(denied.status,429);
+ const body=await denied.json() as {error:string;retryable:boolean};
+ assert.match(body.error,/操作回数/);
+ assert.equal(body.retryable,false,'rejected operations must not trap the wallet in a phantom pending state');
+ assert.equal(f.balance(),before);
 });

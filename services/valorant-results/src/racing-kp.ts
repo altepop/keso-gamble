@@ -1,17 +1,24 @@
 // Horse racing on the live KP wallets. Cards and odds are public; each race's result seed is random,
 // stored here, published only as a SHA-256 hash until the start, and revealed after it.
 // @ts-expect-error The shared pure browser engine has no TypeScript declarations.
-import { RUN_MS, bigRaceName, fillerCrownName, hydrateRacing, isRaceStart, latestRaceStart, openRaceStart, settleRaceBets } from '../../../js/racing.js';
+import { RUN_MS, bigRaceName, fillerCrownName, raceEvent, hydrateRacing, isRaceStart, latestRaceStart, openRaceStart, settleRaceBets } from '../../../js/racing.js';
 import { kpHash, kpRandom } from './kp.ts';
+import {nativeRelicBonus} from './relics.ts';
+import {verifiedBetProfit} from './relic-profit.ts';
 import type { KpEnv, KpMapping } from './kp.ts';
 import { crownFor } from './racing-crowns.ts';
 import { decideEntries, raceEntries } from './racing-horses.ts';
 import type { Entry } from './racing-horses.ts';
-interface RaceBet { id:string; raceId:number; status:string; payout:number }
+interface RaceBet { id:string; raceId:number; status:string; payout:number; amount:number }
 const initialized=new WeakSet<object>();
 export async function ensureRacing(env:KpEnv){
  if(initialized.has(env.DB))return;
  await env.DB.prepare('CREATE TABLE IF NOT EXISTS kp_races(guild TEXT NOT NULL,id INTEGER NOT NULL,seed TEXT NOT NULL,hash TEXT NOT NULL,created_at INTEGER NOT NULL,PRIMARY KEY(guild,id))').run();
+ // A narrow partial index keeps the minute cron from reading every JSON wallet.
+ // SQLite instr() is deterministic: matching the exact JSON property/status tokens
+ // preserves the old LIKE prefilter without inspecting settled-only wallets.
+ await env.DB.prepare(`CREATE INDEX IF NOT EXISTS kp_state_pending_race ON kp_state(guild,user)
+  WHERE instr(data,'"raceBets"')>0 AND instr(data,'"pending"')>0`).run();
  initialized.add(env.DB);
 }
 /** The race's seed row. Created on first use; an existing seed is never replaced. */
@@ -32,7 +39,7 @@ export async function racingView(env:KpEnv,mapping:KpMapping,now=Date.now()){
  const [openCrown,watchCrown]=[await crownFor(env,guild,open),await crownFor(env,guild,watch)];
  // Owned horses are fixed for a race when its betting opens, before anyone can bet on it.
  const openEntries=await decideEntries(env,mapping,open,now),watchEntries=await raceEntries(env,mapping,watch);
- const runs=Boolean(bigRaceName(watch))||Boolean(fillerCrownName(watch))||Boolean(watchCrown)||watchEntries.length>0||await raceHasBets(env,guild,watch);
+ const runs=Boolean(bigRaceName(watch))||Boolean(fillerCrownName(watch))||Boolean(raceEvent(watch))||Boolean(watchCrown)||watchEntries.length>0||await raceHasBets(env,guild,watch);
  const openSeed=await raceSeed(env,guild,open);
  const watched=runs?await raceSeed(env,guild,watch):null;
  return {open:{id:open,hash:openSeed.hash,entries:openEntries,...(openCrown?{crown:openCrown.name}:{})},watch:{id:watch,runs,entries:watchEntries,...(watchCrown?{crown:watchCrown.name}:{}),...(watched?{hash:watched.hash,seed:watched.seed}:{})}};
@@ -40,7 +47,7 @@ export async function racingView(env:KpEnv,mapping:KpMapping,now=Date.now()){
 /** Settles finished races for every wallet with pending bets. Safe to run concurrently and repeatedly. */
 export async function settleKpRaces(env:KpEnv,mapping:KpMapping,now=Date.now()){
  await ensureRacing(env);
- const rows=(await env.DB.prepare(`SELECT w.user,w.balance,w.version AS wallet_version,s.data,s.version AS state_version FROM kp_wallets w JOIN kp_state s ON s.guild=w.guild AND s.user=w.user WHERE w.guild=? AND s.data LIKE '%"raceBets"%' AND s.data LIKE '%"pending"%'`).bind(mapping.guildId).all<{user:string;balance:number;wallet_version:number;data:string;state_version:number}>()).results;
+ const rows=(await env.DB.prepare(`SELECT w.user,w.balance,w.version AS wallet_version,s.data,s.version AS state_version FROM kp_state s INDEXED BY kp_state_pending_race JOIN kp_wallets w ON s.guild=w.guild AND s.user=w.user WHERE s.guild=? AND instr(s.data,'"raceBets"')>0 AND instr(s.data,'"pending"')>0`).bind(mapping.guildId).all<{user:string;balance:number;wallet_version:number;data:string;state_version:number}>()).results;
  let count=0;
  for(const row of rows){
   const state=JSON.parse(row.data);Object.assign(state,hydrateRacing(state));state.cash=row.balance;
@@ -50,8 +57,10 @@ export async function settleKpRaces(env:KpEnv,mapping:KpMapping,now=Date.now()){
   const entries=new Map<number,Entry[]>();for(const id of due)entries.set(id,await raceEntries(env,mapping,id));
   const before=state.cash,settled:RaceBet[]=settleRaceBets(state,now,(id:number)=>seeds.get(id)??null,(id:number)=>entries.get(id)??[]);
   if(!settled.length)continue;
+  const gain=verifiedBetProfit(settled); // positive realized profit after stakes
+  const relicBonus=nativeRelicBonus(state,'racing',gain,now);
   const id='race-settle:'+settled.map(b=>b.id).join(',');
-  const response={result:{settled:settled.map(b=>({id:b.id,status:b.status,payout:b.payout}))}};
+  const response={result:{settled:settled.map(b=>({id:b.id,status:b.status,payout:b.payout})),relicBonus}};
   // Same guarded insert as player operations: it applies only if neither wallet nor state changed.
   const inserted=await env.DB.prepare(`INSERT INTO kp_operations(id,guild,user,request_hash,response,delta,state,directive,at)
    SELECT ?,?,?,?,?,?,?,NULL,? WHERE EXISTS(SELECT 1 FROM kp_wallets w JOIN kp_state s ON w.guild=s.guild AND w.user=s.user WHERE w.guild=? AND w.user=? AND w.version=? AND s.version=?) ON CONFLICT(guild,user,id) DO NOTHING`)

@@ -1,5 +1,6 @@
 import type {KpEnv} from './kp.ts';
 import {kpEventId} from './kp.ts';
+import {creditVerifiedRelicBonus} from './relics.ts';
 import {enqueue,ensurePosts} from './racing-posts.ts';
 export const SKIRMISH_POLICY='skirmish-risk-v1';
 export const SKIRMISH_PRIZES=[0,50,250,600,1000,1500] as const;
@@ -46,6 +47,7 @@ export async function settleSkirmishMatch(env:KpEnv,input:{guild:string;puuid:st
   }
   const result=await insert(env,s,next,{id,kind:'match',match:input.match,outcome:input.win?'win':'loss',delta,note,now:input.now});
   if(result.meta.changes){
+   if(delta>0)try{await creditVerifiedRelicBonus(env,input.guild,input.user,id,'skirmish',delta,true,input.now);}catch{console.warn('relic_skirmish_bonus_pending');}
    // The challenge in 稼ぎch: a four-win run and a lost pot. Missing a post never undoes the settlement.
    const post=delta?`👑 <@${input.user}> スカーミッシュ${SKIRMISH_TOP}連勝！ **${delta.toLocaleString('ja-JP')} KP** 持っていきよった！`:s.phase==='armed'&&!input.win&&s.pot?`💥 <@${input.user}> スカーミッシュ${s.wins+1}勝目ならず…保留してた **${s.pot.toLocaleString('ja-JP')} KP** は全部パーや。`:'';
    if(post)try{await ensurePosts(env);await enqueue(env,'sk-post:'+id,post,input.now);}catch{console.warn('skirmish_post_pending');}
@@ -69,6 +71,7 @@ export async function decideSkirmish(env:KpEnv,guild:string,user:string,custom:s
  const id=`sk-choice:${guild}:${s.puuid}:${s.version}`;
  const result=await insert(env,s,next,{id,kind:cash?'cash':'continue',delta:cash?s.pot:0,note:'',now});
  if(!result.meta.changes)return {content:'先に別の選択が確定しました。/kp balance で確認してください。',components:[]};
+ if(cash&&s.pot>0)try{await creditVerifiedRelicBonus(env,guild,user,id,'skirmish',s.pot,true,now);}catch{console.warn('relic_skirmish_bonus_pending');}
  const pot=s.pot.toLocaleString('ja-JP'),prize=SKIRMISH_PRIZES[s.wins+1].toLocaleString('ja-JP');
  try{await ensurePosts(env);await enqueue(env,'sk-post:'+id,cash?`💰 <@${user}> スカーミッシュ${s.wins}勝で降りた。**${pot} KP**、手堅く回収や。`:`🔥 <@${user}> スカーミッシュ${s.wins}勝、**${pot} KP** を蹴って続行や！ 次勝ったら ${prize} KP、負けたら全部パー。`,now);}catch{console.warn('skirmish_post_pending');}
  return {content:cash?`${s.pot} KPを受け取りました。次の試合から新しく挑戦できます。`:`続行しました。今から始まる次の試合が対象です。勝てば${SKIRMISH_PRIZES[s.wins+1]} KP、負けると保留分は0。`,components:[]};
