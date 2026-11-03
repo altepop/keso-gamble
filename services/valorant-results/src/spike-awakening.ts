@@ -58,13 +58,15 @@ export function nextSpikeTrials(p:SpikeProfile,m:SpikeMatch):SpikeTrials {
  if(role==='Initiator'&&m.assists>=7)t.initiator=true;
  if(role==='Sentinel'&&m.kills>=5&&m.deaths===0)t.sentinel=true;
  // The seven consecutive eligible Spike Rush games must each be a Controller
- // victory with K/D >=2 and a different agent from the other six.
+ // victory with KDA ((kills+assists)/deaths) >=2 and a different agent from the other six.
+ // (K/D >=2 until 2026-11-03; the owner changed it to KDA.)
  // A failed/repeated match breaks the run; a qualifying repeated Controller
  // can count as the first match of a fresh run.
  // Completed streaks and legacy awakenings are permanent.
  const complete=t.controllerGrandfathered===true||t.controllerStreak!.length===SPIKE_CONTROLLER_STREAK_REQUIRED;
  if(role==='Controller'){
-  const kd=m.kills>0&&(m.deaths===0||m.kills>=2*m.deaths);
+  // controllerKdAgents keeps its stored name; it records Controller games that met the K/D (now KDA) bar.
+  const kd=m.kills+m.assists>0&&(m.deaths===0||m.kills+m.assists>=2*m.deaths);
   if(kd&&!t.controllerKdAgents!.includes(m.agent))t.controllerKdAgents!.push(m.agent);
   if(!complete){
    t.controllerStreak=m.win&&kd?(t.controllerStreak!.includes(m.agent)?[m.agent]:[...t.controllerStreak!,m.agent]):[];
@@ -120,7 +122,7 @@ export async function ensureSpikeAwakening(env:KpEnv){
 const TRIAL_RULES:Record<SpikeRole,string>={
  Duelist:'デュエリストで1試合15キル以上',
  Initiator:'イニシエーターで1試合7アシスト以上',
- Controller:`コントローラーで「勝利＋K/D 2.0以上（デス0なら1キル以上）」を、毎回違うコントローラーで${SPIKE_CONTROLLER_STREAK_REQUIRED}試合連続（他ロール・負け・K/D不足で0に戻る、同じエージェントの再使用は1から）`,
+ Controller:`コントローラーで「勝利＋KDA 2.0以上（(キル+アシスト)÷デス。デス0ならキル+アシスト1以上）」を、毎回違うコントローラーで${SPIKE_CONTROLLER_STREAK_REQUIRED}試合連続（他ロール・負け・KDA不足で0に戻る、同じエージェントの再使用は1から）`,
  Sentinel:'センチネルで1試合5キル以上かつデス0',
 };
 /** /spike status user:@someone (administrators only): the member's growth and every trial's real condition and
