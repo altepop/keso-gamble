@@ -7,6 +7,8 @@ import { crownFor, ensureCrowns } from './racing-crowns.ts';
 import {ensureRacing,raceSeed} from './racing-kp.ts';
 import configuredPlayers from '../players.json' with { type: 'json' };
 import { kpRandom } from './kp.ts';
+import {spendMyHorseVoucher} from './relic-exchange.ts';
+import type {RelicCollection} from './relics.ts';
 import type { KpEnv, KpMapping } from './kp.ts';
 export interface Entry { horseId:string; name:string; ability:number; style:number; owner:string; ownerName:string; nickname?:string|null; person?:boolean; condition?:number; record?:{races:number;wins:number;seconds:number;thirds:number}; recentRanks?:number[] }
 export interface Horse { id:string; owner:string; name:string; grade:number; ability:number; style:number; box:string; price:number; created_at:number; races:number; wins:number; seconds:number; thirds:number; earnings:number; retired_at:number|null; sold_at:number|null; last_race:number|null }
@@ -193,15 +195,17 @@ export async function ownedHorses(env:KpEnv,mapping:KpMapping,user:string){
  return rows.map(h=>({...h,nickname:nick.get(h.id)?.nickname??null,gradeLabel:CLASSES[h.grade].grade,sellValue:h.retired_at?0:sellValue(h.price,h.races),racesLeft:Math.max(0,RETIRE_RACES-h.races)}));
 }
 /** Wallet operation bodies. They change `state` and return the result the triggers apply. */
-export async function buyHorse(env:KpEnv,mapping:KpMapping,user:string,state:{cash:number},args:Record<string,unknown>){
+export async function buyHorse(env:KpEnv,mapping:KpMapping,user:string,state:{cash:number;relics?:RelicCollection},args:Record<string,unknown>){
  await ensureHorses(env);
  const box=BOXES.find((b:{id:string})=>b.id===args.box);if(!box)throw Error('ボックスを選んでください。');
  const name=validHorseName(args.name);
  const active=await env.DB.prepare('SELECT COUNT(*) AS n FROM kp_horses WHERE guild=? AND owner=? AND sold_at IS NULL AND retired_at IS NULL').bind(mapping.guildId,user).first<{n:number}>();
  if((active?.n??0)>=MAX_OWNED)throw Error(`持てる馬は${MAX_OWNED}頭までです。売るか引退を待ってください。`);
- if(state.cash<box.price)throw Error('KPが足りません。');
- const horse={id:'horse-'+kpRandom(),name,...drawHorse(box.id,cryptoRng),box:box.id,price:box.price};
- state.cash-=box.price;
+ const useVoucher=args.useVoucher===true;
+ if(!useVoucher&&state.cash<box.price)throw Error('KPが足りません。');
+ if(useVoucher)spendMyHorseVoucher(state,box.id);
+ const horse={id:'horse-'+kpRandom(),name,...drawHorse(box.id,cryptoRng),box:box.id,price:useVoucher?0:box.price};
+ if(!useVoucher)state.cash-=box.price;
  return {horse:{...horse,gradeLabel:CLASSES[horse.grade].grade}};
 }
 export async function sellHorse(env:KpEnv,mapping:KpMapping,user:string,state:{cash:number},args:Record<string,unknown>){

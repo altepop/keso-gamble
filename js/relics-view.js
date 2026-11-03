@@ -1,6 +1,7 @@
 import {relicSoundEnabled,relicSoundVolume,RELIC_SOUND_DESIGNS} from './relics-audio.js?v=web-5bfb3e191c5a1e21';
 import {relicBuildSection,relicPresetsSection,relicSummonHistorySection,relicSpecialSection,relicEffectLogSection,relicEconomySection} from './relics-v7.js?v=web-5bfb3e191c5a1e21';
 import {relicInventory,relicFilterControls,relicItemCard,relicInventoryPages,relicRevealPanel,relicBonusDashboard} from './relics-v4.js?v=web-5bfb3e191c5a1e21';
+import {relicExchangeSection} from './relic-exchange-view.js?v=web-shards-20261103';
 // Three independent origins: common summons, Steam achievements, and Unite results.
 // Never recommend cross-game combinations or require another game's relic for an upgrade.
 const esc=s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -56,8 +57,8 @@ export function relicsPanel(state,{proofs=null,notice='',loading=false,view={},r
  const bonusDashboard=relicBonusDashboard(state,proofs,view);
  const buildTools=relicPresetsSection(collection,proofs)+relicBuildSection(proofs);
  const advanced=relicSummonHistorySection(collection)+relicSpecialSection(collection)+relicEffectLogSection(collection,proofs)+relicEconomySection(collection,proofs);
- const section=['collection','gear','summon','records'].includes(view.section)?view.section:'collection';
- const tabs=[['collection','🎒 図鑑'],['gear','🧰 装備・診断'],['summon','🔮 召喚'],['records','📊 記録・限定']];
+ const section=['collection','gear','summon','records','exchange'].includes(view.section)?view.section:'collection';
+ const tabs=[['collection','🎒 図鑑'],['gear','🧰 装備・診断'],['summon','🔮 召喚'],['exchange','🧩 欠片・交換所'],['records','📊 記録・限定']];
  const nav='<nav class="relic-v8-nav" aria-label="遺物画面の切替">'+tabs.map(([id,label])=>
   '<button type="button" class="relic-v8-tab'+(section===id?' active':'')+'" data-action="relic-tab" data-tab="'+id+'" aria-current="'+(section===id?'page':'false')+'">'+label+'</button>').join('')+'</nav>';
  const pane=(id)=>'<div class="relic-v8-pane'+(section===id?' active':'')+'" data-pane="'+id+'">';
@@ -111,6 +112,9 @@ export function relicsPanel(state,{proofs=null,notice='',loading=false,view={},r
    ${pagesHtml}
  </div></section>
  </div>
+ ${pane('exchange')}
+ ${relicExchangeSection(collection,proofs,Boolean(state.serverWallet))}
+ </div>
  ${pane('records')}
  ${advanced}
  <section class="panel"><div class="card-body"><h2 class="panel-title">📚 モード別・特殊遺物全${catalog.length||148}種類</h2><p class="helper">従来の140種類に加え、新たに代償付きの8種類を追加した。倍率は上限なしで合算し、共鳴も発動する。一方で代償を持つ遺物は他の効果を減らすため、単純に高レアを並べるだけでは最強とは限らない。</p>${grouped||'<p class="helper">データ取得中。再度この画面を開いてください。</p>'}</div></section>
@@ -123,5 +127,5 @@ export function relicsPanel(state,{proofs=null,notice='',loading=false,view={},r
    <p class="helper">サーバーが確定したランク戦の1〜5連勝、または累計10・25・50・100・200勝から獲得。単体で強力な固有能力を持つ。同時装備は1個まで。ガチャ排出・売買・他遺物の解放条件にはしない。</p>
    ${uniteList.map(([id,name,power,condition])=>`<div class="asset-line"><span><strong>${esc(name)}</strong><br><small>${esc(condition)} ・ 戦力 ${yen(power)}</small></span><button type="button" class="action-btn" data-action="relic-claim-unite" data-tier="${esc(id)}" ${!state.serverWallet||owned(id)?'disabled':''}>${owned(id)?'受取済み':'獲得を確認'}</button></div>`).join('')}
  </div></section>
- <p class="helper">※KP上乗せの合算上限は撤廃。VALORANTやクイズ・通話などは検証済みの確定報酬に限る。カジノはプラス精算、株は原価を超えた売却益、競馬とMリーグは賭け金を差し引いた的中利益だけが対象。購入しただけでは報酬を発生させない。KESO LOOP限定遺物は未実装。</p></div>`;
+ <p class="helper">※KP上乗せの合算上限は撤廃。VALORANTやクイズ・通話などは検証済みの確定報酬に限る。カジノはプラス精算、株は原価を超えた売却益、競馬とMリーグは賭け金を差し引いた的中利益だけが対象。購入しただけでは報酬を発生させない。</p></div>`;
 }

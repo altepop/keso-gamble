@@ -25,6 +25,8 @@ export interface RelicItem {
 }
 export interface RelicCollection {
   totalSummons: number;
+  shards?: number;
+  horseVouchers?: number;
   items: Record<string, RelicItem>;
   equipped: string[];
   dailyNativeBonus?: {day:string;amount:number};
