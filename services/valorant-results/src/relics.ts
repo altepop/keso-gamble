@@ -367,6 +367,7 @@ export async function creditVerifiedRelicBonus(
   .bind(guild,user).first<{data:string}>();
  if(!row)return 0;
  const state=JSON.parse(row.data) as {relics?:RelicCollection};
+ if(!state.relics?.equipped?.length)return 0;
  let spikeGamesBefore:number|undefined;
  if(mode==='spikerush'){
   // Proven receipt + immutable snapshot from the already-settled Riot match.
