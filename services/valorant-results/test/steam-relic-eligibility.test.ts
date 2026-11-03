@@ -36,7 +36,7 @@ test('as soon as a day reaches 5,000 KP, claiming even an earlier positive recei
  f.db.prepare('INSERT INTO kp_steam_daily VALUES(?,?,?,?)').run(guild,user,f.day,5000);
  assert.throws(()=>requireSteamRelicEligibility(f.evidence(credited)),/5,000KP/);
  assert.equal(f.commit('claim-blocked',credited),0);
- assert.equal(f.db.prepare('SELECT count(*) AS n FROM kp_operations').get().n,0);
+ assert.equal((f.db.prepare('SELECT count(*) AS n FROM kp_operations').get() as {n:number}).n,0);
  const rows=f.db.prepare(STEAM_RELIC_LIST_SQL).all(f.day,guild,user) as Array<SteamRelicEvidence>;
  assert.equal(rows.length,2);
  assert.equal(rows[0]!.earnedToday,5000);
