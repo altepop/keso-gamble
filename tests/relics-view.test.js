@@ -40,5 +40,6 @@ test('Steam common 25%+ and challenge 10–25% are visible without historical im
  assert.match(html,/二十五戦の灯台/);
  assert.match(html,/全局面の方位磁針/);
  assert.match(html,/監視登録以降に新規解除/);
- assert.match(html,/過去の実績には干渉しない/);
+ assert.match(html,/監視登録以降に新規解除/);
+ assert.match(html,/0KPで記録された実績は翌日も対象外/);
 });
