@@ -113,7 +113,7 @@ async function mleagueView(env:KpEnv,now:number){
   for(const g of games)if(lineups.has(g.id))lines.push(`第${g.game}試合 出場：${lineups.get(g.id)!.map(clean).join('・')}`);
   for(const p of mlCard(d,games[0])){const o=mlOdds(p,stats);lines.push(`${p.no}. ${clean(p.name)}（${clean(p.teamName)}）ラス ${(o.last/10).toFixed(1)}倍`);}
  }
- lines.push('\n買い方：/mbet → matchで試合 → playerで選手名・チーム・ラス倍率を確認 → amountに掛け金（例500）→ 確認画面で「購入する」。賭け方はラス（4位）予想のみ。','第1試合は19:00、第2試合は第1試合の結果が出るまで。始まったら /mclose で締め切り（開始後の予想は返金）。出なかった選手は返金。');
+ lines.push('\n買い方：/mbet → matchで試合 → playerで選手名・チーム・ラス倍率を確認 → amountに掛け金（例500）→ 確認画面で「購入する」。賭け方はラス（4位）予想のみ。','第1試合は19:00、第2試合は出場の4人が決まってから15分まで。始まったら /mclose で締め切り（開始後の予想は返金）。出なかった選手は返金。');
  return lines.join('\n');
 }
 /** A user option given as a mention (<@id>, <@!id>) or a bare ID. */
