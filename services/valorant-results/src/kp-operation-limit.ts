@@ -7,9 +7,10 @@ export const MAX_KP_OPERATIONS_PER_MINUTE=120;
 const ready=new WeakMap<object,Promise<void>>();
 async function ensureOperationBudget(env:KpEnv){
  if(ready.has(env.DB))return ready.get(env.DB)!;
- const job=env.DB.prepare('CREATE TABLE IF NOT EXISTS kp_operation_limits(guild TEXT NOT NULL,user TEXT NOT NULL,minute INTEGER NOT NULL,count INTEGER NOT NULL,PRIMARY KEY(guild,user,minute))').run().then(()=>{});
- ready.set(env.DB,job);
- try{await job;}catch(error){ready.delete(env.DB);throw error;}
+ const job=env.DB.prepare('CREATE TABLE IF NOT EXISTS kp_operation_limits(guild TEXT NOT NULL,user TEXT NOT NULL,minute INTEGER NOT NULL,count INTEGER NOT NULL,PRIMARY KEY(guild,user,minute))').run();
+ const readyJob=Promise.resolve(job).then(()=>{});
+ ready.set(env.DB,readyJob);
+ try{await readyJob;}catch(error){ready.delete(env.DB);throw error;}
 }
 export async function allowedKpOperation(env:KpEnv,guild:string,user:string,now=Date.now()):Promise<boolean>{
  await ensureOperationBudget(env);
