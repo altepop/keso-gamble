@@ -2,6 +2,7 @@ import {relicSoundEnabled,relicSoundVolume,RELIC_SOUND_DESIGNS} from './relics-a
 import {relicBuildSection,relicPresetsSection,relicSummonHistorySection,relicSpecialSection,relicEffectLogSection,relicEconomySection} from './relics-v7.js?v=web-5bfb3e191c5a1e21';
 import {relicInventory,relicFilterControls,relicItemCard,relicInventoryPages,relicRevealPanel,relicBonusDashboard} from './relics-v4.js?v=web-5bfb3e191c5a1e21';
 import {relicExchangeSection} from './relic-exchange-view.js?v=web-shards-20261103';
+import {relicMarketSection} from './relic-market-view.js?v=web-market-20261103';
 // Three independent origins: common summons, Steam achievements, and Unite results.
 // Never recommend cross-game combinations or require another game's relic for an upgrade.
 const esc=s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -57,8 +58,8 @@ export function relicsPanel(state,{proofs=null,notice='',loading=false,view={},r
  const bonusDashboard=relicBonusDashboard(state,proofs,view);
  const buildTools=relicPresetsSection(collection,proofs)+relicBuildSection(proofs);
  const advanced=relicSummonHistorySection(collection)+relicSpecialSection(collection)+relicEffectLogSection(collection,proofs)+relicEconomySection(collection,proofs);
- const section=['collection','gear','summon','records','exchange'].includes(view.section)?view.section:'collection';
- const tabs=[['collection','🎒 図鑑・装備'],['gear','📊 ビルド・試算'],['summon','🔮 召喚'],['exchange','🧩 欠片・交換所'],['records','📊 記録・限定']];
+ const section=['collection','gear','summon','records','exchange','market'].includes(view.section)?view.section:'collection';
+ const tabs=[['collection','🎒 図鑑・装備'],['gear','📊 ビルド・試算'],['summon','🔮 召喚'],['exchange','🧩 欠片・交換所'],['market','🌑 闇市'],['records','📊 記録・限定']];
  const nav='<nav class="relic-v8-nav" aria-label="遺物画面の切替">'+tabs.map(([id,label])=>
   '<button type="button" class="relic-v8-tab'+(section===id?' active':'')+'" data-action="relic-tab" data-tab="'+id+'" aria-current="'+(section===id?'page':'false')+'">'+label+'</button>').join('')+'</nav>';
  const pane=(id)=>'<div class="relic-v8-pane'+(section===id?' active':'')+'" data-pane="'+id+'">';
@@ -118,9 +119,12 @@ export function relicsPanel(state,{proofs=null,notice='',loading=false,view={},r
  ${pane('exchange')}
  ${relicExchangeSection(collection,proofs,Boolean(state.serverWallet))}
  </div>
+ ${pane('market')}
+ ${relicMarketSection(collection,{...proofs,members:state.members??[]},state.selfUserId,Boolean(state.serverWallet),view.marketConfirmation)}
+ </div>
  ${pane('records')}
  ${advanced}
- <section class="panel"><div class="card-body"><h2 class="panel-title">📚 モード別・特殊遺物全${catalog.length||190}種類</h2><p class="helper">通常175種・代償付き8種・固有能力7種を収録した。倍率は上限なしで合算し、共鳴も発動する。一方で代償を持つ遺物は他の効果を減らすため、単純に高レアを並べるだけでは最強とは限らない。</p>${grouped||'<p class="helper">データ取得中。再度この画面を開いてください。</p>'}</div></section>
+ <section class="panel"><div class="card-body"><h2 class="panel-title">📚 モード別・特殊遺物全${catalog.length||210}種類</h2><p class="helper">通常175種・代償付き8種・固有能力7種・雀魂/通話20種を収録した。倍率は上限なしで合算し、共鳴も発動する。一方で代償を持つ遺物は他の効果を減らすため、単純に高レアを並べるだけでは最強とは限らない。</p>${grouped||'<p class="helper">データ取得中。再度この画面を開いてください。</p>'}</div></section>
  <section class="panel"><div class="card-body"><h2 class="panel-title">🟦 Steam限定遺物</h2>
    <p class="helper">監視登録以降に新規解除し、サーバーが検証して<strong>実際にKPを支給した実績</strong>だけが対象だ。当日（9時〜翌9時）にSteamで5,000KPを稼いだ後は、新しいSteam限定遺物を受け取れない。0KPで記録された実績は翌日も対象外。既に受取済みの遺物は保持する。</p>
    ${proofs?.steam?.some(e=>Number(e.earnedToday)>=5000)?'<p class="relic-steam-cap-alert" role="status">🔒 本日のSteam報酬は5,000／5,000KP。限定遺物の新規受け取りは翌朝9時まで停止中だ。</p>':''}
