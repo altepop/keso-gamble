@@ -452,7 +452,9 @@ for(const eventName of ['input','change'])addEventListener(eventName,e=>{
  if(preview&&screen==='relics'&&eventName==='change'){
   const key=preview.dataset.relicPreview;
   if(key==='mode'||key==='amount'){
-   relicView={...relicView,[key==='mode'?'previewMode':'previewAmount']:key==='mode'?preview.value:Number(preview.value)};
+   relicView=key==='mode'
+    ?{...relicView,previewMode:preview.value,previewAmount:preview.value==='spikerush'?40:500}
+    :{...relicView,previewAmount:Number(preview.value)};
    render();
   }
   return;
