@@ -1,6 +1,6 @@
 import {stockOrderQuote,STOCK_ORDER_VERSION,STOCK_PRICE_SCALE} from './stock-order.js?v=web-5bfb3e191c5a1e21';
 import {steamConnectionMessage} from './steam-view.js?v=web-5bfb3e191c5a1e21';
-import {relicsPanel} from './relics-view.js?v=web-5bfb3e191c5a1e21';
+import {relicsPanel} from './relics-view.js?v=web-shards-20261103';
 import {primeRelicAudio,playRelicSound,previewRelicSound,stopRelicSound,setRelicSoundVolume,toggleRelicSound} from './relics-audio.js?v=web-5bfb3e191c5a1e21';
 import {relicDefaultView} from './relics-v4.js?v=web-5bfb3e191c5a1e21';
 import {privateCasinoPanel} from './private-casino-view.js?v=web-5bfb3e191c5a1e21';
