@@ -425,7 +425,9 @@ export async function monitor(env: Env, players: Player[] = configuredPlayers): 
     catch { console.warn('kp_setup_pending'); }
     // Bound extra API traffic: one reserved match per run, one attempt per match per five minutes.
     const reservations=new Map((await env.DB.prepare(`SELECT s.riot_id,${sessionModeSQL} AS mode FROM death_unrated_sessions s WHERE s.cancelled_at IS NULL`).all<{riot_id:string;mode:string}>()).results.map(r=>[r.riot_id,r.mode]));
-    const saved=new Set((await env.DB.prepare('SELECT riot_id,match_id FROM notifications ORDER BY ended_at DESC LIMIT 200').all<{riot_id:string;match_id:string}>()).results.map(r=>JSON.stringify([r.riot_id,r.match_id])));
+    // Which (player, match) results are already stored. Filled per player from the five matches the API returned
+    // (index on match_id), instead of reading the latest 200 results on every run (~250k rows a day).
+    const saved=new Set<string>();
     // Never read a growing rank-history table eagerly. Competitive matches
     // load only their own rank2:<match>:<puuid> via indexed key lookup.
     const ranks=new Map<string,string>();
@@ -460,6 +462,9 @@ export async function monitor(env: Env, players: Player[] = configuredPlayers): 
         const matches = await api<Match[]>(env, `/valorant/v4/by-puuid/matches/${account.region}/pc/${encodeURIComponent(account.puuid)}?size=5`);
         if (!Array.isArray(matches)) throw new Error('Invalid matches');
         const counts = { fetched: matches.length, newResults: 0, duplicates: 0, beforeMonitoring: 0, excluded: 0 };
+        const ids = matches.map(m => m?.metadata?.match_id).filter((id): id is string => typeof id === 'string');
+        if (ids.length) for (const r of (await env.DB.prepare(`SELECT riot_id,match_id FROM notifications WHERE match_id IN (${ids.map(() => '?').join(',')})`)
+          .bind(...ids).all<{ riot_id: string; match_id: string }>()).results) saved.add(JSON.stringify([r.riot_id, r.match_id]));
         stage = 'save_result';
         for (const match of [...matches].sort((a, b) => Date.parse(a.metadata.started_at) - Date.parse(b.metadata.started_at))) {
           counts[await saveMatch(env, match, player, account,kpRun,reservations,saved,ranks)]++;

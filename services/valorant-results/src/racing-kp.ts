@@ -6,7 +6,7 @@ import { kpHash, kpRandom } from './kp.ts';
 import {nativeRelicBonus} from './relics.ts';
 import {verifiedBetProfit} from './relic-profit.ts';
 import type { KpEnv, KpMapping } from './kp.ts';
-import { crownFor } from './racing-crowns.ts';
+import { crownFor, recordMelts } from './racing-crowns.ts';
 import { decideEntries, raceEntries } from './racing-horses.ts';
 import type { Entry } from './racing-horses.ts';
 interface RaceBet { id:string; raceId:number; status:string; payout:number; amount:number }
@@ -19,6 +19,8 @@ export async function ensureRacing(env:KpEnv){
  // preserves the old LIKE prefilter without inspecting settled-only wallets.
  await env.DB.prepare(`CREATE INDEX IF NOT EXISTS kp_state_pending_race ON kp_state(guild,user)
   WHERE instr(data,'"raceBets"')>0 AND instr(data,'"pending"')>0`).run();
+ // Finished races whose result is not worth a 稼ぎch post (see queueRacePosts).
+ await env.DB.prepare('CREATE TABLE IF NOT EXISTS kp_race_post_skips(guild TEXT NOT NULL,race INTEGER NOT NULL,PRIMARY KEY(guild,race)) WITHOUT ROWID').run();
  initialized.add(env.DB);
 }
 /** The race's seed row. Created on first use; an existing seed is never replaced. */
@@ -65,7 +67,10 @@ export async function settleKpRaces(env:KpEnv,mapping:KpMapping,now=Date.now()){
   const inserted=await env.DB.prepare(`INSERT INTO kp_operations(id,guild,user,request_hash,response,delta,state,directive,at)
    SELECT ?,?,?,?,?,?,?,NULL,? WHERE EXISTS(SELECT 1 FROM kp_wallets w JOIN kp_state s ON w.guild=s.guild AND w.user=s.user WHERE w.guild=? AND w.user=? AND w.version=? AND s.version=?) ON CONFLICT(guild,user,id) DO NOTHING`)
    .bind(id,mapping.guildId,row.user,await kpHash(id),JSON.stringify(response),state.cash-before,JSON.stringify(state),now,mapping.guildId,row.user,row.wallet_version,row.state_version).run();
-  if(inserted.meta.changes)count+=settled.length;
+  if(inserted.meta.changes){
+   count+=settled.length;
+   try{await recordMelts(env,mapping.guildId,row.user,settled);}catch{console.warn('crown_melt_pending');}
+  }
  }
  return count;
 }

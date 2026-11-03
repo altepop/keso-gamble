@@ -17,10 +17,11 @@ export function shouldSettleHorsePrizes(now:number){
  const elapsed=((now-RUN_MS)%RACE_INTERVAL+RACE_INTERVAL)%RACE_INTERVAL;
  return elapsed<4*60000||now%(3600000)<60000;
 }
-// Avoid full-history anti-join scans each minute. Every six hours run a full backlog sweep.
+// Avoid full-history anti-join scans each minute. Every six hours run a full backlog sweep; in between, look back
+// six hours (enough for the hourly retry of a missed race; was 48 hours, ~235 rows per check).
 export function horsePrizeLookback(now:number){
  if(!Number.isSafeInteger(now)||now<0)throw Error('Invalid settlement time');
- return now%(6*3600000)<60000?0:Math.max(0,now-48*3600000);
+ return now%(6*3600000)<60000?0:Math.max(0,now-6*3600000);
 }
 const initialized=new WeakSet<object>();
 export async function ensureHorses(env:KpEnv){

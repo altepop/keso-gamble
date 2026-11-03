@@ -55,3 +55,14 @@ The read-only GitHub Actions monitor runs each hour using Cloudflare GraphQL `d1
 - The graph reads only `members × shown days` rows from the primary key `(guild, day, user)`, plus `kp_wallets` and `kp_debts`. The old `kp_ledger_trend_window` index is dropped (no longer used; saves its write cost).
 - The table is built once from the full history the first time the graph is opened (one full read of the ledger and debt events), guarded by `kp_settings.kp_trend_days_v1`. A rebuild deletes and recomputes in one batch, so running it twice never double counts.
 - Ledger history itself is unchanged; the table can always be rebuilt from it by removing the settings key.
+## Heavy reads found on 2026-11-03 (24h top list)
+
+| Was | Change |
+|---|---|
+| Crown schedule scanned every wallet twice a minute (roast levels + big race losses) | Roast levels are read only when a crown is actually named. Big losses (≥ 10,000 KP on one race) are written to `kp_crown_melts` when the race settles, and crowns read that small table. |
+| Race results: every minute, up to 3 finished races with nothing to post re-expanded every wallet's bets | A finished race whose result is not worth a post is remembered in `kp_race_post_skips` and not checked again. Races with pending bets are still checked each minute. |
+| VALORANT monitor read the latest 200 results every run to know what is already saved | Reads only the rows of the (up to five) matches the API returned for the player, via the `match_id` index. |
+| Horse prizes looked back 48 hours on every check (~235 rows) | Looks back 6 hours (covers the hourly retry); the full sweep every 6 hours is unchanged. |
+| M.LEAGUE cards re-read in full every 5 seconds of use | After 5 seconds, a one-row version (`ml_state.cards_version`, changed whenever a card changes) decides whether to read them again. |
+| Stock screen re-read the last 48 ticks on every wallet read | Kept per isolate for the market version (changes every 5 minutes). |
+| Voice history read 100 events (+100 bonus lookups) on each wallet read | Reads 50: today's total needs at most 48 slots. |

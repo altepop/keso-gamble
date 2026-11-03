@@ -265,11 +265,23 @@ export function applyStockOrder(state:Record<string,any>,args:Record<string,unkn
  state.trades.unshift({id:crypto.randomUUID(),symbol:stock.id,side:args.side,quantity,price:quote.price,fee:quote.fee,gross:quote.gross,time:Date.now()});state.trades=state.trades.slice(0,50);
  return {result:quote,stockTrade:{symbol:stock.id,side:args.side,quantity,...quote,pricingVersion:STOCK_ORDER_VERSION,marketVersion:state.stockMarket.version,history:state.history[stock.id]}};
 }
+// The last 48 ticks only change when the market moves (every 5 minutes), but every full wallet read asked for them
+// (~2,000 times a day). Kept per isolate for the market version they belong to.
+const tickCache=new WeakMap<object,Map<string,{version:number;ticks:Promise<Array<{prices:Record<string,number>;at:number}>>}>>();
+function recentTicks(env:KpEnv,market:Market){
+ let byGuild=tickCache.get(env.DB);if(!byGuild){byGuild=new Map();tickCache.set(env.DB,byGuild);}
+ const cached=byGuild.get(market.guild);if(cached&&cached.version===market.version)return cached.ticks;
+ const ticks=Promise.resolve(env.DB.prepare('SELECT prices,at FROM stock_ticks WHERE guild=? ORDER BY version DESC LIMIT 48').bind(market.guild).all<{prices:string;at:number}>())
+  .then(r=>r.results.reverse().map(r=>({prices:JSON.parse(r.prices) as Record<string,number>,at:r.at})));
+ byGuild.set(market.guild,{version:market.version,ticks});
+ ticks.catch(()=>{if(byGuild!.get(market.guild)?.ticks===ticks)byGuild!.delete(market.guild);});
+ return ticks;
+}
 export async function stockView(env:KpEnv,market:Market,user?:string,now=Date.now()){
  const quotes=(await env.DB.prepare('SELECT symbol,units,tick_at FROM stock_order_quotes WHERE guild=?').bind(market.guild).all<{symbol:string;units:number;tick_at:number}>()).results;
  const orderQuotes=Object.fromEntries(STOCKS.map(s=>{const row=quotes.find(q=>q.symbol===s.id&&q.tick_at===market.at&&Math.round(q.units/STOCK_PRICE_SCALE)===market.prices[s.id]);return [s.id,row?.units??market.prices[s.id]*STOCK_PRICE_SCALE];}));
  const news=(await env.DB.prepare('SELECT symbol,label,applied_bps AS bps,at FROM stock_news WHERE guild=? AND applied_version IS NOT NULL AND applied_bps!=0 ORDER BY at DESC,id DESC LIMIT 12').bind(market.guild).all()).results;
- const ticks=(await env.DB.prepare('SELECT prices,at FROM stock_ticks WHERE guild=? ORDER BY version DESC LIMIT 48').bind(market.guild).all<{prices:string;at:number}>()).results.reverse().map(r=>({prices:JSON.parse(r.prices),at:r.at}));
+ const ticks=[...await recentTicks(env,market)];
  if(!ticks.length)ticks.push({prices:market.prices,at:market.at});
  const dividends=user?(await env.DB.prepare('SELECT day,amount,eligible_value AS eligibleValue,at FROM stock_dividends WHERE guild=? AND user=? ORDER BY day DESC LIMIT 7').bind(market.guild,user).all()).results:[];
  return {orderQuotes,pricingVersion:STOCK_ORDER_VERSION,volatilityMultiplier:2,version:market.version,at:Math.max(market.at,...ticks.map(t=>t.at)),startedAt:market.startedAt,intervalMinutes:5,dividendPercent:1,dividendCap:DIVIDEND_CAP,holdHours:24,discountCap:2000,ticks,news,dividends};

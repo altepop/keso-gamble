@@ -23,7 +23,17 @@ const initialized=new WeakSet<object>();
 export async function ensureCrowns(env:KpEnv){
  if(initialized.has(env.DB))return;
  await env.DB.prepare('CREATE TABLE IF NOT EXISTS kp_crowns(guild TEXT NOT NULL,race INTEGER NOT NULL,name TEXT NOT NULL,user TEXT NOT NULL,kind TEXT NOT NULL,source TEXT NOT NULL UNIQUE,created_at INTEGER NOT NULL,PRIMARY KEY(guild,race))').run();
+ // Big race losses (melt crowns), written when a race settles, so crowns never scan every wallet's bets.
+ await env.DB.prepare('CREATE TABLE IF NOT EXISTS kp_crown_melts(guild TEXT NOT NULL,race INTEGER NOT NULL,user TEXT NOT NULL,lost INTEGER NOT NULL,PRIMARY KEY(guild,race,user)) WITHOUT ROWID').run();
  initialized.add(env.DB);
+}
+/** After a race settles: a member who lost MELT_LOSS KP or more on one race gets a melt crown event. */
+export async function recordMelts(env:KpEnv,guild:string,user:string,settled:Array<{raceId:number;amount:number;status:string}>){
+ const lost=new Map<number,number>();
+ for(const b of settled)if(b.status==='lost')lost.set(b.raceId,(lost.get(b.raceId)??0)+b.amount);
+ const melts=[...lost].filter(([,n])=>n>=MELT_LOSS);if(!melts.length)return;
+ await ensureCrowns(env);
+ for(const [race,n] of melts)await env.DB.prepare('INSERT OR IGNORE INTO kp_crown_melts(guild,race,user,lost) VALUES(?,?,?,?)').bind(guild,race,user,n).run();
 }
 export async function crownFor(env:KpEnv,guild:string,race:number){
  await ensureCrowns(env);
@@ -36,6 +46,7 @@ async function roastLevels(env:KpEnv,mapping:KpMapping){
 interface Event { kind:CrownKind; user:string; source:string; match?:string; riotId?:string }
 /** Events from the latest recorded matches of each registered member, and from big race losses. */
 export async function crownEvents(env:KpEnv,mapping:KpMapping,now:number):Promise<Event[]>{
+ await ensureCrowns(env);
  const events:Event[]=[];
  for(const account of mapping.accounts){
   // Ten straight losses is the largest threshold. An eleventh prior result
@@ -53,7 +64,7 @@ export async function crownEvents(env:KpEnv,mapping:KpMapping,now:number):Promis
   const jst=new Date(latest.ended_at+9*3600000);
   if(losses>=2&&jst.getUTCHours()<5)at('night',`night:${account.riotId}:${jst.toISOString().slice(0,10)}`);
  }
- const melts=(await env.DB.prepare("SELECT s.user,json_extract(b.value,'$.raceId') AS race,SUM(json_extract(b.value,'$.amount')) AS lost FROM kp_state s,json_each(s.data,'$.raceBets') b WHERE s.guild=? AND json_extract(b.value,'$.status')='lost' AND json_extract(b.value,'$.raceId')>? GROUP BY s.user,race HAVING lost>=?").bind(mapping.guildId,now-FRESH,MELT_LOSS).all<{user:string;race:number;lost:number}>()).results;
+ const melts=(await env.DB.prepare('SELECT user,race FROM kp_crown_melts WHERE guild=? AND race>?').bind(mapping.guildId,now-FRESH).all<{user:string;race:number}>()).results;
  for(const m of melts)events.push({kind:'melt',user:m.user,source:`melt:${m.user}:${m.race}`});
  return events;
 }
@@ -75,12 +86,15 @@ export function crownNoticeLine(name:string,race:number){return `\n🏇 ${clock(
 /** Creates crowns for new events. Each event is used once (unique source); returns the new crowns. */
 export async function scheduleCrowns(env:KpEnv,mapping:KpMapping,now=Date.now()){
  await ensureCrowns(env);
- const levelOf=await roastLevels(env,mapping),created:Array<{race:number;name:string;user:string;kind:CrownKind|SpecialCrownKind;match?:string;riotId?:string;special?:boolean}>=[];
+ // Every wallet's roast level is read only when a crown is actually being named (not on every idle minute).
+ let levels:Awaited<ReturnType<typeof roastLevels>>|null=null;
+ const levelOf=async(user:string)=>(levels??=await roastLevels(env,mapping))(user);
+ const created:Array<{race:number;name:string;user:string;kind:CrownKind|SpecialCrownKind;match?:string;riotId?:string;special?:boolean}>=[];
  // A one-off, time-limited story event. Choose an empty slot >=30 minutes out
  // without moving regular crown races or creating anything on later dates.
  if(now>=VDK_SPECIAL_FROM&&now<VDK_SPECIAL_UNTIL){
   const subject=mapping.accounts.find(a=>memberName(mapping,a.discordUserId)?.toLowerCase()==='vdk'||a.riotId.split('#')[0].toLowerCase()==='vdk');
-  if((!subject||levelOf(subject.discordUserId)!=='mild')&&
+  if((!subject||await levelOf(subject.discordUserId)!=='mild')&&
     !await env.DB.prepare('SELECT 1 FROM kp_crowns WHERE source=?').bind(VDK_SPECIAL_SOURCE).first()){
    const taken=new Set((await env.DB.prepare('SELECT race FROM kp_crowns WHERE guild=? AND race>?').bind(mapping.guildId,now).all<{race:number}>()).results.map(r=>r.race));
    const first=Math.ceil((now+30*60000)/RACE_INTERVAL)*RACE_INTERVAL;
@@ -94,8 +108,9 @@ export async function scheduleCrowns(env:KpEnv,mapping:KpMapping,now=Date.now())
   }
  }
  for(const e of await crownEvents(env,mapping,now)){
-  const person=memberName(mapping,e.user),name=person&&crownName(e.kind,levelOf(e.user),person);
-  if(!name||await env.DB.prepare('SELECT 1 FROM kp_crowns WHERE source=?').bind(e.source).first())continue;
+  const person=memberName(mapping,e.user);
+  if(!person||await env.DB.prepare('SELECT 1 FROM kp_crowns WHERE source=?').bind(e.source).first())continue;
+  const name=crownName(e.kind,await levelOf(e.user),person);if(!name)continue;
   for(let attempt=0;attempt<3;attempt++){
    const race=await nextCrownSlot(env,mapping.guildId,now);if(race===null)break;
    const inserted=await env.DB.prepare('INSERT INTO kp_crowns(guild,race,name,user,kind,source,created_at) VALUES(?,?,?,?,?,?,?) ON CONFLICT DO NOTHING').bind(mapping.guildId,race,name,e.user,e.kind,e.source,now).run();
