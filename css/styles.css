@@ -646,3 +646,8 @@ body.esc-wheel-open{overflow:hidden!important}
 @keyframes relic-ceremony-flash{0%,60%,100%{opacity:0}70%{opacity:.85;background:radial-gradient(circle,white,transparent 66%)}}
 @keyframes relic-ceremony-text{0%,62%{opacity:0;transform:translateY(12px)}80%{opacity:.85;transform:translateY(-2px)}100%{opacity:1;transform:none}}
 @media(prefers-reduced-motion:reduce){.relic-reveal-cinematic *{animation:none!important;transition:none!important}.relic-cinematic-flash,.relic-cinematic-rays,.relic-cinematic-runes,.relic-cinematic-rings{display:none}}
+
+.relic-reveal-actions{display:flex;justify-content:center;flex-wrap:wrap;gap:8px;margin:10px 0}
+.relic-reveal-actions>.action-btn{min-height:44px;flex:1 1 135px;font-size:12px}
+.relic-sound-btn{background:rgba(22,38,69,.85);border:1px solid #a6c3f4;color:#e5edff}
+.relic-reveal-instant .relic-sound-btn{display:inline-flex}
