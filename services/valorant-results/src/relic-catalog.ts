@@ -29,7 +29,7 @@ export type NormalRelicRarity = typeof RELIC_RARITIES[number];
 export interface NormalRelicDefinition {
   id:string; name:string; mode:RelicMode; rarity:NormalRelicRarity;
   power:number; skill:string; ability:string; percent:number; cap:number;
- short:string; trait?:string;
+ short:string; trait?:string; tradeoff?:'solo'|'coinflip'|'bloodmoon'|'allin'|'void'|'chain'|'eclipse'|'frenzy'; drawback?:string;
 }
 const names:ReadonlyArray<readonly [RelicMode,readonly string[]]> = [
   [
@@ -507,7 +507,36 @@ export const NORMAL_RELICS:ReadonlyArray<NormalRelicDefinition> = names.flatMap(
 */
   }),
 );
-export const NORMAL_RELIC_BY_ID = new Map(NORMAL_RELICS.map(x=>[x.id,x]));
+/** Eight standalone normal-summon relics with extreme trade-offs. Steam/Unite unchanged.
+ * Their stable IDs are additional rewards, never replacing the original 140 items. */
+export const RISK_RELICS:ReadonlyArray<NormalRelicDefinition>=[
+ {id:'normal.pact.lonely_king',name:'孤独な覇冠',mode:'competitive',rarity:'legendary',power:125,skill:'sovereign',
+  percent:175,cap:0,tradeoff:'solo',drawback:'自分が発動すると、ほかの遺物の上乗せKPが80%減',
+  short:'コンペ勝利：報酬＋175%',trait:'孤高の代償',ability:'コンペ勝利時＋175%。同時装備のほかの遺物は上乗せKPが80%減る。'},
+ {id:'normal.pact.coinflip',name:'双面の魔導銀貨',mode:'universal',rarity:'legendary',power:130,skill:'even',
+  percent:220,cap:0,tradeoff:'coinflip',drawback:'奇数KPの報酬では、ほかの遺物の上乗せKPが60%減',
+  short:'偶数KPの報酬：＋220%',trait:'表裏逆転',ability:'偶数KPの報酬に＋220%。奇数KPのときはほかの遺物の追加分が60%減る。'},
+ {id:'normal.pact.bloodmoon',name:'血月の大契約',mode:'competitive',rarity:'mythic',power:208,skill:'victory_high',
+  percent:310,cap:0,tradeoff:'bloodmoon',drawback:'報酬400KP未満で、ほかの遺物の追加分が70%減',
+  short:'コンペ勝利＆400KP以上：＋310%',trait:'血月の誓い',ability:'コンペ勝利かつ報酬400KP以上なら＋310%。400KP未満ではほかの遺物の効果が70%減る。'},
+ {id:'normal.pact.last_seven',name:'破滅への全賭け',mode:'fortune',rarity:'mythic',power:215,skill:'lucky7',
+  percent:420,cap:0,tradeoff:'allin',drawback:'報酬末尾が7以外なら、ほかの遺物の追加分が50%減',
+  short:'報酬末尾7：＋420%',trait:'七番目の破滅',ability:'報酬末尾が7なら＋420%。それ以外はほかの遺物の効果が50%減る。'},
+ {id:'normal.pact.void',name:'虚無の王との契約',mode:'universal',rarity:'ancient',power:290,skill:'spark',
+  percent:300,cap:0,tradeoff:'void',drawback:'ほかの遺物の効果が75%減り、七重共鳴も無効',
+  short:'報酬獲得時：＋300%',trait:'虚無支配',ability:'全ゲームの報酬＋300%。ほかの遺物の上乗せKPは75%減。七重共鳴も発動しない。'},
+ {id:'normal.pact.chain',name:'暴走する鎖の心臓',mode:'universal',rarity:'ancient',power:310,skill:'spark',
+  percent:260,cap:0,tradeoff:'chain',drawback:'ほかの遺物が2個以上発動しなければ、自分の効果が0',
+  short:'ほか2種以上が発動：＋260%',trait:'連鎖暴走',ability:'ほかの遺物が2個以上同時発動すると＋260%。さらにほかの発動1個につき＋60ポイント。単独では0。'},
+ {id:'normal.pact.eclipse',name:'日蝕の至高王',mode:'universal',rarity:'transcendent',power:460,skill:'victory_high',
+  percent:560,cap:0,tradeoff:'eclipse',drawback:'勝利かつ400KP以上でなければ、ほかの遺物の追加分が0',
+  short:'勝利＆400KP以上：＋560%',trait:'日蝕の代償',ability:'勝利かつ報酬400KP以上なら＋560%。条件未達ではほかの遺物によるKP追加をすべて消す。'},
+ {id:'normal.pact.frenzy',name:'賽の崩壊核',mode:'fortune',rarity:'transcendent',power:480,skill:'prime',
+  percent:900,cap:0,tradeoff:'frenzy',drawback:'素数KP以外の報酬では、ほかの遺物の追加分が90%減',
+  short:'素数KPの報酬：＋900%',trait:'確率暴走',ability:'素数KPの報酬なら＋900%。それ以外はほかの遺物の上乗せKPが90%減る。'},
+];
+export const ALL_NORMAL_RELICS:ReadonlyArray<NormalRelicDefinition>=[...NORMAL_RELICS,...RISK_RELICS];
+export const NORMAL_RELIC_BY_ID = new Map(ALL_NORMAL_RELICS.map(x=>[x.id,x]));
 export const NORMAL_RELIC_BY_RARITY:ReadonlyMap<NormalRelicRarity,ReadonlyArray<NormalRelicDefinition>>=
-  new Map(RELIC_RARITIES.map(r=>[r,NORMAL_RELICS.filter(item=>item.rarity===r)]));
-export const RELIC_CATALOG_COUNT = NORMAL_RELICS.length;
+  new Map(RELIC_RARITIES.map(r=>[r,ALL_NORMAL_RELICS.filter(item=>item.rarity===r)]));
+export const RELIC_CATALOG_COUNT = ALL_NORMAL_RELICS.length;
