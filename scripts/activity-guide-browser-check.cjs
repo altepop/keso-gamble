@@ -18,7 +18,7 @@ let browser;
  await page.route('**/api/kp/operation',async route=>{writes++;await route.abort();});
  await page.goto('http://127.0.0.1:'+port+'/');
  await page.getByRole('button',{name:/デモで試す/}).click();
- const modal=page.getByRole('dialog',{name:/まずは5つだけ|遊び方/});
+ const modal=page.locator('.keso-guide-dialog');
  await modal.waitFor();
  assert.match(await modal.textContent(),/STEP 1 \/ 5/);
  for(let step=1;step<5;step++){
