@@ -14,7 +14,7 @@
 
 ## 名簿とロール
 
-`services/valorant-results/spikerush-roster.json`は2026-10-29確認の29人で固定した。
+`services/valorant-results/spikerush-roster.json`は2026-10-29確認の29人で固定し、2026-11-03 にオーナー指示で新デュエリストのフッシュ（Hush）を追加して30人にした（valorant-api.com で ID とロールを確認）。追加前にデュエリストの通常解放を済ませた人は解放済みのまま。途中の人は、フッシュも2回使うと解放になる。
 
 - Riot公式一覧：https://playvalorant.com/en-us/agents/
 - UUID・ロール：https://valorant-api.com/v1/agents?isPlayableCharacter=true&language=en-US （コミュニティAPI）
@@ -32,7 +32,7 @@ D＝デュエリスト、I＝イニシエーター、C＝コントローラー�
 ## 成長と計算
 
 `N`は今回より前の有効試合数。`H=clamp((N-5)/35,0,1)`。
-最初の6試合はH=0。40試合を終えるとH=1になるが、全ロールの解放には最短58試合（29人×2）が必要。
+最初の6試合はH=0。40試合を終えるとH=1になるが、全ロールの解放には最短60試合（30人×2）が必要。
 
 勝ちW=1、負けW=0、キルK、アシストA、デスDとする。
 
