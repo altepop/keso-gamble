@@ -4,6 +4,7 @@
 // @ts-expect-error The shared pure browser engine has no TypeScript declarations.
 import { BOXES, CLASSES, MAX_OWNED, RETIRE_RACES, RACE_INTERVAL, RUN_MS, conditionFromActivity, drawHorse, horseNickname, prizeFor, raceCard, raceClass, raceOdds, raceResult, sellValue, validHorseName } from '../../../js/racing.js';
 import { crownFor, ensureCrowns } from './racing-crowns.ts';
+import {ensureRacing,raceSeed} from './racing-kp.ts';
 import configuredPlayers from '../players.json' with { type: 'json' };
 import { kpRandom } from './kp.ts';
 import type { KpEnv, KpMapping } from './kp.ts';
@@ -121,8 +122,7 @@ export async function ensureRaceField(env:KpEnv,mapping:KpMapping,race:number,no
  * A person-named horse also brings its namesake a consolation: 5% of what others bet on it. */
 export async function settleHorsePrizes(env:KpEnv,mapping:KpMapping,now=Date.now()){
  await ensureHorses(env);await ensureCrowns(env);
- const racing=await import('./racing-kp.ts');
- await racing.ensureRacing(env); // even an unattended field needs a persistent seed table
+ await ensureRacing(env); // even an unattended field needs a persistent seed table
  const from=horsePrizeLookback(now),before=now-RUN_MS;
  const races=(await env.DB.prepare(`SELECT race FROM (SELECT e.race FROM kp_race_entries e WHERE e.guild=? AND e.race>=? AND e.race<=? AND NOT EXISTS(SELECT 1 FROM kp_horse_results r WHERE r.guild=e.guild AND r.race=e.race AND r.horse=e.horse)
   UNION SELECT c.race FROM kp_crowns c WHERE c.guild=? AND c.race>=? AND c.race<=? AND NOT EXISTS(SELECT 1 FROM kp_horse_results r WHERE r.guild=c.guild AND r.race=c.race AND r.horse='person-'||c.user)) ORDER BY race LIMIT 20`)
@@ -133,7 +133,7 @@ export async function settleHorsePrizes(env:KpEnv,mapping:KpMapping,now=Date.now
   if(!seed){
    // Historic cron fixed fields without seeds when nobody opened the Activity.
    // raceSeed atomically INSERT OR IGNOREs one result for all competing workers.
-   seed=await racing.raceSeed(env,mapping.guildId,race);
+   seed=await raceSeed(env,mapping.guildId,race);
   }
   const entries=await raceEntries(env,mapping,race),card=raceCard(race,undefined,entries),order:number[]=raceResult(card,seed.seed).order;
   const sold=new Map((await env.DB.prepare('SELECT id,sold_at FROM kp_horses WHERE guild=? AND sold_at IS NOT NULL').bind(mapping.guildId).all<{id:string;sold_at:number}>()).results.map(r=>[r.id,r.sold_at]));
