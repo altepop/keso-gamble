@@ -78,7 +78,9 @@ export function relicEffectLogSection(collection,proofs){
   return '<details class="relic-v7-log"><summary><strong>＋'+num(e.bonus)+' KP</strong> · '+
    h(proofs?.modeNames?.[e.mode]??e.mode)+' · '+h(date(e.at))+'</summary>'+
    '<p>元報酬：'+num(e.amount)+'KP ／ 実効：＋'+(e.amount?((e.bonus/e.amount)*100).toFixed(1):'0')+'%</p>'+
-   '<p>'+ (names||'条件に応じた効果')+'</p>'+(sets?'<p>'+sets+'</p>':'')+
+   '<p>'+ (names||'条件に応じた効果')+'</p>'+
+   (e.spikeOpening?'<p class="relic-spike-receipt">⚡ 通算'+num(e.spikeOpening.game)+'試合目の初動加護：対象'+num(e.spikeOpening.eligible)+'個・1個＋'+num(e.spikeOpening.flatPerRelic)+'KP・倍率分×'+h(e.spikeOpening.multiplier)+'</p>':'')+
+   (sets?'<p>'+sets+'</p>':'')+
    '<small>確定済み'+(e.origin==='verified'?'検証報酬':'KESOゲーム精算')+'の記録</small></details>';
  }).join('');
  return section('📒 発動ログ（実際に支給されたKP）',
