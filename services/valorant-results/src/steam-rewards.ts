@@ -26,6 +26,10 @@ export const steamSchema=[
  `CREATE TRIGGER IF NOT EXISTS kp_steam_cap_guard BEFORE INSERT ON kp_steam_events WHEN NEW.amount!=min(NEW.requested,max(0,5000-COALESCE((SELECT amount FROM kp_steam_daily WHERE guild=NEW.guild AND user=NEW.user AND day=strftime('%Y-%m-%d',NEW.at/1000,'unixepoch')),0))) BEGIN SELECT RAISE(ABORT,'Steam daily cap'); END`,
  `CREATE TRIGGER IF NOT EXISTS kp_steam_apply AFTER INSERT ON kp_steam_events WHEN NEW.amount>0 BEGIN INSERT INTO kp_steam_daily(guild,user,day,amount) VALUES(NEW.guild,NEW.user,strftime('%Y-%m-%d',NEW.at/1000,'unixepoch'),NEW.amount) ON CONFLICT(guild,user,day) DO UPDATE SET amount=amount+excluded.amount; INSERT INTO kp_ledger(id,guild,user,delta,kind,at) VALUES(NEW.id,NEW.guild,NEW.user,NEW.amount,'steam',NEW.at); END`,
 ];
+// An achievement Steam has not yet given a name or rarity for is retried every 5 minutes, not every minute: one that
+// stays missing re-read the game's awarded achievements (~230 rows) on each cron (2026-11-03 D1 Insights).
+// A batch cut at 20 achievements still continues on the next minute.
+export const STEAM_MISSING_RETRY_MS=5*60000;
 export async function ensureSteam(env:SteamEnv){
  let job=ready.get(env.DB);if(!job){job=env.DB.batch(steamSchema.map(s=>env.DB.prepare(s))).then(()=>{});ready.set(env.DB,job);job.catch(()=>ready.delete(env.DB));}await job;
 }
@@ -147,7 +151,7 @@ export async function monitorSteam(env:SteamEnv,guild:string,send:typeof fetch=f
     // Equipped Steam relics add to a newly credited achievement (once per achievement; the daily cap still applies to the base).
     try{const got=await env.DB.prepare('SELECT amount FROM kp_steam_events WHERE id=?').bind(id).first<{amount:number}>();if(Number(got?.amount)>0)await creditVerifiedRelicBonus(env,guild,job.user,id,'steam',Number(got!.amount),true,settledAt);}catch{console.warn('relic_steam_bonus_pending');}
    }
-   await env.DB.prepare('UPDATE kp_steam_games SET next_at=?,last_checked=?,error=?,lease=NULL,lease_until=0 WHERE guild=? AND user=? AND app=? AND lease=?').bind(now+(incomplete?60000:15*60000),now,more?'batch_remaining':incomplete?'missing_or_pending':null,guild,job.user,job.app,lease).run();
+   await env.DB.prepare('UPDATE kp_steam_games SET next_at=?,last_checked=?,error=?,lease=NULL,lease_until=0 WHERE guild=? AND user=? AND app=? AND lease=?').bind(now+(more?60000:incomplete?STEAM_MISSING_RETRY_MS:15*60000),now,more?'batch_remaining':incomplete?'missing_or_pending':null,guild,job.user,job.app,lease).run();
   }else await env.DB.prepare('UPDATE kp_steam_games SET next_at=?,last_checked=?,error=NULL,lease=NULL,lease_until=0 WHERE guild=? AND user=? AND app=? AND lease=?').bind(now+15*60000,now,guild,job.user,job.app,lease).run();
  }catch(e){const error=e instanceof SteamReadError?e:new SteamReadError('retry_pending');await env.DB.prepare('UPDATE kp_steam_games SET next_at=?,error=?,active=CASE WHEN ? THEN 0 ELSE active END,lease=NULL,lease_until=0 WHERE guild=? AND user=? AND app=? AND lease=?').bind(now+error.delay,error.code,Number(knownFreeOrNotGame(error.code)),guild,row.user,row.app,lease).run();}
 }

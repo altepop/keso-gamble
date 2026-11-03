@@ -290,4 +290,6 @@ test('a recorded race whose old counter was accidentally lost is repaired on own
  assert.equal(displayed.earnings,result.prize);
  assert.equal(balance(f.sql),original,'repair never credits a duplicate prize');
  assert.equal(await repairRecordedHorseStats(f.env,mapping,one),0,'repeat visits do not write anything');
+ // D1: once an owner is repaired, later refreshes read one settings row instead of every result again.
+ assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM kp_settings WHERE key=?').get('horse_stats_repaired_v1:'+guild+':'+one)!.n,1);
 });

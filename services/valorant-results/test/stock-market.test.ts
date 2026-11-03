@@ -483,3 +483,17 @@ test('D1: the last 48 ticks are read once per market version, not on every walle
  await stockView(f.env,{...market,version:market.version+1});
  assert.equal(reads,2,'a new market version reads again');
 });
+
+test('D1: the daily news budget reads only today\'s non-zero news through its partial index',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:T});const f=await fixture();
+ const market=await prepareStocks(f.env,guild,undefined,T);
+ const today=Math.floor(T/STOCK_HOLD)*STOCK_HOLD;
+ for(let i=0;i<50;i++)f.sql.prepare("INSERT INTO stock_news(guild,id,symbol,label,bps,at,applied_version,applied_bps,applied_at) VALUES(?,?,'msum','x',20,?,1,0,?)").run(guild,'zero:'+i,today+i,today+i);
+ f.sql.prepare("INSERT INTO stock_news(guild,id,symbol,label,bps,at,applied_version,applied_bps,applied_at) VALUES(?,?,'msum','x',700,?,1,700,?)").run(guild,'spent',today,today);
+ const plan=f.sql.prepare("EXPLAIN QUERY PLAN SELECT symbol,SUM(ABS(applied_bps)) AS total FROM stock_news INDEXED BY stock_news_daily_used WHERE guild=? AND applied_at>=? AND applied_bps!=0 AND id NOT LIKE 'admin:%' GROUP BY symbol").all(guild,today).map(r=>String(r.detail)).join(' ');
+ assert.match(plan,/stock_news_daily_used/);
+ // The zero-bps rows never counted toward the budget: only 100 bps of msum's 800 remain for a big new headline.
+ f.sql.prepare("INSERT INTO stock_news(guild,id,symbol,label,bps,at) VALUES(?,'big','msum','y',250,?)").run(guild,T);
+ await tickStocks(f.env,market,T+5*60_000,()=>0.5);
+ assert.equal(f.sql.prepare("SELECT applied_bps FROM stock_news WHERE id='big'").get()!.applied_bps,100);
+});

@@ -56,6 +56,9 @@ export async function ensureStocks(env:KpEnv){
  // Range on applied_at limits reads to today's events, with the remaining
  // GROUP BY fields inside a covering index; old history is not deleted.
  `CREATE INDEX IF NOT EXISTS stock_news_daily_budget ON stock_news(guild,applied_at,symbol,applied_bps,id)`,
+ // Most applied news carry 0 bps once a symbol's budget is spent (fortune news arrives every tick), so the
+ // budget sum reads only today's non-zero rows (455 rows/tick read on 2026-11-03 before this index).
+ `CREATE INDEX IF NOT EXISTS stock_news_daily_used ON stock_news(guild,applied_at,symbol,applied_bps,id) WHERE applied_bps!=0`,
  // A partial time-sorted index supports the 12 newest public headlines without
  // scanning and sorting every historical market event on each wallet refresh.
  `CREATE INDEX IF NOT EXISTS stock_news_recent_public ON stock_news(guild,at DESC,id DESC) WHERE applied_version IS NOT NULL AND applied_bps!=0`,
@@ -216,10 +219,11 @@ export function nextStockPrices(prices:Record<string,number>,news:Array<{symbol:
 const random=()=>{const v=new Uint32Array(1);crypto.getRandomValues(v);return v[0]/4294967296;};
 export async function tickStocks(env:KpEnv,market:Market,now=Date.now(),draw:()=>number=random){
  if(now-market.at<STOCK_INTERVAL)return market;
+ await ensureStocks(env);
  await captureNews(env,market,now);
  for(const n of fictionNews(draw))await env.DB.prepare('INSERT OR IGNORE INTO stock_news(guild,id,symbol,label,bps,at) VALUES(?,?,?,?,?,?)').bind(market.guild,`fiction:${n.symbol}:${market.version}`,n.symbol,n.label,n.bps,now).run();
  const pending=(await env.DB.prepare('SELECT id,symbol,label,bps,at FROM stock_news WHERE guild=? AND applied_version IS NULL ORDER BY at,id LIMIT 40').bind(market.guild).all<{id:string;symbol:string;label:string;bps:number;at:number}>()).results;
- const used=(await env.DB.prepare("SELECT symbol,SUM(ABS(applied_bps)) AS total,SUM(CASE WHEN id LIKE 'trades:%' THEN ABS(applied_bps) ELSE 0 END) AS trades FROM stock_news WHERE guild=? AND applied_at>=? AND id NOT LIKE 'admin:%' GROUP BY symbol").bind(market.guild,Math.floor(now/STOCK_HOLD)*STOCK_HOLD).all<{symbol:string;total:number;trades:number}>()).results;
+ const used=(await env.DB.prepare("SELECT symbol,SUM(ABS(applied_bps)) AS total,SUM(CASE WHEN id LIKE 'trades:%' THEN ABS(applied_bps) ELSE 0 END) AS trades FROM stock_news INDEXED BY stock_news_daily_used WHERE guild=? AND applied_at>=? AND applied_bps!=0 AND id NOT LIKE 'admin:%' GROUP BY symbol").bind(market.guild,Math.floor(now/STOCK_HOLD)*STOCK_HOLD).all<{symbol:string;total:number;trades:number}>()).results;
  const budgets=new Map(IDS.map(id=>[id,{day:(DAY_BUDGET[id]??300)-(used.find(r=>r.symbol===id)?.total??0),tick:250,trades:30-(used.find(r=>r.symbol===id)?.trades??0)}]));
  const effective=pending.map(n=>{const b=budgets.get(n.symbol);if(!b)return {...n,bps:0};const trading=n.id.startsWith('trades:');const size=Math.max(0,Math.min(Math.abs(n.bps),b.day,b.tick,trading?b.trades:Infinity));b.day-=size;b.tick-=size;if(trading)b.trades-=size;return {...n,bps:Math.sign(n.bps)*size};});
  const prices=nextStockPrices(market.prices,effective,draw),history=Object.fromEntries(IDS.map(id=>[id,[...(market.history[id]??[]),prices[id]].slice(-48)]));

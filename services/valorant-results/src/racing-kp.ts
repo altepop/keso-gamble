@@ -31,8 +31,16 @@ export async function raceSeed(env:KpEnv,guild:string,id:number){
  await env.DB.prepare('INSERT OR IGNORE INTO kp_races(guild,id,seed,hash,created_at) VALUES(?,?,?,?,?)').bind(guild,id,seed,await kpHash(seed),Date.now()).run();
  return (await env.DB.prepare('SELECT seed,hash FROM kp_races WHERE guild=? AND id=?').bind(guild,id).first<{seed:string;hash:string}>())!;
 }
-async function raceHasBets(env:KpEnv,guild:string,id:number){
- return Boolean(await env.DB.prepare("SELECT 1 FROM kp_state s,json_each(s.data,'$.raceBets') b WHERE s.guild=? AND json_extract(b.value,'$.raceId')=? LIMIT 1").bind(guild,id).first());
+// Betting on a race closes before its start, so once it has started whether anyone bet on it never changes.
+// racingView asks this for the running race on every Activity refresh, and each answer scanned every wallet's JSON
+// (~85 rows; 1,821 calls/day in the 2026-11-03 D1 Insights), so the answer is kept per race after the start.
+const startedRaceBets=new WeakMap<object,Map<string,boolean>>();
+async function raceHasBets(env:KpEnv,guild:string,id:number,now=Date.now()){
+ const known=startedRaceBets.get(env.DB)??new Map<string,boolean>(),key=guild+':'+id;startedRaceBets.set(env.DB,known);
+ if(known.has(key))return known.get(key)!;
+ const has=Boolean(await env.DB.prepare("SELECT 1 FROM kp_state s,json_each(s.data,'$.raceBets') b WHERE s.guild=? AND json_extract(b.value,'$.raceId')=? LIMIT 1").bind(guild,id).first());
+ if(now>=id){known.set(key,has);if(known.size>64)known.delete(known.keys().next().value!);}
+ return has;
 }
 /** What the Activity needs: the open race's hash, and the latest race's seed once it has started.
  * Crown races (named after someone's bad day) always run and carry their name. */
@@ -41,7 +49,7 @@ export async function racingView(env:KpEnv,mapping:KpMapping,now=Date.now()){
  const [openCrown,watchCrown]=[await crownFor(env,guild,open),await crownFor(env,guild,watch)];
  // Owned horses are fixed for a race when its betting opens, before anyone can bet on it.
  const openEntries=await decideEntries(env,mapping,open,now),watchEntries=await raceEntries(env,mapping,watch);
- const runs=Boolean(bigRaceName(watch))||Boolean(fillerCrownName(watch))||Boolean(raceEvent(watch))||Boolean(watchCrown)||watchEntries.length>0||await raceHasBets(env,guild,watch);
+ const runs=Boolean(bigRaceName(watch))||Boolean(fillerCrownName(watch))||Boolean(raceEvent(watch))||Boolean(watchCrown)||watchEntries.length>0||await raceHasBets(env,guild,watch,now);
  const openSeed=await raceSeed(env,guild,open);
  const watched=runs?await raceSeed(env,guild,watch):null;
  return {open:{id:open,hash:openSeed.hash,entries:openEntries,...(openCrown?{crown:openCrown.name}:{})},watch:{id:watch,runs,entries:watchEntries,...(watchCrown?{crown:watchCrown.name}:{}),...(watched?{hash:watched.hash,seed:watched.seed}:{})}};
