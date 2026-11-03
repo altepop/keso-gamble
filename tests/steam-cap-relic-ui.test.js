@@ -14,7 +14,7 @@ test('when the 5,000KP/day cap is met both unpaid and credited Steam relic claim
  assert.match(html,/5,000／5,000KP/);
  assert.match(html,/0KP（対象外）/);
  assert.match(html,/翌9時まで不可/);
- assert.match(html,/上限到達/);
+ assert.match(html,/当日上限/);
  assert.ok(/data-event="steam:g:s:a:1" disabled/.test(html));
  assert.ok(/data-event="steam:g:s:a:2" disabled/.test(html));
 });
