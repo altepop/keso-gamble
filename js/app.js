@@ -1,32 +1,35 @@
-import {stockOrderQuote,STOCK_ORDER_VERSION,STOCK_PRICE_SCALE} from './stock-order.js?v=web-e054fc2bb05b5f3f';
-import {steamConnectionMessage} from './steam-view.js?v=web-e054fc2bb05b5f3f';
-import {privateCasinoPanel} from './private-casino-view.js?v=web-e054fc2bb05b5f3f';
-import {communityPanel,communityRows} from './community-feed.js?v=web-e054fc2bb05b5f3f';
-import {stockPanel,stockCandles,stockPrice,privateStockOperator} from './stock-view.js?v=web-e054fc2bb05b5f3f';
-import {stockStoryChoices,validateCustomStory} from './stock-stories.js?v=web-e054fc2bb05b5f3f';
-import {wheelView,covered,redNumbers,outcomeAngle} from './roulette-view.js?v=web-e054fc2bb05b5f';
-import {makeEscalationWheel} from './escalation-roulette.js?v=web-e054fc2bb05b5f';
-import {connectDiscordActivity,isDiscordActivity,openSteamLogin,openCompanionGame}from './discord-activity-auth.js?v=web-e054fc2bb05b5f3f';
-import { createKpClient } from './kp-client.js?v=web-e054fc2bb05b5f3f';
-import { fullRefreshInterval, communityRefreshEnabled, COMMUNITY_REFRESH_INTERVAL } from './live-refresh-policy.js';
-import { fmt, fmt0 } from './format.js?v=web-e054fc2bb05b5f3f';
-import { submitClaim, approveClaim, issueDirective, completeDirective } from './progression.js?v=web-e054fc2bb05b5f3f';
-import { titleView, homeView, playView, directivesView, escapeHTML } from './progression-views.js?v=web-e054fc2bb05b5f3f';
-import { genCandles, movingAverage, svgCandles } from './charts.js?v=web-e054fc2bb05b5f3f';
-import { MARKET, createInitialState, portfolioValue, assets, advanceMarket, trade, spin, spinNumbers, validateNumberBets, grantDemoSalary, cryptoRouletteNumber } from './engine.js?v=web-e054fc2bb05b5f3f';
-import { KEY, LEGACY_KEY } from './storage.js?v=web-e054fc2bb05b5f3f';
-import { PUBLIC_SALT, RUN_MS, WEEKLY_LIMIT, openRaceStart, latestRaceStart, raceCard, raceOdds, raceResult, raceTimeline, raceCommentary, raceRuns, placeRaceBet, settleRaceBets, weeklySpent } from './racing.js?v=web-e054fc2bb05b5f3f';
-import { LUXURY } from './luxury.js?v=web-e054fc2bb05b5f3f';
-import { raceScreen, racePreview, drawRace, raceElapsed, ownerPanel, luxuryPanel, roastPanel } from './racing-view.js?v=web-luxuryfix-20261101';
-import { createStore } from './store.js?v=web-e054fc2bb05b5f3f';
-import { healthPanel } from './health-view.js?v=web-e054fc2bb05b5f3f';
-import { trendPanel } from './trend-view.js?v=web-e054fc2bb05b5f3f';
-import { mleagueScreen, mleaguePreview } from './mleague-view.js?v=web-e054fc2bb05b5f3f';
-import { gamePicker, chinchiroView, blackjackView } from './casino-view.js?v=web-e054fc2bb05b5f3f';
-import {casinoFrames} from './casino-animation.js?v=web-e054fc2bb05b5f3f';
-import { playChinchiro, bjStart, bjHit, bjStand, bjDouble, cryptoDie, cryptoCard, cryptoInt } from './casino.js?v=web-e054fc2bb05b5f3f';
-import { minesStart, minesPick, minesCashout, playSlot, vpDeal, vpDraw, playBaccarat, VP_NAMES } from './casino-more.js?v=web-e054fc2bb05b5f3f';
-import { minesView, slotView, videoPokerView, baccaratView } from './casino-more-view.js?v=web-e054fc2bb05b5f3f';
+import {stockOrderQuote,STOCK_ORDER_VERSION,STOCK_PRICE_SCALE} from './stock-order.js?v=web-470bd2c61b2b699e';
+import {steamConnectionMessage} from './steam-view.js?v=web-470bd2c61b2b699e';
+import {relicsPanel} from './relics-view.js?v=web-470bd2c61b2b699e';
+import {primeRelicAudio,playRelicSound,previewRelicSound,stopRelicSound,setRelicSoundVolume,toggleRelicSound} from './relics-audio.js?v=web-470bd2c61b2b699e';
+import {relicDefaultView} from './relics-v4.js?v=web-470bd2c61b2b699e';
+import {privateCasinoPanel} from './private-casino-view.js?v=web-470bd2c61b2b699e';
+import {communityPanel,communityRows} from './community-feed.js?v=web-470bd2c61b2b699e';
+import {stockPanel,stockCandles,stockPrice,privateStockOperator} from './stock-view.js?v=web-470bd2c61b2b699e';
+import {stockStoryChoices,validateCustomStory} from './stock-stories.js?v=web-470bd2c61b2b699e';
+import {wheelView,covered,redNumbers,outcomeAngle} from './roulette-view.js?v=web-470bd2c61b2b699e';
+import {makeEscalationWheel} from './escalation-roulette.js?v=web-470bd2c61b2b699e';
+import {connectDiscordActivity,isDiscordActivity,openSteamLogin,openCompanionGame}from './discord-activity-auth.js?v=web-470bd2c61b2b699e';
+import { createKpClient } from './kp-client.js?v=web-470bd2c61b2b699e';
+import { fullRefreshInterval, communityRefreshEnabled, COMMUNITY_REFRESH_INTERVAL } from './live-refresh-policy.js?v=web-470bd2c61b2b699e';
+import { fmt, fmt0 } from './format.js?v=web-470bd2c61b2b699e';
+import { submitClaim, approveClaim, issueDirective, completeDirective } from './progression.js?v=web-470bd2c61b2b699e';
+import { titleView, homeView, playView, directivesView, escapeHTML } from './progression-views.js?v=web-470bd2c61b2b699e';
+import { genCandles, movingAverage, svgCandles } from './charts.js?v=web-470bd2c61b2b699e';
+import { MARKET, createInitialState, portfolioValue, assets, advanceMarket, trade, spin, spinNumbers, validateNumberBets, grantDemoSalary, cryptoRouletteNumber } from './engine.js?v=web-470bd2c61b2b699e';
+import { KEY, LEGACY_KEY } from './storage.js?v=web-470bd2c61b2b699e';
+import { PUBLIC_SALT, RUN_MS, WEEKLY_LIMIT, openRaceStart, latestRaceStart, raceCard, raceOdds, raceResult, raceTimeline, raceCommentary, raceRuns, placeRaceBet, settleRaceBets, weeklySpent } from './racing.js?v=web-470bd2c61b2b699e';
+import { LUXURY } from './luxury.js?v=web-470bd2c61b2b699e';
+import { raceScreen, racePreview, drawRace, raceElapsed, ownerPanel, luxuryPanel, roastPanel } from './racing-view.js?v=web-470bd2c61b2b699e';
+import { createStore } from './store.js?v=web-470bd2c61b2b699e';
+import { healthPanel } from './health-view.js?v=web-470bd2c61b2b699e';
+import { trendPanel } from './trend-view.js?v=web-470bd2c61b2b699e';
+import { mleagueScreen, mleaguePreview } from './mleague-view.js?v=web-470bd2c61b2b699e';
+import { gamePicker, chinchiroView, blackjackView } from './casino-view.js?v=web-470bd2c61b2b699e';
+import {casinoFrames} from './casino-animation.js?v=web-470bd2c61b2b699e';
+import { playChinchiro, bjStart, bjHit, bjStand, bjDouble, cryptoDie, cryptoCard, cryptoInt } from './casino.js?v=web-470bd2c61b2b699e';
+import { minesStart, minesPick, minesCashout, playSlot, vpDeal, vpDraw, playBaccarat, VP_NAMES } from './casino-more.js?v=web-470bd2c61b2b699e';
+import { minesView, slotView, videoPokerView, baccaratView } from './casino-more-view.js?v=web-470bd2c61b2b699e';
 const $=(s,el=document)=>el.querySelector(s);
 const wallet=createKpClient();
 const embedded=isDiscordActivity();
@@ -35,6 +38,12 @@ let autoState=embedded?'loading':'idle';
 let autoMessage='';
 let live=wallet.connected&&!embedded;
 let steamView=null;
+let relicProofs=null,relicNotice='',relicLoading=false;
+// Each tap is one paid purchase. Never queue taps while a request or reveal is active.
+let relicSummonBusy=false,lastRelicSummonTap=0,lastSummonBlockToast=0;
+const RELIC_SUMMON_TAP_GAP_MS=1200;
+let lastRelicLedgerId=null;
+let relicView={...relicDefaultView(),previewMode:'competitive',previewAmount:500},relicReveal=null;
 let connectionError=live?'口座を読み込んでいます…':'';
 let state;
 let screen='title';
@@ -123,13 +132,15 @@ function renderRow(item){
 }
 
 // Bottom tabs and the screens under each. 遊ぶ = 競馬・カジノ・株、使う = 指名・馬主・高級品.
-const GROUPS={race:[['race','競馬'],['mleague','Mリーグ'],['casino','カジノ'],['market','株']],directives:[['directives','指名'],['stable','馬主'],['shop','高級品']]};
+const GROUPS={race:[['race','競馬'],['mleague','Mリーグ'],['casino','カジノ'],['market','株']],directives:[['directives','指名'],['stable','馬主'],['shop','高級品'],['relics','遺物']]};
 const groupOf=id=>Object.keys(GROUPS).find(g=>GROUPS[g].some(([s])=>s===id))??id;
 function tabsFor(group){return `<div class="sub-tabs">${GROUPS[group].map(([id,label])=>`<button class="sub-tab ${screen===id?'active':''}" data-screen="${id}">${label}</button>`).join('')}</div>`;}
 function subTabs(){return tabsFor('race');}
 
 // Race playback state. The card, result and odds are pure functions of the race start time.
 let raceDraft={type:'win',horse:null};
+// Native confirmation dialogs can silently fail in Discord's iOS webview.
+let pendingHorseSale=null;
 // Mリーグ: the chosen game and player, and whether the confirmation is showing.
 let mlDraft={match:null,player:null,confirm:false};
 // 資産 → システムの状態, loaded only when asked for.
@@ -257,8 +268,9 @@ function screenCasino(){
 function useScreen(title,body,{preview=false}={}){
   return `<div class="screen"><header class="topbar"><div class="toprow"><h1 class="title">${title}</h1><span class="badge">${moneyCompact(state.cash)}</span></div></header>${tabsFor('directives')}${live||preview?`<div class="asset-list">${body}</div>`:'<div class="market-disclaimer">本番のKP口座をつなぐと使えます。</div>'}${bottomNav()}</div>`;
 }
-function screenStable(){return useScreen('馬主',live?ownerPanel(state,Date.now()):'');}
+function screenStable(){return useScreen('馬主',live?ownerPanel(state,Date.now(),pendingHorseSale):'');}
 function screenShop(){return useScreen('高級品',luxuryPanel(state,{readonly:!live,confirmation:luxuryConfirmation}),{preview:true});}
+function screenRelics(){return useScreen('遺物',relicsPanel(state,{proofs:relicProofs,notice:relicNotice,loading:relicLoading,view:relicView,reveal:relicReveal,summonBusy:relicSummonBusy||wallet.pending}));}
 
 function screenAssets(){
   return `<div class="screen"><header class="topbar"><div class="toprow"><h1 class="title">資産</h1><div class="small-actions">${live?'':'<button class="icon-btn" data-action="reset" aria-label="初期化">↺</button>'}</div></div></header><div class="wallet-strip"><div class="wallet-item"><small>保有KP</small><strong>${moneyCompact(state.cash)}</strong></div><div class="wallet-item"><small>株式評価額</small><strong>${moneyCompact(portfolioValue(state))}</strong></div><div class="wallet-item"><small>純資産</small><strong>${moneyCompact(assets(state))}</strong></div></div>${live?'<div class="market-disclaimer">サーバー口座 · 試合報酬と決済は全端末で共通です。</div>':'<div class="market-disclaimer">端末内のデモ口座</div>'}${live?'':`<details class="panel"><summary class="card-body">開発用：テストKPの補充</summary><div class="action-row"><button class="action-btn" data-action="salary">テスト用KP +600 KP</button></div></details>`}${state.debt?.amount>0?`<div class="market-disclaimer">💸 借KP ${moneyCompact(state.debt.amount)}（${state.debt.intervalMinutes}分ごとに利子${state.debt.interestPercent}%）</div>`:''}<div class="asset-list">${live&&state.privateCasino?privateStockOperator(MARKET,{selection:stockShockSelection,notice:stockShockNotice,confirmation:stockShockConfirmation,events:state.marketEvents}):''}${live&&state.privateCasino?privateCasinoPanel(drafts,privateRacePreview,privateRoundMessage):''}<div class="asset-card"><div class="panel-title" style="margin-bottom:10px">保有銘柄</div>${MARKET.map(s=>`<div class="asset-line"><span>${s.name}</span><strong>${state.holdings[s.id]}株 / ${moneyCompact(state.holdings[s.id]*state.prices[s.id])}</strong></div>`).join('')}<div class="action-row"><button class="action-btn" data-screen="market">株を売買する</button></div></div>${tradeHistory()}${live?roastPanel(state):''}${live?trendPanel(trend,trendView):''}${live?healthPanel(health,healthLoading,healthError):''}<div class="asset-card"><h2 class="panel-title">口座</h2>${live?'<div id="connection-slot"></div>':''}<button class="title-back" data-screen="title">タイトルへ戻る</button></div></div>${bottomNav()}</div>`;
@@ -281,7 +293,7 @@ function detailSheet(){
 }
 
 function render(){
-  const html = screen==='title'?titleView(state,wallet.remembered,autoState,autoMessage):screen==='home'?homeView(state,bottomNav()):screen==='play'?playView(state,drafts,bottomNav(),steamView):screen==='directives'?directivesView(state,drafts,bottomNav(),tabsFor('directives')):screen==='stable'?screenStable():screen==='shop'?screenShop():screen==='market'?screenMarket():screen==='casino'?screenCasino():screen==='mleague'?mleagueScreen({state,live,draft:{...mlDraft,amount:drafts['ml-amount']},tabs:subTabs(),nav:bottomNav()}):screen==='race'?screenRace():screenAssets();
+  const html = screen==='title'?titleView(state,wallet.remembered,autoState,autoMessage,wallet.connected):screen==='home'?homeView(state,bottomNav()):screen==='play'?playView(state,drafts,bottomNav(),steamView):screen==='directives'?directivesView(state,drafts,bottomNav(),tabsFor('directives')):screen==='stable'?screenStable():screen==='shop'?screenShop():screen==='relics'?screenRelics():screen==='market'?screenMarket():screen==='casino'?screenCasino():screen==='mleague'?mleagueScreen({state,live,draft:{...mlDraft,amount:drafts['ml-amount']},tabs:subTabs(),nav:bottomNav()}):screen==='race'?screenRace():screenAssets();
   const previousView=app.querySelector('.screen')?.dataset.view;
   // Do not carry an expanded home feed into a different screen: closed
   // disclosures must not trigger 10-second D1 polling in the background.
@@ -311,8 +323,28 @@ function render(){
 }
 
 
+function showRelicReward(bonus,base=0,names=[]){
+ if(!Number.isFinite(bonus)||bonus<=0)return;
+ document.getElementById('relic-kp-award')?.remove();
+ const el=document.createElement('div');el.id='relic-kp-award';el.className='relic-kp-award';
+ el.setAttribute('role','status');el.setAttribute('aria-live','polite');
+ const title=document.createElement('strong');title.textContent='✦ 遺物ボーナス ＋'+Math.floor(bonus).toLocaleString('ja-JP')+' KP';
+ const info=document.createElement('span');info.textContent=base>0?'報酬 '+Math.floor(base).toLocaleString('ja-JP')+' KP → 合計 '+Math.floor(base+bonus).toLocaleString('ja-JP')+' KP':'確定済みの追加KPを獲得';
+ const source=document.createElement('small');source.textContent=(names??[]).slice(0,3).join(' ／ ');
+ const close=document.createElement('button');close.type='button';close.textContent='閉じる';close.addEventListener('click',()=>el.remove());
+ el.append(title,info,source,close);document.body.appendChild(el);
+ setTimeout(()=>el.remove(),6500);
+}
+function observeRelicLedger(){
+ const latest=Array.isArray(state?.ledger)?state.ledger.find(row=>row.kind==='relic'):null;
+ if(!latest)return;
+ const id=String(latest.id??latest.at??'');
+ if(lastRelicLedgerId!==null&&id&&lastRelicLedgerId!==id&&Number(latest.delta)>0)showRelicReward(Number(latest.delta));
+ lastRelicLedgerId=id;
+}
+
 async function refreshWallet(resume=false){
- try{if(resume&&wallet.pending)await wallet.resume();state=await wallet.state();connectionError='';if(!detail)render();}
+ try{if(resume&&wallet.pending)await wallet.resume();state=await wallet.state();observeRelicLedger();connectionError='';if(!detail)render();}
  catch(error){connectionError=error.message;if(!detail)render();if(resume)throw error;}
 }
 // Live wallets: the server rolls the dice and draws the cards. The demo uses the same rules with the browser's crypto.
@@ -368,7 +400,11 @@ async function doMoreCasino(action,extra={}){
 async function liveOperation(action,args){
  if(connectionError)throw Error('残高を更新してから操作してください。');
  const result=await wallet.operate(action,args);
- try{state=await wallet.state();connectionError='';}catch{connectionError='決済済みです。残高を更新してください。';}
+ try{state=await wallet.state();observeRelicLedger();connectionError='';}catch{connectionError='決済済みです。残高を更新してください。';}
+ if(Number(result?.relicBonus)>0){
+  const actual=state?.relics?.lastNativeEffect;
+  showRelicReward(Number(result.relicBonus),Number(actual?.amount??0),actual?.names??[]);
+ }
  return result;
 }
 
@@ -405,12 +441,52 @@ async function doSpin(){
 const trendDay=e=>{const hit=e.target.closest?.('[data-trend-day]');if(!hit)return;const day=Number(hit.dataset.trendDay);if(trendView.day!==day){trendView.day=day;render();}};
 addEventListener('click',trendDay);
 addEventListener('pointermove',e=>{if(e.pointerType==='mouse')trendDay(e);});
+// Client-only filter state; no D1 requests for typing or paging.
+for(const eventName of ['input','change'])addEventListener(eventName,e=>{
+ const audioVolume=e.target.closest?.('[data-relic-sound-volume]');
+ if(audioVolume&&screen==='relics'){
+  if(eventName==='input'){
+   const n=setRelicSoundVolume(audioVolume.value);
+   const output=document.querySelector('#relic-v9-volume-value');
+   if(output)output.textContent=n+'%';
+  }
+  return;
+ }
+ const preview=e.target.closest?.('[data-relic-preview]');
+ if(preview&&screen==='relics'&&eventName==='change'){
+  const key=preview.dataset.relicPreview;
+  if(key==='mode'||key==='amount'){
+   relicView=key==='mode'
+    ?{...relicView,previewMode:preview.value,previewAmount:preview.value==='spikerush'?40:500}
+    :{...relicView,previewAmount:Number(preview.value)};
+   render();
+  }
+  return;
+ }
+ const el=e.target.closest?.('[data-relic-filter]');
+ if(!el||screen!=='relics')return;
+ const key=el.dataset.relicFilter;
+ if(!['query','source','rarity','mode','sort'].includes(key))return;
+ if(eventName==='input'&&key!=='query')return;
+ if(eventName==='change'&&key==='query')return;
+ const caret=key==='query'?[el.selectionStart,el.selectionEnd]:null;
+ relicView={...relicView,[key]:el.value,page:0};
+ render();
+ if(caret){
+  const field=document.querySelector('#relic-search');
+  field?.focus({preventScroll:true});
+  if(caret[0]!==null&&caret[1]!==null)field?.setSelectionRange(caret[0],caret[1]);
+ }
+});
 addEventListener('click',async e=>{
   const t=e.target.closest?.('button,[data-open]'); if(!t) return;
   if(t.dataset.action==='casino-skip'){casinoSkipped=true;skipCasinoPause?.();return;}
   if(casinoBusy&&(t.dataset.screen||t.dataset.casinoGame)){toast('演出をスキップすると移動できます');return;}
-  const mutates=!!t.dataset.approve || !!t.dataset.complete || ['steam-library','steam-status','steam-link','steam-open','steam-confirm','steam-disconnect','steam-game','salary','trade','spin','race-bet','roast-level','horse-buy','horse-sell','luxury-approve','reset','submit-claim','issue-directive','connect-kp','refresh-kp','disconnect-kp','auto-connect-kp','ml-buy','chinchiro','bj-start','bj-hit','bj-stand','bj-double','mines-start','mines-pick','mines-cashout','slot','vp-deal','vp-draw','baccarat','private-round','private-race','stock-shock','stock-shock-approve','stock-guerrilla-toggle'].includes(t.dataset.action);
-  if(mutates && mutationPending)return;
+  const mutates=!!t.dataset.approve || !!t.dataset.complete || ['steam-library','steam-status','steam-link','steam-open','steam-confirm','steam-disconnect','steam-game','salary','trade','spin','race-bet','roast-level','horse-buy','horse-sell-approve','luxury-approve','reset','submit-claim','issue-directive','connect-kp','restore-kp','refresh-kp','disconnect-kp','auto-connect-kp','ml-buy','chinchiro','bj-start','bj-hit','bj-stand','bj-double','mines-start','mines-pick','mines-cashout','slot','vp-deal','vp-draw','baccarat','private-round','private-race','stock-shock','stock-shock-approve','stock-guerrilla-toggle','relic-summon','relic-equip','relic-auto-equip','relic-save-preset','relic-overwrite-preset','relic-load-preset','relic-remove-preset','relic-rename-preset','relic-claim-steam','relic-claim-unite'].includes(t.dataset.action);
+  if(mutates && mutationPending){
+    if(t.dataset.action==='relic-summon'&&Date.now()-lastSummonBlockToast>1200){toast('召喚結果を確認中。連打しても追加購入されません');lastSummonBlockToast=Date.now();}
+    return;
+  }
   if(mutates)mutationPending=true;
   try{
     if(t.dataset.escSpin){
@@ -419,6 +495,85 @@ addEventListener('click',async e=>{
       return;
     }
     if(t.dataset.companion){await openCompanionGame(t.dataset.companion);return;}
+    if(t.dataset.action==='relic-tab'){
+      if(!['collection','gear','summon','records'].includes(t.dataset.tab))return;
+      relicView={...relicView,section:t.dataset.tab};
+      render();
+      document.querySelector('.relic-v8-nav')?.scrollIntoView({block:'start',behavior:'auto'});
+      return;
+    }
+    if(t.dataset.action==='relic-layout'){
+      relicView={...relicView,layout:t.dataset.layout==='list'?'list':'grid',page:0};
+      render();
+      return;
+    }
+    if(t.dataset.action==='relic-equipped-only'){
+      relicView={...relicView,equippedOnly:!relicView.equippedOnly,page:0};
+      render();
+      return;
+    }
+    if(t.dataset.action==='relic-sound-toggle'){
+      toggleRelicSound();render();return;
+    }
+    if(t.dataset.action==='relic-sound-preview'){
+      // No KP operation or D1 read. The trusted preview tap also unlocks iOS sound.
+      if(!primeRelicAudio()){toast('効果音をオンにして音量を上げてください。');return;}
+      if(!previewRelicSound(t.dataset.tier))toast('音声の自動再生が制限された場合は、もう一度試聴をタップしてください。');
+      return;
+    }
+    if(t.dataset.action==='relic-reveal-skip'){
+      const panel=app.querySelector('.relic-reveal');
+      panel?.classList.add('relic-reveal-instant');
+      stopRelicSound();
+      panel?.querySelector('[data-action="relic-reveal-close"]')?.focus();
+      return;
+    }
+    if(t.dataset.action==='relic-reveal-sound'){
+      primeRelicAudio();if(!playRelicSound(relicReveal))toast('端末の制限で音を再生できない場合がある。サウンド設定を確認してください。');
+      return;
+    }
+    if(t.dataset.action==='relic-reveal-close'){stopRelicSound();relicReveal=null;render();return;}
+    if(t.dataset.action==='relic-page'){relicView.page=Number(t.dataset.page)||0;render();document.querySelector('.relic-v8-viewbar')?.scrollIntoView({block:'start',behavior:'auto'});return;}
+    if(t.dataset.action==='relic-replay'){
+      const idx=Number(t.dataset.historyIndex);
+      const history=state.relics?.summonHistory;
+      if(Array.isArray(history)&&Number.isInteger(idx)&&history[idx]){
+        primeRelicAudio();relicReveal=history[idx];render();playRelicSound(relicReveal);
+      }
+      return;
+    }
+    if(t.dataset.action?.startsWith('relic-')){
+      if(!live||!wallet.connected)throw Error('遺物は本番KP口座への接続が必要です。');
+      const action=t.dataset.action;
+      if(action==='relic-summon'){
+        if(relicReveal){toast('召喚結果を閉じてから次を引いてください');return;}
+        const now=Date.now();
+        if(relicSummonBusy||now-lastRelicSummonTap<RELIC_SUMMON_TAP_GAP_MS){toast('連打防止中。少し間を空けてください');return;}
+        lastRelicSummonTap=now;
+        primeRelicAudio(); // iOS: unlock sound during the trusted tap.
+        relicSummonBusy=true;
+        render(); // immediately disable purchase buttons and show the pending state.
+      }
+      const presetSelected=$('#relic-preset')?.value??'';
+      const presetName=$('#relic-preset-name')?.value??'';
+      const args=action==='relic-summon'?{count:Number(t.dataset.count)}:
+       action==='relic-equip'?{relic:t.dataset.relic??'',slot:Number((relicView.section==='collection'?$('#relic-slot-gallery')?.value:$('#relic-slot')?.value)??0)}:
+       action==='relic-auto-equip'?{goal:$('#relic-goal')?.value??'all'}:
+       action==='relic-save-preset'?{preset:presetName}:
+       action==='relic-overwrite-preset'?{preset:presetSelected}:
+       action==='relic-rename-preset'?{preset:presetSelected,newName:presetName}:
+       ['relic-load-preset','relic-remove-preset'].includes(action)?{preset:presetSelected}:
+       action==='relic-claim-steam'?{event:t.dataset.event}:{tier:t.dataset.tier};
+      const result=await liveOperation(action,args);
+      if(['relic-equip','relic-auto-equip','relic-save-preset','relic-overwrite-preset','relic-load-preset','relic-remove-preset','relic-rename-preset','relic-claim-steam','relic-claim-unite'].includes(action)){
+       try{relicProofs=await wallet.relics();}catch(error){relicNotice='装備は更新したが、効果一覧を再取得できなかった。'+(error.message??'');}
+      }
+      if(action==='relic-summon')relicReveal=result;
+      relicNotice=action==='relic-save-preset'?'「'+result.name+'」を保存した。':action==='relic-overwrite-preset'?'「'+result.name+'」を上書きした。':action==='relic-rename-preset'?'「'+result.name+'」に改名した。':action==='relic-load-preset'?'装備をプリセットから復元した。':action==='relic-remove-preset'?'プリセットを削除した。':action==='relic-auto-equip'?`おまかせ装備完了。4枠の合計戦力 ${result.power}`:action==='relic-summon'?`${result.count}連召喚：${result.cost.toLocaleString('ja-JP')} KPを使用。${result.highlights?.length?'大当たり '+result.highlights.map(v=>v.name).join('、'):'獲得遺物を図鑑に追加した。'}`:action==='relic-equip'?`装備変更完了。戦力 ${result.power}`:`${result.item.name} を獲得した。`;
+      render();
+      if(action==='relic-summon')playRelicSound(relicReveal);
+      toast(relicNotice);return;
+    }
     if(t.dataset.action==='stock-guerrilla-toggle'){
       if(!live||!state.privateCasino)throw Error('この操作は利用できません。');
       const enabled=state.marketEvents?.enabled===false;
@@ -506,6 +661,7 @@ addEventListener('click',async e=>{
       }catch(error){steamView={...(steamView??{}),link:wallet.steamLinkRequest,error:error.message||'Steam接続を確認できません。',notice:'',loading:false};toast('Steam接続を確認できません。画面の案内をご確認ください。');}
       render();return;
     }
+    if(t.dataset.action==='restore-kp'){state=await wallet.restoreStoredSession();live=true;autoState='connected';autoMessage='';connectionError='';screen='home';render();toast('保存済みのKP口座に再接続しました');return;}
     if(t.dataset.action==='connect-kp'){state=await wallet.connect($('#kp-connect-code').value);live=true;autoState='connected';autoMessage='';connectionError='';delete drafts['kp-connect-code'];screen='home';render();toast(wallet.remembered?'接続しました。次回は自動で接続します':'接続しました。この環境では閉じると再接続が必要です');return;}
     if(t.dataset.action==='private-round'){
       if(!live||!state.privateCasino)throw Error('この操作は利用できません。');
@@ -518,9 +674,9 @@ addEventListener('click',async e=>{
       privateRacePreview=await wallet.privateRace();render();return;
     }
     if(t.dataset.action==='refresh-kp'){await refreshWallet(true);render();return;}
-    if(t.dataset.action==='disconnect-kp'){await wallet.disconnect();autoState=embedded?'paused':'idle';autoMessage='';live=false;trend=null;trendView={...trendView,error:'',focus:null,day:null};privateRacePreview=null;privateRoundMessage='';steamView=null;connectionError='';state=store.state;screen='title';render();return;}
+    if(t.dataset.action==='disconnect-kp'){await wallet.disconnect();autoState=embedded?'paused':'idle';autoMessage='';live=false;trend=null;trendView={...trendView,error:'',focus:null,day:null};privateRacePreview=null;privateRoundMessage='';steamView=null;relicProofs=null;relicNotice='';stopRelicSound();relicReveal=null;relicView={...relicDefaultView(),previewMode:'competitive',previewAmount:500};connectionError='';state=store.state;screen='title';render();return;}
     if(t.dataset.casinoGame){if(spinLock){toast('抽選中は切り替えられません');return;}casinoGame=t.dataset.casinoGame;render();return;}
-    if(t.dataset.screen){if(spinLock){toast('抽選中は画面を切り替えられません');return;}detail=null;luxuryConfirmation=null;screen=t.dataset.screen;render();if(screen==='race')settleRaces();return;}
+    if(t.dataset.screen){if(spinLock){toast('抽選中は画面を切り替えられません');return;}detail=null;pendingHorseSale=null;luxuryConfirmation=null;screen=t.dataset.screen;render();if(screen==='relics'&&live){relicLoading=true;render();try{relicProofs=await wallet.relics();}catch(error){relicNotice='実績データの取得に失敗した。'+(error.message??'');}finally{relicLoading=false;render();}}if(screen==='race')settleRaces();return;}
     if(t.dataset.action==='load-trend'){await loadTrend(Number(t.dataset.days));return;}
     if(t.dataset.trendSort){const key=t.dataset.trendSort;trendView.dir=trendView.sort===key?-trendView.dir:1;trendView.sort=key;render();return;}
     if(t.dataset.trendFocus){trendView.focus=trendView.focus===t.dataset.trendFocus?null:t.dataset.trendFocus;render();return;}
@@ -536,8 +692,19 @@ addEventListener('click',async e=>{
       mlDraft={match:null,player:null,confirm:false};delete drafts['ml-amount'];render();toast(`${bet.player}のラスを買いました（${(bet.odds/10).toFixed(1)}倍）`);return;
     }
     if(t.dataset.raceType){raceDraft.type=t.dataset.raceType;render();return;}
-    if(t.dataset.action==='horse-buy'){const {horse}=await liveOperation('horse-buy',{box:t.dataset.box,name:$('#horse-name')?.value??''});delete drafts['horse-name'];render();toast(`${horse.name}（${horse.gradeLabel}）が仲間入りしました`);return;}
-    if(t.dataset.action==='horse-sell'){if(!confirm('この馬を売りますか？売ると戻せません'))return;const {sold}=await liveOperation('horse-sell',{horseId:t.dataset.horse});render();toast(`売却しました（+${moneyCompact(sold.refund)}）`);return;}
+    if(t.dataset.action==='horse-buy'){const {horse}=await liveOperation('horse-buy',{box:t.dataset.box,name:$('#horse-name')?.value??''});delete drafts['horse-name'];pendingHorseSale=null;render();toast(`${horse.name}（${horse.gradeLabel}）が仲間入りしました`);return;}
+    if(t.dataset.action==='horse-sell'){
+      const horse=state.horses?.find(h=>h.id===t.dataset.horse&&!h.retired_at);
+      if(!live||!horse)throw Error('売れる馬が見つかりません。');
+      pendingHorseSale=horse.id;render();return;
+    }
+    if(t.dataset.action==='horse-sell-cancel'){pendingHorseSale=null;render();return;}
+    if(t.dataset.action==='horse-sell-approve'){
+      const horse=state.horses?.find(h=>h.id===pendingHorseSale&&!h.retired_at);
+      if(!live||!horse||horse.id!==t.dataset.horse)throw Error('売れる馬が見つかりません。');
+      const {sold}=await liveOperation('horse-sell',{horseId:horse.id});
+      pendingHorseSale=null;render();toast(`売却しました（+${moneyCompact(sold.refund)}）`);return;
+    }
     if(t.dataset.action==='luxury'){
       if(!live||!wallet.connected)throw Error('高級品の購入には本番KP口座への接続が必要です。');
       const item=LUXURY.find(i=>i.id===t.dataset.item);if(!item)throw Error('品目を選んでください。');
@@ -592,7 +759,9 @@ addEventListener('click',async e=>{
     if(t.dataset.action==='reset'){if(confirm('データを初期化しますか？')){await commit(next => Object.assign(next,createInitialState()));for(const key of Object.keys(drafts))delete drafts[key];renderedMarkup=undefined;render();toast('初期化した')}return;}
 
   }catch(err){render();toast(err.message||'操作に失敗した');}
-  finally { if(mutates)mutationPending=false; }
+  finally { if(mutates)mutationPending=false;
+    if(t.dataset.action==='relic-summon'){relicSummonBusy=false;render();}
+  }
 });
 
 addEventListener('input',e=>{

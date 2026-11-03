@@ -15,6 +15,11 @@ import {kpCommands,KP_COMMAND_VERSION} from './kp-command.ts';
 import {voiceControl,voiceStatus} from './voice-api.ts';
 import {voiceRewardHistory,voicePolicy} from './voice-rewards.ts';
 import {receiveLoopKp} from './loop-kp.ts';
+import {summonRelics,grantSteamRelic,grantUniteRelic,equipRelic,autoEquipRelics,saveRelicPreset,loadRelicPreset,removeRelicPreset,renameRelicPreset,listRelicPresets,diagnoseRelicBuild,nativeRelicBonus,evaluateRelicBonus,rarityRatesForLevel,summonLevel,SUMMON_MILESTONES,UNITE,UNITE_REQUIREMENTS,UNITE_STREAK_IDS,STEAM_RELIC_TIERS,type UniteRelicId} from './relics.ts';
+import {ALL_NORMAL_RELICS,RELIC_MODE_NAMES} from './relic-catalog.ts';
+import {verifiedCasinoProfit,verifiedStockProfit} from './relic-profit.ts';
+import {STEAM_RELIC_PROOF_SQL,STEAM_RELIC_LIST_SQL,STEAM_RELIC_COMMIT_GUARD,steamRelicDay,requireSteamRelicEligibility,type SteamRelicEvidence} from './steam-relic-eligibility.ts';
+import type {RelicCollection,RelicItem} from './relics.ts';
 import {ensureQuizKp,receiveQuizKp,isKpParticipant,quizKpRates,quizKpLimits} from './quiz-kp.ts';
 import {activityAuthAvailable,createActivityChallenge,authenticateActivity}from './discord-activity-auth.ts';
 import { initializeKp, exchangeKpCode, kpSession, revokeKpSession, kpHash } from './kp.ts';
@@ -40,6 +45,7 @@ import { mlActivityView, mlClosed, mlData, mlLineupTimes, mlResults, seasonStats
 import { racingView, raceSeed } from './racing-kp.ts';
 import { defaultRoastLevel, validRoastLevel } from './racing-crowns.ts';
 import { buyHorse, sellHorse, ownedHorses, raceEntries } from './racing-horses.ts';
+import {allowedKpOperation} from './kp-operation-limit.ts';
 import { masteryOf, riotIdOf } from './mastery.ts';
 import {DEBT_BLOCKED,DEBT_INTEREST_PERCENT,DEBT_INTEREST_TEXT,DEBT_INTERVAL_MINUTES,DEBT_MAX,debtOf} from './kp-debt.ts';
 import { buyLuxury, luxuryPosts, luxuryView } from './luxury.ts';
@@ -133,7 +139,7 @@ export async function previewMlBet(env:KpEnv,mapping:KpMapping,user:string,args:
  const bet=await applyMlBet(env,state,args);
  return {bet,balanceAfter:before-bet.amount};
 }
-export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:string,action:string,args:Record<string,unknown>){
+export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:string,action:string,args:Record<string,unknown>,deferPostCommit?:(job:Promise<void>)=>void){
  if(!/^[a-zA-Z0-9-]{16,80}$/.test(id))throw Error('操作IDが不正です。');
  // Owner-only stock manipulation is a market event, not a wallet transaction.
  // Keep the ordinary operation ID, allowing retry after lost responses without doubling the shock.
@@ -158,7 +164,7 @@ export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:strin
   const state=await readKpState(env,mapping,user),before=state.cash;let result:unknown;let directive:Record<string,unknown>|null=null;let stockTrade:Record<string,unknown>|undefined;
   // 借KP: no bet or purchase at all while any is owed, decided before any draw. Checking the result instead would let a
   // winning roll through and refuse only the losing one. Selling, finishing a blackjack hand and settings stay open.
-  const settles=['horse-sell','roast-level','bj-hit','bj-stand','mines-pick','mines-cashout','vp-draw'].includes(action)||(action==='trade'&&args.side==='sell');
+  const settles=['horse-sell','roast-level','bj-hit','bj-stand','mines-pick','mines-cashout','vp-draw','relic-equip','relic-auto-equip','relic-claim-steam','relic-claim-unite','relic-save-preset','relic-overwrite-preset','relic-load-preset','relic-remove-preset','relic-rename-preset'].includes(action)||(action==='trade'&&args.side==='sell');
   if(!settles&&await debtOf(env,mapping.guildId,user)>0)throw Error(DEBT_BLOCKED);
   if(ownerRound){const round=privateCasinoRound(state,args);action=round.action;args=round.args;result=round.result;}
   else if(action==='trade'){const order=applyStockOrder(state,args);result=order.result;stockTrade=order.stockTrade;}
@@ -203,35 +209,121 @@ export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:strin
   else if(action==='vp-deal')result=vpDeal(state,args.amount,cryptoInt);
   else if(action==='vp-draw')result=vpDraw(state,args.hold,cryptoInt);
   else if(action==='baccarat')result=playBaccarat(state,args.amount,args.side,cryptoCard);
+  else if(action==='relic-summon') result=summonRelics(state,Number(args.count));
+  else if(action==='relic-equip') result=equipRelic(state,String(args.relic??''),Number(args.slot));
+  else if(action==='relic-auto-equip') result=autoEquipRelics(state,String(args.goal??'all'));
+  else if(action==='relic-save-preset'||action==='relic-overwrite-preset') result=saveRelicPreset(state,String(args.preset??''));
+  else if(action==='relic-load-preset') result=loadRelicPreset(state,String(args.preset??''));
+  else if(action==='relic-remove-preset') result=removeRelicPreset(state,String(args.preset??''));
+  else if(action==='relic-rename-preset') result=renameRelicPreset(state,String(args.preset??''),String(args.newName??''));
+  else if(action==='relic-claim-steam'){
+   const event=String(args.event??'');
+   if(event.length<20||event.length>250||!event.startsWith('steam:'))throw Error('Steam実績を選んでください。');
+   const receipt=await env.DB.prepare(STEAM_RELIC_PROOF_SQL)
+    .bind(steamRelicDay(),event,mapping.guildId,user).first<SteamRelicEvidence>();
+   result=grantSteamRelic(state,requireSteamRelicEligibility(receipt));
+  }else if(action==='relic-claim-unite'){
+   const tier=String(args.tier??'') as UniteRelicId,required=UNITE_REQUIREMENTS[tier];
+   if(!Object.hasOwn(UNITE_REQUIREMENTS,tier))throw Error('ユナイト遺物を選んでください。');
+   // Only already-settled, server-verified ranked-match records count. The
+   // Unite streak itself is capped at five; career tiers count individual verified wins.
+   let confirmedWins=0;
+   if(UNITE_STREAK_IDS.has(tier)){
+    const proof=await env.DB.prepare('SELECT wins FROM unite_rewards WHERE guild=? AND user=? AND win=1 AND wins>=? LIMIT 1')
+     .bind(mapping.guildId,user,required).first<{wins:number}>();
+    confirmedWins=proof?.wins??0;
+   }else{
+    const proof=await env.DB.prepare('SELECT COUNT(*) AS n FROM unite_rewards WHERE guild=? AND user=? AND win=1')
+     .bind(mapping.guildId,user).first<{n:number}>();
+    confirmedWins=proof?.n??0;
+   }
+   if(confirmedWins<required)throw Error('ユナイトの検証済み勝利記録がまだ足りません。');
+   result=grantUniteRelic(state,tier,confirmedWins);
+  }
   else if(action==='roast-level'){
    if(!validRoastLevel(args.level))throw Error('煽りレベルを選んでください。');
    state.roastLevel=args.level;result={roastLevel:args.level};
   }else throw Error('この操作は本番口座では使えません。');
+  // Unlimited stacking only on completed, positive, server-determined outcomes.
+  // Stock buys and ticket purchases cannot manufacture KP via repeat buys/sells.
+  // These mechanics never touch game RNG, odds, or past results.
+  let relicBonus=0;
+  const casino=['spin','chinchiro','bj-start','bj-hit','bj-stand','bj-double','mines-cashout','slot','vp-draw','baccarat'].includes(action);
+  if(casino){const profit=verifiedCasinoProfit(result);if(profit>0)relicBonus=nativeRelicBonus(state,'casino',profit);}
+  // Selling shares only grants bonuses on REALIZED positive FIFO profit, never
+  // from the gross proceeds or repeated buys. One owner-indexed query on sells.
+  if(action==='trade'&&args.side==='sell'&&stockTrade){
+   const sale=stockTrade as {symbol:string;quantity:number;total:number};
+   const lots=await env.DB.prepare(`WITH eligible AS (
+     SELECT remaining,price,COALESCE(SUM(remaining) OVER (ORDER BY at,id ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING),0) AS already
+     FROM stock_lots WHERE guild=? AND user=? AND symbol=? AND remaining>0)
+     SELECT COALESCE(SUM(MIN(remaining,MAX(0,? - already))),0) AS shares,
+            COALESCE(SUM(MIN(remaining,MAX(0,? - already))*price),0) AS cost FROM eligible`)
+    .bind(mapping.guildId,user,sale.symbol,sale.quantity,sale.quantity).first<{shares:number;cost:number}>();
+   if(Number(lots?.shares)===sale.quantity){
+    // Acquired stock paid at least a 1% fee; include it in the break-even check.
+    const profit=verifiedStockProfit(sale.total,Number(lots?.cost??0),Number(lots?.shares??0),sale.quantity);
+    if(profit>0)relicBonus=nativeRelicBonus(state,'market',profit);
+   }
+  }
+  if(relicBonus&&result&&typeof result==='object')result={...result,relicBonus};
   // 借KP: nothing that costs KP while any is owed (the database refuses it too).
   if(state.cash<before&&await debtOf(env,mapping.guildId,user)>0)throw Error(DEBT_BLOCKED);
   const activity=publicTrade(action,args,result);
   const response={result,...(ownerRound?{operationSource:'owner-casino'}:{}),...(stockTrade?{stockTrade}:{}),...(activity?{activity}:{})};const safeState={...state,claims:[],directives:[]};delete safeState.privateCasino;delete safeState.debt;delete safeState.jackpot;delete safeState.mleague;delete safeState.ledger;delete safeState.members;delete safeState.racing;delete safeState.horses;delete safeState.mastery;delete safeState.luxury;delete safeState.stockMarket;delete safeState.stockBenefits;
   let inserted;
   try{
+   // Do not mention optional Steam tables in other actions' SQL. SQLite
+   // resolves every table at prepare time even if a boolean branch is false.
+   const steamClaim=action==='relic-claim-steam';
+   const commitGuard=steamClaim?STEAM_RELIC_COMMIT_GUARD:'';
+   const commitArgs=steamClaim?[String(sourceArgs.event??''),mapping.guildId,user,mapping.guildId,user,steamRelicDay()]:[];
    inserted=await env.DB.prepare(`INSERT INTO kp_operations(id,guild,user,request_hash,response,delta,state,directive,at)
-   SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM kp_wallets w JOIN kp_state s ON w.guild=s.guild AND w.user=s.user WHERE w.guild=? AND w.user=? AND w.version=? AND s.version=?) AND (?=0 OR EXISTS(SELECT 1 FROM stock_markets WHERE guild=? AND version=?)) ON CONFLICT(guild,user,id) DO NOTHING`)
-   .bind(id,mapping.guildId,user,requestHash,JSON.stringify(response),state.cash-before,JSON.stringify(safeState),directive?JSON.stringify(directive):null,Date.now(),mapping.guildId,user,state.walletVersion,state.stateVersion,['trade','directive','luxury'].includes(action)?1:0,mapping.guildId,state.stockMarket.version).run();
+   SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM kp_wallets w JOIN kp_state s ON w.guild=s.guild AND w.user=s.user WHERE w.guild=? AND w.user=? AND w.version=? AND s.version=?) AND (?=0 OR EXISTS(SELECT 1 FROM stock_markets WHERE guild=? AND version=?)) ${commitGuard} ON CONFLICT(guild,user,id) DO NOTHING`)
+   .bind(id,mapping.guildId,user,requestHash,JSON.stringify(response),state.cash-before,JSON.stringify(safeState),directive?JSON.stringify(directive):null,Date.now(),mapping.guildId,user,state.walletVersion,state.stateVersion,['trade','directive','luxury'].includes(action)?1:0,mapping.guildId,state.stockMarket.version,
+    ...commitArgs).run();
   }catch(error){
    // Someone else's 💎💎💎 changed the shared pool after this spin was drawn: nothing was saved, so draw again.
    if(action==='slot'&&String((error as Error)?.message).includes('Jackpot changed'))continue;
    throw error;
   }
   if(inserted.meta.changes){
+   // An operation is already durable. Large win announcements are supplementary:
+   // waiting for their D1 queue must not hold the settled bet response open.
+   const postNotices=async()=>{
+   if(action==='relic-summon'&&(env as {KP_EARNINGS_WEBHOOK_URL?:string}).KP_EARNINGS_WEBHOOK_URL){
+    const summoned=result as ReturnType<typeof summonRelics>;
+    const top=summoned.highlights.find(h=>h.rarity==='transcendent'||h.rarity==='ancient');
+    const rare=top||summoned.foils.length>0||summoned.mutations.length>0;
+    if(rare)try{
+     await ensurePosts(env);
+     const message=top?`🌈 遺物の神引き！ <@${user}> が ${top.rarity==='transcendent'?'超越':'古代'}「${top.name}」を獲得！ ${summoned.count}連召喚`:
+      summoned.foils.length?`✨ <@${user}> が特殊個体「${summoned.foils[0]}」を引き当てた！`:
+       `🧬 <@${user}> の遺物「${summoned.mutations[0]}」が突然変異した！`;
+     await enqueue(env,'relic-pull:'+mapping.guildId+':'+user+':'+id,message,Date.now());
+    }catch{console.warn('relic_rare_notice_pending');}
+   }
    if(action==='luxury')try{await luxuryPosts(env,mapping,user,(result as {luxury:Parameters<typeof luxuryPosts>[3]}).luxury);}catch{console.warn('luxury_post_pending');}
    if(action==='gift'&&(env as {KP_EARNINGS_WEBHOOK_URL?:string}).KP_EARNINGS_WEBHOOK_URL)try{await ensurePosts(env);await enqueue(env,'gift:'+user+':'+id,giftPost(user,(result as ReturnType<typeof applyGift>).gift),Date.now());}catch{console.warn('gift_post_pending');}
    const big=casinoPost(user,action,result);
    if(big&&(env as {KP_EARNINGS_WEBHOOK_URL?:string}).KP_EARNINGS_WEBHOOK_URL)try{await ensurePosts(env);await enqueue(env,'casino:'+user+':'+id,big,Date.now());}catch{console.warn('casino_post_pending');}
+   };
+   if(deferPostCommit){
+    try{deferPostCommit(postNotices().catch(()=>console.warn('kp_post_pending')));}
+    catch{console.warn('kp_post_schedule_failed');}
+   }else await postNotices();
    return response;
+  }
+  // The daily limit may have filled after we loaded the proof. Do not write
+  // the item if it became ineligible while awaiting another worker's credit.
+  if(action==='relic-claim-steam'){
+   const updated=await env.DB.prepare(STEAM_RELIC_PROOF_SQL).bind(steamRelicDay(),String(sourceArgs.event??''),mapping.guildId,user).first<SteamRelicEvidence>();
+   requireSteamRelicEligibility(updated);
   }
  }
  throw Error('他の操作と重なりました。残高を更新してもう一度お試しください。');
 }
-export async function kpApi(request:Request,env:KpEnv,override?:KpMapping):Promise<Response>{
+export async function kpApi(request:Request,env:KpEnv,override?:KpMapping,deferPostCommit?:(job:Promise<void>)=>void):Promise<Response>{
  const origin=request.headers.get('Origin');const origins=['https://altepop.github.io','https://'+discord.applicationId+'.discordsays.com'];
  if(origin&&!origins.includes(origin))return new Response('Forbidden origin',{status:403});
  const headers:Record<string,string>={'Cache-Control':'no-store','Vary':'Origin'};
@@ -297,6 +389,45 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping):Promi
    if(await d1OptionalMode(env))return Response.json({error:'D1節約モード中です。資産推移は次のリセット後に確認できます。'},{status:429,headers:{...headers,'Retry-After':'120'}});
    return response(await kpTrend(env,mapping.guildId,await names(),Number(new URL(request.url).searchParams.get('days')??7)));
   }
+  if(request.method==='GET'&&path==='/api/kp/relics'){
+   // Called only when the relic screen opens. No new cron or D1 scan on regular wallet polling.
+   const steam=await env.DB.prepare(STEAM_RELIC_LIST_SQL)
+    .bind(steamRelicDay(),mapping.guildId,owner.user).all<SteamRelicEvidence>().then(r=>r.results).catch(()=>[]);
+   const row=await env.DB.prepare('SELECT data FROM kp_state WHERE guild=? AND user=?').bind(mapping.guildId,owner.user).first<{data:string}>();
+   const ownedState=JSON.parse(row?.data??'{}') as {relics?:RelicCollection};
+   // Indexed member lookup, only on explicit relic screen open. The game index
+   // always comes from the server-owned Spike profile, never the client.
+   const spikeProfile=await env.DB.prepare(`SELECT CAST(json_extract(s.data,'$.games') AS INTEGER) AS games
+    FROM kp_accounts a JOIN spike_profiles s ON s.guild=a.guild AND s.puuid=a.puuid AND s.user=a.user
+    WHERE a.guild=? AND a.user=?`).bind(mapping.guildId,owner.user)
+    .first<{games:number}>().catch(()=>null);
+   const spikeGamesBefore=Number.isSafeInteger(spikeProfile?.games)&&Number(spikeProfile?.games)>=0?Number(spikeProfile?.games):0;
+    const level=summonLevel(ownedState.relics?.totalSummons??0);
+   const nativeModes=new Set(['casino','market','racing','mleague']); // retained for UI grouping
+   const currentDay=new Date().toISOString().slice(0,10);
+   const usedToday=ownedState.relics?.dailyNativeBonus?.day===currentDay?ownedState.relics.dailyNativeBonus.amount:0;
+   const logs=(await env.DB.prepare('SELECT id,mode,base,bonus,details,at FROM relic_effect_logs WHERE guild=? AND user=? ORDER BY at DESC,id DESC LIMIT 30').bind(mapping.guildId,owner.user).all<{id:string;mode:string;base:number;bonus:number;details:string;at:number}>().then(r=>r.results).catch(()=>[])).map(entry=>{
+    let detail:{lines?:unknown[];sets?:unknown[];resonance?:number;spikeOpening?:{game:number;multiplier:number;flatPerRelic:number;eligible:number}}={};
+    try{detail=JSON.parse(entry.details);}catch{}
+    return {id:entry.id,mode:entry.mode,amount:entry.base,bonus:entry.bonus,at:entry.at,origin:'verified',lines:detail.lines??[],sets:detail.sets??[],resonance:detail.resonance??0,spikeOpening:detail.spikeOpening??null};
+   });
+   const ownEconomy=await env.DB.prepare("SELECT COUNT(*) AS n,COALESCE(SUM(delta),0) AS total FROM kp_ledger WHERE guild=? AND user=? AND kind='relic'").bind(mapping.guildId,owner.user).first<{n:number;total:number}>().catch(()=>null);
+   const guildEconomy=await env.DB.prepare("SELECT COUNT(*) AS n,COUNT(DISTINCT user) AS players,COALESCE(SUM(delta),0) AS total FROM kp_ledger WHERE guild=? AND kind='relic'").bind(mapping.guildId).first<{n:number;players:number;total:number}>().catch(()=>null);
+   const diagnosis=diagnoseRelicBuild(ownedState.relics as RelicCollection|undefined);
+   const personalEconomy={nativeTotal:ownedState.relics?.nativeEarned??0,nativeCount:ownedState.relics?.nativeCount??0,
+    verifiedTotal:ownEconomy?.total??0,verifiedCount:ownEconomy?.n??0,
+    summonSpent:(ownedState.relics?.totalSummons??0)*200,
+    mutationCount:ownedState.relics?.mutatedCount??0,foilCount:ownedState.relics?.foilCount??0,
+    guild:{players:guildEconomy?.players??0,verifiedTotal:guildEconomy?.total??0,verifiedCount:guildEconomy?.n??0}};
+   const previewModes=['competitive','unrated','swiftplay','spikerush','teamdeathmatch','escalation','deathmatch','skirmish','racing','casino','market','mleague','quiz','voice'];
+   // Computed from the exact same pure function as real KP payouts, with no extra DB queries.
+   const previews=previewModes.flatMap(mode=>(mode==='spikerush'?[20,40,100,500]:[100,500,900,5000]).map(amount=>({
+    mode,amount,...evaluateRelicBonus(ownedState.relics as RelicCollection|undefined,mode,{amount,win:true,...mode==='spikerush'?{spikeGamesBefore}:{}},0)
+   })));
+   return response({price:200,steam,unite:Object.entries(UNITE).map(([id,d])=>({id,name:d.name,power:d.power,condition:id.startsWith('unite.career_')?'累計'+d.wins+'勝':d.wins+'連勝'})),steamTiers:STEAM_RELIC_TIERS,level,
+    rates:rarityRatesForLevel(level),maxRates:rarityRatesForLevel(10),ratesByLevel:Array.from({length:10},(_,i)=>rarityRatesForLevel(i+1)),
+    modeNames:RELIC_MODE_NAMES,catalog:ALL_NORMAL_RELICS,milestones:SUMMON_MILESTONES,previews,spikeGamesBefore,diagnosis,externalLogs:logs,presets:listRelicPresets(ownedState.relics),economy:personalEconomy,lastNativeEffect:ownedState.relics?.lastNativeEffect??null,nativeRemaining:null});
+  }
   if(request.method==='GET'&&path==='/api/kp/state')return response(await readKpState(env,mapping,owner.user));
   // 監視状態: members only, aggregates only.
   if(request.method==='GET'&&path==='/api/kp/health')return response(await healthReport(env,mapping.guildId));
@@ -304,7 +435,18 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping):Promi
   if(request.method==='POST'&&path==='/api/kp/operation'){
    const text=await request.text();if(text.length>4096)return response({error:'入力が長すぎます。'},400);
    const body=JSON.parse(text);if(typeof body.id!=='string'||typeof body.action!=='string'||!body.args||typeof body.args!=='object'||Array.isArray(body.args))return response({error:'操作内容が不正です。'},400);
-   const result=await operateKp(env,mapping,owner.user,body.id,body.action,body.args);
+   if(!await allowedKpOperation(env,mapping.guildId,owner.user)){
+    // Return the exact persisted receipt during a quota burst. This is a
+    // read-only lookup; never reroll or charge a second time.
+    const prior=await env.DB.prepare('SELECT request_hash,response FROM kp_operations WHERE guild=? AND user=? AND id=?')
+     .bind(mapping.guildId,owner.user,body.id).first<{request_hash:string;response:string}>();
+    if(prior&&prior.request_hash===await kpHash(JSON.stringify({action:body.action,args:body.args})))
+     return response(JSON.parse(prior.response));
+    // The operation has not been accepted: the client must not retain a
+    // phantom "payment pending" that locks all subsequent play.
+    return response({error:'操作回数が多すぎます。1分後に再試行してください。',retryable:false},429);
+   }
+   const result=await operateKp(env,mapping,owner.user,body.id,body.action,body.args,deferPostCommit);
    return response(result);
   }
   return response({error:'Not found'},404);

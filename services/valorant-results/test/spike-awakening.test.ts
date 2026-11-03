@@ -169,16 +169,27 @@ test('hidden trial clues cost 10k once per role and reveal private exact progres
  assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM spike_hint_unlocks').get()!.n,1);
  f.close();
 });
-test('paid Controller hint reports consecutive win progress without extra history scanning',async()=>{
+test('Controller hint teases instead of revealing the trial, shows manual refund terms and abstract progress',async()=>{
  const f=await fixture();
  const all=SPIKE_ROSTER.agents.filter(a=>a.role==='Controller').map(a=>a.id);
  const p=complete();
  p.trials={...blankTrials(),duelist:true,initiator:true,sentinel:true,controllerKdAgents:all,controllerStreak:all.slice(0,2)};
  f.seed(p);f.credit(10000);
- await purchaseSpikeHint(f.env,guild,one,'Controller',START);
+ const before=await spikeStatus(f.env,guild,one);
+ assert.match(before,/申請すればヒント代10,000 KPを全額返金/);
+ assert.doesNotMatch(before,/7試合連続勝利|K\/D 2\.0以上/);
+ const first=await purchaseSpikeHint(f.env,guild,one,'Controller',START);
+ assert.match(first,/教えないよ〜ん/);
+ assert.match(first,/返金申請があった場合に全額返金/);
+ assert.equal(f.balance(),0);
+ const repeat=await purchaseSpikeHint(f.env,guild,one,'Controller',START+1);
+ assert.match(repeat,/購入済み/);
+ assert.match(repeat,/教えないよ〜ん/);
+ assert.equal(f.balance(),0,'repeat requests must never deduct another 10k');
  const view=await spikeStatus(f.env,guild,one);
- assert.match(view,/連勝 2\/7試合/);
- assert.match(view,/7試合連続勝利/);
+ assert.match(view,/教えないよ〜ん/);
+ assert.match(view,/試練進捗 2\/7/);
+ assert.doesNotMatch(view,/7試合連続勝利|連勝 2\/7|K\/D 2\.0以上|敗北・K\/D/);
  assert.doesNotMatch(view,/旧条件達成を継承/);
  f.close();
 });

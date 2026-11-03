@@ -2,14 +2,26 @@
 // finishing place, retired after RETIRE_RACES and sellable for 10-20% of the price.
 // Buying and selling ride on the wallet operation insert (one transaction with the KP change).
 // @ts-expect-error The shared pure browser engine has no TypeScript declarations.
-import { BOXES, CLASSES, MAX_OWNED, RETIRE_RACES, RUN_MS, conditionFromActivity, drawHorse, horseNickname, prizeFor, raceCard, raceClass, raceOdds, raceResult, sellValue, validHorseName } from '../../../js/racing.js';
+import { BOXES, CLASSES, MAX_OWNED, RETIRE_RACES, RACE_INTERVAL, RUN_MS, conditionFromActivity, drawHorse, horseNickname, prizeFor, raceCard, raceClass, raceOdds, raceResult, sellValue, validHorseName } from '../../../js/racing.js';
 import { crownFor, ensureCrowns } from './racing-crowns.ts';
+import {ensureRacing,raceSeed} from './racing-kp.ts';
 import configuredPlayers from '../players.json' with { type: 'json' };
 import { kpRandom } from './kp.ts';
 import type { KpEnv, KpMapping } from './kp.ts';
-export interface Entry { horseId:string; name:string; ability:number; style:number; owner:string; ownerName:string; nickname?:string|null; person?:boolean; condition?:number }
+export interface Entry { horseId:string; name:string; ability:number; style:number; owner:string; ownerName:string; nickname?:string|null; person?:boolean; condition?:number; record?:{races:number;wins:number;seconds:number;thirds:number}; recentRanks?:number[] }
 export interface Horse { id:string; owner:string; name:string; grade:number; ability:number; style:number; box:string; price:number; created_at:number; races:number; wins:number; seconds:number; thirds:number; earnings:number; retired_at:number|null; sold_at:number|null; last_race:number|null }
 export const ENTRY_CHANCE=.4,REST=60*60000,CONSOLATION_RATE=.05;
+// Prioritize the four minutes after a finish. Hourly retry preserves eventual settlement.
+export function shouldSettleHorsePrizes(now:number){
+ if(!Number.isSafeInteger(now)||now<0)return false;
+ const elapsed=((now-RUN_MS)%RACE_INTERVAL+RACE_INTERVAL)%RACE_INTERVAL;
+ return elapsed<4*60000||now%(3600000)<60000;
+}
+// Avoid full-history anti-join scans each minute. Every six hours run a full backlog sweep.
+export function horsePrizeLookback(now:number){
+ if(!Number.isSafeInteger(now)||now<0)throw Error('Invalid settlement time');
+ return now%(6*3600000)<60000?0:Math.max(0,now-48*3600000);
+}
 const initialized=new WeakSet<object>();
 export async function ensureHorses(env:KpEnv){
  if(initialized.has(env.DB))return;
@@ -23,6 +35,7 @@ export async function ensureHorses(env:KpEnv){
   // The PK is by id; this covering seek stops full history scans for each horse.
   env.DB.prepare('CREATE INDEX IF NOT EXISTS kp_horse_runs_horse_recent ON kp_horse_runs(horse,race DESC,rank,win_odds,favourite)'),
   env.DB.prepare('CREATE TABLE IF NOT EXISTS kp_horse_results(id TEXT PRIMARY KEY,guild TEXT NOT NULL,race INTEGER NOT NULL,horse TEXT NOT NULL,owner TEXT NOT NULL,rank INTEGER NOT NULL,prize INTEGER NOT NULL CHECK(typeof(prize)=\'integer\' AND prize>=0),at INTEGER NOT NULL,UNIQUE(guild,race,horse))'),
+  env.DB.prepare('CREATE INDEX IF NOT EXISTS kp_horse_results_horse_count ON kp_horse_results(guild,horse,rank,race,prize)'),
   // A prize credits the owner's wallet and updates the record in the same statement.
   env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS kp_horse_result_apply AFTER INSERT ON kp_horse_results BEGIN
    INSERT INTO kp_ledger(id,guild,user,delta,kind,at) SELECT 'prize:'||NEW.id,NEW.guild,NEW.owner,NEW.prize,'prize',NEW.at WHERE NEW.prize>0;
@@ -43,10 +56,10 @@ const memberName=(mapping:KpMapping,user:string)=>{const a=mapping.accounts.find
 const cryptoRng=()=>crypto.getRandomValues(new Uint32Array(1))[0]/4294967296;
 
 async function nicknames(env:KpEnv,horses:Array<{id:string;wins:number;seconds:number}>){
- const out=new Map<string,string|null>();
+ const out=new Map<string,{nickname:string|null;recentRanks:number[]}>();
  for(const h of horses){
   const runs=(await env.DB.prepare('SELECT rank,win_odds AS winOdds,favourite FROM kp_horse_runs WHERE horse=? ORDER BY race DESC LIMIT 20').bind(h.id).all<{rank:number;winOdds:number;favourite:number}>()).results;
-  out.set(h.id,horseNickname(h,runs.map(r=>({...r,favourite:r.favourite===1}))));
+  out.set(h.id,{nickname:horseNickname(h,runs.map(r=>({...r,favourite:r.favourite===1}))),recentRanks:runs.slice(0,5).map(r=>r.rank)});
  }
  return out;
 }
@@ -67,11 +80,11 @@ export async function activityConditions(env:KpEnv,guild:string,users:string[],n
 }
 export async function raceEntries(env:KpEnv,mapping:KpMapping,race:number):Promise<Entry[]>{
  await ensureHorses(env);
- const rows=(await env.DB.prepare('SELECT h.id,h.name,h.ability,h.style,h.owner,h.wins,h.seconds FROM kp_race_entries e JOIN kp_horses h ON h.id=e.horse WHERE e.guild=? AND e.race=? ORDER BY e.gate_order').bind(mapping.guildId,race).all<{id:string;name:string;ability:number;style:number;owner:string;wins:number;seconds:number}>()).results;
+ const rows=(await env.DB.prepare('SELECT h.id,h.name,h.ability,h.style,h.owner,h.races,h.wins,h.seconds,h.thirds FROM kp_race_entries e JOIN kp_horses h ON h.id=e.horse WHERE e.guild=? AND e.race=? ORDER BY e.gate_order').bind(mapping.guildId,race).all<{id:string;name:string;ability:number;style:number;owner:string;races:number;wins:number;seconds:number;thirds:number}>()).results;
  const nick=await nicknames(env,rows),crown=await crownFor(env,mapping.guildId,race);
  // Conditions were fixed when the race opened; races decided before that rule keep the card's own.
  const fixed=new Map((await env.DB.prepare('SELECT horse,condition FROM kp_entry_conditions WHERE guild=? AND race=?').bind(mapping.guildId,race).all<{horse:string;condition:number}>()).results.map(r=>[r.horse,r.condition]));
- const owned:Entry[]=rows.map(h=>({horseId:h.id,name:h.name,ability:h.ability,style:h.style,owner:h.owner,ownerName:memberName(mapping,h.owner),nickname:nick.get(h.id)??null}));
+ const owned:Entry[]=rows.map(h=>({horseId:h.id,name:h.name,ability:h.ability,style:h.style,owner:h.owner,ownerName:memberName(mapping,h.owner),nickname:nick.get(h.id)?.nickname??null,record:{races:h.races,wins:h.wins,seconds:h.seconds,thirds:h.thirds},recentRanks:nick.get(h.id)?.recentRanks??[]}));
  const all=crown?[personEntry(mapping,race,crown.user),...owned]:owned;
  return all.map(e=>fixed.has(e.horseId)?{...e,condition:fixed.get(e.horseId)}:e);
 }
@@ -96,16 +109,32 @@ export async function decideEntries(env:KpEnv,mapping:KpMapping,race:number,now=
  ]);
  return raceEntries(env,mapping,race);
 }
+/** Minute cron only needs to ensure the race field exists; it never consumes the entries.
+ * A decided field's immutable marker avoids repeated nickname/last-20 history queries. */
+export async function ensureRaceField(env:KpEnv,mapping:KpMapping,race:number,now=Date.now()){
+ await ensureHorses(env);
+ const existing=await env.DB.prepare('SELECT 1 FROM kp_race_fields WHERE guild=? AND race=?').bind(mapping.guildId,race).first();
+ if(existing)return false;
+ await decideEntries(env,mapping,race,now);
+ return true;
+}
 /** Prizes for finished races with owned or person-named horses. Each horse is paid once per race.
  * A person-named horse also brings its namesake a consolation: 5% of what others bet on it. */
 export async function settleHorsePrizes(env:KpEnv,mapping:KpMapping,now=Date.now()){
  await ensureHorses(env);await ensureCrowns(env);
- const races=(await env.DB.prepare(`SELECT race FROM (SELECT e.race FROM kp_race_entries e WHERE e.guild=? AND NOT EXISTS(SELECT 1 FROM kp_horse_results r WHERE r.guild=e.guild AND r.race=e.race AND r.horse=e.horse)
-  UNION SELECT c.race FROM kp_crowns c WHERE c.guild=? AND NOT EXISTS(SELECT 1 FROM kp_horse_results r WHERE r.guild=c.guild AND r.race=c.race AND r.horse='person-'||c.user)) WHERE race<=? ORDER BY race LIMIT 20`).bind(mapping.guildId,mapping.guildId,now-RUN_MS).all<{race:number}>()).results.map(r=>r.race);
+ await ensureRacing(env); // even an unattended field needs a persistent seed table
+ const from=horsePrizeLookback(now),before=now-RUN_MS;
+ const races=(await env.DB.prepare(`SELECT race FROM (SELECT e.race FROM kp_race_entries e WHERE e.guild=? AND e.race>=? AND e.race<=? AND NOT EXISTS(SELECT 1 FROM kp_horse_results r WHERE r.guild=e.guild AND r.race=e.race AND r.horse=e.horse)
+  UNION SELECT c.race FROM kp_crowns c WHERE c.guild=? AND c.race>=? AND c.race<=? AND NOT EXISTS(SELECT 1 FROM kp_horse_results r WHERE r.guild=c.guild AND r.race=c.race AND r.horse='person-'||c.user)) ORDER BY race LIMIT 20`)
+  .bind(mapping.guildId,from,before,mapping.guildId,from,before).all<{race:number}>()).results.map(r=>r.race);
  let paid=0;
  for(const race of races){
-  const seed=await env.DB.prepare('SELECT seed FROM kp_races WHERE guild=? AND id=?').bind(mapping.guildId,race).first<{seed:string}>();
-  if(!seed)continue;
+  let seed=await env.DB.prepare('SELECT seed FROM kp_races WHERE guild=? AND id=?').bind(mapping.guildId,race).first<{seed:string}>();
+  if(!seed){
+   // Historic cron fixed fields without seeds when nobody opened the Activity.
+   // raceSeed atomically INSERT OR IGNOREs one result for all competing workers.
+   seed=await raceSeed(env,mapping.guildId,race);
+  }
   const entries=await raceEntries(env,mapping,race),card=raceCard(race,undefined,entries),order:number[]=raceResult(card,seed.seed).order;
   const sold=new Map((await env.DB.prepare('SELECT id,sold_at FROM kp_horses WHERE guild=? AND sold_at IS NOT NULL').bind(mapping.guildId).all<{id:string;sold_at:number}>()).results.map(r=>[r.id,r.sold_at]));
   const odds=raceOdds(card),favourite=card.horses.map((h:{number:number})=>h.number).sort((a:number,b:number)=>odds.winProb[b]-odds.winProb[a])[0];
@@ -122,11 +151,45 @@ export async function settleHorsePrizes(env:KpEnv,mapping:KpMapping,now=Date.now
  }
  return paid;
 }
+/** Repair counter gaps from provable result receipts, not by replaying KP payouts.
+ * This is a bounded owner-only indexed read; no full-guild scan or writes on
+ * healthy horses. MAX guards all existing counters against double counting. */
+export async function repairRecordedHorseStats(env:KpEnv,mapping:KpMapping,user:string){
+ await ensureHorses(env);
+ const sql=`SELECT h.id,COUNT(r.id) AS races,
+  SUM(CASE WHEN r.rank=1 THEN 1 ELSE 0 END) AS wins,
+  SUM(CASE WHEN r.rank=2 THEN 1 ELSE 0 END) AS seconds,
+  SUM(CASE WHEN r.rank=3 THEN 1 ELSE 0 END) AS thirds,
+  SUM(r.prize) AS earnings,MAX(r.race) AS lastRace
+  FROM kp_horses h JOIN kp_horse_results r ON r.guild=h.guild AND r.horse=h.id
+  WHERE h.guild=? AND h.owner=? AND h.sold_at IS NULL
+  GROUP BY h.id HAVING COUNT(r.id)>h.races OR
+   SUM(CASE WHEN r.rank=1 THEN 1 ELSE 0 END)>h.wins OR
+   SUM(CASE WHEN r.rank=2 THEN 1 ELSE 0 END)>h.seconds OR
+   SUM(CASE WHEN r.rank=3 THEN 1 ELSE 0 END)>h.thirds
+  LIMIT 30`;
+ const gaps=(await env.DB.prepare(sql).bind(mapping.guildId,user).all<{
+  id:string;races:number;wins:number;seconds:number;thirds:number;earnings:number;lastRace:number
+ }>()).results;
+ if(!gaps.length)return 0;
+ for(const gap of gaps){
+  const update=`UPDATE kp_horses SET
+   races=MAX(races,?),wins=MAX(wins,?),seconds=MAX(seconds,?),
+   thirds=MAX(thirds,?),earnings=MAX(earnings,?),
+   last_race=MAX(COALESCE(last_race,0),?),
+   retired_at=CASE WHEN retired_at IS NULL AND MAX(races,?)>=? THEN ? ELSE retired_at END
+   WHERE guild=? AND owner=? AND id=?`;
+  await env.DB.prepare(update).bind(gap.races,gap.wins,gap.seconds,gap.thirds,
+   gap.earnings,gap.lastRace,gap.races,RETIRE_RACES,Date.now(),mapping.guildId,user,gap.id).run();
+ }
+ return gaps.length;
+}
 export async function ownedHorses(env:KpEnv,mapping:KpMapping,user:string){
  await ensureHorses(env);
+ await repairRecordedHorseStats(env,mapping,user);
  const rows=(await env.DB.prepare('SELECT id,name,grade,ability,style,box,price,created_at,races,wins,seconds,thirds,earnings,retired_at FROM kp_horses WHERE guild=? AND owner=? AND sold_at IS NULL ORDER BY retired_at IS NOT NULL,created_at DESC LIMIT 30').bind(mapping.guildId,user).all<Horse>()).results;
  const nick=await nicknames(env,rows);
- return rows.map(h=>({...h,nickname:nick.get(h.id)??null,gradeLabel:CLASSES[h.grade].grade,sellValue:h.retired_at?0:sellValue(h.price,h.races),racesLeft:Math.max(0,RETIRE_RACES-h.races)}));
+ return rows.map(h=>({...h,nickname:nick.get(h.id)?.nickname??null,gradeLabel:CLASSES[h.grade].grade,sellValue:h.retired_at?0:sellValue(h.price,h.races),racesLeft:Math.max(0,RETIRE_RACES-h.races)}));
 }
 /** Wallet operation bodies. They change `state` and return the result the triggers apply. */
 export async function buyHorse(env:KpEnv,mapping:KpMapping,user:string,state:{cash:number},args:Record<string,unknown>){

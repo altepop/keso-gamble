@@ -1,12 +1,13 @@
 // Crown races: a normal race renamed after something that just happened to a member (3 losses in a
 // row, a broken win streak, a big KP loss...). How harsh the name is follows that person's roast level.
 // @ts-expect-error The shared pure browser engine has no TypeScript declarations.
-import { RACE_INTERVAL, crownSlotAllowed, openRaceStart } from '../../../js/racing.js';
+import { RACE_INTERVAL, bigRaceName, fillerCrownName, crownSlotAllowed, openRaceStart } from '../../../js/racing.js';
 import configuredPlayers from '../players.json' with { type: 'json' };
 import type { KpEnv, KpMapping } from './kp.ts';
 export type RoastLevel='mild'|'normal'|'full';
 export const ROAST_LEVELS:RoastLevel[]=['mild','normal','full'];
 export type CrownKind='streak3'|'streak5'|'streak10'|'stopped'|'night'|'back'|'melt';
+export type SpecialCrownKind='vdklastdeath';
 const NAMES:Record<Exclude<RoastLevel,'mild'>,Record<CrownKind,(n:string)=>string>>={
  full:{streak3:n=>`${n}戦犯レース しばくぞ杯`,streak5:n=>`${n}をみんなで介護するレース あかんかったなぁ賞`,streak10:n=>`${n}そろそろ引退しろレース 了解お兄さん杯`,stopped:n=>`${n}調子に乗った罰レース 効いてて草賞`,night:n=>`${n}もう寝ろレース マイクロスリープ杯`,back:n=>`${n}生きてた記念レース うおw杯`,melt:n=>`${n}KP溶かし大会 5億マジかw杯`},
  normal:{streak3:n=>`${n}おつかれレース 一旦な杯`,streak5:n=>`${n}がんばれレース 大丈夫だよ杯`,streak10:n=>`${n}ひと休みレース 次のVTR賞`,stopped:n=>`${n}連勝ストップ記念レース 良かったこの距離で杯`,night:n=>`${n}夜ふかしレース 寝ないチャレンジではない賞`,back:n=>`${n}おかえりレース お祭り男か杯`,melt:n=>`${n}ドンマイ大会 3がある杯`},
@@ -26,7 +27,7 @@ export async function ensureCrowns(env:KpEnv){
 }
 export async function crownFor(env:KpEnv,guild:string,race:number){
  await ensureCrowns(env);
- return env.DB.prepare('SELECT name,user,kind FROM kp_crowns WHERE guild=? AND race=?').bind(guild,race).first<{name:string;user:string;kind:CrownKind}>();
+ return env.DB.prepare('SELECT name,user,kind FROM kp_crowns WHERE guild=? AND race=?').bind(guild,race).first<{name:string;user:string;kind:CrownKind|SpecialCrownKind}>();
 }
 async function roastLevels(env:KpEnv,mapping:KpMapping){
  const rows=(await env.DB.prepare("SELECT user,json_extract(data,'$.roastLevel') AS level FROM kp_state WHERE guild=?").bind(mapping.guildId).all<{user:string;level:string|null}>()).results;
@@ -62,6 +63,11 @@ export async function nextCrownSlot(env:KpEnv,guild:string,now:number){
  for(let race=openRaceStart(now)+RACE_INTERVAL,i=0;i<400;race+=RACE_INTERVAL,i++)if(crownSlotAllowed(race)&&!taken.has(race))return race;
  return null;
 }
+// One free community-only memorial race; never touches wallet or existing race outcomes.
+export const VDK_SPECIAL_NAME='VDK 0デス完走目前・終了間際の1デス葬儀杯';
+export const VDK_SPECIAL_SOURCE='special:vdk-0death-lastdeath:20261102';
+const VDK_SPECIAL_FROM=Date.parse('2026-11-02T00:00:00+09:00');
+const VDK_SPECIAL_UNTIL=Date.parse('2026-11-02T18:00:00+09:00');
 const memberName=(mapping:KpMapping,user:string)=>{const a=mapping.accounts.find(a=>a.discordUserId===user);return a?(configuredPlayers.find(p=>p.riotId.toLowerCase()===a.riotId.toLowerCase())?.name??a.riotId.split('#')[0]):null;};
 const clock=(time:number)=>new Date(time).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});
 export function crownNoticeLine(name:string,race:number){return `\n🏇 ${clock(race)}発走『${name}』開催決定`;}
@@ -69,7 +75,24 @@ export function crownNoticeLine(name:string,race:number){return `\n🏇 ${clock(
 /** Creates crowns for new events. Each event is used once (unique source); returns the new crowns. */
 export async function scheduleCrowns(env:KpEnv,mapping:KpMapping,now=Date.now()){
  await ensureCrowns(env);
- const levelOf=await roastLevels(env,mapping),created:Array<{race:number;name:string;user:string;kind:CrownKind;match?:string;riotId?:string}>=[];
+ const levelOf=await roastLevels(env,mapping),created:Array<{race:number;name:string;user:string;kind:CrownKind|SpecialCrownKind;match?:string;riotId?:string;special?:boolean}>=[];
+ // A one-off, time-limited story event. Choose an empty slot >=30 minutes out
+ // without moving regular crown races or creating anything on later dates.
+ if(now>=VDK_SPECIAL_FROM&&now<VDK_SPECIAL_UNTIL){
+  const subject=mapping.accounts.find(a=>memberName(mapping,a.discordUserId)?.toLowerCase()==='vdk'||a.riotId.split('#')[0].toLowerCase()==='vdk');
+  if((!subject||levelOf(subject.discordUserId)!=='mild')&&
+    !await env.DB.prepare('SELECT 1 FROM kp_crowns WHERE source=?').bind(VDK_SPECIAL_SOURCE).first()){
+   const taken=new Set((await env.DB.prepare('SELECT race FROM kp_crowns WHERE guild=? AND race>?').bind(mapping.guildId,now).all<{race:number}>()).results.map(r=>r.race));
+   const first=Math.ceil((now+30*60000)/RACE_INTERVAL)*RACE_INTERVAL;
+   for(let race=first,i=0;i<12;i++,race+=RACE_INTERVAL){
+    if(bigRaceName(race)||fillerCrownName(race)||taken.has(race))continue;
+    const saved=await env.DB.prepare('INSERT INTO kp_crowns(guild,race,name,user,kind,source,created_at) VALUES(?,?,?,?,?,?,?) ON CONFLICT DO NOTHING')
+      .bind(mapping.guildId,race,VDK_SPECIAL_NAME,'VDK','vdklastdeath',VDK_SPECIAL_SOURCE,now).run();
+    if(saved.meta.changes){created.push({race,name:VDK_SPECIAL_NAME,user:'VDK',kind:'vdklastdeath',special:true});break;}
+    if(await env.DB.prepare('SELECT 1 FROM kp_crowns WHERE source=?').bind(VDK_SPECIAL_SOURCE).first())break;
+   }
+  }
+ }
  for(const e of await crownEvents(env,mapping,now)){
   const person=memberName(mapping,e.user),name=person&&crownName(e.kind,levelOf(e.user),person);
   if(!name||await env.DB.prepare('SELECT 1 FROM kp_crowns WHERE source=?').bind(e.source).first())continue;
@@ -88,5 +111,5 @@ export async function scheduleCrowns(env:KpEnv,mapping:KpMapping,now=Date.now())
   const message=split<0?notice.message+line:notice.message.slice(0,split)+line+notice.message.slice(split);
   await env.DB.prepare("UPDATE notifications SET message=?,sent=CASE WHEN mode='escalation' AND outcome='draw' THEN 1 ELSE 0 END WHERE riot_id=? AND match_id=?").bind(message,c.riotId,c.match).run();
  }
- return created.map(c=>({...c,reason:REASONS[c.kind]}));
+ return created.map(c=>({...c,reason:c.kind==='vdklastdeath'?'0デスチャレンジ終了直前の1デス事件':REASONS[c.kind]}));
 }

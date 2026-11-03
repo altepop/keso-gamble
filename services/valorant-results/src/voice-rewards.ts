@@ -1,5 +1,6 @@
 import {ensureQuizKp} from './quiz-kp.ts';
 import {newKpState} from './kp.ts';
+import {creditVerifiedRelicBonus} from './relics.ts';
 import type {KpEnv} from './kp.ts';
 /** Each 5-minute slot pays 15 KP: the 5 KP event plus a 10 KP bonus. */
 export const VOICE_BONUS=10;
@@ -23,12 +24,15 @@ export async function creditVoiceSlot(env:KpEnv,guild:string,user:string,day:str
  if(!/^\d{15,22}$/.test(user)||!/^\d{15,22}$/.test(guild)||!/^\d{4}-\d{2}-\d{2}$/.test(day)||!Number.isInteger(slot)||slot<1||slot>48)throw Error('Invalid voice slot');
  await ensureQuizKp(env);await ensureVoiceLedger(env);
  // Participant/wallet/state and credit are one atomic D1 batch, including new members.
- await env.DB.batch([
+ const settledRows=await env.DB.batch([
   env.DB.prepare('INSERT OR IGNORE INTO kp_participants VALUES(?,?)').bind(guild,user),
   env.DB.prepare('INSERT OR IGNORE INTO kp_wallets(guild,user) VALUES(?,?)').bind(guild,user),
   env.DB.prepare('INSERT OR IGNORE INTO kp_state(guild,user,data) VALUES(?,?,?)').bind(guild,user,JSON.stringify(newKpState())),
   env.DB.prepare('INSERT INTO kp_voice_events VALUES(?,?,?,?,?,5,?) ON CONFLICT DO NOTHING').bind('voice:'+guild+':'+user+':'+day+':'+slot,guild,user,day,slot,at),
  ]);
+ // Once every fourth genuine 5-minute slot: 12 bonus checks/day max, no extra idle cron reads.
+ if(slot%4===0&&(settledRows[3]?.meta?.changes??0)>0)
+  try{await creditVerifiedRelicBonus(env,guild,user,'voice:'+guild+':'+user+':'+day+':'+slot,'voice',voicePolicy.amount,true,at);}catch{console.warn('relic_voice_bonus_pending');}
 }
 export interface VoiceRewardEntry {id:string;day:string;slot:number;amount:number;at:number}
 /** A member's last 100 voice rewards don't change unless a new ledger row

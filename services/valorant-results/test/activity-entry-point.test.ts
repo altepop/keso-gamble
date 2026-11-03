@@ -19,6 +19,17 @@ test('signed PRIMARY_ENTRY_POINT application command returns LAUNCH_ACTIVITY 12 
  assert.equal(res.status,200);assert.deepEqual(await res.json(),{type:12});
  assert.equal(context.tasks.length,0,'no Discord webhook follow-up and no post');
 });
+test('signed Primary Entry Point launches from DM without guild_id; gameplay commands remain guild-only',async()=>{
+ const pair=await keys(),cfg=await config(pair);
+ const dmLaunch=event({type:4,name:'launch'},{guild_id:undefined,member:undefined,user:{id:userId}});
+ const result=await discordInteractions(await make(dmLaunch,pair.privateKey),{} as Env,ctx(),cfg);
+ assert.equal(result.status,200);
+ assert.deepEqual(await result.json(),{type:12},'DM launch must not be blocked by the guild gate');
+ const dmCommand=event({type:1,name:'unsupported'},{guild_id:undefined,member:undefined,user:{id:userId}});
+ const denied=await discordInteractions(await make(dmCommand,pair.privateKey),{} as Env,ctx(),cfg);
+ assert.equal(denied.status,200);
+ assert.notEqual((await denied.json() as {type:number}).type,12,'other DM commands remain unavailable');
+});
 test('entry callback does not intercept autocomplete interaction or arbitrary chat commands',async()=>{
  const pair=await keys(),c=await config(pair);
  const res=await discordInteractions(await make(event({type:1,name:'unsupported'}),pair.privateKey),{} as Env,ctx(),c);
