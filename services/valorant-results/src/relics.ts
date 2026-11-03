@@ -519,26 +519,65 @@ export function autoEquipRelics(state:{relics?:RelicCollection},goal:string='all
 }
 
 
-export function saveRelicPreset(state:{relics?:RelicCollection},name:string){
- if(!RELIC_PRESETS.some(x=>x.id===name))throw Error('装備プリセットを選択してください。');
- const c=relicCollection(state);
- c.presets={...c.presets,[name]:[...c.equipped.slice(0,RELIC_SLOTS)]};
- return {name,equipped:c.presets[name]};
-}
-export function loadRelicPreset(state:{relics?:RelicCollection},name:string){
- if(!RELIC_PRESETS.some(x=>x.id===name))throw Error('装備プリセットを選択してください。');
- const c=relicCollection(state),ids=c.presets?.[name];
- if(!ids)throw Error('このプリセットには装備が保存されていません。');
- if(ids.some(id=>id&&!c.items[id]))throw Error('所持していない遺物が含まれています。');
+/** Custom names live in the existing KV shape to preserve all V7 preset saves. */
+export const RELIC_PRESET_LIMIT=20;
+export const RELIC_PRESET_NAME_LIMIT=24;
+const cleanPresetName=(raw:string):string=>{
+ if(typeof raw!=='string')throw Error('プリセット名を入力してください。');
+ const name=raw.trim().normalize('NFC');
+ if(!name||[...name].length>RELIC_PRESET_NAME_LIMIT||/[\u0000-\u001f\u007f<>]/u.test(name)||
+  /^(?:__proto__|constructor|prototype)$/i.test(name))throw Error('プリセット名は1〜24文字（制御文字・<>不可）で入力してください。');
+ return name;
+};
+const knownLegacyPresets:Readonly<Record<string,string>>={
+ balanced:'バランス',valorant:'VALORANT',racing:'競馬',casino:'カジノ',
+ market:'株式',risk:'危険なビルド',
+};
+const existingPreset=(c:RelicCollection,name:string)=>{
+ const presets=c.presets??{};
+ if(!Object.hasOwn(presets,name))throw Error('指定したプリセットは保存されていません。');
+ return presets;
+};
+const validateLoadout=(c:RelicCollection,ids:readonly string[])=>{
+ if(!Array.isArray(ids)||ids.length>RELIC_SLOTS||ids.some(id=>typeof id!=='string'||(id&&!Object.hasOwn(c.items,id))))throw Error('未所持の遺物が含まれています。');
  if(ids.filter(id=>id&&c.items[id]?.origin==='unite').length>1)throw Error('ユナイト遺物は同時に1個までです。');
  if(new Set(ids.filter(Boolean)).size!==ids.filter(Boolean).length)throw Error('遺物の重複装備はできません。');
- c.equipped=ids.slice(0,RELIC_SLOTS);
+};
+export function listRelicPresets(collection:RelicCollection|undefined){
+ return Object.entries(collection?.presets??{}).filter(([,ids])=>Array.isArray(ids)).map(([id,ids])=>({
+  id,name:knownLegacyPresets[id]??id,equipped:ids.filter(Boolean).length,
+ }));
+}
+export function saveRelicPreset(state:{relics?:RelicCollection},rawName:string){
+ const name=cleanPresetName(rawName),c=relicCollection(state);
+ const presets=c.presets??{};
+ if(!Object.hasOwn(presets,name)&&Object.keys(presets).length>=RELIC_PRESET_LIMIT)throw Error('プリセットは20個まで保存できます。');
+ const ids=[...c.equipped.slice(0,RELIC_SLOTS)];
+ validateLoadout(c,ids);
+ c.presets={...presets,[name]:ids};
+ return {name,equipped:ids,updated:Object.hasOwn(presets,name)};
+}
+export function loadRelicPreset(state:{relics?:RelicCollection},rawName:string){
+ const name=cleanPresetName(rawName),c=relicCollection(state);
+ const ids=existingPreset(c,name)[name]!;
+ validateLoadout(c,ids);
+ c.equipped=[...ids];
  return {name,equipped:c.equipped,power:c.equipped.reduce((sum,id)=>sum+(c.items[id]?.power??0),0)};
 }
-export function removeRelicPreset(state:{relics?:RelicCollection},name:string){
- if(!RELIC_PRESETS.some(x=>x.id===name))throw Error('装備プリセットを選択してください。');
- const c=relicCollection(state);if(c.presets)delete c.presets[name];
+export function removeRelicPreset(state:{relics?:RelicCollection},rawName:string){
+ const name=cleanPresetName(rawName),c=relicCollection(state);
+ existingPreset(c,name);
+ const next={...c.presets};delete next[name];c.presets=next;
  return {name,deleted:true};
+}
+export function renameRelicPreset(state:{relics?:RelicCollection},oldRaw:string,newRaw:string){
+ const oldName=cleanPresetName(oldRaw),newName=cleanPresetName(newRaw),c=relicCollection(state);
+ existingPreset(c,oldName);
+ if(oldName===newName)return {name:newName,renamed:false};
+ if(Object.hasOwn(c.presets??{},newName))throw Error('同名のプリセットが存在します。別の名前を選んでください。');
+ const next={...c.presets,[newName]:[...c.presets![oldName]!]};delete next[oldName];
+ c.presets=next;
+ return {name:newName,previous:oldName,renamed:true};
 }
 /** A compact, reproducible model; no random events or D1 lookups involved. */
 export function diagnoseRelicBuild(collection:RelicCollection|undefined){
