@@ -1,6 +1,7 @@
 import {stockOrderQuote,STOCK_ORDER_VERSION,STOCK_PRICE_SCALE} from './stock-order.js?v=web-7063014c96efd008';
 import {steamConnectionMessage} from './steam-view.js?v=web-7063014c96efd008';
 import {relicsPanel} from './relics-view.js?v=web-7063014c96efd008';
+import {relicSoundEnabled,primeRelicAudio,playRelicSound,toggleRelicSound} from './relics-audio.js';
 import {relicDefaultView} from './relics-v4.js?v=web-7063014c96efd008';
 import {privateCasinoPanel} from './private-casino-view.js?v=web-7063014c96efd008';
 import {communityPanel,communityRows} from './community-feed.js?v=web-7063014c96efd008';
@@ -460,7 +461,7 @@ addEventListener('click',async e=>{
   const t=e.target.closest?.('button,[data-open]'); if(!t) return;
   if(t.dataset.action==='casino-skip'){casinoSkipped=true;skipCasinoPause?.();return;}
   if(casinoBusy&&(t.dataset.screen||t.dataset.casinoGame)){toast('演出をスキップすると移動できます');return;}
-  const mutates=!!t.dataset.approve || !!t.dataset.complete || ['steam-library','steam-status','steam-link','steam-open','steam-confirm','steam-disconnect','steam-game','salary','trade','spin','race-bet','roast-level','horse-buy','horse-sell-approve','luxury','reset','submit-claim','issue-directive','connect-kp','refresh-kp','disconnect-kp','auto-connect-kp','ml-buy','chinchiro','bj-start','bj-hit','bj-stand','bj-double','mines-start','mines-pick','mines-cashout','slot','vp-deal','vp-draw','baccarat','private-round','private-race','stock-shock','stock-shock-approve','stock-guerrilla-toggle','relic-summon','relic-equip','relic-auto-equip','relic-save-preset','relic-load-preset','relic-remove-preset','relic-claim-steam','relic-claim-unite'].includes(t.dataset.action);
+  const mutates=!!t.dataset.approve || !!t.dataset.complete || ['steam-library','steam-status','steam-link','steam-open','steam-confirm','steam-disconnect','steam-game','salary','trade','spin','race-bet','roast-level','horse-buy','horse-sell-approve','luxury','reset','submit-claim','issue-directive','connect-kp','refresh-kp','disconnect-kp','auto-connect-kp','ml-buy','chinchiro','bj-start','bj-hit','bj-stand','bj-double','mines-start','mines-pick','mines-cashout','slot','vp-deal','vp-draw','baccarat','private-round','private-race','stock-shock','stock-shock-approve','stock-guerrilla-toggle','relic-summon','relic-equip','relic-auto-equip','relic-save-preset','relic-overwrite-preset','relic-load-preset','relic-remove-preset','relic-rename-preset','relic-claim-steam','relic-claim-unite'].includes(t.dataset.action);
   if(mutates && mutationPending)return;
   if(mutates)mutationPending=true;
   try{
@@ -470,6 +471,21 @@ addEventListener('click',async e=>{
       return;
     }
     if(t.dataset.companion){await openCompanionGame(t.dataset.companion);return;}
+    if(t.dataset.action==='relic-tab'){
+      if(!['collection','gear','summon','records'].includes(t.dataset.tab))return;
+      relicView={...relicView,section:t.dataset.tab};
+      render();
+      document.querySelector('.relic-v8-nav')?.scrollIntoView({block:'start',behavior:'auto'});
+      return;
+    }
+    if(t.dataset.action==='relic-layout'){
+      relicView={...relicView,layout:t.dataset.layout==='list'?'list':'grid',page:0};
+      render();
+      return;
+    }
+    if(t.dataset.action==='relic-sound-toggle'){
+      toggleRelicSound();render();return;
+    }
     if(t.dataset.action==='relic-reveal-skip'){
       const panel=app.querySelector('.relic-reveal');
       panel?.classList.add('relic-reveal-instant');
@@ -477,23 +493,7 @@ addEventListener('click',async e=>{
       return;
     }
     if(t.dataset.action==='relic-reveal-sound'){
-      const Audio=window.AudioContext||window.webkitAudioContext;
-      if(!Audio){toast('この端末では効果音を再生できません');return;}
-      const ctx=new Audio(),rarity=Object.keys(relicReveal?.summary??{}).find(key=>key==='transcendent'&&relicReveal.summary[key]>0)||'ancient';
-      try{
-        await ctx.resume();
-        const tones=rarity==='transcendent'?[392,587.33,783.99,1174.66]:[293.66,440,587.33,880];
-        tones.forEach((frequency,n)=>{
-          const oscillator=ctx.createOscillator(),gain=ctx.createGain();
-          oscillator.type='sine';oscillator.frequency.value=frequency;
-          gain.gain.setValueAtTime(0.0001,ctx.currentTime+n*.13);
-          gain.gain.exponentialRampToValueAtTime(.035,ctx.currentTime+n*.13+.04);
-          gain.gain.exponentialRampToValueAtTime(.0001,ctx.currentTime+n*.13+.28);
-          oscillator.connect(gain);gain.connect(ctx.destination);
-          oscillator.start(ctx.currentTime+n*.13);oscillator.stop(ctx.currentTime+n*.13+.29);
-        });
-        setTimeout(()=>ctx.close().catch(()=>{}),1100);
-      }catch{ctx.close().catch(()=>{});toast('この端末では効果音を再生できません');}
+      primeRelicAudio();if(!playRelicSound(relicReveal))toast('端末の制限で音を再生できない場合がある。サウンド設定を確認してください。');
       return;
     }
     if(t.dataset.action==='relic-reveal-close'){relicReveal=null;render();return;}
@@ -502,20 +502,30 @@ addEventListener('click',async e=>{
       const idx=Number(t.dataset.historyIndex);
       const history=state.relics?.summonHistory;
       if(Array.isArray(history)&&Number.isInteger(idx)&&history[idx]){
-        relicReveal=history[idx];render();
+        primeRelicAudio();relicReveal=history[idx];render();playRelicSound(relicReveal);
       }
       return;
     }
     if(t.dataset.action?.startsWith('relic-')){
       if(!live||!wallet.connected)throw Error('遺物は本番KP口座への接続が必要です。');
       const action=t.dataset.action;
-      const args=action==='relic-summon'?{count:Number(t.dataset.count)}:action==='relic-equip'?{relic:t.dataset.relic??'',slot:Number($('#relic-slot')?.value??0)}:action==='relic-auto-equip'?{goal:$('#relic-goal')?.value??'all'}:['relic-save-preset','relic-load-preset','relic-remove-preset'].includes(action)?{preset:$('#relic-preset')?.value??''}:action==='relic-claim-steam'?{event:t.dataset.event}:{tier:t.dataset.tier};
+      if(action==='relic-summon')primeRelicAudio(); // unlock audio during the trusted tap, before the network await on iOS
+      const presetSelected=$('#relic-preset')?.value??'';
+      const presetName=$('#relic-preset-name')?.value??'';
+      const args=action==='relic-summon'?{count:Number(t.dataset.count)}:
+       action==='relic-equip'?{relic:t.dataset.relic??'',slot:Number($('#relic-slot')?.value??0)}:
+       action==='relic-auto-equip'?{goal:$('#relic-goal')?.value??'all'}:
+       action==='relic-save-preset'?{preset:presetName}:
+       action==='relic-overwrite-preset'?{preset:presetSelected}:
+       action==='relic-rename-preset'?{preset:presetSelected,newName:presetName}:
+       ['relic-load-preset','relic-remove-preset'].includes(action)?{preset:presetSelected}:
+       action==='relic-claim-steam'?{event:t.dataset.event}:{tier:t.dataset.tier};
       const result=await liveOperation(action,args);
-      if(['relic-equip','relic-auto-equip','relic-save-preset','relic-load-preset','relic-remove-preset','relic-claim-steam','relic-claim-unite'].includes(action)){
+      if(['relic-equip','relic-auto-equip','relic-save-preset','relic-overwrite-preset','relic-load-preset','relic-remove-preset','relic-rename-preset','relic-claim-steam','relic-claim-unite'].includes(action)){
        try{relicProofs=await wallet.relics();}catch(error){relicNotice='装備は更新したが、効果一覧を再取得できなかった。'+(error.message??'');}
       }
-      if(action==='relic-summon')relicReveal=result;
-      relicNotice=action==='relic-save-preset'?'プリセットを保存した。':action==='relic-load-preset'?'装備をプリセットから復元した。':action==='relic-remove-preset'?'プリセットを削除した。':action==='relic-auto-equip'?`おまかせ装備完了。4枠の合計戦力 ${result.power}`:action==='relic-summon'?`${result.count}連召喚：${result.cost.toLocaleString('ja-JP')} KPを使用。${result.highlights?.length?'大当たり '+result.highlights.map(v=>v.name).join('、'):'獲得遺物を図鑑に追加した。'}`:action==='relic-equip'?`装備変更完了。戦力 ${result.power}`:`${result.item.name} を獲得した。`;
+      if(action==='relic-summon'){relicReveal=result;playRelicSound(relicReveal);}
+      relicNotice=action==='relic-save-preset'?'「'+result.name+'」を保存した。':action==='relic-overwrite-preset'?'「'+result.name+'」を上書きした。':action==='relic-rename-preset'?'「'+result.name+'」に改名した。':action==='relic-load-preset'?'装備をプリセットから復元した。':action==='relic-remove-preset'?'プリセットを削除した。':action==='relic-auto-equip'?`おまかせ装備完了。4枠の合計戦力 ${result.power}`:action==='relic-summon'?`${result.count}連召喚：${result.cost.toLocaleString('ja-JP')} KPを使用。${result.highlights?.length?'大当たり '+result.highlights.map(v=>v.name).join('、'):'獲得遺物を図鑑に追加した。'}`:action==='relic-equip'?`装備変更完了。戦力 ${result.power}`:`${result.item.name} を獲得した。`;
       render();toast(relicNotice);return;
     }
     if(t.dataset.action==='stock-guerrilla-toggle'){
