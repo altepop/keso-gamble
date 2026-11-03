@@ -39,6 +39,9 @@ let autoMessage='';
 let live=wallet.connected&&!embedded;
 let steamView=null;
 let relicProofs=null,relicNotice='',relicLoading=false;
+// Each tap is one paid purchase. Never queue taps while a request or reveal is active.
+let relicSummonBusy=false,lastRelicSummonTap=0,lastSummonBlockToast=0;
+const RELIC_SUMMON_TAP_GAP_MS=1200;
 let lastRelicLedgerId=null;
 let relicView={...relicDefaultView(),previewMode:'competitive',previewAmount:500},relicReveal=null;
 let connectionError=live?'口座を読み込んでいます…':'';
@@ -266,7 +269,7 @@ function useScreen(title,body){
 }
 function screenStable(){return useScreen('馬主',live?ownerPanel(state,Date.now(),pendingHorseSale):'');}
 function screenShop(){return useScreen('高級品',live?luxuryPanel(state):'');}
-function screenRelics(){return useScreen('遺物',relicsPanel(state,{proofs:relicProofs,notice:relicNotice,loading:relicLoading,view:relicView,reveal:relicReveal}));}
+function screenRelics(){return useScreen('遺物',relicsPanel(state,{proofs:relicProofs,notice:relicNotice,loading:relicLoading,view:relicView,reveal:relicReveal,summonBusy:relicSummonBusy||wallet.pending}));}
 
 function screenAssets(){
   return `<div class="screen"><header class="topbar"><div class="toprow"><h1 class="title">資産</h1><div class="small-actions">${live?'':'<button class="icon-btn" data-action="reset" aria-label="初期化">↺</button>'}</div></div></header><div class="wallet-strip"><div class="wallet-item"><small>保有KP</small><strong>${moneyCompact(state.cash)}</strong></div><div class="wallet-item"><small>株式評価額</small><strong>${moneyCompact(portfolioValue(state))}</strong></div><div class="wallet-item"><small>純資産</small><strong>${moneyCompact(assets(state))}</strong></div></div>${live?'<div class="market-disclaimer">サーバー口座 · 試合報酬と決済は全端末で共通です。</div>':'<div class="market-disclaimer">端末内のデモ口座</div>'}${live?'':`<details class="panel"><summary class="card-body">開発用：テストKPの補充</summary><div class="action-row"><button class="action-btn" data-action="salary">テスト用KP +600 KP</button></div></details>`}${state.debt?.amount>0?`<div class="market-disclaimer">💸 借KP ${moneyCompact(state.debt.amount)}（${state.debt.intervalMinutes}分ごとに利子${state.debt.interestPercent}%）</div>`:''}<div class="asset-list">${live&&state.privateCasino?privateStockOperator(MARKET,{selection:stockShockSelection,notice:stockShockNotice,confirmation:stockShockConfirmation,events:state.marketEvents}):''}${live&&state.privateCasino?privateCasinoPanel(drafts,privateRacePreview,privateRoundMessage):''}<div class="asset-card"><div class="panel-title" style="margin-bottom:10px">保有銘柄</div>${MARKET.map(s=>`<div class="asset-line"><span>${s.name}</span><strong>${state.holdings[s.id]}株 / ${moneyCompact(state.holdings[s.id]*state.prices[s.id])}</strong></div>`).join('')}<div class="action-row"><button class="action-btn" data-screen="market">株を売買する</button></div></div>${tradeHistory()}${live?roastPanel(state):''}${live?trendPanel(trend,trendView):''}${live?healthPanel(health,healthLoading,healthError):''}<div class="asset-card"><h2 class="panel-title">口座</h2>${live?'<div id="connection-slot"></div>':''}<button class="title-back" data-screen="title">タイトルへ戻る</button></div></div>${bottomNav()}</div>`;
@@ -479,7 +482,10 @@ addEventListener('click',async e=>{
   if(t.dataset.action==='casino-skip'){casinoSkipped=true;skipCasinoPause?.();return;}
   if(casinoBusy&&(t.dataset.screen||t.dataset.casinoGame)){toast('演出をスキップすると移動できます');return;}
   const mutates=!!t.dataset.approve || !!t.dataset.complete || ['steam-library','steam-status','steam-link','steam-open','steam-confirm','steam-disconnect','steam-game','salary','trade','spin','race-bet','roast-level','horse-buy','horse-sell-approve','luxury','reset','submit-claim','issue-directive','connect-kp','restore-kp','refresh-kp','disconnect-kp','auto-connect-kp','ml-buy','chinchiro','bj-start','bj-hit','bj-stand','bj-double','mines-start','mines-pick','mines-cashout','slot','vp-deal','vp-draw','baccarat','private-round','private-race','stock-shock','stock-shock-approve','stock-guerrilla-toggle','relic-summon','relic-equip','relic-auto-equip','relic-save-preset','relic-overwrite-preset','relic-load-preset','relic-remove-preset','relic-rename-preset','relic-claim-steam','relic-claim-unite'].includes(t.dataset.action);
-  if(mutates && mutationPending)return;
+  if(mutates && mutationPending){
+    if(t.dataset.action==='relic-summon'&&Date.now()-lastSummonBlockToast>1200){toast('召喚結果を確認中。連打しても追加購入されません');lastSummonBlockToast=Date.now();}
+    return;
+  }
   if(mutates)mutationPending=true;
   try{
     if(t.dataset.escSpin){
@@ -538,7 +544,15 @@ addEventListener('click',async e=>{
     if(t.dataset.action?.startsWith('relic-')){
       if(!live||!wallet.connected)throw Error('遺物は本番KP口座への接続が必要です。');
       const action=t.dataset.action;
-      if(action==='relic-summon')primeRelicAudio(); // unlock audio during the trusted tap, before the network await on iOS
+      if(action==='relic-summon'){
+        if(relicReveal){toast('召喚結果を閉じてから次を引いてください');return;}
+        const now=Date.now();
+        if(relicSummonBusy||now-lastRelicSummonTap<RELIC_SUMMON_TAP_GAP_MS){toast('連打防止中。少し間を空けてください');return;}
+        lastRelicSummonTap=now;
+        primeRelicAudio(); // iOS: unlock sound during the trusted tap.
+        relicSummonBusy=true;
+        render(); // immediately disable purchase buttons and show the pending state.
+      }
       const presetSelected=$('#relic-preset')?.value??'';
       const presetName=$('#relic-preset-name')?.value??'';
       const args=action==='relic-summon'?{count:Number(t.dataset.count)}:
@@ -728,7 +742,9 @@ addEventListener('click',async e=>{
     if(t.dataset.action==='reset'){if(confirm('データを初期化しますか？')){await commit(next => Object.assign(next,createInitialState()));for(const key of Object.keys(drafts))delete drafts[key];renderedMarkup=undefined;render();toast('初期化した')}return;}
 
   }catch(err){render();toast(err.message||'操作に失敗した');}
-  finally { if(mutates)mutationPending=false; }
+  finally { if(mutates)mutationPending=false;
+    if(t.dataset.action==='relic-summon'){relicSummonBusy=false;render();}
+  }
 });
 
 addEventListener('input',e=>{
