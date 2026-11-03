@@ -36,6 +36,7 @@ export const kpSchema=[
  `CREATE TABLE IF NOT EXISTS kp_codes(hash TEXT PRIMARY KEY,guild TEXT NOT NULL,user TEXT NOT NULL,expires INTEGER NOT NULL,session_hash TEXT)`,
  `CREATE TABLE IF NOT EXISTS kp_sessions(hash TEXT PRIMARY KEY,guild TEXT NOT NULL,user TEXT NOT NULL,expires INTEGER NOT NULL)`,
  `CREATE TABLE IF NOT EXISTS kp_operations(id TEXT NOT NULL,guild TEXT NOT NULL,user TEXT NOT NULL,request_hash TEXT NOT NULL,response TEXT NOT NULL,delta INTEGER NOT NULL,state TEXT NOT NULL,directive TEXT,at INTEGER NOT NULL,PRIMARY KEY(guild,user,id))`,
+ `CREATE TABLE IF NOT EXISTS kp_operation_limits(guild TEXT NOT NULL,user TEXT NOT NULL,minute INTEGER NOT NULL,count INTEGER NOT NULL,PRIMARY KEY(guild,user,minute))`,
  `CREATE TABLE IF NOT EXISTS kp_directives(id TEXT PRIMARY KEY,guild TEXT NOT NULL,issuer TEXT NOT NULL,target TEXT NOT NULL,task TEXT NOT NULL,game TEXT NOT NULL,achievement TEXT NOT NULL,cost INTEGER NOT NULL,status TEXT NOT NULL DEFAULT 'active',at INTEGER NOT NULL)`,
  `CREATE TABLE IF NOT EXISTS kp_directive_deliveries(id TEXT PRIMARY KEY,status TEXT NOT NULL)`,
  `CREATE UNIQUE INDEX IF NOT EXISTS kp_directive_active ON kp_directives(guild,target) WHERE status='active'`,
