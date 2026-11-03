@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {MORE_MAHJONG_VOICE_RELICS} from '../src/relic-more-voice-mahjong.ts';
 import {ALL_NORMAL_RELICS,RELIC_CATALOG_COUNT,NORMAL_RELIC_BY_ID} from '../src/relic-catalog.ts';
 import {evaluateRelicBonus,type RelicCollection} from '../src/relics.ts';
 
@@ -11,7 +12,8 @@ test('20 additional relics; 10 voice/10 Mahjong; all IDs unique and old catalog 
  assert.equal(RELIC_CATALOG_COUNT,210);
  assert.equal(new Set(ALL_NORMAL_RELICS.map(x=>x.id)).size,210);
  assert.equal(ALL_NORMAL_RELICS.filter(x=>x.id.startsWith('normal.voice.riddle.')).length,4);
- assert.equal(ALL_NORMAL_RELICS.filter(x=>x.id.startsWith('normal.mahjong.')).length,10);
+ assert.equal(MORE_MAHJONG_VOICE_RELICS.filter(x=>x.mode==='mahjong').length,10);
+ assert.equal(MORE_MAHJONG_VOICE_RELICS.filter(x=>x.mode==='voice').length,10);
 });
 test('secret voice build: each gear looks unimpressive, full four-slot resonance is immense',()=>{
  const single=gears.map(id=>evaluateRelicBonus(make([id]),'voice',{amount:15,win:true}).bonus);
