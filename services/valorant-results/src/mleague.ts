@@ -4,6 +4,7 @@
 import data from '../mleague-2026-27.json' with {type:'json'};
 import {kpHash} from './kp.ts';
 import {nativeRelicBonus} from './relics.ts';
+import {verifiedBetProfit} from './relic-profit.ts';
 import type {KpEnv,KpMapping} from './kp.ts';
 import {enqueue,ensurePosts,earningsWebhook} from './racing-posts.ts';
 import type {PostEnv} from './racing-posts.ts';
@@ -283,7 +284,7 @@ export async function settleMl(env:KpEnv,mapping:KpMapping,now=Date.now()){
   if(!due.length)continue;
   const settled:MlBet[]=settleMlBets(state,await mlResults(env,due));
   if(!settled.length)continue;
-  const relicBonus=nativeRelicBonus(state,'mleague',Math.max(0,settled.reduce((net,b)=>net+b.payout-b.amount,0)),now);
+  const relicBonus=nativeRelicBonus(state,'mleague',verifiedBetProfit(settled),now);
   const id='ml-settle:'+settled.map(b=>b.id).join(',');
   const response={result:{settled:settled.map(b=>({id:b.id,status:b.status,payout:b.payout})),relicBonus}};
   const inserted=await env.DB.prepare(`INSERT INTO kp_operations(id,guild,user,request_hash,response,delta,state,directive,at)
