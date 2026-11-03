@@ -210,10 +210,18 @@ export async function kpRelicBonus(env:KpEnv,guild:string,user:string,id:string)
  * Reformatting a delivered notification replaces the old line, never repeats it.
  * The earned relic KP is inside the Spike breakdown parentheses where possible. */
 export function kpCreditLine(text:string,amount:number,note='',relic=0){
- const base=text.replace(/\n🪙 この試合 [+−]\d+ KP[^\n]*/g,''),split=base.indexOf('\n💬 ');
- const relicLabel=Number.isSafeInteger(relic)&&relic>0?'🧿遺物補正＋'+relic+' KP':'';
- const tail=!relicLabel?note:note.endsWith('）')?note.slice(0,-1)+'・'+relicLabel+'）':note?note+'（'+relicLabel+'）':'（'+relicLabel+'）';
- const line='\n🪙 この試合 '+(amount<0?'−'+(-amount):'+'+amount)+' KP'+tail;
+ // Rewriting an already-sent result must replace both totals and prior relic
+ // components; do not retain a stale old result after a late ledger settlement.
+ const base=text.replace(/\n🪙 この試合 [+−]\d+ KP[^\n]*/g,'')
+  .replace(/\n\s*↳ (?:試合報酬|🧿 遺物補正)[^\n]*/g,'');
+ const split=base.indexOf('\n💬 ');
+ const goodRelic=Number.isSafeInteger(relic)&&relic>0?relic:0;
+ const gross=amount-goodRelic;
+ const fmt=(n:number)=>n<0?'−'+(-n):'+'+n;
+ const cleanedNote=note.replace(/・🧿遺物補正＋\d+ KP/g,'').replace(/（🧿遺物補正＋\d+ KP）/g,'');
+ const line='\n🪙 この試合 '+fmt(amount)+' KP'+
+  (goodRelic?'\n  ↳ 試合報酬 '+fmt(gross)+' KP'+(cleanedNote?' '+cleanedNote:'')+
+   '\n  ↳ 🧿 遺物補正 +'+goodRelic+' KP':cleanedNote);
  return split<0?base+line:base.slice(0,split)+line+base.slice(split);
 }
 /** The KP of one VALORANT result before the wallet: the mode's rate, the side bonuses of the easy modes, then luck.
