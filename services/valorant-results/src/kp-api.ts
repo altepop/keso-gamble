@@ -18,6 +18,7 @@ import {receiveLoopKp} from './loop-kp.ts';
 import {summonRelics,grantSteamRelic,grantUniteRelic,equipRelic,autoEquipRelics,saveRelicPreset,loadRelicPreset,removeRelicPreset,renameRelicPreset,listRelicPresets,diagnoseRelicBuild,nativeRelicBonus,evaluateRelicBonus,rarityRatesForLevel,summonLevel,SUMMON_MILESTONES,UNITE,UNITE_REQUIREMENTS,UNITE_STREAK_IDS,STEAM_RELIC_TIERS,type UniteRelicId} from './relics.ts';
 import {ALL_NORMAL_RELICS,RELIC_MODE_NAMES} from './relic-catalog.ts';
 import {verifiedCasinoProfit,verifiedStockProfit} from './relic-profit.ts';
+import {STEAM_RELIC_PROOF_SQL,STEAM_RELIC_LIST_SQL,STEAM_RELIC_COMMIT_GUARD,steamRelicDay,requireSteamRelicEligibility} from './steam-relic-eligibility.ts';
 import type {RelicCollection,RelicItem} from './relics.ts';
 import {ensureQuizKp,receiveQuizKp,isKpParticipant,quizKpRates,quizKpLimits} from './quiz-kp.ts';
 import {activityAuthAvailable,createActivityChallenge,authenticateActivity}from './discord-activity-auth.ts';
@@ -218,10 +219,9 @@ export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:strin
   else if(action==='relic-claim-steam'){
    const event=String(args.event??'');
    if(event.length<20||event.length>250||!event.startsWith('steam:'))throw Error('Steam実績を選んでください。');
-   const proof=await env.DB.prepare('SELECT id,app,achievement,title,percent FROM kp_steam_events WHERE id=? AND guild=? AND user=?')
-    .bind(event,mapping.guildId,user).first<{id:string;app:number;achievement:string;title:string;percent:number}>();
-   if(!proof)throw Error('監視開始後のSteam実績を確認できません。過去の実績は対象外です。');
-   result=grantSteamRelic(state,proof);
+   const receipt=await env.DB.prepare(STEAM_RELIC_PROOF_SQL)
+    .bind(steamRelicDay(),event,mapping.guildId,user).first<import('./steam-relic-eligibility.ts').SteamRelicEvidence>();
+   result=grantSteamRelic(state,requireSteamRelicEligibility(receipt));
   }else if(action==='relic-claim-unite'){
    const tier=String(args.tier??'') as UniteRelicId,required=UNITE_REQUIREMENTS[tier];
    if(!Object.hasOwn(UNITE_REQUIREMENTS,tier))throw Error('ユナイト遺物を選んでください。');
@@ -274,8 +274,10 @@ export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:strin
   let inserted;
   try{
    inserted=await env.DB.prepare(`INSERT INTO kp_operations(id,guild,user,request_hash,response,delta,state,directive,at)
-   SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM kp_wallets w JOIN kp_state s ON w.guild=s.guild AND w.user=s.user WHERE w.guild=? AND w.user=? AND w.version=? AND s.version=?) AND (?=0 OR EXISTS(SELECT 1 FROM stock_markets WHERE guild=? AND version=?)) ON CONFLICT(guild,user,id) DO NOTHING`)
-   .bind(id,mapping.guildId,user,requestHash,JSON.stringify(response),state.cash-before,JSON.stringify(safeState),directive?JSON.stringify(directive):null,Date.now(),mapping.guildId,user,state.walletVersion,state.stateVersion,['trade','directive','luxury'].includes(action)?1:0,mapping.guildId,state.stockMarket.version).run();
+   SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM kp_wallets w JOIN kp_state s ON w.guild=s.guild AND w.user=s.user WHERE w.guild=? AND w.user=? AND w.version=? AND s.version=?) AND (?=0 OR EXISTS(SELECT 1 FROM stock_markets WHERE guild=? AND version=?)) ${STEAM_RELIC_COMMIT_GUARD} ON CONFLICT(guild,user,id) DO NOTHING`)
+   .bind(id,mapping.guildId,user,requestHash,JSON.stringify(response),state.cash-before,JSON.stringify(safeState),directive?JSON.stringify(directive):null,Date.now(),mapping.guildId,user,state.walletVersion,state.stateVersion,['trade','directive','luxury'].includes(action)?1:0,mapping.guildId,state.stockMarket.version,
+    action==='relic-claim-steam'?1:0,action==='relic-claim-steam'?String(sourceArgs.event??''):'',mapping.guildId,user,
+    mapping.guildId,user,steamRelicDay()).run();
   }catch(error){
    // Someone else's 💎💎💎 changed the shared pool after this spin was drawn: nothing was saved, so draw again.
    if(action==='slot'&&String((error as Error)?.message).includes('Jackpot changed'))continue;
@@ -299,6 +301,12 @@ export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:strin
    const big=casinoPost(user,action,result);
    if(big&&(env as {KP_EARNINGS_WEBHOOK_URL?:string}).KP_EARNINGS_WEBHOOK_URL)try{await ensurePosts(env);await enqueue(env,'casino:'+user+':'+id,big,Date.now());}catch{console.warn('casino_post_pending');}
    return response;
+  }
+  // The daily limit may have filled after we loaded the proof. Do not write
+  // the item if it became ineligible while awaiting another worker's credit.
+  if(action==='relic-claim-steam'){
+   const updated=await env.DB.prepare(STEAM_RELIC_PROOF_SQL).bind(steamRelicDay(),String(sourceArgs.event??''),mapping.guildId,user).first<import('./steam-relic-eligibility.ts').SteamRelicEvidence>();
+   requireSteamRelicEligibility(updated);
   }
  }
  throw Error('他の操作と重なりました。残高を更新してもう一度お試しください。');
@@ -371,8 +379,8 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping):Promi
   }
   if(request.method==='GET'&&path==='/api/kp/relics'){
    // Called only when the relic screen opens. No new cron or D1 scan on regular wallet polling.
-   const steam=await env.DB.prepare('SELECT id,title,percent,app FROM kp_steam_events WHERE guild=? AND user=? ORDER BY CASE WHEN percent<=10 THEN 0 WHEN percent<=25 THEN 1 ELSE 2 END,at DESC LIMIT 100')
-    .bind(mapping.guildId,owner.user).all<{id:string;title:string;percent:number;app:number}>().then(r=>r.results).catch(()=>[]);
+   const steam=await env.DB.prepare(STEAM_RELIC_LIST_SQL)
+    .bind(steamRelicDay(),mapping.guildId,owner.user).all<import('./steam-relic-eligibility.ts').SteamRelicEvidence>().then(r=>r.results).catch(()=>[]);
    const row=await env.DB.prepare('SELECT data FROM kp_state WHERE guild=? AND user=?').bind(mapping.guildId,owner.user).first<{data:string}>();
    const ownedState=JSON.parse(row?.data??'{}') as {relics?:RelicCollection};
    const level=summonLevel(ownedState.relics?.totalSummons??0);
