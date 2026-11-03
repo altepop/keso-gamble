@@ -1,4 +1,4 @@
-import {NORMAL_RELICS,RISK_RELICS,ALL_NORMAL_RELICS,RELIC_CATALOG_COUNT,RELIC_RARITIES,RELIC_MODE_NAMES} from '../src/relic-catalog.ts';
+import {NORMAL_RELICS,RISK_RELICS,ABILITY_RELICS,ALL_NORMAL_RELICS,RELIC_CATALOG_COUNT,RELIC_RARITIES,RELIC_MODE_NAMES} from '../src/relic-catalog.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {spikeOpeningTier,RELIC_SUMMON_COST,rarityForRoll,rarityRatesForLevel,modeRelicBonus,evaluateRelicBonus,nativeRelicBonus,relicCollection,summonLevel,summonRelics,grantSteamRelic,grantUniteRelic,equipRelic,autoEquipRelics,SUMMON_MILESTONES,summonProgress,steamRelicTier,steamRelicArchetype,STEAM_RELIC_TIERS,UNITE,UNITE_REQUIREMENTS,UNITE_STREAK_IDS,type RelicCollection} from '../src/relics.ts';
@@ -78,9 +78,9 @@ test('equipment is optional for both sources; no hardcoded combination or earnin
 });
 
 test('all 10 summon tiers add up to 100% and level 10 completely eliminates common',()=>{
- assert.equal(RELIC_CATALOG_COUNT,183);
+ assert.equal(RELIC_CATALOG_COUNT,190);
  assert.equal(RISK_RELICS.length,8);
- assert.equal(new Set(ALL_NORMAL_RELICS.map(r=>r.id)).size,183);
+ assert.equal(new Set(ALL_NORMAL_RELICS.map(r=>r.id)).size,190);
  assert.equal(new Set(NORMAL_RELICS.map(r=>r.id)).size,175);
  assert.equal(new Set(NORMAL_RELICS.map(r=>r.name)).size,175);
  assert.equal(Object.keys(RELIC_MODE_NAMES).length,25);
