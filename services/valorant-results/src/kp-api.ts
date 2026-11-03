@@ -387,7 +387,14 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping):Promi
     .bind(steamRelicDay(),mapping.guildId,owner.user).all<SteamRelicEvidence>().then(r=>r.results).catch(()=>[]);
    const row=await env.DB.prepare('SELECT data FROM kp_state WHERE guild=? AND user=?').bind(mapping.guildId,owner.user).first<{data:string}>();
    const ownedState=JSON.parse(row?.data??'{}') as {relics?:RelicCollection};
-   const level=summonLevel(ownedState.relics?.totalSummons??0);
+   // Indexed member lookup, only on explicit relic screen open. The game index
+   // always comes from the server-owned Spike profile, never the client.
+   const spikeProfile=await env.DB.prepare(`SELECT CAST(json_extract(s.data,'$.games') AS INTEGER) AS games
+    FROM kp_accounts a JOIN spike_profiles s ON s.guild=a.guild AND s.puuid=a.puuid AND s.user=a.user
+    WHERE a.guild=? AND a.user=?`).bind(mapping.guildId,owner.user)
+    .first<{games:number}>().catch(()=>null);
+   const spikeGamesBefore=Number.isSafeInteger(spikeProfile?.games)&&Number(spikeProfile?.games)>=0?Number(spikeProfile?.games):0;
+    const level=summonLevel(ownedState.relics?.totalSummons??0);
    const nativeModes=new Set(['casino','market','racing','mleague']); // retained for UI grouping
    const currentDay=new Date().toISOString().slice(0,10);
    const usedToday=ownedState.relics?.dailyNativeBonus?.day===currentDay?ownedState.relics.dailyNativeBonus.amount:0;
@@ -406,12 +413,12 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping):Promi
     guild:{players:guildEconomy?.players??0,verifiedTotal:guildEconomy?.total??0,verifiedCount:guildEconomy?.n??0}};
    const previewModes=['competitive','unrated','swiftplay','spikerush','teamdeathmatch','escalation','deathmatch','skirmish','racing','casino','market','mleague','quiz','voice'];
    // Computed from the exact same pure function as real KP payouts, with no extra DB queries.
-   const previews=previewModes.flatMap(mode=>[100,500,900,5000].map(amount=>({
-    mode,amount,...evaluateRelicBonus(ownedState.relics as RelicCollection|undefined,mode,{amount,win:true},0)
+   const previews=previewModes.flatMap(mode=>(mode==='spikerush'?[20,40,100,500]:[100,500,900,5000]).map(amount=>({
+    mode,amount,...evaluateRelicBonus(ownedState.relics as RelicCollection|undefined,mode,{amount,win:true,...mode==='spikerush'?{spikeGamesBefore}:{}},0)
    })));
    return response({price:200,steam,unite:Object.entries(UNITE).map(([id,d])=>({id,name:d.name,power:d.power,condition:id.startsWith('unite.career_')?'累計'+d.wins+'勝':d.wins+'連勝'})),steamTiers:STEAM_RELIC_TIERS,level,
     rates:rarityRatesForLevel(level),maxRates:rarityRatesForLevel(10),ratesByLevel:Array.from({length:10},(_,i)=>rarityRatesForLevel(i+1)),
-    modeNames:RELIC_MODE_NAMES,catalog:ALL_NORMAL_RELICS,milestones:SUMMON_MILESTONES,previews,diagnosis,externalLogs:logs,presets:listRelicPresets(ownedState.relics),economy:personalEconomy,lastNativeEffect:ownedState.relics?.lastNativeEffect??null,nativeRemaining:null});
+    modeNames:RELIC_MODE_NAMES,catalog:ALL_NORMAL_RELICS,milestones:SUMMON_MILESTONES,previews,spikeGamesBefore,diagnosis,externalLogs:logs,presets:listRelicPresets(ownedState.relics),economy:personalEconomy,lastNativeEffect:ownedState.relics?.lastNativeEffect??null,nativeRemaining:null});
   }
   if(request.method==='GET'&&path==='/api/kp/state')return response(await readKpState(env,mapping,owner.user));
   // 監視状態: members only, aggregates only.
