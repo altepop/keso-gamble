@@ -309,7 +309,7 @@ export function cardPost(day:Fixture[],results:Map<string,MlResult>,d:MlView=dat
   const fav=(type:'top'|'last')=>[...card].sort((a,b)=>a.odds[type]-b.odds[type]).slice(0,3).map(p=>`${clean(p.name)} ${(p.odds[type]/10).toFixed(1)}倍`).join('／');
   lines.push(`**${f.table}卓** ${f.teams.map(teamName).join('・')}`,`　ラス本命：${fav('last')}`);
  }
- lines.push('第1試合は19:00で締切や。第2試合は第1試合の結果が出たら締切やで。','/mleague で倍率を見て、/mbet でラス予想を買うてな。出えへんかった選手の分は返金するで。');
+ lines.push('第1試合は19:00で締切や。第2試合は出場の4人が決まってから15分で締切やで。','/mleague で倍率を見て、/mbet でラス予想を買うてな。出えへんかった選手の分は返金するで。');
  return lines.join('\n');
 }
 export function resultPost(f:Fixture,r:MlResult,bets:Array<MlBet&{user:string}>){
