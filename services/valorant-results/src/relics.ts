@@ -327,7 +327,7 @@ export function nativeRelicBonus(
  if(!payout)return 0;
  state.cash+=payout;
  state.relics.lastNativeEffect={mode,amount,bonus:payout,percent:Math.round(payout/amount*10000)/100,at:now,names:detail.skills.slice(0,4),lines:detail.lines,sets:detail.sets};
- state.relics.nativeEarned=(state.relics.nativeEarned??0)+payout;
+ state.relics.nativeEarned=Math.min(Number.MAX_SAFE_INTEGER, (state.relics.nativeEarned??0)+payout);
  state.relics.nativeCount=(state.relics.nativeCount??0)+1;
  const record:RelicEffectRecord={id:'native:'+now+':'+(state.relics.nativeCount??0),mode,amount,bonus:payout,at:now,origin:'native',lines:detail.lines,sets:detail.sets,resonance:detail.resonance};
  state.relics.nativeEffects=[record,...(state.relics.nativeEffects??[])].slice(0,30);
@@ -370,6 +370,7 @@ export function summonRelics(
   state: {cash: number; relics?: RelicCollection},
   count: number,
   numbers?: Uint32Array,
+  variantNumbers?: Uint32Array,
 ) {
   if (!RELIC_SUMMON_SIZES.includes(count as (typeof RELIC_SUMMON_SIZES)[number])) throw Error('召喚は1・10・100・1000連から選んでください。');
   const price = count * RELIC_SUMMON_COST;
@@ -382,7 +383,8 @@ export function summonRelics(
   const mutations:string[]=[],foils:string[]=[];
   // Independent cryptographic draws for variants. Explicit test entropy suppresses
   // rare random mutations to make deterministic original unit tests stable.
-  const variants = numbers ? new Uint32Array(count*2).fill(0xffffffff) : crypto.getRandomValues(new Uint32Array(count*2));
+  const variants = variantNumbers ?? (numbers ? new Uint32Array(count*2).fill(0xffffffff) : crypto.getRandomValues(new Uint32Array(count*2)));
+  if(variants.length!==count*2)throw Error('Invalid variant draw');
   for (let n = 0; n < count; n++) {
     const rarity = rarityForRoll(entropy[n * 2]! % 1_000_000, summonLevel(c.totalSummons));
     const candidates=NORMAL_RELIC_BY_RARITY.get(rarity as NormalRelicRarity)!;
