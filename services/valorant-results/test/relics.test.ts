@@ -78,13 +78,13 @@ test('equipment is optional for both sources; no hardcoded combination or earnin
 });
 
 test('all 10 summon tiers add up to 100% and level 10 completely eliminates common',()=>{
- assert.equal(RELIC_CATALOG_COUNT,148);
+ assert.equal(RELIC_CATALOG_COUNT,183);
  assert.equal(RISK_RELICS.length,8);
- assert.equal(new Set(ALL_NORMAL_RELICS.map(r=>r.id)).size,148);
- assert.equal(new Set(NORMAL_RELICS.map(r=>r.id)).size,140);
- assert.equal(new Set(NORMAL_RELICS.map(r=>r.name)).size,140);
- assert.equal(Object.keys(RELIC_MODE_NAMES).length,20);
- for(const tier of RELIC_RARITIES) assert.equal(NORMAL_RELICS.filter(r=>r.rarity===tier).length,20);
+ assert.equal(new Set(ALL_NORMAL_RELICS.map(r=>r.id)).size,183);
+ assert.equal(new Set(NORMAL_RELICS.map(r=>r.id)).size,175);
+ assert.equal(new Set(NORMAL_RELICS.map(r=>r.name)).size,175);
+ assert.equal(Object.keys(RELIC_MODE_NAMES).length,25);
+ for(const tier of RELIC_RARITIES) assert.equal(NORMAL_RELICS.filter(r=>r.rarity===tier).length,25);
  const checks=[1,2,3,4,5,6,7,8,9,10];
  for(const lvl of checks){
   const rates=rarityRatesForLevel(lvl);
@@ -194,7 +194,7 @@ test('meta-capable lower rarity, universal and specialist normal relics are effe
  const c=NORMAL_RELICS.find(r=>r.mode==='fortune'&&r.rarity==='rare')!;
  for(const def of [a,b,c]) x.relics!.items[def.id]={...def,origin:'normal',count:1};
  x.relics!.equipped=[a.id,b.id,c.id];
- assert.equal(NORMAL_RELICS.length,140);
+ assert.equal(NORMAL_RELICS.length,175);
  assert.equal(a.percent,8);
  assert.equal(b.percent,17);
  assert.equal(c.skill,'prime');
@@ -237,7 +237,7 @@ test('tactical triggers differentiate rarities instead of rewarding all amounts'
 
 
 test('short headlines say bonus KP percentage directly, and preserve ancient/transcendental identity',()=>{
- assert.equal(NORMAL_RELICS.length,140);
+ assert.equal(NORMAL_RELICS.length,175);
  assert.ok(NORMAL_RELICS.every(x=>x.short.includes('KP報酬＋')&&x.short.includes('%')));
  const mastery=NORMAL_RELICS.find(x=>x.mode==='competitive'&&x.rarity==='ancient')!;
  assert.match(mastery.short,/勝利・達成時：KP報酬＋9%/);
@@ -416,4 +416,19 @@ test('four compatible Spike relics stack opening bonuses; empty slots and other 
  assert.ok(early.bonus>evaluateRelicBonus(coll,'spikerush',{amount:40,win:true}).bonus);
  assert.equal(evaluateRelicBonus(undefined,'spikerush',{amount:40,win:true,spikeGamesBefore:0}).bonus,0);
  assert.equal(evaluateRelicBonus(coll,'competitive',{amount:40,win:true,spikeGamesBefore:0}).spikeOpening,undefined);
+});
+
+test('2026-11-03: 雀魂・ユナイト・Steam・KESO LOOP・デスマッチ一発勝負にも7レアずつ遺物があり、既存のIDは変わらない',()=>{
+ for(const mode of ['mahjong','unite','steam','loop','dmchallenge']){
+  const items=NORMAL_RELICS.filter(r=>r.mode===mode);
+  assert.deepEqual(items.map(r=>r.rarity),[...RELIC_RARITIES],mode);
+  assert.ok(items.every(r=>r.id===`normal.${mode}.${r.rarity}`));
+ }
+ assert.ok(NORMAL_RELICS.some(r=>r.id==='normal.copper'),'legacy ids stay');
+ const own=(id:string)=>{const def=NORMAL_RELICS.find(r=>r.id===id)!;return {totalSummons:1,equipped:[id],items:{[id]:{...def,origin:'normal' as const,count:1}}} as unknown as RelicCollection;};
+ assert.ok(evaluateRelicBonus(own('normal.mahjong.transcendent'),'mahjong',{amount:600,win:true}).bonus>0,'a 雀魂 relic works on 雀魂');
+ assert.equal(evaluateRelicBonus(own('normal.mahjong.transcendent'),'competitive',{amount:600,win:true}).bonus,0,'and not elsewhere');
+ assert.ok(evaluateRelicBonus(own('normal.loop.legendary'),'loop',{amount:50000,win:true}).bonus>0,'LOOP milestones (multiples of 25) trigger the quarter skill');
+ assert.ok(evaluateRelicBonus(own('normal.dmchallenge.mythic'),'dmchallenge',{amount:5000,win:true}).bonus>0);
+ assert.ok(evaluateRelicBonus(own('normal.universal.common'),'unite',{amount:200,win:true}).bonus>0,'universal relics also cover the new games');
 });

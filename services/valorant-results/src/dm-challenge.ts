@@ -2,6 +2,7 @@ import type {KpEnv} from './kp.ts';
 import {kpEventId,kpMatchNet} from './kp.ts';
 import type {Match} from './results.ts';
 import {enqueue,ensurePosts} from './racing-posts.ts';
+import {creditVerifiedRelicBonus} from './relics.ts';
 
 export const DM_CHALLENGE_PRIZE=5000;
 export const DM_CHALLENGE_POLICY='dm-daily-40k-v1';
@@ -87,6 +88,8 @@ export async function settleDmMatch(env:KpEnv,input:{guild:string;user:string;pu
     ON CONFLICT DO NOTHING`)
     .bind(id,guild,user,puuid,day,raw.metadata.match_id,start,award,now,guild,user,puuid,day,start,id).run();
   if(claim.meta.changes){
+   // Equipped デスマッチ一発勝負 relics add to a won challenge, once (relic:<event id>).
+   if(award)try{await creditVerifiedRelicBonus(env,guild,user,id,'dmchallenge',award,true,now);}catch{console.warn('relic_dm_bonus_pending');}
    if(award){try{
     await ensurePosts(env);
     await enqueue(env,'dm-win:'+id,`🎯🏆 <@${user}> がデスマッチの**1日1回の一発勝負**を制覇！ **40キル・1位で +5,000 KP**！`,now);

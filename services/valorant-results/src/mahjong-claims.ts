@@ -7,6 +7,14 @@ import type {KpEnv,KpMapping} from './kp.ts';
 import {ensureQuizKp} from './quiz-kp.ts';
 import type {PaipuSummary} from './mahjong-summary.ts';
 import {borrowedBy,debtNote,ensureDebt} from './kp-debt.ts';
+import {creditVerifiedRelicBonus} from './relics.ts';
+/** Equipped 雀魂 relics add to an approved, positive result (once per claim; a 1st place counts as a win). */
+async function mahjongRelic(env:KpEnv,guild:string,id:string){
+ try{
+  const c=await env.DB.prepare("SELECT user,amount,rank,decided_at AS at FROM kp_mahjong_claims WHERE guild=? AND id=? AND status='approved'").bind(guild,id).first<{user:string;amount:number;rank:number;at:number}>();
+  if(c&&c.amount>0)await creditVerifiedRelicBonus(env,guild,c.user,'mahjong:'+id,'mahjong',c.amount,c.rank===1,c.at);
+ }catch{console.warn('relic_mahjong_bonus_pending');}
+}
 type Game=keyof typeof policy.games;
 interface Claim {id:string;user:string;paipu:string;link:string;game:Game;rank:number;amount:number;status:'pending'|'approved'|'rejected';decider:string|null;at:number}
 interface PaifuInteraction {id:string;guild_id?:string;member?:{user?:{id:string}};data?:{name?:string;custom_id?:string;options?:Array<{name:string;value?:unknown}>}}
@@ -117,6 +125,7 @@ export async function decidePaifu(env:KpEnv,interaction:PaifuInteraction,overrid
   .bind(approve?'approved':'rejected',user,now,check?.game??claim.game,check?.amount??claim.amount,mapping.guildId,claim.id,now-EXPIRES,...(approve?[user]:[])).run();
  const after=(await read(env,mapping.guildId,claim.id))!;
  // A member's approval of a fetched paipu also teaches which game account is this person's.
+ if(after.status==='approved'&&claim.status==='pending')await mahjongRelic(env,mapping.guildId,claim.id);
  if(after.status==='approved'&&check?.account)await env.DB.prepare('INSERT OR IGNORE INTO kp_mahjong_links(guild,user,account) VALUES(?,?,?)').bind(mapping.guildId,claim.user,check.account).run();
  return renderClaim(after,now);
 }
@@ -154,6 +163,7 @@ export async function settleClaim(env:KpEnv,guild:string,c:Pick<Claim,'id'|'user
  if('refuse' in check)return `⚠️ <@${c.user}> の${c.rank}位申請：${check.refuse}`;
  if(check.auto){
   const done=await env.DB.prepare(`UPDATE kp_mahjong_claims SET status='approved',decider='paipu',decided_at=?,game=?,amount=? WHERE guild=? AND id=? AND status='pending'`).bind(now,check.game,check.amount,guild,c.id).run();
+  if(done.meta.changes)await mahjongRelic(env,guild,c.id);
   return done.meta.changes?`✅ <@${c.user}> ${c.rank}位を牌譜で確認。${signed(await paid(env,c.id))}${debtNote(await borrowedBy(env,'mahjong:'+c.id))}`:null;
  }
  await env.DB.prepare(`UPDATE kp_mahjong_claims SET game=?,amount=? WHERE guild=? AND id=? AND status='pending'`).bind(check.game,check.amount,guild,c.id).run();
@@ -177,7 +187,7 @@ export async function autoCredit(env:KpEnv,guild:string,summary:PaipuSummary,now
     .bind(id,guild,link.user,summary.uuid,'https://game.mahjongsoul.com/index.html?paipu='+summary.uuid,game,seat.rank,amount,jstDay(summary.end||now),now),
   ]);
   const done=await env.DB.prepare(`UPDATE kp_mahjong_claims SET status='approved',decider='paipu',decided_at=? WHERE guild=? AND id=? AND status='pending'`).bind(now,guild,id).run();
-  if(done.meta.changes){const moved=await paid(env,id);lines.push(`${moved<0||stake(game,seat.rank)<0?'💸':'✅'} <@${link.user}> ${seat.rank}位 ${signed(moved)}（牌譜から自動）${note}${debtNote(await borrowedBy(env,'mahjong:'+id))}`);}
+  if(done.meta.changes){await mahjongRelic(env,guild,id);const moved=await paid(env,id);lines.push(`${moved<0||stake(game,seat.rank)<0?'💸':'✅'} <@${link.user}> ${seat.rank}位 ${signed(moved)}（牌譜から自動）${note}${debtNote(await borrowedBy(env,'mahjong:'+id))}`);}
  }
  return lines;
 }

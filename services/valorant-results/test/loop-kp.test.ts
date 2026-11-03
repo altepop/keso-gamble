@@ -90,3 +90,15 @@ test('ledger failure rolls back the event and account creation, and a retry can 
  await assert.rejects(receiveLoopKp(await request(event()),f.env,mapping));assert.equal(f.sql.prepare('SELECT count(*) AS n FROM kp_loop_events').get()!.n,0);assert.equal(f.sql.prepare('SELECT count(*) AS n FROM kp_wallets').get()!.n,0);
  f.sql.exec('DROP TRIGGER reject_loop');assert.equal((await receiveLoopKp(await request(event()),f.env,mapping)).status,200);assert.equal(balance(f.sql),50000);
 });
+test('an equipped KESO LOOP relic adds to the milestone once; a resend adds nothing more',async()=>{
+ const {NORMAL_RELIC_BY_ID}=await import('../src/relic-catalog.ts');
+ const f=fixture();const def=NORMAL_RELIC_BY_ID.get('normal.loop.legendary')!;
+ f.sql.prepare('INSERT INTO kp_wallets(guild,user) VALUES(?,?)').run(guild,user);
+ f.sql.prepare('INSERT INTO kp_state(guild,user,data) VALUES(?,?,?)').run(guild,user,JSON.stringify({cash:0,relics:{totalSummons:1,equipped:[def.id],items:{[def.id]:{...def,origin:'normal',count:1}}}}));
+ assert.equal((await receiveLoopKp(await request(event()),f.env,mapping)).status,200);
+ const relic=Number(f.sql.prepare("SELECT COALESCE(SUM(delta),0) n FROM kp_ledger WHERE kind='relic'").get()!.n);
+ assert.ok(relic>0,'50,000 is a multiple of 25: the legendary LOOP relic triggers');
+ assert.equal(balance(f.sql),50000+relic);
+ await receiveLoopKp(await request(event({evidenceId:'run_456'})),f.env,mapping);
+ assert.equal(balance(f.sql),50000+relic,'the same milestone pays its relic bonus only once');
+});
