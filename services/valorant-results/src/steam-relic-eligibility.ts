@@ -30,9 +30,10 @@ export function requireSteamRelicEligibility(proof:SteamRelicEvidence|null):Stea
 }
 /** Commit-time check closes the race with an external Steam credit arriving
  * between the first proof query and the idempotent KP operation insertion.
- * The CASE is short-circuited for all non-Steam actions. This SQL must be
- * included in the wallet-operation INSERT ... SELECT WHERE expression. */
-export const STEAM_RELIC_COMMIT_GUARD=` AND (?=0 OR (
+ * IMPORTANT: inject ONLY for action === relic-claim-steam. SQLite resolves
+ * table names at SQL prepare time, even if an OR branch is always true.
+ * Non-Steam actions must not reference optional Steam tables at all. */
+export const STEAM_RELIC_COMMIT_GUARD=` AND
  EXISTS(SELECT 1 FROM kp_steam_events e WHERE e.id=? AND e.guild=? AND e.user=? AND e.amount>0)
  AND NOT EXISTS(SELECT 1 FROM kp_steam_daily d WHERE d.guild=? AND d.user=? AND d.day=? AND d.amount>=5000)
-))`;
+`;
