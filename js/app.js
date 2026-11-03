@@ -1,7 +1,7 @@
 import {stockOrderQuote,STOCK_ORDER_VERSION,STOCK_PRICE_SCALE} from './stock-order.js?v=web-c26e3116d1c9b64f';
 import {steamConnectionMessage} from './steam-view.js?v=web-c26e3116d1c9b64f';
 import {relicsPanel} from './relics-view.js?v=web-c26e3116d1c9b64f';
-import {relicSoundEnabled,primeRelicAudio,playRelicSound,toggleRelicSound} from './relics-audio.js?v=web-c26e3116d1c9b64f';
+import {primeRelicAudio,playRelicSound,previewRelicSound,stopRelicSound,setRelicSoundVolume,toggleRelicSound} from './relics-audio.js';
 import {relicDefaultView} from './relics-v4.js?v=web-c26e3116d1c9b64f';
 import {privateCasinoPanel} from './private-casino-view.js?v=web-c26e3116d1c9b64f';
 import {communityPanel,communityRows} from './community-feed.js?v=web-c26e3116d1c9b64f';
@@ -439,6 +439,15 @@ addEventListener('click',trendDay);
 addEventListener('pointermove',e=>{if(e.pointerType==='mouse')trendDay(e);});
 // Client-only filter state; no D1 requests for typing or paging.
 for(const eventName of ['input','change'])addEventListener(eventName,e=>{
+ const audioVolume=e.target.closest?.('[data-relic-sound-volume]');
+ if(audioVolume&&screen==='relics'){
+  if(eventName==='input'){
+   const n=setRelicSoundVolume(audioVolume.value);
+   const output=document.querySelector('#relic-v9-volume-value');
+   if(output)output.textContent=n+'%';
+  }
+  return;
+ }
  const preview=e.target.closest?.('[data-relic-preview]');
  if(preview&&screen==='relics'&&eventName==='change'){
   const key=preview.dataset.relicPreview;
@@ -497,9 +506,16 @@ addEventListener('click',async e=>{
     if(t.dataset.action==='relic-sound-toggle'){
       toggleRelicSound();render();return;
     }
+    if(t.dataset.action==='relic-sound-preview'){
+      // No KP operation or D1 read. The trusted preview tap also unlocks iOS sound.
+      if(!primeRelicAudio()){toast('効果音をオンにして音量を上げてください。');return;}
+      if(!previewRelicSound(t.dataset.tier))toast('音声の自動再生が制限された場合は、もう一度試聴をタップしてください。');
+      return;
+    }
     if(t.dataset.action==='relic-reveal-skip'){
       const panel=app.querySelector('.relic-reveal');
       panel?.classList.add('relic-reveal-instant');
+      stopRelicSound();
       panel?.querySelector('[data-action="relic-reveal-close"]')?.focus();
       return;
     }
@@ -507,7 +523,7 @@ addEventListener('click',async e=>{
       primeRelicAudio();if(!playRelicSound(relicReveal))toast('端末の制限で音を再生できない場合がある。サウンド設定を確認してください。');
       return;
     }
-    if(t.dataset.action==='relic-reveal-close'){relicReveal=null;render();return;}
+    if(t.dataset.action==='relic-reveal-close'){stopRelicSound();relicReveal=null;render();return;}
     if(t.dataset.action==='relic-page'){relicView.page=Number(t.dataset.page)||0;render();document.querySelector('.relic-v8-viewbar')?.scrollIntoView({block:'start',behavior:'auto'});return;}
     if(t.dataset.action==='relic-replay'){
       const idx=Number(t.dataset.historyIndex);
@@ -640,7 +656,7 @@ addEventListener('click',async e=>{
       privateRacePreview=await wallet.privateRace();render();return;
     }
     if(t.dataset.action==='refresh-kp'){await refreshWallet(true);render();return;}
-    if(t.dataset.action==='disconnect-kp'){await wallet.disconnect();autoState=embedded?'paused':'idle';autoMessage='';live=false;trend=null;trendView={...trendView,error:'',focus:null,day:null};privateRacePreview=null;privateRoundMessage='';steamView=null;relicProofs=null;relicNotice='';relicReveal=null;relicView={...relicDefaultView(),previewMode:'competitive',previewAmount:500};connectionError='';state=store.state;screen='title';render();return;}
+    if(t.dataset.action==='disconnect-kp'){await wallet.disconnect();autoState=embedded?'paused':'idle';autoMessage='';live=false;trend=null;trendView={...trendView,error:'',focus:null,day:null};privateRacePreview=null;privateRoundMessage='';steamView=null;relicProofs=null;relicNotice='';stopRelicSound();relicReveal=null;relicView={...relicDefaultView(),previewMode:'competitive',previewAmount:500};connectionError='';state=store.state;screen='title';render();return;}
     if(t.dataset.casinoGame){if(spinLock){toast('抽選中は切り替えられません');return;}casinoGame=t.dataset.casinoGame;render();return;}
     if(t.dataset.screen){if(spinLock){toast('抽選中は画面を切り替えられません');return;}detail=null;pendingHorseSale=null;screen=t.dataset.screen;render();if(screen==='relics'&&live){relicLoading=true;render();try{relicProofs=await wallet.relics();}catch(error){relicNotice='実績データの取得に失敗した。'+(error.message??'');}finally{relicLoading=false;render();}}if(screen==='race')settleRaces();return;}
     if(t.dataset.action==='load-trend'){await loadTrend(Number(t.dataset.days));return;}
