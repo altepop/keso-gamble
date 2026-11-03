@@ -137,8 +137,14 @@ export async function drainKpInbox(env:KpEnv){
    env.DB.prepare(`INSERT INTO kp_events(id,guild,user,puuid,match,mode,outcome,amount,policy,at) SELECT ?,?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM kp_accounts WHERE guild=? AND puuid=? AND user=?) ON CONFLICT(id) DO NOTHING`).bind(e.id,e.guild,e.user,e.puuid,e.match,e.mode,e.outcome,e.amount,e.policy,Date.now(),e.guild,e.puuid,e.user),
    env.DB.prepare('INSERT OR IGNORE INTO kp_reward_notes(id,note) SELECT ?,? WHERE EXISTS(SELECT 1 FROM kp_events WHERE id=?)').bind(e.id,e.note??'',e.id),
   ]);
-  // Proven match receipt must be newly committed; retries or re-equipping never backpay.
-  if((settledRows[0]?.meta?.changes??0)>0 && e.amount>0)
+  // Spike Rush is exceptional: settleSpike's DB trigger inserts kp_events
+  // BEFORE the generic INSERT below, so changes===0 even on the FIRST
+  // legitimate match. That silently suppressed every Spike relic reward.
+  // For Spike allow an existing server-verified receipt on inbox replay;
+  // unique relic:<match-id> ledger key makes retries strictly idempotent.
+  // Already drained historical matches are NOT scanned or back-paid.
+  const realSpike=e.kind==='spikerush-growth'&&e.mode==='spikerush';
+  if(e.amount>0&&(realSpike||(settledRows[0]?.meta?.changes??0)>0))
    try { await creditVerifiedRelicBonus(env,e.guild,e.user,e.id,e.mode,e.amount,e.outcome==='win'); }
    catch { console.warn('relic_match_bonus_pending'); }
   // A big unrated lottery prize is announced once in 稼ぎch; the post never holds up the credit.
