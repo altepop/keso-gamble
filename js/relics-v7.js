@@ -19,15 +19,29 @@ export function relicBuildSection(proofs){
   '<p class="helper">'+h(d.sample)+ '。平均は実際のプレイ頻度や確率を予測したものではなく、指定した条件の試算値だ。</p>');
 }
 export function relicPresetsSection(collection,proofs){
- const presets=Array.isArray(proofs?.presets)?proofs.presets:[{id:'balanced',name:'バランス'},{id:'valorant',name:'VALORANT'},{id:'racing',name:'競馬'},{id:'casino',name:'カジノ'},{id:'market',name:'株式'},{id:'risk',name:'危険なビルド'}];
- return section('💾 装備プリセット',
-  '<p class="helper">現在の4枠を保存し、別のゲームに移るときにワンタップで復元できる。危険なビルドは自動装備されない。</p>'+
-  '<label class="relic-v7-field" for="relic-preset">保存先・呼び出すプリセット</label>'+
-  '<select class="select" id="relic-preset">'+presets.map(p=>'<option value="'+h(p.id)+'">'+h(p.name)+(collection?.presets?.[p.id]?' ✔ 保存済み':'')+'</option>').join('')+'</select>'+
-  '<div class="relic-v7-actions"><button type="button" class="action-btn" data-action="relic-save-preset">今の4枠を保存</button>'+
-  '<button type="button" class="action-btn primary" data-action="relic-load-preset">この編成に切替</button>'+
-  '<button type="button" class="action-btn" data-action="relic-remove-preset">保存を削除</button></div>');
+ const legacy={balanced:'バランス',valorant:'VALORANT',racing:'競馬',casino:'カジノ',market:'株式',risk:'危険なビルド'};
+ const fromState=Object.entries(collection?.presets??{}).filter(([,ids])=>Array.isArray(ids)).map(([id,ids])=>({
+  id,name:legacy[id]??id,equipped:ids.filter(Boolean).length,
+ }));
+ const presets=fromState.length?fromState:(Array.isArray(proofs?.presets)?proofs.presets:[]);
+ const selected=presets[0]?.id??'';
+ const choices=presets.map(p=>'<option value="'+h(p.id)+'">'+h(p.name)+'（'+Number(p.equipped??0)+'/4枠）</option>').join('');
+ const disabled=presets.length?'':' disabled';
+ return section('💾 自由に名前を付ける装備プリセット',
+  '<p class="helper">好きな名前で最大20件保存できる。同じ名前で保存すれば現在の4枠に上書きする。昔の6枠もそのまま読み込める。</p>'+
+  '<label class="relic-v7-field" for="relic-preset-name">新しく保存する名前・変更後の名前（24文字まで）</label>'+
+  '<input class="relic-v8-name-input" type="text" id="relic-preset-name" maxlength="48" autocomplete="off" placeholder="例：コンペ勝利100%狙い" aria-describedby="relic-preset-hint">'+
+  '<p id="relic-preset-hint" class="relic-v8-hint">装備の変更とは別に保存される。KPは消費しない。</p>'+
+  '<button type="button" class="action-btn primary relic-v8-save" data-action="relic-save-preset">この名前で新規保存／同名を上書き</button>'+
+  '<label class="relic-v7-field" for="relic-preset">保存済みプリセット　'+presets.length+'/20</label>'+
+  '<select class="select" id="relic-preset"'+disabled+'>'+ (choices||'<option value="">まだ保存なし</option>')+'</select>'+
+  '<div class="relic-v7-actions relic-v8-preset-actions">'+
+  '<button type="button" class="action-btn primary" data-action="relic-load-preset"'+disabled+'>この編成に切替</button>'+
+  '<button type="button" class="action-btn" data-action="relic-overwrite-preset"'+disabled+'>選択中に上書き</button>'+
+  '<button type="button" class="action-btn" data-action="relic-rename-preset"'+disabled+'>入力した名前に変更</button>'+
+  '<button type="button" class="action-btn danger" data-action="relic-remove-preset"'+disabled+'>この保存を削除</button></div>');
 }
+
 export function relicSummonHistorySection(collection){
  const history=Array.isArray(collection?.summonHistory)?collection.summonHistory:[];
  const entries=history.slice(0,30).map((x,i)=>{
