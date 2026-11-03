@@ -6,23 +6,23 @@ const owned=(...defs:(typeof NORMAL_RELICS)[number][]):RelicCollection=>({totalS
 
 test('new rarity modifications use independent deterministic chance and never reroll existing summons',()=>{
  const r=NORMAL_RELICS.find(x=>x.mode==='competitive'&&x.rarity==='common')!;
- const state:{cash:number;relics?:RelicCollection}={cash:1500,relics:owned(r)};
+ const state:{cash:number;relics?:RelicCollection}={cash:2500,relics:owned(r)};
  state.relics!.equipped=[];
- const rarityRolls=new Uint32Array(4);
- rarityRolls[0]=999999;rarityRolls[1]=0;rarityRolls[2]=999999;rarityRolls[3]=0;
- const variants=new Uint32Array([0,0,0xffffffff,0xffffffff]);
+ const rarityRolls=new Uint32Array(20);
+ for(let n=0;n<10;n++){rarityRolls[n*2]=999999;rarityRolls[n*2+1]=0;}
+ const variants=new Uint32Array(20).fill(0xffffffff);variants[0]=0;variants[1]=0;
  // Draw uses the caller's deterministic rarity and item slots, and independent variant bytes.
- const result=summonRelics(state,2,rarityRolls,variants);
- assert.equal(state.relics!.totalSummons,2);
- assert.equal(state.relics!.summonHistory?.[0]?.count,2);
+ const result=summonRelics(state,10,rarityRolls,variants);
+ assert.equal(state.relics!.totalSummons,10);
+ assert.equal(state.relics!.summonHistory?.[0]?.count,10);
  assert.equal(result.start,1);
- assert.equal(result.end,2);
- assert.equal(result.cost,400);
- assert.equal(state.cash,1100);
+ assert.equal(result.end,10);
+ assert.equal(result.cost,2000);
+ assert.equal(state.cash,500);
  assert.ok(result.mutations.length<=1);
  assert.ok(result.foils.length<=1);
  assert.equal(state.relics!.summonHistory?.length,1);
- assert.equal(result.summary.common,2);
+ assert.equal(result.summary.common,10);
 });
 test('summon history is bounded by 30 entries and retains rarest highlight for replay',()=>{
  const s:{cash:number;relics?:RelicCollection}={cash:10000};
@@ -55,8 +55,8 @@ test('building diagnosis is reproducible and never modifies KP or relics',()=>{
  assert.equal(JSON.stringify(state),before);
 });
 test('sets and curse reversal really modify payout, not just a label',()=>{
- const a=NORMAL_RELICS.find(x=>x.mode==='competitive'&&x.rarity==='rare')!;
- const b=NORMAL_RELICS.find(x=>x.mode==='competitive'&&x.rarity==='legendary')!;
+ const a=NORMAL_RELICS.find(x=>x.mode==='competitive'&&x.rarity==='mythic')!;
+ const b=NORMAL_RELICS.find(x=>x.mode==='competitive'&&x.rarity==='ancient')!;
  const c=owned(a,b);
  const x=evaluateRelicBonus(c,'competitive',{amount:307,win:true});
  assert.ok(x.sets.some(s=>s.name.includes('同系統の絆')));
