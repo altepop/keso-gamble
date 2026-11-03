@@ -698,3 +698,9 @@ body.esc-wheel-open{overflow:hidden!important}
 @keyframes relic-reward-appear{from{opacity:0;transform:translate(-50%,18px) scale(.88)}to{opacity:1;transform:translate(-50%,0) scale(1)}}
 @media(max-width:360px){.relic-v7-stats,.relic-v7-economy{grid-template-columns:1fr}.relic-v7-history-item{flex-direction:column}.relic-v7-history-item button{align-self:end}}
 @media(prefers-reduced-motion:reduce){.relic-kp-award{animation:none;transition:none}}
+
+.relic-holographic{border:2px solid #a7fff6!important;background:linear-gradient(112deg,#322d70,#1a5273,#423673,#23556c)!important;box-shadow:0 0 20px rgba(139,238,255,.48)!important}
+.relic-mutated .relic-card-title:before{content:"✴ ";color:#ffe58b}
+.relic-holographic .relic-v7-item-badges{background:linear-gradient(90deg,#473c7e,#265f79);border-color:#90f8f4}
+.relic-v7-extras{border:1px solid #ffdc89;border-radius:12px;background:linear-gradient(100deg,#4b275e,#215c73);padding:10px;margin:12px 0;display:grid;gap:8px}
+.relic-v7-extras strong{font-size:13px;color:#fff1af}
