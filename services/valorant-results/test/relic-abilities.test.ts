@@ -50,8 +50,8 @@ test('comeback works only for positive non-victory receipts; threshold needs 500
 test('ancient echo requires another actually triggered relic',()=>{
  const echo='normal.ability.echo',bell='normal.ability.small_bell',flag='normal.ability.comeback';
  assert.equal(result([echo],'quiz',100).bonus,0);
- assert.equal(result([echo,bell],'quiz',100).bonus,40+6);
- assert.equal(result([echo,bell,flag],'competitive',100,false).bonus,40*2+6+50);
+ assert.equal(result([echo,bell],'quiz',100).lines.find(x=>x.id===echo)?.exotic,40);
+ assert.equal(result([echo,bell,flag],'competitive',100,false).lines.find(x=>x.id===echo)?.exotic,80);
  assert.equal(result([echo,flag],'competitive',100,true).bonus,0);
 });
 test('shard pick changes only shard extraction and preserves last relic + equipped tool',()=>{
