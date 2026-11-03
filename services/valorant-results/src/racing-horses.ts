@@ -34,6 +34,7 @@ export async function ensureHorses(env:KpEnv){
   // The PK is by id; this covering seek stops full history scans for each horse.
   env.DB.prepare('CREATE INDEX IF NOT EXISTS kp_horse_runs_horse_recent ON kp_horse_runs(horse,race DESC,rank,win_odds,favourite)'),
   env.DB.prepare('CREATE TABLE IF NOT EXISTS kp_horse_results(id TEXT PRIMARY KEY,guild TEXT NOT NULL,race INTEGER NOT NULL,horse TEXT NOT NULL,owner TEXT NOT NULL,rank INTEGER NOT NULL,prize INTEGER NOT NULL CHECK(typeof(prize)=\'integer\' AND prize>=0),at INTEGER NOT NULL,UNIQUE(guild,race,horse))'),
+  env.DB.prepare('CREATE INDEX IF NOT EXISTS kp_horse_results_horse_count ON kp_horse_results(guild,horse,rank,race,prize)'),
   // A prize credits the owner's wallet and updates the record in the same statement.
   env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS kp_horse_result_apply AFTER INSERT ON kp_horse_results BEGIN
    INSERT INTO kp_ledger(id,guild,user,delta,kind,at) SELECT 'prize:'||NEW.id,NEW.guild,NEW.owner,NEW.prize,'prize',NEW.at WHERE NEW.prize>0;
@@ -126,8 +127,13 @@ export async function settleHorsePrizes(env:KpEnv,mapping:KpMapping,now=Date.now
   .bind(mapping.guildId,from,before,mapping.guildId,from,before).all<{race:number}>()).results.map(r=>r.race);
  let paid=0;
  for(const race of races){
-  const seed=await env.DB.prepare('SELECT seed FROM kp_races WHERE guild=? AND id=?').bind(mapping.guildId,race).first<{seed:string}>();
-  if(!seed)continue;
+  let seed=await env.DB.prepare('SELECT seed FROM kp_races WHERE guild=? AND id=?').bind(mapping.guildId,race).first<{seed:string}>();
+  if(!seed){
+   // Historic cron fixed fields without seeds when nobody opened the Activity.
+   // raceSeed atomically INSERT OR IGNOREs one result for all competing workers.
+   const racing=await import('./racing-kp.ts');
+   seed=await racing.raceSeed(env,mapping.guildId,race);
+  }
   const entries=await raceEntries(env,mapping,race),card=raceCard(race,undefined,entries),order:number[]=raceResult(card,seed.seed).order;
   const sold=new Map((await env.DB.prepare('SELECT id,sold_at FROM kp_horses WHERE guild=? AND sold_at IS NOT NULL').bind(mapping.guildId).all<{id:string;sold_at:number}>()).results.map(r=>[r.id,r.sold_at]));
   const odds=raceOdds(card),favourite=card.horses.map((h:{number:number})=>h.number).sort((a:number,b:number)=>odds.winProb[b]-odds.winProb[a])[0];
@@ -144,8 +150,42 @@ export async function settleHorsePrizes(env:KpEnv,mapping:KpMapping,now=Date.now
  }
  return paid;
 }
+/** Repair counter gaps from provable result receipts, not by replaying KP payouts.
+ * This is a bounded owner-only indexed read; no full-guild scan or writes on
+ * healthy horses. MAX guards all existing counters against double counting. */
+export async function repairRecordedHorseStats(env:KpEnv,mapping:KpMapping,user:string){
+ await ensureHorses(env);
+ const sql=`SELECT h.id,COUNT(r.id) AS races,
+  SUM(CASE WHEN r.rank=1 THEN 1 ELSE 0 END) AS wins,
+  SUM(CASE WHEN r.rank=2 THEN 1 ELSE 0 END) AS seconds,
+  SUM(CASE WHEN r.rank=3 THEN 1 ELSE 0 END) AS thirds,
+  SUM(r.prize) AS earnings,MAX(r.race) AS lastRace
+  FROM kp_horses h JOIN kp_horse_results r ON r.guild=h.guild AND r.horse=h.id
+  WHERE h.guild=? AND h.owner=? AND h.sold_at IS NULL
+  GROUP BY h.id HAVING COUNT(r.id)>h.races OR
+   SUM(CASE WHEN r.rank=1 THEN 1 ELSE 0 END)>h.wins OR
+   SUM(CASE WHEN r.rank=2 THEN 1 ELSE 0 END)>h.seconds OR
+   SUM(CASE WHEN r.rank=3 THEN 1 ELSE 0 END)>h.thirds
+  LIMIT 30`;
+ const gaps=(await env.DB.prepare(sql).bind(mapping.guildId,user).all<{
+  id:string;races:number;wins:number;seconds:number;thirds:number;earnings:number;lastRace:number
+ }>()).results;
+ if(!gaps.length)return 0;
+ for(const gap of gaps){
+  const update=`UPDATE kp_horses SET
+   races=MAX(races,?),wins=MAX(wins,?),seconds=MAX(seconds,?),
+   thirds=MAX(thirds,?),earnings=MAX(earnings,?),
+   last_race=MAX(COALESCE(last_race,0),?),
+   retired_at=CASE WHEN retired_at IS NULL AND MAX(races,?)>=? THEN ? ELSE retired_at END
+   WHERE guild=? AND owner=? AND id=?`;
+  await env.DB.prepare(update).bind(gap.races,gap.wins,gap.seconds,gap.thirds,
+   gap.earnings,gap.lastRace,gap.races,RETIRE_RACES,Date.now(),mapping.guildId,user,gap.id).run();
+ }
+ return gaps.length;
+}
 export async function ownedHorses(env:KpEnv,mapping:KpMapping,user:string){
  await ensureHorses(env);
+ await repairRecordedHorseStats(env,mapping,user);
  const rows=(await env.DB.prepare('SELECT id,name,grade,ability,style,box,price,created_at,races,wins,seconds,thirds,earnings,retired_at FROM kp_horses WHERE guild=? AND owner=? AND sold_at IS NULL ORDER BY retired_at IS NOT NULL,created_at DESC LIMIT 30').bind(mapping.guildId,user).all<Horse>()).results;
  const nick=await nicknames(env,rows);
  return rows.map(h=>({...h,nickname:nick.get(h.id)?.nickname??null,gradeLabel:CLASSES[h.grade].grade,sellValue:h.retired_at?0:sellValue(h.price,h.races),racesLeft:Math.max(0,RETIRE_RACES-h.races)}));
