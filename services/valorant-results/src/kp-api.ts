@@ -18,6 +18,7 @@ import {receiveLoopKp} from './loop-kp.ts';
 import {summonRelics,grantSteamRelic,grantUniteRelic,equipRelic,autoEquipRelics,saveRelicPreset,loadRelicPreset,removeRelicPreset,renameRelicPreset,listRelicPresets,diagnoseRelicBuild,nativeRelicBonus,evaluateRelicBonus,rarityRatesForLevel,summonLevel,SUMMON_MILESTONES,UNITE,UNITE_REQUIREMENTS,UNITE_STREAK_IDS,STEAM_RELIC_TIERS,type UniteRelicId} from './relics.ts';
 import {ALL_NORMAL_RELICS,RELIC_MODE_NAMES} from './relic-catalog.ts';
 import {verifiedCasinoProfit,verifiedStockProfit} from './relic-profit.ts';
+import {recycleNormalRelic,exchangeNormalRelic,exchangeMyHorseVoucher,SHARD_YIELDS,SHARD_PRICES,MY_HORSE_VOUCHER_PRICE} from './relic-exchange.ts';
 import {STEAM_RELIC_PROOF_SQL,STEAM_RELIC_LIST_SQL,STEAM_RELIC_COMMIT_GUARD,steamRelicDay,requireSteamRelicEligibility,type SteamRelicEvidence} from './steam-relic-eligibility.ts';
 import type {RelicCollection,RelicItem} from './relics.ts';
 import {ensureQuizKp,receiveQuizKp,isKpParticipant,quizKpRates,quizKpLimits} from './quiz-kp.ts';
@@ -164,7 +165,7 @@ export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:strin
   const state=await readKpState(env,mapping,user),before=state.cash;let result:unknown;let directive:Record<string,unknown>|null=null;let stockTrade:Record<string,unknown>|undefined;
   // 借KP: no bet or purchase at all while any is owed, decided before any draw. Checking the result instead would let a
   // winning roll through and refuse only the losing one. Selling, finishing a blackjack hand and settings stay open.
-  const settles=['horse-sell','roast-level','bj-hit','bj-stand','mines-pick','mines-cashout','vp-draw','relic-equip','relic-auto-equip','relic-claim-steam','relic-claim-unite','relic-save-preset','relic-overwrite-preset','relic-load-preset','relic-remove-preset','relic-rename-preset'].includes(action)||(action==='trade'&&args.side==='sell');
+  const settles=['horse-sell','roast-level','bj-hit','bj-stand','mines-pick','mines-cashout','vp-draw','relic-equip','relic-auto-equip','relic-claim-steam','relic-claim-unite','relic-save-preset','relic-overwrite-preset','relic-load-preset','relic-remove-preset','relic-rename-preset','relic-recycle','relic-shop','relic-voucher'].includes(action)||(action==='trade'&&args.side==='sell');
   if(!settles&&await debtOf(env,mapping.guildId,user)>0)throw Error(DEBT_BLOCKED);
   if(ownerRound){const round=privateCasinoRound(state,args);action=round.action;args=round.args;result=round.result;}
   else if(action==='trade'){const order=applyStockOrder(state,args);result=order.result;stockTrade=order.stockTrade;}
@@ -210,6 +211,9 @@ export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:strin
   else if(action==='vp-draw')result=vpDraw(state,args.hold,cryptoInt);
   else if(action==='baccarat')result=playBaccarat(state,args.amount,args.side,cryptoCard);
   else if(action==='relic-summon') result=summonRelics(state,Number(args.count));
+  else if(action==='relic-recycle') result=recycleNormalRelic(state,String(args.relic??''),Number(args.count));
+  else if(action==='relic-shop') result=exchangeNormalRelic(state,String(args.relic??''));
+  else if(action==='relic-voucher') result=exchangeMyHorseVoucher(state);
   else if(action==='relic-equip') result=equipRelic(state,String(args.relic??''),Number(args.slot));
   else if(action==='relic-auto-equip') result=autoEquipRelics(state,String(args.goal??'all'));
   else if(action==='relic-save-preset'||action==='relic-overwrite-preset') result=saveRelicPreset(state,String(args.preset??''));
@@ -427,7 +431,7 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping,deferP
    })));
    return response({price:200,steam,unite:Object.entries(UNITE).map(([id,d])=>({id,name:d.name,power:d.power,condition:id.startsWith('unite.career_')?'累計'+d.wins+'勝':d.wins+'連勝'})),steamTiers:STEAM_RELIC_TIERS,level,
     rates:rarityRatesForLevel(level),maxRates:rarityRatesForLevel(10),ratesByLevel:Array.from({length:10},(_,i)=>rarityRatesForLevel(i+1)),
-    modeNames:RELIC_MODE_NAMES,catalog:ALL_NORMAL_RELICS,milestones:SUMMON_MILESTONES,previews,spikeGamesBefore,diagnosis,externalLogs:logs,presets:listRelicPresets(ownedState.relics),economy:personalEconomy,lastNativeEffect:ownedState.relics?.lastNativeEffect??null,nativeRemaining:null});
+    modeNames:RELIC_MODE_NAMES,catalog:ALL_NORMAL_RELICS,exchange:{yields:SHARD_YIELDS,prices:SHARD_PRICES,horseVoucherPrice:MY_HORSE_VOUCHER_PRICE},milestones:SUMMON_MILESTONES,previews,spikeGamesBefore,diagnosis,externalLogs:logs,presets:listRelicPresets(ownedState.relics),economy:personalEconomy,lastNativeEffect:ownedState.relics?.lastNativeEffect??null,nativeRemaining:null});
   }
   if(request.method==='GET'&&path==='/api/kp/state')return response(await readKpState(env,mapping,owner.user));
   // 監視状態: members only, aggregates only.
