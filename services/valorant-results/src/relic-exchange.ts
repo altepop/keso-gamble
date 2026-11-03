@@ -73,6 +73,6 @@ export function spendMyHorseVoucher(state:{relics?:RelicCollection},box:string){
  if(box!=='normal')throw Error('My馬引換券はノーマルボックス専用です。');
  const c=relicCollection(state);assertBalance(c);
  if(!(c.horseVouchers??0))throw Error('My馬引換券がありません。');
- c.horseVouchers!--;
+ c.horseVouchers=(c.horseVouchers??0)-1;
  return {horseVouchers:c.horseVouchers};
 }
