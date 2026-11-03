@@ -162,7 +162,7 @@ export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:strin
   const state=await readKpState(env,mapping,user),before=state.cash;let result:unknown;let directive:Record<string,unknown>|null=null;let stockTrade:Record<string,unknown>|undefined;
   // 借KP: no bet or purchase at all while any is owed, decided before any draw. Checking the result instead would let a
   // winning roll through and refuse only the losing one. Selling, finishing a blackjack hand and settings stay open.
-  const settles=['horse-sell','roast-level','bj-hit','bj-stand','mines-pick','mines-cashout','vp-draw','relic-equip','relic-auto-equip','relic-claim-steam','relic-claim-unite','relic-save-preset','relic-load-preset','relic-remove-preset','relic-rename-preset'].includes(action)||(action==='trade'&&args.side==='sell');
+  const settles=['horse-sell','roast-level','bj-hit','bj-stand','mines-pick','mines-cashout','vp-draw','relic-equip','relic-auto-equip','relic-claim-steam','relic-claim-unite','relic-save-preset','relic-overwrite-preset','relic-load-preset','relic-remove-preset','relic-rename-preset'].includes(action)||(action==='trade'&&args.side==='sell');
   if(!settles&&await debtOf(env,mapping.guildId,user)>0)throw Error(DEBT_BLOCKED);
   if(ownerRound){const round=privateCasinoRound(state,args);action=round.action;args=round.args;result=round.result;}
   else if(action==='trade'){const order=applyStockOrder(state,args);result=order.result;stockTrade=order.stockTrade;}
@@ -210,7 +210,7 @@ export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:strin
   else if(action==='relic-summon') result=summonRelics(state,Number(args.count));
   else if(action==='relic-equip') result=equipRelic(state,String(args.relic??''),Number(args.slot));
   else if(action==='relic-auto-equip') result=autoEquipRelics(state,String(args.goal??'all'));
-  else if(action==='relic-save-preset') result=saveRelicPreset(state,String(args.preset??''));
+  else if(action==='relic-save-preset'||action==='relic-overwrite-preset') result=saveRelicPreset(state,String(args.preset??''));
   else if(action==='relic-load-preset') result=loadRelicPreset(state,String(args.preset??''));
   else if(action==='relic-remove-preset') result=removeRelicPreset(state,String(args.preset??''));
   else if(action==='relic-rename-preset') result=renameRelicPreset(state,String(args.preset??''),String(args.newName??''));
