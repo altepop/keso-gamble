@@ -86,7 +86,7 @@ test('24時間の優待が指名と高級品に適用され、再送・残高不
  assert.equal((await readKpState(f.env,mapping,one)).stockBenefits.percent,0);
  t.mock.timers.tick(DAY+1);const s=await readKpState(f.env,mapping,one);assert.equal(s.stockBenefits.percent,5);
  const before=f.cash();const r=await operateKp(f.env,mapping,one,'benefit-directive-one','directive',{target:two,task:'competitive'}) as {result:{discount:{paid:number}}};
- assert.equal(r.result.discount.paid,38000);assert.equal(f.cash(),before-38000);await operateKp(f.env,mapping,one,'benefit-directive-one','directive',{target:two,task:'competitive'});assert.equal(f.cash(),before-7600);
+ assert.equal(r.result.discount.paid,38000);assert.equal(f.cash(),before-38000);await operateKp(f.env,mapping,one,'benefit-directive-one','directive',{target:two,task:'competitive'});assert.equal(f.cash(),before-38000);
  const luxury=await operateKp(f.env,mapping,one,'benefit-luxury-title-1','luxury',{item:'title',title:'KP長者'}) as {result:{discount:{paid:number}}};assert.equal(luxury.result.discount.paid,19000);
  assert.deepEqual(stockDiscount(2000000,5),{base:2000000,percent:5,saved:2000,paid:1998000});assert.throws(()=>stockDiscount(100,50));
 });
