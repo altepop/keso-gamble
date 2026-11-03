@@ -23,7 +23,7 @@ export {VoiceGateway} from './voice-gateway.ts';
 import {ensureVoice} from './voice-api.ts';
 import { claimDeathMatch } from './death-sessions.ts';
 import type { KpRun } from './kp.ts';
-import { initializeKp, syncKpAccounts, collectKpMatch, drainKpInbox, flushKpDirectives, prepareKpRun, loadKpRunMatch, kpEventId, kpCreditLine } from './kp.ts';
+import { initializeKp, syncKpAccounts, collectKpMatch, drainKpInbox, flushKpDirectives, prepareKpRun, loadKpRunMatch, kpEventId, kpCreditLine, kpRelicBonus } from './kp.ts';
 import { kpApi } from './kp-api.ts';
 import { raceSeed,settleKpRaces } from './racing-kp.ts';
 import { queueRacePosts, flushRacePosts, enqueue, ensurePosts } from './racing-posts.ts';
@@ -186,7 +186,15 @@ async function saveMatch(env: Env, match: Match, player: Player, account: Accoun
       const amount = kpRun.credits.get(kpId) ?? await collectKpMatch(env,kpRun.mapping,match,account.puuid);
       if (amount !== null) {
         kpRun.credits.set(kpId,amount);
-        result.message=kpCreditLine(result.message,amount,mode==='spikerush'?await spikeNote(env,kpId):(kpRun.notes?.get(kpId)??await readModeNote(env,kpId)));
+        // Existing events already have the relic delta in loadKpRunMatch.
+        // A brand-new credit has no preloaded event: fetch its receipt once
+        // by primary key AFTER settlement and reuse within this monitor run.
+        let relic=kpRun.relicBonuses.get(kpId);
+        if(relic===undefined){
+          relic=await kpRelicBonus(env,kpRun.mapping.guildId,kpRun.mapping.accounts.find(a=>a.riotId===player.riotId)?.discordUserId??'',kpId);
+          kpRun.relicBonuses.set(kpId,relic);
+        }
+        result.message=kpCreditLine(result.message,amount,mode==='spikerush'?await spikeNote(env,kpId):(kpRun.notes?.get(kpId)??await readModeNote(env,kpId)),relic);
         kpActive=kpRun.messages.get(kpId)!==result.message;
       }
     }
