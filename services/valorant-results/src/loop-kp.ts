@@ -1,6 +1,7 @@
 import {ensureQuizKp} from './quiz-kp.ts';
 import {newKpState} from './kp.ts';
 import type {KpEnv,KpMapping} from './kp.ts';
+import {creditVerifiedRelicBonus} from './relics.ts';
 
 // Deliberately unavailable until LOOP verifies identity and game progress on its server.
 // Configuration belongs on the receiving Worker, never in the browser or event payload.
@@ -57,5 +58,7 @@ export async function receiveLoopKp(request:Request,env:KpEnv,mapping:KpMapping)
   env.DB.prepare('INSERT INTO kp_loop_events VALUES(?,?,?,?,?,?,?) ON CONFLICT(guild,user,milestone) DO NOTHING').bind(id,mapping.guildId,e.discordUserId,e.milestone,e.evidenceId,LOOP_FIXED_REWARDS[e.milestone]??config.rates[e.milestone],e.completedAt),
  ]);
  const saved=await env.DB.prepare('SELECT amount FROM kp_loop_events WHERE id=?').bind(id).first<{amount:number}>();
+ // Equipped KESO LOOP relics add to the milestone once (a resend finds the same relic:<id> ledger row).
+ if(Number(saved?.amount)>0)try{await creditVerifiedRelicBonus(env,mapping.guildId,e.discordUserId,id,'loop',Number(saved!.amount),true,e.completedAt);}catch{console.warn('relic_loop_bonus_pending');}
  return response({accepted:true,id,amount:saved!.amount});
 }

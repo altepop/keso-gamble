@@ -1,6 +1,7 @@
 import rules from '../mode-rewards.json' with {type:'json'};
 import {applyLuck,luckFor,luckLabel} from './luck.ts';
 import type {KpEnv} from './kp.ts';
+import {creditVerifiedRelicBonus} from './relics.ts';
 /** Only public, individually verified rank-match stats grant a performance bonus. */
 export interface UnitePerformance {
  pokemon?:string;rockBuild?:boolean;ko:number;ast:number;int?:number;ours:number;theirs:number;dmg?:string;heal:string;tkn:string;surrendered:boolean;
@@ -79,7 +80,12 @@ export async function settleUnite(env:KpEnv,input:{id:string;guild:string;uid:st
   const result=await env.DB.prepare(`INSERT INTO unite_rewards(id,guild,uid,user,fingerprint,win,base,net,wins,losses,note,expected_version,at)
    SELECT ?,?,?,?,?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM unite_streaks WHERE guild=? AND uid=? AND user=? AND version=?) ON CONFLICT(id) DO NOTHING`)
    .bind(input.id,input.guild,input.uid,input.user,input.fingerprint,Number(input.win),q.base,q.net,q.wins,q.losses,q.note,p.version,input.now,input.guild,input.uid,input.user,p.version).run();
-  if(result.meta.changes){const r=await env.DB.prepare('SELECT delta FROM kp_ledger WHERE id=?').bind(input.id).first<{delta:number}>();return {note:q.note,delta:Number(r?.delta??0)};}
+  if(result.meta.changes){
+   const r=await env.DB.prepare('SELECT delta FROM kp_ledger WHERE id=?').bind(input.id).first<{delta:number}>(),delta=Number(r?.delta??0);
+   // Equipped ユナイト relics add to a newly settled, positive result (once per game).
+   if(delta>0)try{await creditVerifiedRelicBonus(env,input.guild,input.user,input.id,'unite',delta,input.win,input.now);}catch{console.warn('relic_unite_bonus_pending');}
+   return {note:q.note,delta};
+  }
  }
  throw Error('Unite concurrent settlement');
 }

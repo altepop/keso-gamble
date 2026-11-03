@@ -419,9 +419,10 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping,deferP
     summonSpent:(ownedState.relics?.totalSummons??0)*200,
     mutationCount:ownedState.relics?.mutatedCount??0,foilCount:ownedState.relics?.foilCount??0,
     guild:{players:guildEconomy?.players??0,verifiedTotal:guildEconomy?.total??0,verifiedCount:guildEconomy?.n??0}};
-   const previewModes=['competitive','unrated','swiftplay','spikerush','teamdeathmatch','escalation','deathmatch','skirmish','racing','casino','market','mleague','quiz','voice'];
+   const previewModes=['competitive','unrated','swiftplay','spikerush','teamdeathmatch','escalation','deathmatch','skirmish','racing','casino','market','mleague','quiz','voice','mahjong','unite','steam','loop','dmchallenge'];
+   const previewAmounts=(mode:string)=>mode==='spikerush'?[20,40,100,500]:mode==='loop'?[1000,50000,300000]:mode==='dmchallenge'?[5000]:[100,500,900,5000];
    // Computed from the exact same pure function as real KP payouts, with no extra DB queries.
-   const previews=previewModes.flatMap(mode=>(mode==='spikerush'?[20,40,100,500]:[100,500,900,5000]).map(amount=>({
+   const previews=previewModes.flatMap(mode=>previewAmounts(mode).map(amount=>({
     mode,amount,...evaluateRelicBonus(ownedState.relics as RelicCollection|undefined,mode,{amount,win:true,...mode==='spikerush'?{spikeGamesBefore}:{}},0)
    })));
    return response({price:200,steam,unite:Object.entries(UNITE).map(([id,d])=>({id,name:d.name,power:d.power,condition:id.startsWith('unite.career_')?'累計'+d.wins+'勝':d.wins+'連勝'})),steamTiers:STEAM_RELIC_TIERS,level,

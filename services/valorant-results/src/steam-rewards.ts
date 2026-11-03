@@ -1,6 +1,7 @@
 import defaults from '../steam-rewards.json' with {type:'json'};
 import {kpHash,kpRandom} from './kp.ts';
 import type {KpEnv} from './kp.ts';
+import {creditVerifiedRelicBonus} from './relics.ts';
 
 export const STEAM_MIN_PLAYTIME_MINUTES=120;
 export interface SteamConfig {version:string;dailyCap:number;minPlaytimeMinutes:number;paidGamesOnly:boolean;enabled:boolean;startsAt:number|null;tiers:Array<{maxPercent:number;amount:number}>}
@@ -143,6 +144,8 @@ export async function monitorSteam(env:SteamEnv,guild:string,send:typeof fetch=f
     const settledAt=clock();
     // The insert guard and ledger trigger share a transaction. Unlink/stop during an API call cancels credit.
     await env.DB.prepare(`INSERT INTO kp_steam_events SELECT ?,?,?,?,?,?,?,?,?,min(?,max(0,5000-COALESCE((SELECT amount FROM kp_steam_daily WHERE guild=? AND user=? AND day=?),0))),?,?,? WHERE EXISTS(SELECT 1 FROM kp_steam_games g JOIN kp_steam_accounts a ON a.guild=g.guild AND a.user=g.user WHERE g.guild=? AND g.user=? AND g.app=? AND g.active=1 AND a.active=1 AND a.steam=? AND g.lease=? AND g.lease_until>=?) ON CONFLICT(guild,steam,app,achievement) DO NOTHING`).bind(id,guild,job.user,a.steam,job.app,achievement.apiname,names.get(achievement.apiname)!,percent,steamAmount(c,percent),steamAmount(c,percent),guild,job.user,new Date(settledAt).toISOString().slice(0,10),c.version,achievement.unlocktime*1000,settledAt,guild,job.user,job.app,a.steam,lease,settledAt).run();paid.push(id);
+    // Equipped Steam relics add to a newly credited achievement (once per achievement; the daily cap still applies to the base).
+    try{const got=await env.DB.prepare('SELECT amount FROM kp_steam_events WHERE id=?').bind(id).first<{amount:number}>();if(Number(got?.amount)>0)await creditVerifiedRelicBonus(env,guild,job.user,id,'steam',Number(got!.amount),true,settledAt);}catch{console.warn('relic_steam_bonus_pending');}
    }
    await env.DB.prepare('UPDATE kp_steam_games SET next_at=?,last_checked=?,error=?,lease=NULL,lease_until=0 WHERE guild=? AND user=? AND app=? AND lease=?').bind(now+(incomplete?60000:15*60000),now,more?'batch_remaining':incomplete?'missing_or_pending':null,guild,job.user,job.app,lease).run();
   }else await env.DB.prepare('UPDATE kp_steam_games SET next_at=?,last_checked=?,error=NULL,lease=NULL,lease_until=0 WHERE guild=? AND user=? AND app=? AND lease=?').bind(now+15*60000,now,guild,job.user,job.app,lease).run();

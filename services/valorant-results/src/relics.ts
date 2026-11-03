@@ -172,6 +172,7 @@ const MODE_THRESHOLDS:Record<string,readonly [number,number]>={
  teamdeathmatch:[50,100],escalation:[50,150],deathmatch:[50,500],skirmish:[50,250],
  racing:[100,500],casino:[100,500],market:[50,200],mleague:[100,500],
  quiz:[30,100],voice:[10,15],
+ mahjong:[100,400],unite:[100,400],steam:[100,500],loop:[1000,50000],dmchallenge:[1000,5000],
 };
 const compatibleRelic=(sourceMode:string|undefined,mode:string)=>sourceMode===mode||
  sourceMode==='universal'||sourceMode==='fortune'||
@@ -508,7 +509,7 @@ export function equipRelic(state:{relics?:RelicCollection},id:string,slot:number
  * of client-side equip calls. No DB reads beyond the already loaded wallet state. */
 export function autoEquipRelics(state:{relics?:RelicCollection},goal:string='all'){
  const modes=['all','competitive','unrated','swiftplay','spikerush','teamdeathmatch','escalation',
-  'deathmatch','skirmish','racing','casino','market','mleague','quiz','voice'];
+  'deathmatch','skirmish','racing','casino','market','mleague','quiz','voice','mahjong','unite','steam','loop','dmchallenge'];
  if(!modes.includes(goal))throw Error('おまかせ装備の目的を選んでください。');
  const c=relicCollection(state),items=Object.values(c.items);
  const applicable=(i:RelicItem)=>{

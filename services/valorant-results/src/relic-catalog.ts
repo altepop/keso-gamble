@@ -21,7 +21,12 @@ export const RELIC_MODE_NAMES = {
   "marketplus": "株式・裏戦略",
   "racingplus": "競馬・裏戦略",
   "casinoplus": "カジノ・裏戦略",
-  "fortune": "特殊条件"
+  "fortune": "特殊条件",
+  "mahjong": "雀魂",
+  "unite": "ポケモンユナイト",
+  "steam": "Steam実績",
+  "loop": "KESO LOOP",
+  "dmchallenge": "デスマッチ一発勝負"
 } as const;
 export type RelicMode = keyof typeof RELIC_MODE_NAMES;
 export const RELIC_RARITIES = ['common','uncommon','rare','legendary','mythic','ancient','transcendent'] as const;
@@ -205,7 +210,13 @@ const names:ReadonlyArray<readonly [RelicMode,readonly string[]]> = [
   ["marketplus",["端数を拾う猫","急落待ちの蜘蛛","逆張りの鉄則","株価の七番目","薄利千金の短剣","市場閉鎖の前夜","価格の外側に立つ者"]],
   ["racingplus",["複勝拾いの蹄鉄","人気薄の笛","払戻しの仕掛け","七番人気の魔符","馬券師の罠","万馬券への片道切符","砂塵の勝利法則"]],
   ["casinoplus",["一枚のチップ","傷んだジョーカー","偶数の銀盃","七の目の契約","低配当の怪物","大勝の先読み","悪魔の取り分"]],
-  ["fortune",["七秒の砂時計","細い勝ち筋","敗者の宝石","端数の魔導書","薄氷の勝利札","奇数の支配者","確率の裏口"]]
+  ["fortune",["七秒の砂時計","細い勝ち筋","敗者の宝石","端数の魔導書","薄氷の勝利札","奇数の支配者","確率の裏口"]],
+  // 2026-11-03: games whose KP had no relic yet (owner's request). Appended so every older id stays the same.
+  ["mahjong",["白の安牌","七対子の栞","裏ドラの鏡","跳満の算盤","役満の龍珠","天和の門","九蓮宝燈の玉座"]],
+  ["unite",["野生のきのみ","ゴールの合図旗","ユナイト技の欠片","ラストヒットの爪","ゴールラッシュの冠","伝説の守り札","覇王のユナイトバッジ"]],
+  ["steam",["埃をかぶったセーブデータ","初見クリアの付箋","実績解除の鈴","完全攻略の地図","レア実績の金枠","プラチナの記章","全実績の聖杯"]],
+  ["loop",["ループの砂粒","巻き戻しの懐中時計","既視感の手帳","輪廻の羅針盤","永劫の砂時計","終わらない夜の鍵","円環の理"]],
+  ["dmchallenge",["一発勝負の弾丸","背水のホルスター","四十殺しの刻印","孤高のスコープ","頂点の弾帯","単騎無双の兜","一騎当千の冠"]]
 ];
 const power=[10,24,55,110,180,260,350];
 /** Each tier is a different standalone passive, not a generic +KP% stat.
@@ -402,6 +413,11 @@ const TACTICAL_SKILLS:Readonly<Record<RelicMode,readonly string[]>> = {
     'master',
     'sovereign'
   ],
+  'mahjong':['odd','near','prime','reverse','advance','master','sovereign'],
+  'unite':['even','thin','digit7','double','surge','master','sovereign'],
+  'steam':['triple','quarter','lucky7','prime','highroll','master','sovereign'],
+  'loop':['spark','rescue','advance','quarter','highroll','master','sovereign'],
+  'dmchallenge':['spark','rescue','advance','mod11','highroll','master','sovereign'],
   'fortune': [
     'lucky77',
     'square',
@@ -444,12 +460,14 @@ export const NORMAL_RELICS:ReadonlyArray<NormalRelicDefinition> = names.flatMap(
       universal:[100,400],finance:[100,500],
       marketplus:[50,200],racingplus:[100,500],casinoplus:[100,500],
       fortune:[50,200],
+      mahjong:[100,400],unite:[100,400],steam:[100,500],loop:[1000,50000],dmchallenge:[1000,5000],
     };
     const [low,high]=base[mode]!;
     const isNative=['racing','casino','market','mleague'].includes(mode);
     const source:Record<string,string>={
       racing:'馬券購入・確定配当',casino:'カジノでのプラス精算',market:'株の買付',mleague:'予想購入・確定配当',
       quiz:'クイズ完走',voice:'通話20分ごとの確定枠',skirmish:'スカーミッシュのKP受取',
+      mahjong:'雀魂の確定KP',unite:'ユナイトの確定KP',steam:'Steam実績KP',loop:'KESO LOOPの到達KP',dmchallenge:'デスマッチ一発勝負の成功',
     };
     const conditions:Record<string,string>={
       spark:'対象額が1KP以上',rescue:`対象額が${low}KP以下`,advance:`対象額が${low}KP以上`,
