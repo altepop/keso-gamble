@@ -163,6 +163,7 @@ export type RelicBonusResult={
  bonus:number;gross:number;cap:number;percent:number;effectivePercent:number;
  skills:string[];lines:RelicBonusLine[];resonance:number;
  sets:{name:string;bonus:number}[];curseReversed:boolean;
+ spikeOpening?:{game:number;multiplier:number;flatPerRelic:number;eligible:number};
 };
 const RELIC_NATIVE_MODES=new Set(['casino','market','racing','mleague']);
 const safeReward=(n:number)=>Number.isFinite(n)?Math.max(0,Math.min(Number.MAX_SAFE_INTEGER-1,Math.floor(n))):0;
@@ -178,6 +179,15 @@ const compatibleRelic=(sourceMode:string|undefined,mode:string)=>sourceMode===mo
  (sourceMode==='marketplus'&&mode==='market')||
  (sourceMode==='racingplus'&&mode==='racing')||
  (sourceMode==='casinoplus'&&mode==='casino');
+/** Server-verified career game index only. No client API can choose a lower game.
+ * Helps new players feel their equipped relics even at a 20/40 KP base. */
+export function spikeOpeningTier(gamesBefore:number){
+ if(!Number.isSafeInteger(gamesBefore)||gamesBefore<0)return null;
+ if(gamesBefore<6)return {game:gamesBefore+1,multiplier:3,flatPerRelic:50};
+ if(gamesBefore<15)return {game:gamesBefore+1,multiplier:2,flatPerRelic:30};
+ if(gamesBefore<40)return {game:gamesBefore+1,multiplier:1.5,flatPerRelic:15};
+ return null;
+}
 const hasPrimeAmount=(n:number)=>{if(n<2)return false;for(let k=2;k*k<=n;k++)if(n%k===0)return false;return true;};
 const relicTrigger=(skill:string|undefined,amount:number,win:boolean,bounds:readonly[number,number]):boolean=>{
  const sum=String(amount).split('').reduce((a,v)=>a+Number(v),0);
@@ -208,7 +218,7 @@ const relicTrigger=(skill:string|undefined,amount:number,win:boolean,bounds:read
  }
 };
 export function evaluateRelicBonus(
- collection:RelicCollection|undefined,mode:string,event:{amount:number;win:boolean},
+ collection:RelicCollection|undefined,mode:string,event:{amount:number;win:boolean;spikeGamesBefore?:number},
  _nativeRemaining=120,
 ):RelicBonusResult{
  const empty:RelicBonusResult={bonus:0,gross:0,cap:0,percent:0,effectivePercent:0,skills:[],lines:[],resonance:0,sets:[],curseReversed:false};
@@ -247,7 +257,19 @@ export function evaluateRelicBonus(
   }
  }
 
- const pactIds=new Set(lines.map(x=>x.id));
+ // Opening blessing is a NEW independent effect (not a replacement for the
+ // item's usual win/digit triggers). Compatible equipped relics always give
+ // a modest fixed bonus, and their triggered % component is amplified.
+ // Therefore a match-1 loss with 20 KP still benefits visibly from equipment.
+ const opening=mode==='spikerush'&&event.spikeGamesBefore!==undefined
+  ?spikeOpeningTier(event.spikeGamesBefore):null;
+ const openingEligible=opening?lines.filter(l=>l.active):[];
+ if(opening)for(const line of openingEligible){
+  line.base=safeReward(line.base*opening.multiplier);
+  line.exotic=safeReward(line.exotic+opening.flatPerRelic);
+  line.reason+='／⚡先陣の加護：固定＋'+opening.flatPerRelic+'KP・本来の倍率分×'+opening.multiplier;
+ }
+  const pactIds=new Set(lines.map(x=>x.id));
  const curseReversed=pactIds.has('normal.pact.void')&&pactIds.has('normal.pact.coinflip')&&amount%7===0;
  // Risk pacts are independently rolled normal relics, NEVER Steam/Unite upgrades.
  // Drawbacks suppress bonus from OTHER relics only, not the verified base KP reward.
@@ -300,6 +322,7 @@ export function evaluateRelicBonus(
  const percent=effective.reduce((n,l)=>n+l.effectivePercent,0);
  return {bonus,gross,cap:0,percent,effectivePercent:Math.round(10000*bonus/amount)/100,
   lines,resonance,sets,curseReversed,
+  ...(opening?{spikeOpening:{...opening,eligible:openingEligible.length}}:{}),
   skills:[...lines.filter(l=>l.base+l.exotic>0).map(l=>l.name),...sets.map(x=>x.name),...(resonance?['七重共鳴']:[])]};
 }
 export function modeRelicBonus(
@@ -344,7 +367,19 @@ export async function creditVerifiedRelicBonus(
   .bind(guild,user).first<{data:string}>();
  if(!row)return 0;
  const state=JSON.parse(row.data) as {relics?:RelicCollection};
- const detail=evaluateRelicBonus(state.relics,mode,{amount,win});
+ let spikeGamesBefore:number|undefined;
+ if(mode==='spikerush'){
+  // Proven receipt + immutable snapshot from the already-settled Riot match.
+  // Never take the game number from browser input or a mutable profile.
+  const spike=await env.DB.prepare(`SELECT json_extract(detail,'$.gamesBefore') AS gamesBefore
+   FROM spike_rewards WHERE id=? AND guild=? AND user=?
+   UNION ALL SELECT json_extract(detail,'$.gamesBefore') AS gamesBefore
+   FROM spike_overdrive_rewards WHERE id=? AND guild=? AND user=?`)
+   .bind(receipt,guild,user,receipt,guild,user).first<{gamesBefore:number}>();
+  if(!spike||!Number.isSafeInteger(spike.gamesBefore)||spike.gamesBefore<0)return 0;
+  spikeGamesBefore=spike.gamesBefore;
+ }
+ const detail=evaluateRelicBonus(state.relics,mode,{amount,win,spikeGamesBefore});
  const bonus=detail.bonus;
  if(!bonus)return 0;
  const id='relic:'+receipt;
@@ -354,7 +389,7 @@ export async function creditVerifiedRelicBonus(
  try{
   await env.DB.prepare(
    'INSERT OR IGNORE INTO relic_effect_logs(id,guild,user,mode,base,bonus,details,at) SELECT ?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM kp_ledger WHERE id=? AND guild=? AND user=?)'
-  ).bind(id,guild,user,mode,amount,bonus,JSON.stringify({lines:detail.lines,sets:detail.sets,resonance:detail.resonance,curseReversed:detail.curseReversed}),at,id,guild,user).run();
+  ).bind(id,guild,user,mode,amount,bonus,JSON.stringify({lines:detail.lines,sets:detail.sets,resonance:detail.resonance,curseReversed:detail.curseReversed,spikeOpening:detail.spikeOpening}),at,id,guild,user).run();
  }catch{console.warn('relic_effect_log_pending');}
  return saved.meta.changes?bonus:0;
 }
