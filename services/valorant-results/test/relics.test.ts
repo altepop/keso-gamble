@@ -1,7 +1,7 @@
 import {NORMAL_RELICS,RISK_RELICS,ALL_NORMAL_RELICS,RELIC_CATALOG_COUNT,RELIC_RARITIES,RELIC_MODE_NAMES} from '../src/relic-catalog.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {RELIC_SUMMON_COST,rarityForRoll,rarityRatesForLevel,modeRelicBonus,evaluateRelicBonus,nativeRelicBonus,relicCollection,summonLevel,summonRelics,grantSteamRelic,grantUniteRelic,equipRelic,autoEquipRelics,SUMMON_MILESTONES,summonProgress,steamRelicTier,steamRelicArchetype,STEAM_RELIC_TIERS,UNITE,UNITE_REQUIREMENTS,UNITE_STREAK_IDS,type RelicCollection} from '../src/relics.ts';
+import {spikeOpeningTier,RELIC_SUMMON_COST,rarityForRoll,rarityRatesForLevel,modeRelicBonus,evaluateRelicBonus,nativeRelicBonus,relicCollection,summonLevel,summonRelics,grantSteamRelic,grantUniteRelic,equipRelic,autoEquipRelics,SUMMON_MILESTONES,summonProgress,steamRelicTier,steamRelicArchetype,STEAM_RELIC_TIERS,UNITE,UNITE_REQUIREMENTS,UNITE_STREAK_IDS,type RelicCollection} from '../src/relics.ts';
 test('200KP per roll, valid batch sizes, never overspends or draws entropy for rejected input',()=>{
   assert.equal(RELIC_SUMMON_COST,200);
   const x:{cash:number;relics?:RelicCollection}={cash:351000};
@@ -365,4 +365,55 @@ test('summon 1000 highlights rarest first even if final rare pull appears late',
  assert.equal(result.summary.transcendent,1);
  assert.equal(result.highlights[0]?.rarity,'transcendent');
  assert.ok(result.highlights.length<=12);
+});
+
+
+test('Spike opening relics are strong immediately at 20/40 KP with no growth progress',()=>{
+ const spike=NORMAL_RELICS.find(x=>x.mode==='spikerush'&&x.rarity==='common')!;
+ const other=NORMAL_RELICS.find(x=>x.mode==='competitive'&&x.rarity==='common')!;
+ const inventory:RelicCollection={totalSummons:0,items:Object.fromEntries([spike,other].map(x=>[x.id,{...x,origin:'normal',count:1}])),equipped:[spike.id,other.id]};
+ const noOpening=evaluateRelicBonus(inventory,'spikerush',{amount:40,win:true});
+ assert.equal(noOpening.bonus,0,'existing lucky7 condition is not triggered by 40KP');
+ const first=evaluateRelicBonus(inventory,'spikerush',{amount:40,win:true,spikeGamesBefore:0});
+ assert.equal(first.spikeOpening?.game,1);
+ assert.equal(first.spikeOpening?.flatPerRelic,50);
+ assert.equal(first.spikeOpening?.eligible,1,'competitive-only relic must not become universal');
+ assert.equal(first.bonus,50);
+ assert.equal(first.lines.find(x=>x.id===other.id)?.exotic,0);
+ assert.match(first.lines.find(x=>x.id===spike.id)!.reason,/先陣の加護/);
+ assert.equal(evaluateRelicBonus(inventory,'spikerush',{amount:20,win:false,spikeGamesBefore:0}).bonus,50);
+});
+test('the first 6/next 9/next 25 Spike matches gradually taper, then normal relics resume at game 41',()=>{
+ const spike=NORMAL_RELICS.find(x=>x.mode==='spikerush'&&x.rarity==='uncommon')!;
+ const c:RelicCollection={totalSummons:0,items:{[spike.id]:{...spike,origin:'normal',count:1}},equipped:[spike.id]};
+ const baseline=evaluateRelicBonus(c,'spikerush',{amount:40,win:true});
+ assert.ok(baseline.bonus>0,'even 40KP activates uncommon Spike relic');
+ const expectAt=(n:number,factor:number,flat:number)=>{
+  const got=evaluateRelicBonus(c,'spikerush',{amount:40,win:true,spikeGamesBefore:n});
+  assert.equal(got.spikeOpening?.multiplier,factor);
+  assert.equal(got.spikeOpening?.flatPerRelic,flat);
+  assert.equal(got.bonus,baseline.bonus*factor+flat);
+ };
+ expectAt(0,3,50);expectAt(5,3,50);
+ expectAt(6,2,30);expectAt(14,2,30);
+ // 1.5x is floored for safe integer KP accounting.
+ for(const n of [15,39]){
+  const got=evaluateRelicBonus(c,'spikerush',{amount:40,win:true,spikeGamesBefore:n});
+  assert.equal(got.spikeOpening?.flatPerRelic,15);
+  assert.equal(got.bonus,Math.floor(baseline.bonus*1.5)+15);
+ }
+ assert.equal(evaluateRelicBonus(c,'spikerush',{amount:40,win:true,spikeGamesBefore:40}).bonus,baseline.bonus);
+ assert.equal(spikeOpeningTier(40),null);
+ assert.equal(spikeOpeningTier(-1),null);
+});
+test('four compatible Spike relics stack opening bonuses; empty slots and other games do not',()=>{
+ const defs=NORMAL_RELICS.filter(x=>x.mode==='spikerush').slice(0,4);
+ assert.equal(defs.length,4);
+ const coll:RelicCollection={totalSummons:0,items:Object.fromEntries(defs.map(x=>[x.id,{...x,origin:'normal',count:1}])),equipped:defs.map(x=>x.id)};
+ const early=evaluateRelicBonus(coll,'spikerush',{amount:40,win:true,spikeGamesBefore:0});
+ assert.ok(early.bonus>=200,'four equipped relics each grant 50KP immediately');
+ assert.equal(early.spikeOpening?.eligible,4);
+ assert.ok(early.bonus>evaluateRelicBonus(coll,'spikerush',{amount:40,win:true}).bonus);
+ assert.equal(evaluateRelicBonus(undefined,'spikerush',{amount:40,win:true,spikeGamesBefore:0}).bonus,0);
+ assert.equal(evaluateRelicBonus(coll,'competitive',{amount:40,win:true,spikeGamesBefore:0}).spikeOpening,undefined);
 });
