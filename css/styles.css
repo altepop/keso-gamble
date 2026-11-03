@@ -653,3 +653,48 @@ body.esc-wheel-open{overflow:hidden!important}
 .relic-reveal-instant .relic-sound-btn{display:inline-flex}
 
 .relic-risk-notice{color:#ffacc3!important;font-weight:700;line-height:1.45}
+
+
+/* V7: compact authenticated collection tools, logs, variants and economic indicators */
+.relic-v7-panel .card-body{min-width:0}
+.relic-v7-hero{display:inline-block;margin:5px 0 12px;border:1px solid #a0d3fa;background:#19375a;color:#eeefff;border-radius:99px;padding:8px 18px;font-size:19px;font-weight:900}
+.relic-v7-stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:9px 0 14px}
+.relic-v7-stats>div{min-width:0;border:1px solid #4865a5;background:linear-gradient(135deg,#16284d,#091930);border-radius:12px;padding:11px}
+.relic-v7-stats small,.relic-v7-economy small{display:block;color:#c7d7f4;font-size:11px;line-height:1.4}
+.relic-v7-stats b,.relic-v7-economy b{display:block;font-size:20px;margin-top:4px;color:#b2ffdf;overflow-wrap:anywhere}
+.relic-v7-subtitle{font-size:13px;margin:12px 0 7px;color:#e8e5ff}
+.relic-v7-field{display:block;margin:8px 0 4px;font-size:13px}
+#relic-preset{width:100%;min-height:44px}
+.relic-v7-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:12px 0}
+.relic-v7-actions button{min-height:44px;font-size:12px}
+.relic-v7-actions button:last-child{grid-column:1/-1}
+.relic-v7-history-item{display:flex;align-items:start;justify-content:space-between;gap:9px;border:1px solid #324b74;padding:11px;border-radius:10px;margin:10px 0;background:#09182d}
+.relic-v7-history-item>div{min-width:0;flex:1}
+.relic-v7-history-item strong{font-size:15px}
+.relic-v7-history-item small{display:block;color:#b7c8e0;line-height:1.5;margin-top:5px;font-size:11px}
+.relic-v7-history-item p{font-size:12px;line-height:1.5;margin:6px 0}
+.relic-v7-summon-hit{color:#ffe7a9;font-weight:750}
+.relic-v7-history-item button{min-height:40px;flex:0 0 auto;font-size:11px;padding:8px}
+.relic-v7-special-card{border:2px solid #9acbff;border-radius:12px;padding:12px;margin:8px 0;background:linear-gradient(115deg,#2b306b,#122448,#344066)}
+.relic-v7-special-card strong{color:#fff9c2;font-size:14px}
+.relic-v7-special-card p{font-size:12px;color:#e4f0ff;margin:7px 0}
+.relic-v7-item-badges{display:inline-block;font-size:11px;color:#ffd7a3;padding:4px 9px;margin:6px 0 0;background:#3e3059;border-radius:99px;border:1px solid #bd9eff}
+.relic-v7-log{border:1px solid #355581;border-radius:10px;margin:9px 0;padding:10px;background:#0a1d39}
+.relic-v7-log summary{font-size:13px;line-height:1.6;color:#dceaff;cursor:pointer}
+.relic-v7-log strong{color:#a4ffca}
+.relic-v7-log p{font-size:12px;line-height:1.6;overflow-wrap:anywhere}
+.relic-v7-log small{font-size:11px;color:#b4c6dc}
+.relic-v7-economy{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+.relic-v7-economy>div{border:1px solid #315c86;padding:12px;background:#102440;border-radius:11px;min-width:0}
+.relic-v7-economy b{font-size:17px}
+.relic-v7-combos{padding:12px;background:linear-gradient(120deg,#202349,#121939);border-radius:12px;margin:14px 0;border:1px solid #8065bd}
+.relic-v7-set{display:block;font-size:12px;margin:5px 0;font-weight:750;color:#bafbdc}
+.relic-v7-reversed{display:block;color:#ffe187;margin-top:8px;font-size:14px}
+.relic-kp-award{position:fixed;z-index:99999;left:50%;bottom:max(env(safe-area-inset-bottom,0px) + 25px,36px);transform:translateX(-50%);width:min(90vw,430px);border:2px solid #e4c581;border-radius:18px;padding:15px;background:linear-gradient(120deg,#392d65,#0d3d4d);color:#fff;box-shadow:0 0 40px rgba(111,246,206,.5);animation:relic-reward-appear .45s ease both;display:grid;gap:7px;text-align:center}
+.relic-kp-award strong{color:#fff6ad;font-size:21px}
+.relic-kp-award span{color:#d1ffee;font-size:13px}
+.relic-kp-award small{color:#c2d7e9;font-size:11px}
+.relic-kp-award button{justify-self:center;min-height:35px;padding:5px 15px;border:1px solid #a6bbde;background:#17243e;border-radius:9px;color:white}
+@keyframes relic-reward-appear{from{opacity:0;transform:translate(-50%,18px) scale(.88)}to{opacity:1;transform:translate(-50%,0) scale(1)}}
+@media(max-width:360px){.relic-v7-stats,.relic-v7-economy{grid-template-columns:1fr}.relic-v7-history-item{flex-direction:column}.relic-v7-history-item button{align-self:end}}
+@media(prefers-reduced-motion:reduce){.relic-kp-award{animation:none;transition:none}}
