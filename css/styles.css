@@ -770,3 +770,11 @@ body.esc-wheel-open{overflow:hidden!important}
 .relic-v9-tier-button.relic-rarity-transcendent strong{font-size:17px;background:linear-gradient(90deg,#ffe58c,#a7ffe7,#e4adff);background-clip:text;-webkit-background-clip:text;color:transparent}
 @media(min-width:700px){.relic-v9-tier-audition{grid-template-columns:repeat(3,minmax(0,1fr))}.relic-v9-tier-button.relic-rarity-transcendent{grid-column:span 3;min-height:80px}}
 @media(prefers-reduced-motion:reduce){.relic-v9-tier-button:active{transform:none}}
+
+/* Spike Rush opening relic blessing: visible at base 20–40KP, not hidden in percentages. */
+.relic-spike-kick{margin:12px 0;padding:14px 12px;border:1px solid #80ffce;border-left:5px solid #89ffe0;border-radius:12px;background:linear-gradient(125deg,#0c3442,#12294c);color:#eafff9}
+.relic-spike-kick strong{display:block;font-size:15px;color:#d0fff2;line-height:1.5}
+.relic-spike-kick p{line-height:1.6;font-size:14px;margin:7px 0 6px}
+.relic-spike-kick p b{color:#fff4aa;font-size:17px}
+.relic-spike-kick small{display:block;line-height:1.5;color:#b5dfe7;font-size:11px}
+.relic-spike-receipt{border:1px solid #5ac7b2;border-radius:9px;padding:9px;background:#103c4a;color:#d3ffe9;font-weight:700}
