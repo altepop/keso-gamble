@@ -651,3 +651,5 @@ body.esc-wheel-open{overflow:hidden!important}
 .relic-reveal-actions>.action-btn{min-height:44px;flex:1 1 135px;font-size:12px}
 .relic-sound-btn{background:rgba(22,38,69,.85);border:1px solid #a6c3f4;color:#e5edff}
 .relic-reveal-instant .relic-sound-btn{display:inline-flex}
+
+.relic-risk-notice{color:#ffacc3!important;font-weight:700;line-height:1.45}
