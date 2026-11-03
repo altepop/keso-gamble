@@ -61,8 +61,9 @@ export function relicItemCard(item,source,modeNames,equipped){
  reverse:'左右対称の数字',near:'基準額+50以内',thin:'基準額未満',heavy:'高額ラインの2倍以上',
  triple:'3の倍数',lucky77:'数字に77を含む'};
  const base=Number(def?.percent??item.percent??0);
- const duplicates=item.origin==='normal'?Math.min(5,Math.floor(Math.log2(Math.max(1,Number(item.count)||1)))):0;
- const effective=base+duplicates+(item.mutation?.percent??0)+(item.foil?.percent??0);
+ const special=Boolean(def?.special);
+ const duplicates=item.origin==='normal'&&!special?Math.min(5,Math.floor(Math.log2(Math.max(1,Number(item.count)||1)))):0;
+ const effective=base+duplicates+(!special?(item.mutation?.percent??0)+(item.foil?.percent??0):0);
  const extraTitle=(item.foil?'✨ '+({holographic:'ホログラム',starlit:'星紋',abyss:'深淵'}[item.foil.kind]??'特殊個体')+' ／ ':'')+
   (item.mutation?'🧬 '+({prism:'虹彩変異',risk:'偶数覚醒',comeback:'逆境覚醒'}[item.mutation.kind]??'突然変異'):'');
  const headline=def?.short??(conditions[item.skill]??'条件を満たした時')+'：KP報酬＋'+base+'%';
@@ -75,7 +76,7 @@ export function relicItemCard(item,source,modeNames,equipped){
   '<div class="relic-card-top"><span class="relic-rarity-badge">'+esc(label)+'</span><span class="relic-mode">'+esc(mode)+'</span></div>'+
   '<strong class="relic-card-title">'+esc(name)+'</strong>'+(extraTitle?'<p class="relic-v7-item-badges">'+esc(extraTitle)+'</p>':'')+
   '<p class="relic-card-effect"><b>'+esc(headline)+'</b></p>'+
-  '<div class="relic-card-stats"><span class="relic-percent-stat">設定 <b>＋'+esc(effective)+'%</b></span><span class="relic-v8-extra-stat">合算上限 <b>なし</b></span><span class="relic-v8-extra-stat">戦力 <b>'+number(item.power)+'</b></span><span>所持 <b>'+number(count)+'</b></span>'+(isEquipped?'<span class="relic-current">● 装備中</span>':'')+'</div>'+
+  '<div class="relic-card-stats"><span class="relic-percent-stat">'+(special?'固有能力 <b>倍率なし</b>':'設定 <b>＋'+esc(effective)+'%</b>')+'</span><span class="relic-v8-extra-stat">合算上限 <b>なし</b></span><span class="relic-v8-extra-stat">戦力 <b>'+number(item.power)+'</b></span><span>所持 <b>'+number(count)+'</b></span>'+(isEquipped?'<span class="relic-current">● 装備中</span>':'')+'</div>'+
   '<details class="relic-card-detail"><summary>効果の詳細・装備</summary>'+
   '<p>入手方法：'+esc(title)+'</p><p>対象：'+esc(mode)+'</p><p>元の効果：＋'+esc(base)+'%'+(duplicates?' ／ 重複強化：＋'+duplicates+'ポイント':'')+'</p>'+(extraTitle?'<p>変異・特殊個体の条件付き効果：'+esc(extraTitle)+'。発動条件で実際の倍率が変化する。</p>':'')+(trait?'<p class="relic-trait">★ '+esc(trait)+'</p>':'')+'<p>'+esc(effect)+'</p>'+(def?.drawback?'<p class="relic-drawback">⚠ デメリット：'+esc(def.drawback)+'</p>':'')+
   (item.origin==='normal'?'<p>重ねて入手すると戦力が成長する。現在の育成段階：'+number(1+Math.floor(Math.log2(count)))+'</p>':'')+
