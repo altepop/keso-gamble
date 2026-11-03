@@ -482,7 +482,7 @@ addEventListener('click',async e=>{
   const t=e.target.closest?.('button,[data-open]'); if(!t) return;
   if(t.dataset.action==='casino-skip'){casinoSkipped=true;skipCasinoPause?.();return;}
   if(casinoBusy&&(t.dataset.screen||t.dataset.casinoGame)){toast('演出をスキップすると移動できます');return;}
-  const mutates=!!t.dataset.approve || !!t.dataset.complete || ['steam-library','steam-status','steam-link','steam-open','steam-confirm','steam-disconnect','steam-game','salary','trade','spin','race-bet','roast-level','horse-buy','horse-sell-approve','luxury-approve','reset','submit-claim','issue-directive','connect-kp','restore-kp','refresh-kp','disconnect-kp','auto-connect-kp','ml-buy','chinchiro','bj-start','bj-hit','bj-stand','bj-double','mines-start','mines-pick','mines-cashout','slot','vp-deal','vp-draw','baccarat','private-round','private-race','stock-shock','stock-shock-approve','stock-guerrilla-toggle','relic-summon','relic-equip','relic-auto-equip','relic-save-preset','relic-overwrite-preset','relic-load-preset','relic-remove-preset','relic-rename-preset','relic-claim-steam','relic-claim-unite'].includes(t.dataset.action);
+  const mutates=!!t.dataset.approve || !!t.dataset.complete || ['steam-library','steam-status','steam-link','steam-open','steam-confirm','steam-disconnect','steam-game','salary','trade','spin','race-bet','roast-level','horse-buy','horse-sell-approve','luxury-approve','reset','submit-claim','issue-directive','connect-kp','restore-kp','refresh-kp','disconnect-kp','auto-connect-kp','ml-buy','chinchiro','bj-start','bj-hit','bj-stand','bj-double','mines-start','mines-pick','mines-cashout','slot','vp-deal','vp-draw','baccarat','private-round','private-race','stock-shock','stock-shock-approve','stock-guerrilla-toggle','relic-summon','relic-equip','relic-auto-equip','relic-save-preset','relic-overwrite-preset','relic-load-preset','relic-remove-preset','relic-rename-preset','relic-claim-steam','relic-claim-unite','relic-recycle','relic-shop','relic-voucher','relic-voucher-buy'].includes(t.dataset.action);
   if(mutates && mutationPending){
     if(t.dataset.action==='relic-summon'&&Date.now()-lastSummonBlockToast>1200){toast('召喚結果を確認中。連打しても追加購入されません');lastSummonBlockToast=Date.now();}
     return;
@@ -496,7 +496,7 @@ addEventListener('click',async e=>{
     }
     if(t.dataset.companion){await openCompanionGame(t.dataset.companion);return;}
     if(t.dataset.action==='relic-tab'){
-      if(!['collection','gear','summon','records'].includes(t.dataset.tab))return;
+      if(!['collection','gear','summon','records','exchange'].includes(t.dataset.tab))return;
       relicView={...relicView,section:t.dataset.tab};
       render();
       document.querySelector('.relic-v8-nav')?.scrollIntoView({block:'start',behavior:'auto'});
@@ -545,6 +545,13 @@ addEventListener('click',async e=>{
     if(t.dataset.action?.startsWith('relic-')){
       if(!live||!wallet.connected)throw Error('遺物は本番KP口座への接続が必要です。');
       const action=t.dataset.action;
+      if(action==='relic-voucher-buy'){
+        const name=$('#relic-voucher-name')?.value??'';
+        const {horse}=await liveOperation('horse-buy',{box:'normal',name,useVoucher:true});
+        relicProofs=await wallet.relics().catch(()=>relicProofs);
+        relicNotice=horse.name+'（'+horse.gradeLabel+'）を引換券で迎えた。';
+        render();toast(relicNotice);return;
+      }
       if(action==='relic-summon'){
         if(relicReveal){toast('召喚結果を閉じてから次を引いてください');return;}
         const now=Date.now();
@@ -559,17 +566,20 @@ addEventListener('click',async e=>{
       const args=action==='relic-summon'?{count:Number(t.dataset.count)}:
        action==='relic-equip'?{relic:t.dataset.relic??'',slot:Number((relicView.section==='collection'?$('#relic-slot-gallery')?.value:$('#relic-slot')?.value)??0)}:
        action==='relic-auto-equip'?{goal:$('#relic-goal')?.value??'all'}:
+       action==='relic-recycle'?{relic:$('#relic-recycle-id')?.value??'',count:Number($('#relic-recycle-count')?.value??1)}:
+       action==='relic-shop'?{relic:$('#relic-shop-id')?.value??''}:
+       action==='relic-voucher'?{}:
        action==='relic-save-preset'?{preset:presetName}:
        action==='relic-overwrite-preset'?{preset:presetSelected}:
        action==='relic-rename-preset'?{preset:presetSelected,newName:presetName}:
        ['relic-load-preset','relic-remove-preset'].includes(action)?{preset:presetSelected}:
        action==='relic-claim-steam'?{event:t.dataset.event}:{tier:t.dataset.tier};
       const result=await liveOperation(action,args);
-      if(['relic-equip','relic-auto-equip','relic-save-preset','relic-overwrite-preset','relic-load-preset','relic-remove-preset','relic-rename-preset','relic-claim-steam','relic-claim-unite'].includes(action)){
+      if(['relic-equip','relic-auto-equip','relic-save-preset','relic-overwrite-preset','relic-load-preset','relic-remove-preset','relic-rename-preset','relic-claim-steam','relic-claim-unite','relic-recycle','relic-shop','relic-voucher'].includes(action)){
        try{relicProofs=await wallet.relics();}catch(error){relicNotice='装備は更新したが、効果一覧を再取得できなかった。'+(error.message??'');}
       }
       if(action==='relic-summon')relicReveal=result;
-      relicNotice=action==='relic-save-preset'?'「'+result.name+'」を保存した。':action==='relic-overwrite-preset'?'「'+result.name+'」を上書きした。':action==='relic-rename-preset'?'「'+result.name+'」に改名した。':action==='relic-load-preset'?'装備をプリセットから復元した。':action==='relic-remove-preset'?'プリセットを削除した。':action==='relic-auto-equip'?`おまかせ装備完了。4枠の合計戦力 ${result.power}`:action==='relic-summon'?`${result.count}連召喚：${result.cost.toLocaleString('ja-JP')} KPを使用。${result.highlights?.length?'大当たり '+result.highlights.map(v=>v.name).join('、'):'獲得遺物を図鑑に追加した。'}`:action==='relic-equip'?`装備変更完了。戦力 ${result.power}`:`${result.item.name} を獲得した。`;
+      relicNotice=action==='relic-recycle'?result.recycled+'個を欠片にして、'+result.gained+'欠片獲得した。':action==='relic-shop'?result.item.name+'を'+result.cost+'欠片で交換した。':action==='relic-voucher'?'My馬引換券を交換した。所持'+result.horseVouchers+'枚。':action==='relic-save-preset'?'「'+result.name+'」を保存した。':action==='relic-overwrite-preset'?'「'+result.name+'」を上書きした。':action==='relic-rename-preset'?'「'+result.name+'」に改名した。':action==='relic-load-preset'?'装備をプリセットから復元した。':action==='relic-remove-preset'?'プリセットを削除した。':action==='relic-auto-equip'?`おまかせ装備完了。4枠の合計戦力 ${result.power}`:action==='relic-summon'?`${result.count}連召喚：${result.cost.toLocaleString('ja-JP')} KPを使用。${result.highlights?.length?'大当たり '+result.highlights.map(v=>v.name).join('、'):'獲得遺物を図鑑に追加した。'}`:action==='relic-equip'?`装備変更完了。戦力 ${result.power}`:`${result.item.name} を獲得した。`;
       render();
       if(action==='relic-summon')playRelicSound(relicReveal);
       toast(relicNotice);return;
