@@ -43,3 +43,15 @@ test('Steam common 25%+ and challenge 10–25% are visible without historical im
  assert.match(html,/監視登録以降に新規解除/);
  assert.match(html,/0KPで記録された実績は翌日も対象外/);
 });
+
+test('連続召喚中は全てのガチャ購入ボタンを即時無効化し通信中と知らせる',()=>{
+ const state={cash:300000,serverWallet:true,relics:{totalSummons:1500,items:{},equipped:[]}};
+ const html=relicsPanel(state,{view:{section:'summon'},summonBusy:true});
+ assert.match(html,/召喚を処理中/);
+ for(const n of [1,10,100,1000]){
+  assert.match(html,new RegExp('data-action="relic-summon" data-count="'+n+'" disabled'));
+ }
+ const settled=relicsPanel(state,{view:{section:'summon'},summonBusy:false});
+ assert.doesNotMatch(settled,/召喚を処理中/);
+ assert.match(settled,/data-action="relic-summon" data-count="10" >/);
+});

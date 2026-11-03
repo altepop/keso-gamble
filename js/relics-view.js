@@ -1,6 +1,6 @@
-import {relicSoundEnabled,relicSoundVolume,RELIC_SOUND_DESIGNS} from './relics-audio.js?v=web-b403f140046cbd65';
-import {relicBuildSection,relicPresetsSection,relicSummonHistorySection,relicSpecialSection,relicEffectLogSection,relicEconomySection} from './relics-v7.js?v=web-b403f140046cbd65';
-import {relicInventory,relicFilterControls,relicItemCard,relicInventoryPages,relicRevealPanel,relicBonusDashboard} from './relics-v4.js?v=web-b403f140046cbd65';
+import {relicSoundEnabled,relicSoundVolume,RELIC_SOUND_DESIGNS} from './relics-audio.js?v=web-06733520f64a1841';
+import {relicBuildSection,relicPresetsSection,relicSummonHistorySection,relicSpecialSection,relicEffectLogSection,relicEconomySection} from './relics-v7.js?v=web-06733520f64a1841';
+import {relicInventory,relicFilterControls,relicItemCard,relicInventoryPages,relicRevealPanel,relicBonusDashboard} from './relics-v4.js?v=web-06733520f64a1841';
 // Three independent origins: common summons, Steam achievements, and Unite results.
 // Never recommend cross-game combinations or require another game's relic for an upgrade.
 const esc=s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -14,7 +14,7 @@ const unite=[
  ['unite.career_50','五十勝の栄光',570,'累計50勝'],['unite.career_100','百戦の星冠',650,'累計100勝'],
  ['unite.career_200','無窮のエオス',710,'累計200勝'],
 ];
-export function relicsPanel(state,{proofs=null,notice='',loading=false,view={},reveal=null}={}){
+export function relicsPanel(state,{proofs=null,notice='',loading=false,view={},reveal=null,summonBusy=false}={}){
  const collection=state.relics??{totalSummons:0,items:{},equipped:[]};
  const items=Object.values(collection.items??{});
  const uniteList=Array.isArray(proofs?.unite)&&proofs.unite.length?proofs.unite.map(u=>[u.id,u.name,u.power,u.condition]):unite;
@@ -78,7 +78,8 @@ export function relicsPanel(state,{proofs=null,notice='',loading=false,view={},r
       </button>`).join('')}
     </div>
    </div>
-   <div class="action-row">${[1,10,100,1000].map(n=>`<button type="button" class="action-btn ${n===10?'primary':''}" data-action="relic-summon" data-count="${n}" ${state.cash<200*n||!state.serverWallet?'disabled':''}>${n}連 · ${yen(200*n)} KP</button>`).join('')}</div>
+   ${summonBusy?'<p class="relic-summon-busy" role="status" aria-live="polite">🔮 召喚を処理中。KPと獲得結果を確認している。連打しても追加購入されない。</p>':''}
+   <div class="action-row">${[1,10,100,1000].map(n=>`<button type="button" class="action-btn ${n===10?'primary':''}" data-action="relic-summon" data-count="${n}" ${summonBusy||state.cash<200*n||!state.serverWallet?'disabled':''}>${summonBusy?'処理中…':n+'連 · '+yen(200*n)+' KP'}</button>`).join('')}</div>
    ${notice?`<p class="market-disclaimer" role="status">${esc(notice)}</p>`:''}
  </div></section>
  </div>
