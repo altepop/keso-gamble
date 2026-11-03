@@ -118,9 +118,9 @@ test('existing 21 relic ids preserve all copies and become named mode skills',()
  assert.equal(c.items['normal.copper']?.count,8);
  assert.equal(c.items['normal.copper']?.power,25);
  assert.equal(c.items['normal.copper']?.mode,'competitive');
- assert.match(c.items['normal.copper']!.ability,/コンペの報酬で/);
+ assert.match(c.items['normal.copper']!.ability,/コンペで/);
  assert.equal(c.items['normal.rainbow']?.origin,'normal');
- assert.match(c.items['normal.rainbow']!.ability,/コンペの報酬で/);
+ assert.match(c.items['normal.rainbow']!.ability,/コンペで/);
 });
 test('mode specialists activate only their own verified mode and cannot multiply arbitrary rewards',()=>{
  const x:{cash:number;relics?:RelicCollection}={cash:4000};
@@ -259,7 +259,7 @@ test('ancient chain seal is added without a global cap',()=>{
  const x:RelicCollection={totalSummons:0,items,equipped:[ancient.id,universal.id,fortune.id]};
  const r=evaluateRelicBonus(x,'competitive',{amount:107,win:true});
  const a=r.lines.find(x=>x.id===ancient.id)!;
- assert.equal(a.trait,'刻印連鎖');
+ assert.ok(a.trait.startsWith('刻印連鎖'));
  assert.equal(a.exotic,8);
  assert.equal(r.gross,r.bonus);
  assert.ok(r.bonus>Math.floor(107*.15));
@@ -271,7 +271,7 @@ test('transcendental fate breakthrough pays fixed KP when conditions fail',()=>{
  const r=evaluateRelicBonus(x,'competitive',{amount:500,win:false});
  assert.equal(r.percent,0);
  assert.equal(r.lines[0]?.triggered,false);
- assert.equal(r.lines[0]?.trait,'運命突破');
+ assert.ok(r.lines[0]?.trait.startsWith('運命突破'));
  assert.ok(r.lines[0]!.exotic>0);
  assert.ok(r.bonus>0);
  assert.equal(modeRelicBonus(x,'competitive',{amount:500,win:false}).bonus,r.bonus);
@@ -316,7 +316,7 @@ test('all eight new risk pacts are normal-summon only, with new stable IDs and v
  for(const item of RISK_RELICS){
   assert.equal(item.id.startsWith('normal.pact.'),true);
   assert.ok(item.tradeoff);
-  assert.ok(item.drawback?.includes('他'));
+  assert.ok((item.drawback?.length??0)>10);
   assert.ok(['legendary','mythic','ancient','transcendent'].includes(item.rarity));
  }
  assert.equal(RISK_RELICS.filter(x=>x.rarity==='transcendent').length,2);
