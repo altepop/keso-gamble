@@ -138,7 +138,7 @@ function tabsFor(group){return `<div class="sub-tabs">${GROUPS[group].map(([id,l
 function subTabs(){return tabsFor('race');}
 
 // Race playback state. The card, result and odds are pure functions of the race start time.
-let raceDraft={type:'win',horse:null};
+let raceDraft={type:'win',horse:null,order:[null,null,null]};
 // Native confirmation dialogs can silently fail in Discord's iOS webview.
 let pendingHorseSale=null;
 // Mリーグ: the chosen game and player, and whether the confirmation is showing.
@@ -738,9 +738,9 @@ addEventListener('click',async e=>{
     }
     if(t.dataset.action==='roast-level'){await liveOperation('roast-level',{level:t.dataset.level});render();toast('煽りレベルを変更しました');return;}
     if(t.dataset.action==='race-bet'){
-      const now=Date.now(),raceId=openRaceStart(now),args={raceId,type:raceDraft.type,horse:raceDraft.horse,amount:Number($('#race-amount')?.value)};
+      const now=Date.now(),raceId=openRaceStart(now),args={raceId,type:raceDraft.type,horse:raceDraft.type==='trifecta'?raceDraft.order:raceDraft.horse,amount:Number($('#race-amount')?.value)};
       const bet=live?(await liveOperation('race-bet',args)).bet:await commit(next=>placeRaceBet(next,args,now));
-      render();toast(`${bet.horse}番の馬券を買いました（${(bet.odds/10).toFixed(1)}倍）`);return;
+      render();toast(`${Array.isArray(bet.horse)?bet.horse.join('→')+' 3連単':bet.horse+'番'}の馬券を買いました（${(bet.odds/10).toFixed(1)}倍）`);return;
     }
     if(t.dataset.open){openDetail(t.dataset.kind,t.dataset.open);return;}
     if(t.dataset.orderSymbol){activeSymbol=t.dataset.orderSymbol;detail=null;screen='market';render();document.getElementById('trade-qty')?.scrollIntoView({block:'center'});return;}
@@ -826,6 +826,7 @@ addEventListener('input', e => {
     if(luxuryConfirmation){luxuryConfirmation=null;$('.luxury-confirmation')?.remove();}
   }
   if(e.target.id==='ml-amount'){drafts['ml-amount']=e.target.value;const preview=$('#ml-preview');if(preview)preview.textContent=mleaguePreview(state,{...mlDraft,amount:e.target.value});}
+  if(e.target.dataset.raceOrder!==undefined){const idx=Number(e.target.dataset.raceOrder);raceDraft.order[idx]=e.target.value?Number(e.target.value):null;const el=$('#race-preview');if(el){const card=openCard(Date.now());el.innerHTML=racePreview(card,raceOdds(card),{...raceDraft,amount:drafts['race-amount']});}return;}
   if(e.target.id==='race-amount'){drafts['race-amount']=e.target.value;const preview=$('#race-preview');if(preview){const open=openCard(Date.now());preview.innerHTML=racePreview(open,raceOdds(open),{...raceDraft,amount:e.target.value});}}
   if(e.target.id==='steam-game-search'){if(steamView){steamView.search=e.target.value;render();}return;}
   if (e.target.id==='kp-connect-code'||['trade-qty','bet-amount','chinchiro-amount','bj-amount','mines-amount','slot-amount','vp-amount','baccarat-amount'].includes(e.target.id)||e.target.id.startsWith('claim-')||e.target.id.startsWith('directive-')) drafts[e.target.id] = e.target.value;
