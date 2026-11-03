@@ -10,6 +10,9 @@ const ENABLE_KEY='keso.relic.sound.v8'; // preserve users' existing mute choice
 const VOLUME_KEY='keso.relic.volume.v9';
 const EPS=.00008;
 let ctx=null, playback=null, enabled=true, volume=72;
+// Keep track of scheduled sources: a new summon must stop the previous fanfare,
+// not merely mute dozens of oscillators still running in the audio graph.
+let sourceCollector=null;
 try{
  enabled=globalThis.localStorage?.getItem(ENABLE_KEY)!=='off';
  const saved=globalThis.localStorage?.getItem(VOLUME_KEY);
@@ -79,6 +82,7 @@ function envelope(gain,at,attack,hold,release,peak){
 function oscillator(c,target,freq,at,duration,{type='sine',amp=.25,attack=.01,hold=0,detune=0,filter=0,pan=0,sweep=0}={}){
  if(freq<=0||duration<=0)return;
  const o=c.createOscillator(),g=c.createGain();
+ sourceCollector?.push(o);
  o.type=type;o.frequency.value=freq;
  if(detune&&o.detune)o.detune.value=detune;
  if(sweep){
@@ -142,6 +146,7 @@ function noise(c){
 function burst(c,bus,at,len,amp=.16,{cutoff=1500,type='lowpass',rising=false}={}){
  const buffer=noise(c);if(!buffer)return;
  const src=c.createBufferSource(),g=c.createGain();
+ sourceCollector?.push(src);
  src.buffer=buffer;
  let end=g;
  if(typeof c.createBiquadFilter==='function'){
@@ -274,8 +279,11 @@ export function stopRelicSound(){
   old.gate.gain.setValueAtTime(old.gate.gain.value||.4,t);
   old.gate.gain.exponentialRampToValueAtTime(EPS,t+.09);
  }catch{old.gate.gain.value=0;}
+ // A source may already have a later scheduled stop; the new stop supersedes it.
+ // This prevents repeated rare results from accumulating minutes of active nodes.
+ for(const source of old.sources??[]){try{source.stop(t+.10);}catch{}}
  // Sources have their own stop times. Disconnect the master after the fade.
- setTimeout(()=>{try{old.bus.disconnect();old.gate.disconnect()}catch{}},150);
+ setTimeout(()=>{try{old.bus.disconnect();old.gate.disconnect();for(const source of old.sources??[])source.disconnect?.();}catch{}},150);
 }
 export function playRelicSound(reveal){
  if(!enabled||volume===0)return false;
@@ -285,8 +293,10 @@ export function playRelicSound(reveal){
  try{
   stopRelicSound();
   const parts=makeBus(c,tier),start=c.currentTime+.026;
-  playback={...parts,context:c};
-  schedule(c,parts.bus,tier,start);
+  const sources=[];
+  playback={...parts,context:c,sources};
+  sourceCollector=sources;
+  try{schedule(c,parts.bus,tier,start);}finally{sourceCollector=null;}
   const session=playback;
   setTimeout(()=>{
    if(playback===session)playback=null;
