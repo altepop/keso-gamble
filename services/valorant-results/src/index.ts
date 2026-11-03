@@ -499,7 +499,7 @@ export default {
     if(request.method==='GET'&&new URL(request.url).pathname==='/api/discord/activity-entry/status')return silentEntryStatus(env).then(info=>Response.json(info,{headers:{'Cache-Control':'no-store'}})).catch(()=>Response.json({handlerConfirmed:false},{status:503}));
     if(new URL(request.url).pathname.startsWith('/api/discord/app-webhook/'))return appWebhookApi(request,env).catch(()=>new Response('Unavailable',{status:503}));
     if(new URL(request.url).pathname.startsWith('/api/mahjong/paipu/'))return paipuApi(request,env).catch(()=>new Response('Unavailable',{status:503}));
-    return new URL(request.url).pathname.startsWith('/api/kp/') ? kpApi(request, env) : discordInteractions(request, env, ctx);
+    return new URL(request.url).pathname.startsWith('/api/kp/') ? kpApi(request, env, undefined, job=>ctx.waitUntil(job)) : discordInteractions(request, env, ctx);
   },
   async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
     ctx.waitUntil(track(env,'mahjong_watch',()=>monitorMahjong(env)));
