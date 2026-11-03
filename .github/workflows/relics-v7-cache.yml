@@ -1,0 +1,32 @@
+name: Relics V7 one-time Activity release hash preparation
+on:
+  push:
+    branches:
+      - feat/relics-v7-all-11-improvements
+    paths:
+      - 'js/**'
+      - 'css/**'
+      - 'index.html'
+      - '.github/workflows/relics-v7-cache.yml'
+permissions:
+  contents: write
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run build:activity
+      - name: Commit updated versioned browser resources
+        run: |
+          if ! git diff --quiet -- index.html js css; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add index.html js css
+            git commit -m "build(activity): publish V7 generated cache hashes"
+            git push origin HEAD:feat/relics-v7-all-11-improvements
+          fi
