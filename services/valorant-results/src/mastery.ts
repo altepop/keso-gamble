@@ -15,11 +15,33 @@ export function titlesFor(level:RoastLevel,agent:string,games:number,wins:number
  if(level==='mild')return [];
  return [countTitle(agent,games),level==='full'?winTitle(agent,games,wins):null].filter((t):t is string=>Boolean(t));
 }
-const initialized=new WeakSet<object>();
+// A newly seen agent match updates a small per-agent summary exactly once.
+// Previously the Activity grouped all historic agent_plays every full-state
+// refresh: 143,706 D1 rows/day in 2026-11-01 Insights.
+// The migration/backfill and trigger installation are in one D1 transaction.
+// The marker prevents an expensive full backfill on every isolate restart.
+const initialized=new WeakMap<object,Promise<void>>();
 export async function ensureMastery(env:KpEnv){
- if(initialized.has(env.DB))return;
- await env.DB.prepare('CREATE TABLE IF NOT EXISTS agent_plays(riot_id TEXT NOT NULL,match_id TEXT NOT NULL,agent TEXT NOT NULL,outcome TEXT,ended_at INTEGER NOT NULL,PRIMARY KEY(riot_id,match_id))').run();
- initialized.add(env.DB);
+ const existing=initialized.get(env.DB);if(existing)return existing;
+ const job=(async()=>{
+  await env.DB.batch([
+   env.DB.prepare('CREATE TABLE IF NOT EXISTS agent_plays(riot_id TEXT NOT NULL,match_id TEXT NOT NULL,agent TEXT NOT NULL,outcome TEXT,ended_at INTEGER NOT NULL,PRIMARY KEY(riot_id,match_id))'),
+   env.DB.prepare('CREATE TABLE IF NOT EXISTS agent_mastery_totals(riot_id TEXT NOT NULL,agent TEXT NOT NULL,games INTEGER NOT NULL,wins INTEGER NOT NULL,PRIMARY KEY(riot_id,agent))'),
+   env.DB.prepare('CREATE TABLE IF NOT EXISTS agent_mastery_meta(key TEXT PRIMARY KEY)'),
+   // One-time legacy backfill. The NOT EXISTS guard skips all source rows on
+   // subsequent cold starts; use INSERT OR REPLACE so concurrent first starts
+   // cannot double-count history when D1 serializes the transactions.
+   env.DB.prepare("INSERT OR REPLACE INTO agent_mastery_totals(riot_id,agent,games,wins) SELECT riot_id,agent,COUNT(*),COALESCE(SUM(outcome='win'),0) FROM agent_plays WHERE NOT EXISTS(SELECT 1 FROM agent_mastery_meta WHERE key='v1') GROUP BY riot_id,agent"),
+   env.DB.prepare("INSERT OR IGNORE INTO agent_mastery_meta(key) VALUES('v1')"),
+   env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS agent_plays_summary_insert AFTER INSERT ON agent_plays BEGIN
+     INSERT INTO agent_mastery_totals(riot_id,agent,games,wins)
+     VALUES(NEW.riot_id,NEW.agent,1,CASE WHEN NEW.outcome='win' THEN 1 ELSE 0 END)
+     ON CONFLICT(riot_id,agent) DO UPDATE SET games=games+1,wins=wins+excluded.wins;
+   END`),
+  ]);
+ })();
+ initialized.set(env.DB,job);
+ try{await job;}catch(e){if(initialized.get(env.DB)===job)initialized.delete(env.DB);throw e;}
 }
 /** Records one finished match. Returns the agent's game count when this call added the match. */
 export async function recordAgentPlay(env:KpEnv,riotId:string,matchId:string,agent:string|undefined|null,outcome:string|null,endedAt:number){
@@ -28,11 +50,11 @@ export async function recordAgentPlay(env:KpEnv,riotId:string,matchId:string,age
  await ensureMastery(env);
  const r=await env.DB.prepare('INSERT OR IGNORE INTO agent_plays(riot_id,match_id,agent,outcome,ended_at) VALUES(?,?,?,?,?)').bind(riotId,matchId,name,outcome,endedAt).run();
  if(!r.meta.changes)return null;
- return Number((await env.DB.prepare('SELECT COUNT(*) AS n FROM agent_plays WHERE riot_id=? AND agent=?').bind(riotId,name).first<{n:number}>())?.n??0);
+ return Number((await env.DB.prepare('SELECT games FROM agent_mastery_totals WHERE riot_id=? AND agent=?').bind(riotId,name).first<{games:number}>())?.games??0);
 }
 export async function masteryOf(env:KpEnv,riotId:string,level:RoastLevel){
  await ensureMastery(env);
- const rows=(await env.DB.prepare("SELECT agent,COUNT(*) AS games,SUM(outcome='win') AS wins FROM agent_plays WHERE riot_id=? GROUP BY agent ORDER BY games DESC,agent LIMIT 8").bind(riotId).all<{agent:string;games:number;wins:number}>()).results;
+ const rows=(await env.DB.prepare("SELECT agent,games,wins FROM agent_mastery_totals WHERE riot_id=? ORDER BY games DESC,agent LIMIT 8").bind(riotId).all<{agent:string;games:number;wins:number}>()).results;
  return rows.map(r=>({agent:r.agent,games:r.games,wins:r.wins??0,titles:titlesFor(level,r.agent,r.games,r.wins??0)}));
 }
 export function riotIdOf(mapping:KpMapping,user:string){return mapping.accounts.find(a=>a.discordUserId===user)?.riotId??null;}

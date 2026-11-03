@@ -10,38 +10,26 @@
 
 実況は `RaceBroadcaster` Durable Objectのアラームで実行し、既存の通話報酬用 `VoiceGateway` と別のインスタンス・クラスに分けています。毎分の既存cronが対象を登録し、アラームを復旧します。Worker名・D1・cron・秘密値・Interactionsを保持したまま、既知の `RACE_BROADCAST` bindingと追加migrationだけを加えます。
 
-## 自動リプレイ動画
+## 自動リプレイ動画（Issue #194 により停止）
 
-GitHub Actionsの `Race replay video` が毎時02・17・32・47分に終了済みレースを先に確認します。対象が0件なら、Python/Pillow・ffmpeg・フォントの準備と動画生成をスキップして終了します。対象がある場合だけ生成ツールを準備し、52秒・768×432・H.264 MP4を作り、稼ぎchへ添付します。レンダリングはActivityと同じ着順・走行タイムラインを使います。サーバーの着順を動画側で抽選し直しません。音声はありません。
+Discordへの競馬リプレイMP4の**自動投稿は廃止**した。毎時のGitHub Actions起動・デプロイ完了時の起動を削除し、手動Actionsでも本番レースの取得やアップロードを行わない。旧バージョンが持つジョブ・lease・再試行が再開されても、Workerの動画ジョブ取得とMP4アップロードAPIは `410 Gone` を返し、データベースやDiscordを操作しない。既存の動画投稿・レース結果・履歴は削除しない。待機キューは無効化したまま保持する。
 
-Workerの配置完了後にもキューの接続確認を兼ねて実行します。Actionsのスケジュールは正確な時刻に開始する保証がないため、動画投稿はゴール直後ではなく生成・配送完了後です。チャットの実況とは独立しています。添付動画の再生開始時刻は利用者ごとで、同時自動再生を保証しません。Discordの画面共有・Go Live・ステージ映像配信は使いません。PCの常時起動や、新しい有料配信サービス・契約は不要です。
+唯一残す手動Actionsは、架空の固定レースだけをローカルでレンダリングして動画ファイルの正常性を確認するオフライン検査である。本番のDiscord、OIDC、D1動画ジョブにはアクセスしない。通常運用ではこのActionsを実行しない。
 
-対象の確認時に確保した最新の最大2レースを、runner内の非公開一時ファイル（0600）で生成ステップへ渡します。生成時にキューを取り直さないため、確保済みのレースが抜けたり別のレースへ入れ替わったりしません。OIDCトークンは一時ファイルへ保存せず、アップロード時は改めて取得します。一時ファイルは成功・失敗を問わず終了時に削除し、artifactへ保存しません。15分以上古い受け渡しデータは使用しません。
-
-1回の処理は最新の最大2レース、直近6時間までです。古い大量の動画を一度に送信しません。動画は8MB以下で送ります。通常実行でレースデータや動画を公開Actions artifactへ保存せず、runnerの一時ファイルを終了時に削除します。
-
-## 認証と再試行
-
-動画処理にはGitHub OIDCを使います。専用のAPIキーを配る必要はありません。署名・issuer・audience・有効期限・repository/owner ID・mainブランチ・専用workflowのパス・実行種別をWorkerで確認します。フォークやPull Requestからの動画投稿は拒否します。
-
-取得できるのは終了済みレースだけで、再生に必要な表示名・位置・着順・実況を返します。未発走レースの結果、秘密シード、Discord IDの対応表、残高、Webhook URLは返しません。アップロードにはそのレースの期限付きleaseも必要です。公開 `/api/racing/status` は件数・稼働状態だけです。
-
-動画のキュー取得は期限付きで確保し、再取得・同時処理で重複しません。既に配送済みのアップロード再送は成功扱いで二度送りません。確実に拒否された配送は後で再試行します。POST中のタイムアウトなど「送れたか不明」の場合はunknownに残し、勝手に再投稿しません。実況の初回作成も同様です。人が投稿を削除した場合は再作成しません。Discordのレート制限時はretry_afterを待ちます。
+**変更しない機能：** 発走3分前からの告知、約5秒間隔のテキスト実況編集、50秒後の確定結果、馬券購入、配当・KP精算、馬主・冠レース、Activity表示、既存の結果通知、株式速報、一般向け「Activityを開く」リンク。今後の実況終了メッセージは、動画を投稿するとの案内を表示しない。
 
 ## 検証・運用
 
-Node 24のSQLiteと模擬Discord応答で、無観客での予約、同じ投稿の編集、時刻への追従、終了前の結果非公開、レート制限、重複防止、OIDC署名と権限、動画のlease・形式・再送を確認します。
+Node 24のSQLiteと模擬Discord応答で、テキスト実況の作成・編集・終了表示、投稿削除時の再投稿防止を検証する。動画ジョブ取得は空、旧ジョブ・期限切れlease・投稿待ち/送信中/投稿済みのいずれも配送不可であり、動画用のD1読み書き・Webhook送信が起きないことをテストする。過去のMP4はDiscord側でそのまま残る。
 
-`RACE_VIDEO_FONT=/path/to/Japanese-font node scripts/race-video/run.mjs --check` は架空レースの動画だけを生成します。PythonのPillowとffmpegが必要です。Discordには送りません。Actionsの手動実行も `check=true` なら同様で、検査用の架空レース動画だけをartifactに保存します。明示的なcheckモードでは本番キューを確認せず、従来どおりツールを準備して動画の形式を検証します。
-
-ライブ投稿を開始した既存レースを消したり、秘密値やBot Tokenをリセットしたりする作業は不要です。実運用の配送状態はD1の `race_broadcasts` に保持します。
+`RACE_VIDEO_FONT=/path/to/Japanese-font node scripts/race-video/run.mjs --check` は**架空の固定レースのローカル検証のみ**を行う。その他の実行引数と引数なし実行は、ネットワーク処理に進まず拒否する。
 
 ## Activityへのボタン
 
-稼ぎchの通知・観戦投稿・リプレイ動画と、`/kp`・`/keiba`・`/bet`等の返信に「Activityを開く」のリンクボタンを付けます。公式の `https://discord.com/activities/<application_id>` を使い、GitHub Pagesを通常ブラウザーで開くボタンとは分けています。URLにDiscordユーザーID・セッション・秘密値を含めません。
+稼ぎchの通知・観戦投稿と、`/kp`・`/keiba`・`/bet`等の返信に「Activityを開く」のリンクボタンを付けます。公式の `https://discord.com/activities/<application_id>` を使い、GitHub Pagesを通常ブラウザーで開くボタンとは分けています。URLにDiscordユーザーID・セッション・秘密値を含めません。
 
 初回の認証や、起動先チャンネルの選択がDiscord側で表示される場合があります。許可画面を飛ばすものではなく、スマホでの最終的な起動動作はDiscordクライアントにも依存します。既存の起動設定・OAuth・URL Mappingは変更しません。以前の通知には追加せず、反映後に送る投稿と実況の編集から表示します。
 
-Webhookは `with_components=true` を指定し、アプリ所有でないWebhookでも許可されるリンクボタンだけを送ります。通常の本文と動画添付を保持するため、Components V2には切り替えません。
+Webhookは `with_components=true` を指定し、アプリ所有でないWebhookでも許可されるリンクボタンだけを送ります。通常の本文を保持するため、Components V2には切り替えません。
 
 公式仕様: [Activity共有リンク](https://docs.discord.com/developers/activities/development-guides/growth-and-referrals)、[Webhookのcomponents](https://docs.discord.com/developers/resources/webhook#execute-webhook)。

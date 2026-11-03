@@ -353,7 +353,10 @@ test('a settled Steam achievement waits for the quiet period, then queues once w
  const body=JSON.parse(achievementPosts(f)[0]!.body as string);assert.match(body.content,/実績 1個解除/);assert.match(body.content,/100 KP/);assert.deepEqual(body.allowed_mentions,{parse:[]});
  due(f);await monitorSteam(env,guild,mock(f,[unlocked(f)],60),()=>f.now+180000);assert.equal(await queueSteamPosts(env,guild,f.now+300000),0);assert.equal(achievementPosts(f).length,1);assert.equal(earned(f),100);
 });
-test('55 simultaneous Steam achievements spanning three collection runs become one capped summary',async()=>{
+test('55 simultaneous Steam achievements spanning three collection runs become one capped summary',async t=>{
+ // The fixture spans 3 minutes. Crossing UTC midnight correctly resets the daily cap;
+ // pin this test to midday so it asserts one-day behavior on any CI start time.
+ t.mock.timers.enable({apis:['Date'],now:Date.parse('2026-10-30T12:00:00Z')});
  const f=await fixture(),env=postEnv(f);linked(f);const list=Array.from({length:55},(_,i)=>unlocked(f,'burst-'+i));
  for(let n=0;n<3;n++){
   due(f);await monitorSteam(env,guild,mock(f,list,60),()=>f.now+n*60000);assert.equal(await queueSteamPosts(env,guild,f.now+n*60000),0);

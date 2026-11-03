@@ -40,8 +40,22 @@ const server=spawn('python3',['-m','http.server','8767','--bind','127.0.0.1'],{s
  await page.locator('#horse-name').fill('ケソ号');await page.locator('[data-action=horse-buy][data-box=normal]').click();await page.locator('.toast').filter({hasText:'仲間入り'}).waitFor();
  assert.deepEqual(bodies.shift().args,{box:'normal',name:'ケソ号'});
  assert.match(await page.locator('.asset-card').filter({hasText:'ボックスを開けると'}).innerText(),/ケソ号（下級/);assert.match(await page.locator('.asset-card').filter({hasText:'ボックスを開けると'}).innerText(),/今日の交換はあと1回/);
- page.once('dialog',d=>d.accept());await page.locator('[data-action=horse-sell]').click();await page.locator('.toast').filter({hasText:'売却'}).waitFor();
- assert.deepEqual(bodies.shift().args,{horseId:'horse-2'});
+ // Discord iOS can swallow window.confirm. The horse sale must never need it.
+ await page.evaluate(()=>{window.confirm=()=>{throw Error('native confirm is unavailable in Discord iOS');};});
+ await page.locator('[data-action=horse-sell]').click();
+ await page.locator('.horse-sale-confirmation').waitFor();
+ assert.match(await page.locator('.horse-sale-confirmation').innerText(),/ケソ号.*600 KP.*取り消せません/s);
+ assert.equal(bodies.length,0,'review must not submit a sale');
+ await page.locator('[data-action=horse-sell-cancel]').click();
+ assert.equal(await page.locator('.horse-sale-confirmation').count(),0);
+ assert.equal(bodies.length,0,'cancel must not submit a sale');
+ await page.locator('[data-action=horse-sell]').click();
+ await page.locator('[data-action=horse-sell-approve]').click();
+ await page.locator('.toast').filter({hasText:'売却'}).waitFor();
+ assert.equal(await page.locator('.horse-sale-confirmation').count(),0);
+ assert.equal(await page.locator('[data-action=horse-sell]').count(),0,'sold horse disappears');
+ const sale=bodies.shift();assert.equal(sale.action,'horse-sell');assert.deepEqual(sale.args,{horseId:'horse-2'});
+ await page.evaluate(()=>{window.confirm=()=>true;}); // Other purchase dialogs remain unchanged.
  state.cash=100000;await refresh(toShop);
  await page.locator('#lux-target').selectOption('two');page.once('dialog',d=>d.accept());await page.locator('[data-action=luxury][data-item=convict]').click();await page.locator('.toast').filter({hasText:'戦犯認定を買いました'}).waitFor();
  const lux=bodies.shift();assert.equal(lux.action,'luxury');assert.equal(lux.args.item,'convict');assert.equal(lux.args.target,'two');

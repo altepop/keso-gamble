@@ -35,35 +35,30 @@ async function harness(t,jobs=[]){
  const calls=async()=>{try{return (await readFile(log,'utf8')).trim().split('\n').filter(Boolean).map(JSON.parse);}catch(e){if(e.code==='ENOENT')return [];throw e;}};
  return {dir,cache,output,run,calls};
 }
-test('an empty video queue reports no work without preparing or invoking an encoder',async t=>{
- const f=await harness(t);const result=f.run(['--claim','--jobs-file',f.cache]);assert.equal(result.status,0,result.stderr);assert.match(result.stdout,/Skipping video tools/);assert.equal(await readFile(f.output,'utf8'),'has_jobs=false\n');
- assert.deepEqual((await f.calls()).map(c=>c.kind),['identity','claim']);assert.deepEqual(JSON.parse(await readFile(f.cache,'utf8')).jobs,[]);assert.equal((await stat(f.cache)).mode&0o777,0o600);
- const render=f.run(['--jobs-file',f.cache]);assert.equal(render.status,0,render.stderr);assert.match(render.stdout,/Race videos posted: 0/);assert.deepEqual((await f.calls()).map(c=>c.kind),['identity','claim']);
-});
-test('video jobs are claimed once before tools, then the same leases are encoded and delivered',async t=>{
- const jobs=[job(),job(1793189700000)],f=await harness(t,jobs);
- const claimed=f.run(['--claim','--jobs-file',f.cache]);assert.equal(claimed.status,0,claimed.stderr);assert.equal(await readFile(f.output,'utf8'),'has_jobs=true\n');assert.deepEqual((await f.calls()).map(c=>c.kind),['identity','claim']);
- const saved=await readFile(f.cache,'utf8');assert(!saved.includes('fixture-oidc-token'));assert(!saved.includes('fixture-request-secret'));assert.deepEqual(JSON.parse(saved).jobs,jobs);
- const delivered=f.run(['--jobs-file',f.cache]);assert.equal(delivered.status,0,delivered.stderr);assert.match(delivered.stdout,/Race videos posted: 2/);
- const calls=await f.calls();assert.equal(calls.filter(c=>c.kind==='claim').length,1);assert.equal(calls.filter(c=>c.kind==='encode').length,2);
- assert.deepEqual(calls.filter(c=>c.kind==='upload').map(c=>[Number(c.race),c.lease,c.type]),jobs.map(j=>[j.race,j.lease,'video/mp4']));
-});
-test('a failed queue request stops instead of claiming there is no video work',async t=>{
- const f=await harness(t),result=f.run(['--claim','--jobs-file',f.cache],{FIXTURE_QUEUE_STATUS:'503'});assert.equal(result.status,1);assert.match(result.stderr,/queue_http_503/);await assert.rejects(readFile(f.cache),{code:'ENOENT'});await assert.rejects(readFile(f.output),{code:'ENOENT'});assert.equal((await f.calls()).filter(c=>c.kind==='encode').length,0);
-});
-test('stale or malformed job handoffs cannot start rendering or upload',async t=>{
- for(const data of [{claimedAt:Date.now()-21*60000,jobs:[job()]},{claimedAt:Date.now()+60000,jobs:[job()]},{claimedAt:Date.now(),jobs:[job(),job()]},{claimedAt:Date.now(),jobs:[{...job(),lease:'invalid'}]}]){
-  const f=await harness(t);await writeFile(f.cache,JSON.stringify(data));const result=f.run(['--jobs-file',f.cache]);assert.equal(result.status,1);assert.match(result.stderr,/invalid_job_handoff/);assert.deepEqual(await f.calls(),[]);
+test('all legacy production video invocations fail before fetching OIDC, claiming D1 jobs, rendering or uploading',async t=>{
+ const f=await harness(t,[job()]);
+ for(const args of [[],['--claim','--jobs-file',f.cache],['--jobs-file',f.cache],['--claim'],['--check','--jobs-file',f.cache],['--upload'],['--check','--claim']]){
+  const result=f.run(args);
+  assert.equal(result.status,2,JSON.stringify(args)+': '+result.stderr);
+  assert.match(result.stderr,/race_video_delivery_disabled/);
  }
+ assert.deepEqual(await f.calls(),[],'no network, D1, encoder or webhook calls');
+ await assert.rejects(readFile(f.output),{code:'ENOENT'});
+ await assert.rejects(readFile(f.cache),{code:'ENOENT'});
 });
-test('oversized handoffs and invalid argument combinations fail before any external request',async t=>{
- const f=await harness(t);await writeFile(f.cache,'x'.repeat(1024*1024+1));const oversized=f.run(['--jobs-file',f.cache]);assert.equal(oversized.status,1);assert.match(oversized.stderr,/invalid_job_handoff/);
- for(const args of [['--claim'],['--jobs-file'],['--check','--claim','--jobs-file',f.cache]]){const result=f.run(args);assert.equal(result.status,1);assert.match(result.stderr,/invalid_arguments/);}
- assert.deepEqual(await f.calls(),[]);
+test('offline manual video fixture can render but makes no HTTP request or Discord upload',async t=>{
+ const f=await harness(t,[job()]);
+ const result=f.run(['--check']);
+ assert.equal(result.status,0,result.stderr);
+ assert.match(result.stdout,/No Discord post/);
+ assert.deepEqual((await f.calls()).map(c=>c.kind),['encode']);
+ await assert.rejects(readFile(f.output),{code:'ENOENT'});
 });
-test('manual video check renders its fixture without claiming or posting live races',async t=>{
- const f=await harness(t,[job()]),result=f.run(['--check']);assert.equal(result.status,0,result.stderr);assert.match(result.stdout,/No Discord post/);assert.deepEqual((await f.calls()).map(c=>c.kind),['encode']);await assert.rejects(readFile(f.output),{code:'ENOENT'});
-});
-test('the existing direct CLI still claims and renders in a single invocation',async t=>{
- const f=await harness(t,[job()]),result=f.run([]);assert.equal(result.status,0,result.stderr);assert.deepEqual((await f.calls()).map(c=>c.kind),['identity','claim','encode','identity','upload']);
+test('removed automatic trigger prevents scheduled and deploy-complete workflow dispatches',async()=>{
+ const workflow=await readFile(join(root,'.github/workflows/race-video.yml'),'utf8');
+ assert.match(workflow,/workflow_dispatch:/);
+ assert.doesNotMatch(workflow,/^\s+schedule:\s*$/m);
+ assert.doesNotMatch(workflow,/^\s+workflow_run:\s*$/m);
+ assert.doesNotMatch(workflow,/--claim|--jobs-file|--upload/);
+ assert.match(workflow,/run\.mjs --check/);
 });

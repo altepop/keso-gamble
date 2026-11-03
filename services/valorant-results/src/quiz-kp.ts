@@ -1,5 +1,6 @@
 import policy from '../quiz-kp-policy.json' with { type: 'json' };
 import {newKpState} from './kp.ts';
+import {creditVerifiedRelicBonus} from './relics.ts';
 import type {KpEnv,KpMapping} from './kp.ts';
 const initialized=new WeakSet<object>();
 export async function ensureQuizKp(env:KpEnv){
@@ -33,12 +34,14 @@ export async function receiveQuizKp(request:Request,env:KpEnv,mapping:KpMapping,
  await ensureQuizKp(env);
  const id='quiz:'+mapping.guildId+':'+e.discordUserId+':'+e.mode+':'+e.day+(slot>1?':'+slot:'');
  const amount=policy.rates[e.mode as keyof typeof policy.rates];
- await env.DB.batch([
+ const settledRows=await env.DB.batch([
   env.DB.prepare('INSERT OR IGNORE INTO kp_participants VALUES(?,?)').bind(mapping.guildId,e.discordUserId),
   env.DB.prepare('INSERT OR IGNORE INTO kp_wallets(guild,user) VALUES(?,?)').bind(mapping.guildId,e.discordUserId),
   env.DB.prepare('INSERT OR IGNORE INTO kp_state(guild,user,data) VALUES(?,?,?)').bind(mapping.guildId,e.discordUserId,JSON.stringify(newKpState())),
   (slot===1?env.DB.prepare('INSERT INTO kp_quiz_events SELECT ?,?,?,?,?,?,?,? WHERE NOT EXISTS(SELECT 1 FROM kp_quiz_ranked_extra WHERE guild=? AND user=? AND game=?) ON CONFLICT DO NOTHING').bind(id,mapping.guildId,e.discordUserId,e.mode,e.day,e.gameId,amount,e.completedAt,mapping.guildId,e.discordUserId,e.gameId):env.DB.prepare('INSERT INTO kp_quiz_ranked_extra SELECT ?,?,?,?,?,?,?,?,? WHERE NOT EXISTS(SELECT 1 FROM kp_quiz_events WHERE guild=? AND user=? AND game=?) ON CONFLICT DO NOTHING').bind(id,mapping.guildId,e.discordUserId,e.mode,e.day,e.gameId,amount,e.completedAt,slot,mapping.guildId,e.discordUserId,e.gameId)),
  ]);
+ if((settledRows[3]?.meta?.changes??0)>0)
+  try{await creditVerifiedRelicBonus(env,mapping.guildId,e.discordUserId,id,'quiz',amount,true,e.completedAt);}catch{console.warn('relic_quiz_bonus_pending');}
  return Response.json({accepted:true},{headers:{'Cache-Control':'no-store'}});
 }
 export const quizKpRates=policy.rates;

@@ -1,13 +1,13 @@
 import {privateCasinoAllowed} from '../src/private-casino.ts';
 import {memberNames} from '../src/member-names.ts';
-import {communityFeed,publicTrade} from '../src/community-feed.ts';
+import {communityFeed,feedRevision,publicTrade} from '../src/community-feed.ts';
 import test from 'node:test';
 import { URL as NodeURL } from 'node:url';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import {readFileSync,readdirSync}from'node:fs';
 import {generateKeyPairSync,randomBytes,createCipheriv,publicEncrypt}from'node:crypto';
-import {initializeKp,syncKpAccounts,collectKpMatch,drainKpInbox,issueKpCode,exchangeKpCode,kpSession,decryptKpMapping,kpCreditLine}from'../src/kp.ts';
+import {initializeKp,syncKpAccounts,collectKpMatch,drainKpInbox,issueKpCode,exchangeKpCode,kpSession,decryptKpMapping,kpCreditLine,createKpSession,prepareKpRun,loadKpRunMatch,kpEventId,kpSchemaVersion,kpRelicBonus}from'../src/kp.ts';
 import type{KpEnv,KpMapping}from'../src/kp.ts';
 import {readKpState,operateKp,kpApi}from'../src/kp-api.ts';
 const guild='100000000000000100',one='100000000000000101',two='100000000000000102';
@@ -24,6 +24,48 @@ async function fixture(){
 }
 function game(id:string,queue='competitive',win=true){return {metadata:{match_id:id,is_completed:true,queue:{id:queue},started_at:new Date(Date.now()-10000).toISOString(),game_length_in_ms:1000},players:[{puuid:'p-one',team_id:'red'}],teams:[{team_id:'red',won:win},{team_id:'blue',won:!win}]};}
 function seed(sql:DatabaseSync,user:string,amount:number){sql.prepare('INSERT INTO kp_ledger VALUES(?,?,?,?,?,?)').run('test-'+user,guild,user,amount,'test-only',Date.now());}
+test('per-minute KP monitor avoids scanning all rewards and lazily reads only requested match IDs',async()=>{
+ const f=await fixture();f.enableHistory();
+ const old=game('historical-001');
+ assert.equal(await collectKpMatch(f.env,mapping,old,'p-one'),900);
+ const eventId=kpEventId(guild,'historical-001','p-one');
+ f.sql.prepare('INSERT INTO kp_reward_notes(id,note) VALUES(?,?) ON CONFLICT(id) DO UPDATE SET note=excluded.note').run(eventId,'（既存）');
+ f.sql.prepare('INSERT INTO notifications(riot_id,match_id,message,ended_at,mode,sent) VALUES(?,?,?,?,?,1)')
+  .run('One#JP1','historical-001','試合結果\\n🪙 この試合 +900 KP（既存）',Date.now(),'competitive');
+ // Extra historic events must not cause the prepare path to scan 200 rows.
+ f.resetQueries();
+ const run=await prepareKpRun(f.env,mapping);
+ assert.equal(f.queries(),1,'prepare performs only the schema setting point lookup');
+ assert.equal(run.credits.size,0,'preloading historical events is forbidden');
+ await loadKpRunMatch(f.env,run,eventId);
+ assert.equal(run.credits.get(eventId),900);
+ assert.match(run.messages.get(eventId)??'',/試合結果/);
+ assert.equal(run.notes?.get(eventId),'（既存）');
+ const oneRead=f.queries();
+ await loadKpRunMatch(f.env,run,eventId);
+ assert.equal(f.queries(),oneRead,'repeated instances of the same match do not read DB again');
+ const absent=kpEventId(guild,'unknown-001','p-one');
+ await loadKpRunMatch(f.env,run,absent);
+ assert.equal(run.credits.has(absent),false);
+ const queries=f.queries();await loadKpRunMatch(f.env,run,absent);
+ assert.equal(f.queries(),queries,'missing matches are cached for one cron run only');
+ const next=await prepareKpRun(f.env,mapping);
+ await loadKpRunMatch(f.env,next,eventId);
+ assert.equal(next.credits.get(eventId),900,'a new invocation always checks durable state');
+ assert.equal(f.sql.prepare("SELECT COUNT(*) AS n FROM kp_ledger WHERE kind='match'").get()!.n,1,'no credits are duplicated');
+});
+test('schema version cold check reads one exact key and handles only missing kp_settings',async()=>{
+ const f=await fixture();
+ const calls:string[]=[];
+ const base=f.env.DB.prepare.bind(f.env.DB);
+ const checked={...f.env,DB:{...f.env.DB,prepare:(sql:string)=>{calls.push(sql);return base(sql);}} as D1Database};
+ assert.equal((await kpSchemaVersion(checked))?.value,'1');
+ assert.deepEqual(calls,["SELECT value FROM kp_settings WHERE key='schema_version'"]);
+ const noTable={...f.env,DB:{prepare:()=>({first:async()=>{throw Error('D1_ERROR: no such table: main.kp_settings');}})} as unknown as D1Database};
+ assert.equal(await kpSchemaVersion(noTable),null,'fresh install is permitted');
+ const failed={...f.env,DB:{prepare:()=>({first:async()=>{throw Error('D1_ERROR: database unavailable');}})} as unknown as D1Database};
+ await assert.rejects(kpSchemaVersion(failed),/database unavailable/,'a transient D1 error must not bootstrap');
+});
 test('activation starts at zero, preserves first linking and cutoff, excludes old matches, and nine wins buy an 8000 KP directive',async()=>{
  const f=await fixture();assert.equal((await readKpState(f.env,mapping,one)).cash,0);
  assert.equal(await collectKpMatch(f.env,mapping,game('old'),'p-one'),null);
@@ -139,7 +181,7 @@ test('four players with cached five-match histories avoid repeating wallet setup
  const histories=new Map<string,ReturnType<typeof game>[]>();
  for(let i=0;i<4;i++){const games=Array.from({length:5},(_,n)=>{const raw=game('cached-'+i+'-'+n);raw.players[0].puuid=puuids[i];f.sql.prepare('INSERT INTO notifications(riot_id,match_id,message,ended_at,mode,sent) VALUES(?,?,?,?,?,1)').run(names[i]+'#JP1',raw.metadata.match_id,'fixture',Date.now()-9000,'competitive');return raw;});histories.set(puuids[i],games);}
  globalThis.fetch=async url=>{const target=String(url).split('/').at(-1)!.split('?')[0];return Response.json({data:histories.get(target)??[]});};
- try{f.resetQueries();await monitor({...f.env,HENRIK_API_KEY:'fixture',DISCORD_WEBHOOK_URL:'https://discord.com/api/webhooks/1/fixture'},names.map(name=>({riotId:name+'#JP1'})));assert.ok(f.queries()+3<=50,`queries including three cold-initialization reads: ${f.queries()+3}`);}
+ try{f.resetQueries();await monitor({...f.env,HENRIK_API_KEY:'fixture',DISCORD_WEBHOOK_URL:'https://discord.com/api/webhooks/1/fixture'},names.map(name=>({riotId:name+'#JP1'})));assert.ok(f.queries()+3<=75,`queries including three cold-initialization reads and per-match indexed rank lookups: ${f.queries()+3}`);}
  finally{globalThis.fetch=original;}
 });
 
@@ -342,15 +384,18 @@ test('legacy policy team deathmatch and escalation: 35 kills or more add 150, wi
  assert.ok(plain(Array.from({length:50},(_,i)=>valoKp(at('kb-34'+i,'hurm',true,34),'p-one','teamdeathmatch','win'))).every(r=>r.base===70&&r.note===''));
  assert.ok(plain(Array.from({length:50},(_,i)=>valoKp(at('kb-sw'+i,'swiftplay',true,40),'p-one','swiftplay','win'))).every(r=>r.base===180&&r.note===''));
 });
-test('escalation: the usual small rate, and on a very rare draw (about 3%) +1,000 for a win or −1,000 for a loss',async()=>{
+test('escalation: 1-in-24 big draws use five tiers while super events remain mutually exclusive',async()=>{
  const {valoKp}=await import('../src/kp.ts');
  const esc=(id:string,mode:string,win:boolean)=>{const raw=game(id,mode,win) as ReturnType<typeof game>&{players:Array<{puuid:string;team_id:string;stats?:{kills?:number;score?:number}}>};
   raw.players=[{puuid:'p-one',team_id:'red',stats:{kills:30,score:500}},...[10,20,15,5].map((k,i)=>({puuid:'m'+i,team_id:'red',stats:{kills:k,score:100}}))];return raw;};
  const wins=Array.from({length:2000},(_,i)=>valoKp(esc('e-win'+i,'ggteam',true),'p-one','escalation','win'));
- const big=wins.filter(r=>r.base===1000);assert.ok(big.length>=30&&big.length<=90,String(big.length));assert.ok(wins.every(r=>r.base===70||r.base===1000));
- assert.ok(big.every(r=>r.note.startsWith('（🎰 エスカ大勝負）')));
+ const big=wins.filter(r=>r.escalation?.kind==='big');assert.ok(big.length>=60&&big.length<=110,String(big.length));
+ const winTiers=new Set([500,1000,2500,5000,15000]);
+ assert.ok(wins.every(r=>r.base===70||winTiers.has(r.base)));
+ assert.ok(big.every(r=>r.note.startsWith('（🎰 エスカ大勝負 ')&&r.note.includes('KP／')));
  const losses=Array.from({length:2000},(_,i)=>valoKp(esc('e-loss'+i,'ggteam',false),'p-one','escalation','loss'));
- assert.ok(losses.every(r=>r.base===0||r.base===-1000)&&losses.some(r=>r.base===-1000));
+ assert.ok(losses.every(r=>r.base===0||winTiers.has(-r.base)));
+ assert.ok(losses.some(r=>r.escalation?.kind==='big'&&r.base<0));
  assert.ok(Array.from({length:200},(_,i)=>valoKp(esc('t-win'+i,'hurm',true),'p-one','teamdeathmatch','win').base).every(v=>v===70),'team deathmatch: no bonus');
 });
 
@@ -381,7 +426,9 @@ test('a later monitor run shows a loss as its net negative KP, not the zero stor
  const {prepareKpRun}=await import('../src/kp.ts');const f=await fixture();f.enableHistory();seed(f.sql,one,1000);
  assert.equal(await collectKpMatch(f.env,mapping,game('cached-loss-net','competitive',false),'p-one'),-200);
  const run=await prepareKpRun(f.env,mapping);
- assert.equal(run.credits.get([...run.credits.keys()].find(k=>k.includes('cached-loss-net'))!),-200);
+ const id=kpEventId(guild,'cached-loss-net','p-one');
+ await loadKpRunMatch(f.env,run,id);
+ assert.equal(run.credits.get(id),-200);
 });
 
 test('a rank change that reaches the history late is still caught on a later run, and the post is updated',async()=>{
@@ -502,7 +549,7 @@ test('member name aliases bind a unique guild wallet once, never a colliding or 
  assert.equal((await memberNames(f.env,'other-guild',base,config)).has(one),false);
  f.sql.prepare('DELETE FROM kp_settings WHERE key=?').run('member-name:'+guild+':'+one.slice(-4));
  assert.equal((await memberNames(f.env,guild,base,config)).has(one),false,'initial collision stays unassigned');
- assert.equal((await memberNames(f.env,guild,base,{guildId:guild,names:[{suffix:'9999',name:'Absent'}]})).size,1);
+ assert.deepEqual((await memberNames(f.env,guild,base,{guildId:guild,names:[{suffix:'9999',name:'Absent'}]})),new Map([...base,['827801943928995840','小林']]));
  const renamed=await memberNames(f.env,guild,base,{guildId:guild,names:[{suffix:two.slice(-4),name:'New name'}]});assert.equal(renamed.get(two),'New name');
 });
 
@@ -592,5 +639,93 @@ test('explicit member IDs use exact matching even when suffixes collide and pres
  const names=await memberNames(f.env,guild,base,config);
  assert.equal(names.get(one),'New display');assert.equal(names.has(collision),false);assert.equal(names.get(two),'Old alias');assert.equal(base.get(two),'Existing');
  assert.equal((await memberNames(f.env,'other-guild',base,config)).has(one),false);
- for(const names of [[{userId:one,suffix:one.slice(-4),name:'Invalid'}],[{userId:'123',name:'Invalid'}],[{userId:one,name:'A'},{userId:one,name:'B'}]])assert.deepEqual(await memberNames(f.env,guild,base,{guildId:guild,names}),base);
+ for(const names of [[{userId:one,suffix:one.slice(-4),name:'Invalid'}],[{userId:'123',name:'Invalid'}],[{userId:one,name:'A'},{userId:one,name:'B'}]])assert.deepEqual(await memberNames(f.env,guild,base,{guildId:guild,names}),new Map([...base,['827801943928995840','小林']]));
+});
+
+test('定期的なコミュニティ表示の名前解決は保存済みの複数名を1回で取得する',async()=>{
+ const f=await fixture();
+ const config={guildId:guild,names:[{suffix:one.slice(-4),name:'一号'},{suffix:two.slice(-4),name:'二号'}]};
+ const base=new Map<string,string>();
+ await memberNames(f.env,guild,base,config);
+ f.resetQueries();
+ const names=await memberNames(f.env,guild,base,config);
+ assert.equal(names.get(one),'一号');
+ assert.equal(names.get(two),'二号');
+ assert.equal(f.queries(),1,'two persisted names must be fetched in one indexed SELECT');
+});
+
+test('5秒コミュニティ更新は変更がない場合に40件の履歴を再読込しない。新規投稿は即反映し、権限も維持',async()=>{
+ const f=await fixture();
+ const token=await createKpSession(f.env,guild,one);
+ const db=f.env.DB as unknown as {prepare:(text:string)=>unknown};
+ const raw=db.prepare;
+ let feedScans=0,markerReads=0;
+ db.prepare=((text:string)=>{
+  if(text.includes('SELECT id,user,at,json_extract(response'))feedScans++;
+  if(text.includes('SELECT MAX(rowid) AS latest FROM kp_operations'))markerReads++;
+  return raw(text);
+ }) as typeof db.prepare;
+ const get=(revision?:number,authorized=true)=>kpApi(new Request('https://example.test/api/kp/feed'+(revision===undefined?'':'?revision='+revision),{headers:authorized?{Authorization:'Bearer '+token}:{}}),f.env,mapping);
+ try{
+  const initial=await get();
+  assert.equal(initial.status,200);
+  const first=await initial.json() as {entries:Array<unknown>;revision:number;unchanged?:boolean};
+  assert.deepEqual(first.entries,[]);
+  assert.equal(first.revision,0);
+  assert.equal(feedScans,1);
+  const same=await get(first.revision);
+  assert.deepEqual(await same.json(),{unchanged:true,revision:0});
+  assert.equal(feedScans,1,'no full read for unchanged operations');
+  assert.equal(markerReads,2,'only a cheap one-row max() lookup for each poll');
+  const forbidden=await get(first.revision,false);
+  assert.equal(forbidden.status,401,'conditional requests must still authenticate');
+  assert.equal(feedScans,1);
+  f.sql.prepare("INSERT INTO kp_ledger VALUES(?,?,?,?,?,?)").run('feed-credit',guild,one,1000,'test',Date.now());
+  await operateKp(f.env,mapping,one,'feed-new-activity-0001','spin',{type:'red',amount:100});
+  const changed=await get(first.revision);
+  const latest=await changed.json() as {entries:Array<{label:string}>;revision:number};
+  assert(latest.revision>first.revision);
+  assert(latest.entries.length>=1);
+  assert.equal(feedScans,2,'new activity fetches the full feed promptly');
+  const still=await get(latest.revision);
+  assert.equal((await still.json() as {unchanged:boolean}).unchanged,true);
+  assert.equal(feedScans,2);
+  const force=await get();
+  assert.equal((await force.json() as {entries:unknown[]}).entries.length,latest.entries.length);
+  assert.equal(feedScans,3,'the client can force a full refresh for renamed members');
+  assert.equal(await feedRevision(f.env),latest.revision);
+ }finally{db.prepare=raw;}
+});
+
+test('あかんbot shows server-verified relic KP inside total breakdown and replaces the line on edit',async()=>{
+ const base='🎉 ほげは勝ち！（スパイクラッシュ）\\n💬 ナイス！'.replace('\\n','\n');
+ const label='（基礎40・補正0・端数精算 40 KP）';
+ const first=kpCreditLine(base,90,label,50);
+ assert.match(first,/🪙 この試合 \+90 KP\n  ↳ 試合報酬 \+40 KP （基礎40・補正0・端数精算 40 KP）\n  ↳ 🧿 遺物補正 \+50 KP/);
+ assert.match(first,/\n💬 ナイス！/);
+ assert.equal(kpCreditLine(first,90,label,50),first,'a repeated post update must not duplicate the relic item');
+ assert.equal((first.match(/🧿 遺物補正/g)??[]).length,1);
+ assert.equal(kpCreditLine(first,40,label,0),kpCreditLine(base,40,label),'a rollback or changed result removes stale relic items');
+ assert.match(kpCreditLine('Result',111,'',11),/この試合 \+111 KP\n  ↳ 試合報酬 \+100 KP\n  ↳ 🧿 遺物補正 \+11 KP/);
+ assert.match(kpCreditLine('Result',300,'（勝利）',50),/この試合 \+300 KP\n  ↳ 試合報酬 \+250 KP （勝利）\n  ↳ 🧿 遺物補正 \+50 KP/);
+});
+test('あかんbot reads relic bonuses from the real verified ledger and includes them in one cached match read',async()=>{
+ const f=await fixture();f.enableHistory();
+ const match='breakdown-relic',id=kpEventId(guild,match,'p-one');
+ f.sql.prepare('INSERT INTO kp_events(id,guild,user,puuid,match,mode,outcome,amount,policy,at) VALUES(?,?,?,?,?,?,?,?,?,?)')
+  .run(id,guild,one,'p-one',match,'spikerush','win',40,'fixture',Date.now());
+ f.sql.prepare('INSERT INTO kp_ledger(id,guild,user,delta,kind,at) VALUES(?,?,?,?,?,?)')
+  .run('relic:'+id,guild,one,50,'relic',Date.now());
+ const run=await prepareKpRun(f.env,mapping);
+ f.resetQueries();
+ await loadKpRunMatch(f.env,run,id);
+ assert.equal(f.queries(),1,'preloaded event and relic are read with one indexed query');
+ assert.equal(run.credits.get(id),90);
+ assert.equal(run.relicBonuses.get(id),50);
+ assert.equal(kpCreditLine('Result',run.credits.get(id)!, '（基礎40・補正0・端数精算 40 KP）',run.relicBonuses.get(id)), 'Result\n🪙 この試合 +90 KP\n  ↳ 試合報酬 +40 KP （基礎40・補正0・端数精算 40 KP）\n  ↳ 🧿 遺物補正 +50 KP');
+ assert.equal(await kpRelicBonus(f.env,guild,one,id),50);
+ assert.equal(await kpRelicBonus(f.env,guild,two,id),0,'another account cannot query this receipt as their own');
+ assert.equal(await kpRelicBonus(f.env,guild,one,'forged'),0);
+ const newRun=await prepareKpRun(f.env,mapping);await loadKpRunMatch(f.env,newRun,id);
+ assert.equal(newRun.relicBonuses.get(id),50,'restarts and later bot edits show the same settled proof');
 });

@@ -3,6 +3,8 @@
 // number and the four teams; anything that does not match exactly is ignored, never guessed.
 import data from '../mleague-2026-27.json' with {type:'json'};
 import {kpHash} from './kp.ts';
+import {nativeRelicBonus} from './relics.ts';
+import {verifiedBetProfit} from './relic-profit.ts';
 import type {KpEnv,KpMapping} from './kp.ts';
 import {enqueue,ensurePosts,earningsWebhook} from './racing-posts.ts';
 import type {PostEnv} from './racing-posts.ts';
@@ -17,6 +19,30 @@ export interface MlView {teams:MlData['teams'];fixtures:Fixture[]}
 export interface MlResult {names:string[];points:number[];at:number;closedAt?:number}
 interface MlBet {id:string;match:string;player:string;type:'top'|'last';amount:number;odds:number;status:string;payout:number;time:number}
 export const ML_DATA:MlData=data;
+/** Pure schedule gate for the every-minute Worker cron.
+ * 18:00 JST daily: one catch-up for delayed official results, settlement and
+ * tomorrow's match cards, even on off-days.
+ * 18:01–23:59: only when today has a listed match.
+ * 00:00–03:59: only when yesterday had a listed match (late game 2/results).
+ * 04:00–17:59: zero M.LEAGUE cron queries, including on match days.
+ *
+ * Manual /mleague, /mbet and Activity reads are intentionally unaffected.
+ * This does not alter how official results are verified or bets are settled.
+ */
+export function shouldRunMlCron(now:number,fixtures:ReadonlyArray<Pick<Fixture,'date'>>=data.fixtures):boolean{
+ if(!Number.isFinite(now))return false;
+ const local=new Date(now+9*3600000);
+ const hour=local.getUTCHours(),minute=local.getUTCMinutes();
+ const today=local.toISOString().slice(0,10);
+ const hasDate=(date:string)=>fixtures.some(f=>f.date===date);
+ if(hour===18&&minute===0)return true;
+ if(hour>=18)return hasDate(today);
+ if(hour<4){
+  const yesterday=new Date(now+9*3600000-86400000).toISOString().slice(0,10);
+  return hasDate(yesterday);
+ }
+ return false;
+}
 // Every minute: game 2 closes when game 1's result is stored, so a late read keeps betting open longer.
 // Results are read every minute for 8 hours after a start. After that, a game somebody still has an unsettled bet on
 // (an outage, a late official page) keeps being read every 10 minutes until its result arrives.
@@ -74,16 +100,31 @@ export function parseOfficialCards(html:string,year:number,d:MlData=data){
  }
  return out;
 }
+// M.LEAGUE calls mlData in several functions of the same minute-long cron run.
+// D1 Insights: 6,992 reads/day * 36 scanned rows for ml_cards alone.
+// Share a snapshot for 5 seconds in one Worker isolate, not across processes.
+// Updating the official calendar invalidates it before and after the writes.
+const mlViewCache=new WeakMap<object,{created:number;promise:Promise<MlView>}>();
+const ML_VIEW_TTL=5000;
 export async function storeCards(env:KpEnv,cards:ReturnType<typeof parseOfficialCards>,now:number){
+ mlViewCache.delete(env.DB);
  await ensureMl(env);
- for(const c of cards)await env.DB.prepare('INSERT INTO ml_cards(date,tbl,teams,at) VALUES(?,?,?,?) ON CONFLICT(date,tbl) DO UPDATE SET teams=excluded.teams,at=excluded.at WHERE ml_cards.teams!=excluded.teams').bind(c.date,c.table,JSON.stringify(c.teams),now).run();
+ try{
+  for(const c of cards)await env.DB.prepare('INSERT INTO ml_cards(date,tbl,teams,at) VALUES(?,?,?,?) ON CONFLICT(date,tbl) DO UPDATE SET teams=excluded.teams,at=excluded.at WHERE ml_cards.teams!=excluded.teams').bind(c.date,c.table,JSON.stringify(c.teams),now).run();
+ }finally{mlViewCache.delete(env.DB);}
 }
 /** The fixtures with official teams where the calendar has been read; only those are open for betting. */
 export async function mlData(env:KpEnv):Promise<MlView>{
  await ensureMl(env);
- const cards=(await env.DB.prepare('SELECT date,tbl,teams FROM ml_cards').all<{date:string;tbl:number;teams:string}>()).results;
- const official=new Map(cards.map(c=>[c.date+'#'+c.tbl,JSON.parse(c.teams) as string[]]));
- return {teams:data.teams,fixtures:data.fixtures.map(f=>{const teams=official.get(f.date+'#'+f.table);return teams?{...f,teams,confirmed:true}:{...f,confirmed:false};})};
+ const current=Date.now(),cached=mlViewCache.get(env.DB);
+ if(cached&&current-cached.created>=0&&current-cached.created<ML_VIEW_TTL)return cached.promise;
+ const promise=(async()=>{
+  const cards=(await env.DB.prepare('SELECT date,tbl,teams FROM ml_cards').all<{date:string;tbl:number;teams:string}>()).results;
+  const official=new Map(cards.map(c=>[c.date+'#'+c.tbl,JSON.parse(c.teams) as string[]])); 
+  return {teams:data.teams,fixtures:data.fixtures.map(f=>{const teams=official.get(f.date+'#'+f.table);return teams?{...f,teams,confirmed:true}:{...f,confirmed:false};})};
+ })();
+ mlViewCache.set(env.DB,{created:current,promise});
+ try{return await promise;}catch(error){if(mlViewCache.get(env.DB)?.promise===promise)mlViewCache.delete(env.DB);throw error;}
 }
 const monthPage=(y:number,m:number)=>`https://m-league.jp/games/?mlm=${m}&mly=${y}`;
 async function fetchMonth(env:KpEnv,y:number,m:number,now:number,request:typeof fetch){
@@ -243,8 +284,9 @@ export async function settleMl(env:KpEnv,mapping:KpMapping,now=Date.now()){
   if(!due.length)continue;
   const settled:MlBet[]=settleMlBets(state,await mlResults(env,due));
   if(!settled.length)continue;
+  const relicBonus=nativeRelicBonus(state,'mleague',verifiedBetProfit(settled),now);
   const id='ml-settle:'+settled.map(b=>b.id).join(',');
-  const response={result:{settled:settled.map(b=>({id:b.id,status:b.status,payout:b.payout}))}};
+  const response={result:{settled:settled.map(b=>({id:b.id,status:b.status,payout:b.payout})),relicBonus}};
   const inserted=await env.DB.prepare(`INSERT INTO kp_operations(id,guild,user,request_hash,response,delta,state,directive,at)
    SELECT ?,?,?,?,?,?,?,NULL,? WHERE EXISTS(SELECT 1 FROM kp_wallets w JOIN kp_state s ON w.guild=s.guild AND w.user=s.user WHERE w.guild=? AND w.user=? AND w.version=? AND s.version=?) ON CONFLICT(guild,user,id) DO NOTHING`)
    .bind(id,mapping.guildId,row.user,await kpHash(id),JSON.stringify(response),state.cash-row.balance,JSON.stringify(state),now,mapping.guildId,row.user,row.wallet_version,row.state_version).run();

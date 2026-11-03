@@ -6,7 +6,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { initializeKp, syncKpAccounts } from '../src/kp.ts';
 import type { KpMapping } from '../src/kp.ts';
 import { operateKp, readKpState } from '../src/kp-api.ts';
-import { countTitle, winTitle, titlesFor, recordMastery } from '../src/mastery.ts';
+import { countTitle, winTitle, titlesFor, recordMastery, masteryOf, ensureMastery } from '../src/mastery.ts';
 import type { PostEnv } from '../src/racing-posts.ts';
 const guild='100000000000000100',one='100000000000000101',two='100000000000000102';
 const mapping:KpMapping={guildId:guild,accounts:[{riotId:'One#JP1',discordUserId:one},{riotId:'Two#JP1',discordUserId:two}]};
@@ -39,6 +39,26 @@ test('count and win-rate titles follow the decided wording', () => {
  assert.deepEqual(titlesFor('full','ジェット',30,3),['ジェットしか友達がいない','ジェットの面汚し']);
 });
 
+test('legacy agent history backfills once; further matches increment counts and wins idempotently',async()=>{
+ const f=await fixture(false);
+ f.sql.exec('CREATE TABLE IF NOT EXISTS agent_plays(riot_id TEXT NOT NULL,match_id TEXT NOT NULL,agent TEXT NOT NULL,outcome TEXT,ended_at INTEGER NOT NULL,PRIMARY KEY(riot_id,match_id))');
+ const ins=f.sql.prepare('INSERT INTO agent_plays(riot_id,match_id,agent,outcome,ended_at) VALUES(?,?,?,?,?)');
+ for(let i=1;i<=120;i++)ins.run('One#JP1','legacy-'+i,i<=80?'ジェット':'セージ',i%4?'win':'loss',i*1000);
+ const first=await masteryOf(f.env,'One#JP1','full');
+ assert.deepEqual(first.map(x=>[x.agent,x.games,x.wins]),[['ジェット',80,60],['セージ',40,30]]);
+ const sql='SELECT agent,games,wins FROM agent_mastery_totals WHERE riot_id=? ORDER BY games DESC,agent LIMIT 8';
+ const explain=f.sql.prepare('EXPLAIN QUERY PLAN '+sql).all('One#JP1').map(x=>String(x.detail)).join(';');
+ assert.match(explain,/USING INDEX sqlite_autoindex_agent_mastery_totals_1|USING INDEX agent_mastery_totals/);
+ assert.doesNotMatch(explain,/SCAN agent_plays/);
+ assert.equal(await recordMastery(f.env,mapping,'One#JP1','fresh-121','ジェット','win',200000,async()=>()=>'mild'),81);
+ assert.equal(await recordMastery(f.env,mapping,'One#JP1','fresh-121','ジェット','win',200000,async()=>()=>'mild'),null);
+ assert.deepEqual((await masteryOf(f.env,'One#JP1','full'))[0],{
+  agent:'ジェット',games:81,wins:61,titles:['ジェットの付属品','ジェット以外は使うな']
+ });
+ assert.equal(f.sql.prepare("SELECT COUNT(*) AS n FROM agent_mastery_meta WHERE key='v1'").get()!.n,1);
+ await ensureMastery(f.env);
+ assert.equal(f.sql.prepare("SELECT games FROM agent_mastery_totals WHERE riot_id='One#JP1' AND agent='ジェット'").get()!.games,81);
+});
 test('a milestone game is announced once; repeats and other agents are not', async () => {
  const f=await fixture();
  for(let i=1;i<=6;i++)await recordMastery(f.env,mapping,'One#JP1','m'+i,'ジェット',i%2?'win':'loss',i*1000,full);

@@ -1,15 +1,53 @@
+import {EXTRA_HORSE_NAMES,EXTRA_CROWN_NAMES,REGULAR_RACE_NAMES} from './racing-name-catalog.js?v=web-06733520f64a1841';
 // Horse racing. Pure logic with no DOM or clock reads, shared by the browser and the Worker.
 // Cards and odds are public (PUBLIC_SALT). The run uses a per-race seed: the demo uses the public
 // salt, while the Worker keeps a random seed secret until the start and publishes its hash first.
 export const RACE_INTERVAL=15*60000, CLOSE_BEFORE=60000, RUN_MS=50000, COURSE_M=1600;
-export const WEEKLY_LIMIT=50000, MIN_BET=100, BET_STEP=100;
+export const WEEKLY_LIMIT=80000, MIN_BET=100, BET_STEP=100;
 export const PUBLIC_SALT='keso-play-demo-racing-v1';
 export const BET_TYPES={win:{label:'1着当て',formal:'単勝'},place:{label:'3着以内当て',formal:'複勝'}};
 export const STYLES=[{label:'最初から飛ばす',curve:.08},{label:'前の方につける',curve:.03},{label:'後半に追い上げる',curve:-.03},{label:'最後に一気',curve:-.08}];
 export const CONDITIONS=[{label:'絶不調',value:-1},{label:'不調',value:-.5},{label:'普通',value:0},{label:'好調',value:.5},{label:'絶好調',value:1}];
 export const GOINGS=[{label:'走りやすい',noise:1},{label:'ややぬかるみ',noise:1.15},{label:'ぬかるんでいる',noise:1.3}];
+
+/** New information-rich market, future races only. Old tickets and archived results are immutable. */
+export const FORM_REFORM_FROM=Date.parse('2026-11-04T00:00:00+09:00');
+export const TRACK_BIAS_LABELS=['内枠有利','枠の偏りなし','外枠有利'];
+// Suitability follows the horse's identity, so a returning named or owned horse keeps its preference.
+export function groundAffinity(h){
+ const id=String(h.horseId??h.name);
+ const roll=rngFrom('ground-affinity:'+id)();
+ return roll<.35?0:roll<.65?1:2; // 0 firm, 1 flexible, 2 mud
+}
+export const AFFINITY_LABELS=['良馬場巧者','オールラウンダー','道悪巧者'];
+export function runningNotes(card,h){
+ const approx=h.ability-CLASSES[card.raceClass].mean;
+ const training=approx>=.46?'A':approx>=.17?'B':approx>=-.16?'C':approx>=-.42?'D':'E';
+ const apt=groundAffinity(h);
+ const trackFit=card.going===1?(apt===1?'◎':'○'):apt===card.going?'◎':apt===1?'○':'△';
+ return {training,apt,aptitude:AFFINITY_LABELS[apt],trackFit,form:h.record??null,recentRanks:h.recentRanks??[]};
+}
+export function raceBrief(card){
+ const front=card.horses.filter(h=>h.style<=1).length;
+ const pace=front>=Math.ceil(card.size*.6)?'ハイペース（差し馬注目）':front<=Math.floor(card.size*.35)?'スローペース（先行馬注目）':'平均ペース（展開次第）';
+ return {pace,front,bias:TRACK_BIAS_LABELS[card.trackBias??1],hint:'オッズは市場の概算評価。ペース・当日の枠傾向・馬場適性・特別ルールの影響を十分に反映しない。'};
+}
+function fieldContextBonus(card,h){
+ if(card.start<FORM_REFORM_FROM)return 0;
+ const apt=groundAffinity(h);
+ const ground=card.going===1?(apt===1?.09:0):apt===card.going?.26:apt===1?.07:-.20;
+ const mid=(h.number-.5)/card.size-.5;
+ const gate=card.trackBias===0?-mid*.50:card.trackBias===2?mid*.50:0;
+ return ground+gate;
+}
+
 // Fictional names only. Real members' names need their consent (docs/RACING_PLAN.md).
-export const HORSE_NAMES=['ゲートニキヅカナイ','エイムガブレール','キャリーマチ','ランクダケヒクイ','ヨフカシオー','エーティーエム','ニバンテボーイ','ムテキノイイワケ','アンレタイショウ','デスマッチノオウ','フルバイノユメ','エコラウンド','ハナサノマジュツシ','ニンキサギ','キマグレノアクマ','ネオチダービー','ワンタップドリーム','クラッチミス','スモークツカイ','ラストアワー','ゼロキルクイーン','ヤケクソラン','ゴールデンマンジュウ','コタツデネムル','ザンネンカイチョウ','シンヤサンジ','オヤツタイム','カブヲトカシタ','リセットボタン','バクチウチ','ゲンジツトウヒ','ハラペコジョッキー','ウワサノダークホース','オクレテキタヒーロー','イイワケハアトデ','ミチクサオー','タダノウマ','ジツハツヨイ','ガチャハズレ','マタマケタ','デスアンレ','ヒトシイマツモト','ダイスキミヤガワ','エスカレーター','カチカク','トケルバター','オモシロインデス','ニシフハカイガイ','デスレ','カガワケンミン','ケーピートカシ','ドワー','ヤリラフィー'];
+const LEGACY_HORSE_NAMES=['ゲートニキヅカナイ','エイムガブレール','キャリーマチ','ランクダケヒクイ','ヨフカシオー','エーティーエム','ニバンテボーイ','ムテキノイイワケ','アンレタイショウ','デスマッチノオウ','フルバイノユメ','エコラウンド','ハナサノマジュツシ','ニンキサギ','キマグレノアクマ','ネオチダービー','ワンタップドリーム','クラッチミス','スモークツカイ','ラストアワー','ゼロキルクイーン','ヤケクソラン','ゴールデンマンジュウ','コタツデネムル','ザンネンカイチョウ','シンヤサンジ','オヤツタイム','カブヲトカシタ','リセットボタン','バクチウチ','ゲンジツトウヒ','ハラペコジョッキー','ウワサノダークホース','オクレテキタヒーロー','イイワケハアトデ','ミチクサオー','タダノウマ','ジツハツヨイ','ガチャハズレ','マタマケタ','デスアンレ','ヒトシイマツモト','ダイスキミヤガワ','エスカレーター','カチカク','トケルバター','オモシロインデス','ニシフハカイガイ','デスレ','カガワケンミン','ケーピートカシ','ドワー','ヤリラフィー'];
+// Introducing names changes the number of shuffled items and therefore the
+// random draws used for horse abilities, odds and archived race replays.
+// Keep old race cards byte-for-byte identical; activate only for future starts.
+export const NAME_EXPANSION_FROM=Date.parse('2026-11-03T00:00:00+09:00');
+export const HORSE_NAMES=[...LEGACY_HORSE_NAMES,...EXTRA_HORSE_NAMES];
 const JST=9*3600000;
 // Big races carry the group's memes (MEME_SOURCES.md): 松本等しい, 堀大輔, もこう's stream phrases, KESO TOWN.
 const WEEKDAY_BIG={0:'日付またぎレース 堀大輔マイクロスリープ杯',480:'出勤前レース 寝ないチャレンジではない賞',750:'昼休みレース 最後の餃子ステークス',1200:'ゴールデンタイム 良かったこの距離で記念',1260:'KESO TOWN メインレース 松本等しい杯',1320:'夜ふかし バチコーンストライク記念',1380:'最終レース 次のVTR行ってみましょか賞'};
@@ -31,10 +69,42 @@ export function latestRaceStart(now){return Math.floor(now/RACE_INTERVAL)*RACE_I
 /** Monday 0:00 JST, matching `/valo week`. */
 export function weekStart(now){const d=new Date(now+JST);const days=(d.getUTCDay()+6)%7;return Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),d.getUTCDate()-days)-JST;}
 export const placeSlots=size=>size>=8?3:2;
+// Only FUTURE slots change race physics. Historical cards/odds/settlements must stay identical.
+export const CHAOS_RACES_FROM=Date.parse('2026-11-04T00:00:00+09:00');
+export const CHAOS_RACE_TYPES=[
+ {id:'front',name:'逃げ馬天国',effect:'先行・逃げ脚質が有利',desc:'序盤から飛ばす馬に追い風。好スタートがいつも以上に重要。'},
+ {id:'close',name:'末脚解放',effect:'差し・追い込み脚質が有利',desc:'最後方からの逆転が狙いやすい。先行馬は油断禁物。'},
+ {id:'upset',name:'下剋上',effect:'能力の低い馬にハンデ補正',desc:'格上馬の独走を許さない。普段の人気馬ほど安全ではない。'},
+ {id:'condition',name:'体調最優先',effect:'好調馬がさらに有利・不調馬は苦戦',desc:'コンディションの差が普段より大きく着順へ響く。'},
+];
+export function raceEvent(start){
+ if(!isRaceStart(start)||start<CHAOS_RACES_FROM)return null;
+ const {day,minutes}=jstParts(start);
+ const eligible=minutes===1095||minutes===1275||minutes===1395||((day===0||day===6)&&(minutes===735||minutes===975));
+ if(!eligible)return null;
+ return CHAOS_RACE_TYPES[Math.floor(rngFrom('chaos-race:'+start)()*CHAOS_RACE_TYPES.length)];
+}
+function chaosStrengthBonus(h,avg,event){
+ if(!event)return 0;
+ switch(event.id){
+  case 'front':return h.style<=1?.4:-.10;
+  case 'close':return h.style>=2?.4:-.10;
+  case 'upset':return Math.max(-.45,Math.min(.45,(avg-h.ability)*.72));
+  case 'condition':return (h.condition-2)*.2;
+  default:return 0;
+ }
+}
+
 // Crown races with no person in the name, at :30: every night 19:30-0:30, and weekends from 10:30 (docs/RACING_PLAN.md §3).
 // Races named after someone's bad day come from the Worker (src/racing-crowns.ts) and override the name.
-export const FILLER_CROWNS=['うおw記念','クイヤ記念','お祭り男か記念','しばくぞ記念','あかんかったなぁ記念','了解お兄さん記念','効いてて草記念','一旦な記念','3がある記念','毒かも記念','いいわぁ記念','純の勝ち記念','判定してるやつがおかしい記念','フルタじゃねえわ記念','KESO TOWN町内会杯','ラストデス記念','エコラウンド記念','フルバイの夢記念','ATMレース','KP溶かし予選','ガチャハズレ大会','寝落ち記念'];
-export function fillerCrownName(start){const {day,minutes}=jstParts(start);return minutes%60===30&&(minutes>=1170||minutes<=30||((day===0||day===6)&&minutes>=630))?FILLER_CROWNS[(start/RACE_INTERVAL)%FILLER_CROWNS.length]:null;}
+const LEGACY_FILLER_CROWNS=['うおw記念','クイヤ記念','お祭り男か記念','しばくぞ記念','あかんかったなぁ記念','了解お兄さん記念','効いてて草記念','一旦な記念','3がある記念','毒かも記念','いいわぁ記念','純の勝ち記念','判定してるやつがおかしい記念','フルタじゃねえわ記念','KESO TOWN町内会杯','ラストデス記念','エコラウンド記念','フルバイの夢記念','ATMレース','KP溶かし予選','ガチャハズレ大会','寝落ち記念'];
+export const FILLER_CROWNS=[...LEGACY_FILLER_CROWNS,...EXTRA_CROWN_NAMES];
+export function fillerCrownName(start){const {day,minutes}=jstParts(start);if(!(minutes%60===30&&(minutes>=1170||minutes<=30||((day===0||day===6)&&minutes>=630))))return null;
+ if(start<NAME_EXPANSION_FROM)return LEGACY_FILLER_CROWNS[(start/RACE_INTERVAL)%LEGACY_FILLER_CROWNS.length];
+ return FILLER_CROWNS[Math.floor(rngFrom(`filler:${start}`)()*FILLER_CROWNS.length)];
+}
+/** Ordinary races gain a distinct fictional name without claiming an extra crown slot. */
+export function regularRaceName(start){return REGULAR_RACE_NAMES[Math.floor(rngFrom(`ordinary:${start}`)()*REGULAR_RACE_NAMES.length)];}
 /** Slots a crown race may use: weekday nights 19:00-0:45, weekends from 10:00 (members work days). */
 export function crownSlotAllowed(start){
  if(!isRaceStart(start)||bigRaceName(start)||fillerCrownName(start))return false;
@@ -51,16 +121,16 @@ export function raceCard(start,salt=PUBLIC_SALT,entries=[]){
  if(!isRaceStart(start))throw Error('レースが見つかりません');
  const rng=rngFrom(`${salt}:card:${start}`);
  const big=bigRaceName(start),size=big?10:8,cls=raceClass(start);
- const names=[...HORSE_NAMES];
+ const names=start<NAME_EXPANSION_FROM?[...LEGACY_HORSE_NAMES]:[...HORSE_NAMES];
  for(let i=names.length-1;i>0;i--){const j=Math.floor(rng()*(i+1));[names[i],names[j]]=[names[j],names[i]];}
  const horses=names.slice(0,size).map((name,i)=>({number:i+1,name,ability:CLASSES[cls].mean+normal(rng)*.35,style:Math.floor(rng()*STYLES.length),condition:pickWeighted(rng,[1,2,4,2,1])}));
  if(entries.length){
   const gates=[...horses.keys()],grng=rngFrom(`${salt}:gates:${start}`);
   for(let i=gates.length-1;i>0;i--){const j=Math.floor(grng()*(i+1));[gates[i],gates[j]]=[gates[j],gates[i]];}
-  entries.slice(0,size).forEach((e,i)=>Object.assign(horses[gates[i]],{name:e.name,ability:e.ability,style:e.style,horseId:e.horseId,owner:e.owner,ownerName:e.ownerName,nickname:e.nickname??null,person:!!e.person},Number.isInteger(e.condition)&&e.condition>=0&&e.condition<CONDITIONS.length?{condition:e.condition}:{}));
+  entries.slice(0,size).forEach((e,i)=>Object.assign(horses[gates[i]],{name:e.name,ability:e.ability,style:e.style,horseId:e.horseId,owner:e.owner,ownerName:e.ownerName,nickname:e.nickname??null,person:!!e.person,...(start>=FORM_REFORM_FROM&&e.record?{record:e.record,recentRanks:e.recentRanks??[]}:{})},Number.isInteger(e.condition)&&e.condition>=0&&e.condition<CONDITIONS.length?{condition:e.condition}:{}));
  }
- const crown=big?null:fillerCrownName(start);
- return {id:start,start,closeAt:start-CLOSE_BEFORE,number:raceNumber(start),name:big??crown??`第${raceNumber(start)}レース`,big:!!big,crown:!!crown,raceClass:cls,size,going:pickWeighted(rng,[5,3,2]),horses};
+ const crown=big?null:fillerCrownName(start),event=raceEvent(start);
+ return {id:start,start,closeAt:start-CLOSE_BEFORE,number:raceNumber(start),name:event?`第${raceNumber(start)}レース ${event.name}杯`:big??crown??(start<NAME_EXPANSION_FROM?`第${raceNumber(start)}レース`:`第${raceNumber(start)}レース ${regularRaceName(start)}`),big:!!big,crown:!!crown,raceClass:cls,size,going:pickWeighted(rng,[5,3,2]),horses,...(event?{event}:{}),...(start>=FORM_REFORM_FROM?{trackBias:Math.floor(rngFrom('track-bias:'+start)()*3)}:{})};
 }
 
 // The race model: a Plackett-Luce ranking (each place goes to a remaining horse with probability
@@ -68,17 +138,18 @@ export function raceCard(start,salt=PUBLIC_SALT,entries=[]){
 // compute, so the odds have no sampling error and the Worker stays well inside its CPU limit.
 const PACE_POINTS=[-2,-1,0,1,2],PACE_WEIGHTS=[1,4,6,4,1].map(w=>w/16); // mean 0, variance 1
 const BETA=1.6;
-function raceModel(card){
+function raceModel(card,market=false){
  const front=card.horses.filter(h=>h.style<=1).length,paceBase=(front-card.size/2)/2,sharp=BETA/GOINGS[card.going].noise;
+ const avgAbility=card.event?card.horses.reduce((sum,h)=>sum+h.ability,0)/card.size:0;
  return PACE_POINTS.map((point,k)=>{
-  const pace=paceBase+point*.6; // > 0: a fast pace that favours the closers
-  return {weight:PACE_WEIGHTS[k],strength:card.horses.map(h=>Math.exp(sharp*(h.ability+CONDITIONS[h.condition].value*.35+(card.size/2-h.number)*.02+(h.style-1.5)*.2*pace)))};
+  const pace=market?0:paceBase+point*.6; // bookmaker predicts neutral pace, actual racing draws a pace scenario
+  return {weight:PACE_WEIGHTS[k],strength:card.horses.map(h=>Math.exp(sharp*(h.ability*(market?.87:1)+CONDITIONS[h.condition].value*(market?.24:.35)+(card.size/2-h.number)*.02+(h.style-1.5)*.2*pace+(market?0:chaosStrengthBonus(h,avgAbility,card.event)+fieldContextBonus(card,h))))) };
  });
 }
 /** Exact probability that each horse wins, and finishes inside the paid places. */
-export function finishProbabilities(card){
+function calculateProbabilities(card,market=false){
  const slots=placeSlots(card.size),win=new Array(card.size).fill(0),place=new Array(card.size).fill(0);
- for(const {weight,strength} of raceModel(card)){
+ for(const {weight,strength} of raceModel(card,market)){
   const used=new Uint8Array(card.size);
   const visit=(depth,prob,rest)=>{
    for(let j=0;j<card.size;j++){
@@ -92,6 +163,9 @@ export function finishProbabilities(card){
  }
  return {win,place};
 }
+export function finishProbabilities(card){return calculateProbabilities(card,false);}
+/** Estimated by the market without complete live form; NOT the true winning probability. */
+export function marketProbabilities(card){return card.start>=FORM_REFORM_FROM?calculateProbabilities(card,true):finishProbabilities(card);}
 
 /** The real run: one draw from the same model, using the race's seed. */
 export function raceResult(card,seed=PUBLIC_SALT){
@@ -114,8 +188,9 @@ const oddsCache=new Map();
 export function raceOdds(card){
  const key=card.id+':'+card.horses.map(h=>h.horseId??'').join(',');
  if(oddsCache.has(key))return oddsCache.get(key);
- const {win,place}=finishProbabilities(card),odds={win:{},place:{},winProb:{},placeProb:{}};
- for(const h of card.horses){const i=h.number-1;odds.win[h.number]=oddsFromProbability(win[i]);odds.place[h.number]=oddsFromProbability(place[i]);odds.winProb[h.number]=win[i];odds.placeProb[h.number]=place[i];}
+ const {win,place}=marketProbabilities(card),odds={win:{},place:{},winProb:{},placeProb:{}};
+ const margin=card.start>=FORM_REFORM_FROM?1.05:1;
+ for(const h of card.horses){const i=h.number-1;odds.win[h.number]=oddsFromProbability(win[i]*margin);odds.place[h.number]=oddsFromProbability(place[i]*margin);odds.winProb[h.number]=win[i];odds.placeProb[h.number]=place[i];}
  if(oddsCache.size>32)oddsCache.delete(oddsCache.keys().next().value);
  oddsCache.set(key,odds);
  return odds;
@@ -220,7 +295,7 @@ export function settleRaceBets(state,now,seedOf=()=>PUBLIC_SALT,entriesOf=()=>[]
  return settled;
 }
 /** No-contest rule: a race runs only when someone bet on it (big and crown races always run). */
-export function raceRuns(card,state){return card.big||card.crown||state.raceBets.some(b=>b.raceId===card.id);}
+export function raceRuns(card,state){return card.big||card.crown||!!card.event||state.raceBets.some(b=>b.raceId===card.id);}
 
 // Owners (docs/RACING_PLAN.md §6). The Worker owns horses and prizes; these rules are shared for display.
 export const MAX_OWNED=3,RETIRE_RACES=20,DAILY_EXCHANGES=3,PRIZES=[1000,400,200];

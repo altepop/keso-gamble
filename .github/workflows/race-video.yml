@@ -1,26 +1,20 @@
-name: Race replay video
+name: Race replay video (render check only)
+
+# Issue #194: do not schedule, dispatch after deploy, claim jobs, or upload MP4.
+# Optional manual check generates a local synthetic fixture only, not a Discord post.
 on:
-  schedule:
-    - cron: '2,17,32,47 * * * *'
-  workflow_run:
-    workflows: ['VALORANT Bot check and deploy']
-    branches: [main]
-    types: [completed]
   workflow_dispatch:
-    inputs:
-      check:
-        description: '動画生成だけ検査する（Discordには投稿しない）'
-        type: boolean
-        default: false
+
 permissions:
   contents: read
-  id-token: write
+
 concurrency:
   group: race-video
   cancel-in-progress: false
+
 jobs:
-  replay:
-    if: github.repository == 'altepop/keso-gamble' && github.ref == 'refs/heads/main' && (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success')
+  render-check:
+    if: github.repository == 'altepop/keso-gamble' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -28,25 +22,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - name: Check for completed races
-        id: video_jobs
-        if: inputs.check != true
-        run: node scripts/race-video/run.mjs --claim --jobs-file "$RUNNER_TEMP/keso-race-jobs.json"
-      - name: Prepare video tools
-        if: inputs.check == true || steps.video_jobs.outputs.has_jobs == 'true'
+      - name: Prepare local video render tools
         run: bash scripts/race-video/prepare.sh
-      - name: Render and deliver completed races
-        if: inputs.check == true || steps.video_jobs.outputs.has_jobs == 'true'
-        env:
-          CHECK: ${{ inputs.check }}
-        run: |
-          if [ "$CHECK" = 'true' ]; then node scripts/race-video/run.mjs --check; else node scripts/race-video/run.mjs --jobs-file "$RUNNER_TEMP/keso-race-jobs.json"; fi
-      - uses: actions/upload-artifact@v4
-        if: inputs.check == true
-        with:
-          name: race-video-check
-          path: ${{ runner.temp }}/keso-race-check.mp4
-          retention-days: 3
-      - name: Remove private job handoff
-        if: always()
-        run: rm -f -- "$RUNNER_TEMP/keso-race-jobs.json"
+      - name: Render synthetic fixture (never sends to Discord)
+        run: node scripts/race-video/run.mjs --check

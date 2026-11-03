@@ -1,9 +1,11 @@
 import {skirmishState,skirmishPrompt} from './skirmish.ts';
+import {startDmChallenge,dmChallengeStatus} from './dm-challenge.ts';
 import {isKpRanking} from './kp-command.ts';
+import {spikeStatus,purchaseSpikeHint} from './spike-awakening.ts';
 import {initializeKp,newKpState} from './kp.ts';
 import type {KpEnv,KpMapping} from './kp.ts';
 import {ensureQuizKp} from './quiz-kp.ts';
-import {operateKp,previewMlBet,readKpState} from './kp-api.ts';
+import {operateKp,previewMlBet} from './kp-api.ts';
 import {racingView} from './racing-kp.ts';
 import {ML_DATA,closeMl,mlClosed,mlData,mlLineups,mlLineupTimes,mlResults,seasonStats} from './mleague.ts';
 import {enqueue,ensurePosts} from './racing-posts.ts';
@@ -13,9 +15,9 @@ import {nameGiftHorse,decideEntries} from './racing-horses.ts';
 import {crownFor} from './racing-crowns.ts';
 import {DEBT_INTEREST_TEXT,DEBT_MAX,debtOf,ensureDebt} from './kp-debt.ts';
 // @ts-expect-error Shared browser engine.
-import {mlCard,mlOdds,mlOpen,mlClosesAt,mlStart} from '../../../js/mleague.js';
+import {mlCard,mlOdds,mlOpen,mlClosesAt,mlStart,hydrateMleague} from '../../../js/mleague.js';
 // @ts-expect-error Shared browser engine.
-import {openRaceStart,raceCard,raceOdds,placeSlots,payoutFor} from '../../../js/racing.js';
+import {openRaceStart,raceCard,raceOdds,placeSlots,payoutFor,hydrateRacing} from '../../../js/racing.js';
 interface Slash {id:string;guild_id?:string;member?:{user?:{id:string}};data?:{name?:string;options?:Array<{name:string;type?:number;options?:unknown[];value?:unknown}>}}
 const clock=(at:number)=>new Date(at).toLocaleTimeString('ja-JP',{timeZone:'Asia/Tokyo',hour:'2-digit',minute:'2-digit'});
 const clean=(s:string)=>s.replace(/[@`*_~<>|\r\n]/g,'');
@@ -52,9 +54,16 @@ function betLines(d:Awaited<ReturnType<typeof mlData>>,fixture:{date:string;tabl
 type OwnBet={match?:string;raceId?:number;player?:string;horse?:number;type:string;amount:number;odds:number;status:string;payout:number;time:number};
 const md=(date:string)=>`${Number(date.slice(5,7))}/${Number(date.slice(8,10))}`;
 async function myBets(env:KpEnv,mapping:KpMapping,user:string){
- const state=await readKpState(env,mapping,user),d=await mlData(env);
+ // /kp bets only needs this member's saved bet slips. A full Activity
+ // snapshot would also read stocks, 100-row KP/voice histories, all horses,
+ // mastery, notices and M.LEAGUE views on *every* Discord invocation.
+ const row=await env.DB.prepare('SELECT data FROM kp_state WHERE guild=? AND user=?').bind(mapping.guildId,user).first<{data:string}>();
+ if(!row)return 'まだ予想・馬券はありません。';
+ const raw=JSON.parse(row.data),state={...hydrateRacing(raw),...hydrateMleague(raw)};
+ // A user with no M.LEAGUE bets does not need the official card D1 read.
+ const d=state.mlBets.length?await mlData(env):null;
  const label=(b:OwnBet)=>{
-  if(b.match){const f=d.fixtures.find(x=>x.id===b.match);return `Mリーグ ${f?`${md(f.date)} ${f.table}卓 第${f.game}試合`:'試合'}・${clean(b.player??'')}の${b.type==='top'?'トップ':'ラス'}`;}
+  if(b.match){const f=d?.fixtures.find(x=>x.id===b.match);return `Mリーグ ${f?`${md(f.date)} ${f.table}卓 第${f.game}試合`:'試合'}・${clean(b.player??'')}の${b.type==='top'?'トップ':'ラス'}`;}
   const day=new Date((b.raceId??0)+9*3600000).toISOString();return `競馬 ${md(day.slice(0,10))} ${clock(b.raceId??0)}発走 ${b.horse}番 ${b.type==='place'?'複勝':'単勝'}`;
  };
  const all:OwnBet[]=[...(state.mlBets??[]),...(state.raceBets??[])].sort((a:OwnBet,b:OwnBet)=>b.time-a.time);
@@ -176,7 +185,7 @@ export async function mbetChoices(env:KpEnv,interaction:Slash):Promise<Array<{na
 export async function runKpCommand(env:KpEnv,interaction:Slash,override?:KpMapping,out?:{components?:unknown[]}):Promise<string>{
  const mapping=await initializeKp(env,override),user=interaction.member?.user?.id;
  if(!mapping||interaction.guild_id!==mapping.guildId||!user||!/^\d{15,22}$/.test(user))return 'このサーバーの本人の口座で利用してください。';
- const command=interaction.data?.name;if(!['kp','keiba','bet','mleague','mbet','mclose','kpgrant','paifulink','unitelink','horsename','give'].includes(command??''))return '対応していないコマンドです。';
+ const command=interaction.data?.name;if(!['kp','spike','dm','keiba','bet','mleague','mbet','mclose','kpgrant','paifulink','unitelink','horsename','give'].includes(command??''))return '対応していないコマンドです。';
  if(isKpRanking(interaction)){
   // A single server-side snapshot: current spendable KP, not stocks or lifetime earnings.
   const rows=(await env.DB.prepare('SELECT user,balance,RANK() OVER(ORDER BY balance DESC) AS rank,COUNT(*) OVER() AS total FROM kp_wallets WHERE guild=? ORDER BY balance DESC,user ASC LIMIT 10').bind(mapping.guildId).all<{user:string;balance:number;rank:number;total:number}>()).results;
@@ -197,6 +206,22 @@ export async function runKpCommand(env:KpEnv,interaction:Slash,override?:KpMappi
   env.DB.prepare('INSERT OR IGNORE INTO kp_state(guild,user,data) VALUES(?,?,?)').bind(mapping.guildId,user,JSON.stringify(newKpState())),
  ]);
  const balance=async()=>Number((await env.DB.prepare('SELECT balance FROM kp_wallets WHERE guild=? AND user=?').bind(mapping.guildId,user).first<{balance:number}>())?.balance??0);
+ if(command==='dm'){
+  const opts=interaction.data?.options;
+  if(!opts||opts.length!==1||opts[0].type!==1||opts[0].options?.length)return '利用できる操作は /dm start と /dm status だ。';
+  return opts[0].name==='start'?startDmChallenge(env,mapping.guildId,user):opts[0].name==='status'?dmChallengeStatus(env,mapping.guildId,user):'利用できる操作は /dm start と /dm status だ。';
+ }
+ if(command==='spike'){
+  const raw=interaction.data?.options;
+  if(!raw||raw.length!==1||raw[0].type!==1)return '/spike status で育成状況を確認するか /spike hint でヒントを購入してください。';
+  if(raw[0].name==='status'&&(!raw[0].options||!raw[0].options.length))return spikeStatus(env,mapping.guildId,user);
+  if(raw[0].name==='hint'){
+   const opts=raw[0].options as Array<{name?:string;type?:number;value?:unknown}>|undefined;
+   if(!opts||opts.length!==1||opts[0].name!=='role'||opts[0].type!==3)return 'ヒントを解放するロールを指定してください。';
+   return purchaseSpikeHint(env,mapping.guildId,user,opts[0].value);
+  }
+  return '利用できる操作は /spike status と /spike hint です。';
+ }
  if(command==='kp'&&sub==='bets')return myBets(env,mapping,user);
  if(command==='kp'){
   const owed=await debtOf(env,mapping.guildId,user);

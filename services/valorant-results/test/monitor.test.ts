@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync, readdirSync } from 'node:fs';
 import { URL as NodeURL } from 'node:url';
-import { monitor, resultMessage } from '../src/index.ts';
+import { monitor, resultMessage, monitorRankState } from '../src/index.ts';
 import type { Env } from '../src/index.ts';
 
 function environment(): Env {
@@ -40,6 +40,24 @@ function match(id: string, mode = 'competitive', win = true, ended = Date.now(),
   };
 }
 
+test('rank monitor reads only the requested key, caches misses and rereads on next cron',async()=>{
+ const env=environment();const wanted='rank2:match-new:p-one';
+ const old='rank2:match-old:p-two';
+ await env.DB.prepare('INSERT INTO monitor_state(key,value) VALUES(?,?)').bind(old,'none').run();
+ await env.DB.prepare('INSERT INTO monitor_state(key,value) VALUES(?,?)').bind(wanted,'{"before":15,"after":14}').run();
+ const oldPrepare=env.DB.prepare.bind(env.DB),sqls:string[]=[];
+ env.DB.prepare=((query:string)=>{sqls.push(query);return oldPrepare(query);}) as typeof env.DB.prepare;
+ const seen=new Map<string,string>();
+ assert.equal(await monitorRankState(env.DB,seen,wanted),'{"before":15,"after":14}');
+ assert.equal(await monitorRankState(env.DB,seen,wanted),'{"before":15,"after":14}');
+ assert.equal(await monitorRankState(env.DB,seen,'rank2:none:p-one'),'');
+ assert.equal(await monitorRankState(env.DB,seen,'rank2:none:p-one'),'');
+ assert.equal(sqls.length,2);
+ assert.ok(sqls.every(query=>query==='SELECT value FROM monitor_state WHERE key=?'),'never load 300 old ranks');
+ await env.DB.prepare('UPDATE monitor_state SET value=? WHERE key=?').bind('none',wanted).run();
+ assert.equal(await monitorRankState(env.DB,seen,wanted),'{"before":15,"after":14}','single cron has snapshot semantics');
+ assert.equal(await monitorRankState(env.DB,new Map(),wanted),'none','next cron sees changed rank state');
+});
 test('winner flags and opaque team IDs produce the requested chat messages', () => {
   assert.equal(resultMessage(match('1'), 'user-1', 'たろう')?.message.split('\n')[0], '🎉 たろうは13対10で勝ち！！（コンペ）');
   const loss = resultMessage(match('2', 'ggteam', false), 'user-1', 'はなこ')!;

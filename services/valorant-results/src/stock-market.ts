@@ -2,6 +2,7 @@
 import {stockOrderQuote,STOCK_ORDER_VERSION,STOCK_PRICE_SCALE} from '../../../js/stock-order.js';
 // One server market per guild. Quotes, dividends, lots and benefits never use the demo PRNG.
 import type {KpEnv} from './kp.ts';
+import {availableStockNewsTables} from './stock-news-sources.ts';
 // @ts-expect-error Shared pure browser engine.
 import {MARKET,advanceMarket} from '../../../js/engine.js';
 interface Stock {id:string;name:string;initialPrice:number}
@@ -33,11 +34,31 @@ export async function ensureStocks(env:KpEnv){
  `CREATE TABLE IF NOT EXISTS stock_lots(id TEXT PRIMARY KEY,guild TEXT NOT NULL,user TEXT NOT NULL,symbol TEXT NOT NULL,quantity INTEGER NOT NULL CHECK(quantity>=0),remaining INTEGER NOT NULL CHECK(remaining BETWEEN 0 AND quantity),price INTEGER NOT NULL CHECK(price>0),at INTEGER NOT NULL)`,
  `CREATE INDEX IF NOT EXISTS stock_lots_owner ON stock_lots(guild,user,symbol,at,id)`,
  `CREATE TABLE IF NOT EXISTS stock_trades(id TEXT PRIMARY KEY,guild TEXT NOT NULL,user TEXT NOT NULL,symbol TEXT NOT NULL,side TEXT NOT NULL CHECK(side IN ('buy','sell')),quantity INTEGER NOT NULL CHECK(quantity>0),price INTEGER NOT NULL,at INTEGER NOT NULL)`,
+ // Five-minute stock market scans use guild + event time, not account-owner primary keys.
+ // Without these indexes, each tick can scan the full historical ledger/operation tables.
+ `CREATE INDEX IF NOT EXISTS kp_ledger_guild_at ON kp_ledger(guild,at)`,
+ `CREATE INDEX IF NOT EXISTS kp_operations_guild_at ON kp_operations(guild,at)`,
+ // Only settlement operations produce racing market news; avoid expanding JSON from
+ // unrelated casino, trade and other operations on every five-minute tick.
+ `CREATE INDEX IF NOT EXISTS kp_operations_race_news ON kp_operations(guild,at) WHERE substr(lower(id),1,12)='race-settle:'`,
+ `CREATE INDEX IF NOT EXISTS kp_events_guild_at ON kp_events(guild,at)`,
+ `CREATE INDEX IF NOT EXISTS stock_trades_guild_at ON stock_trades(guild,at)`,
  `CREATE TABLE IF NOT EXISTS stock_sale_lots(sale TEXT NOT NULL,lot TEXT NOT NULL,quantity INTEGER NOT NULL CHECK(quantity>0),PRIMARY KEY(sale,lot))`,
  `CREATE TABLE IF NOT EXISTS stock_dividend_days(guild TEXT NOT NULL,day TEXT NOT NULL,prices TEXT NOT NULL,at INTEGER NOT NULL,PRIMARY KEY(guild,day))`,
+ // Separate completion marker: a previous release could save a dividend-day snapshot
+ // but fail while crediting the wallets. Never mistake that snapshot for completion.
+ `CREATE TABLE IF NOT EXISTS stock_dividend_runs(guild TEXT NOT NULL,day TEXT NOT NULL,PRIMARY KEY(guild,day))`,
  `CREATE TABLE IF NOT EXISTS stock_dividends(guild TEXT NOT NULL,user TEXT NOT NULL,day TEXT NOT NULL,amount INTEGER NOT NULL CHECK(amount BETWEEN 1 AND 500),eligible_value INTEGER NOT NULL,at INTEGER NOT NULL,PRIMARY KEY(guild,user,day))`,
  `CREATE TABLE IF NOT EXISTS stock_news(guild TEXT NOT NULL,id TEXT NOT NULL,symbol TEXT NOT NULL,label TEXT NOT NULL,bps INTEGER NOT NULL,at INTEGER NOT NULL,applied_version INTEGER,applied_bps INTEGER NOT NULL DEFAULT 0,applied_at INTEGER,PRIMARY KEY(guild,id))`,
  `CREATE INDEX IF NOT EXISTS stock_news_pending ON stock_news(guild,applied_version,at)`,
+ // The per-symbol daily impact budget used to scan *all historical news*
+ // once per tick (539 rows/query in the 2026-11-01 13:55 D1 Insights).
+ // Range on applied_at limits reads to today's events, with the remaining
+ // GROUP BY fields inside a covering index; old history is not deleted.
+ `CREATE INDEX IF NOT EXISTS stock_news_daily_budget ON stock_news(guild,applied_at,symbol,applied_bps,id)`,
+ // A partial time-sorted index supports the 12 newest public headlines without
+ // scanning and sorting every historical market event on each wallet refresh.
+ `CREATE INDEX IF NOT EXISTS stock_news_recent_public ON stock_news(guild,at DESC,id DESC) WHERE applied_version IS NOT NULL AND applied_bps!=0`,
  `CREATE TABLE IF NOT EXISTS stock_ticks(guild TEXT NOT NULL,version INTEGER NOT NULL,prices TEXT NOT NULL,at INTEGER NOT NULL,PRIMARY KEY(guild,version))`,
  `CREATE TABLE IF NOT EXISTS stock_announcements(guild TEXT NOT NULL,symbol TEXT NOT NULL,slot INTEGER NOT NULL,at INTEGER NOT NULL,PRIMARY KEY(guild,symbol,slot))`,
  `CREATE TABLE IF NOT EXISTS kp_posts(id TEXT PRIMARY KEY,body TEXT NOT NULL,at INTEGER NOT NULL,sent INTEGER NOT NULL DEFAULT 0)`,
@@ -107,15 +128,33 @@ export async function payStockDividends(env:KpEnv,market:Market,now=Date.now()){
  const boundary=Math.floor(now/STOCK_HOLD)*STOCK_HOLD;
  if(boundary<=market.startedAt)return;
  const day=new Date(boundary).toISOString().slice(0,10);
- await env.DB.prepare('INSERT OR IGNORE INTO stock_dividend_days VALUES(?,?,?,?)').bind(market.guild,day,JSON.stringify(market.prices),now).run();
- await env.DB.prepare(`INSERT OR IGNORE INTO stock_dividends(guild,user,day,amount,eligible_value,at)
-  SELECT l.guild,l.user,?,MIN(500,CAST(SUM(l.remaining*CAST(json_extract(m.prices,'$.'||l.symbol) AS INTEGER))/100 AS INTEGER)),SUM(l.remaining*CAST(json_extract(m.prices,'$.'||l.symbol) AS INTEGER)),?
-  FROM stock_lots l JOIN stock_dividend_days m ON m.guild=l.guild AND m.day=? WHERE l.guild=? AND l.remaining>0 AND l.at<=? GROUP BY l.guild,l.user HAVING SUM(l.remaining*CAST(json_extract(m.prices,'$.'||l.symbol) AS INTEGER))>=100`)
-  .bind(day,now,day,market.guild,boundary-STOCK_HOLD).run();
+ // Every open Activity previously rescanned *all* historical stock lots for today's
+ // dividend, even after it had already been settled. A primary-key lookup now
+ // skips repeat work. Keep the snapshot, payouts and completion marker in
+ // a single atomic batch so a failed dividend
+ // distribution never leaves a completion marker that suppresses a retry.
+ if(await env.DB.prepare('SELECT 1 FROM stock_dividend_runs WHERE guild=? AND day=?').bind(market.guild,day).first())return;
+ await env.DB.batch([
+  env.DB.prepare('INSERT OR IGNORE INTO stock_dividend_days VALUES(?,?,?,?)').bind(market.guild,day,JSON.stringify(market.prices),now),
+  env.DB.prepare(`INSERT OR IGNORE INTO stock_dividends(guild,user,day,amount,eligible_value,at)
+   SELECT l.guild,l.user,?,MIN(500,CAST(SUM(l.remaining*CAST(json_extract(m.prices,'$.'||l.symbol) AS INTEGER))/100 AS INTEGER)),SUM(l.remaining*CAST(json_extract(m.prices,'$.'||l.symbol) AS INTEGER)),?
+   FROM stock_lots l JOIN stock_dividend_days m ON m.guild=l.guild AND m.day=?
+   WHERE l.guild=? AND l.remaining>0 AND l.at<=?
+   GROUP BY l.guild,l.user HAVING SUM(l.remaining*CAST(json_extract(m.prices,'$.'||l.symbol) AS INTEGER))>=100`)
+   .bind(day,now,day,market.guild,boundary-STOCK_HOLD),
+  env.DB.prepare('INSERT OR IGNORE INTO stock_dividend_runs(guild,day) VALUES(?,?)').bind(market.guild,day),
+ ]);
+}
+/** Race settlement operations are recorded at processing time. Re-reading 24h of
+ * growing operations on every 5-minute tick expanded JSON needlessly (21k D1
+ * rows/hour in 2026-10-31 Insights). Retain a 1h overlap behind the last
+ * successful tick; after a long outage still honor the original last-24h cap. */
+export function raceNewsSince(market:Pick<Market,'startedAt'|'at'>,now:number){
+ return Math.max(market.startedAt,now-86400000,market.at-3600000);
 }
 async function captureNews(env:KpEnv,market:Market,now:number){
- const since=Math.max(market.startedAt,now-86400000),guild=market.guild;
- const tables=new Set((await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table'").all<{name:string}>()).results.map(r=>r.name));
+ const since=Math.max(market.startedAt,now-86400000),raceSince=raceNewsSince(market,now),guild=market.guild;
+ const tables=await availableStockNewsTables(env.DB);
  // Fixed source tables only; no display names, webhook text or browser-submitted events.
  if(tables.has('kp_events'))await env.DB.prepare(`INSERT OR IGNORE INTO stock_news(guild,id,symbol,label,bps,at) SELECT guild,'valo:'||match||':'||outcome,'keso',CASE WHEN outcome='win' THEN 'VALORANTで勝利' ELSE 'VALORANTで敗戦' END,CASE WHEN outcome='win' THEN 40 ELSE -30 END,MAX(at) FROM kp_events WHERE guild=? AND at>=? AND outcome IN('win','loss') GROUP BY guild,match,outcome`).bind(guild,since).run();
  for(const table of ['kp_quiz_events','kp_quiz_ranked_extra'])if(tables.has(table))await env.DB.prepare(`INSERT OR IGNORE INTO stock_news(guild,id,symbol,label,bps,at) SELECT guild,'quiz:'||game,'riso','QUIZのプレイを記録',15,completed_at FROM ${table} WHERE guild=? AND completed_at>=?`).bind(guild,since).run();
@@ -124,9 +163,9 @@ async function captureNews(env:KpEnv,market:Market,now:number){
  await env.DB.prepare(`INSERT OR IGNORE INTO stock_news(guild,id,symbol,label,bps,at)
   SELECT guild,'race:'||user||':'||id,'yuya',CASE WHEN net>0 THEN '競馬で大きな利益' ELSE '競馬で大きな損失' END,CASE WHEN net>0 THEN 50 ELSE -40 END,at FROM (
    SELECT o.guild,o.user,o.id,o.at,SUM(CAST(json_extract(b.value,'$.payout') AS INTEGER)-CAST(json_extract(b.value,'$.amount') AS INTEGER)) AS net
-   FROM kp_operations o JOIN json_each(o.response,'$.result.settled') r JOIN json_each(o.state,'$.raceBets') b ON json_extract(b.value,'$.id')=json_extract(r.value,'$.id')
-   WHERE o.guild=? AND o.at>=? AND o.id LIKE 'race-settle:%' GROUP BY o.guild,o.user,o.id,o.at
-  ) WHERE ABS(net)>=5000`).bind(guild,since).run();
+   FROM kp_operations o INDEXED BY kp_operations_race_news JOIN json_each(o.response,'$.result.settled') r JOIN json_each(o.state,'$.raceBets') b ON json_extract(b.value,'$.id')=json_extract(r.value,'$.id')
+   WHERE o.guild=? AND o.at>=? AND o.id LIKE 'race-settle:%' AND substr(lower(o.id),1,12)='race-settle:' GROUP BY o.guild,o.user,o.id,o.at
+  ) WHERE ABS(net)>=5000`).bind(guild,raceSince).run();
  await env.DB.prepare(`INSERT OR IGNORE INTO stock_news(guild,id,symbol,label,bps,at) SELECT guild,'trades:'||CAST(at/300000 AS INTEGER),'yano','株の売買が活発',15,MAX(at) FROM stock_trades WHERE guild=? AND at>=? GROUP BY guild,CAST(at/300000 AS INTEGER) HAVING COUNT(*)>=5`).bind(guild,since).run();
  // メシウマ食堂／他人の金で焼肉: how many times someone lost or won KP since the last tick, whatever the amounts.
  const {minus,plus}=await fortuneCounts(env,guild,market.at,now);
@@ -180,7 +219,7 @@ export async function tickStocks(env:KpEnv,market:Market,now=Date.now(),draw:()=
  await captureNews(env,market,now);
  for(const n of fictionNews(draw))await env.DB.prepare('INSERT OR IGNORE INTO stock_news(guild,id,symbol,label,bps,at) VALUES(?,?,?,?,?,?)').bind(market.guild,`fiction:${n.symbol}:${market.version}`,n.symbol,n.label,n.bps,now).run();
  const pending=(await env.DB.prepare('SELECT id,symbol,label,bps,at FROM stock_news WHERE guild=? AND applied_version IS NULL ORDER BY at,id LIMIT 40').bind(market.guild).all<{id:string;symbol:string;label:string;bps:number;at:number}>()).results;
- const used=(await env.DB.prepare("SELECT symbol,SUM(ABS(applied_bps)) AS total,SUM(CASE WHEN id LIKE 'trades:%' THEN ABS(applied_bps) ELSE 0 END) AS trades FROM stock_news WHERE guild=? AND applied_at>=? GROUP BY symbol").bind(market.guild,Math.floor(now/STOCK_HOLD)*STOCK_HOLD).all<{symbol:string;total:number;trades:number}>()).results;
+ const used=(await env.DB.prepare("SELECT symbol,SUM(ABS(applied_bps)) AS total,SUM(CASE WHEN id LIKE 'trades:%' THEN ABS(applied_bps) ELSE 0 END) AS trades FROM stock_news WHERE guild=? AND applied_at>=? AND id NOT LIKE 'admin:%' GROUP BY symbol").bind(market.guild,Math.floor(now/STOCK_HOLD)*STOCK_HOLD).all<{symbol:string;total:number;trades:number}>()).results;
  const budgets=new Map(IDS.map(id=>[id,{day:(DAY_BUDGET[id]??300)-(used.find(r=>r.symbol===id)?.total??0),tick:250,trades:30-(used.find(r=>r.symbol===id)?.trades??0)}]));
  const effective=pending.map(n=>{const b=budgets.get(n.symbol);if(!b)return {...n,bps:0};const trading=n.id.startsWith('trades:');const size=Math.max(0,Math.min(Math.abs(n.bps),b.day,b.tick,trading?b.trades:Infinity));b.day-=size;b.tick-=size;if(trading)b.trades-=size;return {...n,bps:Math.sign(n.bps)*size};});
  const prices=nextStockPrices(market.prices,effective,draw),history=Object.fromEntries(IDS.map(id=>[id,[...(market.history[id]??[]),prices[id]].slice(-48)]));
@@ -194,8 +233,11 @@ export async function tickStocks(env:KpEnv,market:Market,now=Date.now(),draw:()=
 export async function prepareStocks(env:KpEnv,guild:string,user?:string,now=Date.now()){
  await ensureStocks(env);
  const prices=Object.fromEntries(STOCKS.map(s=>[s.id,s.initialPrice])),history=Object.fromEntries(STOCKS.map(s=>[s.id,[s.initialPrice]]));
- await env.DB.prepare('INSERT OR IGNORE INTO stock_markets VALUES(?,0,?,?,?,?,?)').bind(guild,JSON.stringify(prices),JSON.stringify(history),now,now,'initial').run();
- let market=await read(env,guild);
+ // Common case: the shared market already exists. Do not issue an ignored
+ // INSERT on every 1-minute full-state refresh or scheduled stock update.
+ const existing=await env.DB.prepare('SELECT * FROM stock_markets WHERE guild=?').bind(guild).first<RawMarket>();
+ if(!existing)await env.DB.prepare('INSERT OR IGNORE INTO stock_markets VALUES(?,0,?,?,?,?,?)').bind(guild,JSON.stringify(prices),JSON.stringify(history),now,now,'initial').run();
+ let market=existing?parse(existing):await read(env,guild);
  const missing=(await env.DB.prepare('SELECT s.user FROM kp_state s LEFT JOIN stock_accounts a ON a.guild=s.guild AND a.user=s.user WHERE s.guild=? AND a.user IS NULL LIMIT 25').bind(guild).all<{user:string}>()).results;
  for(const row of missing)await migrateStocks(env,market,row.user,now);
  if(user&&!missing.some(r=>r.user===user))await migrateStocks(env,market,user,now);
@@ -233,7 +275,9 @@ export async function stockView(env:KpEnv,market:Market,user?:string,now=Date.no
  return {orderQuotes,pricingVersion:STOCK_ORDER_VERSION,volatilityMultiplier:2,version:market.version,at:Math.max(market.at,...ticks.map(t=>t.at)),startedAt:market.startedAt,intervalMinutes:5,dividendPercent:1,dividendCap:DIVIDEND_CAP,holdHours:24,discountCap:2000,ticks,news,dividends};
 }
 export async function queueStockPosts(env:KpEnv&{KP_EARNINGS_WEBHOOK_URL?:string},market:Market,now=Date.now()){
- if(!env.KP_EARNINGS_WEBHOOK_URL||market.version===0)return;
+ // A dedicated breaking bulletin already covers a special price shock.
+ // The generic ±3% alert must not duplicate it or consume the daily alert quota.
+ if(!env.KP_EARNINGS_WEBHOOK_URL||market.version===0||market.token.startsWith('admin:'))return;
  const previous=await env.DB.prepare('SELECT prices FROM stock_ticks WHERE guild=? AND version=?').bind(market.guild,market.version-1).first<{prices:string}>();
  const old=previous?JSON.parse(previous.prices):Object.fromEntries(STOCKS.map(s=>[s.id,s.initialPrice]));
  const slot=Math.floor(now/(30*60_000));
