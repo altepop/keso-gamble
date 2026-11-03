@@ -251,7 +251,7 @@ test('unattended owned-horse race with NO seed still settles, updates appearance
  const f=await fixture(0);
  const race=raceOfClass(0,openRaceStart(T0));addHorse(f.sql,'horse-unattended',0);
  await decideEntries(f.env,mapping,race,race-RACE_INTERVAL,1);
- assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM kp_races WHERE id=?').get(race)!.n,0,'original cron historically fixed entries without a race seed');
+ assert.equal(Number(f.sql.prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE type='table' AND name='kp_races'").get()!.n),0,'unattended fixture has not even created a race seed table');
  const before=balance(f.sql);
  await settleHorsePrizes(f.env,mapping,race+RUN_MS);
  const result=f.sql.prepare('SELECT id,rank,prize FROM kp_horse_results WHERE horse=?').get('horse-unattended') as {id:string;rank:number;prize:number};
