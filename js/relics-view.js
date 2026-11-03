@@ -88,6 +88,9 @@ export function relicsPanel(state,{proofs=null,notice='',loading=false,view={},r
  <section class="panel"><div class="card-body"><h2 class="panel-title">🎒 遺物図鑑（${yen(items.length)}種）</h2>
    <p class="helper">2列表示で所持品を比較できる。タップすると詳細と装備を確認できる。</p>
    ${filterHtml}
+   <label class="relic-v8-slot-picker">選択した遺物を装備する枠
+    <select id="relic-slot-gallery" class="select">${[0,1,2,3].map(n=>`<option value="${n}">枠${n+1}：${esc(collection.items[collection.equipped[n]]?.name??'空き')}</option>`).join('')}</select>
+   </label>
    <div class="relic-v8-viewbar">
     <button type="button" class="action-btn ${view.layout!=='list'?'active':''}" data-action="relic-layout" data-layout="grid">▦ 2列</button>
     <button type="button" class="action-btn ${view.layout==='list'?'active':''}" data-action="relic-layout" data-layout="list">☰ 1列</button>
