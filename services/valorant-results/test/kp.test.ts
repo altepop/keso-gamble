@@ -621,7 +621,15 @@ test('private casino: every hand on the menu pays exactly that hand through the 
    const expected=game==='mines'?(()=>{const [m,k]=hand.split('x').map(Number);return Math.floor(100*minesMultiplier(m,k))-100;})():nets[hand];
    const result=await operateKp(f.env,mapping,one,`private-hand-${String(++n).padStart(3,'0')}`,'private-casino',{game,amount:100,hand}) as {result:{net?:number;done?:{net:number;hand?:string;winner?:string}};operationSource:string};
    const net=result.result.net??result.result.done!.net;
-   assert.equal(net,expected,`${game} ${hand}`);cash+=net;assert.equal((await readKpState(f.env,mapping,one)).cash,cash,`${game} ${hand} wallet`);
+   if(game==='slot'&&hand.startsWith('temple')){
+    const done=result.result.done as {reels:string[];bet:number;bonus:{kind:string;mode:string;filled:boolean;total:number;steps:{landed:{cell:number;units:number}[]}[]};payout:number;net:number};
+    assert.deepEqual(done.reels,['diamond','diamond','cherry'],'owner can force feature entry only');
+    assert.equal(done.bonus.mode,'respin');assert.equal(done.bonus.kind,'temple');
+    assert.equal(done.bonus.total,done.payout);assert.equal(done.net,done.payout-done.bet);
+    if(hand==='temple-grand'){assert.equal(net,19900);assert.equal(done.bonus.filled,true);assert.equal(done.bonus.steps[0].landed.length,9);}
+    else{assert.ok(done.bonus.steps.length>=1);assert.ok(done.payout>=0,'ordinary feature rolls remain randomized');}
+   }else assert.equal(net,expected,`${game} ${hand}`);
+   cash+=net;assert.equal((await readKpState(f.env,mapping,one)).cash,cash,`${game} ${hand} wallet`);
    if(game==='poker')assert.equal(result.result.done!.hand,hand);
    if(game==='baccarat')assert.equal(result.result.done!.winner,hand);
   }
