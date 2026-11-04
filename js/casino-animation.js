@@ -63,5 +63,7 @@ export function createRelicRevealGate(announce){
     announce(reward.bonus,reward.base,reward.names);
    }
   },
+  // Disconnect must not replay a notice from the previous session.
+  cancel(){active=0;pending=null},
  };
 }
