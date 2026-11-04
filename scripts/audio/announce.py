@@ -34,14 +34,14 @@ def hold_last_vowel(x,sr,hold,fall):
     f=int(.01*sr)
     def xf(u,v):w=np.linspace(0,1,f);return np.concatenate([u[:-f],u[-f:]*(1-w)+v[:f]*w,v[f:]])
     return xf(xf(x[:core_a],held),tail)
-def call(text,hold,fall=2.0,lift=float(os.environ.get('LIFT',3.0)),ls=float(os.environ.get('LS',.88))):
+def call(text,hold,fall=2.0,lift=float(os.environ.get('LIFT',1.0)),ls=float(os.environ.get('LS',.95))):
     x,sr=say(text,ls)
     x=librosa.effects.pitch_shift(x,sr=sr,n_steps=lift)
     x=hold_last_vowel(x,sr,hold,fall).astype(float)
     x=resample_poly(x,SR,sr);x/=np.max(np.abs(x))
     # 張り: brighter presence and a harder drive push the voice forward without smearing the words
-    pres=float(os.environ.get('PRESENCE',.75));drive=float(os.environ.get('DRIVE',2.4))
-    x=hp(x,150);x=x+pres*bp(x,2000,6000)+.25*bp(x,900,1600)
+    pres=float(os.environ.get('PRESENCE',.35));drive=float(os.environ.get('DRIVE',1.6))
+    x=hp(x,120);x=x+pres*bp(x,2500,6000)
     x=np.tanh(x*drive)/np.tanh(drive)
     d=np.concatenate([np.zeros(int(.012*SR)),x])[:len(x)]
     st=np.stack([x*.9+d*.25,x*.9-d*.05+d*.3],1)          # light width
