@@ -3,12 +3,12 @@
  *
  * Off until the player turns 効果音 on. While off this module never creates an AudioContext, so the Activity keeps
  * its promise to leave Discord's audio session alone (an iPhone report: voice went quiet while the Activity was
- * open). Nothing plays without a tap or a game event the player started; no loops. Volume follows the relic sound
- * slider. The big sounds (fanfares, coin showers, slot reels, the announcer) are studio-rendered files in /audio
+ * open). Nothing plays without a tap or a game event the player started; no loops. 効果音 and the announcer each
+ * have a volume (the 🎚 panel next to the switch); until set, 効果音 follows the relic sound slider. The big sounds (fanfares, coin showers, slot reels, the announcer) are studio-rendered files in /audio
  * (see scripts/audio/README.md), fetched only after 効果音 is turned on; until they arrive, or if they cannot load,
  * the synthesized versions below play instead.
  */
-import {relicSoundVolume} from './relics-audio.js?v=web-5dd94cb307ac8599';
+import {relicSoundVolume} from './relics-audio.js?v=web-4aa077317490cfd2';
 
 const KEY='keso.sfx.v1';
 // Content-hashed names, so a changed sound never comes from a stale cache.
@@ -31,9 +31,29 @@ export const SFX_FILES=Object.freeze({
 const FILE_FOR=Object.freeze({reel:'slot-spin',reelStop:'reel-stop',win:'win',lose:'lose',coins:'coins',bigwin:'fanfare-mega',
  slotBig:'fanfare-big',slotMega:'fanfare-mega',slotGolden:'fanfare-super',slotTempleComplete:'fanfare-big',finish:'win'});
 const buffers=new Map();let loading=null;
-let enabled=false,ctx=null,master=null,noiseBuffer=null;
+let enabled=false,ctx=null,master=null,voiceBus=null,noiseBuffer=null;
 try{enabled=globalThis.localStorage?.getItem(KEY)==='on';}catch{}
 export const sfxEnabled=()=>enabled;
+// Volumes 0–100. 効果音 starts at the relic slider's level (what players already heard); the announcer at full.
+const VOLUME_KEYS=Object.freeze({effects:'keso.sfx.volume.v1',voice:'keso.sfx.voice-volume.v1'});
+const clampVolume=n=>Math.round(Math.max(0,Math.min(100,Number(n))));
+const volumes={effects:null,voice:100};
+for(const kind of Object.keys(VOLUME_KEYS)){
+ try{const saved=globalThis.localStorage?.getItem(VOLUME_KEYS[kind]);if(saved!==null&&saved!==undefined&&saved!==''&&Number.isFinite(Number(saved)))volumes[kind]=clampVolume(saved);}catch{}
+}
+/** The volume (0–100) of 'effects' (効果音) or 'voice' (実況). */
+export function sfxVolume(kind='effects'){return kind==='voice'?volumes.voice:volumes.effects??clampVolume(relicSoundVolume());}
+/** Sets a volume, saves it, and applies it to sounds already playing. Returns the stored value. */
+export function setSfxVolume(kind,n){
+ if(!Object.hasOwn(VOLUME_KEYS,kind)||!Number.isFinite(Number(n)))return sfxVolume(kind);
+ volumes[kind]=clampVolume(n);
+ try{globalThis.localStorage?.setItem(VOLUME_KEYS[kind],String(volumes[kind]));}catch{}
+ applyVolumes();
+ return volumes[kind];
+}
+function applyVolumes(){
+ try{if(master)master.gain.value=.55*sfxVolume('effects')/100;if(voiceBus)voiceBus.gain.value=.55*sfxVolume('voice')/100;}catch{}
+}
 
 function context(){
  if(!enabled)return null;
@@ -41,13 +61,13 @@ function context(){
  if(!Audio)return null;
  // A blocked or failing audio stack must never break a bet: no sound is the fallback.
  try{
-  if(!ctx||ctx.state==='closed'){ctx=new Audio({latencyHint:'interactive'});master=null;noiseBuffer=null;}
+  if(!ctx||ctx.state==='closed'){ctx=new Audio({latencyHint:'interactive'});master=null;voiceBus=null;noiseBuffer=null;}
   if(ctx.state!=='running')void ctx.resume?.()?.catch?.(()=>{});
-  if(!master){master=ctx.createGain();master.connect(ctx.destination);loading=null;buffers.clear();}
+  if(!master){master=ctx.createGain();master.connect(ctx.destination);voiceBus=ctx.createGain();voiceBus.connect(ctx.destination);loading=null;buffers.clear();}
   if(!loading)loading=loadFiles(ctx);
-  master.gain.value=.55*Math.max(0,Math.min(100,relicSoundVolume()))/100;
+  applyVolumes();
   return ctx;
- }catch{ctx=null;master=null;return null;}
+ }catch{ctx=null;master=null;voiceBus=null;return null;}
 }
 function loadFiles(c){
  const base=new URL('../audio/',import.meta.url);
@@ -65,7 +85,7 @@ export function playFile(name,{gain=1,at=0}={}){
 export function toggleSfx(){
  enabled=!enabled;
  try{globalThis.localStorage?.setItem(KEY,enabled?'on':'off');}catch{}
- if(enabled)play('chip');else if(ctx){void ctx.close?.().catch(()=>{});ctx=null;master=null;}
+ if(enabled)play('chip');else if(ctx){void ctx.close?.().catch(()=>{});ctx=null;master=null;voiceBus=null;}
  return enabled;
 }
 /** Starts fetching the rendered sound files (only when 効果音 is on). */
@@ -173,6 +193,6 @@ let voiceSource=null;
 export function announce(text){
  const c=context(),b=buffers.get(VOICE_FOR[text]);if(!c||!b)return false;
  try{voiceSource?.stop();}catch{}
- try{const s=c.createBufferSource(),g=c.createGain();s.buffer=b;g.gain.value=1.25;s.connect(g);g.connect(master);s.start();voiceSource=s;return true;}catch{return false;}
+ try{const s=c.createBufferSource(),g=c.createGain();s.buffer=b;g.gain.value=1.25;s.connect(g);g.connect(voiceBus??master);s.start();voiceSource=s;return true;}catch{return false;}
 }
 export function stopAnnounce(){try{voiceSource?.stop();}catch{}voiceSource=null;}

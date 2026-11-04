@@ -894,10 +894,17 @@ body:has(.screen[data-view="relics"]){--body-bg:#07020f}body:has(.screen[data-vi
 .market-disclaimer:not(.open)::after{content:''}
 
 /* 効果音 switch in the casino and racing headers. */
-.sfx-toggle{appearance:none;margin-left:auto;display:inline-flex;align-items:center;gap:4px;border:1px solid var(--t-tab-line,#294f85);background:var(--t-tab,#08142d);color:var(--t-tab-text,#cad8f8);border-radius:999px;padding:5px 10px;font-size:12px;font-weight:700;line-height:1.2;min-height:30px}
+.sfx-controls{margin-left:auto;display:inline-flex;align-items:center;gap:6px}
+.sfx-toggle,.sfx-volume-btn{appearance:none;display:inline-flex;align-items:center;gap:4px;border:1px solid var(--t-tab-line,#294f85);background:var(--t-tab,#08142d);color:var(--t-tab-text,#cad8f8);border-radius:999px;padding:5px 10px;font-size:12px;font-weight:700;line-height:1.2;min-height:30px}
 .sfx-toggle[aria-pressed="true"]{background:var(--t-pill,#e8eefc);color:var(--t-on-pill,#0b1733);border-color:var(--t-pill,#e8eefc)}
-.sfx-toggle+.keso-guide-trigger.docked{margin-left:0}
-.toprow:has(.sfx-toggle){gap:8px}
+.sfx-volume-btn[aria-expanded="true"]{background:var(--t-pill,#e8eefc);color:var(--t-on-pill,#0b1733);border-color:var(--t-pill,#e8eefc)}
+.sfx-volume-panel{position:absolute;top:calc(100% + 6px);right:0;z-index:40;width:min(280px,calc(100vw - 32px));display:grid;gap:10px;padding:12px 14px;border-radius:14px;border:1px solid var(--t-tab-line,#294f85);background:var(--t-tab,#08142d);color:var(--t-tab-text,#cad8f8);box-shadow:0 12px 32px rgba(0,0,0,.45)}
+.sfx-volume-row{display:grid;grid-template-columns:5.5em 1fr 3.2em;align-items:center;gap:8px;font-size:13px;font-weight:700}
+.sfx-volume-row input{width:100%;min-height:28px;accent-color:var(--t-pill,#e8eefc)}
+.sfx-volume-row output{text-align:right;font-variant-numeric:tabular-nums}
+.sfx-volume-panel p{margin:0;font-size:11px;opacity:.75}
+.sfx-controls+.keso-guide-trigger.docked{margin-left:0}
+.toprow:has(.sfx-toggle){gap:8px;position:relative}
 
 /* Relic encyclopedia + shard shop: clear owned/missing affordances on mobile. */
 .relic-ownership-shortcuts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin:12px 0}
@@ -1107,6 +1114,6 @@ body:has(.screen[data-view="relics"]){--body-bg:#07020f}body:has(.screen[data-vi
 .toprow .badge{white-space:nowrap;flex:none}
 @media (max-width:430px){
  .toprow:has(.sfx-toggle) .title{font-size:24px}
- .sfx-toggle span,.toprow:has(.sfx-toggle) .keso-guide-trigger.docked span{display:none}
- .sfx-toggle{padding:5px 8px}
+ .sfx-toggle span,.sfx-volume-btn span,.toprow:has(.sfx-toggle) .keso-guide-trigger.docked span{display:none}
+ .sfx-toggle,.sfx-volume-btn{padding:5px 8px}
 }
