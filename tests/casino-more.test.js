@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { minesStart, minesPick, minesCashout, minesMultiplier, playSlot, slotPayout, slotWinTier, SLOT_SYMBOLS, SLOT_WEIGHT, vpDeal, vpDraw, vpHand, VP_PAYS, playBaccarat, baccaratDeal, baccaratPayout, hydrateMoreCasino, createMoreCasino } from '../js/casino-more.js';
 import { createInitialState, hydrateState } from '../js/engine.js';
+import {templeGridAt} from '../js/slot-temple.js';
 
 const seq = values => { let i = 0; return n => { const v = values[i++]; if (v === undefined) throw Error('ran out'); return v % n; }; };
 const wallet = cash => ({ ...createInitialState(0), cash });
@@ -101,17 +102,31 @@ test('勝負中の手と履歴は保存・復元され、壊れた値は捨て�
   assert.throws(() => playSlot(wallet(200000), 100100, seq([0, 0, 0])), /100〜100,000/);
 });
 
-test('黄金神殿：ダイヤ2個で3祭壇の賞金を同じ回転中に確定する',()=>{
+test('黄金神殿 Hold & Respin：15マス・固定コイン・3回復帰・満盤加算を1回のスピンで確定',()=>{
  const state=wallet(10000);
- // reels diamond, diamond, cherry; awards 1x, 5x, 100x. Three RNG draws only after a verified trigger.
- const done=playSlot(state,100,seq([20,20,0,0,96,99])).done;
+ // 💎💎🍒, 6 initial 0.2x coins; all 9 empty positions receive 0.2x on the first respin.
+ const done=playSlot(state,100,seq([20,20,0,...Array(24).fill(0)])).done;
  assert.deepEqual(done.reels,['diamond','diamond','cherry']);
- assert.deepEqual(done.bonus,{kind:'temple',awards:[1,5,100],total:10600});
- assert.equal(done.payout,10600);
- assert.equal(done.net,10500);
- assert.equal(state.cash,20500);
- assert.equal(slotWinTier(done),'golden');
- assert.equal(hydrateMoreCasino({slots:[done]}).slots[0].bonus.total,10600);
+ const bonus=done.bonus;
+ assert.equal(bonus.mode,'respin');assert.equal(bonus.kind,'temple');
+ assert.equal(bonus.grid.length,15);assert.equal(bonus.grid.filter(Boolean).length,6);
+ assert.equal(bonus.steps.length,1);assert.equal(bonus.steps[0].landed.length,9);
+ assert.equal(bonus.steps[0].remaining,0,'15/15 completes without extra spins');
+ assert.equal(bonus.filled,true);assert.equal(bonus.fillUnits,100,'full board +10x');
+ assert.equal(templeGridAt(bonus,0).filter(Boolean).length,6);
+ assert.equal(templeGridAt(bonus,1).filter(Boolean).length,15);
+ assert.equal(bonus.total,1300);assert.equal(done.payout,1300);
+ assert.equal(state.cash,11200,'1 atomic credit, not one credit per opened coin');
+ assert.equal(slotWinTier(done),'mega');assert.equal(hydrateMoreCasino({slots:[done]}).slots[0].bonus.total,1300);
+ const copy=JSON.parse(JSON.stringify(bonus));templeGridAt(copy,0);templeGridAt(copy,1);
+ assert.deepEqual(copy,bonus,'replaying settled steps is read only');
+});
+test('黄金神殿 Hold & Respin：新コイン無しで残り3→2→1→0、元の配当は変わらない',()=>{
+ const state=wallet(10000),done=playSlot(state,100,seq([20,20,0,...Array(6).fill(0),...Array(27).fill(999)])).done;
+ assert.deepEqual(done.bonus.steps.map(x=>x.remaining),[2,1,0]);
+ assert.ok(done.bonus.steps.every(x=>x.landed.length===0));
+ assert.equal(done.bonus.filled,false);assert.equal(done.bonus.total,120);
+ assert.equal(state.cash,10020);assert.equal(slotWinTier(done),null);
 });
 test('黄金神殿：ダイヤ3個は従来の共有ジャックポットのみ、普通の出目にはボーナスなし',()=>{
  const jackpot=playSlot(wallet(1000),100,seq([20,20,20]),{amount:50000,version:2}).done;
