@@ -65,7 +65,7 @@ export const SLOT_TEMPLE_PRIZES=Object.freeze([1,2,3,5,10,100]);
 export function slotWinTier(done){
  if(!done||!Number.isSafeInteger(done.bet)||done.bet<=0)return null;
  const multiple=(done.payout??0)/done.bet;
- return multiple>=100?'golden':multiple>=40?'mega':multiple>=10?'big':null;
+ return multiple>=40?'golden':multiple>=10?'mega':multiple>=5?'big':null;
 }
 function templePrize(rand){
  const n=roll(rand,100);
