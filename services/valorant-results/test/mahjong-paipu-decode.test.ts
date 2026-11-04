@@ -3,6 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import protobuf from 'protobufjs';
+// @ts-expect-error The Actions fetcher is plain JavaScript; only its record decoder is exercised here.
 import {decodeRecords} from '../scripts/mahjong-paipu.mjs';
 
 const liqi={nested:{lq:{nested:{
