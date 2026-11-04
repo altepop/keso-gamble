@@ -26,7 +26,7 @@ import { healthPanel } from './health-view.js?v=web-97dee0ca9bc9e22b';
 import { trendPanel } from './trend-view.js?v=web-97dee0ca9bc9e22b';
 import { mleagueScreen, mleaguePreview } from './mleague-view.js?v=web-97dee0ca9bc9e22b';
 import { gamePicker, chinchiroView, blackjackView } from './casino-view.js?v=web-97dee0ca9bc9e22b';
-import {casinoFrames} from './casino-animation.js?v=web-97dee0ca9bc9e22b';
+import {casinoFrames,createRelicRevealGate} from './casino-animation.js?v=web-97dee0ca9bc9e22b';
 import { playChinchiro, bjStart, bjHit, bjStand, bjDouble, cryptoDie, cryptoCard, cryptoInt } from './casino.js?v=web-97dee0ca9bc9e22b';
 import { showBigWin } from './bigwin.js?v=web-97dee0ca9bc9e22b';
 import { audioMixEnabled, audioMixSupported, setAudioMix } from './audio-mix.js?v=web-97dee0ca9bc9e22b';
@@ -400,11 +400,12 @@ function showRelicReward(bonus,base=0,names=[]){
  el.append(title,info,source,close);document.body.appendChild(el);
  setTimeout(()=>el.remove(),6500);
 }
+const relicRewardGate=createRelicRevealGate(showRelicReward);
 function observeRelicLedger(){
  const latest=Array.isArray(state?.ledger)?state.ledger.find(row=>row.kind==='relic'):null;
  if(!latest)return;
  const id=String(latest.id??latest.at??'');
- if(lastRelicLedgerId!==null&&id&&lastRelicLedgerId!==id&&Number(latest.delta)>0)showRelicReward(Number(latest.delta));
+ if(lastRelicLedgerId!==null&&id&&lastRelicLedgerId!==id&&Number(latest.delta)>0)relicRewardGate.notify(Number(latest.delta));
  lastRelicLedgerId=id;
 }
 
@@ -421,6 +422,7 @@ async function doCasino(action){
   if(input&&(!Number.isSafeInteger(amount)||amount<100||amount>100000))throw new Error('賭け金は100〜100,000 KPの整数です');
   if(casinoBusy)return;
   const before=structuredClone({cash:state.cash,chinchiro:state.chinchiro??[],blackjack:state.blackjack??null,bjHistory:state.bjHistory??[]});
+  relicRewardGate.begin(); // Preserve dice/card suspense until all reveal frames have finished.
   casinoBusy=true;casinoSkipped=!!reducedMotion?.matches;
   casinoPresentation={...before,chinchiro:action==='chinchiro'?[]:before.chinchiro,bjHistory:action==='bj-start'?[]:before.bjHistory};
   casinoStage={phase:'waiting'};render();unlockSfx();
@@ -439,6 +441,7 @@ async function doCasino(action){
     if(action==='chinchiro')toast(`${result.net>0?'勝ち':result.net<0?'負け':'分け'} ${signed(result.net)}`);
     else if(result.done)toast(`${BJ_RESULTS[result.done.result]??''} ${signed(result.done.net)}`);
   }finally{casinoBusy=false;casinoPresentation=null;casinoStage={};skipCasinoPause=null;render();
+    relicRewardGate.finish();
     const nextAction=action==='chinchiro'?'chinchiro':state.blackjack?'bj-hit':'bj-start';
     $(`[data-action="${nextAction}"]`)?.focus({preventScroll:true});
   }
@@ -483,7 +486,7 @@ async function liveOperation(action,args){
  try{state=await wallet.state();observeRelicLedger();connectionError='';}catch{connectionError='決済済みです。残高を更新してください。';}
  if(Number(result?.relicBonus)>0){
   const actual=state?.relics?.lastNativeEffect;
-  showRelicReward(Number(result.relicBonus),Number(actual?.amount??0),actual?.names??[]);
+  relicRewardGate.notify(Number(result.relicBonus),Number(actual?.amount??0),actual?.names??[]);
  }
  return result;
 }
