@@ -1,6 +1,6 @@
-import { CASINO_MIN, CASINO_MAX, RANKS, SUITS } from './casino.js?v=web-a627724e8a74f1e5';
-import {templeRespinScene,templeWinBackdrop} from './slot-temple-view.js?v=web-a627724e8a74f1e5';
-import { MINES_CELLS, MINES_CHOICES, MINES_CAP, minesMultiplier, SLOT_SYMBOLS, slotWinTier, JACKPOT_PERCENT, JACKPOT_FULL_BET, VP_PAYS, VP_NAMES, BACCARAT_SIDES } from './casino-more.js?v=web-a627724e8a74f1e5';
+import { CASINO_MIN, CASINO_MAX, RANKS, SUITS } from './casino.js?v=web-851e5963520baf6a';
+import {templeRespinScene,templeWinBackdrop} from './slot-temple-view.js?v=web-851e5963520baf6a';
+import { MINES_CELLS, MINES_CHOICES, MINES_CAP, minesMultiplier, SLOT_SYMBOLS, slotWinTier, JACKPOT_PERCENT, JACKPOT_FULL_BET, VP_PAYS, VP_NAMES, BACCARAT_SIDES } from './casino-more.js?v=web-851e5963520baf6a';
 // Screens for マインズ・スロット・ビデオポーカー・バカラ. They only show what the wallet already holds; every draw and
 // payout is decided by casino-more.js (the server's for live wallets).
 const kp=n=>Math.abs(n).toLocaleString('ja-JP')+' KP';
@@ -34,7 +34,7 @@ const slotDust=Array.from({length:38},(_,i)=>`<i style="--i:${i};--x:${(i*47)%10
 const slotPrize=amount=>Math.round(amount).toLocaleString('ja-JP');
 export function slotCeremony(reveal){
  if(!reveal?.done)return '';
- const {done}=reveal,tier=slotWinTier(done)||'big';
+ const {done}=reveal,tier=slotWinTier(done)||(done.bonus?.mode==='respin'?'feature':'big');
  const stars=`<div class="slot-confetti" aria-hidden="true">${slotDust}</div>`;
  const close='<button class="slot-close" type="button" data-action="slot-close-reveal" aria-label="演出を閉じる">×</button>';
  if(reveal.type==='bonus'&&done.bonus?.mode==='respin')return templeRespinScene(reveal);
@@ -54,7 +54,7 @@ export function slotCeremony(reveal){
  }
  const gold=tier==='golden',mega=tier==='mega'||gold;
  const stages=`<div class="slot-win-stages ${tier}">
-   <div class="slot-win-stage stage-big">BIG WIN</div>
+   ${tier==='feature'?'<div class="slot-win-stage stage-feature">FEATURE WIN</div>':'<div class="slot-win-stage stage-big">BIG WIN</div>'}
    ${mega?'<div class="slot-win-stage stage-mega">MEGA WIN</div>':''}
    ${gold?'<div class="slot-win-stage stage-golden">GOLDEN WIN</div>':''}
   </div>`;

@@ -1065,3 +1065,7 @@ body:has(.screen[data-view="relics"]){--body-bg:#07020f}body:has(.screen[data-vi
 @keyframes mayaSlowSun{to{transform:translateX(-50%) rotate(360deg)}}
 @media(max-width:420px){.maya-cabinet{padding:7px;border-width:3px}.maya-machine{gap:2px}.maya-board{padding:3px;gap:2px;border-width:3px}.maya-cell{aspect-ratio:1}.maya-coin{inset:1px;border-width:1px}.maya-coin::before{inset:5%}.maya-nameplate{padding:2px 0 4px}.maya-respin-left,.maya-respin-right{border-width:1px}.maya-progress{margin-top:5px}.maya-scene .slot-close{top:max(5px,env(safe-area-inset-top));right:5px;transform:scale(.75);transform-origin:top right}}
 @media(prefers-reduced-motion:reduce){.maya-sun-stone,.maya-ghost,.maya-cell.arriving .maya-coin,.maya-full-award{animation:none!important}}
+
+/* Owner-triggered natural temple bonuses below 5x are FEATURE WIN, not BIG WIN. */
+.slot-win-stage.stage-feature{font-size:clamp(37px,11vw,72px);color:#c9f7e7;text-shadow:0 5px #155245,0 0 35px #5bffdc}
+@media(prefers-reduced-motion:reduce){.slot-win-stages.feature .stage-feature{opacity:1!important}}
