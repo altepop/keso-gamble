@@ -1,37 +1,38 @@
-import {stockOrderQuote,STOCK_ORDER_VERSION,STOCK_PRICE_SCALE} from './stock-order.js?v=web-a647b3e0aebfe5d1';
-import {steamConnectionMessage} from './steam-view.js?v=web-a647b3e0aebfe5d1';
-import {relicsPanel} from './relics-view.js?v=web-a647b3e0aebfe5d1';
-import {primeRelicAudio,playRelicSound,previewRelicSound,stopRelicSound,setRelicSoundVolume,toggleRelicSound} from './relics-audio.js?v=web-a647b3e0aebfe5d1';
-import {relicDefaultView} from './relics-v4.js?v=web-a647b3e0aebfe5d1';
-import {privateCasinoPanel} from './private-casino-view.js?v=web-a647b3e0aebfe5d1';
-import {communityPanel,communityRows} from './community-feed.js?v=web-a647b3e0aebfe5d1';
-import {stockPanel,stockCandles,stockPrice,privateStockOperator} from './stock-view.js?v=web-a647b3e0aebfe5d1';
-import {stockStoryChoices,validateCustomStory} from './stock-stories.js?v=web-a647b3e0aebfe5d1';
-import {wheelView,covered,redNumbers,outcomeAngle} from './roulette-view.js?v=web-a647b3e0aebfe5d1';
-import {makeEscalationWheel} from './escalation-roulette.js?v=web-a647b3e0aebfe5d1';
-import {connectDiscordActivity,isDiscordActivity,openSteamLogin,openCompanionGame}from './discord-activity-auth.js?v=web-a647b3e0aebfe5d1';
-import { createKpClient } from './kp-client.js?v=web-a647b3e0aebfe5d1';
-import { fullRefreshInterval, communityRefreshEnabled, COMMUNITY_REFRESH_INTERVAL } from './live-refresh-policy.js?v=web-a647b3e0aebfe5d1';
-import { fmt, fmt0 } from './format.js?v=web-a647b3e0aebfe5d1';
-import { submitClaim, approveClaim, issueDirective, completeDirective } from './progression.js?v=web-a647b3e0aebfe5d1';
-import { titleView, homeView, playView, directivesView, escapeHTML } from './progression-views.js?v=web-a647b3e0aebfe5d1';
-import { genCandles, movingAverage, svgCandles } from './charts.js?v=web-a647b3e0aebfe5d1';
-import { MARKET, createInitialState, portfolioValue, assets, advanceMarket, trade, spin, spinNumbers, validateNumberBets, grantDemoSalary, cryptoRouletteNumber } from './engine.js?v=web-a647b3e0aebfe5d1';
-import { KEY, LEGACY_KEY } from './storage.js?v=web-a647b3e0aebfe5d1';
-import { PUBLIC_SALT, RUN_MS, WEEKLY_LIMIT, openRaceStart, latestRaceStart, raceCard, raceOdds, raceResult, raceTimeline, raceCommentary, raceRuns, placeRaceBet, settleRaceBets, weeklySpent } from './racing.js?v=web-a647b3e0aebfe5d1';
-import { LUXURY } from './luxury.js?v=web-a647b3e0aebfe5d1';
-import { raceScreen, racePreview, drawRace, raceElapsed, ownerPanel, luxuryPanel, roastPanel } from './racing-view.js?v=web-a647b3e0aebfe5d1';
-import { createStore } from './store.js?v=web-a647b3e0aebfe5d1';
-import { healthPanel } from './health-view.js?v=web-a647b3e0aebfe5d1';
-import { trendPanel } from './trend-view.js?v=web-a647b3e0aebfe5d1';
-import { mleagueScreen, mleaguePreview } from './mleague-view.js?v=web-a647b3e0aebfe5d1';
-import { gamePicker, chinchiroView, blackjackView } from './casino-view.js?v=web-a647b3e0aebfe5d1';
-import {casinoFrames} from './casino-animation.js?v=web-a647b3e0aebfe5d1';
-import { playChinchiro, bjStart, bjHit, bjStand, bjDouble, cryptoDie, cryptoCard, cryptoInt } from './casino.js?v=web-a647b3e0aebfe5d1';
-import { showBigWin } from './bigwin.js?v=web-a647b3e0aebfe5d1';
-import { sfxEnabled, toggleSfx, unlockSfx, play as playSfx, playResult, announce } from './sfx.js?v=web-a647b3e0aebfe5d1';
-import { minesStart, minesPick, minesCashout, playSlot, slotWinTier, vpDeal, vpDraw, playBaccarat, VP_NAMES } from './casino-more.js?v=web-a647b3e0aebfe5d1';
-import { minesView, slotView, videoPokerView, baccaratView } from './casino-more-view.js?v=web-a647b3e0aebfe5d1';
+import {stockOrderQuote,STOCK_ORDER_VERSION,STOCK_PRICE_SCALE} from './stock-order.js?v=web-c21ee1f08c09167e';
+import {steamConnectionMessage} from './steam-view.js?v=web-c21ee1f08c09167e';
+import {relicsPanel} from './relics-view.js?v=web-c21ee1f08c09167e';
+import {primeRelicAudio,playRelicSound,previewRelicSound,stopRelicSound,setRelicSoundVolume,toggleRelicSound} from './relics-audio.js?v=web-c21ee1f08c09167e';
+import {relicDefaultView} from './relics-v4.js?v=web-c21ee1f08c09167e';
+import {privateCasinoPanel} from './private-casino-view.js?v=web-c21ee1f08c09167e';
+import {communityPanel,communityRows} from './community-feed.js?v=web-c21ee1f08c09167e';
+import {stockPanel,stockCandles,stockPrice,privateStockOperator} from './stock-view.js?v=web-c21ee1f08c09167e';
+import {stockStoryChoices,validateCustomStory} from './stock-stories.js?v=web-c21ee1f08c09167e';
+import {wheelView,covered,redNumbers,outcomeAngle} from './roulette-view.js?v=web-c21ee1f08c09167e';
+import {makeEscalationWheel} from './escalation-roulette.js?v=web-c21ee1f08c09167e';
+import {connectDiscordActivity,isDiscordActivity,openSteamLogin,openCompanionGame}from './discord-activity-auth.js?v=web-c21ee1f08c09167e';
+import { createKpClient } from './kp-client.js?v=web-c21ee1f08c09167e';
+import { fullRefreshInterval, communityRefreshEnabled, COMMUNITY_REFRESH_INTERVAL } from './live-refresh-policy.js?v=web-c21ee1f08c09167e';
+import { fmt, fmt0 } from './format.js?v=web-c21ee1f08c09167e';
+import { submitClaim, approveClaim, issueDirective, completeDirective } from './progression.js?v=web-c21ee1f08c09167e';
+import { titleView, homeView, playView, directivesView, escapeHTML } from './progression-views.js?v=web-c21ee1f08c09167e';
+import { genCandles, movingAverage, svgCandles } from './charts.js?v=web-c21ee1f08c09167e';
+import { MARKET, createInitialState, portfolioValue, assets, advanceMarket, trade, spin, spinNumbers, validateNumberBets, grantDemoSalary, cryptoRouletteNumber } from './engine.js?v=web-c21ee1f08c09167e';
+import { KEY, LEGACY_KEY } from './storage.js?v=web-c21ee1f08c09167e';
+import { PUBLIC_SALT, RUN_MS, WEEKLY_LIMIT, openRaceStart, latestRaceStart, raceCard, raceOdds, raceResult, raceTimeline, raceCommentary, raceRuns, placeRaceBet, settleRaceBets, weeklySpent } from './racing.js?v=web-c21ee1f08c09167e';
+import { LUXURY } from './luxury.js?v=web-c21ee1f08c09167e';
+import { raceScreen, racePreview, drawRace, raceElapsed, ownerPanel, luxuryPanel, roastPanel } from './racing-view.js?v=web-c21ee1f08c09167e';
+import { createStore } from './store.js?v=web-c21ee1f08c09167e';
+import { healthPanel } from './health-view.js?v=web-c21ee1f08c09167e';
+import { trendPanel } from './trend-view.js?v=web-c21ee1f08c09167e';
+import { mleagueScreen, mleaguePreview } from './mleague-view.js?v=web-c21ee1f08c09167e';
+import { gamePicker, chinchiroView, blackjackView } from './casino-view.js?v=web-c21ee1f08c09167e';
+import {casinoFrames} from './casino-animation.js?v=web-c21ee1f08c09167e';
+import { playChinchiro, bjStart, bjHit, bjStand, bjDouble, cryptoDie, cryptoCard, cryptoInt } from './casino.js?v=web-c21ee1f08c09167e';
+import { showBigWin } from './bigwin.js?v=web-c21ee1f08c09167e';
+import { audioMixEnabled, audioMixSupported, setAudioMix } from './audio-mix.js?v=web-c21ee1f08c09167e';
+import { sfxEnabled, toggleSfx, unlockSfx, play as playSfx, playResult, announce } from './sfx.js?v=web-c21ee1f08c09167e';
+import { minesStart, minesPick, minesCashout, playSlot, slotWinTier, vpDeal, vpDraw, playBaccarat, VP_NAMES } from './casino-more.js?v=web-c21ee1f08c09167e';
+import { minesView, slotView, videoPokerView, baccaratView } from './casino-more-view.js?v=web-c21ee1f08c09167e';
 const $=(s,el=document)=>el.querySelector(s);
 const wallet=createKpClient();
 const embedded=isDiscordActivity();
@@ -309,8 +310,12 @@ function screenStable(){return useScreen('馬主',live?ownerPanel(state,Date.now
 function screenShop(){return useScreen('高級品',luxuryPanel(state,{readonly:!live,confirmation:luxuryConfirmation}),{preview:true});}
 function screenRelics(){return useScreen('遺物',relicsPanel(state,{proofs:relicProofs,notice:relicNotice,loading:relicLoading,view:relicView,reveal:relicReveal,summonBusy:relicSummonBusy||wallet.pending}));}
 
+function audioMixCard(){
+  const on=audioMixEnabled();
+  return `<div class="asset-card"><h2 class="panel-title">📱 iPhone：動画・音楽を止めない（実験）</h2><p class="helper">iPhoneでActivityを開くと、ピクチャインピクチャの動画や音楽が止まることがあります（Discordアプリ側の動作）。オンにすると、ほかのアプリの音と一緒に鳴らすようiPhoneに伝えます。効くかは端末とDiscordの版によります。Discordの通話の聞こえ方が変わったらオフにしてください。</p>${audioMixSupported()?'':'<p class="helper">この端末・アプリでは設定できません。</p>'}<div class="action-row"><button type="button" class="action-btn ${on?'primary':''}" data-action="audio-mix-toggle" aria-pressed="${on}">${on?'オン（タップでオフ）':'オフ（タップでオン）'}</button></div><p class="helper">変更後は、Activityを閉じて開き直すと確実です。</p></div>`;
+}
 function screenAssets(){
-  return `<div class="screen"><header class="topbar"><div class="toprow"><h1 class="title">資産</h1><div class="small-actions">${live?'':'<button class="icon-btn" data-action="reset" aria-label="初期化">↺</button>'}</div></div></header><div class="wallet-strip"><div class="wallet-item"><small>保有KP</small><strong>${moneyCompact(state.cash)}</strong></div><div class="wallet-item"><small>株式評価額</small><strong>${moneyCompact(portfolioValue(state))}</strong></div><div class="wallet-item"><small>純資産</small><strong>${moneyCompact(assets(state))}</strong></div></div>${live?'<div class="market-disclaimer">サーバー口座 · 試合報酬と決済は全端末で共通です。</div>':'<div class="market-disclaimer">端末内のデモ口座</div>'}${live?'':`<details class="panel"><summary class="card-body">開発用：テストKPの補充</summary><div class="action-row"><button class="action-btn" data-action="salary">テスト用KP +600 KP</button></div></details>`}${state.debt?.amount>0?`<div class="market-disclaimer">💸 借KP ${moneyCompact(state.debt.amount)}（${state.debt.intervalMinutes}分ごとに利子${state.debt.interestPercent}%）</div>`:''}<div class="asset-list">${live&&state.privateCasino?privateStockOperator(MARKET,{selection:stockShockSelection,notice:stockShockNotice,confirmation:stockShockConfirmation,events:state.marketEvents}):''}${live&&state.privateCasino?privateCasinoPanel(drafts,privateRacePreview,privateRoundMessage):''}<div class="asset-card"><div class="panel-title" style="margin-bottom:10px">保有銘柄</div>${MARKET.map(s=>`<div class="asset-line"><span>${s.name}</span><strong>${state.holdings[s.id]}株 / ${moneyCompact(state.holdings[s.id]*state.prices[s.id])}</strong></div>`).join('')}<div class="action-row"><button class="action-btn" data-screen="market">株を売買する</button></div></div>${tradeHistory()}${live?roastPanel(state):''}${live?trendPanel(trend,trendView):''}${live?healthPanel(health,healthLoading,healthError):''}<div class="asset-card"><h2 class="panel-title">口座</h2>${live?'<div id="connection-slot"></div>':''}<button class="title-back" data-screen="title">タイトルへ戻る</button></div></div>${bottomNav()}</div>`;
+  return `<div class="screen"><header class="topbar"><div class="toprow"><h1 class="title">資産</h1><div class="small-actions">${live?'':'<button class="icon-btn" data-action="reset" aria-label="初期化">↺</button>'}</div></div></header><div class="wallet-strip"><div class="wallet-item"><small>保有KP</small><strong>${moneyCompact(state.cash)}</strong></div><div class="wallet-item"><small>株式評価額</small><strong>${moneyCompact(portfolioValue(state))}</strong></div><div class="wallet-item"><small>純資産</small><strong>${moneyCompact(assets(state))}</strong></div></div>${live?'<div class="market-disclaimer">サーバー口座 · 試合報酬と決済は全端末で共通です。</div>':'<div class="market-disclaimer">端末内のデモ口座</div>'}${live?'':`<details class="panel"><summary class="card-body">開発用：テストKPの補充</summary><div class="action-row"><button class="action-btn" data-action="salary">テスト用KP +600 KP</button></div></details>`}${state.debt?.amount>0?`<div class="market-disclaimer">💸 借KP ${moneyCompact(state.debt.amount)}（${state.debt.intervalMinutes}分ごとに利子${state.debt.interestPercent}%）</div>`:''}<div class="asset-list">${live&&state.privateCasino?privateStockOperator(MARKET,{selection:stockShockSelection,notice:stockShockNotice,confirmation:stockShockConfirmation,events:state.marketEvents}):''}${live&&state.privateCasino?privateCasinoPanel(drafts,privateRacePreview,privateRoundMessage):''}<div class="asset-card"><div class="panel-title" style="margin-bottom:10px">保有銘柄</div>${MARKET.map(s=>`<div class="asset-line"><span>${s.name}</span><strong>${state.holdings[s.id]}株 / ${moneyCompact(state.holdings[s.id]*state.prices[s.id])}</strong></div>`).join('')}<div class="action-row"><button class="action-btn" data-screen="market">株を売買する</button></div></div>${tradeHistory()}${live?roastPanel(state):''}${live?trendPanel(trend,trendView):''}${live?healthPanel(health,healthLoading,healthError):''}${audioMixCard()}<div class="asset-card"><h2 class="panel-title">口座</h2>${live?'<div id="connection-slot"></div>':''}<button class="title-back" data-screen="title">タイトルへ戻る</button></div></div>${bottomNav()}</div>`;
 }
 
 function bottomNav(){
@@ -571,6 +576,7 @@ for(const eventName of ['input','change'])addEventListener(eventName,e=>{
 });
 addEventListener('click',async e=>{
   const t=e.target.closest?.('button,[data-open]'); if(!t) return;
+  if(t.dataset.action==='audio-mix-toggle'){const on=!audioMixEnabled();setAudioMix(on);render();toast(on?'オンにしました。Activityを開き直してから動画を再生してみてください':'オフにしました');return;}
   if(t.dataset.action==='sfx-toggle'){const on=toggleSfx();render();toast(on?'効果音をオンにしました（カジノ・競馬）':'効果音をオフにしました');return;}
   if(t.matches('[data-bet],[data-race-horse],[data-race-type],[data-race-amount],[data-casino-game],[data-mines-count],[data-number]'))playSfx('tick');
   if(t.dataset.action==='casino-skip'){casinoSkipped=true;skipCasinoPause?.();return;}
