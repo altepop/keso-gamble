@@ -43,3 +43,34 @@ test('reveal has separate transcendent ceremony, retains fixed server result and
  assert.match(html,/抽選はサーバーで確定済み/);
  assert.equal(relicRevealPanel(null),'');
 });
+
+test('unowned normal relics remain visible, searchable and sortable without joining wallet inventory',()=>{
+ const owned=make(1,{id:'normal.owned',name:'既所持',rarity:'rare',power:70});
+ const missing={id:'normal.missing',name:'まだ見ぬ冠',rarity:'transcendent',mode:'voice',power:900,ability:'<svg>未知の効果',percent:0};
+ const other={id:'normal.race',name:'競馬の光',rarity:'common',mode:'racing',power:1,ability:'競馬向け'};
+ const catalog=new Map([[missing.id,missing],[other.id,other]]);
+ const before=JSON.stringify(owned);
+ const all=relicInventory([owned],catalog,{voice:'通話',racing:'競馬'},{sort:'rarity'});
+ assert.equal(all.total,3);
+ assert.equal(all.all,1);
+ assert.equal(all.unowned,2);
+ assert.equal(all.matching,3);
+ assert.equal(all.matches[0].id,missing.id);
+ assert.equal(relicInventory([owned],catalog,{}, {ownership:'unowned'}).matching,2);
+ assert.equal(relicInventory([owned],catalog,{}, {ownership:'owned'}).matching,1);
+ assert.equal(relicInventory([owned],catalog,{voice:'通話'}, {ownership:'unowned',query:'通話'}).matches[0].id,missing.id);
+ assert.equal(relicInventory([owned],catalog,{}, {sort:'owned'}).matches[0].id,owned.id);
+ assert.equal(relicInventory([owned],catalog,{}, {ownership:'unowned',equippedOnly:true},[owned.id]).matching,0);
+ assert.equal(JSON.stringify(owned),before);
+ const card=relicItemCard({...missing,count:0,unowned:true,origin:'normal'},catalog,{voice:'通話'},[],{transcendent:0});
+ assert.match(card,/◇ 未所持/);
+ assert.match(card,/未所持のため装備はできない/);
+ assert.doesNotMatch(card,/data-action="relic-equip"/);
+ assert.ok(!card.includes('<svg>'));
+ const exchangeable=relicItemCard({...other,count:0,unowned:true,origin:'normal'},catalog,{},[],{common:120});
+ assert.match(exchangeable,/data-action="relic-open-exchange" data-relic="normal.race"/);
+ const filters=relicFilterControls({ownership:'unowned'},{voice:'通話'},all);
+ assert.match(filters,/data-relic-filter="ownership"/);
+ assert.match(filters,/未所持のみ/);
+ assert.match(filters,/未所持 2/);
+});
