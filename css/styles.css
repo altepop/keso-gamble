@@ -1002,3 +1002,66 @@ body:has(.screen[data-view="relics"]){--body-bg:#07020f}body:has(.screen[data-vi
  .slot-premium .slot-reel.spinning b,.slot-spin-strip,.slot-premium .slot-reel.slot-matched,.slot-confetti i,.slot-ceremony::before,.slot-mast-light,.slot-win-halo,.slot-sun,.slot-temple-total strong,.slot-altar.opened,.slot-win-stage{animation:none!important;transition:none!important}
  .slot-win-stage{opacity:0}.slot-win-stages.big .stage-big,.slot-win-stages.mega .stage-mega,.slot-win-stages.golden .stage-golden{opacity:1!important}
 }
+
+
+/* KESO LOST SUN TEMPLE — 5x3 hold-and-respin cinema. Inspired by the user-recorded bonus flow;
+   all visual assets are original CSS geometry, not borrowed game art. */
+.maya-scene{background:radial-gradient(ellipse at 50% 13%,#ffe59a66 0,transparent 38%),linear-gradient(150deg,#15362d,#3b4226 30%,#936422 68%,#291a18 100%);padding:clamp(12px,3vh,28px) max(9px,env(safe-area-inset-left)) max(12px,env(safe-area-inset-bottom));isolation:isolate}
+.maya-scene::before{background:repeating-linear-gradient(115deg,#ffffff04 0 2px,transparent 2px 40px);animation:none}
+.maya-scene::after{background:linear-gradient(90deg,#0008,transparent 18%,transparent 82%,#0008)}
+.maya-sky{position:absolute;inset:0;overflow:hidden;pointer-events:none}
+.maya-sun-stone{position:absolute;left:50%;top:-19vw;transform:translateX(-50%);font:clamp(230px,58vw,550px)/1 Georgia,serif;color:#ffe89a17;text-shadow:0 0 60px #ffcf5c5b;animation:mayaSlowSun 25s linear infinite}
+.maya-obelisk{position:absolute;bottom:0;font:clamp(150px,31vw,330px)/1 Georgia,serif;color:#99815742;text-shadow:12px 15px 0 #0b261344,0 0 35px #ffc96533}.maya-obelisk.left{left:-7vw}.maya-obelisk.right{right:-7vw}
+.maya-cabinet{position:relative;z-index:2;width:min(100%,850px);margin:auto;padding:clamp(8px,1.6vw,20px);border:5px ridge #d4a850;border-radius:15px;background:linear-gradient(145deg,#3d351a 0,#ab8032 2%,#2a321e 6%,#193f3d 45%,#72501d 95%,#b18a39 100%);box-shadow:0 0 0 2px #2b180a,0 10px 60px #0009,inset 0 0 26px #ffe0937a;overflow:hidden}
+.maya-cabinet::before{content:"";position:absolute;inset:4px;border:1px solid #ffdda866;border-radius:7px;pointer-events:none}
+.maya-jackpots{display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;margin:0 7px 5px;position:relative}
+.maya-jackpots>span{background:linear-gradient(180deg,#143d39,#091f27);border:1px solid #bca04f;box-shadow:inset 0 0 8px #86cc8752;color:#eac36b;border-radius:6px;padding:3px 1px;font:bold clamp(7px,1.25vw,10px)/1.1 Georgia,serif;letter-spacing:.06em}
+.maya-jackpots strong{display:block;color:#fff6bf;font:900 clamp(9px,2vw,18px)/1.15 Georgia,serif;letter-spacing:.015em;text-shadow:0 0 9px #fbb643}
+.maya-nameplate{display:flex;align-items:center;justify-content:center;gap:clamp(4px,1.7vw,15px);padding:3px 0 8px;text-align:center}
+.maya-nameplate>div{background:linear-gradient(90deg,transparent,#a0752242,transparent);padding:2px 10px}
+.maya-nameplate small{display:block;font-size:clamp(7px,1.5vw,10px);letter-spacing:.19em;color:#fce3a5}
+.maya-nameplate h2{font:bold clamp(19px,5vw,38px)/1.1 Georgia,serif;margin:1px 0;color:#fce29b;text-shadow:0 2px #482708,0 0 20px #fff4a6;letter-spacing:.035em}
+.maya-nameplate h2 span{font-size:.46em;display:block;letter-spacing:.14em;margin-top:4px}
+.maya-mask{font-size:clamp(23px,6vw,58px);color:#e3b765;text-shadow:0 0 17px #ffc74e}
+.maya-machine{display:grid;grid-template-columns:clamp(27px,6vw,58px) minmax(0,1fr) clamp(27px,6vw,58px);align-items:stretch;gap:3px}
+.maya-respin-left,.maya-respin-right{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;border:2px ridge #d8a857;border-radius:7px;background:linear-gradient(90deg,#302017,#7f3d18 55%,#2a2417);box-shadow:inset 0 0 15px #0d090d;color:#ffd87f;min-width:0}
+.maya-respin-left small,.maya-respin-right small{font-size:clamp(6px,1.1vw,10px);letter-spacing:-.06em;writing-mode:vertical-rl}
+.maya-respin-left strong,.maya-respin-right strong{font:bold clamp(24px,6.5vw,54px)/1 Georgia,serif;color:#fff3ba;text-shadow:0 0 10px #ffc840,0 3px 0 #622d0f}
+.maya-respin-left span{font-size:clamp(6px,1.2vw,10px)}.maya-respin-right div{display:flex;flex-direction:column;gap:5px}.maya-respin-right div span{font-size:clamp(7px,1.9vw,14px);color:#ffe47d}.maya-respin-right div span.out{color:#614525}
+.maya-board{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));grid-template-rows:repeat(3,minmax(0,1fr));gap:clamp(2px,.55vw,7px);padding:clamp(4px,.8vw,8px);border:clamp(3px,.8vw,7px) ridge #af7832;box-shadow:inset 0 0 22px #000,0 0 25px #ffd6736b;background:linear-gradient(145deg,#102934,#19618a 49%,#092538);border-radius:8px;min-width:0}
+.maya-cell{aspect-ratio:1.22;position:relative;min-width:0;border:1px solid #8cc0a7a3;border-radius:3px;overflow:hidden;background:radial-gradient(ellipse at 50% 50%,#1a5f85,#0c283f 76%);box-shadow:inset 0 0 14px #0008}
+.maya-cell::before{content:"";position:absolute;inset:0;opacity:.22;background:repeating-conic-gradient(from 45deg at 50% 50%,#eff9cd 0deg 8deg,transparent 9deg 24deg);pointer-events:none}
+.maya-cell-back{position:absolute;inset:6px;border:2px solid #67b0a13f;transform:rotate(45deg) scale(.72);opacity:.35}
+.maya-cell.open{background:radial-gradient(ellipse at 50% 50%,#20546a,#10273f 77%)}
+.maya-ghost{position:absolute;inset:0;display:grid;place-items:center;font-size:clamp(13px,4vw,35px);color:#b4c6a21f;animation:mayaGhostPulse .8s alternate infinite}
+.maya-coin{position:absolute;inset:2px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;border-radius:50%;color:#402108;background:radial-gradient(circle at 35% 25%,#fff8b7 0,#eac55b 18%,#b77d19 53%,#ffdc75 75%,#74400c 100%);border:2px dotted #ffeaa2;box-shadow:inset 0 0 0 3px #ad7b2166,inset 0 2px 7px #fff8cb99,0 0 9px #ffe36e9c;overflow:hidden}
+.maya-coin::before{content:"";position:absolute;inset:8%;border:1px solid #f8e59c9c;border-radius:50%;box-shadow:inset 0 0 10px #73350b33;pointer-events:none}
+.maya-coin-top{font:bold clamp(5px,1.3vw,12px)/1 Georgia,serif;letter-spacing:.06em}
+.maya-coin strong{font:1000 clamp(8px,2.05vw,19px)/1.05 Georgia,serif;white-space:nowrap;font-variant-numeric:tabular-nums;text-shadow:0 1px #fff4b3}
+.maya-coin small{font-size:clamp(5px,1.15vw,10px);line-height:1;font-weight:900}
+.maya-cell.rare .maya-coin{background:radial-gradient(circle at 40% 35%,#ffffea 0,#fdd55d 25%,#e7880f 55%,#8c2b09 100%);box-shadow:inset 0 0 7px #fff5ad,0 0 12px #fff5ae,0 0 18px #1fc8c5}
+.maya-cell.locked{outline:2px solid #24d5c28a;outline-offset:-3px}
+.maya-cell.arriving .maya-coin{animation:mayaCoinLand .65s cubic-bezier(.2,1.5,.45,1) both}
+.maya-progress{display:grid;grid-template-columns:1fr 1.4fr;gap:8px;margin:9px 5px 5px}
+.maya-progress>div{background:linear-gradient(90deg,#101e26da,#2e1f0fda);border:1px solid #c39444;border-radius:7px;padding:5px 8px;display:flex;flex-direction:column;gap:2px}
+.maya-progress small{font-size:clamp(7px,1.6vw,11px);letter-spacing:.11em;color:#e9cd8b}
+.maya-progress strong{font:bold clamp(19px,4.5vw,34px)/1.05 Georgia,serif;color:#ffea9d;text-shadow:0 0 12px #ffd34b}
+.maya-progress strong span{font-size:.42em}
+.maya-status{min-height:25px;display:grid;place-items:center;font-size:clamp(10px,2.5vw,14px);font-weight:800;color:#fff0bc;text-shadow:0 0 6px #000;margin:5px 0}
+.maya-full-award{color:#fff2b0;background:radial-gradient(ellipse,#cb6a1ccc,transparent);font-weight:1000;font-size:clamp(11px,2.6vw,22px);animation:slotPulse .5s alternate infinite}
+.maya-bottom{display:grid;grid-template-columns:1fr 1fr auto;align-items:center;gap:5px;margin:5px 3px;padding:5px;border-radius:6px;border:1px solid #b88638;background:linear-gradient(110deg,#201c23,#5a321b,#211c23)}
+.maya-bet,.maya-step{font:bold clamp(8px,2vw,15px)/1.2 Georgia,serif;color:#ffecb3}
+.maya-skip{background:linear-gradient(110deg,#c26f22,#ffe0a5,#b76620);border:1px solid #ffefb5;border-radius:100px;color:#45200b;min-height:37px;min-width:67px;font:bold clamp(10px,2.6vw,14px)/1.1 system-ui;cursor:pointer}
+.maya-safety{color:#c1b59a;font-size:clamp(8px,1.7vw,10px);margin:5px 0 0}
+.slot-win-scene.from-temple{background:radial-gradient(circle at 50% 40%,#a0771788 0,transparent 45%),linear-gradient(120deg,#04131ee5,#080c17ef)}
+.slot-win-scene.from-temple .slot-win-content{z-index:2;filter:drop-shadow(0 4px 6px #000)}
+.maya-win-backdrop{position:absolute;inset:0;display:grid;place-items:center;opacity:.36;filter:blur(1.5px) sepia(.4);pointer-events:none;z-index:0}
+.maya-win-backdrop .maya-board{width:min(90vw,650px);transform:perspective(800px) rotateX(4deg) scale(1.12)}
+.maya-win-backdrop .maya-coin{filter:saturate(.6)}
+.slot-win-scene.from-temple .slot-win-amount{background:linear-gradient(#140d16ec,#0b0a0bec);border-radius:100px;padding:12px clamp(14px,4vw,35px)}
+.slot-win-scene.from-temple .slot-win-stage{text-transform:uppercase;font-style:italic}
+@keyframes mayaCoinLand{0%{transform:scale(2.2);opacity:0;filter:brightness(3)}65%{transform:scale(.87);opacity:1;filter:brightness(1.5)}100%{transform:scale(1);filter:brightness(1)}}
+@keyframes mayaGhostPulse{to{opacity:.25}}
+@keyframes mayaSlowSun{to{transform:translateX(-50%) rotate(360deg)}}
+@media(max-width:420px){.maya-cabinet{padding:7px;border-width:3px}.maya-machine{gap:2px}.maya-board{padding:3px;gap:2px;border-width:3px}.maya-cell{aspect-ratio:1}.maya-coin{inset:1px;border-width:1px}.maya-coin::before{inset:5%}.maya-nameplate{padding:2px 0 4px}.maya-respin-left,.maya-respin-right{border-width:1px}.maya-progress{margin-top:5px}.maya-scene .slot-close{top:max(5px,env(safe-area-inset-top));right:5px;transform:scale(.75);transform-origin:top right}}
+@media(prefers-reduced-motion:reduce){.maya-sun-stone,.maya-ghost,.maya-cell.arriving .maya-coin,.maya-full-award{animation:none!important}}
