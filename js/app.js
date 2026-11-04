@@ -260,7 +260,7 @@ let casinoGame='roulette';
 let casinoBusy=false,casinoPresentation=null,casinoStage={},casinoSkipped=false,skipCasinoPause=null;
 let slotReveal=null,slotFeatureTimer=null; // Server-settled slot bonus; playback is not another gambling operation.
 const stopTempleReplay=()=>{if(slotFeatureTimer!==null){clearTimeout(slotFeatureTimer);slotFeatureTimer=null;}};
-function toTempleWin(done){stopTempleReplay();slotReveal={type:'win',done};const tier=slotWinTier(done)||'big';playSfx(tier==='golden'?'slotGolden':tier==='mega'?'slotMega':'slotBig');render();}
+function toTempleWin(done){stopTempleReplay();slotReveal={type:'win',done};const tier=slotWinTier(done);playSfx(tier==='golden'?'slotGolden':tier==='mega'?'slotMega':tier==='big'?'slotBig':'slotTempleComplete');render();}
 function runTempleReplay(){
  stopTempleReplay();const current=slotReveal;
  if(!current||current.type!=='bonus'||current.done.bonus?.mode!=='respin')return;
