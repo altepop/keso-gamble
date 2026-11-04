@@ -16,7 +16,7 @@ const port=18781,server=spawn('python3',['-m','http.server',String(port),'--bind
    createBuffer(_c,len){return {getChannelData:()=>new Float32Array(len)};}
    createBufferSource(){window.__audio.sources++;return {...node(),buffer:null,start(){},stop(){}};}
    resume(){return Promise.resolve();}close(){window.__audio.closed++;this.state='closed';return Promise.resolve();}}
-  window.__spoken=[];
+  window.__spoken=[];window.__kesoBigWinTest=true;
   Object.defineProperty(window,'SpeechSynthesisUtterance',{value:function(text){this.text=text;}});
   Object.defineProperty(window,'speechSynthesis',{value:{speak(u){window.__spoken.push(u.text);},cancel(){},getVoices:()=>[]}});
   Object.defineProperty(window,'AudioContext',{value:Fake});Object.defineProperty(window,'webkitAudioContext',{value:Fake});
