@@ -2,7 +2,7 @@ export const isDiscordActivity=(host=globalThis.location?.hostname??'')=>host.en
 const sdkInstances=new Map();
 async function officialSdk(applicationId){
  if(!sdkInstances.has(applicationId)){
-  const {DiscordSDK}=await import('./vendor/discord-sdk.js?v=web-786f3c6d7e8ed7d5');
+  const {DiscordSDK}=await import('./vendor/discord-sdk.js?v=web-72d506a019c62921');
   sdkInstances.set(applicationId,new DiscordSDK(applicationId,{disableConsoleLogOverride:true}));
  }
  return sdkInstances.get(applicationId);

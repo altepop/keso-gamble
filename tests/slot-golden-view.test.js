@@ -5,17 +5,17 @@ import {slotCeremony,slotView} from '../js/casino-more-view.js';
 const prize=(payout,bonus=null)=>({game:'slot',bet:100,payout,net:payout-100,reels:['diamond','diamond','cherry'],jackpot:0,...(bonus?{bonus}:{}),time:1});
 
 test('GOLDEN WIN is the top stage after BIG and MEGA, with confirmed KP count-up',()=>{
- const huge=slotCeremony({type:'win',done:prize(30000)});
+ const huge=slotCeremony({type:'win',done:prize(4000)});
  assert.match(huge,/stage-big/);
  assert.match(huge,/stage-mega/);
  assert.match(huge,/stage-golden/);
  assert.match(huge,/GOLDEN WIN/);
- assert.match(huge,/data-slot-countup="30000"/);
+ assert.match(huge,/data-slot-countup="4000"/);
  assert.match(huge,/data-action="slot-close-reveal"/);
- const medium=slotCeremony({type:'win',done:prize(4000)});
+ const medium=slotCeremony({type:'win',done:prize(1000)});
  assert.match(medium,/MEGA WIN/);
  assert.doesNotMatch(medium,/GOLDEN WIN/);
- const small=slotCeremony({type:'win',done:prize(1000)});
+ const small=slotCeremony({type:'win',done:prize(500)});
  assert.match(small,/BIG WIN/);
  assert.doesNotMatch(small,/MEGA WIN/);
 });
@@ -43,6 +43,7 @@ test('slot screen blocks spin while revealing and explains jackpot and feature s
  assert.match(view,/COMMUNITY JACKPOT/);
  assert.match(view,/💎💎 ＋ 任意の絵柄/);
  assert.match(view,/GOLDEN WIN/);
+ assert.match(view,/BIG WIN（5倍〜）／MEGA WIN（10倍〜）／GOLDEN WIN（40倍〜）/);
  const idle=slotView({slots:[]},{});
  assert.match(idle,/data-action="slot"/);
 });

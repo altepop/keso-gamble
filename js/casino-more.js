@@ -2,7 +2,7 @@
 // random number comes from the caller (`rand(n)`: an integer 0..n-1, the server's crypto draw for live wallets), and a
 // game that is not finished keeps nothing secret in the state, so the saved state never reveals what comes next.
 // A finished round always returns {done:{game,…,net}} (net = what the round did to the wallet).
-import { CASINO_MIN, CASINO_MAX, validCard } from './casino.js?v=web-786f3c6d7e8ed7d5';
+import { CASINO_MIN, CASINO_MAX, validCard } from './casino.js?v=web-72d506a019c62921';
 const validInt=(v,min=0)=>Number.isSafeInteger(v)&&v>=min;
 function stake(state,amount){
  if(!validInt(amount,CASINO_MIN)||amount>CASINO_MAX)throw Error(`賭け金は${CASINO_MIN}〜${CASINO_MAX.toLocaleString('ja-JP')} KPの整数です。`);
@@ -65,7 +65,7 @@ export const SLOT_TEMPLE_PRIZES=Object.freeze([1,2,3,5,10,100]);
 export function slotWinTier(done){
  if(!done||!Number.isSafeInteger(done.bet)||done.bet<=0)return null;
  const multiple=(done.payout??0)/done.bet;
- return multiple>=100?'golden':multiple>=40?'mega':multiple>=10?'big':null;
+ return multiple>=40?'golden':multiple>=10?'mega':multiple>=5?'big':null;
 }
 function templePrize(rand){
  const n=roll(rand,100);
