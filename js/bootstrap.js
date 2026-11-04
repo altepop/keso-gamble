@@ -6,7 +6,7 @@ let stage='Discordの起動確認';
 try{
  await prepareDiscordActivity();
  stage='画面の読み込み';
- await import('./app.js?v=web-c1a9b40e5846f7f7');
+ await import('./app.js?v=web-relic-20261104-v1');
 }catch(error){
  console.error('KESO startup failed at '+stage,error);
  root.replaceChildren();
