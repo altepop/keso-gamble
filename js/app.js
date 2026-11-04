@@ -258,7 +258,23 @@ function tradePanel(){
 // カジノ: one game at a time (ルーレット・チンチロ・ブラックジャック).
 let casinoGame='roulette';
 let casinoBusy=false,casinoPresentation=null,casinoStage={},casinoSkipped=false,skipCasinoPause=null;
-let slotReveal=null; // Server-settled slot bonus or win, never an extra gambling operation.
+let slotReveal=null,slotFeatureTimer=null; // Server-settled slot bonus; playback is not another gambling operation.
+const stopTempleReplay=()=>{if(slotFeatureTimer!==null){clearTimeout(slotFeatureTimer);slotFeatureTimer=null;}};
+function toTempleWin(done){stopTempleReplay();slotReveal={type:'win',done};const tier=slotWinTier(done)||'big';playSfx(tier==='golden'?'slotGolden':tier==='mega'?'slotMega':'slotBig');render();}
+function runTempleReplay(){
+ stopTempleReplay();const current=slotReveal;
+ if(!current||current.type!=='bonus'||current.done.bonus?.mode!=='respin')return;
+ const bonus=current.done.bonus,step=current.step||0;
+ slotFeatureTimer=setTimeout(()=>{
+  if(slotReveal!==current||screen!=='casino'||casinoGame!=='slot')return;
+  if(current.step>=bonus.steps.length){toTempleWin(current.done);return;}
+  current.step++;
+  const landed=bonus.steps[current.step-1]?.landed||[];
+  playSfx(landed.length?'slotCoin':'slotRespin');
+  if(current.step===bonus.steps.length)playSfx('slotTempleComplete');
+  render();runTempleReplay();
+ },step===0?1450:step>=bonus.steps.length?1550:950);
+}
 let minesCount=3,vpHold=[false,false,false,false,false];
 function screenCasino(){
   const visible=casinoPresentation??state;
@@ -335,7 +351,7 @@ function render(){
   const counter=$('[data-slot-countup]');
   if(counter&&!counter.dataset.counting){
     counter.dataset.counting='1';
-    const target=Number(counter.dataset.slotCountup),duration=slotReveal?.type==='win'?(slotWinTier(slotReveal.done)==='golden'?2400:1450):1100;
+    const target=Number(counter.dataset.slotCountup),duration=slotReveal?.type==='win'?(slotReveal.done.bonus?.mode==='respin'?(slotWinTier(slotReveal.done)==='golden'?6300:5300):(slotWinTier(slotReveal.done)==='golden'?2400:1450)):1100;
     if(Number.isSafeInteger(target)&&target>=0&&!reducedMotion?.matches){
       const started=performance.now();
       const tick=now=>{
@@ -430,7 +446,7 @@ async function doMoreCasino(action,extra={}){
     if(action==='mines-pick')playSfx(done&&done.net<0?'boom':'gem');
     if(done&&action==='slot'){
       // The server already settled the entire spin including temple prizes.
-      if(done.bonus){slotReveal={type:'bonus',done,picks:[]};playSfx('slotTemple');}
+      if(done.bonus){slotReveal=done.bonus.mode==='respin'?{type:'bonus',done,step:0}:{type:'bonus',done,picks:[]};playSfx('slotTemple');if(done.bonus.mode==='respin')runTempleReplay();}
       else{
         const tier=slotWinTier(done);
         if(tier){slotReveal={type:'win',done};playSfx(tier==='golden'?'slotGolden':tier==='mega'?'slotMega':'slotBig');}
@@ -764,11 +780,15 @@ addEventListener('click',async e=>{
       privateRacePreview=await wallet.privateRace();render();return;
     }
     if(t.dataset.action==='refresh-kp'){await refreshWallet(true);render();return;}
-    if(t.dataset.action==='disconnect-kp'){slotReveal=null;await wallet.disconnect();autoState=embedded?'paused':'idle';autoMessage='';live=false;trend=null;trendView={...trendView,error:'',focus:null,day:null};privateRacePreview=null;privateRoundMessage='';steamView=null;relicProofs=null;relicNotice='';stopRelicSound();relicReveal=null;relicView={...relicDefaultView(),previewMode:'competitive',previewAmount:500};connectionError='';state=store.state;screen='title';render();return;}
+    if(t.dataset.action==='disconnect-kp'){stopTempleReplay();slotReveal=null;await wallet.disconnect();autoState=embedded?'paused':'idle';autoMessage='';live=false;trend=null;trendView={...trendView,error:'',focus:null,day:null};privateRacePreview=null;privateRoundMessage='';steamView=null;relicProofs=null;relicNotice='';stopRelicSound();relicReveal=null;relicView={...relicDefaultView(),previewMode:'competitive',previewAmount:500};connectionError='';state=store.state;screen='title';render();return;}
     if(t.dataset.casinoGame){if(spinLock||casinoBusy||slotReveal){toast('演出を閉じてから切り替えてください');return;}casinoGame=t.dataset.casinoGame;render();return;}
     if(t.dataset.screen){if(spinLock||casinoBusy||slotReveal){toast('演出を閉じてから切り替えてください');return;}detail=null;pendingHorseSale=null;luxuryConfirmation=null;screen=t.dataset.screen;render();if(screen==='relics'&&live){relicLoading=true;render();try{relicProofs=await wallet.relics();}catch(error){relicNotice='実績データの取得に失敗した。'+(error.message??'');}finally{relicLoading=false;render();}}if(screen==='race')settleRaces();return;}
     if(t.dataset.action==='slot-close-reveal'){
       slotReveal=null;render();$('[data-action="slot"]')?.focus({preventScroll:true});return;
+    }
+    if(t.dataset.action==='slot-feature-skip'){
+      if(slotReveal?.type!=='bonus'||slotReveal.done.bonus?.mode!=='respin')return;
+      toTempleWin(slotReveal.done);return;
     }
     if(t.dataset.action==='slot-open-altar'){
       if(!slotReveal||slotReveal.type!=='bonus'||slotReveal.picks.length>=3)return;
