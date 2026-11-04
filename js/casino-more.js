@@ -59,6 +59,18 @@ export function minesCashout(state,rand,now=Date.now()){
 }
 
 // ---- スロット ----
+// A two-diamond temple feature uses the SAME authoritative crypto RNG as the main reels.
+// Rewards are settled atomically during the spin, not when the UI opens a door.
+export const SLOT_TEMPLE_PRIZES=Object.freeze([1,2,3,5,10,100]);
+export function slotWinTier(done){
+ if(!done||!Number.isSafeInteger(done.bet)||done.bet<=0)return null;
+ const multiple=(done.payout??0)/done.bet;
+ return multiple>=100?'golden':multiple>=40?'mega':multiple>=10?'big':null;
+}
+function templePrize(rand){
+ const n=roll(rand,100);
+ return n<50?1:n<78?2:n<92?3:n<98?5:n<99?10:100;
+}
 // 3リール。リールごとに 🍒6・🍋5・🔔4・⭐3・7️⃣2・💎1 の重み（21）。3つ揃いで配当、🍒2つで1.5倍。
 // 本番は賭け金の3%がみんなの共有ジャックポットに積み上がり、💎💎💎で獲得（1,000 KP以上の賭けで全額、未満は割合）。
 export const SLOT_SYMBOLS=[['cherry','🍒',6,5],['lemon','🍋',5,10],['bell','🔔',4,20],['star','⭐',3,40],['seven','7️⃣',2,100],['diamond','💎',1,300]];
@@ -74,9 +86,17 @@ export function playSlot(state,amount,rand,jackpot=null,now=Date.now()){
  const reels=[reel(rand),reel(rand),reel(rand)],base=slotPayout(reels,amount);
  const hit=reels.every(r=>r==='diamond')&&jackpot&&validInt(jackpot.amount);
  const won=hit?Math.floor(jackpot.amount*Math.min(amount,JACKPOT_FULL_BET)/JACKPOT_FULL_BET):0;
- const payout=base+won;
+ // Exactly two diamonds open the Golden Temple, even if the third symbol misses.
+ // Each of three sealed altars is already drawn on the server. Picking an altar changes
+ // the order of presentation ONLY; it never asks the browser to generate money.
+ const bonus=reels.filter(r=>r==='diamond').length===2
+  ?{kind:'temple',awards:[templePrize(rand),templePrize(rand),templePrize(rand)]}:null;
+ if(bonus)bonus.total=bonus.awards.reduce((n,v)=>n+v,0)*amount;
+ const payout=base+won+(bonus?.total??0);
+ if(!Number.isSafeInteger(state.cash-amount+payout))throw Error('払戻額が上限を超えます。');
  state.cash=state.cash-amount+payout;
  const done={game:'slot',bet:amount,reels,payout,jackpot:won,net:payout-amount,time:now,
+  ...(bonus?{bonus}:{}),
   ...(jackpot?{pool:{before:jackpot.amount,version:jackpot.version,contribution:Math.floor(amount*JACKPOT_PERCENT/100)}}:{})};
  remember(state,'slots',done);return {done};
 }
