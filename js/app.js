@@ -503,7 +503,7 @@ for(const eventName of ['input','change'])addEventListener(eventName,e=>{
  if(eventName==='input'&&key!=='query')return;
  if(eventName==='change'&&key==='query')return;
  const caret=key==='query'?[el.selectionStart,el.selectionEnd]:null;
- relicView={...relicView,[key]:el.value,page:0};
+ relicView={...relicView,[key]:el.value,...(key==='ownership'&&el.value==='unowned'?{equippedOnly:false}:{}),page:0};
  render();
  if(caret){
   const field=document.querySelector('#relic-search');
