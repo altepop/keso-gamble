@@ -5,7 +5,7 @@ const mines=[[1,10],[3,5],[3,10],[5,5],[5,10],[10,3],[10,6]];
 export const PRIVATE_HANDS={
  chinchiro:[['pinzoro','ピンゾロ（5倍）'],...[2,3,4,5,6].map(n=>[`zoro-${n}`,`${n}のゾロ目（3倍）`]),['shigoro','シゴロ（2倍）'],['hifumi','親がヒフミ（2倍）'],...[6,5,4,3,2].map(n=>[`me-${n}`,`${n}の目で勝ち（1倍）`])],
  blackjack:[['blackjack','初手21（2.5倍）']],
- slot:[['seven','7️⃣7️⃣7️⃣（100倍）'],['star','⭐⭐⭐（40倍）'],['bell','🔔🔔🔔（20倍）'],['lemon','🍋🍋🍋（10倍）'],['cherry','🍒🍒🍒（5倍）'],['cherry2','🍒2つ（1.5倍）']],
+ slot:[['temple','🏛️ 黄金神殿フィーチャー（コイン・再抽選は通常抽選）'],['temple-grand','🌞 黄金神殿 特等賞200倍（15マス完成）'],['seven','7️⃣7️⃣7️⃣（100倍）'],['star','⭐⭐⭐（40倍）'],['bell','🔔🔔🔔（20倍）'],['lemon','🍋🍋🍋（10倍）'],['cherry','🍒🍒🍒（5倍）'],['cherry2','🍒2つ（1.5倍）']],
  poker:[['royal','ロイヤルストレートフラッシュ（250倍）'],['straight-flush','ストレートフラッシュ（50倍）'],['four','フォーカード（25倍）'],['full-house','フルハウス（8倍）'],['flush','フラッシュ（5倍）'],['straight','ストレート（4倍）'],['three','スリーカード（3倍）'],['two-pair','ツーペア（2倍）'],['jacks','ジャックス・オア・ベター（1倍）']],
  baccarat:[['player','プレイヤーが9で勝ち（2倍）'],['banker','バンカーが9で勝ち（1.95倍）'],['tie','9同士の引き分け（9倍）']],
  mines:mines.map(([m,k])=>[`${m}x${k}`,`地雷${m}個・${k}マス開けて降りる（${minesMultiplier(m,k)}倍）`]),
@@ -30,6 +30,26 @@ export function chinchiroDice(hand){
 }
 const SLOT_START={cherry:0,lemon:6,bell:11,star:15,seven:18};
 export function slotDraws(hand){return hand==='cherry2'?[0,0,6]:[SLOT_START[hand],SLOT_START[hand],SLOT_START[hand]];}
+// The owner can force a feature ENTRY without choosing its unknown awards.
+// All remaining random draws use the server's cryptographically secure RNG.
+// Grand mode deliberately fills the last nine cells in a single respin, for cinematic checks.
+// No browser-supplied cell, prize or KP amount is accepted.
+export function privateSlotRng(hand,random){
+ if(hand!=='temple'&&hand!=='temple-grand'){
+  const sequence=slotDraws(hand);let i=0;
+  return n=>{if(i>=sequence.length)throw Error('役の抽選が足りません。');return sequence[i++];};
+ }
+ const forced=[20,20,0]; // Two diamonds + one cherry are the server-side trigger.
+ if(hand==='temple-grand'){
+  forced.push(...Array(6).fill(0)); // Six initial 0.2x coins.
+  for(let i=0;i<9;i++)forced.push(0,0); // Land every empty cell and fill the 5x3 board.
+ }
+ let i=0;
+ return n=>{
+  if(i>=forced.length)return random(n);
+  const v=forced[i++];if(v>=n)throw Error('裏モードの抽選が不正です。');return v;
+ };
+}
 const c=(r,s)=>({r,s});
 const POKER={
  royal:[c(10,1),c(11,1),c(12,1),c(13,1),c(1,1)],'straight-flush':[c(5,2),c(6,2),c(7,2),c(8,2),c(9,2)],
