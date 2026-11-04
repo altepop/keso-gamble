@@ -773,7 +773,16 @@ addEventListener('click',async e=>{
       if(!live||!state.privateCasino)throw Error('この操作は利用できません。');
       const game=$('#private-game').value,args=game==='roulette'?{game,amount:Number($('#private-amount').value),number:Number($('#private-number').value)}:{game,amount:Number($('#private-amount').value),hand:$('#private-hand').value};
       const result=await liveOperation('private-casino',args),net=result.net??result.done?.net??(result.payout-result.amount);
-      privateRoundMessage=(net>=0?'+':'')+moneyCompact(net);render();toast(privateRoundMessage);return;
+      privateRoundMessage=(net>=0?'+':'')+moneyCompact(net);
+      // The owner triggered a REAL, server-settled feature. Replay its exact timeline
+      // in the regular slot view; the UI must not create a second wager or award.
+      if(game==='slot'&&result.done?.bonus?.mode==='respin'){
+        stopTempleReplay();casinoGame='slot';screen='casino';casinoBusy=false;
+        slotReveal={type:'bonus',done:result.done,step:0};
+        playSfx('slotTemple');render();runTempleReplay();
+        toast('黄金神殿フィーチャー発動！');return;
+      }
+      render();toast(privateRoundMessage);return;
     }
     if(t.dataset.action==='private-race'){
       if(!live||!state.privateCasino)throw Error('この操作は利用できません。');
