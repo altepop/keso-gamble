@@ -50,9 +50,22 @@ const port=18769,server=spawn('python3',['-m','http.server',String(port),'--bind
 
  // スロット: 💎💎💎 in the demo pays 300× with no shared jackpot.
  let before=await cash();
- await game('slot');assert.match(await page.locator('.slot-jackpot').innerText(),/本番口座だけ/);
+ await game('slot');assert.match(await page.locator('.slot-jackpot').innerText(),/本番口座限定/);
  await page.locator('#slot-amount').fill('100');await rig([20,20,20]);await page.locator('[data-action=slot]').click();
  await page.locator('.casino-verdict').waitFor();await count('.slot-reel[aria-label="💎"]',3);await cashIs(before-100+30000);
+ await page.locator('.slot-win-scene').waitFor();
+ assert.match(await page.locator('.slot-win-scene').innerText(),/GOLDEN WIN/);
+ await page.locator('[data-action=slot-close-reveal]').first().click();
+ // 2 diamonds launch the complete, server-settled three-altar temple game.
+ before=await cash();await rig([20,20,0,0,96,99]);await page.locator('[data-action=slot]').click();
+ await page.locator('.slot-temple-scene').waitFor();await cashIs(before-100+10600);
+ assert.equal(await page.locator('[data-action=slot-open-altar]').count(),3);
+ for(const altar of [2,0,1])await page.locator('[data-action=slot-open-altar]').nth(altar).click();
+ await page.locator('[data-action=slot-finish-bonus]').click();
+ await page.locator('.slot-win-scene').waitFor();
+ assert.match(await page.locator('.slot-win-scene').innerText(),/GOLDEN WIN/);
+ await page.locator('[data-action=slot-close-reveal]').first().click();
+ assert.equal(await page.locator('.slot-ceremony').count(),0);
  await noOverflow('slot');
 
  // ビデオポーカー: A-4 of spades held, a 6 of spades drawn: a flush.
@@ -72,5 +85,5 @@ const port=18769,server=spawn('python3',['-m','http.server',String(port),'--bind
  await noOverflow('baccarat');
 
  assert.deepEqual(errors,[]);
- console.log('More casino passed: mines safe picks, cash-out and a mine, slot 💎💎💎 without a demo jackpot, video poker hold and draw, baccarat natural, 320/390/1280 widths.');
+ console.log('More casino passed: mines safe picks, cash-out and a mine, slot 💎💎💎, three-altar temple bonus and GOLDEN WIN, video poker hold and draw, baccarat natural, 320/390/1280 widths.');
 })().catch(e=>{console.error(e);process.exitCode=1}).finally(async()=>{await browser?.close();server.kill()});
