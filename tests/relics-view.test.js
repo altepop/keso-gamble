@@ -65,9 +65,28 @@ test('図鑑を装備の入口とし、ビルド・試算は装備確認と効�
  assert.match(html,/data-tab="collection"[^>]*>🎒 図鑑・装備<\/button>/);
  assert.doesNotMatch(html,/装備・診断/);
  assert.match(html,/① 装備する枠を選ぶ/);
- assert.match(html,/② 遺物カードの「効果の詳細・装備」を開く/);
+ assert.match(html,/② 所持済みカードの「効果の詳細・装備」を開く/);
  assert.match(html,/data-action="relic-equip" data-relic="normal.universal.common"/);
  assert.match(html,/data-action="relic-tab" data-tab="collection">🎒 図鑑・装備へ/);
  assert.match(html,/📊 現在のビルド/);
  assert.match(html,/装備を外す枠/);
+});
+
+test('図鑑に未所持品も表示し、欠片交換への導線と新しい超越確率を案内する',()=>{
+ const item={id:'normal.owned',name:'所持中の遺物',origin:'normal',rarity:'common',mode:'voice',power:30,count:1,ability:'自分用'};
+ const state={cash:5000,serverWallet:true,relics:{totalSummons:8100,items:{[item.id]:item},equipped:[]}};
+ const proofs={modeNames:{voice:'通話'},catalog:[
+  {id:'normal.owned',name:item.name,rarity:'common',mode:'voice',power:30,ability:'自分用',percent:12},
+  {id:'normal.missing',name:'未所持の珍品',rarity:'rare',mode:'voice',power:100,ability:'珍しい効果',percent:50},
+ ],exchange:{prices:{common:20,rare:120},yields:{common:1},horseVoucherPrice:100},
+ ratesByLevel:Array.from({length:10},(_,i)=>({common:0,uncommon:4,rare:30,legendary:40,mythic:21,ancient:4.99,transcendent:i===9?0.01:0.0008}))};
+ const html=relicsPanel(state,{proofs,view:{ownership:'unowned',exchangeOwnership:'unowned'}});
+ assert.match(html,/図鑑・装備（2種／所持1種）/);
+ assert.match(html,/未所持の珍品/);
+ assert.match(html,/◇ 未所持/);
+ assert.match(html,/data-action="relic-open-exchange" data-relic="normal.missing"/);
+ assert.match(html,/data-action="relic-ownership" data-ownership="unowned"/);
+ assert.match(html,/超越0.01%/);
+ assert.match(html,/現在Lv10／最大Lv10/);
+ assert.doesNotMatch(html,/超越0.003%/);
 });

@@ -2,7 +2,9 @@
 const esc=x=>String(x??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 const num=x=>Number(x??0).toLocaleString('ja-JP');
 const rarityNames={common:'一般',uncommon:'上質',rare:'希少',legendary:'伝説',mythic:'神話',ancient:'古代',transcendent:'超越'};
-export function relicExchangeSection(collection,proofs,connected){
+const rarityOrder=Object.keys(rarityNames);
+const option=(value,label,selected)=>'<option value="'+esc(value)+'"'+(value===selected?' selected':'')+'>'+esc(label)+'</option>';
+export function relicExchangeSection(collection,proofs,connected,view={}){
  const exchange=proofs?.exchange??{};
  const yields=exchange.yields??{};
  const prices=exchange.prices??{};
@@ -12,11 +14,31 @@ export function relicExchangeSection(collection,proofs,connected){
  const tickets=Math.max(0,Number(collection?.horseVouchers??0));
  const owned=Object.values(collection?.items??{}).filter(i=>i.origin==='normal'&&Number(i.count)>1&&Number(yields[i.rarity])>0)
   .sort((a,b)=>(Number(yields[b.rarity])||0)-(Number(yields[a.rarity])||0)||a.name.localeCompare(b.name,'ja'));
- const catalog=(proofs?.catalog??[]).filter(d=>Object.hasOwn(prices,d.rarity)).sort((a,b)=>Number(prices[a.rarity])-Number(prices[b.rarity])||a.name.localeCompare(b.name,'ja'));
- const recycleOptions=owned.map(i=>'<option value="'+esc(i.id)+'">'+esc(i.name)+'（'+esc(rarityNames[i.rarity]??i.rarity)+
-  '、余剰'+num(i.count-1)+'個、1個につき'+num(Number(yields[i.rarity])+(shardPick?1:0))+'欠片）</option>').join('');
- const exchangeOptions=catalog.map(d=>'<option value="'+esc(d.id)+'">'+esc(d.name)+'（'+esc(rarityNames[d.rarity])+
-  '、'+num(prices[d.rarity])+'欠片）</option>').join('');
+ const fullCatalog=(proofs?.catalog??[]).filter(d=>Object.hasOwn(prices,d.rarity));
+ const countOf=id=>Math.max(0,Number(collection?.items?.[id]?.count??0));
+ const missing=fullCatalog.filter(d=>countOf(d.id)===0).length;
+ const query=String(view.exchangeQuery??'').trim().toLocaleLowerCase('ja-JP');
+ const ownership=['all','owned','unowned'].includes(view.exchangeOwnership)?view.exchangeOwnership:'all';
+ const sort=['price','price-desc','rarity','name','owned'].includes(view.exchangeSort)?view.exchangeSort:'price';
+ const catalog=fullCatalog.filter(d=>{
+  const count=countOf(d.id);
+  if(ownership==='owned'&&!count)return false;
+  if(ownership==='unowned'&&count)return false;
+  return !query||[d.name,d.ability,d.short,rarityNames[d.rarity],proofs?.modeNames?.[d.mode]].some(x=>String(x??'').toLocaleLowerCase('ja-JP').includes(query));
+ }).sort((a,b)=>{
+  const priceDiff=Number(prices[a.rarity])-Number(prices[b.rarity]);
+  const rarDiff=rarityOrder.indexOf(b.rarity)-rarityOrder.indexOf(a.rarity);
+  const ownDiff=Number(countOf(b.id)>0)-Number(countOf(a.id)>0);
+  const diff=sort==='price'?priceDiff:sort==='price-desc'?-priceDiff:sort==='rarity'?rarDiff:sort==='owned'?-ownDiff:0;
+  return diff||a.name.localeCompare(b.name,'ja')||a.id.localeCompare(b.id);
+ });
+ const selected=catalog.find(d=>d.id===view.exchangeSelected)??catalog[0]??null;
+ const selectedPrice=selected?Number(prices[selected.rarity]):0;
+ const need=Math.max(0,selectedPrice-shards);
+ const recycleOptions=owned.map(i=>option(i.id,i.name+'（'+(rarityNames[i.rarity]??i.rarity)+
+  '、余剰'+num(i.count-1)+'個、1個につき'+num(Number(yields[i.rarity])+(shardPick?1:0))+'欠片）','')).join('');
+ const exchangeOptions=catalog.map(d=>option(d.id,(countOf(d.id)?'✓ 所持 '+num(countOf(d.id)):'◇ 未所持')+'｜'+d.name+
+  '（'+rarityNames[d.rarity]+'、'+num(prices[d.rarity])+'欠片）',selected?.id)).join('');
  const table=Object.keys(yields).map(r=>'<span class="badge">'+esc(rarityNames[r]??r)+'：'+num(yields[r])+'欠片/個</span>').join(' ');
  return '<section class="panel"><div class="card-body"><h2 class="panel-title">🧩 欠片・交換所</h2>'+
   '<p>保有する欠片 <strong>'+num(shards)+'</strong>個 ／ My馬引換券 <strong>'+num(tickets)+'</strong>枚</p>'+
@@ -29,10 +51,24 @@ export function relicExchangeSection(collection,proofs,connected){
    '<button type="button" class="action-btn" data-action="relic-recycle" '+(!connected?'disabled':'')+'>欠片に変える</button>':
    '<p class="helper">余剰の通常遺物がまだない。</p>')+'</div>'+
   '<div class="relic-exchange-shop"><h3>🎁 好きな遺物を選んで交換</h3>'+
-  (catalog.length?'<label>欲しい遺物<select class="select" id="relic-shop-id">'+exchangeOptions+'</select></label>'+
+  '<p class="helper">全'+num(fullCatalog.length)+'種類（所持 '+num(fullCatalog.length-missing)+'・未所持 '+num(missing)+'）。未所持品だけに絞り込んだり、必要欠片数で並べ替えられる。</p>'+
+  '<div class="relic-exchange-filters">'+
+   '<label>遺物名・効果で検索<input class="select" id="relic-exchange-search" type="search" data-relic-exchange-filter="exchangeQuery" value="'+esc(view.exchangeQuery??'')+'" placeholder="名前・効果・ゲーム" autocomplete="off"></label>'+
+   '<label>所持状況<select class="select" id="relic-exchange-ownership" data-relic-exchange-filter="exchangeOwnership">'+
+    option('all','すべて',ownership)+option('unowned','未所持のみ',ownership)+option('owned','所持済みのみ',ownership)+'</select></label>'+
+   '<label>並べ替え<select class="select" id="relic-exchange-sort" data-relic-exchange-filter="exchangeSort">'+
+    option('price','必要欠片が少ない順',sort)+option('price-desc','必要欠片が多い順',sort)+option('rarity','レア度が高い順',sort)+
+    option('owned','所持済みを先に',sort)+option('name','名前順',sort)+'</select></label>'+
+  '</div>'+
+  '<p class="relic-found">条件に一致：'+num(catalog.length)+'種類</p>'+
+  (catalog.length?'<label>交換する遺物<select class="select" id="relic-shop-id" data-relic-exchange-filter="exchangeSelected">'+exchangeOptions+'</select></label>'+
+   '<div class="relic-exchange-selection" role="status"><strong>'+esc(selected.name)+'</strong><span class="badge">'+esc(rarityNames[selected.rarity]??selected.rarity)+'</span>'+
+   '<p>'+(countOf(selected.id)?'✓ 所持済み（'+num(countOf(selected.id))+'個）':'◇ 未所持')+' · 交換価格 <b>'+num(selectedPrice)+'欠片</b></p>'+
+   '<p>'+esc(selected.short??selected.ability??'')+'</p>'+
+   (need?'<p class="relic-exchange-shortfall">交換まであと <b>'+num(need)+'欠片</b>必要</p>':'<p class="relic-exchange-ready">✓ 今すぐ交換できる欠片がある</p>')+'</div>'+
    '<p class="helper">所持済みでも、同じ遺物を1個追加できる。交換では召喚レベル・特殊個体の抽選は進まない。</p>'+
-   '<button type="button" class="action-btn primary" data-action="relic-shop" '+(!connected?'disabled':'')+'>欠片で交換する</button>':
-   '<p class="helper">交換対象を読み込んでいる。</p>')+'</div>'+
+   '<button type="button" class="action-btn primary" data-action="relic-shop" '+(!connected||need>0?'disabled':'')+'>欠片で交換する</button>':
+   '<p class="helper">'+(fullCatalog.length?'条件に合う交換対象がない。検索や所持状況を変えてください。':'交換対象を読み込んでいる。')+'</p>')+'</div>'+
   '<div class="relic-exchange-voucher"><h3>🐴 My馬引換券</h3>'+
    '<p>引換券1枚：<strong>'+num(voucherPrice)+'欠片</strong>（ノーマルボックス専用）</p>'+
    '<button type="button" class="action-btn" data-action="relic-voucher" '+(!connected||!voucherPrice||shards<voucherPrice?'disabled':'')+'>引換券を入手する</button>'+
