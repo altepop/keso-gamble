@@ -28,7 +28,7 @@ test('shop search, ownership and selected item use read-only catalog and show sh
  const html=relicExchangeSection(coll,proofs,true,{exchangeQuery:'短剣',exchangeOwnership:'unowned',exchangeSort:'price-desc'});
  assert.match(html,/条件に一致：1種類/);
  assert.match(html,/未発見の短剣/);
- assert.doesNotMatch(html,/持っている護符（/);
+ assert.doesNotMatch(html,/value="normal.have"[^>]*>✓ 所持/);
  assert.match(html,/あと <b>50欠片<\/b>必要/);
  assert.match(html,/data-action="relic-shop" disabled/);
  const chosen=relicExchangeSection({...coll,shards:1000},proofs,true,{exchangeSelected:'normal.unseen'});
