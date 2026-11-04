@@ -1,8 +1,8 @@
 import {stockOrderQuote,STOCK_ORDER_VERSION,STOCK_PRICE_SCALE} from './stock-order.js?v=web-a1bd570bcecb46ec';
 import {steamConnectionMessage} from './steam-view.js?v=web-a1bd570bcecb46ec';
-import {relicsPanel} from './relics-view.js?v=web-a1bd570bcecb46ec';
+import {relicsPanel} from './relics-view.js?v=web-relic-20261104-v2';
 import {primeRelicAudio,playRelicSound,previewRelicSound,stopRelicSound,setRelicSoundVolume,toggleRelicSound} from './relics-audio.js?v=web-a1bd570bcecb46ec';
-import {relicDefaultView} from './relics-v4.js?v=web-a1bd570bcecb46ec';
+import {relicDefaultView} from './relics-v4.js?v=web-relic-20261104-v2';
 import {privateCasinoPanel} from './private-casino-view.js?v=web-a1bd570bcecb46ec';
 import {communityPanel,communityRows} from './community-feed.js?v=web-a1bd570bcecb46ec';
 import {stockPanel,stockCandles,stockPrice,privateStockOperator} from './stock-view.js?v=web-a1bd570bcecb46ec';
@@ -484,14 +484,30 @@ for(const eventName of ['input','change'])addEventListener(eventName,e=>{
   }
   return;
  }
+ const exchangeEl=e.target.closest?.('[data-relic-exchange-filter]');
+ if(exchangeEl&&screen==='relics'){
+  const key=exchangeEl.dataset.relicExchangeFilter;
+  if(!['exchangeQuery','exchangeOwnership','exchangeSort','exchangeSelected'].includes(key))return;
+  if(eventName==='input'&&key!=='exchangeQuery')return;
+  if(eventName==='change'&&key==='exchangeQuery')return;
+  const caret=key==='exchangeQuery'?[exchangeEl.selectionStart,exchangeEl.selectionEnd]:null;
+  relicView={...relicView,[key]:exchangeEl.value};
+  render();
+  if(caret){
+   const field=document.querySelector('#relic-exchange-search');
+   field?.focus({preventScroll:true});
+   if(caret[0]!==null&&caret[1]!==null)field?.setSelectionRange(caret[0],caret[1]);
+  }
+  return;
+ }
  const el=e.target.closest?.('[data-relic-filter]');
  if(!el||screen!=='relics')return;
  const key=el.dataset.relicFilter;
- if(!['query','source','rarity','mode','sort'].includes(key))return;
+ if(!['query','source','rarity','mode','sort','ownership'].includes(key))return;
  if(eventName==='input'&&key!=='query')return;
  if(eventName==='change'&&key==='query')return;
  const caret=key==='query'?[el.selectionStart,el.selectionEnd]:null;
- relicView={...relicView,[key]:el.value,page:0};
+ relicView={...relicView,[key]:el.value,...(key==='ownership'&&el.value==='unowned'?{equippedOnly:false}:{}),page:0};
  render();
  if(caret){
   const field=document.querySelector('#relic-search');
@@ -525,13 +541,24 @@ addEventListener('click',async e=>{
       document.querySelector('.relic-v8-nav')?.scrollIntoView({block:'start',behavior:'auto'});
       return;
     }
+    if(t.dataset.action==='relic-ownership'){
+      if(!['all','owned','unowned'].includes(t.dataset.ownership))return;
+      relicView={...relicView,ownership:t.dataset.ownership,equippedOnly:false,page:0};
+      render();return;
+    }
+    if(t.dataset.action==='relic-open-exchange'){
+      relicView={...relicView,section:'exchange',exchangeOwnership:'all',exchangeQuery:'',exchangeSelected:t.dataset.relic??''};
+      render();
+      document.querySelector('.relic-v8-nav')?.scrollIntoView({block:'start',behavior:'auto'});
+      return;
+    }
     if(t.dataset.action==='relic-layout'){
       relicView={...relicView,layout:t.dataset.layout==='list'?'list':'grid',page:0};
       render();
       return;
     }
     if(t.dataset.action==='relic-equipped-only'){
-      relicView={...relicView,equippedOnly:!relicView.equippedOnly,page:0};
+      relicView={...relicView,equippedOnly:!relicView.equippedOnly,ownership:'owned',page:0};
       render();
       return;
     }
