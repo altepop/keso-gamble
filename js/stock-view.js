@@ -1,4 +1,4 @@
-import {stockStoryChoices} from './stock-stories.js?v=web-7b038b3bd2bd73fd';
+import {stockStoryChoices} from './stock-stories.js?v=web-0b9499bf325cfe1b';
 const kp=n=>Math.floor(n).toLocaleString('ja-JP')+' KP';
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 export function stockPrice(base,benefits){const percent=benefits?.percent??0;return base-Math.min(2000,Math.floor(base*percent/100));}

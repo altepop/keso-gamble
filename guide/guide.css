@@ -61,3 +61,6 @@
  .keso-guide-trigger{right:12px;bottom:calc(77px + env(safe-area-inset-bottom,0px));padding:9px 12px;font-size:12px}
 }
 @media(prefers-reduced-motion:reduce){.keso-guide-overlay *{scroll-behavior:auto!important;animation:none!important;transition:none!important}}
+
+.keso-guide-trigger.docked{position:static;margin-left:auto;padding:6px 11px;font-size:12px;box-shadow:none;z-index:auto;flex:none}
+.keso-guide-trigger.docked b{width:18px;height:18px;font-size:12px}

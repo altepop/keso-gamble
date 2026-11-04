@@ -46,3 +46,11 @@ test('owned names in native summary and form remain HTML-escaped',()=>{
  assert.match(html,/&lt;img/);
  assert.match(html,/&lt;b&gt;bad/);
 });
+test('the betting table has three columns, style/condition under the name, short bet types and quick amounts',()=>{
+ const card=raceCard(jst('2026-11-04','18:15'));const html=render(card);
+ assert.equal((html.match(/<th>/g)||[]).length,3,'馬・単勝・複勝');
+ assert.equal((html.match(/class="race-meta"/g)||[]).length,card.horses.length);
+ assert.match(html,/data-race-type="win"[^>]*>単勝<small>1着当て<\/small>/);
+ assert.match(html,/data-race-type="trifecta"[^>]*>3連単<small>/);
+ assert.deepEqual([...html.matchAll(/data-race-amount="(\d+)"/g)].map(m=>Number(m[1])),[100,500,1000,5000,10000]);
+});

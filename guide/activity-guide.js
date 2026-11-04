@@ -780,8 +780,15 @@ function setupGuide(){
   if(!app.querySelector('.screen[data-view="home"]'))return;
   autoPrompted=true;show('intro',true,true);
  };
- new MutationObserver(autoOpen).observe(app,{childList:true});
- autoOpen();
+ // The trigger sits in each screen's header (beside the KP badge) so it never covers buttons in the page; the
+ // title screen has no header, so there it floats as before. A re-render replaces the header, so dock again.
+ const dock=()=>{
+  const row=app.querySelector('.screen .toprow');
+  if(row){if(trigger.parentNode!==row)row.insertBefore(trigger,row.lastElementChild);trigger.classList.add('docked');}
+  else{if(trigger.parentNode!==document.body)document.body.insertBefore(trigger,mount);trigger.classList.remove('docked');}
+ };
+ new MutationObserver(()=>{dock();autoOpen();}).observe(app,{childList:true});
+ dock();autoOpen();
 }
 if(typeof document!=='undefined'){
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setupGuide,{once:true});else setupGuide();
