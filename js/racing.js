@@ -1,4 +1,4 @@
-import {EXTRA_HORSE_NAMES,EXTRA_CROWN_NAMES,REGULAR_RACE_NAMES} from './racing-name-catalog.js?v=web-14e3b0f4bdac502e';
+import {EXTRA_HORSE_NAMES,EXTRA_CROWN_NAMES,REGULAR_RACE_NAMES} from './racing-name-catalog.js?v=web-851e5963520baf6a';
 // Horse racing. Pure logic with no DOM or clock reads, shared by the browser and the Worker.
 // Cards and odds are public (PUBLIC_SALT). The run uses a per-race seed: the demo uses the public
 // salt, while the Worker keeps a random seed secret until the start and publishes its hash first.
