@@ -99,7 +99,7 @@ export function casinoPost(user:string,action:string,result:unknown):string|null
  const finished=(result as {done?:{game?:string;net:number;payout:number;bet:number;jackpot?:number;bonus?:{kind:string;total:number};hand?:string;multiplier?:number;reels?:string[]}|null})?.done;
  if(finished?.game==='slot'){
   if(finished.jackpot)return `💎💎💎 <@${user}> スロットで**ジャックポット**！！ +${yen(finished.jackpot)}（合計 +${yen(finished.net)}）`;
-  if(finished.bonus?.kind==='temple'&&finished.net>=5000)return `🏛️✨ <@${user}> **黄金神殿ボーナス**突入！ 祭壇で +${yen(finished.bonus.total)}、合計 +${yen(finished.net)}`;
+  if(finished.bonus?.kind==='temple'&&finished.net>=5000)return `🏛️✨ <@${user}> **黄金神殿ボーナス**突入！ 黄金コインで +${yen(finished.bonus.total)}、合計 +${yen(finished.net)}`;
   if(finished.net>=5000)return `🎰 <@${user}> スロットで ${finished.reels!.map(r=>({seven:'7️⃣',diamond:'💎',star:'⭐',bell:'🔔',lemon:'🍋',cherry:'🍒'} as Record<string,string>)[r]).join('')} +${yen(finished.net)}`;
   return null;
  }

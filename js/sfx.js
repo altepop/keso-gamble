@@ -6,7 +6,7 @@
  * open). Every sound is synthesized on the device: no files, no loops, nothing plays without a tap or a game event
  * the player started. Volume follows the relic sound slider.
  */
-import {relicSoundVolume} from './relics-audio.js?v=web-72d506a019c62921';
+import {relicSoundVolume} from './relics-audio.js?v=web-13764a98ba4a26eb';
 
 const KEY='keso.sfx.v1';
 let enabled=false,ctx=null,master=null,noiseBuffer=null;
@@ -93,6 +93,9 @@ export const SFX_SOUNDS=Object.freeze({
   osc(c,140,t,.35,{type:'triangle',amp:.24,to:70});
   [79,84,88,91].forEach((n,i)=>osc(c,note(n),t+.10+i*.1,.4,{type:'triangle',amp:.14}));
  },
+ slotRespin:(c,t)=>{hiss(c,t,.28,{amp:.09,freq:1500,to:650});[480,590,670].forEach((n,i)=>osc(c,n,t+i*.065,.10,{type:'triangle',amp:.09}));},
+ slotCoin:(c,t)=>{hiss(c,t,.25,{amp:.2,freq:4400});osc(c,165,t,.28,{type:'triangle',amp:.17,to:85});[76,81,88,95].forEach((n,i)=>osc(c,note(n),t+.04+i*.09,.33,{type:'triangle',amp:.15}));},
+ slotTempleComplete:(c,t)=>{[48,55,60,67,72,79,84].forEach((n,i)=>osc(c,note(n),t+i*.13,.51,{type:'triangle',amp:.14}));hiss(c,t+.65,.8,{amp:.12,freq:2600,q:1});},
  slotBig:(c,t)=>{
   [64,67,72,76,79,84].forEach((n,i)=>osc(c,note(n),t+i*.1,.5,{type:'triangle',amp:.16}));
   for(let i=0;i<7;i++)osc(c,note(84+i),t+.5+i*.06,.2,{amp:.05});

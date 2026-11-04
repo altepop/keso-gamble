@@ -2,7 +2,8 @@
 // random number comes from the caller (`rand(n)`: an integer 0..n-1, the server's crypto draw for live wallets), and a
 // game that is not finished keeps nothing secret in the state, so the saved state never reveals what comes next.
 // A finished round always returns {done:{game,…,net}} (net = what the round did to the wallet).
-import { CASINO_MIN, CASINO_MAX, validCard } from './casino.js?v=web-72d506a019c62921';
+import { CASINO_MIN, CASINO_MAX, validCard } from './casino.js?v=web-13764a98ba4a26eb';
+import {createTempleRespin} from './slot-temple.js?v=web-13764a98ba4a26eb';
 const validInt=(v,min=0)=>Number.isSafeInteger(v)&&v>=min;
 function stake(state,amount){
  if(!validInt(amount,CASINO_MIN)||amount>CASINO_MAX)throw Error(`賭け金は${CASINO_MIN}〜${CASINO_MAX.toLocaleString('ja-JP')} KPの整数です。`);
@@ -59,8 +60,8 @@ export function minesCashout(state,rand,now=Date.now()){
 }
 
 // ---- スロット ----
-// A two-diamond temple feature uses the SAME authoritative crypto RNG as the main reels.
-// Rewards are settled atomically during the spin, not when the UI opens a door.
+// Exactly two diamonds open a 5x3 Hold & Respin temple feature using the same server-side crypto RNG.
+// All rewards and every replay step are settled atomically in one original spin; playback can never transfer KP.
 export const SLOT_TEMPLE_PRIZES=Object.freeze([1,2,3,5,10,100]);
 export function slotWinTier(done){
  if(!done||!Number.isSafeInteger(done.bet)||done.bet<=0)return null;
@@ -86,12 +87,9 @@ export function playSlot(state,amount,rand,jackpot=null,now=Date.now()){
  const reels=[reel(rand),reel(rand),reel(rand)],base=slotPayout(reels,amount);
  const hit=reels.every(r=>r==='diamond')&&jackpot&&validInt(jackpot.amount);
  const won=hit?Math.floor(jackpot.amount*Math.min(amount,JACKPOT_FULL_BET)/JACKPOT_FULL_BET):0;
- // Exactly two diamonds open the Golden Temple, even if the third symbol misses.
- // Each of three sealed altars is already drawn on the server. Picking an altar changes
- // the order of presentation ONLY; it never asks the browser to generate money.
- const bonus=reels.filter(r=>r==='diamond').length===2
-  ?{kind:'temple',awards:[templePrize(rand),templePrize(rand),templePrize(rand)]}:null;
- if(bonus)bonus.total=bonus.awards.reduce((n,v)=>n+v,0)*amount;
+ // Exactly two diamonds start the Golden Temple. The server pre-draws the entire
+ // 15-cell / 3-respins feature before crediting any KP, and records an immutable timeline.
+ const bonus=reels.filter(r=>r==='diamond').length===2?createTempleRespin(amount,rand):null;
  const payout=base+won+(bonus?.total??0);
  if(!Number.isSafeInteger(state.cash-amount+payout))throw Error('払戻額が上限を超えます。');
  state.cash=state.cash-amount+payout;

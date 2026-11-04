@@ -20,29 +20,35 @@ test('GOLDEN WIN is the top stage after BIG and MEGA, with confirmed KP count-up
  assert.doesNotMatch(small,/MEGA WIN/);
 });
 
-test('temple ceremony reveals three altars and displays their predetermined values',()=>{
- const done=prize(10600,{kind:'temple',awards:[1,5,100],total:10600});
- const entrance=slotCeremony({type:'bonus',done,picks:[]});
- assert.equal((entrance.match(/data-action="slot-open-altar"/g)||[]).length,3);
- assert.match(entrance,/TEMPLE BONUS/);
- assert.match(entrance,/サーバー|スピン時に確定済み/);
- assert.doesNotMatch(entrance,/data-action="slot-finish-bonus"/);
- const mid=slotCeremony({type:'bonus',done,picks:[{door:1,award:1}]});
- assert.match(mid,/DISCOVERED/);assert.match(mid,/1 \/ 3 祭壇/);
- const complete=slotCeremony({type:'bonus',done,picks:[{door:1,award:1},{door:0,award:5},{door:2,award:100}]});
- assert.match(complete,/BONUS COMPLETE/);
- assert.match(complete,/data-action="slot-finish-bonus"/);
- assert.ok(complete.includes('106<em>×</em>'));
- assert.doesNotMatch(complete,/data-action="slot"([ >])/);
+test('temple Hold & Respin renders the 5x3 grid, locked coins, and reset counter',()=>{
+ const bonus={kind:'temple',mode:'respin',grid:[2,2,0,0,0,2,2,0,0,0,2,2,0,0,0],
+  steps:[{landed:[{cell:2,units:10},{cell:7,units:50}],remaining:3},{landed:[],remaining:2},{landed:[],remaining:1},{landed:[],remaining:0}],
+  filled:false,fillUnits:0,total:1200};
+ const done=prize(1200,bonus),entry=slotCeremony({type:'bonus',done,step:0});
+ assert.match(entry,/フィーチャーゲーム/);
+ assert.equal((entry.match(/class="maya-cell /g)||[]).length,15);
+ assert.equal((entry.match(/maya-cell locked/g)||[]).length,6);
+ assert.match(entry,/RESPINS/);assert.match(entry,/>3<\/strong>/);
+ assert.match(entry,/data-action="slot-feature-skip"/);
+ assert.doesNotMatch(entry,/data-action="slot-open-altar"/);
+ const landed=slotCeremony({type:'bonus',done,step:1});
+ assert.equal((landed.match(/maya-cell locked/g)||[]).length,8);
+ assert.equal((landed.match(/arriving/g)||[]).length,2);
+ assert.match(landed,/残り回数が3回に回復/);
+ const miss=slotCeremony({type:'bonus',done,step:4});
+ assert.match(miss,/フィーチャー終了/);
+ assert.match(miss,/WINを見る/);
+ const win=slotCeremony({type:'win',done});
+ assert.match(win,/from-temple/);assert.match(win,/maya-win-backdrop/);
 });
-
 test('slot screen blocks spin while revealing and explains jackpot and feature separately',()=>{
- const done=prize(10600,{kind:'temple',awards:[1,5,100],total:10600});
- const view=slotView({slots:[done]},{reveal:{type:'bonus',done,picks:[]},jackpot:{amount:30000}});
+ const done=prize(1300,{kind:'temple',mode:'respin',grid:[2,2,0,0,0,2,2,0,0,0,2,2,0,0,0],steps:[],total:1300});
+ const view=slotView({slots:[done]},{reveal:{type:'bonus',done,step:0},jackpot:{amount:30000}});
  assert.match(view,/data-action="slot" disabled/);
  assert.match(view,/COMMUNITY JACKPOT/);
  assert.match(view,/💎💎 ＋ 任意の絵柄/);
  assert.match(view,/GOLDEN WIN/);
+ assert.match(view,/新しいコインで残り3回に回復/);
  assert.match(view,/BIG WIN（5倍〜）／MEGA WIN（10倍〜）／GOLDEN WIN（40倍〜）/);
  const idle=slotView({slots:[]},{});
  assert.match(idle,/data-action="slot"/);
