@@ -1,6 +1,6 @@
-import { CASINO_MIN, CASINO_MAX, RANKS, SUITS } from './casino.js?v=web-13764a98ba4a26eb';
-import {templeRespinScene,templeWinBackdrop} from './slot-temple-view.js?v=web-13764a98ba4a26eb';
-import { MINES_CELLS, MINES_CHOICES, MINES_CAP, minesMultiplier, SLOT_SYMBOLS, slotWinTier, JACKPOT_PERCENT, JACKPOT_FULL_BET, VP_PAYS, VP_NAMES, BACCARAT_SIDES } from './casino-more.js?v=web-13764a98ba4a26eb';
+import { CASINO_MIN, CASINO_MAX, RANKS, SUITS } from './casino.js?v=web-a627724e8a74f1e5';
+import {templeRespinScene,templeWinBackdrop} from './slot-temple-view.js?v=web-a627724e8a74f1e5';
+import { MINES_CELLS, MINES_CHOICES, MINES_CAP, minesMultiplier, SLOT_SYMBOLS, slotWinTier, JACKPOT_PERCENT, JACKPOT_FULL_BET, VP_PAYS, VP_NAMES, BACCARAT_SIDES } from './casino-more.js?v=web-a627724e8a74f1e5';
 // Screens for マインズ・スロット・ビデオポーカー・バカラ. They only show what the wallet already holds; every draw and
 // payout is decided by casino-more.js (the server's for live wallets).
 const kp=n=>Math.abs(n).toLocaleString('ja-JP')+' KP';
@@ -76,7 +76,7 @@ export function slotView(state,{busy=false,jackpot=null,drafts={},reveal=null}={
  ${tier&&last&&!busy?`<div class="slot-tier-flag flag-${tier}">${tier.toUpperCase()} WIN <span>· ${slotMultiplier(last)}×</span></div>`:''}
  ${label?verdict(label,last.net):`<div class="casino-stage-status" role="status">${busy?'運命のリールが回転中…':'賭け金を入れて黄金を狙え！'}</div>`}
  ${slotCeremony(reveal)}</section>`;
- const table=`<div class="asset-card slot-paytable"><h2 class="panel-title">配当・神殿フィーチャー</h2><div class="slot-feature-card"><strong>💎💎 ＋ 任意の絵柄 → 黄金神殿ボーナス</strong><span>5列×3段の黄金コインを固定して空きマスだけを再抽選。新しいコインで残り3回に回復、0回で精算。15マス全部埋まると追加10倍！</span></div>${SLOT_SYMBOLS.slice().reverse().map(([id,face,,pay])=>`<div class="asset-line"><span>${face}${face}${face}</span><strong>${pay}倍${id==='diamond'?'＋ジャックポット':''}</strong></div>`).join('')}<div class="asset-line"><span>🍒が2つ</span><strong>1.5倍</strong></div><p class="helper">BIG WIN（5倍〜）／MEGA WIN（10倍〜）／GOLDEN WIN（40倍〜）。倍率は掛け金に対する払戻総額で判定。黄金神殿の結果もサーバー側の元のスピンで確定し、再抽選演出で追加決済は発生しない。</p></div>`;
+ const table=`<div class="asset-card slot-paytable"><h2 class="panel-title">配当・神殿フィーチャー</h2><div class="slot-feature-card"><strong>💎💎 ＋ 任意の絵柄 → 黄金神殿ボーナス</strong><span>5列×3段の黄金コインを固定して空きマスだけを再抽選。新しいコインで残り3回に回復、0回で精算。15マス全部埋まると特等賞200倍！（その回の払戻総額）</span></div>${SLOT_SYMBOLS.slice().reverse().map(([id,face,,pay])=>`<div class="asset-line"><span>${face}${face}${face}</span><strong>${pay}倍${id==='diamond'?'＋ジャックポット':''}</strong></div>`).join('')}<div class="asset-line"><span>🍒が2つ</span><strong>1.5倍</strong></div><p class="helper">BIG WIN（5倍〜）／MEGA WIN（10倍〜）／GOLDEN WIN（40倍〜）。倍率は掛け金に対する払戻総額で判定。黄金神殿の結果もサーバー側の元のスピンで確定し、再抽選演出で追加決済は発生しない。</p></div>`;
  return `${arena}<div class="trade-box casino-controls">${stakeField('slot-amount',draft(drafts,'slot-amount',500))}<div class="action-row"><button class="action-btn primary casino-play slot-pull" data-action="slot" ${busy||!!reveal?'disabled':''}>${busy?'リール回転中…':reveal?'演出を確認中…':'⚡ SPIN — 黄金を解き放て'} <span>↗</span></button></div></div>${table}`;
 }
 export function videoPokerView(state,{busy=false,hold=[],drafts={}}={}){

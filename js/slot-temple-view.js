@@ -1,6 +1,6 @@
 // Client-only replay of an already paid Hold & Respin bonus.
 // Every coin and respin came from the server's crypto draw inside the original single slot operation.
-import {TEMPLE_SIZE,TEMPLE_RESPINS,templeGridAt,templeCoinKP} from './slot-temple.js?v=web-13764a98ba4a26eb';
+import {TEMPLE_SIZE,TEMPLE_RESPINS,templeGridAt,templeCoinKP} from './slot-temple.js?v=web-a627724e8a74f1e5';
 const number=n=>Math.floor(n).toLocaleString('ja-JP');
 const coinFace=(bet,units)=>units>=100
  ?`<span class="maya-coin-top">${units>=300?'SOLAR':'GOLD'}</span><strong>${number(templeCoinKP(bet,units))}</strong><small>KP</small>`
@@ -32,7 +32,7 @@ export function templeRespinScene(reveal){
    <div class="maya-sky" aria-hidden="true"><span class="maya-sun-stone">☼</span><span class="maya-obelisk left">◈</span><span class="maya-obelisk right">◈</span></div>
    <button type="button" class="slot-close" data-action="slot-close-reveal" aria-label="演出を閉じる">×</button>
    <div class="maya-cabinet">
-    <div class="maya-jackpots"><span>✧ MINI<br><strong>10×</strong></span><span>✦ MAJOR<br><strong>30×</strong></span><span>☼ GOLDEN<br><strong>FULL BOARD</strong></span></div>
+    <div class="maya-jackpots"><span>✧ MINI<br><strong>10×</strong></span><span>✦ MAJOR<br><strong>30×</strong></span><span>☼ GRAND<br><strong>200×</strong></span></div>
     <div class="maya-nameplate"><span class="maya-mask" aria-hidden="true">☼</span><div><small>THE LOST SUN TEMPLE</small><h2>黄金神殿<span>フィーチャーゲーム</span></h2></div><span class="maya-mask" aria-hidden="true">☼</span></div>
     <div class="maya-machine">
      <div class="maya-respin-left" aria-label="残り再抽選回数"><small>RESPINS</small><strong>${remaining}</strong><span>LEFT</span></div>
@@ -40,7 +40,7 @@ export function templeRespinScene(reveal){
      <div class="maya-respin-right" aria-hidden="true"><small>RESPINS</small><div>${right}</div><strong>${remaining}</strong></div>
     </div>
     <div class="maya-progress"><div><small>LOCKED COINS</small><strong>${grid.filter(Boolean).length}<span> / ${TEMPLE_SIZE}</span></strong></div><div><small>ACCUMULATED</small><strong>${number(running)} <span>KP</span></strong></div></div>
-    ${full?`<div class="maya-full-award">✦ FULL BOARD +${number(templeCoinKP(done.bet,bonus.fillUnits||0))} KP ✦</div>`:''}
+    ${full?`<div class="maya-full-award">✦ FULL BOARD · 特等賞 ${number(templeCoinKP(done.bet,bonus.fillUnits||0))} KP（総額） ✦</div>`:''}
     <p class="maya-status" role="status" aria-live="polite">${status}</p>
     <div class="maya-bottom"><span class="maya-bet">BET ${number(done.bet)} KP</span><span class="maya-step">${finished?'BONUS COMPLETE':`RESPIN ${step+1}`}</span><button type="button" data-action="slot-feature-skip" class="maya-skip">${finished?'WINを見る ›':'スキップ »'}</button></div>
     <p class="maya-safety">報酬はスピン時に確定済み · 再抽選は演出として自動再生</p>
