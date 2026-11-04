@@ -29,8 +29,8 @@ import { gamePicker, chinchiroView, blackjackView } from './casino-view.js?v=web
 import {casinoFrames} from './casino-animation.js?v=web-786f3c6d7e8ed7d5';
 import { playChinchiro, bjStart, bjHit, bjStand, bjDouble, cryptoDie, cryptoCard, cryptoInt } from './casino.js?v=web-786f3c6d7e8ed7d5';
 import { sfxEnabled, toggleSfx, unlockSfx, play as playSfx, playResult } from './sfx.js?v=web-786f3c6d7e8ed7d5';
-import { minesStart, minesPick, minesCashout, playSlot, slotWinTier, vpDeal, vpDraw, playBaccarat, VP_NAMES } from './casino-more.js?v=web-786f3c6d7e8ed7d5';
-import { minesView, slotView, videoPokerView, baccaratView } from './casino-more-view.js?v=web-786f3c6d7e8ed7d5';
+import { minesStart, minesPick, minesCashout, playSlot, slotWinTier, vpDeal, vpDraw, playBaccarat, VP_NAMES } from './casino-more.js?v=web-61b1c904d327f80a';
+import { minesView, slotView, videoPokerView, baccaratView } from './casino-more-view.js?v=web-61b1c904d327f80a';
 const $=(s,el=document)=>el.querySelector(s);
 const wallet=createKpClient();
 const embedded=isDiscordActivity();
