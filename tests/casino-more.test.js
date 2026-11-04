@@ -112,12 +112,12 @@ test('黄金神殿 Hold & Respin：15マス・固定コイン・3回復帰・満
  assert.equal(bonus.grid.length,15);assert.equal(bonus.grid.filter(Boolean).length,6);
  assert.equal(bonus.steps.length,1);assert.equal(bonus.steps[0].landed.length,9);
  assert.equal(bonus.steps[0].remaining,0,'15/15 completes without extra spins');
- assert.equal(bonus.filled,true);assert.equal(bonus.fillUnits,100,'full board +10x');
+ assert.equal(bonus.filled,true);assert.equal(bonus.fillUnits,2000,'full board 200x GRAND total');
  assert.equal(templeGridAt(bonus,0).filter(Boolean).length,6);
  assert.equal(templeGridAt(bonus,1).filter(Boolean).length,15);
- assert.equal(bonus.total,1300);assert.equal(done.payout,1300);
- assert.equal(state.cash,11200,'1 atomic credit, not one credit per opened coin');
- assert.equal(slotWinTier(done),'mega');assert.equal(hydrateMoreCasino({slots:[done]}).slots[0].bonus.total,1300);
+ assert.equal(bonus.total,20000);assert.equal(done.payout,20000);
+ assert.equal(state.cash,29900,'1 atomic credit, not one credit per opened coin');
+ assert.equal(slotWinTier(done),'golden');assert.equal(hydrateMoreCasino({slots:[done]}).slots[0].bonus.total,20000);
  const copy=JSON.parse(JSON.stringify(bonus));templeGridAt(copy,0);templeGridAt(copy,1);
  assert.deepEqual(copy,bonus,'replaying settled steps is read only');
 });
