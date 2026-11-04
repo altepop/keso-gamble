@@ -4,7 +4,7 @@
 export const TEMPLE_COLUMNS=5,TEMPLE_ROWS=3,TEMPLE_SIZE=TEMPLE_COLUMNS*TEMPLE_ROWS,TEMPLE_RESPINS=3;
 export const TEMPLE_INITIAL_CELLS=Object.freeze([0,1,5,6,10,11]);
 export const TEMPLE_COIN_TABLE=Object.freeze([[2,80],[3,140],[5,300],[8,200],[10,150],[15,60],[20,40],[50,20],[100,8],[300,2]]);
-export const TEMPLE_FILL_UNITS=100; // Full board: an additional 10x.
+export const TEMPLE_FILL_UNITS=2000; // Full board: 200x grand prize (TOTAL, not plus 200x).
 const draw=(rand,n)=>{
  const v=rand(n);
  if(!Number.isInteger(v)||v<0||v>=n)throw Error('黄金神殿の抽選が不正です。');
@@ -32,7 +32,7 @@ export function createTempleRespin(bet,rand){
   const landed=[];
   for(let cell=0;cell<TEMPLE_SIZE;cell++){
    if(grid[cell]!==0)continue;
-   if(draw(rand,1000)<80){const units=coin(rand);grid[cell]=units;landed.push({cell,units});}
+   if(draw(rand,1000)<65){const units=coin(rand);grid[cell]=units;landed.push({cell,units});}
   }
   remaining=landed.length?TEMPLE_RESPINS:remaining-1;
   if(!grid.includes(0))remaining=0;
@@ -42,7 +42,8 @@ export function createTempleRespin(bet,rand){
  const initial=Array(TEMPLE_SIZE).fill(0);
  for(const cell of TEMPLE_INITIAL_CELLS)initial[cell]=grid[cell];
  // Initial cells were never mutable, so the above is the exact starting layout.
- const filled=!grid.includes(0),units=grid.reduce((a,b)=>a+b,0)+(filled?TEMPLE_FILL_UNITS:0);
+ const filled=!grid.includes(0),coinUnits=grid.reduce((a,b)=>a+b,0);
+ const units=filled?Math.max(TEMPLE_FILL_UNITS,coinUnits):coinUnits;
  const total=templeCoinKP(bet,units);
  return {kind:'temple',mode:'respin',grid:initial,steps,filled,fillUnits:filled?TEMPLE_FILL_UNITS:0,total};
 }
