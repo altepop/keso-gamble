@@ -48,17 +48,18 @@ const port=18769,server=spawn('python3',['-m','http.server',String(port),'--bind
  await page.locator('.casino-verdict').filter({hasText:'地雷を踏んだ'}).waitFor();await cashIs(start-1000+1250-1000);
  await noOverflow('mines');
 
- // スロット: 💎💎💎 in the demo pays 300× with no shared jackpot.
+ // スロット: 💎💎💎 in demo pays 300×; KP and relic popups are hidden until the celebration closes.
  let before=await cash();
  await game('slot');assert.match(await page.locator('.slot-jackpot').innerText(),/本番口座限定/);
  await page.locator('#slot-amount').fill('100');await rig([20,20,20]);await page.locator('[data-action=slot]').click();
- await page.locator('.casino-verdict').waitFor();await count('.slot-reel[aria-label="💎"]',3);await cashIs(before-100+30000);
  await page.locator('.slot-win-scene').waitFor();
  assert.match(await page.locator('.slot-win-scene').innerText(),/GOLDEN WIN/);
+ assert.equal(await cash(),before,'pre-spin cash remains visible until the tier celebration closes');
  await page.locator('[data-action=slot-close-reveal]').first().click();
+ await page.locator('.casino-verdict').waitFor();await count('.slot-reel[aria-label="💎"]',3);await cashIs(before-100+30000);
  // 💎💎🍒 launches a 5x3, server-drawn respin feature; all coins are settled ONCE.
  before=await cash();await rig([20,20,0,...Array(24).fill(0)]);await page.locator('[data-action=slot]').click();
- await page.locator('.maya-scene').waitFor();await cashIs(before-100+20000);
+ await page.locator('.maya-scene').waitFor();assert.equal(await cash(),before,'temple respins must not reveal settled KP early');
  assert.equal(await page.locator('.maya-cell').count(),15,'full 5x3 board');
  assert.equal(await page.locator('.maya-cell.locked').count(),6,'six initial locked coins');
  assert.equal(await page.locator('[data-action=slot-open-altar]').count(),0,'no old altar picker');
@@ -67,8 +68,8 @@ const port=18769,server=spawn('python3',['-m','http.server',String(port),'--bind
  await page.locator('[data-action=slot-feature-skip]').click();
  await page.locator('.slot-win-scene.from-temple').waitFor();
  assert.match(await page.locator('.slot-win-scene').innerText(),/GOLDEN WIN/);
- assert.equal(await cash(),before-100+20000,'skipping the replay cannot award KP twice');
- await page.locator('[data-action=slot-close-reveal]').first().click();
+ assert.equal(await cash(),before,'even the skip-to-win screen keeps the result concealed until close');
+ await page.locator('[data-action=slot-close-reveal]').first().click();await cashIs(before-100+20000);
  assert.equal(await page.locator('.slot-ceremony').count(),0);
  await noOverflow('slot');
 
