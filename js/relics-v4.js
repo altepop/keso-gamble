@@ -3,7 +3,7 @@ import {relicCombinationsSection} from './relics-v7.js?v=web-a1bd570bcecb46ec';
 const esc=x=>String(x??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 const number=x=>Number(x??0).toLocaleString('ja-JP');
 export const relicRarityNames={common:'一般',uncommon:'上質',rare:'希少',legendary:'伝説',mythic:'神話',ancient:'古代',transcendent:'超越',exclusive:'限定'};
-export const relicDefaultView=()=>({query:'',source:'all',rarity:'all',mode:'all',sort:'power',page:0,section:'collection',layout:'grid',equippedOnly:false});
+export const relicDefaultView=()=>({query:'',source:'all',rarity:'all',mode:'all',sort:'power',ownership:'all',page:0,section:'collection',layout:'grid',equippedOnly:false,exchangeQuery:'',exchangeOwnership:'all',exchangeSort:'price',exchangeSelected:''});
 const displayMode=(item,source,modeNames)=>{
  const mode=source.get(item.id)?.mode??item.mode??'universal';
  return modeNames?.[mode]??(item.origin==='steam'?'Steam実績':item.origin==='unite'?'ユナイト':'全ゲーム共通');
@@ -11,7 +11,15 @@ const displayMode=(item,source,modeNames)=>{
 export function relicInventory(items,source,modeNames,view={},equipped=[]){
  const v={...relicDefaultView(),...view};
  const q=String(v.query||'').trim().toLocaleLowerCase('ja-JP');
- const matching=items.filter(i=>{
+ // Public server catalog is display-only: unowned entries never enter the wallet.
+ const ownedIds=new Set(items.map(i=>i.id));
+ const undiscovered=[...source.values()].filter(d=>d?.id&&d?.rarity&&!ownedIds.has(d.id))
+  .map(d=>({...d,origin:'normal',count:0,unowned:true}));
+ const combined=[...items,...undiscovered];
+ const matching=combined.filter(i=>{
+  const unowned=i.unowned===true;
+  if(v.ownership==='owned'&&unowned)return false;
+  if(v.ownership==='unowned'&&!unowned)return false;
   const def=source.get(i.id);
   const mode=def?.mode??i.mode??'universal';
   if(v.equippedOnly&&!equipped.includes(i.id))return false;
@@ -29,12 +37,13 @@ export function relicInventory(items,source,modeNames,view={},equipped=[]){
    const seq=Object.keys(relicRarityNames);
    return seq.indexOf(b.rarity)-seq.indexOf(a.rarity)||b.power-a.power;
   }
+  if(v.sort==='owned')return Number(Boolean(a.unowned))-Number(Boolean(b.unowned))||b.power-a.power;
   if(v.sort==='name')return (aDef?.name??a.name).localeCompare(bDef?.name??b.name,'ja');
   return b.power-a.power||(aDef?.name??a.name).localeCompare(bDef?.name??b.name,'ja');
  });
  const perPage=12,totalPages=Math.max(1,Math.ceil(matching.length/perPage));
  const page=Math.max(0,Math.min(totalPages-1,Number(v.page)||0));
- return {matches:matching.slice(page*perPage,(page+1)*perPage),matching:matching.length,page,totalPages,all:items.length};
+ return {matches:matching.slice(page*perPage,(page+1)*perPage),matching:matching.length,page,totalPages,all:items.length,unowned:undiscovered.length,total:combined.length};
 }
 const options=(items,value)=>items.map(([id,label])=>'<option value="'+esc(id)+'"'+(id===value?' selected':'')+'>'+esc(label)+'</option>').join('');
 export function relicFilterControls(view,modeNames,inv){
@@ -43,12 +52,13 @@ export function relicFilterControls(view,modeNames,inv){
   '<input id="relic-search" class="relic-search" type="search" data-relic-filter="query" placeholder="名前・能力・対象ゲーム" autocomplete="off" value="'+esc(v.query)+'">'+
   '<div class="relic-filter-grid">'+
   '<label>入手元<select class="select" data-relic-filter="source" id="relic-source">'+options([['all','すべて'],['normal','通常召喚'],['steam','Steam'],['unite','ユナイト']],v.source)+'</select></label>'+
+  '<label>所持状況<select class="select" data-relic-filter="ownership" id="relic-ownership">'+options([['all','すべて'],['owned','所持のみ'],['unowned','未所持のみ']],v.ownership)+'</select></label>'+
   '<label>レアリティ<select class="select" data-relic-filter="rarity" id="relic-rarity">'+options([['all','すべて'],...Object.entries(relicRarityNames)],v.rarity)+'</select></label>'+
   '<label>ゲーム・効果先<select class="select" data-relic-filter="mode" id="relic-mode">'+options([['all','すべて'],...Object.entries(modeNames??{})],v.mode)+'</select></label>'+
-  '<label>並べ替え<select class="select" data-relic-filter="sort" id="relic-sort">'+options([['power','戦力が高い順'],['percent','倍率が高い順'],['rarity','レア度が高い順'],['copies','所持数が多い順'],['name','名前順']],v.sort)+'</select></label></div>'+
-  '<p class="relic-found">一致 '+number(inv.matching)+'種類 / 所持 '+number(inv.all)+'種類 · '+(inv.page+1)+'/'+inv.totalPages+'ページ</p></div>';
+  '<label>並べ替え<select class="select" data-relic-filter="sort" id="relic-sort">'+options([['power','戦力が高い順'],['percent','倍率が高い順'],['rarity','レア度が高い順'],['copies','所持数が多い順'],['owned','所持品を先に'],['name','名前順']],v.sort)+'</select></label></div>'+
+  '<p class="relic-found">表示 '+number(inv.matching)+'種類 / 全'+number(inv.total??inv.all)+'種類（所持 '+number(inv.all)+'・未所持 '+number(inv.unowned??0)+'） · '+(inv.page+1)+'/'+inv.totalPages+'ページ</p></div>';
 }
-export function relicItemCard(item,source,modeNames,equipped){
+export function relicItemCard(item,source,modeNames,equipped,exchangePrices={}){
  const def=source.get(item.id),rarity=Object.hasOwn(relicRarityNames,item.rarity)?item.rarity:'exclusive';
  const label=relicRarityNames[rarity],name=def?.name??item.name;
  const mode=displayMode(item,source,modeNames);
@@ -71,16 +81,21 @@ export function relicItemCard(item,source,modeNames,equipped){
  const trait=def?.trait??(item.origin==='steam'||item.origin==='unite'?'出自の加護：条件達成時に固定KPを追加':'');
  const title=item.origin==='unite'?'ユナイト限定':item.origin==='steam'?'Steam実績限定':'通常召喚';
  const isEquipped=equipped.includes(item.id);
- const count=Number(item.count)||1;
- return '<article class="relic-card relic-rarity-'+rarity+(isEquipped?' relic-equipped':'')+(item.foil?' relic-holographic':'')+(item.mutation?' relic-mutated':'')+'">'+
+ const unowned=item.unowned===true;
+ const count=unowned?0:(Number(item.count)||1);
+ const exchangePrice=item.origin==='normal'?Number(exchangePrices[item.rarity]??0):0;
+ return '<article class="relic-card relic-rarity-'+rarity+(unowned?' relic-unowned':'')+(isEquipped?' relic-equipped':'')+(item.foil?' relic-holographic':'')+(item.mutation?' relic-mutated':'')+'">'+
   '<div class="relic-card-top"><span class="relic-rarity-badge">'+esc(label)+'</span><span class="relic-mode">'+esc(mode)+'</span></div>'+
+  '<span class="relic-ownership-badge '+(unowned?'missing':'owned')+'">'+(unowned?'◇ 未所持':'✓ 所持済み')+'</span>'+
   '<strong class="relic-card-title">'+esc(name)+'</strong>'+(extraTitle?'<p class="relic-v7-item-badges">'+esc(extraTitle)+'</p>':'')+
   '<p class="relic-card-effect"><b>'+esc(headline)+'</b></p>'+
   '<div class="relic-card-stats"><span class="relic-percent-stat">'+(special?'固有能力 <b>倍率なし</b>':'設定 <b>＋'+esc(effective)+'%</b>')+'</span><span class="relic-v8-extra-stat">合算上限 <b>なし</b></span><span class="relic-v8-extra-stat">戦力 <b>'+number(item.power)+'</b></span><span>所持 <b>'+number(count)+'</b></span>'+(isEquipped?'<span class="relic-current">● 装備中</span>':'')+'</div>'+
-  '<details class="relic-card-detail"><summary>効果の詳細・装備</summary>'+
+  '<details class="relic-card-detail"><summary>'+(unowned?'効果の詳細・入手方法':'効果の詳細・装備')+'</summary>'+
   '<p>入手方法：'+esc(title)+'</p><p>対象：'+esc(mode)+'</p><p>元の効果：＋'+esc(base)+'%'+(duplicates?' ／ 重複強化：＋'+duplicates+'ポイント':'')+'</p>'+(extraTitle?'<p>変異・特殊個体の条件付き効果：'+esc(extraTitle)+'。発動条件で実際の倍率が変化する。</p>':'')+(trait?'<p class="relic-trait">★ '+esc(trait)+'</p>':'')+'<p>'+esc(effect)+'</p>'+(def?.drawback?'<p class="relic-drawback">⚠ デメリット：'+esc(def.drawback)+'</p>':'')+
-  (item.origin==='normal'?'<p>重ねて入手すると戦力が成長する。現在の育成段階：'+number(1+Math.floor(Math.log2(count)))+'</p>':'')+
-  '<button type="button" class="action-btn" data-action="relic-equip" data-relic="'+esc(item.id)+'">'+(isEquipped?'別の枠に装備':'指定枠に装備')+'</button></details></article>';
+  (item.origin==='normal'&&!unowned?'<p>重ねて入手すると戦力が成長する。現在の育成段階：'+number(1+Math.floor(Math.log2(count)))+'</p>':'')+
+  (unowned?'<p class="relic-unowned-help">未所持のため装備はできない。図鑑では効果を確認できる。</p>':
+   '<button type="button" class="action-btn" data-action="relic-equip" data-relic="'+esc(item.id)+'">'+(isEquipped?'別の枠に装備':'指定枠に装備')+'</button>')+
+  (exchangePrice>0?'<button type="button" class="action-btn" data-action="relic-open-exchange" data-relic="'+esc(item.id)+'">🧩 欠片交換で確認（'+number(exchangePrice)+'欠片）</button>':'')+'</details></article>';
 }
 export function relicInventoryPages(inv){
  return '<div class="relic-pagination"><button type="button" class="action-btn" data-action="relic-page" data-page="'+(inv.page-1)+'"'+(inv.page===0?' disabled':'')+'>← 前の12件</button>'+
