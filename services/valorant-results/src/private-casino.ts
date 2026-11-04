@@ -4,11 +4,11 @@ import type {KpEnv} from './kp.ts';
 // @ts-expect-error Shared pure game engine.
 import {spin} from '../../../js/engine.js';
 // @ts-expect-error Shared pure game engine.
-import {playChinchiro,bjStart} from '../../../js/casino.js';
+import {playChinchiro,bjStart,cryptoInt} from '../../../js/casino.js';
 // @ts-expect-error Shared pure game engine.
 import {playSlot,vpDeal,vpDraw,playBaccarat,minesStart,minesPick,minesCashout} from '../../../js/casino-more.js';
 // @ts-expect-error Shared table of the hands the menu offers.
-import {privateHand,chinchiroDice,slotDraws,pokerDraws,baccaratCards,minesPlan} from '../../../js/private-casino-rules.js';
+import {privateHand,chinchiroDice,privateSlotRng,pokerDraws,baccaratCards,minesPlan} from '../../../js/private-casino-rules.js';
 interface Policy {enabled:boolean;guildId:string;ownerId:string}
 const configs=new Map<string,Promise<Policy>>();
 export async function privateCasinoAllowed(env:KpEnv,guild:string,user:string){
@@ -37,7 +37,7 @@ export function privateCasinoRound(state:any,args:Record<string,unknown>){
   const cards=[{r:1,s:0},{r:13,s:1},{r:9,s:2},{r:8,s:3}];return {action:'bj-start',args:{amount},result:bjStart(state,amount,next(cards))};
  }
  // The 💎 jackpot is never offered: the shared pool only gets the ordinary contribution.
- if(game==='slot')return {action:'slot',args:{amount},result:playSlot(state,amount,next(slotDraws(hand)),{amount:state.jackpot.amount,version:state.jackpot.version})};
+ if(game==='slot')return {action:'slot',args:{amount},result:playSlot(state,amount,privateSlotRng(hand,cryptoInt),{amount:state.jackpot.amount,version:state.jackpot.version})};
  if(game==='poker'){
   vpDeal(state,amount,pokerDraws(hand));
   return {action:'vp-draw',args:{amount},result:vpDraw(state,[true,true,true,true,true],()=>{throw Error('交換はしません。');})};
