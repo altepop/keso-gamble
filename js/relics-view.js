@@ -41,7 +41,7 @@ export function relicsPanel(state,{proofs=null,notice='',loading=false,view={},r
  const ratesTable=displayedRates&&maxRates?`<details class="rules"><summary>全レアリティの排出率（現在Lv${level}／最大Lv10）</summary>
  <div class="asset-line"><strong>レアリティ</strong><strong>現在 ／ Lv10</strong></div>
  ${rateOrder.map(id=>`<div class="asset-line"><span>${esc(names[id])}</span><strong>${rate(displayedRates[id])}% ／ ${rate(maxRates[id])}%</strong></div>`).join('')}
- <p class="helper">Lv10では一般0%。上質も4%。確定天井はなく、超越はLv10で'+rate(maxRates.transcendent)+'%（確定天井なし）。</p></details>`:'<p class="helper">排出率表はKP口座への接続後、遺物画面を開くと確認できる。</p>';
+ <p class="helper">Lv10では一般0%。上質も4%。確定天井はなく、超越はLv10で${rate(maxRates.transcendent)}%（確定天井なし）。</p></details>`:'<p class="helper">排出率表はKP口座への接続後、遺物画面を開くと確認できる。</p>';
  const grouped=Object.entries(proofs?.modeNames??{}).map(([id,label])=>{
   const defs=catalog.filter(item=>item.mode===id);
   return `<details class="rules"><summary>${esc(label)} ／ ${defs.length}種類</summary>
@@ -67,7 +67,7 @@ export function relicsPanel(state,{proofs=null,notice='',loading=false,view={},r
  return relicRevealPanel(reveal)+nav+pane('summon')+`<section class="panel"><div class="card-body"><h2 class="panel-title">🔮 遺物召喚</h2>
    <p><strong>200 KP／1回</strong> · 召喚レベル ${level} · 累計 ${yen(collection.totalSummons)}回</p>
    <div class="relic-level-progress"><strong>${nextMilestone===null?'Lv10到達！':'次のLvまで あと'+yen(toNext)+'回'}</strong><div class="relic-progress-rail"><span style="width:${nextMilestone===null?100:Math.floor(100*(collection.totalSummons-milestones[level-1])/(nextMilestone-milestones[level-1]))}%"></span></div><small>段階別の累計目標：${milestones.map((n,i)=>'Lv'+(i+1)+' '+yen(n)+'回').join(' / ')}</small></div>
-   <p class="helper">召喚した累計回数でレベルが上昇する。Lv10到達は累計8,100回。以前の召喚回数・獲得遺物はそのまま残る。Lv10では一般0%、上質4%、超越'+rate(maxRates?.transcendent??0.01)+'%。超越の確定天井はない。</p>
+   <p class="helper">召喚した累計回数でレベルが上昇する。Lv10到達は累計8,100回。以前の召喚回数・獲得遺物はそのまま残る。Lv10では一般0%、上質4%、超越${rate(maxRates?.transcendent??0.01)}%。超越の確定天井はない。</p>
    ${ratesTable}
    <p class="helper">🔊 召喚結果の効果音は自動再生が基本だ。いつでも消音できる。</p>
    <button type="button" class="action-btn relic-v8-audio-toggle" data-action="relic-sound-toggle" aria-pressed="${relicSoundEnabled()?'true':'false'}">${relicSoundEnabled()?'🔊 自動効果音：オン':'🔇 自動効果音：オフ'}</button>
