@@ -480,10 +480,26 @@ for(const eventName of ['input','change'])addEventListener(eventName,e=>{
   }
   return;
  }
+ const exchangeEl=e.target.closest?.('[data-relic-exchange-filter]');
+ if(exchangeEl&&screen==='relics'){
+  const key=exchangeEl.dataset.relicExchangeFilter;
+  if(!['exchangeQuery','exchangeOwnership','exchangeSort','exchangeSelected'].includes(key))return;
+  if(eventName==='input'&&key!=='exchangeQuery')return;
+  if(eventName==='change'&&key==='exchangeQuery')return;
+  const caret=key==='exchangeQuery'?[exchangeEl.selectionStart,exchangeEl.selectionEnd]:null;
+  relicView={...relicView,[key]:exchangeEl.value};
+  render();
+  if(caret){
+   const field=document.querySelector('#relic-exchange-search');
+   field?.focus({preventScroll:true});
+   if(caret[0]!==null&&caret[1]!==null)field?.setSelectionRange(caret[0],caret[1]);
+  }
+  return;
+ }
  const el=e.target.closest?.('[data-relic-filter]');
  if(!el||screen!=='relics')return;
  const key=el.dataset.relicFilter;
- if(!['query','source','rarity','mode','sort'].includes(key))return;
+ if(!['query','source','rarity','mode','sort','ownership'].includes(key))return;
  if(eventName==='input'&&key!=='query')return;
  if(eventName==='change'&&key==='query')return;
  const caret=key==='query'?[el.selectionStart,el.selectionEnd]:null;
@@ -521,13 +537,24 @@ addEventListener('click',async e=>{
       document.querySelector('.relic-v8-nav')?.scrollIntoView({block:'start',behavior:'auto'});
       return;
     }
+    if(t.dataset.action==='relic-ownership'){
+      if(!['all','owned','unowned'].includes(t.dataset.ownership))return;
+      relicView={...relicView,ownership:t.dataset.ownership,equippedOnly:false,page:0};
+      render();return;
+    }
+    if(t.dataset.action==='relic-open-exchange'){
+      relicView={...relicView,section:'exchange',exchangeOwnership:'all',exchangeQuery:'',exchangeSelected:t.dataset.relic??''};
+      render();
+      document.querySelector('.relic-v8-nav')?.scrollIntoView({block:'start',behavior:'auto'});
+      return;
+    }
     if(t.dataset.action==='relic-layout'){
       relicView={...relicView,layout:t.dataset.layout==='list'?'list':'grid',page:0};
       render();
       return;
     }
     if(t.dataset.action==='relic-equipped-only'){
-      relicView={...relicView,equippedOnly:!relicView.equippedOnly,page:0};
+      relicView={...relicView,equippedOnly:!relicView.equippedOnly,ownership:'owned',page:0};
       render();
       return;
     }
