@@ -118,7 +118,11 @@ test('黄金神殿：ダイヤ3個は従来の共有ジャックポットのみ�
  assert.equal(jackpot.bonus,undefined);assert.equal(jackpot.payout,35000);
  assert.equal(slotWinTier(jackpot),'golden');
  const normal=playSlot(wallet(1000),100,seq([0,0,0])).done;
- assert.equal(normal.bonus,undefined);assert.equal(slotWinTier(normal),null);
+ assert.equal(normal.bonus,undefined);assert.equal(slotWinTier(normal),'big', '🍒3つの5倍配当はBIG WIN');
+ const lemon=playSlot(wallet(1000),100,seq([6,6,6])).done;
+ assert.equal(slotWinTier(lemon),'mega','🍋3つの10倍配当はMEGA WIN');
+ const star=playSlot(wallet(1000),100,seq([15,15,15])).done;
+ assert.equal(slotWinTier(star),'golden','⭐3つの40倍配当はGOLDEN WIN');
  const tiers=[[0,null],[499,null],[500,'big'],[999,'big'],[1000,'mega'],[3999,'mega'],[4000,'golden'],[10000,'golden']];
  for(const [payout,expected] of tiers)assert.equal(slotWinTier({bet:100,payout}),expected,`${payout}/100`);
  assert.equal(slotWinTier({bet:0,payout:4000}),null);
