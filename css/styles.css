@@ -804,3 +804,68 @@ body.esc-wheel-open{overflow:hidden!important}
 .relic-spike-kick p b{color:#fff4aa;font-size:17px}
 .relic-spike-kick small{display:block;line-height:1.5;color:#b5dfe7;font-size:11px}
 .relic-spike-receipt{border:1px solid #5ac7b2;border-radius:9px;padding:9px;background:#103c4a;color:#d3ffe9;font-weight:700}
+
+/* ===== Mode themes =====
+   Each screen gets its own colours and mood from data-view: 競馬 = turf green, 遺物 = purple, カジノ = casino red
+   and gold, and so on. Only colours and backgrounds change; layout and controls stay the same. Home keeps the
+   original navy. Text on accents is checked against WCAG AA. */
+.screen{
+  --t-bg:#030a1d;--t-top1:#07133a;--t-top2:#081437;--t-panel1:#08122d;--t-panel2:#050d22;--t-line:rgba(35,61,113,.7);
+  --t-soft:#07142f;--t-soft-text:#879fc9;--t-tab:#08142d;--t-tab-text:#cad8f8;--t-tab-line:rgba(36,67,120,.72);
+  --t-accent:#1776f2;--t-accent2:#0b57c4;--t-on-accent:#fff;--t-pill:#e8eefc;--t-on-pill:#0b1733;--t-glow:transparent;--t-pattern:none;
+  background:var(--t-pattern),radial-gradient(120% 60% at 50% 0%,var(--t-glow),transparent 70%),var(--t-bg);
+}
+.screen[data-view] .topbar{background:linear-gradient(180deg,var(--t-top1) 0%,var(--t-top2) 82%,color-mix(in srgb,var(--t-top2) 95%,transparent) 100%);border-bottom-color:var(--t-line)}
+.screen[data-view] .market-disclaimer{background:var(--t-soft);color:var(--t-soft-text);border-bottom-color:var(--t-line)}
+.screen[data-view] .trade-box,.screen[data-view] .asset-card{background:linear-gradient(180deg,var(--t-panel1),var(--t-panel2));border-color:var(--t-line)}
+.screen[data-view] .trade-box h3{border-bottom-color:var(--t-line)}
+.screen[data-view] .sub-tab,.screen[data-view] .segment button{background:var(--t-tab);color:var(--t-tab-text);border-color:var(--t-tab-line)}
+.screen[data-view] .sub-tab.active,.screen[data-view] .segment button.active{background:var(--t-pill);color:var(--t-on-pill);border-color:var(--t-pill)}
+.screen[data-view] .action-btn{border-color:var(--t-tab-line);background:linear-gradient(180deg,var(--t-panel1),var(--t-tab))}
+.screen[data-view] .action-btn.primary{background:linear-gradient(180deg,var(--t-accent),var(--t-accent2));border-color:var(--t-accent);color:var(--t-on-accent)}
+.screen[data-view] .badge{border-color:var(--t-tab-line);background:var(--t-tab)}
+.screen[data-view] .bottom-nav{background:color-mix(in srgb,var(--t-bg) 96%,transparent);border-top-color:var(--t-line)}
+.screen[data-view] .nav-btn.active,.screen[data-view] .nav-btn.active .ico{color:var(--t-pill)}
+body:has(.screen[data-view]){background:var(--body-bg,linear-gradient(180deg,#071033 0%,#030815 100%))}
+/* Inner cards, rows and inputs take the mode's colours too (the home screen keeps navy). */
+.screen[data-view]:not([data-view="home"]){--panel:var(--t-panel1);--panel2:var(--t-panel2);--line:var(--t-line);--line2:var(--t-tab-line)}
+.screen[data-view]:not([data-view="home"]) :is(.panel,.metric-card,.result-panel,.item-card,.loop-card,.stock-panel,.relic-controls,.relic-v7-history-item,.relic-v7-log,.relic-preview-row,.depth-section,.esc-reward-row){background:linear-gradient(180deg,var(--t-panel1),var(--t-panel2));border-color:var(--t-line)}
+.screen[data-view]:not([data-view="home"]) .wallet-strip{background:var(--t-soft)}
+.screen[data-view]:not([data-view="home"]) :is(.bet-grid button,.ml-pick,.shortcut){background:var(--t-tab);border-color:var(--t-tab-line)}
+.screen[data-view]:not([data-view="home"]) .bet-grid button.active{background:var(--t-pill);color:var(--t-on-pill);border-color:var(--t-pill)}
+.screen[data-view]:not([data-view="home"]) .ml-pick.selected{background:color-mix(in srgb,var(--t-accent) 30%,var(--t-tab));border-color:var(--t-accent)}
+.screen[data-view]:not([data-view="home"]) .row{background:linear-gradient(180deg,color-mix(in srgb,var(--t-panel1) 92%,transparent),color-mix(in srgb,var(--t-panel2) 92%,transparent));border-bottom-color:var(--t-line)}
+.screen[data-view]:not([data-view="home"]) :is(.input,.select,.relic-search,.relic-v8-name-input){background:color-mix(in srgb,var(--t-bg) 70%,#000);border-color:var(--t-tab-line)}
+.screen[data-view]:not([data-view="home"]) :is(.input,.select):focus{outline:2px solid var(--t-accent);outline-offset:1px}
+.screen[data-view]:not([data-view="home"]) .race-table tr.selected td{background:color-mix(in srgb,var(--t-accent) 22%,transparent)}
+.screen[data-view="race"] .race-intelligence{border-color:rgba(74,190,120,.55);background:linear-gradient(120deg,rgba(21,128,61,.3),rgba(5,23,12,.86))}
+
+/* 稼ぐ: energetic amber */
+.screen[data-view="play"]{--t-bg:#140b02;--t-top1:#3a2006;--t-top2:#2a1604;--t-panel1:#24160a;--t-panel2:#170d04;--t-line:rgba(156,98,34,.55);--t-soft:#2a1806;--t-soft-text:#d6b07a;--t-tab:#25170a;--t-tab-text:#f3d9b0;--t-tab-line:rgba(156,98,34,.6);--t-accent:#f39a1d;--t-accent2:#c56f05;--t-on-accent:#1f1200;--t-pill:#ffcf7a;--t-on-pill:#2a1600;--t-glow:rgba(243,154,29,.18)}
+/* 競馬: turf green, faint mown stripes */
+.screen[data-view="race"]{--t-bg:#03140a;--t-top1:#0a3a1d;--t-top2:#072b15;--t-panel1:#0a2615;--t-panel2:#05170c;--t-line:rgba(46,140,82,.5);--t-soft:#06240f;--t-soft-text:#93c9a4;--t-tab:#082414;--t-tab-text:#c9ecd3;--t-tab-line:rgba(46,140,82,.6);--t-accent:#15803d;--t-accent2:#0f6a31;--t-on-accent:#fff;--t-pill:#bff0cf;--t-on-pill:#06301a;--t-glow:rgba(31,168,85,.2);
+  --t-pattern:repeating-linear-gradient(90deg,rgba(255,255,255,.018) 0 48px,transparent 48px 96px)}
+/* Mリーグ: vermilion and gold, like a mahjong table edge */
+.screen[data-view="mleague"]{--t-bg:#160406;--t-top1:#4a0d14;--t-top2:#36090f;--t-panel1:#2a0a10;--t-panel2:#1a0508;--t-line:rgba(190,60,70,.5);--t-soft:#2c0a10;--t-soft-text:#e3a8ad;--t-tab:#2a0b11;--t-tab-text:#f6d3d6;--t-tab-line:rgba(190,60,70,.55);--t-accent:#d43a46;--t-accent2:#9e1f2b;--t-on-accent:#fff;--t-pill:#f3cf7a;--t-on-pill:#3a1405;--t-glow:rgba(212,58,70,.2)}
+/* カジノ: dark felt red with gold */
+.screen[data-view="casino"]{--t-bg:#12030a;--t-top1:#3d0718;--t-top2:#2c0512;--t-panel1:#260a14;--t-panel2:#16040b;--t-line:rgba(212,160,60,.42);--t-soft:#2a0812;--t-soft-text:#e6c48a;--t-tab:#240913;--t-tab-text:#f4dcae;--t-tab-line:rgba(212,160,60,.45);--t-accent:#e0b042;--t-accent2:#b5841c;--t-on-accent:#2a1500;--t-pill:#f4d27a;--t-on-pill:#3a1a00;--t-glow:rgba(224,176,66,.16);
+  --t-pattern:radial-gradient(circle at 50% 120%,rgba(160,20,50,.35),transparent 60%)}
+/* 株: trading-terminal cyan */
+.screen[data-view="market"]{--t-bg:#020e14;--t-top1:#06303f;--t-top2:#04222e;--t-panel1:#071f29;--t-panel2:#041219;--t-line:rgba(38,170,200,.42);--t-soft:#05222c;--t-soft-text:#8fcfdf;--t-tab:#062029;--t-tab-text:#c8eef7;--t-tab-line:rgba(38,170,200,.5);--t-accent:#13b3d6;--t-accent2:#0e9cbd;--t-on-accent:#00222b;--t-pill:#b6eefb;--t-on-pill:#032a35;--t-glow:rgba(19,179,214,.16);
+  --t-pattern:linear-gradient(rgba(19,179,214,.05) 1px,transparent 1px) 0 0/100% 32px}
+/* 指名: coral */
+.screen[data-view="directives"]{--t-bg:#150608;--t-top1:#3c1416;--t-top2:#2c0e10;--t-panel1:#261012;--t-panel2:#18080a;--t-line:rgba(230,110,90,.45);--t-soft:#2a0f10;--t-soft-text:#efb1a4;--t-tab:#25100f;--t-tab-text:#f8d7cf;--t-tab-line:rgba(230,110,90,.5);--t-accent:#ec6f55;--t-accent2:#d9603f;--t-on-accent:#2a0800;--t-pill:#ffc9bb;--t-on-pill:#3a0f05;--t-glow:rgba(236,111,85,.16)}
+/* 馬主: saddle brown and hay */
+.screen[data-view="stable"]{--t-bg:#120b05;--t-top1:#3a2512;--t-top2:#2a1a0c;--t-panel1:#24180c;--t-panel2:#160e06;--t-line:rgba(190,140,80,.45);--t-soft:#281a0c;--t-soft-text:#d9bf98;--t-tab:#24180c;--t-tab-text:#f1dfc3;--t-tab-line:rgba(190,140,80,.5);--t-accent:#c98a3c;--t-accent2:#b5782c;--t-on-accent:#1f1000;--t-pill:#f1d6a8;--t-on-pill:#2e1a05;--t-glow:rgba(201,138,60,.14)}
+/* 高級品: black and champagne gold */
+.screen[data-view="shop"]{--t-bg:#08070a;--t-top1:#1c1a20;--t-top2:#121116;--t-panel1:#17151b;--t-panel2:#0d0c10;--t-line:rgba(214,186,120,.38);--t-soft:#16141a;--t-soft-text:#d4c39c;--t-tab:#15131a;--t-tab-text:#efe3c4;--t-tab-line:rgba(214,186,120,.42);--t-accent:#d8b866;--t-accent2:#a98a3c;--t-on-accent:#1d1404;--t-pill:#f0dfb0;--t-on-pill:#2a1f06;--t-glow:rgba(216,184,102,.12)}
+/* 遺物: arcane purple, faint stars */
+.screen[data-view="relics"]{--t-bg:#0b0418;--t-top1:#2a1150;--t-top2:#1d0b3a;--t-panel1:#1b0d33;--t-panel2:#100720;--t-line:rgba(150,100,240,.45);--t-soft:#1e0e3a;--t-soft-text:#c2a8f0;--t-tab:#1a0c31;--t-tab-text:#e3d4ff;--t-tab-line:rgba(150,100,240,.5);--t-accent:#7445dd;--t-accent2:#5a2fc0;--t-on-accent:#fff;--t-pill:#dccbff;--t-on-pill:#25104d;--t-glow:rgba(139,92,246,.22);
+  --t-pattern:radial-gradient(1px 1px at 20% 30%,rgba(255,255,255,.35),transparent),radial-gradient(1px 1px at 70% 12%,rgba(255,255,255,.28),transparent),radial-gradient(1px 1px at 85% 60%,rgba(220,200,255,.3),transparent),radial-gradient(1px 1px at 35% 75%,rgba(255,255,255,.22),transparent)}
+/* 資産: silver-blue ledger */
+.screen[data-view="assets"]{--t-bg:#060a12;--t-top1:#18233a;--t-top2:#111a2c;--t-panel1:#111a2b;--t-panel2:#0a101c;--t-line:rgba(140,165,210,.4);--t-soft:#121b2d;--t-soft-text:#aebcd8;--t-tab:#111a2b;--t-tab-text:#dbe4f6;--t-tab-line:rgba(140,165,210,.45);--t-accent:#4369bd;--t-accent2:#33549e;--t-on-accent:#fff;--t-pill:#dbe4f6;--t-on-pill:#13203a;--t-glow:rgba(91,132,214,.14)}
+body:has(.screen[data-view="play"]){--body-bg:#0c0601}body:has(.screen[data-view="race"]){--body-bg:#020c06}
+body:has(.screen[data-view="mleague"]){--body-bg:#0d0204}body:has(.screen[data-view="casino"]){--body-bg:#0b0206}
+body:has(.screen[data-view="market"]){--body-bg:#01090d}body:has(.screen[data-view="directives"]){--body-bg:#0d0405}
+body:has(.screen[data-view="stable"]){--body-bg:#0b0703}body:has(.screen[data-view="shop"]){--body-bg:#050407}
+body:has(.screen[data-view="relics"]){--body-bg:#07020f}body:has(.screen[data-view="assets"]){--body-bg:#04070c}
