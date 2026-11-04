@@ -832,6 +832,8 @@ body:has(.screen[data-view]){background:var(--body-bg,linear-gradient(180deg,#07
 .screen[data-view]:not([data-view="home"]) :is(.panel,.metric-card,.result-panel,.item-card,.loop-card,.stock-panel,.relic-controls,.relic-v7-history-item,.relic-v7-log,.relic-preview-row,.depth-section,.esc-reward-row){background:linear-gradient(180deg,var(--t-panel1),var(--t-panel2));border-color:var(--t-line)}
 .screen[data-view]:not([data-view="home"]) .wallet-strip{background:var(--t-soft)}
 .screen[data-view]:not([data-view="home"]) :is(.bet-grid button,.ml-pick,.shortcut){background:var(--t-tab);border-color:var(--t-tab-line)}
+.screen[data-view]:not([data-view="home"]) .bet-grid button.active{background:var(--t-pill);color:var(--t-on-pill);border-color:var(--t-pill)}
+.screen[data-view]:not([data-view="home"]) .ml-pick.selected{background:color-mix(in srgb,var(--t-accent) 30%,var(--t-tab));border-color:var(--t-accent)}
 .screen[data-view]:not([data-view="home"]) .row{background:linear-gradient(180deg,color-mix(in srgb,var(--t-panel1) 92%,transparent),color-mix(in srgb,var(--t-panel2) 92%,transparent));border-bottom-color:var(--t-line)}
 .screen[data-view]:not([data-view="home"]) :is(.input,.select,.relic-search,.relic-v8-name-input){background:color-mix(in srgb,var(--t-bg) 70%,#000);border-color:var(--t-tab-line)}
 .screen[data-view]:not([data-view="home"]) :is(.input,.select):focus{outline:2px solid var(--t-accent);outline-offset:1px}
