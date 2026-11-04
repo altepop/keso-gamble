@@ -66,3 +66,9 @@ The read-only GitHub Actions monitor runs each hour using Cloudflare GraphQL `d1
 | M.LEAGUE cards re-read in full every 5 seconds of use | After 5 seconds, a one-row version (`ml_state.cards_version`, changed whenever a card changes) decides whether to read them again. |
 | Stock screen re-read the last 48 ticks on every wallet read | Kept per isolate for the market version (changes every 5 minutes). |
 | Voice history read 100 events (+100 bonus lookups) on each wallet read | Reads 50: today's total needs at most 48 slots. |
+
+## Casino reveal hardening (2026-11-04)
+
+- Casino notifications and win-stage sequencing are presentation-only; no new D1 queries, tables, writes, recurring jobs, payout changes or odds changes.
+- Hourly account-wide GraphQL estimates, the 3.5M warning and 4M optional-history conserve mode remain active. Validate real UTC-day read totals on Cloudflare after rollout; this change makes no claim about current usage.
+- The README weekly racing/M.LEAGUE purchase limit has been corrected to the existing 400,000 KP; documentation only.

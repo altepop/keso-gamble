@@ -94,3 +94,22 @@ test('overlapping result animations retain the last relic reward until the final
  assert.deepEqual(shown,[]);
  gate.finish();assert.deepEqual(shown,[[300,100,['重複']]]);
 });
+
+test('relic bonus stays hidden throughout a multistep slot temple reveal',()=>{
+ const events=[],gate=createRelicRevealGate((...args)=>events.push(args));
+ gate.begin();gate.notify(1200,6000,['神殿の遺物']);
+ for(let step=0;step<9;step++)assert.deepEqual(events,[]);
+ gate.finish();assert.deepEqual(events,[[1200,6000,['神殿の遺物']]]);
+});
+test('nested BIG WIN and casino presentations defer notification until both close',()=>{
+ const events=[],gate=createRelicRevealGate((...args)=>events.push(args));
+ gate.begin();gate.begin();gate.notify(1100);gate.notify(1100,5500,['幸運']);
+ gate.finish();assert.deepEqual(events,[]);gate.finish();
+ assert.deepEqual(events,[[1100,5500,['幸運']]]);
+});
+test('disconnect discards pending relic notices',()=>{
+ const events=[],gate=createRelicRevealGate((...args)=>events.push(args));
+ gate.begin();gate.notify(800);gate.cancel();gate.finish();
+ assert.deepEqual(events,[]);gate.notify(20,100,['次のセッション']);
+ assert.deepEqual(events,[[20,100,['次のセッション']]]);
+});
