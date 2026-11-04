@@ -65,7 +65,7 @@ test('図鑑を装備の入口とし、ビルド・試算は装備確認と効�
  assert.match(html,/data-tab="collection"[^>]*>🎒 図鑑・装備<\/button>/);
  assert.doesNotMatch(html,/装備・診断/);
  assert.match(html,/① 装備する枠を選ぶ/);
- assert.match(html,/② 遺物カードの「効果の詳細・装備」を開く/);
+ assert.match(html,/② 所持済みカードの「効果の詳細・装備」を開く/);
  assert.match(html,/data-action="relic-equip" data-relic="normal.universal.common"/);
  assert.match(html,/data-action="relic-tab" data-tab="collection">🎒 図鑑・装備へ/);
  assert.match(html,/📊 現在のビルド/);
