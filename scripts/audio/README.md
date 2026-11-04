@@ -13,3 +13,5 @@
 作り直すときは `render.py OUT_DIR`（効果音）と `announce.py OUT_DIR`（声。`en_US-bryce-medium.onnx` を同じ場所に置く）を実行し、出力した mp3 を `audio/<名前>.<sha256の先頭8桁>.mp3` として置きます。そのうえで、`js/sfx.js` の `SFX_FILES` を更新します。名前に内容のハッシュを入れているのは、古いキャッシュが残らないようにするためです。
 
 再生は「効果音」をオンにしている人だけです。オンにするまで、ファイルの取得も AudioContext の作成もしません。
+
+`voice-mega` だけは、オーナー本人が叫んだ「MEGA WIN!」の録音です（本人提供）。録画から Demucs（htdemucs）で声だけを分離し、`own_voice.py` で雑音を取って整えました。
