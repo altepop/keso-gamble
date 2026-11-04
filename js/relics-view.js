@@ -1,12 +1,13 @@
 import {relicSoundEnabled,relicSoundVolume,RELIC_SOUND_DESIGNS} from './relics-audio.js?v=web-a1bd570bcecb46ec';
 import {relicBuildSection,relicPresetsSection,relicSummonHistorySection,relicSpecialSection,relicEffectLogSection,relicEconomySection} from './relics-v7.js?v=web-a1bd570bcecb46ec';
-import {relicInventory,relicFilterControls,relicItemCard,relicInventoryPages,relicRevealPanel,relicBonusDashboard} from './relics-v4.js?v=web-a1bd570bcecb46ec';
-import {relicExchangeSection} from './relic-exchange-view.js?v=web-a1bd570bcecb46ec';
+import {relicInventory,relicFilterControls,relicItemCard,relicInventoryPages,relicRevealPanel,relicBonusDashboard} from './relics-v4.js?v=web-relic-20261104-v2';
+import {relicExchangeSection} from './relic-exchange-view.js?v=web-relic-20261104-v2';
 import {relicMarketSection} from './relic-market-view.js?v=web-a1bd570bcecb46ec';
 // Three independent origins: common summons, Steam achievements, and Unite results.
 // Never recommend cross-game combinations or require another game's relic for an upgrade.
 const esc=s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 const yen=n=>Number(n??0).toLocaleString('ja-JP');
+const rate=n=>Number(n??0).toFixed(4).replace(/0+$/,'').replace(/\.$/,'');
 const names={common:'一般',uncommon:'上質',rare:'希少',legendary:'伝説',mythic:'神話',ancient:'古代',transcendent:'🌈 超越',exclusive:'限定'};
 const unite=[
  ['unite.first_win','テイアの守護核',390,'ランク戦1勝'],['unite.two_wins','エオスの双星',425,'2連勝'],
@@ -39,8 +40,8 @@ export function relicsPanel(state,{proofs=null,notice='',loading=false,view={},r
  const rateOrder=['common','uncommon','rare','legendary','mythic','ancient','transcendent'];
  const ratesTable=displayedRates&&maxRates?`<details class="rules"><summary>全レアリティの排出率（現在Lv${level}／最大Lv10）</summary>
  <div class="asset-line"><strong>レアリティ</strong><strong>現在 ／ Lv10</strong></div>
- ${rateOrder.map(id=>`<div class="asset-line"><span>${esc(names[id])}</span><strong>${Number(displayedRates[id]??0).toFixed(3)}% ／ ${Number(maxRates[id]??0).toFixed(3)}%</strong></div>`).join('')}
- <p class="helper">Lv10では一般0%。上質も4%。確定天井はなく、超越はLv10でも0.003%（約33,333回に1回）。</p></details>`:'<p class="helper">排出率表はKP口座への接続後、遺物画面を開くと確認できる。</p>';
+ ${rateOrder.map(id=>`<div class="asset-line"><span>${esc(names[id])}</span><strong>${rate(displayedRates[id])}% ／ ${rate(maxRates[id])}%</strong></div>`).join('')}
+ <p class="helper">Lv10では一般0%。上質も4%。確定天井はなく、超越はLv10で${rate(maxRates.transcendent)}%（確定天井なし）。</p></details>`:'<p class="helper">排出率表はKP口座への接続後、遺物画面を開くと確認できる。</p>';
  const grouped=Object.entries(proofs?.modeNames??{}).map(([id,label])=>{
   const defs=catalog.filter(item=>item.mode===id);
   return `<details class="rules"><summary>${esc(label)} ／ ${defs.length}種類</summary>
@@ -52,7 +53,7 @@ export function relicsPanel(state,{proofs=null,notice='',loading=false,view={},r
  const power=collection.equipped.reduce((n,id)=>n+(collection.items[id]?.power??0),0);
  const inv=relicInventory(items,source,proofs?.modeNames,view,collection.equipped??[]);
  const equipped=collection.equipped??[];
- const cards=inv.matches.map(item=>relicItemCard(item,source,proofs?.modeNames,equipped)).join('');
+ const cards=inv.matches.map(item=>relicItemCard(item,source,proofs?.modeNames,equipped,proofs?.exchange?.prices)).join('');
  const filterHtml=relicFilterControls(view,proofs?.modeNames,inv);
  const pagesHtml=relicInventoryPages(inv);
  const bonusDashboard=relicBonusDashboard(state,proofs,view);
@@ -66,7 +67,7 @@ export function relicsPanel(state,{proofs=null,notice='',loading=false,view={},r
  return relicRevealPanel(reveal)+nav+pane('summon')+`<section class="panel"><div class="card-body"><h2 class="panel-title">🔮 遺物召喚</h2>
    <p><strong>200 KP／1回</strong> · 召喚レベル ${level} · 累計 ${yen(collection.totalSummons)}回</p>
    <div class="relic-level-progress"><strong>${nextMilestone===null?'Lv10到達！':'次のLvまで あと'+yen(toNext)+'回'}</strong><div class="relic-progress-rail"><span style="width:${nextMilestone===null?100:Math.floor(100*(collection.totalSummons-milestones[level-1])/(nextMilestone-milestones[level-1]))}%"></span></div><small>段階別の累計目標：${milestones.map((n,i)=>'Lv'+(i+1)+' '+yen(n)+'回').join(' / ')}</small></div>
-   <p class="helper">召喚した累計回数でレベルが上昇する。Lv10到達は累計8,100回。以前の召喚回数・獲得遺物はそのまま残る。Lv10では一般0%、上質4%、超越0.003%。超越の確定天井はない。</p>
+   <p class="helper">召喚した累計回数でレベルが上昇する。Lv10到達は累計8,100回。以前の召喚回数・獲得遺物はそのまま残る。Lv10では一般0%、上質4%、超越${rate(maxRates?.transcendent??0.01)}%。超越の確定天井はない。</p>
    ${ratesTable}
    <p class="helper">🔊 召喚結果の効果音は自動再生が基本だ。いつでも消音できる。</p>
    <button type="button" class="action-btn relic-v8-audio-toggle" data-action="relic-sound-toggle" aria-pressed="${relicSoundEnabled()?'true':'false'}">${relicSoundEnabled()?'🔊 自動効果音：オン':'🔇 自動効果音：オフ'}</button>
@@ -100,13 +101,16 @@ export function relicsPanel(state,{proofs=null,notice='',loading=false,view={},r
  ${buildTools}
  </div>
  ${pane('collection')}
- <section class="panel"><div class="card-body"><h2 class="panel-title">🎒 図鑑・装備（${yen(items.length)}種）</h2>
-   <p class="helper">ここで所持品の効果を比較して装備する。まず枠を選び、気になる遺物の詳細を開こう。装備後の追加KPは「ビルド・試算」で確認できる。</p>
+ <section class="panel"><div class="card-body"><h2 class="panel-title">🎒 図鑑・装備（${yen(inv.total)}種／所持${yen(items.length)}種）</h2>
+   <p class="helper">所持・未所持を含め、遺物の能力を比較できる。未所持品も検索・並べ替え・入手方法の確認が可能だが、装備できるのは所持品だけだ。</p>
+   <div class="relic-ownership-shortcuts" role="group" aria-label="所持状況">
+    ${[['all','すべて',inv.total],['owned','所持済み',items.length],['unowned','未所持',inv.unowned]].map(([id,label,count])=>'<button type="button" class="action-btn'+((view.ownership??'all')===id?' active':'')+'" data-action="relic-ownership" data-ownership="'+id+'" aria-pressed="'+((view.ownership??'all')===id?'true':'false')+'">'+label+' '+yen(count)+'</button>').join('')}
+   </div>
    ${filterHtml}
    <label class="relic-v8-slot-picker">① 装備する枠を選ぶ
     <select id="relic-slot-gallery" class="select">${[0,1,2,3].map(n=>`<option value="${n}">枠${n+1}：${esc(collection.items[collection.equipped[n]]?.name??'空き')}</option>`).join('')}</select>
    </label>
-   <p class="helper">② 遺物カードの「効果の詳細・装備」を開く → ③「指定枠に装備」を押す。</p>
+   <p class="helper">② 所持済みカードの「効果の詳細・装備」を開く → ③「指定枠に装備」を押す。未所持カードは効果と入手方法を確認できる。</p>
    <div class="relic-v8-viewbar">
     <button type="button" class="action-btn ${view.layout!=='list'?'active':''}" data-action="relic-layout" data-layout="grid">▦ 2列</button>
     <button type="button" class="action-btn ${view.layout==='list'?'active':''}" data-action="relic-layout" data-layout="list">☰ 1列</button>
@@ -117,7 +121,7 @@ export function relicsPanel(state,{proofs=null,notice='',loading=false,view={},r
  </div></section>
  </div>
  ${pane('exchange')}
- ${relicExchangeSection(collection,proofs,Boolean(state.serverWallet))}
+ ${relicExchangeSection(collection,proofs,Boolean(state.serverWallet),view)}
  </div>
  ${pane('market')}
  ${relicMarketSection(collection,{...proofs,members:state.members??[]},state.selfUserId,Boolean(state.serverWallet),view.marketConfirmation)}
