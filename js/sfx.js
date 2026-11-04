@@ -82,6 +82,33 @@ export const SFX_SOUNDS=Object.freeze({
   [72,76,79,84].forEach(n=>osc(c,note(n),t+.5,1.1,{type:'sawtooth',amp:.05,attack:.05,filter:2600}));
   for(let i=0;i<10;i++)osc(c,note(96+Math.floor(Math.random()*8)),t+.5+i*.07,.15,{amp:.05});
  },
+ // Short, opt-in slot fanfares: no BGM, no loops, no audio work while effects are off.
+ slotTemple:(c,t)=>{
+  hiss(c,t,1.2,{amp:.24,type:'lowpass',freq:1100,to:180});
+  [48,55,60,64,67,72].forEach((n,i)=>osc(c,note(n),t+i*.16,.54,{type:'triangle',amp:.18,attack:.02}));
+  [76,79,84,88].forEach((n,i)=>osc(c,note(n),t+.92+i*.13,.43,{type:'sine',amp:.1}));
+ },
+ slotAltar:(c,t)=>{
+  hiss(c,t,.25,{amp:.23,freq:3200,q:2});
+  osc(c,140,t,.35,{type:'triangle',amp:.24,to:70});
+  [79,84,88,91].forEach((n,i)=>osc(c,note(n),t+.10+i*.1,.4,{type:'triangle',amp:.14}));
+ },
+ slotBig:(c,t)=>{
+  [64,67,72,76,79,84].forEach((n,i)=>osc(c,note(n),t+i*.1,.5,{type:'triangle',amp:.16}));
+  for(let i=0;i<7;i++)osc(c,note(84+i),t+.5+i*.06,.2,{amp:.05});
+ },
+ slotMega:(c,t)=>{
+  hiss(c,t,.52,{amp:.27,type:'lowpass',freq:1000,to:250});
+  [60,67,72,76,79,84,88].forEach((n,i)=>osc(c,note(n),t+i*.11,.48,{type:'triangle',amp:.2}));
+  [72,76,79,84].forEach(n=>osc(c,note(n),t+1,1,{type:'sawtooth',amp:.045,attack:.05,filter:2400}));
+ },
+ slotGolden:(c,t)=>{
+  hiss(c,t,1.4,{amp:.33,type:'lowpass',freq:1600,to:160});
+  osc(c,120,t,.8,{type:'triangle',amp:.28,to:55});
+  [60,67,72,76,79,84,88,91,96].forEach((n,i)=>osc(c,note(n),t+i*.15,.62,{type:'triangle',amp:.16}));
+  [60,64,67,72].forEach(n=>osc(c,note(n),t+1.6,1.5,{type:'sawtooth',amp:.044,attack:.05,filter:2600}));
+  for(let i=0;i<18;i++)osc(c,note(88+(i%10)),t+1.3+i*.07,.3,{amp:.05});
+ },
  lose:(c,t)=>{osc(c,note(64),t,.18,{type:'triangle',amp:.12});osc(c,note(59),t+.16,.32,{type:'triangle',amp:.1,to:note(57)});},
  gate:(c,t)=>{[0,.32].forEach(d=>{osc(c,note(84),t+d,.5,{amp:.16});osc(c,note(84)*2.01,t+d,.3,{amp:.05});});hiss(c,t+.6,1.4,{amp:.08,type:'lowpass',freq:500,q:.4});},
  finish:(c,t)=>{[79,84,88,91].forEach((n,i)=>osc(c,note(n),t+i*.11,.35,{type:'triangle',amp:.15}));hiss(c,t+.2,.9,{amp:.07,freq:1500,q:.4});},
