@@ -6,7 +6,7 @@
  * open). Every sound is synthesized on the device: no files, no loops, nothing plays without a tap or a game event
  * the player started. Volume follows the relic sound slider.
  */
-import {relicSoundVolume} from './relics-audio.js?v=web-1c006945cc3f78af';
+import {relicSoundVolume} from './relics-audio.js?v=web-786f3c6d7e8ed7d5';
 
 const KEY='keso.sfx.v1';
 let enabled=false,ctx=null,master=null,noiseBuffer=null;
