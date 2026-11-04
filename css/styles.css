@@ -898,3 +898,24 @@ body:has(.screen[data-view="relics"]){--body-bg:#07020f}body:has(.screen[data-vi
 .sfx-toggle[aria-pressed="true"]{background:var(--t-pill,#e8eefc);color:var(--t-on-pill,#0b1733);border-color:var(--t-pill,#e8eefc)}
 .sfx-toggle+.keso-guide-trigger.docked{margin-left:0}
 .toprow:has(.sfx-toggle){gap:8px}
+
+/* Relic encyclopedia + shard shop: clear owned/missing affordances on mobile. */
+.relic-ownership-shortcuts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin:12px 0}
+.relic-ownership-shortcuts .action-btn{min-width:0;padding:8px 4px;min-height:40px;font-size:12px;white-space:normal}
+.relic-ownership-shortcuts .action-btn.active{border-color:#a3d5ff;background:#254b78;color:#fff}
+.relic-ownership-badge{display:inline-flex;align-items:center;align-self:start;width:max-content;max-width:100%;margin:6px 0 2px;padding:3px 8px;border:1px solid;border-radius:999px;font-size:11px;font-weight:700}
+.relic-ownership-badge.owned{border-color:#407e83;color:#aef6de;background:#103b41}
+.relic-ownership-badge.missing{border-color:#92783e;color:#ffe6ac;background:#42391e}
+.relic-unowned{border-style:dashed;opacity:.89}
+.relic-unowned .relic-card-title{color:#dfe5f1}
+.relic-unowned-help{color:#ffe2ad}
+.relic-exchange-filters{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:10px 0}
+.relic-exchange-filters label{min-width:0;font-size:12px;color:#cbd7f5}
+.relic-exchange-filters label:first-child{grid-column:1/-1}
+.relic-exchange-filters .select{display:block;width:100%;min-width:0;margin-top:5px;min-height:40px}
+.relic-exchange-selection{margin:12px 0;padding:12px;border:1px solid #5275a0;border-radius:12px;background:rgba(19,43,82,.56);font-size:13px}
+.relic-exchange-selection>strong{display:inline-block;margin-right:8px;overflow-wrap:anywhere}
+.relic-exchange-selection p{margin:8px 0;overflow-wrap:anywhere}
+.relic-exchange-shortfall{color:#ffcc9c;font-weight:700}
+.relic-exchange-ready{color:#b0f0d5;font-weight:700}
+@media(max-width:370px){.relic-exchange-filters{grid-template-columns:1fr}.relic-ownership-shortcuts .action-btn{font-size:11px}}
