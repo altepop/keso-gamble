@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { minesStart, minesPick, minesCashout, minesMultiplier, playSlot, slotPayout, SLOT_SYMBOLS, SLOT_WEIGHT, vpDeal, vpDraw, vpHand, VP_PAYS, playBaccarat, baccaratDeal, baccaratPayout, hydrateMoreCasino, createMoreCasino } from '../js/casino-more.js';
+import { minesStart, minesPick, minesCashout, minesMultiplier, playSlot, slotPayout, slotWinTier, SLOT_SYMBOLS, SLOT_WEIGHT, vpDeal, vpDraw, vpHand, VP_PAYS, playBaccarat, baccaratDeal, baccaratPayout, hydrateMoreCasino, createMoreCasino } from '../js/casino-more.js';
 import { createInitialState, hydrateState } from '../js/engine.js';
 
 const seq = values => { let i = 0; return n => { const v = values[i++]; if (v === undefined) throw Error('ran out'); return v % n; }; };
@@ -99,4 +99,27 @@ test('勝負中の手と履歴は保存・復元され、壊れた値は捨て�
   assert.deepEqual(hydrateMoreCasino({ mines: { bet: 500, mines: 3, opened: [1, 1], time: 1 }, vp: { bet: 50, cards: [], time: 1 } }), createMoreCasino());
   assert.throws(() => playSlot(wallet(50), 100, seq([0, 0, 0])), /不足/);
   assert.throws(() => playSlot(wallet(200000), 100100, seq([0, 0, 0])), /100〜100,000/);
+});
+
+test('黄金神殿：ダイヤ2個で3祭壇の賞金を同じ回転中に確定する',()=>{
+ const state=wallet(10000);
+ // reels diamond, diamond, cherry; awards 1x, 5x, 100x. Three RNG draws only after a verified trigger.
+ const done=playSlot(state,100,seq([20,20,0,0,96,99])).done;
+ assert.deepEqual(done.reels,['diamond','diamond','cherry']);
+ assert.deepEqual(done.bonus,{kind:'temple',awards:[1,5,100],total:10600});
+ assert.equal(done.payout,10600);
+ assert.equal(done.net,10500);
+ assert.equal(state.cash,20500);
+ assert.equal(slotWinTier(done),'golden');
+ assert.equal(hydrateMoreCasino({slots:[done]}).slots[0].bonus.total,10600);
+});
+test('黄金神殿：ダイヤ3個は従来の共有ジャックポットのみ、普通の出目にはボーナスなし',()=>{
+ const jackpot=playSlot(wallet(1000),100,seq([20,20,20]),{amount:50000,version:2}).done;
+ assert.equal(jackpot.bonus,undefined);assert.equal(jackpot.payout,35000);
+ assert.equal(slotWinTier(jackpot),'golden');
+ const normal=playSlot(wallet(1000),100,seq([0,0,0])).done;
+ assert.equal(normal.bonus,undefined);assert.equal(slotWinTier(normal),null);
+ assert.equal(slotWinTier({bet:100,payout:1000}),'big');
+ assert.equal(slotWinTier({bet:100,payout:4000}),'mega');
+ assert.equal(slotWinTier({bet:100,payout:10000}),'golden');
 });
