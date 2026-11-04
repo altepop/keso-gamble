@@ -1069,3 +1069,44 @@ body:has(.screen[data-view="relics"]){--body-bg:#07020f}body:has(.screen[data-vi
 /* Owner-triggered natural temple bonuses below 5x are FEATURE WIN, not BIG WIN. */
 .slot-win-stage.stage-feature{font-size:clamp(37px,11vw,72px);color:#c9f7e7;text-shadow:0 5px #155245,0 0 35px #5bffdc}
 @media(prefers-reduced-motion:reduce){.slot-win-stages.feature .stage-feature{opacity:1!important}}
+
+/* ===== Big win show (js/bigwin.js) ===== */
+.bigwin{position:fixed;inset:0;z-index:1500;display:grid;place-items:center;overflow:hidden;cursor:pointer;
+  background:radial-gradient(circle at 50% 45%,rgba(255,196,60,.28),rgba(40,8,20,.88) 55%,rgba(5,2,8,.94));animation:bigwin-in .25s ease-out}
+.bigwin-mega{background:radial-gradient(circle at 50% 45%,rgba(255,90,200,.3),rgba(40,6,40,.9) 55%,rgba(5,2,10,.95))}
+.bigwin-super,.bigwin-jackpot{background:radial-gradient(circle at 50% 45%,rgba(120,220,255,.32),rgba(10,10,48,.9) 55%,rgba(2,2,12,.96))}
+.bigwin-rays{position:absolute;inset:-50%;background:repeating-conic-gradient(from 0deg,rgba(255,215,90,.16) 0 8deg,transparent 8deg 22deg);animation:bigwin-spin 9s linear infinite;mask:radial-gradient(circle,#000 20%,transparent 62%)}
+.bigwin-card{position:relative;text-align:center;padding:0 12px;width:min(520px,100%)}
+.bigwin-title{font-weight:900;font-style:italic;letter-spacing:.02em;line-height:.95;font-size:clamp(48px,15vw,92px);
+  background:linear-gradient(180deg,#fffbe0 0%,#ffe066 34%,#f0a800 52%,#ffd84a 70%,#fff6c8 100%);-webkit-background-clip:text;background-clip:text;color:transparent;
+  -webkit-text-stroke:2px #6b2a00;filter:drop-shadow(0 4px 0 #3a1200) drop-shadow(0 0 18px rgba(255,190,40,.85))}
+.bigwin-mega .bigwin-title{background-image:linear-gradient(180deg,#fff0ff 0%,#ff8af0 38%,#d0109a 55%,#ff9ae8 75%,#fff 100%);-webkit-text-stroke-color:#4a0038;filter:drop-shadow(0 4px 0 #2a0020) drop-shadow(0 0 20px rgba(255,80,220,.85))}
+.bigwin-super .bigwin-title,.bigwin-jackpot .bigwin-title{background-image:linear-gradient(180deg,#ffffff 0%,#9ff3ff 30%,#2f9dff 52%,#c8f6ff 72%,#fff 100%);-webkit-text-stroke-color:#0a1f5a;filter:drop-shadow(0 4px 0 #061238) drop-shadow(0 0 24px rgba(90,200,255,.95))}
+.bigwin-super .bigwin-title{font-size:clamp(38px,11vw,72px)}
+.bigwin-pop{animation:bigwin-pop .55s cubic-bezier(.2,1.6,.4,1)}
+.bigwin-amount{margin:16px auto 0;display:inline-flex;align-items:baseline;gap:8px;padding:10px 26px;border-radius:999px;
+  background:linear-gradient(180deg,#2a1200,#140600);border:3px solid #ffcf4a;box-shadow:0 0 0 3px #7a3a00,0 0 28px rgba(255,200,60,.6),inset 0 2px 10px rgba(255,220,120,.35)}
+.bigwin-amount span{font-size:clamp(34px,10vw,58px);font-weight:900;color:#fff6d0;text-shadow:0 2px 0 #7a3a00,0 0 14px rgba(255,210,90,.9);font-variant-numeric:tabular-nums}
+.bigwin-amount small{font-size:18px;font-weight:800;color:#ffd75a}
+.bigwin-hint{margin-top:14px;color:rgba(255,240,200,.75);font-size:13px}
+.bigwin-done .bigwin-amount{animation:bigwin-throb 1s ease-in-out infinite}
+.bigwin-coins i{position:absolute;top:-8%;left:var(--x);width:calc(26px*var(--s));height:calc(26px*var(--s));border-radius:50%;
+  background:radial-gradient(circle at 35% 30%,#fff7c0,#ffd23a 40%,#c98300 75%,#7a4a00);box-shadow:inset 0 0 0 2px rgba(255,240,170,.7);
+  animation:bigwin-fall var(--d) linear var(--delay) infinite}
+.bigwin-sparks b{position:absolute;left:var(--x);top:var(--y);width:6px;height:6px;border-radius:50%;background:#fff;box-shadow:0 0 12px 4px #ffe680;opacity:0;animation:bigwin-spark 1.2s ease-out var(--delay) infinite}
+@keyframes bigwin-in{from{opacity:0}to{opacity:1}}
+@keyframes bigwin-spin{to{transform:rotate(360deg)}}
+@keyframes bigwin-pop{0%{transform:scale(.3) rotate(-6deg);opacity:0}100%{transform:scale(1) rotate(0)}}
+@keyframes bigwin-throb{50%{transform:scale(1.06)}}
+@keyframes bigwin-fall{0%{transform:translateY(0) rotateY(0)}100%{transform:translateY(118vh) rotateY(720deg)}}
+@keyframes bigwin-spark{0%{opacity:0;transform:scale(.2)}30%{opacity:1;transform:scale(1.4)}100%{opacity:0;transform:scale(.4)}}
+@media (prefers-reduced-motion: reduce){.bigwin,.bigwin-rays,.bigwin-pop,.bigwin-done .bigwin-amount{animation:none}}
+
+/* Header with 効果音・遊び方・KP: keep the title on one line on phones; the two switches shrink to their icons. */
+.toprow .title{white-space:nowrap;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.toprow .badge{white-space:nowrap;flex:none}
+@media (max-width:430px){
+ .toprow:has(.sfx-toggle) .title{font-size:24px}
+ .sfx-toggle span,.toprow:has(.sfx-toggle) .keso-guide-trigger.docked span{display:none}
+ .sfx-toggle{padding:5px 8px}
+}

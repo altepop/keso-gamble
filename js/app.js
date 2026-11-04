@@ -1,36 +1,37 @@
-import {stockOrderQuote,STOCK_ORDER_VERSION,STOCK_PRICE_SCALE} from './stock-order.js?v=web-851e5963520baf6a';
-import {steamConnectionMessage} from './steam-view.js?v=web-851e5963520baf6a';
-import {relicsPanel} from './relics-view.js?v=web-851e5963520baf6a';
-import {primeRelicAudio,playRelicSound,previewRelicSound,stopRelicSound,setRelicSoundVolume,toggleRelicSound} from './relics-audio.js?v=web-851e5963520baf6a';
-import {relicDefaultView} from './relics-v4.js?v=web-851e5963520baf6a';
-import {privateCasinoPanel} from './private-casino-view.js?v=web-851e5963520baf6a';
-import {communityPanel,communityRows} from './community-feed.js?v=web-851e5963520baf6a';
-import {stockPanel,stockCandles,stockPrice,privateStockOperator} from './stock-view.js?v=web-851e5963520baf6a';
-import {stockStoryChoices,validateCustomStory} from './stock-stories.js?v=web-851e5963520baf6a';
-import {wheelView,covered,redNumbers,outcomeAngle} from './roulette-view.js?v=web-851e5963520baf6a';
-import {makeEscalationWheel} from './escalation-roulette.js?v=web-851e5963520baf6a';
-import {connectDiscordActivity,isDiscordActivity,openSteamLogin,openCompanionGame}from './discord-activity-auth.js?v=web-851e5963520baf6a';
-import { createKpClient } from './kp-client.js?v=web-851e5963520baf6a';
-import { fullRefreshInterval, communityRefreshEnabled, COMMUNITY_REFRESH_INTERVAL } from './live-refresh-policy.js?v=web-851e5963520baf6a';
-import { fmt, fmt0 } from './format.js?v=web-851e5963520baf6a';
-import { submitClaim, approveClaim, issueDirective, completeDirective } from './progression.js?v=web-851e5963520baf6a';
-import { titleView, homeView, playView, directivesView, escapeHTML } from './progression-views.js?v=web-851e5963520baf6a';
-import { genCandles, movingAverage, svgCandles } from './charts.js?v=web-851e5963520baf6a';
-import { MARKET, createInitialState, portfolioValue, assets, advanceMarket, trade, spin, spinNumbers, validateNumberBets, grantDemoSalary, cryptoRouletteNumber } from './engine.js?v=web-851e5963520baf6a';
-import { KEY, LEGACY_KEY } from './storage.js?v=web-851e5963520baf6a';
-import { PUBLIC_SALT, RUN_MS, WEEKLY_LIMIT, openRaceStart, latestRaceStart, raceCard, raceOdds, raceResult, raceTimeline, raceCommentary, raceRuns, placeRaceBet, settleRaceBets, weeklySpent } from './racing.js?v=web-851e5963520baf6a';
-import { LUXURY } from './luxury.js?v=web-851e5963520baf6a';
-import { raceScreen, racePreview, drawRace, raceElapsed, ownerPanel, luxuryPanel, roastPanel } from './racing-view.js?v=web-851e5963520baf6a';
-import { createStore } from './store.js?v=web-851e5963520baf6a';
-import { healthPanel } from './health-view.js?v=web-851e5963520baf6a';
-import { trendPanel } from './trend-view.js?v=web-851e5963520baf6a';
-import { mleagueScreen, mleaguePreview } from './mleague-view.js?v=web-851e5963520baf6a';
-import { gamePicker, chinchiroView, blackjackView } from './casino-view.js?v=web-851e5963520baf6a';
-import {casinoFrames} from './casino-animation.js?v=web-851e5963520baf6a';
-import { playChinchiro, bjStart, bjHit, bjStand, bjDouble, cryptoDie, cryptoCard, cryptoInt } from './casino.js?v=web-851e5963520baf6a';
-import { sfxEnabled, toggleSfx, unlockSfx, play as playSfx, playResult } from './sfx.js?v=web-851e5963520baf6a';
-import { minesStart, minesPick, minesCashout, playSlot, slotWinTier, vpDeal, vpDraw, playBaccarat, VP_NAMES } from './casino-more.js?v=web-851e5963520baf6a';
-import { minesView, slotView, videoPokerView, baccaratView } from './casino-more-view.js?v=web-851e5963520baf6a';
+import {stockOrderQuote,STOCK_ORDER_VERSION,STOCK_PRICE_SCALE} from './stock-order.js?v=web-a647b3e0aebfe5d1';
+import {steamConnectionMessage} from './steam-view.js?v=web-a647b3e0aebfe5d1';
+import {relicsPanel} from './relics-view.js?v=web-a647b3e0aebfe5d1';
+import {primeRelicAudio,playRelicSound,previewRelicSound,stopRelicSound,setRelicSoundVolume,toggleRelicSound} from './relics-audio.js?v=web-a647b3e0aebfe5d1';
+import {relicDefaultView} from './relics-v4.js?v=web-a647b3e0aebfe5d1';
+import {privateCasinoPanel} from './private-casino-view.js?v=web-a647b3e0aebfe5d1';
+import {communityPanel,communityRows} from './community-feed.js?v=web-a647b3e0aebfe5d1';
+import {stockPanel,stockCandles,stockPrice,privateStockOperator} from './stock-view.js?v=web-a647b3e0aebfe5d1';
+import {stockStoryChoices,validateCustomStory} from './stock-stories.js?v=web-a647b3e0aebfe5d1';
+import {wheelView,covered,redNumbers,outcomeAngle} from './roulette-view.js?v=web-a647b3e0aebfe5d1';
+import {makeEscalationWheel} from './escalation-roulette.js?v=web-a647b3e0aebfe5d1';
+import {connectDiscordActivity,isDiscordActivity,openSteamLogin,openCompanionGame}from './discord-activity-auth.js?v=web-a647b3e0aebfe5d1';
+import { createKpClient } from './kp-client.js?v=web-a647b3e0aebfe5d1';
+import { fullRefreshInterval, communityRefreshEnabled, COMMUNITY_REFRESH_INTERVAL } from './live-refresh-policy.js?v=web-a647b3e0aebfe5d1';
+import { fmt, fmt0 } from './format.js?v=web-a647b3e0aebfe5d1';
+import { submitClaim, approveClaim, issueDirective, completeDirective } from './progression.js?v=web-a647b3e0aebfe5d1';
+import { titleView, homeView, playView, directivesView, escapeHTML } from './progression-views.js?v=web-a647b3e0aebfe5d1';
+import { genCandles, movingAverage, svgCandles } from './charts.js?v=web-a647b3e0aebfe5d1';
+import { MARKET, createInitialState, portfolioValue, assets, advanceMarket, trade, spin, spinNumbers, validateNumberBets, grantDemoSalary, cryptoRouletteNumber } from './engine.js?v=web-a647b3e0aebfe5d1';
+import { KEY, LEGACY_KEY } from './storage.js?v=web-a647b3e0aebfe5d1';
+import { PUBLIC_SALT, RUN_MS, WEEKLY_LIMIT, openRaceStart, latestRaceStart, raceCard, raceOdds, raceResult, raceTimeline, raceCommentary, raceRuns, placeRaceBet, settleRaceBets, weeklySpent } from './racing.js?v=web-a647b3e0aebfe5d1';
+import { LUXURY } from './luxury.js?v=web-a647b3e0aebfe5d1';
+import { raceScreen, racePreview, drawRace, raceElapsed, ownerPanel, luxuryPanel, roastPanel } from './racing-view.js?v=web-a647b3e0aebfe5d1';
+import { createStore } from './store.js?v=web-a647b3e0aebfe5d1';
+import { healthPanel } from './health-view.js?v=web-a647b3e0aebfe5d1';
+import { trendPanel } from './trend-view.js?v=web-a647b3e0aebfe5d1';
+import { mleagueScreen, mleaguePreview } from './mleague-view.js?v=web-a647b3e0aebfe5d1';
+import { gamePicker, chinchiroView, blackjackView } from './casino-view.js?v=web-a647b3e0aebfe5d1';
+import {casinoFrames} from './casino-animation.js?v=web-a647b3e0aebfe5d1';
+import { playChinchiro, bjStart, bjHit, bjStand, bjDouble, cryptoDie, cryptoCard, cryptoInt } from './casino.js?v=web-a647b3e0aebfe5d1';
+import { showBigWin } from './bigwin.js?v=web-a647b3e0aebfe5d1';
+import { sfxEnabled, toggleSfx, unlockSfx, play as playSfx, playResult, announce } from './sfx.js?v=web-a647b3e0aebfe5d1';
+import { minesStart, minesPick, minesCashout, playSlot, slotWinTier, vpDeal, vpDraw, playBaccarat, VP_NAMES } from './casino-more.js?v=web-a647b3e0aebfe5d1';
+import { minesView, slotView, videoPokerView, baccaratView } from './casino-more-view.js?v=web-a647b3e0aebfe5d1';
 const $=(s,el=document)=>el.querySelector(s);
 const wallet=createKpClient();
 const embedded=isDiscordActivity();
@@ -260,7 +261,19 @@ let casinoGame='roulette';
 let casinoBusy=false,casinoPresentation=null,casinoStage={},casinoSkipped=false,skipCasinoPause=null;
 let slotReveal=null,slotFeatureTimer=null; // Server-settled slot bonus; playback is not another gambling operation.
 const stopTempleReplay=()=>{if(slotFeatureTimer!==null){clearTimeout(slotFeatureTimer);slotFeatureTimer=null;}};
-function toTempleWin(done){stopTempleReplay();slotReveal={type:'win',done};const tier=slotWinTier(done);playSfx(tier==='golden'?'slotGolden':tier==='mega'?'slotMega':tier==='big'?'slotBig':'slotTempleComplete');render();}
+// Slot win reveal sound + announcer, timed to the BIG → MEGA → GOLDEN WIN titles (.stage-* delays 0 / .86s / 1.74s).
+let slotCallTimers=[];
+function slotWinFanfare(tier){
+ slotCallTimers.forEach(clearTimeout);slotCallTimers=[];
+ if(!tier){playSfx('slotTempleComplete');return;}
+ playSfx(tier==='golden'?'slotGolden':tier==='mega'?'slotMega':'slotBig');
+ announce('Big win!');
+ if(tier==='mega'||tier==='golden')slotCallTimers.push(setTimeout(()=>announce('Mega win!'),860));
+ if(tier==='golden')slotCallTimers.push(setTimeout(()=>announce('Golden win!'),1740));
+}
+/** A result's sound, or the full big-win show for 8× the bet and up (and jackpots). */
+function celebrate(net,bet,{jackpot=false,game}={}){if(!showBigWin(net,bet,{jackpot,game}))playResult(net,{jackpot});}
+function toTempleWin(done){stopTempleReplay();slotReveal={type:'win',done};slotWinFanfare(slotWinTier(done));render();}
 function runTempleReplay(){
  stopTempleReplay();const current=slotReveal;
  if(!current||current.type!=='bonus'||current.done.bonus?.mode!=='respin')return;
@@ -410,12 +423,12 @@ async function doCasino(action){
     for(const frame of casinoFrames(action,before,result)){
       if(casinoSkipped)break;
       casinoPresentation=frame.view;casinoStage=frame.stage;render();
-      const phase=frame.stage?.phase;if(phase==='rolling')playSfx('dice');else if(phase==='landing')playSfx('diceStop');else if(phase==='dealing')playSfx('card');else if(phase==='settled')playResult(frame.stage.net);
+      const phase=frame.stage?.phase;if(phase==='rolling')playSfx('dice');else if(phase==='landing')playSfx('diceStop');else if(phase==='dealing')playSfx('card');else if(phase==='settled')celebrate(frame.stage.net,amount,{game:'chinchiro'});
       await new Promise(resolve=>{const timer=setTimeout(()=>{skipCasinoPause=null;resolve();},frame.ms);skipCasinoPause=()=>{clearTimeout(timer);skipCasinoPause=null;resolve();};});
     }
     const signed=n=>(n>0?'+':n<0?'−':'±')+moneyCompact(Math.abs(n));
-    if(action==='chinchiro'&&casinoSkipped)playResult(result.net);
-    if(action!=='chinchiro'&&result.done)playResult(result.done.net);
+    if(action==='chinchiro'&&casinoSkipped)celebrate(result.net,amount,{game:'chinchiro'});
+    if(action!=='chinchiro'&&result.done)celebrate(result.done.net,result.done.bet,{game:'blackjack'});
     if(action==='chinchiro')toast(`${result.net>0?'勝ち':result.net<0?'負け':'分け'} ${signed(result.net)}`);
     else if(result.done)toast(`${BJ_RESULTS[result.done.result]??''} ${signed(result.done.net)}`);
   }finally{casinoBusy=false;casinoPresentation=null;casinoStage={};skipCasinoPause=null;render();
@@ -449,10 +462,10 @@ async function doMoreCasino(action,extra={}){
       if(done.bonus){slotReveal=done.bonus.mode==='respin'?{type:'bonus',done,step:0}:{type:'bonus',done,picks:[]};playSfx('slotTemple');if(done.bonus.mode==='respin')runTempleReplay();}
       else{
         const tier=slotWinTier(done);
-        if(tier){slotReveal={type:'win',done};playSfx(tier==='golden'?'slotGolden':tier==='mega'?'slotMega':'slotBig');}
-        else playResult(done.net,{jackpot:!!done.jackpot});
+        if(tier){slotReveal={type:'win',done};slotWinFanfare(tier);}
+        else celebrate(done.net,done.bet,{jackpot:!!done.jackpot,game:'slot'});
       }
-    }else if(done&&!(action==='mines-pick'&&done.net<0))setTimeout(()=>playResult(done.net),60);
+    }else if(done&&!(action==='mines-pick'&&done.net<0))setTimeout(()=>celebrate(done.net,done.bet,{game:done.game}),60);
     if(done){const signed=n=>(n>0?'+':n<0?'−':'±')+moneyCompact(Math.abs(n));
       toast(done.game==='slot'&&done.jackpot?`ジャックポット！ ${signed(done.net)}`:done.game==='video-poker'?`${VP_NAMES[done.hand]} ${signed(done.net)}`:done.game==='mines'&&done.net<0?`地雷… ${signed(done.net)}`:`${done.net>0?'勝ち':done.net<0?'負け':'分け'} ${signed(done.net)}`);}
   }finally{casinoBusy=false;render();}
@@ -493,7 +506,7 @@ async function doSpin(){
   playSfx('spin',{duration:1.8});
   setTimeout(()=>{try{
       const r=result;
-      playSfx('land');setTimeout(()=>playResult((r.payout??0)-amount),140);
+      playSfx('land');setTimeout(()=>celebrate((r.payout??0)-amount,amount,{game:'roulette'}),140);
       spinLock=false; render(); toast(r.payout>0?`的中 ${moneyCompact(r.payout)}`:`出目 ${r.outcome}`);
     }catch(err){spinLock=false;render();toast(err.message)}
   },1800);
@@ -812,7 +825,7 @@ addEventListener('click',async e=>{
       const done=slotReveal.done;
       slotReveal={type:'win',done};
       const tier=slotWinTier(done)||'big';
-      playSfx(tier==='golden'?'slotGolden':tier==='mega'?'slotMega':'slotBig');render();return;
+      slotWinFanfare(tier);render();return;
     }
     if(t.dataset.action==='load-trend'){await loadTrend(Number(t.dataset.days));return;}
     if(t.dataset.trendSort){const key=t.dataset.trendSort;trendView.dir=trendView.sort===key?-trendView.dir:1;trendView.sort=key;render();return;}

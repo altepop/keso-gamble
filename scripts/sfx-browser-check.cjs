@@ -16,6 +16,9 @@ const port=18781,server=spawn('python3',['-m','http.server',String(port),'--bind
    createBuffer(_c,len){return {getChannelData:()=>new Float32Array(len)};}
    createBufferSource(){window.__audio.sources++;return {...node(),buffer:null,start(){},stop(){}};}
    resume(){return Promise.resolve();}close(){window.__audio.closed++;this.state='closed';return Promise.resolve();}}
+  window.__spoken=[];window.__kesoBigWinTest=true;
+  Object.defineProperty(window,'SpeechSynthesisUtterance',{value:function(text){this.text=text;}});
+  Object.defineProperty(window,'speechSynthesis',{value:{speak(u){window.__spoken.push(u.text);},cancel(){},getVoices:()=>[]}});
   Object.defineProperty(window,'AudioContext',{value:Fake});Object.defineProperty(window,'webkitAudioContext',{value:Fake});
  });
  const page=await ctx.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));page.setDefaultTimeout(8000);
@@ -41,6 +44,19 @@ const port=18781,server=spawn('python3',['-m','http.server',String(port),'--bind
  await page.reload();await page.locator('.title-start').click();await page.locator('.nav-btn[data-screen=race]').click();
  assert.equal(await page.locator('[data-action=sfx-toggle]').getAttribute('aria-pressed'),'true');
  await page.locator('[data-action=sfx-toggle]').click();await page.locator('[data-action=sfx-toggle][aria-pressed=false]').waitFor();
+ // The big-win show (switched back on): titles climb BIG → MEGA → SUPER MEGA WIN with the announcer, the amount counts
+ // up to the real result, a tap skips to the end and another closes it.
+ await page.locator('[data-action=sfx-toggle]').click();await page.locator('[data-action=sfx-toggle][aria-pressed=true]').waitFor();
+ await page.evaluate(()=>{window.__spoken.length=0;});
+ const version=await page.evaluate(()=>[...document.querySelectorAll('script[src*="bootstrap.js"]')][0].src.split('?v=')[1]);
+ await page.evaluate(v=>import('./js/bigwin.js?v='+v).then(m=>{window.__bigWinShown=m.showBigWin(5000,100,{reducedMotion:false});}),version);
+ await page.locator('.bigwin [data-bigwin-title]').filter({hasText:'SUPER MEGA WIN'}).waitFor({timeout:9000});
+ assert.deepEqual(await page.evaluate(()=>window.__spoken),['Big win!','Mega win!','Super mega win!']);
+ await page.locator('.bigwin').click({position:{x:20,y:20}});
+ assert.equal(await page.locator('[data-bigwin-count]').innerText(),'5,000');
+ await page.locator('.bigwin').click({position:{x:20,y:20}});
+ assert.equal(await page.locator('.bigwin').count(),0,'a second tap closes the show');
+ assert.equal(await page.evaluate(()=>import('./js/bigwin.js').then(m=>m.showBigWin(300,100))),false,'an ordinary win has no show');
  assert.deepEqual(errors,[]);
- console.log('Sound effects passed: off by default with no AudioContext, switch-on tap opens audio, roulette sounds, racing switch shared, persisted, switch-off.');
+ console.log('Sound effects passed: off by default with no AudioContext, switch-on tap opens audio, roulette sounds, racing switch shared, persisted, switch-off; big-win show climbs BIG → MEGA → SUPER MEGA WIN with announcer, counts to the result, skip and close.');
 })().catch(e=>{console.error(e);process.exitCode=1}).finally(async()=>{await browser?.close();server.kill()});
