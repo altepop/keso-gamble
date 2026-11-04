@@ -8,7 +8,7 @@
  * (see scripts/audio/README.md), fetched only after 効果音 is turned on; until they arrive, or if they cannot load,
  * the synthesized versions below play instead.
  */
-import {relicSoundVolume} from './relics-audio.js?v=web-e343b87991eef426';
+import {relicSoundVolume} from './relics-audio.js?v=web-97dee0ca9bc9e22b';
 
 const KEY='keso.sfx.v1';
 // Content-hashed names, so a changed sound never comes from a stale cache.
@@ -23,7 +23,7 @@ export const SFX_FILES=Object.freeze({
  'voice-big':'voice-big.41a19517.mp3',
  'voice-golden':'voice-golden.151f52c7.mp3',
  'voice-jackpot':'voice-jackpot.b3f2a6f3.mp3',
- 'voice-mega':'voice-mega.36c15b37.mp3',
+ 'voice-mega':'voice-mega.2a501547.mp3',
  'voice-super':'voice-super.24c50a4c.mp3',
  'win':'win.344c2973.mp3'
 });
