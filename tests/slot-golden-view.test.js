@@ -32,7 +32,7 @@ test('temple ceremony reveals three altars and displays their predetermined valu
  const complete=slotCeremony({type:'bonus',done,picks:[{door:1,award:1},{door:0,award:5},{door:2,award:100}]});
  assert.match(complete,/BONUS COMPLETE/);
  assert.match(complete,/data-action="slot-finish-bonus"/);
- assert.match(complete,/106<em>×<\\/em>/);
+ assert.ok(complete.includes('106<em>×</em>'));
  assert.doesNotMatch(complete,/data-action="slot"([ >])/);
 });
 
