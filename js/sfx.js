@@ -8,7 +8,7 @@
  * (see scripts/audio/README.md), fetched only after 効果音 is turned on; until they arrive, or if they cannot load,
  * the synthesized versions below play instead.
  */
-import {relicSoundVolume} from './relics-audio.js?v=web-79f0382fc22c937a';
+import {relicSoundVolume} from './relics-audio.js?v=web-e343b87991eef426';
 
 const KEY='keso.sfx.v1';
 // Content-hashed names, so a changed sound never comes from a stale cache.
@@ -20,11 +20,11 @@ export const SFX_FILES=Object.freeze({
  'lose':'lose.fc5014d9.mp3',
  'reel-stop':'reel-stop.d5201604.mp3',
  'slot-spin':'slot-spin.24677872.mp3',
- 'voice-big':'voice-big.ce8a319c.mp3',
- 'voice-golden':'voice-golden.1e795fe4.mp3',
- 'voice-jackpot':'voice-jackpot.f80dd943.mp3',
- 'voice-mega':'voice-mega.35a81d11.mp3',
- 'voice-super':'voice-super.60ab6a43.mp3',
+ 'voice-big':'voice-big.41a19517.mp3',
+ 'voice-golden':'voice-golden.151f52c7.mp3',
+ 'voice-jackpot':'voice-jackpot.b3f2a6f3.mp3',
+ 'voice-mega':'voice-mega.36c15b37.mp3',
+ 'voice-super':'voice-super.24c50a4c.mp3',
  'win':'win.344c2973.mp3'
 });
 // Which game sound uses which file (a missing or unloaded file falls back to the synthesized sound of that name).

@@ -8,8 +8,8 @@
 | `fanfare-big` / `-mega` / `-super` | 段階ファンファーレ | 合成した金管セクション（3人分を少しずつずらす）、ティンパニ、シンバル、弦、コイン |
 | `slot-spin` / `reel-stop` | リールの回転音・停止音 | ラチェット音、モーター音、停止の「ドン」と金属音 |
 | `win` / `lose` | 小さな勝ち・負け | 短い金管とコイン |
-| `voice-*` | 「Big win!」「MEGA WIIIN!!」などのアナウンス（`hype.py`：最後の母音を伸ばして音程を上げる） | Piper TTS（`en_US-norman-medium`。LibriVox のパブリックドメイン朗読だけで学習）で読ませた声を、低く・二重に・歪ませ、スタジアムの反響を付ける |
+| `voice-*` | 「Big win!」「Mega win!」などのアナウンス | `announce.py`：Piper TTS（`en_US-bryce-medium`。作者本人の録音で、パブリックドメイン）。最初の語は短く、最後の語の母音を約0.45〜0.75秒伸ばして少し下げる。聞き取りやすさ優先で加工は軽め |
 
-作り直すときは `voice.py` → `render.py OUT_DIR` を実行し、出力した mp3 を `audio/<名前>.<sha256の先頭8桁>.mp3` として置きます。そのうえで、`js/sfx.js` の `SFX_FILES` を更新します。名前に内容のハッシュを入れているのは、古いキャッシュが残らないようにするためです。
+作り直すときは `render.py OUT_DIR`（効果音）と `announce.py OUT_DIR`（声。`en_US-bryce-medium.onnx` を同じ場所に置く）を実行し、出力した mp3 を `audio/<名前>.<sha256の先頭8桁>.mp3` として置きます。そのうえで、`js/sfx.js` の `SFX_FILES` を更新します。名前に内容のハッシュを入れているのは、古いキャッシュが残らないようにするためです。
 
 再生は「効果音」をオンにしている人だけです。オンにするまで、ファイルの取得も AudioContext の作成もしません。
