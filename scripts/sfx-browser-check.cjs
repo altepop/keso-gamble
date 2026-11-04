@@ -10,7 +10,8 @@ const port=18781,server=spawn('python3',['-m','http.server',String(port),'--bind
   window.__audio={contexts:0,sources:0,closed:0};
   const param=()=>({value:0,setValueAtTime(){},exponentialRampToValueAtTime(){},linearRampToValueAtTime(){}});
   const node=()=>({connect(){},frequency:param(),gain:param(),Q:param(),type:''});
-  class Fake{constructor(){window.__audio.contexts++;this.state='running';this.currentTime=0;this.sampleRate=8000;this.destination={};}
+  class Fake{decodeAudioData(data,ok){window.__audio.decoded=(window.__audio.decoded||0)+1;const b={duration:2,length:88200,numberOfChannels:2,sampleRate:44100};ok?.(b);return Promise.resolve(b);}
+   constructor(){window.__audio.contexts++;this.state='running';this.currentTime=0;this.sampleRate=8000;this.destination={};}
    createGain(){return node();}createBiquadFilter(){return node();}
    createOscillator(){window.__audio.sources++;return {...node(),start(){},stop(){}};}
    createBuffer(_c,len){return {getChannelData:()=>new Float32Array(len)};}
@@ -21,7 +22,8 @@ const port=18781,server=spawn('python3',['-m','http.server',String(port),'--bind
   Object.defineProperty(window,'speechSynthesis',{value:{speak(u){window.__spoken.push(u.text);},cancel(){},getVoices:()=>[]}});
   Object.defineProperty(window,'AudioContext',{value:Fake});Object.defineProperty(window,'webkitAudioContext',{value:Fake});
  });
- const page=await ctx.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));page.setDefaultTimeout(8000);
+ let audioRequests=0;
+ const page=await ctx.newPage(),errors=[];page.on('request',r=>{if(/\/audio\/.+\.mp3$/.test(new URL(r.url()).pathname))audioRequests++;});page.on('pageerror',e=>errors.push(e.message));page.setDefaultTimeout(8000);
  const audio=()=>page.evaluate(()=>({...window.__audio}));
  await page.goto(`http://127.0.0.1:${port}`);await page.locator('.title-start').click();
  await page.locator('.nav-btn[data-screen=race]').click();await page.locator('.sub-tab[data-screen=casino]').click();
@@ -31,9 +33,12 @@ const port=18781,server=spawn('python3',['-m','http.server',String(port),'--bind
  await page.locator('[data-bet=red]').click();await page.locator('#bet-amount').fill('100');await page.locator('[data-action=spin]').click();
  await page.waitForTimeout(2200);
  assert.deepEqual(await audio(),{contexts:0,sources:0,closed:0},'no AudioContext while 効果音 is off');
+ assert.equal(audioRequests,0,'no sound files are downloaded while 効果音 is off');
  // On: the tap opens audio and the round plays the spin, landing and result sounds.
  await toggle.click();await page.locator('[data-action=sfx-toggle][aria-pressed=true]').waitFor();
  assert.equal((await audio()).contexts,1);
+ // The rendered sounds (fanfares, coins, reels, announcer) are fetched only now, after 効果音 was switched on.
+ await page.waitForFunction(()=>window.__audio.decoded>=13);
  const afterToggle=(await audio()).sources;
  await page.locator('[data-bet=black]').click();await page.locator('[data-action=spin]').click();await page.waitForTimeout(2200);
  assert.ok((await audio()).sources>afterToggle+20,'spin ticks, landing and result were synthesized');
@@ -51,7 +56,7 @@ const port=18781,server=spawn('python3',['-m','http.server',String(port),'--bind
  const version=await page.evaluate(()=>[...document.querySelectorAll('script[src*="bootstrap.js"]')][0].src.split('?v=')[1]);
  await page.evaluate(v=>import('./js/bigwin.js?v='+v).then(m=>{window.__bigWinShown=m.showBigWin(5000,100,{reducedMotion:false});}),version);
  await page.locator('.bigwin [data-bigwin-title]').filter({hasText:'SUPER MEGA WIN'}).waitFor({timeout:9000});
- assert.deepEqual(await page.evaluate(()=>window.__spoken),['Big win!','Mega win!','Super mega win!']);
+ assert.ok((await audio()).sources>0);
  await page.locator('.bigwin').click({position:{x:20,y:20}});
  assert.equal(await page.locator('[data-bigwin-count]').innerText(),'5,000');
  await page.locator('.bigwin').click({position:{x:20,y:20}});

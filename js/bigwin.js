@@ -6,7 +6,7 @@
  * on, the count has a coin shower, each step a fanfare, and an announcer calls the title. Tap to skip the count; tap
  * again (or wait) to close. The show is display only: the wallet was already settled by the server.
  */
-import {play,announce,stopAnnounce} from './sfx.js?v=web-a647b3e0aebfe5d1';
+import {play,announce,stopAnnounce} from './sfx.js?v=web-0f5832e3cc65fc25';
 
 export const BIG_WIN_TIERS=Object.freeze([
  {id:'big',label:'BIG WIN',call:'Big win!'},
@@ -60,11 +60,11 @@ export function showBigWin(net,bet,{jackpot=false,game='default',reducedMotion=g
  // Each step takes over when the count passes its share of the amount.
  const marks=steps.map((s,i)=>({...s,from:i===0?0:net*(top.at?s.at/top.at:1)*.92}));
  const reach=index=>{const s=marks[index];root.className=`bigwin bigwin-${s.id}`;title.textContent=s.label;title.classList.remove('bigwin-pop');void title.offsetWidth;title.classList.add('bigwin-pop');
-  play(index===0?'rise':'fanfare',{level:index+1,duration:.9});announce(s.call);};
+  play('fanfare',{level:s.id==='jackpot'?3:index+1});announce(s.call);};
  const finish=()=>{if(finished)return;finished=true;cancelAnimationFrame(frame);count.textContent=fmt(net);
   if(shown<marks.length-1)reach(marks.length-1);shown=marks.length-1;
   root.classList.add('bigwin-done');root.querySelector('.bigwin-hint').textContent='タップで閉じる';
-  play(top.id==='big'?'fanfare':'bigwin',{level:marks.length});closeTimer=setTimeout(close,2600);};
+  closeTimer=setTimeout(close,2600);};
  const close=()=>{if(!root.isConnected)return;clearTimeout(closeTimer);cancelAnimationFrame(frame);stopAnnounce();root.remove();if(active?.root===root)active=null;resolveClose();};
  root.addEventListener('click',()=>finished?close():finish());
  reach(0);
