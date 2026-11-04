@@ -1,0 +1,23 @@
+name: Temporary relic catalog unit verification
+on:
+  push:
+    branches:
+      - feat/relic-catalog-filters-rebased-20261104
+    paths:
+      - '.github/workflows/relic-unit-temp.yml'
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install root tools
+        run: npm ci
+      - name: Verify content-derived browser cache
+        run: npm run check:activity
+      - name: Run all UI and game unit tests
+        run: npm test
