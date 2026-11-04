@@ -778,6 +778,10 @@ function setupGuide(){
   if(navigator.webdriver&&!globalThis.__kesoGuideTestTour)return;
   if(seen||autoPrompted||open)return;
   if(!app.querySelector('.screen[data-view="home"]'))return;
+  // Discord does not always keep this Activity's browser storage between launches (opening it from a bot's
+  // 「Activityを開く」 button, phones), so "already seen" alone cannot be trusted there. A player whose KP account
+  // already has play in it is not new: never show them the first-run tour, and remember that where possible.
+  if(document.documentElement.dataset.kesoReturning==='1'){seen=true;safeStore.set();return;}
   autoPrompted=true;show('intro',true,true);
  };
  // The trigger sits in each screen's header (beside the KP badge) so it never covers buttons in the page; the
