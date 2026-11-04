@@ -1,35 +1,35 @@
-import {stockOrderQuote,STOCK_ORDER_VERSION,STOCK_PRICE_SCALE} from './stock-order.js?v=web-7b038b3bd2bd73fd';
-import {steamConnectionMessage} from './steam-view.js?v=web-7b038b3bd2bd73fd';
-import {relicsPanel} from './relics-view.js?v=web-7b038b3bd2bd73fd';
-import {primeRelicAudio,playRelicSound,previewRelicSound,stopRelicSound,setRelicSoundVolume,toggleRelicSound} from './relics-audio.js?v=web-7b038b3bd2bd73fd';
-import {relicDefaultView} from './relics-v4.js?v=web-7b038b3bd2bd73fd';
-import {privateCasinoPanel} from './private-casino-view.js?v=web-7b038b3bd2bd73fd';
-import {communityPanel,communityRows} from './community-feed.js?v=web-7b038b3bd2bd73fd';
-import {stockPanel,stockCandles,stockPrice,privateStockOperator} from './stock-view.js?v=web-7b038b3bd2bd73fd';
-import {stockStoryChoices,validateCustomStory} from './stock-stories.js?v=web-7b038b3bd2bd73fd';
-import {wheelView,covered,redNumbers,outcomeAngle} from './roulette-view.js?v=web-7b038b3bd2bd73fd';
-import {makeEscalationWheel} from './escalation-roulette.js?v=web-7b038b3bd2bd73fd';
-import {connectDiscordActivity,isDiscordActivity,openSteamLogin,openCompanionGame}from './discord-activity-auth.js?v=web-7b038b3bd2bd73fd';
-import { createKpClient } from './kp-client.js?v=web-7b038b3bd2bd73fd';
-import { fullRefreshInterval, communityRefreshEnabled, COMMUNITY_REFRESH_INTERVAL } from './live-refresh-policy.js?v=web-7b038b3bd2bd73fd';
-import { fmt, fmt0 } from './format.js?v=web-7b038b3bd2bd73fd';
-import { submitClaim, approveClaim, issueDirective, completeDirective } from './progression.js?v=web-7b038b3bd2bd73fd';
-import { titleView, homeView, playView, directivesView, escapeHTML } from './progression-views.js?v=web-7b038b3bd2bd73fd';
-import { genCandles, movingAverage, svgCandles } from './charts.js?v=web-7b038b3bd2bd73fd';
-import { MARKET, createInitialState, portfolioValue, assets, advanceMarket, trade, spin, spinNumbers, validateNumberBets, grantDemoSalary, cryptoRouletteNumber } from './engine.js?v=web-7b038b3bd2bd73fd';
-import { KEY, LEGACY_KEY } from './storage.js?v=web-7b038b3bd2bd73fd';
-import { PUBLIC_SALT, RUN_MS, WEEKLY_LIMIT, openRaceStart, latestRaceStart, raceCard, raceOdds, raceResult, raceTimeline, raceCommentary, raceRuns, placeRaceBet, settleRaceBets, weeklySpent } from './racing.js?v=web-7b038b3bd2bd73fd';
-import { LUXURY } from './luxury.js?v=web-7b038b3bd2bd73fd';
-import { raceScreen, racePreview, drawRace, raceElapsed, ownerPanel, luxuryPanel, roastPanel } from './racing-view.js?v=web-7b038b3bd2bd73fd';
-import { createStore } from './store.js?v=web-7b038b3bd2bd73fd';
-import { healthPanel } from './health-view.js?v=web-7b038b3bd2bd73fd';
-import { trendPanel } from './trend-view.js?v=web-7b038b3bd2bd73fd';
-import { mleagueScreen, mleaguePreview } from './mleague-view.js?v=web-7b038b3bd2bd73fd';
-import { gamePicker, chinchiroView, blackjackView } from './casino-view.js?v=web-7b038b3bd2bd73fd';
-import {casinoFrames} from './casino-animation.js?v=web-7b038b3bd2bd73fd';
-import { playChinchiro, bjStart, bjHit, bjStand, bjDouble, cryptoDie, cryptoCard, cryptoInt } from './casino.js?v=web-7b038b3bd2bd73fd';
-import { minesStart, minesPick, minesCashout, playSlot, vpDeal, vpDraw, playBaccarat, VP_NAMES } from './casino-more.js?v=web-7b038b3bd2bd73fd';
-import { minesView, slotView, videoPokerView, baccaratView } from './casino-more-view.js?v=web-7b038b3bd2bd73fd';
+import {stockOrderQuote,STOCK_ORDER_VERSION,STOCK_PRICE_SCALE} from './stock-order.js?v=web-0b9499bf325cfe1b';
+import {steamConnectionMessage} from './steam-view.js?v=web-0b9499bf325cfe1b';
+import {relicsPanel} from './relics-view.js?v=web-0b9499bf325cfe1b';
+import {primeRelicAudio,playRelicSound,previewRelicSound,stopRelicSound,setRelicSoundVolume,toggleRelicSound} from './relics-audio.js?v=web-0b9499bf325cfe1b';
+import {relicDefaultView} from './relics-v4.js?v=web-0b9499bf325cfe1b';
+import {privateCasinoPanel} from './private-casino-view.js?v=web-0b9499bf325cfe1b';
+import {communityPanel,communityRows} from './community-feed.js?v=web-0b9499bf325cfe1b';
+import {stockPanel,stockCandles,stockPrice,privateStockOperator} from './stock-view.js?v=web-0b9499bf325cfe1b';
+import {stockStoryChoices,validateCustomStory} from './stock-stories.js?v=web-0b9499bf325cfe1b';
+import {wheelView,covered,redNumbers,outcomeAngle} from './roulette-view.js?v=web-0b9499bf325cfe1b';
+import {makeEscalationWheel} from './escalation-roulette.js?v=web-0b9499bf325cfe1b';
+import {connectDiscordActivity,isDiscordActivity,openSteamLogin,openCompanionGame}from './discord-activity-auth.js?v=web-0b9499bf325cfe1b';
+import { createKpClient } from './kp-client.js?v=web-0b9499bf325cfe1b';
+import { fullRefreshInterval, communityRefreshEnabled, COMMUNITY_REFRESH_INTERVAL } from './live-refresh-policy.js?v=web-0b9499bf325cfe1b';
+import { fmt, fmt0 } from './format.js?v=web-0b9499bf325cfe1b';
+import { submitClaim, approveClaim, issueDirective, completeDirective } from './progression.js?v=web-0b9499bf325cfe1b';
+import { titleView, homeView, playView, directivesView, escapeHTML } from './progression-views.js?v=web-0b9499bf325cfe1b';
+import { genCandles, movingAverage, svgCandles } from './charts.js?v=web-0b9499bf325cfe1b';
+import { MARKET, createInitialState, portfolioValue, assets, advanceMarket, trade, spin, spinNumbers, validateNumberBets, grantDemoSalary, cryptoRouletteNumber } from './engine.js?v=web-0b9499bf325cfe1b';
+import { KEY, LEGACY_KEY } from './storage.js?v=web-0b9499bf325cfe1b';
+import { PUBLIC_SALT, RUN_MS, WEEKLY_LIMIT, openRaceStart, latestRaceStart, raceCard, raceOdds, raceResult, raceTimeline, raceCommentary, raceRuns, placeRaceBet, settleRaceBets, weeklySpent } from './racing.js?v=web-0b9499bf325cfe1b';
+import { LUXURY } from './luxury.js?v=web-0b9499bf325cfe1b';
+import { raceScreen, racePreview, drawRace, raceElapsed, ownerPanel, luxuryPanel, roastPanel } from './racing-view.js?v=web-0b9499bf325cfe1b';
+import { createStore } from './store.js?v=web-0b9499bf325cfe1b';
+import { healthPanel } from './health-view.js?v=web-0b9499bf325cfe1b';
+import { trendPanel } from './trend-view.js?v=web-0b9499bf325cfe1b';
+import { mleagueScreen, mleaguePreview } from './mleague-view.js?v=web-0b9499bf325cfe1b';
+import { gamePicker, chinchiroView, blackjackView } from './casino-view.js?v=web-0b9499bf325cfe1b';
+import {casinoFrames} from './casino-animation.js?v=web-0b9499bf325cfe1b';
+import { playChinchiro, bjStart, bjHit, bjStand, bjDouble, cryptoDie, cryptoCard, cryptoInt } from './casino.js?v=web-0b9499bf325cfe1b';
+import { minesStart, minesPick, minesCashout, playSlot, vpDeal, vpDraw, playBaccarat, VP_NAMES } from './casino-more.js?v=web-0b9499bf325cfe1b';
+import { minesView, slotView, videoPokerView, baccaratView } from './casino-more-view.js?v=web-0b9499bf325cfe1b';
 const $=(s,el=document)=>el.querySelector(s);
 const wallet=createKpClient();
 const embedded=isDiscordActivity();
@@ -41,6 +41,7 @@ let steamView=null;
 let relicProofs=null,relicNotice='',relicLoading=false;
 // Each tap is one paid purchase. Never queue taps while a request or reveal is active.
 let relicSummonBusy=false,lastRelicSummonTap=0,lastSummonBlockToast=0;
+let noteOpen=false; // the tapped-open mode note (see the click listener near the end)
 const RELIC_SUMMON_TAP_GAP_MS=1200;
 let lastRelicLedgerId=null;
 let relicView={...relicDefaultView(),previewMode:'competitive',previewAmount:500},relicReveal=null;
@@ -262,7 +263,7 @@ function screenCasino(){
   if(casinoGame==='poker')return head+videoPokerView(visible,{busy:casinoBusy,hold:vpHold,drafts})+bottomNav()+'</div>';
   if(casinoGame==='baccarat')return head+baccaratView(visible,{busy:casinoBusy,drafts})+bottomNav()+'</div>';
   const recent=state.spins[0];
-  return `${head}<div class="center-panel"><div style="position:relative;width:var(--roulette-size,min(320px,86vw));margin:0 auto 18px"><div class="pointer"></div><div class="roulette-board" id="wheel" style="transform:rotate(${rotation|| (recent?outcomeAngle(recent.outcome):0)}deg)">${wheelView(betType==='number'?'numbers':betType,betNumber,[...numberBets.keys()])}<div class="roulette-center">${recent?recent.outcome:'K'}</div></div></div></div><div class="number-table" aria-label="ルーレットの数字">${Array.from({length:37},(_,n)=>`<button data-number="${n}" aria-pressed="${numberSelected(n)}" class="number-cell ${n===0?'green':redNumbers.has(n)?'red':'black'} ${numberSelected(n)?'selected':''}">${n}${betType==='number'&&numberBets.has(n)?`<small>${numberBets.get(n)} KP</small>`:''}</button>`).join('')}</div><p class="helper">ヨーロピアン式・0は緑。数字36倍／赤黒・偶奇・前半後半2倍／ダズン・列3倍（掛け金込み）。数字は複数選択OK。数字をもう一度タップすると解除。数字ごと100 KP以上、合計100,000 KPまで。</p><div class="bet-grid">${[['red','赤'],['black','黒'],['even','偶数'],['odd','奇数'],['number','数字指定'],['low','1〜18'],['high','19〜36'],['dozen1','1〜12'],['dozen2','13〜24'],['dozen3','25〜36'],['column1','1列目'],['column2','2列目'],['column3','3列目']].map(([id,label])=>`<button data-bet="${id}" class="${betType===id?'active':''}">${label}</button>`).join('')}</div><div class="trade-box"><h3>ベット</h3>${betType==='number'?`<p class="helper">盤面から数字を選んでください。</p>${[...numberBets].map(([n,amount])=>`<div class="field"><label for="number-stake-${n}">${n} の掛け金</label><input id="number-stake-${n}" data-stake="${n}" class="input" type="number" min="100" max="100000" step="1" value="${amount}"></div>`).join('')}<strong>合計 <span id="number-bet-total">${moneyCompact([...numberBets.values()].reduce((a,b)=>a+b,0))}</span></strong>`:`<div class="field"><label for="bet-amount">賭け金</label><input id="bet-amount" class="input" type="number" min="100" max="100000" step="1" value="500"></div>`}<div class="action-row"><button class="action-btn primary" data-action="spin" ${spinLock?'disabled':''}>ルーレットを回す</button></div></div><div class="result-panel"><p class="result-title ${recent && recent.payout>0?'negative':recent?'positive':''}">${recent ? (recent.payout>0?'的中':'不的中') : '直近結果'}</p><div class="helper">${recent ? `出目 ${recent.outcome} / 賭け ${moneyCompact(recent.amount)} / 払戻 ${moneyCompact(recent.payout)}${recent.bets?'<br>'+recent.bets.map(b=>b.number+': '+moneyCompact(b.amount)).join(' · '):''}` : 'まだ抽選履歴はありません。'}</div></div>${bottomNav()}</div>`;
+  return `${head}<div class="center-panel"><div style="position:relative;width:var(--roulette-size,min(320px,86vw));margin:0 auto 18px"><div class="pointer"></div><div class="roulette-board" id="wheel" style="transform:rotate(${rotation|| (recent?outcomeAngle(recent.outcome):0)}deg)">${wheelView(betType==='number'?'numbers':betType,betNumber,[...numberBets.keys()])}<div class="roulette-center">${recent?recent.outcome:'K'}</div></div></div></div><div class="number-table" aria-label="ルーレットの数字">${Array.from({length:37},(_,n)=>`<button data-number="${n}" aria-pressed="${numberSelected(n)}" class="number-cell ${n===0?'green':redNumbers.has(n)?'red':'black'} ${numberSelected(n)?'selected':''}">${n}${betType==='number'&&numberBets.has(n)?`<small>${numberBets.get(n)} KP</small>`:''}</button>`).join('')}</div><p class="helper">ヨーロピアン式・0は緑。数字36倍／赤黒・偶奇・前半後半2倍／ダズン・列3倍（掛け金込み）。数字は複数選択OK。数字をもう一度タップすると解除。数字ごと100 KP以上、合計100,000 KPまで。</p><div class="bet-grid bet-groups">${[['2倍',[['red','赤'],['black','黒'],['even','偶数'],['odd','奇数'],['low','1〜18'],['high','19〜36']]],['3倍',[['dozen1','1〜12'],['dozen2','13〜24'],['dozen3','25〜36'],['column1','1列目'],['column2','2列目'],['column3','3列目']]],['36倍',[['number','数字指定']]]].map(([group,bets])=>`<div class="bet-group"><span class="bet-group-label">${group}</span><div class="bet-group-buttons">${bets.map(([id,label])=>`<button data-bet="${id}" class="${betType===id?'active':''}">${label}</button>`).join('')}</div></div>`).join('')}</div><div class="trade-box"><h3>ベット</h3>${betType==='number'?`<p class="helper">盤面から数字を選んでください。</p>${[...numberBets].map(([n,amount])=>`<div class="field"><label for="number-stake-${n}">${n} の掛け金</label><input id="number-stake-${n}" data-stake="${n}" class="input" type="number" min="100" max="100000" step="1" value="${amount}"></div>`).join('')}<strong>合計 <span id="number-bet-total">${moneyCompact([...numberBets.values()].reduce((a,b)=>a+b,0))}</span></strong>`:`<div class="field"><label for="bet-amount">賭け金</label><input id="bet-amount" class="input" type="number" min="100" max="100000" step="1" value="500"></div>`}<div class="action-row"><button class="action-btn primary" data-action="spin" ${spinLock?'disabled':''}>ルーレットを回す</button></div></div><div class="result-panel"><p class="result-title ${recent && recent.payout>0?'negative':recent?'positive':''}">${recent ? (recent.payout>0?'的中':'不的中') : '直近結果'}</p><div class="helper">${recent ? `出目 ${recent.outcome} / 賭け ${moneyCompact(recent.amount)} / 払戻 ${moneyCompact(recent.payout)}${recent.bets?'<br>'+recent.bets.map(b=>b.number+': '+moneyCompact(b.amount)).join(' · '):''}` : 'まだ抽選履歴はありません。'}</div></div>${bottomNav()}</div>`;
 }
 
 function useScreen(title,body,{preview=false}={}){
@@ -310,6 +311,7 @@ function render(){
   // A quote/balance poll must not replace a pressed button when its display is unchanged.
   if(markup===renderedMarkup)return;
   app.innerHTML=markup;renderedMarkup=markup;
+  if(noteOpen)app.querySelector('.market-disclaimer')?.classList.add('open');
   app.querySelectorAll('details:not(.community-feed)').forEach((el,index)=>{el.open=openDetails[index]??el.open;});
   if(communityOpen!==undefined){const feed=app.querySelector('details.community-feed');if(feed)feed.open=communityOpen;}
   for (const [id,value] of Object.entries(drafts)) { const input=document.getElementById(id); if(input) input.value=value; }
@@ -707,6 +709,7 @@ addEventListener('click',async e=>{
       mlDraft={match:null,player:null,confirm:false};delete drafts['ml-amount'];render();toast(`${bet.player}のラスを買いました（${(bet.odds/10).toFixed(1)}倍）`);return;
     }
     if(t.dataset.raceType){raceDraft.type=t.dataset.raceType;render();return;}
+    if(t.dataset.raceAmount){const input=$('#race-amount');if(input){input.value=t.dataset.raceAmount;input.dispatchEvent(new Event('input',{bubbles:true}));}return;}
     if(t.dataset.action==='horse-buy'){const {horse}=await liveOperation('horse-buy',{box:t.dataset.box,name:$('#horse-name')?.value??''});delete drafts['horse-name'];pendingHorseSale=null;render();toast(`${horse.name}（${horse.gradeLabel}）が仲間入りしました`);return;}
     if(t.dataset.action==='horse-sell'){
       const horse=state.horses?.find(h=>h.id===t.dataset.horse&&!h.retired_at);
@@ -888,6 +891,8 @@ async function refreshCommunity(){
 // The closed disclosure on other screens causes ZERO feed requests.
 setInterval(refreshCommunity,COMMUNITY_REFRESH_INTERVAL);
 addEventListener('click',e=>{if(e.target.closest?.('.community-feed > summary'))setTimeout(refreshCommunity,0);});
+// Long mode notes show two lines; a tap opens the rest (and keeps it open across refreshes until tapped again).
+addEventListener('click',e=>{const note=e.target.closest?.('.market-disclaimer');if(!note)return;noteOpen=!noteOpen;note.classList.toggle('open',noteOpen);});
 addEventListener('visibilitychange',()=>{if(!document.hidden)refreshCommunity();});
 let lastPulse=null,lastFull=0;
 async function refreshLive(){
