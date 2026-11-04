@@ -45,10 +45,22 @@ const port=18781,server=spawn('python3',['-m','http.server',String(port),'--bind
  // The racing screen has the same switch, already on.
  await page.locator('.sub-tab[data-screen=race]').click();
  assert.equal(await page.locator('[data-action=sfx-toggle]').getAttribute('aria-pressed'),'true');
+ // 🎚 opens the volume panel: 効果音 and 実況ボイス each have a slider, saved for next time; letting go plays a sample.
+ await page.locator('[data-action=sfx-volume]').click();
+ const effects=page.locator('[data-sfx-volume=effects]'),voice=page.locator('[data-sfx-volume=voice]');
+ await effects.fill('30');await voice.fill('60');
+ assert.equal(await page.locator('[data-sfx-volume-value=effects]').innerText(),'30%');
+ assert.deepEqual(await page.evaluate(()=>[localStorage.getItem('keso.sfx.volume.v1'),localStorage.getItem('keso.sfx.voice-volume.v1')]),['30','60']);
+ await page.locator('[data-action=sfx-volume]').click();
+ assert.equal(await page.locator('.sfx-volume-panel').count(),0,'a second tap closes the panel');
  // The choice survives a reload; switching off closes the audio context.
  await page.reload();await page.locator('.title-start').click();await page.locator('.nav-btn[data-screen=race]').click();
  assert.equal(await page.locator('[data-action=sfx-toggle]').getAttribute('aria-pressed'),'true');
+ await page.locator('[data-action=sfx-volume]').click();
+ assert.equal(await page.locator('[data-sfx-volume=effects]').inputValue(),'30','the volume survives a reload');
+ await page.locator('[data-action=sfx-volume]').click();
  await page.locator('[data-action=sfx-toggle]').click();await page.locator('[data-action=sfx-toggle][aria-pressed=false]').waitFor();
+ assert.equal(await page.locator('[data-action=sfx-volume]').count(),0,'no volume button while 効果音 is off');
  // The big-win show (switched back on): titles climb BIG → MEGA → SUPER MEGA WIN with the announcer, the amount counts
  // up to the real result, a tap skips to the end and another closes it.
  await page.locator('[data-action=sfx-toggle]').click();await page.locator('[data-action=sfx-toggle][aria-pressed=true]').waitFor();
@@ -63,5 +75,5 @@ const port=18781,server=spawn('python3',['-m','http.server',String(port),'--bind
  assert.equal(await page.locator('.bigwin').count(),0,'a second tap closes the show');
  assert.equal(await page.evaluate(()=>import('./js/bigwin.js').then(m=>m.showBigWin(300,100))),false,'an ordinary win has no show');
  assert.deepEqual(errors,[]);
- console.log('Sound effects passed: off by default with no AudioContext, switch-on tap opens audio, roulette sounds, racing switch shared, persisted, switch-off; big-win show climbs BIG → MEGA → SUPER MEGA WIN with announcer, counts to the result, skip and close.');
+ console.log('Sound effects passed: off by default with no AudioContext, switch-on tap opens audio, roulette sounds, racing switch shared, 効果音/実況 volume sliders saved, persisted, switch-off; big-win show climbs BIG → MEGA → SUPER MEGA WIN with announcer, counts to the result, skip and close.');
 })().catch(e=>{console.error(e);process.exitCode=1}).finally(async()=>{await browser?.close();server.kill()});
