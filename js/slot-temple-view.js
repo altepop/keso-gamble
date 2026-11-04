@@ -1,6 +1,6 @@
 // Client-only replay of an already paid Hold & Respin bonus.
 // Every coin and respin came from the server's crypto draw inside the original single slot operation.
-import {TEMPLE_SIZE,TEMPLE_RESPINS,templeGridAt,templeCoinKP} from './slot-temple.js?v=web-a510489982f68c7b';
+import {TEMPLE_SIZE,TEMPLE_RESPINS,templeGridAt,templeCoinKP} from './slot-temple.js?v=web-79f0382fc22c937a';
 const number=n=>Math.floor(n).toLocaleString('ja-JP');
 const coinFace=(bet,units)=>units>=100
  ?`<span class="maya-coin-top">${units>=300?'SOLAR':'GOLD'}</span><strong>${number(templeCoinKP(bet,units))}</strong><small>KP</small>`

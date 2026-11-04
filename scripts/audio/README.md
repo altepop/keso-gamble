@@ -8,7 +8,7 @@
 | `fanfare-big` / `-mega` / `-super` | 段階ファンファーレ | 合成した金管セクション（3人分を少しずつずらす）、ティンパニ、シンバル、弦、コイン |
 | `slot-spin` / `reel-stop` | リールの回転音・停止音 | ラチェット音、モーター音、停止の「ドン」と金属音 |
 | `win` / `lose` | 小さな勝ち・負け | 短い金管とコイン |
-| `voice-*` | 「Big win!」などのアナウンス | Piper TTS（`en_US-norman-medium`。LibriVox のパブリックドメイン朗読だけで学習）で読ませた声を、低く・二重に・歪ませ、スタジアムの反響を付ける |
+| `voice-*` | 「Big win!」「MEGA WIIIN!!」などのアナウンス（`hype.py`：最後の母音を伸ばして音程を上げる） | Piper TTS（`en_US-norman-medium`。LibriVox のパブリックドメイン朗読だけで学習）で読ませた声を、低く・二重に・歪ませ、スタジアムの反響を付ける |
 
 作り直すときは `voice.py` → `render.py OUT_DIR` を実行し、出力した mp3 を `audio/<名前>.<sha256の先頭8桁>.mp3` として置きます。そのうえで、`js/sfx.js` の `SFX_FILES` を更新します。名前に内容のハッシュを入れているのは、古いキャッシュが残らないようにするためです。
 
