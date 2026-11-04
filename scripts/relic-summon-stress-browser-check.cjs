@@ -61,6 +61,8 @@ let browser;
  assert.equal(state.relics.totalSummons,10);
  await page.evaluate(sel=>{for(let i=0;i<20;i++)document.querySelector(sel)?.click();},target);
  assert.equal(seen.length,1,'open result cannot create another charge');
+ // Keep the result open longer than the gap: on a slow device the gap must still count from closing, not from the tap.
+ await page.waitForTimeout(1300);
  await page.locator('.relic-reveal-close').click();
  await page.locator(target).click();
  assert.equal(seen.length,1,'the cooldown prevents an immediate repeat after closing');
