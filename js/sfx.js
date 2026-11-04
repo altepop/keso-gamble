@@ -3,12 +3,34 @@
  *
  * Off until the player turns 効果音 on. While off this module never creates an AudioContext, so the Activity keeps
  * its promise to leave Discord's audio session alone (an iPhone report: voice went quiet while the Activity was
- * open). Every sound is synthesized on the device: no files, no loops, nothing plays without a tap or a game event
- * the player started. Volume follows the relic sound slider.
+ * open). Nothing plays without a tap or a game event the player started; no loops. Volume follows the relic sound
+ * slider. The big sounds (fanfares, coin showers, slot reels, the announcer) are studio-rendered files in /audio
+ * (see scripts/audio/README.md), fetched only after 効果音 is turned on; until they arrive, or if they cannot load,
+ * the synthesized versions below play instead.
  */
-import {relicSoundVolume} from './relics-audio.js?v=web-c21ee1f08c09167e';
+import {relicSoundVolume} from './relics-audio.js?v=web-a510489982f68c7b';
 
 const KEY='keso.sfx.v1';
+// Content-hashed names, so a changed sound never comes from a stale cache.
+export const SFX_FILES=Object.freeze({
+ 'coins':'coins.e209c277.mp3',
+ 'fanfare-big':'fanfare-big.65336afb.mp3',
+ 'fanfare-mega':'fanfare-mega.0af33ed7.mp3',
+ 'fanfare-super':'fanfare-super.1596f43f.mp3',
+ 'lose':'lose.fc5014d9.mp3',
+ 'reel-stop':'reel-stop.d5201604.mp3',
+ 'slot-spin':'slot-spin.24677872.mp3',
+ 'voice-big':'voice-big.d906850f.mp3',
+ 'voice-golden':'voice-golden.59dfcb36.mp3',
+ 'voice-jackpot':'voice-jackpot.6739e584.mp3',
+ 'voice-mega':'voice-mega.df57a50b.mp3',
+ 'voice-super':'voice-super.36103144.mp3',
+ 'win':'win.344c2973.mp3'
+});
+// Which game sound uses which file (a missing or unloaded file falls back to the synthesized sound of that name).
+const FILE_FOR=Object.freeze({reel:'slot-spin',reelStop:'reel-stop',win:'win',lose:'lose',coins:'coins',bigwin:'fanfare-mega',
+ slotBig:'fanfare-big',slotMega:'fanfare-mega',slotGolden:'fanfare-super',slotTempleComplete:'fanfare-big',finish:'win'});
+const buffers=new Map();let loading=null;
 let enabled=false,ctx=null,master=null,noiseBuffer=null;
 try{enabled=globalThis.localStorage?.getItem(KEY)==='on';}catch{}
 export const sfxEnabled=()=>enabled;
@@ -21,10 +43,23 @@ function context(){
  try{
   if(!ctx||ctx.state==='closed'){ctx=new Audio({latencyHint:'interactive'});master=null;noiseBuffer=null;}
   if(ctx.state!=='running')void ctx.resume?.()?.catch?.(()=>{});
-  if(!master){master=ctx.createGain();master.connect(ctx.destination);}
+  if(!master){master=ctx.createGain();master.connect(ctx.destination);loading=null;buffers.clear();}
+  if(!loading)loading=loadFiles(ctx);
   master.gain.value=.55*Math.max(0,Math.min(100,relicSoundVolume()))/100;
   return ctx;
  }catch{ctx=null;master=null;return null;}
+}
+function loadFiles(c){
+ const base=new URL('../audio/',import.meta.url);
+ return Promise.all(Object.entries(SFX_FILES).map(async([name,file])=>{
+  try{const r=await fetch(new URL(file,base));if(!r.ok)return;const data=await r.arrayBuffer();
+   const b=await new Promise((ok,fail)=>{const p=c.decodeAudioData(data,ok,fail);p?.then?.(ok,fail);});if(c===ctx)buffers.set(name,b);}catch{}
+ }));
+}
+/** Plays a rendered file now (or `at` seconds from now); false if it is not loaded (yet). */
+export function playFile(name,{gain=1,at=0}={}){
+ const c=context(),b=buffers.get(name);if(!c||!b)return false;
+ try{const s=c.createBufferSource(),g=c.createGain();s.buffer=b;g.gain.value=gain;s.connect(g);g.connect(master);s.start(c.currentTime+.01+at);return true;}catch{return false;}
 }
 /** Turns sound on or off. Turning on happens inside the tap, which is what lets iOS start audio. */
 export function toggleSfx(){
@@ -33,6 +68,8 @@ export function toggleSfx(){
  if(enabled)play('chip');else if(ctx){void ctx.close?.().catch(()=>{});ctx=null;master=null;}
  return enabled;
 }
+/** Starts fetching the rendered sound files (only when 効果音 is on). */
+export function preloadSfx(){context();}
 /** Call inside a tap before a sound that will play after an await (iOS only resumes audio during a gesture). */
 export function unlockSfx(){context();}
 
@@ -110,7 +147,16 @@ export const SFX_SOUNDS=Object.freeze({
  gate:(c,t)=>{[0,.32].forEach(d=>{osc(c,note(84),t+d,.5,{amp:.16});osc(c,note(84)*2.01,t+d,.3,{amp:.05});});hiss(c,t+.6,1.4,{amp:.08,type:'lowpass',freq:500,q:.4});},
  finish:(c,t)=>{[79,84,88,91].forEach((n,i)=>lead(c,n,t+i*.11,.3,.09));SFX_SOUNDS.coins(c,t+.3,{duration:.6});},
 });
-export function play(name,options){
+export function play(name,options={}){
+ const file=FILE_FOR[name];
+ if(file&&buffers.has(file)){
+  // A long coin shower repeats its file until the requested time is covered.
+  if(name==='coins'){const len=buffers.get(file).duration*.82;for(let at=0;at<(options.duration??2);at+=len)playFile(file,{at,gain:.8});return true;}
+  if(name==='slotMega'){playFile('fanfare-big');playFile('fanfare-mega',{at:.86,gain:.9});return true;}
+  if(name==='slotGolden'){playFile('fanfare-big');playFile('fanfare-mega',{at:.86,gain:.9});playFile('fanfare-super',{at:1.74});return true;}
+  return playFile(file);
+ }
+ if(name==='fanfare'&&buffers.has('fanfare-big'))return playFile(['fanfare-big','fanfare-mega','fanfare-super'][Math.min(3,Math.max(1,options.level??1))-1]);
  const c=context(),sound=SFX_SOUNDS[name];
  if(!c||!sound)return false;
  try{sound(c,c.currentTime+.01,options);return true;}catch{return false;}
@@ -121,17 +167,12 @@ export function playResult(net,{jackpot=false}={}){
  return play(jackpot||net>=10000?'bigwin':net>0?'win':net<0?'lose':'tick');
 }
 
-/** The win announcer: a spoken "BIG WIN!" etc. through the device's own voice (no recordings), only while 効果音 is on. */
+/** The win announcer ("BIG WIN!" etc.): rendered voice files, only while 効果音 is on. One call at a time. */
+const VOICE_FOR={'Big win!':'voice-big','Mega win!':'voice-mega','Super mega win!':'voice-super','Golden win!':'voice-golden','Jackpot!':'voice-jackpot'};
+let voiceSource=null;
 export function announce(text){
- if(!enabled)return false;
- const speech=globalThis.speechSynthesis,Utterance=globalThis.SpeechSynthesisUtterance;
- if(!speech||!Utterance)return false;
- try{
-  speech.cancel();
-  const u=new Utterance(text);u.lang='en-US';u.rate=.82;u.pitch=.55;u.volume=Math.max(0,Math.min(1,relicSoundVolume()/100));
-  const voice=speech.getVoices?.().find(v=>/^en(-|_)US/i.test(v.lang)&&/male|david|alex|daniel|fred/i.test(v.name))??speech.getVoices?.().find(v=>/^en/i.test(v.lang));
-  if(voice)u.voice=voice;
-  speech.speak(u);return true;
- }catch{return false;}
+ const c=context(),b=buffers.get(VOICE_FOR[text]);if(!c||!b)return false;
+ try{voiceSource?.stop();}catch{}
+ try{const s=c.createBufferSource(),g=c.createGain();s.buffer=b;g.gain.value=1.25;s.connect(g);g.connect(master);s.start();voiceSource=s;return true;}catch{return false;}
 }
-export function stopAnnounce(){try{globalThis.speechSynthesis?.cancel();}catch{}}
+export function stopAnnounce(){try{voiceSource?.stop();}catch{}voiceSource=null;}
