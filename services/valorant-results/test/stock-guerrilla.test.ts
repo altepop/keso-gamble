@@ -116,7 +116,7 @@ test('a failed multi-stock event rolls back both the market and its next schedul
  await ensureStockOperator(f.env);
  f.sql.exec("CREATE TRIGGER reject_riso BEFORE INSERT ON stock_admin_moves WHEN NEW.symbol='riso' BEGIN SELECT RAISE(ABORT,'fixture-failure'); END");
  await assert.rejects(runGuerrillaMarket(f.env,guild,time,()=>0),/fixture-failure/);
- assert.deepEqual((await prepareStocks(f.env,guild)).prices,m.prices);
+ assert.deepEqual((await prepareStocks(f.env,guild,undefined,time)).prices,m.prices);
  assert.equal(f.sql.prepare('SELECT next_at FROM stock_guerrilla_settings').get()!.next_at,time-1);
  assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM stock_admin_moves').get()!.n,0);
  assert.equal(queued(f.sql).length,0);
