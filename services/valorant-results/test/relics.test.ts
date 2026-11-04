@@ -18,7 +18,7 @@ test('200KP per roll, valid batch sizes, never overspends or draws entropy for r
   assert.throws(()=>summonRelics(x,1000),/KPが足りません/);
   assert.equal(x.cash,151000);
 });
-test('transcendent is exceptionally rare at all levels, capped at 3/100000 in level 10',()=>{
+test('transcendent follows the new 10-level odds, with exact ticket boundaries',()=>{
   assert.equal(summonLevel(0),1);
   assert.equal(summonLevel(1800),4);
   assert.equal(summonLevel(8100),10);
@@ -26,8 +26,8 @@ test('transcendent is exceptionally rare at all levels, capped at 3/100000 in le
   assert.equal(SUMMON_MILESTONES.length,10);
   assert.equal(rarityForRoll(7,1),'transcendent');
   assert.equal(rarityForRoll(8,1),'ancient');
-  assert.equal(rarityForRoll(29,10),'transcendent');
-  assert.equal(rarityForRoll(30,10),'ancient');
+  assert.equal(rarityForRoll(99,10),'transcendent');
+  assert.equal(rarityForRoll(100,10),'ancient');
   assert.equal(rarityForRoll(999999,10),'uncommon');
   const x:{cash:number;relics?:RelicCollection}={cash:200};
   const o=summonRelics(x,1,new Uint32Array([0,0]));
@@ -100,13 +100,38 @@ test('all 10 summon tiers add up to 100% and level 10 completely eliminates comm
  assert.equal(rarityRatesForLevel(10).rare,30);
  assert.equal(rarityRatesForLevel(10).legendary,40);
  assert.equal(rarityRatesForLevel(10).mythic,21);
- assert.equal(rarityRatesForLevel(10).ancient,4.997);
- assert.equal(rarityRatesForLevel(10).transcendent,0.003);
+ assert.equal(rarityRatesForLevel(10).ancient,4.99);
+ assert.equal(rarityRatesForLevel(10).transcendent,0.01);
  assert.equal(rarityForRoll(0,10),'transcendent');
- assert.equal(rarityForRoll(29,10),'transcendent');
- assert.equal(rarityForRoll(30,10),'ancient');
+ assert.equal(rarityForRoll(99,10),'transcendent');
+ assert.equal(rarityForRoll(100,10),'ancient');
  assert.equal(rarityForRoll(999999,10),'uncommon');
 });
+test('only transcendent odds increase: exact level table, and no other high-tier changes',()=>{
+ const tickets=[8,11,14,17,20,25,30,50,70,100];
+ const start=[520092,280000,130000,50000,17500,2400,8];
+ const end=[0,40000,300000,400000,210000,49970,30];
+ for(let level=1;level<=10;level++){
+  const rates=rarityRatesForLevel(level);
+  assert.equal(rates.transcendent,tickets[level-1]!/10000,`Lv${level} transcendent`);
+  assert.equal(rarityForRoll(tickets[level-1]!-1,level),'transcendent');
+  assert.equal(rarityForRoll(tickets[level-1]!,level),'ancient');
+  const old=start.map((v,i)=>v+Math.round((end[i]!-v)*(level-1)/9));
+  for(const [i,name] of ['uncommon','rare','legendary','mythic'].entries()){
+   assert.equal(rates[name as 'uncommon'|'rare'|'legendary'|'mythic'],old[i+1]!/10000,`Lv${level} ${name} unchanged`);
+  }
+  assert.equal(rates.ancient,(old[5]!-(level===10?70:0))/10000);
+  assert.ok(rates.common>=0);
+  assert.ok(Math.abs(Object.values(rates).reduce((a,b)=>a+b,0)-100)<1e-8);
+ }
+ assert.equal(rarityRatesForLevel(1).transcendent,0.0008);
+ assert.equal(rarityRatesForLevel(5).transcendent,0.002);
+ assert.equal(rarityRatesForLevel(7).transcendent,0.003);
+ assert.equal(rarityRatesForLevel(8).transcendent,0.005);
+ assert.equal(rarityRatesForLevel(9).transcendent,0.007);
+ assert.equal(rarityRatesForLevel(10).transcendent,0.01);
+});
+
 test('existing 21 relic ids preserve all copies and become named mode skills',()=>{
  const state:{relics?:RelicCollection}={relics:{totalSummons:450,items:{
   'normal.copper':{id:'normal.copper',name:'くすんだ銅貨',origin:'normal',rarity:'common',ability:'蓄積',power:10,count:8},

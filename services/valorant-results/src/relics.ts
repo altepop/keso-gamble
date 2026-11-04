@@ -132,13 +132,23 @@ export function summonProgress(total:number){
  return {level,total,current,next,remaining:next===null?0:Math.max(0,next-total)};
 }
 /** Exact ticket odds (one million possible outcomes), interpolated at each level.
- * Lv10 intentionally has ZERO common artifacts, but transcendents remain a very rare direct draw.
+ * Only the transcendent odds have been boosted. Other non-common tiers retain
+ * their previous odds, except Lv10 ancient gives up 70 tickets to keep common at 0.
  */
 const START_RATES = [520092,280000,130000,50000,17500,2400,8] as const;
 const END_RATES = [0,40000,300000,400000,210000,49970,30] as const;
+// Lv1–10, in tickets per million (= 0.0001% per ticket).
+// 0.0008%, 0.0011%, 0.0014%, 0.0017%, 0.002%, 0.0025%,
+// 0.003%, 0.005%, 0.007%, 0.01%.
+const TRANSCENDENT_ROLLS_BY_LEVEL = [8,11,14,17,20,25,30,50,70,100] as const;
 export function rarityRatesForLevel(level:number):Readonly<Record<NormalRelicRarity,number>> {
   if (!Number.isInteger(level)||level<1||level>10) throw Error('召喚レベルが不正です。');
   const rates=RELIC_RARITIES.map((_,i)=>START_RATES[i]!+Math.round((END_RATES[i]!-START_RATES[i]!)*(level-1)/9));
+  const formerTranscendent=rates[6]!;
+  rates[6]=TRANSCENDENT_ROLLS_BY_LEVEL[level-1]!;
+  // Lv1–9: common absorbs the small difference. At Lv10 common is already zero,
+  // so shift 0.007 percentage points from ancient to transcendent instead.
+  if(level===10)rates[5]=rates[5]!-(rates[6]!-formerTranscendent);
   rates[0]=1_000_000-rates.slice(1).reduce((sum,n)=>sum+n,0);
   return Object.fromEntries(RELIC_RARITIES.map((r,i)=>[r,rates[i]!/10000])) as Record<NormalRelicRarity,number>;
 }
