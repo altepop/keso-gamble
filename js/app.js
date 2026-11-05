@@ -30,7 +30,7 @@ import {casinoFrames,createRelicRevealGate} from './casino-animation.js?v=web-b2
 import { playChinchiro, bjStart, bjHit, bjStand, bjDouble, cryptoDie, cryptoCard, cryptoInt } from './casino.js?v=web-b28f04122eccc51b';
 import { showBigWin } from './bigwin.js?v=web-b28f04122eccc51b';
 import { audioMixEnabled, audioMixSupported, setAudioMix } from './audio-mix.js?v=web-b28f04122eccc51b';
-import { sfxEnabled, toggleSfx, unlockSfx, preloadSfx, play as playSfx, playResult, announce, sfxVolume, setSfxVolume } from './sfx.js?v=web-b28f04122eccc51b';
+import { sfxEnabled, toggleSfx, unlockSfx, preloadSfx, play as playSfx, playResult, announce, sfxVolume, setSfxVolume, bgmEnabled, setBgmScene, toggleBgm, BGM_TRACKS } from './sfx.js?v=web-b28f04122eccc51b';
 import { minesStart, minesPick, minesCashout, playSlot, slotWinTier, vpDeal, vpDraw, playBaccarat, VP_NAMES } from './casino-more.js?v=web-b28f04122eccc51b';
 import { minesView, slotView, videoPokerView, baccaratView } from './casino-more-view.js?v=web-b28f04122eccc51b';
 const $=(s,el=document)=>el.querySelector(s);
@@ -339,11 +339,12 @@ function detailSheet(){
 function render(){
   let html = screen==='title'?titleView(state,wallet.remembered,autoState,autoMessage,wallet.connected):screen==='home'?homeView(state,bottomNav()):screen==='play'?playView(state,drafts,bottomNav(),steamView):screen==='directives'?directivesView(state,drafts,bottomNav(),tabsFor('directives')):screen==='stable'?screenStable():screen==='shop'?screenShop():screen==='relics'?screenRelics():screen==='market'?screenMarket():screen==='casino'?screenCasino():screen==='mleague'?mleagueScreen({state,live,draft:{...mlDraft,amount:drafts['ml-amount']},tabs:subTabs(),nav:bottomNav()}):screen==='race'?screenRace():screenAssets();
   // 効果音 switch for the casino and racing screens (off unless the player turns it on).
+  setBgmScene(screen==='casino'||screen==='race'?screen:'');
   if((screen==='casino'||screen==='race')&&sfxEnabled())preloadSfx(); // fetch the rendered sounds before the first win
   if(screen==='casino'||screen==='race'){
    const on=sfxEnabled(),open=on&&sfxVolumeOpen;
    const slider=(kind,label)=>`<label class="sfx-volume-row"><span>${label}</span><input type="range" min="0" max="100" step="5" value="${sfxVolume(kind)}" data-sfx-volume="${kind}" aria-label="${label}の音量"><output data-sfx-volume-value="${kind}">${sfxVolume(kind)}%</output></label>`;
-   html=html.replace('</h1>',`</h1><span class="sfx-controls"><button type="button" class="sfx-toggle" data-action="sfx-toggle" aria-pressed="${on}" title="カジノ・競馬の効果音">${on?'🔊':'🔇'}<span>効果音</span></button>${on?`<button type="button" class="sfx-volume-btn" data-action="sfx-volume" aria-expanded="${open}" aria-controls="sfx-volume-panel" title="音量">🎚<span>音量</span></button>`:''}${open?`<div class="sfx-volume-panel" id="sfx-volume-panel" role="group" aria-label="音量">${slider('effects','効果音')}${slider('voice','実況ボイス')}<p>指を離すと試しに鳴ります</p></div>`:''}</span>`);
+   html=html.replace('</h1>',`</h1><span class="sfx-controls"><button type="button" class="sfx-toggle" data-action="sfx-toggle" aria-pressed="${on}" title="カジノ・競馬の効果音">${on?'🔊':'🔇'}<span>効果音</span></button>${on?`<button type="button" class="sfx-volume-btn" data-action="sfx-volume" aria-expanded="${open}" aria-controls="sfx-volume-panel" title="音量">🎚<span>音量</span></button>`:''}${open?`<div class="sfx-volume-panel" id="sfx-volume-panel" role="group" aria-label="音量">${slider('effects','効果音')}${slider('voice','実況ボイス')}${slider('bgm','BGM')}<button type=\"button\" class=\"action-btn\" data-action=\"bgm-toggle\" aria-pressed=\"${bgmEnabled()}\">${bgmEnabled()?'BGMをオフにする':'BGMをオンにする'}</button><p>BGMは初期オフ。小音量で通話を優先。PeriTune（むつき醒）／CC BY 4.0。競馬：Fight2、カジノ：Enchanter2。<a href=\"https://peritune.com/about/\" target=\"_blank\" rel=\"noopener noreferrer\">利用条件</a></p></div>`:''}</span>`);
   }
   const previousView=app.querySelector('.screen')?.dataset.view;
   // Do not carry an expanded home feed into a different screen: closed
@@ -554,7 +555,7 @@ for(const eventName of ['input','change'])addEventListener(eventName,e=>{
   const kind=sfxSlider.dataset.sfxVolume,n=setSfxVolume(kind,sfxSlider.value);
   const output=document.querySelector(`[data-sfx-volume-value="${kind}"]`);if(output)output.textContent=n+'%';
   // Letting go plays a sample at the new level: a win chime, or the MEGA WIN call.
-  if(eventName==='change')kind==='voice'?announce('Mega win!'):playSfx('win');
+  if(eventName==='change'&&kind!=='bgm')kind==='voice'?announce('Mega win!'):playSfx('win');
   return;
  }
  const audioVolume=e.target.closest?.('[data-relic-sound-volume]');
@@ -613,6 +614,7 @@ addEventListener('click',async e=>{
   if(t.dataset.action==='audio-mix-toggle'){const on=!audioMixEnabled();setAudioMix(on);render();toast(on?'オンにしました。Activityを開き直してから動画を再生してみてください':'オフにしました');return;}
   if(sfxVolumeOpen&&t.dataset.action!=='sfx-volume'&&!t.closest('.sfx-volume-panel')){sfxVolumeOpen=false;document.querySelector('.sfx-volume-panel')?.remove();document.querySelector('[data-action=sfx-volume]')?.setAttribute('aria-expanded','false');}
   if(t.dataset.action==='sfx-volume'){sfxVolumeOpen=!sfxVolumeOpen;render();return;}
+  if(t.dataset.action==='bgm-toggle'){const on=toggleBgm(screen);render();toast(on?'BGMをオンにしました（通話に配慮して小音量）':'BGMをオフにしました');return;}
   if(t.dataset.action==='sfx-toggle'){const on=toggleSfx();if(!on)sfxVolumeOpen=false;render();toast(on?'効果音をオンにしました（カジノ・競馬）':'効果音をオフにしました');return;}
   if(t.matches('[data-bet],[data-race-horse],[data-race-type],[data-race-amount],[data-casino-game],[data-mines-count],[data-number]'))playSfx('tick');
   if(t.dataset.action==='casino-skip'){casinoSkipped=true;skipCasinoPause?.();return;}
