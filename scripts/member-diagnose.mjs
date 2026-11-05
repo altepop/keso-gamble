@@ -3,6 +3,10 @@
 // because Actions logs of this repository are public.
 import {appendFileSync} from 'node:fs';
 import {pathToFileURL} from 'node:url';
+import {readFileSync} from 'node:fs';
+const roster=JSON.parse(readFileSync(new URL('../services/valorant-results/spikerush-roster.json',import.meta.url),'utf8'));
+const agentName=id=>roster.agents.find(a=>a.id===id)?.name??'?';
+const agentRole=id=>roster.agents.find(a=>a.id===id)?.role??'?';
 export const D1_B_ID='bf23ab40-814f-4626-9e0b-36739ac41750';
 const norm=s=>String(s).normalize('NFKC').toLowerCase();
 const at=t=>t?new Date(Number(t)).toISOString().replace('.000Z','Z'):'—';
@@ -24,12 +28,17 @@ export async function diagnose({discordId,query,now=Date.now()}){
   const riot=exact?.riot_id??loose?.riot_id??l.riot;
   const recent=await one('SELECT ended_at,mode,outcome,sent FROM notifications WHERE riot_id=? ORDER BY ended_at DESC LIMIT 12',[riot]);
   const modes=await one('SELECT mode,count(*) AS n,sum(ended_at>=?) AS afterLink,min(ended_at) AS first,max(ended_at) AS last FROM notifications WHERE riot_id=? AND ended_at>=? GROUP BY mode ORDER BY n DESC',[Number(l.linked_at),riot,since]);
+  const spike=await one(`SELECT at,agent,json_extract(detail,'$.outcome') AS outcome,json_extract(next_profile,'$.trials.controllerStreak') AS streak FROM spike_rewards WHERE guild=? AND puuid=?
+    UNION ALL SELECT at,agent,json_extract(detail,'$.outcome'),json_extract(next_profile,'$.trials.controllerStreak') FROM spike_overdrive_rewards WHERE guild=? AND puuid=? ORDER BY at DESC LIMIT 15`,[l.guild,l.puuid,l.guild,l.puuid]).catch(()=>[]);
+  const prof=await one(`SELECT json_extract(data,'$.trials') AS trials FROM spike_profiles WHERE guild=? AND puuid=?`,[l.guild,l.puuid]).catch(()=>[]);
   const kpModes=await one('SELECT mode,count(*) AS n,sum(amount) AS kp FROM kp_events WHERE guild=? AND user=? AND at>=? GROUP BY mode ORDER BY n DESC',[l.guild,discordId,since]);
   out.accounts.push({riot:mask(l.riot),linkedAt:at(l.linked_at),tracked:Boolean(exact),trackedOnlyAfterNormalizing:!exact&&Boolean(loose),
    trackedSince:at((exact??loose)?.since),notices14d:Number(n[0]?.n??0),lastMatch:at(n[0]?.last),unsent:Number(n[0]?.unsent??0),
    kpEvents14d:Number(e[0]?.n??0),lastKp:at(e[0]?.last),kp14d:Number(e[0]?.kp??0),
    recent:recent.map(r=>({at:at(r.ended_at),mode:String(r.mode??'—'),outcome:String(r.outcome??'—'),sent:Number(r.sent)===1})),
    modes:modes.map(m=>({mode:String(m.mode??'—'),n:Number(m.n),afterLink:Number(m.afterLink??0),first:at(m.first),last:at(m.last)})),
+   spike:spike.map(r=>({at:at(r.at),agent:agentName(r.agent),role:agentRole(r.agent),outcome:String(r.outcome??'—'),streak:(()=>{try{return (JSON.parse(r.streak??'[]')).map(agentName);}catch{return [];}})()})),
+   trials:(()=>{try{const t=JSON.parse(prof[0]?.trials??'null');return t?{controllerStreak:(t.controllerStreak??[]).map(agentName),grandfathered:t.controllerGrandfathered===true,duelist:!!t.duelist,initiator:!!t.initiator,sentinel:!!t.sentinel}:null;}catch{return null;}})(),
    kpModes:kpModes.map(m=>({mode:String(m.mode??'—'),n:Number(m.n),kp:Number(m.kp??0)}))});
  }
  const state=await one("SELECT key,value FROM monitor_state WHERE key IN ('api_after','cursor')");
@@ -53,6 +62,9 @@ export function summary(r){
   '| Last KP event | '+a.lastKp+' |','',
   '#### Recent matches noticed (newest first)','','| Ended (UTC) | Mode | Result | Posted |','|:--|:--|:--|:--|',
   ...(a.recent??[]).map(m=>'| '+m.at+' | '+m.mode+' | '+m.outcome+' | '+(m.sent?'yes':'no')+' |'),'',
+  '#### Spike Rush trials','',a.trials?'Controller streak now: '+a.trials.controllerStreak.length+'/7 ('+(a.trials.controllerStreak.join(' → ')||'—')+')'+(a.trials.grandfathered?' · grandfathered':'')+' · Duelist '+(a.trials.duelist?'done':'—')+' · Initiator '+(a.trials.initiator?'done':'—')+' · Sentinel '+(a.trials.sentinel?'done':'—'):'No Spike Rush profile','',
+  '| Settled (UTC) | Agent | Role | Result | Controller streak after |','|:--|:--|:--|:--|:--|',
+  ...(a.spike??[]).map(r=>'| '+r.at+' | '+r.agent+' | '+r.role+' | '+r.outcome+' | '+r.streak.length+'/7 '+(r.streak.join(' → ')||'')+' |'),'',
   '#### Matches by mode (14 days)','','| Mode | Notices | after KP link | KP events | KP | First | Last |','|:--|--:|--:|--:|--:|:--|:--|',
   ...[...new Set([...(a.modes??[]).map(m=>m.mode),...(a.kpModes??[]).map(m=>m.mode)])].map(mode=>{const n=(a.modes??[]).find(m=>m.mode===mode),k=(a.kpModes??[]).find(m=>m.mode===mode);return '| '+mode+' | '+(n?.n??0)+' | '+(n?.afterLink??0)+' | '+(k?.n??0)+' | '+(k?.kp??0).toLocaleString('en-US')+' | '+(n?.first??'—')+' | '+(n?.last??'—')+' |';}),'');
  if(r.trackedUnlinked.length){lines.push('### Monitored but not linked to any Discord ID','','| Riot (masked) | Tracked since | Non-ASCII |','|:--|:--|:--|');
