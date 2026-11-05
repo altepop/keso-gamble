@@ -8,7 +8,7 @@ import {ensureBroadcast,prepareRaceBroadcast,raceShow,liveRacePost,broadcastStep
 import type {BroadcastEnv} from '../src/racing-broadcast.ts';
 import {claimVideoJobs,raceVideoApi} from '../src/racing-video.ts';
 // @ts-expect-error Shared race model.
-import {raceCard} from '../../../js/racing.js';
+import {raceCard,lastPlaceAt} from '../../../js/racing.js';
 const guild='100000000000000100',MAIN=Date.parse('2026-10-27T21:00:00+09:00');
 const mapping={guildId:guild,accounts:[{riotId:'One#JP1',discordUserId:'100000000000000101'}]};
 async function fixture(){
@@ -83,6 +83,30 @@ test('live frames and replay use the canonical order without leaking finish info
  assert.match(liveRacePost(show,MAIN+50000).content,new RegExp('1着 '+show.order[0]+'番'));
  assert.ok(liveRacePost(show,MAIN+20000).content.length<=1950);
  assert.doesNotMatch(liveRacePost(show,MAIN+50000).content,/レース動画は生成後/);
+});
+
+test('Discord live実況 highlights the current last horse and final last without showing final rank early',()=>{
+ const card=raceCard(MAIN),show=raceShow(card,'last-lens');
+ for(const seconds of [5,15,30,40]){
+  const t=seconds*1000,spot=lastPlaceAt(show.timeline,t)!;
+  const post=liveRacePost(show,MAIN+t);
+  const name=show.card.horses.find((h:any)=>h.number===spot.number)!.name;
+  assert.match(post.content,/現在の最後方/);
+  assert.ok(post.content.includes(`${spot.number}番 ${name}`));
+  assert.ok(post.content.includes(`約${spot.gap}m`));
+  assert.doesNotMatch(post.content,/本日の最下位：/);
+  assert.doesNotMatch(post.content,/確定順位/);
+  assert.ok(post.content.length<=1950);
+  assert.deepEqual(post.allowed_mentions,{parse:[]});
+ }
+ const finished=liveRacePost(show,MAIN+50000);
+ const last=show.order.at(-1)!;
+ const name=show.card.horses.find((h:any)=>h.number===last)!.name;
+ assert.match(finished.content,/本日の最下位：/);
+ assert.ok(finished.content.includes(`${last}番 ${name}`));
+ assert.ok(finished.content.includes('1着 '+show.order[0]+'番'));
+ assert.ok(!finished.content.includes('現在の最後方'));
+ assert.equal(finished.content.length<=1950,true);
 });
 
 test('VDK roast commentary changes neither race odds nor outcomes',()=>{

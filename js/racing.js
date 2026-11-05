@@ -1,4 +1,4 @@
-import {EXTRA_HORSE_NAMES,EXTRA_CROWN_NAMES,REGULAR_RACE_NAMES} from './racing-name-catalog.js?v=web-c5b1ebfc3796a2b9';
+import {EXTRA_HORSE_NAMES,EXTRA_CROWN_NAMES,REGULAR_RACE_NAMES} from './racing-name-catalog.js?v=web-a2a1b7373ecd9163';
 // Horse racing. Pure logic with no DOM or clock reads, shared by the browser and the Worker.
 // Cards and odds are public (PUBLIC_SALT). The run uses a per-race seed: the demo uses the public
 // salt, while the Worker keeps a random seed secret until the start and publishes its hash first.
@@ -239,26 +239,60 @@ export function distanceAt(timeline,number,t){
 }
 export function leaderAt(timeline,t){let best=null,dist=-1;for(const n of Object.keys(timeline.horses)){const d=distanceAt(timeline,n,t);if(d>dist){dist=d;best=Number(n);}}return best;}
 
-const ROAST_LAST=['これは作戦ではありません。実力です','持ち主の生き様を体現しています','エイムと同じで走るラインも定まらない','前の馬に完全にキャリーされています'];
-const ROAST_BOTTOM=['堂々の最下位。お疲れさまでした','最下位。この馬に賭けるのはやめましょう','最下位。言い訳の準備はできています'];
-/** Text commentary (the Activity plays no audio). */
+/** Public live positions only. Never use the eventual finishing order to choose
+ * who is last before the race is over. Tie-break by horse number, not result rank. */
+export function lastPlaceAt(timeline,t){
+ const numbers=Object.keys(timeline.horses).map(Number);
+ if(!numbers.length)return null;
+ const ranked=numbers.sort((a,b)=>distanceAt(timeline,b,t)-distanceAt(timeline,a,t)||a-b);
+ const number=ranked.at(-1),ahead=ranked.at(-2);
+ return {number,ahead: ahead??null,gap:ahead===undefined?0:Math.max(0,Math.round(distanceAt(timeline,ahead,t)-distanceAt(timeline,number,t)))};
+}
+const LAST_FINISH_ROAST=[
+ 'まさかの最下位！ 今日いちばん長く競馬を楽しんだ馬です！',
+ '最下位でフィニッシュ！ 実況席の視線を最後まで独占しました！',
+ '最後の最後まで主役は譲らない！ ……最下位でゴール！',
+ '最下位！ ほかの馬が帰り支度を始めても走り切りました！',
+ '堂々の最下位！ ここから逆転するには、もう1レース必要です！'
+];
+/** Commentary follows the live backmarker from launch to finish.
+ * Rank, odds, bets and physical trajectory are not changed by the narration. */
 export function raceCommentary(card,result,timeline,odds,seed=PUBLIC_SALT){
  const rng=rngFrom(`${seed}:talk:${card.id}`),pick=list=>list[Math.floor(rng()*list.length)];
  const name=n=>`${n}番 ${card.horses[n-1].name}`;
- const lead=timeline.horses[result.order[0]].finish,lines=[{t:0,text:`${card.name}、スタート！`}];
+ const lead=timeline.horses[result.order[0]].finish;
+ const lines=[{t:0,text:`${card.name}、スタート！ 先頭争いよりも、最後方の動きから目が離せません！`}];
  for(const r of result.runs)if(r.late)lines.push({t:1500,text:`${name(r.number)}、ゲートが開いたことに気付いていません！`});
- lines.push({t:lead*.3,text:`先頭は${name(leaderAt(timeline,lead*.3))}`});
- const tail=Object.keys(timeline.horses).map(Number).sort((a,b)=>distanceAt(timeline,a,lead*.5)-distanceAt(timeline,b,lead*.5))[0];
- lines.push({t:lead*.5,text:`最後方は${name(tail)}。${pick(ROAST_LAST)}`});
- lines.push({t:lead*.68,text:`最後の直線！先頭は${name(leaderAt(timeline,lead*.68))}`});
- const late=leaderAt(timeline,lead*.85);
- if(late!==leaderAt(timeline,lead*.68))lines.push({t:lead*.85,text:`${name(late)}が外から一気！`});
- if(timeline.photo)lines.push({t:lead-200,text:'ほぼ同時にゴール！ビデオ判定です…'});
+ let prev=null;
+ for(const [fraction,stage] of [
+  [.14,'start'],[.29,'chase'],[.44,'half'],[.60,'turn'],[.75,'stretch'],[.88,'final'],[.94,'wire']
+ ]){
+  const t=Math.round(lead*fraction),spot=lastPlaceAt(timeline,t);
+  if(!spot)continue;
+  const who=name(spot.number),gap=spot.gap;
+  const status=prev!==null&&prev!==spot.number
+   ?`最後方が入れ替わった！ 今度は${who}！`
+   :`最後方は${who}！`;
+  const distance=gap>0?`前の馬まで約${gap}m。`:'前の馬とほぼ並んでいます。';
+  let reaction='';
+  if(stage==='start')reaction=pick(['序盤からこの位置、これは何の作戦だ！','まだ始まったばかりだ、ここからが見せ場！']);
+  else if(stage==='chase')reaction=gap>=30?'集団が遠い！ 頼む、まだ置いていかれるな！':'前の馬に食らいついています！';
+  else if(stage==='half')reaction=pick(['実況席は先頭を見ていません！ こちらが今日の主役！','折り返しても最後方！ ここから脚を使えるのか！']);
+  else if(stage==='turn')reaction=gap>=40?'差が開く！ このままでは単独の旅になってしまう！':'まだ届く距離！ 最下位脱出なるか！';
+  else if(stage==='stretch')reaction=pick(['最終直線！ 観客の視線が最後方へ！','さあ最後の直線！ 誰がビリになるのか！']);
+  else if(stage==='final')reaction=gap>=35?'前が見えなくなってきた！ それでも脚を止めない！':'少しでも順位を上げたい！ ラストスパート！';
+  else reaction='ゴールは目前！ 最下位だけは避けたいところ！';
+  lines.push({t,text:`${status} ${distance}${reaction}`});
+  prev=spot.number;
+ }
  const favourite=card.horses.map(h=>h.number).sort((a,b)=>odds.win[a]-odds.win[b])[0];
  const winner=result.order[0];
+ if(timeline.photo)lines.push({t:lead-200,text:'先頭はほぼ同時にゴール！ ビデオ判定です…'});
  lines.push({t:lead+(timeline.photo?1500:0),text:winner===favourite?`勝ったのは1番人気 ${name(winner)}！順当です`:`勝ったのは${name(winner)}！`});
- if(winner!==favourite&&result.order.indexOf(favourite)>=placeSlots(card.size))lines.push({t:lead+2500,text:`1番人気の${name(favourite)}は${result.order.indexOf(favourite)+1}着。人気を裏切りました`});
- lines.push({t:timeline.horses[result.order.at(-1)].finish,text:`${name(result.order.at(-1))}、${pick(ROAST_BOTTOM)}`});
+ if(winner!==favourite&&result.order.indexOf(favourite)>=placeSlots(card.size))
+  lines.push({t:lead+2500,text:`1番人気の${name(favourite)}は${result.order.indexOf(favourite)+1}着。人気を裏切りました`});
+ const last=result.order.at(-1);
+ lines.push({t:Math.max(timeline.horses[last].finish,lead+2600),text:`${name(last)}、${pick(LAST_FINISH_ROAST)}`});
  return lines.sort((a,b)=>a.t-b.t);
 }
 
