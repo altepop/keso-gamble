@@ -15,7 +15,7 @@ import {kpCommands,KP_COMMAND_VERSION} from './kp-command.ts';
 import {voiceControl,voiceStatus} from './voice-api.ts';
 import {voiceRewardHistory,voicePolicy} from './voice-rewards.ts';
 import {receiveLoopKp} from './loop-kp.ts';
-import {summonRelics,grantSteamRelic,grantUniteRelic,equipRelic,autoEquipRelics,saveRelicPreset,loadRelicPreset,removeRelicPreset,renameRelicPreset,listRelicPresets,diagnoseRelicBuild,nativeRelicBonus,nativeRelicLoss,evaluateRelicBonus,rarityRatesForLevel,summonLevel,SUMMON_MILESTONES,UNITE,UNITE_REQUIREMENTS,UNITE_STREAK_IDS,STEAM_RELIC_TIERS,steamRelicPool,STEAM_RELIC_POOL_GRADES,type UniteRelicId} from './relics.ts';
+import {summonRelics,grantSteamRelic,grantUniteRelic,equipRelic,autoEquipRelics,saveRelicPreset,loadRelicPreset,removeRelicPreset,renameRelicPreset,listRelicPresets,diagnoseRelicBuild,nativeRelicBonus,nativeRelicLoss,snapshotLoadout,rememberLoadout,evaluateRelicBonus,rarityRatesForLevel,summonLevel,SUMMON_MILESTONES,UNITE,UNITE_REQUIREMENTS,UNITE_STREAK_IDS,STEAM_RELIC_TIERS,steamRelicPool,STEAM_RELIC_POOL_GRADES,type UniteRelicId} from './relics.ts';
 import {ALL_NORMAL_RELICS,RELIC_MODE_NAMES} from './relic-catalog.ts';
 import {verifiedCasinoProfit,verifiedCasinoStake,verifiedStockProfit,verifiedCasinoNet,verifiedCasinoLossStake,verifiedStockLoss} from './relic-profit.ts';
 import {ensureRelicMarket,activeRelicListings,listingById,prepareRelicListing,receiveRelicListing,cancelRelicListing,MARKET_MAX_ACTIVE_PER_PLAYER} from './relic-market.ts';
@@ -165,7 +165,8 @@ export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:strin
   const existing=await env.DB.prepare('SELECT request_hash,response FROM kp_operations WHERE guild=? AND user=? AND id=?').bind(mapping.guildId,user,id).first<{request_hash:string;response:string}>();
   if(existing){if(existing.request_hash!==requestHash)throw Error('同じ操作IDを別の操作には使えません。');return JSON.parse(existing.response);}
   const knownGiftTarget=action==='gift'&&/^\d{15,22}$/.test(String(args.to??''))&&await isKpParticipant(env,mapping,String(args.to))&&Boolean(await env.DB.prepare('SELECT 1 FROM kp_wallets WHERE guild=? AND user=?').bind(mapping.guildId,String(args.to)).first());
-  const state=await readKpState(env,mapping,user),before=state.cash;let result:unknown;let directive:Record<string,unknown>|null=null;let stockTrade:Record<string,unknown>|undefined;
+  const state=await readKpState(env,mapping,user),before=state.cash;let result:unknown;
+  const loadoutBefore=snapshotLoadout((state as {relics?:RelicCollection}).relics);let directive:Record<string,unknown>|null=null;let stockTrade:Record<string,unknown>|undefined;
   // 借KP: no bet or purchase at all while any is owed, decided before any draw. Checking the result instead would let a
   // winning roll through and refuse only the losing one. Selling, finishing a blackjack hand and settings stay open.
   const settles=['horse-sell','roast-level','bj-hit','bj-stand','mines-pick','mines-cashout','vp-draw','relic-equip','relic-auto-equip','relic-claim-steam','relic-claim-unite','relic-save-preset','relic-overwrite-preset','relic-load-preset','relic-remove-preset','relic-rename-preset','relic-recycle','relic-shop','relic-voucher','relic-market-list','relic-market-cancel'].includes(action)||(action==='trade'&&args.side==='sell');
@@ -269,6 +270,8 @@ export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:strin
   // Unlimited stacking only on completed, positive, server-determined outcomes.
   // Stock buys and ticket purchases cannot manufacture KP via repeat buys/sells.
   // These mechanics never touch game RNG, odds, or past results.
+  // Remember a loadout that this operation took off, so a later loss cannot dodge the relic penalty.
+  rememberLoadout((state as {relics?:RelicCollection}).relics,loadoutBefore,Date.now());
   let relicBonus=0;
   const casino=['spin','chinchiro','bj-start','bj-hit','bj-stand','bj-double','mines-cashout','slot','vp-draw','baccarat'].includes(action);
   let relicPenalty=0;

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 // @ts-expect-error Shared browser quote arithmetic.
 import {stockOrderQuote,STOCK_PRICE_SCALE} from '../../../js/stock-order.js';
 import {verifiedStockProfit,verifiedBetProfit,verifiedBetStake,verifiedBetLoss,verifiedStockLoss,verifiedCasinoNet,verifiedCasinoLossStake} from '../src/relic-profit.ts';
-import {nativeRelicBonus,nativeRelicLoss,nativeRelicAllowance,evaluateRelicBonus,creditVerifiedRelicBonus,type RelicCollection,type RelicItem} from '../src/relics.ts';
+import {nativeRelicBonus,nativeRelicLoss,snapshotLoadout,rememberLoadout,RELIC_LOSS_MEMORY_MS,nativeRelicAllowance,evaluateRelicBonus,creditVerifiedRelicBonus,type RelicCollection,type RelicItem} from '../src/relics.ts';
 
 function strong(){
  const relics:RelicCollection={totalSummons:0,items:{},equipped:[]};
@@ -115,4 +115,33 @@ test('Spike Rush: relics apply to the base (40/20) only, not to the growth corre
  assert.equal(credited,onBase);
  assert.ok(onAll>onBase*5,'the growth correction no longer multiplies the relic bonus');
  assert.equal(ledger[0]?.[3],onBase);
+});
+
+test('taking relics off right before a losing sale does not dodge the penalty for 24 hours',()=>{
+ const state=strong();state.cash=100000;
+ // The player removes every relic just before selling at a loss.
+ const before=snapshotLoadout(state.relics);
+ state.relics.equipped=[];
+ rememberLoadout(state.relics,before,now);
+ assert.equal(state.relics.recentLoadouts?.length,1);
+ assert.equal(nativeRelicLoss(state,'market',11000,now+60000,90000),250,'the removed loadout still counts');
+ // The bonus side uses only what is equipped now.
+ assert.equal(nativeRelicBonus(state,'market',11000,now+60000,90000),0);
+ // A day later the removed loadout no longer counts and is pruned on the next change check.
+ const later=now+RELIC_LOSS_MEMORY_MS+1;
+ assert.equal(nativeRelicLoss(state,'market',11000,later,90000),0);
+ rememberLoadout(state.relics,[],later);
+ assert.equal(state.relics.recentLoadouts?.length,0);
+ // Swapping in a weaker set: the stronger removed set is used for losses.
+ const swap=strong();swap.cash=100000;
+ const strongSet=snapshotLoadout(swap.relics);
+ swap.relics.equipped=[swap.relics.equipped[0]!];
+ rememberLoadout(swap.relics,strongSet,now);
+ const weakOnly=evaluateRelicBonus(swap.relics,'casino',{amount:3500,win:true}).bonus;
+ const strongAll=evaluateRelicBonus({...swap.relics,equipped:strongSet.map(x=>x.id)},'casino',{amount:3500,win:true}).bonus;
+ assert.ok(strongAll>=weakOnly);
+ assert.equal(nativeRelicLoss(swap,'casino',3500,now,3500),Math.min(18,strongAll));
+ // No change, nothing remembered.
+ const same=strong();rememberLoadout(same.relics,snapshotLoadout(same.relics),now);
+ assert.equal(same.relics.recentLoadouts,undefined);
 });

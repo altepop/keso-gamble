@@ -41,6 +41,9 @@ export interface RelicCollection {
   dailyRelicLoss?: Partial<Record<'casino'|'market'|'racing'|'mleague',{day:string;amount:number}>>;
   nativeLost?: number;
   lastRelicLoss?: {mode:string;amount:number;penalty:number;at:number};
+  /** Loadouts taken off in the last 24 hours (copies of the items). A settled loss uses the strongest of these
+   * and the current loadout, so taking relics off right before a losing sale does not dodge the penalty. */
+  recentLoadouts?: {items:RelicItem[];until:number}[];
   lastNativeEffect?: {mode:string;amount:number;bonus:number;percent:number;at:number;names:string[];lines?:RelicBonusLine[];sets?:{name:string;bonus:number}[]};
   summonHistory?:SummonHistoryEntry[];
   presets?:Record<string,string[]>;
@@ -498,6 +501,29 @@ export function nativeRelicBonus(
  state.relics.nativeEffects=[record,...(state.relics.nativeEffects??[])].slice(0,30);
  return payout;
 }
+export const RELIC_LOSS_MEMORY_MS=24*3600_000;
+/** Copies of the currently equipped items (before an operation that may change them). */
+export function snapshotLoadout(c?:RelicCollection):RelicItem[]{
+ if(!c?.equipped?.length)return [];
+ return c.equipped.map(id=>c.items[id]).filter((x):x is RelicItem=>Boolean(x)).map(x=>structuredClone(x));
+}
+/** After an operation: if the equipped set changed, remember the previous one for 24 hours. */
+export function rememberLoadout(c:RelicCollection|undefined,before:RelicItem[],now=Date.now()){
+ if(!c)return;
+ const live=(c.recentLoadouts??[]).filter(l=>l.until>now);
+ const changed=before.length>0&&(before.length!==c.equipped.length||before.some((x,i)=>x.id!==c.equipped[i]));
+ if(changed)live.unshift({items:before,until:now+RELIC_LOSS_MEMORY_MS});
+ if(changed||live.length!==(c.recentLoadouts??[]).length)c.recentLoadouts=live.slice(0,8);
+}
+function lossBonus(c:RelicCollection,mode:string,loss:number,now:number):number{
+ let best=c.equipped.length?evaluateRelicBonus(c,mode,{amount:loss,win:true}).bonus:0;
+ for(const l of c.recentLoadouts??[]){
+  if(!(l.until>now)||!l.items.length)continue;
+  const view:RelicCollection={...c,items:Object.fromEntries(l.items.map(x=>[x.id,x])),equipped:l.items.map(x=>x.id)};
+  best=Math.max(best,evaluateRelicBonus(view,mode,{amount:loss,win:true}).bonus);
+ }
+ return best;
+}
 /** The mirror of nativeRelicBonus for a settled LOSS in casino, stocks, racing or M.League (owner decision
  * 2026-11-05): the equipped relics' bonus on that amount is taken away instead of added, under the same caps
  * (0.5% of the stake/proceeds, 250 per settlement, 500 per day per mode) and never below a zero balance. */
@@ -508,18 +534,18 @@ export function nativeRelicLoss(
  now=Date.now(),
  stake=0,
 ):number{
- if(!state.relics?.equipped?.length||!Number.isSafeInteger(loss)||loss<=0)return 0;
+ const c=state.relics;
+ if(!c||!(c.equipped?.length||c.recentLoadouts?.some(l=>l.until>now))||!Number.isSafeInteger(loss)||loss<=0)return 0;
  const day=casinoRelicDay(now);
- const used=state.relics.dailyRelicLoss?.[mode]?.day===day?state.relics.dailyRelicLoss[mode]!.amount:0;
+ const used=c.dailyRelicLoss?.[mode]?.day===day?c.dailyRelicLoss[mode]!.amount:0;
  const allowance=mode==='casino'?casinoRelicAllowance(stake,used):nativeRelicAllowance(stake,used);
  if(!allowance)return 0;
- const detail=evaluateRelicBonus(state.relics,mode,{amount:loss,win:true});
- const penalty=Math.min(detail.bonus,allowance,Math.max(0,Math.floor(state.cash)));
+ const penalty=Math.min(lossBonus(c,mode,loss,now),allowance,Math.max(0,Math.floor(state.cash)));
  if(!Number.isSafeInteger(penalty)||penalty<=0)return 0;
  state.cash-=penalty;
- state.relics.dailyRelicLoss={...(state.relics.dailyRelicLoss??{}),[mode]:{day,amount:used+penalty}};
- state.relics.nativeLost=Math.min(Number.MAX_SAFE_INTEGER,(state.relics.nativeLost??0)+penalty);
- state.relics.lastRelicLoss={mode,amount:loss,penalty,at:now};
+ c.dailyRelicLoss={...(c.dailyRelicLoss??{}),[mode]:{day,amount:used+penalty}};
+ c.nativeLost=Math.min(Number.MAX_SAFE_INTEGER,(c.nativeLost??0)+penalty);
+ c.lastRelicLoss={mode,amount:loss,penalty,at:now};
  return penalty;
 }
 /** Caller MUST confirm a new, immutable server-verified receipt before invoking.
