@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 // @ts-expect-error Shared browser quote arithmetic.
 import {stockOrderQuote,STOCK_PRICE_SCALE} from '../../../js/stock-order.js';
 import {verifiedStockProfit,verifiedBetProfit,verifiedBetStake,verifiedBetLoss,verifiedStockLoss,verifiedCasinoNet,verifiedCasinoLossStake} from '../src/relic-profit.ts';
-import {relicGamble,RELIC_RECEIPT_CAP,nativeRelicBonus,nativeRelicLoss,snapshotLoadout,rememberLoadout,RELIC_LOSS_MEMORY_MS,nativeRelicAllowance,evaluateRelicBonus,creditVerifiedRelicBonus,type RelicCollection,type RelicItem} from '../src/relics.ts';
+import {creditVerifiedRelicLoss,nativeRelicBonus,nativeRelicLoss,snapshotLoadout,rememberLoadout,RELIC_LOSS_MEMORY_MS,nativeRelicAllowance,evaluateRelicBonus,creditVerifiedRelicBonus,type RelicCollection,type RelicItem} from '../src/relics.ts';
 
 function strong(){
  const relics:RelicCollection={totalSummons:0,items:{},equipped:[]};
@@ -101,24 +101,6 @@ test('losses: the relic multiplier is taken away under the same caps, never belo
  assert.equal(nativeRelicLoss(plain,'casino',3500,now,3500),0);
 });
 
-test('Spike Rush: relics apply to the base (40/20) only, not to the growth correction (owner decision)',async()=>{
- const relics=strong().relics;
- const ledger:unknown[][]=[];
- const prepare=(text:string)=>({bind:(...values:unknown[])=>({
-  first:async()=>text.includes('FROM kp_state')?{data:JSON.stringify({relics})}:text.includes('spike_rewards')?{gamesBefore:30,base:40}:
-   text.startsWith('SELECT delta FROM kp_ledger')?{delta:ledger[0]?.[3]}:null,
-  run:async()=>{if(text.startsWith('INSERT OR IGNORE INTO kp_ledger'))ledger.push(values);return {meta:{changes:1}};},
- })});
- const env={DB:{prepare}} as never;
- const credited=await creditVerifiedRelicBonus(env,'g','u','match:g:m1:p','spikerush',720,true,now);
- const onBase=evaluateRelicBonus(relics,'spikerush',{amount:40,win:true,spikeGamesBefore:30}).bonus;
- const onAll=evaluateRelicBonus(relics,'spikerush',{amount:720,win:true,spikeGamesBefore:30}).bonus;
- assert.ok(onAll>onBase*5,'the growth correction no longer multiplies the relic bonus');
- // The strong build resolves on the 40 KP base: full bonus by chance, nothing, or a 20 KP recoil.
- assert.ok([onBase,0,-20].includes(credited),String(credited));
- assert.equal(ledger[0]?.[3],credited);
-});
-
 test('taking relics off right before a losing sale does not dodge the penalty for 24 hours',()=>{
  const state=strong();state.cash=100000;
  // The player removes every relic just before selling at a loss.
@@ -148,24 +130,111 @@ test('taking relics off right before a losing sale does not dodge the penalty fo
  assert.equal(same.relics.recentLoadouts,undefined);
 });
 
-test('verified receipts: strong builds keep their full bonus by chance, with recoil, averaging +50% of the base',()=>{
- // A modest build (<= +50%) is unchanged and certain.
- assert.deepEqual(relicGamble(150,400,0.99,0.99),{payout:150,kind:'steady',chance:1,full:150});
- // Spike Rush example: base 400, a stacked build worth +4,000.
- const hit=relicGamble(4000,400,0,0.99);
- assert.equal(hit.kind,'hit');assert.equal(hit.payout,4000);
- assert.ok(Math.abs(hit.chance-240/4040)<1e-9);
- assert.deepEqual(relicGamble(4000,400,0.99,0.1),{payout:-200,kind:'recoil',chance:hit.chance,full:4000});
- assert.equal(relicGamble(4000,400,0.99,0.5).kind,'miss');
- // The exact average is +50% of the base for any strength.
- for(const [bonus,base] of [[4000,400],[900,400],[50000,300000],[2646,40],[100000,900]] as const){
-  const g=relicGamble(bonus,base,0,0.99),full=g.full,recoil=Math.floor(base*.5);
-  const ev=g.chance*full-(1-g.chance)*0.2*recoil;
-  assert.ok(full<=Math.floor(base*.5)?g.payout===full:Math.abs(ev-Math.floor(base*.5))<1e-6,`${bonus}/${base}`);
- }
- // One receipt never pays more than 10,000 KP of relic bonus (LOOP chapter 2: 300,000 base).
- assert.equal(relicGamble(900000,300000,0,0).payout,RELIC_RECEIPT_CAP);
- // Monte Carlo: average stays near +50%.
- let sum=0;const n=200000;for(let i=0;i<n;i++)sum+=relicGamble(4000,400,Math.random(),Math.random()).payout;
- assert.ok(Math.abs(sum/n-200)<15,String(sum/n));
+
+// A minimal D1 over node:sqlite with the tables the verified relic paths use.
+async function db(relics:RelicCollection,balance=1000){
+ const {DatabaseSync}=await import('node:sqlite');
+ const sql=new DatabaseSync(':memory:');
+ sql.exec(`CREATE TABLE kp_state(guild TEXT,user TEXT,data TEXT,PRIMARY KEY(guild,user));
+  CREATE TABLE kp_wallets(guild TEXT,user TEXT,balance INTEGER NOT NULL CHECK(balance>=0),PRIMARY KEY(guild,user));
+  CREATE TABLE kp_ledger(id TEXT PRIMARY KEY,guild TEXT,user TEXT,delta INTEGER,kind TEXT,at INTEGER);
+  CREATE TRIGGER apply AFTER INSERT ON kp_ledger BEGIN UPDATE kp_wallets SET balance=balance+NEW.delta WHERE guild=NEW.guild AND user=NEW.user; END;
+  CREATE TABLE kp_debt_events(id TEXT PRIMARY KEY,guild TEXT,user TEXT,amount INTEGER,kind TEXT,at INTEGER);
+  CREATE TABLE kp_steam_events(id TEXT PRIMARY KEY);
+  CREATE TABLE spike_rewards(id TEXT,guild TEXT,user TEXT,detail TEXT);CREATE TABLE spike_overdrive_rewards(id TEXT,guild TEXT,user TEXT,detail TEXT);`);
+ sql.prepare('INSERT INTO kp_state VALUES(?,?,?)').run('g','u',JSON.stringify({relics}));
+ sql.prepare('INSERT INTO kp_wallets VALUES(?,?,?)').run('g','u',balance);
+ class Q{t:string;v:unknown[];constructor(t:string,v:unknown[]=[]){this.t=t;this.v=v;}bind(...v:unknown[]){return new Q(this.t,v);}
+  async first(){return sql.prepare(this.t).get(...this.v as never[])??null;}async run(){const r=sql.prepare(this.t).run(...this.v as never[]);return {meta:{changes:Number(r.changes)}};}
+  async all(){return {results:sql.prepare(this.t).all(...this.v as never[])};}}
+ return {sql,env:{DB:{prepare:(t:string)=>new Q(t)}} as never,balance:()=>Number((sql.prepare("SELECT balance FROM kp_wallets").get() as {balance:number}).balance),
+  debt:()=>Number((sql.prepare("SELECT COALESCE(SUM(amount),0) AS n FROM kp_debt_events").get() as {n:number}).n)};
+}
+
+test('thrill modes: wins get the full relic bonus with no cap, normal losses keep the plain reward',async()=>{
+ const s=strong(),f=await db(s.relics);
+ const full=evaluateRelicBonus(s.relics,'competitive',{amount:900,win:true}).bonus;
+ assert.ok(full>900,'数倍');
+ assert.equal(await creditVerifiedRelicBonus(f.env,'g','u','match:1','competitive',900,true,now),full);
+ assert.equal(await creditVerifiedRelicBonus(f.env,'g','u','match:2','competitive',200,false,now),0,'a normal loss: +200 only');
+ assert.equal(f.balance(),1000+full);
+});
+
+test('thrill negative results grow by the relic strength, beyond the balance as 借KP; the アンレ lottery is computed apart',async()=>{
+ const s=strong(),f=await db(s.relics,300);
+ const extra=evaluateRelicBonus(s.relics,'competitive',{amount:400,win:true}).bonus;
+ assert.equal(await creditVerifiedRelicLoss(f.env,'g','u','match:3','competitive',400,now),extra);
+ assert.equal(f.balance(),0);
+ assert.equal(f.debt(),extra-300,'the rest is 借KP');
+ assert.equal(await creditVerifiedRelicLoss(f.env,'g','u','match:3','competitive',400,now),0,'once per receipt');
+ // Safe modes never take an extra loss.
+ assert.equal(await creditVerifiedRelicLoss(f.env,'g','u','match:4','teamdeathmatch',400,now),0);
+ // アンレ: 370 win + 100,000 lottery → relics act on 370 only.
+ const g=await db(strong().relics);
+ const onWin=evaluateRelicBonus(strong().relics,'unrated',{amount:370,win:true}).bonus;
+ assert.equal(await creditVerifiedRelicBonus(g.env,'g','u','match:5','unrated',100370,true,now,100000),onWin);
+});
+
+test('safe modes: the bonus is at most the base; one-off rewards: LOOP 20,000 per receipt, Steam 20,000 and 30,000 a day',async()=>{
+ const s=strong(),f=await db(s.relics);
+ assert.equal(await creditVerifiedRelicBonus(f.env,'g','u','voice:1','voice',30,true,now),30);
+ assert.equal(await creditVerifiedRelicBonus(f.env,'g','u','loop:1','loop',300000,true,now),20000);
+ for(const id of ['steam:a','steam:b','steam:c'])f.sql.prepare('INSERT INTO kp_steam_events VALUES(?)').run(id);
+ assert.equal(await creditVerifiedRelicBonus(f.env,'g','u','steam:a','steam',5000,true,now),Math.min(20000,evaluateRelicBonus(s.relics,'steam',{amount:5000,win:true}).bonus));
+ const first=Number((f.sql.prepare("SELECT delta FROM kp_ledger WHERE id='relic:steam:a'").get() as {delta:number}).delta);
+ await creditVerifiedRelicBonus(f.env,'g','u','steam:b','steam',5000,true,now);
+ const third=await creditVerifiedRelicBonus(f.env,'g','u','steam:c','steam',5000,true,now);
+ const total=Number((f.sql.prepare("SELECT SUM(delta) AS n FROM kp_ledger WHERE id LIKE 'relic:steam:%'").get() as {n:number}).n);
+ assert.ok(total<=30000,String(total));assert.ok(first>0);assert.ok(third>=0);
+});
+
+test('relics put on just before a win do not count; taken off before a loss still count',async()=>{
+ const s=strong();
+ // The player equips the strong set 10 minutes before the win settles (nothing was equipped before).
+ s.relics.recentLoadouts=[{items:[],until:now+RELIC_LOSS_MEMORY_MS}];s.relics.loadoutChangedAt=now-10*60_000;
+ const f=await db(s.relics);
+ assert.equal(await creditVerifiedRelicBonus(f.env,'g','u','match:6','competitive',900,true,now),0);
+ // Two hours after the change it counts.
+ assert.ok(await creditVerifiedRelicBonus(f.env,'g','u','match:7','competitive',900,true,now+2*3600_000)>900);
+ // Taking everything off before a loss: the removed set still counts for 24 hours.
+ const t=strong(),items=snapshotLoadout(t.relics);t.relics.equipped=[];rememberLoadout(t.relics,items,now);
+ const h=await db(t.relics,100000);
+ assert.ok(await creditVerifiedRelicLoss(h.env,'g','u','match:8','competitive',400,now+60_000)>400);
+});
+
+test('special effects: 竜騎士 win x1.25 / loss x0.5, 色違い thrill win x1.5, 深淵 contract x1.3/x1.75, crown x1.5/x2',async()=>{
+ const {DRAGOON_RELICS}=await import('../src/relic-dragoon.ts');
+ const {ABYSS_RELICS}=await import('../src/relic-abyss.ts');
+ const {relicWinFactor,relicLossFactor,relicFlags,FOIL_ODDS}=await import('../src/relics.ts');
+ assert.equal(FOIL_ODDS,5000);
+ const set:RelicCollection={totalSummons:0,items:{},equipped:[]};
+ for(const d of DRAGOON_RELICS){set.items[d.id]={...d,origin:'normal',count:1} as RelicItem;set.equipped.push(d.id);}
+ const flags=relicFlags(set);
+ assert.equal(flags.dragoon,true);
+ assert.equal(relicWinFactor(flags,true),1.25);assert.equal(relicLossFactor(flags),0.5);
+ assert.equal(relicWinFactor({dragoon:false,foil:true,contract:false,crown:false},true),1.5);
+ assert.equal(relicWinFactor({dragoon:false,foil:true,contract:false,crown:false},false),1,'色違い boosts thrill wins only');
+ assert.equal(relicWinFactor({dragoon:false,foil:false,contract:true,crown:false},true),1.3);
+ assert.equal(relicLossFactor({dragoon:false,foil:false,contract:true,crown:false}),1.75);
+ assert.equal(relicWinFactor({dragoon:false,foil:false,contract:true,crown:true},true),1.5);
+ assert.equal(relicLossFactor({dragoon:false,foil:false,contract:true,crown:true}),2);
+ // End to end: the Dragoon set on a competitive win pays 1.25x the plain relic bonus.
+ const f=await db(set);
+ const plain=evaluateRelicBonus(set,'competitive',{amount:900,win:true}).bonus;
+ assert.equal(await creditVerifiedRelicBonus(f.env,'g','u','match:9','competitive',900,true,now),Math.floor(plain*1.25));
+ // Abyss crown on a ラス doubles the extra loss.
+ const c:RelicCollection={totalSummons:0,items:{},equipped:[]};const crown=ABYSS_RELICS.find(x=>x.id==='normal.abyss.crown')!;
+ c.items[crown.id]={...crown,origin:'normal',count:1} as RelicItem;c.equipped.push(crown.id);
+ const g=await db(c,100000);
+ const raw=evaluateRelicBonus(c,'mahjong',{amount:4000,win:true}).bonus;
+ assert.equal(await creditVerifiedRelicLoss(g.env,'g','u','mahjong:1','mahjong',4000,now),raw*2);
+ // Betting losses with the Dragoon set are halved (and still capped).
+ const bet={cash:100000,relics:set};
+ assert.ok(nativeRelicLoss(bet,'market',100000,now,1_000_000)<=250);
+});
+
+test('Spike Rush (safe): relics act on the 40/20 base and add at most the base',async()=>{
+ const s=strong(),f=await db(s.relics);
+ f.sql.prepare('INSERT INTO spike_rewards VALUES(?,?,?,?)').run('match:s','g','u',JSON.stringify({gamesBefore:30,base:40}));
+ assert.equal(await creditVerifiedRelicBonus(f.env,'g','u','match:s','spikerush',720,true,now),40);
 });

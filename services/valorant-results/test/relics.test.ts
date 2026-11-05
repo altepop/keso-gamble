@@ -78,9 +78,9 @@ test('equipment is optional for both sources; no hardcoded combination or earnin
 });
 
 test('all 10 summon tiers add up to 100% and level 10 completely eliminates common',()=>{
- assert.equal(RELIC_CATALOG_COUNT,210);
+ assert.equal(RELIC_CATALOG_COUNT,216);
  assert.equal(RISK_RELICS.length,8);
- assert.equal(new Set(ALL_NORMAL_RELICS.map(r=>r.id)).size,210);
+ assert.equal(new Set(ALL_NORMAL_RELICS.map(r=>r.id)).size,216);
  assert.equal(new Set(NORMAL_RELICS.map(r=>r.id)).size,175);
  assert.equal(new Set(NORMAL_RELICS.map(r=>r.name)).size,175);
  assert.equal(Object.keys(RELIC_MODE_NAMES).length,25);

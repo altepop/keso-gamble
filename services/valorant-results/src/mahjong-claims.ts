@@ -7,12 +7,17 @@ import type {KpEnv,KpMapping} from './kp.ts';
 import {ensureQuizKp} from './quiz-kp.ts';
 import type {PaipuSummary} from './mahjong-summary.ts';
 import {borrowedBy,debtNote,ensureDebt} from './kp-debt.ts';
-import {creditVerifiedRelicBonus} from './relics.ts';
+import {creditVerifiedRelicBonus,creditVerifiedRelicLoss} from './relics.ts';
 /** Equipped 雀魂 relics add to an approved, positive result (once per claim; a 1st place counts as a win). */
 async function mahjongRelic(env:KpEnv,guild:string,id:string){
  try{
-  const c=await env.DB.prepare("SELECT user,amount,rank,decided_at AS at FROM kp_mahjong_claims WHERE guild=? AND id=? AND status='approved'").bind(guild,id).first<{user:string;amount:number;rank:number;at:number}>();
-  if(c&&c.amount>0)await creditVerifiedRelicBonus(env,guild,c.user,'mahjong:'+id,'mahjong',c.amount,c.rank===1,c.at);
+  const c=await env.DB.prepare("SELECT user,amount,rank,game,decided_at AS at FROM kp_mahjong_claims WHERE guild=? AND id=? AND status='approved'").bind(guild,id).first<{user:string;amount:number;rank:number;game:string;at:number}>();
+  if(!c||!(c.amount>0))return;
+  // 雀魂 is a thrill mode (2026-11-05): 1位 gets the full relic bonus, a negative rank (ラス) loses more by the same
+  // relic strength (beyond the balance as 借KP); a positive non-1st rank keeps its plain reward.
+  const rate=Object.hasOwn(policy.games,c.game)?stake(c.game as Game,c.rank):0;
+  if(rate<0)await creditVerifiedRelicLoss(env,guild,c.user,'mahjong:'+id,'mahjong',c.amount,c.at);
+  else await creditVerifiedRelicBonus(env,guild,c.user,'mahjong:'+id,'mahjong',c.amount,c.rank===1,c.at);
  }catch{console.warn('relic_mahjong_bonus_pending');}
 }
 type Game=keyof typeof policy.games;
