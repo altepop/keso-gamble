@@ -23,13 +23,13 @@ export async function diagnose({discordId,query,now=Date.now()}){
   const e=await one('SELECT count(*) AS n,max(at) AS last,sum(amount) AS kp FROM kp_events WHERE guild=? AND user=? AND at>=?',[l.guild,discordId,since]);
   const riot=exact?.riot_id??loose?.riot_id??l.riot;
   const recent=await one('SELECT ended_at,mode,outcome,sent FROM notifications WHERE riot_id=? ORDER BY ended_at DESC LIMIT 12',[riot]);
-  const modes=await one('SELECT mode,count(*) AS n FROM notifications WHERE riot_id=? AND ended_at>=? GROUP BY mode ORDER BY n DESC',[riot,since]);
+  const modes=await one('SELECT mode,count(*) AS n,sum(ended_at>=?) AS afterLink,min(ended_at) AS first,max(ended_at) AS last FROM notifications WHERE riot_id=? AND ended_at>=? GROUP BY mode ORDER BY n DESC',[Number(l.linked_at),riot,since]);
   const kpModes=await one('SELECT mode,count(*) AS n,sum(amount) AS kp FROM kp_events WHERE guild=? AND user=? AND at>=? GROUP BY mode ORDER BY n DESC',[l.guild,discordId,since]);
   out.accounts.push({riot:mask(l.riot),linkedAt:at(l.linked_at),tracked:Boolean(exact),trackedOnlyAfterNormalizing:!exact&&Boolean(loose),
    trackedSince:at((exact??loose)?.since),notices14d:Number(n[0]?.n??0),lastMatch:at(n[0]?.last),unsent:Number(n[0]?.unsent??0),
    kpEvents14d:Number(e[0]?.n??0),lastKp:at(e[0]?.last),kp14d:Number(e[0]?.kp??0),
    recent:recent.map(r=>({at:at(r.ended_at),mode:String(r.mode??'—'),outcome:String(r.outcome??'—'),sent:Number(r.sent)===1})),
-   modes:modes.map(m=>({mode:String(m.mode??'—'),n:Number(m.n)})),
+   modes:modes.map(m=>({mode:String(m.mode??'—'),n:Number(m.n),afterLink:Number(m.afterLink??0),first:at(m.first),last:at(m.last)})),
    kpModes:kpModes.map(m=>({mode:String(m.mode??'—'),n:Number(m.n),kp:Number(m.kp??0)}))});
  }
  const state=await one("SELECT key,value FROM monitor_state WHERE key IN ('api_after','cursor')");
@@ -53,8 +53,8 @@ export function summary(r){
   '| Last KP event | '+a.lastKp+' |','',
   '#### Recent matches noticed (newest first)','','| Ended (UTC) | Mode | Result | Posted |','|:--|:--|:--|:--|',
   ...(a.recent??[]).map(m=>'| '+m.at+' | '+m.mode+' | '+m.outcome+' | '+(m.sent?'yes':'no')+' |'),'',
-  '#### Matches by mode (14 days)','','| Mode | Notices | KP events | KP |','|:--|--:|--:|--:|',
-  ...[...new Set([...(a.modes??[]).map(m=>m.mode),...(a.kpModes??[]).map(m=>m.mode)])].map(mode=>{const n=(a.modes??[]).find(m=>m.mode===mode),k=(a.kpModes??[]).find(m=>m.mode===mode);return '| '+mode+' | '+(n?.n??0)+' | '+(k?.n??0)+' | '+(k?.kp??0).toLocaleString('en-US')+' |';}),'');
+  '#### Matches by mode (14 days)','','| Mode | Notices | after KP link | KP events | KP | First | Last |','|:--|--:|--:|--:|--:|:--|:--|',
+  ...[...new Set([...(a.modes??[]).map(m=>m.mode),...(a.kpModes??[]).map(m=>m.mode)])].map(mode=>{const n=(a.modes??[]).find(m=>m.mode===mode),k=(a.kpModes??[]).find(m=>m.mode===mode);return '| '+mode+' | '+(n?.n??0)+' | '+(n?.afterLink??0)+' | '+(k?.n??0)+' | '+(k?.kp??0).toLocaleString('en-US')+' | '+(n?.first??'—')+' | '+(n?.last??'—')+' |';}),'');
  if(r.trackedUnlinked.length){lines.push('### Monitored but not linked to any Discord ID','','| Riot (masked) | Tracked since | Non-ASCII |','|:--|:--|:--|');
   for(const t of r.trackedUnlinked)lines.push('| '+t.riot+' | '+t.since+' | '+(t.nonAscii?'yes':'no')+' |');lines.push('');}
  return lines.join('\n');
