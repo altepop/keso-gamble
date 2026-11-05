@@ -13,6 +13,8 @@ const query=async(sql,params)=>{
  if(/FROM kp_events.*GROUP BY/s.test(sql))return [{mode:'skirmish_2v2',n:1,kp:150}];
  if(/FROM notifications/.test(sql))return [{n:0,last:null,unsent:0}];
  if(/FROM kp_events/.test(sql))return [{n:0,last:null,kp:null}];
+ if(/FROM spike_rewards/.test(sql))return [{at:now-500,agent:'41fb69c1-4189-7b37-f117-bcaf1e96f1bf',outcome:'win',streak:'["41fb69c1-4189-7b37-f117-bcaf1e96f1bf"]'}];
+ if(/FROM spike_profiles/.test(sql))return [{trials:'{"controllerStreak":["41fb69c1-4189-7b37-f117-bcaf1e96f1bf"]}'}];
  if(/monitor_state/.test(sql))return [{key:'api_after',value:String(now+60000)}];
  throw Error('unexpected '+sql);
 };
@@ -24,6 +26,8 @@ test('finds a link that only matches after Unicode/case normalizing, and never p
  const text=summary(r);
  assert.doesNotMatch(text,/frin|Alpha|怖すぎ|p1|p2|564073526655582229/i);
  assert.match(text,/only after Unicode\/case normalizing/);
+ assert.match(text,/Controller streak now: 1\/7 \(Astra\)/);
+ assert.match(text,/\| Astra \| Controller \| win \| 1\/7 Astra \|/);
  assert.match(text,/\| skirmish_2v2 \| 1 \| 1 \| 1 \| 150 \|/);
 });
 test('reports an unlinked Discord ID and monitored players without a link',async()=>{
