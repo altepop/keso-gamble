@@ -44,7 +44,7 @@ export function applyCasinoLossRisk(state:{cash:number},result:unknown,risk:Casi
 }
 export function outstandingCasinoReserve(rounds:Record<string,CasinoRisk>):number{
  return Object.values(rounds).reduce((sum,r)=>{
-  if(!r||!Number.isSafeInteger(r.bet)||r.bet!<0||![1,1.5,2,3].includes(r.multiplier))return sum;
-  return sum+Math.ceil(r.bet!*(r.multiplier-1));
+  if(!r||typeof r.bet!=='number'||!Number.isSafeInteger(r.bet)||r.bet<0||![1,1.5,2,3].includes(r.multiplier))return sum;
+  return sum+Math.ceil(r.bet*(r.multiplier-1));
  },0);
 }
