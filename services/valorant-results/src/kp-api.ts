@@ -17,7 +17,7 @@ import {voiceRewardHistory,voicePolicy} from './voice-rewards.ts';
 import {receiveLoopKp} from './loop-kp.ts';
 import {summonRelics,grantSteamRelic,grantUniteRelic,equipRelic,autoEquipRelics,saveRelicPreset,loadRelicPreset,removeRelicPreset,renameRelicPreset,listRelicPresets,diagnoseRelicBuild,nativeRelicBonus,evaluateRelicBonus,rarityRatesForLevel,summonLevel,SUMMON_MILESTONES,UNITE,UNITE_REQUIREMENTS,UNITE_STREAK_IDS,STEAM_RELIC_TIERS,steamRelicPool,STEAM_RELIC_POOL_GRADES,type UniteRelicId} from './relics.ts';
 import {ALL_NORMAL_RELICS,RELIC_MODE_NAMES} from './relic-catalog.ts';
-import {verifiedCasinoProfit,verifiedStockProfit} from './relic-profit.ts';
+import {verifiedCasinoProfit,verifiedCasinoStake,verifiedStockProfit} from './relic-profit.ts';
 import {ensureRelicMarket,activeRelicListings,listingById,prepareRelicListing,receiveRelicListing,cancelRelicListing,MARKET_MAX_ACTIVE_PER_PLAYER} from './relic-market.ts';
 import {recycleNormalRelic,exchangeNormalRelic,exchangeMyHorseVoucher,SHARD_YIELDS,SHARD_PRICES,MY_HORSE_VOUCHER_PRICE} from './relic-exchange.ts';
 import {STEAM_RELIC_PROOF_SQL,STEAM_RELIC_LIST_SQL,STEAM_RELIC_COMMIT_GUARD,steamRelicDay,requireSteamRelicEligibility,type SteamRelicEvidence} from './steam-relic-eligibility.ts';
@@ -271,7 +271,7 @@ export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:strin
   // These mechanics never touch game RNG, odds, or past results.
   let relicBonus=0;
   const casino=['spin','chinchiro','bj-start','bj-hit','bj-stand','bj-double','mines-cashout','slot','vp-draw','baccarat'].includes(action);
-  if(casino){const profit=verifiedCasinoProfit(result);if(profit>0)relicBonus=nativeRelicBonus(state,'casino',profit);}
+  if(casino){const profit=verifiedCasinoProfit(result);if(profit>0)relicBonus=nativeRelicBonus(state,'casino',profit,Date.now(),verifiedCasinoStake(result));}
   // Selling shares only grants bonuses on REALIZED positive FIFO profit, never
   // from the gross proceeds or repeated buys. One owner-indexed query on sells.
   if(action==='trade'&&args.side==='sell'&&stockTrade){

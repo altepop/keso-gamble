@@ -78,7 +78,7 @@ test('native effect log records the actual earned amount and 30-entry bounded hi
  const def=NORMAL_RELICS.find(x=>x.mode==='casino'&&x.rarity==='ancient')!;
  const state:{cash:number;relics?:RelicCollection}={cash:1000,relics:owned(def)};
  for(let i=0;i<33;i++){
-  mod.nativeRelicBonus(state,'casino',500,Date.UTC(2026,10,3,0,i));
+  mod.nativeRelicBonus(state,'casino',500,Date.UTC(2026,10,3+i),10000);
  }
  assert.equal(state.relics?.nativeCount,33);
  assert.equal(state.relics?.nativeEffects?.length,30);
