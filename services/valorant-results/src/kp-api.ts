@@ -39,6 +39,7 @@ import { hydrateCasino, playChinchiro, bjStart, bjHit, bjStand, bjDouble, crypto
 import { hydrateMoreCasino, minesStart, minesPick, minesCashout, playSlot, vpDeal, vpDraw, playBaccarat, VP_NAMES } from '../../../js/casino-more.js';
 import {jackpotOf} from './casino-jackpot.ts';
 import { enqueue, ensurePosts } from './racing-posts.ts';
+import {transcendentGodPullPost} from './relic-god-pull.ts';
 // @ts-expect-error Shared browser engine.
 import { hydrateMleague, placeMlBet } from '../../../js/mleague.js';
 import { kpRewardHistory } from './kp-reward-history.ts';
@@ -313,16 +314,13 @@ export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:strin
    // waiting for their D1 queue must not hold the settled bet response open.
    const postNotices=async()=>{
    if(action==='relic-summon'&&(env as {KP_EARNINGS_WEBHOOK_URL?:string}).KP_EARNINGS_WEBHOOK_URL){
-    const summoned=result as ReturnType<typeof summonRelics>;
-    const top=summoned.highlights.find(h=>h.rarity==='transcendent'||h.rarity==='ancient');
-    const rare=top||summoned.foils.length>0||summoned.mutations.length>0;
-    if(rare)try{
+    // Other rarities, foil and mutation outcomes are private to the summon UI.
+    // Queued only after the durable operation was committed, once per operation ID.
+    const message=transcendentGodPullPost(user,result as ReturnType<typeof summonRelics>);
+    if(message)try{
      await ensurePosts(env);
-     const message=top?`🌈 遺物の神引き！ <@${user}> が ${top.rarity==='transcendent'?'超越':'古代'}「${top.name}」を獲得！ ${summoned.count}連召喚`:
-      summoned.foils.length?`✨ <@${user}> が特殊個体「${summoned.foils[0]}」を引き当てた！`:
-       `🧬 <@${user}> の遺物「${summoned.mutations[0]}」が突然変異した！`;
      await enqueue(env,'relic-pull:'+mapping.guildId+':'+user+':'+id,message,Date.now());
-    }catch{console.warn('relic_rare_notice_pending');}
+    }catch{console.warn('relic_transcendent_notice_pending');}
    }
    if(action==='luxury')try{await luxuryPosts(env,mapping,user,(result as {luxury:Parameters<typeof luxuryPosts>[3]}).luxury);}catch{console.warn('luxury_post_pending');}
    if(action==='gift'&&(env as {KP_EARNINGS_WEBHOOK_URL?:string}).KP_EARNINGS_WEBHOOK_URL)try{await ensurePosts(env);await enqueue(env,'gift:'+user+':'+id,giftPost(user,(result as ReturnType<typeof applyGift>).gift),Date.now());}catch{console.warn('gift_post_pending');}
