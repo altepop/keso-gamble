@@ -18,6 +18,7 @@ import {receiveLoopKp} from './loop-kp.ts';
 import {summonRelics,grantSteamRelic,grantUniteRelic,equipRelic,autoEquipRelics,saveRelicPreset,loadRelicPreset,removeRelicPreset,renameRelicPreset,listRelicPresets,diagnoseRelicBuild,nativeRelicBonus,evaluateRelicBonus,rarityRatesForLevel,summonLevel,SUMMON_MILESTONES,UNITE,UNITE_REQUIREMENTS,UNITE_STREAK_IDS,STEAM_RELIC_TIERS,steamRelicPool,STEAM_RELIC_POOL_GRADES,type UniteRelicId} from './relics.ts';
 import {ALL_NORMAL_RELICS,RELIC_MODE_NAMES} from './relic-catalog.ts';
 import {verifiedCasinoProfit,verifiedStockProfit} from './relic-profit.ts';
+import {casinoRiskProfile,applyCasinoLossRisk,outstandingCasinoReserve,NEUTRAL_CASINO_RISK,type CasinoRisk} from './relic-casino-risk.ts';
 import {ensureRelicMarket,activeRelicListings,listingById,prepareRelicListing,receiveRelicListing,cancelRelicListing,MARKET_MAX_ACTIVE_PER_PLAYER} from './relic-market.ts';
 import {recycleNormalRelic,exchangeNormalRelic,exchangeMyHorseVoucher,SHARD_YIELDS,SHARD_PRICES,MY_HORSE_VOUCHER_PRICE} from './relic-exchange.ts';
 import {STEAM_RELIC_PROOF_SQL,STEAM_RELIC_LIST_SQL,STEAM_RELIC_COMMIT_GUARD,steamRelicDay,requireSteamRelicEligibility,type SteamRelicEvidence} from './steam-relic-eligibility.ts';
@@ -166,6 +167,34 @@ export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:strin
   if(existing){if(existing.request_hash!==requestHash)throw Error('同じ操作IDを別の操作には使えません。');return JSON.parse(existing.response);}
   const knownGiftTarget=action==='gift'&&/^\d{15,22}$/.test(String(args.to??''))&&await isKpParticipant(env,mapping,String(args.to))&&Boolean(await env.DB.prepare('SELECT 1 FROM kp_wallets WHERE guild=? AND user=?').bind(mapping.guildId,String(args.to)).first());
   const state=await readKpState(env,mapping,user),before=state.cash;let result:unknown;let directive:Record<string,unknown>|null=null;let stockTrade:Record<string,unknown>|undefined;
+  // Server-side snapshot prevents a player from swapping risk relics after placing a wager.
+  // Funds reserved for an open risky round cannot be spent on other actions.
+  const riskRounds:Record<string,CasinoRisk>={...(state.casinoRiskRounds??{})};
+  const riskAtStake=casinoRiskProfile(state.relics);
+  const riskStarts:Record<string,string>={'bj-start':'blackjack','mines-start':'mines','vp-deal':'poker'};
+  const riskFinishes:Record<string,string>={'bj-hit':'blackjack','bj-stand':'blackjack','bj-double':'blackjack','mines-pick':'mines','mines-cashout':'mines','vp-draw':'poker'};
+  const pendingKey=riskFinishes[sourceAction];
+  const roundRisk=pendingKey?(riskRounds[pendingKey]??NEUTRAL_CASINO_RISK):riskAtStake;
+  const oneStepCasino=['spin','chinchiro','slot','baccarat'].includes(sourceAction);
+  const openingCasino=Boolean(riskStarts[sourceAction]);
+  if(!ownerRound&&sourceAction==='bj-double'&&state.blackjack&&riskRounds.blackjack){
+   const bet=Number(state.blackjack.bet);
+   const multiplier=riskRounds.blackjack.multiplier;
+   const otherReserve=outstandingCasinoReserve(riskRounds)-Math.ceil(bet*(multiplier-1));
+   const required=Math.ceil(2*bet*multiplier)-bet+otherReserve;
+   if(Number.isSafeInteger(required)&&before<required)
+    throw Error('⚠ 超越遺物を装備して始めたブラックジャックのダブルには、'+required.toLocaleString('ja-JP')+' KP 以上必要です。');
+  }
+  if(!ownerRound&&(openingCasino||oneStepCasino)){
+   const wager=sourceAction==='spin'&&sourceArgs.type==='numbers'&&Array.isArray(sourceArgs.bets)
+    ?sourceArgs.bets.reduce((sum:number,b:any)=>sum+Number(b?.amount??0),0):Number(sourceArgs.amount);
+   const maximumBaseLoss=sourceAction==='chinchiro'?wager*5:wager;
+   const exposure=Math.ceil(maximumBaseLoss*riskAtStake.multiplier);
+   const required=exposure+outstandingCasinoReserve(riskRounds);
+   // Invalid stakes are still rejected by the original game engine before any draw.
+   if((riskAtStake.multiplier>1||outstandingCasinoReserve(riskRounds)>0)&&Number.isSafeInteger(required)&&exposure>0&&before<required)
+    throw Error('⚠ 超越遺物の損失増幅に備えるKPが不足しています。必要残高：'+required.toLocaleString('ja-JP')+' KP（負け時最大×'+riskAtStake.multiplier+'）。');
+  }
   // 借KP: no bet or purchase at all while any is owed, decided before any draw. Checking the result instead would let a
   // winning roll through and refuse only the losing one. Selling, finishing a blackjack hand and settings stay open.
   const settles=['horse-sell','roast-level','bj-hit','bj-stand','mines-pick','mines-cashout','vp-draw','relic-equip','relic-auto-equip','relic-claim-steam','relic-claim-unite','relic-save-preset','relic-overwrite-preset','relic-load-preset','relic-remove-preset','relic-rename-preset','relic-recycle','relic-shop','relic-voucher','relic-market-list','relic-market-cancel'].includes(action)||(action==='trade'&&args.side==='sell');
@@ -270,8 +299,32 @@ export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:strin
   // Stock buys and ticket purchases cannot manufacture KP via repeat buys/sells.
   // These mechanics never touch game RNG, odds, or past results.
   let relicBonus=0;
-  const casino=['spin','chinchiro','bj-start','bj-hit','bj-stand','bj-double','mines-cashout','slot','vp-draw','baccarat'].includes(action);
-  if(casino){const profit=verifiedCasinoProfit(result);if(profit>0)relicBonus=nativeRelicBonus(state,'casino',profit);}
+  const casino=['spin','chinchiro','bj-start','bj-hit','bj-stand','bj-double','mines-pick','mines-cashout','slot','vp-draw','baccarat'].includes(action);
+  if(casino){
+   const profit=verifiedCasinoProfit(result);
+   // Do not allow a player to start safely, then equip a +900% risk pact only
+   // for the payout. Apply native bonuses from the same wager-time loadout.
+   const currentEquipped=state.relics?.equipped;
+   if(!ownerRound&&pendingKey&&roundRisk.equipped&&state.relics)state.relics.equipped=roundRisk.equipped;
+   try{if(profit>0)relicBonus=nativeRelicBonus(state,'casino',profit);}
+   finally{if(currentEquipped&&state.relics)state.relics.equipped=currentEquipped;}
+   if(!ownerRound){
+    const done=(result as {done?:unknown})?.done;
+    if(openingCasino&&done===null)riskRounds[riskStarts[sourceAction]]={...riskAtStake,bet:Number(sourceArgs.amount),equipped:[...(state.relics?.equipped??[])]};
+    // A natural blackjack can end on the starting request. Other multi-step
+    // settlements use the frozen risk captured by their original stake.
+    if((oneStepCasino||openingCasino||pendingKey)&&done!==null){
+     const penalty=applyCasinoLossRisk(state,result,roundRisk);
+     if(penalty)state.lastCasinoRelicLoss={...penalty,at:Date.now(),game:sourceAction};
+     if(pendingKey)delete riskRounds[pendingKey];
+    }
+    state.casinoRiskRounds=riskRounds;
+   }
+  }
+  // Prevent other operations (including a double-down) from consuming the money
+  // required to settle any outstanding increased-loss exposure.
+  if(!ownerRound&&state.cash<outstandingCasinoReserve(riskRounds))
+   throw Error('⚠ 超越遺物の勝負中は、損失増幅に備えたKPを使えません。勝負を確定してください。');
   // Selling shares only grants bonuses on REALIZED positive FIFO profit, never
   // from the gross proceeds or repeated buys. One owner-indexed query on sells.
   if(action==='trade'&&args.side==='sell'&&stockTrade){

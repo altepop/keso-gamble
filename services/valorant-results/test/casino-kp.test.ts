@@ -148,3 +148,75 @@ test('quota rejection is final and already-settled jackpot receipts remain retri
  assert.equal(body.retryable,false,'rejected operations must not trap the wallet in a phantom pending state');
  assert.equal(f.balance(),before);
 });
+
+test('transcendent casino loss triples an actual chinchiro defeat without double-charging replay',async t=>{
+ const {RISK_RELICS}=await import('../src/relic-catalog.ts');
+ const f=await fixture();f.credit('risk-start',20000);
+ const eclipse=RISK_RELICS.find(x=>x.id==='normal.pact.eclipse')!;
+ const frenzy=RISK_RELICS.find(x=>x.id==='normal.pact.frenzy')!;
+ const row=f.sql.prepare('SELECT data FROM kp_state WHERE guild=? AND user=?').get(guild,one) as {data:string};
+ const state=JSON.parse(row.data);
+ state.relics={totalSummons:2,items:Object.fromEntries([eclipse,frenzy].map(x=>[x.id,{...x,origin:'normal',count:1}])),equipped:[eclipse.id,frenzy.id]};
+ f.sql.prepare('UPDATE kp_state SET data=? WHERE guild=? AND user=?').run(JSON.stringify(state),guild,one);
+ // The casino draws all ones: parent pinzoro, so ordinary loss is 5 * the bet.
+ t.mock.method((globalThis as unknown as {crypto:Crypto}).crypto,'getRandomValues',((v:Uint32Array)=>{v.fill(0);return v;}) as never);
+ await assert.rejects(operateKp(f.env,mapping,one,'risk-rejected-00000001','chinchiro',{amount:2000}),/損失増幅/);
+ assert.equal(f.balance(),20000);
+ const id='risk-chinchiro-00000001';
+ const won=await operateKp(f.env,mapping,one,id,'chinchiro',{amount:1000}) as {result:{net:number;baseNet:number;relicRisk:{extraLoss:number;multiplier:number}}};
+ assert.equal(won.result.baseNet,-5000);
+ assert.equal(won.result.net,-15000);
+ assert.equal(won.result.relicRisk.multiplier,3);
+ assert.equal(won.result.relicRisk.extraLoss,10000);
+ assert.equal(f.balance(),5000);
+ assert.deepEqual(await operateKp(f.env,mapping,one,id,'chinchiro',{amount:1000}),won);
+ assert.equal(f.balance(),5000);
+});
+test('open blackjack risk remains after removing relic; losing settlement debits frozen amount',async t=>{
+ const {RISK_RELICS}=await import('../src/relic-catalog.ts');
+ const f=await fixture();f.credit('risk-bj-start',20000);
+ const eclipse=RISK_RELICS.find(x=>x.id==='normal.pact.eclipse')!;
+ const row=f.sql.prepare('SELECT data FROM kp_state WHERE guild=? AND user=?').get(guild,one) as {data:string};
+ const state=JSON.parse(row.data);
+ state.relics={totalSummons:1,items:{[eclipse.id]:{...eclipse,origin:'normal',count:1}},equipped:[eclipse.id]};
+ f.sql.prepare('UPDATE kp_state SET data=? WHERE guild=? AND user=?').run(JSON.stringify(state),guild,one);
+ // All cards are rank 3: 3+3 starts a non-natural hand and loses against dealer 18.
+ t.mock.method((globalThis as unknown as {crypto:Crypto}).crypto,'getRandomValues',((v:Uint32Array)=>{v.fill(2);return v;}) as never);
+ const start=await operateKp(f.env,mapping,one,'risk-blackjack-start-01','bj-start',{amount:1000}) as {result:{done:unknown}};
+ assert.equal(start.result.done,null);
+ assert.equal((await readKpState(f.env,mapping,one)).casinoRiskRounds.blackjack.multiplier,1.5);
+ const raw=f.sql.prepare('SELECT data FROM kp_state WHERE guild=? AND user=?').get(guild,one) as {data:string};
+ const next=JSON.parse(raw.data);next.relics.equipped=[];
+ f.sql.prepare('UPDATE kp_state SET data=? WHERE guild=? AND user=?').run(JSON.stringify(next),guild,one);
+ const done=await operateKp(f.env,mapping,one,'risk-blackjack-stand-01','bj-stand',{}) as {result:{done:{net:number;baseNet:number;relicRisk:{extraLoss:number}}}};
+ assert.equal(done.result.done.baseNet,-1000);
+ assert.equal(done.result.done.net,-1500);
+ assert.equal(done.result.done.relicRisk.extraLoss,500);
+ assert.equal(f.balance(),18500);
+ assert.equal((await readKpState(f.env,mapping,one)).casinoRiskRounds.blackjack,undefined);
+});
+
+test('casino winning bonus uses original wager-time relic loadout, not swapped equipment',async t=>{
+ const {RISK_RELICS}=await import('../src/relic-catalog.ts');
+ const eclipse=RISK_RELICS.find(x=>x.id==='normal.pact.eclipse')!;
+ const f=await fixture();f.credit('risk-win-credit',20000);
+ const row=f.sql.prepare('SELECT data FROM kp_state WHERE guild=? AND user=?').get(guild,one) as {data:string};
+ const state=JSON.parse(row.data);
+ state.relics={totalSummons:1,items:{[eclipse.id]:{...eclipse,origin:'normal',count:1}},equipped:[eclipse.id]};
+ f.sql.prepare('UPDATE kp_state SET data=? WHERE guild=? AND user=?').run(JSON.stringify(state),guild,one);
+ // Player gets 10+10, dealer reaches 3+10+10 and busts.
+ let i=0;const cards=[9,9,2,9,9];
+ t.mock.method((globalThis as unknown as {crypto:Crypto}).crypto,'getRandomValues',((v:Uint32Array)=>{v.fill(cards[i++]??9);return v;}) as never);
+ const start=await operateKp(f.env,mapping,one,'risk-win-start-000001','bj-start',{amount:1000}) as {result:{done:unknown}};
+ assert.equal(start.result.done,null);
+ const pending=(await readKpState(f.env,mapping,one)).casinoRiskRounds.blackjack;
+ assert.deepEqual(pending.equipped,[eclipse.id]);
+ const raw=f.sql.prepare('SELECT data FROM kp_state WHERE guild=? AND user=?').get(guild,one) as {data:string};
+ const changed=JSON.parse(raw.data);changed.relics.equipped=[];
+ f.sql.prepare('UPDATE kp_state SET data=? WHERE guild=? AND user=?').run(JSON.stringify(changed),guild,one);
+ const end=await operateKp(f.env,mapping,one,'risk-win-stand-000001','bj-stand',{}) as {result:{done:{net:number};relicBonus:number}};
+ assert.equal(end.result.done.net,1000);
+ assert.equal(end.result.relicBonus,5600,'the same wager-time +560% applies after equipment is removed');
+ assert.equal(f.balance(),26600);
+ assert.deepEqual((await readKpState(f.env,mapping,one)).relics.equipped,[],'the loadout swap is not persisted over user choices');
+});
