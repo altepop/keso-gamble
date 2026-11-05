@@ -37,6 +37,13 @@ export interface RelicCollection {
   dailyCasinoRelic?: {day:string;amount:number};
   /** Stocks, racing and M.League: the same day boundary and cap, one bucket per mode, stored with the settlement. */
   dailyNativeRelic?: Partial<Record<'market'|'racing'|'mleague',{day:string;amount:number}>>;
+  /** Losses (2026-11-05 owner decision): the relic multiplier also applies to a settled loss, with the same caps. */
+  dailyRelicLoss?: Partial<Record<'casino'|'market'|'racing'|'mleague',{day:string;amount:number}>>;
+  nativeLost?: number;
+  lastRelicLoss?: {mode:string;amount:number;penalty:number;at:number};
+  /** Loadouts taken off in the last 24 hours (copies of the items). A settled loss uses the strongest of these
+   * and the current loadout, so taking relics off right before a losing sale does not dodge the penalty. */
+  recentLoadouts?: {items:RelicItem[];until:number}[];
   lastNativeEffect?: {mode:string;amount:number;bonus:number;percent:number;at:number;names:string[];lines?:RelicBonusLine[];sets?:{name:string;bonus:number}[]};
   summonHistory?:SummonHistoryEntry[];
   presets?:Record<string,string[]>;
@@ -494,6 +501,53 @@ export function nativeRelicBonus(
  state.relics.nativeEffects=[record,...(state.relics.nativeEffects??[])].slice(0,30);
  return payout;
 }
+export const RELIC_LOSS_MEMORY_MS=24*3600_000;
+/** Copies of the currently equipped items (before an operation that may change them). */
+export function snapshotLoadout(c?:RelicCollection):RelicItem[]{
+ if(!c?.equipped?.length)return [];
+ return c.equipped.map(id=>c.items[id]).filter((x):x is RelicItem=>Boolean(x)).map(x=>structuredClone(x));
+}
+/** After an operation: if the equipped set changed, remember the previous one for 24 hours. */
+export function rememberLoadout(c:RelicCollection|undefined,before:RelicItem[],now=Date.now()){
+ if(!c)return;
+ const live=(c.recentLoadouts??[]).filter(l=>l.until>now);
+ const changed=before.length>0&&(before.length!==c.equipped.length||before.some((x,i)=>x.id!==c.equipped[i]));
+ if(changed)live.unshift({items:before,until:now+RELIC_LOSS_MEMORY_MS});
+ if(changed||live.length!==(c.recentLoadouts??[]).length)c.recentLoadouts=live.slice(0,8);
+}
+function lossBonus(c:RelicCollection,mode:string,loss:number,now:number):number{
+ let best=c.equipped.length?evaluateRelicBonus(c,mode,{amount:loss,win:true}).bonus:0;
+ for(const l of c.recentLoadouts??[]){
+  if(!(l.until>now)||!l.items.length)continue;
+  const view:RelicCollection={...c,items:Object.fromEntries(l.items.map(x=>[x.id,x])),equipped:l.items.map(x=>x.id)};
+  best=Math.max(best,evaluateRelicBonus(view,mode,{amount:loss,win:true}).bonus);
+ }
+ return best;
+}
+/** The mirror of nativeRelicBonus for a settled LOSS in casino, stocks, racing or M.League (owner decision
+ * 2026-11-05): the equipped relics' bonus on that amount is taken away instead of added, under the same caps
+ * (0.5% of the stake/proceeds, 250 per settlement, 500 per day per mode) and never below a zero balance. */
+export function nativeRelicLoss(
+ state:{cash:number;relics?:RelicCollection},
+ mode:'casino'|'market'|'racing'|'mleague',
+ loss:number,
+ now=Date.now(),
+ stake=0,
+):number{
+ const c=state.relics;
+ if(!c||!(c.equipped?.length||c.recentLoadouts?.some(l=>l.until>now))||!Number.isSafeInteger(loss)||loss<=0)return 0;
+ const day=casinoRelicDay(now);
+ const used=c.dailyRelicLoss?.[mode]?.day===day?c.dailyRelicLoss[mode]!.amount:0;
+ const allowance=mode==='casino'?casinoRelicAllowance(stake,used):nativeRelicAllowance(stake,used);
+ if(!allowance)return 0;
+ const penalty=Math.min(lossBonus(c,mode,loss,now),allowance,Math.max(0,Math.floor(state.cash)));
+ if(!Number.isSafeInteger(penalty)||penalty<=0)return 0;
+ state.cash-=penalty;
+ c.dailyRelicLoss={...(c.dailyRelicLoss??{}),[mode]:{day,amount:used+penalty}};
+ c.nativeLost=Math.min(Number.MAX_SAFE_INTEGER,(c.nativeLost??0)+penalty);
+ c.lastRelicLoss={mode,amount:loss,penalty,at:now};
+ return penalty;
+}
 /** Caller MUST confirm a new, immutable server-verified receipt before invoking.
  * This is not a public API; browsers can never request a bonus for arbitrary evidence.
  */
@@ -510,13 +564,17 @@ export async function creditVerifiedRelicBonus(
  if(mode==='spikerush'){
   // Proven receipt + immutable snapshot from the already-settled Riot match.
   // Never take the game number from browser input or a mutable profile.
-  const spike=await env.DB.prepare(`SELECT json_extract(detail,'$.gamesBefore') AS gamesBefore
+  const spike=await env.DB.prepare(`SELECT json_extract(detail,'$.gamesBefore') AS gamesBefore,json_extract(detail,'$.base') AS base
    FROM spike_rewards WHERE id=? AND guild=? AND user=?
-   UNION ALL SELECT json_extract(detail,'$.gamesBefore') AS gamesBefore
+   UNION ALL SELECT json_extract(detail,'$.gamesBefore') AS gamesBefore,json_extract(detail,'$.base') AS base
    FROM spike_overdrive_rewards WHERE id=? AND guild=? AND user=?`)
-   .bind(receipt,guild,user,receipt,guild,user).first<{gamesBefore:number}>();
+   .bind(receipt,guild,user,receipt,guild,user).first<{gamesBefore:number;base:number}>();
   if(!spike||!Number.isSafeInteger(spike.gamesBefore)||spike.gamesBefore<0)return 0;
   spikeGamesBefore=spike.gamesBefore;
+  // Owner decision 2026-11-05: relics apply to the Spike Rush BASE only (win 40 / loss 20), not to the
+  // growth correction, which is already the reward for building the roster.
+  if(!Number.isSafeInteger(spike.base)||spike.base<=0)return 0;
+  amount=Math.min(amount,spike.base);
  }
  const detail=evaluateRelicBonus(state.relics,mode,{amount,win,spikeGamesBefore});
  const bonus=detail.bonus;

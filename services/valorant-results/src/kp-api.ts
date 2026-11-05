@@ -15,9 +15,9 @@ import {kpCommands,KP_COMMAND_VERSION} from './kp-command.ts';
 import {voiceControl,voiceStatus} from './voice-api.ts';
 import {voiceRewardHistory,voicePolicy} from './voice-rewards.ts';
 import {receiveLoopKp} from './loop-kp.ts';
-import {summonRelics,grantSteamRelic,grantUniteRelic,equipRelic,autoEquipRelics,saveRelicPreset,loadRelicPreset,removeRelicPreset,renameRelicPreset,listRelicPresets,diagnoseRelicBuild,nativeRelicBonus,evaluateRelicBonus,rarityRatesForLevel,summonLevel,SUMMON_MILESTONES,UNITE,UNITE_REQUIREMENTS,UNITE_STREAK_IDS,STEAM_RELIC_TIERS,steamRelicPool,STEAM_RELIC_POOL_GRADES,type UniteRelicId} from './relics.ts';
+import {summonRelics,grantSteamRelic,grantUniteRelic,equipRelic,autoEquipRelics,saveRelicPreset,loadRelicPreset,removeRelicPreset,renameRelicPreset,listRelicPresets,diagnoseRelicBuild,nativeRelicBonus,nativeRelicLoss,snapshotLoadout,rememberLoadout,evaluateRelicBonus,rarityRatesForLevel,summonLevel,SUMMON_MILESTONES,UNITE,UNITE_REQUIREMENTS,UNITE_STREAK_IDS,STEAM_RELIC_TIERS,steamRelicPool,STEAM_RELIC_POOL_GRADES,type UniteRelicId} from './relics.ts';
 import {ALL_NORMAL_RELICS,RELIC_MODE_NAMES} from './relic-catalog.ts';
-import {verifiedCasinoProfit,verifiedCasinoStake,verifiedStockProfit} from './relic-profit.ts';
+import {verifiedCasinoProfit,verifiedCasinoStake,verifiedStockProfit,verifiedCasinoNet,verifiedCasinoLossStake,verifiedStockLoss} from './relic-profit.ts';
 import {ensureRelicMarket,activeRelicListings,listingById,prepareRelicListing,receiveRelicListing,cancelRelicListing,MARKET_MAX_ACTIVE_PER_PLAYER} from './relic-market.ts';
 import {recycleNormalRelic,exchangeNormalRelic,exchangeMyHorseVoucher,SHARD_YIELDS,SHARD_PRICES,MY_HORSE_VOUCHER_PRICE} from './relic-exchange.ts';
 import {STEAM_RELIC_PROOF_SQL,STEAM_RELIC_LIST_SQL,STEAM_RELIC_COMMIT_GUARD,steamRelicDay,requireSteamRelicEligibility,type SteamRelicEvidence} from './steam-relic-eligibility.ts';
@@ -165,7 +165,8 @@ export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:strin
   const existing=await env.DB.prepare('SELECT request_hash,response FROM kp_operations WHERE guild=? AND user=? AND id=?').bind(mapping.guildId,user,id).first<{request_hash:string;response:string}>();
   if(existing){if(existing.request_hash!==requestHash)throw Error('同じ操作IDを別の操作には使えません。');return JSON.parse(existing.response);}
   const knownGiftTarget=action==='gift'&&/^\d{15,22}$/.test(String(args.to??''))&&await isKpParticipant(env,mapping,String(args.to))&&Boolean(await env.DB.prepare('SELECT 1 FROM kp_wallets WHERE guild=? AND user=?').bind(mapping.guildId,String(args.to)).first());
-  const state=await readKpState(env,mapping,user),before=state.cash;let result:unknown;let directive:Record<string,unknown>|null=null;let stockTrade:Record<string,unknown>|undefined;
+  const state=await readKpState(env,mapping,user),before=state.cash;let result:unknown;
+  const loadoutBefore=snapshotLoadout((state as {relics?:RelicCollection}).relics);let directive:Record<string,unknown>|null=null;let stockTrade:Record<string,unknown>|undefined;
   // 借KP: no bet or purchase at all while any is owed, decided before any draw. Checking the result instead would let a
   // winning roll through and refuse only the losing one. Selling, finishing a blackjack hand and settings stay open.
   const settles=['horse-sell','roast-level','bj-hit','bj-stand','mines-pick','mines-cashout','vp-draw','relic-equip','relic-auto-equip','relic-claim-steam','relic-claim-unite','relic-save-preset','relic-overwrite-preset','relic-load-preset','relic-remove-preset','relic-rename-preset','relic-recycle','relic-shop','relic-voucher','relic-market-list','relic-market-cancel'].includes(action)||(action==='trade'&&args.side==='sell');
@@ -269,9 +270,13 @@ export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:strin
   // Unlimited stacking only on completed, positive, server-determined outcomes.
   // Stock buys and ticket purchases cannot manufacture KP via repeat buys/sells.
   // These mechanics never touch game RNG, odds, or past results.
+  // Remember a loadout that this operation took off, so a later loss cannot dodge the relic penalty.
+  rememberLoadout((state as {relics?:RelicCollection}).relics,loadoutBefore,Date.now());
   let relicBonus=0;
   const casino=['spin','chinchiro','bj-start','bj-hit','bj-stand','bj-double','mines-cashout','slot','vp-draw','baccarat'].includes(action);
-  if(casino){const profit=verifiedCasinoProfit(result);if(profit>0)relicBonus=nativeRelicBonus(state,'casino',profit,Date.now(),verifiedCasinoStake(result));}
+  let relicPenalty=0;
+  if(casino){const profit=verifiedCasinoProfit(result);if(profit>0)relicBonus=nativeRelicBonus(state,'casino',profit,Date.now(),verifiedCasinoStake(result));
+   else{const net=verifiedCasinoNet(result);if(net<0)relicPenalty=nativeRelicLoss(state,'casino',-net,Date.now(),verifiedCasinoLossStake(result));}}
   // Selling shares only grants bonuses on REALIZED positive FIFO profit, never
   // from the gross proceeds or repeated buys. One owner-indexed query on sells.
   if(action==='trade'&&args.side==='sell'&&stockTrade){
@@ -288,9 +293,12 @@ export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:strin
     // Capped by the sale's gross proceeds (0.5%, 250/trade, 500/day): a price the seller pushed up with
     // their own buys can no longer turn an older cheap lot into a large "profit" bonus.
     if(profit>0)relicBonus=nativeRelicBonus(state,'market',profit,Date.now(),Number((stockTrade as {gross?:unknown}).gross));
+    else{const loss=verifiedStockLoss(sale.total,Number(lots?.cost??0),Number(lots?.shares??0),sale.quantity);
+     if(loss>0)relicPenalty=nativeRelicLoss(state,'market',loss,Date.now(),Number((stockTrade as {gross?:unknown}).gross));}
    }
   }
   if(relicBonus&&result&&typeof result==='object')result={...result,relicBonus};
+  if(relicPenalty&&result&&typeof result==='object')result={...result,relicPenalty};
   // 借KP: nothing that costs KP while any is owed (the database refuses it too).
   if(state.cash<before&&await debtOf(env,mapping.guildId,user)>0)throw Error(DEBT_BLOCKED);
   const activity=publicTrade(action,args,result);
