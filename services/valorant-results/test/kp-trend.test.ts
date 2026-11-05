@@ -63,15 +63,15 @@ test('KP推移の集計表：作成後の台帳・借KP（上限で削られた�
  const f=await fixture();await ensureDebt(f.env);
  f.credit('before',one,1000,day(24));
  const first=await kpTrend(f.env,guild,new Map(),7,NOW); // builds the table from the history so far
- // After the table exists: a credit, a loss that borrows, a second loss whose debt is cut down by the 1,000 cap,
+ // After the table exists: a credit, a loss that borrows, a second loss whose debt is cut down by the 30,000 cap,
  // and one that is dropped entirely at the cap.
  f.credit('after',one,500,day(26));
  const owe=(id:string,amount:number,at:number)=>{f.sql.prepare("INSERT INTO kp_ledger VALUES(?,?,?,0,'match',?)").run(id,guild,two,at);return borrowShortfall(f.env,id,amount).run();};
- await owe('l1',800,day(27));await owe('l2',700,day(28));await owe('l3',500,day(28));
+ await owe('l1',24000,day(27));await owe('l2',21000,day(28));await owe('l3',15000,day(28));
  const live=await kpTrend(f.env,guild,new Map(),7,NOW);
  assert.deepEqual(first.members.find(m=>m.id===one)!.points,[0,1000,1000,1000,1000,1000,1000]);
  assert.deepEqual(live.members.find(m=>m.id===one)!.points,[0,1000,1000,1500,1500,1500,1500]);
- assert.deepEqual(live.members.find(m=>m.id===two)!.points,[0,0,0,0,-800,-1000,-1000],'only what fits under the cap counts');
+ assert.deepEqual(live.members.find(m=>m.id===two)!.points,[0,0,0,0,-24000,-30000,-30000],'only what fits under the cap counts');
  // Rebuilding from the full history gives exactly the same table (no double counting).
  const before=JSON.stringify(f.sql.prepare('SELECT * FROM kp_trend_days ORDER BY guild,day,user').all());
  f.sql.prepare("DELETE FROM kp_settings WHERE key='kp_trend_days_v1'").run();
