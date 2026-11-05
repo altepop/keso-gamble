@@ -23,6 +23,7 @@ export {VoiceGateway} from './voice-gateway.ts';
 import {ensureVoice} from './voice-api.ts';
 import { claimDeathMatch } from './death-sessions.ts';
 import type { KpRun } from './kp.ts';
+import { shouldRunRetention, cleanupExpiredCredentials } from './retention.ts';
 import { initializeKp, syncKpAccounts, collectKpMatch, drainKpInbox, flushKpDirectives, prepareKpRun, loadKpRunMatch, kpEventId, kpCreditLine, kpRelicBonus } from './kp.ts';
 import { kpApi } from './kp-api.ts';
 import { raceSeed,settleKpRaces } from './racing-kp.ts';
@@ -507,6 +508,8 @@ export default {
     return new URL(request.url).pathname.startsWith('/api/kp/') ? kpApi(request, env, undefined, job=>ctx.waitUntil(job)) : discordInteractions(request, env, ctx);
   },
   async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    // Existing minute cron: a single small cleanup window each JST day; no additional schedule.
+    if(shouldRunRetention(_event.scheduledTime??Date.now()))ctx.waitUntil(cleanupExpiredCredentials(env,Date.now()).catch(()=>console.warn('credential_retention_pending')));
     ctx.waitUntil(track(env,'mahjong_watch',()=>monitorMahjong(env)));
     ctx.waitUntil(track(env,'unite_watch',()=>monitorUnite(env)));
     ctx.waitUntil(track(env,'voice',()=>ensureVoice(env)));
