@@ -1,6 +1,8 @@
 import { commentPools, memeQuotes } from '../src/comments.ts';
 import configuredPlayers from '../players.json' with { type: 'json' };
 import test from 'node:test';
+// Monitor fixtures share a fixed wall clock; tests that simulate elapsed time may override it locally.
+test.beforeEach(t=>(t as import('node:test').TestContext).mock.timers.enable({apis:['Date'],now:Date.parse('2026-11-04T12:00:00+09:00')}));
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync, readdirSync } from 'node:fs';
