@@ -64,6 +64,9 @@ jobs:
           npm --prefix ../.. run check:activity
           npm --prefix ../.. test
       - run: npm run build
+      - name: Test deploy smoke protocol (mocked endpoints)
+        working-directory: .
+        run: node --test scripts/post-deploy-smoke.test.mjs
       - name: Prepare race video verification
         working-directory: .
         run: bash scripts/race-video/prepare.sh
@@ -179,6 +182,16 @@ jobs:
             *) echo 'Invalid Activity entry mode'; exit 1 ;;
           esac
           node scripts/activity-entry-handler.mjs "--$ENTRYPOINT_MODE"
+      - name: Verify production Activity, Worker and KP reads
+        env:
+          KESO_SMOKE_WALLET_TOKEN: ${{ secrets.KESO_SMOKE_WALLET_TOKEN }}
+        run: node scripts/post-deploy-smoke.mjs
+      - name: Send optional deploy failure alert to Discord
+        if: failure()
+        env:
+          KESO_SMOKE_ALERT_WEBHOOK_URL: ${{ secrets.KESO_SMOKE_ALERT_WEBHOOK_URL }}
+          RUN_LINK: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: node scripts/post-deploy-smoke.mjs --notify-failure
       - name: Inspect unclassified queue identifiers (no account or match data)
         continue-on-error: true
         working-directory: ${{ runner.temp }}/kp-app/services/valorant-results
