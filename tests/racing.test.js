@@ -114,7 +114,7 @@ test('実況は各時点の最後方を追い、確定前に未来の順位を�
   const timeline=raceTimeline(card,result,seed),odds=raceOdds(card);
   const lines=raceCommentary(card,result,timeline,odds,seed);
   const finish=timeline.horses[orderBefore[0]].finish;
-  for(const phase of [.14,.29,.44,.60,.75,.88,.97]){
+  for(const phase of [.14,.29,.44,.60,.75,.88,.94]){
    const t=Math.round(finish*phase),position=lastPlaceAt(timeline,t);
    const line=lines.find(l=>l.t===t);
    assert.ok(position&&line,'every commentary phase must have a live backmarker');
