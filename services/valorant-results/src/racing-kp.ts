@@ -3,8 +3,8 @@
 // @ts-expect-error The shared pure browser engine has no TypeScript declarations.
 import { RUN_MS, bigRaceName, fillerCrownName, raceEvent, hydrateRacing, isRaceStart, latestRaceStart, openRaceStart, settleRaceBets } from '../../../js/racing.js';
 import { kpHash, kpRandom } from './kp.ts';
-import {nativeRelicBonus} from './relics.ts';
-import {verifiedBetProfit,verifiedBetStake} from './relic-profit.ts';
+import {nativeRelicBonus,nativeRelicLoss} from './relics.ts';
+import {verifiedBetProfit,verifiedBetStake,verifiedBetLoss} from './relic-profit.ts';
 import type { KpEnv, KpMapping } from './kp.ts';
 import { crownFor, recordMelts } from './racing-crowns.ts';
 import { decideEntries, raceEntries } from './racing-horses.ts';
@@ -69,8 +69,9 @@ export async function settleKpRaces(env:KpEnv,mapping:KpMapping,now=Date.now()){
   if(!settled.length)continue;
   const gain=verifiedBetProfit(settled); // positive realized profit after stakes
   const relicBonus=nativeRelicBonus(state,'racing',gain,now,verifiedBetStake(settled));
+  const relicPenalty=relicBonus?0:nativeRelicLoss(state,'racing',verifiedBetLoss(settled),now,verifiedBetStake(settled));
   const id='race-settle:'+settled.map(b=>b.id).join(',');
-  const response={result:{settled:settled.map(b=>({id:b.id,status:b.status,payout:b.payout})),relicBonus}};
+  const response={result:{settled:settled.map(b=>({id:b.id,status:b.status,payout:b.payout})),relicBonus,relicPenalty}};
   // Same guarded insert as player operations: it applies only if neither wallet nor state changed.
   const inserted=await env.DB.prepare(`INSERT INTO kp_operations(id,guild,user,request_hash,response,delta,state,directive,at)
    SELECT ?,?,?,?,?,?,?,NULL,? WHERE EXISTS(SELECT 1 FROM kp_wallets w JOIN kp_state s ON w.guild=s.guild AND w.user=s.user WHERE w.guild=? AND w.user=? AND w.version=? AND s.version=?) ON CONFLICT(guild,user,id) DO NOTHING`)

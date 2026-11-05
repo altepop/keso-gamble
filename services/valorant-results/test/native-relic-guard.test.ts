@@ -2,8 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 // @ts-expect-error Shared browser quote arithmetic.
 import {stockOrderQuote,STOCK_PRICE_SCALE} from '../../../js/stock-order.js';
-import {verifiedStockProfit,verifiedBetProfit,verifiedBetStake} from '../src/relic-profit.ts';
-import {nativeRelicBonus,nativeRelicAllowance,evaluateRelicBonus,type RelicCollection,type RelicItem} from '../src/relics.ts';
+import {verifiedStockProfit,verifiedBetProfit,verifiedBetStake,verifiedBetLoss,verifiedStockLoss,verifiedCasinoNet,verifiedCasinoLossStake} from '../src/relic-profit.ts';
+import {nativeRelicBonus,nativeRelicLoss,nativeRelicAllowance,evaluateRelicBonus,creditVerifiedRelicBonus,type RelicCollection,type RelicItem} from '../src/relics.ts';
 
 function strong(){
  const relics:RelicCollection={totalSummons:0,items:{},equipped:[]};
@@ -70,4 +70,49 @@ test('racing and M.League: bonus follows the settlement stakes, covering every o
  assert.equal(verifiedBetStake([{amount:100},{amount:-1}]),0,'an invalid stake pays nothing');
  assert.equal(nativeRelicAllowance(0,0),0);
  assert.equal(nativeRelicAllowance(Number.NaN,0),0);
+});
+
+test('losses: the relic multiplier is taken away under the same caps, never below zero (owner decision)',()=>{
+ const state=strong();state.cash=10000;
+ // Roulette: 35 numbers x 100 KP lost.
+ const lost={amount:3500,payout:0};
+ assert.equal(verifiedCasinoNet(lost),-3500);
+ assert.equal(verifiedCasinoLossStake(lost),3500);
+ assert.equal(nativeRelicLoss(state,'casino',3500,now,verifiedCasinoLossStake(lost)),18);
+ assert.equal(state.cash,9982);
+ assert.equal(verifiedCasinoLossStake({amount:100,payout:200}),0,'a win is not a loss');
+ // Stocks, racing, M.League: 250 per settlement, 500 per day per mode, separate from the bonus allowance.
+ assert.equal(verifiedStockLoss(90000,100000,10,10),11000);
+ assert.equal(verifiedStockLoss(200000,100000,10,10),0);
+ assert.equal(nativeRelicLoss(state,'market',11000,now,90000),250);
+ assert.equal(nativeRelicLoss(state,'market',11000,now,90000),250);
+ assert.equal(nativeRelicLoss(state,'market',11000,now,90000),0);
+ assert.equal(verifiedBetLoss([{amount:1000,payout:0},{amount:500,payout:900}]),600);
+ assert.equal(verifiedBetLoss([{amount:1000,payout:3000}]),0);
+ assert.equal(nativeRelicLoss(state,'racing',600,now,1500),8);
+ // The bonus allowance for the day is untouched by losses.
+ assert.equal(nativeRelicBonus(state,'market',5000,now,100000),250);
+ // Never below zero.
+ const poor=strong();poor.cash=5;
+ assert.equal(nativeRelicLoss(poor,'mleague',100000,now,100000),5);
+ assert.equal(poor.cash,0);
+ // No relics equipped: nothing happens.
+ const plain={cash:1000,relics:{totalSummons:0,items:{},equipped:[]} as RelicCollection};
+ assert.equal(nativeRelicLoss(plain,'casino',3500,now,3500),0);
+});
+
+test('Spike Rush: relics apply to the base (40/20) only, not to the growth correction (owner decision)',async()=>{
+ const relics=strong().relics;
+ const ledger:unknown[][]=[];
+ const prepare=(text:string)=>({bind:(...values:unknown[])=>({
+  first:async()=>text.includes('FROM kp_state')?{data:JSON.stringify({relics})}:text.includes('spike_rewards')?{gamesBefore:30,base:40}:null,
+  run:async()=>{if(text.startsWith('INSERT OR IGNORE INTO kp_ledger'))ledger.push(values);return {meta:{changes:1}};},
+ })});
+ const env={DB:{prepare}} as never;
+ const credited=await creditVerifiedRelicBonus(env,'g','u','match:g:m1:p','spikerush',720,true,now);
+ const onBase=evaluateRelicBonus(relics,'spikerush',{amount:40,win:true,spikeGamesBefore:30}).bonus;
+ const onAll=evaluateRelicBonus(relics,'spikerush',{amount:720,win:true,spikeGamesBefore:30}).bonus;
+ assert.equal(credited,onBase);
+ assert.ok(onAll>onBase*5,'the growth correction no longer multiplies the relic bonus');
+ assert.equal(ledger[0]?.[3],onBase);
 });

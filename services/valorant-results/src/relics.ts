@@ -37,6 +37,10 @@ export interface RelicCollection {
   dailyCasinoRelic?: {day:string;amount:number};
   /** Stocks, racing and M.League: the same day boundary and cap, one bucket per mode, stored with the settlement. */
   dailyNativeRelic?: Partial<Record<'market'|'racing'|'mleague',{day:string;amount:number}>>;
+  /** Losses (2026-11-05 owner decision): the relic multiplier also applies to a settled loss, with the same caps. */
+  dailyRelicLoss?: Partial<Record<'casino'|'market'|'racing'|'mleague',{day:string;amount:number}>>;
+  nativeLost?: number;
+  lastRelicLoss?: {mode:string;amount:number;penalty:number;at:number};
   lastNativeEffect?: {mode:string;amount:number;bonus:number;percent:number;at:number;names:string[];lines?:RelicBonusLine[];sets?:{name:string;bonus:number}[]};
   summonHistory?:SummonHistoryEntry[];
   presets?:Record<string,string[]>;
@@ -494,6 +498,30 @@ export function nativeRelicBonus(
  state.relics.nativeEffects=[record,...(state.relics.nativeEffects??[])].slice(0,30);
  return payout;
 }
+/** The mirror of nativeRelicBonus for a settled LOSS in casino, stocks, racing or M.League (owner decision
+ * 2026-11-05): the equipped relics' bonus on that amount is taken away instead of added, under the same caps
+ * (0.5% of the stake/proceeds, 250 per settlement, 500 per day per mode) and never below a zero balance. */
+export function nativeRelicLoss(
+ state:{cash:number;relics?:RelicCollection},
+ mode:'casino'|'market'|'racing'|'mleague',
+ loss:number,
+ now=Date.now(),
+ stake=0,
+):number{
+ if(!state.relics?.equipped?.length||!Number.isSafeInteger(loss)||loss<=0)return 0;
+ const day=casinoRelicDay(now);
+ const used=state.relics.dailyRelicLoss?.[mode]?.day===day?state.relics.dailyRelicLoss[mode]!.amount:0;
+ const allowance=mode==='casino'?casinoRelicAllowance(stake,used):nativeRelicAllowance(stake,used);
+ if(!allowance)return 0;
+ const detail=evaluateRelicBonus(state.relics,mode,{amount:loss,win:true});
+ const penalty=Math.min(detail.bonus,allowance,Math.max(0,Math.floor(state.cash)));
+ if(!Number.isSafeInteger(penalty)||penalty<=0)return 0;
+ state.cash-=penalty;
+ state.relics.dailyRelicLoss={...(state.relics.dailyRelicLoss??{}),[mode]:{day,amount:used+penalty}};
+ state.relics.nativeLost=Math.min(Number.MAX_SAFE_INTEGER,(state.relics.nativeLost??0)+penalty);
+ state.relics.lastRelicLoss={mode,amount:loss,penalty,at:now};
+ return penalty;
+}
 /** Caller MUST confirm a new, immutable server-verified receipt before invoking.
  * This is not a public API; browsers can never request a bonus for arbitrary evidence.
  */
@@ -510,13 +538,17 @@ export async function creditVerifiedRelicBonus(
  if(mode==='spikerush'){
   // Proven receipt + immutable snapshot from the already-settled Riot match.
   // Never take the game number from browser input or a mutable profile.
-  const spike=await env.DB.prepare(`SELECT json_extract(detail,'$.gamesBefore') AS gamesBefore
+  const spike=await env.DB.prepare(`SELECT json_extract(detail,'$.gamesBefore') AS gamesBefore,json_extract(detail,'$.base') AS base
    FROM spike_rewards WHERE id=? AND guild=? AND user=?
-   UNION ALL SELECT json_extract(detail,'$.gamesBefore') AS gamesBefore
+   UNION ALL SELECT json_extract(detail,'$.gamesBefore') AS gamesBefore,json_extract(detail,'$.base') AS base
    FROM spike_overdrive_rewards WHERE id=? AND guild=? AND user=?`)
-   .bind(receipt,guild,user,receipt,guild,user).first<{gamesBefore:number}>();
+   .bind(receipt,guild,user,receipt,guild,user).first<{gamesBefore:number;base:number}>();
   if(!spike||!Number.isSafeInteger(spike.gamesBefore)||spike.gamesBefore<0)return 0;
   spikeGamesBefore=spike.gamesBefore;
+  // Owner decision 2026-11-05: relics apply to the Spike Rush BASE only (win 40 / loss 20), not to the
+  // growth correction, which is already the reward for building the roster.
+  if(!Number.isSafeInteger(spike.base)||spike.base<=0)return 0;
+  amount=Math.min(amount,spike.base);
  }
  const detail=evaluateRelicBonus(state.relics,mode,{amount,win,spikeGamesBefore});
  const bonus=detail.bonus;

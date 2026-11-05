@@ -55,3 +55,40 @@ export function verifiedCasinoStake(result:unknown):number{
  const exposure=Number(stake)*(r.doubled?2:1);
  return Number.isSafeInteger(exposure)?exposure:0;
 }
+
+/** Signed net of a settled casino round (negative = loss); 0 when the result is not a finished round. */
+export function verifiedCasinoNet(result:unknown):number{
+ if(!result||typeof result!=='object')return 0;
+ const r=result as {net?:unknown;done?:{net?:unknown};payout?:unknown;amount?:unknown};
+ const net=Number.isSafeInteger(r.done?.net)?Number(r.done!.net):
+  Number.isSafeInteger(r.net)?Number(r.net):
+  Number.isSafeInteger(r.payout)&&Number.isSafeInteger(r.amount)?Number(r.payout)-Number(r.amount):0;
+ return Number.isSafeInteger(net)?net:0;
+}
+/** The server-confirmed wager of a finished casino round that LOST (same bounds as verifiedCasinoStake). */
+export function verifiedCasinoLossStake(result:unknown):number{
+ if(verifiedCasinoNet(result)>=0||!result||typeof result!=='object')return 0;
+ const raw=result as {done?:unknown;bet?:unknown;amount?:unknown;doubled?:unknown};
+ const r=raw.done&&typeof raw.done==='object'?raw.done as {bet?:unknown;amount?:unknown;doubled?:unknown}:raw;
+ const stake=r.bet??r.amount;
+ if(!Number.isSafeInteger(stake)||Number(stake)<100||Number(stake)>100000)return 0;
+ if(r.doubled!==undefined&&typeof r.doubled!=='boolean')return 0;
+ return Number(stake)*(r.doubled?2:1);
+}
+/** Realized loss of a stock sale against its FIFO cost (including the 1% buy fee); 0 for a profit. */
+export function verifiedStockLoss(sale:number,cost:number,filled:number,quantity:number):number{
+ if(![sale,cost,filled,quantity].every(Number.isFinite)||!Number.isSafeInteger(quantity)||quantity<=0||filled!==quantity||sale<0||cost<=0)return 0;
+ const loss=Math.ceil(cost*1.01)-Math.floor(sale);
+ return Number.isSafeInteger(loss)?Math.max(0,loss):0;
+}
+/** Net loss of one bet settlement (all its bets together); 0 when it won or broke even. */
+export function verifiedBetLoss(settled:readonly {payout:number;amount:number}[]):number{
+ if(!Array.isArray(settled))return 0;
+ let net=0;
+ for(const b of settled){
+  if(!Number.isSafeInteger(b.payout)||!Number.isSafeInteger(b.amount)||b.amount<0||b.payout<0)return 0;
+  net+=b.payout-b.amount;
+  if(!Number.isSafeInteger(net))return 0;
+ }
+ return Math.max(0,-net);
+}
