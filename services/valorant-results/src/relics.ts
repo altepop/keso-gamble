@@ -1,5 +1,6 @@
 /** KESO relics: a server-owned collection. No bonuses alter other games' KP economy. */
-import {NORMAL_RELIC_BY_ID,NORMAL_RELIC_BY_RARITY,RELIC_RARITIES,RELIC_CATALOG_COUNT} from './relic-catalog.ts';
+import {NORMAL_RELIC_BY_ID,NORMAL_RELIC_BY_RARITY,RELIC_RARITIES,RELIC_CATALOG_COUNT,RELIC_MODE_NAMES} from './relic-catalog.ts';
+import {steamExtraRelics,STEAM_EXTRA_PER_GRADE,STEAM_GRADE_NAMES,type SteamGrade,type SteamFeatureKind} from './steam-relic-catalog.ts';
 import type {RelicMode,NormalRelicRarity} from './relic-catalog.ts';
 export {RELIC_CATALOG_COUNT,RELIC_RARITIES} from './relic-catalog.ts';
 export const RELIC_SUMMON_COST = 200;
@@ -22,6 +23,8 @@ export interface RelicItem {
   foil?:{kind:'holographic'|'starlit'|'abyss';percent:number;at:number};
   // External evidence is bound to existing certified receipts, not a browser claim.
   source?: string;
+  /** Server-assigned effects for NEW Steam trophies only; persisted once per verified receipt. */
+  steamFeature?:{kind:SteamFeatureKind;value:number};
 }
 export interface RelicCollection {
   totalSummons: number;
@@ -91,6 +94,34 @@ export function steamRelicArchetype(app:number,achievement:string){
  for(let i=0;i<achievement.length;i++)h=Math.imul(h^achievement.charCodeAt(i),16777619)>>>0;
  return STEAM_RELIC_ARCHETYPES[h%STEAM_RELIC_ARCHETYPES.length]!;
 }
+/** Visible collection: 12 original archetypes plus 18 new grade-exclusive designs. */
+export function steamRelicPool(grade:SteamGrade){
+ const tier=STEAM_RELIC_TIERS.find(t=>t.label===grade)!;
+ return [
+  ...STEAM_RELIC_ARCHETYPES.map(a=>({...a,percent:tier.percent,feature:'none' as const,featureValue:0})),
+  ...steamExtraRelics(grade).map(a=>({...a,ability:'Steam限定の固有設計'})),
+ ];
+}
+export const STEAM_RELIC_POOL_GRADES=STEAM_GRADE_NAMES;
+export function steamRelicVariant(app:number,achievement:string,percent:number){
+ const grade=steamRelicTier(percent).label as SteamGrade;
+ let h=(2166136261^app)>>>0;
+ for(let i=0;i<achievement.length;i++)h=Math.imul(h^achievement.charCodeAt(i),16777619)>>>0;
+ return steamRelicPool(grade)[h%(STEAM_RELIC_ARCHETYPES.length+STEAM_EXTRA_PER_GRADE)]!;
+}
+const STEAM_SKILL_TEXT:Record<string,string>={
+ spark:'報酬を獲得',rescue:'基準以下の報酬を獲得',advance:'基準以上の報酬を獲得',
+ highroll:'高額報酬を獲得',triple:'3の倍数の報酬を獲得',quarter:'25の倍数の報酬を獲得',
+ lucky7:'末尾7の報酬を獲得',prime:'素数KPの報酬を獲得',square:'平方数KPの報酬を獲得',
+ reverse:'左右対称の報酬を獲得',odd:'奇数KPの報酬を獲得',even:'偶数KPの報酬を獲得',
+ master:'達成・勝利を確定',sovereign:'勝利を確定',
+};
+const steamFeatureText=(kind:SteamFeatureKind,value:number)=>({
+ none:'',fixed:'さらに固定＋'+value+'KP。',
+ chorus:'同時に発動したほかの遺物1個につき＋'+value+'KP。',
+ mirror:'ほかの遺物の最大倍率追加分の'+value+'%を複写。',
+ curse:'条件未達の場合、ほかの遺物の追加KPを'+value+'%減らす。',
+} as const)[kind];
 export const UNITE = {
  'unite.first_win':{name:'テイアの守護核',power:390,ability:'全モードの達成に寄り添う堅守',mode:'universal',skill:'spark',percent:10,cap:36,wins:1},
  'unite.two_wins':{name:'エオスの双星',power:425,ability:'全モードの少額報酬に効く逆境効果',mode:'universal',skill:'rescue',percent:12,cap:40,wins:2},
@@ -307,7 +338,19 @@ export function evaluateRelicBonus(
   line.exotic=safeReward(line.exotic+opening.flatPerRelic);
   line.reason+='／⚡先陣の加護：固定＋'+opening.flatPerRelic+'KP・本来の倍率分×'+opening.multiplier;
  }
-  const pactIds=new Set(lines.map(x=>x.id));
+  // A Steam curse suppresses OTHER relic bonuses on missed activation, never the verified base KP.
+ for(const line of lines){
+  const feature=collection.items[line.id]?.steamFeature;
+  if(feature?.kind!=='curse'||!line.active||line.triggered)continue;
+  const factor=Math.max(0,100-feature.value)/100;
+  for(const other of lines)if(other.id!==line.id){
+   other.base=safeReward(other.base*factor);
+   other.exotic=safeReward(other.exotic*factor);
+   if(other.triggered)other.reason+='／Steam禁呪の反動';
+  }
+  line.reason+='／禁呪の反動（ほかの遺物－'+feature.value+'%）';
+ }
+ const pactIds=new Set(lines.map(x=>x.id));
  const curseReversed=pactIds.has('normal.pact.void')&&pactIds.has('normal.pact.coinflip')&&amount%7===0;
  // Risk pacts are independently rolled normal relics, NEVER Steam/Unite upgrades.
  // Drawbacks suppress bonus from OTHER relics only, not the verified base KP reward.
@@ -333,6 +376,20 @@ export function evaluateRelicBonus(
    const otherCount=others.filter(l=>l.triggered).length;
    if(otherCount<2){line.base=0;line.triggered=false;line.reason='連鎖不成立（ほか2個の発動が必要）';}
    else{line.effectivePercent+=60*otherCount;line.base=safeReward(amount*line.effectivePercent/100);line.reason='連鎖成功：ほか'+otherCount+'個の効果と連動';}
+  }
+ }
+ // Server-persisted Steam abilities are evaluated after drawback suppression.
+ // A mirror only copies another relic's percentage portion, never its own or a prior mirror.
+ for(const line of lines){
+  const feature=collection.items[line.id]?.steamFeature;
+  if(!feature||!line.active||!line.triggered)continue;
+  let extra=0;
+  if(feature.kind==='fixed')extra=feature.value;
+  else if(feature.kind==='chorus')extra=lines.filter(other=>other.id!==line.id&&other.triggered).length*feature.value;
+  else if(feature.kind==='mirror')extra=Math.floor(Math.max(0,...lines.filter(other=>other.id!==line.id).map(other=>other.base))*feature.value/100);
+  if(extra>0){
+   line.exotic=safeReward(line.exotic+extra);
+   line.reason+='／Steam固有＋'+extra+'KP';
   }
  }
  const effective=lines.filter(l=>l.triggered);
@@ -504,13 +561,16 @@ export function grantSteamRelic(
  const id='steam.'+proof.id;
  if(Object.hasOwn(c.items,id))throw Error('この実績遺物は受け取り済みです。');
  if(Object.keys(c.items).filter(k=>k.startsWith('steam.')).length>=200)throw Error('Steam遺物の保有枠は200個までです。');
- const archetype=steamRelicArchetype(proof.app,proof.achievement);
+ const archetype=steamRelicVariant(proof.app,proof.achievement,proof.percent);
+ const feature=archetype.feature;
+ const strength=Math.round(Math.max(0,archetype.percent-tier.percent)*0.6+(feature==='fixed'?archetype.featureValue*0.15:0));
  const item:RelicItem={
   id,name:tier.label+'の'+archetype.name+'：'+proof.title.slice(0,55),
-  origin:'steam',rarity:'exclusive',power:tier.power,
-  ability:tier.label+'／'+archetype.ability+'：報酬＋'+tier.percent+'%。追加KPはほかの遺物と上限なしで合算。',
-  mode:archetype.mode,skill:archetype.skill,percent:tier.percent,cap:tier.cap,
+  origin:'steam',rarity:'exclusive',power:Math.min(1800,tier.power+strength),
+  ability:tier.label+'／'+RELIC_MODE_NAMES[archetype.mode]+'で'+(STEAM_SKILL_TEXT[archetype.skill]??'条件達成')+'すると元報酬＋'+archetype.percent+'%。'+steamFeatureText(feature,archetype.featureValue)+'ほかの遺物と上限なしで合算。',
+  mode:archetype.mode,skill:archetype.skill,percent:archetype.percent,cap:tier.cap,
   count:1,source:'steam app '+proof.app+' / '+proof.achievement.slice(0,90),
+  ...(feature!=='none'?{steamFeature:{kind:feature,value:archetype.featureValue}}:{}),
  };
  store(c,item);
  return{item};
