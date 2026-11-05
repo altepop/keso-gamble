@@ -1,0 +1,40 @@
+name: Spike Rush missed Controller correction (owner)
+
+# One-off, owner-approved correction for a Controller win the monitor missed. Changes only the streak
+# bookkeeping in spike_profiles (compare-and-set); never KP, ledger or reward rows.
+on:
+  workflow_dispatch:
+    inputs:
+      discord_id:
+        description: Discord user ID of the member
+        required: true
+      agent:
+        description: The Controller used in the missed win (e.g. Clove)
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: spike-missed-controller
+  cancel-in-progress: false
+
+jobs:
+  correct:
+    if: github.repository == 'altepop/keso-gamble' && github.actor == 'altepop'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Test the correction
+        run: node --test scripts/spike-missed-controller.test.mjs
+      - name: Apply the correction
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          DISCORD_ID: ${{ inputs.discord_id }}
+          AGENT: ${{ inputs.agent }}
+        run: node scripts/spike-missed-controller.mjs
