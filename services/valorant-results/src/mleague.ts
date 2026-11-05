@@ -3,6 +3,7 @@
 // number and the four teams; anything that does not match exactly is ignored, never guessed.
 import data from '../mleague-2026-27.json' with {type:'json'};
 import {kpHash,kpRandom} from './kp.ts';
+import {ensureBetIndex} from './bet-index.ts';
 import {nativeRelicBonus} from './relics.ts';
 import {verifiedBetProfit} from './relic-profit.ts';
 import type {KpEnv,KpMapping} from './kp.ts';
@@ -184,10 +185,9 @@ export function awaitedFixtures(now:number,known:Map<string,MlResult>,d:{fixture
 }
 /** Games that some saved wallet still has an unsettled prediction on. */
 export async function unsettledMlMatches(env:KpEnv){
- const rows=(await env.DB.prepare(`SELECT data FROM kp_state WHERE data LIKE '%"mlBets"%' AND data LIKE '%"status":"pending"%'`).all<{data:string}>()).results;
- const matches=new Set<string>();
- for(const row of rows){try{for(const b of (JSON.parse(row.data).mlBets??[]) as MlBet[])if(b?.status==='pending'&&typeof b.match==='string')matches.add(b.match);}catch{console.warn('ml_state_unreadable');}}
- return matches;
+ await ensureBetIndex(env);
+ const rows=(await env.DB.prepare("SELECT DISTINCT match FROM kp_bet_index WHERE kind='ml' AND status='pending'").all<{match:string}>()).results;
+ return new Set(rows.map(row=>row.match).filter(Boolean));
 }
 /** Polls the official page every three minutes while a started game has no result. */
 export async function pollMlResults(env:KpEnv,now=Date.now(),request:typeof fetch=fetch){
@@ -286,7 +286,12 @@ export function lineupPost(f:Fixture,names:string[],bets:Array<MlBet&{user:strin
 /** Settles every user's pending predictions that now have an official result (same guarded write as racing). */
 export async function settleMl(env:KpEnv,mapping:KpMapping,now=Date.now()){
  await ensureMl(env);
- const rows=(await env.DB.prepare(`SELECT w.user,w.balance,w.version AS wallet_version,s.data,s.version AS state_version FROM kp_wallets w JOIN kp_state s ON s.guild=w.guild AND s.user=w.user WHERE w.guild=? AND s.data LIKE '%"status":"pending"%' AND s.data LIKE '%"mlBets"%'`).bind(mapping.guildId).all<{user:string;balance:number;wallet_version:number;data:string;state_version:number}>()).results;
+ await ensureBetIndex(env);
+ const rows=(await env.DB.prepare(`SELECT w.user,w.balance,w.version AS wallet_version,s.data,s.version AS state_version
+   FROM (SELECT DISTINCT user FROM kp_bet_index WHERE guild=? AND kind='ml' AND status='pending') pending
+   JOIN kp_wallets w ON w.guild=? AND w.user=pending.user
+   JOIN kp_state s ON s.guild=w.guild AND s.user=w.user`)
+   .bind(mapping.guildId,mapping.guildId).all<{user:string;balance:number;wallet_version:number;data:string;state_version:number}>()).results;
  let count=0;
  for(const row of rows){
   const state=JSON.parse(row.data);Object.assign(state,hydrateRacing(state),hydrateMleague(state));state.cash=row.balance;
@@ -306,7 +311,11 @@ export async function settleMl(env:KpEnv,mapping:KpMapping,now=Date.now()){
 }
 /** Everyone's predictions on one fixture, from saved states. */
 async function betsOn(env:KpEnv,guild:string,match:string){
- const rows=(await env.DB.prepare(`SELECT user,data FROM kp_state WHERE guild=? AND data LIKE ?`).bind(guild,`%${match}%`).all<{user:string;data:string}>()).results;
+ await ensureBetIndex(env);
+ const rows=(await env.DB.prepare(`SELECT s.user,s.data FROM
+    (SELECT DISTINCT user FROM kp_bet_index WHERE guild=? AND kind='ml' AND match=?) matched
+    JOIN kp_state s ON s.guild=? AND s.user=matched.user`)
+    .bind(guild,match,guild).all<{user:string;data:string}>()).results;
  return rows.flatMap(r=>(hydrateMleague(JSON.parse(r.data)).mlBets as MlBet[]).filter(b=>b.match===match).map(b=>({...b,user:r.user})));
 }
 const clock=(f:Fixture)=>`${Number(f.date.slice(5,7))}/${Number(f.date.slice(8,10))}`;
