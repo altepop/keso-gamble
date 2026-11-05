@@ -8,7 +8,7 @@ import {ensureBroadcast,prepareRaceBroadcast,raceShow,liveRacePost,broadcastStep
 import type {BroadcastEnv} from '../src/racing-broadcast.ts';
 import {claimVideoJobs,raceVideoApi} from '../src/racing-video.ts';
 // @ts-expect-error Shared race model.
-import {raceCard,lastPlaceAt,distanceAt} from '../../../js/racing.js';
+import {raceCard,lastPlaceAt} from '../../../js/racing.js';
 const guild='100000000000000100',MAIN=Date.parse('2026-10-27T21:00:00+09:00');
 const mapping={guildId:guild,accounts:[{riotId:'One#JP1',discordUserId:'100000000000000101'}]};
 async function fixture(){
