@@ -18,8 +18,11 @@ test('神引き速報 is exclusive to transcendent draws, not ancient, mythic, f
 
 test('real seeded transcendent draw sends one announcement and hides lesser rarity names',()=>{
  // Lv1 ticket 0 is transcendental; ticket 8 is ancient.
- const state={cash:400};
- const summon=summonRelics(state,2,new Uint32Array([0,0,8,0]));
+ const state={cash:2000};
+ const entropy=new Uint32Array(20).fill(999999);
+ entropy[0]=0; entropy[1]=0; // transcendental
+ entropy[2]=8; entropy[3]=0; // ancient
+ const summon=summonRelics(state,10,entropy);
  assert.equal(summon.summary.transcendent,1);
  assert.equal(summon.summary.ancient,1);
  const msg=transcendentGodPullPost(user,summon);
@@ -27,7 +30,7 @@ test('real seeded transcendent draw sends one announcement and hides lesser rari
  assert.match(msg,/【神引き速報｜超越降臨】/);
  assert.match(msg,/<@827801943928995840>/);
  assert.match(msg,/超越を1個獲得/);
- assert.match(msg,/2連召喚/);
+ assert.match(msg,/10連召喚/);
  const chosen=summon.highlights.find(x=>x.rarity==='transcendent')!;
  assert.ok(msg.includes(chosen.name));
  const lesser=summon.highlights.find(x=>x.rarity==='ancient')!;
