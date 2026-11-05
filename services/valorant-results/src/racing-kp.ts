@@ -4,7 +4,7 @@
 import { RUN_MS, bigRaceName, fillerCrownName, raceEvent, hydrateRacing, isRaceStart, latestRaceStart, openRaceStart, settleRaceBets } from '../../../js/racing.js';
 import { kpHash, kpRandom } from './kp.ts';
 import {nativeRelicBonus} from './relics.ts';
-import {verifiedBetProfit} from './relic-profit.ts';
+import {verifiedBetProfit,verifiedBetStake} from './relic-profit.ts';
 import type { KpEnv, KpMapping } from './kp.ts';
 import { crownFor, recordMelts } from './racing-crowns.ts';
 import { decideEntries, raceEntries } from './racing-horses.ts';
@@ -68,7 +68,7 @@ export async function settleKpRaces(env:KpEnv,mapping:KpMapping,now=Date.now()){
   const before=state.cash,settled:RaceBet[]=settleRaceBets(state,now,(id:number)=>seeds.get(id)??null,(id:number)=>entries.get(id)??[]);
   if(!settled.length)continue;
   const gain=verifiedBetProfit(settled); // positive realized profit after stakes
-  const relicBonus=nativeRelicBonus(state,'racing',gain,now);
+  const relicBonus=nativeRelicBonus(state,'racing',gain,now,verifiedBetStake(settled));
   const id='race-settle:'+settled.map(b=>b.id).join(',');
   const response={result:{settled:settled.map(b=>({id:b.id,status:b.status,payout:b.payout})),relicBonus}};
   // Same guarded insert as player operations: it applies only if neither wallet nor state changed.

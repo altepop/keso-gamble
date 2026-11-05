@@ -35,9 +35,9 @@ test('casino only: original overpower relics stay strong everywhere BUT casino g
  // The same 100 KP profit with wager=1800 is restricted to 9 KP.
  const second=nativeRelicBonus(state,'casino',100,now,1800);
  assert.equal(second,9);
- // Another non-casino income source does not consume the casino allowance.
- const nonCasino=nativeRelicBonus(state,'market',100,now);
- assert.ok(nonCasino>100);
+ // Stocks have their own allowance (0.5% of 20,000 KP proceeds) and do not consume the casino allowance.
+ const nonCasino=nativeRelicBonus(state,'market',100,now,20000);
+ assert.equal(nonCasino,100);
  assert.equal(state.relics.dailyCasinoRelic.amount,27);
 });
 test('every casino settlement source supplies only real wager and never gross payouts',()=>{
