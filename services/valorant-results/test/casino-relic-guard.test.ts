@@ -94,7 +94,7 @@ test('daily limit is atomic with state and resets at JST 09:00, without any D1 q
  const p2=nativeRelicBonus(state,'casino',100000,start,100000);
  const p3=nativeRelicBonus(state,'casino',100000,start,100000);
  assert.equal(p1,250);assert.equal(p2,250);assert.equal(p3,0);
- assert.equal(state.relics.dailyCasinoRelic.amount,500);
+ assert.equal(state.relics.dailyCasinoRelic?.amount,500);
  assert.equal(state.relics.nativeEffects?.length,2,'no ledger entry for 0 bonus');
  const reset=nativeRelicBonus(state,'casino',100000,next,100000);
  assert.equal(reset,250);
