@@ -7,8 +7,8 @@ test('summarises native and verified bonuses, flags buy-then-sell stock bonuses,
    {user:'123456789012345678',cat:'stock',bonus:9000,at:now-1000,symbol:'keso',side:'sell',gross:200000,fee:2000},
    {user:'123456789012345678',cat:'casino',bonus:300,at:now-2000}];
   if(sql.includes('FROM stock_trades'))return [{user:'123456789012345678',symbol:'keso',quantity:1000,price:1500,at:now-60000}];
-  if(sql.includes('GROUP BY mode'))return [{mode:'spikerush',count:3,base:300,bonus:600,max:300,ratio:2}];
-  if(sql.includes('GROUP BY user,mode'))return [{user:'123456789012345678',mode:'spikerush',count:3,bonus:600}];
+  if(sql.includes('GROUP BY mode'))return [{mode:'match',count:3,bonus:600,max:300}];
+  if(sql.includes('GROUP BY user,mode'))return [{user:'123456789012345678',mode:'match',count:3,bonus:600}];
   if(sql.includes('FROM kp_state'))return [{user:'123456789012345678',earned:9300,count:2}];
  };
  const text=await audit(query,now-14*86400000);
