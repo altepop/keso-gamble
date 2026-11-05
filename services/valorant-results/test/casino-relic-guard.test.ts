@@ -42,8 +42,8 @@ test('casino only: original overpower relics stay strong everywhere BUT casino g
 });
 test('every casino settlement source supplies only real wager and never gross payouts',()=>{
  const receipts=[
-  [{amount:3500,payout:3600,net:100},3500,'roulette multi number'],
-  [{amount:500,payout:1000,net:500},500,'roulette single/color'],
+  [{amount:3500,payout:3600},3500,'roulette multi number without net property'],
+  [{amount:500,payout:1000},500,'roulette single/color without net property'],
   [{amount:1000,net:500,units:1},1000,'chinchiro'],
   [{done:{bet:800,doubled:true,payout:3200,net:1600}},1600,'blackjack double'],
   [{done:{bet:1000,doubled:false,payout:2000,net:1000}},1000,'blackjack'],
@@ -73,7 +73,7 @@ test('roulette cover-all and small hedge do not create casino relic rewards in e
  assert.equal(CASINO_RELIC_ROUND_CAP,250);
  assert.equal(CASINO_RELIC_DAILY_CAP,500);
  assert.equal(verifiedCasinoProfit({amount:3700,payout:3600,net:-100}),0);
- assert.equal(verifiedCasinoStake({amount:3700,payout:3600,net:-100}),0);
+ assert.equal(verifiedCasinoStake({amount:3700,payout:3600}),0);
  assert.equal(casinoRelicAllowance(3500,0),18);
  assert.equal(casinoRelicAllowance(1800,0),9);
  assert.equal(casinoRelicAllowance(100,0),1);

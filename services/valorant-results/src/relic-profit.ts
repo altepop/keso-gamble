@@ -35,7 +35,9 @@ export function verifiedCasinoStake(result:unknown):number{
  const raw=result as {done?:unknown;net?:unknown;bet?:unknown;amount?:unknown;doubled?:unknown};
  const r=raw.done&&typeof raw.done==='object'
   ?raw.done as {net?:unknown;bet?:unknown;amount?:unknown;doubled?:unknown}:raw;
- if(!Number.isSafeInteger(r.net)||Number(r.net)<=0)return 0;
+ // Roulette records expose payout/amount but omit net. Derive it through the
+ // SAME verified profit helper used for the payout; otherwise roulette is unintentionally disabled.
+ if(verifiedCasinoProfit(result)<=0)return 0;
  const stake=r.bet??r.amount;
  if(!Number.isSafeInteger(stake)||Number(stake)<100||Number(stake)>100000)return 0;
  if(r.doubled!==undefined&&typeof r.doubled!=='boolean')return 0;
