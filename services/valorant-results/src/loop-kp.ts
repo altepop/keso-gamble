@@ -57,8 +57,8 @@ export async function receiveLoopKp(request:Request,env:KpEnv,mapping:KpMapping)
   env.DB.prepare('INSERT OR IGNORE INTO kp_state(guild,user,data) VALUES(?,?,?)').bind(mapping.guildId,e.discordUserId,JSON.stringify(newKpState())),
   env.DB.prepare('INSERT INTO kp_loop_events VALUES(?,?,?,?,?,?,?) ON CONFLICT(guild,user,milestone) DO NOTHING').bind(id,mapping.guildId,e.discordUserId,e.milestone,e.evidenceId,LOOP_FIXED_REWARDS[e.milestone]??config.rates[e.milestone],e.completedAt),
  ]);
- const saved=await env.DB.prepare('SELECT amount FROM kp_loop_events WHERE id=?').bind(id).first<{amount:number}>();
+ const saved=await env.DB.prepare('SELECT amount,evidence FROM kp_loop_events WHERE id=?').bind(id).first<{amount:number;evidence:string}>();
  // Equipped KESO LOOP relics add to the milestone once (a resend finds the same relic:<id> ledger row).
- if(Number(saved?.amount)>0)try{await creditVerifiedRelicBonus(env,mapping.guildId,e.discordUserId,id,'loop',Number(saved!.amount),true,e.completedAt);}catch{console.warn('relic_loop_bonus_pending');}
+ if(Number(saved?.amount)>0&&!saved?.evidence.startsWith('manual-grant:'))try{await creditVerifiedRelicBonus(env,mapping.guildId,e.discordUserId,id,'loop',Number(saved!.amount),true,e.completedAt);}catch{console.warn('relic_loop_bonus_pending');}
  return response({accepted:true,id,amount:saved!.amount});
 }
