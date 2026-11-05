@@ -3,7 +3,7 @@ import {memberNames} from '../src/member-names.ts';
 import {communityFeed,feedRevision,publicTrade} from '../src/community-feed.ts';
 import test from 'node:test';
 // Fixed wall clock for all tests in this file: midnight/09:00 boundaries stay deterministic.
-test.beforeEach(t=>t.mock.timers.enable({apis:['Date'],now:Date.parse('2026-11-04T12:00:00+09:00')}));
+test.beforeEach(t=>(t as import('node:test').TestContext).mock.timers.enable({apis:['Date'],now:Date.parse('2026-11-04T12:00:00+09:00')}));
 
 import { URL as NodeURL } from 'node:url';
 import assert from 'node:assert/strict';
