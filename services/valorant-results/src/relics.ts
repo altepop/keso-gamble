@@ -33,6 +33,8 @@ export interface RelicCollection {
   items: Record<string, RelicItem>;
   equipped: string[];
   dailyNativeBonus?: {day:string;amount:number};
+  /** Casino ONLY. UTC calendar day switches at 09:00 JST, stored atomically with each spin. */
+  dailyCasinoRelic?: {day:string;amount:number};
   lastNativeEffect?: {mode:string;amount:number;bonus:number;percent:number;at:number;names:string[];lines?:RelicBonusLine[];sets?:{name:string;bonus:number}[]};
   summonHistory?:SummonHistoryEntry[];
   presets?:Record<string,string[]>;
@@ -433,17 +435,43 @@ export function modeRelicBonus(
 /** Paid only after a verified positive realized casino outcome. Never from placing
  * a stake, purchasing a stock, or buying a ticket. Idempotency is guaranteed by
  * the parent operation transaction. This blocks unlimited risk-free buy loops. */
+/** Casino relics are strictly a SMALL cash-back on actual funds at risk.
+ * 0.5% of wager (rounded up), at most 250KP per settlement, 500KP per JST 09:00 day.
+ * Stake is required for the casino path: missing/malformed evidence fails closed.
+ * No cap or balance change applies to any other game/mode.
+ */
+export const CASINO_RELIC_RATE=0.005;
+export const CASINO_RELIC_ROUND_CAP=250;
+export const CASINO_RELIC_DAILY_CAP=500;
+export function casinoRelicDay(now:number):string{
+ return new Date(now).toISOString().slice(0,10); // JST 09:00 == UTC midnight
+}
+export function casinoRelicAllowance(
+ stake:number,usedToday:number,
+):number{
+ if(!Number.isSafeInteger(stake)||stake<100||stake>200000||
+  !Number.isSafeInteger(usedToday)||usedToday<0)return 0;
+ return Math.max(0,Math.min(CASINO_RELIC_ROUND_CAP,
+  Math.ceil(stake*CASINO_RELIC_RATE),CASINO_RELIC_DAILY_CAP-usedToday));
+}
 export function nativeRelicBonus(
  state:{cash:number;relics?:RelicCollection},
  mode:'casino'|'market'|'racing'|'mleague',
  amount:number,
  now=Date.now(),
+ casinoStake=0,
 ):number {
  if(!state.relics||!Number.isSafeInteger(amount)||amount<=0)return 0;
+ const day=mode==='casino'?casinoRelicDay(now):'';
+ const earned=mode==='casino'&&state.relics.dailyCasinoRelic?.day===day
+  ?state.relics.dailyCasinoRelic.amount:0;
+ const allowance=mode==='casino'?casinoRelicAllowance(casinoStake,earned):Number.MAX_SAFE_INTEGER;
+ if(!allowance)return 0;
  const detail=evaluateRelicBonus(state.relics,mode,{amount,win:true});
- const payout=Math.min(detail.bonus,Math.max(0,Number.MAX_SAFE_INTEGER-1-state.cash));
+ const payout=Math.min(detail.bonus,allowance,Math.max(0,Number.MAX_SAFE_INTEGER-1-state.cash));
  if(!payout)return 0;
  state.cash+=payout;
+ if(mode==='casino')state.relics.dailyCasinoRelic={day,amount:earned+payout};
  state.relics.lastNativeEffect={mode,amount,bonus:payout,percent:Math.round(payout/amount*10000)/100,at:now,names:detail.skills.slice(0,4),lines:detail.lines,sets:detail.sets};
  state.relics.nativeEarned=Math.min(Number.MAX_SAFE_INTEGER, (state.relics.nativeEarned??0)+payout);
  state.relics.nativeCount=(state.relics.nativeCount??0)+1;

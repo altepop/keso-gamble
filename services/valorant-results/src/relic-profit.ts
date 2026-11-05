@@ -26,3 +26,19 @@ export function verifiedStockProfit(sale:number,cost:number,filled:number,quanti
  const profit=Math.floor(sale-Math.ceil(cost*1.01));
  return Number.isSafeInteger(profit)?Math.max(0,profit):0;
 }
+
+// The wager is server-confirmed; a player cannot pass a supposed loss or arbitrary stake.
+// Multi-number roulette uses the SUM of every number bet, never the winning number only.
+// Blackjack doubles legitimately risk two stakes; a push has no positive profit.
+export function verifiedCasinoStake(result:unknown):number{
+ if(!result||typeof result!=='object')return 0;
+ const raw=result as {done?:unknown;net?:unknown;bet?:unknown;amount?:unknown;doubled?:unknown};
+ const r=raw.done&&typeof raw.done==='object'
+  ?raw.done as {net?:unknown;bet?:unknown;amount?:unknown;doubled?:unknown}:raw;
+ if(!Number.isSafeInteger(r.net)||Number(r.net)<=0)return 0;
+ const stake=r.bet??r.amount;
+ if(!Number.isSafeInteger(stake)||Number(stake)<100||Number(stake)>100000)return 0;
+ if(r.doubled!==undefined&&typeof r.doubled!=='boolean')return 0;
+ const exposure=Number(stake)*(r.doubled?2:1);
+ return Number.isSafeInteger(exposure)?exposure:0;
+}
