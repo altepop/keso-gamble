@@ -1,4 +1,4 @@
-import test from 'node:test';import assert from 'node:assert/strict';import {DatabaseSync} from 'node:sqlite';
+import test from 'node:test';\n// Fixed wall clock for all tests in this file: midnight/09:00 boundaries stay deterministic.\ntest.beforeEach(t=>t.mock.timers.enable({apis:['Date'],now:Date.parse('2026-11-04T12:00:00+09:00')}));\nimport assert from 'node:assert/strict';import {DatabaseSync} from 'node:sqlite';
 import {kpSchema} from '../src/kp.ts';import type {KpEnv} from '../src/kp.ts';
 import {ensureModeRewards} from '../src/mode-rewards.ts';
 import {ensureSkirmish,settleSkirmishMatch,skirmishState,skirmishPrompt,decideSkirmish,skirmishResultButtons,withoutSkirmishButtons} from '../src/skirmish.ts';
