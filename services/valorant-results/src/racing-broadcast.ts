@@ -6,7 +6,7 @@ import {raceSeed} from './racing-kp.ts';
 import {raceEntries} from './racing-horses.ts';
 import {crownFor} from './racing-crowns.ts';
 // @ts-expect-error Shared deterministic race model.
-import {RACE_INTERVAL,RUN_MS,COURSE_M,bigRaceName,fillerCrownName,raceCard,raceResult,raceTimeline,raceOdds,raceCommentary,distanceAt,raceEvent} from '../../../js/racing.js';
+import {RACE_INTERVAL,RUN_MS,COURSE_M,bigRaceName,fillerCrownName,raceCard,raceResult,raceTimeline,raceOdds,raceCommentary,distanceAt,lastPlaceAt,raceEvent} from '../../../js/racing.js';
 export type BroadcastEnv=PostEnv&{RACE_BROADCAST?:DurableObjectNamespace};
 export interface RaceShow {card:any;timeline:any;order:number[];commentary:Array<{t:number;text:string}>;odds:any}
 export interface BroadcastRow {guild:string;race:number;snapshot:string;message:string|null;channel:string|null;step:number;retry_at:number;video:string;lease:string|null;lease_until:number;video_message:string|null}
@@ -42,7 +42,12 @@ export function liveRacePost(show:RaceShow,now:number){
  if(now<card.start)return {content:[title,`<t:${Math.floor(card.start/1000)}:t> 発走 · あと<t:${Math.floor(card.start/1000)}:R>`,`締切 <t:${Math.floor((card.start-60000)/1000)}:t>　\`/bet\` で購入`,...(card.event?[`🌪️ 特別ルール：${clean(card.event.name)}｜${clean(card.event.effect)}`]:[]),...card.horses.map((h:any)=>`${h.number}番 ${name(h.number)}　${(show.odds.win[h.number]/10).toFixed(1)}倍`),'ここで実況するで！ Activityを開かんでも観戦できるから、そのまま見といてな。'].join('\n'),allowed_mentions:{parse:[]},components:activityLaunchComponents()};
  const ranked=[...order].sort((a,b)=>distanceAt(timeline,b,t)-distanceAt(timeline,a,t));
  const line=show.commentary.filter(c=>c.t<=t).at(-1)?.text??'スタート！';
- return {content:[title,finished?'**確定順位**':`発走から${Math.floor(t/1000)}秒 · 残り約${Math.max(0,Math.ceil((COURSE_M-distanceAt(timeline,ranked[0],t))/100))*100}m`,finished?order.slice(0,3).map((n,i)=>`${['🥇','🥈','🥉'][i]} ${i+1}着 ${n}番 **${name(n)}**`).join('\n'):'```\n'+card.horses.map((h:any)=>{const pos=Math.min(14,Math.floor(distanceAt(timeline,h.number,t)/COURSE_M*14));return `${String(h.number).padStart(2)} ${'━'.repeat(pos)}🐎${'─'.repeat(14-pos)} ${name(h.number)}`;}).join('\n')+'\n```',`💬 ${clean(line)}`,finished?'レースは確定や。払戻しは口座に自動で入るから待っといてな。':'約5秒ごとに更新するで。'].join('\n').slice(0,1950),allowed_mentions:{parse:[]},components:activityLaunchComponents()};
+ const backmarker=finished?null:lastPlaceAt(timeline,Math.max(1,t));
+ const finalLast=order.at(-1);
+ const tailLine=finished
+  ?`🐢 **本日の最下位：${finalLast}番 ${name(finalLast)}**（${order.length}着）`
+  :backmarker?`🐢 **現在の最後方：${backmarker.number}番 ${name(backmarker.number)}**（前との差 約${backmarker.gap}m）`:'';
+ return {content:[title,finished?'**確定順位**':`発走から${Math.floor(t/1000)}秒 · 残り約${Math.max(0,Math.ceil((COURSE_M-distanceAt(timeline,ranked[0],t))/100))*100}m`,tailLine,finished?order.slice(0,3).map((n,i)=>`${['🥇','🥈','🥉'][i]} ${i+1}着 ${n}番 **${name(n)}**`).join('\n'):'```\n'+card.horses.map((h:any)=>{const pos=Math.min(14,Math.floor(distanceAt(timeline,h.number,t)/COURSE_M*14));return `${String(h.number).padStart(2)} ${'━'.repeat(pos)}🐎${'─'.repeat(14-pos)} ${name(h.number)}`;}).join('\n')+'\n```',`💬 ${clean(line)}`,finished?'レースは確定や。払戻しは口座に自動で入るから待っといてな。':'約5秒ごとに更新するで。'].join('\n').slice(0,1950),allowed_mentions:{parse:[]},components:activityLaunchComponents()};
 }
 /** Cron arms an alarm before the start; no viewer or Activity session is needed. */
 export async function prepareRaceBroadcast(env:BroadcastEnv,mapping:KpMapping,now=Date.now()){
