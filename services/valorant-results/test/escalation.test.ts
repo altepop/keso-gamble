@@ -1,4 +1,7 @@
-import test from 'node:test';\n// Fixed wall clock for all tests in this file: midnight/09:00 boundaries stay deterministic.\ntest.beforeEach(t=>t.mock.timers.enable({apis:['Date'],now:Date.parse('2026-11-04T12:00:00+09:00')}));\n
+import test from 'node:test';
+// Fixed wall clock for all tests in this file: midnight/09:00 boundaries stay deterministic.
+test.beforeEach(t=>t.mock.timers.enable({apis:['Date'],now:Date.parse('2026-11-04T12:00:00+09:00')}));
+
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
 import {readdirSync,readFileSync} from 'node:fs';
