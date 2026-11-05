@@ -5,6 +5,7 @@ import {spikeStatus,spikeAdminStatus,purchaseSpikeHint} from './spike-awakening.
 import {initializeKp,newKpState} from './kp.ts';
 import type {KpEnv,KpMapping} from './kp.ts';
 import {ensureQuizKp} from './quiz-kp.ts';
+import {ensureLoopKp,LOOP_FIXED_REWARDS} from './loop-kp.ts';
 import {operateKp,previewMlBet} from './kp-api.ts';
 import {racingView} from './racing-kp.ts';
 import {ML_DATA,closeMl,mlClosed,mlData,mlLineups,mlLineupTimes,mlResults,seasonStats} from './mleague.ts';
@@ -287,14 +288,36 @@ export async function runKpCommand(env:KpEnv,interaction:Slash,override?:KpMappi
   // cannot pay twice; a negative amount takes no more than the balance (wallets cannot go below 0).
   const value=(key:string)=>interaction.data?.options?.find(o=>o.name===key)?.value;
   const target=discordUser(value('user')),amount=Number(value('amount')),reason=clean(String(value('reason')??'').trim()).slice(0,60);
-  if(!/^\d{15,22}$/.test(target)||!Number.isSafeInteger(amount)||!amount||Math.abs(amount)>100000||!reason)return '相手・0以外のKP（±10万まで）・理由を指定してください。';
+  const milestone=String(value('loop_milestone')??''),asLoop=milestone!=='';
+  if(!/^\d{15,22}$/.test(target)||!Number.isSafeInteger(amount)||!amount||!reason)return '相手・0以外のKP・理由を指定してください。';
+  if(asLoop){
+   if(!Object.hasOwn(LOOP_FIXED_REWARDS,milestone)||amount!==LOOP_FIXED_REWARDS[milestone])
+    return 'LOOP代替付与は報酬の種類に決まっている額を正確に入力してください。対象は1,000／50,000／300,000 KPです。';
+   await ensureLoopKp(env);
+  }else if(Math.abs(amount)>100000)return '通常の手動付与は±10万KPまでです。';
+  const loopId='loop:'+mapping.guildId+':'+target+':'+milestone,proof='manual-grant:'+interaction.id;
   await env.DB.batch([
    env.DB.prepare('INSERT OR IGNORE INTO kp_participants(guild,user) VALUES(?,?)').bind(mapping.guildId,target),
    env.DB.prepare('INSERT OR IGNORE INTO kp_wallets(guild,user) VALUES(?,?)').bind(mapping.guildId,target),
    env.DB.prepare('INSERT OR IGNORE INTO kp_state(guild,user,data) VALUES(?,?,?)').bind(mapping.guildId,target,JSON.stringify(newKpState())),
-   env.DB.prepare(`INSERT OR IGNORE INTO kp_ledger(id,guild,user,delta,kind,at) SELECT ?,?,?,CASE WHEN ?<0 THEN -MIN(-?,balance) ELSE ? END,'grant',? FROM kp_wallets WHERE guild=? AND user=?`)
-    .bind('grant:'+interaction.id,mapping.guildId,target,amount,amount,amount,created(interaction.id),mapping.guildId,target),
+   ...(asLoop?[
+    // The existing kp_loop_apply trigger creates the ONE ledger credit. A later signed LOOP
+    // delivery uses this exact (guild,user,milestone) unique key and cannot pay again.
+    env.DB.prepare('INSERT INTO kp_loop_events(id,guild,user,milestone,evidence,amount,completed_at) VALUES(?,?,?,?,?,?,?) ON CONFLICT(guild,user,milestone) DO NOTHING').bind(loopId,mapping.guildId,target,milestone,proof,amount,created(interaction.id)),
+   ]:[
+    env.DB.prepare(`INSERT OR IGNORE INTO kp_ledger(id,guild,user,delta,kind,at) SELECT ?,?,?,CASE WHEN ?<0 THEN -MIN(-?,balance) ELSE ? END,'grant',? FROM kp_wallets WHERE guild=? AND user=?`)
+     .bind('grant:'+interaction.id,mapping.guildId,target,amount,amount,amount,created(interaction.id),mapping.guildId,target),
+   ]),
   ]);
+  if(asLoop){
+   const row=await env.DB.prepare('SELECT amount,evidence FROM kp_loop_events WHERE id=?').bind(loopId).first<{amount:number;evidence:string}>();
+   const after=Number((await env.DB.prepare('SELECT balance FROM kp_wallets WHERE guild=? AND user=?').bind(mapping.guildId,target).first<{balance:number}>())?.balance??0);
+   if(row?.evidence!==proof)return `⚠️ <@${target}> の LOOP「${milestone}」はすでに支給済みです。追加付与なし。残高 ${money(after)}`;
+   const silent=value('silent')===true;
+   // Announcements are deduplicated by interaction ID. No separate 'grant' ledger row.
+   if(!silent&&(env as {KP_EARNINGS_WEBHOOK_URL?:string}).KP_EARNINGS_WEBHOOK_URL){await ensurePosts(env);await enqueue(env,'kp-grant:'+interaction.id,`🎁 <@${target}> に +${money(amount)}（LOOP ${milestone} 代替・${reason}）`,created(interaction.id));}
+   return `🎁 <@${target}> に +${money(amount)}（LOOP ${milestone} 代替・${reason}）。残高 ${money(after)}\nLOOPの同じ達成IDから再送されても二重払いされません。`+(silent?'\n🤫 通知なし（稼ぎchには投稿していません）':'');
+  }
   const row=await env.DB.prepare('SELECT delta FROM kp_ledger WHERE id=?').bind('grant:'+interaction.id).first<{delta:number}>();
   const moved=Number(row?.delta??0),signed=(moved<0?'−':'+')+money(Math.abs(moved));
   const after=Number((await env.DB.prepare('SELECT balance FROM kp_wallets WHERE guild=? AND user=?').bind(mapping.guildId,target).first<{balance:number}>())?.balance??0);
