@@ -195,3 +195,28 @@ test('open blackjack risk remains after removing relic; losing settlement debits
  assert.equal(f.balance(),18500);
  assert.equal((await readKpState(f.env,mapping,one)).casinoRiskRounds.blackjack,undefined);
 });
+
+test('casino winning bonus uses original wager-time relic loadout, not swapped equipment',async t=>{
+ const {RISK_RELICS}=await import('../src/relic-catalog.ts');
+ const eclipse=RISK_RELICS.find(x=>x.id==='normal.pact.eclipse')!;
+ const f=await fixture();f.credit('risk-win-credit',20000);
+ const row=f.sql.prepare('SELECT data FROM kp_state WHERE guild=? AND user=?').get(guild,one) as {data:string};
+ const state=JSON.parse(row.data);
+ state.relics={totalSummons:1,items:{[eclipse.id]:{...eclipse,origin:'normal',count:1}},equipped:[eclipse.id]};
+ f.sql.prepare('UPDATE kp_state SET data=? WHERE guild=? AND user=?').run(JSON.stringify(state),guild,one);
+ // Player gets 10+10, dealer reaches 3+10+10 and busts.
+ let i=0;const cards=[9,9,2,9,9];
+ t.mock.method((globalThis as unknown as {crypto:Crypto}).crypto,'getRandomValues',((v:Uint32Array)=>{v.fill(cards[i++]??9);return v;}) as never);
+ const start=await operateKp(f.env,mapping,one,'risk-win-start-000001','bj-start',{amount:1000}) as {result:{done:unknown}};
+ assert.equal(start.result.done,null);
+ const pending=(await readKpState(f.env,mapping,one)).casinoRiskRounds.blackjack;
+ assert.deepEqual(pending.equipped,[eclipse.id]);
+ const raw=f.sql.prepare('SELECT data FROM kp_state WHERE guild=? AND user=?').get(guild,one) as {data:string};
+ const changed=JSON.parse(raw.data);changed.relics.equipped=[];
+ f.sql.prepare('UPDATE kp_state SET data=? WHERE guild=? AND user=?').run(JSON.stringify(changed),guild,one);
+ const end=await operateKp(f.env,mapping,one,'risk-win-stand-000001','bj-stand',{}) as {result:{done:{net:number};relicBonus:number}};
+ assert.equal(end.result.done.net,1000);
+ assert.equal(end.result.relicBonus,5600,'the same wager-time +560% applies after equipment is removed');
+ assert.equal(f.balance(),26600);
+ assert.deepEqual((await readKpState(f.env,mapping,one)).relics.equipped,[],'the loadout swap is not persisted over user choices');
+});
