@@ -548,6 +548,32 @@ export function nativeRelicLoss(
  c.lastRelicLoss={mode,amount:loss,penalty,at:now};
  return penalty;
 }
+/** Verified receipts (games, voice, Steam, LOOP, …): how a relic bonus resolves. */
+export const RELIC_EXPECTED_RATIO=0.5;   // the average relic bonus is at most +50% of the base reward
+export const RELIC_RECOIL_CHANCE=0.2;    // after a miss, a 1-in-5 recoil …
+export const RELIC_RECOIL_RATIO=0.5;     // … of half the base reward
+export const RELIC_RECEIPT_CAP=10000;    // one receipt never pays more than +10,000 KP of relic bonus
+export type RelicGamble={payout:number;kind:'steady'|'hit'|'miss'|'recoil';chance:number;full:number};
+/**
+ * A build whose bonus is at most +50% of the base pays it every time (unchanged). A stronger build keeps its full
+ * bonus (up to 10,000 KP) but pays it only with chance p; otherwise nothing, or a recoil of half the base reward
+ * one time in five. p is chosen so the average is exactly +50%: p·B − (1−p)·0.2·R = E.
+ */
+export function relicGamble(bonus:number,base:number,roll:number,recoilRoll:number):RelicGamble{
+ const full=Math.max(0,Math.min(Math.floor(bonus),RELIC_RECEIPT_CAP));
+ if(!Number.isSafeInteger(base)||base<=0||!full)return {payout:0,kind:'miss',chance:0,full};
+ const expected=Math.floor(base*RELIC_EXPECTED_RATIO);
+ if(full<=expected)return {payout:full,kind:'steady',chance:1,full};
+ const recoil=Math.floor(base*RELIC_RECOIL_RATIO),risk=RELIC_RECOIL_CHANCE*recoil;
+ const chance=(expected+risk)/(full+risk);
+ if(roll<chance)return {payout:full,kind:'hit',chance,full};
+ if(recoil>0&&recoilRoll<RELIC_RECOIL_CHANCE)return {payout:-recoil,kind:'recoil',chance,full};
+ return {payout:0,kind:'miss',chance,full};
+}
+let relicRandom:()=>number=()=>crypto.getRandomValues(new Uint32Array(1))[0]!/2**32;
+function randomUnit(){return relicRandom();}
+/** Tests only: fix the relic roll (0 = always hit). Returns a function that restores the real random source. */
+export function useRelicRandomForTests(fn:()=>number){const previous=relicRandom;relicRandom=fn;return ()=>{relicRandom=previous;};}
 /** Caller MUST confirm a new, immutable server-verified receipt before invoking.
  * This is not a public API; browsers can never request a bonus for arbitrary evidence.
  */
@@ -577,18 +603,25 @@ export async function creditVerifiedRelicBonus(
   amount=Math.min(amount,spike.base);
  }
  const detail=evaluateRelicBonus(state.relics,mode,{amount,win,spikeGamesBefore});
- const bonus=detail.bonus;
- if(!bonus)return 0;
+ if(!detail.bonus)return 0;
+ // High risk, high return (owner decision 2026-11-05): a strong build still pays its full bonus, but only by chance,
+ // and a miss can recoil. The average stays at +50% of the base reward. A miss is recorded too (0 KP), so a retry of
+ // the same receipt can never re-roll it.
+ const gamble=relicGamble(detail.bonus,amount,randomUnit(),randomUnit());
+ const bonus=gamble.payout;
  const id='relic:'+receipt;
- const saved=await env.DB.prepare('INSERT OR IGNORE INTO kp_ledger(id,guild,user,delta,kind,at) VALUES(?,?,?,?,?,?)')
-  .bind(id,guild,user,bonus,'relic',at).run();
+ const saved=await env.DB.prepare(`INSERT OR IGNORE INTO kp_ledger(id,guild,user,delta,kind,at)
+   SELECT ?,?,?,CASE WHEN ?<0 THEN -MIN(-?,balance) ELSE ? END,'relic',? FROM kp_wallets WHERE guild=? AND user=?`)
+  .bind(id,guild,user,bonus,bonus,bonus,at,guild,user).run();
  // Log only real credited receipts; write is independently idempotent on retries.
  try{
   await env.DB.prepare(
    'INSERT OR IGNORE INTO relic_effect_logs(id,guild,user,mode,base,bonus,details,at) SELECT ?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM kp_ledger WHERE id=? AND guild=? AND user=?)'
-  ).bind(id,guild,user,mode,amount,bonus,JSON.stringify({lines:detail.lines,sets:detail.sets,resonance:detail.resonance,curseReversed:detail.curseReversed,spikeOpening:detail.spikeOpening}),at,id,guild,user).run();
+  ).bind(id,guild,user,mode,amount,bonus,JSON.stringify({lines:detail.lines,sets:detail.sets,resonance:detail.resonance,curseReversed:detail.curseReversed,spikeOpening:detail.spikeOpening,gamble}),at,id,guild,user).run();
  }catch{console.warn('relic_effect_log_pending');}
- return saved.meta.changes?bonus:0;
+ if(!saved.meta.changes)return 0;
+ const credited=await env.DB.prepare('SELECT delta FROM kp_ledger WHERE id=? AND guild=? AND user=?').bind(id,guild,user).first<{delta:number}>();
+ return Number(credited?.delta??0);
 }
 function store(c: RelicCollection, item: RelicItem) {
   const old = c.items[item.id];

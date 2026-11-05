@@ -1,4 +1,4 @@
-import {relicCombinationsSection} from './relics-v7.js?v=web-fdbba104bcb11575';
+import {relicCombinationsSection} from './relics-v7.js?v=web-a063f7169502c6c6';
 // Presentation-only helpers; KP, ownership and equipped slots stay server authoritative.
 const esc=x=>String(x??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 const number=x=>Number(x??0).toLocaleString('ja-JP');
@@ -145,8 +145,9 @@ export function relicBonusDashboard(state,proofs,view={}){
   select('mode',mode,availableModes.map(x=>[x,modes[x]??x]))+'</label><label>報酬の例'+
   select('amount',amount,(mode==='spikerush'?[20,40,100,500]:[100,500,900,5000]).map(x=>[x,number(x)+' KP']))+'</label></div>';
  const recent=(Array.isArray(state?.ledger)?state.ledger:[]).filter(x=>x.kind==='relic').slice(0,3);
- const recentHtml=recent.length?'<div class="relic-last-real"><b>確定済みの遺物ボーナス（最新3件）</b>'+
-  recent.map(x=>'<span>実際に付与：<strong>＋'+number(x.delta)+' KP</strong></span>').join('')+
+ const recentHtml=recent.length?'<div class="relic-last-real"><b>確定済みの遺物ボーナス（最新3件）</b><small>強い組み合わせほど「確率で全額・外れると不発か反動」。平均は元の報酬の＋50%まで。</small>'+
+  recent.map(x=>Number(x.delta)>0?'<span>大当たり・実際に付与：<strong>＋'+number(x.delta)+' KP</strong></span>':
+   Number(x.delta)<0?'<span>🩸 反動：<strong>−'+number(-Number(x.delta))+' KP</strong></span>':'<span>不発（0 KP）</span>').join('')+
   '</div>':'';
  const last=proofs?.lastNativeEffect;
  const lastHtml=last&&Number.isFinite(last.bonus)

@@ -204,7 +204,7 @@ export async function kpMatchNet(env:KpEnv,id:string){const r=await env.DB.prepa
 export async function kpRelicBonus(env:KpEnv,guild:string,user:string,id:string):Promise<number>{
  const hit=await env.DB.prepare("SELECT delta FROM kp_ledger WHERE id=? AND guild=? AND user=? AND kind='relic'")
   .bind('relic:'+id,guild,user).first<{delta:number}>();
- return Math.max(0,Number(hit?.delta??0));
+ return Number(hit?.delta??0); // negative = relic recoil (high-risk relics, 2026-11-05)
 }
 /** A single line shows BOTH the actual wallet total and a clear breakdown.
  * Reformatting a delivered notification replaces the old line, never repeats it.
@@ -213,15 +213,15 @@ export function kpCreditLine(text:string,amount:number,note='',relic=0){
  // Rewriting an already-sent result must replace both totals and prior relic
  // components; do not retain a stale old result after a late ledger settlement.
  const base=text.replace(/\n🪙 この試合 [+−]\d+ KP[^\n]*/g,'')
-  .replace(/\n\s*↳ (?:試合報酬|🧿 遺物補正)[^\n]*/g,'');
+  .replace(/\n\s*↳ (?:試合報酬|🧿 遺物補正|🩸 遺物の反動)[^\n]*/g,'');
  const split=base.indexOf('\n💬 ');
- const goodRelic=Number.isSafeInteger(relic)&&relic>0?relic:0;
+ const goodRelic=Number.isSafeInteger(relic)&&relic!==0?relic:0;
  const gross=amount-goodRelic;
  const fmt=(n:number)=>n<0?'−'+(-n):'+'+n;
  const cleanedNote=note.replace(/・🧿遺物補正＋\d+ KP/g,'').replace(/（🧿遺物補正＋\d+ KP）/g,'');
  const line='\n🪙 この試合 '+fmt(amount)+' KP'+
   (goodRelic?'\n  ↳ 試合報酬 '+fmt(gross)+' KP'+(cleanedNote?' '+cleanedNote:'')+
-   '\n  ↳ 🧿 遺物補正 +'+goodRelic+' KP':cleanedNote);
+   (goodRelic>0?'\n  ↳ 🧿 遺物補正 +'+goodRelic+' KP':'\n  ↳ 🩸 遺物の反動 −'+(-goodRelic)+' KP'):cleanedNote);
  return split<0?base+line:base.slice(0,split)+line+base.slice(split);
 }
 /** The KP of one VALORANT result before the wallet: the mode's rate, the side bonuses of the easy modes, then luck.
@@ -356,7 +356,7 @@ export async function loadKpRunMatch(env:KpEnv,run:KpRun,id:string):Promise<void
   .bind(id,run.mapping.guildId).first<{amount:number;relic:number;message:string|null;note:string|null}>();
  if(row){
   run.credits.set(id,row.amount);
-  run.relicBonuses.set(id,Math.max(0,Number(row.relic??0)));
+  run.relicBonuses.set(id,Number(row.relic??0));
   if(row.message!==null)run.messages.set(id,row.message);
   run.notes?.set(id,row.note??(/\n🪙 この試合 [^\n]*? KP([^\n]*)/.exec(row.message??'')?.[1]??''));
  }

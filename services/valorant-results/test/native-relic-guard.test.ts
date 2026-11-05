@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 // @ts-expect-error Shared browser quote arithmetic.
 import {stockOrderQuote,STOCK_PRICE_SCALE} from '../../../js/stock-order.js';
 import {verifiedStockProfit,verifiedBetProfit,verifiedBetStake,verifiedBetLoss,verifiedStockLoss,verifiedCasinoNet,verifiedCasinoLossStake} from '../src/relic-profit.ts';
-import {nativeRelicBonus,nativeRelicLoss,snapshotLoadout,rememberLoadout,RELIC_LOSS_MEMORY_MS,nativeRelicAllowance,evaluateRelicBonus,creditVerifiedRelicBonus,type RelicCollection,type RelicItem} from '../src/relics.ts';
+import {relicGamble,RELIC_RECEIPT_CAP,nativeRelicBonus,nativeRelicLoss,snapshotLoadout,rememberLoadout,RELIC_LOSS_MEMORY_MS,nativeRelicAllowance,evaluateRelicBonus,creditVerifiedRelicBonus,type RelicCollection,type RelicItem} from '../src/relics.ts';
 
 function strong(){
  const relics:RelicCollection={totalSummons:0,items:{},equipped:[]};
@@ -105,16 +105,18 @@ test('Spike Rush: relics apply to the base (40/20) only, not to the growth corre
  const relics=strong().relics;
  const ledger:unknown[][]=[];
  const prepare=(text:string)=>({bind:(...values:unknown[])=>({
-  first:async()=>text.includes('FROM kp_state')?{data:JSON.stringify({relics})}:text.includes('spike_rewards')?{gamesBefore:30,base:40}:null,
+  first:async()=>text.includes('FROM kp_state')?{data:JSON.stringify({relics})}:text.includes('spike_rewards')?{gamesBefore:30,base:40}:
+   text.startsWith('SELECT delta FROM kp_ledger')?{delta:ledger[0]?.[3]}:null,
   run:async()=>{if(text.startsWith('INSERT OR IGNORE INTO kp_ledger'))ledger.push(values);return {meta:{changes:1}};},
  })});
  const env={DB:{prepare}} as never;
  const credited=await creditVerifiedRelicBonus(env,'g','u','match:g:m1:p','spikerush',720,true,now);
  const onBase=evaluateRelicBonus(relics,'spikerush',{amount:40,win:true,spikeGamesBefore:30}).bonus;
  const onAll=evaluateRelicBonus(relics,'spikerush',{amount:720,win:true,spikeGamesBefore:30}).bonus;
- assert.equal(credited,onBase);
  assert.ok(onAll>onBase*5,'the growth correction no longer multiplies the relic bonus');
- assert.equal(ledger[0]?.[3],onBase);
+ // The strong build resolves on the 40 KP base: full bonus by chance, nothing, or a 20 KP recoil.
+ assert.ok([onBase,0,-20].includes(credited),String(credited));
+ assert.equal(ledger[0]?.[3],credited);
 });
 
 test('taking relics off right before a losing sale does not dodge the penalty for 24 hours',()=>{
@@ -144,4 +146,26 @@ test('taking relics off right before a losing sale does not dodge the penalty fo
  // No change, nothing remembered.
  const same=strong();rememberLoadout(same.relics,snapshotLoadout(same.relics),now);
  assert.equal(same.relics.recentLoadouts,undefined);
+});
+
+test('verified receipts: strong builds keep their full bonus by chance, with recoil, averaging +50% of the base',()=>{
+ // A modest build (<= +50%) is unchanged and certain.
+ assert.deepEqual(relicGamble(150,400,0.99,0.99),{payout:150,kind:'steady',chance:1,full:150});
+ // Spike Rush example: base 400, a stacked build worth +4,000.
+ const hit=relicGamble(4000,400,0,0.99);
+ assert.equal(hit.kind,'hit');assert.equal(hit.payout,4000);
+ assert.ok(Math.abs(hit.chance-240/4040)<1e-9);
+ assert.deepEqual(relicGamble(4000,400,0.99,0.1),{payout:-200,kind:'recoil',chance:hit.chance,full:4000});
+ assert.equal(relicGamble(4000,400,0.99,0.5).kind,'miss');
+ // The exact average is +50% of the base for any strength.
+ for(const [bonus,base] of [[4000,400],[900,400],[50000,300000],[2646,40],[100000,900]] as const){
+  const g=relicGamble(bonus,base,0,0.99),full=g.full,recoil=Math.floor(base*.5);
+  const ev=g.chance*full-(1-g.chance)*0.2*recoil;
+  assert.ok(full<=Math.floor(base*.5)?g.payout===full:Math.abs(ev-Math.floor(base*.5))<1e-6,`${bonus}/${base}`);
+ }
+ // One receipt never pays more than 10,000 KP of relic bonus (LOOP chapter 2: 300,000 base).
+ assert.equal(relicGamble(900000,300000,0,0).payout,RELIC_RECEIPT_CAP);
+ // Monte Carlo: average stays near +50%.
+ let sum=0;const n=200000;for(let i=0;i<n;i++)sum+=relicGamble(4000,400,Math.random(),Math.random()).payout;
+ assert.ok(Math.abs(sum/n-200)<15,String(sum/n));
 });
