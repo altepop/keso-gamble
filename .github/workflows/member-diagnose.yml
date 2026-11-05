@@ -1,0 +1,32 @@
+name: Member link check (read-only)
+
+# Checks whether one member's Riot account is monitored and linked to their KP wallet.
+# SELECT only. The job summary shows yes/no, counts, times and masked Riot IDs; never raw IDs.
+on:
+  workflow_dispatch:
+    inputs:
+      discord_id:
+        description: Discord user ID to check
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    if: github.repository == 'altepop/keso-gamble' && github.actor == 'altepop'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Test the check
+        run: node --test scripts/member-diagnose.test.mjs
+      - name: Check the member (read-only)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          DISCORD_ID: ${{ inputs.discord_id }}
+        run: node scripts/member-diagnose.mjs
