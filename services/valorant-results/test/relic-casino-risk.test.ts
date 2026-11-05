@@ -1,0 +1,40 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {RISK_RELICS} from '../src/relic-catalog.ts';
+import {casinoRiskProfile,casinoNet,applyCasinoLossRisk,outstandingCasinoReserve} from '../src/relic-casino-risk.ts';
+import type {RelicCollection} from '../src/relics.ts';
+const e=RISK_RELICS.find(x=>x.id==='normal.pact.eclipse')!;
+const f=RISK_RELICS.find(x=>x.id==='normal.pact.frenzy')!;
+const inventory:RelicCollection={totalSummons:2,items:Object.fromEntries([e,f].map(x=>[x.id,{...x,origin:'normal' as const,count:1}])),equipped:[e.id,f.id]};
+test('only owned, equipped transcendent pacts magnify casino losses',()=>{
+ assert.equal(casinoRiskProfile(undefined).multiplier,1);
+ assert.equal(casinoRiskProfile({...inventory,equipped:[]}).multiplier,1);
+ assert.equal(casinoRiskProfile({...inventory,equipped:[e.id]}).multiplier,1.5);
+ assert.equal(casinoRiskProfile({...inventory,equipped:[f.id]}).multiplier,2);
+ assert.equal(casinoRiskProfile(inventory).multiplier,3);
+ assert.equal(casinoRiskProfile({...inventory,items:{[e.id]:{...inventory.items[e.id]!,origin:'steam'}}}).multiplier,1);
+});
+test('loss is a single extra debit; a win, push, or open hand never pays a penalty',()=>{
+ const s={cash:20000},risk=casinoRiskProfile(inventory);
+ assert.equal(casinoNet({done:null}),null);
+ assert.equal(casinoNet({done:{net:0}}),0);
+ assert.equal(casinoNet({done:{net:-1000}}),-1000);
+ assert.equal(casinoNet({amount:1000,payout:0}),-1000);
+ assert.equal(applyCasinoLossRisk(s,{done:{net:1000}},risk),null);
+ assert.equal(applyCasinoLossRisk(s,{done:null},risk),null);
+ const finished:any={done:{net:-1000,payout:0,bet:1000}};
+ assert.deepEqual(applyCasinoLossRisk(s,finished,risk),{multiplier:3,baseLoss:1000,extraLoss:2000,totalLoss:3000,names:['日蝕の至高王','賽の崩壊核']});
+ assert.equal(s.cash,18000);
+ assert.equal(finished.done.baseNet,-1000);
+ assert.equal(finished.done.net,-3000);
+ assert.equal(finished.done.payout,0);
+ assert.equal(finished.relicPenalty.extraLoss,2000);
+});
+test('risk never overdraws wallet, and open-hand reserve tracks stake and multiplier',()=>{
+ const s={cash:100};
+ const info=applyCasinoLossRisk(s,{net:-1000},casinoRiskProfile(inventory));
+ assert.equal(info?.extraLoss,100);
+ assert.equal(s.cash,0);
+ assert.equal(outstandingCasinoReserve({blackjack:{multiplier:1.5,names:[],bet:1000},mines:{multiplier:2,names:[],bet:2000}}),2500);
+ assert.equal(outstandingCasinoReserve({blackjack:{multiplier:1,names:[],bet:1000}}),0);
+});
