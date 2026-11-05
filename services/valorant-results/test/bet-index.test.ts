@@ -31,7 +31,7 @@ test('backfill existing saved bets exactly once, keeping settled M.LEAGUE histor
  const f=fixture();
  f.sql.prepare('INSERT INTO kp_state(guild,user,data) VALUES(?,?,?)').run(guild,one,JSON.stringify({mlBets:[ml('1'),ml('2','won','match-2')],raceBets:[race('3'),race('4','lost')]}));
  await ensureBetIndex(f.env);await ensureBetIndex(f.env);
- const rows=f.sql.prepare('SELECT kind,slot,match,status FROM kp_bet_index ORDER BY kind,slot').all();
+ const rows=f.sql.prepare('SELECT kind,slot,match,status FROM kp_bet_index ORDER BY kind,slot').all().map(r=>({...r}));
  assert.deepEqual(rows,[{kind:'ml',slot:0,match:'match-1',status:'pending'},{kind:'ml',slot:1,match:'match-2',status:'won'},{kind:'race',slot:0,match:'123',status:'pending'}]);
  assert.equal(f.sql.prepare("SELECT value FROM kp_settings WHERE key='bet_index_backfilled_v1'").get()!.value,'1');
 });
@@ -40,7 +40,7 @@ test('state updates and inserts maintain the index without duplicated or stale p
  f.sql.prepare('INSERT INTO kp_state(guild,user,data) VALUES(?,?,?)').run(guild,one,JSON.stringify({mlBets:[ml('1')],raceBets:[race('2')]}));
  assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM kp_bet_index WHERE status='pending'").get()!.n,2);
  f.sql.prepare('UPDATE kp_state SET data=? WHERE guild=? AND user=?').run(JSON.stringify({mlBets:[ml('1','won')],raceBets:[race('2','won')]}),guild,one);
- assert.deepEqual(f.sql.prepare('SELECT kind,status FROM kp_bet_index ORDER BY kind').all(),[{kind:'ml',status:'won'}]);
+ assert.deepEqual(f.sql.prepare('SELECT kind,status FROM kp_bet_index ORDER BY kind').all().map(r=>({...r})),[{kind:'ml',status:'won'}]);
  f.sql.prepare('DELETE FROM kp_state WHERE guild=? AND user=?').run(guild,one);
  assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM kp_bet_index').get()!.n,0);
 });
