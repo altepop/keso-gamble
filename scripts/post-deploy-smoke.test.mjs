@@ -7,7 +7,7 @@ function mock(entries){
   const url=new URL(input),path=url.pathname;
   if(init?.headers?.Authorization==='Bearer '+token&&path==='/api/kp/state')return Response.json(entries.wallet??{cash:123});
   if(path==='/keso-gamble/')return new Response('<meta name="keso-release" content="x"><script src="./js/bootstrap.js"></script>');
-  if(path==='/keso-gamble/js/bootstrap.js')return new Response('console.log("boot")');
+  if(path==='/keso-gamble/js/bootstrap.js')return new Response('console.log("bootstrap loaded")');
   if(path==='/api/kp/status')return Response.json(entries.status??{enabled:true,currency:'KP',registered:4});
   return new Response('missing',{status:404});
  };
