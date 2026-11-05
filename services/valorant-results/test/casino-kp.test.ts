@@ -159,7 +159,7 @@ test('transcendent casino loss triples an actual chinchiro defeat without double
  state.relics={totalSummons:2,items:Object.fromEntries([eclipse,frenzy].map(x=>[x.id,{...x,origin:'normal',count:1}])),equipped:[eclipse.id,frenzy.id]};
  f.sql.prepare('UPDATE kp_state SET data=? WHERE guild=? AND user=?').run(JSON.stringify(state),guild,one);
  // The casino draws all ones: parent pinzoro, so ordinary loss is 5 * the bet.
- t.mock.method(globalThis.crypto,'getRandomValues',((v:Uint32Array)=>{v.fill(0);return v;}) as never);
+ t.mock.method((globalThis as unknown as {crypto:Crypto}).crypto,'getRandomValues',((v:Uint32Array)=>{v.fill(0);return v;}) as never);
  await assert.rejects(operateKp(f.env,mapping,one,'risk-rejected-00000001','chinchiro',{amount:2000}),/損失増幅/);
  assert.equal(f.balance(),20000);
  const id='risk-chinchiro-00000001';
@@ -181,7 +181,7 @@ test('open blackjack risk remains after removing relic; losing settlement debits
  state.relics={totalSummons:1,items:{[eclipse.id]:{...eclipse,origin:'normal',count:1}},equipped:[eclipse.id]};
  f.sql.prepare('UPDATE kp_state SET data=? WHERE guild=? AND user=?').run(JSON.stringify(state),guild,one);
  // All cards are rank 3: 3+3 starts a non-natural hand and loses against dealer 18.
- t.mock.method(globalThis.crypto,'getRandomValues',((v:Uint32Array)=>{v.fill(2);return v;}) as never);
+ t.mock.method((globalThis as unknown as {crypto:Crypto}).crypto,'getRandomValues',((v:Uint32Array)=>{v.fill(2);return v;}) as never);
  const start=await operateKp(f.env,mapping,one,'risk-blackjack-start-01','bj-start',{amount:1000}) as {result:{done:unknown}};
  assert.equal(start.result.done,null);
  assert.equal((await readKpState(f.env,mapping,one)).casinoRiskRounds.blackjack.multiplier,1.5);
