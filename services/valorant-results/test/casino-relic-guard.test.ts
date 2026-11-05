@@ -10,7 +10,7 @@ import {
 function relicFixture(){
  const relics:RelicCollection={totalSummons:0,items:{},equipped:[]};
  // Purposefully use the overpowered ORIGINAL relics: no relic-specific nerfs.
- const definitions:[
+ const definitions=[
   {id:'normal.pact.coinflip',name:'双面の魔導銀貨',mode:'universal',skill:'even',percent:220},
   {id:'normal.pact.chain',name:'暴走する鎖の心臓',mode:'universal',skill:'spark',percent:260},
   {id:'normal.universal.common',name:'どこでも効く銅貨',mode:'universal',skill:'even',percent:2},
