@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { RACE_INTERVAL, CLOSE_BEFORE, RUN_MS, COURSE_M, WEEKLY_LIMIT, openRaceStart, latestRaceStart, bigRaceName, raceNumber, weekStart, raceCard, raceResult, raceOdds, raceTimeline, raceCommentary, distanceAt, oddsFromProbability, finishProbabilities, payoutFor, betWins, placeRaceBet, settleRaceBets, hydrateRacing, raceRuns, fillerCrownName, crownSlotAllowed } from '../js/racing.js';
+import { RACE_INTERVAL, CLOSE_BEFORE, RUN_MS, COURSE_M, WEEKLY_LIMIT, openRaceStart, latestRaceStart, bigRaceName, raceNumber, weekStart, raceCard, raceResult, raceOdds, raceTimeline, raceCommentary, lastPlaceAt, distanceAt, oddsFromProbability, finishProbabilities, payoutFor, betWins, placeRaceBet, settleRaceBets, hydrateRacing, raceRuns, fillerCrownName, crownSlotAllowed } from '../js/racing.js';
 import { createInitialState, hydrateState } from '../js/engine.js';
 
 const jst=(text)=>Date.parse(text+'+09:00');
@@ -105,6 +105,32 @@ test('commentary is text only, ordered, and names the winner and the last horse'
   assert.match(lines[0].text,/スタート/);
   assert.ok(lines.some(l=>l.text.includes(card.horses[result.order[0]-1].name)&&l.text.includes('勝った')));
   assert.ok(lines.some(l=>l.text.includes(card.horses[result.order.at(-1)-1].name)&&l.text.includes('最下位')));
+});
+
+test('実況は各時点の最後方を追い、確定前に未来の順位を開示しない',()=>{
+ const card=raceCard(tuesday9pm);
+ for(const seed of ['backmarker-main','backmarker-shuffle','backmarker-upset']){
+  const result=raceResult(card,seed),orderBefore=[...result.order];
+  const timeline=raceTimeline(card,result,seed),odds=raceOdds(card);
+  const lines=raceCommentary(card,result,timeline,odds,seed);
+  const finish=timeline.horses[orderBefore[0]].finish;
+  for(const phase of [.14,.29,.44,.60,.75,.88,.97]){
+   const t=Math.round(finish*phase),position=lastPlaceAt(timeline,t);
+   const line=lines.find(l=>l.t===t);
+   assert.ok(position&&line,'every commentary phase must have a live backmarker');
+   assert.match(line.text,new RegExp(`${position.number}番 `));
+   assert.ok(line.text.includes(card.horses[position.number-1].name));
+   assert.match(line.text,/最後方|最下位|ビリ/);
+   assert.ok(position.gap>=0);
+   assert.equal(position.gap,Math.round(Math.max(0,distanceAt(timeline,position.ahead,t)-distanceAt(timeline,position.number,t))));
+  }
+  const beforeWinner=lines.filter(x=>x.t<finish-200);
+  assert.ok(beforeWinner.every(l=>!l.text.includes('本日の最下位')&&!l.text.includes('でフィニッシュ')));
+  const finale=lines.find(x=>x.text.includes('最下位')&&x.text.includes(card.horses[orderBefore.at(-1)-1].name));
+  assert.ok(finale&&finale.t>=timeline.horses[orderBefore.at(-1)].finish);
+  assert.deepEqual(result.order,orderBefore,'narration must not mutate the canonical order');
+  assert.deepEqual(lines.map(x=>x.t),[...lines.map(x=>x.t)].sort((a,b)=>a-b));
+ }
 });
 
 test('weekly ticket purchase cap is 400,000 KP, and existing 370k spent gains 30k of headroom',()=>{
