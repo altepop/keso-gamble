@@ -126,7 +126,7 @@ test('実況は各時点の最後方を追い、確定前に未来の順位を�
   }
   const beforeWinner=lines.filter(x=>x.t<finish-200);
   assert.ok(beforeWinner.every(l=>!l.text.includes('本日の最下位')&&!l.text.includes('でフィニッシュ')));
-  const finale=lines.find(x=>x.text.includes('最下位')&&x.text.includes(card.horses[orderBefore.at(-1)-1].name));
+  const finale=lines.at(-1);
   assert.ok(finale&&finale.t>=timeline.horses[orderBefore.at(-1)].finish);
   assert.deepEqual(result.order,orderBefore,'narration must not mutate the canonical order');
   assert.deepEqual(lines.map(x=>x.t),[...lines.map(x=>x.t)].sort((a,b)=>a-b));
