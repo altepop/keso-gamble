@@ -1,7 +1,7 @@
 /** Server-owned risk for the two extreme transcendent relics.
  * No casino odds or RNG are modified. Open games freeze the risk at wager time. */
 import type {RelicCollection} from './relics.ts';
-export type CasinoRisk={multiplier:number;names:string[];bet?:number};
+export type CasinoRisk={multiplier:number;names:string[];bet?:number;equipped?:string[]};
 export const NEUTRAL_CASINO_RISK:CasinoRisk={multiplier:1,names:[]};
 const RISK_PACTS=[
  {id:'normal.pact.eclipse',name:'日蝕の至高王',multiplier:1.5},
