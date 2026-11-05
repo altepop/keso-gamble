@@ -84,7 +84,7 @@ test('/kp shows 借KP and the repayment row',async()=>{
  const f=await fixture();
  await settleRankChange(f.env,mapping,one,{before:12,after:11},'m1','p-one',T0);
  const kp=()=>runKpCommand(f.env,{id:String((BigInt(T0)-1420070400000n)<<22n),guild_id:guild,member:{user:{id:one}},data:{name:'kp',options:[]}},mapping);
- assert.match(await kp(),/💸 借KP：\*\*500 KP\*\*（1日ごとに利子1%、上限1,000 KP/);
+ assert.match(await kp(),/💸 借KP：\*\*500 KP\*\*（1日ごとに利子1%、上限30,000 KP/);
  f.credit('c1',800);await settleDebts(f.env,guild,T0+60_000);
  const after=await kp();assert.doesNotMatch(after,/💸 借KP/);assert.match(after,/借KP返済 -500 KP/);
 });
@@ -99,21 +99,21 @@ test('Mahjong Soul: last place the wallet cannot cover becomes 借KP; other rank
  claim('b',2,0);claim('c',1,500);
  assert.equal(await debtOf(f.env,guild,one),700);assert.equal(f.balance(),500);
 });
-test('借KP stops at 1,000: a loss, interest and other borrowing only add what fits, repayment still works, older debts come down to it',async()=>{
+test('借KP stops at 30,000: a loss, interest and other borrowing only add what fits, repayment still works, older debts come down to it',async()=>{
  const {borrowShortfall,borrowedBy,ensureDebt,DEBT_MAX}=await import('../src/kp-debt.ts');
- assert.equal(DEBT_MAX,1000);
+ assert.equal(DEBT_MAX,30000);
  const f=await fixture();
  const owe=(id:string,amount:number)=>{f.sql.prepare("INSERT OR IGNORE INTO kp_ledger VALUES(?,?,?,0,'match',?)").run(id,guild,one,T0);return borrowShortfall(f.env,id,amount).run();};
- await owe('loss-1',800);assert.equal(await debtOf(f.env,guild,one),800);
- await owe('loss-2',700);assert.equal(await debtOf(f.env,guild,one),1000,'only 200 of 700 fits');
- assert.equal(await borrowedBy(f.env,'loss-2'),200,'the post says what was really borrowed');
- await owe('loss-3',500);assert.equal(await debtOf(f.env,guild,one),1000);assert.equal(await borrowedBy(f.env,'loss-3'),0,'nothing fits: no event, no note');
- await owe('loss-3',500);assert.equal(await debtOf(f.env,guild,one),1000,'a retry at the cap stays at the cap');
- await settleDebts(f.env,guild,T0+DAY);assert.equal(await debtOf(f.env,guild,one),1000,'interest stops at the cap too');
- // Repayment is not capped. The period's interest, which found no room at the cap, is charged once there is room (1% of 700).
- f.credit('in-1',300);await settleDebts(f.env,guild,T0+DAY+MIN);assert.equal(await debtOf(f.env,guild,one),707);
- await settleDebts(f.env,guild,T0+DAY+2*MIN);assert.equal(await debtOf(f.env,guild,one),707,'once per period');
- const sum=Number(f.sql.prepare('SELECT SUM(amount) n FROM kp_debt_events WHERE user=?').get(one)!.n);assert.equal(sum,707,'the events add up to the debt');
+ await owe('loss-1',24000);assert.equal(await debtOf(f.env,guild,one),24000);
+ await owe('loss-2',21000);assert.equal(await debtOf(f.env,guild,one),30000,'only 6,000 of 21,000 fits');
+ assert.equal(await borrowedBy(f.env,'loss-2'),6000,'the post says what was really borrowed');
+ await owe('loss-3',15000);assert.equal(await debtOf(f.env,guild,one),30000);assert.equal(await borrowedBy(f.env,'loss-3'),0,'nothing fits: no event, no note');
+ await owe('loss-3',15000);assert.equal(await debtOf(f.env,guild,one),30000,'a retry at the cap stays at the cap');
+ await settleDebts(f.env,guild,T0+DAY);assert.equal(await debtOf(f.env,guild,one),30000,'interest stops at the cap too');
+ // Repayment is not capped. The period's interest, which found no room at the cap, is charged once there is room (1% of 21,000).
+ f.credit('in-1',9000);await settleDebts(f.env,guild,T0+DAY+MIN);assert.equal(await debtOf(f.env,guild,one),21210);
+ await settleDebts(f.env,guild,T0+DAY+2*MIN);assert.equal(await debtOf(f.env,guild,one),21210,'once per period');
+ const sum=Number(f.sql.prepare('SELECT SUM(amount) n FROM kp_debt_events WHERE user=?').get(one)!.n);assert.equal(sum,21210,'the events add up to the debt');
  // 稼ぎch: the cap is announced once (loss-2 reached it; the retries and the interest at the cap add nothing), and
  // reaching it again after some repayment is a new post. Nothing is posted until it is all paid back.
  await ensurePosts(f.env);
@@ -123,11 +123,22 @@ test('借KP stops at 1,000: a loss, interest and other borrowing only add what f
  assert.deepEqual(full(),[],'a notice older than a day is not posted late');
  await queueDebtPosts(f.env,guild,T0+MIN);
  assert.deepEqual(full().map(p=>p.id),['debt-full:borrow:loss-2']);
- assert.equal(JSON.parse(full()[0].body).content,`💸 <@${one}> の借KPが上限の1,000 KPに到達！もう満タンや。\n入ったKPから自動で返すまで、株も馬券もカジノも使えへんで。`);
- await owe('loss-4',400);await queueDebtPosts(f.env,guild,T0+MIN);assert.deepEqual(full().map(p=>p.id),['debt-full:borrow:loss-2','debt-full:borrow:loss-4']);
+ assert.equal(JSON.parse(full()[0].body).content,`💸 <@${one}> の借KPが上限の30,000 KPに到達！もう満タンや。\n入ったKPから自動で返すまで、株も馬券もカジノも使えへんで。`);
+ await owe('loss-4',12000);await queueDebtPosts(f.env,guild,T0+MIN);assert.deepEqual(full().map(p=>p.id),['debt-full:borrow:loss-2','debt-full:borrow:loss-4']);
  assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM kp_posts WHERE id LIKE 'debt-clear:%'").get()!.n,0);
  // A debt from before the cap comes down to it when the Worker starts.
- f.sql.prepare('UPDATE kp_debts SET amount=5000 WHERE user=?').run(one);
+ f.sql.prepare('UPDATE kp_debts SET amount=50000 WHERE user=?').run(one);
  await ensureDebt({...f.env,DB:{prepare:f.env.DB.prepare,batch:f.env.DB.batch}} as KpEnv);
- assert.equal(await debtOf(f.env,guild,one),1000);
+ assert.equal(await debtOf(f.env,guild,one),30000);
+});
+test('上限を上げた本番DB：旧上限(1,000)のトリガーは消え、新しい上限のトリガーだけが残る',async()=>{
+ const {borrowShortfall,ensureDebt}=await import('../src/kp-debt.ts');
+ const f=await fixture();await ensureDebt(f.env);
+ const names=()=>(f.sql.prepare("SELECT name FROM sqlite_master WHERE type='trigger' AND name LIKE 'kp_debt_apply%'").all() as Array<{name:string}>).map(r=>r.name);
+ // An old Worker created the 1,000-cap trigger under the previous name.
+ f.sql.exec(`CREATE TRIGGER kp_debt_apply_posts AFTER INSERT ON kp_debt_events BEGIN UPDATE kp_debts SET amount=amount WHERE 0; END`);
+ await ensureDebt({...f.env,DB:{prepare:f.env.DB.prepare,batch:f.env.DB.batch}} as KpEnv);
+ assert.deepEqual(names(),['kp_debt_apply_cap_30000']);
+ f.sql.prepare("INSERT INTO kp_ledger VALUES('big',?,?,0,'match',?)").run(guild,one,T0);await borrowShortfall(f.env,'big',5000).run();
+ assert.equal(await debtOf(f.env,guild,one),5000,'counted once, above the old 1,000 cap');
 });
