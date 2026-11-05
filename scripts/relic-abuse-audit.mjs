@@ -39,7 +39,7 @@ export async function audit(query,since){
  if(flagged){out.push('| Member | Sales | Relic bonus | Sell fees | Bought within the hour (KP) |','|:--|--:|--:|--:|--:|');
   for(const [u,s] of Object.entries(byUser).sort((a,b)=>b[1].bonus-a[1].bonus))out.push(`| ${who(u)} | ${n(s.sales)} | ${n(s.bonus)} | ${n(s.fees)} | ${n(Math.round(s.bought))} |`);}
  // Verified-receipt bonuses (VALORANT, Steam, voice, LOOP, ...): totals and the highest bonus/base ratios.
- const logs=await query(`SELECT mode,count(*) AS count,sum(base) AS base,sum(bonus) AS bonus,max(bonus) AS max,max(CAST(bonus AS REAL)/max(base,1)) AS ratio FROM relic_effect_logs WHERE at>=? GROUP BY mode ORDER BY bonus DESC`,[since]);
+ const logs=await query(`SELECT mode,count(*) AS count,sum(base) AS base,sum(bonus) AS bonus,max(bonus) AS max,max(CAST(bonus AS REAL)/(CASE WHEN base>0 THEN base ELSE 1 END)) AS ratio FROM relic_effect_logs WHERE at>=? GROUP BY mode ORDER BY bonus DESC`,[since]);
  out.push('','## Verified-receipt relic bonuses (games, voice, Steam, LOOP, …)','','| Mode | Payouts | Base KP | Bonus KP | Largest | Max bonus/base |','|:--|--:|--:|--:|--:|--:|');
  for(const l of logs)out.push(`| ${l.mode} | ${n(l.count)} | ${n(l.base)} | ${n(l.bonus)} | ${n(l.max)} | ${Number(l.ratio??0).toFixed(1)}× |`);
  const top=await query(`SELECT user,mode,count(*) AS count,sum(bonus) AS bonus FROM relic_effect_logs WHERE at>=? GROUP BY user,mode ORDER BY bonus DESC LIMIT 10`,[since]);
@@ -58,9 +58,9 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
  const query=async(sql,params)=>{
   if(!/^\s*SELECT\b/i.test(sql))throw Error('read-only');
   const res=await fetch(api,{method:'POST',headers:{Authorization:'Bearer '+e.CLOUDFLARE_API_TOKEN,'Content-Type':'application/json'},body:JSON.stringify({sql,params}),signal:AbortSignal.timeout(30000)});
-  if(!res.ok)throw Error('D1 HTTP '+res.status);
-  const body=await res.json();
-  if(body.success!==true||!body.result?.[0]?.success)throw Error('D1 query failed');
+  const body=await res.json().catch(()=>({}));
+  // D1 error messages describe the SQL problem only (no data or credentials).
+  if(!res.ok||body.success!==true||!body.result?.[0]?.success)throw Error('D1 query failed ('+res.status+'): '+String(body.errors?.[0]?.message??'').slice(0,200));
   return body.result[0].results;
  };
  const since=Date.now()-Number(e.DAYS||14)*86400000;
