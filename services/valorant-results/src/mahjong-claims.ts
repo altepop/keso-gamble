@@ -9,16 +9,21 @@ import type {PaipuSummary} from './mahjong-summary.ts';
 import {borrowedBy,debtNote,ensureDebt} from './kp-debt.ts';
 import {creditVerifiedRelicBonus,creditVerifiedRelicLoss} from './relics.ts';
 /** Equipped 雀魂 relics add to an approved, positive result (once per claim; a 1st place counts as a win). */
-async function mahjongRelic(env:KpEnv,guild:string,id:string){
+/** Applies the relic to a decided claim and returns a note for the post (「🧿 遺物補正 +N」 / 「🩸 遺物の反動 −N」). */
+async function mahjongRelic(env:KpEnv,guild:string,id:string):Promise<string>{
  try{
   const c=await env.DB.prepare("SELECT user,amount,rank,game,decided_at AS at FROM kp_mahjong_claims WHERE guild=? AND id=? AND status='approved'").bind(guild,id).first<{user:string;amount:number;rank:number;game:string;at:number}>();
-  if(!c||!(c.amount>0))return;
+  if(!c||!(c.amount>0))return '';
   // 雀魂 is a thrill mode (2026-11-05): 1位 gets the full relic bonus, a negative rank (ラス) loses more by the same
   // relic strength (beyond the balance as 借KP); a positive non-1st rank keeps its plain reward.
   const rate=Object.hasOwn(policy.games,c.game)?stake(c.game as Game,c.rank):0;
-  if(rate<0)await creditVerifiedRelicLoss(env,guild,c.user,'mahjong:'+id,'mahjong',c.amount,c.at);
-  else await creditVerifiedRelicBonus(env,guild,c.user,'mahjong:'+id,'mahjong',c.amount,c.rank===1,c.at);
- }catch{console.warn('relic_mahjong_bonus_pending');}
+  if(rate<0){
+   const loss=await creditVerifiedRelicLoss(env,guild,c.user,'mahjong:'+id,'mahjong',c.amount,c.at);
+   return loss>0?`（🩸 遺物の反動 −${money(loss)}${debtNote(await borrowedBy(env,'relic:mahjong:'+id))}）`:'';
+  }
+  const bonus=await creditVerifiedRelicBonus(env,guild,c.user,'mahjong:'+id,'mahjong',c.amount,c.rank===1,c.at);
+  return bonus>0?`（🧿 遺物補正 +${money(bonus)}）`:'';
+ }catch{console.warn('relic_mahjong_bonus_pending');return '';}
 }
 type Game=keyof typeof policy.games;
 interface Claim {id:string;user:string;paipu:string;link:string;game:Game;rank:number;amount:number;status:'pending'|'approved'|'rejected';decider:string|null;at:number}
@@ -168,8 +173,9 @@ export async function settleClaim(env:KpEnv,guild:string,c:Pick<Claim,'id'|'user
  if('refuse' in check)return `⚠️ <@${c.user}> の${c.rank}位申請：${check.refuse}`;
  if(check.auto){
   const done=await env.DB.prepare(`UPDATE kp_mahjong_claims SET status='approved',decider='paipu',decided_at=?,game=?,amount=? WHERE guild=? AND id=? AND status='pending'`).bind(now,check.game,check.amount,guild,c.id).run();
-  if(done.meta.changes)await mahjongRelic(env,guild,c.id);
-  return done.meta.changes?`✅ <@${c.user}> ${c.rank}位を牌譜で確認。${signed(await paid(env,c.id))}${debtNote(await borrowedBy(env,'mahjong:'+c.id))}`:null;
+  if(!done.meta.changes)return null;
+  const relic=await mahjongRelic(env,guild,c.id);
+  return `✅ <@${c.user}> ${c.rank}位を牌譜で確認。${signed(await paid(env,c.id))}${debtNote(await borrowedBy(env,'mahjong:'+c.id))}${relic}`;
  }
  await env.DB.prepare(`UPDATE kp_mahjong_claims SET game=?,amount=? WHERE guild=? AND id=? AND status='pending'`).bind(check.game,check.amount,guild,c.id).run();
  return `🔎 <@${c.user}> の${c.rank}位は牌譜では「${check.nickname.replace(/[@`*_~<>|#\\\[\]()\r\n]/g,'').slice(0,16)}」。初回なので他のメンバーの承認を待っています（承認後は自動確認）。`;
@@ -192,7 +198,7 @@ export async function autoCredit(env:KpEnv,guild:string,summary:PaipuSummary,now
     .bind(id,guild,link.user,summary.uuid,'https://game.mahjongsoul.com/index.html?paipu='+summary.uuid,game,seat.rank,amount,jstDay(summary.end||now),now),
   ]);
   const done=await env.DB.prepare(`UPDATE kp_mahjong_claims SET status='approved',decider='paipu',decided_at=? WHERE guild=? AND id=? AND status='pending'`).bind(now,guild,id).run();
-  if(done.meta.changes){await mahjongRelic(env,guild,id);const moved=await paid(env,id);lines.push(`${moved<0||stake(game,seat.rank)<0?'💸':'✅'} <@${link.user}> ${seat.rank}位 ${signed(moved)}（牌譜から自動）${note}${debtNote(await borrowedBy(env,'mahjong:'+id))}`);}
+  if(done.meta.changes){const relic=await mahjongRelic(env,guild,id);const moved=await paid(env,id);lines.push(`${moved<0||stake(game,seat.rank)<0?'💸':'✅'} <@${link.user}> ${seat.rank}位 ${signed(moved)}（牌譜から自動）${note}${debtNote(await borrowedBy(env,'mahjong:'+id))}${relic}`);}
  }
  return lines;
 }

@@ -696,8 +696,10 @@ export async function creditVerifiedRelicLoss(
    SELECT ?,?,?,-MIN(?,balance),'relic',? FROM kp_wallets WHERE guild=? AND user=?`).bind(id,guild,user,extra,at,guild,user).run();
  if(!saved.meta.changes)return 0;
  // The part the balance could not cover becomes 借KP (same mechanism as match penalties).
- await env.DB.prepare(`INSERT OR IGNORE INTO kp_debt_events(id,guild,user,amount,kind,at) SELECT 'borrow:'||id,guild,user,CAST(? AS INTEGER)+delta,'borrow',at FROM kp_ledger WHERE id=? AND CAST(? AS INTEGER)+delta>0`)
-  .bind(extra,id,extra).run().catch(()=>console.warn('relic_loss_debt_pending'));
+ try{
+  await env.DB.prepare(`INSERT OR IGNORE INTO kp_debt_events(id,guild,user,amount,kind,at) SELECT 'borrow:'||id,guild,user,CAST(? AS INTEGER)+delta,'borrow',at FROM kp_ledger WHERE id=? AND CAST(? AS INTEGER)+delta>0`)
+   .bind(extra,id,extra).run();
+ }catch{console.warn('relic_loss_debt_pending');}
  return extra;
 }
 function store(c: RelicCollection, item: RelicItem) {
