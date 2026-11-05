@@ -27,6 +27,20 @@ export function relicsPanel(state,{proofs=null,notice='',loading=false,view={},r
   if(value<=5)return'偉業';if(value<=10)return'熟練';
   if(value<25)return'挑戦';return'旅路';
  };
+ const steamSkill={spark:'報酬時',rescue:'少額報酬',advance:'基準額以上',highroll:'高額報酬',prime:'素数KP',
+  quarter:'25の倍数KP',triple:'3の倍数KP',lucky7:'末尾7のKP',odd:'奇数KP',even:'偶数KP',
+  square:'平方数KP',reverse:'左右対称のKP',master:'達成・勝利',sovereign:'勝利'};
+ const steamEffect=x=>x.feature==='fixed'?'固定＋'+yen(x.featureValue)+'KP':
+  x.feature==='chorus'?'連鎖1個につき＋'+yen(x.featureValue)+'KP':
+  x.feature==='mirror'?'他遺物の最大倍率分を'+yen(x.featureValue)+'%複写':
+  x.feature==='curse'?'未達時ほかの遺物－'+yen(x.featureValue)+'%':'';
+ const steamPools=Array.isArray(proofs?.steamPools)?proofs.steamPools:[];
+ const steamPoolsHtml=steamPools.length?'<details class="rules"><summary>📖 Steam限定遺物の全候補を見る（7段階・'+yen(steamPools.reduce((n,t)=>n+(t.variants?.length||0),0))+'候補）</summary>'+
+ '<p class="helper">25%以上でも獲得可能。全ての解除率で候補は30種類。実績IDによって系統が決まり、同じ実績の引き直しは不可。通常召喚からは出ない。表示の倍率はその遺物固有の値で、格付け全員が同じ強さではない。</p>'+
+ steamPools.map(group=>'<details class="rules"><summary>'+esc(group.grade)+'（'+yen(group.variants?.length||0)+'種類）</summary>'+
+ (group.variants||[]).map(x=>'<div class="asset-line"><span><strong>'+esc(x.name)+'</strong><br><small>'+esc(proofs?.modeNames?.[x.mode]||x.mode)+' ・ '+esc(steamSkill[x.skill]||x.skill)+(steamEffect(x)?' ・ '+esc(steamEffect(x)):'')+'</small></span><strong>＋'+yen(x.percent)+'%</strong></div>').join('')+
+ '</details>').join('')+'</details>':'';
+
  const owned=count=>items.some(x=>x.id===count);
  const catalog=Array.isArray(proofs?.catalog)?proofs.catalog:[];
  const source=new Map(catalog.map(def=>[def.id,def]));
@@ -130,7 +144,8 @@ export function relicsPanel(state,{proofs=null,notice='',loading=false,view={},r
  ${advanced}
  <section class="panel"><div class="card-body"><h2 class="panel-title">📚 モード別・特殊遺物全${catalog.length||210}種類</h2><p class="helper">通常175種・代償付き8種・固有能力7種・雀魂/通話20種を収録した。倍率は上限なしで合算し、共鳴も発動する。一方で代償を持つ遺物は他の効果を減らすため、単純に高レアを並べるだけでは最強とは限らない。</p>${grouped||'<p class="helper">データ取得中。再度この画面を開いてください。</p>'}</div></section>
  <section class="panel"><div class="card-body"><h2 class="panel-title">🟦 Steam限定遺物</h2>
-   <p class="helper">監視登録以降に新規解除し、サーバーが検証して<strong>実際にKPを支給した実績</strong>だけが対象だ。当日（9時〜翌9時）にSteamで5,000KPを稼いだ後は、新しいSteam限定遺物を受け取れない。0KPで記録された実績は翌日も対象外。既に受取済みの遺物は保持する。</p>
+   ${steamPoolsHtml}
+   <p class="helper">世界解除率25%以上の実績でも「旅路」を獲得できる。25%未満は上位格付けだ。監視登録以降に新規解除し、サーバーが検証して<strong>実際にKPを支給した実績</strong>だけが対象だ。当日（9時〜翌9時）にSteamで5,000KPを稼いだ後は、新しいSteam限定遺物を受け取れない。0KPで記録された実績は翌日も対象外。既に受取済みの遺物は保持する。</p>
    ${proofs?.steam?.some(e=>Number(e.earnedToday)>=5000)?'<p class="relic-steam-cap-alert" role="status">🔒 本日のSteam報酬は5,000／5,000KP。限定遺物の新規受け取りは翌朝9時まで停止中だ。</p>':''}
    ${!state.serverWallet?'<p class="helper">本番KP口座へ接続してください。</p>':loading?'<p class="helper">達成記録を確認中…</p>':proofs?.steam?.length?proofs.steam.map(e=>`<div class="asset-line"><span>${esc(e.title)}<br><small>${steamGrade(e.percent)}の遺物 · 世界解除率 ${yen(e.percent)}% ${Number(e.amount)<=0?' · ⛔ 0KP（対象外）':Number(e.earnedToday)>=5000?' · 🔒 当日上限':' · ✅ 支給'+yen(e.amount)+'KP'}</small></span><button type="button" class="action-btn" data-action="relic-claim-steam" data-event="${esc(e.id)}" ${owned('steam.'+e.id)||Number(e.amount)<=0||Number(e.earnedToday)>=5000?'disabled':''}>${owned('steam.'+e.id)?'受取済み':Number(e.amount)<=0?'対象外':Number(e.earnedToday)>=5000?'翌9時まで不可':'獲得'}</button></div>`).join(''):'<p class="helper">監視開始後の新規実績の記録がまだない。監視前の実績は遡及しない。</p>'}
  </div></section>

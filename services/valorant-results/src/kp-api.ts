@@ -15,7 +15,7 @@ import {kpCommands,KP_COMMAND_VERSION} from './kp-command.ts';
 import {voiceControl,voiceStatus} from './voice-api.ts';
 import {voiceRewardHistory,voicePolicy} from './voice-rewards.ts';
 import {receiveLoopKp} from './loop-kp.ts';
-import {summonRelics,grantSteamRelic,grantUniteRelic,equipRelic,autoEquipRelics,saveRelicPreset,loadRelicPreset,removeRelicPreset,renameRelicPreset,listRelicPresets,diagnoseRelicBuild,nativeRelicBonus,evaluateRelicBonus,rarityRatesForLevel,summonLevel,SUMMON_MILESTONES,UNITE,UNITE_REQUIREMENTS,UNITE_STREAK_IDS,STEAM_RELIC_TIERS,type UniteRelicId} from './relics.ts';
+import {summonRelics,grantSteamRelic,grantUniteRelic,equipRelic,autoEquipRelics,saveRelicPreset,loadRelicPreset,removeRelicPreset,renameRelicPreset,listRelicPresets,diagnoseRelicBuild,nativeRelicBonus,evaluateRelicBonus,rarityRatesForLevel,summonLevel,SUMMON_MILESTONES,UNITE,UNITE_REQUIREMENTS,UNITE_STREAK_IDS,STEAM_RELIC_TIERS,steamRelicPool,STEAM_RELIC_POOL_GRADES,type UniteRelicId} from './relics.ts';
 import {ALL_NORMAL_RELICS,RELIC_MODE_NAMES} from './relic-catalog.ts';
 import {verifiedCasinoProfit,verifiedStockProfit} from './relic-profit.ts';
 import {ensureRelicMarket,activeRelicListings,listingById,prepareRelicListing,receiveRelicListing,cancelRelicListing,MARKET_MAX_ACTIVE_PER_PLAYER} from './relic-market.ts';
@@ -445,7 +445,7 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping,deferP
    const previews=previewModes.flatMap(mode=>previewAmounts(mode).map(amount=>({
     mode,amount,...evaluateRelicBonus(ownedState.relics as RelicCollection|undefined,mode,{amount,win:true,...mode==='spikerush'?{spikeGamesBefore}:{}},0)
    })));
-   return response({price:200,steam,unite:Object.entries(UNITE).map(([id,d])=>({id,name:d.name,power:d.power,condition:id.startsWith('unite.career_')?'累計'+d.wins+'勝':d.wins+'連勝'})),steamTiers:STEAM_RELIC_TIERS,level,
+   return response({price:200,steam,steamPools:STEAM_RELIC_POOL_GRADES.map(grade=>({grade,variants:steamRelicPool(grade)})),unite:Object.entries(UNITE).map(([id,d])=>({id,name:d.name,power:d.power,condition:id.startsWith('unite.career_')?'累計'+d.wins+'勝':d.wins+'連勝'})),steamTiers:STEAM_RELIC_TIERS,level,
     rates:rarityRatesForLevel(level),maxRates:rarityRatesForLevel(10),ratesByLevel:Array.from({length:10},(_,i)=>rarityRatesForLevel(i+1)),
     modeNames:RELIC_MODE_NAMES,catalog:ALL_NORMAL_RELICS,relicMarket,exchange:{yields:SHARD_YIELDS,prices:SHARD_PRICES,horseVoucherPrice:MY_HORSE_VOUCHER_PRICE},milestones:SUMMON_MILESTONES,previews,spikeGamesBefore,diagnosis,externalLogs:logs,presets:listRelicPresets(ownedState.relics),economy:personalEconomy,lastNativeEffect:ownedState.relics?.lastNativeEffect??null,nativeRemaining:null});
   }
