@@ -38,12 +38,14 @@ export async function audit(query,since){
  out.push('','## Stock: bonus sales within 1 hour after buying the same stock','',`${n(flagged)} sales, ${n(flaggedBonus)} KP of relic bonus.`,'');
  if(flagged){out.push('| Member | Sales | Relic bonus | Sell fees | Bought within the hour (KP) |','|:--|--:|--:|--:|--:|');
   for(const [u,s] of Object.entries(byUser).sort((a,b)=>b[1].bonus-a[1].bonus))out.push(`| ${who(u)} | ${n(s.sales)} | ${n(s.bonus)} | ${n(s.fees)} | ${n(Math.round(s.bought))} |`);}
- // Verified-receipt bonuses (VALORANT, Steam, voice, LOOP, ...): totals and the highest bonus/base ratios.
- const logs=await query(`SELECT mode,count(*) AS count,sum(base) AS base,sum(bonus) AS bonus,max(bonus) AS max,max(CAST(bonus AS REAL)/(CASE WHEN base>0 THEN base ELSE 1 END)) AS ratio FROM relic_effect_logs WHERE at>=? GROUP BY mode ORDER BY bonus DESC`,[since]);
- out.push('','## Verified-receipt relic bonuses (games, voice, Steam, LOOP, …)','','| Mode | Payouts | Base KP | Bonus KP | Largest | Max bonus/base |','|:--|--:|--:|--:|--:|--:|');
- for(const l of logs)out.push(`| ${l.mode} | ${n(l.count)} | ${n(l.base)} | ${n(l.bonus)} | ${n(l.max)} | ${Number(l.ratio??0).toFixed(1)}× |`);
- const top=await query(`SELECT user,mode,count(*) AS count,sum(bonus) AS bonus FROM relic_effect_logs WHERE at>=? GROUP BY user,mode ORDER BY bonus DESC LIMIT 10`,[since]);
- out.push('','### Verified-receipt bonuses by member and mode (top 10)','','| Member | Mode | Payouts | Bonus KP |','|:--|:--|--:|--:|');
+ // Verified-receipt bonuses (VALORANT, Steam, voice, LOOP, ...): the ledger rows 'relic:<receipt>'; the receipt
+ // prefix names the source (match:, voice:, loop:, mahjong:, sk-...).
+ const src=`CASE WHEN instr(substr(id,7),':')>0 THEN substr(substr(id,7),1,instr(substr(id,7),':')-1) ELSE substr(id,7) END`;
+ const logs=await query(`SELECT ${src} AS mode,count(*) AS count,sum(delta) AS bonus,max(delta) AS max FROM kp_ledger WHERE kind='relic' AND at>=? GROUP BY mode ORDER BY bonus DESC`,[since]);
+ out.push('','## Verified-receipt relic bonuses (ledger kind=relic, by receipt source)','','| Source | Payouts | Bonus KP | Largest |','|:--|--:|--:|--:|');
+ for(const l of logs)out.push(`| ${l.mode} | ${n(l.count)} | ${n(l.bonus)} | ${n(l.max)} |`);
+ const top=await query(`SELECT user,${src} AS mode,count(*) AS count,sum(delta) AS bonus FROM kp_ledger WHERE kind='relic' AND at>=? GROUP BY user,mode ORDER BY bonus DESC LIMIT 10`,[since]);
+ out.push('','### Verified-receipt bonuses by member and source (top 10)','','| Member | Source | Payouts | Bonus KP |','|:--|:--|--:|--:|');
  for(const r of top)out.push(`| ${who(r.user)} | ${r.mode} | ${n(r.count)} | ${n(r.bonus)} |`);
  // Lifetime native totals kept in each member's state.
  const life=await query(`SELECT user,CAST(json_extract(data,'$.relics.nativeEarned') AS INTEGER) AS earned,CAST(json_extract(data,'$.relics.nativeCount') AS INTEGER) AS count FROM kp_state WHERE json_extract(data,'$.relics.nativeEarned')>0 ORDER BY earned DESC LIMIT 10`,[]);
