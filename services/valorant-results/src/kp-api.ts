@@ -192,7 +192,7 @@ export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:strin
    const exposure=Math.ceil(maximumBaseLoss*riskAtStake.multiplier);
    const required=exposure+outstandingCasinoReserve(riskRounds);
    // Invalid stakes are still rejected by the original game engine before any draw.
-   if(Number.isSafeInteger(required)&&exposure>0&&before<required)
+   if((riskAtStake.multiplier>1||outstandingCasinoReserve(riskRounds)>0)&&Number.isSafeInteger(required)&&exposure>0&&before<required)
     throw Error('⚠ 超越遺物の損失増幅に備えるKPが不足しています。必要残高：'+required.toLocaleString('ja-JP')+' KP（負け時最大×'+riskAtStake.multiplier+'）。');
   }
   // 借KP: no bet or purchase at all while any is owed, decided before any draw. Checking the result instead would let a
