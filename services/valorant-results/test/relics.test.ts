@@ -162,16 +162,20 @@ test('mode specialists activate only their own verified mode and cannot multiply
  assert.equal(on.bonus,evaluateRelicBonus(x.relics,mode,{amount:507,win:true}).bonus);
  assert.equal(modeRelicBonus(x.relics,mode,{amount:0,win:true}).bonus,0);
 });
-test('native confirmed positive payouts stack forever without old daily or percent limits',()=>{
+test('stock relic bonuses are capped by the sale proceeds: 0.5%, 250 per sale, 500 per day (2026-11-05)',()=>{
  const def=NORMAL_RELICS.find(r=>r.mode==='market'&&r.rarity==='transcendent')!;
  const item={...def,origin:'normal' as const,count:10};
  const state:{cash:number;relics?:RelicCollection}={cash:1000,relics:{totalSummons:4000,items:{[def.id]:item},equipped:[def.id]}};
  const expected=evaluateRelicBonus(state.relics,'market',{amount:100000,win:true}).bonus;
- assert.ok(expected>120);
- assert.equal(nativeRelicBonus(state,'market',100000,Date.parse('2026-11-02')),expected);
- assert.equal(nativeRelicBonus(state,'market',100000,Date.parse('2026-11-02')),expected);
- assert.equal(nativeRelicBonus(state,'market',100000,Date.parse('2026-11-02')),expected);
- assert.equal(state.cash,1000+expected*3);
+ assert.ok(expected>250,'the relic itself stays strong; only the payout is capped');
+ const day=Date.parse('2026-11-02');
+ assert.equal(nativeRelicBonus(state,'market',100000,day,1_000_000),250);
+ assert.equal(nativeRelicBonus(state,'market',100000,day,1_000_000),250);
+ assert.equal(nativeRelicBonus(state,'market',100000,day,1_000_000),0,'daily 500 reached');
+ assert.equal(state.cash,1500);
+ assert.deepEqual(state.relics?.dailyNativeRelic?.market,{day:'2026-11-02',amount:500});
+ assert.equal(nativeRelicBonus(state,'market',100000,day+86400000,1_000_000),250,'a new day starts a new allowance');
+ assert.equal(nativeRelicBonus(state,'market',100000,day,0),0,'no proven proceeds, no bonus');
  assert.equal(state.relics?.dailyNativeBonus,undefined);
 });
 
@@ -233,7 +237,7 @@ test('meta-capable lower rarity, universal and specialist normal relics are effe
  const no=modeRelicBonus(x.relics,'competitive',{amount:500,win:true});
  assert.ok(!no.skills.includes(c.name));
  const granted={cash:0,relics:x.relics};
- assert.ok(nativeRelicBonus(granted,'market',500,Date.UTC(2026,10,3))>5);
+ assert.ok(nativeRelicBonus(granted,'market',500,Date.UTC(2026,10,3),20000)>5);
 });
 
 test('auto equipment selects owned relics and obeys four slots and Unite singleton',()=>{
@@ -326,11 +330,12 @@ test('native simulator reports real final percentage and never credits fake KP',
  assert.equal(x.bonus,450);
  assert.equal(x.effectivePercent,9);
  assert.equal(JSON.stringify(state),before);
- const actual=nativeRelicBonus(state,'market',5000,Date.UTC(2026,10,3));
- assert.equal(actual,x.bonus);
- assert.equal(state.cash,550);
- assert.equal(state.relics?.lastNativeEffect?.bonus,450);
- assert.equal(state.relics?.lastNativeEffect?.percent,9);
+ // The payout is the simulated bonus, limited by the sale proceeds cap (250 per sale).
+ const actual=nativeRelicBonus(state,'market',5000,Date.UTC(2026,10,3),100000);
+ assert.equal(actual,250);
+ assert.equal(state.cash,350);
+ assert.equal(state.relics?.lastNativeEffect?.bonus,250);
+ assert.equal(state.relics?.lastNativeEffect?.percent,5);
  const capped=evaluateRelicBonus(state.relics,'market',{amount:5000,win:true},70);
  assert.equal(capped.bonus,450);
 });

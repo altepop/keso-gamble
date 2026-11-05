@@ -285,7 +285,9 @@ export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:strin
    if(Number(lots?.shares)===sale.quantity){
     // Acquired stock paid at least a 1% fee; include it in the break-even check.
     const profit=verifiedStockProfit(sale.total,Number(lots?.cost??0),Number(lots?.shares??0),sale.quantity);
-    if(profit>0)relicBonus=nativeRelicBonus(state,'market',profit);
+    // Capped by the sale's gross proceeds (0.5%, 250/trade, 500/day): a price the seller pushed up with
+    // their own buys can no longer turn an older cheap lot into a large "profit" bonus.
+    if(profit>0)relicBonus=nativeRelicBonus(state,'market',profit,Date.now(),Number((stockTrade as {gross?:unknown}).gross));
    }
   }
   if(relicBonus&&result&&typeof result==='object')result={...result,relicBonus};

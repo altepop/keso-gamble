@@ -18,6 +18,17 @@ export function verifiedBetProfit(settled:readonly {payout:number;amount:number}
  }
  return Math.max(0,net);
 }
+/** Total KP staked in one settlement (every settled bet, winning or not); 0 when any record is invalid. */
+export function verifiedBetStake(settled:readonly {amount:number}[]):number{
+ if(!Array.isArray(settled))return 0;
+ let total=0;
+ for(const b of settled){
+  if(!Number.isSafeInteger(b.amount)||b.amount<=0)return 0;
+  total+=b.amount;
+  if(!Number.isSafeInteger(total))return 0;
+ }
+ return total;
+}
 /** In an optimistic stock sale, source lots are inspected BEFORE the sell trigger.
  * A missing/unmatched lot or a no-profit round trip must never give free KP. */
 export function verifiedStockProfit(sale:number,cost:number,filled:number,quantity:number):number{

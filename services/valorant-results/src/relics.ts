@@ -35,6 +35,8 @@ export interface RelicCollection {
   dailyNativeBonus?: {day:string;amount:number};
   /** Casino ONLY. UTC calendar day switches at 09:00 JST, stored atomically with each spin. */
   dailyCasinoRelic?: {day:string;amount:number};
+  /** Stocks, racing and M.League: the same day boundary and cap, one bucket per mode, stored with the settlement. */
+  dailyNativeRelic?: Partial<Record<'market'|'racing'|'mleague',{day:string;amount:number}>>;
   lastNativeEffect?: {mode:string;amount:number;bonus:number;percent:number;at:number;names:string[];lines?:RelicBonusLine[];sets?:{name:string;bonus:number}[]};
   summonHistory?:SummonHistoryEntry[];
   presets?:Record<string,string[]>;
@@ -454,24 +456,37 @@ export function casinoRelicAllowance(
  return Math.max(0,Math.min(CASINO_RELIC_ROUND_CAP,
   Math.ceil(stake*CASINO_RELIC_RATE),CASINO_RELIC_DAILY_CAP-usedToday));
 }
+/** Stocks, racing and M.League (2026-11-05): the casino rule, keyed to the KP actually put in.
+ * A sale's gross proceeds / a settlement's total stakes. 0.5% of that is below the 1%+1% stock fees and the
+ * house edge, so self-made price moves, wash trades and covering every outcome can never pay. */
+export const NATIVE_RELIC_RATE=CASINO_RELIC_RATE;
+export const NATIVE_RELIC_ROUND_CAP=CASINO_RELIC_ROUND_CAP;
+export const NATIVE_RELIC_DAILY_CAP=CASINO_RELIC_DAILY_CAP;
+export function nativeRelicAllowance(stake:number,usedToday:number):number{
+ if(!Number.isSafeInteger(stake)||stake<=0||!Number.isSafeInteger(usedToday)||usedToday<0)return 0;
+ return Math.max(0,Math.min(NATIVE_RELIC_ROUND_CAP,Math.ceil(stake*NATIVE_RELIC_RATE),NATIVE_RELIC_DAILY_CAP-usedToday));
+}
 export function nativeRelicBonus(
  state:{cash:number;relics?:RelicCollection},
  mode:'casino'|'market'|'racing'|'mleague',
  amount:number,
  now=Date.now(),
- casinoStake=0,
+ stake=0,
 ):number {
  if(!state.relics||!Number.isSafeInteger(amount)||amount<=0)return 0;
- const day=mode==='casino'?casinoRelicDay(now):'';
- const earned=mode==='casino'&&state.relics.dailyCasinoRelic?.day===day
-  ?state.relics.dailyCasinoRelic.amount:0;
- const allowance=mode==='casino'?casinoRelicAllowance(casinoStake,earned):Number.MAX_SAFE_INTEGER;
+ // Every native mode has a stake-based and daily cap. A missing or invalid stake pays nothing (safe side).
+ const day=casinoRelicDay(now);
+ const earned=mode==='casino'
+  ?(state.relics.dailyCasinoRelic?.day===day?state.relics.dailyCasinoRelic.amount:0)
+  :(state.relics.dailyNativeRelic?.[mode]?.day===day?state.relics.dailyNativeRelic[mode]!.amount:0);
+ const allowance=mode==='casino'?casinoRelicAllowance(stake,earned):nativeRelicAllowance(stake,earned);
  if(!allowance)return 0;
  const detail=evaluateRelicBonus(state.relics,mode,{amount,win:true});
  const payout=Math.min(detail.bonus,allowance,Math.max(0,Number.MAX_SAFE_INTEGER-1-state.cash));
  if(!payout)return 0;
  state.cash+=payout;
  if(mode==='casino')state.relics.dailyCasinoRelic={day,amount:earned+payout};
+ else state.relics.dailyNativeRelic={...(state.relics.dailyNativeRelic??{}),[mode]:{day,amount:earned+payout}};
  state.relics.lastNativeEffect={mode,amount,bonus:payout,percent:Math.round(payout/amount*10000)/100,at:now,names:detail.skills.slice(0,4),lines:detail.lines,sets:detail.sets};
  state.relics.nativeEarned=Math.min(Number.MAX_SAFE_INTEGER, (state.relics.nativeEarned??0)+payout);
  state.relics.nativeCount=(state.relics.nativeCount??0)+1;
