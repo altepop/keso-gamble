@@ -289,7 +289,7 @@ export async function runKpCommand(env:KpEnv,interaction:Slash,override?:KpMappi
   const value=(key:string)=>interaction.data?.options?.find(o=>o.name===key)?.value;
   const target=discordUser(value('user')),amount=Number(value('amount')),reason=clean(String(value('reason')??'').trim()).slice(0,60);
   const milestone=String(value('loop_milestone')??''),asLoop=milestone!=='';
-  if(!/^\\d{15,22}$/.test(target)||!Number.isSafeInteger(amount)||!amount||!reason)return '相手・0以外のKP・理由を指定してください。';
+  if(!/^\d{15,22}$/.test(target)||!Number.isSafeInteger(amount)||!amount||!reason)return '相手・0以外のKP・理由を指定してください。';
   if(asLoop){
    if(!Object.hasOwn(LOOP_FIXED_REWARDS,milestone)||amount!==LOOP_FIXED_REWARDS[milestone])
     return 'LOOP代替付与は報酬の種類に決まっている額を正確に入力してください。対象は1,000／50,000／300,000 KPです。';
@@ -316,7 +316,7 @@ export async function runKpCommand(env:KpEnv,interaction:Slash,override?:KpMappi
    const silent=value('silent')===true;
    // Announcements are deduplicated by interaction ID. No separate 'grant' ledger row.
    if(!silent&&(env as {KP_EARNINGS_WEBHOOK_URL?:string}).KP_EARNINGS_WEBHOOK_URL){await ensurePosts(env);await enqueue(env,'kp-grant:'+interaction.id,`🎁 <@${target}> に +${money(amount)}（LOOP ${milestone} 代替・${reason}）`,created(interaction.id));}
-   return `🎁 <@${target}> に +${money(amount)}（LOOP ${milestone} 代替・${reason}）。残高 ${money(after)}\\nLOOPの同じ達成IDから再送されても二重払いされません。`+(silent?'\\n🤫 通知なし（稼ぎchには投稿していません）':'');
+   return `🎁 <@${target}> に +${money(amount)}（LOOP ${milestone} 代替・${reason}）。残高 ${money(after)}\nLOOPの同じ達成IDから再送されても二重払いされません。`+(silent?'\n🤫 通知なし（稼ぎchには投稿していません）':'');
   }
   const row=await env.DB.prepare('SELECT delta FROM kp_ledger WHERE id=?').bind('grant:'+interaction.id).first<{delta:number}>();
   const moved=Number(row?.delta??0),signed=(moved<0?'−':'+')+money(Math.abs(moved));
