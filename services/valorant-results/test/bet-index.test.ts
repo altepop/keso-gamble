@@ -9,7 +9,8 @@ function fixture(){
  const sql=new DatabaseSync(':memory:');
  for(const statement of kpSchema)sql.exec(statement);
  class Q {
-  constructor(public text:string,public params:unknown[]=[]){}
+  text:string;params:unknown[];
+  constructor(text:string,params:unknown[]=[]){this.text=text;this.params=params;}
   bind(...params:unknown[]){return new Q(this.text,params);}
   run(){return {meta:{changes:Number(sql.prepare(this.text).run(...this.params as never[]).changes)}};}
   first(){return sql.prepare(this.text).get(...this.params as never[])??null;}
