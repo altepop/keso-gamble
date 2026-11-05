@@ -1,5 +1,6 @@
 /** KESO relics: a server-owned collection. No bonuses alter other games' KP economy. */
 import {dragoonSetComplete,DRAGOON_SET_NAME} from './relic-dragoon.ts';
+import {abyssEquipped} from './relic-abyss.ts';
 import {NORMAL_RELIC_BY_ID,NORMAL_RELIC_BY_RARITY,RELIC_RARITIES,RELIC_CATALOG_COUNT,RELIC_MODE_NAMES} from './relic-catalog.ts';
 import {steamExtraRelics,STEAM_EXTRA_PER_GRADE,STEAM_GRADE_NAMES,type SteamGrade,type SteamFeatureKind} from './steam-relic-catalog.ts';
 import type {RelicMode,NormalRelicRarity} from './relic-catalog.ts';
@@ -418,7 +419,9 @@ export function evaluateRelicBonus(
  if(new Set(modes).size>=3)applySet('異界旅団（+15%）',.15);
  if(rarities.some(r=>rarities.filter(x=>x===r).length>=3))applySet('同格の誓い（+25%）',.25);
  if(curseReversed)sets.push({name:'呪い反転（虚無＋銀貨＋7の倍数）',bonus:0});
- if(dragoonSetComplete(collection))sets.push({name:DRAGOON_SET_NAME,bonus:0});
+ if(dragoonSetComplete(collection)&&!abyssEquipped(collection))sets.push({name:DRAGOON_SET_NAME,bonus:0});
+ if(abyssEquipped(collection))sets.push({name:'深淵の代償（当たりやすく、外れの半分で元の報酬を失う）',bonus:0});
+ if(collection.equipped.some(id=>collection.items[id]?.origin==='normal'&&collection.items[id]?.foil))sets.push({name:'色違いの輝き（大当たり1.5倍・上限2倍）',bonus:0});
  let resonance=0;
  if(!suppressResonance&&effective.length>=2&&amount%7===0){
   const skillKinds=new Set(effective.map(l=>NORMAL_RELIC_BY_ID.get(l.id)?.skill??collection.items[l.id]?.skill));
@@ -543,7 +546,7 @@ export function nativeRelicLoss(
  const allowance=mode==='casino'?casinoRelicAllowance(stake,used):nativeRelicAllowance(stake,used);
  if(!allowance)return 0;
  // 竜騎士の加護 (all four equipped now): betting-loss recoil is halved.
- const raw=lossBonus(c,mode,loss,now),softened=dragoonSetComplete(c)?Math.floor(raw/2):raw;
+ const raw=lossBonus(c,mode,loss,now),softened=dragoonSetComplete(c)&&!abyssEquipped(c)?Math.floor(raw/2):raw;
  const penalty=Math.min(softened,allowance,Math.max(0,Math.floor(state.cash)));
  if(!Number.isSafeInteger(penalty)||penalty<=0)return 0;
  state.cash-=penalty;
@@ -564,16 +567,30 @@ export type RelicGamble={payout:number;kind:'steady'|'hit'|'miss'|'recoil';chanc
  * one time in five. p is chosen so the average is exactly +50%: p·B − (1−p)·0.2·R = E.
  */
 export const DRAGOON_RECEIPT_CAP=30000;
-export function relicGamble(bonus:number,base:number,roll:number,recoilRoll:number,options:{dragoon?:boolean}={}):RelicGamble{
- const full=Math.max(0,Math.min(Math.floor(bonus),options.dragoon?DRAGOON_RECEIPT_CAP:RELIC_RECEIPT_CAP));
+export const FOIL_BOOST=1.5;
+export const FOIL_ODDS=5000;
+export type RelicGambleOptions={dragoon?:boolean;foil?:boolean;abyss?:boolean};
+/** Equipped flags that change how a strong bonus resolves (Dragoon set, a foil relic, an abyss relic). */
+export function relicGambleOptions(c?:RelicCollection):RelicGambleOptions{
+ if(!c)return {};
+ const abyss=abyssEquipped(c);
+ const foil=c.equipped.some(id=>c.items[id]?.origin==='normal'&&Boolean(c.items[id]?.foil));
+ return {dragoon:!abyss&&dragoonSetComplete(c),foil,abyss};
+}
+export function relicGamble(bonus:number,base:number,roll:number,recoilRoll:number,options:RelicGambleOptions={}):RelicGamble{
+ // 色違いの輝き: a hit is 1.5x and the cap doubles (the chance falls to match, so the average does not move).
+ const cap=(options.dragoon&&!options.abyss?DRAGOON_RECEIPT_CAP:RELIC_RECEIPT_CAP)*(options.foil?2:1);
+ const full=Math.max(0,Math.min(Math.floor(bonus*(options.foil?FOIL_BOOST:1)),cap));
  if(!Number.isSafeInteger(base)||base<=0||!full)return {payout:0,kind:'miss',chance:0,full};
  const expected=Math.floor(base*RELIC_EXPECTED_RATIO);
  if(full<=expected)return {payout:full,kind:'steady',chance:1,full};
- // 竜騎士の加護: no recoil; the chance then comes from p·B = E, so the average stays +50%.
- const recoil=options.dragoon?0:Math.floor(base*RELIC_RECOIL_RATIO),risk=RELIC_RECOIL_CHANCE*recoil;
- const chance=(expected+risk)/(full+risk);
+ // 竜騎士の加護: no recoil. 深淵: recoil on half the misses and as large as the base (overrides the Dragoon set).
+ // The chance always solves p·B − (1−p)·q·R = E, so the average stays +50% in every case.
+ const q=options.abyss?0.5:RELIC_RECOIL_CHANCE;
+ const recoil=options.abyss?base:options.dragoon?0:Math.floor(base*RELIC_RECOIL_RATIO),risk=q*recoil;
+ const chance=Math.min(1,(expected+risk)/(full+risk));
  if(roll<chance)return {payout:full,kind:'hit',chance,full};
- if(recoil>0&&recoilRoll<RELIC_RECOIL_CHANCE)return {payout:-recoil,kind:'recoil',chance,full};
+ if(recoil>0&&recoilRoll<q)return {payout:-recoil,kind:'recoil',chance,full};
  return {payout:0,kind:'miss',chance,full};
 }
 let relicRandom:()=>number=()=>crypto.getRandomValues(new Uint32Array(1))[0]!/2**32;
@@ -613,7 +630,7 @@ export async function creditVerifiedRelicBonus(
  // High risk, high return (owner decision 2026-11-05): a strong build still pays its full bonus, but only by chance,
  // and a miss can recoil. The average stays at +50% of the base reward. A miss is recorded too (0 KP), so a retry of
  // the same receipt can never re-roll it.
- const gamble=relicGamble(detail.bonus,amount,randomUnit(),randomUnit(),{dragoon:dragoonSetComplete(state.relics)});
+ const gamble=relicGamble(detail.bonus,amount,randomUnit(),randomUnit(),relicGambleOptions(state.relics));
  const bonus=gamble.payout;
  const id='relic:'+receipt;
  const saved=await env.DB.prepare(`INSERT OR IGNORE INTO kp_ledger(id,guild,user,delta,kind,at)
@@ -664,7 +681,7 @@ export function summonRelics(
     const duplicate=Boolean(c.items[id]);
     store(c,{id,name,origin:'normal',rarity,mode,skill,power,ability,count:1});
     const item=c.items[id]!;
-    // 1/4096 duplicate evolution, once per relic ID; 1/40000 cosmetic foil,
+    // 1/4096 duplicate evolution, once per relic ID; 1/5000 foil (色違い, raised from 1/40000 on 2026-11-05),
     // also once per relic ID. Different source/Steam history is untouched.
     if(!chosen.special&&duplicate&&!item.mutation&&variants[n*2]!%4096===0){
      const kinds=['prism','risk','comeback'] as const;
@@ -672,7 +689,7 @@ export function summonRelics(
      item.mutation={kind,percent:kind==='risk'?24:kind==='comeback'?17:12,at:Date.now()};
      mutations.push(name);c.mutatedCount=(c.mutatedCount??0)+1;
     }
-    if(!chosen.special&&!item.foil&&variants[n*2+1]!%40000===0){
+    if(!chosen.special&&!item.foil&&variants[n*2+1]!%FOIL_ODDS===0){
      const kinds=['holographic','starlit','abyss'] as const;
      item.foil={kind:kinds[(variants[n*2]!>>>8)%3]!,percent:3,at:Date.now()};
      foils.push(name);c.foilCount=(c.foilCount??0)+1;

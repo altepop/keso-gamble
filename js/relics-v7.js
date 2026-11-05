@@ -66,7 +66,7 @@ export function relicSpecialSection(collection){
  return section('🧬 突然変異・特殊個体',
   '<div class="relic-v7-stats"><div><small>変異個体</small><b>'+num(collection?.mutatedCount??0)+'</b></div>'+
   '<div><small>特殊外観個体</small><b>'+num(collection?.foilCount??0)+'</b></div></div>'+
-  '<p class="helper">重複した通常遺物は1/4,096で変異。通常召喚は1/40,000で特殊外観を獲得する。各遺物IDにつきそれぞれ初回だけ適用される。変異に応じて倍率と発動条件が変わる。</p>'+
+  '<p class="helper">重複した通常遺物は1/4,096で変異。通常召喚は1/5,000で色違い（特殊外観）を獲得する。色違いを装備すると遺物ボーナスの大当たりが1.5倍・上限2倍。各遺物IDにつきそれぞれ初回だけ適用される。変異に応じて倍率と発動条件が変わる。</p>'+
   (cards||'<p class="helper">まだ変異・特殊個体は所持していない。</p>'));
 }
 export function relicEffectLogSection(collection,proofs){

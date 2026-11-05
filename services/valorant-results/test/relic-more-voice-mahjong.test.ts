@@ -9,8 +9,8 @@ const make=(ids:string[]):RelicCollection=>({totalSummons:0,items:Object.fromEnt
  const def=NORMAL_RELIC_BY_ID.get(id)!;return [id,{...def,origin:'normal',count:1}];
 })),equipped:ids});
 test('20 additional relics; 10 voice/10 Mahjong; all IDs unique and old catalog preserved',()=>{
- assert.equal(RELIC_CATALOG_COUNT,214);
- assert.equal(new Set(ALL_NORMAL_RELICS.map(x=>x.id)).size,214);
+ assert.equal(RELIC_CATALOG_COUNT,216);
+ assert.equal(new Set(ALL_NORMAL_RELICS.map(x=>x.id)).size,216);
  assert.equal(ALL_NORMAL_RELICS.filter(x=>x.id.startsWith('normal.voice.riddle.')).length,4);
  assert.equal(MORE_MAHJONG_VOICE_RELICS.filter(x=>x.mode==='mahjong').length,10);
  assert.equal(MORE_MAHJONG_VOICE_RELICS.filter(x=>x.mode==='voice').length,10);

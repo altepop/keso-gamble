@@ -202,3 +202,34 @@ test('竜騎士（ドラグーン）: four pieces in the summon pool; the full s
  assert.equal(full,250);
  assert.equal(half,Math.min(250,Math.floor(evaluateRelicBonus(withSet.relics,'market',{amount:100000,win:true}).bonus/2)));
 });
+
+test('色違い and 深淵: a foil makes hits 1.5x with double cap, an abyss relic makes hits likelier but recoil the full base; average stays +50%',async()=>{
+ const {relicGambleOptions,FOIL_ODDS}=await import('../src/relics.ts');
+ const {ABYSS_RELICS}=await import('../src/relic-abyss.ts');
+ const {NORMAL_RELIC_BY_RARITY}=await import('../src/relic-catalog.ts');
+ assert.equal(FOIL_ODDS,5000);
+ for(const r of ABYSS_RELICS)assert.ok(NORMAL_RELIC_BY_RARITY.get(r.rarity)!.some(x=>x.id===r.id));
+ const ev=(bonus:number,base:number,o:object)=>{
+  const g=relicGamble(bonus,base,0,0.99,o);const q=(o as {abyss?:boolean}).abyss?0.5:(o as {dragoon?:boolean}).dragoon?0:0.2;
+  const R=(o as {abyss?:boolean}).abyss?base:(o as {dragoon?:boolean}).dragoon?0:Math.floor(base*.5);
+  return g.chance*g.full-(1-g.chance)*q*R;
+ };
+ // Foil: hit 1.5x, cap doubles.
+ const foil=relicGamble(4000,400,0,0.99,{foil:true});
+ assert.equal(foil.payout,6000);
+ assert.equal(relicGamble(900000,300000,0,0,{foil:true}).payout,20000);
+ assert.equal(relicGamble(900000,300000,0,0,{foil:true,dragoon:true}).payout,60000);
+ // Abyss: likelier hits, recoil = base on half the misses, cancels the Dragoon set.
+ const plain=relicGamble(4000,400,0,0.99),abyss=relicGamble(4000,400,0,0.99,{abyss:true,dragoon:true});
+ assert.ok(abyss.chance>plain.chance*1.5);
+ assert.deepEqual(relicGamble(4000,400,0.99,0.4,{abyss:true}),{payout:-400,kind:'recoil',chance:abyss.chance,full:4000});
+ assert.equal(relicGamble(900000,300000,0,0,{abyss:true,dragoon:true}).payout,10000,'the Dragoon cap does not apply under abyss');
+ for(const o of [{},{foil:true},{dragoon:true},{abyss:true},{abyss:true,foil:true},{dragoon:true,foil:true}])
+  for(const [b,base] of [[4000,400],[2646,40],[50000,900]] as const)assert.ok(Math.abs(ev(b,base,o)-Math.floor(base*.5))<1e-6,JSON.stringify([o,b,base]));
+ // Flags come from what is equipped now.
+ const c:RelicCollection={totalSummons:0,items:{},equipped:[]};
+ const a=ABYSS_RELICS[0]!;c.items[a.id]={...a,origin:'normal',count:1} as RelicItem;c.equipped.push(a.id);
+ assert.deepEqual(relicGambleOptions(c),{dragoon:false,foil:false,abyss:true});
+ c.items[a.id]!.foil={kind:'starlit',percent:3,at:0};
+ assert.equal(relicGambleOptions(c).foil,true);
+});
