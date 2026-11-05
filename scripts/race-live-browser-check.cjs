@@ -36,10 +36,10 @@ const server=spawn('python3',['-m','http.server','8767','--bind','127.0.0.1'],{s
  const ownedNumber=R.raceCard(RACE,R.PUBLIC_SALT,state.racing.open.entries).horses.find(h=>h.horseId==='horse-1').number;
  assert.match(await page.locator(`[data-race-horse="${ownedNumber}"]`).innerText(),/onerror/);
  await toStable();
- assert.match(await page.locator('.asset-card').filter({hasText:'ボックスを開けると'}).innerText(),/今日の交換はあと2回/);
+ assert.match(await page.locator('.asset-card').filter({hasText:'頂上級確定ボックス'}).innerText(),/今日の交換はあと2回/);
  await page.locator('#horse-name').fill('ケソ号');await page.locator('[data-action=horse-buy][data-box=normal]').click();await page.locator('.toast').filter({hasText:'仲間入り'}).waitFor();
  assert.deepEqual(bodies.shift().args,{box:'normal',name:'ケソ号'});
- assert.match(await page.locator('.asset-card').filter({hasText:'ボックスを開けると'}).innerText(),/ケソ号（下級/);assert.match(await page.locator('.asset-card').filter({hasText:'ボックスを開けると'}).innerText(),/今日の交換はあと1回/);
+ assert.match(await page.locator('.asset-card').filter({hasText:'頂上級確定ボックス'}).innerText(),/ケソ号（下級/);assert.match(await page.locator('.asset-card').filter({hasText:'頂上級確定ボックス'}).innerText(),/今日の交換はあと1回/);
  // Discord iOS can swallow window.confirm. The horse sale must never need it.
  await page.evaluate(()=>{window.confirm=()=>{throw Error('native confirm is unavailable in Discord iOS');};});
  await page.locator('[data-action=horse-sell]').click();

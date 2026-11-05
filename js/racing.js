@@ -1,4 +1,4 @@
-import {EXTRA_HORSE_NAMES,EXTRA_CROWN_NAMES,REGULAR_RACE_NAMES} from './racing-name-catalog.js?v=web-4aa077317490cfd2';
+import {EXTRA_HORSE_NAMES,EXTRA_CROWN_NAMES,REGULAR_RACE_NAMES} from './racing-name-catalog.js?v=web-b28f04122eccc51b';
 // Horse racing. Pure logic with no DOM or clock reads, shared by the browser and the Worker.
 // Cards and odds are public (PUBLIC_SALT). The run uses a per-race seed: the demo uses the public
 // salt, while the Worker keeps a random seed secret until the start and publishes its hash first.
@@ -320,6 +320,7 @@ export const BOXES=[
  {id:'gold',label:'ゴールド',price:60000,odds:[0,15,75,10,0]},
  {id:'platinum',label:'プラチナ',price:250000,odds:[0,0,30,70,0]},
  {id:'legend',label:'レジェンド',price:1000000,odds:[0,0,0,70,30]},
+ {id:'apex',label:'頂上級確定',price:3500000,odds:[0,0,0,0,100]},
 ];
 /** A new horse from a box, drawn with the given random source (the Worker uses crypto). */
 export function drawHorse(boxId,rng){
