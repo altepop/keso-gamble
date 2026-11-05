@@ -68,8 +68,8 @@ export function quoteSpike(p:SpikeProfile,m:SpikeMatch,dayGame:number){
  const boost=add(fraction(1),mul(h,add(add(mul(fraction(1,10),c[2]),fraction(3*u[2],20)),fraction(controllerAwakened?1:0,4))));
  const grown=mul(add(fraction(base),mul(h,add(fraction(80),add(x,add(y,z))))),boost);
  const awakenings=progress.filter(r=>r.awakened).length,overdrive=awakenings===4;
- // Only fully awakened users bypass all daily/repeated-agent growth attenuation.
- // With 6K/2A/6D and 50% wins, all four awakenings average ~800 KP per game.
+ // Full OVERDRIVE or the exclusive Controller awakening bypasses daily and repeated-agent attenuation.
+ // Fully awakened players average ~910 KP/game at 6K/2A/6D, not counting the 7-game dominion burst.
  const enhanced=add(add(grown,fraction(awakenings*SPIKE_AWAKENING_REWARD_TOTAL,SPIKE_ROLES.length)),fraction((controllerAwakened?60:0)+dominionBonus));
  // From match 16 onward, grant 30% of the growth component (base KP remains intact).
  const fatigue=controllerAwakened||overdrive?fraction(1):dayGame<=10?fraction(1):dayGame<=15?fraction(1,2):fraction(3,10);
@@ -135,7 +135,7 @@ export async function settleSpike(env:KpEnv,e:SpikeEvent){
  throw Error('Spike settlement conflict');
 }
 export async function spikeNote(env:KpEnv,id:string){
- await ensureSpikeGrowth(env);
+ await ensureSpikeGrowth(env);await ensureSpikeAwakening(env);
  return (await env.DB.prepare('SELECT note FROM (SELECT id,note FROM spike_rewards UNION ALL SELECT id,note FROM spike_overdrive_rewards UNION ALL SELECT id,note FROM spike_dominion_rewards) WHERE id=?').bind(id).first<{note:string}>())?.note??'';
 }
 
