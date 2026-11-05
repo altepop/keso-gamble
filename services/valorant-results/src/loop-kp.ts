@@ -14,10 +14,10 @@ export const LOOP_FIXED_REWARDS:Readonly<Record<string,number>>=Object.freeze({.
 const initialized=new WeakMap<object,Promise<void>>();
 export function ensureLoopKp(env:KpEnv):Promise<void>{
  const existing=initialized.get(env.DB);if(existing)return existing;
- const job=env.DB.batch([
+ const job=Promise.resolve(env.DB.batch([
   env.DB.prepare(`CREATE TABLE IF NOT EXISTS kp_loop_events(id TEXT PRIMARY KEY,guild TEXT NOT NULL,user TEXT NOT NULL,milestone TEXT NOT NULL,evidence TEXT NOT NULL,amount INTEGER NOT NULL CHECK(typeof(amount)='integer' AND amount>0),completed_at INTEGER NOT NULL,UNIQUE(guild,user,milestone))`),
   env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS kp_loop_apply AFTER INSERT ON kp_loop_events BEGIN INSERT INTO kp_ledger(id,guild,user,delta,kind,at) VALUES(NEW.id,NEW.guild,NEW.user,NEW.amount,'loop',NEW.completed_at); END`),
- ]).then(()=>{});initialized.set(env.DB,job);job.catch(()=>initialized.delete(env.DB));return job;
+ ])).then(()=>{});initialized.set(env.DB,job);job.catch(()=>initialized.delete(env.DB));return job;
 }
 function configuration(raw:string|undefined):LoopRewardConfig|null{
  try{
