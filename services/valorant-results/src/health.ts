@@ -1,4 +1,5 @@
 import type { KpEnv } from './kp.ts';
+import {ensureBetIndex} from './bet-index.ts';
 // 監視状態: each scheduled job records when it last worked and when it last failed (with a short, scrubbed reason),
 // and the backlog that would pile up if something stopped (unsettled bets, pending claims, unsent posts…).
 // Shown to members on the Activity's 資産 screen; aggregates only, no names or amounts per person.
@@ -46,16 +47,16 @@ export async function healthReport(env:KpEnv,guild:string,now=Date.now()){
   return {feature,label,status,lastOk:r?.last_ok??null,lastError:r?.last_error??null,error:status==='failing'?r?.error??null:null,failures:r?.failures??0};
  });
  // Unsettled bets live inside each saved wallet; count them without exposing whose they are.
- let mlBets=0,raceBets=0;const mlMatches=new Set<string>();
+ let mlBets=0,raceBets=0,mlMatchesCount=0;
  try{
-  for(const row of (await env.DB.prepare(`SELECT data FROM kp_state WHERE guild=? AND data LIKE '%"status":"pending"%'`).bind(guild).all<{data:string}>()).results){
-   const s=JSON.parse(row.data);
-   for(const b of s.mlBets??[])if(b?.status==='pending'){mlBets++;mlMatches.add(b.match);}
-   for(const b of s.raceBets??[])if(b?.status==='pending')raceBets++;
-  }
+  await ensureBetIndex(env);
+  const rows=(await env.DB.prepare("SELECT kind,COUNT(*) AS n,COUNT(DISTINCT match) AS matches FROM kp_bet_index WHERE guild=? AND status='pending' GROUP BY kind").bind(guild).all<{kind:string;n:number;matches:number}>()).results;
+  mlBets=Number(rows.find(r=>r.kind==='ml')?.n??0);
+  raceBets=Number(rows.find(r=>r.kind==='race')?.n??0);
+  mlMatchesCount=Number(rows.find(r=>r.kind==='ml')?.matches??0);
  }catch{console.warn('health_backlog_pending');}
  const backlog={
-  mleagueBets:mlBets,mleagueMatches:mlMatches.size,raceBets,
+  mleagueBets:mlBets,mleagueMatches:mlMatchesCount,raceBets,
   mahjongClaims:await count(env,"SELECT COUNT(*) AS n FROM kp_mahjong_claims WHERE guild=? AND status='pending'",guild),
   debts:await count(env,'SELECT COUNT(*) AS n FROM kp_debts WHERE guild=? AND amount>0',guild),
   earningsPosts:await count(env,'SELECT COUNT(*) AS n FROM kp_posts WHERE sent=0'),
