@@ -1,0 +1,35 @@
+name: Temporary race commentary asset sync
+on:
+  push:
+    branches:
+      - feat/racing-last-place-commentary-20261105
+    paths:
+      - '.github/workflows/race-cache-temp.yml'
+permissions:
+  contents: write
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/racing-last-place-commentary-20261105
+          persist-credentials: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install and rebuild Activity release
+        run: |
+          npm ci
+          npm run build:activity
+          npm run check:activity
+          npm test
+      - name: Commit content-hashed browser assets
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add js css index.html
+          if ! git diff --staged --quiet; then
+            git commit -m "chore(activity): refresh cache for last-place race commentary"
+            git push origin HEAD:feat/racing-last-place-commentary-20261105
+          fi
