@@ -16,7 +16,7 @@ const result=(ids:string[],mode:string,amount:number,win=true)=>
 
 test('seven unique ability-only IDs are appended; legacy 175 and 8 pact relics remain untouched',()=>{
  assert.equal(ABILITY_RELICS.length,7);
- assert.equal(RELIC_CATALOG_COUNT,210);
+ assert.equal(RELIC_CATALOG_COUNT,214);
  assert.equal(NORMAL_RELICS.length,175);
  assert.equal(new Set(ABILITY_RELICS.map(x=>x.id)).size,7);
  assert.deepEqual(ABILITY_RELICS.map(x=>x.rarity),['common','uncommon','rare','legendary','mythic','ancient','transcendent']);

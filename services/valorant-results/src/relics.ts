@@ -1,4 +1,5 @@
 /** KESO relics: a server-owned collection. No bonuses alter other games' KP economy. */
+import {dragoonSetComplete,DRAGOON_SET_NAME} from './relic-dragoon.ts';
 import {NORMAL_RELIC_BY_ID,NORMAL_RELIC_BY_RARITY,RELIC_RARITIES,RELIC_CATALOG_COUNT,RELIC_MODE_NAMES} from './relic-catalog.ts';
 import {steamExtraRelics,STEAM_EXTRA_PER_GRADE,STEAM_GRADE_NAMES,type SteamGrade,type SteamFeatureKind} from './steam-relic-catalog.ts';
 import type {RelicMode,NormalRelicRarity} from './relic-catalog.ts';
@@ -417,6 +418,7 @@ export function evaluateRelicBonus(
  if(new Set(modes).size>=3)applySet('異界旅団（+15%）',.15);
  if(rarities.some(r=>rarities.filter(x=>x===r).length>=3))applySet('同格の誓い（+25%）',.25);
  if(curseReversed)sets.push({name:'呪い反転（虚無＋銀貨＋7の倍数）',bonus:0});
+ if(dragoonSetComplete(collection))sets.push({name:DRAGOON_SET_NAME,bonus:0});
  let resonance=0;
  if(!suppressResonance&&effective.length>=2&&amount%7===0){
   const skillKinds=new Set(effective.map(l=>NORMAL_RELIC_BY_ID.get(l.id)?.skill??collection.items[l.id]?.skill));
@@ -540,7 +542,9 @@ export function nativeRelicLoss(
  const used=c.dailyRelicLoss?.[mode]?.day===day?c.dailyRelicLoss[mode]!.amount:0;
  const allowance=mode==='casino'?casinoRelicAllowance(stake,used):nativeRelicAllowance(stake,used);
  if(!allowance)return 0;
- const penalty=Math.min(lossBonus(c,mode,loss,now),allowance,Math.max(0,Math.floor(state.cash)));
+ // 竜騎士の加護 (all four equipped now): betting-loss recoil is halved.
+ const raw=lossBonus(c,mode,loss,now),softened=dragoonSetComplete(c)?Math.floor(raw/2):raw;
+ const penalty=Math.min(softened,allowance,Math.max(0,Math.floor(state.cash)));
  if(!Number.isSafeInteger(penalty)||penalty<=0)return 0;
  state.cash-=penalty;
  c.dailyRelicLoss={...(c.dailyRelicLoss??{}),[mode]:{day,amount:used+penalty}};
@@ -559,12 +563,14 @@ export type RelicGamble={payout:number;kind:'steady'|'hit'|'miss'|'recoil';chanc
  * bonus (up to 10,000 KP) but pays it only with chance p; otherwise nothing, or a recoil of half the base reward
  * one time in five. p is chosen so the average is exactly +50%: p·B − (1−p)·0.2·R = E.
  */
-export function relicGamble(bonus:number,base:number,roll:number,recoilRoll:number):RelicGamble{
- const full=Math.max(0,Math.min(Math.floor(bonus),RELIC_RECEIPT_CAP));
+export const DRAGOON_RECEIPT_CAP=30000;
+export function relicGamble(bonus:number,base:number,roll:number,recoilRoll:number,options:{dragoon?:boolean}={}):RelicGamble{
+ const full=Math.max(0,Math.min(Math.floor(bonus),options.dragoon?DRAGOON_RECEIPT_CAP:RELIC_RECEIPT_CAP));
  if(!Number.isSafeInteger(base)||base<=0||!full)return {payout:0,kind:'miss',chance:0,full};
  const expected=Math.floor(base*RELIC_EXPECTED_RATIO);
  if(full<=expected)return {payout:full,kind:'steady',chance:1,full};
- const recoil=Math.floor(base*RELIC_RECOIL_RATIO),risk=RELIC_RECOIL_CHANCE*recoil;
+ // 竜騎士の加護: no recoil; the chance then comes from p·B = E, so the average stays +50%.
+ const recoil=options.dragoon?0:Math.floor(base*RELIC_RECOIL_RATIO),risk=RELIC_RECOIL_CHANCE*recoil;
  const chance=(expected+risk)/(full+risk);
  if(roll<chance)return {payout:full,kind:'hit',chance,full};
  if(recoil>0&&recoilRoll<RELIC_RECOIL_CHANCE)return {payout:-recoil,kind:'recoil',chance,full};
@@ -607,7 +613,7 @@ export async function creditVerifiedRelicBonus(
  // High risk, high return (owner decision 2026-11-05): a strong build still pays its full bonus, but only by chance,
  // and a miss can recoil. The average stays at +50% of the base reward. A miss is recorded too (0 KP), so a retry of
  // the same receipt can never re-roll it.
- const gamble=relicGamble(detail.bonus,amount,randomUnit(),randomUnit());
+ const gamble=relicGamble(detail.bonus,amount,randomUnit(),randomUnit(),{dragoon:dragoonSetComplete(state.relics)});
  const bonus=gamble.payout;
  const id='relic:'+receipt;
  const saved=await env.DB.prepare(`INSERT OR IGNORE INTO kp_ledger(id,guild,user,delta,kind,at)

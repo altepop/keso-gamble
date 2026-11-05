@@ -1,4 +1,5 @@
 import {MORE_MAHJONG_VOICE_RELICS} from './relic-more-voice-mahjong.ts';
+import {DRAGOON_RELICS} from './relic-dragoon.ts';
 /** Every ordinary relic has its own name and a mode-specific autonomous skill.
  * A game mode is NEVER a required source for another item's upgrade or unlock.
  */
@@ -572,7 +573,7 @@ export const ABILITY_RELICS:ReadonlyArray<NormalRelicDefinition>=[
  {id:'normal.ability.threshold',name:'千里眼の凱旋門',mode:'universal',rarity:'transcendent',power:440,skill:'spark',percent:0,cap:0,special:'threshold',
   short:'500KP以上の検証済み報酬で固定＋250KP',trait:'到達報酬',ability:'確定した元の報酬が500KP以上なら固定＋250KPを上乗せ。勝敗・賭け・抽選を変更せず、取引系では発動しない。'},
 ];
-export const ALL_NORMAL_RELICS:ReadonlyArray<NormalRelicDefinition>=[...NORMAL_RELICS,...RISK_RELICS,...ABILITY_RELICS,...MORE_MAHJONG_VOICE_RELICS];
+export const ALL_NORMAL_RELICS:ReadonlyArray<NormalRelicDefinition>=[...NORMAL_RELICS,...RISK_RELICS,...ABILITY_RELICS,...MORE_MAHJONG_VOICE_RELICS,...DRAGOON_RELICS];
 export const NORMAL_RELIC_BY_ID = new Map(ALL_NORMAL_RELICS.map(x=>[x.id,x]));
 export const NORMAL_RELIC_BY_RARITY:ReadonlyMap<NormalRelicRarity,ReadonlyArray<NormalRelicDefinition>>=
   new Map(RELIC_RARITIES.map(r=>[r,ALL_NORMAL_RELICS.filter(item=>item.rarity===r)]));

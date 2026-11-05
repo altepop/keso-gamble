@@ -169,3 +169,36 @@ test('verified receipts: strong builds keep their full bonus by chance, with rec
  let sum=0;const n=200000;for(let i=0;i<n;i++)sum+=relicGamble(4000,400,Math.random(),Math.random()).payout;
  assert.ok(Math.abs(sum/n-200)<15,String(sum/n));
 });
+
+test('竜騎士（ドラグーン）: four pieces in the summon pool; the full set removes recoil, raises the cap, halves betting recoil',async()=>{
+ const {DRAGOON_RELICS,DRAGOON_SET_IDS,dragoonSetComplete}=await import('../src/relic-dragoon.ts');
+ const {NORMAL_RELIC_BY_RARITY,NORMAL_RELIC_BY_ID}=await import('../src/relic-catalog.ts');
+ assert.equal(DRAGOON_RELICS.length,4);
+ for(const r of DRAGOON_RELICS){assert.ok(NORMAL_RELIC_BY_ID.get(r.id));assert.ok(NORMAL_RELIC_BY_RARITY.get('mythic')!.some(x=>x.id===r.id));}
+ const set=():{cash:number;relics:RelicCollection}=>{
+  const relics:RelicCollection={totalSummons:0,items:{},equipped:[]};
+  for(const d of DRAGOON_RELICS){relics.items[d.id]={...d,origin:'normal',count:1} as RelicItem;relics.equipped.push(d.id);}
+  return {cash:100000,relics};
+ };
+ const s=set();
+ assert.ok(dragoonSetComplete(s.relics));
+ assert.ok(!dragoonSetComplete({...s.relics,equipped:DRAGOON_SET_IDS.slice(0,3)}));
+ // Each piece is strong on its own: the full set on a 400 KP win is far above +50%.
+ const strongBonus=evaluateRelicBonus(s.relics,'competitive',{amount:400,win:true}).bonus;
+ assert.ok(strongBonus>400,String(strongBonus));
+ assert.ok(evaluateRelicBonus(s.relics,'competitive',{amount:400,win:true}).sets.some(x=>x.name.includes('竜騎士')));
+ // No recoil with the set; the average stays +50% (p·B = E).
+ const g=relicGamble(4000,400,0.99,0,{dragoon:true});
+ assert.equal(g.kind,'miss');assert.equal(g.payout,0);
+ assert.ok(Math.abs(g.chance-200/4000)<1e-9);
+ // Cap 30,000 instead of 10,000.
+ assert.equal(relicGamble(900000,300000,0,0,{dragoon:true}).payout,30000);
+ assert.equal(relicGamble(900000,300000,0,0).payout,10000);
+ // Betting losses: the recoil is halved.
+ const plain=strong();plain.cash=100000;
+ const withSet=set();
+ const full=nativeRelicLoss(plain,'market',100000,now,1_000_000);
+ const half=nativeRelicLoss(withSet,'market',100000,now,1_000_000);
+ assert.equal(full,250);
+ assert.equal(half,Math.min(250,Math.floor(evaluateRelicBonus(withSet.relics,'market',{amount:100000,win:true}).bonus/2)));
+});
