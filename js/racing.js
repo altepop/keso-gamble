@@ -265,7 +265,7 @@ export function raceCommentary(card,result,timeline,odds,seed=PUBLIC_SALT){
  for(const r of result.runs)if(r.late)lines.push({t:1500,text:`${name(r.number)}、ゲートが開いたことに気付いていません！`});
  let prev=null;
  for(const [fraction,stage] of [
-  [.14,'start'],[.29,'chase'],[.44,'half'],[.60,'turn'],[.75,'stretch'],[.88,'final'],[.97,'wire']
+  [.14,'start'],[.29,'chase'],[.44,'half'],[.60,'turn'],[.75,'stretch'],[.88,'final'],[.94,'wire']
  ]){
   const t=Math.round(lead*fraction),spot=lastPlaceAt(timeline,t);
   if(!spot)continue;
