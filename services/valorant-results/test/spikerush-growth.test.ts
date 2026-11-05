@@ -11,6 +11,7 @@ import type {Match} from '../src/results.ts';
 import {ledgerHistory} from '../src/kp-history.ts';
 import {NORMAL_RELICS} from '../src/relic-catalog.ts';
 import type {RelicCollection} from '../src/relics.ts';
+import {useRelicRandomForTests} from '../src/relics.ts';
 const guild='100000000000000100',one='100000000000000101',two='100000000000000102';
 const mapping:KpMapping={guildId:guild,accounts:[{riotId:'One#JP1',discordUserId:one},{riotId:'Two#JP1',discordUserId:two}]};
 const agent=SPIKE_ROSTER.agents[0],at=Date.parse('2026-10-28T03:00:00Z');
@@ -188,6 +189,7 @@ test('wallet overflow rolls back the reward and growth, and recovery pays once',
 
 
 test('real trigger-created Spike results credit opening relic KP from match 1, without double payout on retry',async()=>{
+ const restore=useRelicRandomForTests(()=>0); // the relic roll hits (a strong build pays by chance since 2026-11-05)
  const f=await fixture();f.enable();
  const def=NORMAL_RELICS.find(x=>x.mode==='spikerush'&&x.rarity==='common')!;
  const collection:RelicCollection={totalSummons:1,items:{[def.id]:{...def,origin:'normal',count:1}},equipped:[def.id]};
@@ -216,6 +218,28 @@ test('real trigger-created Spike results credit opening relic KP from match 1, w
  await drainKpInbox(f.env);await collectKpMatch(f.env,mapping,match,'p-one');
  assert.equal(f.balance(),90,'verified receipt is idempotent even when inbox or match is reprocessed');
  assert.equal((f.sql.prepare("SELECT COUNT(*) AS n FROM kp_ledger WHERE kind='relic'").get() as {n:number}).n,1);
+ restore();
+});
+test('a strong relic build can recoil: the miss is recorded once and the result shows the recoil',async()=>{
+ const rolls=[0.99,0.1];const restore=useRelicRandomForTests(()=>rolls.shift()??0.99);
+ const f=await fixture();f.enable();
+ const def=NORMAL_RELICS.find(x=>x.mode==='spikerush'&&x.rarity==='common')!;
+ const collection:RelicCollection={totalSummons:1,items:{[def.id]:{...def,origin:'normal',count:1}},equipped:[def.id]};
+ const prior=f.sql.prepare('SELECT data FROM kp_state WHERE guild=? AND user=?').get(guild,one) as {data:string};
+ const state=JSON.parse(prior.data) as {relics?:RelicCollection};state.relics=collection;
+ f.sql.prepare('UPDATE kp_state SET data=? WHERE guild=? AND user=?').run(JSON.stringify(state),guild,one);
+ f.sql.prepare('INSERT INTO notifications(riot_id,match_id,message,ended_at,mode,sent) VALUES(?,?,?,?,?,1)')
+  .run('One#JP1','relic-recoil','📢 試合結果\n💬 ナイス！',at,'spikerush');
+ const match=raw('relic-recoil');
+ assert.equal(await collectKpMatch(f.env,mapping,match,'p-one'),20,'40 base, recoil of half the base');
+ assert.equal(f.balance(),20);
+ const bot=String((f.sql.prepare("SELECT message FROM notifications WHERE match_id='relic-recoil'").get() as {message:string}).message);
+ assert.match(bot,/この試合 \+20 KP/);
+ assert.match(bot,/↳ 🩸 遺物の反動 −20 KP/);
+ restore();const again=useRelicRandomForTests(()=>0);
+ await drainKpInbox(f.env);await collectKpMatch(f.env,mapping,match,'p-one');
+ assert.equal(f.balance(),20,'a retry never re-rolls the same receipt');
+ again();
 });
 test('an archived match without a pending inbox is never backpaid when relics are newly equipped',async()=>{
  const f=await fixture();f.enable();
