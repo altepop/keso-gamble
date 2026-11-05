@@ -548,11 +548,11 @@ export const RISK_RELICS:ReadonlyArray<NormalRelicDefinition>=[
   percent:260,cap:0,tradeoff:'chain',drawback:'ほかの遺物が2個以上発動しなければ、自分の効果が0',
   short:'ほか2種以上が発動：＋260%',trait:'連鎖暴走',ability:'ほかの遺物が2個以上同時発動すると＋260%。さらにほかの発動1個につき＋60ポイント。単独では0。'},
  {id:'normal.pact.eclipse',name:'日蝕の至高王',mode:'universal',rarity:'transcendent',power:460,skill:'victory_high',
-  percent:560,cap:0,tradeoff:'eclipse',drawback:'勝利かつ400KP以上でなければ、ほかの遺物の追加分が0',
-  short:'勝利＆400KP以上：＋560%',trait:'日蝕の代償',ability:'勝利かつ報酬400KP以上なら＋560%。条件未達ではほかの遺物によるKP追加をすべて消す。'},
+  percent:560,cap:0,tradeoff:'eclipse',drawback:'勝利条件未達で他の遺物追加KPが0。カジノ敗北時は損失1.5倍',
+  short:'勝利＆400KP以上：＋560%／カジノ敗北×1.5',trait:'日蝕の代償',ability:'勝利かつ報酬400KP以上なら＋560%。条件未達ではほかの遺物によるKP追加をすべて消す。カジノに賭けると敗北時は損失1.5倍（他の損失増幅と乗算、賭け始めに固定）。'},
  {id:'normal.pact.frenzy',name:'賽の崩壊核',mode:'fortune',rarity:'transcendent',power:480,skill:'prime',
-  percent:900,cap:0,tradeoff:'frenzy',drawback:'素数KP以外の報酬では、ほかの遺物の追加分が90%減',
-  short:'素数KPの報酬：＋900%',trait:'確率暴走',ability:'素数KPの報酬なら＋900%。それ以外はほかの遺物の上乗せKPが90%減る。'},
+  percent:900,cap:0,tradeoff:'frenzy',drawback:'素数KP以外で他の遺物追加KPが90%減。カジノ敗北時は損失2倍',
+  short:'素数KPの報酬：＋900%／カジノ敗北×2',trait:'確率暴走',ability:'素数KPの報酬なら＋900%。それ以外はほかの遺物の上乗せKPが90%減る。カジノに賭けると敗北時は損失2倍（他の損失増幅と乗算、賭け始めに固定）。'},
 ];
 /** Seven ability-first relics: zero %-multiplier and an independently visible rule.
  * IDs are appended to preserve every previously-owned item and summon result. */
