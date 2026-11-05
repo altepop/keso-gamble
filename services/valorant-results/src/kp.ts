@@ -1,5 +1,5 @@
 import {feedIndex} from './community-feed.ts';
-import {creditVerifiedRelicBonus} from './relics.ts';
+import {creditVerifiedRelicBonus,creditVerifiedRelicLoss} from './relics.ts';
 import {settleSkirmishMatch} from './skirmish.ts';
 import {settleDmMatch,ensureDmChallenge} from './dm-challenge.ts';
 import {valoKp,ensureModeRewards,MODE_REWARD_VERSION,UNRATED_JACKPOT,jackpotPost} from './mode-rewards.ts';
@@ -145,7 +145,7 @@ export async function drainKpInbox(env:KpEnv){
   // Already drained historical matches are NOT scanned or back-paid.
   const realSpike=e.kind==='spikerush-growth'&&e.mode==='spikerush';
   if(e.amount>0&&(realSpike||(settledRows[0]?.meta?.changes??0)>0))
-   try { await creditVerifiedRelicBonus(env,e.guild,e.user,e.id,e.mode,e.amount,e.outcome==='win'); }
+   try { await creditVerifiedRelicBonus(env,e.guild,e.user,e.id,e.mode,e.amount,e.outcome==='win',Date.now(),Number(e.jackpot??0)); }
    catch { console.warn('relic_match_bonus_pending'); }
   // A big unrated lottery prize is announced once in 稼ぎch; the post never holds up the credit.
   if(e.mode==='unrated'&&Number.isSafeInteger(e.jackpot)&&e.jackpot!>=UNRATED_JACKPOT&&await env.DB.prepare('SELECT 1 AS n FROM kp_events WHERE id=?').bind(e.id).first()){
@@ -154,6 +154,13 @@ export async function drainKpInbox(env:KpEnv){
   // A loss costs a separate debit, never more than the balance (wallets cannot go below 0); the rest becomes 借KP.
   if(e.penalty)await env.DB.prepare(`INSERT OR IGNORE INTO kp_ledger(id,guild,user,delta,kind,at) SELECT ?,?,?,-MIN(?,balance),'match',? FROM kp_wallets WHERE guild=? AND user=? AND EXISTS(SELECT 1 FROM kp_events WHERE id=?)`).bind('penalty:'+e.id,e.guild,e.user,e.penalty,Date.now(),e.guild,e.user,e.id).run();
   if(e.penalty){await ensureDebt(env);await borrowShortfall(env,'penalty:'+e.id,e.penalty).run();}
+  // Thrill modes: a negative result also grows by the equipped relics (owner decision 2026-11-05). The アンレ
+  // lottery is computed apart: only the part of the loss that is not the lottery draw is multiplied.
+  if(e.penalty){
+   const lotteryLoss=e.mode==='unrated'&&Number(e.jackpot)<0?-Number(e.jackpot):0;
+   const loss=Math.max(0,e.penalty-lotteryLoss);
+   if(loss>0)try{await creditVerifiedRelicLoss(env,e.guild,e.user,e.id,e.mode,loss);}catch{console.warn('relic_match_loss_pending');}
+  }
   if(e.mode==='escalation'&&e.escalation){
    await ensureModeRewards(env);
    const spin=e.escalation;

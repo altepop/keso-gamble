@@ -1,4 +1,6 @@
 /** KESO relics: a server-owned collection. No bonuses alter other games' KP economy. */
+import {dragoonSetComplete,DRAGOON_SET_NAME} from './relic-dragoon.ts';
+import {abyssEquipped} from './relic-abyss.ts';
 import {NORMAL_RELIC_BY_ID,NORMAL_RELIC_BY_RARITY,RELIC_RARITIES,RELIC_CATALOG_COUNT,RELIC_MODE_NAMES} from './relic-catalog.ts';
 import {steamExtraRelics,STEAM_EXTRA_PER_GRADE,STEAM_GRADE_NAMES,type SteamGrade,type SteamFeatureKind} from './steam-relic-catalog.ts';
 import type {RelicMode,NormalRelicRarity} from './relic-catalog.ts';
@@ -44,6 +46,8 @@ export interface RelicCollection {
   /** Loadouts taken off in the last 24 hours (copies of the items). A settled loss uses the strongest of these
    * and the current loadout, so taking relics off right before a losing sale does not dodge the penalty. */
   recentLoadouts?: {items:RelicItem[];until:number}[];
+  /** When the equipped set last changed (relics put on within 90 minutes before a win do not count for it). */
+  loadoutChangedAt?: number;
   lastNativeEffect?: {mode:string;amount:number;bonus:number;percent:number;at:number;names:string[];lines?:RelicBonusLine[];sets?:{name:string;bonus:number}[]};
   summonHistory?:SummonHistoryEntry[];
   presets?:Record<string,string[]>;
@@ -417,6 +421,9 @@ export function evaluateRelicBonus(
  if(new Set(modes).size>=3)applySet('異界旅団（+15%）',.15);
  if(rarities.some(r=>rarities.filter(x=>x===r).length>=3))applySet('同格の誓い（+25%）',.25);
  if(curseReversed)sets.push({name:'呪い反転（虚無＋銀貨＋7の倍数）',bonus:0});
+ if(dragoonSetComplete(collection))sets.push({name:DRAGOON_SET_NAME,bonus:0});
+ if(abyssEquipped(collection))sets.push({name:'深淵の代償（勝ちを増幅、負けの反動も増幅）',bonus:0});
+ if(collection.equipped.some(id=>collection.items[id]?.origin==='normal'&&collection.items[id]?.foil))sets.push({name:'色違いの輝き（ハラハラ枠の勝ち×1.5）',bonus:0});
  let resonance=0;
  if(!suppressResonance&&effective.length>=2&&amount%7===0){
   const skillKinds=new Set(effective.map(l=>NORMAL_RELIC_BY_ID.get(l.id)?.skill??collection.items[l.id]?.skill));
@@ -512,7 +519,7 @@ export function rememberLoadout(c:RelicCollection|undefined,before:RelicItem[],n
  if(!c)return;
  const live=(c.recentLoadouts??[]).filter(l=>l.until>now);
  const changed=before.length>0&&(before.length!==c.equipped.length||before.some((x,i)=>x.id!==c.equipped[i]));
- if(changed)live.unshift({items:before,until:now+RELIC_LOSS_MEMORY_MS});
+ if(changed){live.unshift({items:before,until:now+RELIC_LOSS_MEMORY_MS});c.loadoutChangedAt=now;}
  if(changed||live.length!==(c.recentLoadouts??[]).length)c.recentLoadouts=live.slice(0,8);
 }
 function lossBonus(c:RelicCollection,mode:string,loss:number,now:number):number{
@@ -540,7 +547,7 @@ export function nativeRelicLoss(
  const used=c.dailyRelicLoss?.[mode]?.day===day?c.dailyRelicLoss[mode]!.amount:0;
  const allowance=mode==='casino'?casinoRelicAllowance(stake,used):nativeRelicAllowance(stake,used);
  if(!allowance)return 0;
- const penalty=Math.min(lossBonus(c,mode,loss,now),allowance,Math.max(0,Math.floor(state.cash)));
+ const penalty=Math.min(Math.floor(lossBonus(c,mode,loss,now)*relicLossFactor(relicFlags(c))),allowance,Math.max(0,Math.floor(state.cash)));
  if(!Number.isSafeInteger(penalty)||penalty<=0)return 0;
  state.cash-=penalty;
  c.dailyRelicLoss={...(c.dailyRelicLoss??{}),[mode]:{day,amount:used+penalty}};
@@ -548,39 +555,75 @@ export function nativeRelicLoss(
  c.lastRelicLoss={mode,amount:loss,penalty,at:now};
  return penalty;
 }
-/** Verified receipts (games, voice, Steam, LOOP, …): how a relic bonus resolves. */
-export const RELIC_EXPECTED_RATIO=0.5;   // the average relic bonus is at most +50% of the base reward
-export const RELIC_RECOIL_CHANCE=0.2;    // after a miss, a 1-in-5 recoil …
-export const RELIC_RECOIL_RATIO=0.5;     // … of half the base reward
-export const RELIC_RECEIPT_CAP=10000;    // one receipt never pays more than +10,000 KP of relic bonus
-export type RelicGamble={payout:number;kind:'steady'|'hit'|'miss'|'recoil';chance:number;full:number};
 /**
- * A build whose bonus is at most +50% of the base pays it every time (unchanged). A stronger build keeps its full
- * bonus (up to 10,000 KP) but pays it only with chance p; otherwise nothing, or a recoil of half the base reward
- * one time in five. p is chosen so the average is exactly +50%: p·B − (1−p)·0.2·R = E.
+ * Verified receipts (games, voice, Steam, LOOP, …): how relics act, by how much risk the mode carries
+ * (owner decision 2026-11-05, replacing the chance-based #342):
+ * - THRILL modes (コンペ・アンレ・エスカレーション・デスマッチ・DM一発勝負・スカーミッシュ・雀魂): a WIN gets the full relic bonus with no
+ *   cap ("数倍"). A normal loss keeps its base reward with no bonus. A NEGATIVE result (最下位・ラス・大勝負の負け) grows by the same
+ *   relic strength: the extra loss is taken even beyond the balance, as 借KP (borrowShortfall), like the base penalty.
+ * - SAFE modes (スパイクラッシュ〔基礎だけ〕・TDM・スイフト・レプリケーション・ユナイト・通話・QUIZ): the bonus is at most the base reward.
+ * - ONE-OFF rewards: LOOP up to 20,000 per receipt; Steam up to 20,000 per receipt and 30,000 per day.
+ * - アンレの特別抽選 is computed apart: the bonus is on the match reward without the lottery prize.
+ * Special effects (they multiply the relic part only): 竜騎士4点 win ×1.25 / extra loss ×0.5; 色違い (thrill wins) ×1.5;
+ * 深淵の契約書 win ×1.3 / loss ×1.75; 奈落の王冠 win ×1.5 / loss ×2.
+ * Equipment: relics put on within 90 minutes before the settlement do not count for a WIN (the weaker of the current and
+ * the previous loadout is used); for a LOSS the strongest loadout of the last 24 hours counts (no taking relics off).
  */
-export function relicGamble(bonus:number,base:number,roll:number,recoilRoll:number):RelicGamble{
- const full=Math.max(0,Math.min(Math.floor(bonus),RELIC_RECEIPT_CAP));
- if(!Number.isSafeInteger(base)||base<=0||!full)return {payout:0,kind:'miss',chance:0,full};
- const expected=Math.floor(base*RELIC_EXPECTED_RATIO);
- if(full<=expected)return {payout:full,kind:'steady',chance:1,full};
- const recoil=Math.floor(base*RELIC_RECOIL_RATIO),risk=RELIC_RECOIL_CHANCE*recoil;
- const chance=(expected+risk)/(full+risk);
- if(roll<chance)return {payout:full,kind:'hit',chance,full};
- if(recoil>0&&recoilRoll<RELIC_RECOIL_CHANCE)return {payout:-recoil,kind:'recoil',chance,full};
- return {payout:0,kind:'miss',chance,full};
+export const FOIL_ODDS=5000;
+export const THRILL_MODES=new Set(['competitive','unrated','escalation','deathmatch','dmchallenge','skirmish','mahjong']);
+export const ONE_OFF_CAPS:Readonly<Record<string,{receipt:number;daily?:number}>>={loop:{receipt:20000},steam:{receipt:20000,daily:30000}};
+export const RELIC_EQUIP_LEAD_MS=90*60_000;
+export function relicModeClass(mode:string):'thrill'|'safe'|'oneoff'{
+ return THRILL_MODES.has(mode)?'thrill':Object.hasOwn(ONE_OFF_CAPS,mode)?'oneoff':'safe';
 }
-let relicRandom:()=>number=()=>crypto.getRandomValues(new Uint32Array(1))[0]!/2**32;
-function randomUnit(){return relicRandom();}
-/** Tests only: fix the relic roll (0 = always hit). Returns a function that restores the real random source. */
-export function useRelicRandomForTests(fn:()=>number){const previous=relicRandom;relicRandom=fn;return ()=>{relicRandom=previous;};}
+export type RelicFlags={dragoon:boolean;foil:boolean;contract:boolean;crown:boolean};
+export function relicFlags(c?:RelicCollection):RelicFlags{
+ if(!c)return {dragoon:false,foil:false,contract:false,crown:false};
+ const has=(id:string)=>c.equipped.includes(id)&&c.items[id]?.origin==='normal'&&Number(c.items[id]?.count)>=1;
+ return {dragoon:dragoonSetComplete(c),foil:c.equipped.some(id=>c.items[id]?.origin==='normal'&&Boolean(c.items[id]?.foil)),
+  contract:has('normal.abyss.contract'),crown:has('normal.abyss.crown')};
+}
+/** Multiplier on the relic WIN bonus from special effects. */
+export function relicWinFactor(f:RelicFlags,thrill:boolean){
+ return (f.dragoon?1.25:1)*(f.foil&&thrill?1.5:1)*(f.crown?1.5:f.contract?1.3:1);
+}
+/** Multiplier on the relic EXTRA LOSS from special effects. */
+export function relicLossFactor(f:RelicFlags){
+ return (f.dragoon?0.5:1)*(f.crown?2:f.contract?1.75:1);
+}
+function view(c:RelicCollection,items:RelicItem[]):RelicCollection{
+ return {...c,items:Object.fromEntries(items.map(x=>[x.id,x])),equipped:items.map(x=>x.id)};
+}
+/** The loadout that counts for a WIN settled at `at`: if the current one was put on less than 90 minutes before,
+ * the weaker of it and the loadout it replaced. */
+export function winLoadout(c:RelicCollection,mode:string,amount:number,at:number,event:{spikeGamesBefore?:number}={}):RelicCollection{
+ if(!(Number(c.loadoutChangedAt)>at-RELIC_EQUIP_LEAD_MS))return c;
+ const previous=(c.recentLoadouts??[])[0];
+ const before=previous?view(c,previous.items):view(c,[]);
+ const now=evaluateRelicBonus(c,mode,{amount,win:true,...event}).bonus,then=evaluateRelicBonus(before,mode,{amount,win:true,...event}).bonus;
+ return now<=then?c:before;
+}
+/** The loadout that counts for a LOSS: the strongest of the current one and any taken off in the last 24 hours. */
+export function lossLoadout(c:RelicCollection,mode:string,loss:number,at:number):RelicCollection{
+ let best=c,score=c.equipped.length?evaluateRelicBonus(c,mode,{amount:loss,win:true}).bonus:0;
+ for(const l of c.recentLoadouts??[]){
+  if(!(l.until>at)||!l.items.length)continue;
+  const v=view(c,l.items),b=evaluateRelicBonus(v,mode,{amount:loss,win:true}).bonus;
+  if(b>score){best=v;score=b;}
+ }
+ return best;
+}
 /** Caller MUST confirm a new, immutable server-verified receipt before invoking.
  * This is not a public API; browsers can never request a bonus for arbitrary evidence.
+ * `lottery` (アンレ only) is the special-lottery part of `amount`, which relics never multiply.
  */
 export async function creditVerifiedRelicBonus(
- env:{DB:D1Database},guild:string,user:string,receipt:string,mode:string,amount:number,win:boolean,at=Date.now(),
+ env:{DB:D1Database},guild:string,user:string,receipt:string,mode:string,amount:number,win:boolean,at=Date.now(),lottery=0,
 ):Promise<number> {
  if(!Number.isSafeInteger(amount)||amount<=0||!receipt||receipt.length>350)return 0;
+ const kind=relicModeClass(mode);
+ // Thrill modes: only a win is boosted; a normal loss keeps its plain reward.
+ if(kind==='thrill'&&!win)return 0;
  const row=await env.DB.prepare('SELECT data FROM kp_state WHERE guild=? AND user=?')
   .bind(guild,user).first<{data:string}>();
  if(!row)return 0;
@@ -602,26 +645,60 @@ export async function creditVerifiedRelicBonus(
   if(!Number.isSafeInteger(spike.base)||spike.base<=0)return 0;
   amount=Math.min(amount,spike.base);
  }
- const detail=evaluateRelicBonus(state.relics,mode,{amount,win,spikeGamesBefore});
+ // アンレの特別抽選は独立計算: relics act on the match reward without the lottery prize.
+ if(mode==='unrated'&&Number.isSafeInteger(lottery)&&lottery>0)amount=Math.max(0,amount-lottery);
+ if(amount<=0)return 0;
+ const loadout=winLoadout(state.relics,mode,amount,at,{spikeGamesBefore});
+ const detail=evaluateRelicBonus(loadout,mode,{amount,win,spikeGamesBefore});
  if(!detail.bonus)return 0;
- // High risk, high return (owner decision 2026-11-05): a strong build still pays its full bonus, but only by chance,
- // and a miss can recoil. The average stays at +50% of the base reward. A miss is recorded too (0 KP), so a retry of
- // the same receipt can never re-roll it.
- const gamble=relicGamble(detail.bonus,amount,randomUnit(),randomUnit());
- const bonus=gamble.payout;
+ let bonus=Math.floor(detail.bonus*relicWinFactor(relicFlags(loadout),kind==='thrill'));
+ if(kind==='safe')bonus=Math.min(bonus,amount);
+ if(kind==='oneoff'){
+  const cap=ONE_OFF_CAPS[mode]!;
+  bonus=Math.min(bonus,cap.receipt);
+  if(cap.daily){
+   const day=Date.parse(casinoRelicDay(at)+'T00:00:00Z');
+   const used=await env.DB.prepare(`SELECT COALESCE(SUM(l.delta),0) AS n FROM kp_ledger l JOIN kp_steam_events s ON l.id='relic:'||s.id
+     WHERE l.guild=? AND l.user=? AND l.kind='relic' AND l.at>=?`).bind(guild,user,day).first<{n:number}>().catch(()=>({n:0}));
+   bonus=Math.min(bonus,Math.max(0,cap.daily-Number(used?.n??0)));
+  }
+ }
+ if(!Number.isSafeInteger(bonus)||bonus<=0)return 0;
  const id='relic:'+receipt;
- const saved=await env.DB.prepare(`INSERT OR IGNORE INTO kp_ledger(id,guild,user,delta,kind,at)
-   SELECT ?,?,?,CASE WHEN ?<0 THEN -MIN(-?,balance) ELSE ? END,'relic',? FROM kp_wallets WHERE guild=? AND user=?`)
-  .bind(id,guild,user,bonus,bonus,bonus,at,guild,user).run();
+ const saved=await env.DB.prepare('INSERT OR IGNORE INTO kp_ledger(id,guild,user,delta,kind,at) VALUES(?,?,?,?,?,?)')
+  .bind(id,guild,user,bonus,'relic',at).run();
  // Log only real credited receipts; write is independently idempotent on retries.
  try{
   await env.DB.prepare(
    'INSERT OR IGNORE INTO relic_effect_logs(id,guild,user,mode,base,bonus,details,at) SELECT ?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM kp_ledger WHERE id=? AND guild=? AND user=?)'
-  ).bind(id,guild,user,mode,amount,bonus,JSON.stringify({lines:detail.lines,sets:detail.sets,resonance:detail.resonance,curseReversed:detail.curseReversed,spikeOpening:detail.spikeOpening,gamble}),at,id,guild,user).run();
+  ).bind(id,guild,user,mode,amount,bonus,JSON.stringify({lines:detail.lines,sets:detail.sets,resonance:detail.resonance,curseReversed:detail.curseReversed,spikeOpening:detail.spikeOpening,kind}),at,id,guild,user).run();
  }catch{console.warn('relic_effect_log_pending');}
+ return saved.meta.changes?bonus:0;
+}
+/** Thrill modes: a NEGATIVE result (最下位・ラス・大勝負の負け) grows by the equipped relics' strength. Taken beyond the
+ * balance as 借KP, like the base penalty, so keeping KP elsewhere does not dodge it. Once per receipt. */
+export async function creditVerifiedRelicLoss(
+ env:{DB:D1Database},guild:string,user:string,receipt:string,mode:string,loss:number,at=Date.now(),
+):Promise<number>{
+ if(relicModeClass(mode)!=='thrill'||!Number.isSafeInteger(loss)||loss<=0||!receipt||receipt.length>350)return 0;
+ const row=await env.DB.prepare('SELECT data FROM kp_state WHERE guild=? AND user=?').bind(guild,user).first<{data:string}>();
+ if(!row)return 0;
+ const state=JSON.parse(row.data) as {relics?:RelicCollection};
+ const c=state.relics;
+ if(!c||!(c.equipped?.length||c.recentLoadouts?.some(l=>l.until>at)))return 0;
+ const loadout=lossLoadout(c,mode,loss,at);
+ // Win-only relics count as if their condition were met: the loss mirrors what the same amount would have won.
+ const raw=evaluateRelicBonus(loadout,mode,{amount:loss,win:true}).bonus;
+ const extra=Math.floor(raw*relicLossFactor(relicFlags(loadout)));
+ if(!Number.isSafeInteger(extra)||extra<=0)return 0;
+ const id='relic:'+receipt;
+ const saved=await env.DB.prepare(`INSERT OR IGNORE INTO kp_ledger(id,guild,user,delta,kind,at)
+   SELECT ?,?,?,-MIN(?,balance),'relic',? FROM kp_wallets WHERE guild=? AND user=?`).bind(id,guild,user,extra,at,guild,user).run();
  if(!saved.meta.changes)return 0;
- const credited=await env.DB.prepare('SELECT delta FROM kp_ledger WHERE id=? AND guild=? AND user=?').bind(id,guild,user).first<{delta:number}>();
- return Number(credited?.delta??0);
+ // The part the balance could not cover becomes 借KP (same mechanism as match penalties).
+ await env.DB.prepare(`INSERT OR IGNORE INTO kp_debt_events(id,guild,user,amount,kind,at) SELECT 'borrow:'||id,guild,user,CAST(? AS INTEGER)+delta,'borrow',at FROM kp_ledger WHERE id=? AND CAST(? AS INTEGER)+delta>0`)
+  .bind(extra,id,extra).run().catch(()=>console.warn('relic_loss_debt_pending'));
+ return extra;
 }
 function store(c: RelicCollection, item: RelicItem) {
   const old = c.items[item.id];
@@ -658,7 +735,7 @@ export function summonRelics(
     const duplicate=Boolean(c.items[id]);
     store(c,{id,name,origin:'normal',rarity,mode,skill,power,ability,count:1});
     const item=c.items[id]!;
-    // 1/4096 duplicate evolution, once per relic ID; 1/40000 cosmetic foil,
+    // 1/4096 duplicate evolution, once per relic ID; 1/5000 foil (色違い, raised from 1/40000 on 2026-11-05),
     // also once per relic ID. Different source/Steam history is untouched.
     if(!chosen.special&&duplicate&&!item.mutation&&variants[n*2]!%4096===0){
      const kinds=['prism','risk','comeback'] as const;
@@ -666,7 +743,7 @@ export function summonRelics(
      item.mutation={kind,percent:kind==='risk'?24:kind==='comeback'?17:12,at:Date.now()};
      mutations.push(name);c.mutatedCount=(c.mutatedCount??0)+1;
     }
-    if(!chosen.special&&!item.foil&&variants[n*2+1]!%40000===0){
+    if(!chosen.special&&!item.foil&&variants[n*2+1]!%FOIL_ODDS===0){
      const kinds=['holographic','starlit','abyss'] as const;
      item.foil={kind:kinds[(variants[n*2]!>>>8)%3]!,percent:3,at:Date.now()};
      foils.push(name);c.foilCount=(c.foilCount??0)+1;
