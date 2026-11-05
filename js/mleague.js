@@ -1,7 +1,7 @@
 // M.LEAGUE predictions: name the player who finishes last (ラス) in an official game.
 // Pure logic with no DOM or clock reads, shared by the browser and the Worker. Results come only from
 // the official site (services/valorant-results/src/mleague.ts); nothing here guesses a result.
-import {WEEKLY_LIMIT,MIN_BET,BET_STEP,oddsFromProbability,payoutFor,weekStart} from './racing.js?v=web-b28f04122eccc51b';
+import {WEEKLY_LIMIT,MIN_BET,BET_STEP,oddsFromProbability,payoutFor,weekStart} from './racing.js?v=web-c5b1ebfc3796a2b9';
 
 export const ML_TYPES={top:{label:'トップ'},last:{label:'ラス'}};
 /** Only last place is sold (per the owner); 'top' stays readable so bets bought earlier still settle. */

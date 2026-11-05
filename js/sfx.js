@@ -8,7 +8,7 @@
  * (see scripts/audio/README.md), fetched only after 効果音 is turned on; until they arrive, or if they cannot load,
  * the synthesized versions below play instead.
  */
-import {relicSoundVolume} from './relics-audio.js?v=web-b28f04122eccc51b';
+import {relicSoundVolume} from './relics-audio.js?v=web-c5b1ebfc3796a2b9';
 
 const KEY='keso.sfx.v1';
 // Content-hashed names, so a changed sound never comes from a stale cache.
@@ -35,14 +35,14 @@ let enabled=false,ctx=null,master=null,voiceBus=null,noiseBuffer=null;
 try{enabled=globalThis.localStorage?.getItem(KEY)==='on';}catch{}
 export const sfxEnabled=()=>enabled;
 // Volumes 0–100. 効果音 starts at the relic slider's level (what players already heard); the announcer at full.
-const VOLUME_KEYS=Object.freeze({effects:'keso.sfx.volume.v1',voice:'keso.sfx.voice-volume.v1'});
+const VOLUME_KEYS=Object.freeze({effects:'keso.sfx.volume.v1',voice:'keso.sfx.voice-volume.v1',bgm:'keso.sfx.bgm-volume.v1'});
 const clampVolume=n=>Math.round(Math.max(0,Math.min(100,Number(n))));
-const volumes={effects:null,voice:100};
+const volumes={effects:null,voice:100,bgm:20};
 for(const kind of Object.keys(VOLUME_KEYS)){
  try{const saved=globalThis.localStorage?.getItem(VOLUME_KEYS[kind]);if(saved!==null&&saved!==undefined&&saved!==''&&Number.isFinite(Number(saved)))volumes[kind]=clampVolume(saved);}catch{}
 }
 /** The volume (0–100) of 'effects' (効果音) or 'voice' (実況). */
-export function sfxVolume(kind='effects'){return kind==='voice'?volumes.voice:volumes.effects??clampVolume(relicSoundVolume());}
+export function sfxVolume(kind='effects'){return kind==='voice'?volumes.voice:kind==='bgm'?volumes.bgm:volumes.effects??clampVolume(relicSoundVolume());}
 /** Sets a volume, saves it, and applies it to sounds already playing. Returns the stored value. */
 export function setSfxVolume(kind,n){
  if(!Object.hasOwn(VOLUME_KEYS,kind)||!Number.isFinite(Number(n)))return sfxVolume(kind);
@@ -52,7 +52,7 @@ export function setSfxVolume(kind,n){
  return volumes[kind];
 }
 function applyVolumes(){
- try{if(master)master.gain.value=.55*sfxVolume('effects')/100;if(voiceBus)voiceBus.gain.value=.55*sfxVolume('voice')/100;}catch{}
+ try{if(master)master.gain.value=.55*sfxVolume('effects')/100;if(voiceBus)voiceBus.gain.value=.55*sfxVolume('voice')/100;if(bgmAudio)bgmAudio.volume=.25*sfxVolume('bgm')/100;}catch{}
 }
 
 function context(){
@@ -81,11 +81,42 @@ export function playFile(name,{gain=1,at=0}={}){
  const c=context(),b=buffers.get(name);if(!c||!b)return false;
  try{const s=c.createBufferSource(),g=c.createGain();s.buffer=b;g.gain.value=gain;s.connect(g);g.connect(master);s.start(c.currentTime+.01+at);return true;}catch{return false;}
 }
+
+// Licensed free BGM by PeriTune (Sei Mutsuki), CC BY 4.0; linked to the creator's official MP3.
+// Not preloaded: only an explicit BGM opt-in contacts the source. No new audio session while muted.
+// If the source disallows linking or is unreachable, playback fails silently without blocking the game.
+export const BGM_TRACKS=Object.freeze({
+ casino:{title:'Enchanter2',url:'https://peritune.com/music/PerituneMaterial_Enchanter2.mp3'},
+ race:{title:'Fight2',url:'https://peritune.com/music/PerituneMaterial_Fight2.mp3'},
+});
+const BGM_KEY='keso.bgm.enabled.v1';
+let bgmOn=false,bgmAudio=null,bgmTrack='';
+try{bgmOn=globalThis.localStorage?.getItem(BGM_KEY)==='on';}catch{}
+export const bgmEnabled=()=>bgmOn;
+/** Pause on screen exit or when the user disables sounds; a game never autoplays on first visit. */
+export function setBgmScene(scene){
+ if(!enabled||!bgmOn||!Object.hasOwn(BGM_TRACKS,scene)){try{bgmAudio?.pause();}catch{}return false;}
+ const track=BGM_TRACKS[scene];
+ try{
+  if(!bgmAudio){const Audio=globalThis.Audio;if(!Audio)return false;bgmAudio=new Audio();bgmAudio.preload='none';bgmAudio.loop=true;}
+  if(bgmTrack!==scene){bgmAudio.pause();bgmAudio.src=track.url;bgmTrack=scene;}
+  bgmAudio.volume=.25*sfxVolume('bgm')/100;
+  if(bgmAudio.paused){const p=bgmAudio.play();p?.catch?.(()=>{});}
+  return true;
+ }catch{return false;}
+}
+export function toggleBgm(scene){
+ bgmOn=!bgmOn;
+ try{globalThis.localStorage?.setItem(BGM_KEY,bgmOn?'on':'off');}catch{}
+ setBgmScene(scene);
+ return bgmOn;
+}
+
 /** Turns sound on or off. Turning on happens inside the tap, which is what lets iOS start audio. */
 export function toggleSfx(){
  enabled=!enabled;
  try{globalThis.localStorage?.setItem(KEY,enabled?'on':'off');}catch{}
- if(enabled)play('chip');else if(ctx){void ctx.close?.().catch(()=>{});ctx=null;master=null;voiceBus=null;}
+ if(enabled)play('chip');else {setBgmScene('');}if(!enabled&&ctx){void ctx.close?.().catch(()=>{});ctx=null;master=null;voiceBus=null;}
  return enabled;
 }
 /** Starts fetching the rendered sound files (only when 効果音 is on). */
