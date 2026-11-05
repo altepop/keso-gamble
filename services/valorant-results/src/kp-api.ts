@@ -302,10 +302,15 @@ export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:strin
   const casino=['spin','chinchiro','bj-start','bj-hit','bj-stand','bj-double','mines-pick','mines-cashout','slot','vp-draw','baccarat'].includes(action);
   if(casino){
    const profit=verifiedCasinoProfit(result);
-   if(profit>0)relicBonus=nativeRelicBonus(state,'casino',profit);
+   // Do not allow a player to start safely, then equip a +900% risk pact only
+   // for the payout. Apply native bonuses from the same wager-time loadout.
+   const currentEquipped=state.relics?.equipped;
+   if(!ownerRound&&pendingKey&&roundRisk.equipped&&state.relics)state.relics.equipped=roundRisk.equipped;
+   try{if(profit>0)relicBonus=nativeRelicBonus(state,'casino',profit);}
+   finally{if(currentEquipped&&state.relics)state.relics.equipped=currentEquipped;}
    if(!ownerRound){
     const done=(result as {done?:unknown})?.done;
-    if(openingCasino&&done===null)riskRounds[riskStarts[sourceAction]]={...riskAtStake,bet:Number(sourceArgs.amount)};
+    if(openingCasino&&done===null)riskRounds[riskStarts[sourceAction]]={...riskAtStake,bet:Number(sourceArgs.amount),equipped:[...(state.relics?.equipped??[])]};
     // A natural blackjack can end on the starting request. Other multi-step
     // settlements use the frozen risk captured by their original stake.
     if((oneStepCasino||openingCasino||pendingKey)&&done!==null){
