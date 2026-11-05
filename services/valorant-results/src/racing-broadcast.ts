@@ -43,7 +43,7 @@ export function liveRacePost(show:RaceShow,now:number){
  const ranked=[...order].sort((a,b)=>distanceAt(timeline,b,t)-distanceAt(timeline,a,t));
  const line=show.commentary.filter(c=>c.t<=t).at(-1)?.text??'スタート！';
  const backmarker=finished?null:lastPlaceAt(timeline,Math.max(1,t));
- const finalLast=order.at(-1);
+ const finalLast=order.at(-1)!;
  const tailLine=finished
   ?`🐢 **本日の最下位：${finalLast}番 ${name(finalLast)}**（${order.length}着）`
   :backmarker?`🐢 **現在の最後方：${backmarker.number}番 ${name(backmarker.number)}**（前との差 約${backmarker.gap}m）`:'';
