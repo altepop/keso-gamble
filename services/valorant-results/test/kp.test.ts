@@ -482,6 +482,23 @@ test('unrated lottery can debit a win once and pays a jackpot once without anoth
  assert.equal((await readKpState(f.env,mapping,one)).cash,110240);
 });
 
+test('アンレの遺物は特別抽選と無関係：当たりも小さな抽選もハズレも、遺物は勝ちの基本額(370)だけに掛かる',async()=>{
+ const {valoKp}=await import('../src/mode-rewards.ts');const {evaluateRelicBonus}=await import('../src/relics.ts');
+ const relics={totalSummons:0,equipped:['normal.test.unrated'],items:{'normal.test.unrated':{id:'normal.test.unrated',name:'札',origin:'normal',rarity:'legendary',power:130,ability:'test',count:1,mode:'universal',skill:'even',percent:100,cap:0}}} as never;
+ const base=evaluateRelicBonus(relics,'unrated',{amount:370,win:true}).bonus;assert.ok(base>0);
+ const want:Record<number,number>={870:base,2370:base,270:base,'-130':0};
+ const found:Record<number,ReturnType<typeof game>>={};
+ for(let i=0;i<100000&&Object.keys(found).length<4;i++){const r=game('unrated-relic-'+i,'unrated');const n=valoKp(r,'p-one','unrated','win').net;if(n in want&&!(n in found))found[n]=r;}
+ assert.equal(Object.keys(found).length,4);
+ for(const [net,raw] of Object.entries(found)){
+  const f=await fixture();f.enableHistory();seed(f.sql,one,10000);
+  f.sql.exec("UPDATE kp_settings SET value='0' WHERE key='mode_rewards_started_at'");
+  const row=f.sql.prepare('SELECT data FROM kp_state WHERE user=?').get(one) as {data:string};const st=JSON.parse(row.data);st.relics=relics;f.sql.prepare('UPDATE kp_state SET data=? WHERE user=?').run(JSON.stringify(st),one);
+  await collectKpMatch(f.env,mapping,raw,'p-one');
+  const given=Number((f.sql.prepare("SELECT delta FROM kp_ledger WHERE kind='relic'").get() as {delta:number}|undefined)?.delta??0);
+  assert.equal(given,want[Number(net)],'draw '+net+': relic acts on 370 only');
+ }
+});
 test('Skirmish collection respects account and activation gates before holding rewards, then cashes out through the same wallet',async()=>{
  const queues=(await import('../skirmish-queues.json',{with:{type:'json'}})).default;
  const fixtureQueue='fixture_skirmish_public';(queues.publicQueues as string[]).push(fixtureQueue);
