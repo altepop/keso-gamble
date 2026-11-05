@@ -27,9 +27,12 @@ export async function ensureDebt(env:KpEnv){
   // moves by exactly what the event records. Repayments are never capped.
   'DROP TRIGGER IF EXISTS kp_debt_apply',
   'DROP TRIGGER IF EXISTS kp_debt_apply_capped',
+  // The cap is written into the trigger, so a new cap needs a new trigger name (CREATE IF NOT EXISTS keeps an old body).
+  // 1,000 → 30,000 on 2026-11-05. Drop every earlier name here in the same batch, so exactly one of them exists.
+  'DROP TRIGGER IF EXISTS kp_debt_apply_posts',
   `CREATE TABLE IF NOT EXISTS kp_debt_notices(id TEXT PRIMARY KEY,guild TEXT NOT NULL,user TEXT NOT NULL,kind TEXT NOT NULL CHECK(kind IN ('full','clear')),at INTEGER NOT NULL)`,
   // Reaching the cap and paying everything back are noted once per event that caused them (queueDebtPosts posts them).
-  `CREATE TRIGGER IF NOT EXISTS kp_debt_apply_posts AFTER INSERT ON kp_debt_events BEGIN
+  `CREATE TRIGGER IF NOT EXISTS kp_debt_apply_cap_${DEBT_MAX} AFTER INSERT ON kp_debt_events BEGIN
    INSERT OR IGNORE INTO kp_debts(guild,user) VALUES(NEW.guild,NEW.user);
    DELETE FROM kp_debt_events WHERE id=NEW.id AND NEW.amount>0 AND (SELECT amount FROM kp_debts WHERE guild=NEW.guild AND user=NEW.user)>=${DEBT_MAX};
    UPDATE kp_debt_events SET amount=MIN(NEW.amount,${DEBT_MAX}-(SELECT amount FROM kp_debts WHERE guild=NEW.guild AND user=NEW.user)) WHERE id=NEW.id AND NEW.amount>0;
