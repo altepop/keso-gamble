@@ -615,7 +615,8 @@ export function lossLoadout(c:RelicCollection,mode:string,loss:number,at:number)
 }
 /** Caller MUST confirm a new, immutable server-verified receipt before invoking.
  * This is not a public API; browsers can never request a bonus for arbitrary evidence.
- * `lottery` (アンレ only) is the special-lottery part of `amount`, which relics never multiply.
+ * `lottery` (アンレ only, signed) is the special-lottery part of `amount`; relics act on the win reward without it
+ * (a bad draw does not shrink the relic bonus, a good draw does not grow it).
  */
 export async function creditVerifiedRelicBonus(
  env:{DB:D1Database},guild:string,user:string,receipt:string,mode:string,amount:number,win:boolean,at=Date.now(),lottery=0,
@@ -646,7 +647,7 @@ export async function creditVerifiedRelicBonus(
   amount=Math.min(amount,spike.base);
  }
  // アンレの特別抽選は独立計算: relics act on the match reward without the lottery prize.
- if(mode==='unrated'&&Number.isSafeInteger(lottery)&&lottery>0)amount=Math.max(0,amount-lottery);
+ if(mode==='unrated'&&Number.isSafeInteger(lottery)&&lottery!==0)amount=Math.max(0,amount-lottery);
  if(amount<=0)return 0;
  const loadout=winLoadout(state.relics,mode,amount,at,{spikeGamesBefore});
  const detail=evaluateRelicBonus(loadout,mode,{amount,win,spikeGamesBefore});

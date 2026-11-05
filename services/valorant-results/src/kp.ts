@@ -122,7 +122,9 @@ export async function syncKpAccounts(env:KpEnv,mapping:KpMapping){
  const queries=mapping.accounts.flatMap(a=>{const found=tracked.find(t=>t.riot_id.toLowerCase()===a.riotId.toLowerCase());const old=found&&linked.find(l=>l.puuid===found.puuid);return found&&(!old||old.user!==a.discordUserId||old.riot!==a.riotId)?[env.DB.prepare('INSERT INTO kp_accounts(guild,puuid,user,riot,linked_at) VALUES(?,?,?,?,?) ON CONFLICT(guild,puuid) DO UPDATE SET user=excluded.user,riot=excluded.riot').bind(mapping.guildId,found.puuid,a.discordUserId,a.riotId,Date.now())]:[];});
  if(queries.length)await env.DB.batch(queries);
 }
-interface KpEvent {id:string;guild:string;user:string;puuid:string;match:string;mode:string;outcome:string|null;amount:number;policy:string;at:number;penalty?:number;note?:string;kind?:'spikerush-growth';spike?:SpikeMatch;jackpot?:number;escalation?:EscalationSpin}
+interface KpEvent {id:string;guild:string;user:string;puuid:string;match:string;mode:string;outcome:string|null;amount:number;policy:string;at:number;penalty?:number;note?:string;kind?:'spikerush-growth';spike?:SpikeMatch;jackpot?:number;lottery?:number;escalation?:EscalationSpin}
+/** The unrated lottery draw of an event, any size. Events queued before `lottery` existed hold only the big prizes in `jackpot`. */
+const lotteryOf=(e:{lottery?:number;jackpot?:number})=>Number.isSafeInteger(e.lottery)?e.lottery!:Number.isSafeInteger(e.jackpot)?e.jackpot!:0;
 export function kpEventId(guild:string,match:string,puuid:string){return ['match',guild,match,puuid].map(encodeURIComponent).join(':');}
 export async function drainKpInbox(env:KpEnv){
  const rows=(await env.DB.prepare('SELECT id,payload FROM kp_inbox ORDER BY at,id LIMIT 20').all<{id:string;payload:string}>()).results;
@@ -145,7 +147,7 @@ export async function drainKpInbox(env:KpEnv){
   // Already drained historical matches are NOT scanned or back-paid.
   const realSpike=e.kind==='spikerush-growth'&&e.mode==='spikerush';
   if(e.amount>0&&(realSpike||(settledRows[0]?.meta?.changes??0)>0))
-   try { await creditVerifiedRelicBonus(env,e.guild,e.user,e.id,e.mode,e.amount,e.outcome==='win',Date.now(),Number(e.jackpot??0)); }
+   try { await creditVerifiedRelicBonus(env,e.guild,e.user,e.id,e.mode,e.amount,e.outcome==='win',Date.now(),lotteryOf(e)); }
    catch { console.warn('relic_match_bonus_pending'); }
   // A big unrated lottery prize is announced once in 稼ぎch; the post never holds up the credit.
   if(e.mode==='unrated'&&Number.isSafeInteger(e.jackpot)&&e.jackpot!>=UNRATED_JACKPOT&&await env.DB.prepare('SELECT 1 AS n FROM kp_events WHERE id=?').bind(e.id).first()){
@@ -157,7 +159,7 @@ export async function drainKpInbox(env:KpEnv){
   // Thrill modes: a negative result also grows by the equipped relics (owner decision 2026-11-05). The アンレ
   // lottery is computed apart: only the part of the loss that is not the lottery draw is multiplied.
   if(e.penalty){
-   const lotteryLoss=e.mode==='unrated'&&Number(e.jackpot)<0?-Number(e.jackpot):0;
+   const lotteryLoss=e.mode==='unrated'&&lotteryOf(e)<0?-lotteryOf(e):0;
    const loss=Math.max(0,e.penalty-lotteryLoss);
    if(loss>0)try{await creditVerifiedRelicLoss(env,e.guild,e.user,e.id,e.mode,loss);}catch{console.warn('relic_match_loss_pending');}
   }
@@ -305,7 +307,7 @@ export async function collectKpMatch(env:KpEnv,mapping:KpMapping,raw:Match,puuid
  const escalationV6=status.mode!=='escalation'||start>=cutoff('escalation_v6_started_at');
  const {net,note,lottery,escalation}=modern?valoKp(raw,puuid,status.mode,status.outcome,escalationV5,escalationV6):{...legacyValoKp(raw,puuid,status.mode,status.outcome),lottery:undefined,escalation:undefined};
  // Events hold the earned part (never negative); a cost is a separate debit capped at the balance.
- const e:KpEvent={id,guild:mapping.guildId,user:link.user,puuid,match:raw.metadata.match_id,mode:status.mode,outcome:status.outcome,amount:Math.max(0,net),policy:modern?(status.mode==='escalation'&&!escalationV5?'mode-rewards-v4':status.mode==='escalation'&&!escalationV6?'mode-rewards-v5':MODE_REWARD_VERSION):policy.version,at:Date.now(),...net<0?{penalty:-net}:{},...note?{note}:{},...lottery!==undefined&&lottery>=UNRATED_JACKPOT?{jackpot:lottery}:{},...(spike?{kind:'spikerush-growth' as const,spike,policy:SPIKE_POLICY}:{}),...(escalation?{escalation}:{})};
+ const e:KpEvent={id,guild:mapping.guildId,user:link.user,puuid,match:raw.metadata.match_id,mode:status.mode,outcome:status.outcome,amount:Math.max(0,net),policy:modern?(status.mode==='escalation'&&!escalationV5?'mode-rewards-v4':status.mode==='escalation'&&!escalationV6?'mode-rewards-v5':MODE_REWARD_VERSION):policy.version,at:Date.now(),...net<0?{penalty:-net}:{},...note?{note}:{},...lottery!==undefined&&lottery>=UNRATED_JACKPOT?{jackpot:lottery}:{},...lottery!==undefined?{lottery}:{},...(spike?{kind:'spikerush-growth' as const,spike,policy:SPIKE_POLICY}:{}),...(escalation?{escalation}:{})};
  await env.DB.prepare('INSERT OR IGNORE INTO kp_inbox VALUES(?,?,?)').bind(id,JSON.stringify(e),Date.now()).run();
  await drainKpInbox(env);
  return kpMatchNet(env,id);
