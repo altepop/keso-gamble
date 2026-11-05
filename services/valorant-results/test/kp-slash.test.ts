@@ -153,7 +153,7 @@ test('public command metadata contains definitions only and does not need or exp
  let queries=0;
  const response=await kpApi(new Request('https://worker/api/kp/commands'),{DB:{prepare(){queries++;throw Error('No DB reads');}},KP_BOOTSTRAP_PRIVATE_KEY:'fixture-secret-must-not-leak'} as unknown as KpEnv);
  const body=await response.json() as {version:string;commands:unknown[]};
- assert.equal(response.status,200);assert.equal(body.version,'kp-slash-v21-spike-status-owner');assert.equal(body.commands.length,14);assert.equal(queries,0);
+ assert.equal(response.status,200);assert.equal(body.version,'kp-slash-v22-grant-loop-reconcile');assert.equal(body.commands.length,14);assert.equal(queries,0);
  assert.equal(JSON.stringify(body).includes('fixture-secret'),false);assert.equal(response.headers.get('Cache-Control'),'no-store');
 });
 
@@ -336,4 +336,26 @@ test('/spike status user: only the owner ID sees another member, with every real
  assert.match(await look(owner,'100000000000000199'),/紐付いていない/);
  assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM spike_hint_unlocks').get()!.n,0,'nothing is bought or changed');
  assert.equal(f.sql.prepare('SELECT version FROM spike_profiles WHERE puuid=?').get(puuid)!.version,1);
+});
+
+test('/kpgrant LOOP代替は確定した報酬を一度だけ与え、後日のLOOP受領でも再入金しない',async()=>{
+ const f=await fixture(),cat='100000000000000104';
+ const grant=(n:number,amount:number,milestone:string)=>runKpCommand(f.env,{...interaction('kpgrant',one,[
+  {name:'user',value:cat},{name:'amount',value:amount},{name:'reason',value:'引継ぎ補填'},{name:'loop_milestone',value:milestone}
+ ]),id:id(T0,n)},mapping);
+ assert.match(await grant(10,50000,'chapter.1'),/LOOP chapter.1 代替/);
+ assert.equal(f.sql.prepare('SELECT balance FROM kp_wallets WHERE guild=? AND user=?').get(guild,cat)?.balance,50000);
+ assert.match(await grant(11,50000,'chapter.1'),/すでに支給済み/);
+ assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM kp_ledger WHERE user=?').get(cat)?.n,1);
+ const receipt=f.sql.prepare('SELECT id,evidence,amount FROM kp_loop_events WHERE user=?').get(cat)!;
+ assert.equal(receipt.id,`loop:${guild}:${cat}:chapter.1`);
+ assert.equal(receipt.amount,50000);
+ assert.match(String(receipt.evidence),/^manual-grant:/);
+ // The signed LOOP endpoint uses the same UNIQUE(guild,user,milestone); duplicate attempts are no-ops.
+ f.sql.prepare('INSERT INTO kp_loop_events(id,guild,user,milestone,evidence,amount,completed_at) VALUES(?,?,?,?,?,?,?) ON CONFLICT(guild,user,milestone) DO NOTHING')
+  .run(receipt.id,guild,cat,'chapter.1','clear_id',50000,T0);
+ assert.equal(f.sql.prepare('SELECT balance FROM kp_wallets WHERE guild=? AND user=?').get(guild,cat)?.balance,50000);
+ assert.match(await grant(12,1000,'chapter.2'),/正確に入力/);
+ assert.match(await grant(13,300000,'chapter.2'),/LOOP chapter.2 代替/);
+ assert.equal(f.sql.prepare('SELECT balance FROM kp_wallets WHERE guild=? AND user=?').get(guild,cat)?.balance,350000);
 });
