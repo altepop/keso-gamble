@@ -177,6 +177,14 @@ export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:strin
   const roundRisk=pendingKey?(riskRounds[pendingKey]??NEUTRAL_CASINO_RISK):riskAtStake;
   const oneStepCasino=['spin','chinchiro','slot','baccarat'].includes(sourceAction);
   const openingCasino=Boolean(riskStarts[sourceAction]);
+  if(!ownerRound&&sourceAction==='bj-double'&&state.blackjack&&riskRounds.blackjack){
+   const bet=Number(state.blackjack.bet);
+   const multiplier=riskRounds.blackjack.multiplier;
+   const otherReserve=outstandingCasinoReserve(riskRounds)-Math.ceil(bet*(multiplier-1));
+   const required=Math.ceil(2*bet*multiplier)-bet+otherReserve;
+   if(Number.isSafeInteger(required)&&before<required)
+    throw Error('⚠ 超越遺物を装備して始めたブラックジャックのダブルには、'+required.toLocaleString('ja-JP')+' KP 以上必要です。');
+  }
   if(!ownerRound&&(openingCasino||oneStepCasino)){
    const wager=sourceAction==='spin'&&sourceArgs.type==='numbers'&&Array.isArray(sourceArgs.bets)
     ?sourceArgs.bets.reduce((sum:number,b:any)=>sum+Number(b?.amount??0),0):Number(sourceArgs.amount);
