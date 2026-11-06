@@ -1,7 +1,9 @@
+import {miniBoardView} from './duel-mini-view.js';
+import {EXTRA_DUEL_GAMES} from './duel-mini-games.js';
 import {DUEL_GAMES,duelLegalMoves,duelScore} from './duel-rules.js?v=web-d9b96b4bdbea49e0';
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const kp=n=>Number(n||0).toLocaleString('ja-JP')+' KP';
-const title=(r)=>DUEL_GAMES[r.game]?.name||r.game;
+const title=(r)=>DUEL_GAMES[r.game]?.name||EXTRA_DUEL_GAMES[r.game]?.name||r.game;
 const status=r=>r.status==='pending'?'招待中':r.status==='active'?'対局中':r.status==='finished'?'決着':'キャンセル';
 const timeLeft=deadline=>Math.max(0,Math.ceil((deadline-Date.now())/1000));
 function summary(r,info,user){
@@ -49,7 +51,7 @@ function boardView(r,info,user,busy,confirmResign){
  </div>`;
  return section;
 }
-export function duelScreen({info,user,live,cash,selectedId,game='othello',stake=1000,target='',busy=false,error='',confirmResign=false,nav=''}){
+export function duelScreen({info,user,live,cash,selectedId,game='othello',stake=1000,target='',busy=false,error='',confirmResign=false,pokerPicks=[],nav=''}){
  const matches=info?.matches??[],chosen=matches.find(r=>r.id===selectedId)||matches.find(r=>r.status==='active'||r.status==='pending')||matches[0];
  const members=info?.members??[],invited=chosen?.status==='pending',mine=chosen?.user_a===user;
  return `<div class="screen"><header class="topbar"><div class="toprow"><h1 class="title">⚔️ 決闘</h1><div class="small-actions"><span class="badge">${kp(cash)}</span></div></div></header>
@@ -57,7 +59,7 @@ export function duelScreen({info,user,live,cash,selectedId,game='othello',stake=
  ${!live?'<div class="panel"><div class="card-body">本番KP口座に接続すると、決闘を利用できる。</div></div>':
  `<div class="duel-new panel"><div class="card-body">
  <h2 class="panel-title">決闘を申し込む</h2><div class="duel-formrow">
- <label>ゲーム<select id="duel-game" class="select"><option value="othello" ${game==='othello'?'selected':''}>⚫ オセロ</option><option value="gomoku" ${game==='gomoku'?'selected':''}>⚪ 五目並べ</option></select></label>
+ <label>ゲーム<select id="duel-game" class="select"><option value="othello" ${game==='othello'?'selected':''}>⚫ オセロ</option><option value="gomoku" ${game==='gomoku'?'selected':''}>⚪ 五目並べ</option><option value="connect4" ${game==='connect4'?'selected':''}>🔴 四目並べ</option><option value="hitblow" ${game==='hitblow'?'selected':''}>🔢 Hit & Blow</option><option value="bluffdice" ${game==='bluffdice'?'selected':''}>🎲 ブラフダイス</option><option value="poker" ${game==='poker'?'selected':''}>🃏 5カードポーカー</option></select></label>
  <label>賭け金<select id="duel-stake" class="select">${[100,500,1000,5000,10000,50000,100000].map(n=>`<option value="${n}" ${n===stake?'selected':''}>${kp(n)} / 人</option>`).join('')}</select></label>
  </div><label>対戦相手<select id="duel-target" class="select"><option value="">挑戦相手を選ぶ</option>
  ${members.filter(m=>m.id!==user).map(m=>`<option value="${esc(m.id)}" ${m.id===target?'selected':''}>${esc(m.name)}</option>`).join('')}</select></label>
@@ -74,7 +76,7 @@ export function duelScreen({info,user,live,cash,selectedId,game='othello',stake=
  <p class="helper">${esc(title(chosen))} / ${kp(chosen.stake)}ずつ。招待期限まで約${Math.ceil(timeLeft(chosen.deadline_at)/60)}分。</p>
  <div class="action-row">${!mine&&timeLeft(chosen.deadline_at)>0?`<button class="action-btn primary" data-duel-act="accept" ${busy?'disabled':''}>受けて立つ（${kp(chosen.stake)}）</button>`:''}
  <button class="action-btn" data-duel-act="cancel" ${busy?'disabled':''}>${mine?'招待を取り消す':'断る'}</button></div></div></div>`:''}
- ${chosen.status!=='pending'&&chosen.status!=='cancelled'?boardView(chosen,info,user,busy,confirmResign):''}
+ ${chosen.status!=='pending'&&chosen.status!=='cancelled'?(Object.hasOwn(EXTRA_DUEL_GAMES,chosen.game)?miniBoardView(chosen,info,user,busy,pokerPicks,confirmResign):boardView(chosen,info,user,busy,confirmResign)):''}
  </div>`:''}
  <div class="panel"><div class="card-body"><h2 class="panel-title">決闘のルール</h2><p class="helper">1手10分制限。期限切れは時間切れ負けとなる。途中投了も負け。対戦が始まったら賭け金の取り消しはできない。勝者へ総額を一度だけ支給し、引き分けなら両者返金。遺物の補正・借KPでの賭け・CPU戦は対象外だ。</p></div></div>`}
  ${nav}</div>`;
