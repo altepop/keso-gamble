@@ -6,7 +6,7 @@ const kp=n=>Number(n).toLocaleString('ja-JP')+' KP';
 const left=r=>Math.max(0,Math.ceil((r.deadline_at-Date.now())/1000));
 const cardName=id=>{const ranks='23456789TJQKA',suits=['♠','♥','♦','♣'];return ranks[Math.floor(id/4)]+suits[id%4];};
 const cardColor=id=>id%4===1||id%4===2?'red':'black';
-export function miniBoardView(r,info,user,busy,picks=[]){
+export function miniBoardView(r,info,user,busy,picks=[],confirmResign=false){
  const name=id=>info.members?.find(m=>m.id===id)?.name||'プレイヤー';
  const turn=r.status==='active'&&r.turn_user===user&&!busy&&left(r)>0;
  const a=r.black_user===r.user_a?r.user_a:r.user_b,b=a===r.user_a?r.user_b:r.user_a;
@@ -50,6 +50,6 @@ export function miniBoardView(r,info,user,busy,picks=[]){
  ${r.status==='active'?`<div class="duel-turn ${turn?'my-turn':''}">${turn?'🟢 あなたの番':h(name(r.turn_user))+'の番'} ・ 残り${Math.ceil(left(r)/60)}分</div>`:''}
  ${content}
  ${finished?`<p class="duel-result">${h(outcome)}</p>`:''}
- ${r.status==='active'?`<div class="duel-actions">${left(r)===0?'<button type="button" data-duel-act="timeout" class="action-btn primary">⏰ 時間切れを精算する</button>':'<button type="button" data-duel-act="resign-preview" class="action-btn">投了する</button>'}</div>`:''}
+ ${r.status==='active'?`<div class="duel-actions">${left(r)===0?'<button type="button" data-duel-act="timeout" class="action-btn primary">⏰ 時間切れを精算する</button>':(confirmResign?'<button type="button" data-duel-act="resign" class="action-btn duel-challenge">投了を確定する（敗北）</button><button type="button" data-duel-act="resign-cancel" class="action-btn">戻る</button>':'<button type="button" data-duel-act="resign-preview" class="action-btn">投了する</button>')}</div>`:''}
  <p class="duel-footnote">${h(note)}</p></div>`;
 }
