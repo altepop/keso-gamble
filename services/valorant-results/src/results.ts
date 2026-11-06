@@ -16,7 +16,7 @@ export interface Match {
     stats?: { kills?: number; deaths?: number; assists?: number; score?: number; headshots?: number; bodyshots?: number; legshots?: number } | null;
   }>;
   rounds?: Array<{ id: number }>;
-  kills?: Array<{ round: number; time_in_round_in_ms: number; victim: { puuid: string } }>;
+  kills?: Array<{ round: number; time_in_round_in_ms: number; killer?: { puuid: string } | null; victim: { puuid: string } }>;
   teams: Array<{ team_id: string; won: boolean; rounds?: { won: number } }>;
 }
 export interface Notice {
