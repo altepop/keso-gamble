@@ -1117,3 +1117,61 @@ body:has(.screen[data-view="relics"]){--body-bg:#07020f}body:has(.screen[data-vi
  .sfx-toggle span,.sfx-volume-btn span,.toprow:has(.sfx-toggle) .keso-guide-trigger.docked span{display:none}
  .sfx-toggle,.sfx-volume-btn{padding:5px 8px}
 }
+
+
+/* PvP Board Duel — touch-safe Othello and free-style Gomoku */
+.duel-intro{margin:14px 14px 0;padding:21px 20px 18px;background:radial-gradient(circle at 90% -40%,#27856d 0,transparent 60%),linear-gradient(140deg,#092b2b,#07162e);border:1px solid #285d58;border-radius:18px}
+.duel-intro>span{font-size:11px;font-weight:900;letter-spacing:.27em;color:#6fffd7}
+.duel-intro h2{margin:7px 0 8px;font-size:29px;letter-spacing:.05em;font-weight:850}
+.duel-intro p{font-size:13px;line-height:1.7;color:#bfd2db;margin:0}
+.duel-new .card-body{display:flex;flex-direction:column;gap:12px}
+.duel-formrow{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.duel-new label{display:flex;flex-direction:column;gap:6px;font-size:12px;color:#d2dcf4;font-weight:600}
+.duel-new select{width:100%;min-width:0}
+.duel-explainer{background:#091b32;border:1px solid #1f4061;border-radius:10px;padding:12px;font-size:12px;line-height:1.75;color:#b8c9e4}
+.duel-explainer strong{color:#8cffe3;font-size:14px}
+.duel-full{width:100%}
+.duel-heading{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+.duel-match{width:100%;display:flex;justify-content:space-between;align-items:center;gap:8px;text-align:left;margin:6px 0;border:1px solid #1a3559;padding:12px;background:#081a36;color:#fff;border-radius:10px}
+.duel-match.duel-live{border-color:#286c78;background:#09252c}
+.duel-match>span{display:flex;flex-direction:column;gap:4px}
+.duel-match strong{font-size:14px}
+.duel-match small{font-size:11px;color:#b0c3da}
+.duel-purse{text-align:right;font-size:14px;color:#b7ffeb;font-weight:800}
+.duel-purse small{color:#9cc1be}
+.duel-arena{margin:14px 14px 0;background:#071426;border:1px solid #24486c;border-radius:16px;padding:15px 11px 16px;box-shadow:0 10px 35px rgba(0,0,0,.22)}
+.duel-arena-head{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.duel-arena-head>div{display:flex;align-items:center;gap:9px;font-weight:800;font-size:17px}
+.duel-tag,.duel-state{border:1px solid #366a70;border-radius:100px;background:#092d36;color:#a6ffe3;font-size:11px;padding:5px 9px}
+.duel-state{border-color:#425675;color:#c6defe}
+.duel-players{display:flex;justify-content:space-between;align-items:center;gap:6px;padding:15px 1px 12px;font-size:12px;font-weight:750}
+.duel-players>span{display:flex;align-items:center;gap:5px;min-width:0}
+.duel-players>span:nth-child(2){color:#6bc6e9;font-size:10px}
+.duel-token{display:inline-grid;place-items:center;width:21px;height:21px;border-radius:100%;font-size:19px}
+.duel-token.black{color:#111}
+.duel-token.white{color:#fff}
+.duel-turn{text-align:center;padding:10px 9px;margin-bottom:12px;border:1px solid #28466a;border-radius:9px;background:#10223c;color:#c8d9f0;font-size:13px;font-weight:750}
+.duel-turn.my-turn{border-color:#27846d;background:#064639;color:#c5ffdb}
+.duel-board{--duel-size:8;display:grid;grid-template-columns:repeat(var(--duel-size),minmax(0,1fr));width:100%;aspect-ratio:1;margin:0 auto;border:3px solid #091009;background:#1d754b;overflow:hidden;touch-action:manipulation}
+.duel-square{appearance:none;min-width:0;min-height:0;border:1px solid rgba(0,20,8,.46);padding:0;background:rgba(23,120,70,.35);display:grid;place-items:center;position:relative;cursor:default}
+.duel-square:disabled{opacity:1}
+.duel-square.available{cursor:pointer;background:#28885d}
+.duel-square.available::before{content:'';width:31%;height:31%;border-radius:50%;background:rgba(207,255,223,.55);position:absolute}
+.duel-square.available:focus-visible{outline:3px solid #fff;outline-offset:-3px}
+.duel-piece{width:81%;height:81%;border-radius:50%;display:block;pointer-events:none}
+.duel-square.black .duel-piece{background:radial-gradient(circle at 38% 25%,#5c6571 0,#11181c 38%,#030708 75%);box-shadow:0 2px 3px #0009}
+.duel-square.white .duel-piece{background:radial-gradient(circle at 37% 23%,#fff 0,#ecf2e8 45%,#a1b4a5 100%);box-shadow:0 2px 3px #0005}
+.duel-gomoku{border-color:#2b1d0d;background:#bba169}
+.duel-gomoku .duel-square{background:#c4aa72;border-color:rgba(52,35,13,.55)}
+.duel-gomoku .duel-square.available{background:#d3b77f}
+.duel-gomoku .duel-square.available::before{width:45%;height:45%;background:rgba(26,65,40,.35)}
+.duel-gomoku .duel-piece{width:89%;height:89%}
+.duel-counts{display:flex;justify-content:space-around;padding:11px 0 4px;font-size:13px;font-weight:750}
+.duel-actions{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;padding:10px 0}
+.duel-actions button{flex:1}
+.duel-actions .danger{background:#9f2634;color:#fff}
+.duel-result{text-align:center;color:#bdffe8;font-size:16px;font-weight:850;border:1px solid #247b64;border-radius:10px;padding:11px 6px;margin:10px 0}
+.duel-footnote{color:#aabacb;font-size:11px;line-height:1.6;margin:10px 0 0}
+.duel-error{margin:12px 14px;border-radius:9px}
+@media(min-width:490px){.duel-arena{padding:18px}.duel-board{max-width:430px}}
+@media(max-width:380px){.duel-arena{margin:10px 8px 0;padding:12px 7px}.duel-match{padding:9px}.duel-gomoku .duel-square{border-width:.5px}}
