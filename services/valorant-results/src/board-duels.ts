@@ -30,6 +30,8 @@ export async function ensureBoardDuels(env:KpEnv){
    CHECK(user_a!=user_b))`),
   env.DB.prepare('CREATE INDEX IF NOT EXISTS kp_board_duels_a ON kp_board_duels(guild,user_a,updated_at DESC)'),
   env.DB.prepare('CREATE INDEX IF NOT EXISTS kp_board_duels_b ON kp_board_duels(guild,user_b,updated_at DESC)'),
+  env.DB.prepare("CREATE INDEX IF NOT EXISTS kp_board_duels_expiry ON kp_board_duels(guild,status,deadline_at)"),
+  env.DB.prepare("INSERT OR IGNORE INTO kp_settings(key,value) VALUES('board_duels_enabled','1')"),
   env.DB.prepare(`CREATE TABLE IF NOT EXISTS kp_board_duel_actions(
    id TEXT PRIMARY KEY,guild TEXT NOT NULL,duel_id TEXT NOT NULL,actor TEXT NOT NULL,
    kind TEXT NOT NULL CHECK(kind IN ('accept','move','cancel','resign','timeout')),
@@ -57,7 +59,7 @@ export async function ensureBoardDuels(env:KpEnv){
           AND (NEW.winner IS NULL OR NEW.winner IN (user_a,user_b,'draw')))
       OR (NEW.kind='resign' AND status='active' AND NEW.actor IN (user_a,user_b)
          AND NEW.winner=CASE WHEN NEW.actor=user_a THEN user_b ELSE user_a END)
-      OR (NEW.kind='timeout' AND status='active' AND NEW.actor IN (user_a,user_b)
+      OR (NEW.kind='timeout' AND status='active' AND (NEW.actor IN (user_a,user_b) OR NEW.actor='system')
          AND deadline_at<NEW.at AND NEW.winner=CASE WHEN turn_user=user_a THEN user_b ELSE user_a END)
      );
    SELECT CASE WHEN changes()!=1 THEN RAISE(ABORT,'duel conflict or expired') END;
@@ -183,6 +185,33 @@ export async function boardDuelAction(env:KpEnv,m:KpMapping,user:string,body:Rec
  }
  return present(env,m,user,match.id);
 }
+
+/** Low-budget cron sweep every five minutes; escrow is never held indefinitely after a time-out. */
+export async function settleExpiredBoardDuels(env:KpEnv,guild:string,now=Date.now()){
+ const flag=await env.DB.prepare("SELECT value FROM kp_settings WHERE key='board_duels_enabled'").first();
+ if(!flag)return {settled:0};
+ await ensureBoardDuels(env);
+ const expired=(await env.DB.prepare(`SELECT * FROM kp_board_duels
+  WHERE guild=? AND status='active' AND deadline_at<? ORDER BY deadline_at LIMIT 20`)
+  .bind(guild,now).all<BoardDuel>()).results;
+ let settled=0;
+ for(const match of expired){
+  if(!match.turn_user)continue;
+  const winner=match.turn_user===match.user_a?match.user_b:match.user_a;
+  try{
+   const done=await env.DB.prepare(`INSERT INTO kp_board_duel_actions
+    (id,guild,duel_id,actor,kind,version,at,board,next_turn,winner,first_user,deadline_at)
+    VALUES(?,?,?,'system','timeout',?,?,NULL,NULL,?,NULL,?)`)
+    .bind(crypto.randomUUID(),guild,match.id,match.version,now,winner,match.deadline_at).run();
+   settled+=Number(done.meta.changes??0);
+  }catch(error){
+   if(!String(error).includes('duel conflict'))throw error;
+   // An opponent made the last move while this cron was checking the deadline.
+  }
+ }
+ return {settled};
+}
+
 export async function boardDuelApi(request:Request,env:KpEnv,m:KpMapping,user:string,headers:Record<string,string>={}){
  const response=(body:unknown,status=200)=>Response.json(body,{status,headers:{'Cache-Control':'no-store',...headers}});
  try{
