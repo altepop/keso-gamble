@@ -25,7 +25,32 @@ const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ready=new WeakMap<object,Promise<void>>();
 export async function ensureBoardDuels(env:KpEnv){
  const existing=ready.get(env.DB);if(existing)return existing;
- const task=Promise.resolve(env.DB.batch([
+ const task=(async()=>{
+  // Existing two-game installations have an immutable SQLite CHECK constraint.
+  // Migrate just once, preserving all open escrowed duels and the existing ledger.
+  const installed=await env.DB.prepare("SELECT value FROM kp_settings WHERE key='board_duel_schema_version'")
+   .first<{value:string}>();
+  if(installed?.value==='2')return;
+  const old=await env.DB.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='kp_board_duels'")
+   .first<{sql:string}>();
+  if(old&& !old.sql.includes("'connect4'")){
+   await env.DB.batch([
+    env.DB.prepare('DROP TRIGGER IF EXISTS kp_board_duel_apply'),
+    env.DB.prepare(`CREATE TABLE kp_board_duels_upgraded(
+     id TEXT PRIMARY KEY,guild TEXT NOT NULL,user_a TEXT NOT NULL,user_b TEXT NOT NULL,
+     game TEXT NOT NULL CHECK(game IN ('othello','gomoku','connect4','hitblow','bluffdice','poker')),
+     stake INTEGER NOT NULL CHECK(stake BETWEEN 100 AND 100000),
+     status TEXT NOT NULL CHECK(status IN ('pending','active','finished','cancelled')),
+     board TEXT NOT NULL,black_user TEXT,turn_user TEXT,winner TEXT,version INTEGER NOT NULL DEFAULT 0,
+     created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL,deadline_at INTEGER NOT NULL,
+     CHECK(user_a!=user_b))`),
+    env.DB.prepare(`INSERT INTO kp_board_duels_upgraded
+     SELECT id,guild,user_a,user_b,game,stake,status,board,black_user,turn_user,winner,version,created_at,updated_at,deadline_at FROM kp_board_duels`),
+    env.DB.prepare('DROP TABLE kp_board_duels'),
+    env.DB.prepare('ALTER TABLE kp_board_duels_upgraded RENAME TO kp_board_duels')
+   ]);
+  }
+  await env.DB.batch([
   env.DB.prepare(`CREATE TABLE IF NOT EXISTS kp_board_duels(
    id TEXT PRIMARY KEY,guild TEXT NOT NULL,user_a TEXT NOT NULL,user_b TEXT NOT NULL,
    game TEXT NOT NULL CHECK(game IN ('othello','gomoku','connect4','hitblow','bluffdice','poker')),
@@ -98,7 +123,9 @@ export async function ensureBoardDuels(env:KpEnv){
     SELECT CASE WHEN (NEW.winner='draw' OR NEW.winner IN (NEW.user_a,NEW.user_b))
       THEN 1 ELSE RAISE(ABORT,'duel winner invalid') END;
    END`)
- ])).then(()=>{});
+ ,env.DB.prepare("INSERT INTO kp_settings(key,value) VALUES('board_duel_schema_version','2') ON CONFLICT(key) DO UPDATE SET value='2'")
+  ]);
+ })();
  ready.set(env.DB,task);try{await task;}catch(e){ready.delete(env.DB);throw e;}
 }
 async function room(env:KpEnv,guild:string,id:string,user:string):Promise<BoardDuel>{
