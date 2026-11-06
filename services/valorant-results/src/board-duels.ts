@@ -3,15 +3,21 @@ import {debtOf} from './kp-debt.ts';
 // @ts-expect-error Shared pure browser-side rules (no declaration file).
 import {initialDuelBoard,playDuelMove,DUEL_GAMES} from '../../../js/duel-rules.js';
 
+// @ts-expect-error Shared pure mini-game rules, no TypeScript declaration file.
+import {EXTRA_DUEL_GAMES,miniStart,miniMove} from '../../../js/duel-mini-games.js';
+const GAMES={...DUEL_GAMES,...EXTRA_DUEL_GAMES};
+const MINIS=new Set(['connect4','hitblow','bluffdice','poker']);
+function randInt(n:number){const raw=new Uint32Array(1),limit=Math.floor(0x1_0000_0000/n)*n;do{crypto.getRandomValues(raw);}while(raw[0]>=limit);return raw[0]%n;}
 export const DUEL_MAX_STAKE=100_000;
 export const DUEL_TURN_MS=10*60_000;
 export const DUEL_INVITE_MS=15*60_000;
-type DuelGame='othello'|'gomoku';
+type DuelGame='othello'|'gomoku'|'connect4'|'hitblow'|'bluffdice'|'poker';
 type DuelStatus='pending'|'active'|'finished'|'cancelled';
 export interface BoardDuel{
  id:string;guild:string;user_a:string;user_b:string;game:DuelGame;stake:number;
  status:DuelStatus;board:string;black_user:string|null;turn_user:string|null;
  winner:string|null;version:number;created_at:number;updated_at:number;deadline_at:number;
+ private_hand?:string|null;
 }
 interface DuelAction{ id:string;guild:string;duel_id:string;actor:string;kind:string;version:number;at:number;
  board:string|null;next_turn:string|null;winner:string|null;first_user:string|null;deadline_at:number; }
@@ -22,12 +28,14 @@ export async function ensureBoardDuels(env:KpEnv){
  const task=Promise.resolve(env.DB.batch([
   env.DB.prepare(`CREATE TABLE IF NOT EXISTS kp_board_duels(
    id TEXT PRIMARY KEY,guild TEXT NOT NULL,user_a TEXT NOT NULL,user_b TEXT NOT NULL,
-   game TEXT NOT NULL CHECK(game IN ('othello','gomoku')),
+   game TEXT NOT NULL CHECK(game IN ('othello','gomoku','connect4','hitblow','bluffdice','poker')),
    stake INTEGER NOT NULL CHECK(stake BETWEEN 100 AND 100000),
    status TEXT NOT NULL CHECK(status IN ('pending','active','finished','cancelled')),
    board TEXT NOT NULL,black_user TEXT,turn_user TEXT,winner TEXT,version INTEGER NOT NULL DEFAULT 0,
    created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL,deadline_at INTEGER NOT NULL,
    CHECK(user_a!=user_b))`),
+  env.DB.prepare(`CREATE TABLE IF NOT EXISTS kp_board_duel_secrets(
+   id TEXT PRIMARY KEY,guild TEXT NOT NULL,data TEXT NOT NULL)`),
   env.DB.prepare('CREATE INDEX IF NOT EXISTS kp_board_duels_a ON kp_board_duels(guild,user_a,updated_at DESC)'),
   env.DB.prepare('CREATE INDEX IF NOT EXISTS kp_board_duels_b ON kp_board_duels(guild,user_b,updated_at DESC)'),
   env.DB.prepare("CREATE INDEX IF NOT EXISTS kp_board_duels_expiry ON kp_board_duels(guild,status,deadline_at)"),
@@ -52,7 +60,7 @@ export async function ensureBoardDuels(env:KpEnv){
    WHERE id=NEW.duel_id AND guild=NEW.guild AND version=NEW.version
      AND (
       (NEW.kind='accept' AND status='pending' AND user_b=NEW.actor AND deadline_at>=NEW.at
-         AND NEW.first_user IN (user_a,user_b) AND NEW.board=board)
+         AND NEW.first_user IN (user_a,user_b) AND (NEW.board=board OR game IN ('connect4','hitblow','bluffdice','poker')))
       OR (NEW.kind='cancel' AND status='pending' AND NEW.actor IN (user_a,user_b))
       OR (NEW.kind='move' AND status='active' AND turn_user=NEW.actor AND deadline_at>=NEW.at
           AND (NEW.next_turn IN (user_a,user_b) OR (NEW.next_turn IS NULL AND NEW.winner IS NOT NULL))
@@ -95,8 +103,12 @@ export async function ensureBoardDuels(env:KpEnv){
 }
 async function room(env:KpEnv,guild:string,id:string,user:string):Promise<BoardDuel>{
  if(!UUID.test(id))throw Error('対戦IDが不正です。');
- const row=await env.DB.prepare('SELECT * FROM kp_board_duels WHERE guild=? AND id=? AND (user_a=? OR user_b=?)')
-  .bind(guild,id,user,user).first<BoardDuel>();
+ const row=await env.DB.prepare(`SELECT d.*,
+   CASE WHEN d.black_user=? THEN json_extract(s.data,'$.privateA')
+        ELSE json_extract(s.data,'$.privateB') END AS private_hand
+   FROM kp_board_duels d LEFT JOIN kp_board_duel_secrets s ON s.guild=d.guild AND s.id=d.id
+   WHERE d.guild=? AND d.id=? AND (d.user_a=? OR d.user_b=?)`)
+  .bind(user,guild,id,user,user).first<BoardDuel>();
  if(!row)throw Error('対戦が見つかりません。');return row;
 }
 async function present(env:KpEnv,mapping:KpMapping,user:string,id:string){
@@ -106,10 +118,13 @@ function validateActionId(id:unknown){if(typeof id!=='string'||!UUID.test(id))th
 const activeMembers=(m:KpMapping)=>new Set(m.accounts.map(a=>a.discordUserId));
 export async function boardDuelList(env:KpEnv,m:KpMapping,user:string){
  await ensureBoardDuels(env);
- const matches=(await env.DB.prepare(`SELECT * FROM kp_board_duels
- WHERE guild=? AND (user_a=? OR user_b=?)
- ORDER BY updated_at DESC LIMIT 30`).bind(m.guildId,user,user).all<BoardDuel>()).results;
- return {games:DUEL_GAMES,limit:DUEL_MAX_STAKE,turnMs:DUEL_TURN_MS,invitationMs:DUEL_INVITE_MS,
+ const matches=(await env.DB.prepare(`SELECT d.*,
+ CASE WHEN d.black_user=? THEN json_extract(s.data,'$.privateA')
+      ELSE json_extract(s.data,'$.privateB') END AS private_hand
+ FROM kp_board_duels d LEFT JOIN kp_board_duel_secrets s ON s.guild=d.guild AND s.id=d.id
+ WHERE d.guild=? AND (d.user_a=? OR d.user_b=?)
+ ORDER BY d.updated_at DESC LIMIT 20`).bind(user,m.guildId,user,user).all<BoardDuel>()).results;
+ return {games:GAMES,limit:DUEL_MAX_STAKE,turnMs:DUEL_TURN_MS,invitationMs:DUEL_INVITE_MS,
   members:m.accounts.map(a=>({id:a.discordUserId,name:a.riotId.split('#')[0]})),matches};
 }
 export async function boardDuelAction(env:KpEnv,m:KpMapping,user:string,body:Record<string,unknown>){
@@ -123,7 +138,7 @@ export async function boardDuelAction(env:KpEnv,m:KpMapping,user:string,body:Rec
  }
  if(kind==='create'){
   const game=String(body.game??''),target=String(body.opponent??''),stake=Number(body.stake);
-  if(!Object.hasOwn(DUEL_GAMES,game))throw Error('ゲームを選んでください。');
+  if(!Object.hasOwn(GAMES,game))throw Error('ゲームを選んでください。');
   if(!activeMembers(m).has(target)||target===user)throw Error('対戦する相手を選んでください。');
   if(!Number.isSafeInteger(stake)||stake<100||stake>DUEL_MAX_STAKE)throw Error('賭け金は100〜100,000 KPです。');
   const old=await env.DB.prepare('SELECT * FROM kp_board_duels WHERE id=?').bind(id).first<BoardDuel>();
@@ -141,7 +156,7 @@ export async function boardDuelAction(env:KpEnv,m:KpMapping,user:string,body:Rec
   await env.DB.prepare(`INSERT INTO kp_board_duels
    (id,guild,user_a,user_b,game,stake,status,board,black_user,turn_user,winner,version,created_at,updated_at,deadline_at)
    VALUES(?,?,?,?,?,?,'pending',?,NULL,NULL,NULL,0,?,?,?) ON CONFLICT(id) DO NOTHING`)
-   .bind(id,m.guildId,user,target,game,stake,initialDuelBoard(game),now,now,now+DUEL_INVITE_MS).run();
+   .bind(id,m.guildId,user,target,game,stake,MINIS.has(game)?'.':initialDuelBoard(game),now,now,now+DUEL_INVITE_MS).run();
   return present(env,m,user,id);
  }
  const match=await room(env,m.guildId,String(body.duel??''),user);
@@ -149,17 +164,37 @@ export async function boardDuelAction(env:KpEnv,m:KpMapping,user:string,body:Rec
  if(!Number.isSafeInteger(body.version)||body.version!==match.version)throw Error('対戦盤が更新されました。再読み込みしてください。');
  const now=Date.now();let board:string|null=null,next_turn:string|null=null,winner:string|null=null,first_user:string|null=null;
  let deadline=match.deadline_at;
+ let privateData:string|null=null;
  if(kind==='accept'){
   if(match.status!=='pending'||match.user_b!==user||deadline<now)throw Error('招待は期限切れ、または受付済みです。');
   if(await debtOf(env,m.guildId,user)>0)throw Error('借KPを完済してから決闘してください。');
   first_user=crypto.getRandomValues(new Uint8Array(1))[0]%2===0?match.user_a:match.user_b;
-  board=match.board;deadline=now+DUEL_TURN_MS;
+  if(MINIS.has(match.game)){
+   const started=miniStart(match.game,randInt);
+   board=started.board;privateData=started.secret;
+  }else board=match.board;
+  deadline=now+DUEL_TURN_MS;
  }else if(kind==='move'){
   if(match.status!=='active'||match.turn_user!==user||deadline<now)throw Error('今は着手できません。');
-  const color=match.black_user===user?'B':'W';
-  const after=playDuelMove(match.game,match.board,color,Number(body.cell));
-  board=after.board;next_turn=after.nextColor?(after.nextColor==='B'?match.black_user:(match.black_user===match.user_a?match.user_b:match.user_a)):null;
-  winner=after.winner?(after.winner==='draw'?'draw':after.winner==='B'?match.black_user:(match.black_user===match.user_a?match.user_b:match.user_a)):null;
+  const other=match.black_user===match.user_a?match.user_b:match.user_a;
+  if(MINIS.has(match.game)){
+   let secret:string|null=null;
+   if(match.game!=='connect4'){
+    const row=await env.DB.prepare('SELECT data FROM kp_board_duel_secrets WHERE guild=? AND id=?')
+     .bind(m.guildId,match.id).first<{data:string}>();
+    if(!row)throw Error('非公開ゲーム情報を確認できません。');secret=row.data;
+   }
+   const side=match.black_user===user?'a':'b';
+   const after=miniMove(match.game,match.board,secret,side,body,randInt);
+   board=after.board;privateData=after.secret;
+   next_turn=after.turnSide?(after.turnSide==='a'?match.black_user:other):null;
+   winner=after.winner?(after.winner==='draw'?'draw':after.winner==='a'?match.black_user:other):null;
+  }else{
+   const color=match.black_user===user?'B':'W';
+   const after=playDuelMove(match.game,match.board,color,Number(body.cell));
+   board=after.board;next_turn=after.nextColor?(after.nextColor==='B'?match.black_user:other):null;
+   winner=after.winner?(after.winner==='draw'?'draw':after.winner==='B'?match.black_user:other):null;
+  }
   deadline=now+DUEL_TURN_MS;
  }else if(kind==='cancel'){
   if(match.status!=='pending')throw Error('招待はすでに受諾済みです。');
@@ -173,10 +208,19 @@ export async function boardDuelAction(env:KpEnv,m:KpMapping,user:string,body:Rec
  // The insert and all its triggers are one SQLite transaction: escrow, board update
  // and both settlement credits either all succeed or all roll back.
  try{
-  await env.DB.prepare(`INSERT INTO kp_board_duel_actions
+  const action=env.DB.prepare(`INSERT INTO kp_board_duel_actions
    (id,guild,duel_id,actor,kind,version,at,board,next_turn,winner,first_user,deadline_at)
    VALUES(?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO NOTHING`)
-   .bind(id,m.guildId,match.id,user,kind,match.version,now,board,next_turn,winner,first_user,deadline).run();
+   .bind(id,m.guildId,match.id,user,kind,match.version,now,board,next_turn,winner,first_user,deadline);
+  if(kind==='accept'&&MINIS.has(match.game)&&privateData!==null){
+   await env.DB.batch([
+    env.DB.prepare('INSERT INTO kp_board_duel_secrets(id,guild,data) VALUES(?,?,?)')
+     .bind(match.id,m.guildId,privateData),action]);
+  }else if(kind==='move'&&MINIS.has(match.game)&&privateData!==null&&match.game!=='connect4'){
+   await env.DB.batch([action,env.DB.prepare(`UPDATE kp_board_duel_secrets SET data=?
+     WHERE guild=? AND id=? AND EXISTS(SELECT 1 FROM kp_board_duel_actions WHERE id=? AND duel_id=? AND version=?)`)
+     .bind(privateData,m.guildId,match.id,id,match.id,match.version)]);
+  }else await action.run();
  }catch(error){
   const msg=String(error);
   if(msg.includes('stake unavailable')||msg.includes('CHECK constraint failed'))throw Error('どちらかのKPが不足しているため、対戦を開始できません。');
