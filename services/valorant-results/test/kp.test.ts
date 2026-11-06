@@ -880,7 +880,10 @@ test('four mini duels keep other hands secret, and Hit & Blow settles two escrow
  assert.equal((await readKpState(f.env,mapping,two)).cash,1000);
  const first=started.black_user!,second=first===one?two:one;
  const secret=JSON.parse(String(f.sql.prepare('SELECT data FROM kp_board_duel_secrets WHERE id=?').get(invite.id)!.data));
- assert.equal(started.private_hand,secret.privateA,'the first player receives only their own secret');
+ assert.equal(started.private_hand,first===two?secret.privateA:secret.privateB,'accept returns the private code of the authenticated accepting player');
+ const firstView=(await boardDuelList(f.env,mapping,first)).matches.find(x=>x.id===invite.id)!;
+ assert.equal(firstView.private_hand,secret.privateA,'first player sees only their own code');
+ assert.ok(firstView.private_hand!==secret.privateB,'opponent code must never be included in private room data');
  const other=(await boardDuelList(f.env,mapping,second)).matches.find(x=>x.id===invite.id)!;
  assert.equal(other.private_hand,secret.privateB,'the opponent gets a different secret through the same indexed list');
  assert.equal(started.board.includes(secret.privateB),false,'the public history has no opponent code');
