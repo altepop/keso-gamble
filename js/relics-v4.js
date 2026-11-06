@@ -1,4 +1,4 @@
-import {relicCombinationsSection} from './relics-v7.js?v=web-1a18965955ba424d';
+import {relicCombinationsSection} from './relics-v7.js?v=web-a55c6681d5193a0e';
 // Presentation-only helpers; KP, ownership and equipped slots stay server authoritative.
 const esc=x=>String(x??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 const number=x=>Number(x??0).toLocaleString('ja-JP');
@@ -145,7 +145,7 @@ export function relicBonusDashboard(state,proofs,view={}){
   select('mode',mode,availableModes.map(x=>[x,modes[x]??x]))+'</label><label>報酬の例'+
   select('amount',amount,(mode==='spikerush'?[20,40,100,500]:[100,500,900,5000]).map(x=>[x,number(x)+' KP']))+'</label></div>';
  const recent=(Array.isArray(state?.ledger)?state.ledger:[]).filter(x=>x.kind==='relic').slice(0,3);
- const recentHtml=recent.length?'<div class="relic-last-real"><b>確定済みの遺物ボーナス（最新3件）</b><small>コンペ・アンレ・雀魂などハラハラ枠は勝てば上限なし、最下位やラスは遺物の倍率で損も膨らむ（借KPあり）。スパイクラッシュなど安全枠は元の報酬と同額まで。</small>'+
+ const recentHtml=recent.length?'<div class="relic-last-real"><b>確定済みの遺物ボーナス（最新3件）</b><small>コンペ・アンレ・雀魂などハラハラ枠は勝てば上限なし、最下位やラスは遺物の倍率で損も膨らむ（借KPあり）。スパイクラッシュは基礎40／20KPで計算し、追加分は勝ち400／負け200KPまで。ほかの安全枠は元の報酬と同額まで。</small>'+
   recent.map(x=>Number(x.delta)>0?'<span>実際に付与：<strong>＋'+number(x.delta)+' KP</strong></span>':
    Number(x.delta)<0?'<span>🩸 反動：<strong>−'+number(-Number(x.delta))+' KP</strong></span>':'').join('')+
   '</div>':'';

@@ -233,8 +233,37 @@ test('special effects: 竜騎士 win x1.25 / loss x0.5, 色違い thrill win x1.
  assert.ok(nativeRelicLoss(bet,'market',100000,now,1_000_000)<=250);
 });
 
-test('Spike Rush (safe): relics act on the 40/20 base and add at most the base',async()=>{
- const s=strong(),f=await db(s.relics);
- f.sql.prepare('INSERT INTO spike_rewards VALUES(?,?,?,?)').run('match:s','g','u',JSON.stringify({gamesBefore:30,base:40}));
- assert.equal(await creditVerifiedRelicBonus(f.env,'g','u','match:s','spikerush',720,true,now),40);
+test('Spike Rush: silver and chain use the unchanged 40/20 base, not the growth reward',async()=>{
+ for(const win of [true,false])for(const chained of [false,true]){
+  const s=strong(),base=win?40:20;
+  if(!chained)s.relics.equipped=['normal.pact.coinflip'];
+  else{
+   const id='steam.spike-test';
+   s.relics.items[id]={id,name:'Test spark',origin:'steam',rarity:'exclusive',power:0,ability:'test',count:1,mode:'universal',skill:'spark',percent:10,cap:0};
+   s.relics.equipped.push(id);
+  }
+  const f=await db(s.relics),id='match:s';
+  f.sql.prepare('INSERT INTO spike_rewards VALUES(?,?,?,?)').run(id,'g','u',JSON.stringify({gamesBefore:40,base}));
+  const detail=evaluateRelicBonus(s.relics,'spikerush',{amount:base,win,spikeGamesBefore:40});
+  if(!chained)assert.equal(detail.bonus,win?88:44,'silver +220%, not a fivefold calculation base');
+  else assert.equal(detail.lines.find(l=>l.id==='normal.pact.chain')!.triggered,true);
+  const paid=await creditVerifiedRelicBonus(f.env,'g','u',id,'spikerush',3720,win,now);
+  assert.equal(paid,Math.min(detail.bonus,base*10));
+  assert.ok(paid>base,'strong relics are no longer capped at 40/20');
+  assert.equal(f.balance(),1000+paid);
+  assert.equal(await creditVerifiedRelicBonus(f.env,'g','u',id,'spikerush',3720,win,now),0,'retry never adds KP again');
+ }
+});
+
+test('Spike Rush: final bonus caps at 400/200 including opening blessing; missing proof pays nothing',async()=>{
+ for(const win of [true,false])for(const gamesBefore of [0,40])for(const table of ['spike_rewards','spike_overdrive_rewards']){
+  const id='steam.strong',base=win?40:20;
+  const relics:RelicCollection={totalSummons:0,equipped:[id],items:{[id]:{id,name:'Strong trophy',origin:'steam',rarity:'exclusive',power:0,ability:'test',count:1,mode:'universal',skill:'spark',percent:5000,cap:0}}};
+  const f=await db(relics);
+  f.sql.prepare(`INSERT INTO ${table} VALUES(?,?,?,?)`).run('match:cap','g','u',JSON.stringify({gamesBefore,base}));
+  assert.equal(await creditVerifiedRelicBonus(f.env,'g','u','match:cap','spikerush',5000,win,now),base*10);
+  assert.equal(f.balance(),1000+base*10);
+  assert.equal(await creditVerifiedRelicBonus(f.env,'g','u','match:missing','spikerush',5000,win,now),0);
+  assert.equal(await creditVerifiedRelicBonus(f.env,'g','u','voice:cap','voice',30,true,now),30,'other safe modes retain their original ceiling');
+ }
 });

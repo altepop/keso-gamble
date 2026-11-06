@@ -1,5 +1,5 @@
-import {escapeHTML} from './progression-views.js?v=web-1a18965955ba424d';
-import {PRIVATE_GAMES,PRIVATE_HANDS} from './private-casino-rules.js?v=web-1a18965955ba424d';
+import {escapeHTML} from './progression-views.js?v=web-a55c6681d5193a0e';
+import {PRIVATE_GAMES,PRIVATE_HANDS} from './private-casino-rules.js?v=web-a55c6681d5193a0e';
 export function privateCasinoPanel(drafts={},race=null,message=''){
  const games=PRIVATE_GAMES,game=PRIVATE_HANDS[drafts['private-game']]||drafts['private-game']==='roulette'?drafts['private-game']:'roulette';
  const hands=PRIVATE_HANDS[game]??[],choice=hands.some(([id])=>id===drafts['private-hand'])?drafts['private-hand']:hands[0]?.[0];
