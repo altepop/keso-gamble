@@ -954,7 +954,7 @@ test('upgrading a live Othello-only schema preserves active games and upgrades c
  await ensureBoardDuels(f.env);
  const migrated=f.sql.prepare('SELECT game,user_a,user_b,stake,status FROM kp_board_duels WHERE id=?').get(id(401))!;
  assert.equal(migrated.game,'othello');assert.equal(migrated.stake,500);
- assert.match(String(f.sql.prepare("SELECT sql FROM sqlite_master WHERE name='kp_board_duels'").get()!.sql),'connect4');
+ assert.match(String(f.sql.prepare("SELECT sql FROM sqlite_master WHERE name='kp_board_duels'").get()!.sql),/connect4/);
  assert.equal(f.sql.prepare("SELECT value FROM kp_settings WHERE key='board_duel_schema_version'").get()!.value,'2');
  seed(f.sql,one,1000);seed(f.sql,two,1000);
  const invite=await boardDuelAction(f.env,mapping,one,{id:id(402),action:'create',game:'poker',opponent:two,stake:100});
