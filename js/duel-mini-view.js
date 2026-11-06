@@ -1,4 +1,4 @@
-import {connect4LegalMoves} from './duel-mini-games.js';
+import {connect4LegalMoves} from './duel-mini-games.js?v=web-4537ed3459a57d0f';
 const h=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const safeData=r=>{try{return JSON.parse(r.board);}catch{return {};}};
 const privateValue=r=>{try{return JSON.parse(r.private_hand);}catch{return r.private_hand??null;}};
