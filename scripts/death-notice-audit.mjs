@@ -23,7 +23,7 @@ export async function audit(query,reportedAt,now=Date.now()){
    COALESCE((SELECT value FROM monitor_state WHERE key='death_mode:'||s.session_id||':'||s.riot_id),'unrated') AS mode
    FROM death_unrated_sessions s WHERE s.riot_id=? AND (s.match_id=? OR (s.armed_at<=? AND s.armed_at>=?)) ORDER BY s.armed_at DESC LIMIT 10`,[row.riot_id,row.match_id,row.ended_at,Number(row.ended_at)-24*3600000]);
   const post=await query('SELECT 1 AS present FROM monitor_state WHERE key=?',['post:'+row.match_id]);
-  const verdict=String(row.message).includes('コンペ行き確定')?'competitive':String(row.message).includes('今回はセーフ')?'safe':String(row.message).includes('判定保留')?'pending':'ordinary';
+  const verdict=(String(row.message).includes('コンペに出頭してください')||String(row.message).includes('コンペ行き確定'))?'competitive':String(row.message).includes('今回はセーフ')?'safe':String(row.message).includes('判定保留')?'pending':'ordinary';
   const mode=String(row.mode??'none').replace(/[^a-z0-9_-]/g,'').slice(0,64);
   out.push('',`## Result ${i+1}`,`- Finished: ${clock(row.ended_at)}`,`- Stored mode: ${mode}`,`- Stored verdict: ${verdict}`,`- Discord post recorded: ${post.length>0}`,`- Prior-24h/claimed reservations: ${sessions.length}`);
   for(const [j,s] of waiting.entries()){

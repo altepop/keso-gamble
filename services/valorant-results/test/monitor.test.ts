@@ -665,7 +665,7 @@ test('death-unrated sends a player to competitive for any one condition, even af
     assert.equal(verdict.verdict, 'competitive', kind);
     assert.equal([verdict.negativeKD, verdict.lastDeath, verdict.bottomACS].filter(Boolean).length, 1, kind);
     const message = resultMessage(raw, 'user-1', 'プレイヤーA', true)!.message;
-    assert.match(message, /プレイヤーA、コンペ行き確定/);
+    assert.match(message, /プレイヤーA、コンペに出頭してください/);
     assert.doesNotMatch(message, /（エスカレーション）|で負け|健闘賞/);
   }
   safe.players[0].stats.kills = safe.players[0].stats.deaths;
@@ -735,7 +735,7 @@ test('death-unrated shares one post, handles draws, and keeps its verdict separa
     assert.equal(messages.length, 1);
     assert.match(messages[0], /デスアンレ判定（2人）/);
     assert.match(messages[0], /プレイヤーA、今回はセーフ/);
-    assert.match(messages[0], /プレイヤーC、コンペ行き確定/);
+    assert.match(messages[0], /プレイヤーC、コンペに出頭してください/);
     assert.doesNotMatch(messages[0], /ACT|連勝|連敗|🤝/);
     assert.equal((await env.DB.prepare('SELECT COUNT(*) AS n FROM notifications WHERE sent=1').first<{ n: number }>())!.n, 2);
   } finally { globalThis.fetch = original; }
@@ -1026,7 +1026,7 @@ test('reserved unknown results fetch shared details once, edit the original post
     assert.equal(detailRequests, 1, 'Shared players and repeated history must not refetch resolved details');
     assert.equal(posts.length, 2); assert.equal(posts[0].method, 'POST'); assert.equal(posts[1].method, 'PATCH');
     assert.match(posts[0].content, /ラウンド履歴が未取得/);
-    assert.match(posts[1].content, /プレイヤーA、コンペ行き確定/);
+    assert.match(posts[1].content, /プレイヤーA、コンペに出頭してください/);
     assert.match(posts[1].content, /プレイヤーB、今回はセーフ/);
     assert.doesNotMatch(posts[1].content, /データ不足/);
     assert.equal((await env.DB.prepare('SELECT value FROM monitor_state WHERE key=?').bind('death_last:details-fill:user-1').first<{ value: string }>())!.value, 'true');
@@ -1903,7 +1903,7 @@ test('a claimed death-unrated match keeps its verdict when the player later rese
  globalThis.fetch=async(url,init)=>String(url).includes('api.henrikdev.xyz')?Response.json({data:[raw]}):(sent.push(JSON.parse(String(init?.body)).content),Response.json({id:'123'}));
  try{
   await monitor(env,[{riotId:'one#JP1'}]);
-  assert.equal(sent.length,1);assert.match(sent[0],/コンペ行き確定/);assert.match(sent[0],/次はコンペへ出頭/);
+  assert.equal(sent.length,1);assert.match(sent[0],/コンペに出頭してください/);assert.match(sent[0],/次はコンペへ出頭/);
   assert.equal((await env.DB.prepare("SELECT match_id FROM death_unrated_sessions WHERE session_id='new-swift'").first<{match_id:string|null}>())!.match_id,null);
  }finally{globalThis.fetch=original;}
 });
@@ -1919,7 +1919,7 @@ test('unordered reservation rows cannot hide a newly reserved unrated verdict be
  const raw=unratedMatch('new-unrated-match');raw.players[0].stats.kills=0;
  const sent:string[]=[];
  globalThis.fetch=async(url,init)=>String(url).includes('api.henrikdev.xyz')?Response.json({data:[raw]}):(sent.push(JSON.parse(String(init?.body)).content),Response.json({id:'123'}));
- try{await monitor(env,[{riotId:'one#JP1'}]);assert.equal(sent.length,1);assert.match(sent[0],/コンペ行き確定/);
+ try{await monitor(env,[{riotId:'one#JP1'}]);assert.equal(sent.length,1);assert.match(sent[0],/コンペに出頭してください/);
   assert.equal((await env.DB.prepare("SELECT match_id FROM death_unrated_sessions WHERE session_id='new-unrated'").first<{match_id:string}>())!.match_id,'new-unrated-match');
  }finally{globalThis.fetch=original;}
 });
@@ -1940,4 +1940,25 @@ test('a previously posted ordinary result is promoted and edited in place when i
   assert.equal((await env.DB.prepare("SELECT mode FROM notifications WHERE match_id='repair-death'").first<{mode:string}>())!.mode,'unrated');
   await monitor(env,[{riotId:'one#JP1'}]);assert.equal(sent.length,1,'a resolved result is not posted repeatedly');
  }finally{globalThis.fetch=original;}
+});
+
+// All Death modes end with the exact chant, after any other result lines.
+test('Death verdict footer is the final line on every mode, even after KP details', async () => {
+  const { notificationContent } = await import('../src/results.ts');
+  const { DEATH_CLOSING_LINE, deathStoredMode, deathModes } = await import('../src/death-modes.ts');
+  const env=environment();
+  const raw=unratedMatch('death-footer');
+  raw.players[0].stats.kills=0;
+  for (const mode of deathModes) {
+    raw.metadata.queue.id=mode.value;
+    const message=resultMessage(raw, 'user-1', 'VDK', true)!.message;
+    assert.ok(message.endsWith(DEATH_CLOSING_LINE), mode.value);
+    assert.match(message, /VDK、コンペに出頭してください。/);
+    const notice={riot_id:'VDK#JP1',match_id:'death-footer',message:message+'\n🪙 KP +100',ended_at:Date.now(),mode:deathStoredMode(mode.value),act_id:null,act_name:null,outcome:null};
+    const content=await notificationContent(env.DB,notice);
+    assert.ok(content.endsWith(DEATH_CLOSING_LINE), mode.value);
+    assert.equal(content.split(DEATH_CLOSING_LINE).length,2,'only one chant');
+    assert.match(content, /KP \+100/);
+  }
+  assert.doesNotMatch(resultMessage(raw,'user-1','VDK')!.message, /アカーーーーーン/);
 });
