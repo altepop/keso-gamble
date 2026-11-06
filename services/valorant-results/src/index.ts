@@ -23,6 +23,7 @@ import {paipuApi} from './mahjong-paipu.ts';
 export {VoiceGateway} from './voice-gateway.ts';
 import {ensureVoice} from './voice-api.ts';
 import { claimDeathMatch } from './death-sessions.ts';
+import {ensurePvpDuels,settlePvpDuels} from './pvp-duel.ts';
 import type { KpRun } from './kp.ts';
 import { shouldRunRetention, cleanupExpiredCredentials } from './retention.ts';
 import { initializeKp, syncKpAccounts, collectKpMatch, drainKpInbox, flushKpDirectives, prepareKpRun, loadKpRunMatch, kpEventId, kpCreditLine, kpRelicBonus } from './kp.ts';
@@ -423,7 +424,7 @@ export async function monitor(env: Env, players: Player[] = configuredPlayers): 
     const accounts = new Map<string, Account>((await env.DB.prepare('SELECT riot_id,puuid,region,since FROM tracked_players')
       .all<Account & { riot_id: string }>()).results.map(account => [account.riot_id, account]));
     let kpRun:KpRun|null=null;
-    try { const mapping = await initializeKp(env); if (mapping) { await syncKpAccounts(env,mapping); await drainKpInbox(env); await flushKpDirectives(env,mapping);kpRun=await prepareKpRun(env,mapping); } }
+    try { const mapping = await initializeKp(env); if (mapping) { await syncKpAccounts(env,mapping); await drainKpInbox(env); await flushKpDirectives(env,mapping);kpRun=await prepareKpRun(env,mapping);await ensurePvpDuels(env); } }
     catch { console.warn('kp_setup_pending'); }
     // Bound extra API traffic: one reserved match per run, one attempt per match per five minutes.
     // A player may have an old claimed match in one queue and a waiting reservation in another.
@@ -440,6 +441,8 @@ export async function monitor(env: Env, players: Player[] = configuredPlayers): 
     // load only their own rank2:<match>:<puuid> via indexed key lookup.
     const ranks=new Map<string,string>();
     const deathDetails: DeathDetails = { remaining: 1, matches: new Map(),reservations };
+    const pvpSeen=new Set<string>();
+    let pvpExtraDetail=1;
     // Deliver a previously queued result before spending time polling the API again.
     if (players.length) await flushNotifications(env, players);
     const offset = await state(env, 'cursor') % Math.max(1, players.length);
@@ -475,6 +478,35 @@ export async function monitor(env: Env, players: Player[] = configuredPlayers): 
           .bind(...ids).all<{ riot_id: string; match_id: string }>()).results) saved.add(JSON.stringify([r.riot_id, r.match_id]));
         stage = 'save_result';
         for (const match of [...matches].sort((a, b) => Date.parse(a.metadata.started_at) - Date.parse(b.metadata.started_at))) {
+          if(kpRun&&match.metadata?.match_id&&!pvpSeen.has(match.metadata.match_id)){
+            pvpSeen.add(match.metadata.match_id);
+            try {
+              const names=new Map(players.map(p=>[p.riotId,p.name?.trim()||parseId(p.riotId)[0]]));
+              const attempt=await settlePvpDuels(env,kpRun.mapping,match,accounts,names);
+              // At most one extra detailed request per minute, with a per-match cooldown.
+              if(attempt.missingDetails&&pvpExtraDetail>0
+                && await state(env,'api_after')<=Date.now()
+                && await state(env,'pvp_detail_after:'+match.metadata.match_id)<=Date.now()){
+                pvpExtraDetail--;
+                await setState(env,'pvp_detail_after:'+match.metadata.match_id,Date.now()+5*60_000);
+                const entry=kpRun.mapping.accounts.find(link=>accounts.get(link.riotId)?.puuid
+                  && match.players.some(p=>p.puuid===accounts.get(link.riotId)!.puuid));
+                const account=entry?accounts.get(entry.riotId):undefined;
+                if(account){
+                  try{
+                    const detail=await api<Match>(env,'/valorant/v4/match/'+account.region+'/'+encodeURIComponent(match.metadata.match_id));
+                    if(detail.metadata?.match_id===match.metadata.match_id
+                      && detail.metadata.queue?.id===match.metadata.queue?.id
+                      && detail.metadata.started_at===match.metadata.started_at
+                      && detail.metadata.is_completed===true
+                      && Array.isArray(detail.players)&&detail.players.length===match.players.length
+                      && match.players.every(p=>detail.players.some(q=>p.puuid===q.puuid&&p.team_id===q.team_id)))
+                      await settlePvpDuels(env,kpRun.mapping,detail,accounts,names);
+                  }catch{console.warn('pvp_detail_pending');}
+                }
+              }
+            }catch{console.warn('pvp_settlement_pending');}
+          }
           counts[await saveMatch(env, match, player, account,kpRun,reservations,saved,ranks)]++;
           // A full match already contains other registered players; do not wait for their history to catch up.
           for (const other of players) {

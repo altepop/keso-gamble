@@ -758,3 +758,42 @@ test('あかんbot reads relic bonuses from the real verified ledger and include
  const newRun=await prepareKpRun(f.env,mapping);await loadKpRunMatch(f.env,newRun,id);
  assert.equal(newRun.relicBonuses.get(id),50,'restarts and later bot edits show the same settled proof');
 });
+
+test('direct opponent KP transfer nets 3 to 1 kills into 100 KP, capped at wallet and once per game',async()=>{
+ const {evaluatePvpDuel,settlePvpDuels,ensurePvpDuels}=await import('../src/pvp-duel.ts');
+ const f=await fixture();f.enableHistory();await ensurePvpDuels(f.env);
+ f.sql.exec("UPDATE kp_settings SET value='0' WHERE key='pvp_duels_started_at'");
+ seed(f.sql,two,1000);
+ const raw=game('duel-one') as ReturnType<typeof game>&{players:Array<{puuid:string;team_id:string;stats:{deaths:number}}>;kills:Array<{killer:{puuid:string};victim:{puuid:string};round:number;time_in_round_in_ms:number}>};
+ raw.players=[{puuid:'p-one',team_id:'red',stats:{deaths:1}},{puuid:'p-two',team_id:'blue',stats:{deaths:3}}];
+ raw.kills=[...Array.from({length:3},(_,n)=>({killer:{puuid:'p-one'},victim:{puuid:'p-two'},round:n,time_in_round_in_ms:1000+n})),
+ {killer:{puuid:'p-two'},victim:{puuid:'p-one'},round:4,time_in_round_in_ms:3000}];
+ const tracked=new Map([['One#JP1',{puuid:'p-one',since:0}],['Two#JP1',{puuid:'p-two',since:0}]]);
+ assert.deepEqual(evaluatePvpDuel(raw,mapping,tracked).duels.map(d=>[d.killsA,d.killsB]),[[3,1]]);
+ assert.equal((await settlePvpDuels(f.env,mapping,raw,tracked)).settled,1);
+ assert.equal((await readKpState(f.env,mapping,one)).cash,100);
+ assert.equal((await readKpState(f.env,mapping,two)).cash,900);
+ assert.equal((await settlePvpDuels(f.env,mapping,raw,tracked)).settled,0);
+ assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM kp_ledger WHERE kind='pvp'").get()!.n,2);
+ f.sql.prepare('UPDATE kp_wallets SET balance=30 WHERE guild=? AND user=?').run(guild,two);
+ raw.metadata.match_id='duel-poor';
+ assert.equal((await settlePvpDuels(f.env,mapping,raw,tracked)).settled,1);
+ assert.equal(f.sql.prepare("SELECT transferred FROM kp_pvp_duels WHERE match_id='duel-poor'").get()!.transferred,30);
+ assert.equal(f.sql.prepare('SELECT balance FROM kp_wallets WHERE user=?').get(two)!.balance,0);
+});
+test('PvP rejects teammates, custom matches, unknown wallets and incomplete kill feeds',async()=>{
+ const {evaluatePvpDuel}=await import('../src/pvp-duel.ts');
+ const f=await fixture();f.enableHistory();
+ const tracked=new Map([['One#JP1',{puuid:'p-one',since:0}],['Two#JP1',{puuid:'p-two',since:0}]]);
+ const raw=game('duel-edge') as ReturnType<typeof game>&{players:Array<{puuid:string;team_id:string;stats:{deaths:number}}>;kills:Array<{killer:{puuid:string};victim:{puuid:string};round:number;time_in_round_in_ms:number}>};
+ raw.players=[{puuid:'p-one',team_id:'red',stats:{deaths:1}},{puuid:'p-two',team_id:'blue',stats:{deaths:1}}];
+ raw.kills=[{killer:{puuid:'p-one'},victim:{puuid:'p-two'},round:0,time_in_round_in_ms:1000}];
+ assert.equal(evaluatePvpDuel(raw,mapping,tracked).missingDetails,true);
+ raw.kills.push({killer:{puuid:'p-two'},victim:{puuid:'p-one'},round:1,time_in_round_in_ms:1000});
+ assert.equal(evaluatePvpDuel(raw,mapping,tracked).duels.length,1);
+ raw.players[1].team_id='red';assert.equal(evaluatePvpDuel(raw,mapping,tracked).duels.length,0);
+ raw.players[1].team_id='blue';raw.metadata.queue.id='custom';assert.equal(evaluatePvpDuel(raw,mapping,tracked).duels.length,0);
+ raw.metadata.queue.id='competitive';assert.equal(evaluatePvpDuel(raw,mapping,new Map([['One#JP1',{puuid:'p-one',since:0}]])).duels.length,0);
+ raw.kills[1]={...raw.kills[0]};
+ assert.equal(evaluatePvpDuel(raw,mapping,tracked).missingDetails,true);
+});
