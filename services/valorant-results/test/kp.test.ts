@@ -759,10 +759,11 @@ test('あかんbot reads relic bonuses from the real verified ledger and include
  assert.equal(newRun.relicBonuses.get(id),50,'restarts and later bot edits show the same settled proof');
 });
 
-test('direct opponent KP transfer nets 3 to 1 kills into 100 KP, capped at wallet and once per game',async()=>{
+test('direct opponent KP transfer nets 3 to 1 kills into 100 KP, capped at wallet and once per game',async(t)=>{
  const {evaluatePvpDuel,settlePvpDuels,ensurePvpDuels}=await import('../src/pvp-duel.ts');
  const f=await fixture();f.enableHistory();await ensurePvpDuels(f.env);
- f.sql.exec("UPDATE kp_settings SET value='0' WHERE key='pvp_duels_started_at'");
+ // A match must start after the activation cutoff; do not backdate the DB setting.
+ t.mock.timers.tick(20_000);
  seed(f.sql,two,1000);
  const raw=game('duel-one') as ReturnType<typeof game>&{players:Array<{puuid:string;team_id:string;stats:{deaths:number}}>;kills:Array<{killer:{puuid:string};victim:{puuid:string};round:number;time_in_round_in_ms:number}>};
  raw.players=[{puuid:'p-one',team_id:'red',stats:{deaths:1}},{puuid:'p-two',team_id:'blue',stats:{deaths:3}}];
@@ -796,4 +797,74 @@ test('PvP rejects teammates, custom matches, unknown wallets and incomplete kill
  raw.metadata.queue.id='competitive';assert.equal(evaluatePvpDuel(raw,mapping,new Map([['One#JP1',{puuid:'p-one',since:0}]])).duels.length,0);
  raw.kills[1]={...raw.kills[0]};
  assert.equal(evaluatePvpDuel(raw,mapping,tracked).missingDetails,true);
+});
+
+
+test('wagered Othello accepts both stakes atomically and pays the winner once after resignation',async()=>{
+ const {boardDuelAction}=await import('../src/board-duels.ts');
+ const f=await fixture();seed(f.sql,one,1000);seed(f.sql,two,1000);
+ const makeId=(n:number)=>'00000000-0000-4000-8000-'+String(n).padStart(12,'0');
+ const invite=await boardDuelAction(f.env,mapping,one,{id:makeId(1),action:'create',game:'othello',opponent:two,stake:500});
+ assert.equal(invite.status,'pending');
+ assert.equal((await readKpState(f.env,mapping,one)).cash,1000,'invite is not a unilateral charge');
+ const room=await boardDuelAction(f.env,mapping,two,{id:makeId(2),duel:invite.id,action:'accept',version:0});
+ assert.equal(room.status,'active');assert.ok([one,two].includes(room.black_user!));
+ assert.equal((await readKpState(f.env,mapping,one)).cash,500);
+ assert.equal((await readKpState(f.env,mapping,two)).cash,500);
+ const moved=await boardDuelAction(f.env,mapping,room.turn_user!,{id:makeId(3),duel:room.id,action:'move',version:1,cell:19});
+ assert.equal(moved.version,2);assert.equal(moved.board.split('B').length-1,4);
+ const repeated=await boardDuelAction(f.env,mapping,room.turn_user!,{id:makeId(3),duel:room.id,action:'move',version:1,cell:19});
+ assert.equal(repeated.version,2,'retry of one operation cannot add a move');
+ await assert.rejects(boardDuelAction(f.env,mapping,room.turn_user!,{id:makeId(4),duel:room.id,action:'move',version:1,cell:26}),/更新/);
+ const losing=room.black_user===one?two:one;
+ const finished=await boardDuelAction(f.env,mapping,losing,{id:makeId(5),duel:room.id,action:'resign',version:2});
+ assert.equal(finished.winner,room.black_user);assert.equal(finished.status,'finished');
+ assert.equal((await readKpState(f.env,mapping,room.black_user!)).cash,1500);
+ assert.equal((await readKpState(f.env,mapping,losing)).cash,500);
+ assert.equal(f.sql.prepare("SELECT SUM(delta) as total FROM kp_ledger WHERE kind='duel'").get()!.total,0);
+ await assert.rejects(boardDuelAction(f.env,mapping,losing,{id:makeId(6),duel:room.id,action:'resign',version:3}),/進行中/);
+ assert.equal(f.sql.prepare("SELECT COUNT(*) AS n FROM kp_ledger WHERE kind='duel'").get()!.n,3);
+});
+test('Gomoku invitation may be declined without charges and cannot be accepted without both wallets',async()=>{
+ const {boardDuelAction}=await import('../src/board-duels.ts');
+ const f=await fixture();seed(f.sql,one,1000);
+ const makeId=(n:number)=>'00000000-0000-4000-8000-'+String(n).padStart(12,'0');
+ const invite=await boardDuelAction(f.env,mapping,one,{id:makeId(11),action:'create',game:'gomoku',opponent:two,stake:500});
+ assert.equal(invite.board.length,225);
+ await assert.rejects(boardDuelAction(f.env,mapping,two,{id:makeId(12),duel:invite.id,action:'accept',version:0}),/KPが不足/);
+ assert.equal((await readKpState(f.env,mapping,one)).cash,1000,'escrow failure rolls back both charges');
+ assert.equal(f.sql.prepare("SELECT status FROM kp_board_duels WHERE id=?").get(invite.id)!.status,'pending');
+ assert.equal(f.sql.prepare("SELECT COUNT(*) AS n FROM kp_board_duel_actions").get()!.n,0);
+ const cancelled=await boardDuelAction(f.env,mapping,two,{id:makeId(13),duel:invite.id,action:'cancel',version:0});
+ assert.equal(cancelled.status,'cancelled');
+ assert.equal(f.sql.prepare("SELECT COUNT(*) AS n FROM kp_ledger WHERE kind='duel'").get()!.n,0);
+});
+test('board duel forbids unauthorized opponents and stale moves and settles timed-out games',async(t)=>{
+ const {boardDuelAction,DUEL_TURN_MS}=await import('../src/board-duels.ts');
+ const f=await fixture();seed(f.sql,one,1000);seed(f.sql,two,1000);
+ const makeId=(n:number)=>'00000000-0000-4000-8000-'+String(n).padStart(12,'0');
+ await assert.rejects(boardDuelAction(f.env,mapping,one,{id:makeId(21),action:'create',game:'gomoku',opponent:one,stake:500}),/相手/);
+ const invite=await boardDuelAction(f.env,mapping,one,{id:makeId(22),action:'create',game:'gomoku',opponent:two,stake:500});
+ const started=await boardDuelAction(f.env,mapping,two,{id:makeId(23),duel:invite.id,action:'accept',version:0});
+ await assert.rejects(boardDuelAction(f.env,mapping,started.turn_user===one?two:one,{id:makeId(24),duel:invite.id,action:'move',version:1,cell:112}),/着手/);
+ t.mock.timers.tick(DUEL_TURN_MS+1);
+ const done=await boardDuelAction(f.env,mapping,one,{id:makeId(25),duel:invite.id,action:'timeout',version:1});
+ assert.equal(done.status,'finished');assert.equal(done.winner,started.turn_user===one?two:one);
+ assert.equal(f.sql.prepare("SELECT SUM(delta) AS total FROM kp_ledger WHERE kind='duel'").get()!.total,0);
+});
+
+
+test('periodic duel timeout sweeps escrow once even with no viewer online',async(t)=>{
+ const {boardDuelAction,settleExpiredBoardDuels,DUEL_TURN_MS}=await import('../src/board-duels.ts');
+ const f=await fixture();seed(f.sql,one,2000);seed(f.sql,two,2000);
+ const id=(n:number)=>'00000000-0000-4000-8000-'+String(n).padStart(12,'0');
+ const invite=await boardDuelAction(f.env,mapping,one,{id:id(51),action:'create',game:'gomoku',opponent:two,stake:1000});
+ const started=await boardDuelAction(f.env,mapping,two,{id:id(52),action:'accept',duel:invite.id,version:0});
+ assert.equal((await settleExpiredBoardDuels(f.env,guild)).settled,0);
+ t.mock.timers.tick(DUEL_TURN_MS+10);
+ assert.equal((await settleExpiredBoardDuels(f.env,guild)).settled,1);
+ assert.equal((await settleExpiredBoardDuels(f.env,guild)).settled,0);
+ const finished=f.sql.prepare('SELECT status,winner FROM kp_board_duels WHERE id=?').get(invite.id)!;
+ assert.equal(finished.status,'finished');assert.equal(finished.winner,started.turn_user===one?two:one);
+ assert.equal(f.sql.prepare("SELECT SUM(delta) AS total FROM kp_ledger WHERE kind='duel'").get()!.total,0);
 });

@@ -1,3 +1,4 @@
+import {boardDuelApi} from './board-duels.ts';
 import {steamApi,steamCallback} from './steam-auth.ts';
 import {privateCasinoAllowed,privateCasinoRound} from './private-casino.ts';
 import {memberNames} from './member-names.ts';
@@ -393,6 +394,7 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping,deferP
   const token=/^Bearer ([a-f0-9]{48})$/.exec(request.headers.get('Authorization')??'')?.[1];
   const owner=token?await kpSession(env,token):null;
   if(!owner||owner.guild!==mapping.guildId||!await isKpParticipant(env,mapping,owner.user))return response({error:'接続が切れました。/valo status のコードで接続してください。'},401);
+  if(path==='/api/kp/duels')return boardDuelApi(request,env,mapping,owner.user,headers);
   if(path.startsWith('/api/kp/steam/')){const r=await steamApi(request,env,owner,token!);return new Response(r.body,{status:r.status,headers:{...Object.fromEntries(r.headers),...headers}});}
   if(request.method==='POST'&&path==='/api/kp/logout'){await revokeKpSession(env,token!);return response({disconnected:true});}
   if(request.method==='GET'&&path==='/api/kp/private/race'){

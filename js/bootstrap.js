@@ -1,7 +1,7 @@
 // Complete Discord's initial handshake before the full app's module graph is loaded.
 // A broken/old game module must not leave Discord's native loading cover on screen.
-import {prepareDiscordActivity} from './discord-activity-auth.js?v=web-a55c6681d5193a0e';
-import {applyAudioMix} from './audio-mix.js?v=web-a55c6681d5193a0e';
+import {prepareDiscordActivity} from './discord-activity-auth.js?v=web-d9b96b4bdbea49e0';
+import {applyAudioMix} from './audio-mix.js?v=web-d9b96b4bdbea49e0';
 // Before anything else: the iPhone mix-with-other-audio experiment, only if this device turned it on.
 applyAudioMix();
 const root=document.getElementById('app');
@@ -9,7 +9,7 @@ let stage='Discordの起動確認';
 try{
  await prepareDiscordActivity();
  stage='画面の読み込み';
- await import('./app.js?v=web-a55c6681d5193a0e');
+ await import('./app.js?v=web-d9b96b4bdbea49e0');
 }catch(error){
  console.error('KESO startup failed at '+stage,error);
  root.replaceChildren();

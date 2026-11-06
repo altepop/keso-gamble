@@ -1,6 +1,6 @@
-import {steamPanel} from './steam-view.js?v=web-a55c6681d5193a0e';
-import {stockPrice} from './stock-view.js?v=web-a55c6681d5193a0e';
-import { ACTIVITIES, MEMBERS, ORDERS } from './progression.js?v=web-a55c6681d5193a0e';
+import {steamPanel} from './steam-view.js?v=web-d9b96b4bdbea49e0';
+import {stockPrice} from './stock-view.js?v=web-d9b96b4bdbea49e0';
+import { ACTIVITIES, MEMBERS, ORDERS } from './progression.js?v=web-d9b96b4bdbea49e0';
 export const escapeHTML=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const kp=n=>n.toLocaleString('ja-JP')+' KP';
 // A history amount with its own sign: +900 KP / −200 KP / ±0 KP.
@@ -52,7 +52,7 @@ function masteryView(state){
  const rows=state.mastery.map(m=>`<div class="history-entry"><div><strong>${escapeHTML(m.agent)}</strong> ${m.games}試合・${m.wins}勝</div>${m.titles.length?`<div class="helper">${m.titles.map(t=>`「${escapeHTML(t)}」`).join(' ')}</div>`:''}</div>`).join('');
  return `<details class="asset-card rules"><summary class="panel-title">エージェント熟練度</summary><p class="helper">記録した試合のエージェントを数え、5・15・30・60・100試合で称号が付きます。勝率の称号は10試合から（煽りレベル「全開」のみ）。</p>${rows||'<p class="helper">まだ記録した試合がありません。</p>'}</details>`;
 }
-const SHORTCUTS=[['play','▶','稼ぐ','試合・通話・QUIZ'],['race','🏇','競馬','15分ごとに発走'],['casino','🎰','カジノ','ルーレット・チンチロ・BJ'],['market','📈','株','KESO銘柄の売買'],['directives','⚑','指名','仲間をコンペへ'],['stable','🐴','馬主','ボックス・愛馬'],['shop','💎','高級品','称号・冠レース'],['relics','🔮','遺物','200KP召喚・コレクション']];
+const SHORTCUTS=[['play','▶','稼ぐ','試合・通話・QUIZ'],['race','🏇','競馬','15分ごとに発走'],['casino','🎰','カジノ','ルーレット・チンチロ・BJ'],['duels','⚔️','決闘','オセロ・五目並べ'],['market','📈','株','KESO銘柄の売買'],['directives','⚑','指名','仲間をコンペへ'],['stable','🐴','馬主','ボックス・愛馬'],['shop','💎','高級品','称号・冠レース'],['relics','🔮','遺物','200KP召喚・コレクション']];
 export function homeView(state,nav){
  const active=state.directives.filter(d=>d.status==='active'),mine=active.filter(d=>d.target===state.selfUserId).length;
  const owed=state.debt?.amount>0;
