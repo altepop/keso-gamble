@@ -1891,3 +1891,53 @@ test('with the owned webhook set up, a Skirmish choice is posted as あかんbot
     } finally { globalThis.fetch = original; Date.now = clock; }
   }
 });
+
+test('a claimed death-unrated match keeps its verdict when the player later reserves another mode',async()=>{
+ const env=environment(),original=globalThis.fetch,now=Date.now();
+ await env.DB.prepare('INSERT INTO tracked_players VALUES(?,?,?,?)').bind('one#JP1','user-1','ap',0).run();
+ await env.DB.prepare('INSERT INTO death_unrated_sessions VALUES(?,?,?,?,?,NULL)').bind('one#JP1','old-unrated',now-120000,now+3600000,'missed-verdict').run();
+ await env.DB.prepare('INSERT INTO death_unrated_sessions VALUES(?,?,?,?,NULL,NULL)').bind('one#JP1','new-swift',now-60000,now+3600000).run();
+ await env.DB.prepare('INSERT INTO monitor_state VALUES(?,?)').bind('death_mode:new-swift:one#JP1','swiftplay').run();
+ const raw=unratedMatch('missed-verdict');raw.players[0].stats.kills=0;
+ const sent:string[]=[];
+ globalThis.fetch=async(url,init)=>String(url).includes('api.henrikdev.xyz')?Response.json({data:[raw]}):(sent.push(JSON.parse(String(init?.body)).content),Response.json({id:'123'}));
+ try{
+  await monitor(env,[{riotId:'one#JP1'}]);
+  assert.equal(sent.length,1);assert.match(sent[0],/コンペ行き確定/);assert.match(sent[0],/次はコンペへ出頭/);
+  assert.equal((await env.DB.prepare("SELECT match_id FROM death_unrated_sessions WHERE session_id='new-swift'").first<{match_id:string|null}>())!.match_id,null);
+ }finally{globalThis.fetch=original;}
+});
+
+test('unordered reservation rows cannot hide a newly reserved unrated verdict behind an old claimed swift session',async()=>{
+ const env=environment(),original=globalThis.fetch,now=Date.now();
+ await env.DB.prepare('INSERT INTO tracked_players VALUES(?,?,?,?)').bind('one#JP1','user-1','ap',0).run();
+ await env.DB.prepare('INSERT INTO death_unrated_sessions VALUES(?,?,?,?,?,NULL)').bind('one#JP1','old-swift',now-120000,now+3600000,'old-match').run();
+ await env.DB.prepare('INSERT INTO monitor_state VALUES(?,?)').bind('death_mode:old-swift:one#JP1','swiftplay').run();
+ await env.DB.prepare('INSERT INTO death_unrated_sessions VALUES(?,?,?,?,NULL,NULL)').bind('one#JP1','new-unrated',now-60000,now+3600000).run();
+ // SELECT without ORDER BY is unordered; reversing it simulates another valid SQLite query plan.
+ await env.DB.prepare('PRAGMA reverse_unordered_selects=ON').run();
+ const raw=unratedMatch('new-unrated-match');raw.players[0].stats.kills=0;
+ const sent:string[]=[];
+ globalThis.fetch=async(url,init)=>String(url).includes('api.henrikdev.xyz')?Response.json({data:[raw]}):(sent.push(JSON.parse(String(init?.body)).content),Response.json({id:'123'}));
+ try{await monitor(env,[{riotId:'one#JP1'}]);assert.equal(sent.length,1);assert.match(sent[0],/コンペ行き確定/);
+  assert.equal((await env.DB.prepare("SELECT match_id FROM death_unrated_sessions WHERE session_id='new-unrated'").first<{match_id:string}>())!.match_id,'new-unrated-match');
+ }finally{globalThis.fetch=original;}
+});
+
+test('a previously posted ordinary result is promoted and edited in place when its claimed death session is recovered',async()=>{
+ const env=environment(),original=globalThis.fetch,now=Date.now(),raw=unratedMatch('repair-death');raw.players[0].stats.kills=0;
+ await env.DB.prepare('INSERT INTO tracked_players VALUES(?,?,?,?)').bind('one#JP1','user-1','ap',0).run();
+ await env.DB.prepare('INSERT INTO death_unrated_sessions VALUES(?,?,?,?,?,NULL)').bind('one#JP1','claimed-old',now-120000,now+3600000,'repair-death').run();
+ await env.DB.prepare('INSERT INTO death_unrated_sessions VALUES(?,?,?,?,NULL,NULL)').bind('one#JP1','new-mode',now-60000,now+3600000).run();
+ await env.DB.prepare('INSERT INTO monitor_state VALUES(?,?)').bind('death_mode:new-mode:one#JP1','swiftplay').run();
+ const ordinary=resultMessage(raw,'user-1','one')!;
+ await env.DB.prepare('INSERT INTO notifications(riot_id,match_id,message,ended_at,mode,outcome,sent) VALUES(?,?,?,?,?,?,1)').bind('one#JP1','repair-death',ordinary.message,ordinary.endedAt,ordinary.mode,ordinary.outcome).run();
+ await env.DB.prepare('INSERT INTO monitor_state VALUES(?,?)').bind('post:repair-death','123').run();
+ const sent:Array<{method:string;content:string}>=[];
+ globalThis.fetch=async(url,init)=>String(url).includes('api.henrikdev.xyz')?Response.json({data:[raw]}):(sent.push({method:init!.method!,content:JSON.parse(String(init?.body)).content}),Response.json({id:'123'}));
+ try{
+  await monitor(env,[{riotId:'one#JP1'}]);assert.equal(sent.length,1);assert.equal(sent[0].method,'PATCH');assert.match(sent[0].content,/次はコンペへ出頭/);
+  assert.equal((await env.DB.prepare("SELECT mode FROM notifications WHERE match_id='repair-death'").first<{mode:string}>())!.mode,'unrated');
+  await monitor(env,[{riotId:'one#JP1'}]);assert.equal(sent.length,1,'a resolved result is not posted repeatedly');
+ }finally{globalThis.fetch=original;}
+});

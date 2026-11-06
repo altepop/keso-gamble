@@ -157,13 +157,13 @@ export async function monitorRankState(db:D1Database,cache:Map<string,string>,ke
  }
  return cache.get(key);
 }
-async function saveMatch(env: Env, match: Match, player: Player, account: Account, kpRun:KpRun|null,reservations:Map<string,string>,saved:Set<string>,ranks:Map<string,string>=new Map()): Promise<'excluded' | 'beforeMonitoring' | 'newResults' | 'duplicates'> {
+async function saveMatch(env: Env, match: Match, player: Player, account: Account, kpRun:KpRun|null,reservations:Map<string,Set<string>>,saved:Set<string>,ranks:Map<string,string>=new Map()): Promise<'excluded' | 'beforeMonitoring' | 'newResults' | 'duplicates'> {
   const mode = match.metadata?.queue?.id;
   const ordinary = resultMessage(match, account.puuid, player.name?.trim() || parseId(player.riotId)[0]);
   if (!ordinary) return 'excluded';
   if (ordinary.endedAt <= account.since) return 'beforeMonitoring';
   // Only the selected queue can consume a reservation; normal games stay normal.
-  const death = isDeathMode(mode) && reservations.get(player.riotId)===mode && await claimDeathMatch(env.DB,player.riotId,match.metadata.match_id,Date.parse(match.metadata.started_at),ordinary.endedAt,mode);
+  const death = isDeathMode(mode) && reservations.get(player.riotId)?.has(mode) && await claimDeathMatch(env.DB,player.riotId,match.metadata.match_id,Date.parse(match.metadata.started_at),ordinary.endedAt,mode);
   let previousLastDeath: boolean | undefined;
   if (death) {
     const check = lastDeathCheck(match, account.puuid);
@@ -258,19 +258,19 @@ async function saveMatch(env: Env, match: Match, player: Player, account: Accoun
       finishToDetectionMs: Math.max(0, Date.now() - result.endedAt) });
     return 'newResults';
   }
-  if (kpActive || isDeathNotice(result.mode)) await env.DB.prepare("UPDATE notifications SET message=?,outcome=?,sent=CASE WHEN mode='escalation' AND ?='draw' THEN 1 ELSE 0 END WHERE riot_id=? AND match_id=? AND message!=?")
-    .bind(result.message, result.outcome, result.outcome, player.riotId, match.metadata.match_id, result.message).run();
+  if (kpActive || isDeathNotice(result.mode)) await env.DB.prepare("UPDATE notifications SET message=?,outcome=?,mode=CASE WHEN ?=1 THEN ? ELSE mode END,sent=CASE WHEN mode='escalation' AND ?='draw' THEN 1 ELSE 0 END WHERE riot_id=? AND match_id=? AND (message!=? OR (?=1 AND mode IS NOT ?))")
+    .bind(result.message, result.outcome, isDeathNotice(result.mode)?1:0, result.mode, result.outcome, player.riotId, match.metadata.match_id, result.message, isDeathNotice(result.mode)?1:0, result.mode).run();
   return 'duplicates';
 }
 
 interface DeathDetails {
   remaining: number;
   matches: Map<string, Match | null>;
-  reservations:Map<string,string>;
+  reservations:Map<string,Set<string>>;
 }
 
 async function deathDetail(env: Env, match: Match, players: Player[], accounts: Map<string, Account>, details: DeathDetails): Promise<Match | null> {
-  if (!isDeathMode(match.metadata?.queue?.id) || !match.metadata.is_completed || ![...details.reservations.values()].includes(match.metadata.queue.id)) return null;
+  if (!isDeathMode(match.metadata?.queue?.id) || !match.metadata.is_completed || ![...details.reservations.values()].some(modes=>modes.has(match.metadata.queue.id))) return null;
   const matchId = match.metadata.match_id;
   if (details.matches.has(matchId)) return details.matches.get(matchId) ?? null;
   details.matches.set(matchId, null);
@@ -426,7 +426,13 @@ export async function monitor(env: Env, players: Player[] = configuredPlayers): 
     try { const mapping = await initializeKp(env); if (mapping) { await syncKpAccounts(env,mapping); await drainKpInbox(env); await flushKpDirectives(env,mapping);kpRun=await prepareKpRun(env,mapping); } }
     catch { console.warn('kp_setup_pending'); }
     // Bound extra API traffic: one reserved match per run, one attempt per match per five minutes.
-    const reservations=new Map((await env.DB.prepare(`SELECT s.riot_id,${sessionModeSQL} AS mode FROM death_unrated_sessions s WHERE s.cancelled_at IS NULL`).all<{riot_id:string;mode:string}>()).results.map(r=>[r.riot_id,r.mode]));
+    // A player may have an old claimed match in one queue and a waiting reservation in another.
+    // Keep every non-cancelled queue; one Map value used to silently overwrite the others.
+    const reservations=new Map<string,Set<string>>();
+    for(const row of (await env.DB.prepare(`SELECT DISTINCT s.riot_id,${sessionModeSQL} AS mode FROM death_unrated_sessions s WHERE s.cancelled_at IS NULL`).all<{riot_id:string;mode:string}>()).results){
+      if(!reservations.has(row.riot_id))reservations.set(row.riot_id,new Set());
+      reservations.get(row.riot_id)!.add(row.mode);
+    }
     // Which (player, match) results are already stored. Filled per player from the five matches the API returned
     // (index on match_id), instead of reading the latest 200 results on every run (~250k rows a day).
     const saved=new Set<string>();
