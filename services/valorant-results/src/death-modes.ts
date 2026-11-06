@@ -21,3 +21,6 @@ export const deathActionKey = (riotId: string) => 'death_action:' + riotId;
 // Keep existing reservations and schema: older sessions without a mode are unrated.
 // Session and mode are written together in one D1 batch.
 export const sessionModeSQL = "COALESCE((SELECT value FROM monitor_state WHERE key='death_mode:'||s.session_id||':'||s.riot_id),'unrated')";
+
+// Closing line for every Death mode result (also enforced after KP attachments).
+export const DEATH_CLOSING_LINE = 'アカンbotは絶対！！アカーーーーーン！！';

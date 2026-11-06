@@ -85,7 +85,7 @@ export function deathUnratedMessage(raw: Match, puuid: string, name: string, pre
     ? '（' + player.stats.kills + 'K / ' + player.stats.deaths + 'D）' : '';
   const line = (label: string, check: Check, detail = '') => '\n' + (check === true ? '❌' : check === false ? '✅' : '❔')
     + ' ' + label + '：' + (check === true ? '該当' : check === false ? '非該当' : 'データ不足') + detail;
-  const title = result.verdict === 'competitive' ? '☠️ ' + name + '、コンペ行き確定！'
+  const title = result.verdict === 'competitive' ? '☠️ ' + name + '、コンペに出頭してください。'
     : result.verdict === 'safe' ? '🕊️ ' + name + '、今回はセーフ！' : '⏳ ' + name + '、判定保留';
   return title + '（' + deathName(isDeathMode(raw.metadata.queue.id) ? raw.metadata.queue.id : 'unrated') + '）'
     + line('KDマイナス', result.negativeKD, kd)
