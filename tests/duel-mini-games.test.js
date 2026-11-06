@@ -1,0 +1,63 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {connect4Board,connect4Move,connect4LegalMoves,hitBlowAnswer,miniStart,miniMove,miniPrivate,comparePokerHands}from '../js/duel-mini-games.js';
+
+test('Connect Four gravity, four in a row, column overflow and diagonal',()=>{
+ let board=connect4Board();assert.equal(board.length,42);
+ assert.equal(connect4Move(board,'a',3).board[38],'a');
+ for(let c=0;c<4;c++)board=connect4Move(board,'a',c).board;
+ assert.equal(connect4Move(board,'a',4).winner,'a');
+ const result=connect4Move('a'.repeat(35)+'.'.repeat(7),'b',2);
+ assert.equal(result.board[37],'b');
+ assert.throws(()=>connect4Move('a'.repeat(42),'b',1),/置けません/);
+ assert.deepEqual(connect4LegalMoves('.'.repeat(42)),[0,1,2,3,4,5,6]);
+});
+test('Hit & Blow validates unique digits, preserves leading zero, counts duplicates correctly',()=>{
+ assert.deepEqual(hitBlowAnswer('0123','0321'),{hit:2,blow:2});
+ assert.deepEqual(hitBlowAnswer('1234','9876'),{hit:0,blow:0});
+ assert.throws(()=>hitBlowAnswer('1123','1234'),/異なる/);
+ assert.throws(()=>hitBlowAnswer('999','1234'),/異なる/);
+ const started=miniStart('hitblow',()=>0);
+ const a=miniPrivate('hitblow',started.secret,'a').value;
+ const b=miniPrivate('hitblow',started.secret,'b').value;
+ assert.match(a,/^\d{4}$/);assert.equal(new Set(a).size,4);
+ let result=miniMove('hitblow',started.board,started.secret,'a',{guess:b},()=>0);
+ assert.equal(result.winner,'a');assert.equal(JSON.parse(result.board).history[0].hit,4);
+ assert.throws(()=>miniMove('hitblow',started.board,started.secret,'b',{guess:a},()=>0),/番/);
+});
+test('Bluff dice bids must rise; challenge reveals and wins two rounds, rerolling privately',()=>{
+ let seed=0,rand=n=>(seed++%n);
+ const start=miniStart('bluffdice',rand);
+ let step=miniMove('bluffdice',start.board,start.secret,'a',{choice:'bid',count:10,face:6},rand);
+ assert.equal(JSON.parse(step.board).bid.count,10);
+ assert.throws(()=>miniMove('bluffdice',step.board,step.secret,'b',{choice:'bid',count:10,face:6},rand),/強い宣言/);
+ let result=miniMove('bluffdice',step.board,step.secret,'b',{choice:'challenge'},rand);
+ assert.equal(result.winner,null);assert.equal(JSON.parse(result.board).round,2);
+ assert.ok(JSON.parse(result.board).history[0].diceA.length===5);
+ const turn=JSON.parse(result.board).turn;
+ step=miniMove('bluffdice',result.board,result.secret,turn,{choice:'bid',count:10,face:6},rand);
+ result=miniMove('bluffdice',step.board,step.secret,turn==='a'?'b':'a',{choice:'challenge'},rand);
+ assert.equal(result.winner,'b');
+});
+test('Poker ranks standard hands, differentiates suits, and never leaks draw deck into public board',()=>{
+ const hand=cards=>cards.map(([rank,suit])=>(rank-2)*4+suit);
+ const straightFlush=hand([[10,0],[11,0],[12,0],[13,0],[14,0]]);
+ const four=hand([[9,0],[9,1],[9,2],[9,3],[2,0]]);
+ const full=hand([[6,0],[6,1],[6,2],[3,0],[3,1]]);
+ assert.equal(comparePokerHands(straightFlush,four),1);
+ assert.equal(comparePokerHands(full,four),-1);
+ assert.equal(comparePokerHands(four,four),0);
+ let seed=0;const rand=n=>(seed++*17+3)%n;
+ const game=miniStart('poker',rand);
+ assert.equal(JSON.parse(game.board).doneA,false);
+ const own=miniPrivate('poker',game.secret,'a').value;
+ assert.equal(own.length,5);
+ assert.equal(JSON.stringify(game.board).includes(JSON.stringify(own)),false);
+ const a=miniMove('poker',game.board,game.secret,'a',{cells:[1,2]},rand);
+ assert.equal(a.winner,null);assert.equal(JSON.parse(a.board).swapsA,2);
+ assert.throws(()=>miniMove('poker',game.board,game.secret,'a',{cells:[1,1]},rand),/交換/);
+ const b=miniMove('poker',a.board,a.secret,'b',{cells:[]},rand);
+ assert.ok(['a','b','draw'].includes(b.winner));
+ assert.equal(JSON.parse(b.board).showdown.a.length,5);
+ assert.equal(JSON.parse(b.board).showdown.b.length,5);
+});
