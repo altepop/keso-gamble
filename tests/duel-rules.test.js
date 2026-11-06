@@ -12,9 +12,9 @@ test('othello auto passes, then ends with correct score',()=>{
  let b='B'.repeat(64);b=b.slice(0,1)+'.'+b.slice(2);
  assert.equal(duelLegalMoves('othello',b,'B').length,0);
  assert.equal(duelScore(b).B,63);
- const almost='B'.repeat(62)+'.W';
+ const almost='B'.repeat(61)+'.WB';
  assert.equal(duelLegalMoves('othello',almost,'B').length,1);
- const done=playDuelMove('othello',almost,'B',62);
+ const done=playDuelMove('othello',almost,'B',61);
  assert.equal(done.winner,'B');assert.equal(done.nextColor,null);
 });
 test('gomoku five contiguous wins including diagonal, not only six',()=>{
