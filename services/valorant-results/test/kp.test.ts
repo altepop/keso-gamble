@@ -803,7 +803,7 @@ test('PvP rejects teammates, custom matches, unknown wallets and incomplete kill
 test('wagered Othello accepts both stakes atomically and pays the winner once after resignation',async()=>{
  const {boardDuelAction}=await import('../src/board-duels.ts');
  const f=await fixture();seed(f.sql,one,1000);seed(f.sql,two,1000);
- const makeId=n=>'00000000-0000-4000-8000-'+String(n).padStart(12,'0');
+ const makeId=(n:number)=>'00000000-0000-4000-8000-'+String(n).padStart(12,'0');
  const invite=await boardDuelAction(f.env,mapping,one,{id:makeId(1),action:'create',game:'othello',opponent:two,stake:500});
  assert.equal(invite.status,'pending');
  assert.equal((await readKpState(f.env,mapping,one)).cash,1000,'invite is not a unilateral charge');
@@ -828,7 +828,7 @@ test('wagered Othello accepts both stakes atomically and pays the winner once af
 test('Gomoku invitation may be declined without charges and cannot be accepted without both wallets',async()=>{
  const {boardDuelAction}=await import('../src/board-duels.ts');
  const f=await fixture();seed(f.sql,one,1000);
- const makeId=n=>'00000000-0000-4000-8000-'+String(n).padStart(12,'0');
+ const makeId=(n:number)=>'00000000-0000-4000-8000-'+String(n).padStart(12,'0');
  const invite=await boardDuelAction(f.env,mapping,one,{id:makeId(11),action:'create',game:'gomoku',opponent:two,stake:500});
  assert.equal(invite.board.length,225);
  await assert.rejects(boardDuelAction(f.env,mapping,two,{id:makeId(12),duel:invite.id,action:'accept',version:0}),/KPが不足/);
@@ -842,7 +842,7 @@ test('Gomoku invitation may be declined without charges and cannot be accepted w
 test('board duel forbids unauthorized opponents and stale moves and settles timed-out games',async(t)=>{
  const {boardDuelAction,DUEL_TURN_MS}=await import('../src/board-duels.ts');
  const f=await fixture();seed(f.sql,one,1000);seed(f.sql,two,1000);
- const makeId=n=>'00000000-0000-4000-8000-'+String(n).padStart(12,'0');
+ const makeId=(n:number)=>'00000000-0000-4000-8000-'+String(n).padStart(12,'0');
  await assert.rejects(boardDuelAction(f.env,mapping,one,{id:makeId(21),action:'create',game:'gomoku',opponent:one,stake:500}),/相手/);
  const invite=await boardDuelAction(f.env,mapping,one,{id:makeId(22),action:'create',game:'gomoku',opponent:two,stake:500});
  const started=await boardDuelAction(f.env,mapping,two,{id:makeId(23),duel:invite.id,action:'accept',version:0});
