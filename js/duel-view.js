@@ -1,4 +1,4 @@
-import {DUEL_GAMES,duelLegalMoves,duelScore} from './duel-rules.js';
+import {DUEL_GAMES,duelLegalMoves,duelScore} from './duel-rules.js?v=web-d9b96b4bdbea49e0';
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const kp=n=>Number(n||0).toLocaleString('ja-JP')+' KP';
 const title=(r)=>DUEL_GAMES[r.game]?.name||r.game;
