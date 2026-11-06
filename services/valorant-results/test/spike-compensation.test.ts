@@ -138,6 +138,8 @@ test('a genuinely missed match credits certified base without advancing present-
  const manual=kpEventId(guild,'manual-'+at,puuid);
  f.sql.prepare('INSERT INTO kp_events VALUES(?,?,?,?,?,?,?,?,?,?)').run(manual,guild,user,puuid,'manual-'+at,'spikerush','win',40,'manual',at);
  assert.equal(await recoverMatch(f.env,a,raw('manual-duplicate'),now,now),false);
+ const rounded=raw('rounded-duplicate');rounded.metadata.game_length_in_ms!+=250;
+ assert.equal(await recoverMatch(f.env,a,rounded,now,now),false,'a 250ms API/scoreboard rounding difference cannot pay the manual repair again');
 });
 test('network failures preserve the historical cursor, while unavailable API details are reported without blocking other members',async()=>{
  const f=await fixture();f.sql.prepare('INSERT INTO notifications VALUES(?,?,?,?,?,1)').run(riot,'missing','速報',at,'spikerush');

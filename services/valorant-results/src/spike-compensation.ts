@@ -87,8 +87,9 @@ export async function recoverMatch(env:Env,a:{guild:string;user:string;puuid:str
  const starts=(await env.DB.prepare("SELECT value FROM kp_settings WHERE key IN ('starts_at','spikerush_growth_started_at')").all<{value:string}>()).results;
  if(starts.length!==2||starts.some(s=>!integer(Number(s.value)))||m.startedAt<Math.max(a.linked_at,...starts.map(s=>Number(s.value))))return false;
  const id=kpEventId(a.guild,raw.metadata.match_id,a.puuid);
- // A manually repaired notification must not cause the real API match to be paid again under a different ID.
- const manual=await env.DB.prepare(`SELECT 1 AS n FROM kp_events WHERE guild=? AND user=? AND match=?`).bind(a.guild,a.user,'manual-'+m.endedAt).first();
+ // A scoreboard time may be rounded to seconds; the manual repair uses a five-minute guard too.
+ // Never pay the same repaired match again under the API ID because its end time differs slightly.
+ const manual=await env.DB.prepare(`SELECT 1 AS n FROM kp_events WHERE guild=? AND user=? AND mode='spikerush' AND match LIKE 'manual-%' AND CAST(substr(match,8) AS INTEGER) BETWEEN ? AND ?`).bind(a.guild,a.user,m.endedAt-5*60000,m.endedAt+5*60000).first();
  if(manual)return false;
  const earlier=(await env.DB.prepare(`SELECT detail,next_profile,at FROM (${receipts}) WHERE guild=? AND puuid=? AND user=?`).bind(a.guild,a.puuid,a.user).all<{detail:string;next_profile:string;at:number}>()).results
   .map(r=>({...r,end:Number(parse(r.detail).matchEndedAt??r.at)})).filter(r=>r.end<m.endedAt).sort((a,b)=>b.end-a.end);
