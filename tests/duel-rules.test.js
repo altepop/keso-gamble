@@ -20,7 +20,8 @@ test('othello auto passes, then ends with correct score',()=>{
 test('gomoku five contiguous wins including diagonal, not only six',()=>{
  let b=initialDuelBoard('gomoku');const n=15;
  for(let i=0;i<4;i++)b=playDuelMove('gomoku',b,'B',i*(n+1)).board;
- assert.equal(playDuelMove('gomoku',b,'B',4*(n+1)).winner,'B');
- assert.equal(playDuelMove('gomoku',b,'B',5*(n+1)).winner,'B');
+ const won=playDuelMove('gomoku',b,'B',4*(n+1));
+ assert.equal(won.winner,'B');
+ assert.equal(playDuelMove('gomoku',won.board,'B',5*(n+1)).winner,'B');
  assert.throws(()=>playDuelMove('gomoku',b,'W',0),/置けません/);
 });
