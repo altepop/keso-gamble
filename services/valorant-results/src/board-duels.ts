@@ -64,12 +64,14 @@ export async function ensureBoardDuels(env:KpEnv){
   env.DB.prepare('CREATE INDEX IF NOT EXISTS kp_board_duels_a ON kp_board_duels(guild,user_a,updated_at DESC)'),
   env.DB.prepare('CREATE INDEX IF NOT EXISTS kp_board_duels_b ON kp_board_duels(guild,user_b,updated_at DESC)'),
   env.DB.prepare("CREATE INDEX IF NOT EXISTS kp_board_duels_expiry ON kp_board_duels(guild,status,deadline_at)"),
+  env.DB.prepare("CREATE INDEX IF NOT EXISTS kp_board_duels_retention ON kp_board_duels(guild,status,updated_at)"),
   env.DB.prepare("INSERT OR IGNORE INTO kp_settings(key,value) VALUES('board_duels_enabled','1')"),
   env.DB.prepare(`CREATE TABLE IF NOT EXISTS kp_board_duel_actions(
    id TEXT PRIMARY KEY,guild TEXT NOT NULL,duel_id TEXT NOT NULL,actor TEXT NOT NULL,
    kind TEXT NOT NULL CHECK(kind IN ('accept','move','cancel','resign','timeout')),
    version INTEGER NOT NULL,at INTEGER NOT NULL,board TEXT,next_turn TEXT,winner TEXT,
    first_user TEXT,deadline_at INTEGER NOT NULL)`),
+  env.DB.prepare("CREATE INDEX IF NOT EXISTS kp_board_duel_actions_duel ON kp_board_duel_actions(duel_id)"),
   env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS kp_board_duel_apply AFTER INSERT ON kp_board_duel_actions BEGIN
    UPDATE kp_board_duels SET
     status=CASE WHEN NEW.kind='accept' THEN 'active'
@@ -281,6 +283,29 @@ export async function settleExpiredBoardDuels(env:KpEnv,guild:string,now=Date.no
   }
  }
  return {settled};
+}
+
+
+/** Bounded daily house-keeping: preserve the immutable KP ledger, discard only old game artifacts. */
+export async function cleanupBoardDuels(env:KpEnv,guild:string,now=Date.now()){
+ const ready=await env.DB.prepare("SELECT value FROM kp_settings WHERE key='board_duels_enabled'").first();
+ if(!ready)return {expired:0,removed:0};
+ await ensureBoardDuels(env);
+ const expired=await env.DB.prepare(`UPDATE kp_board_duels SET status='cancelled',updated_at=?,version=version+1
+  WHERE id IN(SELECT id FROM kp_board_duels WHERE guild=? AND status='pending' AND deadline_at<?
+   ORDER BY deadline_at LIMIT 30)`).bind(now,guild,now).run();
+ // No unsettled escrow can be deleted: only 30+ day-old finished / cancelled rooms.
+ const rows=(await env.DB.prepare(`SELECT id FROM kp_board_duels WHERE guild=?
+  AND status IN ('finished','cancelled') AND updated_at<? ORDER BY updated_at LIMIT 30`)
+  .bind(guild,now-30*86400_000).all<{id:string}>()).results;
+ if(!rows.length)return {expired:Number(expired.meta.changes??0),removed:0};
+ const placeholders=rows.map(()=>'?').join(','),ids=rows.map(x=>x.id);
+ await env.DB.batch([
+  env.DB.prepare(`DELETE FROM kp_board_duel_actions WHERE duel_id IN(${placeholders})`).bind(...ids),
+  env.DB.prepare(`DELETE FROM kp_board_duel_secrets WHERE guild=? AND id IN(${placeholders})`).bind(guild,...ids),
+  env.DB.prepare(`DELETE FROM kp_board_duels WHERE guild=? AND status IN ('finished','cancelled') AND id IN(${placeholders})`).bind(guild,...ids)
+ ]);
+ return {expired:Number(expired.meta.changes??0),removed:rows.length};
 }
 
 export async function boardDuelApi(request:Request,env:KpEnv,m:KpMapping,user:string,headers:Record<string,string>={}){
