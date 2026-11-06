@@ -48,9 +48,9 @@ test('LOOP chapter clear rewards show the 10x first-clear amounts',()=>{
  assert.match(html,/第二章の初クリア <strong>\+300,000 KP<\/strong>/);
 });
 
-test('負け怖コンペは45万KPで選べ、指令一覧にも勝つまで継続の条件を表示する',()=>{
- const state={...live([]),cash:500000,directives:[{target:'yuya',task:'competitive_until_win',status:'active',cost:450000,time:1}]};
+test('負け怖コンペは100万KPで選べ、指令一覧にも勝つまで継続の条件を表示する',()=>{
+ const state={...live([]),cash:1050000,directives:[{target:'yuya',task:'competitive_until_win',status:'active',cost:1000000,time:1}]};
  const html=directivesView(state,{'directive-task':'competitive_until_win'},'');
- assert.match(html,/value="competitive_until_win" selected/);assert.match(html,/450,000 KP/);
+ assert.match(html,/value="competitive_until_win" selected/);assert.match(html,/1,000,000 KP/);
  assert.match(html,/負け・引き分けは次もコンペ/);assert.match(html,/追加の指令代もかかりません/);
 });

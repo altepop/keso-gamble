@@ -268,17 +268,17 @@ test('premium solo orders charge once and require verified solo parties and deat
  f.sql.prepare('INSERT INTO death_unrated_sessions VALUES(?,?,?,?,?,?)').run('One#JP1','premium',1,Date.now()+10000,'death-solo',null);
  await collectKpMatch(f.env,mapping,u,'p-one');assert.equal(f.sql.prepare("SELECT status FROM kp_directives WHERE task='solo_death_unrated'").get()!.status,'completed');
 });
-test('until-win competitive costs 450,000 once, keeps losses/draws active, and completes only on a subsequent competitive win',async()=>{
- const f=await fixture();f.enableHistory();seed(f.sql,one,1000000);
+test('until-win competitive costs 1,000,000 once, keeps losses/draws active, and completes only on a subsequent competitive win',async()=>{
+ const f=await fixture();f.enableHistory();seed(f.sql,one,1500000);
  await operateKp(f.env,mapping,one,'until-win-order-001','directive',{target:two,task:'competitive_until_win'});
  await operateKp(f.env,mapping,one,'until-win-order-001','directive',{target:two,task:'competitive_until_win'});
- assert.equal((await readKpState(f.env,mapping,one)).cash,550000);
- assert.equal(f.sql.prepare('SELECT cost FROM kp_directives').get()!.cost,450000);
+ assert.equal((await readKpState(f.env,mapping,one)).cash,500000);
+ assert.equal(f.sql.prepare('SELECT cost FROM kp_directives').get()!.cost,1000000);
  const activeNotices:string[]=[],oldFetch=globalThis.fetch;
  globalThis.fetch=async(_url,init)=>{activeNotices.push(JSON.parse(String(init?.body)).content);return new Response(null,{status:204});};
  try{await (await import('../src/kp.ts')).flushKpDirectives({...f.env,DISCORD_WEBHOOK_URL:'https://discord.com/api/webhooks/1/fixture'},mapping);assert.match(activeNotices[0],/負け怖コンペ/);assert.match(activeNotices[0],/勝つまでコンペ/);assert.match(activeNotices[0],/追加の指令代はかからへん/);}finally{globalThis.fetch=oldFetch;}
  await assert.rejects(operateKp(f.env,mapping,one,'until-win-stack-001','directive',{target:two,task:'competitive'}));
- assert.equal((await readKpState(f.env,mapping,one)).cash,550000);
+ assert.equal((await readKpState(f.env,mapping,one)).cash,500000);
  const status=()=>f.sql.prepare('SELECT status FROM kp_directives').get()!.status;
  // The winning game already in progress when the directive was bought does not count.
  const old=game('until-old');old.players[0].puuid='p-two';await collectKpMatch(f.env,mapping,old,'p-two');assert.equal(status(),'active');
@@ -295,7 +295,7 @@ test('until-win competitive costs 450,000 once, keeps losses/draws active, and c
  await collectKpMatch(f.env,mapping,later('until-win'),'p-two');assert.equal(status(),'completed');
  await collectKpMatch(f.env,mapping,later('until-after-loss','competitive',false),'p-two');
  assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM kp_posts WHERE id LIKE 'until-win:%'").get()!.n,2);
- assert.equal((await readKpState(f.env,mapping,one)).cash,550000,'losses, draws and completion do not charge the issuer again');
+ assert.equal((await readKpState(f.env,mapping,one)).cash,500000,'losses, draws and completion do not charge the issuer again');
  const {flushKpDirectives}=await import('../src/kp.ts');const sent:string[]=[],original=globalThis.fetch;
  globalThis.fetch=async(_url,init)=>{sent.push(JSON.parse(String(init?.body)).content);return new Response(null,{status:204});};
  try{await flushKpDirectives({...f.env,DISCORD_WEBHOOK_URL:'https://discord.com/api/webhooks/1/fixture'},mapping);assert.match(sent[0],/負け怖コンペの指令達成/);}finally{globalThis.fetch=original;}

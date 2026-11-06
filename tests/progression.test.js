@@ -31,10 +31,10 @@ test('two-tab approvals credit only once',async()=>{
  const results=await Promise.allSettled([a.transact(s=>approveClaim(s,c.id)),b.transact(s=>approveClaim(s,c.id))]);assert.equal(results.filter(r=>r.status==='fulfilled').length,1);assert.equal(saved.cash,10500);
 });
 
-test('until-win directive keeps its 450,000 price and survives saved-state restoration',()=>{
- const s=createInitialState();s.cash=500000;
+test('until-win directive keeps its 1,000,000 price and survives saved-state restoration',()=>{
+ const s=createInitialState();s.cash=1050000;
  const d=issueDirective(s,{target:'yano',task:'competitive_until_win'});
- assert.equal(d.cost,450000);assert.equal(s.cash,50000);
+ assert.equal(d.cost,1000000);assert.equal(s.cash,50000);
  assert.equal(hydrateState(s).directives[0].task,'competitive_until_win');
- assert.equal(hydrateState(s).directives[0].cost,450000);
+ assert.equal(hydrateState(s).directives[0].cost,1000000);
 });
