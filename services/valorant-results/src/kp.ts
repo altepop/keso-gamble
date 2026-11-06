@@ -1,3 +1,4 @@
+import {settleUntilWin} from './competitive-directive.ts';
 import {feedIndex} from './community-feed.ts';
 import {creditVerifiedRelicBonus,creditVerifiedRelicLoss} from './relics.ts';
 import {settleSkirmishMatch} from './skirmish.ts';
@@ -280,6 +281,7 @@ export async function collectKpMatch(env:KpEnv,mapping:KpMapping,raw:Match,puuid
  const link=await env.DB.prepare(`SELECT a.user,a.linked_at,s.value AS starts_at,e.amount FROM kp_accounts a JOIN kp_settings s ON s.key='starts_at' LEFT JOIN kp_events e ON e.id=? WHERE a.guild=? AND a.puuid=?`).bind(id,mapping.guildId,puuid).first<{user:string;linked_at:number;starts_at:string;amount:number|null}>();
  if(!link||!mapping.accounts.some(a=>a.discordUserId===link.user)||start<Math.max(Number(link.starts_at),link.linked_at))return null;
  await env.DB.prepare("UPDATE kp_directives SET status='completed' WHERE guild=? AND target=? AND task=? AND status='active' AND at<=?").bind(mapping.guildId,link.user,status.mode,start).run();
+ if(status.mode==='competitive')await settleUntilWin(env,mapping.guildId,link.user,raw.metadata.match_id,start,status.outcome);
  const subject=raw.players.find(p=>p.puuid===puuid);
  // A missing party identifier cannot prove solo queueing.
  const solo=typeof subject?.party_id==='string'&&subject.party_id.length>0&&raw.players.filter(p=>p.team_id===subject.team_id).every(p=>typeof p.party_id==='string'&&p.party_id.length>0)&&raw.players.filter(p=>p.party_id===subject.party_id).length===1;
@@ -340,8 +342,8 @@ export async function flushKpDirectives(env:KpEnv & {DISCORD_WEBHOOK_URL:string;
  const url=new URL(env.KP_EARNINGS_WEBHOOK_URL||env.DISCORD_WEBHOOK_URL);if(url.protocol!=='https:'||url.hostname!=='discord.com'||!url.pathname.startsWith('/api/webhooks/'))throw Error('Invalid webhook');
  for(const d of rows){
   const name=(user:string)=>{const a=mapping.accounts.find(a=>a.discordUserId===user);return (configuredPlayers.find(p=>p.riotId.toLowerCase()===a?.riotId.toLowerCase())?.name??'メンバー').replace(/[@`*_~<>]/g,'');};
-  const task=d.task==='competitive'?'コンペ':d.task==='unrated'?'アンレ':d.task==='solo_competitive'?'ソロコンペ':d.task==='solo_death_unrated'?'ソロデスアンレ':'実績';
-  const content=d.status==='completed'?`✅ ${name(d.target)}、${task}の指令達成！おつかれ！`:`⚑ <@${d.target}>、次は${task}やで！\n${name(d.issuer)}が${d.cost.toLocaleString('ja-JP')} KPで指名。${d.task==='solo_death_unrated'?'指名後に /death start でアンレを予約してから、ソロで挑戦や。':`次の${task}完了で達成や。`}`;
+  const task=d.task==='competitive'?'コンペ':d.task==='unrated'?'アンレ':d.task==='solo_competitive'?'ソロコンペ':d.task==='solo_death_unrated'?'ソロデスアンレ':d.task==='competitive_until_win'?'負け怖コンペ':'実績';
+  const content=d.status==='completed'?`✅ ${name(d.target)}、${task}の指令達成！おつかれ！`:`⚑ <@${d.target}>、次は${task}やで！\n${name(d.issuer)}が${d.cost.toLocaleString('ja-JP')} KPで指名。${d.task==='competitive_until_win'?'勝つまでコンペやで！負け・引き分けはもう1試合。ソロでもパーティーでもええけど、コンペで1勝するまで続くで。追加の指令代はかからへん。':d.task==='solo_death_unrated'?'指名後に /death start でアンレを予約してから、ソロで挑戦や。':`次の${task}完了で達成や。`}`;
   const res=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({content,allowed_mentions:{parse:[],users:d.status==='active'?[d.target]:[]}}),signal:AbortSignal.timeout(10000)});
   if(!res.ok){console.warn('kp_directive_delivery_pending');break;}
   await env.DB.prepare('INSERT INTO kp_directive_deliveries VALUES(?,?) ON CONFLICT(id) DO UPDATE SET status=excluded.status').bind(d.id,d.status).run();

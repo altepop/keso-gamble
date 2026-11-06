@@ -10,6 +10,7 @@ export const MEMBERS=[{id:'riso',name:'リソ（デモ）'},{id:'yuya',name:'ゆ
 export const ORDERS=[
   {id:'solo_competitive',name:'ソロコンペ',cost:250000},
   {id:'solo_death_unrated',name:'ソロデスアンレ',cost:300000},
+  {id:'competitive_until_win',name:'負け怖コンペ（勝つまで）',cost:1000000},
   {id:'competitive',name:'コンペを1試合プレイさせる',cost:40000},
   {id:'unrated',name:'アンレを1試合プレイさせる',cost:12500},
   {id:'steam',name:'指定のSteam実績を解除させる',cost:17500},

@@ -4,7 +4,7 @@
 
 仲間内でKPを稼ぎ、増減させ、他人への指名指令に使うDiscord Activity。サーバー口座と、独立した端末内デモがあります。
 
-本番口座はDiscord Activity内で自動接続（管理側の初回OAuth設定が必要）。通常ブラウザーでは `/valo status` の接続コードでログイン。コンペ1勝900 KP（負け −100、負けて味方最下位 −300）、コンペ指名8,000 KP。詳細・保留モード・Discord内のURL Mapping設定は [試合KPの運用](docs/POINT_REWARDS_PLAN.md) を参照してください。
+本番口座はDiscord Activity内で自動接続（管理側の初回OAuth設定が必要）。通常ブラウザーでは `/valo status` の接続コードでログイン。コンペ1勝900 KP（負け −100、負けて味方最下位 −300）、コンペ指名40,000 KP、負け怖コンペ1,000,000 KP（勝つまで継続）。詳細・保留モード・Discord内のURL Mapping設定は [試合KPの運用](docs/POINT_REWARDS_PLAN.md) を参照してください。
 
 本番の株は全員共通の5分相場。24時間保有した株には朝9時の配当と株主優待があります。ニュース連動と移行方法は [株の仕様](docs/STOCK_MARKET.md) を参照してください。
 
