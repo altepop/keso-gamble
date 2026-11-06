@@ -852,3 +852,19 @@ test('board duel forbids unauthorized opponents and stale moves and settles time
  assert.equal(done.status,'finished');assert.equal(done.winner,started.turn_user===one?two:one);
  assert.equal(f.sql.prepare("SELECT SUM(delta) AS total FROM kp_ledger WHERE kind='duel'").get()!.total,0);
 });
+
+
+test('periodic duel timeout sweeps escrow once even with no viewer online',async(t)=>{
+ const {boardDuelAction,settleExpiredBoardDuels,DUEL_TURN_MS}=await import('../src/board-duels.ts');
+ const f=await fixture();seed(f.sql,one,2000);seed(f.sql,two,2000);
+ const id=(n:number)=>'00000000-0000-4000-8000-'+String(n).padStart(12,'0');
+ const invite=await boardDuelAction(f.env,mapping,one,{id:id(51),action:'create',game:'gomoku',opponent:two,stake:1000});
+ const started=await boardDuelAction(f.env,mapping,two,{id:id(52),action:'accept',duel:invite.id,version:0});
+ assert.equal((await settleExpiredBoardDuels(f.env,guild)).settled,0);
+ t.mock.timers.tick(DUEL_TURN_MS+10);
+ assert.equal((await settleExpiredBoardDuels(f.env,guild)).settled,1);
+ assert.equal((await settleExpiredBoardDuels(f.env,guild)).settled,0);
+ const finished=f.sql.prepare('SELECT status,winner FROM kp_board_duels WHERE id=?').get(invite.id)!;
+ assert.equal(finished.status,'finished');assert.equal(finished.winner,started.turn_user===one?two:one);
+ assert.equal(f.sql.prepare("SELECT SUM(delta) AS total FROM kp_ledger WHERE kind='duel'").get()!.total,0);
+});
