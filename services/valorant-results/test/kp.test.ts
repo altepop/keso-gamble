@@ -759,10 +759,11 @@ test('あかんbot reads relic bonuses from the real verified ledger and include
  assert.equal(newRun.relicBonuses.get(id),50,'restarts and later bot edits show the same settled proof');
 });
 
-test('direct opponent KP transfer nets 3 to 1 kills into 100 KP, capped at wallet and once per game',async()=>{
+test('direct opponent KP transfer nets 3 to 1 kills into 100 KP, capped at wallet and once per game',async(t)=>{
  const {evaluatePvpDuel,settlePvpDuels,ensurePvpDuels}=await import('../src/pvp-duel.ts');
  const f=await fixture();f.enableHistory();await ensurePvpDuels(f.env);
- f.sql.exec("UPDATE kp_settings SET value='0' WHERE key='pvp_duels_started_at'");
+ // A match must start after the activation cutoff; do not backdate the DB setting.
+ t.mock.timers.tick(20_000);
  seed(f.sql,two,1000);
  const raw=game('duel-one') as ReturnType<typeof game>&{players:Array<{puuid:string;team_id:string;stats:{deaths:number}}>;kills:Array<{killer:{puuid:string};victim:{puuid:string};round:number;time_in_round_in_ms:number}>};
  raw.players=[{puuid:'p-one',team_id:'red',stats:{deaths:1}},{puuid:'p-two',team_id:'blue',stats:{deaths:3}}];
