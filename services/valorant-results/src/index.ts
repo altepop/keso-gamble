@@ -1,3 +1,4 @@
+import {runSpikeCompensation} from './spike-compensation.ts';
 import {queueCommunityNews} from './community-news.ts';
 import {queueRelicPress} from './relic-press.ts';
 import {queueVdkPearlRoast} from './vdk-pearl-roast.ts';
@@ -516,6 +517,14 @@ export default {
     ctx.waitUntil(track(env,'steam',async()=>{const mapping=await initializeKp(env);if(mapping)await monitorSteam(env,mapping.guildId);}));
     ctx.waitUntil(track(env,'steam_posts',async()=>{const mapping=await initializeKp(env);if(!mapping)return;await queueSteamPosts(env,mapping.guildId);await flushMahjongPosts(env);}));
     ctx.waitUntil(track(env,'valorant',()=>monitor(env)));
+    ctx.waitUntil(track(env,'spike_compensation',async()=>{
+      const mapping=await initializeKp(env);if(!mapping)return;
+      await runSpikeCompensation(env,mapping,async(region,id)=>{
+        if(await state(env,'api_after')>Date.now())throw Error('Henrik rate-limit wait');
+        try{return await api<Match>(env,'/valorant/v4/match/'+encodeURIComponent(region)+'/'+encodeURIComponent(id));}
+        catch(error){if(error instanceof Error&&/HTTP 404|API 404/.test(error.message))return null;throw error;}
+      });
+    }));
     ctx.waitUntil((async()=>{
       const mapping=await initializeKp(env);if(!mapping)return;
       // Independent one-shot OAuth credential migration; never delays race or wallet jobs.

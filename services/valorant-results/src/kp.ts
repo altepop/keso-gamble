@@ -207,12 +207,12 @@ export async function drainKpInbox(env:KpEnv){
  }catch{console.warn('kp_credit_retry_pending');}}
 }
 /** The match's KP after any bottom-of-team debit; null until the event is recorded. */
-export async function kpMatchNet(env:KpEnv,id:string){const r=await env.DB.prepare("SELECT e.amount+COALESCE((SELECT delta FROM kp_ledger WHERE id='penalty:'||e.id),0)+COALESCE((SELECT delta FROM kp_ledger WHERE id='esc-extra:'||e.id),0)+COALESCE((SELECT delta FROM kp_ledger WHERE id='relic:'||e.id),0) AS net FROM kp_events e WHERE e.id=?").bind(id).first<{net:number}>();return r?Number(r.net):null;}
+export async function kpMatchNet(env:KpEnv,id:string){const r=await env.DB.prepare("SELECT e.amount+COALESCE((SELECT delta FROM kp_ledger WHERE id='penalty:'||e.id),0)+COALESCE((SELECT delta FROM kp_ledger WHERE id='esc-extra:'||e.id),0)+COALESCE((SELECT SUM(delta) FROM kp_ledger WHERE id IN ('relic:'||e.id,'spike-comp:'||e.id)),0) AS net FROM kp_events e WHERE e.id=?").bind(id).first<{net:number}>();return r?Number(r.net):null;}
 /** Verified receipt-only relic delta; never take the display amount from user input.
  * The primary-key lookup is invoked only for a new/loaded match notification. */
 export async function kpRelicBonus(env:KpEnv,guild:string,user:string,id:string):Promise<number>{
- const hit=await env.DB.prepare("SELECT delta FROM kp_ledger WHERE id=? AND guild=? AND user=? AND kind='relic'")
-  .bind('relic:'+id,guild,user).first<{delta:number}>();
+ const hit=await env.DB.prepare("SELECT SUM(delta) AS delta FROM kp_ledger WHERE id IN (?,?) AND guild=? AND user=? AND kind='relic'")
+  .bind('relic:'+id,'spike-comp:'+id,guild,user).first<{delta:number}>();
  return Number(hit?.delta??0); // negative = relic recoil (high-risk relics, 2026-11-05)
 }
 /** A single line shows BOTH the actual wallet total and a clear breakdown.
@@ -361,7 +361,7 @@ export async function prepareKpRun(env:KpEnv,mapping:KpMapping):Promise<KpRun>{
  * The loaded set is only per cron run, so other workers never share stale data. */
 export async function loadKpRunMatch(env:KpEnv,run:KpRun,id:string):Promise<void>{
  if(run.loaded.has(id))return;
- const row=await env.DB.prepare("SELECT e.amount+COALESCE((SELECT delta FROM kp_ledger WHERE id='penalty:'||e.id),0)+COALESCE((SELECT delta FROM kp_ledger WHERE id='relic:'||e.id),0) AS amount,COALESCE((SELECT delta FROM kp_ledger WHERE id='relic:'||e.id),0) AS relic,n.message,d.note FROM kp_events e LEFT JOIN kp_reward_notes d ON d.id=e.id LEFT JOIN kp_accounts a ON a.guild=e.guild AND a.puuid=e.puuid LEFT JOIN notifications n ON n.riot_id=a.riot AND n.match_id=e.match WHERE e.id=? AND e.guild=? LIMIT 1")
+ const row=await env.DB.prepare("SELECT e.amount+COALESCE((SELECT delta FROM kp_ledger WHERE id='penalty:'||e.id),0)+COALESCE((SELECT SUM(delta) FROM kp_ledger WHERE id IN ('relic:'||e.id,'spike-comp:'||e.id)),0) AS amount,COALESCE((SELECT SUM(delta) FROM kp_ledger WHERE id IN ('relic:'||e.id,'spike-comp:'||e.id)),0) AS relic,n.message,d.note FROM kp_events e LEFT JOIN kp_reward_notes d ON d.id=e.id LEFT JOIN kp_accounts a ON a.guild=e.guild AND a.puuid=e.puuid LEFT JOIN notifications n ON n.riot_id=a.riot AND n.match_id=e.match WHERE e.id=? AND e.guild=? LIMIT 1")
   .bind(id,run.mapping.guildId).first<{amount:number;relic:number;message:string|null;note:string|null}>();
  if(row){
   run.credits.set(id,row.amount);
