@@ -6,6 +6,7 @@ import {ensurePosts,enqueue} from './racing-posts.ts';
 export const PVP_RATE=50;
 const modes=new Set(['competitive','unrated','swiftplay','spikerush','hurm','ggteam','onefa']);
 type Tracked=ReadonlyMap<string,{puuid:string;since:number}>;
+type PvpEnv=KpEnv & {KP_EARNINGS_WEBHOOK_URL?:string};
 type Member={user:string;puuid:string;team:string;deaths:number;name:string;eligibleAt:number};
 export type Duel={a:Member;b:Member;killsA:number;killsB:number};
 const integer=(n:unknown):n is number=>Number.isSafeInteger(n)&&Number(n)>=0;
@@ -87,7 +88,7 @@ const insertSQL=`INSERT INTO kp_pvp_duels
  WHERE a.guild=? AND a.user=? AND a.puuid=? AND b.user=? AND b.puuid=?
  AND ?>=MAX(a.linked_at,b.linked_at,CAST(active.value AS INTEGER),CAST(configured.value AS INTEGER))
  ON CONFLICT(id) DO NOTHING`;
-export async function settlePvpDuels(env:KpEnv,mapping:KpMapping,raw:Match,tracked:Tracked,names:ReadonlyMap<string,string>=new Map()){
+export async function settlePvpDuels(env:PvpEnv,mapping:KpMapping,raw:Match,tracked:Tracked,names:ReadonlyMap<string,string>=new Map()){
  const {duels,missingDetails}=evaluatePvpDuel(raw,mapping,tracked,names);
  if(!duels.length&&!missingDetails)return {settled:0,missingDetails:false};
  const activated=await ensurePvpDuels(env);
