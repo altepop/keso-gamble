@@ -1,0 +1,55 @@
+import {connect4LegalMoves} from './duel-mini-games.js?v=web-4537ed3459a57d0f';
+const h=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const safeData=r=>{try{return JSON.parse(r.board);}catch{return {};}};
+const privateValue=r=>{try{return JSON.parse(r.private_hand);}catch{return r.private_hand??null;}};
+const kp=n=>Number(n).toLocaleString('ja-JP')+' KP';
+const left=r=>Math.max(0,Math.ceil((r.deadline_at-Date.now())/1000));
+const cardName=id=>{const ranks='23456789TJQKA',suits=['♠','♥','♦','♣'];return ranks[Math.floor(id/4)]+suits[id%4];};
+const cardColor=id=>id%4===1||id%4===2?'red':'black';
+export function miniBoardView(r,info,user,busy,picks=[],confirmResign=false){
+ const name=id=>info.members?.find(m=>m.id===id)?.name||'プレイヤー';
+ const turn=r.status==='active'&&r.turn_user===user&&!busy&&left(r)>0;
+ const a=r.black_user===r.user_a?r.user_a:r.user_b,b=a===r.user_a?r.user_b:r.user_a;
+ const me=a===user?'a':'b',state=safeData(r),hand=privateValue(r),finished=r.status==='finished';
+ let content='',note='';
+ if(r.game==='connect4'){
+  const can=turn?new Set(connect4LegalMoves(r.board)) : new Set();
+  content=`<div class="duel-connect4-head">${Array.from({length:7},(_,i)=>`<button type="button" data-duel-cell="${i}" ${can.has(i)?'':'disabled'} aria-label="${i+1}列に落とす">▼</button>`).join('')}</div>
+ <div class="duel-connect4-board">${[...r.board].map(c=>`<span class="duel-connect4-space ${c==='a'?'a':c==='b'?'b':''}"><i></i></span>`).join('')}</div>`;
+  note='縦・横・斜めに4個先に並べた側の勝利。駒は最下段の空きマスへ落ちる。';
+ }else if(r.game==='hitblow'){
+  content=`<div class="duel-private"><span>自分の秘密の数字</span><strong>${h(hand||'----')}</strong><small>4桁・重複なし。相手には見えない。</small></div>
+  <div class="duel-mini-hint">相手の秘密の数字4桁を推理しよう。Hit＝数字と位置が一致、Blow＝数字だけ一致。</div>
+  <div class="duel-guess-history">${(state.history??[]).slice(-12).reverse().map(x=>`<div class="duel-guess-row"><span>${x.by===me?'あなた':'相手'}</span><b>${h(x.guess)}</b><strong>${x.hit} Hit / ${x.blow} Blow</strong></div>`).join('')||'<p class="helper">まだ予想はない。</p>'}</div>
+  ${turn?`<div class="duel-mini-form"><input id="duel-guess" maxlength="4" inputmode="numeric" pattern="[0-9]{4}" placeholder="例：0123" aria-label="推理する4桁の数字"><button type="button" data-duel-act="move" data-duel-mini="hitblow" class="action-btn primary">数字を予想する</button></div>`:''}
+  ${state.reveal?`<p class="duel-mini-hint">正解：${h(state.reveal.a)} / ${h(state.reveal.b)}</p>`:''}`;
+  note='交互に推理し、先に4 Hitで勝利。40手以内に決着しなければ引き分け。';
+ }else if(r.game==='bluffdice'){
+  const bid=state.bid,canRaise=turn&&(bid?.by!==me),canChallenge=canRaise&&bid;
+  content=`<div class="duel-private"><span>自分の5個のダイス（相手には非公開）</span><div class="duel-own-dice">${Array.isArray(hand)?hand.map(n=>`<b>${h(n)}</b>`).join(''):'－'}</div></div>
+  <div class="duel-dual-score"><span>${h(name(a))}：${state.winsA??0}勝</span><b>先に2勝</b><span>${h(name(b))}：${state.winsB??0}勝</span></div>
+  <div class="duel-dice-bid">${bid?`現在の宣言 <strong>「${bid.face}の目が ${bid.count}個以上」</strong><small>${bid.by===me?'自分の宣言':'相手の宣言'}</small>`:'最初の宣言をしてください。'}</div>
+  ${turn?`<div class="duel-mini-form"><label>個数<select id="duel-bid-count">${Array.from({length:10},(_,i)=>`<option value="${i+1}">${i+1}個</option>`).join('')}</select></label><label>目<select id="duel-bid-face">${Array.from({length:6},(_,i)=>`<option value="${i+1}">${i+1}の目</option>`).join('')}</select></label>
+  <button type="button" data-duel-act="move" data-duel-mini="bid" class="action-btn primary">宣言する</button>
+  ${canChallenge?'<button type="button" data-duel-act="move" data-duel-mini="challenge" class="action-btn duel-challenge">嘘だ！</button>':''}</div>`:''}
+  ${(state.history??[]).slice().reverse().map(x=>`<div class="duel-mini-round"><b>ラウンド${x.round}：${h(name(x.winner==='a'?a:b))}勝利</b><small>宣言 ${x.bid.face}の目 ${x.bid.count}個 ／ 実際 ${x.actual}個</small><small>公開：${x.diceA.join(' ')} 対 ${x.diceB.join(' ')}</small></div>`).join('')}`;
+  note='双方に5個のサイコロ。宣言より強く言い直すか「嘘だ！」と挑戦。疑われた宣言が正しければ宣言者の勝利。1はワイルドではない。';
+ }else if(r.game==='poker'){
+  const cards=Array.isArray(hand)?hand:[],picked=new Set(picks);
+  content=`<div class="duel-private"><span>あなたの5枚（相手には非公開）</span></div>
+  <div class="duel-cards">${cards.map((c,i)=>`<button type="button" class="duel-card ${cardColor(c)} ${picked.has(i)?'selected':''}" data-duel-card="${i}" ${turn?'':'disabled'}><b>${h(cardName(c))}</b><small>${picked.has(i)?'交換':'保持'}</small></button>`).join('')}</div>
+  <div class="duel-mini-hint">先手：${state.doneA?'交換済み':'未確定'}　後手：${state.doneB?'交換済み':'未確定'}</div>
+  ${turn?`<button type="button" class="action-btn primary duel-poker-submit" data-duel-act="move" data-duel-mini="poker">${picked.size}枚交換して確定（最大3枚）</button>`:''}
+  ${state.showdown?`<div class="duel-showdown"><p>カード公開</p><span>${h(name(a))}：${state.showdown.a.map(cardName).join(' ')}</span><span>${h(name(b))}：${state.showdown.b.map(cardName).join(' ')}</span></div>`:''}`;
+  note='5枚を配り、各自1回だけ0〜3枚交換。双方確定で役を比較し勝敗を決定。同点は引き分け。';
+ }
+ const outcome=finished?(r.winner==='draw'?'引き分け・双方に賭け金を返金':r.winner===user?'🏆 勝利！ 総取り '+kp(r.stake*2):'敗北・'+kp(r.stake)+'を失った'):'';
+ return `<div class="duel-arena duel-mini-arena">
+ <div class="duel-arena-head"><div><span class="duel-tag">${h(info.games?.[r.game]?.name||r.game)}</span><strong>${kp(r.stake)} × 2</strong></div><span class="duel-state">${r.status==='finished'?'決着':'対戦中'}</span></div>
+ <div class="duel-players"><span>① ${h(name(a))}</span><span>VS</span><span>② ${h(name(b))}</span></div>
+ ${r.status==='active'?`<div class="duel-turn ${turn?'my-turn':''}">${turn?'🟢 あなたの番':h(name(r.turn_user))+'の番'} ・ 残り${Math.ceil(left(r)/60)}分</div>`:''}
+ ${content}
+ ${finished?`<p class="duel-result">${h(outcome)}</p>`:''}
+ ${r.status==='active'?`<div class="duel-actions">${left(r)===0?'<button type="button" data-duel-act="timeout" class="action-btn primary">⏰ 時間切れを精算する</button>':(confirmResign?'<button type="button" data-duel-act="resign" class="action-btn duel-challenge">投了を確定する（敗北）</button><button type="button" data-duel-act="resign-cancel" class="action-btn">戻る</button>':'<button type="button" data-duel-act="resign-preview" class="action-btn">投了する</button>')}</div>`:''}
+ <p class="duel-footnote">${h(note)}</p></div>`;
+}

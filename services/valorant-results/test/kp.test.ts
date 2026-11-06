@@ -868,3 +868,95 @@ test('periodic duel timeout sweeps escrow once even with no viewer online',async
  assert.equal(finished.status,'finished');assert.equal(finished.winner,started.turn_user===one?two:one);
  assert.equal(f.sql.prepare("SELECT SUM(delta) AS total FROM kp_ledger WHERE kind='duel'").get()!.total,0);
 });
+
+
+test('four mini duels keep other hands secret, and Hit & Blow settles two escrowed wallets',async()=>{
+ const {boardDuelAction,boardDuelList}=await import('../src/board-duels.ts');
+ const f=await fixture();seed(f.sql,one,1500);seed(f.sql,two,1500);
+ const id=(n:number)=>'00000000-0000-4000-8000-'+String(n).padStart(12,'0');
+ const invite=await boardDuelAction(f.env,mapping,one,{id:id(101),action:'create',game:'hitblow',opponent:two,stake:500});
+ const started=await boardDuelAction(f.env,mapping,two,{id:id(102),duel:invite.id,action:'accept',version:0});
+ assert.equal(started.status,'active');assert.equal((await readKpState(f.env,mapping,one)).cash,1000);
+ assert.equal((await readKpState(f.env,mapping,two)).cash,1000);
+ const first=started.black_user!,second=first===one?two:one;
+ const secret=JSON.parse(String(f.sql.prepare('SELECT data FROM kp_board_duel_secrets WHERE id=?').get(invite.id)!.data));
+ assert.equal(started.private_hand,secret.privateA,'the first player receives only their own secret');
+ const other=(await boardDuelList(f.env,mapping,second)).matches.find(x=>x.id===invite.id)!;
+ assert.equal(other.private_hand,secret.privateB,'the opponent gets a different secret through the same indexed list');
+ assert.equal(started.board.includes(secret.privateB),false,'the public history has no opponent code');
+ f.resetQueries();
+ await boardDuelList(f.env,mapping,first);await boardDuelList(f.env,mapping,first);
+ assert.ok(f.queries()<=2,'an indexed two-call room refresh uses at most two D1 reads');
+ const win=await boardDuelAction(f.env,mapping,first,{id:id(103),action:'move',duel:invite.id,version:1,guess:secret.privateB});
+ assert.equal(win.status,'finished');assert.equal(win.winner,first);
+ assert.equal((await readKpState(f.env,mapping,first)).cash,2000);
+ assert.equal((await readKpState(f.env,mapping,second)).cash,1000);
+ assert.equal(f.sql.prepare("SELECT SUM(delta) AS total FROM kp_ledger WHERE kind='duel'").get()!.total,0);
+});
+test('bluff dice and poker are server-authoritative: cannot see opponent hand before settlement',async()=>{
+ const {boardDuelAction,boardDuelList}=await import('../src/board-duels.ts');
+ const f=await fixture();seed(f.sql,one,3000);seed(f.sql,two,3000);
+ const id=(n:number)=>'00000000-0000-4000-8000-'+String(n).padStart(12,'0');
+ const invite=await boardDuelAction(f.env,mapping,one,{id:id(201),action:'create',game:'bluffdice',opponent:two,stake:500});
+ let room=await boardDuelAction(f.env,mapping,two,{id:id(202),duel:invite.id,action:'accept',version:0});
+ const a=room.black_user!,b=a===one?two:one;
+ const priv=JSON.parse(String(f.sql.prepare('SELECT data FROM kp_board_duel_secrets WHERE id=?').get(invite.id)!.data));
+ assert.ok(Array.isArray(priv.privateA)&&Array.isArray(priv.privateB));
+ const theirs=(await boardDuelList(f.env,mapping,b)).matches.find(x=>x.id===invite.id)!;
+ assert.deepEqual(JSON.parse(String(theirs.private_hand)),priv.privateB);
+ assert.equal(JSON.stringify(JSON.parse(room.board)).includes('privateA'),false);
+ room=await boardDuelAction(f.env,mapping,a,{id:id(203),action:'move',duel:invite.id,version:1,choice:'bid',count:10,face:6});
+ room=await boardDuelAction(f.env,mapping,b,{id:id(204),action:'move',duel:invite.id,version:2,choice:'challenge'});
+ assert.equal(JSON.parse(room.board).round,2);
+ const next=room.turn_user!;
+ room=await boardDuelAction(f.env,mapping,next,{id:id(205),action:'move',duel:invite.id,version:3,choice:'bid',count:10,face:6});
+ room=await boardDuelAction(f.env,mapping,next===one?two:one,{id:id(206),action:'move',duel:invite.id,version:4,choice:'challenge'});
+ assert.equal(room.status,'finished');
+ const poker=await boardDuelAction(f.env,mapping,one,{id:id(207),action:'create',game:'poker',opponent:two,stake:500});
+ let deal=await boardDuelAction(f.env,mapping,two,{id:id(208),action:'accept',duel:poker.id,version:0});
+ const first=deal.turn_user!,opponent=first===one?two:one;
+ assert.equal(JSON.parse(String(deal.private_hand)).length,5);
+ assert.equal(JSON.parse(deal.board).showdown,undefined,'cards are hidden until both players finish');
+ deal=await boardDuelAction(f.env,mapping,first,{id:id(209),action:'move',duel:poker.id,version:1,cells:[0,2]});
+ assert.equal(JSON.parse(deal.board).showdown,undefined);
+ deal=await boardDuelAction(f.env,mapping,opponent,{id:id(210),action:'move',duel:poker.id,version:2,cells:[]});
+ assert.equal(deal.status,'finished');
+ assert.equal(JSON.parse(deal.board).showdown.a.length,5);
+ assert.equal(f.sql.prepare("SELECT SUM(delta) AS total FROM kp_ledger WHERE kind='duel'").get()!.total,0);
+});
+test('Connect Four enforces gravity, rejects wrong turns, and pays only at game end',async()=>{
+ const {boardDuelAction}=await import('../src/board-duels.ts');
+ const f=await fixture();seed(f.sql,one,1000);seed(f.sql,two,1000);
+ const id=(n:number)=>'00000000-0000-4000-8000-'+String(n).padStart(12,'0');
+ const invite=await boardDuelAction(f.env,mapping,one,{id:id(301),action:'create',game:'connect4',opponent:two,stake:200});
+ let room=await boardDuelAction(f.env,mapping,two,{id:id(302),duel:invite.id,action:'accept',version:0});
+ const first=room.turn_user!,second=first===one?two:one;
+ await assert.rejects(boardDuelAction(f.env,mapping,second,{id:id(303),duel:invite.id,action:'move',version:1,cell:0}),/着手/);
+ for(let step=0;step<7;step++){
+  const actor=step%2===0?first:second,col=step%2===0?0:1;
+  room=await boardDuelAction(f.env,mapping,actor,{id:id(310+step),action:'move',duel:invite.id,version:step+1,cell:col});
+ }
+ assert.equal(room.winner,first);assert.equal(room.status,'finished');
+ assert.equal((await readKpState(f.env,mapping,first)).cash,1200);
+ assert.equal((await readKpState(f.env,mapping,second)).cash,800);
+});
+test('upgrading a live Othello-only schema preserves active games and upgrades check constraints once',async()=>{
+ const {boardDuelAction,ensureBoardDuels}=await import('../src/board-duels.ts');
+ const f=await fixture();
+ f.sql.exec(`CREATE TABLE kp_board_duels(
+  id TEXT PRIMARY KEY,guild TEXT NOT NULL,user_a TEXT NOT NULL,user_b TEXT NOT NULL,
+  game TEXT NOT NULL CHECK(game IN ('othello','gomoku')),
+  stake INTEGER NOT NULL,status TEXT NOT NULL,board TEXT NOT NULL,black_user TEXT,turn_user TEXT,
+  winner TEXT,version INTEGER NOT NULL,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL,deadline_at INTEGER NOT NULL)`);
+ const id=(n:number)=>'00000000-0000-4000-8000-'+String(n).padStart(12,'0');
+ f.sql.prepare("INSERT INTO kp_board_duels VALUES(?,?,?,?,'othello',500,'pending',?,NULL,NULL,NULL,0,?,?,?)")
+  .run(id(401),guild,one,two,'.'.repeat(64),Date.now(),Date.now(),Date.now()+60000);
+ await ensureBoardDuels(f.env);
+ const migrated=f.sql.prepare('SELECT game,user_a,user_b,stake,status FROM kp_board_duels WHERE id=?').get(id(401))!;
+ assert.equal(migrated.game,'othello');assert.equal(migrated.stake,500);
+ assert.match(String(f.sql.prepare("SELECT sql FROM sqlite_master WHERE name='kp_board_duels'").get()!.sql),/connect4/);
+ assert.equal(f.sql.prepare("SELECT value FROM kp_settings WHERE key='board_duel_schema_version'").get()!.value,'2');
+ seed(f.sql,one,1000);seed(f.sql,two,1000);
+ const invite=await boardDuelAction(f.env,mapping,one,{id:id(402),action:'create',game:'poker',opponent:two,stake:100});
+ assert.equal(invite.game,'poker');
+});

@@ -24,7 +24,7 @@ export {VoiceGateway} from './voice-gateway.ts';
 import {ensureVoice} from './voice-api.ts';
 import { claimDeathMatch } from './death-sessions.ts';
 import {ensurePvpDuels,settlePvpDuels} from './pvp-duel.ts';
-import {settleExpiredBoardDuels} from './board-duels.ts';
+import {settleExpiredBoardDuels,cleanupBoardDuels} from './board-duels.ts';
 import type { KpRun } from './kp.ts';
 import { shouldRunRetention, cleanupExpiredCredentials } from './retention.ts';
 import { initializeKp, syncKpAccounts, collectKpMatch, drainKpInbox, flushKpDirectives, prepareKpRun, loadKpRunMatch, kpEventId, kpCreditLine, kpRelicBonus } from './kp.ts';
@@ -549,7 +549,11 @@ export default {
   },
   async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
     // Existing minute cron: a single small cleanup window each JST day; no additional schedule.
-    if(shouldRunRetention(_event.scheduledTime??Date.now()))ctx.waitUntil(cleanupExpiredCredentials(env,Date.now()).catch(()=>console.warn('credential_retention_pending')));
+    if(shouldRunRetention(_event.scheduledTime??Date.now())){
+      ctx.waitUntil(cleanupExpiredCredentials(env,Date.now()).catch(()=>console.warn('credential_retention_pending')));
+      ctx.waitUntil((async()=>{const mapping=await initializeKp(env);if(mapping)await cleanupBoardDuels(env,mapping.guildId);})()
+       .catch(()=>console.warn('board_duel_retention_pending')));
+    }
     // Every five minutes, finish abandoned KP board matches; indexed and skipped until first use.
     if(Math.floor((_event.scheduledTime??Date.now())/60000)%5===0)
       ctx.waitUntil(track(env,'board_duel_timeout',async()=>{const mapping=await initializeKp(env);if(mapping)await settleExpiredBoardDuels(env,mapping.guildId);}));
