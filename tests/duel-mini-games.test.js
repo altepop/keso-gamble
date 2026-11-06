@@ -7,8 +7,8 @@ test('Connect Four gravity, four in a row, column overflow and diagonal',()=>{
  assert.equal(connect4Move(board,'a',3).board[38],'a');
  for(let c=0;c<4;c++)board=connect4Move(board,'a',c).board;
  assert.equal(connect4Move(board,'a',4).winner,'a');
- const result=connect4Move('a'.repeat(35)+'.'.repeat(7),'b',2);
- assert.equal(result.board[37],'b');
+ const result=connect4Move('.'.repeat(35)+'a'.repeat(7),'b',2);
+ assert.equal(result.board[30],'b');
  assert.throws(()=>connect4Move('a'.repeat(42),'b',1),/置けません/);
  assert.deepEqual(connect4LegalMoves('.'.repeat(42)),[0,1,2,3,4,5,6]);
 });
