@@ -175,7 +175,7 @@ export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:strin
   else if(action==='trade'){const order=applyStockOrder(state,args);result=order.result;stockTrade=order.stockTrade;}
   else if(action==='spin')result=args.type==='numbers'?spinNumbers(state,args.bets,cryptoRouletteNumber()):spin(state,args.type,args.amount,args.choice??0,cryptoRouletteNumber());
   else if(action==='directive'){
-   const costs:Record<string,number>={competitive:40000,unrated:12500,solo_competitive:250000,solo_death_unrated:300000},task=String(args.task),target=String(args.target),base=Object.hasOwn(costs,task)?costs[task]:0;
+   const costs:Record<string,number>={competitive:40000,unrated:12500,solo_competitive:250000,solo_death_unrated:300000,competitive_until_win:450000},task=String(args.task),target=String(args.target),base=Object.hasOwn(costs,task)?costs[task]:0;
    const discount=stockDiscount(base,state.stockBenefits.percent),cost=discount.paid;
    if(!cost||!mapping.accounts.some(a=>a.discordUserId===target)||target===user)throw Error('指名する相手と課題を選んでください。');
    if(state.cash<cost)throw Error('KPが足りません。');
