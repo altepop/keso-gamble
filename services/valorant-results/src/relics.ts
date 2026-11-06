@@ -561,7 +561,7 @@ export function nativeRelicLoss(
  * - THRILL modes (コンペ・アンレ・エスカレーション・デスマッチ・DM一発勝負・スカーミッシュ・雀魂): a WIN gets the full relic bonus with no
  *   cap ("数倍"). A normal loss keeps its base reward with no bonus. A NEGATIVE result (最下位・ラス・大勝負の負け) grows by the same
  *   relic strength: the extra loss is taken even beyond the balance, as 借KP (borrowShortfall), like the base penalty.
- * - SAFE modes (スパイクラッシュ〔基礎だけ〕・TDM・スイフト・レプリケーション・ユナイト・通話・QUIZ): the bonus is at most the base reward.
+ * - SAFE modes (スパイクラッシュ〔基礎だけ〕・TDM・スイフト・レプリケーション・ユナイト・通話・QUIZ): the bonus is at most the base reward (Spike Rush: ten times its base).
  * - ONE-OFF rewards: LOOP up to 20,000 per receipt; Steam up to 20,000 per receipt and 30,000 per day.
  * - アンレの特別抽選 is computed apart: the bonus is on the match reward without the lottery prize.
  * Special effects (they multiply the relic part only): 竜騎士4点 win ×1.25 / extra loss ×0.5; 色違い (thrill wins) ×1.5;
@@ -653,7 +653,8 @@ export async function creditVerifiedRelicBonus(
  const detail=evaluateRelicBonus(loadout,mode,{amount,win,spikeGamesBefore});
  if(!detail.bonus)return 0;
  let bonus=Math.floor(detail.bonus*relicWinFactor(relicFlags(loadout),kind==='thrill'));
- if(kind==='safe')bonus=Math.min(bonus,amount);
+ // Spike Rush keeps its 40/20 calculation base; only its final payout ceiling is raised.
+ if(kind==='safe')bonus=Math.min(bonus,amount*(mode==='spikerush'?10:1));
  if(kind==='oneoff'){
   const cap=ONE_OFF_CAPS[mode]!;
   bonus=Math.min(bonus,cap.receipt);

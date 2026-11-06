@@ -201,20 +201,20 @@ test('real trigger-created Spike results credit opening relic KP from match 1, w
  f.sql.prepare('INSERT INTO notifications(riot_id,match_id,message,ended_at,mode,sent) VALUES(?,?,?,?,?,1)')
   .run('One#JP1','relic-first','📢 試合結果\n💬 ナイス！',at,'spikerush');
  const match=raw('relic-first');
- assert.equal(await collectKpMatch(f.env,mapping,match,'p-one'),80,'40 base + 50 opening, limited to the base in a safe mode (2026-11-05): +40');
- assert.equal(f.balance(),80);
+ assert.equal(await collectKpMatch(f.env,mapping,match,'p-one'),90,'40 base + 50 opening, below the new +400 relic ceiling');
+ assert.equal(f.balance(),90);
  assert.equal(f.profile().games,1);
  assert.equal((f.sql.prepare("SELECT COUNT(*) AS n FROM kp_ledger WHERE id=? AND kind='relic'").get('relic:'+id) as {n:number}).n,1);
  const log=f.sql.prepare('SELECT base,bonus,details FROM relic_effect_logs WHERE id=?').get('relic:'+id) as {base:number;bonus:number;details:string};
- assert.equal(log.base,40);assert.equal(log.bonus,40);
+ assert.equal(log.base,40);assert.equal(log.bonus,50);
  const bot=String((f.sql.prepare("SELECT message FROM notifications WHERE match_id='relic-first'").get() as {message:string}).message);
- assert.match(bot,/この試合 \+80 KP/);
- assert.match(bot,/試合報酬 \+40 KP （基礎40・補正0・端数精算 40 KP）\n  ↳ 🧿 遺物補正 \+40 KP/);
+ assert.match(bot,/この試合 \+90 KP/);
+ assert.match(bot,/試合報酬 \+40 KP （基礎40・補正0・端数精算 40 KP）\n  ↳ 🧿 遺物補正 \+50 KP/);
  assert.equal((bot.match(/🧿 遺物補正/g)??[]).length,1);
  assert.equal(JSON.parse(log.details).spikeOpening.flatPerRelic,50);
  assert.equal(JSON.parse(log.details).spikeOpening.game,1);
  await drainKpInbox(f.env);await collectKpMatch(f.env,mapping,match,'p-one');
- assert.equal(f.balance(),80,'verified receipt is idempotent even when inbox or match is reprocessed');
+ assert.equal(f.balance(),90,'verified receipt is idempotent even when inbox or match is reprocessed');
  assert.equal((f.sql.prepare("SELECT COUNT(*) AS n FROM kp_ledger WHERE kind='relic'").get() as {n:number}).n,1);
 });
 test('an archived match without a pending inbox is never backpaid when relics are newly equipped',async()=>{
