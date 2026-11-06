@@ -71,6 +71,7 @@ export function duelScreen({info,user,live,cash,selectedId,game='othello',stake=
  ${members.map(m=>`<button type="button" class="duel-opponent-choice ${m.id===target?'selected':''}" data-duel-target-option="${esc(m.id)}" aria-pressed="${m.id===target}">${esc(m.name)}${m.id===target?' ✓':''}</button>`).join('')}</div>`:''}
  ${!members.length?`<p class="duel-opponent-help" role="status">${error?'対戦相手を取得できません。画面を更新してください。':loading?'対戦相手を確認しています':'対戦相手が表示されません。右下の「更新」を押してください。'}</p>`:''}
  ${!info?.members?.length&&members.length?'<p class="duel-opponent-help">口座に登録されたメンバーを表示しています</p>':''}
+ ${error?'<p class="duel-opponent-help" role="alert">'+esc(error)+'</p>':''}
  </div>
  <div class="duel-explainer"><strong>勝てば +${kp(stake)} / 負ければ −${kp(stake)}</strong><br>申し込み時にはKPは減らない。相手が承認すると双方から${kp(stake)}ずつ引かれる。</div>
  <button type="button" class="action-btn primary duel-full" data-duel-act="create" ${busy||!target||cash<stake?'disabled':''}>対戦を申し込む</button>
