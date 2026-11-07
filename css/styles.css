@@ -1262,3 +1262,17 @@ body:has(.screen[data-view="relics"]){--body-bg:#07020f}body:has(.screen[data-vi
 .duel-gomoku .duel-square.duel-preview-cell::after{content:'✓';position:absolute;z-index:2;font-size:19px;font-weight:900;color:#fff;line-height:1;pointer-events:none}
 @media(min-width:800px){.duel-board-scroll{height:520px;max-width:520px;margin:0 auto}}
 @media(max-width:360px){.duel-gomoku-tools{padding:8px}.duel-gomoku-confirm-actions .action-btn{padding:9px;font-size:12px}}
+
+/* Gomoku uses a wooden intersection grid, not 225 large "legal move" dots. */
+.duel-board-scroll .duel-gomoku .duel-square,
+.duel-board-scroll .duel-gomoku .duel-square.available{border:0;background:#c4aa72}
+.duel-board-scroll .duel-gomoku .duel-square::before,
+.duel-board-scroll .duel-gomoku .duel-square.available::before{
+ content:'';display:block;position:absolute;inset:0;width:auto;height:auto;border-radius:0;
+ background:linear-gradient(90deg,transparent calc(50% - .65px),#73532e calc(50% - .65px),#73532e calc(50% + .65px),transparent calc(50% + .65px)),
+ linear-gradient(0deg,transparent calc(50% - .65px),#73532e calc(50% - .65px),#73532e calc(50% + .65px),transparent calc(50% + .65px));
+ pointer-events:none
+}
+.duel-board-scroll .duel-gomoku .duel-piece{width:76%;height:76%;position:relative;z-index:1}
+.duel-board-scroll .duel-gomoku .duel-square.duel-preview-cell{background:#f6d780}
+.duel-board-scroll .duel-gomoku .duel-square.duel-preview-cell::after{z-index:2}
