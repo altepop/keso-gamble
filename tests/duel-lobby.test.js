@@ -40,3 +40,18 @@ test('duel copy avoids artificial hype and fragment slogans',()=>{
   assert.ok(!page.includes(phrase),'unwanted copy: '+phrase);
  }
 });
+
+test('more than five verified KP targets appear in both duel and high-end luxury controls',async()=>{
+ const {luxuryPanel}=await import('../js/racing-view.js');
+ const roster=['VDK','藤村','石原','名古屋','小林','千葉ゆうや','別の参加者'].map((name,i)=>({id:'10000000000000'+String(200+i).padStart(4,'0'),name}));
+ const duels=render({info:{members:roster,matches:[],games:{}},opponentPickerOpen:true});
+ for(const m of roster){
+  assert.ok(duels.includes(m.name),'duel candidate missing '+m.name);
+  assert.ok(duels.includes('data-duel-target-option="'+m.id+'"'));
+ }
+ const luxury=luxuryPanel({members:roster,selfUserId:self,horses:[],luxury:{},stockBenefits:{percent:0}},{readonly:false});
+ for(const m of roster){
+  assert.ok(luxury.includes(m.name),'luxury target missing '+m.name);
+  assert.ok(luxury.includes('value="'+m.id+'"'),'luxury option ID missing '+m.name);
+ }
+});
