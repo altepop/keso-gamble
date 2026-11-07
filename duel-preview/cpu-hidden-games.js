@@ -70,7 +70,7 @@ export function cpuHitBlow(board,side,level,random){
  // Non-solution probes can be optimal when they split the remaining answers
  // better than any candidate. They are considered only when enough uncertainty
  // remains to recoup the extra turn.
- if(remaining.length>5){
+ if(remaining.length>40){
   for(const guess of spaced(codes,60))if(!used.has(guess)&&!candidates.includes(guess))candidates.push(guess);
  }
  let best=candidates[0],score=Infinity;
@@ -84,7 +84,7 @@ export function cpuHitBlow(board,side,level,random){
   for(let n=0;n<25;n++)if(n!==20)cost+=partitions[n]*partitions[n];
   cost/=answers.length;
   if(remaining.includes(guess))cost-=Math.min(1,answers.length/Math.max(1,remaining.length));
-  else cost+=remaining.length<=20?1.6:.28;
+  else cost+=remaining.length<=40?10:2.8;
   if(cost<score){score=cost;best=guess;}
  }
  return {guess:best};
