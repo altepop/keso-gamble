@@ -15,6 +15,8 @@ let browser;const errors=[],requests=[];
  const context=await browser.newContext({viewport:{width:390,height:844},deviceScaleFactor:1,hasTouch:true,isMobile:engine==='webkit',reducedMotion:'reduce'});
  const page=await context.newPage();
  page.on('pageerror',err=>errors.push(err.message));
+ page.on('response',res=>{if(res.status()>=400)errors.push('HTTP '+res.status()+' '+res.url());});
+ page.on('requestfailed',req=>errors.push('fetch '+req.url()));
  page.on('request',req=>{if(/api\/kp|\.workers\.dev|discord\.com/.test(req.url()))requests.push(req.url());});
  await page.goto(url,{waitUntil:'networkidle'});
  assert.equal(await page.locator('body.cpu-practice').count(),1);
