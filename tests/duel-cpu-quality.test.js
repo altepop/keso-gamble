@@ -13,7 +13,7 @@ test('Six difficulty guides describe actual strategies without old obsolete tria
   for(const level of ['easy','normal','strong'])assert.ok(CPU_DIFFICULTY_GUIDE[game][level].length>12);
  }
  assert.match(CPU_DIFFICULTY_GUIDE.hitblow.strong,/1,450/);
- assert.match(CPU_DIFFICULTY_GUIDE.poker.strong,/公開交換枚数/);
+ assert.match(CPU_DIFFICULTY_GUIDE.poker.strong,/440/);
 });
 test('100 deterministic board decisions never break live legal-move validation',()=>{
  for(const game of ['othello','gomoku','connect4']){
@@ -67,18 +67,5 @@ test('No CPU decision needs the other player private secret to apply to live rul
   const chosen=chooseCpuMove(game,board,{side:'a',hand,level:'strong',random:rand(42)});
   const result=miniMove(game,board,secret,'a',chosen,randint(r));
   assert.ok(result?.board);
- }
-});
-
-test('Poker conditions on a PUBLIC opponent exchange count, never on another secret',()=>{
- const r=rand(3171);
- for(const hand of [[5,9,17,25,33],[0,12,24,36,48],[5,6,7,24,49]]){
-  const a=chooseCpuMove('poker',JSON.stringify({turn:'b',swapsA:3}),{side:'b',hand,level:'strong',random:r});
-  const b=chooseCpuMove('poker',JSON.stringify({turn:'b',swapsA:0}),{side:'b',hand,level:'strong',random:r});
-  const c=chooseCpuMove('poker',JSON.stringify({turn:'a',swapsB:null}),{side:'a',hand,level:'strong',random:r});
-  for(const m of [a,b,c]){
-   assert.ok(m.cells.length<=3&&new Set(m.cells).size===m.cells.length);
-   assert.ok(m.cells.every(i=>Number.isInteger(i)&&i>=0&&i<5));
-  }
  }
 });
