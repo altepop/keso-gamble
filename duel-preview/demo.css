@@ -1,0 +1,7 @@
+body{background:#040c22;color:#eef3ff}.demo-toolbar{max-width:760px;margin:0 auto;padding:13px 14px 11px;background:#0b1c35;border-bottom:1px solid #3a567b;position:relative;z-index:20;display:flex;flex-direction:column;gap:9px}
+.demo-brand{display:flex;gap:10px;align-items:center}.demo-brand>strong{font-size:19px}.demo-brand>span{font-size:14px;color:#b7c8e0}.demo-brand>a{margin-left:auto;color:#a3d7ff;font-size:12px}
+.demo-control-line{display:flex;align-items:center;gap:6px;flex-wrap:wrap}.demo-control-title{font-size:12px;color:#adc1dd;min-width:84px}.demo-control-line button,.demo-control-line select{font-size:13px;color:#eef5ff;background:#0c2745;border:1px solid #43709b;padding:9px 11px;border-radius:8px;min-height:41px}.demo-control-line button[aria-pressed=true]{color:#07162c;background:#b4f5e2;border-color:#c8ffe9;font-weight:700}.demo-control-line select{min-width:146px;flex:1}.demo-control-line button:focus-visible,.demo-control-line select:focus-visible{outline:3px solid #85d5ff}
+.demo-notice{background:#06192b;color:#b8cfe5;font-size:12px;line-height:1.65;border-radius:8px;border:1px solid #244c6c;padding:9px 11px;margin:0}.demo-notice strong{color:#b3ffdc}
+#demo-feedback{font-size:12px;line-height:1.5;color:#c6ffd8;min-height:0}#demo-feedback:empty{display:none}
+#demo-app .screen{min-height:unset;padding-bottom:55px}.duel-opponent-toggle,.duel-opponent-choice{font-size:15px}
+@media(max-width:390px){.demo-control-title{min-width:70px}.demo-toolbar{padding:10px}.demo-control-line button{font-size:12px;padding:8px}}
