@@ -34,20 +34,6 @@ function boardView(r,info,user,busy,confirmResign,gomokuPreviewCell=null,recentM
  ${previewValid?`<span><strong>${previewRow}行 ${previewCol}列</strong> を選択中</span><div class="duel-gomoku-confirm-actions"><button type="button" class="action-btn primary" data-duel-confirm-cell="${gomokuPreviewCell}" ${busy?'disabled':''}>ここに置く</button><button type="button" class="action-btn" data-duel-cancel-cell="1">取り消す</button></div>`:
  `<span>${canPlay?'置きたいマスをタップして選択':'相手の手番または対局終了まで待機'}</span>`}
  </div></div>`:'';
- // Othello passes automatically. Explain why the same color may play again.
- // The displayed hint is derived from the existing board, without extra D1 reads.
- let passNotice='';
- if(r.game==='othello'&&r.status==='active'&&r.turn_user){
-  const toPlay=r.turn_user===black?'B':'W',skipped=toPlay==='B'?'W':'B';
-  try{
-   if(duelLegalMoves('othello',r.board,toPlay).length>0&&
-      duelLegalMoves('othello',r.board,skipped).length===0){
-    passNotice='<p class="duel-footnote duel-auto-pass" role="status">'+
-     (skipped==='B'?'黒':'白')+'は置ける場所がないため自動パス。'+
-     (toPlay==='B'?'黒':'白')+'が続けて置く番です。</p>';
-   }
-  }catch{}
- }
  const score=duelScore(r.board);
  const result=r.winner==='draw'?'引き分け：賭け金を返金':r.winner===user?'勝利：受取 '+kp(r.stake*2)+'（差引 +'+kp(r.stake)+'）':r.winner?'敗北：差引 −'+kp(r.stake):'';
  const expired=timeLeft(r.deadline_at)===0;
@@ -56,7 +42,6 @@ function boardView(r,info,user,busy,confirmResign,gomokuPreviewCell=null,recentM
  <span class="duel-state">${esc(status(r))}</span></div>
  <div class="duel-players"><span><b class="duel-token black">●</b>${esc(name(black))}</span><span>VS</span><span><b class="duel-token white">●</b>${esc(name(white))}</span></div>
  ${r.status==='active'?`<div class="duel-turn ${turn?'my-turn':''}">${turn?'🟢 あなたの番':esc(name(r.turn_user))+'の番'}　<span data-duel-timer="${r.deadline_at}">残り${Math.ceil(timeLeft(r.deadline_at)/60)}分</span></div>`:''}
- ${passNotice}
  ${gomokuTools}
  ${r.game==='gomoku'?`<div class="duel-board-scroll" data-duel-board-scroll="${esc(r.id)}" tabindex="0" role="region" aria-label="五目並べの拡大盤面。指で上下左右に移動できる">`:''}
  <div class="duel-board ${r.game==='gomoku'?'duel-gomoku':'duel-othello'}" role="grid" aria-label="${esc(title(r))}の盤面" style="--duel-size:${size}">
