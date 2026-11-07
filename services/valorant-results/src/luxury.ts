@@ -1,4 +1,5 @@
 import {stockDiscount} from './stock-market.ts';
+import {kpTargetAllowed,kpTargetMembers} from './kp-target-members.ts';
 import {raceCatchphrase,raceAside} from './racing-voice.ts';
 // Luxury items bought with KP. The purchase row (and the crown race, for crown items) is written by a
 // trigger on the same wallet operation insert as the KP debit, so either everything applies or nothing.
@@ -39,7 +40,7 @@ export async function buyLuxury(env:KpEnv&{KP_EARNINGS_WEBHOOK_URL?:string},mapp
  const luxury:{id:string;item:string;target:string|null;payload:string|null;until:number|null;crown?:{race:number;name:string;user:string}}={id:'lux-'+kpRandom(),item:item.id,target:null,payload:null,until:null};
  if(item.needs==='target'){
   const target=String(args.target??'');
-  if(!mapping.accounts.some(a=>a.discordUserId===target)||target===user)throw Error('相手を選んでください。');
+  if(target===user||!await kpTargetAllowed(env,mapping,target))throw Error('KP口座のある相手を選んでください。');
   if((await roastLevelsOf(env,mapping))(target)==='mild')throw Error('相手の煽りレベルが「控えめ」なので使えません。');
   if(item.id==='roast-post'&&!env.KP_EARNINGS_WEBHOOK_URL)throw Error('稼ぎchの投稿先がまだ設定されていません。');
   luxury.target=target;
@@ -48,7 +49,8 @@ export async function buyLuxury(env:KpEnv&{KP_EARNINGS_WEBHOOK_URL?:string},mapp
  if(item.id==='title'){if(!TITLES.includes(args.title))throw Error('称号を選んでください。');luxury.payload=String(args.title);}
  if(item.id==='crown-name'||item.id==='crown-target'){
   const race=await nextCrownSlot(env,mapping.guildId,now);if(race===null)throw Error('空いている枠がありません。');
-  const name=item.id==='crown-name'?validCrownName(args.text):`${memberName(mapping,luxury.target!)}を笑う会`;
+  const targetName=luxury.target?(await kpTargetMembers(env,mapping)).find(m=>m.id===luxury.target)?.name:null;
+  const name=item.id==='crown-name'?validCrownName(args.text):`${targetName??memberName(mapping,luxury.target!)}を笑う会`;
   luxury.crown={race,name,user:item.id==='crown-name'?user:luxury.target!};luxury.payload=name;
  }
  if(item.needs==='horse'||item.needs==='retired'){
@@ -76,16 +78,16 @@ export async function luxuryPosts(env:KpEnv&{KP_EARNINGS_WEBHOOK_URL?:string},ma
  if(text)await enqueue(env,'luxury:'+luxury.id,text,now);
 }
 /** What everyone sees: today's convicts, the current billboard horse; and the viewer's own title. */
-export async function luxuryView(env:KpEnv,mapping:KpMapping,user:string,now=Date.now()){
+export async function luxuryView(env:KpEnv,mapping:KpMapping,user:string,now=Date.now(),displayNames:ReadonlyMap<string,string>=new Map()){
  await ensureLuxury(env);
  const rows=(await env.DB.prepare("SELECT user,item,target,payload,until FROM kp_luxury WHERE guild=? AND (item IN ('title','statue') OR until>?) ORDER BY created_at DESC LIMIT 200").bind(mapping.guildId,now).all<{user:string;item:string;target:string|null;payload:string|null;until:number|null}>()).results;
- const convicts=[...new Set(rows.filter(r=>r.item==='convict').map(r=>r.target!))].map(u=>({user:u,name:memberName(mapping,u)}));
+ const convicts=[...new Set(rows.filter(r=>r.item==='convict').map(r=>r.target!))].map(u=>({user:u,name:displayNames.get(u)??memberName(mapping,u)}));
  const board=rows.find(r=>r.item==='billboard');
  const horse=board?await env.DB.prepare('SELECT name FROM kp_horses WHERE id=?').bind(board.payload).first<{name:string}>():null;
  return {
   title:rows.find(r=>r.item==='title'&&r.user===user)?.payload??null,
   convicts,
-  billboard:board&&horse?{horseName:horse.name,ownerName:memberName(mapping,board.user),until:board.until}:null,
+  billboard:board&&horse?{horseName:horse.name,ownerName:displayNames.get(board.user)??memberName(mapping,board.user),until:board.until}:null,
   statues:rows.filter(r=>r.item==='statue'&&r.user===user).map(r=>r.payload),
  };
 }

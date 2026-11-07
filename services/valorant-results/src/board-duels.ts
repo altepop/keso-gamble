@@ -1,5 +1,6 @@
 import type {KpEnv,KpMapping} from './kp.ts';
 import {debtOf} from './kp-debt.ts';
+import {kpTargetMembers,kpTargetAllowed} from './kp-target-members.ts';
 // @ts-expect-error Shared pure browser-side rules (no declaration file).
 import {initialDuelBoard,playDuelMove,DUEL_GAMES} from '../../../js/duel-rules.js';
 
@@ -144,7 +145,7 @@ async function present(env:KpEnv,mapping:KpMapping,user:string,id:string){
  return room(env,mapping.guildId,id,user);
 }
 function validateActionId(id:unknown){if(typeof id!=='string'||!UUID.test(id))throw Error('操作IDが不正です。');return id;}
-const activeMembers=(m:KpMapping)=>new Set(m.accounts.map(a=>a.discordUserId));
+
 export async function boardDuelList(env:KpEnv,m:KpMapping,user:string){
  await ensureBoardDuels(env);
  const matches=(await env.DB.prepare(`SELECT d.*,
@@ -154,7 +155,7 @@ export async function boardDuelList(env:KpEnv,m:KpMapping,user:string){
  WHERE d.guild=? AND (d.user_a=? OR d.user_b=?)
  ORDER BY d.updated_at DESC LIMIT 20`).bind(user,m.guildId,user,user).all<BoardDuel>()).results;
  return {games:GAMES,limit:DUEL_MAX_STAKE,turnMs:DUEL_TURN_MS,invitationMs:DUEL_INVITE_MS,
-  members:m.accounts.map(a=>({id:a.discordUserId,name:a.riotId.split('#')[0]})),matches};
+  members:await kpTargetMembers(env,m),matches};
 }
 export async function boardDuelAction(env:KpEnv,m:KpMapping,user:string,body:Record<string,unknown>){
  await ensureBoardDuels(env);
@@ -168,7 +169,7 @@ export async function boardDuelAction(env:KpEnv,m:KpMapping,user:string,body:Rec
  if(kind==='create'){
   const game=String(body.game??''),target=String(body.opponent??''),stake=Number(body.stake);
   if(!Object.hasOwn(GAMES,game))throw Error('ゲームを選んでください。');
-  if(!activeMembers(m).has(target)||target===user)throw Error('対戦する相手を選んでください。');
+  if(target===user||!await kpTargetAllowed(env,m,target))throw Error('KP口座のある対戦相手を選んでください。');
   if(!Number.isSafeInteger(stake)||stake<100||stake>DUEL_MAX_STAKE)throw Error('賭け金は100〜100,000 KPです。');
   const old=await env.DB.prepare('SELECT * FROM kp_board_duels WHERE id=?').bind(id).first<BoardDuel>();
   if(old){

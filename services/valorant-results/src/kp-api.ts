@@ -2,6 +2,7 @@ import {boardDuelApi} from './board-duels.ts';
 import {steamApi,steamCallback} from './steam-auth.ts';
 import {privateCasinoAllowed,privateCasinoRound} from './private-casino.ts';
 import {memberNames} from './member-names.ts';
+import {kpTargetMembers} from './kp-target-members.ts';
 import {kpTrend} from './kp-trend.ts';
 import {d1OptionalMode} from './d1-optional-mode.ts';
 import {communityFeed,feedRevision,publicTrade} from './community-feed.ts';
@@ -67,7 +68,7 @@ export async function readKpState(env:KpEnv,mapping:KpMapping,user:string){
  const market=await prepareStocks(env,mapping.guildId,user);
  const wallet=await env.DB.prepare('SELECT balance,version FROM kp_wallets WHERE guild=? AND user=?').bind(mapping.guildId,user).first<{balance:number;version:number}>();
  const row=await env.DB.prepare('SELECT data,version FROM kp_state WHERE guild=? AND user=?').bind(mapping.guildId,user).first<{data:string;version:number}>();if(!wallet||!row)throw Error('口座が見つかりません。');
- const state=JSON.parse(row.data);state.cash=wallet.balance;state.serverWallet=true;state.walletVersion=wallet.version;state.stateVersion=row.version;state.prices=market.prices;state.history=market.history;state.holdings={...Object.fromEntries((MARKET as {id:string}[]).map(s=>[s.id,0])),...state.holdings};state.lastMarketAt=market.at;state.stockMarket=await stockView(env,market,user);state.stockBenefits=await stockBenefits(env,market,user);Object.assign(state,hydrateRacing(state),hydrateMleague(state),hydrateCasino(state),hydrateMoreCasino(state));state.jackpot=await jackpotOf(env,mapping.guildId);if(!validRoastLevel(state.roastLevel))state.roastLevel=defaultRoastLevel(mapping,user);state.racing=await racingView(env,mapping);state.horses=await ownedHorses(env,mapping,user);const riotId=riotIdOf(mapping,user);state.mastery=riotId?await masteryOf(env,riotId,state.roastLevel):[];state.luxury=await luxuryView(env,mapping,user);for(const h of state.horses)h.statue=state.luxury.statues.includes(h.id);
+ const state=JSON.parse(row.data);state.cash=wallet.balance;state.serverWallet=true;state.walletVersion=wallet.version;state.stateVersion=row.version;state.prices=market.prices;state.history=market.history;state.holdings={...Object.fromEntries((MARKET as {id:string}[]).map(s=>[s.id,0])),...state.holdings};state.lastMarketAt=market.at;state.stockMarket=await stockView(env,market,user);state.stockBenefits=await stockBenefits(env,market,user);Object.assign(state,hydrateRacing(state),hydrateMleague(state),hydrateCasino(state),hydrateMoreCasino(state));state.jackpot=await jackpotOf(env,mapping.guildId);if(!validRoastLevel(state.roastLevel))state.roastLevel=defaultRoastLevel(mapping,user);state.racing=await racingView(env,mapping);state.horses=await ownedHorses(env,mapping,user);const riotId=riotIdOf(mapping,user);state.mastery=riotId?await masteryOf(env,riotId,state.roastLevel):[];const members=await kpTargetMembers(env,mapping);state.luxury=await luxuryView(env,mapping,user,Date.now(),new Map(members.map(m=>[m.id,m.name])));for(const h of state.horses)h.statue=state.luxury.statues.includes(h.id);
  // Immutable match/quiz/ledger history is cached across an isolate only
  // while kp_wallets.version is unchanged. Recalculate day-specific counters
  // below on every request to handle midnight without a D1 history scan.
@@ -78,7 +79,7 @@ export async function readKpState(env:KpEnv,mapping:KpMapping,user:string){
  state.claims=rewards.map(e=>({id:e.id,activity:e.mode,reference:e.match,reward:e.amount,status:'approved',time:e.at})).concat(quiz.map(e=>({id:e.id,activity:'quiz.'+e.mode,reference:e.game,reward:e.amount,status:'approved',time:e.completed_at}))).concat(voice.map(e=>({id:e.id,activity:'voice',reference:'通話 '+e.slot+'回目',reward:e.amount,status:'approved',time:e.at}))).sort((a:{time:number},b:{time:number})=>b.time-a.time).slice(0,100);
  state.claims.push(...state.stockMarket.dividends.map((d:{day:string;amount:number;at:number})=>({id:'dividend:'+d.day,activity:'株配当',reference:d.day,reward:d.amount,status:'approved',time:d.at})));state.claims.sort((a:{time:number},b:{time:number})=>b.time-a.time);
  state.directives=(await env.DB.prepare('SELECT id,issuer,target,task,game,achievement,cost,status,at AS time FROM kp_directives WHERE guild=? AND (issuer=? OR target=?) ORDER BY at DESC,id LIMIT 100').bind(mapping.guildId,user,user).all()).results;
- state.members=mapping.accounts.map(a=>({id:a.discordUserId,name:configuredPlayers.find(p=>p.riotId.toLowerCase()===a.riotId.toLowerCase())?.name??a.riotId.split('#')[0]}));
+ state.members=members;
  state.escalationSpins=(await env.DB.prepare("SELECT id,kind,tier,award,balance_before AS beforeBalance,balance_after AS afterBalance,at FROM kp_escalation_spins WHERE guild=? AND user=? ORDER BY at DESC LIMIT 12").bind(mapping.guildId,user).all()).results;
  // Every wallet movement, for the 入出金履歴 (claims stay for the older views).
  state.ledger=ledger;
