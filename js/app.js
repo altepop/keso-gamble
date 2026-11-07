@@ -1193,7 +1193,11 @@ async function refreshMarket() {
 }
 async function refreshDuel(force=false){
  if(screen!=='duels'||!live||document.hidden||duelBusy||!wallet.connected)return;
- const now=Date.now();if(!force&&now-duelLastFetch<10000)return;
+ const now=Date.now();const active=duelData?.matches?.some(m=>m.status==='active'&&m.deadline_at>now);
+ const pending=duelData?.matches?.some(m=>m.status==='pending'&&m.deadline_at>now);
+ // Preserve 10-second updates during play but reduce idle reads: 20s for invites, 30s otherwise.
+ const cadence=active?10000:pending?20000:30000;
+ if(!force&&now-duelLastFetch<cadence)return;
  duelLastFetch=now;duelLoading=true;render();
  try{
   const fresh=await wallet.duels();
