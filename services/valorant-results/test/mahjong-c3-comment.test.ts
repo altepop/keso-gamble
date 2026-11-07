@@ -112,3 +112,12 @@ test('a report without an extracted finding leaves exactly the old message uncha
   assert.equal(paipuPost({...summary,c3},members,()=> 'normal'),old);
  }
 });
+
+test('new post-call reports use discard ordinals instead of claiming an uninterrupted turn',()=>{
+ const r={...review,version:2,findings:[{...different,position:'discard'}]};
+ assert.ok(acceptedC3Report(summary,r));const lines=equalC3Comments(summary,r,members);
+ assert.match(lines.join(''),/4打目/);assert.doesNotMatch(lines.join(''),/4巡目/);
+ assert.equal(acceptedC3Report(summary,{...r,findings:[{...different,position:'round'}]}),null);
+ assert.equal(acceptedC3Report(summary,{...r,findings:[different]}),null);
+ assert.equal(acceptedC3Report(summary,{...r,version:1}),null);
+});

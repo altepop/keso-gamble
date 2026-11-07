@@ -43,3 +43,9 @@ test('four-player recommendations must be a legal masked discard actually held, 
  assert.equal(legalC3Discard({legal:['1p']},{mask},{action:37}),null);
  assert.equal(legalC3Discard({legal:['1p']},{mask},{action:NaN}),null);
 });
+
+test('even a recommended legal tile is withheld when the recorded actual discard is masked illegal',async()=>{
+ const {legalC3Discard}=await import('../scripts/mahjong-c3-infer.mjs');const mask=Array(46).fill(1);mask[10]=0;
+ assert.equal(legalC3Discard({actual:'2p',legal:['1p','2p']},{mask},{action:9}),null);
+ assert.equal(legalC3Discard({actual:'1p',legal:['1p','2p']},{mask},{action:9}),'1p');
+});

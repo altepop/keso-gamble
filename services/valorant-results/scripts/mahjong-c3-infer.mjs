@@ -55,6 +55,12 @@ export async function createC3Reviewer(rootPath){
  }
  return {
   version:m.version,
+  async inspect(caseData){
+   if(disposed)throw Error('c3_disposed');
+   const observed=encoder.encode({seat:caseData.seat,events:caseData.events});
+   const actual=Array.from({length:37},(_,i)=>indexTile(i)).indexOf(caseData.actual);
+   return {actualLegal:actual>=0&&Boolean(observed.mask[actual]),legalDiscardCount:Array.from(observed.mask).slice(0,37).filter(Boolean).length};
+  },
   async probe(){
    if(disposed)throw Error('c3_disposed');
    // This test performs a genuine network invocation, but never uses a
@@ -72,7 +78,7 @@ export async function createC3Reviewer(rootPath){
    for(const c of cases){
     try{
      const suggested=await choose(c);
-     if(suggested)results.push({seat:c.seat,round:c.round,turn:c.turn,actual:c.actual,recommended:suggested});
+     if(suggested)results.push({seat:c.seat,round:c.round,turn:c.turn,actual:c.actual,recommended:suggested,position:c.position});
     }catch(_error){
      // A malformed round/case cannot become a fabricated verdict.
      // Continue other independent cases; no per-hand secrets in logs.
@@ -86,7 +92,7 @@ export async function createC3Reviewer(rootPath){
    if(different)selected.push(different);
    if(same&&!selected.some(f=>f.seat===same.seat&&f.round===same.round&&f.turn===same.turn))selected.push(same);
    for(const f of results)if(selected.length<4&&!selected.some(q=>q.seat===f.seat&&q.round===f.round&&q.turn===f.turn))selected.push(f);
-   return {version:1,source:'c3',model:MODEL,uuid:summary.uuid,findings:selected};
+   return {version:2,source:'c3',model:MODEL,uuid:summary.uuid,findings:selected};
   },
   async close(){if(!disposed){disposed=true;await network.release();}},
  };
@@ -96,6 +102,7 @@ export async function createC3Reviewer(rootPath){
 export function legalC3Discard(caseData,observed,primary){
  const index=primary?.action;
  if(!Number.isInteger(index)||index<0||index>36||!observed?.mask?.[index])return null;
+ if(caseData?.actual!==undefined){const actual=Array.from({length:37},(_,i)=>indexTile(i)).indexOf(caseData.actual);if(actual<0||!observed.mask[actual])return null;}
  const suggested=indexTile(index);
  return caseData?.legal?.includes(suggested)?suggested:null;
 }

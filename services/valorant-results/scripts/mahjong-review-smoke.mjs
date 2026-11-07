@@ -23,3 +23,22 @@ try{
  for(const f of result.findings){const c=cases.find(c=>c.seat===f.seat&&c.round===f.round&&c.turn===f.turn&&c.actual===f.actual);if(!c||!c.legal.includes(f.recommended))throw Error('model_discard_unverified');}
  console.log('Equal review: real model + isolated worker + artificial legal four-player replay passed; no real-game, Discord or KP claim.');
 }finally{await reviewer.close();}
+
+// All are artificial records. This verifies the actual encoder's state/mask,
+// plus real network output after each supported strategic transition.
+const {fourScenario,FOUR_SCENARIOS}=await import('../test/fixtures/mahjong-review-four.ts');
+const {createC3Reviewer}=await import('./mahjong-c3-infer.mjs');
+const four=await createC3Reviewer(root);
+try{
+ for(const kind of FOUR_SCENARIOS){
+  const {summary,actions}=fourScenario(kind),cases=buildC3Cases(actions,summary);
+  const event=kind==='reach'?'reach_accepted':kind;
+  const relevant=cases.filter(c=>c.events.some(e=>e.type===event));
+  if(!relevant.length)throw Error('synthetic_transition_missing_'+kind);
+  // Include the immediate called-hand discard if present and all sampled seats.
+  for(const c of relevant){const inspected=await four.inspect(c);if(!inspected.actualLegal||!inspected.legalDiscardCount)throw Error('synthetic_mask_invalid_'+kind);}
+  const report=await four.review(summary,actions);
+  if(!acceptedC3Report(summary,report))throw Error('synthetic_model_report_missing_'+kind);
+  console.log('Equal review: artificial '+kind+' context, real encoder legal masks and model findings passed');
+ }
+}finally{await four.close();}
