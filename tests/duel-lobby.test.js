@@ -67,9 +67,9 @@ test('high-value duel requires a visible second confirmation, with net wager exp
 });
 test('recent results are computed only from returned 20 duels, never another D1 query',()=>{
  const data={games:{},members:users,matches:[
-  {id:'1',status:'finished',user_a:self,user_b:friend,winner:self,stake:1000,game:'othello',version:3},
-  {id:'2',status:'finished',user_a:self,user_b:friend,winner:friend,stake:1000,game:'othello',version:2},
-  {id:'3',status:'finished',user_a:self,user_b:friend,winner:'draw',stake:1000,game:'othello',version:5}
+  {id:'1',status:'finished',user_a:self,user_b:friend,winner:self,stake:1000,game:'othello',version:3,board:'.'.repeat(64),black_user:self,deadline_at:Date.now()},
+  {id:'2',status:'finished',user_a:self,user_b:friend,winner:friend,stake:1000,game:'othello',version:2,board:'.'.repeat(64),black_user:self,deadline_at:Date.now()},
+  {id:'3',status:'finished',user_a:self,user_b:friend,winner:'draw',stake:1000,game:'othello',version:5,board:'.'.repeat(64),black_user:self,deadline_at:Date.now()}
  ]};
  const html=render({info:data,target:friend,selectedId:'no-room'});
  assert.match(html,/1勝 1敗 1分/);
