@@ -20,7 +20,17 @@ const monitoredNames=(mapping:KpMapping)=>new Map(mapping.accounts.map(a=>{
 /** Exact guild KP participants with a real wallet and state; never mint a wallet to fill the picker.
  * One bounded indexed roster query, not a per-candidate lookup. Full-ID aliases from
  * the existing encrypted name config apply to participants who do not play VALORANT. */
+const rosterCache=new WeakMap<object,{at:number;guild:string;value:Promise<KpTargetMember[]>}>();
+/** An Activity may request state and duels together. Reuse their same roster
+ * for 30s rather than reading every account list on every 10-second poll. */
 export async function kpTargetMembers(env:KpEnv,mapping:KpMapping):Promise<KpTargetMember[]>{
+ const entry=rosterCache.get(env.DB);
+ if(entry&&entry.guild===mapping.guildId&&Date.now()-entry.at<30_000)return entry.value;
+ const value=fetchKpTargetMembers(env,mapping);
+ rosterCache.set(env.DB,{at:Date.now(),guild:mapping.guildId,value});
+ try{return await value;}catch(error){if(rosterCache.get(env.DB)?.value===value)rosterCache.delete(env.DB);throw error;}
+}
+async function fetchKpTargetMembers(env:KpEnv,mapping:KpMapping):Promise<KpTargetMember[]>{
  await ensureQuizKp(env);
  const monitored=monitoredNames(mapping);
  const known=(await env.DB.prepare(`SELECT p.user
