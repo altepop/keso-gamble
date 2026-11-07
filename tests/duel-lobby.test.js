@@ -117,3 +117,27 @@ test('unconfirmed operation is shown even in a selected active game',()=>{
  assert.match(html,/data-duel-retry/);
  assert.match(html,/id="duel-guess"/);
 });
+
+test('Othello clearly shows an auto-pass and allows the same color to move again',async()=>{
+ const {duelLegalMoves,playDuelMove}=await import('../js/duel-rules.js');
+ const fixtures=[
+  {board:'WW.W.BBBWWWWWWBBWWWWWWWBWWBWBWWBWWBBWBWB.WBWBWBBWWBBBBBB.WBBBWWW',color:'B',cell:4,owner:self,label:/白は置ける場所がないため自動パス/},
+  {board:'.WWWW.B.BBBBBBBBBBBWBBBBBBWBWBBBBBBWWWBBBBWWWWWBBBWWBWBBBBBBBBWW',color:'W',cell:7,owner:friend,label:/黒は置ける場所がないため自動パス/}
+ ];
+ for(const fixture of fixtures){
+  const after=playDuelMove('othello',fixture.board,fixture.color,fixture.cell);
+  assert.equal(after.passed,true);
+  const match={id:'pass-demo',game:'othello',status:'active',user_a:self,user_b:friend,
+   black_user:self,turn_user:fixture.owner,board:after.board,version:42,stake:1000,
+   deadline_at:Date.now()+60000};
+  const info={games:{othello:{name:'オセロ'}},members:users,matches:[match]};
+  const sameSide=render({user:fixture.owner,info,selectedId:'pass-demo'});
+  assert.match(sameSide,fixture.label);
+  assert.match(sameSide,/続けて置く番です/);
+  assert.match(sameSide,/あなたの番/);
+  const legal=duelLegalMoves('othello',after.board,fixture.color);
+  for(const cell of legal)assert.match(sameSide,new RegExp('class="duel-square[^"]*available[^"]*"[^>]*data-duel-cell="'+cell+'"'));
+  const otherSide=render({user:fixture.owner===self?friend:self,info,selectedId:'pass-demo'});
+  assert.doesNotMatch(otherSide,/duel-square[^"]*available/,'skipped participant cannot place a stone');
+ }
+});
