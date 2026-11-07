@@ -40,7 +40,7 @@ const a='[data-demo-view=a]',b='[data-demo-view=b]';
   await page.locator('[data-duel-act=accept]').click();
   assert.equal(await page.locator('#demo-app .duel-arena').count(),1);
   assert.match(await page.locator('.duel-state').innerText(),/対戦中/);
-  assert.match(await page.locator('.duel-arena').innerText(),new RegExp(modeName[mode].replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
+  assert.ok((await page.locator('.duel-arena').innerText()).includes(modeName[mode]),'arena title '+mode);
   await page.locator(a).click();
   await screenshot('01-'+mode+'-playing');
   const data=await page.locator('#demo-app .badge').first().innerText();
