@@ -1,11 +1,5 @@
 name: Duel CPU six-mode comparative benchmark
 on:
-  push:
-    branches:
-      - feat/duel-cpu-final-quality-20261107
-    paths:
-      - 'scripts/duel-cpu-benchmark.mjs'
-      - '.github/workflows/duel-cpu-benchmark.yml'
   workflow_dispatch:
 permissions:
   contents: read
@@ -20,13 +14,13 @@ jobs:
       matrix:
         include:
           - game: othello
-            pairs: 6
+            pairs: 10
           - game: gomoku
-            pairs: 25
+            pairs: 30
           - game: connect4
             pairs: 10
           - game: hitblow
-            pairs: 120
+            pairs: 200
           - game: bluffdice
             pairs: 300
           - game: poker
