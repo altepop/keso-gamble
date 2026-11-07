@@ -10,7 +10,11 @@ export interface C3Case {
 const WINDS=['E','S'];
 const tile=(x:unknown)=>toC3Tile(x);
 const seatOk=(n:unknown)=>Number.isInteger(n)&&Number(n)>=0&&Number(n)<4;
-const arrayOf=(input:unknown)=>Array.isArray(input)?input.map(tile):[];
+const arrayOf=(input:unknown):string[]|null=>{
+ if(!Array.isArray(input))return null;
+ const xs=input.map(tile);
+ return xs.every((x):x is string=>typeof x==='string')?xs:null;
+};
 function startCase(d:any):{events:Event[];dealer:number;hands:string[][]}|null{
  if(!d||!Number.isInteger(d.chang)||d.chang<0||d.chang>1||
   !Number.isInteger(d.ju)||d.ju<0||d.ju>3||
@@ -18,8 +22,12 @@ function startCase(d:any):{events:Event[];dealer:number;hands:string[][]}|null{
   !Number.isSafeInteger(d.liqibang)||d.liqibang<0||
   !Array.isArray(d.scores)||d.scores.length!==4||d.scores.some((s:unknown)=>!Number.isInteger(s))||
   !tile(Array.isArray(d.doras)?d.doras[0]:d.dora))return null;
- const hands=[0,1,2,3].map(i=>arrayOf(d['tiles'+i]));
- if(hands.some((h,i)=>h.length!==(i===d.ju?14:13)||h.some(t=>!t)))return null;
+ const hands:string[][]=[];
+ for(let i=0;i<4;i++){
+  const h=arrayOf(d['tiles'+i]);
+  if(!h||h.length!==(i===d.ju?14:13))return null;
+  hands.push(h);
+ }
  // The dealer's 14th starting tile is an initial self-draw. Never evaluate
  // that first discard because older records differ in initial tile ordering.
  // Reject impossible dealt copies and duplicate red fives.
