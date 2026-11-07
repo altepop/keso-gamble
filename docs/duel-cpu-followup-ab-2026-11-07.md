@@ -28,6 +28,7 @@
 ## 本番への反映範囲
 - 採用: `duel-preview/cpu-board-search.js` の五目並べ強めCPUの局面評価のみ。
 - テスト: `tests/duel-cpu-quality.test.js` に先回り防御の再発防止テスト。
+- 公開ページ: `duel-demo.html` / `duel-preview/demo.js` / `duel-preview/cpu.js` の参照バージョンを更新し、ブラウザキャッシュから新AIを確実に読み込ませる。
 - 不採用: ポーカー公開交換枚数モデル、Hit & Blow近似残り手数評価。**元のmainの処理に完全に復元**。
 - 調査用の一時的なGitHub Actionsの自動起動は取り消し、従来どおり手動ベンチマークのみ。
 
