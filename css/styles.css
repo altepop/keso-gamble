@@ -1223,3 +1223,16 @@ body:has(.screen[data-view="relics"]){--body-bg:#07020f}body:has(.screen[data-vi
 .duel-showdown{display:flex;flex-direction:column;gap:8px;background:#122a3c;border-radius:10px;padding:10px;font-size:12px}
 .duel-showdown p{margin:0;color:#94ffce}
 .duel-showdown span{word-wrap:break-word;line-height:1.6}
+
+
+/* The opponent picker is rendered in-app, not as an iOS native select.
+   It keeps the registered candidates available while the game API refreshes. */
+.duel-opponent-field{display:flex;flex-direction:column;gap:7px}
+.duel-opponent-label{font-size:12px;font-weight:650;color:#d2dcf4}
+.duel-opponent-toggle{width:100%;min-height:48px;display:flex;align-items:center;justify-content:space-between;gap:12px;text-align:left;border:1px solid #355e90;border-radius:10px;padding:10px 13px;background:#071329;color:#eef3ff;font-size:15px;font-weight:600;touch-action:manipulation}
+.duel-opponent-toggle:focus-visible,.duel-opponent-choice:focus-visible{outline:2px solid #67b4ff;outline-offset:2px}
+.duel-opponent-toggle>span:last-child{color:#95b9df}
+.duel-opponent-list{display:grid;max-height:240px;overflow-y:auto;overscroll-behavior:contain;border:1px solid #365a82;border-radius:10px;background:#09182e;padding:5px;gap:3px}
+.duel-opponent-choice{min-height:46px;display:flex;align-items:center;width:100%;text-align:left;padding:10px 12px;color:#e9f1ff;background:transparent;border:1px solid transparent;border-radius:7px;font-size:15px;touch-action:manipulation}
+.duel-opponent-choice:hover,.duel-opponent-choice.selected{background:#173653;border-color:#32648a}
+.duel-opponent-help{color:#bccde4;font-size:12px;line-height:1.55;margin:0}
