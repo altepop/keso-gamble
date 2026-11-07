@@ -47,7 +47,7 @@ export function pokerHandScore(hand){
  if(flush)return [6,...desc];
  if(high)return [5,high];
  if(groups[0].n===3)return [4,...pack];
- if(groups[0].n===2)return [3,...pack];
+ if(groups[0].n===2&&groups[1].n===2)return [3,...pack];
  if(groups[0].n===2)return [2,...pack];
  return [1,...desc];
 }
@@ -56,6 +56,15 @@ export function comparePokerHands(a,b){
  const left=pokerHandScore(a),right=pokerHandScore(b);
  for(let i=0;i<Math.max(left.length,right.length);i++){if((left[i]??0)>(right[i]??0))return 1;if((left[i]??0)<(right[i]??0))return -1;}
  return 0;
+}
+// Explain only the cards explicitly revealed at showdown; the server uses this scoring function too.
+const pokerRankText=n=>n<=10?String(n):({11:'J',12:'Q',13:'K',14:'A'}[n]??String(n));
+export function pokerShowdownReason(a,b){
+ const left=pokerHandScore(a),right=pokerHandScore(b),winner=comparePokerHands(a,b);
+ if(!winner)return '同じ強さのため引き分け。賭け金は双方へ返金される。';
+ if(left[0]!==right[0])return `${pokerHandName(winner>0?a:b)}が${pokerHandName(winner>0?b:a)}より強い役のため決着。`;
+ const index=left.findIndex((v,i)=>v!==right[i]);
+ return `同じ${pokerHandName(a)}のため、${pokerRankText(Math.max(left[index],right[index]))}と${pokerRankText(Math.min(left[index],right[index]))}の比較で決着（上位カードから順に比較）。`;
 }
 export function validBluffBid(bid,count,face){
  return Number.isSafeInteger(count)&&count>=1&&count<=10&&Number.isSafeInteger(face)&&face>=1&&face<=6&&(!bid||count>bid.count||(count===bid.count&&face>bid.face));
