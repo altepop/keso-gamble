@@ -32,7 +32,7 @@ function cycle(f:ReturnType<typeof setup>,selfDraw='1s'){
  }
  f.actions.push(draw(0,f.remove(selfDraw)),discard(0,selfDraw,{moqie:true}));
 }
-function decision(hand=baseHand):ReviewDecision{return {seat:0,round:0,turn:4,actual:hand[0],draw:hand.at(-1)!,hand,players:3,dealer:0,wind:0,honba:0,sticks:0,scores:[35000,35000,35000],rivers:[[],[],[]],melds:[[],[],[]],north:[0,0,0],riichi:[false,false,false],doubleRiichi:[false,false,false],doras:['S'],visible:Array(34).fill(0),interrupted:false};}
+function decision(hand=baseHand):ReviewDecision{return {seat:0,round:0,turn:4,actionIndex:0,actual:hand[0],draw:hand.at(-1)!,hand,players:3,dealer:0,wind:0,honba:0,sticks:0,scores:[35000,35000,35000],rivers:[[],[],[]],melds:[[],[],[]],north:[0,0,0],riichi:[false,false,false],doubleRiichi:[false,false,false],doras:['S'],visible:Array(34).fill(0),interrupted:false};}
 
 test('sanma exact shanten: standard, seven pairs, thirteen orphans and forbidden tiles',()=>{
  assert.equal(sanmaShanten(['1p','2p','3p','4p','5p','6p','7s','8s','9s','E','E','E','P']),0);

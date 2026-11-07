@@ -2,14 +2,14 @@
 import {parentPort,workerData} from 'node:worker_threads';
 import {buildC3Cases} from '../src/mahjong-c3-cases.ts';
 import {reviewDecisions} from '../src/mahjong-review-state.ts';
-import {sanmaShapeFinding,SANMA_ENGINE} from '../src/mahjong-sanma-efficiency.ts';
+import {sanmaShapeFinding,sanmaShapeEligible,SANMA_ENGINE} from '../src/mahjong-sanma-efficiency.ts';
 let four;
 parentPort.on('message',async ({summary,actions})=>{
  try{
   if(summary.players===3){
    const all=[];const perSeat=new Map();
    for(const d of reviewDecisions(actions,summary,128)){
-    if((perSeat.get(d.seat)??0)>=6)continue;
+    if(!sanmaShapeEligible(d,summary.game)||(perSeat.get(d.seat)??0)>=6)continue;
     perSeat.set(d.seat,(perSeat.get(d.seat)??0)+1);
     const finding=sanmaShapeFinding(d,summary.game);if(finding)all.push(finding);
    }
