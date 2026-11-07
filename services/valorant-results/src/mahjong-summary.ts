@@ -5,7 +5,7 @@ import fans from '../mahjong-fans.json' with {type:'json'};
 
 export interface PaipuHead {
  uuid:string;start_time:number;end_time:number;
- config?:{mode?:{mode?:number}};
+ config?:{category?:number;meta?:{room_id?:number};mode?:{mode?:number;ai?:boolean}};
  accounts?:Array<{account_id:number;seat:number;nickname:string}>;
  result?:{players?:Array<{seat:number;part_point_1:number}>};
 }
@@ -22,7 +22,7 @@ export interface PlayerSummary {
  wins:number;tsumo:number;dealIns:number;dealInPoints:number;riichi:number;riichiWins:number;riichiDealIns:number;
  callRounds:number;rounds:number;maxScore:number;minScore:number;bestLead:number;
 }
-export interface PaipuSummary {v:1;uuid:string;game:string;players:number;start:number;end:number;seats:PlayerSummary[];rounds:Round[]}
+export interface PaipuSummary {v:1;uuid:string;game:string;players:number;start:number;end:number;seats:PlayerSummary[];rounds:Round[];category?:number;roomId?:number;ai?:boolean}
 
 const WINDS=['東','南','西','北'];
 const FAN_NAMES:Record<string,string>=fans;
@@ -109,5 +109,5 @@ export function summarizePaipu(head:PaipuHead,actions:PaipuAction[]):PaipuSummar
  }
  close(undefined);
  for(const s of seats){if(!Number.isFinite(s.maxScore)){s.maxScore=s.score;s.minScore=s.score;}s.minScore=Math.min(s.minScore,s.score);s.maxScore=Math.max(s.maxScore,s.score);}
- return {v:1,uuid:head.uuid,game,players,start:head.start_time*1000,end:head.end_time*1000,seats,rounds};
+ return {v:1,uuid:head.uuid,game,players,start:head.start_time*1000,end:head.end_time*1000,seats,rounds,category:head.config?.category??0,roomId:head.config?.meta?.room_id??0,ai:Boolean(head.config?.mode?.ai)};
 }

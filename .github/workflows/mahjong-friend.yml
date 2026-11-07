@@ -1,0 +1,49 @@
+name: Mahjong friend-match scan
+
+on:
+  workflow_dispatch:
+    inputs:
+      probe_only:
+        description: 'Read-only friend-history probe; no Worker writes'
+        type: boolean
+        default: true
+  schedule:
+    - cron: '0,30 * * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mahjong-friend-scan
+  cancel-in-progress: false
+
+jobs:
+  friend-scan:
+    if: github.repository == 'altepop/keso-gamble' && (github.event_name == 'workflow_dispatch' || vars.MAHJONG_FRIEND_SCAN_ENABLED == 'true')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: services/valorant-results
+    env:
+      YOSTAR_UID: ${{ secrets.YOSTAR_UID }}
+      YOSTAR_TOKEN: ${{ secrets.YOSTAR_TOKEN }}
+      YOSTAR_DEVICE_ID: ${{ secrets.YOSTAR_DEVICE_ID }}
+      MAHJONG_INGEST_KEY: ${{ secrets.MAHJONG_INGEST_KEY }}
+      MAHJONG_WORKER_URL: https://valorant-results.tealeaforest.workers.dev
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Install
+        run: npm ci --ignore-scripts
+      - name: Probe or scan
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && [ "$PROBE_ONLY" = "true" ]; then
+            node --experimental-strip-types scripts/mahjong-paipu.mjs --friend-probe
+          else
+            node --experimental-strip-types scripts/mahjong-paipu.mjs --friend-scan
+          fi
+        env:
+          PROBE_ONLY: ${{ inputs.probe_only }}
