@@ -44,7 +44,38 @@ let live=wallet.connected&&!embedded;
 let steamView=null;
 let duelData=null,duelError='',duelActiveId=null,duelGame='othello',duelStake=1000,duelTarget='',duelBusy=false,duelResignConfirm=false,duelLastFetch=0;
 let duelPendingAction=null,duelPokerPicks=[],duelOpponentPickerOpen=false,duelLoading=false,duelGomokuPreview=null;
-let duelGuessDraft='',duelRiskConfirm=null;
+let duelGuessDraft='',duelRiskConfirm=null,duelLastGoodFetch=0,duelRetryNotBefore=0,duelRefreshFailures=0;
+const DUEL_PENDING_KEY='keso-duel-action-v1',DUEL_HISTORY_KEY='keso-duel-moves-v1-';
+let duelHistoryOwner=null;
+function duelStorage(){try{return window.sessionStorage??null;}catch{return null;}}
+function saveDuelPending(){
+ try{const store=duelStorage();if(store)duelPendingAction?store.setItem(DUEL_PENDING_KEY,JSON.stringify(duelPendingAction)):store.removeItem(DUEL_PENDING_KEY);}catch{}
+}
+function loadDuelPending(){
+ if(duelPendingAction||!state?.selfUserId)return;
+ try{const saved=JSON.parse(duelStorage()?.getItem(DUEL_PENDING_KEY)??'null');
+  if(saved?.owner===state.selfUserId&&Date.now()-saved.at<7*86400_000&&
+   /^[0-9a-f-]{36}$/i.test(saved.id)&&saved.args&&typeof saved.args.action==='string')duelPendingAction=saved;
+ }catch{}
+}
+function loadDuelHistory(){
+ const owner=state?.selfUserId;if(!owner||owner===duelHistoryOwner)return;
+ duelHistoryOwner=owner;duelRecentMoves.clear();duelMoveHistory.clear();
+ try{const entries=JSON.parse(window.localStorage?.getItem(DUEL_HISTORY_KEY+owner)??'[]');
+  if(!Array.isArray(entries))return;
+  for(const [id,rows] of entries.slice(-25)){
+   if(typeof id!=='string'||!Array.isArray(rows))continue;
+   const moves=rows.filter(x=>Number.isInteger(x.cell)&&x.cell>=0&&x.cell<225&&
+    Number.isInteger(x.version)&&['B','W'].includes(x.color)).slice(-12);
+   if(moves.length){duelMoveHistory.set(id,moves);const last=moves.at(-1);duelRecentMoves.set(id,{version:last.version,cell:last.cell});}
+  }
+ }catch{}
+}
+function saveDuelHistory(){
+ try{window.localStorage?.setItem(DUEL_HISTORY_KEY+state.selfUserId,
+  JSON.stringify([...duelMoveHistory.entries()].slice(-25).map(([id,rows])=>[id,rows.slice(-12)])));
+ }catch{}
+}
 const duelRecentMoves=new Map();
 const duelMoveHistory=new Map();
 // Keep only move markers inferred from a single newly occupied square between two received boards.
@@ -60,6 +91,7 @@ function observeDuelChanges(fresh){
     duelRecentMoves.set(match.id,{version:match.version,cell:added[0]});
     const entries=duelMoveHistory.get(match.id)??[];
     duelMoveHistory.set(match.id,[...entries,{version:match.version,cell:added[0],color:match.board[added[0]]}].slice(-12));
+     saveDuelHistory();
    }
    else duelRecentMoves.delete(match.id);
   }
