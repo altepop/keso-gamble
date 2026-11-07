@@ -204,3 +204,55 @@ test('sanma wording follows the actual player count and rank, including bust and
  const four={...summary,rounds:[],seats:summary.seats.map((p,i)=>({...p,rank:i+1,score:25000,dealIns:0,riichi:0,riichiWins:0,riichiDealIns:0,bestLead:0}))};
  for(let i=0;i<100;i++)assert.doesNotMatch(roastFor({...four,uuid:'four-lines-'+i},3,'full',names).join(''),/三麻|三人卓|北抜き/);
 });
+
+
+test('a verified friend match transfers zero-sum KP exactly once, without ranked rewards',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:T0});
+ const f=await fixture(),ids=[one,two,'100000000000000103','100000000000000104'];
+ const s={...summary,category:1,roomId:4321,ai:false,end:T0-10000,start:T0-200000};
+ assert.deepEqual(await (await f.call('/api/mahjong/paipu/friend/candidates',{uuids:[s.uuid]})).json(),{unknown:[s.uuid]});
+ // All four Mahjong Soul accounts must be linked and have real KP wallets.
+ for(let i=0;i<4;i++){
+  f.sql.prepare('INSERT OR IGNORE INTO kp_wallets(guild,user) VALUES(?,?)').run(guild,ids[i]);
+  f.sql.prepare('INSERT INTO kp_ledger(id,guild,user,delta,kind,at) VALUES(?,?,?,?,?,?)').run('seed-friend-'+i,guild,ids[i],1000,'test',T0-200000);
+  f.sql.prepare('INSERT INTO kp_mahjong_links(guild,user,account) VALUES(?,?,?)').run(guild,ids[i],s.seats[i].accountId);
+ }
+ f.env.MAHJONG_FRIEND_SETTLEMENT_ENABLED='true';
+ const result={results:[{uuid:s.uuid,summary:s}]};
+ assert.deepEqual(await (await f.call('/api/mahjong/paipu/friend/summaries',result)).json(),{statuses:['settled']});
+ const rates=[600,200,-200,-600];
+ for(let i=0;i<4;i++)assert.equal(f.balance(ids[i]),1000+rates[s.seats[i].rank-1]);
+ assert.equal(Number(f.sql.prepare("SELECT COALESCE(SUM(delta),0) AS n FROM kp_ledger WHERE kind='mahjong_friend'").get().n),0);
+ assert.equal(Number(f.sql.prepare("SELECT COUNT(*) AS n FROM kp_ledger WHERE kind='mahjong_friend'").get().n),4);
+ assert.deepEqual(await (await f.call('/api/mahjong/paipu/friend/candidates',{uuids:[s.uuid]})).json(),{unknown:[]});
+ assert.deepEqual(await (await f.call('/api/mahjong/paipu/friend/summaries',result)).json(),{statuses:['settled']});
+ assert.equal(Number(f.sql.prepare("SELECT COUNT(*) AS n FROM kp_ledger WHERE kind='mahjong_friend'").get().n),4);
+ assert.equal(Number(f.sql.prepare("SELECT COUNT(*) AS n FROM kp_mahjong_claims").get().n),0,'no ranked reward claims are generated');
+});
+
+test('the friend preview is read-only; unlinked and insufficient matches never partially settle',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:T0});
+ const f=await fixture(),s={...summary,category:1,roomId:4321,ai:false,end:T0-10000,start:T0-200000};
+ const ids=[one,two,'100000000000000103','100000000000000104'];
+ const result={results:[{uuid:s.uuid,summary:s}]};
+ assert.deepEqual(await (await f.call('/api/mahjong/paipu/friend/summaries',result)).json(),{statuses:['unlinked']});
+ assert.equal(Number(f.sql.prepare("SELECT COUNT(*) AS n FROM kp_ledger WHERE kind='mahjong_friend'").get().n),0);
+ // A separate game with every player linked but not enough KP must remain atomic.
+ const t2=await fixture();
+ await t2.call('/api/mahjong/paipu/friend/candidates',{uuids:[s.uuid]});
+ for(let i=0;i<4;i++){
+  t2.sql.prepare('INSERT OR IGNORE INTO kp_wallets(guild,user) VALUES(?,?)').run(guild,ids[i]);
+  t2.sql.prepare('INSERT INTO kp_mahjong_links(guild,user,account) VALUES(?,?,?)').run(guild,ids[i],s.seats[i].accountId);
+ }
+ t2.env.MAHJONG_FRIEND_SETTLEMENT_ENABLED='true';
+ assert.deepEqual(await (await t2.call('/api/mahjong/paipu/friend/summaries',result)).json(),{statuses:['insufficient']});
+ assert.equal(Number(t2.sql.prepare("SELECT COUNT(*) AS n FROM kp_ledger WHERE kind='mahjong_friend'").get().n),0);
+ const t3=await fixture();
+ await t3.call('/api/mahjong/paipu/friend/candidates',{uuids:[s.uuid]});
+ for(let i=0;i<4;i++){
+  t3.sql.prepare('INSERT OR IGNORE INTO kp_wallets(guild,user) VALUES(?,?)').run(guild,ids[i]);
+  t3.sql.prepare('INSERT INTO kp_mahjong_links(guild,user,account) VALUES(?,?,?)').run(guild,ids[i],s.seats[i].accountId);
+ }
+ assert.deepEqual(await (await t3.call('/api/mahjong/paipu/friend/summaries',result)).json(),{statuses:['preview']});
+ assert.equal(Number(t3.sql.prepare("SELECT COUNT(*) AS n FROM kp_ledger WHERE kind='mahjong_friend'").get().n),0);
+});
