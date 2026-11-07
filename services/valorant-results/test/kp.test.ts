@@ -963,3 +963,75 @@ test('upgrading a live Othello-only schema preserves active games and upgrades c
  const invite=await boardDuelAction(f.env,mapping,one,{id:id(402),action:'create',game:'poker',opponent:two,stake:100});
  assert.equal(invite.game,'poker');
 });
+
+
+test('every duel game completes a two-member wager and settles the real SQLite ledger to zero',async()=>{
+ const {boardDuelAction,boardDuelList}=await import('../src/board-duels.ts');
+ // These are production D1 handlers running against an in-memory SQLite fixture, never live KP.
+ const {duelLegalMoves}=await import('../../../js/duel-rules.js');
+ const f=await fixture();seed(f.sql,one,20_000);seed(f.sql,two,20_000);
+ let serial=600;
+ const id=()=> '00000000-0000-4000-8000-'+String(++serial).padStart(12,'0');
+ const balance=(user:string)=>Number(f.sql.prepare('SELECT balance FROM kp_wallets WHERE guild=? AND user=?').get(guild,user)!.balance);
+ let operations=0;
+ for(const game of ['othello','gomoku','connect4','hitblow','bluffdice','poker'] as const){
+  const start=[balance(one),balance(two)],stake=500;
+  const invite=await boardDuelAction(f.env,mapping,one,{id:id(),action:'create',game,opponent:two,stake});
+  assert.equal(invite.status,'pending',game);assert.deepEqual([balance(one),balance(two)],start,'no debit before both approve');
+  let room=await boardDuelAction(f.env,mapping,two,{id:id(),action:'accept',duel:invite.id,version:0});
+  assert.equal(room.status,'active',game);assert.deepEqual([balance(one),balance(two)],[start[0]-stake,start[1]-stake]);
+  const a=room.black_user!,b=a===one?two:one;
+  const act=async(user:string,body:Record<string,unknown>)=>{
+   const before=room.version;
+   const op=id();
+   room=await boardDuelAction(f.env,mapping,user,{id:op,duel:room.id,version:room.version,action:'move',...body});
+   operations++;
+   const repeat=await boardDuelAction(f.env,mapping,user,{id:op,duel:room.id,version:before,action:'move',...body});
+   assert.equal(repeat.version,room.version,'retry never makes an extra move in '+game);
+   return room;
+  };
+  if(game==='othello'){
+   let steps=0;
+   while(room.status==='active'&&steps<65){
+    const user=room.turn_user!,color=user===a?'B':'W';
+    const legal=duelLegalMoves('othello',room.board,color);
+    assert.ok(legal.length>0,'automatic pass keeps the active player legal');
+    await act(user,{cell:legal[steps%legal.length]});steps++;
+   }
+   assert.ok(steps>=40&&steps<=65,'Othello completed a full board game');
+  }else if(game==='gomoku'){
+   for(let i=0;i<9;i++)await act(i%2?b:a,{cell:i%2?15+Math.floor(i/2):Math.floor(i/2)});
+  }else if(game==='connect4'){
+   for(let i=0;i<7;i++)await act(i%2?b:a,{cell:i%2?1:0});
+  }else if(game==='hitblow'){
+   const data=JSON.parse(String(f.sql.prepare('SELECT data FROM kp_board_duel_secrets WHERE id=?').get(room.id)!.data));
+   const first=(await boardDuelList(f.env,mapping,a)).matches.find(r=>r.id===room.id)!;
+   const second=(await boardDuelList(f.env,mapping,b)).matches.find(r=>r.id===room.id)!;
+   assert.equal(first.private_hand,data.privateA);assert.equal(second.private_hand,data.privateB);
+   assert.equal(first.board.includes(data.privateB),false,'opponent secret stays hidden in public state');
+   await act(a,{guess:data.privateB});
+  }else if(game==='bluffdice'){
+   for(let round=0;round<2;round++){
+    await act(a,{choice:'bid',count:10,face:6});
+    await act(b,{choice:'challenge'});
+   }
+  }else if(game==='poker'){
+   const first=(await boardDuelList(f.env,mapping,a)).matches.find(r=>r.id===room.id)!;
+   const second=(await boardDuelList(f.env,mapping,b)).matches.find(r=>r.id===room.id)!;
+   assert.equal(JSON.parse(String(first.private_hand)).length,5);
+   assert.equal(JSON.parse(String(second.private_hand)).length,5);
+   assert.equal(JSON.parse(first.board).showdown,undefined,'before either turn no cards are public');
+   await act(a,{cells:[0,1,2]});
+   assert.equal(JSON.parse(room.board).showdown,undefined,'after first turn opponent cards remain private');
+   await act(b,{cells:[]});
+   assert.equal(JSON.parse(room.board).showdown.a.length,5);
+  }
+  assert.equal(room.status,'finished',game+' must finish');
+  assert.ok(room.winner==='draw'||room.winner===one||room.winner===two,game+' winner validated');
+  assert.equal(balance(one)+balance(two),start[0]+start[1],game+' conserves all KP');
+  assert.equal(f.sql.prepare("SELECT SUM(delta) AS total FROM kp_ledger WHERE kind='duel'").get()!.total,0,game+' never mints or loses virtual currency');
+  const count=f.sql.prepare("SELECT COUNT(*) AS n FROM kp_ledger WHERE id LIKE ?").get('duel:%:'+room.id)!.n;
+  assert.ok(Number(count)>=3&&Number(count)<=4,game+' exactly two debits and only justified payouts');
+ }
+ assert.ok(operations>=70,'covered a full Othello plus all other games');
+});
