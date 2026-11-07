@@ -16,7 +16,7 @@ test('Equal bot cites exact round, turn, discarded tile and C3 suggestion, witho
  const post=paipuPost(s,members,()=> 'normal');
  assert.match(post,/松本等しいのc3検討/);
  assert.match(post,/けそ、東1局の4巡目の6pなあ。c3は赤5p切りを選んどる/);
- assert.match(post,/小林の東3局9巡目、Eか。c3は9sやったで/);
+ assert.match(post,/小林の東3局9巡目、東か。c3は9sやったで/);
  assert.match(post,/選択の違いだけでは失着とは断定できない/);
  assert.ok(post.length<=1900);
  assert.equal(equalC3Comments(summary,null,members).length,0);
