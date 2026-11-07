@@ -130,7 +130,7 @@ export async function fetchSummary(session,uuid,reviewer=null){
    if(review)summary.c3=review;
   }catch(error){
    // Read-only AI review must NEVER interrupt current paipu/KP settlement.
-   console.log('equal_review: skipped ('+String(error?.message??'review_failed').replace(/[^a-z0-9_-]/gi,'').slice(0,48)+')');
+   console.log('equal_review: skipped; existing paipu settlement preserved');
   }
  }
  return summary;
