@@ -1276,3 +1276,12 @@ body:has(.screen[data-view="relics"]){--body-bg:#07020f}body:has(.screen[data-vi
 .duel-board-scroll .duel-gomoku .duel-piece{width:76%;height:76%;position:relative;z-index:1}
 .duel-board-scroll .duel-gomoku .duel-square.duel-preview-cell{background:#f6d780}
 .duel-board-scroll .duel-gomoku .duel-square.duel-preview-cell::after{z-index:2}
+
+/* Duel clarity, all presentation-only (no KP or D1 interaction). */
+.duel-mode-guide{margin:0;padding:9px 11px;border:1px solid #2b4b61;border-radius:9px;background:#0a2438;color:#c8dced;font-size:12px;line-height:1.65}
+.duel-risk-note{margin:0;padding:11px 12px;border:1px solid #e0a457;background:#33210f;color:#ffe4ae;border-radius:9px;font-size:13px;line-height:1.65}
+.duel-square.duel-last-cell{outline:3px solid #ffcf6a;outline-offset:-3px;background-color:#6d6837}
+.duel-square.duel-last-cell .duel-piece{box-shadow:0 0 0 2px #ffcf6a}
+.duel-heading small{font-size:11px;color:#bbd8e2}
+.duel-heading{flex-wrap:wrap}
+@media (prefers-contrast:more){.duel-square.duel-last-cell{outline:4px solid #fff}}
