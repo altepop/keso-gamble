@@ -65,7 +65,7 @@ function boardView(r,info,user,busy,confirmResign,gomokuPreviewCell=null,recentM
  </div>`;
  return section;
 }
-export function duelScreen({info,user,live,cash,selectedId,game='othello',stake=1000,target='',busy=false,error='',confirmResign=false,pokerPicks=[],fallbackMembers=[],opponentPickerOpen=false,loading=false,nav='',gomokuPreviewCell=null,recentMoves=null,localMoveHistory=null,guessDraft='',riskConfirm=''}){
+export function duelScreen({info,user,live,cash,selectedId,game='othello',stake=1000,target='',busy=false,error='',confirmResign=false,pokerPicks=[],fallbackMembers=[],opponentPickerOpen=false,loading=false,nav='',gomokuPreviewCell=null,recentMoves=null,localMoveHistory=null,guessDraft='',riskConfirm='',lastSynced=0,pendingRetry=false,historyHasMore=false}){
  const matches=info?.matches??[],chosen=matches.find(r=>r.id===selectedId)||matches.find(r=>r.status==='active'||r.status==='pending')||matches[0];
  const members=(info?.members?.length?info.members:fallbackMembers).filter(m=>m&&typeof m.id==='string'&&m.id!==user);
  const invited=chosen?.status==='pending',mine=chosen?.user_a===user;
@@ -95,7 +95,11 @@ export function duelScreen({info,user,live,cash,selectedId,game='othello',stake=
  ${stake>=50000&&riskConfirm==='create'?'<p class="duel-risk-note" role="alert">高額対戦の確認：相手と金額を確認し、もう一度押すと申し込みます。</p>':''}
   <button type="button" class="action-btn primary duel-full" data-duel-act="create" ${busy||!target||cash<stake?'disabled':''}>${stake>=50000&&riskConfirm==='create'?'確認して申し込む':'対戦を申し込む'}</button>
  </div></div>`;
+ const syncNotice=live?'<div class="duel-sync" role="status" aria-live="polite">対戦情報：'+(lastSynced?'最終更新 '+new Date(lastSynced).toLocaleTimeString('ja-JP'):'確認中')+(loading?'・更新中':'')+'。<button type="button" class="action-btn" data-duel-refresh="1" '+(busy?'disabled':'')+'>更新</button></div>':'';
+ const retryNotice=pendingRetry?'<div class="storage-warning duel-error" role="alert"><strong>前回の対戦操作が未確認です。</strong><p>別の操作は送らず、同じ操作IDを使って結果を確認してください。</p><button type="button" class="action-btn primary" data-duel-retry="1" '+(busy?'disabled':'')+'>前回の操作を確認</button></div>':'';
+ const moreNotice=historyHasMore?'<div class="duel-history-more"><button type="button" class="action-btn" data-duel-history-more="1" '+(busy?'disabled':'')+'>過去の対戦を20件ずつ読み込む</button><p class="helper">このボタンを押した場合だけ過去の対戦を取得する。</p></div>':'';
  return `<div class="screen"><header class="topbar"><div class="toprow"><h1 class="title">⚔️ 決闘</h1><div class="small-actions"><span class="badge">${kp(cash)}</span></div></div></header>
+ ${syncNotice}${retryNotice}
  ${chosen?`<div class="duel-current">
  ${invited?`<div class="panel"><div class="card-body"><h2 class="panel-title">${mine?'相手の返答待ち':'対戦の申し込み'}</h2>
  <p class="helper">${esc(title(chosen))} / ${kp(chosen.stake)}ずつ。招待期限まで約${Math.ceil(timeLeft(chosen.deadline_at)/60)}分。</p>
@@ -109,6 +113,7 @@ export function duelScreen({info,user,live,cash,selectedId,game='othello',stake=
  <div class="duel-heading"><h2 class="panel-title">対戦ルーム</h2><small>最近の戦績：${stats.win}勝 ${stats.lose}敗 ${stats.draw}分（最大20件）</small><button class="action-btn" data-duel-refresh="1" ${busy?'disabled':''}>更新 ↻</button></div>
  ${matches.length?matches.map(r=>summary(r,info,user)).join(''):'<p class="helper">対戦履歴はまだありません。</p>'}
  </div></div>`:''}
+ ${moreNotice}
  ${!live?'<div class="panel"><div class="card-body">KP口座に接続すると対戦できる。</div></div>':focus?
  `<details class="duel-create-collapse"><summary>別の対戦を申し込む</summary>${formMarkup}</details>`:formMarkup}
  ${!focus?` <div class="duel-history panel"><div class="card-body">
