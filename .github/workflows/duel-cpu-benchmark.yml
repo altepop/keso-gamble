@@ -1,11 +1,5 @@
 name: Duel CPU six-mode comparative benchmark
 on:
-  push:
-    branches: [feat/duel-cpu-rigorous-endgame-20261107]
-    paths:
-      - 'duel-preview/cpu-*.js'
-      - 'scripts/duel-cpu-gomoku-ab.mjs'
-      - '.github/workflows/duel-cpu-benchmark.yml'
   workflow_dispatch:
 permissions:
   contents: read
@@ -19,8 +13,18 @@ jobs:
       max-parallel: 6
       matrix:
         include:
+          - game: othello
+            pairs: 10
           - game: gomoku
-            pairs: 90
+            pairs: 30
+          - game: connect4
+            pairs: 10
+          - game: hitblow
+            pairs: 200
+          - game: bluffdice
+            pairs: 300
+          - game: poker
+            pairs: 200
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -38,28 +42,3 @@ jobs:
           path: cpu-benchmark-${{ matrix.game }}.log
           if-no-files-found: warn
           retention-days: 21
-  gomoku-paired-ab:
-    name: Paired old/new Gomoku tactical benchmark
-    runs-on: ubuntu-24.04
-    timeout-minutes: 14
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-      - name: Retrieve untouched prior Gomoku strategy
-        run: |
-          git fetch --depth=1 origin main
-          git show origin/main:duel-preview/cpu-board-search.js > duel-preview/cpu-board-search-prior.js
-      - name: Compare old/new on identical seeded game openings
-        run: |
-          set -euo pipefail
-          node scripts/duel-cpu-gomoku-ab.mjs 90 | tee cpu-gomoku-ab-results.log
-          grep -q '^GOMOKU_AB_RESULT ' cpu-gomoku-ab-results.log
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: duel-cpu-gomoku-paired-results
-          path: cpu-gomoku-ab-results.log
-          if-no-files-found: warn
-          retention-days: 14
