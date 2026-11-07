@@ -5,6 +5,7 @@ import {D1_B_ID} from '../../../scripts/relic-abuse-audit.mjs';
 import {login,fetchDecodedRecord} from './mahjong-paipu.mjs';
 import {summarizePaipu} from '../src/mahjong-summary.ts';
 import {supportsReviewRules} from '../src/mahjong-review-rules.ts';
+import {calibrateSanmaPayments} from '../src/mahjong-sanma-calibration.ts';
 import {reviewDecisions} from '../src/mahjong-review-state.ts';
 import {buildC3Cases} from '../src/mahjong-c3-cases.ts';
 import {acceptedC3Report} from '../src/mahjong-c3-comment.ts';
@@ -27,7 +28,7 @@ export function auditSample(head,actions,saved,report){
  // Existing, previously saved result metadata must remain the same; don't log it.
  const facts=s=>JSON.stringify({players:s.players,game:s.game,start:s.start,end:s.end,seats:s.seats,rounds:s.rounds});
  if(facts(summary)!==facts(saved))throw Error('audit_saved_result_mismatch');
- return {players:summary.players,rounds:summary.rounds.length,records:actions.length,kinds,diagnostics,roundShapes:[...new Map(roundShapes.map(s=>[JSON.stringify(s),s])).values()],activeRuleFlags,supportedRules:supportsReviewRules(head),replayedDecisions:frames.length,postInterruptionDecisions:frames.filter(f=>f.interrupted).length,modelCases:cases.length,verifiedFindings:findings.length,savedResultMatches:true};
+ return {players:summary.players,rounds:summary.rounds.length,records:actions.length,kinds,diagnostics,roundShapes:[...new Map(roundShapes.map(s=>[JSON.stringify(s),s])).values()],activeRuleFlags,supportedRules:supportsReviewRules(head),paymentCalibration:calibrateSanmaPayments(head,actions),replayedDecisions:frames.length,postInterruptionDecisions:frames.filter(f=>f.interrupted).length,modelCases:cases.length,verifiedFindings:findings.length,findingBases:Object.fromEntries([...new Set(findings.map(f=>f.basis??'model'))].map(b=>[b,findings.filter(f=>(f.basis??'model')===b).length])),savedResultMatches:true};
 }
 export async function liveAudit(env=process.env,{query,connect=login,decode=fetchDecodedRecord,reviewerFactory=createPaipuReviewer}={}){
  if(!query)throw Error('audit_query_missing');
