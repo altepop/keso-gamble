@@ -1,4 +1,4 @@
-import {connect4LegalMoves,pokerHandName,validBluffBid} from './duel-mini-games.js?v=web-63ae2ba614f15494';
+import {connect4LegalMoves,pokerHandName,pokerShowdownReason,validBluffBid} from './duel-mini-games.js?v=web-4cfed36ba8062663';
 const h=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const safeData=r=>{try{return JSON.parse(r.board);}catch{return {};}};
 const privateValue=r=>{try{return JSON.parse(r.private_hand);}catch{return r.private_hand??null;}};
@@ -39,9 +39,9 @@ export function miniBoardView(r,info,user,busy,picks=[],confirmResign=false,gues
   const cards=Array.isArray(hand)?hand:[],picked=new Set(picks);
   content=`<div class="duel-private"><span>自分の手札5枚</span></div>
   <div class="duel-cards">${cards.map((c,i)=>`<button type="button" class="duel-card ${cardColor(c)} ${picked.has(i)?'selected':''}" data-duel-card="${i}" ${turn?'':'disabled'}><b>${h(cardName(c))}</b><small>${picked.has(i)?'交換':'保持'}</small></button>`).join('')}</div>
-  <div class="duel-mini-hint">先手：${state.doneA?'交換済み':'未確定'}　後手：${state.doneB?'交換済み':'未確定'}</div>
+  <div class="duel-mini-hint">現在の自分の役：${cards.length===5?h(pokerHandName(cards)):'確認中'}。先手：${state.doneA?'交換済み':'未確定'}　後手：${state.doneB?'交換済み':'未確定'}</div>
   ${turn?`<button type="button" class="action-btn primary duel-poker-submit" data-duel-act="move" data-duel-mini="poker">${picked.size}枚交換して確定（最大3枚）</button>`:''}
-  ${state.showdown?`<div class="duel-showdown"><p>カード公開</p><span>${h(name(a))}：${state.showdown.a.map(cardName).join(' ')}（${h(pokerHandName(state.showdown.a))}）</span><span>${h(name(b))}：${state.showdown.b.map(cardName).join(' ')}（${h(pokerHandName(state.showdown.b))}）</span></div>`:''}`;
+  ${state.showdown?`<div class="duel-showdown"><p>カード公開</p><span>${h(name(a))}：${state.showdown.a.map(cardName).join(' ')}（${h(pokerHandName(state.showdown.a))}）</span><span>${h(name(b))}：${state.showdown.b.map(cardName).join(' ')}（${h(pokerHandName(state.showdown.b))}）</span><p class="duel-mini-hint">${h(pokerShowdownReason(state.showdown.a,state.showdown.b))}</p></div>`:''}`;
   note='各自5枚を配り、0〜3枚を1回だけ交換できる。両者の交換が終わったら役を比較。同点は引き分け。';
  }
  const outcome=finished?(r.winner==='draw'?'引き分け：賭け金を返金':r.winner===user?'勝利：受取 '+kp(r.stake*2)+'（差引 +'+kp(r.stake)+'）':'敗北：差引 −'+kp(r.stake)):'';
@@ -50,7 +50,7 @@ export function miniBoardView(r,info,user,busy,picks=[],confirmResign=false,gues
  <div class="duel-players"><span>① ${h(name(a))}</span><span>VS</span><span>② ${h(name(b))}</span></div>
  ${r.status==='active'?`<div class="duel-turn ${turn?'my-turn':''}">${turn?'🟢 あなたの番':h(name(r.turn_user))+'の番'} ・ <span data-duel-timer="${r.deadline_at}">残り${Math.ceil(left(r)/60)}分</span></div>`:''}
  ${content}
- ${finished?`<p class="duel-result">${h(outcome)}</p>`:''}
+ ${finished?`<p class="duel-result">${h(outcome)}</p><p class="duel-footnote">投了・時間切れの有無は、この画面の盤面だけからは断定できない。KPの確定結果を表示している。</p>`:''}
  ${r.status==='active'?`<div class="duel-actions">${left(r)===0?'<button type="button" data-duel-act="timeout" class="action-btn primary">⏰ 時間切れを確定する</button>':(confirmResign?'<button type="button" data-duel-act="resign" class="action-btn duel-challenge">投了を確定する（敗北）</button><button type="button" data-duel-act="resign-cancel" class="action-btn">戻る</button>':'<button type="button" data-duel-act="resign-preview" class="action-btn">投了する</button>')}</div>`:''}
  <p class="duel-footnote">${h(note)}</p></div>`;
 }

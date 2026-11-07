@@ -1285,3 +1285,10 @@ body:has(.screen[data-view="relics"]){--body-bg:#07020f}body:has(.screen[data-vi
 .duel-heading small{font-size:11px;color:#bbd8e2}
 .duel-heading{flex-wrap:wrap}
 @media (prefers-contrast:more){.duel-square.duel-last-cell{outline:4px solid #fff}}
+
+.duel-sync{margin:10px 14px;padding:10px 12px;display:flex;align-items:center;flex-wrap:wrap;gap:8px;justify-content:space-between;background:#10263c;border:1px solid #315271;border-radius:9px;color:#bdd6e9;font-size:12px;line-height:1.6}
+.duel-sync .action-btn{min-height:38px;font-size:12px}
+.duel-history-more{text-align:center;margin:12px 14px}
+.duel-history-more .action-btn{width:100%;min-height:46px}
+.duel-history-more .helper{margin:7px 0;font-size:11px}
+.duel-error[data-duel-recovery]{margin:12px 14px;line-height:1.6}

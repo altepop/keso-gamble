@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {connect4Board,connect4Move,connect4LegalMoves,hitBlowAnswer,miniStart,miniMove,miniPrivate,comparePokerHands,pokerHandName,pokerHandScore,validBluffBid}from '../js/duel-mini-games.js';
+import {connect4Board,connect4Move,connect4LegalMoves,hitBlowAnswer,miniStart,miniMove,miniPrivate,comparePokerHands,pokerHandName,pokerHandScore,pokerShowdownReason,validBluffBid}from '../js/duel-mini-games.js';
 
 test('Connect Four gravity, four in a row, column overflow and diagonal',()=>{
  let board=connect4Board();assert.equal(board.length,42);
@@ -86,4 +86,19 @@ test('poker labels and bluff bid validation match the settlement rules',()=>{
  assert.equal(validBluffBid({count:5,face:3},5,4),true);
  assert.equal(validBluffBid({count:10,face:6},10,6),false);
  assert.equal(validBluffBid({count:10,face:6},11,1),false);
+});
+
+test('poker one pair and two pair are distinct, with correct showdown explanations',()=>{
+ const c=(r,s)=>(r-2)*4+s;
+ const one=[c(10,0),c(10,1),c(2,2),c(4,3),c(8,0)];
+ const two=[c(10,0),c(10,1),c(8,2),c(8,3),c(2,0)];
+ const high=[c(14,0),c(13,1),c(9,2),c(7,3),c(3,0)];
+ assert.equal(pokerHandName(one),'ワンペア');
+ assert.equal(pokerHandName(two),'ツーペア');
+ assert.equal(comparePokerHands(two,one),1);
+ assert.equal(comparePokerHands(one,high),1);
+ assert.match(pokerShowdownReason(two,one),/ツーペア.*ワンペア/);
+ assert.match(pokerShowdownReason(one,one),/引き分け/);
+ const higher=[c(11,0),c(11,1),c(2,2),c(4,3),c(8,0)];
+ assert.match(pokerShowdownReason(higher,one),/比較で決着/);
 });

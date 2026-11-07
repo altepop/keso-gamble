@@ -1,39 +1,39 @@
-import {stockOrderQuote,STOCK_ORDER_VERSION,STOCK_PRICE_SCALE} from './stock-order.js?v=web-63ae2ba614f15494';
-import {steamConnectionMessage} from './steam-view.js?v=web-63ae2ba614f15494';
-import {relicsPanel} from './relics-view.js?v=web-63ae2ba614f15494';
-import {primeRelicAudio,playRelicSound,previewRelicSound,stopRelicSound,setRelicSoundVolume,toggleRelicSound} from './relics-audio.js?v=web-63ae2ba614f15494';
-import {relicDefaultView} from './relics-v4.js?v=web-63ae2ba614f15494';
-import {privateCasinoPanel} from './private-casino-view.js?v=web-63ae2ba614f15494';
-import {communityPanel,communityRows} from './community-feed.js?v=web-63ae2ba614f15494';
-import {stockPanel,stockCandles,stockPrice,privateStockOperator} from './stock-view.js?v=web-63ae2ba614f15494';
-import {stockStoryChoices,validateCustomStory} from './stock-stories.js?v=web-63ae2ba614f15494';
-import {wheelView,covered,redNumbers,outcomeAngle} from './roulette-view.js?v=web-63ae2ba614f15494';
-import {makeEscalationWheel} from './escalation-roulette.js?v=web-63ae2ba614f15494';
-import {connectDiscordActivity,isDiscordActivity,openSteamLogin,openCompanionGame}from './discord-activity-auth.js?v=web-63ae2ba614f15494';
-import { createKpClient } from './kp-client.js?v=web-63ae2ba614f15494';
-import { fullRefreshInterval, communityRefreshEnabled, COMMUNITY_REFRESH_INTERVAL } from './live-refresh-policy.js?v=web-63ae2ba614f15494';
-import { fmt, fmt0 } from './format.js?v=web-63ae2ba614f15494';
-import { submitClaim, approveClaim, issueDirective, completeDirective } from './progression.js?v=web-63ae2ba614f15494';
-import { titleView, homeView, playView, directivesView, escapeHTML } from './progression-views.js?v=web-63ae2ba614f15494';
-import { genCandles, movingAverage, svgCandles } from './charts.js?v=web-63ae2ba614f15494';
-import { MARKET, createInitialState, portfolioValue, assets, advanceMarket, trade, spin, spinNumbers, validateNumberBets, grantDemoSalary, cryptoRouletteNumber } from './engine.js?v=web-63ae2ba614f15494';
-import { KEY, LEGACY_KEY } from './storage.js?v=web-63ae2ba614f15494';
-import { PUBLIC_SALT, RUN_MS, WEEKLY_LIMIT, openRaceStart, latestRaceStart, raceCard, raceOdds, raceResult, raceTimeline, raceCommentary, raceRuns, placeRaceBet, settleRaceBets, weeklySpent } from './racing.js?v=web-63ae2ba614f15494';
-import { LUXURY } from './luxury.js?v=web-63ae2ba614f15494';
-import { raceScreen, racePreview, drawRace, raceElapsed, ownerPanel, luxuryPanel, roastPanel } from './racing-view.js?v=web-63ae2ba614f15494';
-import { createStore } from './store.js?v=web-63ae2ba614f15494';
-import { healthPanel } from './health-view.js?v=web-63ae2ba614f15494';
-import { trendPanel } from './trend-view.js?v=web-63ae2ba614f15494';
-import { mleagueScreen, mleaguePreview } from './mleague-view.js?v=web-63ae2ba614f15494';
-import {duelScreen} from './duel-view.js?v=web-63ae2ba614f15494';
-import { gamePicker, chinchiroView, blackjackView } from './casino-view.js?v=web-63ae2ba614f15494';
-import {casinoFrames,createRelicRevealGate} from './casino-animation.js?v=web-63ae2ba614f15494';
-import { playChinchiro, bjStart, bjHit, bjStand, bjDouble, cryptoDie, cryptoCard, cryptoInt } from './casino.js?v=web-63ae2ba614f15494';
-import { showBigWin } from './bigwin.js?v=web-63ae2ba614f15494';
-import { audioMixEnabled, audioMixSupported, setAudioMix } from './audio-mix.js?v=web-63ae2ba614f15494';
-import { sfxEnabled, toggleSfx, unlockSfx, preloadSfx, play as playSfx, playResult, announce, sfxVolume, setSfxVolume, bgmEnabled, setBgmScene, toggleBgm, BGM_TRACKS } from './sfx.js?v=web-63ae2ba614f15494';
-import { minesStart, minesPick, minesCashout, playSlot, slotWinTier, vpDeal, vpDraw, playBaccarat, VP_NAMES } from './casino-more.js?v=web-63ae2ba614f15494';
-import { minesView, slotView, videoPokerView, baccaratView } from './casino-more-view.js?v=web-63ae2ba614f15494';
+import {stockOrderQuote,STOCK_ORDER_VERSION,STOCK_PRICE_SCALE} from './stock-order.js?v=web-4cfed36ba8062663';
+import {steamConnectionMessage} from './steam-view.js?v=web-4cfed36ba8062663';
+import {relicsPanel} from './relics-view.js?v=web-4cfed36ba8062663';
+import {primeRelicAudio,playRelicSound,previewRelicSound,stopRelicSound,setRelicSoundVolume,toggleRelicSound} from './relics-audio.js?v=web-4cfed36ba8062663';
+import {relicDefaultView} from './relics-v4.js?v=web-4cfed36ba8062663';
+import {privateCasinoPanel} from './private-casino-view.js?v=web-4cfed36ba8062663';
+import {communityPanel,communityRows} from './community-feed.js?v=web-4cfed36ba8062663';
+import {stockPanel,stockCandles,stockPrice,privateStockOperator} from './stock-view.js?v=web-4cfed36ba8062663';
+import {stockStoryChoices,validateCustomStory} from './stock-stories.js?v=web-4cfed36ba8062663';
+import {wheelView,covered,redNumbers,outcomeAngle} from './roulette-view.js?v=web-4cfed36ba8062663';
+import {makeEscalationWheel} from './escalation-roulette.js?v=web-4cfed36ba8062663';
+import {connectDiscordActivity,isDiscordActivity,openSteamLogin,openCompanionGame}from './discord-activity-auth.js?v=web-4cfed36ba8062663';
+import { createKpClient } from './kp-client.js?v=web-4cfed36ba8062663';
+import { fullRefreshInterval, communityRefreshEnabled, COMMUNITY_REFRESH_INTERVAL } from './live-refresh-policy.js?v=web-4cfed36ba8062663';
+import { fmt, fmt0 } from './format.js?v=web-4cfed36ba8062663';
+import { submitClaim, approveClaim, issueDirective, completeDirective } from './progression.js?v=web-4cfed36ba8062663';
+import { titleView, homeView, playView, directivesView, escapeHTML } from './progression-views.js?v=web-4cfed36ba8062663';
+import { genCandles, movingAverage, svgCandles } from './charts.js?v=web-4cfed36ba8062663';
+import { MARKET, createInitialState, portfolioValue, assets, advanceMarket, trade, spin, spinNumbers, validateNumberBets, grantDemoSalary, cryptoRouletteNumber } from './engine.js?v=web-4cfed36ba8062663';
+import { KEY, LEGACY_KEY } from './storage.js?v=web-4cfed36ba8062663';
+import { PUBLIC_SALT, RUN_MS, WEEKLY_LIMIT, openRaceStart, latestRaceStart, raceCard, raceOdds, raceResult, raceTimeline, raceCommentary, raceRuns, placeRaceBet, settleRaceBets, weeklySpent } from './racing.js?v=web-4cfed36ba8062663';
+import { LUXURY } from './luxury.js?v=web-4cfed36ba8062663';
+import { raceScreen, racePreview, drawRace, raceElapsed, ownerPanel, luxuryPanel, roastPanel } from './racing-view.js?v=web-4cfed36ba8062663';
+import { createStore } from './store.js?v=web-4cfed36ba8062663';
+import { healthPanel } from './health-view.js?v=web-4cfed36ba8062663';
+import { trendPanel } from './trend-view.js?v=web-4cfed36ba8062663';
+import { mleagueScreen, mleaguePreview } from './mleague-view.js?v=web-4cfed36ba8062663';
+import {duelScreen} from './duel-view.js?v=web-4cfed36ba8062663';
+import { gamePicker, chinchiroView, blackjackView } from './casino-view.js?v=web-4cfed36ba8062663';
+import {casinoFrames,createRelicRevealGate} from './casino-animation.js?v=web-4cfed36ba8062663';
+import { playChinchiro, bjStart, bjHit, bjStand, bjDouble, cryptoDie, cryptoCard, cryptoInt } from './casino.js?v=web-4cfed36ba8062663';
+import { showBigWin } from './bigwin.js?v=web-4cfed36ba8062663';
+import { audioMixEnabled, audioMixSupported, setAudioMix } from './audio-mix.js?v=web-4cfed36ba8062663';
+import { sfxEnabled, toggleSfx, unlockSfx, preloadSfx, play as playSfx, playResult, announce, sfxVolume, setSfxVolume, bgmEnabled, setBgmScene, toggleBgm, BGM_TRACKS } from './sfx.js?v=web-4cfed36ba8062663';
+import { minesStart, minesPick, minesCashout, playSlot, slotWinTier, vpDeal, vpDraw, playBaccarat, VP_NAMES } from './casino-more.js?v=web-4cfed36ba8062663';
+import { minesView, slotView, videoPokerView, baccaratView } from './casino-more-view.js?v=web-4cfed36ba8062663';
 const $=(s,el=document)=>el.querySelector(s);
 const wallet=createKpClient();
 const embedded=isDiscordActivity();
@@ -44,7 +44,45 @@ let live=wallet.connected&&!embedded;
 let steamView=null;
 let duelData=null,duelError='',duelActiveId=null,duelGame='othello',duelStake=1000,duelTarget='',duelBusy=false,duelResignConfirm=false,duelLastFetch=0;
 let duelPendingAction=null,duelPokerPicks=[],duelOpponentPickerOpen=false,duelLoading=false,duelGomokuPreview=null;
-let duelGuessDraft='',duelRiskConfirm=null;
+let duelGuessDraft='',duelRiskConfirm=null,duelLastGoodFetch=0,duelRetryNotBefore=0,duelRefreshFailures=0;
+const DUEL_PENDING_KEY='keso-duel-action-v1',DUEL_HISTORY_KEY='keso-duel-moves-v1-';
+let duelHistoryOwner=null,duelListOwner=null,duelHasMore=false;
+function mergeDuelPages(fresh){
+ const owner=state.selfUserId;
+ if(duelListOwner!==owner){duelData=null;duelListOwner=owner;duelHasMore=!!fresh.hasMore;}
+ const byId=new Map((duelData?.matches??[]).map(r=>[r.id,r]));
+ for(const match of fresh.matches??[])byId.set(match.id,match);
+ return {...fresh,matches:[...byId.values()].sort((a,b)=>b.updated_at-a.updated_at||b.id.localeCompare(a.id))};
+}
+function duelStorage(){try{return window.sessionStorage??null;}catch{return null;}}
+function saveDuelPending(){
+ try{const store=duelStorage();if(store)duelPendingAction?store.setItem(DUEL_PENDING_KEY,JSON.stringify(duelPendingAction)):store.removeItem(DUEL_PENDING_KEY);}catch{}
+}
+function loadDuelPending(){
+ if(duelPendingAction||!state?.selfUserId)return;
+ try{const saved=JSON.parse(duelStorage()?.getItem(DUEL_PENDING_KEY)??'null');
+  if(saved?.owner===state.selfUserId&&Date.now()-saved.at<7*86400_000&&
+   /^[0-9a-f-]{36}$/i.test(saved.id)&&saved.args&&typeof saved.args.action==='string')duelPendingAction=saved;
+ }catch{}
+}
+function loadDuelHistory(){
+ const owner=state?.selfUserId;if(!owner||owner===duelHistoryOwner)return;
+ duelHistoryOwner=owner;duelRecentMoves.clear();duelMoveHistory.clear();
+ try{const entries=JSON.parse(window.localStorage?.getItem(DUEL_HISTORY_KEY+owner)??'[]');
+  if(!Array.isArray(entries))return;
+  for(const [id,rows] of entries.slice(-25)){
+   if(typeof id!=='string'||!Array.isArray(rows))continue;
+   const moves=rows.filter(x=>Number.isInteger(x.cell)&&x.cell>=0&&x.cell<225&&
+    Number.isInteger(x.version)&&['B','W'].includes(x.color)).slice(-12);
+   if(moves.length){duelMoveHistory.set(id,moves);const last=moves.at(-1);duelRecentMoves.set(id,{version:last.version,cell:last.cell});}
+  }
+ }catch{}
+}
+function saveDuelHistory(){
+ try{window.localStorage?.setItem(DUEL_HISTORY_KEY+state.selfUserId,
+  JSON.stringify([...duelMoveHistory.entries()].slice(-25).map(([id,rows])=>[id,rows.slice(-12)])));
+ }catch{}
+}
 const duelRecentMoves=new Map();
 const duelMoveHistory=new Map();
 // Keep only move markers inferred from a single newly occupied square between two received boards.
@@ -60,6 +98,7 @@ function observeDuelChanges(fresh){
     duelRecentMoves.set(match.id,{version:match.version,cell:added[0]});
     const entries=duelMoveHistory.get(match.id)??[];
     duelMoveHistory.set(match.id,[...entries,{version:match.version,cell:added[0],color:match.board[added[0]]}].slice(-12));
+     saveDuelHistory();
    }
    else duelRecentMoves.delete(match.id);
   }
@@ -368,7 +407,8 @@ function render(){
   const activeDuel=duelData?.matches?.find(r=>r.id===duelActiveId)||duelData?.matches?.find(r=>r.status==='active'||r.status==='pending')||duelData?.matches?.[0];
   const gomokuPreviewCell=duelGomokuPreview&&activeDuel&&duelGomokuPreview.id===activeDuel.id&&duelGomokuPreview.version===activeDuel.version&&activeDuel.turn_user===state.selfUserId?duelGomokuPreview.cell:null;
   let html = screen==='title'?titleView(state,wallet.remembered,autoState,autoMessage,wallet.connected):screen==='home'?homeView(state,bottomNav()):screen==='play'?playView(state,drafts,bottomNav(),steamView):screen==='directives'?directivesView(state,drafts,bottomNav(),tabsFor('directives')):screen==='stable'?screenStable():screen==='shop'?screenShop():screen==='relics'?screenRelics():screen==='market'?screenMarket():screen==='casino'?screenCasino():screen==='duels'?duelScreen({info:duelData,user:state.selfUserId,live,cash:state.cash,selectedId:duelActiveId,game:duelGame,stake:duelStake,target:duelTarget,busy:duelBusy,error:duelError,confirmResign:duelResignConfirm,pokerPicks:duelPokerPicks,fallbackMembers:state.members??[],opponentPickerOpen:duelOpponentPickerOpen,loading:duelLoading,gomokuPreviewCell,recentMoves:duelRecentMoves,localMoveHistory:duelMoveHistory,guessDraft:duelGuessDraft,
-riskConfirm:duelRiskConfirm===`create:${duelGame}:${duelTarget}:${duelStake}`?'create':activeDuel&&duelRiskConfirm===`accept:${activeDuel.id}:${activeDuel.version}:${activeDuel.stake}`?'accept':'',nav:bottomNav()}):screen==='mleague'?mleagueScreen({state,live,draft:{...mlDraft,amount:drafts['ml-amount']},tabs:subTabs(),nav:bottomNav()}):screen==='race'?screenRace():screenAssets();
+lastSynced:duelLastGoodFetch,pendingRetry:!!duelPendingAction,historyHasMore:duelHasMore,
+ riskConfirm:duelRiskConfirm===`create:${duelGame}:${duelTarget}:${duelStake}`?'create':activeDuel&&duelRiskConfirm===`accept:${activeDuel.id}:${activeDuel.version}:${activeDuel.stake}`?'accept':'',nav:bottomNav()}):screen==='mleague'?mleagueScreen({state,live,draft:{...mlDraft,amount:drafts['ml-amount']},tabs:subTabs(),nav:bottomNav()}):screen==='race'?screenRace():screenAssets();
   // 効果音 switch for the casino and racing screens (off unless the player turns it on).
   setBgmScene(screen==='casino'||screen==='race'?screen:'');
   if((screen==='casino'||screen==='race')&&sfxEnabled())preloadSfx(); // fetch the rendered sounds before the first win
@@ -674,6 +714,34 @@ addEventListener('click',async e=>{
   if(t.dataset.duelSelect){duelActiveId=t.dataset.duelSelect;duelResignConfirm=false;duelPokerPicks=[];duelGuessDraft='';duelRiskConfirm=null;duelGomokuPreview=null;render();return;}
   if(t.dataset.duelCard!==undefined){const i=Number(t.dataset.duelCard);if(!Number.isInteger(i)||i<0||i>4)return;if(duelPokerPicks.includes(i))duelPokerPicks=duelPokerPicks.filter(x=>x!==i);else if(duelPokerPicks.length<3)duelPokerPicks=[...duelPokerPicks,i];else{toast('交換できるのは3枚までだ');return;}render();return;}
   if(t.dataset.duelRefresh){await refreshDuel(true);return;}
+   if(t.dataset.duelHistoryMore){
+    if(duelLoading||duelBusy||!live||document.hidden||!duelHasMore)return;
+    const list=duelData?.matches??[],last=list.at(-1);if(!last)return;
+    duelLoading=true;render();
+    try{
+     const page=await wallet.duels(last.updated_at+':'+last.id);
+     const byId=new Map(list.map(x=>[x.id,x]));
+     for(const row of page.matches??[])byId.set(row.id,row);
+     duelData={...duelData,matches:[...byId.values()].sort((a,b)=>b.updated_at-a.updated_at||b.id.localeCompare(a.id))};
+     duelHasMore=!!page.hasMore;duelError='';
+    }catch(error){duelError='過去の対戦を読み込めませんでした。 '+(error?.message??'');}
+    finally{duelLoading=false;render();}
+    return;
+   }
+   if(t.dataset.duelRetry){
+    if(!live||duelBusy||!duelPendingAction){toast('確認する前回の操作がありません。');return;}
+    duelBusy=true;duelError='';render();
+    try{
+     const recovered=await wallet.duelAction({...duelPendingAction.args,id:duelPendingAction.id});
+     duelPendingAction=null;saveDuelPending();
+     duelActiveId=recovered.match.id;duelResignConfirm=false;duelPokerPicks=[];duelGomokuPreview=null;
+     try{const [next,info]=await Promise.all([wallet.state(),wallet.duels()]);observeDuelChanges(info);state=next;duelData=mergeDuelPages(info);duelLastGoodFetch=Date.now();}
+     catch{duelError='操作IDは確認できましたが、最新のKP・盤面取得に失敗しました。「更新」を押してください。';}
+     toast('前回の操作IDで通信結果を確認しました。');
+    }catch(error){duelError='前回と同じ操作IDで確認しましたが、結果を確定できませんでした。別の操作は送らず通信状況を確認してください。 '+(error.message??'');}
+    finally{duelBusy=false;render();}
+    return;
+   }
   if(t.dataset.duelCancelCell!==undefined){duelGomokuPreview=null;render();return;}
   if(t.dataset.duelCell!==undefined||t.dataset.duelConfirmCell!==undefined){
    const chosen=duelData?.matches?.find(r=>r.id===duelActiveId)||duelData?.matches?.find(r=>r.status==='active'||r.status==='pending')||duelData?.matches?.[0];
@@ -705,17 +773,20 @@ addEventListener('click',async e=>{
      mini==='challenge'?{choice:'challenge'}:mini==='poker'?{cells:[...duelPokerPicks]} :{cell:Number(t.dataset.duelConfirmCell??t.dataset.duelCell)};
    const args=action==='create'?{action,game:duelGame,opponent:duelTarget,stake:duelStake}:
     {action,duel:match?.id,version:match?.version,...move};
-   if(!duelPendingAction||JSON.stringify(duelPendingAction.args)!==JSON.stringify(args))duelPendingAction={id:crypto.randomUUID(),args};
+   if(duelPendingAction&&JSON.stringify(duelPendingAction.args)!==JSON.stringify(args)){
+     duelError='前回の操作結果が未確認のため、新しい操作を送れません。「前回の操作を確認」を押してください。';render();return;
+    }
+    if(!duelPendingAction){duelPendingAction={id:crypto.randomUUID(),args,owner:state.selfUserId,at:Date.now()};saveDuelPending();}
    duelBusy=true;duelError='';render();
    try{
     const result=await wallet.duelAction({...duelPendingAction.args,id:duelPendingAction.id});
-    duelPendingAction=null;duelActiveId=result.match.id;duelResignConfirm=false;duelPokerPicks=[];duelGomokuPreview=null;duelOpponentPickerOpen=false;if(action==='move')duelGuessDraft='';
-    try{const [next,info]=await Promise.all([wallet.state(),wallet.duels()]);observeDuelChanges(info);state=next;duelData=info;}
+    duelPendingAction=null;saveDuelPending();duelActiveId=result.match.id;duelResignConfirm=false;duelPokerPicks=[];duelGomokuPreview=null;duelOpponentPickerOpen=false;if(action==='move')duelGuessDraft='';
+    try{const [next,info]=await Promise.all([wallet.state(),wallet.duels()]);observeDuelChanges(info);state=next;duelData=mergeDuelPages(info);}
     catch{duelError='対戦操作は確定したが、最新の盤面または口座の取得に失敗した。更新を押してください。';}
     toast(action==='create'?'挑戦状を送った！':action==='accept'?'決闘開始！':'盤面を更新した');
    }catch(error){
     duelError='通信結果または操作内容を確認できません。更新してから、必要に応じて同じ操作を再試行してください。 '+(error.message??'');duelGomokuPreview=null;
-    try{duelData=await wallet.duels();}catch{}
+    try{const latest=await wallet.duels();observeDuelChanges(latest);duelData=mergeDuelPages(latest);duelLastGoodFetch=Date.now();}catch{}
    }finally{duelBusy=false;render();}
    return;
   }
@@ -1198,8 +1269,9 @@ async function refreshMarket() {
   catch(error) { toast(error.message); }
 }
 async function refreshDuel(force=false){
- if(screen!=='duels'||!live||document.hidden||duelBusy||!wallet.connected)return;
- const now=Date.now();const active=duelData?.matches?.some(m=>m.status==='active'&&m.deadline_at>now);
+ if(screen!=='duels'||!live||document.hidden||duelBusy||duelLoading||!wallet.connected)return;
+ loadDuelHistory();loadDuelPending();
+ const now=Date.now();if(!force&&now<duelRetryNotBefore)return;const active=duelData?.matches?.some(m=>m.status==='active'&&m.deadline_at>now);
  const pending=duelData?.matches?.some(m=>m.status==='pending'&&m.deadline_at>now);
  // Preserve 10-second updates during play but reduce idle reads: 20s for invites, 30s otherwise.
  const cadence=active?10000:pending?20000:30000;
@@ -1208,12 +1280,17 @@ async function refreshDuel(force=false){
  try{
   const fresh=await wallet.duels();
   if(screen!=='duels'||!live)return;
-  observeDuelChanges(fresh);duelData=fresh;duelError='';
+  observeDuelChanges(fresh);duelData=mergeDuelPages(fresh);duelError='';duelLastGoodFetch=Date.now();duelRefreshFailures=0;duelRetryNotBefore=0;
   if(!duelActiveId||!fresh.matches.some(r=>r.id===duelActiveId)){
    duelActiveId=fresh.matches.find(r=>r.status==='active'||r.status==='pending')?.id??fresh.matches[0]?.id??null;
   }
   render();
- }catch(error){duelError='対戦情報を取得できませんでした。通信状況を確認して「更新」を押してください。'+(error?.message?'（'+error.message+'）':'');render();}
+  }catch(error){
+  duelRefreshFailures=Math.min(4,duelRefreshFailures+1);
+  duelRetryNotBefore=Date.now()+Math.min(60000,10000*2**(duelRefreshFailures-1));
+  duelError='対戦情報を取得できませんでした。最後に受信した盤面を表示しています。通信状況を確認して「更新」を押してください。'+(error?.message?'（'+error.message+'）':'');
+  render();
+ }
  finally{duelLoading=false;render();}
 }
 setInterval(()=>{if(screen==='duels')refreshDuel();},10000);

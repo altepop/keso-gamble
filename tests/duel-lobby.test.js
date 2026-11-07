@@ -101,3 +101,19 @@ test('last board move can be emphasized from an existing snapshot, without loadi
  assert.match(html,/duel-last-cell/);
  assert.match(html,/この端末で確認した直前の着手/);
 });
+
+test('recovery banner and explicit history paging display without new polling',()=>{
+ const html=render({lastSynced:Date.now()-25000,pendingRetry:true,historyHasMore:true});
+ assert.match(html,/最終更新/);
+ assert.match(html,/data-duel-retry="1"/);
+ assert.match(html,/前回の操作を確認/);
+ assert.match(html,/data-duel-history-more="1"/);
+ assert.match(html,/このボタンを押した場合だけ/);
+});
+test('unconfirmed operation is shown even in a selected active game',()=>{
+ const room={id:'room',status:'active',game:'hitblow',user_a:self,user_b:friend,black_user:self,
+  private_hand:'1234',board:'{"history":[]}',stake:1000,version:2,turn_user:self,deadline_at:Date.now()+60000};
+ const html=render({info:{matches:[room],members:users,games:{hitblow:{name:'Hit & Blow'}}},pendingRetry:true});
+ assert.match(html,/data-duel-retry/);
+ assert.match(html,/id="duel-guess"/);
+});

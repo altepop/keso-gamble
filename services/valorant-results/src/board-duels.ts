@@ -1,5 +1,7 @@
 import type {KpEnv,KpMapping} from './kp.ts';
 import {debtOf} from './kp-debt.ts';
+// @ts-expect-error Pure shared ledger verifier, independently covered by node:test.
+import {checkDuelLedger} from '../../../js/duel-kp-audit.js';
 import {kpTargetMembers,kpTargetAllowed} from './kp-target-members.ts';
 // @ts-expect-error Shared pure browser-side rules (no declaration file).
 import {initialDuelBoard,playDuelMove,DUEL_GAMES} from '../../../js/duel-rules.js';
@@ -141,21 +143,45 @@ async function room(env:KpEnv,guild:string,id:string,user:string):Promise<BoardD
   .bind(user,guild,id,user,user).first<BoardDuel>();
  if(!row)throw Error('対戦が見つかりません。');return row;
 }
+// Check real transitions only, using one indexed ledger-ID lookup per escrow/settlement.
+// Never poll for anomalies or repeat a KP credit after an audit read fails.
+async function verifyDuelLedger(env:KpEnv,match:BoardDuel){
+ if(!['active','finished'].includes(match.status))return;
+ try{
+  const ids=['duel:stake:a:','duel:stake:b:','duel:payout:a:','duel:payout:b:'].map(prefix=>prefix+match.id);
+  const rows=(await env.DB.prepare('SELECT id,guild,user,delta,kind FROM kp_ledger WHERE id IN (?,?,?,?)')
+   .bind(...ids).all<{id:string;guild:string;user:string;delta:number;kind:string}>()).results;
+  const verdict=checkDuelLedger(match,rows);
+  if(!verdict.ok)console.error('duel-ledger-integrity-anomaly',JSON.stringify({duel:match.id,problems:verdict.problems}));
+ }catch(error){console.error('duel-ledger-audit-unavailable',match.id,String(error));}
+}
 async function present(env:KpEnv,mapping:KpMapping,user:string,id:string){
  return room(env,mapping.guildId,id,user);
 }
 function validateActionId(id:unknown){if(typeof id!=='string'||!UUID.test(id))throw Error('操作IDが不正です。');return id;}
 
-export async function boardDuelList(env:KpEnv,m:KpMapping,user:string){
+export async function boardDuelList(env:KpEnv,m:KpMapping,user:string,cursor:string|null=null){
  await ensureBoardDuels(env);
- const matches=(await env.DB.prepare(`SELECT d.*,
- CASE WHEN d.black_user=? THEN json_extract(s.data,'$.privateA')
-      ELSE json_extract(s.data,'$.privateB') END AS private_hand
- FROM kp_board_duels d LEFT JOIN kp_board_duel_secrets s ON s.guild=d.guild AND s.id=d.id
- WHERE d.guild=? AND (d.user_a=? OR d.user_b=?)
- ORDER BY d.updated_at DESC LIMIT 20`).bind(user,m.guildId,user,user).all<BoardDuel>()).results;
+ let cutoff:number|null=null,id='';
+ if(cursor!==null){
+  const parsed=/^([0-9]{10,15}):([0-9a-f-]{36})$/i.exec(cursor);
+  if(!parsed||!UUID.test(parsed[2]))throw Error('履歴の読み込み位置が不正です。');
+  cutoff=Number(parsed[1]);id=parsed[2];
+  if(!Number.isSafeInteger(cutoff))throw Error('履歴の読み込み位置が不正です。');
+ }
+ const condition=cutoff===null?'':' AND (d.updated_at<? OR (d.updated_at=? AND d.id<?))';
+ const query=`SELECT d.*,
+  CASE WHEN d.black_user=? THEN json_extract(s.data,'$.privateA')
+       ELSE json_extract(s.data,'$.privateB') END AS private_hand
+  FROM kp_board_duels d LEFT JOIN kp_board_duel_secrets s ON s.guild=d.guild AND s.id=d.id
+  WHERE d.guild=? AND (d.user_a=? OR d.user_b=?)${condition}
+  ORDER BY d.updated_at DESC,d.id DESC LIMIT 20`;
+ const stmt=env.DB.prepare(query);
+ const matches=(await (cutoff===null?stmt.bind(user,m.guildId,user,user):
+   stmt.bind(user,m.guildId,user,user,cutoff,cutoff,id)).all<BoardDuel>()).results;
  return {games:GAMES,limit:DUEL_MAX_STAKE,turnMs:DUEL_TURN_MS,invitationMs:DUEL_INVITE_MS,
-  members:await kpTargetMembers(env,m),matches};
+   // Only first page needs a roster. Subsequent pages reuse already loaded members.
+   members:cursor===null?await kpTargetMembers(env,m):[],matches,hasMore:matches.length===20};
 }
 export async function boardDuelAction(env:KpEnv,m:KpMapping,user:string,body:Record<string,unknown>){
  await ensureBoardDuels(env);
@@ -257,7 +283,11 @@ export async function boardDuelAction(env:KpEnv,m:KpMapping,user:string,body:Rec
   if(msg.includes('duel conflict'))throw Error('相手が先に操作したため、盤面を更新してください。');
   throw error;
  }
- return present(env,m,user,match.id);
+ const latest=await present(env,m,user,match.id);
+ if((kind==='accept'&&latest.status==='active')||
+    (['move','resign','timeout'].includes(kind)&&latest.status==='finished'))
+  await verifyDuelLedger(env,latest);
+ return latest;
 }
 
 /** Low-budget cron sweep every five minutes; escrow is never held indefinitely after a time-out. */
@@ -277,7 +307,9 @@ export async function settleExpiredBoardDuels(env:KpEnv,guild:string,now=Date.no
     (id,guild,duel_id,actor,kind,version,at,board,next_turn,winner,first_user,deadline_at)
     VALUES(?,?,?,'system','timeout',?,?,NULL,NULL,?,NULL,?)`)
     .bind(crypto.randomUUID(),guild,match.id,match.version,now,winner,match.deadline_at).run();
-   settled+=Number(done.meta.changes??0);
+   const applied=Number(done.meta.changes??0);
+   settled+=applied;
+   if(applied)await verifyDuelLedger(env,{...match,status:'finished',winner});
   }catch(error){
    if(!String(error).includes('duel conflict'))throw error;
    // An opponent made the last move while this cron was checking the deadline.
@@ -312,7 +344,7 @@ export async function cleanupBoardDuels(env:KpEnv,guild:string,now=Date.now()){
 export async function boardDuelApi(request:Request,env:KpEnv,m:KpMapping,user:string,headers:Record<string,string>={}){
  const response=(body:unknown,status=200)=>Response.json(body,{status,headers:{'Cache-Control':'no-store',...headers}});
  try{
-  if(request.method==='GET')return response(await boardDuelList(env,m,user));
+  if(request.method==='GET')return response(await boardDuelList(env,m,user,new URL(request.url).searchParams.get('cursor')));
   if(request.method!=='POST')return response({error:'不正な操作です。'},405);
   const raw=await request.text();if(raw.length>1024)return response({error:'操作内容が長すぎます。'},400);
   const body=JSON.parse(raw) as Record<string,unknown>;
