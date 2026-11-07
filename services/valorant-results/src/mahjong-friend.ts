@@ -63,10 +63,15 @@ export async function processFriend(env:FriendEnv,mapping:KpMapping,s:PaipuSumma
   // Do not persist malformed records as seen; debugging a temporary decoder mismatch stays possible.
   return invalid;
  }
+ // Mark a verified friend UUID in the legacy paipu cache (small sentinel, not the whole replay).
+ // This ensures an old /paifu claim cannot generate ranked rewards for the same friend match.
+ await env.DB.prepare('INSERT OR IGNORE INTO kp_mahjong_paipu(guild,paipu,summary,attempts,at) VALUES(?,?,?,0,?)').bind(guild,s.uuid,JSON.stringify({category:1}),now).run();
+ const legacy=await env.DB.prepare("SELECT 1 AS found FROM kp_mahjong_claims WHERE guild=? AND paipu=? AND status='approved' LIMIT 1").bind(guild,s.uuid).first();
  const links=(await env.DB.prepare('SELECT user,account FROM kp_mahjong_links WHERE guild=? ORDER BY account').bind(guild).all<{user:string;account:number}>()).results;
  const transfers=friendTransfers(s,links);
  let status='preview';
- if(!transfers)status='unlinked';
+ if(legacy)status='legacy_claim';
+ else if(!transfers)status='unlinked';
  else if(env.MAHJONG_FRIEND_SETTLEMENT_ENABLED!=='true')status='preview';
  else {
   const wallets=(await env.DB.prepare('SELECT user,balance FROM kp_wallets WHERE guild=?').bind(guild).all<{user:string;balance:number}>()).results;
