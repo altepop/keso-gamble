@@ -1,7 +1,7 @@
 // Browser-only two-view demo and CPU practice built from the same rules/UI as live duels.
 // All effects stay in RAM: no network, localStorage, KP API, D1 or Discord calls.
-import {duelScreen} from '../js/duel-view.js';
-import {DUEL_GAMES,initialDuelBoard,playDuelMove,duelPlayerForColor} from '../js/duel-rules.js';
+import {duelScreen} from '../js/duel-view.js?v=othello-pass-20261107-v1';
+import {DUEL_GAMES,initialDuelBoard,playDuelMove,duelPlayerForColor} from '../js/duel-rules.js?v=othello-pass-20261107-v1';
 import {EXTRA_DUEL_GAMES,miniStart,miniMove} from '../js/duel-mini-games.js';
 import {chooseCpuMove,CPU_DIFFICULTY_GUIDE} from './cpu.js?v=cpu-20261107-v4';
 const GAMES={...DUEL_GAMES,...EXTRA_DUEL_GAMES};
