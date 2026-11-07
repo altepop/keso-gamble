@@ -316,16 +316,19 @@ async function deathDetail(env: Env, match: Match, players: Player[], accounts: 
   }
 }
 
-async function flushNotifications(env: Env, players: Player[]): Promise<void> {
+export async function flushNotifications(env: Env, players: Player[]): Promise<void> {
   await ensureNotificationReadIndexes(env.DB);
-  const hasPending = await env.DB.prepare('SELECT 1 AS n FROM notifications WHERE sent=0 LIMIT 1').first();
-  if (!hasPending) return;
+  // Some Death-mode notices remain unsent until explicitly claimed. The old
+  // sent=0 probe stayed positive forever, forcing Discord cooldown/monitor_state
+  // checks on every Cron even though there was nothing deliverable.
+  // Use the exact indexed, claim-aware candidate list once, and short-circuit.
+  const pending = await pendingNotificationMatches(env.DB,10);
+  if (!pending.length) return;
   const discordAfter = await state(env, 'discord_after');
   if (discordAfter > Date.now()) { console.info('discord_wait', { retryAt: new Date(discordAfter).toISOString() }); return; }
   const url = new URL(env.DISCORD_WEBHOOK_URL);
   if (url.protocol !== 'https:' || url.hostname !== 'discord.com' || !url.pathname.startsWith('/api/webhooks/')) throw new Error('Invalid Discord Webhook URL');
   url.searchParams.set('wait', 'true');
-  const pending = await pendingNotificationMatches(env.DB,10);
   for (const pendingMatch of pending) {
     try {
       // Include sent participants when another player's result arrives on a later poll.
