@@ -6,6 +6,7 @@ import {queueSteamPosts} from './steam-posts.ts';
 import {ensureNotificationReadIndexes} from './notification-indexes.ts';
 import {markDeliveredNotices} from './notification-delivery.ts';
 import {pendingNotificationMatches} from './notification-pending.ts';
+import {cleanupMonitorData} from './monitor-cleanup.ts';
 import {monitorSteam} from './steam-rewards.ts';
 import {readModeNote} from './mode-rewards.ts';
 import {skirmishResultButtons} from './skirmish.ts';
@@ -416,12 +417,9 @@ export async function monitor(env: Env, players: Player[] = configuredPlayers): 
   if (!lock.meta.changes) { console.info('monitor_skipped', { reason: 'previous_run_active' }); return; }
   try {
     await setState(env, 'monitor_started', Date.now());
-    const marks = players.map(() => '?').join(',');
-    await env.DB.prepare(`DELETE FROM tracked_players${players.length ? ` WHERE riot_id NOT IN (${marks})` : ''}`)
-      .bind(...players.map(p => p.riotId)).run();
-    await env.DB.prepare(`DELETE FROM death_unrated_sessions${players.length ? ` WHERE riot_id NOT IN (${marks})` : ''}`)
-      .bind(...players.map(p => p.riotId)).run();
-    await env.DB.prepare('DELETE FROM discord_command_receipts WHERE expires_at<?').bind(Date.now()).run();
+    // Cleanup is maintenance only: avoid walking both growing tables each minute.
+    // A changed monitored-player roster is always cleaned immediately.
+    await cleanupMonitorData(env.DB, players.map(p => p.riotId));
     const accounts = new Map<string, Account>((await env.DB.prepare('SELECT riot_id,puuid,region,since FROM tracked_players')
       .all<Account & { riot_id: string }>()).results.map(account => [account.riot_id, account]));
     let kpRun:KpRun|null=null;
