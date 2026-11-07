@@ -1,6 +1,6 @@
-import {miniBoardView} from './duel-mini-view.js?v=web-4cfed36ba8062663';
-import {EXTRA_DUEL_GAMES} from './duel-mini-games.js?v=web-4cfed36ba8062663';
-import {DUEL_GAMES,duelLegalMoves,duelScore} from './duel-rules.js?v=web-4cfed36ba8062663';
+import {miniBoardView} from './duel-mini-view.js?v=web-d7ccb359a6e5e215';
+import {EXTRA_DUEL_GAMES} from './duel-mini-games.js?v=web-d7ccb359a6e5e215';
+import {DUEL_GAMES,duelLegalMoves,duelScore} from './duel-rules.js?v=web-d7ccb359a6e5e215';
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const kp=n=>Number(n||0).toLocaleString('ja-JP')+' KP';
 const title=(r)=>DUEL_GAMES[r.game]?.name||EXTRA_DUEL_GAMES[r.game]?.name||r.game;
@@ -99,6 +99,7 @@ export function duelScreen({info,user,live,cash,selectedId,game='othello',stake=
  const retryNotice=pendingRetry?'<div class="storage-warning duel-error" role="alert"><strong>前回の対戦操作が未確認です。</strong><p>別の操作は送らず、同じ操作IDを使って結果を確認してください。</p><button type="button" class="action-btn primary" data-duel-retry="1" '+(busy?'disabled':'')+'>前回の操作を確認</button></div>':'';
  const moreNotice=historyHasMore?'<div class="duel-history-more"><button type="button" class="action-btn" data-duel-history-more="1" '+(busy?'disabled':'')+'>過去の対戦を20件ずつ読み込む</button><p class="helper">このボタンを押した場合だけ過去の対戦を取得する。</p></div>':'';
  return `<div class="screen"><header class="topbar"><div class="toprow"><h1 class="title">⚔️ 決闘</h1><div class="small-actions"><span class="badge">${kp(cash)}</span></div></div></header>
+ <div class="duel-practice-entry"><div><strong>CPUと練習する</strong><p>相手が手を返してくる練習対戦。6モードすべて、実KP消費なし。iPhoneでも何度でも試せる。</p></div><a class="action-btn primary" href="./duel-demo.html?cpu=1">CPUとの練習を始める</a></div>
  ${syncNotice}${retryNotice}
  ${chosen?`<div class="duel-current">
  ${invited?`<div class="panel"><div class="card-body"><h2 class="panel-title">${mine?'相手の返答待ち':'対戦の申し込み'}</h2>
@@ -120,6 +121,6 @@ export function duelScreen({info,user,live,cash,selectedId,game='othello',stake=
  <div class="duel-heading"><h2 class="panel-title">対戦ルーム</h2><button class="action-btn" data-duel-refresh="1" ${busy?'disabled':''}>更新 ↻</button></div>
  ${matches.length?matches.map(r=>summary(r,info,user)).join(''):'<p class="helper">対戦履歴はまだありません。</p>'}
  </div></div>`:''}
- ${live?`<div class="panel"><div class="card-body"><h2 class="panel-title">対戦ルール</h2><p class="helper">1手の制限時間は10分。制限時間を過ぎた場合と投了した場合は負けになる。対戦開始後は賭け金を取り消せない。引き分けでは双方に賭け金を返金する。遺物の補正や借KPは使えない。CPU対戦には対応していない。</p></div></div>`:''}
+ ${live?`<div class="panel"><div class="card-body"><h2 class="panel-title">対戦ルール</h2><p class="helper">1手の制限時間は10分。制限時間を過ぎた場合と投了した場合は負けになる。対戦開始後は賭け金を取り消せない。引き分けでは双方に賭け金を返金する。遺物の補正や借KPは使えない。CPU練習は別画面で遊べる。CPU戦のKPは練習用で、本番の残高には反映しない。</p></div></div>`:''}
  ${nav}</div>`;
 }
