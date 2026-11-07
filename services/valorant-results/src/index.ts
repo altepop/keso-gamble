@@ -5,6 +5,7 @@ import {queueVdkPearlRoast} from './vdk-pearl-roast.ts';
 import {queueSteamPosts} from './steam-posts.ts';
 import {ensureNotificationReadIndexes} from './notification-indexes.ts';
 import {markDeliveredNotices} from './notification-delivery.ts';
+import {pendingNotificationMatches} from './notification-pending.ts';
 import {monitorSteam} from './steam-rewards.ts';
 import {readModeNote} from './mode-rewards.ts';
 import {skirmishResultButtons} from './skirmish.ts';
@@ -324,12 +325,8 @@ async function flushNotifications(env: Env, players: Player[]): Promise<void> {
   const url = new URL(env.DISCORD_WEBHOOK_URL);
   if (url.protocol !== 'https:' || url.hostname !== 'discord.com' || !url.pathname.startsWith('/api/webhooks/')) throw new Error('Invalid Discord Webhook URL');
   url.searchParams.set('wait', 'true');
-  const pending = await env.DB.prepare(`SELECT match_id,MIN(ended_at) AS ended_at FROM notifications
-    WHERE sent=0 AND (mode IS NULL OR (mode!='unrated' AND substr(mode,1,6)!='death_') OR EXISTS(
-      SELECT 1 FROM death_unrated_sessions s WHERE s.riot_id=notifications.riot_id
-      AND s.match_id=notifications.match_id AND s.cancelled_at IS NULL))
-    GROUP BY match_id ORDER BY ended_at,match_id LIMIT 10`).all<{ match_id: string }>();
-  for (const pendingMatch of pending.results) {
+  const pending = await pendingNotificationMatches(env.DB,10);
+  for (const pendingMatch of pending) {
     try {
       // Include sent participants when another player's result arrives on a later poll.
       const notices = await env.DB.prepare(`SELECT * FROM notifications WHERE match_id=?
