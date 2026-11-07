@@ -22,7 +22,7 @@ export interface PlayerSummary {
  wins:number;tsumo:number;dealIns:number;dealInPoints:number;riichi:number;riichiWins:number;riichiDealIns:number;
  callRounds:number;rounds:number;maxScore:number;minScore:number;bestLead:number;
 }
-export interface PaipuSummary {v:1;uuid:string;game:string;players:number;start:number;end:number;seats:PlayerSummary[];rounds:Round[]}
+export interface PaipuSummary {v:1;uuid:string;game:string;players:number;start:number;end:number;seats:PlayerSummary[];rounds:Round[];c3?:unknown}
 
 const WINDS=['東','南','西','北'];
 const FAN_NAMES:Record<string,string>=fans;
