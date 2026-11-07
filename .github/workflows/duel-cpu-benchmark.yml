@@ -1,5 +1,10 @@
 name: Duel CPU six-mode comparative benchmark
 on:
+  push:
+    branches: [feat/duel-cpu-rigorous-endgame-20261107]
+    paths:
+      - 'duel-preview/cpu-*.js'
+      - '.github/workflows/duel-cpu-benchmark.yml'
   workflow_dispatch:
 permissions:
   contents: read
@@ -13,18 +18,10 @@ jobs:
       max-parallel: 6
       matrix:
         include:
-          - game: othello
-            pairs: 10
-          - game: gomoku
-            pairs: 30
-          - game: connect4
-            pairs: 10
-          - game: hitblow
-            pairs: 200
-          - game: bluffdice
-            pairs: 300
           - game: poker
-            pairs: 200
+            pairs: 550
+          - game: hitblow
+            pairs: 300
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
