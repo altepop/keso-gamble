@@ -17,7 +17,7 @@ function startCase(d:any):{events:Event[];dealer:number}|null{
   !Number.isSafeInteger(d.ben)||d.ben<0||
   !Number.isSafeInteger(d.liqibang)||d.liqibang<0||
   !Array.isArray(d.scores)||d.scores.length!==4||d.scores.some((s:unknown)=>!Number.isInteger(s))||
-  !Array.isArray(d.doras)||!tile(d.doras[0]))return null;
+  !tile(Array.isArray(d.doras)?d.doras[0]:d.dora))return null;
  const hands=[0,1,2,3].map(i=>arrayOf(d['tiles'+i]));
  if(hands.some((h,i)=>h.length!==(i===d.ju?14:13)||h.some(t=>!t)))return null;
  // The dealer's 14th starting tile is an initial self-draw. Never evaluate
@@ -26,7 +26,7 @@ function startCase(d:any):{events:Event[];dealer:number}|null{
  const events:Event[]=[
   {type:'start_game'},
   {type:'start_kyoku',bakaze:WINDS[d.chang],kyoku:d.ju+1,honba:d.ben,kyotaku:d.liqibang,
-   oya:d.ju,scores:d.scores.slice(),dora_marker:tile(d.doras[0]),tehais:hands},
+   oya:d.ju,scores:d.scores.slice(),dora_marker:tile(Array.isArray(d.doras)?d.doras[0]:d.dora),tehais:hands},
   {type:'tsumo',actor:d.ju,pai:firstDraw},
  ];
  return {events,dealer:d.ju};
@@ -50,7 +50,8 @@ export function buildC3Cases(actions:PaipuAction[],summary:PaipuSummary,cap=48):
  let pendingDraw:{seat:number;tile:string}|null=null;
  const turns=[0,0,0,0],out:C3Case[]=[];
  for(let i=0;i<actions.length;i++){
-  const {name,data:d}=actions[i]??{};
+  const a=actions[i];
+  const name=a?.name,d=a?.data;
   if(name==='RecordNewRound'){
    round++;turns.fill(0);current=startCase(d);blocked=!current||round>=summary.rounds.length;
    events=current?.events??[];pendingDraw=current?{seat:current.dealer,tile:(events.at(-1) as Event).pai as string}:null;
