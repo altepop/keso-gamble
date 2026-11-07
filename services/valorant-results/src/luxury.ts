@@ -1,4 +1,5 @@
 import {stockDiscount} from './stock-market.ts';
+import {kpTargetAllowed,kpTargetMembers} from './kp-target-members.ts';
 import {raceCatchphrase,raceAside} from './racing-voice.ts';
 // Luxury items bought with KP. The purchase row (and the crown race, for crown items) is written by a
 // trigger on the same wallet operation insert as the KP debit, so either everything applies or nothing.
@@ -39,7 +40,7 @@ export async function buyLuxury(env:KpEnv&{KP_EARNINGS_WEBHOOK_URL?:string},mapp
  const luxury:{id:string;item:string;target:string|null;payload:string|null;until:number|null;crown?:{race:number;name:string;user:string}}={id:'lux-'+kpRandom(),item:item.id,target:null,payload:null,until:null};
  if(item.needs==='target'){
   const target=String(args.target??'');
-  if(!mapping.accounts.some(a=>a.discordUserId===target)||target===user)throw Error('相手を選んでください。');
+  if(target===user||!await kpTargetAllowed(env,mapping,target))throw Error('KP口座のある相手を選んでください。');
   if((await roastLevelsOf(env,mapping))(target)==='mild')throw Error('相手の煽りレベルが「控えめ」なので使えません。');
   if(item.id==='roast-post'&&!env.KP_EARNINGS_WEBHOOK_URL)throw Error('稼ぎchの投稿先がまだ設定されていません。');
   luxury.target=target;
@@ -48,7 +49,8 @@ export async function buyLuxury(env:KpEnv&{KP_EARNINGS_WEBHOOK_URL?:string},mapp
  if(item.id==='title'){if(!TITLES.includes(args.title))throw Error('称号を選んでください。');luxury.payload=String(args.title);}
  if(item.id==='crown-name'||item.id==='crown-target'){
   const race=await nextCrownSlot(env,mapping.guildId,now);if(race===null)throw Error('空いている枠がありません。');
-  const name=item.id==='crown-name'?validCrownName(args.text):`${memberName(mapping,luxury.target!)}を笑う会`;
+  const targetName=luxury.target?(await kpTargetMembers(env,mapping)).find(m=>m.id===luxury.target)?.name:null;
+  const name=item.id==='crown-name'?validCrownName(args.text):`${targetName??memberName(mapping,luxury.target!)}を笑う会`;
   luxury.crown={race,name,user:item.id==='crown-name'?user:luxury.target!};luxury.payload=name;
  }
  if(item.needs==='horse'||item.needs==='retired'){
