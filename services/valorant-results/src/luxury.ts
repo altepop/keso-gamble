@@ -78,16 +78,16 @@ export async function luxuryPosts(env:KpEnv&{KP_EARNINGS_WEBHOOK_URL?:string},ma
  if(text)await enqueue(env,'luxury:'+luxury.id,text,now);
 }
 /** What everyone sees: today's convicts, the current billboard horse; and the viewer's own title. */
-export async function luxuryView(env:KpEnv,mapping:KpMapping,user:string,now=Date.now()){
+export async function luxuryView(env:KpEnv,mapping:KpMapping,user:string,now=Date.now(),displayNames:ReadonlyMap<string,string>=new Map()){
  await ensureLuxury(env);
  const rows=(await env.DB.prepare("SELECT user,item,target,payload,until FROM kp_luxury WHERE guild=? AND (item IN ('title','statue') OR until>?) ORDER BY created_at DESC LIMIT 200").bind(mapping.guildId,now).all<{user:string;item:string;target:string|null;payload:string|null;until:number|null}>()).results;
- const convicts=[...new Set(rows.filter(r=>r.item==='convict').map(r=>r.target!))].map(u=>({user:u,name:memberName(mapping,u)}));
+ const convicts=[...new Set(rows.filter(r=>r.item==='convict').map(r=>r.target!))].map(u=>({user:u,name:displayNames.get(u)??memberName(mapping,u)}));
  const board=rows.find(r=>r.item==='billboard');
  const horse=board?await env.DB.prepare('SELECT name FROM kp_horses WHERE id=?').bind(board.payload).first<{name:string}>():null;
  return {
   title:rows.find(r=>r.item==='title'&&r.user===user)?.payload??null,
   convicts,
-  billboard:board&&horse?{horseName:horse.name,ownerName:memberName(mapping,board.user),until:board.until}:null,
+  billboard:board&&horse?{horseName:horse.name,ownerName:displayNames.get(board.user)??memberName(mapping,board.user),until:board.until}:null,
   statues:rows.filter(r=>r.item==='statue'&&r.user===user).map(r=>r.payload),
  };
 }
