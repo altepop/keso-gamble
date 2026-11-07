@@ -28,7 +28,7 @@ jobs:
           - game: hitblow
             pairs: 950
           - game: bluffdice
-            pairs: 2200
+            pairs: 2000
           - game: poker
             pairs: 1700
     steps:
@@ -37,7 +37,10 @@ jobs:
         with:
           node-version: '24'
       - name: Run paired first/second side matches with production CPU and rules
-        run: node scripts/duel-cpu-benchmark.mjs ${{ matrix.game }} ${{ matrix.pairs }} | tee cpu-benchmark-${{ matrix.game }}.log
+        run: |
+          set -euo pipefail
+          node scripts/duel-cpu-benchmark.mjs ${{ matrix.game }} ${{ matrix.pairs }} | tee cpu-benchmark-${{ matrix.game }}.log
+          grep -q '^BENCH_RESULT ' cpu-benchmark-${{ matrix.game }}.log
       - uses: actions/upload-artifact@v4
         if: always()
         with:
