@@ -1,4 +1,4 @@
-// Local two-player walkthrough built from the SAME rules and UI components as live duels.
+// Browser-only two-view demo and CPU practice built from the same rules/UI as live duels.
 // All effects stay in RAM: no network, localStorage, KP API, D1 or Discord calls.
 import {duelScreen} from '../js/duel-view.js';
 import {DUEL_GAMES,initialDuelBoard,playDuelMove} from '../js/duel-rules.js';
@@ -59,7 +59,7 @@ function restart(name=game){
   const now=Date.now();
   match={id:crypto.randomUUID(),guild:'practice',user_a:USERS.a,user_b:USERS.b,game,stake,status:'active',
    board:MINI.has(game)?'.':initialDuelBoard(game),black_user:USERS.a,turn_user:USERS.a,
-   winner:null,version:1,created_at:now,updated_at:now,deadline_at:now+10*60000};
+   winner:null,version:1,created_at:now,updated_at:now,deadline_at:now+24*60*60000};
   if(MINI.has(game)){const started=miniStart(game,rand);match.board=started.board;secret=started.secret;}
   balance[USERS.a]-=stake;balance[USERS.b]-=stake;
   note('CPUとの練習を開始しました。あなたが先手です。');
@@ -106,7 +106,7 @@ function move(body,actor=current()){
   match.turn_user=result.nextColor?(result.nextColor==='B'?match.black_user:other):null;
   if(result.winner)settle(result.winner==='draw'?'draw':result.winner==='B'?match.black_user:other);
  }
- match.version++;match.updated_at=Date.now();match.deadline_at=Date.now()+10*60000;
+ match.version++;match.updated_at=Date.now();match.deadline_at=Date.now()+(againstCpu?24*60*60000:10*60000);
  if(!MINI.has(game)){const added=[...match.board].flatMap((cell,i)=>oldBoard[i]==='.'&&cell!=='.'?[i]:[]);if(added.length===1){recentMoves.set(match.id,{version:match.version,cell:added[0]});const entries=localMoveHistory.get(match.id)??[];localMoveHistory.set(match.id,[...entries,{version:match.version,cell:added[0],color:match.board[added[0]]}].slice(-12));}else recentMoves.delete(match.id);}
  picks=[];previewCell=null;confirmResign=false;guessDraft='';render();
  if(againstCpu&&match.status==='active'&&match.turn_user===USERS.b&&!cpuBusy)scheduleCpu();
@@ -124,8 +124,8 @@ function scheduleCpu(){
    const side=MINI.has(game)?'b':'W';
    const action=chooseCpuMove(game,match.board,{side,hand:own,level:cpuLevel});
    cpuBusy=false;move(action,USERS.b);
-   if(match.status==='active')note('CPUが操作しました。次はあなたの手番です。');
-   else note('練習対戦が終了しました。結果を確認できます。');
+   if(match.status==='active'&&match.turn_user===USERS.a)note('CPUが操作しました。次はあなたの手番です。');
+   else if(match.status==='finished')note('練習対戦が終了しました。結果を確認できます。');
    render();
   }catch(error){cpuBusy=false;note('CPUの操作に失敗しました。最初からやり直してください。'+(error.message??''),true);render();}
  },430);
