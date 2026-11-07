@@ -1082,3 +1082,33 @@ test('display names use verified Riot handles rather than raw Dolly, frin, h1d3g
  assert.equal(canonicalDisplayAlias('h1d3g1g4s'),'石原');
  assert.equal(canonicalDisplayAlias('名古屋'),'名古屋');
 });
+
+
+test('the confirmed Nagoya/Chiba Discord IDs appear in both guild-wide KP target lists without touching directives',async()=>{
+ const {kpTargetMembers}=await import('../src/kp-target-members.ts');
+ const {boardDuelList}=await import('../src/board-duels.ts');
+ const {ensureQuizKp}=await import('../src/quiz-kp.ts');
+ const server=(await import('../discord-config.json',{with:{type:'json'}})).default;
+ const f=await fixture();
+ await ensureQuizKp(f.env);
+ const members=[
+  {id:'590461900907872266',name:'名古屋'},
+  {id:'1237302193938370576',name:'千葉ゆうや'},
+ ];
+ const initial=String(f.sql.prepare('SELECT data FROM kp_state WHERE guild=? AND user=?').get(guild,one)!.data);
+ for(const m of members){
+  f.sql.prepare('INSERT INTO kp_participants(guild,user) VALUES(?,?)').run(server.guildId,m.id);
+  f.sql.prepare('INSERT INTO kp_wallets(guild,user) VALUES(?,?)').run(server.guildId,m.id);
+  f.sql.prepare('INSERT INTO kp_state(guild,user,data) VALUES(?,?,?)').run(server.guildId,m.id,initial);
+ }
+ const actualGuild:KpMapping={guildId:server.guildId,accounts:[]};
+ const originalDirectives=f.sql.prepare('SELECT * FROM kp_directives').all();
+ const roster=await kpTargetMembers(f.env,actualGuild);
+ const duels=(await boardDuelList(f.env,actualGuild,members[0]!.id)).members;
+ for(const m of members){
+  assert.equal(roster.find(x=>x.id===m.id)?.name,m.name,'luxury picker uses owner-verified ID/name');
+  assert.equal(duels.find(x=>x.id===m.id)?.name,m.name,'duel picker uses the same ID/name');
+ }
+ assert.deepEqual(f.sql.prepare('SELECT * FROM kp_directives').all(),originalDirectives,'directives and their state remain unchanged');
+ assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM kp_ledger').get()!.n,0,'roster lookup never transfers KP');
+});
