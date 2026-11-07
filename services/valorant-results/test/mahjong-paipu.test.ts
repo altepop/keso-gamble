@@ -256,3 +256,21 @@ test('the friend preview is read-only; unlinked and insufficient matches never p
  assert.deepEqual(await (await t3.call('/api/mahjong/paipu/friend/summaries',result)).json(),{statuses:['preview']});
  assert.equal(Number(t3.sql.prepare("SELECT COUNT(*) AS n FROM kp_ledger WHERE kind='mahjong_friend'").get()?.n??0),0);
 });
+
+
+test('a previously approved /paifu game is never automatically settled again as a friend game',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:T0});
+ const f=await fixture();
+ const claim=await f.claim(one,1);
+ await f.press(two,claimId(claim));
+ const ids=[one,two,'100000000000000103','100000000000000104'];
+ const s={...summary,category:1,roomId:12345,ai:false,end:T0-10000,start:T0-200000};
+ for(let i=0;i<4;i++){
+  f.sql.prepare('INSERT OR IGNORE INTO kp_wallets(guild,user) VALUES(?,?)').run(guild,ids[i]);
+  f.sql.prepare('INSERT INTO kp_mahjong_links(guild,user,account) VALUES(?,?,?)').run(guild,ids[i],s.seats[i].accountId);
+ }
+ f.env.MAHJONG_FRIEND_SETTLEMENT_ENABLED='true';
+ assert.deepEqual(await (await f.call('/api/mahjong/paipu/friend/summaries',{results:[{uuid:s.uuid,summary:s}]})).json(),{statuses:['legacy_claim']});
+ assert.equal(Number(f.sql.prepare("SELECT COUNT(*) AS n FROM kp_ledger WHERE kind='mahjong_friend'").get()?.n??0),0);
+ assert.equal(Number(f.sql.prepare("SELECT COUNT(*) AS n FROM kp_mahjong_friend_games WHERE status='legacy_claim'").get()?.n??0),1);
+});
