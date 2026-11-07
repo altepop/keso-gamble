@@ -51,8 +51,8 @@ export function cpuHitBlow(board,side,level,random){
  if(level==='easy')return {guess:pick(remaining,random)};
  if(level==='normal'){
   // Intermediate strategy: sample candidate answers but never use non-answer probes.
-  const candidates=candidatePool(remaining,random,12); // overridden below
-  const answers=spaced(remaining,Math.min(130,remaining.length));
+  const candidates=candidatePool(remaining,random,6); // overridden below
+  const answers=spaced(remaining,Math.min(55,remaining.length));
   let best=candidates[0],score=Infinity;
   for(const guess of candidates){
    const counts=new Uint16Array(25);
@@ -65,12 +65,11 @@ export function cpuHitBlow(board,side,level,random){
  // First move is an information-rich and predictable anchor. It makes the
  // benchmark and mobile UI deterministic without disclosing any secret.
  if(mine.length===0&&!used.has('0123'))return {guess:'0123'};
- const answers=spaced(remaining,Math.min(1100,remaining.length));
- const candidates=candidatePool(remaining,random,Math.min(85,remaining.length));
- // Non-solution probes can be optimal when they split the remaining answers
- // better than any candidate. They are considered only when enough uncertainty
- // remains to recoup the extra turn.
- if(remaining.length>40){
+ const answers=spaced(remaining,Math.min(1450,remaining.length));
+ const candidates=candidatePool(remaining,random,Math.min(remaining.length<=320?remaining.length:110,remaining.length));
+ // In a race to solve, a diagnostic probe spends a turn without a chance of
+ // winning. Empirical head-to-head tests show candidate-only guesses dominate.
+ if(false){
   for(const guess of spaced(codes,60))if(!used.has(guess)&&!candidates.includes(guess))candidates.push(guess);
  }
  let best=candidates[0],score=Infinity;
