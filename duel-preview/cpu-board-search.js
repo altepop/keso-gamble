@@ -200,8 +200,11 @@ export function chooseConnect4(board,side,level,random){
   if(exact)table.set(k,best);
   return best;
  }
- let selected=3,best=-Infinity;
- for(const col of moves.slice().sort((a,b)=>Math.abs(a-3)-Math.abs(b-3))){
+ // The centre column may already be full. Even if the time/node budget
+ // expires before evaluating any root candidate, the fallback must be legal.
+ const ordered=moves.slice().sort((a,b)=>Math.abs(a-3)-Math.abs(b-3));
+ let selected=ordered[0],best=-Infinity;
+ for(const col of ordered){
   if(nodes>maxNodes||Date.now()>deadline)break;
   const result=connect4Move(board,side,col);
   const score=result.winner?(result.winner==='draw'?0:100000):

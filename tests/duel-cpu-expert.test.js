@@ -99,3 +99,23 @@ test('Hit & Blow never discards the correct answer merely because the other play
   assert.deepEqual(choice,{guess:target});
  }
 });
+
+test('Connect Four timed-out search always returns a legal column even when centre column is full',()=>{
+ let board=connect4Board();
+ // An alternating fully occupied centre column: no immediate connect-four.
+ for(let i=0;i<6;i++)board=connect4Move(board,i%2?'b':'a',3).board;
+ const legal=connect4LegalMoves(board);
+ assert.equal(legal.includes(3),false);
+ const originalNow=Date.now;
+ try{
+  for(const level of ['normal','strong']){
+   let elapsed=0;
+   // Advance the monotonic budget at every Date.now call. A slow mobile
+   // device may be delayed before the root search evaluates its first move.
+   Date.now=()=>{elapsed+=1000;return elapsed;};
+   const move=chooseCpuMove('connect4',board,{side:'a',level,random:deterministic});
+   assert.ok(legal.includes(move.cell),level+' chose illegal column '+move.cell);
+   assert.doesNotThrow(()=>connect4Move(board,'a',move.cell));
+  }
+ }finally{Date.now=originalNow;}
+});

@@ -3,7 +3,7 @@
 import {duelScreen} from '../js/duel-view.js';
 import {DUEL_GAMES,initialDuelBoard,playDuelMove} from '../js/duel-rules.js';
 import {EXTRA_DUEL_GAMES,miniStart,miniMove} from '../js/duel-mini-games.js';
-import {chooseCpuMove,CPU_DIFFICULTY_GUIDE} from './cpu.js?v=cpu-20261107-v4';
+import {chooseCpuMove,CPU_DIFFICULTY_GUIDE} from './cpu.js?v=connect4-fallback-20261107-v1';
 const GAMES={...DUEL_GAMES,...EXTRA_DUEL_GAMES};
 const USERS={a:'100000000000000101',b:'100000000000000102'};
 const MEMBERS=[{id:USERS.a,name:'プレイヤーA'},{id:USERS.b,name:'プレイヤーB'}];
