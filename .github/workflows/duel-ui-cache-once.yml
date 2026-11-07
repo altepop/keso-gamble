@@ -1,0 +1,36 @@
+name: Temporary duel UI cache rebuild
+on:
+  push:
+    branches:
+      - fix/duel-active-first-gomoku-touch-20261107
+    paths:
+      - 'js/**'
+      - 'css/**'
+      - 'index.html'
+      - '.github/workflows/duel-ui-cache-once.yml'
+permissions:
+  contents: write
+jobs:
+  rebuild:
+    if: github.repository == 'altepop/keso-gamble'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/duel-active-first-gomoku-touch-20261107
+          persist-credentials: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run build:activity
+      - name: Commit browser version refresh to feature branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add js css index.html
+          if ! git diff --cached --quiet; then
+            git commit -m "Refresh content-derived Activity cache versions for duel UX"
+            git push origin HEAD:fix/duel-active-first-gomoku-touch-20261107
+          fi
