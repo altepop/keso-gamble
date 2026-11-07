@@ -4,7 +4,7 @@ test.beforeEach(t=>(t as import('node:test').TestContext).mock.timers.enable({ap
 
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
-import {STEAM_RELIC_DAILY_CAP,STEAM_RELIC_PROOF_SQL,STEAM_RELIC_LIST_SQL,STEAM_RELIC_COMMIT_GUARD,steamRelicDay,requireSteamRelicEligibility,type SteamRelicEvidence} from '../src/steam-relic-eligibility.ts';
+import {STEAM_RELIC_DAILY_CAP,STEAM_RELIC_PROOF_SQL,STEAM_RELIC_LIST_SQL,steamRelicListParams,STEAM_RELIC_COMMIT_GUARD,steamRelicDay,requireSteamRelicEligibility,type SteamRelicEvidence} from '../src/steam-relic-eligibility.ts';
 
 const guild='100000000000000001',user='200000000000000001',other='200000000000000002';
 const credited='steam:valid:paid',unpaid='steam:valid:zero';
@@ -40,7 +40,7 @@ test('as soon as a day reaches 5,000 KP, claiming even an earlier positive recei
  assert.throws(()=>requireSteamRelicEligibility(f.evidence(credited)),/5,000KP/);
  assert.equal(f.commit('claim-blocked',credited),0);
  assert.equal((f.db.prepare('SELECT count(*) AS n FROM kp_operations').get() as {n:number}).n,0);
- const rows=f.db.prepare(STEAM_RELIC_LIST_SQL).all(f.day,guild,user) as Array<SteamRelicEvidence>;
+ const rows=f.db.prepare(STEAM_RELIC_LIST_SQL).all(...steamRelicListParams(f.day,guild,user)) as Array<SteamRelicEvidence>;
  assert.equal(rows.length,2);
  assert.equal(rows[0]!.earnedToday,5000);
 });
