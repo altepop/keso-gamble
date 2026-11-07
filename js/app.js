@@ -400,7 +400,8 @@ function render(){
   const activeDuel=duelData?.matches?.find(r=>r.id===duelActiveId)||duelData?.matches?.find(r=>r.status==='active'||r.status==='pending')||duelData?.matches?.[0];
   const gomokuPreviewCell=duelGomokuPreview&&activeDuel&&duelGomokuPreview.id===activeDuel.id&&duelGomokuPreview.version===activeDuel.version&&activeDuel.turn_user===state.selfUserId?duelGomokuPreview.cell:null;
   let html = screen==='title'?titleView(state,wallet.remembered,autoState,autoMessage,wallet.connected):screen==='home'?homeView(state,bottomNav()):screen==='play'?playView(state,drafts,bottomNav(),steamView):screen==='directives'?directivesView(state,drafts,bottomNav(),tabsFor('directives')):screen==='stable'?screenStable():screen==='shop'?screenShop():screen==='relics'?screenRelics():screen==='market'?screenMarket():screen==='casino'?screenCasino():screen==='duels'?duelScreen({info:duelData,user:state.selfUserId,live,cash:state.cash,selectedId:duelActiveId,game:duelGame,stake:duelStake,target:duelTarget,busy:duelBusy,error:duelError,confirmResign:duelResignConfirm,pokerPicks:duelPokerPicks,fallbackMembers:state.members??[],opponentPickerOpen:duelOpponentPickerOpen,loading:duelLoading,gomokuPreviewCell,recentMoves:duelRecentMoves,localMoveHistory:duelMoveHistory,guessDraft:duelGuessDraft,
-riskConfirm:duelRiskConfirm===`create:${duelGame}:${duelTarget}:${duelStake}`?'create':activeDuel&&duelRiskConfirm===`accept:${activeDuel.id}:${activeDuel.version}:${activeDuel.stake}`?'accept':'',nav:bottomNav()}):screen==='mleague'?mleagueScreen({state,live,draft:{...mlDraft,amount:drafts['ml-amount']},tabs:subTabs(),nav:bottomNav()}):screen==='race'?screenRace():screenAssets();
+lastSynced:duelLastGoodFetch,pendingRetry:!!duelPendingAction,
+ riskConfirm:duelRiskConfirm===`create:${duelGame}:${duelTarget}:${duelStake}`?'create':activeDuel&&duelRiskConfirm===`accept:${activeDuel.id}:${activeDuel.version}:${activeDuel.stake}`?'accept':'',nav:bottomNav()}):screen==='mleague'?mleagueScreen({state,live,draft:{...mlDraft,amount:drafts['ml-amount']},tabs:subTabs(),nav:bottomNav()}):screen==='race'?screenRace():screenAssets();
   // 効果音 switch for the casino and racing screens (off unless the player turns it on).
   setBgmScene(screen==='casino'||screen==='race'?screen:'');
   if((screen==='casino'||screen==='race')&&sfxEnabled())preloadSfx(); // fetch the rendered sounds before the first win
@@ -1247,8 +1248,9 @@ async function refreshMarket() {
   catch(error) { toast(error.message); }
 }
 async function refreshDuel(force=false){
- if(screen!=='duels'||!live||document.hidden||duelBusy||!wallet.connected)return;
- const now=Date.now();const active=duelData?.matches?.some(m=>m.status==='active'&&m.deadline_at>now);
+ if(screen!=='duels'||!live||document.hidden||duelBusy||duelLoading||!wallet.connected)return;
+ loadDuelHistory();loadDuelPending();
+ const now=Date.now();if(!force&&now<duelRetryNotBefore)return;const active=duelData?.matches?.some(m=>m.status==='active'&&m.deadline_at>now);
  const pending=duelData?.matches?.some(m=>m.status==='pending'&&m.deadline_at>now);
  // Preserve 10-second updates during play but reduce idle reads: 20s for invites, 30s otherwise.
  const cadence=active?10000:pending?20000:30000;
@@ -1257,12 +1259,17 @@ async function refreshDuel(force=false){
  try{
   const fresh=await wallet.duels();
   if(screen!=='duels'||!live)return;
-  observeDuelChanges(fresh);duelData=fresh;duelError='';
+  observeDuelChanges(fresh);duelData=fresh;duelError='';duelLastGoodFetch=Date.now();duelRefreshFailures=0;duelRetryNotBefore=0;
   if(!duelActiveId||!fresh.matches.some(r=>r.id===duelActiveId)){
    duelActiveId=fresh.matches.find(r=>r.status==='active'||r.status==='pending')?.id??fresh.matches[0]?.id??null;
   }
   render();
- }catch(error){duelError='対戦情報を取得できませんでした。通信状況を確認して「更新」を押してください。'+(error?.message?'（'+error.message+'）':'');render();}
+  }catch(error){
+  duelRefreshFailures=Math.min(4,duelRefreshFailures+1);
+  duelRetryNotBefore=Date.now()+Math.min(60000,10000*2**(duelRefreshFailures-1));
+  duelError='対戦情報を取得できませんでした。最後に受信した盤面を表示しています。通信状況を確認して「更新」を押してください。'+(error?.message?'（'+error.message+'）':'');
+  render();
+ }
  finally{duelLoading=false;render();}
 }
 setInterval(()=>{if(screen==='duels')refreshDuel();},10000);
