@@ -362,7 +362,7 @@ function render(){
   const warning=live?connectionError:sessionOnly?'端末に保存できないため、この画面を閉じると変更が失われます。':!navigator.locks?.request?'このブラウザでは安全な保存を利用できません。HTTPS対応の最新ブラウザで開いてください。':'';
   const connection=live?`<div class="kp-connection"><span>${wallet.pending?'通信結果の確認待ち':wallet.remembered?'KP口座 接続中':'KP口座 一時接続'}</span><button data-action="refresh-kp">${wallet.pending?'通信結果を確認':'残高を更新'}</button><button data-action="disconnect-kp">接続を解除</button></div>`:'';
   const withControls=html.includes('<div id="connection-slot"></div>')?html.replace('<div id="connection-slot"></div>',connection):wallet.pending?(html.includes('</header>')?html.replace('</header>','</header>'+connection):connection+html):html; // an unconfirmed payment is shown on every screen, the title included
-  const withFeed=live&&screen!=='title'?withControls.replace('</header>','</header>'+communityPanel([],screen==='home')):withControls;
+  const withFeed=live&&screen!=='title'&&screen!=='duels'?withControls.replace('</header>','</header>'+communityPanel([],screen==='home')):withControls;
   const markup=withFeed.replace('<div class="screen">','<div class="screen" data-view="'+screen+'">'+(warning?`<div class="storage-warning" role="status">${warning}</div>`:''))+detailSheet();
   // A quote/balance poll must not replace a pressed button when its display is unchanged.
   if(markup===renderedMarkup)return;
