@@ -5,6 +5,7 @@ import {readFile} from 'node:fs/promises';
 import {resolve,join} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {buildC3Cases} from '../src/mahjong-c3-cases.ts';
+import {selectReviewFindings} from '../src/mahjong-review-selection.ts';
 
 const MODEL='c3-v1.0-observation-1';
 const HONORS=['E','S','W','N','P','F','C'];
@@ -50,12 +51,17 @@ export async function createC3Reviewer(rootPath){
   const primary=await network.infer(observed.observation,observed.mask);
   // Only plain discard recommendations are comparable to one actual discard.
   // Reach, kan, call, win, draw, and abort are not silently reclassified.
-  const index=primary.action;
-  if(!Number.isInteger(index)||index<0||index>36)return null;
-  return indexTile(index);
+  return legalC3Discard(caseData,observed,primary);
+
  }
  return {
   version:m.version,
+  async inspect(caseData){
+   if(disposed)throw Error('c3_disposed');
+   const observed=encoder.encode({seat:caseData.seat,events:caseData.events});
+   const actual=Array.from({length:37},(_,i)=>indexTile(i)).indexOf(caseData.actual);
+   return {actualLegal:actual>=0&&Boolean(observed.mask[actual]),legalDiscardCount:Array.from(observed.mask).slice(0,37).filter(Boolean).length};
+  },
   async probe(){
    if(disposed)throw Error('c3_disposed');
    // This test performs a genuine network invocation, but never uses a
@@ -73,22 +79,25 @@ export async function createC3Reviewer(rootPath){
    for(const c of cases){
     try{
      const suggested=await choose(c);
-     if(suggested)results.push({seat:c.seat,round:c.round,turn:c.turn,actual:c.actual,recommended:suggested});
+     if(suggested)results.push({seat:c.seat,round:c.round,turn:c.turn,actual:c.actual,recommended:suggested,position:c.position});
     }catch(_error){
      // A malformed round/case cannot become a fabricated verdict.
      // Continue other independent cases; no per-hand secrets in logs.
     }
    }
    if(!results.length)return null;
-   // Prefer surprising alternatives, but include a valid agreement too.
-   const different=results.find(f=>f.actual!==f.recommended);
-   const same=results.find(f=>f.actual===f.recommended);
-   const selected=[];
-   if(different)selected.push(different);
-   if(same&&!selected.some(f=>f.seat===same.seat&&f.round===same.round&&f.turn===same.turn))selected.push(same);
-   for(const f of results)if(selected.length<4&&!selected.some(q=>q.seat===f.seat&&q.round===f.round&&q.turn===f.turn))selected.push(f);
-   return {version:1,source:'c3',model:MODEL,uuid:summary.uuid,findings:selected};
+   const selected=selectReviewFindings(results,4);
+   return {version:2,source:'c3',model:MODEL,uuid:summary.uuid,findings:selected};
   },
   async close(){if(!disposed){disposed=true;await network.release();}},
  };
+}
+
+/** A model action is only commentary when both the encoder and replay allow it. */
+export function legalC3Discard(caseData,observed,primary){
+ const index=primary?.action;
+ if(!Number.isInteger(index)||index<0||index>36||!observed?.mask?.[index])return null;
+ if(caseData?.actual!==undefined){const actual=Array.from({length:37},(_,i)=>indexTile(i)).indexOf(caseData.actual);if(actual<0||!observed.mask[actual])return null;}
+ const suggested=indexTile(index);
+ return caseData?.legal?.includes(suggested)?suggested:null;
 }

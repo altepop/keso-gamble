@@ -8,6 +8,7 @@ import {initializeKp} from './kp.ts';
 import type {KpEnv,KpMapping} from './kp.ts';
 import {autoCredit,ensureMahjongClaims,paipuCheck,settleClaim} from './mahjong-claims.ts';
 import {mahjongPlayers} from './mahjong.ts';
+import {equalSanmaComments,acceptedSanmaReport} from './mahjong-sanma-comment.ts';
 import {equalC3Comments,acceptedC3Report} from './mahjong-c3-comment.ts';
 import type {PaipuSummary,PlayerSummary,Win} from './mahjong-summary.ts';
 import {enqueue,ensurePosts,roastLevelsOf} from './racing-posts.ts';
@@ -150,7 +151,7 @@ export function paipuPost(summary:PaipuSummary,members:Map<number,Member>,levelO
   return text;
  };
  const baseline=clipped(parts);
- const comments=equalC3Comments(summary,summary.c3,members);
+ const comments=summary.players===3?equalSanmaComments(summary,summary.review,members):equalC3Comments(summary,summary.c3,members);
  // If the existing post is already at capacity, leave it byte-for-byte unchanged.
  // Append the optional section only when every original section will still fit.
  if(!comments.length||full.length>1900)return baseline;
@@ -167,7 +168,7 @@ export function paipuPost(summary:PaipuSummary,members:Map<number,Member>,levelO
  * registered accounts of the result watcher, roasted by name until they are linked to Discord. */
 export async function applySummary(env:PaipuEnv,mapping:KpMapping,summary:PaipuSummary,now=Date.now(),players:Array<{id:number;name:string}>=[]){
  // The signed ingestion may carry a C3 review, but invalid review data never becomes a bot claim.
- summary={...summary,c3:acceptedC3Report(summary,summary.c3)??undefined};
+ summary={...summary,c3:acceptedC3Report(summary,summary.c3)??undefined,review:acceptedSanmaReport(summary,summary.review)??undefined};
  await env.DB.prepare('INSERT INTO kp_mahjong_paipu(guild,paipu,summary,error,attempts,at) VALUES(?,?,?,NULL,0,?) ON CONFLICT(guild,paipu) DO UPDATE SET summary=excluded.summary,error=NULL,at=excluded.at WHERE kp_mahjong_paipu.summary IS NULL')
   .bind(mapping.guildId,summary.uuid,JSON.stringify(summary),now).run();
  const claims=(await env.DB.prepare(`SELECT id,user,paipu,rank,status FROM kp_mahjong_claims WHERE guild=? AND paipu=? AND status!='rejected'`).bind(mapping.guildId,summary.uuid).all<{id:string;user:string;paipu:string;rank:number;status:string}>()).results;
