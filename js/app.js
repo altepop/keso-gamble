@@ -44,6 +44,8 @@ let live=wallet.connected&&!embedded;
 let steamView=null;
 let duelData=null,duelError='',duelActiveId=null,duelGame='othello',duelStake=1000,duelTarget='',duelBusy=false,duelResignConfirm=false,duelLastFetch=0;
 let duelPendingAction=null,duelPokerPicks=[],duelOpponentPickerOpen=false,duelLoading=false,duelGomokuPreview=null;
+let duelGuessDraft='',duelRiskConfirm=null;
+const duelRecentMoves=new Map();
 let sfxVolumeOpen=false; // the 🎚 volume panel next to 効果音 (casino / racing)
 let relicProofs=null,relicNotice='',relicLoading=false;
 // Each tap is one paid purchase. Never queue taps while a request or reveal is active.
@@ -342,7 +344,8 @@ function detailSheet(){
 function render(){
   const activeDuel=duelData?.matches?.find(r=>r.id===duelActiveId)||duelData?.matches?.find(r=>r.status==='active'||r.status==='pending')||duelData?.matches?.[0];
   const gomokuPreviewCell=duelGomokuPreview&&activeDuel&&duelGomokuPreview.id===activeDuel.id&&duelGomokuPreview.version===activeDuel.version&&activeDuel.turn_user===state.selfUserId?duelGomokuPreview.cell:null;
-  let html = screen==='title'?titleView(state,wallet.remembered,autoState,autoMessage,wallet.connected):screen==='home'?homeView(state,bottomNav()):screen==='play'?playView(state,drafts,bottomNav(),steamView):screen==='directives'?directivesView(state,drafts,bottomNav(),tabsFor('directives')):screen==='stable'?screenStable():screen==='shop'?screenShop():screen==='relics'?screenRelics():screen==='market'?screenMarket():screen==='casino'?screenCasino():screen==='duels'?duelScreen({info:duelData,user:state.selfUserId,live,cash:state.cash,selectedId:duelActiveId,game:duelGame,stake:duelStake,target:duelTarget,busy:duelBusy,error:duelError,confirmResign:duelResignConfirm,pokerPicks:duelPokerPicks,fallbackMembers:state.members??[],opponentPickerOpen:duelOpponentPickerOpen,loading:duelLoading,gomokuPreviewCell,nav:bottomNav()}):screen==='mleague'?mleagueScreen({state,live,draft:{...mlDraft,amount:drafts['ml-amount']},tabs:subTabs(),nav:bottomNav()}):screen==='race'?screenRace():screenAssets();
+  let html = screen==='title'?titleView(state,wallet.remembered,autoState,autoMessage,wallet.connected):screen==='home'?homeView(state,bottomNav()):screen==='play'?playView(state,drafts,bottomNav(),steamView):screen==='directives'?directivesView(state,drafts,bottomNav(),tabsFor('directives')):screen==='stable'?screenStable():screen==='shop'?screenShop():screen==='relics'?screenRelics():screen==='market'?screenMarket():screen==='casino'?screenCasino():screen==='duels'?duelScreen({info:duelData,user:state.selfUserId,live,cash:state.cash,selectedId:duelActiveId,game:duelGame,stake:duelStake,target:duelTarget,busy:duelBusy,error:duelError,confirmResign:duelResignConfirm,pokerPicks:duelPokerPicks,fallbackMembers:state.members??[],opponentPickerOpen:duelOpponentPickerOpen,loading:duelLoading,gomokuPreviewCell,recentMoves:duelRecentMoves,guessDraft:duelGuessDraft,
+riskConfirm:duelRiskConfirm===`create:${duelGame}:${duelTarget}:${duelStake}`?'create':activeDuel&&duelRiskConfirm===`accept:${activeDuel.id}:${activeDuel.version}:${activeDuel.stake}`?'accept':'',nav:bottomNav()}):screen==='mleague'?mleagueScreen({state,live,draft:{...mlDraft,amount:drafts['ml-amount']},tabs:subTabs(),nav:bottomNav()}):screen==='race'?screenRace():screenAssets();
   // 効果音 switch for the casino and racing screens (off unless the player turns it on).
   setBgmScene(screen==='casino'||screen==='race'?screen:'');
   if((screen==='casino'||screen==='race')&&sfxEnabled())preloadSfx(); // fetch the rendered sounds before the first win
@@ -358,6 +361,7 @@ function render(){
   const openDetails=[...app.querySelectorAll('details:not(.community-feed)')].map(el=>el.open);
   const focusedElement=document.activeElement;
   const focused=focusedElement?.id;
+  const duelGuessSelection=focused==='duel-guess'?[focusedElement.selectionStart,focusedElement.selectionEnd]:null;
   const focusData=focusedElement && Object.entries(focusedElement.dataset).find(([key])=>['screen','marketTab','marketMode','tradeSide','bet','action','open','raceHorse','raceType'].includes(key));
   const warning=live?connectionError:sessionOnly?'端末に保存できないため、この画面を閉じると変更が失われます。':!navigator.locks?.request?'このブラウザでは安全な保存を利用できません。HTTPS対応の最新ブラウザで開いてください。':'';
   const connection=live?`<div class="kp-connection"><span>${wallet.pending?'通信結果の確認待ち':wallet.remembered?'KP口座 接続中':'KP口座 一時接続'}</span><button data-action="refresh-kp">${wallet.pending?'通信結果を確認':'残高を更新'}</button><button data-action="disconnect-kp">接続を解除</button></div>`:'';
@@ -381,6 +385,7 @@ function render(){
   if(communityOpen!==undefined){const feed=app.querySelector('details.community-feed');if(feed)feed.open=communityOpen;}
   for (const [id,value] of Object.entries(drafts)) { const input=document.getElementById(id); if(input) input.value=value; }
   if(focused&&!casinoBusy) document.getElementById(focused)?.focus();
+  if(duelGuessSelection){const input=document.getElementById('duel-guess');if(input&&duelGuessSelection[0]!==null&&duelGuessSelection[1]!==null)input.setSelectionRange(...duelGuessSelection);}
   else if(focusData&&!casinoBusy){const [key,value]=focusData;const match=[...app.querySelectorAll('button,[data-open]')].find(el=>el.dataset[key]===value);match?.focus();}
   if(detail) $('.screen').inert=true;
   document.body.style.overflow=detail?'hidden':'';
@@ -564,11 +569,21 @@ addEventListener('click',trendDay);
 addEventListener('pointermove',e=>{if(e.pointerType==='mouse')trendDay(e);});
 // Client-only filter state; no D1 requests for typing or paging.
 for(const eventName of ['input','change'])addEventListener(eventName,e=>{
+ if(eventName==='input'&&screen==='duels'&&e.target.id==='duel-guess'){duelGuessDraft=e.target.value;return;}
+ if(eventName==='change'&&screen==='duels'&&e.target.id==='duel-bid-count'){
+  const match=duelData?.matches?.find(x=>x.id===duelActiveId),face=document.getElementById('duel-bid-face');
+  if(match?.game==='bluffdice'&&face){
+   try{const bid=JSON.parse(match.board).bid,count=Number(e.target.value);
+    for(const option of face.options)option.disabled=!!bid&&(count<bid.count||(count===bid.count&&Number(option.value)<=bid.face));
+    if(face.selectedOptions[0]?.disabled)face.value=[...face.options].find(o=>!o.disabled)?.value??'';
+   }catch{}
+  }return;
+ }
  if(eventName==='change'&&screen==='duels'&&['duel-game','duel-stake','duel-target'].includes(e.target.id)){
-  if(e.target.id==='duel-game')duelGame=e.target.value;
+  if(e.target.id==='duel-game'){duelGame=e.target.value;duelGuessDraft='';}
   if(e.target.id==='duel-stake')duelStake=Number(e.target.value);
   if(e.target.id==='duel-target')duelTarget=e.target.value;
-  render();return;
+  duelRiskConfirm=null;render();return;
  }
  const sfxSlider=e.target.closest?.('[data-sfx-volume]');
  if(sfxSlider&&(screen==='casino'||screen==='race')){
@@ -632,8 +647,8 @@ for(const eventName of ['input','change'])addEventListener(eventName,e=>{
 addEventListener('click',async e=>{
   const t=e.target.closest?.('button,[data-open]'); if(!t) return;
   if(t.dataset.duelTargetToggle){duelOpponentPickerOpen=!duelOpponentPickerOpen;render();return;}
-  if(t.dataset.duelTargetOption){duelTarget=t.dataset.duelTargetOption;duelOpponentPickerOpen=false;render();return;}
-  if(t.dataset.duelSelect){duelActiveId=t.dataset.duelSelect;duelResignConfirm=false;duelPokerPicks=[];duelGomokuPreview=null;render();return;}
+  if(t.dataset.duelTargetOption){duelTarget=t.dataset.duelTargetOption;duelRiskConfirm=null;duelOpponentPickerOpen=false;render();return;}
+  if(t.dataset.duelSelect){duelActiveId=t.dataset.duelSelect;duelResignConfirm=false;duelPokerPicks=[];duelGuessDraft='';duelRiskConfirm=null;duelGomokuPreview=null;render();return;}
   if(t.dataset.duelCard!==undefined){const i=Number(t.dataset.duelCard);if(!Number.isInteger(i)||i<0||i>4)return;if(duelPokerPicks.includes(i))duelPokerPicks=duelPokerPicks.filter(x=>x!==i);else if(duelPokerPicks.length<3)duelPokerPicks=[...duelPokerPicks,i];else{toast('交換できるのは3枚までだ');return;}render();return;}
   if(t.dataset.duelRefresh){await refreshDuel(true);return;}
   if(t.dataset.duelCancelCell!==undefined){duelGomokuPreview=null;render();return;}
@@ -657,7 +672,11 @@ addEventListener('click',async e=>{
    if(action==='resign-cancel'){duelResignConfirm=false;render();return;}
    if(duelBusy||!live||!wallet.connected){toast('接続状態または対戦操作を確認してください。');return;}
    const match=duelData?.matches?.find(x=>x.id===duelActiveId)||duelData?.matches?.find(x=>x.status==='active'||x.status==='pending')||duelData?.matches?.[0];
-   const mini=t.dataset.duelMini;
+   const highStakeKey=action==='create'&&duelStake>=50000?`create:${duelGame}:${duelTarget}:${duelStake}`:
+      action==='accept'&&match?.stake>=50000?`accept:${match.id}:${match.version}:${match.stake}`:null;
+    if(highStakeKey&&duelRiskConfirm!==highStakeKey){duelRiskConfirm=highStakeKey;render();return;}
+    duelRiskConfirm=null;
+    const mini=t.dataset.duelMini;
    const move=action!=='move'?{}:mini==='hitblow'?{guess:document.getElementById('duel-guess')?.value??''}:
      mini==='bid'?{choice:'bid',count:Number(document.getElementById('duel-bid-count')?.value),face:Number(document.getElementById('duel-bid-face')?.value)}:
      mini==='challenge'?{choice:'challenge'}:mini==='poker'?{cells:[...duelPokerPicks]} :{cell:Number(t.dataset.duelConfirmCell??t.dataset.duelCell)};
@@ -667,7 +686,7 @@ addEventListener('click',async e=>{
    duelBusy=true;duelError='';render();
    try{
     const result=await wallet.duelAction({...duelPendingAction.args,id:duelPendingAction.id});
-    duelPendingAction=null;duelActiveId=result.match.id;duelResignConfirm=false;duelPokerPicks=[];duelGomokuPreview=null;duelOpponentPickerOpen=false;
+    duelPendingAction=null;duelActiveId=result.match.id;duelResignConfirm=false;duelPokerPicks=[];duelGomokuPreview=null;duelOpponentPickerOpen=false;if(action==='move')duelGuessDraft='';
     try{const [next,info]=await Promise.all([wallet.state(),wallet.duels()]);state=next;duelData=info;}
     catch{duelError='対戦操作は確定したが、最新の盤面または口座の取得に失敗した。更新を押してください。';}
     toast(action==='create'?'挑戦状を送った！':action==='accept'?'決闘開始！':'盤面を更新した');
