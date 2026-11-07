@@ -2,6 +2,7 @@ import {boardDuelApi} from './board-duels.ts';
 import {steamApi,steamCallback} from './steam-auth.ts';
 import {privateCasinoAllowed,privateCasinoRound} from './private-casino.ts';
 import {memberNames} from './member-names.ts';
+import {kpTargetMembers} from './kp-target-members.ts';
 import {kpTrend} from './kp-trend.ts';
 import {d1OptionalMode} from './d1-optional-mode.ts';
 import {communityFeed,feedRevision,publicTrade} from './community-feed.ts';
@@ -78,7 +79,7 @@ export async function readKpState(env:KpEnv,mapping:KpMapping,user:string){
  state.claims=rewards.map(e=>({id:e.id,activity:e.mode,reference:e.match,reward:e.amount,status:'approved',time:e.at})).concat(quiz.map(e=>({id:e.id,activity:'quiz.'+e.mode,reference:e.game,reward:e.amount,status:'approved',time:e.completed_at}))).concat(voice.map(e=>({id:e.id,activity:'voice',reference:'通話 '+e.slot+'回目',reward:e.amount,status:'approved',time:e.at}))).sort((a:{time:number},b:{time:number})=>b.time-a.time).slice(0,100);
  state.claims.push(...state.stockMarket.dividends.map((d:{day:string;amount:number;at:number})=>({id:'dividend:'+d.day,activity:'株配当',reference:d.day,reward:d.amount,status:'approved',time:d.at})));state.claims.sort((a:{time:number},b:{time:number})=>b.time-a.time);
  state.directives=(await env.DB.prepare('SELECT id,issuer,target,task,game,achievement,cost,status,at AS time FROM kp_directives WHERE guild=? AND (issuer=? OR target=?) ORDER BY at DESC,id LIMIT 100').bind(mapping.guildId,user,user).all()).results;
- state.members=mapping.accounts.map(a=>({id:a.discordUserId,name:configuredPlayers.find(p=>p.riotId.toLowerCase()===a.riotId.toLowerCase())?.name??a.riotId.split('#')[0]}));
+ state.members=await kpTargetMembers(env,mapping);
  state.escalationSpins=(await env.DB.prepare("SELECT id,kind,tier,award,balance_before AS beforeBalance,balance_after AS afterBalance,at FROM kp_escalation_spins WHERE guild=? AND user=? ORDER BY at DESC LIMIT 12").bind(mapping.guildId,user).all()).results;
  // Every wallet movement, for the 入出金履歴 (claims stay for the older views).
  state.ledger=ledger;
