@@ -41,7 +41,7 @@ test('orphan Death notifications do not repeatedly trigger Discord backoff or ne
  const db={prepare:(query:string)=>({
   run:()=>sql.exec(query),
   bind:(...params:unknown[])=>({all:async()=>({results:sql.prepare(query).all(...params as never[])})}),
-  first:async()=>{if(query.includes('monitor_state'))scannedState++;throw Error('unnecessary monitor_state access');},
+  first:async()=>{if(query.includes('monitor_state')){scannedState++;throw Error('unnecessary monitor_state access');}return sql.prepare(query).get()??null;},
  }),batch:async(queries:Array<{run:()=>unknown}>)=>{for(const q of queries)q.run();return []}} as unknown as D1Database;
  const {flushNotifications}=await import('../src/index.ts');
  const env={DB:db,DISCORD_WEBHOOK_URL:'https://discord.com/api/webhooks/123/test'} as import('../src/index.ts').Env;
