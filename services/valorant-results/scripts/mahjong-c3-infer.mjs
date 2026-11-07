@@ -25,8 +25,8 @@ export async function createC3Reviewer(rootPath){
  const root=resolve(rootPath),m=JSON.parse(await readFile(absolute(root,'manifest.json'),'utf8'));
  if(m.schema!=='modeb-c3-assets/1'||m.version!==MODEL)throw Error('c3_version_mismatch');
  const [{createC3Encoder},{createC3Session},ort]=await Promise.all([
-  import(pathToFileURL(join(root,'scripts/lib/modeb-c3-encoder.mjs')).href),
-  import(pathToFileURL(join(root,'scripts/lib/modeb-c3-browser.mjs')).href),
+  import('./c3-vendor/modeb-c3-encoder.mjs'),
+  import('./c3-vendor/modeb-c3-browser.mjs'),
   import(pathToFileURL(absolute(root,'ort.wasm.min.mjs')).href),
  ]);
  if(!ort.env?.wasm)throw Error('c3_runtime_missing');
