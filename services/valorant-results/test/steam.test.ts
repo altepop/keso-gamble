@@ -54,6 +54,7 @@ test('disabled or missing-key collection never contacts Steam or creates events'
 test('new API-confirmed achievement credits the real ledger once; edits, resets and rarity changes cannot re-credit',async()=>{
  const f=await fixture();linked(f,['old']);const list=[unlocked(f,'old'),unlocked(f),unlocked(f,'locked')];list[2]!.achieved=0;
  await monitorSteam(f.env,guild,mock(f,list),()=>f.now);assert.equal(earned(f),5000);
+ assert.deepEqual(JSON.parse(f.sql.prepare('SELECT baseline FROM kp_steam_games').get()!.baseline as string),['old','new'],'settled achievement is remembered durably');
  const history=await ledgerHistory(f.env,guild,user);assert.equal(history[0]!.label,'Steam実績');assert.match(history[0]!.detail,/達成 new/);
  due(f);await monitorSteam(f.env,guild,mock(f,list,49),()=>f.now);assert.equal(earned(f),5000);assert.equal(f.sql.prepare('SELECT count(*) AS n FROM kp_steam_events').get()!.n,1);
 });
@@ -136,7 +137,9 @@ test('Steam game selection is bounded to five active games and common payouts re
  const f=await fixture();linked(f);for(let i=1;i<=4;i++)f.sql.prepare('INSERT INTO kp_steam_games(guild,user,app) VALUES(?,?,?)').run(guild,user,app+i);
  assert.throws(()=>f.sql.prepare('INSERT INTO kp_steam_games(guild,user,app) VALUES(?,?,?)').run(guild,user,app+5),/limit/);
  const list=Array.from({length:25},(_,i)=>unlocked(f,'common-'+i));await monitorSteam(f.env,guild,mock(f,list,60),()=>f.now);assert.equal(f.sql.prepare('SELECT count(*) AS n FROM kp_steam_events').get()!.n,20);
- due(f);await monitorSteam(f.env,guild,mock(f,list,60),()=>f.now);assert.equal(f.sql.prepare('SELECT count(*) AS n FROM kp_steam_events').get()!.n,25);assert.equal(f.sql.prepare('SELECT count(*) AS n FROM kp_ledger').get()!.n,25);assert.equal(earned(f),2500);
+ assert.equal(JSON.parse(f.sql.prepare('SELECT baseline FROM kp_steam_games').get()!.baseline as string).length,20,'only the first 20 settled achievements were compacted');
+ due(f);await monitorSteam(f.env,guild,mock(f,list,60),()=>f.now);assert.equal(f.sql.prepare('SELECT count(*) AS n FROM kp_steam_events').get()!.n,25);
+ assert.equal(JSON.parse(f.sql.prepare('SELECT baseline FROM kp_steam_games').get()!.baseline as string).length,25,'remaining achievements are retried, not discarded');assert.equal(f.sql.prepare('SELECT count(*) AS n FROM kp_ledger').get()!.n,25);assert.equal(earned(f),2500);
 });
 test('rate limits stop authenticated API-key abuse before further Steam requests',async()=>{
  const f=await fixture();for(let i=0;i<5;i++)await startSteamLink(f.env,owner,f.session);await assert.rejects(startSteamLink(f.env,owner,f.session),/10分/);
@@ -426,4 +429,17 @@ test('Steam summaries combine multiple games for one member but never mix differ
 test('installing Steam notifications does not retroactively announce already settled achievements',async()=>{
  const f=await fixture(),env=postEnv(f);linked(f);f.sql.exec('DROP TRIGGER kp_steam_notice');await monitorSteam(env,guild,mock(f,[unlocked(f)],60),()=>f.now);
  const fresh={...env,DB:Object.assign({},env.DB)};await ensureSteam(fresh);assert.equal(await queueSteamPosts(fresh,guild,f.now+STEAM_NOTICE_QUIET),0);assert.equal(achievementPosts(f).length,0);assert.equal(earned(f),100);
+});
+
+test('Steam baseline repairs legacy paid receipts without repaying or losing pending achievements',async()=>{
+ const f=await fixture();linked(f);
+ await monitorSteam(f.env,guild,mock(f,[unlocked(f,'new')],60),()=>f.now);
+ assert.equal(earned(f),100);
+ // Simulate an account created before compacted baselines were introduced.
+ f.sql.prepare("UPDATE kp_steam_games SET baseline='[]'").run();
+ due(f);
+ await monitorSteam(f.env,guild,mock(f,[unlocked(f,'new'),unlocked(f,'later')],60),()=>f.now);
+ assert.equal(earned(f),200,'only the new achievement is credited');
+ assert.deepEqual(JSON.parse(f.sql.prepare('SELECT baseline FROM kp_steam_games').get()!.baseline as string),['new','later']);
+ assert.equal(f.sql.prepare('SELECT count(*) AS n FROM kp_steam_events').get()!.n,2);
 });
