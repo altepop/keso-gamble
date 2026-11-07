@@ -1,9 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {c3DiscardCandidates,toC3Tile} from '../src/mahjong-c3-extract.ts';
+import type {PaipuAction} from '../src/mahjong-summary.ts';
 
 test('exact East 1 seat-zero fourth discard is anchored to the real action',()=>{
- const actions=[{name:'RecordNewRound',data:{chang:0,ju:0}}];
+ const actions:PaipuAction[]=[{name:'RecordNewRound',data:{chang:0,ju:0}}];
  for(let turn=1;turn<=4;turn++){
   for(let seat=0;seat<4;seat++)actions.push({name:'RecordDiscardTile',data:{seat,tile:turn===4&&seat===0?'6p':seat===0?'5p':'2m'}});
  }
