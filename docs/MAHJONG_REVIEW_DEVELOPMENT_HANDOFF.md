@@ -112,3 +112,10 @@
 - 最終ローカル検証: 型検査、service 736件、deploy/任意worker 22件、D1 budget 4件、Activityロジック277件が成功。Wrangler buildはdry-run成功。ブラウザは既存CIで確認中、牌譜の実対局/実Discordテストは未実施。
 - 外部の公開牌譜fixtureも調べた（AsaChiri/majsoul-naga、commit `75d815e41855149823d985be86359233a64d869b`）。protobufのデコードはできたが対局モード情報がなく現行summaryが `unsupported_mode` で拒否。モードを創作して通さず、実対局検証に数えない。生データはrepo外に置き、このPRへ追加していない。
 - 変更後の推論ログには匿名のreport件数だけを追加。ID/牌譜/手牌を出力しない。これだけではDiscordの送達完了は証明しない。
+
+## 実モデルの追加検証
+
+- 既存 `VALORANT Bot check and deploy` のcheckジョブへ、解析関連ファイル変更時だけ実施する実モデル検証を追加。新規cron/別ワークフロー/Secretはなし。
+- `mahjong-review-smoke.mjs` は赤牌を含む物理的に整合する人工四麻牌譜を生成し、本番と同じ遅延起動workerで実モデルを呼ぶ。推奨牌を元ケースの合法手牌に照合する。
+- モデルの既存キャッシュを共有し、同じ牌譜の本番分析/Discord/KP/D1へのアクセスはない。追加CIステップは最大3分、内部推論は45秒のまま。
+- このコミット時点ではGitHub側の結果待ち。結果はPR #377の最新ChecksとPR本文へ記録する。実モデル検証が通っても人工牌譜であり、実対局の検証完了には数えない。
