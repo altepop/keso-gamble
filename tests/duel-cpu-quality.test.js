@@ -69,3 +69,14 @@ test('No CPU decision needs the other player private secret to apply to live rul
   assert.ok(result?.board);
  }
 });
+
+test('Strong Gomoku respects an open-three threat that can become an unblockable double-four',()=>{
+ const cells=[...initialDuelBoard('gomoku')];
+ for(const i of [112,113,114])cells[i]='B';
+ for(const i of [92,93,97])cells[i]='W';
+ const board=cells.join('');
+ const selected=chooseCpuMove('gomoku',board,{side:'W',level:'strong',random:()=>.43}).cell;
+ assert.ok([111,115].includes(selected),'block one end of an open three before a two-sided four appears');
+ const action=playDuelMove('gomoku',board,'W',selected);
+ assert.ok(typeof action.board==='string'&&action.board[selected]==='W');
+});
