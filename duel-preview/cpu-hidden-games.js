@@ -101,10 +101,17 @@ export function cpuHitBlow(board,side,level,random){
   // Expected candidates after next response (lower is better).
   // Questions that can win immediately are preferable to probes at equal
   // expected information gain, especially near the end of a game.
+  // Minimize approximate expected remaining TURNS, not expected candidate
+  // COUNT. Past tests showed count-only entropy often preferred a bad fork.
+  // Skip the 4-hit bucket: the game ends on that answer immediately.
   let cost=0;
-  for(let n=0;n<25;n++)if(n!==20)cost+=partitions[n]*partitions[n];
+  const scaled=remaining.length/answers.length;
+  for(let n=0;n<25;n++)if(n!==20&&partitions[n]){
+   const bucket=partitions[n]*scaled;
+   const futureTurns=bucket<=1?1:1+Math.log(bucket)/Math.log(6.2);
+   cost+=partitions[n]*futureTurns;
+  }
   cost/=answers.length;
-  cost-=1; // every candidate can immediately solve the round
   if(cost<score){score=cost;best=guess;}
  }
  return {guess:best};
