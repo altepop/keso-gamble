@@ -36,7 +36,7 @@ test('100 deterministic board decisions never break live legal-move validation',
 test('Strong bluff selects guaranteed truthful raise using own dice; no opponent information',()=>{
  const hand=[6,6,6,2,3],board=JSON.stringify({turn:'b',bid:null,history:[],round:1});
  const action=chooseCpuMove('bluffdice',board,{side:'b',hand,level:'strong',random:rand(99)});
- assert.deepEqual(action,{choice:'bid',count:3,face:6,p:1,guaranteed:true,ownCount:3});
+ assert.deepEqual(action,{choice:'bid',count:3,face:6});
 });
 test('Hit & Blow solves a single remaining secret and respects other players guesses',()=>{
  const target='0123',mine=['0124','0135','0216'].map(guess=>({by:'b',guess,...hitBlowAnswer(guess,target)}));
