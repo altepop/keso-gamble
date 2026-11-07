@@ -30,3 +30,28 @@ test('D1 pending scan uses partial indexes and ignores hundreds of unclaimed dea
  assert.equal((sql.prepare('SELECT count(*) AS n FROM notifications WHERE sent=0').get() as {n:number}).n,804);
  sql.close();
 });
+
+test('orphan Death notifications do not repeatedly trigger Discord backoff or network work each Cron',async()=>{
+ const sql=new DatabaseSync(':memory:');
+ sql.exec(`CREATE TABLE notifications(riot_id TEXT NOT NULL,match_id TEXT NOT NULL,ended_at INTEGER NOT NULL,sent INTEGER NOT NULL DEFAULT 0,mode TEXT,outcome TEXT,PRIMARY KEY(riot_id,match_id));
+ CREATE TABLE death_unrated_sessions(riot_id TEXT NOT NULL,match_id TEXT NOT NULL,cancelled_at INTEGER,PRIMARY KEY(riot_id,match_id));`);
+ const insert=sql.prepare('INSERT INTO notifications(riot_id,match_id,ended_at,sent,mode) VALUES(?,?,?,?,?)');
+ for(let i=0;i<750;i++)insert.run('riot-'+i,'unclaimed-'+i,100+i,0,'death_unrated');
+ let scannedState=0;
+ const db={prepare:(query:string)=>({
+  run:()=>sql.exec(query),
+  bind:(...params:unknown[])=>({all:async()=>({results:sql.prepare(query).all(...params as never[])})}),
+  first:async()=>{if(query.includes('monitor_state'))scannedState++;throw Error('unnecessary monitor_state access');},
+ }),batch:async(queries:Array<{run:()=>unknown}>)=>{for(const q of queries)q.run();return []}} as unknown as D1Database;
+ const {flushNotifications}=await import('../src/index.ts');
+ const env={DB:db,DISCORD_WEBHOOK_URL:'https://discord.com/api/webhooks/123/test'} as import('../src/index.ts').Env;
+ const previous=globalThis.fetch;
+ let requests=0;
+ globalThis.fetch=(async()=>{requests++;throw Error('no Discord call without claim');}) as typeof fetch;
+ try{
+  for(let i=0;i<3;i++)await flushNotifications(env,[]);
+  assert.equal(scannedState,0,'skip state lookup for permanently unclaimed Death notices');
+  assert.equal(requests,0,'no webhook call without claim');
+  assert.equal((sql.prepare('SELECT COUNT(*) AS n FROM notifications WHERE sent=0').get() as {n:number}).n,750,'unsent notices are not discarded');
+ }finally{globalThis.fetch=previous;sql.close();}
+});
