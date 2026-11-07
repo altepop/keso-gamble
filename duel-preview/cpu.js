@@ -1,6 +1,6 @@
 // Pure CPU decision entrypoint. No API, D1, KP, network or opponent secret access.
 // Difficulty changes the search method and decision quality, not the game rules.
-import {chooseOthello,chooseGomoku,chooseConnect4} from './cpu-board-search.js';
+import {chooseOthello,chooseGomoku,chooseConnect4} from './cpu-board-search.js?v=gomoku-fork-20261107-v2';
 import {cpuHitBlow,cpuBluffDice} from './cpu-hidden-games.js';
 import {cpuPoker} from './cpu-poker.js';
 export function chooseCpuMove(game,board,{side,hand=null,level='normal',random=Math.random}={}){
