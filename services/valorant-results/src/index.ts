@@ -4,6 +4,7 @@ import {queueRelicPress} from './relic-press.ts';
 import {queueVdkPearlRoast} from './vdk-pearl-roast.ts';
 import {queueSteamPosts} from './steam-posts.ts';
 import {ensureNotificationReadIndexes} from './notification-indexes.ts';
+import {markDeliveredNotices} from './notification-delivery.ts';
 import {monitorSteam} from './steam-rewards.ts';
 import {readModeNote} from './mode-rewards.ts';
 import {skirmishResultButtons} from './skirmish.ts';
@@ -388,7 +389,9 @@ async function flushNotifications(env: Env, players: Player[]): Promise<void> {
       if (typeof message.id !== 'string' || !/^\d+$/.test(message.id)) throw new Error('Invalid Discord message ID');
       await setState(env, 'post:' + pendingMatch.match_id, message.id);
       if (skirmish) await setState(env, 'via:' + pendingMatch.match_id, useOwned ? 'app' : 'plain');
-      await env.DB.prepare('UPDATE notifications SET sent=1 WHERE match_id=?').bind(pendingMatch.match_id).run();
+      // A match can contain Death-mode participants excluded from this post.
+      // Never acknowledge their undelivered notices as sent.
+      await markDeliveredNotices(env.DB,pendingMatch.match_id,notices.results);
       let timing = null;
       try {
         const detected = await env.DB.prepare('SELECT value FROM monitor_state WHERE key=?')
