@@ -111,6 +111,18 @@ export function chooseGomoku(board,side,level,random){
  const threats=candidates(board,opp,16).filter(cell=>strength(board,opp,cell)>=1000000);
  if(threats.length)return {cell:threats[0]};
  if(level==='normal')return {cell:ranked[0]};
+ // Find moves that create two independent immediate wins on the NEXT turn.
+ // A single block cannot stop both; this is a real tactical fork, unlike
+ // speculative one-ply positional values.
+ const forks=[];
+ const tactical=[...new Set([...ranked,...candidates(board,opp,12)])];
+ for(const cell of tactical){
+  const after=board.slice(0,cell)+side+board.slice(cell+1);
+  let winCount=0;
+  for(const target of candidates(after,side,20))if(strength(after,side,target)>=1000000)winCount++;
+  if(winCount>=2)forks.push(cell);
+ }
+ if(forks.length)return {cell:forks[0]};
  // Depth-two defensive search. Prefer building forks over moves that allow immediate
  // counter-forks. Prune to local candidates to bound mobile CPU latency.
  let chosen=ranked[0],best=-Infinity;let nodes=0;
@@ -124,11 +136,11 @@ export function chooseGomoku(board,side,level,random){
    const then=after.slice(0,reply)+opp+after.slice(reply+1);
    const attack=candidates(then,side,5).map(k=>strength(then,side,k));
    const defense=candidates(then,opp,5).map(k=>strength(then,opp,k));
-   const value=(attack[0]??0)*1.2-(defense[0]??0)*1.6;
+   const value=(attack[0]??0)*1.72-(defense[0]??0)*1.22;
    worst=Math.min(worst,value);
   }
   if(worst===Infinity)worst=0;
-  const combined=worst+strength(board,side,cell)*.12+strength(board,opp,cell)*.16;
+  const combined=worst+strength(board,side,cell)*.68+strength(board,opp,cell)*.19;
   if(combined>best){best=combined;chosen=cell;}
   if(nodes>80||Date.now()>deadline)break;
  }

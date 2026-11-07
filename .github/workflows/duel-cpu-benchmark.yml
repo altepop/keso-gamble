@@ -1,11 +1,5 @@
 name: Duel CPU six-mode comparative benchmark
 on:
-  push:
-    branches:
-      - test/duel-cpu-six-mode-benchmark-20261107
-    paths:
-      - 'scripts/duel-cpu-benchmark.mjs'
-      - '.github/workflows/duel-cpu-benchmark.yml'
   workflow_dispatch:
 permissions:
   contents: read
@@ -20,24 +14,27 @@ jobs:
       matrix:
         include:
           - game: othello
-            pairs: 35
+            pairs: 10
           - game: gomoku
-            pairs: 80
+            pairs: 30
           - game: connect4
-            pairs: 60
+            pairs: 10
           - game: hitblow
-            pairs: 600
+            pairs: 200
           - game: bluffdice
-            pairs: 1500
+            pairs: 300
           - game: poker
-            pairs: 1200
+            pairs: 200
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
       - name: Run paired first/second side matches with production CPU and rules
-        run: node scripts/duel-cpu-benchmark.mjs ${{ matrix.game }} ${{ matrix.pairs }} | tee cpu-benchmark-${{ matrix.game }}.log
+        run: |
+          set -euo pipefail
+          node scripts/duel-cpu-benchmark.mjs ${{ matrix.game }} ${{ matrix.pairs }} | tee cpu-benchmark-${{ matrix.game }}.log
+          grep -q '^BENCH_RESULT ' cpu-benchmark-${{ matrix.game }}.log
       - uses: actions/upload-artifact@v4
         if: always()
         with:
