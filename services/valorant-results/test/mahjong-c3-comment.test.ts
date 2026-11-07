@@ -93,7 +93,7 @@ test('adding comments preserves the entire original post including old roasts an
  const oldLast=older.split('\n').at(-1);
  assert.ok(oldLast?.startsWith('💬 '),'legacy ending intact');
  assert.equal(newer.split('\n').at(-1),oldLast,'existing closing quote stays last');
- const allOldBlocks=older.slice(older.indexOf('**主な和了**'),older.lastIndexOf('💬 '));
+ const allOldBlocks=older.slice(older.indexOf('**主な和了**'),older.lastIndexOf('\n\n💬 '));
  assert.ok(newer.includes(allOldBlocks),'hand and member text remains byte-for-byte intact');
 });
 
