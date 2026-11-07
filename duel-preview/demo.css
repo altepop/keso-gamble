@@ -18,3 +18,5 @@ body.cpu-practice .duel-arena{border-color:#4c8ea1}
 .duel-practice-entry strong{display:block;color:#c9ffeb;font-size:15px}
 .duel-practice-entry p{margin:6px 0 0;max-width:430px;font-size:12px;color:#bdd2e8;line-height:1.7}
 .duel-practice-entry a{display:inline-flex;align-items:center;justify-content:center;text-decoration:none;padding:10px 13px;border-radius:9px;min-height:45px;white-space:normal;text-align:center;font-weight:700}
+body.cpu-practice .duel-practice-entry{display:none}
+body.cpu-practice [data-duel-timer]{display:none}
