@@ -9,6 +9,15 @@ export const CANONICAL_RIOT_HANDLES:Readonly<Record<string,string>>={
  dolly:'VDK',frin:'藤村',h1d3g1g4s:'石原',
 };
 const snowflake=(id:string)=>/^\d{15,22}$/.test(id);
+/** Display-only correction for names already bound to an exact Discord ID by the
+ * encrypted alias registry; this does NOT assign identities by matching a name. */
+export function canonicalDisplayAlias(name:string){
+ const trimmed=name.trim();
+ const lower=trimmed.toLowerCase();
+ if(CANONICAL_RIOT_HANDLES[lower])return CANONICAL_RIOT_HANDLES[lower];
+ if(['千葉祐也','千葉裕也','千葉雄也','千葉ゆうや'].includes(trimmed))return '千葉ゆうや';
+ return trimmed;
+}
 const canonicalRiotName=(riot:string,configured?:string)=>{
  const handle=riot.split('#')[0]!.trim();
  return CANONICAL_RIOT_HANDLES[handle.toLowerCase()]??configured??handle;
@@ -46,7 +55,7 @@ async function fetchKpTargetMembers(env:KpEnv,mapping:KpMapping):Promise<KpTarge
   const handle=account.riotId.split('#')[0]!.toLowerCase();
   if(CANONICAL_RIOT_HANDLES[handle])names.set(account.discordUserId,CANONICAL_RIOT_HANDLES[handle]);
  }
- return [...all].map(id=>({id,name:names.get(id)??`メンバー（ID末尾${id.slice(-4)}）`}))
+ return [...all].map(id=>({id,name:canonicalDisplayAlias(names.get(id)??`メンバー（ID末尾${id.slice(-4)}）`)}))
   .sort((a,b)=>a.name.localeCompare(b.name,'ja')||a.id.localeCompare(b.id));
 }
 /** Target must be a real registered participant with a wallet+state; mapping-only
