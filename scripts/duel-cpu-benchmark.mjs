@@ -80,8 +80,8 @@ function contest(seed,asFirst){
  }
  const elapsed=performance.now()-started;
  summary.totalMatchMs+=elapsed;
- summary.moves+=round+Number(Boolean(winner));
- summary.maxMatchMoves=Math.max(summary.maxMatchMoves,round+Number(Boolean(winner)));
+ summary.moves+=round;
+ summary.maxMatchMoves=Math.max(summary.maxMatchMoves,round);
  if(error||!winner){recordError(seed,asFirst,round,error??'Exceeded 400 turns');return;}
  const strongSide=asFirst?(game==='othello'||game==='gomoku'?'B':'a'):
   (game==='othello'||game==='gomoku'?'W':'b');
@@ -89,7 +89,7 @@ function contest(seed,asFirst){
  summary[result]++;summary[asFirst?'strongAsFirst':'strongAsSecond'][result]++;
  summary.matched++;
  summary.finishReasons[winner]=(summary.finishReasons[winner]??0)+1;
- if(summary.sampleMatches.length<10)summary.sampleMatches.push({seed,asFirst,turns:round+1,winner,result,elapsedMs:Math.round(elapsed)});
+ if(summary.sampleMatches.length<10)summary.sampleMatches.push({seed,asFirst,turns:round,winner,result,elapsedMs:Math.round(elapsed)});
 }
 for(let seed=0;seed<pairs;seed++){
  const value=(0x9d711a87+Math.imul(seed+1,0x9e3779b9))>>>0;
