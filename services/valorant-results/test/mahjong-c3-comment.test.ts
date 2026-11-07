@@ -98,7 +98,7 @@ test('adding comments preserves the entire original post including old roasts an
 });
 
 test('near Discord limit the old post wins; extra comments may be omitted, never old content',()=>{
- const longResults=['🔎 '+('かなり長い精算結果'.repeat(130))];
+ const longResults=['🔎 '+('かなり長い精算結果'.repeat(250))];
  const baseline=paipuPost(summary,members,()=> 'normal',longResults);
  const modified=paipuPost({...summary,c3:review},members,()=> 'normal',longResults);
  assert.equal(modified,baseline,'existing message is the priority at capacity');
