@@ -1,6 +1,6 @@
-import {steamPanel} from './steam-view.js?v=web-0f68b2c668fb1902';
-import {stockPrice} from './stock-view.js?v=web-0f68b2c668fb1902';
-import { ACTIVITIES, MEMBERS, ORDERS } from './progression.js?v=web-0f68b2c668fb1902';
+import {steamPanel} from './steam-view.js?v=web-4efcebfe94f706ee';
+import {stockPrice} from './stock-view.js?v=web-4efcebfe94f706ee';
+import { ACTIVITIES, MEMBERS, ORDERS } from './progression.js?v=web-4efcebfe94f706ee';
 export const escapeHTML=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const kp=n=>n.toLocaleString('ja-JP')+' KP';
 // A history amount with its own sign: +900 KP / −200 KP / ±0 KP.
