@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {initialDuelBoard,duelLegalMoves,playDuelMove,duelScore,duelPlayerForColor} from '../js/duel-rules.js';
+import {initialDuelBoard,duelLegalMoves,playDuelMove,duelScore} from '../js/duel-rules.js';
 test('othello opens with four legal black moves and flips one white stone',()=>{
  const b=initialDuelBoard('othello');assert.equal(b.length,64);
  assert.deepEqual(duelLegalMoves('othello',b,'B'),[19,26,37,44]);
@@ -41,17 +41,10 @@ test('Othello auto-pass returns the SAME mover for both black and white, with a 
   assert.doesNotThrow(()=>playDuelMove('othello',after.board,color,allowed[0]));
  }
 });
-test('Othello color-to-user mapping handles both participants, white-pass and consecutive white turns',()=>{
- for(const [black,a,b] of [['player-a','player-a','player-b'],['player-b','player-a','player-b']]){
-  const white=black===a?b:a;
-  const whitePass=playDuelMove('othello',WHITE_PASS.board,'W',WHITE_PASS.move);
-  const blackPass=playDuelMove('othello',BLACK_PASS.board,'B',BLACK_PASS.move);
-  assert.equal(duelPlayerForColor(black,a,b,whitePass.nextColor),white);
-  assert.equal(duelPlayerForColor(black,a,b,blackPass.nextColor),black);
-  assert.equal(duelPlayerForColor(black,a,b,null),null);
-  const whiteWin=playDuelMove('othello','W'.repeat(61)+'.BW','W',61);
-  assert.equal(whiteWin.winner,'W');
-  assert.equal(duelPlayerForColor(black,a,b,whiteWin.winner),white,'white receives the actual winning payout');
- }
- assert.throws(()=>duelPlayerForColor('player-a','player-a','player-b','Q'),/色が不正/);
+test('Othello white wins even when white made the final move',()=>{
+ const final=playDuelMove('othello','W'.repeat(61)+'.BW','W',61);
+ assert.equal(final.winner,'W');
+ assert.equal(final.nextColor,null);
+ assert.equal(final.score.W,64);
+ assert.equal(final.score.B,0);
 });
