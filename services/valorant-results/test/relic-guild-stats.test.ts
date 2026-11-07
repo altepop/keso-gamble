@@ -12,7 +12,7 @@ function fixture(){
  };
  let reads=0;
  const db={prepare:(query:string)=>({bind:(...args:unknown[])=>({first:async()=>{
-  reads++;return sql.prepare(query).get(...args as never[])??null;
+  reads++;const row=sql.prepare(query).get(...args as never[]);return row?{...row}:null;
  }})})} as unknown as D1Database;
  return {sql,add,db,get reads(){return reads;}};
 }
