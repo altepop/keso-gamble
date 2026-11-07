@@ -1,14 +1,5 @@
 name: Equal review public model smoke
 on:
-  push:
-    branches:
-      - feat/mahjong-equal-c3-comments-20261107
-    paths:
-      - .github/workflows/mahjong-c3-model-smoke.yml
-      - services/valorant-results/scripts/mahjong-c3-infer.mjs
-      - services/valorant-results/scripts/mahjong-c3-full-smoke.mjs
-      - services/valorant-results/scripts/mahjong-c3-download.mjs
-      - services/valorant-results/scripts/c3-vendor/**
   workflow_dispatch:
 permissions:
   contents: read
