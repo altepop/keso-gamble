@@ -4,7 +4,7 @@ import {debtOf} from './kp-debt.ts';
 import {checkDuelLedger} from '../../../js/duel-kp-audit.js';
 import {kpTargetMembers,kpTargetAllowed} from './kp-target-members.ts';
 // @ts-expect-error Shared pure browser-side rules (no declaration file).
-import {initialDuelBoard,playDuelMove,duelPlayerForColor,DUEL_GAMES} from '../../../js/duel-rules.js';
+import {initialDuelBoard,playDuelMove,DUEL_GAMES} from '../../../js/duel-rules.js';
 
 // @ts-expect-error Shared pure mini-game rules, no TypeScript declaration file.
 import {EXTRA_DUEL_GAMES,miniStart,miniMove} from '../../../js/duel-mini-games.js';
@@ -248,8 +248,8 @@ export async function boardDuelAction(env:KpEnv,m:KpMapping,user:string,body:Rec
   }else{
    const color=match.black_user===user?'B':'W';
    const after=playDuelMove(match.game,match.board,color,Number(body.cell));
-   board=after.board;next_turn=duelPlayerForColor(match.black_user,match.user_a,match.user_b,after.nextColor);
-   winner=after.winner?(after.winner==='draw'?'draw':duelPlayerForColor(match.black_user,match.user_a,match.user_b,after.winner)):null;
+   board=after.board;next_turn=after.nextColor?(after.nextColor==='B'?match.black_user:other):null;
+   winner=after.winner?(after.winner==='draw'?'draw':after.winner==='B'?match.black_user:other):null;
   }
   deadline=now+DUEL_TURN_MS;
  }else if(kind==='cancel'){
