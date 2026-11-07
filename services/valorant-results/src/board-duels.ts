@@ -164,7 +164,7 @@ export async function boardDuelList(env:KpEnv,m:KpMapping,user:string,cursor:str
  await ensureBoardDuels(env);
  let cutoff:number|null=null,id='';
  if(cursor!==null){
-  const parsed=/^(\\d{10,15}):([0-9a-f-]{36})$/i.exec(cursor);
+  const parsed=/^([0-9]{10,15}):([0-9a-f-]{36})$/i.exec(cursor);
   if(!parsed||!UUID.test(parsed[2]))throw Error('履歴の読み込み位置が不正です。');
   cutoff=Number(parsed[1]);id=parsed[2];
   if(!Number.isSafeInteger(cutoff))throw Error('履歴の読み込み位置が不正です。');
