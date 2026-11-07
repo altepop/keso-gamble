@@ -12,14 +12,6 @@ export function initialDuelBoard(game){
  }
  return board.join('');
 }
-// Color ownership must never depend on the actor who just played: after an
-// Othello auto-pass the same color may move again, including white.
-export function duelPlayerForColor(blackUser,userA,userB,color){
- if(color===null)return null;
- if(color!=='B'&&color!=='W')throw Error('手番の色が不正です。');
- if(!blackUser||userA===userB||(blackUser!==userA&&blackUser!==userB))throw Error('先手情報が不正です。');
- return color==='B'?blackUser:blackUser===userA?userB:userA;
-}
 export function duelScore(board){return {B:board.split('B').length-1,W:board.split('W').length-1};}
 export function duelLegalMoves(game,board,color){
  const n=DUEL_GAMES[game]?.size;
