@@ -117,6 +117,7 @@ const tail=needed=>{
  for(let n=needed;n<=5;n++)p+=combinations[n]*(1/6)**n*(5/6)**(5-n);
  return p;
 };
+const justBid=({count,face})=>({choice:'bid',count,face});
 export function cpuBluffDice(board,hand,side,level,random){
  if(!Array.isArray(hand)||hand.length!==5||hand.some(x=>!Number.isInteger(x)||x<1||x>6))
   throw Error('CPUのダイスが不正です。');
@@ -151,8 +152,8 @@ export function cpuBluffDice(board,hand,side,level,random){
  if(!options.length)return {choice:'challenge'};
  if(level==='normal'){
   const safe=options.filter(x=>x.p>=.36).sort((a,b)=>a.count-b.count||a.face-b.face);
-  return safe.length?pick(safe.slice(0,Math.min(8,safe.length)),random):bid?
-    {choice:'challenge'}:options[0];
+  return safe.length?justBid(pick(safe.slice(0,Math.min(8,safe.length)),random)):bid?
+    {choice:'challenge'}:justBid(options[0]);
  }
  // A bid already fully covered by the CPU's own dice cannot be wrong.
  // Opponents who see none of that face may challenge, gifting a round win.
@@ -160,12 +161,12 @@ export function cpuBluffDice(board,hand,side,level,random){
  const guaranteed=options.filter(x=>x.guaranteed);
  if(guaranteed.length){
   guaranteed.sort((a,b)=>b.count-a.count||b.ownCount-a.ownCount||b.face-a.face);
-  return guaranteed[0];
+  return justBid(guaranteed[0]);
  }
  // When none of our bids is certain, do not chase enormous raises:
  // require a high posterior success probability or call the last bid.
  const safe=options.filter(x=>x.p>=.68);
- if(!safe.length)return bid?{choice:'challenge'}:options[0];
+ if(!safe.length)return bid?{choice:'challenge'}:justBid(options[0]);
  safe.sort((a,b)=>b.count-a.count||b.p-a.p||b.face-a.face);
- return safe[0];
+ return justBid(safe[0]);
 }
