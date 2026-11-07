@@ -35,6 +35,8 @@ GitHub `altepop/keso-gamble` の設定で：
 1. **Actions secret** `M_LEAGUE_C3_TOKEN`：非公開 `altepop/m-league-manager` の **Contents: Read-only** だけを許した fine-grained token。公開リポジトリのソースやDiscordへは絶対に表示しない。
 2. **Actions variable** `MAHJONG_EQUAL_REVIEW_ENABLED=true`：コード/モデルのCIと実牌譜の試行が成功した後にのみ設定する。
 
+実モデルを本番で有効化する前に、**`MAHJONG_EQUAL_REVIEW_ENABLED` は設定しないまま**、GitHub の Actions → `Mahjong paipu fetch` → `Run workflow` → `c3_probe=true` を手動実行する。これはモデルを実際に読み込んで1回ONNX推論するだけで、雀魂ログイン・Discord・D1・KPには触れない。読み取り秘密値がないと明示エラーにする。
+
 両方が揃わない場合はモデルを取得せず、既存の等しいbotの投稿とKP精算だけを実行する。取得や推論に失敗した場合も、結果を捏造せず旧機能を維持する。
 
 GitHub Actionsのjobを安全に試すには、まずprivate repoの [Node実推論スモークPR #173](https://github.com/altepop/m-league-manager/pull/173) が成功することを確認する。その後、四麻の実牌譜で牌・巡目・匿名化・推論結果を確認する。
