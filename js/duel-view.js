@@ -1,6 +1,6 @@
-import {miniBoardView} from './duel-mini-view.js?v=web-0f68b2c668fb1902';
-import {EXTRA_DUEL_GAMES} from './duel-mini-games.js?v=web-0f68b2c668fb1902';
-import {DUEL_GAMES,duelLegalMoves,duelScore} from './duel-rules.js?v=web-0f68b2c668fb1902';
+import {miniBoardView} from './duel-mini-view.js?v=web-bf8e91699d3e151e';
+import {EXTRA_DUEL_GAMES} from './duel-mini-games.js?v=web-bf8e91699d3e151e';
+import {DUEL_GAMES,duelLegalMoves,duelScore} from './duel-rules.js?v=web-bf8e91699d3e151e';
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const kp=n=>Number(n||0).toLocaleString('ja-JP')+' KP';
 const title=(r)=>DUEL_GAMES[r.game]?.name||EXTRA_DUEL_GAMES[r.game]?.name||r.game;
@@ -15,7 +15,7 @@ function summary(r,info,user){
   <span class="duel-purse">${kp(r.stake)}<small>${r.status==='active'?'勝った人が '+kp(r.stake*2)+' 受け取り':r.status==='pending'?'返答待ち':'結果を見る'}</small></span>
  </button>`;
 }
-function boardView(r,info,user,busy,confirmResign){
+function boardView(r,info,user,busy,confirmResign,gomokuPreviewCell=null){
  const ownBlack=r.black_user===user,own=r.user_a===user||r.user_b===user;
  const black=r.black_user===r.user_a?r.user_a:r.user_b;
  const white=black===r.user_a?r.user_b:r.user_a;
@@ -25,6 +25,15 @@ function boardView(r,info,user,busy,confirmResign){
  let legal=[];
  try{if(canPlay)legal=duelLegalMoves(r.game,r.board,color);}catch{}
  const playable=new Set(legal);
+ const previewValid=r.game==='gomoku'&&Number.isSafeInteger(gomokuPreviewCell)&&playable.has(gomokuPreviewCell);
+ const previewRow=previewValid?Math.floor(gomokuPreviewCell/size)+1:0;
+ const previewCol=previewValid?gomokuPreviewCell%size+1:0;
+ const gomokuTools=r.game==='gomoku'? `<div class="duel-gomoku-tools" role="group" aria-label="五目並べの着手">
+ <p class="duel-gomoku-help">盤面は指で上下左右に動かせる。マスを選んでから着手を確定する。</p>
+ <div class="duel-gomoku-selection" role="status" aria-live="polite">
+ ${previewValid?`<span><strong>${previewRow}行 ${previewCol}列</strong> を選択中</span><div class="duel-gomoku-confirm-actions"><button type="button" class="action-btn primary" data-duel-confirm-cell="${gomokuPreviewCell}" ${busy?'disabled':''}>ここに置く</button><button type="button" class="action-btn" data-duel-cancel-cell="1">取り消す</button></div>`:
+ `<span>${canPlay?'置きたいマスをタップして選択':'相手の手番または対局終了まで待機'}</span>`}
+ </div></div>`:'';
  const score=duelScore(r.board);
  const result=r.winner==='draw'?'引き分け：賭け金を返金':r.winner===user?'勝利：'+kp(r.stake*2)+'を受け取り':r.winner?'敗北：'+kp(r.stake)+'の支払い確定':'';
  const expired=timeLeft(r.deadline_at)===0;
@@ -33,12 +42,15 @@ function boardView(r,info,user,busy,confirmResign){
  <span class="duel-state">${esc(status(r))}</span></div>
  <div class="duel-players"><span><b class="duel-token black">●</b>${esc(name(black))}</span><span>VS</span><span><b class="duel-token white">●</b>${esc(name(white))}</span></div>
  ${r.status==='active'?`<div class="duel-turn ${turn?'my-turn':''}">${turn?'🟢 あなたの番':esc(name(r.turn_user))+'の番'}　残り ${Math.ceil(timeLeft(r.deadline_at)/60)}分</div>`:''}
+ ${gomokuTools}
+ ${r.game==='gomoku'?`<div class="duel-board-scroll" data-duel-board-scroll="${esc(r.id)}" tabindex="0" role="region" aria-label="五目並べの拡大盤面。指で上下左右に移動できる">`:''}
  <div class="duel-board ${r.game==='gomoku'?'duel-gomoku':'duel-othello'}" role="grid" aria-label="${esc(title(r))}の盤面" style="--duel-size:${size}">
  ${[...r.board].map((cell,i)=>{
    const active=canPlay&&playable.has(i);
-   const classes=[cell==='B'?'black':cell==='W'?'white':'empty',active?'available':''].join(' ');
-   return `<button type="button" class="duel-square ${classes}" role="gridcell" data-duel-cell="${i}" title="${Math.floor(i/size)+1}行${i%size+1}列" aria-label="${Math.floor(i/size)+1}行${i%size+1}列 ${cell==='B'?'黒':cell==='W'?'白':active?'着手可能':'空き'}" ${active?'':'disabled'}><span class="duel-piece"></span></button>`;
+   const classes=[cell==='B'?'black':cell==='W'?'white':'empty',active?'available':'',previewValid&&i===gomokuPreviewCell?'duel-preview-cell':''].join(' ');
+   return `<button type="button" class="duel-square ${classes}" role="gridcell" data-duel-cell="${i}" title="${Math.floor(i/size)+1}行${i%size+1}列" aria-label="${Math.floor(i/size)+1}行${i%size+1}列 ${cell==='B'?'黒':cell==='W'?'白':previewValid&&i===gomokuPreviewCell?'選択中':active?'着手可能':'空き'}" ${r.game==='gomoku'&&active?`aria-pressed="${previewValid&&i===gomokuPreviewCell}"`:''} ${active?'':'disabled'}><span class="duel-piece"></span></button>`;
  }).join('')}</div>
+ ${r.game==='gomoku'?'</div>':''}
  <div class="duel-counts"><span>⚫ 黒 ${score.B}</span><span>⚪ 白 ${score.W}</span></div>
  ${r.status==='finished'?`<div class="duel-result">${esc(result)}</div>`:''}
  ${r.status==='active'?`<div class="duel-actions">
@@ -51,16 +63,14 @@ function boardView(r,info,user,busy,confirmResign){
  </div>`;
  return section;
 }
-export function duelScreen({info,user,live,cash,selectedId,game='othello',stake=1000,target='',busy=false,error='',confirmResign=false,pokerPicks=[],fallbackMembers=[],opponentPickerOpen=false,loading=false,nav=''}){
+export function duelScreen({info,user,live,cash,selectedId,game='othello',stake=1000,target='',busy=false,error='',confirmResign=false,pokerPicks=[],fallbackMembers=[],opponentPickerOpen=false,loading=false,nav='',gomokuPreviewCell=null}){
  const matches=info?.matches??[],chosen=matches.find(r=>r.id===selectedId)||matches.find(r=>r.status==='active'||r.status==='pending')||matches[0];
  const members=(info?.members?.length?info.members:fallbackMembers).filter(m=>m&&typeof m.id==='string'&&m.id!==user);
  const invited=chosen?.status==='pending',mine=chosen?.user_a===user;
  const selectedMember=members.find(m=>m.id===target);
  info={...info,members:[...(info?.members??[]),...members.filter(m=>!(info?.members??[]).some(x=>x.id===m.id))]};
- return `<div class="screen"><header class="topbar"><div class="toprow"><h1 class="title">⚔️ 決闘</h1><div class="small-actions"><span class="badge">${kp(cash)}</span></div></div></header>
- <div class="duel-intro"><span>対人ゲーム</span><h2>KPを賭けて対戦</h2><p>ゲームと対戦相手、賭け金を選んで申し込む。相手が承認すると対戦が始まり、勝った人が双方の賭け金を受け取る。引き分けは返金。</p></div>
- ${!live?'<div class="panel"><div class="card-body">KP口座に接続すると対戦できる。</div></div>':
- `<div class="duel-new panel"><div class="card-body">
+ const focus=chosen?.status==='active'||chosen?.status==='pending';
+ const formMarkup=`<div class="duel-new panel"><div class="card-body">
  <h2 class="panel-title">対戦を申し込む</h2><div class="duel-formrow">
  <label>ゲーム<select id="duel-game" class="select"><option value="othello" ${game==='othello'?'selected':''}>⚫ オセロ</option><option value="gomoku" ${game==='gomoku'?'selected':''}>⚪ 五目並べ</option><option value="connect4" ${game==='connect4'?'selected':''}>🔴 四目並べ</option><option value="hitblow" ${game==='hitblow'?'selected':''}>🔢 Hit & Blow</option><option value="bluffdice" ${game==='bluffdice'?'selected':''}>🎲 ブラフダイス</option><option value="poker" ${game==='poker'?'selected':''}>🃏 5カードポーカー</option></select></label>
  <label>賭け金<select id="duel-stake" class="select">${[100,500,1000,5000,10000,50000,100000].map(n=>`<option value="${n}" ${n===stake?'selected':''}>${kp(n)} / 人</option>`).join('')}</select></label>
@@ -75,19 +85,27 @@ export function duelScreen({info,user,live,cash,selectedId,game='othello',stake=
  </div>
  <div class="duel-explainer"><strong>勝てば +${kp(stake)} / 負ければ −${kp(stake)}</strong><br>申し込み時にはKPは減らない。相手が承認すると双方から${kp(stake)}ずつ引かれる。</div>
  <button type="button" class="action-btn primary duel-full" data-duel-act="create" ${busy||!target||cash<stake?'disabled':''}>対戦を申し込む</button>
- </div></div>
- ${error?`<div class="storage-warning duel-error" role="alert">${esc(error)}</div>`:''}
- <div class="duel-history panel"><div class="card-body">
- <div class="duel-heading"><h2 class="panel-title">対戦ルーム</h2><button class="action-btn" data-duel-refresh="1" ${busy?'disabled':''}>更新 ↻</button></div>
- ${matches.length?matches.map(r=>summary(r,info,user)).join(''):'<p class="helper">対戦履歴はまだありません。</p>'}
- </div></div>
+ </div></div>`;
+ return `<div class="screen"><header class="topbar"><div class="toprow"><h1 class="title">⚔️ 決闘</h1><div class="small-actions"><span class="badge">${kp(cash)}</span></div></div></header>
  ${chosen?`<div class="duel-current">
  ${invited?`<div class="panel"><div class="card-body"><h2 class="panel-title">${mine?'相手の返答待ち':'対戦の申し込み'}</h2>
  <p class="helper">${esc(title(chosen))} / ${kp(chosen.stake)}ずつ。招待期限まで約${Math.ceil(timeLeft(chosen.deadline_at)/60)}分。</p>
  <div class="action-row">${!mine&&timeLeft(chosen.deadline_at)>0?`<button class="action-btn primary" data-duel-act="accept" ${busy?'disabled':''}>承認して始める（${kp(chosen.stake)}）</button>`:''}
  <button class="action-btn" data-duel-act="cancel" ${busy?'disabled':''}>${mine?'招待を取り消す':'断る'}</button></div></div></div>`:''}
- ${chosen.status!=='pending'&&chosen.status!=='cancelled'?(Object.hasOwn(EXTRA_DUEL_GAMES,chosen.game)?miniBoardView(chosen,info,user,busy,pokerPicks,confirmResign):boardView(chosen,info,user,busy,confirmResign)):''}
+ ${chosen.status!=='pending'&&chosen.status!=='cancelled'?(Object.hasOwn(EXTRA_DUEL_GAMES,chosen.game)?miniBoardView(chosen,info,user,busy,pokerPicks,confirmResign):boardView(chosen,info,user,busy,confirmResign,gomokuPreviewCell)):''}
  </div>`:''}
- <div class="panel"><div class="card-body"><h2 class="panel-title">対戦ルール</h2><p class="helper">1手の制限時間は10分。制限時間を過ぎた場合と投了した場合は負けになる。対戦開始後は賭け金を取り消せない。引き分けでは双方に賭け金を返金する。遺物の補正や借KPは使えない。CPU対戦には対応していない。</p></div></div>`}
+ ${!chosen?'<div class="duel-intro"><span>対人ゲーム</span><h2>KPを賭けて対戦</h2><p>ゲームと対戦相手、賭け金を選んで申し込む。相手が承認すると対戦が始まり、勝った人が双方の賭け金を受け取る。引き分けは返金。</p></div>':''}
+ ${error?`<div class="storage-warning duel-error" role="alert">${esc(error)}</div>`:''}
+ ${focus?` <div class="duel-history panel"><div class="card-body">
+ <div class="duel-heading"><h2 class="panel-title">対戦ルーム</h2><button class="action-btn" data-duel-refresh="1" ${busy?'disabled':''}>更新 ↻</button></div>
+ ${matches.length?matches.map(r=>summary(r,info,user)).join(''):'<p class="helper">対戦履歴はまだありません。</p>'}
+ </div></div>`:''}
+ ${!live?'<div class="panel"><div class="card-body">KP口座に接続すると対戦できる。</div></div>':focus?
+ `<details class="duel-create-collapse"><summary>別の対戦を申し込む</summary>${formMarkup}</details>`:formMarkup}
+ ${!focus?` <div class="duel-history panel"><div class="card-body">
+ <div class="duel-heading"><h2 class="panel-title">対戦ルーム</h2><button class="action-btn" data-duel-refresh="1" ${busy?'disabled':''}>更新 ↻</button></div>
+ ${matches.length?matches.map(r=>summary(r,info,user)).join(''):'<p class="helper">対戦履歴はまだありません。</p>'}
+ </div></div>`:''}
+ ${live?`<div class="panel"><div class="card-body"><h2 class="panel-title">対戦ルール</h2><p class="helper">1手の制限時間は10分。制限時間を過ぎた場合と投了した場合は負けになる。対戦開始後は賭け金を取り消せない。引き分けでは双方に賭け金を返金する。遺物の補正や借KPは使えない。CPU対戦には対応していない。</p></div></div>`:''}
  ${nav}</div>`;
 }

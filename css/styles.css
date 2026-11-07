@@ -1236,3 +1236,29 @@ body:has(.screen[data-view="relics"]){--body-bg:#07020f}body:has(.screen[data-vi
 .duel-opponent-choice{min-height:46px;display:flex;align-items:center;width:100%;text-align:left;padding:10px 12px;color:#e9f1ff;background:transparent;border:1px solid transparent;border-radius:7px;font-size:15px;touch-action:manipulation}
 .duel-opponent-choice:hover,.duel-opponent-choice.selected{background:#173653;border-color:#32648a}
 .duel-opponent-help{color:#bccde4;font-size:12px;line-height:1.55;margin:0}
+
+/* Active duel first: keep the board above the invitation form and match history. */
+.duel-create-collapse{margin:14px 14px 0;border:1px solid #24496b;border-radius:12px;background:#07192c;overflow:hidden}
+.duel-create-collapse>summary{min-height:52px;display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:pointer;padding:14px 16px;font-size:14px;font-weight:700;color:#b7e5f6;list-style:none}
+.duel-create-collapse>summary::-webkit-details-marker{display:none}
+.duel-create-collapse>summary::after{content:'＋';font-size:21px;line-height:1}
+.duel-create-collapse[open]>summary::after{content:'−'}
+.duel-create-collapse>.duel-new{margin:0;border:0;border-radius:0;border-top:1px solid #24496b}
+.duel-create-collapse>summary:focus-visible{outline:3px solid #86d4ff;outline-offset:-3px}
+/* A 15×15 board at 660px makes each hit target 44×44px on narrow phones.
+   The viewport scrolls in both directions without resizing the board. */
+.duel-board-scroll{width:100%;max-width:100%;height:min(60vh,440px);min-height:250px;overflow:auto;overscroll-behavior:contain;touch-action:pan-x pan-y;scrollbar-width:thin;scrollbar-color:#d6bb7c #523b20;border:2px solid #b9a06d;border-radius:8px;background:#c4aa72}
+.duel-board-scroll:focus-visible{outline:3px solid #8edcff;outline-offset:2px}
+.duel-board-scroll .duel-gomoku{width:660px;min-width:660px;max-width:none;aspect-ratio:1;border:0;margin:0;touch-action:pan-x pan-y}
+.duel-board-scroll .duel-square{touch-action:pan-x pan-y}
+.duel-gomoku-tools{position:sticky;top:76px;z-index:9;padding:9px 10px;margin-bottom:9px;background:#0b2634;border:1px solid #2c5d6a;border-radius:10px;box-shadow:0 4px 18px #0005}
+.duel-gomoku-help{margin:0 0 7px;font-size:11px;line-height:1.5;color:#b6d8dc}
+.duel-gomoku-selection{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;min-height:30px;font-size:13px;color:#d4e8f2}
+.duel-gomoku-selection strong{font-size:16px;color:#fff1b5}
+.duel-gomoku-confirm-actions{display:flex;gap:6px}
+.duel-gomoku-confirm-actions .action-btn{flex:0 0 auto;min-height:42px;padding:9px 12px;font-size:13px}
+.duel-gomoku .duel-square.duel-preview-cell{background:#f4d276;box-shadow:inset 0 0 0 3px #fff0b4;z-index:1}
+.duel-gomoku .duel-square.duel-preview-cell::before{background:#183f29;opacity:.85}
+.duel-gomoku .duel-square.duel-preview-cell::after{content:'✓';position:absolute;z-index:2;font-size:19px;font-weight:900;color:#fff;line-height:1;pointer-events:none}
+@media(min-width:800px){.duel-board-scroll{height:520px;max-width:520px;margin:0 auto}}
+@media(max-width:360px){.duel-gomoku-tools{padding:8px}.duel-gomoku-confirm-actions .action-btn{padding:9px;font-size:12px}}
