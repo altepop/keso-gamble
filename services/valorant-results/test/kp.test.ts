@@ -1067,7 +1067,7 @@ test('target pickers include registered KP users beyond five monitored VALORANT 
  await assert.rejects(buyLuxury(f.env,mapping,one,{cash:60000},{item:'convict',target:stranger}),/KP口座/);
 });
 test('display names use verified Riot handles rather than raw Dolly, frin, h1d3g1g4s labels',async()=>{
- const {kpTargetMembers,CANONICAL_RIOT_HANDLES}=await import('../src/kp-target-members.ts');
+ const {kpTargetMembers,CANONICAL_RIOT_HANDLES,canonicalDisplayAlias}=await import('../src/kp-target-members.ts');
  const f=await fixture();
  const alt:KpMapping={guildId:guild,accounts:[
   {riotId:'Dolly#SDGs',discordUserId:one},
@@ -1078,4 +1078,7 @@ test('display names use verified Riot handles rather than raw Dolly, frin, h1d3g
  assert.equal(names.find(x=>x.id===two)?.name,'藤村');
  assert.equal(names.find(x=>x.id==='100000000000000103')?.name,'石原');
  assert.equal(CANONICAL_RIOT_HANDLES.dolly,'VDK');
+ assert.equal(canonicalDisplayAlias('千葉祐也'),'千葉ゆうや');
+ assert.equal(canonicalDisplayAlias('h1d3g1g4s'),'石原');
+ assert.equal(canonicalDisplayAlias('名古屋'),'名古屋');
 });
