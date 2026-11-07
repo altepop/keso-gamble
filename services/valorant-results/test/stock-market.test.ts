@@ -497,3 +497,31 @@ test('D1: the daily news budget reads only today\'s non-zero news through its pa
  await tickStocks(f.env,market,T+5*60_000,()=>0.5);
  assert.equal(f.sql.prepare("SELECT applied_bps FROM stock_news WHERE id='big'").get()!.applied_bps,100);
 });
+
+test('D1 stock bulletins use indexed time ranges and only one daily count scan per batch',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:T});
+ const f=await fixture();
+ const m=await prepareStocks(f.env,guild,undefined,T);
+ const inserts=f.sql.prepare('INSERT INTO stock_announcements VALUES(?,?,?,?)');
+ f.sql.exec('BEGIN');
+ for(let i=0;i<1800;i++)inserts.run(guild,'keso',Math.floor((T-10*DAY)/1800000)-i,T-10*DAY-i*1800000);
+ f.sql.exec('COMMIT');
+ const latest="SELECT at AS last FROM stock_announcements INDEXED BY stock_announcements_symbol_recent WHERE guild=? AND symbol=? ORDER BY at DESC LIMIT 1";
+ const daily="SELECT COUNT(*) AS n FROM stock_announcements INDEXED BY stock_announcements_daily WHERE guild=? AND at>=?";
+ const explain=(q:string,...params:unknown[])=>f.sql.prepare('EXPLAIN QUERY PLAN '+q).all(...params as never[]).map(x=>String(x.detail)).join('; ');
+ assert.match(explain(latest,guild,'keso'),/stock_announcements_symbol_recent/);
+ assert.match(explain(daily,guild,Math.floor(T/DAY)*DAY),/stock_announcements_daily/);
+ assert.doesNotMatch(explain(daily,guild,Math.floor(T/DAY)*DAY),/SCAN stock_announcements$/);
+ assert.equal((f.sql.prepare(latest).get(guild,'keso') as {last:number}).last,T-10*DAY);
+ const symbols=Object.keys(m.prices).slice(0,2);
+ assert.equal(symbols.length,2);
+ for(const s of symbols)m.prices[s]=Math.round(m.prices[s]*1.2);
+ m.version=1;
+ const oldPrepare=f.env.DB.prepare.bind(f.env.DB);let countReads=0;
+ f.env.DB.prepare=((q:string)=>{if(q.includes('SELECT COUNT(*) AS n FROM stock_announcements'))countReads++;return oldPrepare(q);}) as typeof f.env.DB.prepare;
+ await queueStockPosts({...f.env,KP_EARNINGS_WEBHOOK_URL:'https://discord.com/api/webhooks/1/token'},m,T+30*60_000);
+ assert.equal(countReads,1,'daily quota is scanned once for multiple symbols');
+ assert.equal(Number((f.sql.prepare('SELECT COUNT(*) AS n FROM stock_announcements WHERE at>=?').get(T) as {n:number}).n),2);
+ assert.equal(Number((f.sql.prepare('SELECT COUNT(*) AS n FROM kp_posts').get() as {n:number}).n),2);
+ f.sql.close();
+});
