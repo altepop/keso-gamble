@@ -31,7 +31,7 @@ const feedbackCode=(a,b)=>numericFeedback(a,b);
 function candidatePool(possible,random,max){
  if(possible.length<=max)return possible;
  const candidates=new Set(spaced(possible,Math.floor(max*.65)));
- // Random sampling is unbiased by decimal / lexicographic neighborhood.
+ // Mix evenly spaced positions with a seeded stride; fully deterministic.
  const offset=Math.floor(random()*possible.length);
  for(let k=0;k<possible.length&&candidates.size<max;k++)
   candidates.add(possible[(offset+k*37)%possible.length]);
@@ -51,7 +51,7 @@ export function cpuHitBlow(board,side,level,random){
  if(level==='easy')return {guess:pick(remaining,random)};
  if(level==='normal'){
   // Intermediate strategy: sample candidate answers but never use non-answer probes.
-  const candidates=candidatePool(remaining,random,6); // overridden below
+  const candidates=candidatePool(remaining,random,6);
   const answers=spaced(remaining,Math.min(55,remaining.length));
   let best=candidates[0],score=Infinity;
   for(const guess of candidates){
@@ -67,11 +67,8 @@ export function cpuHitBlow(board,side,level,random){
  if(mine.length===0&&!used.has('0123'))return {guess:'0123'};
  const answers=spaced(remaining,Math.min(1450,remaining.length));
  const candidates=candidatePool(remaining,random,Math.min(remaining.length<=320?remaining.length:110,remaining.length));
- // In a race to solve, a diagnostic probe spends a turn without a chance of
- // winning. Empirical head-to-head tests show candidate-only guesses dominate.
- if(false){
-  for(const guess of spaced(codes,60))if(!used.has(guess)&&!candidates.includes(guess))candidates.push(guess);
- }
+ // Experiments showed that speculative non-answer probes increased total
+ // solving turns. The CPU now prioritizes guesses that can win this turn.
  let best=candidates[0],score=Infinity;
  for(const guess of candidates){
   const partitions=new Uint16Array(25);
@@ -82,8 +79,7 @@ export function cpuHitBlow(board,side,level,random){
   let cost=0;
   for(let n=0;n<25;n++)if(n!==20)cost+=partitions[n]*partitions[n];
   cost/=answers.length;
-  if(remaining.includes(guess))cost-=Math.min(1,answers.length/Math.max(1,remaining.length));
-  else cost+=remaining.length<=40?10:2.8;
+  cost-=1; // every candidate can immediately solve the round
   if(cost<score){score=cost;best=guess;}
  }
  return {guess:best};
