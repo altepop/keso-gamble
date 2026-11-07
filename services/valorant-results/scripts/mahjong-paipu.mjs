@@ -148,4 +148,32 @@ export async function run(env=process.env,check=process.argv.includes('--check')
   console.log(`paipu: ${results.filter(r=>r.summary).length} ok, ${results.filter(r=>r.error).length} failed (${[...new Set(results.map(r=>r.error).filter(Boolean))].join(',')}); stored ${reply.stored??0}`);
  }
 }
-if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href)(process.argv.includes('--queue')?queueSize().then(n=>console.log('count='+n)):run()).then(()=>process.exit(0),error=>{console.error('mahjong paipu failed:',String(error.message).replace(/[A-Za-z0-9+/=_-]{24,}/g,'***'));process.exit(1);});
+
+/** Inspect only friend games visible in the already-authenticated account's own history. */
+export async function scanFriend(env=process.env,probe=false){
+ for(const key of ['YOSTAR_UID','YOSTAR_TOKEN','YOSTAR_DEVICE_ID',...(probe?[]:['MAHJONG_INGEST_KEY','MAHJONG_WORKER_URL'])])
+  if(!env[key])throw Error('missing_secret_'+key);
+ const session=await login(env);
+ try{
+  const reply=await session.call('fetchGameRecordList',{start:1,count:20,type:1});
+  const now=Date.now();
+  const recent=(reply.record_list??[]).filter(r=>typeof r?.uuid==='string'&&/^\d{6}-[0-9a-f-]{36}$/i.test(r.uuid)&&
+   Number.isSafeInteger(r.end_time)&&r.end_time*1000>=now-6*3600_000&&r.end_time*1000<=now+60000).slice(0,20);
+  console.log('friend history: recent='+recent.length);
+  if(probe||!recent.length)return recent.length;
+  const response=await worker(env,'/api/mahjong/paipu/friend/candidates',{uuids:recent.map(r=>r.uuid)});
+  const missing=new Set(response.unknown??[]);
+  const results=[];
+  for(const record of recent.filter(r=>missing.has(r.uuid)).slice(0,5)){
+   try{results.push({uuid:record.uuid,summary:await fetchSummary(session,record.uuid)});}
+   catch(error){console.warn('friend_paipu_fetch_error',String(error.message).slice(0,60));}
+  }
+  if(results.length){
+   const result=await worker(env,'/api/mahjong/paipu/friend/summaries',{results});
+   console.log('friend verified:',JSON.stringify(result.statuses??[]));
+  }
+  return results.length;
+ }finally{session.close();}
+}
+
+if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href)(process.argv.includes('--queue')?queueSize().then(n=>console.log('count='+n)):process.argv.includes('--friend-probe')?scanFriend(process.env,true):process.argv.includes('--friend-scan')?scanFriend(process.env,false):run()).then(()=>process.exit(0),error=>{console.error('mahjong paipu failed:',String(error.message).replace(/[A-Za-z0-9+/=_-]{24,}/g,'***'));process.exit(1);});
