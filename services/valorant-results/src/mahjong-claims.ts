@@ -99,6 +99,7 @@ export async function runPaifuCommand(env:KpEnv,interaction:PaifuInteraction,ove
  if(!mapping||interaction.guild_id!==mapping.guildId||!user||!/^\d{15,22}$/.test(user)||!/^\d{15,22}$/.test(interaction.id))return {content:'このサーバーの本人の口座で利用してください。',components:[]};
  let claim;try{claim=paifuRequest(interaction,now);}catch(error){return {content:(error as Error).message,components:[]};}
  await ensureQuizKp(env);await ensureMahjongClaims(env);
+ if((await paipuSummary(env,mapping.guildId,claim.paipu))?.category===1)return {content:'友人戦は /paifu の段位戦報酬では申請できません。',components:[]};
  const existing=await read(env,mapping.guildId,interaction.id);
  if(existing)return renderClaim(existing,now);
  const day=jstDay(now);
@@ -153,8 +154,8 @@ export function luckyStake(game:Game,rank:number,paipu:string,account:number){
 }
 export async function paipuCheck(env:KpEnv,guild:string,claim:Pick<Claim,'user'|'paipu'|'rank'>):Promise<null|{refuse:string}|{game:Game;amount:number;account:number;nickname:string;auto:boolean}>{
  const summary=await paipuSummary(env,guild,claim.paipu);
+ if(summary?.category===1)return {refuse:'友人戦は段位戦の /paifu 報酬では精算できません。'};
  if(!summary||!Object.hasOwn(policy.games,summary.game))return null;
- if(summary.category===1)return {refuse:'友人戦は段位戦の /paifu 報酬では精算できません。'};
  const player=summary.seats.find(s=>s.rank===claim.rank);
  if(!player)return {refuse:`牌譜は${summary.players}人戦です。順位を確認してください。`};
  const links=(await env.DB.prepare('SELECT user,account FROM kp_mahjong_links WHERE guild=? AND (user=? OR account=?)').bind(guild,claim.user,player.accountId).all<{user:string;account:number}>()).results;
