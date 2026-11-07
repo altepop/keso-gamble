@@ -15,6 +15,7 @@ on:
       - 'duel-preview/**'
       - 'js/duel-*.js'
       - 'scripts/duel-demo-browser-check.cjs'
+      - 'scripts/duel-live-touch-browser-check.cjs'
       - '.github/workflows/duel-demo-preview.yml'
   workflow_dispatch:
 permissions:
