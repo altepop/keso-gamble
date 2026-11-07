@@ -101,38 +101,64 @@ function candidates(board,side,limit){
  available.sort(order);
  return available.slice(0,limit).map(x=>x.cell);
 }
+function nextGomoku(board,cell,side){return board.slice(0,cell)+side+board.slice(cell+1);}
+function tactical(board,side,limit=20){
+ // Rank threats by *actual next-move power* rather than general defense.
+ const best=[];
+ for(let cell=0;cell<225;cell++)if(board[cell]==='.'){
+  const score=strength(board,side,cell);
+  if(score>3)best.push({cell,score});
+ }
+ best.sort((a,b)=>b.score-a.score||a.cell-b.cell);
+ return best.slice(0,limit);
+}
 export function chooseGomoku(board,side,level,random){
  const moves=duelLegalMoves('gomoku',board,side);
  if(!moves.length)throw Error('合法手がありません。');
  if(level==='easy')return {cell:pick(moves,random)};
- const opp=opposite(side),ranked=candidates(board,side,level==='strong'?10:7);
- const winning=ranked.filter(cell=>strength(board,side,cell)>=1000000);
- if(winning.length)return {cell:winning[0]};
- const threats=candidates(board,opp,16).filter(cell=>strength(board,opp,cell)>=1000000);
- if(threats.length)return {cell:threats[0]};
+ const opp=opposite(side),ranked=candidates(board,side,level==='strong'?15:7);
+ const ownWinning=tactical(board,side,8).filter(x=>x.score>=1000000);
+ if(ownWinning.length)return {cell:ownWinning[0].cell};
+ const oppWinning=tactical(board,opp,8).filter(x=>x.score>=1000000);
+ if(oppWinning.length)return {cell:oppWinning[0].cell};
  if(level==='normal')return {cell:ranked[0]};
- // Depth-two defensive search. Prefer building forks over moves that allow immediate
- // counter-forks. Prune to local candidates to bound mobile CPU latency.
- let chosen=ranked[0],best=-Infinity;let nodes=0;
- const deadline=Date.now()+430;
- for(const cell of ranked){
-  const after=board.slice(0,cell)+side+board.slice(cell+1);
+ // Strong plays actively: first force two independent four-in-a-row threats
+ // (forks), then calculate opponent's most dangerous answer. A forced win
+ // matters more than a static one-step defensive score.
+ const attack=tactical(board,side,12).map(x=>x.cell);
+ const defense=tactical(board,opp,10).map(x=>x.cell);
+ const options=[...new Set([...ranked,...attack,...defense])].filter(x=>board[x]==='.').slice(0,22);
+ const deadline=Date.now()+360;
+ let best=-Infinity,selected=options[0]??ranked[0],visited=0;
+ for(const cell of options){
+  if(Date.now()>deadline||visited>150)break;
+  const after=nextGomoku(board,cell,side);
+  const enemyWins=tactical(after,opp,5).filter(x=>x.score>=1000000);
+  if(enemyWins.length)continue;
+  const forks=tactical(after,side,8).filter(x=>x.score>=1000000);
+  if(forks.length>=2)return {cell}; // opponent cannot block both unless it wins itself
+  const ownNow=strength(board,side,cell),enemyNow=strength(board,opp,cell);
   let worst=Infinity;
-  for(const reply of candidates(after,opp,7)){
-   if(++nodes>80||Date.now()>deadline)break;
-   if(strength(after,opp,reply)>=1000000){worst=-1e8;break;}
-   const then=after.slice(0,reply)+opp+after.slice(reply+1);
-   const attack=candidates(then,side,5).map(k=>strength(then,side,k));
-   const defense=candidates(then,opp,5).map(k=>strength(then,opp,k));
-   const value=(attack[0]??0)*1.2-(defense[0]??0)*1.6;
+  const replies=[...new Set([...candidates(after,opp,7),...tactical(after,opp,7).map(x=>x.cell)])].slice(0,12);
+  for(const reply of replies){
+   if(++visited>150||Date.now()>deadline)break;
+   const later=nextGomoku(after,reply,opp);
+   const bestOwn=tactical(later,side,8);
+   const bestOpp=tactical(later,opp,8);
+   const mine=bestOwn[0]?.score??0,theirs=bestOpp[0]?.score??0;
+   // Prioritize threats that force a response; avoid pure blocking when there
+   // is an opportunity to create an open four or threatening open three.
+   const value=mine>=1000000?1e7:
+     theirs>=1000000?-1e7:
+     mine*1.4-theirs*1.55;
    worst=Math.min(worst,value);
   }
-  if(worst===Infinity)worst=0;
-  const combined=worst+strength(board,side,cell)*.12+strength(board,opp,cell)*.16;
-  if(combined>best){best=combined;chosen=cell;}
-  if(nodes>80||Date.now()>deadline)break;
+  if(!Number.isFinite(worst))worst=0;
+  const score=worst+ownNow*.65+enemyNow*.25+
+    (14-Math.abs(Math.floor(cell/15)-7)-Math.abs(cell%15-7))*.2;
+  if(score>best){best=score;selected=cell;}
  }
- return {cell:chosen};
+ return {cell:selected};
 }
 const WINDOWS=(()=>{
  const lines=[];
