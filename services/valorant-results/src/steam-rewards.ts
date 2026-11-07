@@ -3,6 +3,10 @@ import {kpHash,kpRandom} from './kp.ts';
 import type {KpEnv} from './kp.ts';
 import {creditVerifiedRelicBonus} from './relics.ts';
 
+// The relic screen orders each member's Steam receipts by rarity and recency.
+// The historic guild/user/at index could not serve this ORDER BY, forcing
+// every relic-screen open to read and sort all prior receipts (101k rows/24h).
+export const STEAM_RELIC_ORDER_INDEX_SQL='CREATE INDEX IF NOT EXISTS kp_steam_relic_list_order ON kp_steam_events(guild,user,('+"CASE WHEN percent<=10 THEN 0 WHEN percent<=25 THEN 1 ELSE 2 END"+'),at DESC)';
 export const STEAM_MIN_PLAYTIME_MINUTES=120;
 export interface SteamConfig {version:string;dailyCap:number;minPlaytimeMinutes:number;paidGamesOnly:boolean;enabled:boolean;startsAt:number|null;tiers:Array<{maxPercent:number;amount:number}>}
 export type SteamEnv=KpEnv & {STEAM_WEB_API_KEY?:string;KP_STEAM_CONFIG?:string};
@@ -23,6 +27,7 @@ export const steamSchema=[
  `CREATE INDEX IF NOT EXISTS kp_steam_notice_user ON kp_steam_notice_items(guild,user,seq)`,
  `CREATE TRIGGER IF NOT EXISTS kp_steam_notice AFTER INSERT ON kp_steam_events BEGIN INSERT INTO kp_steam_notice_items(event,guild,user,at) VALUES(NEW.id,NEW.guild,NEW.user,NEW.at); END`,
  `CREATE INDEX IF NOT EXISTS kp_steam_history ON kp_steam_events(guild,user,at DESC)`,
+ STEAM_RELIC_ORDER_INDEX_SQL,
  `CREATE TRIGGER IF NOT EXISTS kp_steam_cap_guard BEFORE INSERT ON kp_steam_events WHEN NEW.amount!=min(NEW.requested,max(0,5000-COALESCE((SELECT amount FROM kp_steam_daily WHERE guild=NEW.guild AND user=NEW.user AND day=strftime('%Y-%m-%d',NEW.at/1000,'unixepoch')),0))) BEGIN SELECT RAISE(ABORT,'Steam daily cap'); END`,
  `CREATE TRIGGER IF NOT EXISTS kp_steam_apply AFTER INSERT ON kp_steam_events WHEN NEW.amount>0 BEGIN INSERT INTO kp_steam_daily(guild,user,day,amount) VALUES(NEW.guild,NEW.user,strftime('%Y-%m-%d',NEW.at/1000,'unixepoch'),NEW.amount) ON CONFLICT(guild,user,day) DO UPDATE SET amount=amount+excluded.amount; INSERT INTO kp_ledger(id,guild,user,delta,kind,at) VALUES(NEW.id,NEW.guild,NEW.user,NEW.amount,'steam',NEW.at); END`,
 ];
