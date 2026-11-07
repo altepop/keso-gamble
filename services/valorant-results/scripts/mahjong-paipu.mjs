@@ -114,7 +114,7 @@ export function decodeRecords(root,bytes){
  return raw.map(b=>{const w=Wrapper.decode(b),name=w.name.replace(/^\.lq\./,''),T=root.lookupType('lq.'+name);return {name,data:T.toObject(T.decode(w.data),{longs:Number,defaults:true})};});
 }
 
-export async function fetchSummary(session,uuid){
+export async function fetchSummary(session,uuid,reviewer=null){
  const record=await session.call('fetchGameRecord',{game_uuid:uuid,client_version_string:session.versionString});
  let data=record.data;
  if(!data?.length){
@@ -122,7 +122,18 @@ export async function fetchSummary(session,uuid){
   const r=await fetch(record.data_url,{signal:AbortSignal.timeout(TIMEOUT)});if(!r.ok)throw Error('record_http_'+r.status);
   data=Buffer.from(await r.arrayBuffer());
  }
- return summarizePaipu(record.head,decodeRecords(session.root,data));
+ const actions=decodeRecords(session.root,data);
+ const summary=summarizePaipu(record.head,actions);
+ if(reviewer&&summary.players===4){
+  try{
+   const review=await reviewer.review(summary,actions);
+   if(review)summary.c3=review;
+  }catch(error){
+   // Read-only AI review must NEVER interrupt current paipu/KP settlement.
+   console.log('equal_review: skipped; existing paipu settlement preserved');
+  }
+ }
+ return summary;
 }
 
 /** --queue: prints how many paipu wait (for the workflow to decide on installing). */
@@ -136,13 +147,24 @@ export async function run(env=process.env,check=process.argv.includes('--check')
  if(!check&&!queue.length){console.log('paipu queue: 0');return;}
  const session=await login(env);
  console.log('login: ok');
+ let reviewer=null;
+ if(env.MAHJONG_EQUAL_REVIEW_ENABLED==='true'&&env.C3_ASSETS_ROOT){
+  try{
+   const {createC3Reviewer}=await import('./mahjong-c3-infer.mjs');
+   reviewer=await createC3Reviewer(env.C3_ASSETS_ROOT);
+   console.log('equal_review: model initialized');
+  }catch(error){
+   // Never log local paths, usernames, or downloaded game contents.
+   console.log('equal_review: unavailable (existing paipu flow preserved)');
+  }
+ }
  const results=[];
  try{
   for(const uuid of queue.slice(0,10)){
-   try{results.push({uuid,summary:await fetchSummary(session,uuid)});}
+   try{results.push({uuid,summary:await fetchSummary(session,uuid,reviewer)});}
    catch(error){results.push({uuid,error:String(error.message).slice(0,80)});}
   }
- }finally{session.close();}
+ }finally{await reviewer?.close().catch(()=>{});session.close();}
  if(results.length){
   const reply=await worker(env,'/api/mahjong/paipu/summaries',{results});
   console.log(`paipu: ${results.filter(r=>r.summary).length} ok, ${results.filter(r=>r.error).length} failed (${[...new Set(results.map(r=>r.error).filter(Boolean))].join(',')}); stored ${reply.stored??0}`);
