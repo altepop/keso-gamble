@@ -68,7 +68,7 @@ export function createKpClient({storage,temporaryStorage,request=globalThis.fetc
   trend:days=>api('trend?days='+days),
   relics:()=>api('relics'),
   privateRace:()=>api('private/race'),
-  duels:()=>api('duels'),duelAction:body=>api('duels',body),
+  duels:cursor=>api('duels'+(cursor?'?cursor='+encodeURIComponent(cursor):'')),duelAction:body=>api('duels',body),
   get steamLinkRequest(){return steamLink;},
   steamStatus:()=>api('steam/status'),steamLibrary:()=>api('steam/library'),
   async startSteam(){const link=await api('steam/link',{});write(steamKey,JSON.stringify(link));steamLink=link;return link;},
