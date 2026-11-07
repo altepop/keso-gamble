@@ -497,3 +497,38 @@ test('D1: the daily news budget reads only today\'s non-zero news through its pa
  await tickStocks(f.env,market,T+5*60_000,()=>0.5);
  assert.equal(f.sql.prepare("SELECT applied_bps FROM stock_news WHERE id='big'").get()!.applied_bps,100);
 });
+
+test('D1 stock alert daily count is read only once per tick even if multiple symbols move',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:T});
+ const f=await fixture();
+ const m=await prepareStocks(f.env,guild,undefined,T);
+ m.version=1;
+ const symbols=Object.keys(m.prices).slice(0,2);
+ assert.equal(symbols.length,2);
+ for(const symbol of symbols)m.prices[symbol]=Math.round(m.prices[symbol]*1.2);
+ const orig=f.env.DB.prepare.bind(f.env.DB);let countReads=0;
+ f.env.DB.prepare=((q:string)=>{if(q.includes('SELECT COUNT(*) AS n FROM stock_announcements'))countReads++;return orig(q);}) as typeof f.env.DB.prepare;
+ const env={...f.env,KP_EARNINGS_WEBHOOK_URL:'https://discord.com/api/webhooks/1/token'};
+ await queueStockPosts(env,m,T+30*60_000);
+ assert.equal(countReads,1,'one count for multiple rising stocks');
+ assert.equal((f.sql.prepare('SELECT COUNT(*) AS n FROM stock_announcements').get() as {n:number}).n,2);
+ assert.equal((f.sql.prepare('SELECT COUNT(*) AS n FROM kp_posts').get() as {n:number}).n,2);
+ await queueStockPosts(env,m,T+30*60_000);
+ assert.equal((f.sql.prepare('SELECT COUNT(*) AS n FROM stock_announcements').get() as {n:number}).n,2,'repeat tick is idempotent');
+ f.sql.close();
+});
+test('D1 stock alert keeps daily maximum eight when two or more symbols move in same tick',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:T});
+ const f=await fixture();
+ const m=await prepareStocks(f.env,guild,undefined,T);
+ m.version=1;
+ const symbols=Object.keys(m.prices).slice(0,2);
+ for(const symbol of symbols)m.prices[symbol]=Math.round(m.prices[symbol]*1.2);
+ const day=Math.floor(T/DAY)*DAY, insert=f.sql.prepare('INSERT INTO stock_announcements VALUES(?,?,?,?)');
+ for(let i=0;i<7;i++)insert.run(guild,'history',i,day+i*60000);
+ const env={...f.env,KP_EARNINGS_WEBHOOK_URL:'https://discord.com/api/webhooks/1/token'};
+ await queueStockPosts(env,m,T+30*60_000);
+ assert.equal((f.sql.prepare('SELECT COUNT(*) AS n FROM stock_announcements').get() as {n:number}).n,8);
+ assert.equal((f.sql.prepare('SELECT COUNT(*) AS n FROM kp_posts').get() as {n:number}).n,1);
+ f.sql.close();
+});
