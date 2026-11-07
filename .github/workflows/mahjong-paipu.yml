@@ -11,6 +11,10 @@ on:
         description: 'ログインできるかだけ確認する（牌譜は取得しない）'
         type: boolean
         default: false
+      c3_probe:
+        description: '実モデルのNode推論だけ検証（雀魂・Discord・KP・D1へアクセスしない）'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -40,7 +44,9 @@ jobs:
         env:
           YOSTAR_TOKEN: ${{ secrets.YOSTAR_TOKEN }}
           CHECK: ${{ inputs.check }}
+          MODEL_PROBE: ${{ inputs.c3_probe }}
         run: |
+          if [ "$MODEL_PROBE" = "true" ]; then echo 'count=probe' >> "$GITHUB_OUTPUT"; exit 0; fi
           if [ -z "$YOSTAR_TOKEN" ] || [ -z "$MAHJONG_INGEST_KEY" ]; then
             echo 'YOSTAR_* または MAHJONG_INGEST_KEY が未設定のためスキップします。'
             exit 0
@@ -48,7 +54,7 @@ jobs:
           if [ "$CHECK" = 'true' ]; then echo 'count=check' >> "$GITHUB_OUTPUT"; exit 0; fi
           node --experimental-strip-types scripts/mahjong-paipu.mjs --queue | tee -a "$GITHUB_OUTPUT"
       - name: Install
-        if: steps.queue.outputs.count && steps.queue.outputs.count != '0'
+        if: steps.queue.outputs.count && steps.queue.outputs.count != '0' && steps.queue.outputs.count != 'probe'
         run: npm ci --ignore-scripts
       - name: Decide optional private model access
         id: c3
@@ -56,8 +62,9 @@ jobs:
         env:
           MODEL_TOKEN: ${{ secrets.M_LEAGUE_C3_TOKEN }}
           MODEL_ENABLED: ${{ vars.MAHJONG_EQUAL_REVIEW_ENABLED }}
+          MODEL_PROBE: ${{ inputs.c3_probe }}
         run: |
-          if [ "$MODEL_ENABLED" = "true" ] && [ -n "$MODEL_TOKEN" ]; then
+          if { [ "$MODEL_ENABLED" = "true" ] || [ "$MODEL_PROBE" = "true" ]; } && [ -n "$MODEL_TOKEN" ]; then
             echo 'enabled=true' >> "$GITHUB_OUTPUT"
           else
             echo 'enabled=false' >> "$GITHUB_OUTPUT"
@@ -74,8 +81,18 @@ jobs:
           sparse-checkout: |
             assets/c3
             scripts/lib
+      - name: Explain missing model permission for manual probe
+        if: inputs.c3_probe == true && steps.c3.outputs.enabled != 'true'
+        run: |
+          echo 'M_LEAGUE_C3_TOKEN（非公開M-LEAGUE ManagerのContents Read-only）が必要です。'
+          exit 1
+      - name: Read-only Node inference probe
+        if: inputs.c3_probe == true && steps.c3.outputs.enabled == 'true'
+        env:
+          C3_ASSETS_ROOT: ${{ github.workspace }}/c3-private
+        run: node --experimental-strip-types scripts/mahjong-c3-probe.mjs
       - name: Fetch and summarize paipu
-        if: steps.queue.outputs.count && steps.queue.outputs.count != '0'
+        if: steps.queue.outputs.count && steps.queue.outputs.count != '0' && steps.queue.outputs.count != 'probe'
         env:
           YOSTAR_UID: ${{ secrets.YOSTAR_UID }}
           YOSTAR_TOKEN: ${{ secrets.YOSTAR_TOKEN }}
