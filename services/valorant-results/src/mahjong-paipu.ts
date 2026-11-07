@@ -156,7 +156,9 @@ export function paipuPost(summary:PaipuSummary,members:Map<number,Member>,levelO
  if(!comments.length||full.length>1900)return baseline;
  for(let count=comments.length;count>0;count--){
   const extra=section('松本等しいのひと言',comments.slice(0,count));
-  const candidate=[...parts.slice(0,-(meme?2:0)||undefined),...extra,...(meme?parts.slice(-2):[])].join('\n');
+  const originalBody=meme?parts.slice(0,-2):parts;
+  const ending=meme?parts.slice(-2):[];
+  const candidate=[...originalBody,...extra,...ending].join('\n');
   if(candidate.length<=1900)return candidate;
  }
  return baseline;
