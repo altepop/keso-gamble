@@ -26,8 +26,9 @@ const spaced=(arr,limit)=>{
 };
 export function cpuHitBlow(board,side,level,random){
  const history=JSON.parse(board).history??[];
- const used=new Set(history.map(h=>h.guess));
  const mine=history.filter(h=>h.by===side);
+ // Players guess DIFFERENT secret codes; an opponent's guess is never used by this CPU.
+ const used=new Set(mine.map(h=>h.guess));
  const possible=codes.filter(code=>mine.every(h=>numericFeedback(h.guess,code)===h.hit*5+h.blow));
  const remaining=possible.filter(code=>!used.has(code));
  if(!remaining.length)throw Error('数字の候補がありません。');
