@@ -5,3 +5,16 @@ body{background:#040c22;color:#eef3ff}.demo-toolbar{max-width:760px;margin:0 aut
 #demo-feedback{font-size:12px;line-height:1.5;color:#c6ffd8;min-height:0}#demo-feedback:empty{display:none}
 #demo-app .screen{min-height:unset;padding-bottom:55px}.duel-opponent-toggle,.duel-opponent-choice{font-size:15px}
 @media(max-width:390px){.demo-control-title{min-width:70px}.demo-toolbar{padding:10px}.demo-control-line button{font-size:12px;padding:8px}}
+
+body.cpu-practice #demo-view-switch{display:none}
+body.cpu-practice #demo-cpu-settings{display:flex}
+body.cpu-practice .duel-history,body.cpu-practice .duel-create-collapse,body.cpu-practice .duel-sync,body.cpu-practice .duel-history-more{display:none}
+body.cpu-practice .duel-current{margin-top:8px}
+body.cpu-practice .duel-arena{border-color:#4c8ea1}
+.demo-control-line label{font-size:12px;color:#b8d3e7}
+.demo-cpu-help{font-size:11px;color:#9fcab9;flex:1}
+.demo-notice{border-color:#426b83}
+.duel-practice-entry{margin:12px 14px;padding:14px;border:1px solid #4b7f81;border-radius:13px;background:linear-gradient(110deg,#0c3041,#0d1c39);display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.duel-practice-entry strong{display:block;color:#c9ffeb;font-size:15px}
+.duel-practice-entry p{margin:6px 0 0;max-width:430px;font-size:12px;color:#bdd2e8;line-height:1.7}
+.duel-practice-entry a{display:inline-flex;align-items:center;justify-content:center;text-decoration:none;padding:10px 13px;border-radius:9px;min-height:45px;white-space:normal;text-align:center;font-weight:700}
