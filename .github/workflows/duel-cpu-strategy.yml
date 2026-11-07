@@ -24,4 +24,4 @@ jobs:
         with:
           node-version: '24'
       - name: Verify all six CPU tactics, legality and upper time bounds
-        run: node --test tests/duel-cpu.test.js tests/duel-cpu-expert.test.js
+        run: node --test tests/duel-cpu.test.js tests/duel-cpu-expert.test.js tests/duel-cpu-quality.test.js
