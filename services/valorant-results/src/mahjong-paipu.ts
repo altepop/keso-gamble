@@ -8,6 +8,7 @@ import {initializeKp} from './kp.ts';
 import type {KpEnv,KpMapping} from './kp.ts';
 import {autoCredit,ensureMahjongClaims,paipuCheck,settleClaim} from './mahjong-claims.ts';
 import {mahjongPlayers} from './mahjong.ts';
+import {equalC3Comments,acceptedC3Report} from './mahjong-c3-comment.ts';
 import type {PaipuSummary,PlayerSummary,Win} from './mahjong-summary.ts';
 import {enqueue,ensurePosts,roastLevelsOf} from './racing-posts.ts';
 import type {RoastLevel} from './racing-crowns.ts';
@@ -138,7 +139,8 @@ export function paipuPost(summary:PaipuSummary,members:Map<number,Member>,levelO
  // One intact, source-checked quotation, matched to how the members finished.
  const ranks=[...members.keys()].map(seatNo=>summary.seats[seatNo].rank),pool=MEME_POOLS[ranks.includes(summary.players)?'last':ranks.includes(1)?'top':'middle'];
  const meme=memes.quotes.find(q=>q.id===pool[hash('paipu-meme:'+summary.uuid)%pool.length])?.text;
- const parts=[`🀄 **雀魂 ${label}｜牌譜検討**`,...section('順位',standings),...section('KP',outcomes.map(l=>l.startsWith('🔎')?l:untag(l))),...section('主な和了',hands),...section('メンバー',blocks.flatMap((b,i)=>i?['',b]:[b])),...meme?['',`💬 ${meme}`]:[]];
+ const c3=equalC3Comments(summary,summary.c3,members);
+ const parts=[`🀄 **雀魂 ${label}｜牌譜検討**`,...section('順位',standings),...section('KP',outcomes.map(l=>l.startsWith('🔎')?l:untag(l))),...section('松本等しいのc3検討',c3.length?[...c3,'-# c3との選択の違いだけでは失着とは断定できない。']:[]),...section('主な和了',hands),...section('メンバー',blocks.flatMap((b,i)=>i?['',b]:[b])),...meme?['',`💬 ${meme}`]:[]];
  let text='';
  for(const part of parts){if((text+'\n'+part).length>1900)break;text+=(text?'\n':'')+part;}
  return text;
@@ -146,6 +148,8 @@ export function paipuPost(summary:PaipuSummary,members:Map<number,Member>,levelO
 /** Applies one fetched summary: stores it, settles /paifu claims, queues the post. `players` are the
  * registered accounts of the result watcher, roasted by name until they are linked to Discord. */
 export async function applySummary(env:PaipuEnv,mapping:KpMapping,summary:PaipuSummary,now=Date.now(),players:Array<{id:number;name:string}>=[]){
+ // The signed ingestion may carry a C3 review, but invalid review data never becomes a bot claim.
+ summary={...summary,c3:acceptedC3Report(summary,summary.c3)??undefined};
  await env.DB.prepare('INSERT INTO kp_mahjong_paipu(guild,paipu,summary,error,attempts,at) VALUES(?,?,?,NULL,0,?) ON CONFLICT(guild,paipu) DO UPDATE SET summary=excluded.summary,error=NULL,at=excluded.at WHERE kp_mahjong_paipu.summary IS NULL')
   .bind(mapping.guildId,summary.uuid,JSON.stringify(summary),now).run();
  const claims=(await env.DB.prepare(`SELECT id,user,paipu,rank,status FROM kp_mahjong_claims WHERE guild=? AND paipu=? AND status!='rejected'`).bind(mapping.guildId,summary.uuid).all<{id:string;user:string;paipu:string;rank:number;status:string}>()).results;
