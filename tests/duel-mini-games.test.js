@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {connect4Board,connect4Move,connect4LegalMoves,hitBlowAnswer,miniStart,miniMove,miniPrivate,comparePokerHands}from '../js/duel-mini-games.js';
+import {connect4Board,connect4Move,connect4LegalMoves,hitBlowAnswer,miniStart,miniMove,miniPrivate,comparePokerHands,pokerHandName,pokerHandScore,validBluffBid}from '../js/duel-mini-games.js';
 
 test('Connect Four gravity, four in a row, column overflow and diagonal',()=>{
  let board=connect4Board();assert.equal(board.length,42);
@@ -60,4 +60,30 @@ test('Poker ranks standard hands, differentiates suits, and never leaks draw dec
  assert.ok(['a','b','draw'].includes(b.winner));
  assert.equal(JSON.parse(b.board).showdown.a.length,5);
  assert.equal(JSON.parse(b.board).showdown.b.length,5);
+});
+
+test('Hit & Blow ends on the 40th non-winning move, not the 41st',()=>{
+ const start=miniStart('hitblow',()=>0),sec=JSON.parse(start.secret);
+ let board=start.board,side='a',answer;
+ for(let n=1;n<=40;n++){
+  const target=side==='a'?sec.privateB:sec.privateA;
+  const guess=target.slice(1)+target[0];
+  const result=miniMove('hitblow',board,start.secret,side,{guess},()=>0);
+  if(n<40)assert.equal(result.winner,null,'turn '+n+' must stay active');
+  else {assert.equal(result.winner,'draw');assert.equal(JSON.parse(result.board).history.length,40);assert.ok(JSON.parse(result.board).reveal);}
+  board=result.board;answer=result;side=side==='a'?'b':'a';
+ }
+ assert.equal(answer.turnSide,null);
+});
+test('poker labels and bluff bid validation match the settlement rules',()=>{
+ const c=(rank,suit)=>(rank-2)*4+suit;
+ const royal=[10,11,12,13,14].map(r=>c(r,0));
+ const wheel=[14,2,3,4,5].map(r=>c(r,1));
+ assert.equal(pokerHandName(royal),'ストレートフラッシュ');
+ assert.equal(pokerHandName(wheel),'ストレートフラッシュ');
+ assert.equal(pokerHandScore(wheel)[1],5,'ace-low straight tie-break');
+ assert.equal(validBluffBid({count:5,face:3},5,3),false);
+ assert.equal(validBluffBid({count:5,face:3},5,4),true);
+ assert.equal(validBluffBid({count:10,face:6},10,6),false);
+ assert.equal(validBluffBid({count:10,face:6},11,1),false);
 });

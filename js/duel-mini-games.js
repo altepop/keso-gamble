@@ -32,27 +32,33 @@ export function hitBlowAnswer(guess,code){
  if(typeof guess!=='string'||!/^[0-9]{4}$/.test(guess)||new Set(guess).size!==4)throw Error('異なる数字4桁を入力してください。');
  return {hit:[...guess].filter((v,i)=>v===code[i]).length,blow:[...guess].filter((v,i)=>v!==code[i]&&code.includes(v)).length};
 }
+// Pure rank calculation; a showdown can be described from publicly revealed cards.
+export const POKER_HAND_NAMES=['','ハイカード','ワンペア','ツーペア','スリーカード','ストレート','フラッシュ','フルハウス','フォーカード','ストレートフラッシュ'];
+export function pokerHandScore(hand){
+ if(!Array.isArray(hand)||hand.length!==5||new Set(hand).size!==5||hand.some(c=>!Number.isInteger(c)||c<0||c>=52))throw Error('カードの形式が不正です。');
+ const ranks=hand.map(c=>Math.floor(c/4)+2),desc=[...ranks].sort((x,y)=>y-x);
+ const flush=hand.every(c=>c%4===hand[0]%4);
+ const uniq=[...new Set(desc)],high=uniq.length===5?(desc[0]-desc[4]===4?desc[0]:JSON.stringify(desc)==='[14,5,4,3,2]'?5:0):0;
+ const groups=[...new Set(ranks)].map(rank=>({rank,n:ranks.filter(r=>r===rank).length})).sort((a,b)=>b.n-a.n||b.rank-a.rank);
+ const pack=groups.flatMap(g=>Array(g.n).fill(g.rank));
+ if(flush&&high)return [9,high];
+ if(groups[0].n===4)return [8,...pack];
+ if(groups[0].n===3&&groups[1].n===2)return [7,...pack];
+ if(flush)return [6,...desc];
+ if(high)return [5,high];
+ if(groups[0].n===3)return [4,...pack];
+ if(groups[0].n===2)return [3,...pack];
+ if(groups[0].n===2)return [2,...pack];
+ return [1,...desc];
+}
+export function pokerHandName(hand){return POKER_HAND_NAMES[pokerHandScore(hand)[0]];}
 export function comparePokerHands(a,b){
- const score=hand=>{
-  if(!Array.isArray(hand)||hand.length!==5||new Set(hand).size!==5||hand.some(c=>!Number.isInteger(c)||c<0||c>=52))throw Error('カードの形式が不正です。');
-  const ranks=hand.map(c=>Math.floor(c/4)+2),desc=[...ranks].sort((x,y)=>y-x);
-  const flush=hand.every(c=>c%4===hand[0]%4);
-  const uniq=[...new Set(desc)],high=uniq.length===5?(desc[0]-desc[4]===4?desc[0]:JSON.stringify(desc)==='[14,5,4,3,2]'?5:0):0;
-  const groups=[...new Set(ranks)].map(rank=>({rank,n:ranks.filter(r=>r===rank).length})).sort((a,b)=>b.n-a.n||b.rank-a.rank);
-  const pack=groups.flatMap(g=>Array(g.n).fill(g.rank));
-  if(flush&&high)return [9,high];
-  if(groups[0].n===4)return [8,...pack];
-  if(groups[0].n===3&&groups[1].n===2)return [7,...pack];
-  if(flush)return [6,...desc];
-  if(high)return [5,high];
-  if(groups[0].n===3)return [4,...pack];
-  if(groups[0].n===2&&groups[1].n===2)return [3,...pack];
-  if(groups[0].n===2)return [2,...pack];
-  return [1,...desc];
- };
- const left=score(a),right=score(b);
+ const left=pokerHandScore(a),right=pokerHandScore(b);
  for(let i=0;i<Math.max(left.length,right.length);i++){if((left[i]??0)>(right[i]??0))return 1;if((left[i]??0)<(right[i]??0))return -1;}
  return 0;
+}
+export function validBluffBid(bid,count,face){
+ return Number.isSafeInteger(count)&&count>=1&&count<=10&&Number.isSafeInteger(face)&&face>=1&&face<=6&&(!bid||count>bid.count||(count===bid.count&&face>bid.face));
 }
 function digits(rand){const array=Array.from({length:10},(_,i)=>String(i));for(let i=9;i>0;i--){const j=rand(i+1);[array[i],array[j]]=[array[j],array[i]];}return array.slice(0,4).join('');}
 function dice(rand){return Array.from({length:5},()=>rand(6)+1);}
@@ -83,8 +89,9 @@ export function miniMove(game,board,secret,side,body,rand){
   const guess=String(body.guess??''),code=side==='a'?sec.privateB:sec.privateA;
   const result=hitBlowAnswer(guess,code);
   pub.history.push({by:side,guess,...result});
-  if(pub.history.length>40){return {board:JSON.stringify({...pub,turn:null}),secret,winner:'draw',turnSide:null};}
+
   if(result.hit===4){pub.turn=null;pub.reveal={a:sec.privateA,b:sec.privateB};return {board:JSON.stringify(pub),secret,winner:side,turnSide:null};}
+   if(pub.history.length>=40){pub.turn=null;pub.reveal={a:sec.privateA,b:sec.privateB};return {board:JSON.stringify(pub),secret,winner:'draw',turnSide:null};}
   pub.turn=opposite(side);return {board:JSON.stringify(pub),secret,winner:null,turnSide:pub.turn};
  }
  if(game==='bluffdice'){
@@ -92,7 +99,7 @@ export function miniMove(game,board,secret,side,body,rand){
   if(action==='bid'){
    const count=Number(body.count),face=Number(body.face);
    if(!Number.isSafeInteger(count)||count<1||count>10||!Number.isSafeInteger(face)||face<1||face>6)throw Error('宣言する個数・目を選んでください。');
-   if(pub.bid&&(count<pub.bid.count||(count===pub.bid.count&&face<=pub.bid.face)))throw Error('前より強い宣言が必要です。');
+   if(!validBluffBid(pub.bid,count,face))throw Error('前より強い宣言が必要です。');
    pub.bid={count,face,by:side};pub.turn=opposite(side);
    return {board:JSON.stringify(pub),secret,winner:null,turnSide:pub.turn};
   }
