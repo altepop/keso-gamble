@@ -62,6 +62,31 @@ export function cpuHitBlow(board,side,level,random){
   }
   return {guess:best};
  }
+ // With few candidates left, solve the finite information game exactly.
+ // Unlike entropy alone, this minimizes the number of future guesses until
+ // the actual answer is found, accounting for the value of solving right now.
+ if(remaining.length<=10){
+  const memo=new Map();
+  function solve(set){
+   if(set.length===1)return {value:1,guess:set[0]};
+   const key=set.join(',');
+   if(memo.has(key))return memo.get(key);
+   let best=Infinity,chosen=set[0];
+   for(const guess of set){
+    const groups=new Map();
+    for(const answer of set){
+     const feedback=feedbackCode(guess,answer);
+     if(feedback===20)continue;
+     const group=groups.get(feedback)??[];group.push(answer);groups.set(feedback,group);
+    }
+    let expected=1;
+    for(const group of groups.values())expected+=group.length/set.length*solve(group).value;
+    if(expected<best-1e-8){best=expected;chosen=guess;}
+   }
+   const out={value:best,guess:chosen};memo.set(key,out);return out;
+  }
+  return {guess:solve(remaining).guess};
+ }
  // First move is an information-rich and predictable anchor. It makes the
  // benchmark and mobile UI deterministic without disclosing any secret.
  if(mine.length===0&&!used.has('0123'))return {guess:'0123'};
