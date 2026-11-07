@@ -204,3 +204,31 @@ test('sanma wording follows the actual player count and rank, including bust and
  const four={...summary,rounds:[],seats:summary.seats.map((p,i)=>({...p,rank:i+1,score:25000,dealIns:0,riichi:0,riichiWins:0,riichiDealIns:0,bestLead:0}))};
  for(let i=0;i<100;i++)assert.doesNotMatch(roastFor({...four,uuid:'four-lines-'+i},3,'full',names).join(''),/三麻|三人卓|北抜き/);
 });
+
+test('signed version-2 finding envelopes reach the existing queued post without changing KP or duplicating delivery',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:T0});
+ const run=async(withReview:boolean)=>{
+  const f=await fixture();await f.call('/api/mahjong/paipu/queue');
+  f.sql.prepare('INSERT INTO kp_mahjong_links VALUES(?,?,?)').run(guild,one,11);
+  f.sql.prepare('INSERT INTO kp_mahjong_links VALUES(?,?,?)').run(guild,two,22);
+  f.sql.prepare("INSERT INTO kp_ledger VALUES('seed-'||?,?,?,100,'test',0)").run(one,guild,one);
+  f.sql.prepare('INSERT INTO mahjong_paipu_auto VALUES(?,?,?)').run(PAIPU,11,T0);
+  // A trusted finding fixture exercises transport/formatting, not real inference.
+  // Genuine reconstruction/inference is checked by the separate replay smoke.
+  const payload=withReview?{...summary,c3:{version:2,source:'c3',model:'c3-v1.0-observation-1',uuid:PAIPU,findings:[{seat:1,round:0,turn:4,actual:'6p',recommended:'3p',position:'discard'}]}}:summary;
+  const response=await f.call('/api/mahjong/paipu/summaries',{results:[{uuid:PAIPU,summary:payload}]});
+  assert.equal(response.status,200);assert.equal((await response.json() as {stored:number}).stored,1);
+  return {f,payload};
+ };
+ const {f,payload}=await run(true),{f:control}=await run(false);
+ assert.equal(f.balance(one),control.balance(one));assert.equal(f.balance(two),control.balance(two));
+ assert.match(f.posts()[0],/4打目/);assert.match(f.posts()[0],/6p/);assert.match(f.posts()[0],/3p/);
+ assert.doesNotMatch(f.posts()[0],/c3|モデル|AI判定/i);
+ for(const section of ['**順位**','**KP**','**主な和了**','**メンバー**','💬 '])assert.ok(f.posts()[0].includes(section));
+ const before=f.sql.prepare('SELECT COUNT(*) n FROM kp_ledger').get()!.n;
+ await f.call('/api/mahjong/paipu/summaries',{results:[{uuid:PAIPU,summary:payload}]});
+ assert.equal(f.posts().length,1);assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM kp_ledger').get()!.n,before);
+ assert.equal(f.balance(two),control.balance(two));
+ const body=JSON.parse(String(f.sql.prepare("SELECT body FROM kp_posts WHERE id=?").get('paipu:'+PAIPU)!.body));
+ assert.deepEqual(body.allowed_mentions,{parse:[]});
+});

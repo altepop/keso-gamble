@@ -5,6 +5,7 @@ import {readFile} from 'node:fs/promises';
 import {resolve,join} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {buildC3Cases} from '../src/mahjong-c3-cases.ts';
+import {selectReviewFindings} from '../src/mahjong-review-selection.ts';
 
 const MODEL='c3-v1.0-observation-1';
 const HONORS=['E','S','W','N','P','F','C'];
@@ -85,13 +86,7 @@ export async function createC3Reviewer(rootPath){
     }
    }
    if(!results.length)return null;
-   // Prefer surprising alternatives, but include a valid agreement too.
-   const different=results.find(f=>f.actual!==f.recommended);
-   const same=results.find(f=>f.actual===f.recommended);
-   const selected=[];
-   if(different)selected.push(different);
-   if(same&&!selected.some(f=>f.seat===same.seat&&f.round===same.round&&f.turn===same.turn))selected.push(same);
-   for(const f of results)if(selected.length<4&&!selected.some(q=>q.seat===f.seat&&q.round===f.round&&q.turn===f.turn))selected.push(f);
+   const selected=selectReviewFindings(results,4);
    return {version:2,source:'c3',model:MODEL,uuid:summary.uuid,findings:selected};
   },
   async close(){if(!disposed){disposed=true;await network.release();}},
