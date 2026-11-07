@@ -56,6 +56,16 @@ export async function createC3Reviewer(rootPath){
  }
  return {
   version:m.version,
+  async probe(){
+   if(disposed)throw Error('c3_disposed');
+   // This test performs a genuine network invocation, but never uses a
+   // live paipu or awards KP. A masked zero observation tests ABI/runtime.
+   const obs=new Float32Array(1012*34),mask=new Uint8Array(46);
+   mask[0]=1;
+   const response=await network.infer(obs,mask);
+   if(response.action!==0||!Number.isFinite(response.q[0]))throw Error('c3_probe_invalid');
+   return true;
+  },
   async review(summary,actions){
    if(disposed)throw Error('c3_disposed');
    const cases=buildC3Cases(actions,summary,48),results=[];
