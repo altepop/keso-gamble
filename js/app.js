@@ -46,6 +46,7 @@ let duelData=null,duelError='',duelActiveId=null,duelGame='othello',duelStake=10
 let duelPendingAction=null,duelPokerPicks=[],duelOpponentPickerOpen=false,duelLoading=false,duelGomokuPreview=null;
 let duelGuessDraft='',duelRiskConfirm=null;
 const duelRecentMoves=new Map();
+const duelMoveHistory=new Map();
 // Keep only move markers inferred from a single newly occupied square between two received boards.
 // Ambiguous jumps (for example, multiple moves while offline) are never mislabeled.
 function observeDuelChanges(fresh){
@@ -55,12 +56,17 @@ function observeDuelChanges(fresh){
   if(!before||before.version===match.version)continue;
   if(['othello','gomoku'].includes(match.game)&&typeof before.board==='string'&&typeof match.board==='string'&&before.board.length===match.board.length){
    const added=[...match.board].flatMap((cell,i)=>before.board[i]==='.'&&cell!=='.'?[i]:[]);
-   if(added.length===1)duelRecentMoves.set(match.id,{version:match.version,cell:added[0]});
+   if(added.length===1){
+    duelRecentMoves.set(match.id,{version:match.version,cell:added[0]});
+    const entries=duelMoveHistory.get(match.id)??[];
+    duelMoveHistory.set(match.id,[...entries,{version:match.version,cell:added[0],color:match.board[added[0]]}].slice(-12));
+   }
    else duelRecentMoves.delete(match.id);
   }
   if(before.status==='active'&&match.status==='active'&&before.turn_user!==state.selfUserId&&match.turn_user===state.selfUserId&&screen==='duels'&&!document.hidden)
    toast('決闘の手番になりました。対戦ルームを確認してください。');
  }
+ if(duelMoveHistory.size>25)for(const key of [...duelMoveHistory.keys()].slice(0,duelMoveHistory.size-25))duelMoveHistory.delete(key);
  if(duelRecentMoves.size>25)for(const key of [...duelRecentMoves.keys()].slice(0,duelRecentMoves.size-25))duelRecentMoves.delete(key);
 }
 let sfxVolumeOpen=false; // the 🎚 volume panel next to 効果音 (casino / racing)
@@ -361,7 +367,7 @@ function detailSheet(){
 function render(){
   const activeDuel=duelData?.matches?.find(r=>r.id===duelActiveId)||duelData?.matches?.find(r=>r.status==='active'||r.status==='pending')||duelData?.matches?.[0];
   const gomokuPreviewCell=duelGomokuPreview&&activeDuel&&duelGomokuPreview.id===activeDuel.id&&duelGomokuPreview.version===activeDuel.version&&activeDuel.turn_user===state.selfUserId?duelGomokuPreview.cell:null;
-  let html = screen==='title'?titleView(state,wallet.remembered,autoState,autoMessage,wallet.connected):screen==='home'?homeView(state,bottomNav()):screen==='play'?playView(state,drafts,bottomNav(),steamView):screen==='directives'?directivesView(state,drafts,bottomNav(),tabsFor('directives')):screen==='stable'?screenStable():screen==='shop'?screenShop():screen==='relics'?screenRelics():screen==='market'?screenMarket():screen==='casino'?screenCasino():screen==='duels'?duelScreen({info:duelData,user:state.selfUserId,live,cash:state.cash,selectedId:duelActiveId,game:duelGame,stake:duelStake,target:duelTarget,busy:duelBusy,error:duelError,confirmResign:duelResignConfirm,pokerPicks:duelPokerPicks,fallbackMembers:state.members??[],opponentPickerOpen:duelOpponentPickerOpen,loading:duelLoading,gomokuPreviewCell,recentMoves:duelRecentMoves,guessDraft:duelGuessDraft,
+  let html = screen==='title'?titleView(state,wallet.remembered,autoState,autoMessage,wallet.connected):screen==='home'?homeView(state,bottomNav()):screen==='play'?playView(state,drafts,bottomNav(),steamView):screen==='directives'?directivesView(state,drafts,bottomNav(),tabsFor('directives')):screen==='stable'?screenStable():screen==='shop'?screenShop():screen==='relics'?screenRelics():screen==='market'?screenMarket():screen==='casino'?screenCasino():screen==='duels'?duelScreen({info:duelData,user:state.selfUserId,live,cash:state.cash,selectedId:duelActiveId,game:duelGame,stake:duelStake,target:duelTarget,busy:duelBusy,error:duelError,confirmResign:duelResignConfirm,pokerPicks:duelPokerPicks,fallbackMembers:state.members??[],opponentPickerOpen:duelOpponentPickerOpen,loading:duelLoading,gomokuPreviewCell,recentMoves:duelRecentMoves,localMoveHistory:duelMoveHistory,guessDraft:duelGuessDraft,
 riskConfirm:duelRiskConfirm===`create:${duelGame}:${duelTarget}:${duelStake}`?'create':activeDuel&&duelRiskConfirm===`accept:${activeDuel.id}:${activeDuel.version}:${activeDuel.stake}`?'accept':'',nav:bottomNav()}):screen==='mleague'?mleagueScreen({state,live,draft:{...mlDraft,amount:drafts['ml-amount']},tabs:subTabs(),nav:bottomNav()}):screen==='race'?screenRace():screenAssets();
   // 効果音 switch for the casino and racing screens (off unless the player turns it on).
   setBgmScene(screen==='casino'||screen==='race'?screen:'');
