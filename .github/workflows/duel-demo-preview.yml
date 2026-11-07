@@ -3,7 +3,7 @@ on:
   pull_request:
     paths:
       - 'duel-demo.html'
-      - 'css/duel-demo.css'
+      - 'duel-preview/**'
       - 'js/duel-*.js'
       - 'scripts/duel-demo-browser-check.cjs'
       - '.github/workflows/duel-demo-preview.yml'
@@ -11,7 +11,7 @@ on:
     branches: [main]
     paths:
       - 'duel-demo.html'
-      - 'css/duel-demo.css'
+      - 'duel-preview/**'
       - 'js/duel-*.js'
       - 'scripts/duel-demo-browser-check.cjs'
       - '.github/workflows/duel-demo-preview.yml'
