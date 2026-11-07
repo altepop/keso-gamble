@@ -110,7 +110,7 @@ export function duelScreen({info,user,live,cash,selectedId,game='othello',stake=
  ${!chosen?'<div class="duel-intro"><span>対人ゲーム</span><h2>KPを賭けて対戦</h2><p>ゲームと対戦相手、賭け金を選んで申し込む。相手が承認すると対戦が始まり、勝った人が双方の賭け金を受け取る。引き分けは返金。</p></div>':''}
  ${error?`<div class="storage-warning duel-error" role="alert">${esc(error)}</div>`:''}
  ${focus?` <div class="duel-history panel"><div class="card-body">
- <div class="duel-heading"><h2 class="panel-title">対戦ルーム</h2><small>最近の戦績：${stats.win}勝 ${stats.lose}敗 ${stats.draw}分（最大20件）</small><button class="action-btn" data-duel-refresh="1" ${busy?'disabled':''}>更新 ↻</button></div>
+ <div class="duel-heading"><h2 class="panel-title">対戦ルーム</h2><small>最近の戦績：${stats.win}勝 ${stats.lose}敗 ${stats.draw}分（読み込み済み${matches.length}件内）</small><button class="action-btn" data-duel-refresh="1" ${busy?'disabled':''}>更新 ↻</button></div>
  ${matches.length?matches.map(r=>summary(r,info,user)).join(''):'<p class="helper">対戦履歴はまだありません。</p>'}
  </div></div>`:''}
  ${moreNotice}
