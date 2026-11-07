@@ -154,6 +154,7 @@ export function luckyStake(game:Game,rank:number,paipu:string,account:number){
 export async function paipuCheck(env:KpEnv,guild:string,claim:Pick<Claim,'user'|'paipu'|'rank'>):Promise<null|{refuse:string}|{game:Game;amount:number;account:number;nickname:string;auto:boolean}>{
  const summary=await paipuSummary(env,guild,claim.paipu);
  if(!summary||!Object.hasOwn(policy.games,summary.game))return null;
+ if(summary.category===1)return {refuse:'友人戦は段位戦の /paifu 報酬では精算できません。'};
  const player=summary.seats.find(s=>s.rank===claim.rank);
  if(!player)return {refuse:`牌譜は${summary.players}人戦です。順位を確認してください。`};
  const links=(await env.DB.prepare('SELECT user,account FROM kp_mahjong_links WHERE guild=? AND (user=? OR account=?)').bind(guild,claim.user,player.accountId).all<{user:string;account:number}>()).results;
@@ -184,7 +185,7 @@ export async function settleClaim(env:KpEnv,guild:string,c:Pick<Claim,'id'|'user
 /** KP for every linked member in a fetched game, without /paifu. Recorded as an automatic claim
  * (id auto:<paipu>:<user>) so the same uniqueness rules stop a second credit; not counted in the daily cap. */
 export async function autoCredit(env:KpEnv,guild:string,summary:PaipuSummary,now:number){
- if(!Object.hasOwn(policy.games,summary.game))return [];
+ if(summary.category===1||!Object.hasOwn(policy.games,summary.game))return [];
  const game=summary.game as Game,lines:string[]=[];
  const links=(await env.DB.prepare('SELECT user,account FROM kp_mahjong_links WHERE guild=?').bind(guild).all<{user:string;account:number}>()).results;
  for(const seat of summary.seats){
