@@ -1,7 +1,7 @@
 // Browser-only two-view demo and CPU practice built from the same rules/UI as live duels.
 // All effects stay in RAM: no network, localStorage, KP API, D1 or Discord calls.
 import {duelScreen} from '../js/duel-view.js';
-import {DUEL_GAMES,initialDuelBoard,playDuelMove} from '../js/duel-rules.js';
+import {DUEL_GAMES,initialDuelBoard,playDuelMove,duelPlayerForColor} from '../js/duel-rules.js';
 import {EXTRA_DUEL_GAMES,miniStart,miniMove} from '../js/duel-mini-games.js';
 import {chooseCpuMove,CPU_DIFFICULTY_GUIDE} from './cpu.js?v=cpu-20261107-v4';
 const GAMES={...DUEL_GAMES,...EXTRA_DUEL_GAMES};
@@ -105,8 +105,8 @@ function move(body,actor=current()){
   const color=match.black_user===actor?'B':'W';
   const result=playDuelMove(game,match.board,color,Number(body.cell));
   match.board=result.board;
-  match.turn_user=result.nextColor?(result.nextColor==='B'?match.black_user:other):null;
-  if(result.winner)settle(result.winner==='draw'?'draw':result.winner==='B'?match.black_user:other);
+  match.turn_user=duelPlayerForColor(match.black_user,match.user_a,match.user_b,result.nextColor);
+  if(result.winner)settle(result.winner==='draw'?'draw':duelPlayerForColor(match.black_user,match.user_a,match.user_b,result.winner));
  }
  match.version++;match.updated_at=Date.now();match.deadline_at=Date.now()+(againstCpu?24*60*60000:10*60000);
  if(!MINI.has(game)){const added=[...match.board].flatMap((cell,i)=>oldBoard[i]==='.'&&cell!=='.'?[i]:[]);if(added.length===1){recentMoves.set(match.id,{version:match.version,cell:added[0]});const entries=localMoveHistory.get(match.id)??[];localMoveHistory.set(match.id,[...entries,{version:match.version,cell:added[0],color:match.board[added[0]]}].slice(-12));}else recentMoves.delete(match.id);}
