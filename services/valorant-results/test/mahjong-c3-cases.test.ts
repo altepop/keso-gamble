@@ -72,3 +72,23 @@ test('missing or malformed hand histories fail closed, and non-four-player games
  assert.deepEqual(buildC3Cases(actions,{...summary,players:3,game:'3-hanchan'}),[]);
  assert.deepEqual(buildC3Cases(actions,summary,0),[]);
 });
+
+test('dealer initial tsumogiri is reconstructed from actual discard instead of guessed tile order',()=>{
+ const actions=fixture();
+ const altered=structuredClone(actions);
+ const dealer=altered[0].data.tiles0 as string[];
+ dealer.unshift(dealer.pop()!);
+ const cases=buildC3Cases(altered,summary);
+ assert.ok(cases.length>=4,'scrambled initial dealer tile order must not stop honest review');
+});
+
+test('unidentified initial dealer draw excludes only the dealer, preserving other players',()=>{
+ const altered=structuredClone(fixture());
+ // Change the first discard to an ordinary hand discard. The initial
+ // dealer draw cannot be proven, but other players still see a legal river.
+ altered[1].data.tile='1m';
+ altered[1].data.moqie=false;
+ const cases=buildC3Cases(altered,summary);
+ assert.ok(cases.length>=2);
+ assert.ok(cases.every(c=>c.seat!==0),'dealer receives no claim based on unknown draw');
+});
