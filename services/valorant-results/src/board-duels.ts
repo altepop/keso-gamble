@@ -160,16 +160,28 @@ async function present(env:KpEnv,mapping:KpMapping,user:string,id:string){
 }
 function validateActionId(id:unknown){if(typeof id!=='string'||!UUID.test(id))throw Error('操作IDが不正です。');return id;}
 
-export async function boardDuelList(env:KpEnv,m:KpMapping,user:string){
+export async function boardDuelList(env:KpEnv,m:KpMapping,user:string,cursor:string|null=null){
  await ensureBoardDuels(env);
- const matches=(await env.DB.prepare(`SELECT d.*,
- CASE WHEN d.black_user=? THEN json_extract(s.data,'$.privateA')
-      ELSE json_extract(s.data,'$.privateB') END AS private_hand
- FROM kp_board_duels d LEFT JOIN kp_board_duel_secrets s ON s.guild=d.guild AND s.id=d.id
- WHERE d.guild=? AND (d.user_a=? OR d.user_b=?)
- ORDER BY d.updated_at DESC LIMIT 20`).bind(user,m.guildId,user,user).all<BoardDuel>()).results;
+ let cutoff:number|null=null,id='';
+ if(cursor!==null){
+  const parsed=/^(\\d{10,15}):([0-9a-f-]{36})$/i.exec(cursor);
+  if(!parsed||!UUID.test(parsed[2]))throw Error('履歴の読み込み位置が不正です。');
+  cutoff=Number(parsed[1]);id=parsed[2];
+  if(!Number.isSafeInteger(cutoff))throw Error('履歴の読み込み位置が不正です。');
+ }
+ const condition=cutoff===null?'':' AND (d.updated_at<? OR (d.updated_at=? AND d.id<?))';
+ const query=`SELECT d.*,
+  CASE WHEN d.black_user=? THEN json_extract(s.data,'$.privateA')
+       ELSE json_extract(s.data,'$.privateB') END AS private_hand
+  FROM kp_board_duels d LEFT JOIN kp_board_duel_secrets s ON s.guild=d.guild AND s.id=d.id
+  WHERE d.guild=? AND (d.user_a=? OR d.user_b=?)${condition}
+  ORDER BY d.updated_at DESC,d.id DESC LIMIT 20`;
+ const stmt=env.DB.prepare(query);
+ const matches=(await (cutoff===null?stmt.bind(user,m.guildId,user,user):
+   stmt.bind(user,m.guildId,user,user,cutoff,cutoff,id)).all<BoardDuel>()).results;
  return {games:GAMES,limit:DUEL_MAX_STAKE,turnMs:DUEL_TURN_MS,invitationMs:DUEL_INVITE_MS,
-  members:await kpTargetMembers(env,m),matches};
+   // Only first page needs a roster. Subsequent pages reuse already loaded members.
+   members:cursor===null?await kpTargetMembers(env,m):[],matches,hasMore:matches.length===20};
 }
 export async function boardDuelAction(env:KpEnv,m:KpMapping,user:string,body:Record<string,unknown>){
  await ensureBoardDuels(env);
@@ -332,7 +344,7 @@ export async function cleanupBoardDuels(env:KpEnv,guild:string,now=Date.now()){
 export async function boardDuelApi(request:Request,env:KpEnv,m:KpMapping,user:string,headers:Record<string,string>={}){
  const response=(body:unknown,status=200)=>Response.json(body,{status,headers:{'Cache-Control':'no-store',...headers}});
  try{
-  if(request.method==='GET')return response(await boardDuelList(env,m,user));
+  if(request.method==='GET')return response(await boardDuelList(env,m,user,new URL(request.url).searchParams.get('cursor')));
   if(request.method!=='POST')return response({error:'不正な操作です。'},405);
   const raw=await request.text();if(raw.length>1024)return response({error:'操作内容が長すぎます。'},400);
   const body=JSON.parse(raw) as Record<string,unknown>;
