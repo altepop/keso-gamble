@@ -39,6 +39,10 @@ const a='[data-demo-view=a]',b='[data-demo-view=b]';
   await page.locator(b).click();
   await page.locator('[data-duel-act=accept]').click();
   assert.equal(await page.locator('#demo-app .duel-arena').count(),1);
+  assert.equal(await page.locator('.duel-intro').count(),0,'hide intro while playing');
+  assert.equal(await page.locator('.duel-create-collapse').count(),1,'new game form collapses during a duel');
+  assert.equal(await page.locator('.duel-create-collapse').evaluate(el=>el.open),false);
+  assert.equal(await page.locator('.duel-current').evaluate(el=>el.compareDocumentPosition(document.querySelector('.duel-history'))&Node.DOCUMENT_POSITION_FOLLOWING?true:false),true,'active board precedes history in DOM');
   assert.match(await page.locator('.duel-state').innerText(),/対局中|対戦中/);
   assert.ok((await page.locator('.duel-arena').innerText()).includes(modeName[mode]),'arena title '+mode);
   await page.locator(a).click();
@@ -69,7 +73,28 @@ const a='[data-demo-view=a]',b='[data-demo-view=b]';
  await screenshot('02-othello-result');
  // Gomoku — alternating 9 moves, five in a row wins.
  await chooseMode('gomoku');
- for(let i=0;i<9;i++){await turn(i%2?'b':'a');await click(i%2?15+Math.floor(i/2):Math.floor(i/2));}
+ const gomokuViewport=page.locator('[data-duel-board-scroll]');
+ const dimensions=await gomokuViewport.evaluate(el=>({width:el.clientWidth,scrollWidth:el.scrollWidth,left:el.scrollLeft,top:el.scrollTop}));
+ assert.ok(dimensions.scrollWidth>=660&&dimensions.width<660,'Gomoku board must pan instead of shrinking on iPhone');
+ assert.ok(dimensions.left>0&&dimensions.top>0,'first open centers on the middle of the board');
+ assert.ok((await page.locator('[data-duel-cell="112"]').boundingBox()).width>=42,'touch target is at least 42px wide');
+ await click(112);
+ assert.equal(await page.locator('.duel-preview-cell').count(),1,'tap only selects a candidate');
+ assert.equal(await page.locator('.duel-counts').innerText().then(x=>x.includes('黒 0')),true,'preview does not commit a move');
+ const selectedPosition=await gomokuViewport.evaluate(el=>({left:el.scrollLeft,top:el.scrollTop}));
+ assert.ok(Math.abs(selectedPosition.left-dimensions.left)<3&&Math.abs(selectedPosition.top-dimensions.top)<3,'preview re-render retains pan position');
+ await page.locator('[data-duel-cancel-cell]').click();
+ assert.equal(await page.locator('.duel-preview-cell').count(),0,'cancel clears selection');
+ await page.locator('.duel-create-collapse>summary').click();
+ assert.equal(await page.locator('#duel-game').isVisible(),true,'another duel can be invited from expandable form');
+ await page.locator('.duel-create-collapse>summary').click();
+ for(let i=0;i<9;i++){
+  await turn(i%2?'b':'a');
+  const cell=i%2?15+Math.floor(i/2):Math.floor(i/2);
+  await click(cell);
+  assert.equal(await page.locator('.duel-preview-cell').count(),1,'must select before placing');
+  await page.locator('[data-duel-confirm-cell="'+cell+'"]').click();
+ }
  await checkWinner('a');
  // Connect Four — four stacked chips in one column.
  await chooseMode('connect4');
