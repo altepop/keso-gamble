@@ -79,3 +79,36 @@ test('one criticism and one praise are included when both exist; tracked names a
  assert.ok(!single[0].includes('@')&&!single[0].includes('**'));
  assert.equal(equalC3Comments(summary,untracked,members,0).length,0);
 });
+
+
+test('adding comments preserves the entire original post including old roasts and the closing quote',()=>{
+ const older=paipuPost(summary,members,()=> 'normal',['✅ Aさん KP +100']);
+ const newer=paipuPost({...summary,c3:review},members,()=> 'normal',['✅ Aさん KP +100']);
+ assert.match(older,/^🀄 \*\*雀魂 四麻 半荘｜牌譜検討\*\*/);
+ for(const section of ['**順位**','**KP**','**主な和了**','**メンバー**','🗯️','💬 ']){
+  assert.ok(older.includes(section),'baseline had '+section);
+  assert.ok(newer.includes(section),'addition removed '+section);
+ }
+ assert.ok(newer.includes('**松本等しいのひと言**'),'short review should fit');
+ const oldLast=older.split('\n').at(-1);
+ assert.ok(oldLast?.startsWith('💬 '),'legacy ending intact');
+ assert.equal(newer.split('\n').at(-1),oldLast,'existing closing quote stays last');
+ const allOldBlocks=older.slice(older.indexOf('**主な和了**'),older.lastIndexOf('💬 '));
+ assert.ok(newer.includes(allOldBlocks),'hand and member text remains byte-for-byte intact');
+});
+
+test('near Discord limit the old post wins; extra comments may be omitted, never old content',()=>{
+ const longResults=['🔎 '+('かなり長い精算結果'.repeat(130))];
+ const baseline=paipuPost(summary,members,()=> 'normal',longResults);
+ const modified=paipuPost({...summary,c3:review},members,()=> 'normal',longResults);
+ assert.equal(modified,baseline,'existing message is the priority at capacity');
+ assert.doesNotMatch(modified,/松本等しいのひと言/);
+ assert.ok(modified.length<=1900);
+});
+
+test('a report without an extracted finding leaves exactly the old message unchanged',()=>{
+ const old=paipuPost(summary,members,()=> 'normal');
+ for(const c3 of [undefined,null,{...review,uuid:'unrelated'},{...review,model:'invalid'},{}]){
+  assert.equal(paipuPost({...summary,c3},members,()=> 'normal'),old);
+ }
+});
