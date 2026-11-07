@@ -63,7 +63,7 @@ jobs:
           MODEL_ENABLED: ${{ vars.MAHJONG_EQUAL_REVIEW_ENABLED }}
           MODEL_PROBE: ${{ inputs.c3_probe }}
         run: |
-          if [ "$MODEL_ENABLED" = "true" ] || [ "$MODEL_PROBE" = "true" ]; then
+          if [ "$MODEL_ENABLED" != "false" ] || [ "$MODEL_PROBE" = "true" ]; then
             echo 'enabled=true' >> "$GITHUB_OUTPUT"
           else
             echo 'enabled=false' >> "$GITHUB_OUTPUT"
