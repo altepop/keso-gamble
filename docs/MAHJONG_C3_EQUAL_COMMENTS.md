@@ -37,9 +37,9 @@ Discordの1900字に余裕がない場合は新コメントだけを省略して
 
 モデル取得に非公開リポジトリ用トークンは**不要**。モデルを公開するのではなく既存の公開配信物を使う。不要になった非公開M-LEAGUE Manager側の実験PR #173は閉じた。
 
-GitHub `altepop/keso-gamble` の Repository Variables に `MAHJONG_EQUAL_REVIEW_ENABLED=true` を設定すると、既存の牌譜取得ワークフローに解析を追加する。未設定・`false` の場合は旧来どおりの牌譜投稿のみ。実行のたびの外部モデル取得はキャッシュを使い、キューが0件ならそもそも読み込まない。
+**PRのマージ後は既存の牌譜取得ワークフローで自動的に解析を試みる。** 追加のSecretやVariable設定は不要。問題が発生した場合は、GitHub `altepop/keso-gamble` の Repository Variables に `MAHJONG_EQUAL_REVIEW_ENABLED=false` を設定すると、モデルのダウンロード・推論を直ちに止めて旧来の等しいbotだけに戻せる。実行のたびの外部モデル取得はキャッシュを使い、キューが0件ならモデルを読み込まない。
 
-**ON/OFF以外のSecretやD1 migrationは不要**。実行前の独立検証には GitHub Actions の `Mahjong paipu fetch` の `c3_probe=true` を使う（雀魂ログイン、Discord、KP、D1操作は行わない）。
+**追加のSecretやD1 migrationは不要**。実行前の独立検証には GitHub Actions の `Mahjong paipu fetch` の `c3_probe=true` を使う（雀魂ログイン、Discord、KP、D1操作は行わない）。
 
 ## 未完成の範囲
 
