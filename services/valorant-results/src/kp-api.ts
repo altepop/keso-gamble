@@ -1,5 +1,6 @@
 import {boardDuelApi} from './board-duels.ts';
 import {steamApi,steamCallback} from './steam-auth.ts';
+import {guildVerifiedRelicStats} from './relic-guild-stats.ts';
 import {privateCasinoAllowed,privateCasinoRound} from './private-casino.ts';
 import {memberNames} from './member-names.ts';
 import {kpTargetMembers} from './kp-target-members.ts';
@@ -444,7 +445,7 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping,deferP
     return {id:entry.id,mode:entry.mode,amount:entry.base,bonus:entry.bonus,at:entry.at,origin:'verified',lines:detail.lines??[],sets:detail.sets??[],resonance:detail.resonance??0,spikeOpening:detail.spikeOpening??null};
    });
    const ownEconomy=await env.DB.prepare("SELECT COUNT(*) AS n,COALESCE(SUM(delta),0) AS total FROM kp_ledger WHERE guild=? AND user=? AND kind='relic'").bind(mapping.guildId,owner.user).first<{n:number;total:number}>().catch(()=>null);
-   const guildEconomy=await env.DB.prepare("SELECT COUNT(*) AS n,COUNT(DISTINCT user) AS players,COALESCE(SUM(delta),0) AS total FROM kp_ledger WHERE guild=? AND kind='relic'").bind(mapping.guildId).first<{n:number;players:number;total:number}>().catch(()=>null);
+   const guildEconomy=await guildVerifiedRelicStats(env.DB,mapping.guildId);
    const diagnosis=diagnoseRelicBuild(ownedState.relics as RelicCollection|undefined);
    const relicMarket=await activeRelicListings(env,mapping.guildId);
    const personalEconomy={nativeTotal:ownedState.relics?.nativeEarned??0,nativeCount:ownedState.relics?.nativeCount??0,
