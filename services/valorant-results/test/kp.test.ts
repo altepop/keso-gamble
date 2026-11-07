@@ -1036,3 +1036,46 @@ test('every duel game completes a two-member wager and settles the real SQLite l
  }
  assert.ok(operations>=70,'covered a full Othello plus all other games');
 });
+
+
+test('target pickers include registered KP users beyond five monitored VALORANT players and reject strangers',async()=>{
+ const {kpTargetMembers,kpTargetAllowed}=await import('../src/kp-target-members.ts');
+ const {ensureQuizKp}=await import('../src/quiz-kp.ts');
+ const {boardDuelAction,boardDuelList}=await import('../src/board-duels.ts');
+ const {buyLuxury}=await import('../src/luxury.ts');
+ const f=await fixture(),guest='100000000000000103',stranger='100000000000000104';
+ await ensureQuizKp(f.env);
+ const initial=String(f.sql.prepare('SELECT data FROM kp_state WHERE guild=? AND user=?').get(guild,one)!.data);
+ f.sql.prepare('INSERT INTO kp_participants(guild,user) VALUES(?,?)').run(guild,guest);
+ f.sql.prepare('INSERT INTO kp_wallets(guild,user) VALUES(?,?)').run(guild,guest);
+ f.sql.prepare('INSERT INTO kp_state(guild,user,data) VALUES(?,?,?)').run(guild,guest,JSON.stringify({...JSON.parse(initial),roastLevel:'normal'}));
+ seed(f.sql,one,100_000);seed(f.sql,guest,20_000);
+ const names=await kpTargetMembers(f.env,mapping);
+ assert.ok(names.some(m=>m.id===guest),'registered quiz/LOOP KP user appears as opponent and luxury target');
+ assert.ok(!names.some(m=>m.id===stranger),'unregistered strangers must not appear');
+ assert.equal(await kpTargetAllowed(f.env,mapping,guest),true);
+ assert.equal(await kpTargetAllowed(f.env,mapping,stranger),false);
+ const invite=await boardDuelAction(f.env,mapping,one,{id:crypto.randomUUID(),action:'create',game:'gomoku',opponent:guest,stake:1000});
+ const room=await boardDuelAction(f.env,mapping,guest,{id:crypto.randomUUID(),action:'accept',duel:invite.id,version:0});
+ assert.equal(room.status,'active');
+ const listed=await boardDuelList(f.env,mapping,one);
+ assert.ok(listed.members.some(x=>x.id===guest),'duels use same registered KP roster as luxury');
+ assert.equal(f.sql.prepare('SELECT balance FROM kp_wallets WHERE user=?').get(guest)!.balance,19000);
+ await assert.rejects(boardDuelAction(f.env,mapping,one,{id:crypto.randomUUID(),action:'create',game:'gomoku',opponent:stranger,stake:1000}),/KP口座/);
+ const item=await buyLuxury(f.env,mapping,one,{cash:60000},{item:'convict',target:guest});
+ assert.equal(item.luxury.target,guest,'luxury also accepts registered non-monitored wallet targets');
+ await assert.rejects(buyLuxury(f.env,mapping,one,{cash:60000},{item:'convict',target:stranger}),/KP口座/);
+});
+test('display names use verified Riot handles rather than raw Dolly, frin, h1d3g1g4s labels',async()=>{
+ const {kpTargetMembers,CANONICAL_RIOT_HANDLES}=await import('../src/kp-target-members.ts');
+ const f=await fixture();
+ const alt:KpMapping={guildId:guild,accounts:[
+  {riotId:'Dolly#SDGs',discordUserId:one},
+  {riotId:'frin#JP',discordUserId:two},
+  {riotId:'h1d3g1g4s#JP',discordUserId:'100000000000000103'}]};
+ const names=await kpTargetMembers(f.env,alt);
+ assert.equal(names.find(x=>x.id===one)?.name,'VDK');
+ assert.equal(names.find(x=>x.id===two)?.name,'藤村');
+ assert.equal(names.find(x=>x.id==='100000000000000103')?.name,'石原');
+ assert.equal(CANONICAL_RIOT_HANDLES.dolly,'VDK');
+});
