@@ -1,5 +1,18 @@
 # KESO PLAY
 
+## D1無料枠への復帰・負荷管理（2026-11-08）
+
+**運用方針：Workers Paidは一時契約。課金期間終了後はFreeへ戻し、KESO PLAY・KESO LOOP両方を無料枠で継続運用する。** 解約予約済みとの申告を受けているが、実際の請求状態と終了日時はCloudflare Billingで別途確認する。
+
+- **無料枠はアカウント全体の合計**。D1 Rows readは500万/UTC日（日本時間09:00リセット）、Rows writtenは10万/UTC日。KESO PLAY（D1-B）とKESO LOOP（D1-A）の合計を監視する。Worker実行回数・CPU・保存容量などの別の枠も考慮する。
+- **通常100万～150万Rows read/日以下を目標**とし、ピーク日も余裕を残す。これは**達成済みの値ではない**。無料枠への切替判断前に複数日の実測を要する。
+- [D1監視GitHub Actions](https://github.com/altepop/keso-gamble/actions/workflows/d1-insights-report.yml)とCloudflare DashboardでRows read/written、SQL別負荷、デプロイ状況を点検。**Insightsのtop-50は下限値、GraphQL日次集計は推定値**であり、公式の日次Quota残量とは異なる。
+- 現行の保護は**推定350万行で警告・400万行で一部feed/trendを節約**するbest-effort方式。VALORANT・Steam・株・競馬・KPの精算まで止めるわけではなく、500万行到達の防止を保証しない。
+- 11/7の監視でVALORANT通知とDeath-mode予約照合が過去24時間で約273万行、Steam実績履歴が約7万行を読んだ。[無料枠復帰計画](docs/D1_FREE_TIER_RETURN.md)に対策PRと運用判断の手順を整理。
+- **毎分全履歴を読むSQL、無制限の再試行、毎回の全期間集計、新しいcronの乱立を避ける。** インデックスと実行計画、差分取得、適切なキャッシュ、カーソル、no-op短絡を優先する。
+- KP台帳、二重精算防止、未送信通知、借KP、馬券、株、Steam/VALORANTの検証条件は維持する。**読み取り削減を理由に金融履歴を削除しない。**
+
+
 初めて遊ぶ人には、ホーム到達時に5ステップのチュートリアルを表示。各画面の右下「？ 遊び方」から全モード・カジノ7種の説明と画面への移動を利用できます。詳細は [はじめての遊び方ガイド](docs/ACTIVITY_TUTORIAL.md) を参照してください。
 
 仲間内でKPを稼ぎ、増減させ、他人への指名指令に使うDiscord Activity。サーバー口座と、独立した端末内デモがあります。
