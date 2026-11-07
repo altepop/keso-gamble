@@ -9,7 +9,7 @@ const port=8877,root=resolve(__dirname,'..'),url='http://127.0.0.1:'+port+'/duel
 const server=spawn('python3',['-m','http.server',String(port),'--bind','127.0.0.1'],{cwd:root,stdio:'ignore'});
 const shotDir=process.env.DUEL_DEMO_SHOTS||'',errors=[],requests=[];
 let browser;
-const modeName={othello:'オセロ',gomoku:'五目並べ',connect4:'四目並べ',hitblow:'Hit & Blow',bluffdice:'ブラフダイス',poker:'5カードポーカー'};
+const modeName={othello:'オセロ',gomoku:'五目並べ',connect4:'四目並べ',hitblow:'Hit & Blow',bluffdice:'ブラフダイス',poker:'5カード・ドローポーカー'};
 const a='[data-demo-view=a]',b='[data-demo-view=b]';
 (async()=>{
  for(let i=0;i<80;i++){try{if((await fetch(url)).ok)break;}catch{}await new Promise(r=>setTimeout(r,100));}
