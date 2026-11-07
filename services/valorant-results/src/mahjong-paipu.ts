@@ -8,11 +8,12 @@ import {initializeKp} from './kp.ts';
 import type {KpEnv,KpMapping} from './kp.ts';
 import {autoCredit,ensureMahjongClaims,paipuCheck,settleClaim} from './mahjong-claims.ts';
 import {mahjongPlayers} from './mahjong.ts';
+import {unseenFriend,processFriend} from './mahjong-friend.ts';
 import type {PaipuSummary,PlayerSummary,Win} from './mahjong-summary.ts';
 import {enqueue,ensurePosts,roastLevelsOf} from './racing-posts.ts';
 import type {RoastLevel} from './racing-crowns.ts';
 
-export interface PaipuEnv extends KpEnv {MAHJONG_INGEST_KEY?:string;KP_EARNINGS_WEBHOOK_URL?:string}
+export interface PaipuEnv extends KpEnv {MAHJONG_INGEST_KEY?:string;KP_EARNINGS_WEBHOOK_URL?:string;MAHJONG_FRIEND_SETTLEMENT_ENABLED?:string}
 /** A player the post talks to: mentioned when linked to Discord, otherwise called by the registered name. */
 export interface Member {user?:string;name:string}
 type Voice=Exclude<keyof typeof voice,'note'>;
@@ -44,6 +45,7 @@ const seat=(v:unknown,players:number)=>int(v,0,players-1);
 export function validSummary(value:unknown,uuid:string):value is PaipuSummary{
  const s=value as PaipuSummary;
  if(!s||s.v!==1||s.uuid!==uuid||!Object.hasOwn(policy.games,s.game)||(s.players!==3&&s.players!==4)||Number(s.game[0])!==s.players)return false;
+ if((s.category!==undefined&&!Number.isSafeInteger(s.category))||(s.roomId!==undefined&&!Number.isSafeInteger(s.roomId))||(s.ai!==undefined&&typeof s.ai!=='boolean'))return false;
  if(!Array.isArray(s.seats)||s.seats.length!==s.players||!Array.isArray(s.rounds)||s.rounds.length>60)return false;
  const ranks=new Set<number>();
  for(const [i,p] of s.seats.entries()){
@@ -146,6 +148,12 @@ export function paipuPost(summary:PaipuSummary,members:Map<number,Member>,levelO
 /** Applies one fetched summary: stores it, settles /paifu claims, queues the post. `players` are the
  * registered accounts of the result watcher, roasted by name until they are linked to Discord. */
 export async function applySummary(env:PaipuEnv,mapping:KpMapping,summary:PaipuSummary,now=Date.now(),players:Array<{id:number;name:string}>=[]){
+ // Friend games must never enter the ranked reward / relic pipeline.
+ if(summary.category===1){
+  await env.DB.prepare('INSERT OR IGNORE INTO kp_mahjong_paipu(guild,paipu,summary,attempts,at) VALUES(?,?,?,0,?)').bind(mapping.guildId,summary.uuid,JSON.stringify(summary),now).run();
+  await processFriend(env,mapping,summary,now);
+  return;
+ }
  await env.DB.prepare('INSERT INTO kp_mahjong_paipu(guild,paipu,summary,error,attempts,at) VALUES(?,?,?,NULL,0,?) ON CONFLICT(guild,paipu) DO UPDATE SET summary=excluded.summary,error=NULL,at=excluded.at WHERE kp_mahjong_paipu.summary IS NULL')
   .bind(mapping.guildId,summary.uuid,JSON.stringify(summary),now).run();
  const claims=(await env.DB.prepare(`SELECT id,user,paipu,rank,status FROM kp_mahjong_claims WHERE guild=? AND paipu=? AND status!='rejected'`).bind(mapping.guildId,summary.uuid).all<{id:string;user:string;paipu:string;rank:number;status:string}>()).results;
@@ -174,6 +182,22 @@ export async function paipuApi(request:Request,env:PaipuEnv,override?:KpMapping,
  if(!mapping)return new Response('Unavailable',{status:503});
  await ensureMahjongClaims(env);
  if(request.method==='GET'&&path==='/api/mahjong/paipu/queue')return Response.json({paipu:await paipuQueue(env,mapping.guildId)});
+
+ if(request.method==='POST'&&path==='/api/mahjong/paipu/friend/candidates'){
+  let uuids:unknown;try{uuids=JSON.parse(body).uuids;}catch{return new Response('Invalid body',{status:400});}
+  try{return Response.json({unknown:await unseenFriend(env,mapping.guildId,uuids)});}catch{return new Response('Invalid candidates',{status:400});}
+ }
+ if(request.method==='POST'&&path==='/api/mahjong/paipu/friend/summaries'){
+  let results:unknown;try{results=JSON.parse(body).results;}catch{return new Response('Invalid body',{status:400});}
+  if(!Array.isArray(results)||results.length>5)return new Response('Invalid body',{status:400});
+  const statuses:string[]=[];
+  for(const r of results){
+   if(!r||typeof r.uuid!=='string'||!validSummary(r.summary,r.uuid)||r.summary.category!==1){statuses.push('invalid');continue;}
+   statuses.push(await processFriend(env,mapping,r.summary,Date.now()));
+  }
+  return Response.json({statuses});
+ }
+
  if(request.method!=='POST'||path!=='/api/mahjong/paipu/summaries')return new Response('Not found',{status:404});
  let results:Array<{uuid:string;summary?:unknown;error?:string}>;
  try{results=JSON.parse(body).results;}catch{return new Response('Invalid body',{status:400});}
