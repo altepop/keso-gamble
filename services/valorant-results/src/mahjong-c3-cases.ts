@@ -65,6 +65,7 @@ export function buildC3Cases(actions:PaipuAction[],summary:PaipuSummary,cap=48):
   actions.length>10000||!Number.isInteger(cap)||cap<1||cap>128)return [];
  let round=-1,events:Event[]=[],current:ReturnType<typeof startCase>=null,blocked=true;
  let concealed:string[][]=[];
+ let initialDealerDrawUnknown=false;
  let pendingDraw:{seat:number;tile:string}|null=null;
  const turns=[0,0,0,0],out:C3Case[]=[];
  for(let i=0;i<actions.length;i++){
@@ -73,6 +74,7 @@ export function buildC3Cases(actions:PaipuAction[],summary:PaipuSummary,cap=48):
   if(name==='RecordNewRound'){
    round++;turns.fill(0);current=startCase(d);blocked=!current||round>=summary.rounds.length;
    events=current?.events??[];concealed=current?.hands.map(h=>h.slice())??[];
+   initialDealerDrawUnknown=false;
    pendingDraw=current?{seat:current.dealer,tile:(events.at(-1) as Event).pai as string}:null;
    if(!blocked&&summary.rounds[round].label!==['東','南'][d.chang]+(d.ju+1)+'局'+(d.ben?' '+d.ben+'本場':''))blocked=true;
    continue;
@@ -91,12 +93,27 @@ export function buildC3Cases(actions:PaipuAction[],summary:PaipuSummary,cap=48):
    const actual=tile(d.tile)!;
    const idx=concealed[d.seat].indexOf(actual);
    if(idx<0){blocked=true;continue;}
+   // The 14 dealer starting tiles do not reliably identify the real first
+   // draw. If the first discard was tsumogiri, that tile IS the real draw.
+   // Otherwise only the concealed hand of other seats is independently
+   // reconstructable. Never review the dealer's later choices in this round.
+   if(turns[d.seat]===0&&current?.dealer===d.seat){
+    const chosen=d.moqie===true?actual:concealed[d.seat].find(t=>t!==actual);
+    if(!chosen||events[1]?.type!=='start_kyoku'||events[2]?.type!=='tsumo'){blocked=true;continue;}
+    const initial=concealed[d.seat].slice();
+    initial.splice(initial.indexOf(chosen),1);
+    const ts=events[1].tehais as string[][];
+    ts[d.seat]=initial;
+    events[2].pai=chosen;
+    pendingDraw.tile=chosen;
+    initialDealerDrawUnknown=d.moqie!==true;
+   }
    concealed[d.seat].splice(idx,1);
    turns[d.seat]++;
    if(d.moqie===true&&actual!==pendingDraw.tile){blocked=true;continue;}
    // Stop at declaration. The real paipu may omit separate reach-accepted events.
    const reach=Boolean(d.is_liqi||d.is_wliqi);
-   if(!reach&&turns[d.seat]>=2&&turns[d.seat]<=18&&out.length<cap){
+   if(!reach&&!(initialDealerDrawUnknown&&d.seat===current?.dealer)&&turns[d.seat]>=2&&turns[d.seat]<=18&&out.length<cap){
     // One or two good sample turns per seat per round, avoiding long polling.
     const candidatesForSeat=out.filter(x=>x.round===round&&x.seat===d.seat).length;
     if(candidatesForSeat<2&&turns[d.seat]>=3)out.push({seat:d.seat,round,turn:turns[d.seat],actual,events:copyForSeat(events,d.seat)});
