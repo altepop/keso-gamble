@@ -38,7 +38,7 @@ export function acceptedC3Report(summary:PaipuSummary,raw:unknown):C3Report|null
  }
  return r;
 }
-const tile=(t:string)=>t.endsWith('r')?'赤'+t.slice(0,-1):t;
+const tile=(t:string)=>t.endsWith('r')?'赤'+t.slice(0,-1):({E:'東',S:'南',W:'西',N:'北',P:'白',F:'發',C:'中'} as Record<string,string>)[t]??t;
 /** Render up to two independently checked differences, never a fabricated "mistake". */
 export function equalC3Comments(summary:PaipuSummary,raw:unknown,members:Map<number,{name:string}>,limit=2):string[]{
  const r=acceptedC3Report(summary,raw);
