@@ -136,11 +136,11 @@ export function chooseGomoku(board,side,level,random){
    const then=after.slice(0,reply)+opp+after.slice(reply+1);
    const attack=candidates(then,side,5).map(k=>strength(then,side,k));
    const defense=candidates(then,opp,5).map(k=>strength(then,opp,k));
-   const value=(attack[0]??0)*1.45-(defense[0]??0)*1.35;
+   const value=(attack[0]??0)*1.72-(defense[0]??0)*1.22;
    worst=Math.min(worst,value);
   }
   if(worst===Infinity)worst=0;
-  const combined=worst+strength(board,side,cell)*.43+strength(board,opp,cell)*.23;
+  const combined=worst+strength(board,side,cell)*.68+strength(board,opp,cell)*.19;
   if(combined>best){best=combined;chosen=cell;}
   if(nodes>80||Date.now()>deadline)break;
  }
