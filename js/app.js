@@ -46,6 +46,23 @@ let duelData=null,duelError='',duelActiveId=null,duelGame='othello',duelStake=10
 let duelPendingAction=null,duelPokerPicks=[],duelOpponentPickerOpen=false,duelLoading=false,duelGomokuPreview=null;
 let duelGuessDraft='',duelRiskConfirm=null;
 const duelRecentMoves=new Map();
+// Keep only move markers inferred from a single newly occupied square between two received boards.
+// Ambiguous jumps (for example, multiple moves while offline) are never mislabeled.
+function observeDuelChanges(fresh){
+ const previous=new Map((duelData?.matches??[]).map(m=>[m.id,m]));
+ for(const match of fresh.matches??[]){
+  const before=previous.get(match.id);
+  if(!before||before.version===match.version)continue;
+  if(['othello','gomoku'].includes(match.game)&&typeof before.board==='string'&&typeof match.board==='string'&&before.board.length===match.board.length){
+   const added=[...match.board].flatMap((cell,i)=>before.board[i]==='.'&&cell!=='.'?[i]:[]);
+   if(added.length===1)duelRecentMoves.set(match.id,{version:match.version,cell:added[0]});
+   else duelRecentMoves.delete(match.id);
+  }
+  if(before.status==='active'&&match.status==='active'&&before.turn_user!==state.selfUserId&&match.turn_user===state.selfUserId&&screen==='duels'&&!document.hidden)
+   toast('決闘の手番になりました。対戦ルームを確認してください。');
+ }
+ if(duelRecentMoves.size>25)for(const key of [...duelRecentMoves.keys()].slice(0,duelRecentMoves.size-25))duelRecentMoves.delete(key);
+}
 let sfxVolumeOpen=false; // the 🎚 volume panel next to 効果音 (casino / racing)
 let relicProofs=null,relicNotice='',relicLoading=false;
 // Each tap is one paid purchase. Never queue taps while a request or reveal is active.
@@ -687,7 +704,7 @@ addEventListener('click',async e=>{
    try{
     const result=await wallet.duelAction({...duelPendingAction.args,id:duelPendingAction.id});
     duelPendingAction=null;duelActiveId=result.match.id;duelResignConfirm=false;duelPokerPicks=[];duelGomokuPreview=null;duelOpponentPickerOpen=false;if(action==='move')duelGuessDraft='';
-    try{const [next,info]=await Promise.all([wallet.state(),wallet.duels()]);state=next;duelData=info;}
+    try{const [next,info]=await Promise.all([wallet.state(),wallet.duels()]);observeDuelChanges(info);state=next;duelData=info;}
     catch{duelError='対戦操作は確定したが、最新の盤面または口座の取得に失敗した。更新を押してください。';}
     toast(action==='create'?'挑戦状を送った！':action==='accept'?'決闘開始！':'盤面を更新した');
    }catch(error){
@@ -1181,7 +1198,7 @@ async function refreshDuel(force=false){
  try{
   const fresh=await wallet.duels();
   if(screen!=='duels'||!live)return;
-  duelData=fresh;duelError='';
+  observeDuelChanges(fresh);duelData=fresh;duelError='';
   if(!duelActiveId||!fresh.matches.some(r=>r.id===duelActiveId)){
    duelActiveId=fresh.matches.find(r=>r.status==='active'||r.status==='pending')?.id??fresh.matches[0]?.id??null;
   }
@@ -1190,6 +1207,17 @@ async function refreshDuel(force=false){
  finally{duelLoading=false;render();}
 }
 setInterval(()=>{if(screen==='duels')refreshDuel();},10000);
+// Countdown updates are purely in-browser and do not query D1.
+setInterval(()=>{
+ if(screen!=='duels'||document.hidden)return;
+ for(const element of document.querySelectorAll('[data-duel-timer]')){
+  const remaining=Math.max(0,Math.ceil((Number(element.dataset.duelTimer)-Date.now())/1000));
+  element.textContent=remaining?`残り ${Math.floor(remaining/60)}:${String(remaining%60).padStart(2,'0')}`:'時間切れ（精算確認中）';
+ }
+},1000);
+// When an Activity resumes after being backgrounded, refresh once if its data is stale.
+// The existing 10-second poll remains the maximum active cadence.
+addEventListener('visibilitychange',()=>{if(!document.hidden&&screen==='duels'&&Date.now()-duelLastFetch>=6000)refreshDuel(true);});
 addEventListener('storage', e => {
   if(!live&&(e.key === null || [KEY,LEGACY_KEY].includes(e.key))) {
     store.refresh();
