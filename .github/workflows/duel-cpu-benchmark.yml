@@ -4,7 +4,7 @@ on:
     branches: [feat/duel-cpu-rigorous-endgame-20261107]
     paths:
       - 'duel-preview/cpu-*.js'
-      - 'scripts/duel-cpu-poker-ab.mjs'
+      - 'scripts/duel-cpu-hitblow-ab.mjs'
       - '.github/workflows/duel-cpu-benchmark.yml'
   workflow_dispatch:
 permissions:
@@ -19,8 +19,6 @@ jobs:
       max-parallel: 6
       matrix:
         include:
-          - game: poker
-            pairs: 550
           - game: hitblow
             pairs: 300
     steps:
@@ -40,8 +38,8 @@ jobs:
           path: cpu-benchmark-${{ matrix.game }}.log
           if-no-files-found: warn
           retention-days: 21
-  poker-paired-ab:
-    name: Paired old/new poker decision benchmark
+  hitblow-paired-ab:
+    name: Paired old/new Hit and Blow reasoning benchmark
     runs-on: ubuntu-24.04
     timeout-minutes: 12
     steps:
@@ -49,19 +47,19 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - name: Retrieve original production CPU for counterfactual only
+      - name: Retrieve untouched original production policy
         run: |
           git fetch --depth=1 origin main
-          git show origin/main:duel-preview/cpu-poker.js > duel-preview/cpu-poker-prior.js
-      - name: Compare old/new against identical poker deals and opponents
+          git show origin/main:duel-preview/cpu-hidden-games.js > duel-preview/cpu-hidden-games-prior.js
+      - name: Compare solving turns for identical hidden codes
         run: |
           set -euo pipefail
-          node scripts/duel-cpu-poker-ab.mjs 650 | tee cpu-poker-ab-results.log
-          grep -q '^POKER_AB_RESULT ' cpu-poker-ab-results.log
+          node scripts/duel-cpu-hitblow-ab.mjs 750 | tee cpu-hitblow-ab-results.log
+          grep -q '^HITBLOW_AB_RESULT ' cpu-hitblow-ab-results.log
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: duel-cpu-poker-paired-results
-          path: cpu-poker-ab-results.log
+          name: duel-cpu-hitblow-paired-results
+          path: cpu-hitblow-ab-results.log
           if-no-files-found: warn
           retention-days: 14
