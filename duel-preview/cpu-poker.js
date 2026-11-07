@@ -32,20 +32,34 @@ const cmp=(left,right)=>{
  return 0;
 };
 const generator=seed=>()=>{seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/4294967296;};
-function scenarios(hand,trials,random){
+function publicOpponentSwaps(board,side){
+ if(typeof board!=='string')return null;
+ let state;
+ try{state=JSON.parse(board);}catch{return null;}
+ // Only a completed, public opponent action can be observed. Own swap count
+ // must never be used as evidence about their hidden five cards.
+ const value=side==='a'?state?.swapsB:side==='b'?state?.swapsA:null;
+ return Number.isInteger(value)&&value>=0&&value<=3?value:null;
+}
+function scenarios(hand,trials,random,opponentSwaps=null){
  const existing=new Set(hand),unseen=Array.from({length:52},(_,i)=>i).filter(c=>!existing.has(c));
  const salt=(Math.floor(random()*4294967296)>>>0)^hand.reduce((x,c)=>Math.imul(x+31,c+7)>>>0,17);
  const sets=[];
- for(let t=0;t<trials;t++){
+ // Opponent's PUBLIC exchange count changes the distribution of the hands
+ // they are likely to have. Use rejection sampling with a hard time bound.
+ // A zero-card exchange is rare; 120 examples suffice under a conservative
+ // decision threshold, without freezing mobile Safari.
+ const goal=opponentSwaps===0?120:trials;
+ const maxAttempts=opponentSwaps===null?goal:opponentSwaps===0?22000:goal*18;
+ for(let t=0;t<maxAttempts&&sets.length<goal;t++){
   const r=generator((salt+Math.imul(t+1,2654435761))>>>0);
   const next=unseen.slice();
   const draw=()=>{
-   const i=Math.floor(r()*next.length),out=next[i];next[i]=next.at(-1);next.pop();return out;
+   const i=Math.floor(r()*next.length),out=next[i];next[i]=next[next.length-1];next.pop();return out;
   };
   const opponent=Array.from({length:5},draw);
   const opponentDiscard=standardDraw(opponent);
-  // Reserve a stable three-card slot for opponent exchanges, even when the
-  // opponent draws fewer. Shared random numbers remain aligned for all masks.
+  if(opponentSwaps!==null&&opponentDiscard.length!==opponentSwaps)continue;
   const oppExtra=Array.from({length:3},draw);
   for(let i=0;i<opponentDiscard.length;i++)opponent[opponentDiscard[i]]=oppExtra[i];
   const ours=Array.from({length:3},draw);
@@ -53,7 +67,7 @@ function scenarios(hand,trials,random){
  }
  return sets;
 }
-export function cpuPoker(hand,level,random){
+export function cpuPoker(hand,level,random,board='{}',side='b'){
  if(!Array.isArray(hand)||hand.length!==5||new Set(hand).size!==5||
   hand.some(c=>!Number.isInteger(c)||c<0||c>51))throw Error('CPUの手札が不正です。');
  if(level==='easy')return {cells:pick([[0,1,2],[1,3],[0,4],[],[2,3,4]],random)};
@@ -61,7 +75,9 @@ export function cpuPoker(hand,level,random){
  if(level==='normal')return {cells:baseline};
  const baselineKey=baseline.join(',');
  const trials=440;
- const draws=scenarios(hand,trials,random);
+ const observed=publicOpponentSwaps(board,side);
+ const draws=scenarios(hand,trials,random,observed);
+ if(draws.length<50)return {cells:baseline}; // insufficient conditional evidence
  const rate=new Map();
  for(const cells of masks){
   let wins=0;
@@ -71,12 +87,12 @@ export function cpuPoker(hand,level,random){
    const side=pokerHandScore(completed),diff=cmp(side,scenario.opponent);
    wins+=diff>0?1:diff===0?.5:0;
   }
-  rate.set(cells.join(','),wins/trials);
+  rate.set(cells.join(','),wins/draws.length);
  }
  const base=rate.get(baselineKey)??0;
  // Require evidence of material improvement rather than picking the maximum
  // of 26 noisy estimates. This shields good one-pair / two-pair holdings.
- let selected=baseline,best=base+.025;
+ let selected=baseline,best=base+(observed===null?.025:observed===0?.07:.035);
  for(const cells of masks){
   const utility=(rate.get(cells.join(','))??0)-cells.length*.0003;
   if(utility>best){best=utility;selected=cells;}
