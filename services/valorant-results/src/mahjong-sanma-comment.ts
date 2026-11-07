@@ -1,20 +1,27 @@
 import type {PaipuSummary} from './mahjong-summary.ts';
-import type {SanmaReport,Efficiency} from './mahjong-sanma-efficiency.ts';
+import type {Efficiency} from './mahjong-sanma-efficiency.ts';
+import type {AcceptedSanmaReport} from './mahjong-sanma-report.ts';
 // Do not import the search engine in the Worker: signed, bounded findings only.
 const tile=/^(?:[19]m|[1-9][ps]|5[ps]r|[ESWNPFC])$/;
 const int=(v:unknown,a:number,b:number)=>Number.isSafeInteger(v)&&Number(v)>=a&&Number(v)<=b;
 const metric=(m:Efficiency,t:string)=>m&&m.tile===t&&int(m.shanten,1,6)&&int(m.ukeire,0,108)&&int(m.bonus,0,40)&&Array.isArray(m.improving)&&m.improving.length<=27&&new Set(m.improving).size===m.improving.length&&m.improving.every(t=>typeof t==='string'&&tile.test(t));
-export function acceptedSanmaReport(s:PaipuSummary,raw:unknown):SanmaReport|null{
- const r=raw as SanmaReport;
- if(s.players!==3||!/^3-(tonpu|hanchan)$/.test(s.game)||!r||r.version!==1||r.source!=='sanma-shape'||r.model!=='sanma-shape-v1'||r.uuid!==s.uuid||!Array.isArray(r.findings)||!r.findings.length||r.findings.length>4)return null;
+export function acceptedSanmaReport(s:PaipuSummary,raw:unknown):AcceptedSanmaReport|null{
+ const r=raw as AcceptedSanmaReport;
+ if(s.players!==3||!/^3-(tonpu|hanchan)$/.test(s.game)||!r||!(r.version===1&&r.source==='sanma-shape'&&r.model==='sanma-shape-v1'||r.version===2&&r.source==='sanma-rules'&&r.model==='sanma-rules-v2')||r.uuid!==s.uuid||!Array.isArray(r.findings)||!r.findings.length||r.findings.length>4)return null;
  const seen=new Set<string>();
  for(const f of r.findings){
-  if(!f||!int(f.seat,0,2)||!int(f.round,0,s.rounds.length-1)||!int(f.turn,1,10)||f.basis!=='shape'||typeof f.actual!=='string'||!tile.test(f.actual)||typeof f.recommended!=='string'||!tile.test(f.recommended)||!metric(f.actualMetric,f.actual)||!metric(f.recommendedMetric,f.recommended))return null;
-  const a=f.actualMetric,b=f.recommendedMetric;
-  if(b.bonus<a.bonus||b.shanten>a.shanten||f.actual!==f.recommended&&!(b.shanten<a.shanten||b.shanten===a.shanten&&b.ukeire>=a.ukeire+8))return null;
-  if(f.actual===f.recommended&&JSON.stringify(a)!==JSON.stringify(b))return null;
+  if(!f||!int(f.seat,0,2)||!int(f.round,0,s.rounds.length-1)||typeof f.actual!=='string'||!tile.test(f.actual)||typeof f.recommended!=='string'||!tile.test(f.recommended))return null;
+  if(f.basis==='genbutsu'){
+   if(r.version!==2||!int(f.turn,6,24)||!int(f.against,0,2)||f.against===f.seat||f.againstRiichi!==true||f.recommendedOnRiver!==true||typeof f.actualOnRiver!=='boolean'||f.actualOnRiver!==(f.actual===f.recommended)||!int(f.shanten,3,6)||f.actual==='N'||f.recommended==='N')return null;
+  }else if(f.basis==='shape'){
+   if(!int(f.turn,1,10)||!metric(f.actualMetric,f.actual)||!metric(f.recommendedMetric,f.recommended))return null;
+   const a=f.actualMetric,b=f.recommendedMetric;
+   if(b.bonus<a.bonus||b.shanten>a.shanten||f.actual!==f.recommended&&!(b.shanten<a.shanten||b.shanten===a.shanten&&b.ukeire>=a.ukeire+8))return null;
+   if(f.actual===f.recommended&&JSON.stringify(a)!==JSON.stringify(b))return null;
+  }else return null;
   const key=[f.seat,f.round,f.turn].join(':');if(seen.has(key))return null;seen.add(key);
  }
+
  return r;
 }
 const show=(t:string)=>t.endsWith('r')?'赤'+t.slice(0,-1):({E:'東',S:'南',W:'西',N:'北',P:'白',F:'發',C:'中'} as Record<string,string>)[t]??t;
@@ -25,7 +32,21 @@ export function equalSanmaComments(s:PaipuSummary,raw:unknown,members:Map<number
  const alt=fs.find(f=>f.actual!==f.recommended),praise=fs.find(f=>f.actual===f.recommended);
  const chosen=alt&&praise?[alt,praise]:fs.slice(0,2);
  return chosen.map(f=>{
-  const name=clean(members.get(f.seat)!.name),at=s.rounds[f.round].label+'の'+f.turn+'打目',a=show(f.actual),b=show(f.recommended),m=f.recommendedMetric;
+  const name=clean(members.get(f.seat)!.name),at=s.rounds[f.round].label+'の'+f.turn+'打目',a=show(f.actual),b=show(f.recommended);
+  if(f.basis==='genbutsu'){
+   const opponent=clean(members.get(f.against)?.name??s.seats[f.against]?.nickname??'リーチした人');
+   const patterns=f.actual===f.recommended?[
+    `🎙️「${name}、${at}の${a}は${opponent}の現物ですねぇ。そのリーチには落ち着いて合わせてますわ」`,
+    `🎙️「${at}、${name}は${a}やね。${opponent}が自分で捨ててる牌ですから、そのリーチ相手にはええ選び方やと思いますわ」`,
+    `🎙️「${name}、${at}。${a}は${opponent}の河にありますねぇ。対${opponent}ではちゃんと止まれてますわ」`,
+   ]:[
+    `🎙️「${name}、${at}の${a}ですかぁ。対${opponent}のリーチだけ考えるなら、僕は現物の${b}も考えますねぇ」`,
+    `🎙️「${at}、${name}は${a}ね。手がまだ遠いですし、${opponent}の河にある${b}を合わせる手もありますわ」`,
+    `🎙️「${name}、${at}やね。${opponent}への受けを優先するなら、現物の${b}も選べますねぇ」`,
+   ];
+   return patterns[(f.round+f.turn+f.seat)%patterns.length];
+  }
+  const m=f.recommendedMetric;
   const variant=(f.round+f.turn+f.seat)%3;
   if(f.actual===f.recommended)return [
    `🎙️「${name}、${at}の${a}ね。手の進み方だけなら僕もそれですわ。次に手が進む牌は見えてへん分で${m.ukeire}枚ありますねぇ」`,

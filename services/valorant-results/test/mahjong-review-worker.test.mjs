@@ -28,7 +28,7 @@ test('sanma review runs in an actual isolated worker without C3 model assets, D1
  hand.forEach(t=>pool.splice(pool.indexOf(t),1));const own1=pool.splice(0,13),own2=pool.splice(0,13),indicator=pool.pop();
  const actions=[{name:'RecordNewRound',data:{chang:0,ju:0,ben:0,liqibang:0,scores:[35000,35000,35000],doras:[indicator],tiles0:hand,tiles1:own1,tiles2:own2}}, {name:'RecordDiscardTile',data:{seat:0,tile:'7z',moqie:false}}];
  for(const seat of [1,2,0]){const tile=pool.pop();actions.push({name:'RecordDealTile',data:{seat,tile}},{name:'RecordDiscardTile',data:{seat,tile:seat===0?'2p':tile,moqie:seat!==0}});}
- try{const report=await reviewer.review(three,actions);assert.ok(report);assert.equal(report.source,'sanma-shape');assert.equal(report.uuid,three.uuid);assert.ok(report.findings.length<=4);for(const f of report.findings)assert.ok(f.actualMetric&&f.recommendedMetric);}
+ try{const report=await reviewer.review(three,actions);assert.ok(report);assert.equal(report.source,'sanma-rules');assert.equal(report.uuid,three.uuid);assert.ok(report.findings.length<=4);for(const f of report.findings)assert.ok(f.actualMetric&&f.recommendedMetric);}
  finally{await reviewer.close();}
  assert.equal(await reviewer.review(three,actions),null);
 });
@@ -48,4 +48,19 @@ test('even a recommended legal tile is withheld when the recorded actual discard
  const {legalC3Discard}=await import('../scripts/mahjong-c3-infer.mjs');const mask=Array(46).fill(1);mask[10]=0;
  assert.equal(legalC3Discard({actual:'2p',legal:['1p','2p']},{mask},{action:9}),null);
  assert.equal(legalC3Discard({actual:'1p',legal:['1p','2p']},{mask},{action:9}),'1p');
+});
+
+test('actual isolated sanma worker recognizes a recorded riichi and offers a real held genbutsu',async()=>{
+ const {threeDefenseScenario}=await import('./fixtures/mahjong-review-three.ts');
+ const {acceptedSanmaReport}=await import('../src/mahjong-sanma-comment.ts');
+ const {summary,actions}=threeDefenseScenario(),reviewer=createPaipuReviewer({sanmaEnabled:true,timeoutMs:10000});
+ try{
+  const report=await reviewer.review(summary,actions);assert.ok(acceptedSanmaReport(summary,report));
+  const defensive=report.findings.find(f=>f.seat===0&&f.turn===6&&f.basis==='genbutsu');
+  assert.ok(defensive);assert.equal(defensive.actual,'2p');assert.equal(defensive.against,1);
+  const {toC3Tile}=await import('../src/mahjong-c3-extract.ts');let own=0;
+  const boundary=actions.findIndex(a=>a.name==='RecordDiscardTile'&&a.data.seat===0&&++own===6);
+  const river=actions.slice(0,boundary).filter(a=>a.name==='RecordDiscardTile'&&a.data.seat===1).map(a=>toC3Tile(a.data.tile));
+  assert.ok(river.includes(defensive.recommended));
+ }finally{await reviewer.close();}
 });
