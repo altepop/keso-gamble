@@ -10,7 +10,7 @@ const MINI=new Set(Object.keys(EXTRA_DUEL_GAMES));
 const $=s=>document.querySelector(s);
 const rand=n=>{const value=new Uint32Array(1),limit=Math.floor(4294967296/n)*n;do{crypto.getRandomValues(value);}while(value[0]>=limit);return value[0]%n;};
 let game='othello',viewer='a',target=USERS.b,stake=1000,match=null,secret=null,balance={[USERS.a]:20000,[USERS.b]:20000},
- picks=[],confirmResign=false,pickerOpen=false,lastError='',status='';
+ picks=[],confirmResign=false,pickerOpen=false,lastError='',status='',previewCell=null;
 function current(){return USERS[viewer];}
 function sideOf(user){return match?.black_user===user?'a':'b';}
 function userOf(side){return side==='a'?match.black_user:match.black_user===match.user_a?match.user_b:match.user_a;}
@@ -24,7 +24,14 @@ function projection(){
 function note(text,error=false){lastError=error?String(text):'';status=error?'':text;}
 function render(){
  const selected=projection(),info={games:GAMES,members:MEMBERS,matches:selected?[selected]:[]};
- $('#demo-app').innerHTML=duelScreen({info,user:current(),live:true,cash:balance[current()],selectedId:match?.id,game,stake,target,busy:false,error:lastError,confirmResign,pokerPicks:picks,opponentPickerOpen:pickerOpen});
+ const oldScroll=$('#demo-app [data-duel-board-scroll]');
+ const position=oldScroll?{id:oldScroll.dataset.duelBoardScroll,left:oldScroll.scrollLeft,top:oldScroll.scrollTop}:null;
+ $('#demo-app').innerHTML=duelScreen({info,user:current(),live:true,cash:balance[current()],selectedId:match?.id,game,stake,target,busy:false,error:lastError,confirmResign,pokerPicks:picks,opponentPickerOpen:pickerOpen,gomokuPreviewCell:previewCell});
+ const scroll=$('#demo-app [data-duel-board-scroll]');
+ if(scroll){
+  if(position?.id===scroll.dataset.duelBoardScroll){scroll.scrollLeft=position.left;scroll.scrollTop=position.top;}
+  else{scroll.scrollLeft=(scroll.scrollWidth-scroll.clientWidth)/2;scroll.scrollTop=(scroll.scrollHeight-scroll.clientHeight)/2;}
+ }
  for(const button of document.querySelectorAll('[data-demo-view]')){
   button.setAttribute('aria-pressed',String(button.dataset.demoView===viewer));
  }
@@ -33,7 +40,7 @@ function render(){
 function restart(name=game){
  if(!Object.hasOwn(GAMES,name))throw Error('不正なゲーム');
  game=name;viewer='a';target=USERS.b;match=null;secret=null;balance={[USERS.a]:20000,[USERS.b]:20000};
- picks=[];confirmResign=false;pickerOpen=false;note('');
+ picks=[];previewCell=null;confirmResign=false;pickerOpen=false;note('');
  render();
 }
 function startInvite(){
@@ -41,7 +48,7 @@ function startInvite(){
  match={id:crypto.randomUUID(),guild:'demo',user_a:current(),user_b:target,game,stake,status:'pending',
   board:MINI.has(game)?'.':initialDuelBoard(game),black_user:null,turn_user:null,
   winner:null,version:0,created_at:Date.now(),updated_at:Date.now(),deadline_at:Date.now()+15*60000};
- note('申し込みを作成しました。画面を見る人を切り替えて承認してください。');render();
+ previewCell=null;note('申し込みを作成しました。画面を見る人を切り替えて承認してください。');render();
 }
 function settle(winner){
  if(match.status==='finished')return;
@@ -59,7 +66,7 @@ function accept(){
  match.black_user=match.user_a;match.turn_user=match.user_a;
  if(MINI.has(game)){const init=miniStart(game,rand);match.board=init.board;secret=init.secret;}
  match.status='active';match.version++;match.updated_at=Date.now();match.deadline_at=Date.now()+10*60000;
- note('対戦を開始しました。プレイヤーAとBを切り替えて操作できます。');render();
+ previewCell=null;note('対戦を開始しました。プレイヤーAとBを切り替えて操作できます。');render();
 }
 function move(body){
  if(!match||match.status!=='active'||current()!==match.turn_user)throw Error('手番を確認してください');
@@ -76,7 +83,7 @@ function move(body){
   if(result.winner)settle(result.winner==='draw'?'draw':result.winner==='B'?match.black_user:other);
  }
  match.version++;match.updated_at=Date.now();match.deadline_at=Date.now()+10*60000;
- picks=[];confirmResign=false;render();
+ picks=[];previewCell=null;confirmResign=false;render();
 }
 function resign(){
  if(!match||match.status!=='active')throw Error('進行中の対戦はありません');
@@ -91,7 +98,7 @@ document.addEventListener('change',e=>{
 });
 document.addEventListener('click',e=>{
  const switcher=e.target.closest('[data-demo-view]');
- if(switcher){viewer=switcher.dataset.demoView;picks=[];confirmResign=false;pickerOpen=false;note('');render();return;}
+ if(switcher){viewer=switcher.dataset.demoView;picks=[];previewCell=null;confirmResign=false;pickerOpen=false;note('');render();return;}
  const targetOption=e.target.closest('[data-duel-target-option]');
  if(targetOption){target=targetOption.dataset.duelTargetOption;pickerOpen=false;render();return;}
  if(e.target.closest('[data-duel-target-toggle]')){pickerOpen=!pickerOpen;render();return;}
@@ -106,8 +113,19 @@ document.addEventListener('click',e=>{
  if(e.target.closest('[data-duel-refresh]')){note('デモは通信せず、この端末だけで更新します');render();return;}
  const selection=e.target.closest('[data-duel-select]');
  if(selection){note('');render();return;}
- const button=e.target.closest('[data-duel-act],[data-duel-cell]');
+ const button=e.target.closest('[data-duel-act],[data-duel-cell],[data-duel-confirm-cell],[data-duel-cancel-cell]');
  if(!button)return;
+ if(button.dataset.duelCancelCell!==undefined){previewCell=null;render();return;}
+ if(button.dataset.duelCell!==undefined&&game==='gomoku'){
+  if(match?.status!=='active'||match.turn_user!==current())return;
+  previewCell=Number(button.dataset.duelCell);render();return;
+ }
+ if(button.dataset.duelConfirmCell!==undefined){
+  const cell=Number(button.dataset.duelConfirmCell);
+  if(game!=='gomoku'||previewCell!==cell||match?.turn_user!==current()){previewCell=null;note('もう一度マスを選択してください',true);render();return;}
+  try{move({cell});}catch(error){previewCell=null;note(error.message||'操作を確認できませんでした',true);render();}
+  return;
+ }
  const action=button.dataset.duelCell!==undefined?'move':button.dataset.duelAct;
  try{
   if(action==='create'){startInvite();return;}
