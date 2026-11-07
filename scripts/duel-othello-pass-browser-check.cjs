@@ -46,7 +46,7 @@ function seeded(seed){
     assert.equal(color,scenario.color,'seed must exercise intended pass direction');
     assert.equal(after.nextColor,color,'same color must play after a pass');
     await page.locator('[data-demo-view='+seat+']').click();
-    assert.match(await page.locator('.duel-auto-pass').innerText(),/自動パス/);
+    assert.match(await page.locator('#demo-feedback').innerText(),/自動パス/);
     assert.match(await page.locator('.duel-turn').innerText(),/あなたの番/);
     const options=duelLegalMoves('othello',board,color);
     assert.ok(options.length>0,'mover retains at least one legal cell');
