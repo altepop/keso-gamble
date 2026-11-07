@@ -968,6 +968,7 @@ test('upgrading a live Othello-only schema preserves active games and upgrades c
 test('every duel game completes a two-member wager and settles the real SQLite ledger to zero',async()=>{
  const {boardDuelAction,boardDuelList}=await import('../src/board-duels.ts');
  // These are production D1 handlers running against an in-memory SQLite fixture, never live KP.
+ // @ts-expect-error Shared duel rules are authored in JS without a TS declaration file.
  const {duelLegalMoves}=await import('../../../js/duel-rules.js');
  const f=await fixture();seed(f.sql,one,20_000);seed(f.sql,two,20_000);
  let serial=600;
