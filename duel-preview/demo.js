@@ -1,7 +1,7 @@
 // Browser-only two-view demo and CPU practice built from the same rules/UI as live duels.
 // All effects stay in RAM: no network, localStorage, KP API, D1 or Discord calls.
-import {duelScreen} from '../js/duel-view.js?v=othello-pass-20261107-v1';
-import {DUEL_GAMES,initialDuelBoard,playDuelMove,duelPlayerForColor} from '../js/duel-rules.js?v=othello-pass-20261107-v1';
+import {duelScreen} from '../js/duel-view.js';
+import {DUEL_GAMES,initialDuelBoard,playDuelMove} from '../js/duel-rules.js';
 import {EXTRA_DUEL_GAMES,miniStart,miniMove} from '../js/duel-mini-games.js';
 import {chooseCpuMove,CPU_DIFFICULTY_GUIDE} from './cpu.js?v=cpu-20261107-v4';
 const GAMES={...DUEL_GAMES,...EXTRA_DUEL_GAMES};
@@ -12,7 +12,7 @@ const MINI=new Set(Object.keys(EXTRA_DUEL_GAMES));
 const $=s=>document.querySelector(s);
 const rand=n=>{const value=new Uint32Array(1),limit=Math.floor(4294967296/n)*n;do{crypto.getRandomValues(value);}while(value[0]>=limit);return value[0]%n;};
 let game='othello',viewer='a',target=USERS.b,stake=1000,match=null,secret=null,balance={[USERS.a]:20000,[USERS.b]:20000},
- picks=[],confirmResign=false,pickerOpen=false,lastError='',status='',previewCell=null,guessDraft='',
+ picks=[],confirmResign=false,pickerOpen=false,lastError='',status='',passNotice='',previewCell=null,guessDraft='',
  againstCpu=new URLSearchParams(location.search).get('cpu')==='1',cpuLevel='normal',cpuBusy=false,cpuTimer=null,roundId=0;
 const recentMoves=new Map(),localMoveHistory=new Map();
 function current(){return USERS[viewer];}
@@ -50,12 +50,12 @@ function render(){
  for(const button of document.querySelectorAll('[data-demo-view]')){
   button.setAttribute('aria-pressed',String(button.dataset.demoView===viewer));
  }
- $('#demo-mode').value=game;$('#demo-feedback').textContent=status;
+ $('#demo-mode').value=game;$('#demo-feedback').textContent=[status,passNotice].filter(Boolean).join('　');
 }
 function restart(name=game){
  if(!Object.hasOwn(GAMES,name))throw Error('不正なゲーム');
  game=name;viewer='a';target=USERS.b;match=null;secret=null;balance={[USERS.a]:20000,[USERS.b]:20000};
- picks=[];previewCell=null;confirmResign=false;pickerOpen=false;guessDraft='';recentMoves.clear();localMoveHistory.clear();note('');
+ picks=[];previewCell=null;confirmResign=false;pickerOpen=false;guessDraft='';passNotice='';recentMoves.clear();localMoveHistory.clear();note('');
  roundId++;if(cpuTimer!==null)clearTimeout(cpuTimer);cpuTimer=null;cpuBusy=false;
  if(againstCpu){
   const now=Date.now();
@@ -98,6 +98,7 @@ function move(body,actor=current()){
  const other=actor===match.user_a?match.user_b:match.user_a;
  const oldBoard=match.board;
  if(MINI.has(game)){
+  passNotice='';
   const result=miniMove(game,match.board,secret,sideOf(actor),body,rand);
   match.board=result.board;secret=result.secret;match.turn_user=result.turnSide?userOf(result.turnSide):null;
   if(result.winner)settle(result.winner==='draw'?'draw':userOf(result.winner));
@@ -105,8 +106,9 @@ function move(body,actor=current()){
   const color=match.black_user===actor?'B':'W';
   const result=playDuelMove(game,match.board,color,Number(body.cell));
   match.board=result.board;
-  match.turn_user=duelPlayerForColor(match.black_user,match.user_a,match.user_b,result.nextColor);
-  if(result.winner)settle(result.winner==='draw'?'draw':duelPlayerForColor(match.black_user,match.user_a,match.user_b,result.winner));
+  match.turn_user=result.nextColor?userOf(result.nextColor==='B'?'a':'b'):null;
+  passNotice=result.passed?(color==='B'?'白':'黒')+'は置ける場所がないため自動パス。'+(color==='B'?'黒':'白')+'が続けて置く番です。':'';
+  if(result.winner)settle(result.winner==='draw'?'draw':userOf(result.winner==='B'?'a':'b'));
  }
  match.version++;match.updated_at=Date.now();match.deadline_at=Date.now()+(againstCpu?24*60*60000:10*60000);
  if(!MINI.has(game)){const added=[...match.board].flatMap((cell,i)=>oldBoard[i]==='.'&&cell!=='.'?[i]:[]);if(added.length===1){recentMoves.set(match.id,{version:match.version,cell:added[0]});const entries=localMoveHistory.get(match.id)??[];localMoveHistory.set(match.id,[...entries,{version:match.version,cell:added[0],color:match.board[added[0]]}].slice(-12));}else recentMoves.delete(match.id);}
