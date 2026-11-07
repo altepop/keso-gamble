@@ -11,7 +11,7 @@ const $=s=>document.querySelector(s);
 const rand=n=>{const value=new Uint32Array(1),limit=Math.floor(4294967296/n)*n;do{crypto.getRandomValues(value);}while(value[0]>=limit);return value[0]%n;};
 let game='othello',viewer='a',target=USERS.b,stake=1000,match=null,secret=null,balance={[USERS.a]:20000,[USERS.b]:20000},
  picks=[],confirmResign=false,pickerOpen=false,lastError='',status='',previewCell=null,guessDraft='';
-const recentMoves=new Map();
+const recentMoves=new Map(),localMoveHistory=new Map();
 function current(){return USERS[viewer];}
 function sideOf(user){return match?.black_user===user?'a':'b';}
 function userOf(side){return side==='a'?match.black_user:match.black_user===match.user_a?match.user_b:match.user_a;}
@@ -27,7 +27,7 @@ function render(){
  const selected=projection(),info={games:GAMES,members:MEMBERS,matches:selected?[selected]:[]};
  const oldScroll=$('#demo-app [data-duel-board-scroll]');
  const position=oldScroll?{id:oldScroll.dataset.duelBoardScroll,left:oldScroll.scrollLeft,top:oldScroll.scrollTop}:null;
- $('#demo-app').innerHTML=duelScreen({info,user:current(),live:true,cash:balance[current()],selectedId:match?.id,game,stake,target,busy:false,error:lastError,confirmResign,pokerPicks:picks,opponentPickerOpen:pickerOpen,gomokuPreviewCell:previewCell,guessDraft,recentMoves});
+ $('#demo-app').innerHTML=duelScreen({info,user:current(),live:true,cash:balance[current()],selectedId:match?.id,game,stake,target,busy:false,error:lastError,confirmResign,pokerPicks:picks,opponentPickerOpen:pickerOpen,gomokuPreviewCell:previewCell,guessDraft,recentMoves,localMoveHistory});
  const scroll=$('#demo-app [data-duel-board-scroll]');
  if(scroll){
   if(position?.id===scroll.dataset.duelBoardScroll){scroll.scrollLeft=position.left;scroll.scrollTop=position.top;}
@@ -41,7 +41,7 @@ function render(){
 function restart(name=game){
  if(!Object.hasOwn(GAMES,name))throw Error('不正なゲーム');
  game=name;viewer='a';target=USERS.b;match=null;secret=null;balance={[USERS.a]:20000,[USERS.b]:20000};
- picks=[];previewCell=null;confirmResign=false;pickerOpen=false;guessDraft='';recentMoves.clear();note('');
+ picks=[];previewCell=null;confirmResign=false;pickerOpen=false;guessDraft='';recentMoves.clear();localMoveHistory.clear();note('');
  render();
 }
 function startInvite(){
@@ -85,7 +85,7 @@ function move(body){
   if(result.winner)settle(result.winner==='draw'?'draw':result.winner==='B'?match.black_user:other);
  }
  match.version++;match.updated_at=Date.now();match.deadline_at=Date.now()+10*60000;
- if(!MINI.has(game)){const added=[...match.board].flatMap((cell,i)=>oldBoard[i]==='.'&&cell!=='.'?[i]:[]);if(added.length===1)recentMoves.set(match.id,{version:match.version,cell:added[0]});else recentMoves.delete(match.id);}
+ if(!MINI.has(game)){const added=[...match.board].flatMap((cell,i)=>oldBoard[i]==='.'&&cell!=='.'?[i]:[]);if(added.length===1){recentMoves.set(match.id,{version:match.version,cell:added[0]});const entries=localMoveHistory.get(match.id)??[];localMoveHistory.set(match.id,[...entries,{version:match.version,cell:added[0],color:match.board[added[0]]}].slice(-12));}else recentMoves.delete(match.id);}
  picks=[];previewCell=null;confirmResign=false;guessDraft='';render();
 }
 function resign(){
