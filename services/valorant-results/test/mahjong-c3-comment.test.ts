@@ -16,7 +16,7 @@ test('Equal bot cites exact round, turn, discarded tile and C3 suggestion, witho
  const post=paipuPost(s,members,()=> 'normal');
  assert.match(post,/松本等しいのc3検討/);
  assert.match(post,/けそ、東1局の4巡目の6pなあ。c3は赤5p切りを選んどる/);
- assert.match(post,/小林の東3局9巡目、東か。c3は9sやったで/);
+ assert.match(post,/小林の東3局 1本場9巡目、東か。c3は9sやったで/);
  assert.match(post,/選択の違いだけでは失着とは断定できない/);
  assert.ok(post.length<=1900);
  assert.equal(equalC3Comments(summary,null,members).length,0);
@@ -48,5 +48,5 @@ test('review only comments on tracked members and caps the number of remarks',()
  assert.equal(equalC3Comments(summary,r,new Map([[1,{name:'@everyone **X**'}],[0,{name:'けそ'}]])).length,2);
  const lines=equalC3Comments(summary,r,new Map([[1,{name:'@everyone **X**'}]]));
  assert.equal(lines.length,1);
- assert.doesNotMatch(lines[0],/@everyone|\\*\\*X/);
+ assert.ok(!lines[0].includes('@')&&!lines[0].includes('**'));
 });
