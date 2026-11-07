@@ -32,7 +32,12 @@ function candidatePool(possible,random,max){
  if(possible.length<=max)return possible;
  const candidates=new Set(spaced(possible,Math.floor(max*.65)));
  // Random sampling is unbiased by decimal / lexicographic neighborhood.
- while(candidates.size<max)candidates.add(pick(possible,random));
+ const offset=Math.floor(random()*possible.length);
+ for(let k=0;k<possible.length&&candidates.size<max;k++)
+  candidates.add(possible[(offset+k*37)%possible.length]);
+ // For lengths sharing a factor with 37, finish with sequential fallback.
+ for(let k=0;k<possible.length&&candidates.size<max;k++)
+  candidates.add(possible[(offset+k)%possible.length]);
  return [...candidates];
 }
 export function cpuHitBlow(board,side,level,random){
