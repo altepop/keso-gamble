@@ -3,7 +3,7 @@
 import {duelScreen} from '../js/duel-view.js';
 import {DUEL_GAMES,initialDuelBoard,playDuelMove} from '../js/duel-rules.js';
 import {EXTRA_DUEL_GAMES,miniStart,miniMove} from '../js/duel-mini-games.js';
-import {chooseCpuMove} from './cpu.js?v=cpu-20261107-v2';
+import {chooseCpuMove,CPU_DIFFICULTY_GUIDE} from './cpu.js?v=cpu-20261107-v3';
 const GAMES={...DUEL_GAMES,...EXTRA_DUEL_GAMES};
 const USERS={a:'100000000000000101',b:'100000000000000102'};
 const MEMBERS=[{id:USERS.a,name:'プレイヤーA'},{id:USERS.b,name:'プレイヤーB'}];
@@ -32,6 +32,8 @@ function render(){
  $('#demo-title').textContent=againstCpu?'CPU練習':'決闘デモ';
  $('#demo-cpu-settings').hidden=!againstCpu;
  $('#demo-cpu-level').value=cpuLevel;
+ const description=CPU_DIFFICULTY_GUIDE[game]?.[cpuLevel]??'';
+ $('#demo-cpu-explain').textContent='このゲームのCPU：'+description;
  $('#demo-notice').innerHTML=againstCpu?
   '<strong>ここは練習用。実KPは変動せず、D1やDiscordへ一切送信しない。</strong> 画面のKPは仮の数値。対人戦と同じ判定ルールでCPUと遊べる。':
   '本番KP・D1・Discordには接続しない。この画面だけで2人分の操作を確認できる。<strong>表示する人を切り替えると手札も切り替わる。</strong>';
