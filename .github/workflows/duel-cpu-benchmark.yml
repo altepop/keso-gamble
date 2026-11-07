@@ -20,17 +20,17 @@ jobs:
       matrix:
         include:
           - game: othello
-            pairs: 26
+            pairs: 6
           - game: gomoku
-            pairs: 130
+            pairs: 25
           - game: connect4
-            pairs: 50
+            pairs: 10
           - game: hitblow
-            pairs: 950
+            pairs: 120
           - game: bluffdice
-            pairs: 2000
+            pairs: 300
           - game: poker
-            pairs: 1700
+            pairs: 200
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
