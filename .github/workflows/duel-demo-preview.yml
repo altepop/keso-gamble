@@ -6,6 +6,7 @@ on:
       - 'duel-preview/**'
       - 'js/duel-*.js'
       - 'scripts/duel-demo-browser-check.cjs'
+      - 'scripts/duel-live-touch-browser-check.cjs'
       - '.github/workflows/duel-demo-preview.yml'
   push:
     branches: [main]
@@ -40,6 +41,10 @@ jobs:
         env:
           DUEL_DEMO_SHOTS: ${{ runner.temp }}/duel-screens
         run: node scripts/duel-demo-browser-check.cjs webkit
+      - name: Verify production Activity Gomoku touch flow in Chromium
+        run: node scripts/duel-live-touch-browser-check.cjs
+      - name: Verify production Activity Gomoku touch flow in iPhone WebKit
+        run: node scripts/duel-live-touch-browser-check.cjs webkit
       - uses: actions/upload-artifact@v4
         if: always()
         with:
