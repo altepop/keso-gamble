@@ -220,7 +220,7 @@ test('a verified friend match transfers zero-sum KP exactly once, without ranked
  f.env.MAHJONG_FRIEND_SETTLEMENT_ENABLED='true';
  const result={results:[{uuid:s.uuid,summary:s}]};
  assert.deepEqual(await (await f.call('/api/mahjong/paipu/friend/summaries',result)).json(),{statuses:['settled']});
- const rates=[600,200,-200,-600];
+ const rates=[200,50,-50,-200];
  for(let i=0;i<4;i++)assert.equal(f.balance(ids[i]),1000+rates[s.seats[i].rank-1]);
  assert.equal(Number(f.sql.prepare("SELECT COALESCE(SUM(delta),0) AS n FROM kp_ledger WHERE kind='mahjong_friend'").get()?.n??0),0);
  assert.equal(Number(f.sql.prepare("SELECT COUNT(*) AS n FROM kp_ledger WHERE kind='mahjong_friend'").get()?.n??0),4);
