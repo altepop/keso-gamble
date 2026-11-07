@@ -88,3 +88,14 @@ test('Strong CPU terminates within bounded time in all six opening scenarios',()
   assert.ok(elapsed<3000,game+' CPU took '+elapsed.toFixed(0)+'ms');
  }
 });
+
+test('Hit & Blow never discards the correct answer merely because the other player guessed it',()=>{
+ const target='0123';
+ const history=['0124','0135','0216'].map(guess=>({by:'b',guess,...hitBlowAnswer(guess,target)}));
+ history.push({by:'a',guess:target,hit:0,blow:1}); // Different player targets a different secret.
+ const state={turn:'b',history};
+ for(const level of ['easy','normal','strong']){
+  const choice=chooseCpuMove('hitblow',JSON.stringify(state),{side:'b',level,random:deterministic});
+  assert.deepEqual(choice,{guess:target});
+ }
+});
