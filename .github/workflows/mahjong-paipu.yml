@@ -56,41 +56,34 @@ jobs:
       - name: Install
         if: steps.queue.outputs.count && steps.queue.outputs.count != '0' && steps.queue.outputs.count != 'probe'
         run: npm ci --ignore-scripts
-      - name: Decide optional private model access
+      - name: Decide optional review inference
         id: c3
         if: steps.queue.outputs.count && steps.queue.outputs.count != '0' && steps.queue.outputs.count != 'check'
         env:
-          MODEL_TOKEN: ${{ secrets.M_LEAGUE_C3_TOKEN }}
           MODEL_ENABLED: ${{ vars.MAHJONG_EQUAL_REVIEW_ENABLED }}
           MODEL_PROBE: ${{ inputs.c3_probe }}
         run: |
-          if { [ "$MODEL_ENABLED" = "true" ] || [ "$MODEL_PROBE" = "true" ]; } && [ -n "$MODEL_TOKEN" ]; then
+          if [ "$MODEL_ENABLED" = "true" ] || [ "$MODEL_PROBE" = "true" ]; then
             echo 'enabled=true' >> "$GITHUB_OUTPUT"
           else
             echo 'enabled=false' >> "$GITHUB_OUTPUT"
           fi
-      - name: Read original C3 model from private M-LEAGUE Manager
+      - name: Restore public model cache
         if: steps.c3.outputs.enabled == 'true'
-        uses: actions/checkout@v7
+        uses: actions/cache@v4
         with:
-          repository: altepop/m-league-manager
-          ref: main
-          token: ${{ secrets.M_LEAGUE_C3_TOKEN }}
-          path: c3-private
-          persist-credentials: false
-          sparse-checkout: |
-            assets/c3
-            scripts/lib
-      - name: Explain missing model permission for manual probe
-        if: inputs.c3_probe == true && steps.c3.outputs.enabled != 'true'
-        run: |
-          echo 'M_LEAGUE_C3_TOKEN（非公開M-LEAGUE ManagerのContents Read-only）が必要です。'
-          exit 1
-      - name: Read-only Node inference probe
-        if: inputs.c3_probe == true && steps.c3.outputs.enabled == 'true'
+          path: services/valorant-results/.cache/c3-model
+          key: equal-review-c3-5b30a83de3ab9523
+      - name: Load source-verified static model
+        if: steps.c3.outputs.enabled == 'true'
         env:
-          C3_ASSETS_ROOT: ${{ github.workspace }}/c3-private
-        run: node --experimental-strip-types scripts/mahjong-c3-probe.mjs
+          C3_ASSETS_ROOT: ${{ github.workspace }}/services/valorant-results/.cache/c3-model
+        run: node scripts/mahjong-c3-download.mjs
+      - name: Read-only Node inference probe
+        if: inputs.c3_probe == true
+        env:
+          C3_ASSETS_ROOT: ${{ github.workspace }}/services/valorant-results/.cache/c3-model
+        run: node scripts/mahjong-c3-probe.mjs
       - name: Fetch and summarize paipu
         if: steps.queue.outputs.count && steps.queue.outputs.count != '0' && steps.queue.outputs.count != 'probe'
         env:
@@ -98,5 +91,5 @@ jobs:
           YOSTAR_TOKEN: ${{ secrets.YOSTAR_TOKEN }}
           YOSTAR_DEVICE_ID: ${{ secrets.YOSTAR_DEVICE_ID }}
           MAHJONG_EQUAL_REVIEW_ENABLED: ${{ steps.c3.outputs.enabled == 'true' && 'true' || 'false' }}
-          C3_ASSETS_ROOT: ${{ github.workspace }}/c3-private
+          C3_ASSETS_ROOT: ${{ github.workspace }}/services/valorant-results/.cache/c3-model
         run: node --experimental-strip-types scripts/mahjong-paipu.mjs ${{ steps.queue.outputs.count == 'check' && '--check' || '' }}
