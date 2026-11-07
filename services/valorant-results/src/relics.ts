@@ -613,6 +613,14 @@ export function lossLoadout(c:RelicCollection,mode:string,loss:number,at:number)
  }
  return best;
 }
+// D1 hotspot (Nov 2026): matching l.id = 'relic:' || s.id drives a full
+// kp_steam_events scan. Search the indexed daily ledger slice first, then use
+// the Steam event PRIMARY KEY for exact receipt verification. No policy change.
+export const STEAM_RELIC_CAP_USED_SQL=`SELECT COALESCE(SUM(l.delta),0) AS n FROM kp_ledger l
+ WHERE l.guild=? AND l.user=? AND l.kind='relic' AND l.at>=?
+ AND substr(l.id,1,6)='relic:'
+ AND EXISTS(SELECT 1 FROM kp_steam_events s WHERE s.id=substr(l.id,7))`;
+
 /** Caller MUST confirm a new, immutable server-verified receipt before invoking.
  * This is not a public API; browsers can never request a bonus for arbitrary evidence.
  * `lottery` (アンレ only, signed) is the special-lottery part of `amount`; relics act on the win reward without it
@@ -660,8 +668,7 @@ export async function creditVerifiedRelicBonus(
   bonus=Math.min(bonus,cap.receipt);
   if(cap.daily){
    const day=Date.parse(casinoRelicDay(at)+'T00:00:00Z');
-   const used=await env.DB.prepare(`SELECT COALESCE(SUM(l.delta),0) AS n FROM kp_ledger l JOIN kp_steam_events s ON l.id='relic:'||s.id
-     WHERE l.guild=? AND l.user=? AND l.kind='relic' AND l.at>=?`).bind(guild,user,day).first<{n:number}>().catch(()=>({n:0}));
+   const used=await env.DB.prepare(STEAM_RELIC_CAP_USED_SQL).bind(guild,user,day).first<{n:number}>().catch(()=>({n:0}));
    bonus=Math.min(bonus,Math.max(0,cap.daily-Number(used?.n??0)));
   }
  }
