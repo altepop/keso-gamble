@@ -11,7 +11,7 @@ const WINDS=['E','S'];
 const tile=(x:unknown)=>toC3Tile(x);
 const seatOk=(n:unknown)=>Number.isInteger(n)&&Number(n)>=0&&Number(n)<4;
 const arrayOf=(input:unknown)=>Array.isArray(input)?input.map(tile):[];
-function startCase(d:any):{events:Event[];dealer:number}|null{
+function startCase(d:any):{events:Event[];dealer:number;hands:string[][]}|null{
  if(!d||!Number.isInteger(d.chang)||d.chang<0||d.chang>1||
   !Number.isInteger(d.ju)||d.ju<0||d.ju>3||
   !Number.isSafeInteger(d.ben)||d.ben<0||
@@ -22,6 +22,15 @@ function startCase(d:any):{events:Event[];dealer:number}|null{
  if(hands.some((h,i)=>h.length!==(i===d.ju?14:13)||h.some(t=>!t)))return null;
  // The dealer's 14th starting tile is an initial self-draw. Never evaluate
  // that first discard because older records differ in initial tile ordering.
+ // Reject impossible dealt copies and duplicate red fives.
+ const observed=hands.flat().concat(tile(Array.isArray(d.doras)?d.doras[0]:d.dora)!);
+ const counts=new Map<string,number>(),reds=new Set<string>();
+ for(const t of observed){
+  const kind=t.endsWith('r')?t.slice(0,-1):t;
+  counts.set(kind,(counts.get(kind)??0)+1);
+  if((counts.get(kind)??0)>4)return null;
+  if(t.endsWith('r')){if(reds.has(kind))return null;reds.add(kind);}
+ }
  const firstDraw=hands[d.ju].pop()!;
  const events:Event[]=[
   {type:'start_game'},
@@ -29,7 +38,7 @@ function startCase(d:any):{events:Event[];dealer:number}|null{
    oya:d.ju,scores:d.scores.slice(),dora_marker:tile(Array.isArray(d.doras)?d.doras[0]:d.dora),tehais:hands},
   {type:'tsumo',actor:d.ju,pai:firstDraw},
  ];
- return {events,dealer:d.ju};
+ return {events,dealer:d.ju,hands:hands.map((h,i)=>i===d.ju?[...h,firstDraw]:h.slice())};
 }
 function copyForSeat(events:Event[],seat:number):Event[]{
  return events.map(e=>{
@@ -47,6 +56,7 @@ export function buildC3Cases(actions:PaipuAction[],summary:PaipuSummary,cap=48):
  if(summary.players!==4||!summary.game.startsWith('4-')||!Array.isArray(actions)||
   actions.length>10000||!Number.isInteger(cap)||cap<1||cap>128)return [];
  let round=-1,events:Event[]=[],current:ReturnType<typeof startCase>=null,blocked=true;
+ let concealed:string[][]=[];
  let pendingDraw:{seat:number;tile:string}|null=null;
  const turns=[0,0,0,0],out:C3Case[]=[];
  for(let i=0;i<actions.length;i++){
@@ -54,21 +64,26 @@ export function buildC3Cases(actions:PaipuAction[],summary:PaipuSummary,cap=48):
   const name=a?.name,d=a?.data;
   if(name==='RecordNewRound'){
    round++;turns.fill(0);current=startCase(d);blocked=!current||round>=summary.rounds.length;
-   events=current?.events??[];pendingDraw=current?{seat:current.dealer,tile:(events.at(-1) as Event).pai as string}:null;
+   events=current?.events??[];concealed=current?.hands.map(h=>h.slice())??[];
+   pendingDraw=current?{seat:current.dealer,tile:(events.at(-1) as Event).pai as string}:null;
    if(!blocked&&summary.rounds[round].label!==['東','南'][d.chang]+(d.ju+1)+'局'+(d.ben?' '+d.ben+'本場':''))blocked=true;
    continue;
   }
   if(blocked||!name)continue;
   if(name==='RecordDealTile'){
-   if(!seatOk(d?.seat)||!tile(d?.tile)||pendingDraw){blocked=true;continue;}
+   if(!seatOk(d?.seat)||!tile(d?.tile)||pendingDraw||concealed[d.seat]?.length!==13){blocked=true;continue;}
    const t=tile(d.tile)!;
+   concealed[d.seat].push(t);
    events.push({type:'tsumo',actor:d.seat,pai:t});
    pendingDraw={seat:d.seat,tile:t};
    continue;
   }
   if(name==='RecordDiscardTile'){
-   if(!seatOk(d?.seat)||!tile(d?.tile)||!pendingDraw||pendingDraw.seat!==d.seat){blocked=true;continue;}
+   if(!seatOk(d?.seat)||!tile(d?.tile)||!pendingDraw||pendingDraw.seat!==d.seat||concealed[d.seat]?.length!==14){blocked=true;continue;}
    const actual=tile(d.tile)!;
+   const idx=concealed[d.seat].indexOf(actual);
+   if(idx<0){blocked=true;continue;}
+   concealed[d.seat].splice(idx,1);
    turns[d.seat]++;
    if(d.moqie===true&&actual!==pendingDraw.tile){blocked=true;continue;}
    // Stop at declaration. The real paipu may omit separate reach-accepted events.
