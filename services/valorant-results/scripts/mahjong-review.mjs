@@ -21,7 +21,7 @@ export function createPaipuReviewer({root,fourEnabled=false,sanmaEnabled=false,t
      const message=value=>done(value),error=()=>stop(),exit=()=>stop();
      const timer=setTimeout(stop,Math.min(timeoutMs,budgetMs-spent));
      worker.once('message',message);worker.once('error',error);worker.once('exit',exit);
-     worker.postMessage({summary,actions});
+     try{worker.postMessage({summary,actions});}catch{stop();}
     });
    }catch{disabled=true;return null;}finally{spent+=Date.now()-started;}
   },

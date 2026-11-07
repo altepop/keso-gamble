@@ -132,3 +132,14 @@ test('concealed kan, red dora and additional indicators are retained without ura
 test('independent shanten reference corpus agrees on 64 synthetic sanma hands',()=>{
  for(const c of reference.cases)assert.equal(sanmaShanten(c.hand),c.expected,JSON.stringify(c.hand));
 });
+
+test('north extraction immediately after a pon is illegal and cannot produce a review',()=>{
+ const f=setup();
+ // Seat 1 has the north in its starting hand; exchange one tile from seat 2
+ // without changing the physical deck, then call before any north draw.
+ const i=f.data.tiles2.indexOf('4z');
+ if(i>=0)[f.data.tiles1[12],f.data.tiles2[i]]=[f.data.tiles2[i],f.data.tiles1[12]];
+ else{const north=f.remove('4z');f.pool.push(f.data.tiles1[12]);f.data.tiles1[12]=north;}
+ f.actions.push(discard(0,'1m'),{name:'RecordChiPengGang',data:{seat:1,type:1,tiles:['1m','1m','1m'],froms:[0,1,1]}},{name:'RecordBaBei',data:{seat:1}},draw(1,f.pool.pop()!),discard(1,'4z'));
+ assert.deepEqual(reviewDecisions(f.actions,f.summary()),[]);
+});

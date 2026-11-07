@@ -27,7 +27,7 @@ export function reviewDecisions(actions:PaipuAction[],summary:PaipuSummary,cap=2
  const tiles=(v:unknown):string[]|null=>Array.isArray(v)&&v.every(t=>parse(t)!==null)?v.map(t=>parse(t)!):null;
  let round=-1,blocked=true,dealer=0,wind=0,honba=0,sticks=0,interrupted=false;
  let hands:string[][]=[],rivers:string[][]=[],melds:ReviewMeld[][]=[],north:number[]=[],riichi:boolean[]=[],doubleRiichi:boolean[]=[],doras:string[]=[],scores:number[]=[],visible:number[]=[],seen:number[]=[],redSeen=new Set<string>();
- let pending:{seat:number;draw:string|null}|null=null,last:{seat:number;tile:string}|null=null,nextSeat=0,replacement:number|null=null;
+ let pending:{seat:number;draw:string|null;afterCall?:boolean}|null=null,last:{seat:number;tile:string}|null=null,nextSeat=0,replacement:number|null=null;
  const out:ReviewDecision[]=[];
  const observe=(t:string)=>{const k=tileKind(t);if(++seen[k]>4)throw Error('copies');if(t.endsWith('r')){if(redSeen.has(t))throw Error('red');redSeen.add(t);}};
  const reveal=(t:string)=>{if(++visible[tileKind(t)]>4)throw Error('visible');};
@@ -83,7 +83,7 @@ export function reviewDecisions(actions:PaipuAction[],summary:PaipuSummary,cap=2
     last={seat:d.seat,tile:t};nextSeat=(d.seat+1)%n;pending=null;continue;
    }
    if(name==='RecordBaBei'){
-    if(n!==3||!seat(d?.seat)||pending?.seat!==d.seat||!hands[d.seat].includes('N')||(riichi[d.seat]&&pending?.draw!=='N'))throw Error('north');
+    if(n!==3||!seat(d?.seat)||pending?.seat!==d.seat||pending?.afterCall||!hands[d.seat].includes('N')||(riichi[d.seat]&&pending?.draw!=='N'))throw Error('north');
     updateDoras(d);remove(d.seat,'N');reveal('N');north[d.seat]++;replacement=d.seat;pending=null;last=null;interrupted=true;continue;
    }
    if(name==='RecordChiPengGang'){
@@ -96,11 +96,11 @@ export function reviewDecisions(actions:PaipuAction[],summary:PaipuSummary,cap=2
     acceptReach(d.liqi);
     ts.forEach((t,i)=>{if(i!==called[0]){remove(d.seat,t);reveal(t);}});
     melds[d.seat].push({kind:chi?'chi':d.type===1?'pon':'kan',tiles:ts,from:last.seat});
-    if(d.type===2){replacement=d.seat;pending=null;}else pending={seat:d.seat,draw:null};
+    if(d.type===2){replacement=d.seat;pending=null;}else pending={seat:d.seat,draw:null,afterCall:true};
     last=null;interrupted=true;continue;
    }
    if(name==='RecordAnGangAddGang'){
-    if(!seat(d?.seat)||pending?.seat!==d.seat||riichi[d.seat])throw Error('kan');
+    if(!seat(d?.seat)||pending?.seat!==d.seat||pending?.afterCall||riichi[d.seat])throw Error('kan');
     const t=parse(d.tiles);if(!t||![2,3].includes(d.type))throw Error('kan type');const k=tileKind(t);
     const owned=hands[d.seat].filter(x=>tileKind(x)===k);
     if(d.type===3){
