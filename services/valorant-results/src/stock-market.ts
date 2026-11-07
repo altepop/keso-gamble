@@ -310,7 +310,7 @@ export async function queueStockPosts(env:KpEnv&{KP_EARNINGS_WEBHOOK_URL?:string
   if(dailyCount>=8)return;
   const body=JSON.stringify({content:`📈 **${s.name} ${change>0?'急騰':'急落'}**\n${market.prices[s.id].toLocaleString('ja-JP')} KP（${change>0?'+':''}${change.toFixed(1)}%）\nKESO PLAYの「株」で確認できます。`,allowed_mentions:{parse:[]}});
   const inserted=await env.DB.batch([
-   env.DB.prepare('INSERT OR IGNORE INTO stock_announcements VALUES(?,?,?,?)'.bind(market.guild,s.id,slot,now),
+   env.DB.prepare('INSERT OR IGNORE INTO stock_announcements VALUES(?,?,?,?)').bind(market.guild,s.id,slot,now),
    env.DB.prepare("INSERT OR IGNORE INTO kp_posts(id,body,at) SELECT ?,?,? WHERE EXISTS(SELECT 1 FROM stock_announcements WHERE guild=? AND symbol=? AND slot=?)").bind('stock:'+market.guild+':'+s.id+':'+slot,body,now,market.guild,s.id,slot),
   ]);
   // Only newly inserted bulletins consume the daily count; duplicates never do.
