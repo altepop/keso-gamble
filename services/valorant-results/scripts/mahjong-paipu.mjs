@@ -114,7 +114,7 @@ export function decodeRecords(root,bytes){
  return raw.map(b=>{const w=Wrapper.decode(b),name=w.name.replace(/^\.lq\./,''),T=root.lookupType('lq.'+name);return {name,data:T.toObject(T.decode(w.data),{longs:Number,defaults:true})};});
 }
 
-export async function fetchSummary(session,uuid,reviewer=null){
+export async function fetchDecodedRecord(session,uuid){
  const record=await session.call('fetchGameRecord',{game_uuid:uuid,client_version_string:session.versionString});
  let data=record.data;
  if(!data?.length){
@@ -123,7 +123,12 @@ export async function fetchSummary(session,uuid,reviewer=null){
   data=Buffer.from(await r.arrayBuffer());
  }
  const actions=decodeRecords(session.root,data);
- const summary=summarizePaipu(record.head,actions);
+ return {head:record.head,actions};
+}
+
+export async function fetchSummary(session,uuid,reviewer=null){
+ const {head,actions}=await fetchDecodedRecord(session,uuid);
+ const summary=summarizePaipu(head,actions);
  if(reviewer){
   try{
    const review=await reviewer.review(summary,actions);

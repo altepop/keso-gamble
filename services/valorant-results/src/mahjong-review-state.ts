@@ -19,9 +19,11 @@ export const tileKind=(tile:string):number=>{
 export const sanmaKind=(kind:number)=>kind>=0&&kind<34&&!(kind>=1&&kind<=7);
 export const kindTile=(kind:number)=>kind>=27?['E','S','W','N','P','F','C'][kind-27]:String(kind%9+1)+'mps'[Math.floor(kind/9)];
 const integer=(v:unknown,a:number,b:number)=>Number.isSafeInteger(v)&&Number(v)>=a&&Number(v)<=b;
+export interface ReviewDiagnostics {acceptedRounds:number;blocked:Record<string,number>}
 /** Decode known standard Mahjong Soul rules only; variant rounds fail closed. */
-export function reviewDecisions(actions:PaipuAction[],summary:PaipuSummary,cap=256):ReviewDecision[]{
+export function reviewDecisions(actions:PaipuAction[],summary:PaipuSummary,cap=256,diagnostics?:ReviewDiagnostics):ReviewDecision[]{
  if(![3,4].includes(summary.players)||!new RegExp('^'+summary.players+'-(tonpu|hanchan)$').test(summary.game)||!Array.isArray(actions)||actions.length>10000||!integer(cap,1,512))return [];
+ const reject=(reason:string)=>{if(diagnostics)diagnostics.blocked[reason]=(diagnostics.blocked[reason]??0)+1;};
  const n=summary.players as 3|4,seat=(v:unknown):v is number=>integer(v,0,n-1);
  const parse=(v:unknown)=>{const t=toC3Tile(v);return t&&(n===4||sanmaKind(tileKind(t)))?t:null;};
  const tiles=(v:unknown):string[]|null=>Array.isArray(v)&&v.every(t=>parse(t)!==null)?v.map(t=>parse(t)!):null;
@@ -48,18 +50,18 @@ export function reviewDecisions(actions:PaipuAction[],summary:PaipuSummary,cap=2
   if(name==='RecordNewRound'){
    round++;blocked=true;pending=null;last=null;replacement=null;
    try{
-    if(!d||!integer(d.chang,0,3)||!seat(d.ju)||!integer(d.ben,0,100)||!integer(d.liqibang,0,100)||!Array.isArray(d.scores)||d.scores.length!==n||!d.scores.every((s:unknown)=>integer(s,-100000,1000000)))continue;
-    if((Array.isArray(d.opens)&&d.opens.length)||d.muyu||d.yongchang||d.field_spell)continue;
-    if(summary.rounds[round]?.label!==['東','南','西','北'][d.chang]+(d.ju+1)+'局'+(d.ben?' '+d.ben+'本場':''))continue;
+    if(!d||!integer(d.chang,0,3)||!seat(d.ju)||!integer(d.ben,0,100)||!integer(d.liqibang,0,100)||!Array.isArray(d.scores)||d.scores.length!==n||!d.scores.every((s:unknown)=>integer(s,-100000,1000000))){reject('round_metadata');continue;}
+    if((Array.isArray(d.opens)&&d.opens.length)||d.muyu||d.yongchang||d.field_spell){reject('unsupported_variant');continue;}
+    if(summary.rounds[round]?.label!==['東','南','西','北'][d.chang]+(d.ju+1)+'局'+(d.ben?' '+d.ben+'本場':'')){reject('round_summary_mismatch');continue;}
     dealer=d.ju;wind=d.chang;honba=d.ben;sticks=d.liqibang;scores=d.scores.slice();
     hands=Array.from({length:n},(_,s)=>tiles(d['tiles'+s])??[]);
-    if(hands.some((h,s)=>h.length!==(s===dealer?14:13)))continue;
+    if(hands.some((h,s)=>h.length!==(s===dealer?14:13))){reject('initial_hands');continue;}
     seen=Array(34).fill(0);visible=Array(34).fill(0);redSeen=new Set();hands.flat().forEach(observe);
     doras=[];updateDoras({doras:d.doras?.length?d.doras:[d.dora]});
-    if(!doras.length)continue;
+    if(!doras.length){reject('dora_missing');continue;}
     rivers=Array.from({length:n},()=>[]);melds=Array.from({length:n},()=>[]);north=Array(n).fill(0);riichi=Array(n).fill(false);doubleRiichi=Array(n).fill(false);
-    pending={seat:dealer,draw:null};nextSeat=dealer;interrupted=false;blocked=false;
-   }catch{blocked=true;}
+    pending={seat:dealer,draw:null};nextSeat=dealer;interrupted=false;blocked=false;if(diagnostics)diagnostics.acceptedRounds++;
+   }catch{blocked=true;reject('invalid_initial_tiles');}
    continue;
   }
   if(blocked)continue;
@@ -112,8 +114,8 @@ export function reviewDecisions(actions:PaipuAction[],summary:PaipuSummary,cap=2
     updateDoras(d);pending=null;replacement=d.seat;last=null;interrupted=true;continue;
    }
    // No allowlist for unknown game-changing records.
-   blocked=true;
-  }catch{blocked=true;pending=null;}
+   blocked=true;reject('unknown_record');
+  }catch(error){blocked=true;pending=null;const code=error instanceof Error?error.message:'';reject(['draw order','draw','discard order','discard','locked reach hand','north','call','meld','called tile','meld shape','kan','kan type','ankan','kakan','dora history','reach data','failed reach','copies','red','visible','missing tile'].includes(code)?code.replaceAll(' ','_'):'invalid_state');}
  }
  return out;
 }
