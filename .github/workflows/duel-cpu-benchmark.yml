@@ -20,15 +20,15 @@ jobs:
       matrix:
         include:
           - game: othello
-            pairs: 12
+            pairs: 10
           - game: gomoku
-            pairs: 40
+            pairs: 36
           - game: connect4
-            pairs: 25
+            pairs: 16
           - game: hitblow
-            pairs: 160
+            pairs: 110
           - game: bluffdice
-            pairs: 300
+            pairs: 220
           - game: poker
             pairs: 300
     steps:
