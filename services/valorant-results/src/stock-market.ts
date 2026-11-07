@@ -14,6 +14,11 @@ export const STOCK_INTERVAL=5*60_000,STOCK_HOLD=86400000,DIVIDEND_CAP=500;
 export interface Market {guild:string;version:number;prices:Record<string,number>;history:Record<string,number[]>;at:number;startedAt:number;token:string}
 export interface StockBenefits {eligibleValue:number;percent:number;heldHours:number}
 interface RawMarket {guild:string;version:number;prices:string;history:string;at:number;started_at:number;token:string}
+// D1 Insights 2026-11-07: alert lookups repeatedly scanned historic rows
+// (about 70k + 29k Rows read / 24h). These covering indexes preserve the
+// exact MAX(at) cooldown and UTC-day COUNT semantics without a query rewrite.
+export const STOCK_ANNOUNCEMENT_LAST_INDEX_SQL='CREATE INDEX IF NOT EXISTS stock_announcements_latest ON stock_announcements(guild,symbol,at DESC)';
+export const STOCK_ANNOUNCEMENT_DAY_INDEX_SQL='CREATE INDEX IF NOT EXISTS stock_announcements_day ON stock_announcements(guild,at)';
 const ready=new WeakSet<object>();
 // A stock listed after the market started trades from its listing price; the next tick saves it.
 const parse=(r:RawMarket):Market=>{
@@ -64,6 +69,8 @@ export async function ensureStocks(env:KpEnv){
  `CREATE INDEX IF NOT EXISTS stock_news_recent_public ON stock_news(guild,at DESC,id DESC) WHERE applied_version IS NOT NULL AND applied_bps!=0`,
  `CREATE TABLE IF NOT EXISTS stock_ticks(guild TEXT NOT NULL,version INTEGER NOT NULL,prices TEXT NOT NULL,at INTEGER NOT NULL,PRIMARY KEY(guild,version))`,
  `CREATE TABLE IF NOT EXISTS stock_announcements(guild TEXT NOT NULL,symbol TEXT NOT NULL,slot INTEGER NOT NULL,at INTEGER NOT NULL,PRIMARY KEY(guild,symbol,slot))`,
+ STOCK_ANNOUNCEMENT_LAST_INDEX_SQL,
+ STOCK_ANNOUNCEMENT_DAY_INDEX_SQL,
  `CREATE TABLE IF NOT EXISTS kp_posts(id TEXT PRIMARY KEY,body TEXT NOT NULL,at INTEGER NOT NULL,sent INTEGER NOT NULL DEFAULT 0)`,
  // One migration row changes holdings and returns only the conversion remainder, atomically.
  `CREATE TRIGGER IF NOT EXISTS stock_account_apply AFTER INSERT ON stock_accounts BEGIN
