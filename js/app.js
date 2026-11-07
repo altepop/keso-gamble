@@ -706,6 +706,20 @@ addEventListener('click',async e=>{
   if(t.dataset.duelSelect){duelActiveId=t.dataset.duelSelect;duelResignConfirm=false;duelPokerPicks=[];duelGuessDraft='';duelRiskConfirm=null;duelGomokuPreview=null;render();return;}
   if(t.dataset.duelCard!==undefined){const i=Number(t.dataset.duelCard);if(!Number.isInteger(i)||i<0||i>4)return;if(duelPokerPicks.includes(i))duelPokerPicks=duelPokerPicks.filter(x=>x!==i);else if(duelPokerPicks.length<3)duelPokerPicks=[...duelPokerPicks,i];else{toast('交換できるのは3枚までだ');return;}render();return;}
   if(t.dataset.duelRefresh){await refreshDuel(true);return;}
+   if(t.dataset.duelRetry){
+    if(!live||duelBusy||!duelPendingAction){toast('確認する前回の操作がありません。');return;}
+    duelBusy=true;duelError='';render();
+    try{
+     const recovered=await wallet.duelAction({...duelPendingAction.args,id:duelPendingAction.id});
+     duelPendingAction=null;saveDuelPending();
+     duelActiveId=recovered.match.id;duelResignConfirm=false;duelPokerPicks=[];duelGomokuPreview=null;
+     try{const [next,info]=await Promise.all([wallet.state(),wallet.duels()]);observeDuelChanges(info);state=next;duelData=info;duelLastGoodFetch=Date.now();}
+     catch{duelError='操作IDは確認できましたが、最新のKP・盤面取得に失敗しました。「更新」を押してください。';}
+     toast('前回の操作IDで通信結果を確認しました。');
+    }catch(error){duelError='前回と同じ操作IDで確認しましたが、結果を確定できませんでした。別の操作は送らず通信状況を確認してください。 '+(error.message??'');}
+    finally{duelBusy=false;render();}
+    return;
+   }
   if(t.dataset.duelCancelCell!==undefined){duelGomokuPreview=null;render();return;}
   if(t.dataset.duelCell!==undefined||t.dataset.duelConfirmCell!==undefined){
    const chosen=duelData?.matches?.find(r=>r.id===duelActiveId)||duelData?.matches?.find(r=>r.status==='active'||r.status==='pending')||duelData?.matches?.[0];
@@ -737,17 +751,20 @@ addEventListener('click',async e=>{
      mini==='challenge'?{choice:'challenge'}:mini==='poker'?{cells:[...duelPokerPicks]} :{cell:Number(t.dataset.duelConfirmCell??t.dataset.duelCell)};
    const args=action==='create'?{action,game:duelGame,opponent:duelTarget,stake:duelStake}:
     {action,duel:match?.id,version:match?.version,...move};
-   if(!duelPendingAction||JSON.stringify(duelPendingAction.args)!==JSON.stringify(args))duelPendingAction={id:crypto.randomUUID(),args};
+   if(duelPendingAction&&JSON.stringify(duelPendingAction.args)!==JSON.stringify(args)){
+     duelError='前回の操作結果が未確認のため、新しい操作を送れません。「前回の操作を確認」を押してください。';render();return;
+    }
+    if(!duelPendingAction){duelPendingAction={id:crypto.randomUUID(),args,owner:state.selfUserId,at:Date.now()};saveDuelPending();}
    duelBusy=true;duelError='';render();
    try{
     const result=await wallet.duelAction({...duelPendingAction.args,id:duelPendingAction.id});
-    duelPendingAction=null;duelActiveId=result.match.id;duelResignConfirm=false;duelPokerPicks=[];duelGomokuPreview=null;duelOpponentPickerOpen=false;if(action==='move')duelGuessDraft='';
+    duelPendingAction=null;saveDuelPending();duelActiveId=result.match.id;duelResignConfirm=false;duelPokerPicks=[];duelGomokuPreview=null;duelOpponentPickerOpen=false;if(action==='move')duelGuessDraft='';
     try{const [next,info]=await Promise.all([wallet.state(),wallet.duels()]);observeDuelChanges(info);state=next;duelData=info;}
     catch{duelError='対戦操作は確定したが、最新の盤面または口座の取得に失敗した。更新を押してください。';}
     toast(action==='create'?'挑戦状を送った！':action==='accept'?'決闘開始！':'盤面を更新した');
    }catch(error){
     duelError='通信結果または操作内容を確認できません。更新してから、必要に応じて同じ操作を再試行してください。 '+(error.message??'');duelGomokuPreview=null;
-    try{duelData=await wallet.duels();}catch{}
+    try{const latest=await wallet.duels();observeDuelChanges(latest);duelData=latest;duelLastGoodFetch=Date.now();}catch{}
    }finally{duelBusy=false;render();}
    return;
   }
