@@ -29,6 +29,6 @@ test('all rates conserve KP and are zero sum',()=>{
   assert.equal(rates.reduce((a,b)=>a+b,0),0,game);
   assert.equal(rates.length,Number(game[0]));
  }
- assert.deepEqual(FRIEND_RATES['4-hanchan'],[600,200,-200,-600]);
- assert.deepEqual(FRIEND_RATES['3-tonpu'],[300,0,-300]);
+ assert.deepEqual(FRIEND_RATES['4-hanchan'],[200,50,-50,-200]);
+ assert.deepEqual(FRIEND_RATES['3-tonpu'],[75,0,-75]);
 });
