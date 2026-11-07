@@ -8,7 +8,7 @@ import {head,sample} from './fixtures/mahjong-paipu.ts';
 const summary=summarizePaipu(head,sample);
 const different={seat:0,round:0,turn:4,actual:'6p',recommended:'3p'};
 const agree={seat:1,round:2,turn:9,actual:'E',recommended:'E'};
-const secondDifference={...agree,recommended:'9s'};
+const secondDifference={...agree,turn:8,recommended:'9s'};
 const review={version:1,source:'c3',model:C3_MODEL,uuid:summary.uuid,findings:[different,agree]};
 const members=new Map([[0,{name:'けそ'}],[1,{name:'小林'}]]);
 
