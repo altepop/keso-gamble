@@ -139,11 +139,27 @@ export function paipuPost(summary:PaipuSummary,members:Map<number,Member>,levelO
  // One intact, source-checked quotation, matched to how the members finished.
  const ranks=[...members.keys()].map(seatNo=>summary.seats[seatNo].rank),pool=MEME_POOLS[ranks.includes(summary.players)?'last':ranks.includes(1)?'top':'middle'];
  const meme=memes.quotes.find(q=>q.id===pool[hash('paipu-meme:'+summary.uuid)%pool.length])?.text;
- const c3=equalC3Comments(summary,summary.c3,members);
- const parts=[`🀄 **雀魂 ${label}｜牌譜検討**`,...section('順位',standings),...section('KP',outcomes.map(l=>l.startsWith('🔎')?l:untag(l))),...section('松本等しいのひと言',c3),...section('主な和了',hands),...section('メンバー',blocks.flatMap((b,i)=>i?['',b]:[b])),...meme?['',`💬 ${meme}`]:[]];
- let text='';
- for(const part of parts){if((text+'\n'+part).length>1900)break;text+=(text?'\n':'')+part;}
- return text;
+ // Render the existing paipu post first, exactly as it was before adding reviews.
+ // An optional review must never consume the character budget of existing outcomes,
+ // hand highlights, member-specific roasts, or the final sourced quote.
+ const parts=[`🀄 **雀魂 ${label}｜牌譜検討**`,...section('順位',standings),...section('KP',outcomes.map(l=>l.startsWith('🔎')?l:untag(l))),...section('主な和了',hands),...section('メンバー',blocks.flatMap((b,i)=>i?['',b]:[b])),...meme?['',`💬 ${meme}`]:[]];
+ const full=parts.join('\n');
+ const clipped=(lines:string[])=>{
+  let text='';
+  for(const part of lines){if((text+'\n'+part).length>1900)break;text+=(text?'\n':'')+part;}
+  return text;
+ };
+ const baseline=clipped(parts);
+ const comments=equalC3Comments(summary,summary.c3,members);
+ // If the existing post is already at capacity, leave it byte-for-byte unchanged.
+ // Append the optional section only when every original section will still fit.
+ if(!comments.length||full.length>1900)return baseline;
+ for(let count=comments.length;count>0;count--){
+  const extra=section('松本等しいのひと言',comments.slice(0,count));
+  const candidate=[...parts.slice(0,-(meme?2:0)||undefined),...extra,...(meme?parts.slice(-2):[])].join('\n');
+  if(candidate.length<=1900)return candidate;
+ }
+ return baseline;
 }
 /** Applies one fetched summary: stores it, settles /paifu claims, queues the post. `players` are the
  * registered accounts of the result watcher, roasted by name until they are linked to Discord. */
