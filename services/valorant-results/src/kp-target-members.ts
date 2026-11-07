@@ -1,5 +1,5 @@
 import type {KpEnv,KpMapping} from './kp.ts';
-import {isKpParticipant} from './quiz-kp.ts';
+import {ensureQuizKp,isKpParticipant} from './quiz-kp.ts';
 import {memberNames} from './member-names.ts';
 import configuredPlayers from '../players.json' with {type:'json'};
 
@@ -21,6 +21,7 @@ const monitoredNames=(mapping:KpMapping)=>new Map(mapping.accounts.map(a=>{
  * One bounded indexed roster query, not a per-candidate lookup. Full-ID aliases from
  * the existing encrypted name config apply to participants who do not play VALORANT. */
 export async function kpTargetMembers(env:KpEnv,mapping:KpMapping):Promise<KpTargetMember[]>{
+ await ensureQuizKp(env);
  const monitored=monitoredNames(mapping);
  const known=(await env.DB.prepare(`SELECT p.user
  FROM kp_participants p
