@@ -321,7 +321,10 @@ export async function flushNotifications(env: Env, players: Player[]): Promise<v
   // Some Death-mode notices remain unsent until explicitly claimed. The old
   // sent=0 probe stayed positive forever, forcing Discord cooldown/monitor_state
   // checks on every Cron even though there was nothing deliverable.
-  // Use the exact indexed, claim-aware candidate list once, and short-circuit.
+  // Preserve the single indexed probe on quiet minutes. Only if some
+  // unsent row exists do the two claim-aware queries need to run.
+  const hasPending = await env.DB.prepare('SELECT 1 AS n FROM notifications WHERE sent=0 LIMIT 1').first();
+  if (!hasPending) return;
   const pending = await pendingNotificationMatches(env.DB,10);
   if (!pending.length) return;
   const discordAfter = await state(env, 'discord_after');
