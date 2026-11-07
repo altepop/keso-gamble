@@ -31,7 +31,7 @@ test('Discord success acknowledges only recipients actually included in the post
  const delivered=sql.prepare(eligible).all('same-match') as Array<{riot_id:string}>;
  assert.deepEqual(delivered.map(r=>r.riot_id),['regular']);
  assert.equal(await markDeliveredNotices(db,'same-match',delivered),1);
- assert.deepEqual(sql.prepare('SELECT riot_id,sent FROM notifications ORDER BY riot_id').all(),
+ assert.deepEqual((sql.prepare('SELECT riot_id,sent FROM notifications ORDER BY riot_id').all() as Array<{riot_id:string;sent:number}>).map(({riot_id,sent})=>({riot_id,sent})),
   [{riot_id:'death',sent:0},{riot_id:'other',sent:0},{riot_id:'regular',sent:1}]);
  // A later claim may unlock the held Death-mode notice. It must still be pending.
  sql.prepare('INSERT INTO death_unrated_sessions VALUES(?,?,NULL)').run('death','same-match');
