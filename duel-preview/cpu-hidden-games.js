@@ -24,27 +24,65 @@ const spaced=(arr,limit)=>{
  for(let i=0;i<limit;i++)result.push(arr[Math.floor((i+.5)*arr.length/limit)]);
  return result;
 };
+// Bulls & Cows: expected remaining candidate count + expected finishing turns.
+// Distinct 4-digit codes include leading zeros; a player's past guesses only reveal
+// feedback about that player's opponent's secret, never about their own secret.
+const feedbackCode=(a,b)=>numericFeedback(a,b);
+function candidatePool(possible,random,max){
+ if(possible.length<=max)return possible;
+ const candidates=new Set(spaced(possible,Math.floor(max*.65)));
+ // Random sampling is unbiased by decimal / lexicographic neighborhood.
+ while(candidates.size<max)candidates.add(pick(possible,random));
+ return [...candidates];
+}
 export function cpuHitBlow(board,side,level,random){
  const history=JSON.parse(board).history??[];
  const mine=history.filter(h=>h.by===side);
- // Players guess DIFFERENT secret codes; an opponent's guess is never used by this CPU.
  const used=new Set(mine.map(h=>h.guess));
- const possible=codes.filter(code=>mine.every(h=>numericFeedback(h.guess,code)===h.hit*5+h.blow));
+ const possible=codes.filter(code=>mine.every(h=>feedbackCode(h.guess,code)===h.hit*5+h.blow));
  const remaining=possible.filter(code=>!used.has(code));
  if(!remaining.length)throw Error('数字の候補がありません。');
+ if(remaining.length===1)return {guess:remaining[0]};
  if(level==='easy')return {guess:pick(remaining,random)};
- const sampleAnswers=spaced(remaining,level==='strong'?480:100);
- const candidates=spaced(remaining,level==='strong'?64:15);
- let choice=candidates[0],best=Infinity;
+ if(level==='normal'){
+  // Intermediate strategy: sample candidate answers but never use non-answer probes.
+  const candidates=candidatePool(remaining,random,12); // overridden below
+  const answers=spaced(remaining,Math.min(130,remaining.length));
+  let best=candidates[0],score=Infinity;
+  for(const guess of candidates){
+   const counts=new Uint16Array(25);
+   for(const answer of answers)counts[feedbackCode(guess,answer)]++;
+   const cost=counts.reduce((acc,n)=>acc+n*n,0);
+   if(cost<score){score=cost;best=guess;}
+  }
+  return {guess:best};
+ }
+ // First move is an information-rich and predictable anchor. It makes the
+ // benchmark and mobile UI deterministic without disclosing any secret.
+ if(mine.length===0&&!used.has('0123'))return {guess:'0123'};
+ const answers=spaced(remaining,Math.min(1100,remaining.length));
+ const candidates=candidatePool(remaining,random,Math.min(85,remaining.length));
+ // Non-solution probes can be optimal when they split the remaining answers
+ // better than any candidate. They are considered only when enough uncertainty
+ // remains to recoup the extra turn.
+ if(remaining.length>5){
+  for(const guess of spaced(codes,60))if(!used.has(guess)&&!candidates.includes(guess))candidates.push(guess);
+ }
+ let best=candidates[0],score=Infinity;
  for(const guess of candidates){
   const partitions=new Uint16Array(25);
-  for(const answer of sampleAnswers)partitions[numericFeedback(guess,answer)]++;
-  // Minimize expected remaining candidates; ties prefer a candidate that can win now.
-  let expected=0;
-  for(const size of partitions)expected+=size*size;
-  if(expected<best){best=expected;choice=guess;}
+  for(const answer of answers)partitions[feedbackCode(guess,answer)]++;
+  // Expected candidates after next response (lower is better).
+  // Questions that can win immediately are preferable to probes at equal
+  // expected information gain, especially near the end of a game.
+  let cost=0;
+  for(let n=0;n<25;n++)if(n!==20)cost+=partitions[n]*partitions[n];
+  cost/=answers.length;
+  if(remaining.includes(guess))cost-=Math.min(1,answers.length/Math.max(1,remaining.length));
+  else cost+=remaining.length<=20?1.6:.28;
+  if(cost<score){score=cost;best=guess;}
  }
- return {guess:choice};
+ return {guess:best};
 }
 const combinations=[1,5,10,10,5,1];
 const tail=needed=>{
