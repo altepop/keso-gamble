@@ -6,7 +6,7 @@ import {creditVerifiedRelicBonus} from './relics.ts';
 // The relic screen orders each member's Steam receipts by rarity and recency.
 // The historic guild/user/at index could not serve this ORDER BY, forcing
 // every relic-screen open to read and sort all prior receipts (101k rows/24h).
-export const STEAM_RELIC_ORDER_INDEX_SQL='CREATE INDEX IF NOT EXISTS kp_steam_relic_list_order ON kp_steam_events(guild,user,('+"CASE WHEN percent<=10 THEN 0 WHEN percent<=25 THEN 1 ELSE 2 END"+'),at DESC)';
+export const STEAM_RELIC_ORDER_INDEX_SQL='CREATE INDEX IF NOT EXISTS kp_steam_relic_list_order ON kp_steam_events(guild,user,(CASE WHEN percent<=10 THEN 0 WHEN percent<=25 THEN 1 ELSE 2 END),at DESC)';
 export const STEAM_MIN_PLAYTIME_MINUTES=120;
 export interface SteamConfig {version:string;dailyCap:number;minPlaytimeMinutes:number;paidGamesOnly:boolean;enabled:boolean;startsAt:number|null;tiers:Array<{maxPercent:number;amount:number}>}
 export type SteamEnv=KpEnv & {STEAM_WEB_API_KEY?:string;KP_STEAM_CONFIG?:string};
