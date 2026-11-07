@@ -72,7 +72,7 @@ function seeded(seed){
  await page.route('**/duel-preview/demo.js*',async route=>{
   const response=await route.fetch();
   const original=await response.text();
-  const hook=\`
+  const hook=`
 window.__duelPassTest={
  simulate(board){
   restart('othello');match.board=board;match.turn_user=USERS.b;
@@ -81,8 +81,8 @@ window.__duelPassTest={
  },
  snapshot(){return {version:match?.version,status:match?.status,turn:match?.turn_user,
   cpu:USERS.b,error:lastError,passNotice};}
-};\`;
-  await route.fulfill({response,body:original+'\\n'+hook});
+};`
+  await route.fulfill({response,body:original+'\n'+hook});
  });
  await page.goto(url.replace('cpu=0','cpu=1'),{waitUntil:'networkidle'});
  await page.waitForFunction(()=>!!window.__duelPassTest,{timeout:10000});
