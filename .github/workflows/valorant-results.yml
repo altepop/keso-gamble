@@ -186,6 +186,11 @@ jobs:
         env:
           KESO_SMOKE_WALLET_TOKEN: ${{ secrets.KESO_SMOKE_WALLET_TOKEN }}
         run: node scripts/post-deploy-smoke.mjs
+      - name: Check requested KP duel/luxury roster (read-only, no IDs printed)
+        continue-on-error: true
+        env:
+          KESO_SMOKE_WALLET_TOKEN: ${{ secrets.KESO_SMOKE_WALLET_TOKEN }}
+        run: node scripts/kp-target-roster-audit.mjs
       - name: Send optional deploy failure alert to Discord
         if: failure()
         env:
