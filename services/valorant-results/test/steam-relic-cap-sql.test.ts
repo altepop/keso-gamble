@@ -38,7 +38,7 @@ test('Steam relic daily cap uses indexed per-user ledger + exact Steam receipt P
  const plan=sql.prepare('EXPLAIN QUERY PLAN '+STEAM_RELIC_CAP_USED_SQL).all(...params)
   .map(x=>String(x.detail)).join(' | ');
  assert.match(plan,/SEARCH l USING INDEX kp_ledger_relic_metrics/);
- assert.match(plan,/SEARCH s USING (?:COVERING )?INDEX sqlite_autoindex_kp_steam_events_1/);
+ assert.match(plan,/SEARCH s (?:EXISTS )?USING (?:COVERING )?INDEX sqlite_autoindex_kp_steam_events_1/);
  assert.doesNotMatch(plan,/SCAN s/,'never scan all Steam achievements just to check a daily bonus');
  sql.close();
 });
