@@ -74,8 +74,9 @@ jobs:
         with:
           path: services/valorant-results/.cache/c3-model
           key: equal-review-c3-5b30a83de3ab9523
+      # Normal runs load lazily inside the isolated reviewer only for eligible four-player cases.
       - name: Load source-verified static model
-        if: steps.c3.outputs.enabled == 'true'
+        if: inputs.c3_probe == true
         env:
           C3_ASSETS_ROOT: ${{ github.workspace }}/services/valorant-results/.cache/c3-model
         run: node scripts/mahjong-c3-download.mjs
@@ -91,5 +92,6 @@ jobs:
           YOSTAR_TOKEN: ${{ secrets.YOSTAR_TOKEN }}
           YOSTAR_DEVICE_ID: ${{ secrets.YOSTAR_DEVICE_ID }}
           MAHJONG_EQUAL_REVIEW_ENABLED: ${{ steps.c3.outputs.enabled == 'true' && 'true' || 'false' }}
+          MAHJONG_SANMA_REVIEW_ENABLED: ${{ vars.MAHJONG_SANMA_REVIEW_ENABLED == 'true' && 'true' || 'false' }}
           C3_ASSETS_ROOT: ${{ github.workspace }}/services/valorant-results/.cache/c3-model
         run: node --experimental-strip-types scripts/mahjong-paipu.mjs ${{ steps.queue.outputs.count == 'check' && '--check' || '' }}

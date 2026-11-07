@@ -5,7 +5,7 @@ import {toC3Tile} from './mahjong-c3-extract.ts';
 
 type Event={type:string;[key:string]:unknown};
 export interface C3Case {
- seat:number;round:number;turn:number;actual:string;events:Event[];
+ seat:number;round:number;turn:number;actual:string;legal:string[];events:Event[];
 }
 const WINDS=['E','S'];
 const tile=(x:unknown)=>toC3Tile(x);
@@ -116,7 +116,7 @@ export function buildC3Cases(actions:PaipuAction[],summary:PaipuSummary,cap=48):
    if(!reach&&!(initialDealerDrawUnknown&&d.seat===current?.dealer)&&turns[d.seat]>=2&&turns[d.seat]<=18&&out.length<cap){
     // One or two good sample turns per seat per round, avoiding long polling.
     const candidatesForSeat=out.filter(x=>x.round===round&&x.seat===d.seat).length;
-    if(candidatesForSeat<2&&turns[d.seat]>=3)out.push({seat:d.seat,round,turn:turns[d.seat],actual,events:copyForSeat(events,d.seat)});
+    if(candidatesForSeat<2&&turns[d.seat]>=3)out.push({seat:d.seat,round,turn:turns[d.seat],actual,legal:[...new Set([...concealed[d.seat],actual])],events:copyForSeat(events,d.seat)});
    }
    events.push({type:'dahai',actor:d.seat,pai:actual,tsumogiri:Boolean(d.moqie)});
    pendingDraw=null;

@@ -124,10 +124,10 @@ export async function fetchSummary(session,uuid,reviewer=null){
  }
  const actions=decodeRecords(session.root,data);
  const summary=summarizePaipu(record.head,actions);
- if(reviewer&&summary.players===4){
+ if(reviewer){
   try{
    const review=await reviewer.review(summary,actions);
-   if(review)summary.c3=review;
+   if(review){if(summary.players===3)summary.review=review;else summary.c3=review;}
   }catch(error){
    // Read-only AI review must NEVER interrupt current paipu/KP settlement.
    console.log('equal_review: skipped; existing paipu settlement preserved');
@@ -147,17 +147,10 @@ export async function run(env=process.env,check=process.argv.includes('--check')
  if(!check&&!queue.length){console.log('paipu queue: 0');return;}
  const session=await login(env);
  console.log('login: ok');
- let reviewer=null;
- if(env.MAHJONG_EQUAL_REVIEW_ENABLED==='true'&&env.C3_ASSETS_ROOT){
-  try{
-   const {createC3Reviewer}=await import('./mahjong-c3-infer.mjs');
-   reviewer=await createC3Reviewer(env.C3_ASSETS_ROOT);
-   console.log('equal_review: model initialized');
-  }catch(error){
-   // Never log local paths, usernames, or downloaded game contents.
-   console.log('equal_review: unavailable (existing paipu flow preserved)');
-  }
- }
+ const {createPaipuReviewer}=await import('./mahjong-review.mjs');
+ const reviewer=createPaipuReviewer({root:env.C3_ASSETS_ROOT,
+  fourEnabled:env.MAHJONG_EQUAL_REVIEW_ENABLED==='true',
+  sanmaEnabled:env.MAHJONG_SANMA_REVIEW_ENABLED==='true'});
  const results=[];
  try{
   for(const uuid of queue.slice(0,10)){
@@ -166,6 +159,7 @@ export async function run(env=process.env,check=process.argv.includes('--check')
   }
  }finally{await reviewer?.close().catch(()=>{});session.close();}
  if(results.length){
+  console.log('equal_review: '+results.filter(r=>r.summary?.c3||r.summary?.review).length+' reports (no game identifiers)');
   const reply=await worker(env,'/api/mahjong/paipu/summaries',{results});
   console.log(`paipu: ${results.filter(r=>r.summary).length} ok, ${results.filter(r=>r.error).length} failed (${[...new Set(results.map(r=>r.error).filter(Boolean))].join(',')}); stored ${reply.stored??0}`);
  }

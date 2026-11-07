@@ -50,9 +50,8 @@ export async function createC3Reviewer(rootPath){
   const primary=await network.infer(observed.observation,observed.mask);
   // Only plain discard recommendations are comparable to one actual discard.
   // Reach, kan, call, win, draw, and abort are not silently reclassified.
-  const index=primary.action;
-  if(!Number.isInteger(index)||index<0||index>36)return null;
-  return indexTile(index);
+  return legalC3Discard(caseData,observed,primary);
+
  }
  return {
   version:m.version,
@@ -91,4 +90,12 @@ export async function createC3Reviewer(rootPath){
   },
   async close(){if(!disposed){disposed=true;await network.release();}},
  };
+}
+
+/** A model action is only commentary when both the encoder and replay allow it. */
+export function legalC3Discard(caseData,observed,primary){
+ const index=primary?.action;
+ if(!Number.isInteger(index)||index<0||index>36||!observed?.mask?.[index])return null;
+ const suggested=indexTile(index);
+ return caseData?.legal?.includes(suggested)?suggested:null;
 }
