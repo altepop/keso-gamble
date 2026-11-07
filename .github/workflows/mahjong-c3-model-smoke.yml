@@ -6,6 +6,7 @@ on:
     paths:
       - .github/workflows/mahjong-c3-model-smoke.yml
       - services/valorant-results/scripts/mahjong-c3-infer.mjs
+      - services/valorant-results/scripts/mahjong-c3-full-smoke.mjs
       - services/valorant-results/scripts/mahjong-c3-download.mjs
       - services/valorant-results/scripts/c3-vendor/**
   workflow_dispatch:
@@ -37,3 +38,5 @@ jobs:
         run: node scripts/mahjong-c3-download.mjs
       - name: ONNX runtime and observation WASM smoke
         run: node scripts/mahjong-c3-probe.mjs
+      - name: Synthetic complete paipu replay and actual C3 critique
+        run: node --experimental-strip-types scripts/mahjong-c3-full-smoke.mjs
