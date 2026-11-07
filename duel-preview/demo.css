@@ -20,3 +20,6 @@ body.cpu-practice .duel-arena{border-color:#4c8ea1}
 .duel-practice-entry a{display:inline-flex;align-items:center;justify-content:center;text-decoration:none;padding:10px 13px;border-radius:9px;min-height:45px;white-space:normal;text-align:center;font-weight:700}
 body.cpu-practice .duel-practice-entry{display:none}
 body.cpu-practice [data-duel-timer]{display:none}
+
+.demo-cpu-explain{margin:0;padding:11px 13px;border:1px solid #386c7d;border-radius:9px;background:#0b2937;color:#cbf5e7;font-size:12px;line-height:1.65}
+body:not(.cpu-practice) .demo-cpu-explain{display:none}
