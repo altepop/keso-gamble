@@ -111,32 +111,41 @@ export function cpuBluffDice(board,hand,side,level,random){
  }
  const history=(state.history??[]).filter(round=>round.bid?.by!==side&&round.bid&&Number.isFinite(round.actual));
  const lies=history.filter(round=>round.actual<round.bid.count).length;
- // Condition on past publicly revealed challenges. Bayesian shrinkage protects
- // against tiny samples, and never exposes current hidden dice.
+ // Challenge records are public, not the current opponent's private dice.
  const bluffRate=(lies+2)/(history.length+5);
  if(bid){
   const p=prob(bid.count,bid.face);
-  const threshold=level==='strong'?.40+Math.min(.12,Math.max(-.08,(bluffRate-.4)*.25)):.24;
+  // Calling succeeds when the declared quantity is not actually present.
+  // A 50% threshold maximizes immediate round win probability under an
+  // uninformative prior, then updates gently from revealed historical bluffs.
+  const threshold=level==='strong'?
+   .50+Math.max(-.06,Math.min(.08,(bluffRate-.4)*.2)):.24;
   if(p<threshold)return {choice:'challenge'};
  }
  const options=[];
  for(let count=1;count<=10;count++)for(let face=1;face<=6;face++){
   if(!validBluffBid(bid,count,face))continue;
-  const p=prob(count,face);
-  options.push({choice:'bid',count,face,p});
+  const ownCount=hand.filter(x=>x===face).length;
+  options.push({choice:'bid',count,face,p:prob(count,face),guaranteed:ownCount>=count,ownCount});
  }
  if(!options.length)return {choice:'challenge'};
- // Strong prioritizes credible declarations while mixing a few bluff moves
- // against opponents who challenge rarely; normal favors a larger random pool.
- const minimum=level==='strong'?.60:.36;
- const safe=options.filter(x=>x.p>=minimum);
- if(!safe.length)return bid?{choice:'challenge'}:options[0];
- safe.sort((a,b)=>a.count-b.count||a.face-b.face);
- if(level==='normal')return pick(safe.slice(0,Math.min(8,safe.length)),random);
- const narrow=safe.slice(0,Math.min(4,safe.length));
- if(bid&&bluffRate<.25&&random()<.12){
-  const bluff=options.filter(x=>x.count<=bid.count+1&&x.p>=.3).slice(0,4);
-  if(bluff.length)return pick(bluff,random);
+ if(level==='normal'){
+  const safe=options.filter(x=>x.p>=.36).sort((a,b)=>a.count-b.count||a.face-b.face);
+  return safe.length?pick(safe.slice(0,Math.min(8,safe.length)),random):bid?
+    {choice:'challenge'}:options[0];
  }
- return pick(narrow,random);
+ // A bid already fully covered by the CPU's own dice cannot be wrong.
+ // Opponents who see none of that face may challenge, gifting a round win.
+ // Prefer meaningful, truthful pressure over repeated minimum one-die bids.
+ const guaranteed=options.filter(x=>x.guaranteed);
+ if(guaranteed.length){
+  guaranteed.sort((a,b)=>b.count-a.count||b.ownCount-a.ownCount||b.face-a.face);
+  return guaranteed[0];
+ }
+ // When none of our bids is certain, do not chase enormous raises:
+ // require a high posterior success probability or call the last bid.
+ const safe=options.filter(x=>x.p>=.68);
+ if(!safe.length)return bid?{choice:'challenge'}:options[0];
+ safe.sort((a,b)=>b.count-a.count||b.p-a.p||b.face-a.face);
+ return safe[0];
 }
