@@ -140,7 +140,7 @@ export function paipuPost(summary:PaipuSummary,members:Map<number,Member>,levelO
  const ranks=[...members.keys()].map(seatNo=>summary.seats[seatNo].rank),pool=MEME_POOLS[ranks.includes(summary.players)?'last':ranks.includes(1)?'top':'middle'];
  const meme=memes.quotes.find(q=>q.id===pool[hash('paipu-meme:'+summary.uuid)%pool.length])?.text;
  const c3=equalC3Comments(summary,summary.c3,members);
- const parts=[`🀄 **雀魂 ${label}｜牌譜検討**`,...section('順位',standings),...section('KP',outcomes.map(l=>l.startsWith('🔎')?l:untag(l))),...section('松本等しいのc3検討',c3.length?[...c3,'-# c3との選択の違いだけでは失着とは断定できない。']:[]),...section('主な和了',hands),...section('メンバー',blocks.flatMap((b,i)=>i?['',b]:[b])),...meme?['',`💬 ${meme}`]:[]];
+ const parts=[`🀄 **雀魂 ${label}｜牌譜検討**`,...section('順位',standings),...section('KP',outcomes.map(l=>l.startsWith('🔎')?l:untag(l))),...section('松本等しいのひと言',c3),...section('主な和了',hands),...section('メンバー',blocks.flatMap((b,i)=>i?['',b]:[b])),...meme?['',`💬 ${meme}`]:[]];
  let text='';
  for(const part of parts){if((text+'\n'+part).length>1900)break;text+=(text?'\n':'')+part;}
  return text;
