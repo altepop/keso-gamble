@@ -1,8 +1,8 @@
 // Read-only CPU move selection. Every decision uses only public board state and the CPU's own
 // private hand; the opponent's secret digits, dice and cards are never passed here.
 // All moves are applied by the same pure game rules as live Discord duels.
-import {duelLegalMoves,playDuelMove,duelScore} from './duel-rules.js';
-import {connect4LegalMoves,connect4Move,hitBlowAnswer,pokerHandScore,validBluffBid} from './duel-mini-games.js';
+import {duelLegalMoves,playDuelMove,duelScore} from '../js/duel-rules.js';
+import {connect4LegalMoves,connect4Move,hitBlowAnswer,pokerHandScore,validBluffBid} from '../js/duel-mini-games.js';
 
 const other=s=>s==='B'?'W':'B';
 const miniOther=s=>s==='a'?'b':'a';
