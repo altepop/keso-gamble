@@ -46,7 +46,14 @@ let duelData=null,duelError='',duelActiveId=null,duelGame='othello',duelStake=10
 let duelPendingAction=null,duelPokerPicks=[],duelOpponentPickerOpen=false,duelLoading=false,duelGomokuPreview=null;
 let duelGuessDraft='',duelRiskConfirm=null,duelLastGoodFetch=0,duelRetryNotBefore=0,duelRefreshFailures=0;
 const DUEL_PENDING_KEY='keso-duel-action-v1',DUEL_HISTORY_KEY='keso-duel-moves-v1-';
-let duelHistoryOwner=null;
+let duelHistoryOwner=null,duelListOwner=null,duelHasMore=false;
+function mergeDuelPages(fresh){
+ const owner=state.selfUserId;
+ if(duelListOwner!==owner){duelData=null;duelListOwner=owner;duelHasMore=!!fresh.hasMore;}
+ const byId=new Map((duelData?.matches??[]).map(r=>[r.id,r]));
+ for(const match of fresh.matches??[])byId.set(match.id,match);
+ return {...fresh,matches:[...byId.values()].sort((a,b)=>b.updated_at-a.updated_at||b.id.localeCompare(a.id))};
+}
 function duelStorage(){try{return window.sessionStorage??null;}catch{return null;}}
 function saveDuelPending(){
  try{const store=duelStorage();if(store)duelPendingAction?store.setItem(DUEL_PENDING_KEY,JSON.stringify(duelPendingAction)):store.removeItem(DUEL_PENDING_KEY);}catch{}
@@ -400,7 +407,7 @@ function render(){
   const activeDuel=duelData?.matches?.find(r=>r.id===duelActiveId)||duelData?.matches?.find(r=>r.status==='active'||r.status==='pending')||duelData?.matches?.[0];
   const gomokuPreviewCell=duelGomokuPreview&&activeDuel&&duelGomokuPreview.id===activeDuel.id&&duelGomokuPreview.version===activeDuel.version&&activeDuel.turn_user===state.selfUserId?duelGomokuPreview.cell:null;
   let html = screen==='title'?titleView(state,wallet.remembered,autoState,autoMessage,wallet.connected):screen==='home'?homeView(state,bottomNav()):screen==='play'?playView(state,drafts,bottomNav(),steamView):screen==='directives'?directivesView(state,drafts,bottomNav(),tabsFor('directives')):screen==='stable'?screenStable():screen==='shop'?screenShop():screen==='relics'?screenRelics():screen==='market'?screenMarket():screen==='casino'?screenCasino():screen==='duels'?duelScreen({info:duelData,user:state.selfUserId,live,cash:state.cash,selectedId:duelActiveId,game:duelGame,stake:duelStake,target:duelTarget,busy:duelBusy,error:duelError,confirmResign:duelResignConfirm,pokerPicks:duelPokerPicks,fallbackMembers:state.members??[],opponentPickerOpen:duelOpponentPickerOpen,loading:duelLoading,gomokuPreviewCell,recentMoves:duelRecentMoves,localMoveHistory:duelMoveHistory,guessDraft:duelGuessDraft,
-lastSynced:duelLastGoodFetch,pendingRetry:!!duelPendingAction,
+lastSynced:duelLastGoodFetch,pendingRetry:!!duelPendingAction,historyHasMore:duelHasMore,
  riskConfirm:duelRiskConfirm===`create:${duelGame}:${duelTarget}:${duelStake}`?'create':activeDuel&&duelRiskConfirm===`accept:${activeDuel.id}:${activeDuel.version}:${activeDuel.stake}`?'accept':'',nav:bottomNav()}):screen==='mleague'?mleagueScreen({state,live,draft:{...mlDraft,amount:drafts['ml-amount']},tabs:subTabs(),nav:bottomNav()}):screen==='race'?screenRace():screenAssets();
   // 効果音 switch for the casino and racing screens (off unless the player turns it on).
   setBgmScene(screen==='casino'||screen==='race'?screen:'');
@@ -707,6 +714,20 @@ addEventListener('click',async e=>{
   if(t.dataset.duelSelect){duelActiveId=t.dataset.duelSelect;duelResignConfirm=false;duelPokerPicks=[];duelGuessDraft='';duelRiskConfirm=null;duelGomokuPreview=null;render();return;}
   if(t.dataset.duelCard!==undefined){const i=Number(t.dataset.duelCard);if(!Number.isInteger(i)||i<0||i>4)return;if(duelPokerPicks.includes(i))duelPokerPicks=duelPokerPicks.filter(x=>x!==i);else if(duelPokerPicks.length<3)duelPokerPicks=[...duelPokerPicks,i];else{toast('交換できるのは3枚までだ');return;}render();return;}
   if(t.dataset.duelRefresh){await refreshDuel(true);return;}
+   if(t.dataset.duelHistoryMore){
+    if(duelLoading||duelBusy||!live||document.hidden||!duelHasMore)return;
+    const list=duelData?.matches??[],last=list.at(-1);if(!last)return;
+    duelLoading=true;render();
+    try{
+     const page=await wallet.duels(last.updated_at+':'+last.id);
+     const byId=new Map(list.map(x=>[x.id,x]));
+     for(const row of page.matches??[])byId.set(row.id,row);
+     duelData={...duelData,matches:[...byId.values()].sort((a,b)=>b.updated_at-a.updated_at||b.id.localeCompare(a.id))};
+     duelHasMore=!!page.hasMore;duelError='';
+    }catch(error){duelError='過去の対戦を読み込めませんでした。 '+(error?.message??'');}
+    finally{duelLoading=false;render();}
+    return;
+   }
    if(t.dataset.duelRetry){
     if(!live||duelBusy||!duelPendingAction){toast('確認する前回の操作がありません。');return;}
     duelBusy=true;duelError='';render();
@@ -714,7 +735,7 @@ addEventListener('click',async e=>{
      const recovered=await wallet.duelAction({...duelPendingAction.args,id:duelPendingAction.id});
      duelPendingAction=null;saveDuelPending();
      duelActiveId=recovered.match.id;duelResignConfirm=false;duelPokerPicks=[];duelGomokuPreview=null;
-     try{const [next,info]=await Promise.all([wallet.state(),wallet.duels()]);observeDuelChanges(info);state=next;duelData=info;duelLastGoodFetch=Date.now();}
+     try{const [next,info]=await Promise.all([wallet.state(),wallet.duels()]);observeDuelChanges(info);state=next;duelData=mergeDuelPages(info);duelLastGoodFetch=Date.now();}
      catch{duelError='操作IDは確認できましたが、最新のKP・盤面取得に失敗しました。「更新」を押してください。';}
      toast('前回の操作IDで通信結果を確認しました。');
     }catch(error){duelError='前回と同じ操作IDで確認しましたが、結果を確定できませんでした。別の操作は送らず通信状況を確認してください。 '+(error.message??'');}
@@ -760,12 +781,12 @@ addEventListener('click',async e=>{
    try{
     const result=await wallet.duelAction({...duelPendingAction.args,id:duelPendingAction.id});
     duelPendingAction=null;saveDuelPending();duelActiveId=result.match.id;duelResignConfirm=false;duelPokerPicks=[];duelGomokuPreview=null;duelOpponentPickerOpen=false;if(action==='move')duelGuessDraft='';
-    try{const [next,info]=await Promise.all([wallet.state(),wallet.duels()]);observeDuelChanges(info);state=next;duelData=info;}
+    try{const [next,info]=await Promise.all([wallet.state(),wallet.duels()]);observeDuelChanges(info);state=next;duelData=mergeDuelPages(info);}
     catch{duelError='対戦操作は確定したが、最新の盤面または口座の取得に失敗した。更新を押してください。';}
     toast(action==='create'?'挑戦状を送った！':action==='accept'?'決闘開始！':'盤面を更新した');
    }catch(error){
     duelError='通信結果または操作内容を確認できません。更新してから、必要に応じて同じ操作を再試行してください。 '+(error.message??'');duelGomokuPreview=null;
-    try{const latest=await wallet.duels();observeDuelChanges(latest);duelData=latest;duelLastGoodFetch=Date.now();}catch{}
+    try{const latest=await wallet.duels();observeDuelChanges(latest);duelData=mergeDuelPages(latest);duelLastGoodFetch=Date.now();}catch{}
    }finally{duelBusy=false;render();}
    return;
   }
@@ -1259,7 +1280,7 @@ async function refreshDuel(force=false){
  try{
   const fresh=await wallet.duels();
   if(screen!=='duels'||!live)return;
-  observeDuelChanges(fresh);duelData=fresh;duelError='';duelLastGoodFetch=Date.now();duelRefreshFailures=0;duelRetryNotBefore=0;
+  observeDuelChanges(fresh);duelData=mergeDuelPages(fresh);duelError='';duelLastGoodFetch=Date.now();duelRefreshFailures=0;duelRetryNotBefore=0;
   if(!duelActiveId||!fresh.matches.some(r=>r.id===duelActiveId)){
    duelActiveId=fresh.matches.find(r=>r.status==='active'||r.status==='pending')?.id??fresh.matches[0]?.id??null;
   }
