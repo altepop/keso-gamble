@@ -25,3 +25,26 @@ test('gomoku five contiguous wins including diagonal, not only six',()=>{
  assert.equal(playDuelMove('gomoku',won.board,'B',5*(n+1)).winner,'B');
  assert.throws(()=>playDuelMove('gomoku',b,'W',0),/置けません/);
 });
+
+const BLACK_PASS={board:'WW.W.BBBWWWWWWBBWWWWWWWBWWBWBWWBWWBBWBWB.WBWBWBBWWBBBBBB.WBBBWWW',move:4};
+const WHITE_PASS={board:'.WWWW.B.BBBBBBBBBBBWBBBBBBWBWBBBBBBWWWBBBBWWWWWBBBWWBWBBBBBBBBWW',move:7};
+test('Othello auto-pass returns the SAME mover for both black and white, with a subsequent legal move',()=>{
+ for(const [color,fixture] of [['B',BLACK_PASS],['W',WHITE_PASS]]){
+  const after=playDuelMove('othello',fixture.board,color,fixture.move);
+  const opposite=color==='B'?'W':'B';
+  assert.equal(after.winner,null);
+  assert.equal(after.passed,true);
+  assert.equal(after.nextColor,color,'passed opponent must not receive the turn');
+  assert.deepEqual(duelLegalMoves('othello',after.board,opposite),[]);
+  const allowed=duelLegalMoves('othello',after.board,color);
+  assert.ok(allowed.length>0,'same player can move again after pass');
+  assert.doesNotThrow(()=>playDuelMove('othello',after.board,color,allowed[0]));
+ }
+});
+test('Othello white wins even when white made the final move',()=>{
+ const final=playDuelMove('othello','W'.repeat(61)+'.BW','W',61);
+ assert.equal(final.winner,'W');
+ assert.equal(final.nextColor,null);
+ assert.equal(final.score.W,64);
+ assert.equal(final.score.B,0);
+});
