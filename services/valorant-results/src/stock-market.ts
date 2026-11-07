@@ -64,6 +64,10 @@ export async function ensureStocks(env:KpEnv){
  `CREATE INDEX IF NOT EXISTS stock_news_recent_public ON stock_news(guild,at DESC,id DESC) WHERE applied_version IS NOT NULL AND applied_bps!=0`,
  `CREATE TABLE IF NOT EXISTS stock_ticks(guild TEXT NOT NULL,version INTEGER NOT NULL,prices TEXT NOT NULL,at INTEGER NOT NULL,PRIMARY KEY(guild,version))`,
  `CREATE TABLE IF NOT EXISTS stock_announcements(guild TEXT NOT NULL,symbol TEXT NOT NULL,slot INTEGER NOT NULL,at INTEGER NOT NULL,PRIMARY KEY(guild,symbol,slot))`,
+ // These two queries run repeatedly during each stock bulletin cycle. The PK
+ // (guild,symbol,slot) cannot seek by 'at' for latest/UTC-day reads.
+ `CREATE INDEX IF NOT EXISTS stock_announcements_symbol_recent ON stock_announcements(guild,symbol,at DESC)`,
+ `CREATE INDEX IF NOT EXISTS stock_announcements_daily ON stock_announcements(guild,at)`,
  `CREATE TABLE IF NOT EXISTS kp_posts(id TEXT PRIMARY KEY,body TEXT NOT NULL,at INTEGER NOT NULL,sent INTEGER NOT NULL DEFAULT 0)`,
  // One migration row changes holdings and returns only the conversion remainder, atomically.
  `CREATE TRIGGER IF NOT EXISTS stock_account_apply AFTER INSERT ON stock_accounts BEGIN
@@ -297,15 +301,19 @@ export async function queueStockPosts(env:KpEnv&{KP_EARNINGS_WEBHOOK_URL?:string
  const previous=await env.DB.prepare('SELECT prices FROM stock_ticks WHERE guild=? AND version=?').bind(market.guild,market.version-1).first<{prices:string}>();
  const old=previous?JSON.parse(previous.prices):Object.fromEntries(STOCKS.map(s=>[s.id,s.initialPrice]));
  const slot=Math.floor(now/(30*60_000));
+ let dailyCount:number|null=null;
  for(const s of STOCKS){
   const change=(market.prices[s.id]/old[s.id]-1)*100;
   if(Math.abs(change)<3)continue;
-  const info=await env.DB.prepare('SELECT MAX(at) AS last FROM stock_announcements WHERE guild=? AND symbol=?').bind(market.guild,s.id).first<{last:number|null}>();if(info?.last&&now-info.last<30*60_000)continue;
-  const count=await env.DB.prepare('SELECT COUNT(*) AS n FROM stock_announcements WHERE guild=? AND at>=?').bind(market.guild,Math.floor(now/86400000)*86400000).first<{n:number}>();if((count?.n??0)>=8)return;
+  const info=await env.DB.prepare('SELECT at AS last FROM stock_announcements INDEXED BY stock_announcements_symbol_recent WHERE guild=? AND symbol=? ORDER BY at DESC LIMIT 1').bind(market.guild,s.id).first<{last:number}>();if(info?.last&&now-info.last<30*60_000)continue;
+  if(dailyCount===null){const count=await env.DB.prepare('SELECT COUNT(*) AS n FROM stock_announcements INDEXED BY stock_announcements_daily WHERE guild=? AND at>=?').bind(market.guild,Math.floor(now/86400000)*86400000).first<{n:number}>();dailyCount=Number(count?.n??0);}
+  if(dailyCount>=8)return;
   const body=JSON.stringify({content:`📈 **${s.name} ${change>0?'急騰':'急落'}**\n${market.prices[s.id].toLocaleString('ja-JP')} KP（${change>0?'+':''}${change.toFixed(1)}%）\nKESO PLAYの「株」で確認できます。`,allowed_mentions:{parse:[]}});
-  await env.DB.batch([
-   env.DB.prepare('INSERT OR IGNORE INTO stock_announcements VALUES(?,?,?,?)').bind(market.guild,s.id,slot,now),
+  const inserted=await env.DB.batch([
+   env.DB.prepare('INSERT OR IGNORE INTO stock_announcements VALUES(?,?,?,?)'.bind(market.guild,s.id,slot,now),
    env.DB.prepare("INSERT OR IGNORE INTO kp_posts(id,body,at) SELECT ?,?,? WHERE EXISTS(SELECT 1 FROM stock_announcements WHERE guild=? AND symbol=? AND slot=?)").bind('stock:'+market.guild+':'+s.id+':'+slot,body,now,market.guild,s.id,slot),
   ]);
+  // Only newly inserted bulletins consume the daily count; duplicates never do.
+  if(inserted[0]?.meta.changes)dailyCount++;
  }
 }
