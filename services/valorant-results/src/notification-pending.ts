@@ -1,7 +1,7 @@
 // Pending regular notices are a tiny partial-index subset. Ineligible Death-mode
 // notices are intentionally kept unsent and never scanned on every Cron tick.
 export interface PendingNotificationMatch {match_id:string;ended_at:number}
-export const REGULAR_PENDING_SQL=`SELECT match_id,MIN(ended_at) AS ended_at FROM notifications
+export const REGULAR_PENDING_SQL=`SELECT match_id,MIN(ended_at) AS ended_at FROM notifications INDEXED BY notifications_pending_regular
  WHERE sent=0 AND (mode IS NULL OR (mode!='unrated' AND substr(mode,1,6)!='death_'))
  GROUP BY match_id ORDER BY ended_at,match_id LIMIT ?`;
 export const CLAIMED_DEATH_PENDING_SQL=`SELECT n.match_id,MIN(n.ended_at) AS ended_at
