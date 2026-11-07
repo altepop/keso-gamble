@@ -1,5 +1,7 @@
 import type {KpEnv,KpMapping} from './kp.ts';
 import {debtOf} from './kp-debt.ts';
+// @ts-expect-error Pure shared ledger verifier, independently covered by node:test.
+import {checkDuelLedger} from '../../../js/duel-kp-audit.js';
 import {kpTargetMembers,kpTargetAllowed} from './kp-target-members.ts';
 // @ts-expect-error Shared pure browser-side rules (no declaration file).
 import {initialDuelBoard,playDuelMove,DUEL_GAMES} from '../../../js/duel-rules.js';
@@ -141,6 +143,18 @@ async function room(env:KpEnv,guild:string,id:string,user:string):Promise<BoardD
   .bind(user,guild,id,user,user).first<BoardDuel>();
  if(!row)throw Error('対戦が見つかりません。');return row;
 }
+// Check real transitions only, using one indexed ledger-ID lookup per escrow/settlement.
+// Never poll for anomalies or repeat a KP credit after an audit read fails.
+async function verifyDuelLedger(env:KpEnv,match:BoardDuel){
+ if(!['active','finished'].includes(match.status))return;
+ try{
+  const ids=['duel:stake:a:','duel:stake:b:','duel:payout:a:','duel:payout:b:'].map(prefix=>prefix+match.id);
+  const rows=(await env.DB.prepare('SELECT id,guild,user,delta,kind FROM kp_ledger WHERE id IN (?,?,?,?)')
+   .bind(...ids).all<{id:string;guild:string;user:string;delta:number;kind:string}>()).results;
+  const verdict=checkDuelLedger(match,rows);
+  if(!verdict.ok)console.error('duel-ledger-integrity-anomaly',JSON.stringify({duel:match.id,problems:verdict.problems}));
+ }catch(error){console.error('duel-ledger-audit-unavailable',match.id,String(error));}
+}
 async function present(env:KpEnv,mapping:KpMapping,user:string,id:string){
  return room(env,mapping.guildId,id,user);
 }
@@ -257,7 +271,11 @@ export async function boardDuelAction(env:KpEnv,m:KpMapping,user:string,body:Rec
   if(msg.includes('duel conflict'))throw Error('相手が先に操作したため、盤面を更新してください。');
   throw error;
  }
- return present(env,m,user,match.id);
+ const latest=await present(env,m,user,match.id);
+ if((kind==='accept'&&latest.status==='active')||
+    (['move','resign','timeout'].includes(kind)&&latest.status==='finished'))
+  await verifyDuelLedger(env,latest);
+ return latest;
 }
 
 /** Low-budget cron sweep every five minutes; escrow is never held indefinitely after a time-out. */
@@ -277,7 +295,9 @@ export async function settleExpiredBoardDuels(env:KpEnv,guild:string,now=Date.no
     (id,guild,duel_id,actor,kind,version,at,board,next_turn,winner,first_user,deadline_at)
     VALUES(?,?,?,'system','timeout',?,?,NULL,NULL,?,NULL,?)`)
     .bind(crypto.randomUUID(),guild,match.id,match.version,now,winner,match.deadline_at).run();
-   settled+=Number(done.meta.changes??0);
+   const applied=Number(done.meta.changes??0);
+   settled+=applied;
+   if(applied)await verifyDuelLedger(env,{...match,status:'finished',winner});
   }catch(error){
    if(!String(error).includes('duel conflict'))throw error;
    // An opponent made the last move while this cron was checking the deadline.
