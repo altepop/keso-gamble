@@ -74,7 +74,7 @@ export async function processFriend(env:FriendEnv,mapping:KpMapping,s:PaipuSumma
  else if(!transfers)status='unlinked';
  else if(env.MAHJONG_FRIEND_SETTLEMENT_ENABLED!=='true')status='preview';
  else {
-  const wallets=(await env.DB.prepare('SELECT user,balance FROM kp_wallets WHERE guild=?').bind(guild).all<{user:string;balance:number}>()).results;
+  const wallets=(await env.DB.prepare('SELECT user,balance FROM kp_wallets WHERE guild=? AND user IN ('+transfers.map(()=>'?').join(',')+')').bind(guild,...transfers.map(x=>x.user)).all<{user:string;balance:number}>()).results;
   if(transfers.some(x=>!wallets.some(w=>w.user===x.user&&w.balance>=-x.delta)))status='insufficient';
   else status='settled';
  }
