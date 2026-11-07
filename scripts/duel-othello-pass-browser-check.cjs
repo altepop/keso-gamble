@@ -66,6 +66,35 @@ function seeded(seed){
   assert.ok(passed,'pass scenario must be reached for '+scenario.color);
   console.log('PASS '+scenario.color+' ('+engine+'): '+(count+1)+' turns, continued same-side move succeeded');
  }
+ // CPU practice: inject only a late-game test fixture into this test's HTTP
+ // response. The production source has NO debug hooks and no server requests.
+ // The live move/scheduler logic must remain unmodified.
+ await page.route('**/duel-preview/demo.js*',async route=>{
+  const response=await route.fetch();
+  const original=await response.text();
+  const hook=\`
+window.__duelPassTest={
+ simulate(board){
+  restart('othello');match.board=board;match.turn_user=USERS.b;
+  render();move({cell:7},USERS.b);
+  return this.snapshot();
+ },
+ snapshot(){return {version:match?.version,status:match?.status,turn:match?.turn_user,
+  cpu:USERS.b,error:lastError,passNotice};}
+};\`;
+  await route.fulfill({response,body:original+'\\n'+hook});
+ });
+ await page.goto(url.replace('cpu=0','cpu=1'),{waitUntil:'networkidle'});
+ await page.waitForFunction(()=>!!window.__duelPassTest,{timeout:10000});
+ const first=await page.evaluate(()=>window.__duelPassTest.simulate('.WWWW.B.BBBBBBBBBBBWBBBBBBWBWBBBBBBWWWBBBBWWWWWBBBWWBWBBBBBBBBWW'));
+ assert.equal(first.version,2,'CPU made the first white move');
+ assert.equal(first.turn,first.cpu,'black must be passed and white CPU keeps the turn');
+ assert.match(first.passNotice,/黒は置ける場所がないため自動パス/);
+ await page.waitForFunction(()=>window.__duelPassTest.snapshot().version>=3,null,{timeout:12000});
+ const second=await page.evaluate(()=>window.__duelPassTest.snapshot());
+ assert.ok(second.version>=3,'CPU must automatically take another turn');
+ assert.equal(second.error,'','consecutive CPU turns must not throw');
+ console.log('CPU WHITE CONTINUATION ('+engine+'): version '+first.version+' → '+second.version);
  assert.deepEqual(errors,[],'browser must have no uncaught exceptions');
  await ctx.close();
 })().catch(err=>{console.error('OTHELLO PASS FAILED ('+engine+')',err);process.exitCode=1;})
