@@ -1,0 +1,39 @@
+name: Equal review public model smoke
+on:
+  push:
+    branches:
+      - feat/mahjong-equal-c3-comments-20261107
+    paths:
+      - .github/workflows/mahjong-c3-model-smoke.yml
+      - services/valorant-results/scripts/mahjong-c3-infer.mjs
+      - services/valorant-results/scripts/mahjong-c3-download.mjs
+      - services/valorant-results/scripts/c3-vendor/**
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: equal-review-model-smoke
+  cancel-in-progress: true
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    defaults:
+      run:
+        working-directory: services/valorant-results
+    env:
+      C3_ASSETS_ROOT: ${{ github.workspace }}/services/valorant-results/.cache/c3-model
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Model cache
+        uses: actions/cache@v4
+        with:
+          path: services/valorant-results/.cache/c3-model
+          key: equal-review-c3-5b30a83de3ab9523
+      - name: Download and verify pinned public model
+        run: node scripts/mahjong-c3-download.mjs
+      - name: ONNX runtime and observation WASM smoke
+        run: node scripts/mahjong-c3-probe.mjs
