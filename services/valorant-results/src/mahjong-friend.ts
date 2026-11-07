@@ -7,10 +7,10 @@ export interface FriendEnv extends KpEnv {
  KP_EARNINGS_WEBHOOK_URL?:string;
 }
 export const FRIEND_RATES:Record<string,number[]>={
- '4-hanchan':[600,200,-200,-600],
- '4-tonpu':[300,100,-100,-300],
- '3-hanchan':[600,0,-600],
- '3-tonpu':[300,0,-300],
+ '4-hanchan':[200,50,-50,-200],
+ '4-tonpu':[100,25,-25,-100],
+ '3-hanchan':[150,0,-150],
+ '3-tonpu':[75,0,-75],
 };
 const UUID=/^\d{6}-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_AGE=6*3600_000;
