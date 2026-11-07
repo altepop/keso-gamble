@@ -39,7 +39,7 @@ let browser;
  });
  const page=await ctx.newPage();page.on('pageerror',e=>errors.push(e.message));
  await page.goto('http://127.0.0.1:'+port+'/',{waitUntil:'domcontentloaded'});
- await page.getByRole('button',{name:/デモで試す/}).click();
+ await page.locator('.title-start').click();
  await page.locator('.nav-btn[data-screen=race]').click();
  await page.locator('.sub-tab[data-screen=duels]').click();
  await page.locator('[data-duel-board-scroll]').waitFor();
