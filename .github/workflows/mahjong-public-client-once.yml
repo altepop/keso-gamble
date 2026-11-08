@@ -27,6 +27,8 @@ jobs:
             if(typeof version.code!=='string'||!/^v[0-9.]+w?\/code\.js$/.test(version.code))throw Error('public_code_path_unverified');
             const source=await read(new URL(version.code,base),20000000);
             console.log('Declared public code:',version.code,'bytes:',Buffer.byteLength(source));
+            console.log('Static source prefix:',source.slice(0,2200));
+            console.log('Static source suffix:',source.slice(-1000));
             for(const method of ['fetchGameRecordListV2','fetchNextGameRecordList','fetchGameRecordList','fetchGameRecord']){
               const hits=[...source.matchAll(new RegExp(method+'["\x27]','g'))].slice(0,3);
               console.log(JSON.stringify({method,matches:hits.length,excerpts:hits.map(m=>source.slice(Math.max(0,m.index-180),m.index+method.length+360))}));
