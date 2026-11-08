@@ -31,3 +31,12 @@ test('defensive notes require precise threat, context and a known held genbutsu'
 test('red and ordinary fives share the opponent river kind for genbutsu',()=>{
  const d=position();d.hand[8]='5pr';d.rivers[1]=['5p'];const f=sanmaDefenseFinding(d,summary.game);assert.ok(f);assert.equal(f.recommended,'5pr');
 });
+
+test('a third player call does not erase a genbutsu fact against the one reacher',()=>{
+ const d=position();d.melds[2]=[{kind:'pon',tiles:['P','P','P'],from:0}];d.visible[31]=3;
+ const f=sanmaDefenseFinding(d,summary.game);assert.ok(f);assert.equal(f.against,1);assert.ok(['9m','E'].includes(f.recommended));
+});
+test('a far open hand can consider a legal held genbutsu without a global push/fold verdict',()=>{
+ const d=position();d.hand=['1m','9m','1p','4p','6p','8p','2s','4s','7s','E','C'];d.actual='1p';d.melds[0]=[{kind:'pon',tiles:['P','P','P'],from:2}];d.visible[31]=3;
+ const f=sanmaDefenseFinding(d,summary.game);assert.ok(f);assert.ok(f.shanten>=3);assert.ok(d.hand.includes(f.recommended));
+});

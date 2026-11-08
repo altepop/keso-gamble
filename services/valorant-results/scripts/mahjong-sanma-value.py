@@ -44,9 +44,9 @@ def bounded_int(v, lo, hi):
 
 def evaluate_case(case):
     # No metadata from the game summary is accepted by this process.
-    if set(case) != {'candidates', 'doras', 'north', 'seatWind', 'roundWind', 'riichi', 'melds'}:
+    if set(case) != {'candidates', 'doras', 'north', 'seatWind', 'roundWind', 'riichi', 'doubleRiichi', 'melds'}:
         raise ValueError('schema')
-    if type(case['riichi']) is not bool or not bounded_int(case['north'], 0, 4) or not bounded_int(case['seatWind'], 0, 2) or not bounded_int(case['roundWind'], 0, 1):
+    if type(case['doubleRiichi']) is not bool or case['doubleRiichi'] and not case['riichi'] or type(case['riichi']) is not bool or not bounded_int(case['north'], 0, 4) or not bounded_int(case['seatWind'], 0, 2) or not bounded_int(case['roundWind'], 0, 1):
         raise ValueError('context')
     if not 1 <= len(case['doras']) <= 5 or not 2 <= len(case['candidates']) <= 14:
         raise ValueError('size')
@@ -83,7 +83,7 @@ def evaluate_case(case):
                 offset += len(m['tiles'])
             result = calculator.estimate_hand_value(
                 tiles, all_tiles[concealed-1], melds=melds, dora_indicators=all_tiles[full+1:full+1+len(case['doras'])],
-                config=HandConfig(is_tsumo=True, is_riichi=case['riichi'], player_wind=27+case['seatWind'], round_wind=27+case['roundWind'],
+                config=HandConfig(is_tsumo=True, is_riichi=case['riichi'], is_daburu_riichi=case['doubleRiichi'], player_wind=27+case['seatWind'], round_wind=27+case['roundWind'],
                                   num_nuki_dora=case['north'], options=OptionalRules(is_three_player=True, has_aka_dora=True, has_open_tanyao=True)))
             # Ambiguous/unsupported limit hands suppress the whole comparison.
             if result.error or not result.cost or result.han >= 13 or any(y.is_yakuman for y in result.yaku):

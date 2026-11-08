@@ -35,7 +35,7 @@ export function auditSample(head,actions,saved,report){
    const value=sanmaValueCase(c,summary.game);
    for(const m of [f.actualValue,f.recommendedValue]){
     const candidate=value?.candidates.find(x=>x.tile===m.tile);
-    if(value.riichi!==f.riichi||value.melds.every(m=>m.kind==='ankan')!==f.menzen||!candidate||candidate.waits.reduce((sum,w)=>sum+w.left,0)!==m.live)throw Error('audit_value_unverified');
+    if(value.riichi!==f.riichi||value.doubleRiichi!==f.doubleRiichi||value.melds.every(m=>m.kind==='ankan')!==f.menzen||!candidate||candidate.waits.reduce((sum,w)=>sum+w.left,0)!==m.live)throw Error('audit_value_unverified');
    }
   }
   if(f.basis==='genbutsu'){
