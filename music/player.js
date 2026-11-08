@@ -23,8 +23,6 @@
     '<label class="music-volume-label" for="music-volume"><span>BGM音量</span><output id="music-percent">',volume,'%','</output></label>',
     '<input type="range" id="music-volume" min="0" max="100" step="1" value="',volume,'" aria-label="BGM音量">',
     '<label class="music-auto-label"><input type="checkbox" id="music-autoplay" ',autoplay?'checked':'','> 起動時に自動再生</label>',
-    '<label for="music-file">音源が未配信なら、端末からMP3を追加</label>',
-    '<input type="file" id="music-file" accept="audio/*">',
     '<p class="music-info">起動時に再生を試みます（初期15%）。iPhone・Discordの制限で自動再生できない場合は▶再生を押してください。設定は端末保存で、D1は利用しません。</p>',
     '<p class="music-status" role="status" aria-live="polite">停止中</p>',
     '</section>'
@@ -48,77 +46,38 @@
   var $=function(s){return root.querySelector(s);};
   var panel=$("#music-panel"),openBtn=$(".music-open"),playBtn=$("#music-play"),select=$("#music-track");
   select.value=track;
-  var memory=new Map(),objectUrl=null,requestId=0,hasPlayed=false;
+  var requestId=0,hasPlayed=false;
   function status(s){$(".music-status").textContent=s;}
   function render(){var playing=!!audio&&!audio.paused;playBtn.textContent=playing?"⏸ 一時停止":"▶ 再生";openBtn.classList.toggle("playing",playing);}
   function pause(){requestId++;if(audio)audio.pause();render();}
-  function release(){if(objectUrl){URL.revokeObjectURL(objectUrl);objectUrl=null;}}
-  function database(){
-    return new Promise(function(resolve,reject){
-      if(!globalThis.indexedDB){reject(Error("storage unavailable"));return;}
-      var req=indexedDB.open("keso-music-v1",1);
-      req.onupgradeneeded=function(){if(!req.result.objectStoreNames.contains("tracks"))req.result.createObjectStore("tracks");};
-      req.onsuccess=function(){resolve(req.result);};
-      req.onerror=function(){reject(req.error);};
-    });
-  }
-  async function stored(id){
-    if(memory.has(id))return memory.get(id);
-    try{
-      var db=await database();
-      return await new Promise(function(resolve){
-        var req=db.transaction("tracks","readonly").objectStore("tracks").get(id);
-        req.onsuccess=function(){resolve(req.result||null);db.close();};
-        req.onerror=function(){resolve(null);db.close();};
-      });
-    }catch(_){return null;}
-  }
-  async function persist(id,file){
-    memory.set(id,file);
-    try{
-      var db=await database();
-      await new Promise(function(resolve,reject){
-        var tx=db.transaction("tracks","readwrite");tx.objectStore("tracks").put(file,id);
-        tx.oncomplete=resolve;tx.onerror=function(){reject(tx.error);};
-      });
-      db.close();return true;
-    }catch(_){return false;}
-  }
   function active(){return tracks.find(function(t){return t.id===track;})||tracks[0];}
-  // IndexedDB access does not activate media; the saved blob is ready for the next trusted tap.
-  void stored(track).then(function(file){if(file)memory.set(track,file);});
   function ensureAudio(){
     if(audio)return audio;
     audio=new Audio();audio.preload="none";audio.loop=false;audio.volume=volume/100;
-    var local=memory.get(track);
-    if(local){objectUrl=URL.createObjectURL(local);audio.src=objectUrl;}
-    else audio.src=new URL(active().src,document.baseURI).href;
+    audio.src=new URL(active().src,document.baseURI).href;
     audio.addEventListener("play",function(){openBtn.classList.remove("needs-tap");render();});
     audio.addEventListener("pause",render);
     audio.addEventListener("ended",function(){if(hasPlayed&&!document.hidden)void next();});
-    audio.addEventListener("error",function(){if(audio.getAttribute("src"))status("音源の読み込みに失敗しました。端末からMP3を追加してください。");render();});
+    audio.addEventListener("error",function(){if(audio.getAttribute("src"))status("公式音源の読み込みに失敗しました。再度開き直してください。");render();});
     return audio;
   }
 
-  async function load(){
-    ensureAudio();var turn=++requestId;
-    audio.pause();audio.removeAttribute("src");audio.load();release();render();
-    var local=await stored(track);
-    if(turn!==requestId)return false;
-    if(local){objectUrl=URL.createObjectURL(local);audio.src=objectUrl;}
-    else audio.src=new URL(active().src,document.baseURI).href;
-    return true;
+  function load(){
+    ensureAudio();requestId++;
+    audio.pause();
+    audio.src=new URL(active().src,document.baseURI).href;
+    audio.load();render();
   }
   async function play(mode="manual"){
     var chosen=track;
     try{
       ensureAudio();
-      if(!audio.getAttribute("src"))await load();
+      if(!audio.getAttribute("src"))load();
       if(chosen!==track)return;
       await audio.play();hasPlayed=true;status("再生中："+active().title);
     }catch(error){
       if(error?.name==="NotAllowedError")status("この端末は音声の自動再生を制限しています。▶ 再生を押してください。");
-      else status("再生できません。音源未配信の場合は下からMP3を登録してください。");
+      else status("公式音源を再生できませんでした。接続状況を確認し、開き直してください。");
       if(mode==="auto")openBtn.classList.add("needs-tap");
     }
     render();
@@ -127,7 +86,7 @@
     if(!tracks.some(function(t){return t.id===id;}))return;
     var resume=forcePlay||(!!audio&&!audio.paused);
     track=id;select.value=id;save("track",id);
-    await load();status("選択中："+active().title);
+    load();status("選択中："+active().title);
     if(resume)await play();
   }
   function next(){var i=tracks.findIndex(function(t){return t.id===track;});return choose(tracks[(i+1)%tracks.length].id,true);}
@@ -138,13 +97,6 @@
   select.addEventListener("change",function(){void choose(select.value,false);});
   $("#music-volume").addEventListener("input",function(e){volume=Math.max(0,Math.min(100,Number(e.target.value)||0));if(audio)audio.volume=volume/100;$("#music-percent").textContent=volume+"%";save("volume",volume);});
   $("#music-autoplay").addEventListener("change",function(e){autoplay=!!e.target.checked;save("autoplay",autoplay?"on":"off");status(autoplay?"次回の起動時から自動再生を試みます。":"次回から自動再生しません。");});
-  $("#music-file").addEventListener("change",async function(e){
-    var file=e.target.files&&e.target.files[0];if(!file)return;
-    if(!file.type.startsWith("audio/")&&!/\.(mp3|ogg|wav|m4a)$/i.test(file.name)){status("音声ファイルを選択してください。");return;}
-    if(file.size>40*1024*1024){status("40MB以下の音源を指定してください。");return;}
-    var ok=await persist(track,file);await load();
-    status(ok?"端末に保存しました。▶ 再生を押してください。":"今回の画面では読み込めました。次回は再選択が必要です。");
-  });
   document.addEventListener("visibilitychange",function(){if(document.hidden){pause();status("画面が非表示のため停止しました。");}});
   window.addEventListener("pagehide",pause);
   document.addEventListener("click",function(e){if(e.target.closest&&e.target.closest('[data-action="bgm-toggle"]')&&audio&&!audio.paused){pause();status("旧BGMへの切り替えに伴い停止しました。");}},true);
