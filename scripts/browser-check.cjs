@@ -17,7 +17,24 @@ async function auditMedia(context){
   const forbidden=method=>function(){record(method);throw Error('Unexpected media activation: '+method);};
   const session={get type(){return 'auto';},set type(_value){record('audioSession.type=');}};
   Object.defineProperty(navigator,'audioSession',{configurable:true,get(){record('navigator.audioSession');return session;}});
-  for(const name of ['Audio','AudioContext','webkitAudioContext','RTCPeerConnection'])
+  // The theme player is now allowed to attempt playback when a genuine title screen renders.
+  // Substitute only its dedicated Audio constructor so game-flow tests remain free of
+  // sound output and unavailable music assets. All other media/capture APIs still fail.
+  function permittedMusicAudio(){
+   if(!(new Error().stack||'').includes('music/player.js'))return forbidden('Audio')();
+   const listeners=new Map();
+   const mock={src:'',preload:'none',loop:false,volume:0,paused:true,
+    addEventListener(name,fn){listeners.set(name,fn);},
+    getAttribute(name){return name==='src'?this.src:null;},
+    removeAttribute(name){if(name==='src')this.src='';},
+    load(){},
+    play(){this.paused=false;listeners.get('play')?.();return Promise.resolve();},
+    pause(){this.paused=true;listeners.get('pause')?.();}
+   };
+   return mock;
+  }
+  Object.defineProperty(window,'Audio',{configurable:true,value:permittedMusicAudio});
+  for(const name of ['AudioContext','webkitAudioContext','RTCPeerConnection'])
    Object.defineProperty(window,name,{configurable:true,value:forbidden(name)});
   HTMLMediaElement.prototype.play=forbidden('HTMLMediaElement.play');
   Object.defineProperty(navigator,'mediaDevices',{configurable:true,value:{
@@ -109,6 +126,6 @@ async function auditMedia(context){
  for(const ctx of browser.contexts())for(const page of ctx.pages())await page.evaluate(()=>window.__flushMediaAudit());
  await g.evaluate(async()=>{const session=navigator.audioSession;session.type='ambient';await window.__flushMediaAudit();});
  assert.deepEqual(mediaCalls.splice(-2),['navigator.audioSession','audioSession.type=']);
- assert.deepEqual(mediaCalls,[],'Game flows must not read/change audio sessions, create playback/capture, or open WebRTC');
- console.log('Browser checks passed: no audio-session access, media playback/capture or WebRTC during game flows; play claims and payouts, Steam text escaping, directives and completion persistence, concurrent orders/salaries, race bets and settlement, storage failure, drafts, chart toggles, keyboard, spin persistence, mobile layouts.');
+ assert.deepEqual(mediaCalls,[],'Game flows must not activate media apart from the isolated startup music player; audioSession, capture and WebRTC remain blocked');
+ console.log('Browser checks passed: safe opt-in controls and isolated music startup; no other audio-session access, playback/capture or WebRTC during game flows; play claims and payouts, Steam text escaping, directives and completion persistence, concurrent orders/salaries, race bets and settlement, storage failure, drafts, chart toggles, keyboard, spin persistence, mobile layouts.');
 })().catch(e=>{console.error(e);process.exitCode=1;}).finally(async()=>{await browser?.close();server.kill();});
