@@ -27,12 +27,12 @@
     '<p class="music-status" role="status" aria-live="polite">停止中</p>',
     '</section>'
   ].join("");
-  document.body.appendChild(root);
+  // Keep the player detached until the app has rendered a usable header.
   // Place the button *inside* the real header, never on top of game controls.
   function mount(){
     var row=document.querySelector("#app .screen header.topbar .toprow");
     if(row){if(root.parentElement!==row)row.appendChild(root);root.hidden=false;}
-    else{if(root.parentElement!==document.body)document.body.appendChild(root);root.hidden=true;}
+    else if(root.parentElement){root.remove();if(audio)pause();}
   }
   mount();
   var appRoot=document.getElementById("app");
