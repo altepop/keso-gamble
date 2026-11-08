@@ -18,3 +18,9 @@
 #keso-music .music-info{margin:0;font-size:11px;line-height:1.6;color:#c5d5ed}
 #keso-music .music-status{margin:0;min-height:18px;color:#b6f1df;font-size:12px;line-height:1.5}
 @media(max-width:480px){#keso-music{margin-left:0}#keso-music .music-open{padding:6px 10px;min-height:38px}#keso-music .music-open span{display:none}}
+/* Startup music is available on the genuine title screen as well as game headers. */
+.title-screen #keso-music{align-self:center;margin:12px auto 0}
+.title-screen #keso-music .music-panel{right:50%;transform:translateX(50%);top:50px;text-align:left}
+#keso-music .music-auto-label{display:flex;align-items:center;gap:9px;min-height:35px;font-size:12px}
+#keso-music .music-auto-label input{width:18px;height:18px;accent-color:#9bdbff}
+#keso-music .music-open.needs-tap{border-color:#f4cc82;box-shadow:0 0 0 2px #f4cc8244,0 6px 24px #0009}
