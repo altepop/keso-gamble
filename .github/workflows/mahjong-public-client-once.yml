@@ -44,6 +44,10 @@ jobs:
             const edits=[];
             for(const n of nodes){if(n.type!=='MemberExpression'||!n.computed||n.object.type!=='Identifier'||n.property.type!=='Literal')continue;const item=tables.get(n.object.name)?.[n.property.value];if(item?.type==='Literal'&&['string','number','boolean'].includes(typeof item.value))edits.push({start:n.start,end:n.end,text:JSON.stringify(item.value),value:item.value});}
             console.log('Static literal tables:',tables.size,'references:',edits.length);
+            for(const hit of [...source.matchAll(/\.ALL\s*=\s*\d+/g)].slice(0,5))console.log('Public ALL enum:',source.slice(Math.max(0,hit.index-100),hit.index+180));
+            for(const hit of edits.filter(e=>e.value==='filterData'&&source.slice(e.end,e.end+2)==='={').slice(0,3)){
+              const begin=hit.start,end=Math.min(source.length,hit.end+1500);let part=source.slice(begin,end);for(const e of edits.filter(e=>e.start>=begin&&e.end<=end).sort((a,b)=>b.start-a.start))part=part.slice(0,e.start-begin)+e.text+part.slice(e.end-begin);console.log('Public default filter:',part);
+            }
             for(const method of ['fetchGameRecordListV2','fetchNextGameRecordList','fetchGameRecordList','fetchGameRecord']){
               const hits=edits.filter(e=>e.value===method).slice(0,3),excerpts=[];
               for(const hit of hits){const begin=Math.max(0,hit.start-1200),end=Math.min(source.length,hit.end+1800);let part=source.slice(begin,end);for(const e of edits.filter(e=>e.start>=begin&&e.end<=end).sort((a,b)=>b.start-a.start))part=part.slice(0,e.start-begin)+e.text+part.slice(e.end-begin);excerpts.push(part);}
