@@ -9,8 +9,9 @@
   var read=function(key,fallback){try{return localStorage.getItem(prefix+key)||fallback;}catch(_){return fallback;}};
   var save=function(key,value){try{localStorage.setItem(prefix+key,String(value));}catch(_){}};
   var track=read("track","mou"),volume=Math.max(0,Math.min(100,Number(read("volume","15"))||0));
+  var autoplay=read("autoplay","on")!=="off",started=false;
   if(!tracks.some(function(t){return t.id===track;}))track="mou";
-  // In Discord, even constructing Audio before a tap may activate the voice/audio session.
+  // Startup playback is requested by the user; browsers may deny autoplay with sound.
   var root=document.createElement("div");root.id="keso-music";
   root.innerHTML=[
     '<button type="button" class="music-open" aria-expanded="false" aria-controls="music-panel" aria-label="音楽プレイヤーを開く">♫ <span>BGM</span></button>',
@@ -21,9 +22,10 @@
     '<div class="music-buttons"><button type="button" id="music-play">▶ 再生</button><button type="button" id="music-next">次の曲 ⏭</button></div>',
     '<label class="music-volume-label" for="music-volume"><span>BGM音量</span><output id="music-percent">',volume,'%','</output></label>',
     '<input type="range" id="music-volume" min="0" max="100" step="1" value="',volume,'" aria-label="BGM音量">',
+    '<label class="music-auto-label"><input type="checkbox" id="music-autoplay" ',autoplay?'checked':'','> 起動時に自動再生</label>',
     '<label for="music-file">音源が未配信なら、端末からMP3を追加</label>',
     '<input type="file" id="music-file" accept="audio/*">',
-    '<p class="music-info">初期停止・小音量。Discord通話中は必要に応じて音量を下げてください。音量と曲の設定は端末に保存し、D1は利用しません。</p>',
+    '<p class="music-info">起動時に再生を試みます（初期15%）。iPhone・Discordの制限で自動再生できない場合は▶再生を押してください。設定は端末保存で、D1は利用しません。</p>',
     '<p class="music-status" role="status" aria-live="polite">停止中</p>',
     '</section>'
   ].join("");
@@ -31,8 +33,14 @@
   // Place the button *inside* the real header, never on top of game controls.
   function mount(){
     var row=document.querySelector("#app .screen header.topbar .toprow");
-    if(row){if(root.parentElement!==row)row.appendChild(root);root.hidden=false;}
-    else if(root.parentElement){root.remove();if(audio)pause();}
+    // Unlike the emergency error/retry screen, the real title has the K emblem.
+    var title=document.querySelector("#app main.title-screen:has(.title-emblem)");
+    var holder=row||title;
+    if(holder){
+      if(root.parentElement!==holder)holder.appendChild(root);
+      root.hidden=false;
+      if(!started){started=true;queueMicrotask(function(){if(autoplay&&root.parentElement&&!document.hidden)void play("auto");});}
+    }else if(root.parentElement){root.remove();if(audio)pause();}
   }
   mount();
   var appRoot=document.getElementById("app");
@@ -85,7 +93,8 @@
     var local=memory.get(track);
     if(local){objectUrl=URL.createObjectURL(local);audio.src=objectUrl;}
     else audio.src=new URL(active().src,document.baseURI).href;
-    audio.addEventListener("play",render);audio.addEventListener("pause",render);
+    audio.addEventListener("play",function(){openBtn.classList.remove("needs-tap");render();});
+    audio.addEventListener("pause",render);
     audio.addEventListener("ended",function(){if(hasPlayed&&!document.hidden)void next();});
     audio.addEventListener("error",function(){if(audio.getAttribute("src"))status("音源の読み込みに失敗しました。端末からMP3を追加してください。");render();});
     return audio;
@@ -100,13 +109,17 @@
     else audio.src=new URL(active().src,document.baseURI).href;
     return true;
   }
-  async function play(){
+  async function play(mode="manual"){
     ensureAudio();var chosen=track;
     try{
       if(!audio.getAttribute("src"))await load();
       if(chosen!==track)return;
       await audio.play();hasPlayed=true;status("再生中："+active().title);
-    }catch(_){status("再生できません。音源が未配信の場合は下のファイル選択からMP3を登録してください。");}
+    }catch(error){
+      if(error?.name==="NotAllowedError")status("この端末は音声の自動再生を制限しています。▶ 再生を押してください。");
+      else status("再生できません。音源未配信の場合は下からMP3を登録してください。");
+      if(mode==="auto")openBtn.classList.add("needs-tap");
+    }
     render();
   }
   async function choose(id,forcePlay){
@@ -123,6 +136,7 @@
   $("#music-next").addEventListener("click",function(){void next();});
   select.addEventListener("change",function(){void choose(select.value,false);});
   $("#music-volume").addEventListener("input",function(e){volume=Math.max(0,Math.min(100,Number(e.target.value)||0));if(audio)audio.volume=volume/100;$("#music-percent").textContent=volume+"%";save("volume",volume);});
+  $("#music-autoplay").addEventListener("change",function(e){autoplay=!!e.target.checked;save("autoplay",autoplay?"on":"off");status(autoplay?"次回の起動時から自動再生を試みます。":"次回から自動再生しません。");});
   $("#music-file").addEventListener("change",async function(e){
     var file=e.target.files&&e.target.files[0];if(!file)return;
     if(!file.type.startsWith("audio/")&&!/\.(mp3|ogg|wav|m4a)$/i.test(file.name)){status("音声ファイルを選択してください。");return;}
