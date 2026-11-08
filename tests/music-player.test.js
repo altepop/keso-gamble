@@ -141,3 +141,31 @@ test('only official tracks are allowed; no user file picker or browser database 
  assert.equal(s.audio.volume,0);
  assert.equal(s.saved.get('keso.music.volume'),'0');
 });
+
+
+test('two new official MP3s are selectable and match exact GitHub filenames',async()=>{
+ const s=setup();
+ await tick();
+ assert.match(s.root.innerHTML,/<option value="kyohansha">午前二時の共犯者<\/option>/);
+ assert.match(s.root.innerHTML,/<option value="ouenka">応援歌<\/option>/);
+ s.element('#music-track').value='kyohansha';
+ s.fire('#music-track','change');await tick();
+ assert.match(decodeURI(s.audio.src),/music\/assets\/午前二時の共犯者 \(1\)\.mp3$/);
+ assert.equal(s.saved.get('keso.music.track'),'kyohansha');
+ s.element('#music-track').value='ouenka';
+ s.fire('#music-track','change');await tick();
+ assert.match(decodeURI(s.audio.src),/music\/assets\/応援歌 \(Remastered\)\.mp3$/);
+ assert.equal(s.saved.get('keso.music.track'),'ouenka');
+});
+
+test('background playback advances across four songs then wraps to beginning',async()=>{
+ const s=setup();
+ await tick();
+ s.document.hidden=true;
+ const expected=['genkai-rhapsody.mp3','午前二時の共犯者 (1).mp3','応援歌 (Remastered).mp3','mou-isshu.mp3'];
+ for(const name of expected){
+  s.audio.listeners.get('ended')();await tick();
+  assert.ok(decodeURI(s.audio.src).endsWith(name),'next song '+name);
+  assert.equal(s.audio.paused,false);
+ }
+});
