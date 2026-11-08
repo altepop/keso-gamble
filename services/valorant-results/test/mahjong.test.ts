@@ -3,7 +3,7 @@ import {URL as NodeURL} from 'node:url';
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
 import {readFileSync} from 'node:fs';
-import {mahjongRank,mahjongRoast,mahjongMessage,parseMahjongRecords,validateMahjongConfig,monitorMahjong,flushMahjongPosts,pacing,PROVIDER_GAP} from '../src/mahjong.ts';
+import {mahjongRank,mahjongRoast,mahjongScoreLine,mahjongMessage,parseMahjongRecords,validateMahjongConfig,monitorMahjong,flushMahjongPosts,pacing,PROVIDER_GAP} from '../src/mahjong.ts';
 // Provider spacing is recorded instead of slept.
 const waits:number[]=[];pacing.wait=async(ms:number)=>{waits.push(ms);};
 import type {MahjongConfig,MahjongEnv,MahjongRecord} from '../src/mahjong.ts';
@@ -63,8 +63,8 @@ test('rank uses final scores and seat order for ties; three-player second is not
  assert.equal(mahjongRank(record(),10),1);assert.equal(mahjongRank(record(),40),4);
  const tied=record();tied.players[0].score=30000;assert.equal(mahjongRank(tied,10),1);assert.equal(mahjongRank(tied,20),2);
  const sanma=record({modeId:24,players:record().players.slice(0,3)});
- assert.ok([...pools.second,...pools.second3].some(lines=>lines.join('\n')===mahjongRoast(sanma,20)));
- assert.ok([...pools.last,...pools.last3].some(lines=>lines.join('\n')===mahjongRoast(sanma,30)));
+ assert.match(mahjongRoast(sanma,20),/トップまで[0-9,]+点/);
+ assert.match(mahjongRoast(sanma,30),/ひとつ上まで[0-9,]+点/);
  const four=new Set<string>(),three=new Set<string>();
  for(let i=0;i<4000;i++){four.add(mahjongRoast(record({_id:'v-'+i}),10));three.add(mahjongRoast(record({_id:'v-'+i,modeId:24,players:record().players.slice(0,3)}),10));}
  assert.equal(four.size,pools.first.length,'every four-player top line appears');assert.equal(three.size,[...pools.first,...pools.first3].filter(lines=>!lines.some(line=>/他の3人|4人おって/.test(line))).length,'three-player tops add their own without four-player-only sets');
@@ -75,7 +75,7 @@ test('every authored roast is three unique nonempty lines (four for third, five 
  assert.ok(Object.values(pools).flat().length>=124);
  for(const [group,list] of Object.entries(pools))for(const lines of list){const base=group.replace(/3$/,''),n=base==='last'||base==='bust'?5:base==='third'?4:3;assert.equal(lines.length,n);assert.equal(new Set(lines).size,n);assert.ok(lines.every(line=>line.length>5&&!line.includes('\n')));assert.doesNotMatch(lines.join(''),/放銃した|役満あが|振り込んだ/);}
  for(let i=0;i<100;i++){assert.equal(mahjongRoast(record({_id:'test-'+i}),10).split('\n').length,3);assert.equal(mahjongRoast(record({_id:'test-'+i}),40).split('\n').length,5);}
- const negative=record();negative.players[0].score=-1000;assert.ok(pools.bust.some(lines=>lines.join('\n')===mahjongRoast(negative,10)));
+ const negative=record();negative.players[0].score=-1000;assert.match(mahjongRoast(negative,10),/最終1,000点のマイナス/);
 });
 
 test('two real new sanma games by one user never reuse identical three-line roast even when original hash collides',async()=>{
@@ -89,7 +89,7 @@ test('two real new sanma games by one user never reuse identical three-line roas
  const first=three('example-0',50000,now/1000-1700,now/1000-1100);
  let second:MahjongRecord|undefined;
  for(let n=1;n<2000;n++){
-  const candidate=three('example-'+n,55800,now/1000-850,now/1000-250);
+  const candidate=three('example-'+n,50000,now/1000-850,now/1000-250);
   if(mahjongRoast(candidate,10)===mahjongRoast(first,10)){second=candidate;break;}
  }
  assert.ok(second,'fixture must reproduce an actual rank-one hash collision');
@@ -113,7 +113,7 @@ test('two real new sanma games by one user never reuse identical three-line roas
  assert.notEqual(firstRoast,secondRoast);
  assert.deepEqual(messages.map(m=>m.allowed_mentions),[{parse:[]},{parse:[]}]);
  assert.match(messages[0]!.content,/50,000点/);
- assert.match(messages[1]!.content,/55,800点/);
+ assert.match(messages[1]!.content,/50,000点/);
  assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM mahjong_watch_posts').get()!.n,2);
  assert.equal((f.sql.prepare("SELECT value FROM mahjong_watch_state WHERE key='mahjong_last_roast:10'").get() as {value:string}).value,secondRoast);
  // Re-reading the same provider history cannot duplicate notifications or
@@ -122,6 +122,34 @@ test('two real new sanma games by one user never reuse identical three-line roas
  assert.equal(messages.length,2);
  assert.equal((f.sql.prepare("SELECT value FROM mahjong_watch_state WHERE key='mahjong_last_roast:10'").get() as {value:string}).value,secondRoast);
  f.sql.close();
+});
+
+
+test('score-based banter uses verified final points and keeps original line counts',()=>{
+ const three=(score:number,second:number,third:number):MahjongRecord=>record({
+  modeId:24,players:[{accountId:10,nickname:'A',score},{accountId:20,nickname:'B',score:second},{accountId:30,nickname:'C',score:third}]
+ });
+ assert.match(mahjongScoreLine(three(55800,30000,14200),10),/2着に25,800点差/);
+ assert.match(mahjongScoreLine(three(50000,30000,20000),10),/2着に20,000点差/);
+ assert.match(mahjongScoreLine(three(31000,30000,29000),10),/2着と1,000点差/);
+ assert.match(mahjongScoreLine(three(30000,30000,10000),10),/2着と同点/);
+ assert.match(mahjongScoreLine(three(30000,30000,10000),20),/トップと同点/);
+ assert.match(mahjongScoreLine(three(20000,30000,15000),10),/トップまで10,000点/);
+ assert.match(mahjongScoreLine(three(5000,30000,20000),10),/ひとつ上まで15,000点/);
+ assert.match(mahjongScoreLine(three(-2300,30000,20000),10),/最終2,300点のマイナス/);
+ const same=record({_id:'same',modeId:24,players:three(55800,30000,14200).players});
+ assert.notEqual(mahjongRoast(same,10),mahjongRoast(record({...same,players:three(50000,30000,20000).players}),10));
+ assert.equal(mahjongRoast(same,10).split('\n').length,3);
+ const msg=mahjongMessage(same,10,'A');
+ assert.match(msg,/2着に25,800点差/);
+ assert.equal(msg.split('\n').length,6);
+});
+test('result-only texts cannot claim an unobserved riichi, win, discard or kita',()=>{
+ const pattern=new RegExp("(放銃|ツモ|リーチ|北を抜|北抜きドラ|北抜きまで|北抜きのドラ|跳満|倍満|役満|当たり牌|和了|アガリ|手牌|捨て牌|打牌|河に|牌効率|押し引き|配牌|鳴き|門前|上がれず|見せ場だけ|守りに入|守備から|攻めを覚|牌の切り方|今日の打ち筋|他家に|そぶりすら|卓から叩き出|泣きながら拍手|読みが当た|上がってた|北を抜|先に打牌|下家から|ツモ切り)");
+ for(const [group,entries] of Object.entries(pools))for(const lines of entries){
+  assert.ok(lines.length>=3,group);
+  assert.doesNotMatch(lines.join('\n'),pattern,group);
+ }
 });
 
 test('message shows actual rank, points, mode, Japan time and source; names cannot inject formatting or mentions',()=>{
