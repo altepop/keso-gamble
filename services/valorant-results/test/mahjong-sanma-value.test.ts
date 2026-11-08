@@ -14,7 +14,7 @@ const frame=()=>{const f=threeValueScenario();return {...f,d:reviewDecisions(f.a
 const metric=(tile:string,live=7,min=3000,max=min)=>({tile,live,min,max,hanMin:3,hanMax:3,fuMin:30,fuMax:30});
 test('conditional hand value request includes only focal hand and public known facts',()=>{
  const {d}=frame(),c=sanmaValueCase(d,'3-hanchan')!;assert.ok(c);assert.equal(c.seatWind,1);
- assert.deepEqual(Object.keys(c).sort(),['candidates','doras','north','roundWind','seatWind']);
+ assert.deepEqual(Object.keys(c).sort(),['candidates','doras','north','riichi','roundWind','seatWind']);
  assert.ok(c.candidates.every(c=>c.hand.length===13));
  const keep=c.candidates.find(c=>c.tile==='5s')!;assert.deepEqual(keep.waits,[{tile:'1s',left:3},{tile:'4s',left:4}]);
  assert.equal(JSON.stringify(c).includes('tiles0'),false);assert.deepEqual(d.publicRed,[]);
@@ -71,7 +71,7 @@ test('real pinned hand calculator recognizes yaku/fu/dora, nuki, dealer and actu
  const red=structuredClone(c);for(const x of red.candidates)x.hand[x.hand.indexOf('5p')]='5pr';
  assert.equal(calculate(red).find((m:any)=>m.tile==='5s').hanMin,6);
  const ordinary={tile:'1s',hand:['9m','9m','9m','1p','2p','3p','4p','5p','6p','7s','8s','9s','E'],waits:[{tile:'E',left:3}]};
- const man=calculate({candidates:[ordinary,{...ordinary,tile:'2s'}],doras:['1m'],north:0,seatWind:1,roundWind:0});
+ const man=calculate({candidates:[ordinary,{...ordinary,tile:'2s'}],doras:['1m'],north:0,seatWind:1,roundWind:0,riichi:false});
  assert.equal(man[0].hanMin,4,'sanma 1m indicator makes 9m dora (not nonexistent 2m)');
  const northDora=calculate({...c,doras:['W'],north:1});
  const plain=calculate({...c,doras:['W'],north:0});
@@ -111,4 +111,16 @@ test('a red tile becomes public only when revealed, including another player dis
  a[1].data.tile='0p';a[1].data.moqie=false;
  const frames=reviewDecisions(a,f.summary),at=frames.find(d=>d.seat===1&&d.turn===2)!;assert.ok(at);
  assert.ok(at.publicRed?.includes('5pr'));assert.ok(at.visible[13]>0);
+});
+
+test('recorded sanma riichi declaration is valued under the same conditional riichi for both choices',{skip:!process.env.SANMA_PYTHON},()=>{
+ const f=threeValueScenario(),a=structuredClone(f.actions);a.at(-1)!.data.is_liqi=true;
+ const d=reviewDecisions(a,f.summary).find(d=>d.seat===1&&d.turn===2)!;assert.ok(d);assert.equal(d.declaringReach,true);
+ const c=sanmaValueCase(d,'3-hanchan')!;assert.equal(c.riichi,true);
+ const plain=reviewSanmaValues([{...d,declaringReach:false}],'3-hanchan')[0];
+ const reach=reviewSanmaValues([d],'3-hanchan')[0];assert.ok(reach);assert.equal(reach.riichi,true);
+ assert.equal(reach.actualValue.hanMin,plain.actualValue.hanMin+1);
+ assert.equal(reach.recommendedValue.hanMin,plain.recommendedValue.hanMin+1);
+ const report={version:3,source:'sanma-rules',model:'sanma-rules-v3',uuid:f.summary.uuid,findings:[reach]};
+ assert.match(equalSanmaComments(f.summary,report,new Map([[1,{name:'test1'}]])).join(''),/リーチ後ツモ/);
 });

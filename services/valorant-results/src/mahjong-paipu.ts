@@ -108,7 +108,7 @@ const MEME_POOLS:Record<'last'|'top'|'middle',string[]>={
  top:['yokatta-kono-kyori','tousan-korette','jun-no-kachida','iiwaa','kiga-kikune','umaremo-elite','gooku-majika','bachikon-strike','omatsuri-otoko'],
  middle:['saigono-gyoza','san-ga-aru','ittanna','daijoubu','maniae','chotto-matte','aji-koi-usui','macchan-imanowha','vtr-don','kuiya'],
 };
-export function paipuPost(summary:PaipuSummary,members:Map<number,Member>,levelOf:(user:string)=>RoastLevel,outcomes:string[]=[]){
+function paipuPostParts(summary:PaipuSummary,members:Map<number,Member>,levelOf:(user:string)=>RoastLevel,outcomes:string[]=[]){
  // Names everywhere; each linked member's Discord tag appears once, on their own block.
  const who=(seatNo:number)=>clean(members.get(seatNo)?.name??summary.seats[seatNo].nickname);
  const names=new Map([...members.values()].filter(m=>m.user).map(m=>[m.user!,clean(m.name)]));
@@ -144,6 +144,13 @@ export function paipuPost(summary:PaipuSummary,members:Map<number,Member>,levelO
  // An optional review must never consume the character budget of existing outcomes,
  // hand highlights, member-specific roasts, or the final sourced quote.
  const parts=[`🀄 **雀魂 ${label}｜牌譜検討**`,...section('順位',standings),...section('KP',outcomes.map(l=>l.startsWith('🔎')?l:untag(l))),...section('主な和了',hands),...section('メンバー',blocks.flatMap((b,i)=>i?['',b]:[b])),...meme?['',`💬 ${meme}`]:[]];
+ const comments=summary.players===3?equalSanmaComments(summary,summary.review,members):equalC3Comments(summary,summary.c3,members);
+ return {parts,meme,comments};
+}
+/** Legacy text-only representation; delivery below preserves overflow too. */
+export function paipuPost(summary:PaipuSummary,members:Map<number,Member>,levelOf:(user:string)=>RoastLevel,outcomes:string[]=[]){
+ const {parts,meme,comments}=paipuPostParts(summary,members,levelOf,outcomes);
+ const section=(title:string,lines:string[])=>lines.length?[`\n**${title}**`,...lines]:[];
  const full=parts.join('\n');
  const clipped=(lines:string[])=>{
   let text='';
@@ -151,7 +158,6 @@ export function paipuPost(summary:PaipuSummary,members:Map<number,Member>,levelO
   return text;
  };
  const baseline=clipped(parts);
- const comments=summary.players===3?equalSanmaComments(summary,summary.review,members):equalC3Comments(summary,summary.c3,members);
  // If the existing post is already at capacity, leave it byte-for-byte unchanged.
  // Append the optional section only when every original section will still fit.
  if(!comments.length||full.length>1900)return baseline;
@@ -164,14 +170,33 @@ export function paipuPost(summary:PaipuSummary,members:Map<number,Member>,levelO
  }
  return baseline;
 }
-/** Keep the existing content unchanged. Overflow analysis travels in the same
- * webhook message as an embed, using the same idempotent queue row and retry.
- * No extra D1 read/write, second message, notification or payout is needed. */
-export function paipuPostPayload(summary:PaipuSummary,members:Map<number,Member>,levelOf:(user:string)=>RoastLevel,outcomes:string[]=[]){
- const content=paipuPost(summary,members,levelOf,outcomes);
- const comments=summary.players===3?equalSanmaComments(summary,summary.review,members):equalC3Comments(summary,summary.c3,members);
- const missing=comments.filter(c=>!content.includes(c));
- return {content,...missing.length?{embeds:[{title:'松本等しいのひと言',description:missing.join('\n')}]}:{}};
+interface PaipuMessage {content:string;embeds?:Array<{title?:string;description:string}>}
+/** Content + embeds share ONE durable queue row/message in ordinary games.
+ * Exceptional >7900-character output uses atomic, individually deduplicated
+ * queue rows; nothing is clipped to make room for a new review. */
+export function paipuPostMessages(summary:PaipuSummary,members:Map<number,Member>,levelOf:(user:string)=>RoastLevel,outcomes:string[]=[]):PaipuMessage[]{
+ const {parts,meme,comments}=paipuPostParts(summary,members,levelOf,outcomes);
+ const extra=comments.length?[`\n**松本等しいのひと言**`,...comments]:[];
+ const body=meme?[...parts.slice(0,-2),...extra,...parts.slice(-2)]:[...parts,...extra];
+ let rest=body.join('\n');const messages:PaipuMessage[]=[];
+ const take=(max:number)=>{
+  let end=Math.min(max,rest.length);
+  if(end<rest.length){const nl=rest.lastIndexOf('\n',end);if(nl>0)end=nl;}
+  // JS/Discord limits use UTF-16; never split an emoji's surrogate pair.
+  if(end<rest.length&&end>0&&/[\uD800-\uDBFF]/.test(rest[end-1]))end--;
+  const chunk=rest.slice(0,end);rest=rest.slice(end);return chunk;
+ };
+ while(rest.length){
+  const message:PaipuMessage={content:take(1900)};let budget=6000;
+  while(rest.length&&budget>0){const description=take(Math.min(4000,budget));if(!description.length)break;(message.embeds??=[]).push({description});budget-=description.length;}
+  messages.push(message);
+ }
+ return messages;
+}
+export function paipuPostPayload(summary:PaipuSummary,members:Map<number,Member>,levelOf:(user:string)=>RoastLevel,outcomes:string[]=[]){return paipuPostMessages(summary,members,levelOf,outcomes)[0];}
+export async function queuePaipuMessages(env:PaipuEnv,uuid:string,posts:PaipuMessage[],now:number){
+ if(posts.length===1)await enqueue(env,'paipu:'+uuid,posts[0].content,now,posts[0].embeds);
+ else if(posts.length)await env.DB.batch(posts.map((post,i)=>env.DB.prepare('INSERT OR IGNORE INTO kp_posts(id,body,at) VALUES(?,?,?)').bind('paipu:'+uuid+(i?':part:'+String(i+1).padStart(2,'0'):''),JSON.stringify({...post,allowed_mentions:{parse:[]}}),now)));
 }
 /** Applies one fetched summary: stores it, settles /paifu claims, queues the post. `players` are the
  * registered accounts of the result watcher, roasted by name until they are linked to Discord. */
@@ -194,8 +219,9 @@ export async function applySummary(env:PaipuEnv,mapping:KpMapping,summary:PaipuS
  outcomes.push(...await autoCredit(env,mapping.guildId,summary,now));
  if(env.KP_EARNINGS_WEBHOOK_URL&&members.size){
   await ensurePosts(env);
-  const post=paipuPostPayload(summary,members,await roastLevelsOf(env,mapping),outcomes);
-  await enqueue(env,'paipu:'+summary.uuid,post.content,now,post.embeds);
+  const posts=paipuPostMessages(summary,members,await roastLevelsOf(env,mapping),outcomes);
+  await queuePaipuMessages(env,summary.uuid,posts,now);
+
  }
 }
 /** GET /api/mahjong/paipu/queue and POST /api/mahjong/paipu/summaries, both signed. */

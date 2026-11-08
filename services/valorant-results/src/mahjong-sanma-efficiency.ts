@@ -59,7 +59,7 @@ export function sanmaDiscardMetrics(d:ReviewDecision):Efficiency[]{
  * final-round placement or value sacrifice. Replay supports more than this evaluator. */
 export function sanmaShapeEligible(d:ReviewDecision,game:string):boolean{
  const finalWind=game==='3-tonpu'?0:1;
- if(d.players!==3||d.wind>finalWind||(d.wind===finalWind&&d.dealer===2)||d.turn>10||d.riichi.some(Boolean)||d.melds.some(m=>m.length>0)||d.hand.includes('N')||d.scores.some(s=>s<10000)||d.scores.some(s=>s>60000))return false;
+ if(d.declaringReach||d.players!==3||d.wind>finalWind||(d.wind===finalWind&&d.dealer===2)||d.turn>10||d.riichi.some(Boolean)||d.melds.some(m=>m.length>0)||d.hand.includes('N')||d.scores.some(s=>s<10000)||d.scores.some(s=>s>60000))return false;
  return true;
 }
 export function sanmaShapeFinding(d:ReviewDecision,game:string):SanmaFinding|null{

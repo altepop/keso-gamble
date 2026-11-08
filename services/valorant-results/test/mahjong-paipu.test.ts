@@ -260,3 +260,43 @@ test('real sanma worker v3 crosses signed ingestion, queue and mocked Discord de
  const before=f.balance(one);await f.call('/api/mahjong/paipu/summaries',{results:[{uuid:PAIPU,summary:{...s,review:report}}]});
  assert.equal(f.balance(one),before);assert.equal(f.posts().length,1);assert.equal(await flushRacePosts(f.env),0);assert.equal(sends,1);
 });
+
+test('long paipu delivery preserves every old section, new review and quote within Discord limits',async()=>{
+ const {paipuPostMessages}=await import('../src/mahjong-paipu.ts');
+ const members=new Map([[0,{name:'Aさん',user:one}],[1,{name:'B',user:two}]]);
+ const s={...summary,c3:{version:2,source:'c3',model:'c3-v1.0-observation-1',uuid:PAIPU,findings:[{seat:1,round:0,turn:4,actual:'6p',recommended:'3p',position:'discard'}]}};
+ const marker='🔎 UNIQUE-LONG-OUTCOME';const full=paipuPost(s,members,()=> 'normal',[marker]);
+ assert.ok(full.includes('**松本等しいのひと言**'));
+ for(const length of [3000,6000,12000]){
+  const outcome='🔎 '+('🀄あ'.repeat(length));
+  const expected=full.replace(marker,outcome),messages=paipuPostMessages(s,members,()=> 'normal',[outcome]);
+  const recovered=messages.flatMap(m=>[m.content,...(m.embeds??[]).map(e=>e.description)]).join('');
+  assert.ok(recovered===expected,'every character survives packing, including newlines and emoji');
+  assert.ok(messages.every(m=>m.content.length<=1900));
+  for(const m of messages){
+   assert.ok((m.embeds??[]).length<=10);assert.ok((m.embeds??[]).every(e=>e.description.length<=4096));
+   assert.ok((m.embeds??[]).reduce((sum,e)=>sum+e.description.length,0)<=6000);
+   for(const c of [m.content,...(m.embeds??[]).map(e=>e.description)]){
+    assert.ok(!/[\uD800-\uDBFF]$/.test(c),'no dangling high surrogate');assert.ok(!/^[\uDC00-\uDFFF]/.test(c),'no dangling low surrogate');
+   }
+  }
+  assert.ok(recovered.endsWith(full.split('\n').at(-1)!));
+ }
+});
+
+test('exceptionally long posts enqueue all parts atomically with stable IDs and preserve pending parts after a delivery failure',async t=>{
+ const {paipuPostMessages,queuePaipuMessages}=await import('../src/mahjong-paipu.ts');
+ const {ensurePosts,flushRacePosts}=await import('../src/racing-posts.ts');const f=await fixture();await ensurePosts(f.env);
+ const posts=paipuPostMessages(summary,new Map([[0,{name:'Aさん',user:one}]]),()=> 'normal',['🔎 '+('長文🀄'.repeat(4000))]);assert.ok(posts.length>1);
+ const batch=f.env.DB.batch.bind(f.env.DB);
+ const mock=t.mock.method(f.env.DB,'batch',async(statements:any)=>batch([...statements,f.env.DB.prepare('INSERT INTO absent_atomic_test_table VALUES(1)')]));
+ await assert.rejects(()=>queuePaipuMessages(f.env,PAIPU,posts,T0));
+ assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM kp_posts WHERE id LIKE 'paipu:%'").get()!.n,0,'failed batch did not register a partial post');mock.mock.restore();
+ await queuePaipuMessages(f.env,PAIPU,posts,T0);await queuePaipuMessages(f.env,PAIPU,posts,T0);
+ const rows=f.sql.prepare("SELECT id,body,sent FROM kp_posts WHERE id LIKE 'paipu:%' ORDER BY id").all();assert.equal(rows.length,posts.length);assert.equal(rows[0].id,'paipu:'+PAIPU);
+ for(const row of rows)assert.deepEqual(JSON.parse(String(row.body)).allowed_mentions,{parse:[]});
+ let failing=true;const sent:any[]=[];
+ t.mock.method(globalThis,'fetch',async(_url:unknown,options:any)=>{if(failing)return new Response('',{status:500});sent.push(JSON.parse(options.body));return new Response('',{status:200});});
+ assert.equal(await flushRacePosts(f.env,10),0);assert.equal(f.sql.prepare('SELECT SUM(sent) n FROM kp_posts').get()!.n,0);
+ failing=false;assert.equal(await flushRacePosts(f.env,10),posts.length);assert.equal(await flushRacePosts(f.env,10),0);assert.equal(sent.length,posts.length);
+});

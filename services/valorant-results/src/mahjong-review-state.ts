@@ -7,7 +7,7 @@ export interface ReviewDecision {
  seat:number;round:number;turn:number;actionIndex:number;actual:string;draw:string|null;hand:string[];
  players:3|4;dealer:number;wind:number;honba:number;sticks:number;scores:number[];
  rivers:string[][];melds:ReviewMeld[][];north:number[];riichi:boolean[];doubleRiichi:boolean[];
- doras:string[];visible:number[];publicRed?:string[];interrupted:boolean;
+ doras:string[];visible:number[];publicRed?:string[];declaringReach?:boolean;interrupted:boolean;
 }
 export const tileKind=(tile:string):number=>{
  const h=['E','S','W','N','P','F','C'].indexOf(tile);
@@ -81,8 +81,8 @@ export function reviewDecisions(actions:PaipuAction[],summary:PaipuSummary,cap=2
     if(!seat(d?.seat)||!pending||pending.seat!==d.seat||hands[d.seat].length!==14-3*melds[d.seat].length)throw Error('discard order');
     const t=parse(d.tile);if(!t||!hands[d.seat].includes(t)||(d.moqie===true&&pending.draw!==null&&pending.draw!==t))throw Error('discard');
     // A discard ordinal stays unambiguous even after calls and replacement draws.
-    if((pending.draw!==null||n===4&&pending.afterCall)&&out.length<cap&&!riichi[d.seat]&&!d.is_liqi&&!d.is_wliqi){
-     out.push({seat:d.seat,round,actionIndex,turn:rivers[d.seat].length+1,actual:t,draw:pending.draw,hand:hands[d.seat].slice(),players:n,dealer,wind,honba,sticks,scores:scores.slice(),rivers:rivers.map(r=>r.slice()),melds:structuredClone(melds),north:north.slice(),riichi:riichi.slice(),doubleRiichi:doubleRiichi.slice(),doras:doras.slice(),visible:visible.slice(),publicRed:[...publicRed],interrupted});
+    if((pending.draw!==null||n===4&&pending.afterCall)&&out.length<cap&&!riichi[d.seat]&&(n===3||!d.is_liqi&&!d.is_wliqi)){
+     out.push({seat:d.seat,round,actionIndex,turn:rivers[d.seat].length+1,actual:t,draw:pending.draw,hand:hands[d.seat].slice(),players:n,dealer,wind,honba,sticks,scores:scores.slice(),rivers:rivers.map(r=>r.slice()),melds:structuredClone(melds),north:north.slice(),riichi:riichi.slice(),doubleRiichi:doubleRiichi.slice(),doras:doras.slice(),visible:visible.slice(),publicRed:[...publicRed],declaringReach:Boolean(d.is_liqi||d.is_wliqi),interrupted});
     }
     if(riichi[d.seat]&&pending.draw!==t)throw Error('locked reach hand');
     remove(d.seat,t);reveal(t);rivers[d.seat].push(t);updateDoras(d);

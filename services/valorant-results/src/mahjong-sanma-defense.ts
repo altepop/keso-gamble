@@ -6,7 +6,7 @@ import {sanmaShanten,sanmaDiscardMetrics} from './mahjong-sanma-efficiency.ts';
 export interface SanmaDefenseFinding {seat:number;round:number;turn:number;actual:string;recommended:string;basis:'genbutsu';against:number;againstRiichi:true;recommendedOnRiver:true;actualOnRiver:boolean;shanten:number}
 export function sanmaDefenseFinding(d:ReviewDecision,game:string):SanmaDefenseFinding|null{
  const finalWind=game==='3-tonpu'?0:1;
- if(d.players!==3||d.hand.length!==14||!d.hand.includes(d.actual)||d.hand.includes('N')||d.riichi[d.seat]||d.turn<6||d.turn>24||d.wind>finalWind||d.wind===finalWind&&d.dealer===2||d.scores.some(s=>s<10000||s>60000)||d.melds.some(m=>m.length))return null;
+ if(d.declaringReach||d.players!==3||d.hand.length!==14||!d.hand.includes(d.actual)||d.hand.includes('N')||d.riichi[d.seat]||d.turn<6||d.turn>24||d.wind>finalWind||d.wind===finalWind&&d.dealer===2||d.scores.some(s=>s<10000||s>60000)||d.melds.some(m=>m.length))return null;
  const opponents=d.riichi.flatMap((r,s)=>r&&s!==d.seat?[s]:[]);if(opponents.length!==1)return null;
  const against=opponents[0],river=new Set(d.rivers[against].map(tileKind));
  if(!d.hand.some(t=>river.has(tileKind(t))))return null;

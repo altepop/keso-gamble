@@ -11,6 +11,7 @@ import {sanmaValueCase} from '../src/mahjong-sanma-value.ts';
 import {buildC3Cases} from '../src/mahjong-c3-cases.ts';
 import {acceptedC3Report} from '../src/mahjong-c3-comment.ts';
 import {acceptedSanmaReport} from '../src/mahjong-sanma-comment.ts';
+import {reviewSanmaValues} from './mahjong-sanma-value.mjs';
 import {createPaipuReviewer} from './mahjong-review.mjs';
 export const RECENT_REVIEW_SQL=`SELECT paipu,summary FROM kp_mahjong_paipu WHERE rowid>(SELECT COALESCE(MAX(rowid),0) FROM kp_mahjong_paipu)-64 AND summary IS NOT NULL ORDER BY rowid DESC LIMIT 12`;
 export function auditSample(head,actions,saved,report){
@@ -22,6 +23,7 @@ export function auditSample(head,actions,saved,report){
  });
  const flags=['begin_open_mode','open_hand','reveal_discard','muyu_mode','yongchang_mode','field_spell_mode','guyi_mode','dora3_mode','xuezhandaodi','huansanzhang','chuanma','zhanxing','tianming_mode','jiuchao_mode','hunzhiyiji_mode','wanxiangxiuluo_mode','beishuizhizhan_mode'];
  const activeRuleFlags=flags.filter(k=>head.config?.mode?.detail_rule?.[k]);
+ const conditionalValueAudit={};if(summary.players===3)reviewSanmaValues(frames,summary.game,{diagnostics:conditionalValueAudit});
  const findings=report?.findings??[];
  if(report&&!(summary.players===3?acceptedSanmaReport(summary,report):acceptedC3Report(summary,report)))throw Error('audit_report_invalid');
  const cases=summary.players===4?buildC3Cases(actions,summary):frames;
@@ -32,7 +34,7 @@ export function auditSample(head,actions,saved,report){
    const value=sanmaValueCase(c,summary.game);
    for(const m of [f.actualValue,f.recommendedValue]){
     const candidate=value?.candidates.find(x=>x.tile===m.tile);
-    if(!candidate||candidate.waits.reduce((sum,w)=>sum+w.left,0)!==m.live)throw Error('audit_value_unverified');
+    if(value.riichi!==f.riichi||!candidate||candidate.waits.reduce((sum,w)=>sum+w.left,0)!==m.live)throw Error('audit_value_unverified');
    }
   }
   if(f.basis==='genbutsu'){
@@ -43,7 +45,7 @@ export function auditSample(head,actions,saved,report){
  // Existing, previously saved result metadata must remain the same; don't log it.
  const facts=s=>JSON.stringify({players:s.players,game:s.game,start:s.start,end:s.end,seats:s.seats,rounds:s.rounds});
  if(facts(summary)!==facts(saved))throw Error('audit_saved_result_mismatch');
- return {players:summary.players,rounds:summary.rounds.length,records:actions.length,kinds,diagnostics,roundShapes:[...new Map(roundShapes.map(s=>[JSON.stringify(s),s])).values()],activeRuleFlags,supportedRules:supportsReviewRules(head),paymentCalibration:calibrateSanmaPayments(head,actions),replayedDecisions:frames.length,postInterruptionDecisions:frames.filter(f=>f.interrupted).length,modelCases:cases.length,verifiedFindings:findings.length,findingBases:Object.fromEntries([...new Set(findings.map(f=>f.basis??'model'))].map(b=>[b,findings.filter(f=>(f.basis??'model')===b).length])),savedResultMatches:true};
+ return {players:summary.players,rounds:summary.rounds.length,records:actions.length,kinds,diagnostics,roundShapes:[...new Map(roundShapes.map(s=>[JSON.stringify(s),s])).values()],activeRuleFlags,supportedRules:supportsReviewRules(head),paymentCalibration:calibrateSanmaPayments(head,actions),conditionalValueAudit,replayedDecisions:frames.length,postInterruptionDecisions:frames.filter(f=>f.interrupted).length,modelCases:cases.length,verifiedFindings:findings.length,findingBases:Object.fromEntries([...new Set(findings.map(f=>f.basis??'model'))].map(b=>[b,findings.filter(f=>(f.basis??'model')===b).length])),savedResultMatches:true};
 }
 export async function liveAudit(env=process.env,{query,connect=login,decode=fetchDecodedRecord,reviewerFactory=createPaipuReviewer}={}){
  if(!query)throw Error('audit_query_missing');
