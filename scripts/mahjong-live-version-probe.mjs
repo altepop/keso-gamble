@@ -10,10 +10,8 @@ try{
   if(!r.ok)throw Error('audit_d1_http');const b=await r.json();if(!b.success||!b.result?.[0]?.success)throw Error('audit_d1_read');return b.result[0].results;
  };
  const decode=async(session,uuid)=>{
-  let last;
-  const profiles=(session.recordProfiles??[]).filter(v=>v!==session.versionString&&/^(?:web|WebGL_2022)-[0-9.()]+$/.test(v)).slice(0,3);
-  for(const profile of profiles)try{const result=await fetchDecodedRecord({...session,versionString:profile},uuid);profileResults.push({profile,ok:true});return result;}catch(error){last=error;profileResults.push({profile,ok:false,...auditFailure(error,'record')});}
-  throw last??Error('audit_no_public_profiles');
+  const profile=/^(?:web|WebGL_2022)-[0-9.()]+$/.test(session.versionString)?session.versionString:'unknown-public-profile';
+  try{const result=await fetchDecodedRecord(session,uuid);profileResults.push({profile,ok:true});return result;}catch(error){profileResults.push({profile,ok:false,...auditFailure(error,'record')});throw error;}
  };
  const result=await liveAudit(env,{query,decode});console.log('Public-profile real record comparison: '+JSON.stringify({profileResults,...result}));if(!result.standardProfilesVerified||!result.standardSanmaProfileVerified)process.exitCode=1;
 }catch(error){console.error('Public-profile comparison failed: '+JSON.stringify(auditFailure(error,'startup')));process.exitCode=1;}
