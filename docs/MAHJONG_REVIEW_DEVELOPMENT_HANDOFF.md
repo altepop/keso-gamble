@@ -374,3 +374,13 @@
 - 結果取得後、.github/workflows/mahjong-record-context-once.ymlを削除。以降のPR更新で診断用のログイン/一覧照会が再実行されない。CLI診断は手動用として残し、通常の監視からは呼ばない。
 - Node24.19.0でnpm run check成功（Bot814/配備診断55/D1予算4、全873件成功・skipなし）、npm run buildのWorker dry-run成功。最終headのGitHub CI結果はPR393本文を優先する。
 - 今回の確認でDBアクセス/書き込み・Discord投稿・KP変更・本番配置・三麻有効化なし。540は未解決。次はアカウント用途/公式再生の観測と現行クライアントの一覧取得手順を照合し、根拠のある一段階だけを進める。認証情報のリセットや版/接続先の総当たりは行わない。
+
+## 公開クライアントに基づく本人履歴V2への切り替え（2026-11-09 JST）
+
+- e6a9dd9のCI42498416280はcheck/browserとも成功、deployはPRのためskip。Chromium/WebKitを含むtest:browser:allを確認した。
+- 秘密値やログインを使わない一時Actionsで、公式version.jsonが宣言したv0.11.252.w/code.js（8,686,884 bytes）を取得。コードは実行せず、acornで構文解析し、配列リテラルへの静的な数値参照だけを置換した。ASTの直接配列束縛を後から別の別名で上書きしない修正後、run42507144976と42507231252で実際の呼び出し箇所を確認した。初期の参照解決でmatches=0となった結果は「呼び出しが存在しない」根拠にしない。
+- 当該公開コードはALL=0、fetchGameRecordListV2へtag/begin_time/end_time/ranks/modes/max_hu_type/level_modeを渡し、返ったiteratorをfetchNextGameRecordListへ渡す。ページ応答はentries。旧fetchGameRecordList呼び出しは確認できなかった。これは宣言された公開Webコードについての観測であり、別のUnityビルド全体の挙動を証明するものではない。
+- 同コードのcheckPaiPuはgame_uuidとclient_version_stringでfetchGameRecordを呼び、成功した後にreadGameRecordを呼ぶ。readGameRecordを取得前の必須条件として追加する根拠はないため、追加していない。
+- 手動の--viewer-history-checkをV2に切り替え。ALL=0、直近30日という診断用の範囲、iterator要求1回、count=1のページ要求1回、完了/本人参加を確認できた場合だけ牌譜取得1回。公開画面の既定期間そのものとは主張しない。空ページやnext=trueでも追加ページへ進まない。iteratorはメモリ内だけで、ログ/戻り値/DBへ出さない。不正/期限切れiteratorはページ照会前に停止。
+- RecordListEntryはaccountsではなくplayersを持つため、プロトコル定義に合わせて参加者を検証。本人不明、期間外、未終了、ID不正は拒否。6件のV2テストと既存の11件の1牌譜診断テストが成功した。
+- 公開ソース確認の一時workflowは削除。所有者/PR393/同一repo限定の別の一時ジョブでV2を一度だけ確認し、結果取得後に削除する。既存Yostar資格情報以外は渡さず、DB・モデル・Discord投稿・KP・本番配置/有効化へは接続しない。

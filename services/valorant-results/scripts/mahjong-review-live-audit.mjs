@@ -45,19 +45,26 @@ export async function recordCheck(env=process.env,{query,connect=login,decode=fe
  finally{session?.close();}
 }
 
-/** Authenticated viewer history only. One list RPC, at most one completed replay. */
+/** Authenticated viewer history: one V2 iterator + one page, at most one completed replay. */
 export async function viewerHistoryCheck(env=process.env,{connect=login,decode=fetchDecodedRecord,nowMs=Date.now()}={}){
  let session,phase='login',historyRequests=0,recordRequests=0,sessionContext;
  try{
   session=await connect(env);sessionContext=recordSessionContext(session,null);
   if(!Number.isSafeInteger(session.viewerAccountId)||session.viewerAccountId<=0||session.viewerAccountId>4294967295)return {ok:false,status:'viewer-unknown',historyRequests,recordRequests,sessionContext};
-  phase='history';historyRequests++;const history=await session.call('fetchGameRecordList',{start:1,count:1,type:0});
-  const entry=Array.isArray(history?.record_list)?history.record_list[0]:undefined;
-  if(!entry)return {ok:false,status:'history-empty-response',historyRequests,recordRequests,totalReportedPositive:Number.isSafeInteger(history?.total_count)&&history.total_count>0,sessionContext};
-  const seats=Array.isArray(entry.accounts)?entry.accounts.map(p=>({accountId:p?.account_id})):null;
+  const endTime=Math.floor(nowMs/1000),beginTime=Math.max(0,endTime-30*86400);
+  if(!Number.isSafeInteger(endTime)||endTime<=0||endTime>4294967295)throw Error('audit_clock_invalid');
+  // Official declared public client: ALL tag=0, V2 iterator followed by NextGameRecordList.
+  // Deliberately bound this diagnostic to 30 days and a single entry; never continue paging.
+  phase='history';historyRequests++;
+  const cursor=await session.call('fetchGameRecordListV2',{tag:0,begin_time:beginTime,end_time:endTime,ranks:[],modes:[],max_hu_type:0,level_mode:[]});
+  if(typeof cursor?.iterator!=='string'||!cursor.iterator.length||cursor.iterator.length>4096||!Number.isSafeInteger(cursor.iterator_expire)||cursor.iterator_expire<=endTime)return {ok:false,status:'history-iterator-unverified',historyRequests,recordRequests,sessionContext};
+  historyRequests++;const history=await session.call('fetchNextGameRecordList',{iterator:cursor.iterator,count:1});
+  const entry=Array.isArray(history?.entries)?history.entries[0]:undefined;
+  if(!entry)return {ok:false,status:'history-empty-response',historyRequests,recordRequests,hasNext:history?.next===true,sessionContext};
+  const seats=Array.isArray(entry.players)?entry.players.map(p=>({accountId:p?.account_id})):null;
   sessionContext=recordSessionContext(session,{seats});
   const validId=typeof entry.uuid==='string'&&/^\d{6}-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(entry.uuid);
-  const completed=Number.isSafeInteger(entry.start_time)&&entry.start_time>0&&Number.isSafeInteger(entry.end_time)&&entry.end_time>entry.start_time&&entry.end_time<=Math.floor(nowMs/1000)+60;
+  const completed=Number.isSafeInteger(entry.start_time)&&entry.start_time>=beginTime&&entry.start_time>0&&Number.isSafeInteger(entry.end_time)&&entry.end_time>entry.start_time&&entry.end_time<=Math.floor(nowMs/1000)+60;
   if(!validId||!completed||sessionContext.viewerParticipated!==true)return {ok:false,status:'history-record-unverified',historyRequests,recordRequests,sessionContext};
   phase='record';recordRequests++;const {head,actions}=await decode(session,entry.uuid);
   const headUuidMatches=head?.uuid===entry.uuid,actionCount=Array.isArray(actions)?Math.min(actions.length,100000):0,ok=headUuidMatches&&actionCount>0;
@@ -139,7 +146,7 @@ export function auditRecordMetadata(row){
 }
 export function auditFailure(error,phase){
  const message=error?.message??'';
- const protocol=message.match(/^(fetchGameRecord|fetchGameRecordList|oauth2Auth|oauth2Check|oauth2Login)_([0-9]{1,6})$/);
+ const protocol=message.match(/^(fetchGameRecord|fetchGameRecordList|fetchGameRecordListV2|fetchNextGameRecordList|oauth2Auth|oauth2Check|oauth2Login)_([0-9]{1,6})$/);
  const code=protocol?'audit_rpc_'+protocol[1]+'_'+protocol[2]:/^audit_[a-z_]+$/.test(message)?message:/^http_\d{3}$/.test(message)?'audit_'+message:/^yostar_login_\d+$/.test(message)?'audit_'+message:message.startsWith('login_failed:')?'audit_login_failed':'audit_failed';
  const kind=['Error','TypeError','SyntaxError','TimeoutError','AbortError'].includes(error?.name)?error.name:'unknown';
  const at=String(error?.stack??'').match(/\/(mahjong-review-live-audit|mahjong-paipu)\.mjs:(\d+):\d+/);
