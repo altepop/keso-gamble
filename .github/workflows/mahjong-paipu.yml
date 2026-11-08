@@ -15,6 +15,10 @@ on:
         description: '既存の実牌譜を最大2件再取得し匿名検証（送信・支給・DB書き込みなし）'
         type: boolean
         default: false
+      enable_sanma:
+        description: '所有者限定: 単発検証の送信成功後に三麻のリポジトリ変数を有効化する'
+        type: boolean
+        default: false
       delivery_probe:
         description: '所有者限定: 人工牌譜の検証投稿を1通送信（KP支給なし・同じ版は再送しない）'
         type: boolean
@@ -134,6 +138,12 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           C3_ASSETS_ROOT: ${{ github.workspace }}/services/valorant-results/.cache/c3-model
         run: node scripts/mahjong-review-delivery-probe.mjs
+      - name: Enable sanma only after successful owner-requested delivery verification
+        if: inputs.enable_sanma && steps.queue.outputs.count == 'delivery-probe' && github.actor == 'altepop'
+        env:
+          PAIPU_DISPATCH_TOKEN: ${{ secrets.PAIPU_DISPATCH_TOKEN }}
+          SANMA_PROBE_VERIFIED: 'true'
+        run: node scripts/enable-verified-sanma-review.mjs
       - name: Read persisted review delivery only (no Mahjong login)
         if: steps.queue.outputs.count == 'delivery'
         env:
