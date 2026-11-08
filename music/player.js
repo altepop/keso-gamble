@@ -5,14 +5,12 @@
     {id:"mou",title:"もう一周",src:"music/assets/mou-isshu.mp3"},
     {id:"rhapsody",title:"限界集落狂詩曲",src:"music/assets/genkai-rhapsody.mp3"}
   ];
-  var prefix="keso.music.", audio=new Audio();
+  var prefix="keso.music.", audio=null;
   var read=function(key,fallback){try{return localStorage.getItem(prefix+key)||fallback;}catch(_){return fallback;}};
   var save=function(key,value){try{localStorage.setItem(prefix+key,String(value));}catch(_){}};
   var track=read("track","mou"),volume=Math.max(0,Math.min(100,Number(read("volume","15"))||0));
   if(!tracks.some(function(t){return t.id===track;}))track="mou";
-  audio.preload="none";audio.loop=false;audio.volume=volume/100;
-  // Setting src with preload=none does not start playback; the first tap can call play() without an await.
-  audio.src=new URL(tracks.find(function(t){return t.id===track;}).src,document.baseURI).href;
+  // In Discord, even constructing Audio before a tap may activate the voice/audio session.
   var root=document.createElement("div");root.id="keso-music";
   root.innerHTML=[
     '<button type="button" class="music-open" aria-expanded="false" aria-controls="music-panel" aria-label="音楽プレイヤーを開く">♫ <span>BGM</span></button>',
@@ -35,8 +33,8 @@
   select.value=track;
   var memory=new Map(),objectUrl=null,requestId=0,hasPlayed=false;
   function status(s){$(".music-status").textContent=s;}
-  function render(){var playing=!audio.paused;playBtn.textContent=playing?"⏸ 一時停止":"▶ 再生";openBtn.classList.toggle("playing",playing);}
-  function pause(){requestId++;audio.pause();render();}
+  function render(){var playing=!!audio&&!audio.paused;playBtn.textContent=playing?"⏸ 一時停止":"▶ 再生";openBtn.classList.toggle("playing",playing);}
+  function pause(){requestId++;if(audio)audio.pause();render();}
   function release(){if(objectUrl){URL.revokeObjectURL(objectUrl);objectUrl=null;}}
   function database(){
     return new Promise(function(resolve,reject){
@@ -70,14 +68,22 @@
     }catch(_){return false;}
   }
   function active(){return tracks.find(function(t){return t.id===track;})||tracks[0];}
-  // Restore user-imported music before the first play when possible, without starting audio.
-  void stored(track).then(function(file){
-    if(!file||!audio.paused||objectUrl)return;
-    objectUrl=URL.createObjectURL(file);audio.src=objectUrl;
-  });
+  // IndexedDB access does not activate media; the saved blob is ready for the next trusted tap.
+  void stored(track).then(function(file){if(file)memory.set(track,file);});
+  function ensureAudio(){
+    if(audio)return audio;
+    audio=new Audio();audio.preload="none";audio.loop=false;audio.volume=volume/100;
+    var local=memory.get(track);
+    if(local){objectUrl=URL.createObjectURL(local);audio.src=objectUrl;}
+    else audio.src=new URL(active().src,document.baseURI).href;
+    audio.addEventListener("play",render);audio.addEventListener("pause",render);
+    audio.addEventListener("ended",function(){if(hasPlayed&&!document.hidden)void next();});
+    audio.addEventListener("error",function(){if(audio.getAttribute("src"))status("音源の読み込みに失敗しました。端末からMP3を追加してください。");render();});
+    return audio;
+  }
 
   async function load(){
-    var turn=++requestId;
+    ensureAudio();var turn=++requestId;
     audio.pause();audio.removeAttribute("src");audio.load();release();render();
     var local=await stored(track);
     if(turn!==requestId)return false;
@@ -86,7 +92,7 @@
     return true;
   }
   async function play(){
-    var chosen=track;
+    ensureAudio();var chosen=track;
     try{
       if(!audio.getAttribute("src"))await load();
       if(chosen!==track)return;
@@ -96,7 +102,7 @@
   }
   async function choose(id,forcePlay){
     if(!tracks.some(function(t){return t.id===id;}))return;
-    var resume=forcePlay||!audio.paused;
+    var resume=forcePlay||(!!audio&&!audio.paused);
     track=id;select.value=id;save("track",id);
     await load();status("選択中："+active().title);
     if(resume)await play();
@@ -104,10 +110,10 @@
   function next(){var i=tracks.findIndex(function(t){return t.id===track;});return choose(tracks[(i+1)%tracks.length].id,true);}
   openBtn.addEventListener("click",function(){panel.hidden=!panel.hidden;openBtn.setAttribute("aria-expanded",String(!panel.hidden));});
   $(".music-close").addEventListener("click",function(){panel.hidden=true;openBtn.setAttribute("aria-expanded","false");openBtn.focus();});
-  playBtn.addEventListener("click",function(){if(!audio.paused){pause();status("一時停止中");}else void play();});
+  playBtn.addEventListener("click",function(){if(audio&&!audio.paused){pause();status("一時停止中");}else void play();});
   $("#music-next").addEventListener("click",function(){void next();});
   select.addEventListener("change",function(){void choose(select.value,false);});
-  $("#music-volume").addEventListener("input",function(e){volume=Math.max(0,Math.min(100,Number(e.target.value)||0));audio.volume=volume/100;$("#music-percent").textContent=volume+"%";save("volume",volume);});
+  $("#music-volume").addEventListener("input",function(e){volume=Math.max(0,Math.min(100,Number(e.target.value)||0));if(audio)audio.volume=volume/100;$("#music-percent").textContent=volume+"%";save("volume",volume);});
   $("#music-file").addEventListener("change",async function(e){
     var file=e.target.files&&e.target.files[0];if(!file)return;
     if(!file.type.startsWith("audio/")&&!/\.(mp3|ogg|wav|m4a)$/i.test(file.name)){status("音声ファイルを選択してください。");return;}
@@ -115,11 +121,8 @@
     var ok=await persist(track,file);await load();
     status(ok?"端末に保存しました。▶ 再生を押してください。":"今回の画面では読み込めました。次回は再選択が必要です。");
   });
-  audio.addEventListener("play",render);audio.addEventListener("pause",render);
-  audio.addEventListener("ended",function(){if(hasPlayed&&!document.hidden)void next();});
-  audio.addEventListener("error",function(){if(audio.getAttribute("src"))status("音源の読み込みに失敗しました。端末からMP3を追加してください。");render();});
   document.addEventListener("visibilitychange",function(){if(document.hidden){pause();status("画面が非表示のため停止しました。");}});
   window.addEventListener("pagehide",pause);
-  document.addEventListener("click",function(e){if(e.target.closest&&e.target.closest('[data-action="bgm-toggle"]')&&!audio.paused){pause();status("旧BGMへの切り替えに伴い停止しました。");}},true);
-  globalThis.KesoMusic={pause:pause,getState:function(){return {track:track,volume:volume,playing:!audio.paused};}};
+  document.addEventListener("click",function(e){if(e.target.closest&&e.target.closest('[data-action="bgm-toggle"]')&&audio&&!audio.paused){pause();status("旧BGMへの切り替えに伴い停止しました。");}},true);
+  globalThis.KesoMusic={pause:pause,getState:function(){return {track:track,volume:volume,playing:!!audio&&!audio.paused};}};
 })();
