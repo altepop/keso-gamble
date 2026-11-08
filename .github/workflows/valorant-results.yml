@@ -55,7 +55,7 @@ jobs:
       - name: Detect changes to optional mahjong analysis
         id: review_paths
         run: |
-          if ! git -C ../.. diff --quiet HEAD^ HEAD -- 'services/valorant-results/src/mahjong-*' 'services/valorant-results/scripts/mahjong-*' 'services/valorant-results/scripts/c3-vendor' '.github/workflows/mahjong-paipu.yml' '.github/workflows/valorant-results.yml'; then
+          if ! git -C ../.. diff --quiet HEAD^ HEAD -- 'services/valorant-results/src/mahjong-*' 'services/valorant-results/scripts/mahjong-*' 'services/valorant-results/scripts/c3-vendor' 'services/valorant-results/scripts/sanma-*' 'services/valorant-results/test/mahjong-*' 'services/valorant-results/test/fixtures/mahjong-review-*' '.github/workflows/mahjong-paipu.yml' '.github/workflows/valorant-results.yml'; then
             echo 'changed=true' >> "$GITHUB_OUTPUT"
           fi
       - name: Set up pinned sanma hand calculator for changed analysis
@@ -84,18 +84,6 @@ jobs:
         env:
           C3_ASSETS_ROOT: ${{ github.workspace }}/services/valorant-results/.cache/c3-model
         run: node scripts/mahjong-review-smoke.mjs
-      # Temporary owner-only phase-four validation; remove after recording evidence.
-      - name: Audit actual sanma hand-value paths without delivery or writes
-        if: github.event_name == 'pull_request' && github.actor == 'altepop' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'feat/mahjong-review-sanma'
-        timeout-minutes: 5
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          YOSTAR_UID: ${{ secrets.YOSTAR_UID }}
-          YOSTAR_TOKEN: ${{ secrets.YOSTAR_TOKEN }}
-          YOSTAR_DEVICE_ID: ${{ secrets.YOSTAR_DEVICE_ID }}
-          C3_ASSETS_ROOT: ${{ github.workspace }}/services/valorant-results/.cache/c3-model
-        run: node scripts/mahjong-review-live-audit.mjs
       - name: Check Activity logic
         run: |
           npm --prefix ../.. ci
