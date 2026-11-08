@@ -25,7 +25,8 @@ test('live result comparisons reject mismatches, and errors still close both ses
  const saved={...summary,game:'4-tonpu'};
  assert.throws(()=>auditSample(head,sample,saved,null),/audit_saved_result_mismatch/);
  let closed=0;
- await assert.rejects(liveAudit({}, {query:async()=>[{paipu:'secret',summary:JSON.stringify(summary)}],connect:async()=>({close(){closed++;}}),decode:async()=>{throw Error('record fetch failure');},reviewerFactory:()=>({close:async()=>{closed++;}})}),/record fetch failure/);
+ const unavailable=await liveAudit({}, {query:async()=>[{paipu:'secret',summary:JSON.stringify(summary)}],connect:async()=>({close(){closed++;}}),decode:async()=>{throw Error('record fetch failure');},reviewerFactory:()=>({close:async()=>{closed++;}})});
+ assert.equal(unavailable.selected,0);assert.equal(unavailable.recordRequests,1);assert.equal(unavailable.standardSanmaProfileVerified,false);assert.equal(unavailable.unavailableRecords.length,1);
  assert.equal(closed,2);
 });
 
@@ -89,4 +90,12 @@ test('audit failures expose only fixed phase/category and approved source line, 
  for(const [message,code] of [['fetchGameRecord_1234','audit_rpc_fetchGameRecord_1234'],['login_failed:private-token','audit_login_failed'],['yostar_login_503','audit_yostar_login_503'],['http_502','audit_http_502'],['audit_report_invalid','audit_report_invalid']])assert.equal(auditFailure(Error(message),'login').code,code);
  assert.doesNotMatch(JSON.stringify(auditFailure(raw,'private-token')),/private-token|private-name/);
  let phase='';await assert.rejects(liveAudit({}, {query:async()=>[{summary:JSON.stringify(summary)}],connect:async()=>{throw Error('secret');},onPhase:(p:string)=>{phase=p;}}));assert.equal(phase,'login');
+});
+
+test('an unavailable recent record cannot hide the next valid game; at most two attempts per size',async()=>{
+ const {threeDefenseScenario}=await import('./fixtures/mahjong-review-three.ts');const three=threeDefenseScenario();
+ const rows=[{paipu:'bad-three',summary:JSON.stringify(three.summary)},{paipu:'good-three',summary:JSON.stringify(three.summary)},{paipu:'third-three',summary:JSON.stringify(three.summary)},{paipu:'bad-four',summary:JSON.stringify(summary)},{paipu:'good-four',summary:JSON.stringify(summary)}];
+ let reads=0,requests=0;
+ const result=await liveAudit({}, {query:async()=>{reads++;return rows;},connect:async()=>({close(){}}),decode:async(_s:object,id:string)=>{requests++;if(id.startsWith('bad'))throw Error('fetchGameRecord_1203');if(id==='third-three')throw Error('must not request');const data=id==='good-three'?three:{head,actions:sample};return {...data,head:{...data.head,config:{...data.head.config,meta:{mode_id:24}}}};},reviewerFactory:()=>({review:async()=>null,close:async()=>{}})});
+ assert.equal(reads,1);assert.equal(requests,4);assert.equal(result.selected,2);assert.equal(result.standardSanmaProfileVerified,true);assert.equal(result.standardProfilesVerified,true);assert.equal(result.unavailableRecords.length,2);assert.equal(result.unavailableRecords[0].code,'audit_rpc_fetchGameRecord_1203');assert.doesNotMatch(JSON.stringify(result),/bad-three|good-three|bad-four|third-three/);
 });

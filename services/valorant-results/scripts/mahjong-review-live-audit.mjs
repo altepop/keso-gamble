@@ -1,5 +1,5 @@
 // Trusted owner-only CI diagnostic. One bounded SELECT; re-fetch <=2 existing
-// games. No ingestion, Discord, KP, D1 writes, artifacts, names or game IDs.
+// successful games, at most two record requests per size. No ingestion, Discord, KP, D1 writes, artifacts, names or game IDs.
 import {pathToFileURL} from 'node:url';
 import {D1_B_ID} from '../../../scripts/relic-abuse-audit.mjs';
 import {login,fetchDecodedRecord} from './mahjong-paipu.mjs';
@@ -74,13 +74,13 @@ export async function deliveryAudit({query}={}){
 export async function liveAudit(env=process.env,{query,connect=login,decode=fetchDecodedRecord,reviewerFactory=createPaipuReviewer,onPhase=()=>{}}={}){
  if(!query)throw Error('audit_query_missing');
  onPhase('history');const rows=await query(RECENT_REVIEW_SQL,[]),selected=[];
- for(const players of [3,4]){const row=rows.find(row=>{try{return JSON.parse(row.summary).players===players;}catch{return false;}});if(row)selected.push(row);}
+ for(const players of [3,4]){const candidates=rows.filter(row=>{try{return JSON.parse(row.summary).players===players;}catch{return false;}}).slice(0,2);if(candidates.length)selected.push({players,candidates});}
  if(!selected.length)return {selected:0,samples:[]};
  onPhase('login');const session=await connect(env);onPhase('reviewer');const reviewer=reviewerFactory({root:env.C3_ASSETS_ROOT,fourEnabled:true,sanmaEnabled:true,timeoutMs:45000,budgetMs:90000});
  try{
-  const samples=[];
-  for(const row of selected){onPhase('record');const {head,actions}=await decode(session,row.paipu);onPhase('summary');const summary=summarizePaipu(head,actions);onPhase('review');const report=confirmedStandardReviewRules(head)?await reviewer.review(summary,actions):null;onPhase('verify');samples.push({...auditSample(head,actions,JSON.parse(row.summary),report),...persistedReviewStatus(JSON.parse(row.summary),row.delivery)});}
-  return {selected:samples.length,handValueBackendConfigured:Boolean(env.SANMA_PYTHON),standardProfilesVerified:samples.length>0&&samples.every(s=>s.confirmedStandardRules),standardSanmaProfileVerified:samples.some(s=>s.players===3&&s.confirmedStandardRules),samples};
+  const samples=[],unavailableRecords=[];let recordRequests=0;
+  for(const {players,candidates} of selected)for(const row of candidates){onPhase('record');let decoded;recordRequests++;try{decoded=await decode(session,row.paipu);}catch(error){unavailableRecords.push({players,...auditFailure(error,'record')});continue;}const {head,actions}=decoded;onPhase('summary');const summary=summarizePaipu(head,actions);onPhase('review');const report=confirmedStandardReviewRules(head)?await reviewer.review(summary,actions):null;onPhase('verify');samples.push({...auditSample(head,actions,JSON.parse(row.summary),report),...persistedReviewStatus(JSON.parse(row.summary),row.delivery)});break;}
+  return {selected:samples.length,recordRequests,unavailableRecords,handValueBackendConfigured:Boolean(env.SANMA_PYTHON),standardProfilesVerified:samples.length>0&&samples.every(s=>s.confirmedStandardRules),standardSanmaProfileVerified:samples.some(s=>s.players===3&&s.confirmedStandardRules),samples};
  }finally{await reviewer.close();session.close();}
 }
 export function auditFailure(error,phase){
