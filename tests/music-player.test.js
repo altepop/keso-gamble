@@ -18,6 +18,7 @@ function setup(){
  const root={id:'',innerHTML:'',querySelector:element};
  const events=new Map(),document={
   baseURI:'https://example.org/',hidden:false,
+  querySelector(){return null;},getElementById(){return null;},
   body:{appendChild(e){this.child=e;}},
   createElement(){return root;},
   addEventListener(type,fn){events.set(type,fn);}
