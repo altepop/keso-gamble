@@ -98,6 +98,7 @@ jobs:
           YOSTAR_DEVICE_ID: ${{ secrets.YOSTAR_DEVICE_ID }}
           C3_ASSETS_ROOT: ${{ github.workspace }}/services/valorant-results/.cache/c3-model
           MAHJONG_REQUIRE_STANDARD_PROFILE: 'true'
+          MAHJONG_AUDIT_OMIT_RECORD_VERSION: 'true'
         run: node scripts/mahjong-review-live-audit.mjs
       - name: Check Activity logic
         run: |
