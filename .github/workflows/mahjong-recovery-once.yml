@@ -1,4 +1,4 @@
-name: Temporary Mahjong one-record recovery check
+name: Temporary Mahjong recovered replay audit
 on:
   pull_request:
     paths:
@@ -12,17 +12,32 @@ jobs:
   one-record:
     if: github.actor == 'altepop' && github.event.pull_request.number == 393 && github.event.pull_request.head.repo.full_name == 'altepop/keso-gamble' && github.head_ref == 'fix/mahjong-audit-diagnostics'
     runs-on: ubuntu-latest
-    timeout-minutes: 3
+    timeout-minutes: 8
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
           node-version: '24'
       - run: npm --prefix services/valorant-results ci --ignore-scripts
-      - name: Read one saved replay with unchanged request, without fallback or writes
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install existing pinned isolated hand evaluator
         working-directory: services/valorant-results
-        run: node scripts/mahjong-review-live-audit.mjs --record-check
+        run: |
+          python3 -m venv .venv-mahjong
+          .venv-mahjong/bin/python -m pip install --disable-pip-version-check --no-deps --only-binary=:all: --require-hashes -r scripts/sanma-requirements.txt
+          echo "SANMA_PYTHON=$PWD/.venv-mahjong/bin/python" >> "$GITHUB_ENV"
+      - uses: actions/cache/restore@v4
+        with:
+          path: services/valorant-results/.cache/c3-model
+          key: equal-review-c3-5b30a83de3ab9523
+      - name: Audit real sanma and yonma without ingestion, posting or credit
+        working-directory: services/valorant-results
+        run: node scripts/mahjong-review-live-audit.mjs
         env:
+          C3_ASSETS_ROOT: ${{ github.workspace }}/services/valorant-results/.cache/c3-model
+          MAHJONG_REQUIRE_STANDARD_PROFILE: 'true'
           YOSTAR_UID: ${{ secrets.YOSTAR_UID }}
           YOSTAR_TOKEN: ${{ secrets.YOSTAR_TOKEN }}
           YOSTAR_DEVICE_ID: ${{ secrets.YOSTAR_DEVICE_ID }}
