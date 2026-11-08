@@ -37,16 +37,12 @@ async function yostarSession(env){
  return {uid:String(r.Data.UserInfo.ID||env.YOSTAR_UID),token:r.Data.UserInfo.Token};
 }
 
-export function publicProductVersion(html){
- const version=html.match(/productVersion["']?\s*:\s*["']([^"']+)["']/)?.[1];
- return typeof version==='string'&&/^\d+(?:\.\d+){1,4}(?:\(\d+\))?$/.test(version)?version:null;
-}
 export async function serverContext(){
  // Loaded here so an empty queue needs no npm install (see the workflow).
  const [{default:protobuf},{default:WebSocket}]=await Promise.all([import('protobufjs'),import('ws')]);
  const info=await json(`${BASE}/version.json?randv=${randv()}`),version=info.version;
  const html=await (await fetch(BASE+'/index.html',{signal:AbortSignal.timeout(TIMEOUT)})).text().catch(()=>'');
- const product=publicProductVersion(html);
+ const product=html.match(/productVersion:\s*["']([^"']+)["']/)?.[1];
  const [config,manifest]=await Promise.all([json(`${BASE}/${String(info.code).split('/')[0]}/config.json`),json(`${BASE}/resversion${version}.json`)]);
  const gateway=config.ip.find(e=>e.gateways?.length).gateways[0].url.replace(/\/+$/,'');
  const routesUrl=new URL(gateway+'/api/clientgate/routes');
@@ -56,7 +52,7 @@ export async function serverContext(){
  if(fields&&!fields.platform)fields.platform={type:'string',id:6};
  const resource=String(version).replace(/\.w$/,'');
  return {WebSocket,root:protobuf.Root.fromJSON(liqi),routes:(routes?.data?.routes??[]).filter(r=>r?.id&&r?.domain),
-  versions:[...new Set([`WebGL_2022-${UNITY_RESOURCE_VERSION}`,product&&`WebGL_2022-${product}`,product&&`web-${product}`,`web-${resource}`].filter(Boolean))],
+  versions:[...new Set([`WebGL_2022-${UNITY_RESOURCE_VERSION}`,product&&`web-${product}`,`web-${resource}`].filter(Boolean))],
   clientVersion:{...(product?{package:product}:{}),resource:`${UNITY_RESOURCE_VERSION}.W`}};
 }
 
@@ -104,7 +100,7 @@ export async function login(env){
     if(!check.has_account)throw Error('oauth2Check_no_account');
     const done=await gate.call('oauth2Login',{type:OAUTH_TYPE,access_token:auth.access_token,reconnect:false,device:DEVICE,random_key:randomUUID(),client_version:ctx.clientVersion,client_version_string:versionString,currency_platforms:CURRENCY,tag:'jp'});
     if(!done.account)throw Error('oauth2Login_failed');
-    return {root:ctx.root,versionString,recordProfiles:ctx.versions,call:gate.call,close:gate.close};
+    return {root:ctx.root,versionString,call:gate.call,close:gate.close};
    }catch(error){errors.push(error.message);gate?.close();}
   }
  }
