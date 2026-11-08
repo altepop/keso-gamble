@@ -331,3 +331,14 @@
 - 模擬WebSocketで実openGatewayの要求/応答フレームを通し、540でも送信されたID/版が保存されることを確認。protobufの項目名違い、壊れたバイト列、引数件数上限、余計な秘密項目の除外、他RPCの従来エラー動作も回帰テストにした。実際のサーバーの540を再現/解消したという意味ではない。
 - ローカルNode24: 型検査・Bot814/配備38/D1予算4、全成功/skipなし。Worker dry-run buildも成功。最終SHAのCIはPR393本文へ記録する。
 - 今回は実APIへの再取得・Discord投稿・本番配置・三麻有効化を行っていない。540は未解決、進捗見積り90%は据え置き。次の小さな段階は、この診断を使った実牌譜1件だけの読み取り確認を準備し、得られた事実から次の修正を決めること。自動で何度も取得し直すworkflowを追加しない。
+
+## 次の小段階：実牌譜1件だけで送信診断を確認（2026-11-08）
+
+- 前回head087ddf1959ae41c7d67d30e29e8996ac62e35297のCI42477159474はcheck/browser成功、PRのためdeploy skip。
+- `mahjong-review-live-audit.mjs --record-check`を追加。直近rowid64行以内から保存済みIDをSELECT1回/LIMIT1で選び、ログイン処理後にfetchDecodedRecordを1回だけ呼ぶ。代替候補・解析モデル・Python・署名付き取り込み・投稿・支給は呼ばない。失敗/空データ/返却ID不一致/資格情報なしは成功扱いにしない。
+- 模擬確認6件を追加。SELECT/取得/close回数、540での再試行なし、秘密値非露出、未ログインでの空/不正ID拒否、返却内容不整合、SQLの64行制限、CLIの資格情報/モード競合を検証。関連20テスト成功。
+- 所有者・同一repo・PR393・専用branch限定の一時ジョブで実行し、結果取得後にそのworkflowを削除。新しい定期処理や自動再ログインは残さない。モデル/Python/取り込み鍵/Webhook/有効化処理を持たず、通常paipu処理と同じconcurrencyを使用。
+- 実行run42478425683/job128724840777（head f169b7577324e674634b72dd314365d2b5d16d8c）。recordRequests=1、phase=record、audit_rpc_fetchGameRecord_540、ok=false。失敗ジョブを再実行していない。
+- 実際のrpc診断: requestDecoded=true、gameUuidPreserved=true、clientVersionPreserved=true、numberParamCount=0、stringParamCount=0、jsonParamPresent=false。送信前のprotobuf符号化でID/版が欠落したケースを除外できた。サーバーがその版/プロトコルを受理することや、540の原因がサーバー側不具合であることまでは証明しない。
+- 540は未解決、三麻有効化と追加の本番配置は行っていない。今回の確認でD1への書き込み・Discord投稿・KP変更なし。次は公式クライアントでの再生可否の回答と、受理条件/現行プロトコルの根拠を照合する。版や接続先を当てずっぽうで変えて試行しない。
+- ローカルNode24の型検査、Bot814/配備44/D1予算4の全テスト（skipなし）とWorker dry-run build成功。最終headのCI結果はPR393本文を優先する。進捗90%は据え置き。
