@@ -11,9 +11,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - run: npm --prefix services/valorant-results ci --ignore-scripts
       - name: Inspect declared public code as text, without login or execution
+        working-directory: services/valorant-results
         run: |
           node --input-type=module <<'JS'
+          import {parse} from 'acorn';
           const base='https://game.mahjongsoul.com/';
           async function read(url,limit){
             const r=await fetch(url,{signal:AbortSignal.timeout(30000),redirect:'error'});
@@ -27,11 +34,18 @@ jobs:
             if(typeof version.code!=='string'||!/^v[0-9.]+w?\/code\.js$/.test(version.code))throw Error('public_code_path_unverified');
             const source=await read(new URL(version.code,base),20000000);
             console.log('Declared public code:',version.code,'bytes:',Buffer.byteLength(source));
-            console.log('Static source prefix:',source.slice(0,2200));
-            console.log('Static source suffix:',source.slice(-1000));
+            const ast=parse(source,{ecmaVersion:'latest'}),nodes=[],todo=[ast];
+            while(todo.length){const n=todo.pop();if(!n||typeof n!=='object')continue;if(n.type)nodes.push(n);for(const [k,v] of Object.entries(n)){if(k==='value'||k==='regex')continue;if(Array.isArray(v))todo.push(...v);else if(v&&typeof v==='object')todo.push(v);}}
+            const tables=new Map(),aliases=[];
+            for(const n of nodes){if(n.type!=='AssignmentExpression'||n.operator!=='='||n.left.type!=='Identifier')continue;let rhs=n.right;while(rhs?.type==='AssignmentExpression')rhs=rhs.right;if(rhs?.type==='ArrayExpression'&&rhs.elements.length>10000)tables.set(n.left.name,rhs.elements);else if(rhs?.type==='Identifier')aliases.push([n.left.name,rhs.name]);}
+            for(let round=0;round<12;round++)for(const [a,b] of aliases)if(tables.has(b))tables.set(a,tables.get(b));
+            const edits=[];
+            for(const n of nodes){if(n.type!=='MemberExpression'||!n.computed||n.object.type!=='Identifier'||n.property.type!=='Literal')continue;const item=tables.get(n.object.name)?.[n.property.value];if(item?.type==='Literal'&&['string','number','boolean'].includes(typeof item.value))edits.push({start:n.start,end:n.end,text:JSON.stringify(item.value),value:item.value});}
+            console.log('Static literal tables:',tables.size,'references:',edits.length);
             for(const method of ['fetchGameRecordListV2','fetchNextGameRecordList','fetchGameRecordList','fetchGameRecord']){
-              const hits=[...source.matchAll(new RegExp(method+'["\x27]','g'))].slice(0,3);
-              console.log(JSON.stringify({method,matches:hits.length,excerpts:hits.map(m=>source.slice(Math.max(0,m.index-180),m.index+method.length+360))}));
+              const hits=edits.filter(e=>e.value===method).slice(0,3),excerpts=[];
+              for(const hit of hits){const begin=Math.max(0,hit.start-1200),end=Math.min(source.length,hit.end+1800);let part=source.slice(begin,end);for(const e of edits.filter(e=>e.start>=begin&&e.end<=end).sort((a,b)=>b.start-a.start))part=part.slice(0,e.start-begin)+e.text+part.slice(e.end-begin);excerpts.push(part);}
+              console.log(JSON.stringify({method,matches:hits.length,excerpts}));
             }
           }catch(e){console.error(/^public_[a-z0-9_]+$/.test(e.message)?e.message:'public_inspection_failed');process.exitCode=1;}
           JS
