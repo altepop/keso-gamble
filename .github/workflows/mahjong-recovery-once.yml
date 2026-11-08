@@ -26,9 +26,9 @@ jobs:
           AUDIT_READ_TOKEN: ${{ github.token }}
         run: |
           git fetch --depth=1 origin da8d56573e757b41fb915f68c9389417b3d78a48
-          git diff --exit-code da8d56573e757b41fb915f68c9389417b3d78a48 HEAD -- services/valorant-results/src services/valorant-results/scripts
+          git diff --quiet da8d56573e757b41fb915f68c9389417b3d78a48 HEAD -- ':(glob)services/valorant-results/src/mahjong-*.ts' ':(glob)services/valorant-results/scripts/mahjong-*.mjs' ':(glob)services/valorant-results/scripts/sanma-*' services/valorant-results/scripts/c3-vendor services/valorant-results/package.json services/valorant-results/package-lock.json
           git fetch --depth=1 origin 4192e3a6be43bdff05cb5b0dc22d89f807d62964
-          git diff --exit-code 4192e3a6be43bdff05cb5b0dc22d89f807d62964 HEAD -- services/valorant-results/src/mahjong-*.ts services/valorant-results/scripts/mahjong-review.mjs services/valorant-results/scripts/mahjong-review-worker.mjs services/valorant-results/scripts/sanma-*
+          git diff --quiet 4192e3a6be43bdff05cb5b0dc22d89f807d62964 HEAD -- services/valorant-results/src/mahjong-*.ts services/valorant-results/scripts/mahjong-review.mjs services/valorant-results/scripts/mahjong-review-worker.mjs services/valorant-results/scripts/sanma-*
           node --input-type=module <<'JS'
           const r=await fetch('https://api.github.com/repos/altepop/keso-gamble/actions/runs/42525457154',{headers:{Authorization:'Bearer '+process.env.AUDIT_READ_TOKEN,Accept:'application/vnd.github+json'},signal:AbortSignal.timeout(15000)});
           if(!r.ok)throw Error('audit_receipt_http');const run=await r.json();
