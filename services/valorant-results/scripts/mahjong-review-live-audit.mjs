@@ -14,7 +14,18 @@ import {acceptedSanmaReport} from '../src/mahjong-sanma-comment.ts';
 import {auditCompletedSanmaHands} from './mahjong-sanma-hand-audit.mjs';
 import {reviewSanmaValues} from './mahjong-sanma-value.mjs';
 import {createPaipuReviewer} from './mahjong-review.mjs';
-export const RECENT_REVIEW_SQL=`SELECT paipu,summary FROM kp_mahjong_paipu WHERE rowid>(SELECT COALESCE(MAX(rowid),0) FROM kp_mahjong_paipu)-64 AND summary IS NOT NULL ORDER BY rowid DESC LIMIT 12`;
+export const RECENT_REVIEW_SQL=`SELECT p.paipu,p.summary,
+ (SELECT json_object('queued',COUNT(*),'sent',COALESCE(SUM(q.sent=1),0),'reviewSent',COALESCE(SUM(q.sent=1 AND instr(q.body,'松本等しいのひと言')>0),0))
+  FROM kp_posts q WHERE q.id>=('paipu:'||p.paipu) AND q.id<('paipu:'||p.paipu||';')) delivery
+ FROM kp_mahjong_paipu p WHERE p.rowid>(SELECT COALESCE(MAX(rowid),0) FROM kp_mahjong_paipu)-64 AND p.summary IS NOT NULL ORDER BY p.rowid DESC LIMIT 12`;
+export function persistedReviewStatus(saved,rawDelivery){
+ const accepted=saved.players===3?acceptedSanmaReport(saved,saved.review):acceptedC3Report(saved,saved.c3);
+ let d;try{d=typeof rawDelivery==='string'?JSON.parse(rawDelivery):rawDelivery;}catch{}
+ const count=k=>Number.isSafeInteger(d?.[k])&&d[k]>=0&&d[k]<=100?d[k]:0;
+ const queued=count('queued'),sent=count('sent'),reviewSent=count('reviewSent');
+ return {persistedReview:accepted?{version:accepted.version,findings:accepted.findings.length}:null,delivery:{queued,sent,reviewSent,allDelivered:queued>0&&sent===queued&&reviewSent<=sent}};
+}
+
 export function auditSample(head,actions,saved,report){
  const summary=summarizePaipu(head,actions),diagnostics={acceptedRounds:0,blocked:{}},frames=reviewDecisions(actions,summary,256,diagnostics);
  const kinds={};for(const a of actions)if(/^Record(?:NewRound|DealTile|DiscardTile|ChiPengGang|AnGangAddGang|BaBei|Hule|NoTile|LiuJu|LiqiSuccess)$/.test(a.name))kinds[a.name]=(kinds[a.name]??0)+1;
@@ -48,6 +59,17 @@ export function auditSample(head,actions,saved,report){
  if(facts(summary)!==facts(saved))throw Error('audit_saved_result_mismatch');
  return {players:summary.players,rounds:summary.rounds.length,records:actions.length,kinds,diagnostics,roundShapes:[...new Map(roundShapes.map(s=>[JSON.stringify(s),s])).values()],activeRuleFlags,supportedRules:supportsReviewRules(head),paymentCalibration:calibrateSanmaPayments(head,actions),conditionalValueAudit,completedHandAudit:summary.players===3?auditCompletedSanmaHands(actions,summary):{},replayedDecisions:frames.length,postInterruptionDecisions:frames.filter(f=>f.interrupted).length,modelCases:cases.length,verifiedFindings:findings.length,findingBases:Object.fromEntries([...new Set(findings.map(f=>f.basis??'model'))].map(b=>[b,findings.filter(f=>(f.basis??'model')===b).length])),savedResultMatches:true};
 }
+/** One bounded SELECT only. No Mahjong login, model load, writes or posts. */
+export async function deliveryAudit({query}={}){
+ if(!query)throw Error('audit_query_missing');
+ const rows=await query(RECENT_REVIEW_SQL,[]),samples=[];
+ for(const row of rows){
+  let saved;try{saved=JSON.parse(row.summary);}catch{continue;}
+  if(![3,4].includes(saved.players))continue;
+  samples.push({players:saved.players,...persistedReviewStatus(saved,row.delivery)});
+ }
+ return {samples,sanmaDelivered:samples.filter(s=>s.players===3&&s.persistedReview&&s.delivery.allDelivered&&s.delivery.reviewSent>0).length,yonmaV2Delivered:samples.filter(s=>s.players===4&&s.persistedReview?.version===2&&s.delivery.allDelivered&&s.delivery.reviewSent>0).length};
+}
 export async function liveAudit(env=process.env,{query,connect=login,decode=fetchDecodedRecord,reviewerFactory=createPaipuReviewer}={}){
  if(!query)throw Error('audit_query_missing');
  const rows=await query(RECENT_REVIEW_SQL,[]),selected=[];
@@ -56,14 +78,15 @@ export async function liveAudit(env=process.env,{query,connect=login,decode=fetc
  const session=await connect(env),reviewer=reviewerFactory({root:env.C3_ASSETS_ROOT,fourEnabled:true,sanmaEnabled:true,timeoutMs:45000,budgetMs:90000});
  try{
   const samples=[];
-  for(const row of selected){const {head,actions}=await decode(session,row.paipu),summary=summarizePaipu(head,actions),report=supportsReviewRules(head)?await reviewer.review(summary,actions):null;samples.push(auditSample(head,actions,JSON.parse(row.summary),report));}
+  for(const row of selected){const {head,actions}=await decode(session,row.paipu),summary=summarizePaipu(head,actions),report=supportsReviewRules(head)?await reviewer.review(summary,actions):null;samples.push({...auditSample(head,actions,JSON.parse(row.summary),report),...persistedReviewStatus(JSON.parse(row.summary),row.delivery)});}
   return {selected:samples.length,handValueBackendConfigured:Boolean(env.SANMA_PYTHON),samples};
  }finally{await reviewer.close();session.close();}
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
  try{
   const env=process.env;
-  if(['CLOUDFLARE_API_TOKEN','CLOUDFLARE_ACCOUNT_ID','YOSTAR_UID','YOSTAR_TOKEN','YOSTAR_DEVICE_ID'].some(k=>!env[k])){
+  const deliveryOnly=process.argv.includes('--delivery');
+  if((deliveryOnly?['CLOUDFLARE_API_TOKEN','CLOUDFLARE_ACCOUNT_ID']:['CLOUDFLARE_API_TOKEN','CLOUDFLARE_ACCOUNT_ID','YOSTAR_UID','YOSTAR_TOKEN','YOSTAR_DEVICE_ID']).some(k=>!env[k])){
    console.log('Live review audit: unavailable_credentials; no access attempted');
   }else{
    const query=async(sql,params)=>{
@@ -71,7 +94,8 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
     const r=await fetch('https://api.cloudflare.com/client/v4/accounts/'+env.CLOUDFLARE_ACCOUNT_ID+'/d1/database/'+D1_B_ID+'/query',{method:'POST',headers:{Authorization:'Bearer '+env.CLOUDFLARE_API_TOKEN,'Content-Type':'application/json'},body:JSON.stringify({sql,params}),signal:AbortSignal.timeout(20000)});
     if(!r.ok)throw Error('audit_d1_http');const body=await r.json();if(body.success!==true||!body.result?.[0]?.success)throw Error('audit_d1_read');return body.result[0].results;
    };
-   console.log('Live review read-only audit: '+JSON.stringify(await liveAudit(env,{query})));
+   if(deliveryOnly)console.log('Live review delivery audit: '+JSON.stringify(await deliveryAudit({query})));
+   else console.log('Live review read-only audit: '+JSON.stringify(await liveAudit(env,{query})));
   }
  }catch(error){
   const code=/^audit_[a-z_]+$/.test(error?.message??'')?error.message:'audit_failed';

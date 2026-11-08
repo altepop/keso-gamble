@@ -39,6 +39,8 @@ concurrency:
   cancel-in-progress: false
 jobs:
   check:
+    outputs:
+      review_changed: ${{ steps.review_paths.outputs.changed }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -84,6 +86,14 @@ jobs:
         env:
           C3_ASSETS_ROOT: ${{ github.workspace }}/services/valorant-results/.cache/c3-model
         run: node scripts/mahjong-review-smoke.mjs
+      # Temporary owner-only delivery baseline; remove before release.
+      - name: Check persisted review delivery without Mahjong login
+        if: github.event_name == 'pull_request' && github.actor == 'altepop' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'feat/mahjong-review-sanma'
+        timeout-minutes: 2
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/mahjong-review-live-audit.mjs --delivery
       - name: Check Activity logic
         run: |
           npm --prefix ../.. ci
@@ -218,6 +228,13 @@ jobs:
         env:
           KESO_SMOKE_WALLET_TOKEN: ${{ secrets.KESO_SMOKE_WALLET_TOKEN }}
         run: node scripts/post-deploy-smoke.mjs
+      - name: Start read-only review delivery verification after changed analysis is deployed
+        if: needs.check.outputs.review_changed == 'true'
+        continue-on-error: true
+        working-directory: services/valorant-results
+        env:
+          PAIPU_DISPATCH_TOKEN: ${{ secrets.PAIPU_DISPATCH_TOKEN }}
+        run: node scripts/dispatch-mahjong-delivery-audit.mjs
       - name: Check requested KP duel/luxury roster (read-only, no IDs printed)
         continue-on-error: true
         env:

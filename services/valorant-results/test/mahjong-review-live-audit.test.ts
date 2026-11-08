@@ -40,3 +40,27 @@ test('live diagnostic verifies defensive claims against the exact earlier public
  assert.equal(auditSample(head,actions,summary,report).verifiedFindings,1);
  assert.throws(()=>auditSample(head,actions,summary,{...report,findings:[{...finding,against:2}]}),/audit_defense_unverified/);
 });
+
+test('delivery audit uses bounded indexed post-ID ranges and reports only persisted acceptance and delivery counts',async()=>{
+ const {DatabaseSync}=await import('node:sqlite');
+ // @ts-expect-error Standalone read-only Actions diagnostic.
+ const {persistedReviewStatus}=await import('../scripts/mahjong-review-live-audit.mjs');
+ const db=new DatabaseSync(':memory:');db.exec('CREATE TABLE kp_mahjong_paipu(paipu TEXT,summary TEXT);CREATE TABLE kp_posts(id TEXT PRIMARY KEY,body TEXT,sent INTEGER)');
+ db.prepare('INSERT INTO kp_mahjong_paipu VALUES(?,?)').run('private-paipu',JSON.stringify(summary));
+ for(const [id,sent,body] of [['paipu:private-paipu',1,'松本等しいのひと言'],['paipu:private-paipu:part:02',0,'continuation'],['paipu:unrelated',1,'other']] as const)db.prepare('INSERT INTO kp_posts VALUES(?,?,?)').run(id,body,sent);
+ const row=db.prepare(RECENT_REVIEW_SQL).get()!;const result=persistedReviewStatus(summary,row.delivery);
+ assert.equal(result.delivery.queued,2);assert.equal(result.delivery.sent,1);assert.equal(result.delivery.reviewSent,1);assert.equal(result.delivery.allDelivered,false);
+ db.prepare('UPDATE kp_posts SET sent=1 WHERE id=?').run('paipu:private-paipu:part:02');
+ assert.equal(persistedReviewStatus(summary,db.prepare(RECENT_REVIEW_SQL).get()!.delivery).delivery.allDelivered,true);
+ assert.doesNotMatch(JSON.stringify(result),/private-paipu|nickname|continuation/);
+ const plan=db.prepare('EXPLAIN QUERY PLAN '+RECENT_REVIEW_SQL).all();assert.ok(plan.some(r=>/SEARCH q USING INDEX/.test(String(r.detail))),'only the bounded primary-key range for each paipu is scanned');
+ assert.equal(persistedReviewStatus(summary,'private-invalid-json').delivery.queued,0);db.close();
+});
+
+test('delivery-only audit makes one SELECT without logging in or returning source identifiers',async()=>{
+ // @ts-expect-error Standalone read-only Actions diagnostic.
+ const {deliveryAudit}=await import('../scripts/mahjong-review-live-audit.mjs');let reads=0;
+ const c3={version:2,source:'c3',model:'c3-v1.0-observation-1',uuid:summary.uuid,findings:[{seat:1,round:0,turn:4,actual:'6p',recommended:'3p',position:'discard'}]};
+ const result=await deliveryAudit({query:async(sql:string,params:unknown[])=>{reads++;assert.equal(sql,RECENT_REVIEW_SQL);assert.deepEqual(params,[]);return [{paipu:'private-record',summary:JSON.stringify({...summary,c3}),delivery:JSON.stringify({queued:1,sent:1,reviewSent:1})}];}});
+ assert.equal(reads,1);assert.equal(result.yonmaV2Delivered,1);assert.equal(result.sanmaDelivered,0);assert.doesNotMatch(JSON.stringify(result),/private-record|nickname|actual|recommended/);
+});
