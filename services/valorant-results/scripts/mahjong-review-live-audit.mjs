@@ -6,7 +6,7 @@ import {login,fetchDecodedRecord} from './mahjong-paipu.mjs';
 import {summarizePaipu} from '../src/mahjong-summary.ts';
 import {supportsReviewRules} from '../src/mahjong-review-rules.ts';
 import {calibrateSanmaPayments} from '../src/mahjong-sanma-calibration.ts';
-import {reviewDecisions} from '../src/mahjong-review-state.ts';
+import {reviewDecisions,tileKind} from '../src/mahjong-review-state.ts';
 import {buildC3Cases} from '../src/mahjong-c3-cases.ts';
 import {acceptedC3Report} from '../src/mahjong-c3-comment.ts';
 import {acceptedSanmaReport} from '../src/mahjong-sanma-comment.ts';
@@ -24,7 +24,14 @@ export function auditSample(head,actions,saved,report){
  const findings=report?.findings??[];
  if(report&&!(summary.players===3?acceptedSanmaReport(summary,report):acceptedC3Report(summary,report)))throw Error('audit_report_invalid');
  const cases=summary.players===4?buildC3Cases(actions,summary):frames;
- for(const f of findings){const c=cases.find(c=>c.seat===f.seat&&c.round===f.round&&c.turn===f.turn&&c.actual===f.actual);if(!c||!(c.legal??c.hand)?.includes(f.recommended))throw Error('audit_discard_invalid');}
+ for(const f of findings){
+  const c=cases.find(c=>c.seat===f.seat&&c.round===f.round&&c.turn===f.turn&&c.actual===f.actual);
+  if(!c||!(c.legal??c.hand)?.includes(f.recommended))throw Error('audit_discard_invalid');
+  if(f.basis==='genbutsu'){
+   const river=c.rivers?.[f.against]?.map(tileKind)??[];
+   if(c.riichi?.[f.against]!==true||!river.includes(tileKind(f.recommended))||river.includes(tileKind(f.actual))!==f.actualOnRiver)throw Error('audit_defense_unverified');
+  }
+ }
  // Existing, previously saved result metadata must remain the same; don't log it.
  const facts=s=>JSON.stringify({players:s.players,game:s.game,start:s.start,end:s.end,seats:s.seats,rounds:s.rounds});
  if(facts(summary)!==facts(saved))throw Error('audit_saved_result_mismatch');

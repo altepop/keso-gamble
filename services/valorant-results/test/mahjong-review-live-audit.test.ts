@@ -28,3 +28,15 @@ test('live result comparisons reject mismatches, and errors still close both ses
  await assert.rejects(liveAudit({}, {query:async()=>[{paipu:'secret',summary:JSON.stringify(summary)}],connect:async()=>({close(){closed++;}}),decode:async()=>{throw Error('record fetch failure');},reviewerFactory:()=>({close:async()=>{closed++;}})}),/record fetch failure/);
  assert.equal(closed,2);
 });
+
+test('live diagnostic verifies defensive claims against the exact earlier public river and reach',async()=>{
+ const {threeDefenseScenario}=await import('./fixtures/mahjong-review-three.ts');
+ const {reviewDecisions}=await import('../src/mahjong-review-state.ts');
+ const {sanmaDefenseFinding}=await import('../src/mahjong-sanma-defense.ts');
+ const {head,actions,summary}=threeDefenseScenario();
+ const frame=reviewDecisions(actions,summary).find(d=>d.seat===0&&d.turn===6)!;
+ const finding=sanmaDefenseFinding(frame,summary.game)!;assert.ok(finding);
+ const report={version:2,source:'sanma-rules',model:'sanma-rules-v2',uuid:summary.uuid,findings:[finding]};
+ assert.equal(auditSample(head,actions,summary,report).verifiedFindings,1);
+ assert.throws(()=>auditSample(head,actions,summary,{...report,findings:[{...finding,against:2}]}),/audit_defense_unverified/);
+});

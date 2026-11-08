@@ -21,5 +21,5 @@ export function threeDefenseScenario(){
   if(turn<8){const t1=pool.pop()!;draw(1,t1);discard(1,t1);}
  }
  const head={uuid:'synthetic-three-defense',start_time:0,end_time:1,config:{mode:{mode:12}},accounts:Array.from({length:3},(_,seat)=>({account_id:seat+1,seat,nickname:'test'+seat})),result:{players:Array.from({length:3},(_,seat)=>({seat,part_point_1:35000}))}};
- return {actions,summary:summarizePaipu(head,actions)};
+ return {head,actions,summary:summarizePaipu(head,actions)};
 }
