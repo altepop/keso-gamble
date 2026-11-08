@@ -12,7 +12,7 @@ on:
         type: boolean
         default: false
       review_audit:
-        description: '既存の実牌譜を最大2件再取得し匿名検証（送信・支給・DB書き込みなし）'
+        description: '既存実牌譜を各ルール最大2候補から匿名検証（成功最大2件、送信・支給なし）'
         type: boolean
         default: false
       enable_sanma:
@@ -23,6 +23,10 @@ on:
         description: '所有者限定: 人工牌譜の検証投稿を1通送信（KP支給なし・同じ版は再送しない）'
         type: boolean
         default: false
+      probe_release:
+        description: '所有者限定: 表示を変えない追修正で既送信の検証SHAを再利用する（通常は空）'
+        type: string
+        default: ''
       delivery_audit:
         description: '保存済み解析とDiscord送信済みの件数だけ確認（SELECT1回、雀魂ログインなし）'
         type: boolean
@@ -137,6 +141,7 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           C3_ASSETS_ROOT: ${{ github.workspace }}/services/valorant-results/.cache/c3-model
+          MAHJONG_REVIEW_PROBE_RELEASE: ${{ inputs.probe_release }}
         run: |
           node scripts/prepare-local.mjs
           node scripts/mahjong-review-delivery-probe.mjs

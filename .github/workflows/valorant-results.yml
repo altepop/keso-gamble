@@ -98,7 +98,7 @@ jobs:
           YOSTAR_DEVICE_ID: ${{ secrets.YOSTAR_DEVICE_ID }}
           C3_ASSETS_ROOT: ${{ github.workspace }}/services/valorant-results/.cache/c3-model
           MAHJONG_REQUIRE_STANDARD_PROFILE: 'true'
-          MAHJONG_AUDIT_OMIT_RECORD_VERSION: 'true'
+          MAHJONG_AUDIT_WEB_VERSION: 'true'
         run: node scripts/mahjong-review-live-audit.mjs
       - name: Check Activity logic
         run: |
@@ -241,6 +241,7 @@ jobs:
         env:
           PAIPU_DISPATCH_TOKEN: ${{ secrets.PAIPU_DISPATCH_TOKEN }}
           REVIEW_DELIVERY_PROBE: ${{ contains(github.event.head_commit.message, '[mahjong-review-probe]') && 'true' || 'false' }}
+          REVIEW_DELIVERY_RESUME: ${{ contains(github.event.head_commit.message, '[mahjong-review-resume]') && 'true' || 'false' }}
         run: node scripts/dispatch-mahjong-delivery-audit.mjs
       - name: Check requested KP duel/luxury roster (read-only, no IDs printed)
         continue-on-error: true

@@ -48,6 +48,6 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
    const r=await fetch('https://api.cloudflare.com/client/v4/accounts/'+env.CLOUDFLARE_ACCOUNT_ID+'/d1/database/'+D1_B_ID+'/query',{method:'POST',headers:{Authorization:'Bearer '+env.CLOUDFLARE_API_TOKEN,'Content-Type':'application/json'},body:JSON.stringify({sql,params}),signal:AbortSignal.timeout(20000)});
    if(!r.ok)throw Error('probe_d1_http_'+r.status);const b=await r.json();if(!b.success||!b.result?.[0]?.success)throw Error('probe_d1_result');return b.result[0].results??[];
   };
-  const result=await verifyProbeDelivery({query,release:env.GITHUB_SHA});console.log('Review delivery probe: '+JSON.stringify(result));if(!result.posted)process.exitCode=1;
+  const result=await verifyProbeDelivery({query,release:env.MAHJONG_REVIEW_PROBE_RELEASE||env.GITHUB_SHA});console.log('Review delivery probe: '+JSON.stringify(result));if(!result.posted)process.exitCode=1;
  }catch(error){const code=/^probe_[a-z0-9_]+$/.test(error?.message??'')?error.message:error?.code==='ERR_MODULE_NOT_FOUND'?'probe_runtime_dependencies':'probe_failed';console.error('Review delivery probe: '+code+' (no credentials, records or raw errors logged)');process.exitCode=1;}
 }

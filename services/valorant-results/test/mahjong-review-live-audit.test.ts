@@ -99,3 +99,9 @@ test('an unavailable recent record cannot hide the next valid game; at most two 
  const result=await liveAudit({}, {query:async()=>{reads++;return rows;},connect:async()=>({close(){}}),decode:async(_s:object,id:string)=>{requests++;if(id.startsWith('bad'))throw Error('fetchGameRecord_1203');if(id==='third-three')throw Error('must not request');const data=id==='good-three'?three:{head,actions:sample};return {...data,head:{...data.head,config:{...data.head.config,meta:{mode_id:24}}}};},reviewerFactory:()=>({review:async()=>null,close:async()=>{}})});
  assert.equal(reads,1);assert.equal(requests,4);assert.equal(result.selected,2);assert.equal(result.standardSanmaProfileVerified,true);assert.equal(result.standardProfilesVerified,true);assert.equal(result.unavailableRecords.length,2);assert.equal(result.unavailableRecords[0].code,'audit_rpc_fetchGameRecord_1203');assert.doesNotMatch(JSON.stringify(result),/bad-three|good-three|bad-four|third-three/);
 });
+
+test('temporary public web-version comparison uses only two known public profiles and keeps one session',async()=>{
+ let calls=0;
+ const result=await liveAudit({MAHJONG_AUDIT_WEB_VERSION:'true'}, {query:async()=>[{paipu:'hidden-game',summary:JSON.stringify(summary)}],connect:async()=>({recordVersions:['WebGL_2022-0.16.213','web-0.16.213','web-0.11.9','private-token'],close(){}}),decode:async(s:{versionString:string})=>{calls++;if(s.versionString==='web-0.16.213')throw Error('fetchGameRecord_540');assert.equal(s.versionString,'web-0.11.9');return {head,actions:sample};},reviewerFactory:()=>({review:async()=>null,close:async()=>{}})});
+ assert.equal(calls,2);assert.equal(result.selected,1);assert.equal(result.unavailableRecords.length,1);assert.doesNotMatch(JSON.stringify(result),/hidden-game|private-token/);
+});

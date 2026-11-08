@@ -100,7 +100,7 @@ export async function login(env){
     if(!check.has_account)throw Error('oauth2Check_no_account');
     const done=await gate.call('oauth2Login',{type:OAUTH_TYPE,access_token:auth.access_token,reconnect:false,device:DEVICE,random_key:randomUUID(),client_version:ctx.clientVersion,client_version_string:versionString,currency_platforms:CURRENCY,tag:'jp'});
     if(!done.account)throw Error('oauth2Login_failed');
-    return {root:ctx.root,versionString,call:gate.call,close:gate.close};
+    return {root:ctx.root,versionString,recordVersions:ctx.versions,call:gate.call,close:gate.close};
    }catch(error){errors.push(error.message);gate?.close();}
   }
  }
