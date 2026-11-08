@@ -11,6 +11,8 @@
   var track=read("track","mou"),volume=Math.max(0,Math.min(100,Number(read("volume","15"))||0));
   if(!tracks.some(function(t){return t.id===track;}))track="mou";
   audio.preload="none";audio.loop=false;audio.volume=volume/100;
+  // Setting src with preload=none does not start playback; the first tap can call play() without an await.
+  audio.src=new URL(tracks.find(function(t){return t.id===track;}).src,document.baseURI).href;
   var root=document.createElement("div");root.id="keso-music";
   root.innerHTML=[
     '<button type="button" class="music-open" aria-expanded="false" aria-controls="music-panel" aria-label="音楽プレイヤーを開く">♫ <span>BGM</span></button>',
@@ -68,6 +70,12 @@
     }catch(_){return false;}
   }
   function active(){return tracks.find(function(t){return t.id===track;})||tracks[0];}
+  // Restore user-imported music before the first play when possible, without starting audio.
+  void stored(track).then(function(file){
+    if(!file||!audio.paused||objectUrl)return;
+    objectUrl=URL.createObjectURL(file);audio.src=objectUrl;
+  });
+
   async function load(){
     var turn=++requestId;
     audio.pause();audio.removeAttribute("src");audio.load();release();render();
