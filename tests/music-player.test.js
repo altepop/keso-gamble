@@ -55,7 +55,7 @@ test('music autoplays after the genuine title renders, with safe default volume'
  await tick();
  assert.equal(s.created(),1);
  assert.equal(s.audio.played,1);
- assert.equal(s.audio.volume,.15);
+ assert.equal(s.audio.volume,.05);
  assert.equal(s.ctx.KesoMusic.getState().playing,true);
  assert.match(s.audio.src,/mou-isshu\.mp3$/);
  const slider=s.element('#music-volume');slider.value='38';
@@ -71,6 +71,16 @@ test('music autoplays after the genuine title renders, with safe default volume'
  s.fire('#music-play','click');await tick();
  s.document.hidden=true;s.events.get('visibilitychange')();
  assert.equal(s.audio.paused,true);
+});
+
+test('saved volume preference is retained, including mute and custom volume',async()=>{
+ const customized=setup({savedEntries:[['keso.music.volume','32']]});
+ await tick();
+ assert.equal(customized.audio.volume,.32);
+ assert.equal(customized.ctx.KesoMusic.getState().volume,32);
+ const muted=setup({savedEntries:[['keso.music.volume','0']]});
+ await tick();
+ assert.equal(muted.audio.volume,0);
 });
 
 test('autoplay OFF persists and opening an error screen never creates Audio',async()=>{
