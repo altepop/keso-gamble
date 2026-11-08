@@ -296,3 +296,15 @@
 
 - 安全な追加診断でログイン成功後の牌譜取得が`fetchGameRecord_540`を返すことを確認（CI `42472584789`, check `128706833184`）。540の意味は未確定で、秘密設定の失効と断定しない。
 - 直近1件が取得不能でも全診断を停止しないよう、同じbounded SELECTの結果から各3/4人最大2候補を試す（合計最大4record RPC、成功標本は最大2）。取得失敗だけを固定codeで記録し、要約/推論/照合の不整合は従来どおり失敗させる。通常運用へのRPC追加なし。
+
+## 最新の運用状態（2026-11-08 UTC、PR #393）
+
+- #377/#392はマージ・本番配置済み。#392 mergeは4192e3a6be43bdff05cb5b0dc22d89f807d62964、Workerは52ca716c-c1c2-4294-8ee9-da4ceb7ddb53。
+- 人工三麻/四麻の検討をまとめた1通は実Discord送達済み。run42471953898の再実行でもposted:true/reused:trueで再投稿なし。実際の新規対局の配信実績とは区別する。
+- 三麻有効化は保留。過去に取得できた三麻9局/7局・四麻8局/11局の4件が、現在すべてfetchGameRecord_540を返す。ID形式・保存UUID・開始日・アカウントIDの妥当性は一致。read-only診断はDB/残高/実牌譜を更新しない。
+- 公式公開設定を確認したところ、151は古いクライアント版を示す。540は旧Web用の同定義表には存在せず、意味を推測で確定しない。公式index.htmlは引用符付きproductVersion 4.0.18を宣言し、旧の正規表現がこれを読めない不具合を修正・単体テスト済み。ただし4.0.18でログインしてもfetchGameRecord_540は継続し、これだけが原因ではない。
+- 実プロファイル再確認: run42474913552/job128713963131。WebGL_2022-4.0.18でも4件とも540。以前の比較診断のステップがcontinue-on-errorにより成功表示になったことがあるが、これは取得成功ではない。今後は実ログのselected・standardProfilesVerified・standardSanmaProfileVerifiedを見る。
+- 最新ローカルcheck実行時点はBot814/配備34/D1予算4、skipなし成功。その後の公開版パーサーは個別1テスト成功。最終SHAでcheck/build/CIを再確認する。
+- 作業環境がunavailableになった。GitHubに保存済みのブランチfix/mahjong-audit-diagnostics/PR393を正とし、手元で実行途中だったcommit/pushの成功を仮定しない。接続ツールで保存状態を照合済み。
+- 一時workflowのmahjong-live-version-probe.ymlとmahjong-public-error-probe.yml、および対応するscriptsは調査後・マージ前に除去する。後者は公式の公開リソース/プロトコル情報だけを読む（資格情報・D1・Discordなし）。前者は所有者/同一repo/専用branch限定の読み取り専用で、mahjong-paipuと同じconcurrencyを使う。
+- 次: 現行WebGL公開設定と旧Webプロトコルの世代差を確認→根拠のある取得修正→read-only実牌譜照合→一時診断削除・全CI→既送達probe_release4192e3a6be43bdff05cb5b0dc22d89f807d62964を再利用して有効化（再投稿しない）。原因不明の版情報試行を本番へ入れない。ユーザーの自然な新規三麻の確認は後日で合意済み。
