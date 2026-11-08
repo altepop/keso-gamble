@@ -1,5 +1,5 @@
 import test from 'node:test';import assert from 'node:assert/strict';import {spawnSync} from 'node:child_process';import {DatabaseSync} from 'node:sqlite';
-import {recordCheck,RECORD_CHECK_SQL} from '../scripts/mahjong-review-live-audit.mjs';
+import {recordCheck,RECORD_CHECK_SQL,OWN_RECORD_CHECK_SQL} from '../scripts/mahjong-review-live-audit.mjs';
 const uuid='261108-aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
 test('single-record check makes one SELECT, one decode and closes the session without exposing the ID',async()=>{
  let reads=0,logins=0,decodes=0,closed=0;
@@ -26,7 +26,7 @@ test('single-record SQL searches only the bounded recent rowid window and return
 });
 test('one-record CLI fails closed without credentials and rejects conflicting modes before any access',()=>{
  const script=new URL('../scripts/mahjong-review-live-audit.mjs',import.meta.url).pathname;
- for(const [args,expected] of [[['--record-check'],/unavailable_credentials/],[['--record-check','--delivery'],/audit_mode_conflict/]]){
+ for(const [args,expected] of [[['--record-check'],/unavailable_credentials/],[['--own-record-check'],/unavailable_credentials/],[['--record-check','--own-record-check'],/audit_mode_conflict/],[['--record-check','--delivery'],/audit_mode_conflict/]]){
   const r=spawnSync(process.execPath,[script,...args],{env:{PATH:process.env.PATH},encoding:'utf8',timeout:10000});assert.equal(r.status,1,r.stderr);assert.match(r.stdout+r.stderr,expected);assert.doesNotMatch(r.stdout+r.stderr,/private-token|Error:/);
  }
 });
@@ -36,4 +36,28 @@ test('single record check returns only game-connection presence and viewer membe
  let calls=0;
  const result=await recordCheck({}, {query:async()=>[{paipu:uuid,summary:JSON.stringify({seats:[{accountId:10001},{accountId:10002},{accountId:10003}]})}],connect:async()=>attachLoginContext({close(){}},{account:{account_id:10001},game_info:{game_uuid:'private-active-game',connect_token:'private-token'}}),decode:async()=>{calls++;throw Error('fetchGameRecord_540');}});
  assert.equal(calls,1);assert.deepEqual(result.sessionContext,{gameConnectionPresent:true,viewerParticipated:true});assert.doesNotMatch(JSON.stringify(result),/10001|10002|10003|private-active|private-token/);
+});
+
+test('own-record mode binds only the authenticated viewer ID and verifies membership before fetching',async()=>{
+ const order=[],viewer=10001,seats=[{accountId:viewer},{accountId:10002},{accountId:10003}];
+ const result=await recordCheck({}, {ownRecord:true,connect:async()=>{order.push('login');return {viewerAccountId:viewer,gameConnectionPresent:false,close(){order.push('close');}};},query:async(sql,params)=>{order.push('query');assert.equal(sql,OWN_RECORD_CHECK_SQL);assert.deepEqual(params,[viewer]);assert.doesNotMatch(sql,/10001/);return [{paipu:uuid,summary:JSON.stringify({seats})}];},decode:async()=>{order.push('record');return {head:{uuid},actions:[{}]};}});
+ assert.deepEqual(order,['login','query','record','close']);assert.equal(result.ok,true);assert.deepEqual(result.sessionContext,{gameConnectionPresent:false,viewerParticipated:true});assert.doesNotMatch(JSON.stringify(result),/10001|aaaaaaaa/);
+});
+test('own-record mode never substitutes another player record when history or identity is unavailable',async()=>{
+ for(const viewer of [undefined,0,'private-id',10001]){
+  let reads=0,decodes=0,closed=0;
+  const result=await recordCheck({}, {ownRecord:true,connect:async()=>({viewerAccountId:viewer,close(){closed++;}}),query:async()=>{reads++;return [];},decode:async()=>{decodes++;throw Error('must not fetch');}});
+  assert.equal(result.ok,false);assert.equal(result.recordRequests,0);assert.equal(decodes,0);assert.equal(closed,1);assert.equal(reads,viewer===10001?1:0);assert.equal(result.status,viewer===10001?'no-own-record':'viewer-unknown');
+ }
+});
+test('own-record mode refuses malformed or nonmatching membership even if a query returns it',async()=>{
+ for(const summary of ['invalid-json',JSON.stringify({seats:[{accountId:10002},{accountId:10003},{accountId:10004}]})]){
+  let decodes=0;const result=await recordCheck({}, {ownRecord:true,connect:async()=>({viewerAccountId:10001,close(){}}),query:async()=>[{paipu:uuid,summary}],decode:async()=>{decodes++;}});assert.equal(result.ok,false);assert.equal(result.status,'own-record-unverified');assert.equal(decodes,0);
+ }
+});
+test('own-record SQL stays within 64 rows, tolerates malformed JSON and selects only bound membership',()=>{
+ const db=new DatabaseSync(':memory:');db.exec('CREATE TABLE kp_mahjong_paipu(paipu TEXT,summary TEXT)');const put=db.prepare('INSERT INTO kp_mahjong_paipu VALUES(?,?)');
+ const summary=JSON.stringify({seats:[{accountId:10001},{accountId:10002},{accountId:10003}]});put.run(uuid,summary);for(let i=0;i<64;i++)put.run('pending-'+i,null);
+ assert.deepEqual(db.prepare(OWN_RECORD_CHECK_SQL).all(10001),[]);put.run('bad','invalid-json');put.run(uuid,summary);
+ assert.equal(db.prepare(OWN_RECORD_CHECK_SQL).all(10001).length,1);assert.deepEqual(db.prepare(OWN_RECORD_CHECK_SQL).all(10004),[]);db.close();
 });

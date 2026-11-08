@@ -20,15 +20,23 @@ export const RECENT_REVIEW_SQL=`SELECT p.paipu,p.summary,
   FROM kp_posts q WHERE q.id>=('paipu:'||p.paipu) AND q.id<('paipu:'||p.paipu||';')) delivery
  FROM kp_mahjong_paipu p WHERE p.rowid>(SELECT COALESCE(MAX(rowid),0) FROM kp_mahjong_paipu)-64 AND p.summary IS NOT NULL ORDER BY p.rowid DESC LIMIT 12`;
 export const RECORD_CHECK_SQL='SELECT paipu,summary FROM kp_mahjong_paipu WHERE rowid>(SELECT COALESCE(MAX(rowid),0) FROM kp_mahjong_paipu)-64 AND summary IS NOT NULL ORDER BY rowid DESC LIMIT 1';
+export const OWN_RECORD_CHECK_SQL="SELECT p.paipu,p.summary FROM kp_mahjong_paipu p WHERE p.rowid>(SELECT COALESCE(MAX(rowid),0) FROM kp_mahjong_paipu)-64 AND p.summary IS NOT NULL AND EXISTS(SELECT 1 FROM json_each(CASE WHEN json_valid(p.summary) THEN p.summary ELSE '{}' END,'$.seats') seat WHERE json_extract(seat.value,'$.accountId')=?) ORDER BY p.rowid DESC LIMIT 1";
 /** One saved ID, one read attempt, no fallback, inference, ingestion or writes. */
-export async function recordCheck(env=process.env,{query,connect=login,decode=fetchDecodedRecord}={}){
+export async function recordCheck(env=process.env,{query,connect=login,decode=fetchDecodedRecord,ownRecord=false}={}){
  let session,phase='history',recordRequests=0,sessionContext;
  try{
   if(typeof query!=='function')throw Error('audit_query_missing');
-  const rows=await query(RECORD_CHECK_SQL,[]),id=rows[0]?.paipu;
-  if(!rows.length)return {ok:false,status:'no-record',recordRequests};
+  if(ownRecord){
+   phase='login';session=await connect(env);
+   if(!Number.isSafeInteger(session.viewerAccountId)||session.viewerAccountId<=0||session.viewerAccountId>4294967295)return {ok:false,status:'viewer-unknown',recordRequests};
+  }
+  phase='history';
+  const rows=await query(ownRecord?OWN_RECORD_CHECK_SQL:RECORD_CHECK_SQL,ownRecord?[session.viewerAccountId]:[]),id=rows[0]?.paipu;
+  if(!rows.length)return {ok:false,status:ownRecord?'no-own-record':'no-record',recordRequests};
   if(typeof id!=='string'||!/^\d{6}-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id))return {ok:false,status:'invalid-record-id',recordRequests};
-  phase='login';session=await connect(env);sessionContext=recordSessionContext(session,rows[0].summary);
+  if(!session){phase='login';session=await connect(env);}
+  sessionContext=recordSessionContext(session,rows[0].summary);
+  if(ownRecord&&sessionContext.viewerParticipated!==true)return {ok:false,status:'own-record-unverified',recordRequests,sessionContext};
   phase='record';recordRequests++;const {head,actions}=await decode(session,id);
   const headUuidMatches=head?.uuid===id,actionCount=Array.isArray(actions)?Math.min(actions.length,100000):0;
   const ok=headUuidMatches&&actionCount>0;
@@ -121,18 +129,18 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
  let phase='startup';
  try{
   const env=process.env;
-  const deliveryOnly=process.argv.includes('--delivery'),recordOnly=process.argv.includes('--record-check');
-  if(deliveryOnly&&recordOnly)throw Error('audit_mode_conflict');
+  const deliveryOnly=process.argv.includes('--delivery'),ownOnly=process.argv.includes('--own-record-check'),recordOnly=process.argv.includes('--record-check')||ownOnly;
+  if(deliveryOnly&&recordOnly||ownOnly&&process.argv.includes('--record-check'))throw Error('audit_mode_conflict');
   if((deliveryOnly?['CLOUDFLARE_API_TOKEN','CLOUDFLARE_ACCOUNT_ID']:['CLOUDFLARE_API_TOKEN','CLOUDFLARE_ACCOUNT_ID','YOSTAR_UID','YOSTAR_TOKEN','YOSTAR_DEVICE_ID']).some(k=>!env[k])){
    console.log('Live review audit: unavailable_credentials; no access attempted');
    if(recordOnly||env.MAHJONG_REQUIRE_STANDARD_PROFILE==='true')process.exitCode=1;
   }else{
    const query=async(sql,params)=>{
-    if(sql!==(recordOnly?RECORD_CHECK_SQL:RECENT_REVIEW_SQL)||params.length)throw Error('audit_query_rejected');
+    if(sql!==(ownOnly?OWN_RECORD_CHECK_SQL:recordOnly?RECORD_CHECK_SQL:RECENT_REVIEW_SQL)||params.length!==(ownOnly?1:0)||ownOnly&&(!Number.isSafeInteger(params[0])||params[0]<=0||params[0]>4294967295))throw Error('audit_query_rejected');
     const r=await fetch('https://api.cloudflare.com/client/v4/accounts/'+env.CLOUDFLARE_ACCOUNT_ID+'/d1/database/'+D1_B_ID+'/query',{method:'POST',headers:{Authorization:'Bearer '+env.CLOUDFLARE_API_TOKEN,'Content-Type':'application/json'},body:JSON.stringify({sql,params}),signal:AbortSignal.timeout(20000)});
     if(!r.ok)throw Error('audit_d1_http');const body=await r.json();if(body.success!==true||!body.result?.[0]?.success)throw Error('audit_d1_read');return body.result[0].results;
    };
-   if(recordOnly){const result=await recordCheck(env,{query});console.log('Live replay one-record check: '+JSON.stringify(result));if(!result.ok)process.exitCode=1;}
+   if(recordOnly){const result=await recordCheck(env,{query,ownRecord:ownOnly});console.log('Live replay one-record check: '+JSON.stringify(result));if(!result.ok)process.exitCode=1;}
    else if(deliveryOnly)console.log('Live review delivery audit: '+JSON.stringify(await deliveryAudit({query})));
    else{const result=await liveAudit(env,{query,onPhase:p=>{phase=p;}});console.log('Live review read-only audit: '+JSON.stringify(result));if(env.MAHJONG_REQUIRE_STANDARD_PROFILE==='true'&&(!result.standardProfilesVerified||!result.standardSanmaProfileVerified))process.exitCode=1;}
   }

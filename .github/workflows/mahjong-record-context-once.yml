@@ -1,4 +1,4 @@
-name: Temporary Mahjong single-record session context
+name: Temporary Mahjong single owned-record comparison
 on:
   pull_request:
     paths:
@@ -19,9 +19,9 @@ jobs:
         with:
           node-version: '24'
       - run: npm --prefix services/valorant-results ci --ignore-scripts
-      - name: Read one record with boolean-only session context (no writes or posting)
+      - name: Read at most one owned saved record (no fallback, writes or posting)
         working-directory: services/valorant-results
-        run: node scripts/mahjong-review-live-audit.mjs --record-check
+        run: node scripts/mahjong-review-live-audit.mjs --own-record-check
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
