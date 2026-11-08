@@ -37,8 +37,10 @@ jobs:
             const ast=parse(source,{ecmaVersion:'latest'}),nodes=[],todo=[ast];
             while(todo.length){const n=todo.pop();if(!n||typeof n!=='object')continue;if(n.type)nodes.push(n);for(const [k,v] of Object.entries(n)){if(k==='value'||k==='regex')continue;if(Array.isArray(v))todo.push(...v);else if(v&&typeof v==='object')todo.push(v);}}
             const tables=new Map(),aliases=[];
+            const literalTables=nodes.filter(n=>n.type==='ArrayExpression'&&n.elements.some(e=>e?.type==='Literal'&&e.value==='fetchGameRecordListV2'));
+            console.log('Method table shapes:',JSON.stringify(literalTables.map(n=>({start:n.start,entries:n.elements.length,indices:['fetchGameRecordListV2','fetchNextGameRecordList','fetchGameRecord'].map(value=>n.elements.findIndex(e=>e?.value===value))}))));
             for(const n of nodes){if(n.type!=='AssignmentExpression'||n.operator!=='='||n.left.type!=='Identifier')continue;let rhs=n.right;while(rhs?.type==='AssignmentExpression')rhs=rhs.right;if(rhs?.type==='ArrayExpression'&&rhs.elements.length>10000)tables.set(n.left.name,rhs.elements);else if(rhs?.type==='Identifier')aliases.push([n.left.name,rhs.name]);}
-            for(let round=0;round<12;round++)for(const [a,b] of aliases)if(tables.has(b))tables.set(a,tables.get(b));
+            for(let round=0;round<12;round++)for(const [a,b] of aliases)if(!tables.has(a)&&tables.has(b))tables.set(a,tables.get(b));
             const edits=[];
             for(const n of nodes){if(n.type!=='MemberExpression'||!n.computed||n.object.type!=='Identifier'||n.property.type!=='Literal')continue;const item=tables.get(n.object.name)?.[n.property.value];if(item?.type==='Literal'&&['string','number','boolean'].includes(typeof item.value))edits.push({start:n.start,end:n.end,text:JSON.stringify(item.value),value:item.value});}
             console.log('Static literal tables:',tables.size,'references:',edits.length);
