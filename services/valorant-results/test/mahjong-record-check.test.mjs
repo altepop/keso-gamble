@@ -26,7 +26,7 @@ test('single-record SQL searches only the bounded recent rowid window and return
 });
 test('one-record CLI fails closed without credentials and rejects conflicting modes before any access',()=>{
  const script=new URL('../scripts/mahjong-review-live-audit.mjs',import.meta.url).pathname;
- for(const [args,expected] of [[['--record-check'],/unavailable_credentials/],[['--own-record-check'],/unavailable_credentials/],[['--record-check','--own-record-check'],/audit_mode_conflict/],[['--record-check','--delivery'],/audit_mode_conflict/]]){
+ for(const [args,expected] of [[['--viewer-history-check'],/unavailable_credentials/],[['--viewer-history-check','--record-check'],/audit_mode_conflict/],[['--record-check'],/unavailable_credentials/],[['--own-record-check'],/unavailable_credentials/],[['--record-check','--own-record-check'],/audit_mode_conflict/],[['--record-check','--delivery'],/audit_mode_conflict/]]){
   const r=spawnSync(process.execPath,[script,...args],{env:{PATH:process.env.PATH},encoding:'utf8',timeout:10000});assert.equal(r.status,1,r.stderr);assert.match(r.stdout+r.stderr,expected);assert.doesNotMatch(r.stdout+r.stderr,/private-token|Error:/);
  }
 });

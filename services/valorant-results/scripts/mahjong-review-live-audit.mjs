@@ -45,6 +45,27 @@ export async function recordCheck(env=process.env,{query,connect=login,decode=fe
  finally{session?.close();}
 }
 
+/** Authenticated viewer history only. One list RPC, at most one completed replay. */
+export async function viewerHistoryCheck(env=process.env,{connect=login,decode=fetchDecodedRecord,nowMs=Date.now()}={}){
+ let session,phase='login',historyRequests=0,recordRequests=0,sessionContext;
+ try{
+  session=await connect(env);sessionContext=recordSessionContext(session,null);
+  if(!Number.isSafeInteger(session.viewerAccountId)||session.viewerAccountId<=0||session.viewerAccountId>4294967295)return {ok:false,status:'viewer-unknown',historyRequests,recordRequests,sessionContext};
+  phase='history';historyRequests++;const history=await session.call('fetchGameRecordList',{start:1,count:1,type:0});
+  const entry=Array.isArray(history?.record_list)?history.record_list[0]:undefined;
+  if(!entry)return {ok:false,status:'history-empty-response',historyRequests,recordRequests,totalReportedPositive:Number.isSafeInteger(history?.total_count)&&history.total_count>0,sessionContext};
+  const seats=Array.isArray(entry.accounts)?entry.accounts.map(p=>({accountId:p?.account_id})):null;
+  sessionContext=recordSessionContext(session,{seats});
+  const validId=typeof entry.uuid==='string'&&/^\d{6}-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(entry.uuid);
+  const completed=Number.isSafeInteger(entry.start_time)&&entry.start_time>0&&Number.isSafeInteger(entry.end_time)&&entry.end_time>entry.start_time&&entry.end_time<=Math.floor(nowMs/1000)+60;
+  if(!validId||!completed||sessionContext.viewerParticipated!==true)return {ok:false,status:'history-record-unverified',historyRequests,recordRequests,sessionContext};
+  phase='record';recordRequests++;const {head,actions}=await decode(session,entry.uuid);
+  const headUuidMatches=head?.uuid===entry.uuid,actionCount=Array.isArray(actions)?Math.min(actions.length,100000):0,ok=headUuidMatches&&actionCount>0;
+  return {ok,status:ok?'record-read':'record-unverified',historyRequests,recordRequests,headUuidMatches,actionCount,sessionContext};
+ }catch(error){return {ok:false,status:'failed',historyRequests,recordRequests,...sessionContext?{sessionContext}:{},diagnostic:auditFailure(error,phase)};}
+ finally{session?.close();}
+}
+
 export function persistedReviewStatus(saved,rawDelivery){
  const accepted=saved.players===3?acceptedSanmaReport(saved,saved.review):acceptedC3Report(saved,saved.c3);
  let d;try{d=typeof rawDelivery==='string'?JSON.parse(rawDelivery):rawDelivery;}catch{}
@@ -118,7 +139,7 @@ export function auditRecordMetadata(row){
 }
 export function auditFailure(error,phase){
  const message=error?.message??'';
- const protocol=message.match(/^(fetchGameRecord|oauth2Auth|oauth2Check|oauth2Login)_([0-9]{1,6})$/);
+ const protocol=message.match(/^(fetchGameRecord|fetchGameRecordList|oauth2Auth|oauth2Check|oauth2Login)_([0-9]{1,6})$/);
  const code=protocol?'audit_rpc_'+protocol[1]+'_'+protocol[2]:/^audit_[a-z_]+$/.test(message)?message:/^http_\d{3}$/.test(message)?'audit_'+message:/^yostar_login_\d+$/.test(message)?'audit_'+message:message.startsWith('login_failed:')?'audit_login_failed':'audit_failed';
  const kind=['Error','TypeError','SyntaxError','TimeoutError','AbortError'].includes(error?.name)?error.name:'unknown';
  const at=String(error?.stack??'').match(/\/(mahjong-review-live-audit|mahjong-paipu)\.mjs:(\d+):\d+/);
@@ -129,11 +150,13 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
  let phase='startup';
  try{
   const env=process.env;
-  const deliveryOnly=process.argv.includes('--delivery'),ownOnly=process.argv.includes('--own-record-check'),recordOnly=process.argv.includes('--record-check')||ownOnly;
-  if(deliveryOnly&&recordOnly||ownOnly&&process.argv.includes('--record-check'))throw Error('audit_mode_conflict');
-  if((deliveryOnly?['CLOUDFLARE_API_TOKEN','CLOUDFLARE_ACCOUNT_ID']:['CLOUDFLARE_API_TOKEN','CLOUDFLARE_ACCOUNT_ID','YOSTAR_UID','YOSTAR_TOKEN','YOSTAR_DEVICE_ID']).some(k=>!env[k])){
+  const deliveryOnly=process.argv.includes('--delivery'),ownOnly=process.argv.includes('--own-record-check'),historyOnly=process.argv.includes('--viewer-history-check'),recordRequested=process.argv.includes('--record-check'),recordOnly=recordRequested||ownOnly;
+  if([deliveryOnly,ownOnly,historyOnly,recordRequested].filter(Boolean).length>1)throw Error('audit_mode_conflict');
+  if((historyOnly?['YOSTAR_UID','YOSTAR_TOKEN','YOSTAR_DEVICE_ID']:deliveryOnly?['CLOUDFLARE_API_TOKEN','CLOUDFLARE_ACCOUNT_ID']:['CLOUDFLARE_API_TOKEN','CLOUDFLARE_ACCOUNT_ID','YOSTAR_UID','YOSTAR_TOKEN','YOSTAR_DEVICE_ID']).some(k=>!env[k])){
    console.log('Live review audit: unavailable_credentials; no access attempted');
-   if(recordOnly||env.MAHJONG_REQUIRE_STANDARD_PROFILE==='true')process.exitCode=1;
+   if(historyOnly||recordOnly||env.MAHJONG_REQUIRE_STANDARD_PROFILE==='true')process.exitCode=1;
+  }else if(historyOnly){
+   const result=await viewerHistoryCheck(env);console.log('Live viewer history check: '+JSON.stringify(result));if(!result.ok)process.exitCode=1;
   }else{
    const query=async(sql,params)=>{
     if(sql!==(ownOnly?OWN_RECORD_CHECK_SQL:recordOnly?RECORD_CHECK_SQL:RECENT_REVIEW_SQL)||params.length!==(ownOnly?1:0)||ownOnly&&(!Number.isSafeInteger(params[0])||params[0]<=0||params[0]>4294967295))throw Error('audit_query_rejected');

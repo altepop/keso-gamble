@@ -1,4 +1,4 @@
-name: Temporary Mahjong single owned-record comparison
+name: Temporary Mahjong viewer-history comparison
 on:
   pull_request:
     paths:
@@ -19,12 +19,10 @@ jobs:
         with:
           node-version: '24'
       - run: npm --prefix services/valorant-results ci --ignore-scripts
-      - name: Read at most one owned saved record (no fallback, writes or posting)
+      - name: Read one viewer-history entry and at most one owned completed replay
         working-directory: services/valorant-results
-        run: node scripts/mahjong-review-live-audit.mjs --own-record-check
+        run: node scripts/mahjong-review-live-audit.mjs --viewer-history-check
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           YOSTAR_UID: ${{ secrets.YOSTAR_UID }}
           YOSTAR_TOKEN: ${{ secrets.YOSTAR_TOKEN }}
           YOSTAR_DEVICE_ID: ${{ secrets.YOSTAR_DEVICE_ID }}
