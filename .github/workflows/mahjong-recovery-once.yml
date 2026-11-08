@@ -1,0 +1,30 @@
+name: Temporary Mahjong one-record recovery check
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/mahjong-recovery-once.yml'
+permissions:
+  contents: read
+concurrency:
+  group: mahjong-paipu
+  cancel-in-progress: false
+jobs:
+  one-record:
+    if: github.actor == 'altepop' && github.event.pull_request.number == 393 && github.event.pull_request.head.repo.full_name == 'altepop/keso-gamble' && github.head_ref == 'fix/mahjong-audit-diagnostics'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - run: npm --prefix services/valorant-results ci --ignore-scripts
+      - name: Read one saved replay with unchanged request, without fallback or writes
+        working-directory: services/valorant-results
+        run: node scripts/mahjong-review-live-audit.mjs --record-check
+        env:
+          YOSTAR_UID: ${{ secrets.YOSTAR_UID }}
+          YOSTAR_TOKEN: ${{ secrets.YOSTAR_TOKEN }}
+          YOSTAR_DEVICE_ID: ${{ secrets.YOSTAR_DEVICE_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
