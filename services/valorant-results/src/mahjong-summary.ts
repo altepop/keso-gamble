@@ -5,7 +5,7 @@ import fans from '../mahjong-fans.json' with {type:'json'};
 
 export interface PaipuHead {
  uuid:string;start_time:number;end_time:number;
- config?:{mode?:{mode?:number;detail_rule?:Record<string,unknown>}};
+ config?:{mode?:{mode?:number;detail_rule?:Record<string,unknown>};meta?:{mode_id?:number;room_id?:number;contest_uid?:number}};
  accounts?:Array<{account_id:number;seat:number;nickname:string}>;
  result?:{players?:Array<{seat:number;part_point_1:number}>};
 }

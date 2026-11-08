@@ -8,7 +8,7 @@ import {createHash,createHmac,randomUUID} from 'node:crypto';
 import {resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {summarizePaipu} from '../src/mahjong-summary.ts';
-import {supportsReviewRules} from '../src/mahjong-review-rules.ts';
+import {confirmedStandardReviewRules} from '../src/mahjong-review-rules.ts';
 
 const BASE='https://game.mahjongsoul.com',SDK='https://jp-sdk-api.yostarplat.com',OAUTH_TYPE=21;
 const YOSTAR_SDK_VERSION='4.16.2',YOSTAR_SALT='347467131a466f6865d7f2662e38841fbe2adb23';
@@ -130,7 +130,7 @@ export async function fetchDecodedRecord(session,uuid){
 export async function fetchSummary(session,uuid,reviewer=null){
  const {head,actions}=await fetchDecodedRecord(session,uuid);
  const summary=summarizePaipu(head,actions);
- if(reviewer&&supportsReviewRules(head)){
+ if(reviewer&&confirmedStandardReviewRules(head)){
   try{
    const review=await reviewer.review(summary,actions);
    if(review){if(summary.players===3)summary.review=review;else summary.c3=review;}

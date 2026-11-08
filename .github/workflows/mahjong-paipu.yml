@@ -137,13 +137,9 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           C3_ASSETS_ROOT: ${{ github.workspace }}/services/valorant-results/.cache/c3-model
-        run: node scripts/mahjong-review-delivery-probe.mjs
-      - name: Enable sanma only after successful owner-requested delivery verification
-        if: inputs.enable_sanma && steps.queue.outputs.count == 'delivery-probe' && github.actor == 'altepop'
-        env:
-          PAIPU_DISPATCH_TOKEN: ${{ secrets.PAIPU_DISPATCH_TOKEN }}
-          SANMA_PROBE_VERIFIED: 'true'
-        run: node scripts/enable-verified-sanma-review.mjs
+        run: |
+          node scripts/prepare-local.mjs
+          node scripts/mahjong-review-delivery-probe.mjs
       - name: Read persisted review delivery only (no Mahjong login)
         if: steps.queue.outputs.count == 'delivery'
         env:
@@ -151,15 +147,22 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: node scripts/mahjong-review-live-audit.mjs --delivery
       - name: Read-only live replay audit (no ingestion or Discord)
-        if: steps.queue.outputs.count == 'audit'
+        if: steps.queue.outputs.count == 'audit' || steps.queue.outputs.count == 'delivery-probe' && inputs.review_audit
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           YOSTAR_UID: ${{ secrets.YOSTAR_UID }}
           YOSTAR_TOKEN: ${{ secrets.YOSTAR_TOKEN }}
           YOSTAR_DEVICE_ID: ${{ secrets.YOSTAR_DEVICE_ID }}
+          MAHJONG_REQUIRE_STANDARD_PROFILE: ${{ steps.queue.outputs.count == 'delivery-probe' && 'true' || 'false' }}
           C3_ASSETS_ROOT: ${{ github.workspace }}/services/valorant-results/.cache/c3-model
         run: node scripts/mahjong-review-live-audit.mjs
+      - name: Enable sanma only after successful owner-requested delivery verification
+        if: inputs.enable_sanma && inputs.review_audit && steps.queue.outputs.count == 'delivery-probe' && github.actor == 'altepop'
+        env:
+          PAIPU_DISPATCH_TOKEN: ${{ secrets.PAIPU_DISPATCH_TOKEN }}
+          SANMA_PROBE_VERIFIED: 'true'
+        run: node scripts/enable-verified-sanma-review.mjs
       - name: Fetch and summarize paipu
         if: steps.queue.outputs.count && steps.queue.outputs.count != '0' && steps.queue.outputs.count != 'probe' && steps.queue.outputs.count != 'delivery' && steps.queue.outputs.count != 'audit' && steps.queue.outputs.count != 'delivery-probe'
         env:
