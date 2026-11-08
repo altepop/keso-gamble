@@ -28,6 +28,15 @@
     '</section>'
   ].join("");
   document.body.appendChild(root);
+  // Place the button *inside* the real header, never on top of game controls.
+  function mount(){
+    var row=document.querySelector("#app .screen header.topbar .toprow");
+    if(row){if(root.parentElement!==row)row.appendChild(root);root.hidden=false;}
+    else{if(root.parentElement!==document.body)document.body.appendChild(root);root.hidden=true;}
+  }
+  mount();
+  var appRoot=document.getElementById("app");
+  if(appRoot&&globalThis.MutationObserver)new MutationObserver(mount).observe(appRoot,{childList:true,subtree:true});
   var $=function(s){return root.querySelector(s);};
   var panel=$("#music-panel"),openBtn=$(".music-open"),playBtn=$("#music-play"),select=$("#music-track");
   select.value=track;
