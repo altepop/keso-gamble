@@ -79,3 +79,14 @@ test('unknown or custom rule profiles skip inference without exposing room or co
   assert.doesNotMatch(JSON.stringify(result),/123456789|987654321|private-game/);
  }
 });
+
+test('audit failures expose only fixed phase/category and approved source line, never raw errors',async()=>{
+ // @ts-expect-error Standalone read-only diagnostic.
+ const {auditFailure}=await import('../scripts/mahjong-review-live-audit.mjs');
+ const raw=new TypeError('token=private-token account=private-name');
+ raw.stack='TypeError: private-token\n at example (file:///private-name/mahjong-review-live-audit.mjs:48:10)';
+ assert.deepEqual(auditFailure(raw,'verify'),{code:'audit_failed',phase:'verify',kind:'TypeError',module:'mahjong-review-live-audit',line:48});
+ for(const [message,code] of [['login_failed:private-token','audit_login_failed'],['yostar_login_503','audit_yostar_login_503'],['http_502','audit_http_502'],['audit_report_invalid','audit_report_invalid']])assert.equal(auditFailure(Error(message),'login').code,code);
+ assert.doesNotMatch(JSON.stringify(auditFailure(raw,'private-token')),/private-token|private-name/);
+ let phase='';await assert.rejects(liveAudit({}, {query:async()=>[{summary:JSON.stringify(summary)}],connect:async()=>{throw Error('secret');},onPhase:(p:string)=>{phase=p;}}));assert.equal(phase,'login');
+});

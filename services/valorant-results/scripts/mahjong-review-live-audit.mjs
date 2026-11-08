@@ -71,19 +71,27 @@ export async function deliveryAudit({query}={}){
  }
  return {samples,sanmaDelivered:samples.filter(s=>s.players===3&&s.persistedReview&&s.delivery.allDelivered&&s.delivery.reviewSent>0).length,yonmaV2Delivered:samples.filter(s=>s.players===4&&s.persistedReview?.version===2&&s.delivery.allDelivered&&s.delivery.reviewSent>0).length};
 }
-export async function liveAudit(env=process.env,{query,connect=login,decode=fetchDecodedRecord,reviewerFactory=createPaipuReviewer}={}){
+export async function liveAudit(env=process.env,{query,connect=login,decode=fetchDecodedRecord,reviewerFactory=createPaipuReviewer,onPhase=()=>{}}={}){
  if(!query)throw Error('audit_query_missing');
- const rows=await query(RECENT_REVIEW_SQL,[]),selected=[];
+ onPhase('history');const rows=await query(RECENT_REVIEW_SQL,[]),selected=[];
  for(const players of [3,4]){const row=rows.find(row=>{try{return JSON.parse(row.summary).players===players;}catch{return false;}});if(row)selected.push(row);}
  if(!selected.length)return {selected:0,samples:[]};
- const session=await connect(env),reviewer=reviewerFactory({root:env.C3_ASSETS_ROOT,fourEnabled:true,sanmaEnabled:true,timeoutMs:45000,budgetMs:90000});
+ onPhase('login');const session=await connect(env);onPhase('reviewer');const reviewer=reviewerFactory({root:env.C3_ASSETS_ROOT,fourEnabled:true,sanmaEnabled:true,timeoutMs:45000,budgetMs:90000});
  try{
   const samples=[];
-  for(const row of selected){const {head,actions}=await decode(session,row.paipu),summary=summarizePaipu(head,actions),report=confirmedStandardReviewRules(head)?await reviewer.review(summary,actions):null;samples.push({...auditSample(head,actions,JSON.parse(row.summary),report),...persistedReviewStatus(JSON.parse(row.summary),row.delivery)});}
+  for(const row of selected){onPhase('record');const {head,actions}=await decode(session,row.paipu);onPhase('summary');const summary=summarizePaipu(head,actions);onPhase('review');const report=confirmedStandardReviewRules(head)?await reviewer.review(summary,actions):null;onPhase('verify');samples.push({...auditSample(head,actions,JSON.parse(row.summary),report),...persistedReviewStatus(JSON.parse(row.summary),row.delivery)});}
   return {selected:samples.length,handValueBackendConfigured:Boolean(env.SANMA_PYTHON),standardProfilesVerified:samples.length>0&&samples.every(s=>s.confirmedStandardRules),standardSanmaProfileVerified:samples.some(s=>s.players===3&&s.confirmedStandardRules),samples};
  }finally{await reviewer.close();session.close();}
 }
+export function auditFailure(error,phase){
+ const message=error?.message??'';
+ const code=/^audit_[a-z_]+$/.test(message)?message:/^http_\d{3}$/.test(message)?'audit_'+message:/^yostar_login_\d+$/.test(message)?'audit_'+message:message.startsWith('login_failed:')?'audit_login_failed':'audit_failed';
+ const kind=['Error','TypeError','SyntaxError','TimeoutError','AbortError'].includes(error?.name)?error.name:'unknown';
+ const at=String(error?.stack??'').match(/\/(mahjong-review-live-audit|mahjong-paipu)\.mjs:(\d+):\d+/);
+ return {code,phase:['history','login','reviewer','record','summary','review','verify'].includes(phase)?phase:'startup',kind,...at?{module:at[1],line:Number(at[2])}:{}};
+}
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
+ let phase='startup';
  try{
   const env=process.env;
   const deliveryOnly=process.argv.includes('--delivery');
@@ -97,10 +105,9 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
     if(!r.ok)throw Error('audit_d1_http');const body=await r.json();if(body.success!==true||!body.result?.[0]?.success)throw Error('audit_d1_read');return body.result[0].results;
    };
    if(deliveryOnly)console.log('Live review delivery audit: '+JSON.stringify(await deliveryAudit({query})));
-   else{const result=await liveAudit(env,{query});console.log('Live review read-only audit: '+JSON.stringify(result));if(env.MAHJONG_REQUIRE_STANDARD_PROFILE==='true'&&(!result.standardProfilesVerified||!result.standardSanmaProfileVerified))process.exitCode=1;}
+   else{const result=await liveAudit(env,{query,onPhase:p=>{phase=p;}});console.log('Live review read-only audit: '+JSON.stringify(result));if(env.MAHJONG_REQUIRE_STANDARD_PROFILE==='true'&&(!result.standardProfilesVerified||!result.standardSanmaProfileVerified))process.exitCode=1;}
   }
  }catch(error){
-  const code=/^audit_[a-z_]+$/.test(error?.message??'')?error.message:'audit_failed';
-  console.error('Live review audit: '+code+' (no raw errors or records logged)');process.exitCode=1;
+  console.error('Live review audit: '+JSON.stringify(auditFailure(error,phase))+' (no raw errors or records logged)');process.exitCode=1;
  }
 }
