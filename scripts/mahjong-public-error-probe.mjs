@@ -1,5 +1,6 @@
 // Temporary public-data-only diagnosis. No login, D1, tokens, IDs or Discord.
-import protobuf from 'protobufjs';
+import {createRequire} from 'node:module';
+const protobuf=createRequire(new URL('../services/valorant-results/package.json',import.meta.url))('protobufjs');
 const BASE='https://game.mahjongsoul.com';
 const read=async path=>{const r=await fetch(BASE+'/'+path,{signal:AbortSignal.timeout(20000)});if(!r.ok)throw Error('public_http_'+r.status);const bytes=Buffer.from(await r.arrayBuffer());if(bytes.length>32*1024*1024)throw Error('public_size');return bytes;};
 try{

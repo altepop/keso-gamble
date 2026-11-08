@@ -1,0 +1,25 @@
+name: Temporary Mahjong public error lookup
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/mahjong-public-error-probe.yml'
+      - 'scripts/mahjong-public-error-probe.mjs'
+permissions:
+  contents: read
+concurrency:
+  group: mahjong-public-errors-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  public-definitions:
+    if: github.actor == 'altepop' && github.event.pull_request.head.repo.full_name == 'altepop/keso-gamble' && github.head_ref == 'fix/mahjong-audit-diagnostics'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: services/valorant-results/package-lock.json
+      - run: npm --prefix services/valorant-results ci --ignore-scripts
+      - run: node scripts/mahjong-public-error-probe.mjs

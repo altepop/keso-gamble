@@ -86,10 +86,6 @@ jobs:
         env:
           C3_ASSETS_ROOT: ${{ github.workspace }}/services/valorant-results/.cache/c3-model
         run: node scripts/mahjong-review-smoke.mjs
-      # Temporary public configuration lookup; remove before merging this fix.
-      - name: Read official public error definitions (temporary owner PR)
-        if: github.event_name == 'pull_request' && github.actor == 'altepop' && github.event.pull_request.head.repo.full_name == 'altepop/keso-gamble' && github.head_ref == 'fix/mahjong-audit-diagnostics'
-        run: node scripts/mahjong-public-error-probe.mjs
       - name: Check Activity logic
         run: |
           npm --prefix ../.. ci
