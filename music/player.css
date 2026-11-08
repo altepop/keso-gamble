@@ -14,7 +14,6 @@
 #keso-music .music-buttons button{min-height:44px;border:1px solid #88aadc;border-radius:10px;background:#1d3e6e;color:white;font-weight:800;cursor:pointer}
 #keso-music .music-volume-label{display:flex;justify-content:space-between;gap:10px}
 #keso-music input[type=range]{width:100%;height:28px;accent-color:#9bdbff;touch-action:pan-x}
-#keso-music input[type=file]{width:100%;max-width:100%;font-size:12px}
 #keso-music .music-info{margin:0;font-size:11px;line-height:1.6;color:#c5d5ed}
 #keso-music .music-status{margin:0;min-height:18px;color:#b6f1df;font-size:12px;line-height:1.5}
 @media(max-width:480px){#keso-music{margin-left:0}#keso-music .music-open{padding:6px 10px;min-height:38px}#keso-music .music-open span{display:none}}

@@ -99,3 +99,15 @@ test('browser autoplay rejection is contained and explicit play remains availabl
  assert.equal(s.audio.played,2);
  assert.equal(s.ctx.KesoMusic.getState().playing,true);
 });
+
+test('only official tracks are allowed; no user file picker or browser database access',async()=>{
+ const s=setup();
+ await tick();
+ assert.doesNotMatch(s.root.innerHTML,/type="file"|music-file|MP3を追加/, 'no user-controlled file imports');
+ assert.equal(s.element('#music-track').value, 'mou', 'selection comes from the app track catalog');
+ assert.doesNotMatch(source,/indexedDB|createObjectURL|readAsArrayBuffer|music-file/);
+ const slider=s.element('#music-volume');slider.value='0';
+ s.fire('#music-volume','input',{target:slider});
+ assert.equal(s.audio.volume,0);
+ assert.equal(s.saved.get('keso.music.volume'),'0');
+});
