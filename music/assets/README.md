@@ -5,6 +5,8 @@ KESO PLAY内の音楽プレイヤーは運営が配信した楽曲のみ再生�
 収録中の音源：
 - `music/assets/mou-isshu.mp3` — 『もう一周』
 - `music/assets/genkai-rhapsody.mp3` — 『限界集落狂詩曲』
+- `music/assets/午前二時の共犯者 (1).mp3` — 『午前二時の共犯者』
+- `music/assets/応援歌 (Remastered).mp3` — 『応援歌』
 
 楽曲を追加する場合、管理者がリポジトリにMP3を配置し、`music/player.js` の `tracks` 一覧に追加してコードレビューとCIを通す。利用者から任意のファイルパスやURLを渡す機能を追加しない。
 
