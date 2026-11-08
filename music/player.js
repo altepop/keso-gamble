@@ -8,7 +8,7 @@
   var prefix="keso.music.", audio=null;
   var read=function(key,fallback){try{return localStorage.getItem(prefix+key)||fallback;}catch(_){return fallback;}};
   var save=function(key,value){try{localStorage.setItem(prefix+key,String(value));}catch(_){}};
-  var track=read("track","mou"),volume=Math.max(0,Math.min(100,Number(read("volume","15"))||0));
+  var track=read("track","mou"),volume=Math.max(0,Math.min(100,Number(read("volume","5"))||0));
   var autoplay=read("autoplay","on")!=="off",started=false;
   if(!tracks.some(function(t){return t.id===track;}))track="mou";
   // Startup playback is requested by the user; browsers may deny autoplay with sound.
@@ -23,7 +23,7 @@
     '<label class="music-volume-label" for="music-volume"><span>BGM音量</span><output id="music-percent">',volume,'%','</output></label>',
     '<input type="range" id="music-volume" min="0" max="100" step="1" value="',volume,'" aria-label="BGM音量">',
     '<label class="music-auto-label"><input type="checkbox" id="music-autoplay" ',autoplay?'checked':'','> 起動時に自動再生</label>',
-    '<p class="music-info">起動時に再生を試みます（初期15%）。iPhone・Discordの制限で自動再生できない場合は▶再生を押してください。設定は端末保存で、D1は利用しません。</p>',
+    '<p class="music-info">起動時に再生を試みます（初期5%）。iPhone・Discordの制限で自動再生できない場合は▶再生を押してください。設定は端末保存で、D1は利用しません。</p>',
     '<p class="music-status" role="status" aria-live="polite">停止中</p>',
     '</section>'
   ].join("");
