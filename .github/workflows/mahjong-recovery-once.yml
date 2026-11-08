@@ -1,45 +1,64 @@
-name: Temporary Mahjong recovered replay audit
+name: Temporary verified Mahjong sanma rollout
 on:
   pull_request:
     paths:
       - '.github/workflows/mahjong-recovery-once.yml'
 permissions:
   contents: read
+  actions: read
 concurrency:
   group: mahjong-paipu
   cancel-in-progress: false
 jobs:
-  one-record:
+  verified-rollout:
     if: github.actor == 'altepop' && github.event.pull_request.number == 393 && github.event.pull_request.head.repo.full_name == 'altepop/keso-gamble' && github.head_ref == 'fix/mahjong-audit-diagnostics'
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 3
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
       - uses: actions/setup-node@v7
         with:
           node-version: '24'
-      - run: npm --prefix services/valorant-results ci --ignore-scripts
-      - uses: actions/setup-python@v6
-        with:
-          python-version: '3.12'
-      - name: Install existing pinned isolated hand evaluator
-        working-directory: services/valorant-results
-        run: |
-          python3 -m venv .venv-mahjong
-          .venv-mahjong/bin/python -m pip install --disable-pip-version-check --no-deps --only-binary=:all: --require-hashes -r scripts/sanma-requirements.txt
-          echo "SANMA_PYTHON=$PWD/.venv-mahjong/bin/python" >> "$GITHUB_ENV"
-      - uses: actions/cache/restore@v4
-        with:
-          path: services/valorant-results/.cache/c3-model
-          key: equal-review-c3-5b30a83de3ab9523
-      - name: Audit real sanma and yonma without ingestion, posting or credit
-        working-directory: services/valorant-results
-        run: node scripts/mahjong-review-live-audit.mjs
+      - name: Verify completed real replay audit and unchanged production analysis
         env:
-          C3_ASSETS_ROOT: ${{ github.workspace }}/services/valorant-results/.cache/c3-model
-          MAHJONG_REQUIRE_STANDARD_PROFILE: 'true'
-          YOSTAR_UID: ${{ secrets.YOSTAR_UID }}
-          YOSTAR_TOKEN: ${{ secrets.YOSTAR_TOKEN }}
-          YOSTAR_DEVICE_ID: ${{ secrets.YOSTAR_DEVICE_ID }}
+          AUDIT_READ_TOKEN: ${{ github.token }}
+        run: |
+          git fetch --depth=1 origin da8d56573e757b41fb915f68c9389417b3d78a48
+          git diff --exit-code da8d56573e757b41fb915f68c9389417b3d78a48 HEAD -- services/valorant-results/src services/valorant-results/scripts
+          git fetch --depth=1 origin 4192e3a6be43bdff05cb5b0dc22d89f807d62964
+          git diff --exit-code 4192e3a6be43bdff05cb5b0dc22d89f807d62964 HEAD -- services/valorant-results/src/mahjong-*.ts services/valorant-results/scripts/mahjong-review.mjs services/valorant-results/scripts/mahjong-review-worker.mjs services/valorant-results/scripts/sanma-*
+          node --input-type=module <<'JS'
+          const r=await fetch('https://api.github.com/repos/altepop/keso-gamble/actions/runs/42525457154',{headers:{Authorization:'Bearer '+process.env.AUDIT_READ_TOKEN,Accept:'application/vnd.github+json'},signal:AbortSignal.timeout(15000)});
+          if(!r.ok)throw Error('audit_receipt_http');const run=await r.json();
+          if(run.status!=='completed'||run.conclusion!=='success'||run.head_sha!=='da8d56573e757b41fb915f68c9389417b3d78a48')throw Error('audit_receipt_unverified');
+          console.log('Real sanma/yonma audit receipt: verified');
+          JS
+      - run: npm --prefix services/valorant-results ci --ignore-scripts
+      - name: Verify existing artificial delivery without creating or posting anything
+        working-directory: services/valorant-results
+        env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          node scripts/prepare-local.mjs
+          node --input-type=module <<'JS'
+          import {verifyProbeDelivery,PROBE_STATUS} from './scripts/mahjong-review-delivery-probe.mjs';
+          import {D1_B_ID} from '../../scripts/relic-abuse-audit.mjs';
+          import {appendFileSync} from 'node:fs';
+          const query=async(sql,params)=>{
+            if(sql!==PROBE_STATUS||params.length!==1||params[0]!=='mahjong-review-probe:4192e3a6be43bdff05cb5b0dc22d89f807d62964')throw Error('delivery_query_rejected');
+            const r=await fetch('https://api.cloudflare.com/client/v4/accounts/'+process.env.CLOUDFLARE_ACCOUNT_ID+'/d1/database/'+D1_B_ID+'/query',{method:'POST',headers:{Authorization:'Bearer '+process.env.CLOUDFLARE_API_TOKEN,'Content-Type':'application/json'},body:JSON.stringify({sql,params}),signal:AbortSignal.timeout(15000)});
+            if(!r.ok)throw Error('delivery_read_http');const b=await r.json();if(!b.success||!b.result?.[0]?.success)throw Error('delivery_read_failed');return b.result[0].results;
+          };
+          const result=await verifyProbeDelivery({query,release:'4192e3a6be43bdff05cb5b0dc22d89f807d62964',generate:async()=>{throw Error('delivery_existing_receipt_missing');},polls:1});
+          if(!result.posted||!result.reused)throw Error('delivery_not_verified');
+          console.log('Existing artificial delivery: verified, reused');
+          appendFileSync(process.env.GITHUB_ENV,'SANMA_PROBE_VERIFIED=true\n');
+          JS
+      - name: Enable previously verified production sanma review
+        working-directory: services/valorant-results
+        env:
+          PAIPU_DISPATCH_TOKEN: ${{ secrets.PAIPU_DISPATCH_TOKEN }}
+        run: node scripts/enable-verified-sanma-review.mjs
