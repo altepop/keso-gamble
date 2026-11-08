@@ -86,7 +86,7 @@ test('audit failures expose only fixed phase/category and approved source line, 
  const raw=new TypeError('token=private-token account=private-name');
  raw.stack='TypeError: private-token\n at example (file:///private-name/mahjong-review-live-audit.mjs:48:10)';
  assert.deepEqual(auditFailure(raw,'verify'),{code:'audit_failed',phase:'verify',kind:'TypeError',module:'mahjong-review-live-audit',line:48});
- for(const [message,code] of [['login_failed:private-token','audit_login_failed'],['yostar_login_503','audit_yostar_login_503'],['http_502','audit_http_502'],['audit_report_invalid','audit_report_invalid']])assert.equal(auditFailure(Error(message),'login').code,code);
+ for(const [message,code] of [['fetchGameRecord_1234','audit_rpc_fetchGameRecord_1234'],['login_failed:private-token','audit_login_failed'],['yostar_login_503','audit_yostar_login_503'],['http_502','audit_http_502'],['audit_report_invalid','audit_report_invalid']])assert.equal(auditFailure(Error(message),'login').code,code);
  assert.doesNotMatch(JSON.stringify(auditFailure(raw,'private-token')),/private-token|private-name/);
  let phase='';await assert.rejects(liveAudit({}, {query:async()=>[{summary:JSON.stringify(summary)}],connect:async()=>{throw Error('secret');},onPhase:(p:string)=>{phase=p;}}));assert.equal(phase,'login');
 });

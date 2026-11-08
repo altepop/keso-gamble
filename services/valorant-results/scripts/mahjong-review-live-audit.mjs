@@ -85,7 +85,8 @@ export async function liveAudit(env=process.env,{query,connect=login,decode=fetc
 }
 export function auditFailure(error,phase){
  const message=error?.message??'';
- const code=/^audit_[a-z_]+$/.test(message)?message:/^http_\d{3}$/.test(message)?'audit_'+message:/^yostar_login_\d+$/.test(message)?'audit_'+message:message.startsWith('login_failed:')?'audit_login_failed':'audit_failed';
+ const protocol=message.match(/^(fetchGameRecord|oauth2Auth|oauth2Check|oauth2Login)_([0-9]{1,6})$/);
+ const code=protocol?'audit_rpc_'+protocol[1]+'_'+protocol[2]:/^audit_[a-z_]+$/.test(message)?message:/^http_\d{3}$/.test(message)?'audit_'+message:/^yostar_login_\d+$/.test(message)?'audit_'+message:message.startsWith('login_failed:')?'audit_login_failed':'audit_failed';
  const kind=['Error','TypeError','SyntaxError','TimeoutError','AbortError'].includes(error?.name)?error.name:'unknown';
  const at=String(error?.stack??'').match(/\/(mahjong-review-live-audit|mahjong-paipu)\.mjs:(\d+):\d+/);
  return {code,phase:['history','login','reviewer','record','summary','review','verify'].includes(phase)?phase:'startup',kind,...at?{module:at[1],line:Number(at[2])}:{}};
