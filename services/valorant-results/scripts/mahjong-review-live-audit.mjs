@@ -11,6 +11,7 @@ import {sanmaValueCase} from '../src/mahjong-sanma-value.ts';
 import {buildC3Cases} from '../src/mahjong-c3-cases.ts';
 import {acceptedC3Report} from '../src/mahjong-c3-comment.ts';
 import {acceptedSanmaReport} from '../src/mahjong-sanma-comment.ts';
+import {auditCompletedSanmaHands} from './mahjong-sanma-hand-audit.mjs';
 import {reviewSanmaValues} from './mahjong-sanma-value.mjs';
 import {createPaipuReviewer} from './mahjong-review.mjs';
 export const RECENT_REVIEW_SQL=`SELECT paipu,summary FROM kp_mahjong_paipu WHERE rowid>(SELECT COALESCE(MAX(rowid),0) FROM kp_mahjong_paipu)-64 AND summary IS NOT NULL ORDER BY rowid DESC LIMIT 12`;
@@ -34,7 +35,7 @@ export function auditSample(head,actions,saved,report){
    const value=sanmaValueCase(c,summary.game);
    for(const m of [f.actualValue,f.recommendedValue]){
     const candidate=value?.candidates.find(x=>x.tile===m.tile);
-    if(value.riichi!==f.riichi||!candidate||candidate.waits.reduce((sum,w)=>sum+w.left,0)!==m.live)throw Error('audit_value_unverified');
+    if(value.riichi!==f.riichi||value.melds.every(m=>m.kind==='ankan')!==f.menzen||!candidate||candidate.waits.reduce((sum,w)=>sum+w.left,0)!==m.live)throw Error('audit_value_unverified');
    }
   }
   if(f.basis==='genbutsu'){
@@ -45,7 +46,7 @@ export function auditSample(head,actions,saved,report){
  // Existing, previously saved result metadata must remain the same; don't log it.
  const facts=s=>JSON.stringify({players:s.players,game:s.game,start:s.start,end:s.end,seats:s.seats,rounds:s.rounds});
  if(facts(summary)!==facts(saved))throw Error('audit_saved_result_mismatch');
- return {players:summary.players,rounds:summary.rounds.length,records:actions.length,kinds,diagnostics,roundShapes:[...new Map(roundShapes.map(s=>[JSON.stringify(s),s])).values()],activeRuleFlags,supportedRules:supportsReviewRules(head),paymentCalibration:calibrateSanmaPayments(head,actions),conditionalValueAudit,replayedDecisions:frames.length,postInterruptionDecisions:frames.filter(f=>f.interrupted).length,modelCases:cases.length,verifiedFindings:findings.length,findingBases:Object.fromEntries([...new Set(findings.map(f=>f.basis??'model'))].map(b=>[b,findings.filter(f=>(f.basis??'model')===b).length])),savedResultMatches:true};
+ return {players:summary.players,rounds:summary.rounds.length,records:actions.length,kinds,diagnostics,roundShapes:[...new Map(roundShapes.map(s=>[JSON.stringify(s),s])).values()],activeRuleFlags,supportedRules:supportsReviewRules(head),paymentCalibration:calibrateSanmaPayments(head,actions),conditionalValueAudit,completedHandAudit:summary.players===3?auditCompletedSanmaHands(actions,summary):{},replayedDecisions:frames.length,postInterruptionDecisions:frames.filter(f=>f.interrupted).length,modelCases:cases.length,verifiedFindings:findings.length,findingBases:Object.fromEntries([...new Set(findings.map(f=>f.basis??'model'))].map(b=>[b,findings.filter(f=>(f.basis??'model')===b).length])),savedResultMatches:true};
 }
 export async function liveAudit(env=process.env,{query,connect=login,decode=fetchDecodedRecord,reviewerFactory=createPaipuReviewer}={}){
  if(!query)throw Error('audit_query_missing');

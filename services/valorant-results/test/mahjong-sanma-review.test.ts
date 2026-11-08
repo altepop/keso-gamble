@@ -103,19 +103,19 @@ test('shape comments omit strategic uncertainty, value sacrifice, north choice, 
 });
 
 test('pon and added kan preserve public melds, own hand length and replacement draw',()=>{
- const f=setup();f.actions.push(discard(0,'1m'),{name:'RecordChiPengGang',data:{seat:1,type:1,tiles:['1m','1m','1m'],froms:[0,1,1]}},discard(1,'1m'));
- // The fourth 1m has now been discarded, so an added-kan on it must be refused.
+ const f=setup();f.actions.push(discard(0,'1m'),{name:'RecordChiPengGang',data:{seat:1,type:1,tiles:['1m','1m','1m'],froms:[0,1,1]}},discard(1,f.data.tiles1.find((t:string)=>t!=='1m')));
+ // The fourth 1m is held, but cannot be discarded immediately after this pon.
  const t=f.pool.pop()!;f.actions.push(draw(2,t),discard(2,t,{moqie:true}));
  const a=f.remove('1s');f.actions.push(draw(0,a),discard(0,a,{moqie:true}));
  const b=f.pool.pop()!;f.actions.push(draw(1,b),discard(1,b,{moqie:true}));
  const ds=reviewDecisions(f.actions,f.summary());const called=ds.find(d=>d.seat===1)!;
- assert.ok(called);assert.equal(called.hand.length,11);assert.equal(called.melds[1][0].kind,'pon');assert.equal(called.melds[1][0].from,0);assert.equal(called.visible[0],4);assert.equal(called.interrupted,true);
+ assert.ok(called);assert.equal(called.hand.length,11);assert.equal(called.melds[1][0].kind,'pon');assert.equal(called.melds[1][0].from,0);assert.equal(called.visible[0],3);assert.equal(called.interrupted,true);
  assert.equal(sanmaShapeFinding(called,'3-hanchan'),null);
  const g=setup();g.actions.push(discard(0,'1m'),{name:'RecordChiPengGang',data:{seat:1,type:1,tiles:['1m','1m','1m'],froms:[0,1,1]}},discard(1,g.data.tiles1.find((t:string)=>t!=='1m')));
  for(const seat of [2,0]){const t=g.pool.pop()!;g.actions.push(draw(seat,t),discard(seat,t,{moqie:true}));}
  g.actions.push(draw(1,g.pool.pop()!),{name:'RecordAnGangAddGang',data:{seat:1,type:2,tiles:'1m'}});
  const repl=g.pool.pop()!;g.actions.push(draw(1,repl),discard(1,repl,{moqie:true}));
- const kan=reviewDecisions(g.actions,g.summary()).find(d=>d.seat===1)!;
+ const kan=reviewDecisions(g.actions,g.summary()).find(d=>d.seat===1&&d.melds[1][0]?.kind==='kan')!;
  assert.ok(kan);assert.equal(kan.melds[1][0].kind,'kan');assert.equal(kan.melds[1][0].tiles.length,4);assert.equal(kan.hand.length,11);
 });
 test('concealed kan, red dora and additional indicators are retained without ura',()=>{
@@ -142,4 +142,10 @@ test('north extraction immediately after a pon is illegal and cannot produce a r
  else{const north=f.remove('4z');f.pool.push(f.data.tiles1[12]);f.data.tiles1[12]=north;}
  f.actions.push(discard(0,'1m'),{name:'RecordChiPengGang',data:{seat:1,type:1,tiles:['1m','1m','1m'],froms:[0,1,1]}},{name:'RecordBaBei',data:{seat:1}},draw(1,f.pool.pop()!),discard(1,'4z'));
  assert.deepEqual(reviewDecisions(f.actions,f.summary()),[]);
+});
+
+test('a pon cannot immediately discard its fourth matching tile (kuikae)',()=>{
+ const f=setup();f.actions.push(discard(0,'1m'),{name:'RecordChiPengGang',data:{seat:1,type:1,tiles:['1m','1m','1m'],froms:[0,1,1]}},discard(1,'1m'));
+ const t=f.pool.pop()!;f.actions.push(draw(2,t),discard(2,t,{moqie:true}));
+ const diagnostics={acceptedRounds:0,blocked:{}};assert.deepEqual(reviewDecisions(f.actions,f.summary(),256,diagnostics),[]);assert.equal((diagnostics.blocked as Record<string,number>).kuikae,1);
 });

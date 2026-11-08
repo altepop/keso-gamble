@@ -84,6 +84,18 @@ jobs:
         env:
           C3_ASSETS_ROOT: ${{ github.workspace }}/services/valorant-results/.cache/c3-model
         run: node scripts/mahjong-review-smoke.mjs
+      # Temporary owner-only completed-hand validation; remove after recording evidence.
+      - name: Audit actual sanma hands without ingestion or delivery
+        if: github.event_name == 'pull_request' && github.actor == 'altepop' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'feat/mahjong-review-sanma'
+        timeout-minutes: 5
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          YOSTAR_UID: ${{ secrets.YOSTAR_UID }}
+          YOSTAR_TOKEN: ${{ secrets.YOSTAR_TOKEN }}
+          YOSTAR_DEVICE_ID: ${{ secrets.YOSTAR_DEVICE_ID }}
+          C3_ASSETS_ROOT: ${{ github.workspace }}/services/valorant-results/.cache/c3-model
+        run: node scripts/mahjong-review-live-audit.mjs
       - name: Check Activity logic
         run: |
           npm --prefix ../.. ci

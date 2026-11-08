@@ -38,17 +38,21 @@ export const SANMA_ENGINE='sanma-shape-v1';
 export interface SanmaReport {version:1;source:'sanma-shape';model:typeof SANMA_ENGINE;uuid:string;findings:SanmaFinding[]}
 const doraKind=(indicator:string)=>{const k=tileKind(indicator);return k===0?8:k===8?0:k>=27&&k<31?27+(k-27+1)%4:k>=31?31+(k-31+1)%3:Math.floor(k/9)*9+(k%9+1)%9;};
 export function sanmaDiscardMetrics(d:ReviewDecision):Efficiency[]{
- if(d.players!==3||d.hand.length!==14||d.visible.length!==34||d.visible.some(n=>!Number.isSafeInteger(n)||n<0||n>4)||!d.hand.includes(d.actual)||sanmaShanten(d.hand)===null)return [];
+ const open=d.melds[d.seat]?.length??0;
+ if(open>4||d.players!==3||d.hand.length!==14-3*open||d.visible.length!==34||d.visible.some(n=>!Number.isSafeInteger(n)||n<0||n>4)||!d.hand.includes(d.actual)||sanmaShanten(d.hand,open)===null)return [];
  const own=Array<number>(34).fill(0);d.hand.forEach(t=>own[tileKind(t)]++);
  if(own.some((n,i)=>n+d.visible[i]>4))return [];
  const bonuses=d.doras.map(doraKind);
- return [...new Set(d.hand)].map(discard=>{
+ const call=d.afterCall?d.melds[d.seat]?.at(-1):null;
+ const forbidden=call?.kind==='pon'?tileKind(call.tiles[0]):-1;
+ if(tileKind(d.actual)===forbidden)return [];
+ return [...new Set(d.hand)].filter(t=>tileKind(t)!==forbidden).map(discard=>{
   const hand=d.hand.slice();hand.splice(hand.indexOf(discard),1);
-  const shanten=sanmaShanten(hand)!;let ukeire=0;const improving:string[]=[];
+  const shanten=sanmaShanten(hand,open)!;let ukeire=0;const improving:string[]=[];
   for(let k=0;k<34;k++){
    if(!sanmaKind(k)||own[k]>=4)continue;
    const left=4-own[k]-d.visible[k];if(left<=0)continue;
-   const t=kindTile(k),next=sanmaShanten([...hand,t]);
+   const t=kindTile(k),next=sanmaShanten([...hand,t],open);
    if(next!==null&&next<shanten){ukeire+=left;improving.push(t);}
   }
   const bonus=hand.reduce((sum,t)=>sum+(t.endsWith('r')?1:0)+bonuses.filter(k=>k===tileKind(t)).length,0);

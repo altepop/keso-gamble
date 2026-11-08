@@ -14,7 +14,7 @@ export function acceptedSanmaReport(s:PaipuSummary,raw:unknown):AcceptedSanmaRep
  for(const f of r.findings){
   if(!f||!int(f.seat,0,2)||!int(f.round,0,s.rounds.length-1)||typeof f.actual!=='string'||!tile.test(f.actual)||typeof f.recommended!=='string'||!tile.test(f.recommended))return null;
   if(f.basis==='tsumo-value'){
-   if(r.version!==3||typeof f.riichi!=='boolean'||!int(f.turn,2,16)||f.actual==='N'||f.recommended==='N'||!valueMetric(f.actualValue,f.actual)||!valueMetric(f.recommendedValue,f.recommended))return null;
+   if(r.version!==3||typeof f.riichi!=='boolean'||typeof f.menzen!=='boolean'||f.riichi&&!f.menzen||!int(f.turn,2,16)||f.actual==='N'||f.recommended==='N'||!valueMetric(f.actualValue,f.actual)||!valueMetric(f.recommendedValue,f.recommended))return null;
    const a=f.actualValue,b=f.recommendedValue;
    if(f.actual===f.recommended?JSON.stringify(a)!==JSON.stringify(b):b.live<a.live||b.min<a.max+1000)return null;
   }else if(f.basis==='genbutsu'){
@@ -42,7 +42,7 @@ export function equalSanmaComments(s:PaipuSummary,raw:unknown,members:Map<number
   if(f.basis==='tsumo-value'){
    const m=f.recommendedValue;
    const range=m.min===m.max?`${m.min}点`:`${m.min}〜${m.max}点`;
-   const premise=(f.riichi?'リーチ後ツモ':'門前ツモ')+'・ツモ損で、本場と供託を抜いた試算';
+   const premise=(f.riichi?'リーチ後ツモ':f.menzen?'門前ツモ':'ツモ和了')+'・ツモ損で、本場と供託を抜いた試算';
    if(f.actual===f.recommended)return [
     `🎙️「${name}、${at}の${a}やね。この待ち選びもええですねぇ。見えてへん待ち牌が${m.live}枚、${premise}なら${range}ありますわ」`,
     `🎙️「${at}、${name}は${a}切りですねぇ。${premise}で${range}。待ちの枚数も残せてますわ」`,

@@ -14,7 +14,7 @@ const frame=()=>{const f=threeValueScenario();return {...f,d:reviewDecisions(f.a
 const metric=(tile:string,live=7,min=3000,max=min)=>({tile,live,min,max,hanMin:3,hanMax:3,fuMin:30,fuMax:30});
 test('conditional hand value request includes only focal hand and public known facts',()=>{
  const {d}=frame(),c=sanmaValueCase(d,'3-hanchan')!;assert.ok(c);assert.equal(c.seatWind,1);
- assert.deepEqual(Object.keys(c).sort(),['candidates','doras','north','riichi','roundWind','seatWind']);
+ assert.deepEqual(Object.keys(c).sort(),['candidates','doras','melds','north','riichi','roundWind','seatWind']);
  assert.ok(c.candidates.every(c=>c.hand.length===13));
  const keep=c.candidates.find(c=>c.tile==='5s')!;assert.deepEqual(keep.waits,[{tile:'1s',left:3},{tile:'4s',left:4}]);
  assert.equal(JSON.stringify(c).includes('tiles0'),false);assert.deepEqual(d.publicRed,[]);
@@ -71,7 +71,7 @@ test('real pinned hand calculator recognizes yaku/fu/dora, nuki, dealer and actu
  const red=structuredClone(c);for(const x of red.candidates)x.hand[x.hand.indexOf('5p')]='5pr';
  assert.equal(calculate(red).find((m:any)=>m.tile==='5s').hanMin,6);
  const ordinary={tile:'1s',hand:['9m','9m','9m','1p','2p','3p','4p','5p','6p','7s','8s','9s','E'],waits:[{tile:'E',left:3}]};
- const man=calculate({candidates:[ordinary,{...ordinary,tile:'2s'}],doras:['1m'],north:0,seatWind:1,roundWind:0,riichi:false});
+ const man=calculate({candidates:[ordinary,{...ordinary,tile:'2s'}],doras:['1m'],north:0,seatWind:1,roundWind:0,riichi:false,melds:[]});
  assert.equal(man[0].hanMin,4,'sanma 1m indicator makes 9m dora (not nonexistent 2m)');
  const northDora=calculate({...c,doras:['W'],north:1});
  const plain=calculate({...c,doras:['W'],north:0});
@@ -123,4 +123,64 @@ test('recorded sanma riichi declaration is valued under the same conditional rii
  assert.equal(reach.recommendedValue.hanMin,plain.recommendedValue.hanMin+1);
  const report={version:3,source:'sanma-rules',model:'sanma-rules-v3',uuid:f.summary.uuid,findings:[reach]};
  assert.match(equalSanmaComments(f.summary,report,new Map([[1,{name:'test1'}]])).join(''),/リーチ後ツモ/);
+});
+
+test('own pon, open kan and ankan use real meld-aware shanten/fu/yaku with correct menzen comments',{skip:!process.env.SANMA_PYTHON},()=>{
+ const {summary,d:base}=frame();
+ for(const kind of ['pon','kan','ankan'] as const){
+  const d=structuredClone(base);d.hand=['1p','2p','3p','4p','5p','6p','2s','3s','5s','5s','5s'];
+  d.actual='2s';d.melds[1]=[{kind,tiles:Array(kind==='pon'?3:4).fill('P'),from:kind==='ankan'?null:0}];
+  d.north[1]=kind==='ankan'?0:2;d.visible[31]=kind==='pon'?3:4;d.visible[30]=d.north[1];
+  const c=sanmaValueCase(d,'3-hanchan')!;assert.ok(c);assert.equal(c.melds[0].kind,kind);assert.equal(c.candidates[0].hand.length,10);
+  const report=reviewSanmaValues([d],'3-hanchan');assert.equal(report.length,1);const finding=report[0];
+  assert.equal(finding.recommended,'5s');assert.equal(finding.menzen,kind==='ankan');
+  assert.ok(finding.recommendedValue.min>=finding.actualValue.max+1000);
+  if(kind==='ankan')assert.equal(finding.actualValue.fuMin,60,'concealed honor quad fu is retained');
+  const text=equalSanmaComments(summary,{version:3,source:'sanma-rules',model:'sanma-rules-v3',uuid:summary.uuid,findings:[finding]},new Map([[1,{name:'test1'}]])).join('');
+  assert.match(text,kind==='ankan'?/門前ツモ/:/ツモ和了/);if(kind!=='ankan')assert.doesNotMatch(text,/門前/);
+  if(kind!=='ankan')assert.equal(sanmaValueCase({...d,declaringReach:true},'3-hanchan'),null,'open riichi is illegal');
+ }
+});
+
+test('same-kind kuikae candidate is excluded immediately after pon',async()=>{
+ const {sanmaDiscardMetrics}=await import('../src/mahjong-sanma-efficiency.ts');const {d}=frame();
+ d.hand=['1p','2p','3p','4p','5p','6p','2s','3s','5s','5s','P'];d.actual='5s';d.draw=null;d.afterCall=true;
+ d.melds[1]=[{kind:'pon',tiles:['P','P','P'],from:0}];d.visible[31]=3;
+ const metrics=sanmaDiscardMetrics(d);assert.ok(metrics.length);assert.ok(metrics.every(m=>m.tile!=='P'));
+ assert.deepEqual(sanmaDiscardMetrics({...d,actual:'P'}),[]);
+});
+
+test('open hand with bonus tiles but no yaku is not called a legal winning hand',{skip:!process.env.SANMA_PYTHON},()=>{
+ const {d}=frame();d.hand=['1p','2p','3p','4p','5p','6p','2s','3s','5s','5s','5s'];d.actual='2s';
+ d.melds[1]=[{kind:'pon',tiles:['1m','1m','1m'],from:0}];d.visible[0]=3;d.north[1]=2;d.visible[30]=2;
+ assert.ok(sanmaValueCase(d,'3-hanchan'));const diagnostics={};
+ assert.deepEqual(reviewSanmaValues([d],'3-hanchan',{diagnostics}),[]);
+ assert.equal((diagnostics as {status?:string}).status,'ok','unsupported/no-yaku is a successful abstention, not a process error');
+});
+
+test('real isolated worker follows a legal two-kita/pon prefix and values the immediate open-hand discard',{skip:!process.env.SANMA_PYTHON},async()=>{
+ const {threeOpenValueScenario}=await import('./fixtures/mahjong-review-three.ts');const {actions,summary}=threeOpenValueScenario();
+ const diagnostics={acceptedRounds:0,blocked:{}},frames=reviewDecisions(actions,summary,256,diagnostics);assert.deepEqual(diagnostics.blocked,{});
+ const d=frames.find(d=>d.seat===1&&d.turn===2)!;assert.ok(d);assert.equal(d.afterCall,true);assert.equal(d.draw,null);assert.equal(d.north[1],2);assert.equal(d.melds[1][0].kind,'pon');assert.equal(d.hand.length,11);
+ const reviewer=createPaipuReviewer({sanmaEnabled:true,timeoutMs:15000});
+ try{const report=await reviewer.review(summary,actions);assert.ok(acceptedSanmaReport(summary,report));const f=report.findings.find((f:any)=>f.seat===1&&f.turn===2&&f.basis==='tsumo-value');assert.ok(f);assert.equal(f.menzen,false);assert.equal(f.recommended,'5s');assert.equal(f.recommendedValue.min,5900);}finally{await reviewer.close();}
+});
+
+test('standard sanma open tanyao is a real yaku, with no imaginary menzen-tsumo han',{skip:!process.env.SANMA_PYTHON},()=>{
+ const {d}=frame();d.hand=['2p','3p','4p','5p','6p','7p','3s','4s','6s','6s','6s'];d.actual='3s';
+ d.melds[1]=[{kind:'pon',tiles:['6p','6p','6p'],from:0}];d.north[1]=2;d.doras=['2s'];d.visible=Array(34).fill(0);d.visible[14]=3;d.visible[19]=1;d.visible[22]=1;d.visible[30]=2;d.publicRed=['5sr'];
+ const findings=reviewSanmaValues([d],'3-hanchan');assert.equal(findings.length,1);assert.equal(findings[0].recommended,'6s');
+ assert.equal(findings[0].actualValue.hanMin,3,'open tanyao 1 + nuki 2, without menzen tsumo');
+ assert.equal(findings[0].recommendedValue.hanMin,4);assert.equal(findings[0].menzen,false);
+});
+
+test('seat and round winds add distinct value-honor han, including double East',{skip:!process.env.SANMA_PYTHON},()=>{
+ const {d}=frame();d.hand=['1p','2p','3p','4p','5p','6p','2s','3s','5s','5s','5s'];d.actual='2s';d.melds[1]=[{kind:'pon',tiles:['E','E','E'],from:0}];d.visible[27]=3;
+ const c=sanmaValueCase(d,'3-hanchan')!;
+ const calculate=(seatWind:number,roundWind:number)=>{
+  const r=spawnSync(process.env.SANMA_PYTHON!,['-I',fileURLToPath(new URL('../scripts/mahjong-sanma-value.py',import.meta.url))],{input:JSON.stringify({version:1,cases:[{...c,seatWind,roundWind}]}),encoding:'utf8',timeout:8000,env:{}});assert.equal(r.status,0);return JSON.parse(r.stdout).results[0].find((m:any)=>m.tile==='2s');
+ };
+ assert.equal(calculate(1,0).hanMin,1,'East round only');
+ assert.equal(calculate(0,1).hanMin,1,'East seat only');
+ assert.equal(calculate(0,0).hanMin,2,'double East is two separate value honors');
 });

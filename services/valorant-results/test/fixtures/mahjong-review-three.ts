@@ -42,3 +42,24 @@ export function threeValueScenario(){
  const head={uuid:'synthetic-three-value',start_time:0,end_time:1,config:{mode:{mode:12}},accounts:Array.from({length:3},(_,seat)=>({account_id:seat+1,seat,nickname:'test'+seat})),result:{players:Array.from({length:3},(_,seat)=>({seat,part_point_1:35000}))}};
  return {head,actions,summary:summarizePaipu(head,actions)};
 }
+
+/** Physically consistent artificial two-kita -> pon -> immediate discard.
+ * Open white-dragon yaku plus two nuki. Never a real account/game. */
+export function threeOpenValueScenario(){
+ const pool:string[]=[];
+ for(const s of ['m','p','s'])for(let n=1;n<=9;n++)if(s!=='m'||n===1||n===9)for(let c=0;c<4;c++)pool.push((n===5&&c===0&&s!=='m'?'0':n)+s);
+ for(let n=1;n<=7;n++)for(let c=0;c<4;c++)pool.push(n+'z');
+ const take=(t:string)=>{const i=pool.indexOf(t);if(i<0)throw Error('synthetic_tile_exhausted');return pool.splice(i,1)[0];};
+ const own=['1p','2p','3p','4p','5p','6p','2s','3s','5s','5z','5z','4z','4z'].map(take);
+ const value1=take('5s'),value2=take('5s'),replacement=take('7z'),indicator=take('1s'),called=take('5z');
+ const zero=[called,...pool.splice(0,13)],two=pool.splice(0,13);
+ const actions:PaipuAction[]=[{name:'RecordNewRound',data:{chang:0,ju:0,ben:0,liqibang:0,scores:[35000,35000,35000],doras:[indicator],tiles0:zero,tiles1:own,tiles2:two}},
+  {name:'RecordDiscardTile',data:{seat:0,tile:zero.at(-1),moqie:true}},
+  {name:'RecordDealTile',data:{seat:1,tile:value1}},{name:'RecordBaBei',data:{seat:1}},
+  {name:'RecordDealTile',data:{seat:1,tile:value2}},{name:'RecordBaBei',data:{seat:1}},
+  {name:'RecordDealTile',data:{seat:1,tile:replacement}},{name:'RecordDiscardTile',data:{seat:1,tile:replacement,moqie:true}}];
+ for(const seat of [2,0]){const tile=pool.pop()!;actions.push({name:'RecordDealTile',data:{seat,tile}},{name:'RecordDiscardTile',data:{seat,tile:seat===0?called:tile,moqie:seat!==0}});}
+ actions.push({name:'RecordChiPengGang',data:{seat:1,type:1,tiles:[called,called,called],froms:[0,1,1]}},{name:'RecordDiscardTile',data:{seat:1,tile:'2s',moqie:false}});
+ const head={uuid:'synthetic-three-open-value',start_time:0,end_time:100,config:{mode:{mode:12}},accounts:Array.from({length:3},(_,seat)=>({account_id:seat+1,seat,nickname:'test'+seat})),result:{players:Array.from({length:3},(_,seat)=>({seat,part_point_1:35000}))}};
+ return {head,actions,summary:summarizePaipu(head,actions)};
+}
