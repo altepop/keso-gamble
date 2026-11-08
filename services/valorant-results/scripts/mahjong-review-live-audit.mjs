@@ -78,10 +78,16 @@ export async function liveAudit(env=process.env,{query,connect=login,decode=fetc
  if(!selected.length)return {selected:0,samples:[]};
  onPhase('login');const session=await connect(env);onPhase('reviewer');const reviewer=reviewerFactory({root:env.C3_ASSETS_ROOT,fourEnabled:true,sanmaEnabled:true,timeoutMs:45000,budgetMs:90000});
  try{
-  const samples=[],unavailableRecords=[];let recordRequests=0;
-  for(const {players,candidates} of selected)for(const row of candidates){onPhase('record');let decoded;const advertised=(session.recordVersions??[]).filter(v=>/^web-[0-9.w]+$/.test(v)).slice(0,2);const versions=env.MAHJONG_AUDIT_WEB_VERSION==='true'?[...new Set([advertised[0]?.replace('web-','WebGL_2022-'),...advertised])].filter(v=>v&&v!==session.versionString).slice(0,3):[session.versionString];for(const [profile,versionString] of versions.entries()){recordRequests++;try{decoded=await decode({...session,versionString},row.paipu);break;}catch(error){unavailableRecords.push({players,profile,...auditFailure(error,'record')});}}if(!decoded)continue;const {head,actions}=decoded;onPhase('summary');const summary=summarizePaipu(head,actions);onPhase('review');const report=confirmedStandardReviewRules(head)?await reviewer.review(summary,actions):null;onPhase('verify');samples.push({...auditSample(head,actions,JSON.parse(row.summary),report),...persistedReviewStatus(JSON.parse(row.summary),row.delivery)});break;}
-  return {selected:samples.length,recordRequests,unavailableRecords,webRecordVersionProbe:env.MAHJONG_AUDIT_WEB_VERSION==='true',handValueBackendConfigured:Boolean(env.SANMA_PYTHON),standardProfilesVerified:samples.length>0&&samples.every(s=>s.confirmedStandardRules),standardSanmaProfileVerified:samples.some(s=>s.players===3&&s.confirmedStandardRules),samples};
+  const samples=[],unavailableRecords=[],recordMetadata=[];let recordRequests=0;
+  for(const {players,candidates} of selected)for(const row of candidates){onPhase('record');let decoded;recordMetadata.push(auditRecordMetadata(row));recordRequests++;try{decoded=await decode(session,row.paipu);}catch(error){unavailableRecords.push({players,...auditFailure(error,'record')});continue;}const {head,actions}=decoded;onPhase('summary');const summary=summarizePaipu(head,actions);onPhase('review');const report=confirmedStandardReviewRules(head)?await reviewer.review(summary,actions):null;onPhase('verify');samples.push({...auditSample(head,actions,JSON.parse(row.summary),report),...persistedReviewStatus(JSON.parse(row.summary),row.delivery)});break;}
+  return {selected:samples.length,recordRequests,unavailableRecords,recordMetadata,handValueBackendConfigured:Boolean(env.SANMA_PYTHON),standardProfilesVerified:samples.length>0&&samples.every(s=>s.confirmedStandardRules),standardSanmaProfileVerified:samples.some(s=>s.players===3&&s.confirmedStandardRules),samples};
  }finally{await reviewer.close();session.close();}
+}
+export function auditRecordMetadata(row){
+ let saved;try{saved=JSON.parse(row.summary);}catch{return {validStoredJSON:false};}
+ const validId=typeof row.paipu==='string'&&/^\d{6}-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(row.paipu);
+ let startDateMatches=false;try{startDateMatches=new Date(saved.start).toISOString().slice(2,10).replaceAll('-','')===row.paipu?.slice(0,6);}catch{}
+ return {validStoredJSON:true,idShape:validId,storedIdMatches:row.paipu===saved.uuid,startDateMatches,plausibleAccounts:Array.isArray(saved.seats)&&saved.seats.every(p=>Number.isSafeInteger(p.accountId)&&p.accountId>1000),rounds:Array.isArray(saved.rounds)?saved.rounds.length:0};
 }
 export function auditFailure(error,phase){
  const message=error?.message??'';

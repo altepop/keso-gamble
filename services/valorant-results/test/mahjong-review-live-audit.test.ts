@@ -100,8 +100,9 @@ test('an unavailable recent record cannot hide the next valid game; at most two 
  assert.equal(reads,1);assert.equal(requests,4);assert.equal(result.selected,2);assert.equal(result.standardSanmaProfileVerified,true);assert.equal(result.standardProfilesVerified,true);assert.equal(result.unavailableRecords.length,2);assert.equal(result.unavailableRecords[0].code,'audit_rpc_fetchGameRecord_1203');assert.doesNotMatch(JSON.stringify(result),/bad-three|good-three|bad-four|third-three/);
 });
 
-test('temporary public web-version comparison bounds known public profiles and keeps one session',async()=>{
- let calls=0;
- const result=await liveAudit({MAHJONG_AUDIT_WEB_VERSION:'true'}, {query:async()=>[{paipu:'hidden-game',summary:JSON.stringify(summary)}],connect:async()=>({recordVersions:['WebGL_2022-0.16.213','web-0.16.213','web-0.11.9','private-token'],close(){}}),decode:async(s:{versionString:string})=>{calls++;if(s.versionString==='web-0.16.213'||s.versionString==='WebGL_2022-0.16.213')throw Error('fetchGameRecord_540');assert.equal(s.versionString,'web-0.11.9');return {head,actions:sample};},reviewerFactory:()=>({review:async()=>null,close:async()=>{}})});
- assert.equal(calls,3);assert.equal(result.selected,1);assert.equal(result.unavailableRecords.length,2);assert.doesNotMatch(JSON.stringify(result),/hidden-game|private-token/);
+test('record metadata helps distinguish fixtures without exposing IDs or player data',async()=>{
+ // @ts-expect-error Standalone read-only diagnostic.
+ const {auditRecordMetadata}=await import('../scripts/mahjong-review-live-audit.mjs');
+ const result=auditRecordMetadata({paipu:head.uuid,summary:JSON.stringify(summary)});
+ assert.equal(result.idShape,true);assert.equal(result.storedIdMatches,true);assert.equal(result.plausibleAccounts,false);assert.equal(result.rounds,summary.rounds.length);assert.doesNotMatch(JSON.stringify(result),/0123abcd|Aさん|nickname|accountId/);
 });

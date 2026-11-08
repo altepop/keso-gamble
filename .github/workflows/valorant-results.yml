@@ -89,7 +89,6 @@ jobs:
       # Temporary owner-only read-only diagnosis; remove before merging this fix.
       - name: Diagnose review audit without ingestion or Discord (temporary owner PR)
         if: github.event_name == 'pull_request' && github.actor == 'altepop' && github.event.pull_request.head.repo.full_name == 'altepop/keso-gamble' && github.head_ref == 'fix/mahjong-audit-diagnostics'
-        continue-on-error: true
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -98,7 +97,6 @@ jobs:
           YOSTAR_DEVICE_ID: ${{ secrets.YOSTAR_DEVICE_ID }}
           C3_ASSETS_ROOT: ${{ github.workspace }}/services/valorant-results/.cache/c3-model
           MAHJONG_REQUIRE_STANDARD_PROFILE: 'true'
-          MAHJONG_AUDIT_WEB_VERSION: 'true'
         run: node scripts/mahjong-review-live-audit.mjs
       - name: Check Activity logic
         run: |
