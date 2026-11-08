@@ -104,7 +104,7 @@ test('only official tracks are allowed; no user file picker or browser database 
  const s=setup();
  await tick();
  assert.doesNotMatch(s.root.innerHTML,/type="file"|music-file|MP3を追加/, 'no user-controlled file imports');
- assert.equal(s.element('#music-track').value, '', 'selection comes from the app track catalog');
+ assert.equal(s.element('#music-track').value, 'mou', 'selection comes from the app track catalog');
  assert.doesNotMatch(source,/indexedDB|createObjectURL|readAsArrayBuffer|music-file/);
  const slider=s.element('#music-volume');slider.value='0';
  s.fire('#music-volume','input',{target:slider});
