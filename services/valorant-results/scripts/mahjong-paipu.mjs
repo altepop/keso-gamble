@@ -7,6 +7,7 @@
 import {createHash,createHmac,randomUUID} from 'node:crypto';
 import {resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
+import {recordRpcDiagnostic} from './mahjong-rpc-diagnostics.mjs';
 import {summarizePaipu} from '../src/mahjong-summary.ts';
 import {confirmedStandardReviewRules} from '../src/mahjong-review-rules.ts';
 
@@ -74,9 +75,14 @@ export async function openGateway(ctx,route){
  const call=async(method,payload)=>{
   const [svc,name]=method.includes('.')?[services[method.split('.')[0]],method.split('.')[1]]:[services.Lobby,method];
   const m=svc.methods[name],req=ctx.root.lookupType('lq.'+m.requestType),res=ctx.root.lookupType('lq.'+m.responseType);
-  const wrapped=Wrapper.encode(Wrapper.create({name:`.lq.${svc.name}.${name}`,data:req.encode(req.create(payload)).finish()})).finish();
+  const requestBytes=req.encode(req.create(payload)).finish();
+  const wrapped=Wrapper.encode(Wrapper.create({name:`.lq.${svc.name}.${name}`,data:requestBytes})).finish();
   const out=res.toObject(res.decode(Wrapper.decode(await ch.send(wrapped)).data),{longs:Number,defaults:true,bytes:Buffer});
-  if(out.error?.code)throw Error(`${name}_${out.error.code}`);
+  if(out.error?.code){
+   const error=Error(name+'_'+out.error.code);
+   if(name==='fetchGameRecord')Object.defineProperty(error,'rpcDiagnostic',{value:recordRpcDiagnostic(req,requestBytes,payload,out.error)});
+   throw error;
+  }
   return out;
  };
  try{

@@ -1,6 +1,7 @@
 // Trusted owner-only CI diagnostic. One bounded SELECT; re-fetch <=2 existing
 // successful games, at most two record requests per size. No ingestion, Discord, KP, D1 writes, artifacts, names or game IDs.
 import {pathToFileURL} from 'node:url';
+import {safeRecordRpcDiagnostic} from './mahjong-rpc-diagnostics.mjs';
 import {D1_B_ID} from '../../../scripts/relic-abuse-audit.mjs';
 import {login,fetchDecodedRecord} from './mahjong-paipu.mjs';
 import {summarizePaipu} from '../src/mahjong-summary.ts';
@@ -95,7 +96,8 @@ export function auditFailure(error,phase){
  const code=protocol?'audit_rpc_'+protocol[1]+'_'+protocol[2]:/^audit_[a-z_]+$/.test(message)?message:/^http_\d{3}$/.test(message)?'audit_'+message:/^yostar_login_\d+$/.test(message)?'audit_'+message:message.startsWith('login_failed:')?'audit_login_failed':'audit_failed';
  const kind=['Error','TypeError','SyntaxError','TimeoutError','AbortError'].includes(error?.name)?error.name:'unknown';
  const at=String(error?.stack??'').match(/\/(mahjong-review-live-audit|mahjong-paipu)\.mjs:(\d+):\d+/);
- return {code,phase:['history','login','reviewer','record','summary','review','verify'].includes(phase)?phase:'startup',kind,...at?{module:at[1],line:Number(at[2])}:{}};
+ const rpc=safeRecordRpcDiagnostic(error?.rpcDiagnostic);
+ return {...rpc?{rpc}:{},code,phase:['history','login','reviewer','record','summary','review','verify'].includes(phase)?phase:'startup',kind,...at?{module:at[1],line:Number(at[2])}:{}};
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
  let phase='startup';
