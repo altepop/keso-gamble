@@ -47,9 +47,10 @@ test('music player is off by default, independent of KP and D1, volume persists'
  assert.equal(s.ctx.KesoMusic.getState().volume,15);
  const slider=s.element('#music-volume');slider.value='38';
  s.fire('#music-volume','input',{target:slider});
- assert.equal(s.audio.volume,.38);
+ assert.equal(s.created(),0,'volume changes do not activate the audio session');
  assert.equal(s.saved.get('keso.music.volume'),'38');
  s.fire('#music-play','click');await new Promise(setImmediate);
+ assert.equal(s.audio.volume,.38,'saved volume applies after the trusted tap');
  assert.equal(s.audio.played,1);assert.equal(s.created(),1);assert.match(s.audio.src,/mou-isshu\.mp3$/);assert.equal(s.ctx.KesoMusic.getState().playing,true);
  s.fire('#music-play','click');assert.equal(s.ctx.KesoMusic.getState().playing,false);
  s.element('#music-track').value='rhapsody';
