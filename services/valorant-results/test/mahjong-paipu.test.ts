@@ -204,3 +204,99 @@ test('sanma wording follows the actual player count and rank, including bust and
  const four={...summary,rounds:[],seats:summary.seats.map((p,i)=>({...p,rank:i+1,score:25000,dealIns:0,riichi:0,riichiWins:0,riichiDealIns:0,bestLead:0}))};
  for(let i=0;i<100;i++)assert.doesNotMatch(roastFor({...four,uuid:'four-lines-'+i},3,'full',names).join(''),/三麻|三人卓|北抜き/);
 });
+
+test('signed version-2 finding envelopes reach the existing queued post without changing KP or duplicating delivery',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:T0});
+ const run=async(withReview:boolean)=>{
+  const f=await fixture();await f.call('/api/mahjong/paipu/queue');
+  f.sql.prepare('INSERT INTO kp_mahjong_links VALUES(?,?,?)').run(guild,one,11);
+  f.sql.prepare('INSERT INTO kp_mahjong_links VALUES(?,?,?)').run(guild,two,22);
+  f.sql.prepare("INSERT INTO kp_ledger VALUES('seed-'||?,?,?,100,'test',0)").run(one,guild,one);
+  f.sql.prepare('INSERT INTO mahjong_paipu_auto VALUES(?,?,?)').run(PAIPU,11,T0);
+  // A trusted finding fixture exercises transport/formatting, not real inference.
+  // Genuine reconstruction/inference is checked by the separate replay smoke.
+  const payload=withReview?{...summary,c3:{version:2,source:'c3',model:'c3-v1.0-observation-1',uuid:PAIPU,findings:[{seat:1,round:0,turn:4,actual:'6p',recommended:'3p',position:'discard'}]}}:summary;
+  const response=await f.call('/api/mahjong/paipu/summaries',{results:[{uuid:PAIPU,summary:payload}]});
+  assert.equal(response.status,200);assert.equal((await response.json() as {stored:number}).stored,1);
+  return {f,payload};
+ };
+ const {f,payload}=await run(true),{f:control}=await run(false);
+ assert.equal(f.balance(one),control.balance(one));assert.equal(f.balance(two),control.balance(two));
+ assert.match(f.posts()[0],/4打目/);assert.match(f.posts()[0],/6p/);assert.match(f.posts()[0],/3p/);
+ assert.doesNotMatch(f.posts()[0],/c3|モデル|AI判定/i);
+ for(const section of ['**順位**','**KP**','**主な和了**','**メンバー**','💬 '])assert.ok(f.posts()[0].includes(section));
+ const before=f.sql.prepare('SELECT COUNT(*) n FROM kp_ledger').get()!.n;
+ await f.call('/api/mahjong/paipu/summaries',{results:[{uuid:PAIPU,summary:payload}]});
+ assert.equal(f.posts().length,1);assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM kp_ledger').get()!.n,before);
+ assert.equal(f.balance(two),control.balance(two));
+ const body=JSON.parse(String(f.sql.prepare("SELECT body FROM kp_posts WHERE id=?").get('paipu:'+PAIPU)!.body));
+ assert.deepEqual(body.allowed_mentions,{parse:[]});
+});
+
+test('real sanma worker v3 crosses signed ingestion, queue and mocked Discord delivery without extra KP or posts',{skip:!process.env.SANMA_PYTHON},async t=>{
+ t.mock.timers.enable({apis:['Date'],now:T0});
+ const {threeValueScenario}=await import('./fixtures/mahjong-review-three.ts');
+ // @ts-expect-error Standalone isolated worker host used by Actions.
+ const {createPaipuReviewer}=await import('../scripts/mahjong-review.mjs');
+ const {flushRacePosts}=await import('../src/racing-posts.ts');
+ const input=threeValueScenario(),s={...input.summary,uuid:PAIPU};
+ const reviewer=createPaipuReviewer({sanmaEnabled:true,timeoutMs:15000});let report;
+ try{report=await reviewer.review(s,input.actions);}finally{await reviewer.close();}
+ assert.equal(report?.version,3);assert.ok(report.findings.some((f:any)=>f.basis==='tsumo-value'));
+ const run=async(review:unknown)=>{
+  const f=await fixture();await f.call('/api/mahjong/paipu/queue');
+  f.sql.prepare('INSERT INTO kp_mahjong_links VALUES(?,?,?)').run(guild,one,2);
+  f.sql.prepare('INSERT INTO mahjong_paipu_auto VALUES(?,?,?)').run(PAIPU,2,T0);
+  const response=await f.call('/api/mahjong/paipu/summaries',{results:[{uuid:PAIPU,summary:{...s,review}}]});assert.equal(response.status,200);
+  return f;
+ };
+ const f=await run(report),control=await run(undefined);assert.equal(f.balance(one),control.balance(one));
+ const row=f.sql.prepare('SELECT body FROM kp_posts WHERE id=?').get('paipu:'+PAIPU)!;
+ const body=JSON.parse(String(row.body));assert.match(JSON.stringify(body),/6000点/);assert.deepEqual(body.allowed_mentions,{parse:[]});
+ assert.match(body.content,/<@100000000000000101>/);assert.doesNotMatch(JSON.stringify(body),/c3|sanma-rules|num_nuki/);
+ let sends=0;
+ t.mock.method(globalThis,'fetch',async(_url:unknown,options:any)=>{sends++;const sent=JSON.parse(options.body);assert.match(JSON.stringify(sent),/6000点/);assert.deepEqual(sent.allowed_mentions,{parse:[]});return new Response('',{status:200});});
+ assert.equal(await flushRacePosts(f.env),1);assert.equal(await flushRacePosts(f.env),0);assert.equal(sends,1);
+ const before=f.balance(one);await f.call('/api/mahjong/paipu/summaries',{results:[{uuid:PAIPU,summary:{...s,review:report}}]});
+ assert.equal(f.balance(one),before);assert.equal(f.posts().length,1);assert.equal(await flushRacePosts(f.env),0);assert.equal(sends,1);
+});
+
+test('long paipu delivery preserves every old section, new review and quote within Discord limits',async()=>{
+ const {paipuPostMessages}=await import('../src/mahjong-paipu.ts');
+ const members=new Map([[0,{name:'Aさん',user:one}],[1,{name:'B',user:two}]]);
+ const s={...summary,c3:{version:2,source:'c3',model:'c3-v1.0-observation-1',uuid:PAIPU,findings:[{seat:1,round:0,turn:4,actual:'6p',recommended:'3p',position:'discard'}]}};
+ const marker='🔎 UNIQUE-LONG-OUTCOME';const full=paipuPost(s,members,()=> 'normal',[marker]);
+ assert.ok(full.includes('**松本等しいのひと言**'));
+ for(const length of [3000,6000,12000]){
+  const outcome='🔎 '+('🀄あ'.repeat(length));
+  const expected=full.replace(marker,outcome),messages=paipuPostMessages(s,members,()=> 'normal',[outcome]);
+  const recovered=messages.flatMap(m=>[m.content,...(m.embeds??[]).map(e=>e.description)]).join('');
+  assert.ok(recovered===expected,'every character survives packing, including newlines and emoji');
+  assert.ok(messages.every(m=>m.content.length<=1900));
+  for(const m of messages){
+   assert.ok((m.embeds??[]).length<=10);assert.ok((m.embeds??[]).every(e=>e.description.length<=4096));
+   assert.ok((m.embeds??[]).reduce((sum,e)=>sum+e.description.length,0)<=6000);
+   for(const c of [m.content,...(m.embeds??[]).map(e=>e.description)]){
+    assert.ok(!/[\uD800-\uDBFF]$/.test(c),'no dangling high surrogate');assert.ok(!/^[\uDC00-\uDFFF]/.test(c),'no dangling low surrogate');
+   }
+  }
+  assert.ok(recovered.endsWith(full.split('\n').at(-1)!));
+ }
+});
+
+test('exceptionally long posts enqueue all parts atomically with stable IDs and preserve pending parts after a delivery failure',async t=>{
+ const {paipuPostMessages,queuePaipuMessages}=await import('../src/mahjong-paipu.ts');
+ const {ensurePosts,flushRacePosts}=await import('../src/racing-posts.ts');const f=await fixture();await ensurePosts(f.env);
+ const posts=paipuPostMessages(summary,new Map([[0,{name:'Aさん',user:one}]]),()=> 'normal',['🔎 '+('長文🀄'.repeat(4000))]);assert.ok(posts.length>1);
+ const batch=f.env.DB.batch.bind(f.env.DB);
+ const mock=t.mock.method(f.env.DB,'batch',async(statements:any)=>batch([...statements,f.env.DB.prepare('INSERT INTO absent_atomic_test_table VALUES(1)')]));
+ await assert.rejects(()=>queuePaipuMessages(f.env,PAIPU,posts,T0));
+ assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM kp_posts WHERE id LIKE 'paipu:%'").get()!.n,0,'failed batch did not register a partial post');mock.mock.restore();
+ await queuePaipuMessages(f.env,PAIPU,posts,T0);await queuePaipuMessages(f.env,PAIPU,posts,T0);
+ const rows=f.sql.prepare("SELECT id,body,sent FROM kp_posts WHERE id LIKE 'paipu:%' ORDER BY id").all();assert.equal(rows.length,posts.length);assert.equal(rows[0].id,'paipu:'+PAIPU);
+ for(const row of rows)assert.deepEqual(JSON.parse(String(row.body)).allowed_mentions,{parse:[]});
+ let failing=true;const sent:any[]=[];
+ t.mock.method(globalThis,'fetch',async(_url:unknown,options:any)=>{if(failing)return new Response('',{status:500});sent.push(JSON.parse(options.body));return new Response('',{status:200});});
+ assert.equal(await flushRacePosts(f.env,10),0);assert.equal(f.sql.prepare('SELECT SUM(sent) n FROM kp_posts').get()!.n,0);
+ failing=false;assert.equal(await flushRacePosts(f.env,10),posts.length);assert.equal(await flushRacePosts(f.env,10),0);assert.equal(sent.length,posts.length);
+});

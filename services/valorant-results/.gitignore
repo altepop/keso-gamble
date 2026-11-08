@@ -16,3 +16,7 @@ reward-accounts.json
 discord-config.json
 wrangler.jsonc
 .private/
+
+# Optional, pinned local hand-value calculator (never served by the Activity).
+.venv-mahjong/
+__pycache__/

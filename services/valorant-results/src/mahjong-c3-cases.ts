@@ -1,134 +1,102 @@
-// Exact, pre-discard public-state cases from 4-player Mahjong Soul records.
-// Strictly excludes any incomplete/ambiguous rounds rather than guessing.
+// Four-player MJAI adapter, gated by the shared physical/turn-order replay.
+// Only the focal player's concealed information survives the final snapshot.
 import type {PaipuAction,PaipuSummary} from './mahjong-summary.ts';
 import {toC3Tile} from './mahjong-c3-extract.ts';
+import {reviewDecisions,hasReachAcceptance} from './mahjong-review-state.ts';
+import type {ReviewTransition} from './mahjong-review-state.ts';
 
 type Event={type:string;[key:string]:unknown};
 export interface C3Case {
- seat:number;round:number;turn:number;actual:string;events:Event[];
+ seat:number;round:number;turn:number;actual:string;legal:string[];events:Event[];position:'discard';
 }
-const WINDS=['E','S'];
 const tile=(x:unknown)=>toC3Tile(x);
-const seatOk=(n:unknown)=>Number.isInteger(n)&&Number(n)>=0&&Number(n)<4;
-const arrayOf=(input:unknown):string[]|null=>{
- if(!Array.isArray(input))return null;
- const xs=input.map(tile);
- return xs.every((x):x is string=>typeof x==='string')?xs:null;
-};
-function startCase(d:any):{events:Event[];dealer:number;hands:string[][]}|null{
- if(!d||!Number.isInteger(d.chang)||d.chang<0||d.chang>1||
-  !Number.isInteger(d.ju)||d.ju<0||d.ju>3||
-  !Number.isSafeInteger(d.ben)||d.ben<0||
-  !Number.isSafeInteger(d.liqibang)||d.liqibang<0||
-  !Array.isArray(d.scores)||d.scores.length!==4||d.scores.some((s:unknown)=>!Number.isInteger(s))||
-  !tile(Array.isArray(d.doras)?d.doras[0]:d.dora))return null;
- const hands:string[][]=[];
- for(let i=0;i<4;i++){
-  const h=arrayOf(d['tiles'+i]);
-  if(!h||h.length!==(i===d.ju?14:13))return null;
-  hands.push(h);
- }
- // The dealer's 14th starting tile is an initial self-draw. Never evaluate
- // that first discard because older records differ in initial tile ordering.
- // Reject impossible dealt copies and duplicate red fives.
- const observed=hands.flat().concat(tile(Array.isArray(d.doras)?d.doras[0]:d.dora)!);
- const counts=new Map<string,number>(),reds=new Set<string>();
- for(const t of observed){
-  const kind=t.endsWith('r')?t.slice(0,-1):t;
-  counts.set(kind,(counts.get(kind)??0)+1);
-  if((counts.get(kind)??0)>4)return null;
-  if(t.endsWith('r')){if(reds.has(kind))return null;reds.add(kind);}
- }
- const firstDraw=hands[d.ju].pop()!;
- const events:Event[]=[
-  {type:'start_game'},
-  {type:'start_kyoku',bakaze:WINDS[d.chang],kyoku:d.ju+1,honba:d.ben,kyotaku:d.liqibang,
-   oya:d.ju,scores:d.scores.slice(),dora_marker:tile(Array.isArray(d.doras)?d.doras[0]:d.dora),tehais:hands},
-  {type:'tsumo',actor:d.ju,pai:firstDraw},
- ];
- return {events,dealer:d.ju,hands:hands.map((h,i)=>i===d.ju?[...h,firstDraw]:h.slice())};
-}
+const array=(xs:unknown):string[]=>Array.isArray(xs)?xs.map(tile).filter((t):t is string=>t!==null):[];
+const wind=['E','S','W','N'];
 function copyForSeat(events:Event[],seat:number):Event[]{
- return events.map(e=>{
-  if(e.type==='start_kyoku')return {...e,tehais:(e.tehais as string[][]).map((h,i)=>i===seat?h.slice():Array(13).fill('?'))};
-  if(e.type==='tsumo'&&e.actor!==seat)return {...e,pai:'?'};
-  return {...e};
- }).map((e,i,arr)=>({...e,can_act:i===arr.length-1}));
+ const copy=structuredClone(events);
+ for(const e of copy){
+  if(e.type==='start_kyoku')e.tehais=(e.tehais as string[][]).map((h,i)=>i===seat?h.slice():Array(13).fill('?'));
+  if(e.type==='tsumo'&&e.actor!==seat)e.pai='?';
+  e.can_act=false;
+ }
+ if(copy.length)copy[copy.length-1].can_act=true;
+ return copy;
 }
-/**
- * 2+巡目の発話候補。公開履歴だけをAIに渡し、相手の配牌・ツモを伏せる。
- * Reach/call/kan/unknown actions after the decision are not approximated:
- * from that point, skip the rest of the round until full replay is supported.
- */
+/** Reconstructs the whole known history, including accepted opponent riichi,
+ * calls and kans. Unknown records / illegal physical histories get no later
+ * candidate from reviewDecisions. Own locked riichi and unverified riichi-kan
+ * remain excluded. Model invocations stay bounded; replay itself covers all. */
 export function buildC3Cases(actions:PaipuAction[],summary:PaipuSummary,cap=48):C3Case[]{
- if(summary.players!==4||!summary.game.startsWith('4-')||!Array.isArray(actions)||
-  actions.length>10000||!Number.isInteger(cap)||cap<1||cap>128)return [];
- let round=-1,events:Event[]=[],current:ReturnType<typeof startCase>=null,blocked=true;
- let concealed:string[][]=[];
- let initialDealerDrawUnknown=false;
- let pendingDraw:{seat:number;tile:string}|null=null;
- const turns=[0,0,0,0],out:C3Case[]=[];
- for(let i=0;i<actions.length;i++){
-  const a=actions[i];
-  const name=a?.name,d=a?.data;
+ if(summary.players!==4||!/^4-(tonpu|hanchan)$/.test(summary.game)||!Number.isInteger(cap)||cap<1||cap>128)return [];
+ const transitions=new Map<number,ReviewTransition>();
+ const frames=reviewDecisions(actions,summary,512,undefined,transitions),byIndex=new Map(frames.map(f=>[f.actionIndex,f]));
+ if(!frames.length)return [];
+ let round=-1,events:Event[]=[],doras:string[]=[],dealer=-1,dealerDrawKnown=false,firstDiscard=true;
+ let pending:{seat:number;tile:string}|null=null;
+ const accepted=new Set<number>(),candidates:C3Case[]=[],stageCounts=new Map<string,number>();
+ const pushDoras=(d:any)=>{
+  const ds=array(d?.doras);
+  for(const t of ds.slice(doras.length))events.push({type:'dora',dora_marker:t});
+  if(ds.length)doras=ds;
+ };
+ const reachAccepted=(d:any)=>{if(hasReachAcceptance(d)&&!accepted.has(d.seat)){events.push({type:'reach_accepted',actor:d.seat});accepted.add(d.seat);}};
+ for(const [index,a] of actions.entries()){
+  const d=a?.data,name=a?.name;
   if(name==='RecordNewRound'){
-   round++;turns.fill(0);current=startCase(d);blocked=!current||round>=summary.rounds.length;
-   events=current?.events??[];concealed=current?.hands.map(h=>h.slice())??[];
-   initialDealerDrawUnknown=false;
-   pendingDraw=current?{seat:current.dealer,tile:(events.at(-1) as Event).pai as string}:null;
-   if(!blocked&&summary.rounds[round].label!==['東','南'][d.chang]+(d.ju+1)+'局'+(d.ben?' '+d.ben+'本場':''))blocked=true;
+   round++;events=[];accepted.clear();dealer=d?.ju;firstDiscard=true;dealerDrawKnown=false;pending=null;
+   const hands=Array.from({length:4},(_,s)=>array(d?.['tiles'+s]));
+   if(!Number.isInteger(dealer)||dealer<0||dealer>3||hands.some((h,s)=>h.length!==(s===dealer?14:13))||!Array.isArray(d.scores)||d.scores.length!==4)continue;
+   const provisional=hands[dealer].pop()!;
+   doras=array(d?.doras?.length?d.doras:[d?.dora]);
+   events=[{type:'start_game'},{type:'start_kyoku',bakaze:wind[d.chang],kyoku:dealer+1,honba:d.ben,kyotaku:d.liqibang,oya:dealer,scores:d.scores.slice(),dora_marker:doras[0],tehais:hands},{type:'tsumo',actor:dealer,pai:provisional}];
+   for(const t of doras.slice(1))events.splice(events.length-1,0,{type:'dora',dora_marker:t});
    continue;
   }
-  if(blocked||!name)continue;
+  if(!events.length)continue;
   if(name==='RecordDealTile'){
-   if(!seatOk(d?.seat)||!tile(d?.tile)||pendingDraw||concealed[d.seat]?.length!==13){blocked=true;continue;}
-   const t=tile(d.tile)!;
-   concealed[d.seat].push(t);
-   events.push({type:'tsumo',actor:d.seat,pai:t});
-   pendingDraw={seat:d.seat,tile:t};
-   continue;
+   reachAccepted(d?.liqi);pushDoras(d);events.push({type:'tsumo',actor:d?.seat,pai:tile(d?.tile)});continue;
   }
   if(name==='RecordDiscardTile'){
-   if(!seatOk(d?.seat)||!tile(d?.tile)||!pendingDraw||pendingDraw.seat!==d.seat||concealed[d.seat]?.length!==14){blocked=true;continue;}
-   const actual=tile(d.tile)!;
-   const idx=concealed[d.seat].indexOf(actual);
-   if(idx<0){blocked=true;continue;}
-   // The 14 dealer starting tiles do not reliably identify the real first
-   // draw. If the first discard was tsumogiri, that tile IS the real draw.
-   // Otherwise only the concealed hand of other seats is independently
-   // reconstructable. Never review the dealer's later choices in this round.
-   if(turns[d.seat]===0&&current?.dealer===d.seat){
-    const chosen=d.moqie===true?actual:concealed[d.seat].find(t=>t!==actual);
-    if(!chosen||events[1]?.type!=='start_kyoku'||events[2]?.type!=='tsumo'){blocked=true;continue;}
-    const initial=concealed[d.seat].slice();
-    initial.splice(initial.indexOf(chosen),1);
-    const ts=events[1].tehais as string[][];
-    ts[d.seat]=initial;
-    events[2].pai=chosen;
-    pendingDraw.tile=chosen;
-    initialDealerDrawUnknown=d.moqie!==true;
+   const actual=tile(d?.tile);
+   if(firstDiscard&&d?.seat===dealer){
+    // Only a real initial tsumogiri proves the dealer's initial self-draw.
+    // For everyone else, both versions are masked, so no guess is exposed.
+    const tsumo=events.find(e=>e.type==='tsumo')!,start=events.find(e=>e.type==='start_kyoku')!;
+    if(d.moqie===true&&actual){
+     const hands=start.tehais as string[][],all=[...hands[dealer],tsumo.pai as string];
+     const at=all.indexOf(actual);if(at>=0){all.splice(at,1);hands[dealer]=all;tsumo.pai=actual;dealerDrawKnown=true;}
+    }
+    firstDiscard=false;
    }
-   concealed[d.seat].splice(idx,1);
-   turns[d.seat]++;
-   if(d.moqie===true&&actual!==pendingDraw.tile){blocked=true;continue;}
-   // Stop at declaration. The real paipu may omit separate reach-accepted events.
-   const reach=Boolean(d.is_liqi||d.is_wliqi);
-   if(!reach&&!(initialDealerDrawUnknown&&d.seat===current?.dealer)&&turns[d.seat]>=2&&turns[d.seat]<=18&&out.length<cap){
-    // One or two good sample turns per seat per round, avoiding long polling.
-    const candidatesForSeat=out.filter(x=>x.round===round&&x.seat===d.seat).length;
-    if(candidatesForSeat<2&&turns[d.seat]>=3)out.push({seat:d.seat,round,turn:turns[d.seat],actual,events:copyForSeat(events,d.seat)});
+   const f=byIndex.get(index),last=events.at(-1);
+   if(f&&(f.seat!==dealer||dealerDrawKnown)&&f.turn<=30&&(f.turn>=3||f.interrupted||f.riichi.some(Boolean))&&last&&['tsumo','chi','pon'].includes(last.type)){
+    const stage=[f.round,f.seat,Number(f.melds.some(m=>m.length)),Number(f.riichi.some(Boolean)),f.melds.flat().filter(m=>m.kind==='ankan'||m.kind==='kan').length].join(':');
+    if((stageCounts.get(stage)??0)<2){
+     stageCounts.set(stage,(stageCounts.get(stage)??0)+1);
+     candidates.push({seat:f.seat,round:f.round,turn:f.turn,actual:f.actual,legal:[...new Set(f.hand)],position:'discard',events:copyForSeat(events,f.seat)});
+    }
    }
-   events.push({type:'dahai',actor:d.seat,pai:actual,tsumogiri:Boolean(d.moqie)});
-   pendingDraw=null;
-   if(reach)blocked=true;
-   continue;
+   if(d?.is_liqi||d?.is_wliqi){events.push({type:'reach',actor:d.seat});}
+   events.push({type:'dahai',actor:d?.seat,pai:actual,tsumogiri:Boolean(d?.moqie)});pushDoras(d);pending={seat:d?.seat,tile:actual!};continue;
   }
-  if(name==='RecordHule'||name==='RecordNoTile'||name==='RecordLiuJu'||
-   name==='RecordChiPengGang'||name==='RecordAnGangAddGang'||name==='RecordBaBei'||
-   name==='RecordLiqiSuccess'){blocked=true;pendingDraw=null;continue;}
-  // Explicitly known non-decision records without strategic effect are omitted.
-  // Unknown record types may affect legality. Never treat them as harmless.
-  blocked=true;
+  if(name==='RecordLiqiSuccess'){reachAccepted(d);continue;}
+  if(name==='RecordChiPengGang'){
+   reachAccepted(d?.liqi);const ts=array(d?.tiles),froms=d?.froms;
+   if(!pending||!Array.isArray(froms)||!Number.isInteger(d?.seat)||d.seat<0||d.seat>3){events=[];continue;}
+   const consumed=ts.filter((_,i)=>froms[i]===d.seat),kind=['chi','pon','daiminkan'][d.type];
+   events.push({type:kind,actor:d.seat,target:pending.seat,pai:pending.tile,consumed});pending=null;continue;
+  }
+  if(name==='RecordAnGangAddGang'){
+   const transition=transitions.get(index);
+   if(!transition){events=[];continue;}
+   events.push({...transition});pushDoras(d);pending=null;continue;
+  }
+  if(['RecordHule','RecordNoTile','RecordLiuJu'].includes(name)){events=[];continue;}
+  events=[];
  }
+ // Round-robin across seats keeps a long first player's history from taking
+ // the complete inference budget. Every case still contains its own prefix.
+ const queues=Array.from({length:4},(_,s)=>candidates.filter(c=>c.seat===s)),out:C3Case[]=[];
+ while(out.length<cap&&queues.some(q=>q.length))for(const q of queues){if(q.length&&out.length<cap)out.push(q.shift()!);}
  return out;
 }

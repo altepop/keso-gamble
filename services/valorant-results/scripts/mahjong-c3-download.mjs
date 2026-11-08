@@ -32,6 +32,9 @@ async function receiveFile(entry){
  const remote=entry.transport?.name||entry.name,uri=new URL(remote,MODEL_SOURCE);
  const ctrl=new AbortController(),timer=setTimeout(()=>ctrl.abort(),160000);
  const temp=file+'.partial';
+ // A killed optional worker can leave an incomplete cache file. The workflow
+ // concurrency group permits one writer; never reuse incomplete bytes.
+ await rm(temp,{force:true});
  try{
   const response=await fetch(uri,{signal:ctrl.signal,headers:{'User-Agent':'KESO-PLAY-C3-verification/1'}});
   if(!response.ok||!response.body||new URL(response.url).origin!==uri.origin)throw Error('model_download_failed:'+entry.name);
