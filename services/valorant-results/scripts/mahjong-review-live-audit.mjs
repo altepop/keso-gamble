@@ -1,7 +1,7 @@
 // Trusted owner-only CI diagnostic. One bounded SELECT; re-fetch <=2 existing
 // successful games, at most two record requests per size. No ingestion, Discord, KP, D1 writes, artifacts, names or game IDs.
 import {pathToFileURL} from 'node:url';
-import {safeRecordRpcDiagnostic} from './mahjong-rpc-diagnostics.mjs';
+import {safeRecordRpcDiagnostic,recordSessionContext} from './mahjong-rpc-diagnostics.mjs';
 import {D1_B_ID} from '../../../scripts/relic-abuse-audit.mjs';
 import {login,fetchDecodedRecord} from './mahjong-paipu.mjs';
 import {summarizePaipu} from '../src/mahjong-summary.ts';
@@ -19,21 +19,21 @@ export const RECENT_REVIEW_SQL=`SELECT p.paipu,p.summary,
  (SELECT json_object('queued',COUNT(*),'sent',COALESCE(SUM(q.sent=1),0),'reviewSent',COALESCE(SUM(q.sent=1 AND instr(q.body,'松本等しいのひと言')>0),0))
   FROM kp_posts q WHERE q.id>=('paipu:'||p.paipu) AND q.id<('paipu:'||p.paipu||';')) delivery
  FROM kp_mahjong_paipu p WHERE p.rowid>(SELECT COALESCE(MAX(rowid),0) FROM kp_mahjong_paipu)-64 AND p.summary IS NOT NULL ORDER BY p.rowid DESC LIMIT 12`;
-export const RECORD_CHECK_SQL='SELECT paipu FROM kp_mahjong_paipu WHERE rowid>(SELECT COALESCE(MAX(rowid),0) FROM kp_mahjong_paipu)-64 AND summary IS NOT NULL ORDER BY rowid DESC LIMIT 1';
+export const RECORD_CHECK_SQL='SELECT paipu,summary FROM kp_mahjong_paipu WHERE rowid>(SELECT COALESCE(MAX(rowid),0) FROM kp_mahjong_paipu)-64 AND summary IS NOT NULL ORDER BY rowid DESC LIMIT 1';
 /** One saved ID, one read attempt, no fallback, inference, ingestion or writes. */
 export async function recordCheck(env=process.env,{query,connect=login,decode=fetchDecodedRecord}={}){
- let session,phase='history',recordRequests=0;
+ let session,phase='history',recordRequests=0,sessionContext;
  try{
   if(typeof query!=='function')throw Error('audit_query_missing');
   const rows=await query(RECORD_CHECK_SQL,[]),id=rows[0]?.paipu;
   if(!rows.length)return {ok:false,status:'no-record',recordRequests};
   if(typeof id!=='string'||!/^\d{6}-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id))return {ok:false,status:'invalid-record-id',recordRequests};
-  phase='login';session=await connect(env);
+  phase='login';session=await connect(env);sessionContext=recordSessionContext(session,rows[0].summary);
   phase='record';recordRequests++;const {head,actions}=await decode(session,id);
   const headUuidMatches=head?.uuid===id,actionCount=Array.isArray(actions)?Math.min(actions.length,100000):0;
   const ok=headUuidMatches&&actionCount>0;
-  return {ok,status:ok?'record-read':'record-unverified',recordRequests,headUuidMatches,actionCount};
- }catch(error){return {ok:false,status:'failed',recordRequests,diagnostic:auditFailure(error,phase)};}
+  return {ok,status:ok?'record-read':'record-unverified',recordRequests,headUuidMatches,actionCount,sessionContext};
+ }catch(error){return {ok:false,status:'failed',recordRequests,...sessionContext?{sessionContext}:{},diagnostic:auditFailure(error,phase)};}
  finally{session?.close();}
 }
 

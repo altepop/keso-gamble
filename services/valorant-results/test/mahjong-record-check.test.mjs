@@ -4,7 +4,7 @@ const uuid='261108-aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
 test('single-record check makes one SELECT, one decode and closes the session without exposing the ID',async()=>{
  let reads=0,logins=0,decodes=0,closed=0;
  const result=await recordCheck({}, {query:async(sql,params)=>{reads++;assert.equal(sql,RECORD_CHECK_SQL);assert.deepEqual(params,[]);return Array(10).fill({paipu:uuid});},connect:async()=>{logins++;return {close(){closed++;}};},decode:async(_session,id)=>{decodes++;assert.equal(id,uuid);return {head:{uuid},actions:[{private:'private-hand'}]};}});
- assert.deepEqual(result,{ok:true,status:'record-read',recordRequests:1,headUuidMatches:true,actionCount:1});assert.equal(reads,1);assert.equal(logins,1);assert.equal(decodes,1);assert.equal(closed,1);assert.doesNotMatch(JSON.stringify(result),/aaaaaaaa|private-hand/);
+ assert.deepEqual(result,{ok:true,status:'record-read',recordRequests:1,headUuidMatches:true,actionCount:1,sessionContext:{gameConnectionPresent:null,viewerParticipated:null}});assert.equal(reads,1);assert.equal(logins,1);assert.equal(decodes,1);assert.equal(closed,1);assert.doesNotMatch(JSON.stringify(result),/aaaaaaaa|private-hand/);
 });
 test('RPC 540 is reported once with safe diagnostics, never retried or called a successful read',async()=>{
  let decodes=0,closed=0;
@@ -29,4 +29,11 @@ test('one-record CLI fails closed without credentials and rejects conflicting mo
  for(const [args,expected] of [[['--record-check'],/unavailable_credentials/],[['--record-check','--delivery'],/audit_mode_conflict/]]){
   const r=spawnSync(process.execPath,[script,...args],{env:{PATH:process.env.PATH},encoding:'utf8',timeout:10000});assert.equal(r.status,1,r.stderr);assert.match(r.stdout+r.stderr,expected);assert.doesNotMatch(r.stdout+r.stderr,/private-token|Error:/);
  }
+});
+
+test('single record check returns only game-connection presence and viewer membership on failure',async()=>{
+ const {attachLoginContext}=await import('../scripts/mahjong-rpc-diagnostics.mjs');
+ let calls=0;
+ const result=await recordCheck({}, {query:async()=>[{paipu:uuid,summary:JSON.stringify({seats:[{accountId:10001},{accountId:10002},{accountId:10003}]})}],connect:async()=>attachLoginContext({close(){}},{account:{account_id:10001},game_info:{game_uuid:'private-active-game',connect_token:'private-token'}}),decode:async()=>{calls++;throw Error('fetchGameRecord_540');}});
+ assert.equal(calls,1);assert.deepEqual(result.sessionContext,{gameConnectionPresent:true,viewerParticipated:true});assert.doesNotMatch(JSON.stringify(result),/10001|10002|10003|private-active|private-token/);
 });

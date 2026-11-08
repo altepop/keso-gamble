@@ -58,3 +58,17 @@ test('other RPC errors preserve their existing behavior without replay diagnosti
  const gateway=await openGateway({root,WebSocket},{id:'synthetic-route',domain:'unused.invalid'});
  try{await assert.rejects(gateway.call('oauth2Auth',{}),error=>{assert.equal(error.message,'oauth2Auth_123');assert.equal(error.rpcDiagnostic,undefined);return true;});}finally{gateway.close();}
 });
+
+test('login context does not serialize the viewer ID or connection token and distinguishes unknown membership',async()=>{
+ const {attachLoginContext,recordSessionContext}=await import('../scripts/mahjong-rpc-diagnostics.mjs');
+ const session=attachLoginContext({}, {account:{account_id:10001},game_info:{game_uuid:'private-game',connect_token:'private-token'}});
+ assert.equal(session.viewerAccountId,10001);assert.deepEqual(JSON.parse(JSON.stringify(session)),{gameConnectionPresent:true});
+ const seats=[{accountId:10001},{accountId:10002},{accountId:10003}];
+ assert.deepEqual(recordSessionContext(session,{seats}),{gameConnectionPresent:true,viewerParticipated:true});
+ assert.equal(recordSessionContext(session,{seats:seats.map(p=>({accountId:p.accountId+10}))}).viewerParticipated,false);
+ for(const raw of ['invalid-json',{}, {seats:[]},{seats:[{}, {}, {}]}])assert.equal(recordSessionContext(session,raw).viewerParticipated,null);
+ assert.equal(recordSessionContext({}, {seats}).gameConnectionPresent,null);
+ assert.equal(recordSessionContext(attachLoginContext({}, {account:{account_id:0},game_info:{}}),{seats}).viewerParticipated,null);
+ assert.equal(attachLoginContext({}, {account:{account_id:10001},game_info:{}}).gameConnectionPresent,false);
+ assert.doesNotMatch(JSON.stringify(recordSessionContext(session,{seats})),/10001|private/);
+});

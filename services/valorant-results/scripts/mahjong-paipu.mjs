@@ -7,7 +7,7 @@
 import {createHash,createHmac,randomUUID} from 'node:crypto';
 import {resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
-import {recordRpcDiagnostic} from './mahjong-rpc-diagnostics.mjs';
+import {recordRpcDiagnostic,attachLoginContext} from './mahjong-rpc-diagnostics.mjs';
 import {summarizePaipu} from '../src/mahjong-summary.ts';
 import {confirmedStandardReviewRules} from '../src/mahjong-review-rules.ts';
 
@@ -106,7 +106,7 @@ export async function login(env){
     if(!check.has_account)throw Error('oauth2Check_no_account');
     const done=await gate.call('oauth2Login',{type:OAUTH_TYPE,access_token:auth.access_token,reconnect:false,device:DEVICE,random_key:randomUUID(),client_version:ctx.clientVersion,client_version_string:versionString,currency_platforms:CURRENCY,tag:'jp'});
     if(!done.account)throw Error('oauth2Login_failed');
-    return {root:ctx.root,versionString,call:gate.call,close:gate.close};
+    return attachLoginContext({root:ctx.root,versionString,call:gate.call,close:gate.close},done);
    }catch(error){errors.push(error.message);gate?.close();}
   }
  }

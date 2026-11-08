@@ -342,3 +342,12 @@
 - 実際のrpc診断: requestDecoded=true、gameUuidPreserved=true、clientVersionPreserved=true、numberParamCount=0、stringParamCount=0、jsonParamPresent=false。送信前のprotobuf符号化でID/版が欠落したケースを除外できた。サーバーがその版/プロトコルを受理することや、540の原因がサーバー側不具合であることまでは証明しない。
 - 540は未解決、三麻有効化と追加の本番配置は行っていない。今回の確認でD1への書き込み・Discord投稿・KP変更なし。次は公式クライアントでの再生可否の回答と、受理条件/現行プロトコルの根拠を照合する。版や接続先を当てずっぽうで変えて試行しない。
 - ローカルNode24の型検査、Bot814/配備44/D1予算4の全テスト（skipなし）とWorker dry-run build成功。最終headのCI結果はPR393本文を優先する。進捗90%は据え置き。
+
+## 取得成功時との比較と、セッション条件の確認準備（2026-11-08 JST）
+
+- headbe58105ee978351dff71fbba061967c6df8ec8faのCI42478814531はcheck/browser成功、PRのためdeploy skip。
+- 取得成功を再確認した基準は77e2ca352511972d72d42936bcaeee022719e49e / run42465917898 / job128685289662。ログの18:09:59 JSTにselected=2（三麻/四麻）を確認。取得失敗した前回1件確認は21:03:23 JST（run42478425683）。
+- be58105時点とのgit diffとacorn AST比較で、yostarSession/serverContext/channel/login/decodeRecords/fetchDecodedRecordの6関数は同一。package.json/package-lock.jsonも同一。openGatewayの差は要求バイト列の変数への抽出とエラー診断付与。実際の送信フレームの回帰テストも成功している。したがって取得部分のコード差分を戻せば直ると判断する根拠は得られなかった。環境/アカウント状態/サーバー側のどれが原因かは未確定。
+- 次の確認は、既存のoauth2Login応答に対局接続情報が返るかと、ログインアカウントが選んだ保存済み牌譜の参加者か。新しいRPCは増やさず、同じSELECTへsummary列を加え、同じログイン応答と既存の要約を比較する。
+- アカウントIDはsessionのnonenumerableな内部属性にだけ置き、ログ/結果にはgameConnectionPresentとviewerParticipatedだけを返す。情報不足や不正な要約はnullとし、falseと混同しない。gameConnectionPresentは非空のgame_info.game_uuidを読めたという観測であり、現在対局中だと断定しない。viewerParticipatedもアクセス権の証明ではない。
+- 模擬テストで参加/非参加/不明の区別、ID/接続トークンの非露出、取得エラーでも状況を保持し再試行しないことを確認。所有者/同一repo/PR393限定の一時ジョブで1件だけ確認し、結果を取ったらworkflowを削除する。通常のログイン要求・取得要求・再試行条件を変えず、D1書き込み・投稿・支給・本番配置はしない。
