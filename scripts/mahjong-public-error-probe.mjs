@@ -6,6 +6,7 @@ const read=async path=>{const r=await fetch(BASE+'/'+path,{signal:AbortSignal.ti
 try{
  const info=JSON.parse((await read('version.json')).toString()),manifest=JSON.parse((await read('resversion'+info.version+'.json')).toString());
  const html=(await read('index.html')).toString();console.log('Official public client version: '+JSON.stringify({version:info.version,code:info.code,products:[...html.matchAll(/productVersion[\"']?\s*:\s*[\"']([^\"']+)[\"']/g)].map(m=>m[1]).filter(v=>/^[0-9.]+$/.test(v)),scripts:[...html.matchAll(/<script[^>]+src=[\"']([^\"']+)[\"']/g)].map(m=>m[1]).slice(0,12)}));
+ console.log('Official public WebGL environment: '+(await read('webgl-env.js')).toString().slice(0,10000));
  const prefix=manifest.res?.['res/config/lqc.lqbin']?.prefix;if(typeof prefix!=='string'||!/^[-a-zA-Z0-9_/.]+$/.test(prefix))throw Error('public_manifest');
  const root=protobuf.parse(`syntax="proto3";message Field {string field_name=1;uint32 array_length=2;string pb_type=3;uint32 pb_index=4;}message SheetMeta {string category=1;string key=2;}message SheetSchema {string name=1;SheetMeta meta=2;repeated Field fields=3;}message TableSchema {string name=1;repeated SheetSchema sheets=2;}message SheetData {string table=1;string sheet=2;repeated bytes data=3;}message ConfigTables {string version=1;string header_hash=2;repeated TableSchema schemas=3;repeated SheetData datas=4;}`,{keepCase:true}).root;
  const T=root.lookupType('ConfigTables'),config=T.toObject(T.decode(await read(prefix+'/res/config/lqc.lqbin')),{defaults:true,bytes:Buffer});
