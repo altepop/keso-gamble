@@ -110,8 +110,9 @@
     return true;
   }
   async function play(mode="manual"){
-    ensureAudio();var chosen=track;
+    var chosen=track;
     try{
+      ensureAudio();
       if(!audio.getAttribute("src"))await load();
       if(chosen!==track)return;
       await audio.play();hasPlayed=true;status("再生中："+active().title);
