@@ -89,7 +89,7 @@ test('two real new sanma games by one user never reuse identical three-line roas
  const first=three('example-0',50000,now/1000-1700,now/1000-1100);
  let second:MahjongRecord|undefined;
  for(let n=1;n<2000;n++){
-  const candidate=three('example-'+n,55800,now/1000-850,now/1000-250);
+  const candidate=three('example-'+n,50000,now/1000-850,now/1000-250);
   if(mahjongRoast(candidate,10)===mahjongRoast(first,10)){second=candidate;break;}
  }
  assert.ok(second,'fixture must reproduce an actual rank-one hash collision');
@@ -113,7 +113,7 @@ test('two real new sanma games by one user never reuse identical three-line roas
  assert.notEqual(firstRoast,secondRoast);
  assert.deepEqual(messages.map(m=>m.allowed_mentions),[{parse:[]},{parse:[]}]);
  assert.match(messages[0]!.content,/50,000点/);
- assert.match(messages[1]!.content,/55,800点/);
+ assert.match(messages[1]!.content,/50,000点/);
  assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM mahjong_watch_posts').get()!.n,2);
  assert.equal((f.sql.prepare("SELECT value FROM mahjong_watch_state WHERE key='mahjong_last_roast:10'").get() as {value:string}).value,secondRoast);
  // Re-reading the same provider history cannot duplicate notifications or
