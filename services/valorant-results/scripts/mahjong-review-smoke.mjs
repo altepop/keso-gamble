@@ -16,12 +16,19 @@ for(let cycle=0;cycle<4;cycle++)for(const seat of [1,2,3,0]){const tile=pool.pop
 const summary={v:1,uuid:'synthetic-physical-four-player-smoke',game:'4-hanchan',players:4,start:0,end:1,seats:[],rounds:[{label:'東1局'}]};
 const cases=buildC3Cases(actions,summary);
 if(!cases.length)throw Error('synthetic_case_missing');
-const reviewer=createPaipuReviewer({root,fourEnabled:true,timeoutMs:45000,budgetMs:90000});
+const reviewer=createPaipuReviewer({root,fourEnabled:true,sanmaEnabled:true,timeoutMs:45000,budgetMs:90000});
 try{
  const result=await reviewer.review(summary,actions);
  if(!acceptedC3Report(summary,result))throw Error('isolated_real_model_review_failed');
  for(const f of result.findings){const c=cases.find(c=>c.seat===f.seat&&c.round===f.round&&c.turn===f.turn&&c.actual===f.actual);if(!c||!c.legal.includes(f.recommended))throw Error('model_discard_unverified');}
  console.log('Equal review: real model + isolated worker + artificial legal four-player replay passed; no real-game, Discord or KP claim.');
+ if(process.env.SANMA_PYTHON){
+  const {makeProbeBody}=await import('./mahjong-review-delivery-probe.mjs');const body=await makeProbeBody({reviewer});
+  if(body.embeds.length!==2||JSON.stringify(body.allowed_mentions)!==JSON.stringify({parse:[]})||!body.content.includes('人工牌譜')||!body.content.includes('KP支給・残高変更はありません'))throw Error('probe_presentation_invalid');
+  if(/<@|c3|synthetic|sanma-rules/.test(JSON.stringify(body)))throw Error('probe_identity_or_model_leak');
+  console.log('Equal review: real models generated labelled three/four-player probe body; not queued or sent by this smoke.');
+ }
+
 }finally{await reviewer.close();}
 
 // All are artificial records. This verifies the actual encoder's state/mask,

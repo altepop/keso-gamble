@@ -9,3 +9,6 @@ test('missing or rejected dispatch credential cannot leak or change to a write/i
  assert.equal((await dispatchDeliveryAudit({PAIPU_DISPATCH_TOKEN:'private'},async()=>({status:403}))).status,'http-403');
  assert.equal((await dispatchDeliveryAudit({PAIPU_DISPATCH_TOKEN:'private'},async()=>{throw Error('private');})).status,'request-failed');
 });
+test('an explicitly marked verification release may request the owner-only single-message probe',async()=>{
+ const result=await dispatchDeliveryAudit({PAIPU_DISPATCH_TOKEN:'private-test-key',REVIEW_DELIVERY_PROBE:'true'},async(_url,options)=>{assert.deepEqual(JSON.parse(options.body),{ref:'main',inputs:{delivery_probe:true}});return {status:204};});assert.equal(result.started,true);
+});
