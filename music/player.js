@@ -5,7 +5,8 @@
     {id:"mou",title:"もう一周",src:"music/assets/mou-isshu.mp3"},
     {id:"rhapsody",title:"限界集落狂詩曲",src:"music/assets/genkai-rhapsody.mp3"},
     {id:"kyohansha",title:"午前二時の共犯者",src:"music/assets/午前二時の共犯者 (1).mp3"},
-    {id:"ouenka",title:"応援歌",src:"music/assets/応援歌 (Remastered).mp3"}
+    {id:"ouenka",title:"応援歌",src:"music/assets/応援歌 (Remastered).mp3"},
+    {id:"gosa",title:"誤差の女王",src:"music/assets/誤差の女王B.mp3"}
   ];
   var prefix="keso.music.", audio=null;
   var read=function(key,fallback){try{return localStorage.getItem(prefix+key)||fallback;}catch(_){return fallback;}};
@@ -20,7 +21,7 @@
     '<section class="music-panel" id="music-panel" aria-label="BGM設定" hidden>',
     '<div class="music-heading"><strong>♫ KESO PLAY MUSIC</strong><button class="music-close" type="button" aria-label="閉じる">×</button></div>',
     '<label for="music-track">曲を選ぶ</label>',
-    '<select id="music-track"><option value="mou">もう一周</option><option value="rhapsody">限界集落狂詩曲</option><option value="kyohansha">午前二時の共犯者</option><option value="ouenka">応援歌</option></select>',
+    '<select id="music-track"><option value="mou">もう一周</option><option value="rhapsody">限界集落狂詩曲</option><option value="kyohansha">午前二時の共犯者</option><option value="ouenka">応援歌</option><option value="gosa">誤差の女王</option></select>',
     '<div class="music-buttons"><button type="button" id="music-play">▶ 再生</button><button type="button" id="music-next">次の曲 ⏭</button></div>',
     '<label class="music-volume-label" for="music-volume"><span>BGM音量</span><output id="music-percent">',volume,'%','</output></label>',
     '<input type="range" id="music-volume" min="0" max="100" step="1" value="',volume,'" aria-label="BGM音量">',

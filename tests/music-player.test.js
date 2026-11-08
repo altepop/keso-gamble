@@ -158,14 +158,30 @@ test('two new official MP3s are selectable and match exact GitHub filenames',asy
  assert.equal(s.saved.get('keso.music.track'),'ouenka');
 });
 
-test('background playback advances across four songs then wraps to beginning',async()=>{
+test('background playback advances across five songs then wraps to beginning',async()=>{
  const s=setup();
  await tick();
  s.document.hidden=true;
- const expected=['genkai-rhapsody.mp3','午前二時の共犯者 (1).mp3','応援歌 (Remastered).mp3','mou-isshu.mp3'];
+ const expected=['genkai-rhapsody.mp3','午前二時の共犯者 (1).mp3','応援歌 (Remastered).mp3','誤差の女王B.mp3','mou-isshu.mp3'];
  for(const name of expected){
   s.audio.listeners.get('ended')();await tick();
   assert.ok(decodeURI(s.audio.src).endsWith(name),'next song '+name);
   assert.equal(s.audio.paused,false);
  }
+});
+
+
+test('official 誤差の女王B is selectable, encoded safely, and persists as chosen song',async()=>{
+ const s=setup();
+ await tick();
+ assert.match(s.root.innerHTML,/<option value="gosa">誤差の女王<\/option>/);
+ s.element('#music-track').value='gosa';
+ s.fire('#music-track','change');await tick();
+ assert.equal(s.saved.get('keso.music.track'),'gosa');
+ assert.match(decodeURI(s.audio.src),/music\/assets\/誤差の女王B\.mp3$/);
+ const restored=setup({savedEntries:[['keso.music.track','gosa']]});
+ await tick();
+ assert.equal(restored.element('#music-track').value,'gosa');
+ assert.match(decodeURI(restored.audio.src),/music\/assets\/誤差の女王B\.mp3$/);
+ assert.equal(restored.audio.volume,.05);
 });
