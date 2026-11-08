@@ -69,7 +69,27 @@ test('music autoplays after the genuine title renders, with safe default volume'
  assert.match(s.audio.src,/genkai-rhapsody\.mp3$/);
  assert.equal(s.saved.get('keso.music.track'),'rhapsody');
  s.fire('#music-play','click');await tick();
- s.document.hidden=true;s.events.get('visibilitychange')();
+ s.document.hidden=true;s.events.get('visibilitychange')?.();
+ assert.equal(s.audio.paused,false,'switching to a background tab must not pause BGM');
+});
+
+test('background playback keeps running across visibility changes, advances tracks, and honors manual pause',async()=>{
+ const s=setup();
+ await tick();
+ s.document.hidden=true;
+ s.events.get('visibilitychange')?.();
+ assert.equal(s.audio.paused,false);
+ s.audio.listeners.get('ended')();
+ await tick();
+ assert.match(s.audio.src,/genkai-rhapsody\.mp3$/);
+ assert.equal(s.ctx.KesoMusic.getState().playing,true,'playlist continues while hidden');
+ s.fire('#music-play','click');
+ assert.equal(s.audio.paused,true);
+ const previousPlayCount=s.audio.played;
+ s.document.hidden=false;
+ s.events.get('visibilitychange')?.();
+ await tick();
+ assert.equal(s.audio.played,previousPlayCount,'returning to foreground never resumes a user-paused track');
  assert.equal(s.audio.paused,true);
 });
 

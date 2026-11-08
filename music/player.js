@@ -23,7 +23,7 @@
     '<label class="music-volume-label" for="music-volume"><span>BGM音量</span><output id="music-percent">',volume,'%','</output></label>',
     '<input type="range" id="music-volume" min="0" max="100" step="1" value="',volume,'" aria-label="BGM音量">',
     '<label class="music-auto-label"><input type="checkbox" id="music-autoplay" ',autoplay?'checked':'','> 起動時に自動再生</label>',
-    '<p class="music-info">起動時に再生を試みます（初期5%）。iPhone・Discordの制限で自動再生できない場合は▶再生を押してください。設定は端末保存で、D1は利用しません。</p>',
+    '<p class="music-info">起動時に再生を試みます（初期5%）。iPhone・Discordの制限で自動再生できない場合は▶再生を押してください。別タブ・裏画面でも再生を続けます（端末によっては中断される場合があります）。設定は端末保存で、D1は利用しません。</p>',
     '<p class="music-status" role="status" aria-live="polite">停止中</p>',
     '</section>'
   ].join("");
@@ -37,7 +37,7 @@
     if(holder){
       if(root.parentElement!==holder)holder.appendChild(root);
       root.hidden=false;
-      if(!started){started=true;queueMicrotask(function(){if(autoplay&&root.parentElement&&!document.hidden)void play("auto");});}
+      if(!started){started=true;queueMicrotask(function(){if(autoplay&&root.parentElement)void play("auto");});}
     }else if(root.parentElement){root.remove();if(audio)pause();}
   }
   mount();
@@ -57,7 +57,7 @@
     audio.src=new URL(active().src,document.baseURI).href;
     audio.addEventListener("play",function(){openBtn.classList.remove("needs-tap");render();});
     audio.addEventListener("pause",render);
-    audio.addEventListener("ended",function(){if(hasPlayed&&!document.hidden)void next();});
+    audio.addEventListener("ended",function(){if(hasPlayed)void next();});
     audio.addEventListener("error",function(){if(audio.getAttribute("src"))status("公式音源の読み込みに失敗しました。再度開き直してください。");render();});
     return audio;
   }
@@ -97,8 +97,6 @@
   select.addEventListener("change",function(){void choose(select.value,false);});
   $("#music-volume").addEventListener("input",function(e){volume=Math.max(0,Math.min(100,Number(e.target.value)||0));if(audio)audio.volume=volume/100;$("#music-percent").textContent=volume+"%";save("volume",volume);});
   $("#music-autoplay").addEventListener("change",function(e){autoplay=!!e.target.checked;save("autoplay",autoplay?"on":"off");status(autoplay?"次回の起動時から自動再生を試みます。":"次回から自動再生しません。");});
-  document.addEventListener("visibilitychange",function(){if(document.hidden){pause();status("画面が非表示のため停止しました。");}});
-  window.addEventListener("pagehide",pause);
   document.addEventListener("click",function(e){if(e.target.closest&&e.target.closest('[data-action="bgm-toggle"]')&&audio&&!audio.paused){pause();status("旧BGMへの切り替えに伴い停止しました。");}},true);
   globalThis.KesoMusic={pause:pause,getState:function(){return {track:track,volume:volume,playing:!!audio&&!audio.paused};}};
 })();
