@@ -58,7 +58,7 @@ export function mahjongRank(record:MahjongRecord,player:number){
  const sorted=record.players.map((p,seat)=>({...p,seat})).sort((a,b)=>b.score-a.score||a.seat-b.seat);
  return sorted.findIndex(p=>p.accountId===player)+1;
 }
-export function mahjongRoast(record:MahjongRecord,player:number){
+export function mahjongRoast(record:MahjongRecord,player:number,previousRoast=''){
  const p=record.players.find(p=>p.accountId===player);if(!p)throw Error('mahjong_player_absent');
  const rank=mahjongRank(record,player);
  const group=p.score<0?'bust':rank===1?'first':rank===record.players.length?'last':rank===2?'second':'third';
@@ -67,8 +67,20 @@ export function mahjongRoast(record:MahjongRecord,player:number){
  // Legacy shared sets that explicitly name three opponents belong to four-player tables only.
  const shared=record.players.length===3?all[group].filter(lines=>!lines.some(line=>/他の3人|4人おって/.test(line))):all[group];
  const pool=[...shared,...record.players.length===3?all[group+'3']??[]:[]];
- return pick(pool,record._id+':'+player).join('\n');
+ const selected=pick(pool,record._id+':'+player);
+ const text=selected.join('\n');
+ // Deterministic per record even across retries. Only a *different* new game
+ // may rotate away from the previous game's exact same three-line template.
+ if(!previousRoast||text!==previousRoast||pool.length<=1)return text;
+ const offset=1+((hashRoastKey(record._id+':'+player+':alternative'))%(pool.length-1));
+ const start=pool.indexOf(selected);
+ for(let step=0;step<pool.length-1;step++){
+  const alternative=pool[(start+offset+step)%pool.length]!.join('\n');
+  if(alternative!==previousRoast)return alternative;
+ }
+ return text;
 }
+function hashRoastKey(key:string){let h=2166136261;for(const c of key)h=Math.imul(h^c.charCodeAt(0),16777619);return (h^(h>>>16))>>>0;}
 export function parseMahjongRecords(value:unknown,player:number,modes:number[],since:number,now:number):MahjongRecord[]{
  if(!Array.isArray(value)||value.length>100)throw Error('invalid_mahjong_records');
  return value.map((r:MahjongRecord)=>{
@@ -77,10 +89,10 @@ export function parseMahjongRecords(value:unknown,player:number,modes:number[],s
   return {...r,uuid};
  }).filter(r=>modes.includes(r.modeId)&&r.startTime*1000>=since).sort((a,b)=>a.startTime-b.startTime||a._id.localeCompare(b._id));
 }
-export function mahjongMessage(record:MahjongRecord,player:number,name:string){
+export function mahjongMessage(record:MahjongRecord,player:number,name:string,previousRoast=''){
  const p=record.players.find(p=>p.accountId===player);if(!p)throw Error('mahjong_player_absent');
  const time=new Date(record.endTime*1000).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});
- return [`🀄 **${clean(name)}｜${mahjongRank(record,player)}着／${record.players.length}人**`,`${MODES[record.modeId]}｜${p.score.toLocaleString('ja-JP')}点｜${time} 終了`,mahjongRoast(record,player),`戦績：<https://${record.modeId<20?'amae-koromo':'ikeda'}.sapk.ch/player/${player}/${record.modeId}>`].join('\n');
+ return [`🀄 **${clean(name)}｜${mahjongRank(record,player)}着／${record.players.length}人**`,`${MODES[record.modeId]}｜${p.score.toLocaleString('ja-JP')}点｜${time} 終了`,mahjongRoast(record,player,previousRoast),`戦績：<https://${record.modeId<20?'amae-koromo':'ikeda'}.sapk.ch/player/${player}/${record.modeId}>`].join('\n');
 }
 async function state(env:MahjongEnv,key:string){return (await env.DB.prepare('SELECT value FROM mahjong_watch_state WHERE key=?').bind(key).first<{value:string}>())?.value??'';}
 async function save(env:MahjongEnv,key:string,value:string|number){await env.DB.prepare('INSERT INTO mahjong_watch_state(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind(key,String(value)).run();}
@@ -165,7 +177,22 @@ export async function monitorMahjong(env:MahjongEnv,now=Date.now(),override?:Mah
      const id='mahjong:'+p.id+':'+record._id;
      // Only fresh games: a first successful poll returns a week of history, which must not flood the channel.
      if(record.uuid&&record.endTime*1000>now-AUTO_PAIPU_AGE)fresh+=(await env.DB.prepare('INSERT OR IGNORE INTO mahjong_paipu_auto(paipu,account,at) VALUES(?,?,?)').bind(record.uuid,p.id,record.endTime*1000).run()).meta.changes;
-     const added=await env.DB.prepare('INSERT OR IGNORE INTO mahjong_watch_posts(id,body,at) VALUES(?,?,?)').bind(id,JSON.stringify({content:mahjongMessage(record,p.id,p.name||record.players.find(m=>m.accountId===p.id)!.nickname),allowed_mentions:{parse:[]}}),record.endTime*1000).run();
+     const displayName=p.name||record.players.find(m=>m.accountId===p.id)!.nickname;
+     // Existing games are ignored without reading or rewriting a roast history row.
+     // This keeps the hourly D1 read budget independent of the provider's lookback.
+     const added=await env.DB.prepare('INSERT OR IGNORE INTO mahjong_watch_posts(id,body,at) VALUES(?,?,?)').bind(id,JSON.stringify({content:mahjongMessage(record,p.id,displayName),allowed_mentions:{parse:[]}}),record.endTime*1000).run();
+     if(added.meta.changes){
+      // Per-account primary-key lookup only for *new* completed games. Without
+      // this, two unrelated match IDs can hash to the same three-line script.
+      const key='mahjong_last_roast:'+p.id;
+      const previous=await state(env,key);
+      const roast=mahjongRoast(record,p.id,previous);
+      if(roast!==mahjongRoast(record,p.id)){
+       // The queued message has not been flushed yet. Do not edit sent posts.
+       await env.DB.prepare('UPDATE mahjong_watch_posts SET body=? WHERE id=? AND sent=0').bind(JSON.stringify({content:mahjongMessage(record,p.id,displayName,previous),allowed_mentions:{parse:[]}}),id).run();
+      }
+      await save(env,key,roast);
+     }
      // How long after the game ended it was first seen (provider delay plus the poll gap), for diagnosis.
      if(added.meta.changes&&record.endTime*1000>now-AUTO_PAIPU_AGE){await save(env,'found_delay_seconds',Math.round((now-record.endTime*1000)/1000));await save(env,'found_game_end_at',record.endTime*1000);}
     }

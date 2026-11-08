@@ -77,6 +77,53 @@ test('every authored roast is three unique nonempty lines (four for third, five 
  for(let i=0;i<100;i++){assert.equal(mahjongRoast(record({_id:'test-'+i}),10).split('\n').length,3);assert.equal(mahjongRoast(record({_id:'test-'+i}),40).split('\n').length,5);}
  const negative=record();negative.players[0].score=-1000;assert.ok(pools.bust.some(lines=>lines.join('\n')===mahjongRoast(negative,10)));
 });
+
+test('two real new sanma games by one user never reuse identical three-line roast even when original hash collides',async()=>{
+ const f=fixture();
+ const three=(id:string,score:number,start:number,end:number):MahjongRecord=>record({
+  _id:id,modeId:24,startTime:start,endTime:end,
+  players:[{accountId:10,nickname:'Fhmrm',score},{accountId:20,nickname:'B',score:30000},{accountId:30,nickname:'C',score:15000}],
+ });
+ // Find the collision demonstrated by the screenshot without assuming one
+ // particular provider match ID or weakening the randomized template pool.
+ const first=three('example-0',50000,now/1000-1700,now/1000-1100);
+ let second:MahjongRecord|undefined;
+ for(let n=1;n<2000;n++){
+  const candidate=three('example-'+n,55800,now/1000-850,now/1000-250);
+  if(mahjongRoast(candidate,10)===mahjongRoast(first,10)){second=candidate;break;}
+ }
+ assert.ok(second,'fixture must reproduce an actual rank-one hash collision');
+ assert.equal(mahjongRoast(first,10),mahjongRoast(second,10));
+ assert.notEqual(mahjongRoast(second,10,mahjongRoast(first,10)),mahjongRoast(first,10));
+ assert.equal(mahjongRoast(second,10,mahjongRoast(first,10)),mahjongRoast(second,10,mahjongRoast(first,10)),'alternative remains deterministic');
+ const messages:Array<{content:string;allowed_mentions:unknown}>=[];
+ const request=(async(input:RequestInfo|URL,init?:RequestInit)=>{
+  const url=String(input);
+  if(url.includes('discord.com')){
+   messages.push(JSON.parse(String(init?.body)));
+   return Response.json({id:String(100000000000000001n+BigInt(messages.length))});
+  }
+  if(url.includes('api.github.com'))return new Response(null,{status:204});
+  return Response.json(url.includes('/pl3/')?[first,second]:[]);
+ }) as typeof fetch;
+ await monitorMahjong(f.env,now,config,request);
+ assert.equal(messages.length,2);
+ const firstRoast=messages[0]!.content.split('\n').slice(2,5).join('\n');
+ const secondRoast=messages[1]!.content.split('\n').slice(2,5).join('\n');
+ assert.notEqual(firstRoast,secondRoast);
+ assert.deepEqual(messages.map(m=>m.allowed_mentions),[{parse:[]},{parse:[]}]);
+ assert.match(messages[0]!.content,/50,000点/);
+ assert.match(messages[1]!.content,/55,800点/);
+ assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM mahjong_watch_posts').get()!.n,2);
+ assert.equal((f.sql.prepare("SELECT value FROM mahjong_watch_state WHERE key='mahjong_last_roast:10'").get() as {value:string}).value,secondRoast);
+ // Re-reading the same provider history cannot duplicate notifications or
+ // overwrite the previous roast, and requires no extra per-game history I/O.
+ await monitorMahjong(f.env,now+5*60_000,config,request);
+ assert.equal(messages.length,2);
+ assert.equal((f.sql.prepare("SELECT value FROM mahjong_watch_state WHERE key='mahjong_last_roast:10'").get() as {value:string}).value,secondRoast);
+ f.sql.close();
+});
+
 test('message shows actual rank, points, mode, Japan time and source; names cannot inject formatting or mentions',()=>{
  const text=mahjongMessage(record(),10,'@everyone\n**fixture**');
  assert.match(text,/fixture｜1着／4人/);assert.match(text,/40,000点/);assert.match(text,/四麻・玉の間 半荘/);assert.match(text,/player\/10\/12/);assert.doesNotMatch(text,/@everyone|\n\*\*fixture/);
