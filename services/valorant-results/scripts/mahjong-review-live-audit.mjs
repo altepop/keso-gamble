@@ -4,7 +4,7 @@ import {pathToFileURL} from 'node:url';
 import {D1_B_ID} from '../../../scripts/relic-abuse-audit.mjs';
 import {login,fetchDecodedRecord} from './mahjong-paipu.mjs';
 import {summarizePaipu} from '../src/mahjong-summary.ts';
-import {supportsReviewRules} from '../src/mahjong-review-rules.ts';
+import {supportsReviewRules,confirmedStandardReviewRules} from '../src/mahjong-review-rules.ts';
 import {calibrateSanmaPayments} from '../src/mahjong-sanma-calibration.ts';
 import {reviewDecisions,tileKind} from '../src/mahjong-review-state.ts';
 import {sanmaValueCase} from '../src/mahjong-sanma-value.ts';
@@ -35,7 +35,8 @@ export function auditSample(head,actions,saved,report){
  });
  const flags=['begin_open_mode','open_hand','reveal_discard','muyu_mode','yongchang_mode','field_spell_mode','guyi_mode','dora3_mode','xuezhandaodi','huansanzhang','chuanma','zhanxing','tianming_mode','jiuchao_mode','hunzhiyiji_mode','wanxiangxiuluo_mode','beishuizhizhan_mode'];
  const activeRuleFlags=flags.filter(k=>head.config?.mode?.detail_rule?.[k]);
- const conditionalValueAudit={};if(summary.players===3)reviewSanmaValues(frames,summary.game,{diagnostics:conditionalValueAudit});
+ const confirmed=confirmedStandardReviewRules(head);
+ const conditionalValueAudit={status:confirmed?'not-run':'rule-profile-unverified'};if(summary.players===3&&confirmed)reviewSanmaValues(frames,summary.game,{diagnostics:conditionalValueAudit});
  const findings=report?.findings??[];
  if(report&&!(summary.players===3?acceptedSanmaReport(summary,report):acceptedC3Report(summary,report)))throw Error('audit_report_invalid');
  const cases=summary.players===4?buildC3Cases(actions,summary):frames;
@@ -57,7 +58,7 @@ export function auditSample(head,actions,saved,report){
  // Existing, previously saved result metadata must remain the same; don't log it.
  const facts=s=>JSON.stringify({players:s.players,game:s.game,start:s.start,end:s.end,seats:s.seats,rounds:s.rounds});
  if(facts(summary)!==facts(saved))throw Error('audit_saved_result_mismatch');
- return {players:summary.players,rounds:summary.rounds.length,records:actions.length,kinds,diagnostics,roundShapes:[...new Map(roundShapes.map(s=>[JSON.stringify(s),s])).values()],activeRuleFlags,supportedRules:supportsReviewRules(head),paymentCalibration:calibrateSanmaPayments(head,actions),conditionalValueAudit,completedHandAudit:summary.players===3?auditCompletedSanmaHands(actions,summary):{},replayedDecisions:frames.length,postInterruptionDecisions:frames.filter(f=>f.interrupted).length,modelCases:cases.length,verifiedFindings:findings.length,findingBases:Object.fromEntries([...new Set(findings.map(f=>f.basis??'model'))].map(b=>[b,findings.filter(f=>(f.basis??'model')===b).length])),savedResultMatches:true};
+ return {players:summary.players,rounds:summary.rounds.length,records:actions.length,kinds,diagnostics,roundShapes:[...new Map(roundShapes.map(s=>[JSON.stringify(s),s])).values()],activeRuleFlags,supportedRules:supportsReviewRules(head),confirmedStandardRules:confirmed,standardMetadata:{hasMeta:Boolean(head.config?.meta),modeId:Number.isInteger(head.config?.meta?.mode_id)&&head.config.meta.mode_id>0&&head.config.meta.mode_id<=100?head.config.meta.mode_id:null,hasCustomRoom:Boolean(head.config?.meta?.room_id),hasContest:Boolean(head.config?.meta?.contest_uid)},paymentCalibration:calibrateSanmaPayments(head,actions),conditionalValueAudit,completedHandAudit:summary.players===3&&confirmed?auditCompletedSanmaHands(actions,summary):{},replayedDecisions:frames.length,postInterruptionDecisions:frames.filter(f=>f.interrupted).length,modelCases:cases.length,verifiedFindings:findings.length,findingBases:Object.fromEntries([...new Set(findings.map(f=>f.basis??'model'))].map(b=>[b,findings.filter(f=>(f.basis??'model')===b).length])),savedResultMatches:true};
 }
 /** One bounded SELECT only. No Mahjong login, model load, writes or posts. */
 export async function deliveryAudit({query}={}){
@@ -78,8 +79,8 @@ export async function liveAudit(env=process.env,{query,connect=login,decode=fetc
  const session=await connect(env),reviewer=reviewerFactory({root:env.C3_ASSETS_ROOT,fourEnabled:true,sanmaEnabled:true,timeoutMs:45000,budgetMs:90000});
  try{
   const samples=[];
-  for(const row of selected){const {head,actions}=await decode(session,row.paipu),summary=summarizePaipu(head,actions),report=supportsReviewRules(head)?await reviewer.review(summary,actions):null;samples.push({...auditSample(head,actions,JSON.parse(row.summary),report),...persistedReviewStatus(JSON.parse(row.summary),row.delivery)});}
-  return {selected:samples.length,handValueBackendConfigured:Boolean(env.SANMA_PYTHON),samples};
+  for(const row of selected){const {head,actions}=await decode(session,row.paipu),summary=summarizePaipu(head,actions),report=confirmedStandardReviewRules(head)?await reviewer.review(summary,actions):null;samples.push({...auditSample(head,actions,JSON.parse(row.summary),report),...persistedReviewStatus(JSON.parse(row.summary),row.delivery)});}
+  return {selected:samples.length,handValueBackendConfigured:Boolean(env.SANMA_PYTHON),standardProfilesVerified:samples.length>0&&samples.every(s=>s.confirmedStandardRules),standardSanmaProfileVerified:samples.some(s=>s.players===3&&s.confirmedStandardRules),samples};
  }finally{await reviewer.close();session.close();}
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
@@ -88,6 +89,7 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
   const deliveryOnly=process.argv.includes('--delivery');
   if((deliveryOnly?['CLOUDFLARE_API_TOKEN','CLOUDFLARE_ACCOUNT_ID']:['CLOUDFLARE_API_TOKEN','CLOUDFLARE_ACCOUNT_ID','YOSTAR_UID','YOSTAR_TOKEN','YOSTAR_DEVICE_ID']).some(k=>!env[k])){
    console.log('Live review audit: unavailable_credentials; no access attempted');
+   if(env.MAHJONG_REQUIRE_STANDARD_PROFILE==='true')process.exitCode=1;
   }else{
    const query=async(sql,params)=>{
     if(sql!==RECENT_REVIEW_SQL||params.length)throw Error('audit_query_rejected');
@@ -95,7 +97,7 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
     if(!r.ok)throw Error('audit_d1_http');const body=await r.json();if(body.success!==true||!body.result?.[0]?.success)throw Error('audit_d1_read');return body.result[0].results;
    };
    if(deliveryOnly)console.log('Live review delivery audit: '+JSON.stringify(await deliveryAudit({query})));
-   else console.log('Live review read-only audit: '+JSON.stringify(await liveAudit(env,{query})));
+   else{const result=await liveAudit(env,{query});console.log('Live review read-only audit: '+JSON.stringify(result));if(env.MAHJONG_REQUIRE_STANDARD_PROFILE==='true'&&(!result.standardProfilesVerified||!result.standardSanmaProfileVerified))process.exitCode=1;}
   }
  }catch(error){
   const code=/^audit_[a-z_]+$/.test(error?.message??'')?error.message:'audit_failed';

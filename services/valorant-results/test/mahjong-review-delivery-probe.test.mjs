@@ -19,3 +19,22 @@ test('an existing pending probe is only polled, and pending/invalid configuratio
  assert.equal(result.posted,false);assert.equal(result.status,'pending');assert.equal(reads,3);
  await assert.rejects(()=>verifyProbeDelivery({query:async()=>[],release:'bad'}),/probe_configuration/);
 });
+
+test('fresh checkout can import and reuse a delivered probe without ignored runtime configs or dependencies',async()=>{
+ const {mkdtempSync,cpSync,mkdirSync,writeFileSync,rmSync}=await import('node:fs');
+ const {tmpdir}=await import('node:os');const {join}=await import('node:path');const {spawnSync}=await import('node:child_process');
+ const dir=mkdtempSync(join(tmpdir(),'mahjong-probe-startup-'));
+ try{
+  const repo=new URL('../../../',import.meta.url);
+  for(const sub of ['scripts','src','test/fixtures']){
+   const dest=join(dir,'services/valorant-results',sub);mkdirSync(dest,{recursive:true});
+   cpSync(new URL('services/valorant-results/'+sub,repo),dest,{recursive:true});
+  }
+  cpSync(new URL('services/valorant-results/mahjong-fans.json',repo),join(dir,'services/valorant-results/mahjong-fans.json'));
+  mkdirSync(join(dir,'scripts'));cpSync(new URL('scripts/relic-abuse-audit.mjs',repo),join(dir,'scripts/relic-abuse-audit.mjs'));
+  writeFileSync(join(dir,'package.json'),'{}');
+  const child=spawnSync(process.execPath,['--input-type=module','-e',
+   "const {verifyProbeDelivery}=await import('./services/valorant-results/scripts/mahjong-review-delivery-probe.mjs');const r=await verifyProbeDelivery({release:'"+release+"',query:async()=>[{sent:1}]});if(!r.posted||!r.reused)process.exit(1);"],{cwd:dir,encoding:'utf8',timeout:10000});
+  assert.equal(child.status,0,child.stderr);
+ }finally{rmSync(dir,{recursive:true,force:true});}
+});

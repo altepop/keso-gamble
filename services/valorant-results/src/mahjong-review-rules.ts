@@ -5,3 +5,10 @@ export function supportsReviewRules(head:{config?:{mode?:{mode?:number;detail_ru
  const mode=head?.config?.mode;
  return Boolean(mode&&[1,2,11,12].includes(mode.mode??-1)&&UNSUPPORTED_REVIEW_FLAGS.every(k=>mode.detail_rule?.[k]===undefined||mode.detail_rule[k]===0||mode.detail_rule[k]===false));
 }
+
+/** Zero-filled detail rules cannot distinguish a custom room's rule choices
+ * from ranked defaults. Only ranked metadata confirms our standard profile. */
+export function confirmedStandardReviewRules(head:{config?:{mode?:{mode?:number;detail_rule?:Record<string,unknown>};meta?:{mode_id?:number;room_id?:number;contest_uid?:number}}}):boolean{
+ const meta=head?.config?.meta;
+ return supportsReviewRules(head)&&Boolean(meta&&Number.isInteger(meta.mode_id)&&(meta.mode_id??0)>0&&!meta.room_id&&!meta.contest_uid);
+}

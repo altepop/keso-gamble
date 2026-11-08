@@ -64,3 +64,18 @@ test('delivery-only audit makes one SELECT without logging in or returning sourc
  const result=await deliveryAudit({query:async(sql:string,params:unknown[])=>{reads++;assert.equal(sql,RECENT_REVIEW_SQL);assert.deepEqual(params,[]);return [{paipu:'private-record',summary:JSON.stringify({...summary,c3}),delivery:JSON.stringify({queued:1,sent:1,reviewSent:1})}];}});
  assert.equal(reads,1);assert.equal(result.yonmaV2Delivered,1);assert.equal(result.sanmaDelivered,0);assert.doesNotMatch(JSON.stringify(result),/private-record|nickname|actual|recommended/);
 });
+
+test('unknown or custom rule profiles skip inference without exposing room or contest IDs',async()=>{
+ for(const meta of [undefined,{mode_id:24,room_id:123456789},{mode_id:24,contest_uid:987654321},{mode_id:24}]){
+  let reviews=0;
+  const result=await liveAudit({}, {
+   query:async()=>[{paipu:'private-game',summary:JSON.stringify(summary)}],
+   connect:async()=>({close(){}}),decode:async()=>({head:{...head,config:{...head.config,meta}},actions:sample}),
+   reviewerFactory:()=>({review:async()=>{reviews++;return null;},close:async()=>{}}),
+  });
+  const standard=Boolean(meta&&!meta.room_id&&!meta.contest_uid);
+  assert.equal(reviews,standard?1:0);assert.equal(result.standardProfilesVerified,standard);
+  assert.equal(result.samples[0].confirmedStandardRules,standard);
+  assert.doesNotMatch(JSON.stringify(result),/123456789|987654321|private-game/);
+ }
+});

@@ -7,12 +7,12 @@ import {fourScenario} from '../test/fixtures/mahjong-review-four.ts';
 import {createPaipuReviewer} from './mahjong-review.mjs';
 import {acceptedSanmaReport} from '../src/mahjong-sanma-comment.ts';
 import {acceptedC3Report} from '../src/mahjong-c3-comment.ts';
-import {paipuPostMessages} from '../src/mahjong-paipu.ts';
 export const PROBE_INSERT='INSERT OR IGNORE INTO kp_posts(id,body,at) VALUES(?,?,?)';
 export const PROBE_STATUS='SELECT sent FROM kp_posts WHERE id=?';
 export async function makeProbeBody({reviewer,root=process.env.C3_ASSETS_ROOT}={}){
  const own=!reviewer;if(own)reviewer=createPaipuReviewer({root,fourEnabled:true,sanmaEnabled:true});
  try{
+  const {paipuPostMessages}=await import('../src/mahjong-paipu.ts');
   const embeds=[];
   for(const [label,fixture] of [['三麻（人工牌譜・北抜き／ポン）',threeOpenValueScenario()],['四麻（人工牌譜・立直あり）',fourScenario('reach')]]){
    const {summary,actions}=fixture,report=await reviewer.review(summary,actions);
@@ -46,8 +46,8 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
   const query=async(sql,params)=>{
    if(![PROBE_INSERT,PROBE_STATUS].includes(sql))throw Error('probe_query_rejected');
    const r=await fetch('https://api.cloudflare.com/client/v4/accounts/'+env.CLOUDFLARE_ACCOUNT_ID+'/d1/database/'+D1_B_ID+'/query',{method:'POST',headers:{Authorization:'Bearer '+env.CLOUDFLARE_API_TOKEN,'Content-Type':'application/json'},body:JSON.stringify({sql,params}),signal:AbortSignal.timeout(20000)});
-   if(!r.ok)throw Error('probe_d1_http');const b=await r.json();if(!b.success||!b.result?.[0]?.success)throw Error('probe_d1_result');return b.result[0].results??[];
+   if(!r.ok)throw Error('probe_d1_http_'+r.status);const b=await r.json();if(!b.success||!b.result?.[0]?.success)throw Error('probe_d1_result');return b.result[0].results??[];
   };
   const result=await verifyProbeDelivery({query,release:env.GITHUB_SHA});console.log('Review delivery probe: '+JSON.stringify(result));if(!result.posted)process.exitCode=1;
- }catch{console.error('Review delivery probe: failed (no credentials, records or raw errors logged)');process.exitCode=1;}
+ }catch(error){const code=/^probe_[a-z0-9_]+$/.test(error?.message??'')?error.message:error?.code==='ERR_MODULE_NOT_FOUND'?'probe_runtime_dependencies':'probe_failed';console.error('Review delivery probe: '+code+' (no credentials, records or raw errors logged)');process.exitCode=1;}
 }
