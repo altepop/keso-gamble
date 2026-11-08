@@ -86,18 +86,10 @@ jobs:
         env:
           C3_ASSETS_ROOT: ${{ github.workspace }}/services/valorant-results/.cache/c3-model
         run: node scripts/mahjong-review-smoke.mjs
-      # Temporary owner-only read-only diagnosis; remove before merging this fix.
-      - name: Diagnose review audit without ingestion or Discord (temporary owner PR)
+      # Temporary public configuration lookup; remove before merging this fix.
+      - name: Read official public error definitions (temporary owner PR)
         if: github.event_name == 'pull_request' && github.actor == 'altepop' && github.event.pull_request.head.repo.full_name == 'altepop/keso-gamble' && github.head_ref == 'fix/mahjong-audit-diagnostics'
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          YOSTAR_UID: ${{ secrets.YOSTAR_UID }}
-          YOSTAR_TOKEN: ${{ secrets.YOSTAR_TOKEN }}
-          YOSTAR_DEVICE_ID: ${{ secrets.YOSTAR_DEVICE_ID }}
-          C3_ASSETS_ROOT: ${{ github.workspace }}/services/valorant-results/.cache/c3-model
-          MAHJONG_REQUIRE_STANDARD_PROFILE: 'true'
-        run: node scripts/mahjong-review-live-audit.mjs
+        run: node scripts/mahjong-public-error-probe.mjs
       - name: Check Activity logic
         run: |
           npm --prefix ../.. ci
