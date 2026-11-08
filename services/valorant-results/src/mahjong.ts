@@ -58,6 +58,35 @@ export function mahjongRank(record:MahjongRecord,player:number){
  const sorted=record.players.map((p,seat)=>({...p,seat})).sort((a,b)=>b.score-a.score||a.seat-b.seat);
  return sorted.findIndex(p=>p.accountId===player)+1;
 }
+
+/** Score/rank facts provided by the match-results API, not the later paipu.
+ * This must stay pure: no D1 reads, no claimed hand, yaku, riichi or comeback. */
+export function mahjongScoreLine(record:MahjongRecord,player:number):string{
+ const sorted=record.players.map((p,seat)=>({...p,seat})).sort((a,b)=>b.score-a.score||a.seat-b.seat);
+ const index=sorted.findIndex(p=>p.accountId===player);
+ if(index<0)throw Error('mahjong_player_absent');
+ const p=sorted[index]!,num=(n:number)=>Math.abs(n).toLocaleString('ja-JP');
+ if(p.score<0)return `最終${num(p.score)}点のマイナス。スコア欄にまで借金作らんといてくれ。`;
+ if(index===0){
+  const gap=p.score-sorted[1]!.score;
+  if(gap===0)return '2着と同点でトップ。順位表、最後まで気ぃ抜かせてくれへんな。';
+  if(gap<=2000)return `2着と${num(gap)}点差のトップ。接戦でも一番上は譲らんかったな。`;
+  if(gap<12000)return `2着に${num(gap)}点差。勝ち切ったって言葉、今日は使ってええで。`;
+  if(gap<30000)return `2着に${num(gap)}点差。結果画面、なかなか気持ちええ眺めやな。`;
+  return `2着に${num(gap)}点差。順位表の間、ちょっと空きすぎちゃうか。`;
+ }
+ if(index===record.players.length-1){
+  const gap=sorted[index-1]!.score-p.score;
+  if(gap===0)return 'ひとつ上と同点でラス。順位表、最後まで意地悪やな。';
+  return `ひとつ上まで${num(gap)}点差。まずはそこから埋めよか。`;
+ }
+ const gap=sorted[0]!.score-p.score;
+ if(gap===0)return 'トップと同点やのに順位は下。結果画面、融通きかへんな。';
+ if(gap<=2000)return `トップまで${num(gap)}点。惜しすぎて今日は寝つき悪そうやな。`;
+ if(gap<12000)return `トップまで${num(gap)}点。『ほぼ1着』は今日のところ封印や。`;
+ return `トップまで${num(gap)}点。数字が遠慮なしに差を教えてくれるな。`;
+}
+
 export function mahjongRoast(record:MahjongRecord,player:number,previousRoast=''){
  const p=record.players.find(p=>p.accountId===player);if(!p)throw Error('mahjong_player_absent');
  const rank=mahjongRank(record,player);
@@ -68,14 +97,16 @@ export function mahjongRoast(record:MahjongRecord,player:number,previousRoast=''
  const shared=record.players.length===3?all[group].filter(lines=>!lines.some(line=>/他の3人|4人おって/.test(line))):all[group];
  const pool=[...shared,...record.players.length===3?all[group+'3']??[]:[]];
  const selected=pick(pool,record._id+':'+player);
- const text=selected.join('\n');
- // Deterministic per record even across retries. Only a *different* new game
- // may rotate away from the previous game's exact same three-line template.
+ // Verified scoreboard facts only; the paipu has not been decoded yet.
+ const fact=mahjongScoreLine(record,player);
+ const render=(lines:string[])=>lines.map((line,i)=>i===1?fact:line).join('\n');
+ const text=render(selected);
+ // Stable within retries; only rotate when a new game would repeat the whole post.
  if(!previousRoast||text!==previousRoast||pool.length<=1)return text;
  const offset=1+((hashRoastKey(record._id+':'+player+':alternative'))%(pool.length-1));
  const start=pool.indexOf(selected);
  for(let step=0;step<pool.length-1;step++){
-  const alternative=pool[(start+offset+step)%pool.length]!.join('\n');
+  const alternative=render(pool[(start+offset+step)%pool.length]!);
   if(alternative!==previousRoast)return alternative;
  }
  return text;
