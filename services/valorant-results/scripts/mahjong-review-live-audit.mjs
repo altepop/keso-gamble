@@ -7,6 +7,7 @@ import {summarizePaipu} from '../src/mahjong-summary.ts';
 import {supportsReviewRules} from '../src/mahjong-review-rules.ts';
 import {calibrateSanmaPayments} from '../src/mahjong-sanma-calibration.ts';
 import {reviewDecisions,tileKind} from '../src/mahjong-review-state.ts';
+import {sanmaValueCase} from '../src/mahjong-sanma-value.ts';
 import {buildC3Cases} from '../src/mahjong-c3-cases.ts';
 import {acceptedC3Report} from '../src/mahjong-c3-comment.ts';
 import {acceptedSanmaReport} from '../src/mahjong-sanma-comment.ts';
@@ -27,6 +28,13 @@ export function auditSample(head,actions,saved,report){
  for(const f of findings){
   const c=cases.find(c=>c.seat===f.seat&&c.round===f.round&&c.turn===f.turn&&c.actual===f.actual);
   if(!c||!(c.legal??c.hand)?.includes(f.recommended))throw Error('audit_discard_invalid');
+  if(f.basis==='tsumo-value'){
+   const value=sanmaValueCase(c,summary.game);
+   for(const m of [f.actualValue,f.recommendedValue]){
+    const candidate=value?.candidates.find(x=>x.tile===m.tile);
+    if(!candidate||candidate.waits.reduce((sum,w)=>sum+w.left,0)!==m.live)throw Error('audit_value_unverified');
+   }
+  }
   if(f.basis==='genbutsu'){
    const river=c.rivers?.[f.against]?.map(tileKind)??[];
    if(c.riichi?.[f.against]!==true||!river.includes(tileKind(f.recommended))||river.includes(tileKind(f.actual))!==f.actualOnRiver)throw Error('audit_defense_unverified');
@@ -46,7 +54,7 @@ export async function liveAudit(env=process.env,{query,connect=login,decode=fetc
  try{
   const samples=[];
   for(const row of selected){const {head,actions}=await decode(session,row.paipu),summary=summarizePaipu(head,actions),report=supportsReviewRules(head)?await reviewer.review(summary,actions):null;samples.push(auditSample(head,actions,JSON.parse(row.summary),report));}
-  return {selected:samples.length,samples};
+  return {selected:samples.length,handValueBackendConfigured:Boolean(env.SANMA_PYTHON),samples};
  }finally{await reviewer.close();session.close();}
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){

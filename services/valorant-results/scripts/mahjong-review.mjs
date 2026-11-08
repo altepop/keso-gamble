@@ -12,6 +12,7 @@ export function createPaipuReviewer({root,fourEnabled=false,sanmaEnabled=false,t
    try{
     if(!worker){
      const env={C3_ASSETS_ROOT:root??''};
+     if(process.env.SANMA_PYTHON)env.SANMA_PYTHON=process.env.SANMA_PYTHON;
      for(const key of ['HTTP_PROXY','HTTPS_PROXY','NO_PROXY','http_proxy','https_proxy','no_proxy','NODE_EXTRA_CA_CERTS','SSL_CERT_FILE'])if(process.env[key])env[key]=process.env[key];
      worker=workerFactory({workerData:{root},env});
     }

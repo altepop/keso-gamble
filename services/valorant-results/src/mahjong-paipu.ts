@@ -164,6 +164,15 @@ export function paipuPost(summary:PaipuSummary,members:Map<number,Member>,levelO
  }
  return baseline;
 }
+/** Keep the existing content unchanged. Overflow analysis travels in the same
+ * webhook message as an embed, using the same idempotent queue row and retry.
+ * No extra D1 read/write, second message, notification or payout is needed. */
+export function paipuPostPayload(summary:PaipuSummary,members:Map<number,Member>,levelOf:(user:string)=>RoastLevel,outcomes:string[]=[]){
+ const content=paipuPost(summary,members,levelOf,outcomes);
+ const comments=summary.players===3?equalSanmaComments(summary,summary.review,members):equalC3Comments(summary,summary.c3,members);
+ const missing=comments.filter(c=>!content.includes(c));
+ return {content,...missing.length?{embeds:[{title:'松本等しいのひと言',description:missing.join('\n')}]}:{}};
+}
 /** Applies one fetched summary: stores it, settles /paifu claims, queues the post. `players` are the
  * registered accounts of the result watcher, roasted by name until they are linked to Discord. */
 export async function applySummary(env:PaipuEnv,mapping:KpMapping,summary:PaipuSummary,now=Date.now(),players:Array<{id:number;name:string}>=[]){
@@ -185,7 +194,8 @@ export async function applySummary(env:PaipuEnv,mapping:KpMapping,summary:PaipuS
  outcomes.push(...await autoCredit(env,mapping.guildId,summary,now));
  if(env.KP_EARNINGS_WEBHOOK_URL&&members.size){
   await ensurePosts(env);
-  await enqueue(env,'paipu:'+summary.uuid,paipuPost(summary,members,await roastLevelsOf(env,mapping),outcomes),now);
+  const post=paipuPostPayload(summary,members,await roastLevelsOf(env,mapping),outcomes);
+  await enqueue(env,'paipu:'+summary.uuid,post.content,now,post.embeds);
  }
 }
 /** GET /api/mahjong/paipu/queue and POST /api/mahjong/paipu/summaries, both signed. */

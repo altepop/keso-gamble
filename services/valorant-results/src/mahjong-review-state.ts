@@ -7,7 +7,7 @@ export interface ReviewDecision {
  seat:number;round:number;turn:number;actionIndex:number;actual:string;draw:string|null;hand:string[];
  players:3|4;dealer:number;wind:number;honba:number;sticks:number;scores:number[];
  rivers:string[][];melds:ReviewMeld[][];north:number[];riichi:boolean[];doubleRiichi:boolean[];
- doras:string[];visible:number[];interrupted:boolean;
+ doras:string[];visible:number[];publicRed?:string[];interrupted:boolean;
 }
 export const tileKind=(tile:string):number=>{
  const h=['E','S','W','N','P','F','C'].indexOf(tile);
@@ -31,11 +31,11 @@ export function reviewDecisions(actions:PaipuAction[],summary:PaipuSummary,cap=2
  const parse=(v:unknown)=>{const t=toC3Tile(v);return t&&(n===4||sanmaKind(tileKind(t)))?t:null;};
  const tiles=(v:unknown):string[]|null=>Array.isArray(v)&&v.every(t=>parse(t)!==null)?v.map(t=>parse(t)!):null;
  let round=-1,blocked=true,dealer=0,wind=0,honba=0,sticks=0,interrupted=false;
- let hands:string[][]=[],rivers:string[][]=[],melds:ReviewMeld[][]=[],north:number[]=[],riichi:boolean[]=[],doubleRiichi:boolean[]=[],accepted:boolean[]=[],doras:string[]=[],scores:number[]=[],visible:number[]=[],seen:number[]=[],redSeen=new Set<string>();
+ let hands:string[][]=[],rivers:string[][]=[],melds:ReviewMeld[][]=[],north:number[]=[],riichi:boolean[]=[],doubleRiichi:boolean[]=[],accepted:boolean[]=[],doras:string[]=[],scores:number[]=[],visible:number[]=[],seen:number[]=[],redSeen=new Set<string>(),publicRed=new Set<string>();
  let pending:{seat:number;draw:string|null;afterCall?:boolean}|null=null,last:{seat:number;tile:string}|null=null,nextSeat=0,replacement:number|null=null;
  const out:ReviewDecision[]=[];
  const observe=(t:string)=>{const k=tileKind(t);if(++seen[k]>4)throw Error('copies');if(t.endsWith('r')){if(redSeen.has(t))throw Error('red');redSeen.add(t);}};
- const reveal=(t:string)=>{if(++visible[tileKind(t)]>4)throw Error('visible');};
+ const reveal=(t:string)=>{if(++visible[tileKind(t)]>4)throw Error('visible');if(t.endsWith('r'))publicRed.add(t);};
  const remove=(s:number,t:string)=>{const i=hands[s].indexOf(t);if(i<0)throw Error('missing tile');hands[s].splice(i,1);};
  const updateDoras=(d:any)=>{
   if(!Array.isArray(d?.doras)||!d.doras.length)return;
@@ -61,7 +61,7 @@ export function reviewDecisions(actions:PaipuAction[],summary:PaipuSummary,cap=2
     dealer=d.ju;wind=d.chang;honba=d.ben;sticks=d.liqibang;scores=d.scores.slice();
     hands=Array.from({length:n},(_,s)=>tiles(d['tiles'+s])??[]);
     if(hands.some((h,s)=>h.length!==(s===dealer?14:13))){reject('initial_hands');continue;}
-    seen=Array(34).fill(0);visible=Array(34).fill(0);redSeen=new Set();hands.flat().forEach(observe);
+    seen=Array(34).fill(0);visible=Array(34).fill(0);redSeen=new Set();publicRed=new Set();hands.flat().forEach(observe);
     doras=[];updateDoras({doras:d.doras?.length?d.doras:[d.dora]});
     if(!doras.length){reject('dora_missing');continue;}
     rivers=Array.from({length:n},()=>[]);melds=Array.from({length:n},()=>[]);north=Array(n).fill(0);riichi=Array(n).fill(false);doubleRiichi=Array(n).fill(false);accepted=Array(n).fill(false);
@@ -82,7 +82,7 @@ export function reviewDecisions(actions:PaipuAction[],summary:PaipuSummary,cap=2
     const t=parse(d.tile);if(!t||!hands[d.seat].includes(t)||(d.moqie===true&&pending.draw!==null&&pending.draw!==t))throw Error('discard');
     // A discard ordinal stays unambiguous even after calls and replacement draws.
     if((pending.draw!==null||n===4&&pending.afterCall)&&out.length<cap&&!riichi[d.seat]&&!d.is_liqi&&!d.is_wliqi){
-     out.push({seat:d.seat,round,actionIndex,turn:rivers[d.seat].length+1,actual:t,draw:pending.draw,hand:hands[d.seat].slice(),players:n,dealer,wind,honba,sticks,scores:scores.slice(),rivers:rivers.map(r=>r.slice()),melds:structuredClone(melds),north:north.slice(),riichi:riichi.slice(),doubleRiichi:doubleRiichi.slice(),doras:doras.slice(),visible:visible.slice(),interrupted});
+     out.push({seat:d.seat,round,actionIndex,turn:rivers[d.seat].length+1,actual:t,draw:pending.draw,hand:hands[d.seat].slice(),players:n,dealer,wind,honba,sticks,scores:scores.slice(),rivers:rivers.map(r=>r.slice()),melds:structuredClone(melds),north:north.slice(),riichi:riichi.slice(),doubleRiichi:doubleRiichi.slice(),doras:doras.slice(),visible:visible.slice(),publicRed:[...publicRed],interrupted});
     }
     if(riichi[d.seat]&&pending.draw!==t)throw Error('locked reach hand');
     remove(d.seat,t);reveal(t);rivers[d.seat].push(t);updateDoras(d);

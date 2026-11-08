@@ -62,6 +62,23 @@ jobs:
       - name: Install
         if: steps.queue.outputs.count && steps.queue.outputs.count != '0' && steps.queue.outputs.count != 'probe'
         run: npm ci --ignore-scripts
+      # Queue-empty and yonma-only runs never install the sanma calculator.
+      # Failure leaves the existing shape/defense/yonma review and KP fetch intact.
+      - name: Set up optional sanma calculator
+        if: steps.queue.outputs.count && steps.queue.outputs.count != '0' && steps.queue.outputs.count != 'check' && steps.queue.outputs.count != 'probe' && (vars.MAHJONG_SANMA_REVIEW_ENABLED == 'true' || steps.queue.outputs.count == 'audit')
+        continue-on-error: true
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: services/valorant-results/scripts/sanma-requirements.txt
+      - name: Install optional pinned hand evaluator
+        if: steps.queue.outputs.count && steps.queue.outputs.count != '0' && steps.queue.outputs.count != 'check' && steps.queue.outputs.count != 'probe' && (vars.MAHJONG_SANMA_REVIEW_ENABLED == 'true' || steps.queue.outputs.count == 'audit')
+        continue-on-error: true
+        run: |
+          python3 -m venv .venv-mahjong
+          .venv-mahjong/bin/python -m pip install --disable-pip-version-check --no-deps --only-binary=:all: --require-hashes -r scripts/sanma-requirements.txt
+          echo "SANMA_PYTHON=$PWD/.venv-mahjong/bin/python" >> "$GITHUB_ENV"
       - name: Decide optional review inference
         id: c3
         if: steps.queue.outputs.count && steps.queue.outputs.count != '0' && steps.queue.outputs.count != 'check'

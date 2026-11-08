@@ -232,3 +232,31 @@ test('signed version-2 finding envelopes reach the existing queued post without 
  const body=JSON.parse(String(f.sql.prepare("SELECT body FROM kp_posts WHERE id=?").get('paipu:'+PAIPU)!.body));
  assert.deepEqual(body.allowed_mentions,{parse:[]});
 });
+
+test('real sanma worker v3 crosses signed ingestion, queue and mocked Discord delivery without extra KP or posts',{skip:!process.env.SANMA_PYTHON},async t=>{
+ t.mock.timers.enable({apis:['Date'],now:T0});
+ const {threeValueScenario}=await import('./fixtures/mahjong-review-three.ts');
+ // @ts-expect-error Standalone isolated worker host used by Actions.
+ const {createPaipuReviewer}=await import('../scripts/mahjong-review.mjs');
+ const {flushRacePosts}=await import('../src/racing-posts.ts');
+ const input=threeValueScenario(),s={...input.summary,uuid:PAIPU};
+ const reviewer=createPaipuReviewer({sanmaEnabled:true,timeoutMs:15000});let report;
+ try{report=await reviewer.review(s,input.actions);}finally{await reviewer.close();}
+ assert.equal(report?.version,3);assert.ok(report.findings.some((f:any)=>f.basis==='tsumo-value'));
+ const run=async(review:unknown)=>{
+  const f=await fixture();await f.call('/api/mahjong/paipu/queue');
+  f.sql.prepare('INSERT INTO kp_mahjong_links VALUES(?,?,?)').run(guild,one,2);
+  f.sql.prepare('INSERT INTO mahjong_paipu_auto VALUES(?,?,?)').run(PAIPU,2,T0);
+  const response=await f.call('/api/mahjong/paipu/summaries',{results:[{uuid:PAIPU,summary:{...s,review}}]});assert.equal(response.status,200);
+  return f;
+ };
+ const f=await run(report),control=await run(undefined);assert.equal(f.balance(one),control.balance(one));
+ const row=f.sql.prepare('SELECT body FROM kp_posts WHERE id=?').get('paipu:'+PAIPU)!;
+ const body=JSON.parse(String(row.body));assert.match(JSON.stringify(body),/6000点/);assert.deepEqual(body.allowed_mentions,{parse:[]});
+ assert.match(body.content,/<@100000000000000101>/);assert.doesNotMatch(JSON.stringify(body),/c3|sanma-rules|num_nuki/);
+ let sends=0;
+ t.mock.method(globalThis,'fetch',async(_url:unknown,options:any)=>{sends++;const sent=JSON.parse(options.body);assert.match(JSON.stringify(sent),/6000点/);assert.deepEqual(sent.allowed_mentions,{parse:[]});return new Response('',{status:200});});
+ assert.equal(await flushRacePosts(f.env),1);assert.equal(await flushRacePosts(f.env),0);assert.equal(sends,1);
+ const before=f.balance(one);await f.call('/api/mahjong/paipu/summaries',{results:[{uuid:PAIPU,summary:{...s,review:report}}]});
+ assert.equal(f.balance(one),before);assert.equal(f.posts().length,1);assert.equal(await flushRacePosts(f.env),0);assert.equal(sends,1);
+});
