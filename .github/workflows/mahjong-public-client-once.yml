@@ -1,0 +1,35 @@
+name: Temporary public Mahjong client inspection
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/mahjong-public-client-once.yml'
+permissions:
+  contents: read
+jobs:
+  public-source:
+    if: github.actor == 'altepop' && github.event.pull_request.number == 393 && github.event.pull_request.head.repo.full_name == 'altepop/keso-gamble' && github.head_ref == 'fix/mahjong-audit-diagnostics'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Inspect declared public code as text, without login or execution
+        run: |
+          node --input-type=module <<'JS'
+          const base='https://game.mahjongsoul.com/';
+          async function read(url,limit){
+            const r=await fetch(url,{signal:AbortSignal.timeout(30000),redirect:'error'});
+            if(!r.ok)throw Error('public_http_'+r.status);
+            const chunks=[];let size=0;
+            for await(const c of r.body){size+=c.length;if(size>limit)throw Error('public_size_limit');chunks.push(c);}
+            return Buffer.concat(chunks).toString('utf8');
+          }
+          try{
+            const version=JSON.parse(await read(base+'version.json',65536));
+            if(typeof version.code!=='string'||!/^v[0-9.]+w?\/code\.js$/.test(version.code))throw Error('public_code_path_unverified');
+            const source=await read(new URL(version.code,base),20000000);
+            console.log('Declared public code:',version.code,'bytes:',Buffer.byteLength(source));
+            for(const method of ['fetchGameRecordListV2','fetchNextGameRecordList','fetchGameRecordList','fetchGameRecord']){
+              const hits=[...source.matchAll(new RegExp(method+'["\x27]','g'))].slice(0,3);
+              console.log(JSON.stringify({method,matches:hits.length,excerpts:hits.map(m=>source.slice(Math.max(0,m.index-180),m.index+method.length+360))}));
+            }
+          }catch(e){console.error(/^public_[a-z0-9_]+$/.test(e.message)?e.message:'public_inspection_failed');process.exitCode=1;}
+          JS
