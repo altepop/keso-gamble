@@ -32,3 +32,67 @@ test('unsupported endpoint never awards any KP or makes external requests',async
  assert.deepEqual(await result.json(),{rewardsEnabled:false,ownershipVerified:false,profiles:[]});
  assert.equal(records.some(r=>r.sql.includes('kp_ledger')),false);
 });
+
+// Exercise real SQLite persistence and cache/rate boundaries, rather than only normalization.
+import {DatabaseSync} from 'node:sqlite';
+function fixture(){
+ const sql=new DatabaseSync(':memory:');
+ sql.exec('CREATE TABLE kp_wallets(guild TEXT,user TEXT,balance INTEGER); INSERT INTO kp_wallets VALUES(\'g\',\'u\',1234)');
+ class Query{
+  text:string;values:unknown[];
+  constructor(text:string,values:unknown[]=[]){this.text=text;this.values=values;}
+  bind(...values:unknown[]){return new Query(this.text,values);}
+  async run(){return {meta:{changes:Number(sql.prepare(this.text).run(...this.values as never[]).changes)}};}
+  async first(){return sql.prepare(this.text).get(...this.values as never[])??null;}
+  async all(){return {results:sql.prepare(this.text).all(...this.values as never[]) };}
+ }
+ const env={DB:{prepare:(s:string)=>new Query(s),batch:async(q:Query[])=>{sql.exec('BEGIN');try{const r=[];for(const x of q)r.push(await x.run());sql.exec('COMMIT');return r;}catch(e){sql.exec('ROLLBACK');throw e;}}}} as unknown as Parameters<typeof hoyoApi>[1];
+ let calls=0,fail=false;
+ const send:typeof fetch=async(input,init)=>{
+  calls++;assert.match(String(input),/^https:\/\/enka\.network\/api\/(uid|hsr\/uid|zzz\/uid)\/[0-9]{8,12}\/$/);
+  assert.equal(init?.redirect,'manual');assert(!new Headers(init?.headers).has('authorization'));
+  if(fail)return new Response('upstream unavailable',{status:503});
+  const uid=String(input).split('/').filter(Boolean).at(-1);
+  return Response.json({uid,ttl:600,playerInfo:{nickname:'Fixture',level:60},avatarInfoList:[]});
+ };
+ const call=(path:string,body?:unknown,user='u',upstream=send)=>hoyoApi(new Request('https://worker/api/kp/hoyo/'+path,{method:body===undefined?'GET':'POST',...(body===undefined?{}:{body:JSON.stringify(body)})}),env,{guild:'g',user},upstream);
+ return {sql,call,get calls(){return calls;},set fail(v:boolean){fail=v;}};
+}
+test('profile links are owner-scoped, cached, removable and never alter a wallet',async()=>{
+ const f=fixture();
+ try{
+  await f.call('link',{game:'genshin',uid:'618285856'});
+  await f.call('refresh',{game:'genshin'});
+  await f.call('link',{game:'genshin',uid:'618285856'});
+  assert.equal(f.calls,1,'repeated link/refresh reuse the same cached data');
+  const mine:any=await (await f.call('status')).json();assert.equal(mine.profiles.length,1);
+  const other:any=await (await f.call('status',undefined,'other')).json();assert.deepEqual(other.profiles,[]);
+  await f.call('unlink',{game:'genshin'},'other');
+  assert.equal((await(await f.call('status')).json() as any).profiles.length,1);
+  await f.call('unlink',{game:'genshin'});
+  assert.deepEqual((await(await f.call('status')).json() as any).profiles,[]);
+  assert.equal(f.sql.prepare('SELECT balance FROM kp_wallets').get()!.balance,1234);
+ }finally{f.sql.close();}
+});
+test('external failures retain the previous profile and the ninth lookup makes no request',async()=>{
+ const f=fixture();
+ try{
+  await f.call('link',{game:'genshin',uid:'618285856'});
+  f.sql.prepare('UPDATE kp_hoyo_profiles SET next_at=0').run();f.fail=true;
+  for(let i=0;i<7;i++)await assert.rejects(f.call('refresh',{game:'genshin'}),/取得できません/);
+  assert.equal(f.calls,8);
+  await assert.rejects(f.call('refresh',{game:'genshin'}),/確認回数/);assert.equal(f.calls,8);
+  const status:any=await(await f.call('status')).json();assert.equal(status.profiles[0].uid,'618285856');
+  assert.equal(status.profiles[0].snapshot.nickname,'Fixture');
+  assert.equal(f.sql.prepare('SELECT balance FROM kp_wallets').get()!.balance,1234);
+ }finally{f.sql.close();}
+});
+test('invalid UID cannot select another host; oversized upstream data is rejected before persistence',async()=>{
+ const f=fixture();
+ try{
+  await assert.rejects(f.call('link',{game:'genshin',uid:'https://example.com'}),/UID/);assert.equal(f.calls,0);
+  const tooBig:typeof fetch=async()=>new Response('x'.repeat(1024*1024+1));
+  await assert.rejects(f.call('link',{game:'genshin',uid:'618285856'},'u',tooBig),/大きすぎ/);
+  assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM kp_hoyo_profiles').get()!.n,0);
+ }finally{f.sql.close();}
+});

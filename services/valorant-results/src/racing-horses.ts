@@ -4,8 +4,11 @@
 // @ts-expect-error The shared pure browser engine has no TypeScript declarations.
 import { BOXES, CLASSES, MAX_OWNED, RETIRE_RACES, RACE_INTERVAL, RUN_MS, conditionFromActivity, drawHorse, horseNickname, prizeFor, raceCard, raceClass, raceOdds, raceResult, sellValue, validHorseName } from '../../../js/racing.js';
 import { crownFor, ensureCrowns } from './racing-crowns.ts';
+import {ensureRacing,raceSeed} from './racing-kp.ts';
 import configuredPlayers from '../players.json' with { type: 'json' };
 import { kpRandom } from './kp.ts';
+import {spendMyHorseVoucher} from './relic-exchange.ts';
+import type {RelicCollection} from './relics.ts';
 import type { KpEnv, KpMapping } from './kp.ts';
 export interface Entry { horseId:string; name:string; ability:number; style:number; owner:string; ownerName:string; nickname?:string|null; person?:boolean; condition?:number; record?:{races:number;wins:number;seconds:number;thirds:number}; recentRanks?:number[] }
 export interface Horse { id:string; owner:string; name:string; grade:number; ability:number; style:number; box:string; price:number; created_at:number; races:number; wins:number; seconds:number; thirds:number; earnings:number; retired_at:number|null; sold_at:number|null; last_race:number|null }
@@ -16,16 +19,19 @@ export function shouldSettleHorsePrizes(now:number){
  const elapsed=((now-RUN_MS)%RACE_INTERVAL+RACE_INTERVAL)%RACE_INTERVAL;
  return elapsed<4*60000||now%(3600000)<60000;
 }
-// Avoid full-history anti-join scans each minute. Every six hours run a full backlog sweep.
+// Avoid full-history anti-join scans each minute. Every six hours run a full backlog sweep; in between, look back
+// six hours (enough for the hourly retry of a missed race; was 48 hours, ~235 rows per check).
 export function horsePrizeLookback(now:number){
  if(!Number.isSafeInteger(now)||now<0)throw Error('Invalid settlement time');
- return now%(6*3600000)<60000?0:Math.max(0,now-48*3600000);
+ return now%(6*3600000)<60000?0:Math.max(0,now-6*3600000);
 }
 const initialized=new WeakSet<object>();
 export async function ensureHorses(env:KpEnv){
  if(initialized.has(env.DB))return;
  await env.DB.batch([
   env.DB.prepare(`CREATE TABLE IF NOT EXISTS kp_horses(id TEXT PRIMARY KEY,guild TEXT NOT NULL,owner TEXT NOT NULL,name TEXT NOT NULL,grade INTEGER NOT NULL,ability REAL NOT NULL,style INTEGER NOT NULL,box TEXT NOT NULL,price INTEGER NOT NULL,created_at INTEGER NOT NULL,races INTEGER NOT NULL DEFAULT 0,wins INTEGER NOT NULL DEFAULT 0,seconds INTEGER NOT NULL DEFAULT 0,thirds INTEGER NOT NULL DEFAULT 0,earnings INTEGER NOT NULL DEFAULT 0,retired_at INTEGER,sold_at INTEGER,last_race INTEGER)`),
+  // 資産 → 馬主 reads one owner's horses on each refresh; without this every refresh scanned all horses.
+  env.DB.prepare('CREATE INDEX IF NOT EXISTS kp_horses_owner ON kp_horses(guild,owner,sold_at)'),
   env.DB.prepare('CREATE TABLE IF NOT EXISTS kp_race_fields(guild TEXT NOT NULL,race INTEGER NOT NULL,decided_at INTEGER NOT NULL,PRIMARY KEY(guild,race))'),
   env.DB.prepare('CREATE TABLE IF NOT EXISTS kp_race_entries(guild TEXT NOT NULL,race INTEGER NOT NULL,gate_order INTEGER NOT NULL,horse TEXT NOT NULL,PRIMARY KEY(guild,race,horse))'),
   env.DB.prepare('CREATE TABLE IF NOT EXISTS kp_entry_conditions(guild TEXT NOT NULL,race INTEGER NOT NULL,horse TEXT NOT NULL,condition INTEGER NOT NULL,PRIMARY KEY(guild,race,horse))'),
@@ -34,6 +40,7 @@ export async function ensureHorses(env:KpEnv){
   // The PK is by id; this covering seek stops full history scans for each horse.
   env.DB.prepare('CREATE INDEX IF NOT EXISTS kp_horse_runs_horse_recent ON kp_horse_runs(horse,race DESC,rank,win_odds,favourite)'),
   env.DB.prepare('CREATE TABLE IF NOT EXISTS kp_horse_results(id TEXT PRIMARY KEY,guild TEXT NOT NULL,race INTEGER NOT NULL,horse TEXT NOT NULL,owner TEXT NOT NULL,rank INTEGER NOT NULL,prize INTEGER NOT NULL CHECK(typeof(prize)=\'integer\' AND prize>=0),at INTEGER NOT NULL,UNIQUE(guild,race,horse))'),
+  env.DB.prepare('CREATE INDEX IF NOT EXISTS kp_horse_results_horse_count ON kp_horse_results(guild,horse,rank,race,prize)'),
   // A prize credits the owner's wallet and updates the record in the same statement.
   env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS kp_horse_result_apply AFTER INSERT ON kp_horse_results BEGIN
    INSERT INTO kp_ledger(id,guild,user,delta,kind,at) SELECT 'prize:'||NEW.id,NEW.guild,NEW.owner,NEW.prize,'prize',NEW.at WHERE NEW.prize>0;
@@ -70,9 +77,12 @@ export function personEntry(mapping:KpMapping,race:number,user:string):Entry{
  * the person played at all in the last 3 days. Voice is counted per 60 KP so calls do not dominate. */
 export async function activityConditions(env:KpEnv,guild:string,users:string[],now:number){
  const out=new Map<string,number>();
+ // Read the last day first; the 3-day window is only needed for someone who did not play today, and then only
+ // until one play is found. Reading 3 days of each runner's ledger cost ~120 rows (1,279 calls a day, 2026-11-03).
  for(const user of new Set(users)){
-  const r=await env.DB.prepare(`SELECT SUM(CASE WHEN at>? AND kind IN ('match','quiz') THEN 1 ELSE 0 END) AS plays,SUM(CASE WHEN at>? AND kind='voice' THEN delta ELSE 0 END) AS voice,SUM(CASE WHEN kind IN ('match','quiz','voice') THEN 1 ELSE 0 END) AS any3 FROM kp_ledger WHERE guild=? AND user=? AND at>? AND at<=?`).bind(now-86400000,now-86400000,guild,user,now-3*86400000,now).first<{plays:number|null;voice:number|null;any3:number|null}>();
-  out.set(user,conditionFromActivity((r?.plays??0)+Math.floor((r?.voice??0)/60),(r?.any3??0)>0));
+  const r=await env.DB.prepare(`SELECT SUM(CASE WHEN kind IN ('match','quiz') THEN 1 ELSE 0 END) AS plays,SUM(CASE WHEN kind='voice' THEN delta ELSE 0 END) AS voice,SUM(CASE WHEN kind IN ('match','quiz','voice') THEN 1 ELSE 0 END) AS any1 FROM kp_ledger WHERE guild=? AND user=? AND at>? AND at<=?`).bind(guild,user,now-86400000,now).first<{plays:number|null;voice:number|null;any1:number|null}>();
+  const recent=(r?.any1??0)>0||Boolean(await env.DB.prepare(`SELECT 1 FROM kp_ledger WHERE guild=? AND user=? AND at>? AND at<=? AND kind IN ('match','quiz','voice') LIMIT 1`).bind(guild,user,now-3*86400000,now-86400000).first());
+  out.set(user,conditionFromActivity((r?.plays??0)+Math.floor((r?.voice??0)/60),recent));
  }
  return out;
 }
@@ -120,14 +130,19 @@ export async function ensureRaceField(env:KpEnv,mapping:KpMapping,race:number,no
  * A person-named horse also brings its namesake a consolation: 5% of what others bet on it. */
 export async function settleHorsePrizes(env:KpEnv,mapping:KpMapping,now=Date.now()){
  await ensureHorses(env);await ensureCrowns(env);
+ await ensureRacing(env); // even an unattended field needs a persistent seed table
  const from=horsePrizeLookback(now),before=now-RUN_MS;
  const races=(await env.DB.prepare(`SELECT race FROM (SELECT e.race FROM kp_race_entries e WHERE e.guild=? AND e.race>=? AND e.race<=? AND NOT EXISTS(SELECT 1 FROM kp_horse_results r WHERE r.guild=e.guild AND r.race=e.race AND r.horse=e.horse)
   UNION SELECT c.race FROM kp_crowns c WHERE c.guild=? AND c.race>=? AND c.race<=? AND NOT EXISTS(SELECT 1 FROM kp_horse_results r WHERE r.guild=c.guild AND r.race=c.race AND r.horse='person-'||c.user)) ORDER BY race LIMIT 20`)
   .bind(mapping.guildId,from,before,mapping.guildId,from,before).all<{race:number}>()).results.map(r=>r.race);
  let paid=0;
  for(const race of races){
-  const seed=await env.DB.prepare('SELECT seed FROM kp_races WHERE guild=? AND id=?').bind(mapping.guildId,race).first<{seed:string}>();
-  if(!seed)continue;
+  let seed=await env.DB.prepare('SELECT seed FROM kp_races WHERE guild=? AND id=?').bind(mapping.guildId,race).first<{seed:string}>();
+  if(!seed){
+   // Historic cron fixed fields without seeds when nobody opened the Activity.
+   // raceSeed atomically INSERT OR IGNOREs one result for all competing workers.
+   seed=await raceSeed(env,mapping.guildId,race);
+  }
   const entries=await raceEntries(env,mapping,race),card=raceCard(race,undefined,entries),order:number[]=raceResult(card,seed.seed).order;
   const sold=new Map((await env.DB.prepare('SELECT id,sold_at FROM kp_horses WHERE guild=? AND sold_at IS NOT NULL').bind(mapping.guildId).all<{id:string;sold_at:number}>()).results.map(r=>[r.id,r.sold_at]));
   const odds=raceOdds(card),favourite=card.horses.map((h:{number:number})=>h.number).sort((a:number,b:number)=>odds.winProb[b]-odds.winProb[a])[0];
@@ -144,22 +159,67 @@ export async function settleHorsePrizes(env:KpEnv,mapping:KpMapping,now=Date.now
  }
  return paid;
 }
+/** Repair counter gaps from provable result receipts, not by replaying KP payouts.
+ * This is a bounded owner-only indexed read; no full-guild scan or writes on
+ * healthy horses. MAX guards all existing counters against double counting. */
+// The counters are kept by kp_horse_result_apply in the same statement as each result, so the old gaps only need
+// repairing once per owner. Re-aggregating every result on each 資産 refresh read ~236 rows a call
+// (1,463 calls / 346k rows in the 2026-11-03 D1 Insights); a done marker makes later visits one indexed read.
+const HORSE_REPAIR_DONE='horse_stats_repaired_v1:';
+const repairedOwners=new WeakMap<object,Set<string>>();
+export async function repairRecordedHorseStats(env:KpEnv,mapping:KpMapping,user:string){
+ await ensureHorses(env);
+ const key=HORSE_REPAIR_DONE+mapping.guildId+':'+user,done=repairedOwners.get(env.DB)??new Set<string>();repairedOwners.set(env.DB,done);
+ if(done.has(key))return 0;
+ if(await env.DB.prepare('SELECT 1 FROM kp_settings WHERE key=?').bind(key).first()){done.add(key);return 0;}
+ const sql=`SELECT h.id,COUNT(r.id) AS races,
+  SUM(CASE WHEN r.rank=1 THEN 1 ELSE 0 END) AS wins,
+  SUM(CASE WHEN r.rank=2 THEN 1 ELSE 0 END) AS seconds,
+  SUM(CASE WHEN r.rank=3 THEN 1 ELSE 0 END) AS thirds,
+  SUM(r.prize) AS earnings,MAX(r.race) AS lastRace
+  FROM kp_horses h JOIN kp_horse_results r ON r.guild=h.guild AND r.horse=h.id
+  WHERE h.guild=? AND h.owner=? AND h.sold_at IS NULL
+  GROUP BY h.id HAVING COUNT(r.id)>h.races OR
+   SUM(CASE WHEN r.rank=1 THEN 1 ELSE 0 END)>h.wins OR
+   SUM(CASE WHEN r.rank=2 THEN 1 ELSE 0 END)>h.seconds OR
+   SUM(CASE WHEN r.rank=3 THEN 1 ELSE 0 END)>h.thirds
+  LIMIT 30`;
+ const gaps=(await env.DB.prepare(sql).bind(mapping.guildId,user).all<{
+  id:string;races:number;wins:number;seconds:number;thirds:number;earnings:number;lastRace:number
+ }>()).results;
+ for(const gap of gaps){
+  const update=`UPDATE kp_horses SET
+   races=MAX(races,?),wins=MAX(wins,?),seconds=MAX(seconds,?),
+   thirds=MAX(thirds,?),earnings=MAX(earnings,?),
+   last_race=MAX(COALESCE(last_race,0),?),
+   retired_at=CASE WHEN retired_at IS NULL AND MAX(races,?)>=? THEN ? ELSE retired_at END
+   WHERE guild=? AND owner=? AND id=?`;
+  await env.DB.prepare(update).bind(gap.races,gap.wins,gap.seconds,gap.thirds,
+   gap.earnings,gap.lastRace,gap.races,RETIRE_RACES,Date.now(),mapping.guildId,user,gap.id).run();
+ }
+ await env.DB.prepare("INSERT INTO kp_settings(key,value) VALUES(?,'1') ON CONFLICT(key) DO NOTHING").bind(key).run();
+ done.add(key);
+ return gaps.length;
+}
 export async function ownedHorses(env:KpEnv,mapping:KpMapping,user:string){
  await ensureHorses(env);
+ await repairRecordedHorseStats(env,mapping,user);
  const rows=(await env.DB.prepare('SELECT id,name,grade,ability,style,box,price,created_at,races,wins,seconds,thirds,earnings,retired_at FROM kp_horses WHERE guild=? AND owner=? AND sold_at IS NULL ORDER BY retired_at IS NOT NULL,created_at DESC LIMIT 30').bind(mapping.guildId,user).all<Horse>()).results;
  const nick=await nicknames(env,rows);
  return rows.map(h=>({...h,nickname:nick.get(h.id)?.nickname??null,gradeLabel:CLASSES[h.grade].grade,sellValue:h.retired_at?0:sellValue(h.price,h.races),racesLeft:Math.max(0,RETIRE_RACES-h.races)}));
 }
 /** Wallet operation bodies. They change `state` and return the result the triggers apply. */
-export async function buyHorse(env:KpEnv,mapping:KpMapping,user:string,state:{cash:number},args:Record<string,unknown>){
+export async function buyHorse(env:KpEnv,mapping:KpMapping,user:string,state:{cash:number;relics?:RelicCollection},args:Record<string,unknown>){
  await ensureHorses(env);
  const box=BOXES.find((b:{id:string})=>b.id===args.box);if(!box)throw Error('ボックスを選んでください。');
  const name=validHorseName(args.name);
  const active=await env.DB.prepare('SELECT COUNT(*) AS n FROM kp_horses WHERE guild=? AND owner=? AND sold_at IS NULL AND retired_at IS NULL').bind(mapping.guildId,user).first<{n:number}>();
  if((active?.n??0)>=MAX_OWNED)throw Error(`持てる馬は${MAX_OWNED}頭までです。売るか引退を待ってください。`);
- if(state.cash<box.price)throw Error('KPが足りません。');
- const horse={id:'horse-'+kpRandom(),name,...drawHorse(box.id,cryptoRng),box:box.id,price:box.price};
- state.cash-=box.price;
+ const useVoucher=args.useVoucher===true;
+ if(!useVoucher&&state.cash<box.price)throw Error('KPが足りません。');
+ if(useVoucher)spendMyHorseVoucher(state,box.id);
+ const horse={id:'horse-'+kpRandom(),name,...drawHorse(box.id,cryptoRng),box:box.id,price:useVoucher?0:box.price};
+ if(!useVoucher)state.cash-=box.price;
  return {horse:{...horse,gradeLabel:CLASSES[horse.grade].grade}};
 }
 export async function sellHorse(env:KpEnv,mapping:KpMapping,user:string,state:{cash:number},args:Record<string,unknown>){
@@ -196,7 +256,7 @@ export async function maybeGiftHorse(env:KpEnv,mapping:KpMapping,slot:number,rng
   env.DB.prepare('UPDATE kp_horse_gifts SET user=?,horse=? WHERE guild=? AND slot=?').bind(user,horse.id,mapping.guildId,slot),
  ]);
  const label=BOXES.find((b:{id:string})=>b.id===box)!.label;
- return {user,horse:{...horse,gradeLabel:CLASSES[horse.grade].grade},text:`🎁 **馬が空から降ってきた！** <@${user}> に${CLASSES[horse.grade].grade}の馬がプレゼントされました（${label}ボックス相当・この15分の当選確率 ${GIFT_CHANCE*100}%）\n名前はまだありません。\`/horsename\` で好きな名前を付けてください（付けるまでは「${GIFT_PLACEHOLDER}」で走ります）。\n-# 持ち馬に入ります。売っても0 KP、走れば賞金はもらえます。`};
+ return {user,horse:{...horse,gradeLabel:CLASSES[horse.grade].grade},text:`🎁 **馬が空から降ってきたで！** <@${user}> に${CLASSES[horse.grade].grade}の馬が届いたで！（${label}ボックス相当・この15分の当選確率 ${GIFT_CHANCE*100}%）\n名前はまだないで。\`/horsename\` で好きな名前を付けてな（付けるまでは「${GIFT_PLACEHOLDER}」で走るで）。\n-# 持ち馬に入るで。売っても0 KPやけど、走ったら賞金はもらえるで。`};
 }
 async function ensureGifts(env:KpEnv){
  await env.DB.batch([
@@ -208,11 +268,11 @@ export async function nameGiftHorse(env:KpEnv,mapping:KpMapping,user:string,name
  await ensureHorses(env);await ensureGifts(env);
  let value:string;try{value=validHorseName(name);}catch(error){return {reply:(error as Error).message};}
  const gift=await env.DB.prepare('SELECT g.slot,g.horse FROM kp_horse_gifts g JOIN kp_horses h ON h.id=g.horse WHERE g.guild=? AND g.user=? AND g.named=0 AND h.sold_at IS NULL ORDER BY g.at LIMIT 1').bind(mapping.guildId,user).first<{slot:number;horse:string}>();
- if(!gift)return {reply:'名前を付けられるプレゼントの馬はいません。プレゼントの馬は、ごくまれに空から降ってきます。'};
+ if(!gift)return {reply:'名前を付けられるプレゼントの馬はおらへんで。ごくまれに空から降ってくるから待っといてな。'};
  const done=await env.DB.batch([
   env.DB.prepare('UPDATE kp_horse_gifts SET named=1 WHERE guild=? AND slot=? AND named=0').bind(mapping.guildId,gift.slot),
   env.DB.prepare(`UPDATE kp_horses SET name=? WHERE id=? AND name='${GIFT_PLACEHOLDER}'`).bind(value,gift.horse),
  ]);
- if(!done[0].meta.changes)return {reply:'この馬にはもう名前が付いています。'};
- return {reply:`🐴 プレゼントの馬に「${value}」と名付けました。これから「${value}」として走ります。`,post:`🐴 <@${user}> がプレゼントの馬に「${value}」と名付けました。`};
+ if(!done[0].meta.changes)return {reply:'この馬にはもう名前が付いてるで。'};
+ return {reply:`🐴 プレゼントの馬に「${value}」と名付けたで！ これから「${value}」として走るで。`,post:`🐴 <@${user}> がプレゼントの馬に「${value}」と名付けたで！`};
 }

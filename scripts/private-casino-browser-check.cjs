@@ -3,6 +3,8 @@ const {spawn}=require('node:child_process'),{existsSync}=require('node:fs');
 const server=spawn('python3',['-m','http.server','8794','--bind','127.0.0.1'],{cwd:require('node:path').join(__dirname,'..'),stdio:'ignore'});let browser;
 (async()=>{
  for(let i=0;i<50;i++){try{if((await fetch('http://127.0.0.1:8794')).ok)break;}catch{}await new Promise(r=>setTimeout(r,100));}
+ const {playSlot}=await import('../js/casino-more.js');
+ const {privateSlotRng}=await import('../js/private-casino-rules.js');
  const {createInitialState}=await import('../js/engine.js');const state={...createInitialState(),serverWallet:true,privateCasino:true,cash:10000,selfUserId:'owner',members:[],ledger:[]};
  const engine=process.argv[2]||'chromium';browser=await(engine==='webkit'?webkit:chromium).launch(engine==='webkit'?{}:{executablePath:existsSync('/usr/bin/chromium')?'/usr/bin/chromium':undefined,args:['--no-sandbox']});
  const ctx=await browser.newContext({viewport:{width:390,height:844},reducedMotion:'reduce'});await ctx.addInitScript(()=>localStorage.setItem('keso-kp-session-v1','fixture'));
@@ -23,7 +25,12 @@ const server=spawn('python3',['-m','http.server','8794','--bind','127.0.0.1'],{c
     state.prices[symbol]=after;
     await route.fulfill({json:{result:{symbol,direction,strength,before,after,version:shocks.length,headline:body.args.headline??(body.args.eventId==='keso-down-1'?'本社の唯一のWi-Fiが電子レンジに敗北、決算発表中断':'架空ニュース'),replayed:false}}});return;
    }
-   assert.equal(body.action,'private-casino');bodies.push(body.args);if(body.args.game!=='roulette'){state.cash+=124500;await route.fulfill({json:{result:{hand:null,done:{game:'video-poker',bet:500,hand:'royal',payout:125000,net:124500}},operationSource:'owner-casino'}});return;}assert.deepEqual(body.args,{game:'roulette',amount:500,number:7});ops++;await new Promise(r=>setTimeout(r,250));state.cash+=17500;result={result:{type:'number',choice:7,outcome:7,amount:500,payout:18000},operationSource:'owner-casino'};
+   assert.equal(body.action,'private-casino');bodies.push(body.args);
+   if(body.args.game==='slot'&&body.args.hand.startsWith('temple')){
+    const {done}=playSlot(state,body.args.amount,privateSlotRng(body.args.hand,()=>500));
+    await route.fulfill({json:{result:{done},operationSource:'owner-casino'}});return;
+   }
+   if(body.args.game!=='roulette'){state.cash+=124500;await route.fulfill({json:{result:{hand:null,done:{game:'video-poker',bet:500,hand:'royal',payout:125000,net:124500}},operationSource:'owner-casino'}});return;}assert.deepEqual(body.args,{game:'roulette',amount:500,number:7});ops++;await new Promise(r=>setTimeout(r,250));state.cash+=17500;result={result:{type:'number',choice:7,outcome:7,amount:500,payout:18000},operationSource:'owner-casino'};
   }else throw Error('Unexpected API '+path);
   await route.fulfill({json:result});
  });
@@ -39,6 +46,37 @@ const server=spawn('python3',['-m','http.server','8794','--bind','127.0.0.1'],{c
  await page.waitForFunction(()=>document.querySelector('.wallet-strip').textContent.includes('152,000'));
  assert.deepEqual(bodies.at(-1),{game:'poker',amount:500,hand:'royal'});
  await page.locator('#private-game').selectOption('chinchiro');assert.match(await page.locator('#private-hand').innerText(),/ピンゾロ[\s\S]*シゴロ/);
+ // Force and WATCH the feature game from the owner menu without placing a second wager.
+ await page.locator('#private-game').selectOption('slot');
+ assert.match(await page.locator('#private-hand').innerText(),/黄金神殿/);
+ await page.locator('#private-hand').selectOption('temple');
+ await page.locator('#private-amount').fill('100');
+ await page.locator('[data-action=private-round]').click();
+ await page.locator('.maya-scene').waitFor();
+ assert.equal(await page.locator('.maya-cell').count(),15);
+ assert.deepEqual(bodies.at(-1),{game:'slot',amount:100,hand:'temple'});
+ assert.equal(state.cash,152200,'feature settled once on the server');
+ await page.locator('[data-action=slot-feature-skip]').click();
+ await page.locator('.slot-win-scene').waitFor();
+ assert.match(await page.locator('.slot-win-scene').innerText(),/FEATURE WIN/);
+ await page.locator('[data-action=slot-close-reveal]').first().click();
+ await page.locator('.nav-btn[data-screen=assets]').click();
+ await page.locator('.private-casino summary').click();
+ await page.locator('#private-game').selectOption('slot');
+ await page.locator('#private-hand').selectOption('temple-grand');
+ await page.locator('#private-amount').fill('100');
+ await page.locator('[data-action=private-round]').click();
+ await page.locator('.maya-scene').waitFor();
+ assert.equal(await page.locator('.maya-cell').count(),15);
+ assert.equal(state.cash,172100,'200x grand settled once');
+ assert.deepEqual(bodies.at(-1),{game:'slot',amount:100,hand:'temple-grand'});
+ await page.locator('[data-action=slot-feature-skip]').click();
+ await page.locator('.slot-win-scene').waitFor();
+ assert.match(await page.locator('.slot-win-scene').innerText(),/GOLDEN WIN/);
+ assert.equal(state.cash,172100,'replaying cannot award twice');
+ await page.locator('[data-action=slot-close-reveal]').first().click();
+ await page.locator('.nav-btn[data-screen=assets]').click();
+ await page.locator('.private-casino summary').click();
  // Owner-only stock operator in the same private area: actual click, request and shared price refresh.
  await page.locator('details.asset-card.rules').filter({hasText:'裏モード：株価オペレーター'}).locator('summary').click();
  assert.equal(await page.locator('#admin-stock-symbol option').count(),12);
@@ -66,7 +104,7 @@ const server=spawn('python3',['-m','http.server','8794','--bind','127.0.0.1'],{c
  assert.equal(await page.locator('#admin-stock-strength').inputValue(),'50');
  assert.deepEqual(shocks.map(({id,...args})=>args),[{symbol:'keso',direction:'down',strength:50,eventId:'keso-down-1'}]);
  assert.match(await page.locator('#stock-shock-notice').innerText(),/Wi-Fi/);
- assert.equal(state.cash,152000,'admin stock action cannot credit the wallet');
+ assert.equal(state.cash,172100,'admin stock action cannot credit the wallet');
  // Success should remain readable even after the 1.8-second toast disappears.
  await page.waitForTimeout(2000);
  assert.match(await page.locator('#stock-shock-notice').innerText(),/株価操作を受け付けました/);

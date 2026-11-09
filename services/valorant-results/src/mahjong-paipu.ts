@@ -8,6 +8,8 @@ import {initializeKp} from './kp.ts';
 import type {KpEnv,KpMapping} from './kp.ts';
 import {autoCredit,ensureMahjongClaims,paipuCheck,settleClaim} from './mahjong-claims.ts';
 import {mahjongPlayers} from './mahjong.ts';
+import {equalSanmaComments,acceptedSanmaReport} from './mahjong-sanma-comment.ts';
+import {equalC3Comments,acceptedC3Report} from './mahjong-c3-comment.ts';
 import type {PaipuSummary,PlayerSummary,Win} from './mahjong-summary.ts';
 import {enqueue,ensurePosts,roastLevelsOf} from './racing-posts.ts';
 import type {RoastLevel} from './racing-crowns.ts';
@@ -106,7 +108,7 @@ const MEME_POOLS:Record<'last'|'top'|'middle',string[]>={
  top:['yokatta-kono-kyori','tousan-korette','jun-no-kachida','iiwaa','kiga-kikune','umaremo-elite','gooku-majika','bachikon-strike','omatsuri-otoko'],
  middle:['saigono-gyoza','san-ga-aru','ittanna','daijoubu','maniae','chotto-matte','aji-koi-usui','macchan-imanowha','vtr-don','kuiya'],
 };
-export function paipuPost(summary:PaipuSummary,members:Map<number,Member>,levelOf:(user:string)=>RoastLevel,outcomes:string[]=[]){
+function paipuPostParts(summary:PaipuSummary,members:Map<number,Member>,levelOf:(user:string)=>RoastLevel,outcomes:string[]=[]){
  // Names everywhere; each linked member's Discord tag appears once, on their own block.
  const who=(seatNo:number)=>clean(members.get(seatNo)?.name??summary.seats[seatNo].nickname);
  const names=new Map([...members.values()].filter(m=>m.user).map(m=>[m.user!,clean(m.name)]));
@@ -138,32 +140,99 @@ export function paipuPost(summary:PaipuSummary,members:Map<number,Member>,levelO
  // One intact, source-checked quotation, matched to how the members finished.
  const ranks=[...members.keys()].map(seatNo=>summary.seats[seatNo].rank),pool=MEME_POOLS[ranks.includes(summary.players)?'last':ranks.includes(1)?'top':'middle'];
  const meme=memes.quotes.find(q=>q.id===pool[hash('paipu-meme:'+summary.uuid)%pool.length])?.text;
+ // Render the existing paipu post first, exactly as it was before adding reviews.
+ // An optional review must never consume the character budget of existing outcomes,
+ // hand highlights, member-specific roasts, or the final sourced quote.
  const parts=[`🀄 **雀魂 ${label}｜牌譜検討**`,...section('順位',standings),...section('KP',outcomes.map(l=>l.startsWith('🔎')?l:untag(l))),...section('主な和了',hands),...section('メンバー',blocks.flatMap((b,i)=>i?['',b]:[b])),...meme?['',`💬 ${meme}`]:[]];
- let text='';
- for(const part of parts){if((text+'\n'+part).length>1900)break;text+=(text?'\n':'')+part;}
- return text;
+ const comments=summary.players===3?equalSanmaComments(summary,summary.review,members):equalC3Comments(summary,summary.c3,members);
+ return {parts,meme,comments};
 }
-/** Applies one fetched summary: stores it, settles /paifu claims, queues the post. `players` are the
+/** Legacy text-only representation; delivery below preserves overflow too. */
+export function paipuPost(summary:PaipuSummary,members:Map<number,Member>,levelOf:(user:string)=>RoastLevel,outcomes:string[]=[]){
+ const {parts,meme,comments}=paipuPostParts(summary,members,levelOf,outcomes);
+ const section=(title:string,lines:string[])=>lines.length?[`\n**${title}**`,...lines]:[];
+ const full=parts.join('\n');
+ const clipped=(lines:string[])=>{
+  let text='';
+  for(const part of lines){if((text+'\n'+part).length>1900)break;text+=(text?'\n':'')+part;}
+  return text;
+ };
+ const baseline=clipped(parts);
+ // If the existing post is already at capacity, leave it byte-for-byte unchanged.
+ // Append the optional section only when every original section will still fit.
+ if(!comments.length||full.length>1900)return baseline;
+ for(let count=comments.length;count>0;count--){
+  const extra=section('松本等しいのひと言',comments.slice(0,count));
+  const originalBody=meme?parts.slice(0,-2):parts;
+  const ending=meme?parts.slice(-2):[];
+  const candidate=[...originalBody,...extra,...ending].join('\n');
+  if(candidate.length<=1900)return candidate;
+ }
+ return baseline;
+}
+interface PaipuMessage {content:string;embeds?:Array<{title?:string;description:string}>}
+/** Content + embeds share ONE durable queue row/message in ordinary games.
+ * Exceptional >7900-character output uses atomic, individually deduplicated
+ * queue rows; nothing is clipped to make room for a new review. */
+export function paipuPostMessages(summary:PaipuSummary,members:Map<number,Member>,levelOf:(user:string)=>RoastLevel,outcomes:string[]=[]):PaipuMessage[]{
+ const {parts,meme,comments}=paipuPostParts(summary,members,levelOf,outcomes);
+ const extra=comments.length?[`\n**松本等しいのひと言**`,...comments]:[];
+ const body=meme?[...parts.slice(0,-2),...extra,...parts.slice(-2)]:[...parts,...extra];
+ let rest=body.join('\n');const messages:PaipuMessage[]=[];
+ const take=(max:number)=>{
+  let end=Math.min(max,rest.length);
+  if(end<rest.length){const nl=rest.lastIndexOf('\n',end);if(nl>0)end=nl;}
+  // JS/Discord limits use UTF-16; never split an emoji's surrogate pair.
+  if(end<rest.length&&end>0&&/[\uD800-\uDBFF]/.test(rest[end-1]))end--;
+  const chunk=rest.slice(0,end);rest=rest.slice(end);return chunk;
+ };
+ while(rest.length){
+  const message:PaipuMessage={content:take(1900)};let budget=6000;
+  while(rest.length&&budget>0){const description=take(Math.min(4000,budget));if(!description.length)break;(message.embeds??=[]).push({description});budget-=description.length;}
+  messages.push(message);
+ }
+ return messages;
+}
+export function paipuPostPayload(summary:PaipuSummary,members:Map<number,Member>,levelOf:(user:string)=>RoastLevel,outcomes:string[]=[]){return paipuPostMessages(summary,members,levelOf,outcomes)[0];}
+export async function queuePaipuMessages(env:PaipuEnv,uuid:string,posts:PaipuMessage[],now:number,completion?:{guild:string;summary:PaipuSummary}){
+ if(completion){
+  if(completion.summary.uuid!==uuid)throw Error('paipu_completion_mismatch');
+  // The summary is the existing queue's completion marker. Commit it LAST in
+  // the same transaction as every outbox part. A failed batch stays retryable.
+  const statements=posts.map((post,i)=>env.DB.prepare('INSERT OR IGNORE INTO kp_posts(id,body,at) SELECT ?,?,? WHERE NOT EXISTS(SELECT 1 FROM kp_mahjong_paipu WHERE guild=? AND paipu=? AND summary IS NOT NULL)')
+   .bind('paipu:'+uuid+(i?':part:'+String(i+1).padStart(2,'0'):''),JSON.stringify({...post,allowed_mentions:{parse:[]}}),now,completion.guild,uuid));
+  statements.push(env.DB.prepare('INSERT INTO kp_mahjong_paipu(guild,paipu,summary,error,attempts,at) VALUES(?,?,?,NULL,0,?) ON CONFLICT(guild,paipu) DO UPDATE SET summary=excluded.summary,error=NULL,at=excluded.at WHERE kp_mahjong_paipu.summary IS NULL')
+   .bind(completion.guild,uuid,JSON.stringify(completion.summary),now));
+  await env.DB.batch(statements);return;
+ }
+ if(posts.length===1)await enqueue(env,'paipu:'+uuid,posts[0].content,now,posts[0].embeds);
+ else if(posts.length)await env.DB.batch(posts.map((post,i)=>env.DB.prepare('INSERT OR IGNORE INTO kp_posts(id,body,at) VALUES(?,?,?)').bind('paipu:'+uuid+(i?':part:'+String(i+1).padStart(2,'0'):''),JSON.stringify({...post,allowed_mentions:{parse:[]}}),now)));
+}
+/** Settles a fetched summary, then atomically stores it and its outbox. `players` are the
  * registered accounts of the result watcher, roasted by name until they are linked to Discord. */
 export async function applySummary(env:PaipuEnv,mapping:KpMapping,summary:PaipuSummary,now=Date.now(),players:Array<{id:number;name:string}>=[]){
- await env.DB.prepare('INSERT INTO kp_mahjong_paipu(guild,paipu,summary,error,attempts,at) VALUES(?,?,?,NULL,0,?) ON CONFLICT(guild,paipu) DO UPDATE SET summary=excluded.summary,error=NULL,at=excluded.at WHERE kp_mahjong_paipu.summary IS NULL')
-  .bind(mapping.guildId,summary.uuid,JSON.stringify(summary),now).run();
+ // The signed ingestion may carry a C3 review, but invalid review data never becomes a bot claim.
+ summary={...summary,c3:acceptedC3Report(summary,summary.c3)??undefined,review:acceptedSanmaReport(summary,summary.review)??undefined};
  const claims=(await env.DB.prepare(`SELECT id,user,paipu,rank,status FROM kp_mahjong_claims WHERE guild=? AND paipu=? AND status!='rejected'`).bind(mapping.guildId,summary.uuid).all<{id:string;user:string;paipu:string;rank:number;status:string}>()).results;
  const members=new Map<number,Member>(),outcomes:string[]=[];
  for(const p of summary.seats){const r=players.find(x=>x.id===p.accountId&&p.accountId>0);if(r)members.set(p.seat,{name:r.name});}
  const links=(await env.DB.prepare('SELECT user,account FROM kp_mahjong_links WHERE guild=?').bind(mapping.guildId).all<{user:string;account:number}>()).results;
  for(const p of summary.seats){const link=links.find(l=>l.account===p.accountId&&p.accountId>0);if(link)members.set(p.seat,{user:link.user,name:p.nickname});}
  for(const c of claims){
-  const check=await paipuCheck(env,mapping.guildId,c),player=summary.seats.find(s=>s.rank===c.rank);
+  // Automatic claims are handled below, including receipts after a retry.
+  if(c.id===`auto:${summary.uuid}:${c.user}`)continue;
+  const check=await paipuCheck(env,mapping.guildId,c,summary),player=summary.seats.find(s=>s.rank===c.rank);
   if(player&&check&&!('refuse' in check))members.set(player.seat,{user:c.user,name:player.nickname});
-  const line=await settleClaim(env,mapping.guildId,c,now);if(line)outcomes.push(line);
+  const line=await settleClaim(env,mapping.guildId,c,now,{fetched:summary,reportExisting:true});if(line)outcomes.push(line);
  }
  // Linked members who did not claim are credited from the paipu itself.
- outcomes.push(...await autoCredit(env,mapping.guildId,summary,now));
+ outcomes.push(...await autoCredit(env,mapping.guildId,summary,now,true));
+ let posts:PaipuMessage[]=[];
  if(env.KP_EARNINGS_WEBHOOK_URL&&members.size){
   await ensurePosts(env);
-  await enqueue(env,'paipu:'+summary.uuid,paipuPost(summary,members,await roastLevelsOf(env,mapping),outcomes),now);
+  posts=paipuPostMessages(summary,members,await roastLevelsOf(env,mapping),outcomes);
  }
+ await queuePaipuMessages(env,summary.uuid,posts,now,{guild:mapping.guildId,summary});
 }
 /** GET /api/mahjong/paipu/queue and POST /api/mahjong/paipu/summaries, both signed. */
 export async function paipuApi(request:Request,env:PaipuEnv,override?:KpMapping,playersOverride?:Array<{id:number;name:string}>):Promise<Response>{
@@ -178,13 +247,18 @@ export async function paipuApi(request:Request,env:PaipuEnv,override?:KpMapping,
  let results:Array<{uuid:string;summary?:unknown;error?:string}>;
  try{results=JSON.parse(body).results;}catch{return new Response('Invalid body',{status:400});}
  if(!Array.isArray(results)||results.length>10)return new Response('Invalid body',{status:400});
- const queued=new Set(await paipuQueue(env,mapping.guildId));let stored=0;
+ const queued=new Set(await paipuQueue(env,mapping.guildId));let stored=0,failed=0;
+ const failure=async(uuid:string,error:string)=>env.DB.prepare('INSERT INTO kp_mahjong_paipu(guild,paipu,error,attempts,at) VALUES(?,?,?,1,?) ON CONFLICT(guild,paipu) DO UPDATE SET error=excluded.error,attempts=attempts+1,at=excluded.at WHERE kp_mahjong_paipu.summary IS NULL').bind(mapping.guildId,uuid,error,Date.now()).run();
  const players=playersOverride??(override?[]:await mahjongPlayers(env));
  for(const r of results){
   if(typeof r?.uuid!=='string'||!PAIPU.test(r.uuid)||!queued.has(r.uuid))continue;
-  if(validSummary(r.summary,r.uuid)){await applySummary(env,mapping,r.summary,Date.now(),players);stored++;continue;}
+  if(validSummary(r.summary,r.uuid)){
+   try{await applySummary(env,mapping,r.summary,Date.now(),players);stored++;}
+   catch{await failure(r.uuid,'summary_apply_failed');failed++;}
+   queued.delete(r.uuid);continue;
+  }
   const error=typeof r.error==='string'?r.error.replace(/[^\w:,.-]/g,'').slice(0,80):'invalid_summary';
-  await env.DB.prepare('INSERT INTO kp_mahjong_paipu(guild,paipu,error,attempts,at) VALUES(?,?,?,1,?) ON CONFLICT(guild,paipu) DO UPDATE SET error=excluded.error,attempts=attempts+1,at=excluded.at').bind(mapping.guildId,r.uuid,error,Date.now()).run();
+  await failure(r.uuid,error);queued.delete(r.uuid);
  }
- return Response.json({stored});
+ return Response.json({stored,...failed?{failed}:{}});
 }

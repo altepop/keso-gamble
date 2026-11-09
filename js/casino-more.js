@@ -2,7 +2,8 @@
 // random number comes from the caller (`rand(n)`: an integer 0..n-1, the server's crypto draw for live wallets), and a
 // game that is not finished keeps nothing secret in the state, so the saved state never reveals what comes next.
 // A finished round always returns {done:{game,…,net}} (net = what the round did to the wallet).
-import { CASINO_MIN, CASINO_MAX, validCard } from './casino.js?v=web-e054fc2bb05b5f3f';
+import { CASINO_MIN, CASINO_MAX, validCard } from './casino.js?v=web-3e87eca8099653c5';
+import {createTempleRespin} from './slot-temple.js?v=web-3e87eca8099653c5';
 const validInt=(v,min=0)=>Number.isSafeInteger(v)&&v>=min;
 function stake(state,amount){
  if(!validInt(amount,CASINO_MIN)||amount>CASINO_MAX)throw Error(`賭け金は${CASINO_MIN}〜${CASINO_MAX.toLocaleString('ja-JP')} KPの整数です。`);
@@ -59,6 +60,18 @@ export function minesCashout(state,rand,now=Date.now()){
 }
 
 // ---- スロット ----
+// Exactly two diamonds open a 5x3 Hold & Respin temple feature using the same server-side crypto RNG.
+// All rewards and every replay step are settled atomically in one original spin; playback can never transfer KP.
+export const SLOT_TEMPLE_PRIZES=Object.freeze([1,2,3,5,10,100]);
+export function slotWinTier(done){
+ if(!done||!Number.isSafeInteger(done.bet)||done.bet<=0)return null;
+ const multiple=(done.payout??0)/done.bet;
+ return multiple>=40?'golden':multiple>=10?'mega':multiple>=5?'big':null;
+}
+function templePrize(rand){
+ const n=roll(rand,100);
+ return n<50?1:n<78?2:n<92?3:n<98?5:n<99?10:100;
+}
 // 3リール。リールごとに 🍒6・🍋5・🔔4・⭐3・7️⃣2・💎1 の重み（21）。3つ揃いで配当、🍒2つで1.5倍。
 // 本番は賭け金の3%がみんなの共有ジャックポットに積み上がり、💎💎💎で獲得（1,000 KP以上の賭けで全額、未満は割合）。
 export const SLOT_SYMBOLS=[['cherry','🍒',6,5],['lemon','🍋',5,10],['bell','🔔',4,20],['star','⭐',3,40],['seven','7️⃣',2,100],['diamond','💎',1,300]];
@@ -74,9 +87,14 @@ export function playSlot(state,amount,rand,jackpot=null,now=Date.now()){
  const reels=[reel(rand),reel(rand),reel(rand)],base=slotPayout(reels,amount);
  const hit=reels.every(r=>r==='diamond')&&jackpot&&validInt(jackpot.amount);
  const won=hit?Math.floor(jackpot.amount*Math.min(amount,JACKPOT_FULL_BET)/JACKPOT_FULL_BET):0;
- const payout=base+won;
+ // Exactly two diamonds start the Golden Temple. The server pre-draws the entire
+ // 15-cell / 3-respins feature before crediting any KP, and records an immutable timeline.
+ const bonus=reels.filter(r=>r==='diamond').length===2?createTempleRespin(amount,rand):null;
+ const payout=base+won+(bonus?.total??0);
+ if(!Number.isSafeInteger(state.cash-amount+payout))throw Error('払戻額が上限を超えます。');
  state.cash=state.cash-amount+payout;
  const done={game:'slot',bet:amount,reels,payout,jackpot:won,net:payout-amount,time:now,
+  ...(bonus?{bonus}:{}),
   ...(jackpot?{pool:{before:jackpot.amount,version:jackpot.version,contribution:Math.floor(amount*JACKPOT_PERCENT/100)}}:{})};
  remember(state,'slots',done);return {done};
 }

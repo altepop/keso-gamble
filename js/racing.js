@@ -1,11 +1,11 @@
-import {EXTRA_HORSE_NAMES,EXTRA_CROWN_NAMES,REGULAR_RACE_NAMES} from './racing-name-catalog.js';
+import {EXTRA_HORSE_NAMES,EXTRA_CROWN_NAMES,REGULAR_RACE_NAMES} from './racing-name-catalog.js?v=web-3e87eca8099653c5';
 // Horse racing. Pure logic with no DOM or clock reads, shared by the browser and the Worker.
 // Cards and odds are public (PUBLIC_SALT). The run uses a per-race seed: the demo uses the public
 // salt, while the Worker keeps a random seed secret until the start and publishes its hash first.
 export const RACE_INTERVAL=15*60000, CLOSE_BEFORE=60000, RUN_MS=50000, COURSE_M=1600;
-export const WEEKLY_LIMIT=80000, MIN_BET=100, BET_STEP=100;
+export const WEEKLY_LIMIT=400000, MIN_BET=100, BET_STEP=100, MAX_RACE_BET=100000;
 export const PUBLIC_SALT='keso-play-demo-racing-v1';
-export const BET_TYPES={win:{label:'1着当て',formal:'単勝'},place:{label:'3着以内当て',formal:'複勝'}};
+export const BET_TYPES={win:{label:'1着当て',formal:'単勝'},place:{label:'3着以内当て',formal:'複勝'},trifecta:{label:'1〜3着を順番通り',formal:'3連単'}};
 export const STYLES=[{label:'最初から飛ばす',curve:.08},{label:'前の方につける',curve:.03},{label:'後半に追い上げる',curve:-.03},{label:'最後に一気',curve:-.08}];
 export const CONDITIONS=[{label:'絶不調',value:-1},{label:'不調',value:-.5},{label:'普通',value:0},{label:'好調',value:.5},{label:'絶好調',value:1}];
 export const GOINGS=[{label:'走りやすい',noise:1},{label:'ややぬかるみ',noise:1.15},{label:'ぬかるんでいる',noise:1.3}];
@@ -196,7 +196,19 @@ export function raceOdds(card){
  return odds;
 }
 
+export function trifectaOdds(card,selection){
+ if(!Array.isArray(selection)||selection.length!==3||new Set(selection).size!==3||selection.some(n=>!Number.isSafeInteger(n)||n<1||n>card.size))return null;
+ const [a,b,d]=selection.map(n=>n-1);
+ let chance=0;
+ for(const {weight,strength} of raceModel(card,card.start>=FORM_REFORM_FROM)){
+  const total=strength.reduce((sum,n)=>sum+n,0);
+  chance+=weight*(strength[a]/total)*(strength[b]/(total-strength[a]))*(strength[d]/(total-strength[a]-strength[b]));
+ }
+ // Future-market adjustment mirrors single-horse odds and never leaks private seed.
+ return Math.min(100000,oddsFromProbability(chance*(card.start>=FORM_REFORM_FROM?1.05:1)));
+}
 export function betWins(type,horse,result,size){
+ if(type==='trifecta')return Array.isArray(horse)&&horse.length===3&&horse.every((n,i)=>result.order[i]===n);
  if(type==='win')return result.order[0]===horse;
  if(type==='place')return result.order.slice(0,placeSlots(size)).includes(horse);
  return false;
@@ -227,26 +239,60 @@ export function distanceAt(timeline,number,t){
 }
 export function leaderAt(timeline,t){let best=null,dist=-1;for(const n of Object.keys(timeline.horses)){const d=distanceAt(timeline,n,t);if(d>dist){dist=d;best=Number(n);}}return best;}
 
-const ROAST_LAST=['これは作戦ではありません。実力です','持ち主の生き様を体現しています','エイムと同じで走るラインも定まらない','前の馬に完全にキャリーされています'];
-const ROAST_BOTTOM=['堂々の最下位。お疲れさまでした','最下位。この馬に賭けるのはやめましょう','最下位。言い訳の準備はできています'];
-/** Text commentary (the Activity plays no audio). */
+/** Public live positions only. Never use the eventual finishing order to choose
+ * who is last before the race is over. Tie-break by horse number, not result rank. */
+export function lastPlaceAt(timeline,t){
+ const numbers=Object.keys(timeline.horses).map(Number);
+ if(!numbers.length)return null;
+ const ranked=numbers.sort((a,b)=>distanceAt(timeline,b,t)-distanceAt(timeline,a,t)||a-b);
+ const number=ranked.at(-1),ahead=ranked.at(-2);
+ return {number,ahead: ahead??null,gap:ahead===undefined?0:Math.max(0,Math.round(distanceAt(timeline,ahead,t)-distanceAt(timeline,number,t)))};
+}
+const LAST_FINISH_ROAST=[
+ 'まさかの最下位！ 今日いちばん長く競馬を楽しんだ馬です！',
+ '最下位でフィニッシュ！ 実況席の視線を最後まで独占しました！',
+ '最後の最後まで主役は譲らない！ ……最下位でゴール！',
+ '最下位！ ほかの馬が帰り支度を始めても走り切りました！',
+ '堂々の最下位！ ここから逆転するには、もう1レース必要です！'
+];
+/** Commentary follows the live backmarker from launch to finish.
+ * Rank, odds, bets and physical trajectory are not changed by the narration. */
 export function raceCommentary(card,result,timeline,odds,seed=PUBLIC_SALT){
  const rng=rngFrom(`${seed}:talk:${card.id}`),pick=list=>list[Math.floor(rng()*list.length)];
  const name=n=>`${n}番 ${card.horses[n-1].name}`;
- const lead=timeline.horses[result.order[0]].finish,lines=[{t:0,text:`${card.name}、スタート！`}];
+ const lead=timeline.horses[result.order[0]].finish;
+ const lines=[{t:0,text:`${card.name}、スタート！ 先頭争いよりも、最後方の動きから目が離せません！`}];
  for(const r of result.runs)if(r.late)lines.push({t:1500,text:`${name(r.number)}、ゲートが開いたことに気付いていません！`});
- lines.push({t:lead*.3,text:`先頭は${name(leaderAt(timeline,lead*.3))}`});
- const tail=Object.keys(timeline.horses).map(Number).sort((a,b)=>distanceAt(timeline,a,lead*.5)-distanceAt(timeline,b,lead*.5))[0];
- lines.push({t:lead*.5,text:`最後方は${name(tail)}。${pick(ROAST_LAST)}`});
- lines.push({t:lead*.68,text:`最後の直線！先頭は${name(leaderAt(timeline,lead*.68))}`});
- const late=leaderAt(timeline,lead*.85);
- if(late!==leaderAt(timeline,lead*.68))lines.push({t:lead*.85,text:`${name(late)}が外から一気！`});
- if(timeline.photo)lines.push({t:lead-200,text:'ほぼ同時にゴール！ビデオ判定です…'});
+ let prev=null;
+ for(const [fraction,stage] of [
+  [.14,'start'],[.29,'chase'],[.44,'half'],[.60,'turn'],[.75,'stretch'],[.88,'final'],[.94,'wire']
+ ]){
+  const t=Math.round(lead*fraction),spot=lastPlaceAt(timeline,t);
+  if(!spot)continue;
+  const who=name(spot.number),gap=spot.gap;
+  const status=prev!==null&&prev!==spot.number
+   ?`最後方が入れ替わった！ 今度は${who}！`
+   :`最後方は${who}！`;
+  const distance=gap>0?`前の馬まで約${gap}m。`:'前の馬とほぼ並んでいます。';
+  let reaction='';
+  if(stage==='start')reaction=pick(['序盤からこの位置、これは何の作戦だ！','まだ始まったばかりだ、ここからが見せ場！']);
+  else if(stage==='chase')reaction=gap>=30?'集団が遠い！ 頼む、まだ置いていかれるな！':'前の馬に食らいついています！';
+  else if(stage==='half')reaction=pick(['実況席は先頭を見ていません！ こちらが今日の主役！','折り返しても最後方！ ここから脚を使えるのか！']);
+  else if(stage==='turn')reaction=gap>=40?'差が開く！ このままでは単独の旅になってしまう！':'まだ届く距離！ 最下位脱出なるか！';
+  else if(stage==='stretch')reaction=pick(['最終直線！ 観客の視線が最後方へ！','さあ最後の直線！ 誰がビリになるのか！']);
+  else if(stage==='final')reaction=gap>=35?'前が見えなくなってきた！ それでも脚を止めない！':'少しでも順位を上げたい！ ラストスパート！';
+  else reaction='ゴールは目前！ 最下位だけは避けたいところ！';
+  lines.push({t,text:`${status} ${distance}${reaction}`});
+  prev=spot.number;
+ }
  const favourite=card.horses.map(h=>h.number).sort((a,b)=>odds.win[a]-odds.win[b])[0];
  const winner=result.order[0];
+ if(timeline.photo)lines.push({t:lead-200,text:'先頭はほぼ同時にゴール！ ビデオ判定です…'});
  lines.push({t:lead+(timeline.photo?1500:0),text:winner===favourite?`勝ったのは1番人気 ${name(winner)}！順当です`:`勝ったのは${name(winner)}！`});
- if(winner!==favourite&&result.order.indexOf(favourite)>=placeSlots(card.size))lines.push({t:lead+2500,text:`1番人気の${name(favourite)}は${result.order.indexOf(favourite)+1}着。人気を裏切りました`});
- lines.push({t:timeline.horses[result.order.at(-1)].finish,text:`${name(result.order.at(-1))}、${pick(ROAST_BOTTOM)}`});
+ if(winner!==favourite&&result.order.indexOf(favourite)>=placeSlots(card.size))
+  lines.push({t:lead+2500,text:`1番人気の${name(favourite)}は${result.order.indexOf(favourite)+1}着。人気を裏切りました`});
+ const last=result.order.at(-1);
+ lines.push({t:Math.max(timeline.horses[last].finish,lead+2600),text:`${name(last)}、${pick(LAST_FINISH_ROAST)}`});
  return lines.sort((a,b)=>a.t-b.t);
 }
 
@@ -254,7 +300,7 @@ export function raceCommentary(card,result,timeline,odds,seed=PUBLIC_SALT){
 export function createRacing(){return {raceBets:[],raceWeek:{start:0,spent:0}};}
 function keepPending(bets){const pending=bets.filter(b=>b.status==='pending');return [...pending,...bets.filter(b=>b.status!=='pending').sort((a,b)=>b.time-a.time).slice(0,Math.max(0,60-pending.length))].sort((a,b)=>b.time-a.time);}
 const validInt=(v,min=0)=>Number.isSafeInteger(v)&&v>=min;
-function validBet(b){return b&&typeof b.id==='string'&&b.id.length<=40&&isRaceStart(b.raceId)&&Object.hasOwn(BET_TYPES,b.type)&&validInt(b.horse,1)&&b.horse<=10&&validInt(b.amount,MIN_BET)&&b.amount%BET_STEP===0&&validInt(b.odds,10)&&validInt(b.time)&&(b.status==='pending'?b.payout===0:['won','lost'].includes(b.status)&&validInt(b.payout)&&(b.status==='lost'?b.payout===0:b.payout===payoutFor(b.amount,b.odds)));}
+function validBet(b){return b&&typeof b.id==='string'&&b.id.length<=40&&isRaceStart(b.raceId)&&Object.hasOwn(BET_TYPES,b.type)&&(b.type==='trifecta'?Array.isArray(b.horse)&&b.horse.length===3&&new Set(b.horse).size===3&&b.horse.every(n=>validInt(n,1)&&n<=10):validInt(b.horse,1)&&b.horse<=10)&&validInt(b.amount,MIN_BET)&&b.amount%BET_STEP===0&&validInt(b.odds,10)&&validInt(b.time)&&(b.status==='pending'?b.payout===0:['won','lost'].includes(b.status)&&validInt(b.payout)&&(b.status==='lost'?b.payout===0:b.payout===payoutFor(b.amount,b.odds)));}
 export function hydrateRacing(raw){
  const racing=createRacing();
  // Every unsettled ticket stays (its KP is already paid); settled ones fill the rest of the 60 shown, newest first.
@@ -267,12 +313,15 @@ export function placeRaceBet(state,{raceId,type,horse,amount},now,entries=[]){
  if(raceId!==openRaceStart(now))throw Error('このレースの馬券は締め切りました');
  if(!Object.hasOwn(BET_TYPES,type))throw Error('券の種類を選んでください');
  const card=raceCard(raceId,PUBLIC_SALT,entries);
- if(!Number.isInteger(horse)||horse<1||horse>card.size)throw Error('馬を選んでください');
+ if(type==='trifecta'?(!Array.isArray(horse)||horse.length!==3||new Set(horse).size!==3||horse.some(n=>!Number.isInteger(n)||n<1||n>card.size)):(!Number.isInteger(horse)||horse<1||horse>card.size))throw Error('馬を選んでください（3連単は異なる3頭を着順通りに）。');
  if(!validInt(amount,MIN_BET)||amount%BET_STEP!==0)throw Error(`金額は${MIN_BET} KP以上、${BET_STEP} KP単位です`);
+ if(amount>MAX_RACE_BET)throw Error('馬券は1枚100,000 KPまでです。');
  if(amount>state.cash)throw Error('KPが不足しています');
  const spent=weeklySpent(state,now);
  if(spent+amount>WEEKLY_LIMIT)throw Error(`1週間に買える馬券は${WEEKLY_LIMIT.toLocaleString('ja-JP')} KPまでです（残り${(WEEKLY_LIMIT-spent).toLocaleString('ja-JP')} KP）`);
- const odds=raceOdds(card)[type][horse];
+ const odds=type==='trifecta'?trifectaOdds(card,horse):raceOdds(card)[type][horse];
+ if(!Number.isSafeInteger(odds)||odds<10)throw Error('オッズを取得できません。');
+ if(!Number.isSafeInteger(payoutFor(amount,odds)))throw Error('払戻金が計算上限を超えています。');
  const bet={id:`${now}-${state.raceBets.length}`,raceId,type,horse,amount,odds,status:'pending',payout:0,time:now};
  state.cash-=amount;
  state.raceWeek={start:weekStart(now),spent:spent+amount};
@@ -305,6 +354,7 @@ export const BOXES=[
  {id:'gold',label:'ゴールド',price:60000,odds:[0,15,75,10,0]},
  {id:'platinum',label:'プラチナ',price:250000,odds:[0,0,30,70,0]},
  {id:'legend',label:'レジェンド',price:1000000,odds:[0,0,0,70,30]},
+ {id:'apex',label:'頂上級確定',price:3500000,odds:[0,0,0,0,100]},
 ];
 /** A new horse from a box, drawn with the given random source (the Worker uses crypto). */
 export function drawHorse(boxId,rng){

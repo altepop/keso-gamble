@@ -47,3 +47,28 @@ The read-only GitHub Actions monitor runs each hour using Cloudflare GraphQL `d1
 - `settleKpRaces` keeps its every-minute scheduling, but uses the partial index `kp_state_pending_race` instead of scanning all `kp_state` JSON rows on idle ticks.
 - Index predicate: both exact JSON tokens `"raceBets"` and `"pending"` occur in the stored state. The settlement code still checks the actual ticket status and due time after reading the indexed candidates. Existing KP version guards, double-payment protections and race frequency are unchanged.
 - The index is maintained on `kp_state` writes, so compare live D1 total Rows read **and written** during real play with pre-change baseline. Confirm via official Cloudflare Metrics; SQLite `EXPLAIN QUERY PLAN` alone does not prove Cloudflare-billed Rows savings.
+
+## KP trend daily totals (2026-11-03)
+
+- On 2026-11-03 the KP trend graph was the top D1 reader of the hour: each 30-day open read every ledger row of the window (about 9,800 rows; 9 opens ≈ 88,000 rows).
+- `kp_trend_days(guild, day, user, net)` now keeps each member's daily change of KP − 借KP (JST day). Triggers on `kp_ledger` inserts and on `kp_debt_events` insert / update / delete keep it current; the debt triggers add up correctly whatever order they run in with the cap trigger.
+- The graph reads only `members × shown days` rows from the primary key `(guild, day, user)`, plus `kp_wallets` and `kp_debts`. The old `kp_ledger_trend_window` index is dropped (no longer used; saves its write cost).
+- The table is built once from the full history the first time the graph is opened (one full read of the ledger and debt events), guarded by `kp_settings.kp_trend_days_v1`. A rebuild deletes and recomputes in one batch, so running it twice never double counts.
+- Ledger history itself is unchanged; the table can always be rebuilt from it by removing the settings key.
+## Heavy reads found on 2026-11-03 (24h top list)
+
+| Was | Change |
+|---|---|
+| Crown schedule scanned every wallet twice a minute (roast levels + big race losses) | Roast levels are read only when a crown is actually named. Big losses (≥ 10,000 KP on one race) are written to `kp_crown_melts` when the race settles, and crowns read that small table. |
+| Race results: every minute, up to 3 finished races with nothing to post re-expanded every wallet's bets | A finished race whose result is not worth a post is remembered in `kp_race_post_skips` and not checked again. Races with pending bets are still checked each minute. |
+| VALORANT monitor read the latest 200 results every run to know what is already saved | Reads only the rows of the (up to five) matches the API returned for the player, via the `match_id` index. |
+| Horse prizes looked back 48 hours on every check (~235 rows) | Looks back 6 hours (covers the hourly retry); the full sweep every 6 hours is unchanged. |
+| M.LEAGUE cards re-read in full every 5 seconds of use | After 5 seconds, a one-row version (`ml_state.cards_version`, changed whenever a card changes) decides whether to read them again. |
+| Stock screen re-read the last 48 ticks on every wallet read | Kept per isolate for the market version (changes every 5 minutes). |
+| Voice history read 100 events (+100 bonus lookups) on each wallet read | Reads 50: today's total needs at most 48 slots. |
+
+## Casino reveal hardening (2026-11-04)
+
+- Casino notifications and win-stage sequencing are presentation-only; no new D1 queries, tables, writes, recurring jobs, payout changes or odds changes.
+- Hourly account-wide GraphQL estimates, the 3.5M warning and 4M optional-history conserve mode remain active. Validate real UTC-day read totals on Cloudflare after rollout; this change makes no claim about current usage.
+- The README weekly racing/M.LEAGUE purchase limit has been corrected to the existing 400,000 KP; documentation only.

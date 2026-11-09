@@ -6,7 +6,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { initializeKp, syncKpAccounts } from '../src/kp.ts';
 import type { KpMapping } from '../src/kp.ts';
 import { operateKp, readKpState } from '../src/kp-api.ts';
-import { scheduleCrowns, crownEvents, crownName, BACK_GAP, VDK_SPECIAL_NAME, VDK_SPECIAL_SOURCE } from '../src/racing-crowns.ts';
+import { scheduleCrowns, crownEvents, recordMelts, crownName, BACK_GAP, VDK_SPECIAL_NAME, VDK_SPECIAL_SOURCE } from '../src/racing-crowns.ts';
 import { racingView } from '../src/racing-kp.ts';
 import { queueRacePosts, flushRacePosts } from '../src/racing-posts.ts';
 import type { PostEnv } from '../src/racing-posts.ts';
@@ -68,7 +68,8 @@ test('a broken win streak, a long break and a big KP loss also crown races; stal
  const stale=await fixture();results(stale.sql,'One#JP1','LLL',NOW-5*3600000);
  assert.equal((await scheduleCrowns(stale.env,mapping,NOW)).length,0);
  const melt=await fixture(),race=NOW-RACE_INTERVAL*2;
- melt.sql.prepare('UPDATE kp_state SET data=json_set(data,\'$.raceBets\',json(?)) WHERE user=?').run(JSON.stringify([{id:'b1',raceId:race,type:'win',horse:1,amount:12000,odds:30,status:'lost',payout:0,time:race-300000}]),one);
+ await recordMelts(melt.env,mapping.guildId,one,[{raceId:race,amount:7000,status:'lost'},{raceId:race,amount:5000,status:'lost'},{raceId:race-RACE_INTERVAL,amount:9999,status:'lost'}]);
+ await recordMelts(melt.env,mapping.guildId,two,[{raceId:race,amount:20000,status:'won'}]);
  await scheduleCrowns(melt.env,mapping,NOW);
  assert.deepEqual(crowns(melt.sql).map(c=>c.name),['OneKP溶かし大会 5億マジかw杯']);
 });
@@ -122,4 +123,16 @@ test('streak detection remains identical with exactly ten and over-ten losses, r
  assert(!elevenEvents.some(e=>e.kind==='streak10'),'11 losses must not be mislabeled as exactly 10');
  const streak=await fixture();results(streak.sql,'One#JP1','W'.repeat(20)+'L');
  assert((await crownEvents(streak.env,mapping,NOW)).some(e=>e.kind==='stopped'),'3+ wins followed by a loss still creates stopped crown');
+});
+test('D1: whether anyone bet on a started race is scanned once, not on every Activity refresh', async () => {
+ const f=await fixture();let scans=0;const prepare=f.env.DB.prepare.bind(f.env.DB);
+ (f.env.DB as unknown as {prepare:(t:string)=>unknown}).prepare=(text:string)=>{if(text.includes("json_each(s.data,'$.raceBets')")&&text.includes('LIMIT 1'))scans++;return prepare(text);};
+ let checked=0;
+ for(let race=Math.ceil(NOW/RACE_INTERVAL)*RACE_INTERVAL;checked<2;race+=RACE_INTERVAL){
+  scans=0;const first=await racingView(f.env,mapping,race+5000);if(!scans)continue; // this race runs anyway (big race, event, crown)
+  assert.equal(first.watch.runs,false);
+  const again=await racingView(f.env,mapping,race+20000);
+  assert.equal(scans,1,'the started race is answered from memory');assert.equal(again.watch.runs,false);
+  checked++;
+ }
 });

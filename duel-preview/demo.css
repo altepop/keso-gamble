@@ -1,0 +1,25 @@
+body{background:#040c22;color:#eef3ff}.demo-toolbar{max-width:760px;margin:0 auto;padding:13px 14px 11px;background:#0b1c35;border-bottom:1px solid #3a567b;position:relative;z-index:20;display:flex;flex-direction:column;gap:9px}
+.demo-brand{display:flex;gap:10px;align-items:center}.demo-brand>strong{font-size:19px}.demo-brand>span{font-size:14px;color:#b7c8e0}.demo-brand>a{margin-left:auto;color:#a3d7ff;font-size:12px}
+.demo-control-line{display:flex;align-items:center;gap:6px;flex-wrap:wrap}.demo-control-title{font-size:12px;color:#adc1dd;min-width:84px}.demo-control-line button,.demo-control-line select{font-size:13px;color:#eef5ff;background:#0c2745;border:1px solid #43709b;padding:9px 11px;border-radius:8px;min-height:41px}.demo-control-line button[aria-pressed=true]{color:#07162c;background:#b4f5e2;border-color:#c8ffe9;font-weight:700}.demo-control-line select{min-width:146px;flex:1}.demo-control-line button:focus-visible,.demo-control-line select:focus-visible{outline:3px solid #85d5ff}
+.demo-notice{background:#06192b;color:#b8cfe5;font-size:12px;line-height:1.65;border-radius:8px;border:1px solid #244c6c;padding:9px 11px;margin:0}.demo-notice strong{color:#b3ffdc}
+#demo-feedback{font-size:12px;line-height:1.5;color:#c6ffd8;min-height:0}#demo-feedback:empty{display:none}
+#demo-app .screen{min-height:unset;padding-bottom:55px}.duel-opponent-toggle,.duel-opponent-choice{font-size:15px}
+@media(max-width:390px){.demo-control-title{min-width:70px}.demo-toolbar{padding:10px}.demo-control-line button{font-size:12px;padding:8px}}
+
+body.cpu-practice #demo-view-switch{display:none}
+body.cpu-practice #demo-cpu-settings{display:flex}
+body.cpu-practice .duel-history,body.cpu-practice .duel-create-collapse,body.cpu-practice .duel-sync,body.cpu-practice .duel-history-more{display:none}
+body.cpu-practice .duel-current{margin-top:8px}
+body.cpu-practice .duel-arena{border-color:#4c8ea1}
+.demo-control-line label{font-size:12px;color:#b8d3e7}
+.demo-cpu-help{font-size:11px;color:#9fcab9;flex:1}
+.demo-notice{border-color:#426b83}
+.duel-practice-entry{margin:12px 14px;padding:14px;border:1px solid #4b7f81;border-radius:13px;background:linear-gradient(110deg,#0c3041,#0d1c39);display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.duel-practice-entry strong{display:block;color:#c9ffeb;font-size:15px}
+.duel-practice-entry p{margin:6px 0 0;max-width:430px;font-size:12px;color:#bdd2e8;line-height:1.7}
+.duel-practice-entry a{display:inline-flex;align-items:center;justify-content:center;text-decoration:none;padding:10px 13px;border-radius:9px;min-height:45px;white-space:normal;text-align:center;font-weight:700}
+body.cpu-practice .duel-practice-entry{display:none}
+body.cpu-practice [data-duel-timer]{display:none}
+
+.demo-cpu-explain{margin:0;padding:11px 13px;border:1px solid #386c7d;border-radius:9px;background:#0b2937;color:#cbf5e7;font-size:12px;line-height:1.65}
+body:not(.cpu-practice) .demo-cpu-explain{display:none}

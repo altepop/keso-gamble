@@ -36,10 +36,10 @@ const server=spawn('python3',['-m','http.server','8767','--bind','127.0.0.1'],{s
  const ownedNumber=R.raceCard(RACE,R.PUBLIC_SALT,state.racing.open.entries).horses.find(h=>h.horseId==='horse-1').number;
  assert.match(await page.locator(`[data-race-horse="${ownedNumber}"]`).innerText(),/onerror/);
  await toStable();
- assert.match(await page.locator('.asset-card').filter({hasText:'ボックスを開けると'}).innerText(),/今日の交換はあと2回/);
+ assert.match(await page.locator('.asset-card').filter({hasText:'頂上級確定ボックス'}).innerText(),/今日の交換はあと2回/);
  await page.locator('#horse-name').fill('ケソ号');await page.locator('[data-action=horse-buy][data-box=normal]').click();await page.locator('.toast').filter({hasText:'仲間入り'}).waitFor();
  assert.deepEqual(bodies.shift().args,{box:'normal',name:'ケソ号'});
- assert.match(await page.locator('.asset-card').filter({hasText:'ボックスを開けると'}).innerText(),/ケソ号（下級/);assert.match(await page.locator('.asset-card').filter({hasText:'ボックスを開けると'}).innerText(),/今日の交換はあと1回/);
+ assert.match(await page.locator('.asset-card').filter({hasText:'頂上級確定ボックス'}).innerText(),/ケソ号（下級/);assert.match(await page.locator('.asset-card').filter({hasText:'頂上級確定ボックス'}).innerText(),/今日の交換はあと1回/);
  // Discord iOS can swallow window.confirm. The horse sale must never need it.
  await page.evaluate(()=>{window.confirm=()=>{throw Error('native confirm is unavailable in Discord iOS');};});
  await page.locator('[data-action=horse-sell]').click();
@@ -57,7 +57,11 @@ const server=spawn('python3',['-m','http.server','8767','--bind','127.0.0.1'],{s
  const sale=bodies.shift();assert.equal(sale.action,'horse-sell');assert.deepEqual(sale.args,{horseId:'horse-2'});
  await page.evaluate(()=>{window.confirm=()=>true;}); // Other purchase dialogs remain unchanged.
  state.cash=100000;await refresh(toShop);
- await page.locator('#lux-target').selectOption('two');page.once('dialog',d=>d.accept());await page.locator('[data-action=luxury][data-item=convict]').click();await page.locator('.toast').filter({hasText:'戦犯認定を買いました'}).waitFor();
+ await page.locator('#lux-target').selectOption('two');
+ await page.locator('[data-action=luxury][data-item=convict]').click();
+ await page.locator('.luxury-confirmation').filter({hasText:'戦犯認定'}).waitFor();
+ await page.locator('[data-action=luxury-approve]').click();
+ await page.locator('.toast').filter({hasText:'戦犯認定を買いました'}).waitFor();
  const lux=bodies.shift();assert.equal(lux.action,'luxury');assert.equal(lux.args.item,'convict');assert.equal(lux.args.target,'two');
  await toAssets();
  assert.equal(await page.locator('[data-action=roast-level][aria-pressed=true]').getAttribute('data-level'),'full');

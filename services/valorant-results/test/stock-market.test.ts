@@ -86,14 +86,14 @@ test('24時間の優待が指名と高級品に適用され、再送・残高不
  assert.equal((await readKpState(f.env,mapping,one)).stockBenefits.percent,0);
  t.mock.timers.tick(DAY+1);const s=await readKpState(f.env,mapping,one);assert.equal(s.stockBenefits.percent,5);
  const before=f.cash();const r=await operateKp(f.env,mapping,one,'benefit-directive-one','directive',{target:two,task:'competitive'}) as {result:{discount:{paid:number}}};
- assert.equal(r.result.discount.paid,7600);assert.equal(f.cash(),before-7600);await operateKp(f.env,mapping,one,'benefit-directive-one','directive',{target:two,task:'competitive'});assert.equal(f.cash(),before-7600);
+ assert.equal(r.result.discount.paid,38000);assert.equal(f.cash(),before-38000);await operateKp(f.env,mapping,one,'benefit-directive-one','directive',{target:two,task:'competitive'});assert.equal(f.cash(),before-38000);
  const luxury=await operateKp(f.env,mapping,one,'benefit-luxury-title-1','luxury',{item:'title',title:'KP長者'}) as {result:{discount:{paid:number}}};assert.equal(luxury.result.discount.paid,19000);
  assert.deepEqual(stockDiscount(2000000,5),{base:2000000,percent:5,saved:2000,paid:1998000});assert.throws(()=>stockDiscount(100,50));
 });
 test('売却直後に優待は減る。他人の保有やクライアント指定の割引率は使えない',async t=>{
- t.mock.timers.enable({apis:['Date'],now:T});const f=await fixture();f.credit('fund',100000);f.credit('fund2',20000,two);await trade(f,'benefit-ownership-buy','buy',50);t.mock.timers.tick(DAY+1);
+ t.mock.timers.enable({apis:['Date'],now:T});const f=await fixture();f.credit('fund',100000);f.credit('fund2',50000,two);await trade(f,'benefit-ownership-buy','buy',50);t.mock.timers.tick(DAY+1);
  await trade(f,'benefit-ownership-sell','sell',50);assert.equal((await readKpState(f.env,mapping,one)).stockBenefits.percent,0);
- const before=f.cash(two);await operateKp(f.env,mapping,two,'benefit-foreign-direct','directive',{target:one,task:'competitive',percent:100,discount:8000});assert.equal(f.cash(two),before-8000);
+ const before=f.cash(two);await operateKp(f.env,mapping,two,'benefit-foreign-direct','directive',{target:one,task:'competitive',percent:100,discount:8000});assert.equal(f.cash(two),before-40000);
 });
 test('daily news budget uses a covering time-range index and ignores thousands of historical events',async()=>{
  const f=await fixture();await prepareStocks(f.env,guild,one,T);
@@ -470,4 +470,65 @@ test('オーナー自作ニュースは確定時の内容をそのまま保存�
  await assert.rejects(applyStockShock(f.env,guild,one,'news-custom-test-0001',{...text,headline:'別のニュースにすり替えた'},T),/操作ID/);
  await assert.rejects(applyStockShock(f.env,guild,one,'news-custom-test-0002',{...text,headline:'<img src=x onerror=alert(1)>'},T),/見出し/);
  assert.equal((await readKpState(f.env,mapping,two)).prices.keso,Math.round(before*1.1));
+});
+
+test('D1: the last 48 ticks are read once per market version, not on every wallet read',async t=>{
+ const {stockView}=await import('../src/stock-market.ts');
+ t.mock.timers.enable({apis:['Date'],now:T});const f=await fixture();
+ const market=await prepareStocks(f.env,guild);
+ const db=f.env.DB,original=db.prepare.bind(db);let reads=0;
+ db.prepare=((sql:string)=>{if(sql.startsWith('SELECT prices,at FROM stock_ticks'))reads++;return original(sql);}) as typeof db.prepare;
+ const a=await stockView(f.env,market),b=await stockView(f.env,market);
+ assert.equal(reads,1);assert.deepEqual(a.ticks,b.ticks);
+ await stockView(f.env,{...market,version:market.version+1});
+ assert.equal(reads,2,'a new market version reads again');
+});
+
+test('D1: the daily news budget reads only today\'s non-zero news through its partial index',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:T});const f=await fixture();
+ const market=await prepareStocks(f.env,guild,undefined,T);
+ const today=Math.floor(T/STOCK_HOLD)*STOCK_HOLD;
+ for(let i=0;i<50;i++)f.sql.prepare("INSERT INTO stock_news(guild,id,symbol,label,bps,at,applied_version,applied_bps,applied_at) VALUES(?,?,'msum','x',20,?,1,0,?)").run(guild,'zero:'+i,today+i,today+i);
+ f.sql.prepare("INSERT INTO stock_news(guild,id,symbol,label,bps,at,applied_version,applied_bps,applied_at) VALUES(?,?,'msum','x',700,?,1,700,?)").run(guild,'spent',today,today);
+ const plan=f.sql.prepare("EXPLAIN QUERY PLAN SELECT symbol,SUM(ABS(applied_bps)) AS total FROM stock_news INDEXED BY stock_news_daily_used WHERE guild=? AND applied_at>=? AND applied_bps!=0 AND id NOT LIKE 'admin:%' GROUP BY symbol").all(guild,today).map(r=>String(r.detail)).join(' ');
+ assert.match(plan,/stock_news_daily_used/);
+ // The zero-bps rows never counted toward the budget: only 100 bps of msum's 800 remain for a big new headline.
+ f.sql.prepare("INSERT INTO stock_news(guild,id,symbol,label,bps,at) VALUES(?,'big','msum','y',250,?)").run(guild,T);
+ await tickStocks(f.env,market,T+5*60_000,()=>0.5);
+ assert.equal(f.sql.prepare("SELECT applied_bps FROM stock_news WHERE id='big'").get()!.applied_bps,100);
+});
+
+test('D1 stock alert daily count is read only once per tick even if multiple symbols move',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:T});
+ const f=await fixture();
+ const m=await prepareStocks(f.env,guild,undefined,T);
+ m.version=1;
+ const symbols=Object.keys(m.prices).slice(0,2);
+ assert.equal(symbols.length,2);
+ for(const symbol of symbols)m.prices[symbol]=Math.round(m.prices[symbol]*1.2);
+ const orig=f.env.DB.prepare.bind(f.env.DB);let countReads=0;
+ f.env.DB.prepare=((q:string)=>{if(q.includes('SELECT COUNT(*) AS n FROM stock_announcements'))countReads++;return orig(q);}) as typeof f.env.DB.prepare;
+ const env={...f.env,KP_EARNINGS_WEBHOOK_URL:'https://discord.com/api/webhooks/1/token'};
+ await queueStockPosts(env,m,T+30*60_000);
+ assert.equal(countReads,1,'one count for multiple rising stocks');
+ assert.equal((f.sql.prepare('SELECT COUNT(*) AS n FROM stock_announcements').get() as {n:number}).n,2);
+ assert.equal((f.sql.prepare('SELECT COUNT(*) AS n FROM kp_posts').get() as {n:number}).n,2);
+ await queueStockPosts(env,m,T+30*60_000);
+ assert.equal((f.sql.prepare('SELECT COUNT(*) AS n FROM stock_announcements').get() as {n:number}).n,2,'repeat tick is idempotent');
+ f.sql.close();
+});
+test('D1 stock alert keeps daily maximum eight when two or more symbols move in same tick',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:T});
+ const f=await fixture();
+ const m=await prepareStocks(f.env,guild,undefined,T);
+ m.version=1;
+ const symbols=Object.keys(m.prices).slice(0,2);
+ for(const symbol of symbols)m.prices[symbol]=Math.round(m.prices[symbol]*1.2);
+ const day=Math.floor(T/DAY)*DAY, insert=f.sql.prepare('INSERT INTO stock_announcements VALUES(?,?,?,?)');
+ for(let i=0;i<7;i++)insert.run(guild,'history',i,day+i*60000);
+ const env={...f.env,KP_EARNINGS_WEBHOOK_URL:'https://discord.com/api/webhooks/1/token'};
+ await queueStockPosts(env,m,T+30*60_000);
+ assert.equal((f.sql.prepare('SELECT COUNT(*) AS n FROM stock_announcements').get() as {n:number}).n,8);
+ assert.equal((f.sql.prepare('SELECT COUNT(*) AS n FROM kp_posts').get() as {n:number}).n,1);
+ f.sql.close();
 });

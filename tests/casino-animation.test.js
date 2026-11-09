@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {casinoFrames} from '../js/casino-animation.js';
+import {casinoFrames,createRelicRevealGate} from '../js/casino-animation.js';
 import {chinchiroView,blackjackView,diceSuspense} from '../js/casino-view.js';
 const c=r=>({r,s:0});
 const before={cash:10000,chinchiro:[],blackjack:null,bjHistory:[]};
@@ -63,4 +63,53 @@ test('the suspense copy uses only stopped faces, and an absent role gets the rea
  assert.equal(frames.filter(f=>f.stage.phase==='reroll').length,2);
  assert.equal(frames.filter(f=>f.stage.phase==='landing').length,6);
  assert.ok(frames.reduce((n,f)=>n+f.ms,0)<12000,'three throws stay bounded and skippable');
+});
+
+test('relic KP is never announced during dice suspense; the detailed bonus appears once after the verdict',()=>{
+ const shown=[],gate=createRelicRevealGate((...args)=>shown.push(args));
+ const frames=casinoFrames('chinchiro',before,{
+  amount:500,oya:{rolls:[[3,3,4]],hand:{kind:'me',point:4}},ko:{rolls:[[1,1,1]],hand:{kind:'pinzoro'}},net:2500,units:5,time:1
+ });
+ gate.begin();
+ gate.notify(750); // Ledger entry may arrive before the detailed operation response.
+ gate.notify(750,2500,['勝負の遺物']);
+ for(const frame of frames.slice(0,-1)){
+  assert.notEqual(frame.stage.phase,'settled');
+  assert.deepEqual(shown,[],'relic KP must not leak the outcome before the last die lands');
+ }
+ assert.equal(frames.at(-1).stage.phase,'settled');
+ assert.deepEqual(shown,[]);
+ gate.finish();
+ assert.deepEqual(shown,[[750,2500,['勝負の遺物']]],'show one detailed bonus after full animation');
+});
+test('relic bonus appears normally outside casino animations, with invalid bonuses ignored',()=>{
+ const shown=[],gate=createRelicRevealGate((...args)=>shown.push(args));
+ gate.notify(50,100,['通常報酬']);
+ gate.begin();gate.notify(0);gate.notify(Number.NaN);gate.finish();gate.finish();
+ assert.deepEqual(shown,[[50,100,['通常報酬']]]);
+});
+test('overlapping result animations retain the last relic reward until the final reveal',()=>{
+ const shown=[],gate=createRelicRevealGate((...args)=>shown.push(args));
+ gate.begin();gate.begin();gate.notify(300,100,['重複']);gate.finish();
+ assert.deepEqual(shown,[]);
+ gate.finish();assert.deepEqual(shown,[[300,100,['重複']]]);
+});
+
+test('relic bonus stays hidden throughout a multistep slot temple reveal',()=>{
+ const events=[],gate=createRelicRevealGate((...args)=>events.push(args));
+ gate.begin();gate.notify(1200,6000,['神殿の遺物']);
+ for(let step=0;step<9;step++)assert.deepEqual(events,[]);
+ gate.finish();assert.deepEqual(events,[[1200,6000,['神殿の遺物']]]);
+});
+test('nested BIG WIN and casino presentations defer notification until both close',()=>{
+ const events=[],gate=createRelicRevealGate((...args)=>events.push(args));
+ gate.begin();gate.begin();gate.notify(1100);gate.notify(1100,5500,['幸運']);
+ gate.finish();assert.deepEqual(events,[]);gate.finish();
+ assert.deepEqual(events,[[1100,5500,['幸運']]]);
+});
+test('disconnect discards pending relic notices',()=>{
+ const events=[],gate=createRelicRevealGate((...args)=>events.push(args));
+ gate.begin();gate.notify(800);gate.cancel();gate.finish();
+ assert.deepEqual(events,[]);gate.notify(20,100,['次のセッション']);
+ assert.deepEqual(events,[[20,100,['次のセッション']]]);
 });

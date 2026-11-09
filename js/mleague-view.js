@@ -1,5 +1,5 @@
-import { escapeHTML } from './progression-views.js?v=web-e054fc2bb05b5f3f';
-import { payoutFor } from './racing.js?v=web-e054fc2bb05b5f3f';
+import { escapeHTML } from './progression-views.js?v=web-3e87eca8099653c5';
+import { payoutFor } from './racing.js?v=web-3e87eca8099653c5';
 // The Activity's Mリーグ screen: today's (or the next) games from the server, a last-place prediction with a
 // confirmation step, and the member's own predictions. Buying is the wallet operation 'ml-bet' with the shown odds,
 // so a changed price is refused by the server instead of bought.
@@ -21,7 +21,7 @@ function orderPanel(view,draft,state){
  const amount=Number(draft.amount),valid=Number.isSafeInteger(amount)&&amount>=100&&amount%100===0;
  const summary=`${md(f.date)} ${f.table}卓 第${f.game}試合・<strong>${escapeHTML(p.name)}</strong>のラス · ${odd(p.odds)}`;
  if(draft.confirm&&valid)return `<div class="trade-box ml-order"><h3>購入の確認</h3><p>${summary}</p><div class="asset-line"><span>掛け金</span><strong>${kp(amount)}</strong></div><div class="asset-line"><span>当たれば（掛け金込み）</span><strong>${kp(payoutFor(amount,p.odds))}</strong></div><div class="asset-line"><span>購入後の残高</span><strong>${kp(state.cash-amount)}</strong></div><p class="helper">購入後の取消はできません。倍率が変わっていたら購入せずにお知らせします。</p><div class="bj-actions ml-confirm"><button class="action-btn primary" data-action="ml-buy">購入する</button><button class="action-btn" data-action="ml-cancel">やめる</button></div></div>`;
- return `<div class="trade-box ml-order"><h3>予想を買う</h3><p>${summary}</p><div class="field"><label for="ml-amount">掛け金（100 KP以上・100 KP単位。競馬と合計で週5万KPまで）</label><input id="ml-amount" class="input" type="number" min="100" step="100" inputmode="numeric"></div><p class="helper" id="ml-preview">${valid?`当たれば ${kp(payoutFor(amount,p.odds))}`:'金額を入れてください'}</p><div class="action-row"><button class="action-btn primary" data-action="ml-confirm">確認へ</button></div></div>`;
+ return `<div class="trade-box ml-order"><h3>予想を買う</h3><p>${summary}</p><div class="field"><label for="ml-amount">掛け金（100 KP以上・100 KP単位。競馬と合計で週40万KPまで・1枚10万KPまで）</label><input id="ml-amount" class="input" type="number" min="100" max="100000" step="100" inputmode="numeric"></div><p class="helper" id="ml-preview">${valid?`当たれば ${kp(payoutFor(amount,p.odds))}`:'金額を入れてください'}</p><div class="action-row"><button class="action-btn primary" data-action="ml-confirm">確認へ</button></div></div>`;
 }
 function myBets(state,view){
  const bets=(state.mlBets??[]).slice(0,15);

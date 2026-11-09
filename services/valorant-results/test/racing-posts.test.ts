@@ -96,7 +96,15 @@ test('results wait for settlement, then name each bettor with the payout or a ro
  assert.match(result.content,new RegExp(`<@${one}>`));
  assert.match(result.content,new RegExp(seed));
  assert.deepEqual(result.allowed_mentions,{parse:[]},'mentions show names but never ping');
- assert.match(result.content,order[0]===1||order.slice(0,3).includes(2)?/💰/:/💸/);
+ const saved=JSON.parse(String(f.sql.prepare('SELECT data FROM kp_state WHERE guild=? AND user=?').get(guild,one)!.data));
+ const tickets=saved.raceBets.filter((b:{raceId:number})=>b.raceId===MAIN);
+ const invested=tickets.reduce((n:number,b:{amount:number})=>n+b.amount,0);
+ const returned=tickets.reduce((n:number,b:{payout:number})=>n+b.payout,0);
+ const net=returned-invested;
+ const icon=net>0?'💰':net<0?'💸':'⚖️';
+ assert.ok(result.content.includes(`${icon} <@${one}>　収支 `),'post must classify the entire race, not just the hit');
+ assert.ok(result.content.includes(`購入 ${invested.toLocaleString('ja-JP')} KP / 払戻 ${returned.toLocaleString('ja-JP')} KP`));
+ assert.match(result.content,/単勝[○×]/);assert.match(result.content,/複勝[○×]/);
 });
 
 test('a normal race gets its result post whenever someone bet on it, however small; without bets only big races do', () => {
@@ -158,4 +166,33 @@ test('the public status says whether the earnings webhook is set, without reveal
   assert.equal(JSON.parse(text).earningsPostsConfigured,set);
   assert.doesNotMatch(text,/webhooks|token/);
  }
+});
+
+test('a finished race with nothing to post is remembered, so later minutes do not rescan every wallet for it',async()=>{
+ const f=await fixture();
+ const now=NORMAL+RUN_MS+60000;
+ await queueRacePosts(f.env,mapping,now); // normal races without bets, crowns or owned horses: nothing to post
+ assert.deepEqual(posts(f.sql).filter(p=>p.id.startsWith('race-result:')),[]);
+ const skipped=Number(f.sql.prepare('SELECT COUNT(*) n FROM kp_race_post_skips WHERE guild=?').get(guild)!.n);
+ assert.ok(skipped>=1,'the finished races are remembered as not posted');
+ const oldPrepare=f.env.DB.prepare.bind(f.env.DB);
+ f.env.DB.prepare=((query:string)=>{
+  if(query.includes("json_each(s.data,'$.raceBets')"))throw Error('A remembered race must not re-expand wallet bets');
+  return oldPrepare(query);
+ }) as typeof f.env.DB.prepare;
+ await queueRacePosts(f.env,mapping,now+60000);
+});
+
+test('a 10,000 KP loss on one race is recorded for its melt crown when the race settles; a win is not',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:NORMAL-10*60000});
+ const f=await fixture();
+ const {ensureRacing}=await import('../src/racing-kp.ts');await ensureRacing(f.env);
+ f.sql.prepare('INSERT INTO kp_races(guild,id,seed,hash,created_at) VALUES(?,?,?,?,?)').run(guild,NORMAL,'melt-seed','h',0);
+ const order=raceResult(raceCard(NORMAL),'melt-seed').order;
+ await operateKp(f.env,mapping,one,'race-bet-melt-0001','race-bet',{raceId:NORMAL,type:'win',horse:order.at(-1),amount:6000});
+ await operateKp(f.env,mapping,one,'race-bet-melt-0002','race-bet',{raceId:NORMAL,type:'win',horse:order.at(-2),amount:4000});
+ await settleKpRaces(f.env,mapping,NORMAL+RUN_MS);
+ assert.deepEqual(f.sql.prepare('SELECT user,race,lost FROM kp_crown_melts').all().map(r=>({...r})),[{user:one,race:NORMAL,lost:10000}]);
+ await settleKpRaces(f.env,mapping,NORMAL+RUN_MS+60000);
+ assert.equal(Number(f.sql.prepare('SELECT COUNT(*) n FROM kp_crown_melts').get()!.n),1,'settling again records nothing new');
 });

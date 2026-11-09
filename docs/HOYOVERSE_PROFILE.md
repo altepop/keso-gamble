@@ -35,6 +35,8 @@ npm run check:activity
 npm run test:browser
 ```
 
-現ブランチは本番未配置・KP支給なし。チェック前のマージを行わない。EnkaのAPI規約・最新のHTTPステータスを尊重する。
+2026-11-09：最新mainとの競合を解消。表示・登録・解除はKP支給なしの初期版として検証しています。SQLiteで所有者分離・キャッシュ・失敗時保存維持・照会上限・レスポンス上限を検証し、Chromium/WebKitの画面検証をCIへ追加しました。
+
+実機DiscordとEnkaの現行3作品の実レスポンスは未確認です。失敗時は既存プロフィールとKPを保持し、取得エラーを表示します。この実装からゲーム達成報酬が出るとは案内しません。実機確認とKP支給の導入は別作業です。EnkaのAPI規約・最新のHTTPステータスを尊重する。
 
 外部仕様: https://github.com/EnkaNetwork/API-docs/blob/master/api.md

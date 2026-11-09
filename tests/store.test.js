@@ -25,3 +25,20 @@ test('save failure keeps subsequent session operations in memory',async()=>{
 test('unsupported locking refuses shared writes rather than overwriting',async()=>{
  const a=createStore({load:()=>createInitialState(),locks:null});await assert.rejects(a.transact(s=>buyReward(s,'gold')),/HTTPS/);assert.equal(a.state.cash,10000);
 });
+test('inside the lock the durable copy wins over a stale localStorage read from another tab',async()=>{
+ // Tab B's localStorage cache still holds the state from before tab A's order; IndexedDB has A's order.
+ let saved=createInitialState(),durableCopy=null;const stale=structuredClone(saved);let queue=Promise.resolve();
+ const locks={request(name,run){const result=queue.then(run);queue=result.catch(()=>{});return result;}};
+ const durable={read:async()=>durableCopy&&structuredClone(durableCopy),write:async s=>{durableCopy=structuredClone(s);}};
+ const a=createStore({load:()=>structuredClone(saved),save:s=>{saved=structuredClone(s);return true;},locks,durable});
+ const b=createStore({load:()=>structuredClone(stale),save:s=>{saved=structuredClone(s);return true;},locks,durable});
+ await a.transact(s=>trade(s,'keso','buy',4));await b.transact(s=>trade(s,'keso','buy',4));
+ assert.equal(saved.holdings.keso,8);assert.equal(saved.cash,304);assert.equal(durableCopy.cash,304);
+});
+test('a failing durable write is dropped so no tab later reads an older copy from it',async()=>{
+ let saved=createInitialState(),durableCopy=createInitialState(),cleared=0;
+ const durable={read:async()=>durableCopy&&structuredClone(durableCopy),write:async()=>{throw Error('quota');},clear:async()=>{durableCopy=null;cleared++;}};
+ const a=createStore({load:()=>structuredClone(saved),save:s=>{saved=structuredClone(s);return true;},locks:{request:(_,run)=>run()},durable});
+ await a.transact(s=>trade(s,'keso','buy',4));assert.equal(cleared,1);assert.equal(durableCopy,null);assert.equal(saved.holdings.keso,4);
+ await a.transact(s=>trade(s,'keso','buy',4));assert.equal(saved.holdings.keso,8);
+});

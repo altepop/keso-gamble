@@ -1,7 +1,12 @@
 import defaults from '../steam-rewards.json' with {type:'json'};
 import {kpHash,kpRandom} from './kp.ts';
 import type {KpEnv} from './kp.ts';
+import {creditVerifiedRelicBonus} from './relics.ts';
 
+// The relic screen orders each member's Steam receipts by rarity and recency.
+// The historic guild/user/at index could not serve this ORDER BY, forcing
+// every relic-screen open to read and sort all prior receipts (101k rows/24h).
+export const STEAM_RELIC_ORDER_INDEX_SQL='CREATE INDEX IF NOT EXISTS kp_steam_relic_list_order ON kp_steam_events(guild,user,(CASE WHEN percent<=10 THEN 0 WHEN percent<=25 THEN 1 ELSE 2 END),at DESC)';
 export const STEAM_MIN_PLAYTIME_MINUTES=120;
 export interface SteamConfig {version:string;dailyCap:number;minPlaytimeMinutes:number;paidGamesOnly:boolean;enabled:boolean;startsAt:number|null;tiers:Array<{maxPercent:number;amount:number}>}
 export type SteamEnv=KpEnv & {STEAM_WEB_API_KEY?:string;KP_STEAM_CONFIG?:string};
@@ -22,9 +27,14 @@ export const steamSchema=[
  `CREATE INDEX IF NOT EXISTS kp_steam_notice_user ON kp_steam_notice_items(guild,user,seq)`,
  `CREATE TRIGGER IF NOT EXISTS kp_steam_notice AFTER INSERT ON kp_steam_events BEGIN INSERT INTO kp_steam_notice_items(event,guild,user,at) VALUES(NEW.id,NEW.guild,NEW.user,NEW.at); END`,
  `CREATE INDEX IF NOT EXISTS kp_steam_history ON kp_steam_events(guild,user,at DESC)`,
+ STEAM_RELIC_ORDER_INDEX_SQL,
  `CREATE TRIGGER IF NOT EXISTS kp_steam_cap_guard BEFORE INSERT ON kp_steam_events WHEN NEW.amount!=min(NEW.requested,max(0,5000-COALESCE((SELECT amount FROM kp_steam_daily WHERE guild=NEW.guild AND user=NEW.user AND day=strftime('%Y-%m-%d',NEW.at/1000,'unixepoch')),0))) BEGIN SELECT RAISE(ABORT,'Steam daily cap'); END`,
  `CREATE TRIGGER IF NOT EXISTS kp_steam_apply AFTER INSERT ON kp_steam_events WHEN NEW.amount>0 BEGIN INSERT INTO kp_steam_daily(guild,user,day,amount) VALUES(NEW.guild,NEW.user,strftime('%Y-%m-%d',NEW.at/1000,'unixepoch'),NEW.amount) ON CONFLICT(guild,user,day) DO UPDATE SET amount=amount+excluded.amount; INSERT INTO kp_ledger(id,guild,user,delta,kind,at) VALUES(NEW.id,NEW.guild,NEW.user,NEW.amount,'steam',NEW.at); END`,
 ];
+// An achievement Steam has not yet given a name or rarity for is retried every 5 minutes, not every minute: one that
+// stays missing re-read the game's awarded achievements (~230 rows) on each cron (2026-11-03 D1 Insights).
+// A batch cut at 20 achievements still continues on the next minute.
+export const STEAM_MISSING_RETRY_MS=5*60000;
 export async function ensureSteam(env:SteamEnv){
  let job=ready.get(env.DB);if(!job){job=env.DB.batch(steamSchema.map(s=>env.DB.prepare(s))).then(()=>{});ready.set(env.DB,job);job.catch(()=>ready.delete(env.DB));}await job;
 }
@@ -134,6 +144,10 @@ export async function monitorSteam(env:SteamEnv,guild:string,send:typeof fetch=f
    for(const x of schema.game.availableGameStats.achievements)if(typeof x.name==='string'&&typeof x.displayName==='string')names.set(x.name,x.displayName.slice(0,200));
    for(const x of rarity.achievementpercentages.achievements)if(typeof x.name==='string'&&(typeof x.percent==='number'||typeof x.percent==='string'&&/^\d+(\.\d+)?$/.test(x.percent))&&Number.isFinite(Number(x.percent))&&Number(x.percent)>=0&&Number(x.percent)<=100)rates.set(x.name,Number(x.percent));
    const awarded=new Set((await env.DB.prepare('SELECT achievement FROM kp_steam_events WHERE guild=? AND steam=? AND app=?').bind(guild,a.steam,job.app).all<{achievement:string}>()).results.map(e=>e.achievement));
+   // Compact the existing baseline with already-paid receipts. This avoids re-reading
+   // the complete growing kp_steam_events history every 15 minutes for the same achievements.
+   // Never compact an unverified/incomplete achievement; those must remain retryable.
+   const processed=new Set<string>(candidates.filter(x=>awarded.has(x.apiname)).map(x=>x.apiname));
    let incomplete=false,more=false;const paid=[];
    for(const achievement of candidates){
     if(!names.has(achievement.apiname)||!rates.has(achievement.apiname)){incomplete=true;continue;}
@@ -142,9 +156,17 @@ export async function monitorSteam(env:SteamEnv,guild:string,send:typeof fetch=f
     if(paid.length>=20){incomplete=true;more=true;break;}
     const settledAt=clock();
     // The insert guard and ledger trigger share a transaction. Unlink/stop during an API call cancels credit.
-    await env.DB.prepare(`INSERT INTO kp_steam_events SELECT ?,?,?,?,?,?,?,?,?,min(?,max(0,5000-COALESCE((SELECT amount FROM kp_steam_daily WHERE guild=? AND user=? AND day=?),0))),?,?,? WHERE EXISTS(SELECT 1 FROM kp_steam_games g JOIN kp_steam_accounts a ON a.guild=g.guild AND a.user=g.user WHERE g.guild=? AND g.user=? AND g.app=? AND g.active=1 AND a.active=1 AND a.steam=? AND g.lease=? AND g.lease_until>=?) ON CONFLICT(guild,steam,app,achievement) DO NOTHING`).bind(id,guild,job.user,a.steam,job.app,achievement.apiname,names.get(achievement.apiname)!,percent,steamAmount(c,percent),steamAmount(c,percent),guild,job.user,new Date(settledAt).toISOString().slice(0,10),c.version,achievement.unlocktime*1000,settledAt,guild,job.user,job.app,a.steam,lease,settledAt).run();paid.push(id);
+    const inserted=await env.DB.prepare(`INSERT INTO kp_steam_events SELECT ?,?,?,?,?,?,?,?,?,min(?,max(0,5000-COALESCE((SELECT amount FROM kp_steam_daily WHERE guild=? AND user=? AND day=?),0))),?,?,? WHERE EXISTS(SELECT 1 FROM kp_steam_games g JOIN kp_steam_accounts a ON a.guild=g.guild AND a.user=g.user WHERE g.guild=? AND g.user=? AND g.app=? AND g.active=1 AND a.active=1 AND a.steam=? AND g.lease=? AND g.lease_until>=?) ON CONFLICT(guild,steam,app,achievement) DO NOTHING`).bind(id,guild,job.user,a.steam,job.app,achievement.apiname,names.get(achievement.apiname)!,percent,steamAmount(c,percent),steamAmount(c,percent),guild,job.user,new Date(settledAt).toISOString().slice(0,10),c.version,achievement.unlocktime*1000,settledAt,guild,job.user,job.app,a.steam,lease,settledAt).run();
+    if(inserted.meta.changes)processed.add(achievement.apiname);
+    paid.push(id);
+    // Equipped Steam relics add to a newly credited achievement (once per achievement; the daily cap still applies to the base).
+    try{const got=await env.DB.prepare('SELECT amount FROM kp_steam_events WHERE id=?').bind(id).first<{amount:number}>();if(Number(got?.amount)>0)await creditVerifiedRelicBonus(env,guild,job.user,id,'steam',Number(got!.amount),true,settledAt);}catch{console.warn('relic_steam_bonus_pending');}
    }
-   await env.DB.prepare('UPDATE kp_steam_games SET next_at=?,last_checked=?,error=?,lease=NULL,lease_until=0 WHERE guild=? AND user=? AND app=? AND lease=?').bind(now+(incomplete?60000:15*60000),now,more?'batch_remaining':incomplete?'missing_or_pending':null,guild,job.user,job.app,lease).run();
+   // Baseline means already excluded from future rewards, including achievements
+   // paid after the original registration and zero-KP receipts at the daily cap.
+   // One guarded UPDATE persists cursor + compacted baseline atomically.
+   const compacted=JSON.stringify([...new Set([...baseline,...processed])]);
+   await env.DB.prepare('UPDATE kp_steam_games SET baseline=?,next_at=?,last_checked=?,error=?,lease=NULL,lease_until=0 WHERE guild=? AND user=? AND app=? AND lease=?').bind(compacted,now+(more?60000:incomplete?STEAM_MISSING_RETRY_MS:15*60000),now,more?'batch_remaining':incomplete?'missing_or_pending':null,guild,job.user,job.app,lease).run();
   }else await env.DB.prepare('UPDATE kp_steam_games SET next_at=?,last_checked=?,error=NULL,lease=NULL,lease_until=0 WHERE guild=? AND user=? AND app=? AND lease=?').bind(now+15*60000,now,guild,job.user,job.app,lease).run();
  }catch(e){const error=e instanceof SteamReadError?e:new SteamReadError('retry_pending');await env.DB.prepare('UPDATE kp_steam_games SET next_at=?,error=?,active=CASE WHEN ? THEN 0 ELSE active END,lease=NULL,lease_until=0 WHERE guild=? AND user=? AND app=? AND lease=?').bind(now+error.delay,error.code,Number(knownFreeOrNotGame(error.code)),guild,row.user,row.app,lease).run();}
 }

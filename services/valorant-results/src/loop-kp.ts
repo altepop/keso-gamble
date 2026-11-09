@@ -1,17 +1,23 @@
 import {ensureQuizKp} from './quiz-kp.ts';
 import {newKpState} from './kp.ts';
 import type {KpEnv,KpMapping} from './kp.ts';
+import {creditVerifiedRelicBonus} from './relics.ts';
 
 // Deliberately unavailable until LOOP verifies identity and game progress on its server.
 // Configuration belongs on the receiving Worker, never in the browser or event payload.
 export interface LoopRewardConfig {enabled:boolean;startsAt:number;publicKey:string;rates:Record<string,number>}
+// Chapter clear payouts are authoritative in the receiver, even if a deployed environment still has old rates.
+// These are first-clear-only rewards; already recorded milestones keep their original amounts.
+export const LOOP_CHAPTER_CLEAR_REWARDS:Readonly<Record<string,number>>=Object.freeze({'chapter.1':50000,'chapter.2':300000});
+export const LOOP_EARLY_REWARDS:Readonly<Record<string,number>>=Object.freeze({'onboarding.first_stage':1000});
+export const LOOP_FIXED_REWARDS:Readonly<Record<string,number>>=Object.freeze({...LOOP_CHAPTER_CLEAR_REWARDS,...LOOP_EARLY_REWARDS});
 const initialized=new WeakMap<object,Promise<void>>();
 export function ensureLoopKp(env:KpEnv):Promise<void>{
  const existing=initialized.get(env.DB);if(existing)return existing;
- const job=env.DB.batch([
+ const job=Promise.resolve(env.DB.batch([
   env.DB.prepare(`CREATE TABLE IF NOT EXISTS kp_loop_events(id TEXT PRIMARY KEY,guild TEXT NOT NULL,user TEXT NOT NULL,milestone TEXT NOT NULL,evidence TEXT NOT NULL,amount INTEGER NOT NULL CHECK(typeof(amount)='integer' AND amount>0),completed_at INTEGER NOT NULL,UNIQUE(guild,user,milestone))`),
   env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS kp_loop_apply AFTER INSERT ON kp_loop_events BEGIN INSERT INTO kp_ledger(id,guild,user,delta,kind,at) VALUES(NEW.id,NEW.guild,NEW.user,NEW.amount,'loop',NEW.completed_at); END`),
- ]).then(()=>{});initialized.set(env.DB,job);job.catch(()=>initialized.delete(env.DB));return job;
+ ])).then(()=>{});initialized.set(env.DB,job);job.catch(()=>initialized.delete(env.DB));return job;
 }
 function configuration(raw:string|undefined):LoopRewardConfig|null{
  try{
@@ -41,7 +47,7 @@ export async function receiveLoopKp(request:Request,env:KpEnv,mapping:KpMapping)
   if(!await crypto.subtle.verify('Ed25519',key,bytes(signature),new TextEncoder().encode(timestamp+'.'+body)))return response({error:'Unauthorized'},401);
  }catch{return response({error:'Unauthorized'},401);}
  let e;try{e=JSON.parse(body);}catch{return response({error:'Invalid event'},400);}
- if(!e||e.kind!=='loop.milestone.completed'||e.version!==1||e.guildId!==mapping.guildId||typeof e.discordUserId!=='string'||!/^\d{15,22}$/.test(e.discordUserId)||typeof e.milestone!=='string'||!Object.hasOwn(config.rates,e.milestone)||typeof e.evidenceId!=='string'||! /^[A-Za-z0-9_-]{1,128}$/.test(e.evidenceId)||!Number.isSafeInteger(e.completedAt)||e.completedAt<config.startsAt||e.completedAt>Date.now()+60000)return response({error:'Invalid event'},400);
+ if(!e||e.kind!=='loop.milestone.completed'||e.version!==1||e.guildId!==mapping.guildId||typeof e.discordUserId!=='string'||!/^\d{15,22}$/.test(e.discordUserId)||typeof e.milestone!=='string'||(!Object.hasOwn(config.rates,e.milestone)&&!Object.hasOwn(LOOP_FIXED_REWARDS,e.milestone))||typeof e.evidenceId!=='string'||! /^[A-Za-z0-9_-]{1,128}$/.test(e.evidenceId)||!Number.isSafeInteger(e.completedAt)||e.completedAt<config.startsAt||e.completedAt>Date.now()+60000)return response({error:'Invalid event'},400);
  // Only the receiver chooses the amount. No run ID, slot, rule version or reset in this stable key.
  const id='loop:'+mapping.guildId+':'+e.discordUserId+':'+e.milestone;
  await ensureQuizKp(env);await ensureLoopKp(env);
@@ -49,8 +55,10 @@ export async function receiveLoopKp(request:Request,env:KpEnv,mapping:KpMapping)
   env.DB.prepare('INSERT OR IGNORE INTO kp_participants(guild,user) VALUES(?,?)').bind(mapping.guildId,e.discordUserId),
   env.DB.prepare('INSERT OR IGNORE INTO kp_wallets(guild,user) VALUES(?,?)').bind(mapping.guildId,e.discordUserId),
   env.DB.prepare('INSERT OR IGNORE INTO kp_state(guild,user,data) VALUES(?,?,?)').bind(mapping.guildId,e.discordUserId,JSON.stringify(newKpState())),
-  env.DB.prepare('INSERT INTO kp_loop_events VALUES(?,?,?,?,?,?,?) ON CONFLICT(guild,user,milestone) DO NOTHING').bind(id,mapping.guildId,e.discordUserId,e.milestone,e.evidenceId,config.rates[e.milestone],e.completedAt),
+  env.DB.prepare('INSERT INTO kp_loop_events VALUES(?,?,?,?,?,?,?) ON CONFLICT(guild,user,milestone) DO NOTHING').bind(id,mapping.guildId,e.discordUserId,e.milestone,e.evidenceId,LOOP_FIXED_REWARDS[e.milestone]??config.rates[e.milestone],e.completedAt),
  ]);
- const saved=await env.DB.prepare('SELECT amount FROM kp_loop_events WHERE id=?').bind(id).first<{amount:number}>();
+ const saved=await env.DB.prepare('SELECT amount,evidence FROM kp_loop_events WHERE id=?').bind(id).first<{amount:number;evidence:string}>();
+ // Equipped KESO LOOP relics add to the milestone once (a resend finds the same relic:<id> ledger row).
+ if(Number(saved?.amount)>0&&!saved?.evidence.startsWith('manual-grant:'))try{await creditVerifiedRelicBonus(env,mapping.guildId,e.discordUserId,id,'loop',Number(saved!.amount),true,e.completedAt);}catch{console.warn('relic_loop_bonus_pending');}
  return response({accepted:true,id,amount:saved!.amount});
 }

@@ -1,6 +1,6 @@
 import { storedMode, modeLabel, isSoloMode } from './modes.ts';
 import { deathUnratedMessage } from './death-unrated.ts';
-import { deathName, deathStoredMode, isDeathMode, isDeathNotice } from './death-modes.ts';
+import { DEATH_CLOSING_LINE, deathName, deathStoredMode, isDeathMode, isDeathNotice } from './death-modes.ts';
 import { commentPools as taunts, resultComment } from './comments.ts';
 
 export type Outcome = 'win' | 'loss' | 'draw';
@@ -16,7 +16,7 @@ export interface Match {
     stats?: { kills?: number; deaths?: number; assists?: number; score?: number; headshots?: number; bodyshots?: number; legshots?: number } | null;
   }>;
   rounds?: Array<{ id: number }>;
-  kills?: Array<{ round: number; time_in_round_in_ms: number; victim: { puuid: string } }>;
+  kills?: Array<{ round: number; time_in_round_in_ms: number; killer?: { puuid: string } | null; victim: { puuid: string } }>;
   teams: Array<{ team_id: string; won: boolean; rounds?: { won: number } }>;
 }
 export interface Notice {
@@ -75,7 +75,7 @@ export function resultMessage(raw: Match, puuid: string, label: string, deathUnr
     ? '\n🏅 負けても健闘賞：チーム最多キル' + (tied ? '（同率）' : '') + '！ ようやった、勝ち星だけ迷子や！' : '';
   const performance = (location ? '\n🗺️ ' + location : '') + (details.length ? '\n🔫 ' + details.join('｜') : '');
   if (isDeathMode(mode) && deathUnrated) return {
-    message: deathUnratedMessage(raw, puuid, name, previousLastDeath) + performance,
+    message: deathUnratedMessage(raw, puuid, name, previousLastDeath) + performance + '\n' + DEATH_CLOSING_LINE,
     endedAt: start + duration, mode: deathStoredMode(mode), outcome,
     actId: raw.metadata.season?.id || null, actName: raw.metadata.season?.short || null, teamId: player.team_id || '',
   };
@@ -144,7 +144,12 @@ async function actSummary(db: D1Database, notice: Notice): Promise<{ text: strin
 }
 
 export async function notificationContent(db: D1Database, notice: Notice): Promise<string> {
-  if (isDeathNotice(notice.mode)) return notice.message;
+  if (isDeathNotice(notice.mode)) {
+    // KP settlement may attach lines after the verdict. Keep the closing chant as the
+    // *last* line even on a message edit, a legacy queued result or a grouped post.
+    const previous = '\n' + DEATH_CLOSING_LINE;
+    return notice.message.replace(previous, '').trimEnd() + previous;
+  }
   const summary = await actSummary(db, notice);
   const split = notice.message.indexOf('\n💬 ');
   const base = split < 0 ? notice.message : notice.message.slice(0, split);

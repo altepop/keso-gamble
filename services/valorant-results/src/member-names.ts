@@ -6,6 +6,8 @@ export interface MemberNames {guildId:string;names:Array<{suffix?:string;userId?
 /** Display-only exact-ID aliases; never assign a name by matching four trailing digits. */
 export const MEMBER_NAME_OVERRIDES:Readonly<Record<string,string>>={
  '827801943928995840':'小林',
+ '590461900907872266':'名古屋',
+ '1237302193938370576':'千葉ゆうや',
 };
 function withExplicitAliases(names:Map<string,string>,guild:string){
  if(guild===discord.guildId)for(const [user,name] of Object.entries(MEMBER_NAME_OVERRIDES))names.set(user,name);

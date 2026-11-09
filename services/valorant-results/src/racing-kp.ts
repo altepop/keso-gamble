@@ -3,11 +3,13 @@
 // @ts-expect-error The shared pure browser engine has no TypeScript declarations.
 import { RUN_MS, bigRaceName, fillerCrownName, raceEvent, hydrateRacing, isRaceStart, latestRaceStart, openRaceStart, settleRaceBets } from '../../../js/racing.js';
 import { kpHash, kpRandom } from './kp.ts';
+import {nativeRelicBonus,nativeRelicLoss} from './relics.ts';
+import {verifiedBetProfit,verifiedBetStake,verifiedBetLoss} from './relic-profit.ts';
 import type { KpEnv, KpMapping } from './kp.ts';
-import { crownFor } from './racing-crowns.ts';
+import { crownFor, recordMelts } from './racing-crowns.ts';
 import { decideEntries, raceEntries } from './racing-horses.ts';
 import type { Entry } from './racing-horses.ts';
-interface RaceBet { id:string; raceId:number; status:string; payout:number }
+interface RaceBet { id:string; raceId:number; status:string; payout:number; amount:number }
 const initialized=new WeakSet<object>();
 export async function ensureRacing(env:KpEnv){
  if(initialized.has(env.DB))return;
@@ -17,6 +19,8 @@ export async function ensureRacing(env:KpEnv){
  // preserves the old LIKE prefilter without inspecting settled-only wallets.
  await env.DB.prepare(`CREATE INDEX IF NOT EXISTS kp_state_pending_race ON kp_state(guild,user)
   WHERE instr(data,'"raceBets"')>0 AND instr(data,'"pending"')>0`).run();
+ // Finished races whose result is not worth a 稼ぎch post (see queueRacePosts).
+ await env.DB.prepare('CREATE TABLE IF NOT EXISTS kp_race_post_skips(guild TEXT NOT NULL,race INTEGER NOT NULL,PRIMARY KEY(guild,race)) WITHOUT ROWID').run();
  initialized.add(env.DB);
 }
 /** The race's seed row. Created on first use; an existing seed is never replaced. */
@@ -27,8 +31,16 @@ export async function raceSeed(env:KpEnv,guild:string,id:number){
  await env.DB.prepare('INSERT OR IGNORE INTO kp_races(guild,id,seed,hash,created_at) VALUES(?,?,?,?,?)').bind(guild,id,seed,await kpHash(seed),Date.now()).run();
  return (await env.DB.prepare('SELECT seed,hash FROM kp_races WHERE guild=? AND id=?').bind(guild,id).first<{seed:string;hash:string}>())!;
 }
-async function raceHasBets(env:KpEnv,guild:string,id:number){
- return Boolean(await env.DB.prepare("SELECT 1 FROM kp_state s,json_each(s.data,'$.raceBets') b WHERE s.guild=? AND json_extract(b.value,'$.raceId')=? LIMIT 1").bind(guild,id).first());
+// Betting on a race closes before its start, so once it has started whether anyone bet on it never changes.
+// racingView asks this for the running race on every Activity refresh, and each answer scanned every wallet's JSON
+// (~85 rows; 1,821 calls/day in the 2026-11-03 D1 Insights), so the answer is kept per race after the start.
+const startedRaceBets=new WeakMap<object,Map<string,boolean>>();
+async function raceHasBets(env:KpEnv,guild:string,id:number,now=Date.now()){
+ const known=startedRaceBets.get(env.DB)??new Map<string,boolean>(),key=guild+':'+id;startedRaceBets.set(env.DB,known);
+ if(known.has(key))return known.get(key)!;
+ const has=Boolean(await env.DB.prepare("SELECT 1 FROM kp_state s,json_each(s.data,'$.raceBets') b WHERE s.guild=? AND json_extract(b.value,'$.raceId')=? LIMIT 1").bind(guild,id).first());
+ if(now>=id){known.set(key,has);if(known.size>64)known.delete(known.keys().next().value!);}
+ return has;
 }
 /** What the Activity needs: the open race's hash, and the latest race's seed once it has started.
  * Crown races (named after someone's bad day) always run and carry their name. */
@@ -37,7 +49,7 @@ export async function racingView(env:KpEnv,mapping:KpMapping,now=Date.now()){
  const [openCrown,watchCrown]=[await crownFor(env,guild,open),await crownFor(env,guild,watch)];
  // Owned horses are fixed for a race when its betting opens, before anyone can bet on it.
  const openEntries=await decideEntries(env,mapping,open,now),watchEntries=await raceEntries(env,mapping,watch);
- const runs=Boolean(bigRaceName(watch))||Boolean(fillerCrownName(watch))||Boolean(raceEvent(watch))||Boolean(watchCrown)||watchEntries.length>0||await raceHasBets(env,guild,watch);
+ const runs=Boolean(bigRaceName(watch))||Boolean(fillerCrownName(watch))||Boolean(raceEvent(watch))||Boolean(watchCrown)||watchEntries.length>0||await raceHasBets(env,guild,watch,now);
  const openSeed=await raceSeed(env,guild,open);
  const watched=runs?await raceSeed(env,guild,watch):null;
  return {open:{id:open,hash:openSeed.hash,entries:openEntries,...(openCrown?{crown:openCrown.name}:{})},watch:{id:watch,runs,entries:watchEntries,...(watchCrown?{crown:watchCrown.name}:{}),...(watched?{hash:watched.hash,seed:watched.seed}:{})}};
@@ -55,13 +67,19 @@ export async function settleKpRaces(env:KpEnv,mapping:KpMapping,now=Date.now()){
   const entries=new Map<number,Entry[]>();for(const id of due)entries.set(id,await raceEntries(env,mapping,id));
   const before=state.cash,settled:RaceBet[]=settleRaceBets(state,now,(id:number)=>seeds.get(id)??null,(id:number)=>entries.get(id)??[]);
   if(!settled.length)continue;
+  const gain=verifiedBetProfit(settled); // positive realized profit after stakes
+  const relicBonus=nativeRelicBonus(state,'racing',gain,now,verifiedBetStake(settled));
+  const relicPenalty=relicBonus?0:nativeRelicLoss(state,'racing',verifiedBetLoss(settled),now,verifiedBetStake(settled));
   const id='race-settle:'+settled.map(b=>b.id).join(',');
-  const response={result:{settled:settled.map(b=>({id:b.id,status:b.status,payout:b.payout}))}};
+  const response={result:{settled:settled.map(b=>({id:b.id,status:b.status,payout:b.payout})),relicBonus,relicPenalty}};
   // Same guarded insert as player operations: it applies only if neither wallet nor state changed.
   const inserted=await env.DB.prepare(`INSERT INTO kp_operations(id,guild,user,request_hash,response,delta,state,directive,at)
    SELECT ?,?,?,?,?,?,?,NULL,? WHERE EXISTS(SELECT 1 FROM kp_wallets w JOIN kp_state s ON w.guild=s.guild AND w.user=s.user WHERE w.guild=? AND w.user=? AND w.version=? AND s.version=?) ON CONFLICT(guild,user,id) DO NOTHING`)
    .bind(id,mapping.guildId,row.user,await kpHash(id),JSON.stringify(response),state.cash-before,JSON.stringify(state),now,mapping.guildId,row.user,row.wallet_version,row.state_version).run();
-  if(inserted.meta.changes)count+=settled.length;
+  if(inserted.meta.changes){
+   count+=settled.length;
+   try{await recordMelts(env,mapping.guildId,row.user,settled);}catch{console.warn('crown_melt_pending');}
+  }
  }
  return count;
 }

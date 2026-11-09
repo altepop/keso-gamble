@@ -59,33 +59,37 @@ test('each of four trials has a unique verifiable achievement and old profiles r
  p.trials=nextSpikeTrials(p,m(initiator.id,{assists:7}));assert.equal(p.trials.initiator,true);
  p.trials=nextSpikeTrials(p,m(sentinel.id,{kills:5,deaths:0}));assert.equal(p.trials.sentinel,true);
  const controllers=SPIKE_ROSTER.agents.filter(a=>a.role==='Controller');
- for(const agent of controllers)p.trials=nextSpikeTrials(p,m(agent.id,{win:false,kills:4,deaths:2}));
+ for(const agent of controllers)p.trials=nextSpikeTrials(p,m(agent.id,{win:false,kills:4,assists:0,deaths:2}));
  assert.equal(p.trials.controllerKdAgents?.length,7,'historical independent K/D records are retained');
  assert.equal(p.trials.controllerStreak?.length,0,'seven K/D matches without wins do not count');
- for(const agent of controllers.slice(0,3))p.trials=nextSpikeTrials(p,m(agent.id,{win:true,kills:4,deaths:2}));
+ for(const agent of controllers.slice(0,3))p.trials=nextSpikeTrials(p,m(agent.id,{win:true,kills:4,assists:0,deaths:2}));
  assert.equal(p.trials.controllerStreak?.length,3);
  assert.equal(isOverdrive(p),false);
- p.trials=nextSpikeTrials(p,m(controllers[3].id,{win:true,kills:3,deaths:2}));
- assert.equal(p.trials.controllerStreak?.length,0,'a low K/D win resets the chain');
- p.trials=nextSpikeTrials(p,m(controllers[0].id,{win:true,kills:2,deaths:0}));
+ p.trials=nextSpikeTrials(p,m(controllers[3].id,{win:true,kills:2,assists:1,deaths:2}));
+ assert.equal(p.trials.controllerStreak?.length,0,'a low KDA win resets the chain (3/2 = 1.5)');
+ p.trials=nextSpikeTrials(p,m(controllers[0].id,{win:true,kills:2,assists:0,deaths:0}));
  assert.equal(p.trials.controllerStreak?.length,1,'positive kills at 0 deaths qualify');
- p.trials=nextSpikeTrials(p,m(controllers[1].id,{win:true,kills:4,deaths:2}));
+ p.trials=nextSpikeTrials(p,m(controllers[1].id,{win:true,kills:4,assists:0,deaths:2}));
  assert.equal(p.trials.controllerStreak?.length,2);
- p.trials=nextSpikeTrials(p,m(controllers[1].id,{win:true,kills:6,deaths:3}));
+ p.trials=nextSpikeTrials(p,m(controllers[1].id,{win:true,kills:6,assists:0,deaths:3}));
  assert.deepEqual(p.trials.controllerStreak,[controllers[1].id],'a repeated controller starts a new run at 1/7');
  p.trials=nextSpikeTrials(p,m(duelist.id,{win:true,kills:15,deaths:2}));
  assert.equal(p.trials.controllerStreak?.length,0,'other roles interrupt the seven Spike match sequence');
- for(const agent of controllers.slice(0,6))p.trials=nextSpikeTrials(p,m(agent.id,{win:true,kills:6,deaths:3}));
+ for(const agent of controllers.slice(0,6))p.trials=nextSpikeTrials(p,m(agent.id,{win:true,kills:6,assists:0,deaths:3}));
  assert.equal(p.trials.controllerStreak?.length,6);
  assert.equal(isOverdrive(p),false,'must win all seven matches consecutively with unique agents');
- p.trials=nextSpikeTrials(p,m(controllers[6].id,{win:true,kills:1,deaths:0}));
+ p.trials=nextSpikeTrials(p,m(controllers[6].id,{win:true,kills:1,assists:0,deaths:0}));
  assert.equal(isOverdrive(p),true,'seven different Controller wins all K/D >=2 trigger OVERDRIVE');
  const locked=p.trials.controllerStreak?.slice();
  p.trials=nextSpikeTrials(p,m(controllers[0].id,{win:false,kills:0,deaths:4}));
  assert.deepEqual(p.trials.controllerStreak,locked,'achieved awakening is permanent');
  assert.equal(isOverdrive(p),true);
- const zero=nextSpikeTrials({...p,trials:blankTrials()},m(controllers[0].id,{kills:0,deaths:0,assists:2}));
- assert.equal(zero.controllerKdAgents?.length,0,'zero kills and zero deaths do not qualify');
+ const assisted=nextSpikeTrials({...p,trials:blankTrials()},m(controllers[0].id,{kills:0,deaths:0,assists:2}));
+ assert.deepEqual(assisted.controllerStreak,[controllers[0].id],'KDA: 0 kills, 2 assists and 0 deaths qualify');
+ const kda=nextSpikeTrials({...p,trials:blankTrials()},m(controllers[0].id,{kills:2,assists:4,deaths:3}));
+ assert.deepEqual(kda.controllerStreak,[controllers[0].id],'KDA: (2+4)/3 = 2.0 qualifies though K/D is 0.67');
+ const short=nextSpikeTrials({...p,trials:blankTrials()},m(controllers[0].id,{kills:2,assists:3,deaths:3}));
+ assert.deepEqual(short.controllerStreak,[],'KDA: (2+3)/3 = 1.67 does not');
  const old=complete();delete old.trials;assert.equal(isOverdrive(old),false,'old stored data does not silently gain new trials');
 });
 test('old completed Controller awakening survives migration, while unfinished v1 progress needs a fresh seven-win streak',()=>{
@@ -107,23 +111,23 @@ test('old completed Controller awakening survives migration, while unfinished v1
  assert.equal(oneMore.controllerGrandfathered,false);
  assert.equal(isOverdrive({...incomplete,trials:oneMore}),false,'v3 cannot grandfather newly completed old K/D conditions');
 });
-test('fully awakened matches average 800 KP and never fatigue after 10 or repeat agents',()=>{
+test('fully awakened controller dominates rewards and never fatigues or repeats',()=>{
  const p=complete();
  const win=quoteSpike(p,m(),1),loss=quoteSpike(p,m(duelist.id,{win:false}),1);
- assert.equal(win.amount,813);assert.equal(loss.amount,788);
- assert.ok(Math.abs((win.amount+loss.amount)/2-800)<=1);
+ assert.equal(win.amount,925);assert.equal(loss.amount,895);
+ assert.ok(Math.abs((win.amount+loss.amount)/2-910)<=1);
  for(const game of [1,10,11,16,100]){
   const repeated={...p,recent:Array(4).fill(duelist.id)};
   assert.equal(quoteSpike(repeated,m(),game).amount,win.amount);
   assert.equal(quoteSpike(repeated,m(duelist.id,{win:false}),game).amount,loss.amount);
  }
- assert.equal(quoteSpike(p,m(duelist.id,{kills:1000,assists:1000,deaths:0}),1).amount,980);
+ assert.equal(quoteSpike(p,m(duelist.id,{kills:1000,assists:1000,deaths:0}),1).amount,1125);
  const almost={...p,trials:{...p.trials!,duelist:false}};
  assert.equal(spikeProgress(almost).filter(r=>r.awakened).length,3);
  assert.ok(quoteSpike(almost,m(),1).amount>600&&quoteSpike(almost,m(),1).amount<800,'three awakenings each grant a quarter of the boost');
 });
 
-test('each awakened role earns an equal quarter of the 555 KP bonus',()=>{
+test('each role earns a quarter of 555 KP but Controller adds an exclusive multiplier and 60 KP',()=>{
  const p=complete();
  const stages=[blankTrials(),
   {...blankTrials(),duelist:true},
@@ -133,8 +137,9 @@ test('each awakened role earns an equal quarter of the 555 KP bonus',()=>{
  const quoted=stages.map(trials=>quoteSpike({...p,trials,carryN:'0',carryD:'1'},m(),1));
  assert.deepEqual(quoted.map(q=>q.breakdown.awakenings),[0,1,2,3,4]);
  const exact=quoted.map(q=>q.amount+Number(q.next.carryN)/Number(q.next.carryD));
- for(let i=1;i<exact.length;i++)assert.ok(Math.abs(exact[i]-exact[i-1]-138.75)<1e-8);
- assert.equal(quoted[4].amount,813);
+ for(let i=1;i<exact.length-1;i++)assert.ok(Math.abs(exact[i]-exact[i-1]-138.75)<1e-8);
+ assert.ok(exact[4]-exact[3]>138.75+60,'exclusive Controller multiplier stacks with the equal awakening bonus');
+ assert.equal(quoted[4].amount,925);
 });
 
 test('legacy controller wins are backfilled from rewarded matches without changing other trials',async()=>{
@@ -193,19 +198,19 @@ test('Controller hint teases instead of revealing the trial, shows manual refund
  assert.doesNotMatch(view,/旧条件達成を継承/);
  f.close();
 });
-test('legacy 425 check survives, OVERDRIVE gets a separate atomic 813/788 ledger and one game receipt',async()=>{
+test('legacy 425 check survives, OVERDRIVE keeps atomic 925/895 receipts and one ledger event',async()=>{
  const f=await fixture();f.seed(complete());
- assert.equal(await collectKpMatch(f.env,mapping,raw('overdrive-win'),'p-one'),813);
- assert.equal(await collectKpMatch(f.env,mapping,raw('overdrive-win'),'p-one'),813);
- assert.equal(f.balance(),813);
+ assert.equal(await collectKpMatch(f.env,mapping,raw('overdrive-win'),'p-one'),925);
+ assert.equal(await collectKpMatch(f.env,mapping,raw('overdrive-win'),'p-one'),925);
+ assert.equal(f.balance(),925);
  assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM spike_rewards').get()!.n,0);
- assert.equal(f.sql.prepare('SELECT amount FROM spike_overdrive_rewards').get()!.amount,813);
+ assert.equal(f.sql.prepare('SELECT amount FROM spike_overdrive_rewards').get()!.amount,925);
  assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM kp_events').get()!.n,1);
  assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM kp_ledger').get()!.n,1);
  const rows=await ledgerHistory(f.env,guild,one);
- assert.equal(rows[0].delta,813);assert.match(rows[0].detail,/OVERDRIVE/);
- assert.equal(await collectKpMatch(f.env,mapping,raw('overdrive-loss',{win:false}),'p-one'),788);
- assert.equal(f.balance(),1601);
+ assert.equal(rows[0].delta,925);assert.match(rows[0].detail,/OVERDRIVE/);
+ assert.equal(await collectKpMatch(f.env,mapping,raw('overdrive-loss',{win:false}),'p-one'),895);
+ assert.equal(f.balance(),1820);
  const daily=f.sql.prepare('SELECT detail FROM spike_overdrive_rewards WHERE match=?').get('overdrive-loss') as {detail:string};
  assert.equal(JSON.parse(daily.detail).dayGame,2,'v1 + v2 day counter remains consistent');
  f.close();
@@ -219,8 +224,50 @@ test('overdrive transaction failure leaves wallet, profile, receipt and day coun
  assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM kp_events').get()!.n,0);
  assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM kp_inbox').get()!.n,1);
  f.sql.exec('DROP TRIGGER fail_overdrive');
- assert.equal(await collectKpMatch(f.env,mapping,raw('failed-event'),'p-one'),813);
- assert.equal(f.balance(),813);
+ assert.equal(await collectKpMatch(f.env,mapping,raw('failed-event'),'p-one'),925);
+ assert.equal(f.balance(),925);
+ f.close();
+});
+
+test('Controller-only dominion charges over seven matches, pays 3000/5000 KP and is not shared by other awakenings',()=>{
+ const p=complete();
+ const others={...p,trials:{...p.trials!,controllerGrandfathered:false,controllerKdAgents:[],controllerStreak:[],controllerTrialVersion:3 as const}};
+ assert.equal(quoteSpike(others,m(),1).breakdown.dominionBonus,0);
+ const only={...p,trials:{...p.trials!,duelist:false,initiator:false,sentinel:false}};
+ assert.equal(quoteSpike(only,m(),100).breakdown.dailyFactor,1,'Controller alone removes attenuation');
+ let current=p;
+ for(let i=1;i<=7;i++){
+  const q=quoteSpike(current,m(),100);
+  assert.equal(q.breakdown.dominionChargeAfter,i%7);
+  assert.equal(q.breakdown.dominionBonus,i===7?3000:0);
+  current=q.next;
+ }
+ assert.equal(current.controllerDominionCharge,0);
+ const epic=quoteSpike({...p,controllerDominionCharge:6},m(duelist.id,{kills:6,assists:6,deaths:6}),1);
+ assert.equal(epic.breakdown.dominionBonus,5000);
+ assert.ok(epic.amount>5000,'1,000 KP must never truncate a domain conquest');
+ assert.equal(epic.next.controllerDominionCharge,0);
+ assert.throws(()=>quoteSpike({...p,controllerDominionCharge:7},m(),1),/dominion charge/);
+});
+
+test('a high-value dominion win settles exactly once and survives atomic rollback',async()=>{
+ const f=await fixture();f.seed({...complete(),controllerDominionCharge:6});
+ f.sql.exec("CREATE TRIGGER block_dominion BEFORE INSERT ON kp_events BEGIN SELECT RAISE(ABORT,'dominion-failure'); END");
+ const sample=raw('dominion-win',{kills:6,assists:6,deaths:6});
+ assert.equal(await collectKpMatch(f.env,mapping,sample,'p-one'),null);
+ assert.equal(f.balance(),0);
+ assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM spike_dominion_rewards').get()!.n,0);
+ f.sql.exec('DROP TRIGGER block_dominion');
+ const paid=await collectKpMatch(f.env,mapping,sample,'p-one');
+ assert.ok(typeof paid==='number'&&paid>5000);
+ assert.equal(await collectKpMatch(f.env,mapping,sample,'p-one'),paid);
+ assert.equal(f.balance(),paid);
+ assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM kp_events').get()!.n,1);
+ assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM spike_dominion_rewards').get()!.n,1);
+ const snapshot=JSON.parse((f.sql.prepare('SELECT data FROM spike_profiles WHERE guild=?').get(guild) as {data:string}).data);
+ assert.equal(snapshot.controllerDominionCharge,0);
+ const entries=await ledgerHistory(f.env,guild,one);
+ assert.equal(entries[0].delta,paid);assert.match(entries[0].detail,/領域制圧/);
  f.close();
 });
 

@@ -51,12 +51,24 @@ export function createKpClient({storage,temporaryStorage,request=globalThis.fetc
   async connect(code){const result=await api('auth',{code:code.trim()});return acceptSession(result.token);},
   activityConfig:()=>api('activity/config'),activityChallenge:codeChallenge=>api('activity/challenge',{codeChallenge}),exchangeActivity:input=>api('activity/auth',input),acceptActivitySession:acceptSession,
   state:readState,resume,
+  async restoreStoredSession(){
+   if(!token)throw Error('保存済みの接続がありません。Discordから再接続してください。');
+   const state=await api('state');
+   // An Activity reload may preserve an unfinished operation from a different login.
+   // Never apply that operation to the remembered account.
+   if(pending&&(!pending.owner||pending.owner!==state.selfUserId))
+    throw Error('別の口座に未確認の操作があります。元のアカウントで通信結果を確認してください。');
+   ownerUserId=state.selfUserId;
+   return state;
+  },
   // Whether anything changed since the last full state (a short string; compare for equality).
   pulse:async()=>(await api('pulse')).pulse,
   health:()=>api('health'),
   feed:revision=>api('feed'+(Number.isSafeInteger(revision)&&revision>=0?'?revision='+revision:'')),
   trend:days=>api('trend?days='+days),
+  relics:()=>api('relics'),
   privateRace:()=>api('private/race'),
+  duels:cursor=>api('duels'+(cursor?'?cursor='+encodeURIComponent(cursor):'')),duelAction:body=>api('duels',body),
   get steamLinkRequest(){return steamLink;},
   steamStatus:()=>api('steam/status'),steamLibrary:()=>api('steam/library'),
   async startSteam(){const link=await api('steam/link',{});write(steamKey,JSON.stringify(link));steamLink=link;return link;},

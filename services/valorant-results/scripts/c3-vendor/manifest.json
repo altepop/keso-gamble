@@ -1,0 +1,50 @@
+{
+  "schema": "modeb-c3-assets/1",
+  "version": "c3-v1.0-observation-1",
+  "files": [
+    {
+      "name": "model.onnx",
+      "bytes": 43660681,
+      "sha256": "5b30a83de3ab9523280619b5cb872003834d33cda4bfe0f9cf4f831bdb42c64f",
+      "transport": {
+        "name": "model.onnx.pack",
+        "encoding": "gzip",
+        "bytes": 40276721
+      }
+    },
+    {
+      "name": "encoder.wasm",
+      "bytes": 1339255,
+      "sha256": "e765dee84c6265c7b4b5b690c014827580b11d11b654ddbefc98d3942a527cbd",
+      "transport": {
+        "name": "encoder.wasm.pack",
+        "encoding": "gzip",
+        "bytes": 475249
+      }
+    },
+    {
+      "name": "ort.wasm.min.mjs",
+      "bytes": 49997,
+      "sha256": "d5a6d7bc8ee587648fb3742dde8c0094d17cbd3822a68bbec8ddfcd4f2adb88e"
+    },
+    {
+      "name": "ort-wasm-simd-threaded.mjs",
+      "bytes": 24274,
+      "sha256": "5687566b1bc1c8cf628d76c2ddb16b2a3b81a7997273d4666564880495088e57"
+    },
+    {
+      "name": "ort-wasm-simd-threaded.wasm",
+      "bytes": 12361745,
+      "sha256": "be0e129949062ad50290ef94683fac8be5bb6156f709e030b7a5f1661a2f6c17",
+      "transport": {
+        "name": "ort-wasm-simd-threaded.wasm.pack",
+        "encoding": "gzip",
+        "bytes": 3157954
+      }
+    }
+  ],
+  "source": {
+    "name": "source.tar.gz",
+    "sha256": "1de32856fef08211378bfaa372cea747892104f796c567a5185414b5e1b07316"
+  }
+}

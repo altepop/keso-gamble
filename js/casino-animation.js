@@ -40,3 +40,30 @@ export function casinoFrames(action,before,result){
  }
  return frames;
 }
+
+/**
+ * Casino results settle before their animation, but relic KP must not announce
+ * a win or loss while the dice/cards are still unrevealed. Coalesce a ledger
+ * notice and its detailed operation response into a single post-reveal notice.
+ */
+export function createRelicRevealGate(announce){
+ let active=0,pending=null;
+ return {
+  begin(){active++;},
+  notify(bonus,base=0,names=[]){
+   if(!Number.isFinite(bonus)||bonus<=0)return;
+   if(active){pending={bonus,base,names};return;}
+   announce(bonus,base,names);
+  },
+  finish(){
+   if(!active)return;
+   active--;
+   if(active===0&&pending){
+    const reward=pending;pending=null;
+    announce(reward.bonus,reward.base,reward.names);
+   }
+  },
+  // Disconnect must not replay a notice from the previous session.
+  cancel(){active=0;pending=null},
+ };
+}

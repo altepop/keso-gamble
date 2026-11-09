@@ -9,7 +9,8 @@ export const SPIKE_CONTROLLER_STREAK_REQUIRED=7;
 // The former 35 KP per awakening + 415 KP for the fourth awakening
 // is now shared equally: 555 / 4 = 138.75 KP per awakened role.
 export const SPIKE_AWAKENING_REWARD_TOTAL=555;
-export const SPIKE_MAX_REWARD=1000;
+// Safety bound for a single settled match, not a 1,000 KP gameplay ceiling.
+export const SPIKE_MAX_REWARD=10000;
 export const SPIKE_ROLES=['Duelist','Initiator','Controller','Sentinel'] as const;
 export type SpikeRole=typeof SPIKE_ROLES[number];
 export interface SpikeTrials {duelist:boolean;initiator:boolean;controllerWins:string[];controllerWinCounts?:Record<string,number>;controllerKdAgents?:string[];controllerStreak?:string[];controllerTrialVersion?:3;controllerGrandfathered?:boolean;sentinel:boolean}
@@ -39,7 +40,7 @@ export function safeTrials(p:SpikeProfile):SpikeTrials {
  * live in the profile and no further historical scans are necessary. */
 export async function hydrateSpikeControllerHistory(env:KpEnv,guild:string,puuid:string,p:SpikeProfile):Promise<SpikeProfile>{
  if(p.games===0||p.trials?.controllerWinCounts)return p;
- const rows=(await env.DB.prepare("SELECT agent,COUNT(*) AS wins FROM (SELECT agent FROM spike_rewards WHERE guild=? AND puuid=? AND json_extract(detail,'$.outcome')='win' UNION ALL SELECT agent FROM spike_overdrive_rewards WHERE guild=? AND puuid=? AND json_extract(detail,'$.outcome')='win') GROUP BY agent").bind(guild,puuid,guild,puuid).all<{agent:string;wins:number}>()).results;
+ const rows=(await env.DB.prepare("SELECT agent,COUNT(*) AS wins FROM (SELECT agent FROM spike_rewards WHERE guild=? AND puuid=? AND json_extract(detail,'$.outcome')='win' UNION ALL SELECT agent FROM spike_overdrive_rewards WHERE guild=? AND puuid=? AND json_extract(detail,'$.outcome')='win' UNION ALL SELECT agent FROM spike_dominion_rewards WHERE guild=? AND puuid=? AND json_extract(detail,'$.outcome')='win') GROUP BY agent").bind(guild,puuid,guild,puuid).all<{agent:string;wins:number}>()).results;
  const trials=safeTrials(p);
  for(const row of rows)if(controllerIds.has(row.agent)&&Number.isSafeInteger(row.wins)&&row.wins>0){
   trials.controllerWinCounts![row.agent]=Math.max(trials.controllerWinCounts![row.agent]??0,Math.min(3,row.wins));
@@ -58,13 +59,15 @@ export function nextSpikeTrials(p:SpikeProfile,m:SpikeMatch):SpikeTrials {
  if(role==='Initiator'&&m.assists>=7)t.initiator=true;
  if(role==='Sentinel'&&m.kills>=5&&m.deaths===0)t.sentinel=true;
  // The seven consecutive eligible Spike Rush games must each be a Controller
- // victory with K/D >=2 and a different agent from the other six.
+ // victory with KDA ((kills+assists)/deaths) >=2 and a different agent from the other six.
+ // (K/D >=2 until 2026-11-03; the owner changed it to KDA.)
  // A failed/repeated match breaks the run; a qualifying repeated Controller
  // can count as the first match of a fresh run.
  // Completed streaks and legacy awakenings are permanent.
  const complete=t.controllerGrandfathered===true||t.controllerStreak!.length===SPIKE_CONTROLLER_STREAK_REQUIRED;
  if(role==='Controller'){
-  const kd=m.kills>0&&(m.deaths===0||m.kills>=2*m.deaths);
+  // controllerKdAgents keeps its stored name; it records Controller games that met the K/D (now KDA) bar.
+  const kd=m.kills+m.assists>0&&(m.deaths===0||m.kills+m.assists>=2*m.deaths);
   if(kd&&!t.controllerKdAgents!.includes(m.agent))t.controllerKdAgents!.push(m.agent);
   if(!complete){
    t.controllerStreak=m.win&&kd?(t.controllerStreak!.includes(m.agent)?[m.agent]:[...t.controllerStreak!,m.agent]):[];
@@ -103,6 +106,14 @@ export async function ensureSpikeAwakening(env:KpEnv){
  note TEXT NOT NULL,detail TEXT NOT NULL CHECK(json_valid(detail)),next_profile TEXT NOT NULL CHECK(json_valid(next_profile)),
  expected_version INTEGER NOT NULL,at INTEGER NOT NULL,UNIQUE(guild,match,puuid))`),
  env.DB.prepare('CREATE INDEX IF NOT EXISTS spike_overdrive_rewards_day ON spike_overdrive_rewards(guild,puuid,day)'),
+ // The original 425 and 1,000 CHECK constraints are immutable. Large post-awakening
+ // receipts have their own table and exactly the same optimistic profile + KP ledger transaction.
+ env.DB.prepare(`CREATE TABLE IF NOT EXISTS spike_dominion_rewards(
+ id TEXT PRIMARY KEY,guild TEXT NOT NULL,puuid TEXT NOT NULL,user TEXT NOT NULL,match TEXT NOT NULL,
+ day TEXT NOT NULL,agent TEXT NOT NULL,amount INTEGER NOT NULL CHECK(amount BETWEEN 0 AND 10000),
+ note TEXT NOT NULL,detail TEXT NOT NULL CHECK(json_valid(detail)),next_profile TEXT NOT NULL CHECK(json_valid(next_profile)),
+ expected_version INTEGER NOT NULL,at INTEGER NOT NULL,UNIQUE(guild,match,puuid))`),
+ env.DB.prepare('CREATE INDEX IF NOT EXISTS spike_dominion_rewards_day ON spike_dominion_rewards(guild,puuid,day)'),
  env.DB.prepare('CREATE TABLE IF NOT EXISTS mahjong_watch_posts(id TEXT PRIMARY KEY,body TEXT NOT NULL,at INTEGER NOT NULL,sent INTEGER NOT NULL DEFAULT 0,lease INTEGER NOT NULL DEFAULT 0,message_id TEXT)'),
  env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS spike_overdrive_apply AFTER INSERT ON spike_overdrive_rewards BEGIN
  SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM kp_accounts WHERE guild=NEW.guild AND puuid=NEW.puuid AND user=NEW.user) THEN RAISE(ABORT,'Spike account mismatch') END;
@@ -111,10 +122,48 @@ export async function ensureSpikeAwakening(env:KpEnv){
  SELECT CASE WHEN changes()!=1 THEN RAISE(ABORT,'Spike profile conflict') END;
  INSERT INTO kp_events(id,guild,user,puuid,match,mode,outcome,amount,policy,at)
  VALUES(NEW.id,NEW.guild,NEW.user,NEW.puuid,NEW.match,'spikerush',json_extract(NEW.detail,'$.outcome'),NEW.amount,'spikerush-overdrive-v2',NEW.at);
+ END`),
+ env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS spike_dominion_apply AFTER INSERT ON spike_dominion_rewards BEGIN
+ SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM kp_accounts WHERE guild=NEW.guild AND puuid=NEW.puuid AND user=NEW.user) THEN RAISE(ABORT,'Spike account mismatch') END;
+ UPDATE spike_profiles SET data=NEW.next_profile,version=version+1
+ WHERE guild=NEW.guild AND puuid=NEW.puuid AND user=NEW.user AND version=NEW.expected_version;
+ SELECT CASE WHEN changes()!=1 THEN RAISE(ABORT,'Spike profile conflict') END;
+ INSERT INTO kp_events(id,guild,user,puuid,match,mode,outcome,amount,policy,at)
+ VALUES(NEW.id,NEW.guild,NEW.user,NEW.puuid,NEW.match,'spikerush',json_extract(NEW.detail,'$.outcome'),NEW.amount,'spikerush-dominion-v1',NEW.at);
  END`)
  ])).then(()=>{});
  ready.set(env.DB,task);
  try{await task;}catch(e){ready.delete(env.DB);throw e;}
+}
+// What each trial really asks, for the administrator view only (members see SPIKE_HINTS after buying a hint).
+const TRIAL_RULES:Record<SpikeRole,string>={
+ Duelist:'デュエリストで1試合15キル以上',
+ Initiator:'イニシエーターで1試合7アシスト以上',
+ Controller:`コントローラーで「勝利＋KDA 2.0以上（(キル+アシスト)÷デス。デス0ならキル+アシスト1以上）」を、毎回違うコントローラーで${SPIKE_CONTROLLER_STREAK_REQUIRED}試合連続（他ロール・負け・KDA不足で0に戻る、同じエージェントの再使用は1から）`,
+ Sentinel:'センチネルで1試合5キル以上かつデス0',
+};
+/** /spike status user:@someone (administrators only): the member's growth and every trial's real condition and
+ * progress, whether or not they bought hints. Read only; nothing is charged or changed. */
+export async function spikeAdminStatus(env:KpEnv,guild:string,target:string){
+ await ensureSpikeAwakening(env);
+ const member=await env.DB.prepare('SELECT a.puuid,a.riot,s.data FROM kp_accounts a LEFT JOIN spike_profiles s ON s.guild=a.guild AND s.puuid=a.puuid AND s.user=a.user WHERE a.guild=? AND a.user=?')
+  .bind(guild,target).first<{puuid:string;riot:string;data:string|null}>();
+ if(!member)return `🔒 <@${target}> はRiotアカウントがKP口座に紐付いていないため、スパイクラッシュの判定対象外です。`;
+ const p=await hydrateSpikeControllerHistory(env,guild,member.puuid,member.data?JSON.parse(member.data) as SpikeProfile:initialSpikeProfile());
+ const unlocks=new Set((await env.DB.prepare('SELECT role FROM spike_hint_unlocks WHERE guild=? AND puuid=?').bind(guild,member.puuid).all<{role:string}>()).results.map(x=>x.role));
+ const t=safeTrials(p),name=(id:string)=>roster.agents.find(a=>a.id===id)?.name??id;
+ const lines=spikeProgress(p).map(r=>{
+  const done=r.role==='Controller'?(t.controllerGrandfathered?`達成（旧条件を継承）`:`${t.controllerStreak!.length}/${SPIKE_CONTROLLER_STREAK_REQUIRED}${t.controllerStreak!.length?`（連続中：${t.controllerStreak!.map(name).join('→')}）`:''}`):r.trialDone?'達成':'未達成';
+  const rest=r.role==='Controller'&&!r.trialDone?`
+　残りのコントローラー：${controllers.filter(a=>!t.controllerStreak!.includes(a.id)).map(a=>a.name).join('・')}`:'';
+  return `**${r.role}** ${r.used}/${r.required}｜${r.awakened?'✨覚醒済み':r.unlocked?'通常育成完了':'育成中'}
+　試練：${TRIAL_RULES[r.role]}
+　判定：${done}${rest}
+　ヒント：${unlocks.has(r.role)?'購入済み':'未購入'}`;
+ });
+ const riot=member.riot.replace(/[@`*_~<>|\r\n]/g,'');
+ return [`🛠️ **管理者ビュー｜SPIKE 育成状況** <@${target}>（${riot}）`,`通算：${p.games}試合｜覚醒：${spikeProgress(p).filter(x=>x.awakened).length}/4｜OVERDRIVE：${isOverdrive(p)?'発動中':'未解放'}`,`🌌 完全掌握：${spikeProgress(p)[2].awakened?`発動中｜領域ゲージ ${p.controllerDominionCharge??0}/7`:'未解放'}`,
+  ...lines,'-# この返信はあなたにだけ表示されています。本人の口座・試練は変更していません。'].join('\n\n');
 }
 export async function spikeStatus(env:KpEnv,guild:string,user:string){
  await ensureSpikeAwakening(env);
@@ -133,7 +182,7 @@ export async function spikeStatus(env:KpEnv,guild:string,user:string){
   return `**${r.role}** ${r.used}/${r.required}｜${suffix}\n　使用：${agents}${trial}`;
  });
  return ['🧬 **SPIKE 育成状況**',`通算：${p.games}試合｜覚醒：${progress.filter(x=>x.awakened).length}/4`,
-  `👑 OVERDRIVE：${isOverdrive(p)?'**発動中｜標準的な戦績で平均約800KP/試合**':'未解放'}`,
+  `👑 OVERDRIVE：${isOverdrive(p)?'**発動中**':'未解放'}`,`🌌 完全掌握：${progress[2].awakened?`**発動中｜報酬倍率1.50倍・減衰無効・領域ゲージ ${p.controllerDominionCharge??0}/7**（7試合ごとに+3,000KP／勝利かつKDA2以上なら+5,000KP）`:'未解放（コントローラー覚醒専用）'}`,
   ...details,'','ヒントは**ロールごと1万KP・買い切り**。購入しなくても試練は裏で記録され、条件を満たせば覚醒できる。',
   'Controllerのヒントは内容非公開。購入後でも、運営へ申請すればヒント代10,000 KPを全額返金します（手動対応）。',
    '覚醒・OVERDRIVEの効果は**達成した次の試合から**適用される。'].join('\n\n');

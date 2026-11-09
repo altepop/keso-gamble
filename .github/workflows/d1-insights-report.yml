@@ -32,8 +32,8 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       WRANGLER_SEND_METRICS: 'false'
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: '24'
           cache: npm
@@ -52,12 +52,12 @@ jobs:
             '| D1 | # | SQL type | Table names | Calls | Rows read | Avg. rows | Query fingerprint |',
             '|:---|---:|:---|:---|---:|---:|---:|:---|'];
           const databases = [
-            ['D1-A','93625c27-74b4-4154-a0a5-2d7485083f33'],
-            ['D1-B','bf23ab40-814f-4626-9e0b-36739ac41750']
+            ['KESO LOOP','93625c27-74b4-4154-a0a5-2d7485083f33'],
+            ['KESO PLAY','bf23ab40-814f-4626-9e0b-36739ac41750']
           ];
           if(!process.env.CLOUDFLARE_API_TOKEN || !process.env.CLOUDFLARE_ACCOUNT_ID){
             console.log('D1_INSIGHTS_UNAVAILABLE: existing Cloudflare deployment credentials are missing');
-            summary.push('| Both | - | Credentials missing | - | - | - | - | - |');
+            summary.push('| KESO PLAY / LOOP | - | Credentials missing | - | - | - | - | - |');
           } else for(const [label,id] of databases){
             try{
               const stdout=execFileSync('npx',[

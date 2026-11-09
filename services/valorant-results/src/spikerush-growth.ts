@@ -17,12 +17,13 @@ const add=(a:Fraction,b:Fraction)=>fraction(a.n*b.d+b.n*a.d,a.d*b.d);
 const mul=(a:Fraction,b:Fraction)=>fraction(a.n*b.n,a.d*b.d);
 const sub=(a:Fraction,b:Fraction)=>fraction(a.n*b.d-b.n*a.d,a.d*b.d);
 const display=(a:Fraction)=>Number(a.n)/Number(a.d);
-export interface SpikeProfile {games:number;counts:Record<string,number>;unlocked:Role[];recent:string[];carryN:string;carryD:string;trials?:SpikeTrials}
-export const initialSpikeProfile=():SpikeProfile=>({games:0,counts:{},unlocked:[],recent:[],carryN:'0',carryD:'1'});
+export interface SpikeProfile {games:number;counts:Record<string,number>;unlocked:Role[];recent:string[];carryN:string;carryD:string;trials?:SpikeTrials;controllerDominionCharge?:number}
+export const initialSpikeProfile=():SpikeProfile=>({games:0,counts:{},unlocked:[],recent:[],carryN:'0',carryD:'1',controllerDominionCharge:0});
 function checkProfile(p:SpikeProfile){
  if(!p||!Number.isSafeInteger(p.games)||p.games<0||p.games>=Number.MAX_SAFE_INTEGER||!p.counts||typeof p.counts!=='object'||Array.isArray(p.counts)||!Array.isArray(p.unlocked)||p.unlocked.some(r=>!SPIKE_ROLES.includes(r))||!Array.isArray(p.recent)||p.recent.length>4||p.recent.some(a=>typeof a!=='string')||!/^\d{1,2048}$/.test(p.carryN)||!/^\d{1,2048}$/.test(p.carryD))throw Error('Invalid spike profile');
  for(const [id,n]of Object.entries(p.counts))if(!roster.agents.some(a=>a.id===id)||!Number.isInteger(n)||n<0||n>2)throw Error('Invalid spike agent count');
  if(BigInt(p.carryD)<1n||BigInt(p.carryN)>=BigInt(p.carryD))throw Error('Invalid spike remainder');
+ if(p.controllerDominionCharge!==undefined&&(!Number.isSafeInteger(p.controllerDominionCharge)||p.controllerDominionCharge<0||p.controllerDominionCharge>6))throw Error('Invalid controller dominion charge');
 }
 export function spikeProgress(p:SpikeProfile){
  checkProfile(p);
@@ -52,28 +53,35 @@ function checkMatch(m:SpikeMatch){
 export function quoteSpike(p:SpikeProfile,m:SpikeMatch,dayGame:number){
  checkProfile(p);checkMatch(m);if(!Number.isSafeInteger(dayGame)||dayGame<1)throw Error('Invalid spike daily count');
  const progress=spikeProgress(p),c=progress.map(r=>fraction(r.used,r.required)),u=progress.map(r=>r.unlocked?1:0);
+ const controllerAwakened=progress[2].awakened;
+ // The exclusive Controller awakening skill: one domain is conquered every seven settled post-awakening matches.
+ // Existing awakened profiles start at 0 on deployment. The unlock match itself does not charge the skill.
+ const dominionChargeBefore=p.controllerDominionCharge??0;
+ const dominionChargeAfter=controllerAwakened?(dominionChargeBefore+1)%7:0;
+ const dominionKda=m.kills+m.assists>0&&(m.deaths===0||m.kills+m.assists>=2*m.deaths);
+ const dominionBonus=controllerAwakened&&dominionChargeAfter===0?(m.win&&dominionKda?5000:3000):0;
  const h=fraction(Math.max(0,Math.min(35,p.games-5)),35),base=20+(m.win?20:0);
  const x=mul(add(fraction(4+2*u[0]),mul(fraction(2),c[0])),fraction(Math.min(m.kills,15)));
  const y=mul(add(fraction(6+3*u[1],2),mul(fraction(3,2),c[1])),fraction(Math.min(m.assists,10)));
  const efficiency=fraction(Math.min(m.kills+m.assists,2*Math.max(1,m.deaths)),Math.max(1,m.deaths));
  const z=mul(add(mul(fraction(10),c[3]),fraction(10*u[3])),efficiency);
- const boost=add(fraction(1),mul(h,add(mul(fraction(1,10),c[2]),fraction(3*u[2],20))));
+ const boost=add(fraction(1),mul(h,add(add(mul(fraction(1,10),c[2]),fraction(3*u[2],20)),fraction(controllerAwakened?1:0,4))));
  const grown=mul(add(fraction(base),mul(h,add(fraction(80),add(x,add(y,z))))),boost);
  const awakenings=progress.filter(r=>r.awakened).length,overdrive=awakenings===4;
- // Only fully awakened users bypass all daily/repeated-agent growth attenuation.
- // With 6K/2A/6D and 50% wins, all four awakenings average ~800 KP per game.
- const enhanced=add(grown,fraction(awakenings*SPIKE_AWAKENING_REWARD_TOTAL,SPIKE_ROLES.length));
+ // Full OVERDRIVE or the exclusive Controller awakening bypasses daily and repeated-agent attenuation.
+ // Fully awakened players average ~910 KP/game at 6K/2A/6D, not counting the 7-game dominion burst.
+ const enhanced=add(add(grown,fraction(awakenings*SPIKE_AWAKENING_REWARD_TOTAL,SPIKE_ROLES.length)),fraction((controllerAwakened?60:0)+dominionBonus));
  // From match 16 onward, grant 30% of the growth component (base KP remains intact).
- const fatigue=overdrive?fraction(1):dayGame<=10?fraction(1):dayGame<=15?fraction(1,2):fraction(3,10);
- const same=1+p.recent.filter(a=>a===m.agent).length,repeat=overdrive?fraction(1):fraction(same<=2?10:same===3?8:same===4?6:4,10);
+ const fatigue=controllerAwakened||overdrive?fraction(1):dayGame<=10?fraction(1):dayGame<=15?fraction(1,2):fraction(3,10);
+ const same=1+p.recent.filter(a=>a===m.agent).length,repeat=controllerAwakened||overdrive?fraction(1):fraction(same<=2?10:same===3?8:same===4?6:4,10);
  const exact=add(fraction(base),mul(mul(fatigue,repeat),sub(enhanced,fraction(base))));
  const total=add(exact,fraction(BigInt(p.carryN),BigInt(p.carryD))),whole=total.n/total.d;
  if(whole<0n||whole>BigInt(awakenings?SPIKE_MAX_REWARD:425))throw Error('Spike reward exceeds bound');
- const remainder=fraction(total.n%total.d,total.d),next:SpikeProfile={games:p.games+1,counts:{...p.counts,[m.agent]:Math.min(2,(p.counts[m.agent]??0)+1)},unlocked:progress.filter(r=>r.unlocked).map(r=>r.role),recent:[m.agent,...p.recent].slice(0,4),carryN:String(remainder.n),carryD:String(remainder.d),trials:nextSpikeTrials(p,m)};
+ const remainder=fraction(total.n%total.d,total.d),next:SpikeProfile={games:p.games+1,counts:{...p.counts,[m.agent]:Math.min(2,(p.counts[m.agent]??0)+1)},unlocked:progress.filter(r=>r.unlocked).map(r=>r.role),recent:[m.agent,...p.recent].slice(0,4),carryN:String(remainder.n),carryD:String(remainder.d),trials:nextSpikeTrials(p,m),controllerDominionCharge:dominionChargeAfter};
  next.unlocked=spikeProgress(next).filter(r=>r.unlocked).map(r=>r.role);
  const amount=Number(whole),growth=Number(display(sub(exact,fraction(base))).toFixed(4));
- const breakdown={base,growth,dayGame,dailyFactor:display(fatigue),repeatFactor:display(repeat),overdrive,awakenings,carryBefore:p.carryN+'/'+p.carryD,carryAfter:next.carryN+'/'+next.carryD,gamesBefore:p.games,agentUsesBefore:p.counts[m.agent]??0,rolesBefore:progress,unlockedNow:next.unlocked.filter(r=>!progress.find(v=>v.role===r)?.unlocked),awakenedNow:spikeProgress(next).filter(r=>r.awakened&&!progress.find(x=>x.role===r.role)?.awakened).map(r=>r.role)};
- const note=`（${overdrive?'👑 OVERDRIVE・':''}基礎${base}・補正${Number(growth.toFixed(2))}・端数精算 ${amount} KP）`;
+ const breakdown={base,growth,dayGame,dailyFactor:display(fatigue),repeatFactor:display(repeat),overdrive,awakenings,controllerDominion:controllerAwakened,dominionChargeBefore,dominionChargeAfter,dominionBonus,carryBefore:p.carryN+'/'+p.carryD,carryAfter:next.carryN+'/'+next.carryD,gamesBefore:p.games,agentUsesBefore:p.counts[m.agent]??0,rolesBefore:progress,unlockedNow:next.unlocked.filter(r=>!progress.find(v=>v.role===r)?.unlocked),awakenedNow:spikeProgress(next).filter(r=>r.awakened&&!progress.find(x=>x.role===r.role)?.awakened).map(r=>r.role)};
+ const note=`（${overdrive?'👑 OVERDRIVE・':''}${controllerAwakened?'🌌 完全掌握・':''}${dominionBonus?`領域制圧+${dominionBonus}KP・`:''}基礎${base}・補正${Number(growth.toFixed(2))}・端数精算 ${amount} KP）`;
  return {amount,next,note,breakdown};
 }
 export interface SpikeEvent {id:string;guild:string;user:string;puuid:string;match:string;spike:SpikeMatch}
@@ -104,7 +112,7 @@ export async function settleSpike(env:KpEnv,e:SpikeEvent){
  if(e.id!==['match',e.guild,e.match,e.puuid].map(encodeURIComponent).join(':'))throw Error('Invalid spike identity');
  await ensureSpikeGrowth(env);await ensureSpikeAwakening(env);
  for(let attempt=0;attempt<5;attempt++){
-  const existing=await env.DB.prepare('SELECT e.amount,e.user,COALESCE(s.note,v.note) AS note FROM kp_events e LEFT JOIN spike_rewards s ON s.id=e.id LEFT JOIN spike_overdrive_rewards v ON v.id=e.id WHERE e.id=?').bind(e.id).first<{amount:number;user:string;note:string|null}>();
+  const existing=await env.DB.prepare('SELECT e.amount,e.user,COALESCE(s.note,v.note,d.note) AS note FROM kp_events e LEFT JOIN spike_rewards s ON s.id=e.id LEFT JOIN spike_overdrive_rewards v ON v.id=e.id LEFT JOIN spike_dominion_rewards d ON d.id=e.id WHERE e.id=?').bind(e.id).first<{amount:number;user:string;note:string|null}>();
   if(existing){if(existing.user!==e.user)throw Error('Spike owner mismatch');return {amount:existing.amount,note:existing.note??''};}
   const link=await env.DB.prepare("SELECT a.user,a.linked_at,s.value AS starts FROM kp_accounts a JOIN kp_settings s ON s.key='spikerush_growth_started_at' WHERE a.guild=? AND a.puuid=?").bind(e.guild,e.puuid).first<{user:string;linked_at:number;starts:string}>();
   if(!link||link.user!==e.user||e.spike.startedAt<Math.max(Number(link.starts),link.linked_at))return null;
@@ -113,11 +121,11 @@ export async function settleSpike(env:KpEnv,e:SpikeEvent){
   if(!profile||profile.user!==e.user)throw Error('Spike profile owner mismatch');
   // UTC midnight is 09:00 JST. Late arrivals use their match day and current committed growth.
   const day=new Date(e.spike.endedAt).toISOString().slice(0,10);
-  const count=await env.DB.prepare('SELECT (SELECT COUNT(*) FROM spike_rewards WHERE guild=? AND puuid=? AND day=?)+(SELECT COUNT(*) FROM spike_overdrive_rewards WHERE guild=? AND puuid=? AND day=?) AS n').bind(e.guild,e.puuid,day,e.guild,e.puuid,day).first<{n:number}>();
+  const count=await env.DB.prepare('SELECT (SELECT COUNT(*) FROM spike_rewards WHERE guild=? AND puuid=? AND day=?)+(SELECT COUNT(*) FROM spike_overdrive_rewards WHERE guild=? AND puuid=? AND day=?)+(SELECT COUNT(*) FROM spike_dominion_rewards WHERE guild=? AND puuid=? AND day=?) AS n').bind(e.guild,e.puuid,day,e.guild,e.puuid,day,e.guild,e.puuid,day).first<{n:number}>();
   const previous=await hydrateSpikeControllerHistory(env,e.guild,e.puuid,JSON.parse(profile.data) as SpikeProfile);
   const quote=quoteSpike(previous,e.spike,Number(count?.n??0)+1);
   const detail={...quote.breakdown,outcome:e.spike.win?'win':'loss',policy:SPIKE_POLICY,roster:roster.version,matchEndedAt:e.spike.endedAt};
-  const destination=quote.amount>425?'spike_overdrive_rewards':'spike_rewards';
+  const destination=quote.amount>1000?'spike_dominion_rewards':quote.amount>425?'spike_overdrive_rewards':'spike_rewards';
   const written=await env.DB.prepare(`INSERT INTO ${destination}(id,guild,puuid,user,match,day,agent,amount,note,detail,next_profile,expected_version,at)
    SELECT ?,?,?,?,?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM spike_profiles WHERE guild=? AND puuid=? AND user=? AND version=?)
    AND NOT EXISTS(SELECT 1 FROM kp_events WHERE id=?) ON CONFLICT(id) DO NOTHING`)
@@ -127,18 +135,18 @@ export async function settleSpike(env:KpEnv,e:SpikeEvent){
  throw Error('Spike settlement conflict');
 }
 export async function spikeNote(env:KpEnv,id:string){
- await ensureSpikeGrowth(env);
- return (await env.DB.prepare('SELECT note FROM spike_rewards WHERE id=?').bind(id).first<{note:string}>())?.note??'';
+ await ensureSpikeGrowth(env);await ensureSpikeAwakening(env);
+ return (await env.DB.prepare('SELECT note FROM (SELECT id,note FROM spike_rewards UNION ALL SELECT id,note FROM spike_overdrive_rewards UNION ALL SELECT id,note FROM spike_dominion_rewards) WHERE id=?').bind(id).first<{note:string}>())?.note??'';
 }
 
 /** Queue public milestone announcements through the existing results-bot webhook.
  * Individual trial completion and trial requirements are strictly private.
  * The stable event and role keys make inbox retries idempotent. */
 export async function queueSpikeMilestoneNotices(env:KpEnv,e:Pick<SpikeEvent,'id'|'guild'|'puuid'|'user'>){
- const row=await env.DB.prepare("SELECT agent,detail FROM spike_rewards WHERE id=? AND guild=? AND puuid=? AND user=? UNION ALL SELECT agent,detail FROM spike_overdrive_rewards WHERE id=? AND guild=? AND puuid=? AND user=?")
-  .bind(e.id,e.guild,e.puuid,e.user,e.id,e.guild,e.puuid,e.user).first<{agent:string;detail:string}>();
+ const row=await env.DB.prepare("SELECT agent,detail FROM spike_rewards WHERE id=? AND guild=? AND puuid=? AND user=? UNION ALL SELECT agent,detail FROM spike_overdrive_rewards WHERE id=? AND guild=? AND puuid=? AND user=? UNION ALL SELECT agent,detail FROM spike_dominion_rewards WHERE id=? AND guild=? AND puuid=? AND user=?")
+  .bind(e.id,e.guild,e.puuid,e.user,e.id,e.guild,e.puuid,e.user,e.id,e.guild,e.puuid,e.user).first<{agent:string;detail:string}>();
  if(!row)return;
- const detail=JSON.parse(row.detail) as {agentUsesBefore?:unknown;awakenedNow?:unknown;awakenings?:unknown};
+ const detail=JSON.parse(row.detail) as {agentUsesBefore?:unknown;awakenedNow?:unknown;awakenings?:unknown;dominionBonus?:unknown;dominionChargeAfter?:unknown};
  const roles=Array.isArray(detail.awakenedNow)?detail.awakenedNow.filter((role:unknown):role is Role=>typeof role==='string'&&SPIKE_ROLES.includes(role as Role)):[];
  const now=Date.now();
  const queue=async(id:string,content:string)=>{
@@ -152,7 +160,11 @@ export async function queueSpikeMilestoneNotices(env:KpEnv,e:Pick<SpikeEvent,'id
   await queue('spike-agent:'+e.guild+':'+e.puuid+':'+agent.id,
    '✅ **【SPIKE｜エージェント育成完了】**\n<@'+e.user+'> が **'+agent.name+'** の通常育成を完了！\n🧬 使用回数：**2/2**');
  }
- if(!roles.length)return;
+ if(typeof detail.dominionBonus==='number'&&detail.dominionBonus>=3000&&detail.dominionChargeAfter===0){
+   await queue('spike-dominion:'+e.id,
+    '🌌 **【SPIKE｜完全掌握・領域制圧】**\n<@'+e.user+'> がコントローラー覚醒者だけの支配領域を発動！\n💰 **追加 '+detail.dominionBonus.toLocaleString('ja-JP')+' KP** を確定。\n🔁 次の領域制圧まで7試合。');
+  }
+  if(!roles.length)return;
  const before=Number(detail.awakenings);
  if(!Number.isInteger(before)||before<0||before>=4||before+roles.length>4)return;
  const labels:Record<Role,string>={Duelist:'デュエリスト',Initiator:'イニシエーター',Controller:'コントローラー',Sentinel:'センチネル'};
@@ -163,6 +175,6 @@ export async function queueSpikeMilestoneNotices(env:KpEnv,e:Pick<SpikeEvent,'id
  }
  if(before+roles.length===4){
   await queue('spike-overdrive:'+e.id,
-   '👑 **【SPIKE｜OVERDRIVE解放】**\n<@'+e.user+'> がついに **全4ロール覚醒！**\n🔥 **OVERDRIVE発動**\n💰 次の試合から、標準的な戦績で平均約800KP/試合へ。');
+   '👑 **【SPIKE｜OVERDRIVE解放】**\n<@'+e.user+'> がついに **全4ロール覚醒！**\n🔥 **OVERDRIVE発動**\n🌌 次の試合からコントローラー専用の「完全掌握」「領域制圧」が発動する。');
  }
 }

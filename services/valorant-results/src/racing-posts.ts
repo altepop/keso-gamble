@@ -34,8 +34,8 @@ export function earningsWebhook(env:PostEnv){
 }
 
 /** How to buy from Discord, with the race's own start time filled in. */
-const howToBet=(start:number)=>[`🎫 **Discordで買える！**　\`/bet\` と打つ → **horse** で馬を一覧から選ぶ → **amount** に掛け金（例 500）→ 送信`,
- `-# ${clock(start-CLOSE_BEFORE)}まで受付／券種は選ばなければ1着当て／100 KP単位・1週間で合計5万KPまで（Mリーグ予想と合算）・購入後の取消不可・/keiba で出走表、アプリの「勝負 → 競馬」でも買えます`];
+const howToBet=(start:number)=>[`🎫 **Discordで馬券を買うてな！**　\`/bet\` と打って → **horse** で馬を選んで → **amount** に掛け金（例 500）を入れて送信や`,
+ `-# ${clock(start-CLOSE_BEFORE)}まで受付やで。券種を選ばへんかったら1着当てや。100 KP単位・1週間で合計5万KPまで（Mリーグ予想と合算）。買うた後は取り消せへんで。/keiba で出走表を見られるし、アプリの「勝負 → 競馬」でも買えるで`];
 export function cardPost(card:Card,hash:string){
  const odds=raceOdds(card),brief=card.start>=FORM_REFORM_FROM?raceBrief(card):null;
  return [`🏇 **${clean(card.name)}**`,
@@ -47,20 +47,25 @@ export function cardPost(card:Card,hash:string){
   ...(card.event?['',`🌪️ **特別ルール：${clean(card.event.name)}**`,`🎯 ${clean(card.event.effect)}`,`-# ${clean(card.event.desc)}／市場倍率はこの有利不利を完全には織り込まない`]:[]),
   '',...howToBet(card.start),
   '',`💬 ${raceCatchphrase('card',String(card.id))}`,raceAside('card',String(card.id)),
-  `-# 結果のハッシュ: \`${hash.slice(0,16)}…\`（発走後にシード値を公開）`].join('\n');
+  `-# 結果のハッシュ: \`${hash.slice(0,16)}…\`（発走後にシード値を公開するで）`].join('\n');
 }
 export function resultPost(card:Card,seed:string,bets:Array<Bet&{user:string}>,levelOf:(user:string)=>RoastLevel,titleOf:(user:string)=>string|undefined=()=>undefined){
  const odds=raceOdds(card),order:number[]=raceResult(card,seed).order;
- const lines=[`🏁 **${clean(card.name)}** 結果`,`-# ${clock(card.start)}発走・${card.size}頭`,...(card.event?[`🌪️ 特別ルール：${clean(card.event.name)}（${clean(card.event.effect)}）`]:[]),'',
+ const lines=[`🏁 **${clean(card.name)}** 結果出たで！`,`-# ${clock(card.start)}発走・${card.size}頭`,...(card.event?[`🌪️ 特別ルール：${clean(card.event.name)}（${clean(card.event.effect)}）`]:[]),'',
   ...order.slice(0,3).flatMap((n,i)=>{const h=card.horses[n-1];return [`${['🥇','🥈','🥉'][i]} ${i+1}着 ${n}番 **${clean(h.name)}**${i===0?`　1着当て ${odd(odds.win[n])}`:''}`,
    ...h.ownerName?[`-# 馬主 ${clean(h.ownerName)}・賞金 ${kp(prizeFor(card,i))}`]:[]];})];
  const byUser=new Map<string,Array<Bet>>();for(const b of bets)byUser.set(b.user,[...(byUser.get(b.user)??[]),b]);
- if(byUser.size)lines.push('','**馬券**');
+ if(byUser.size)lines.push('','**馬券（同レースの全購入分を合算した収支）**');
  for(const [user,list] of byUser){
   const who=`<@${user}>${titleOf(user)?`「${clean(titleOf(user)!)}」`:''}`;
-  const paid=list.reduce((n,b)=>n+b.payout,0),spent=list.reduce((n,b)=>n+b.amount,0),hits=list.filter(b=>b.status==='won');
-  if(hits.length)lines.push(`💰 ${who}　+${kp(paid)}`,`-# ${hits.map(b=>`${b.horse}番の${BET_TYPES[b.type].label}（${odd(b.odds)}）`).join('・')} 的中`,`🗯️ ${raceBanter(paid>spent?'win':'partial',levelOf(user),user+':'+card.id)}`);
-  else lines.push(`💸 ${who}　−${kp(spent)}`,`-# ${list.map(b=>`${b.horse}番の${BET_TYPES[b.type].label}`).join('・')} 外れ`,`🗯️ ${raceBanter('loss',levelOf(user),user+':'+card.id)}`);
+  const paid=list.reduce((n,b)=>n+b.payout,0),spent=list.reduce((n,b)=>n+b.amount,0);
+  const profit=paid-spent,hits=list.filter(b=>b.status==='won');
+  const balance=profit>0?`+${kp(profit)}`:profit<0?`−${kp(-profit)}`:'±0 KP';
+  const icon=profit>0?'💰':profit<0?'💸':'⚖️';
+  // Show losing tickets as well as winners; a winning place bet is not a profitable race by itself.
+  const tickets=list.map(b=>`${b.horse}番${BET_TYPES[b.type].formal}${b.status==='won'?'○':'×'}`).join('・');
+  const tone=hits.length?(profit>0?'win':'partial'):'loss';
+  lines.push(`${icon} ${who}　収支 ${balance}（購入 ${kp(spent)} / 払戻 ${kp(paid)}）`,`-# 内訳 ${tickets}`,`🗯️ ${raceBanter(tone,levelOf(user),user+':'+card.id)}`);
  }
  if(card.event){
   const winner=order[0],fav=card.horses.reduce((best,h)=>odds.win[h.number]<odds.win[best]?h.number:best,1);
@@ -68,7 +73,7 @@ export function resultPost(card:Card,seed:string,bets:Array<Bet&{user:string}>,l
   else lines.push('','🏆 **特別ルールでも1番人気が勝利！** 波乱の看板に騙されなかった強さ。');
  }
  lines.push('',`💬 ${raceCatchphrase('result',String(card.id))}`,raceAside('result',String(card.id)));
- lines.push(`-# シード値: \`${seed}\`（締切前のハッシュと一致することを画面で確認できます）`);
+ lines.push(`-# シード値: \`${seed}\`（締切前のハッシュと一致するか画面で確かめられるで）`);
  return lines.join('\n');
 }
 /** The result (with every bettor's payout or loss and a roast) goes out for any race someone bet on, and always for
@@ -80,7 +85,7 @@ export function worthPosting(card:Card,bets:Bet[],crowned=false,ownerWon=false){
 async function raceBets(env:KpEnv,guild:string,id:number){
  return (await env.DB.prepare("SELECT s.user,b.value FROM kp_state s,json_each(s.data,'$.raceBets') b WHERE s.guild=? AND json_extract(b.value,'$.raceId')=?").bind(guild,id).all<{user:string;value:string}>()).results.map(r=>({...JSON.parse(r.value) as Bet,user:r.user}));
 }
-export async function enqueue(env:KpEnv,id:string,body:string,now:number){await env.DB.prepare('INSERT OR IGNORE INTO kp_posts(id,body,at) VALUES(?,?,?)').bind(id,JSON.stringify({content:body,allowed_mentions:{parse:[]}}),now).run();}
+export async function enqueue(env:KpEnv,id:string,body:string,now:number,embeds?:Array<{title?:string;description:string}>){await env.DB.prepare('INSERT OR IGNORE INTO kp_posts(id,body,at) VALUES(?,?,?)').bind(id,JSON.stringify({content:body,allowed_mentions:{parse:[]},...(embeds?.length?{embeds}:{})}),now).run();}
 export function crownPost(c:{race:number;name:string;user:string;reason:string;special?:boolean}){
  if(c.special)return [
   '🏇 **緊急特別開催｜VDKやらかし追悼レース**',
@@ -91,7 +96,7 @@ export function crownPost(c:{race:number;name:string;user:string;reason:string;s
   '馬券は発走15分前から /bet またはKESO PLAYの「勝負 → 競馬」で購入可能。無料特別開催でKP購入費はありません。',
   '※VDK本人の試合報酬や履歴は変更しません。',
  ].join('\n');
- return `🏇 『${clean(c.name)}』開催決定！ ${clock(c.race)}発走（<@${c.user}> の${c.reason}にちなんで）\n発走15分前から \`/bet\`（馬を一覧から選んで掛け金を入れるだけ）か、アプリの「勝負 → 競馬」で馬券を買えます。\n💬 ${raceCatchphrase('crown',String(c.race))}\n${raceAside('crown',String(c.race))}`;
+ return `🏇 『${clean(c.name)}』開催決定や！ ${clock(c.race)}発走（<@${c.user}> の${c.reason}にちなんで）\n発走15分前から \`/bet\`（馬を選んで掛け金を入れるだけや）か、アプリの「勝負 → 競馬」で馬券を買うてな。\n💬 ${raceCatchphrase('crown',String(c.race))}\n${raceAside('crown',String(c.race))}`;
 }
 export async function roastLevelsOf(env:KpEnv,mapping:KpMapping){
  const rows=(await env.DB.prepare("SELECT user,json_extract(data,'$.roastLevel') AS level FROM kp_state WHERE guild=?").bind(mapping.guildId).all<{user:string;level:string|null}>()).results;
@@ -120,15 +125,19 @@ export async function queueRacePosts(env:PostEnv,mapping:KpMapping,now=Date.now(
   // INSERT OR IGNORE keeps the published result immutable. Once this ID is
   // already queued (even if Discord delivery is pending), rebuilding the
   // exact same post cannot change it; skip the wallet JSON expansion.
-  const already=await env.DB.prepare('SELECT 1 AS n FROM kp_posts WHERE id=?').bind('race-result:'+id).first();
+  // A race decided not to be posted is remembered too, so its bets (a scan of every wallet's JSON) are not read
+  // again every minute for the next 45 minutes.
+  const already=await env.DB.prepare('SELECT 1 AS n FROM kp_posts WHERE id=? UNION ALL SELECT 1 FROM kp_race_post_skips WHERE guild=? AND race=?').bind('race-result:'+id,mapping.guildId,id).first();
   if(already)continue;
   const bets=await raceBets(env,mapping.guildId,id);
+  if(bets.some(b=>b.status==='pending'))continue; // settled within a minute or two; check again
+  const skip=()=>env.DB.prepare('INSERT OR IGNORE INTO kp_race_post_skips(guild,race) VALUES(?,?)').bind(mapping.guildId,id).run();
   const crown=await crownFor(env,mapping.guildId,id),entries=await raceEntries(env,mapping,id);
-  if(bets.some(b=>b.status==='pending')||(!bets.length&&!bigRaceName(id)&&!raceEvent(id)&&!crown&&!entries.length))continue;
+  if(!bets.length&&!bigRaceName(id)&&!raceEvent(id)&&!crown&&!entries.length){await skip();continue;}
   const seed=await env.DB.prepare('SELECT seed FROM kp_races WHERE guild=? AND id=?').bind(mapping.guildId,id).first<{seed:string}>();
   const card={...raceCard(id,undefined,entries),...(crown?{name:crown.name}:{})};
   const ownerWon=Boolean(seed)&&Boolean(card.horses[raceResult(card,seed!.seed).order[0]-1].ownerName);
-  if(!worthPosting(card,bets,Boolean(crown),ownerWon))continue;
+  if(!worthPosting(card,bets,Boolean(crown),ownerWon)){await skip();continue;}
   if(seed){levelOf??=await roastLevelsOf(env,mapping);const titles=await titlesOf(env,mapping.guildId);await enqueue(env,'race-result:'+id,resultPost(card,seed.seed,bets,levelOf,u=>titles.get(u)),now);}
  }
 }

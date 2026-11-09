@@ -9,6 +9,8 @@ import {initializeKp,syncKpAccounts,collectKpMatch,drainKpInbox,kpEventId} from 
 import type {KpEnv,KpMapping} from '../src/kp.ts';
 import type {Match} from '../src/results.ts';
 import {ledgerHistory} from '../src/kp-history.ts';
+import {NORMAL_RELICS} from '../src/relic-catalog.ts';
+import type {RelicCollection} from '../src/relics.ts';
 const guild='100000000000000100',one='100000000000000101',two='100000000000000102';
 const mapping:KpMapping={guildId:guild,accounts:[{riotId:'One#JP1',discordUserId:one},{riotId:'Two#JP1',discordUserId:two}]};
 const agent=SPIKE_ROSTER.agents[0],at=Date.parse('2026-10-28T03:00:00Z');
@@ -36,9 +38,14 @@ async function fixture(){
  return {env,sql,enable,profile,balance,seed,conflict(){conflict=true;}};
 }
 
-test('the pinned roster has four roles, unique canonical IDs, and no unpublished Hush',()=>{
- assert.equal(SPIKE_ROSTER.agents.length,29);assert.equal(new Set(SPIKE_ROSTER.agents.map(a=>a.id)).size,29);
- assert.ok(!SPIKE_ROSTER.agents.some(a=>a.name==='Hush'));
+test('the pinned roster has four roles, unique canonical IDs, and Hush as a Duelist (added 2026-11-03)',()=>{
+ assert.equal(SPIKE_ROSTER.agents.length,30);assert.equal(new Set(SPIKE_ROSTER.agents.map(a=>a.id)).size,30);
+ assert.deepEqual(SPIKE_ROSTER.agents.find(a=>a.name==='Hush'),{id:'ddd5a15c-4fbe-42fa-3789-11a55ca5ee04',name:'Hush',role:'Duelist'});
+ // A Hush game is now counted, and a Duelist role unlocked before Hush existed stays unlocked.
+ const hush=raw();(hush.players[0].agent as {id?:string;name?:string})={id:'DDD5A15C-4FBE-42FA-3789-11A55CA5EE04',name:'Hush'};
+ assert.equal(spikeMatch(hush,'p-one')?.agent,'ddd5a15c-4fbe-42fa-3789-11a55ca5ee04');
+ const before={...initialSpikeProfile(),unlocked:['Duelist'] as SpikeProfile['unlocked']};
+ assert.equal(spikeProgress(before).find(r=>r.role==='Duelist')?.unlocked,true);
  for(const role of SPIKE_ROLES)assert.ok(SPIKE_ROSTER.agents.filter(a=>a.role===role).length>0);
 });
 test('cold start, growth boundaries and full role unlock use the previous match snapshot',()=>{
@@ -153,18 +160,18 @@ test('daily count uses match end with 09:00 JST boundary; a duplicate never cons
  assert.equal(f.profile().games,62);
 });
 
-test('all 29 agents twice really unlock four roles; payouts remain exact and different players stay separate',async()=>{
+test('all 30 agents twice really unlock four roles; payouts remain exact and different players stay separate',async()=>{
  const f=await fixture();f.enable();
  for(let i=0;i<SPIKE_ROSTER.agents.length*2;i++){
   const r=raw('roster-'+i,{agent:SPIKE_ROSTER.agents[i%SPIKE_ROSTER.agents.length].id});
   assert.ok((await collectKpMatch(f.env,mapping,r,'p-one'))!>0);
  }
- assert.equal(f.profile().games,58);assert.equal(f.profile().unlocked.length,4);
+ assert.equal(f.profile().games,SPIKE_ROSTER.agents.length*2);assert.equal(f.profile().unlocked.length,4);
  assert.ok(Object.values(f.profile().counts).every(n=>n===2));
  const other=raw('other-player');other.players[0].puuid='p-two';
  assert.equal(await collectKpMatch(f.env,mapping,other,'p-two'),40);
  assert.equal(JSON.parse(String(f.sql.prepare('SELECT data FROM spike_profiles WHERE puuid=?').get('p-two')!.data)).games,1);
- assert.equal(f.profile().games,58);
+ assert.equal(f.profile().games,SPIKE_ROSTER.agents.length*2);
  const paid=Number(f.sql.prepare('SELECT SUM(amount) n FROM spike_rewards WHERE user=?').get(one)!.n);
  assert.equal(f.balance(),paid);
 });
@@ -177,4 +184,49 @@ test('wallet overflow rolls back the reward and growth, and recovery pays once',
  f.sql.prepare('INSERT INTO kp_ledger VALUES(?,?,?,?,?,?)').run('space',guild,one,-100,'test',at);
  await drainKpInbox(f.env);await drainKpInbox(f.env);
  assert.equal(f.balance(),Number.MAX_SAFE_INTEGER-60);assert.equal(f.profile().games,1);
+});
+
+
+test('real trigger-created Spike results credit opening relic KP from match 1, without double payout on retry',async()=>{
+ const f=await fixture();f.enable();
+ const def=NORMAL_RELICS.find(x=>x.mode==='spikerush'&&x.rarity==='common')!;
+ const collection:RelicCollection={totalSummons:1,items:{[def.id]:{...def,origin:'normal',count:1}},equipped:[def.id]};
+ const prior=f.sql.prepare('SELECT data FROM kp_state WHERE guild=? AND user=?').get(guild,one) as {data:string};
+ const state=JSON.parse(prior.data) as {relics?:RelicCollection};
+ state.relics=collection;
+ f.sql.prepare('UPDATE kp_state SET data=? WHERE guild=? AND user=?').run(JSON.stringify(state),guild,one);
+ const id=kpEventId(guild,'relic-first','p-one');
+ // A result already sent by the bot must be edited after the verified
+ // Spike receipt, including the newly minted relic ledger amount.
+ f.sql.prepare('INSERT INTO notifications(riot_id,match_id,message,ended_at,mode,sent) VALUES(?,?,?,?,?,1)')
+  .run('One#JP1','relic-first','📢 試合結果\n💬 ナイス！',at,'spikerush');
+ const match=raw('relic-first');
+ assert.equal(await collectKpMatch(f.env,mapping,match,'p-one'),90,'40 base + 50 opening, below the new +400 relic ceiling');
+ assert.equal(f.balance(),90);
+ assert.equal(f.profile().games,1);
+ assert.equal((f.sql.prepare("SELECT COUNT(*) AS n FROM kp_ledger WHERE id=? AND kind='relic'").get('relic:'+id) as {n:number}).n,1);
+ const log=f.sql.prepare('SELECT base,bonus,details FROM relic_effect_logs WHERE id=?').get('relic:'+id) as {base:number;bonus:number;details:string};
+ assert.equal(log.base,40);assert.equal(log.bonus,50);
+ const bot=String((f.sql.prepare("SELECT message FROM notifications WHERE match_id='relic-first'").get() as {message:string}).message);
+ assert.match(bot,/この試合 \+90 KP/);
+ assert.match(bot,/試合報酬 \+40 KP （基礎40・補正0・端数精算 40 KP）\n  ↳ 🧿 遺物補正 \+50 KP/);
+ assert.equal((bot.match(/🧿 遺物補正/g)??[]).length,1);
+ assert.equal(JSON.parse(log.details).spikeOpening.flatPerRelic,50);
+ assert.equal(JSON.parse(log.details).spikeOpening.game,1);
+ await drainKpInbox(f.env);await collectKpMatch(f.env,mapping,match,'p-one');
+ assert.equal(f.balance(),90,'verified receipt is idempotent even when inbox or match is reprocessed');
+ assert.equal((f.sql.prepare("SELECT COUNT(*) AS n FROM kp_ledger WHERE kind='relic'").get() as {n:number}).n,1);
+});
+test('an archived match without a pending inbox is never backpaid when relics are newly equipped',async()=>{
+ const f=await fixture();f.enable();
+ const old=raw('old-without-relic');
+ assert.equal(await collectKpMatch(f.env,mapping,old,'p-one'),40);
+ const def=NORMAL_RELICS.find(x=>x.mode==='spikerush'&&x.rarity==='common')!;
+ const prior=f.sql.prepare('SELECT data FROM kp_state WHERE guild=? AND user=?').get(guild,one) as {data:string};
+ const state=JSON.parse(prior.data) as {relics?:RelicCollection};
+ state.relics={totalSummons:1,items:{[def.id]:{...def,origin:'normal',count:1}},equipped:[def.id]};
+ f.sql.prepare('UPDATE kp_state SET data=? WHERE guild=? AND user=?').run(JSON.stringify(state),guild,one);
+ await drainKpInbox(f.env);
+ assert.equal(f.balance(),40);
+ assert.equal((f.sql.prepare("SELECT COUNT(*) AS n FROM kp_ledger WHERE kind='relic'").get() as {n:number}).n,0);
 });

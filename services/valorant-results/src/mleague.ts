@@ -2,7 +2,10 @@
 // Results are read only from the official "日程・結果" page and matched to the fixture by date, game
 // number and the four teams; anything that does not match exactly is ignored, never guessed.
 import data from '../mleague-2026-27.json' with {type:'json'};
-import {kpHash} from './kp.ts';
+import {kpHash,kpRandom} from './kp.ts';
+import {ensureBetIndex} from './bet-index.ts';
+import {nativeRelicBonus,nativeRelicLoss} from './relics.ts';
+import {verifiedBetProfit,verifiedBetStake,verifiedBetLoss} from './relic-profit.ts';
 import type {KpEnv,KpMapping} from './kp.ts';
 import {enqueue,ensurePosts,earningsWebhook} from './racing-posts.ts';
 import type {PostEnv} from './racing-posts.ts';
@@ -75,8 +78,8 @@ export async function mlClosed(env:KpEnv){
 /** A registered member closes a game's betting at the time it started (default: now). The earliest
  * stated time is kept, so a later, looser call cannot reopen bets that were already late. */
 export async function closeMl(env:KpEnv,mapping:KpMapping,user:string,fixture:Fixture,at:number,now:number){
- if(!mapping.accounts.some(a=>a.discordUserId===user))throw Error('締め切りできるのは登録メンバーだけです。');
- if(at<mlStart(fixture)||at>now)throw Error('開始時刻は19:00から今までの時刻で指定してください。');
+ if(!mapping.accounts.some(a=>a.discordUserId===user))throw Error('締め切りできるんは登録メンバーだけやで。');
+ if(at<mlStart(fixture)||at>now)throw Error('開始時刻は19:00から今までの時刻で入れてな。');
  await ensureMl(env);
  await env.DB.prepare('INSERT INTO ml_closed(match,at,user,created) VALUES(?,?,?,?) ON CONFLICT(match) DO UPDATE SET at=excluded.at,user=excluded.user,created=excluded.created WHERE excluded.at<ml_closed.at').bind(fixture.id,at,user,now).run();
  return (await mlClosed(env)).get(fixture.id)!;
@@ -102,13 +105,17 @@ export function parseOfficialCards(html:string,year:number,d:MlData=data){
 // D1 Insights: 6,992 reads/day * 36 scanned rows for ml_cards alone.
 // Share a snapshot for 5 seconds in one Worker isolate, not across processes.
 // Updating the official calendar invalidates it before and after the writes.
-const mlViewCache=new WeakMap<object,{created:number;promise:Promise<MlView>}>();
+// After the 5 seconds, a one-row version check (bumped whenever a card changes) decides whether the cards are read
+// again, instead of reading every stored card (~2,000 times a day before).
+const mlViewCache=new WeakMap<object,{created:number;version:string;promise:Promise<MlView>}>();
 const ML_VIEW_TTL=5000;
 export async function storeCards(env:KpEnv,cards:ReturnType<typeof parseOfficialCards>,now:number){
  mlViewCache.delete(env.DB);
  await ensureMl(env);
  try{
-  for(const c of cards)await env.DB.prepare('INSERT INTO ml_cards(date,tbl,teams,at) VALUES(?,?,?,?) ON CONFLICT(date,tbl) DO UPDATE SET teams=excluded.teams,at=excluded.at WHERE ml_cards.teams!=excluded.teams').bind(c.date,c.table,JSON.stringify(c.teams),now).run();
+  let changed=0;
+  for(const c of cards)changed+=(await env.DB.prepare('INSERT INTO ml_cards(date,tbl,teams,at) VALUES(?,?,?,?) ON CONFLICT(date,tbl) DO UPDATE SET teams=excluded.teams,at=excluded.at WHERE ml_cards.teams!=excluded.teams').bind(c.date,c.table,JSON.stringify(c.teams),now).run()).meta.changes;
+  if(changed)await env.DB.prepare("INSERT INTO ml_state(key,value) VALUES('cards_version',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").bind(kpRandom()).run();
  }finally{mlViewCache.delete(env.DB);}
 }
 /** The fixtures with official teams where the calendar has been read; only those are open for betting. */
@@ -116,12 +123,18 @@ export async function mlData(env:KpEnv):Promise<MlView>{
  await ensureMl(env);
  const current=Date.now(),cached=mlViewCache.get(env.DB);
  if(cached&&current-cached.created>=0&&current-cached.created<ML_VIEW_TTL)return cached.promise;
- const promise=(async()=>{
+ // Parallel callers share one check: the entry is cached before anything is awaited.
+ const entry={created:current,version:'',promise:undefined as unknown as Promise<MlView>};
+ entry.promise=(async()=>{
+  const version=(await env.DB.prepare("SELECT value FROM ml_state WHERE key='cards_version'").first<{value:string}>())?.value??'';
+  entry.version=version;
+  if(cached&&cached.version===version)return cached.promise;
   const cards=(await env.DB.prepare('SELECT date,tbl,teams FROM ml_cards').all<{date:string;tbl:number;teams:string}>()).results;
-  const official=new Map(cards.map(c=>[c.date+'#'+c.tbl,JSON.parse(c.teams) as string[]])); 
+  const official=new Map(cards.map(c=>[c.date+'#'+c.tbl,JSON.parse(c.teams) as string[]]));
   return {teams:data.teams,fixtures:data.fixtures.map(f=>{const teams=official.get(f.date+'#'+f.table);return teams?{...f,teams,confirmed:true}:{...f,confirmed:false};})};
  })();
- mlViewCache.set(env.DB,{created:current,promise});
+ mlViewCache.set(env.DB,entry);
+ const promise=entry.promise;
  try{return await promise;}catch(error){if(mlViewCache.get(env.DB)?.promise===promise)mlViewCache.delete(env.DB);throw error;}
 }
 const monthPage=(y:number,m:number)=>`https://m-league.jp/games/?mlm=${m}&mly=${y}`;
@@ -172,10 +185,9 @@ export function awaitedFixtures(now:number,known:Map<string,MlResult>,d:{fixture
 }
 /** Games that some saved wallet still has an unsettled prediction on. */
 export async function unsettledMlMatches(env:KpEnv){
- const rows=(await env.DB.prepare(`SELECT data FROM kp_state WHERE data LIKE '%"mlBets"%' AND data LIKE '%"status":"pending"%'`).all<{data:string}>()).results;
- const matches=new Set<string>();
- for(const row of rows){try{for(const b of (JSON.parse(row.data).mlBets??[]) as MlBet[])if(b?.status==='pending'&&typeof b.match==='string')matches.add(b.match);}catch{console.warn('ml_state_unreadable');}}
- return matches;
+ await ensureBetIndex(env);
+ const rows=(await env.DB.prepare("SELECT DISTINCT match FROM kp_bet_index WHERE kind='ml' AND status='pending'").all<{match:string}>()).results;
+ return new Set(rows.map(row=>row.match).filter(Boolean));
 }
 /** Polls the official page every three minutes while a started game has no result. */
 export async function pollMlResults(env:KpEnv,now=Date.now(),request:typeof fetch=fetch){
@@ -264,17 +276,22 @@ export async function pollMlLineups(env:PostEnv,mapping:KpMapping,now=Date.now()
 }
 export function lineupPost(f:Fixture,names:string[],bets:Array<MlBet&{user:string}>){
  const team=(n:string)=>data.teams.find(t=>t.players.some(p=>p.name===n))?.name??'';
- const lines=[`🀄 **${clock(f)} ${f.table}卓 第${f.game}試合 出場決定**`,names.map(n=>`${clean(n)}（${clean(team(n))}）`).join('・')];
+ const lines=[`🀄 **${clock(f)} ${f.table}卓 第${f.game}試合 出場決定や！**`,names.map(n=>`${clean(n)}（${clean(team(n))}）`).join('・')];
  for(const b of bets.filter(x=>x.status==='pending')){
   const what=`${clean(b.player)}の${ML_TYPES[b.type].label} ${money(b.amount)}`;
-  lines.push(names.includes(b.player)?`🎯 <@${b.user}> ${what}（${(b.odds/10).toFixed(1)}倍）`:`↩️ <@${b.user}> ${what}：出場しないので返金予定`);
+  lines.push(names.includes(b.player)?`🎯 <@${b.user}> ${what}（${(b.odds/10).toFixed(1)}倍）`:`↩️ <@${b.user}> ${what}：出えへんから返金予定やで`);
  }
  return lines.join('\n');
 }
 /** Settles every user's pending predictions that now have an official result (same guarded write as racing). */
 export async function settleMl(env:KpEnv,mapping:KpMapping,now=Date.now()){
  await ensureMl(env);
- const rows=(await env.DB.prepare(`SELECT w.user,w.balance,w.version AS wallet_version,s.data,s.version AS state_version FROM kp_wallets w JOIN kp_state s ON s.guild=w.guild AND s.user=w.user WHERE w.guild=? AND s.data LIKE '%"status":"pending"%' AND s.data LIKE '%"mlBets"%'`).bind(mapping.guildId).all<{user:string;balance:number;wallet_version:number;data:string;state_version:number}>()).results;
+ await ensureBetIndex(env);
+ const rows=(await env.DB.prepare(`SELECT w.user,w.balance,w.version AS wallet_version,s.data,s.version AS state_version
+   FROM (SELECT DISTINCT user FROM kp_bet_index WHERE guild=? AND kind='ml' AND status='pending') pending
+   JOIN kp_wallets w ON w.guild=? AND w.user=pending.user
+   JOIN kp_state s ON s.guild=w.guild AND s.user=w.user`)
+   .bind(mapping.guildId,mapping.guildId).all<{user:string;balance:number;wallet_version:number;data:string;state_version:number}>()).results;
  let count=0;
  for(const row of rows){
   const state=JSON.parse(row.data);Object.assign(state,hydrateRacing(state),hydrateMleague(state));state.cash=row.balance;
@@ -282,8 +299,10 @@ export async function settleMl(env:KpEnv,mapping:KpMapping,now=Date.now()){
   if(!due.length)continue;
   const settled:MlBet[]=settleMlBets(state,await mlResults(env,due));
   if(!settled.length)continue;
+  const relicBonus=nativeRelicBonus(state,'mleague',verifiedBetProfit(settled),now,verifiedBetStake(settled));
+  const relicPenalty=relicBonus?0:nativeRelicLoss(state,'mleague',verifiedBetLoss(settled),now,verifiedBetStake(settled));
   const id='ml-settle:'+settled.map(b=>b.id).join(',');
-  const response={result:{settled:settled.map(b=>({id:b.id,status:b.status,payout:b.payout}))}};
+  const response={result:{settled:settled.map(b=>({id:b.id,status:b.status,payout:b.payout})),relicBonus,relicPenalty}};
   const inserted=await env.DB.prepare(`INSERT INTO kp_operations(id,guild,user,request_hash,response,delta,state,directive,at)
    SELECT ?,?,?,?,?,?,?,NULL,? WHERE EXISTS(SELECT 1 FROM kp_wallets w JOIN kp_state s ON w.guild=s.guild AND w.user=s.user WHERE w.guild=? AND w.user=? AND w.version=? AND s.version=?) ON CONFLICT(guild,user,id) DO NOTHING`)
    .bind(id,mapping.guildId,row.user,await kpHash(id),JSON.stringify(response),state.cash-row.balance,JSON.stringify(state),now,mapping.guildId,row.user,row.wallet_version,row.state_version).run();
@@ -293,27 +312,32 @@ export async function settleMl(env:KpEnv,mapping:KpMapping,now=Date.now()){
 }
 /** Everyone's predictions on one fixture, from saved states. */
 async function betsOn(env:KpEnv,guild:string,match:string){
- const rows=(await env.DB.prepare(`SELECT user,data FROM kp_state WHERE guild=? AND data LIKE ?`).bind(guild,`%${match}%`).all<{user:string;data:string}>()).results;
+ await ensureBetIndex(env);
+ const rows=(await env.DB.prepare(`SELECT s.user,s.data FROM
+    (SELECT DISTINCT user FROM kp_bet_index WHERE guild=? AND kind='ml' AND match=?) matched
+    JOIN kp_state s ON s.guild=? AND s.user=matched.user`)
+    .bind(guild,match,guild).all<{user:string;data:string}>()).results;
  return rows.flatMap(r=>(hydrateMleague(JSON.parse(r.data)).mlBets as MlBet[]).filter(b=>b.match===match).map(b=>({...b,user:r.user})));
 }
 const clock=(f:Fixture)=>`${Number(f.date.slice(5,7))}/${Number(f.date.slice(8,10))}`;
 const teamName=(id:string)=>data.teams.find(t=>t.id===id)?.name??id;
 export function cardPost(day:Fixture[],results:Map<string,MlResult>,d:MlView=data){
- const stats=seasonStats(results),lines=[`🀄 **Mリーグ予想** ${clock(day[0])} 19:00開始（ラスの選手を当てる）`];
+ const stats=seasonStats(results),lines=[`🀄 **Mリーグ予想** ${clock(day[0])} 19:00開始（誰がラスになるか当ててみい！）`];
+ lines.push('ちゃんとBETしてや！ 眺めてるだけやとKPは増えへんで。');
  for(const f of day.filter(x=>x.game===1)){
   const card=mlCard(d,f).map((p:{name:string;no:number})=>({...p,odds:mlOdds(p,stats)}));
   const fav=(type:'top'|'last')=>[...card].sort((a,b)=>a.odds[type]-b.odds[type]).slice(0,3).map(p=>`${clean(p.name)} ${(p.odds[type]/10).toFixed(1)}倍`).join('／');
   lines.push(`**${f.table}卓** ${f.teams.map(teamName).join('・')}`,`　ラス本命：${fav('last')}`);
  }
- lines.push('第1試合は19:00、第2試合は第1試合の結果が出るまで締切。','/mleague で全員の倍率、/mbet で予想。出なかった選手は返金。');
+ lines.push('第1試合は19:00で締切や。第2試合は出場の4人が決まってから15分で締切やで。','/mleague で倍率を見て、/mbet でラス予想を買うてな。出えへんかった選手の分は返金するで。');
  return lines.join('\n');
 }
 export function resultPost(f:Fixture,r:MlResult,bets:Array<MlBet&{user:string}>){
- const lines=[`🀄 **Mリーグ ${clock(f)} ${f.table}卓 第${f.game}試合 結果**`,r.names.map((n,i)=>`${i+1}着 ${clean(n)} ${r.points[i]<0?'▲':''}${Math.abs(r.points[i])}pt`).join('　')];
+ const lines=[`🀄 **Mリーグ ${clock(f)} ${f.table}卓 第${f.game}試合 結果出たで！**`,r.names.map((n,i)=>`${i+1}着 ${clean(n)} ${r.points[i]<0?'▲':''}${Math.abs(r.points[i])}pt`).join('　')];
  for(const b of bets){
   const what=`${clean(b.player)}の${ML_TYPES[b.type].label}`;
-  lines.push(b.status==='won'?`💰 <@${b.user}> ${what}的中！ ${money(b.amount)} → ${money(b.payout)}（${(b.odds/10).toFixed(1)}倍）`
-   :b.status==='refunded'?`↩️ <@${b.user}> ${what}は不出場で返金（${money(b.amount)}）`:`💸 <@${b.user}> ${what}は外れ（−${money(b.amount)}）`);
+  lines.push(b.status==='won'?`💰 <@${b.user}> ${what}的中や！ ${money(b.amount)} → ${money(b.payout)}（${(b.odds/10).toFixed(1)}倍）`
+   :b.status==='refunded'?`↩️ <@${b.user}> ${what}は出場せえへんかったから返金や（${money(b.amount)}）`:`💸 <@${b.user}> ${what}は外れや（−${money(b.amount)}）`);
  }
  return lines.join('\n');
 }

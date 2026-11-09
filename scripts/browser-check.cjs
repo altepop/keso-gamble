@@ -17,7 +17,24 @@ async function auditMedia(context){
   const forbidden=method=>function(){record(method);throw Error('Unexpected media activation: '+method);};
   const session={get type(){return 'auto';},set type(_value){record('audioSession.type=');}};
   Object.defineProperty(navigator,'audioSession',{configurable:true,get(){record('navigator.audioSession');return session;}});
-  for(const name of ['Audio','AudioContext','webkitAudioContext','RTCPeerConnection'])
+  // The theme player is now allowed to attempt playback when a genuine title screen renders.
+  // Substitute only its dedicated Audio constructor so game-flow tests remain free of
+  // sound output and unavailable music assets. All other media/capture APIs still fail.
+  function permittedMusicAudio(){
+   if(!(new Error().stack||'').includes('music/player.js'))return forbidden('Audio')();
+   const listeners=new Map();
+   const mock={src:'',preload:'none',loop:false,volume:0,paused:true,
+    addEventListener(name,fn){listeners.set(name,fn);},
+    getAttribute(name){return name==='src'?this.src:null;},
+    removeAttribute(name){if(name==='src')this.src='';},
+    load(){},
+    play(){this.paused=false;listeners.get('play')?.();return Promise.resolve();},
+    pause(){this.paused=true;listeners.get('pause')?.();}
+   };
+   return mock;
+  }
+  Object.defineProperty(window,'Audio',{configurable:true,value:permittedMusicAudio});
+  for(const name of ['AudioContext','webkitAudioContext','RTCPeerConnection'])
    Object.defineProperty(window,name,{configurable:true,value:forbidden(name)});
   HTMLMediaElement.prototype.play=forbidden('HTMLMediaElement.play');
   Object.defineProperty(navigator,'mediaDevices',{configurable:true,value:{
@@ -54,14 +71,25 @@ async function auditMedia(context){
  for(const width of [320,390,1280]){await a.setViewportSize({width,height:844});assert.equal(await a.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);}
  const blocked=await browser.newContext();await auditMedia(blocked);const p=await blocked.newPage();p.on('pageerror',e=>errors.push(e.message));await p.addInitScript(()=>Object.defineProperty(window,'localStorage',{get(){throw Error('blocked')}}));await p.goto('http://127.0.0.1:8765');await p.locator('.title-start').click();await p.locator('.nav-btn[data-screen=assets]').click();await p.locator('summary').click();await p.locator('[data-action=salary]').click();await p.locator('.toast').filter({hasText:'テスト用KP'}).waitFor();await p.locator('.nav-btn[data-screen=race]').click();await p.locator('.sub-tab[data-screen=market]').click();await p.locator('#trade-qty').fill('1');await p.locator('[data-action=trade]').click();await p.locator('.toast').filter({hasText:'買付した'}).waitFor();
  const gameContext=await browser.newContext({viewport:{width:390,height:844}});await auditMedia(gameContext);const g=await gameContext.newPage();g.on('pageerror',e=>errors.push(e.message));await g.goto('http://127.0.0.1:8765');await g.locator('.title-start').click();
+ // Luxury is discoverable in demo mode, but purchases never touch the demo wallet.
+ await g.locator('.nav-btn[data-screen=directives]').click();
+ await g.locator('.sub-tab[data-screen=shop]').click();
+ assert.equal(await g.locator('.screen').getAttribute('data-view'),'shop');
+ assert.equal(await g.locator('[data-action=luxury]').count(),7);
+ assert.equal(await g.locator('[data-action=luxury]:disabled').count(),7);
+ assert.match(await g.locator('.asset-card').innerText(),/商品一覧のプレビュー/);
+ await g.locator('.sub-tab[data-screen=directives]').click();
+ assert.equal(await g.locator('.screen').getAttribute('data-view'),'directives');
+ await g.locator('.nav-btn[data-screen=home]').click();
  assert.match(await g.locator('#app').innerText(),/保有KP[\s\S]*発令中の指令/);assert.doesNotMatch(await g.locator('#app').innerText(),/日経|TOPIX/);
  await g.locator('.nav-btn[data-screen=play]').click();await g.locator('#claim-reference').fill('match-001');await g.locator('[data-action=submit-claim]').click();await g.locator('[data-approve]').waitFor();
  let gameState=await g.evaluate(k=>JSON.parse(localStorage.getItem(k)),key);assert.equal(gameState.cash,10000);await g.locator('[data-approve]').click();await g.waitForFunction(k=>JSON.parse(localStorage.getItem(k)).cash===10500,key);
  await g.locator('#claim-activity').selectOption('steam');await g.locator('#claim-game').fill('Portal 2');await g.locator('#claim-achievement').fill('<img src=x onerror=alert(1)>');await g.locator('#claim-reference').fill('proof-001');await g.locator('[data-action=submit-claim]').click();await g.locator('[data-approve]').click();await g.waitForFunction(k=>JSON.parse(localStorage.getItem(k)).cash===11300,key);assert.equal(await g.locator('.history-entry img').count(),0);
- await g.locator('.nav-btn[data-screen=directives]').click();await g.locator('#directive-target').selectOption('riso');await g.locator('#directive-task').selectOption('unrated');await g.locator('[data-action=issue-directive]').click();await g.locator('[data-complete]').waitFor();gameState=await g.evaluate(k=>JSON.parse(localStorage.getItem(k)),key);assert.equal(gameState.cash,8800);assert.equal(gameState.directives[0].status,'active');
+ for(let n=2;n<=4;n++){await g.locator('#claim-activity').selectOption('competitive');await g.locator('#claim-reference').fill('match-00'+n);await g.locator('[data-action=submit-claim]').click();await g.locator('[data-approve]').click();await g.waitForFunction(([k,amount])=>JSON.parse(localStorage.getItem(k)).cash===amount,[key,11300+500*(n-1)]);}
+  await g.locator('.nav-btn[data-screen=directives]').click();await g.locator('#directive-target').selectOption('riso');await g.locator('#directive-task').selectOption('unrated');await g.locator('[data-action=issue-directive]').click();await g.locator('[data-complete]').waitFor();gameState=await g.evaluate(k=>JSON.parse(localStorage.getItem(k)),key);assert.equal(gameState.cash,300);assert.equal(gameState.directives[0].status,'active');
  await g.locator('[data-complete]').click();await g.waitForFunction(k=>JSON.parse(localStorage.getItem(k)).directives[0].status==='completed',key);await g.reload();await g.locator('.title-start').click();await g.locator('.nav-btn[data-screen=directives]').click();assert.match(await g.locator('#app').innerText(),/達成済み/);
  for(const screen of ['home','play','race','directives','assets']){await g.locator(`.nav-btn[data-screen=${screen}]`).click();await g.setViewportSize({width:320,height:844});assert.equal(await g.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,screen);}
- await g.locator('.nav-btn[data-screen=assets]').click();await g.locator('.title-back').click();await g.locator('.title-screen').waitFor();assert.equal((await g.evaluate(k=>JSON.parse(localStorage.getItem(k)),key)).cash,8800);await g.locator('.title-start').click();
+ await g.locator('.nav-btn[data-screen=assets]').click();await g.locator('.title-back').click();await g.locator('.title-screen').waitFor();assert.equal((await g.evaluate(k=>JSON.parse(localStorage.getItem(k)),key)).cash,300);await g.locator('.title-start').click();
  const resetContext=await browser.newContext();await auditMedia(resetContext);const resetPage=await resetContext.newPage();resetPage.on('pageerror',e=>errors.push(e.message));await resetPage.goto('http://127.0.0.1:8765');await resetPage.locator('.title-start').click();await resetPage.locator('.nav-btn[data-screen=race]').click();await resetPage.locator('.sub-tab[data-screen=market]').click();await resetPage.locator('#trade-qty').fill('3');await resetPage.locator('.nav-btn[data-screen=assets]').click();resetPage.once('dialog',dialog=>dialog.accept());await resetPage.locator('[data-action=reset]').click();await resetPage.locator('.nav-btn[data-screen=race]').click();await resetPage.locator('.sub-tab[data-screen=market]').click();await resetPage.waitForFunction(()=>document.querySelector('#trade-qty')?.value==='1');
  const raceContext=await browser.newContext({viewport:{width:390,height:844}});await auditMedia(raceContext);const r=await raceContext.newPage();r.on('pageerror',e=>errors.push(e.message));
  await r.clock.install({time:new Date('2026-10-27T12:05:30Z')});await r.goto('http://127.0.0.1:8765');await r.locator('.title-start').click();await r.locator('.nav-btn[data-screen=race]').click();await r.locator('.sub-tab[data-screen=market]').click();await r.locator('.sub-tab[data-screen=race]').click();
@@ -74,11 +102,30 @@ async function auditMedia(context){
  raceState=await r.evaluate(k=>JSON.parse(localStorage.getItem(k)),key);assert.equal(raceState.cash,9000+raceState.raceBets[0].payout);assert.match(await r.locator('.race-result').innerText(),/着順/);
  await r.clock.fastForward(15*60000);await r.locator('.race-stage').filter({hasText:'21:30発走'}).waitFor(); // the next race (a named night race runs even without bets)
  for(const width of [320,390,1280]){await r.setViewportSize({width,height:844});assert.equal(await r.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'race '+width);}
+ // After the 11/4 reform, mobile race cards should remain compact and details must not bet.
+ const future=await raceContext.newPage();future.on('pageerror',e=>errors.push(e.message));
+ await future.clock.install({time:new Date('2026-11-04T09:02:00Z')});
+ await future.goto('http://127.0.0.1:8765');await future.locator('.title-start').click();
+ await future.locator('.nav-btn[data-screen=race]').click();await future.locator('.sub-tab[data-screen=market]').click();await future.locator('.sub-tab[data-screen=race]').click();
+ await future.locator('.race-intelligence summary').waitFor();
+ assert.ok(await future.locator('.race-horse-detail').count()>0,'each horse exposes optional form');
+ assert.equal(await future.locator('.race-intelligence').evaluate(el=>el.open),false,'forecast starts folded');
+ await future.locator('.race-intelligence summary').click();
+ assert.equal(await future.locator('.race-intelligence').evaluate(el=>el.open),true,'forecast expands without a handler');
+ assert.equal(await future.locator('.race-event-note').count(),1,'18:15 is a special race');
+ await future.locator('.race-event-note summary').click();
+ assert.equal(await future.locator('.race-event-note').evaluate(el=>el.open),true);
+ await future.locator('.race-horse-detail summary').first().click();
+ assert.match(await future.locator('.race-horse-detail-body').first().innerText(),/馬場適性/);
+ await future.locator('[data-race-horse="2"]').click();
+ assert.equal(await future.locator('[data-race-horse="2"]').getAttribute('aria-pressed'),'true','selection still works');
+ assert.match(await future.locator('#race-preview').innerText(),/2番/);
+ for(const width of [320,390]){await future.setViewportSize({width,height:844});assert.equal(await future.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'reform race '+width);}
  assert.deepEqual(errors,[]);
  // Confirm the probe is active, so a missing instrumentation hook cannot pass silently.
  for(const ctx of browser.contexts())for(const page of ctx.pages())await page.evaluate(()=>window.__flushMediaAudit());
  await g.evaluate(async()=>{const session=navigator.audioSession;session.type='ambient';await window.__flushMediaAudit();});
  assert.deepEqual(mediaCalls.splice(-2),['navigator.audioSession','audioSession.type=']);
- assert.deepEqual(mediaCalls,[],'Game flows must not read/change audio sessions, create playback/capture, or open WebRTC');
- console.log('Browser checks passed: no audio-session access, media playback/capture or WebRTC during game flows; play claims and payouts, Steam text escaping, directives and completion persistence, concurrent orders/salaries, race bets and settlement, storage failure, drafts, chart toggles, keyboard, spin persistence, mobile layouts.');
+ assert.deepEqual(mediaCalls,[],'Game flows must not activate media apart from the isolated startup music player; audioSession, capture and WebRTC remain blocked');
+ console.log('Browser checks passed: safe opt-in controls and isolated music startup; no other audio-session access, playback/capture or WebRTC during game flows; play claims and payouts, Steam text escaping, directives and completion persistence, concurrent orders/salaries, race bets and settlement, storage failure, drafts, chart toggles, keyboard, spin persistence, mobile layouts.');
 })().catch(e=>{console.error(e);process.exitCode=1;}).finally(async()=>{await browser?.close();server.kill();});

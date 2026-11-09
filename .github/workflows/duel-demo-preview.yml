@@ -1,0 +1,66 @@
+name: Duel six-mode interactive demo screenshots
+on:
+  pull_request:
+    paths:
+      - 'duel-demo.html'
+      - 'duel-preview/**'
+      - 'js/duel-*.js'
+      - 'scripts/duel-demo-browser-check.cjs'
+      - 'scripts/duel-othello-pass-browser-check.cjs'
+      - 'scripts/duel-cpu-browser-check.cjs'
+      - 'scripts/duel-live-touch-browser-check.cjs'
+      - '.github/workflows/duel-demo-preview.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'duel-demo.html'
+      - 'duel-preview/**'
+      - 'js/duel-*.js'
+      - 'scripts/duel-demo-browser-check.cjs'
+      - 'scripts/duel-othello-pass-browser-check.cjs'
+      - 'scripts/duel-live-touch-browser-check.cjs'
+      - '.github/workflows/duel-demo-preview.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  six-modes:
+    name: Screenshot and test all six PvP games
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm install --no-save playwright@1.63.0
+      - run: npx playwright install --with-deps chromium webkit
+      - name: Walk through all 6 modes on mobile Chromium
+        env:
+          DUEL_DEMO_SHOTS: ${{ runner.temp }}/duel-screens
+        run: node scripts/duel-demo-browser-check.cjs
+      - name: Walk through all 6 modes on iPhone WebKit
+        env:
+          DUEL_DEMO_SHOTS: ${{ runner.temp }}/duel-screens
+        run: node scripts/duel-demo-browser-check.cjs webkit
+      - name: Verify automatic Othello pass continues on mobile Chromium
+        run: node scripts/duel-othello-pass-browser-check.cjs
+      - name: Verify automatic Othello pass continues on iPhone WebKit
+        run: node scripts/duel-othello-pass-browser-check.cjs webkit
+      - name: Verify production Activity Gomoku touch flow in Chromium
+        run: node scripts/duel-live-touch-browser-check.cjs
+      - name: Verify production Activity Gomoku touch flow in iPhone WebKit
+        run: node scripts/duel-live-touch-browser-check.cjs webkit
+      - name: Test CPU practice in mobile Chromium
+        run: node scripts/duel-cpu-browser-check.cjs
+      - name: Test CPU practice in iPhone WebKit
+        run: node scripts/duel-cpu-browser-check.cjs webkit
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: duel-demo-six-modes
+          path: ${{ runner.temp }}/duel-screens/*.png
+          if-no-files-found: warn
+          retention-days: 14

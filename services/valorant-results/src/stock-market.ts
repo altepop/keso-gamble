@@ -14,6 +14,11 @@ export const STOCK_INTERVAL=5*60_000,STOCK_HOLD=86400000,DIVIDEND_CAP=500;
 export interface Market {guild:string;version:number;prices:Record<string,number>;history:Record<string,number[]>;at:number;startedAt:number;token:string}
 export interface StockBenefits {eligibleValue:number;percent:number;heldHours:number}
 interface RawMarket {guild:string;version:number;prices:string;history:string;at:number;started_at:number;token:string}
+// D1 Insights 2026-11-07: alert lookups repeatedly scanned historic rows
+// (about 70k + 29k Rows read / 24h). These covering indexes preserve the
+// exact MAX(at) cooldown and UTC-day COUNT semantics without a query rewrite.
+export const STOCK_ANNOUNCEMENT_LAST_INDEX_SQL='CREATE INDEX IF NOT EXISTS stock_announcements_latest ON stock_announcements(guild,symbol,at DESC)';
+export const STOCK_ANNOUNCEMENT_DAY_INDEX_SQL='CREATE INDEX IF NOT EXISTS stock_announcements_day ON stock_announcements(guild,at)';
 const ready=new WeakSet<object>();
 // A stock listed after the market started trades from its listing price; the next tick saves it.
 const parse=(r:RawMarket):Market=>{
@@ -56,11 +61,16 @@ export async function ensureStocks(env:KpEnv){
  // Range on applied_at limits reads to today's events, with the remaining
  // GROUP BY fields inside a covering index; old history is not deleted.
  `CREATE INDEX IF NOT EXISTS stock_news_daily_budget ON stock_news(guild,applied_at,symbol,applied_bps,id)`,
+ // Most applied news carry 0 bps once a symbol's budget is spent (fortune news arrives every tick), so the
+ // budget sum reads only today's non-zero rows (455 rows/tick read on 2026-11-03 before this index).
+ `CREATE INDEX IF NOT EXISTS stock_news_daily_used ON stock_news(guild,applied_at,symbol,applied_bps,id) WHERE applied_bps!=0`,
  // A partial time-sorted index supports the 12 newest public headlines without
  // scanning and sorting every historical market event on each wallet refresh.
  `CREATE INDEX IF NOT EXISTS stock_news_recent_public ON stock_news(guild,at DESC,id DESC) WHERE applied_version IS NOT NULL AND applied_bps!=0`,
  `CREATE TABLE IF NOT EXISTS stock_ticks(guild TEXT NOT NULL,version INTEGER NOT NULL,prices TEXT NOT NULL,at INTEGER NOT NULL,PRIMARY KEY(guild,version))`,
  `CREATE TABLE IF NOT EXISTS stock_announcements(guild TEXT NOT NULL,symbol TEXT NOT NULL,slot INTEGER NOT NULL,at INTEGER NOT NULL,PRIMARY KEY(guild,symbol,slot))`,
+ STOCK_ANNOUNCEMENT_LAST_INDEX_SQL,
+ STOCK_ANNOUNCEMENT_DAY_INDEX_SQL,
  `CREATE TABLE IF NOT EXISTS kp_posts(id TEXT PRIMARY KEY,body TEXT NOT NULL,at INTEGER NOT NULL,sent INTEGER NOT NULL DEFAULT 0)`,
  // One migration row changes holdings and returns only the conversion remainder, atomically.
  `CREATE TRIGGER IF NOT EXISTS stock_account_apply AFTER INSERT ON stock_accounts BEGIN
@@ -216,10 +226,11 @@ export function nextStockPrices(prices:Record<string,number>,news:Array<{symbol:
 const random=()=>{const v=new Uint32Array(1);crypto.getRandomValues(v);return v[0]/4294967296;};
 export async function tickStocks(env:KpEnv,market:Market,now=Date.now(),draw:()=>number=random){
  if(now-market.at<STOCK_INTERVAL)return market;
+ await ensureStocks(env);
  await captureNews(env,market,now);
  for(const n of fictionNews(draw))await env.DB.prepare('INSERT OR IGNORE INTO stock_news(guild,id,symbol,label,bps,at) VALUES(?,?,?,?,?,?)').bind(market.guild,`fiction:${n.symbol}:${market.version}`,n.symbol,n.label,n.bps,now).run();
  const pending=(await env.DB.prepare('SELECT id,symbol,label,bps,at FROM stock_news WHERE guild=? AND applied_version IS NULL ORDER BY at,id LIMIT 40').bind(market.guild).all<{id:string;symbol:string;label:string;bps:number;at:number}>()).results;
- const used=(await env.DB.prepare("SELECT symbol,SUM(ABS(applied_bps)) AS total,SUM(CASE WHEN id LIKE 'trades:%' THEN ABS(applied_bps) ELSE 0 END) AS trades FROM stock_news WHERE guild=? AND applied_at>=? AND id NOT LIKE 'admin:%' GROUP BY symbol").bind(market.guild,Math.floor(now/STOCK_HOLD)*STOCK_HOLD).all<{symbol:string;total:number;trades:number}>()).results;
+ const used=(await env.DB.prepare("SELECT symbol,SUM(ABS(applied_bps)) AS total,SUM(CASE WHEN id LIKE 'trades:%' THEN ABS(applied_bps) ELSE 0 END) AS trades FROM stock_news INDEXED BY stock_news_daily_used WHERE guild=? AND applied_at>=? AND applied_bps!=0 AND id NOT LIKE 'admin:%' GROUP BY symbol").bind(market.guild,Math.floor(now/STOCK_HOLD)*STOCK_HOLD).all<{symbol:string;total:number;trades:number}>()).results;
  const budgets=new Map(IDS.map(id=>[id,{day:(DAY_BUDGET[id]??300)-(used.find(r=>r.symbol===id)?.total??0),tick:250,trades:30-(used.find(r=>r.symbol===id)?.trades??0)}]));
  const effective=pending.map(n=>{const b=budgets.get(n.symbol);if(!b)return {...n,bps:0};const trading=n.id.startsWith('trades:');const size=Math.max(0,Math.min(Math.abs(n.bps),b.day,b.tick,trading?b.trades:Infinity));b.day-=size;b.tick-=size;if(trading)b.trades-=size;return {...n,bps:Math.sign(n.bps)*size};});
  const prices=nextStockPrices(market.prices,effective,draw),history=Object.fromEntries(IDS.map(id=>[id,[...(market.history[id]??[]),prices[id]].slice(-48)]));
@@ -265,11 +276,23 @@ export function applyStockOrder(state:Record<string,any>,args:Record<string,unkn
  state.trades.unshift({id:crypto.randomUUID(),symbol:stock.id,side:args.side,quantity,price:quote.price,fee:quote.fee,gross:quote.gross,time:Date.now()});state.trades=state.trades.slice(0,50);
  return {result:quote,stockTrade:{symbol:stock.id,side:args.side,quantity,...quote,pricingVersion:STOCK_ORDER_VERSION,marketVersion:state.stockMarket.version,history:state.history[stock.id]}};
 }
+// The last 48 ticks only change when the market moves (every 5 minutes), but every full wallet read asked for them
+// (~2,000 times a day). Kept per isolate for the market version they belong to.
+const tickCache=new WeakMap<object,Map<string,{version:number;ticks:Promise<Array<{prices:Record<string,number>;at:number}>>}>>();
+function recentTicks(env:KpEnv,market:Market){
+ let byGuild=tickCache.get(env.DB);if(!byGuild){byGuild=new Map();tickCache.set(env.DB,byGuild);}
+ const cached=byGuild.get(market.guild);if(cached&&cached.version===market.version)return cached.ticks;
+ const ticks=Promise.resolve(env.DB.prepare('SELECT prices,at FROM stock_ticks WHERE guild=? ORDER BY version DESC LIMIT 48').bind(market.guild).all<{prices:string;at:number}>())
+  .then(r=>r.results.reverse().map(r=>({prices:JSON.parse(r.prices) as Record<string,number>,at:r.at})));
+ byGuild.set(market.guild,{version:market.version,ticks});
+ ticks.catch(()=>{if(byGuild!.get(market.guild)?.ticks===ticks)byGuild!.delete(market.guild);});
+ return ticks;
+}
 export async function stockView(env:KpEnv,market:Market,user?:string,now=Date.now()){
  const quotes=(await env.DB.prepare('SELECT symbol,units,tick_at FROM stock_order_quotes WHERE guild=?').bind(market.guild).all<{symbol:string;units:number;tick_at:number}>()).results;
  const orderQuotes=Object.fromEntries(STOCKS.map(s=>{const row=quotes.find(q=>q.symbol===s.id&&q.tick_at===market.at&&Math.round(q.units/STOCK_PRICE_SCALE)===market.prices[s.id]);return [s.id,row?.units??market.prices[s.id]*STOCK_PRICE_SCALE];}));
  const news=(await env.DB.prepare('SELECT symbol,label,applied_bps AS bps,at FROM stock_news WHERE guild=? AND applied_version IS NOT NULL AND applied_bps!=0 ORDER BY at DESC,id DESC LIMIT 12').bind(market.guild).all()).results;
- const ticks=(await env.DB.prepare('SELECT prices,at FROM stock_ticks WHERE guild=? ORDER BY version DESC LIMIT 48').bind(market.guild).all<{prices:string;at:number}>()).results.reverse().map(r=>({prices:JSON.parse(r.prices),at:r.at}));
+ const ticks=[...await recentTicks(env,market)];
  if(!ticks.length)ticks.push({prices:market.prices,at:market.at});
  const dividends=user?(await env.DB.prepare('SELECT day,amount,eligible_value AS eligibleValue,at FROM stock_dividends WHERE guild=? AND user=? ORDER BY day DESC LIMIT 7').bind(market.guild,user).all()).results:[];
  return {orderQuotes,pricingVersion:STOCK_ORDER_VERSION,volatilityMultiplier:2,version:market.version,at:Math.max(market.at,...ticks.map(t=>t.at)),startedAt:market.startedAt,intervalMinutes:5,dividendPercent:1,dividendCap:DIVIDEND_CAP,holdHours:24,discountCap:2000,ticks,news,dividends};
@@ -281,15 +304,20 @@ export async function queueStockPosts(env:KpEnv&{KP_EARNINGS_WEBHOOK_URL?:string
  const previous=await env.DB.prepare('SELECT prices FROM stock_ticks WHERE guild=? AND version=?').bind(market.guild,market.version-1).first<{prices:string}>();
  const old=previous?JSON.parse(previous.prices):Object.fromEntries(STOCKS.map(s=>[s.id,s.initialPrice]));
  const slot=Math.floor(now/(30*60_000));
+ // One bounded day-count lookup per market tick, regardless of how many symbols move.
+ let dailyCount:number|null=null;
  for(const s of STOCKS){
   const change=(market.prices[s.id]/old[s.id]-1)*100;
   if(Math.abs(change)<3)continue;
   const info=await env.DB.prepare('SELECT MAX(at) AS last FROM stock_announcements WHERE guild=? AND symbol=?').bind(market.guild,s.id).first<{last:number|null}>();if(info?.last&&now-info.last<30*60_000)continue;
-  const count=await env.DB.prepare('SELECT COUNT(*) AS n FROM stock_announcements WHERE guild=? AND at>=?').bind(market.guild,Math.floor(now/86400000)*86400000).first<{n:number}>();if((count?.n??0)>=8)return;
+  if(dailyCount===null){const count=await env.DB.prepare('SELECT COUNT(*) AS n FROM stock_announcements WHERE guild=? AND at>=?').bind(market.guild,Math.floor(now/86400000)*86400000).first<{n:number}>();dailyCount=Number(count?.n??0);}
+  if(dailyCount>=8)return;
   const body=JSON.stringify({content:`📈 **${s.name} ${change>0?'急騰':'急落'}**\n${market.prices[s.id].toLocaleString('ja-JP')} KP（${change>0?'+':''}${change.toFixed(1)}%）\nKESO PLAYの「株」で確認できます。`,allowed_mentions:{parse:[]}});
-  await env.DB.batch([
+  const inserted=await env.DB.batch([
    env.DB.prepare('INSERT OR IGNORE INTO stock_announcements VALUES(?,?,?,?)').bind(market.guild,s.id,slot,now),
    env.DB.prepare("INSERT OR IGNORE INTO kp_posts(id,body,at) SELECT ?,?,? WHERE EXISTS(SELECT 1 FROM stock_announcements WHERE guild=? AND symbol=? AND slot=?)").bind('stock:'+market.guild+':'+s.id+':'+slot,body,now,market.guild,s.id,slot),
   ]);
+  // An ignored duplicate does not consume another slot or trigger the next alert.
+  if(inserted[0]?.meta.changes)dailyCount++;
  }
 }

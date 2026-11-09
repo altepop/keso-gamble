@@ -54,7 +54,7 @@ test('slash race card uses the real entries and never leaks a race seed',async t
  assert.match(message,/16:15発走・\d+頭｜締切 16:14/);assert.match(message,/` 1` /);assert.match(message,/` 8` /);
  const seed=f.sql.prepare('SELECT seed FROM kp_races ORDER BY id DESC LIMIT 1').get()?.seed;
  if(seed)assert.equal(message.includes(String(seed)),false);
- assert.match(message,/`\/bet` と打って、horse で馬を一覧から選び/);
+ assert.match(message,/`\/bet` と打って、horse で馬を選んでな/);
 });
 test('slash bet uses the shared wallet, rejects stale races and invalid stakes, and retries one debit',async t=>{
  t.mock.timers.enable({apis:['Date'],now:T0});const f=await fixture();
@@ -153,7 +153,7 @@ test('public command metadata contains definitions only and does not need or exp
  let queries=0;
  const response=await kpApi(new Request('https://worker/api/kp/commands'),{DB:{prepare(){queries++;throw Error('No DB reads');}},KP_BOOTSTRAP_PRIVATE_KEY:'fixture-secret-must-not-leak'} as unknown as KpEnv);
  const body=await response.json() as {version:string;commands:unknown[]};
- assert.equal(response.status,200);assert.equal(body.version,'kp-slash-v19-dm-daily-40k');assert.equal(body.commands.length,14);assert.equal(queries,0);
+ assert.equal(response.status,200);assert.equal(body.version,'kp-slash-v22-grant-loop-reconcile');assert.equal(body.commands.length,14);assert.equal(queries,0);
  assert.equal(JSON.stringify(body).includes('fixture-secret'),false);assert.equal(response.headers.get('Cache-Control'),'no-store');
 });
 
@@ -212,7 +212,7 @@ test('/bet needs only a horse and an amount: the open race and a win bet are ass
  const typed=await betChoices(f.env,{...interaction('bet',one,[{name:'horse',value:'2',focused:true} as never])},mapping);
  assert.deepEqual(typed.map(c=>c.value),[2],'typing a number narrows the list');
  const receipt=await runKpCommand(f.env,interaction('bet',one,[{name:'horse',value:2},{name:'amount',value:500}]),mapping);
- assert.match(receipt,/馬券を購入しました/);assert.match(receipt,/16:15発走/);assert.match(receipt,new RegExp(`\\*\\*2番 ${choices[1].name.split('　')[0].replace(/^2番 /,'')}\\*\\* の1着当て`));
+ assert.match(receipt,/馬券を購入したで/);assert.match(receipt,/16:15発走/);assert.match(receipt,new RegExp(`\\*\\*2番 ${choices[1].name.split('　')[0].replace(/^2番 /,'')}\\*\\* の1着当て`));
  assert.match(receipt,/掛け金 500 KP × 確定倍率 \d+\.\d倍 ＝ 当たれば [\d,]+ KP/);
  assert.equal(f.sql.prepare('SELECT balance FROM kp_wallets WHERE user=?').get(one)?.balance,9500);
 });
@@ -299,7 +299,7 @@ test('private /spike status and /spike hint select the requested role and charge
  const f=await fixture();
  const status={...interaction('spike'),data:{name:'spike',options:[{type:1,name:'status'}]}};
  const view=await runKpCommand(f.env,status,mapping);
- assert.match(view,/\*\*Duelist\*\* 0\/16/);assert.match(view,/🔒 未公開/);
+ assert.match(view,/\*\*Duelist\*\* 0\/18/);assert.match(view,/🔒 未公開/);
  assert.doesNotMatch(view,/15キル以上/);
  const hint={...interaction('spike'),data:{name:'spike',options:[{type:1,name:'hint',options:[{name:'role',type:3,value:'Duelist'}]}]}};
  const first=await runKpCommand(f.env,hint,mapping);
@@ -311,4 +311,51 @@ test('private /spike status and /spike hint select the requested role and charge
  const after=await runKpCommand(f.env,status,mapping);
  assert.match(after,/15キル以上/);
  assert.doesNotMatch(after,/7アシスト以上/,'unbought role condition stays hidden');
+});
+
+test('/spike status user: only the owner ID sees another member, with every real trial and the Controller run',async()=>{
+ const f=await fixture();
+ const {ensureSpikeAwakening}=await import('../src/spike-awakening.ts');await ensureSpikeAwakening(f.env);
+ const {initialSpikeProfile}=await import('../src/spikerush-growth.ts');
+ const roster=(await import('../spikerush-roster.json',{with:{type:'json'}})).default as {agents:Array<{id:string;name:string;role:string}>};
+ const controllers=roster.agents.filter(a=>a.role==='Controller');
+ const profile={...initialSpikeProfile(),games:3,trials:{duelist:false,initiator:true,controllerWins:[],controllerWinCounts:{},controllerKdAgents:[],controllerStreak:[controllers[0].id,controllers[1].id],controllerTrialVersion:3,sentinel:false}};
+ const puuid=String(f.sql.prepare('SELECT puuid FROM kp_accounts WHERE user=?').get(two)!.puuid);
+ f.sql.prepare('INSERT INTO spike_profiles(guild,puuid,user,data,version) VALUES(?,?,?,?,1)').run(guild,puuid,two,JSON.stringify(profile));
+ const owner='606119536697278464';
+ const look=(viewer:string,target:string=two,permissions='0')=>runKpCommand(f.env,{...interaction('spike',viewer),member:{permissions,user:{id:viewer}},data:{name:'spike',options:[{type:1,name:'status',options:[{name:'user',type:6,value:target}]}]}} as Parameters<typeof runKpCommand>[1],mapping);
+ assert.match(await look(one),/運営だけが見られます/,'a member cannot look at someone else');
+ assert.match(await look(one,two,'8'),/運営だけが見られます/,'server administrators other than the owner cannot either');
+ const view=await look(owner);
+ assert.match(view,new RegExp(`管理者ビュー.*<@${two}>`));
+ assert.ok(view.length<1950,'fits in one Discord message');
+ assert.match(view,/15キル以上/,'every real trial is shown even without hints');
+ assert.match(view,new RegExp(`判定：2/7（連続中：${controllers[0].name}→${controllers[1].name}）`));
+ assert.match(view,new RegExp(`残りのコントローラー：${controllers.slice(2).map(a=>a.name).join('・')}`));
+ assert.match(view,/Initiator[\s\S]*判定：達成/);
+ assert.match(await look(owner,'100000000000000199'),/紐付いていない/);
+ assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM spike_hint_unlocks').get()!.n,0,'nothing is bought or changed');
+ assert.equal(f.sql.prepare('SELECT version FROM spike_profiles WHERE puuid=?').get(puuid)!.version,1);
+});
+
+test('/kpgrant LOOP代替は確定した報酬を一度だけ与え、後日のLOOP受領でも再入金しない',async()=>{
+ const f=await fixture(),cat='100000000000000104';
+ const grant=(n:number,amount:number,milestone:string)=>runKpCommand(f.env,{...interaction('kpgrant',one,[
+  {name:'user',value:cat},{name:'amount',value:amount},{name:'reason',value:'引継ぎ補填'},{name:'loop_milestone',value:milestone}
+ ]),id:id(T0,n)},mapping);
+ assert.match(await grant(10,50000,'chapter.1'),/LOOP chapter.1 代替/);
+ assert.equal(f.sql.prepare('SELECT balance FROM kp_wallets WHERE guild=? AND user=?').get(guild,cat)?.balance,50000);
+ assert.match(await grant(11,50000,'chapter.1'),/すでに支給済み/);
+ assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM kp_ledger WHERE user=?').get(cat)?.n,1);
+ const receipt=f.sql.prepare('SELECT id,evidence,amount FROM kp_loop_events WHERE user=?').get(cat)!;
+ assert.equal(receipt.id,`loop:${guild}:${cat}:chapter.1`);
+ assert.equal(receipt.amount,50000);
+ assert.match(String(receipt.evidence),/^manual-grant:/);
+ // The signed LOOP endpoint uses the same UNIQUE(guild,user,milestone); duplicate attempts are no-ops.
+ f.sql.prepare('INSERT INTO kp_loop_events(id,guild,user,milestone,evidence,amount,completed_at) VALUES(?,?,?,?,?,?,?) ON CONFLICT(guild,user,milestone) DO NOTHING')
+  .run(receipt.id,guild,cat,'chapter.1','clear_id',50000,T0);
+ assert.equal(f.sql.prepare('SELECT balance FROM kp_wallets WHERE guild=? AND user=?').get(guild,cat)?.balance,50000);
+ assert.match(await grant(12,1000,'chapter.2'),/正確に入力/);
+ assert.match(await grant(13,300000,'chapter.2'),/LOOP chapter.2 代替/);
+ assert.equal(f.sql.prepare('SELECT balance FROM kp_wallets WHERE guild=? AND user=?').get(guild,cat)?.balance,350000);
 });

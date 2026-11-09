@@ -1,0 +1,48 @@
+name: Missed Spike Rush KP (owner)
+
+# One-off, owner-approved KP for a Spike Rush match the monitor missed, using the normal Spike Rush formula and
+# the scoreboard the owner provides. Requires the match to be recorded first (Missed match record).
+on:
+  workflow_dispatch:
+    inputs:
+      discord_id: {description: Discord user ID of the member, required: true}
+      agent: {description: Agent name (e.g. Clove), required: true}
+      kills: {description: Kills, required: true}
+      deaths: {description: Deaths, required: true}
+      assists: {description: Assists, required: true}
+      win: {description: true or false, required: true}
+      started_at: {description: Match start (ISO 8601), required: true}
+      ended_at: {description: Match end (ISO 8601, same as the recorded missed match), required: true}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: missed-spike-kp
+  cancel-in-progress: false
+
+jobs:
+  pay:
+    if: github.repository == 'altepop/keso-gamble' && github.actor == 'altepop'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Test the payment
+        run: node --experimental-strip-types --test scripts/missed-spike-kp.test.mjs
+      - name: Pay the missed match
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          DISCORD_ID: ${{ inputs.discord_id }}
+          AGENT: ${{ inputs.agent }}
+          KILLS: ${{ inputs.kills }}
+          DEATHS: ${{ inputs.deaths }}
+          ASSISTS: ${{ inputs.assists }}
+          WIN: ${{ inputs.win }}
+          STARTED_AT: ${{ inputs.started_at }}
+          ENDED_AT: ${{ inputs.ended_at }}
+        run: node --experimental-strip-types scripts/missed-spike-kp.mjs

@@ -7,6 +7,8 @@ export async function ensureNotificationReadIndexes(db:D1Database):Promise<void>
  const job=(async()=>{
   await db.batch([
    db.prepare('CREATE INDEX IF NOT EXISTS notifications_pending_match ON notifications(ended_at,match_id) WHERE sent=0'),
+   db.prepare("CREATE INDEX IF NOT EXISTS notifications_pending_regular ON notifications(ended_at,match_id) WHERE sent=0 AND (mode IS NULL OR (mode!='unrated' AND substr(mode,1,6)!='death_'))"),
+   db.prepare('CREATE INDEX IF NOT EXISTS death_sessions_active_notice ON death_unrated_sessions(riot_id,match_id) WHERE cancelled_at IS NULL'),
    db.prepare("CREATE INDEX IF NOT EXISTS notifications_crown_history ON notifications(riot_id,ended_at DESC,match_id DESC,outcome) WHERE outcome IN ('win','loss')"),
    // A match's participants are read together for a single Discord post; the
    // existing primary key (riot_id,match_id) cannot seek by match alone.

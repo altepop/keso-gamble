@@ -1,0 +1,27 @@
+name: CPU duel tactics and performance
+on:
+  pull_request:
+    paths:
+      - 'duel-preview/cpu*.js'
+      - 'tests/duel-cpu*.test.js'
+      - '.github/workflows/duel-cpu-strategy.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'duel-preview/cpu*.js'
+      - 'tests/duel-cpu*.test.js'
+      - '.github/workflows/duel-cpu-strategy.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  cpu:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Verify all six CPU tactics, legality and upper time bounds
+        run: node --test tests/duel-cpu.test.js tests/duel-cpu-expert.test.js tests/duel-cpu-quality.test.js

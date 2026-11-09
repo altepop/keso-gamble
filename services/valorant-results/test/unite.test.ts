@@ -244,3 +244,19 @@ test('verified Crustle move build goes through monitoring and remains exactly-on
  assert.equal(f.balance(cat),before);
  assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM unite_rewards").get()!.n,1);
 });
+test('an equipped ユナイト relic adds to a newly settled win once',async()=>{
+ const {NORMAL_RELIC_BY_ID}=await import('../src/relic-catalog.ts');
+ const f=await fixture();
+ await link(f,`<@${cat}>`,'https://uniteapi.dev/p/'+UID,2);
+ await monitorUnite(f.env,T0,f.request,mapping);
+ const def=NORMAL_RELIC_BY_ID.get('normal.unite.transcendent')!;
+ f.sql.prepare('INSERT OR IGNORE INTO kp_wallets(guild,user) VALUES(?,?)').run(guild,cat);
+ f.sql.prepare('INSERT OR REPLACE INTO kp_state(guild,user,data) VALUES(?,?,?)').run(guild,cat,JSON.stringify({cash:0,relics:{totalSummons:1,equipped:[def.id],items:{[def.id]:{...def,origin:'normal',count:1}}}}));
+ f.set(page([card({pokemon:'Absol',ko:12}),card()]));
+ await monitorUnite(f.env,T0+3*60_000,f.request,mapping);
+ const relic=Number(f.sql.prepare("SELECT COALESCE(SUM(delta),0) n FROM kp_ledger WHERE kind='relic' AND user=?").get(cat)!.n);
+ assert.ok(relic>0,'the transcendent ユナイト relic pays on a win');
+ const before=f.balance(cat);
+ await monitorUnite(f.env,T0+6*60_000,f.request,mapping);
+ assert.equal(f.balance(cat),before,'the same game is not paid again');
+});

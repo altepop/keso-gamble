@@ -1,5 +1,6 @@
-import { CASINO_MIN, CASINO_MAX, RANKS, SUITS } from './casino.js?v=web-e054fc2bb05b5f3f';
-import { MINES_CELLS, MINES_CHOICES, MINES_CAP, minesMultiplier, SLOT_SYMBOLS, JACKPOT_PERCENT, JACKPOT_FULL_BET, VP_PAYS, VP_NAMES, BACCARAT_SIDES } from './casino-more.js?v=web-e054fc2bb05b5f3f';
+import { CASINO_MIN, CASINO_MAX, RANKS, SUITS } from './casino.js?v=web-3e87eca8099653c5';
+import {templeRespinScene,templeWinBackdrop} from './slot-temple-view.js?v=web-3e87eca8099653c5';
+import { MINES_CELLS, MINES_CHOICES, MINES_CAP, minesMultiplier, SLOT_SYMBOLS, slotWinTier, JACKPOT_PERCENT, JACKPOT_FULL_BET, VP_PAYS, VP_NAMES, BACCARAT_SIDES } from './casino-more.js?v=web-3e87eca8099653c5';
 // Screens for マインズ・スロット・ビデオポーカー・バカラ. They only show what the wallet already holds; every draw and
 // payout is decided by casino-more.js (the server's for live wallets).
 const kp=n=>Math.abs(n).toLocaleString('ja-JP')+' KP';
@@ -28,16 +29,56 @@ export function minesView(state,{busy=false,count=3,drafts={}}={}){
 }
 
 const SYMBOL=Object.fromEntries(SLOT_SYMBOLS.map(([id,face])=>[id,face]));
-export function slotView(state,{busy=false,jackpot=null,drafts={}}={}){
- const last=state.slots?.[0];
- const reels=(busy||!last?['seven','seven','seven']:last.reels).map((r,i)=>`<span class="slot-reel ${busy?'spinning':''}" style="--reel:${i}" ${busy?'aria-hidden="true"':`role="img" aria-label="${SYMBOL[r]}"`}><b>${SYMBOL[r]}</b></span>`).join('');
- const pool=jackpot?`<div class="slot-jackpot"><span>みんなの共有ジャックポット</span><strong>${kp(jackpot.amount)}</strong><small>賭け金の${JACKPOT_PERCENT}%が積み上がる · 💎💎💎で獲得（${JACKPOT_FULL_BET.toLocaleString('ja-JP')} KP以上の賭けで全額）</small></div>`:'<div class="slot-jackpot demo"><span>共有ジャックポットは本番口座だけ</span></div>';
- const label=last&&!busy?(last.jackpot?`ジャックポット ${kp(last.jackpot)}！`:last.payout?'当たり':'はずれ'):'';
- const arena=`<section class="casino-arena slot-arena ${last&&!busy?(last.net>0?'win':'lose'):''}" aria-label="スロット"><div class="casino-masthead"><span>KESO SLOTS</span></div>${pool}<div class="slot-window">${reels}</div>${label?verdict(label,last.net):`<div class="casino-stage-status" role="status">${busy?'回転中…':'賭け金を入れて回す'}</div>`}</section>`;
- const table=`<div class="asset-card"><h2 class="panel-title">配当（賭け金込み）</h2>${SLOT_SYMBOLS.slice().reverse().map(([id,face,,pay])=>`<div class="asset-line"><span>${face}${face}${face}</span><strong>${pay}倍${id==='diamond'?'＋ジャックポット':''}</strong></div>`).join('')}<div class="asset-line"><span>🍒が2つ</span><strong>1.5倍</strong></div></div>`;
- return `${arena}<div class="trade-box casino-controls">${stakeField('slot-amount',draft(drafts,'slot-amount',500))}<div class="action-row"><button class="action-btn primary casino-play" data-action="slot" ${busy?'disabled':''}>${busy?'回転中…':'回す'} <span>↗</span></button></div></div>${table}`;
+const slotMultiplier=r=>r?.bet>0?Math.floor(r.payout/r.bet*10)/10:0;
+const slotDust=Array.from({length:38},(_,i)=>`<i style="--i:${i};--x:${(i*47)%100}%;--d:${(i*13)%22/10}s"></i>`).join('');
+const slotPrize=amount=>Math.round(amount).toLocaleString('ja-JP');
+export function slotCeremony(reveal){
+ if(!reveal?.done)return '';
+ const {done}=reveal,tier=slotWinTier(done)||(done.bonus?.mode==='respin'?'feature':'big');
+ const stars=`<div class="slot-confetti" aria-hidden="true">${slotDust}</div>`;
+ const close='<button class="slot-close" type="button" data-action="slot-close-reveal" aria-label="演出を閉じる">×</button>';
+ if(reveal.type==='bonus'&&done.bonus?.mode==='respin')return templeRespinScene(reveal);
+ if(reveal.type==='bonus'){
+  const picks=reveal.picks??[],finished=picks.length>=3;
+  const doors=[0,1,2].map(i=>{
+   const pick=picks.find(p=>p.door===i);
+   return `<button class="slot-altar ${pick?'opened':''}" data-action="slot-open-altar" data-altar="${i}" type="button" ${pick||finished?'disabled':''} aria-label="祭壇${i+1}${pick?' 解放済み':''}"><span class="slot-altar-crown">☀</span><span class="slot-altar-number">${pick?slotPrize(pick.award)+'×':'?'}</span><small>${pick?'DISCOVERED':'ALTAR '+(i+1)}</small></button>`;
+  }).join('');
+  const current=picks.reduce((sum,p)=>sum+p.award,0);
+  return `<div class="slot-ceremony slot-temple-scene" role="dialog" aria-modal="true" aria-label="黄金神殿ボーナス">
+    ${stars}${close}<div class="slot-sun" aria-hidden="true">☀</div>
+    <div class="slot-temple-arch"><div class="slot-temple-kicker">KESO GOLDEN TEMPLE</div><div class="slot-temple-figure" aria-hidden="true">𓂀</div>
+    <h2>${finished?'BONUS COMPLETE':'TEMPLE BONUS'}</h2><p>${finished?'すべての祭壇が解放された！':'神殿の祭壇をひとつずつ開けよう'}</p>
+    <div class="slot-altar-grid">${doors}</div><div class="slot-temple-total"><small>DISCOVERED</small><strong>${slotPrize(current)}<em>×</em></strong><span>${picks.length} / 3 祭壇</span></div>
+    ${finished?'<button type="button" class="slot-ritual-button" data-action="slot-finish-bonus">黄金の祝福を見る ✦</button>':'<p class="slot-temple-note">報酬はスピン時に確定済み。祭壇の選択は演出のみだ。</p>'}</div></div>`;
+ }
+ const gold=tier==='golden',mega=tier==='mega'||gold;
+ const stages=`<div class="slot-win-stages ${tier}">
+   ${tier==='feature'?'<div class="slot-win-stage stage-feature">FEATURE WIN</div>':'<div class="slot-win-stage stage-big">BIG WIN</div>'}
+   ${mega?'<div class="slot-win-stage stage-mega">MEGA WIN</div>':''}
+   ${gold?'<div class="slot-win-stage stage-golden">GOLDEN WIN</div>':''}
+  </div>`;
+ return `<div class="slot-ceremony slot-win-scene tier-${tier} ${done.bonus?.mode==='respin'?'from-temple':''}" role="dialog" aria-modal="true" aria-label="大当たり！${tier.toUpperCase()} WIN">
+    ${templeWinBackdrop(done)}${stars}${close}<div class="slot-win-halo" aria-hidden="true"><div class="slot-win-crown">♛</div></div>
+    <div class="slot-win-content"><div class="slot-win-eyebrow">✦ KESO GRAND CELEBRATION ✦</div>${stages}
+    <div class="slot-win-amount"><span data-slot-countup="${done.payout}">${slotPrize(done.payout)}</span><small>KP</small></div>
+    <p class="slot-win-multiple">${slotMultiplier(done)}× PAYOUT ${done.bonus?'· TEMPLE BONUS':''}${done.jackpot?' · JACKPOT':''}</p>
+    <button type="button" class="slot-ritual-button" data-action="slot-close-reveal">次のスピンへ ›</button></div></div>`;
 }
-
+export function slotView(state,{busy=false,jackpot=null,drafts={},reveal=null}={}){
+ const last=state.slots?.[0],tier=!busy?slotWinTier(last):null;
+ const reels=(busy?['cherry','lemon','bell']:last?.reels??['star','seven','diamond']).map((r,i)=>`<span class="slot-reel ${busy?'spinning':''} ${last&&!busy&&last.reels.every(x=>x===r)?'slot-matched':''}" style="--reel:${i}" ${busy?'aria-hidden="true"':`role="img" aria-label="${SYMBOL[r]}"`}><b>${busy?'<span class="slot-spin-strip">🍒<br>🔔<br>7️⃣<br>💎<br>⭐<br>🍋<br>🍒<br>🔔</span>':SYMBOL[r]}</b></span>`).join('');
+ const pool=jackpot?`<div class="slot-jackpot"><span>◆ COMMUNITY JACKPOT ◆</span><strong>${kp(jackpot.amount)}</strong><small>賭け金の${JACKPOT_PERCENT}%を積立 · 💎💎💎 で獲得（${JACKPOT_FULL_BET.toLocaleString('ja-JP')} KP以上の賭けで全額）</small></div>`:'<div class="slot-jackpot demo"><span>◆ JACKPOT は本番口座限定 ◆</span></div>';
+ const label=last&&!busy?(last.bonus?`黄金神殿の祝福 +${kp(last.bonus.total)}`:last.jackpot?`ジャックポット ${kp(last.jackpot)}！`:last.payout?'当たり':'はずれ'):'';
+ const arena=`<section class="casino-arena slot-arena slot-premium ${last&&!busy?(last.net>0?'win':'lose'):''}" aria-label="KESO黄金スロット"><div class="casino-masthead"><span>KESO GOLDEN VAULT</span><span class="slot-mast-light">✦ ✦ ✦</span></div>
+ <div class="slot-marquee"><span>★</span><strong>GOLDEN VAULT</strong><span>★</span><small>FORTUNE · TEMPLE · JACKPOT</small></div>
+ ${pool}<div class="slot-machine"><div class="slot-machine-top">✧ ✦ ✧　 GOLD REELS 　✧ ✦ ✧</div><div class="slot-window">${reels}</div><div class="slot-machine-bottom"><span>✦</span><span>✦</span><span>✦</span><span>✦</span><span>✦</span></div></div>
+ ${tier&&last&&!busy?`<div class="slot-tier-flag flag-${tier}">${tier.toUpperCase()} WIN <span>· ${slotMultiplier(last)}×</span></div>`:''}
+ ${label?verdict(label,last.net):`<div class="casino-stage-status" role="status">${busy?'運命のリールが回転中…':'賭け金を入れて黄金を狙え！'}</div>`}
+ ${slotCeremony(reveal)}</section>`;
+ const table=`<div class="asset-card slot-paytable"><h2 class="panel-title">配当・神殿フィーチャー</h2><div class="slot-feature-card"><strong>💎💎 ＋ 任意の絵柄 → 黄金神殿ボーナス</strong><span>5列×3段の黄金コインを固定して空きマスだけを再抽選。新しいコインで残り3回に回復、0回で精算。15マス全部埋まると特等賞200倍！（その回の払戻総額）</span></div>${SLOT_SYMBOLS.slice().reverse().map(([id,face,,pay])=>`<div class="asset-line"><span>${face}${face}${face}</span><strong>${pay}倍${id==='diamond'?'＋ジャックポット':''}</strong></div>`).join('')}<div class="asset-line"><span>🍒が2つ</span><strong>1.5倍</strong></div><p class="helper">BIG WIN（5倍〜）／MEGA WIN（10倍〜）／GOLDEN WIN（40倍〜）。倍率は掛け金に対する払戻総額で判定。黄金神殿の結果もサーバー側の元のスピンで確定し、再抽選演出で追加決済は発生しない。</p></div>`;
+ return `${arena}<div class="trade-box casino-controls">${stakeField('slot-amount',draft(drafts,'slot-amount',500))}<div class="action-row"><button class="action-btn primary casino-play slot-pull" data-action="slot" ${busy||!!reveal?'disabled':''}>${busy?'リール回転中…':reveal?'演出を確認中…':'⚡ SPIN — 黄金を解き放て'} <span>↗</span></button></div></div>${table}`;
+}
 export function videoPokerView(state,{busy=false,hold=[],drafts={}}={}){
  const h=state.vp,last=!h?state.vpHistory?.[0]:null,shown=h?.cards??last?.cards??[];
  const cards=shown.map((c,i)=>h?`<button class="vp-card ${hold[i]?'held':''}" data-vp-hold="${i}" aria-pressed="${!!hold[i]}" ${busy?'disabled':''}>${card(c)}<span>${hold[i]?'HOLD':'交換'}</span></button>`:`<span class="vp-card">${card(c)}</span>`).join('');

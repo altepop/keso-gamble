@@ -6,7 +6,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { initializeKp, syncKpAccounts } from '../src/kp.ts';
 import type { KpEnv, KpMapping } from '../src/kp.ts';
 import { operateKp, readKpState } from '../src/kp-api.ts';
-import { decideEntries, ensureRaceField, ensureHorses, raceEntries, settleHorsePrizes, shouldSettleHorsePrizes, horsePrizeLookback } from '../src/racing-horses.ts';
+import { decideEntries, ensureRaceField, ensureHorses, raceEntries, settleHorsePrizes, repairRecordedHorseStats, shouldSettleHorsePrizes, horsePrizeLookback } from '../src/racing-horses.ts';
 import { raceSeed, settleKpRaces } from '../src/racing-kp.ts';
 // @ts-expect-error The shared pure browser engine has no TypeScript declarations.
 import { BOXES, RACE_INTERVAL, RETIRE_RACES, RUN_MS, openRaceStart, prizeFor, raceCard, raceClass, raceOdds, raceResult } from '../../../js/racing.js';
@@ -181,15 +181,15 @@ test('a very rare free horse: drawn once per slot, only for members with a free 
  assert.equal(await maybeGiftHorse(f.env,mapping,1000,seq(0)),null,'the same slot is never drawn twice');
  const gift=(await maybeGiftHorse(f.env,mapping,2000,seq(0,0.99,0.4,0.5)))!;
  assert.equal(gift.user,two,'picked among members');assert.equal(gift.horse.box,'normal');assert.equal(gift.horse.price,0);
- assert.match(gift.text,new RegExp(`🎁 \\*\\*馬が空から降ってきた！\\*\\* <@${two}> に.+の馬がプレゼントされました（ノーマルボックス相当・この15分の当選確率 0.2%）\\n名前はまだありません。\`/horsename\``));
+ assert.match(gift.text,new RegExp(`🎁 \\*\\*馬が空から降ってきたで！\\*\\* <@${two}> に.+の馬が届いたで！（ノーマルボックス相当・この15分の当選確率 0.2%）\\n名前はまだないで。\`/horsename\``));
  assert.equal(gift.horse.name,'ナナシ','no name is chosen for the owner');
  const {nameGiftHorse}=await import('../src/racing-horses.ts');
- assert.match((await nameGiftHorse(f.env,mapping,one,'ノロイウマ')).reply,/名前を付けられるプレゼントの馬はいません/,'only the recipient names it');
+ assert.match((await nameGiftHorse(f.env,mapping,one,'ノロイウマ')).reply,/名前を付けられるプレゼントの馬はおらへんで/,'only the recipient names it');
  assert.match((await nameGiftHorse(f.env,mapping,two,'@everyone')).reply,/記号/);
  const named=await nameGiftHorse(f.env,mapping,two,'タナボタオー');
- assert.match(named.reply,/「タナボタオー」と名付けました/);assert.equal(named.post,`🐴 <@${two}> がプレゼントの馬に「タナボタオー」と名付けました。`);
+ assert.match(named.reply,/「タナボタオー」と名付けたで/);assert.equal(named.post,`🐴 <@${two}> がプレゼントの馬に「タナボタオー」と名付けたで！`);
  assert.equal(f.sql.prepare('SELECT name FROM kp_horses WHERE id=?').get(gift.horse.id)!.name,'タナボタオー');
- assert.match((await nameGiftHorse(f.env,mapping,two,'ベツノナマエ')).reply,/いません/,'named once');
+ assert.match((await nameGiftHorse(f.env,mapping,two,'ベツノナマエ')).reply,/おらへんで/,'named once');
  const row=f.sql.prepare('SELECT owner,price FROM kp_horses WHERE id=?').get(gift.horse.id)!;assert.equal(row.owner,two);assert.equal(row.price,0);
  for(let i=0;i<3;i++)f.sql.prepare("INSERT INTO kp_horses(id,guild,owner,name,grade,ability,style,box,price,created_at) VALUES(?,?,?,?,0,0,0,'normal',3000,0)").run('full-'+i,guild,one,'x'+i);
  f.sql.prepare("UPDATE kp_horses SET sold_at=NULL WHERE owner=?").run(two);
@@ -206,7 +206,7 @@ test('D1: settlement check runs immediately after finish, retries each hour, ski
  assert.equal(shouldSettleHorsePrizes(-1),false);
  const hour=Date.parse('2026-11-04T18:00:30Z');
  assert.equal(horsePrizeLookback(hour),0,'unbounded backlog sweep every six hours');
- assert.equal(horsePrizeLookback(hour+2*60000),hour+2*60000-48*3600000,'bounded 48h hot path');
+ assert.equal(horsePrizeLookback(hour+2*60000),hour+2*60000-6*3600000,'bounded 6h hot path');
 });
 
 test('D1: old unpaid owned-horse race is recovered on the six-hour backlog sweep',async()=>{
@@ -244,4 +244,52 @@ test('D1: minute cron checks only race field marker once decided, without nickna
  assert.equal(sqls.length,1,'a decided field requires just one indexed marker lookup');
  assert.match(sqls[0],/FROM kp_race_fields WHERE guild=\? AND race=\?/);
  assert.ok(!sqls.some(sql=>sql.includes('kp_horse_runs')),'no wasted last-20 form/nickname reads');
+});
+
+
+test('unattended owned-horse race with NO seed still settles, updates appearances and pays exactly once',async()=>{
+ const f=await fixture(0);
+ const race=raceOfClass(0,openRaceStart(T0));addHorse(f.sql,'horse-unattended',0);
+ await decideEntries(f.env,mapping,race,race-RACE_INTERVAL,1);
+ assert.equal(Number(f.sql.prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE type='table' AND name='kp_races'").get()!.n),0,'unattended fixture has not even created a race seed table');
+ const before=balance(f.sql);
+ await settleHorsePrizes(f.env,mapping,race+RUN_MS);
+ const result=f.sql.prepare('SELECT id,rank,prize FROM kp_horse_results WHERE horse=?').get('horse-unattended') as {id:string;rank:number;prize:number};
+ assert.ok(result,'missing seed is repaired and the horse gets an immutable result');
+ const after=f.sql.prepare('SELECT races,wins,seconds,thirds,earnings,last_race FROM kp_horses WHERE id=?').get('horse-unattended')!;
+ assert.equal(after.races,1);
+ assert.equal(after.wins,Number(result.rank===1));
+ assert.equal(after.seconds,Number(result.rank===2));
+ assert.equal(after.thirds,Number(result.rank===3));
+ assert.equal(after.earnings,result.prize);
+ assert.equal(after.last_race,race);
+ assert.equal(balance(f.sql),before+result.prize);
+ assert.equal(Number(f.sql.prepare('SELECT COUNT(*) AS n FROM kp_races WHERE id=?').get(race)!.n),1);
+ const originalSeed=f.sql.prepare('SELECT seed FROM kp_races WHERE id=?').get(race)!.seed;
+ await settleHorsePrizes(f.env,mapping,race+RUN_MS+60000);
+ assert.equal(f.sql.prepare('SELECT seed FROM kp_races WHERE id=?').get(race)!.seed,originalSeed);
+ assert.equal(f.sql.prepare('SELECT races FROM kp_horses WHERE id=?').get('horse-unattended')!.races,1);
+ assert.equal(balance(f.sql),before+result.prize);
+ assert.equal(Number(f.sql.prepare('SELECT COUNT(*) AS n FROM kp_horse_results WHERE horse=?').get('horse-unattended')!.n),1);
+});
+test('a recorded race whose old counter was accidentally lost is repaired on owner view without replaying KP',async()=>{
+ const f=await fixture(0),race=raceOfClass(0,openRaceStart(T0));
+ addHorse(f.sql,'horse-gap',0);
+ await decideEntries(f.env,mapping,race,race-RACE_INTERVAL,1);
+ await raceSeed(f.env,guild,race);
+ await settleHorsePrizes(f.env,mapping,race+RUN_MS);
+ const result=f.sql.prepare('SELECT rank,prize FROM kp_horse_results WHERE horse=?').get('horse-gap') as {rank:number;prize:number};
+ const original=balance(f.sql);
+ f.sql.prepare('UPDATE kp_horses SET races=0,wins=0,seconds=0,thirds=0,earnings=0,last_race=NULL WHERE id=?').run('horse-gap');
+ assert.equal(await repairRecordedHorseStats(f.env,mapping,one),1);
+ const displayed=(await readKpState(f.env,mapping,one)).horses.find((h:{id:string})=>h.id==='horse-gap');
+ assert.equal(displayed.races,1);
+ assert.equal(displayed.wins,Number(result.rank===1));
+ assert.equal(displayed.seconds,Number(result.rank===2));
+ assert.equal(displayed.thirds,Number(result.rank===3));
+ assert.equal(displayed.earnings,result.prize);
+ assert.equal(balance(f.sql),original,'repair never credits a duplicate prize');
+ assert.equal(await repairRecordedHorseStats(f.env,mapping,one),0,'repeat visits do not write anything');
+ // D1: once an owner is repaired, later refreshes read one settings row instead of every result again.
+ assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM kp_settings WHERE key=?').get('horse_stats_repaired_v1:'+guild+':'+one)!.n,1);
 });

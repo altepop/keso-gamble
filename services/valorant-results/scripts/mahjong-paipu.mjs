@@ -7,7 +7,9 @@
 import {createHash,createHmac,randomUUID} from 'node:crypto';
 import {resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
+import {recordRpcDiagnostic,attachLoginContext} from './mahjong-rpc-diagnostics.mjs';
 import {summarizePaipu} from '../src/mahjong-summary.ts';
+import {confirmedStandardReviewRules} from '../src/mahjong-review-rules.ts';
 
 const BASE='https://game.mahjongsoul.com',SDK='https://jp-sdk-api.yostarplat.com',OAUTH_TYPE=21;
 const YOSTAR_SDK_VERSION='4.16.2',YOSTAR_SALT='347467131a466f6865d7f2662e38841fbe2adb23';
@@ -73,9 +75,14 @@ export async function openGateway(ctx,route){
  const call=async(method,payload)=>{
   const [svc,name]=method.includes('.')?[services[method.split('.')[0]],method.split('.')[1]]:[services.Lobby,method];
   const m=svc.methods[name],req=ctx.root.lookupType('lq.'+m.requestType),res=ctx.root.lookupType('lq.'+m.responseType);
-  const wrapped=Wrapper.encode(Wrapper.create({name:`.lq.${svc.name}.${name}`,data:req.encode(req.create(payload)).finish()})).finish();
+  const requestBytes=req.encode(req.create(payload)).finish();
+  const wrapped=Wrapper.encode(Wrapper.create({name:`.lq.${svc.name}.${name}`,data:requestBytes})).finish();
   const out=res.toObject(res.decode(Wrapper.decode(await ch.send(wrapped)).data),{longs:Number,defaults:true,bytes:Buffer});
-  if(out.error?.code)throw Error(`${name}_${out.error.code}`);
+  if(out.error?.code){
+   const error=Error(name+'_'+out.error.code);
+   if(name==='fetchGameRecord')Object.defineProperty(error,'rpcDiagnostic',{value:recordRpcDiagnostic(req,requestBytes,payload,out.error)});
+   throw error;
+  }
   return out;
  };
  try{
@@ -99,7 +106,7 @@ export async function login(env){
     if(!check.has_account)throw Error('oauth2Check_no_account');
     const done=await gate.call('oauth2Login',{type:OAUTH_TYPE,access_token:auth.access_token,reconnect:false,device:DEVICE,random_key:randomUUID(),client_version:ctx.clientVersion,client_version_string:versionString,currency_platforms:CURRENCY,tag:'jp'});
     if(!done.account)throw Error('oauth2Login_failed');
-    return {root:ctx.root,versionString,call:gate.call,close:gate.close};
+    return attachLoginContext({root:ctx.root,versionString,call:gate.call,close:gate.close},done);
    }catch(error){errors.push(error.message);gate?.close();}
   }
  }
@@ -114,7 +121,7 @@ export function decodeRecords(root,bytes){
  return raw.map(b=>{const w=Wrapper.decode(b),name=w.name.replace(/^\.lq\./,''),T=root.lookupType('lq.'+name);return {name,data:T.toObject(T.decode(w.data),{longs:Number,defaults:true})};});
 }
 
-export async function fetchSummary(session,uuid){
+export async function fetchDecodedRecord(session,uuid){
  const record=await session.call('fetchGameRecord',{game_uuid:uuid,client_version_string:session.versionString});
  let data=record.data;
  if(!data?.length){
@@ -122,7 +129,23 @@ export async function fetchSummary(session,uuid){
   const r=await fetch(record.data_url,{signal:AbortSignal.timeout(TIMEOUT)});if(!r.ok)throw Error('record_http_'+r.status);
   data=Buffer.from(await r.arrayBuffer());
  }
- return summarizePaipu(record.head,decodeRecords(session.root,data));
+ const actions=decodeRecords(session.root,data);
+ return {head:record.head,actions};
+}
+
+export async function fetchSummary(session,uuid,reviewer=null){
+ const {head,actions}=await fetchDecodedRecord(session,uuid);
+ const summary=summarizePaipu(head,actions);
+ if(reviewer&&confirmedStandardReviewRules(head)){
+  try{
+   const review=await reviewer.review(summary,actions);
+   if(review){if(summary.players===3)summary.review=review;else summary.c3=review;}
+  }catch(error){
+   // Read-only AI review must NEVER interrupt current paipu/KP settlement.
+   console.log('equal_review: skipped; existing paipu settlement preserved');
+  }
+ }
+ return summary;
 }
 
 /** --queue: prints how many paipu wait (for the workflow to decide on installing). */
@@ -136,16 +159,22 @@ export async function run(env=process.env,check=process.argv.includes('--check')
  if(!check&&!queue.length){console.log('paipu queue: 0');return;}
  const session=await login(env);
  console.log('login: ok');
+ const {createPaipuReviewer}=await import('./mahjong-review.mjs');
+ const reviewer=createPaipuReviewer({root:env.C3_ASSETS_ROOT,
+  fourEnabled:env.MAHJONG_EQUAL_REVIEW_ENABLED==='true',
+  sanmaEnabled:env.MAHJONG_SANMA_REVIEW_ENABLED==='true'});
  const results=[];
  try{
   for(const uuid of queue.slice(0,10)){
-   try{results.push({uuid,summary:await fetchSummary(session,uuid)});}
+   try{results.push({uuid,summary:await fetchSummary(session,uuid,reviewer)});}
    catch(error){results.push({uuid,error:String(error.message).slice(0,80)});}
   }
- }finally{session.close();}
+ }finally{await reviewer?.close().catch(()=>{});session.close();}
  if(results.length){
+  console.log('equal_review: '+results.filter(r=>r.summary?.c3||r.summary?.review).length+' reports (no game identifiers)');
   const reply=await worker(env,'/api/mahjong/paipu/summaries',{results});
-  console.log(`paipu: ${results.filter(r=>r.summary).length} ok, ${results.filter(r=>r.error).length} failed (${[...new Set(results.map(r=>r.error).filter(Boolean))].join(',')}); stored ${reply.stored??0}`);
+  console.log(`paipu: ${results.filter(r=>r.summary).length} fetched, ${results.filter(r=>r.error).length} fetch failed (${[...new Set(results.map(r=>r.error).filter(Boolean))].join(',')}); stored ${reply.stored??0}, apply failed ${reply.failed??0}`);
+  if(reply.failed>0)throw Error('paipu_summary_apply_failed');
  }
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href)(process.argv.includes('--queue')?queueSize().then(n=>console.log('count='+n)):run()).then(()=>process.exit(0),error=>{console.error('mahjong paipu failed:',String(error.message).replace(/[A-Za-z0-9+/=_-]{24,}/g,'***'));process.exit(1);});

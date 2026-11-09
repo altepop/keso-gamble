@@ -10,9 +10,9 @@ test('stock panel shows real dividends and holding conditions; source labels are
  assert.match(stockPanel({}),/デモ相場/);
 });
 test('stock benefit prices are shown on directives without disabling a now-affordable purchase',()=>{
- const state={...createInitialState(),cash:7700,serverWallet:true,stockBenefits:{percent:5},members:[],selfUserId:'fixture'};
- const html=directivesView(state,{},'');assert.match(html,/7,600 KP/);assert.match(html,/株主優待/);assert.doesNotMatch(html,/data-action="issue-directive" disabled/);
- assert.equal(stockPrice(2000000,{percent:5}),1998000);assert.equal(stockPrice(8000),8000);
+ const state={...createInitialState(),cash:38500,serverWallet:true,stockBenefits:{percent:5},members:[],selfUserId:'fixture'};
+ const html=directivesView(state,{},'');assert.match(html,/38,000 KP/);assert.match(html,/株主優待/);assert.doesNotMatch(html,/data-action="issue-directive" disabled/);
+ assert.equal(stockPrice(2000000,{percent:5}),1998000);assert.equal(stockPrice(40000),40000);
 });
 test('the common-market chart uses stored quote timestamps and prices, without invented prices or volume',()=>{
  const candles=stockCandles({ticks:[{at:0,prices:{keso:1200}},{at:300000,prices:{keso:1210}}]},'keso');
