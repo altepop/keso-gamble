@@ -263,3 +263,48 @@ test('the delay between a game ending and it being found is kept for diagnosis',
  const f=fixture(),web=fakeFetch();await monitorMahjong(f.env,now,config,web.request);
  assert.equal(state(f.sql,'found_delay_seconds'),'100');assert.equal(state(f.sql,'found_game_end_at'),String(now-100_000));
 });
+
+test('a fresh paipu is dispatched even when a later provider request returns 429',async()=>{
+ const f=fixture(),env={...f.env,PAIPU_DISPATCH_TOKEN:'fixture-github-token'},uuid='261027-01234567-89ab-cdef-0123-456789abcdef';
+ const web=fakeFetch([{...record(),uuid}]);let providerCalls=0;
+ const request=(async(input:RequestInfo|URL,init?:RequestInit)=>{
+  const url=new URL(String(input));
+  if(url.hostname==='5-data.amae-koromo.com'&&++providerCalls===2)return new Response('provider limit',{status:429,headers:{'Retry-After':'3600'}});
+  return web.request(input,init);
+ })as typeof fetch;
+ await monitorMahjong(env,now,config,request);
+ assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM mahjong_paipu_auto').get()!.n,1);
+ assert.equal(web.dispatches.length,1,'already queued games must not wait for the delayed cron after a partial provider failure');
+ assert.equal(state(f.sql,'error'),'provider_http_429');assert.ok(Number(state(f.sql,'next_poll_at'))>=now+3600_000);assert.equal(state(f.sql,'lock'),undefined);
+ await monitorMahjong(env,now+60_000,config,request);assert.equal(providerCalls,2);assert.equal(web.dispatches.length,1,'backoff does not cause repeated dispatches');
+});
+
+test('a fresh paipu is dispatched after a later transport failure, but failures before discovery start no job',async()=>{
+ for(const failAt of [1,2]){
+  const f=fixture(),env={...f.env,PAIPU_DISPATCH_TOKEN:'fixture-github-token'},web=fakeFetch([{...record(),uuid:'261027-01234567-89ab-cdef-0123-456789abcdef'}]);let providerCalls=0;
+  const request=(async(input:RequestInfo|URL,init?:RequestInit)=>{
+   const url=new URL(String(input));if(url.hostname==='5-data.amae-koromo.com'&&++providerCalls===failAt)throw Error('fixture network failure');return web.request(input,init);
+  })as typeof fetch;
+  await monitorMahjong(env,now,config,request);
+  assert.equal(web.dispatches.length,failAt===2?1:0);assert.equal(state(f.sql,'error'),'provider_or_data_unavailable');assert.equal(state(f.sql,'lock'),undefined);
+ }
+});
+
+test('provider and dispatch failures keep separate status and always release the poll lease',async()=>{
+ const f=fixture(),env={...f.env,PAIPU_DISPATCH_TOKEN:'fixture-github-token'},web=fakeFetch([{...record(),uuid:'261027-01234567-89ab-cdef-0123-456789abcdef'}]);web.failDispatch(503);let providerCalls=0;
+ const request=(async(input:RequestInfo|URL,init?:RequestInit)=>{
+  const url=new URL(String(input));if(url.hostname==='5-data.amae-koromo.com'&&++providerCalls===2)return new Response(null,{status:429});return web.request(input,init);
+ })as typeof fetch;
+ await monitorMahjong(env,now,config,request);
+ assert.equal(web.dispatches.length,1);assert.equal(state(f.sql,'error'),'provider_http_429');assert.equal(state(f.sql,'dispatch_error'),'github_http_503');assert.equal(state(f.sql,'lock'),undefined);
+});
+
+test('a dispatch-status write failure cannot leave the poll lease locked',async()=>{
+ const f=fixture(),env={...f.env,PAIPU_DISPATCH_TOKEN:'fixture-github-token'};
+ await monitorMahjong(env,now,config,fakeFetch([]).request);
+ f.sql.prepare("UPDATE mahjong_watch_state SET value='0' WHERE key='next_poll_at'").run();
+ f.sql.exec("CREATE TRIGGER fail_dispatch_status BEFORE INSERT ON mahjong_watch_state WHEN NEW.key='dispatch_error' BEGIN SELECT RAISE(ABORT,'fixture status write failure'); END");
+ const web=fakeFetch([{...record(),uuid:'261027-01234567-89ab-cdef-0123-456789abcdef'}]);
+ await assert.rejects(()=>monitorMahjong(env,now+60_000,config,web.request));
+ assert.equal(web.dispatches.length,1);assert.equal(state(f.sql,'lock'),undefined);
+});

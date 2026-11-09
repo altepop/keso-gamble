@@ -183,6 +183,7 @@ export async function monitorMahjong(env:MahjongEnv,now=Date.now(),override?:Mah
  const lease=now+4*60_000;
  const lock=await env.DB.prepare("INSERT INTO mahjong_watch_state(key,value) VALUES('lock',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value WHERE CAST(mahjong_watch_state.value AS INTEGER)<=?").bind(String(lease),now).run();
  if(!lock.meta.changes)return;
+ let fresh=0;
  try{
   // Notifications retry independently, including when the data provider is unavailable.
   await flushMahjongPosts(env,now,request);
@@ -190,7 +191,7 @@ export async function monitorMahjong(env:MahjongEnv,now=Date.now(),override?:Mah
   await save(env,'next_poll_at',now+INTERVAL);await save(env,'last_attempt_at',now);
   const since=Math.max(config.startedAt,now-LOOKBACK),to=Math.ceil(now/INTERVAL)*INTERVAL;
   const headers:Record<string,string>=env.AMAE_KOROMO_TOKEN?{Authorization:'Bearer '+env.AMAE_KOROMO_TOKEN}:{};
-  let first=true,fresh=0;
+  let first=true;
   for(const p of [...config.players.map(p=>({...p,since})),...await linkedPlayers(env,config,Math.max(since,now-AUTO_PAIPU_AGE))]){
    for(const table of ['pl4','pl3']){
     const modes=WATCHED.filter(m=>(m<20)===(table==='pl4'));
@@ -231,11 +232,13 @@ export async function monitorMahjong(env:MahjongEnv,now=Date.now(),override?:Mah
   }
   await save(env,'last_success_at',now);await save(env,'error','');
   await flushMahjongPosts(env,now,request);
-  if(fresh)await dispatchPaipu(env,request);
  }catch{
   await save(env,'error','provider_or_data_unavailable');await save(env,'next_poll_at',now+15*60_000);
  }finally{
-  await env.DB.prepare("DELETE FROM mahjong_watch_state WHERE key='lock' AND value=?").bind(String(lease)).run();
+  // A later table/player failing must not strand games already queued above.
+  // Keep provider backoff intact; dispatch only the fresh IDs already found.
+  try{if(fresh)await dispatchPaipu(env,request);}
+  finally{await env.DB.prepare("DELETE FROM mahjong_watch_state WHERE key='lock' AND value=?").bind(String(lease)).run();}
  }
 }
 export async function mahjongStatus(env:MahjongEnv){
