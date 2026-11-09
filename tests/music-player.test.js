@@ -10,7 +10,7 @@ function setup({savedEntries=[],validTitle=true,autoplayDenied=false,fetcher}={}
  let audioCreated=0;
  const element=(name)=>{
   if(!elements.has(name))elements.set(name,{
-   value:'',textContent:'',hidden:false,files:[],attributes:{},
+   value:'',textContent:'',hidden:name==='#music-panel'||name==='#music-lyrics-panel',files:[],attributes:{},
    classList:{toggle(){},add(){},remove(){}},focus(){},
    addEventListener(type,fn){handlers.set(name+':'+type,fn);},
    appendChild(child){(this.children||(this.children=[])).push(child);},
