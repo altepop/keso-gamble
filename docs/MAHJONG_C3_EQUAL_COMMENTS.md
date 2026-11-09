@@ -1,6 +1,6 @@
 # 等しいbot：牌譜に基づくひと言
 
-PR #377でWorkerへ配置済み。三麻の有効化は単発配送・実標準ルール確認の成功後。最新の状態はMAHJONG_REVIEW_DEVELOPMENT_HANDOFF.md末尾を参照。
+PR #377/#392でWorkerへ配置済み。PR #393は実三麻/四麻検証と人工投稿の送達確認後にマージし、取得workflowの三麻解析を標準で有効にした。最新の状態はMAHJONG_REVIEW_DEVELOPMENT_HANDOFF.md末尾を参照。
 検証対象の完全SHA、実牌譜の確認範囲、自己採点は [開発引き継ぎ](MAHJONG_REVIEW_DEVELOPMENT_HANDOFF.md) を参照。
 
 ## 投稿と判断の範囲
@@ -57,7 +57,7 @@ Python設定がない場合は打点比較だけを省略する。関係する�
 ## 設定と本番確認
 
 - 四麻の既存設定 `MAHJONG_EQUAL_REVIEW_ENABLED` は維持。`false` で任意推論を停止。
-- PR #393では実三麻/四麻auditと人工投稿の送達確認を終えたため、マージ後は三麻解析を標準で有効にする。`MAHJONG_SANMA_REVIEW_ENABLED` は未設定または `true` で有効、明示的な `false` または不正な設定で無効。設定画面での変数追加は必須ではない。PR未反映のmainは従来の未設定=無効のまま。
+- PR #393で実三麻/四麻auditと人工投稿の送達確認を終え、三麻解析を標準で有効にした。`MAHJONG_SANMA_REVIEW_ENABLED` は未設定または `true` で有効、明示的な `false` または不正な設定で無効。設定画面での変数追加は必須ではない。通常実行の有効ログと自然な新規対局での送達は、開発引き継ぎの最新記録を参照。
 - 既存 `Mahjong paipu fetch` の手動 `c3_probe=true` は実モデルだけの検証。雀魂/Discord/KP/D1へアクセスしない。
 - 手動 `review_audit=true` はSELECT1回、直近rowid64行内から最大12件を読み、最大2対局を再取得して匿名検証。取り込み/支給/Discord送信/DB書き込みなし。通常cronでは診断しない。
 - 配置時は先に新レポートを検証できるWorkerを配置・確認してから三麻を有効にする。トークンの再作成やDB migrationは不要。
