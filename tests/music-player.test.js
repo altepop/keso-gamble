@@ -10,7 +10,7 @@ function setup({savedEntries=[],validTitle=true,autoplayDenied=false,fetcher}={}
  let audioCreated=0;
  const element=(name)=>{
   if(!elements.has(name))elements.set(name,{
-   value:'',textContent:'',hidden:false,files:[],attributes:{},
+   value:'',textContent:'',hidden:name==='#music-panel'||name==='#music-lyrics-panel',files:[],attributes:{},
    classList:{toggle(){},add(){},remove(){}},focus(){},
    addEventListener(type,fn){handlers.set(name+':'+type,fn);},
    appendChild(child){(this.children||(this.children=[])).push(child);},
@@ -19,7 +19,10 @@ function setup({savedEntries=[],validTitle=true,autoplayDenied=false,fetcher}={}
   });
   return elements.get(name);
  };
- const root={id:'',innerHTML:'',parentElement:null,querySelector:element,remove(){this.parentElement=null;}};
+ const root={id:'',innerHTML:'',parentElement:null,querySelector:element,
+ classList:{add(){},remove(){},toggle(){}},
+ addEventListener(type,fn){handlers.set('root:'+type,fn);},
+ remove(){this.parentElement=null;}};
  const title={appendChild(el){el.parentElement=this;}};
  const events=new Map(),document={
   baseURI:'https://example.org/',hidden:false,
@@ -314,4 +317,36 @@ test('shuffle plays all eight official songs once; repeat off ends without cycli
  s.audio.listeners.get('ended')();await tick();
  assert.equal(s.audio.played,played,'repeat off must not start another shuffle cycle automatically');
  assert.match(s.element('.music-status').textContent,/終了/);
+});
+
+
+test('user-supplied もう一周 and 限界集落狂詩曲 lyrics are complete and contain no Suno directions',async()=>{
+ const s=setup();await tick();
+ for(const [id,expected] of [
+  ['mou',['いつもどおりの顔をして','KESO PLAY！','勝てば饒舌　負ければ雄弁','戻る理由は言わなくていい','結局また　ここにいる']],
+  ['rhapsody',['議長席だけが　空いている','満場一致で　異議あり！','優雅で不埒な　狂詩曲','退屈だけが　欠席だ','最高の一音を　奪い合う']]
+ ]){
+  s.element('#music-track').value=id;s.fire('#music-track','change');await tick();
+  s.fire('#music-tab-lyrics','click');
+  assert.equal(s.element('#music-lyrics-source').textContent,'ユーザー提供の歌詞原稿');
+  const words=s.element('#music-lyrics-content').textContent;
+  for(const word of expected)assert.ok(words.includes(word),'missing user lyric: '+word);
+  assert.doesNotMatch(words,/\[(Intro|Verse|Pre-Chorus|Chorus|Instrumental|Final|Bridge|Outro|End)/);
+ }
+});
+
+test('music modal can be closed from backdrop, close button and Escape; controls remain usable',async()=>{
+ const s=setup();await tick();
+ s.fire('.music-open','click');
+ assert.equal(s.element('#music-panel').hidden,false);
+ assert.equal(s.element('.music-open').attributes['aria-expanded'],'true');
+ s.events.get('keydown')?.({key:'Escape'});
+ assert.equal(s.element('#music-panel').hidden,true);
+ s.fire('.music-open','click');
+ s.fire('root','click',{target:s.root});
+ assert.equal(s.element('#music-panel').hidden,true);
+ s.fire('.music-open','click');
+ s.fire('.music-close','click');
+ assert.equal(s.element('#music-panel').hidden,true);
+ assert.equal(s.ctx.KesoMusic.getState().playing,true,'closing panel should not stop playback');
 });
