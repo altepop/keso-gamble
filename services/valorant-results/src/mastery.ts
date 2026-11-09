@@ -28,6 +28,10 @@ export async function ensureMastery(env:KpEnv){
    env.DB.prepare('CREATE TABLE IF NOT EXISTS agent_plays(riot_id TEXT NOT NULL,match_id TEXT NOT NULL,agent TEXT NOT NULL,outcome TEXT,ended_at INTEGER NOT NULL,PRIMARY KEY(riot_id,match_id))'),
    env.DB.prepare('CREATE TABLE IF NOT EXISTS agent_mastery_totals(riot_id TEXT NOT NULL,agent TEXT NOT NULL,games INTEGER NOT NULL,wins INTEGER NOT NULL,PRIMARY KEY(riot_id,agent))'),
    env.DB.prepare('CREATE TABLE IF NOT EXISTS agent_mastery_meta(key TEXT PRIMARY KEY)'),
+  ]);
+  const migrated=await env.DB.prepare("SELECT key FROM agent_mastery_meta WHERE key='v1'").first<{key:string}>();
+  if(migrated)return;
+  await env.DB.batch([
    // One-time legacy backfill. The NOT EXISTS guard skips all source rows on
    // subsequent cold starts; use INSERT OR REPLACE so concurrent first starts
    // cannot double-count history when D1 serializes the transactions.

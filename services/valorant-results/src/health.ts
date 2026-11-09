@@ -9,7 +9,8 @@ export const HEALTH_FEATURES:Record<string,string>={
  crown_schedule:'冠レース',mleague:'Mリーグの結果・精算',earnings_post:'稼ぎchへの投稿',race_broadcast:'競馬の実況',
 };
 const ready=new WeakSet<object>();
-const OK_WRITE_EVERY=5*60000,okWritten=new Map<string,number>();
+const OK_WRITE_EVERY=5*60000;
+const okByDb=new WeakMap<object,Map<string,number>>();
 async function ensureHealth(env:KpEnv){
  if(ready.has(env.DB))return;
  await env.DB.prepare('CREATE TABLE IF NOT EXISTS kp_health(feature TEXT PRIMARY KEY,last_ok INTEGER,last_error INTEGER,error TEXT,failures INTEGER NOT NULL DEFAULT 0)').run();
@@ -27,11 +28,13 @@ export async function track(env:KpEnv,feature:string,job:()=>Promise<unknown>){
  try{await job();}catch(error){failed=error??Error('failed');console.warn(feature+'_pending');}
  try{
   await ensureHealth(env);const now=Date.now();
+  let okWritten=okByDb.get(env.DB);if(!okWritten){okWritten=new Map();okByDb.set(env.DB,okWritten);}
   // A success is written at most every 5 minutes per job (the cron runs every minute); failures are written at once.
   if(failed===null&&now-(okWritten.get(feature)??0)<OK_WRITE_EVERY)return;
-  if(failed===null)okWritten.set(feature,now);else okWritten.delete(feature);
-  if(failed===null)await env.DB.prepare('INSERT INTO kp_health(feature,last_ok,failures) VALUES(?,?,0) ON CONFLICT(feature) DO UPDATE SET last_ok=excluded.last_ok,failures=0').bind(feature,now).run();
+  if(failed!==null)okWritten.delete(feature);
+  if(failed===null)await env.DB.prepare('INSERT INTO kp_health(feature,last_ok,failures) VALUES(?,?,0) ON CONFLICT(feature) DO UPDATE SET last_ok=excluded.last_ok,failures=0 WHERE kp_health.last_ok IS NULL OR kp_health.last_ok<=excluded.last_ok-? OR kp_health.failures>0').bind(feature,now,OK_WRITE_EVERY).run();
   else await env.DB.prepare('INSERT INTO kp_health(feature,last_error,error,failures) VALUES(?,?,?,1) ON CONFLICT(feature) DO UPDATE SET last_error=excluded.last_error,error=excluded.error,failures=failures+1').bind(feature,now,scrub(failed)).run();
+  if(failed===null)okWritten.set(feature,now);
  }catch{console.warn('health_record_pending');}
 }
 async function count(env:KpEnv,sql:string,...binds:unknown[]){

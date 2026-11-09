@@ -1,3 +1,4 @@
+import {personalVerifiedRelicStats} from './relic-economy.ts';
 import {hoyoApi} from './hoyo.ts';
 import {boardDuelApi} from './board-duels.ts';
 import {steamApi,steamCallback} from './steam-auth.ts';
@@ -446,7 +447,7 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping,deferP
     try{detail=JSON.parse(entry.details);}catch{}
     return {id:entry.id,mode:entry.mode,amount:entry.base,bonus:entry.bonus,at:entry.at,origin:'verified',lines:detail.lines??[],sets:detail.sets??[],resonance:detail.resonance??0,spikeOpening:detail.spikeOpening??null};
    });
-   const ownEconomy=await env.DB.prepare("SELECT COUNT(*) AS n,COALESCE(SUM(delta),0) AS total FROM kp_ledger WHERE guild=? AND user=? AND kind='relic'").bind(mapping.guildId,owner.user).first<{n:number;total:number}>().catch(()=>null);
+   const ownEconomy=await personalVerifiedRelicStats(env.DB,mapping.guildId,owner.user).catch(()=>null);
    const guildEconomy=await guildVerifiedRelicStats(env.DB,mapping.guildId);
    const diagnosis=diagnoseRelicBuild(ownedState.relics as RelicCollection|undefined);
    const relicMarket=await activeRelicListings(env,mapping.guildId);

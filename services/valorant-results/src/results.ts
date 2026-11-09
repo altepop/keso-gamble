@@ -96,17 +96,23 @@ export function resultMessage(raw: Match, puuid: string, label: string, deathUnr
   };
 }
 
+export const DAILY_RESULTS_SQL=`SELECT
+    SUM(CASE WHEN outcome='win' THEN 1 ELSE 0 END) AS wins,
+    SUM(CASE WHEN outcome='loss' THEN 1 ELSE 0 END) AS losses,
+    SUM(CASE WHEN outcome='draw' THEN 1 ELSE 0 END) AS draws
+    FROM notifications WHERE riot_id=? AND mode=? AND ended_at>=?
+    AND (ended_at<? OR (ended_at=? AND match_id<=?))`;
+export const ACT_RESULTS_SQL=`SELECT outcome FROM notifications
+    WHERE riot_id=? AND mode=? AND act_id=? AND outcome IS NOT NULL
+    AND (ended_at<? OR (ended_at=? AND match_id<=?))
+    ORDER BY ended_at DESC,match_id DESC`;
+
 async function actSummary(db: D1Database, notice: Notice): Promise<{ text: string; streak: number }> {
   // Old queued notifications from before the migration remain deliverable as-is.
   if (!notice.outcome) return { text: '', streak: 0 };
   const day = new Date(notice.ended_at + 9 * 3600_000).toISOString().slice(0, 10);
   const midnight = Date.parse(day + 'T00:00:00+09:00');
-  const today = await db.prepare(`SELECT
-    SUM(CASE WHEN outcome='win' THEN 1 ELSE 0 END) AS wins,
-    SUM(CASE WHEN outcome='loss' THEN 1 ELSE 0 END) AS losses,
-    SUM(CASE WHEN outcome='draw' THEN 1 ELSE 0 END) AS draws
-    FROM notifications WHERE riot_id=? AND mode=? AND ended_at>=?
-    AND (ended_at<? OR (ended_at=? AND match_id<=?))`)
+  const today = await db.prepare(DAILY_RESULTS_SQL)
     .bind(notice.riot_id, notice.mode, midnight, notice.ended_at, notice.ended_at, notice.match_id)
     .first<{ wins: number | null; losses: number | null; draws: number | null }>();
   const dayLabel = Math.abs(Date.now() - notice.ended_at) < 86400_000
@@ -114,10 +120,7 @@ async function actSummary(db: D1Database, notice: Notice): Promise<{ text: strin
   const daily = '\n' + dayLabel + '（記録分）：' + (today?.wins ?? 0) + '勝' + (today?.losses ?? 0) + '敗'
     + (today?.draws ? today.draws + '分' : '');
   if (!notice.act_id) return { text: daily + '\nACT情報未取得（集計なし）', streak: 0 };
-  const rows = await db.prepare(`SELECT outcome FROM notifications
-    WHERE riot_id=? AND mode=? AND act_id=? AND outcome IS NOT NULL
-    AND (ended_at<? OR (ended_at=? AND match_id<=?))
-    ORDER BY ended_at DESC,match_id DESC`)
+  const rows = await db.prepare(ACT_RESULTS_SQL)
     .bind(notice.riot_id, notice.mode, notice.act_id, notice.ended_at, notice.ended_at, notice.match_id)
     .all<{ outcome: Outcome }>();
   const results = rows.results.map(row => row.outcome);

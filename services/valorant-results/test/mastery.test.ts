@@ -88,3 +88,13 @@ test('the wallet state lists mastery with titles at the person\'s roast level', 
  assert.deepEqual((await readKpState(f.env,mapping,one)).mastery[0].titles,[]);
  assert.equal('mastery' in JSON.parse(String(f.sql.prepare('SELECT data FROM kp_state WHERE user=?').get(one)!.data)),false);
 });
+
+test('a cold binding with the legacy migration marker never executes the history GROUP BY again',async()=>{
+ const f=await fixture(false);
+ await ensureMastery(f.env);
+ const seen:string[]=[];
+ const db={...f.env.DB,prepare:(q:string)=>{seen.push(q);return f.env.DB.prepare(q);}} as D1Database;
+ await ensureMastery({...f.env,DB:db});
+ assert(!seen.some(q=>q.includes('FROM agent_plays')),'a guard inside a GROUP BY is not enough: do not execute that statement');
+ assert(!seen.some(q=>q.includes('CREATE TRIGGER')),'marker and trigger were installed in one atomic legacy batch');
+});

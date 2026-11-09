@@ -9,18 +9,21 @@ export const OPTIONAL_THRESHOLD=4_000_000,WARNING_THRESHOLD=3_500_000;
 export const D1_B_ID='bf23ab40-814f-4626-9e0b-36739ac41750';
 export const SETTING_KEY='d1_optional_conserve_utc_day';
 
-export function sumDailyRows(account,utcDay){
+function sumMetric(account,utcDay,metric){
  if(!account||!Array.isArray(account.d1AnalyticsAdaptiveGroups))throw Error('Missing D1 analytics');
  let total=0;
  for(const group of account.d1AnalyticsAdaptiveGroups){
   if(group?.dimensions?.date!==utcDay)continue;
-  const count=Number(group?.sum?.rowsRead);
+  const count=Number(group?.sum?.[metric]);
   if(!Number.isSafeInteger(count)||count<0)throw Error('Invalid D1 row sum');
   total+=count;
  }
  if(!Number.isSafeInteger(total))throw Error('D1 sum overflow');
  return total;
 }
+export const sumDailyRows=(account,day)=>sumMetric(account,day,'rowsRead');
+export const sumDailyWrittenRows=(account,day)=>sumMetric(account,day,'rowsWritten');
+export const WRITE_WARNING_THRESHOLD=70_000;
 export function shouldConserve(estimate){return Number.isSafeInteger(estimate)&&estimate>=OPTIONAL_THRESHOLD;}
 export const gqlQuery=`query D1DailyBudget($accountTag: string!, $day: Date!) {
  viewer { accounts(filter:{accountTag:$accountTag}) {
@@ -44,6 +47,11 @@ export async function runGuard(env=process.env,request=fetch,now=new Date()){
  if(data.errors?.length||data.data?.viewer?.accounts?.length!==1)throw Error('D1 Analytics response unavailable');
  const estimate=sumDailyRows(data.data.viewer.accounts[0],day);
  console.log('D1_ACCOUNT_DAILY_ESTIMATE '+day+' rows='+estimate+' sampled=true alert='+WARNING_THRESHOLD+' conserve='+OPTIONAL_THRESHOLD);
+ let writtenEstimate=null;
+ try{writtenEstimate=sumDailyWrittenRows(data.data.viewer.accounts[0],day);}
+ catch{console.warn('D1_WRITE_ESTIMATE_UNAVAILABLE');}
+ console.log('D1_ACCOUNT_DAILY_WRITES_ESTIMATE '+day+' rows='+(writtenEstimate??'unknown')+' sampled=true alert='+WRITE_WARNING_THRESHOLD);
+ if(writtenEstimate!==null&&writtenEstimate>=WRITE_WARNING_THRESHOLD)console.warn('D1_WRITE_BUDGET_WARNING '+day+' rows='+writtenEstimate+' sampled=true');
  let status='ok';
  if(estimate>=WARNING_THRESHOLD){status='warning';console.warn('D1_BUDGET_WARNING '+day+' rows='+estimate+' sampled=true');}
  if(shouldConserve(estimate)){
@@ -63,6 +71,8 @@ export async function runGuard(env=process.env,request=fetch,now=new Date()){
   '', '| Metric | Value |','|:--|--:|',
   '| Billing day (UTC) | '+day+' |',
   '| Estimated Rows read across all account D1 databases | '+estimate.toLocaleString('en-US')+' |',
+  '| Estimated Rows written across all account D1 databases | '+(writtenEstimate===null?'unknown':writtenEstimate.toLocaleString('en-US'))+' |',
+  '| Write warning (estimated; no financial throttling) | '+WRITE_WARNING_THRESHOLD.toLocaleString('en-US')+' |',
   '| Warning (estimated) | '+WARNING_THRESHOLD.toLocaleString('en-US')+' |',
   '| Optional-history soft mode threshold (estimated) | '+OPTIONAL_THRESHOLD.toLocaleString('en-US')+' |',
   '| Result | '+status+' |',
@@ -70,7 +80,7 @@ export async function runGuard(env=process.env,request=fetch,now=new Date()){
   'Cloudflare GraphQL is adaptively sampled and may lag actual quota. This is a best-effort soft mode, NOT a hard usage guarantee. Core KP/ranking/races/stock/settlements are never stopped.',
   ''
  ].join('\n'));
- return {status,day,estimate};
+ return {status,day,estimate,writtenEstimate};
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
  runGuard().catch(error=>{console.error('D1_BUDGET_GUARD_ERROR '+(error instanceof Error?error.message:'unknown'));process.exitCode=1;});

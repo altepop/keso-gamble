@@ -49,3 +49,14 @@ test('missing or unusable GraphQL metrics never activate optional throttling',as
  assert.equal(empty.status,'unavailable');assert.equal(calls.length,0);
  await assert.rejects(runGuard(env,async()=>({ok:true,json:async()=>({data:{viewer:{accounts:[]}}})}),new Date('2026-11-01T13:00:00Z')),/unavailable/);
 });
+
+test('daily write estimate includes every database in UTC today, and a write warning never throttles wallets',async()=>{
+ const {sumDailyWrittenRows,WRITE_WARNING_THRESHOLD}=await import('./d1-daily-guard.mjs');
+ const payload=result(100);const account=payload.data.viewer.accounts[0];
+ account.d1AnalyticsAdaptiveGroups[0].sum.rowsWritten=WRITE_WARNING_THRESHOLD;
+ account.d1AnalyticsAdaptiveGroups[1].sum.rowsWritten=123;
+ assert.equal(sumDailyWrittenRows(account,day),WRITE_WARNING_THRESHOLD+123);
+ assert.throws(()=>sumDailyWrittenRows({d1AnalyticsAdaptiveGroups:[{dimensions:{date:day},sum:{rowsRead:1}}]},day),/Invalid/);
+ let calls=0;const r=await runGuard(env,async()=>{calls++;return {ok:true,json:async()=>payload};},new Date(day+'T15:00:00Z'));
+ assert.equal(calls,1);assert.equal(r.status,'ok');assert.equal(r.writtenEstimate,WRITE_WARNING_THRESHOLD+123);
+});

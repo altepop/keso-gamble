@@ -72,3 +72,7 @@ The read-only GitHub Actions monitor runs each hour using Cloudflare GraphQL `d1
 - Casino notifications and win-stage sequencing are presentation-only; no new D1 queries, tables, writes, recurring jobs, payout changes or odds changes.
 - Hourly account-wide GraphQL estimates, the 3.5M warning and 4M optional-history conserve mode remain active. Validate real UTC-day read totals on Cloudflare after rollout; this change makes no claim about current usage.
 - The README weekly racing/M.LEAGUE purchase limit has been corrected to the existing 400,000 KP; documentation only.
+
+## 2026-11-09 additional audit
+
+The [whole-system audit](D1_AUDIT_20261109.md) records the observed baseline, SQL changes and limits. Relic presentation totals use a transactionally maintained per-member projection after a one-time ledger backfill; financial authorization still uses the original wallet/ledger. Health success timestamps also enforce their five-minute limit in SQL across isolate restarts. The existing UTC-day analytics now reports Rows written and warns at an estimated 70,000; this warning never stops settlements. Compare both reads and writes after rollout before declaring Free-tier readiness.

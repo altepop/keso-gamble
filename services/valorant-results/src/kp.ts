@@ -359,9 +359,18 @@ export async function prepareKpRun(env:KpEnv,mapping:KpMapping):Promise<KpRun>{
 /** Indexed id lookup: preserves old-match payouts, edited result messages and
  * delayed KP recovery without scanning all historic results for every poll.
  * The loaded set is only per cron run, so other workers never share stale data. */
+export const KP_RUN_MATCH_SQL=`SELECT e.amount+COALESCE(p.delta,0)+COALESCE(r.delta,0)+COALESCE(c.delta,0) AS amount,
+ COALESCE(r.delta,0)+COALESCE(c.delta,0) AS relic,n.message,d.note FROM kp_events e
+ LEFT JOIN kp_ledger p ON p.id='penalty:'||e.id
+ LEFT JOIN kp_ledger r ON r.id='relic:'||e.id
+ LEFT JOIN kp_ledger c ON c.id='spike-comp:'||e.id
+ LEFT JOIN kp_reward_notes d ON d.id=e.id
+ LEFT JOIN kp_accounts a ON a.guild=e.guild AND a.puuid=e.puuid
+ LEFT JOIN notifications n ON n.riot_id=a.riot AND n.match_id=e.match
+ WHERE e.id=? AND e.guild=? LIMIT 1`;
 export async function loadKpRunMatch(env:KpEnv,run:KpRun,id:string):Promise<void>{
  if(run.loaded.has(id))return;
- const row=await env.DB.prepare("SELECT e.amount+COALESCE((SELECT delta FROM kp_ledger WHERE id='penalty:'||e.id),0)+COALESCE((SELECT SUM(delta) FROM kp_ledger WHERE id IN ('relic:'||e.id,'spike-comp:'||e.id)),0) AS amount,COALESCE((SELECT SUM(delta) FROM kp_ledger WHERE id IN ('relic:'||e.id,'spike-comp:'||e.id)),0) AS relic,n.message,d.note FROM kp_events e LEFT JOIN kp_reward_notes d ON d.id=e.id LEFT JOIN kp_accounts a ON a.guild=e.guild AND a.puuid=e.puuid LEFT JOIN notifications n ON n.riot_id=a.riot AND n.match_id=e.match WHERE e.id=? AND e.guild=? LIMIT 1")
+ const row=await env.DB.prepare(KP_RUN_MATCH_SQL)
   .bind(id,run.mapping.guildId).first<{amount:number;relic:number;message:string|null;note:string|null}>();
  if(row){
   run.credits.set(id,row.amount);

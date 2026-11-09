@@ -17,7 +17,7 @@ test('D1 notification queue and racing match scans use indexes without dropping 
   batch:async(items:Array<{run:()=>unknown}>)=>{for(const item of items)item.run();return [];}} as unknown as D1Database;
  await ensureNotificationReadIndexes(db);
  await ensureNotificationReadIndexes(db);
- assert.equal(calls,6,'avoid repeating CREATE INDEX on every poll within an isolate');
+ assert.equal(calls,8,'avoid repeating CREATE INDEX on every poll within an isolate');
  const explain=(q:string,...args:unknown[])=>sql.prepare('EXPLAIN QUERY PLAN '+q).all(...args as never[]).map(x=>String(x.detail)).join('; ');
  const queue='SELECT 1 AS n FROM notifications WHERE sent=0 LIMIT 1';
  const rank='SELECT match_id,outcome,ended_at FROM notifications WHERE riot_id=? AND outcome IN (\'win\',\'loss\') ORDER BY ended_at DESC,match_id DESC LIMIT 40';
@@ -36,4 +36,27 @@ test('D1 notification queue and racing match scans use indexes without dropping 
  assert.equal(before.c,250);
  assert.equal((sql.prepare(queue).get() as {n:number}).n,1);
  assert.equal((sql.prepare(rank).all('One#JP1') as Array<{ended_at:number}>)[0].ended_at,249);
+});
+
+test('daily and ACT summaries use covering ranges with the same ties, null outcomes and end-time boundary',async()=>{
+ const {DAILY_RESULTS_SQL,ACT_RESULTS_SQL}=await import('../src/results.ts');
+ const sql=new DatabaseSync(':memory:');
+ try{
+ for(const file of readdirSync(new URL('../migrations/',import.meta.url)).filter(f=>f.endsWith('.sql')).sort())sql.exec(readFileSync(new URL('../migrations/'+file,import.meta.url),'utf8'));
+ sql.prepare('INSERT INTO tracked_players VALUES(?,?,?,?)').run('One#JP1','p','ap',0);
+ const add=sql.prepare('INSERT INTO notifications(riot_id,match_id,message,ended_at,sent,mode,act_id,outcome) VALUES(?,?,?,?,1,?,?,?)');
+ for(let i=0;i<4000;i++)add.run('One#JP1',String(i).padStart(5,'0'),'ok',i,i%2?'competitive':'escalation',i<3900?'old':'new',i%3?'win':'loss');
+ add.run('One#JP1','03995-a','tie',3995,'competitive','new','draw');add.run('One#JP1','03995-z','later tie',3995,'competitive','new',null);
+ const args=['One#JP1','competitive',3900,3995,3995,'03995-a'];
+ const actArgs=['One#JP1','competitive','new',3995,3995,'03995-a'];
+ const daily=sql.prepare(DAILY_RESULTS_SQL).get(...args),act=sql.prepare(ACT_RESULTS_SQL).all(...actArgs);
+ const db={prepare:(q:string)=>({run:async()=>{sql.exec(q);}}),batch:async(q:Array<{run:()=>unknown}>)=>{for(const x of q)await x.run();return [];}} as unknown as D1Database;
+ await ensureNotificationReadIndexes(db);
+ assert.deepEqual(sql.prepare(DAILY_RESULTS_SQL).get(...args),daily);assert.deepEqual(sql.prepare(ACT_RESULTS_SQL).all(...actArgs),act);
+ const plan=(q:string,args:unknown[])=>sql.prepare('EXPLAIN QUERY PLAN '+q).all(...args as never[]).map(r=>String(r.detail)).join(' | ');
+ assert.match(plan(DAILY_RESULTS_SQL,args),/COVERING INDEX notifications_day_mode_cover/);
+ assert.match(plan(ACT_RESULTS_SQL,actArgs),/COVERING INDEX notifications_act_cover/);
+ assert.doesNotMatch(plan(ACT_RESULTS_SQL,actArgs),/USE TEMP B-TREE/);
+ assert.equal((act[0] as {outcome:string}).outcome,'draw');
+ }finally{sql.close();}
 });
