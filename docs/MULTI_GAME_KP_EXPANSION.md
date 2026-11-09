@@ -1,6 +1,20 @@
 # 参加者拡大・他ゲーム報酬・指令の拡張案
 
-2026-10-27。現行コードを確認した設計案。実装済み・自動支給中とは扱わない。
+> **2026-10-27時点の設計メモ（履歴用）です。現在の運用仕様ではありません。**
+> 2026-11-09追記：4人制限・金額・実装状況は、その後の実装で変更されています。以下の提案から設定や価格を復元しないでください。
+
+現在の確認先：
+- Steam：`services/valorant-results/src/steam-rewards.ts`、`steam-config.example.json`、`docs/STEAM_RELIC_EXPANSION_20261105.md`。有料ゲーム・120分・日次上限の実装を優先。
+- VCT QUIZ：`services/valorant-results/src/quiz-kp.ts`。
+- KESO LOOP：`services/valorant-results/src/loop-kp.ts`。初期案の金額は廃止済み。
+- 雀魂：`services/valorant-results/src/mahjong*.ts`、`docs/MAHJONG_REVIEW_DEVELOPMENT_HANDOFF.md`。段位戦と牌譜解析の現行実装を優先。友人戦は [Issue #406](https://github.com/altepop/keso-gamble/issues/406) で継続。
+- 指令：`services/valorant-results/src/kp-api.ts`、`js/progression.js`。負け怖の未実装条件は [Issue #405](https://github.com/altepop/keso-gamble/issues/405)。
+
+Java版Realmsの採掘連携と未提供の他ゲーム指令は依然として案です。この文書の取り込みで有効化されません。
+
+---
+
+以下は2026-10-27当時の原文です。
 
 ## ユーザーの要望
 
