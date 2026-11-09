@@ -194,35 +194,45 @@ export function paipuPostMessages(summary:PaipuSummary,members:Map<number,Member
  return messages;
 }
 export function paipuPostPayload(summary:PaipuSummary,members:Map<number,Member>,levelOf:(user:string)=>RoastLevel,outcomes:string[]=[]){return paipuPostMessages(summary,members,levelOf,outcomes)[0];}
-export async function queuePaipuMessages(env:PaipuEnv,uuid:string,posts:PaipuMessage[],now:number){
+export async function queuePaipuMessages(env:PaipuEnv,uuid:string,posts:PaipuMessage[],now:number,completion?:{guild:string;summary:PaipuSummary}){
+ if(completion){
+  if(completion.summary.uuid!==uuid)throw Error('paipu_completion_mismatch');
+  // The summary is the existing queue's completion marker. Commit it LAST in
+  // the same transaction as every outbox part. A failed batch stays retryable.
+  const statements=posts.map((post,i)=>env.DB.prepare('INSERT OR IGNORE INTO kp_posts(id,body,at) SELECT ?,?,? WHERE NOT EXISTS(SELECT 1 FROM kp_mahjong_paipu WHERE guild=? AND paipu=? AND summary IS NOT NULL)')
+   .bind('paipu:'+uuid+(i?':part:'+String(i+1).padStart(2,'0'):''),JSON.stringify({...post,allowed_mentions:{parse:[]}}),now,completion.guild,uuid));
+  statements.push(env.DB.prepare('INSERT INTO kp_mahjong_paipu(guild,paipu,summary,error,attempts,at) VALUES(?,?,?,NULL,0,?) ON CONFLICT(guild,paipu) DO UPDATE SET summary=excluded.summary,error=NULL,at=excluded.at WHERE kp_mahjong_paipu.summary IS NULL')
+   .bind(completion.guild,uuid,JSON.stringify(completion.summary),now));
+  await env.DB.batch(statements);return;
+ }
  if(posts.length===1)await enqueue(env,'paipu:'+uuid,posts[0].content,now,posts[0].embeds);
  else if(posts.length)await env.DB.batch(posts.map((post,i)=>env.DB.prepare('INSERT OR IGNORE INTO kp_posts(id,body,at) VALUES(?,?,?)').bind('paipu:'+uuid+(i?':part:'+String(i+1).padStart(2,'0'):''),JSON.stringify({...post,allowed_mentions:{parse:[]}}),now)));
 }
-/** Applies one fetched summary: stores it, settles /paifu claims, queues the post. `players` are the
+/** Settles a fetched summary, then atomically stores it and its outbox. `players` are the
  * registered accounts of the result watcher, roasted by name until they are linked to Discord. */
 export async function applySummary(env:PaipuEnv,mapping:KpMapping,summary:PaipuSummary,now=Date.now(),players:Array<{id:number;name:string}>=[]){
  // The signed ingestion may carry a C3 review, but invalid review data never becomes a bot claim.
  summary={...summary,c3:acceptedC3Report(summary,summary.c3)??undefined,review:acceptedSanmaReport(summary,summary.review)??undefined};
- await env.DB.prepare('INSERT INTO kp_mahjong_paipu(guild,paipu,summary,error,attempts,at) VALUES(?,?,?,NULL,0,?) ON CONFLICT(guild,paipu) DO UPDATE SET summary=excluded.summary,error=NULL,at=excluded.at WHERE kp_mahjong_paipu.summary IS NULL')
-  .bind(mapping.guildId,summary.uuid,JSON.stringify(summary),now).run();
  const claims=(await env.DB.prepare(`SELECT id,user,paipu,rank,status FROM kp_mahjong_claims WHERE guild=? AND paipu=? AND status!='rejected'`).bind(mapping.guildId,summary.uuid).all<{id:string;user:string;paipu:string;rank:number;status:string}>()).results;
  const members=new Map<number,Member>(),outcomes:string[]=[];
  for(const p of summary.seats){const r=players.find(x=>x.id===p.accountId&&p.accountId>0);if(r)members.set(p.seat,{name:r.name});}
  const links=(await env.DB.prepare('SELECT user,account FROM kp_mahjong_links WHERE guild=?').bind(mapping.guildId).all<{user:string;account:number}>()).results;
  for(const p of summary.seats){const link=links.find(l=>l.account===p.accountId&&p.accountId>0);if(link)members.set(p.seat,{user:link.user,name:p.nickname});}
  for(const c of claims){
-  const check=await paipuCheck(env,mapping.guildId,c),player=summary.seats.find(s=>s.rank===c.rank);
+  // Automatic claims are handled below, including receipts after a retry.
+  if(c.id===`auto:${summary.uuid}:${c.user}`)continue;
+  const check=await paipuCheck(env,mapping.guildId,c,summary),player=summary.seats.find(s=>s.rank===c.rank);
   if(player&&check&&!('refuse' in check))members.set(player.seat,{user:c.user,name:player.nickname});
-  const line=await settleClaim(env,mapping.guildId,c,now);if(line)outcomes.push(line);
+  const line=await settleClaim(env,mapping.guildId,c,now,{fetched:summary,reportExisting:true});if(line)outcomes.push(line);
  }
  // Linked members who did not claim are credited from the paipu itself.
- outcomes.push(...await autoCredit(env,mapping.guildId,summary,now));
+ outcomes.push(...await autoCredit(env,mapping.guildId,summary,now,true));
+ let posts:PaipuMessage[]=[];
  if(env.KP_EARNINGS_WEBHOOK_URL&&members.size){
   await ensurePosts(env);
-  const posts=paipuPostMessages(summary,members,await roastLevelsOf(env,mapping),outcomes);
-  await queuePaipuMessages(env,summary.uuid,posts,now);
-
+  posts=paipuPostMessages(summary,members,await roastLevelsOf(env,mapping),outcomes);
  }
+ await queuePaipuMessages(env,summary.uuid,posts,now,{guild:mapping.guildId,summary});
 }
 /** GET /api/mahjong/paipu/queue and POST /api/mahjong/paipu/summaries, both signed. */
 export async function paipuApi(request:Request,env:PaipuEnv,override?:KpMapping,playersOverride?:Array<{id:number;name:string}>):Promise<Response>{
@@ -237,13 +247,18 @@ export async function paipuApi(request:Request,env:PaipuEnv,override?:KpMapping,
  let results:Array<{uuid:string;summary?:unknown;error?:string}>;
  try{results=JSON.parse(body).results;}catch{return new Response('Invalid body',{status:400});}
  if(!Array.isArray(results)||results.length>10)return new Response('Invalid body',{status:400});
- const queued=new Set(await paipuQueue(env,mapping.guildId));let stored=0;
+ const queued=new Set(await paipuQueue(env,mapping.guildId));let stored=0,failed=0;
+ const failure=async(uuid:string,error:string)=>env.DB.prepare('INSERT INTO kp_mahjong_paipu(guild,paipu,error,attempts,at) VALUES(?,?,?,1,?) ON CONFLICT(guild,paipu) DO UPDATE SET error=excluded.error,attempts=attempts+1,at=excluded.at WHERE kp_mahjong_paipu.summary IS NULL').bind(mapping.guildId,uuid,error,Date.now()).run();
  const players=playersOverride??(override?[]:await mahjongPlayers(env));
  for(const r of results){
   if(typeof r?.uuid!=='string'||!PAIPU.test(r.uuid)||!queued.has(r.uuid))continue;
-  if(validSummary(r.summary,r.uuid)){await applySummary(env,mapping,r.summary,Date.now(),players);stored++;continue;}
+  if(validSummary(r.summary,r.uuid)){
+   try{await applySummary(env,mapping,r.summary,Date.now(),players);stored++;}
+   catch{await failure(r.uuid,'summary_apply_failed');failed++;}
+   queued.delete(r.uuid);continue;
+  }
   const error=typeof r.error==='string'?r.error.replace(/[^\w:,.-]/g,'').slice(0,80):'invalid_summary';
-  await env.DB.prepare('INSERT INTO kp_mahjong_paipu(guild,paipu,error,attempts,at) VALUES(?,?,?,1,?) ON CONFLICT(guild,paipu) DO UPDATE SET error=excluded.error,attempts=attempts+1,at=excluded.at').bind(mapping.guildId,r.uuid,error,Date.now()).run();
+  await failure(r.uuid,error);queued.delete(r.uuid);
  }
- return Response.json({stored});
+ return Response.json({stored,...failed?{failed}:{}});
 }

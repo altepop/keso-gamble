@@ -173,7 +173,8 @@ export async function run(env=process.env,check=process.argv.includes('--check')
  if(results.length){
   console.log('equal_review: '+results.filter(r=>r.summary?.c3||r.summary?.review).length+' reports (no game identifiers)');
   const reply=await worker(env,'/api/mahjong/paipu/summaries',{results});
-  console.log(`paipu: ${results.filter(r=>r.summary).length} ok, ${results.filter(r=>r.error).length} failed (${[...new Set(results.map(r=>r.error).filter(Boolean))].join(',')}); stored ${reply.stored??0}`);
+  console.log(`paipu: ${results.filter(r=>r.summary).length} fetched, ${results.filter(r=>r.error).length} fetch failed (${[...new Set(results.map(r=>r.error).filter(Boolean))].join(',')}); stored ${reply.stored??0}, apply failed ${reply.failed??0}`);
+  if(reply.failed>0)throw Error('paipu_summary_apply_failed');
  }
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href)(process.argv.includes('--queue')?queueSize().then(n=>console.log('count='+n)):run()).then(()=>process.exit(0),error=>{console.error('mahjong paipu failed:',String(error.message).replace(/[A-Za-z0-9+/=_-]{24,}/g,'***'));process.exit(1);});

@@ -151,8 +151,8 @@ export function luckyStake(game:Game,rank:number,paipu:string,account:number){
  const base=stake(game,rank),luck=luckFor('mahjong:'+paipu+':'+account);
  return {amount:Math.abs(applyLuck(base,luck)),note:luckLabel(luck,base)};
 }
-export async function paipuCheck(env:KpEnv,guild:string,claim:Pick<Claim,'user'|'paipu'|'rank'>):Promise<null|{refuse:string}|{game:Game;amount:number;account:number;nickname:string;auto:boolean}>{
- const summary=await paipuSummary(env,guild,claim.paipu);
+export async function paipuCheck(env:KpEnv,guild:string,claim:Pick<Claim,'user'|'paipu'|'rank'>,fetched?:PaipuSummary):Promise<null|{refuse:string}|{game:Game;amount:number;account:number;nickname:string;auto:boolean}>{
+ const summary=fetched?.uuid===claim.paipu?fetched:await paipuSummary(env,guild,claim.paipu);
  if(!summary||!Object.hasOwn(policy.games,summary.game))return null;
  const player=summary.seats.find(s=>s.rank===claim.rank);
  if(!player)return {refuse:`牌譜は${summary.players}人戦です。順位を確認してください。`};
@@ -164,16 +164,30 @@ export async function paipuCheck(env:KpEnv,guild:string,claim:Pick<Claim,'user'|
  return {game,amount:luckyStake(game,claim.rank,claim.paipu,player.accountId).amount,account:player.accountId,nickname:player.nickname,auto:Boolean(mine)};
 }
 
+/** Rebuild text from committed receipts only; never reroll equipment or move KP. */
+async function existingRelicReceipt(env:KpEnv,guild:string,id:string){
+ const row=await env.DB.prepare("SELECT delta FROM kp_ledger WHERE guild=? AND id=? AND kind='relic'").bind(guild,'relic:mahjong:'+id).first<{delta:number}>();
+ if(!row)return '';
+ if(row.delta>0)return `（🧿 遺物補正 +${money(row.delta)}）`;
+ const borrowed=await borrowedBy(env,'relic:mahjong:'+id),loss=-row.delta+borrowed;
+ return loss>0?`（🩸 遺物の反動 −${money(loss)}${debtNote(borrowed)}）`:'';
+}
+async function settledClaimReceipt(env:KpEnv,guild:string,c:Pick<Claim,'id'|'user'|'paipu'|'rank'>){
+ const approved=await env.DB.prepare("SELECT 1 AS n FROM kp_mahjong_claims WHERE guild=? AND id=? AND user=? AND paipu=? AND rank=? AND status='approved' AND decider='paipu'").bind(guild,c.id,c.user,c.paipu,c.rank).first();
+ if(!approved)return null;
+ const relic=await existingRelicReceipt(env,guild,c.id);
+ return `✅ <@${c.user}> ${c.rank}位を牌譜で確認。${signed(await paid(env,c.id))}${debtNote(await borrowedBy(env,'mahjong:'+c.id))}${relic}`;
+}
 /** Applies a fetched paipu to one pending claim: auto-approval for a linked account, otherwise the
  * game type and amount are corrected and a member's approval is awaited. Returns a line for the post. */
-export async function settleClaim(env:KpEnv,guild:string,c:Pick<Claim,'id'|'user'|'paipu'|'rank'>&{status:string},now:number):Promise<string|null>{
- if(c.status!=='pending')return null;
- const check=await paipuCheck(env,guild,c);
+export async function settleClaim(env:KpEnv,guild:string,c:Pick<Claim,'id'|'user'|'paipu'|'rank'>&{status:string},now:number,options:{fetched?:PaipuSummary;reportExisting?:boolean}={}):Promise<string|null>{
+ if(c.status!=='pending')return options.reportExisting?settledClaimReceipt(env,guild,c):null;
+ const check=await paipuCheck(env,guild,c,options.fetched);
  if(!check)return null;
  if('refuse' in check)return `⚠️ <@${c.user}> の${c.rank}位申請：${check.refuse}`;
  if(check.auto){
   const done=await env.DB.prepare(`UPDATE kp_mahjong_claims SET status='approved',decider='paipu',decided_at=?,game=?,amount=? WHERE guild=? AND id=? AND status='pending'`).bind(now,check.game,check.amount,guild,c.id).run();
-  if(!done.meta.changes)return null;
+  if(!done.meta.changes)return options.reportExisting?settledClaimReceipt(env,guild,c):null;
   const relic=await mahjongRelic(env,guild,c.id);
   return `✅ <@${c.user}> ${c.rank}位を牌譜で確認。${signed(await paid(env,c.id))}${debtNote(await borrowedBy(env,'mahjong:'+c.id))}${relic}`;
  }
@@ -183,7 +197,7 @@ export async function settleClaim(env:KpEnv,guild:string,c:Pick<Claim,'id'|'user
 
 /** KP for every linked member in a fetched game, without /paifu. Recorded as an automatic claim
  * (id auto:<paipu>:<user>) so the same uniqueness rules stop a second credit; not counted in the daily cap. */
-export async function autoCredit(env:KpEnv,guild:string,summary:PaipuSummary,now:number){
+export async function autoCredit(env:KpEnv,guild:string,summary:PaipuSummary,now:number,reportExisting=false){
  if(!Object.hasOwn(policy.games,summary.game))return [];
  const game=summary.game as Game,lines:string[]=[];
  const links=(await env.DB.prepare('SELECT user,account FROM kp_mahjong_links WHERE guild=?').bind(guild).all<{user:string;account:number}>()).results;
@@ -198,7 +212,8 @@ export async function autoCredit(env:KpEnv,guild:string,summary:PaipuSummary,now
     .bind(id,guild,link.user,summary.uuid,'https://game.mahjongsoul.com/index.html?paipu='+summary.uuid,game,seat.rank,amount,jstDay(summary.end||now),now),
   ]);
   const done=await env.DB.prepare(`UPDATE kp_mahjong_claims SET status='approved',decider='paipu',decided_at=? WHERE guild=? AND id=? AND status='pending'`).bind(now,guild,id).run();
-  if(done.meta.changes){const relic=await mahjongRelic(env,guild,id);const moved=await paid(env,id);lines.push(`${moved<0||stake(game,seat.rank)<0?'💸':'✅'} <@${link.user}> ${seat.rank}位 ${signed(moved)}（牌譜から自動）${note}${debtNote(await borrowedBy(env,'mahjong:'+id))}${relic}`);}
+  const approved=done.meta.changes||reportExisting&&await env.DB.prepare("SELECT 1 AS n FROM kp_mahjong_claims WHERE guild=? AND id=? AND user=? AND paipu=? AND status='approved' AND decider='paipu'").bind(guild,id,link.user,summary.uuid).first();
+  if(approved){const relic=done.meta.changes?await mahjongRelic(env,guild,id):await existingRelicReceipt(env,guild,id);const moved=await paid(env,id);lines.push(`${moved<0||stake(game,seat.rank)<0?'💸':'✅'} <@${link.user}> ${seat.rank}位 ${signed(moved)}（牌譜から自動）${note}${debtNote(await borrowedBy(env,'mahjong:'+id))}${relic}`);}
  }
  return lines;
 }
