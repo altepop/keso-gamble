@@ -251,12 +251,14 @@ test('shuffle, previous, lyrics tabs and newly adopted tracks work together',asy
  assert.equal(s.element('#music-library').hidden,true);
  assert.ok(s.element('#music-lyrics-content').textContent.trim().length>0,'lyrics panel contains text for randomly selected song');
  const before=s.audio.src;
- s.fire('#music-song-fullpa','click');await tick();
- assert.notEqual(s.audio.src,before,'uploaded song replaces current playback');
- assert.match(decodeURI(s.audio.src),/フルパならB\.mp3$/);
- assert.equal(s.saved.get('keso.music.track'),'fullpa');
+ // Shuffle may already have selected fullpa, so always choose a DIFFERENT official song.
+ const target=s.ctx.KesoMusic.getState().track==='fullpa'?'relic':'fullpa';
+ s.fire('#music-song-'+target,'click');await tick();
+ assert.notEqual(s.audio.src,before,'selecting another uploaded song replaces current playback');
+ assert.match(decodeURI(s.audio.src),target==='relic'?/値札のない遺物B\.mp3$/:/フルパならB\.mp3$/);
+ assert.equal(s.saved.get('keso.music.track'),target);
  assert.equal(s.ctx.KesoMusic.getState().playing,true);
- assert.match(s.element('#music-lyrics-content').textContent,/フルパなら/);
+ assert.match(s.element('#music-lyrics-content').textContent,target==='relic'?/値札のない遺物/:/フルパなら/);
  assert.doesNotMatch(s.element('#music-lyrics-content').textContent,/\[(?:Verse|Chorus|Intro|Bridge)\]/);
  s.fire('#music-tab-library','click');
  assert.equal(s.element('#music-library').hidden,false);
