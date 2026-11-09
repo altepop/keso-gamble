@@ -56,7 +56,8 @@ jobs:
       - name: Report sanma configuration without accessing Mahjong or D1
         env:
           SANMA_CONFIGURATION: ${{ vars.MAHJONG_SANMA_REVIEW_ENABLED == 'true' && 'enabled' || vars.MAHJONG_SANMA_REVIEW_ENABLED == 'false' && 'disabled' || vars.MAHJONG_SANMA_REVIEW_ENABLED == '' && 'unset' || 'invalid' }}
-        run: printf 'equal_review_configuration: sanma=%s\n' "$SANMA_CONFIGURATION"
+        run: |
+          printf 'equal_review_configuration: sanma=%s\n' "$SANMA_CONFIGURATION"
       - run: npm ci
       - name: Detect changes to optional mahjong analysis
         id: review_paths
