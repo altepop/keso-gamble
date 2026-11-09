@@ -412,3 +412,11 @@
 - ユーザーが https://github.com/altepop/keso-gamble/settings/variables/actions で非秘密のRepository variable `MAHJONG_SANMA_REVIEW_ENABLED` を文字列 `true` に設定するのが最小の残作業。これはSecretsではなくVariables。mainの既存mahjong-paipu.ymlはこの値を読み、次の通常実行から三麻解析を有効にする。新しいWorker配置/DB migrationは不要。既に存在する場合は値だけ更新する。
 - 一時の取得・解析・有効化workflowは削除。以後のPR更新で自動再試行は残さない。実装テストは直近874件・build成功を維持。今回の通常CIのcheckはrun42525357288で成功、最終headのCI状態はPR本文を優先する。
 - 進捗目安95%（三麻95/四麻95/Bot95/検証90）。残るのは変数設定の確認、次回通常実行での有効フラグ確認、自然な新規対局の三麻/四麻v2送達、540再発時の公式クライアントとの比較。未対局アカウントの本人履歴探索は再開しない。
+
+## 設定値を読み取りだけで確認する経路（2026-11-09 JST）
+
+- b854af005c4da5bc5d67c28a626123b3083a878dのCI42525849336はcheck/browser成功、deploy skip。モデル検証・Activity・Chromium/WebKit・Worker buildまで成功を確認した。
+- 既存トークンでのVariables APIは403だったが、通常のGitHub Actionsは既にvars.MAHJONG_SANMA_REVIEW_ENABLEDを参照している。CIのcheckと通常paipuの既存キュー確認ステップに、同じ参照から作る固定状態ログを追加した。API権限やトークン設定は変えない。
+- ログはequal_review_configuration: sanma=enabled/disabled/unset/invalidの4状態のみ。設定値の原文をenvにもログにも渡さない。空文字はunset、厳密な文字列trueのみenabled。通常の有効化条件も厳密なtrueのまま。
+- 設定の読み取りは雀魂・D1・Discord・KPへアクセスせず、追加のジョブ/依存インストールも行わない。観測用ログの変更なので新しい単体テストは追加せず、既存CIで構文と通常処理を検証する。
+- このログがenabledでも、実際に新規対局の解析/送達が完了したことを意味しない。CIで現在のRepository variableの状態、通常実行で実際の実行時設定を別々に確認する。最新の観測結果はPR393本文を参照。

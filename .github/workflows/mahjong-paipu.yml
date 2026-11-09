@@ -69,7 +69,9 @@ jobs:
           DELIVERY_AUDIT: ${{ inputs.delivery_audit }}
           DELIVERY_PROBE: ${{ inputs.delivery_probe }}
           PROBE_ACTOR: ${{ github.actor }}
+          SANMA_CONFIGURATION: ${{ vars.MAHJONG_SANMA_REVIEW_ENABLED == 'true' && 'enabled' || vars.MAHJONG_SANMA_REVIEW_ENABLED == 'false' && 'disabled' || vars.MAHJONG_SANMA_REVIEW_ENABLED == '' && 'unset' || 'invalid' }}
         run: |
+          printf 'equal_review_configuration: sanma=%s\n' "$SANMA_CONFIGURATION"
           if [ "$DELIVERY_PROBE" = "true" ]; then
             test "$PROBE_ACTOR" = altepop || { echo 'Owner-only verification'; exit 1; }
             echo 'count=delivery-probe' >> "$GITHUB_OUTPUT"; exit 0
