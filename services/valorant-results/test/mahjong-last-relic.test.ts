@@ -30,7 +30,7 @@ async function fixture(){
  const balance=(user:string)=>Number(sql.prepare('SELECT balance FROM kp_wallets WHERE user=?').get(user)?.balance??0);
  const debt=(user:string)=>Number(sql.prepare('SELECT amount FROM kp_debts WHERE user=?').get(user)?.amount??0);
  const posts=()=>(sql.prepare("SELECT body FROM kp_posts WHERE id LIKE 'paipu:%'").all() as Array<{body:string}>).map(r=>JSON.parse(r.body).content as string).join('\n');
- return {sql,call,balance,debt,posts};
+ return {env,sql,call,balance,debt,posts};
 }
 function relics(){
  const c:RelicCollection={totalSummons:0,items:{},equipped:[]};
@@ -67,4 +67,41 @@ test('雀魂のラス（半荘 −500）：残高から引き、足りない分�
  assert.doesNotMatch(rich.posts(),/遺物/);
  const broke=await play(true,100);assert.equal(broke.balance(one),0);assert.equal(broke.debt(one),400+extra,'ラス分 400 と遺物の損がどちらも借KPに');
  assert.match(broke.posts(),new RegExp(`4位 −100 KP（牌譜から自動）（💸 払えない分は借KP \\+400）（🩸 遺物の反動 −${k(extra)}（💸 払えない分は借KP \\+${k(extra).replace(' KP','')}）`));
+});
+
+test('retry after a failed outbox does not repeat the last-place penalty, relic loss or debt',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:T0});const f=await fixture();await f.call('/api/mahjong/paipu/queue');
+ const {ensurePosts}=await import('../src/racing-posts.ts');await ensurePosts(f.env);
+ f.sql.prepare('INSERT INTO kp_mahjong_links VALUES(?,?,?)').run(guild,one,11);
+ f.sql.prepare("INSERT INTO kp_ledger VALUES('seed',?,?,100,'test',0)").run(guild,one);
+ const state=JSON.parse(String(f.sql.prepare('SELECT data FROM kp_state WHERE user=?').get(one)!.data));state.relics=relics();
+ f.sql.prepare('UPDATE kp_state SET data=? WHERE user=?').run(JSON.stringify(state),one);
+ f.sql.prepare('INSERT INTO mahjong_paipu_auto VALUES(?,?,?)').run(PAIPU,11,T0);
+ f.sql.exec("CREATE TRIGGER fail_paipu_post BEFORE INSERT ON kp_posts WHEN NEW.id LIKE 'paipu:%' BEGIN SELECT RAISE(ABORT,'fixture outbox failure'); END");
+ assert.deepEqual(await (await f.call('/api/mahjong/paipu/summaries',{results:[{uuid:PAIPU,summary}]})).json(),{stored:0,failed:1});
+ const before={balance:f.balance(one),debt:f.debt(one),ledger:f.sql.prepare('SELECT id,delta FROM kp_ledger ORDER BY id').all(),debtEvents:f.sql.prepare('SELECT id,amount FROM kp_debt_events ORDER BY id').all()};
+ assert.equal(before.balance,0);assert.ok(before.debt>400);
+ f.sql.exec('DROP TRIGGER fail_paipu_post');
+ assert.deepEqual(await (await f.call('/api/mahjong/paipu/summaries',{results:[{uuid:PAIPU,summary}]})).json(),{stored:1});
+ assert.deepEqual({balance:f.balance(one),debt:f.debt(one),ledger:f.sql.prepare('SELECT id,delta FROM kp_ledger ORDER BY id').all(),debtEvents:f.sql.prepare('SELECT id,amount FROM kp_debt_events ORDER BY id').all()},before);
+ assert.match(f.posts(),/4位 −100 KP（牌譜から自動）/);assert.match(f.posts(),/遺物の反動/);
+ assert.equal((f.posts().match(/4位 −100 KP（牌譜から自動）/g)??[]).length,1);
+});
+
+test('a committed relic win keeps its original receipt after equipment changes during retry',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:T0});const f=await fixture();await f.call('/api/mahjong/paipu/queue');
+ const {ensurePosts}=await import('../src/racing-posts.ts');await ensurePosts(f.env);
+ f.sql.prepare('INSERT INTO kp_mahjong_links VALUES(?,?,?)').run(guild,one,22);
+ const state=JSON.parse(String(f.sql.prepare('SELECT data FROM kp_state WHERE user=?').get(one)!.data));state.relics=relics();
+ f.sql.prepare('UPDATE kp_state SET data=? WHERE user=?').run(JSON.stringify(state),one);
+ f.sql.prepare('INSERT INTO mahjong_paipu_auto VALUES(?,?,?)').run(PAIPU,22,T0);
+ f.sql.exec("CREATE TRIGGER fail_paipu_post BEFORE INSERT ON kp_posts WHEN NEW.id LIKE 'paipu:%' BEGIN SELECT RAISE(ABORT,'fixture outbox failure'); END");
+ assert.deepEqual(await (await f.call('/api/mahjong/paipu/summaries',{results:[{uuid:PAIPU,summary}]})).json(),{stored:0,failed:1});
+ const balance=f.balance(one),ledger=f.sql.prepare('SELECT id,delta FROM kp_ledger ORDER BY id').all();
+ const bonus=Number(f.sql.prepare("SELECT delta FROM kp_ledger WHERE kind='relic'").get()!.delta);assert.ok(bonus>0);
+ state.relics.equipped=[];f.sql.prepare('UPDATE kp_state SET data=? WHERE user=?').run(JSON.stringify(state),one);
+ f.sql.exec('DROP TRIGGER fail_paipu_post');
+ await f.call('/api/mahjong/paipu/summaries',{results:[{uuid:PAIPU,summary}]});
+ assert.equal(f.balance(one),balance);assert.deepEqual(f.sql.prepare('SELECT id,delta FROM kp_ledger ORDER BY id').all(),ledger);
+ assert.match(f.posts(),new RegExp('遺物補正 \\+'+bonus.toLocaleString('ja-JP')+' KP'));
 });
