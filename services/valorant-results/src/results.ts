@@ -96,15 +96,17 @@ export function resultMessage(raw: Match, puuid: string, label: string, deathUnr
   };
 }
 
+// The OR preserves ties by match ID. Repeat its end-time parameter after the
+// original placeholders so SQLite also seeks an explicit upper index bound.
 export const DAILY_RESULTS_SQL=`SELECT
     SUM(CASE WHEN outcome='win' THEN 1 ELSE 0 END) AS wins,
     SUM(CASE WHEN outcome='loss' THEN 1 ELSE 0 END) AS losses,
     SUM(CASE WHEN outcome='draw' THEN 1 ELSE 0 END) AS draws
     FROM notifications WHERE riot_id=? AND mode=? AND ended_at>=?
-    AND (ended_at<? OR (ended_at=? AND match_id<=?))`;
+    AND (ended_at<? OR (ended_at=? AND match_id<=?)) AND ended_at<=?4`;
 export const ACT_RESULTS_SQL=`SELECT outcome FROM notifications
     WHERE riot_id=? AND mode=? AND act_id=? AND outcome IS NOT NULL
-    AND (ended_at<? OR (ended_at=? AND match_id<=?))
+    AND (ended_at<? OR (ended_at=? AND match_id<=?)) AND ended_at<=?4
     ORDER BY ended_at DESC,match_id DESC`;
 
 async function actSummary(db: D1Database, notice: Notice): Promise<{ text: string; streak: number }> {

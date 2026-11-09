@@ -49,13 +49,16 @@ test('daily and ACT summaries use covering ranges with the same ties, null outco
  add.run('One#JP1','03995-a','tie',3995,'competitive','new','draw');add.run('One#JP1','03995-z','later tie',3995,'competitive','new',null);
  const args=['One#JP1','competitive',3900,3995,3995,'03995-a'];
  const actArgs=['One#JP1','competitive','new',3995,3995,'03995-a'];
- const daily=sql.prepare(DAILY_RESULTS_SQL).get(...args),act=sql.prepare(ACT_RESULTS_SQL).all(...actArgs);
+ const oldDaily=DAILY_RESULTS_SQL.replace(' AND ended_at<=?4',''),oldAct=ACT_RESULTS_SQL.replace(' AND ended_at<=?4','');
+ const daily=sql.prepare(oldDaily).get(...args),act=sql.prepare(oldAct).all(...actArgs);
  const db={prepare:(q:string)=>({run:async()=>{sql.exec(q);}}),batch:async(q:Array<{run:()=>unknown}>)=>{for(const x of q)await x.run();return [];}} as unknown as D1Database;
  await ensureNotificationReadIndexes(db);
  assert.deepEqual(sql.prepare(DAILY_RESULTS_SQL).get(...args),daily);assert.deepEqual(sql.prepare(ACT_RESULTS_SQL).all(...actArgs),act);
  const plan=(q:string,args:unknown[])=>sql.prepare('EXPLAIN QUERY PLAN '+q).all(...args as never[]).map(r=>String(r.detail)).join(' | ');
  assert.match(plan(DAILY_RESULTS_SQL,args),/COVERING INDEX notifications_day_mode_cover/);
  assert.match(plan(ACT_RESULTS_SQL,actArgs),/COVERING INDEX notifications_act_cover/);
+ assert.match(plan(DAILY_RESULTS_SQL,args),/ended_at>\? AND ended_at<\?/);
+ assert.match(plan(ACT_RESULTS_SQL,actArgs),/ended_at<\?/);
  assert.doesNotMatch(plan(ACT_RESULTS_SQL,actArgs),/USE TEMP B-TREE/);
  assert.equal((act[0] as {outcome:string}).outcome,'draw');
  }finally{sql.close();}
