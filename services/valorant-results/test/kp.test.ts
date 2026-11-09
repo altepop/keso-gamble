@@ -1112,3 +1112,17 @@ test('the confirmed Nagoya/Chiba Discord IDs appear in both guild-wide KP target
  assert.deepEqual(f.sql.prepare('SELECT * FROM kp_directives').all(),originalDirectives,'directives and their state remain unchanged');
  assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM kp_ledger').get()!.n,0,'roster lookup never transfers KP');
 });
+
+test('monitor reward lookup reads each immutable bonus receipt once and preserves combined compensation',async()=>{
+ const {KP_RUN_MATCH_SQL}=await import('../src/kp.ts');
+ const f=await fixture();f.enableHistory();
+ const raw=game('lookup-d1-reduction');await collectKpMatch(f.env,mapping,raw,'p-one');
+ const id=kpEventId(guild,raw.metadata.match_id,'p-one');
+ for(const [prefix,delta] of [['penalty:',-40],['relic:',50],['spike-comp:',75]] as const)f.sql.prepare('INSERT INTO kp_ledger VALUES(?,?,?,?,?,?)').run(prefix+id,guild,one,delta,'test-only',Date.now());
+ const run=await prepareKpRun(f.env,mapping);await loadKpRunMatch(f.env,run,id);
+ assert.equal(run.credits.get(id),985);assert.equal(run.relicBonuses.get(id),125);
+ const plan=f.sql.prepare('EXPLAIN QUERY PLAN '+KP_RUN_MATCH_SQL).all(id,guild).map(r=>String(r.detail)).join(' | ');
+ for(const alias of ['p','r','c'])assert.match(plan,new RegExp('SEARCH '+alias+' USING INDEX sqlite_autoindex_kp_ledger_1'));
+ assert.doesNotMatch(plan,/SCAN kp_ledger|CORRELATED SCALAR SUBQUERY/);
+ const other=await prepareKpRun(f.env,{...mapping,guildId:'100000000000009999'});await loadKpRunMatch(f.env,other,id);assert.equal(other.credits.size,0);
+});

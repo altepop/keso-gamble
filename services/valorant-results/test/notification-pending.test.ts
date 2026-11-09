@@ -5,7 +5,7 @@ import {pendingNotificationMatches,REGULAR_PENDING_SQL,CLAIMED_DEATH_PENDING_SQL
 import {ensureNotificationReadIndexes} from '../src/notification-indexes.ts';
 test('D1 pending scan uses partial indexes and ignores hundreds of unclaimed deaths',async()=>{
  const sql=new DatabaseSync(':memory:');
- sql.exec(`CREATE TABLE notifications(riot_id TEXT NOT NULL,match_id TEXT NOT NULL,ended_at INTEGER NOT NULL,sent INTEGER NOT NULL DEFAULT 0,mode TEXT,outcome TEXT, PRIMARY KEY(riot_id,match_id));
+ sql.exec(`CREATE TABLE notifications(riot_id TEXT NOT NULL,match_id TEXT NOT NULL,ended_at INTEGER NOT NULL,sent INTEGER NOT NULL DEFAULT 0,mode TEXT,outcome TEXT,act_id TEXT, PRIMARY KEY(riot_id,match_id));
  CREATE TABLE death_unrated_sessions(riot_id TEXT NOT NULL,match_id TEXT NOT NULL,cancelled_at INTEGER,PRIMARY KEY(riot_id,match_id));`);
  const db={prepare:(query:string)=>({
    run:()=>sql.exec(query),
@@ -33,7 +33,7 @@ test('D1 pending scan uses partial indexes and ignores hundreds of unclaimed dea
 
 test('orphan Death notifications do not repeatedly trigger Discord backoff or network work each Cron',async()=>{
  const sql=new DatabaseSync(':memory:');
- sql.exec(`CREATE TABLE notifications(riot_id TEXT NOT NULL,match_id TEXT NOT NULL,ended_at INTEGER NOT NULL,sent INTEGER NOT NULL DEFAULT 0,mode TEXT,outcome TEXT,PRIMARY KEY(riot_id,match_id));
+ sql.exec(`CREATE TABLE notifications(riot_id TEXT NOT NULL,match_id TEXT NOT NULL,ended_at INTEGER NOT NULL,sent INTEGER NOT NULL DEFAULT 0,mode TEXT,outcome TEXT,act_id TEXT,PRIMARY KEY(riot_id,match_id));
  CREATE TABLE death_unrated_sessions(riot_id TEXT NOT NULL,match_id TEXT NOT NULL,cancelled_at INTEGER,PRIMARY KEY(riot_id,match_id));`);
  const insert=sql.prepare('INSERT INTO notifications(riot_id,match_id,ended_at,sent,mode) VALUES(?,?,?,?,?)');
  for(let i=0;i<750;i++)insert.run('riot-'+i,'unclaimed-'+i,100+i,0,'death_unrated');

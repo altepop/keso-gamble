@@ -52,3 +52,20 @@ test('監視：たまっているもの（未精算・承認待ち・借KP・送
  assert.doesNotMatch(JSON.stringify(r),new RegExp(one),'no member ids');
  const res=await kpApi(new Request('https://worker/api/kp/health'),f.env,mapping);assert.equal(res.status,401);
 });
+
+test('cold bindings share the durable five-minute success throttle; failure and immediate recovery are never suppressed',async t=>{
+ const f=await fixture();t.mock.method(console,'warn',()=>{});
+ const at=T0+123456;t.mock.timers.enable({apis:['Date'],now:at});
+ await track(f.env,'voice',async()=>{});
+ const before=f.sql.prepare("SELECT last_ok FROM kp_health WHERE feature='voice'").get()!.last_ok;
+ let writes=0;
+ f.sql.function('count_health_write',()=>{writes++;return 0;});
+ f.sql.exec('CREATE TRIGGER count_health AFTER UPDATE ON kp_health BEGIN SELECT count_health_write(); END');
+ const cold=():KpEnv=>({...f.env,DB:{...f.env.DB} as D1Database});
+ t.mock.timers.setTime(at+60000);await track(cold(),'voice',async()=>{});
+ assert.equal(writes,0);assert.equal(f.sql.prepare("SELECT last_ok FROM kp_health WHERE feature='voice'").get()!.last_ok,before);
+ await track(cold(),'voice',async()=>{throw Error('fixture failure');});assert.equal(writes,1);
+ await track(cold(),'voice',async()=>{});assert.equal(writes,2);
+ assert.equal(f.sql.prepare("SELECT failures FROM kp_health WHERE feature='voice'").get()!.failures,0);
+ t.mock.timers.setTime(at+6*60000);await track(cold(),'voice',async()=>{});assert.equal(writes,3);
+});
