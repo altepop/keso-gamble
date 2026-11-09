@@ -1,25 +1,72 @@
-/* KESO PLAY BGM: separate from app rerenders and casino SFX. */
-#keso-music{position:relative;flex-shrink:0;z-index:11;font-family:system-ui,-apple-system,"Noto Sans JP",sans-serif;color:#f1f5ff}
-#keso-music[hidden]{display:none}
+/* KESO PLAY MUSIC: original dark music-library UI, isolated from game Activity. */
+#keso-music{--music-accent:#78edb7;--music-bg:#0c121e;--music-muted:#a7b6cd;position:relative;flex-shrink:0;z-index:11;font-family:system-ui,-apple-system,"Noto Sans JP",sans-serif;color:#eef5ff}
+#keso-music[hidden],#keso-music [hidden]{display:none!important}
+#keso-music *{box-sizing:border-box}
 #keso-music button,#keso-music select,#keso-music input{font:inherit}
-#keso-music .music-open{min-height:42px;padding:7px 13px;border-radius:99px;border:1px solid #8aafd2;background:#102548;color:#fff;box-shadow:0 6px 24px #0009;cursor:pointer;font-weight:800}
-#keso-music .music-open.playing{border-color:#79f4cb;box-shadow:0 0 0 2px #79f4cb44,0 6px 24px #0009}
-#keso-music .music-panel{position:absolute;right:0;top:50px;width:min(350px,calc(100vw - 24px));max-height:min(76vh,600px);overflow-y:auto;padding:15px;border:1px solid #5b7db0;border-radius:17px;background:#0b1833;box-shadow:0 18px 55px #000c;display:grid;gap:11px;font-size:13px}
-#keso-music .music-panel[hidden]{display:none}
-#keso-music .music-heading{display:flex;align-items:center;justify-content:space-between;color:#e9eeff;font-size:14px}
-#keso-music .music-close{border:0;background:transparent;color:white;font-size:24px;min-width:38px;min-height:38px;cursor:pointer}
-#keso-music label{font-weight:700}
-#keso-music select{width:100%;min-height:42px;padding:8px;border-radius:9px;background:#172c4d;border:1px solid #6a8eb7;color:white}
-#keso-music .music-buttons{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-#keso-music .music-buttons button{min-height:44px;border:1px solid #88aadc;border-radius:10px;background:#1d3e6e;color:white;font-weight:800;cursor:pointer}
-#keso-music .music-volume-label{display:flex;justify-content:space-between;gap:10px}
-#keso-music input[type=range]{width:100%;height:28px;accent-color:#9bdbff;touch-action:pan-x}
-#keso-music .music-info{margin:0;font-size:11px;line-height:1.6;color:#c5d5ed}
-#keso-music .music-status{margin:0;min-height:18px;color:#b6f1df;font-size:12px;line-height:1.5}
-@media(max-width:480px){#keso-music{margin-left:0}#keso-music .music-open{padding:6px 10px;min-height:38px}#keso-music .music-open span{display:none}}
-/* Startup music is available on the genuine title screen as well as game headers. */
+#keso-music button{cursor:pointer;-webkit-tap-highlight-color:transparent}
+#keso-music button:focus-visible,#keso-music select:focus-visible,#keso-music input:focus-visible,#keso-music .music-lyrics-content:focus-visible{outline:2px solid var(--music-accent);outline-offset:3px}
+#keso-music .music-open{min-height:42px;padding:7px 13px;border-radius:99px;border:1px solid #7d9ab1;background:linear-gradient(130deg,#142846,#152138);color:white;font-weight:800;box-shadow:0 6px 22px #0007;letter-spacing:.05em}
+#keso-music .music-open.playing{border-color:var(--music-accent);box-shadow:0 0 0 2px #78edb733,0 6px 22px #0008}
+#keso-music .music-open.needs-tap{border-color:#f0cd7c}
+#keso-music .music-panel{position:absolute;right:0;top:50px;width:min(440px,calc(100vw - 20px));max-height:min(84dvh,740px);overflow-y:auto;overscroll-behavior:contain;padding:15px;background:linear-gradient(160deg,#152f34 0%,#0b1628 35%,#0b121e 100%);border:1px solid #52707c;border-radius:21px;box-shadow:0 20px 65px #000d;display:flex;flex-direction:column;gap:12px;text-align:left;font-size:13px}
+#keso-music .music-heading{display:flex;justify-content:space-between;align-items:center;gap:8px}
+#keso-music .music-heading>div{display:flex;flex-direction:column;gap:2px}
+#keso-music .music-heading strong{font-size:17px;letter-spacing:.03em}
+#keso-music .music-eyebrow{color:#8dd7bb;letter-spacing:.14em;font-size:9px;font-weight:800}
+#keso-music .music-close{border:0;background:#ffffff0c;color:#fff;font-size:23px;width:38px;height:38px;min-width:38px;border-radius:50%}
+#keso-music .music-now{display:flex;align-items:center;gap:13px;padding:13px;border:1px solid #ffffff20;background:#ffffff0b;border-radius:16px}
+#keso-music .music-art{display:grid;place-items:center;width:76px;height:76px;flex-shrink:0;border-radius:13px;background:linear-gradient(135deg,#23a68c,#24406d 60%,#624687);box-shadow:0 10px 20px #0006;font-size:38px;color:#f6fff9}
+#keso-music .music-now-text{display:flex;flex-direction:column;min-width:0;gap:6px}
+#keso-music .music-now-text strong{font-size:17px;line-height:1.25;overflow-wrap:anywhere}
+#keso-music .music-now-text small{font-size:10px;font-weight:800;letter-spacing:.12em;color:var(--music-accent)}
+#keso-music .music-now-text span{color:var(--music-muted);font-size:11px}
+#keso-music .music-timeline{display:flex;flex-direction:column;gap:1px}
+#keso-music .music-times{display:flex;justify-content:space-between;color:#bccce0;font-size:11px;font-variant-numeric:tabular-nums}
+#keso-music input[type="range"]{width:100%;margin:0;min-height:28px;accent-color:var(--music-accent);cursor:pointer;touch-action:pan-x}
+#keso-music input[type="range"]:disabled{opacity:.38;cursor:not-allowed}
+#keso-music .music-transport{display:grid;grid-template-columns:1fr 1fr 1.8fr 1fr 1fr;gap:8px;align-items:center;text-align:center}
+#keso-music .music-transport button{min-width:0;min-height:44px;border:0;border-radius:11px;color:#d8e7f4;background:#ffffff0d;font-size:21px}
+#keso-music .music-transport button.enabled{color:var(--music-accent);background:#75eabd1c}
+#keso-music .music-transport .music-main-play{font-size:13px;font-weight:900;color:#102622;background:var(--music-accent);white-space:nowrap}
+#keso-music .music-tabs{display:grid;grid-template-columns:1fr 1fr;gap:7px;background:#091322;border-radius:12px;padding:5px;border:1px solid #ffffff1a}
+#keso-music .music-tabs button{min-height:38px;border:0;border-radius:9px;background:transparent;color:#b6c8d9;font-weight:800}
+#keso-music .music-tabs button[aria-pressed="true"]{background:#2c454b;color:#e9fff5}
+#keso-music #music-library{min-height:100px}
+#keso-music .music-section-title{display:flex;justify-content:space-between;align-items:center;gap:8px;font-weight:800;margin-bottom:8px}
+#keso-music .music-section-title small{font-size:10px;color:var(--music-muted);font-weight:500}
+#keso-music .music-track-select{display:flex;align-items:center;gap:8px;margin:5px 0 10px}
+#keso-music .music-track-select label{color:#c4d3dc;font-weight:700;white-space:nowrap;font-size:11px}
+#keso-music #music-track{width:100%;min-width:0;min-height:34px;padding:5px 8px;border-radius:8px;border:1px solid #536d82;background:#19283d;color:#fff}
+#keso-music .music-song-list{display:flex;flex-direction:column;gap:4px;max-height:235px;overflow-y:auto;overscroll-behavior:contain}
+#keso-music .music-song{width:100%;min-height:55px;display:flex;align-items:center;gap:10px;border:1px solid transparent;border-radius:12px;background:transparent;color:#fff;text-align:left;padding:5px 8px}
+#keso-music .music-song:hover{background:#ffffff12}
+#keso-music .music-song.selected{background:#76e8b81c;border-color:#73f1b44a}
+#keso-music .music-song-cover{display:grid;place-items:center;flex-shrink:0;width:43px;height:43px;background:linear-gradient(135deg,#215e65,#47386c);border-radius:9px;font-size:22px}
+#keso-music .music-song-copy{display:flex;flex:1;min-width:0;flex-direction:column;gap:3px}
+#keso-music .music-song-title{font-size:13px;font-weight:800;overflow-wrap:anywhere}
+#keso-music .music-song small{color:var(--music-muted);font-size:10px}
+#keso-music .music-song-end{font-size:12px;color:var(--music-accent);font-weight:800;white-space:nowrap}
+#keso-music .music-upcoming{opacity:.74}
+#keso-music #music-lyrics-panel{min-height:0}
+#keso-music .music-lyrics-heading{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}
+#keso-music .music-lyrics-heading strong{font-size:15px}
+#keso-music .music-lyrics-heading small{font-size:10px;color:#a7b6cd;text-align:right}
+#keso-music .music-lyrics-content{padding:17px 16px;max-height:min(40vh,330px);min-height:125px;overflow-y:auto;white-space:pre-wrap;overflow-wrap:anywhere;font-size:15px;font-weight:650;line-height:2;color:#f0fff4;border-radius:14px;background:linear-gradient(170deg,#153a3c,#16223d);border:1px solid #77e7b83a}
+#keso-music .music-bottom{display:grid;gap:3px;border-top:1px solid #ffffff20;padding-top:9px}
+#keso-music .music-volume-label{display:flex;justify-content:space-between;color:#dceae7;font-weight:700;font-size:12px}
+#keso-music .music-auto-label{display:flex;gap:8px;align-items:center;min-height:31px;font-size:11px;color:#c9d6e3}
+#keso-music .music-auto-label input{width:17px;height:17px;accent-color:var(--music-accent)}
+#keso-music .music-status{min-height:18px;margin:0;color:#a1efcb;font-size:11px;line-height:1.5}
+#keso-music .music-info{margin:0;color:#9babbd;font-size:10px;line-height:1.55}
 .title-screen #keso-music{align-self:center;margin:12px auto 0}
-.title-screen #keso-music .music-panel{right:50%;transform:translateX(50%);top:50px;text-align:left}
-#keso-music .music-auto-label{display:flex;align-items:center;gap:9px;min-height:35px;font-size:12px}
-#keso-music .music-auto-label input{width:18px;height:18px;accent-color:#9bdbff}
-#keso-music .music-open.needs-tap{border-color:#f4cc82;box-shadow:0 0 0 2px #f4cc8244,0 6px 24px #0009}
+.title-screen #keso-music .music-panel{right:50%;transform:translateX(50%);top:50px}
+@media(max-width:480px){
+ #keso-music .music-open{min-height:38px;padding:6px 10px}
+ #keso-music .music-open span{display:none}
+ #keso-music .music-panel{width:min(390px,calc(100vw - 16px));padding:12px;gap:10px;max-height:80dvh}
+ #keso-music .music-now{padding:10px}
+ #keso-music .music-art{width:62px;height:62px}
+ #keso-music .music-song-list{max-height:180px}
+ #keso-music .music-lyrics-content{max-height:32dvh;font-size:14px}
+}
+@media(prefers-reduced-motion:reduce){#keso-music *{scroll-behavior:auto!important;transition:none!important}}
