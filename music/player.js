@@ -40,7 +40,7 @@
   }).join("");
   root.innerHTML=[
     '<button type="button" class="music-open" aria-expanded="false" aria-controls="music-panel" aria-label="音楽プレイヤーを開く">♫ <span>MUSIC</span></button>',
-    '<section class="music-panel" id="music-panel" role="dialog" aria-modal="true" aria-label="KESO PLAY MUSIC" hidden>',
+    '<section class="music-panel" id="music-panel" role="region" aria-label="KESO PLAY MUSIC" hidden>',
     '<div class="music-heading"><div><span class="music-eyebrow">KESO TOWN ORIGINALS</span><strong>KESO PLAY MUSIC</strong></div><button class="music-close" type="button" aria-label="閉じる">×</button></div>',
     '<div class="music-now"><div class="music-art" aria-hidden="true">♫</div><div class="music-now-text"><small>NOW PLAYING</small><strong id="music-now-title"></strong><span>Official KESO TOWN Music</span></div></div>',
     '<div class="music-timeline"><input type="range" id="music-seek" min="0" max="1000" value="0" step="1" aria-label="再生位置を移動" disabled><div class="music-times"><output id="music-current">0:00</output><output id="music-duration">0:00</output></div></div>',
