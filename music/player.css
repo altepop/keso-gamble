@@ -8,7 +8,7 @@
 #keso-music .music-open{min-height:42px;padding:7px 13px;border-radius:99px;border:1px solid #7d9ab1;background:linear-gradient(130deg,#142846,#152138);color:white;font-weight:800;box-shadow:0 6px 22px #0007;letter-spacing:.05em}
 #keso-music .music-open.playing{border-color:var(--music-accent);box-shadow:0 0 0 2px #78edb733,0 6px 22px #0008}
 #keso-music .music-open.needs-tap{border-color:#f0cd7c}
-#keso-music .music-panel{position:absolute;right:0;top:50px;width:min(440px,calc(100vw - 20px));max-height:min(84dvh,740px);overflow-y:auto;overscroll-behavior:contain;padding:15px;background:linear-gradient(160deg,#152f34 0%,#0b1628 35%,#0b121e 100%);border:1px solid #52707c;border-radius:21px;box-shadow:0 20px 65px #000d;display:flex;flex-direction:column;gap:12px;text-align:left;font-size:13px}
+#keso-music .music-panel{position:fixed;top:max(104px,calc(var(--activity-top-inset,0px) + 76px));bottom:calc(90px + env(safe-area-inset-bottom,0px));right:max(12px,env(safe-area-inset-right,0px));left:auto;width:min(440px,calc(100vw - 24px));height:auto;max-height:none;overflow-y:auto;overscroll-behavior:contain;padding:15px;background:linear-gradient(160deg,#152f34 0%,#0b1628 35%,#0b121e 100%);border:1px solid #52707c;border-radius:21px;box-shadow:0 20px 65px #000d;display:block;text-align:left;font-size:13px;z-index:2;touch-action:pan-y}
 #keso-music .music-heading{display:flex;justify-content:space-between;align-items:center;gap:8px}
 #keso-music .music-heading>div{display:flex;flex-direction:column;gap:2px}
 #keso-music .music-heading strong{font-size:17px;letter-spacing:.03em}
@@ -59,14 +59,43 @@
 #keso-music .music-status{min-height:18px;margin:0;color:#a1efcb;font-size:11px;line-height:1.5}
 #keso-music .music-info{margin:0;color:#9babbd;font-size:10px;line-height:1.55}
 .title-screen #keso-music{align-self:center;margin:12px auto 0}
-.title-screen #keso-music .music-panel{right:50%;transform:translateX(50%);top:50px}
+.title-screen #keso-music .music-panel{right:50%;transform:translateX(50%)}
 @media(max-width:480px){
  #keso-music .music-open{min-height:38px;padding:6px 10px}
  #keso-music .music-open span{display:none}
- #keso-music .music-panel{width:min(390px,calc(100vw - 16px));padding:12px;gap:10px;max-height:80dvh}
+ #keso-music .music-panel{width:calc(100vw - 20px);right:10px;left:10px;transform:none;padding:14px;top:max(112px,calc(var(--activity-top-inset,0px) + 74px));bottom:calc(90px + env(safe-area-inset-bottom,0px));max-height:none;border-radius:18px}
  #keso-music .music-now{padding:10px}
  #keso-music .music-art{width:62px;height:62px}
  #keso-music .music-song-list{max-height:180px}
  #keso-music .music-lyrics-content{max-height:32dvh;font-size:14px}
+}
+
+/* A music panel is a single independent scroll surface, not shrinkable flex cards.
+ * Prevents song rows from painting on top of volume, status and lyrics on small screens. */
+#keso-music .music-panel > :not(:first-child){margin-top:12px}
+#keso-music .music-panel > *{position:relative;min-width:0}
+#keso-music .music-panel #music-library{min-height:0}
+#keso-music .music-panel .music-song-list{max-height:none;overflow:visible}
+#keso-music .music-panel .music-song{flex-shrink:0}
+#keso-music .music-panel .music-track-select{display:none} /* The complete track list itself is the picker. */
+#keso-music .music-panel .music-info{padding-bottom:8px}
+#keso-music .music-panel .music-lyrics-content{max-height:none;min-height:140px;overflow:visible;line-height:1.85}
+/* Header and title-screen are otherwise lower than the fixed bottom navigation. */
+#app .screen > .topbar:has(#keso-music.music-expanded){z-index:100}
+#app main.title-screen:has(#keso-music.music-expanded){overflow:visible;position:relative;z-index:100}
+#keso-music.music-expanded{isolation:isolate;z-index:101}
+#keso-music.music-expanded::before{
+  content:"";position:fixed;inset:0;background:rgba(1,5,15,.77);
+  backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);z-index:1
+}
+#keso-music.music-expanded > .music-open{visibility:hidden}
+@media(max-width:480px){
+ #keso-music .music-panel{right:10px;left:10px;width:auto}
+ #app main.title-screen #keso-music .music-panel{right:10px;left:10px;transform:none}
+ #keso-music .music-panel .music-song{min-height:56px}
+ #keso-music .music-panel .music-lyrics-content{max-height:none}
+}
+@media(max-height:540px){
+ #keso-music .music-panel{top:8px;bottom:8px}
 }
 @media(prefers-reduced-motion:reduce){#keso-music *{scroll-behavior:auto!important;transition:none!important}}
