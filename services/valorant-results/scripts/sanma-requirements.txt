@@ -1,0 +1,2 @@
+# MahjongRepository/mahjong, MIT. CPU-only; isolated optional paipu calculation.
+mahjong==2.1.0 --hash=sha256:6c9ad88fe0e8df74d43f466a05517209104a52494d9cf0fbc544442a10c0e91c

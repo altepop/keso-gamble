@@ -58,7 +58,36 @@ export function mahjongRank(record:MahjongRecord,player:number){
  const sorted=record.players.map((p,seat)=>({...p,seat})).sort((a,b)=>b.score-a.score||a.seat-b.seat);
  return sorted.findIndex(p=>p.accountId===player)+1;
 }
-export function mahjongRoast(record:MahjongRecord,player:number){
+
+/** Score/rank facts provided by the match-results API, not the later paipu.
+ * This must stay pure: no D1 reads, no claimed hand, yaku, riichi or comeback. */
+export function mahjongScoreLine(record:MahjongRecord,player:number):string{
+ const sorted=record.players.map((p,seat)=>({...p,seat})).sort((a,b)=>b.score-a.score||a.seat-b.seat);
+ const index=sorted.findIndex(p=>p.accountId===player);
+ if(index<0)throw Error('mahjong_player_absent');
+ const p=sorted[index]!,num=(n:number)=>Math.abs(n).toLocaleString('ja-JP');
+ if(p.score<0)return `最終${num(p.score)}点のマイナス。スコア欄にまで借金作らんといてくれ。`;
+ if(index===0){
+  const gap=p.score-sorted[1]!.score;
+  if(gap===0)return '2着と同点でトップ。順位表、最後まで気ぃ抜かせてくれへんな。';
+  if(gap<=2000)return `2着と${num(gap)}点差のトップ。接戦でも一番上は譲らんかったな。`;
+  if(gap<12000)return `2着に${num(gap)}点差。勝ち切ったって言葉、今日は使ってええで。`;
+  if(gap<30000)return `2着に${num(gap)}点差。結果画面、なかなか気持ちええ眺めやな。`;
+  return `2着に${num(gap)}点差。順位表の間、ちょっと空きすぎちゃうか。`;
+ }
+ if(index===record.players.length-1){
+  const gap=sorted[index-1]!.score-p.score;
+  if(gap===0)return 'ひとつ上と同点でラス。順位表、最後まで意地悪やな。';
+  return `ひとつ上まで${num(gap)}点差。まずはそこから埋めよか。`;
+ }
+ const gap=sorted[0]!.score-p.score;
+ if(gap===0)return 'トップと同点やのに順位は下。結果画面、融通きかへんな。';
+ if(gap<=2000)return `トップまで${num(gap)}点。惜しすぎて今日は寝つき悪そうやな。`;
+ if(gap<12000)return `トップまで${num(gap)}点。『ほぼ1着』は今日のところ封印や。`;
+ return `トップまで${num(gap)}点。数字が遠慮なしに差を教えてくれるな。`;
+}
+
+export function mahjongRoast(record:MahjongRecord,player:number,previousRoast=''){
  const p=record.players.find(p=>p.accountId===player);if(!p)throw Error('mahjong_player_absent');
  const rank=mahjongRank(record,player);
  const group=p.score<0?'bust':rank===1?'first':rank===record.players.length?'last':rank===2?'second':'third';
@@ -67,8 +96,22 @@ export function mahjongRoast(record:MahjongRecord,player:number){
  // Legacy shared sets that explicitly name three opponents belong to four-player tables only.
  const shared=record.players.length===3?all[group].filter(lines=>!lines.some(line=>/他の3人|4人おって/.test(line))):all[group];
  const pool=[...shared,...record.players.length===3?all[group+'3']??[]:[]];
- return pick(pool,record._id+':'+player).join('\n');
+ const selected=pick(pool,record._id+':'+player);
+ // Verified scoreboard facts only; the paipu has not been decoded yet.
+ const fact=mahjongScoreLine(record,player);
+ const render=(lines:string[])=>lines.map((line,i)=>i===1?fact:line).join('\n');
+ const text=render(selected);
+ // Stable within retries; only rotate when a new game would repeat the whole post.
+ if(!previousRoast||text!==previousRoast||pool.length<=1)return text;
+ const offset=1+((hashRoastKey(record._id+':'+player+':alternative'))%(pool.length-1));
+ const start=pool.indexOf(selected);
+ for(let step=0;step<pool.length-1;step++){
+  const alternative=render(pool[(start+offset+step)%pool.length]!);
+  if(alternative!==previousRoast)return alternative;
+ }
+ return text;
 }
+function hashRoastKey(key:string){let h=2166136261;for(const c of key)h=Math.imul(h^c.charCodeAt(0),16777619);return (h^(h>>>16))>>>0;}
 export function parseMahjongRecords(value:unknown,player:number,modes:number[],since:number,now:number):MahjongRecord[]{
  if(!Array.isArray(value)||value.length>100)throw Error('invalid_mahjong_records');
  return value.map((r:MahjongRecord)=>{
@@ -77,10 +120,10 @@ export function parseMahjongRecords(value:unknown,player:number,modes:number[],s
   return {...r,uuid};
  }).filter(r=>modes.includes(r.modeId)&&r.startTime*1000>=since).sort((a,b)=>a.startTime-b.startTime||a._id.localeCompare(b._id));
 }
-export function mahjongMessage(record:MahjongRecord,player:number,name:string){
+export function mahjongMessage(record:MahjongRecord,player:number,name:string,previousRoast=''){
  const p=record.players.find(p=>p.accountId===player);if(!p)throw Error('mahjong_player_absent');
  const time=new Date(record.endTime*1000).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});
- return [`🀄 **${clean(name)}｜${mahjongRank(record,player)}着／${record.players.length}人**`,`${MODES[record.modeId]}｜${p.score.toLocaleString('ja-JP')}点｜${time} 終了`,mahjongRoast(record,player),`戦績：<https://${record.modeId<20?'amae-koromo':'ikeda'}.sapk.ch/player/${player}/${record.modeId}>`].join('\n');
+ return [`🀄 **${clean(name)}｜${mahjongRank(record,player)}着／${record.players.length}人**`,`${MODES[record.modeId]}｜${p.score.toLocaleString('ja-JP')}点｜${time} 終了`,mahjongRoast(record,player,previousRoast),`戦績：<https://${record.modeId<20?'amae-koromo':'ikeda'}.sapk.ch/player/${player}/${record.modeId}>`].join('\n');
 }
 async function state(env:MahjongEnv,key:string){return (await env.DB.prepare('SELECT value FROM mahjong_watch_state WHERE key=?').bind(key).first<{value:string}>())?.value??'';}
 async function save(env:MahjongEnv,key:string,value:string|number){await env.DB.prepare('INSERT INTO mahjong_watch_state(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind(key,String(value)).run();}
@@ -140,6 +183,7 @@ export async function monitorMahjong(env:MahjongEnv,now=Date.now(),override?:Mah
  const lease=now+4*60_000;
  const lock=await env.DB.prepare("INSERT INTO mahjong_watch_state(key,value) VALUES('lock',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value WHERE CAST(mahjong_watch_state.value AS INTEGER)<=?").bind(String(lease),now).run();
  if(!lock.meta.changes)return;
+ let fresh=0;
  try{
   // Notifications retry independently, including when the data provider is unavailable.
   await flushMahjongPosts(env,now,request);
@@ -147,7 +191,7 @@ export async function monitorMahjong(env:MahjongEnv,now=Date.now(),override?:Mah
   await save(env,'next_poll_at',now+INTERVAL);await save(env,'last_attempt_at',now);
   const since=Math.max(config.startedAt,now-LOOKBACK),to=Math.ceil(now/INTERVAL)*INTERVAL;
   const headers:Record<string,string>=env.AMAE_KOROMO_TOKEN?{Authorization:'Bearer '+env.AMAE_KOROMO_TOKEN}:{};
-  let first=true,fresh=0;
+  let first=true;
   for(const p of [...config.players.map(p=>({...p,since})),...await linkedPlayers(env,config,Math.max(since,now-AUTO_PAIPU_AGE))]){
    for(const table of ['pl4','pl3']){
     const modes=WATCHED.filter(m=>(m<20)===(table==='pl4'));
@@ -165,7 +209,22 @@ export async function monitorMahjong(env:MahjongEnv,now=Date.now(),override?:Mah
      const id='mahjong:'+p.id+':'+record._id;
      // Only fresh games: a first successful poll returns a week of history, which must not flood the channel.
      if(record.uuid&&record.endTime*1000>now-AUTO_PAIPU_AGE)fresh+=(await env.DB.prepare('INSERT OR IGNORE INTO mahjong_paipu_auto(paipu,account,at) VALUES(?,?,?)').bind(record.uuid,p.id,record.endTime*1000).run()).meta.changes;
-     const added=await env.DB.prepare('INSERT OR IGNORE INTO mahjong_watch_posts(id,body,at) VALUES(?,?,?)').bind(id,JSON.stringify({content:mahjongMessage(record,p.id,p.name||record.players.find(m=>m.accountId===p.id)!.nickname),allowed_mentions:{parse:[]}}),record.endTime*1000).run();
+     const displayName=p.name||record.players.find(m=>m.accountId===p.id)!.nickname;
+     // Existing games are ignored without reading or rewriting a roast history row.
+     // This keeps the hourly D1 read budget independent of the provider's lookback.
+     const added=await env.DB.prepare('INSERT OR IGNORE INTO mahjong_watch_posts(id,body,at) VALUES(?,?,?)').bind(id,JSON.stringify({content:mahjongMessage(record,p.id,displayName),allowed_mentions:{parse:[]}}),record.endTime*1000).run();
+     if(added.meta.changes){
+      // Per-account primary-key lookup only for *new* completed games. Without
+      // this, two unrelated match IDs can hash to the same three-line script.
+      const key='mahjong_last_roast:'+p.id;
+      const previous=await state(env,key);
+      const roast=mahjongRoast(record,p.id,previous);
+      if(roast!==mahjongRoast(record,p.id)){
+       // The queued message has not been flushed yet. Do not edit sent posts.
+       await env.DB.prepare('UPDATE mahjong_watch_posts SET body=? WHERE id=? AND sent=0').bind(JSON.stringify({content:mahjongMessage(record,p.id,displayName,previous),allowed_mentions:{parse:[]}}),id).run();
+      }
+      await save(env,key,roast);
+     }
      // How long after the game ended it was first seen (provider delay plus the poll gap), for diagnosis.
      if(added.meta.changes&&record.endTime*1000>now-AUTO_PAIPU_AGE){await save(env,'found_delay_seconds',Math.round((now-record.endTime*1000)/1000));await save(env,'found_game_end_at',record.endTime*1000);}
     }
@@ -173,11 +232,13 @@ export async function monitorMahjong(env:MahjongEnv,now=Date.now(),override?:Mah
   }
   await save(env,'last_success_at',now);await save(env,'error','');
   await flushMahjongPosts(env,now,request);
-  if(fresh)await dispatchPaipu(env,request);
  }catch{
   await save(env,'error','provider_or_data_unavailable');await save(env,'next_poll_at',now+15*60_000);
  }finally{
-  await env.DB.prepare("DELETE FROM mahjong_watch_state WHERE key='lock' AND value=?").bind(String(lease)).run();
+  // A later table/player failing must not strand games already queued above.
+  // Keep provider backoff intact; dispatch only the fresh IDs already found.
+  try{if(fresh)await dispatchPaipu(env,request);}
+  finally{await env.DB.prepare("DELETE FROM mahjong_watch_state WHERE key='lock' AND value=?").bind(String(lease)).run();}
  }
 }
 export async function mahjongStatus(env:MahjongEnv){

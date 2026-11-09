@@ -5,7 +5,7 @@ import fans from '../mahjong-fans.json' with {type:'json'};
 
 export interface PaipuHead {
  uuid:string;start_time:number;end_time:number;
- config?:{mode?:{mode?:number}};
+ config?:{mode?:{mode?:number;detail_rule?:Record<string,unknown>};meta?:{mode_id?:number;room_id?:number;contest_uid?:number}};
  accounts?:Array<{account_id:number;seat:number;nickname:string}>;
  result?:{players?:Array<{seat:number;part_point_1:number}>};
 }
@@ -22,7 +22,7 @@ export interface PlayerSummary {
  wins:number;tsumo:number;dealIns:number;dealInPoints:number;riichi:number;riichiWins:number;riichiDealIns:number;
  callRounds:number;rounds:number;maxScore:number;minScore:number;bestLead:number;
 }
-export interface PaipuSummary {v:1;uuid:string;game:string;players:number;start:number;end:number;seats:PlayerSummary[];rounds:Round[];c3?:unknown}
+export interface PaipuSummary {v:1;uuid:string;game:string;players:number;start:number;end:number;seats:PlayerSummary[];rounds:Round[];c3?:unknown;review?:unknown}
 
 const WINDS=['東','南','西','北'];
 const FAN_NAMES:Record<string,string>=fans;

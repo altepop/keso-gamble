@@ -1,0 +1,25 @@
+/* KESO PLAY BGM: separate from app rerenders and casino SFX. */
+#keso-music{position:relative;flex-shrink:0;z-index:11;font-family:system-ui,-apple-system,"Noto Sans JP",sans-serif;color:#f1f5ff}
+#keso-music[hidden]{display:none}
+#keso-music button,#keso-music select,#keso-music input{font:inherit}
+#keso-music .music-open{min-height:42px;padding:7px 13px;border-radius:99px;border:1px solid #8aafd2;background:#102548;color:#fff;box-shadow:0 6px 24px #0009;cursor:pointer;font-weight:800}
+#keso-music .music-open.playing{border-color:#79f4cb;box-shadow:0 0 0 2px #79f4cb44,0 6px 24px #0009}
+#keso-music .music-panel{position:absolute;right:0;top:50px;width:min(350px,calc(100vw - 24px));max-height:min(76vh,600px);overflow-y:auto;padding:15px;border:1px solid #5b7db0;border-radius:17px;background:#0b1833;box-shadow:0 18px 55px #000c;display:grid;gap:11px;font-size:13px}
+#keso-music .music-panel[hidden]{display:none}
+#keso-music .music-heading{display:flex;align-items:center;justify-content:space-between;color:#e9eeff;font-size:14px}
+#keso-music .music-close{border:0;background:transparent;color:white;font-size:24px;min-width:38px;min-height:38px;cursor:pointer}
+#keso-music label{font-weight:700}
+#keso-music select{width:100%;min-height:42px;padding:8px;border-radius:9px;background:#172c4d;border:1px solid #6a8eb7;color:white}
+#keso-music .music-buttons{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+#keso-music .music-buttons button{min-height:44px;border:1px solid #88aadc;border-radius:10px;background:#1d3e6e;color:white;font-weight:800;cursor:pointer}
+#keso-music .music-volume-label{display:flex;justify-content:space-between;gap:10px}
+#keso-music input[type=range]{width:100%;height:28px;accent-color:#9bdbff;touch-action:pan-x}
+#keso-music .music-info{margin:0;font-size:11px;line-height:1.6;color:#c5d5ed}
+#keso-music .music-status{margin:0;min-height:18px;color:#b6f1df;font-size:12px;line-height:1.5}
+@media(max-width:480px){#keso-music{margin-left:0}#keso-music .music-open{padding:6px 10px;min-height:38px}#keso-music .music-open span{display:none}}
+/* Startup music is available on the genuine title screen as well as game headers. */
+.title-screen #keso-music{align-self:center;margin:12px auto 0}
+.title-screen #keso-music .music-panel{right:50%;transform:translateX(50%);top:50px;text-align:left}
+#keso-music .music-auto-label{display:flex;align-items:center;gap:9px;min-height:35px;font-size:12px}
+#keso-music .music-auto-label input{width:18px;height:18px;accent-color:#9bdbff}
+#keso-music .music-open.needs-tap{border-color:#f4cc82;box-shadow:0 0 0 2px #f4cc8244,0 6px 24px #0009}

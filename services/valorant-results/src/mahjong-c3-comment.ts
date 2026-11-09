@@ -10,9 +10,10 @@ export interface C3Finding {
  turn:number;
  actual:string;
  recommended:string;
+ position?:'discard';
 }
 export interface C3Report {
- version:1;
+ version:1|2;
  source:'c3';
  model:string;
  uuid:string;
@@ -25,11 +26,11 @@ const integer=(v:unknown,min:number,max:number)=>Number.isSafeInteger(v)&&Number
 export function acceptedC3Report(summary:PaipuSummary,raw:unknown):C3Report|null{
  const r=raw as C3Report;
  if(!r||summary.players!==4||!summary.game.startsWith('4-')||
-  r.version!==1||r.source!=='c3'||r.model!==C3_MODEL||r.uuid!==summary.uuid||
+  ![1,2].includes(r.version)||r.source!=='c3'||r.model!==C3_MODEL||r.uuid!==summary.uuid||
   !Array.isArray(r.findings)||r.findings.length<1||r.findings.length>4)return null;
  const seen=new Set<string>();
  for(const f of r.findings){
-  if(!f||!integer(f.seat,0,3)||!integer(f.round,0,summary.rounds.length-1)||
+  if(!f||(r.version===2?f.position!=='discard':f.position!==undefined)||!integer(f.seat,0,3)||!integer(f.round,0,summary.rounds.length-1)||
    !integer(f.turn,1,30)||typeof f.actual!=='string'||!TILE.test(f.actual)||
    typeof f.recommended!=='string'||!TILE.test(f.recommended))return null;
   const key=f.seat+':'+f.round+':'+f.turn;
@@ -48,15 +49,15 @@ function hash(v:string){
 }
 const clean=(name:string)=>name.replace(/[@\x60*_~<>|#\\\[\]()\r\n]/g,'').slice(0,16)||'名無し';
 function equalLine(f:C3Finding,name:string,round:string,index:number){
- const actual=tile(f.actual),suggested=tile(f.recommended);
+ const actual=tile(f.actual),suggested=tile(f.recommended),unit=f.position==='discard'?'打目':'巡目';
  const patterns=f.actual===f.recommended?[
-  '🎙️「'+name+'、'+round+'の'+f.turn+'巡目の'+actual+'ねぇ。いや、僕もそれ切りますわ。これはええと思いますよぉ〜」',
-  '🎙️「'+round+'の'+f.turn+'巡目、'+name+'の'+actual+'か。うん、僕も同じですわ。こういう一打は好きですねぇ」',
-  '🎙️「'+name+'、'+round+'の'+f.turn+'巡目は'+actual+'切りね。僕もここはそうしますねぇ〜。ええ感じやと思いますわ」',
+  '🎙️「'+name+'、'+round+'の'+f.turn+unit+'の'+actual+'ねぇ。いや、僕もそれ切りますわ。これはええと思いますよぉ〜」',
+  '🎙️「'+round+'の'+f.turn+unit+'、'+name+'の'+actual+'か。うん、僕も同じですわ。こういう一打は好きですねぇ」',
+  '🎙️「'+name+'、'+round+'の'+f.turn+unit+'は'+actual+'切りね。僕もここはそうしますねぇ〜。ええ感じやと思いますわ」',
  ]:[
-  '🎙️「'+name+'、'+round+'の'+f.turn+'巡目の'+actual+'なあ。僕はここで'+suggested+'切りますけどねぇ〜。ちょっと惜しい気がしますわ」',
-  '🎙️「'+round+'の'+f.turn+'巡目、'+name+'の'+actual+'かぁ。僕やったら'+suggested+'ですかねぇ。ここはちょっと違うかなあ」',
-  '🎙️「'+name+'、'+round+'の'+f.turn+'巡目やね。'+actual+'は僕ちょっと気になりますわ。僕なら'+suggested+'切りたいですねぇ〜」',
+  '🎙️「'+name+'、'+round+'の'+f.turn+unit+'の'+actual+'なあ。僕はここで'+suggested+'切りますけどねぇ〜。ちょっと惜しい気がしますわ」',
+  '🎙️「'+round+'の'+f.turn+unit+'、'+name+'の'+actual+'かぁ。僕やったら'+suggested+'ですかねぇ。ここはちょっと違うかなあ」',
+  '🎙️「'+name+'、'+round+'の'+f.turn+unit+'やね。'+actual+'は僕ちょっと気になりますわ。僕なら'+suggested+'切りたいですねぇ〜」',
  ];
  return patterns[index%patterns.length];
 }

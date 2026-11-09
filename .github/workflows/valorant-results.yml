@@ -39,19 +39,58 @@ concurrency:
   cancel-in-progress: false
 jobs:
   check:
+    outputs:
+      review_changed: ${{ steps.review_paths.outputs.changed }}
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: services/valorant-results
     steps:
       - uses: actions/checkout@v7
+        with: {fetch-depth: 2}
       - uses: actions/setup-node@v7
         with:
           node-version: '24'
           cache: npm
           cache-dependency-path: services/valorant-results/package-lock.json
+      - name: Report proposed sanma release configuration without accessing Mahjong or D1
+        env:
+          SANMA_CONFIGURATION: ${{ vars.MAHJONG_SANMA_REVIEW_ENABLED == 'true' && 'enabled' || vars.MAHJONG_SANMA_REVIEW_ENABLED == 'false' && 'disabled' || vars.MAHJONG_SANMA_REVIEW_ENABLED == '' && 'enabled-release-default' || 'invalid' }}
+        run: |
+          printf 'equal_review_configuration: sanma=%s\n' "$SANMA_CONFIGURATION"
       - run: npm ci
+      - name: Detect changes to optional mahjong analysis
+        id: review_paths
+        run: |
+          if ! git -C ../.. diff --quiet HEAD^ HEAD -- 'services/valorant-results/src/mahjong-*' 'services/valorant-results/scripts/mahjong-*' 'services/valorant-results/scripts/c3-vendor' 'services/valorant-results/scripts/sanma-*' 'services/valorant-results/test/mahjong-*' 'services/valorant-results/test/fixtures/mahjong-review-*' '.github/workflows/mahjong-paipu.yml' '.github/workflows/valorant-results.yml'; then
+            echo 'changed=true' >> "$GITHUB_OUTPUT"
+          fi
+      - name: Set up pinned sanma hand calculator for changed analysis
+        if: steps.review_paths.outputs.changed == 'true'
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: services/valorant-results/scripts/sanma-requirements.txt
+      - name: Install isolated sanma calculator
+        if: steps.review_paths.outputs.changed == 'true'
+        run: |
+          python3 -m venv .venv-mahjong
+          .venv-mahjong/bin/python -m pip install --disable-pip-version-check --no-deps --only-binary=:all: --require-hashes -r scripts/sanma-requirements.txt
+          echo "SANMA_PYTHON=$PWD/.venv-mahjong/bin/python" >> "$GITHUB_ENV"
       - run: npm run check
+      - name: Restore existing optional model cache for read-only verification
+        if: steps.review_paths.outputs.changed == 'true'
+        uses: actions/cache@v4
+        with:
+          path: services/valorant-results/.cache/c3-model
+          key: equal-review-c3-5b30a83de3ab9523
+      - name: Check real model in isolated worker with artificial legal replay
+        if: steps.review_paths.outputs.changed == 'true'
+        timeout-minutes: 3
+        env:
+          C3_ASSETS_ROOT: ${{ github.workspace }}/services/valorant-results/.cache/c3-model
+        run: node scripts/mahjong-review-smoke.mjs
       - name: Check Activity logic
         run: |
           npm --prefix ../.. ci
@@ -186,6 +225,15 @@ jobs:
         env:
           KESO_SMOKE_WALLET_TOKEN: ${{ secrets.KESO_SMOKE_WALLET_TOKEN }}
         run: node scripts/post-deploy-smoke.mjs
+      - name: Start read-only review delivery verification after changed analysis is deployed
+        if: needs.check.outputs.review_changed == 'true'
+        continue-on-error: true
+        working-directory: services/valorant-results
+        env:
+          PAIPU_DISPATCH_TOKEN: ${{ secrets.PAIPU_DISPATCH_TOKEN }}
+          REVIEW_DELIVERY_PROBE: ${{ contains(github.event.head_commit.message, '[mahjong-review-probe]') && 'true' || 'false' }}
+          REVIEW_DELIVERY_RESUME: ${{ contains(github.event.head_commit.message, '[mahjong-review-resume]') && 'true' || 'false' }}
+        run: node scripts/dispatch-mahjong-delivery-audit.mjs
       - name: Check requested KP duel/luxury roster (read-only, no IDs printed)
         continue-on-error: true
         env:

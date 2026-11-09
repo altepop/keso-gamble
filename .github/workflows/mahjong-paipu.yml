@@ -11,6 +11,26 @@ on:
         description: 'ログインできるかだけ確認する（牌譜は取得しない）'
         type: boolean
         default: false
+      review_audit:
+        description: '既存実牌譜を各ルール最大2候補から匿名検証（成功最大2件、送信・支給なし）'
+        type: boolean
+        default: false
+      enable_sanma:
+        description: '所有者限定: 単発検証の送信成功後に三麻のリポジトリ変数を有効化する'
+        type: boolean
+        default: false
+      delivery_probe:
+        description: '所有者限定: 人工牌譜の検証投稿を1通送信（KP支給なし・同じ版は再送しない）'
+        type: boolean
+        default: false
+      probe_release:
+        description: '所有者限定: 表示を変えない追修正で既送信の検証SHAを再利用する（通常は空）'
+        type: string
+        default: ''
+      delivery_audit:
+        description: '保存済み解析とDiscord送信済みの件数だけ確認（SELECT1回、雀魂ログインなし）'
+        type: boolean
+        default: false
       c3_probe:
         description: '実モデルのNode推論だけ検証（雀魂・Discord・KP・D1へアクセスしない）'
         type: boolean
@@ -45,8 +65,20 @@ jobs:
           YOSTAR_TOKEN: ${{ secrets.YOSTAR_TOKEN }}
           CHECK: ${{ inputs.check }}
           MODEL_PROBE: ${{ inputs.c3_probe }}
+          MODEL_AUDIT: ${{ inputs.review_audit }}
+          DELIVERY_AUDIT: ${{ inputs.delivery_audit }}
+          DELIVERY_PROBE: ${{ inputs.delivery_probe }}
+          PROBE_ACTOR: ${{ github.actor }}
+          SANMA_CONFIGURATION: ${{ vars.MAHJONG_SANMA_REVIEW_ENABLED == 'true' && 'enabled' || vars.MAHJONG_SANMA_REVIEW_ENABLED == 'false' && 'disabled' || vars.MAHJONG_SANMA_REVIEW_ENABLED == '' && 'enabled-release-default' || 'invalid' }}
         run: |
+          printf 'equal_review_configuration: sanma=%s\n' "$SANMA_CONFIGURATION"
+          if [ "$DELIVERY_PROBE" = "true" ]; then
+            test "$PROBE_ACTOR" = altepop || { echo 'Owner-only verification'; exit 1; }
+            echo 'count=delivery-probe' >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          if [ "$DELIVERY_AUDIT" = "true" ]; then echo 'count=delivery' >> "$GITHUB_OUTPUT"; exit 0; fi
           if [ "$MODEL_PROBE" = "true" ]; then echo 'count=probe' >> "$GITHUB_OUTPUT"; exit 0; fi
+          if [ "$MODEL_AUDIT" = "true" ]; then echo 'count=audit' >> "$GITHUB_OUTPUT"; exit 0; fi
           if [ -z "$YOSTAR_TOKEN" ] || [ -z "$MAHJONG_INGEST_KEY" ]; then
             echo 'YOSTAR_* または MAHJONG_INGEST_KEY が未設定のためスキップします。'
             exit 0
@@ -54,16 +86,37 @@ jobs:
           if [ "$CHECK" = 'true' ]; then echo 'count=check' >> "$GITHUB_OUTPUT"; exit 0; fi
           node --experimental-strip-types scripts/mahjong-paipu.mjs --queue | tee -a "$GITHUB_OUTPUT"
       - name: Install
-        if: steps.queue.outputs.count && steps.queue.outputs.count != '0' && steps.queue.outputs.count != 'probe'
+        if: steps.queue.outputs.count && steps.queue.outputs.count != '0' && steps.queue.outputs.count != 'probe' && steps.queue.outputs.count != 'delivery'
         run: npm ci --ignore-scripts
+      # Real sanma/yonma audit 42525457154 and existing delivery receipt verified.
+      # Release default: enabled when unset; explicit false or invalid values disable it.
+      # Queue-empty runs never install the sanma calculator.
+      # Failure leaves the existing shape/defense/yonma review and KP fetch intact.
+      - name: Set up optional sanma calculator
+        if: steps.queue.outputs.count && steps.queue.outputs.count != '0' && steps.queue.outputs.count != 'check' && steps.queue.outputs.count != 'probe' && steps.queue.outputs.count != 'delivery' && (vars.MAHJONG_SANMA_REVIEW_ENABLED == 'true' || vars.MAHJONG_SANMA_REVIEW_ENABLED == '' || steps.queue.outputs.count == 'audit' || steps.queue.outputs.count == 'delivery-probe')
+        continue-on-error: true
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: services/valorant-results/scripts/sanma-requirements.txt
+      - name: Install optional pinned hand evaluator
+        if: steps.queue.outputs.count && steps.queue.outputs.count != '0' && steps.queue.outputs.count != 'check' && steps.queue.outputs.count != 'probe' && steps.queue.outputs.count != 'delivery' && (vars.MAHJONG_SANMA_REVIEW_ENABLED == 'true' || vars.MAHJONG_SANMA_REVIEW_ENABLED == '' || steps.queue.outputs.count == 'audit' || steps.queue.outputs.count == 'delivery-probe')
+        continue-on-error: true
+        run: |
+          python3 -m venv .venv-mahjong
+          .venv-mahjong/bin/python -m pip install --disable-pip-version-check --no-deps --only-binary=:all: --require-hashes -r scripts/sanma-requirements.txt
+          echo "SANMA_PYTHON=$PWD/.venv-mahjong/bin/python" >> "$GITHUB_ENV"
       - name: Decide optional review inference
         id: c3
-        if: steps.queue.outputs.count && steps.queue.outputs.count != '0' && steps.queue.outputs.count != 'check'
+        if: steps.queue.outputs.count && steps.queue.outputs.count != '0' && steps.queue.outputs.count != 'check' && steps.queue.outputs.count != 'delivery'
         env:
           MODEL_ENABLED: ${{ vars.MAHJONG_EQUAL_REVIEW_ENABLED }}
           MODEL_PROBE: ${{ inputs.c3_probe }}
+          MODEL_AUDIT: ${{ inputs.review_audit }}
+          MODEL_DELIVERY_PROBE: ${{ inputs.delivery_probe }}
         run: |
-          if [ "$MODEL_ENABLED" != "false" ] || [ "$MODEL_PROBE" = "true" ]; then
+          if [ "$MODEL_ENABLED" != "false" ] || [ "$MODEL_PROBE" = "true" ] || [ "$MODEL_AUDIT" = "true" ] || [ "$MODEL_DELIVERY_PROBE" = "true" ]; then
             echo 'enabled=true' >> "$GITHUB_OUTPUT"
           else
             echo 'enabled=false' >> "$GITHUB_OUTPUT"
@@ -74,22 +127,58 @@ jobs:
         with:
           path: services/valorant-results/.cache/c3-model
           key: equal-review-c3-5b30a83de3ab9523
+      # Normal runs load lazily inside the isolated reviewer only for eligible four-player cases.
       - name: Load source-verified static model
-        if: steps.c3.outputs.enabled == 'true'
+        if: steps.queue.outputs.count == 'probe'
         env:
           C3_ASSETS_ROOT: ${{ github.workspace }}/services/valorant-results/.cache/c3-model
         run: node scripts/mahjong-c3-download.mjs
       - name: Read-only Node inference probe
-        if: inputs.c3_probe == true
+        if: steps.queue.outputs.count == 'probe'
         env:
           C3_ASSETS_ROOT: ${{ github.workspace }}/services/valorant-results/.cache/c3-model
         run: node scripts/mahjong-c3-probe.mjs
+      - name: Verify actual delivery with one labelled artificial message (owner only)
+        if: steps.queue.outputs.count == 'delivery-probe' && github.actor == 'altepop'
+        timeout-minutes: 4
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          C3_ASSETS_ROOT: ${{ github.workspace }}/services/valorant-results/.cache/c3-model
+          MAHJONG_REVIEW_PROBE_RELEASE: ${{ inputs.probe_release }}
+        run: |
+          node scripts/prepare-local.mjs
+          node scripts/mahjong-review-delivery-probe.mjs
+      - name: Read persisted review delivery only (no Mahjong login)
+        if: steps.queue.outputs.count == 'delivery'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/mahjong-review-live-audit.mjs --delivery
+      - name: Read-only live replay audit (no ingestion or Discord)
+        if: steps.queue.outputs.count == 'audit' || steps.queue.outputs.count == 'delivery-probe' && inputs.review_audit
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          YOSTAR_UID: ${{ secrets.YOSTAR_UID }}
+          YOSTAR_TOKEN: ${{ secrets.YOSTAR_TOKEN }}
+          YOSTAR_DEVICE_ID: ${{ secrets.YOSTAR_DEVICE_ID }}
+          MAHJONG_REQUIRE_STANDARD_PROFILE: ${{ steps.queue.outputs.count == 'delivery-probe' && 'true' || 'false' }}
+          C3_ASSETS_ROOT: ${{ github.workspace }}/services/valorant-results/.cache/c3-model
+        run: node scripts/mahjong-review-live-audit.mjs
+      - name: Enable sanma only after successful owner-requested delivery verification
+        if: inputs.enable_sanma && inputs.review_audit && steps.queue.outputs.count == 'delivery-probe' && github.actor == 'altepop'
+        env:
+          PAIPU_DISPATCH_TOKEN: ${{ secrets.PAIPU_DISPATCH_TOKEN }}
+          SANMA_PROBE_VERIFIED: 'true'
+        run: node scripts/enable-verified-sanma-review.mjs
       - name: Fetch and summarize paipu
-        if: steps.queue.outputs.count && steps.queue.outputs.count != '0' && steps.queue.outputs.count != 'probe'
+        if: steps.queue.outputs.count && steps.queue.outputs.count != '0' && steps.queue.outputs.count != 'probe' && steps.queue.outputs.count != 'delivery' && steps.queue.outputs.count != 'audit' && steps.queue.outputs.count != 'delivery-probe'
         env:
           YOSTAR_UID: ${{ secrets.YOSTAR_UID }}
           YOSTAR_TOKEN: ${{ secrets.YOSTAR_TOKEN }}
           YOSTAR_DEVICE_ID: ${{ secrets.YOSTAR_DEVICE_ID }}
           MAHJONG_EQUAL_REVIEW_ENABLED: ${{ steps.c3.outputs.enabled == 'true' && 'true' || 'false' }}
+          MAHJONG_SANMA_REVIEW_ENABLED: ${{ (vars.MAHJONG_SANMA_REVIEW_ENABLED == 'true' || vars.MAHJONG_SANMA_REVIEW_ENABLED == '') && 'true' || 'false' }}
           C3_ASSETS_ROOT: ${{ github.workspace }}/services/valorant-results/.cache/c3-model
         run: node --experimental-strip-types scripts/mahjong-paipu.mjs ${{ steps.queue.outputs.count == 'check' && '--check' || '' }}

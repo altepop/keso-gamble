@@ -15,10 +15,12 @@ const round:PaipuAction={name:'RecordNewRound',data:{chang:0,ju:0,ben:0,liqibang
 const discard=(seat:number,tile:string):PaipuAction=>({name:'RecordDiscardTile',data:{seat,tile,moqie:true,is_liqi:false}});
 const draw=(seat:number,tile:string):PaipuAction=>({name:'RecordDealTile',data:{seat,tile}});
 function fixture(){
- const actions:PaipuAction[]=[round,discard(0,'5p')];
- for(let turn=1;turn<5;turn++){
-  for(let seat=1;seat<4;seat++)actions.push(draw(seat,seat===1?'1p':seat===2?'2p':'3p'),discard(seat,seat===1?'1p':seat===2?'2p':'3p'));
-  actions.push(draw(0,'6p'),discard(0,'6p'));
+ const actions:PaipuAction[]=[structuredClone(round),discard(0,'5p')];
+ const pool:string[]=[];
+ for(const suit of ['m','p','s','z'])for(let k=1;k<=(suit==='z'?7:9);k++)for(let copy=0;copy<4;copy++)pool.push(k+suit);
+ for(const t of [...deals.flat(),'1z']){const at=pool.indexOf(t);assert.ok(at>=0);pool.splice(at,1);}
+ for(let turn=1;turn<5;turn++)for(const seat of [1,2,3,0]){
+  const t=pool.shift()!;actions.push(draw(seat,t),discard(seat,t));
  }
  actions.push({name:'RecordNoTile',data:{players:[],scores:[]}});
  return actions;
@@ -50,7 +52,7 @@ test('historical C3 inputs hide other hands and future draws for all candidates'
  }
 });
 
-test('future events and post-chi/riichi actions are never passed to the model',()=>{
+test('malformed call and unacknowledged riichi histories do not invent later cases',()=>{
  const actions=fixture(),baseline=buildC3Cases(actions,summary);
  assert.ok(baseline.length>0);
  const past=[...actions];
@@ -91,4 +93,53 @@ test('unidentified initial dealer draw excludes only the dealer, preserving othe
  const cases=buildC3Cases(altered,summary);
  assert.ok(cases.length>=2);
  assert.ok(cases.every(c=>c.seat!==0),'dealer receives no claim based on unknown draw');
+});
+
+test('accepted riichi, chi, pon and every non-riichi kan produce exact public-prefix cases',async()=>{
+ const {fourScenario,FOUR_SCENARIOS}=await import('./fixtures/mahjong-review-four.ts');
+ const {reviewDecisions}=await import('../src/mahjong-review-state.ts');
+ for(const kind of FOUR_SCENARIOS){
+  const {actions,summary}=fourScenario(kind),cases=buildC3Cases(actions,summary),frames=reviewDecisions(actions,summary);
+  const event=kind==='reach'?'reach_accepted':kind;
+  assert.ok(cases.some(c=>c.events.some(e=>e.type===event)),kind+' is represented after the actual event');
+  if(kind==='chi'||kind==='pon')assert.ok(cases.some(c=>c.seat===1&&c.events.at(-1)?.type===kind),'immediate call discard is represented');
+  for(const c of cases){
+   assert.equal(c.position,'discard');const f=frames.find(f=>f.seat===c.seat&&f.round===c.round&&f.turn===c.turn)!;
+   assert.ok(f);assert.equal(c.actual,f.actual);assert.deepEqual(c.legal.slice().sort(),[...new Set(f.hand)].sort());
+   const initial=c.events.find(e=>e.type==='start_kyoku')!;
+   assert.ok((initial.tehais as string[][]).every((h,s)=>s===c.seat||h.every(t=>t==='?')));
+   assert.ok(c.events.filter(e=>e.type==='tsumo'&&e.actor!==c.seat).every(e=>e.pai==='?'));
+   const prefix=actions.slice(0,f.actionIndex+1),same=buildC3Cases(prefix,summary).find(x=>x.seat===c.seat&&x.round===c.round&&x.turn===c.turn);
+   assert.ok(same);assert.deepEqual(same.events,c.events,'later actions cannot change this decision');
+  }
+  if(kind==='reach'){
+   assert.ok(cases.every(c=>c.seat!==1),'own locked riichi is never praised for a forced discard');
+   const c=cases.find(c=>c.events.some(e=>e.type==='reach_accepted'))!;
+   assert.equal(c.events.filter(e=>e.type==='reach_accepted').length,1);
+   assert.ok(c.events.findIndex(e=>e.type==='reach')<c.events.findIndex(e=>e.type==='reach_accepted'));
+  }
+  if(kind==='ankan'||kind==='kakan'){
+   const c=cases.find(c=>c.events.some(e=>e.type===kind))!;
+   const k=c.events.find(e=>e.type===kind)!;
+   const publicTiles=[...(k.consumed as string[]),...typeof k.pai==='string'?[k.pai]:[]];
+   assert.ok(publicTiles.includes('5pr'),'red identity comes from the actual kan, not a guessed red five');
+   assert.equal(publicTiles.length,4);
+  }
+ }
+});
+
+test('new protobuf default extension objects do not turn a standard round into a special mode',()=>{
+ const actions=fixture();
+ const start=actions[0].data;
+ start.opens=[0,1,2,3].map(seat=>({seat,tiles:[],count:[]}));
+ start.muyu={seat:0,count:0,count_max:0,id:0};start.yongchang={seat:0,moqie_count:0,moqie_bonus:0,shouqie_count:0,shouqie_bonus:0};start.field_spell=0;
+ assert.ok(buildC3Cases(actions,summary).length>=5);
+ start.muyu.count_max=3;assert.deepEqual(buildC3Cases(actions,summary),[]);
+});
+
+test('empty protobuf riichi placeholders neither deduct points nor fabricate reach-accepted events',()=>{
+ const actions=fixture();
+ for(const a of actions)if(a.name==='RecordDealTile')a.data.liqi={seat:0,score:0,liqibang:0,failed:false};
+ const cases=buildC3Cases(actions,summary);
+ assert.ok(cases.length>=5);assert.ok(cases.every(c=>c.events.every(e=>e.type!=='reach_accepted')));
 });

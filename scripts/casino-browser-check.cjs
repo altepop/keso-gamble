@@ -14,7 +14,20 @@ let browser;
  const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
  await context.exposeBinding('__mediaAudit',(_,name)=>media.push(name));
  await context.addInitScript(()=>{
-  for(const name of ['Audio','AudioContext','webkitAudioContext','RTCPeerConnection'])Object.defineProperty(window,name,{configurable:true,value:function(){window.__mediaAudit(name);throw Error('Unexpected media use');}});
+  // Mock only the dedicated BGM player; casino/other media remain forbidden.
+  Object.defineProperty(window,'Audio',{configurable:true,value:function(){
+   if(!(new Error().stack||'').includes('music/player.js')){window.__mediaAudit('Audio');throw Error('Unexpected media use');}
+   const callbacks=new Map();
+   return {src:'',paused:true,preload:'none',loop:false,volume:0,
+    addEventListener(event,fn){callbacks.set(event,fn);},
+    getAttribute(name){return name==='src'?this.src:null;},
+    removeAttribute(name){if(name==='src')this.src='';},
+    load(){},
+    pause(){this.paused=true;callbacks.get('pause')?.();},
+    play(){this.paused=false;callbacks.get('play')?.();return Promise.resolve();}
+   };
+  }});
+  for(const name of ['AudioContext','webkitAudioContext','RTCPeerConnection'])Object.defineProperty(window,name,{configurable:true,value:function(){window.__mediaAudit(name);throw Error('Unexpected media use');}});
   HTMLMediaElement.prototype.play=function(){window.__mediaAudit('play');throw Error('Unexpected media use');};
  });
  const page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));
@@ -66,5 +79,5 @@ let browser;
  await rig([8,9]);await page.locator('[data-action=bj-stand]').click();await page.waitForFunction(()=>document.querySelector('[data-action=bj-start]')&&!document.querySelector('[data-action=bj-start]').disabled);
  await page.reload();await page.locator('.title-start').click();await page.locator('[data-screen=casino]').click();await page.locator('[data-casino-game=blackjack]').click();assert.equal(await page.locator('.casino-verdict.fresh').count(),0,'reload does not replay a settled round');
  assert.deepEqual(media,[]);assert.deepEqual(errors,[]);
- console.log('Casino browser checks passed: 3D dice, individual stops, last-die suspense, cards, exactly one demo round, skip, reduced motion, persisted reload, 320/390/1280 widths, no audio activation.');
+ console.log('Casino browser checks passed: 3D dice, individual stops, last-die suspense, cards, exactly one demo round, skip, reduced motion, persisted reload, 320/390/1280 widths, no unexpected audio activation outside the theme player.');
 })().catch(e=>{console.error(e);process.exitCode=1;}).finally(async()=>{await browser?.close();server.kill();});

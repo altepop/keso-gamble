@@ -204,3 +204,214 @@ test('sanma wording follows the actual player count and rank, including bust and
  const four={...summary,rounds:[],seats:summary.seats.map((p,i)=>({...p,rank:i+1,score:25000,dealIns:0,riichi:0,riichiWins:0,riichiDealIns:0,bestLead:0}))};
  for(let i=0;i<100;i++)assert.doesNotMatch(roastFor({...four,uuid:'four-lines-'+i},3,'full',names).join(''),/三麻|三人卓|北抜き/);
 });
+
+test('signed version-2 finding envelopes reach the existing queued post without changing KP or duplicating delivery',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:T0});
+ const run=async(withReview:boolean)=>{
+  const f=await fixture();await f.call('/api/mahjong/paipu/queue');
+  f.sql.prepare('INSERT INTO kp_mahjong_links VALUES(?,?,?)').run(guild,one,11);
+  f.sql.prepare('INSERT INTO kp_mahjong_links VALUES(?,?,?)').run(guild,two,22);
+  f.sql.prepare("INSERT INTO kp_ledger VALUES('seed-'||?,?,?,100,'test',0)").run(one,guild,one);
+  f.sql.prepare('INSERT INTO mahjong_paipu_auto VALUES(?,?,?)').run(PAIPU,11,T0);
+  // A trusted finding fixture exercises transport/formatting, not real inference.
+  // Genuine reconstruction/inference is checked by the separate replay smoke.
+  const payload=withReview?{...summary,c3:{version:2,source:'c3',model:'c3-v1.0-observation-1',uuid:PAIPU,findings:[{seat:1,round:0,turn:4,actual:'6p',recommended:'3p',position:'discard'}]}}:summary;
+  const response=await f.call('/api/mahjong/paipu/summaries',{results:[{uuid:PAIPU,summary:payload}]});
+  assert.equal(response.status,200);assert.equal((await response.json() as {stored:number}).stored,1);
+  return {f,payload};
+ };
+ const {f,payload}=await run(true),{f:control}=await run(false);
+ assert.equal(f.balance(one),control.balance(one));assert.equal(f.balance(two),control.balance(two));
+ assert.match(f.posts()[0],/4打目/);assert.match(f.posts()[0],/6p/);assert.match(f.posts()[0],/3p/);
+ assert.doesNotMatch(f.posts()[0],/c3|モデル|AI判定/i);
+ for(const section of ['**順位**','**KP**','**主な和了**','**メンバー**','💬 '])assert.ok(f.posts()[0].includes(section));
+ const before=f.sql.prepare('SELECT COUNT(*) n FROM kp_ledger').get()!.n;
+ await f.call('/api/mahjong/paipu/summaries',{results:[{uuid:PAIPU,summary:payload}]});
+ assert.equal(f.posts().length,1);assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM kp_ledger').get()!.n,before);
+ assert.equal(f.balance(two),control.balance(two));
+ const body=JSON.parse(String(f.sql.prepare("SELECT body FROM kp_posts WHERE id=?").get('paipu:'+PAIPU)!.body));
+ assert.deepEqual(body.allowed_mentions,{parse:[]});
+});
+
+test('real sanma worker v3 crosses signed ingestion, queue and mocked Discord delivery without extra KP or posts',{skip:!process.env.SANMA_PYTHON},async t=>{
+ t.mock.timers.enable({apis:['Date'],now:T0});
+ const {threeValueScenario}=await import('./fixtures/mahjong-review-three.ts');
+ // @ts-expect-error Standalone isolated worker host used by Actions.
+ const {createPaipuReviewer}=await import('../scripts/mahjong-review.mjs');
+ const {flushRacePosts}=await import('../src/racing-posts.ts');
+ const input=threeValueScenario(),s={...input.summary,uuid:PAIPU};
+ const reviewer=createPaipuReviewer({sanmaEnabled:true,timeoutMs:15000});let report;
+ try{report=await reviewer.review(s,input.actions);}finally{await reviewer.close();}
+ assert.equal(report?.version,3);assert.ok(report.findings.some((f:any)=>f.basis==='tsumo-value'));
+ const run=async(review:unknown)=>{
+  const f=await fixture();await f.call('/api/mahjong/paipu/queue');
+  f.sql.prepare('INSERT INTO kp_mahjong_links VALUES(?,?,?)').run(guild,one,2);
+  f.sql.prepare('INSERT INTO mahjong_paipu_auto VALUES(?,?,?)').run(PAIPU,2,T0);
+  const response=await f.call('/api/mahjong/paipu/summaries',{results:[{uuid:PAIPU,summary:{...s,review}}]});assert.equal(response.status,200);
+  return f;
+ };
+ const f=await run(report),control=await run(undefined);assert.equal(f.balance(one),control.balance(one));
+ const row=f.sql.prepare('SELECT body FROM kp_posts WHERE id=?').get('paipu:'+PAIPU)!;
+ const body=JSON.parse(String(row.body));assert.match(JSON.stringify(body),/6000点/);assert.deepEqual(body.allowed_mentions,{parse:[]});
+ assert.match(body.content,/<@100000000000000101>/);assert.doesNotMatch(JSON.stringify(body),/c3|sanma-rules|num_nuki/);
+ let sends=0;
+ t.mock.method(globalThis,'fetch',async(_url:unknown,options:any)=>{sends++;const sent=JSON.parse(options.body);assert.match(JSON.stringify(sent),/6000点/);assert.deepEqual(sent.allowed_mentions,{parse:[]});return new Response('',{status:200});});
+ assert.equal(await flushRacePosts(f.env),1);assert.equal(await flushRacePosts(f.env),0);assert.equal(sends,1);
+ const before=f.balance(one);await f.call('/api/mahjong/paipu/summaries',{results:[{uuid:PAIPU,summary:{...s,review:report}}]});
+ assert.equal(f.balance(one),before);assert.equal(f.posts().length,1);assert.equal(await flushRacePosts(f.env),0);assert.equal(sends,1);
+});
+
+test('long paipu delivery preserves every old section, new review and quote within Discord limits',async()=>{
+ const {paipuPostMessages}=await import('../src/mahjong-paipu.ts');
+ const members=new Map([[0,{name:'Aさん',user:one}],[1,{name:'B',user:two}]]);
+ const s={...summary,c3:{version:2,source:'c3',model:'c3-v1.0-observation-1',uuid:PAIPU,findings:[{seat:1,round:0,turn:4,actual:'6p',recommended:'3p',position:'discard'}]}};
+ const marker='🔎 UNIQUE-LONG-OUTCOME';const full=paipuPost(s,members,()=> 'normal',[marker]);
+ assert.ok(full.includes('**松本等しいのひと言**'));
+ for(const length of [3000,6000,12000]){
+  const outcome='🔎 '+('🀄あ'.repeat(length));
+  const expected=full.replace(marker,outcome),messages=paipuPostMessages(s,members,()=> 'normal',[outcome]);
+  const recovered=messages.flatMap(m=>[m.content,...(m.embeds??[]).map(e=>e.description)]).join('');
+  assert.ok(recovered===expected,'every character survives packing, including newlines and emoji');
+  assert.ok(messages.every(m=>m.content.length<=1900));
+  for(const m of messages){
+   assert.ok((m.embeds??[]).length<=10);assert.ok((m.embeds??[]).every(e=>e.description.length<=4096));
+   assert.ok((m.embeds??[]).reduce((sum,e)=>sum+e.description.length,0)<=6000);
+   for(const c of [m.content,...(m.embeds??[]).map(e=>e.description)]){
+    assert.ok(!/[\uD800-\uDBFF]$/.test(c),'no dangling high surrogate');assert.ok(!/^[\uDC00-\uDFFF]/.test(c),'no dangling low surrogate');
+   }
+  }
+  assert.ok(recovered.endsWith(full.split('\n').at(-1)!));
+ }
+});
+
+test('exceptionally long posts enqueue all parts atomically with stable IDs and preserve pending parts after a delivery failure',async t=>{
+ const {paipuPostMessages,queuePaipuMessages}=await import('../src/mahjong-paipu.ts');
+ const {ensurePosts,flushRacePosts}=await import('../src/racing-posts.ts');const f=await fixture();await ensurePosts(f.env);
+ const posts=paipuPostMessages(summary,new Map([[0,{name:'Aさん',user:one}]]),()=> 'normal',['🔎 '+('長文🀄'.repeat(4000))]);assert.ok(posts.length>1);
+ const batch=f.env.DB.batch.bind(f.env.DB);
+ const mock=t.mock.method(f.env.DB,'batch',async(statements:any)=>batch([...statements,f.env.DB.prepare('INSERT INTO absent_atomic_test_table VALUES(1)')]));
+ await assert.rejects(()=>queuePaipuMessages(f.env,PAIPU,posts,T0));
+ assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM kp_posts WHERE id LIKE 'paipu:%'").get()!.n,0,'failed batch did not register a partial post');mock.mock.restore();
+ await queuePaipuMessages(f.env,PAIPU,posts,T0);await queuePaipuMessages(f.env,PAIPU,posts,T0);
+ const rows=f.sql.prepare("SELECT id,body,sent FROM kp_posts WHERE id LIKE 'paipu:%' ORDER BY id").all();assert.equal(rows.length,posts.length);assert.equal(rows[0].id,'paipu:'+PAIPU);
+ for(const row of rows)assert.deepEqual(JSON.parse(String(row.body)).allowed_mentions,{parse:[]});
+ let failing=true;const sent:any[]=[];
+ t.mock.method(globalThis,'fetch',async(_url:unknown,options:any)=>{if(failing)return new Response('',{status:500});sent.push(JSON.parse(options.body));return new Response('',{status:200});});
+ assert.equal(await flushRacePosts(f.env,10),0);assert.equal(f.sql.prepare('SELECT SUM(sent) n FROM kp_posts').get()!.n,0);
+ failing=false;assert.equal(await flushRacePosts(f.env,10),posts.length);assert.equal(await flushRacePosts(f.env,10),0);assert.equal(sent.length,posts.length);
+});
+
+test('an outbox failure stays queued and a retry preserves the credited amount and review without paying twice',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:T0});
+ const f=await fixture();const {ensurePosts}=await import('../src/racing-posts.ts');await ensurePosts(f.env);
+ await f.claim(one,1);f.sql.prepare('INSERT INTO kp_mahjong_links VALUES(?,?,?)').run(guild,one,22);
+ const reviewed={...summary,c3:{version:2,source:'c3',model:'c3-v1.0-observation-1',uuid:PAIPU,findings:[{seat:1,round:0,turn:4,actual:'6p',recommended:'3p',position:'discard'}]}};
+ f.sql.exec("CREATE TRIGGER fail_paipu_post BEFORE INSERT ON kp_posts WHEN NEW.id LIKE 'paipu:%' BEGIN SELECT RAISE(ABORT,'fixture outbox failure'); END");
+ const failed=await f.call('/api/mahjong/paipu/summaries',{results:[{uuid:PAIPU,summary:reviewed}]}).catch(()=>null);
+ assert.equal(f.balance(one),600,'the payout can commit before the post fails');
+ assert.equal(f.sql.prepare('SELECT summary FROM kp_mahjong_paipu WHERE paipu=?').get(PAIPU)?.summary??null,null,'a failed outbox must not mark the summary as complete');
+ assert.deepEqual(await (await f.call('/api/mahjong/paipu/queue')).json(),{paipu:[PAIPU]},'a failed final commit must remain retryable');
+ if(failed)assert.deepEqual(await failed.json(),{stored:0,failed:1});
+ assert.equal(f.posts().length,0);
+ f.sql.exec('DROP TRIGGER fail_paipu_post');
+ assert.deepEqual(await (await f.call('/api/mahjong/paipu/summaries',{results:[{uuid:PAIPU,summary:reviewed}]})).json(),{stored:1});
+ assert.equal(f.balance(one),600);assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM kp_ledger WHERE kind='mahjong' AND user=?").get(one)!.n,1);
+ assert.equal(f.posts().length,1);assert.match(f.posts()[0],/\+600 KP/);assert.match(JSON.stringify(f.sql.prepare('SELECT body FROM kp_posts').all()),/松本等しいのひと言/);
+ assert.deepEqual(await (await f.call('/api/mahjong/paipu/queue')).json(),{paipu:[]});
+});
+
+test('automatic payout receipts survive retry and a permanent outbox failure remains bounded',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:T0});
+ const f=await fixture();const {ensurePosts}=await import('../src/racing-posts.ts');await ensurePosts(f.env);
+ await f.claim(two,2);f.sql.prepare('INSERT INTO kp_mahjong_links VALUES(?,?,?)').run(guild,one,22);
+ f.sql.exec("CREATE TRIGGER fail_paipu_post BEFORE INSERT ON kp_posts WHEN NEW.id LIKE 'paipu:%' BEGIN SELECT RAISE(ABORT,'private fixture failure'); END");
+ for(let attempt=1;attempt<=3;attempt++){
+  const response=await f.call('/api/mahjong/paipu/summaries',{results:[{uuid:PAIPU,summary}]});
+  assert.deepEqual(await response.json(),{stored:0,failed:1});
+  assert.equal(f.balance(one),600);assert.equal(f.posts().length,0);
+  const row=f.sql.prepare('SELECT summary,error,attempts FROM kp_mahjong_paipu').get()!;
+  assert.equal(row.summary,null);assert.equal(row.error,'summary_apply_failed');assert.equal(row.attempts,attempt);
+ }
+ assert.deepEqual(await (await f.call('/api/mahjong/paipu/queue')).json(),{paipu:[]},'permanent failures stop at the existing three-attempt budget');
+ assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM kp_ledger WHERE kind='mahjong' AND user=?").get(one)!.n,1);
+ // Re-enable the synthetic retry only inside this test to inspect its receipt.
+ f.sql.exec('DROP TRIGGER fail_paipu_post');f.sql.prepare('UPDATE kp_mahjong_paipu SET attempts=2').run();
+ await f.call('/api/mahjong/paipu/summaries',{results:[{uuid:PAIPU,summary}]});
+ assert.equal(f.balance(one),600);assert.match(f.posts()[0],/\+600 KP（牌譜から自動）/);
+ assert.equal((f.posts()[0].match(/\+600 KP/g)??[]).length,1,'automatic and manual retry paths must not print two receipts for one payout');
+});
+
+test('summary and all long outbox parts roll back together, and completed output cannot gain new parts',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:T0});
+ const {paipuPostMessages,queuePaipuMessages}=await import('../src/mahjong-paipu.ts');const {ensurePosts}=await import('../src/racing-posts.ts');
+ const f=await fixture();await f.claim(one,1);await ensurePosts(f.env);
+ const posts=paipuPostMessages(summary,new Map([[1,{user:one,name:'B'}]]),()=> 'normal',['🔎 '+('長文🀄'.repeat(4000))]);assert.ok(posts.length>1);
+ f.sql.exec("CREATE TRIGGER fail_paipu_completion BEFORE INSERT ON kp_mahjong_paipu BEGIN SELECT RAISE(ABORT,'fixture completion failure'); END");
+ await assert.rejects(()=>queuePaipuMessages(f.env,PAIPU,posts,T0,{guild,summary}));
+ assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM kp_posts').get()!.n,0,'late summary failure rolls back every earlier part');
+ assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM kp_mahjong_paipu').get()!.n,0);
+ f.sql.exec('DROP TRIGGER fail_paipu_completion');
+ await queuePaipuMessages(f.env,PAIPU,posts,T0,{guild,summary});
+ assert.equal(f.posts().length,posts.length);
+ await queuePaipuMessages(f.env,PAIPU,[...posts,{content:'must not append'}],T0,{guild,summary});
+ assert.equal(f.posts().length,posts.length);assert.ok(f.posts().every(p=>!p.includes('must not append')));
+ assert.deepEqual(await (await f.call('/api/mahjong/paipu/queue')).json(),{paipu:[]});
+});
+
+test('overlapping ingestion finishes with one payout, one complete outbox and its receipt',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:T0});
+ const f=await fixture();const {ensurePosts}=await import('../src/racing-posts.ts');await ensurePosts(f.env);
+ await f.claim(one,1);f.sql.prepare('INSERT INTO kp_mahjong_links VALUES(?,?,?)').run(guild,one,22);
+ const batch=f.env.DB.batch.bind(f.env.DB);let first=true,release!:()=>void,entered!:()=>void;
+ const gate=new Promise<void>(r=>{release=r;}),waiting=new Promise<void>(r=>{entered=r;});t.after(()=>release());
+ t.mock.method(f.env.DB,'batch',async(statements:any)=>{
+  if(first&&statements.some((q:any)=>q.text.startsWith('INSERT INTO kp_mahjong_paipu'))){first=false;entered();await gate;}
+  return batch(statements);
+ });
+ const body={results:[{uuid:PAIPU,summary}]},early=f.call('/api/mahjong/paipu/summaries',body);
+ await waiting;
+ assert.deepEqual(await (await f.call('/api/mahjong/paipu/summaries',body)).json(),{stored:1});
+ release();assert.deepEqual(await (await early).json(),{stored:1});
+ assert.equal(f.balance(one),600);assert.equal(f.posts().length,1);assert.match(f.posts()[0],/\+600 KP/);
+ assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM kp_ledger WHERE kind='mahjong' AND user=?").get(one)!.n,1);
+});
+
+test('a webhook-free ingestion completes, duplicate input is applied once, and old completed summaries are not backfilled',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:T0});const f=await fixture();await f.claim(one,1);
+ f.env.KP_EARNINGS_WEBHOOK_URL=undefined;
+ assert.deepEqual(await (await f.call('/api/mahjong/paipu/summaries',{results:[{uuid:PAIPU,summary},{uuid:PAIPU,summary}]})).json(),{stored:1});
+ assert.ok(f.sql.prepare('SELECT summary FROM kp_mahjong_paipu').get()!.summary);
+ f.env.KP_EARNINGS_WEBHOOK_URL='https://discord.com/api/webhooks/1/token';
+ assert.deepEqual(await (await f.call('/api/mahjong/paipu/queue')).json(),{paipu:[]});
+ assert.deepEqual(await (await f.call('/api/mahjong/paipu/summaries',{results:[{uuid:PAIPU,summary}]})).json(),{stored:0},'completed historical summaries stay outside the queue');
+});
+
+test('one failed summary does not block the next game and duplicate input consumes one attempt',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:T0});const f=await fixture();const {ensurePosts}=await import('../src/racing-posts.ts');await ensurePosts(f.env);
+ const other=PAIPU.replace('cdef-','cde1-');const {luckyStake}=await import('../src/mahjong-claims.ts');const expected=600+luckyStake('4-hanchan',1,other,22).amount;await f.claim(one,1);await f.claim(one,1,other);
+ f.sql.prepare('INSERT INTO kp_mahjong_links VALUES(?,?,?)').run(guild,one,22);
+ f.sql.exec(`CREATE TRIGGER fail_one_paipu BEFORE INSERT ON kp_posts WHEN NEW.id='paipu:${PAIPU}' BEGIN SELECT RAISE(ABORT,'fixture one game failure'); END`);
+ const result=await f.call('/api/mahjong/paipu/summaries',{results:[{uuid:PAIPU,summary},{uuid:PAIPU,summary},{uuid:other,summary:{...summary,uuid:other}}]});
+ assert.deepEqual(await result.json(),{stored:1,failed:1});assert.equal(f.balance(one),expected);
+ assert.equal(f.sql.prepare('SELECT attempts FROM kp_mahjong_paipu WHERE paipu=?').get(PAIPU)!.attempts,1);
+ assert.deepEqual(await (await f.call('/api/mahjong/paipu/queue')).json(),{paipu:[PAIPU]});assert.equal(f.posts().length,1);
+ f.sql.exec('DROP TRIGGER fail_one_paipu');await f.call('/api/mahjong/paipu/summaries',{results:[{uuid:PAIPU,summary}]});
+ assert.equal(f.balance(one),expected);assert.equal(f.posts().length,2);assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM kp_ledger WHERE kind='mahjong' AND user=?").get(one)!.n,2);
+});
+
+test('a sanma result and its actual rule-based finding survive an ingestion retry',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:T0});const f=await fixture();const {ensurePosts}=await import('../src/racing-posts.ts');await ensurePosts(f.env);await f.claim(one,1);
+ const {threeDefenseScenario}=await import('./fixtures/mahjong-review-three.ts');const {reviewDecisions}=await import('../src/mahjong-review-state.ts');const {sanmaDefenseFinding}=await import('../src/mahjong-sanma-defense.ts');
+ const scenario=threeDefenseScenario(),s={...scenario.summary,uuid:PAIPU};
+ const findings=reviewDecisions(scenario.actions,s).map(frame=>sanmaDefenseFinding(frame,s.game)).filter((v):v is NonNullable<typeof v>=>Boolean(v));assert.ok(findings.length);
+ const reviewed={...s,review:{version:2,source:'sanma-rules',model:'sanma-rules-v2',uuid:PAIPU,findings:findings.slice(0,4)}};
+ f.sql.prepare('INSERT INTO kp_mahjong_links VALUES(?,?,?)').run(guild,one,s.seats[0].accountId);
+ f.sql.exec("CREATE TRIGGER fail_paipu_post BEFORE INSERT ON kp_posts WHEN NEW.id LIKE 'paipu:%' BEGIN SELECT RAISE(ABORT,'fixture sanma failure'); END");
+ assert.deepEqual(await (await f.call('/api/mahjong/paipu/summaries',{results:[{uuid:PAIPU,summary:reviewed}]})).json(),{stored:0,failed:1});
+ const balance=f.balance(one),ledger=f.sql.prepare("SELECT id,delta FROM kp_ledger WHERE kind='mahjong' ORDER BY id").all();
+ f.sql.exec('DROP TRIGGER fail_paipu_post');
+ assert.deepEqual(await (await f.call('/api/mahjong/paipu/summaries',{results:[{uuid:PAIPU,summary:reviewed}]})).json(),{stored:1});
+ assert.equal(f.balance(one),balance);assert.deepEqual(f.sql.prepare("SELECT id,delta FROM kp_ledger WHERE kind='mahjong' ORDER BY id").all(),ledger);
+ const saved=JSON.parse(String(f.sql.prepare('SELECT summary FROM kp_mahjong_paipu').get()!.summary));assert.ok(saved.review?.findings.length);
+ assert.match(JSON.stringify(f.sql.prepare('SELECT body FROM kp_posts').all()),/松本等しいのひと言/);assert.equal(f.posts().length,1);
+});

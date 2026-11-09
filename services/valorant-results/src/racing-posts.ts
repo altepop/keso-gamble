@@ -85,7 +85,7 @@ export function worthPosting(card:Card,bets:Bet[],crowned=false,ownerWon=false){
 async function raceBets(env:KpEnv,guild:string,id:number){
  return (await env.DB.prepare("SELECT s.user,b.value FROM kp_state s,json_each(s.data,'$.raceBets') b WHERE s.guild=? AND json_extract(b.value,'$.raceId')=?").bind(guild,id).all<{user:string;value:string}>()).results.map(r=>({...JSON.parse(r.value) as Bet,user:r.user}));
 }
-export async function enqueue(env:KpEnv,id:string,body:string,now:number){await env.DB.prepare('INSERT OR IGNORE INTO kp_posts(id,body,at) VALUES(?,?,?)').bind(id,JSON.stringify({content:body,allowed_mentions:{parse:[]}}),now).run();}
+export async function enqueue(env:KpEnv,id:string,body:string,now:number,embeds?:Array<{title?:string;description:string}>){await env.DB.prepare('INSERT OR IGNORE INTO kp_posts(id,body,at) VALUES(?,?,?)').bind(id,JSON.stringify({content:body,allowed_mentions:{parse:[]},...(embeds?.length?{embeds}:{})}),now).run();}
 export function crownPost(c:{race:number;name:string;user:string;reason:string;special?:boolean}){
  if(c.special)return [
   '🏇 **緊急特別開催｜VDKやらかし追悼レース**',
