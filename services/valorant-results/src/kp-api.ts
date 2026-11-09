@@ -1,3 +1,4 @@
+import {hoyoApi} from './hoyo.ts';
 import {boardDuelApi} from './board-duels.ts';
 import {steamApi,steamCallback} from './steam-auth.ts';
 import {guildVerifiedRelicStats} from './relic-guild-stats.ts';
@@ -398,6 +399,7 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping,deferP
   if(!owner||owner.guild!==mapping.guildId||!await isKpParticipant(env,mapping,owner.user))return response({error:'接続が切れました。/valo status のコードで接続してください。'},401);
   if(path==='/api/kp/duels')return boardDuelApi(request,env,mapping,owner.user,headers);
   if(path.startsWith('/api/kp/steam/')){const r=await steamApi(request,env,owner,token!);return new Response(r.body,{status:r.status,headers:{...Object.fromEntries(r.headers),...headers}});}
+  if(path.startsWith('/api/kp/hoyo/')){const r=await hoyoApi(request,env,owner);return new Response(r.body,{status:r.status,headers:{...Object.fromEntries(r.headers),...headers}});}
   if(request.method==='POST'&&path==='/api/kp/logout'){await revokeKpSession(env,token!);return response({disconnected:true});}
   if(request.method==='GET'&&path==='/api/kp/private/race'){
    if(!await privateCasinoAllowed(env,mapping.guildId,owner.user))return response({error:'この操作は利用できません。'},403);
