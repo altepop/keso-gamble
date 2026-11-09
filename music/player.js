@@ -40,7 +40,7 @@
   }).join("");
   root.innerHTML=[
     '<button type="button" class="music-open" aria-expanded="false" aria-controls="music-panel" aria-label="音楽プレイヤーを開く">♫ <span>MUSIC</span></button>',
-    '<section class="music-panel" id="music-panel" aria-label="KESO PLAY MUSIC" hidden>',
+    '<section class="music-panel" id="music-panel" role="dialog" aria-modal="true" aria-label="KESO PLAY MUSIC" hidden>',
     '<div class="music-heading"><div><span class="music-eyebrow">KESO TOWN ORIGINALS</span><strong>KESO PLAY MUSIC</strong></div><button class="music-close" type="button" aria-label="閉じる">×</button></div>',
     '<div class="music-now"><div class="music-art" aria-hidden="true">♫</div><div class="music-now-text"><small>NOW PLAYING</small><strong id="music-now-title"></strong><span>Official KESO TOWN Music</span></div></div>',
     '<div class="music-timeline"><input type="range" id="music-seek" min="0" max="1000" value="0" step="1" aria-label="再生位置を移動" disabled><div class="music-times"><output id="music-current">0:00</output><output id="music-duration">0:00</output></div></div>',
@@ -53,7 +53,7 @@
     '</div>',
     '<div class="music-tabs" role="group" aria-label="表示切り替え"><button type="button" id="music-tab-library" aria-pressed="true">♪ 曲一覧</button><button type="button" id="music-tab-lyrics" aria-pressed="false">≡ 歌詞</button></div>',
     '<div id="music-library"><div class="music-section-title"><span>プレイリスト</span><small>',playable.length,'曲配信中 / ',tracks.length-playable.length,'曲準備中</small></div>',
-    '<div class="music-track-select"><label for="music-track">再生曲を選ぶ</label><select id="music-track">',
+    '<div class="music-track-select" aria-hidden="true"><label for="music-track">再生曲を選ぶ</label><select id="music-track">',
     playable.map(function(t){return '<option value="'+t.id+'">'+esc(t.title)+'</option>';}).join(""),
     '</select></div><div class="music-song-list">',items,'</div></div>',
     '<div id="music-lyrics-panel" hidden><div class="music-lyrics-heading"><strong id="music-lyrics-title"></strong><small id="music-lyrics-source"></small></div>',
@@ -62,7 +62,7 @@
     '<input type="range" id="music-volume" min="0" max="100" step="1" value="',volume,'" aria-label="BGM音量">',
     '<label class="music-auto-label"><input type="checkbox" id="music-autoplay" ',autoplay?'checked':'','> 起動時に自動再生</label></div>',
     '<p class="music-status" role="status" aria-live="polite">停止中</p>',
-    '<p class="music-info">初期音量5%。再生位置はバーをクリック・ドラッグして移動できます。歌詞は自動同期ではなくスクロール表示です。設定はこの端末に保存。D1は使用しません。端末やDiscordの制限により自動再生・裏画面再生が止まることがあります。</p>',
+    '<p class="music-info">再生位置はバーをタップして移動できます。歌詞は手動スクロール表示です。音量などの設定はこの端末に保存。端末やDiscordによって自動再生・裏画面再生が制限される場合があります。</p>',
     '</section>'
   ].join("");
   // Reparent only into the authentic app header or title screen; avoid blocking gameplay.
@@ -225,8 +225,23 @@
     audio.currentTime=clamp(Number(value),0,1000)/1000*audio.duration;
     updateTime();
   }
-  openBtn.addEventListener("click",function(){panel.hidden=!panel.hidden;openBtn.setAttribute("aria-expanded",String(!panel.hidden));});
-  $(".music-close").addEventListener("click",function(){panel.hidden=true;openBtn.setAttribute("aria-expanded","false");openBtn.focus();});
+  function setPanelOpen(open){
+    panel.hidden=!open;
+    root.classList.toggle("music-expanded",open);
+    openBtn.setAttribute("aria-expanded",String(open));
+    if(open){
+      panel.scrollTop=0;
+      $(".music-close").focus();
+    }else openBtn.focus();
+  }
+  openBtn.addEventListener("click",function(){setPanelOpen(panel.hidden);});
+  $(".music-close").addEventListener("click",function(){setPanelOpen(false);});
+  root.addEventListener("click",function(event){
+    if(event.target===root&&!panel.hidden)setPanelOpen(false); // click on dimmed backdrop
+  });
+  document.addEventListener("keydown",function(event){
+    if(event.key==="Escape"&&!panel.hidden)setPanelOpen(false);
+  });
   playBtn.addEventListener("click",function(){if(audio&&!audio.paused){pause();status("一時停止中");}else void play("manual");});
   $("#music-next").addEventListener("click",function(){void next(false);});
   $("#music-prev").addEventListener("click",function(){void previous();});
