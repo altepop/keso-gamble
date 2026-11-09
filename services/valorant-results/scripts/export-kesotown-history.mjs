@@ -15,10 +15,10 @@ const API = 'https://discord.com/api/v10';
 
 export function parseArgs(argv) {
   const [mode, ...tokens] = argv;
-  if (!['list', 'export'].includes(mode)) throw new Error('Use "list" or "export".');
-  const opts = { mode, guild: '', channels: [], days: 180, perChannel: 3000, total: 20000, includeBots: true };
+  if (!['list', 'pick', 'export'].includes(mode)) throw new Error('Use "list", "pick" or "export".');
+  const opts = { mode, guild: '', channels: [], days: 180, perChannel: 3000, total: 20000, includeBots: true, match: '' };
   const keys = { '--guild': 'guild', '--channels': 'channels', '--days': 'days',
-    '--per-channel': 'perChannel', '--total': 'total' };
+    '--per-channel': 'perChannel', '--total': 'total', '--match': 'match' };
   for (let i = 0; i < tokens.length; i++) {
     const key = tokens[i];
     if (key === '--no-bots') { opts.includeBots = false; continue; }
@@ -32,6 +32,8 @@ export function parseArgs(argv) {
         opts.channels.some(s => !ID.test(s))) throw new Error('--channels needs 1-50 unique channel IDs.');
   }
   if (mode === 'export' && !opts.channels.length) throw new Error('Explicit --channels is required. There is NO export-all mode.');
+  if (mode === 'pick' && opts.channels.length) throw new Error('Pick mode uses numbered channel selection, not --channels.');
+  if (typeof opts.match !== 'string' || opts.match.length > 80 || /[\x00-\x1f]/.test(opts.match)) throw new Error('Invalid --match filter.');
   for (const [name, max] of [['days', 1095], ['perChannel', 10000], ['total', 50000]]) {
     const value = Number(opts[name]);
     if (!Number.isSafeInteger(value) || value < 1 || value > max) throw new Error('Invalid --' + name + ', max ' + max);
@@ -121,7 +123,10 @@ export async function run(opts, token, deps = {}) {
   const channels = await get('/guilds/' + opts.guild + '/channels');
   if (!Array.isArray(channels)) throw new Error('Discord channel list was invalid.');
   const readable = channels.filter(c => TYPES.has(c.type) && ID.test(String(c.id || '')));
-  if (opts.mode === 'list') return { channels: readable.map(c => ({ id: c.id, name: c.name })) };
+  if (opts.mode === 'list') {
+    const categories = new Map(channels.filter(c => c.type === 4).map(c => [String(c.id), String(c.name || '')]));
+    return { channels: readable.map(c => ({ id: c.id, name: c.name, category: categories.get(String(c.parent_id)) || '' })) };
+  }
 
   const index = new Map(readable.map(c => [String(c.id), c]));
   for (const id of opts.channels) if (!index.has(id)) {
@@ -168,9 +173,69 @@ export async function run(opts, token, deps = {}) {
   };
 }
 
+/**
+ * Explicit multi-selection for local research; no implicit "all channels".
+ * Accept 1,3,5-8. No message fetch is performed until separately confirmed.
+ */
+export function selectChannelNumbers(input, candidates) {
+  const cleaned = String(input || '').replace(/\s+/g, '');
+  if (!/^\d+(?:-\d+)?(?:,\d+(?:-\d+)?)*$/.test(cleaned)) {
+    throw new Error('Choose channel numbers such as 1,3,5-8; "all" is not supported.');
+  }
+  const seen = new Set();
+  for (const fragment of cleaned.split(',')) {
+    const [start, end = start] = fragment.split('-').map(Number);
+    if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) ||
+        start < 1 || end < start || end > candidates.length || end - start >= 50) {
+      throw new Error('Invalid channel number/range: ' + fragment);
+    }
+    for (let n = start; n <= end; n++) {
+      seen.add(n);
+      if (seen.size > 50) throw new Error('Choose up to 50 channels per export; divide into batches.');
+    }
+  }
+  if (!seen.size) throw new Error('At least one channel must be chosen.');
+  return [...seen].map(n => candidates[n - 1]);
+}
+
+async function pickChannels(opts, token) {
+  if (!process.stdin.isTTY) throw new Error('Pick mode requires an interactive local terminal.');
+  const listed = await run({ ...opts, mode: 'list' }, token);
+  const query = opts.match.trim().toLocaleLowerCase('ja');
+  const candidates = listed.channels.filter(c =>
+    !query || String(c.name || '').toLocaleLowerCase('ja').includes(query) ||
+      String(c.category || '').toLocaleLowerCase('ja').includes(query)
+  );
+  if (!candidates.length) throw new Error('No candidate text channels. Try without --match.');
+  console.log('\nKESOTOWNの候補チャンネル（メッセージ本文は未取得）');
+  for (const [index, c] of candidates.entries()) {
+    const group = c.category ? c.category + ' / ' : '';
+    console.log(String(index + 1).padStart(3, ' ') + '. ' + group + c.name);
+  }
+  console.log('\n取得する番号を選択する（例: 1,3,5-12）。');
+  console.log('個人相談や非公開の内容があるチャンネルは選ばない。50件まで。');
+  const input = createInterface({ input: process.stdin, output: process.stdout, terminal: true });
+  try {
+    const answer = await input.question('チャンネル番号: ');
+    const selected = selectChannelNumbers(answer, candidates);
+    console.log('\n取得対象:');
+    for (const c of selected) console.log('  ' + (c.category ? c.category + ' / ' : '') + c.name);
+    console.log('過去' + opts.days + '日 / 合計最大' + opts.total + '件、各チャンネル最大' + opts.perChannel + '件。');
+    const confirmation = await input.question('内容を理解し、選択したチャンネルだけ取得するなら YES: ');
+    if (confirmation.trim() !== 'YES') throw new Error('Canceled: nothing exported.');
+    return selected.map(c => String(c.id));
+  } finally { input.close(); }
+}
+
 async function main() {
   const options = parseArgs(process.argv.slice(2));
   const token = await getToken();
+  if (options.mode === 'pick') {
+    options.channels = await pickChannels(options, token);
+    options.mode = 'export';
+    // Prevent early channels from exhausting the shared fetch budget.
+    options.perChannel = Math.min(options.perChannel, Math.max(1, Math.floor(options.total / options.channels.length)));
+  }
   const result = await run(options, token);
   if (options.mode === 'list') {
     console.log('Readable candidate channels (choose IDs explicitly; exclude private or sensitive topics):');

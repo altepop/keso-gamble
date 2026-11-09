@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseArgs, redactContent, discordGet, makeRecords, run } from '../scripts/export-kesotown-history.mjs';
+import { parseArgs, selectChannelNumbers, redactContent, discordGet, makeRecords, run } from '../scripts/export-kesotown-history.mjs';
 
 const guild = '100000000000000100';
 const a = '100000000000000110', b = '100000000000000120';
@@ -99,4 +99,32 @@ test('empty content after Discord content restrictions fails explicitly',async()
     if(path.startsWith('/guilds/')) return [{id:a,name:'一般',type:0}];
     return [{id:'100000000000000150',timestamp:now,author:{id:user},content:''}];
   }}),/No readable text/);
+});
+
+
+test('picker allows explicit numbered groups and ranges, never implicit all',()=>{
+  const channels=Array.from({length:60},(_,i)=>({id:String(100000000000000100n+BigInt(i)),name:'channel-'+(i+1)}));
+  assert.deepEqual(selectChannelNumbers('1, 3, 5-7, 3',channels).map(x=>x.name),
+    ['channel-1','channel-3','channel-5','channel-6','channel-7']);
+  assert.throws(()=>selectChannelNumbers('all',channels),/not supported/);
+  assert.throws(()=>selectChannelNumbers('0',channels),/Invalid channel/);
+  assert.throws(()=>selectChannelNumbers('65',channels),/Invalid channel/);
+  assert.throws(()=>selectChannelNumbers('1-51',channels),/Invalid channel|50 channels/);
+  assert.throws(()=>selectChannelNumbers('7-2',channels),/Invalid channel/);
+  assert.throws(()=>selectChannelNumbers('',channels),/Choose channel numbers/);
+  const picker=parseArgs(['pick','--guild',guild,'--days','365','--match','雑談']);
+  assert.equal(picker.mode,'pick');
+  assert.equal(picker.match,'雑談');
+  assert.equal(picker.days,365);
+  assert.deepEqual(picker.channels,[]);
+  assert.throws(()=>parseArgs(['pick','--guild',guild,'--channels',a]),/numbered channel selection/);
+});
+
+test('candidate list includes category labels without fetching messages',async()=>{
+  const opts=parseArgs(['list','--guild',guild]);
+  const categories=await run(opts,'unused',{get:async path=>{
+    assert.equal(path,'/guilds/'+guild+'/channels');
+    return [{id:a,name:'雑談',type:0,parent_id:b},{id:b,name:'コミュニティ',type:4}];
+  }});
+  assert.deepEqual(categories.channels,[{id:a,name:'雑談',category:'コミュニティ'}]);
 });
