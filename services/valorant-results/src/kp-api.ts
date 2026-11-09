@@ -23,7 +23,7 @@ import {ALL_NORMAL_RELICS,RELIC_MODE_NAMES} from './relic-catalog.ts';
 import {verifiedCasinoProfit,verifiedCasinoStake,verifiedStockProfit,verifiedCasinoNet,verifiedCasinoLossStake,verifiedStockLoss} from './relic-profit.ts';
 import {ensureRelicMarket,activeRelicListings,listingById,prepareRelicListing,receiveRelicListing,cancelRelicListing,MARKET_MAX_ACTIVE_PER_PLAYER} from './relic-market.ts';
 import {recycleNormalRelic,exchangeNormalRelic,exchangeMyHorseVoucher,SHARD_YIELDS,SHARD_PRICES,MY_HORSE_VOUCHER_PRICE} from './relic-exchange.ts';
-import {STEAM_RELIC_PROOF_SQL,STEAM_RELIC_LIST_SQL,STEAM_RELIC_COMMIT_GUARD,steamRelicDay,requireSteamRelicEligibility,type SteamRelicEvidence} from './steam-relic-eligibility.ts';
+import {STEAM_RELIC_PROOF_SQL,STEAM_RELIC_LIST_SQL,steamRelicListParams,STEAM_RELIC_COMMIT_GUARD,steamRelicDay,requireSteamRelicEligibility,type SteamRelicEvidence} from './steam-relic-eligibility.ts';
 import type {RelicCollection,RelicItem} from './relics.ts';
 import {ensureQuizKp,receiveQuizKp,isKpParticipant,quizKpRates,quizKpLimits} from './quiz-kp.ts';
 import {activityAuthAvailable,createActivityChallenge,authenticateActivity}from './discord-activity-auth.ts';
@@ -425,7 +425,7 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping,deferP
   if(request.method==='GET'&&path==='/api/kp/relics'){
    // Called only when the relic screen opens. No new cron or D1 scan on regular wallet polling.
    const steam=await env.DB.prepare(STEAM_RELIC_LIST_SQL)
-    .bind(steamRelicDay(),mapping.guildId,owner.user).all<SteamRelicEvidence>().then(r=>r.results).catch(()=>[]);
+    .bind(...steamRelicListParams(steamRelicDay(),mapping.guildId,owner.user)).all<SteamRelicEvidence>().then(r=>r.results).catch(()=>[]);
    const row=await env.DB.prepare('SELECT data FROM kp_state WHERE guild=? AND user=?').bind(mapping.guildId,owner.user).first<{data:string}>();
    const ownedState=JSON.parse(row?.data??'{}') as {relics?:RelicCollection};
    // Indexed member lookup, only on explicit relic screen open. The game index
