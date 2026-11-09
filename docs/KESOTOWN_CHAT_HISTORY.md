@@ -35,6 +35,20 @@ Node 24以上で実行（追加のnpmパッケージ不要）。
 
     node scripts/export-kesotown-history.mjs list --guild "あなたのサーバーID"
 
+**チャンネルが多い場合はこちらを推奨する。** 名前とカテゴリを番号付きで一覧表示し、番号・範囲を選ぶ方式だ。50チャンネルまで選べるが、無差別に全チャンネルを自動選択する機能はない。
+
+    node scripts/export-kesotown-history.mjs pick --guild "サーバーID"
+
+表示された番号から、例えば `1,3,5-12` と入力すると、その番号のチャンネルが候補になる。対象チャンネルを再表示した後、`YES` と大文字で確認した場合だけ本文を取得する。取得しない場合はそのまま中止する。相談・非公開のチャンネルは選ばない。
+
+候補が多すぎる場合は名前またはカテゴリ名で絞り込める。
+
+    node scripts/export-kesotown-history.mjs pick --guild "サーバーID" --match "雑談"
+
+多くのチャンネルを選んだときは、合計取得上限を先頭のチャンネルが独占しないよう、1チャンネル当たりの最大取得件数を自動調整する。50チャンネルを超える場合は対象を分割して複数回実行する。
+
+**注意：既にDownload ZIPで保存している人は、新機能が入っていない。新しいmainをZIPで再ダウンロードするか、git管理している場合はgit pullしてから使う。**
+
 対象チャンネルを明示して過去180日分を最大2万件取得する例。
 
     node scripts/export-kesotown-history.mjs export --guild "サーバーID" --channels "チャンネルID1,チャンネルID2" --days 180 --per-channel 3000 --total 20000
