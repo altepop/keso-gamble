@@ -12,10 +12,13 @@ export const STEAM_RELIC_PROOF_SQL=`SELECT e.id,e.app,e.achievement,e.title,e.pe
  FROM kp_steam_events e LEFT JOIN kp_steam_daily d
  ON d.guild=e.guild AND d.user=e.user AND d.day=?
  WHERE e.id=? AND e.guild=? AND e.user=?`;
+// The catalog's single-day allowance is the same for every receipt. Avoid
+// re-reading the same kp_steam_daily row for each of 100 achievements.
+export const steamRelicListParams=(day:string,guild:string,user:string)=>
+ [guild,user,day,guild,user] as const;
 export const STEAM_RELIC_LIST_SQL=`SELECT e.id,e.title,e.percent,e.app,e.amount,
- COALESCE(d.amount,0) AS earnedToday
- FROM kp_steam_events e LEFT JOIN kp_steam_daily d
- ON d.guild=e.guild AND d.user=e.user AND d.day=?
+ COALESCE((SELECT d.amount FROM kp_steam_daily d WHERE d.guild=? AND d.user=? AND d.day=?),0) AS earnedToday
+ FROM kp_steam_events e
  WHERE e.guild=? AND e.user=?
  ORDER BY CASE WHEN e.percent<=10 THEN 0 WHEN e.percent<=25 THEN 1 ELSE 2 END,e.at DESC LIMIT 100`;
 
