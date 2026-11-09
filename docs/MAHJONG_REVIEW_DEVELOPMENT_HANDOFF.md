@@ -1,6 +1,6 @@
 # 雀魂牌譜検討：開発引き継ぎ
 
-更新: 2026-11-08 JST。**PR #377はマージ・Worker配置済み。限定局面の三麻評価と四麻拡張を実装。初回の単発配送ジョブが設定ファイル不足で送信前に停止したため、三麻の有効化は保留し、追修正中。実対局の最終確認はユーザーが後日行う。以下の古い段階記録より末尾の最新結果を優先する。**
+更新: 2026-11-09 JST。**#377/#392はマージ・Worker配置済み。人工三麻/四麻の検討1通は実Discord送達済み。最新の実三麻/四麻は再取得・解析に成功し、三麻の実9和了は役/符/基礎支払い9/9一致。540の発生原因は未確定。現行mainは未設定=無効のまま。#393には検証完了を根拠に未設定=標準有効へ移行するリリース設定を用意し、手動Variables更新を不要にした。PRは未マージ。自然な新規対局の確認はユーザーが後日行う。末尾の最新状態を優先する。**
 
 ## 再開場所と現在の状態
 
@@ -285,3 +285,149 @@
 - ユーザーは自然な新規三麻の最終確認について「後で確認する」と回答済み。再質問せず、本番の人工送達と自然対局を分けて報告する。
 
 - 追修正ローカル検証: Node24、Bot811件・配備33件・D1予算4件すべて成功、skipなし。型検査・Worker dry-run build成功。実モデルはCIで再確認する。
+
+## 単発配送は成功、実牌譜診断の失敗を調査中
+
+- #392のmain/deploy `42471585501` はcheck/browser/deploy成功。Worker `52ca716c-c1c2-4294-8ee9-da4ceb7ddb53`。
+- 単発検証run `42471953898` / job `128704563689`: `posted:true,reused:false`。人工三麻/四麻の検討を1通で送達済み。残高/実牌譜の変更なし。
+- 直後のread-only実牌譜診断が`audit_failed`で停止。有効化はskip。失敗jobを1回再実行（job `128705273302`）しても同じ診断エラー。probeは`posted:true,reused:true`で再投稿なし。
+- `fix/mahjong-audit-diagnostics`で固定の処理段階・例外分類・承認済みモジュールの行番号だけを記録。raw error/stack/ID/秘密値は出さない。単体テストでは秘密文字列の非露出も確認。ローカルBot812・配備33・D1予算4成功。
+- 一時的な所有者/同一repo/専用branch限定のPR read-only診断を追加。通常CI/他PRには適用しない。**原因確認後、マージ前に一時ステップを除去する。** 三麻の有効化は未完了、自然対局の最終確認はユーザーが後日。
+
+- 安全な追加診断でログイン成功後の牌譜取得が`fetchGameRecord_540`を返すことを確認（CI `42472584789`, check `128706833184`）。540の意味は未確定で、秘密設定の失効と断定しない。
+- 直近1件が取得不能でも全診断を停止しないよう、同じbounded SELECTの結果から各3/4人最大2候補を試す（合計最大4record RPC、成功標本は最大2）。取得失敗だけを固定codeで記録し、要約/推論/照合の不整合は従来どおり失敗させる。通常運用へのRPC追加なし。
+
+## 最新の運用状態（2026-11-08 UTC、PR #393）
+
+- #377/#392はマージ・本番配置済み。#392 mergeは4192e3a6be43bdff05cb5b0dc22d89f807d62964、Workerは52ca716c-c1c2-4294-8ee9-da4ceb7ddb53。
+- 人工三麻/四麻の検討をまとめた1通は実Discord送達済み。run42471953898の再実行でもposted:true/reused:trueで再投稿なし。実際の新規対局の配信実績とは区別する。
+- 三麻有効化は保留。過去に取得できた三麻9局/7局・四麻8局/11局の4件が、現在すべてfetchGameRecord_540を返す。ID形式・保存UUID・開始日・アカウントIDの妥当性は一致。read-only診断はDB/残高/実牌譜を更新しない。
+- 公式公開設定を確認したところ、151は古いクライアント版を示す。540は旧Web用の同定義表には存在せず、意味を推測で確定しない。公式index.htmlはproductVersion 4.0.18を宣言している。引用符付きキーにも対応するパーサーを試験したが、実際の宣言は無引用符で、旧パーサーでも読める。原因と確定できないためこの試験変更は採用しない。4.0.18でログインしてもfetchGameRecord_540は継続した。
+- 実プロファイル再確認: run42474913552/job128713963131。WebGL_2022-4.0.18でも4件とも540。以前の比較診断のステップがcontinue-on-errorにより成功表示になったことがあるが、これは取得成功ではない。今後は実ログのselected・standardProfilesVerified・standardSanmaProfileVerifiedを見る。
+- 最新ローカルcheck実行時点はBot814/配備34/D1予算4、skipなし成功。その後の公開版パーサーは個別1テスト成功。最終SHAでcheck/build/CIを再確認する。
+- 作業環境がunavailableになった。GitHubに保存済みのブランチfix/mahjong-audit-diagnostics/PR393を正とし、手元で実行途中だったcommit/pushの成功を仮定しない。接続ツールで保存状態を照合済み。
+- 一時workflowのmahjong-live-version-probe.ymlとmahjong-public-error-probe.yml、および対応するscriptsは調査後・マージ前に除去する。後者は公式の公開リソース/プロトコル情報だけを読む（資格情報・D1・Discordなし）。前者は所有者/同一repo/専用branch限定の読み取り専用で、mahjong-paipuと同じconcurrencyを使う。
+- 次: 現行WebGL公開設定と旧Webプロトコルの世代差を確認→根拠のある取得修正→read-only実牌譜照合→一時診断削除・全CI→既送達probe_release4192e3a6be43bdff05cb5b0dc22d89f807d62964を再利用して有効化（再投稿しない）。原因不明の版情報試行を本番へ入れない。ユーザーの自然な新規三麻の確認は後日で合意済み。
+
+## 安全な整理後の最終状態（2026-11-08 UTC）
+
+- 本番の解析実装: #377/#392。main 4192e3a6be43bdff05cb5b0dc22d89f807d62964、Worker 52ca716c-c1c2-4294-8ee9-da4ceb7ddb53。毎分cronと既存binding/秘密値を維持し、新しい本番migration/KP変更なし。
+- 実Discord: run42471953898の人工三麻/四麻1通はposted:true。再実行はreused:trueで再送なし。自然な新規対局の新三麻/新四麻v2投稿は未確認。旧四麻v1の既存配信確認と混同しない。
+- 過去の実牌譜検証: 三麻の実6和了で役/符・基礎支払い6/6一致、実四麻48候補から4 finding。これは当時の取得/計算の根拠であり、現在の取得成功ではない。
+- 現在の障害: 以前取得できた三麻9局/7局、四麻8局/11局が4件ともfetchGameRecord_540。ログイン成功、ID形式/保存UUID/開始日/実アカウントIDは妥当。公式の旧Web用エラー定義では151は古い版、540の定義は見つからなかった。540を規制/失効/停止と断定しない。
+- 公式public indexの実宣言はproductVersion: "4.0.18"（キーは無引用符）。引用符対応を今回の原因とした説明は訂正し、版情報試験・追加ログイン候補・recordProfiles・パーサー試験をすべて撤去。通常のmahjong-paipu.mjsはmain4192e3aと同じ内容へ戻す。
+- 新しいWebGL_2022-4.0.18を使った読み取りも4件とも540（run42474913552）。別のresource-version公開manifest確認はHTTP403のため追わない。一時的な公開/実アカウント診断workflow2本とscripts2本は削除し、以後のpushで自動再試行/追加ログインしない。
+- #393に残すのは、秘密値を出さない段階/固定コード/承認済みモジュール行番号の診断、最大4候補から最大2標本のread-only照合、匿名の整合性メタデータ、既送達probe_releaseを再利用する所有者用の再開手順。通常の取得・KP・投稿本文は変更しない。原因未解決のためDraft、マージ/配置/有効化はしない。
+- 作業環境はunavailable。作業中execは終了し、GitHubの保存済みheadを照合して接続ツールで原子的に整理。未送信のローカルcommit/pushを成功と仮定しない。元のdirtyなActivity作業や他worktreeは触らない。
+- 最後のローカル全check（整理前の対応する診断実装）はBot814/配備34/D1予算4、全成功/skipなし。整理後の完全SHAの最終CIはPR393本文に記録する。コードを書いたこと/CIの継続設定の成功表示を、実牌譜の取得成功とは扱わない。
+- 進捗見積りは全体90%、三麻90%、四麻90%、bot連携95%、検証85%。解析/過去の実データ計算/本番配置/人工送達は進んだが、現在のAPI障害・三麻有効化・自然な新規対局確認を残すので完成扱いにしない。三麻は限定局面の牌効率/現物/条件付き打点であり、一般的な攻守/着順EVを解く戦術AIではない。
+- 再開順: (1)公式クライアントでも過去牌譜を再生できるかという任意質問への回答を確認（新規対局不要、未回答）(2)環境復帰後に保存済みbranch/PR393を取得し540の原因を根拠に基づいて調査。秘密値の再質問/リセット、API制限の迂回をしない (3)実3/4人の読み取り照合と最終CI (4)コードを確認してmerge・配置後、[mahjong-review-resume]で既送達SHA4192e3a6be43bdff05cb5b0dc22d89f807d62964を再利用して配送確認→標準プロフィール照合→有効化。自然な新規対局の確認はユーザーが後日行う。
+
+## 少しずつ再開：送信データの診断を追加（2026-11-08）
+
+- 作業環境の復旧を確認し、ローカル2a76bb1からGitHubのe0da45dc51f12136451947e4089d569044cf1107へfast-forward。元のActivity作業や未コミット変更には触れていない。
+- 今回の小さな変更は、fetchGameRecordでエラーが返った場合だけ、実際に送ったprotobufバイト列を自分でdecodeし直し、牌譜ID/クライアント版が保持されたかを真偽値で記録するもの。要求の送信形式・ログイン候補・再試行回数は変更しない。
+- 追加のrpc診断はrequestDecoded/gameUuidPreserved/clientVersionPreserved/jsonParamPresentと、上限16のサーバー引数件数だけ。値・ID・トークン・版の文字列・request bytes・server paramsの本文は保持/出力しない。Errorの属性は非enumerable、audit側でも許可した型/項目だけを再構成する。
+- 模擬WebSocketで実openGatewayの要求/応答フレームを通し、540でも送信されたID/版が保存されることを確認。protobufの項目名違い、壊れたバイト列、引数件数上限、余計な秘密項目の除外、他RPCの従来エラー動作も回帰テストにした。実際のサーバーの540を再現/解消したという意味ではない。
+- ローカルNode24: 型検査・Bot814/配備38/D1予算4、全成功/skipなし。Worker dry-run buildも成功。最終SHAのCIはPR393本文へ記録する。
+- 今回は実APIへの再取得・Discord投稿・本番配置・三麻有効化を行っていない。540は未解決、進捗見積り90%は据え置き。次の小さな段階は、この診断を使った実牌譜1件だけの読み取り確認を準備し、得られた事実から次の修正を決めること。自動で何度も取得し直すworkflowを追加しない。
+
+## 次の小段階：実牌譜1件だけで送信診断を確認（2026-11-08）
+
+- 前回head087ddf1959ae41c7d67d30e29e8996ac62e35297のCI42477159474はcheck/browser成功、PRのためdeploy skip。
+- `mahjong-review-live-audit.mjs --record-check`を追加。直近rowid64行以内から保存済みIDをSELECT1回/LIMIT1で選び、ログイン処理後にfetchDecodedRecordを1回だけ呼ぶ。代替候補・解析モデル・Python・署名付き取り込み・投稿・支給は呼ばない。失敗/空データ/返却ID不一致/資格情報なしは成功扱いにしない。
+- 模擬確認6件を追加。SELECT/取得/close回数、540での再試行なし、秘密値非露出、未ログインでの空/不正ID拒否、返却内容不整合、SQLの64行制限、CLIの資格情報/モード競合を検証。関連20テスト成功。
+- 所有者・同一repo・PR393・専用branch限定の一時ジョブで実行し、結果取得後にそのworkflowを削除。新しい定期処理や自動再ログインは残さない。モデル/Python/取り込み鍵/Webhook/有効化処理を持たず、通常paipu処理と同じconcurrencyを使用。
+- 実行run42478425683/job128724840777（head f169b7577324e674634b72dd314365d2b5d16d8c）。recordRequests=1、phase=record、audit_rpc_fetchGameRecord_540、ok=false。失敗ジョブを再実行していない。
+- 実際のrpc診断: requestDecoded=true、gameUuidPreserved=true、clientVersionPreserved=true、numberParamCount=0、stringParamCount=0、jsonParamPresent=false。送信前のprotobuf符号化でID/版が欠落したケースを除外できた。サーバーがその版/プロトコルを受理することや、540の原因がサーバー側不具合であることまでは証明しない。
+- 540は未解決、三麻有効化と追加の本番配置は行っていない。今回の確認でD1への書き込み・Discord投稿・KP変更なし。次は公式クライアントでの再生可否の回答と、受理条件/現行プロトコルの根拠を照合する。版や接続先を当てずっぽうで変えて試行しない。
+- ローカルNode24の型検査、Bot814/配備44/D1予算4の全テスト（skipなし）とWorker dry-run build成功。最終headのCI結果はPR393本文を優先する。進捗90%は据え置き。
+
+## 取得成功時との比較と、セッション条件の確認準備（2026-11-08 JST）
+
+- headbe58105ee978351dff71fbba061967c6df8ec8faのCI42478814531はcheck/browser成功、PRのためdeploy skip。
+- 取得成功を再確認した基準は77e2ca352511972d72d42936bcaeee022719e49e / run42465917898 / job128685289662。ログの18:09:59 JSTにselected=2（三麻/四麻）を確認。取得失敗した前回1件確認は21:03:23 JST（run42478425683）。
+- be58105時点とのgit diffとacorn AST比較で、yostarSession/serverContext/channel/login/decodeRecords/fetchDecodedRecordの6関数は同一。package.json/package-lock.jsonも同一。openGatewayの差は要求バイト列の変数への抽出とエラー診断付与。実際の送信フレームの回帰テストも成功している。したがって取得部分のコード差分を戻せば直ると判断する根拠は得られなかった。環境/アカウント状態/サーバー側のどれが原因かは未確定。
+- 次の確認は、既存のoauth2Login応答に対局接続情報が返るかと、ログインアカウントが選んだ保存済み牌譜の参加者か。新しいRPCは増やさず、同じSELECTへsummary列を加え、同じログイン応答と既存の要約を比較する。
+- アカウントIDはsessionのnonenumerableな内部属性にだけ置き、ログ/結果にはgameConnectionPresentとviewerParticipatedだけを返す。情報不足や不正な要約はnullとし、falseと混同しない。gameConnectionPresentは非空のgame_info.game_uuidを読めたという観測であり、現在対局中だと断定しない。viewerParticipatedもアクセス権の証明ではない。
+- 模擬テストで参加/非参加/不明の区別、ID/接続トークンの非露出、取得エラーでも状況を保持し再試行しないことを確認。所有者/同一repo/PR393限定の一時ジョブで1件だけ確認し、結果を取ったらworkflowを削除する。通常のログイン要求・取得要求・再試行条件を変えず、D1書き込み・投稿・支給・本番配置はしない。
+
+### セッション条件の実測と本人牌譜の比較準備
+
+- run42480140735/job128730087409（head23fc692da59668cfc038fbc414613aeafd0c91ca）の21:25:17 JSTの1件確認は540。gameConnectionPresent=false、viewerParticipated=false、recordRequests=1。送信ID/版保持はtrue、取得できた追加引数は0/0/JSONなし。対局接続情報は観測されず、対象の保存済み牌譜はログインアカウント本人の参加牌譜ではなかった。これだけでアクセス制限が原因とは断定しない。
+- 比較のため`--own-record-check`を追加。認証応答で得た内部IDをbindし、直近rowid64行内の保存済み本人参加牌譜だけをSELECT1回/LIMIT1で選ぶ。本人ID不明・本人牌譜なし・参加情報不整合は取得0回で終了し、他人の牌譜へフォールバックしない。見つかった場合だけ同じ取得APIを1回呼ぶ。アカウントや権限を偽装しない。
+- 本人比較も同じ所有者限定の一時ジョブで行い、結果取得後にworkflowを削除する。追加した4テストでbind値、上限、情報不足、不一致の拒否、SQLの範囲/JSONを確認した。通常の取得やログイン要求を変更せず、書き込み・通知・支給は行わない。
+
+## 本人履歴からの比較準備（2026-11-09 JST）
+
+- run42480728144/job128731861063（head52338d5d61093147065a1aa81c61590383b62bfa）の保存済み本人牌譜チェックはno-own-record、recordRequests=0。直近64行の保存済み要約に本人参加の候補がなく、他人へ代替せず終了した。アカウント自身に過去対局がないという証明ではない。
+- `--viewer-history-check`を追加。認証した本人のfetchGameRecordListをstart=1/count=1/type=0で1回だけ呼ぶ。公開プロトコルのReqGameRecordList/ResGameRecordListと、公開クライアントEndlessCheng/mahjong-helperのrecord.go（commit514bb97c5a6d157fa2ed1ac804a53cb9b559d7d0）の取得手順を照合した。古い公開クライアントの省略している版情報は現在のAPIで151になっており、通常取得への省略変更は採用しない。
+- 履歴の先頭1件について、本人の参加・正規形式ID・終了時刻を確認できた場合だけfetchDecodedRecordを1回呼ぶ。空ページ、本人不明/不一致、未終了/未来、返却不整合を成功扱いにせず、別の候補やページへ進まない。空ページを「過去対局が一切ない」と断定しない。
+- この比較は一覧経由という取得手順も変わるため、成功しても参加者条件だけが原因だとは断定しない。アカウントIDの偽装やアクセス制限の迂回は行わない。
+- DBへはアクセスしない。一時ジョブからCloudflare資格情報も除去し、Yostar既存資格情報だけを使用する。モデル・投稿・支給・本番配置は行わず、結果取得後にworkflowを削除する。単体テストでは1回上限、本人確認、終了条件、再試行禁止、秘密値非露出を確認済み。
+
+### 本人履歴の実測・一時ジョブ終了（2026-11-09 JST）
+
+- head14fa338db41bdf3d64e32fcfa3a6b6509511a8b2 / run42497793239 / job128783782017、2026-11-09 01:02:19 JSTの結果はhistory-empty-response。historyRequests=1、recordRequests=0、totalReportedPositive=false、gameConnectionPresent=false、viewerParticipated=null。一覧要求1回の応答に候補がなく、牌譜取得や解析を行わず終了した。
+- 空の応答は旧一覧APIの今回のページについての観測だけ。本人が一度も対局していないことや、540の原因が所有者制限であることは証明しない。現行公開プロトコルにはfetchGameRecordListV2とfetchNextGameRecordListもあるが、実クライアントのtag/filter/iteratorの利用手順は未確認。定義が存在するだけで推測した要求を本番へ送らない。
+- 認証に使っているのが普段の対局アカウントか、専用の未対局アカウントかを任意質問済み。IDや秘密値の再送は不要。公式アプリで既存牌譜が再生できるかという以前の質問も含め、回答があれば受理条件の調査へ反映する。
+- 結果取得後、.github/workflows/mahjong-record-context-once.ymlを削除。以降のPR更新で診断用のログイン/一覧照会が再実行されない。CLI診断は手動用として残し、通常の監視からは呼ばない。
+- Node24.19.0でnpm run check成功（Bot814/配備診断55/D1予算4、全873件成功・skipなし）、npm run buildのWorker dry-run成功。最終headのGitHub CI結果はPR393本文を優先する。
+- 今回の確認でDBアクセス/書き込み・Discord投稿・KP変更・本番配置・三麻有効化なし。540は未解決。次はアカウント用途/公式再生の観測と現行クライアントの一覧取得手順を照合し、根拠のある一段階だけを進める。認証情報のリセットや版/接続先の総当たりは行わない。
+
+## 公開クライアントに基づく本人履歴V2への切り替え（2026-11-09 JST）
+
+- e6a9dd9のCI42498416280はcheck/browserとも成功、deployはPRのためskip。Chromium/WebKitを含むtest:browser:allを確認した。
+- 秘密値やログインを使わない一時Actionsで、公式version.jsonが宣言したv0.11.252.w/code.js（8,686,884 bytes）を取得。コードは実行せず、acornで構文解析し、配列リテラルへの静的な数値参照だけを置換した。ASTの直接配列束縛を後から別の別名で上書きしない修正後、run42507144976と42507231252で実際の呼び出し箇所を確認した。初期の参照解決でmatches=0となった結果は「呼び出しが存在しない」根拠にしない。
+- 当該公開コードはALL=0、fetchGameRecordListV2へtag/begin_time/end_time/ranks/modes/max_hu_type/level_modeを渡し、返ったiteratorをfetchNextGameRecordListへ渡す。ページ応答はentries。旧fetchGameRecordList呼び出しは確認できなかった。これは宣言された公開Webコードについての観測であり、別のUnityビルド全体の挙動を証明するものではない。
+- 同コードのcheckPaiPuはgame_uuidとclient_version_stringでfetchGameRecordを呼び、成功した後にreadGameRecordを呼ぶ。readGameRecordを取得前の必須条件として追加する根拠はないため、追加していない。
+- 手動の--viewer-history-checkをV2に切り替え。ALL=0、直近30日という診断用の範囲、iterator要求1回、count=1のページ要求1回、完了/本人参加を確認できた場合だけ牌譜取得1回。公開画面の既定期間そのものとは主張しない。空ページやnext=trueでも追加ページへ進まない。iteratorはメモリ内だけで、ログ/戻り値/DBへ出さない。不正/期限切れiteratorはページ照会前に停止。
+- RecordListEntryはaccountsではなくplayersを持つため、プロトコル定義に合わせて参加者を検証。本人不明、期間外、未終了、ID不正は拒否。6件のV2テストと既存の11件の1牌譜診断テストが成功した。
+- 公開ソース確認の一時workflowは削除。所有者/PR393/同一repo限定の別の一時ジョブでV2を一度だけ確認し、結果取得後に削除する。既存Yostar資格情報以外は渡さず、DB・モデル・Discord投稿・KP・本番配置/有効化へは接続しない。
+
+### 本人履歴V2の実測・今回の終了点
+
+- heade44eb439846a3d0fbb2b0d0c9427ac69e41713cf / run42507448228 / job128813037773、2026-11-09 02:56:48 JSTにhistory-empty-response。historyRequests=2、recordRequests=0、hasNext=false、gameConnectionPresent=false、viewerParticipated=null。iteratorは検証を通過し、次のページ応答が空だった。追加ページ/旧API/別のユーザーへフォールバックしていない。
+- 旧一覧だけでなく、公開コードに合わせたV2の直近30日フィルタでも本人候補は得られなかった。これは本人の生涯対局数が0、アカウントが誤っている、または540が権限制限であると断定する証拠ではない。所有者アカウントでの牌譜取得という比較は依然実施できていない。通常の監視での540と一覧の空応答を混同しない。
+- V2一時ジョブも結果取得後に削除。今回の調査による診断ログイン/公開コード取得の自動実行は残さない。公開コードの実行、ログイン資格情報の変更、DB書き込み、Discord投稿、支給、配置/有効化なし。
+- Node24.19.0のnpm run check成功（Bot814、配備診断56、D1予算4、全874件・skipなし）、Worker dry-run build成功。PR最終headのCI状態はPR本文を参照。
+- 次に必要なのは、既存の任意質問への回答（連携用アカウントは普段対局する本人用か専用未対局用か、公式アプリで対象の既存牌譜を再生できるか）。秘密値やIDの再送は不要。回答なしで設定をリセットしたり別人に切り替えたりしない。
+
+## ユーザー確認：連携アカウントは未対局（2026-11-09 JST）
+
+- ユーザー回答「未対局アカウントだよ」。Bot専用の未対局アカウントとして扱う。本人の旧一覧/V2一覧が空だった観測と整合し、本人牌譜を探す診断を続ける必要はない。別のアカウントへの交換や対局の実施を要求しない。
+- 未対局であることだけで、他人の牌譜取得が許可されない、または540の原因だとは断定しない。既に同系統の取得経路で実牌譜の取得成功記録があるため、アカウントの対局数だけを原因にしない。
+- 次の切り分けとして、同じ専用アカウントで公式アプリから他人の牌譜URLを再生できるかを質問済み。ID/秘密値の再送は不要。再生できる場合はBot要求との差、公式でも失敗する場合は表示されるエラーと対象牌譜の条件を優先する。
+- ff14487f4ebac86a4b06b5cb1c0fabcf5ba18a94のCI42507542334はcheck/browser成功、deploy skip。今回の変更は引き継ぎのみで追加のAPI要求・テスト実行・配置・有効化をしていない。
+
+## 実牌譜の取得・解析を再確認、有効化のみ権限不足（2026-11-09 JST）
+
+- 前の本体取得から時間を空け、要求や版候補を変更せず保存済み最新1件を確認。run42525357254/job128867674368、2026-11-09 06:28:37 JST: ok=true、recordRequests=1、headUuidMatches=true、actionCount=700、viewerParticipated=false。未対局の専用アカウントから他人の牌譜を取得できた。選定は最新候補のため、以前540になった全IDが復旧したという意味ではない。540の原因や継続的な復旧は未確定。
+- 続く読み取り検証run42525457154/job128867988645（headda8d56573e757b41fb915f68c9389417b3d78a48）、06:30:01 JST: selected=2、recordRequests=2、unavailableRecords=[]、standardProfilesVerified/standardSanmaProfileVerified=true。書き込み・通知・支給なし。
+- 実三麻13局/700レコード: 北抜き26、副露9、槓2、和了9。全13局受理・blocked空、保存済みsummaryと一致。9和了の役/符9/9、基礎支払い9/9、本場サンプル3、ツモ損3/3一致。条件付き打点10局面を計算しfinding1件。最終4件の根拠はgenbutsu2/shape1/tsumo-value1。**実例で守備・条件付き打点のfindingを再検証できた**。256局面の上限付き解析であり、全局面の戦術最適性を証明しない。
+- 実四麻8局/652レコード: 全8局受理、保存済みsummaryと一致、モデル入力48・検証済みfinding4件。保存済み投稿の解析は従来v1の4件で、新v2自然送達の確認とは混同しない。実三麻の保存済み解析/送達はまだ0。
+- 有効化前の照合run42525609001は、並行作業でmainに加わったexport-kesotown-history.mjsの差分で停止した。公開差分を確認し、解析に関わるmahjong/sanma/c3・依存関係へ照合範囲を絞った。元の作業ツリーやその新機能を上書きしない。main ba083b13f49d4386292a5b678e61999e2eb7b004の解析本体は既存配置版と同一。
+- run42525718999/job128868767445、06:32:40 JST: 実3/4人auditの成功レシートと解析コード一致を確認。既存の人工投稿4192e3a6be43bdff05cb5b0dc22d89f807d62964のsent=1をSELECTだけで確認し、posted=true/reused=true。INSERT・新規投稿・KP変更なし。
+- 続く有効化はenabled=false/status=read-http-403。既存PAIPU_DISPATCH_TOKENにrepository Actions Variablesの読み取り権限がなく、変更要求へ進めなかった。自動承認レビューの拒否ではなくGitHub APIの権限エラー。トークンの交換/リセットや別資格情報での再試行はしない。
+- ユーザーが https://github.com/altepop/keso-gamble/settings/variables/actions で非秘密のRepository variable `MAHJONG_SANMA_REVIEW_ENABLED` を文字列 `true` に設定するのが最小の残作業。これはSecretsではなくVariables。mainの既存mahjong-paipu.ymlはこの値を読み、次の通常実行から三麻解析を有効にする。新しいWorker配置/DB migrationは不要。既に存在する場合は値だけ更新する。
+- 一時の取得・解析・有効化workflowは削除。以後のPR更新で自動再試行は残さない。実装テストは直近874件・build成功を維持。今回の通常CIのcheckはrun42525357288で成功、最終headのCI状態はPR本文を優先する。
+- 進捗目安95%（三麻95/四麻95/Bot95/検証90）。残るのは変数設定の確認、次回通常実行での有効フラグ確認、自然な新規対局の三麻/四麻v2送達、540再発時の公式クライアントとの比較。未対局アカウントの本人履歴探索は再開しない。
+
+## 設定値を読み取りだけで確認する経路（2026-11-09 JST）
+
+- b854af005c4da5bc5d67c28a626123b3083a878dのCI42525849336はcheck/browser成功、deploy skip。モデル検証・Activity・Chromium/WebKit・Worker buildまで成功を確認した。
+- 既存トークンでのVariables APIは403だったが、通常のGitHub Actionsは既にvars.MAHJONG_SANMA_REVIEW_ENABLEDを参照している。CIのcheckと通常paipuの既存キュー確認ステップに、同じ参照から作る固定状態ログを追加した。API権限やトークン設定は変えない。
+- ログはequal_review_configuration: sanma=enabled/disabled/unset/invalidの4状態のみ。設定値の原文をenvにもログにも渡さない。空文字はunset、厳密な文字列trueのみenabled。通常の有効化条件も厳密なtrueのまま。
+- 設定の読み取りは雀魂・D1・Discord・KPへアクセスせず、追加のジョブ/依存インストールも行わない。観測用ログの変更なので新しい単体テストは追加せず、既存CIで構文と通常処理を検証する。
+- このログがenabledでも、実際に新規対局の解析/送達が完了したことを意味しない。CIで現在のRepository variableの状態、通常実行で実際の実行時設定を別々に確認する。最新の観測結果はPR393本文を参照。
+
+
+## 実測した未設定状態と、検証済み三麻の標準有効化（2026-11-09 JST）
+
+- run42546109284/job128931373056、2026-11-09 10:32:47 JST: equal_review_configuration: sanma=unset。Actions自身のvars参照で空の値を確認した。旧mainではこの状態は無効。Variables APIの権限エラーを再試行せず、設定値の読み取りだけで判別できた。
+- 同headad86dd1bc2f3d70b32dc33020123296f69daaa9dのCI42546109284はcheck/browser成功、deploy skip。ログ追加の初回c0d2455はYAMLのplain scalar内のコロンを修正し、両workflowのYAML解析後に再検証した。初回をCI成功と扱わない。
+- 既に実三麻/四麻の標準ルール・実解析・実9和了の役/符/支払いと、以前の人工投稿sent=1を確認できたため、PRを反映すれば三麻を標準で有効にするリリース設定を用意した。以前の「手動でVariablesを追加」が必須という案はこのリリースで置き換える。資格情報の権限拡張やAPIでの変数更新は不要。
+- mahjong-paipu.ymlは変数未設定またはtrueでPython準備とsanmaEnabled=trueを有効にし、false/それ以外の値では通常の三麻推論を停止する。比較はGitHub Actionsの式の文字列比較に従う。空キュー/check/読み取り配送ではPythonをインストールしない。手動auditは従来どおり本番設定に依存しない検証モード。
+- createPaipuReviewerの既定falseは変えない。通常取得workflowが明示的に渡す引数だけを変更する。四麻の設定、KP、支給処理、DBスキーマ、Webhook、cron周期、解析モデル/ルール本体は変えない。明示的なfalseを通常実行が書き換える処理もない。
+- 設定ログは固定状態enabled/disabled/enabled-release-default/invalid。CIは「このPRを反映した場合の設定」を表示し、未反映mainの稼働状態と混同しない。既存の権限でRepository variableを更新したという主張ではない。
+- 次は最終CI成功を確認してPRをレビュー可能にする。その後のmainへの反映はユーザーが行う。マージ後の次の通常取得で有効ログを確認し、自然な新規三麻の解析送達を確認する。既存の合意どおり実対局プレイはユーザーが後日行う。

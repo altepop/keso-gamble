@@ -53,6 +53,11 @@ jobs:
           node-version: '24'
           cache: npm
           cache-dependency-path: services/valorant-results/package-lock.json
+      - name: Report proposed sanma release configuration without accessing Mahjong or D1
+        env:
+          SANMA_CONFIGURATION: ${{ vars.MAHJONG_SANMA_REVIEW_ENABLED == 'true' && 'enabled' || vars.MAHJONG_SANMA_REVIEW_ENABLED == 'false' && 'disabled' || vars.MAHJONG_SANMA_REVIEW_ENABLED == '' && 'enabled-release-default' || 'invalid' }}
+        run: |
+          printf 'equal_review_configuration: sanma=%s\n' "$SANMA_CONFIGURATION"
       - run: npm ci
       - name: Detect changes to optional mahjong analysis
         id: review_paths
@@ -227,6 +232,7 @@ jobs:
         env:
           PAIPU_DISPATCH_TOKEN: ${{ secrets.PAIPU_DISPATCH_TOKEN }}
           REVIEW_DELIVERY_PROBE: ${{ contains(github.event.head_commit.message, '[mahjong-review-probe]') && 'true' || 'false' }}
+          REVIEW_DELIVERY_RESUME: ${{ contains(github.event.head_commit.message, '[mahjong-review-resume]') && 'true' || 'false' }}
         run: node scripts/dispatch-mahjong-delivery-audit.mjs
       - name: Check requested KP duel/luxury roster (read-only, no IDs printed)
         continue-on-error: true

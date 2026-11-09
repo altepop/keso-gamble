@@ -7,7 +7,7 @@ export async function dispatchDeliveryAudit(env=process.env,request=fetch){
  try{
   const response=await request('https://api.github.com/repos/altepop/keso-gamble/actions/workflows/mahjong-paipu.yml/dispatches',{
    method:'POST',headers:{Authorization:'Bearer '+token,Accept:'application/vnd.github+json','Content-Type':'application/json','X-GitHub-Api-Version':'2022-11-28'},
-   body:JSON.stringify({ref:'main',inputs:env.REVIEW_DELIVERY_PROBE==='true'?{delivery_probe:true,review_audit:true,enable_sanma:true}:{delivery_audit:true}}),signal:AbortSignal.timeout(15000),
+   body:JSON.stringify({ref:'main',inputs:env.REVIEW_DELIVERY_RESUME==='true'?{delivery_probe:true,review_audit:true,enable_sanma:true,probe_release:'4192e3a6be43bdff05cb5b0dc22d89f807d62964'}:env.REVIEW_DELIVERY_PROBE==='true'?{delivery_probe:true,review_audit:true,enable_sanma:true}:{delivery_audit:true}}),signal:AbortSignal.timeout(15000),
   });
   return response.status===204?{started:true,status:'started'}:{started:false,status:'http-'+response.status};
  }catch{return {started:false,status:'request-failed'};}
