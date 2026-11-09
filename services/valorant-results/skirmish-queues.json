@@ -1,0 +1,5 @@
+{
+  "publicQueues": ["skirmish_2v2"],
+  "verifiedAt": "2026-10-29",
+  "source": "Existing Henrik results saved by the live monitor; deployment 40824035368 confirmed the exact queue identifier. Custom queue remains excluded."
+}

@@ -18,5 +18,31 @@
   ],
   "observability": {
     "enabled": true
-  }
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "VOICE_GATEWAY",
+        "class_name": "VoiceGateway"
+      },
+      {
+        "name": "RACE_BROADCAST",
+        "class_name": "RaceBroadcaster"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "voice-v1",
+      "new_sqlite_classes": [
+        "VoiceGateway"
+      ]
+    },
+    {
+      "tag": "race-broadcast-v1",
+      "new_sqlite_classes": [
+        "RaceBroadcaster"
+      ]
+    }
+  ]
 }

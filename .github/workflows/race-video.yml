@@ -1,0 +1,28 @@
+name: Race replay video (render check only)
+
+# Issue #194: do not schedule, dispatch after deploy, claim jobs, or upload MP4.
+# Optional manual check generates a local synthetic fixture only, not a Discord post.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: race-video
+  cancel-in-progress: false
+
+jobs:
+  render-check:
+    if: github.repository == 'altepop/keso-gamble' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Prepare local video render tools
+        run: bash scripts/race-video/prepare.sh
+      - name: Render synthetic fixture (never sends to Discord)
+        run: node scripts/race-video/run.mjs --check

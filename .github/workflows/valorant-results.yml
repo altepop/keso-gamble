@@ -11,6 +11,10 @@ on:
       - 'package.json'
       - 'package-lock.json'
       - 'scripts/build-discord-sdk.mjs'
+      - 'scripts/build-activity.mjs'
+      - 'scripts/*browser-check.cjs'
+      - 'scripts/race-video/**'
+      - '.github/workflows/race-video.yml'
   push:
     branches: [main]
     paths:
@@ -23,6 +27,10 @@ on:
       - 'package.json'
       - 'package-lock.json'
       - 'scripts/build-discord-sdk.mjs'
+      - 'scripts/build-activity.mjs'
+      - 'scripts/*browser-check.cjs'
+      - 'scripts/race-video/**'
+      - '.github/workflows/race-video.yml'
   workflow_dispatch:
 permissions:
   contents: read
@@ -31,28 +39,103 @@ concurrency:
   cancel-in-progress: false
 jobs:
   check:
+    outputs:
+      review_changed: ${{ steps.review_paths.outputs.changed }}
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: services/valorant-results
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+        with: {fetch-depth: 2}
+      - uses: actions/setup-node@v7
         with:
           node-version: '24'
           cache: npm
           cache-dependency-path: services/valorant-results/package-lock.json
+      - name: Report proposed sanma release configuration without accessing Mahjong or D1
+        env:
+          SANMA_CONFIGURATION: ${{ vars.MAHJONG_SANMA_REVIEW_ENABLED == 'true' && 'enabled' || vars.MAHJONG_SANMA_REVIEW_ENABLED == 'false' && 'disabled' || vars.MAHJONG_SANMA_REVIEW_ENABLED == '' && 'enabled-release-default' || 'invalid' }}
+        run: |
+          printf 'equal_review_configuration: sanma=%s\n' "$SANMA_CONFIGURATION"
       - run: npm ci
+      - name: Detect changes to optional mahjong analysis
+        id: review_paths
+        run: |
+          if ! git -C ../.. diff --quiet HEAD^ HEAD -- 'services/valorant-results/src/mahjong-*' 'services/valorant-results/scripts/mahjong-*' 'services/valorant-results/scripts/c3-vendor' 'services/valorant-results/scripts/sanma-*' 'services/valorant-results/test/mahjong-*' 'services/valorant-results/test/fixtures/mahjong-review-*' '.github/workflows/mahjong-paipu.yml' '.github/workflows/valorant-results.yml'; then
+            echo 'changed=true' >> "$GITHUB_OUTPUT"
+          fi
+      - name: Set up pinned sanma hand calculator for changed analysis
+        if: steps.review_paths.outputs.changed == 'true'
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: services/valorant-results/scripts/sanma-requirements.txt
+      - name: Install isolated sanma calculator
+        if: steps.review_paths.outputs.changed == 'true'
+        run: |
+          python3 -m venv .venv-mahjong
+          .venv-mahjong/bin/python -m pip install --disable-pip-version-check --no-deps --only-binary=:all: --require-hashes -r scripts/sanma-requirements.txt
+          echo "SANMA_PYTHON=$PWD/.venv-mahjong/bin/python" >> "$GITHUB_ENV"
       - run: npm run check
+      - name: Restore existing optional model cache for read-only verification
+        if: steps.review_paths.outputs.changed == 'true'
+        uses: actions/cache@v4
+        with:
+          path: services/valorant-results/.cache/c3-model
+          key: equal-review-c3-5b30a83de3ab9523
+      - name: Check real model in isolated worker with artificial legal replay
+        if: steps.review_paths.outputs.changed == 'true'
+        timeout-minutes: 3
+        env:
+          C3_ASSETS_ROOT: ${{ github.workspace }}/services/valorant-results/.cache/c3-model
+        run: node scripts/mahjong-review-smoke.mjs
       - name: Check Activity logic
         run: |
           npm --prefix ../.. ci
           npm --prefix ../.. run check:discord
+          # GitHub Pages serves the committed files, so a pull request must commit the rebuilt ?v= versions:
+          # stale versions let a phone's WebView mix old cached modules with new ones (#138).
+          if [ "${{ github.event_name }}" = pull_request ]; then npm --prefix ../.. run check:activity; fi
+          # Keep direct GitHub web edits from blocking Worker deployment.
+          npm --prefix ../.. run build:activity
+          npm --prefix ../.. run check:activity
           npm --prefix ../.. test
       - run: npm run build
+      - name: Test deploy smoke protocol (mocked endpoints)
+        working-directory: .
+        run: node --test scripts/post-deploy-smoke.test.mjs
+      - name: Prepare race video verification
+        working-directory: .
+        run: bash scripts/race-video/prepare.sh
+      - name: Render a fixture replay (no Discord delivery)
+        working-directory: .
+        run: node scripts/race-video/run.mjs --check
+  # Activity flows in a real browser against mocked Worker answers (demo, live wallet, racing, Discord login,
+  # casino, stocks, Mリーグ/履歴/pulse). No secrets and no network beyond the runner.
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - name: Refresh Activity cache versions for browser tests
+        run: npm run build:activity
+      - name: Install Playwright, Chromium and WebKit
+        run: |
+          npm install --no-save playwright@1.63.0
+          npx playwright install --with-deps chromium webkit
+      - run: npm run test:browser:all
   deploy:
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-    needs: check
+    needs: [check, browser]
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -60,8 +143,8 @@ jobs:
     env:
       WRANGLER_SEND_METRICS: 'false'
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: '24'
       - name: Check required deployment Secrets
@@ -77,7 +160,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/kp-app/services/valorant-results"
           cp -R services/valorant-results/. "$RUNNER_TEMP/kp-app/services/valorant-results/"
           mkdir -p "$RUNNER_TEMP/kp-app/js"
-          cp js/engine.js js/progression.js "$RUNNER_TEMP/kp-app/js/"
+          cp js/*.js "$RUNNER_TEMP/kp-app/js/"
           cd "$RUNNER_TEMP/kp-app/services/valorant-results"
           npm ci
       - name: Recover existing Worker configuration
@@ -94,7 +177,7 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: node scripts/provision-kp-key.mjs
       - name: Retain public encryption key
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: kp-bootstrap-public-key
           path: ${{ runner.temp }}/kp-app/services/valorant-results/kp-public-key.json
@@ -106,6 +189,15 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           DISCORD_CLIENT_SECRET: ${{ secrets.DISCORD_CLIENT_SECRET }}
         run: node scripts/provision-activity-auth.mjs
+      - name: Configure optional Mahjong Secrets
+        working-directory: ${{ runner.temp }}/kp-app/services/valorant-results
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          MAHJONG_INGEST_KEY: ${{ secrets.MAHJONG_INGEST_KEY }}
+          AMAE_KOROMO_TOKEN: ${{ secrets.AMAE_KOROMO_TOKEN }}
+          PAIPU_DISPATCH_TOKEN: ${{ secrets.PAIPU_DISPATCH_TOKEN }}
+        run: node scripts/provision-mahjong-key.mjs
       - name: Validate live configuration and build
         working-directory: ${{ runner.temp }}/kp-app/services/valorant-results
         run: |
@@ -118,6 +210,48 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: npm run deploy -- --keep-vars
+      - name: Update existing Discord Activity entry point after successful Worker deploy
+        working-directory: ${{ runner.temp }}/kp-app/services/valorant-results
+        env:
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          ENTRYPOINT_MODE: ${{ vars.DISCORD_ACTIVITY_ENTRYPOINT_MODE || 'apply' }}
+        run: |
+          case "$ENTRYPOINT_MODE" in
+            apply|rollback|status) ;;
+            *) echo 'Invalid Activity entry mode'; exit 1 ;;
+          esac
+          node scripts/activity-entry-handler.mjs "--$ENTRYPOINT_MODE"
+      - name: Verify production Activity, Worker and KP reads
+        env:
+          KESO_SMOKE_WALLET_TOKEN: ${{ secrets.KESO_SMOKE_WALLET_TOKEN }}
+        run: node scripts/post-deploy-smoke.mjs
+      - name: Start read-only review delivery verification after changed analysis is deployed
+        if: needs.check.outputs.review_changed == 'true'
+        continue-on-error: true
+        working-directory: services/valorant-results
+        env:
+          PAIPU_DISPATCH_TOKEN: ${{ secrets.PAIPU_DISPATCH_TOKEN }}
+          REVIEW_DELIVERY_PROBE: ${{ contains(github.event.head_commit.message, '[mahjong-review-probe]') && 'true' || 'false' }}
+          REVIEW_DELIVERY_RESUME: ${{ contains(github.event.head_commit.message, '[mahjong-review-resume]') && 'true' || 'false' }}
+        run: node scripts/dispatch-mahjong-delivery-audit.mjs
+      - name: Check requested KP duel/luxury roster (read-only, no IDs printed)
+        continue-on-error: true
+        env:
+          KESO_SMOKE_WALLET_TOKEN: ${{ secrets.KESO_SMOKE_WALLET_TOKEN }}
+        run: node scripts/kp-target-roster-audit.mjs
+      - name: Send optional deploy failure alert to Discord
+        if: failure()
+        env:
+          KESO_SMOKE_ALERT_WEBHOOK_URL: ${{ secrets.KESO_SMOKE_ALERT_WEBHOOK_URL }}
+          RUN_LINK: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: node scripts/post-deploy-smoke.mjs --notify-failure
+      - name: Inspect unclassified queue identifiers (no account or match data)
+        continue-on-error: true
+        working-directory: ${{ runner.temp }}/kp-app/services/valorant-results
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/inspect-mode-identifiers.mjs
       - name: Remove private runner copy
         if: always()
         run: rm -rf "$RUNNER_TEMP/kp-app"

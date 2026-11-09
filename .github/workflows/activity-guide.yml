@@ -1,0 +1,40 @@
+name: Activity beginner guide checks
+
+on:
+  pull_request:
+    paths:
+      - 'guide/**'
+      - 'index.html'
+      - 'tests/activity-guide.test.js'
+      - 'scripts/activity-guide-browser-check.cjs'
+      - 'package.json'
+      - '.github/workflows/activity-guide.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'guide/**'
+      - 'index.html'
+      - 'tests/activity-guide.test.js'
+      - 'scripts/activity-guide-browser-check.cjs'
+      - 'package.json'
+      - '.github/workflows/activity-guide.yml'
+
+jobs:
+  guide:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm install --no-save playwright
+      - run: npx playwright install --with-deps chromium
+      - name: Verify module graph
+        run: npm run build:activity && npm run check:activity
+      - name: Check topic coverage
+        run: node --test tests/activity-guide.test.js
+      - name: Simulate first-time smartphone tutorial
+        run: npm run test:guide-browser

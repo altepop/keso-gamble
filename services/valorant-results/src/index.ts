@@ -1,22 +1,71 @@
+import {runSpikeCompensation} from './spike-compensation.ts';
+import {queueCommunityNews} from './community-news.ts';
+import {queueRelicPress} from './relic-press.ts';
+import {queueVdkPearlRoast} from './vdk-pearl-roast.ts';
+import {queueSteamPosts} from './steam-posts.ts';
+import {ensureNotificationReadIndexes} from './notification-indexes.ts';
+import {markDeliveredNotices} from './notification-delivery.ts';
+import {pendingNotificationMatches} from './notification-pending.ts';
+import {cleanupMonitorData} from './monitor-cleanup.ts';
+import {monitorSteam} from './steam-rewards.ts';
+import {readModeNote} from './mode-rewards.ts';
+import {skirmishResultButtons} from './skirmish.ts';
+import {appWebhook,appWebhookApi,forgetAppWebhook} from './app-webhook.ts';
+import {spikeNote} from './spikerush-growth.ts';
+import {prepareRaceBroadcast} from './racing-broadcast.ts';
+import {raceVideoApi} from './racing-video.ts';
+export {RaceBroadcaster} from './racing-broadcast.ts';
+import {prepareStocks,queueStockPosts} from './stock-market.ts';
+import {migrateSilentEntryPoint,silentEntryStatus} from './discord-silent-entry.ts';
+import {runGuerrillaMarket} from './stock-guerrilla.ts';
+import {monitorMahjong, mahjongStatus, flushMahjongPosts} from './mahjong.ts';
+import {monitorUnite} from './unite.ts';
+import {settleRankChange,rankChangeBlock,rankChangeFor} from './rank-change.ts';
+import type {RankChange} from './rank-change.ts';
+import {paipuApi} from './mahjong-paipu.ts';
+export {VoiceGateway} from './voice-gateway.ts';
+import {ensureVoice} from './voice-api.ts';
 import { claimDeathMatch } from './death-sessions.ts';
+import {ensurePvpDuels,settlePvpDuels} from './pvp-duel.ts';
+import {settleExpiredBoardDuels,cleanupBoardDuels} from './board-duels.ts';
 import type { KpRun } from './kp.ts';
-import { initializeKp, syncKpAccounts, collectKpMatch, drainKpInbox, flushKpDirectives, prepareKpRun, kpEventId, kpCreditLine } from './kp.ts';
+import { shouldRunRetention, cleanupExpiredCredentials } from './retention.ts';
+import { initializeKp, syncKpAccounts, collectKpMatch, drainKpInbox, flushKpDirectives, prepareKpRun, loadKpRunMatch, kpEventId, kpCreditLine, kpRelicBonus } from './kp.ts';
 import { kpApi } from './kp-api.ts';
+import { raceSeed,settleKpRaces } from './racing-kp.ts';
+import { queueRacePosts, flushRacePosts, enqueue, ensurePosts } from './racing-posts.ts';
+import { pollMlLineups, pollMlResults, refreshMlCards, settleMl, queueMlPosts, shouldRunMlCron } from './mleague.ts';
+import { scheduleCrowns } from './racing-crowns.ts';
+import { ensureRaceField, maybeGiftHorse, settleHorsePrizes, shouldSettleHorsePrizes } from './racing-horses.ts';
+import { recordMastery } from './mastery.ts';
+import { roastLevelsOf } from './racing-posts.ts';
+// @ts-expect-error The shared pure browser engine has no TypeScript declarations.
+import { openRaceStart } from '../../../js/racing.js';
 import { lastDeathCheck } from './death-unrated.ts';
 import { isDeathMode, isDeathNotice, sessionModeSQL } from './death-modes.ts';
 import { discordInteractions } from './discord-interactions.ts';
 import configuredPlayers from '../players.json' with { type: 'json' };
 import { resultMessage, groupNotification } from './results.ts';
+import { settleDebts, queueDebtPosts } from './kp-debt.ts';
+import { track } from './health.ts';
 import type { Match, Notice } from './results.ts';
 export { resultMessage } from './results.ts';
 
 export interface Env {
+  STEAM_WEB_API_KEY?:string;
+  KP_STEAM_CONFIG?:string;
+  VOICE_GATEWAY?:DurableObjectNamespace;
+  RACE_BROADCAST?:DurableObjectNamespace;
   DISCORD_CLIENT_SECRET?: string;
   KP_BOOTSTRAP_PRIVATE_KEY?: string;
   KP_BOOTSTRAP_PUBLIC_KEY?: string;
   DB: D1Database;
   HENRIK_API_KEY: string;
   DISCORD_WEBHOOK_URL: string;
+  KP_EARNINGS_WEBHOOK_URL?: string;
+  MAHJONG_INGEST_KEY?: string;
+  AMAE_KOROMO_TOKEN?: string;
+  PAIPU_DISPATCH_TOKEN?: string;
 }
 export interface Player { riotId: string; name?: string }
 interface Account { puuid: string; region: string; since: number }
@@ -90,7 +139,7 @@ async function api<T>(env: Env, path: string): Promise<T> {
   });
   const remaining = response.headers.get('X-RateLimit-Remaining');
   const headerNumber = (name: string) => { const value = response.headers.get(name); return value !== null && /^\d+(?:\.\d+)?$/.test(value) ? Number(value) : null; };
-  console.info('henrik_response', { endpoint: path.includes('/match/') ? 'match_detail' : path.includes('/matches/') ? 'matches' : 'account', status: response.status,
+  console.info('henrik_response', { endpoint: path.includes('/match/') ? 'match_detail' : path.includes('/matches/') ? 'matches' : path.includes('/mmr-history/') ? 'mmr_history' : 'account', status: response.status,
     responseMs: Date.now() - requestedAt, cacheTTL: headerNumber('X-Cache-TTL'), cacheAge: headerNumber('Age'), remaining: headerNumber('X-RateLimit-Remaining') });
   if (response.status === 429 || (remaining !== null && Number(remaining) <= 1)) {
     const retryAt = Date.now() + retryAfter(response);
@@ -104,13 +153,22 @@ async function api<T>(env: Env, path: string): Promise<T> {
 }
 
 
-async function saveMatch(env: Env, match: Match, player: Player, account: Account, kpRun:KpRun|null,reservations:Map<string,string>,saved:Set<string>): Promise<'excluded' | 'beforeMonitoring' | 'newResults' | 'duplicates'> {
+/** Per-cron rank lookup is indexed by monitor_state's key PRIMARY KEY.
+ * A per-run map caches negative results too; future runs always recheck DB. */
+export async function monitorRankState(db:D1Database,cache:Map<string,string>,key:string):Promise<string|undefined>{
+ if(!cache.has(key)){
+  const row=await db.prepare('SELECT value FROM monitor_state WHERE key=?').bind(key).first<{value:string}>();
+  cache.set(key,row?.value??'');
+ }
+ return cache.get(key);
+}
+async function saveMatch(env: Env, match: Match, player: Player, account: Account, kpRun:KpRun|null,reservations:Map<string,Set<string>>,saved:Set<string>,ranks:Map<string,string>=new Map()): Promise<'excluded' | 'beforeMonitoring' | 'newResults' | 'duplicates'> {
   const mode = match.metadata?.queue?.id;
   const ordinary = resultMessage(match, account.puuid, player.name?.trim() || parseId(player.riotId)[0]);
   if (!ordinary) return 'excluded';
   if (ordinary.endedAt <= account.since) return 'beforeMonitoring';
   // Only the selected queue can consume a reservation; normal games stay normal.
-  const death = isDeathMode(mode) && reservations.get(player.riotId)===mode && await claimDeathMatch(env.DB,player.riotId,match.metadata.match_id,Date.parse(match.metadata.started_at),ordinary.endedAt,mode);
+  const death = isDeathMode(mode) && reservations.get(player.riotId)?.has(mode) && await claimDeathMatch(env.DB,player.riotId,match.metadata.match_id,Date.parse(match.metadata.started_at),ordinary.endedAt,mode);
   let previousLastDeath: boolean | undefined;
   if (death) {
     const check = lastDeathCheck(match, account.puuid);
@@ -131,14 +189,62 @@ async function saveMatch(env: Env, match: Match, player: Player, account: Accoun
   const kpId=kpRun?kpEventId(kpRun.mapping.guildId,match.metadata.match_id,account.puuid):'';
   try {
     if (kpRun && Date.parse(match.metadata.started_at)>=kpRun.startsAt) {
+      await loadKpRunMatch(env,kpRun,kpId);
       const amount = kpRun.credits.get(kpId) ?? await collectKpMatch(env,kpRun.mapping,match,account.puuid);
       if (amount !== null) {
         kpRun.credits.set(kpId,amount);
-        result.message=kpCreditLine(result.message,amount);
+        // Existing events already have the relic delta in loadKpRunMatch.
+        // A brand-new credit has no preloaded event: fetch its receipt once
+        // by primary key AFTER settlement and reuse within this monitor run.
+        let relic=kpRun.relicBonuses.get(kpId);
+        if(relic===undefined){
+          relic=await kpRelicBonus(env,kpRun.mapping.guildId,kpRun.mapping.accounts.find(a=>a.riotId===player.riotId)?.discordUserId??'',kpId);
+          kpRun.relicBonuses.set(kpId,relic);
+        }
+        result.message=kpCreditLine(result.message,amount,mode==='spikerush'?await spikeNote(env,kpId):(kpRun.notes?.get(kpId)??await readModeNote(env,kpId)),relic);
         kpActive=kpRun.messages.get(kpId)!==result.message;
       }
     }
   } catch { console.warn('kp_match_pending'); }
+  // Competitive rank change from the MMR history. The history can lag the match list, so a match ended in the
+  // last 6 hours is looked up on each run until it appears, and given up 45 minutes after it ended. The result is
+  // kept, so every rewrite of the post carries it. A demotion costs KP once, a promotion pays once.
+  if (mode === 'competitive' && kpRun) try {
+    const key = 'rank2:' + match.metadata.match_id + ':' + account.puuid, now = Date.now();
+    // Load only ranks belonging to a match actually seen in this monitor run.
+    // The previous cron read up to 300 historic rank rows every minute even
+    // when no one played (224,483 D1 rows/day across monitor_state queries).
+    // Cache misses within the run; a later cron reloads durable changes.
+    const stored = await monitorRankState(env.DB,ranks,key);
+    let change: RankChange | null = stored?.startsWith('{') ? JSON.parse(stored) as RankChange : null;
+    // At most three lookups per run, and one history request per player per run.
+    const lookups = Number(ranks.get('__lookups') ?? 0);
+    if (!change && stored !== 'none' && result.endedAt > now - 6 * 3600_000 && lookups < 3) {
+      ranks.set('__lookups', String(lookups + 1));
+      const cached = ranks.get('__history:' + account.puuid);
+      const history: unknown = cached !== undefined ? JSON.parse(cached) : await api<unknown>(env, `/valorant/v2/by-puuid/mmr-history/${account.region}/pc/${encodeURIComponent(account.puuid)}`);
+      if (cached === undefined) ranks.set('__history:' + account.puuid, JSON.stringify(history));
+      change = rankChangeFor(history, match.metadata.match_id);
+      console.info('rank_change_lookup', { matchId: match.metadata.match_id, found: Boolean(change), before: change?.before, after: change?.after,
+        entries: Array.isArray((history as { history?: unknown[] })?.history) ? (history as { history: unknown[] }).history.length : Array.isArray(history) ? history.length : null });
+      const next = change ? JSON.stringify(change) : now > result.endedAt + 45 * 60_000 ? 'none' : 'pending';
+      if (next !== stored) await env.DB.prepare('INSERT INTO monitor_state(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind(key, next).run();
+      ranks.set(key, next);
+      const user = kpRun.mapping.accounts.find(a => a.riotId === player.riotId)?.discordUserId;
+      if (change && user) await settleRankChange(env, kpRun.mapping, user, change, match.metadata.match_id, account.puuid, Date.now());
+      if (change && change.after !== change.before) {
+        kpActive = true;
+        // Found after the result was already posted: announce it again as its own post (result bot webhook).
+        if (saved.has(JSON.stringify([player.riotId, match.metadata.match_id]))) {
+          await env.DB.prepare("CREATE TABLE IF NOT EXISTS mahjong_watch_posts(id TEXT PRIMARY KEY,body TEXT NOT NULL,at INTEGER NOT NULL,sent INTEGER NOT NULL DEFAULT 0,lease INTEGER NOT NULL DEFAULT 0,message_id TEXT)").run();
+          const name = player.name?.trim() || parseId(player.riotId)[0];
+          await env.DB.prepare('INSERT OR IGNORE INTO mahjong_watch_posts(id,body,at) VALUES(?,?,?)').bind('rank:' + key,
+            JSON.stringify({ content: `📢 **${name}のランク速報**（${new Date(result.endedAt + 9 * 3600_000).toISOString().slice(11, 16)} 終了のコンペ）` + rankChangeBlock(change, match.metadata.match_id + ':' + account.puuid), allowed_mentions: { parse: [] } }), now).run();
+        }
+      }
+    }
+    if (change) result.message += rankChangeBlock(change, match.metadata.match_id + ':' + account.puuid);
+  } catch { console.warn('rank_change_pending'); }
   const savedKey=JSON.stringify([player.riotId,match.metadata.match_id]);
   if(saved.has(savedKey)&&!kpActive&&!isDeathNotice(result.mode))return 'duplicates';
   const inserted = await env.DB.prepare('INSERT OR IGNORE INTO notifications(riot_id,match_id,message,ended_at,mode,act_id,act_name,outcome,sent,team_id) VALUES(?,?,?,?,?,?,?,?,?,?)')
@@ -147,24 +253,29 @@ async function saveMatch(env: Env, match: Match, player: Player, account: Accoun
   saved.add(savedKey);
   if(kpRun&&kpRun.credits.has(kpId))kpRun.messages.set(kpId,result.message);
   if (inserted.meta.changes) {
+    // Agent mastery counts new results only; a failure never blocks the result post.
+    if (kpRun) try {
+      const subject = match.players.find(p => p.puuid === account.puuid), mapping = kpRun.mapping;
+      await recordMastery(env, mapping, player.riotId, match.metadata.match_id, subject?.agent?.name, result.outcome, result.endedAt, () => roastLevelsOf(env, mapping));
+    } catch { console.warn('mastery_pending'); }
     await env.DB.prepare('INSERT OR IGNORE INTO monitor_state(key,value) VALUES(?,?)').bind('detected:' + match.metadata.match_id, String(Date.now())).run();
     console.info('result_saved', { player: player.name || player.riotId, outcome: result.outcome, endedAt: new Date(result.endedAt).toISOString(),
       finishToDetectionMs: Math.max(0, Date.now() - result.endedAt) });
     return 'newResults';
   }
-  if (kpActive || isDeathNotice(result.mode)) await env.DB.prepare("UPDATE notifications SET message=?,outcome=?,sent=CASE WHEN mode='escalation' AND ?='draw' THEN 1 ELSE 0 END WHERE riot_id=? AND match_id=? AND message!=?")
-    .bind(result.message, result.outcome, result.outcome, player.riotId, match.metadata.match_id, result.message).run();
+  if (kpActive || isDeathNotice(result.mode)) await env.DB.prepare("UPDATE notifications SET message=?,outcome=?,mode=CASE WHEN ?=1 THEN ? ELSE mode END,sent=CASE WHEN mode='escalation' AND ?='draw' THEN 1 ELSE 0 END WHERE riot_id=? AND match_id=? AND (message!=? OR (?=1 AND mode IS NOT ?))")
+    .bind(result.message, result.outcome, isDeathNotice(result.mode)?1:0, result.mode, result.outcome, player.riotId, match.metadata.match_id, result.message, isDeathNotice(result.mode)?1:0, result.mode).run();
   return 'duplicates';
 }
 
 interface DeathDetails {
   remaining: number;
   matches: Map<string, Match | null>;
-  reservations:Map<string,string>;
+  reservations:Map<string,Set<string>>;
 }
 
 async function deathDetail(env: Env, match: Match, players: Player[], accounts: Map<string, Account>, details: DeathDetails): Promise<Match | null> {
-  if (!isDeathMode(match.metadata?.queue?.id) || !match.metadata.is_completed || ![...details.reservations.values()].includes(match.metadata.queue.id)) return null;
+  if (!isDeathMode(match.metadata?.queue?.id) || !match.metadata.is_completed || ![...details.reservations.values()].some(modes=>modes.has(match.metadata.queue.id))) return null;
   const matchId = match.metadata.match_id;
   if (details.matches.has(matchId)) return details.matches.get(matchId) ?? null;
   details.matches.set(matchId, null);
@@ -206,20 +317,23 @@ async function deathDetail(env: Env, match: Match, players: Player[], accounts: 
   }
 }
 
-async function flushNotifications(env: Env, players: Player[]): Promise<void> {
+export async function flushNotifications(env: Env, players: Player[]): Promise<void> {
+  await ensureNotificationReadIndexes(env.DB);
+  // Some Death-mode notices remain unsent until explicitly claimed. The old
+  // sent=0 probe stayed positive forever, forcing Discord cooldown/monitor_state
+  // checks on every Cron even though there was nothing deliverable.
+  // Preserve the single indexed probe on quiet minutes. Only if some
+  // unsent row exists do the two claim-aware queries need to run.
   const hasPending = await env.DB.prepare('SELECT 1 AS n FROM notifications WHERE sent=0 LIMIT 1').first();
   if (!hasPending) return;
+  const pending = await pendingNotificationMatches(env.DB,10);
+  if (!pending.length) return;
   const discordAfter = await state(env, 'discord_after');
   if (discordAfter > Date.now()) { console.info('discord_wait', { retryAt: new Date(discordAfter).toISOString() }); return; }
   const url = new URL(env.DISCORD_WEBHOOK_URL);
   if (url.protocol !== 'https:' || url.hostname !== 'discord.com' || !url.pathname.startsWith('/api/webhooks/')) throw new Error('Invalid Discord Webhook URL');
   url.searchParams.set('wait', 'true');
-  const pending = await env.DB.prepare(`SELECT match_id,MIN(ended_at) AS ended_at FROM notifications
-    WHERE sent=0 AND (mode IS NULL OR (mode!='unrated' AND substr(mode,1,6)!='death_') OR EXISTS(
-      SELECT 1 FROM death_unrated_sessions s WHERE s.riot_id=notifications.riot_id
-      AND s.match_id=notifications.match_id AND s.cancelled_at IS NULL))
-    GROUP BY match_id ORDER BY ended_at,match_id LIMIT 10`).all<{ match_id: string }>();
-  for (const pendingMatch of pending.results) {
+  for (const pendingMatch of pending) {
     try {
       // Include sent participants when another player's result arrives on a later poll.
       const notices = await env.DB.prepare(`SELECT * FROM notifications WHERE match_id=?
@@ -231,15 +345,45 @@ async function flushNotifications(env: Env, players: Player[]): Promise<void> {
       const saved = await env.DB.prepare('SELECT value FROM monitor_state WHERE key=?')
         .bind('post:' + pendingMatch.match_id).first<{ value: string }>();
       // Discord snowflakes must stay strings: conversion to Number loses precision.
-      const editUrl = new URL(url);
-      editUrl.pathname = editUrl.pathname.replace(/\/$/, '') + '/messages/' + encodeURIComponent(saved?.value ?? '');
-      editUrl.searchParams.delete('wait');
-      const send = (target: URL, method: string) => fetch(target, {
-        method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), signal: AbortSignal.timeout(10_000),
-      });
-      let response = await send(saved ? editUrl : url, saved ? 'PATCH' : 'POST');
+      // A Skirmish win that opened a 受取／続行 choice carries its buttons. Interactive buttons need a webhook owned by the
+      // application: the one set up through /api/discord/app-webhook/start, posting as あかんbot. Without it the plain
+      // webhook is tried; if Discord refuses the buttons, the post goes out without (it still names /kp balance) for a day.
+      const skirmish = notices.results.some(notice => notice.mode?.startsWith('skirmish'));
+      const owned = skirmish ? await appWebhook(env) : null;
+      const via = saved ? (await env.DB.prepare('SELECT value FROM monitor_state WHERE key=?').bind('via:' + pendingMatch.match_id).first<{ value: string }>())?.value : undefined;
+      const buttons = skirmish && (owned || await state(env, 'skirmish_buttons_off_until') <= Date.now())
+        ? await skirmishResultButtons(env, pendingMatch.match_id, notices.results, new Map(players.map(player => [player.riotId, player.name?.trim() || parseId(player.riotId)[0]]))) : [];
+      // A message is always edited through the webhook that posted it.
+      let useOwned = Boolean(owned && (saved ? via === 'app' : buttons.length));
+      const base = () => { const target = new URL(useOwned ? owned!.url : url); target.searchParams.set('wait', 'true'); return target; };
+      const edit = () => { const target = base(); target.pathname = target.pathname.replace(/\/$/, '') + '/messages/' + encodeURIComponent(saved?.value ?? ''); target.searchParams.delete('wait'); return target; };
+      const send = (target: URL, method: string, components?: unknown[]) => {
+        const to = new URL(target);
+        if (components) to.searchParams.set('with_components', 'true');
+        const identity = useOwned && method === 'POST' ? { ...(owned!.username ? { username: owned!.username } : {}), ...(owned!.avatarUrl ? { avatar_url: owned!.avatarUrl } : {}) } : {};
+        return fetch(to, {
+          method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...payload, ...identity, ...(components ? { components } : {}) }), signal: AbortSignal.timeout(10_000),
+        });
+      };
+      const components = skirmish ? buttons : undefined;
+      let response = await send(saved ? edit() : base(), saved ? 'PATCH' : 'POST', components);
+      if (useOwned && !saved && (response.status === 401 || response.status === 404)) {
+        // The owned webhook was deleted in Discord: back to the plain webhook, without buttons.
+        console.warn('app_webhook_gone');
+        await forgetAppWebhook(env);
+        useOwned = false;
+        response = await send(base(), 'POST', []);
+      }
+      if (buttons.length && !useOwned && response.status === 400) {
+        console.warn('skirmish_buttons_refused');
+        await setState(env, 'skirmish_buttons_off_until', Date.now() + 86400_000);
+        response = await send(saved ? edit() : base(), saved ? 'PATCH' : 'POST', []);
+      }
       // A deleted original message can be replaced when a late result needs to be added.
-      if (saved && response.status === 404) response = await send(url, 'POST');
+      if (saved && response.status === 404) {
+        useOwned = Boolean(owned && buttons.length);
+        response = await send(base(), 'POST', components && (useOwned || await state(env, 'skirmish_buttons_off_until') <= Date.now() ? components : []));
+      }
       if (!response.ok) {
         console.warn('discord_post_failed', { status: response.status });
         await setState(env, 'discord_after', Date.now() + retryAfter(response));
@@ -248,7 +392,10 @@ async function flushNotifications(env: Env, players: Player[]): Promise<void> {
       const message = await response.json() as { id?: string };
       if (typeof message.id !== 'string' || !/^\d+$/.test(message.id)) throw new Error('Invalid Discord message ID');
       await setState(env, 'post:' + pendingMatch.match_id, message.id);
-      await env.DB.prepare('UPDATE notifications SET sent=1 WHERE match_id=?').bind(pendingMatch.match_id).run();
+      if (skirmish) await setState(env, 'via:' + pendingMatch.match_id, useOwned ? 'app' : 'plain');
+      // A match can contain Death-mode participants excluded from this post.
+      // Never acknowledge their undelivered notices as sent.
+      await markDeliveredNotices(env.DB,pendingMatch.match_id,notices.results);
       let timing = null;
       try {
         const detected = await env.DB.prepare('SELECT value FROM monitor_state WHERE key=?')
@@ -276,21 +423,31 @@ export async function monitor(env: Env, players: Player[] = configuredPlayers): 
   if (!lock.meta.changes) { console.info('monitor_skipped', { reason: 'previous_run_active' }); return; }
   try {
     await setState(env, 'monitor_started', Date.now());
-    const marks = players.map(() => '?').join(',');
-    await env.DB.prepare(`DELETE FROM tracked_players${players.length ? ` WHERE riot_id NOT IN (${marks})` : ''}`)
-      .bind(...players.map(p => p.riotId)).run();
-    await env.DB.prepare(`DELETE FROM death_unrated_sessions${players.length ? ` WHERE riot_id NOT IN (${marks})` : ''}`)
-      .bind(...players.map(p => p.riotId)).run();
-    await env.DB.prepare('DELETE FROM discord_command_receipts WHERE expires_at<?').bind(Date.now()).run();
+    // Cleanup is maintenance only: avoid walking both growing tables each minute.
+    // A changed monitored-player roster is always cleaned immediately.
+    await cleanupMonitorData(env.DB, players.map(p => p.riotId));
     const accounts = new Map<string, Account>((await env.DB.prepare('SELECT riot_id,puuid,region,since FROM tracked_players')
       .all<Account & { riot_id: string }>()).results.map(account => [account.riot_id, account]));
     let kpRun:KpRun|null=null;
-    try { const mapping = await initializeKp(env); if (mapping) { await syncKpAccounts(env,mapping); await drainKpInbox(env); await flushKpDirectives(env,mapping);kpRun=await prepareKpRun(env,mapping); } }
+    try { const mapping = await initializeKp(env); if (mapping) { await syncKpAccounts(env,mapping); await drainKpInbox(env); await flushKpDirectives(env,mapping);kpRun=await prepareKpRun(env,mapping);await ensurePvpDuels(env); } }
     catch { console.warn('kp_setup_pending'); }
     // Bound extra API traffic: one reserved match per run, one attempt per match per five minutes.
-    const reservations=new Map((await env.DB.prepare(`SELECT s.riot_id,${sessionModeSQL} AS mode FROM death_unrated_sessions s WHERE s.cancelled_at IS NULL`).all<{riot_id:string;mode:string}>()).results.map(r=>[r.riot_id,r.mode]));
-    const saved=new Set((await env.DB.prepare('SELECT riot_id,match_id FROM notifications ORDER BY ended_at DESC LIMIT 200').all<{riot_id:string;match_id:string}>()).results.map(r=>JSON.stringify([r.riot_id,r.match_id])));
+    // A player may have an old claimed match in one queue and a waiting reservation in another.
+    // Keep every non-cancelled queue; one Map value used to silently overwrite the others.
+    const reservations=new Map<string,Set<string>>();
+    for(const row of (await env.DB.prepare(`SELECT DISTINCT s.riot_id,${sessionModeSQL} AS mode FROM death_unrated_sessions s WHERE s.cancelled_at IS NULL`).all<{riot_id:string;mode:string}>()).results){
+      if(!reservations.has(row.riot_id))reservations.set(row.riot_id,new Set());
+      reservations.get(row.riot_id)!.add(row.mode);
+    }
+    // Which (player, match) results are already stored. Filled per player from the five matches the API returned
+    // (index on match_id), instead of reading the latest 200 results on every run (~250k rows a day).
+    const saved=new Set<string>();
+    // Never read a growing rank-history table eagerly. Competitive matches
+    // load only their own rank2:<match>:<puuid> via indexed key lookup.
+    const ranks=new Map<string,string>();
     const deathDetails: DeathDetails = { remaining: 1, matches: new Map(),reservations };
+    const pvpSeen=new Set<string>();
+    let pvpExtraDetail=1;
     // Deliver a previously queued result before spending time polling the API again.
     if (players.length) await flushNotifications(env, players);
     const offset = await state(env, 'cursor') % Math.max(1, players.length);
@@ -321,19 +478,51 @@ export async function monitor(env: Env, players: Player[] = configuredPlayers): 
         const matches = await api<Match[]>(env, `/valorant/v4/by-puuid/matches/${account.region}/pc/${encodeURIComponent(account.puuid)}?size=5`);
         if (!Array.isArray(matches)) throw new Error('Invalid matches');
         const counts = { fetched: matches.length, newResults: 0, duplicates: 0, beforeMonitoring: 0, excluded: 0 };
+        const ids = matches.map(m => m?.metadata?.match_id).filter((id): id is string => typeof id === 'string');
+        if (ids.length) for (const r of (await env.DB.prepare(`SELECT riot_id,match_id FROM notifications WHERE match_id IN (${ids.map(() => '?').join(',')})`)
+          .bind(...ids).all<{ riot_id: string; match_id: string }>()).results) saved.add(JSON.stringify([r.riot_id, r.match_id]));
         stage = 'save_result';
         for (const match of [...matches].sort((a, b) => Date.parse(a.metadata.started_at) - Date.parse(b.metadata.started_at))) {
-          counts[await saveMatch(env, match, player, account,kpRun,reservations,saved)]++;
+          if(kpRun&&match.metadata?.match_id&&!pvpSeen.has(match.metadata.match_id)){
+            pvpSeen.add(match.metadata.match_id);
+            try {
+              const names=new Map(players.map(p=>[p.riotId,p.name?.trim()||parseId(p.riotId)[0]]));
+              const attempt=await settlePvpDuels(env,kpRun.mapping,match,accounts,names);
+              // At most one extra detailed request per minute, with a per-match cooldown.
+              if(attempt.missingDetails&&pvpExtraDetail>0
+                && await state(env,'api_after')<=Date.now()
+                && await state(env,'pvp_detail_after:'+match.metadata.match_id)<=Date.now()){
+                pvpExtraDetail--;
+                await setState(env,'pvp_detail_after:'+match.metadata.match_id,Date.now()+5*60_000);
+                const entry=kpRun.mapping.accounts.find(link=>accounts.get(link.riotId)?.puuid
+                  && match.players.some(p=>p.puuid===accounts.get(link.riotId)!.puuid));
+                const account=entry?accounts.get(entry.riotId):undefined;
+                if(account){
+                  try{
+                    const detail=await api<Match>(env,'/valorant/v4/match/'+account.region+'/'+encodeURIComponent(match.metadata.match_id));
+                    if(detail.metadata?.match_id===match.metadata.match_id
+                      && detail.metadata.queue?.id===match.metadata.queue?.id
+                      && detail.metadata.started_at===match.metadata.started_at
+                      && detail.metadata.is_completed===true
+                      && Array.isArray(detail.players)&&detail.players.length===match.players.length
+                      && match.players.every(p=>detail.players.some(q=>p.puuid===q.puuid&&p.team_id===q.team_id)))
+                      await settlePvpDuels(env,kpRun.mapping,detail,accounts,names);
+                  }catch{console.warn('pvp_detail_pending');}
+                }
+              }
+            }catch{console.warn('pvp_settlement_pending');}
+          }
+          counts[await saveMatch(env, match, player, account,kpRun,reservations,saved,ranks)]++;
           // A full match already contains other registered players; do not wait for their history to catch up.
           for (const other of players) {
             if (other.riotId === player.riotId) continue;
             const otherAccount = accounts.get(other.riotId);
-            if (otherAccount && match.players?.some(member => member.puuid === otherAccount.puuid)) await saveMatch(env, match, other, otherAccount,kpRun,reservations,saved);
+            if (otherAccount && match.players?.some(member => member.puuid === otherAccount.puuid)) await saveMatch(env, match, other, otherAccount,kpRun,reservations,saved,ranks);
           }
           const detail = await deathDetail(env, match, players, accounts, deathDetails);
           if (detail) for (const target of players) {
             const targetAccount = accounts.get(target.riotId);
-            if (targetAccount && detail.players.some(member => member.puuid === targetAccount.puuid)) await saveMatch(env, detail, target, targetAccount,kpRun,reservations,saved);
+            if (targetAccount && detail.players.some(member => member.puuid === targetAccount.puuid)) await saveMatch(env, detail, target, targetAccount,kpRun,reservations,saved,ranks);
           }
         }
         await setState(env, 'checked:' + player.riotId, Date.now());
@@ -355,9 +544,67 @@ export async function monitor(env: Env, players: Player[] = configuredPlayers): 
 
 export default {
   fetch(request: Request, env: Env, ctx: ExecutionContext) {
-    return new URL(request.url).pathname.startsWith('/api/kp/') ? kpApi(request, env) : discordInteractions(request, env, ctx);
+    if(new URL(request.url).pathname.startsWith('/api/racing/'))return raceVideoApi(request,env).catch(()=>new Response('Unavailable',{status:503}));
+    if(request.method==='GET'&&new URL(request.url).pathname==='/api/mahjong/status')return mahjongStatus(env).then(status=>Response.json(status,{headers:{'Cache-Control':'no-store'}})).catch(()=>Response.json({enabled:false,error:'configuration_unavailable'},{status:503}));
+    if(request.method==='GET'&&new URL(request.url).pathname==='/api/discord/activity-entry/status')return silentEntryStatus(env).then(info=>Response.json(info,{headers:{'Cache-Control':'no-store'}})).catch(()=>Response.json({handlerConfirmed:false},{status:503}));
+    if(new URL(request.url).pathname.startsWith('/api/discord/app-webhook/'))return appWebhookApi(request,env).catch(()=>new Response('Unavailable',{status:503}));
+    if(new URL(request.url).pathname.startsWith('/api/mahjong/paipu/'))return paipuApi(request,env).catch(()=>new Response('Unavailable',{status:503}));
+    return new URL(request.url).pathname.startsWith('/api/kp/') ? kpApi(request, env, undefined, job=>ctx.waitUntil(job)) : discordInteractions(request, env, ctx);
   },
   async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
-    ctx.waitUntil(monitor(env));
+    // Existing minute cron: a single small cleanup window each JST day; no additional schedule.
+    if(shouldRunRetention(_event.scheduledTime??Date.now())){
+      ctx.waitUntil(cleanupExpiredCredentials(env,Date.now()).catch(()=>console.warn('credential_retention_pending')));
+      ctx.waitUntil((async()=>{const mapping=await initializeKp(env);if(mapping)await cleanupBoardDuels(env,mapping.guildId);})()
+       .catch(()=>console.warn('board_duel_retention_pending')));
+    }
+    // Every five minutes, finish abandoned KP board matches; indexed and skipped until first use.
+    if(Math.floor((_event.scheduledTime??Date.now())/60000)%5===0)
+      ctx.waitUntil(track(env,'board_duel_timeout',async()=>{const mapping=await initializeKp(env);if(mapping)await settleExpiredBoardDuels(env,mapping.guildId);}));
+    ctx.waitUntil(track(env,'mahjong_watch',()=>monitorMahjong(env)));
+    ctx.waitUntil(track(env,'unite_watch',()=>monitorUnite(env)));
+    ctx.waitUntil(track(env,'voice',()=>ensureVoice(env)));
+    ctx.waitUntil(track(env,'steam',async()=>{const mapping=await initializeKp(env);if(mapping)await monitorSteam(env,mapping.guildId);}));
+    ctx.waitUntil(track(env,'steam_posts',async()=>{const mapping=await initializeKp(env);if(!mapping)return;await queueSteamPosts(env,mapping.guildId);await flushMahjongPosts(env);}));
+    ctx.waitUntil(track(env,'valorant',()=>monitor(env)));
+    ctx.waitUntil(track(env,'spike_compensation',async()=>{
+      const mapping=await initializeKp(env);if(!mapping)return;
+      await runSpikeCompensation(env,mapping,async(region,id)=>{
+        if(await state(env,'api_after')>Date.now())throw Error('Henrik rate-limit wait');
+        try{return await api<Match>(env,'/valorant/v4/match/'+encodeURIComponent(region)+'/'+encodeURIComponent(id));}
+        catch(error){if(error instanceof Error&&/HTTP 404|API 404/.test(error.message))return null;throw error;}
+      });
+    }));
+    ctx.waitUntil((async()=>{
+      const mapping=await initializeKp(env);if(!mapping)return;
+      // Independent one-shot OAuth credential migration; never delays race or wallet jobs.
+      ctx.waitUntil(migrateSilentEntryPoint(env).catch(()=>console.warn('discord_entrypoint_pending')));
+      await track(env,'stock_market',async()=>{await runGuerrillaMarket(env,mapping.guildId);const market=await prepareStocks(env,mapping.guildId);await queueStockPosts(env,market);});
+      // Owned horses run even when nobody opens the Activity.
+      await track(env,'horse_race',async()=>{const now=Date.now(),open=openRaceStart(now);
+       // A horse can run without anyone opening the Activity. Lock its random
+       // seed when its field opens, never only when a viewer/bettor is present.
+       const created=await ensureRaceField(env,mapping,open,now);
+       if(created)await raceSeed(env,mapping.guildId,open);
+       if(shouldSettleHorsePrizes(now))await settleHorsePrizes(env,mapping,now);
+      });
+      // A very rare free horse for someone, drawn once per race slot and announced in the earnings channel.
+      await track(env,'horse_gift',async()=>{const gift=await maybeGiftHorse(env,mapping,openRaceStart(Date.now()));if(gift&&env.KP_EARNINGS_WEBHOOK_URL){await ensurePosts(env);await enqueue(env,'horse-gift:'+gift.horse.id,gift.text,Date.now());}});
+      await track(env,'race_settlement',async()=>{await settleKpRaces(env,mapping);});
+      // 借KP: repay from what came in, then the day's interest. Reaching the cap and paying it all back go to 稼ぎch.
+      await track(env,'debt_settlement',async()=>{await settleDebts(env,mapping.guildId);if(env.KP_EARNINGS_WEBHOOK_URL){await ensurePosts(env);await queueDebtPosts(env,mapping.guildId);}});
+      // Results are queued after settlement in the same run, then sent.
+      let crowns:Awaited<ReturnType<typeof scheduleCrowns>>=[];
+      await track(env,'crown_schedule',async()=>{crowns=await scheduleCrowns(env,mapping);});
+      // M.LEAGUE: official results, then settlement, then posts (flushed together with the racing ones).
+      // The main cron still runs every minute, but M.LEAGUE only needs DB
+      // reads around its 19:00 JST matches. A single 18:00 check also catches
+      // stale results and seeds next-day cards following an off-day.
+      // Cloudflare may execute a cron a little late; use its intended minute for the 18:00 catch-up.
+      if(shouldRunMlCron(_event.scheduledTime??Date.now()))
+        await track(env,'mleague',async()=>{await refreshMlCards(env);await pollMlLineups(env,mapping);await pollMlResults(env);await settleMl(env,mapping);await queueMlPosts(env,mapping);});
+      await track(env,'earnings_post',async()=>{await queueRacePosts(env,mapping,Date.now(),crowns);await queueVdkPearlRoast(env,mapping).catch(()=>console.warn('vdk_pearl_roast_pending'));await queueCommunityNews(env).catch(()=>console.warn('community_news_pending'));await queueRelicPress(env).catch(()=>console.warn('relic_press_pending'));await flushRacePosts(env);});
+      await track(env,'race_broadcast',async()=>{await prepareRaceBroadcast(env,mapping);});
+    })().catch(()=>console.warn('race_settlement_pending')));
   },
 };

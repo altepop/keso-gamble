@@ -1,0 +1,138 @@
+import test from 'node:test';
+import { URL as NodeURL } from 'node:url';
+import assert from 'node:assert/strict';
+import { DatabaseSync } from 'node:sqlite';
+import { readFileSync, readdirSync } from 'node:fs';
+import { initializeKp, syncKpAccounts } from '../src/kp.ts';
+import type { KpMapping } from '../src/kp.ts';
+import { operateKp, readKpState } from '../src/kp-api.ts';
+import { scheduleCrowns, crownEvents, recordMelts, crownName, BACK_GAP, VDK_SPECIAL_NAME, VDK_SPECIAL_SOURCE } from '../src/racing-crowns.ts';
+import { racingView } from '../src/racing-kp.ts';
+import { queueRacePosts, flushRacePosts } from '../src/racing-posts.ts';
+import type { PostEnv } from '../src/racing-posts.ts';
+// @ts-expect-error The shared pure browser engine has no TypeScript declarations.
+import { RACE_INTERVAL, crownSlotAllowed, raceCard, raceRuns } from '../../../js/racing.js';
+const guild='100000000000000100',one='100000000000000101',two='100000000000000102';
+const mapping:KpMapping={guildId:guild,accounts:[{riotId:'One#JP1',discordUserId:one},{riotId:'Two#JP1',discordUserId:two}]};
+// Tuesday 2026-10-27 14:00 JST: a weekday afternoon, so crowns wait for the evening.
+const NOW=Date.parse('2026-10-27T14:00:00+09:00');
+async function fixture(webhook=false){
+ const sql=new DatabaseSync(':memory:');
+ for(const file of readdirSync(new NodeURL('../migrations/',import.meta.url)).filter(f=>f.endsWith('.sql')).sort())sql.exec(readFileSync(new NodeURL('../migrations/'+file,import.meta.url),'utf8'));
+ class Query{text:string;values:unknown[];constructor(text:string,values:unknown[]=[]){this.text=text;this.values=values;}bind(...values:unknown[]){return new Query(this.text,values);}first(){return sql.prepare(this.text).get(...this.values as never[])??null;}all(){return {results:sql.prepare(this.text).all(...this.values as never[])};}run(){return {meta:{changes:Number(sql.prepare(this.text).run(...this.values as never[]).changes)}};}}
+ const env:PostEnv={KP_BOOTSTRAP_PRIVATE_KEY:'fixture-key',...(webhook?{KP_EARNINGS_WEBHOOK_URL:'https://discord.com/api/webhooks/1/token'}:{}),DB:{prepare:(text:string)=>new Query(text),batch:(queries:Query[])=>{sql.exec('BEGIN');try{const rows=queries.map(q=>q.run());sql.exec('COMMIT');return rows;}catch(error){sql.exec('ROLLBACK');throw error;}}}as unknown as D1Database};
+ sql.prepare('INSERT INTO tracked_players VALUES(?,?,?,?)').run('One#JP1','p-one','ap',0);sql.prepare('INSERT INTO tracked_players VALUES(?,?,?,?)').run('Two#JP1','p-two','ap',0);
+ await initializeKp(env,mapping);await syncKpAccounts(env,mapping);
+ return {env,sql};
+}
+function results(sql:DatabaseSync,riot:string,outcomes:string,end=NOW-60000,gap=3600000){
+ // Oldest first; the last character is the latest match.
+ [...outcomes].forEach((o,i)=>sql.prepare("INSERT INTO notifications(riot_id,match_id,message,ended_at,sent,mode,outcome) VALUES(?,?,?,?,1,'competitive',?)").run(riot,`${riot}-m${i}`,`結果 ${i}\n💬 コメント`,end-(outcomes.length-1-i)*gap,o==='W'?'win':'loss'));
+ return `${riot}-m${outcomes.length-1}`;
+}
+const crowns=(sql:DatabaseSync)=>sql.prepare('SELECT race,name,user,kind FROM kp_crowns ORDER BY race').all() as Array<{race:number;name:string;user:string;kind:string}>;
+const jstHour=(t:number)=>new Date(t+9*3600000).getUTCHours();
+
+test('three losses in a row crown an evening race after the member, once, and note it on the match post', async () => {
+ const f=await fixture(),latest=results(f.sql,'One#JP1','WLLL');
+ const created=await scheduleCrowns(f.env,mapping,NOW);
+ assert.equal(created.length,1);
+ const [crown]=crowns(f.sql);
+ assert.equal(crown.name,'One戦犯レース しばくぞ杯');assert.equal(crown.user,one);assert.equal(crown.kind,'streak3');
+ assert.ok(jstHour(crown.race)>=19&&crownSlotAllowed(crown.race),'weekday crowns wait for the evening');
+ const notice=f.sql.prepare('SELECT message,sent FROM notifications WHERE match_id=?').get(latest) as {message:string;sent:number};
+ assert.match(notice.message,/開催決定\n💬/);assert.equal(notice.sent,0,'the sent post is edited');
+ assert.equal((await scheduleCrowns(f.env,mapping,NOW+60000)).length,0);assert.equal(crowns(f.sql).length,1);
+ const unchanged=f.sql.prepare('SELECT message FROM notifications WHERE match_id=?').get(latest) as {message:string};
+ assert.equal(unchanged.message.split('開催決定').length,2);
+});
+
+test('the roast level decides the name; "mild" never renames a race after anyone', async () => {
+ assert.equal(crownName('streak3','normal','One'),'Oneおつかれレース 一旦な杯');
+ assert.equal(crownName('streak3','mild','One'),null);
+ const f=await fixture();results(f.sql,'One#JP1','LLL');results(f.sql,'Two#JP1','LLL');
+ await assert.rejects(operateKp(f.env,mapping,one,'roast-level-op-0001','roast-level',{level:'max'}),/煽りレベル/);
+ await operateKp(f.env,mapping,one,'roast-level-op-0002','roast-level',{level:'mild'});
+ await operateKp(f.env,mapping,two,'roast-level-op-0003','roast-level',{level:'normal'});
+ assert.equal((await readKpState(f.env,mapping,one)).roastLevel,'mild');
+ await scheduleCrowns(f.env,mapping,NOW);
+ assert.deepEqual(crowns(f.sql).map(c=>c.name),['Twoおつかれレース 一旦な杯']);
+});
+
+test('a broken win streak, a long break and a big KP loss also crown races; stale matches do not', async () => {
+ const f=await fixture();
+ results(f.sql,'One#JP1','WWWL');
+ results(f.sql,'Two#JP1','WW',NOW-60000,BACK_GAP+3600000);
+ await scheduleCrowns(f.env,mapping,NOW);
+ assert.deepEqual(crowns(f.sql).map(c=>c.kind).sort(),['back','stopped']);
+ const stale=await fixture();results(stale.sql,'One#JP1','LLL',NOW-5*3600000);
+ assert.equal((await scheduleCrowns(stale.env,mapping,NOW)).length,0);
+ const melt=await fixture(),race=NOW-RACE_INTERVAL*2;
+ await recordMelts(melt.env,mapping.guildId,one,[{raceId:race,amount:7000,status:'lost'},{raceId:race,amount:5000,status:'lost'},{raceId:race-RACE_INTERVAL,amount:9999,status:'lost'}]);
+ await recordMelts(melt.env,mapping.guildId,two,[{raceId:race,amount:20000,status:'won'}]);
+ await scheduleCrowns(melt.env,mapping,NOW);
+ assert.deepEqual(crowns(melt.sql).map(c=>c.name),['OneKP溶かし大会 5億マジかw杯']);
+});
+
+test('crown races run without bets, show their name, and are announced in the earnings channel', async t => {
+ const f=await fixture(true);results(f.sql,'One#JP1','LLL');
+ const sent:string[]=[];t.mock.method(globalThis,'fetch',async(_url:URL,init:{body:string})=>{sent.push(JSON.parse(init.body).content);return new Response('{}');});
+ const created=await scheduleCrowns(f.env,mapping,NOW);const race=created[0].race;
+ await queueRacePosts(f.env,mapping,NOW,created);
+ await queueRacePosts(f.env,mapping,race-10*60000);
+ const view=await racingView(f.env,mapping,race-10*60000);
+ assert.equal(view.open.id,race);assert.equal(view.open.crown,'One戦犯レース しばくぞ杯');
+ const running=await racingView(f.env,mapping,race+5000);
+ assert.equal(running.watch.runs,true);assert.equal(running.watch.crown,'One戦犯レース しばくぞ杯');assert.match(String(running.watch.seed),/^[0-9a-f]+$/);
+ await flushRacePosts(f.env);
+ assert.match(sent[0],/『One戦犯レース しばくぞ杯』開催決定/);assert.match(sent[0],/3連敗/);
+ assert.match(sent[1],/One戦犯レース しばくぞ杯/);assert.match(sent[1],/結果のハッシュ/);
+});
+
+test('one free VDK near-zero-death memorial race schedules idempotently, runs and posts a special roast',async t=>{
+ const now=Date.parse('2026-11-02T00:55:00+09:00'),f=await fixture(true),sent:string[]=[];
+ t.mock.method(globalThis,'fetch',async(_url:URL,init:{body:string})=>{sent.push(JSON.parse(init.body).content);return new Response('{}');});
+ const created=await scheduleCrowns(f.env,mapping,now);
+ assert.equal(created.length,1);assert.equal(created[0].name,VDK_SPECIAL_NAME);assert.equal(created[0].special,true);
+ const race=created[0].race;assert.equal(race,Date.parse('2026-11-02T01:30:00+09:00'));
+ assert.equal(f.sql.prepare('SELECT source FROM kp_crowns WHERE race=?').get(race)!.source,VDK_SPECIAL_SOURCE);
+ assert.equal((await scheduleCrowns(f.env,mapping,now+60000)).length,0);
+ assert.equal((await scheduleCrowns(f.env,mapping,Date.parse('2026-11-03T00:00:00+09:00'))).length,0);
+ await queueRacePosts(f.env,mapping,now,created);
+ await queueRacePosts(f.env,mapping,race-10*60000);
+ const view=await racingView(f.env,mapping,race+5000);
+ assert.equal(view.watch.runs,true);assert.equal(view.watch.crown,VDK_SPECIAL_NAME);
+ await flushRacePosts(f.env);
+ assert.match(sent[0],/VDKやらかし追悼レース/);assert.match(sent[0],/終了直前に1デス/);
+ assert.doesNotMatch(sent[0],/<@VDK>/);assert.match(sent[1],/VDK 0デス完走目前/);
+});
+test('weekend :30 races are crown races in the shared card, and always run', () => {
+ const sat=Date.parse('2026-10-31T15:30:00+09:00'),card=raceCard(sat);
+ assert.equal(card.crown,true);assert.notEqual(card.name,`第${card.number}レース`);
+ assert.equal(raceRuns(card,{raceBets:[]}),true);
+ assert.equal(raceCard(Date.parse('2026-10-27T15:30:00+09:00')).crown,false);
+ assert.equal(crownSlotAllowed(sat),false,'a filler slot is not given to a person');
+});
+
+test('streak detection remains identical with exactly ten and over-ten losses, reading only 11 rows',async()=>{
+ const ten=await fixture();results(ten.sql,'One#JP1','W'+'L'.repeat(10));
+ const tenEvents=await crownEvents(ten.env,mapping,NOW);
+ assert(tenEvents.some(e=>e.kind==='streak10'));
+ const eleven=await fixture();results(eleven.sql,'One#JP1','W'+'L'.repeat(11));
+ const elevenEvents=await crownEvents(eleven.env,mapping,NOW);
+ assert(!elevenEvents.some(e=>e.kind==='streak10'),'11 losses must not be mislabeled as exactly 10');
+ const streak=await fixture();results(streak.sql,'One#JP1','W'.repeat(20)+'L');
+ assert((await crownEvents(streak.env,mapping,NOW)).some(e=>e.kind==='stopped'),'3+ wins followed by a loss still creates stopped crown');
+});
+test('D1: whether anyone bet on a started race is scanned once, not on every Activity refresh', async () => {
+ const f=await fixture();let scans=0;const prepare=f.env.DB.prepare.bind(f.env.DB);
+ (f.env.DB as unknown as {prepare:(t:string)=>unknown}).prepare=(text:string)=>{if(text.includes("json_each(s.data,'$.raceBets')")&&text.includes('LIMIT 1'))scans++;return prepare(text);};
+ let checked=0;
+ for(let race=Math.ceil(NOW/RACE_INTERVAL)*RACE_INTERVAL;checked<2;race+=RACE_INTERVAL){
+  scans=0;const first=await racingView(f.env,mapping,race+5000);if(!scans)continue; // this race runs anyway (big race, event, crown)
+  assert.equal(first.watch.runs,false);
+  const again=await racingView(f.env,mapping,race+20000);
+  assert.equal(scans,1,'the started race is answered from memory');assert.equal(again.watch.runs,false);
+  checked++;
+ }
+});

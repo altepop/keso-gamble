@@ -1,0 +1,33 @@
+name: Relic bonus abuse audit (read-only)
+
+# Who received how much relic bonus from which source, and stock bonuses from buy-then-sell cycles.
+# SELECT only; members are shown as the last 4 digits of their Discord ID.
+on:
+  workflow_dispatch:
+    inputs:
+      days:
+        description: How many days back to check
+        required: false
+        default: '14'
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    if: github.repository == 'altepop/keso-gamble' && github.actor == 'altepop'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Test the audit
+        run: node --test scripts/relic-abuse-audit.test.mjs
+      - name: Audit (read-only)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          DAYS: ${{ inputs.days }}
+        run: node scripts/relic-abuse-audit.mjs

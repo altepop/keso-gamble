@@ -1,3 +1,31 @@
+import {boardDuelApi} from './board-duels.ts';
+import {steamApi,steamCallback} from './steam-auth.ts';
+import {guildVerifiedRelicStats} from './relic-guild-stats.ts';
+import {privateCasinoAllowed,privateCasinoRound} from './private-casino.ts';
+import {memberNames} from './member-names.ts';
+import {kpTargetMembers} from './kp-target-members.ts';
+import {kpTrend} from './kp-trend.ts';
+import {d1OptionalMode} from './d1-optional-mode.ts';
+import {communityFeed,feedRevision,publicTrade} from './community-feed.ts';
+import skirmishQueues from '../skirmish-queues.json' with {type:'json'};
+import {SKIRMISH_POLICY} from './skirmish.ts';
+import modeRewards from '../mode-rewards.json' with {type:'json'};
+import {SPIKE_POLICY,SPIKE_ROSTER} from './spikerush-growth.ts';
+import {STOCK_INTERVAL,prepareStocks,stockView,stockBenefits,stockDiscount,applyStockOrder,ensureStocks} from './stock-market.ts';
+import {applyStockShock} from './stock-admin.ts';
+import {guerrillaSettings,setGuerrillaEnabled} from './stock-guerrilla.ts';
+import {kpCommands,KP_COMMAND_VERSION} from './kp-command.ts';
+import {voiceControl,voiceStatus} from './voice-api.ts';
+import {voiceRewardHistory,voicePolicy} from './voice-rewards.ts';
+import {receiveLoopKp} from './loop-kp.ts';
+import {summonRelics,grantSteamRelic,grantUniteRelic,equipRelic,autoEquipRelics,saveRelicPreset,loadRelicPreset,removeRelicPreset,renameRelicPreset,listRelicPresets,diagnoseRelicBuild,nativeRelicBonus,nativeRelicLoss,snapshotLoadout,rememberLoadout,evaluateRelicBonus,rarityRatesForLevel,summonLevel,SUMMON_MILESTONES,UNITE,UNITE_REQUIREMENTS,UNITE_STREAK_IDS,STEAM_RELIC_TIERS,steamRelicPool,STEAM_RELIC_POOL_GRADES,type UniteRelicId} from './relics.ts';
+import {ALL_NORMAL_RELICS,RELIC_MODE_NAMES} from './relic-catalog.ts';
+import {verifiedCasinoProfit,verifiedCasinoStake,verifiedStockProfit,verifiedCasinoNet,verifiedCasinoLossStake,verifiedStockLoss} from './relic-profit.ts';
+import {ensureRelicMarket,activeRelicListings,listingById,prepareRelicListing,receiveRelicListing,cancelRelicListing,MARKET_MAX_ACTIVE_PER_PLAYER} from './relic-market.ts';
+import {recycleNormalRelic,exchangeNormalRelic,exchangeMyHorseVoucher,SHARD_YIELDS,SHARD_PRICES,MY_HORSE_VOUCHER_PRICE} from './relic-exchange.ts';
+import {STEAM_RELIC_PROOF_SQL,STEAM_RELIC_LIST_SQL,STEAM_RELIC_COMMIT_GUARD,steamRelicDay,requireSteamRelicEligibility,type SteamRelicEvidence} from './steam-relic-eligibility.ts';
+import type {RelicCollection,RelicItem} from './relics.ts';
+import {ensureQuizKp,receiveQuizKp,isKpParticipant,quizKpRates,quizKpLimits} from './quiz-kp.ts';
 import {activityAuthAvailable,createActivityChallenge,authenticateActivity}from './discord-activity-auth.ts';
 import { initializeKp, exchangeKpCode, kpSession, revokeKpSession, kpHash } from './kp.ts';
 import type { KpEnv, KpMapping } from './kp.ts';
@@ -5,57 +33,351 @@ import configuredPlayers from '../players.json' with { type: 'json' };
 import discord from '../discord-config.json' with { type: 'json' };
 import policy from '../kp-policy.json' with { type: 'json' };
 // @ts-expect-error The shared pure browser engine has no TypeScript declarations.
-import { advanceMarket, trade, spin, spinNumbers, cryptoRouletteNumber } from '../../../js/engine.js';
+import { spin, spinNumbers, cryptoRouletteNumber, MARKET } from '../../../js/engine.js';
+// @ts-expect-error The shared pure browser engine has no TypeScript declarations.
+import { hydrateRacing, placeRaceBet, useExchange, raceCard, raceOdds, raceResult } from '../../../js/racing.js';
+// @ts-expect-error Shared browser engine.
+import { hydrateCasino, playChinchiro, bjStart, bjHit, bjStand, bjDouble, cryptoDie, cryptoCard, cryptoInt } from '../../../js/casino.js';
+// @ts-expect-error Shared pure browser module.
+import { hydrateMoreCasino, minesStart, minesPick, minesCashout, playSlot, vpDeal, vpDraw, playBaccarat, VP_NAMES } from '../../../js/casino-more.js';
+import {jackpotOf} from './casino-jackpot.ts';
+import { enqueue, ensurePosts } from './racing-posts.ts';
+import {transcendentGodPullPost} from './relic-god-pull.ts';
+// @ts-expect-error Shared browser engine.
+import { hydrateMleague, placeMlBet } from '../../../js/mleague.js';
+import { kpRewardHistory } from './kp-reward-history.ts';
+import { healthReport } from './health.ts';
+import { mlActivityView, mlClosed, mlData, mlLineupTimes, mlResults, seasonStats } from './mleague.ts';
+import { racingView, raceSeed } from './racing-kp.ts';
+import { defaultRoastLevel, validRoastLevel } from './racing-crowns.ts';
+import { buyHorse, sellHorse, ownedHorses, raceEntries } from './racing-horses.ts';
+import {allowedKpOperation} from './kp-operation-limit.ts';
+import { masteryOf, riotIdOf } from './mastery.ts';
+import {DEBT_BLOCKED,DEBT_INTEREST_PERCENT,DEBT_INTEREST_TEXT,DEBT_INTERVAL_MINUTES,DEBT_MAX,debtOf} from './kp-debt.ts';
+import { buyLuxury, luxuryPosts, luxuryView } from './luxury.ts';
+import { applyGift, ensureGift, giftPost } from './kp-gift.ts';
+/** A few tiny reads that change whenever the full state would: the wallet and saved state versions (every ledger
+ * row bumps the wallet), 借KP, directives naming the member, and the 5-minute stock tick. The Activity polls this
+ * every 15 seconds and fetches the full state only when it changes (or once a minute for time-based screens). */
+export async function kpPulse(env:KpEnv,guild:string,user:string,now=Date.now()){
+ await ensureStocks(env);
+ const row=await env.DB.prepare("SELECT w.version AS w,s.version AS s,(SELECT version FROM stock_markets WHERE guild=w.guild) AS m,(SELECT amount FROM kp_debts WHERE guild=w.guild AND user=w.user) AS debt,(SELECT COUNT(*)||'-'||COALESCE(MAX(at),0)||'-'||SUM(status='active') FROM kp_directives WHERE guild=w.guild AND (issuer=w.user OR target=w.user)) AS d FROM kp_wallets w JOIN kp_state s ON s.guild=w.guild AND s.user=w.user WHERE w.guild=? AND w.user=?").bind(guild,user).first<{w:number;s:number;d:string;m:number|null;debt:number|null}>();
+ if(!row)throw Error('口座が見つかりません。');
+ return `${row.w}.${row.s}.${row.d}.${row.debt??0}.${row.m??0}.${Math.floor(now/STOCK_INTERVAL)}`;
+}
 export async function readKpState(env:KpEnv,mapping:KpMapping,user:string){
+ const market=await prepareStocks(env,mapping.guildId,user);
  const wallet=await env.DB.prepare('SELECT balance,version FROM kp_wallets WHERE guild=? AND user=?').bind(mapping.guildId,user).first<{balance:number;version:number}>();
  const row=await env.DB.prepare('SELECT data,version FROM kp_state WHERE guild=? AND user=?').bind(mapping.guildId,user).first<{data:string;version:number}>();if(!wallet||!row)throw Error('口座が見つかりません。');
- const state=JSON.parse(row.data);state.cash=wallet.balance;state.serverWallet=true;state.walletVersion=wallet.version;state.stateVersion=row.version;advanceMarket(state);
- const rewards=(await env.DB.prepare('SELECT id,match,mode,amount,at FROM kp_events WHERE guild=? AND user=? ORDER BY at DESC,id LIMIT 100').bind(mapping.guildId,user).all<{id:string;match:string;mode:string;amount:number;at:number}>()).results;
- state.claims=rewards.map(e=>({id:e.id,activity:e.mode,reference:e.match,reward:e.amount,status:'approved',time:e.at}));
+ const state=JSON.parse(row.data);state.cash=wallet.balance;state.serverWallet=true;state.walletVersion=wallet.version;state.stateVersion=row.version;state.prices=market.prices;state.history=market.history;state.holdings={...Object.fromEntries((MARKET as {id:string}[]).map(s=>[s.id,0])),...state.holdings};state.lastMarketAt=market.at;state.stockMarket=await stockView(env,market,user);state.stockBenefits=await stockBenefits(env,market,user);Object.assign(state,hydrateRacing(state),hydrateMleague(state),hydrateCasino(state),hydrateMoreCasino(state));state.jackpot=await jackpotOf(env,mapping.guildId);if(!validRoastLevel(state.roastLevel))state.roastLevel=defaultRoastLevel(mapping,user);state.racing=await racingView(env,mapping);state.horses=await ownedHorses(env,mapping,user);const riotId=riotIdOf(mapping,user);state.mastery=riotId?await masteryOf(env,riotId,state.roastLevel):[];const members=await kpTargetMembers(env,mapping);state.luxury=await luxuryView(env,mapping,user,Date.now(),new Map(members.map(m=>[m.id,m.name])));for(const h of state.horses)h.statue=state.luxury.statues.includes(h.id);
+ // Immutable match/quiz/ledger history is cached across an isolate only
+ // while kp_wallets.version is unchanged. Recalculate day-specific counters
+ // below on every request to handle midnight without a D1 history scan.
+ const {rewards,quiz,ledger}=await kpRewardHistory(env,mapping.guildId,user,wallet.version);
+ const voice=await voiceRewardHistory(env,mapping.guildId,user,wallet.version);
+ state.voiceRewards={...await voiceStatus(env,user),...voicePolicy,earned:voice.filter(e=>e.day===new Date().toISOString().slice(0,10)).reduce((n,e)=>n+e.amount,0)};
+ state.quizRates=quizKpRates;state.quizDay=new Date().toISOString().slice(0,10);state.quizLimits=quizKpLimits;state.quizCounts=Object.fromEntries(Object.keys(quizKpRates).map(mode=>[mode,quiz.filter(e=>e.day===state.quizDay&&e.mode===mode).length]));state.quizCompleted=Object.keys(quizKpLimits).filter(mode=>state.quizCounts[mode]>=quizKpLimits[mode]!);
+ state.claims=rewards.map(e=>({id:e.id,activity:e.mode,reference:e.match,reward:e.amount,status:'approved',time:e.at})).concat(quiz.map(e=>({id:e.id,activity:'quiz.'+e.mode,reference:e.game,reward:e.amount,status:'approved',time:e.completed_at}))).concat(voice.map(e=>({id:e.id,activity:'voice',reference:'通話 '+e.slot+'回目',reward:e.amount,status:'approved',time:e.at}))).sort((a:{time:number},b:{time:number})=>b.time-a.time).slice(0,100);
+ state.claims.push(...state.stockMarket.dividends.map((d:{day:string;amount:number;at:number})=>({id:'dividend:'+d.day,activity:'株配当',reference:d.day,reward:d.amount,status:'approved',time:d.at})));state.claims.sort((a:{time:number},b:{time:number})=>b.time-a.time);
  state.directives=(await env.DB.prepare('SELECT id,issuer,target,task,game,achievement,cost,status,at AS time FROM kp_directives WHERE guild=? AND (issuer=? OR target=?) ORDER BY at DESC,id LIMIT 100').bind(mapping.guildId,user,user).all()).results;
- state.members=mapping.accounts.map(a=>({id:a.discordUserId,name:configuredPlayers.find(p=>p.riotId.toLowerCase()===a.riotId.toLowerCase())?.name??a.riotId.split('#')[0]}));
- state.selfUserId=user;state.rewardRates=policy.modes;return state;
+ state.members=members;
+ state.escalationSpins=(await env.DB.prepare("SELECT id,kind,tier,award,balance_before AS beforeBalance,balance_after AS afterBalance,at FROM kp_escalation_spins WHERE guild=? AND user=? ORDER BY at DESC LIMIT 12").bind(mapping.guildId,user).all()).results;
+ // Every wallet movement, for the 入出金履歴 (claims stay for the older views).
+ state.ledger=ledger;
+ // The Mリーグ screen; a failure here never blocks the wallet.
+ try{state.mleague=await mlActivityView(env);}catch{console.warn('ml_view_pending');state.mleague=null;}
+ if(await privateCasinoAllowed(env,mapping.guildId,user)){state.privateCasino=true;state.marketEvents=await guerrillaSettings(env,mapping.guildId);}else{delete state.privateCasino;delete state.marketEvents;}
+ state.selfUserId=user;state.rewardRates={...policy.modes,unrated:{...policy.modes.unrated,win:modeRewards.unrated.win}};state.modeRewards=modeRewards;state.debt={amount:await debtOf(env,mapping.guildId,user),interestPercent:DEBT_INTEREST_PERCENT,intervalMinutes:DEBT_INTERVAL_MINUTES,interestText:DEBT_INTEREST_TEXT,max:DEBT_MAX};return state;
 }
-export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:string,action:string,args:Record<string,unknown>){
+// Big casino moments go to the earnings channel so others can watch (a ピンゾロ either way, a natural, or ±5,000 KP).
+const yen=(n:number)=>Math.abs(n).toLocaleString('ja-JP')+' KP';
+export function casinoPost(user:string,action:string,result:unknown):string|null{
+ if(action==='chinchiro'){
+  const r=result as {net:number;oya:{hand:{kind:string}};ko:{hand:{kind:string}}|null};
+  if(r.ko?.hand.kind==='pinzoro')return `🎲 <@${user}> チンチロで**ピンゾロ**！ 親から +${yen(r.net)}`;
+  if(r.oya.hand.kind==='pinzoro')return `🎲 <@${user}> チンチロ、親のピンゾロを食らって −${yen(r.net)}`;
+  if(r.net>=5000)return `🎲 <@${user}> チンチロで +${yen(r.net)}`;
+  if(r.net<=-5000)return `🎲 <@${user}> チンチロで −${yen(r.net)} 溶かした`;
+  return null;
+ }
+ const finished=(result as {done?:{game?:string;net:number;payout:number;bet:number;jackpot?:number;bonus?:{kind:string;total:number};hand?:string;multiplier?:number;reels?:string[]}|null})?.done;
+ if(finished?.game==='slot'){
+  if(finished.jackpot)return `💎💎💎 <@${user}> スロットで**ジャックポット**！！ +${yen(finished.jackpot)}（合計 +${yen(finished.net)}）`;
+  if(finished.bonus?.kind==='temple'&&finished.net>=5000)return `🏛️✨ <@${user}> **黄金神殿ボーナス**突入！ 黄金コインで +${yen(finished.bonus.total)}、合計 +${yen(finished.net)}`;
+  if(finished.net>=5000)return `🎰 <@${user}> スロットで ${finished.reels!.map(r=>({seven:'7️⃣',diamond:'💎',star:'⭐',bell:'🔔',lemon:'🍋',cherry:'🍒'} as Record<string,string>)[r]).join('')} +${yen(finished.net)}`;
+  return null;
+ }
+ if(finished?.game==='mines'){
+  if(finished.net>=5000)return `💣 <@${user}> マインズで ${finished.multiplier}倍まで粘って +${yen(finished.net)}`;
+  if(finished.net<=-5000)return `💥 <@${user}> マインズで地雷を踏んで −${yen(finished.net)}`;
+  return null;
+ }
+ if(finished?.game==='video-poker'){
+  if(['royal','straight-flush','four'].includes(finished.hand!))return `🃏 <@${user}> ビデオポーカーで**${VP_NAMES[finished.hand!]}**！ +${yen(finished.net)}`;
+  if(finished.net>=5000)return `🃏 <@${user}> ビデオポーカーで +${yen(finished.net)}`;
+  return null;
+ }
+ if(finished?.game==='baccarat'){
+  if(finished.net>=5000)return `🎴 <@${user}> バカラで +${yen(finished.net)}`;
+  if(finished.net<=-5000)return `🎴 <@${user}> バカラで −${yen(finished.net)} 溶かした`;
+  return null;
+ }
+ if(!action.startsWith('bj-'))return null;
+ const done=(result as {done:{result:string;net:number}|null}).done;
+ if(!done)return null;
+ if(done.result==='blackjack'&&done.net>=1000)return `🃏 <@${user}> ブラックジャック！ +${yen(done.net)}`;
+ if(done.net>=5000)return `🃏 <@${user}> ブラックジャック卓で +${yen(done.net)}`;
+ if(done.net<=-5000)return `🃏 <@${user}> ブラックジャック卓で −${yen(done.net)} 溶かした`;
+ return null;
+}
+/** The /mbet checks and the bet itself on a wallet state (the caller decides whether the state is saved). */
+async function applyMlBet(env:KpEnv,state:Record<string,unknown>,args:Record<string,unknown>){
+ const d=await mlData(env),fixture=d.fixtures.find(f=>f.id===args.match);
+ if(fixture&&!fixture.confirmed)throw Error('公式の対戦カードを確認中や。ちょっと待って、もう一度試してな。');
+ const closed=fixture?(await mlClosed(env)).get(fixture.id):undefined;
+ if(closed&&Date.now()>=closed.at)throw Error('この試合の予想は締め切ったで（メンバーが試合開始を報告）。');
+ // Odds use this season's official results; game 2 closes 15 minutes after its players are confirmed (or with its own result).
+ return placeMlBet(state,{match:args.match,player:args.player,type:args.type,amount:args.amount},Date.now(),d,await mlResults(env,fixture?[fixture.id]:[]),seasonStats(await mlResults(env)),await mlLineupTimes(env)) as {player:string;type:string;amount:number;odds:number};
+}
+/** What an /mbet would buy, checked exactly like the purchase (balance, weekly limit, 借KP, closing) but never saved. */
+export async function previewMlBet(env:KpEnv,mapping:KpMapping,user:string,args:Record<string,unknown>){
+ if(await debtOf(env,mapping.guildId,user)>0)throw Error(DEBT_BLOCKED);
+ const state=await readKpState(env,mapping,user),before=state.cash as number;
+ const bet=await applyMlBet(env,state,args);
+ return {bet,balanceAfter:before-bet.amount};
+}
+export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:string,action:string,args:Record<string,unknown>,deferPostCommit?:(job:Promise<void>)=>void){
  if(!/^[a-zA-Z0-9-]{16,80}$/.test(id))throw Error('操作IDが不正です。');
- const requestHash=await kpHash(JSON.stringify({action,args}));
+ // Owner-only stock manipulation is a market event, not a wallet transaction.
+ // Keep the ordinary operation ID, allowing retry after lost responses without doubling the shock.
+ if(action==='stock-guerrilla-toggle'){
+  if(!await privateCasinoAllowed(env,mapping.guildId,user))throw Error('この操作は利用できません。');
+  return {result:await setGuerrillaEnabled(env,mapping.guildId,args.enabled)};
+ }
+ if(action==='stock-shock'){
+  if(!await privateCasinoAllowed(env,mapping.guildId,user))throw Error('この操作は利用できません。');
+  return {result:await applyStockShock(env,mapping.guildId,user,id,args)};
+ }
+ const sourceAction=action;
+ const ownerRound=action==='private-casino';
+ if(ownerRound&&!await privateCasinoAllowed(env,mapping.guildId,user))throw Error('この操作は利用できません。');
+ const requestHash=await kpHash(JSON.stringify({action:sourceAction,args}));
+ const sourceArgs=args;
  for(let attempt=0;attempt<4;attempt++){
+  action=sourceAction;args=sourceArgs;
   const existing=await env.DB.prepare('SELECT request_hash,response FROM kp_operations WHERE guild=? AND user=? AND id=?').bind(mapping.guildId,user,id).first<{request_hash:string;response:string}>();
   if(existing){if(existing.request_hash!==requestHash)throw Error('同じ操作IDを別の操作には使えません。');return JSON.parse(existing.response);}
-  const state=await readKpState(env,mapping,user),before=state.cash;let result:unknown;let directive:Record<string,unknown>|null=null;
-  if(action==='trade')result=trade(state,args.symbol,args.side,args.quantity);
+  const knownGiftTarget=action==='gift'&&/^\d{15,22}$/.test(String(args.to??''))&&await isKpParticipant(env,mapping,String(args.to))&&Boolean(await env.DB.prepare('SELECT 1 FROM kp_wallets WHERE guild=? AND user=?').bind(mapping.guildId,String(args.to)).first());
+  const state=await readKpState(env,mapping,user),before=state.cash;let result:unknown;
+  const loadoutBefore=snapshotLoadout((state as {relics?:RelicCollection}).relics);let directive:Record<string,unknown>|null=null;let stockTrade:Record<string,unknown>|undefined;
+  // 借KP: no bet or purchase at all while any is owed, decided before any draw. Checking the result instead would let a
+  // winning roll through and refuse only the losing one. Selling, finishing a blackjack hand and settings stay open.
+  const settles=['horse-sell','roast-level','bj-hit','bj-stand','mines-pick','mines-cashout','vp-draw','relic-equip','relic-auto-equip','relic-claim-steam','relic-claim-unite','relic-save-preset','relic-overwrite-preset','relic-load-preset','relic-remove-preset','relic-rename-preset','relic-recycle','relic-shop','relic-voucher','relic-market-list','relic-market-cancel'].includes(action)||(action==='trade'&&args.side==='sell');
+  if(!settles&&await debtOf(env,mapping.guildId,user)>0)throw Error(DEBT_BLOCKED);
+  if(ownerRound){const round=privateCasinoRound(state,args);action=round.action;args=round.args;result=round.result;}
+  else if(action==='trade'){const order=applyStockOrder(state,args);result=order.result;stockTrade=order.stockTrade;}
   else if(action==='spin')result=args.type==='numbers'?spinNumbers(state,args.bets,cryptoRouletteNumber()):spin(state,args.type,args.amount,args.choice??0,cryptoRouletteNumber());
   else if(action==='directive'){
-   const costs:Record<string,number>={competitive:2500,unrated:1500,solo_competitive:15000,solo_death_unrated:20000},task=String(args.task),target=String(args.target),cost=Object.hasOwn(costs,task)?costs[task]:0;
+   const costs:Record<string,number>={competitive:40000,unrated:12500,solo_competitive:250000,solo_death_unrated:300000},task=String(args.task),target=String(args.target),base=Object.hasOwn(costs,task)?costs[task]:0;
+   const discount=stockDiscount(base,state.stockBenefits.percent),cost=discount.paid;
    if(!cost||!mapping.accounts.some(a=>a.discordUserId===target)||target===user)throw Error('指名する相手と課題を選んでください。');
    if(state.cash<cost)throw Error('KPが足りません。');
+   useExchange(state,Date.now()); // directives, boxes and luxury items share the daily limit
    const game=task==='steam'?String(args.game??'').trim():'',achievement=task==='steam'?String(args.achievement??'').trim():'';
    if(task==='steam'&&(!game||!achievement||game.length>80||achievement.length>120))throw Error('ゲームと実績を入力してください。');
-   directive={target,task,game,achievement,cost};state.cash-=cost;result={issued:true};
+   directive={target,task,game,achievement,cost};state.cash-=cost;result={issued:true,discount};
+  }else if(action==='race-bet'){
+   const raceId=Number(args.raceId),entries=Number.isSafeInteger(raceId)?await raceEntries(env,mapping,raceId):[];
+   const bet=placeRaceBet(state,{raceId:args.raceId,type:args.type,horse:args.horse,amount:args.amount},Date.now(),entries);
+   await raceSeed(env,mapping.guildId,bet.raceId); // the hash is fixed before betting closes
+   result={bet};
+  }else if(action==='ml-bet'){
+   const bet=await applyMlBet(env,state,args);
+   // A purchase confirmed on a preview (/mbet) is bought only at the odds the member saw.
+   if(args.odds!==undefined&&args.odds!==bet.odds)throw Error(`倍率が ${(Number(args.odds)/10).toFixed(1)}倍 から ${(bet.odds/10).toFixed(1)}倍 に変わったから買うてへんで。もう一度 /mbet で確かめてな。`);
+   result={bet};
+  }else if(action==='horse-buy'){
+   useExchange(state,Date.now());result=await buyHorse(env,mapping,user,state,args);
+  }else if(action==='horse-sell'){
+   result=await sellHorse(env,mapping,user,state,args);
+  }else if(action==='luxury'){
+   useExchange(state,Date.now());result=await buyLuxury(env,mapping,user,state,args,Date.now(),state.stockBenefits.percent);
+  }else if(action==='gift'){
+   const to=String(args.to??'');await ensureGift(env);
+   result=applyGift(state,user,args,id=>id===to&&knownGiftTarget);
+  }else if(action==='chinchiro')result=playChinchiro(state,args.amount,cryptoDie);
+  else if(action==='bj-start')result=bjStart(state,args.amount,cryptoCard);
+  else if(action==='bj-hit')result=bjHit(state,cryptoCard);
+  else if(action==='bj-stand')result=bjStand(state,cryptoCard);
+  else if(action==='bj-double')result=bjDouble(state,cryptoCard);
+  else if(action==='mines-start')result=minesStart(state,args.amount,args.mines);
+  else if(action==='mines-pick')result=minesPick(state,args.cell,cryptoInt);
+  else if(action==='mines-cashout')result=minesCashout(state,cryptoInt);
+  else if(action==='slot')result=playSlot(state,args.amount,cryptoInt,{amount:state.jackpot.amount,version:state.jackpot.version});
+  else if(action==='vp-deal')result=vpDeal(state,args.amount,cryptoInt);
+  else if(action==='vp-draw')result=vpDraw(state,args.hold,cryptoInt);
+  else if(action==='baccarat')result=playBaccarat(state,args.amount,args.side,cryptoCard);
+  else if(action==='relic-summon') result=summonRelics(state,Number(args.count));
+  else if(action==='relic-recycle') result=recycleNormalRelic(state,String(args.relic??''),Number(args.count));
+  else if(action==='relic-shop') result=exchangeNormalRelic(state,String(args.relic??''));
+  else if(action==='relic-voucher') result=exchangeMyHorseVoucher(state);
+   else if(action==='relic-market-list'){
+    await ensureRelicMarket(env);
+    const active=await env.DB.prepare("SELECT COUNT(*) AS n FROM kp_relic_listings WHERE guild=? AND seller=? AND status='active'")
+     .bind(mapping.guildId,user).first<{n:number}>();
+    if((active?.n??0)>=MARKET_MAX_ACTIVE_PER_PLAYER)throw Error('闇市の出品は1人4件までです。');
+    result=prepareRelicListing(state,String(args.relic??''),Number(args.price),id,mapping.guildId,user);
+   }else if(action==='relic-market-buy'){
+    const listing=await listingById(env,mapping.guildId,String(args.listing??''));
+    if(!listing)throw Error('出品が見つかりません。');
+    result=receiveRelicListing(state,listing,user);
+   }else if(action==='relic-market-cancel'){
+    const listing=await listingById(env,mapping.guildId,String(args.listing??''));
+    if(!listing)throw Error('出品が見つかりません。');
+    result=cancelRelicListing(state,listing,user);
+   }
+  else if(action==='relic-equip') result=equipRelic(state,String(args.relic??''),Number(args.slot));
+  else if(action==='relic-auto-equip') result=autoEquipRelics(state,String(args.goal??'all'));
+  else if(action==='relic-save-preset'||action==='relic-overwrite-preset') result=saveRelicPreset(state,String(args.preset??''));
+  else if(action==='relic-load-preset') result=loadRelicPreset(state,String(args.preset??''));
+  else if(action==='relic-remove-preset') result=removeRelicPreset(state,String(args.preset??''));
+  else if(action==='relic-rename-preset') result=renameRelicPreset(state,String(args.preset??''),String(args.newName??''));
+  else if(action==='relic-claim-steam'){
+   const event=String(args.event??'');
+   if(event.length<20||event.length>250||!event.startsWith('steam:'))throw Error('Steam実績を選んでください。');
+   const receipt=await env.DB.prepare(STEAM_RELIC_PROOF_SQL)
+    .bind(steamRelicDay(),event,mapping.guildId,user).first<SteamRelicEvidence>();
+   result=grantSteamRelic(state,requireSteamRelicEligibility(receipt));
+  }else if(action==='relic-claim-unite'){
+   const tier=String(args.tier??'') as UniteRelicId,required=UNITE_REQUIREMENTS[tier];
+   if(!Object.hasOwn(UNITE_REQUIREMENTS,tier))throw Error('ユナイト遺物を選んでください。');
+   // Only already-settled, server-verified ranked-match records count. The
+   // Unite streak itself is capped at five; career tiers count individual verified wins.
+   let confirmedWins=0;
+   if(UNITE_STREAK_IDS.has(tier)){
+    const proof=await env.DB.prepare('SELECT wins FROM unite_rewards WHERE guild=? AND user=? AND win=1 AND wins>=? LIMIT 1')
+     .bind(mapping.guildId,user,required).first<{wins:number}>();
+    confirmedWins=proof?.wins??0;
+   }else{
+    const proof=await env.DB.prepare('SELECT COUNT(*) AS n FROM unite_rewards WHERE guild=? AND user=? AND win=1')
+     .bind(mapping.guildId,user).first<{n:number}>();
+    confirmedWins=proof?.n??0;
+   }
+   if(confirmedWins<required)throw Error('ユナイトの検証済み勝利記録がまだ足りません。');
+   result=grantUniteRelic(state,tier,confirmedWins);
+  }
+  else if(action==='roast-level'){
+   if(!validRoastLevel(args.level))throw Error('煽りレベルを選んでください。');
+   state.roastLevel=args.level;result={roastLevel:args.level};
   }else throw Error('この操作は本番口座では使えません。');
-  const response={result};const safeState={...state,claims:[],directives:[]};delete safeState.members;
-  const inserted=await env.DB.prepare(`INSERT INTO kp_operations(id,guild,user,request_hash,response,delta,state,directive,at)
-   SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM kp_wallets w JOIN kp_state s ON w.guild=s.guild AND w.user=s.user WHERE w.guild=? AND w.user=? AND w.version=? AND s.version=?) ON CONFLICT(guild,user,id) DO NOTHING`)
-   .bind(id,mapping.guildId,user,requestHash,JSON.stringify(response),state.cash-before,JSON.stringify(safeState),directive?JSON.stringify(directive):null,Date.now(),mapping.guildId,user,state.walletVersion,state.stateVersion).run();
-  if(inserted.meta.changes)return response;
+  // Unlimited stacking only on completed, positive, server-determined outcomes.
+  // Stock buys and ticket purchases cannot manufacture KP via repeat buys/sells.
+  // These mechanics never touch game RNG, odds, or past results.
+  // Remember a loadout that this operation took off, so a later loss cannot dodge the relic penalty.
+  rememberLoadout((state as {relics?:RelicCollection}).relics,loadoutBefore,Date.now());
+  let relicBonus=0;
+  const casino=['spin','chinchiro','bj-start','bj-hit','bj-stand','bj-double','mines-cashout','slot','vp-draw','baccarat'].includes(action);
+  let relicPenalty=0;
+  if(casino){const profit=verifiedCasinoProfit(result);if(profit>0)relicBonus=nativeRelicBonus(state,'casino',profit,Date.now(),verifiedCasinoStake(result));
+   else{const net=verifiedCasinoNet(result);if(net<0)relicPenalty=nativeRelicLoss(state,'casino',-net,Date.now(),verifiedCasinoLossStake(result));}}
+  // Selling shares only grants bonuses on REALIZED positive FIFO profit, never
+  // from the gross proceeds or repeated buys. One owner-indexed query on sells.
+  if(action==='trade'&&args.side==='sell'&&stockTrade){
+   const sale=stockTrade as {symbol:string;quantity:number;total:number};
+   const lots=await env.DB.prepare(`WITH eligible AS (
+     SELECT remaining,price,COALESCE(SUM(remaining) OVER (ORDER BY at,id ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING),0) AS already
+     FROM stock_lots WHERE guild=? AND user=? AND symbol=? AND remaining>0)
+     SELECT COALESCE(SUM(MIN(remaining,MAX(0,? - already))),0) AS shares,
+            COALESCE(SUM(MIN(remaining,MAX(0,? - already))*price),0) AS cost FROM eligible`)
+    .bind(mapping.guildId,user,sale.symbol,sale.quantity,sale.quantity).first<{shares:number;cost:number}>();
+   if(Number(lots?.shares)===sale.quantity){
+    // Acquired stock paid at least a 1% fee; include it in the break-even check.
+    const profit=verifiedStockProfit(sale.total,Number(lots?.cost??0),Number(lots?.shares??0),sale.quantity);
+    // Capped by the sale's gross proceeds (0.5%, 250/trade, 500/day): a price the seller pushed up with
+    // their own buys can no longer turn an older cheap lot into a large "profit" bonus.
+    if(profit>0)relicBonus=nativeRelicBonus(state,'market',profit,Date.now(),Number((stockTrade as {gross?:unknown}).gross));
+    else{const loss=verifiedStockLoss(sale.total,Number(lots?.cost??0),Number(lots?.shares??0),sale.quantity);
+     if(loss>0)relicPenalty=nativeRelicLoss(state,'market',loss,Date.now(),Number((stockTrade as {gross?:unknown}).gross));}
+   }
+  }
+  if(relicBonus&&result&&typeof result==='object')result={...result,relicBonus};
+  if(relicPenalty&&result&&typeof result==='object')result={...result,relicPenalty};
+  // 借KP: nothing that costs KP while any is owed (the database refuses it too).
+  if(state.cash<before&&await debtOf(env,mapping.guildId,user)>0)throw Error(DEBT_BLOCKED);
+  const activity=publicTrade(action,args,result);
+  const response={result,...(ownerRound?{operationSource:'owner-casino'}:{}),...(stockTrade?{stockTrade}:{}),...(activity?{activity}:{})};const safeState={...state,claims:[],directives:[]};delete safeState.privateCasino;delete safeState.debt;delete safeState.jackpot;delete safeState.mleague;delete safeState.ledger;delete safeState.members;delete safeState.racing;delete safeState.horses;delete safeState.mastery;delete safeState.luxury;delete safeState.stockMarket;delete safeState.stockBenefits;
+  let inserted;
+  try{
+   // Do not mention optional Steam tables in other actions' SQL. SQLite
+   // resolves every table at prepare time even if a boolean branch is false.
+   const steamClaim=action==='relic-claim-steam';
+   const commitGuard=steamClaim?STEAM_RELIC_COMMIT_GUARD:'';
+   const commitArgs=steamClaim?[String(sourceArgs.event??''),mapping.guildId,user,mapping.guildId,user,steamRelicDay()]:[];
+   inserted=await env.DB.prepare(`INSERT INTO kp_operations(id,guild,user,request_hash,response,delta,state,directive,at)
+   SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM kp_wallets w JOIN kp_state s ON w.guild=s.guild AND w.user=s.user WHERE w.guild=? AND w.user=? AND w.version=? AND s.version=?) AND (?=0 OR EXISTS(SELECT 1 FROM stock_markets WHERE guild=? AND version=?)) ${commitGuard} ON CONFLICT(guild,user,id) DO NOTHING`)
+   .bind(id,mapping.guildId,user,requestHash,JSON.stringify(response),state.cash-before,JSON.stringify(safeState),directive?JSON.stringify(directive):null,Date.now(),mapping.guildId,user,state.walletVersion,state.stateVersion,['trade','directive','luxury'].includes(action)?1:0,mapping.guildId,state.stockMarket.version,
+    ...commitArgs).run();
+  }catch(error){
+   // Someone else's 💎💎💎 changed the shared pool after this spin was drawn: nothing was saved, so draw again.
+   if(action==='slot'&&String((error as Error)?.message).includes('Jackpot changed'))continue;
+   throw error;
+  }
+  if(inserted.meta.changes){
+   // An operation is already durable. Large win announcements are supplementary:
+   // waiting for their D1 queue must not hold the settled bet response open.
+   const postNotices=async()=>{
+   if(action==='relic-summon'&&(env as {KP_EARNINGS_WEBHOOK_URL?:string}).KP_EARNINGS_WEBHOOK_URL){
+    // Other rarities, foil and mutation outcomes are private to the summon UI.
+    // Queued only after the durable operation was committed, once per operation ID.
+    const message=transcendentGodPullPost(user,result as ReturnType<typeof summonRelics>);
+    if(message)try{
+     await ensurePosts(env);
+     await enqueue(env,'relic-pull:'+mapping.guildId+':'+user+':'+id,message,Date.now());
+    }catch{console.warn('relic_transcendent_notice_pending');}
+   }
+   if(action==='luxury')try{await luxuryPosts(env,mapping,user,(result as {luxury:Parameters<typeof luxuryPosts>[3]}).luxury);}catch{console.warn('luxury_post_pending');}
+   if(action==='gift'&&(env as {KP_EARNINGS_WEBHOOK_URL?:string}).KP_EARNINGS_WEBHOOK_URL)try{await ensurePosts(env);await enqueue(env,'gift:'+user+':'+id,giftPost(user,(result as ReturnType<typeof applyGift>).gift),Date.now());}catch{console.warn('gift_post_pending');}
+   const big=casinoPost(user,action,result);
+   if(big&&(env as {KP_EARNINGS_WEBHOOK_URL?:string}).KP_EARNINGS_WEBHOOK_URL)try{await ensurePosts(env);await enqueue(env,'casino:'+user+':'+id,big,Date.now());}catch{console.warn('casino_post_pending');}
+   };
+   if(deferPostCommit){
+    try{deferPostCommit(postNotices().catch(()=>console.warn('kp_post_pending')));}
+    catch{console.warn('kp_post_schedule_failed');}
+   }else await postNotices();
+   return response;
+  }
+  // The daily limit may have filled after we loaded the proof. Do not write
+  // the item if it became ineligible while awaiting another worker's credit.
+  if(action==='relic-claim-steam'){
+   const updated=await env.DB.prepare(STEAM_RELIC_PROOF_SQL).bind(steamRelicDay(),String(sourceArgs.event??''),mapping.guildId,user).first<SteamRelicEvidence>();
+   requireSteamRelicEligibility(updated);
+  }
  }
  throw Error('他の操作と重なりました。残高を更新してもう一度お試しください。');
 }
-export async function kpApi(request:Request,env:KpEnv,override?:KpMapping):Promise<Response>{
+export async function kpApi(request:Request,env:KpEnv,override?:KpMapping,deferPostCommit?:(job:Promise<void>)=>void):Promise<Response>{
  const origin=request.headers.get('Origin');const origins=['https://altepop.github.io','https://'+discord.applicationId+'.discordsays.com'];
  if(origin&&!origins.includes(origin))return new Response('Forbidden origin',{status:403});
  const headers:Record<string,string>={'Cache-Control':'no-store','Vary':'Origin'};
  if(origin)Object.assign(headers,{'Access-Control-Allow-Origin':origin,'Access-Control-Allow-Headers':'Authorization,Content-Type','Access-Control-Allow-Methods':'GET,POST,OPTIONS'});
  const response=(body:unknown,status=200)=>Response.json(body,{status,headers});
+ if(request.method==='GET'&&new URL(request.url).pathname==='/api/kp/commands')return response({applicationId:discord.applicationId,version:KP_COMMAND_VERSION,commands:kpCommands});
  if(request.method==='OPTIONS')return new Response(null,{status:204,headers});
  try{
+  if(request.method==='GET'&&new URL(request.url).pathname==='/api/kp/steam/callback')return steamCallback(request,env);
   const mapping=await initializeKp(env,override);if(!mapping)return response({error:'口座はまだ準備中です。'},503);
   const path=new URL(request.url).pathname;
+  if(path.startsWith('/api/kp/voice/'))return voiceControl(request,env);
+  if(request.method==='POST'&&path==='/api/kp/loop/reward')return receiveLoopKp(request,env,mapping);
+  if(request.method==='POST'&&path==='/api/kp/quiz/reward')return receiveQuizKp(request,env,mapping);
+  if(request.method==='GET'&&path==='/api/kp/market'){const market=await prepareStocks(env,mapping.guildId);return response({...await stockView(env,market),prices:market.prices,history:market.history});}
   if(request.method==='GET'&&path==='/api/kp/status') {
     const linked=await env.DB.prepare('SELECT COUNT(*) AS n FROM kp_accounts WHERE guild=?').bind(mapping.guildId).first<{n:number}>();
     const start=await env.DB.prepare("SELECT value FROM kp_settings WHERE key='starts_at'").first<{value:string}>();
     const timing=(await env.DB.prepare("SELECT key,value FROM monitor_state WHERE key IN ('monitor_started','monitor_finished')").all<{key:string;value:string}>()).results;
-    return response({enabled:true,currency:'KP',startsAt:Number(start?.value??0),registered:mapping.accounts.length,linked:linked?.n??0,voiceEnabled:false,sessionPolicy:'until_revoked',activityAuthAvailable:activityAuthAvailable(env),monitor:{lastStartedAt:Number(timing.find(r=>r.key==='monitor_started')?.value??0),lastFinishedAt:Number(timing.find(r=>r.key==='monitor_finished')?.value??0)}});
+    const spikeStart=await env.DB.prepare("SELECT value FROM kp_settings WHERE key='spikerush_growth_started_at'").first<{value:string}>();
+    const modeStart=await env.DB.prepare("SELECT value FROM kp_settings WHERE key='mode_rewards_started_at'").first<{value:string}>();
+    return response({modeRewards:{version:modeRewards.version,startsAt:Number(modeStart?.value??0)},skirmish:{version:SKIRMISH_POLICY,enabled:skirmishQueues.publicQueues.length>0},spikerushGrowth:{version:SPIKE_POLICY,rosterVersion:SPIKE_ROSTER.version,startsAt:Number(spikeStart?.value??0)},enabled:true,currency:'KP',startsAt:Number(start?.value??0),registered:mapping.accounts.length,linked:linked?.n??0,voiceEnabled:(await voiceStatus(env)).enabled,earningsPostsConfigured:Boolean((env as {KP_EARNINGS_WEBHOOK_URL?:string}).KP_EARNINGS_WEBHOOK_URL),sessionPolicy:'until_revoked',activityAuthAvailable:activityAuthAvailable(env),monitor:{lastStartedAt:Number(timing.find(r=>r.key==='monitor_started')?.value??0),lastFinishedAt:Number(timing.find(r=>r.key==='monitor_finished')?.value??0)}});
   }
   if(request.method==='GET'&&path==='/api/kp/activity/config')return response({available:activityAuthAvailable(env),applicationId:discord.applicationId});
   if(request.method==='POST'&&(path==='/api/kp/activity/challenge'||path==='/api/kp/activity/auth')){
@@ -73,18 +395,98 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping):Promi
   }
   const token=/^Bearer ([a-f0-9]{48})$/.exec(request.headers.get('Authorization')??'')?.[1];
   const owner=token?await kpSession(env,token):null;
-  if(!owner||owner.guild!==mapping.guildId||!mapping.accounts.some(a=>a.discordUserId===owner.user))return response({error:'接続が切れました。/valo status のコードで接続してください。'},401);
+  if(!owner||owner.guild!==mapping.guildId||!await isKpParticipant(env,mapping,owner.user))return response({error:'接続が切れました。/valo status のコードで接続してください。'},401);
+  if(path==='/api/kp/duels')return boardDuelApi(request,env,mapping,owner.user,headers);
+  if(path.startsWith('/api/kp/steam/')){const r=await steamApi(request,env,owner,token!);return new Response(r.body,{status:r.status,headers:{...Object.fromEntries(r.headers),...headers}});}
   if(request.method==='POST'&&path==='/api/kp/logout'){await revokeKpSession(env,token!);return response({disconnected:true});}
+  if(request.method==='GET'&&path==='/api/kp/private/race'){
+   if(!await privateCasinoAllowed(env,mapping.guildId,owner.user))return response({error:'この操作は利用できません。'},403);
+   const view=await racingView(env,mapping),card=raceCard(view.open.id,undefined,view.open.entries),seed=await raceSeed(env,mapping.guildId,view.open.id),result=raceResult(card,seed.seed),odds=raceOdds(card);
+   return response({id:card.id,name:card.name,closeAt:card.closeAt,hash:seed.hash,order:result.order.map((n:number)=>({number:n,name:card.horses.find((h:{number:number})=>h.number===n)?.name,win:odds.win[n],place:odds.place[n]}))});
+  }
+  const names=()=>memberNames(env,mapping.guildId,new Map(mapping.accounts.map(a=>[a.discordUserId,configuredPlayers.find(p=>p.riotId.toLowerCase()===a.riotId.toLowerCase())?.name??a.riotId.split('#')[0]])));
+  if(request.method==='GET'&&path==='/api/kp/feed'){
+   // Soft D1 safety mode skips OPTIONAL community histories only.
+   // Wallets, bets, cron settlements and public /kp ranking remain live.
+   if(await d1OptionalMode(env))return response({unchanged:true,conserve:true});
+   // Authorization above is required even for unchanged feeds. The client
+   // polls every five seconds, but the forty latest actions need no re-read
+   // when no new operation was committed since its previous response.
+   const revision=await feedRevision(env);
+   const since=new URL(request.url).searchParams.get('revision');
+   if(since!==null&&/^\d{1,16}$/.test(since)&&Number(since)===revision)
+    return response({unchanged:true,revision});
+   return response({...await communityFeed(env,mapping.guildId,await names()),revision});
+  }
+  if(request.method==='GET'&&path==='/api/kp/trend'){
+   if(await d1OptionalMode(env))return Response.json({error:'D1節約モード中です。資産推移は次のリセット後に確認できます。'},{status:429,headers:{...headers,'Retry-After':'120'}});
+   return response(await kpTrend(env,mapping.guildId,await names(),Number(new URL(request.url).searchParams.get('days')??7)));
+  }
+  if(request.method==='GET'&&path==='/api/kp/relics'){
+   // Called only when the relic screen opens. No new cron or D1 scan on regular wallet polling.
+   const steam=await env.DB.prepare(STEAM_RELIC_LIST_SQL)
+    .bind(steamRelicDay(),mapping.guildId,owner.user).all<SteamRelicEvidence>().then(r=>r.results).catch(()=>[]);
+   const row=await env.DB.prepare('SELECT data FROM kp_state WHERE guild=? AND user=?').bind(mapping.guildId,owner.user).first<{data:string}>();
+   const ownedState=JSON.parse(row?.data??'{}') as {relics?:RelicCollection};
+   // Indexed member lookup, only on explicit relic screen open. The game index
+   // always comes from the server-owned Spike profile, never the client.
+   const spikeProfile=await env.DB.prepare(`SELECT CAST(json_extract(s.data,'$.games') AS INTEGER) AS games
+    FROM kp_accounts a JOIN spike_profiles s ON s.guild=a.guild AND s.puuid=a.puuid AND s.user=a.user
+    WHERE a.guild=? AND a.user=?`).bind(mapping.guildId,owner.user)
+    .first<{games:number}>().catch(()=>null);
+   const spikeGamesBefore=Number.isSafeInteger(spikeProfile?.games)&&Number(spikeProfile?.games)>=0?Number(spikeProfile?.games):0;
+    const level=summonLevel(ownedState.relics?.totalSummons??0);
+   const nativeModes=new Set(['casino','market','racing','mleague']); // retained for UI grouping
+   const currentDay=new Date().toISOString().slice(0,10);
+   const usedToday=ownedState.relics?.dailyNativeBonus?.day===currentDay?ownedState.relics.dailyNativeBonus.amount:0;
+   const logs=(await env.DB.prepare('SELECT id,mode,base,bonus,details,at FROM relic_effect_logs WHERE guild=? AND user=? ORDER BY at DESC,id DESC LIMIT 30').bind(mapping.guildId,owner.user).all<{id:string;mode:string;base:number;bonus:number;details:string;at:number}>().then(r=>r.results).catch(()=>[])).map(entry=>{
+    let detail:{lines?:unknown[];sets?:unknown[];resonance?:number;spikeOpening?:{game:number;multiplier:number;flatPerRelic:number;eligible:number}}={};
+    try{detail=JSON.parse(entry.details);}catch{}
+    return {id:entry.id,mode:entry.mode,amount:entry.base,bonus:entry.bonus,at:entry.at,origin:'verified',lines:detail.lines??[],sets:detail.sets??[],resonance:detail.resonance??0,spikeOpening:detail.spikeOpening??null};
+   });
+   const ownEconomy=await env.DB.prepare("SELECT COUNT(*) AS n,COALESCE(SUM(delta),0) AS total FROM kp_ledger WHERE guild=? AND user=? AND kind='relic'").bind(mapping.guildId,owner.user).first<{n:number;total:number}>().catch(()=>null);
+   const guildEconomy=await guildVerifiedRelicStats(env.DB,mapping.guildId);
+   const diagnosis=diagnoseRelicBuild(ownedState.relics as RelicCollection|undefined);
+   const relicMarket=await activeRelicListings(env,mapping.guildId);
+   const personalEconomy={nativeTotal:ownedState.relics?.nativeEarned??0,nativeCount:ownedState.relics?.nativeCount??0,
+    verifiedTotal:ownEconomy?.total??0,verifiedCount:ownEconomy?.n??0,
+    summonSpent:(ownedState.relics?.totalSummons??0)*200,
+    mutationCount:ownedState.relics?.mutatedCount??0,foilCount:ownedState.relics?.foilCount??0,
+    guild:{players:guildEconomy?.players??0,verifiedTotal:guildEconomy?.total??0,verifiedCount:guildEconomy?.n??0}};
+   const previewModes=['competitive','unrated','swiftplay','spikerush','teamdeathmatch','escalation','deathmatch','skirmish','racing','casino','market','mleague','quiz','voice','mahjong','unite','steam','loop','dmchallenge'];
+   const previewAmounts=(mode:string)=>mode==='spikerush'?[20,40,100,500]:mode==='loop'?[1000,50000,300000]:mode==='dmchallenge'?[5000]:[100,500,900,5000];
+   // Computed from the exact same pure function as real KP payouts, with no extra DB queries.
+   const previews=previewModes.flatMap(mode=>previewAmounts(mode).map(amount=>({
+    mode,amount,...evaluateRelicBonus(ownedState.relics as RelicCollection|undefined,mode,{amount,win:true,...mode==='spikerush'?{spikeGamesBefore}:{}},0)
+   })));
+   return response({price:200,steam,steamPools:STEAM_RELIC_POOL_GRADES.map(grade=>({grade,variants:steamRelicPool(grade)})),unite:Object.entries(UNITE).map(([id,d])=>({id,name:d.name,power:d.power,condition:id.startsWith('unite.career_')?'累計'+d.wins+'勝':d.wins+'連勝'})),steamTiers:STEAM_RELIC_TIERS,level,
+    rates:rarityRatesForLevel(level),maxRates:rarityRatesForLevel(10),ratesByLevel:Array.from({length:10},(_,i)=>rarityRatesForLevel(i+1)),
+    modeNames:RELIC_MODE_NAMES,catalog:ALL_NORMAL_RELICS,relicMarket,exchange:{yields:SHARD_YIELDS,prices:SHARD_PRICES,horseVoucherPrice:MY_HORSE_VOUCHER_PRICE},milestones:SUMMON_MILESTONES,previews,spikeGamesBefore,diagnosis,externalLogs:logs,presets:listRelicPresets(ownedState.relics),economy:personalEconomy,lastNativeEffect:ownedState.relics?.lastNativeEffect??null,nativeRemaining:null});
+  }
   if(request.method==='GET'&&path==='/api/kp/state')return response(await readKpState(env,mapping,owner.user));
+  // 監視状態: members only, aggregates only.
+  if(request.method==='GET'&&path==='/api/kp/health')return response(await healthReport(env,mapping.guildId));
+  if(request.method==='GET'&&path==='/api/kp/pulse')return response({pulse:await kpPulse(env,mapping.guildId,owner.user)});
   if(request.method==='POST'&&path==='/api/kp/operation'){
    const text=await request.text();if(text.length>4096)return response({error:'入力が長すぎます。'},400);
    const body=JSON.parse(text);if(typeof body.id!=='string'||typeof body.action!=='string'||!body.args||typeof body.args!=='object'||Array.isArray(body.args))return response({error:'操作内容が不正です。'},400);
-   const result=await operateKp(env,mapping,owner.user,body.id,body.action,body.args);
+   if(!await allowedKpOperation(env,mapping.guildId,owner.user)){
+    // Return the exact persisted receipt during a quota burst. This is a
+    // read-only lookup; never reroll or charge a second time.
+    const prior=await env.DB.prepare('SELECT request_hash,response FROM kp_operations WHERE guild=? AND user=? AND id=?')
+     .bind(mapping.guildId,owner.user,body.id).first<{request_hash:string;response:string}>();
+    if(prior&&prior.request_hash===await kpHash(JSON.stringify({action:body.action,args:body.args})))
+     return response(JSON.parse(prior.response));
+    // The operation has not been accepted: the client must not retain a
+    // phantom "payment pending" that locks all subsequent play.
+    return response({error:'操作回数が多すぎます。1分後に再試行してください。',retryable:false},429);
+   }
+   const result=await operateKp(env,mapping,owner.user,body.id,body.action,body.args,deferPostCommit);
    return response(result);
   }
   return response({error:'Not found'},404);
  }catch(error){
   const message=error instanceof Error?error.message:'';
-  return response({retryable:!(/[ぁ-んァ-ヶ一-龯]/.test(message)&&!message.includes('SQL')),error:/[ぁ-んァ-ヶ一-龯]/.test(message)&&!message.includes('SQL')?message:message.includes('kp_directive_active')||message.includes('kp_directives.guild, kp_directives.target')?'その相手には実行中の指令があります。':'処理を確認できませんでした。残高を更新して確認してください。'},400);
+  return response({retryable:!(/[ぁ-んァ-ヶ一-龯]/.test(message)&&!message.includes('SQL')),error:/[ぁ-んァ-ヶ一-龯]/.test(message)&&!message.includes('SQL')?message:message.includes('relic_market_sold')?'出品の状態が変わったため購入・取り下げできません。再読み込みしてください。':message.includes('kp_directive_active')||message.includes('kp_directives.guild, kp_directives.target')?'その相手には実行中の指令があります。':message.includes('kp_horse_limit')?'持てる馬は3頭までです。':message.includes('kp_crowns')?'その枠は埋まりました。もう一度お試しください。':message.includes('kp_horse_not_sellable')?'売れる馬が見つかりません。':'処理を確認できませんでした。残高を更新して確認してください。'},400);
  }
 }

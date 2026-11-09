@@ -2,14 +2,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import legacy from '../taunts.json' with { type: 'json' };
 import catalogue from '../meme-quotes.json' with { type: 'json' };
-import { commentTones, commentToneNames, commentPools, memeQuotes, resultComment, selectedTone } from '../src/comments.ts';
+import { commentTones, commentToneNames, commentPools, memeQuotes, resultComment, selectedTone, winningCommentGroups, losingCommentGroups } from '../src/comments.ts';
 import type { CommentGroup, Tone } from '../src/comments.ts';
 
 const groups = Object.keys(commentTones) as CommentGroup[];
 
 test('all situations keep the original catalogue and separate authored lines from sourced memes', () => {
   // Count distinct wording, not repeated mappings of one quotation to several situations.
-  assert.equal(new Set(Object.values(commentPools).flat()).size, 843);
+  assert.ok(new Set(Object.values(commentPools).flat()).size >= 1263);
   assert.deepEqual([...commentToneNames].sort(), ['dry', 'hot', 'meme', 'net', 'normal', 'roast']);
   for (const group of groups) {
     assert.deepEqual(Object.keys(commentTones[group]).sort(), [...commentToneNames].sort());
@@ -23,9 +23,9 @@ test('all situations keep the original catalogue and separate authored lines fro
 test('every tone and line can be selected within its eligible situation', () => {
   for (const group of groups) {
     const seen = new Map<Tone, Set<string>>();
-    for (let n = 0; n < 4000; n++) {
-      const id = 'tone-coverage-' + n, tone = selectedTone(id, 'test-player');
-      const text = resultComment(id, 'test-player', group, 7).slice('\n💬 '.length);
+    for (let n = 0; n < 40000; n++) {
+      const id = 'tone-coverage-' + n, tone = selectedTone(id, 'test-player', group);
+      const text = resultComment(id, 'test-player', group, 7).split('\n💬 ')[1];
       const allowed = [...commentTones[group][tone], ...(tone === 'normal' ? ((legacy as Record<string, string[]>)[group] ?? []) : [])];
       assert.ok(allowed.some(line => line.replaceAll('{streak}', '7') === text), group + ':' + tone);
       if (!seen.has(tone)) seen.set(tone, new Set());
@@ -43,7 +43,7 @@ test('tone and wording remain stable on refetches and authored streaks use actua
       const id = 'same-match-' + n;
       const first = resultComment(id, 'same-player', group, 6);
       assert.equal(resultComment(id, 'same-player', group, 6), first);
-      if (selectedTone(id, 'same-player') !== 'meme') assert.match(first, /6連/);
+      if (selectedTone(id, 'same-player', group) !== 'meme') assert.match(first, /6(?:連|回)/);
       assert.doesNotMatch(first, /\{streak\}|@everyone|@here/);
     }
   }
@@ -76,15 +76,49 @@ test('meme quotations have traceable evidence and invented continuations are abs
 
 test('selected meme messages stay verbatim even during streaks, with no count, extra line or authored suffix', () => {
   const seen = new Set<string>();
-  for (const group of groups) for (let n = 0; n < 1000; n++) {
+  for (const group of groups) for (let n = 0; n < 12000; n++) {
     const id = 'verbatim-' + n;
-    if (selectedTone(id, 'test-player') !== 'meme') continue;
-    const text = resultComment(id, 'test-player', group, 99);
-    const quote = memeQuotes.find(candidate => text === '\n💬 ' + candidate.text);
+    if (selectedTone(id, 'test-player', group) !== 'meme') continue;
+    const text = resultComment(id, 'test-player', group, 99).split('\n💬 ')[1];
+    const quote = memeQuotes.find(candidate => text === candidate.text);
     assert.ok(quote, text);
     assert.ok(quote.groups.includes(group));
-    assert.equal(resultComment(id, 'test-player', group, 100), text);
+    assert.equal(resultComment(id, 'test-player', group, 100).split('\n💬 ')[1], text);
     seen.add(quote.id);
   }
   assert.deepEqual([...seen].sort(), memeQuotes.map(quote => quote.id).sort());
+});
+
+test('wins are roasted like losses: the sharp tones dominate while every tone can still appear',()=>{
+  for(const group of winningCommentGroups){
+    let sharp=0;const seen=new Set<Tone>();
+    for(let n=0;n<5000;n++){
+      const tone=selectedTone('winning-weight-'+n,'fixture',group);seen.add(tone);
+      if(['roast','net','dry'].includes(tone))sharp++;
+    }
+    assert.ok(sharp/5000>=0.88&&sharp/5000<=0.96,group+':'+sharp);
+    assert.equal(seen.size,6);
+  }
+});
+
+test('wins and losses keep verbatim memes rare (about 6%) and almost everything sharp; other results stay mixed',()=>{
+ for(const group of groups){
+  let memes=0,sharp=0;
+  for(let n=0;n<10000;n++){
+   const tone=selectedTone('meme-frequency-'+n,'fixture',group);
+   if(tone==='meme')memes++;
+   if(['roast','net','dry'].includes(tone))sharp++;
+  }
+  const taunting=losingCommentGroups.includes(group)||winningCommentGroups.includes(group);
+  if(taunting){assert.ok(memes/10000>=0.04&&memes/10000<=0.08,group+':'+memes);assert.ok(sharp/10000>=0.88&&sharp/10000<=0.96,group+':'+sharp);}
+  else assert.ok(memes/10000>=0.27&&memes/10000<=0.33,group+':'+memes);
+ }
+});
+
+test('a result gets three different comment lines, stable on refetch, the first being the one chosen before', () => {
+  for (const group of groups) for (let n = 0; n < 300; n++) {
+    const id = 'three-' + n, text = resultComment(id, 'test-player', group, 4), lines = text.split('\n💬 ').slice(1);
+    assert.equal(lines.length, 3, text);assert.equal(new Set(lines).size, 3);assert.ok(text.startsWith('\n💬 '));
+    assert.equal(resultComment(id, 'test-player', group, 4), text);
+  }
 });

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync,mkdirSync,writeFileSync,readFileSync,rmSync } from 'node:fs';
+import { mkdtempSync,mkdirSync,writeFileSync,readFileSync,readdirSync,rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { extractSettings,deploymentConfig,prepareLiveSettings } from '../scripts/live-settings.mjs';
@@ -58,4 +58,31 @@ test('wallet deployment requires the already-provisioned key and a matching encr
  writeFileSync(join(dir,'kp-bootstrap.encrypted.json'),JSON.stringify({version:1,keyFingerprint,ciphertext:'cipher',wrappedKey:'wrapped'}));
  await prepareLiveSettings(dir,env,async url=>{if(url.endsWith('/content/v2'))return new Response(source,{headers:{'Content-Type':'application/javascript'}});return Response.json({success:true,result:url.endsWith('/schedules')?{schedules}:active});});
  assert.equal(JSON.parse(readFileSync(join(dir,'wrangler.jsonc'))).vars.KP_BOOTSTRAP_PUBLIC_KEY,publicKey);
+});
+test('voice and racing Durable Objects are retained while unknown bindings are rejected',()=>{
+ const bound={...settings,bindings:[...settings.bindings,{type:'durable_object_namespace',name:'VOICE_GATEWAY',class_name:'VoiceGateway',script_name:'example'}]};
+ const config=deploymentConfig(bound,schedules,'example');assert.deepEqual(config.durable_objects.bindings,[{name:'VOICE_GATEWAY',class_name:'VoiceGateway'},{name:'RACE_BROADCAST',class_name:'RaceBroadcaster'}]);assert.deepEqual(config.migrations,[{tag:'voice-v1',new_sqlite_classes:['VoiceGateway']},{tag:'race-broadcast-v1',new_sqlite_classes:['RaceBroadcaster']}]);
+ assert.throws(()=>deploymentConfig({...bound,bindings:[...settings.bindings,{type:'durable_object_namespace',name:'VOICE_GATEWAY',class_name:'Other'}]},schedules,'example'),/Unrecognized/);
+ assert.doesNotThrow(()=>deploymentConfig({...bound,bindings:[...bound.bindings,{type:'durable_object_namespace',name:'RACE_BROADCAST',class_name:'RaceBroadcaster',script_name:'example'}]},schedules,'example'));
+ assert.throws(()=>deploymentConfig({...bound,bindings:[...bound.bindings,{type:'durable_object_namespace',name:'RACE_BROADCAST',class_name:'RaceBroadcaster',script_name:'other-worker'}]},schedules,'example'),/Unrecognized/);
+});
+test('the deploy copy includes every shared browser module the Worker imports',()=>{
+ const root=new URL('../../../',import.meta.url),workflow=readFileSync(new URL('.github/workflows/valorant-results.yml',root),'utf8');
+ const copy=/cp (.+) "\$RUNNER_TEMP\/kp-app\/js\/"/.exec(workflow)?.[1].split(/\s+/)??[];
+ const copied=file=>copy.includes('js/*.js')||copy.includes('js/'+file);
+ const pending=[],seen=new Set();
+ for(const name of readdirSync(new URL('services/valorant-results/src/',root)).filter(n=>n.endsWith('.ts')))for(const [,file] of readFileSync(new URL('services/valorant-results/src/'+name,root),'utf8').matchAll(/from '\.\.\/\.\.\/\.\.\/js\/([\w-]+\.js)'/g))pending.push(file);
+ while(pending.length){const file=pending.pop();if(seen.has(file))continue;seen.add(file);for(const [,next] of readFileSync(new URL('js/'+file,root),'utf8').matchAll(/from '\.\/([\w-]+\.js)'/g))pending.push(next);}
+ assert.ok(seen.has('racing.js')&&seen.has('engine.js'));
+ for(const file of seen)assert.ok(copied(file),`js/${file} is imported by the Worker but not copied for deployment`);
+});
+test('a lazily initialized JSON module is read once, statically; a second assignment is ambiguous',()=>{
+ const lazy=`var players_default;var init_players=__esm({"players.json"(){players_default=${JSON.stringify(players)};}});var discord_config_default;var init_d=__esm({"d.json"(){discord_config_default=${JSON.stringify(discord)};}});`;
+ assert.deepEqual(extractSettings(lazy),{players,discord});
+ assert.throws(()=>extractSettings(lazy+'players_default=[];'),/Ambiguous/);
+ assert.throws(()=>extractSettings(source+`players_default=${JSON.stringify(players)};`),/Ambiguous/);
+ assert.throws(()=>extractSettings(lazy.replace(JSON.stringify(players),'loadPlayers()')),/static JSON/);
+});
+test('Worker sources avoid dynamic imports, which make esbuild lazily initialize the configuration',()=>{
+ for(const name of readdirSync(new URL('../src/',import.meta.url)).filter(n=>n.endsWith('.ts')))assert.doesNotMatch(readFileSync(new URL('../src/'+name,import.meta.url),'utf8'),/(?<!\bas\s)\bimport\(/,name); // type-only `as import(...)` is erased
 });

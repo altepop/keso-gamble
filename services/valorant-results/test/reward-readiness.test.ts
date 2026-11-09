@@ -2,8 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { assessRewardReadiness, quoteVoiceAccrual } from '../src/reward-readiness.ts';
 const game = (queue: string) => ({metadata:{match_id:'match',queue:{id:queue},is_completed:true,started_at:'2026-10-26T00:00:00Z',game_length_in_ms:600000},players:[{puuid:'one',team_id:'red',session_playtime_in_ms:600000}],teams:[{team_id:'red',won:true},{team_id:'blue',won:false}]});
-test('deathmatch completion remains held even when total match and personal playtime look complete',()=>{
- assert.deepEqual(assessRewardReadiness(game('deathmatch'),'one'),{status:'hold',reason:'deathmatch_completion_unverified'});
+test('deathmatch is ready without a team outcome; it is settled by K/D and first place',()=>{
+ assert.deepEqual(assessRewardReadiness(game('deathmatch'),'one'),{status:'ready',mode:'deathmatch',outcome:null});
 });
 test('ordinary modes normalize aliases, unknown outcomes never become wins, and custom rules stay pending',()=>{
  for(const [queue,mode] of [['ggteam','escalation'],['hurm','teamdeathmatch'],['onefa','replication'],['swiftplay','swiftplay']])assert.deepEqual(assessRewardReadiness(game(queue),'one'),{status:'ready',mode,outcome:'win'});

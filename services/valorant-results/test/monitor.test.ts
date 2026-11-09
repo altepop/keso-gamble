@@ -1,11 +1,13 @@
 import { commentPools, memeQuotes } from '../src/comments.ts';
 import configuredPlayers from '../players.json' with { type: 'json' };
 import test from 'node:test';
+// Monitor fixtures share a fixed wall clock; tests that simulate elapsed time may override it locally.
+test.beforeEach(t=>(t as import('node:test').TestContext).mock.timers.enable({apis:['Date'],now:Date.parse('2026-11-04T12:00:00+09:00')}));
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync, readdirSync } from 'node:fs';
 import { URL as NodeURL } from 'node:url';
-import { monitor, resultMessage } from '../src/index.ts';
+import { monitor, resultMessage, monitorRankState } from '../src/index.ts';
 import type { Env } from '../src/index.ts';
 
 function environment(): Env {
@@ -40,6 +42,24 @@ function match(id: string, mode = 'competitive', win = true, ended = Date.now(),
   };
 }
 
+test('rank monitor reads only the requested key, caches misses and rereads on next cron',async()=>{
+ const env=environment();const wanted='rank2:match-new:p-one';
+ const old='rank2:match-old:p-two';
+ await env.DB.prepare('INSERT INTO monitor_state(key,value) VALUES(?,?)').bind(old,'none').run();
+ await env.DB.prepare('INSERT INTO monitor_state(key,value) VALUES(?,?)').bind(wanted,'{"before":15,"after":14}').run();
+ const oldPrepare=env.DB.prepare.bind(env.DB),sqls:string[]=[];
+ env.DB.prepare=((query:string)=>{sqls.push(query);return oldPrepare(query);}) as typeof env.DB.prepare;
+ const seen=new Map<string,string>();
+ assert.equal(await monitorRankState(env.DB,seen,wanted),'{"before":15,"after":14}');
+ assert.equal(await monitorRankState(env.DB,seen,wanted),'{"before":15,"after":14}');
+ assert.equal(await monitorRankState(env.DB,seen,'rank2:none:p-one'),'');
+ assert.equal(await monitorRankState(env.DB,seen,'rank2:none:p-one'),'');
+ assert.equal(sqls.length,2);
+ assert.ok(sqls.every(query=>query==='SELECT value FROM monitor_state WHERE key=?'),'never load 300 old ranks');
+ await env.DB.prepare('UPDATE monitor_state SET value=? WHERE key=?').bind('none',wanted).run();
+ assert.equal(await monitorRankState(env.DB,seen,wanted),'{"before":15,"after":14}','single cron has snapshot semantics');
+ assert.equal(await monitorRankState(env.DB,new Map(),wanted),'none','next cron sees changed rank state');
+});
 test('winner flags and opaque team IDs produce the requested chat messages', () => {
   assert.equal(resultMessage(match('1'), 'user-1', 'たろう')?.message.split('\n')[0], '🎉 たろうは13対10で勝ち！！（コンペ）');
   const loss = resultMessage(match('2', 'ggteam', false), 'user-1', 'はなこ')!;
@@ -272,7 +292,7 @@ test('three and five losses switch taunts, override performance teasing, and sta
       games = [raw, ...games].slice(0, 2);
       await monitor(env, [{ riotId: 'player#JP1' }]);
       const content = deliveries.at(-1)!;
-      assert.equal((content.match(/💬/g) ?? []).length, 1);
+      assert.equal((content.match(/💬/g) ?? []).length, 3);
       if (n >= 3) {
         assert.match(content, new RegExp('現在：' + n + '連敗'));
         const group = n >= 5 ? 'long_losing_streak' : 'losing_streak';
@@ -345,7 +365,7 @@ test('losing-streak recovery celebrates three or more losses once within the sam
       await monitor(env, config);
       if (scenario === 'three' || scenario === 'five') assert.match(deliveries[0], new RegExp('🎊 ' + losses + '連敗ストップ！'));
       else assert.doesNotMatch(deliveries[0], /🎊|連敗ストップ/);
-      assert.equal((deliveries[0].match(/\n💬 /g) ?? []).length, 1);
+      assert.equal((deliveries[0].match(/\n💬 /g) ?? []).length, 3);
       game = { ...game, metadata: { ...game.metadata, match_id: 'next-win', started_at: new Date(base + 11_000).toISOString() } };
       await monitor(env, config);
       assert.doesNotMatch(deliveries[1], /🎊|連敗ストップ/);
@@ -645,7 +665,7 @@ test('death-unrated sends a player to competitive for any one condition, even af
     assert.equal(verdict.verdict, 'competitive', kind);
     assert.equal([verdict.negativeKD, verdict.lastDeath, verdict.bottomACS].filter(Boolean).length, 1, kind);
     const message = resultMessage(raw, 'user-1', 'プレイヤーA', true)!.message;
-    assert.match(message, /プレイヤーA、コンペ行き確定/);
+    assert.match(message, /プレイヤーA、コンペに出頭してください/);
     assert.doesNotMatch(message, /（エスカレーション）|で負け|健闘賞/);
   }
   safe.players[0].stats.kills = safe.players[0].stats.deaths;
@@ -715,7 +735,7 @@ test('death-unrated shares one post, handles draws, and keeps its verdict separa
     assert.equal(messages.length, 1);
     assert.match(messages[0], /デスアンレ判定（2人）/);
     assert.match(messages[0], /プレイヤーA、今回はセーフ/);
-    assert.match(messages[0], /プレイヤーC、コンペ行き確定/);
+    assert.match(messages[0], /プレイヤーC、コンペに出頭してください/);
     assert.doesNotMatch(messages[0], /ACT|連勝|連敗|🤝/);
     assert.equal((await env.DB.prepare('SELECT COUNT(*) AS n FROM notifications WHERE sent=1').first<{ n: number }>())!.n, 2);
   } finally { globalThis.fetch = original; }
@@ -1006,7 +1026,7 @@ test('reserved unknown results fetch shared details once, edit the original post
     assert.equal(detailRequests, 1, 'Shared players and repeated history must not refetch resolved details');
     assert.equal(posts.length, 2); assert.equal(posts[0].method, 'POST'); assert.equal(posts[1].method, 'PATCH');
     assert.match(posts[0].content, /ラウンド履歴が未取得/);
-    assert.match(posts[1].content, /プレイヤーA、コンペ行き確定/);
+    assert.match(posts[1].content, /プレイヤーA、コンペに出頭してください/);
     assert.match(posts[1].content, /プレイヤーB、今回はセーフ/);
     assert.doesNotMatch(posts[1].content, /データ不足/);
     assert.equal((await env.DB.prepare('SELECT value FROM monitor_state WHERE key=?').bind('death_last:details-fill:user-1').first<{ value: string }>())!.value, 'true');
@@ -1685,7 +1705,7 @@ test('wins and draws each select stable comments across many different matches',
       assert.equal(first, resultMessage(raw, 'user-1', 'プレイヤーA')!.message);
       const comment = first.split('\n💬 ')[1];
       assert.ok(pools[outcome].includes(comment));seen.add(comment);
-      assert.equal((first.match(/\n💬 /g) ?? []).length, 1);
+      assert.equal((first.match(/\n💬 /g) ?? []).length, 3);
     }
     assert.ok(seen.size >= 12, outcome);
   }
@@ -1710,7 +1730,7 @@ test('winning streaks use three/five thresholds, remain stable, and draw resets 
       const comment = content.split('\n💬 ')[1];
       const group = n >= 5 ? 'long_winning_streak' : n >= 3 ? 'winning_streak' : 'win';
       assert.ok(pools[group].some(line => line.replaceAll('{streak}', String(n)) === comment));
-      assert.equal((content.match(/\n💬 /g) ?? []).length, 1);
+      assert.equal((content.match(/\n💬 /g) ?? []).length, 3);
       const count = deliveries.length;
       await monitor(env, [{ riotId: 'player#JP1' }]);assert.equal(deliveries.length, count);
     }
@@ -1772,4 +1792,173 @@ test('custom and non-round death modes are selectable but never invent missing t
   assert.match(resultMessage(small, 'user-1', 'A', true)!.message, /判定保留/);
   assert.match(resultMessage(small, 'user-1', 'A', true)!.message, /デスカスタム/);
   assert.doesNotMatch(resultMessage(small, 'user-1', 'A', true)!.message, /今回はセーフ/);
+});
+
+test('a Skirmish win that opened a choice is posted with its 受取／続行 buttons; refused buttons fall back to plain text', async () => {
+  const { kpSchema } = await import('../src/kp.ts'); const { ensureModeRewards } = await import('../src/mode-rewards.ts');
+  const { settleSkirmishMatch } = await import('../src/skirmish.ts');
+  for (const refuse of [false, true]) {
+    const env = environment(); const original = globalThis.fetch;
+    let now = Date.now(); const clock = Date.now; Date.now = () => now;
+    for (const schema of kpSchema) await env.DB.prepare(schema).run();
+    await ensureModeRewards(env as never);
+    await env.DB.prepare('INSERT INTO kp_accounts(guild,puuid,user,riot,linked_at) VALUES(?,?,?,?,0)').bind('100000000000000100', 'user-1', '100000000000000101', 'player#JP1').run();
+    await env.DB.prepare('INSERT INTO kp_wallets(guild,user) VALUES(?,?)').bind('100000000000000100', '100000000000000101').run();
+    let games: unknown[] = [];
+    const posts: Array<{ url: string; body: { content: string; components?: { components: { custom_id: string }[] }[] } }> = [];
+    globalThis.fetch = async (url, init) => {
+      if (String(url).includes('/account/')) return Response.json({ data: { puuid: 'user-1', region: 'ap' } });
+      if (String(url).includes('/matches/')) return Response.json({ data: games });
+      const body = JSON.parse(String(init?.body)); posts.push({ url: String(url), body });
+      if (refuse && body.components?.length) return new Response('{"message":"Invalid Form Body"}', { status: 400 });
+      return Response.json({ id: '1' });
+    };
+    try {
+      const config = [{ riotId: 'player#JP1', name: 'たろう' }];
+      await monitor(env, config);
+      now += 60_000; games = [match('sk1', 'skirmish_2v2', true, now)];
+      await settleSkirmishMatch(env as never, { guild: '100000000000000100', puuid: 'user-1', user: '100000000000000101', match: 'sk1', start: now - 1000, end: now, win: true, now });
+      await monitor(env, config);
+      const sent = posts.filter(p => p.url.includes('/webhooks/123/'));
+      assert.match(sent[0].url, /with_components=true/);
+      assert.deepEqual(sent[0].body.components?.[0].components.map(c => c.custom_id.split(':')[3]), ['cash', 'continue']);
+      if (refuse) {
+        assert.equal(sent.length, 2, 'resent once without buttons');
+        assert.deepEqual(sent[1].body.components, []);
+        assert.ok((await env.DB.prepare("SELECT value FROM monitor_state WHERE key='skirmish_buttons_off_until'").first<{ value: string }>())!.value > String(now));
+      } else assert.equal(sent.length, 1);
+    } finally { globalThis.fetch = original; Date.now = clock; }
+  }
+});
+
+test('posts without a Skirmish game never ask for components', async () => {
+  const env = environment(); const original = globalThis.fetch;
+  let now = Date.now(); const clock = Date.now; Date.now = () => now;
+  let games: unknown[] = []; const urls: string[] = [], bodies: Record<string, unknown>[] = [];
+  globalThis.fetch = async (url, init) => {
+    if (String(url).includes('/account/')) return Response.json({ data: { puuid: 'user-1', region: 'ap' } });
+    if (String(url).includes('/matches/')) return Response.json({ data: games });
+    urls.push(String(url)); bodies.push(JSON.parse(String(init?.body))); return Response.json({ id: '1' });
+  };
+  try {
+    const config = [{ riotId: 'player#JP1', name: 'たろう' }];
+    await monitor(env, config); now += 60_000; games = [match('c1', 'competitive', true, now)]; await monitor(env, config);
+    assert.equal(urls.length, 1); assert.doesNotMatch(urls[0], /with_components/); assert.equal('components' in bodies[0], false);
+  } finally { globalThis.fetch = original; Date.now = clock; }
+});
+
+test('with the owned webhook set up, a Skirmish choice is posted as あかんbot with buttons even after the plain webhook refused them; a deleted owned webhook falls back', async () => {
+  const { kpSchema } = await import('../src/kp.ts'); const { ensureModeRewards } = await import('../src/mode-rewards.ts');
+  const { settleSkirmishMatch } = await import('../src/skirmish.ts');
+  for (const gone of [false, true]) {
+    const env = environment(); const original = globalThis.fetch;
+    let now = Date.now(); const clock = Date.now; Date.now = () => now;
+    for (const schema of kpSchema) await env.DB.prepare(schema).run();
+    await ensureModeRewards(env as never);
+    await env.DB.prepare('INSERT INTO kp_accounts(guild,puuid,user,riot,linked_at) VALUES(?,?,?,?,0)').bind('100000000000000100', 'user-1', '100000000000000101', 'player#JP1').run();
+    await env.DB.prepare('INSERT INTO kp_wallets(guild,user) VALUES(?,?)').bind('100000000000000100', '100000000000000101').run();
+    await env.DB.prepare('CREATE TABLE IF NOT EXISTS app_webhooks(name TEXT PRIMARY KEY,data TEXT NOT NULL,at INTEGER NOT NULL)').run();
+    await env.DB.prepare("INSERT INTO app_webhooks VALUES('akan',?,0)").bind(JSON.stringify({ url: 'https://discord.com/api/webhooks/77/owned', username: 'アカンbot', avatarUrl: 'https://cdn.discordapp.com/avatars/123/abc.png' })).run();
+    await env.DB.prepare("INSERT INTO monitor_state(key,value) VALUES('skirmish_buttons_off_until',?)").bind(String(now + 86400_000)).run();
+    let games: unknown[] = [];
+    const posts: Array<{ url: string; method: string; body: Record<string, unknown> & { components?: unknown[] } }> = [];
+    globalThis.fetch = async (url, init) => {
+      if (String(url).includes('/account/')) return Response.json({ data: { puuid: 'user-1', region: 'ap' } });
+      if (String(url).includes('/matches/')) return Response.json({ data: games });
+      posts.push({ url: String(url), method: String(init?.method), body: JSON.parse(String(init?.body)) });
+      if (gone && String(url).includes('/webhooks/77/')) return new Response('{"message":"Unknown Webhook"}', { status: 404 });
+      return Response.json({ id: '555' });
+    };
+    try {
+      const config = [{ riotId: 'player#JP1', name: 'たろう' }];
+      await monitor(env, config);
+      now += 60_000; games = [match('sk1', 'skirmish_2v2', true, now)];
+      await settleSkirmishMatch(env as never, { guild: '100000000000000100', puuid: 'user-1', user: '100000000000000101', match: 'sk1', start: now - 1000, end: now, win: true, now });
+      await monitor(env, config);
+      const via = (await env.DB.prepare("SELECT value FROM monitor_state WHERE key='via:sk1'").first<{ value: string }>())?.value;
+      if (!gone) {
+        assert.equal(posts.length, 1); assert.match(posts[0].url, /\/webhooks\/77\/owned\?.*with_components=true/);
+        assert.equal(posts[0].body.username, 'アカンbot'); assert.equal(posts[0].body.avatar_url, 'https://cdn.discordapp.com/avatars/123/abc.png');
+        assert.equal((posts[0].body.components as unknown[]).length, 1); assert.equal(via, 'app');
+        // A later edit of the same result goes through the webhook that posted it.
+        await env.DB.prepare("UPDATE notifications SET sent=0 WHERE match_id='sk1'").run();
+        await monitor(env, config);
+        assert.equal(posts.at(-1)!.method, 'PATCH'); assert.match(posts.at(-1)!.url, /\/webhooks\/77\/owned\/messages\/555/);
+      } else {
+        assert.equal(posts.length, 2); assert.match(posts[1].url, /\/webhooks\/123\//); assert.deepEqual(posts[1].body.components, []);
+        assert.equal(via, 'plain'); assert.equal(await env.DB.prepare('SELECT 1 FROM app_webhooks').first(), null, 'the deleted webhook is forgotten');
+      }
+    } finally { globalThis.fetch = original; Date.now = clock; }
+  }
+});
+
+test('a claimed death-unrated match keeps its verdict when the player later reserves another mode',async()=>{
+ const env=environment(),original=globalThis.fetch,now=Date.now();
+ await env.DB.prepare('INSERT INTO tracked_players VALUES(?,?,?,?)').bind('one#JP1','user-1','ap',0).run();
+ await env.DB.prepare('INSERT INTO death_unrated_sessions VALUES(?,?,?,?,?,NULL)').bind('one#JP1','old-unrated',now-120000,now+3600000,'missed-verdict').run();
+ await env.DB.prepare('INSERT INTO death_unrated_sessions VALUES(?,?,?,?,NULL,NULL)').bind('one#JP1','new-swift',now-60000,now+3600000).run();
+ await env.DB.prepare('INSERT INTO monitor_state VALUES(?,?)').bind('death_mode:new-swift:one#JP1','swiftplay').run();
+ const raw=unratedMatch('missed-verdict');raw.players[0].stats.kills=0;
+ const sent:string[]=[];
+ globalThis.fetch=async(url,init)=>String(url).includes('api.henrikdev.xyz')?Response.json({data:[raw]}):(sent.push(JSON.parse(String(init?.body)).content),Response.json({id:'123'}));
+ try{
+  await monitor(env,[{riotId:'one#JP1'}]);
+  assert.equal(sent.length,1);assert.match(sent[0],/コンペに出頭してください/);assert.match(sent[0],/次はコンペへ出頭/);
+  assert.equal((await env.DB.prepare("SELECT match_id FROM death_unrated_sessions WHERE session_id='new-swift'").first<{match_id:string|null}>())!.match_id,null);
+ }finally{globalThis.fetch=original;}
+});
+
+test('unordered reservation rows cannot hide a newly reserved unrated verdict behind an old claimed swift session',async()=>{
+ const env=environment(),original=globalThis.fetch,now=Date.now();
+ await env.DB.prepare('INSERT INTO tracked_players VALUES(?,?,?,?)').bind('one#JP1','user-1','ap',0).run();
+ await env.DB.prepare('INSERT INTO death_unrated_sessions VALUES(?,?,?,?,?,NULL)').bind('one#JP1','old-swift',now-120000,now+3600000,'old-match').run();
+ await env.DB.prepare('INSERT INTO monitor_state VALUES(?,?)').bind('death_mode:old-swift:one#JP1','swiftplay').run();
+ await env.DB.prepare('INSERT INTO death_unrated_sessions VALUES(?,?,?,?,NULL,NULL)').bind('one#JP1','new-unrated',now-60000,now+3600000).run();
+ // SELECT without ORDER BY is unordered; reversing it simulates another valid SQLite query plan.
+ await env.DB.prepare('PRAGMA reverse_unordered_selects=ON').run();
+ const raw=unratedMatch('new-unrated-match');raw.players[0].stats.kills=0;
+ const sent:string[]=[];
+ globalThis.fetch=async(url,init)=>String(url).includes('api.henrikdev.xyz')?Response.json({data:[raw]}):(sent.push(JSON.parse(String(init?.body)).content),Response.json({id:'123'}));
+ try{await monitor(env,[{riotId:'one#JP1'}]);assert.equal(sent.length,1);assert.match(sent[0],/コンペに出頭してください/);
+  assert.equal((await env.DB.prepare("SELECT match_id FROM death_unrated_sessions WHERE session_id='new-unrated'").first<{match_id:string}>())!.match_id,'new-unrated-match');
+ }finally{globalThis.fetch=original;}
+});
+
+test('a previously posted ordinary result is promoted and edited in place when its claimed death session is recovered',async()=>{
+ const env=environment(),original=globalThis.fetch,now=Date.now(),raw=unratedMatch('repair-death');raw.players[0].stats.kills=0;
+ await env.DB.prepare('INSERT INTO tracked_players VALUES(?,?,?,?)').bind('one#JP1','user-1','ap',0).run();
+ await env.DB.prepare('INSERT INTO death_unrated_sessions VALUES(?,?,?,?,?,NULL)').bind('one#JP1','claimed-old',now-120000,now+3600000,'repair-death').run();
+ await env.DB.prepare('INSERT INTO death_unrated_sessions VALUES(?,?,?,?,NULL,NULL)').bind('one#JP1','new-mode',now-60000,now+3600000).run();
+ await env.DB.prepare('INSERT INTO monitor_state VALUES(?,?)').bind('death_mode:new-mode:one#JP1','swiftplay').run();
+ const ordinary=resultMessage(raw,'user-1','one')!;
+ await env.DB.prepare('INSERT INTO notifications(riot_id,match_id,message,ended_at,mode,outcome,sent) VALUES(?,?,?,?,?,?,1)').bind('one#JP1','repair-death',ordinary.message,ordinary.endedAt,ordinary.mode,ordinary.outcome).run();
+ await env.DB.prepare('INSERT INTO monitor_state VALUES(?,?)').bind('post:repair-death','123').run();
+ const sent:Array<{method:string;content:string}>=[];
+ globalThis.fetch=async(url,init)=>String(url).includes('api.henrikdev.xyz')?Response.json({data:[raw]}):(sent.push({method:init!.method!,content:JSON.parse(String(init?.body)).content}),Response.json({id:'123'}));
+ try{
+  await monitor(env,[{riotId:'one#JP1'}]);assert.equal(sent.length,1);assert.equal(sent[0].method,'PATCH');assert.match(sent[0].content,/次はコンペへ出頭/);
+  assert.equal((await env.DB.prepare("SELECT mode FROM notifications WHERE match_id='repair-death'").first<{mode:string}>())!.mode,'unrated');
+  await monitor(env,[{riotId:'one#JP1'}]);assert.equal(sent.length,1,'a resolved result is not posted repeatedly');
+ }finally{globalThis.fetch=original;}
+});
+
+// All Death modes end with the exact chant, after any other result lines.
+test('Death verdict footer is the final line on every mode, even after KP details', async () => {
+  const { notificationContent } = await import('../src/results.ts');
+  const { DEATH_CLOSING_LINE, deathStoredMode, deathModes } = await import('../src/death-modes.ts');
+  const env=environment();
+  const raw=unratedMatch('death-footer');
+  raw.players[0].stats.kills=0;
+  for (const mode of deathModes) {
+    raw.metadata.queue.id=mode.value;
+    const message=resultMessage(raw, 'user-1', 'VDK', true)!.message;
+    assert.ok(message.endsWith(DEATH_CLOSING_LINE), mode.value);
+    assert.match(message, /VDK、コンペに出頭してください。/);
+    const notice={riot_id:'VDK#JP1',match_id:'death-footer',message:message+'\n🪙 KP +100',ended_at:Date.now(),mode:deathStoredMode(mode.value),act_id:null,act_name:null,outcome:null};
+    const content=await notificationContent(env.DB,notice);
+    assert.ok(content.endsWith(DEATH_CLOSING_LINE), mode.value);
+    assert.equal(content.split(DEATH_CLOSING_LINE).length,2,'only one chant');
+    assert.match(content, /KP \+100/);
+  }
+  assert.doesNotMatch(resultMessage(raw,'user-1','VDK')!.message, /アカーーーーーン/);
 });

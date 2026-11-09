@@ -13,15 +13,15 @@ test('Steam achievements require game, achievement and evidence; duplicate title
  assert.throws(()=>submitClaim(s,{activity:'steam',game:'portal 2',achievement:' wake up ',reference:'other proof'}));
 });
 test('directives charge once, require a target, prevent stacking, and completion does not refund',()=>{
- const s=createInitialState();assert.throws(()=>issueDirective(s,{target:'self',task:'competitive'}));
- const d=issueDirective(s,{target:'riso',task:'competitive'});assert.equal(s.cash,7500);assert.throws(()=>issueDirective(s,{target:'riso',task:'unrated'}));completeDirective(s,d.id);assert.equal(s.cash,7500);assert.throws(()=>completeDirective(s,d.id));issueDirective(s,{target:'riso',task:'unrated'});assert.equal(s.cash,6000);
+ const s=createInitialState();s.cash=50_000;assert.throws(()=>issueDirective(s,{target:'self',task:'competitive'}));
+ const d=issueDirective(s,{target:'riso',task:'competitive'});assert.equal(s.cash,10000,'competitive costs 40,000');assert.throws(()=>issueDirective(s,{target:'riso',task:'unrated'}));completeDirective(s,d.id);assert.equal(s.cash,10000);assert.throws(()=>completeDirective(s,d.id));assert.throws(()=>issueDirective(s,{target:'riso',task:'unrated'}),/不足/,'10,000 left is short of the 12,500 unrated price');
 });
 test('missing achievement details and insufficient balance never debit',()=>{
  const s=createInitialState();assert.throws(()=>issueDirective(s,{target:'yuya',task:'steam'}));s.cash=100;const before=structuredClone(s);assert.throws(()=>issueDirective(s,{target:'yuya',task:'competitive'}));assert.deepEqual(s,before);
 });
 test('old saves migrate empty progress; valid records survive; corrupted records are dropped',()=>{
  const s=createInitialState();delete s.claims;delete s.directives;delete s.progressSeq;assert.deepEqual(hydrateState(s).claims,[]);
- Object.assign(s,{claims:[],directives:[],progressSeq:0});const c=submitClaim(s,{activity:'competitive',reference:'abc'});approveClaim(s,c.id);issueDirective(s,{target:'yano',task:'steam',game:'Portal',achievement:'Finish'});
+ Object.assign(s,{claims:[],directives:[],progressSeq:0,cash:25_000});const c=submitClaim(s,{activity:'competitive',reference:'abc'});approveClaim(s,c.id);issueDirective(s,{target:'yano',task:'steam',game:'Portal',achievement:'Finish'});
  const restored=hydrateState(s);assert.deepEqual(restored.claims,s.claims);assert.deepEqual(restored.directives,s.directives);
  s.claims.push(null,{...s.claims[0],id:999,reward:999999});s.directives.push({target:'unknown'});const repaired=hydrateState(s);assert.equal(repaired.claims.length,1);assert.equal(repaired.directives.length,1);assert.equal(repaired.progressSeq,2);
 });
