@@ -69,7 +69,7 @@ jobs:
           DELIVERY_AUDIT: ${{ inputs.delivery_audit }}
           DELIVERY_PROBE: ${{ inputs.delivery_probe }}
           PROBE_ACTOR: ${{ github.actor }}
-          SANMA_CONFIGURATION: ${{ vars.MAHJONG_SANMA_REVIEW_ENABLED == 'true' && 'enabled' || vars.MAHJONG_SANMA_REVIEW_ENABLED == 'false' && 'disabled' || vars.MAHJONG_SANMA_REVIEW_ENABLED == '' && 'unset' || 'invalid' }}
+          SANMA_CONFIGURATION: ${{ vars.MAHJONG_SANMA_REVIEW_ENABLED == 'true' && 'enabled' || vars.MAHJONG_SANMA_REVIEW_ENABLED == 'false' && 'disabled' || vars.MAHJONG_SANMA_REVIEW_ENABLED == '' && 'enabled-release-default' || 'invalid' }}
         run: |
           printf 'equal_review_configuration: sanma=%s\n' "$SANMA_CONFIGURATION"
           if [ "$DELIVERY_PROBE" = "true" ]; then
@@ -88,10 +88,12 @@ jobs:
       - name: Install
         if: steps.queue.outputs.count && steps.queue.outputs.count != '0' && steps.queue.outputs.count != 'probe' && steps.queue.outputs.count != 'delivery'
         run: npm ci --ignore-scripts
-      # Queue-empty and yonma-only runs never install the sanma calculator.
+      # Real sanma/yonma audit 42525457154 and existing delivery receipt verified.
+      # Release default: enabled when unset; explicit false or invalid values disable it.
+      # Queue-empty runs never install the sanma calculator.
       # Failure leaves the existing shape/defense/yonma review and KP fetch intact.
       - name: Set up optional sanma calculator
-        if: steps.queue.outputs.count && steps.queue.outputs.count != '0' && steps.queue.outputs.count != 'check' && steps.queue.outputs.count != 'probe' && steps.queue.outputs.count != 'delivery' && (vars.MAHJONG_SANMA_REVIEW_ENABLED == 'true' || steps.queue.outputs.count == 'audit' || steps.queue.outputs.count == 'delivery-probe')
+        if: steps.queue.outputs.count && steps.queue.outputs.count != '0' && steps.queue.outputs.count != 'check' && steps.queue.outputs.count != 'probe' && steps.queue.outputs.count != 'delivery' && (vars.MAHJONG_SANMA_REVIEW_ENABLED == 'true' || vars.MAHJONG_SANMA_REVIEW_ENABLED == '' || steps.queue.outputs.count == 'audit' || steps.queue.outputs.count == 'delivery-probe')
         continue-on-error: true
         uses: actions/setup-python@v6
         with:
@@ -99,7 +101,7 @@ jobs:
           cache: pip
           cache-dependency-path: services/valorant-results/scripts/sanma-requirements.txt
       - name: Install optional pinned hand evaluator
-        if: steps.queue.outputs.count && steps.queue.outputs.count != '0' && steps.queue.outputs.count != 'check' && steps.queue.outputs.count != 'probe' && steps.queue.outputs.count != 'delivery' && (vars.MAHJONG_SANMA_REVIEW_ENABLED == 'true' || steps.queue.outputs.count == 'audit' || steps.queue.outputs.count == 'delivery-probe')
+        if: steps.queue.outputs.count && steps.queue.outputs.count != '0' && steps.queue.outputs.count != 'check' && steps.queue.outputs.count != 'probe' && steps.queue.outputs.count != 'delivery' && (vars.MAHJONG_SANMA_REVIEW_ENABLED == 'true' || vars.MAHJONG_SANMA_REVIEW_ENABLED == '' || steps.queue.outputs.count == 'audit' || steps.queue.outputs.count == 'delivery-probe')
         continue-on-error: true
         run: |
           python3 -m venv .venv-mahjong
@@ -177,6 +179,6 @@ jobs:
           YOSTAR_TOKEN: ${{ secrets.YOSTAR_TOKEN }}
           YOSTAR_DEVICE_ID: ${{ secrets.YOSTAR_DEVICE_ID }}
           MAHJONG_EQUAL_REVIEW_ENABLED: ${{ steps.c3.outputs.enabled == 'true' && 'true' || 'false' }}
-          MAHJONG_SANMA_REVIEW_ENABLED: ${{ vars.MAHJONG_SANMA_REVIEW_ENABLED == 'true' && 'true' || 'false' }}
+          MAHJONG_SANMA_REVIEW_ENABLED: ${{ (vars.MAHJONG_SANMA_REVIEW_ENABLED == 'true' || vars.MAHJONG_SANMA_REVIEW_ENABLED == '') && 'true' || 'false' }}
           C3_ASSETS_ROOT: ${{ github.workspace }}/services/valorant-results/.cache/c3-model
         run: node --experimental-strip-types scripts/mahjong-paipu.mjs ${{ steps.queue.outputs.count == 'check' && '--check' || '' }}

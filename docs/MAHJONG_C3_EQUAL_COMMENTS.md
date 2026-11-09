@@ -57,7 +57,7 @@ Python設定がない場合は打点比較だけを省略する。関係する�
 ## 設定と本番確認
 
 - 四麻の既存設定 `MAHJONG_EQUAL_REVIEW_ENABLED` は維持。`false` で任意推論を停止。
-- 三麻はリポジトリ変数 `MAHJONG_SANMA_REVIEW_ENABLED=true` の時だけ有効。本作業では変更していない。
+- PR #393では実三麻/四麻auditと人工投稿の送達確認を終えたため、マージ後は三麻解析を標準で有効にする。`MAHJONG_SANMA_REVIEW_ENABLED` は未設定または `true` で有効、明示的な `false` または不正な設定で無効。設定画面での変数追加は必須ではない。PR未反映のmainは従来の未設定=無効のまま。
 - 既存 `Mahjong paipu fetch` の手動 `c3_probe=true` は実モデルだけの検証。雀魂/Discord/KP/D1へアクセスしない。
 - 手動 `review_audit=true` はSELECT1回、直近rowid64行内から最大12件を読み、最大2対局を再取得して匿名検証。取り込み/支給/Discord送信/DB書き込みなし。通常cronでは診断しない。
 - 配置時は先に新レポートを検証できるWorkerを配置・確認してから三麻を有効にする。トークンの再作成やDB migrationは不要。
@@ -71,7 +71,7 @@ Python設定がない場合は打点比較だけを省略する。関係する�
 - `delivery_probe=true`: 所有者限定。人工牌譜の三麻/四麻を実計算し、「人工牌譜・KP支給なし」の検証を既存キューへ1通登録する。同じrelease SHAは再送しない。1行のINSERTと最大5回の主キーSELECT以外にDB変更はない。
 - 解析を変更した配置後は既存dispatch資格情報でread-only確認を起動できる。配置commitに明示的な`[mahjong-review-probe]`を含む時だけ、上記の検証投稿を選べる。通常の配置やcronで人工投稿を繰り返す仕組みではない。
 
-所有者が`delivery_probe`と`enable_sanma`を同時に指定した場合だけ、送信済み確認の成功後に三麻のbool変数をtrueに設定できる。既存資格情報に変数編集権限がなければ失敗を表示し、有効になったとは扱わない。通常のcron/配置で勝手に再有効化はしない。
+以前の手動移行モードでは、所有者が`delivery_probe`と`enable_sanma`を同時指定すると、送達確認後に三麻変数の更新を試みる。既存資格情報ではVariables APIが403となるため、この更新に依存しない標準有効化をPR #393に用意した。通常のcron/配置からRepository variableは書き換えず、明示的な`false`による停止を維持する。
 
 ### 標準ルールの確認
 

@@ -53,9 +53,9 @@ jobs:
           node-version: '24'
           cache: npm
           cache-dependency-path: services/valorant-results/package-lock.json
-      - name: Report sanma configuration without accessing Mahjong or D1
+      - name: Report proposed sanma release configuration without accessing Mahjong or D1
         env:
-          SANMA_CONFIGURATION: ${{ vars.MAHJONG_SANMA_REVIEW_ENABLED == 'true' && 'enabled' || vars.MAHJONG_SANMA_REVIEW_ENABLED == 'false' && 'disabled' || vars.MAHJONG_SANMA_REVIEW_ENABLED == '' && 'unset' || 'invalid' }}
+          SANMA_CONFIGURATION: ${{ vars.MAHJONG_SANMA_REVIEW_ENABLED == 'true' && 'enabled' || vars.MAHJONG_SANMA_REVIEW_ENABLED == 'false' && 'disabled' || vars.MAHJONG_SANMA_REVIEW_ENABLED == '' && 'enabled-release-default' || 'invalid' }}
         run: |
           printf 'equal_review_configuration: sanma=%s\n' "$SANMA_CONFIGURATION"
       - run: npm ci
