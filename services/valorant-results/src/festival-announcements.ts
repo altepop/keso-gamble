@@ -7,8 +7,8 @@ export function festivalReminders(now:number){
  // Only this one-hour catch-up window can touch D1; no new queries on ordinary ticks.
  if(hour!==9)return [];
  const due:Array<{race:number;stage:string}>=[];
- for(const days of [3,1,0])for(let h=19;h<=23;h++){
-  const race=day+days*DAY+h*3600000+45*60000;
+ for(const days of [3,1,0])for(let minute=19*60;minute<24*60;minute+=15){
+  const race=day+days*DAY+minute*60000;
   if(festivalRace(race))due.push({race,stage:days===3?'three-days':days===1?'tomorrow':'today'});
  }
  return due;

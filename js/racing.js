@@ -1,4 +1,4 @@
-import {EXTRA_HORSE_NAMES,EXTRA_CROWN_NAMES,REGULAR_RACE_NAMES} from './racing-name-catalog.js?v=web-b475d5b20f5d179d';
+import {EXTRA_HORSE_NAMES,EXTRA_CROWN_NAMES,REGULAR_RACE_NAMES} from './racing-name-catalog.js?v=web-fbd9fb1e0a1cddb8';
 // Horse racing. Pure logic with no DOM or clock reads, shared by the browser and the Worker.
 // Cards and odds are public (PUBLIC_SALT). The run uses a per-race seed: the demo uses the public
 // salt, while the Worker keeps a random seed secret until the start and publishes its hash first.
@@ -79,13 +79,18 @@ export const CHAOS_RACE_TYPES=[
 ];
 // Rare festival slots are independent of result and payout seeds. Only future races change.
 export const FESTIVAL_FROM=Date.parse('2026-11-11T00:00:00+09:00');
+export const FESTIVAL_FIRST=Date.parse('2026-11-14T22:00:00+09:00');
 export const FESTIVAL_PRICE=1000,FESTIVAL_MAX_ODDS10=1000000;
 export function festivalRace(start){
  if(!isRaceStart(start)||start<FESTIVAL_FROM)return null;
- const week=weekStart(start),rng=rngFrom('festival-week-v1:'+week);
- if(rng()>=.5)return null;
- const chosenDay=Math.floor(rng()*7),chosenHour=19+Math.floor(rng()*5);
- if(start!==week+chosenDay*86400000+(chosenHour*60+45)*60000)return null;
+ const week=weekStart(start);
+ if(week===weekStart(FESTIVAL_FIRST)){
+  if(start!==FESTIVAL_FIRST)return null; // Fixed opening night replaces this week's random slot.
+ }else{
+  const rng=rngFrom('festival-week-v1:'+week);if(rng()>=.5)return null;
+  const chosenDay=Math.floor(rng()*7),chosenHour=19+Math.floor(rng()*5);
+  if(start!==week+chosenDay*86400000+(chosenHour*60+45)*60000)return null;
+ }
  return {id:'festival',name:'一枚で億り人杯',effect:'1人1枚・オッズ非公開・最大1億KP',desc:'馬券は全員1,000 KP。倍率はゴールまで秘密。的中した馬券に秘蔵倍率を適用。購入後の追加・変更はできません。'};
 }
 export function festivalFactor(seed){

@@ -200,10 +200,11 @@ test('a 10,000 KP loss on one race is recorded for its melt crown when the race 
 
 test('festival reminders are queued once on three separate JST mornings, then one opening card; retries and bindings cannot duplicate them',async()=>{
  // @ts-expect-error Shared deterministic schedule.
- const {FESTIVAL_FROM,festivalRace}=await import('../../../js/racing.js');
+ const {FESTIVAL_FROM,FESTIVAL_FIRST,festivalRace}=await import('../../../js/racing.js');
  const {festivalReminders,festivalAnnouncement}=await import('../src/festival-announcements.ts');
  const {queueFestivalAnnouncements}=await import('../src/racing-posts.ts');
  let race=FESTIVAL_FROM;while(!festivalRace(race))race+=RACE_INTERVAL;
+ assert.equal(race,FESTIVAL_FIRST);
  const day=Math.floor((race+9*3600000)/86400000)*86400000-9*3600000;
  const f=await fixture();await ensurePosts(f.env);
  let count=0;
@@ -214,7 +215,7 @@ test('festival reminders are queued once on three separate JST mornings, then on
   await Promise.all([queueFestivalAnnouncements(f.env,at),queueFestivalAnnouncements({...f.env,DB:{...f.env.DB} as D1Database},at+60000)]);
   await queueFestivalAnnouncements(f.env,at+59*60000);
   count++;assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM kp_posts WHERE id LIKE 'race-festival-reminder:%'").get()!.n,count);
-  const text=festivalAnnouncement(race,reminder.stage);assert.match(text,/1,000 KPで1人1枚/);assert.match(text,/最大1億KP/);assert.match(text,/今はまだ買えへん/);assert.match(text,/日本時間/);assert.doesNotMatch(text,/秘蔵倍率 ×/);
+  const text=festivalAnnouncement(race,reminder.stage);assert.match(text,/1,000 KPで1人1枚/);assert.match(text,/最大1億KP/);assert.match(text,/今はまだ買えへん/);assert.match(text,/日本時間/);assert.match(text,/22:00/);assert.match(text,/21:45〜21:59/);assert.doesNotMatch(text,/秘蔵倍率 ×/);
  }
  const bodies=f.sql.prepare("SELECT body FROM kp_posts WHERE id LIKE 'race-festival-reminder:%'").all().map(r=>JSON.parse(String(r.body)));
  for(const body of bodies)assert.deepEqual(body.allowed_mentions,{parse:[]});

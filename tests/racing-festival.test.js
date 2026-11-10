@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {FESTIVAL_FROM,FESTIVAL_PRICE,FESTIVAL_MAX_ODDS10,festivalRace,festivalFactor,festivalOdds10,raceCard,raceOdds,raceResult,raceTimeline,distanceAt,createRacing,placeRaceBet,hydrateRacing,settleRaceBets,weekStart,RUN_MS} from '../js/racing.js';
+import {FESTIVAL_FROM,FESTIVAL_FIRST,FESTIVAL_PRICE,FESTIVAL_MAX_ODDS10,festivalRace,festivalFactor,festivalOdds10,raceCard,raceOdds,raceResult,raceTimeline,distanceAt,createRacing,placeRaceBet,hydrateRacing,settleRaceBets,weekStart,RUN_MS} from '../js/racing.js';
 import {racePreview} from '../js/racing-view.js';
 const firstFestival=()=>{for(let t=FESTIVAL_FROM;t<FESTIVAL_FROM+70*86400000;t+=900000)if(festivalRace(t))return t;throw Error('fixture festival missing');};
 const RACE=firstFestival(),NOW=RACE-120000;
@@ -10,7 +10,7 @@ test('festivals are future-only, deterministic and at most one evening slot per 
  const weeks=new Map();let count=0;
  for(let t=FESTIVAL_FROM;t<FESTIVAL_FROM+365*86400000;t+=900000){const e=festivalRace(t);if(!e)continue;
   const key=weekStart(t);assert(!weeks.has(key));weeks.set(key,t);count++;
-  const japan=new Date(t+9*3600000);assert.equal(japan.getUTCMinutes(),45);assert(japan.getUTCHours()>=19&&japan.getUTCHours()<=23);
+  const japan=new Date(t+9*3600000);assert.equal(japan.getUTCMinutes(),t===FESTIVAL_FIRST?0:45);assert(japan.getUTCHours()>=19&&japan.getUTCHours()<=23);
   assert.deepEqual(festivalRace(t),e);
  }
  assert(count>=15&&count<=38);
@@ -38,4 +38,12 @@ test('festival preview never leaks base odds or a purported payout, and its show
  }
  const order=[...card.horses].sort((a,b)=>distanceAt(timeline,b.number,RUN_MS)-distanceAt(timeline,a.number,RUN_MS)).map(h=>h.number);
  assert.deepEqual(order,result.order);assert.equal(card.size,10);
+});
+
+
+test('opening night is Saturday November 14 at 22:00 JST and replaces that week’s random festival',()=>{
+ assert.equal(FESTIVAL_FIRST,Date.parse('2026-11-14T22:00:00+09:00'));
+ assert.equal(firstFestival(),FESTIVAL_FIRST);assert(festivalRace(FESTIVAL_FIRST));
+ assert.equal(festivalRace(Date.parse('2026-11-15T22:45:00+09:00')),null);
+ assert.equal(festivalRace(FESTIVAL_FIRST-900000),null);assert.equal(festivalRace(FESTIVAL_FIRST+900000),null);
 });
