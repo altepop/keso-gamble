@@ -1,3 +1,4 @@
+import {festivalTerms,publicFestivalResponse} from './race-festival.ts';
 import {personalVerifiedRelicStats} from './relic-economy.ts';
 import {hoyoApi} from './hoyo.ts';
 import {boardDuelApi} from './board-duels.ts';
@@ -190,7 +191,8 @@ export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:strin
    directive={target,task,game,achievement,cost};state.cash-=cost;result={issued:true,discount};
   }else if(action==='race-bet'){
    const raceId=Number(args.raceId),entries=Number.isSafeInteger(raceId)?await raceEntries(env,mapping,raceId):[];
-   const bet=placeRaceBet(state,{raceId:args.raceId,type:args.type,horse:args.horse,amount:args.amount},Date.now(),entries);
+   const festival=await festivalTerms(env,mapping.guildId,raceId);
+   const bet=placeRaceBet(state,{raceId:args.raceId,type:args.type,horse:args.horse,amount:args.amount},Date.now(),entries,festival?.factor);
    await raceSeed(env,mapping.guildId,bet.raceId); // the hash is fixed before betting closes
    result={bet};
   }else if(action==='ml-bet'){
@@ -320,6 +322,7 @@ export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:strin
    .bind(id,mapping.guildId,user,requestHash,JSON.stringify(response),state.cash-before,JSON.stringify(safeState),directive?JSON.stringify(directive):null,Date.now(),mapping.guildId,user,state.walletVersion,state.stateVersion,['trade','directive','luxury'].includes(action)?1:0,mapping.guildId,state.stockMarket.version,
     ...commitArgs).run();
   }catch(error){
+   if(String((error as Error)?.message).includes('kp_festival_tickets'))throw Error('この祭りレースの馬券は1人1枚です。');
    // Someone else's 💎💎💎 changed the shared pool after this spin was drawn: nothing was saved, so draw again.
    if(action==='slot'&&String((error as Error)?.message).includes('Jackpot changed'))continue;
    throw error;
@@ -362,7 +365,7 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping,deferP
  if(origin&&!origins.includes(origin))return new Response('Forbidden origin',{status:403});
  const headers:Record<string,string>={'Cache-Control':'no-store','Vary':'Origin'};
  if(origin)Object.assign(headers,{'Access-Control-Allow-Origin':origin,'Access-Control-Allow-Headers':'Authorization,Content-Type','Access-Control-Allow-Methods':'GET,POST,OPTIONS'});
- const response=(body:unknown,status=200)=>Response.json(body,{status,headers});
+ const response=(body:unknown,status=200)=>Response.json(publicFestivalResponse(body),{status,headers});
  if(request.method==='GET'&&new URL(request.url).pathname==='/api/kp/commands')return response({applicationId:discord.applicationId,version:KP_COMMAND_VERSION,commands:kpCommands});
  if(request.method==='OPTIONS')return new Response(null,{status:204,headers});
  try{
@@ -404,7 +407,9 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping,deferP
   if(request.method==='POST'&&path==='/api/kp/logout'){await revokeKpSession(env,token!);return response({disconnected:true});}
   if(request.method==='GET'&&path==='/api/kp/private/race'){
    if(!await privateCasinoAllowed(env,mapping.guildId,owner.user))return response({error:'この操作は利用できません。'},403);
-   const view=await racingView(env,mapping),card=raceCard(view.open.id,undefined,view.open.entries),seed=await raceSeed(env,mapping.guildId,view.open.id),result=raceResult(card,seed.seed),odds=raceOdds(card);
+   const view=await racingView(env,mapping);
+   if(view.open.festival)return response({error:'祭りレースは先読みできません。全員同じ一発勝負です。'},403);
+   const card=raceCard(view.open.id,undefined,view.open.entries),seed=await raceSeed(env,mapping.guildId,view.open.id),result=raceResult(card,seed.seed),odds=raceOdds(card);
    return response({id:card.id,name:card.name,closeAt:card.closeAt,hash:seed.hash,order:result.order.map((n:number)=>({number:n,name:card.horses.find((h:{number:number})=>h.number===n)?.name,win:odds.win[n],place:odds.place[n]}))});
   }
   const names=()=>memberNames(env,mapping.guildId,new Map(mapping.accounts.map(a=>[a.discordUserId,configuredPlayers.find(p=>p.riotId.toLowerCase()===a.riotId.toLowerCase())?.name??a.riotId.split('#')[0]])));

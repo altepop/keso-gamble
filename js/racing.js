@@ -1,4 +1,4 @@
-import {EXTRA_HORSE_NAMES,EXTRA_CROWN_NAMES,REGULAR_RACE_NAMES} from './racing-name-catalog.js?v=web-3e87eca8099653c5';
+import {EXTRA_HORSE_NAMES,EXTRA_CROWN_NAMES,REGULAR_RACE_NAMES} from './racing-name-catalog.js?v=web-b475d5b20f5d179d';
 // Horse racing. Pure logic with no DOM or clock reads, shared by the browser and the Worker.
 // Cards and odds are public (PUBLIC_SALT). The run uses a per-race seed: the demo uses the public
 // salt, while the Worker keeps a random seed secret until the start and publishes its hash first.
@@ -77,7 +77,25 @@ export const CHAOS_RACE_TYPES=[
  {id:'upset',name:'下剋上',effect:'能力の低い馬にハンデ補正',desc:'格上馬の独走を許さない。普段の人気馬ほど安全ではない。'},
  {id:'condition',name:'体調最優先',effect:'好調馬がさらに有利・不調馬は苦戦',desc:'コンディションの差が普段より大きく着順へ響く。'},
 ];
+// Rare festival slots are independent of result and payout seeds. Only future races change.
+export const FESTIVAL_FROM=Date.parse('2026-11-11T00:00:00+09:00');
+export const FESTIVAL_PRICE=1000,FESTIVAL_MAX_ODDS10=1000000;
+export function festivalRace(start){
+ if(!isRaceStart(start)||start<FESTIVAL_FROM)return null;
+ const week=weekStart(start),rng=rngFrom('festival-week-v1:'+week);
+ if(rng()>=.5)return null;
+ const chosenDay=Math.floor(rng()*7),chosenHour=19+Math.floor(rng()*5);
+ if(start!==week+chosenDay*86400000+(chosenHour*60+45)*60000)return null;
+ return {id:'festival',name:'一枚で億り人杯',effect:'1人1枚・オッズ非公開・最大1億KP',desc:'馬券は全員1,000 KP。倍率はゴールまで秘密。的中した馬券に秘蔵倍率を適用。購入後の追加・変更はできません。'};
+}
+export function festivalFactor(seed){
+ const r=rngFrom('festival-payout-v1:'+seed)();
+ return r<.4?10:r<.75?50:r<.95?200:r<.995?1000:10000;
+}
+export const festivalOdds10=(base,factor)=>Math.min(FESTIVAL_MAX_ODDS10,base*factor);
+
 export function raceEvent(start){
+ const festival=festivalRace(start);if(festival)return festival;
  if(!isRaceStart(start)||start<CHAOS_RACES_FROM)return null;
  const {day,minutes}=jstParts(start);
  const eligible=minutes===1095||minutes===1275||minutes===1395||((day===0||day===6)&&(minutes===735||minutes===975));
@@ -107,7 +125,7 @@ export function fillerCrownName(start){const {day,minutes}=jstParts(start);if(!(
 export function regularRaceName(start){return REGULAR_RACE_NAMES[Math.floor(rngFrom(`ordinary:${start}`)()*REGULAR_RACE_NAMES.length)];}
 /** Slots a crown race may use: weekday nights 19:00-0:45, weekends from 10:00 (members work days). */
 export function crownSlotAllowed(start){
- if(!isRaceStart(start)||bigRaceName(start)||fillerCrownName(start))return false;
+ if(!isRaceStart(start)||bigRaceName(start)||fillerCrownName(start)||festivalRace(start))return false;
  const {day,minutes}=jstParts(start);
  return minutes>=1140||minutes<60||((day===0||day===6)&&minutes>=600);
 }
@@ -115,12 +133,12 @@ export function crownSlotAllowed(start){
 // Race classes and horse grades share one ladder. A horse runs in the class of its grade.
 export const CLASSES=[{label:'ザコ戦',grade:'下級',mult:1,mean:-.6},{label:'中堅戦',grade:'中級',mult:3,mean:-.2},{label:'強豪戦',grade:'上級',mult:10,mean:.2},{label:'エリート戦',grade:'エリート級',mult:30,mean:.6},{label:'頂上決戦',grade:'頂上級',mult:100,mean:1}];
 /** Class of a race slot. Big races are one class up. */
-export function raceClass(start){const base=pickWeighted(rngFrom(`class:${start}`),[50,25,15,7,3]);return Math.min(CLASSES.length-1,base+(bigRaceName(start)?1:0));}
+export function raceClass(start){if(festivalRace(start))return 4;const base=pickWeighted(rngFrom(`class:${start}`),[50,25,15,7,3]);return Math.min(CLASSES.length-1,base+(bigRaceName(start)?1:0));}
 /** A card is public: wild horses come from the race time; owned horses (`entries`) come from the Worker. */
 export function raceCard(start,salt=PUBLIC_SALT,entries=[]){
  if(!isRaceStart(start))throw Error('レースが見つかりません');
  const rng=rngFrom(`${salt}:card:${start}`);
- const big=bigRaceName(start),size=big?10:8,cls=raceClass(start);
+ const big=bigRaceName(start),size=big||festivalRace(start)?10:8,cls=raceClass(start);
  const names=start<NAME_EXPANSION_FROM?[...LEGACY_HORSE_NAMES]:[...HORSE_NAMES];
  for(let i=names.length-1;i>0;i--){const j=Math.floor(rng()*(i+1));[names[i],names[j]]=[names[j],names[i]];}
  const horses=names.slice(0,size).map((name,i)=>({number:i+1,name,ability:CLASSES[cls].mean+normal(rng)*.35,style:Math.floor(rng()*STYLES.length),condition:pickWeighted(rng,[1,2,4,2,1])}));
@@ -224,7 +242,7 @@ export function raceTimeline(card,result,seed=PUBLIC_SALT){
  const horses={};
  result.runs.forEach((r,i)=>{
   const h=card.horses[r.number-1];
-  const curve=Math.max(-.9,Math.min(.9,STYLES[h.style].curve+(r.late?-.06:0)+(rng()-.5)*.02));
+  const curve=Math.max(-.9,Math.min(.9,STYLES[h.style].curve+(r.late?-.06:0)+(rng()-.5)*(festivalRace(card.start)?.9:.02)));
   horses[r.number]={finish:44000+raw[i]*scale,curve,late:r.late,rank:i+1};
  });
  return {horses,photo:result.order.length>1&&(raw[1]-raw[0])*scale<120};
@@ -300,29 +318,32 @@ export function raceCommentary(card,result,timeline,odds,seed=PUBLIC_SALT){
 export function createRacing(){return {raceBets:[],raceWeek:{start:0,spent:0}};}
 function keepPending(bets){const pending=bets.filter(b=>b.status==='pending');return [...pending,...bets.filter(b=>b.status!=='pending').sort((a,b)=>b.time-a.time).slice(0,Math.max(0,60-pending.length))].sort((a,b)=>b.time-a.time);}
 const validInt=(v,min=0)=>Number.isSafeInteger(v)&&v>=min;
-function validBet(b){return b&&typeof b.id==='string'&&b.id.length<=40&&isRaceStart(b.raceId)&&Object.hasOwn(BET_TYPES,b.type)&&(b.type==='trifecta'?Array.isArray(b.horse)&&b.horse.length===3&&new Set(b.horse).size===3&&b.horse.every(n=>validInt(n,1)&&n<=10):validInt(b.horse,1)&&b.horse<=10)&&validInt(b.amount,MIN_BET)&&b.amount%BET_STEP===0&&validInt(b.odds,10)&&validInt(b.time)&&(b.status==='pending'?b.payout===0:['won','lost'].includes(b.status)&&validInt(b.payout)&&(b.status==='lost'?b.payout===0:b.payout===payoutFor(b.amount,b.odds)));}
+function validBet(b){return b&&typeof b.id==='string'&&b.id.length<=40&&isRaceStart(b.raceId)&&Object.hasOwn(BET_TYPES,b.type)&&(b.type==='trifecta'?Array.isArray(b.horse)&&b.horse.length===3&&new Set(b.horse).size===3&&b.horse.every(n=>validInt(n,1)&&n<=10):validInt(b.horse,1)&&b.horse<=10)&&validInt(b.amount,MIN_BET)&&b.amount%BET_STEP===0&&(validInt(b.odds,10)||(b.festival===true&&festivalRace(b.raceId)&&b.status==='pending'&&b.odds===null))&&validInt(b.time)&&(b.status==='pending'?b.payout===0:['won','lost'].includes(b.status)&&validInt(b.payout)&&(b.status==='lost'?b.payout===0:b.payout===payoutFor(b.amount,b.odds)));}
 export function hydrateRacing(raw){
  const racing=createRacing();
  // Every unsettled ticket stays (its KP is already paid); settled ones fill the rest of the 60 shown, newest first.
- if(Array.isArray(raw?.raceBets))racing.raceBets=keepPending(raw.raceBets.filter(validBet)).map(b=>({id:b.id,raceId:b.raceId,type:b.type,horse:b.horse,amount:b.amount,odds:b.odds,status:b.status,payout:b.payout,time:b.time}));
+ if(Array.isArray(raw?.raceBets))racing.raceBets=keepPending(raw.raceBets.filter(validBet)).map(b=>({id:b.id,raceId:b.raceId,type:b.type,horse:b.horse,amount:b.amount,odds:b.odds,status:b.status,payout:b.payout,time:b.time,...(b.festival===true?{festival:true}:{})}));
  if(validInt(raw?.raceWeek?.start)&&validInt(raw.raceWeek.spent))racing.raceWeek={start:raw.raceWeek.start,spent:raw.raceWeek.spent};
  return racing;
 }
 export function weeklySpent(state,now){return state.raceWeek.start===weekStart(now)?state.raceWeek.spent:0;}
-export function placeRaceBet(state,{raceId,type,horse,amount},now,entries=[]){
+export function placeRaceBet(state,{raceId,type,horse,amount},now,entries=[],factor=festivalFactor(PUBLIC_SALT+raceId)){
  if(raceId!==openRaceStart(now))throw Error('このレースの馬券は締め切りました');
  if(!Object.hasOwn(BET_TYPES,type))throw Error('券の種類を選んでください');
- const card=raceCard(raceId,PUBLIC_SALT,entries);
+ const card=raceCard(raceId,PUBLIC_SALT,entries),festival=festivalRace(raceId);
+ if(festival&&state.raceBets.some(b=>b.raceId===raceId))throw Error('この祭りレースの馬券は1人1枚です。');
+ if(festival&&amount!==FESTIVAL_PRICE)throw Error('祭りの馬券は1枚1,000 KPです。');
  if(type==='trifecta'?(!Array.isArray(horse)||horse.length!==3||new Set(horse).size!==3||horse.some(n=>!Number.isInteger(n)||n<1||n>card.size)):(!Number.isInteger(horse)||horse<1||horse>card.size))throw Error('馬を選んでください（3連単は異なる3頭を着順通りに）。');
  if(!validInt(amount,MIN_BET)||amount%BET_STEP!==0)throw Error(`金額は${MIN_BET} KP以上、${BET_STEP} KP単位です`);
  if(amount>MAX_RACE_BET)throw Error('馬券は1枚100,000 KPまでです。');
  if(amount>state.cash)throw Error('KPが不足しています');
  const spent=weeklySpent(state,now);
  if(spent+amount>WEEKLY_LIMIT)throw Error(`1週間に買える馬券は${WEEKLY_LIMIT.toLocaleString('ja-JP')} KPまでです（残り${(WEEKLY_LIMIT-spent).toLocaleString('ja-JP')} KP）`);
- const odds=type==='trifecta'?trifectaOdds(card,horse):raceOdds(card)[type][horse];
+ const baseOdds=type==='trifecta'?trifectaOdds(card,horse):raceOdds(card)[type][horse];
+ const odds=festival?festivalOdds10(baseOdds,factor):baseOdds;
  if(!Number.isSafeInteger(odds)||odds<10)throw Error('オッズを取得できません。');
  if(!Number.isSafeInteger(payoutFor(amount,odds)))throw Error('払戻金が計算上限を超えています。');
- const bet={id:`${now}-${state.raceBets.length}`,raceId,type,horse,amount,odds,status:'pending',payout:0,time:now};
+ const bet={id:`${now}-${state.raceBets.length}`,raceId,type,horse,amount,odds,status:'pending',payout:0,time:now,...(festival?{festival:true}:{})};
  state.cash-=amount;
  state.raceWeek={start:weekStart(now),spent:spent+amount};
  state.raceBets.unshift(bet);
@@ -335,6 +356,7 @@ export function settleRaceBets(state,now,seedOf=()=>PUBLIC_SALT,entriesOf=()=>[]
  const settled=[];
  for(const bet of state.raceBets){
   if(bet.status!=='pending'||now<bet.raceId+RUN_MS)continue;
+  if(!validInt(bet.odds,10))throw Error('確定配当を確認できません。再確認してください。');
   const seed=seedOf(bet.raceId);if(seed===null||seed===undefined)continue;
   const card=raceCard(bet.raceId,PUBLIC_SALT,entriesOf(bet.raceId)),won=betWins(bet.type,bet.horse,raceResult(card,seed),card.size);
   const payout=won?payoutFor(bet.amount,bet.odds):0;

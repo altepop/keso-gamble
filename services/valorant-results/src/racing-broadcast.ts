@@ -39,7 +39,7 @@ export function liveRacePost(show:RaceShow,now:number){
  const {card,timeline,order}=show,t=Math.max(0,now-card.start),finished=t>=RUN_MS;
  const name=(n:number)=>clean(card.horses.find((h:any)=>h.number===n).name);
  const title=`${finished?'🏁':now<card.start?'🏇':'🔴'} **${clean(card.name)}**`;
- if(now<card.start)return {content:[title,`<t:${Math.floor(card.start/1000)}:t> 発走 · あと<t:${Math.floor(card.start/1000)}:R>`,`締切 <t:${Math.floor((card.start-60000)/1000)}:t>　\`/bet\` で購入`,...(card.event?[`🌪️ 特別ルール：${clean(card.event.name)}｜${clean(card.event.effect)}`]:[]),...card.horses.map((h:any)=>`${h.number}番 ${name(h.number)}　${(show.odds.win[h.number]/10).toFixed(1)}倍`),'ここで実況するで！ Activityを開かんでも観戦できるから、そのまま見といてな。'].join('\n'),allowed_mentions:{parse:[]},components:activityLaunchComponents()};
+ if(now<card.start)return {content:[title,`<t:${Math.floor(card.start/1000)}:t> 発走 · あと<t:${Math.floor(card.start/1000)}:R>`,`締切 <t:${Math.floor((card.start-60000)/1000)}:t>　\`/bet\` で購入`,...(card.event?[`🌪️ 特別ルール：${clean(card.event.name)}｜${clean(card.event.effect)}`]:[]),...card.horses.map((h:any)=>`${h.number}番 ${name(h.number)}　${card.event?.id==='festival'?'倍率は秘密や':(show.odds.win[h.number]/10).toFixed(1)+'倍'}`),'ここで実況するで！ Activityを開かんでも観戦できるから、そのまま見といてな。'].join('\n'),allowed_mentions:{parse:[]},components:activityLaunchComponents()};
  const ranked=[...order].sort((a,b)=>distanceAt(timeline,b,t)-distanceAt(timeline,a,t));
  const line=show.commentary.filter(c=>c.t<=t).at(-1)?.text??'スタート！';
  const backmarker=finished?null:lastPlaceAt(timeline,Math.max(1,t));
