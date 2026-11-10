@@ -1,3 +1,5 @@
+import {festivalReminders,festivalAnnouncement} from './festival-announcements.ts';
+import {festivalTerms} from './race-festival.ts';
 import {activityLaunchComponents} from './activity-link.ts';
 // Horse racing posts for the earnings channel. Posts are queued once under a fixed ID and sent by
 // the minute cron. Queue IDs deduplicate registration; an interrupted delivery can remain unknown.
@@ -35,24 +37,24 @@ export function earningsWebhook(env:PostEnv){
 
 /** How to buy from Discord, with the race's own start time filled in. */
 const howToBet=(start:number)=>[`🎫 **Discordで馬券を買うてな！**　\`/bet\` と打って → **horse** で馬を選んで → **amount** に掛け金（例 500）を入れて送信や`,
- `-# ${clock(start-CLOSE_BEFORE)}まで受付やで。券種を選ばへんかったら1着当てや。100 KP単位・1週間で合計5万KPまで（Mリーグ予想と合算）。買うた後は取り消せへんで。/keiba で出走表を見られるし、アプリの「勝負 → 競馬」でも買えるで`];
-export function cardPost(card:Card,hash:string){
- const odds=raceOdds(card),brief=card.start>=FORM_REFORM_FROM?raceBrief(card):null;
+ `-# ${clock(start-CLOSE_BEFORE)}まで受付やで。券種を選ばへんかったら1着当てや。100 KP単位・1週間で合計40万KPまで（Mリーグ予想と合算）。買うた後は取り消せへんで。/keiba で出走表を見られるし、アプリの「勝負 → 競馬」でも買えるで`];
+export function cardPost(card:Card,hash:string,festivalHash?:string){
+ const festival=card.event?.id==='festival',odds=raceOdds(card),brief=card.start>=FORM_REFORM_FROM&&!festival?raceBrief(card):null;
  return [`🏇 **${clean(card.name)}**`,
   `-# ${clock(card.start)}発走・${card.size}頭・コース ${GOINGS[card.going].label}｜締切 ${clock(card.start-CLOSE_BEFORE)}`,
    ...(brief?[`🧠 ${clean(brief.pace)}｜${clean(brief.bias)}`,`-# 市場オッズは参考値。馬場適性、展開、特別ルールを十分に織り込まない。`]:[]),
   '',`**出走馬**　倍率は 1着当て / ${placeSlots(card.size)}着以内当て`,
-  ...card.horses.flatMap(h=>[`\`${String(h.number).padStart(2)}\` ${clean(h.name)}${h.nickname?`「${clean(h.nickname)}」`:''}　**${odd(odds.win[h.number])}** / ${odd(odds.place[h.number])}${brief?`｜調教${runningNotes(card,h).training}・馬場${runningNotes(card,h).trackFit}`:''}`,
+  ...card.horses.flatMap(h=>[`\`${String(h.number).padStart(2)}\` ${clean(h.name)}${h.nickname?`「${clean(h.nickname)}」`:''}　${festival?'倍率は非公開':'**'+odd(odds.win[h.number])+'** / '+odd(odds.place[h.number])}${brief?`｜調教${runningNotes(card,h).training}・馬場${runningNotes(card,h).trackFit}`:''}`,
    ...h.person?['-# 本人の名前の馬・見舞金つき']:h.ownerName?[`-# 馬主 ${clean(h.ownerName)}${brief&&h.record?`｜${h.record.races}戦${h.record.wins}勝 近走${(h.recentRanks??[]).slice(0,5).join('-')||'初出走'}`:''}`]:[]]),
-  ...(card.event?['',`🌪️ **特別ルール：${clean(card.event.name)}**`,`🎯 ${clean(card.event.effect)}`,`-# ${clean(card.event.desc)}／市場倍率はこの有利不利を完全には織り込まない`]:[]),
-  '',...howToBet(card.start),
+  ...(card.event?['',`🌪️ **特別ルール：${clean(card.event.name)}**`,`🎯 ${clean(card.event.effect)}`,`-# ${clean(card.event.desc)}${festival?'':'／市場倍率はこの有利不利を完全には織り込まない'}`]:[]),
+  '',...(festival?['🎆 **祭りの1枚！** 1人1枚、1,000 KP。オッズはゴールまで内緒や。','的中したら秘蔵倍率を適用。最大1億KP。指令の値札が小銭に見えるかもしれへんで。','`/bet` かActivityで購入。追加も変更もできへんで。',...(festivalHash?['配当抽選ハッシュ: `'+festivalHash+'`']:[])]:howToBet(card.start)),
   '',`💬 ${raceCatchphrase('card',String(card.id))}`,raceAside('card',String(card.id)),
   `-# 結果のハッシュ: \`${hash.slice(0,16)}…\`（発走後にシード値を公開するで）`].join('\n');
 }
 export function resultPost(card:Card,seed:string,bets:Array<Bet&{user:string}>,levelOf:(user:string)=>RoastLevel,titleOf:(user:string)=>string|undefined=()=>undefined){
  const odds=raceOdds(card),order:number[]=raceResult(card,seed).order;
  const lines=[`🏁 **${clean(card.name)}** 結果出たで！`,`-# ${clock(card.start)}発走・${card.size}頭`,...(card.event?[`🌪️ 特別ルール：${clean(card.event.name)}（${clean(card.event.effect)}）`]:[]),'',
-  ...order.slice(0,3).flatMap((n,i)=>{const h=card.horses[n-1];return [`${['🥇','🥈','🥉'][i]} ${i+1}着 ${n}番 **${clean(h.name)}**${i===0?`　1着当て ${odd(odds.win[n])}`:''}`,
+  ...order.slice(0,3).flatMap((n,i)=>{const h=card.horses[n-1];return [`${['🥇','🥈','🥉'][i]} ${i+1}着 ${n}番 **${clean(h.name)}**${i===0&&card.event?.id!=='festival'?`　1着当て ${odd(odds.win[n])}`:''}`,
    ...h.ownerName?[`-# 馬主 ${clean(h.ownerName)}・賞金 ${kp(prizeFor(card,i))}`]:[]];})];
  const byUser=new Map<string,Array<Bet>>();for(const b of bets)byUser.set(b.user,[...(byUser.get(b.user)??[]),b]);
  if(byUser.size)lines.push('','**馬券（同レースの全購入分を合算した収支）**');
@@ -65,9 +67,10 @@ export function resultPost(card:Card,seed:string,bets:Array<Bet&{user:string}>,l
   // Show losing tickets as well as winners; a winning place bet is not a profitable race by itself.
   const tickets=list.map(b=>`${b.horse}番${BET_TYPES[b.type].formal}${b.status==='won'?'○':'×'}`).join('・');
   const tone=hits.length?(profit>0?'win':'partial'):'loss';
+  if(card.event?.id==='festival'&&paid>=1000000)lines.push('🎆🎆🎆',`**${who} ${paid>=100000000?'億り人誕生や！！':'富豪誕生！！'} 払戻し ${kp(paid)}！！**`);
   lines.push(`${icon} ${who}　収支 ${balance}（購入 ${kp(spent)} / 払戻 ${kp(paid)}）`,`-# 内訳 ${tickets}`,`🗯️ ${raceBanter(tone,levelOf(user),user+':'+card.id)}`);
  }
- if(card.event){
+ if(card.event&&card.event.id!=='festival'){
   const winner=order[0],fav=card.horses.reduce((best,h)=>odds.win[h.number]<odds.win[best]?h.number:best,1);
   if(winner!==fav)lines.push('',`🎲 **${clean(card.event.name)}・波乱発生！** 1番人気の${clean(card.horses[fav-1].name)}は${order.indexOf(fav)+1}着。勝者${clean(card.horses[winner-1].name)}の単勝${odd(odds.win[winner])}！`);
   else lines.push('','🏆 **特別ルールでも1番人気が勝利！** 波乱の看板に騙されなかった強さ。');
@@ -106,6 +109,7 @@ export async function roastLevelsOf(env:KpEnv,mapping:KpMapping){
 export async function queueRacePosts(env:PostEnv,mapping:KpMapping,now=Date.now(),crowns:Array<{race:number;name:string;user:string;reason:string}>=[]){
  if(!earningsWebhook(env))return;
  await ensureRacing(env);await ensurePosts(env);
+ await queueFestivalAnnouncements(env,now);
  for(const c of crowns)await enqueue(env,'race-crown:'+c.race,crownPost(c),now);
  // The card of a big race or a crown named after someone goes out once betting has opened for it.
  const open=openRaceStart(now),openCrown=await crownFor(env,mapping.guildId,open);
@@ -113,7 +117,7 @@ export async function queueRacePosts(env:PostEnv,mapping:KpMapping,now=Date.now(
   // A card is immutable once enqueued; skip expensive horse/seed reads
   // rather than reconstruct it every minute until betting closes.
   const present=await env.DB.prepare('SELECT 1 AS n FROM kp_posts WHERE id=?').bind('race-card:'+open).first();
-  if(!present)await enqueue(env,'race-card:'+open,cardPost({...raceCard(open,undefined,await raceEntries(env,mapping,open)),...(openCrown?{name:openCrown.name}:{})},(await raceSeed(env,mapping.guildId,open)).hash),now);
+  if(!present)await enqueue(env,'race-card:'+open,cardPost({...raceCard(open,undefined,await raceEntries(env,mapping,open)),...(openCrown?{name:openCrown.name}:{})},(await raceSeed(env,mapping.guildId,open)).hash,(await festivalTerms(env,mapping.guildId,open))?.hash),now);
  }
  // Results: the last few races, once every bet on them is settled. Older races are never posted late.
  const latest=latestRaceStart(now);
@@ -138,7 +142,7 @@ export async function queueRacePosts(env:PostEnv,mapping:KpMapping,now=Date.now(
   const card={...raceCard(id,undefined,entries),...(crown?{name:crown.name}:{})};
   const ownerWon=Boolean(seed)&&Boolean(card.horses[raceResult(card,seed!.seed).order[0]-1].ownerName);
   if(!worthPosting(card,bets,Boolean(crown),ownerWon)){await skip();continue;}
-  if(seed){levelOf??=await roastLevelsOf(env,mapping);const titles=await titlesOf(env,mapping.guildId);await enqueue(env,'race-result:'+id,resultPost(card,seed.seed,bets,levelOf,u=>titles.get(u)),now);}
+  if(seed){levelOf??=await roastLevelsOf(env,mapping);const titles=await titlesOf(env,mapping.guildId);await enqueue(env,'race-result:'+id,resultPost(card,seed.seed,bets,levelOf,u=>titles.get(u))+(card.event?.id==='festival'?await festivalResultProof(env,mapping.guildId,id):''),now);}
  }
 }
 export async function flushRacePosts(env:PostEnv,limit=5){
@@ -155,4 +159,14 @@ export async function flushRacePosts(env:PostEnv,limit=5){
   await env.DB.prepare('UPDATE kp_posts SET sent=1 WHERE id=?').bind(row.id).run();sent++;
  }
  return sent;
+}
+
+async function festivalResultProof(env:KpEnv,guild:string,id:number){const terms=await festivalTerms(env,guild,id);return terms?'\n🎆 **秘蔵倍率 ×'+terms.factor.toLocaleString('ja-JP')+' 解禁！** 当選馬券にはこの補正を適用（最大1億KP）。\n配当抽選シード: `'+terms.seed+'`':'';}
+
+export async function queueFestivalAnnouncements(env:KpEnv,now:number){
+ for(const {race,stage} of festivalReminders(now)){
+  const id=`race-festival-reminder:${race}:${stage}`;
+  const present=await env.DB.prepare('SELECT 1 AS n FROM kp_posts WHERE id=?').bind(id).first();
+  if(!present)await enqueue(env,id,festivalAnnouncement(race,stage),now);
+ }
 }

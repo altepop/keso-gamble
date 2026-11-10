@@ -1,3 +1,4 @@
+import {publicFestival} from './race-festival.ts';
 // Horse racing on the live KP wallets. Cards and odds are public; each race's result seed is random,
 // stored here, published only as a SHA-256 hash until the start, and revealed after it.
 // @ts-expect-error The shared pure browser engine has no TypeScript declarations.
@@ -52,7 +53,8 @@ export async function racingView(env:KpEnv,mapping:KpMapping,now=Date.now()){
  const runs=Boolean(bigRaceName(watch))||Boolean(fillerCrownName(watch))||Boolean(raceEvent(watch))||Boolean(watchCrown)||watchEntries.length>0||await raceHasBets(env,guild,watch,now);
  const openSeed=await raceSeed(env,guild,open);
  const watched=runs?await raceSeed(env,guild,watch):null;
- return {open:{id:open,hash:openSeed.hash,entries:openEntries,...(openCrown?{crown:openCrown.name}:{})},watch:{id:watch,runs,entries:watchEntries,...(watchCrown?{crown:watchCrown.name}:{}),...(watched?{hash:watched.hash,seed:watched.seed}:{})}};
+ const [openFestival,watchFestival]=[await publicFestival(env,guild,open,now),await publicFestival(env,guild,watch,now)];
+ return {open:{id:open,hash:openSeed.hash,entries:openEntries,...(openFestival?{festival:openFestival}:{}),...(openCrown?{crown:openCrown.name}:{})},watch:{id:watch,runs,entries:watchEntries,...(watchFestival?{festival:watchFestival}:{}),...(watchCrown?{crown:watchCrown.name}:{}),...(watched?{hash:watched.hash,seed:watched.seed}:{})}};
 }
 /** Settles finished races for every wallet with pending bets. Safe to run concurrently and repeatedly. */
 export async function settleKpRaces(env:KpEnv,mapping:KpMapping,now=Date.now()){

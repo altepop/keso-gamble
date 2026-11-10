@@ -1,3 +1,5 @@
+// @ts-expect-error Shared festival rules.
+import {festivalRace,FESTIVAL_PRICE,RUN_MS} from '../../../js/racing.js';
 import {skirmishState,skirmishPrompt} from './skirmish.ts';
 import {startDmChallenge,dmChallengeStatus} from './dm-challenge.ts';
 import {isKpRanking} from './kp-command.ts';
@@ -54,7 +56,7 @@ function betLines(d:Awaited<ReturnType<typeof mlData>>,fixture:{date:string;tabl
  return `${Number(fixture.date.slice(5,7))}/${Number(fixture.date.slice(8,10))} ${fixture.table}卓 第${fixture.game}試合・**${clean(bet.player)}**のラス（4位）\nチーム ${clean(team?.name??'—')}\n掛け金 ${money(bet.amount)}／倍率 ${(bet.odds/10).toFixed(1)}倍\n的中時の払戻し ${money(payoutFor(bet.amount,bet.odds))}（掛け金込み）`;
 }
 // ---- /kp bets: the member's own predictions and tickets ----
-type OwnBet={match?:string;raceId?:number;player?:string;horse?:number;type:string;amount:number;odds:number;status:string;payout:number;time:number};
+type OwnBet={festival?:boolean;match?:string;raceId?:number;player?:string;horse?:number;type:string;amount:number;odds:number;status:string;payout:number;time:number};
 const md=(date:string)=>`${Number(date.slice(5,7))}/${Number(date.slice(8,10))}`;
 async function myBets(env:KpEnv,mapping:KpMapping,user:string){
  // /kp bets only needs this member's saved bet slips. A full Activity
@@ -73,7 +75,7 @@ async function myBets(env:KpEnv,mapping:KpMapping,user:string){
  const pending=all.filter(b=>b.status==='pending'),done=all.filter(b=>b.status!=='pending').slice(0,10);
  const odd=(b:OwnBet)=>`${(b.odds/10).toFixed(1)}倍`;
  const lines=[`🎫 **あなたの予想・馬券**`,'',`**未精算** ${pending.length}件・合計 ${money(pending.reduce((n,b)=>n+b.amount,0))}`];
- lines.push(...pending.slice(0,15).map(b=>`・${label(b)}　${money(b.amount)}（${odd(b)}・当たれば ${money(payoutFor(b.amount,b.odds))}）`));
+ lines.push(...pending.slice(0,15).map(b=>`・${label(b)}　${money(b.amount)}（${b.festival&&Date.now()<(b.raceId??0)+RUN_MS?'倍率はゴールまで非公開':odd(b)+'・当たれば '+money(payoutFor(b.amount,b.odds))}）`));
  if(pending.length>15)lines.push(`・ほか ${pending.length-15}件`);
  if(!pending.length)lines.push('・なし');
  lines.push('',`**最近の精算**`);
@@ -129,12 +131,12 @@ export async function betChoices(env:KpEnv,interaction:Slash,override?:KpMapping
  const card={...raceCard(open,undefined,entries),...(crown?{name:crown.name}:{})},odds=raceOdds(card);
  const typed=String((interaction.data?.options as Array<{name:string;value?:unknown;focused?:boolean}>|undefined)?.find(o=>o.focused)?.value??'').trim();
  return card.horses.filter((h:{number:number;name:string})=>!typed||String(h.number)===typed||h.name.includes(typed))
-  .map((h:{number:number;name:string})=>({name:`${h.number}番 ${h.name}　1着 ${(odds.win[h.number]/10).toFixed(1)}倍・${placeSlots(card.size)}着内 ${(odds.place[h.number]/10).toFixed(1)}倍｜${clock(open)}発走`.slice(0,100),value:h.number})).slice(0,25);
+  .map((h:{number:number;name:string})=>({name:`${h.number}番 ${h.name}　${festivalRace(open)?'祭りの倍率は非公開':'1着 '+(odds.win[h.number]/10).toFixed(1)+'倍・'+placeSlots(card.size)+'着内 '+(odds.place[h.number]/10).toFixed(1)+'倍'}｜${clock(open)}発走`.slice(0,100),value:h.number})).slice(0,25);
 }
 /** When the list is not ready in time, the gate numbers alone: the bet itself still checks the horse and fixes the odds. */
 export function betFallbackChoices(now=Date.now()):Array<{name:string;value:number}>{
  const open=openRaceStart(now),size=raceCard(open).size;
- return Array.from({length:size},(_,i)=>({name:`${i+1}番（馬名・倍率の読み込みが遅れています。購入時に確定）｜${clock(open)}発走`.slice(0,100),value:i+1}));
+ return Array.from({length:size},(_,i)=>({name:`${i+1}番（${festivalRace(open)?'祭りの倍率はゴール後に公開':'馬名・倍率の読み込みが遅れています。購入時に確定'}）｜${clock(open)}発走`.slice(0,100),value:i+1}));
 }
 /** An autocomplete answer within Discord's limit: the list if it is ready, otherwise the fallback. */
 export async function withinDeadline<T>(work:Promise<T>,ms:number,fallback:()=>T):Promise<T>{
@@ -356,23 +358,24 @@ export async function runKpCommand(env:KpEnv,interaction:Slash,override?:KpMappi
   }catch(error){return friendlyError(error,'予想の内容を確認できへんかったわ。ちょっと待って、もう一度 /mbet してな。');}
  }
  if(command==='keiba'){
-  const view=await racingView(env,mapping),open=view.open,card={...raceCard(open.id,undefined,open.entries),...(open.crown?{name:open.crown}:{})},odds=raceOdds(card);
+  const view=await racingView(env,mapping),open=view.open,card={...raceCard(open.id,undefined,open.entries),...(open.crown?{name:open.crown}:{})},odds=raceOdds(card),festival=festivalRace(card.start);
   return [`🏇 **${clean(card.name)}**`,`-# ${clock(open.id)}発走・${card.size}頭｜締切 ${clock(card.closeAt)}`,
    '',`**出走馬**　倍率は 1着当て / ${placeSlots(card.size)}着以内当て`,
-   ...card.horses.map((h:{number:number;name:string})=>`\`${String(h.number).padStart(2)}\` ${clean(h.name)}　**${(odds.win[h.number]/10).toFixed(1)}倍** / ${(odds.place[h.number]/10).toFixed(1)}倍`),
-   '',`🎫 **買い方**　\`/bet\` と打って、horse で馬を選んでな。amount に掛け金（例 500）を入れて送信や`,
-   `-# 券種は選ばなければ1着当て（${placeSlots(card.size)}着以内当てにもできる）／100 KP単位・1週間で合計5万KPまで（Mリーグ予想と合算）・購入後の取消不可・この返答は本人にだけ表示`].join('\n');
+   ...card.horses.map((h:{number:number;name:string})=>`\`${String(h.number).padStart(2)}\` ${clean(h.name)}　${festival?'倍率は非公開':'**'+(odds.win[h.number]/10).toFixed(1)+'倍** / '+(odds.place[h.number]/10).toFixed(1)+'倍'}`),
+   ...(festival?['🎆 **祭りの馬券は1人1枚・1,000 KP。オッズはゴールまで秘密や。**']:[]),
+   '',`🎫 **買い方**　\`/bet\` と打って、horse で馬を選んでな。amount に掛け金（祭りは1,000、それ以外は例500）を入れて送信や`,
+   `-# 券種は選ばなければ1着当て（${placeSlots(card.size)}着以内当てにもできる）／100 KP単位・1週間で合計40万KPまで（Mリーグ予想と合算）・購入後の取消不可・この返答は本人にだけ表示`].join('\n');
  }
  const options=interaction.data?.options??[];
  const value=(key:string)=>options.find(o=>o.name===key)?.value;
  try{
   // The race taking bets when the command was sent; an old client may still send race:HH:MM, which must match it.
   const raceId=value('race')===undefined?openRaceStart(created(interaction.id)):slashRace(value('race'),interaction.id);
-  const result=await operateKp(env,mapping,user,interaction.id,'race-bet',{raceId,horse:value('horse'),amount:value('amount'),type:value('type')??'win'}) as {result:{bet:{raceId:number;horse:number;amount:number;odds:number;type:string}}};
+  const result=await operateKp(env,mapping,user,interaction.id,'race-bet',{raceId,horse:value('horse'),amount:value('amount'),type:value('type')??'win'}) as {result:{bet:{raceId:number;horse:number;amount:number;odds:number;type:string;festival?:boolean}}};
   const bet=result.result.bet,view=await racingView(env,mapping,created(interaction.id)),card=raceCard(bet.raceId,undefined,view.open.id===bet.raceId?view.open.entries:undefined);
   const name=view.open.id===bet.raceId&&view.open.crown?view.open.crown:card.name,horse=card.horses[bet.horse-1]?.name??'';
   return [`🎫 **馬券を購入したで！**`,`${clean(name)}（${clock(bet.raceId)}発走）`,`**${bet.horse}番 ${clean(horse)}** の${bet.type==='win'?'1着当て':placeSlots(card.size)+'着以内当て'}`,
-   `掛け金 ${money(bet.amount)} × 確定倍率 ${(bet.odds/10).toFixed(1)}倍 ＝ 当たれば ${money(Math.floor(bet.amount*bet.odds/10))}`,`残高 ${money(await balance())}`,'-# 買うた後は取り消せへんで。結果と払戻しは自動で反映するで。'].join('\n');
+   bet.festival?'祭りの1枚を受け付けたで。倍率はゴールまで内緒や。':`掛け金 ${money(bet.amount)} × 確定倍率 ${(bet.odds/10).toFixed(1)}倍 ＝ 当たれば ${money(Math.floor(bet.amount*bet.odds/10))}`,`残高 ${money(await balance())}`,'-# 買うた後は取り消せへんで。結果と払戻しは自動で反映するで。'].join('\n');
  }catch(error){
   const message=error instanceof Error?error.message:'';
   return /[ぁ-んァ-ヶ一-龯]/.test(message)&&!/SQL|D1_|kp_/.test(message)?message:'購入結果を確認できへんかったわ。Activityの馬券履歴と /kp の残高を確かめてな。';
