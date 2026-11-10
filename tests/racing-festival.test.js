@@ -44,6 +44,7 @@ test('festival preview never leaks base odds or a purported payout, and its show
 test('opening night is Saturday November 14 at 22:00 JST and replaces that week’s random festival',()=>{
  assert.equal(FESTIVAL_FIRST,Date.parse('2026-11-14T22:00:00+09:00'));
  assert.equal(firstFestival(),FESTIVAL_FIRST);assert(festivalRace(FESTIVAL_FIRST));
+ assert.match(raceCard(FESTIVAL_FIRST).name,/一枚で億り人杯$/);assert.doesNotMatch(raceCard(FESTIVAL_FIRST).name,/杯杯/);
  assert.equal(festivalRace(Date.parse('2026-11-15T22:45:00+09:00')),null);
  assert.equal(festivalRace(FESTIVAL_FIRST-900000),null);assert.equal(festivalRace(FESTIVAL_FIRST+900000),null);
 });

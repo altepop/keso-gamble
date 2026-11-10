@@ -1,4 +1,4 @@
-import {EXTRA_HORSE_NAMES,EXTRA_CROWN_NAMES,REGULAR_RACE_NAMES} from './racing-name-catalog.js?v=web-fbd9fb1e0a1cddb8';
+import {EXTRA_HORSE_NAMES,EXTRA_CROWN_NAMES,REGULAR_RACE_NAMES} from './racing-name-catalog.js?v=web-9f89178bb5f1a63e';
 // Horse racing. Pure logic with no DOM or clock reads, shared by the browser and the Worker.
 // Cards and odds are public (PUBLIC_SALT). The run uses a per-race seed: the demo uses the public
 // salt, while the Worker keeps a random seed secret until the start and publishes its hash first.
@@ -153,7 +153,7 @@ export function raceCard(start,salt=PUBLIC_SALT,entries=[]){
   entries.slice(0,size).forEach((e,i)=>Object.assign(horses[gates[i]],{name:e.name,ability:e.ability,style:e.style,horseId:e.horseId,owner:e.owner,ownerName:e.ownerName,nickname:e.nickname??null,person:!!e.person,...(start>=FORM_REFORM_FROM&&e.record?{record:e.record,recentRanks:e.recentRanks??[]}:{})},Number.isInteger(e.condition)&&e.condition>=0&&e.condition<CONDITIONS.length?{condition:e.condition}:{}));
  }
  const crown=big?null:fillerCrownName(start),event=raceEvent(start);
- return {id:start,start,closeAt:start-CLOSE_BEFORE,number:raceNumber(start),name:event?`第${raceNumber(start)}レース ${event.name}杯`:big??crown??(start<NAME_EXPANSION_FROM?`第${raceNumber(start)}レース`:`第${raceNumber(start)}レース ${regularRaceName(start)}`),big:!!big,crown:!!crown,raceClass:cls,size,going:pickWeighted(rng,[5,3,2]),horses,...(event?{event}:{}),...(start>=FORM_REFORM_FROM?{trackBias:Math.floor(rngFrom('track-bias:'+start)()*3)}:{})};
+ return {id:start,start,closeAt:start-CLOSE_BEFORE,number:raceNumber(start),name:event?`第${raceNumber(start)}レース ${event.name}${event.id==='festival'?'':'杯'}`:big??crown??(start<NAME_EXPANSION_FROM?`第${raceNumber(start)}レース`:`第${raceNumber(start)}レース ${regularRaceName(start)}`),big:!!big,crown:!!crown,raceClass:cls,size,going:pickWeighted(rng,[5,3,2]),horses,...(event?{event}:{}),...(start>=FORM_REFORM_FROM?{trackBias:Math.floor(rngFrom('track-bias:'+start)()*3)}:{})};
 }
 
 // The race model: a Plackett-Luce ranking (each place goes to a remaining horse with probability
