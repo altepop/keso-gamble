@@ -1,3 +1,4 @@
+import {festivalReminders,festivalAnnouncement} from './festival-announcements.ts';
 import {festivalTerms} from './race-festival.ts';
 import {activityLaunchComponents} from './activity-link.ts';
 // Horse racing posts for the earnings channel. Posts are queued once under a fixed ID and sent by
@@ -108,6 +109,7 @@ export async function roastLevelsOf(env:KpEnv,mapping:KpMapping){
 export async function queueRacePosts(env:PostEnv,mapping:KpMapping,now=Date.now(),crowns:Array<{race:number;name:string;user:string;reason:string}>=[]){
  if(!earningsWebhook(env))return;
  await ensureRacing(env);await ensurePosts(env);
+ await queueFestivalAnnouncements(env,now);
  for(const c of crowns)await enqueue(env,'race-crown:'+c.race,crownPost(c),now);
  // The card of a big race or a crown named after someone goes out once betting has opened for it.
  const open=openRaceStart(now),openCrown=await crownFor(env,mapping.guildId,open);
@@ -160,3 +162,11 @@ export async function flushRacePosts(env:PostEnv,limit=5){
 }
 
 async function festivalResultProof(env:KpEnv,guild:string,id:number){const terms=await festivalTerms(env,guild,id);return terms?'\n🎆 **秘蔵倍率 ×'+terms.factor.toLocaleString('ja-JP')+' 解禁！** 当選馬券にはこの補正を適用（最大1億KP）。\n配当抽選シード: `'+terms.seed+'`':'';}
+
+export async function queueFestivalAnnouncements(env:KpEnv,now:number){
+ for(const {race,stage} of festivalReminders(now)){
+  const id=`race-festival-reminder:${race}:${stage}`;
+  const present=await env.DB.prepare('SELECT 1 AS n FROM kp_posts WHERE id=?').bind(id).first();
+  if(!present)await enqueue(env,id,festivalAnnouncement(race,stage),now);
+ }
+}

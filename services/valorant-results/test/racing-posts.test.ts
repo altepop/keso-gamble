@@ -196,3 +196,33 @@ test('a 10,000 KP loss on one race is recorded for its melt crown when the race 
  await settleKpRaces(f.env,mapping,NORMAL+RUN_MS+60000);
  assert.equal(Number(f.sql.prepare('SELECT COUNT(*) n FROM kp_crown_melts').get()!.n),1,'settling again records nothing new');
 });
+
+
+test('festival reminders are queued once on three separate JST mornings, then one opening card; retries and bindings cannot duplicate them',async()=>{
+ // @ts-expect-error Shared deterministic schedule.
+ const {FESTIVAL_FROM,festivalRace}=await import('../../../js/racing.js');
+ const {festivalReminders,festivalAnnouncement}=await import('../src/festival-announcements.ts');
+ const {queueFestivalAnnouncements}=await import('../src/racing-posts.ts');
+ let race=FESTIVAL_FROM;while(!festivalRace(race))race+=RACE_INTERVAL;
+ const day=Math.floor((race+9*3600000)/86400000)*86400000-9*3600000;
+ const f=await fixture();await ensurePosts(f.env);
+ let count=0;
+ for(const days of [3,1,0]){
+  const at=day-days*86400000+9*3600000;
+  assert.equal(festivalReminders(at-1).length,0);assert.equal(festivalReminders(at+3600000).length,0);
+  const reminder=festivalReminders(at).find(r=>r.race===race)!;assert(reminder);
+  await Promise.all([queueFestivalAnnouncements(f.env,at),queueFestivalAnnouncements({...f.env,DB:{...f.env.DB} as D1Database},at+60000)]);
+  await queueFestivalAnnouncements(f.env,at+59*60000);
+  count++;assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM kp_posts WHERE id LIKE 'race-festival-reminder:%'").get()!.n,count);
+  const text=festivalAnnouncement(race,reminder.stage);assert.match(text,/1,000 KPで1人1枚/);assert.match(text,/最大1億KP/);assert.match(text,/今はまだ買えへん/);assert.match(text,/日本時間/);assert.doesNotMatch(text,/秘蔵倍率 ×/);
+ }
+ const bodies=f.sql.prepare("SELECT body FROM kp_posts WHERE id LIKE 'race-festival-reminder:%'").all().map(r=>JSON.parse(String(r.body)));
+ for(const body of bodies)assert.deepEqual(body.allowed_mentions,{parse:[]});
+ // At the opening only the normal immutable card is added, without catch-up spam.
+ await queueRacePosts(f.env,mapping,race-14*60000);await queueRacePosts(f.env,mapping,race-10*60000);
+ assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM kp_posts WHERE id LIKE 'race-festival-reminder:%'").get()!.n,3);
+ assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM kp_posts WHERE id=?').get('race-card:'+race)!.n,1);
+ const fail={...f.env,DB:{prepare:()=>{throw Error('ordinary ticks must not query announcement SQL');}} as unknown as D1Database};
+ await queueFestivalAnnouncements(fail,day+12*3600000);
+ assert.equal(festivalReminders(day+2*86400000+9*3600000).length,0);
+});
