@@ -21,9 +21,8 @@ export class MusicQueue {
   next({skip=false}={}){
     if(!skip && this.loop==='one' && this.current)return this.current;
     const previous=this.current;
+    if(previous && this.loop==='all' && !skip)this.upcoming.push(previous);
     this.current=this.upcoming.shift()??null;
-    if(previous && this.loop==='all' && !skip && this.current)
-      this.upcoming.push(previous);
     this.paused=false;
     return this.current;
   }
