@@ -251,7 +251,7 @@ test('a settled ticket without an enqueued outcome post is recovered exactly onc
   assert.equal(await reconcilePredictionPosts(env,start+60_000),1);
   const record=f.sqlite.prepare("SELECT body FROM kp_posts WHERE id='vp:result:100000000000001001'").get() as {body:string};
   const body=JSON.parse(record.body) as {content:string};
-  assert.match(body.content,/試合結果：\\*\\*勝利\\*\\*/);
+  assert.ok(body.content.includes('試合結果：**勝利**'));
   assert.match(body.content,/的中 1件/);
   assert.equal(await reconcilePredictionPosts(env,start+60_000),0);
   assert.equal((f.sqlite.prepare('SELECT COUNT(*) AS n FROM kp_posts').get() as {n:number}).n,1);
