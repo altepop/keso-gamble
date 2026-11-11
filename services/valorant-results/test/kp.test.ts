@@ -1179,16 +1179,16 @@ test('v7 reuses the existing per-match settings read without adding database rou
 });
 
 
-test('Escalation rank measures three games, closes at three wins/losses, stays separate from KP and never rerates duplicates',async()=>{
+test('Escalation rank measures three games, updates every certified match, stays separate from KP and never rerates duplicates',async()=>{
  const f=await fixture();f.enableHistory();seed(f.sql,one,1000000);f.sql.exec("UPDATE kp_settings SET value='0' WHERE key IN ('mode_rewards_started_at','valo_v7_started_at')");
  let n=0;const play=async(win:boolean)=>{const raw=game('power-'+(++n),'ggteam',win);raw.metadata={...raw.metadata,season:{id:'act-a',short:'e11a1'}} as any;await collectKpMatch(f.env,mapping,raw,'p-one');const before=JSON.stringify(f.sql.prepare('SELECT * FROM kp_escalation_ratings').get());await collectKpMatch(f.env,mapping,raw,'p-one');assert.equal(JSON.stringify(f.sql.prepare('SELECT * FROM kp_escalation_ratings').get()),before);};
  for(const win of [true,false])await play(win);
  assert.equal((await readKpState(f.env,mapping,one)).escalationRating.rating,null);
  await play(true);let view=(await readKpState(f.env,mapping,one)).escalationRating;assert.equal(view.rating,400);assert.equal(view.measurementGames,3);assert.equal(view.seriesWins,0);assert.equal(view.seriesLosses,0);assert.equal(view.leaders[0].rating,400);
- for(const win of [true,true,true])await play(win);view=(await readKpState(f.env,mapping,one)).escalationRating;assert.equal(view.rating,500);assert.equal(view.lastChange,100);assert.equal(view.seriesWins,0);
+ for(const win of [true,true,true])await play(win);view=(await readKpState(f.env,mapping,one)).escalationRating;assert.equal(view.rating,460);assert.equal(view.lastChange,20);assert.equal(view.seriesWins,0);
  for(const win of [false,false,false])await play(win);assert.equal((await readKpState(f.env,mapping,one)).escalationRating.rating,400);
- for(const win of [true,false,true,false,true])await play(win);view=(await readKpState(f.env,mapping,one)).escalationRating;assert.equal(view.rating,440);assert.equal(view.lastChange,40);
- for(const win of [false,true,false,true,false])await play(win);view=(await readKpState(f.env,mapping,one)).escalationRating;assert.equal(view.rating,400);assert.equal(view.lastChange,-40);
+ for(const win of [true,false,true,false,true])await play(win);view=(await readKpState(f.env,mapping,one)).escalationRating;assert.equal(view.rating,420);assert.equal(view.lastChange,20);
+ for(const win of [false,true,false,true,false])await play(win);view=(await readKpState(f.env,mapping,one)).escalationRating;assert.equal(view.rating,400);assert.equal(view.lastChange,-20);
  assert.equal(view.played,n);assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM kp_events WHERE mode='escalation'").get()!.n,n);
  assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM kp_escalation_spins').get()!.n,0,'rated games have no special lottery');
  assert(!String(f.sql.prepare('SELECT note FROM kp_reward_notes ORDER BY rowid DESC LIMIT 1').get()!.note).includes('大勝負'));
