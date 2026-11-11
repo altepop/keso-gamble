@@ -6,7 +6,7 @@ import { URL as NodeURL } from 'node:url';
 import {
   PREDICTION_BUTTON, PREDICTION_MODAL, predictionAmount, predictionModal, predictionCard,
   predictionOdds, openPrediction, buyPrediction, settlePredictions, expirePredictions,
-  predictionWasAccepted, predictionBetAnnouncement,
+  predictionWasAccepted, predictionBetAnnouncement, PREMATCH_GUARD_MS,
 } from '../src/valo-predictions.ts';
 import { initializeKp } from '../src/kp.ts';
 import type { KpEnv, KpMapping } from '../src/kp.ts';
@@ -55,7 +55,7 @@ async function fixture(){
   const roster=[{riotId:'One#JP1',name:'ワン'},{riotId:'Two#JP1',name:'ツー'}];
   const open=(id='100000000000001001')=>openPrediction(env,id,guild,'One#JP1','competitive',roster,start,mapping);
   const buy=(event='100000000000001001',amount=1000,at=start+1000)=>buyPrediction(env,event,guild,two,'win',amount,at,mapping);
-  const match=(at=start+60_000,won=true):Match=>({
+  const match=(at=start+5*60_000,won=true):Match=>({
     metadata:{match_id:'m1',started_at:new Date(at).toISOString(),is_completed:true,
       game_length_in_ms:600000,queue:{id:'competitive'}},
     players:[{puuid:'p-one',team_id:'red'}],
@@ -173,4 +173,47 @@ test('new odds are bounded and fixed on each issued card',async()=>{
   await f.buy();
   const ticket=f.sqlite.prepare('SELECT odds FROM vp_tickets').get() as {odds:number};
   assert.equal(ticket.odds,210); // The rate is fixed before the result comes in.
+});
+
+test('late post-start wager cannot win even if the outcome is already known',async()=>{
+  const f=await fixture();
+  await f.open();
+  const afterStart=start+240_000;
+  const receipt=await f.buy('100000000000001001',1000,afterStart);
+  assert.match(receipt,/予想を受け付けました/); // Event provider has not reported the live match yet.
+  assert.equal(await settlePredictions(f.env,f.match(start+120_000,true),'One#JP1',start+900000,mapping),1);
+  const ticket=f.sqlite.prepare('SELECT status,payout FROM vp_tickets').get() as {status:string;payout:number};
+  assert.deepEqual({...ticket},{status:'refunded',payout:1000});
+  assert.equal(f.balance(),100000); // Known result never produces a windfall.
+});
+
+test('purchases closer than two minutes to verified match start are refunded, before start still eligible',async()=>{
+  assert.equal(PREMATCH_GUARD_MS,120000);
+  const f=await fixture();
+  await f.open();
+  await f.buy('100000000000001001',1000,start+4*60000); // one minute before kickoff
+  await settlePredictions(f.env,f.match(start+5*60000,true),'One#JP1',start+900000,mapping);
+  const ticket=f.sqlite.prepare('SELECT status,payout FROM vp_tickets').get() as {status:string;payout:number};
+  assert.deepEqual({...ticket},{status:'refunded',payout:1000});
+  assert.equal(f.balance(),100000);
+});
+
+test('observed completed match closes stale card for a new purchase without debiting KP',async()=>{
+  const f=await fixture();
+  await f.open();
+  // A completed result is observed while the 10-minute card would otherwise remain open.
+  f.sqlite.prepare('INSERT INTO notifications(riot_id,match_id,message,ended_at,mode,act_id,act_name,outcome,sent) VALUES(?,?,?,?,?,?,?,?,1)')
+    .run('One#JP1','just-finished','test',start+60000,'competitive','act','E9A1','win');
+  const receipt=await f.buy('100000000000001001',1000,start+70000);
+  assert.match(receipt,/受付が終了|試合が確認/);
+  assert.equal(f.balance(),100000);
+  assert.equal(f.sqlite.prepare('SELECT COUNT(*) AS n FROM vp_tickets').get()!.n,0);
+});
+
+test('an expired 10-minute card cannot be bought despite upstream match results lag',async()=>{
+  const f=await fixture();
+  await f.open();
+  const receipt=await f.buy('100000000000001001',1000,start+600001);
+  assert.match(receipt,/受付が終了/);
+  assert.equal(f.balance(),100000);
 });
