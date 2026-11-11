@@ -83,3 +83,10 @@ test('initial positive-KD placement reward is described as RR, separate from nor
  const html=playView({...live([]),escalationRating:{act:{id:'a',name:'e11a1'},rating:100,rank:{name:'アイアン Ⅱ',rr:0,tier:0},placementKind:'initial',placementConsistencyBonus:100}});
  for(const text of ['3試合ともキル数がデス数を上回れば','全敗でもアイアンⅡ','3試合連続KDプラス ＋100 RR'])assert(html.includes(text),text);
 });
+
+
+test('Swift shows the approved two-thirds signed draw and both super outcomes without tying the award to match wins',()=>{
+ const html=playView({...live([]),modeRewards:{swiftplay:{specialScope:'all'}}});
+ for(const text of ['抽選額は2/3でプラス・1/3でマイナス','超ラッキー・超アンラッキーも各0.1%','1,000,000KP','圧勝・共通倍率・遺物を計算する前'])assert(html.includes(text),text);
+ assert.doesNotMatch(html,/勝てば獲得、負ければ減額|手持ち半額の抽選はありません/);
+});

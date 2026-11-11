@@ -102,13 +102,29 @@ test('TDM party bonus rejects missing identities/stats, solo players, duplicate 
  const raw=partyMatch(25,25);assert.equal(teamDeathmatchPartyBonus(raw,'p1'),500);assert.equal(teamDeathmatchPartyBonus(raw,'p2'),0);
 });
 
-test('rated Escalation removes its large lottery while Swift receives only the provisional five-tier bet; unrelated modes are unchanged',()=>{
+test('rated Escalation removes its large lottery while Swift receives all three exclusive special outcomes; unrelated modes are unchanged',()=>{
  let moved=0;
  for(let i=0;i<5000;i++){
   const raw=game('moved-'+i,'swiftplay');const swift=valoKp(raw,'me','swiftplay','win');
-  if(swift.escalation){assert.equal(swift.escalation.kind,'big');moved++;assert.equal(swift.base,swift.escalation.award+600);}
+  if(swift.escalation?.kind==='big'){moved++;assert.equal(swift.base,swift.escalation.award+600);}else if(swift.escalation)assert(['super-lucky','super-unlucky'].includes(swift.escalation.kind));
   assert.equal(valoKp(raw,'me','escalation','win').escalation,undefined);
  }
  assert(moved>130&&moved<300);
  for(const mode of ['competitive','deathmatch','replication'])for(const outcome of ['win','loss','draw',null] as const){const raw=game('unchanged-'+mode,mode);assert.deepEqual(valoKp(raw,'me',mode,outcome,true,true,false,true),valoKp(raw,'me',mode,outcome,true,true,false,false));}
+});
+
+
+test('Swift big signs are 2/3 positive independently of match outcome, with no rounding bucket or redraw on retry',async()=>{
+ const {swiftBigSideAt,swiftSpecialFor,escalationFor}=await import('../src/mode-rewards.ts');
+ let positives=0,negatives=0;for(let roll=0;roll<9999;roll++){const sign=swiftBigSideAt(roll);if(sign>0)positives++;else negatives++;}
+ assert.equal(positives,6666);assert.equal(negatives,3333);assert.throws(()=>swiftBigSideAt(9999));assert.throws(()=>swiftBigSideAt(-1));
+ const counts={big:0,positive:0,'super-lucky':0,'super-unlucky':0};
+ for(let i=0;i<100000;i++){
+  const id='swift-all-'+i,spin=swiftSpecialFor(id,'win');assert.deepEqual(swiftSpecialFor(id,'loss'),spin);
+  if(spin){counts[spin.kind]++;if(spin.kind==='big'&&spin.award>0)counts.positive++;}
+ }
+ assert(counts.big>3900&&counts.big<4500);assert(counts.positive/counts.big>0.64&&counts.positive/counts.big<0.70);
+ for(const kind of ['super-lucky','super-unlucky'] as const)assert(counts[kind]>60&&counts[kind]<150);
+ assert.equal(swiftSpecialFor('ignored','draw'),null);assert.equal(swiftSpecialFor('ignored',null),null);
+ for(let i=0;i<2000;i++){const win=escalationFor('legacy-side-'+i,'win'),loss=escalationFor('legacy-side-'+i,'loss');if(win?.kind==='big'){assert(win.award>0);assert(loss!.award<0);}}
 });

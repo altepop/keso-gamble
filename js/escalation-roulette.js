@@ -79,7 +79,7 @@ export function makeEscalationWheel(spin,close=()=>{}){
    <p class="esc-wheel-phase" aria-live="polite">ルーレットが回転しています…</p>
    <div class="esc-roulette-result" aria-live="polite" hidden>
      <small>${m.negative?'減額確定':'獲得確定'}</small><strong>${currentAmount(spin)}</strong>
-     ${showBalance?`<p>手持ちKP　${fmt(spin.beforeBalance)} → <b>${fmt(spin.afterBalance)} KP</b></p>`:`<p>第${spin.tier}段階・${spin.award>=0?'勝利':'敗北'}の結果</p>`}
+     ${showBalance?`<p>手持ちKP　${fmt(spin.beforeBalance)} → <b>${fmt(spin.afterBalance)} KP</b></p>`:`<p>第${spin.tier}段階・${spin.mode==='swiftplay'?(spin.award>=0?'プラス':'マイナス'):(spin.award>=0?'勝利':'敗北')}の結果</p>`}
    </div>
    <div class="esc-roulette-footer"><button type="button" class="esc-wheel-skip">演出をスキップ</button><button type="button" class="esc-wheel-dismiss" hidden>確認しました</button></div>
    <p class="esc-wheel-disclaimer">抽選とKPの精算はサーバー側で完了済みだ。演出の再生・スキップで金額は変わらない。</p>

@@ -30,3 +30,12 @@ test('five tiers give ten distinct comments without pretending a nominal prize i
  assert.throws(()=>escalationBigCopy(1,1000));
  assert.throws(()=>escalationBigPost('not-an-id',5,15000,15000));
 });
+
+
+test('Swift signed draws say plus/minus rather than claiming the player won or lost the match',()=>{
+ const positive=escalationBigNote(1,500,'swiftplay'),negative=escalationBigNote(1,-500,'swiftplay');
+ assert.match(positive,/プラス/);assert.match(negative,/マイナス/);assert.doesNotMatch(positive+negative,/勝利|敗北/);
+ const post=escalationBigPost('100000000000000101',5,-15000,-15000,0,'swiftplay')!;
+ assert.match(post,/マイナス/);assert.match(post,/2\/3でプラス/);assert.doesNotMatch(post,/敗北／基準額/);
+ assert.match(escalationBigNote(1,500),/勝利/);assert.match(escalationBigNote(1,-500),/敗北/);
+});

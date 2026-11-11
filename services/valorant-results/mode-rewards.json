@@ -30,7 +30,9 @@
     "cleanSweepBonus": 600,
     "contributionThreshold": 15,
     "contributionBonus": 150,
-    "specialScope": "big-only"
+    "specialScope": "all",
+    "bigPositiveNumerator": 2,
+    "bigPositiveDenominator": 3
   },
   "teamdeathmatch": {
     "lowerKills": 30,

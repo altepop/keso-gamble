@@ -46,6 +46,22 @@ export function escalationFor(id:string,outcome:string|null,oddsV6=true):Escalat
  }
  return null;
 }
+/** 9999 accepted equally weighted rolls: exactly 6666 positive and 3333 negative. */
+export function swiftBigSideAt(roll:number):1|-1{
+ const n=rules.swiftplay.bigPositiveNumerator,d=rules.swiftplay.bigPositiveDenominator,limit=10000-10000%d;
+ if(!Number.isInteger(d)||d<2||d>10000||!Number.isInteger(n)||n<1||n>=d||!Number.isInteger(roll)||roll<0||roll>=limit)throw Error('Invalid Swift sign draw');
+ return roll%d<n?1:-1;
+}
+function swiftBigSide(id:string):1|-1{
+ const d=rules.swiftplay.bigPositiveDenominator,limit=10000-10000%d;
+ // Reject the incomplete bucket instead of rounding 2/3 to 66.67%. Stable across retries.
+ for(let attempt=0;attempt<16;attempt++){const roll=draw('swift-big-sign:'+id+':'+attempt);if(roll<limit)return swiftBigSideAt(roll);}
+ throw Error('Swift sign draw exhausted');
+}
+export function swiftSpecialFor(id:string,outcome:string|null):EscalationSpin|null{
+ const spin=escalationFor('swift:'+id,outcome,true);
+ return spin?.kind==='big'?{...spin,award:Math.abs(spin.award)*swiftBigSide(id)}:spin;
+}
 const stat=(n:unknown):n is number=>Number.isSafeInteger(n)&&Number(n)>=0;
 /** Lottery prizes from this size up get their own post in 稼ぎch. */
 export const UNRATED_JACKPOT=10000;
@@ -106,7 +122,7 @@ export function valoKp(raw:Match,puuid:string,mode:string,outcome:string|null,es
    if(escalation?.kind==='super-unlucky')note='（📩 超アンラッキー：手持ちKP半額）';
   }
   if(mode==='swiftplay'&&teamSwiftV7){
-   const spin=escalationFor('swift:'+id,outcome,true);
+   const spin=swiftSpecialFor(id,outcome);
    if(spin&&(rules.swiftplay.specialScope==='all'||spin.kind==='big')){
     escalation=spin;
     if(spin.kind==='big'){

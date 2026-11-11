@@ -191,7 +191,7 @@ export async function drainKpInbox(env:KpEnv){
     const lucky=settled.kind==='super-lucky';
     const notice=lucky
       ? `📩 **1通のお知らせです。**\n\n平素よりKESO PLAYをご利用いただき、誠にありがとうございます。\n\n<@${e.user}> 様、${e.mode==='swiftplay'?'スイフト':'エスカレーション'}の抽選結果をご案内いたします。\n\n🌈 **【超ラッキー】**\n**+${fmt(settled.award)} KP** が当選しました。\n\n手持ちKP：${fmt(settled.balance_before)} → **${fmt(settled.balance_after)} KP**\n\n今後ともKESO PLAYをよろしくお願いいたします。\n― 等しいbot`
-      : `📩 **1通のお知らせです。**\n\n平素よりKESO PLAYをご利用いただき、誠にありがとうございます。\n\n<@${e.user}> 様、KP口座について重要なお知らせがございます。\n\n💀 **【超アンラッキー】**\n誠に残念ながら、手持ちKPを半額とさせていただきました。\n\n手持ちKP：${fmt(settled.balance_before)} → **${fmt(settled.balance_after)} KP**\n差引：**−${fmt(settled.balance_before-settled.balance_after)} KP**\n\nなお、本件に関する異議申し立ては受け付けておりません。\n今後ともKESO PLAYをよろしくお願いいたします。\n― 等しいbot`;
+      : `📩 **1通のお知らせです。**\n\n平素よりKESO PLAYをご利用いただき、誠にありがとうございます。\n\n<@${e.user}> 様、${e.mode==='swiftplay'?'スイフト':'エスカレーション'}の抽選について重要なお知らせがございます。\n\n💀 **【超アンラッキー】**\n誠に残念ながら、手持ちKPを半額とさせていただきました。\n\n手持ちKP：${fmt(settled.balance_before)} → **${fmt(settled.balance_after)} KP**\n差引：**−${fmt(settled.balance_before-settled.balance_after)} KP**\n\nなお、本件に関する異議申し立ては受け付けておりません。\n今後ともKESO PLAYをよろしくお願いいたします。\n― 等しいbot`;
     // A failed post enqueue keeps the inbox event pending, so it is retried safely.
     await ensurePosts(env);await enqueue(env,'esc-notice:'+e.id,notice,Date.now());
    }
@@ -379,10 +379,11 @@ export async function prepareKpRun(env:KpEnv,mapping:KpMapping):Promise<KpRun>{
 /** Indexed id lookup: preserves old-match payouts, edited result messages and
  * delayed KP recovery without scanning all historic results for every poll.
  * The loaded set is only per cron run, so other workers never share stale data. */
-export const KP_RUN_MATCH_SQL=`SELECT e.amount+COALESCE(p.delta,0)+COALESCE(r.delta,0)+COALESCE(c.delta,0) AS amount,
+export const KP_RUN_MATCH_SQL=`SELECT e.amount+COALESCE(p.delta,0)+COALESCE(r.delta,0)+COALESCE(c.delta,0)+COALESCE(t.delta,0) AS amount,
  COALESCE(r.delta,0)+COALESCE(c.delta,0) AS relic,n.message,d.note,e.mode,e.policy,
  CASE WHEN e.mode='escalation' AND e.policy='${ESCALATION_RATING_POLICY}' THEN CASE WHEN x.id IS NULL THEN 0 ELSE 1 END ELSE 1 END AS power_done FROM kp_events e
  LEFT JOIN kp_escalation_power_matches x ON x.id=e.id AND e.mode='escalation' AND e.policy='${ESCALATION_RATING_POLICY}'
+ LEFT JOIN kp_ledger t ON t.id='esc-extra:'||e.id AND e.mode IN ('escalation','swiftplay')
  LEFT JOIN kp_ledger p ON p.id='penalty:'||e.id
  LEFT JOIN kp_ledger r ON r.id='relic:'||e.id
  LEFT JOIN kp_ledger c ON c.id='spike-comp:'||e.id

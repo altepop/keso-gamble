@@ -1,7 +1,7 @@
-import {hoyoPanel} from './hoyo-view.js?v=web-29ed04bdab6ca23f';
-import {steamPanel} from './steam-view.js?v=web-29ed04bdab6ca23f';
-import {stockPrice} from './stock-view.js?v=web-29ed04bdab6ca23f';
-import { ACTIVITIES, MEMBERS, ORDERS } from './progression.js?v=web-29ed04bdab6ca23f';
+import {hoyoPanel} from './hoyo-view.js?v=web-8874ce4407dc731e';
+import {steamPanel} from './steam-view.js?v=web-8874ce4407dc731e';
+import {stockPrice} from './stock-view.js?v=web-8874ce4407dc731e';
+import { ACTIVITIES, MEMBERS, ORDERS } from './progression.js?v=web-8874ce4407dc731e';
 export const escapeHTML=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const kp=n=>n.toLocaleString('ja-JP')+' KP';
 // A history amount with its own sign: +900 KP / −200 KP / ±0 KP.
@@ -43,9 +43,9 @@ function escalationRewards(state){
   const detail=r.kind==='big'?'第'+r.tier+'段階':r.kind==='super-unlucky'?'手持ちKP半額':'特別賞金';
   return `<div class="esc-reward-row"><div class="esc-reward-meta"><b>${title}</b>${detail} ／ ${signed(delta)}<br>${new Date(r.at).toLocaleString('ja-JP')}</div><button type="button" data-esc-spin="${escapeHTML(r.id)}">ルーレットを見る</button></div>`;
  }).join('');
- return ratingPanel+`<section class="panel"><div class="card-body"><h2 class="panel-title">🎰 スイフト・大勝負抽選</h2><p class="helper">勝敗が確定したスイフトで1/24（約4.17%）の大勝負。勝てば獲得、負ければ減額。${all?'超ラッキー・超アンラッキーも各0.1%で発生し、3種類は重複しません。':'手持ち半額の抽選はありません。'}結果は試合ごとに一度だけ確定し、ルーレットは保存済みの結果を再生します。</p>
+ return ratingPanel+`<section class="panel"><div class="card-body"><h2 class="panel-title">🎰 スイフト・大勝負抽選</h2><p class="helper">勝敗が確定したスイフトで1/24（約4.17%）の大勝負。試合の勝敗と独立に、抽選額は2/3でプラス・1/3でマイナス。${all?'超ラッキー・超アンラッキーも各0.1%で発生し、3種類は重複しません。':'手持ち半額の抽選はありません。'}結果は試合ごとに一度だけ確定し、ルーレットは保存済みの結果を再生します。</p>
  <details class="rules"><summary>全等級の金額・当選確率と精算ルール</summary>
- <p class="helper"><strong>🎰 大勝負（全試合の1/24・約4.17%）</strong><br>Ⅰ 500 KP：35% ／ Ⅱ 1,000 KP：28% ／ Ⅲ 2,500 KP：20% ／ Ⅳ 5,000 KP：13% ／ Ⅴ 15,000 KP：4%。<br>当選時は通常の基本報酬を置き換えます。5対0の＋600、本人のキル＋アシスト15以上の＋150は圧勝時だけ別途加算。共通ラッキー倍率は合計に1回だけ適用。遺物は安全枠の上限を維持し、敗北の追加損失はありません。</p>
+ <p class="helper"><strong>🎰 大勝負（全試合の1/24・約4.17%）</strong><br>Ⅰ 500 KP：35% ／ Ⅱ 1,000 KP：28% ／ Ⅲ 2,500 KP：20% ／ Ⅳ 5,000 KP：13% ／ Ⅴ 15,000 KP：4%。<br>大勝負のプラス率は2/3。これは圧勝・共通倍率・遺物を計算する前の抽選額です。当選時は通常の基本報酬を置き換えます。5対0の＋600、本人のキル＋アシスト15以上の＋150は圧勝時だけ別途加算。共通ラッキー倍率は合計に1回だけ適用。遺物は安全枠の上限を維持し、敗北の追加損失はありません。</p>
  ${all?'<p class="helper">超ラッキー0.1%：10,000／30,000／100,000／300,000／1,000,000KPを50／30／15／4.5／0.5%で別途加算。超アンラッキー0.1%：通常精算後の手持ちKPのみ半額。保有株・馬などは対象外です。</p>':''}
  <p class="helper">引き分けは対象外。旧エスカの精算済み履歴も、当時のモード名で再生できます。</p></details>${rows||'<p class="helper">まだ大勝負の結果はありません。</p>'}</div></section>`;
 }

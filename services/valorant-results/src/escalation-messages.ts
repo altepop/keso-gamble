@@ -26,7 +26,7 @@ export function escalationBigCopy(tier:number,award:number){
 }
 export function escalationBigNote(tier:number,award:number,mode:'escalation'|'swiftplay'='escalation'){
  const d=escalationBigCopy(tier,award);
- return `（🎰 ${mode==='swiftplay'?'スイフト':'エスカ'}大勝負 ${d.tierLabel}：${d.outcome==='win'?'勝利 +':'敗北 −'}${d.nominal} KP／${d.comment}）`;
+ return `（🎰 ${mode==='swiftplay'?'スイフト':'エスカ'}大勝負 ${d.tierLabel}：${mode==='swiftplay'?(d.outcome==='win'?'プラス +':'マイナス −'):(d.outcome==='win'?'勝利 +':'敗北 −')}${d.nominal} KP／${d.comment}）`;
 }
 /** Separate equal-bot notices are reserved for IV/V: at the configured low-frequency bet odds,
  * posting every tier would needlessly flood the earnings channel. */
@@ -38,11 +38,11 @@ export function escalationBigPost(user:string,tier:number,award:number,net:numbe
   tier===5?`🚨🎰 **${mode==='swiftplay'?'スイフト':'エスカ'}大勝負・Ⅴ 当選**`:`🎰 **${mode==='swiftplay'?'スイフト':'エスカ'}大勝負・Ⅳ 当選**`,
   `<@${user}> の${mode==='swiftplay'?'スイフト':'エスカレーション'}で特別抽選が発生したで。`,
   '',
-  `**抽選：第${d.tierLabel}段階／${d.outcome==='win'?'勝利':'敗北'}／基準額 ${award>0?'+':'−'}${d.nominal} KP**`,
+  `**抽選：第${d.tierLabel}段階／${mode==='swiftplay'?(d.outcome==='win'?'プラス':'マイナス'):(d.outcome==='win'?'勝利':'敗北')}／基準額 ${award>0?'+':'−'}${d.nominal} KP**`,
   `**この試合の口座増減：${net>0?'+':net<0?'−':'±'}${fmt(Math.abs(net))} KP**`,
   ...(owed>0?[`**借KPに計上：+${fmt(owed)} KP**`]:[]),
   '',
   `💬 ${d.comment}`,
-  mode==='swiftplay'?'-# 大勝負は通常の基本報酬の置き換え。5対0と圧勝貢献を別途加算し、共通倍率は合計に1回だけ適用します。遺物は安全枠を維持します。':'-# 大勝負は通常の基本報酬の置き換えです。実際の口座増減は共通ラッキー倍率・成績ボーナス・残高不足による差引上限などで変動します。',
+  mode==='swiftplay'?'-# 大勝負の抽選額は勝敗と独立に2/3でプラス、1/3でマイナス。通常の基本報酬を置き換え、5対0と圧勝貢献を別途加算し、共通倍率は合計に1回だけ適用します。遺物は安全枠を維持します。':'-# 大勝負は通常の基本報酬の置き換えです。実際の口座増減は共通ラッキー倍率・成績ボーナス・残高不足による差引上限などで変動します。',
  ].join('\n');
 }
