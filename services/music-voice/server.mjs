@@ -52,19 +52,24 @@ const server=createServer(async(req,res)=>{
  if(!equal(token,MUSIC_BRIDGE_TOKEN))return reply(res,401,{ok:false,message:'Unauthorized'});
  try{
   const data=await readBody(req);
-  const {guildId,userId,requestId,action,track,volume,loop}=data??{};
+  const {guildId,userId,requestId,applicationId,action,track,volume,loop}=data??{};
   if(guildId!==MUSIC_GUILD_ID||!/^\d{15,22}$/.test(userId??'')
     ||!/^\d{15,22}$/.test(requestId??'')||typeof action!=='string'||action.length>20)
     return reply(res,400,{ok:false,message:'Invalid music request'});
+  // Verify the voice credential belongs to the same KESO PLAY application that
+  // received the signed slash interaction. A webhook or another Bot must not play.
+  if(!client.isReady())return reply(res,503,{ok:false,message:'Music voice bot is still connecting'});
+  if(!/^\d{15,22}$/.test(applicationId??'')||applicationId!==client.user?.id)
+    return reply(res,403,{ok:false,message:'KESO PLAY Bot identity mismatch'});
   pruneReceipts(Date.now());
   const existing=receipts.get(requestId);
   if(existing){
-   if(existing.fingerprint!==JSON.stringify([guildId,userId,action,track,volume,loop]))
+   if(existing.fingerprint!==JSON.stringify([guildId,userId,applicationId,action,track,volume,loop]))
     return reply(res,409,{ok:false,message:'Interaction ID was already used'});
    const result=await existing.result;
    return reply(res,result.ok?200:400,result);
   }
-  const fingerprint=JSON.stringify([guildId,userId,action,track,volume,loop]);
+  const fingerprint=JSON.stringify([guildId,userId,applicationId,action,track,volume,loop]);
   const pending=music.request({guildId,userId,action,track,volume,loop})
    .then(message=>({ok:true,message}),error=>({
      ok:false,message:error instanceof Error&&/[\u3040-\u30ff\u4e00-\u9faf]/.test(error.message)
