@@ -67,13 +67,14 @@ function looksLikeView(v:unknown):v is MusicView{
   &&typeof data.loop==='string'&&Number.isFinite(data.elapsedSec);
 }
 const songTime=(v:unknown)=>{
+ if(v===null||v===undefined)return '--:--';
  const n=Number(v);
  if(!Number.isFinite(n)||n<0)return '--:--';
  const seconds=Math.floor(n);
  return String(Math.floor(seconds/60)).padStart(2,'0')+':'+String(seconds%60).padStart(2,'0');
 };
 export function musicPanel({message,view}:MusicReply){
- if(!view)return {content:message,components:[] as unknown[],embeds:[] as unknown[]};
+ if(!view)return {content:message,components:[],embeds:[]};
  const current=view.current?.title??'停止中';
  const mode=view.mode==='radio'?'📻 KESO RADIO':view.mode==='all'?'🎼 全曲再生':'🎵 通常再生';
  const waiting=view.queue.slice(0,8).map((t,i)=>
