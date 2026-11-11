@@ -1,58 +1,64 @@
 # KESO PLAY Discord権限拡張（2026-11-11）
 
-## 目的
+## 方針
 
-KESO PLAY / あかんbot の既存コマンド・通話監視・Discord Activityを維持したまま、勝敗予想、イベント、スレッド、通話演出などの準備に必要なBot権限を整理する。
+管理者・BAN・キック、ロール・絵文字・スタンプの管理権限は付与しない。KESO PLAYはゲームBotとして、利用者のコンテンツやサーバー全体を変更できる管理権限を持たせない。現行の権限申請スクリプトは **18項目の基本権限** に限定した。音声チャンネルへの他人の移動とプライベートスレッド作成は明示的な追加オプションにした。
 
-ユーザー方針：**管理者・キック・BANは絶対に付与しない。ロールと絵文字・スタンプは既に満杯のため、ロール管理・絵文字/スタンプの作成・管理・外部使用権限を追加しない。** サウンドボードの既存サウンド使用は容量を増やさないため対象とする。
+**Discord権限を許可するだけでは機能は実装されない**。本番Botの稼働コード・既存の通話Gateway・D1・KP精算は、このPRでは変更しない。
 
-## 追加権限を申請する
+## PCがない場合：iPhoneからの権限変更
 
-1. Discord Developer Portalで対象アプリを確認し、ローカルの `services/valorant-results/discord-config.json` に正しい `applicationId`・`guildId` を設定する。Bot Tokenをコピーしたり、コミットしたりしない。
-2. リポジトリのルートから次を実行する。
+Discord iOSアプリで対象サーバーを開き、「サーバー名 → 設定 → ロール → 対象Botロール → 権限」に進み、必要な権限をオンにして保存する。表示名・場所はアプリの版によって変わる場合がある。サーバー管理者または必要な管理権限を持つユーザーが操作する。Botが持つ実際の権限は各チャンネルの上書き設定にも左右される。
+
+Discord Developer Portal の OAuth2 URL Generator から Bot と applications.commands を選ぶ方法でも申請できる。iPhoneのブラウザーで表示が狭い場合は「デスクトップ用Webサイトを表示」を使う。
+
+## 権限申請リンクを生成する（PCを使えるときの代替手段）
+
+`services/valorant-results/discord-config.json` に既存の `applicationId`・`guildId` がある環境で、以下を実行する。
 
 ```sh
 node services/valorant-results/scripts/discord-permission-upgrade.mjs
 ```
 
-3. 出力されるDiscord公式のOAuth2承認URLを、対象サーバーの管理者が開いて許可する。**このスクリプト自体はAPI操作を一切しない。**
-4. サーバー設定 → ロール → Bot の権限で反映を確認し、必要なテキスト・ボイスチャンネルのカテゴリ/チャンネル上書きで権限を限定する。
+出力されたURLをDiscord上で管理者が開いて許可する。このスクリプトはDiscord APIを呼び出さない。
 
-**高度な権限** `MANAGE_CHANNELS` （チャンネルの作成だけでなく編集・削除も可能）は初期セットから除外した。実装・安全性検証後に限り、次を使用する。
+任意の機能を追加する場合：
 
 ```sh
-node services/valorant-results/scripts/discord-permission-upgrade.mjs --with-channel-management
+node services/valorant-results/scripts/discord-permission-upgrade.mjs --with-voice-move
+node services/valorant-results/scripts/discord-permission-upgrade.mjs --with-private-threads
 ```
 
-## 基本セット（権限承認だけでは新機能は有効にならない）
+移動は本人の同意を得た試合募集・自動チーム分けでしか使用しない。非公開スレッドは本当に必要な場合に限る。サーバー全体へのチャンネル管理・イベント管理・スレッド管理はオプションでも要求しない。
 
-| 分野 | Discordフラグ | 主な用途 |
-|---|---|---|
-| 投稿 | VIEW_CHANNEL / SEND_MESSAGES / EMBED_LINKS / ATTACH_FILES / READ_MESSAGE_HISTORY | 予想カード、結果、画像 |
-| 交流 | ADD_REACTIONS / SEND_POLLS / PIN_MESSAGES | 投票、イベント告知、メッセージ固定 |
-| スレッド | CREATE_PUBLIC_THREADS / CREATE_PRIVATE_THREADS / SEND_MESSAGES_IN_THREADS / MANAGE_THREADS | 試合別の話題整理（MANAGE_THREADS は他者のスレッドにも作用するのでコード側制限が必要） |
-| イベント | CREATE_EVENTS / MANAGE_EVENTS | 大会のスケジュール登録・修正（MANAGE_EVENTS は他者作成イベントも管理可能） |
-| 通話 | CONNECT / SPEAK / MOVE_MEMBERS / USE_SOUNDBOARD / USE_EXTERNAL_SOUNDS / SET_VOICE_CHANNEL_STATUS | 本人同意のあるチーム分け、音響演出、通話チャンネル表示 |
-| Activity/コマンド | USE_EMBEDDED_ACTIVITIES / USE_APPLICATION_COMMANDS | 既存KESO PLAY / スラッシュコマンド |
+## 基本権限 18項目
 
-追加セットの `MANAGE_CHANNELS` は明示的なオプションでのみ申請する。
+| 分野 | 権限 |
+|---|---|
+| 投稿・結果通知 | VIEW_CHANNEL / SEND_MESSAGES / EMBED_LINKS / ATTACH_FILES / READ_MESSAGE_HISTORY |
+| 投票・告知 | ADD_REACTIONS / SEND_POLLS / PIN_MESSAGES |
+| 公開スレッド | CREATE_PUBLIC_THREADS / SEND_MESSAGES_IN_THREADS |
+| イベント | CREATE_EVENTS （Bot自身のイベントの編集・削除も可能） |
+| 通話・既存のサウンド | CONNECT / SPEAK / USE_SOUNDBOARD / USE_EXTERNAL_SOUNDS / SET_VOICE_CHANNEL_STATUS |
+| Activityとコマンド | USE_EMBEDDED_ACTIVITIES / USE_APPLICATION_COMMANDS |
 
-## 絶対に要求しないもの
+※ PIN_MESSAGES はほかの投稿にも作用するため、実装する際はBotが投稿したメッセージだけを固定・解除する。音声演出はデフォルトOFF、明示的な操作で起動する。
 
-- `ADMINISTRATOR`, `KICK_MEMBERS`, `BAN_MEMBERS`
-- `MANAGE_ROLES`
-- `MANAGE_GUILD_EXPRESSIONS`, `CREATE_GUILD_EXPRESSIONS`
-- `USE_EXTERNAL_EMOJIS`, `USE_EXTERNAL_STICKERS`
-- `MANAGE_GUILD`, `MANAGE_WEBHOOKS`, `MANAGE_MESSAGES`, `MODERATE_MEMBERS`
-- `MENTION_EVERYONE`
+## オフを維持する権限
 
-## 権限と実装は別
+- 絶対禁止：`ADMINISTRATOR` / `KICK_MEMBERS` / `BAN_MEMBERS`
+- 容量・管理方針：`MANAGE_ROLES` / `CREATE_GUILD_EXPRESSIONS` / `MANAGE_GUILD_EXPRESSIONS` / `USE_EXTERNAL_EMOJIS` / `USE_EXTERNAL_STICKERS`
+- 他者に影響する管理：`MANAGE_CHANNELS` / `MANAGE_MESSAGES` / `MANAGE_WEBHOOKS` / `MANAGE_GUILD` / `MODERATE_MEMBERS` / `MUTE_MEMBERS` / `DEAFEN_MEMBERS` / `MANAGE_NICKNAMES`
+- 通知・権限範囲：`MENTION_EVERYONE` / `MANAGE_EVENTS` / `MANAGE_THREADS`
 
-- **現状のあかんbot**：`src/discord-interactions.ts` でボタン押下、`src/skirmish.ts` で受取/続行ボタン、`src/voice-gateway.ts` で通話状態監視を実装済み。
-- **未実装**：勝敗予想の募集・締切・集計、自動チーム分け、大会イベント作成、サウンドボード再生、スレッド自動作成・整理などは、それぞれコード実装と試験が別途必要。
-- **Gateway Intents**：現在の通話Gatewayは `GUILDS | GUILD_VOICE_STATES`（129）のみ要求する。Presence（ゲーム起動）、Guild Members（加入・退出）、Message Content（一般投稿内容）はDeveloper PortalのPrivileged Intents設定＋**適切なGateway実装**が必要。PortalだけをONにしても情報は届かない。確認前に要求intentsを増やすとGateway切断が起こり、通話KPに影響するため、今は変更しない。
-- 勝敗予想などではWebhookの一般的な投稿権限とインタラクション処理を優先し、毎分ポーリングと新しいD1負荷を増やさない。
-- 音声演出は通話中の音を邪魔しないため、利用者の明示的な操作で開始する方式を採用。本人の許可なしにメンバーを移動しない。
-- 予想の参加記録とプレゼンスを扱う場合は、参加者への説明・対象限定・保存期間の設定が必要。
+非公開スレッド作成とメンバー移動は、上記2つのオプションを使うときに限り承認する。Discordの音声チャンネル移動機能は悪用すれば通話を妨害できるため、対象チャンネルの上書き制限、実装上の参加同意を前提とする。
 
-参考：[Discord公式の権限一覧](https://discord.com/developers/docs/topics/permissions#permissions-bitwise-permission-flags)、[DiscordのPrivileged Intents](https://support-dev.discord.com/hc/en-us/articles/6207308062871-What-are-Privileged-Intents)。
+## Privileged Intentsは別管理
+
+既存Gatewayは `GUILDS | GUILD_VOICE_STATES`（129）を要求する。Presence、Guild Members、Message ContentなどはDeveloper Portalでの設定と追加開発が必要。実装前にONにしても検知できない。Gateway切断や通話KPへの影響を避け、今回の権限申請とは分離する。
+
+## 今後の実装対象
+
+既存の `src/discord-interactions.ts` にボタン、`src/skirmish.ts` にスカーミッシュの受取/続行、`src/voice-gateway.ts` に通話状態監視がある。勝敗予想、イベント、スレッド、チーム移動、サウンドボードは未実装で、テスト・利用者同意・権限チェックとD1負荷管理を経て有効化する。
+
+参考：[Discord公式Permissions](https://discord.com/developers/docs/topics/permissions)、[Discord Roles and Permissions](https://support.discord.com/hc/en-us/articles/214836687-Discord-Roles-and-Permissions)。
