@@ -60,7 +60,9 @@ export class MusicSession {
    if(entries.size>=LIMIT_PENDING&&!entries.has('pending:'+p.interaction.id))
       return new Response('Music queue temporarily busy',{status:429});
    await this.ctx.storage.put('pending:'+p.interaction.id,p);
-   await this.ctx.storage.setAlarm(Date.now()+1000);
+   // Give the initial Discord deferred PATCH time to post "starting".
+   // Otherwise a fast alarm could overwrite the completed playback card.
+   await this.ctx.storage.setAlarm(Date.now()+4000);
    return Response.json({queued:true});
   }
   if(path==='/checkpoint'){
@@ -74,8 +76,9 @@ export class MusicSession {
     if(!isSavedMusic(value))return new Response('invalid checkpoint',{status:400});
     const previous=await this.ctx.storage.get<SavedMusic>('checkpoint');
     if(previous&&previous.savedAt>value.savedAt)return Response.json({saved:false,stale:true});
-    if(value.snapshot===null)await this.ctx.storage.delete('checkpoint');
-    else await this.ctx.storage.put('checkpoint',value);
+    // Keep a null tombstone so a slower old checkpoint cannot resurrect a
+    // queue after /music stop, leave, or an empty VC.
+    await this.ctx.storage.put('checkpoint',value);
     return Response.json({saved:true});
    }
   }
