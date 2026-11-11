@@ -75,7 +75,7 @@ export class MusicSession {
     let value:unknown;try{value=JSON.parse(data);}catch{return new Response('bad json',{status:400});}
     if(!isSavedMusic(value))return new Response('invalid checkpoint',{status:400});
     const previous=await this.ctx.storage.get<SavedMusic>('checkpoint');
-    if(previous&&previous.savedAt>value.savedAt)return Response.json({saved:false,stale:true});
+    if(previous&&previous.savedAt>=value.savedAt)return Response.json({saved:false,stale:true});
     // Keep a null tombstone so a slower old checkpoint cannot resurrect a
     // queue after /music stop, leave, or an empty VC.
     await this.ctx.storage.put('checkpoint',value);
