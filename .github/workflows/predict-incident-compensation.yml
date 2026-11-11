@@ -1,0 +1,141 @@
+name: One-time incident verified KP prediction compensation
+on:
+  push:
+    paths:
+      - .github/workflows/predict-incident-compensation.yml
+permissions:
+  contents: read
+jobs:
+  compensate:
+    if: github.repository == 'altepop/keso-gamble' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      CFACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CFTOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - name: Compensate only the exact verified 23:27 incorrect result
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os, json, urllib.request, datetime
+          from zoneinfo import ZoneInfo
+          
+          account=os.environ['CFACCOUNT']; token=os.environ['CFTOKEN']
+          base='https://api.cloudflare.com/client/v4/accounts/'+account
+          def cf(path,body=None):
+            headers={'Authorization':'Bearer '+token}
+            if body is not None: headers['Content-Type']='application/json'
+            req=urllib.request.Request(base+path,headers=headers,data=json.dumps(body).encode() if body is not None else None)
+            with urllib.request.urlopen(req,timeout=30) as resp: doc=json.load(resp)
+            if not doc.get('success'): raise RuntimeError('cloudflare_query_failed')
+            return doc['result']
+          settings=cf('/workers/scripts/valorant-results/settings')
+          dbs=[b['id'] for b in settings.get('bindings',[]) if b.get('type')=='d1' and b.get('name')=='DB']
+          if len(dbs)!=1:raise RuntimeError('wrong_database_binding')
+          def execute(sql,params=None):
+            result=cf('/d1/database/'+dbs[0]+'/query',{'sql':sql,'params':params or []})
+            if len(result)!=1 or result[0].get('success') is not True: raise RuntimeError('sql_execution_unsuccessful')
+            return result[0]
+          def select(sql,params=None):return execute(sql,params).get('results',[])
+          def jst(t):return datetime.datetime.fromtimestamp(t/1000,ZoneInfo('Asia/Tokyo')).strftime('%Y-%m-%d %H:%M:%S')
+          
+          start=int(datetime.datetime(2026,11,11,23,25,tzinfo=ZoneInfo('Asia/Tokyo')).timestamp()*1000)
+          end=int(datetime.datetime(2026,11,11,23,30,tzinfo=ZoneInfo('Asia/Tokyo')).timestamp()*1000)
+          events=select('SELECT id,guild,riot,mode,created_at,status,outcome,match_id FROM vp_events WHERE created_at BETWEEN ? AND ? ORDER BY created_at LIMIT 3',[start,end])
+          if len(events)!=1:raise RuntimeError('incident_event_count_mismatch')
+          e=events[0]
+          matches=select("""SELECT n.match_id,n.ended_at,n.outcome,
+           CAST(json_extract(s.value,'$.kickoff') AS INTEGER) AS kickoff,
+           json_extract(s.value,'$.outcome') AS verified_outcome
+           FROM notifications n JOIN monitor_state s
+           ON s.key='vp:incident:20261111:kickoff:'||n.match_id
+           WHERE n.riot_id=? AND n.mode=? AND n.ended_at>?
+           AND n.ended_at<? ORDER BY n.ended_at,n.match_id LIMIT 3""",
+           [e['riot'],e['mode'],e['created_at'],e['created_at']+7200000])
+          if len(matches)!=2:raise RuntimeError('verified_match_count_mismatch')
+          first,second=matches
+          if first['outcome']!='loss' or first['verified_outcome']!='loss' or second['outcome']!='win' or second['verified_outcome']!='win':
+            raise RuntimeError('verified_match_outcome_mismatch')
+          if e['status']!='resolved' or e['created_at']<=first['kickoff'] or first['ended_at']<=e['created_at'] or e['match_id']!=second['match_id']:
+            raise RuntimeError('event_not_misassigned_to_second_match')
+          if first['kickoff']>=e['created_at'] or not first['kickoff']<first['ended_at']<second['ended_at']:
+            raise RuntimeError('kickoff_order_mismatch')
+          print('PREDICTION_VERIFIED_FIRST_MATCH=loss',flush=True)
+          print('PREDICTION_VERIFIED_FIRST_KICKOFF_JST='+jst(first['kickoff']),flush=True)
+          print('PREDICTION_CARD_CREATED_JST='+jst(e['created_at']),flush=True)
+          
+          ticket_rows=select("""SELECT t.user,t.side,t.stake,t.odds,t.purchased_at,t.status,t.payout,
+           w.balance,(SELECT delta FROM kp_ledger WHERE id='vp:stake:'||t.event_id||':'||t.user) AS stake_debit,
+           (SELECT delta FROM kp_ledger WHERE id='vp:pay:'||t.event_id||':'||t.user) AS old_credit
+           FROM vp_tickets t JOIN kp_wallets w ON w.user=t.user AND w.guild=?
+           WHERE t.event_id=? ORDER BY t.side""",[e['guild'],e['id']])
+          if len(ticket_rows)!=2 or sorted(t['side'] for t in ticket_rows)!=['loss','win']:
+            raise RuntimeError('ticket_set_mismatch')
+          tickets={t['side']:t for t in ticket_rows};w=tickets['win'];l=tickets['loss']
+          if not (w['stake']==10000 and w['odds']==276 and w['payout'] in (27600,10000)
+                  and l['stake']==5000 and l['odds']==169 and l['payout'] in (0,5000)):
+            raise RuntimeError('amount_or_odds_mismatch')
+          if w['purchased_at']<=first['kickoff'] or l['purchased_at']<=first['kickoff']:
+            raise RuntimeError('bet_placed_before_kickoff_refund_not_authorized')
+          if w['stake_debit']!=-10000 or l['stake_debit']!=-5000 or w['old_credit']!=27600 or l['old_credit'] is not None:
+            raise RuntimeError('original_ledger_mismatch')
+          if e['outcome'] not in ('win','loss'):raise RuntimeError('unexpected_event_outcome')
+          
+          win_correction='vp:incident:20261111:refund-diff:'+e['id']+':win'
+          loss_correction='vp:incident:20261111:refund-diff:'+e['id']+':loss'
+          existing=select('SELECT id,user,delta FROM kp_ledger WHERE id IN (?,?)',[win_correction,loss_correction])
+          if existing and (len(existing)!=2 or {(r['id'],r['user'],r['delta']) for r in existing}!={(win_correction,w['user'],-17600),(loss_correction,l['user'],5000)}):
+            raise RuntimeError('partial_or_invalid_existing_correction')
+          if not existing:
+            if w['status']!='won' or l['status']!='lost' or w['payout']!=27600 or l['payout']!=0 or e['outcome']!='win':
+              raise RuntimeError('unexpected_uncorrected_status')
+            if w['balance']<17600 or l['balance']>9007199254735991:
+              raise RuntimeError('wallet_balance_not_safely_correctable')
+            at=int(datetime.datetime.now(datetime.timezone.utc).timestamp()*1000)
+            # One SQLite statement makes the two adjustment ledgers atomic, with wallet triggers.
+            execute("""INSERT INTO kp_ledger(id,guild,user,delta,kind,at) VALUES
+              (?,?,?,-17600,'valorant_prediction',?),
+              (?,?,?,5000,'valorant_prediction',?)""",
+              [win_correction,e['guild'],w['user'],at,loss_correction,e['guild'],l['user'],at])
+            print('PREDICTION_CORRECTION_LEDGER_INSERTED=2',flush=True)
+          else:
+            print('PREDICTION_CORRECTION_LEDGER_ALREADY_PRESENT=2',flush=True)
+          
+          confirmed=select('SELECT id,user,delta FROM kp_ledger WHERE id IN (?,?)',[win_correction,loss_correction])
+          if len(confirmed)!=2 or {(r['id'],r['user'],r['delta']) for r in confirmed}!={(win_correction,w['user'],-17600),(loss_correction,l['user'],5000)}:
+            raise RuntimeError('adjustment_ledger_verification_failed')
+          
+          execute("""UPDATE vp_tickets SET status='refunded',payout=stake WHERE event_id=?
+           AND status IN ('won','lost')
+           AND EXISTS (SELECT 1 FROM kp_ledger WHERE id=?)
+           AND EXISTS (SELECT 1 FROM kp_ledger WHERE id=?)""",[e['id'],win_correction,loss_correction])
+          execute("""UPDATE vp_events SET match_id=?,outcome='loss' WHERE id=? AND status='resolved'
+           AND outcome IN ('win','loss')
+           AND EXISTS (SELECT 1 FROM kp_ledger WHERE id=?)
+           AND EXISTS (SELECT 1 FROM kp_ledger WHERE id=?)""",
+           [first['match_id'],e['id'],win_correction,loss_correction])
+          # The previous public outcome message is immutable. Queue an explicit correction.
+          msg=('🎯 **勝敗予想の精算訂正｜Dolly（コンペ）**\n'
+           '11/11 23:27の予想は、0:33終了の勝利試合ではなく、23:57終了の敗北試合が最初の対象でした。\n'
+           'その試合の開始は23:27:18、予想受付は23:27:33であり、2件とも試合開始後の購入でした。\n'
+           '**正しい判定：両方とも全額返金**\n'
+           '勝利予想10,000 KP：誤払戻27,600 KPのうち17,600 KPを補正し、掛金10,000 KPを返金。\n'
+           '敗北予想5,000 KP：掛金5,000 KPを返金。\n'
+           '-# KP台帳は差額のみ修正済み。対象試合と購入時刻を検証済み。')
+          post_id='vp:result:correction:20261111:'+e['id']
+          execute("INSERT OR IGNORE INTO kp_posts(id,body,at) VALUES(?,?,?)",
+           [post_id,json.dumps({'content':msg,'allowed_mentions':{'parse':[]}},ensure_ascii=False),
+            int(datetime.datetime.now(datetime.timezone.utc).timestamp()*1000)])
+          t=select('SELECT side,status,payout,stake FROM vp_tickets WHERE event_id=?',[e['id']])
+          ev=select('SELECT outcome,match_id FROM vp_events WHERE id=?',[e['id']])
+          post=select('SELECT sent FROM kp_posts WHERE id=?',[post_id])
+          if len(t)!=2 or any(x['status']!='refunded' or x['payout']!=x['stake'] for x in t) or len(ev)!=1 or ev[0]['outcome']!='loss' or ev[0]['match_id']!=first['match_id'] or len(post)!=1:
+            raise RuntimeError('final_correction_consistency_failed')
+          print('PREDICTION_CORRECTION_CONFIRMED=1',flush=True)
+          print('PREDICTION_WIN_SIDE_NET_ADJUSTMENT=-17600',flush=True)
+          print('PREDICTION_LOSS_SIDE_NET_ADJUSTMENT=5000',flush=True)
+          print('PREDICTION_BOTH_TICKETS_REFUNDED=1',flush=True)
+          print('PREDICTION_CORRECTION_POST_QUEUED=1',flush=True)
+          PY
