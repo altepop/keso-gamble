@@ -1,5 +1,6 @@
 import {existsSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
+import {spawnSync} from 'node:child_process';
 import {joinVoiceChannel,createAudioPlayer,createAudioResource,AudioPlayerStatus,
  NoSubscriberBehavior,entersState,VoiceConnectionStatus} from '@discordjs/voice';
 import ffmpegStatic from 'ffmpeg-static';
@@ -8,7 +9,18 @@ import catalog from './catalog.json' with {type:'json'};
 import {MusicQueue} from './queue.mjs';
 
 if(ffmpegStatic)process.env.FFMPEG_PATH=ffmpegStatic;
-const tracks=new Map(catalog.map(t=>[t.id,{...t,path:fileURLToPath(new URL('../../music/assets/'+encodeURIComponent(t.file),import.meta.url))}]));
+function durationSec(path){
+  if(!ffmpegStatic)return null;
+  try{
+    const result=spawnSync(ffmpegStatic,['-hide_banner','-i',path],{encoding:'utf8',timeout:3000,maxBuffer:262144});
+    const match=/Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)/.exec(result.stderr??'');
+    return match?Math.round(Number(match[1])*3600+Number(match[2])*60+Number(match[3])):null;
+  }catch{return null;}
+}
+const tracks=new Map(catalog.map(t=>{
+  const path=fileURLToPath(new URL('../../music/assets/'+encodeURIComponent(t.file),import.meta.url));
+  return [t.id,{...t,path,durationSec:durationSec(path)}];
+}));
 const pretty=s=>String(s??'').slice(0,150);
 const VOICE_READY_MS=20_000;
 const IDLE_DISCONNECT_MS=120_000;
@@ -24,13 +36,16 @@ export class MusicController {
  session(guild){return this.rooms.get(guild)??null;}
  async request({guildId,userId,action,track,volume,loop}){
   if(!/^\d{15,22}$/.test(guildId)||!/^\d{15,22}$/.test(userId))throw Error('Discordユーザーを確認できない。');
-  return this.locked(guildId,()=>this.execute({guildId,userId,action,track,volume,loop}));
+  return this.locked(guildId,async()=>{
+    const message=await this.execute({guildId,userId,action,track,volume,loop});
+    return {message,view:this.snapshot(guildId)};
+  });
  }
  async execute({guildId,userId,action,track,volume,loop}){
   const guild=this.client.guilds.cache.get(guildId);
   if(!guild||!this.client.isReady())throw Error('音楽Botはまだ起動中だ。');
   const room=this.session(guildId);
-  if(action==='queue'||action==='status'){
+  if(action==='queue'||action==='status'||action==='panel'){
    if(!room)return '🎵 再生中の音楽はない。/music play でVCに呼び出せる。';
    return this.description(room);
   }
@@ -40,6 +55,27 @@ export class MusicController {
    throw Error('先に通常のボイスチャンネルに参加してほしい。');
   if(room && room.channelId!==channel.id)
    throw Error('別のVCで再生中だ。同じVCから操作してほしい。');
+  if(action==='all'||action==='radio'){
+   const album=[...tracks.values()];
+   if(album.some(t=>!existsSync(t.path)))throw Error('音源ファイルが配置されていない。');
+   const active=room??await this.connect(guild,channel);
+   active.queue.loadPlaylist(album,userId,{radio:action==='radio'});
+   this.cancelIdle(active);
+   active.forceSkip=false;
+   if(active.player.state.status!==AudioPlayerStatus.Idle){
+     // Let the existing player emit its Idle event before starting the replacement.
+     active.replacePending=true;
+     active.player.stop(true);
+   }else this.advance(active,{skip:true});
+   return action==='radio'
+     ?'📻 KESO RADIOを開始した。全曲を1回ずつ流し、順番を変えて繰り返す。'
+     :'🎼 オリジナル全'+album.length+'曲を順番に再生する。';
+  }
+  if(action==='shuffle'){
+   if(!room)throw Error('このVCで音楽は再生されていない。');
+   const count=room.queue.shuffle();
+   return count?'🔀 次の'+count+'曲を並び替えた。':'🔀 並び替えられる曲がまだない。';
+  }
   if(action==='play'){
    const found=tracks.get(String(track));
    if(!found)throw Error('曲が見つからない。選択肢から選んでほしい。');
@@ -91,9 +127,12 @@ export class MusicController {
   try{await entersState(connection,VoiceConnectionStatus.Ready,VOICE_READY_MS);}
   catch{connection.destroy();throw Error('VCに接続できなかった。接続・発言権限を確認してほしい。');}
   const room={guildId:guild.id,channelId:channel.id,connection,player,queue:new MusicQueue(),
-    forceSkip:false,idleTimer:null,emptyTimer:null,autoPaused:false,closed:false};
+    forceSkip:false,replacePending:false,idleTimer:null,emptyTimer:null,autoPaused:false,closed:false};
   connection.subscribe(player);
   player.on(AudioPlayerStatus.Idle,()=>{if(!room.closed){
+    if(room.replacePending){
+      room.replacePending=false;room.forceSkip=false;this.advance(room,{skip:true});return;
+    }
     const skip=room.forceSkip;room.forceSkip=false;this.advance(room,{skip});
   }});
   player.on('error',error=>{console.warn('music_playback_error',{code:error?.code??'audio'});
@@ -147,10 +186,19 @@ export class MusicController {
   try{room.player.stop(true);}catch{}
   try{room.connection.destroy();}catch{}
  }
- description(room){
+ snapshot(guildId){
+  const room=this.session(guildId);
+  if(!room)return null;
   const view=room.queue.view();
+  const elapsed=Number(room.player.state.resource?.playbackDuration??0);
+  return {...view,elapsedSec:Math.max(0,Math.floor(elapsed/1000)),
+    state:room.player.state.status};
+ }
+ description(room){
+  const view=this.snapshot(room.guildId);
   const current=view.current?.title??'なし',waiting=view.queue.map((t,i)=>(i+1)+'. '+t.title).join(' / ');
   return '🎶 再生中：'+current+(view.paused?'（一時停止）':'')
+   +'\n'+(view.mode==='radio'?'📻 KESO RADIO':view.mode==='all'?'🎼 全曲再生':'🎵 通常再生')
    +'\n📜 次：'+(waiting||'なし')+'\n🔊 '+view.volume+'%｜🔁 '+view.loop;
  }
  health(){return {ready:this.client.isReady(),active:this.rooms.size};}
