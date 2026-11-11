@@ -1,5 +1,7 @@
 import {matchAct,observeEscalationAct,syncEscalationPower} from './escalation-rating.ts';
 import {runSpikeCompensation} from './spike-compensation.ts';
+import {settlePredictions,expirePredictions} from './valo-predictions.ts';
+import {storedMode} from './modes.ts';
 import {queueCommunityNews} from './community-news.ts';
 import {queueRelicPress} from './relic-press.ts';
 import {queueVdkPearlRoast} from './vdk-pearl-roast.ts';
@@ -163,8 +165,9 @@ export async function monitorRankState(db:D1Database,cache:Map<string,string>,ke
  }
  return cache.get(key);
 }
-async function saveMatch(env: Env, match: Match, player: Player, account: Account, kpRun:KpRun|null,reservations:Map<string,Set<string>>,saved:Set<string>,ranks:Map<string,string>=new Map()): Promise<'excluded' | 'beforeMonitoring' | 'newResults' | 'duplicates'> {
+async function saveMatch(env: Env, match: Match, player: Player, account: Account, kpRun:KpRun|null,reservations:Map<string,Set<string>>,saved:Set<string>,ranks:Map<string,string>=new Map(),predictionTargets:ReadonlySet<string>=new Set()): Promise<'excluded' | 'beforeMonitoring' | 'newResults' | 'duplicates'> {
   const mode = match.metadata?.queue?.id;
+  const predictionActive = typeof mode === 'string' && predictionTargets.has(JSON.stringify([player.riotId,storedMode(mode)]));
   const ordinary = resultMessage(match, account.puuid, player.name?.trim() || parseId(player.riotId)[0]);
   if (!ordinary) return 'excluded';
   if (ordinary.endedAt <= account.since) return 'beforeMonitoring';
@@ -258,11 +261,17 @@ async function saveMatch(env: Env, match: Match, player: Player, account: Accoun
     if (change) result.message += rankChangeBlock(change, match.metadata.match_id + ':' + account.puuid);
   } catch { console.warn('rank_change_pending'); }
   const savedKey=JSON.stringify([player.riotId,match.metadata.match_id]);
-  if(saved.has(savedKey)&&!kpActive&&!isDeathNotice(result.mode))return 'duplicates';
+  if(saved.has(savedKey)&&!kpActive&&!isDeathNotice(result.mode)) {
+    if(predictionActive)try { await settlePredictions(env,match,player.riotId); } catch { console.warn('prediction_settlement_retry_pending'); }
+    return 'duplicates';
+  }
   const inserted = await env.DB.prepare('INSERT OR IGNORE INTO notifications(riot_id,match_id,message,ended_at,mode,act_id,act_name,outcome,sent,team_id) VALUES(?,?,?,?,?,?,?,?,?,?)')
     .bind(player.riotId, match.metadata.match_id, result.message, result.endedAt, result.mode, result.actId, result.actName,
       result.outcome, result.outcome === 'draw' && result.mode === 'escalation' ? 1 : 0, result.teamId).run();
   saved.add(savedKey);
+  // The match's immutable start time is checked against each ticket at settlement.
+  // A failure is retried from the duplicate-result path on the next monitor run.
+  if(predictionActive)try { await settlePredictions(env,match,player.riotId); } catch { console.warn('prediction_settlement_pending'); }
   if(kpRun&&kpRun.credits.has(kpId))kpRun.messages.set(kpId,result.message);
   if (inserted.meta.changes) {
     // Agent mastery counts new results only; a failure never blocks the result post.
@@ -457,6 +466,9 @@ export async function monitor(env: Env, players: Player[] = configuredPlayers): 
     // Never read a growing rank-history table eagerly. Competitive matches
     // load only their own rank2:<match>:<puuid> via indexed key lookup.
     const ranks=new Map<string,string>();
+    const vpMarker=await env.DB.prepare("SELECT 1 FROM monitor_state WHERE key='vp_open' LIMIT 1").first();
+    const vpTargets=new Set(vpMarker ? (await env.DB.prepare("SELECT riot,mode FROM vp_events WHERE status='open'").all<{riot:string;mode:string}>()).results
+      .map(e=>JSON.stringify([e.riot,e.mode])) : []);
     const deathDetails: DeathDetails = { remaining: 1, matches: new Map(),reservations };
     const pvpSeen=new Set<string>();
     let pvpExtraDetail=1;
@@ -524,17 +536,17 @@ export async function monitor(env: Env, players: Player[] = configuredPlayers): 
               }
             }catch{console.warn('pvp_settlement_pending');}
           }
-          counts[await saveMatch(env, match, player, account,kpRun,reservations,saved,ranks)]++;
+          counts[await saveMatch(env, match, player, account,kpRun,reservations,saved,ranks,vpTargets)]++;
           // A full match already contains other registered players; do not wait for their history to catch up.
           for (const other of players) {
             if (other.riotId === player.riotId) continue;
             const otherAccount = accounts.get(other.riotId);
-            if (otherAccount && match.players?.some(member => member.puuid === otherAccount.puuid)) await saveMatch(env, match, other, otherAccount,kpRun,reservations,saved,ranks);
+            if (otherAccount && match.players?.some(member => member.puuid === otherAccount.puuid)) await saveMatch(env, match, other, otherAccount,kpRun,reservations,saved,ranks,vpTargets);
           }
           const detail = await deathDetail(env, match, players, accounts, deathDetails);
           if (detail) for (const target of players) {
             const targetAccount = accounts.get(target.riotId);
-            if (targetAccount && detail.players.some(member => member.puuid === targetAccount.puuid)) await saveMatch(env, detail, target, targetAccount,kpRun,reservations,saved,ranks);
+            if (targetAccount && detail.players.some(member => member.puuid === targetAccount.puuid)) await saveMatch(env, detail, target, targetAccount,kpRun,reservations,saved,ranks,vpTargets);
           }
         }
         await setState(env, 'checked:' + player.riotId, Date.now());
@@ -570,6 +582,9 @@ export default {
       ctx.waitUntil((async()=>{const mapping=await initializeKp(env);if(mapping)await cleanupBoardDuels(env,mapping.guildId);})()
        .catch(()=>console.warn('board_duel_retention_pending')));
     }
+    // Expire unanswered prediction cards and refund reserved KP without another match API poll.
+    if(Math.floor((_event.scheduledTime??Date.now())/60000)%30===0)
+      ctx.waitUntil(track(env,'prediction_expiry',()=>expirePredictions(env)));
     // Every five minutes, finish abandoned KP board matches; indexed and skipped until first use.
     if(Math.floor((_event.scheduledTime??Date.now())/60000)%5===0)
       ctx.waitUntil(track(env,'board_duel_timeout',async()=>{const mapping=await initializeKp(env);if(mapping)await settleExpiredBoardDuels(env,mapping.guildId);}));

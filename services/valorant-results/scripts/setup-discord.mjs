@@ -41,7 +41,7 @@ try {
     if (command.name !== definition.name || command.application_id !== config.applicationId) throw new Error('登録結果を確認できませんでした。');
   }
   writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n');
-  console.log('\n/death と /valo の登録と公開設定の保存が完了しました。Bot Tokenは保存していません。');
+  console.log('\n/death・/valo・/predict の登録と公開設定の保存が完了しました。Bot Tokenは保存していません。');
   console.log('続けて npm.cmd run db:remote と npm.cmd run deploy を実行してください。');
   console.log('配置後、Developer PortalのGeneral InformationにあるInteractions Endpoint URLに次を設定して保存します。');
   console.log(config.workerUrl.replace(/\/$/, '') + '/interactions');

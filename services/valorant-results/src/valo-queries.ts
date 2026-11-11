@@ -50,6 +50,10 @@ const help = `📖 コマンド一覧
 /valo ranking [mode]：最新ACTの勝率ランキング
 /valo status：監視・API待機・送信待ちの状況
 
+🎯 勝敗予想
+/predict player [mode]：次の1試合の勝敗予想カードを作成（100〜100,000 KP、受付60分）
+勝敗ボタンでKP額を入力。試合開始後の予想・引分・対象試合未検出時は返金。
+
 ☠️ デスアンレ／デススイフト（管理者・サーバー管理権限）
 /death start player [player2…]：対象を選び、表示されるメニューでモードを選択
 /death stop [player]：取消（省略で全員）
