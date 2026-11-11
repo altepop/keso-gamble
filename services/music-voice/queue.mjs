@@ -17,6 +17,7 @@ export class MusicQueue {
     this.random=random;
   }
   add(track,requester){
+    if(this.mode==='radio')throw Error('KESO RADIO中は個別追加できない。/music all または /music stop で切り替えてほしい。');
     if(!validUser(requester))throw Error('ユーザーIDが不正だ。');
     if(!track||typeof track.id!=='string')throw Error('曲を選んでほしい。');
     if(this.upcoming.length>=LIMIT)throw Error('再生待ちは最大30曲だ。');
