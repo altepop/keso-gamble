@@ -163,7 +163,7 @@ export async function monitorRankState(db:D1Database,cache:Map<string,string>,ke
  }
  return cache.get(key);
 }
-async function saveMatch(env: Env, match: Match, player: Player, account: Account, kpRun:KpRun|null,reservations:Map<string,Set<string>>,saved:Set<string>,ranks:Map<string,string>=new Map()): Promise<'excluded' | 'beforeMonitoring' | 'newResults' | 'duplicates'> {
+async function saveMatch(env: Env, match: Match, player: Player, account: Account, kpRun:KpRun|null,reservations:Map<string,Set<string>>,saved:Set<string>,ranks:Map<string,string>=new Map(),predictionActive=false): Promise<'excluded' | 'beforeMonitoring' | 'newResults' | 'duplicates'> {
   const mode = match.metadata?.queue?.id;
   const ordinary = resultMessage(match, account.puuid, player.name?.trim() || parseId(player.riotId)[0]);
   if (!ordinary) return 'excluded';
@@ -248,7 +248,7 @@ async function saveMatch(env: Env, match: Match, player: Player, account: Accoun
   } catch { console.warn('rank_change_pending'); }
   const savedKey=JSON.stringify([player.riotId,match.metadata.match_id]);
   if(saved.has(savedKey)&&!kpActive&&!isDeathNotice(result.mode)) {
-    try { await settlePredictions(env,match,player.riotId); } catch { console.warn('prediction_settlement_retry_pending'); }
+    if(predictionActive)try { await settlePredictions(env,match,player.riotId); } catch { console.warn('prediction_settlement_retry_pending'); }
     return 'duplicates';
   }
   const inserted = await env.DB.prepare('INSERT OR IGNORE INTO notifications(riot_id,match_id,message,ended_at,mode,act_id,act_name,outcome,sent,team_id) VALUES(?,?,?,?,?,?,?,?,?,?)')
@@ -257,7 +257,7 @@ async function saveMatch(env: Env, match: Match, player: Player, account: Accoun
   saved.add(savedKey);
   // The match's immutable start time is checked against each ticket at settlement.
   // A failure is retried from the duplicate-result path on the next monitor run.
-  try { await settlePredictions(env,match,player.riotId); } catch { console.warn('prediction_settlement_pending'); }
+  if(predictionActive)try { await settlePredictions(env,match,player.riotId); } catch { console.warn('prediction_settlement_pending'); }
   if(kpRun&&kpRun.credits.has(kpId))kpRun.messages.set(kpId,result.message);
   if (inserted.meta.changes) {
     // Agent mastery counts new results only; a failure never blocks the result post.
@@ -452,6 +452,8 @@ export async function monitor(env: Env, players: Player[] = configuredPlayers): 
     // Never read a growing rank-history table eagerly. Competitive matches
     // load only their own rank2:<match>:<puuid> via indexed key lookup.
     const ranks=new Map<string,string>();
+    const vpEnabled=Boolean(await env.DB.prepare("SELECT 1 FROM monitor_state WHERE key='vp_open' LIMIT 1").first())
+      && Boolean(await env.DB.prepare("SELECT 1 FROM vp_events WHERE status='open' LIMIT 1").first());
     const deathDetails: DeathDetails = { remaining: 1, matches: new Map(),reservations };
     const pvpSeen=new Set<string>();
     let pvpExtraDetail=1;
@@ -519,17 +521,17 @@ export async function monitor(env: Env, players: Player[] = configuredPlayers): 
               }
             }catch{console.warn('pvp_settlement_pending');}
           }
-          counts[await saveMatch(env, match, player, account,kpRun,reservations,saved,ranks)]++;
+          counts[await saveMatch(env, match, player, account,kpRun,reservations,saved,ranks,vpEnabled)]++;
           // A full match already contains other registered players; do not wait for their history to catch up.
           for (const other of players) {
             if (other.riotId === player.riotId) continue;
             const otherAccount = accounts.get(other.riotId);
-            if (otherAccount && match.players?.some(member => member.puuid === otherAccount.puuid)) await saveMatch(env, match, other, otherAccount,kpRun,reservations,saved,ranks);
+            if (otherAccount && match.players?.some(member => member.puuid === otherAccount.puuid)) await saveMatch(env, match, other, otherAccount,kpRun,reservations,saved,ranks,vpEnabled);
           }
           const detail = await deathDetail(env, match, players, accounts, deathDetails);
           if (detail) for (const target of players) {
             const targetAccount = accounts.get(target.riotId);
-            if (targetAccount && detail.players.some(member => member.puuid === targetAccount.puuid)) await saveMatch(env, detail, target, targetAccount,kpRun,reservations,saved,ranks);
+            if (targetAccount && detail.players.some(member => member.puuid === targetAccount.puuid)) await saveMatch(env, detail, target, targetAccount,kpRun,reservations,saved,ranks,vpEnabled);
           }
         }
         await setState(env, 'checked:' + player.riotId, Date.now());
