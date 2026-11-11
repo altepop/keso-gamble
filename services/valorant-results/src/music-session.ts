@@ -42,7 +42,9 @@ function isSavedMusic(input:any):input is SavedMusic{
    &&(!s.guildId||s.guildId===discord.guildId);
 }
 export class MusicSession {
- constructor(private ctx:DurableObjectState,private env:Env){}
+ private ctx:DurableObjectState;
+ private env:Env;
+ constructor(ctx:DurableObjectState,env:Env){this.ctx=ctx;this.env=env;}
  async fetch(request:Request):Promise<Response>{
   const path=new URL(request.url).pathname;
   if(path==='/enqueue'&&request.method==='POST'){
