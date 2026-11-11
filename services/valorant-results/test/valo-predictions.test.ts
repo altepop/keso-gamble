@@ -6,7 +6,7 @@ import { URL as NodeURL } from 'node:url';
 import {
   PREDICTION_BUTTON, PREDICTION_MODAL, predictionAmount, predictionModal, predictionCard,
   predictionOdds, openPrediction, buyPrediction, settlePredictions, expirePredictions,
-  predictionWasAccepted, predictionBetAnnouncement, PREMATCH_GUARD_MS,
+  predictionWasAccepted, predictionBetAnnouncement,
 } from '../src/valo-predictions.ts';
 import { initializeKp } from '../src/kp.ts';
 import type { KpEnv, KpMapping } from '../src/kp.ts';
@@ -187,15 +187,20 @@ test('late post-start wager cannot win even if the outcome is already known',asy
   assert.equal(f.balance(),100000); // Known result never produces a windfall.
 });
 
-test('purchases closer than two minutes to verified match start are refunded, before start still eligible',async()=>{
-  assert.equal(PREMATCH_GUARD_MS,120000);
-  const f=await fixture();
-  await f.open();
-  await f.buy('100000000000001001',1000,start+4*60000); // one minute before kickoff
-  await settlePredictions(f.env,f.match(start+5*60000,true),'One#JP1',start+900000,mapping);
-  const ticket=f.sqlite.prepare('SELECT status,payout FROM vp_tickets').get() as {status:string;payout:number};
-  assert.deepEqual({...ticket},{status:'refunded',payout:1000});
-  assert.equal(f.balance(),100000);
+test('a bet one millisecond before or exactly at kickoff is valid, but one millisecond after is refunded',async()=>{
+  for (const [offset,expectedStatus,expectedPayout] of [
+    [-1,'won',2100],[0,'won',2100],[1,'refunded',1000],
+  ] as const) {
+    const f=await fixture();
+    await f.open();
+    const kickoff=start+5*60000;
+    const receipt=await f.buy('100000000000001001',1000,kickoff+offset);
+    assert.match(receipt,/予想を受け付けました/);
+    await settlePredictions(f.env,f.match(kickoff,true),'One#JP1',start+900000,mapping);
+    const ticket=f.sqlite.prepare('SELECT status,payout FROM vp_tickets').get() as {status:string;payout:number};
+    assert.deepEqual({...ticket},{status:expectedStatus,payout:expectedPayout},'kickoff offset '+offset+'ms');
+    assert.equal(f.balance(),expectedStatus==='won'?101100:100000);
+  }
 });
 
 test('observed completed match closes stale card for a new purchase without debiting KP',async()=>{

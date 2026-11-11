@@ -11,9 +11,8 @@ export const PREDICTION_BUTTON = /^vp:bet:(\d{15,22}):(win|loss)$/;
 export const PREDICTION_MODAL = /^vp:submit:(\d{15,22}):(win|loss)$/;
 const VALID_ID = /^\d{15,22}$/;
 const MIN = 100, MAX = 100000, WINDOW = 10 * 60000, EXPIRY = 6 * 3600000;
-// Discord-confirmed purchase timestamps must precede the real match kickoff.
-// A two-minute safety buffer protects against match-feed delay and time rounding.
-export const PREMATCH_GUARD_MS = 2 * 60000;
+// Discord-confirmed purchase timestamps at or before the actual match kickoff are valid.
+// Bets placed after kickoff are refunded when the verified match result arrives.
 export const PREDICTION_ACCEPTED = '🎫 **予想を受け付けました**';
 export const predictionWasAccepted = (message: string) => message.startsWith(PREDICTION_ACCEPTED + '\n');
 export function predictionBetAnnouncement(user: string) {
@@ -70,7 +69,7 @@ export function predictionCard(e: Event) {
         {type:2,style:3,label:'勝利を予想',custom_id:'vp:bet:' + e.id + ':win'},
         {type:2,style:4,label:'敗北を予想',custom_id:'vp:bet:' + e.id + ':loss'},
       ]},
-      {type:10,content:'-# 受付 ' + until + ' JSTまで · 100〜100,000 KP · 1人1回\n-# 試合開始2分前を過ぎた賭けは、判定後に全額返金。倍率は固定。'},
+      {type:10,content:'-# 受付 ' + until + ' JSTまで · 100〜100,000 KP · 1人1回\n-# 試合開始時刻までの賭けが有効。開始後の賭けは判定後に全額返金。倍率は固定。'},
     ],
   }] };
 }
@@ -180,13 +179,13 @@ export async function settlePredictions(env:KpEnv,match:Match,riot:string,now=Da
   const rival=match.teams.find(t=>t.team_id!==player.team_id);
   if(!team||!rival||(team.won&&rival.won))return 0;
   const outcome=team.won?'win':rival.won?'loss':'draw';
-  const payoutCutoff=start-PREMATCH_GUARD_MS;
+  const payoutCutoff=start; // Kickoff timestamp itself is eligible.
   for(const e of events) {
     if(e.guild!==mapping.guildId)continue;
     const done=await env.DB.batch([
       env.DB.prepare('UPDATE vp_events SET status=\'resolved\',match_id=?,outcome=? WHERE id=? AND status=\'open\' AND created_at<?')
         .bind(match.metadata.match_id,outcome,e.id,start),
-      env.DB.prepare('UPDATE vp_tickets SET status=CASE WHEN purchased_at>=? OR ?=\'draw\' THEN \'refunded\' WHEN side=? THEN \'won\' ELSE \'lost\' END,payout=CASE WHEN purchased_at>=? OR ?=\'draw\' THEN stake WHEN side=? THEN CAST(stake*odds/100 AS INTEGER) ELSE 0 END WHERE event_id=? AND status=\'pending\' AND EXISTS(SELECT 1 FROM vp_events WHERE id=? AND status=\'resolved\' AND match_id=?)')
+      env.DB.prepare('UPDATE vp_tickets SET status=CASE WHEN purchased_at>? OR ?=\'draw\' THEN \'refunded\' WHEN side=? THEN \'won\' ELSE \'lost\' END,payout=CASE WHEN purchased_at>? OR ?=\'draw\' THEN stake WHEN side=? THEN CAST(stake*odds/100 AS INTEGER) ELSE 0 END WHERE event_id=? AND status=\'pending\' AND EXISTS(SELECT 1 FROM vp_events WHERE id=? AND status=\'resolved\' AND match_id=?)')
         .bind(payoutCutoff,outcome,outcome,payoutCutoff,outcome,outcome,e.id,e.id,match.metadata.match_id),
     ]);
     if(done[0].meta.changes){
@@ -201,7 +200,7 @@ export async function settlePredictions(env:KpEnv,match:Match,riot:string,now=Da
             +'試合結果：**'+(outcome==='win'?'勝利':outcome==='loss'?'敗北':'引き分け')+'**'
             +'｜予想 '+total.entries+'件／的中 '+total.hits+'件\n'
             +'予想総額 '+money(total.stakes)+'｜払い戻し総額 '+money(total.payouts)
-            +'\n-# 試合開始2分前を過ぎた予想と引き分けは返金済み。精算は1回のみ。';
+            +'\n-# 試合開始後の予想と引き分けは返金済み。精算は1回のみ。';
           await enqueue(env,'vp:result:'+e.id,post.slice(0,1900),now);
         }
       }catch{console.warn('prediction_result_post_pending');}
