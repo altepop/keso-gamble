@@ -22,7 +22,50 @@ function reply(response,status,body){
  response.end(JSON.stringify(body));
 }
 const client=new Client({intents:[GatewayIntentBits.Guilds,GatewayIntentBits.GuildVoiceStates]});
-const music=new MusicController(client);
+const stateOriginFrom=value=>{
+ try{const url=new URL(value);return url.protocol==='https:'&&!url.username&&!url.password
+   &&!url.search&&!url.hash&&url.pathname==='/'&&
+   (url.hostname.endsWith('.workers.dev')||url.hostname.endsWith('.pages.dev'))?url.origin:null;}
+ catch{return null;}
+};
+let stateOrigin=stateOriginFrom(process.env.MUSIC_STATE_WORKER_URL);
+let restored=false,restorePromise=null;
+function stateEndpoint(guildId){
+ return new URL('/api/discord/music/state?guild='+encodeURIComponent(guildId),stateOrigin);
+}
+async function saveCheckpoint(guildId,snapshot){
+ if(!stateOrigin)return;
+ const body={guildId,savedAt:Date.now(),snapshot:snapshot?{...snapshot,guildId}:null};
+ const response=await fetch(stateEndpoint(guildId),{
+  method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+MUSIC_BRIDGE_TOKEN},
+  body:JSON.stringify(body),signal:AbortSignal.timeout(2_500)});
+ if(!response.ok)throw Error('checkpoint_http_'+response.status);
+}
+const music=new MusicController(client,{checkpoint:saveCheckpoint});
+async function beginRestore(){
+ if(!configured||!client.isReady()||!stateOrigin||restored||restorePromise)return restorePromise;
+ restorePromise=(async()=>{
+  try{
+   const response=await fetch(stateEndpoint(MUSIC_GUILD_ID),{
+    headers:{Authorization:'Bearer '+MUSIC_BRIDGE_TOKEN},signal:AbortSignal.timeout(8_000)});
+   if(!response.ok)throw Error('restore_http_'+response.status);
+   const data=await response.json();
+   if(data.snapshot)await music.restore(data.snapshot);
+   console.info('music_voice_restore_checked',{hadSavedQueue:Boolean(data.snapshot)});
+  }catch{console.warn('music_voice_restore_unavailable');}
+  finally{restored=true;restorePromise=null;}
+ })();
+ return restorePromise;
+}
+function takeStateHint(request){
+ const token=String(request.headers.authorization??'').replace(/^Bearer /,'');
+ if(!configured||!equal(token,MUSIC_BRIDGE_TOKEN))return;
+ const candidate=stateOriginFrom(request.headers['x-keso-music-state-url']);
+ if(!candidate)return;
+ if(candidate!==stateOrigin){stateOrigin=candidate;restored=false;}
+ if(client.isReady())void beginRestore();
+}
+
 client.on('voiceStateUpdate',(oldState,newState)=>music.onVoiceStateUpdate(newState.guild?newState:oldState));
 const receipts=new Map();
 function pruneReceipts(now){
@@ -42,7 +85,9 @@ async function readBody(req){
 const server=createServer(async(req,res)=>{
  const path=new URL(req.url??'/', 'http://localhost').pathname;
  if(req.method==='GET'&&path==='/health'){
-  return reply(res,200,{status:!configured?'configuration_required':music.health().ready?'ready':'starting',
+  takeStateHint(req);
+  const ready=music.health().ready&&(!stateOrigin||restored);
+  return reply(res,200,{status:!configured?'configuration_required':ready?'ready':'starting',
     active:music.health().active});
  }
  if(req.method!=='POST'||path!=='/v1/music')
@@ -58,7 +103,10 @@ const server=createServer(async(req,res)=>{
     return reply(res,400,{ok:false,message:'Invalid music request'});
   // Verify the voice credential belongs to the same KESO PLAY application that
   // received the signed slash interaction. A webhook or another Bot must not play.
-  if(!client.isReady())return reply(res,503,{ok:false,message:'Music voice bot is still connecting'});
+  if(!client.isReady()||(stateOrigin&&!restored)){
+   if(stateOrigin)void beginRestore();
+   return reply(res,503,{ok:false,message:'Music voice bot is still connecting'});
+  }
   if(!/^\d{15,22}$/.test(applicationId??'')||applicationId!==client.user?.id)
     return reply(res,403,{ok:false,message:'KESO PLAY Bot identity mismatch'});
   pruneReceipts(Date.now());
@@ -85,7 +133,10 @@ const server=createServer(async(req,res)=>{
 });
 server.requestTimeout=30_000;
 server.listen(PORT,'0.0.0.0',()=>console.info('music_voice_http_ready'));
-client.once('clientReady',()=>console.info('music_voice_discord_ready'));
+client.once('clientReady',()=>{
+ console.info('music_voice_discord_ready');
+ if(stateOrigin)void beginRestore();
+});
 if(configured)client.login(DISCORD_BOT_TOKEN).catch(()=>{
  console.error('music_voice_discord_login_failed');
  process.exitCode=1;server.close();client.destroy();
