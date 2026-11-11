@@ -1,4 +1,5 @@
 name: Emergency verified prediction hotfix deploy
+# One-time protected kickoff verification; remove once incident is closed.
 on:
   push:
     paths:
