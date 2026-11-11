@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
+import {createHash} from 'node:crypto';
 import {runInNewContext} from 'node:vm';
 const source=readFileSync(new URL('../music/player.js',import.meta.url),'utf8');
 const lyricsSource=readFileSync(new URL('../music/lyrics.js',import.meta.url),'utf8');
@@ -351,4 +352,16 @@ test('music modal can be closed from backdrop, close button and Escape; controls
  s.fire('.music-close','click');
  assert.equal(s.element('#music-panel').hidden,true);
  assert.equal(s.ctx.KesoMusic.getState().playing,true,'closing panel should not stop playback');
+});
+
+
+test('index references content-hashed player, lyrics and stylesheet; stale 8-song cache cannot persist',()=>{
+ const html=readFileSync(new URL('../index.html',import.meta.url),'utf8');
+ for(const path of ['music/player.css','music/lyrics.js','music/player.js']){
+  const bytes=readFileSync(new URL('../'+path,import.meta.url));
+  const hash=createHash('sha1').update('blob '+bytes.length+String.fromCharCode(0))
+   .update(bytes).digest('hex').slice(0,12);
+  assert.ok(html.includes('./'+path+'?v=music-'+hash),'outdated version: '+path);
+ }
+ assert.match(source,/id:"makekowa",title:"負け怖"/);
 });
