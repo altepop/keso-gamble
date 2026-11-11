@@ -20,6 +20,9 @@ interface RawMarket {guild:string;version:number;prices:string;history:string;at
 export const STOCK_ANNOUNCEMENT_LAST_INDEX_SQL='CREATE INDEX IF NOT EXISTS stock_announcements_latest ON stock_announcements(guild,symbol,at DESC)';
 export const STOCK_ANNOUNCEMENT_DAY_INDEX_SQL='CREATE INDEX IF NOT EXISTS stock_announcements_day ON stock_announcements(guild,at)';
 const ready=new WeakSet<object>();
+// Coalesce concurrent cold-start schema checks on the same D1 binding.
+// No cross-isolate cache: migrations and external writes remain authoritative.
+const initializing=new WeakMap<object,Promise<void>>();
 // A stock listed after the market started trades from its listing price; the next tick saves it.
 const parse=(r:RawMarket):Market=>{
  const prices=JSON.parse(r.prices),history=JSON.parse(r.history);
@@ -32,7 +35,9 @@ export function stockDiscount(base:number,percent:number){
 }
 export async function ensureStocks(env:KpEnv){
  if(ready.has(env.DB))return;
- await env.DB.batch([
+ const existing=initializing.get(env.DB);
+ if(existing)return existing;
+ const task=Promise.resolve(env.DB.batch([
  `CREATE TABLE IF NOT EXISTS stock_markets(guild TEXT PRIMARY KEY,version INTEGER NOT NULL,prices TEXT NOT NULL,history TEXT NOT NULL,at INTEGER NOT NULL,started_at INTEGER NOT NULL,token TEXT NOT NULL)`,
  `CREATE TABLE IF NOT EXISTS stock_order_quotes(guild TEXT NOT NULL,symbol TEXT NOT NULL,units INTEGER NOT NULL,tick_at INTEGER NOT NULL,PRIMARY KEY(guild,symbol))`,
  `CREATE TABLE IF NOT EXISTS stock_accounts(guild TEXT NOT NULL,user TEXT NOT NULL,source_version INTEGER NOT NULL,holdings TEXT NOT NULL,old_value INTEGER NOT NULL,new_value INTEGER NOT NULL,refund INTEGER NOT NULL CHECK(refund>=0),at INTEGER NOT NULL,PRIMARY KEY(guild,user))`,
@@ -111,7 +116,10 @@ export async function ensureStocks(env:KpEnv){
   SELECT CASE WHEN COALESCE((SELECT SUM(quantity) FROM stock_sale_lots WHERE sale=NEW.id),0)!=NEW.quantity THEN RAISE(ABORT,'stock holdings changed') END;
   UPDATE stock_lots SET remaining=remaining-(SELECT quantity FROM stock_sale_lots WHERE sale=NEW.id AND lot=stock_lots.id) WHERE id IN(SELECT lot FROM stock_sale_lots WHERE sale=NEW.id);
  END`,
- ].map(sql=>env.DB.prepare(sql)));ready.add(env.DB);
+ ].map(sql=>env.DB.prepare(sql)))).then(()=>{ready.add(env.DB);});
+ initializing.set(env.DB,task);
+ try{await task;}
+ finally{if(initializing.get(env.DB)===task)initializing.delete(env.DB);}
 }
 async function read(env:KpEnv,guild:string){const row=await env.DB.prepare('SELECT * FROM stock_markets WHERE guild=?').bind(guild).first<RawMarket>();if(!row)throw Error('Stock market unavailable');return parse(row);}
 export function convertStocks(data:{holdings?:Record<string,number>;prices?:Record<string,number>},prices:Record<string,number>){
