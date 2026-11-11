@@ -61,9 +61,10 @@ test('wallet deployment requires the already-provisioned key and a matching encr
 });
 test('voice and racing Durable Objects are retained while unknown bindings are rejected',()=>{
  const bound={...settings,bindings:[...settings.bindings,{type:'durable_object_namespace',name:'VOICE_GATEWAY',class_name:'VoiceGateway',script_name:'example'}]};
- const config=deploymentConfig(bound,schedules,'example');assert.deepEqual(config.durable_objects.bindings,[{name:'VOICE_GATEWAY',class_name:'VoiceGateway'},{name:'RACE_BROADCAST',class_name:'RaceBroadcaster'}]);assert.deepEqual(config.migrations,[{tag:'voice-v1',new_sqlite_classes:['VoiceGateway']},{tag:'race-broadcast-v1',new_sqlite_classes:['RaceBroadcaster']}]);
+ const config=deploymentConfig(bound,schedules,'example');assert.deepEqual(config.durable_objects.bindings,[{name:'VOICE_GATEWAY',class_name:'VoiceGateway'},{name:'RACE_BROADCAST',class_name:'RaceBroadcaster'},{name:'MUSIC_SESSION',class_name:'MusicSession'}]);assert.deepEqual(config.migrations,[{tag:'voice-v1',new_sqlite_classes:['VoiceGateway']},{tag:'race-broadcast-v1',new_sqlite_classes:['RaceBroadcaster']},{tag:'music-session-v1',new_sqlite_classes:['MusicSession']}]);
  assert.throws(()=>deploymentConfig({...bound,bindings:[...settings.bindings,{type:'durable_object_namespace',name:'VOICE_GATEWAY',class_name:'Other'}]},schedules,'example'),/Unrecognized/);
  assert.doesNotThrow(()=>deploymentConfig({...bound,bindings:[...bound.bindings,{type:'durable_object_namespace',name:'RACE_BROADCAST',class_name:'RaceBroadcaster',script_name:'example'}]},schedules,'example'));
+ assert.doesNotThrow(()=>deploymentConfig({...bound,bindings:[...bound.bindings,{type:'durable_object_namespace',name:'MUSIC_SESSION',class_name:'MusicSession',script_name:'example'}]},schedules,'example'));
  assert.throws(()=>deploymentConfig({...bound,bindings:[...bound.bindings,{type:'durable_object_namespace',name:'RACE_BROADCAST',class_name:'RaceBroadcaster',script_name:'other-worker'}]},schedules,'example'),/Unrecognized/);
 });
 test('the deploy copy includes every shared browser module the Worker imports',()=>{
