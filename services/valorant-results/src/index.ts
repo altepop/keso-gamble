@@ -1,3 +1,4 @@
+import {ensureRankCommand,rankRegistrationStatus} from './rank-command-registration.ts';
 import {matchAct,observeEscalationAct,syncEscalationPower} from './escalation-rating.ts';
 import {runSpikeCompensation} from './spike-compensation.ts';
 import {settlePredictions,expirePredictions} from './valo-predictions.ts';
@@ -573,6 +574,9 @@ export default {
   fetch(request: Request, env: Env, ctx: ExecutionContext) {
     if(new URL(request.url).pathname.startsWith('/api/racing/'))return raceVideoApi(request,env).catch(()=>new Response('Unavailable',{status:503}));
     if(request.method==='GET'&&new URL(request.url).pathname==='/api/mahjong/status')return mahjongStatus(env).then(status=>Response.json(status,{headers:{'Cache-Control':'no-store'}})).catch(()=>Response.json({enabled:false,error:'configuration_unavailable'},{status:503}));
+    if(request.method==='GET'&&new URL(request.url).pathname==='/api/discord/rank/status')
+      return rankRegistrationStatus(env.DB).then(info=>Response.json(info,{headers:{'Cache-Control':'no-store'}}))
+        .catch(()=>Response.json({registered:false,error:'status_unavailable'},{status:503}));
     if(request.method==='GET'&&new URL(request.url).pathname==='/api/discord/games/status')
       return gameCommandStatus(env.DB).then(info=>Response.json(info,{headers:{'Cache-Control':'no-store'}}))
         .catch(()=>Response.json({registered:false,error:'status_unavailable'},{status:503}));
@@ -601,6 +605,9 @@ export default {
       ctx.waitUntil(track(env,'game_commands',()=>ensureGameCommands(env).then(ok=>{
         if(!ok)throw Error('Game center credentials unavailable');
       })));
+    // Refresh only the owned /kp command; existing /death, /valo and Activity commands stay intact.
+    if(Math.floor((_event.scheduledTime??Date.now())/60000)%10===0)
+      ctx.waitUntil(track(env,'rank_command',()=>ensureRankCommand(env).then(ok=>{if(!ok)throw Error('Rank command credentials unavailable');})));
     // Expire unanswered prediction cards and refund reserved KP without another match API poll.
     if(Math.floor((_event.scheduledTime??Date.now())/60000)%30===0)
       ctx.waitUntil(track(env,'prediction_expiry',()=>expirePredictions(env)));

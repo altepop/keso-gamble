@@ -12,6 +12,7 @@ const paths=[...files('js'),...files('css')].sort();
 const sources=new Map(paths.map(p=>[p,readFileSync(resolve(root,p),'utf8')]));
 const digest=createHash('sha256');
 for(const [p,s] of sources)digest.update(p+'\0'+unversioned(s)+'\0');
+for(const name of readdirSync(resolve(root,'assets/escalation-ranks')).filter(n=>/\.(svg|png)$/.test(n)).sort())digest.update(name+'\0').update(readFileSync(resolve(root,'assets/escalation-ranks',name)));
 const version='web-'+digest.digest('hex').slice(0,16);
 let stale=false;
 for(const [p,s] of sources){
