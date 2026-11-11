@@ -1,3 +1,4 @@
+import {approvedEscalationPress,escaPressActive,escalationPressStatus} from './escalation-press.ts';
 import {ensureRankCommand,rankRegistrationStatus} from './rank-command-registration.ts';
 import {ESCALATION_SHIELD_VERSION,ESCALATION_RR_VERSION,matchAct,observeEscalationAct,syncEscalationPower} from './escalation-rating.ts';
 import {runSpikeCompensation} from './spike-compensation.ts';
@@ -577,6 +578,8 @@ export default {
   fetch(request: Request, env: Env, ctx: ExecutionContext) {
     if(new URL(request.url).pathname.startsWith('/api/racing/'))return raceVideoApi(request,env).catch(()=>new Response('Unavailable',{status:503}));
     if(request.method==='GET'&&new URL(request.url).pathname==='/api/mahjong/status')return mahjongStatus(env).then(status=>Response.json(status,{headers:{'Cache-Control':'no-store'}})).catch(()=>Response.json({enabled:false,error:'configuration_unavailable'},{status:503}));
+    if(request.method==='GET'&&new URL(request.url).pathname==='/api/discord/escalation-press/status')
+      return escalationPressStatus(env).then(info=>Response.json(info,{headers:{'Cache-Control':'no-store'}})).catch(()=>Response.json({posted:false,error:'status_unavailable'},{status:503}));
     if(request.method==='GET'&&new URL(request.url).pathname==='/api/discord/rank/status')
       return rankRegistrationStatus(env.DB).then(info=>Response.json({...info,ratingSystem:ESCALATION_RR_VERSION,rankShieldSystem:ESCALATION_SHIELD_VERSION},{headers:{'Cache-Control':'no-store'}}))
         .catch(()=>Response.json({registered:false,error:'status_unavailable'},{status:503}));
@@ -596,6 +599,7 @@ export default {
     return new URL(request.url).pathname.startsWith('/api/kp/') ? kpApi(request, env, undefined, job=>ctx.waitUntil(job)) : discordInteractions(request, env, ctx);
   },
   async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    if(escaPressActive(Date.now()))ctx.waitUntil(approvedEscalationPress(env).catch(()=>console.warn('approved_escalation_press_unknown')));
     // Existing minute cron: a single small cleanup window each JST day; no additional schedule.
     if(shouldRunRetention(_event.scheduledTime??Date.now())){
       ctx.waitUntil(cleanupExpiredCredentials(env,Date.now()).catch(()=>console.warn('credential_retention_pending')));
