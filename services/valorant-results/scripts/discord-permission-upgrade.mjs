@@ -20,12 +20,8 @@ const permissions = Object.freeze({
   READ_MESSAGE_HISTORY: 16,
   CONNECT: 20,
   SPEAK: 21,
-  MOVE_MEMBERS: 24,
   USE_APPLICATION_COMMANDS: 31,
-  MANAGE_EVENTS: 33,
-  MANAGE_THREADS: 34,
   CREATE_PUBLIC_THREADS: 35,
-  CREATE_PRIVATE_THREADS: 36,
   SEND_MESSAGES_IN_THREADS: 38,
   USE_EMBEDDED_ACTIVITIES: 39,
   USE_SOUNDBOARD: 42,
@@ -35,15 +31,15 @@ const permissions = Object.freeze({
   SEND_POLLS: 49,
   PIN_MESSAGES: 51,
 });
-const optionalPermissions = Object.freeze({MANAGE_CHANNELS: 4});
+// Extra capabilities must be explicitly opted in; none has server-wide moderation power.
+const optionalPermissions = Object.freeze({MOVE_MEMBERS: 24, CREATE_PRIVATE_THREADS: 36});
 const args = process.argv.slice(2);
-if (args.some(arg => arg !== '--with-channel-management')) {
-  throw Error('使用法: node scripts/discord-permission-upgrade.mjs [--with-channel-management]');
+if (args.some(arg => !['--with-voice-move', '--with-private-threads'].includes(arg))) {
+  throw Error('使用法: node scripts/discord-permission-upgrade.mjs [--with-voice-move] [--with-private-threads]');
 }
-const full = args.includes('--with-channel-management');
-const flags = {...permissions, ...(full ? optionalPermissions : {})};
+const flags = {...permissions, ...(args.includes('--with-voice-move') ? {MOVE_MEMBERS: optionalPermissions.MOVE_MEMBERS} : {}), ...(args.includes('--with-private-threads') ? {CREATE_PRIVATE_THREADS: optionalPermissions.CREATE_PRIVATE_THREADS} : {})};
 const mask = Object.values(flags).reduce((acc, bit) => acc | (1n << BigInt(bit)), 0n);
-for (const forbiddenBit of [1, 2, 3, 28, 30, 43]) {
+for (const forbiddenBit of [1, 2, 3, 4, 5, 13, 17, 22, 23, 27, 28, 29, 30, 33, 34, 40, 43]) {
   if ((mask & (1n << BigInt(forbiddenBit))) !== 0n) throw Error('禁止した権限が含まれています。');
 }
 const link = new URL('https://discord.com/oauth2/authorize');
@@ -56,4 +52,5 @@ console.log('選択した権限:', Object.keys(flags).join(', '));
 console.log('権限整数:', mask.toString());
 console.log('承認用リンク（操作は管理者がDiscord上で行います）:\n' + link);
 console.log('注意: 権限承認だけでは未実装の機能は動作しません。Gateway Privileged Intentsも別途設定が必要です。');
-console.log('MANAGE_CHANNELS はサーバー内のチャンネル編集・削除を許可する強い権限です。必要な場合のみ --with-channel-management を使用してください。');
+console.log('他人への音声チャンネル移動は --with-voice-move を、非公開スレッドの作成は --with-private-threads を明示した場合だけ追加します。');
+console.log('管理系の権限 (MANAGE_CHANNELS / MANAGE_EVENTS / MANAGE_THREADS 等) は要求しません。');
