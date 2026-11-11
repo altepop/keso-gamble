@@ -55,7 +55,7 @@ export interface MusicView {
  current:MusicTrackView|null;queue:MusicTrackView[];elapsedSec:number;
  volume:number;paused:boolean;loop:string;mode:string;cycle?:number;state?:string;
 }
-export interface MusicReply {message:string;view?:MusicView}
+export interface MusicReply {message:string;view?:MusicView;pending?:boolean}
 function looksLikeView(v:unknown):v is MusicView{
  if(!v||typeof v!=='object')return false;
  const data=v as Partial<MusicView>;
@@ -116,7 +116,7 @@ export function parseMusic(i:MusicInteraction){
  if(sub.name==='loop'&&!['off','one','all'].includes(String(loop)))throw Error('リピート方式を選んでほしい。');
  return {action:sub.name,track,volume,loop};
 }
-export async function runMusicDetails(env:MusicBridgeEnv,i:MusicInteraction,request:typeof fetch=fetch):Promise<MusicReply>{
+export async function runMusicDetails(env:MusicBridgeEnv,i:MusicInteraction,request:typeof fetch=fetch,workerOrigin?:string):Promise<MusicReply>{
  const parsed=parseMusic(i);
  const guildId=i.guild_id,userId=i.member?.user?.id,requestId=i.id;
  if(![guildId,userId,requestId].every(x=>/^\d{15,22}$/.test(x??'')))throw Error('Discordの操作を確認できない。');
@@ -131,10 +131,18 @@ export async function runMusicDetails(env:MusicBridgeEnv,i:MusicInteraction,requ
  }catch{return {message:'⚙️ 音楽Botの接続設定を確認してほしい。'};}
  // A sleep wake-up is a read-only GET, so it cannot enqueue a song twice.
  try{
-  const status=await request(new URL('/health',base),{method:'GET',signal:AbortSignal.timeout(8_000)});
+  const headers:Record<string,string>={Authorization:'Bearer '+env.MUSIC_BRIDGE_TOKEN};
+  if(workerOrigin){
+   try{const url=new URL(workerOrigin);
+    if(url.protocol==='https:'&&!url.username&&!url.password&&!url.search&&!url.hash
+       &&(url.hostname.endsWith('.workers.dev')||url.hostname.endsWith('.pages.dev')))
+      headers['X-Keso-Music-State-URL']=url.origin;
+   }catch{ /* No remote-controlled state endpoint. */ }
+  }
+  const status=await request(new URL('/health',base),{method:'GET',headers,signal:AbortSignal.timeout(8_000)});
   const ready=status.ok ? (await status.json() as {status?:unknown}).status==='ready':false;
-  if(!ready)return {message:'⏳ 音楽Botを起動中だ。少し後にもう一度実行してほしい。'};
- }catch{return {message:'⏳ 音楽Botの起動を確認できなかった。少し後にもう一度実行してほしい。'};}
+  if(!ready)return {message:'⏳ 音楽Botを起動中だ。自動復帰を試みる。',pending:true};
+ }catch{return {message:'⏳ 音楽Botの起動を確認できなかった。自動復帰を試みる。',pending:true};}
  try{
   const response=await request(new URL('/v1/music',base),{
    method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+env.MUSIC_BRIDGE_TOKEN},
