@@ -255,6 +255,7 @@ export async function recoverPendingPredictions(env:KpEnv,
     JOIN tracked_players a ON a.riot_id=e.riot
     JOIN notifications n ON n.riot_id=e.riot AND n.mode=e.mode AND n.ended_at>=e.created_at
     WHERE e.status='open' AND e.created_at>=?
+      AND EXISTS(SELECT 1 FROM vp_tickets t WHERE t.event_id=e.id AND t.status='pending')
       AND NOT EXISTS(SELECT 1 FROM monitor_state s WHERE s.key='vp:skip:'||e.id||':'||n.match_id)
     ORDER BY e.created_at,n.ended_at,n.match_id LIMIT 1`)
     .bind(now-6*3600000).first<{id:string;riot:string;mode:string;created_at:number;match_id:string;region:string}>();
