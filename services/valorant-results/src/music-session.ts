@@ -1,4 +1,4 @@
-import {musicPanel,runMusicDetails,parseMusic,type MusicInteraction,type MusicReply} from './music-command.ts';
+import {musicPanel,runMusicDetails,parseMusic,MUSIC_COMMAND,type MusicInteraction,type MusicReply} from './music-command.ts';
 import type {Env} from './index.ts';
 import discord from '../discord-config.json' with {type:'json'};
 
@@ -8,6 +8,7 @@ interface DeferredMusic { interaction:MusicInteraction; token:string; origin:str
   applicationId:string; expiresAt:number; reply?:MusicReply; }
 interface SavedMusic {guildId:string; savedAt:number; snapshot:unknown}
 const LIMIT_PENDING=12;
+const catalogIds=new Set<string>(MUSIC_COMMAND.options[0].options[0].choices.map(track=>track.value));
 const AGE_MS=3*60_000;
 const RETRY_MS=6_000;
 const allowedOrigin=(value:string)=>{
@@ -33,11 +34,12 @@ function isSavedMusic(input:any):input is SavedMusic{
     ||!Number.isInteger(s.volume)||s.volume<1||s.volume>100
     ||!Array.isArray(s.upcoming)||s.upcoming.length>30
     ||!Array.isArray(s.radioCatalog)||s.radioCatalog.length>30)return false;
- const entry=(e:any)=>e&&typeof e.id==='string'&&e.id.length<80
+ const entry=(e:any)=>e&&typeof e.id==='string'&&catalogIds.has(e.id)
     &&/^\d{15,22}$/.test(e.requester??'');
  return (s.current===null||entry(s.current))
-   &&s.upcoming.every(entry)&&s.radioCatalog.every((x:unknown)=>typeof x==='string'&&x.length<80)
-   &&typeof s.paused==='boolean'&&typeof s.radioRequester==='string';
+   &&s.upcoming.every(entry)&&s.radioCatalog.every((x:unknown)=>typeof x==='string'&&catalogIds.has(x))
+   &&typeof s.paused==='boolean'&&typeof s.radioRequester==='string'
+   &&(!s.guildId||s.guildId===discord.guildId);
 }
 export class MusicSession {
  constructor(private ctx:DurableObjectState,private env:Env){}
@@ -68,6 +70,8 @@ export class MusicSession {
     const data=await request.text();if(data.length>12_000)return new Response('too large',{status:413});
     let value:unknown;try{value=JSON.parse(data);}catch{return new Response('bad json',{status:400});}
     if(!isSavedMusic(value))return new Response('invalid checkpoint',{status:400});
+    const previous=await this.ctx.storage.get<SavedMusic>('checkpoint');
+    if(previous&&previous.savedAt>value.savedAt)return Response.json({saved:false,stale:true});
     if(value.snapshot===null)await this.ctx.storage.delete('checkpoint');
     else await this.ctx.storage.put('checkpoint',value);
     return Response.json({saved:true});
@@ -89,7 +93,8 @@ export class MusicSession {
   const pending=await this.ctx.storage.list<DeferredMusic>({prefix:'pending:'});
   if(!pending.size)return;
   const now=Date.now();
-  for(const [key,p] of [...pending].slice(0,4)){
+  for(const [key,p] of [...pending].slice(0,1)){
+   if(now>p.expiresAt+10*60_000){await this.ctx.storage.delete(key);continue;}
    const expired=now>p.expiresAt;
    if(!p.reply&&!expired){
     // Retrying an unknown POST result would risk adding a track twice. The
@@ -130,7 +135,7 @@ export async function musicStateApi(request:Request,env:Env):Promise<Response>{
  if(!['GET','POST'].includes(request.method))return new Response('Method not allowed',{status:405});
  const stub=musicStub(env)!;
  return stub.fetch('https://music.internal/checkpoint',{method:request.method,
-   ...(request.method==='POST'?{body:request.body,headers:{'Content-Type':'application/json'}}:{})});
+   ...(request.method==='POST'?{body:await request.text(),headers:{'Content-Type':'application/json'}}:{})});
 }
 // Reuse the existing once-a-minute Cron. A read-only health request every
 // five minutes has no D1 reads or writes and protects the separate free host.
