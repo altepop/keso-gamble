@@ -10,7 +10,8 @@ function fixture() {
   const queries:string[]=[];
   class Q {
     args: unknown[]=[];
-    constructor(readonly sql:string) {queries.push(sql);}
+    readonly sql:string;
+    constructor(sql:string) {this.sql=sql;queries.push(sql);}
     bind(...args:unknown[]) {this.args=args;return this;}
     async first() {return records.has(String(this.args[0])) ? {value:records.get(String(this.args[0]))} : null;}
     async run() {records.set(String(this.args[0]),String(this.args[1]));return {meta:{changes:1}};}
