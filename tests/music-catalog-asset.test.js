@@ -14,3 +14,15 @@ test('負け怖は無印のみ。音源・web/voiceカタログ・歌詞を照�
  assert.equal(statSync(audio).size,5287196,'サイズ不一致：A/B/2と取り違えていないか確認');
  assert.equal(createHash('sha256').update(readFileSync(audio)).digest('hex'),'3517347e0ea1ee0f8e9938cd8101a2f2b646afcf868e97494c93639ed2a2effa','SHA-256不一致：無印ではない音源を検出');
 });
+
+test('ゆず庵⁉️は採用録音版1曲のみをWeb・Voice・歌詞に同期する',()=>{
+ const recording=new URL('../music/assets/ゆず庵.mp3',import.meta.url);
+ assert.deepEqual(catalog.filter(t=>t.id==='yuzuan'),[{id:'yuzuan',title:'ゆず庵⁉️',file:'ゆず庵.mp3'}]);
+ assert.ok(browser.includes('id:"yuzuan",title:"ゆず庵⁉️",src:"music/assets/ゆず庵.mp3"'));
+ assert.ok(lyrics.includes('"yuzuan":'));
+ assert.ok(existsSync(recording),'採用録音版 ゆず庵.mp3 が未配置');
+ assert.equal(statSync(recording).size,2870105,'録音ファイルサイズが違う');
+ assert.equal(createHash('sha256').update(readFileSync(recording)).digest('hex'),
+  '6db8b0747957e329f33f78615f3020b795c3c6fa744aca71d04d96c1e6f1605e',
+  '録音データがユーザー採用版と一致しない');
+});
