@@ -60,7 +60,7 @@ jobs:
           path='/api/discord/predict/audit-kickoff'
           ms=str(int(time.time()*1000))
           signature=hmac.new(secret.encode(),(ms+'.'+path+'.').encode(),hashlib.sha256).hexdigest()
-          url='https://'+worker+'.'+subdomain+'.workers.dev'+path
+          url='https://valorant-results.tealeaforest.workers.dev'+path
           try:
             result=fetch(url,{'X-Mahjong-Time':ms,'X-Mahjong-Signature':signature})
           except urllib.error.HTTPError as err:
