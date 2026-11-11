@@ -62,6 +62,21 @@ jobs:
               '-pkeyopt','rsa_padding_mode:oaep','-pkeyopt','rsa_oaep_md:sha256','-pkeyopt','rsa_mgf1_md:sha256'],
               input=payload,capture_output=True,check=True)
             print('VERIFIED_KICKOFF_ENCRYPTED='+base64.b64encode(p.stdout).decode(),flush=True)
+          checks=get('/d1/database/'+db[0]+'/query',{'sql':"""SELECT t.side,t.stake,t.odds,t.status,t.payout,w.balance,
+              (SELECT l.delta FROM kp_ledger l WHERE l.id='vp:pay:'||t.event_id||':'||t.user) AS paid
+              FROM vp_tickets t JOIN vp_events e ON e.id=t.event_id
+              JOIN kp_wallets w ON w.guild=e.guild AND w.user=t.user
+              WHERE t.event_id=? ORDER BY t.side""",
+              'params':['1570082563177848984']})
+          checks=checks[0].get('results',[])
+          win=next((t for t in checks if t['side']=='win'),None)
+          loss=next((t for t in checks if t['side']=='loss'),None)
+          ready=bool(len(checks)==2 and win and loss and win['stake']==10000
+              and win['odds']==276 and win['status']=='won' and win['payout']==27600
+              and win['paid']==27600 and win['balance']>=17600
+              and loss['stake']==5000 and loss['odds']==169
+              and loss['status']=='lost' and loss['payout']==0 and loss['paid'] is None)
+          print('PREDICTION_CORRECTION_FUNDS_AVAILABLE='+str(ready),flush=True)
           if len(rows)<2:raise RuntimeError('kickoff_records_incomplete')
           print('VERIFIED_KICKOFF_COMPLETE=1')
           PY
