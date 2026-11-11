@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {MUSIC_COMMAND,MUSIC_BUTTON,parseMusic,runMusic,musicControls} from '../src/music-command.ts';
+import discord from '../discord-config.json' with {type:'json'};
 const guild='100000000000000100',user='100000000000000101',id='100000000000000102';
 const config={MUSIC_VOICE_URL:'https://keso-music.onrender.com',
  MUSIC_BRIDGE_TOKEN:'z'.repeat(64)};
@@ -49,7 +50,7 @@ test('verified ready server gets exactly one authenticated command',async()=>{
  assert.equal(calls[1].init?.method,'POST');
  assert.equal(new Headers(calls[1].init?.headers).get('Authorization'),'Bearer '+'z'.repeat(64));
  assert.deepEqual(JSON.parse(String(calls[1].init?.body)),{
-  guildId:guild,userId:id,requestId:id,action:'play',track:'mou'});
+  guildId:guild,userId:id,requestId:id,applicationId:discord.applicationId,action:'play',track:'mou'});
 });
 test('non-HTTPS or non-allowlisted control servers cannot receive secrets',async()=>{
  let calls=0;

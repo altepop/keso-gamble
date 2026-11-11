@@ -1,4 +1,5 @@
 import tracks from '../../music-voice/catalog.json' with {type:'json'};
+import discord from '../discord-config.json' with {type:'json'};
 export const MUSIC_COMMAND_VERSION='music-voice-v1';
 export const MUSIC_BUTTON=/^ms:(pause|resume|skip|stop|queue|leave)$/;
 export const musicControls=()=>[{type:1,components:[
@@ -77,7 +78,7 @@ export async function runMusic(env:MusicBridgeEnv,i:MusicInteraction,request:typ
  try{
   const response=await request(new URL('/v1/music',base),{
    method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+env.MUSIC_BRIDGE_TOKEN},
-   body:JSON.stringify({guildId,userId,requestId,...parsed}),
+   body:JSON.stringify({guildId,userId,requestId,applicationId:discord.applicationId,...parsed}),
    signal:AbortSignal.timeout(23_000),
   });
   const data=await response.json() as {ok?:unknown;message?:unknown};
