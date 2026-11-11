@@ -29,7 +29,7 @@
 
 Renderのダッシュボードで、左側のワークスペース名から **+ New Workspace** を選択し、音楽Bot専用のHobbyワークスペースを作成する。そのワークスペースを選択して **New > Blueprint** から `altepop/keso-gamble` のルートにある `render.yaml` を読み込む。サービス名は `keso-music-voice`、料金プランは `free`、リージョンは `singapore` として定義してある。課金プランへの変更は行わない。
 
-初回デプロイで入力するSecretは `DISCORD_BOT_TOKEN`、`MUSIC_GUILD_ID`、`MUSIC_BRIDGE_TOKEN` の3件だ。**どれもチャットやGitHubに記載しない。** Bot Tokenは既存あかんbotと同じものを利用する。既存のBot Tokenが手元にない場合、Discord Developer Portalで安易にリセットすると既存の通話報酬等が停止する可能性があるため、先に保管先を確認すること。
+初回デプロイで入力するSecretは `DISCORD_BOT_TOKEN`、`MUSIC_GUILD_ID`、`MUSIC_BRIDGE_TOKEN` の3件だ。**どれもチャットやGitHubに記載しない。** Bot Tokenは **KESO PLAY Discordアプリ本体のBot Token** を利用する。あかんbotは通知用Webhookであり、音声再生用のBot Tokenを持つ前提ではない。Webhook URLを `DISCORD_BOT_TOKEN` に設定してはならない。KESO PLAYのBot Tokenが手元にない場合、Discord Developer Portalで安易にリセットすると既存のコマンド登録や通話報酬等が停止する可能性があるため、先に既存の保管先を確認すること。
 
 音声サービスが起動したら、既存Cloudflare Worker `valorant-results` に `MUSIC_VOICE_URL` と `MUSIC_BRIDGE_TOKEN` を追加する。URLは実際に発行されたRenderのHTTPS URLとし、SecretはRenderに入れたものと**完全一致**させる。
 
@@ -47,7 +47,7 @@ RenderなどのNode.js実行環境に、このリポジトリ全体を接続す�
 
 Node音声サーバーには以下の環境変数を**非公開Secret**として設定する。
 
-- `DISCORD_BOT_TOKEN`：既存あかんbotのトークン。同じBotを利用し、別のアプリを招待しない。
+- `DISCORD_BOT_TOKEN`：**KESO PLAY DiscordアプリのBot Token**。Workerの `/music` を受付けるアプリと同一である必要がある。あかんbotのWebhook URLは使用不可。
 - `MUSIC_GUILD_ID`：利用を許可するDiscordサーバーのID。
 - `MUSIC_BRIDGE_TOKEN`：ランダムに生成した32バイト以上の共通シークレット（64文字の16進表現など）。
 
