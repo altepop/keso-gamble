@@ -1,6 +1,9 @@
 import {SKIRMISH_BUTTON,decideSkirmish,withoutSkirmishButtons} from './skirmish.ts';
 import {PREDICTION_BUTTON,PREDICTION_MODAL,predictionModal,predictionAmount,openPrediction,buyPrediction} from './valo-predictions.ts';
 import {activityLaunchComponents} from './activity-link.ts';
+import {CHOOSE_BUTTON,RECRUIT_BUTTON,DUEL_BUTTON,GAME_IDS,gameCenterCard,gameDetailCard,duelInviteCard,recruitCard,type GameId} from './game-center.ts';
+import {startDiscordDuel,respondDiscordDuel} from './game-duel.ts';
+import {createRecruit,changeRecruit,linkRecruitMessage} from './game-recruit.ts';
 import {isKpRanking} from './kp-command.ts';
 import { MBET_BUTTON, betChoices, betFallbackChoices, mbetChoices, mbetDecide, runKpCommand, withinDeadline } from './kp-slash.ts';
 // Leaves time for the request to reach Discord inside its three seconds.
@@ -24,7 +27,7 @@ export interface Interaction {
   id: string; application_id: string; type: number; token?: string; guild_id?: string;
   member?: { permissions?: string; user?: { id: string } };
   data?: { type?: number; name?: string; options?: Option[]; custom_id?: string; values?: string[]; component_type?: number; components?: unknown[] };
-  message?: { flags?: number; components?: unknown[] };
+  message?: { id?:string; channel_id?:string; flags?: number; components?: unknown[] };
 }
 const respond = (content: string) => Response.json({ type: 4, data: { content, flags: 64, allowed_mentions: { parse: [] } } });
 const unhex = (value: string) => Uint8Array.from(value.match(/../g) ?? [], byte => parseInt(byte, 16));
@@ -154,10 +157,19 @@ export async function discordInteractions(request: Request, env: Env, ctx: Execu
   const mbetButton = interaction.type === 3 && MBET_BUTTON.test(interaction.data?.custom_id ?? '');
   const vpButton = interaction.type === 3 && PREDICTION_BUTTON.test(interaction.data?.custom_id ?? '');
   const vpModal = interaction.type === 5 && PREDICTION_MODAL.test(interaction.data?.custom_id ?? '');
+  const gcChoice=interaction.type===3&&CHOOSE_BUTTON.test(interaction.data?.custom_id??'');
+  const gcRecruit=interaction.type===3&&RECRUIT_BUTTON.test(interaction.data?.custom_id??'');
+  const gcDuel=interaction.type===3&&DUEL_BUTTON.test(interaction.data?.custom_id??'');
   if (['kpgrant','paifulink','unitelink'].includes(interaction.data?.name ?? '') && !(permissions & (8n | 32n))) return respond('このコマンドには「管理者」または「サーバー管理」権限が必要です。');
   if ((interaction.data?.name === 'death' || deathSelect) && !(permissions & (8n | 32n))) return respond('開始・終了・状態確認には「管理者」または「サーバー管理」権限が必要です。');
-  if (!deathSelect && !paifuButton && !mbetButton && !skirmishButton && !vpButton && !vpModal && (interaction.type !== 2 || !['predict','death', 'valo', 'kp', 'spike', 'dm', 'keiba', 'bet', 'paifu', 'mleague', 'mbet', 'mclose', 'kpgrant', 'paifulink', 'unitelink', 'horsename', 'give'].includes(interaction.data?.name ?? ''))) return respond('対応していないコマンドです。');
+  if (!deathSelect && !paifuButton && !mbetButton && !skirmishButton && !vpButton && !vpModal && !gcChoice && !gcRecruit && !gcDuel && (interaction.type !== 2 || !['play','duel','recruit','predict','death', 'valo', 'kp', 'spike', 'dm', 'keiba', 'bet', 'paifu', 'mleague', 'mbet', 'mclose', 'kpgrant', 'paifulink', 'unitelink', 'horsename', 'give'].includes(interaction.data?.name ?? ''))) return respond('対応していないコマンドです。');
   if (!/^\d+$/.test(interaction.id) || typeof interaction.token !== 'string' || !interaction.token.length || interaction.token.length > 4096) return new Response('Invalid interaction', { status: 400 });
+  if(gcChoice){
+    const game=CHOOSE_BUTTON.exec(interaction.data!.custom_id!)![1] as GameId;
+    return Response.json({type:4,data:gameDetailCard(game,config.applicationId)});
+  }
+  if((gcRecruit||gcDuel)&&(!interaction.member?.user?.id||!/^\d{15,22}$/.test(interaction.member.user.id)))
+    return respond('Discordのユーザーを確認できない。');
   if (vpButton) {
     const matched = PREDICTION_BUTTON.exec(interaction.data!.custom_id!)!;
     if (!interaction.member?.user?.id) return respond('Discordのユーザーを確認できません。');
@@ -182,9 +194,39 @@ export async function discordInteractions(request: Request, env: Env, ctx: Execu
     } catch { console.warn('discord_command_reply_failed'); }
   };
   ctx.waitUntil((async () => {
-    let result: { content?: string; components?: unknown[]; flags?: number }, notice: string | undefined;
+    let result: { content?: string; components?: unknown[]; flags?: number;
+      allowed_mentions?: {parse:[];users?:string[]} }, notice: string | undefined;
+    let recruitToLink: string|null=null;
     try {
-      if(vpModal){
+      if(gcRecruit){
+        const matched=RECRUIT_BUTTON.exec(interaction.data!.custom_id!)!;
+        const view=await changeRecruit(env,matched[2],config.guildId,interaction.member!.user!.id,
+          matched[1]==='join',Date.now(),interaction.message?.id,interaction.message?.channel_id);
+        result=recruitCard(view,config.applicationId);
+      }else if(gcDuel){
+        const matched=DUEL_BUTTON.exec(interaction.data!.custom_id!)!;
+        const view=await respondDiscordDuel(env,config.guildId,interaction.member!.user!.id,matched[2],
+          matched[1] as 'accept'|'decline',interaction.id);
+        result=duelInviteCard(view,config.applicationId);
+      }else if(interaction.data?.name==='play'){
+        result=gameCenterCard(config.applicationId);
+      }else if(interaction.data?.name==='duel'){
+        const opts=interaction.data.options??[];
+        const opponent=String(opts.find(o=>o.name==='opponent')?.value??'');
+        const game=String(opts.find(o=>o.name==='game')?.value??'');
+        const stake=Number(opts.find(o=>o.name==='stake')?.value);
+        const view=await startDiscordDuel(env,config.guildId,interaction.member!.user!.id,
+          opponent,game,stake,interaction.id);
+        result={...duelInviteCard(view,config.applicationId),allowed_mentions:{parse:[],users:[opponent]}};
+      }else if(interaction.data?.name==='recruit'){
+        const opts=interaction.data.options??[];
+        const game=String(opts.find(o=>o.name==='game')?.value??'');
+        const count=opts.find(o=>o.name==='slots')?.value;
+        const slots=count===undefined?5:Number(count);
+        const view=await createRecruit(env,interaction.id,config.guildId,interaction.member!.user!.id,game,slots);
+        recruitToLink=view.id;
+        result=recruitCard(view,config.applicationId);
+      }else if(vpModal){
         const matched=PREDICTION_MODAL.exec(interaction.data!.custom_id!)!;
         const at=Number((BigInt(interaction.id)>>22n)+1420070400000n);
         result={content:await buyPrediction(env,matched[1],config.guildId,interaction.member!.user!.id,
@@ -218,12 +260,12 @@ export async function discordInteractions(request: Request, env: Env, ctx: Execu
       else result = { content: interaction.data!.name === 'valo' ? await runValoCommand(env.DB, interaction) : await runDeathCommand(env.DB, interaction) };
     } catch (error) {
       console.warn('discord_command_failed');
-      if (paifuButton || skirmishButton) {
+      if (paifuButton || skirmishButton || gcRecruit || gcDuel) {
         // Keep the claim message and its buttons; tell only the presser to retry.
         await whisper('操作結果を確認できませんでした。少し待ってからもう一度押してください。');
         return;
       }
-      if(interaction.data?.name==='predict'||vpModal){
+      if(['duel','recruit','play','predict'].includes(interaction.data?.name??'')||vpModal){
         const message=error instanceof Error?error.message:'';
         result={content:/[ぁ-んァ-ヶ一-龯]/.test(message)&&message.length<=150&&!/SQL|D1_|token|secret/i.test(message)
           ? message:'予想を処理できませんでした。KP残高・受付状況を確認してください。',components:[]};
@@ -243,11 +285,23 @@ export async function discordInteractions(request: Request, env: Env, ctx: Execu
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...result,
           ...((result.flags??0)&32768 ? {content:null,embeds:[],poll:null}:{}),
-          allowed_mentions: { parse: [] } }), signal: AbortSignal.timeout(10_000),
+          allowed_mentions: result.allowed_mentions??{ parse: [] } }), signal: AbortSignal.timeout(10_000),
       });
       if (!response.ok) console.warn('discord_command_reply_failed', { status: response.status });
+      else if(recruitToLink){
+        const posted=await response.json() as {id?:string;channel_id?:string};
+        if(posted.id&&posted.channel_id&&await linkRecruitMessage(env.DB,recruitToLink,config.guildId,posted.channel_id,posted.id)){
+          try{
+            const stub=env.VOICE_GATEWAY?.get(env.VOICE_GATEWAY.idFromName('guild:'+config.guildId));
+            if(stub){const seeded=await stub.fetch('https://voice/recruit/register',{method:'POST',
+              headers:{'Content-Type':'application/json'},body:JSON.stringify({guild:config.guildId,
+                channel:posted.channel_id,message:posted.id})});
+              if(!seeded.ok)console.warn('game_reaction_seed_pending');}
+          }catch{console.warn('game_reaction_seed_pending');}
+        }
+      }
     } catch { console.warn('discord_command_reply_failed'); }
     if (notice) await whisper(notice);
   })());
-  return Response.json(deathSelect || paifuButton || mbetButton || skirmishButton ? { type: 6 } : { type: 5, data: { flags: isKpRanking(interaction) || interaction.data?.name === 'paifu' || interaction.data?.name === 'predict' ? 0 : 64 } });
+  return Response.json(deathSelect || paifuButton || mbetButton || skirmishButton || gcRecruit || gcDuel ? { type: 6 } : { type: 5, data: { flags: isKpRanking(interaction) || interaction.data?.name === 'paifu' || ['play','duel','recruit','predict'].includes(interaction.data?.name??'') ? 0 : 64 } });
 }
