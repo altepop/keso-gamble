@@ -167,7 +167,7 @@ export async function settlePredictions(env:KpEnv,match:Match,riot:string,now=Da
   const start=Date.parse(match.metadata.started_at);if(!Number.isFinite(start))return 0;
   await ensurePredictions(env.DB);
   const mode=storedMode(match.metadata.queue.id);
-  const events=(await env.DB.prepare('SELECT * FROM vp_events WHERE riot=? AND mode=? AND status=\'open\' AND created_at<? ORDER BY created_at LIMIT 5')
+  const events=(await env.DB.prepare('SELECT * FROM vp_events WHERE riot=? AND mode=? AND status=\'open\' AND created_at<=? ORDER BY created_at LIMIT 5')
     .bind(riot,mode,start).all<Event>()).results;
   if(!events.length)return 0;
   const mapping=await initializeKp(env,override);if(!mapping)return 0;
@@ -184,7 +184,7 @@ export async function settlePredictions(env:KpEnv,match:Match,riot:string,now=Da
   for(const e of events) {
     if(e.guild!==mapping.guildId)continue;
     const done=await env.DB.batch([
-      env.DB.prepare('UPDATE vp_events SET status=\'resolved\',match_id=?,outcome=? WHERE id=? AND status=\'open\' AND created_at<?')
+      env.DB.prepare('UPDATE vp_events SET status=\'resolved\',match_id=?,outcome=? WHERE id=? AND status=\'open\' AND created_at<=?')
         .bind(match.metadata.match_id,outcome,e.id,start),
       env.DB.prepare('UPDATE vp_tickets SET status=CASE WHEN purchased_at>? OR ?=\'draw\' THEN \'refunded\' WHEN side=? THEN \'won\' ELSE \'lost\' END,payout=CASE WHEN purchased_at>? OR ?=\'draw\' THEN stake WHEN side=? THEN CAST(stake*odds/100 AS INTEGER) ELSE 0 END WHERE event_id=? AND status=\'pending\' AND EXISTS(SELECT 1 FROM vp_events WHERE id=? AND status=\'resolved\' AND match_id=?)')
         .bind(payoutCutoff,outcome,outcome,payoutCutoff,outcome,outcome,e.id,e.id,match.metadata.match_id),
@@ -265,7 +265,7 @@ export async function recoverPendingPredictions(env:KpEnv,
     throw Error('Prediction recovery match data unavailable');
   const kickoff=Date.parse(match.metadata.started_at);
   if(!Number.isFinite(kickoff))throw Error('Prediction recovery kickoff unavailable');
-  if(kickoff<=row.created_at){
+  if(kickoff<row.created_at){
     // An already-running match is not the next eligible match. Skip only
     // this verified historical game; do not debit/refund tickets or close the card.
     await env.DB.prepare('INSERT OR IGNORE INTO monitor_state(key,value) VALUES(?,?)')
