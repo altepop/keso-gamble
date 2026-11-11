@@ -1411,7 +1411,7 @@ async function valoEnvironment() {
 test('slash command definitions preserve death permissions and expose thirteen read-only valo operations', async () => {
   const { discordCommands } = await import('../src/discord-command.ts');
   const commands = discordCommands();
-  assert.deepEqual(commands.map(command => command.name), ['death', 'valo']);
+  assert.deepEqual(commands.map(command => command.name), ['death', 'valo', 'predict']);
   assert.equal(commands[0].default_member_permissions, '32');
   const deathStart = commands[0].options.find(option => option.name === 'start')!;
   const deathMode = deathStart.options!.find(option => option.name === 'mode')!;
@@ -1419,6 +1419,10 @@ test('slash command definitions preserve death permissions and expose thirteen r
   assert.equal(deathMode.required, false, 'Existing /death starts remain usable through the mode menu');
   assert.equal('default_member_permissions' in commands[1], false);
   assert.equal(commands[1].options.length, 13);
+  assert.equal(commands[2].name,'predict');
+  assert.equal(commands[2].options[0].required,true);
+  assert.equal(commands[2].options[1].required,false);
+  assert.ok(commands[2].options[0].choices.length<=25);
   for (const subcommand of commands[1].options) {
     assert.ok(subcommand.description.length <= 100);
     let optional = false;
