@@ -4,15 +4,15 @@
 
 既存のKESO PLAY Discord Botの `/music` をCloudflare Workerが受付け、Discord音声転送（UDP・DAVE）は**別のNode.js 24.17以上のサービス**で担当する。従来のVoice Gateway（通話報酬）とKP処理は変更しない。
 
-**最初の配信対象はKESO PLAYが管理する既存8曲のみ。** 曲目は `services/music-voice/catalog.json` に固定し、`music/assets/` に配置済みの音源を再生する。一般ユーザーが任意のファイル、YouTube、Spotify、外部URLを指定する機能は提供しない。原曲の利用権とDiscordでの共有が可能かは運営者が確認すること。
+**現在の配信対象はKESO PLAYが管理する正式採用10曲のみ。** 曲目は `services/music-voice/catalog.json` に固定し、`music/assets/` に配置済みの音源を再生する。一般ユーザーが任意のファイル、YouTube、Spotify、外部URLを指定する機能は提供しない。原曲の利用権とDiscordでの共有が可能かは運営者が確認すること。
 
 ## コマンド
 
 | コマンド | 動作 |
 | --- | --- |
 | `/music play song` | コマンドを実行したユーザーのVCへ参加し、選んだ曲を再生またはキュー追加 |
-| `/music radio` | 全8曲を一巡まで重複なくランダム再生し、その後も自動で繰り返す |
-| `/music all` | 全8曲を収録順に再生し、終了したら待機する |
+| `/music radio` | 全10曲を一巡まで重複なくランダム再生し、その後も自動で繰り返す |
+| `/music all` | 全10曲を収録順に再生し、終了したら待機する |
 | `/music shuffle` | 再生中の曲は変えずにキューをシャッフルする |
 | `/music panel` | 再生時間・次の曲・キュー・操作ボタンを一覧表示する |
 | `/music queue` | 再生中・曲順・音量・ループを表示 |
@@ -70,7 +70,7 @@ node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
 
 ## 安全性と制限
 
-- Discord HTTP Interactionの署名検証は既存Workerで行う。Node側は共通Secretを照合し、指定Guildのみ、指定された8曲のみ扱う。
+- Discord HTTP Interactionの署名検証は既存Workerで行う。Node側は共通Secretを照合し、指定Guildのみ、指定された公式カタログ収録曲のみ扱う。
 - リクエストIDで重複コマンドを防止。HTTP接続前に副作用のない `/health` で準備状態を確認する。再生要求の結果が不明な時はキューを確認する。
 - 通常のDiscord音声再生ではUDPとDAVEが必要。RenderホストのUDP疎通は実機で試験する必要がある。
 - Render Free Web Serviceは15分間インバウンド通信がなければスリープすることがあり、**音楽再生中の継続稼働は保証されない**。長時間の安定再生には常時起動できるNode実行環境が適する。
@@ -78,7 +78,7 @@ node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
 
 ## v2：ラジオ・全曲再生・新しい操作パネル
 
-- `/music radio` と `/music all` は**現在再生中の曲とキューを置き換えて**開始する。KESO RADIOはシャッフルの全8曲を再生し終えるまで重複せず、次周の1曲目も直前の曲と同一にならない。
+- `/music radio` と `/music all` は**現在再生中の曲とキューを置き換えて**開始する。KESO RADIOはシャッフルの全10曲を再生し終えるまで重複せず、次周の1曲目も直前の曲と同一にならない。
 - 操作パネルには再生中の曲、経過時間／総再生時間、次の曲、待ち曲数、音量・モード・ボタンを表示する。Discordのメッセージは毎秒自動更新しない。**更新ボタン**か `/music panel` で現在の状態を取得する。
 - Radio再生中にループ設定は変更できない。Radioの循環が自動ループに相当する。
 - Nodeサービス内のメモリだけで再生リストを管理するため、D1負担はゼロ。ホストがスリープ・再起動するとキューは失われる。

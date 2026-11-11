@@ -11,7 +11,7 @@ function fixture(){
    async run(){values.set(args[0],args[1]);return {meta:{changes:1}};}};}})} as unknown as D1Database;
  return {values,db};
 }
-test('the nine-song /music guild command is upserted once, leaving other commands untouched',async()=>{
+test('the ten-song /music guild command is upserted once, leaving other commands untouched',async()=>{
  const {values,db}=fixture(),calls:Array<{url:string;method:string;body:string}>=[];
  const request=async(input:RequestInfo|URL,init?:RequestInit)=>{
   const url=String(input),body=String(init?.body??'');
@@ -27,12 +27,14 @@ test('the nine-song /music guild command is upserted once, leaving other command
  assert.deepEqual(calls.map(x=>x.method),['POST','POST']);
  assert.match(calls[1].url,/\/guilds\/\d+\/commands$/);
  assert.equal(JSON.parse(calls[1].body).name,'music');
- assert.equal(JSON.parse(calls[1].body).options[0].options[0].choices.length,9);
+ assert.equal(JSON.parse(calls[1].body).options[0].options[0].choices.length,10);
  assert.ok(JSON.parse(calls[1].body).options[0].options[0].choices
   .some((x:{value:string;name:string})=>x.value==='makekowa'&&x.name==='負け怖'));
+ assert.ok(JSON.parse(calls[1].body).options[0].options[0].choices
+  .some((x:{value:string;name:string})=>x.value==='yuzuan'&&x.name==='ゆず庵⁉️'));
  assert.equal(values.get(MUSIC_REGISTRATION_KEY),MUSIC_REGISTRATION_VERSION);
  assert.deepEqual(await musicCommandStatus(db),
-  {registered:true,version:MUSIC_REGISTRATION_VERSION,tracks:9});
+  {registered:true,version:MUSIC_REGISTRATION_VERSION,tracks:10});
  assert.equal(await ensureMusicCommand(env,request as typeof fetch),true);
  assert.equal(calls.length,2,'already registered version should skip Discord network');
 });
@@ -60,5 +62,5 @@ test('partial Discord command registration is not considered complete',async()=>
  await assert.rejects(ensureMusicCommand({DB:db,DISCORD_CLIENT_SECRET:'test'},
   fake as typeof fetch),/unconfirmed/);
  assert.equal(values.size,0);
- assert.equal(MUSIC_COMMAND.options[0].options[0].choices.length,9);
+ assert.equal(MUSIC_COMMAND.options[0].options[0].choices.length,10);
 });
