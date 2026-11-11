@@ -14,3 +14,10 @@ test('all 26 Riot rank images match recorded source hashes and dimensions, with 
 });
 
 test('initial placement uses the recorded VALORANT unranked icon and shows the remaining placement games',()=>{const html=escalationRankPanel({escalationRating:{rating:null,measurementGames:1,measurementRequired:3}});assert.match(html,/unranked\.png/);assert.match(html,/認定まであと2試合/);assert.match(html,/初回認定 1\/3試合/);});
+
+test('rank shield panel shows remaining and consumed shields, warns when exhausted and stays absent during placement',()=>{
+ const power={rating:1200,rank:{name:'プラチナ Ⅰ',tier:4,division:1,rr:0},rankShields:{eligible:true,remaining:1,lastConsumed:true}};
+ const html=escalationRankPanel({escalationRating:power});assert.match(html,/ランクシールド 残り1\/2/);assert.match(html,/前の試合で1枚使用/);assert.equal((html.match(/class="filled"/g)||[]).length,1);assert.equal((html.match(/class="empty"/g)||[]).length,1);
+ const exhausted=escalationRankPanel({escalationRating:{...power,rankShields:{eligible:true,remaining:0}}});assert.match(exhausted,/次に0 RRで負けると降格/);
+ assert.doesNotMatch(escalationRankPanel({escalationRating:{...power,rating:null}}),/class="esca-shields"/);
+});
