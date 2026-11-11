@@ -1,0 +1,74 @@
+name: One-time signed prediction kickoff probe
+on:
+  push:
+    paths:
+      - '.github/workflows/predict-signed-kickoff-probe.yml'
+permissions:
+  contents: read
+jobs:
+  inspect:
+    if: github.repository == 'altepop/keso-gamble' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    env:
+      CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      SIGNING_KEY: ${{ secrets.MAHJONG_INGEST_KEY }}
+    steps:
+      - name: Verify actual kickoff times without writing game data
+        run: |
+          set -euo pipefail
+          cat > /tmp/kickoff_pub.pem <<'PUB'
+          -----BEGIN PUBLIC KEY-----
+          MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEA/DcYQHcUvsm9tWpR8L+y
+          9D7+A8AcoW0BP5Wz8gjWQ3zs7Z93wXh1GwRPQnOu/AKd5tAaCkbIW8c9ZQYn6QEz
+          G2sre7D6WF7Hc3Dx+t18APw0WsKfuBf20u97uYiCBTS3PZO3ldEtpAQgsA8YZgPW
+          mgZgnZCe0UKYQ2glODYMsOmjMGwQE9Th1S9BjeIEDZMPGh1m142bAdMFw8A3lXIG
+          lDyX54HAgVa0H9oEgBl8xenGZOhyQp9M4Dyfcs8ad8OmeqrSLRbnhDMOA00WeFgo
+          zQHtxzUznqRS2kMr8ALXiyZNnY6lpNMVyWleWYAek3hiZFzzRDvPahIRiVWVT64m
+          O/ElSUgJSQI5vgKf3Id70dZZMh4Ol09KZYIZpDexIZ7Wz3mLiFfrVYZfwEfY/vll
+          mW3ki/spzU85X5SL0MJu5xi8CQbIS0kIKEaCTpGB1e7JLz9f8CIir7GBhiVmDrcm
+          /6frSIqZJ1Gk/zYmQ1qbiYGNhE020mdP5QP2f80kk0PnkmR/yFM7YfDGgcbwsbEV
+          4N6ECH4KqdryJvhvoed8RKTPD3RIVlfAEA7Ncl1U4WhYlRKkpPnCOvbfJPB/kNeZ
+          trC9292yGEcVEig9we1ehlLnkGZCV9cqv+a759f714w0hp4GAPHUAB1HTa7RyY1b
+          EEH8cyvnrThL/ihxNTc0dGECAwEAAQ==
+          -----END PUBLIC KEY-----
+          PUB
+          python3 - <<'PY'
+          import os, time, json, hmac, hashlib, urllib.request, urllib.error, subprocess, base64, sys
+          def fetch(url,headers):
+            req=urllib.request.Request(url,headers=headers)
+            with urllib.request.urlopen(req,timeout=25) as response:
+              return json.load(response)
+          def encrypted(row):
+            data=json.dumps(row,separators=(',',':'),ensure_ascii=False).encode()
+            if len(data)>440:raise RuntimeError('rsa_payload_too_large')
+            p=subprocess.run(['openssl','pkeyutl','-encrypt','-pubin','-inkey','/tmp/kickoff_pub.pem',
+              '-pkeyopt','rsa_padding_mode:oaep','-pkeyopt','rsa_oaep_md:sha256','-pkeyopt','rsa_mgf1_md:sha256'],
+              input=data,check=True,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL)
+            print('KICKOFF_RESULT_ENC='+base64.b64encode(p.stdout).decode(),flush=True)
+          account=os.environ['CF_ACCOUNT']
+          token=os.environ['CF_TOKEN']
+          secret=os.environ.get('SIGNING_KEY','')
+          if not secret:raise RuntimeError('mahjong_ingest_key_unavailable')
+          api='https://api.cloudflare.com/client/v4/accounts/'+account
+          headers={'Authorization':'Bearer '+token}
+          domain=fetch(api+'/workers/subdomain',headers)
+          if not domain.get('success') or not domain.get('result',{}).get('subdomain'):raise RuntimeError('workers_subdomain_missing')
+          subdomain=domain['result']['subdomain']
+          worker='valorant-results'
+          path='/api/discord/predict/audit-kickoff'
+          ms=str(int(time.time()*1000))
+          signature=hmac.new(secret.encode(),(ms+'.'+path+'.').encode(),hashlib.sha256).hexdigest()
+          url='https://'+worker+'.'+subdomain+'.workers.dev'+path
+          try:
+            result=fetch(url,{'X-Mahjong-Time':ms,'X-Mahjong-Signature':signature})
+          except urllib.error.HTTPError as err:
+            print('KICKOFF_HTTP_STATUS='+str(err.code),flush=True)
+            raise
+          if result.get('error'):raise RuntimeError('kickoff_audit_error')
+          rows=result.get('matches',[])
+          print('KICKOFF_ROWS='+str(len(rows)),flush=True)
+          for row in rows:encrypted(row)
+          print('KICKOFF_AUDIT_COMPLETE=1',flush=True)
+          PY
