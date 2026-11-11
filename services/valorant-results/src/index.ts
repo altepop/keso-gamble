@@ -62,6 +62,8 @@ export interface Env {
   VOICE_GATEWAY?:DurableObjectNamespace;
   RACE_BROADCAST?:DurableObjectNamespace;
   DISCORD_CLIENT_SECRET?: string;
+  MUSIC_VOICE_URL?: string;
+  MUSIC_BRIDGE_TOKEN?: string;
   KP_BOOTSTRAP_PRIVATE_KEY?: string;
   KP_BOOTSTRAP_PUBLIC_KEY?: string;
   DB: D1Database;
