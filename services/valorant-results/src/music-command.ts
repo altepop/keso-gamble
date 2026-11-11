@@ -1,5 +1,13 @@
 import tracks from '../../music-voice/catalog.json' with {type:'json'};
 export const MUSIC_COMMAND_VERSION='music-voice-v1';
+export const MUSIC_BUTTON=/^ms:(pause|resume|skip|stop|queue|leave)$/;
+export const musicControls=()=>[{type:1,components:[
+ {type:2,style:2,label:'⏸ 停止',custom_id:'ms:pause'},
+ {type:2,style:3,label:'▶ 再開',custom_id:'ms:resume'},
+ {type:2,style:1,label:'⏭ 次へ',custom_id:'ms:skip'},
+ {type:2,style:2,label:'📜 曲一覧',custom_id:'ms:queue'},
+ {type:2,style:4,label:'👋 退出',custom_id:'ms:leave'},
+]}];
 export const MUSIC_COMMAND={
  type:1,name:'music',description:'KESO PLAY｜VCでオリジナル楽曲を再生・キュー操作',
  options:[
@@ -24,10 +32,12 @@ export const MUSIC_COMMAND={
 type Option={type?:number;name?:string;value?:string|number;options?:Option[]};
 export interface MusicInteraction {
  id:string;guild_id?:string;member?:{user?:{id:string}};
- data?:{name?:string;options?:Option[]};
+ data?:{name?:string;custom_id?:string;options?:Option[]};
 }
 export interface MusicBridgeEnv{MUSIC_VOICE_URL?:string;MUSIC_BRIDGE_TOKEN?:string}
 export function parseMusic(i:MusicInteraction){
+ const button=MUSIC_BUTTON.exec(i.data?.custom_id??'');
+ if(button)return {action:button[1],track:undefined,volume:undefined,loop:undefined};
  const sub=i.data?.options?.[0];
  if(i.data?.name!=='music'||sub?.type!==1)throw Error('音楽コマンドを確認できない。');
  const allowed=new Set(['play','queue','skip','pause','resume','stop','leave','volume','loop']);
