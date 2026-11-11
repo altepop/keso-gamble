@@ -1,19 +1,12 @@
 {
   "version": "mode-rewards-v6",
   "unrated": {
-    "win": 370,
+    "version": "unrated-rewards-v7",
+    "win": 70,
     "lottery": [
       {
-        "weight": 2000,
-        "amount": -500
-      },
-      {
-        "weight": 3000,
-        "amount": -100
-      },
-      {
-        "weight": 3797,
-        "amount": 0
+        "weight": 8797,
+        "amount": 70
       },
       {
         "weight": 800,
@@ -34,7 +27,12 @@
     ]
   },
   "swiftplay": {
-    "cleanSweepBonus": 400
+    "cleanSweepBonus": 600,
+    "contributionThreshold": 15,
+    "contributionBonus": 150,
+    "specialScope": "all",
+    "bigPositiveNumerator": 2,
+    "bigPositiveDenominator": 3
   },
   "teamdeathmatch": {
     "lowerKills": 30,
@@ -42,7 +40,16 @@
     "lowerBonus": 200,
     "upperKills": 40,
     "upperKd": 2,
-    "upperBonus": 500
+    "upperBonus": 500,
+    "party": {
+      "minimumMembers": 2,
+      "lowerGap": 20,
+      "lowerContribution": 20,
+      "lowerBonus": 200,
+      "upperGap": 25,
+      "upperContribution": 25,
+      "upperBonus": 500
+    }
   },
   "escalation": {
     "lowerKills": 30,
@@ -98,7 +105,25 @@
         "weight": 50,
         "amount": 1000000
       }
-    ]
+    ],
+    "rating": {
+      "measurementGames": 3,
+      "placementPositiveKdBonus": 100,
+      "actPlacementGames": 1,
+      "episodePlacementGames": 3,
+      "episodeDefaultDrop": 600,
+      "rankDivisionPoints": 100,
+      "rankTierPoints": 300,
+      "seriesWins": 3,
+      "seriesLosses": 3,
+      "measurementInitial": 300,
+      "seriesGains": [
+        100,
+        70,
+        40
+      ],
+      "performanceAdjustment": true
+    }
   },
   "deathmatch": {
     "requiredKills": 40

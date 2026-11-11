@@ -3,7 +3,7 @@ import {kpEventId} from './kp.ts';
 import {creditVerifiedRelicBonus} from './relics.ts';
 import {enqueue,ensurePosts} from './racing-posts.ts';
 export const SKIRMISH_POLICY='skirmish-risk-v1';
-export const SKIRMISH_PRIZES=[0,50,250,600,1000,1500] as const;
+export const SKIRMISH_PRIZES=[0,50,250,750,2000,5000] as const;
 // The last step is paid at once; every step before it is held for 受取／続行.
 const SKIRMISH_TOP=SKIRMISH_PRIZES.length-1;
 export interface SkirmishState {guild:string;puuid:string;user:string;wins:number;pot:number;phase:'ready'|'choice'|'armed';eligible_after:number;last_end:number;version:number}

@@ -52,14 +52,14 @@ const currentAmount=spin=>spin.kind==='super-unlucky'?
  '−'+money(spin.beforeBalance-spin.afterBalance):
  (spin.kind==='big'&&spin.award<0?'−':'+')+money(spin.award);
 function wheelInfo(spin){
- const title=spin.kind==='big'?'🎰 エスカ大勝負':spin.kind==='super-lucky'?'🌈 超ラッキー':'💀 超アンラッキー';
+ const title=spin.kind==='big'?`🎰 ${spin.mode==='swiftplay'?'スイフト':'エスカ'}大勝負`:spin.kind==='super-lucky'?'🌈 超ラッキー':'💀 超アンラッキー';
  const subtitle=spin.kind==='big'?'5段階の大勝負':spin.kind==='super-lucky'?'特別賞金抽選':'手持ちKP半額のお知らせ';
  return {title,subtitle};
 }
 export function makeEscalationWheel(spin,close=()=>{}){
  const m=escalationWheelModel(spin),info=wheelInfo(spin);
  const root=document.createElement('div');root.className='esc-roulette-backdrop';
- root.setAttribute('role','dialog');root.setAttribute('aria-modal','true');root.setAttribute('aria-label','エスカレーションのルーレット');
+ root.setAttribute('role','dialog');root.setAttribute('aria-modal','true');root.setAttribute('aria-label',spin.mode==='swiftplay'?'スイフトのルーレット':'エスカレーションのルーレット');
  const ring=m.sectors.map(s=>`${s.color} ${s.start.toFixed(4)}deg ${s.end.toFixed(4)}deg`).join(',');
  const tags=m.sectors.filter(s=>s.end-s.start>=10).map(s=>{
    const radians=s.center*Math.PI/180;
@@ -79,7 +79,7 @@ export function makeEscalationWheel(spin,close=()=>{}){
    <p class="esc-wheel-phase" aria-live="polite">ルーレットが回転しています…</p>
    <div class="esc-roulette-result" aria-live="polite" hidden>
      <small>${m.negative?'減額確定':'獲得確定'}</small><strong>${currentAmount(spin)}</strong>
-     ${showBalance?`<p>手持ちKP　${fmt(spin.beforeBalance)} → <b>${fmt(spin.afterBalance)} KP</b></p>`:`<p>第${spin.tier}段階・${spin.award>=0?'勝利':'敗北'}の結果</p>`}
+     ${showBalance?`<p>手持ちKP　${fmt(spin.beforeBalance)} → <b>${fmt(spin.afterBalance)} KP</b></p>`:`<p>第${spin.tier}段階・${spin.mode==='swiftplay'?(spin.award>=0?'プラス':'マイナス'):(spin.award>=0?'勝利':'敗北')}の結果</p>`}
    </div>
    <div class="esc-roulette-footer"><button type="button" class="esc-wheel-skip">演出をスキップ</button><button type="button" class="esc-wheel-dismiss" hidden>確認しました</button></div>
    <p class="esc-wheel-disclaimer">抽選とKPの精算はサーバー側で完了済みだ。演出の再生・スキップで金額は変わらない。</p>

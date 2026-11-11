@@ -1,3 +1,4 @@
+import {escalationRankReply,isEscalationRanking} from './escalation-rank-command.ts';
 // @ts-expect-error Shared festival rules.
 import {festivalRace,FESTIVAL_PRICE,RUN_MS} from '../../../js/racing.js';
 import {skirmishState,skirmishPrompt} from './skirmish.ts';
@@ -187,10 +188,20 @@ export async function mbetChoices(env:KpEnv,interaction:Slash):Promise<Array<{na
   .map((p:{name:string;teamName:string})=>({name:`${p.name}｜${p.teamName}｜ラス ${(mlOdds(p,stats).last/10).toFixed(1)}倍｜${sitting?'出場確定':'出場未確定・不出場は返金'}`.slice(0,100),value:p.name})).slice(0,25);
  return hits.length?hits:why(`「${String(focused.value).slice(0,20)}」に合う選手がおらへんで。名前かチーム名の一部で探してな`);
 }
-export async function runKpCommand(env:KpEnv,interaction:Slash,override?:KpMapping,out?:{components?:unknown[]}):Promise<string>{
+export async function runKpCommand(env:KpEnv,interaction:Slash,override?:KpMapping,out?:{components?:unknown[];embeds?:unknown[]}):Promise<string>{
  const mapping=await initializeKp(env,override),user=interaction.member?.user?.id;
  if(!mapping||interaction.guild_id!==mapping.guildId||!user||!/^\d{15,22}$/.test(user))return 'このサーバーの本人の口座で利用してください。';
  const command=interaction.data?.name;if(!['kp','spike','dm','keiba','bet','mleague','mbet','mclose','kpgrant','paifulink','unitelink','horsename','give'].includes(command??''))return '対応していないコマンドです。';
+ if(command==='kp'&&interaction.data?.options?.length===1&&interaction.data.options[0].type===1&&['rank','ranks'].includes(interaction.data.options[0].name)){
+  const option=interaction.data.options[0],values=option.options as Array<{name?:string;type?:number;value?:unknown}>|undefined;
+  let target=user;
+  if(option.name==='ranks'&&!isEscalationRanking(interaction))return '/kp ranks に追加の指定はいらへんで。';
+  if(option.name==='rank'&&values?.length){
+   if(values.length!==1||values[0].name!=='user'||values[0].type!==6||typeof values[0].value!=='string'||!/^\d{15,22}$/.test(values[0].value))return '/kp rank の user でメンバーを選んでな。';
+   target=values[0].value;
+  }
+  const reply=await escalationRankReply(env,mapping.guildId,target,option.name==='ranks');if(out)out.embeds=reply.embeds;return reply.content;
+ }
  if(isKpRanking(interaction)){
   // A single server-side snapshot: current spendable KP, not stocks or lifetime earnings.
   const rows=(await env.DB.prepare('SELECT user,balance,RANK() OVER(ORDER BY balance DESC) AS rank,COUNT(*) OVER() AS total FROM kp_wallets WHERE guild=? ORDER BY balance DESC,user ASC LIMIT 10').bind(mapping.guildId).all<{user:string;balance:number;rank:number;total:number}>()).results;
@@ -202,7 +213,7 @@ export async function runKpCommand(env:KpEnv,interaction:Slash,override?:KpMappi
    +'\n\n💸 **借KP**\n'+(debts.length?debts.map(d=>`<@${d.user}>　**${money(d.amount)}**`).join('\n'):'いま借KPのある人はいません。');
  }
  const sub=interaction.data?.options?.length===1&&interaction.data.options[0].type===1&&!interaction.data.options[0].options?.length?interaction.data.options[0].name:null;
- if(command==='kp'&&interaction.data?.options?.length&&!['balance','bets'].includes(sub??''))return '/kp balance・/kp bets・/kp ranking から選んでください。';
+ if(command==='kp'&&interaction.data?.options?.length&&!['balance','bets'].includes(sub??''))return '/kp rank・/kp ranks・/kp balance・/kp bets・/kp ranking から選んでください。';
  // A verified guild interaction can open an empty wallet, never a starting credit.
  await ensureQuizKp(env);
  await env.DB.batch([

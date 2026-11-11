@@ -1,3 +1,5 @@
+import {ensureRankCommand,rankRegistrationStatus} from './rank-command-registration.ts';
+import {matchAct,observeEscalationAct,syncEscalationPower} from './escalation-rating.ts';
 import {runSpikeCompensation} from './spike-compensation.ts';
 import {settlePredictions,expirePredictions} from './valo-predictions.ts';
 import {ensurePredictionCommand,predictionRegistrationStatus} from './predict-registration.ts';
@@ -198,10 +200,21 @@ async function saveMatch(env: Env, match: Match, player: Player, account: Accoun
   const kpId=kpRun?kpEventId(kpRun.mapping.guildId,match.metadata.match_id,account.puuid):'';
   try {
     if (kpRun && Date.parse(match.metadata.started_at)>=kpRun.startsAt) {
+      const act=matchAct(match);
+      if(act&&(!kpRun.act||(act.id!==kpRun.act.id&&act.startedAt>kpRun.act.startedAt)||(act.id===kpRun.act.id&&((!kpRun.act.name&&act.name)||(!kpRun.act.episode&&act.episode))))){
+        if(await observeEscalationAct(env,kpRun.mapping.guildId,act))kpRun.act=act;
+      }
       await loadKpRunMatch(env,kpRun,kpId);
       const amount = kpRun.credits.get(kpId) ?? await collectKpMatch(env,kpRun.mapping,match,account.puuid);
       if (amount !== null) {
         kpRun.credits.set(kpId,amount);
+        if(act&&kpRun.pendingPower?.has(kpId)){
+          const owner=kpRun.mapping.accounts.find(a=>a.riotId===player.riotId)?.discordUserId;
+          if(owner&&await syncEscalationPower(env,kpRun.mapping.guildId,owner,kpId,match,account.puuid)){
+            kpRun.pendingPower.delete(kpId);
+            const note=kpRun.notes?.get(kpId);if(note)kpRun.notes?.set(kpId,note.replace('（エスカランク：ACT・エピソード情報取得待ち）','（エスカランク：ACT情報を反映）'));
+          }
+        }
         // Existing events already have the relic delta in loadKpRunMatch.
         // A brand-new credit has no preloaded event: fetch its receipt once
         // by primary key AFTER settlement and reuse within this monitor run.
@@ -564,6 +577,9 @@ export default {
   fetch(request: Request, env: Env, ctx: ExecutionContext) {
     if(new URL(request.url).pathname.startsWith('/api/racing/'))return raceVideoApi(request,env).catch(()=>new Response('Unavailable',{status:503}));
     if(request.method==='GET'&&new URL(request.url).pathname==='/api/mahjong/status')return mahjongStatus(env).then(status=>Response.json(status,{headers:{'Cache-Control':'no-store'}})).catch(()=>Response.json({enabled:false,error:'configuration_unavailable'},{status:503}));
+    if(request.method==='GET'&&new URL(request.url).pathname==='/api/discord/rank/status')
+      return rankRegistrationStatus(env.DB).then(info=>Response.json(info,{headers:{'Cache-Control':'no-store'}}))
+        .catch(()=>Response.json({registered:false,error:'status_unavailable'},{status:503}));
     if(request.method==='GET'&&new URL(request.url).pathname==='/api/discord/music/status')
       return Response.json({version:MUSIC_COMMAND_VERSION,tracks:MUSIC_COMMAND.options[0].options[0].choices.length,
         bridgeConfigured:Boolean(env.MUSIC_VOICE_URL&&env.MUSIC_BRIDGE_TOKEN),status:'voice_service_separate'},
@@ -596,6 +612,9 @@ export default {
       ctx.waitUntil(track(env,'game_commands',()=>ensureGameCommands(env).then(ok=>{
         if(!ok)throw Error('Game center credentials unavailable');
       })));
+    // Refresh only the owned /kp command; existing /death, /valo and Activity commands stay intact.
+    if(Math.floor((_event.scheduledTime??Date.now())/60000)%10===0)
+      ctx.waitUntil(track(env,'rank_command',()=>ensureRankCommand(env).then(ok=>{if(!ok)throw Error('Rank command credentials unavailable');})));
     // Expire unanswered prediction cards and refund reserved KP without another match API poll.
     if(Math.floor((_event.scheduledTime??Date.now())/60000)%30===0)
       ctx.waitUntil(track(env,'prediction_expiry',()=>expirePredictions(env)));

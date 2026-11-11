@@ -6,12 +6,13 @@ import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
 import {readdirSync,readFileSync} from 'node:fs';
 import {URL} from 'node:url';
-import {escalationFor,valoKp} from '../src/mode-rewards.ts';
-import {collectKpMatch,initializeKp,syncKpAccounts,drainKpInbox} from '../src/kp.ts';
+import {escalationFor,swiftSpecialFor,valoKp as currentValoKp} from '../src/mode-rewards.ts';
+import {collectKpMatch,initializeKp,syncKpAccounts,drainKpInbox,prepareKpRun,loadKpRunMatch,kpEventId} from '../src/kp.ts';
 import {readKpState} from '../src/kp-api.ts';
 import {ensurePosts} from '../src/racing-posts.ts';
 import type {KpEnv,KpMapping} from '../src/kp.ts';
 
+const valoKp=(raw:Parameters<typeof currentValoKp>[0],puuid:string,mode:string,outcome:string|null,v5=true,v6=true)=>currentValoKp(raw,puuid,mode,outcome,v5,v6,false,false);
 const guild='100000000000000100',user='100000000000000101',puuid='escalation-test-puuid';
 const mapping:KpMapping={guildId:guild,accounts:[{riotId:'One#JP1',discordUserId:user}]};
 function match(id:string,win=true){
@@ -179,4 +180,22 @@ test('standard bot report has a unique tier and outcome line; only IV/V create d
  const all=(f.sql.prepare("SELECT body FROM kp_posts WHERE id LIKE 'esc-big:%' ORDER BY id").all()as {body:string}[]).map(x=>JSON.parse(x.body).content as string);
  assert.equal(all.length,2);
  assert.ok(all.some(x=>/第Ⅴ段階/.test(x)&&/敗北/.test(x)));
+});
+
+
+test('Swift super prizes and half-balance settle once, retain their mode and reach the hot monitor cache with the full amount',async()=>{
+ for(const kind of ['super-lucky','super-unlucky'] as const){
+  const f=await fixture();f.seed(100001);f.sql.exec("UPDATE kp_settings SET value='0' WHERE key='valo_v7_started_at'");
+  await readKpState(f.env,mapping,user);f.sql.prepare("UPDATE kp_state SET data=json_set(data,'$.holdings.keso',7)").run();
+  let found='';for(let i=0;i<300000;i++){const id='swift-super-'+kind+'-'+i;if(swiftSpecialFor(id+':'+puuid,'win')?.kind===kind){found=id;break;}}assert(found);
+  const raw=match(found);raw.metadata.queue.id='swiftplay';const quote=currentValoKp(raw,puuid,'swiftplay','win');assert.equal(quote.escalation!.kind,kind);
+  const expected=kind==='super-lucky'?100001+quote.net+quote.escalation!.award:Math.floor((100001+quote.net)/2);
+  const actual=await collectKpMatch(f.env,mapping,raw,puuid);assert.equal(actual,expected-100001);
+  const state=await readKpState(f.env,mapping,user);assert.equal(state.cash,expected);assert.equal(state.holdings.keso,7);assert.equal(state.escalationSpins[0].mode,'swiftplay');assert.equal(state.escalationSpins[0].kind,kind);
+  const run=await prepareKpRun(f.env,mapping),id=kpEventId(guild,found,puuid);await loadKpRunMatch(f.env,run,id);assert.equal(run.credits.get(id),actual,'re-fetched notification includes the super delta');
+  assert.equal(await collectKpMatch(f.env,mapping,raw,puuid),actual);await drainKpInbox(f.env);assert.equal((await readKpState(f.env,mapping,user)).cash,expected);
+  assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM kp_ledger WHERE id LIKE 'esc-extra:%'").get()!.n,1);
+  assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM kp_posts WHERE id LIKE 'esc-notice:%'").get()!.n,1);
+  const notice=f.sql.prepare("SELECT body FROM kp_posts WHERE id LIKE 'esc-notice:%'").get()!;assert.match(String(notice.body),/スイフト/);
+ }
 });

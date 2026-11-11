@@ -392,12 +392,12 @@ test('escalation: 1-in-24 big draws use five tiers while super events remain mut
  const {valoKp}=await import('../src/kp.ts');
  const esc=(id:string,mode:string,win:boolean)=>{const raw=game(id,mode,win) as ReturnType<typeof game>&{players:Array<{puuid:string;team_id:string;stats?:{kills?:number;score?:number}}>};
   raw.players=[{puuid:'p-one',team_id:'red',stats:{kills:30,score:500}},...[10,20,15,5].map((k,i)=>({puuid:'m'+i,team_id:'red',stats:{kills:k,score:100}}))];return raw;};
- const wins=Array.from({length:2000},(_,i)=>valoKp(esc('e-win'+i,'ggteam',true),'p-one','escalation','win'));
+ const wins=Array.from({length:2000},(_,i)=>valoKp(esc('e-win'+i,'ggteam',true),'p-one','escalation','win',true,true,false,false));
  const big=wins.filter(r=>r.escalation?.kind==='big');assert.ok(big.length>=60&&big.length<=110,String(big.length));
  const winTiers=new Set([500,1000,2500,5000,15000]);
  assert.ok(wins.every(r=>r.base===70||winTiers.has(r.base)));
  assert.ok(big.every(r=>r.note.startsWith('（🎰 エスカ大勝負 ')&&r.note.includes('KP／')));
- const losses=Array.from({length:2000},(_,i)=>valoKp(esc('e-loss'+i,'ggteam',false),'p-one','escalation','loss'));
+ const losses=Array.from({length:2000},(_,i)=>valoKp(esc('e-loss'+i,'ggteam',false),'p-one','escalation','loss',true,true,false,false));
  assert.ok(losses.every(r=>r.base===0||winTiers.has(-r.base)));
  assert.ok(losses.some(r=>r.escalation?.kind==='big'&&r.base<0));
  assert.ok(Array.from({length:200},(_,i)=>valoKp(esc('t-win'+i,'hurm',true),'p-one','teamdeathmatch','win').base).every(v=>v===70),'team deathmatch: no bonus');
@@ -464,7 +464,7 @@ test('new mode cutoff preserves legacy games and retries retain original net and
  const start=Date.parse(raw.metadata.started_at);f.sql.prepare("UPDATE kp_settings SET value=? WHERE key='mode_rewards_started_at'").run(String(start+1));
  assert.equal(await collectKpMatch(f.env,mapping,raw,'p-one'),(await import('../src/kp.ts')).legacyValoKp(raw,'p-one','swiftplay','win').net);
  f.sql.prepare("UPDATE kp_settings SET value=? WHERE key='mode_rewards_started_at'").run(String(start));raw.metadata.match_id='modern-swift-2';
- const quote=valoKp(raw,'p-one','swiftplay','win');assert.equal(quote.base,580);
+ const quote=valoKp(raw,'p-one','swiftplay','win',true,true,false,false);assert.equal(quote.base,580);
  const net=await collectKpMatch(f.env,mapping,raw,'p-one');assert.equal(net,quote.net);
  const id=f.sql.prepare("SELECT id FROM kp_events WHERE match='modern-swift-2'").get()!.id as string;
  assert.equal(await readModeNote(f.env,id),quote.note);
@@ -475,7 +475,7 @@ test('unrated lottery can debit a win once and pays a jackpot once without anoth
  const {valoKp}=await import('../src/mode-rewards.ts');const f=await fixture();f.enableHistory();seed(f.sql,one,10000);
  f.sql.exec("UPDATE kp_settings SET value='0' WHERE key='mode_rewards_started_at'");
  let negative:ReturnType<typeof game>|undefined,jackpot:ReturnType<typeof game>|undefined;
- for(let i=0;i<100000&&(!negative||!jackpot);i++){const r=game('unrated-band-'+i,'unrated');const q=valoKp(r,'p-one','unrated','win');if(q.net===-130)negative=r;if(q.net===100370)jackpot=r;}
+ for(let i=0;i<100000&&(!negative||!jackpot);i++){const r=game('unrated-band-'+i,'unrated');const q=valoKp(r,'p-one','unrated','win',true,true,false);if(q.net===-130)negative=r;if(q.net===100370)jackpot=r;}
  assert.ok(negative&&jackpot);
  assert.equal(await collectKpMatch(f.env,mapping,negative,'p-one'),-130);assert.equal(await collectKpMatch(f.env,mapping,negative,'p-one'),-130);
  assert.equal(await collectKpMatch(f.env,mapping,jackpot,'p-one'),100370);assert.equal(await collectKpMatch(f.env,mapping,jackpot,'p-one'),100370);
@@ -488,7 +488,7 @@ test('アンレの遺物は特別抽選と無関係：当たりも小さな抽�
  const base=evaluateRelicBonus(relics,'unrated',{amount:370,win:true}).bonus;assert.ok(base>0);
  const want:Record<number,number>={870:base,2370:base,270:base,'-130':0};
  const found:Record<number,ReturnType<typeof game>>={};
- for(let i=0;i<100000&&Object.keys(found).length<4;i++){const r=game('unrated-relic-'+i,'unrated');const n=valoKp(r,'p-one','unrated','win').net;if(n in want&&!(n in found))found[n]=r;}
+ for(let i=0;i<100000&&Object.keys(found).length<4;i++){const r=game('unrated-relic-'+i,'unrated');const n=valoKp(r,'p-one','unrated','win',true,true,false).net;if(n in want&&!(n in found))found[n]=r;}
  assert.equal(Object.keys(found).length,4);
  for(const [net,raw] of Object.entries(found)){
   const f=await fixture();f.enableHistory();seed(f.sql,one,10000);
@@ -1125,4 +1125,129 @@ test('monitor reward lookup reads each immutable bonus receipt once and preserve
  for(const alias of ['p','r','c'])assert.match(plan,new RegExp('SEARCH '+alias+' USING INDEX sqlite_autoindex_kp_ledger_1'));
  assert.doesNotMatch(plan,/SCAN kp_ledger|CORRELATED SCALAR SUBQUERY/);
  const other=await prepareKpRun(f.env,{...mapping,guildId:'100000000000009999'});await loadKpRunMatch(f.env,other,id);assert.equal(other.credits.size,0);
+});
+
+
+const v7Relics={totalSummons:0,equipped:['normal.test.v7'],items:{'normal.test.v7':{id:'normal.test.v7',name:'fixture 100%',origin:'normal',rarity:'legendary',power:130,ability:'fixture',count:1,mode:'universal',skill:'even',percent:100,cap:0}}};
+function equipV7(f:Awaited<ReturnType<typeof fixture>>){const row=f.sql.prepare('SELECT data FROM kp_state WHERE user=?').get(one)!;const state=JSON.parse(String(row.data));state.relics=v7Relics;f.sql.prepare('UPDATE kp_state SET data=? WHERE user=?').run(JSON.stringify(state),one);}
+test('v7 pays each full award and its relic once, including 100,000; neither legacy 370 nor jackpot subtraction survives',async()=>{
+ const {valoKp}=await import('../src/mode-rewards.ts');
+ const f=await fixture();f.enableHistory();seed(f.sql,one,1000000);equipV7(f);
+ f.sql.exec("UPDATE kp_settings SET value='0' WHERE key IN ('mode_rewards_started_at','valo_v7_started_at')");
+ const found=new Map<number,ReturnType<typeof game>>();
+ for(let i=0;i<100000&&found.size<5;i++){const raw=game('v7-award-'+i,'unrated');const amount=valoKp(raw,'p-one','unrated','win').net;if(!found.has(amount))found.set(amount,raw);}
+ assert.equal(found.size,5);let paid=0;
+ for(const [amount,raw] of found){const expected=amount*2;assert.equal(await collectKpMatch(f.env,mapping,raw,'p-one'),expected);assert.equal(await collectKpMatch(f.env,mapping,raw,'p-one'),expected);paid+=expected;
+  const event=f.sql.prepare('SELECT amount,policy,id FROM kp_events WHERE match=?').get(raw.metadata.match_id)!;assert.equal(event.amount,amount);assert.equal(event.policy,'unrated-rewards-v7');
+  assert.equal(f.sql.prepare("SELECT delta FROM kp_ledger WHERE id=?").get('relic:'+event.id)!.delta,amount);
+ }
+ assert.equal((await readKpState(f.env,mapping,one)).cash,1000000+paid);
+ assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM kp_posts WHERE id LIKE 'jackpot:%'").get()!.n,2);
+ assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM kp_ledger WHERE kind='relic'").get()!.n,5);
+});
+test('v7 cutoff preserves matches started earlier and recorded payouts after cutoff changes',async()=>{
+ const {valoKp}=await import('../src/mode-rewards.ts');const f=await fixture();f.enableHistory();seed(f.sql,one,1000000);
+ const raw=game('v7-cutoff-old','unrated'),start=Date.parse(raw.metadata.started_at);
+ f.sql.exec("UPDATE kp_settings SET value='0' WHERE key='mode_rewards_started_at'");
+ f.sql.prepare("UPDATE kp_settings SET value=? WHERE key='valo_v7_started_at'").run(String(start+1));
+ const old=valoKp(raw,'p-one','unrated','win',true,true,false).net;assert.equal(await collectKpMatch(f.env,mapping,raw,'p-one'),old);
+ f.sql.prepare("UPDATE kp_settings SET value='0' WHERE key='valo_v7_started_at'").run();assert.equal(await collectKpMatch(f.env,mapping,raw,'p-one'),old);
+ const next=game('v7-cutoff-new','unrated');const amount=valoKp(next,'p-one','unrated','win').net;assert.equal(await collectKpMatch(f.env,mapping,next,'p-one'),amount);
+ f.sql.prepare("UPDATE kp_settings SET value=? WHERE key='valo_v7_started_at'").run(String(start+1));assert.equal(await collectKpMatch(f.env,mapping,next,'p-one'),amount);
+});
+test('v7 ordinary and bottom defeats keep their 50/200 base loss and receive the existing matching relic loss once',async()=>{
+ const {luckFor}=await import('../src/luck.ts');
+ for(const bottom of [false,true]){
+  const f=await fixture();f.enableHistory();seed(f.sql,one,1000000);equipV7(f);f.sql.exec("UPDATE kp_settings SET value='0' WHERE key IN ('mode_rewards_started_at','valo_v7_started_at')");
+  const id=Array.from({length:100},(_,i)=>'v7-defeat-'+bottom+'-'+i).find(id=>luckFor('valo:'+id+':p-one')===null)!;
+  const raw=game(id,'unrated',false) as any;raw.players=Array.from({length:10},(_,i)=>({puuid:i?'p'+i:'p-one',team_id:i<5?'red':'blue',stats:{score:i?100:bottom?0:200,kills:10,deaths:10,assists:0}}));
+  const base=bottom?200:50;assert.equal(await collectKpMatch(f.env,mapping,raw,'p-one'),-base*2);assert.equal(await collectKpMatch(f.env,mapping,raw,'p-one'),-base*2);assert.equal((await readKpState(f.env,mapping,one)).cash,1000000-base*2);
+ }
+});
+
+
+test('v7 reuses the existing per-match settings read without adding database round trips',async()=>{
+ const {draw}=await import('../src/luck.ts');const id=Array.from({length:1000},(_,i)=>'v7-budget-'+i).find(id=>{const roll=draw('unrated-lottery:'+id+':p-one');return roll>=5000&&roll<8797;})!;
+ const counts:number[]=[];
+ for(const modern of [false,true]){
+  const f=await fixture();f.enableHistory();seed(f.sql,one,1000000);f.sql.exec("UPDATE kp_settings SET value='0' WHERE key='mode_rewards_started_at'");
+  if(modern)f.sql.exec("UPDATE kp_settings SET value='0' WHERE key='valo_v7_started_at'");
+  f.resetQueries();assert.equal(await collectKpMatch(f.env,mapping,game(id,'unrated'),'p-one'),modern?70:370);counts.push(f.queries());
+ }
+ assert.equal(counts[1],counts[0]);
+});
+
+
+test('Escalation rank measures three games, closes at three wins/losses, stays separate from KP and never rerates duplicates',async()=>{
+ const f=await fixture();f.enableHistory();seed(f.sql,one,1000000);f.sql.exec("UPDATE kp_settings SET value='0' WHERE key IN ('mode_rewards_started_at','valo_v7_started_at')");
+ let n=0;const play=async(win:boolean)=>{const raw=game('power-'+(++n),'ggteam',win);raw.metadata={...raw.metadata,season:{id:'act-a',short:'e11a1'}} as any;await collectKpMatch(f.env,mapping,raw,'p-one');const before=JSON.stringify(f.sql.prepare('SELECT * FROM kp_escalation_ratings').get());await collectKpMatch(f.env,mapping,raw,'p-one');assert.equal(JSON.stringify(f.sql.prepare('SELECT * FROM kp_escalation_ratings').get()),before);};
+ for(const win of [true,false])await play(win);
+ assert.equal((await readKpState(f.env,mapping,one)).escalationRating.rating,null);
+ await play(true);let view=(await readKpState(f.env,mapping,one)).escalationRating;assert.equal(view.rating,400);assert.equal(view.measurementGames,3);assert.equal(view.seriesWins,0);assert.equal(view.seriesLosses,0);assert.equal(view.leaders[0].rating,400);
+ for(const win of [true,true,true])await play(win);view=(await readKpState(f.env,mapping,one)).escalationRating;assert.equal(view.rating,500);assert.equal(view.lastChange,100);assert.equal(view.seriesWins,0);
+ for(const win of [false,false,false])await play(win);assert.equal((await readKpState(f.env,mapping,one)).escalationRating.rating,400);
+ for(const win of [true,false,true,false,true])await play(win);view=(await readKpState(f.env,mapping,one)).escalationRating;assert.equal(view.rating,440);assert.equal(view.lastChange,40);
+ for(const win of [false,true,false,true,false])await play(win);view=(await readKpState(f.env,mapping,one)).escalationRating;assert.equal(view.rating,400);assert.equal(view.lastChange,-40);
+ assert.equal(view.played,n);assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM kp_events WHERE mode='escalation'").get()!.n,n);
+ assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM kp_escalation_spins').get()!.n,0,'rated games have no special lottery');
+ assert(!String(f.sql.prepare('SELECT note FROM kp_reward_notes ORDER BY rowid DESC LIMIT 1').get()!.note).includes('大勝負'));
+});
+test('Escalation power and KP commit atomically; failed rating update leaves no event or award and retries once',async()=>{
+ const f=await fixture();f.enableHistory();seed(f.sql,one,1000000);f.sql.exec("UPDATE kp_settings SET value='0' WHERE key IN ('mode_rewards_started_at','valo_v7_started_at')");
+ const {ensureEscalationRating}=await import('../src/escalation-rating.ts');await ensureEscalationRating(f.env);
+ f.sql.exec("CREATE TRIGGER fixture_rating_failure BEFORE UPDATE ON kp_escalation_ratings BEGIN SELECT RAISE(ABORT,'fixture rating failure'); END");
+ const raw=game('power-rollback','ggteam');raw.metadata={...raw.metadata,season:{id:'act-a',short:'e11a1'}} as any;await collectKpMatch(f.env,mapping,raw,'p-one');assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM kp_events').get()!.n,0);assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM kp_escalation_ratings').get()!.n,0);assert.equal((await readKpState(f.env,mapping,one)).cash,1000000);
+ f.sql.exec('DROP TRIGGER fixture_rating_failure');await drainKpInbox(f.env);await drainKpInbox(f.env);assert.equal(f.sql.prepare('SELECT played FROM kp_escalation_ratings').get()!.played,1);assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM kp_events').get()!.n,1);
+});
+test('new Swift big bets preserve sweep/contribution bonuses, retain their own mode in replay and pay once',async()=>{
+ const {valoKp}=await import('../src/mode-rewards.ts');const f=await fixture();f.enableHistory();seed(f.sql,one,1000000);f.sql.exec("UPDATE kp_settings SET value='0' WHERE key IN ('mode_rewards_started_at','valo_v7_started_at')");
+ let raw:any,quote:any;
+ for(let n=0;n<10000;n++){const candidate=game('swift-moved-'+n,'swiftplay') as any;candidate.players[0].stats={kills:10,deaths:5,assists:5};candidate.teams[0].rounds={won:5};candidate.teams[1].rounds={won:0};const q=valoKp(candidate,'p-one','swiftplay','win');if(q.escalation?.kind==='big'){raw=candidate;quote=q;break;}}
+ assert(raw);assert.equal(quote.base,quote.escalation.award+750);assert.match(quote.note,/スイフト大勝負/);
+ assert.equal(await collectKpMatch(f.env,mapping,raw,'p-one'),quote.net);assert.equal(await collectKpMatch(f.env,mapping,raw,'p-one'),quote.net);assert.equal((await readKpState(f.env,mapping,one)).cash,1000000+quote.net);
+ const rows=(await readKpState(f.env,mapping,one)).escalationSpins;assert.equal(rows.length,1);assert.equal(rows[0].mode,'swiftplay');
+ assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM kp_escalation_ratings').get()!.n,0,'Swift never changes Escalation power');
+});
+
+test('two confirmed party members each receive only the selected TDM bonus and retries do not share or duplicate money',async()=>{
+ const {valoKp}=await import('../src/mode-rewards.ts');const f=await fixture();f.enableHistory();seed(f.sql,one,1000000);seed(f.sql,two,1000000);f.sql.exec("UPDATE kp_settings SET value='0' WHERE key IN ('mode_rewards_started_at','valo_v7_started_at')");
+ const raw=game('tdm-joint-live','hurm') as any;raw.players=Array.from({length:10},(_,i)=>({puuid:i===0?'p-one':i===1?'p-two':'p'+i,team_id:i<5?'red':'blue',party_id:i<2?'party':'solo-'+i,stats:{kills:i<5?20:i===5?75:0,assists:5,deaths:10,score:100}}));
+ for(const [user,puuid] of [[one,'p-one'],[two,'p-two']]){const q=valoKp(raw,puuid,'teamdeathmatch','win');assert.equal(q.base,570);assert.match(q.note,/パーティ共同達成/);assert.equal(await collectKpMatch(f.env,mapping,raw,puuid),q.net);assert.equal(await collectKpMatch(f.env,mapping,raw,puuid),q.net);assert.equal((await readKpState(f.env,mapping,user)).cash,1000000+q.net);}
+ assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM kp_events WHERE mode='teamdeathmatch'").get()!.n,2);assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM kp_escalation_ratings').get()!.n,0);
+});
+
+
+test('unknown ACT defers only power; later verified ACT is reflected once without repaying KP and the hot monitor sees pending receipts',async()=>{
+ const f=await fixture();f.enableHistory();f.sql.exec("UPDATE kp_settings SET value='0' WHERE key IN ('mode_rewards_started_at','valo_v7_started_at')");
+ const raw:any=game('power-late-act','ggteam');raw.metadata.season={id:'act-old'};const id=kpEventId(guild,raw.metadata.match_id,'p-one');
+ const amount=await collectKpMatch(f.env,mapping,raw,'p-one');assert.notEqual(amount,null);
+ const cash=(await readKpState(f.env,mapping,one)).cash;
+ assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM kp_escalation_power_matches').get()!.n,0);
+ let run=await prepareKpRun(f.env,mapping);await loadKpRunMatch(f.env,run,id);assert(run.pendingPower?.has(id));
+ assert.match(run.notes?.get(id)??'',/ACT・エピソード情報取得待ち/);
+ const {observeEscalationAct,matchAct,syncEscalationPower}=await import('../src/escalation-rating.ts');
+ const newer:any=game('new-act-observation');newer.metadata.season={id:'act-new',short:'e11a2'};newer.metadata.started_at=new Date(Date.now()-5000).toISOString();
+ await observeEscalationAct(f.env,guild,matchAct(newer)!);
+ await collectKpMatch(f.env,mapping,raw,'p-one');assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM kp_escalation_power_matches').get()!.n,0,'missing season never borrows the current ACT');
+ raw.metadata.season={id:'act-old',short:'e11a1'};raw.players[0].stats={kills:30,deaths:10,assists:15};
+ assert.equal(await syncEscalationPower(f.env,guild,one,id,raw,'p-one'),true);
+ assert.equal(await syncEscalationPower(f.env,guild,one,id,raw,'p-one'),false);
+ assert.equal(await collectKpMatch(f.env,mapping,raw,'p-one'),amount);
+ assert.equal((await readKpState(f.env,mapping,one)).cash,cash);
+ assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM kp_ledger WHERE kind='match'").get()!.n,1);
+ assert.equal(f.sql.prepare('SELECT played FROM kp_escalation_ratings WHERE act=?').get('act-old')!.played,1);
+ assert.equal(f.sql.prepare('SELECT measurement_performance FROM kp_escalation_ratings WHERE act=?').get('act-old')!.measurement_performance,3);
+ const view=(await readKpState(f.env,mapping,one)).escalationRating;assert.equal(view.act?.id,'act-new');assert.equal(view.played,0);assert.equal(view.previousActs.length,1);
+ run=await prepareKpRun(f.env,mapping);await loadKpRunMatch(f.env,run,id);assert.equal(run.pendingPower?.has(id),false);assert.match(run.notes?.get(id)??'',/ACT情報を反映/);
+});
+
+
+test('three verified positive-KD losses recognize Iron II and repeated collection never awards the placement twice',async()=>{
+ const f=await fixture();f.enableHistory();seed(f.sql,one,1000);f.sql.exec("UPDATE kp_settings SET value='0' WHERE key IN ('mode_rewards_started_at','valo_v7_started_at')");
+ for(let i=0;i<3;i++){
+  const raw:any=game('positive-kd-placement-'+i,'ggteam',false);raw.metadata.season={id:'act-a',short:'e11a1'};raw.players[0].stats={kills:11,deaths:10,assists:0};
+  const amount=await collectKpMatch(f.env,mapping,raw,'p-one');assert.equal(await collectKpMatch(f.env,mapping,raw,'p-one'),amount);
+ }
+ const v=(await readKpState(f.env,mapping,one)).escalationRating;assert.equal(v.grade,'アイアン Ⅱ');assert.equal(v.rank?.rr,0);assert.equal(v.placementConsistencyBonus,100);assert.equal(v.played,3);
+ assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM kp_events').get()!.n,3);assert.equal((await readKpState(f.env,mapping,one)).cash,1000,'rank RR is separate from spendable KP');
 });

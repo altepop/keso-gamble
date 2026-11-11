@@ -1,3 +1,4 @@
+import {isEscalationRanking} from './escalation-rank-command.ts';
 import {SKIRMISH_BUTTON,decideSkirmish,withoutSkirmishButtons} from './skirmish.ts';
 import {PREDICTION_BUTTON,PREDICTION_MODAL,predictionModal,predictionAmount,openPrediction,buyPrediction} from './valo-predictions.ts';
 import {activityLaunchComponents} from './activity-link.ts';
@@ -198,7 +199,7 @@ export async function discordInteractions(request: Request, env: Env, ctx: Execu
     } catch { console.warn('discord_command_reply_failed'); }
   };
   ctx.waitUntil((async () => {
-    let result: { content?: string; components?: unknown[]; flags?: number;
+    let result: { content?: string; components?: unknown[]; embeds?:unknown[]; flags?: number;
       allowed_mentions?: {parse:[];users?:string[]} }, notice: string | undefined;
     let recruitToLink: string|null=null;
     try {
@@ -265,7 +266,7 @@ export async function discordInteractions(request: Request, env: Env, ctx: Execu
       else if (deathSelect) result = { content: await selectDeathMode(env.DB, interaction, configuredPlayers, runDeathCommand), components: [] };
       else if (interaction.data?.name === 'death' && interaction.data.options?.[0]?.name === 'start'
         && !interaction.data.options[0].options?.some(option => option.name === 'mode')) result = await deathModePicker(env.DB, interaction, configuredPlayers);
-      else if (['kp','spike','dm','keiba','bet','mleague','mbet','mclose','kpgrant','paifulink','unitelink','horsename','give'].includes(interaction.data?.name??'')) {const out:{components?:unknown[]}={};result = {content:await runKpCommand(env,interaction,undefined,out)};result.components=out.components??activityLaunchComponents(config.applicationId);}
+      else if (['kp','spike','dm','keiba','bet','mleague','mbet','mclose','kpgrant','paifulink','unitelink','horsename','give'].includes(interaction.data?.name??'')) {const out:{components?:unknown[];embeds?:unknown[]}={};result = {content:await runKpCommand(env,interaction,undefined,out),embeds:out.embeds};result.components=out.components??activityLaunchComponents(config.applicationId);}
       else result = { content: interaction.data!.name === 'valo' ? await runValoCommand(env.DB, interaction) : await runDeathCommand(env.DB, interaction) };
     } catch (error) {
       console.warn('discord_command_failed');
@@ -326,5 +327,5 @@ export async function discordInteractions(request: Request, env: Env, ctx: Execu
     } catch { console.warn('discord_command_reply_failed'); }
     if (notice) await whisper(notice);
   })());
-  return Response.json(deathSelect || paifuButton || mbetButton || skirmishButton || gcRecruit || gcDuel ? { type: 6 } : { type: 5, data: { flags: isKpRanking(interaction) || interaction.data?.name === 'paifu' || ['play','duel','recruit','predict'].includes(interaction.data?.name??'') ? 0 : 64 } });
+  return Response.json(deathSelect || paifuButton || mbetButton || skirmishButton || gcRecruit || gcDuel ? { type: 6 } : { type: 5, data: { flags: isKpRanking(interaction) || isEscalationRanking(interaction) || interaction.data?.name === 'paifu' || ['play','duel','recruit','predict'].includes(interaction.data?.name??'') ? 0 : 64 } });
 }

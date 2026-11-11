@@ -47,3 +47,46 @@ test('LOOP chapter clear rewards show the 10x first-clear amounts',()=>{
  assert.match(html,/第一章の初クリア <strong>\+50,000 KP<\/strong>/);
  assert.match(html,/第二章の初クリア <strong>\+300,000 KP<\/strong>/);
 });
+
+
+test('approved unrated and Skirmish amounts are shown alongside corrected existing Escalation odds',()=>{
+ const html=playView({...live([]),rewardRates:{unrated:{win:70,loss:-50,bottom:-200}}});
+ for(const text of ['勝利 70〜100,000 KP','87.97%で70','当選額全体に遺物補正','3勝750→4勝2,000','5勝なら5,000','1/24','Ⅰ 500 KP：35%','Ⅴ 15,000 KP：4%'])assert(html.includes(text),text);
+ assert.doesNotMatch(html,/勝ち \+370 KP|勝っても抽選でマイナス|3勝600|5勝なら1,500|全試合の15%|等級別40／30／20／8／2%/);
+});
+
+
+test('rated Escalation and moved Swift bets keep separate labels; incomplete measurement and unsafe member names stay safe',()=>{
+ const html=playView({...live([]),members:[{id:'two',name:'<img src=x>'}],escalationRating:{rating:1000,grade:'ゴールド Ⅱ',rank:{name:'ゴールド Ⅱ',rr:0,tier:3},seriesWins:2,seriesLosses:1,leaders:[{user:'two',rating:2200,grade:'S'}]},escalationSpins:[{id:'swift',mode:'swiftplay',kind:'big',tier:1,award:500,at:1},{id:'esc',mode:'escalation',kind:'big',tier:2,award:1000,at:1}]});
+ for(const text of ['エスカランク','ゴールド Ⅱ','0 RR','2勝 1敗','スイフト大勝負','エスカ大勝負','差25以上','さらに +150 KP'])assert(html.includes(text),text);
+ assert(html.includes('&lt;img src=x&gt;'));assert(!html.includes('<img src=x>'));
+ assert.match(playView(live([])),/初回認定 0\/3試合/);
+});
+
+
+test('ACT information, capped personal performance and archived results are visible without injecting ACT names',()=>{
+ const html=playView({...live([]),escalationRating:{act:{id:'act-b',name:'ACT B<img>'},rating:null,measurementGames:0,previousActs:[{act:'act-a',name:'ACT A<script>',rating:2200,measured:1,wins:3,losses:2}]}});
+ for(const text of ['ACT B&lt;img&gt;','ACT A&lt;script&gt;','前ACTの記録','1シリーズ最大＋5','30キル以上','初回は認定3試合','ACT更新は認定1試合','エピソード更新は認定3試合'])assert(html.includes(text),text);
+ assert.doesNotMatch(html,/<img>|<script>/);
+ assert.match(playView({...live([]),escalationRating:{act:null}}),/ACT情報の取得を待っています/);
+});
+
+
+test('ACT recognition shows the carried rank, one-game requirement and historical peak without exposing internal MMR',()=>{
+ const html=playView({...live([]),escalationRating:{act:{id:'b',name:'e11a2'},rating:null,placementKind:'act',measurementRequired:1,measurementGames:0,inheritedRank:{name:'ゴールド Ⅰ',rr:40,tier:3},previousActs:[{act:'a',name:'e11a1',grade:'ゴールド Ⅰ',peakGrade:'プラチナ Ⅰ',measured:1,wins:4,losses:3}]}});
+ for(const text of ['ACT更新認定 0/1試合','ゴールド Ⅰ','40 RR','前ACTから引き継ぎ','最高 プラチナ Ⅰ'])assert(html.includes(text),text);
+ assert(!html.includes('9007199254740991'));assert(!html.includes('内部レート：'));
+});
+
+
+test('initial positive-KD placement reward is described as RR, separate from normal series performance and KP',()=>{
+ const html=playView({...live([]),escalationRating:{act:{id:'a',name:'e11a1'},rating:100,rank:{name:'アイアン Ⅱ',rr:0,tier:0},placementKind:'initial',placementConsistencyBonus:100}});
+ for(const text of ['3試合ともキル数がデス数を上回れば','全敗でもアイアンⅡ','3試合連続KDプラス ＋100 RR'])assert(html.includes(text),text);
+});
+
+
+test('Swift shows the approved two-thirds signed draw and both super outcomes without tying the award to match wins',()=>{
+ const html=playView({...live([]),modeRewards:{swiftplay:{specialScope:'all'}}});
+ for(const text of ['抽選額は2/3でプラス・1/3でマイナス','超ラッキー・超アンラッキーも各0.1%','1,000,000KP','圧勝・共通倍率・遺物を計算する前'])assert(html.includes(text),text);
+ assert.doesNotMatch(html,/勝てば獲得、負ければ減額|手持ち半額の抽選はありません/);
+});

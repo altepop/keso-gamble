@@ -1,5 +1,6 @@
 # 試合KPの運用
 
+この文書は導入時の計画の記録です。現行のモード別報酬は [MODE_REWARDS.md](MODE_REWARDS.md)、今回の改修と提案は [VALORANT_REWARDS_REVIEW_20261111.md](VALORANT_REWARDS_REVIEW_20261111.md) を参照してください。
 2026-10-27: ユーザーの「それで有効まで」に基づき、自動支給とサーバー口座を接続。設定は `services/valorant-results/kp-policy.json`。開始時刻は初回起動時にD1へ一度だけ保存し、再配置で変更しない。
 
 2026-10-28: ユーザーの依頼「プラスを全体的に多く・マイナスも少し・通話ボーナスも多く・司令のボーダーも上げる」で改定（`win-loss-bottom-v2`）。

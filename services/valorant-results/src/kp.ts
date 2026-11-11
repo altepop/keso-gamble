@@ -1,8 +1,10 @@
+import type {EscalationPowerProof} from './escalation-rating.ts';
+import {ensureEscalationRating,escalationPowerProof,escalationPowerStatement,syncEscalationPower,invalidateEscalationBoard,ESCALATION_RATING_POLICY} from './escalation-rating.ts';
 import {feedIndex} from './community-feed.ts';
 import {creditVerifiedRelicBonus,creditVerifiedRelicLoss} from './relics.ts';
 import {settleSkirmishMatch} from './skirmish.ts';
 import {settleDmMatch,ensureDmChallenge} from './dm-challenge.ts';
-import {valoKp,ensureModeRewards,MODE_REWARD_VERSION,UNRATED_JACKPOT,jackpotPost} from './mode-rewards.ts';
+import {valoKp,ensureModeRewards,MODE_REWARD_VERSION,UNRATED_REWARD_VERSION,TEAM_SWIFT_REWARD_VERSION,UNRATED_JACKPOT,jackpotPost} from './mode-rewards.ts';
 import type {EscalationSpin} from './mode-rewards.ts';
 import {escalationBigPost} from './escalation-messages.ts';
 import {enqueue,ensurePosts} from './racing-posts.ts';
@@ -104,6 +106,7 @@ export async function initializeKp(env:KpEnv,override?:KpMapping):Promise<KpMapp
   await ensureDebt(env);
   await ensureSpikeGrowth(env);
   await ensureModeRewards(env);
+  await ensureEscalationRating(env);
   await ensureDmChallenge(env);
   const state=newKpState();
   const known=new Set((await env.DB.prepare('SELECT user FROM kp_wallets WHERE guild=?').bind(mapping.guildId).all<{user:string}>()).results.map(a=>a.user));
@@ -122,9 +125,10 @@ export async function syncKpAccounts(env:KpEnv,mapping:KpMapping){
  const queries=mapping.accounts.flatMap(a=>{const found=tracked.find(t=>t.riot_id.toLowerCase()===a.riotId.toLowerCase());const old=found&&linked.find(l=>l.puuid===found.puuid);return found&&(!old||old.user!==a.discordUserId||old.riot!==a.riotId)?[env.DB.prepare('INSERT INTO kp_accounts(guild,puuid,user,riot,linked_at) VALUES(?,?,?,?,?) ON CONFLICT(guild,puuid) DO UPDATE SET user=excluded.user,riot=excluded.riot').bind(mapping.guildId,found.puuid,a.discordUserId,a.riotId,Date.now())]:[];});
  if(queries.length)await env.DB.batch(queries);
 }
-interface KpEvent {id:string;guild:string;user:string;puuid:string;match:string;mode:string;outcome:string|null;amount:number;policy:string;at:number;penalty?:number;note?:string;kind?:'spikerush-growth';spike?:SpikeMatch;jackpot?:number;lottery?:number;escalation?:EscalationSpin}
+interface KpEvent {id:string;guild:string;user:string;puuid:string;match:string;mode:string;outcome:string|null;amount:number;policy:string;at:number;penalty?:number;note?:string;kind?:'spikerush-growth';spike?:SpikeMatch;jackpot?:number;lottery?:number;escalation?:EscalationSpin;rating?:EscalationPowerProof}
 /** The unrated lottery draw of an event, any size. Events queued before `lottery` existed hold only the big prizes in `jackpot`. */
-const lotteryOf=(e:{lottery?:number;jackpot?:number})=>Number.isSafeInteger(e.lottery)?e.lottery!:Number.isSafeInteger(e.jackpot)?e.jackpot!:0;
+// V7 jackpot is the full award, not a separate lottery subtraction. Old inbox receipts retain their original split.
+const lotteryOf=(e:{lottery?:number;jackpot?:number;policy?:string})=>e.policy===UNRATED_REWARD_VERSION?0:Number.isSafeInteger(e.lottery)?e.lottery!:Number.isSafeInteger(e.jackpot)?e.jackpot!:0;
 export function kpEventId(guild:string,match:string,puuid:string){return ['match',guild,match,puuid].map(encodeURIComponent).join(':');}
 export async function drainKpInbox(env:KpEnv){
  const rows=(await env.DB.prepare('SELECT id,payload FROM kp_inbox ORDER BY at,id LIMIT 20').all<{id:string;payload:string}>()).results;
@@ -135,10 +139,14 @@ export async function drainKpInbox(env:KpEnv){
    if(!settled){await env.DB.prepare('DELETE FROM kp_inbox WHERE id=?').bind(e.id).run();continue;}
    e={...e,amount:settled.amount,note:settled.note};
   }
+  const ranked=e.mode==='escalation'&&e.policy===ESCALATION_RATING_POLICY&&['win','loss'].includes(e.outcome??'')&&e.rating;
+  if(ranked)await ensureEscalationRating(env);
   const settledRows=await env.DB.batch([
    env.DB.prepare(`INSERT INTO kp_events(id,guild,user,puuid,match,mode,outcome,amount,policy,at) SELECT ?,?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM kp_accounts WHERE guild=? AND puuid=? AND user=?) ON CONFLICT(id) DO NOTHING`).bind(e.id,e.guild,e.user,e.puuid,e.match,e.mode,e.outcome,e.amount,e.policy,Date.now(),e.guild,e.puuid,e.user),
    env.DB.prepare('INSERT OR IGNORE INTO kp_reward_notes(id,note) SELECT ?,? WHERE EXISTS(SELECT 1 FROM kp_events WHERE id=?)').bind(e.id,e.note??'',e.id),
+   ...(ranked?[escalationPowerStatement(env,e,ranked)]:[]),
   ]);
+  if(ranked&&(settledRows[2]?.meta?.changes??0)>0)invalidateEscalationBoard(env,e.guild);
   // Spike Rush is exceptional: settleSpike's DB trigger inserts kp_events
   // BEFORE the generic INSERT below, so changes===0 even on the FIRST
   // legitimate match. That silently suppressed every Spike relic reward.
@@ -163,7 +171,7 @@ export async function drainKpInbox(env:KpEnv){
    const loss=Math.max(0,e.penalty-lotteryLoss);
    if(loss>0)try{await creditVerifiedRelicLoss(env,e.guild,e.user,e.id,e.mode,loss);}catch{console.warn('relic_match_loss_pending');}
   }
-  if(e.mode==='escalation'&&e.escalation){
+  if((e.mode==='escalation'||e.mode==='swiftplay')&&e.escalation){
    await ensureModeRewards(env);
    const spin=e.escalation;
    if(!['big','super-lucky','super-unlucky'].includes(spin.kind)||!Number.isSafeInteger(spin.award)||spin.tier<0||spin.tier>5)throw Error('Invalid escalation spin');
@@ -182,8 +190,8 @@ export async function drainKpInbox(env:KpEnv){
     const fmt=(n:number)=>n.toLocaleString('ja-JP');
     const lucky=settled.kind==='super-lucky';
     const notice=lucky
-      ? `📩 **1通のお知らせです。**\n\n平素よりKESO PLAYをご利用いただき、誠にありがとうございます。\n\n<@${e.user}> 様、エスカレーションの抽選結果をご案内いたします。\n\n🌈 **【超ラッキー】**\n**+${fmt(settled.award)} KP** が当選しました。\n\n手持ちKP：${fmt(settled.balance_before)} → **${fmt(settled.balance_after)} KP**\n\n今後ともKESO PLAYをよろしくお願いいたします。\n― 等しいbot`
-      : `📩 **1通のお知らせです。**\n\n平素よりKESO PLAYをご利用いただき、誠にありがとうございます。\n\n<@${e.user}> 様、KP口座について重要なお知らせがございます。\n\n💀 **【超アンラッキー】**\n誠に残念ながら、手持ちKPを半額とさせていただきました。\n\n手持ちKP：${fmt(settled.balance_before)} → **${fmt(settled.balance_after)} KP**\n差引：**−${fmt(settled.balance_before-settled.balance_after)} KP**\n\nなお、本件に関する異議申し立ては受け付けておりません。\n今後ともKESO PLAYをよろしくお願いいたします。\n― 等しいbot`;
+      ? `📩 **1通のお知らせです。**\n\n平素よりKESO PLAYをご利用いただき、誠にありがとうございます。\n\n<@${e.user}> 様、${e.mode==='swiftplay'?'スイフト':'エスカレーション'}の抽選結果をご案内いたします。\n\n🌈 **【超ラッキー】**\n**+${fmt(settled.award)} KP** が当選しました。\n\n手持ちKP：${fmt(settled.balance_before)} → **${fmt(settled.balance_after)} KP**\n\n今後ともKESO PLAYをよろしくお願いいたします。\n― 等しいbot`
+      : `📩 **1通のお知らせです。**\n\n平素よりKESO PLAYをご利用いただき、誠にありがとうございます。\n\n<@${e.user}> 様、${e.mode==='swiftplay'?'スイフト':'エスカレーション'}の抽選について重要なお知らせがございます。\n\n💀 **【超アンラッキー】**\n誠に残念ながら、手持ちKPを半額とさせていただきました。\n\n手持ちKP：${fmt(settled.balance_before)} → **${fmt(settled.balance_after)} KP**\n差引：**−${fmt(settled.balance_before-settled.balance_after)} KP**\n\nなお、本件に関する異議申し立ては受け付けておりません。\n今後ともKESO PLAYをよろしくお願いいたします。\n― 等しいbot`;
     // A failed post enqueue keeps the inbox event pending, so it is retried safely.
     await ensurePosts(env);await enqueue(env,'esc-notice:'+e.id,notice,Date.now());
    }
@@ -193,8 +201,8 @@ export async function drainKpInbox(env:KpEnv){
   // Only rare IV/V events get a second equal-bot post: I-III already have a
   // witty description in the existing VALORANT result. Stable post IDs prevent
   // duplicate messages on inbox retry, and failed delivery never re-settles KP.
-  if(e.mode==='escalation'&&e.escalation?.kind==='big'&&e.escalation.tier>=4&&net!==null){
-   const post=escalationBigPost(e.user,e.escalation.tier,e.escalation.award,net,owed);
+  if((e.mode==='escalation'||e.mode==='swiftplay')&&e.escalation?.kind==='big'&&e.escalation.tier>=4&&net!==null){
+   const post=escalationBigPost(e.user,e.escalation.tier,e.escalation.award,net,owed,e.mode);
    if(post){try{await ensurePosts(env);await enqueue(env,'esc-big:'+e.id,post,Date.now());}catch{console.warn('escalation_big_post_pending');}}
   }
   const notice=await env.DB.prepare('SELECT n.riot_id,n.message FROM notifications n JOIN kp_accounts a ON n.riot_id=a.riot WHERE a.guild=? AND a.puuid=? AND n.match_id=?').bind(e.guild,e.puuid,e.match).first<{riot_id:string;message:string}>();
@@ -277,7 +285,8 @@ export async function collectKpMatch(env:KpEnv,mapping:KpMapping,raw:Match,puuid
  const start=Date.parse(raw.metadata.started_at),duration=raw.metadata.game_length_in_ms;
  if(!Number.isSafeInteger(start)||!Number.isSafeInteger(duration)||duration<=0||start+duration>Date.now()+60000||!raw.metadata.match_id)return null;
  const id=kpEventId(mapping.guildId,raw.metadata.match_id,puuid);
- const link=await env.DB.prepare(`SELECT a.user,a.linked_at,s.value AS starts_at,e.amount FROM kp_accounts a JOIN kp_settings s ON s.key='starts_at' LEFT JOIN kp_events e ON e.id=? WHERE a.guild=? AND a.puuid=?`).bind(id,mapping.guildId,puuid).first<{user:string;linked_at:number;starts_at:string;amount:number|null}>();
+ const powerColumns=status.mode==='escalation'?`,e.policy AS power_policy,CASE WHEN e.policy='${ESCALATION_RATING_POLICY}' THEN EXISTS(SELECT 1 FROM kp_escalation_power_matches r WHERE r.id=e.id) ELSE 1 END AS power_done`:'';
+ const link=await env.DB.prepare(`SELECT a.user,a.linked_at,s.value AS starts_at,e.amount${powerColumns} FROM kp_accounts a JOIN kp_settings s ON s.key='starts_at' LEFT JOIN kp_events e ON e.id=? WHERE a.guild=? AND a.puuid=?`).bind(id,mapping.guildId,puuid).first<{user:string;linked_at:number;starts_at:string;amount:number|null;power_policy?:string;power_done?:number}>();
  if(!link||!mapping.accounts.some(a=>a.discordUserId===link.user)||start<Math.max(Number(link.starts_at),link.linked_at))return null;
  await env.DB.prepare("UPDATE kp_directives SET status='completed' WHERE guild=? AND target=? AND task=? AND status='active' AND at<=?").bind(mapping.guildId,link.user,status.mode,start).run();
  const subject=raw.players.find(p=>p.puuid===puuid);
@@ -285,29 +294,39 @@ export async function collectKpMatch(env:KpEnv,mapping:KpMapping,raw:Match,puuid
  const solo=typeof subject?.party_id==='string'&&subject.party_id.length>0&&raw.players.filter(p=>p.team_id===subject.team_id).every(p=>typeof p.party_id==='string'&&p.party_id.length>0)&&raw.players.filter(p=>p.party_id===subject.party_id).length===1;
  if(solo&&status.mode==='competitive')await env.DB.prepare("UPDATE kp_directives SET status='completed' WHERE guild=? AND target=? AND task='solo_competitive' AND status='active' AND at<=?").bind(mapping.guildId,link.user,start).run();
  if(solo&&status.mode==='unrated')await env.DB.prepare("UPDATE kp_directives SET status='completed' WHERE guild=? AND target=? AND task='solo_death_unrated' AND status='active' AND at<=? AND EXISTS(SELECT 1 FROM death_unrated_sessions s WHERE s.riot_id=? AND s.match_id=? AND s.cancelled_at IS NULL AND s.armed_at>=kp_directives.at AND COALESCE((SELECT value FROM monitor_state WHERE key='death_mode:'||s.session_id||':'||s.riot_id),'unrated')='unrated')").bind(mapping.guildId,link.user,start,mapping.accounts.find(a=>a.discordUserId===link.user)!.riotId,raw.metadata.match_id).run();
- if(link.amount!==null)return kpMatchNet(env,id);
+ if(link.amount!==null){
+  if(link.power_policy===ESCALATION_RATING_POLICY&&!link.power_done)await syncEscalationPower(env,mapping.guildId,link.user,id,raw,puuid);
+  return kpMatchNet(env,id);
+ }
  if(status.mode==='deathmatch'){
   const policy=await env.DB.prepare("SELECT value FROM kp_settings WHERE key='dm_challenge_started_at'").first<{value:string}>();
   if(start>=Number(policy?.value??Infinity))return settleDmMatch(env,{guild:mapping.guildId,user:link.user,puuid,raw,start,now:Date.now()});
  }
  const spike=status.mode==='spikerush'?spikeMatch(raw,puuid):null;
  if(status.mode==='spikerush'&&!spike)return null;
- const modeStart=await env.DB.prepare("SELECT value FROM kp_settings WHERE key='mode_rewards_started_at'").first<{value:string}>();
+ const modeStart=await env.DB.prepare(['unrated','swiftplay','teamdeathmatch','escalation'].includes(status.mode)
+  ?"SELECT value,(SELECT value FROM kp_settings WHERE key='valo_v7_started_at') AS valo_v7_started_at FROM kp_settings WHERE key='mode_rewards_started_at'"
+  :"SELECT value FROM kp_settings WHERE key='mode_rewards_started_at'").first<{value:string;valo_v7_started_at?:string}>();
  const modern=start>=Number(modeStart?.value??Infinity);
+ const modeV7=modern&&['unrated','swiftplay','teamdeathmatch','escalation'].includes(status.mode)&&start>=Number(modeStart?.valo_v7_started_at??Infinity);
+ const unratedV7=status.mode==='unrated'&&modeV7;
  if(status.mode==='skirmish'){
   if(!modern||!['win','loss'].includes(status.outcome??''))return null;
   return (await settleSkirmishMatch(env,{guild:mapping.guildId,puuid,user:link.user,match:raw.metadata.match_id,start,end:start+duration,win:status.outcome==='win',now:Date.now()})).delta;
  }
  // Older pending results keep the old 3%/±1,000 escalation rules; the new draw
  // may only apply to games started after the first v5 schema initialization.
- const escalationStarts=status.mode==='escalation'&&modern
+ const escalationStarts=status.mode==='escalation'&&modern&&!modeV7
    ?(await env.DB.prepare("SELECT key,value FROM kp_settings WHERE key IN ('escalation_v5_started_at','escalation_v6_started_at')").all<{key:string;value:string}>()).results:[];
  const cutoff=(key:string)=>Number(escalationStarts.find(x=>x.key===key)?.value??Infinity);
  const escalationV5=status.mode!=='escalation'||start>=cutoff('escalation_v5_started_at');
  const escalationV6=status.mode!=='escalation'||start>=cutoff('escalation_v6_started_at');
- const {net,note,lottery,escalation}=modern?valoKp(raw,puuid,status.mode,status.outcome,escalationV5,escalationV6):{...legacyValoKp(raw,puuid,status.mode,status.outcome),lottery:undefined,escalation:undefined};
+ const {net,note:rewardNote,lottery,escalation}=modern?valoKp(raw,puuid,status.mode,status.outcome,escalationV5,escalationV6,unratedV7,modeV7):{...legacyValoKp(raw,puuid,status.mode,status.outcome),lottery:undefined,escalation:undefined};
+ const rankedEsc=modeV7&&status.mode==='escalation'&&['win','loss'].includes(status.outcome??'');
+ const rating=rankedEsc?escalationPowerProof(raw,puuid):null;
+ const note=rewardNote+(rankedEsc?(rating?`（エスカランク：${status.outcome==='win'?'勝利':'敗北'}・成績補正${rating.performance}）`:'（エスカランク：ACT・エピソード情報取得待ち）'):'');
  // Events hold the earned part (never negative); a cost is a separate debit capped at the balance.
- const e:KpEvent={id,guild:mapping.guildId,user:link.user,puuid,match:raw.metadata.match_id,mode:status.mode,outcome:status.outcome,amount:Math.max(0,net),policy:modern?(status.mode==='escalation'&&!escalationV5?'mode-rewards-v4':status.mode==='escalation'&&!escalationV6?'mode-rewards-v5':MODE_REWARD_VERSION):policy.version,at:Date.now(),...net<0?{penalty:-net}:{},...note?{note}:{},...lottery!==undefined&&lottery>=UNRATED_JACKPOT?{jackpot:lottery}:{},...lottery!==undefined?{lottery}:{},...(spike?{kind:'spikerush-growth' as const,spike,policy:SPIKE_POLICY}:{}),...(escalation?{escalation}:{})};
+ const e:KpEvent={id,guild:mapping.guildId,user:link.user,puuid,match:raw.metadata.match_id,mode:status.mode,outcome:status.outcome,amount:Math.max(0,net),policy:unratedV7?UNRATED_REWARD_VERSION:modeV7&&status.mode==='escalation'?ESCALATION_RATING_POLICY:modeV7?TEAM_SWIFT_REWARD_VERSION:modern?(status.mode==='escalation'&&!escalationV5?'mode-rewards-v4':status.mode==='escalation'&&!escalationV6?'mode-rewards-v5':MODE_REWARD_VERSION):policy.version,at:Date.now(),...net<0?{penalty:-net}:{},...note?{note}:{},...(unratedV7&&net>=UNRATED_JACKPOT)?{jackpot:net}:lottery!==undefined&&lottery>=UNRATED_JACKPOT?{jackpot:lottery}:{},...lottery!==undefined?{lottery}:{},...(spike?{kind:'spikerush-growth' as const,spike,policy:SPIKE_POLICY}:{}),...(escalation?{escalation}:{}),...(rating?{rating}:{})};
  await env.DB.prepare('INSERT OR IGNORE INTO kp_inbox VALUES(?,?,?)').bind(id,JSON.stringify(e),Date.now()).run();
  await drainKpInbox(env);
  return kpMatchNet(env,id);
@@ -351,16 +370,20 @@ export async function flushKpDirectives(env:KpEnv & {DISCORD_WEBHOOK_URL:string;
 /** Per monitor run: lazily load only the exact matches Henrik returned.
  * The old cron preloaded a 200-result 5-table JOIN every minute even if no game
  * was played: 451,540 D1 rows/day (2026-11-01 Insights). */
-export interface KpRun { mapping:KpMapping; startsAt:number; credits:Map<string,number>; relicBonuses:Map<string,number>; messages:Map<string,string>; notes?:Map<string,string>; loaded:Set<string> }
+export interface KpRun { mapping:KpMapping; startsAt:number; credits:Map<string,number>; relicBonuses:Map<string,number>; messages:Map<string,string>; notes?:Map<string,string>; loaded:Set<string>;pendingPower?:Set<string>;act?:{id:string;name:string|null;startedAt:number;episode?:string|null}|null }
 export async function prepareKpRun(env:KpEnv,mapping:KpMapping):Promise<KpRun>{
- const start=await env.DB.prepare("SELECT value FROM kp_settings WHERE key='starts_at'").first<{value:string}>();
- return {mapping,startsAt:Number(start?.value??Infinity),credits:new Map(),relicBonuses:new Map(),messages:new Map(),notes:new Map(),loaded:new Set()};
+ await ensureEscalationRating(env);
+ const start=await env.DB.prepare("SELECT s.value,a.act,a.name,a.episode,a.started_at FROM kp_settings s LEFT JOIN kp_escalation_current_acts a ON a.guild=? WHERE s.key='starts_at'").bind(mapping.guildId).first<{value:string;act:string|null;name:string|null;episode:string|null;started_at:number|null}>();
+ return {mapping,startsAt:Number(start?.value??Infinity),credits:new Map(),relicBonuses:new Map(),messages:new Map(),notes:new Map(),loaded:new Set(),pendingPower:new Set(),act:start?.act?{id:start.act,name:start.name,episode:start.episode,startedAt:Number(start.started_at)}:null};
 }
 /** Indexed id lookup: preserves old-match payouts, edited result messages and
  * delayed KP recovery without scanning all historic results for every poll.
  * The loaded set is only per cron run, so other workers never share stale data. */
-export const KP_RUN_MATCH_SQL=`SELECT e.amount+COALESCE(p.delta,0)+COALESCE(r.delta,0)+COALESCE(c.delta,0) AS amount,
- COALESCE(r.delta,0)+COALESCE(c.delta,0) AS relic,n.message,d.note FROM kp_events e
+export const KP_RUN_MATCH_SQL=`SELECT e.amount+COALESCE(p.delta,0)+COALESCE(r.delta,0)+COALESCE(c.delta,0)+COALESCE(t.delta,0) AS amount,
+ COALESCE(r.delta,0)+COALESCE(c.delta,0) AS relic,n.message,d.note,e.mode,e.policy,
+ CASE WHEN e.mode='escalation' AND e.policy='${ESCALATION_RATING_POLICY}' THEN CASE WHEN x.id IS NULL THEN 0 ELSE 1 END ELSE 1 END AS power_done FROM kp_events e
+ LEFT JOIN kp_escalation_power_matches x ON x.id=e.id AND e.mode='escalation' AND e.policy='${ESCALATION_RATING_POLICY}'
+ LEFT JOIN kp_ledger t ON t.id='esc-extra:'||e.id AND e.mode IN ('escalation','swiftplay')
  LEFT JOIN kp_ledger p ON p.id='penalty:'||e.id
  LEFT JOIN kp_ledger r ON r.id='relic:'||e.id
  LEFT JOIN kp_ledger c ON c.id='spike-comp:'||e.id
@@ -371,8 +394,9 @@ export const KP_RUN_MATCH_SQL=`SELECT e.amount+COALESCE(p.delta,0)+COALESCE(r.de
 export async function loadKpRunMatch(env:KpEnv,run:KpRun,id:string):Promise<void>{
  if(run.loaded.has(id))return;
  const row=await env.DB.prepare(KP_RUN_MATCH_SQL)
-  .bind(id,run.mapping.guildId).first<{amount:number;relic:number;message:string|null;note:string|null}>();
+  .bind(id,run.mapping.guildId).first<{amount:number;relic:number;message:string|null;note:string|null;mode:string;policy:string;power_done:number}>();
  if(row){
+  if(row.mode==='escalation'&&row.policy===ESCALATION_RATING_POLICY&&!row.power_done)run.pendingPower?.add(id);
   run.credits.set(id,row.amount);
   run.relicBonuses.set(id,Number(row.relic??0));
   if(row.message!==null)run.messages.set(id,row.message);
