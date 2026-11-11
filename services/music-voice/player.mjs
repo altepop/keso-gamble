@@ -12,6 +12,7 @@ const tracks=new Map(catalog.map(t=>[t.id,{...t,path:fileURLToPath(new URL('../.
 const pretty=s=>String(s??'').slice(0,150);
 const VOICE_READY_MS=20_000;
 const IDLE_DISCONNECT_MS=120_000;
+const EMPTY_VOICE_MS=90_000;
 
 export class MusicController {
  constructor(client){this.client=client;this.rooms=new Map();this.locks=new Map();}
@@ -90,7 +91,7 @@ export class MusicController {
   try{await entersState(connection,VoiceConnectionStatus.Ready,VOICE_READY_MS);}
   catch{connection.destroy();throw Error('VCに接続できなかった。接続・発言権限を確認してほしい。');}
   const room={guildId:guild.id,channelId:channel.id,connection,player,queue:new MusicQueue(),
-    forceSkip:false,idleTimer:null,closed:false};
+    forceSkip:false,idleTimer:null,emptyTimer:null,autoPaused:false,closed:false};
   connection.subscribe(player);
   player.on(AudioPlayerStatus.Idle,()=>{if(!room.closed){
     const skip=room.forceSkip;room.forceSkip=false;this.advance(room,{skip});
@@ -100,6 +101,22 @@ export class MusicController {
   });
   connection.on(VoiceConnectionStatus.Destroyed,()=>this.destroy(room));
   this.rooms.set(guild.id,room);return room;
+ }
+ // GuildVoiceStates intent supplies voice membership without privileged member/message intents.
+ onVoiceStateUpdate(state){
+  const room=this.session(state.guild.id);
+  if(!room||room.closed)return;
+  const listeners=[...state.guild.voiceStates.cache.values()].filter(v=>
+   v.channelId===room.channelId && v.id!==this.client.user?.id && !v.member?.user?.bot).length;
+  if(listeners>0){
+   if(room.emptyTimer){clearTimeout(room.emptyTimer);room.emptyTimer=null;}
+   if(room.autoPaused&&!room.queue.paused){room.player.unpause();room.autoPaused=false;}
+   return;
+  }
+  if(room.emptyTimer)return;
+  if(room.player.pause(true)&&!room.queue.paused)room.autoPaused=true;
+  room.emptyTimer=setTimeout(()=>{room.emptyTimer=null;this.destroy(room);},EMPTY_VOICE_MS);
+  room.emptyTimer.unref?.();
  }
  advance(room,{skip=false}={}){
   if(room.closed)return;
@@ -123,7 +140,9 @@ export class MusicController {
  }
  destroy(room){
   if(room.closed)return;
-  room.closed=true;this.cancelIdle(room);room.queue.clear();
+  room.closed=true;this.cancelIdle(room);
+  if(room.emptyTimer){clearTimeout(room.emptyTimer);room.emptyTimer=null;}
+  room.queue.clear();
   this.rooms.delete(room.guildId);
   try{room.player.stop(true);}catch{}
   try{room.connection.destroy();}catch{}
