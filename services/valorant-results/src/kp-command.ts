@@ -1,12 +1,11 @@
+import {ESCA_COMMAND} from './esca-command.ts';
 import {predictionCommand} from './discord-command.ts';
 import {GAME_CENTER_COMMANDS} from './game-center.ts';
 import {MUSIC_COMMAND} from './music-command.ts';
 // Register these guild commands individually; never replace /death, /valo or the Activity entry point.
-export const KP_COMMAND_VERSION='kp-slash-v27-radio-album-panel';
+export const KP_COMMAND_VERSION='kp-slash-v28-esca-radio-album';
 export const kpCommands=[
- {type:1,name:'kp',description:'KESO PLAY｜KP残高・エスカランク',options:[
-  {type:1,name:'rank',description:'エスカランク・認定進捗・前ACTの最高ランク（本人だけに表示）',options:[{type:6,name:'user',description:'見たいメンバー（省略で自分）',required:false}]},
-  {type:1,name:'ranks',description:'今ACTのエスカランク上位10人をチャットへ公開'},
+ {type:1,name:'kp',description:'KESO PLAY｜KP残高・ランキング',options:[
   {type:1,name:'balance',description:'自分の残高と最近の入出金（本人だけに表示）'},
   {type:1,name:'ranking',description:'サーバーのKP残高ランキング上位10人と借KPをチャットへ公開'},
   {type:1,name:'bets',description:'自分のMリーグ予想・馬券と精算結果（本人だけに表示）'},
@@ -70,6 +69,7 @@ export const kpCommands=[
  ]},
   // Registered from the encrypted Voice Gateway Bot credential; no new Secret required.
   predictionCommand(),
+  ESCA_COMMAND,
   ...GAME_CENTER_COMMANDS,
   MUSIC_COMMAND,
 ] as const;

@@ -19,7 +19,7 @@ function fixture() {
   const db={prepare:(sql:string)=>new Q(sql)} as unknown as D1Database;
   return {db,records,queries};
 }
-test('OAuth command registration touches only /kp, stores only version, and is idempotent',async()=>{
+test('OAuth command registration upserts only /esca and the cleaned /kp, stores only version, and is idempotent',async()=>{
   const f=fixture(),calls: Array<{url:string;method:string;authorization:string;body:string}>=[];
   const request=async(input:RequestInfo|URL,init?:RequestInit)=>{
     const url=String(input),method=init?.method??'GET',headers=new Headers(init?.headers);
@@ -27,26 +27,27 @@ test('OAuth command registration touches only /kp, stores only version, and is i
     if(url.endsWith('/oauth2/token'))return Response.json({access_token:'short-lived-fixture-credential',token_type:'Bearer'});
     if(url.endsWith('/commands')) {
       const payload=JSON.parse(String(init?.body));
-      assert.equal(payload.name,'kp');
-      assert.equal(payload.options[0].name,'rank');
-      return Response.json({id:'345678901234567890',application_id:discord.applicationId,guild_id:discord.guildId,name:'kp',type:1});
+      assert(['esca','kp'].includes(payload.name));
+      assert.equal(payload.options[0].name,payload.name==='esca'?'rank':'balance');
+      if(payload.name==='kp')assert(!payload.options.some((o:any)=>['rank','ranks'].includes(o.name)));
+      return Response.json({id:'345678901234567890',application_id:discord.applicationId,guild_id:discord.guildId,name:payload.name,type:1});
     }
     throw Error('Unexpected endpoint');
   };
   const env={DB:f.db,DISCORD_CLIENT_SECRET:'client-secret-fixture'};
   assert.equal(await ensureRankCommand(env,request as typeof fetch),true);
-  assert.equal(calls.length,2);
+  assert.equal(calls.length,3);
   assert.match(calls[0].url,/oauth2\/token$/);
   assert.match(calls[0].body,/applications.commands.update/);
   assert.match(calls[0].authorization,/^Basic /);
   assert.match(calls[1].url,/\/guilds\/\d+\/commands$/);
   assert.equal(calls[1].method,'POST');
   assert.equal(calls[1].authorization,'Bearer short-lived-fixture-credential');
-  assert.deepEqual(await rankRegistrationStatus(f.db),{command:'kp rank / kp ranks',registered:true,version:RANK_COMMAND_VERSION});
+  assert.deepEqual(await rankRegistrationStatus(f.db),{command:'esca rank / esca ranking',registered:true,version:RANK_COMMAND_VERSION});
   assert.equal(f.records.get(RANK_REGISTRATION_KEY),RANK_COMMAND_VERSION);
   assert.equal([...f.records.values()].join('').includes('credential'),false);
   assert.equal(await ensureRankCommand(env,request as typeof fetch),true);
-  assert.equal(calls.length,2,'no new API calls after success');
+  assert.equal(calls.length,3,'no new API calls after success');
 });
 test('without client credentials, no network or registration marker is created',async()=>{
   const f=fixture();
@@ -68,4 +69,17 @@ test('Discord errors and unexpected responses do not claim success',async()=>{
       Response.json({id:'345678901234567890',application_id:discord.applicationId,guild_id:'invalid',name:'kp',type:1});
   }) as typeof fetch));
   assert.equal(f.records.size,0);
+});
+
+
+test('migration confirms both /esca creation and /kp cleanup before recording the new version',async()=>{
+ const f=fixture();f.records.set(RANK_REGISTRATION_KEY,'previous-kp-rank-version');const writes:string[]=[];
+ const request=async(url:RequestInfo|URL,init?:RequestInit)=>{
+  if(String(url).endsWith('/oauth2/token'))return Response.json({access_token:'fixture',token_type:'Bearer'});
+  const command=JSON.parse(String(init?.body));writes.push(command.name);
+  if(command.name==='kp')return new Response(null,{status:503});
+  return Response.json({id:'345678901234567890',application_id:discord.applicationId,guild_id:discord.guildId,name:command.name,type:1});
+ };
+ await assert.rejects(ensureRankCommand({DB:f.db,DISCORD_CLIENT_SECRET:'fixture'},request as typeof fetch));
+ assert.deepEqual(writes,['esca','kp']);assert.equal(f.records.get(RANK_REGISTRATION_KEY),'previous-kp-rank-version');
 });

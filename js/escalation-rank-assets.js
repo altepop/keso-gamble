@@ -1,4 +1,4 @@
-// Original KESO artwork: SVG for Activity, raster PNG for Discord embeds.
+// VALORANT rank artwork © Riot Games. Sources and unchanged file hashes are in assets/escalation-ranks/SOURCE.json.
 export const ESCALATION_ART=[
  {key:'iron',name:'アイアン',color:'#9aabba'},
  {key:'bronze',name:'ブロンズ',color:'#d79b62'},
@@ -10,4 +10,8 @@ export const ESCALATION_ART=[
  {key:'immortal',name:'イモータル',color:'#fa83ac'},
  {key:'radiant',name:'レディアント',color:'#fff4be'},
 ];
-export function escalationArt(tier){return Number.isInteger(tier)&&tier>=0&&tier<ESCALATION_ART.length?ESCALATION_ART[tier]:{key:'unranked',name:'未認定',color:'#93a3be'};}
+export function escalationArt(tier,division=1){
+ if(!Number.isInteger(tier)||tier<0||tier>=ESCALATION_ART.length)return {key:'unranked',file:'unranked.png',name:'未認定',color:'#93a3be'};
+ const art=ESCALATION_ART[tier],level=Number.isInteger(division)&&division>=1&&division<=3?division:1;
+ return {...art,file:art.key+(tier===8?'':'-'+level)+'.png'};
+}

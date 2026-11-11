@@ -1,5 +1,5 @@
-import { escapeHTML } from './progression-views.js?v=web-1b4bb156e63886a6';
-import { payoutFor } from './racing.js?v=web-1b4bb156e63886a6';
+import { escapeHTML } from './progression-views.js?v=web-641c6de20a2b28ae';
+import { payoutFor } from './racing.js?v=web-641c6de20a2b28ae';
 // The Activity's Mリーグ screen: today's (or the next) games from the server, a last-place prediction with a
 // confirmation step, and the member's own predictions. Buying is the wallet operation 'ml-bet' with the shown odds,
 // so a changed price is refused by the server instead of bought.

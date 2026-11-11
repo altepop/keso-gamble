@@ -1,0 +1,183 @@
+{
+  "copyright": "Rank artwork © Riot Games, Inc.",
+  "design": "VALORANT rank icons, unmodified; KESO rankings are independent of VALORANT rankings.",
+  "policy": "https://www.riotgames.com/en/legal",
+  "sourceRepository": "https://github.com/ccjakje/vantage/tree/751cd3fdef09303600975c74757563d9a0371b0d/ICONS/RANKS",
+  "files": [
+    {
+      "file": "iron-1.png",
+      "source": "https://raw.githubusercontent.com/ccjakje/vantage/751cd3fdef09303600975c74757563d9a0371b0d/ICONS/RANKS/Iron_1_Rank.png",
+      "sha256": "e5fdf4f3b6e4504665bd774033d9c5d22fba29a179406b6952799eaf860cca24",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "file": "iron-2.png",
+      "source": "https://raw.githubusercontent.com/ccjakje/vantage/751cd3fdef09303600975c74757563d9a0371b0d/ICONS/RANKS/Iron_2_Rank.png",
+      "sha256": "84a4a08edef9df4502dba62797b79527351a7d46275758fd33e385d82a42c8ad",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "file": "iron-3.png",
+      "source": "https://raw.githubusercontent.com/ccjakje/vantage/751cd3fdef09303600975c74757563d9a0371b0d/ICONS/RANKS/Iron_3_Rank.png",
+      "sha256": "4fd91fd2a9949112e74da787129cc483c6244a30ce1d95cab1fc783c67cc7cd1",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "file": "bronze-1.png",
+      "source": "https://raw.githubusercontent.com/ccjakje/vantage/751cd3fdef09303600975c74757563d9a0371b0d/ICONS/RANKS/Bronze_1_Rank.png",
+      "sha256": "a7dcdab378f3164a6a4cfc2b3810b91a1b28773195600e4c774177f1d5a5f66f",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "file": "bronze-2.png",
+      "source": "https://raw.githubusercontent.com/ccjakje/vantage/751cd3fdef09303600975c74757563d9a0371b0d/ICONS/RANKS/Bronze_2_Rank.png",
+      "sha256": "565f5509bc2d4c84a5d6889b9bf6e570eb75178ace7c6028c9a09f43e6ea07ed",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "file": "bronze-3.png",
+      "source": "https://raw.githubusercontent.com/ccjakje/vantage/751cd3fdef09303600975c74757563d9a0371b0d/ICONS/RANKS/Bronze_3_Rank.png",
+      "sha256": "d661bc9a8b88477539f2129c72ba6bd5fa1c14c5cfce0982fc745b2a3a01e01e",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "file": "silver-1.png",
+      "source": "https://raw.githubusercontent.com/ccjakje/vantage/751cd3fdef09303600975c74757563d9a0371b0d/ICONS/RANKS/Silver_1_Rank.png",
+      "sha256": "f6ba78a29547404353206b531679351392bc24f8f9614c27524da814fa7f9328",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "file": "silver-2.png",
+      "source": "https://raw.githubusercontent.com/ccjakje/vantage/751cd3fdef09303600975c74757563d9a0371b0d/ICONS/RANKS/Silver_2_Rank.png",
+      "sha256": "1689049c70a248c7a2d08c574e29dbb8237b0e9c96d2320936f2601e63f3badb",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "file": "silver-3.png",
+      "source": "https://raw.githubusercontent.com/ccjakje/vantage/751cd3fdef09303600975c74757563d9a0371b0d/ICONS/RANKS/Silver_3_Rank.png",
+      "sha256": "771dad77af523a44475292ce867d1d161cfe55d51c162581c7480471cef06a66",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "file": "gold-1.png",
+      "source": "https://raw.githubusercontent.com/ccjakje/vantage/751cd3fdef09303600975c74757563d9a0371b0d/ICONS/RANKS/Gold_1_Rank.png",
+      "sha256": "abf89f45403d855be5b7d925e8fd354fd72e008c5f475d8b44b3369f62fab924",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "file": "gold-2.png",
+      "source": "https://raw.githubusercontent.com/ccjakje/vantage/751cd3fdef09303600975c74757563d9a0371b0d/ICONS/RANKS/Gold_2_Rank.png",
+      "sha256": "393da94c28ba6d6b775259fd93afc4747eac6012c47318999c2d175190e97ff0",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "file": "gold-3.png",
+      "source": "https://raw.githubusercontent.com/ccjakje/vantage/751cd3fdef09303600975c74757563d9a0371b0d/ICONS/RANKS/Gold_3_Rank.png",
+      "sha256": "9bcf3a0a3c6c2bdfabcc976325a3323aacbeee0d76d895e10a8d179dbc84cdda",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "file": "platinum-1.png",
+      "source": "https://raw.githubusercontent.com/ccjakje/vantage/751cd3fdef09303600975c74757563d9a0371b0d/ICONS/RANKS/Platinum_1_Rank.png",
+      "sha256": "f07deac76b217a665ec2495e90febd0acc6755c576a62e5494599cff311ea9dc",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "file": "platinum-2.png",
+      "source": "https://raw.githubusercontent.com/ccjakje/vantage/751cd3fdef09303600975c74757563d9a0371b0d/ICONS/RANKS/Platinum_2_Rank.png",
+      "sha256": "d56cb1c51c32262c484b32a5048079781498a5644fbddac89c439c952c7d3d77",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "file": "platinum-3.png",
+      "source": "https://raw.githubusercontent.com/ccjakje/vantage/751cd3fdef09303600975c74757563d9a0371b0d/ICONS/RANKS/Platinum_3_Rank.png",
+      "sha256": "5f08ca77a391c584f5e504e8f19f5dc6dde8cccc8021a5e3fa984c3bb32a8e60",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "file": "diamond-1.png",
+      "source": "https://raw.githubusercontent.com/ccjakje/vantage/751cd3fdef09303600975c74757563d9a0371b0d/ICONS/RANKS/Diamond_1_Rank.png",
+      "sha256": "e984aa76e4e7cbf7546930ba88f465d5eed9e7177f110e152514f6ae8dbc944d",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "file": "diamond-2.png",
+      "source": "https://raw.githubusercontent.com/ccjakje/vantage/751cd3fdef09303600975c74757563d9a0371b0d/ICONS/RANKS/Diamond_2_Rank.png",
+      "sha256": "3c0a0631fcd9bd0c5d215e9a7924179fe808e34a228b2e63ad349ae60be1dfcb",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "file": "diamond-3.png",
+      "source": "https://raw.githubusercontent.com/ccjakje/vantage/751cd3fdef09303600975c74757563d9a0371b0d/ICONS/RANKS/Diamond_3_Rank.png",
+      "sha256": "2f95f628de45b863aea7400d36571f4750ad3bcef5c0dc4fb2f4554e028e6ca6",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "file": "ascendant-1.png",
+      "source": "https://raw.githubusercontent.com/ccjakje/vantage/751cd3fdef09303600975c74757563d9a0371b0d/ICONS/RANKS/Ascendant_1_Rank.png",
+      "sha256": "552d741645daafc1ea2e2a133e20378826b9074a3963f0ce91103ec04fb22a85",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "file": "ascendant-2.png",
+      "source": "https://raw.githubusercontent.com/ccjakje/vantage/751cd3fdef09303600975c74757563d9a0371b0d/ICONS/RANKS/Ascendant_2_Rank.png",
+      "sha256": "86cd91435b4c4a8b1ae9543e6ab7b320bfd4690324c8c1079f6bc1df0794fbd5",
+      "width": 275,
+      "height": 256
+    },
+    {
+      "file": "ascendant-3.png",
+      "source": "https://raw.githubusercontent.com/ccjakje/vantage/751cd3fdef09303600975c74757563d9a0371b0d/ICONS/RANKS/Ascendant_3_Rank.png",
+      "sha256": "b0c5dfe25e8c0d2e2b7a9adda48df2e8e16fc49e97038cf18deab5163b24f784",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "file": "immortal-1.png",
+      "source": "https://raw.githubusercontent.com/ccjakje/vantage/751cd3fdef09303600975c74757563d9a0371b0d/ICONS/RANKS/Immortal_1_Rank.png",
+      "sha256": "ccbeb17ff4b69800287ae71fc42d352932562f5244ca5865066efbdbd87cb0f2",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "file": "immortal-2.png",
+      "source": "https://raw.githubusercontent.com/ccjakje/vantage/751cd3fdef09303600975c74757563d9a0371b0d/ICONS/RANKS/Immortal_2_Rank.png",
+      "sha256": "569d81e08f6e87f188e02eabe17032f7496db87106eb19cd3859c60651165ce0",
+      "width": 275,
+      "height": 256
+    },
+    {
+      "file": "immortal-3.png",
+      "source": "https://raw.githubusercontent.com/ccjakje/vantage/751cd3fdef09303600975c74757563d9a0371b0d/ICONS/RANKS/Immortal_3_Rank.png",
+      "sha256": "484df3625b9013494ffa492db64bb165ca3325c637c95ae7b8a2ebc04b054e79",
+      "width": 275,
+      "height": 256
+    },
+    {
+      "file": "radiant.png",
+      "source": "https://raw.githubusercontent.com/ccjakje/vantage/751cd3fdef09303600975c74757563d9a0371b0d/ICONS/RANKS/Radiant_Rank.png",
+      "sha256": "f1629f245e4ccc69c3fd558e6193b4775d32ab592e85b6523fc0dfba699d4820",
+      "width": 256,
+      "height": 256
+    }
+  ]
+}

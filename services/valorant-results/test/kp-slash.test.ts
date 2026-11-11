@@ -80,14 +80,14 @@ test('race clocks cross JST midnight safely and are stable on replay',()=>{
 test('command registration never bulk-replaces other commands and refuses a foreign name collision',async()=>{
  const calls:Array<{path:string;method?:string;body?:any}>=[];
  const api=async(path:string,method?:string,body?:unknown)=>{calls.push({path,method,body});return path==='/users/@me'?{id:one,bot:true}:method==='POST'?{...(body as object),id:one}:[{name:'death'},{name:'valo'},{name:'launch',type:4}];};
- assert.equal(await registerKpCommands(one,guild,api,async()=>{}),19);
- assert.deepEqual(calls.filter(c=>c.method==='POST').map(c=>c.body.name),['kp','spike','dm','keiba','bet','horsename','give','mleague','mbet','mclose','kpgrant','unitelink','paifulink','paifu','predict','play','duel','recruit','music']);
+ assert.equal(await registerKpCommands(one,guild,api,async()=>{}),20);
+ assert.deepEqual(calls.filter(c=>c.method==='POST').map(c=>c.body.name),['kp','spike','dm','keiba','bet','horsename','give','mleague','mbet','mclose','kpgrant','unitelink','paifulink','paifu','predict','esca','play','duel','recruit','music']);
  assert.ok(calls.every(c=>c.method!=='PUT'));assert.deepEqual(kpCommands[4].options?.filter(o=>o.required).map(o=>o.name),['horse','amount']);
  // Unchanged commands are not written again, and writes are spaced out.
  const waits:number[]=[],posted:string[]=[];
  const stored=[{...kpCommands[0],id:'1',application_id:one,version:'9',description_localizations:null,options:kpCommands[0].options.map(o=>({...o,required:false}))},{...kpCommands[3],id:'2'},{name:'death'}];
- assert.equal(await registerKpCommands(one,guild,async(path,method,body)=>{if(method==='POST'){posted.push((body as {name:string}).name);return {...(body as object),id:one};}return path==='/users/@me'?{id:one,bot:true}:stored;},async ms=>{waits.push(ms);}),17);
- assert.deepEqual(posted,['spike','dm','bet','horsename','give','mleague','mbet','mclose','kpgrant','unitelink','paifulink','paifu','predict','play','duel','recruit','music']);assert.deepEqual(waits,Array(posted.length-1).fill(5000),'a gap between writes, none before the first');
+ assert.equal(await registerKpCommands(one,guild,async(path,method,body)=>{if(method==='POST'){posted.push((body as {name:string}).name);return {...(body as object),id:one};}return path==='/users/@me'?{id:one,bot:true}:stored;},async ms=>{waits.push(ms);}),18);
+ assert.deepEqual(posted,['spike','dm','bet','horsename','give','mleague','mbet','mclose','kpgrant','unitelink','paifulink','paifu','predict','esca','play','duel','recruit','music']);assert.deepEqual(waits,Array(posted.length-1).fill(5000),'a gap between writes, none before the first');
  let writes=0;await assert.rejects(registerKpCommands(one,guild,async(path,method)=>{if(method)writes++;return path==='/users/@me'?{id:one,bot:true}:[{name:'bet',description:'Another bot command'}];}),/conflict/);assert.equal(writes,0);
  await assert.rejects(registerKpCommands(one,guild,async()=>({id:two,bot:true})),/mismatch/);
 });
@@ -112,8 +112,8 @@ test('signed KP commands acknowledge privately for ordinary members; tampered re
  const rankingRequest=new Request('https://worker/interactions',{method:'POST',body:rankingBody,headers:{'X-Signature-Ed25519':rankingSignature,'X-Signature-Timestamp':timestamp}});
  assert.deepEqual(await (await discordInteractions(rankingRequest,env,ctx,config)).json(),{type:5,data:{flags:0}});
  await Promise.all(tasks);assert.deepEqual(replies.at(-1).allowed_mentions,{parse:[]});assert.equal(queries,0);
- for(const [sub,flags] of [['rank',64],['ranks',0]] as const){
-  const text=JSON.stringify({...payload,data:{name:'kp',options:[{type:1,name:sub}]}}),sig=Buffer.from(await crypto.subtle.sign('Ed25519',pair.privateKey,new TextEncoder().encode(timestamp+text))).toString('hex');
+ for(const [sub,flags] of [['rank',64],['ranking',0]] as const){
+  const text=JSON.stringify({...payload,data:{name:'esca',options:[{type:1,name:sub}]}}),sig=Buffer.from(await crypto.subtle.sign('Ed25519',pair.privateKey,new TextEncoder().encode(timestamp+text))).toString('hex');
   const req=new Request('https://worker/interactions',{method:'POST',body:text,headers:{'X-Signature-Ed25519':sig,'X-Signature-Timestamp':timestamp}});
   assert.deepEqual(await (await discordInteractions(req,env,ctx,config)).json(),{type:5,data:{flags}});
  }
@@ -150,7 +150,7 @@ test('public ranking lists everyone who owes 借KP, largest first, and marks it 
 test('only the exact ranking subcommand is public; balance, legacy KP and malformed options stay private',()=>{
  assert.equal(isKpRanking({data:{name:'kp',options:[{type:1,name:'ranking'}]}}),true);
  for(const data of [{name:'kp'},{name:'kp',options:[{type:1,name:'balance'}]},{name:'bet',options:[{type:1,name:'ranking'}]},{name:'kp',options:[{type:3,name:'ranking'}]},{name:'kp',options:[{type:1,name:'ranking',options:[{}]}]},{name:'kp',options:[{type:1,name:'ranking'},{type:1,name:'balance'}]}])assert.equal(isKpRanking({data}),false);
- assert.deepEqual(kpCommands[0].options?.map(o=>o.name),['rank','ranks','balance','ranking','bets']);
+ assert.deepEqual(kpCommands[0].options?.map(o=>o.name),['balance','ranking','bets']);
  assert.equal(isKpRanking({data:{name:'kp',options:[{type:1,name:'bets'}]}}),false,'/kp bets stays private');
 });
 
@@ -159,7 +159,7 @@ test('public command metadata contains definitions only and does not need or exp
  let queries=0;
  const response=await kpApi(new Request('https://worker/api/kp/commands'),{DB:{prepare(){queries++;throw Error('No DB reads');}},KP_BOOTSTRAP_PRIVATE_KEY:'fixture-secret-must-not-leak'} as unknown as KpEnv);
  const body=await response.json() as {version:string;commands:unknown[]};
- assert.equal(response.status,200);assert.equal(body.version,'kp-slash-v27-radio-album-panel');assert.equal(body.commands.length,19);assert.equal(queries,0);
+ assert.equal(response.status,200);assert.equal(body.version,'kp-slash-v28-esca-radio-album');assert.equal(body.commands.length,20);assert.equal(queries,0);
  assert.equal(JSON.stringify(body).includes('fixture-secret'),false);assert.equal(response.headers.get('Cache-Control'),'no-store');
 });
 
@@ -375,17 +375,25 @@ test('rank slash commands return an image card and public ranks stay read only, 
    escalationPowerStatement(f.env,{id,guild,user:one,outcome:'win'},{act:{id:'a',name:'e11a1',episode:'e11',startedAt:T0+n,endedAt:T0+n+1},performance:0}),
   ]);
  }
- const extra:{embeds?:any[]}={};const own={...interaction('kp'),data:{name:'kp',options:[{type:1,name:'rank'}]}};
+ const extra:{embeds?:any[]}={};const own={...interaction('kp'),data:{name:'esca',options:[{type:1,name:'rank'}]}};
  const before=f.sql.prepare('SELECT COUNT(*) n FROM kp_ledger').get()!.n;
- assert.match(await runKpCommand(f.env,own,mapping,extra),/シルバー Ⅰ/);assert.equal(extra.embeds![0].title,'シルバー Ⅰ');assert.match(extra.embeds![0].thumbnail.url,/silver\.png/);assert(!JSON.stringify(extra).includes('mmr'));
- const other={...interaction('kp',newUser),data:{name:'kp',options:[{type:1,name:'rank',options:[{type:6,name:'user',value:one}]}]}};
+ assert.match(await runKpCommand(f.env,own,mapping,extra),/シルバー Ⅰ/);assert.equal(extra.embeds![0].title,'シルバー Ⅰ');assert.match(extra.embeds![0].thumbnail.url,/silver-1\.png/);assert(!JSON.stringify(extra).includes('mmr'));
+ const other={...interaction('kp',newUser),data:{name:'esca',options:[{type:1,name:'rank',options:[{type:6,name:'user',value:one}]}]}};
  assert.match(await runKpCommand(f.env,other,mapping,{}),/シルバー Ⅰ/);assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM kp_wallets WHERE user=?').get(newUser)!.n,0);
- const board={...interaction('kp',newUser),data:{name:'kp',options:[{type:1,name:'ranks'}]}};assert.match(await runKpCommand(f.env,board,mapping,extra),/シルバー Ⅰ/);
+ const board={...interaction('kp',newUser),data:{name:'esca',options:[{type:1,name:'ranking'}]}};assert.match(await runKpCommand(f.env,board,mapping,extra),/シルバー Ⅰ/);
  assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM kp_ledger').get()!.n,before);
- const malformed={...other,data:{name:'kp',options:[{type:1,name:'rank',options:[{type:3,name:'user',value:one}]}]}};assert.match(await runKpCommand(f.env,malformed,mapping),/メンバーを選んで/);
+ const malformed={...other,data:{name:'esca',options:[{type:1,name:'rank',options:[{type:3,name:'user',value:one}]}]}};assert.match(await runKpCommand(f.env,malformed,mapping),/メンバーを選んで/);
 });
 test('only exact rank leaderboard is public; personal rank and malformed targets remain private',async()=>{
  const {isEscalationRanking}=await import('../src/escalation-rank-command.ts');
- assert(isEscalationRanking({data:{name:'kp',options:[{type:1,name:'ranks'}]}}));
- for(const option of [{type:1,name:'rank'},{type:3,name:'ranks'},{type:1,name:'ranks',options:[{}]}])assert.equal(isEscalationRanking({data:{name:'kp',options:[option]}}),false);
+ assert(isEscalationRanking({data:{name:'esca',options:[{type:1,name:'ranking'}]}}));
+ for(const option of [{type:1,name:'rank'},{type:3,name:'ranking'},{type:1,name:'ranking',options:[{}]}])assert.equal(isEscalationRanking({data:{name:'esca',options:[option]}}),false);
+});
+
+
+test('KP metadata keeps only finance subcommands while /esca owns rank and ranking; cached old rank commands migrate privately',async()=>{
+ const esca=kpCommands.find(c=>c.name==='esca')!;assert.deepEqual(esca.options.map(o=>o.name),['rank','ranking']);
+ assert.deepEqual(kpCommands[0].options.map(o=>o.name),['balance','ranking','bets']);
+ const f=await fixture();const old={...interaction('kp'),data:{name:'kp',options:[{type:1,name:'rank'}]}};
+ assert.match(await runKpCommand(f.env,old,mapping),/\/esca rank/);assert(!isKpRanking(old));
 });

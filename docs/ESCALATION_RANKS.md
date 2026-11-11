@@ -4,23 +4,25 @@ Discordでは次のコマンドで確認できる。ランク照会で残高・�
 
 | コマンド | 内容 | 表示範囲 |
 | --- | --- | --- |
-| `/kp rank` | 自分のランク・RR・認定進捗・今ACTの最高・前ACTの記録 | 本人のみ |
-| `/kp rank user:@メンバー` | 同じサーバーのメンバーのランク情報 | 呼び出した本人のみ |
-| `/kp ranks` | 今ACTの認定済み上位10人。同RRは同順位 | チャットへ公開。メンション通知なし |
+| `/esca rank` | 自分のランク・RR・認定進捗・今ACTの最高・前ACTの記録 | 本人のみ |
+| `/esca rank user:@メンバー` | 同じサーバーのメンバーのランク情報 | 呼び出した本人のみ |
+| `/esca ranking` | 今ACTの認定済み上位10人。同RRは同順位 | チャットへ公開。メンション通知なし |
 
 いずれもDiscordの署名検証済みInteractionsからのみ利用する。内部レート・口座残高はランクカードに含めない。認定していないメンバーも口座を作らず未認定として表示する。
 
-Activityは「稼ぐ」の先頭に、ランク専用カードを表示する。各ランクの紋章・RRゲージ・認定のステップ・戦績・最高ランク・前回変動幅と、詳細内の順位・過去ACT・全ランク一覧を確認できる。認定中は前ACTのランクを表示し、初回KDプラスの100RRは通常補正と分けて表示する。
+Activityは「稼ぐ」の先頭に、ランク専用カードを表示する。各ランク・段階に対応した公式デザインの画像・RRゲージ・認定のステップ・戦績・最高ランク・前回変動幅と、詳細内の順位・過去ACT・全ランク一覧を確認できる。認定中は前ACTのランクを表示し、初回KDプラスの100RRは通常補正と分けて表示する。
 
 ## 画像
 
-`assets/escalation-ranks/` はKESO独自のオリジナル紋章10種（9ランク＋未認定）。VALORANT公式画像を複製したものではない。Activityは軽量SVG、DiscordのEmbedは公開Pages上のPNGを利用する。画像は静的で、ユーザーID・認証情報・内部レートを含まない。画像取得用の外部サービスは追加しない。
+`assets/escalation-ranks/` はRiot GamesのVALORANTランク画像25種（8ランク×Ⅰ・Ⅱ・Ⅲ＋レディアント）と、KESOの未認定アイコン。画像はリサイズ・描き直しをせずPNGのまま保存し、ActivityとDiscordの両方から同じファイルを使う。画像中にユーザーID・認証情報・内部レートは含まない。
 
-SVGの作成元は `scripts/build-escalation-rank-art.mjs`。PNGは同じSVGをChromiumで256pxにラスタライズしたもの。Activityのキャッシュ版数は画像の内容も含めて計算する。表示に音声・canvas・WebGLは不要。
+画像の取得元・固定コミット・SHA256・元の画像寸法は `SOURCE.json` に記録する。画像の権利はRiot Gamesに帰属し、コードのライセンスとは区別する。利用方針の参照先は https://www.riotgames.com/en/legal 。取得元の公開ミラーや非公式表記だけで、あらゆる用途の利用許諾を保証するものではない。KESOのランク表示がVALORANT本体のランクではないことと非公認であることを画面・カードに明記する。
+
+古いオリジナル紋章と生成スクリプトは削除し、公式画像を誤って生成物で上書きしない。Activityのキャッシュ版数は画像の内容も含めて計算する。表示に音声・canvas・WebGLは不要。
 
 ## Discordへの登録
 
-`KP_COMMAND_VERSION`（v26：ランクと音楽コマンド共存版）を更新し、既存のVoice Gatewayの差分登録に反映する。さらに既存Client Secretによる `applications.commands.update` の短命トークンで、10分ごとの既存cron内から `/kp` 一つだけを更新する。`/death`・`/valo`・クイズOAuth・ActivityのEntry Pointは変更しない。新しい秘密値の入力は不要。
+`KP_COMMAND_VERSION`（v28：/esca分離・ラジオ/アルバム共存版）を更新し、既存のVoice Gatewayの差分登録に反映する。さらに既存Client Secretによる `applications.commands.update` の短命トークンで、10分ごとの既存cron内から `/esca` の新規登録と `/kp` の旧ランク項目除去だけを行う。`/kp ranking` はKP残高用のまま。`/death`・`/valo`・クイズOAuth・ActivityのEntry Pointは変更しない。新しい秘密値の入力は不要。
 
 `GET /api/discord/rank/status` で、期待するコマンド版数と登録済みマーカーを確認できる。トークンや秘密値は返さない。Discordが登録内容を確認できた場合だけマーカーを保存する。登録直後はDiscordクライアントの候補更新に時間が掛かることがある。
 
