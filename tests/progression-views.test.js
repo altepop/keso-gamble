@@ -62,3 +62,11 @@ test('rated Escalation and moved Swift bets keep separate labels; incomplete mea
  assert(html.includes('&lt;img src=x&gt;'));assert(!html.includes('<img src=x>'));
  assert.match(playView(live([])),/初回計測 0\/5試合/);
 });
+
+
+test('ACT information, capped personal performance and archived results are visible without injecting ACT names',()=>{
+ const html=playView({...live([]),escalationRating:{act:{id:'act-b',name:'ACT B<img>'},rating:null,measurementGames:0,previousActs:[{act:'act-a',name:'ACT A<script>',rating:2200,measured:1,wins:3,losses:2}]}});
+ for(const text of ['ACT B&lt;img&gt;','ACT A&lt;script&gt;','前ACTの記録','1シリーズ最大＋5','30キル以上','新しく5試合'])assert(html.includes(text),text);
+ assert.doesNotMatch(html,/<img>|<script>/);
+ assert.match(playView({...live([]),escalationRating:{act:null}}),/ACT情報の取得を待っています/);
+});

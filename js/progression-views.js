@@ -1,7 +1,7 @@
-import {hoyoPanel} from './hoyo-view.js?v=web-2de5195615418464';
-import {steamPanel} from './steam-view.js?v=web-2de5195615418464';
-import {stockPrice} from './stock-view.js?v=web-2de5195615418464';
-import { ACTIVITIES, MEMBERS, ORDERS } from './progression.js?v=web-2de5195615418464';
+import {hoyoPanel} from './hoyo-view.js?v=web-ed53af5a48aaf137';
+import {steamPanel} from './steam-view.js?v=web-ed53af5a48aaf137';
+import {stockPrice} from './stock-view.js?v=web-ed53af5a48aaf137';
+import { ACTIVITIES, MEMBERS, ORDERS } from './progression.js?v=web-ed53af5a48aaf137';
 export const escapeHTML=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const kp=n=>n.toLocaleString('ja-JP')+' KP';
 // A history amount with its own sign: +900 KP / −200 KP / ±0 KP.
@@ -28,9 +28,10 @@ function escalationRewards(state){
  const rating=Number.isFinite(power.rating)?power.rating.toLocaleString('ja-JP'):'計測中';
  const leaders=Array.isArray(power.leaders)?power.leaders:[];
  const board=leaders.length?leaders.map((r,i)=>`<div class="asset-line"><span>${i+1}. ${escapeHTML(members.find(m=>m.id===r.user)?.name??'メンバー '+String(r.user).slice(-4))}</span><strong>${kp(r.rating).replace(' KP','')} · ${escapeHTML(r.grade)}</strong></div>`).join(''):'<p class="helper">計測を終えたメンバーがここに並びます。</p>';
- const status=power.rating==null?`初回計測 ${power.measurementGames??0}/5試合`:`今回のシリーズ ${power.seriesWins??0}勝 ${power.seriesLosses??0}敗`;
- const last=power.lastSeriesAt?`<p class="helper">前回 ${power.lastSeriesWins}勝${power.lastSeriesLosses}敗 ／ パワー ${power.lastChange>=0?'+':''}${power.lastChange}</p>`:'';
- const rank=`<section class="panel"><div class="card-body"><h2 class="panel-title">エスカパワー</h2><strong>${rating}${power.rating==null?'':' · '+escapeHTML(power.grade??'')}</strong><p>${status}</p>${last}<p class="helper">初回5試合で計測。以降は3勝または3敗でシリーズ終了し、勝敗でパワーが動きます。キル・アシストはKP報酬の成績条件です。KESO独自の指標で、公式のXパワーとは別です。</p><details class="rules"><summary>更新幅・ランキング</summary><p class="helper">初回は2,000を中心に勝敗で1,500〜2,500。シリーズは3勝0敗＋100／3勝1敗＋70／3勝2敗＋40。負け越しは逆の幅で下がり、最低0。計測済みの上位10人を表示します。</p>${board}</details></div></section>`;
+ const status=power.act===null?'ACT情報の取得を待っています':power.rating==null?`初回計測 ${power.measurementGames??0}/5試合`:`今回のシリーズ ${power.seriesWins??0}勝 ${power.seriesLosses??0}敗`;
+ const last=power.lastSeriesAt?`<p class="helper">前回 ${power.lastSeriesWins}勝${power.lastSeriesLosses}敗 ／ パワー ${power.lastChange>=0?'+':''}${power.lastChange}（成績補正＋${power.lastPerformance??0}を含む）</p>`:'';
+ const archives=(Array.isArray(power.previousActs)?power.previousActs:[]).map(a=>`<div class="asset-line"><span style="min-width:0;overflow-wrap:anywhere">${escapeHTML(a.name||a.act)}</span><strong>${a.measured?Number(a.rating).toLocaleString('ja-JP'):'計測途中'} · ${a.wins}勝${a.losses}敗</strong></div>`).join('');
+ const rank=`<section class="panel"><div class="card-body"><h2 class="panel-title">エスカパワー</h2><p class="helper" style="overflow-wrap:anywhere">ACT：${escapeHTML(power.act?.name||power.act?.id||'情報待ち')}</p><strong>${rating}${power.rating==null?'':' · '+escapeHTML(power.grade??'')}</strong><p>${status}</p>${last}<p class="helper">初回5試合で計測。以降は3勝または3敗でシリーズ終了し、勝敗でパワーが動きます。30キル以上・高いKD・15アシスト以上で成績補正。補正は1試合最大＋3、1シリーズ最大＋5。負け越しでも少し減少を抑えますが、上昇にはなりません。ACTが変わると新しく5試合を計測します。KESO独自の指標です。</p><details class="rules"><summary>更新幅・ランキング</summary><p class="helper">初回は2,000を中心に勝敗で1,500〜2,500。シリーズは3勝0敗＋100／3勝1敗＋70／3勝2敗＋40。負け越しは逆の幅を基本に、成績補正を加えます。最低0。同じACTで計測済みの上位10人を表示します。</p>${board}${archives?'<h3>前ACTの記録</h3>'+archives:''}</details></div></section>`;
  const spins=Array.isArray(state.escalationSpins)?state.escalationSpins:[],all=state.modeRewards?.swiftplay?.specialScope==='all';
  const signed=n=>n<0?'−'+kp(-n):'+'+kp(n);
  const rows=spins.map(r=>{

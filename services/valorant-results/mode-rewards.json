@@ -114,7 +114,7 @@
         70,
         40
       ],
-      "performanceAdjustment": false
+      "performanceAdjustment": true
     }
   },
   "deathmatch": {

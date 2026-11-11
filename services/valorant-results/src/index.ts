@@ -1,3 +1,4 @@
+import {matchAct,observeEscalationAct,syncEscalationPower} from './escalation-rating.ts';
 import {runSpikeCompensation} from './spike-compensation.ts';
 import {queueCommunityNews} from './community-news.ts';
 import {queueRelicPress} from './relic-press.ts';
@@ -189,10 +190,21 @@ async function saveMatch(env: Env, match: Match, player: Player, account: Accoun
   const kpId=kpRun?kpEventId(kpRun.mapping.guildId,match.metadata.match_id,account.puuid):'';
   try {
     if (kpRun && Date.parse(match.metadata.started_at)>=kpRun.startsAt) {
+      const act=matchAct(match);
+      if(act&&(!kpRun.act||(act.id!==kpRun.act.id&&act.startedAt>kpRun.act.startedAt)||(act.id===kpRun.act.id&&!kpRun.act.name&&act.name))){
+        if(await observeEscalationAct(env,kpRun.mapping.guildId,act))kpRun.act=act;
+      }
       await loadKpRunMatch(env,kpRun,kpId);
       const amount = kpRun.credits.get(kpId) ?? await collectKpMatch(env,kpRun.mapping,match,account.puuid);
       if (amount !== null) {
         kpRun.credits.set(kpId,amount);
+        if(act&&kpRun.pendingPower?.has(kpId)){
+          const owner=kpRun.mapping.accounts.find(a=>a.riotId===player.riotId)?.discordUserId;
+          if(owner&&await syncEscalationPower(env,kpRun.mapping.guildId,owner,kpId,match,account.puuid)){
+            kpRun.pendingPower.delete(kpId);
+            const note=kpRun.notes?.get(kpId);if(note)kpRun.notes?.set(kpId,note.replace('（エスカパワー：ACT情報取得待ち）','（エスカパワー：ACT情報を反映）'));
+          }
+        }
         // Existing events already have the relic delta in loadKpRunMatch.
         // A brand-new credit has no preloaded event: fetch its receipt once
         // by primary key AFTER settlement and reuse within this monitor run.
