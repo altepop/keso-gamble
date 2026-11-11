@@ -27,7 +27,10 @@ const IDLE_DISCONNECT_MS=120_000;
 const EMPTY_VOICE_MS=90_000;
 
 export class MusicController {
- constructor(client){this.client=client;this.rooms=new Map();this.locks=new Map();}
+ constructor(client,{checkpoint=async()=>{}}={}){
+  this.client=client;this.rooms=new Map();this.locks=new Map();
+  this.checkpoint=checkpoint;
+ }
  async locked(guild,handler){
   const previous=this.locks.get(guild)??Promise.resolve();
   const work=previous.catch(()=>{}).then(handler);
@@ -38,6 +41,7 @@ export class MusicController {
   if(!/^\d{15,22}$/.test(guildId)||!/^\d{15,22}$/.test(userId))throw Error('Discordユーザーを確認できない。');
   return this.locked(guildId,async()=>{
     const message=await this.execute({guildId,userId,action,track,volume,loop});
+    await this.save(guildId);
     return {message,view:this.snapshot(guildId)};
   });
  }
@@ -127,7 +131,7 @@ export class MusicController {
   try{await entersState(connection,VoiceConnectionStatus.Ready,VOICE_READY_MS);}
   catch{connection.destroy();throw Error('VCに接続できなかった。接続・発言権限を確認してほしい。');}
   const room={guildId:guild.id,channelId:channel.id,connection,player,queue:new MusicQueue(),
-    forceSkip:false,replacePending:false,idleTimer:null,emptyTimer:null,autoPaused:false,closed:false};
+    forceSkip:false,replacePending:false,idleTimer:null,emptyTimer:null,autoPaused:false,closed:false,recovering:false};
   connection.subscribe(player);
   player.on(AudioPlayerStatus.Idle,()=>{if(!room.closed){
     if(room.replacePending){
@@ -138,7 +142,8 @@ export class MusicController {
   player.on('error',error=>{console.warn('music_playback_error',{code:error?.code??'audio'});
     if(!room.closed)this.advance(room,{skip:true});
   });
-  connection.on(VoiceConnectionStatus.Destroyed,()=>this.destroy(room));
+  connection.on(VoiceConnectionStatus.Disconnected,()=>{if(!room.closed)void this.recover(room);});
+  connection.on(VoiceConnectionStatus.Destroyed,()=>{if(!room.closed)void this.recover(room);});
   this.rooms.set(guild.id,room);return room;
  }
  // GuildVoiceStates intent supplies voice membership without privileged member/message intents.
@@ -160,12 +165,13 @@ export class MusicController {
  advance(room,{skip=false}={}){
   if(room.closed)return;
   const item=room.queue.next({skip});
-  if(!item){this.scheduleIdle(room);return;}
+  if(!item){this.scheduleIdle(room);void this.save(room.guildId);return;}
   this.cancelIdle(room);
   try{
    const resource=createAudioResource(item.track.path,{inlineVolume:true});
    resource.volume?.setVolume(room.queue.volume/100);
    room.player.play(resource);
+   void this.save(room.guildId);
   }catch{
    console.warn('music_resource_unavailable');
    this.advance(room,{skip:true});
@@ -177,14 +183,71 @@ export class MusicController {
   room.idleTimer=setTimeout(()=>{if(!room.queue.current&&!room.queue.upcoming.length)this.destroy(room);},IDLE_DISCONNECT_MS);
   room.idleTimer.unref?.();
  }
- destroy(room){
+ destroy(room,{preserve=false}={}){
   if(room.closed)return;
   room.closed=true;this.cancelIdle(room);
   if(room.emptyTimer){clearTimeout(room.emptyTimer);room.emptyTimer=null;}
-  room.queue.clear();
-  this.rooms.delete(room.guildId);
+  if(this.rooms.get(room.guildId)===room)this.rooms.delete(room.guildId);
   try{room.player.stop(true);}catch{}
   try{room.connection.destroy();}catch{}
+  if(!preserve){room.queue.clear();void this.save(room.guildId);}
+ }
+ async save(guildId){
+  const room=this.session(guildId);
+  const state=room?.queue.current||room?.queue.upcoming.length
+    ?room.queue.serialize(room.channelId):null;
+  try{await this.checkpoint(guildId,state);}
+  catch{console.warn('music_state_checkpoint_failed');}
+ }
+ playCurrent(room){
+  const item=room.queue.current;
+  if(!item)return this.advance(room);
+  try{
+   const resource=createAudioResource(item.track.path,{inlineVolume:true});
+   resource.volume?.setVolume(room.queue.volume/100);
+   room.player.play(resource);
+   if(room.queue.paused)room.player.pause(true);
+  }catch{console.warn('music_restore_resource_failed');this.advance(room,{skip:true});}
+ }
+ async restore(state){
+  if(!state||typeof state.channelId!=='string'||typeof state.guildId!=='string'
+    ||this.session(state.guildId))return false;
+  const guild=this.client.guilds.cache.get(state.guildId);
+  const channel=guild?.channels.cache.get(state.channelId);
+  if(!guild||!channel||channel.type!==ChannelType.GuildVoice||!this.client.isReady())return false;
+  const human=[...guild.voiceStates.cache.values()].some(v=>
+    v.channelId===state.channelId&&v.id!==this.client.user?.id&&!v.member?.user?.bot);
+  if(!human)return false;
+  const queue=new MusicQueue();
+  try{queue.restore(state,tracks);}catch{console.warn('music_state_restore_invalid');return false;}
+  if(!queue.current&&!queue.upcoming.length)return false;
+  const room=await this.connect(guild,channel);
+  room.queue=queue;
+  this.cancelIdle(room);
+  if(queue.current)this.playCurrent(room);
+  else this.advance(room);
+  await this.save(guild.id);
+  console.info('music_voice_queue_restored',{mode:queue.mode,waiting:queue.upcoming.length});
+  return true;
+ }
+ async recover(room){
+  if(room.closed||room.recovering)return;
+  room.recovering=true;
+  // Let Discord.js try its normal voice reconnect before replacing the session.
+  try{
+   await entersState(room.connection,VoiceConnectionStatus.Ready,8_000);
+   room.recovering=false;return;
+  }catch{ /* Reconnect from the sanitized in-memory snapshot. */ }
+  const state={...room.queue.serialize(room.channelId),guildId:room.guildId};
+  await this.save(room.guildId);
+  this.destroy(room,{preserve:true});
+  for(const delay of [1500,3500,7000]){
+   await new Promise(resolve=>setTimeout(resolve,delay));
+   try{if(await this.restore(state))return;}
+   catch{console.warn('music_voice_reconnect_retry');}
+  }
+  console.warn('music_voice_reconnect_exhausted');
+  // A saved remote snapshot is available on the next authenticated warm-up.
  }
  snapshot(guildId){
   const room=this.session(guildId);
