@@ -239,6 +239,43 @@ export async function reconcilePredictionPosts(env:KpEnv&{KP_EARNINGS_WEBHOOK_UR
   return pending.length;
 }
 
+
+/** Recheck an already published VALORANT result when its /predict ticket is still open.
+ * Never infer the result from Discord text: fetch the exact match again and let
+ * settlePredictions verify the server-reported start time, player and outcome.
+ * At most one Henrik API request each run, and only while an unsettled event
+ * has a matching indexed stored result. Ignore games already in progress
+ * when the card opened so that the next eligible game can be considered.
+ */
+export async function recoverPendingPredictions(env:KpEnv,
+  fetchMatch:(region:string,matchId:string)=>Promise<Match>,now=Date.now(),override?:KpMapping) {
+  await ensurePredictions(env.DB);
+  const row=await env.DB.prepare(`SELECT e.id,e.riot,e.mode,e.created_at,n.match_id,a.region
+    FROM vp_events e
+    JOIN tracked_players a ON a.riot_id=e.riot
+    JOIN notifications n ON n.riot_id=e.riot AND n.mode=e.mode AND n.ended_at>=e.created_at
+    WHERE e.status='open' AND e.created_at>=?
+      AND NOT EXISTS(SELECT 1 FROM monitor_state s WHERE s.key='vp:skip:'||e.id||':'||n.match_id)
+    ORDER BY e.created_at,n.ended_at,n.match_id LIMIT 1`)
+    .bind(now-6*3600000).first<{id:string;riot:string;mode:string;created_at:number;match_id:string;region:string}>();
+  if(!row)return 0;
+  const match=await fetchMatch(row.region,row.match_id);
+  if(!match?.metadata?.is_completed||match.metadata.match_id!==row.match_id
+    ||storedMode(match.metadata.queue?.id??'')!==row.mode)
+    throw Error('Prediction recovery match data unavailable');
+  const kickoff=Date.parse(match.metadata.started_at);
+  if(!Number.isFinite(kickoff))throw Error('Prediction recovery kickoff unavailable');
+  if(kickoff<=row.created_at){
+    // An already-running match is not the next eligible match. Skip only
+    // this verified historical game; do not debit/refund tickets or close the card.
+    await env.DB.prepare('INSERT OR IGNORE INTO monitor_state(key,value) VALUES(?,?)')
+      .bind('vp:skip:'+row.id+':'+row.match_id,'preexisting').run();
+    return 0;
+  }
+  // If another monitor already resolved the event, settlement is idempotent.
+  return settlePredictions(env,match,row.riot,now,override);
+}
+
 export async function expirePredictions(env:Pick<KpEnv,'DB'>,now=Date.now()) {
   await ensurePredictions(env.DB);
   const events=(await env.DB.prepare('SELECT id FROM vp_events WHERE status=\'open\' AND created_at<? ORDER BY created_at LIMIT 10')
