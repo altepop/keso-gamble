@@ -1,4 +1,5 @@
 import {runSpikeCompensation} from './spike-compensation.ts';
+import {settlePredictions,expirePredictions} from './valo-predictions.ts';
 import {queueCommunityNews} from './community-news.ts';
 import {queueRelicPress} from './relic-press.ts';
 import {queueVdkPearlRoast} from './vdk-pearl-roast.ts';
@@ -246,11 +247,17 @@ async function saveMatch(env: Env, match: Match, player: Player, account: Accoun
     if (change) result.message += rankChangeBlock(change, match.metadata.match_id + ':' + account.puuid);
   } catch { console.warn('rank_change_pending'); }
   const savedKey=JSON.stringify([player.riotId,match.metadata.match_id]);
-  if(saved.has(savedKey)&&!kpActive&&!isDeathNotice(result.mode))return 'duplicates';
+  if(saved.has(savedKey)&&!kpActive&&!isDeathNotice(result.mode)) {
+    try { await settlePredictions(env,match,player.riotId); } catch { console.warn('prediction_settlement_retry_pending'); }
+    return 'duplicates';
+  }
   const inserted = await env.DB.prepare('INSERT OR IGNORE INTO notifications(riot_id,match_id,message,ended_at,mode,act_id,act_name,outcome,sent,team_id) VALUES(?,?,?,?,?,?,?,?,?,?)')
     .bind(player.riotId, match.metadata.match_id, result.message, result.endedAt, result.mode, result.actId, result.actName,
       result.outcome, result.outcome === 'draw' && result.mode === 'escalation' ? 1 : 0, result.teamId).run();
   saved.add(savedKey);
+  // The match's immutable start time is checked against each ticket at settlement.
+  // A failure is retried from the duplicate-result path on the next monitor run.
+  try { await settlePredictions(env,match,player.riotId); } catch { console.warn('prediction_settlement_pending'); }
   if(kpRun&&kpRun.credits.has(kpId))kpRun.messages.set(kpId,result.message);
   if (inserted.meta.changes) {
     // Agent mastery counts new results only; a failure never blocks the result post.
@@ -558,6 +565,9 @@ export default {
       ctx.waitUntil((async()=>{const mapping=await initializeKp(env);if(mapping)await cleanupBoardDuels(env,mapping.guildId);})()
        .catch(()=>console.warn('board_duel_retention_pending')));
     }
+    // Expire unanswered prediction cards and refund reserved KP without another match API poll.
+    if(Math.floor((_event.scheduledTime??Date.now())/60000)%30===0)
+      ctx.waitUntil(track(env,'prediction_expiry',()=>expirePredictions(env)));
     // Every five minutes, finish abandoned KP board matches; indexed and skipped until first use.
     if(Math.floor((_event.scheduledTime??Date.now())/60000)%5===0)
       ctx.waitUntil(track(env,'board_duel_timeout',async()=>{const mapping=await initializeKp(env);if(mapping)await settleExpiredBoardDuels(env,mapping.guildId);}));
