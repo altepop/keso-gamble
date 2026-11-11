@@ -1,5 +1,6 @@
 import {runSpikeCompensation} from './spike-compensation.ts';
 import {settlePredictions,expirePredictions} from './valo-predictions.ts';
+import {storedMode} from './modes.ts';
 import {queueCommunityNews} from './community-news.ts';
 import {queueRelicPress} from './relic-press.ts';
 import {queueVdkPearlRoast} from './vdk-pearl-roast.ts';
@@ -163,8 +164,9 @@ export async function monitorRankState(db:D1Database,cache:Map<string,string>,ke
  }
  return cache.get(key);
 }
-async function saveMatch(env: Env, match: Match, player: Player, account: Account, kpRun:KpRun|null,reservations:Map<string,Set<string>>,saved:Set<string>,ranks:Map<string,string>=new Map(),predictionActive=false): Promise<'excluded' | 'beforeMonitoring' | 'newResults' | 'duplicates'> {
+async function saveMatch(env: Env, match: Match, player: Player, account: Account, kpRun:KpRun|null,reservations:Map<string,Set<string>>,saved:Set<string>,ranks:Map<string,string>=new Map(),predictionTargets:ReadonlySet<string>=new Set()): Promise<'excluded' | 'beforeMonitoring' | 'newResults' | 'duplicates'> {
   const mode = match.metadata?.queue?.id;
+  const predictionActive = typeof mode === 'string' && predictionTargets.has(JSON.stringify([player.riotId,storedMode(mode)]));
   const ordinary = resultMessage(match, account.puuid, player.name?.trim() || parseId(player.riotId)[0]);
   if (!ordinary) return 'excluded';
   if (ordinary.endedAt <= account.since) return 'beforeMonitoring';
@@ -452,8 +454,9 @@ export async function monitor(env: Env, players: Player[] = configuredPlayers): 
     // Never read a growing rank-history table eagerly. Competitive matches
     // load only their own rank2:<match>:<puuid> via indexed key lookup.
     const ranks=new Map<string,string>();
-    const vpEnabled=Boolean(await env.DB.prepare("SELECT 1 FROM monitor_state WHERE key='vp_open' LIMIT 1").first())
-      && Boolean(await env.DB.prepare("SELECT 1 FROM vp_events WHERE status='open' LIMIT 1").first());
+    const vpMarker=await env.DB.prepare("SELECT 1 FROM monitor_state WHERE key='vp_open' LIMIT 1").first();
+    const vpTargets=new Set(vpMarker ? (await env.DB.prepare("SELECT riot,mode FROM vp_events WHERE status='open'").all<{riot:string;mode:string}>()).results
+      .map(e=>JSON.stringify([e.riot,e.mode])) : []);
     const deathDetails: DeathDetails = { remaining: 1, matches: new Map(),reservations };
     const pvpSeen=new Set<string>();
     let pvpExtraDetail=1;
@@ -521,17 +524,17 @@ export async function monitor(env: Env, players: Player[] = configuredPlayers): 
               }
             }catch{console.warn('pvp_settlement_pending');}
           }
-          counts[await saveMatch(env, match, player, account,kpRun,reservations,saved,ranks,vpEnabled)]++;
+          counts[await saveMatch(env, match, player, account,kpRun,reservations,saved,ranks,vpTargets)]++;
           // A full match already contains other registered players; do not wait for their history to catch up.
           for (const other of players) {
             if (other.riotId === player.riotId) continue;
             const otherAccount = accounts.get(other.riotId);
-            if (otherAccount && match.players?.some(member => member.puuid === otherAccount.puuid)) await saveMatch(env, match, other, otherAccount,kpRun,reservations,saved,ranks,vpEnabled);
+            if (otherAccount && match.players?.some(member => member.puuid === otherAccount.puuid)) await saveMatch(env, match, other, otherAccount,kpRun,reservations,saved,ranks,vpTargets);
           }
           const detail = await deathDetail(env, match, players, accounts, deathDetails);
           if (detail) for (const target of players) {
             const targetAccount = accounts.get(target.riotId);
-            if (targetAccount && detail.players.some(member => member.puuid === targetAccount.puuid)) await saveMatch(env, detail, target, targetAccount,kpRun,reservations,saved,ranks,vpEnabled);
+            if (targetAccount && detail.players.some(member => member.puuid === targetAccount.puuid)) await saveMatch(env, detail, target, targetAccount,kpRun,reservations,saved,ranks,vpTargets);
           }
         }
         await setState(env, 'checked:' + player.riotId, Date.now());
