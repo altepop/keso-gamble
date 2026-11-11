@@ -79,6 +79,12 @@ jobs:
           .venv-mahjong/bin/python -m pip install --disable-pip-version-check --no-deps --only-binary=:all: --require-hashes -r scripts/sanma-requirements.txt
           echo "SANMA_PYTHON=$PWD/.venv-mahjong/bin/python" >> "$GITHUB_ENV"
       - run: npm run check
+      - name: Validate optional DAVE music service source and pure queue tests
+        run: |
+          node --check ../music-voice/server.mjs
+          node --check ../music-voice/player.mjs
+          node --check ../music-voice/queue.mjs
+          node --test ../music-voice/test/*.test.mjs
       - name: Restore existing optional model cache for read-only verification
         if: steps.review_paths.outputs.changed == 'true'
         uses: actions/cache@v4

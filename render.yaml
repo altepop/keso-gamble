@@ -1,0 +1,27 @@
+# Deploy in a NEW dedicated Hobby workspace, not the workspace hosting VCT QUIZ.
+# Secrets are entered in the Render Dashboard; never commit their values.
+services:
+  - type: web
+    name: keso-music-voice
+    runtime: node
+    region: singapore
+    plan: free
+    branch: main
+    autoDeployTrigger: commit
+    buildCommand: npm --prefix services/music-voice install --omit=dev --no-audit --no-fund
+    startCommand: node services/music-voice/server.mjs
+    healthCheckPath: /health
+    buildFilter:
+      paths:
+        - services/music-voice/**
+        - music/assets/**
+        - render.yaml
+    envVars:
+      - key: NODE_VERSION
+        value: 24.17.0
+      - key: DISCORD_BOT_TOKEN
+        sync: false
+      - key: MUSIC_GUILD_ID
+        sync: false
+      - key: MUSIC_BRIDGE_TOKEN
+        sync: false

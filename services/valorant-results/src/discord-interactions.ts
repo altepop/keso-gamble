@@ -1,6 +1,7 @@
 import {SKIRMISH_BUTTON,decideSkirmish,withoutSkirmishButtons} from './skirmish.ts';
 import {PREDICTION_BUTTON,PREDICTION_MODAL,predictionModal,predictionAmount,openPrediction,buyPrediction} from './valo-predictions.ts';
 import {activityLaunchComponents} from './activity-link.ts';
+import {MUSIC_BUTTON,runMusic,musicControls} from './music-command.ts';
 import {CHOOSE_BUTTON,RECRUIT_BUTTON,DUEL_BUTTON,GAME_IDS,gameCenterCard,gameDetailCard,duelInviteCard,recruitCard,type GameId} from './game-center.ts';
 import {startDiscordDuel,respondDiscordDuel} from './game-duel.ts';
 import {createRecruit,changeRecruit,linkRecruitMessage} from './game-recruit.ts';
@@ -160,9 +161,10 @@ export async function discordInteractions(request: Request, env: Env, ctx: Execu
   const gcChoice=interaction.type===3&&CHOOSE_BUTTON.test(interaction.data?.custom_id??'');
   const gcRecruit=interaction.type===3&&RECRUIT_BUTTON.test(interaction.data?.custom_id??'');
   const gcDuel=interaction.type===3&&DUEL_BUTTON.test(interaction.data?.custom_id??'');
+  const musicButton=interaction.type===3&&MUSIC_BUTTON.test(interaction.data?.custom_id??'');
   if (['kpgrant','paifulink','unitelink'].includes(interaction.data?.name ?? '') && !(permissions & (8n | 32n))) return respond('このコマンドには「管理者」または「サーバー管理」権限が必要です。');
   if ((interaction.data?.name === 'death' || deathSelect) && !(permissions & (8n | 32n))) return respond('開始・終了・状態確認には「管理者」または「サーバー管理」権限が必要です。');
-  if (!deathSelect && !paifuButton && !mbetButton && !skirmishButton && !vpButton && !vpModal && !gcChoice && !gcRecruit && !gcDuel && (interaction.type !== 2 || !['play','duel','recruit','predict','death', 'valo', 'kp', 'spike', 'dm', 'keiba', 'bet', 'paifu', 'mleague', 'mbet', 'mclose', 'kpgrant', 'paifulink', 'unitelink', 'horsename', 'give'].includes(interaction.data?.name ?? ''))) return respond('対応していないコマンドです。');
+  if (!deathSelect && !paifuButton && !mbetButton && !skirmishButton && !vpButton && !vpModal && !gcChoice && !gcRecruit && !gcDuel && !musicButton && (interaction.type !== 2 || !['music','play','duel','recruit','predict','death', 'valo', 'kp', 'spike', 'dm', 'keiba', 'bet', 'paifu', 'mleague', 'mbet', 'mclose', 'kpgrant', 'paifulink', 'unitelink', 'horsename', 'give'].includes(interaction.data?.name ?? ''))) return respond('対応していないコマンドです。');
   if (!/^\d+$/.test(interaction.id) || typeof interaction.token !== 'string' || !interaction.token.length || interaction.token.length > 4096) return new Response('Invalid interaction', { status: 400 });
   if(gcChoice){
     const game=CHOOSE_BUTTON.exec(interaction.data!.custom_id!)![1] as GameId;
@@ -200,7 +202,12 @@ export async function discordInteractions(request: Request, env: Env, ctx: Execu
       allowed_mentions?: {parse:[];users?:string[]} }, notice: string | undefined;
     let recruitToLink: string|null=null;
     try {
-      if(gcRecruit){
+      if(musicButton||interaction.data?.name==='music'){
+        const message=await runMusic(env,interaction);
+        result={content:message,components:!message.includes('再生サーバーはまだ接続されていない')
+          &&!message.includes('再生中の音楽はない')
+          &&/^(🎵|🎶|⏸|▶|⏭|⏹|👋|🔊|🔁)/u.test(message)?musicControls():[]};
+      }else if(gcRecruit){
         const matched=RECRUIT_BUTTON.exec(interaction.data!.custom_id!)!;
         const view=await changeRecruit(env,matched[2],config.guildId,interaction.member!.user!.id,
           matched[1]==='join',Date.now(),interaction.message?.id,interaction.message?.channel_id);
@@ -267,7 +274,7 @@ export async function discordInteractions(request: Request, env: Env, ctx: Execu
         await whisper('操作結果を確認できませんでした。少し待ってからもう一度押してください。');
         return;
       }
-      if(['duel','recruit','play','predict'].includes(interaction.data?.name??'')||vpModal){
+      if(['music','duel','recruit','play','predict'].includes(interaction.data?.name??'')||vpModal){
         const message=error instanceof Error?error.message:'';
         result={content:/[ぁ-んァ-ヶ一-龯]/.test(message)&&message.length<=150&&!/SQL|D1_|token|secret/i.test(message)
           ? message:'予想を処理できませんでした。KP残高・受付状況を確認してください。',components:[]};
