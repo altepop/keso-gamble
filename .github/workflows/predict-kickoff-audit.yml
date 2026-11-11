@@ -1,0 +1,94 @@
+name: Temporary secure VALORANT match kickoff audit
+on:
+  push:
+    paths:
+      - .github/workflows/predict-kickoff-audit.yml
+permissions:
+  contents: read
+jobs:
+  audit:
+    if: github.ref == 'refs/heads/main' && github.repository == 'altepop/keso-gamble'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      CFTOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CFACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      HENRIK_KEY: ${{ secrets.HENRIK_API_KEY }}
+      WORKER_NAME: ${{ secrets.VALORANT_RESULTS_WORKER }}
+    steps:
+      - name: Inspect target match without writing D1 or printing user data
+        run: |
+          set -euo pipefail
+          cat > /tmp/predict_pub.pem <<'PUB'
+          -----BEGIN PUBLIC KEY-----
+          MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEA/DcYQHcUvsm9tWpR8L+y
+          9D7+A8AcoW0BP5Wz8gjWQ3zs7Z93wXh1GwRPQnOu/AKd5tAaCkbIW8c9ZQYn6QEz
+          G2sre7D6WF7Hc3Dx+t18APw0WsKfuBf20u97uYiCBTS3PZO3ldEtpAQgsA8YZgPW
+          mgZgnZCe0UKYQ2glODYMsOmjMGwQE9Th1S9BjeIEDZMPGh1m142bAdMFw8A3lXIG
+          lDyX54HAgVa0H9oEgBl8xenGZOhyQp9M4Dyfcs8ad8OmeqrSLRbnhDMOA00WeFgo
+          zQHtxzUznqRS2kMr8ALXiyZNnY6lpNMVyWleWYAek3hiZFzzRDvPahIRiVWVT64m
+          O/ElSUgJSQI5vgKf3Id70dZZMh4Ol09KZYIZpDexIZ7Wz3mLiFfrVYZfwEfY/vll
+          mW3ki/spzU85X5SL0MJu5xi8CQbIS0kIKEaCTpGB1e7JLz9f8CIir7GBhiVmDrcm
+          /6frSIqZJ1Gk/zYmQ1qbiYGNhE020mdP5QP2f80kk0PnkmR/yFM7YfDGgcbwsbEV
+          4N6ECH4KqdryJvhvoed8RKTPD3RIVlfAEA7Ncl1U4WhYlRKkpPnCOvbfJPB/kNeZ
+          trC9292yGEcVEig9we1ehlLnkGZCV9cqv+a759f714w0hp4GAPHUAB1HTa7RyY1b
+          EEH8cyvnrThL/ihxNTc0dGECAwEAAQ==
+          -----END PUBLIC KEY-----
+          PUB
+          python3 - <<'PY'
+          import os,json,urllib.request,urllib.error,subprocess,base64
+          from datetime import datetime
+          from zoneinfo import ZoneInfo
+          def query(path,body=None):
+            hdr={'Authorization':'Bearer '+os.environ['CFTOKEN']}
+            if body is not None:hdr['Content-Type']='application/json'
+            req=urllib.request.Request(path,headers=hdr,data=json.dumps(body).encode() if body else None)
+            with urllib.request.urlopen(req,timeout=30) as res: j=json.load(res)
+            if not j.get('success'):raise RuntimeError('cloudflare_query_failed')
+            return j['result']
+          def encrypt(label,obj):
+            data=json.dumps({'type':label,'value':obj},ensure_ascii=False,separators=(',',':')).encode()
+            if len(data)>440:raise RuntimeError('record_too_long_'+label)
+            p=subprocess.run(['openssl','pkeyutl','-encrypt','-pubin','-inkey','/tmp/predict_pub.pem','-pkeyopt','rsa_padding_mode:oaep','-pkeyopt','rsa_oaep_md:sha256','-pkeyopt','rsa_mgf1_md:sha256'],input=data,capture_output=True,check=True)
+            print('MATCH_AUDIT_ENC='+base64.b64encode(p.stdout).decode(),flush=True)
+          account=os.environ['CFACCOUNT'];root='https://api.cloudflare.com/client/v4/accounts/'+account
+          worker=os.environ.get('WORKER_NAME','valorant-results')
+          config=query(root+'/workers/scripts/'+worker+'/settings')
+          d1=[b['id'] for b in config.get('bindings',[]) if b.get('type')=='d1' and b.get('name')=='DB']
+          if len(d1)!=1:raise RuntimeError('not_one_d1')
+          start=int(datetime(2026,11,11,23,20,tzinfo=ZoneInfo('Asia/Tokyo')).timestamp()*1000)
+          end=int(datetime(2026,11,11,23,40,tzinfo=ZoneInfo('Asia/Tokyo')).timestamp()*1000)
+          def sql(querystring,params):
+            res=query(root+'/d1/database/'+d1[0]+'/query',{'sql':querystring,'params':params})
+            return res[0].get('results',[])
+          evs=sql("""SELECT e.id,e.riot,e.mode,e.name,e.created_at,e.closes_at,e.status,e.match_id,e.outcome,a.region
+           FROM vp_events e LEFT JOIN tracked_players a ON a.riot_id=e.riot
+           WHERE e.created_at>=? AND e.created_at<=? ORDER BY e.created_at LIMIT 10""",[start,end])
+          print('MATCH_AUDIT_EVENT_COUNT='+str(len(evs)))
+          for e in evs:
+            encrypt('event',{k:e.get(k) for k in ['id','riot','mode','name','created_at','status','match_id','outcome']})
+            ticks=sql("SELECT user,side,stake,odds,purchased_at,status,payout FROM vp_tickets WHERE event_id=?",[e['id']])
+            print('MATCH_AUDIT_TICKETS='+str(len(ticks)))
+            for t in ticks:encrypt('ticket',t)
+            notices=sql("""SELECT match_id,riot_id,mode,ended_at,outcome FROM notifications
+              WHERE riot_id=? AND mode=? AND ended_at>? AND ended_at<? ORDER BY ended_at LIMIT 8""",
+              [e['riot'],e['mode'],e['created_at']-3600000,e['created_at']+7200000])
+            print('MATCH_AUDIT_NOTICES='+str(len(notices)))
+            for n in notices:
+              encrypt('notice',{k:n.get(k) for k in ['match_id','ended_at','outcome']})
+              if not e.get('region'):continue
+              path='https://api.henrikdev.xyz/valorant/v4/match/'+str(e['region'])+'/'+str(n['match_id'])
+              headers={'User-Agent':'KesoPredictionAudit/1.0'}
+              if os.environ.get('HENRIK_KEY'):headers['Authorization']=os.environ['HENRIK_KEY']
+              try:
+                req=urllib.request.Request(path,headers=headers)
+                with urllib.request.urlopen(req,timeout=20) as resp: val=json.load(resp)
+                details=val.get('data') or {}
+                meta=details.get('metadata') or {}
+                members=details.get('players') or []
+                times={'id':n['match_id'],'started_at':meta.get('started_at'),'game_length_in_ms':meta.get('game_length_in_ms'),'is_completed':meta.get('is_completed'),'queue':(meta.get('queue') or {}).get('id')}
+                encrypt('match',times)
+              except urllib.error.HTTPError as err:print('MATCH_AUDIT_HENRIK_HTTP='+str(err.code))
+              except Exception as err:print('MATCH_AUDIT_HENRIK_ERROR='+type(err).__name__)
+          print('MATCH_AUDIT_COMPLETE=1')
+          PY
