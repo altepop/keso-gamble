@@ -10,7 +10,20 @@ import {isOwnPrediction} from './prediction-identity.ts';
 export const PREDICTION_BUTTON = /^vp:bet:(\d{15,22}):(win|loss)$/;
 export const PREDICTION_MODAL = /^vp:submit:(\d{15,22}):(win|loss)$/;
 const VALID_ID = /^\d{15,22}$/;
-const MIN = 100, MAX = 100000, WINDOW = 60 * 60000, EXPIRY = 6 * 3600000;
+const MIN = 100, MAX = 100000, WINDOW = 10 * 60000, EXPIRY = 6 * 3600000;
+// Discord-confirmed purchase timestamps must precede the real match kickoff.
+// A two-minute safety buffer protects against match-feed delay and time rounding.
+export const PREMATCH_GUARD_MS = 2 * 60000;
+export const PREDICTION_ACCEPTED = '🎫 **予想を受け付けました**';
+export const predictionWasAccepted = (message: string) => message.startsWith(PREDICTION_ACCEPTED + '\n');
+export function predictionBetAnnouncement(user: string) {
+  if (!VALID_ID.test(user)) throw Error('Invalid Discord user ID');
+  return {
+    content: '🎯 <@' + user + '> が勝敗予想に賭けたぞ！\n-# 予想した勝敗と賭け金は結果が出るまで非公開。',
+    allowed_mentions: { parse: [] as string[], users: [user] },
+  };
+}
+
 const safe = (s: string) => s.replace(/[@<>\x60*_~|\r\n]/g, '').slice(0, 70);
 const money = (n: number) => n.toLocaleString('ja-JP') + ' KP';
 const oddsText = (n: number) => (n / 100).toFixed(2) + '倍';
@@ -37,8 +50,12 @@ export async function ensurePredictions(db: D1Database) {
 }
 export function predictionOdds(wins: number, losses: number) {
   const p = Math.max(.2, Math.min(.8, (wins + 3) / (wins + losses + 6)));
-  return { win: Math.max(110, Math.min(500, Math.floor(92 / p))),
-    loss: Math.max(110, Math.min(500, Math.floor(92 / (1 - p)))) };
+  // Community-friendly odds: 2.10x at an even match, while keeping a
+  // hard 5.00x cap for scarce underdog outcomes. Existing cards retain their
+  // originally snapshotted odds and all wallet/settlement rules stay unchanged.
+  // Avoid IEEE-754 rounding turning a mathematically exact 2.45x into 2.44x.
+  const quote = (chance: number) => Math.max(125, Math.min(500, Math.floor(105 / chance + 1e-9)));
+  return { win: quote(p), loss: quote(1 - p) };
 }
 export function predictionCard(e: Event) {
   const until = new Date(e.closes_at + 9*3600000).toISOString().slice(11,16);
@@ -53,7 +70,7 @@ export function predictionCard(e: Event) {
         {type:2,style:3,label:'勝利を予想',custom_id:'vp:bet:' + e.id + ':win'},
         {type:2,style:4,label:'敗北を予想',custom_id:'vp:bet:' + e.id + ':loss'},
       ]},
-      {type:10,content:'-# 受付 ' + until + ' JSTまで · 100〜100,000 KP · 1人1回\n-# 試合開始後の予想・引き分け・対象試合が見つからない場合は返金。倍率は固定。'},
+      {type:10,content:'-# 受付 ' + until + ' JSTまで · 100〜100,000 KP · 1人1回\n-# 試合開始2分前を過ぎた賭けは、判定後に全額返金。倍率は固定。'},
     ],
   }] };
 }
@@ -80,9 +97,16 @@ export async function openPrediction(env:KpEnv,id:string,guild:string,riot:strin
   if(!player)throw Error('対象者を登録済み一覧から選んでください。');
   await ensurePredictions(env.DB);
   await expirePredictions(env,now);
-  const old=await env.DB.prepare('SELECT id FROM vp_events WHERE guild=? AND riot=? AND mode=? AND status=\'open\' LIMIT 1')
-    .bind(guild,riot,mode).first<{id:string}>();
-  if(old)throw Error('この対象者・モードは受付中です。既存のカードを使用してください。');
+  const old=await env.DB.prepare('SELECT id,closes_at FROM vp_events WHERE guild=? AND riot=? AND mode=? AND status=\'open\' LIMIT 1')
+    .bind(guild,riot,mode).first<{id:string;closes_at:number}>();
+  if(old){
+    if(old.closes_at>=now)throw Error('この対象者・モードは受付中です。既存のカードを使用してください。');
+    // Only an expired, unused card can be retired to let the next card open.
+    // Skip the UPDATE for ordinary openings to preserve the D1 write budget.
+    const retired=await env.DB.prepare("UPDATE vp_events SET status='cancelled' WHERE id=? AND status='open' AND closes_at<? AND NOT EXISTS(SELECT 1 FROM vp_tickets WHERE event_id=?)")
+      .bind(old.id,now,old.id).run();
+    if(!retired.meta.changes)throw Error('この対象者・モードは受付中です。既存のカードを使用してください。');
+  }
   const act=await env.DB.prepare('SELECT act_id,act_name FROM notifications WHERE riot_id=? AND mode=? AND act_id IS NOT NULL AND outcome IN (\'win\',\'loss\') ORDER BY ended_at DESC,match_id DESC LIMIT 1')
     .bind(riot,mode).first<{act_id:string;act_name:string|null}>();
   const count=act?await env.DB.prepare('SELECT SUM(CASE WHEN outcome=\'win\' THEN 1 ELSE 0 END) AS wins,SUM(CASE WHEN outcome=\'loss\' THEN 1 ELSE 0 END) AS losses FROM notifications WHERE riot_id=? AND mode=? AND act_id=?')
@@ -106,33 +130,36 @@ export async function buyPrediction(env:KpEnv,id:string,guild:string,user:string
   const mapping=await initializeKp(env,override);
   if(!mapping||mapping.guildId!==guild)return 'KPが利用できません。';
   await ensurePredictions(env.DB);
-  const e=await env.DB.prepare('SELECT * FROM vp_events WHERE id=? AND guild=?').bind(id,guild).first<Event>();
+  const e=await env.DB.prepare(`SELECT e.*, EXISTS(SELECT 1 FROM notifications n
+    WHERE n.riot_id=e.riot AND n.mode=e.mode AND n.ended_at>=e.created_at LIMIT 1) AS observed_match
+    FROM vp_events e WHERE e.id=? AND e.guild=?`).bind(id,guild).first<Event & {observed_match:number}>();
   if(!e)return 'この予想カードは見つかりません。';
   if(await isOwnPrediction(mapping,e.riot,user))
     return '自分の試合には予想できません。';
-  if(e.status!=='open'||at<e.created_at||at>e.closes_at)return '予想の受付は終了しています。';
+  if(e.status!=='open'||at<e.created_at||at>e.closes_at||e.observed_match)return '対象者の試合が確認されたか、予想の受付が終了しています。新しい試合のカードを利用してください。';
   const existing=await env.DB.prepare('SELECT stake FROM vp_tickets WHERE event_id=? AND user=?')
     .bind(id,user).first<{stake:number}>();
   if(existing)return 'このカードにはすでに '+money(existing.stake)+' を予想済みです。';
   const odds=side==='win'?e.win_odds:e.loss_odds;
-  const row=await env.DB.prepare('INSERT OR IGNORE INTO vp_tickets(event_id,user,side,stake,odds,purchased_at) SELECT e.id,w.user,?,?,?,? FROM vp_events e JOIN kp_wallets w ON w.guild=e.guild AND w.user=? WHERE e.id=? AND e.guild=? AND e.status=\'open\' AND e.created_at<=? AND e.closes_at>=? AND w.balance>=? AND NOT EXISTS(SELECT 1 FROM vp_tickets t WHERE t.event_id=e.id AND t.user=w.user)')
+  const row=await env.DB.prepare('INSERT OR IGNORE INTO vp_tickets(event_id,user,side,stake,odds,purchased_at) SELECT e.id,w.user,?,?,?,? FROM vp_events e JOIN kp_wallets w ON w.guild=e.guild AND w.user=? WHERE e.id=? AND e.guild=? AND e.status=\'open\' AND e.created_at<=? AND e.closes_at>=? AND w.balance>=? AND NOT EXISTS(SELECT 1 FROM vp_tickets t WHERE t.event_id=e.id AND t.user=w.user) AND NOT EXISTS(SELECT 1 FROM notifications n WHERE n.riot_id=e.riot AND n.mode=e.mode AND n.ended_at>=e.created_at)')
     .bind(side,amount,odds,at,user,id,guild,at,at,amount).run();
   if(row.meta.changes===0){
     // Only diagnose failed purchases. The successful path keeps its original D1 cost,
     // and the INSERT ... SELECT remains the atomic balance/duplicate/deadline gate.
     const current=await env.DB.prepare(`SELECT e.status,e.created_at,e.closes_at,
       (SELECT balance FROM kp_wallets WHERE guild=e.guild AND user=?) AS balance,
-      (SELECT stake FROM vp_tickets WHERE event_id=e.id AND user=?) AS prior_stake
+      (SELECT stake FROM vp_tickets WHERE event_id=e.id AND user=?) AS prior_stake,
+      EXISTS(SELECT 1 FROM notifications n WHERE n.riot_id=e.riot AND n.mode=e.mode AND n.ended_at>=e.created_at LIMIT 1) AS observed_match
       FROM vp_events e WHERE e.id=? AND e.guild=?`)
-      .bind(user,user,id,guild).first<{status:string;created_at:number;closes_at:number;balance:number|null;prior_stake:number|null}>();
+      .bind(user,user,id,guild).first<{status:string;created_at:number;closes_at:number;balance:number|null;prior_stake:number|null;observed_match:number}>();
     if(!current)return 'この予想カードは見つかりません。';
     if(current.prior_stake!==null)return 'このカードにはすでに '+money(current.prior_stake)+' を予想済みです。';
-    if(current.status!=='open'||at<current.created_at||at>current.closes_at)return '予想の受付は終了しています。';
+    if(current.status!=='open'||at<current.created_at||at>current.closes_at||current.observed_match)return '対象者の試合が確認されたか、予想の受付が終了しています。新しい試合のカードを利用してください。';
     if(current.balance===null)return 'KP口座が見つかりません。/kp balance で口座を確認してください。';
     if(current.balance<amount)return 'KP残高が不足しています。現在 '+money(current.balance)+'、必要 '+money(amount)+'。';
     return '予想を確定できませんでした。/kp balance で残高を確認し、もう一度お試しください。';
   }
-  return '🎫 **予想を受け付けました**\n'+safe(e.name)+'｜'+modeLabel(e.mode)+'\n'
+  return PREDICTION_ACCEPTED+'\n'+safe(e.name)+'｜'+modeLabel(e.mode)+'\n'
     +(side==='win'?'勝利':'敗北')+'に '+money(amount)+'（'+oddsText(odds)+'）\n的中時 '+money(Math.floor(amount*odds/100))+'。試合終了後に自動判定します。';
 }
 export async function settlePredictions(env:KpEnv,match:Match,riot:string,now=Date.now(),override?:KpMapping) {
@@ -153,13 +180,14 @@ export async function settlePredictions(env:KpEnv,match:Match,riot:string,now=Da
   const rival=match.teams.find(t=>t.team_id!==player.team_id);
   if(!team||!rival||(team.won&&rival.won))return 0;
   const outcome=team.won?'win':rival.won?'loss':'draw';
+  const payoutCutoff=start-PREMATCH_GUARD_MS;
   for(const e of events) {
     if(e.guild!==mapping.guildId)continue;
     const done=await env.DB.batch([
       env.DB.prepare('UPDATE vp_events SET status=\'resolved\',match_id=?,outcome=? WHERE id=? AND status=\'open\' AND created_at<?')
         .bind(match.metadata.match_id,outcome,e.id,start),
       env.DB.prepare('UPDATE vp_tickets SET status=CASE WHEN purchased_at>=? OR ?=\'draw\' THEN \'refunded\' WHEN side=? THEN \'won\' ELSE \'lost\' END,payout=CASE WHEN purchased_at>=? OR ?=\'draw\' THEN stake WHEN side=? THEN CAST(stake*odds/100 AS INTEGER) ELSE 0 END WHERE event_id=? AND status=\'pending\' AND EXISTS(SELECT 1 FROM vp_events WHERE id=? AND status=\'resolved\' AND match_id=?)')
-        .bind(start,outcome,outcome,start,outcome,outcome,e.id,e.id,match.metadata.match_id),
+        .bind(payoutCutoff,outcome,outcome,payoutCutoff,outcome,outcome,e.id,e.id,match.metadata.match_id),
     ]);
     if(done[0].meta.changes){
       console.info('vp_settled',{event:e.id,match:match.metadata.match_id,outcome,at:now});
@@ -173,7 +201,7 @@ export async function settlePredictions(env:KpEnv,match:Match,riot:string,now=Da
             +'試合結果：**'+(outcome==='win'?'勝利':outcome==='loss'?'敗北':'引き分け')+'**'
             +'｜予想 '+total.entries+'件／的中 '+total.hits+'件\n'
             +'予想総額 '+money(total.stakes)+'｜払い戻し総額 '+money(total.payouts)
-            +'\n-# 試合開始後の予想と引き分けは返金済み。精算は1回のみ。';
+            +'\n-# 試合開始2分前を過ぎた予想と引き分けは返金済み。精算は1回のみ。';
           await enqueue(env,'vp:result:'+e.id,post.slice(0,1900),now);
         }
       }catch{console.warn('prediction_result_post_pending');}
