@@ -5,6 +5,7 @@ import type { KpEnv, KpMapping } from './kp.ts';
 import { initializeKp } from './kp.ts';
 import { storedMode, modeLabel } from './modes.ts';
 import {ensurePosts,enqueue} from './racing-posts.ts';
+import {isOwnPrediction} from './prediction-identity.ts';
 
 export const PREDICTION_BUTTON = /^vp:bet:(\d{15,22}):(win|loss)$/;
 export const PREDICTION_MODAL = /^vp:submit:(\d{15,22}):(win|loss)$/;
@@ -107,7 +108,7 @@ export async function buyPrediction(env:KpEnv,id:string,guild:string,user:string
   await ensurePredictions(env.DB);
   const e=await env.DB.prepare('SELECT * FROM vp_events WHERE id=? AND guild=?').bind(id,guild).first<Event>();
   if(!e)return 'この予想カードは見つかりません。';
-  if(mapping.accounts.some(a=>a.discordUserId===user&&a.riotId.toLowerCase()===e.riot.toLowerCase()))
+  if(await isOwnPrediction(mapping,e.riot,user))
     return '自分の試合には予想できません。';
   if(e.status!=='open'||at<e.created_at||at>e.closes_at)return '予想の受付は終了しています。';
   const existing=await env.DB.prepare('SELECT stake FROM vp_tickets WHERE event_id=? AND user=?')
