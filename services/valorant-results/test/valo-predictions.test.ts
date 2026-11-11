@@ -30,7 +30,13 @@ async function fixture(){
     bind(...values:unknown[]){return new Query(this.sql,values);}
     async first<T>(){return (sqlite.prepare(this.sql).get(...this.bindings as never[])??null) as T|null;}
     async all<T>(){return {results:sqlite.prepare(this.sql).all(...this.bindings as never[]) as T[]};}
-    async run(){return {meta:{changes:Number(sqlite.prepare(this.sql).run(...this.bindings as never[]).changes)}};}
+    async run(){
+      // D1 meta.changes uses SQLite total_changes(), which counts trigger writes too.
+      const total=()=>Number((sqlite.prepare('SELECT total_changes() AS n').get() as {n:number}).n);
+      const before=total();
+      sqlite.prepare(this.sql).run(...this.bindings as never[]);
+      return {meta:{changes:total()-before}};
+    }
   }
   const env:KpEnv={KP_BOOTSTRAP_PRIVATE_KEY:'fixture',DB:{
     prepare:(sql:string)=>new Query(sql),batch:async(queries:Query[])=>{
@@ -72,7 +78,10 @@ test('one ticket debits once; replay, own ticket, and insufficient KP do not deb
   const f=await fixture();
   const card=await f.open(); assert.equal(card.flags,32768);
   assert.equal(card.components[0].type,17);
+  const before=(f.sqlite.prepare('SELECT total_changes() AS n').get() as {n:number}).n;
   assert.match(await f.buy(),/予想を受け付けました/);
+  // Ticket + debit ledger + wallet balance update = three D1 changes, not one.
+  assert.equal((f.sqlite.prepare('SELECT total_changes() AS n').get() as {n:number}).n-before,3);
   assert.equal(f.balance(),99000);
   assert.match(await f.buy(),/予想済み/);
   assert.equal(f.balance(),99000);
