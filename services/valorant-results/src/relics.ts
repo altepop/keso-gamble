@@ -623,8 +623,8 @@ export const STEAM_RELIC_CAP_USED_SQL=`SELECT COALESCE(SUM(l.delta),0) AS n FROM
 
 /** Caller MUST confirm a new, immutable server-verified receipt before invoking.
  * This is not a public API; browsers can never request a bonus for arbitrary evidence.
- * `lottery` (アンレ only, signed) is the special-lottery part of `amount`; relics act on the win reward without it
- * (a bad draw does not shrink the relic bonus, a good draw does not grow it).
+ * `lottery` is the legacy signed アンレ split. Legacy receipts keep their original base-only calculation.
+ * V7 receipts pass zero: the entire 70/500/2,000/10,000/100,000 award receives relics.
  */
 export async function creditVerifiedRelicBonus(
  env:{DB:D1Database},guild:string,user:string,receipt:string,mode:string,amount:number,win:boolean,at=Date.now(),lottery=0,

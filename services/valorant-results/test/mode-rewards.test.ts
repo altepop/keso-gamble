@@ -8,7 +8,7 @@ import type {Match} from '../src/results.ts';
 function game(id='one',mode='unrated',win=true,kills=10,deaths=5):Match{return {metadata:{match_id:id,is_completed:true,queue:{id:mode},started_at:new Date(Date.now()-600000).toISOString(),game_length_in_ms:300000},players:Array.from({length:10},(_,i)=>({puuid:i?'p'+i:'me',team_id:i<5?'red':'blue',stats:{kills:i?kills-1:kills,deaths:i?5:deaths,assists:1,score:i?100:200}})),teams:[{team_id:'red',won:win,rounds:{won:win?5:2}},{team_id:'blue',won:!win,rounds:{won:win?0:5}}]};}
 test('unrated lottery has exact weights, stable 0.03% jackpot and mean of 470 on a win without old luck',()=>{
  const counts=new Map<number,number>();let total=0;
- for(let roll=0;roll<10000;roll++){const v=unratedLottery(roll);counts.set(v,(counts.get(v)??0)+1);total+=370+v;}
+ for(let roll=0;roll<10000;roll++){const v=unratedLottery(roll,false);counts.set(v,(counts.get(v)??0)+1);total+=370+v;}
  assert.deepEqual([...counts],[[ -500,2000],[-100,3000],[0,3797],[500,800],[2000,300],[10000,100],[100000,3]]);
  assert.equal(total/10000,470);assert.throws(()=>unratedLottery(10000));
  for(let n=0;n<100;n++){const r=game('draw'+n),q=valoKp(r,'me','unrated','win');assert.equal(q.net,q.base);assert.deepEqual(valoKp(r,'me','unrated','win'),q);assert.doesNotMatch(q.note,/ラッキー/);}
@@ -54,4 +54,21 @@ test('competitive: a loss pays +200 like a small win, only the team bottom on a 
   const b=valoKp(low,'me','competitive','loss');assert.equal(b.base,-400);assert.equal(b.net,applyLuck(-400,luckFor('valo:cb'+n+':me')));
   assert.equal(valoKp(game('cw'+n,'competitive',true),'me','competitive','win').base,900);
  }
+});
+
+
+test('v7 unrated awards sum to 100%, guarantee 70, retain jackpot bands, and never add the old 370 or luck twice',()=>{
+ const counts=new Map<number,number>();let total=0;
+ for(let roll=0;roll<10000;roll++){const v=unratedLottery(roll);assert(v>=70);counts.set(v,(counts.get(v)??0)+1);total+=v;}
+ assert.deepEqual([...counts],[[70,8797],[500,800],[2000,300],[10000,100],[100000,3]]);assert.equal(total/10000,291.579);
+ assert.throws(()=>unratedLottery(-1));assert.throws(()=>unratedLottery(10000));assert.throws(()=>unratedLottery(0.5));
+ for(let n=0;n<2000;n++){const q=valoKp(game('v7-'+n),'me','unrated','win');assert(q.net>=70);assert.equal(q.base,q.net);assert.equal(q.lottery,undefined);assert(counts.has(q.net));}
+});
+test('v7 changes only unrated wins; losses, bottom losses, draws and other modes retain their prior results',()=>{
+ for(const outcome of ['loss','draw',null] as const){const r=game('v7-loss','unrated',false);for(const bottom of [false,true]){
+  r.players[0].stats!.score=bottom?0:200;
+  assert.deepEqual(valoKp(r,'me','unrated',outcome,true,true,true),valoKp(r,'me','unrated',outcome,true,true,false));
+  if(outcome==='loss')assert.equal(valoKp(r,'me','unrated',outcome).base,bottom?-200:-50);
+ }}
+ for(const mode of ['competitive','swiftplay','teamdeathmatch','escalation','deathmatch','replication'])for(const outcome of ['win','loss','draw',null] as const){const r=game('same-'+mode,mode);assert.deepEqual(valoKp(r,'me',mode,outcome,true,true,true),valoKp(r,'me',mode,outcome,true,true,false));}
 });

@@ -4,10 +4,12 @@ import {escalationBigNote} from './escalation-messages.ts';
 import type {Match} from './results.ts';
 import type {KpEnv} from './kp.ts';
 export const MODE_REWARD_VERSION=rules.version;
+export const UNRATED_REWARD_VERSION=rules.unrated.version;
+const LEGACY_UNRATED_LOTTERY=[{weight:2000,amount:-500},{weight:3000,amount:-100},{weight:3797,amount:0},{weight:800,amount:500},{weight:300,amount:2000},{weight:100,amount:10000},{weight:3,amount:100000}] as const;
 const rates:Record<string,{win:number;loss:number;bottom:number}>={competitive:{win:900,loss:200,bottom:-400},unrated:{win:450,loss:-50,bottom:-200},swiftplay:{win:180,loss:-20,bottom:-60},teamdeathmatch:{win:70,loss:0,bottom:-30},escalation:{win:70,loss:0,bottom:-30},replication:{win:180,loss:-20,bottom:-60}};
-export function unratedLottery(roll:number){
+export function unratedLottery(roll:number,v7=true){
  if(!Number.isInteger(roll)||roll<0||roll>=10000)throw Error('Invalid lottery roll');
- let end=0;for(const band of rules.unrated.lottery){end+=band.weight;if(roll<end)return band.amount;}
+ let end=0;for(const band of v7?rules.unrated.lottery:LEGACY_UNRATED_LOTTERY){end+=band.weight;if(roll<end)return band.amount;}
  throw Error('Invalid lottery weights');
 }
 export type EscalationKind='big'|'super-lucky'|'super-unlucky';
@@ -50,7 +52,7 @@ export function jackpotPost(user:string,amount:number){
  return amount>=100000?`🚨🎰🚨 <@${user}> アンレ勝利の抽選で **+${amount.toLocaleString('ja-JP')} KP**！！ 0.03%を引きよった、とんでもないことになっとる！`
   :`🎰💥 <@${user}> アンレ勝利の抽選で **+${amount.toLocaleString('ja-JP')} KP** の大当たりや！`;
 }
-export function valoKp(raw:Match,puuid:string,mode:string,outcome:string|null,escalationV5=true,escalationV6=true):{base:number;net:number;note:string;lottery?:number;escalation?:EscalationSpin}{
+export function valoKp(raw:Match,puuid:string,mode:string,outcome:string|null,escalationV5=true,escalationV6=true,unratedV7=true):{base:number;net:number;note:string;lottery?:number;escalation?:EscalationSpin}{
  if(mode==='spikerush'||!['win','loss','draw',null].includes(outcome))return {base:0,net:0,note:''};
  const p=raw.players.find(p=>p.puuid===puuid),s=p?.stats,id=raw.metadata.match_id+':'+puuid;
  let base=0,bonus=0,note='';
@@ -66,7 +68,9 @@ export function valoKp(raw:Match,puuid:string,mode:string,outcome:string|null,es
   const bottom=outcome==='loss'&&team.length===5&&scores.every(stat)&&stat(s?.score)&&s.score===Math.min(...scores as number[]);
   base=outcome==='win'?rate.win:outcome==='loss'?(bottom?rate.bottom:rate.loss):0;
   if(mode==='unrated'&&outcome==='win'){
-   const picked=unratedLottery(draw('unrated-lottery:'+id));base=rules.unrated.win+picked;
+   const picked=unratedLottery(draw('unrated-lottery:'+id),unratedV7);
+   if(unratedV7)return {base:picked,net:picked,note:`（アンレ当選 +${picked.toLocaleString('ja-JP')} KP・遺物は当選額全体が対象）`};
+   base=370+picked;
    return {base,net:base,lottery:picked,note:`（アンレ抽選 ${picked>=0?'+':''}${picked.toLocaleString('ja-JP')} KP）`};
   }
   if(mode==='swiftplay'&&outcome==='win'){
@@ -110,7 +114,7 @@ export async function ensureModeRewards(env:KpEnv){
     VALUES('esc-extra:'||NEW.id,NEW.guild,NEW.user,NEW.balance_after-NEW.balance_before,'match',NEW.at);
     END`),
   ]);
-  await env.DB.prepare("INSERT OR IGNORE INTO kp_settings(key,value) VALUES('escalation_v5_started_at',?),('escalation_v6_started_at',?)").bind(String(Date.now()),String(Date.now())).run();
+  await env.DB.prepare("INSERT OR IGNORE INTO kp_settings(key,value) VALUES('escalation_v5_started_at',?),('escalation_v6_started_at',?),('unrated_v7_started_at',?)").bind(String(Date.now()),String(Date.now()),String(Date.now())).run();
   if(active)return;
   await env.DB.batch([
    env.DB.prepare('CREATE TABLE IF NOT EXISTS kp_reward_notes(id TEXT PRIMARY KEY,note TEXT NOT NULL)'),

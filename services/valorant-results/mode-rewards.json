@@ -1,19 +1,12 @@
 {
   "version": "mode-rewards-v6",
   "unrated": {
-    "win": 370,
+    "version": "unrated-rewards-v7",
+    "win": 70,
     "lottery": [
       {
-        "weight": 2000,
-        "amount": -500
-      },
-      {
-        "weight": 3000,
-        "amount": -100
-      },
-      {
-        "weight": 3797,
-        "amount": 0
+        "weight": 8797,
+        "amount": 70
       },
       {
         "weight": 800,

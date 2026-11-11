@@ -47,3 +47,10 @@ test('LOOP chapter clear rewards show the 10x first-clear amounts',()=>{
  assert.match(html,/第一章の初クリア <strong>\+50,000 KP<\/strong>/);
  assert.match(html,/第二章の初クリア <strong>\+300,000 KP<\/strong>/);
 });
+
+
+test('approved unrated and Skirmish amounts are shown alongside corrected existing Escalation odds',()=>{
+ const html=playView({...live([]),rewardRates:{unrated:{win:70,loss:-50,bottom:-200}}});
+ for(const text of ['勝利 70〜100,000 KP','87.97%で70','当選額全体に遺物補正','3勝750→4勝2,000','5勝なら5,000','1/24','Ⅰ 500 KP：35%','Ⅴ 15,000 KP：4%'])assert(html.includes(text),text);
+ assert.doesNotMatch(html,/勝ち \+370 KP|勝っても抽選でマイナス|3勝600|5勝なら1,500|全試合の15%|等級別40／30／20／8／2%/);
+});

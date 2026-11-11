@@ -475,7 +475,7 @@ test('unrated lottery can debit a win once and pays a jackpot once without anoth
  const {valoKp}=await import('../src/mode-rewards.ts');const f=await fixture();f.enableHistory();seed(f.sql,one,10000);
  f.sql.exec("UPDATE kp_settings SET value='0' WHERE key='mode_rewards_started_at'");
  let negative:ReturnType<typeof game>|undefined,jackpot:ReturnType<typeof game>|undefined;
- for(let i=0;i<100000&&(!negative||!jackpot);i++){const r=game('unrated-band-'+i,'unrated');const q=valoKp(r,'p-one','unrated','win');if(q.net===-130)negative=r;if(q.net===100370)jackpot=r;}
+ for(let i=0;i<100000&&(!negative||!jackpot);i++){const r=game('unrated-band-'+i,'unrated');const q=valoKp(r,'p-one','unrated','win',true,true,false);if(q.net===-130)negative=r;if(q.net===100370)jackpot=r;}
  assert.ok(negative&&jackpot);
  assert.equal(await collectKpMatch(f.env,mapping,negative,'p-one'),-130);assert.equal(await collectKpMatch(f.env,mapping,negative,'p-one'),-130);
  assert.equal(await collectKpMatch(f.env,mapping,jackpot,'p-one'),100370);assert.equal(await collectKpMatch(f.env,mapping,jackpot,'p-one'),100370);
@@ -488,7 +488,7 @@ test('アンレの遺物は特別抽選と無関係：当たりも小さな抽�
  const base=evaluateRelicBonus(relics,'unrated',{amount:370,win:true}).bonus;assert.ok(base>0);
  const want:Record<number,number>={870:base,2370:base,270:base,'-130':0};
  const found:Record<number,ReturnType<typeof game>>={};
- for(let i=0;i<100000&&Object.keys(found).length<4;i++){const r=game('unrated-relic-'+i,'unrated');const n=valoKp(r,'p-one','unrated','win').net;if(n in want&&!(n in found))found[n]=r;}
+ for(let i=0;i<100000&&Object.keys(found).length<4;i++){const r=game('unrated-relic-'+i,'unrated');const n=valoKp(r,'p-one','unrated','win',true,true,false).net;if(n in want&&!(n in found))found[n]=r;}
  assert.equal(Object.keys(found).length,4);
  for(const [net,raw] of Object.entries(found)){
   const f=await fixture();f.enableHistory();seed(f.sql,one,10000);
@@ -1125,4 +1125,54 @@ test('monitor reward lookup reads each immutable bonus receipt once and preserve
  for(const alias of ['p','r','c'])assert.match(plan,new RegExp('SEARCH '+alias+' USING INDEX sqlite_autoindex_kp_ledger_1'));
  assert.doesNotMatch(plan,/SCAN kp_ledger|CORRELATED SCALAR SUBQUERY/);
  const other=await prepareKpRun(f.env,{...mapping,guildId:'100000000000009999'});await loadKpRunMatch(f.env,other,id);assert.equal(other.credits.size,0);
+});
+
+
+const v7Relics={totalSummons:0,equipped:['normal.test.v7'],items:{'normal.test.v7':{id:'normal.test.v7',name:'fixture 100%',origin:'normal',rarity:'legendary',power:130,ability:'fixture',count:1,mode:'universal',skill:'even',percent:100,cap:0}}};
+function equipV7(f:Awaited<ReturnType<typeof fixture>>){const row=f.sql.prepare('SELECT data FROM kp_state WHERE user=?').get(one)!;const state=JSON.parse(String(row.data));state.relics=v7Relics;f.sql.prepare('UPDATE kp_state SET data=? WHERE user=?').run(JSON.stringify(state),one);}
+test('v7 pays each full award and its relic once, including 100,000; neither legacy 370 nor jackpot subtraction survives',async()=>{
+ const {valoKp}=await import('../src/mode-rewards.ts');
+ const f=await fixture();f.enableHistory();seed(f.sql,one,1000000);equipV7(f);
+ f.sql.exec("UPDATE kp_settings SET value='0' WHERE key IN ('mode_rewards_started_at','unrated_v7_started_at')");
+ const found=new Map<number,ReturnType<typeof game>>();
+ for(let i=0;i<100000&&found.size<5;i++){const raw=game('v7-award-'+i,'unrated');const amount=valoKp(raw,'p-one','unrated','win').net;if(!found.has(amount))found.set(amount,raw);}
+ assert.equal(found.size,5);let paid=0;
+ for(const [amount,raw] of found){const expected=amount*2;assert.equal(await collectKpMatch(f.env,mapping,raw,'p-one'),expected);assert.equal(await collectKpMatch(f.env,mapping,raw,'p-one'),expected);paid+=expected;
+  const event=f.sql.prepare('SELECT amount,policy,id FROM kp_events WHERE match=?').get(raw.metadata.match_id)!;assert.equal(event.amount,amount);assert.equal(event.policy,'unrated-rewards-v7');
+  assert.equal(f.sql.prepare("SELECT delta FROM kp_ledger WHERE id=?").get('relic:'+event.id)!.delta,amount);
+ }
+ assert.equal((await readKpState(f.env,mapping,one)).cash,1000000+paid);
+ assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM kp_posts WHERE id LIKE 'jackpot:%'").get()!.n,2);
+ assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM kp_ledger WHERE kind='relic'").get()!.n,5);
+});
+test('v7 cutoff preserves matches started earlier and recorded payouts after cutoff changes',async()=>{
+ const {valoKp}=await import('../src/mode-rewards.ts');const f=await fixture();f.enableHistory();seed(f.sql,one,1000000);
+ const raw=game('v7-cutoff-old','unrated'),start=Date.parse(raw.metadata.started_at);
+ f.sql.exec("UPDATE kp_settings SET value='0' WHERE key='mode_rewards_started_at'");
+ f.sql.prepare("UPDATE kp_settings SET value=? WHERE key='unrated_v7_started_at'").run(String(start+1));
+ const old=valoKp(raw,'p-one','unrated','win',true,true,false).net;assert.equal(await collectKpMatch(f.env,mapping,raw,'p-one'),old);
+ f.sql.prepare("UPDATE kp_settings SET value='0' WHERE key='unrated_v7_started_at'").run();assert.equal(await collectKpMatch(f.env,mapping,raw,'p-one'),old);
+ const next=game('v7-cutoff-new','unrated');const amount=valoKp(next,'p-one','unrated','win').net;assert.equal(await collectKpMatch(f.env,mapping,next,'p-one'),amount);
+ f.sql.prepare("UPDATE kp_settings SET value=? WHERE key='unrated_v7_started_at'").run(String(start+1));assert.equal(await collectKpMatch(f.env,mapping,next,'p-one'),amount);
+});
+test('v7 ordinary and bottom defeats keep their 50/200 base loss and receive the existing matching relic loss once',async()=>{
+ const {luckFor}=await import('../src/luck.ts');
+ for(const bottom of [false,true]){
+  const f=await fixture();f.enableHistory();seed(f.sql,one,1000000);equipV7(f);f.sql.exec("UPDATE kp_settings SET value='0' WHERE key IN ('mode_rewards_started_at','unrated_v7_started_at')");
+  const id=Array.from({length:100},(_,i)=>'v7-defeat-'+bottom+'-'+i).find(id=>luckFor('valo:'+id+':p-one')===null)!;
+  const raw=game(id,'unrated',false) as any;raw.players=Array.from({length:10},(_,i)=>({puuid:i?'p'+i:'p-one',team_id:i<5?'red':'blue',stats:{score:i?100:bottom?0:200,kills:10,deaths:10,assists:0}}));
+  const base=bottom?200:50;assert.equal(await collectKpMatch(f.env,mapping,raw,'p-one'),-base*2);assert.equal(await collectKpMatch(f.env,mapping,raw,'p-one'),-base*2);assert.equal((await readKpState(f.env,mapping,one)).cash,1000000-base*2);
+ }
+});
+
+
+test('v7 reuses the existing per-match settings read without adding database round trips',async()=>{
+ const {draw}=await import('../src/luck.ts');const id=Array.from({length:1000},(_,i)=>'v7-budget-'+i).find(id=>{const roll=draw('unrated-lottery:'+id+':p-one');return roll>=5000&&roll<8797;})!;
+ const counts:number[]=[];
+ for(const modern of [false,true]){
+  const f=await fixture();f.enableHistory();seed(f.sql,one,1000000);f.sql.exec("UPDATE kp_settings SET value='0' WHERE key='mode_rewards_started_at'");
+  if(modern)f.sql.exec("UPDATE kp_settings SET value='0' WHERE key='unrated_v7_started_at'");
+  f.resetQueries();assert.equal(await collectKpMatch(f.env,mapping,game(id,'unrated'),'p-one'),modern?70:370);counts.push(f.queries());
+ }
+ assert.equal(counts[1],counts[0]);
 });
