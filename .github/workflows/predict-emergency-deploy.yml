@@ -1,5 +1,5 @@
 name: Emergency verified prediction hotfix deploy
-# One-time verified KP correction for 2026-11-11 Dolly prediction; remove after completion.
+# Final cleanup deployment: incident settled and validated, temporary Cron hooks removed.
 on:
   push:
     paths:
