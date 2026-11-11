@@ -52,7 +52,7 @@ jobs:
             p=subprocess.run(['openssl','pkeyutl','-encrypt','-pubin','-inkey','/tmp/predict_pub.pem','-pkeyopt','rsa_padding_mode:oaep','-pkeyopt','rsa_oaep_md:sha256','-pkeyopt','rsa_mgf1_md:sha256'],input=data,capture_output=True,check=True)
             print('MATCH_AUDIT_ENC='+base64.b64encode(p.stdout).decode(),flush=True)
           account=os.environ['CFACCOUNT'];root='https://api.cloudflare.com/client/v4/accounts/'+account
-          worker=os.environ.get('WORKER_NAME','valorant-results')
+          worker=os.environ.get('WORKER_NAME') or 'valorant-results'
           config=query(root+'/workers/scripts/'+worker+'/settings')
           d1=[b['id'] for b in config.get('bindings',[]) if b.get('type')=='d1' and b.get('name')=='DB']
           if len(d1)!=1:raise RuntimeError('not_one_d1')
