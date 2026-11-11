@@ -76,7 +76,7 @@ test('radio embeds show current song, duration, queue and both control rows',asy
  assert.equal(reply.view?.mode,'radio');
  const card=musicPanel(reply);
  assert.equal(card.components.length,2);
- assert.match(JSON.stringify(card.embeds),/00:51 \\/ 03:52/);
+ assert.match(JSON.stringify(card.embeds),/00:51 \/ 03:52/);
  assert.match(JSON.stringify(card.embeds),/誤差の女王/);
  assert.match(JSON.stringify(card.embeds),/KESO RADIO/);
  assert.equal(card.components[1].components[1].custom_id,'ms:radio');
