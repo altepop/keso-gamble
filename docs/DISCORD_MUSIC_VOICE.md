@@ -23,6 +23,18 @@
 
 ## デプロイ手順（Node音声サーバー）
 
+### VCT QUIZを守るための配置先
+
+このリポジトリには `render.yaml` を用意してある。**VCT QUIZと同じRenderワークスペースにはデプロイしない。** 無料の稼働時間が共通となり、VCT QUIZが停止するおそれがある。
+
+Renderのダッシュボードで、左側のワークスペース名から **+ New Workspace** を選択し、音楽Bot専用のHobbyワークスペースを作成する。そのワークスペースを選択して **New > Blueprint** から `altepop/keso-gamble` のルートにある `render.yaml` を読み込む。サービス名は `keso-music-voice`、料金プランは `free`、リージョンは `singapore` として定義してある。課金プランへの変更は行わない。
+
+初回デプロイで入力するSecretは `DISCORD_BOT_TOKEN`、`MUSIC_GUILD_ID`、`MUSIC_BRIDGE_TOKEN` の3件だ。**どれもチャットやGitHubに記載しない。** Bot Tokenは既存あかんbotと同じものを利用する。既存のBot Tokenが手元にない場合、Discord Developer Portalで安易にリセットすると既存の通話報酬等が停止する可能性があるため、先に保管先を確認すること。
+
+音声サービスが起動したら、既存Cloudflare Worker `valorant-results` に `MUSIC_VOICE_URL` と `MUSIC_BRIDGE_TOKEN` を追加する。URLは実際に発行されたRenderのHTTPS URLとし、SecretはRenderに入れたものと**完全一致**させる。
+
+※このプロジェクトを編集できる接続済みRenderツールでは新しいワークスペースを直接作成できない。作成後にこのチャットで配備・確認を続けられる。
+
 Cloudflare Workersだけでは、Discordの音声通信に必要なUDPを送受信できない。2026年以降の通常VCにはDAVE暗号化対応が必須であり、`@discordjs/voice` を使用する。
 
 RenderなどのNode.js実行環境に、このリポジトリ全体を接続する（**Root Directoryを `services/music-voice` だけに限定しない**。音源はルートの `music/assets` にある）。
