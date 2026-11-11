@@ -161,6 +161,8 @@ export async function discordInteractions(request: Request, env: Env, ctx: Execu
   if (vpButton) {
     const matched = PREDICTION_BUTTON.exec(interaction.data!.custom_id!)!;
     if (!interaction.member?.user?.id) return respond('Discordのユーザーを確認できません。');
+    const openedAt=Number((BigInt(matched[1])>>22n)+1420070400000n);
+    if(Date.now()>openedAt+60*60000)return respond('このカードは受付終了しています。');
     return Response.json(predictionModal(matched[1],matched[2] as 'win'|'loss'));
   }
   if (vpModal && (!interaction.member?.user?.id || predictionAmount(interaction.data)===null))
@@ -214,14 +216,18 @@ export async function discordInteractions(request: Request, env: Env, ctx: Execu
         && !interaction.data.options[0].options?.some(option => option.name === 'mode')) result = await deathModePicker(env.DB, interaction, configuredPlayers);
       else if (['kp','spike','dm','keiba','bet','mleague','mbet','mclose','kpgrant','paifulink','unitelink','horsename','give'].includes(interaction.data?.name??'')) {const out:{components?:unknown[]}={};result = {content:await runKpCommand(env,interaction,undefined,out)};result.components=out.components??activityLaunchComponents(config.applicationId);}
       else result = { content: interaction.data!.name === 'valo' ? await runValoCommand(env.DB, interaction) : await runDeathCommand(env.DB, interaction) };
-    } catch {
+    } catch (error) {
       console.warn('discord_command_failed');
       if (paifuButton || skirmishButton) {
         // Keep the claim message and its buttons; tell only the presser to retry.
         await whisper('操作結果を確認できませんでした。少し待ってからもう一度押してください。');
         return;
       }
-      result = { content: '操作結果を確認できませんでした。KP・馬券は /kp またはActivity、予約は /death status で確認してください。', components: [] }; }
+      if(interaction.data?.name==='predict'||vpModal){
+        const message=error instanceof Error?error.message:'';
+        result={content:/[ぁ-んァ-ヶ一-龯]/.test(message)&&message.length<=150&&!/SQL|D1_|token|secret/i.test(message)
+          ? message:'予想を処理できませんでした。KP残高・受付状況を確認してください。',components:[]};
+      }else result = { content: '操作結果を確認できませんでした。KP・馬券は /kp またはActivity、予約は /death status で確認してください。', components: [] }; }
     if (interaction.data?.name === 'valo' && interaction.data.options?.[0]?.name === 'status') {
       try {
         const mapping = await initializeKp(env), user = interaction.member?.user?.id;
