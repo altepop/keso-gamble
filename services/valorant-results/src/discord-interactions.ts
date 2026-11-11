@@ -2,7 +2,7 @@ import {isEscalationRanking} from './escalation-rank-command.ts';
 import {SKIRMISH_BUTTON,decideSkirmish,withoutSkirmishButtons} from './skirmish.ts';
 import {PREDICTION_BUTTON,PREDICTION_MODAL,predictionModal,predictionAmount,openPrediction,buyPrediction} from './valo-predictions.ts';
 import {activityLaunchComponents} from './activity-link.ts';
-import {MUSIC_BUTTON,runMusic,musicControls} from './music-command.ts';
+import {MUSIC_BUTTON,runMusicDetails,musicPanel} from './music-command.ts';
 import {CHOOSE_BUTTON,RECRUIT_BUTTON,DUEL_BUTTON,GAME_IDS,gameCenterCard,gameDetailCard,duelInviteCard,recruitCard,type GameId} from './game-center.ts';
 import {startDiscordDuel,respondDiscordDuel} from './game-duel.ts';
 import {createRecruit,changeRecruit,linkRecruitMessage} from './game-recruit.ts';
@@ -204,10 +204,7 @@ export async function discordInteractions(request: Request, env: Env, ctx: Execu
     let recruitToLink: string|null=null;
     try {
       if(musicButton||interaction.data?.name==='music'){
-        const message=await runMusic(env,interaction);
-        result={content:message,components:!message.includes('再生サーバーはまだ接続されていない')
-          &&!message.includes('再生中の音楽はない')
-          &&/^(🎵|🎶|⏸|▶|⏭|⏹|👋|🔊|🔁)/u.test(message)?musicControls():[]};
+        result=musicPanel(await runMusicDetails(env,interaction));
       }else if(gcRecruit){
         const matched=RECRUIT_BUTTON.exec(interaction.data!.custom_id!)!;
         const view=await changeRecruit(env,matched[2],config.guildId,interaction.member!.user!.id,

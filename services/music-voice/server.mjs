@@ -71,7 +71,7 @@ const server=createServer(async(req,res)=>{
   }
   const fingerprint=JSON.stringify([guildId,userId,applicationId,action,track,volume,loop]);
   const pending=music.request({guildId,userId,action,track,volume,loop})
-   .then(message=>({ok:true,message}),error=>({
+   .then(value=>({ok:true,message:value.message,view:value.view}),error=>({
      ok:false,message:error instanceof Error&&/[\u3040-\u30ff\u4e00-\u9faf]/.test(error.message)
       ?error.message.slice(0,180):'音楽再生を処理できなかった。',
    }));

@@ -22,7 +22,7 @@ Activityは「稼ぐ」の先頭に、ランク専用カードを表示する。
 
 ## Discordへの登録
 
-`KP_COMMAND_VERSION`（v27：/esca分離版）を更新し、既存のVoice Gatewayの差分登録に反映する。さらに既存Client Secretによる `applications.commands.update` の短命トークンで、10分ごとの既存cron内から `/esca` の新規登録と `/kp` の旧ランク項目除去だけを行う。`/kp ranking` はKP残高用のまま。`/death`・`/valo`・クイズOAuth・ActivityのEntry Pointは変更しない。新しい秘密値の入力は不要。
+`KP_COMMAND_VERSION`（v28：/esca分離・ラジオ/アルバム共存版）を更新し、既存のVoice Gatewayの差分登録に反映する。さらに既存Client Secretによる `applications.commands.update` の短命トークンで、10分ごとの既存cron内から `/esca` の新規登録と `/kp` の旧ランク項目除去だけを行う。`/kp ranking` はKP残高用のまま。`/death`・`/valo`・クイズOAuth・ActivityのEntry Pointは変更しない。新しい秘密値の入力は不要。
 
 `GET /api/discord/rank/status` で、期待するコマンド版数と登録済みマーカーを確認できる。トークンや秘密値は返さない。Discordが登録内容を確認できた場合だけマーカーを保存する。登録直後はDiscordクライアントの候補更新に時間が掛かることがある。
 

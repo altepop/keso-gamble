@@ -3,7 +3,7 @@ import {predictionCommand} from './discord-command.ts';
 import {GAME_CENTER_COMMANDS} from './game-center.ts';
 import {MUSIC_COMMAND} from './music-command.ts';
 // Register these guild commands individually; never replace /death, /valo or the Activity entry point.
-export const KP_COMMAND_VERSION='kp-slash-v27-esca-namespace';
+export const KP_COMMAND_VERSION='kp-slash-v28-esca-radio-album';
 export const kpCommands=[
  {type:1,name:'kp',description:'KESO PLAY｜KP残高・ランキング',options:[
   {type:1,name:'balance',description:'自分の残高と最近の入出金（本人だけに表示）'},
