@@ -6,7 +6,7 @@ import { URL as NodeURL } from 'node:url';
 import {
   PREDICTION_BUTTON, PREDICTION_MODAL, predictionAmount, predictionModal, predictionCard,
   predictionOdds, openPrediction, buyPrediction, settlePredictions, expirePredictions,
-  predictionWasAccepted, predictionBetAnnouncement, reconcilePredictionPosts,
+  predictionWasAccepted, predictionBetAnnouncement, reconcilePredictionPosts, recoverPendingPredictions,
 } from '../src/valo-predictions.ts';
 import { initializeKp } from '../src/kp.ts';
 import type { KpEnv, KpMapping } from '../src/kp.ts';
@@ -268,4 +268,40 @@ test('expired prediction with reserved KP gets a visible refund outcome',async()
   const record=f.sqlite.prepare("SELECT body FROM kp_posts WHERE id='vp:result:100000000000001001'").get() as {body:string};
   assert.match((JSON.parse(record.body) as {content:string}).content,/全額返金/);
   assert.equal(f.balance(),100000);
+});
+
+test('already published match result recovers an unsettled prediction without double payout',async()=>{
+  const f=await fixture();
+  await f.open();await f.buy();
+  const kickoff=start+5*60000;
+  f.sqlite.prepare('INSERT INTO notifications(riot_id,match_id,message,ended_at,mode,act_id,act_name,outcome,sent) VALUES(?,?,?,?,?,?,?,?,1)')
+    .run('One#JP1','m1','posted',kickoff+600000,'competitive','act','E9A1','win');
+  let calls=0;
+  const fetchMatch=async(region:string,id:string)=>{
+    calls++;
+    assert.equal(region,'ap');
+    assert.equal(id,'m1');
+    return f.match(kickoff,true);
+  };
+  assert.equal(await recoverPendingPredictions(f.env,fetchMatch,start+900000,mapping),1);
+  assert.equal((f.sqlite.prepare('SELECT status FROM vp_tickets').get() as {status:string}).status,'won');
+  assert.equal(f.balance(),101100);
+  assert.equal(await recoverPendingPredictions(f.env,fetchMatch,start+900000,mapping),0);
+  assert.equal(calls,1);
+  assert.equal(f.balance(),101100);
+});
+
+test('a result from a match already running before card creation is skipped safely',async()=>{
+  const f=await fixture();
+  await f.open();await f.buy();
+  f.sqlite.prepare('INSERT INTO notifications(riot_id,match_id,message,ended_at,mode,act_id,act_name,outcome,sent) VALUES(?,?,?,?,?,?,?,?,1)')
+    .run('One#JP1','m1','posted',start+300000,'competitive','act','E9A1','win');
+  const fetchOld=async()=>f.match(start-10000,true);
+  assert.equal(await recoverPendingPredictions(f.env,fetchOld,start+900000,mapping),0);
+  assert.equal((f.sqlite.prepare('SELECT status FROM vp_tickets').get() as {status:string}).status,'pending');
+  assert.equal(f.balance(),99000);
+  // Verified preexisting games are excluded on the next recovery scan.
+  let calls=0;
+  assert.equal(await recoverPendingPredictions(f.env,async()=>{calls++;return f.match();},start+900000,mapping),0);
+  assert.equal(calls,0);
 });
