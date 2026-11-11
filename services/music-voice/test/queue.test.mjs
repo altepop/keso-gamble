@@ -38,6 +38,7 @@ test('radio covers every track exactly once per cycle without boundary repeats',
  const q=new MusicQueue({random});
  assert.equal(q.loadPlaylist(tracks,user,{radio:true}),8);
  assert.equal(q.mode,'radio');assert.equal(q.cycle,1);
+ assert.throws(()=>q.add(tracks[0],user),/RADIO中/,'radio queue must not accept duplicates from manual requests');
  let previous='';
  for(let cycle=0;cycle<60;cycle++){
   const seen=[];
