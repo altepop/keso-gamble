@@ -207,13 +207,13 @@ export async function settlePredictions(env:KpEnv,match:Match,riot:string,now=Da
 
 interface PredictionPostTotals {entries:number;stakes:number;hits:number;payouts:number}
 function predictionResultPost(e:Pick<Event,'name'|'mode'>,outcome:string|null,total:PredictionPostTotals,expired=false) {
-  const heading='🎯 **勝敗予想の結果**｜'+safe(e.name)+'（'+modeLabel(e.mode)+'）\\n';
+  const heading='🎯 **勝敗予想の結果**｜'+safe(e.name)+'（'+modeLabel(e.mode)+'）\n';
   if(expired)return heading+'受付から6時間が経過し、対象試合を確定できなかったため全額返金。'
-    +'\\n予想 '+total.entries+'件｜返金合計 '+money(total.payouts);
+    +'\n予想 '+total.entries+'件｜返金合計 '+money(total.payouts);
   return heading+'試合結果：**'+(outcome==='win'?'勝利':outcome==='loss'?'敗北':'引き分け')+'**'
-    +'｜予想 '+total.entries+'件／的中 '+total.hits+'件\\n'
+    +'｜予想 '+total.entries+'件／的中 '+total.hits+'件\n'
     +'予想総額 '+money(total.stakes)+'｜払い戻し総額 '+money(total.payouts)
-    +'\\n-# 試合開始後の予想と引き分けは返金済み。精算は1回のみ。';
+    +'\n-# 試合開始後の予想と引き分けは返金済み。精算は1回のみ。';
 }
 
 /** Repair missing outcome notices independently of ticket settlement.
