@@ -1,4 +1,5 @@
 import {SKIRMISH_BUTTON,decideSkirmish,withoutSkirmishButtons} from './skirmish.ts';
+import {PREDICTION_BUTTON,PREDICTION_MODAL,predictionModal,predictionAmount,openPrediction,buyPrediction} from './valo-predictions.ts';
 import {activityLaunchComponents} from './activity-link.ts';
 import {isKpRanking} from './kp-command.ts';
 import { MBET_BUTTON, betChoices, betFallbackChoices, mbetChoices, mbetDecide, runKpCommand, withinDeadline } from './kp-slash.ts';
@@ -22,7 +23,7 @@ interface Option { type: number; name: string; value?: string; options?: Option[
 export interface Interaction {
   id: string; application_id: string; type: number; token?: string; guild_id?: string;
   member?: { permissions?: string; user?: { id: string } };
-  data?: { type?: number; name?: string; options?: Option[]; custom_id?: string; values?: string[]; component_type?: number };
+  data?: { type?: number; name?: string; options?: Option[]; custom_id?: string; values?: string[]; component_type?: number; components?: unknown[] };
   message?: { flags?: number; components?: unknown[] };
 }
 const respond = (content: string) => Response.json({ type: 4, data: { content, flags: 64, allowed_mentions: { parse: [] } } });
@@ -151,10 +152,21 @@ export async function discordInteractions(request: Request, env: Env, ctx: Execu
   const skirmishButton=interaction.type===3&&SKIRMISH_BUTTON.test(interaction.data?.custom_id??'');
   if(skirmishButton&&SKIRMISH_BUTTON.exec(interaction.data!.custom_id!)?.[1]!==interaction.member?.user?.id)return respond('本人だけが選べます。');
   const mbetButton = interaction.type === 3 && MBET_BUTTON.test(interaction.data?.custom_id ?? '');
+  const vpButton = interaction.type === 3 && PREDICTION_BUTTON.test(interaction.data?.custom_id ?? '');
+  const vpModal = interaction.type === 5 && PREDICTION_MODAL.test(interaction.data?.custom_id ?? '');
   if (['kpgrant','paifulink','unitelink'].includes(interaction.data?.name ?? '') && !(permissions & (8n | 32n))) return respond('このコマンドには「管理者」または「サーバー管理」権限が必要です。');
   if ((interaction.data?.name === 'death' || deathSelect) && !(permissions & (8n | 32n))) return respond('開始・終了・状態確認には「管理者」または「サーバー管理」権限が必要です。');
-  if (!deathSelect && !paifuButton && !mbetButton && !skirmishButton && (interaction.type !== 2 || !['death', 'valo', 'kp', 'spike', 'dm', 'keiba', 'bet', 'paifu', 'mleague', 'mbet', 'mclose', 'kpgrant', 'paifulink', 'unitelink', 'horsename', 'give'].includes(interaction.data?.name ?? ''))) return respond('対応していないコマンドです。');
+  if (!deathSelect && !paifuButton && !mbetButton && !skirmishButton && !vpButton && !vpModal && (interaction.type !== 2 || !['predict','death', 'valo', 'kp', 'spike', 'dm', 'keiba', 'bet', 'paifu', 'mleague', 'mbet', 'mclose', 'kpgrant', 'paifulink', 'unitelink', 'horsename', 'give'].includes(interaction.data?.name ?? ''))) return respond('対応していないコマンドです。');
   if (!/^\d+$/.test(interaction.id) || typeof interaction.token !== 'string' || !interaction.token.length || interaction.token.length > 4096) return new Response('Invalid interaction', { status: 400 });
+  if (vpButton) {
+    const matched = PREDICTION_BUTTON.exec(interaction.data!.custom_id!)!;
+    if (!interaction.member?.user?.id) return respond('Discordのユーザーを確認できません。');
+    const openedAt=Number((BigInt(matched[1])>>22n)+1420070400000n);
+    if(Date.now()>openedAt+60*60000)return respond('このカードは受付終了しています。');
+    return Response.json(predictionModal(matched[1],matched[2] as 'win'|'loss'));
+  }
+  if (vpModal && (!interaction.member?.user?.id || predictionAmount(interaction.data)===null))
+    return respond('KP額は100〜100000の整数を入力してください。');
   // A malformed paipu claim is answered privately before the public deferred reply is opened.
   if (interaction.data?.name === 'paifu' && interaction.type === 2) {
     try { paifuRequest(interaction, Date.now()); } catch (error) { return respond((error as Error).message); }
@@ -170,9 +182,20 @@ export async function discordInteractions(request: Request, env: Env, ctx: Execu
     } catch { console.warn('discord_command_reply_failed'); }
   };
   ctx.waitUntil((async () => {
-    let result: { content: string; components?: unknown[] }, notice: string | undefined;
+    let result: { content?: string; components?: unknown[]; flags?: number }, notice: string | undefined;
     try {
-      if(skirmishButton){
+      if(vpModal){
+        const matched=PREDICTION_MODAL.exec(interaction.data!.custom_id!)!;
+        const at=Number((BigInt(interaction.id)>>22n)+1420070400000n);
+        result={content:await buyPrediction(env,matched[1],config.guildId,interaction.member!.user!.id,
+          matched[2] as 'win'|'loss',predictionAmount(interaction.data)!,at)};
+      } else if(interaction.data?.name==='predict'){
+        const options=interaction.data.options??[];
+        const riot=options.find(o=>o.name==='player')?.value??'';
+        const mode=options.find(o=>o.name==='mode')?.value??'competitive';
+        const payload=await openPrediction(env,interaction.id,config.guildId,riot,mode,configuredPlayers);
+        result=payload;
+      } else if(skirmishButton){
         if(!await initializeKp(env))throw Error('KP unavailable');
         const user=interaction.member!.user!.id,decided=await decideSkirmish(env,config.guildId,user,interaction.data!.custom_id!);
         // On the public あかんbot result only the presser's buttons go; the choice itself is told to them alone
@@ -193,32 +216,38 @@ export async function discordInteractions(request: Request, env: Env, ctx: Execu
         && !interaction.data.options[0].options?.some(option => option.name === 'mode')) result = await deathModePicker(env.DB, interaction, configuredPlayers);
       else if (['kp','spike','dm','keiba','bet','mleague','mbet','mclose','kpgrant','paifulink','unitelink','horsename','give'].includes(interaction.data?.name??'')) {const out:{components?:unknown[]}={};result = {content:await runKpCommand(env,interaction,undefined,out)};result.components=out.components??activityLaunchComponents(config.applicationId);}
       else result = { content: interaction.data!.name === 'valo' ? await runValoCommand(env.DB, interaction) : await runDeathCommand(env.DB, interaction) };
-    } catch {
+    } catch (error) {
       console.warn('discord_command_failed');
       if (paifuButton || skirmishButton) {
         // Keep the claim message and its buttons; tell only the presser to retry.
         await whisper('操作結果を確認できませんでした。少し待ってからもう一度押してください。');
         return;
       }
-      result = { content: '操作結果を確認できませんでした。KP・馬券は /kp またはActivity、予約は /death status で確認してください。', components: [] }; }
+      if(interaction.data?.name==='predict'||vpModal){
+        const message=error instanceof Error?error.message:'';
+        result={content:/[ぁ-んァ-ヶ一-龯]/.test(message)&&message.length<=150&&!/SQL|D1_|token|secret/i.test(message)
+          ? message:'予想を処理できませんでした。KP残高・受付状況を確認してください。',components:[]};
+      }else result = { content: '操作結果を確認できませんでした。KP・馬券は /kp またはActivity、予約は /death status で確認してください。', components: [] }; }
     if (interaction.data?.name === 'valo' && interaction.data.options?.[0]?.name === 'status') {
       try {
         const mapping = await initializeKp(env), user = interaction.member?.user?.id;
         const code = mapping && user ? await issueKpCode(env, mapping, user) : null;
         if (code && mapping && user) {
           const wallet = await env.DB.prepare('SELECT balance FROM kp_wallets WHERE guild=? AND user=?').bind(mapping.guildId, user).first<{ balance: number }>();
-          result.content += '\n\n🪙 本番口座：' + (wallet?.balance ?? 0) + ' KP\nActivityのタイトルで「口座を接続」を押し、次のコードを貼り付けてください（10分・1回のみ）。\n`' + code + '`';
+          result.content = (result.content??'') + '\n\n🪙 本番口座：' + (wallet?.balance ?? 0) + ' KP\nActivityのタイトルで「口座を接続」を押し、次のコードを貼り付けてください（10分・1回のみ）。\n`' + code + '`';
         }
-      } catch { console.warn('kp_login_code_failed'); result.content += '\n\nKP口座を確認できませんでした。少し待って /valo status をもう一度実行してください。'; }
+      } catch { console.warn('kp_login_code_failed'); result.content = (result.content??'') + '\n\nKP口座を確認できませんでした。少し待って /valo status をもう一度実行してください。'; }
     }
     try {
       const response = await fetch('https://discord.com/api/v10/webhooks/' + config.applicationId + '/' + encodeURIComponent(interaction.token!) + '/messages/@original', {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...result, allowed_mentions: { parse: [] } }), signal: AbortSignal.timeout(10_000),
+        body: JSON.stringify({ ...result,
+          ...((result.flags??0)&32768 ? {content:null,embeds:[],poll:null}:{}),
+          allowed_mentions: { parse: [] } }), signal: AbortSignal.timeout(10_000),
       });
       if (!response.ok) console.warn('discord_command_reply_failed', { status: response.status });
     } catch { console.warn('discord_command_reply_failed'); }
     if (notice) await whisper(notice);
   })());
-  return Response.json(deathSelect || paifuButton || mbetButton || skirmishButton ? { type: 6 } : { type: 5, data: { flags: isKpRanking(interaction) || interaction.data?.name === 'paifu' ? 0 : 64 } });
+  return Response.json(deathSelect || paifuButton || mbetButton || skirmishButton ? { type: 6 } : { type: 5, data: { flags: isKpRanking(interaction) || interaction.data?.name === 'paifu' || interaction.data?.name === 'predict' ? 0 : 64 } });
 }
