@@ -1,0 +1,38 @@
+name: Music Voice sidecar check
+
+on:
+  pull_request:
+    paths:
+      - 'services/music-voice/**'
+      - 'music/assets/**'
+      - '.github/workflows/music-voice-check.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  voice:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24.17.0'
+      - name: Install isolated Node voice dependencies
+        run: npm --prefix services/music-voice install --no-audit --no-fund
+      - name: Test queue and load Discord DAVE voice dependencies
+        run: |
+          npm --prefix services/music-voice test
+          node --input-type=module -e "await import('./services/music-voice/player.mjs'); console.log('voice-import-ok')"
+      - name: Verify all catalog audio files exist
+        run: |
+          node --input-type=module -e "
+            import catalog from './services/music-voice/catalog.json' with {type:'json'};
+            import {existsSync} from 'node:fs';
+            for(const t of catalog){
+              if(!existsSync('music/assets/'+t.file))throw Error('Missing audio: '+t.id);
+            }
+            console.log('catalog-ok: '+catalog.length);
+          "
