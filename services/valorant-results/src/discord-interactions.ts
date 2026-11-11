@@ -3,6 +3,7 @@ import {SKIRMISH_BUTTON,decideSkirmish,withoutSkirmishButtons} from './skirmish.
 import {PREDICTION_BUTTON,PREDICTION_MODAL,predictionModal,predictionAmount,openPrediction,buyPrediction,predictionWasAccepted,predictionBetAnnouncement} from './valo-predictions.ts';
 import {activityLaunchComponents} from './activity-link.ts';
 import {MUSIC_BUTTON,runMusicDetails,musicPanel} from './music-command.ts';
+import {queueMusicRecovery} from './music-session.ts';
 import {CHOOSE_BUTTON,RECRUIT_BUTTON,DUEL_BUTTON,GAME_IDS,gameCenterCard,gameDetailCard,duelInviteCard,recruitCard,type GameId} from './game-center.ts';
 import {startDiscordDuel,respondDiscordDuel} from './game-duel.ts';
 import {createRecruit,changeRecruit,linkRecruitMessage} from './game-recruit.ts';
@@ -205,7 +206,15 @@ export async function discordInteractions(request: Request, env: Env, ctx: Execu
     let predictionAnnouncementUser: string|null=null;
     try {
       if(musicButton||interaction.data?.name==='music'){
-        result=musicPanel(await runMusicDetails(env,interaction));
+        const origin=new URL(request.url).origin;
+        const musicReply=await runMusicDetails(env,interaction,fetch,origin);
+        if(musicReply.pending){
+          const queued=await queueMusicRecovery(env,interaction,interaction.token!,origin);
+          result={content:queued
+            ?'⏳ 音楽Botを起動中だ。起動でき次第、このメッセージを自動更新して再生する。'
+            :'⏳ 音楽Botは起動中だ。復旧ジョブを登録できなかったため、少し後に再試行してほしい。',
+            components:[]};
+        }else result=musicPanel(musicReply);
       }else if(gcRecruit){
         const matched=RECRUIT_BUTTON.exec(interaction.data!.custom_id!)!;
         const view=await changeRecruit(env,matched[2],config.guildId,interaction.member!.user!.id,
