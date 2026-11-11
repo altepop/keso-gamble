@@ -117,7 +117,7 @@ export async function buyPrediction(env:KpEnv,id:string,guild:string,user:string
   const odds=side==='win'?e.win_odds:e.loss_odds;
   const row=await env.DB.prepare('INSERT OR IGNORE INTO vp_tickets(event_id,user,side,stake,odds,purchased_at) SELECT e.id,w.user,?,?,?,? FROM vp_events e JOIN kp_wallets w ON w.guild=e.guild AND w.user=? WHERE e.id=? AND e.guild=? AND e.status=\'open\' AND e.created_at<=? AND e.closes_at>=? AND w.balance>=? AND NOT EXISTS(SELECT 1 FROM vp_tickets t WHERE t.event_id=e.id AND t.user=w.user)')
     .bind(side,amount,odds,at,user,id,guild,at,at,amount).run();
-  if(row.meta.changes!==1){
+  if(row.meta.changes===0){
     // Only diagnose failed purchases. The successful path keeps its original D1 cost,
     // and the INSERT ... SELECT remains the atomic balance/duplicate/deadline gate.
     const current=await env.DB.prepare(`SELECT e.status,e.created_at,e.closes_at,
