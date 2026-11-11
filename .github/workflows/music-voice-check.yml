@@ -49,8 +49,6 @@ jobs:
           cache-dependency-path: services/valorant-results/package-lock.json
       - name: Install Worker test dependencies
         run: npm --prefix services/valorant-results ci --no-audit --no-fund
-      - name: Validate TypeScript and standalone music interactions
+      - name: Validate all Worker logic, deployment and music recovery
         working-directory: services/valorant-results
-        run: |
-          npm run typecheck
-          node --experimental-strip-types --test test/music-command.test.ts
+        run: npm run check

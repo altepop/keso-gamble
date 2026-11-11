@@ -91,6 +91,46 @@ export class MusicQueue {
     this.upcoming=[];this.current=null;this.loop='off';this.paused=false;
     this.mode='manual';this.radioCatalog=[];this.radioRequester='';this.cycle=0;
   }
+  // Only catalog IDs and Discord user IDs are durable. Never persist a path,
+  // audio buffer, bot token, or other runtime object.
+  serialize(channelId){
+    const entry=x=>x?{id:x.track.id,requester:x.requester}:null;
+    return {channelId,current:entry(this.current),upcoming:this.upcoming.map(entry),
+      volume:this.volume,loop:this.loop,paused:this.paused,mode:this.mode,
+      cycle:this.cycle,radioCatalog:this.radioCatalog.map(t=>t.id),
+      radioRequester:this.radioRequester};
+  }
+  restore(snapshot,catalog){
+    if(!snapshot||!['manual','all','radio'].includes(snapshot.mode)
+      ||!['off','one','all'].includes(snapshot.loop)
+      ||!Number.isInteger(snapshot.volume)||snapshot.volume<1||snapshot.volume>100
+      ||!Number.isSafeInteger(snapshot.cycle)||snapshot.cycle<0||snapshot.cycle>1_000_000
+      ||typeof snapshot.paused!=='boolean'||!Array.isArray(snapshot.upcoming)
+      ||snapshot.upcoming.length>LIMIT||!Array.isArray(snapshot.radioCatalog)
+      ||snapshot.radioCatalog.length>LIMIT)throw Error('音楽の保存状態が不正だ。');
+    const fromId=id=>{
+      const track=catalog.get(id);
+      if(!track)throw Error('音楽の保存状態に未登録の曲がある。');
+      return track;
+    };
+    const entry=e=>{
+      if(!e||!validUser(e.requester)||typeof e.id!=='string')throw Error('音楽の予約が不正だ。');
+      return {track:fromId(e.id),requester:e.requester};
+    };
+    const current=snapshot.current===null?null:entry(snapshot.current);
+    const upcoming=snapshot.upcoming.map(entry);
+    const radioCatalog=snapshot.radioCatalog.map(fromId);
+    if(snapshot.mode==='radio'&&(!validUser(snapshot.radioRequester)
+      ||radioCatalog.length<2||new Set(radioCatalog.map(t=>t.id)).size!==radioCatalog.length
+      ||snapshot.loop!=='off'))throw Error('ラジオの保存状態が不正だ。');
+    if(snapshot.mode!=='radio'&&radioCatalog.length)throw Error('不要なラジオ状態だ。');
+    if(snapshot.mode==='manual'&&upcoming.length>LIMIT)throw Error('予約が多すぎる。');
+    // All input is validated before any live queue field changes.
+    this.current=current;this.upcoming=upcoming;this.volume=snapshot.volume;
+    this.loop=snapshot.loop;this.paused=snapshot.paused;this.mode=snapshot.mode;
+    this.cycle=snapshot.cycle;this.radioCatalog=radioCatalog;
+    this.radioRequester=snapshot.mode==='radio'?snapshot.radioRequester:'';
+  }
   view(){
     const entry=x=>x?{id:x.track.id,title:x.track.title,
       durationSec:x.track.durationSec??null}:null;
