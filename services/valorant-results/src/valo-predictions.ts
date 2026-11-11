@@ -128,9 +128,12 @@ export async function settlePredictions(env:KpEnv,match:Match,riot:string,now=Da
   const row=await env.DB.prepare('SELECT puuid FROM tracked_players WHERE riot_id=?').bind(riot).first<{puuid:string}>();
   const player=match.players.find(p=>p.puuid===row?.puuid);
   if(!player)return 0;
+  // Incomplete or inconsistent team data must never be treated as a draw/refund.
+  if(!Array.isArray(match.teams)||match.teams.length!==2||match.teams.some(t=>typeof t.won!=='boolean'))return 0;
   const team=match.teams.find(t=>t.team_id===player.team_id);
   const rival=match.teams.find(t=>t.team_id!==player.team_id);
-  const outcome=team?.won?'win':rival?.won?'loss':'draw';
+  if(!team||!rival||(team.won&&rival.won))return 0;
+  const outcome=team.won?'win':rival.won?'loss':'draw';
   for(const e of events) {
     if(e.guild!==mapping.guildId)continue;
     const done=await env.DB.batch([
