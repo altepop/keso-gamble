@@ -44,11 +44,11 @@ export class MusicController {
    if(!found)throw Error('曲が見つからない。選択肢から選んでほしい。');
    if(!existsSync(found.path))throw Error('音源ファイルが配置されていない。');
    const active=room??await this.connect(guild,channel);
-   const position=active.queue.add(found,userId);
+   const startsNow=!active.queue.current && active.player.state.status===AudioPlayerStatus.Idle;
+   active.queue.add(found,userId);
    this.cancelIdle(active);
-   if(!active.queue.current && active.player.state.status===AudioPlayerStatus.Idle)
-    this.advance(active);
-   return '🎵 '+pretty(found.title)+(position>1||active.queue.current?.track.id!==found.id?' をキューに追加した。':' を再生する。')
+   if(startsNow)this.advance(active);
+   return '🎵 '+pretty(found.title)+(startsNow?' を再生する。':' をキューに追加した。')
     +'\n'+this.description(active);
   }
   if(!room)throw Error('このVCで音楽は再生されていない。');
