@@ -154,7 +154,7 @@ test('public bet announcement mentions only the bettor and never reveals the wag
   assert.deepEqual(notice.allowed_mentions,{parse:[],users:[two]});
   assert.match(notice.content,new RegExp('<@'+two+'>'));
   assert.match(notice.content,/賭けたぞ/);
-  assert.doesNotMatch(notice.content.replace(/<@\\d+>/g,''),/勝利|敗北|win|loss|1000|1,000|2\\.10|的中|払い戻し/);
+  assert.doesNotMatch(notice.content.replace(/<@\d+>/g,''),/勝利|敗北|win|loss|1000|1,000|2\.10|的中|払い戻し/);
   assert.equal(predictionWasAccepted(await f.buy()),false); // A duplicate must never trigger a second ping.
   assert.equal(predictionWasAccepted(await buyPrediction(f.env,'100000000000001001',guild,visitor,'loss',1000,start+1000,mapping)),false);
   assert.throws(()=>predictionBetAnnouncement('invalid'));
