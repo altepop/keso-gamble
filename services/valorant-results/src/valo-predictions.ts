@@ -11,6 +11,16 @@ export const PREDICTION_BUTTON = /^vp:bet:(\d{15,22}):(win|loss)$/;
 export const PREDICTION_MODAL = /^vp:submit:(\d{15,22}):(win|loss)$/;
 const VALID_ID = /^\d{15,22}$/;
 const MIN = 100, MAX = 100000, WINDOW = 60 * 60000, EXPIRY = 6 * 3600000;
+export const PREDICTION_ACCEPTED = '🎫 **予想を受け付けました**';
+export const predictionWasAccepted = (message: string) => message.startsWith(PREDICTION_ACCEPTED + '\n');
+export function predictionBetAnnouncement(user: string) {
+  if (!VALID_ID.test(user)) throw Error('Invalid Discord user ID');
+  return {
+    content: '🎯 <@' + user + '> が勝敗予想に賭けたぞ！\n-# 予想した勝敗と賭け金は結果が出るまで非公開。',
+    allowed_mentions: { parse: [] as string[], users: [user] },
+  };
+}
+
 const safe = (s: string) => s.replace(/[@<>\x60*_~|\r\n]/g, '').slice(0, 70);
 const money = (n: number) => n.toLocaleString('ja-JP') + ' KP';
 const oddsText = (n: number) => (n / 100).toFixed(2) + '倍';
@@ -132,7 +142,7 @@ export async function buyPrediction(env:KpEnv,id:string,guild:string,user:string
     if(current.balance<amount)return 'KP残高が不足しています。現在 '+money(current.balance)+'、必要 '+money(amount)+'。';
     return '予想を確定できませんでした。/kp balance で残高を確認し、もう一度お試しください。';
   }
-  return '🎫 **予想を受け付けました**\n'+safe(e.name)+'｜'+modeLabel(e.mode)+'\n'
+  return PREDICTION_ACCEPTED+'\n'+safe(e.name)+'｜'+modeLabel(e.mode)+'\n'
     +(side==='win'?'勝利':'敗北')+'に '+money(amount)+'（'+oddsText(odds)+'）\n的中時 '+money(Math.floor(amount*odds/100))+'。試合終了後に自動判定します。';
 }
 export async function settlePredictions(env:KpEnv,match:Match,riot:string,now=Date.now(),override?:KpMapping) {
