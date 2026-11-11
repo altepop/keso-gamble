@@ -9,12 +9,13 @@ const command=(name:string,value?:string|number)=>({
  id,guild_id:guild,member:{user:{id}},data:{name:'music',options:[{name,type:1,
   options:value===undefined?[]:[{name:name==='play'?'song':name==='volume'?'percent':'mode',type:3,value}]}]},
 });
-test('/music offers nine authorized tracks including original makekowa with controls',()=>{
+test('/music offers ten authorized tracks including original makekowa with controls',()=>{
  assert.equal(MUSIC_COMMAND.options.length,13);
  const choices=MUSIC_COMMAND.options[0].options[0].choices;
- assert.equal(choices.length,9);
+ assert.equal(choices.length,10);
  assert.equal(new Set(choices.map(x=>x.value)).size,9);
  assert.ok(choices.some(x=>x.value==='makekowa'&&x.name==='負け怖'));
+ assert.ok(choices.some(x=>x.value==='yuzuan'&&x.name==='ゆず庵⁉️'));
  assert.match('ms:skip',MUSIC_BUTTON);
  assert.equal(musicControls()[0].components.length,5);
  assert.equal(musicControls().length,2);
@@ -26,6 +27,7 @@ test('/music offers nine authorized tracks including original makekowa with cont
  assert.equal(parseMusic({id,guild_id:guild,member:{user:{id:user}},data:{custom_id:'ms:radio'}}).action,'radio');
  assert.deepEqual(parseMusic(command('play','mou')).track,'mou');
  assert.deepEqual(parseMusic(command('play','makekowa')).track,'makekowa');
+ assert.deepEqual(parseMusic(command('play','yuzuan')).track,'yuzuan');
  assert.equal(parseMusic({id,guild_id:guild,member:{user:{id:user}},data:{custom_id:'ms:pause'}}).action,'pause');
  assert.throws(()=>parseMusic(command('play','youtube:abc')),/曲/);
  assert.throws(()=>parseMusic(command('volume',200)),/音量/);
