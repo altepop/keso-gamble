@@ -24,7 +24,8 @@ async function fixture(){
   for(const file of readdirSync(path).filter(file=>file.endsWith('.sql')).sort())
     sqlite.exec(readFileSync(new NodeURL(file,path),'utf8'));
   class Query {
-    constructor(public sql:string, public bindings:unknown[]=[]){}
+    sql:string; bindings:unknown[];
+    constructor(sql:string,bindings:unknown[]=[]){this.sql=sql;this.bindings=bindings;}
     bind(...values:unknown[]){return new Query(this.sql,values);}
     async first<T>(){return (sqlite.prepare(this.sql).get(...this.bindings as never[])??null) as T|null;}
     async all<T>(){return {results:sqlite.prepare(this.sql).all(...this.bindings as never[]) as T[]};}
