@@ -241,7 +241,9 @@ export async function discordInteractions(request: Request, env: Env, ctx: Execu
     try {
       const response = await fetch('https://discord.com/api/v10/webhooks/' + config.applicationId + '/' + encodeURIComponent(interaction.token!) + '/messages/@original', {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...result, allowed_mentions: { parse: [] } }), signal: AbortSignal.timeout(10_000),
+        body: JSON.stringify({ ...result,
+          ...((result.flags??0)&32768 ? {content:null,embeds:[],poll:null}:{}),
+          allowed_mentions: { parse: [] } }), signal: AbortSignal.timeout(10_000),
       });
       if (!response.ok) console.warn('discord_command_reply_failed', { status: response.status });
     } catch { console.warn('discord_command_reply_failed'); }
