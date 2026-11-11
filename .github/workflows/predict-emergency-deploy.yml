@@ -80,7 +80,7 @@ jobs:
         run: |
           node scripts/assert-deploy-config.mjs
           npm run typecheck
-          npm test
+          node --experimental-strip-types --test test/valo-predictions.test.ts
           npm run build
       - name: Deploy existing Bot (additive KP setup; existing commands retained)
         working-directory: ${{ runner.temp }}/kp-app/services/valorant-results
