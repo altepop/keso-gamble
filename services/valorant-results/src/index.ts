@@ -35,7 +35,7 @@ import {monitorMahjong, mahjongStatus, flushMahjongPosts} from './mahjong.ts';
 import {monitorUnite} from './unite.ts';
 import {settleRankChange,rankChangeBlock,rankChangeFor} from './rank-change.ts';
 import type {RankChange} from './rank-change.ts';
-import {paipuApi} from './mahjong-paipu.ts';
+import {paipuApi,verifyIngest} from './mahjong-paipu.ts';
 export {VoiceGateway} from './voice-gateway.ts';
 import {ensureVoice} from './voice-api.ts';
 import { claimDeathMatch } from './death-sessions.ts';
@@ -608,6 +608,33 @@ export default {
     if(request.method==='GET'&&new URL(request.url).pathname==='/api/discord/predict/status')
       return predictionRegistrationStatus(env.DB).then(s=>Response.json(s,{headers:{'Cache-Control':'no-store'}}))
         .catch(()=>Response.json({command:'predict',registered:false,error:'status_unavailable'},{status:503}));
+    // Temporary, signed and read-only kickoff audit for the 2026-11-11 23:27 prediction incident.
+    // Remove after reconciliation: do not retain a sensitive diagnostic endpoint.
+    if(request.method==='GET'&&new URL(request.url).pathname==='/api/discord/predict/audit-kickoff'){
+      return (async()=>{
+        const path='/api/discord/predict/audit-kickoff';
+        if(!await verifyIngest(request,env,path,''))return new Response('Unauthorized',{status:401});
+        const eventRows=(await env.DB.prepare(`SELECT e.created_at,e.riot,e.mode,a.region,n.match_id,n.ended_at,n.outcome
+          FROM vp_events e
+          JOIN tracked_players a ON a.riot_id=e.riot
+          JOIN notifications n ON n.riot_id=e.riot AND n.mode=e.mode
+          WHERE e.status='resolved' AND e.created_at>=? AND e.created_at<?
+            AND n.ended_at>e.created_at AND n.ended_at<e.created_at+7200000
+          ORDER BY n.ended_at ASC LIMIT 3`)
+          .bind(Date.parse('2026-11-11T23:25:00+09:00'),Date.parse('2026-11-11T23:30:00+09:00'))
+          .all<{created_at:number;riot:string;mode:string;region:string;match_id:string;ended_at:number;outcome:string}>()).results;
+        const results=[];
+        for(const row of eventRows){
+          const m=await api<Match>(env,'/valorant/v4/match/'+encodeURIComponent(row.region)+'/'+encodeURIComponent(row.match_id));
+          if(m.metadata?.match_id!==row.match_id||m.metadata?.is_completed!==true
+            ||storedMode(m.metadata.queue?.id??'')!==row.mode)throw Error('Audit mismatch');
+          results.push({created_at:row.created_at,match_id:row.match_id,stored_end:row.ended_at,
+            kickoff:m.metadata.started_at,duration_ms:m.metadata.game_length_in_ms,outcome:row.outcome});
+        }
+        return Response.json({matches:results},{headers:{'Cache-Control':'no-store'}});
+      })().catch(error=>{console.warn('prediction_kickoff_audit_unavailable',{reason:diagnosticReason(error)});
+        return Response.json({error:'audit_unavailable'},{status:503,headers:{'Cache-Control':'no-store'}});});
+    }
     if(request.method==='GET'&&new URL(request.url).pathname==='/api/discord/activity-entry/status')return silentEntryStatus(env).then(info=>Response.json(info,{headers:{'Cache-Control':'no-store'}})).catch(()=>Response.json({handlerConfirmed:false},{status:503}));
     if(new URL(request.url).pathname.startsWith('/api/discord/app-webhook/'))return appWebhookApi(request,env).catch(()=>new Response('Unavailable',{status:503}));
     if(new URL(request.url).pathname.startsWith('/api/mahjong/paipu/'))return paipuApi(request,env).catch(()=>new Response('Unavailable',{status:503}));
