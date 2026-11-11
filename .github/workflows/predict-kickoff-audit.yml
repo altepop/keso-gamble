@@ -36,47 +36,57 @@ jobs:
           -----END PUBLIC KEY-----
           PUB
           python3 - <<'PY'
-          import os,time,json,urllib.request,subprocess,base64
-          account=os.environ['CFACCOUNT'];token=os.environ['CFTOKEN']
+          import os,json,urllib.request,datetime
+          from zoneinfo import ZoneInfo
+          account=os.environ['CFACCOUNT']; token=os.environ['CFTOKEN']
           base='https://api.cloudflare.com/client/v4/accounts/'+account
           def get(path,body=None):
             headers={'Authorization':'Bearer '+token}
-            if body is not None:headers['Content-Type']='application/json'
-            req=urllib.request.Request(base+path,headers=headers,data=json.dumps(body).encode() if body is not None else None)
-            with urllib.request.urlopen(req,timeout=25) as resp:r=json.load(resp)
-            if not r.get('success'):raise RuntimeError('cloudflare_request_failed')
-            return r['result']
+            if body is not None: headers['Content-Type']='application/json'
+            request=urllib.request.Request(base+path,headers=headers,data=json.dumps(body).encode() if body is not None else None)
+            with urllib.request.urlopen(request,timeout=25) as response:result=json.load(response)
+            if not result.get('success'):raise RuntimeError('cloudflare_request_failed')
+            return result['result']
           settings=get('/workers/scripts/valorant-results/settings')
           db=[b['id'] for b in settings.get('bindings',[]) if b.get('type')=='d1' and b.get('name')=='DB']
           if len(db)!=1:raise RuntimeError('d1_binding_missing')
-          rows=[]
-          for _ in range(15):
-            out=get('/d1/database/'+db[0]+'/query',{'sql':"SELECT key,value FROM monitor_state WHERE key LIKE 'vp:incident:20261111:kickoff:%' LIMIT 3"})
-            rows=out[0].get('results',[]) if out else []
-            if len(rows)>=2:break
-            time.sleep(12)
-          print('VERIFIED_KICKOFF_ROWS='+str(len(rows)),flush=True)
-          for row in rows:
-            payload=json.dumps(row,separators=(',',':')).encode()
-            p=subprocess.run(['openssl','pkeyutl','-encrypt','-pubin','-inkey','/tmp/predict_pub.pem',
-              '-pkeyopt','rsa_padding_mode:oaep','-pkeyopt','rsa_oaep_md:sha256','-pkeyopt','rsa_mgf1_md:sha256'],
-              input=payload,capture_output=True,check=True)
-            print('VERIFIED_KICKOFF_ENCRYPTED='+base64.b64encode(p.stdout).decode(),flush=True)
-          checks=get('/d1/database/'+db[0]+'/query',{'sql':"""SELECT t.side,t.stake,t.odds,t.status,t.payout,w.balance,
-              (SELECT l.delta FROM kp_ledger l WHERE l.id='vp:pay:'||t.event_id||':'||t.user) AS paid
-              FROM vp_tickets t JOIN vp_events e ON e.id=t.event_id
-              JOIN kp_wallets w ON w.guild=e.guild AND w.user=t.user
-              WHERE t.event_id=? ORDER BY t.side""",
-              'params':['1570082563177848984']})
-          checks=checks[0].get('results',[])
-          win=next((t for t in checks if t['side']=='win'),None)
-          loss=next((t for t in checks if t['side']=='loss'),None)
-          ready=bool(len(checks)==2 and win and loss and win['stake']==10000
-              and win['odds']==276 and win['status']=='won' and win['payout']==27600
-              and win['paid']==27600 and win['balance']>=17600
-              and loss['stake']==5000 and loss['odds']==169
-              and loss['status']=='lost' and loss['payout']==0 and loss['paid'] is None)
-          print('PREDICTION_CORRECTION_FUNDS_AVAILABLE='+str(ready),flush=True)
-          if len(rows)<2:raise RuntimeError('kickoff_records_incomplete')
-          print('VERIFIED_KICKOFF_COMPLETE=1')
+          def select(sql,params):
+            ans=get('/d1/database/'+db[0]+'/query',{'sql':sql,'params':params})
+            return ans[0].get('results',[]) if ans else []
+          start=1794410700000
+          end=1794411000000
+          # For incident Nov 11 2026 23:25 to 23:30 JST, compute timestamps directly.
+          start=int(datetime.datetime(2026,11,11,23,25,tzinfo=ZoneInfo('Asia/Tokyo')).timestamp()*1000)
+          end=int(datetime.datetime(2026,11,11,23,30,tzinfo=ZoneInfo('Asia/Tokyo')).timestamp()*1000)
+          events=select('SELECT id,created_at,status,outcome FROM vp_events WHERE created_at BETWEEN ? AND ? ORDER BY created_at LIMIT 3',[start,end])
+          print('INCIDENT_EVENT_COUNT='+str(len(events)))
+          if len(events)!=1:raise RuntimeError('unexpected_incident_event_count')
+          e=events[0]
+          matches=select("""SELECT n.ended_at,n.outcome,
+           CAST(json_extract(s.value,'$.kickoff') AS INTEGER) AS kickoff,
+           json_extract(s.value,'$.outcome') AS verified_outcome
+           FROM notifications n JOIN vp_events e ON e.riot=n.riot_id AND e.mode=n.mode
+           JOIN monitor_state s ON s.key='vp:incident:20261111:kickoff:'||n.match_id
+           WHERE e.id=? AND n.ended_at>e.created_at AND n.ended_at<e.created_at+7200000
+           ORDER BY n.ended_at,n.match_id LIMIT 2""",[e['id']])
+          print('INCIDENT_VERIFIED_MATCHES='+str(len(matches)))
+          if len(matches)!=2:raise RuntimeError('verified_kickoff_records_not_available')
+          jst=ZoneInfo('Asia/Tokyo')
+          fmt=lambda t:datetime.datetime.fromtimestamp(t/1000,jst).strftime('%Y-%m-%d %H:%M:%S')
+          print('INCIDENT_CARD_CREATED_JST='+fmt(e['created_at']))
+          for i,m in enumerate(matches):
+            if m['outcome']!=m['verified_outcome']:raise RuntimeError('match_verification_failed')
+            print('INCIDENT_MATCH_'+str(i+1)+'_RESULT='+m['outcome'])
+            print('INCIDENT_MATCH_'+str(i+1)+'_KICKOFF_JST='+fmt(m['kickoff']))
+            print('INCIDENT_MATCH_'+str(i+1)+'_ENDED_JST='+fmt(m['ended_at']))
+            print('INCIDENT_MATCH_'+str(i+1)+'_ALREADY_STARTED_AT_CARD='+str(m['kickoff']<e['created_at']).lower())
+          first=matches[0]
+          tickets=select('SELECT side,stake,odds,purchased_at,status,payout FROM vp_tickets WHERE event_id=? ORDER BY purchased_at LIMIT 5',[e['id']])
+          print('INCIDENT_TICKET_COUNT='+str(len(tickets)))
+          for t in tickets:
+            # Public output is limited to announced wager sides and temporal validity, no IDs/amounts.
+            print('INCIDENT_'+t['side'].upper()+'_BET_VALID_AT_FIRST_KICKOFF='+str(t['purchased_at']<=first['kickoff']).lower())
+            print('INCIDENT_'+t['side'].upper()+'_PREVIOUS_STATUS='+t['status'])
+            print('INCIDENT_'+t['side'].upper()+'_PREVIOUS_PAYOUT_NONZERO='+str(t['payout']>0).lower())
+          print('INCIDENT_VERDICT_READ_ONLY=1')
           PY
