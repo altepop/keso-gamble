@@ -1,6 +1,7 @@
 import {predictionCommand} from './discord-command.ts';
+import {GAME_CENTER_COMMANDS} from './game-center.ts';
 // Register these guild commands individually; never replace /death, /valo or the Activity entry point.
-export const KP_COMMAND_VERSION='kp-slash-v23-valorant-predict';
+export const KP_COMMAND_VERSION='kp-slash-v24-discord-game-center';
 export const kpCommands=[
  {type:1,name:'kp',description:'KESO PLAY｜KP残高・ランキング',options:[
   {type:1,name:'balance',description:'自分の残高と最近の入出金（本人だけに表示）'},
@@ -66,6 +67,7 @@ export const kpCommands=[
  ]},
   // Registered from the encrypted Voice Gateway Bot credential; no new Secret required.
   predictionCommand(),
+  ...GAME_CENTER_COMMANDS,
 ] as const;
 /** Compares what Discord stores with a definition, ignoring fields Discord adds (ids, localizations, defaults). */
 function shape(value:any):unknown{
