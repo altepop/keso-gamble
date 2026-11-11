@@ -13,6 +13,9 @@ test('ordered queue, skip, volume, and loop behavior',()=>{
  assert.equal(q.next({skip:true}).track.id,'gosa');
  q.setLoop('off');assert.equal(q.next(),null);
  assert.equal(q.view().queue.length,0);
+ q.add(track,user);assert.equal(q.next().track.id,'mou');
+ q.setLoop('all');assert.equal(q.next().track.id,'mou','one-song repeat-all must stay playing');
+ q.setLoop('off');assert.equal(q.next(),null);
  assert.throws(()=>q.setVolume(0),/音量/);
  assert.throws(()=>q.setVolume(101),/音量/);
  assert.throws(()=>q.setLoop('bad'),/リピート/);
