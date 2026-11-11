@@ -51,9 +51,11 @@ export async function ensureMusicCommand(env:MusicRegistrationEnv,request:typeof
  if(typeof saved.id!=='string'||!/^\d{15,22}$/.test(saved.id)||
     saved.application_id!==discord.applicationId||saved.guild_id!==discord.guildId||
     saved.name!=='music'||saved.type!==1||
-    !Array.isArray(choices)||choices.length!==MUSIC_COMMAND.options[0].options[0].choices.length||
-    !choices.some(t=>t.name==='負け怖'&&t.value==='makekowa'))
-  throw Error('Music command nine-song registration unconfirmed');
+    !Array.isArray(choices)||
+    choices.length!==MUSIC_COMMAND.options[0].options[0].choices.length||
+    !MUSIC_COMMAND.options[0].options[0].choices.every((expected,i)=>
+      choices[i]?.name===expected.name&&choices[i]?.value===expected.value))
+  throw Error('Music command full catalog registration unconfirmed');
  await env.DB.prepare('INSERT INTO monitor_state(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value')
   .bind(MUSIC_REGISTRATION_KEY,MUSIC_REGISTRATION_VERSION).run();
  return true;
