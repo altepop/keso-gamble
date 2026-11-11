@@ -596,13 +596,24 @@ export default {
         .catch(()=>Response.json({registered:false,error:'status_unavailable'},{status:503}));
     if(new URL(request.url).pathname==='/api/discord/music/state')return musicStateApi(request,env);
     if(request.method==='GET'&&new URL(request.url).pathname==='/api/discord/music/status')
-      return musicCommandStatus(env.DB).then(registration=>Response.json({
-        version:MUSIC_COMMAND_VERSION,tracks:MUSIC_COMMAND.options[0].options[0].choices.length,
-        registered:registration.registered,
-        bridgeConfigured:Boolean(env.MUSIC_VOICE_URL&&env.MUSIC_BRIDGE_TOKEN),
-        recoveryConfigured:Boolean(env.MUSIC_SESSION),status:'voice_service_separate'},
-        {headers:{'Cache-Control':'no-store'}}))
-        .catch(()=>Response.json({registered:false,error:'status_unavailable'},{status:503}));
+      return musicCommandStatus(env.DB).then(async registration=>{
+        // Diagnostics only for a failed version; one indexed read on this explicit status request,
+        // never on the minute cron or normal KP operations. kp_health stores scrubbed errors.
+        const health=registration.registered?null:await env.DB.prepare(
+          "SELECT last_ok,last_error,error,failures FROM kp_health WHERE feature='music_commands'")
+          .first<{last_ok:number|null;last_error:number|null;error:string|null;failures:number}>()
+          .catch(()=>null);
+        return Response.json({
+          version:MUSIC_COMMAND_VERSION,tracks:MUSIC_COMMAND.options[0].options[0].choices.length,
+          registered:registration.registered,
+          bridgeConfigured:Boolean(env.MUSIC_VOICE_URL&&env.MUSIC_BRIDGE_TOKEN),
+          recoveryConfigured:Boolean(env.MUSIC_SESSION),
+          ...(health?{registrationCheck:{
+            lastOk:health.last_ok,lastError:health.last_error,
+            failures:health.failures,reason:health.error}}:{}),
+          status:'voice_service_separate'},
+          {headers:{'Cache-Control':'no-store'}});
+      }).catch(()=>Response.json({registered:false,error:'status_unavailable'},{status:503}));
     if(request.method==='GET'&&new URL(request.url).pathname==='/api/discord/games/status')
       return gameCommandStatus(env.DB).then(info=>Response.json(info,{headers:{'Cache-Control':'no-store'}}))
         .catch(()=>Response.json({registered:false,error:'status_unavailable'},{status:503}));
