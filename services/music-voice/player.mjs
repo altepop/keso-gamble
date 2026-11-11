@@ -13,7 +13,7 @@ function durationSec(path){
   if(!ffmpegStatic)return null;
   try{
     const result=spawnSync(ffmpegStatic,['-hide_banner','-i',path],{encoding:'utf8',timeout:3000,maxBuffer:262144});
-    const match=/Duration:\\s*(\\d+):(\\d+):(\\d+(?:\\.\\d+)?)/.exec(result.stderr??'');
+    const match=/Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)/.exec(result.stderr??'');
     return match?Math.round(Number(match[1])*3600+Number(match[2])*60+Number(match[3])):null;
   }catch{return null;}
 }
@@ -197,7 +197,8 @@ export class MusicController {
  description(room){
   const view=this.snapshot(room.guildId);
   const current=view.current?.title??'なし',waiting=view.queue.map((t,i)=>(i+1)+'. '+t.title).join(' / ');
-  return '🎶 再生中：'+current+(view.paused?'（一時停止）':'')\n   +'\n'+(view.mode==='radio'?'📻 KESO RADIO':view.mode==='all'?'🎼 全曲再生':'🎵 通常再生')
+  return '🎶 再生中：'+current+(view.paused?'（一時停止）':'')
+   +'\n'+(view.mode==='radio'?'📻 KESO RADIO':view.mode==='all'?'🎼 全曲再生':'🎵 通常再生')
    +'\n📜 次：'+(waiting||'なし')+'\n🔊 '+view.volume+'%｜🔁 '+view.loop;
  }
  health(){return {ready:this.client.isReady(),active:this.rooms.size};}
