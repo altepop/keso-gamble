@@ -2,7 +2,7 @@
 
 ## 方針
 
-管理者・BAN・キック、ロール・絵文字・スタンプの管理権限は付与しない。KESO PLAYはゲームBotとして、利用者のコンテンツやサーバー全体を変更できる管理権限を持たせない。現行の権限申請スクリプトは **19項目の基本権限** に限定した。音声チャンネルへの他人の移動とプライベートスレッド作成は明示的な追加オプションにした。
+管理者・BAN・キック、ロール・絵文字・スタンプの管理権限は付与しない。KESO PLAYはゲームBotとして、利用者のコンテンツやサーバー全体を変更できる管理権限を持たせない。現行の権限申請スクリプトは **20項目の基本権限** に限定した。音声チャンネルへのメンバー移動は利用者が承認した20権限に含む（実際の移動は本人同意必須）。プライベートスレッド作成は任意オプションとした。
 
 **Discord権限を許可するだけでは機能は実装されない**。本番Botの稼働コード・既存の通話Gateway・D1・KP精算は、このPRでは変更しない。
 
@@ -25,13 +25,12 @@ node services/valorant-results/scripts/discord-permission-upgrade.mjs
 任意の機能を追加する場合：
 
 ```sh
-node services/valorant-results/scripts/discord-permission-upgrade.mjs --with-voice-move
 node services/valorant-results/scripts/discord-permission-upgrade.mjs --with-private-threads
 ```
 
-移動は本人の同意を得た試合募集・自動チーム分けでしか使用しない。非公開スレッドは本当に必要な場合に限る。サーバー全体へのチャンネル管理・イベント管理・スレッド管理はオプションでも要求しない。
+メンバー移動は本人の同意を得た試合募集・自動チーム分けでしか使用しない。非公開スレッドは本当に必要な場合に限る。サーバー全体へのチャンネル管理・イベント管理・スレッド管理はオプションでも要求しない。
 
-## 基本権限 19項目
+## 基本権限 20項目
 
 | 分野 | 権限 |
 |---|---|
@@ -39,7 +38,7 @@ node services/valorant-results/scripts/discord-permission-upgrade.mjs --with-pri
 | 投票・告知 | ADD_REACTIONS / SEND_POLLS / PIN_MESSAGES / MENTION_EVERYONE |
 | 公開スレッド | CREATE_PUBLIC_THREADS / SEND_MESSAGES_IN_THREADS |
 | イベント | CREATE_EVENTS （Bot自身のイベントの編集・削除も可能） |
-| 通話・既存のサウンド | CONNECT / SPEAK / USE_SOUNDBOARD / USE_EXTERNAL_SOUNDS / SET_VOICE_CHANNEL_STATUS |
+| 通話・既存のサウンド | CONNECT / SPEAK / MOVE_MEMBERS / USE_SOUNDBOARD / USE_EXTERNAL_SOUNDS / SET_VOICE_CHANNEL_STATUS |
 | Activityとコマンド | USE_EMBEDDED_ACTIVITIES / USE_APPLICATION_COMMANDS |
 
 ※ MENTION_EVERYONE は重大イベントでのみ、運営が事前に許可した投稿種別・チャンネルに限り使用する。通常の勝敗速報・KP精算・繰り返し通知では使わない。通常のBot投稿は `allowed_mentions: {parse: []}` を維持し、承認済みの特別イベントだけ明示的に `everyone` を許可する。
@@ -53,7 +52,7 @@ node services/valorant-results/scripts/discord-permission-upgrade.mjs --with-pri
 - 他者に影響する管理：`MANAGE_CHANNELS` / `MANAGE_MESSAGES` / `MANAGE_WEBHOOKS` / `MANAGE_GUILD` / `MODERATE_MEMBERS` / `MUTE_MEMBERS` / `DEAFEN_MEMBERS` / `MANAGE_NICKNAMES`
 - 管理範囲：`MANAGE_EVENTS` / `MANAGE_THREADS`
 
-非公開スレッド作成とメンバー移動は、上記2つのオプションを使うときに限り承認する。Discordの音声チャンネル移動機能は悪用すれば通話を妨害できるため、対象チャンネルの上書き制限、実装上の参加同意を前提とする。
+非公開スレッド作成のみ任意オプション。メンバー移動はユーザーが承認した基本20権限に含む。Discordの音声チャンネル移動機能は悪用すれば通話を妨害できるため、対象チャンネルの上書き制限、実装上の参加同意を前提とする。
 
 ## Privileged Intentsは別管理
 
