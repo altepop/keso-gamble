@@ -341,6 +341,92 @@ async function auditDisputedPredictionKickoffs(env:Env):Promise<void>{
   console.info('prediction_kickoff_audit_verified',{matches:matches.length});
 }
 
+
+/** Reconcile one proven historical mismatch, preserving original purchases
+ * and immutable payout ledger rows. The two compensating ledger entries,
+ * event revision and ticket correction are committed as one D1 batch.
+ * Verified kickoff was 23:27:18.729 JST; card opened 23:27:33.995 JST.
+ * The tickets are post-kickoff and must both be refunded, not paid as wins.
+ */
+async function reconcileDollyPredictionIncident(env:Env):Promise<void>{
+  const eventId='1570082563177848984';
+  const oldMatch='4ae50a79-297d-41e1-95d2-8eb8b78c04fb';
+  const firstMatch='edab9334-5520-4d35-9ded-a92e3fe0b412';
+  const marker='vp:incident:20261111:corrected';
+  const correctionPost='vp:correction:'+eventId;
+  const msg='🎯 **勝敗予想の精算訂正｜VDK（コンペ）**\\n'
+    +'23:27:18に試合開始、23:27:33に予想カードが発行されたため、すべて試合開始後の購入でした。'
+    +'先に終了した敗北試合を飛ばして次の勝利で判定していた不具合を修正しました。\\n'
+    +'**勝利予想 10,000 KPは全額返金**（誤払戻しとの差額17,600 KPを調整）\\n'
+    +'**敗北予想 5,000 KPも全額返金**\\n'
+    +'-# 試合開始時刻まで有効。返金・調整は重複して行いません。';
+  if(await state(env,marker)>0){
+    if(env.KP_EARNINGS_WEBHOOK_URL){await ensurePosts(env);await enqueue(env,correctionPost,msg,Date.now());}
+    return;
+  }
+  const event=await env.DB.prepare('SELECT guild,created_at,status,match_id,outcome FROM vp_events WHERE id=?')
+    .bind(eventId).first<{guild:string;created_at:number;status:string;match_id:string|null;outcome:string|null}>();
+  if(!event||event.created_at!==1794407253995||event.status!=='resolved'
+    ||event.match_id!==oldMatch||event.outcome!=='win')
+    throw Error('Incident event precondition mismatch');
+  const records=(await env.DB.prepare(`SELECT t.user,t.side,t.stake,t.odds,t.purchased_at,t.status,t.payout,w.balance,
+    (SELECT l.delta FROM kp_ledger l WHERE l.id='vp:pay:'||t.event_id||':'||t.user) AS paid
+    FROM vp_tickets t JOIN kp_wallets w ON w.guild=? AND w.user=t.user
+    WHERE t.event_id=? ORDER BY t.side`).bind(event.guild,eventId)
+    .all<{user:string;side:string;stake:number;odds:number;purchased_at:number;status:string;payout:number;balance:number;paid:number|null}>()).results;
+  if(records.length!==2)throw Error('Incident ticket count mismatch');
+  const win=records.find(t=>t.side==='win'),loss=records.find(t=>t.side==='loss');
+  if(!win||!loss||win.stake!==10000||win.odds!==276||win.status!=='won'||win.payout!==27600
+    ||win.paid!==27600||win.balance<17600||win.purchased_at!==1794407281171
+    ||loss.stake!==5000||loss.odds!==169||loss.status!=='lost'||loss.payout!==0
+    ||loss.paid!==null||loss.purchased_at!==1794407268103)
+    throw Error('Incident ticket or wallet precondition mismatch');
+  const a=await env.DB.prepare('SELECT value FROM monitor_state WHERE key=?')
+    .bind('vp:incident:20261111:kickoff:'+firstMatch).first<{value:string}>();
+  const b=await env.DB.prepare('SELECT value FROM monitor_state WHERE key=?')
+    .bind('vp:incident:20261111:kickoff:'+oldMatch).first<{value:string}>();
+  if(!a||!b)throw Error('Incident kickoff verification unavailable');
+  const first=JSON.parse(a.value) as {kickoff:number;endedAt:number;outcome:string};
+  const second=JSON.parse(b.value) as {kickoff:number;endedAt:number;outcome:string};
+  if(first.kickoff!==1794407238729||first.outcome!=='loss'
+    ||second.outcome!=='win'||second.kickoff!==1794409301525
+    ||first.endedAt>=second.kickoff||event.created_at<=first.kickoff
+    ||win.purchased_at<=first.kickoff||loss.purchased_at<=first.kickoff)
+    throw Error('Incident verified times mismatch');
+  const now=Date.now();
+  const winCorrectionId='vp:incident:20261111:reverse-win';
+  const lossRefundId='vp:incident:20261111:refund-loss';
+  const changes=await env.DB.batch([
+    env.DB.prepare("UPDATE vp_events SET match_id=?,outcome='loss' WHERE id=? AND status='resolved' AND match_id=? AND outcome='win'")
+      .bind(firstMatch,eventId,oldMatch),
+    env.DB.prepare("UPDATE vp_tickets SET status='refunded',payout=stake WHERE event_id=? AND side='win' AND status='won' AND stake=10000 AND payout=27600")
+      .bind(eventId),
+    env.DB.prepare("UPDATE vp_tickets SET status='refunded',payout=stake WHERE event_id=? AND side='loss' AND status='lost' AND stake=5000 AND payout=0")
+      .bind(eventId),
+    env.DB.prepare(`INSERT OR IGNORE INTO kp_ledger(id,guild,user,delta,kind,at)
+      SELECT ?,e.guild,t.user,-17600,'valorant_prediction',? FROM vp_events e
+      JOIN vp_tickets t ON t.event_id=e.id
+      WHERE e.id=? AND e.match_id=? AND e.outcome='loss' AND t.side='win'
+        AND t.status='refunded' AND t.payout=10000
+        AND EXISTS(SELECT 1 FROM kp_ledger l WHERE l.id='vp:pay:'||e.id||':'||t.user AND l.delta=27600)`)
+      .bind(winCorrectionId,now,eventId,firstMatch),
+    env.DB.prepare(`INSERT OR IGNORE INTO kp_ledger(id,guild,user,delta,kind,at)
+      SELECT ?,e.guild,t.user,5000,'valorant_prediction',? FROM vp_events e
+      JOIN vp_tickets t ON t.event_id=e.id
+      WHERE e.id=? AND e.match_id=? AND e.outcome='loss' AND t.side='loss'
+        AND t.status='refunded' AND t.payout=5000
+        AND NOT EXISTS(SELECT 1 FROM kp_ledger l WHERE l.id='vp:pay:'||e.id||':'||t.user)`)
+      .bind(lossRefundId,now,eventId,firstMatch),
+    env.DB.prepare(`INSERT OR IGNORE INTO monitor_state(key,value)
+      SELECT ?,? WHERE EXISTS(SELECT 1 FROM kp_ledger WHERE id=? AND delta=-17600)
+        AND EXISTS(SELECT 1 FROM kp_ledger WHERE id=? AND delta=5000)`)
+      .bind(marker,String(now),winCorrectionId,lossRefundId),
+  ]);
+  if(!changes[0].meta.changes)throw Error('Incident settlement correction did not commit');
+  console.info('prediction_incident_corrected',{tickets:2});
+  if(env.KP_EARNINGS_WEBHOOK_URL){await ensurePosts(env);await enqueue(env,correctionPost,msg,Date.now());}
+}
+
 interface DeathDetails {
   remaining: number;
   matches: Map<string, Match | null>;
@@ -701,8 +787,10 @@ export default {
     ctx.waitUntil(track(env,'steam',async()=>{const mapping=await initializeKp(env);if(mapping)await monitorSteam(env,mapping.guildId);}));
     ctx.waitUntil(track(env,'steam_posts',async()=>{const mapping=await initializeKp(env);if(!mapping)return;await queueSteamPosts(env,mapping.guildId);await flushMahjongPosts(env);}));
     ctx.waitUntil(track(env,'valorant',()=>monitor(env)));
-    if(Math.floor((_event.scheduledTime??Date.now())/60000)%5===0)
-      ctx.waitUntil(track(env,'prediction_kickoff_audit',()=>auditDisputedPredictionKickoffs(env)));
+    ctx.waitUntil(track(env,'prediction_kickoff_audit',async()=>{
+      await auditDisputedPredictionKickoffs(env);
+      await reconcileDollyPredictionIncident(env);
+    }));
     ctx.waitUntil(track(env,'spike_compensation',async()=>{
       const mapping=await initializeKp(env);if(!mapping)return;
       await runSpikeCompensation(env,mapping,async(region,id)=>{
