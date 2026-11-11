@@ -4,6 +4,7 @@ import type { Player } from './index.ts';
 import type { KpEnv, KpMapping } from './kp.ts';
 import { initializeKp } from './kp.ts';
 import { storedMode, modeLabel } from './modes.ts';
+import {ensurePosts,enqueue} from './racing-posts.ts';
 
 export const PREDICTION_BUTTON = /^vp:bet:(\d{15,22}):(win|loss)$/;
 export const PREDICTION_MODAL = /^vp:submit:(\d{15,22}):(win|loss)$/;
@@ -138,7 +139,23 @@ export async function settlePredictions(env:KpEnv,match:Match,riot:string,now=Da
       env.DB.prepare('UPDATE vp_tickets SET status=CASE WHEN purchased_at>=? OR ?=\'draw\' THEN \'refunded\' WHEN side=? THEN \'won\' ELSE \'lost\' END,payout=CASE WHEN purchased_at>=? OR ?=\'draw\' THEN stake WHEN side=? THEN CAST(stake*odds/100 AS INTEGER) ELSE 0 END WHERE event_id=? AND status=\'pending\' AND EXISTS(SELECT 1 FROM vp_events WHERE id=? AND status=\'resolved\' AND match_id=?)')
         .bind(start,outcome,outcome,start,outcome,outcome,e.id,e.id,match.metadata.match_id),
     ]);
-    if(done[0].meta.changes)console.info('vp_settled',{event:e.id,match:match.metadata.match_id,outcome,at:now});
+    if(done[0].meta.changes){
+      console.info('vp_settled',{event:e.id,match:match.metadata.match_id,outcome,at:now});
+      // Optional public result post. Ledger settlement has already committed; Discord errors cannot undo it.
+      if ((env as KpEnv & {KP_EARNINGS_WEBHOOK_URL?:string}).KP_EARNINGS_WEBHOOK_URL) try {
+        const total=await env.DB.prepare('SELECT COUNT(*) AS entries,COALESCE(SUM(stake),0) AS stakes,COALESCE(SUM(CASE WHEN status=\'won\' THEN 1 ELSE 0 END),0) AS hits,COALESCE(SUM(payout),0) AS payouts FROM vp_tickets WHERE event_id=?')
+          .bind(e.id).first<{entries:number;stakes:number;hits:number;payouts:number}>();
+        if(total?.entries){
+          await ensurePosts(env);
+          const post='🎯 **勝敗予想の結果**｜'+safe(e.name)+'（'+modeLabel(e.mode)+'）\n'
+            +'試合結果：**'+(outcome==='win'?'勝利':outcome==='loss'?'敗北':'引き分け')+'**'
+            +'｜予想 '+total.entries+'件／的中 '+total.hits+'件\n'
+            +'予想総額 '+money(total.stakes)+'｜払い戻し総額 '+money(total.payouts)
+            +'\n-# 試合開始後の予想と引き分けは返金済み。精算は1回のみ。';
+          await enqueue(env,'vp:result:'+e.id,post.slice(0,1900),now);
+        }
+      }catch{console.warn('prediction_result_post_pending');}
+    }
   }
   return events.length;
 }
