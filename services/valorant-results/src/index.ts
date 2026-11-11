@@ -2,7 +2,7 @@ import {approvedEscalationPress,escaPressActive,escalationPressStatus} from './e
 import {ensureRankCommand,rankRegistrationStatus} from './rank-command-registration.ts';
 import {ESCALATION_SHIELD_VERSION,ESCALATION_RR_VERSION,matchAct,observeEscalationAct,syncEscalationPower} from './escalation-rating.ts';
 import {runSpikeCompensation} from './spike-compensation.ts';
-import {settlePredictions,expirePredictions,reconcilePredictionPosts} from './valo-predictions.ts';
+import {settlePredictions,expirePredictions,reconcilePredictionPosts,recoverPendingPredictions} from './valo-predictions.ts';
 import {ensurePredictionCommand,predictionRegistrationStatus} from './predict-registration.ts';
 import {ensureGameCommands,gameCommandStatus} from './game-command-registration.ts';
 import {MUSIC_COMMAND_VERSION,MUSIC_COMMAND} from './music-command.ts';
@@ -567,6 +567,11 @@ export async function monitor(env: Env, players: Player[] = configuredPlayers): 
       } catch (error) { console.warn('player_poll_failed', { player: player.name || player.riotId, stage, reason: diagnosticReason(error) }); }
       await flushNotifications(env, players);
     }
+    if (vpTargets.size && Math.floor(Date.now()/60000)%5===0) try {
+      const recovered=await recoverPendingPredictions(env,(region,id)=>
+        api<Match>(env,'/valorant/v4/match/'+encodeURIComponent(region)+'/'+encodeURIComponent(id)));
+      if(recovered)console.info('prediction_recovered_from_result',{count:recovered});
+    } catch(error) {console.warn('prediction_recovery_pending',{reason:diagnosticReason(error)});}
     if (!players.length) return;
     await flushNotifications(env, players);
     try {const mapping=await initializeKp(env);if(mapping)await flushKpDirectives(env,mapping);}catch{console.warn('kp_directive_delivery_pending');}
