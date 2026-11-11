@@ -25,7 +25,7 @@ export function predictionCommand(configured = players) {
     name: (player.name || player.riotId.split('#')[0]).slice(0,80), value:player.riotId,
   }));
   return {
-    name:'predict',description:'次のVALORANT試合の勝敗予想を開始',type:1,
+    name:'predict',description:'KESO PLAY｜次のVALORANT試合のKP勝敗予想を開始',type:1,
     options:[
       {type:3,name:'player',description:'予想する対象者',required:true,choices},
       {type:3,name:'mode',description:'対象モード（省略でコンペ）',required:false,choices:[
