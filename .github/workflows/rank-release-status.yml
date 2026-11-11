@@ -1,0 +1,41 @@
+name: Rank release status (read-only)
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/rank-release-status.yml']
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/setup-node@v7
+        with: {node-version: '24'}
+      - name: Verify published rank images and automatic Discord registration without posting
+        run: |
+          node --input-type=module <<'NODE'
+          const worker='https://valorant-results.tealeaforest.workers.dev';
+          const pages='https://altepop.github.io/keso-gamble/assets/escalation-ranks/';
+          const get=async url=>{const r=await fetch(url,{signal:AbortSignal.timeout(15000),headers:{'Cache-Control':'no-cache'}});if(!r.ok)throw Error('HTTP '+r.status+' '+new URL(url).pathname);return r;};
+          for(const key of ['unranked','iron','bronze','silver','gold','platinum','diamond','ascendant','immortal','radiant']){
+            const svg=await (await get(pages+key+'.svg')).text();if(!svg.includes('<svg'))throw Error('Missing SVG: '+key);
+            const png=new Uint8Array(await (await get(pages+key+'.png')).arrayBuffer());if(png[0]!==137||png[1]!==80||png[2]!==78||png[3]!==71)throw Error('Missing PNG: '+key);
+          }
+          const metadata=await (await get(worker+'/api/kp/commands')).json();
+          const kp=metadata.commands?.find(c=>c.name==='kp');
+          if(!kp?.options?.some(o=>o.name==='rank')||!kp.options.some(o=>o.name==='ranks'))throw Error('Rank definitions absent');
+          let registered=false,rankRegistered=false,gatewayRegistered=false;
+          for(let attempt=0;attempt<20;attempt++){
+            const rank=await (await get(worker+'/api/discord/rank/status')).json();
+            const voice=await (await get(worker+'/api/kp/voice/status')).json();
+            rankRegistered=rank.registered===true&&rank.version===metadata.version;
+            gatewayRegistered=voice.commandsRegistered===true&&voice.commandsVersion===metadata.version;
+            if(rankRegistered||gatewayRegistered){registered=true;break;}
+            console.log('RANK_REGISTRATION_PENDING '+JSON.stringify({attempt:attempt+1,version:metadata.version}));
+            if(attempt<19)await new Promise(done=>setTimeout(done,30000));
+          }
+          console.log('RANK_RELEASE_STATUS '+JSON.stringify({images:'ok',definitions:'ok',version:metadata.version,rankRegistered,gatewayRegistered,registered}));
+          if(!registered)throw Error('Automatic Discord registration is still pending');
+          NODE
