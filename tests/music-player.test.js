@@ -275,7 +275,7 @@ test('lyrics are curated static official copy, not uploaded or HTML executed',as
  assert.equal(s.element('#music-lyrics-title').textContent,'誤差の女王');
  assert.doesNotMatch(s.element('#music-lyrics-content').textContent,/\[Instrumental|\[Final Chorus/);
  assert.doesNotMatch(source,/indexedDB|readAsArrayBuffer|createObjectURL|type="file"/);
- assert.doesNotMatch(source,/fetch\(/, "all eight official paths are registered statically");
+ assert.doesNotMatch(source,/fetch\(/, "all ten official paths are registered statically");
  assert.ok(s.root.innerHTML.includes('music-song-makekowa'),'official makekowa listed');
  assert.ok(s.root.innerHTML.includes('music-song-relic'),'newly approved tracks listed clearly');
 });
