@@ -22,6 +22,7 @@ export async function escalationRankReply(env:KpEnv,guild:string,user:string,ran
   {name:'今ACTの戦績',value:`${v.wins}勝 ${v.losses}敗`,inline:true},
   {name:v.lastUpdateKind==='placement'?'認定結果':v.lastUpdateKind==='legacy-series'?'以前のシリーズ結果':'直前の試合',value:v.lastSeriesAt?`${v.lastChange>=0?'+':''}${v.lastChange} RR（成績補正${signed(v.lastPerformance)}を含む）`:'まだ更新なし',inline:true},
  ];
+ if(v.rankShields?.eligible)fields.push({name:'🛡️ ランクシールド',value:`残り **${v.rankShields.remaining}/2**${v.rankShields.lastConsumed?' · 前の試合で1枚使用して降格を回避':v.rankShields.remaining?' · 0 RRの敗北で1枚消費':' · 次に0 RRで負けると降格'}`,inline:false});
  if(v.placementConsistencyBonus)fields.push({name:'初回認定ボーナス',value:'3試合ともKDプラス：＋100 RR',inline:false});
  if(v.previousActs.length)fields.push({name:'前ACTの記録',value:v.previousActs.map(a=>`${clean(a.name||a.act)}：${a.grade} ／ 最高 ${a.peakGrade}`).join('\n').slice(0,1000),inline:false});
  return {content:`🎖️ <@${user}> のエスカランクやで。\n${rank?`**${rank.name} · ${rank.rr} RR**`:pending(v)}`,embeds:[{title:rank?rank.name:'未認定',description:rank?`**${rank.rr} RR**${v.rating===null?' · 前ACTから引き継ぎ中':''}`:pending(v),color:color(rank?.tier),thumbnail:{url:image(rank??undefined)},fields,footer:{text:'ランク画像 © Riot Games。KESO独自ランク（非公認）でVALORANT本体とは別。初回3試合／ACT更新1試合／エピソード更新3試合。'}}]};

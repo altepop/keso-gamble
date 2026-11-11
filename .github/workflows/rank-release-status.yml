@@ -24,7 +24,7 @@ jobs:
             const metadata=await (await get(worker+'/api/kp/commands')).json();version=metadata.version;
             const esca=metadata.commands?.find(c=>c.name==='esca'),kp=metadata.commands?.find(c=>c.name==='kp');
             const rank=await (await get(worker+'/api/discord/rank/status')).json();
-            const ready=rank.ratingSystem==='per-match-v2'&&esca?.options?.some(o=>o.name==='rank')&&esca.options.some(o=>o.name==='ranking')&&kp?.options?.some(o=>o.name==='ranking')&&!kp.options.some(o=>['rank','ranks'].includes(o.name));
+            const ready=rank.ratingSystem==='per-match-v2'&&rank.rankShieldSystem==='rank-shields-v1'&&esca?.options?.some(o=>o.name==='rank')&&esca.options.some(o=>o.name==='ranking')&&kp?.options?.some(o=>o.name==='ranking')&&!kp.options.some(o=>['rank','ranks'].includes(o.name));
             if(ready){
               if(!images){
                 const source=await (await get(pages+'SOURCE.json')).json();if(source.files?.length!==26)throw Error('Rank image manifest incomplete');
@@ -41,6 +41,6 @@ jobs:
             console.log('RANK_REGISTRATION_PENDING '+JSON.stringify({attempt:attempt+1,version}));
             if(attempt<35)await new Promise(done=>setTimeout(done,30000));
           }
-          console.log('RANK_RELEASE_STATUS '+JSON.stringify({images:images?'ok':'pending',namespace:'esca',ratingSystem:'per-match-v2',version,rankRegistered,gatewayRegistered,registered}));
+          console.log('RANK_RELEASE_STATUS '+JSON.stringify({images:images?'ok':'pending',namespace:'esca',ratingSystem:'per-match-v2',rankShieldSystem:'rank-shields-v1',version,rankRegistered,gatewayRegistered,registered}));
           if(!registered)throw Error('Automatic /esca registration is still pending');
           NODE

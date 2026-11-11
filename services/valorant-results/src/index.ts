@@ -1,5 +1,5 @@
 import {ensureRankCommand,rankRegistrationStatus} from './rank-command-registration.ts';
-import {ESCALATION_RR_VERSION,matchAct,observeEscalationAct,syncEscalationPower} from './escalation-rating.ts';
+import {ESCALATION_SHIELD_VERSION,ESCALATION_RR_VERSION,matchAct,observeEscalationAct,syncEscalationPower} from './escalation-rating.ts';
 import {runSpikeCompensation} from './spike-compensation.ts';
 import {settlePredictions,expirePredictions} from './valo-predictions.ts';
 import {ensurePredictionCommand,predictionRegistrationStatus} from './predict-registration.ts';
@@ -578,7 +578,7 @@ export default {
     if(new URL(request.url).pathname.startsWith('/api/racing/'))return raceVideoApi(request,env).catch(()=>new Response('Unavailable',{status:503}));
     if(request.method==='GET'&&new URL(request.url).pathname==='/api/mahjong/status')return mahjongStatus(env).then(status=>Response.json(status,{headers:{'Cache-Control':'no-store'}})).catch(()=>Response.json({enabled:false,error:'configuration_unavailable'},{status:503}));
     if(request.method==='GET'&&new URL(request.url).pathname==='/api/discord/rank/status')
-      return rankRegistrationStatus(env.DB).then(info=>Response.json({...info,ratingSystem:ESCALATION_RR_VERSION},{headers:{'Cache-Control':'no-store'}}))
+      return rankRegistrationStatus(env.DB).then(info=>Response.json({...info,ratingSystem:ESCALATION_RR_VERSION,rankShieldSystem:ESCALATION_SHIELD_VERSION},{headers:{'Cache-Control':'no-store'}}))
         .catch(()=>Response.json({registered:false,error:'status_unavailable'},{status:503}));
     if(request.method==='GET'&&new URL(request.url).pathname==='/api/discord/music/status')
       return Response.json({version:MUSIC_COMMAND_VERSION,tracks:MUSIC_COMMAND.options[0].options[0].choices.length,
