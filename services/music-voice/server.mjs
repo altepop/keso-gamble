@@ -22,6 +22,7 @@ function reply(response,status,body){
 }
 const client=new Client({intents:[GatewayIntentBits.Guilds,GatewayIntentBits.GuildVoiceStates]});
 const music=new MusicController(client);
+client.on('voiceStateUpdate',(oldState,newState)=>music.onVoiceStateUpdate(newState.guild?newState:oldState));
 const receipts=new Map();
 function pruneReceipts(now){
  if(receipts.size<200)return;
