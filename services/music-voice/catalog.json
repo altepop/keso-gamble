@@ -1,0 +1,42 @@
+[
+  {
+    "id": "mou",
+    "title": "もう一周",
+    "file": "mou-isshu.mp3"
+  },
+  {
+    "id": "rhapsody",
+    "title": "限界集落狂詩曲",
+    "file": "genkai-rhapsody.mp3"
+  },
+  {
+    "id": "kyohansha",
+    "title": "午前二時の共犯者",
+    "file": "午前二時の共犯者 (1).mp3"
+  },
+  {
+    "id": "ouenka",
+    "title": "応援歌",
+    "file": "応援歌 (Remastered).mp3"
+  },
+  {
+    "id": "gosa",
+    "title": "誤差の女王",
+    "file": "誤差の女王B.mp3"
+  },
+  {
+    "id": "fullpa",
+    "title": "フルパなら",
+    "file": "フルパならB.mp3"
+  },
+  {
+    "id": "relic",
+    "title": "値札のない遺物",
+    "file": "値札のない遺物B.mp3"
+  },
+  {
+    "id": "masakane",
+    "title": "まさかね",
+    "file": "まさかねC.mp3"
+  }
+]

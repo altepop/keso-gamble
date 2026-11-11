@@ -4,6 +4,7 @@ import {runSpikeCompensation} from './spike-compensation.ts';
 import {settlePredictions,expirePredictions} from './valo-predictions.ts';
 import {ensurePredictionCommand,predictionRegistrationStatus} from './predict-registration.ts';
 import {ensureGameCommands,gameCommandStatus} from './game-command-registration.ts';
+import {MUSIC_COMMAND_VERSION,MUSIC_COMMAND} from './music-command.ts';
 import {pruneGameRecruits} from './game-recruit.ts';
 import {storedMode} from './modes.ts';
 import {queueCommunityNews} from './community-news.ts';
@@ -64,6 +65,8 @@ export interface Env {
   VOICE_GATEWAY?:DurableObjectNamespace;
   RACE_BROADCAST?:DurableObjectNamespace;
   DISCORD_CLIENT_SECRET?: string;
+  MUSIC_VOICE_URL?: string;
+  MUSIC_BRIDGE_TOKEN?: string;
   KP_BOOTSTRAP_PRIVATE_KEY?: string;
   KP_BOOTSTRAP_PUBLIC_KEY?: string;
   DB: D1Database;
@@ -577,6 +580,10 @@ export default {
     if(request.method==='GET'&&new URL(request.url).pathname==='/api/discord/rank/status')
       return rankRegistrationStatus(env.DB).then(info=>Response.json(info,{headers:{'Cache-Control':'no-store'}}))
         .catch(()=>Response.json({registered:false,error:'status_unavailable'},{status:503}));
+    if(request.method==='GET'&&new URL(request.url).pathname==='/api/discord/music/status')
+      return Response.json({version:MUSIC_COMMAND_VERSION,tracks:MUSIC_COMMAND.options[0].options[0].choices.length,
+        bridgeConfigured:Boolean(env.MUSIC_VOICE_URL&&env.MUSIC_BRIDGE_TOKEN),status:'voice_service_separate'},
+        {headers:{'Cache-Control':'no-store'}});
     if(request.method==='GET'&&new URL(request.url).pathname==='/api/discord/games/status')
       return gameCommandStatus(env.DB).then(info=>Response.json(info,{headers:{'Cache-Control':'no-store'}}))
         .catch(()=>Response.json({registered:false,error:'status_unavailable'},{status:503}));

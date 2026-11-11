@@ -1,7 +1,8 @@
 import {predictionCommand} from './discord-command.ts';
 import {GAME_CENTER_COMMANDS} from './game-center.ts';
+import {MUSIC_COMMAND} from './music-command.ts';
 // Register these guild commands individually; never replace /death, /valo or the Activity entry point.
-export const KP_COMMAND_VERSION='kp-slash-v25-escalation-ranks';
+export const KP_COMMAND_VERSION='kp-slash-v26-escalation-ranks-music';
 export const kpCommands=[
  {type:1,name:'kp',description:'KESO PLAY｜KP残高・エスカランク',options:[
   {type:1,name:'rank',description:'エスカランク・認定進捗・前ACTの最高ランク（本人だけに表示）',options:[{type:6,name:'user',description:'見たいメンバー（省略で自分）',required:false}]},
@@ -70,6 +71,7 @@ export const kpCommands=[
   // Registered from the encrypted Voice Gateway Bot credential; no new Secret required.
   predictionCommand(),
   ...GAME_CENTER_COMMANDS,
+  MUSIC_COMMAND,
 ] as const;
 /** Compares what Discord stores with a definition, ignoring fields Discord adds (ids, localizations, defaults). */
 function shape(value:any):unknown{

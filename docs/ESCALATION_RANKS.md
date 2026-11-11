@@ -20,7 +20,7 @@ SVGの作成元は `scripts/build-escalation-rank-art.mjs`。PNGは同じSVGをC
 
 ## Discordへの登録
 
-`KP_COMMAND_VERSION` を更新し、既存のVoice Gatewayの差分登録に反映する。さらに既存Client Secretによる `applications.commands.update` の短命トークンで、10分ごとの既存cron内から `/kp` 一つだけを更新する。`/death`・`/valo`・クイズOAuth・ActivityのEntry Pointは変更しない。新しい秘密値の入力は不要。
+`KP_COMMAND_VERSION`（v26：ランクと音楽コマンド共存版）を更新し、既存のVoice Gatewayの差分登録に反映する。さらに既存Client Secretによる `applications.commands.update` の短命トークンで、10分ごとの既存cron内から `/kp` 一つだけを更新する。`/death`・`/valo`・クイズOAuth・ActivityのEntry Pointは変更しない。新しい秘密値の入力は不要。
 
 `GET /api/discord/rank/status` で、期待するコマンド版数と登録済みマーカーを確認できる。トークンや秘密値は返さない。Discordが登録内容を確認できた場合だけマーカーを保存する。登録直後はDiscordクライアントの候補更新に時間が掛かることがある。
 
