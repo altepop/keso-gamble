@@ -1,0 +1,41 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {MusicQueue} from '../queue.mjs';
+const user='100000000000000101';
+const songs=new Map(Array.from({length:8},(_,i)=>['s'+i,{id:'s'+i,title:'Song '+i}]));
+test('manual queue survives a serialized process restart with volume, repeat, pause',()=>{
+ const first=new MusicQueue();
+ first.add(songs.get('s0'),user);first.add(songs.get('s1'),user);
+ first.next();first.setVolume(43);first.setLoop('all');first.paused=true;
+ const saved=first.serialize('100000000000000111');
+ const restored=new MusicQueue();
+ restored.restore(JSON.parse(JSON.stringify(saved)),songs);
+ assert.deepEqual(restored.serialize(saved.channelId),saved);
+ assert.equal(restored.next().track.id,'s1');
+ assert.equal(restored.next().track.id,'s0');
+});
+test('radio restore preserves shuffled remainder without repeating the cycle',()=>{
+ const q=new MusicQueue({random:()=>0.6});
+ q.loadPlaylist([...songs.values()],user,{radio:true});
+ const played=[q.next().track.id,q.next({skip:true}).track.id];
+ const saved=JSON.parse(JSON.stringify(q.serialize('100000000000000111')));
+ const other=new MusicQueue({random:()=>0.2});
+ other.restore(saved,songs);
+ const rest=[];for(let i=0;i<6;i++)rest.push(other.next({skip:true}).track.id);
+ assert.equal(new Set([...played,...rest]).size,8);
+ assert.equal(other.next({skip:true}).track.id!==rest.at(-1),true);
+});
+test('malformed or unknown snapshot cannot corrupt existing music state',()=>{
+ const q=new MusicQueue();q.add(songs.get('s0'),user);q.next();
+ const before=q.serialize('100000000000000111');
+ for(const invalid of [
+  {...before,upcoming:[{id:'not_in_catalog',requester:user}]},
+  {...before,volume:300},
+  {...before,mode:'radio',radioCatalog:['s0']},
+  {...before,upcoming:new Array(31).fill({id:'s0',requester:user})},
+  {...before,current:{id:'s0',requester:'bad'}},
+ ]){
+  assert.throws(()=>q.restore(invalid,songs));
+  assert.deepEqual(q.serialize(before.channelId),before);
+ }
+});
