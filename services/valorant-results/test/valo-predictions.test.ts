@@ -11,10 +11,11 @@ import { initializeKp } from '../src/kp.ts';
 import type { KpEnv, KpMapping } from '../src/kp.ts';
 import type { Match } from '../src/results.ts';
 
-const guild='100000000000000100',one='100000000000000101',two='100000000000000102';
+const guild='100000000000000100',one='100000000000000101',two='100000000000000102',three='100000000000000103',visitor='100000000000000104';
 const mapping:KpMapping={guildId:guild,accounts:[
   {riotId:'One#JP1',discordUserId:one},
   {riotId:'Two#JP1',discordUserId:two},
+  {riotId:'Three#JP1',discordUserId:three},
 ]};
 const start=Date.parse('2026-11-11T12:00:00+09:00');
 async function fixture(){
@@ -29,7 +30,13 @@ async function fixture(){
     bind(...values:unknown[]){return new Query(this.sql,values);}
     async first<T>(){return (sqlite.prepare(this.sql).get(...this.bindings as never[])??null) as T|null;}
     async all<T>(){return {results:sqlite.prepare(this.sql).all(...this.bindings as never[]) as T[]};}
-    async run(){return {meta:{changes:Number(sqlite.prepare(this.sql).run(...this.bindings as never[]).changes)}};}
+    async run(){
+      // D1 meta.changes uses SQLite total_changes(), which counts trigger writes too.
+      const total=()=>Number((sqlite.prepare('SELECT total_changes() AS n').get() as {n:number}).n);
+      const before=total();
+      sqlite.prepare(this.sql).run(...this.bindings as never[]);
+      return {meta:{changes:total()-before}};
+    }
   }
   const env:KpEnv={KP_BOOTSTRAP_PRIVATE_KEY:'fixture',DB:{
     prepare:(sql:string)=>new Query(sql),batch:async(queries:Query[])=>{
@@ -71,7 +78,10 @@ test('one ticket debits once; replay, own ticket, and insufficient KP do not deb
   const f=await fixture();
   const card=await f.open(); assert.equal(card.flags,32768);
   assert.equal(card.components[0].type,17);
+  const before=(f.sqlite.prepare('SELECT total_changes() AS n').get() as {n:number}).n;
   assert.match(await f.buy(),/予想を受け付けました/);
+  // Ticket + debit ledger + wallet balance update = three D1 changes, not one.
+  assert.equal((f.sqlite.prepare('SELECT total_changes() AS n').get() as {n:number}).n-before,3);
   assert.equal(f.balance(),99000);
   assert.match(await f.buy(),/予想済み/);
   assert.equal(f.balance(),99000);
@@ -79,6 +89,15 @@ test('one ticket debits once; replay, own ticket, and insufficient KP do not deb
   assert.match(await f.buy('100000000000001001',100000,start+2000),/予想済み/);
   assert.equal(f.sqlite.prepare('SELECT COUNT(*) AS n FROM vp_tickets').get()!.n,1);
   assert.equal(f.sqlite.prepare('SELECT COUNT(*) AS n FROM kp_ledger WHERE kind=?').get('valorant_prediction')!.n,1);
+});
+test('failed purchase explains missing KP wallet or insufficient balance without making a ticket',async()=>{
+  const f=await fixture();
+  await f.open();
+  assert.match(await buyPrediction(f.env,'100000000000001001',guild,visitor,'win',1000,start+1000,mapping),/KP口座が見つかりません/);
+  assert.match(await buyPrediction(f.env,'100000000000001001',guild,three,'loss',1000,start+1000,mapping),/KP残高が不足/);
+  assert.equal((f.sqlite.prepare('SELECT COUNT(*) AS n FROM vp_tickets').get() as {n:number}).n,0);
+  assert.equal((f.sqlite.prepare('SELECT COUNT(*) AS n FROM kp_ledger WHERE kind=?').get('valorant_prediction') as {n:number}).n,0);
+  assert.equal(f.balance(),100000);
 });
 test('next match settles once, awards payout only on correct side',async()=>{
   const f=await fixture();

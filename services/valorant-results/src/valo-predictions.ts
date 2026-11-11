@@ -117,7 +117,21 @@ export async function buyPrediction(env:KpEnv,id:string,guild:string,user:string
   const odds=side==='win'?e.win_odds:e.loss_odds;
   const row=await env.DB.prepare('INSERT OR IGNORE INTO vp_tickets(event_id,user,side,stake,odds,purchased_at) SELECT e.id,w.user,?,?,?,? FROM vp_events e JOIN kp_wallets w ON w.guild=e.guild AND w.user=? WHERE e.id=? AND e.guild=? AND e.status=\'open\' AND e.created_at<=? AND e.closes_at>=? AND w.balance>=? AND NOT EXISTS(SELECT 1 FROM vp_tickets t WHERE t.event_id=e.id AND t.user=w.user)')
     .bind(side,amount,odds,at,user,id,guild,at,at,amount).run();
-  if(row.meta.changes!==1)return '購入できませんでした。残高・受付期限・購入済みかを確認してください。';
+  if(row.meta.changes===0){
+    // Only diagnose failed purchases. The successful path keeps its original D1 cost,
+    // and the INSERT ... SELECT remains the atomic balance/duplicate/deadline gate.
+    const current=await env.DB.prepare(`SELECT e.status,e.created_at,e.closes_at,
+      (SELECT balance FROM kp_wallets WHERE guild=e.guild AND user=?) AS balance,
+      (SELECT stake FROM vp_tickets WHERE event_id=e.id AND user=?) AS prior_stake
+      FROM vp_events e WHERE e.id=? AND e.guild=?`)
+      .bind(user,user,id,guild).first<{status:string;created_at:number;closes_at:number;balance:number|null;prior_stake:number|null}>();
+    if(!current)return 'この予想カードは見つかりません。';
+    if(current.prior_stake!==null)return 'このカードにはすでに '+money(current.prior_stake)+' を予想済みです。';
+    if(current.status!=='open'||at<current.created_at||at>current.closes_at)return '予想の受付は終了しています。';
+    if(current.balance===null)return 'KP口座が見つかりません。/kp balance で口座を確認してください。';
+    if(current.balance<amount)return 'KP残高が不足しています。現在 '+money(current.balance)+'、必要 '+money(amount)+'。';
+    return '予想を確定できませんでした。/kp balance で残高を確認し、もう一度お試しください。';
+  }
   return '🎫 **予想を受け付けました**\n'+safe(e.name)+'｜'+modeLabel(e.mode)+'\n'
     +(side==='win'?'勝利':'敗北')+'に '+money(amount)+'（'+oddsText(odds)+'）\n的中時 '+money(Math.floor(amount*odds/100))+'。試合終了後に自動判定します。';
 }
