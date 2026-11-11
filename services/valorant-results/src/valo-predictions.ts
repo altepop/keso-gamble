@@ -89,8 +89,12 @@ export async function openPrediction(env:KpEnv,id:string,guild:string,riot:strin
   const wins=count?.wins??0,losses=count?.losses??0,odds=predictionOdds(wins,losses);
   const e:Event={id,guild,riot,mode,name:safe(player.name||riot.split('#')[0]),created_at:now,
     closes_at:now+WINDOW,win_odds:odds.win,loss_odds:odds.loss,wins,losses,act_name:act?.act_name??null,status:'open'};
-  const inserted=await env.DB.prepare('INSERT OR IGNORE INTO vp_events(id,guild,riot,mode,name,created_at,closes_at,win_odds,loss_odds,wins,losses,act_name) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)')
-    .bind(id,guild,riot,mode,e.name,now,e.closes_at,odds.win,odds.loss,wins,losses,e.act_name).run();
+  const [inserted]=await env.DB.batch([
+    env.DB.prepare('INSERT OR IGNORE INTO vp_events(id,guild,riot,mode,name,created_at,closes_at,win_odds,loss_odds,wins,losses,act_name) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)')
+      .bind(id,guild,riot,mode,e.name,now,e.closes_at,odds.win,odds.loss,wins,losses,e.act_name),
+    // One indexed monitoring marker avoids reading prediction tables for ordinary matches.
+    env.DB.prepare("INSERT INTO monitor_state(key,value) VALUES('vp_open','1') ON CONFLICT(key) DO NOTHING"),
+  ]);
   if(inserted.meta.changes!==1)throw Error('同じ対象の予想がすでに始まっています。');
   return predictionCard(e);
 }
@@ -170,5 +174,7 @@ export async function expirePredictions(env:Pick<KpEnv,'DB'>,now=Date.now()) {
     env.DB.prepare('UPDATE vp_events SET status=\'cancelled\' WHERE id=? AND status=\'open\'').bind(e.id),
     env.DB.prepare('UPDATE vp_tickets SET status=\'refunded\',payout=stake WHERE event_id=? AND status=\'pending\' AND EXISTS(SELECT 1 FROM vp_events WHERE id=? AND status=\'cancelled\')').bind(e.id,e.id),
   ]);
+  // Retire the marker if every card has been resolved or cancelled.
+  await env.DB.prepare("DELETE FROM monitor_state WHERE key='vp_open' AND NOT EXISTS(SELECT 1 FROM vp_events WHERE status='open' LIMIT 1)").run();
   return events.length;
 }
