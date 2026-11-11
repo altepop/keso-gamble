@@ -204,7 +204,9 @@ export async function discordInteractions(request: Request, env: Env, ctx: Execu
     try {
       if(musicButton||interaction.data?.name==='music'){
         const message=await runMusic(env,interaction);
-        result={content:message,components:/^(🎵|🎶|⏸|▶|⏭|⏹|👋|🔊|🔁)/u.test(message)?musicControls():[]};
+        result={content:message,components:!message.includes('再生サーバーはまだ接続されていない')
+          &&!message.includes('再生中の音楽はない')
+          &&/^(🎵|🎶|⏸|▶|⏭|⏹|👋|🔊|🔁)/u.test(message)?musicControls():[]};
       }else if(gcRecruit){
         const matched=RECRUIT_BUTTON.exec(interaction.data!.custom_id!)!;
         const view=await changeRecruit(env,matched[2],config.guildId,interaction.member!.user!.id,
