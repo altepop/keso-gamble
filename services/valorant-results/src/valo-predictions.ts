@@ -40,6 +40,7 @@ export async function ensurePredictions(db: D1Database) {
     db.prepare('CREATE UNIQUE INDEX IF NOT EXISTS vp_one_open ON vp_events(guild,riot,mode) WHERE status=\'open\''),
     db.prepare('CREATE INDEX IF NOT EXISTS vp_open_by_mode ON vp_events(riot,mode,created_at) WHERE status=\'open\''),
     db.prepare('CREATE INDEX IF NOT EXISTS vp_expire ON vp_events(created_at) WHERE status=\'open\''),
+    db.prepare("CREATE INDEX IF NOT EXISTS vp_post_recovery ON vp_events(created_at DESC) WHERE status IN ('resolved','cancelled')"),
     db.prepare('CREATE TABLE IF NOT EXISTS vp_tickets(event_id TEXT NOT NULL,user TEXT NOT NULL,side TEXT NOT NULL CHECK(side IN (\'win\',\'loss\')),stake INTEGER NOT NULL CHECK(stake BETWEEN 100 AND 100000),odds INTEGER NOT NULL CHECK(odds BETWEEN 110 AND 500),purchased_at INTEGER NOT NULL,status TEXT NOT NULL DEFAULT \'pending\' CHECK(status IN (\'pending\',\'won\',\'lost\',\'refunded\')),payout INTEGER NOT NULL DEFAULT 0 CHECK(payout BETWEEN 0 AND 500000),PRIMARY KEY(event_id,user),FOREIGN KEY(event_id) REFERENCES vp_events(id))'),
     db.prepare('CREATE TRIGGER IF NOT EXISTS vp_debit AFTER INSERT ON vp_tickets BEGIN INSERT INTO kp_ledger(id,guild,user,delta,kind,at) SELECT \'vp:stake:\'||NEW.event_id||\':\'||NEW.user,e.guild,NEW.user,-NEW.stake,\'valorant_prediction\',NEW.purchased_at FROM vp_events e WHERE e.id=NEW.event_id; END'),
     db.prepare('CREATE TRIGGER IF NOT EXISTS vp_credit AFTER UPDATE OF status ON vp_tickets WHEN OLD.status=\'pending\' AND NEW.status!=\'pending\' AND NEW.payout>0 BEGIN INSERT INTO kp_ledger(id,guild,user,delta,kind,at) SELECT \'vp:pay:\'||NEW.event_id||\':\'||NEW.user,e.guild,NEW.user,NEW.payout,\'valorant_prediction\',CAST(strftime(\'%s\',\'now\') AS INTEGER)*1000 FROM vp_events e WHERE e.id=NEW.event_id; END'),
@@ -196,18 +197,48 @@ export async function settlePredictions(env:KpEnv,match:Match,riot:string,now=Da
           .bind(e.id).first<{entries:number;stakes:number;hits:number;payouts:number}>();
         if(total?.entries){
           await ensurePosts(env);
-          const post='🎯 **勝敗予想の結果**｜'+safe(e.name)+'（'+modeLabel(e.mode)+'）\n'
-            +'試合結果：**'+(outcome==='win'?'勝利':outcome==='loss'?'敗北':'引き分け')+'**'
-            +'｜予想 '+total.entries+'件／的中 '+total.hits+'件\n'
-            +'予想総額 '+money(total.stakes)+'｜払い戻し総額 '+money(total.payouts)
-            +'\n-# 試合開始後の予想と引き分けは返金済み。精算は1回のみ。';
-          await enqueue(env,'vp:result:'+e.id,post.slice(0,1900),now);
+          await enqueue(env,'vp:result:'+e.id,predictionResultPost(e,outcome,total).slice(0,1900),now);
         }
       }catch{console.warn('prediction_result_post_pending');}
     }
   }
   return events.length;
 }
+
+interface PredictionPostTotals {entries:number;stakes:number;hits:number;payouts:number}
+function predictionResultPost(e:Pick<Event,'name'|'mode'>,outcome:string|null,total:PredictionPostTotals,expired=false) {
+  const heading='🎯 **勝敗予想の結果**｜'+safe(e.name)+'（'+modeLabel(e.mode)+'）\\n';
+  if(expired)return heading+'受付から6時間が経過し、対象試合を確定できなかったため全額返金。'
+    +'\\n予想 '+total.entries+'件｜返金合計 '+money(total.payouts);
+  return heading+'試合結果：**'+(outcome==='win'?'勝利':outcome==='loss'?'敗北':'引き分け')+'**'
+    +'｜予想 '+total.entries+'件／的中 '+total.hits+'件\\n'
+    +'予想総額 '+money(total.stakes)+'｜払い戻し総額 '+money(total.payouts)
+    +'\\n-# 試合開始後の予想と引き分けは返金済み。精算は1回のみ。';
+}
+
+/** Repair missing outcome notices independently of ticket settlement.
+ * A Discord queue failure after the atomic wallet transaction used to leave
+ * resolved bets with no result post forever, because subsequent polls skip resolved events.
+ * Read only a 24h indexed window; existing kp_posts IDs prevent duplicates.
+ */
+export async function reconcilePredictionPosts(env:KpEnv&{KP_EARNINGS_WEBHOOK_URL?:string},now=Date.now()) {
+  if(!env.KP_EARNINGS_WEBHOOK_URL)return 0;
+  await ensurePredictions(env.DB);
+  await ensurePosts(env);
+  const pending=(await env.DB.prepare(`SELECT e.id,e.name,e.mode,e.status,e.outcome,
+     COUNT(*) AS entries,COALESCE(SUM(t.stake),0) AS stakes,
+     COALESCE(SUM(CASE WHEN t.status='won' THEN 1 ELSE 0 END),0) AS hits,
+     COALESCE(SUM(t.payout),0) AS payouts
+   FROM vp_events e JOIN vp_tickets t ON t.event_id=e.id
+   WHERE e.status IN ('resolved','cancelled') AND e.created_at>=?
+     AND NOT EXISTS(SELECT 1 FROM kp_posts p WHERE p.id='vp:result:'||e.id)
+   GROUP BY e.id ORDER BY e.created_at DESC LIMIT 10`)
+    .bind(now-24*3600000).all<Event & PredictionPostTotals & {outcome:string|null}>()).results;
+  for(const e of pending)await enqueue(env,'vp:result:'+e.id,
+    predictionResultPost(e,e.outcome,e,e.status==='cancelled').slice(0,1900),now);
+  return pending.length;
+}
+
 export async function expirePredictions(env:Pick<KpEnv,'DB'>,now=Date.now()) {
   await ensurePredictions(env.DB);
   const events=(await env.DB.prepare('SELECT id FROM vp_events WHERE status=\'open\' AND created_at<? ORDER BY created_at LIMIT 10')
