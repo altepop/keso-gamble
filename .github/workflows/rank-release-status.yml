@@ -23,16 +23,17 @@ jobs:
           for(let attempt=0;attempt<36;attempt++){
             const metadata=await (await get(worker+'/api/kp/commands')).json();version=metadata.version;
             const esca=metadata.commands?.find(c=>c.name==='esca'),kp=metadata.commands?.find(c=>c.name==='kp');
-            const ready=esca?.options?.some(o=>o.name==='rank')&&esca.options.some(o=>o.name==='ranking')&&kp?.options?.some(o=>o.name==='ranking')&&!kp.options.some(o=>['rank','ranks'].includes(o.name));
+            const rank=await (await get(worker+'/api/discord/rank/status')).json();
+            const ready=rank.ratingSystem==='per-match-v2'&&esca?.options?.some(o=>o.name==='rank')&&esca.options.some(o=>o.name==='ranking')&&kp?.options?.some(o=>o.name==='ranking')&&!kp.options.some(o=>['rank','ranks'].includes(o.name));
             if(ready){
               if(!images){
-                const source=await (await get(pages+'SOURCE.json')).json();if(source.files?.length!==25)throw Error('Rank image manifest incomplete');
-                for(const file of ['unranked.png',...source.files.map(f=>f.file)]){
+                const source=await (await get(pages+'SOURCE.json')).json();if(source.files?.length!==26)throw Error('Rank image manifest incomplete');
+                for(const file of source.files.map(f=>f.file)){
                   const png=new Uint8Array(await (await get(pages+file)).arrayBuffer());if(png[0]!==137||png[1]!==80||png[2]!==78||png[3]!==71)throw Error('Missing rank PNG');
                 }
                 images=true;
               }
-              const rank=await (await get(worker+'/api/discord/rank/status')).json(),voice=await (await get(worker+'/api/kp/voice/status')).json();
+              const voice=await (await get(worker+'/api/kp/voice/status')).json();
               rankRegistered=rank.registered===true&&rank.version===metadata.version;
               gatewayRegistered=voice.commandsRegistered===true&&voice.commandsVersion===metadata.version;
               if(rankRegistered||gatewayRegistered){registered=true;break;}
@@ -40,6 +41,6 @@ jobs:
             console.log('RANK_REGISTRATION_PENDING '+JSON.stringify({attempt:attempt+1,version}));
             if(attempt<35)await new Promise(done=>setTimeout(done,30000));
           }
-          console.log('RANK_RELEASE_STATUS '+JSON.stringify({images:images?'ok':'pending',namespace:'esca',version,rankRegistered,gatewayRegistered,registered}));
+          console.log('RANK_RELEASE_STATUS '+JSON.stringify({images:images?'ok':'pending',namespace:'esca',ratingSystem:'per-match-v2',version,rankRegistered,gatewayRegistered,registered}));
           if(!registered)throw Error('Automatic /esca registration is still pending');
           NODE

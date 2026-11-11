@@ -58,7 +58,7 @@ test('approved unrated and Skirmish amounts are shown alongside corrected existi
 
 test('rated Escalation and moved Swift bets keep separate labels; incomplete measurement and unsafe member names stay safe',()=>{
  const html=playView({...live([]),members:[{id:'two',name:'<img src=x>'}],escalationRating:{rating:1000,grade:'ゴールド Ⅱ',rank:{name:'ゴールド Ⅱ',rr:0,tier:3},seriesWins:2,seriesLosses:1,leaders:[{user:'two',rating:2200,grade:'S'}]},escalationSpins:[{id:'swift',mode:'swiftplay',kind:'big',tier:1,award:500,at:1},{id:'esc',mode:'escalation',kind:'big',tier:2,award:1000,at:1}]});
- for(const text of ['エスカランク','ゴールド Ⅱ','0 RR','2勝 1敗','スイフト大勝負','エスカ大勝負','差25以上','さらに +150 KP'])assert(html.includes(text),text);
+ for(const text of ['エスカランク','ゴールド Ⅱ','0 RR','毎試合評価','スイフト大勝負','エスカ大勝負','差25以上','さらに +150 KP'])assert(html.includes(text),text);
  assert(html.includes('&lt;img src=x&gt;'));assert(!html.includes('<img src=x>'));
  assert.match(playView(live([])),/初回認定 0\/3試合/);
 });
@@ -66,7 +66,7 @@ test('rated Escalation and moved Swift bets keep separate labels; incomplete mea
 
 test('ACT information, capped personal performance and archived results are visible without injecting ACT names',()=>{
  const html=playView({...live([]),escalationRating:{act:{id:'act-b',name:'ACT B<img>'},rating:null,measurementGames:0,previousActs:[{act:'act-a',name:'ACT A<script>',rating:2200,measured:1,wins:3,losses:2}]}});
- for(const text of ['ACT B&lt;img&gt;','ACT A&lt;script&gt;','前ACTの記録','1シリーズ最大＋5','30キル以上','初回は認定3試合','ACT更新は認定1試合','エピソード更新は認定3試合'])assert(html.includes(text),text);
+ for(const text of ['ACT B&lt;img&gt;','ACT A&lt;script&gt;','前ACTの記録','−10〜＋10','KD・チーム内キル数・アシスト','初回は認定3試合','ACT更新は認定1試合','エピソード更新は認定3試合'])assert(html.includes(text),text);
  assert.doesNotMatch(html,/<img>|<script>/);
  assert.match(playView({...live([]),escalationRating:{act:null}}),/ACT情報の取得を待っています/);
 });

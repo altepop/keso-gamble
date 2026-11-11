@@ -3,9 +3,9 @@ import type {Match} from './results.ts';
 import {assessRewardReadiness} from './reward-readiness.ts';
 export const ESCALATION_RATING_POLICY='escalation-power-v1';
 export const ESCALATION_MEASUREMENT_GAMES=3;
-export const ESCALATION_SERIES_GAINS=[100,70,40] as const;
+export const ESCALATION_RR_VERSION='per-match-v2';
 export interface EscalationAct {id:string;name:string|null;startedAt:number;endedAt:number;episode?:string|null}
-export interface EscalationPowerProof {act:EscalationAct;performance:number;kdPositive?:boolean}
+export interface EscalationPowerProof {act:EscalationAct;performance:number;kdPositive?:boolean;rrPerformance?:number}
 /** Henrik season.short is an eNaN code; unknown labels never imply a new episode. */
 export function escalationEpisode(name:unknown):string|null{
  if(typeof name!=='string')return null;
@@ -39,17 +39,40 @@ export function escalationPerformance(raw:Match,puuid:string):number{
  if(valid(a)&&a>=15)extra++;
  return Math.min(3,extra);
 }
+/** Individual correction: KD (up to ±8), same-team median kills (±3), assists (-1..+2).
+ * Low-volume positive KD is attenuated; incomplete or ambiguous own stats are neutral. */
+export function escalationMatchPerformance(raw:Match,puuid:string):number{
+ const owners=raw.players.filter(p=>p.puuid===puuid);if(owners.length!==1)return 0;
+ const p=owners[0],s=p.stats,k=s?.kills,d=s?.deaths,a=s?.assists;
+ const valid=(v:unknown):v is number=>Number.isSafeInteger(v)&&Number(v)>=0;
+ if(!valid(k)||!valid(d)||!valid(a))return 0;
+ const clamp=(v:number,min:number,max:number)=>Math.max(min,Math.min(max,v));
+ const kd=clamp(Math.round(8*(k-d)/Math.max(10,d)*(k>d?Math.min(1,k/15):1)),-8,8);
+ let team=0;
+ if(typeof p.team_id==='string'&&p.team_id){
+  const peers=raw.players.filter(q=>q.puuid!==puuid&&q.team_id===p.team_id);
+  if(peers.length>=2&&new Set(peers.map(q=>q.puuid)).size===peers.length&&peers.every(q=>valid(q.stats?.kills))){
+   const kills=peers.map(q=>q.stats!.kills!).sort((a,b)=>a-b),middle=Math.floor(kills.length/2);
+   const median=kills.length%2?kills[middle]:(kills[middle-1]+kills[middle])/2;
+   team=clamp(Math.round(4*(k-median)/Math.max(10,median)),-3,3);
+  }
+ }
+ return clamp(kd+team+clamp(Math.round((a-5)/5),-1,2),-10,10);
+}
+export function escalationMatchDelta(outcome:'win'|'loss',performance:number){
+ if(!['win','loss'].includes(outcome)||!Number.isInteger(performance)||performance < -10||performance > 10)throw Error('Invalid match RR');
+ return (outcome==='win'?20:-20)+performance;
+}
 export function escalationPowerProof(raw:Match,puuid:string):EscalationPowerProof|null{
  const ready=assessRewardReadiness(raw,puuid),act=matchAct(raw);
- return act&&act.episode&&ready.status==='ready'&&ready.mode==='escalation'&&['win','loss'].includes(ready.outcome??'')?{act,performance:escalationPerformance(raw,puuid),kdPositive:escalationPositiveKd(raw,puuid)}:null;
+ return act&&act.episode&&ready.status==='ready'&&ready.mode==='escalation'&&['win','loss'].includes(ready.outcome??'')?{act,performance:escalationPerformance(raw,puuid),kdPositive:escalationPositiveKd(raw,puuid),rrPerformance:escalationMatchPerformance(raw,puuid)}:null;
 }
 export function escalationGrade(rating:number){return escalationRank(rating).name;}
 const ready=new WeakMap<object,Promise<void>>();
 const finishMeasure='measured=0 AND measurement_games+1=measurement_required';
-const finishSeries="measured=1 AND (series_wins+(NEW.outcome='win')=3 OR series_losses+(NEW.outcome='loss')=3)";
+const finishMatch='measured=1';
 const measureBonus='MIN(5,measurement_performance+NEW.performance)';
-const seriesBonus='MIN(5,series_performance+NEW.performance)';
-const seriesDelta=`CASE WHEN NEW.outcome='win' THEN CASE series_losses WHEN 0 THEN 100 WHEN 1 THEN 70 ELSE 40 END ELSE -CASE series_wins WHEN 0 THEN 100 WHEN 1 THEN 70 ELSE 40 END END+${seriesBonus}`;
+const matchDelta="CASE WHEN NEW.outcome='win' THEN 20 ELSE -20 END+NEW.rr_performance";
 const consistencyBonus="CASE WHEN placement_kind='initial' AND measurement_positive_kd+NEW.kd_positive=3 THEN 100 ELSE 0 END";
 const placementWins="measurement_wins+(NEW.outcome='win')";
 // Keep the internal estimate across resets. At most +one whole rank on an episode placement.
@@ -58,11 +81,14 @@ const placementRating=`CASE placement_kind
  WHEN 'act' THEN seed_rating+CASE WHEN NEW.outcome='win' THEN 20+${measureBonus} ELSE 0 END
  ELSE MAX(0,seed_rating-600+MIN(900,MAX(0,seed_mmr-seed_rating+100*(2*(${placementWins})-measurement_required)+${measureBonus}))) END`;
 const placementPerformance=`((${placementRating})-(${placementRating.replaceAll(measureBonus,'0')}))`;
-const nextRating=`CASE WHEN ${finishMeasure} THEN (${placementRating}) WHEN ${finishSeries} THEN MIN(9007199254740991,MAX(0,rating+(${seriesDelta}))) ELSE rating END`;
+const nextRating=`CASE WHEN ${finishMeasure} THEN (${placementRating}) WHEN ${finishMatch} THEN MIN(9007199254740991,MAX(0,rating+(${matchDelta}))) ELSE rating END`;
 /** ACTs are observed from verified match times, never from the receipt time or the phone clock. */
 export async function ensureEscalationRating(env:KpEnv){
  const previous=ready.get(env.DB);if(previous)return previous;
- const job=(async()=>{await env.DB.batch([
+ const job=(async()=>{
+ const marker=await env.DB.prepare('SELECT value FROM kp_settings WHERE key=?').bind('escalation_rr_schema').first<{value:string}>();
+ if(marker?.value===ESCALATION_RR_VERSION)return;
+ await env.DB.batch([
   env.DB.prepare('CREATE TABLE IF NOT EXISTS kp_escalation_current_acts(guild TEXT PRIMARY KEY,act TEXT NOT NULL,name TEXT,episode TEXT,started_at INTEGER NOT NULL)'),
   env.DB.prepare(`CREATE TABLE IF NOT EXISTS kp_escalation_ratings(
    guild TEXT NOT NULL,user TEXT NOT NULL,act TEXT NOT NULL,act_name TEXT,episode TEXT NOT NULL,started_at INTEGER NOT NULL,placement_kind TEXT NOT NULL,measurement_required INTEGER NOT NULL,seed_rating INTEGER NOT NULL,seed_mmr INTEGER NOT NULL,mmr INTEGER NOT NULL DEFAULT 300,peak_rating INTEGER NOT NULL DEFAULT 0,rating INTEGER NOT NULL DEFAULT 300 CHECK(rating BETWEEN 0 AND 9007199254740991),
@@ -74,8 +100,17 @@ export async function ensureEscalationRating(env:KpEnv){
   env.DB.prepare('CREATE INDEX IF NOT EXISTS kp_escalation_rating_board ON kp_escalation_ratings(guild,act,measured,rating DESC,played DESC,user)'),
   env.DB.prepare('CREATE INDEX IF NOT EXISTS kp_escalation_rating_inherit ON kp_escalation_ratings(guild,user,measured,started_at DESC)'),
   env.DB.prepare('CREATE INDEX IF NOT EXISTS kp_escalation_rating_history ON kp_escalation_ratings(guild,user,at DESC,act)'),
-  env.DB.prepare(`CREATE TABLE IF NOT EXISTS kp_escalation_power_matches(id TEXT PRIMARY KEY,guild TEXT NOT NULL,user TEXT NOT NULL,act TEXT NOT NULL,act_name TEXT,episode TEXT NOT NULL,started_at INTEGER NOT NULL,ended_at INTEGER NOT NULL,outcome TEXT NOT NULL CHECK(outcome IN ('win','loss')),performance INTEGER NOT NULL CHECK(performance BETWEEN 0 AND 3),kd_positive INTEGER NOT NULL DEFAULT 0 CHECK(kd_positive IN (0,1)))`),
-  env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS kp_escalation_power_apply AFTER INSERT ON kp_escalation_power_matches BEGIN
+  env.DB.prepare(`CREATE TABLE IF NOT EXISTS kp_escalation_power_matches(id TEXT PRIMARY KEY,guild TEXT NOT NULL,user TEXT NOT NULL,act TEXT NOT NULL,act_name TEXT,episode TEXT NOT NULL,started_at INTEGER NOT NULL,ended_at INTEGER NOT NULL,outcome TEXT NOT NULL CHECK(outcome IN ('win','loss')),performance INTEGER NOT NULL CHECK(performance BETWEEN 0 AND 3),kd_positive INTEGER NOT NULL DEFAULT 0 CHECK(kd_positive IN (0,1)),rr_performance INTEGER NOT NULL DEFAULT 0 CHECK(rr_performance BETWEEN -10 AND 10))`),
+ ]);
+ const columns=async()=>new Set((await env.DB.prepare('PRAGMA table_info(kp_escalation_power_matches)').all<{name:string}>()).results.map(c=>c.name));
+ if(!(await columns()).has('rr_performance')){
+  try{await env.DB.prepare('ALTER TABLE kp_escalation_power_matches ADD COLUMN rr_performance INTEGER NOT NULL DEFAULT 0 CHECK(rr_performance BETWEEN -10 AND 10)').run();}
+  catch(error){if(!(await columns()).has('rr_performance'))throw error;}
+ }
+ // D1 batch is transactional: no request can observe a gap between the two triggers.
+ await env.DB.batch([
+  env.DB.prepare('DROP TRIGGER IF EXISTS kp_escalation_power_apply'),
+  env.DB.prepare(`CREATE TRIGGER kp_escalation_power_apply AFTER INSERT ON kp_escalation_power_matches BEGIN
    INSERT INTO kp_escalation_current_acts(guild,act,name,episode,started_at) VALUES(NEW.guild,NEW.act,NEW.act_name,NEW.episode,NEW.started_at)
     ON CONFLICT(guild) DO UPDATE SET act=excluded.act,name=excluded.name,episode=excluded.episode,started_at=CASE WHEN excluded.act=act THEN started_at ELSE excluded.started_at END
     WHERE (excluded.act!=act AND excluded.started_at>started_at) OR (excluded.act=act AND ((name IS NULL AND excluded.name IS NOT NULL) OR (episode IS NULL AND excluded.episode IS NOT NULL)));
@@ -88,16 +123,14 @@ export async function ensureEscalationRating(env:KpEnv){
    UPDATE kp_escalation_ratings SET
     rating=${nextRating},
     peak_rating=CASE WHEN measured=1 OR (${finishMeasure}) THEN MAX(peak_rating,(${nextRating})) ELSE peak_rating END,
-    mmr=CASE WHEN (${finishMeasure}) AND placement_kind='initial' THEN (${placementRating}) ELSE MIN(9007199254740991,MAX(0,mmr+CASE WHEN NEW.outcome='win' THEN 30 ELSE -30 END+NEW.performance)) END,
+    mmr=CASE WHEN (${finishMeasure}) AND placement_kind='initial' THEN (${placementRating}) ELSE MIN(9007199254740991,MAX(0,mmr+CASE WHEN measured=1 THEN (${matchDelta}) ELSE CASE WHEN NEW.outcome='win' THEN 30 ELSE -30 END+NEW.performance END)) END,
     last_change=CASE WHEN ${finishMeasure} THEN (${placementRating})-seed_rating
-     WHEN ${finishSeries} THEN MIN(9007199254740991-rating,MAX(-rating,(${seriesDelta}))) ELSE last_change END,
-    last_performance=CASE WHEN ${finishMeasure} THEN ${placementPerformance} WHEN ${finishSeries} THEN ${seriesBonus} ELSE last_performance END,
-    last_series_wins=CASE WHEN ${finishMeasure} THEN ${placementWins} WHEN ${finishSeries} THEN series_wins+(NEW.outcome='win') ELSE last_series_wins END,
-    last_series_losses=CASE WHEN ${finishMeasure} THEN measurement_required-(${placementWins}) WHEN ${finishSeries} THEN series_losses+(NEW.outcome='loss') ELSE last_series_losses END,
-    last_series_at=CASE WHEN (${finishMeasure}) OR (${finishSeries}) THEN NEW.ended_at ELSE last_series_at END,
-    series_performance=CASE WHEN measured=0 OR series_wins+(NEW.outcome='win')=3 OR series_losses+(NEW.outcome='loss')=3 THEN 0 ELSE ${seriesBonus} END,
-    series_wins=CASE WHEN measured=0 OR series_wins+(NEW.outcome='win')=3 OR series_losses+(NEW.outcome='loss')=3 THEN 0 ELSE series_wins+(NEW.outcome='win') END,
-    series_losses=CASE WHEN measured=0 OR series_wins+(NEW.outcome='win')=3 OR series_losses+(NEW.outcome='loss')=3 THEN 0 ELSE series_losses+(NEW.outcome='loss') END,
+     WHEN ${finishMatch} THEN MIN(9007199254740991-rating,MAX(-rating,(${matchDelta}))) ELSE last_change END,
+    last_performance=CASE WHEN ${finishMeasure} THEN ${placementPerformance} WHEN ${finishMatch} THEN NEW.rr_performance ELSE last_performance END,
+    last_series_wins=CASE WHEN ${finishMeasure} THEN ${placementWins} WHEN ${finishMatch} THEN (NEW.outcome='win') ELSE last_series_wins END,
+    last_series_losses=CASE WHEN ${finishMeasure} THEN measurement_required-(${placementWins}) WHEN ${finishMatch} THEN (NEW.outcome='loss') ELSE last_series_losses END,
+    last_series_at=CASE WHEN (${finishMeasure}) OR (${finishMatch}) THEN NEW.ended_at ELSE last_series_at END,
+    series_performance=0,series_wins=0,series_losses=0,
     measurement_positive_kd=measurement_positive_kd+CASE WHEN measured=0 THEN NEW.kd_positive ELSE 0 END,
     measurement_performance=CASE WHEN measured=0 THEN ${measureBonus} ELSE measurement_performance END,
     measured=CASE WHEN measurement_games+1>=measurement_required THEN 1 ELSE measured END,
@@ -106,14 +139,16 @@ export async function ensureEscalationRating(env:KpEnv){
    WHERE guild=NEW.guild AND user=NEW.user AND act=NEW.act;
    UPDATE kp_state SET version=version+1 WHERE guild=NEW.guild AND user=NEW.user;
   END`),
+  env.DB.prepare('INSERT OR REPLACE INTO kp_settings(key,value) VALUES(?,?)').bind('escalation_rr_schema',ESCALATION_RR_VERSION),
  ]);})();ready.set(env.DB,job);try{await job;}catch(error){ready.delete(env.DB);throw error;}
 }
 export function escalationPowerStatement(env:KpEnv,e:{id:string;guild:string;user:string;outcome:string|null},proof:EscalationPowerProof){
- const a=proof.act,episode=a?.episode??escalationEpisode(a?.name);
+ const a=proof.act,episode=a?.episode??escalationEpisode(a?.name),rr=proof.rrPerformance??0;
+ if(!Number.isInteger(rr)||rr < -10||rr > 10)throw Error('Invalid match RR');
  if(!episode||!['win','loss'].includes(e.outcome??'')||!a||typeof a.id!=='string'||!a.id.trim()||a.id.length>100||!Number.isSafeInteger(a.startedAt)||!Number.isSafeInteger(a.endedAt)||a.endedAt<=a.startedAt||!Number.isInteger(proof.performance)||proof.performance<0||proof.performance>3)throw Error('Invalid escalation power proof');
- return env.DB.prepare(`INSERT INTO kp_escalation_power_matches(id,guild,user,act,act_name,episode,started_at,ended_at,outcome,performance,kd_positive)
- SELECT ?,?,?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM kp_events WHERE id=? AND guild=? AND user=? AND mode='escalation' AND policy=? AND outcome=?) ON CONFLICT(id) DO NOTHING`)
- .bind(e.id,e.guild,e.user,a.id,a.name,episode,a.startedAt,a.endedAt,e.outcome,proof.performance,proof.kdPositive===true?1:0,e.id,e.guild,e.user,ESCALATION_RATING_POLICY,e.outcome);
+ return env.DB.prepare(`INSERT INTO kp_escalation_power_matches(id,guild,user,act,act_name,episode,started_at,ended_at,outcome,performance,kd_positive,rr_performance)
+ SELECT ?,?,?,?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM kp_events WHERE id=? AND guild=? AND user=? AND mode='escalation' AND policy=? AND outcome=?) ON CONFLICT(id) DO NOTHING`)
+ .bind(e.id,e.guild,e.user,a.id,a.name,episode,a.startedAt,a.endedAt,e.outcome,proof.performance,proof.kdPositive===true?1:0,rr,e.id,e.guild,e.user,ESCALATION_RATING_POLICY,e.outcome);
 }
 interface CurrentAct {id:string;name:string|null;episode:string|null;startedAt:number}
 const currentActs=new WeakMap<object,Map<string,{until:number;act:CurrentAct|null}>>();
@@ -151,5 +186,6 @@ export async function escalationRatingView(env:KpEnv,guild:string,user:string,no
  const previous=previousActs.find(a=>a.measured);
  const placementKind=me?.placement_kind??(act&&!act.episode?'waiting':!previous?'initial':previous.episode===act?.episode?'act':'episode');
  const history=previousActs.map(a=>({...a,grade:a.measured?escalationGrade(Number(a.rating)):'未認定',peakGrade:a.measured?escalationGrade(Number(a.peakRating)):'未認定'}));
- return {act:act?{id:act.id,name:act.name,episode:act.episode}:null,rating:me?.measured?me.rating:null,rank:me?.measured?escalationRank(me.rating):null,grade:me?.measured?escalationGrade(me.rating):'認定中',placementKind,measurementRequired:me?.measurement_required??(placementKind==='waiting'?null:placementKind==='act'?1:3),inheritedRank:me&&me.placement_kind!=='initial'?escalationRank(me.seed_rating):previous?escalationRank(previous.rating):null,peakGrade:me?.measured?escalationGrade(me.peak_rating):null,measurementGames:me?.measurement_games??0,measurementWins:me?.measurement_wins??0,measurementPositiveKd:me?.measurement_positive_kd??0,placementConsistencyBonus:me?.measured&&me.placement_kind==='initial'&&me.measurement_positive_kd===3?100:0,measurementPerformance:me?.measurement_performance??0,seriesWins:me?.series_wins??0,seriesLosses:me?.series_losses??0,seriesPerformance:me?.series_performance??0,played:me?.played??0,wins:me?.wins??0,losses:me?.losses??0,lastChange:me?.last_change??0,lastPerformance:me?.last_performance??0,lastSeriesWins:me?.last_series_wins??0,lastSeriesLosses:me?.last_series_losses??0,lastSeriesAt:me?.last_series_at??null,leaders:board.rows.map(r=>({...r,grade:escalationGrade(r.rating),rank:escalationRank(r.rating)})),previousActs:history};
+ const lastUpdateKind=me?.measured&&me.played===me.measurement_required?'placement':me&&me.last_series_wins+me.last_series_losses>1?'legacy-series':'match';
+ return {ratingSystem:ESCALATION_RR_VERSION,lastUpdateKind,act:act?{id:act.id,name:act.name,episode:act.episode}:null,rating:me?.measured?me.rating:null,rank:me?.measured?escalationRank(me.rating):null,grade:me?.measured?escalationGrade(me.rating):'認定中',placementKind,measurementRequired:me?.measurement_required??(placementKind==='waiting'?null:placementKind==='act'?1:3),inheritedRank:me&&me.placement_kind!=='initial'?escalationRank(me.seed_rating):previous?escalationRank(previous.rating):null,peakGrade:me?.measured?escalationGrade(me.peak_rating):null,measurementGames:me?.measurement_games??0,measurementWins:me?.measurement_wins??0,measurementPositiveKd:me?.measurement_positive_kd??0,placementConsistencyBonus:me?.measured&&me.placement_kind==='initial'&&me.measurement_positive_kd===3?100:0,measurementPerformance:me?.measurement_performance??0,seriesWins:me?.series_wins??0,seriesLosses:me?.series_losses??0,seriesPerformance:me?.series_performance??0,played:me?.played??0,wins:me?.wins??0,losses:me?.losses??0,lastChange:me?.last_change??0,lastPerformance:me?.last_performance??0,lastSeriesWins:me?.last_series_wins??0,lastSeriesLosses:me?.last_series_losses??0,lastSeriesAt:me?.last_series_at??null,leaders:board.rows.map(r=>({...r,grade:escalationGrade(r.rating),rank:escalationRank(r.rating)})),previousActs:history};
 }

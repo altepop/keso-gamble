@@ -5,6 +5,7 @@ import {escalationArt} from '../../../js/escalation-rank-assets.js';
 type RankView=Awaited<ReturnType<typeof escalationRatingView>>;
 const clean=(s:unknown)=>String(s??'').replace(/[@`*_~<>|\r\n]/g,'').slice(0,100);
 const image=(rank?:{tier:number;division?:number|null})=>'https://altepop.github.io/keso-gamble/assets/escalation-ranks/'+escalationArt(rank?.tier,rank?.division).file+'?art=2';
+const signed=(n:number)=>(n>=0?'+':'')+n;
 const color=(tier:unknown)=>parseInt(escalationArt(tier).color.slice(1),16);
 const pending=(v:RankView)=>!v.act?'ACT情報が届くのを待ってるで。':v.placementKind==='waiting'?'エピソード情報を確認中や。':`${v.placementKind==='act'?'ACT更新':v.placementKind==='episode'?'エピソード更新':'初回'}認定 ${v.measurementGames}/${v.measurementRequired??3}試合 · あと${Math.max(0,(v.measurementRequired??3)-v.measurementGames)}試合やで。`;
 export async function escalationRankReply(env:KpEnv,guild:string,user:string,ranking=false){
@@ -16,10 +17,10 @@ export async function escalationRankReply(env:KpEnv,guild:string,user:string,ran
  }
  const fields=[
   {name:'ACT',value:clean(v.act?.name||v.act?.id||'情報待ち'),inline:true},
-  {name:v.rating===null?'認定の進み具合':'今回のシリーズ',value:v.rating===null?pending(v):`${v.seriesWins}勝 ${v.seriesLosses}敗（3勝か3敗で更新）`,inline:true},
+  {name:v.rating===null?'認定の進み具合':'毎試合の評価',value:v.rating===null?pending(v):'勝ち＋10〜＋30／負け−30〜−10 RR',inline:true},
   {name:'今ACTの最高',value:v.peakGrade||'認定後に記録',inline:true},
   {name:'今ACTの戦績',value:`${v.wins}勝 ${v.losses}敗`,inline:true},
-  {name:'前回の更新',value:v.lastSeriesAt?`${v.lastChange>=0?'+':''}${v.lastChange} RR（成績補正＋${v.lastPerformance}を含む）`:'まだ更新なし',inline:true},
+  {name:v.lastUpdateKind==='placement'?'認定結果':v.lastUpdateKind==='legacy-series'?'以前のシリーズ結果':'直前の試合',value:v.lastSeriesAt?`${v.lastChange>=0?'+':''}${v.lastChange} RR（成績補正${signed(v.lastPerformance)}を含む）`:'まだ更新なし',inline:true},
  ];
  if(v.placementConsistencyBonus)fields.push({name:'初回認定ボーナス',value:'3試合ともKDプラス：＋100 RR',inline:false});
  if(v.previousActs.length)fields.push({name:'前ACTの記録',value:v.previousActs.map(a=>`${clean(a.name||a.act)}：${a.grade} ／ 最高 ${a.peakGrade}`).join('\n').slice(0,1000),inline:false});

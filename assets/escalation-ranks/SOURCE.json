@@ -1,6 +1,6 @@
 {
   "copyright": "Rank artwork © Riot Games, Inc.",
-  "design": "VALORANT rank icons, unmodified; KESO rankings are independent of VALORANT rankings.",
+  "design": "VALORANT rank icons including UNRANKED, unmodified; KESO ratings are independent of VALORANT competitive ranks.",
   "policy": "https://www.riotgames.com/en/legal",
   "sourceRepository": "https://github.com/ccjakje/vantage/tree/751cd3fdef09303600975c74757563d9a0371b0d/ICONS/RANKS",
   "files": [
@@ -176,6 +176,13 @@
       "file": "radiant.png",
       "source": "https://raw.githubusercontent.com/ccjakje/vantage/751cd3fdef09303600975c74757563d9a0371b0d/ICONS/RANKS/Radiant_Rank.png",
       "sha256": "f1629f245e4ccc69c3fd558e6193b4775d32ab592e85b6523fc0dfba699d4820",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "file": "unranked.png",
+      "source": "https://raw.githubusercontent.com/hiromps/hiromps.github.io/7e7c6e60d7cee90d8e6710942bcf2769dc729c24/assets/images/ranks/unranked.png",
+      "sha256": "e626a1b3f4a7e69fcee352606c1df9a4c0256c9d04a0b4bab31f1bd5c363cc6f",
       "width": 256,
       "height": 256
     }

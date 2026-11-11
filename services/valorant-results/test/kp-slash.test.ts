@@ -382,6 +382,13 @@ test('rank slash commands return an image card and public ranks stay read only, 
  assert.match(await runKpCommand(f.env,other,mapping,{}),/シルバー Ⅰ/);assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM kp_wallets WHERE user=?').get(newUser)!.n,0);
  const board={...interaction('kp',newUser),data:{name:'esca',options:[{type:1,name:'ranking'}]}};assert.match(await runKpCommand(f.env,board,mapping,extra),/シルバー Ⅰ/);
  assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM kp_ledger').get()!.n,before);
+ const id='rank-poor-loss';await f.env.DB.batch([
+  f.env.DB.prepare('INSERT INTO kp_events VALUES(?,?,?,?,?,?,?,?,?,?)').bind(id,guild,one,'p-one',id,'escalation','loss',0,ESCALATION_RATING_POLICY,T0+10),
+  escalationPowerStatement(f.env,{id,guild,user:one,outcome:'loss'},{act:{id:'a',name:'e11a1',episode:'e11',startedAt:T0+10,endedAt:T0+11},performance:0,rrPerformance:-5}),
+ ]);
+ const afterEvent=f.sql.prepare('SELECT COUNT(*) n FROM kp_ledger').get()!.n;
+ await runKpCommand(f.env,own,mapping,extra);const field=extra.embeds![0].fields.find((f:any)=>f.name==='直前の試合');assert.match(field.value,/-25 RR/);assert.match(field.value,/成績補正-5/);assert(!field.value.includes('＋-'));assert(extra.embeds![0].fields.some((f:any)=>f.name==='毎試合の評価'));
+ assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM kp_ledger').get()!.n,afterEvent);
  const malformed={...other,data:{name:'esca',options:[{type:1,name:'rank',options:[{type:3,name:'user',value:one}]}]}};assert.match(await runKpCommand(f.env,malformed,mapping),/メンバーを選んで/);
 });
 test('only exact rank leaderboard is public; personal rank and malformed targets remain private',async()=>{
