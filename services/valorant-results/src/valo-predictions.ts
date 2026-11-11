@@ -1,7 +1,7 @@
 import players from '../players.json' with { type: 'json' };
 import type { Match } from './results.ts';
 import type { Player } from './index.ts';
-import type { KpEnv } from './kp.ts';
+import type { KpEnv, KpMapping } from './kp.ts';
 import { initializeKp } from './kp.ts';
 import { storedMode, modeLabel } from './modes.ts';
 
@@ -70,9 +70,9 @@ export function predictionAmount(data: unknown) {
   return Number.isSafeInteger(num)&&num>=MIN&&num<=MAX?num:null;
 }
 export async function openPrediction(env:KpEnv,id:string,guild:string,riot:string,mode:string,
-  roster:Player[]=players,now=Date.now()) {
+  roster:Player[]=players,now=Date.now(),override?:KpMapping) {
   if (!VALID_ID.test(id)||!VALID_ID.test(guild)||!allowedModes.includes(mode)) throw Error('予想対象を確認できません。');
-  const mapping=await initializeKp(env);
+  const mapping=await initializeKp(env,override);
   if (!mapping||mapping.guildId!==guild) throw Error('KPが利用できません。');
   const player=roster.find(p=>p.riotId===riot);
   if(!player)throw Error('対象者を登録済み一覧から選んでください。');
@@ -94,10 +94,10 @@ export async function openPrediction(env:KpEnv,id:string,guild:string,riot:strin
   return predictionCard(e);
 }
 export async function buyPrediction(env:KpEnv,id:string,guild:string,user:string,side:'win'|'loss',
-  amount:number,at=Date.now()):Promise<string> {
+  amount:number,at=Date.now(),override?:KpMapping):Promise<string> {
   if(!VALID_ID.test(id)||!VALID_ID.test(guild)||!VALID_ID.test(user)||!['win','loss'].includes(side)||
     !Number.isSafeInteger(amount)||amount<MIN||amount>MAX)return '入力を確認してください。';
-  const mapping=await initializeKp(env);
+  const mapping=await initializeKp(env,override);
   if(!mapping||mapping.guildId!==guild)return 'KPが利用できません。';
   await ensurePredictions(env.DB);
   const e=await env.DB.prepare('SELECT * FROM vp_events WHERE id=? AND guild=?').bind(id,guild).first<Event>();
@@ -115,7 +115,7 @@ export async function buyPrediction(env:KpEnv,id:string,guild:string,user:string
   return '🎫 **予想を受け付けました**\n'+safe(e.name)+'｜'+modeLabel(e.mode)+'\n'
     +(side==='win'?'勝利':'敗北')+'に '+money(amount)+'（'+oddsText(odds)+'）\n的中時 '+money(Math.floor(amount*odds/100))+'。試合終了後に自動判定します。';
 }
-export async function settlePredictions(env:KpEnv,match:Match,riot:string,now=Date.now()) {
+export async function settlePredictions(env:KpEnv,match:Match,riot:string,now=Date.now(),override?:KpMapping) {
   if(!match.metadata?.is_completed||!match.metadata.match_id)return 0;
   const start=Date.parse(match.metadata.started_at);if(!Number.isFinite(start))return 0;
   await ensurePredictions(env.DB);
@@ -123,7 +123,7 @@ export async function settlePredictions(env:KpEnv,match:Match,riot:string,now=Da
   const events=(await env.DB.prepare('SELECT * FROM vp_events WHERE riot=? AND mode=? AND status=\'open\' AND created_at<? ORDER BY created_at LIMIT 5')
     .bind(riot,mode,start).all<Event>()).results;
   if(!events.length)return 0;
-  const mapping=await initializeKp(env);if(!mapping)return 0;
+  const mapping=await initializeKp(env,override);if(!mapping)return 0;
   const row=await env.DB.prepare('SELECT puuid FROM tracked_players WHERE riot_id=?').bind(riot).first<{puuid:string}>();
   const player=match.players.find(p=>p.puuid===row?.puuid);
   if(!player)return 0;
