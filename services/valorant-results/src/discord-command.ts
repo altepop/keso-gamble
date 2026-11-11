@@ -34,7 +34,7 @@ export function predictionCommand(configured = players) {
         {name:'エスカレーション',value:'escalation'},
       ]},
     ],
-  };
+  } as const;
 }
 export function discordCommands(configured = players) {
   return [deathCommand(configured), valoCommand(configured), predictionCommand(configured)] as const;
