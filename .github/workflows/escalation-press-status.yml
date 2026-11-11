@@ -1,0 +1,35 @@
+name: Approved Escalation press delivery status
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/escalation-press-status.yml']
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/setup-node@v7
+        with: {node-version: '24'}
+      - name: Verify the approved message receipt without posting or retrying delivery
+        run: |
+          node --input-type=module <<'NODE'
+          const url='https://valorant-results.tealeaforest.workers.dev/api/discord/escalation-press/status';
+          let success=false;
+          for(let attempt=0;attempt<36;attempt++){
+            const response=await fetch(url,{signal:AbortSignal.timeout(15000),headers:{'Cache-Control':'no-cache'}});
+            if(response.ok){
+              const status=await response.json();
+              if(status.bodyHash!=='c93c1ebd2698b57d7c655f543444fc1f1ac0e5d24a30ff409dd28d861e5bff47')throw Error('Approved press body hash mismatch');
+              if(status.release!=='approved-escalation-press:2026-11-11:rank-shields-v1')throw Error('Unexpected press release');
+              console.log('ESCA_PRESS_DELIVERY '+JSON.stringify(status));
+              if(status.posted&&status.mentionEveryone&&status.contentVerified){success=true;break;}
+              if(['unknown','rejected'].includes(status.state)||status.posted)throw Error('Delivery requires review; no automatic repost');
+              if(!status.configured)throw Error('Existing earnings webhook is not configured');
+            }else if(response.status!==404)console.log('ESCA_PRESS_STATUS_PENDING '+response.status);
+            if(attempt<35)await new Promise(done=>setTimeout(done,30000));
+          }
+          if(!success)throw Error('Approved press delivery is not yet confirmed');
+          NODE
