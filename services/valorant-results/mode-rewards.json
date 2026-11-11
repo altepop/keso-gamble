@@ -106,6 +106,7 @@
     ],
     "rating": {
       "measurementGames": 3,
+      "placementPositiveKdBonus": 100,
       "actPlacementGames": 1,
       "episodePlacementGames": 3,
       "episodeDefaultDrop": 600,

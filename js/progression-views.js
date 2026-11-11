@@ -1,7 +1,7 @@
-import {hoyoPanel} from './hoyo-view.js?v=web-e6fd0d5f454c89ff';
-import {steamPanel} from './steam-view.js?v=web-e6fd0d5f454c89ff';
-import {stockPrice} from './stock-view.js?v=web-e6fd0d5f454c89ff';
-import { ACTIVITIES, MEMBERS, ORDERS } from './progression.js?v=web-e6fd0d5f454c89ff';
+import {hoyoPanel} from './hoyo-view.js?v=web-29ed04bdab6ca23f';
+import {steamPanel} from './steam-view.js?v=web-29ed04bdab6ca23f';
+import {stockPrice} from './stock-view.js?v=web-29ed04bdab6ca23f';
+import { ACTIVITIES, MEMBERS, ORDERS } from './progression.js?v=web-29ed04bdab6ca23f';
 export const escapeHTML=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const kp=n=>n.toLocaleString('ja-JP')+' KP';
 // A history amount with its own sign: +900 KP / −200 KP / ±0 KP.
@@ -34,7 +34,7 @@ function escalationRewards(state){
  const archives=(Array.isArray(power.previousActs)?power.previousActs:[]).map(a=>`<div class="asset-line"><span style="min-width:0;overflow-wrap:anywhere">${escapeHTML(a.name||a.act)}<br>最高 ${escapeHTML(a.peakGrade||'未認定')}</span><strong>${a.measured?escapeHTML(a.grade||'認定済み'):'認定途中'}<br>${Number(a.wins)}勝${Number(a.losses)}敗</strong></div>`).join('');
  const rr=rank?Math.max(0,Math.floor(Number(rank.rr)||0)):0;
  const badge=rank?`<div class="escalation-rank"><strong style="font-size:1.6rem">${escapeHTML(rank.name)}</strong><p>${rr} RR${!recognized?' · 前ACTから引き継ぎ':''}</p>${rank.tier!==8?`<progress value="${Math.min(100,rr)}" max="100" aria-label="次のランクまでのRR" style="width:100%"></progress>`:''}</div>`:'<strong>未認定</strong>';
- const ratingPanel=`<section class="panel"><div class="card-body"><h2 class="panel-title">エスカランク</h2><p class="helper" style="overflow-wrap:anywhere">ACT：${escapeHTML(power.act?.name||power.act?.id||'情報待ち')}</p>${badge}<p role="status">${status}</p>${power.peakGrade?`<p class="helper">今ACTの最高 ${escapeHTML(power.peakGrade)}</p>`:''}${last}<p class="helper">初回は認定3試合。ACT更新は認定1試合で前のランクを引き継ぎ、この認定では降格しません。エピソード更新は認定3試合で、基本は2ランク下から再開。内部レートと認定成績が高ければ1ランク下・据え置き・昇格もあります。VALORANT本体とは別のKESO独自ランクです。</p><details class="rules"><summary>更新幅・ランキング</summary><p class="helper">アイアン〜イモータルはⅠ・Ⅱ・Ⅲ、さらにレディアント。100 RRで1段階、3段階で1ランク。認定後は3勝または3敗でシリーズ終了し、3勝0敗＋100／3勝1敗＋70／3勝2敗＋40 RR。負け越しは逆の幅が基本です。30キル以上・高いKD・15アシスト以上で成績補正。補正は1試合最大＋3、1シリーズ最大＋5。負け越しでは減少を軽減するだけで上昇にはなりません。同じACTで認定済みの上位10人を表示します。</p>${board}${archives?'<h3>前ACTの記録</h3>'+archives:''}</details></div></section>`;
+ const ratingPanel=`<section class="panel"><div class="card-body"><h2 class="panel-title">エスカランク</h2><p class="helper" style="overflow-wrap:anywhere">ACT：${escapeHTML(power.act?.name||power.act?.id||'情報待ち')}</p>${badge}<p role="status">${status}</p>${power.peakGrade?`<p class="helper">今ACTの最高 ${escapeHTML(power.peakGrade)}</p>`:''}${last}${power.placementConsistencyBonus?'<p class="helper">初回認定：3試合連続KDプラス ＋100 RR</p>':''}<p class="helper">初回は認定3試合。3試合ともキル数がデス数を上回れば認定に＋100 RR。全敗でもアイアンⅡになります。ACT更新は認定1試合で前のランクを引き継ぎ、この認定では降格しません。エピソード更新は認定3試合で、基本は2ランク下から再開。内部レートと認定成績が高ければ1ランク下・据え置き・昇格もあります。VALORANT本体とは別のKESO独自ランクです。</p><details class="rules"><summary>更新幅・ランキング</summary><p class="helper">アイアン〜イモータルはⅠ・Ⅱ・Ⅲ、さらにレディアント。100 RRで1段階、3段階で1ランク。認定後は3勝または3敗でシリーズ終了し、3勝0敗＋100／3勝1敗＋70／3勝2敗＋40 RR。負け越しは逆の幅が基本です。30キル以上・高いKD・15アシスト以上で成績補正。補正は1試合最大＋3、1シリーズ最大＋5。負け越しでは減少を軽減するだけで上昇にはなりません。同じACTで認定済みの上位10人を表示します。</p>${board}${archives?'<h3>前ACTの記録</h3>'+archives:''}</details></div></section>`;
  const spins=Array.isArray(state.escalationSpins)?state.escalationSpins:[],all=state.modeRewards?.swiftplay?.specialScope==='all';
  const signed=n=>n<0?'−'+kp(-n):'+'+kp(n);
  const rows=spins.map(r=>{

@@ -1240,3 +1240,14 @@ test('unknown ACT defers only power; later verified ACT is reflected once withou
  const view=(await readKpState(f.env,mapping,one)).escalationRating;assert.equal(view.act?.id,'act-new');assert.equal(view.played,0);assert.equal(view.previousActs.length,1);
  run=await prepareKpRun(f.env,mapping);await loadKpRunMatch(f.env,run,id);assert.equal(run.pendingPower?.has(id),false);assert.match(run.notes?.get(id)??'',/ACT情報を反映/);
 });
+
+
+test('three verified positive-KD losses recognize Iron II and repeated collection never awards the placement twice',async()=>{
+ const f=await fixture();f.enableHistory();seed(f.sql,one,1000);f.sql.exec("UPDATE kp_settings SET value='0' WHERE key IN ('mode_rewards_started_at','valo_v7_started_at')");
+ for(let i=0;i<3;i++){
+  const raw:any=game('positive-kd-placement-'+i,'ggteam',false);raw.metadata.season={id:'act-a',short:'e11a1'};raw.players[0].stats={kills:11,deaths:10,assists:0};
+  const amount=await collectKpMatch(f.env,mapping,raw,'p-one');assert.equal(await collectKpMatch(f.env,mapping,raw,'p-one'),amount);
+ }
+ const v=(await readKpState(f.env,mapping,one)).escalationRating;assert.equal(v.grade,'アイアン Ⅱ');assert.equal(v.rank?.rr,0);assert.equal(v.placementConsistencyBonus,100);assert.equal(v.played,3);
+ assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM kp_events').get()!.n,3);assert.equal((await readKpState(f.env,mapping,one)).cash,1000,'rank RR is separate from spendable KP');
+});

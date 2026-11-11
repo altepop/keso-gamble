@@ -4,18 +4,18 @@ import {DatabaseSync} from 'node:sqlite';
 import {kpSchema} from '../src/kp.ts';
 import type {KpEnv} from '../src/kp.ts';
 import type {Match} from '../src/results.ts';
-import {ensureEscalationRating,escalationRatingView,escalationPowerStatement,escalationPerformance,escalationPowerProof,invalidateEscalationBoard,escalationEpisode,escalationRank,observeEscalationAct,ESCALATION_RATING_POLICY} from '../src/escalation-rating.ts';
+import {ensureEscalationRating,escalationRatingView,escalationPowerStatement,escalationPerformance,escalationPowerProof,escalationPositiveKd,invalidateEscalationBoard,escalationEpisode,escalationRank,observeEscalationAct,ESCALATION_RATING_POLICY} from '../src/escalation-rating.ts';
 async function fixture(){
  const sql=new DatabaseSync(':memory:');for(const statement of kpSchema)sql.exec(statement);let boardReads=0,n=0;
  class Q{text:string;values:unknown[];constructor(text:string,values:unknown[]=[]){this.text=text;this.values=values;}bind(...v:unknown[]){return new Q(this.text,v);}first(){return sql.prepare(this.text).get(...this.values as never[])??null;}all(){if(this.text.includes('measured=1'))boardReads++;return{results:sql.prepare(this.text).all(...this.values as never[])};}run(){return{meta:{changes:Number(sql.prepare(this.text).run(...this.values as never[]).changes)}};}}
  const env={DB:{prepare:(text:string)=>new Q(text),batch:(queries:Q[])=>{sql.exec('BEGIN');try{const rows=queries.map(q=>q.run());sql.exec('COMMIT');return rows;}catch(error){sql.exec('ROLLBACK');throw error;}}}} as unknown as KpEnv;
  await ensureEscalationRating(env);
- const play=async(user:string,win:boolean,mode='escalation',policy=ESCALATION_RATING_POLICY,id?:string,act='act-a',performance=0,start?:number,episode='e11')=>{
+ const play=async(user:string,win:boolean,mode='escalation',policy=ESCALATION_RATING_POLICY,id?:string,act='act-a',performance=0,start?:number,episode='e11',kdPositive=false)=>{
   n++;id??='rating-'+n;start??=n*1000;
   sql.prepare('INSERT OR IGNORE INTO kp_wallets(guild,user) VALUES(?,?)').run('guild',user);sql.prepare("INSERT OR IGNORE INTO kp_state(guild,user,data) VALUES(?,?,'{}')").run('guild',user);
   const outcome=win?'win':'loss';await env.DB.batch([
    env.DB.prepare('INSERT OR IGNORE INTO kp_events VALUES(?,?,?,?,?,?,?,?,?,?)').bind(id,'guild',user,'p-'+user,id,mode,outcome,0,policy,n),
-   escalationPowerStatement(env,{id,guild:'guild',user,outcome},{act:{id:act,name:act,episode,startedAt:start,endedAt:start+100},performance}),
+   escalationPowerStatement(env,{id,guild:'guild',user,outcome},{act:{id:act,name:act,episode,startedAt:start,endedAt:start+100},performance,kdPositive}),
   ]);invalidateEscalationBoard(env,'guild');return id;
  };
  return{env,sql,play,boardReads:()=>boardReads};
@@ -108,4 +108,29 @@ test('initial placements start lower for every win count, with the same 200-poin
   const f=await fixture();for(let i=0;i<3;i++)await f.play('u',i<wins,'escalation',ESCALATION_RATING_POLICY,undefined,'act-a',performance);
   const v=await escalationRatingView(f.env,'guild','u');assert.equal(v.rating,points+(performance?5:0));assert.equal(v.grade,name);assert.equal(v.rank!.rr,performance?5:0);
  }
+});
+
+
+test('positive KD in all three initial games adds one division once, while one missing or equal KD prevents it',async()=>{
+ for(const [wins,points,name] of [[0,100,'アイアン Ⅱ'],[1,300,'ブロンズ Ⅰ'],[2,500,'ブロンズ Ⅲ'],[3,700,'シルバー Ⅱ']] as const){
+  const f=await fixture();let last='';for(let i=0;i<3;i++)last=await f.play('u',i<wins,'escalation',ESCALATION_RATING_POLICY,undefined,'act-a',0,undefined,'e11',true);
+  let v=await escalationRatingView(f.env,'guild','u');assert.equal(v.rating,points);assert.equal(v.grade,name);assert.equal(v.placementConsistencyBonus,100);assert.equal(v.measurementPositiveKd,3);assert.equal(v.lastPerformance,0);
+  await f.play('u',false,'escalation',ESCALATION_RATING_POLICY,last,'act-a',0,undefined,'e11',true);v=await escalationRatingView(f.env,'guild','u');assert.equal(v.rating,points);assert.equal(v.measurementPositiveKd,3);
+ }
+ for(const flags of [[true,false,true],[true,true,false],[false,true,true]]){
+  const f=await fixture();for(const flag of flags)await f.play('u',false,'escalation',ESCALATION_RATING_POLICY,undefined,'act-a',0,undefined,'e11',flag);
+  const v=await escalationRatingView(f.env,'guild','u');assert.equal(v.rating,0);assert.equal(v.placementConsistencyBonus,0);
+ }
+});
+test('KD consistency uses strict integer kills greater than deaths, with missing or ambiguous players excluded',()=>{
+ const raw={players:[{puuid:'p',stats:{kills:11,deaths:10}}]} as Match;
+ for(const [kills,deaths,want] of [[11,10,true],[10,10,false],[9,10,false],[1,0,true],[0,0,false],[-1,0,false],[1.5,1,false],[NaN,0,false]] as const){raw.players[0].stats={kills,deaths};assert.equal(escalationPositiveKd(raw,'p'),want);}
+ raw.players[0].stats={kills:10};assert.equal(escalationPositiveKd(raw,'p'),false);raw.players.push(raw.players[0]);assert.equal(escalationPositiveKd(raw,'p'),false);
+});
+test('the consistency bonus does not recur on later series or ACT/episode recognition',async()=>{
+ const f=await fixture();for(let i=0;i<6;i++)await f.play('u',false,'escalation',ESCALATION_RATING_POLICY,undefined,'act-a',0,undefined,'e11',true);
+ let v=await escalationRatingView(f.env,'guild','u');assert.equal(v.rating,0);assert.equal(v.measurementPositiveKd,3);assert.equal(v.lastChange,-100);
+ await f.play('u',false,'escalation',ESCALATION_RATING_POLICY,undefined,'act-b',0,100000,'e11',true);v=await escalationRatingView(f.env,'guild','u');assert.equal(v.rating,0);assert.equal(v.placementConsistencyBonus,0);
+ for(let i=0;i<3;i++)await f.play('u',false,'escalation',ESCALATION_RATING_POLICY,undefined,'act-c',0,200000+i*1000,'e12',true);
+ v=await escalationRatingView(f.env,'guild','u');assert.equal(v.rating,0);assert.equal(v.placementConsistencyBonus,0);
 });

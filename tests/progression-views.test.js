@@ -77,3 +77,9 @@ test('ACT recognition shows the carried rank, one-game requirement and historica
  for(const text of ['ACT更新認定 0/1試合','ゴールド Ⅰ','40 RR','前ACTから引き継ぎ','最高 プラチナ Ⅰ'])assert(html.includes(text),text);
  assert(!html.includes('9007199254740991'));assert(!html.includes('内部レート：'));
 });
+
+
+test('initial positive-KD placement reward is described as RR, separate from normal series performance and KP',()=>{
+ const html=playView({...live([]),escalationRating:{act:{id:'a',name:'e11a1'},rating:100,rank:{name:'アイアン Ⅱ',rr:0,tier:0},placementKind:'initial',placementConsistencyBonus:100}});
+ for(const text of ['3試合ともキル数がデス数を上回れば','全敗でもアイアンⅡ','3試合連続KDプラス ＋100 RR'])assert(html.includes(text),text);
+});

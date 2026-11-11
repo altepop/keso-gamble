@@ -20,5 +20,7 @@ const server=spawn('python3',['-m','http.server','8822','--bind','127.0.0.1'],{c
  assert.match(await placement.innerText(),/ACT更新認定 0\/1試合/);assert.match(await placement.innerText(),/25 RR · 前ACTから引き継ぎ/);
  placement=await showPlacement({act:{id:'act-c',name:'e12a1'},rating:null,placementKind:'episode',measurementRequired:3,measurementGames:2,inheritedRank:{name:'ゴールド Ⅱ',rr:25,tier:3}});
  assert.match(await placement.innerText(),/エピソード更新認定 2\/3試合/);assert.equal(await placement.locator('progress').getAttribute('value'),'25');
+ placement=await showPlacement({act:{id:'a',name:'e11a1'},rating:100,rank:{name:'アイアン Ⅱ',rr:0,tier:0},placementKind:'initial',placementConsistencyBonus:100,measurementGames:3});
+ assert.match(await placement.innerText(),/アイアン Ⅱ/);assert.match(await placement.innerText(),/3試合連続KDプラス ＋100 RR/);
  assert.equal(mutations,0);assert.deepEqual(errors,[]);console.log(engine+': Escalation ranks, ACT/episode placements and escaped ranking, Swift/legacy Escalation replay labels, no cash mutation and mobile widths passed.');
 })().catch(error=>{console.error(error);process.exitCode=1;}).finally(async()=>{await browser?.close();server.kill();});
