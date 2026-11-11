@@ -93,3 +93,29 @@ node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
 6. 切断・ホスト再起動からの復帰、Render無料枠でのスリープ挙動を確認する。
 
 **検証完了の判定は実際のVCで音が聞こえた時点とする。** 画面やコマンド定義だけでは成功としない。
+
+## 自動復帰と永続化（2026-11-11）
+
+音楽の独立性を維持しつつ、以下の障害対策を追加した。
+
+- **5分間隔の生存確認**：既存 `valorant-results` Worker の毎分 Cron から5分ごとに認証付き `GET /health` を送る。新規 Cron は作らず、D1の読み書きやGitHub Actionsの定期実行も増やさない。Renderのスリープ軽減用であり、無料ホストの再起動や月次無料枠を保証するものではない。HTTP失敗は `music_voice_keepalive_unready` をWorkerログに記録する。
+- **1操作からの復帰**：`/music` が起動中なら、既存のDiscord遅延返信を使い「起動中」を表示し、音楽専用 `MusicSession` Durable Object のAlarmが6秒前後の間隔で再試行する。起動後は*元の同じDiscordメッセージ*を更新して結果を知らせる。最大約3分で打ち切る。POSTの結果が不明な場合は二重追加を避けて自動再送しない。
+- **キューのチェックポイント**：Node側が音楽専用Workerエンドポイント `/api/discord/music/state?guild=<guild>` に認証付きで曲ID、依頼者ID、順番、音量、停止状態、ループ、ラジオ周回を保存する。**音源ファイルの内容、Discord Bot Token、KP残高や取引データは保存しない**。D1にも保存せず、新規のSQLite Durable Object `MUSIC_SESSION` のストレージだけを使う。
+- **再起動後の復元**：Nodeが認証付きヘルスチェックからWorkerのURLを受け取り、保存状態を取得する。15分以内のチェックポイントで、対象のVCに人が残っていれば接続とキューを復元する。**再生中の曲は先頭から再開**する。無人VCに勝手に再入室しない。ホストの再起動をまたぐ中断ゼロの再生は保証しない。
+- **VC瞬断の復帰**：Discord.js自体の接続復帰を8秒試し、その後は保存した状態を使って最大3段階の再接続を試す。失敗した場合はログを残し、ユーザーが状況を確認できるようにする。
+
+### 配備・認証
+
+Worker側の `MUSIC_SESSION` は `music-session-v1` migration を使用する。初回デプロイでは `live-settings.mjs` が既存 `VOICE_GATEWAY`・`RACE_BROADCAST`・D1のID・毎分Cron・Secretを保持し、新しい音楽用Durable Objectだけ追加する。
+
+新しい秘密値は不要。音声サービスとWorkerが既に共有している `MUSIC_BRIDGE_TOKEN` を使う。音声サービスは認証されたWorkerのヘルスチェックから専用URLを学習するため、外部の任意URLは許可しない。手動で指定する場合はRenderの `MUSIC_STATE_WORKER_URL` に**実際のWorkerのHTTPSオリジン（`*.workers.dev`）**を設定してよいが、通常は不要である。
+
+Renderの `keso-music-voice` がmainを自動配備し、WorkerがGitHub Actionsで検査後に配備されることを確認する。まず `/api/discord/music/status` の `bridgeConfigured` と `recoveryConfigured` がtrue、次に `https://keso-music-voice.onrender.com/health` の `status` が `ready` になることを確認する。設定値や認証トークンはチャットやログに表示しない。
+
+### 試験と既知の制約
+
+- ユニット試験：`npm --prefix services/music-voice test` と `npm --prefix services/valorant-results test`。
+- 3時間の**模擬**ラジオ試験：`services/music-voice/test/recovery.test.mjs` が180分相当の60曲再生・複数回の復元を短時間で検証する。これは実際のDiscord VCでの3時間稼働を意味しない。
+- 本番実機試験：通常VCで `/music radio` → 5分超の再生 → 20分放置後の `/music play` → Node再起動 → 連続再生・保存キューの挙動と音声を検証する。
+- 無料プランの停止、Discord側の通信障害、WorkerのAlarm遅延、制限超過時の中断はゼロにはできない。**連続3時間の再生を確実にしたい場合は常時起動可能な有料または自前のNodeホストが必要**だ。
+- 復元状態は、再生中にメンバーが全員抜けた場合の自動退出、`/music stop`、`/music leave` によって破棄する。永続化は前回の曲順を「永久に残す」ことを目的としない。

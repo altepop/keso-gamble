@@ -43,6 +43,7 @@
       "new_sqlite_classes": [
         "RaceBroadcaster"
       ]
-    }
+    },
+    {"tag":"music-session-v1","new_sqlite_classes":["MusicSession"]}
   ]
 }
