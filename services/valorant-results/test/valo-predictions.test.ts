@@ -121,5 +121,5 @@ test('ACT odds are snapshotted from indexed notifications',async()=>{
   const card=await f.open();
   assert.match(JSON.stringify(card),/ACT E9A1/);
   const odds=f.sqlite.prepare('SELECT win_odds,loss_odds,wins,losses FROM vp_events').get() as {win_odds:number;loss_odds:number;wins:number;losses:number};
-  assert.deepEqual(odds,{win_odds:161,loss_odds:214,wins:1,losses:0});
+  assert.deepEqual({...odds},{win_odds:161,loss_odds:214,wins:1,losses:0});
 });
