@@ -290,6 +290,20 @@ export async function discordInteractions(request: Request, env: Env, ctx: Execu
           allowed_mentions: result.allowed_mentions??{ parse: [] } }), signal: AbortSignal.timeout(10_000),
       });
       if (!response.ok) console.warn('discord_command_reply_failed', { status: response.status });
+      else if(interaction.data?.name==='duel' && result.allowed_mentions?.users?.length===1){
+        // Editing the deferred card may not push a mention notification. Send one fresh,
+        // narrowly targeted follow-up only after Discord confirms the invite card exists.
+        const target=result.allowed_mentions.users[0];
+        try{
+          const sent=await fetch('https://discord.com/api/v10/webhooks/'+config.applicationId+'/'+encodeURIComponent(interaction.token!),{
+            method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+              content:'⚔️ <@'+target+'> 決闘の招待が届いている。上のカードで承諾・辞退を選んでほしい。',
+              allowed_mentions:{parse:[],users:[target]},
+            }),signal:AbortSignal.timeout(10000),
+          });
+          if(!sent.ok)console.warn('game_duel_invite_notify_pending');
+        }catch{console.warn('game_duel_invite_notify_pending');}
+      }
       else if(recruitToLink){
         const posted=await response.json() as {id?:string;channel_id?:string};
         if(posted.id&&posted.channel_id&&await linkRecruitMessage(env.DB,recruitToLink,config.guildId,posted.channel_id,posted.id)){
