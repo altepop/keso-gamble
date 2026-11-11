@@ -5,6 +5,9 @@ import {settlePredictions,expirePredictions} from './valo-predictions.ts';
 import {ensurePredictionCommand,predictionRegistrationStatus} from './predict-registration.ts';
 import {ensureGameCommands,gameCommandStatus} from './game-command-registration.ts';
 import {MUSIC_COMMAND_VERSION,MUSIC_COMMAND} from './music-command.ts';
+import {musicKeepalive,musicStateApi} from './music-session.ts';
+export {MusicSession} from './music-session.ts';
+import musicDiscord from '../discord-config.json' with {type:'json'};
 import {pruneGameRecruits} from './game-recruit.ts';
 import {storedMode} from './modes.ts';
 import {queueCommunityNews} from './community-news.ts';
@@ -64,6 +67,7 @@ export interface Env {
   KP_STEAM_CONFIG?:string;
   VOICE_GATEWAY?:DurableObjectNamespace;
   RACE_BROADCAST?:DurableObjectNamespace;
+  MUSIC_SESSION?:DurableObjectNamespace;
   DISCORD_CLIENT_SECRET?: string;
   MUSIC_VOICE_URL?: string;
   MUSIC_BRIDGE_TOKEN?: string;
@@ -580,9 +584,10 @@ export default {
     if(request.method==='GET'&&new URL(request.url).pathname==='/api/discord/rank/status')
       return rankRegistrationStatus(env.DB).then(info=>Response.json({...info,ratingSystem:ESCALATION_RR_VERSION,rankShieldSystem:ESCALATION_SHIELD_VERSION},{headers:{'Cache-Control':'no-store'}}))
         .catch(()=>Response.json({registered:false,error:'status_unavailable'},{status:503}));
+    if(new URL(request.url).pathname==='/api/discord/music/state')return musicStateApi(request,env);
     if(request.method==='GET'&&new URL(request.url).pathname==='/api/discord/music/status')
       return Response.json({version:MUSIC_COMMAND_VERSION,tracks:MUSIC_COMMAND.options[0].options[0].choices.length,
-        bridgeConfigured:Boolean(env.MUSIC_VOICE_URL&&env.MUSIC_BRIDGE_TOKEN),status:'voice_service_separate'},
+        bridgeConfigured:Boolean(env.MUSIC_VOICE_URL&&env.MUSIC_BRIDGE_TOKEN),recoveryConfigured:Boolean(env.MUSIC_SESSION),status:'voice_service_separate'},
         {headers:{'Cache-Control':'no-store'}});
     if(request.method==='GET'&&new URL(request.url).pathname==='/api/discord/games/status')
       return gameCommandStatus(env.DB).then(info=>Response.json(info,{headers:{'Cache-Control':'no-store'}}))
@@ -596,6 +601,11 @@ export default {
     return new URL(request.url).pathname.startsWith('/api/kp/') ? kpApi(request, env, undefined, job=>ctx.waitUntil(job)) : discordInteractions(request, env, ctx);
   },
   async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    // Read-only ping on the existing Cron, no D1 and no new scheduled trigger.
+    if(Math.floor((_event.scheduledTime??Date.now())/60_000)%5===0)
+      ctx.waitUntil(musicKeepalive(env,musicDiscord.workerUrl)
+        .then(ready=>{if(!ready&&env.MUSIC_VOICE_URL)console.warn('music_voice_keepalive_unready');})
+        .catch(()=>console.warn('music_voice_keepalive_failed')));
     // Existing minute cron: a single small cleanup window each JST day; no additional schedule.
     if(shouldRunRetention(_event.scheduledTime??Date.now())){
       ctx.waitUntil(cleanupExpiredCredentials(env,Date.now()).catch(()=>console.warn('credential_retention_pending')));
