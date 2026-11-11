@@ -90,7 +90,7 @@ jobs:
             print('INCIDENT_'+t['side'].upper()+'_PREVIOUS_PAYOUT_NONZERO='+str(t['payout']>0).lower())
           # Verify that the completed compensation is reflected atomically in the actual KP ledger.
           for attempt in range(12):
-            corrected=select("SELECT value FROM monitor_state WHERE key='vp:incident:20261111:corrected'")
+            corrected=select("SELECT value FROM monitor_state WHERE key='vp:incident:20261111:corrected'",[])
             if corrected:break
             time.sleep(10)
           print('INCIDENT_CORRECTION_MARKER='+str(bool(corrected)).lower())
@@ -106,7 +106,7 @@ jobs:
             print('INCIDENT_CORRECTION_LEDGER_VERIFIED='+str(expected).lower())
           notices=select("SELECT sent FROM kp_posts WHERE id=? LIMIT 1",['vp:correction:'+e['id']])
           print('INCIDENT_CORRECTION_POST_SENT='+str(bool(notices and notices[0]['sent']==1)).lower())
-          health=select("SELECT error,failures FROM kp_health WHERE feature='prediction_kickoff_audit' LIMIT 1")
+          health=select("SELECT error,failures FROM kp_health WHERE feature='prediction_kickoff_audit' LIMIT 1",[])
           if health and health[0].get('error'):
             print('INCIDENT_JOB_LAST_ERROR='+str(health[0]['error'])[:90])
           print('INCIDENT_VERDICT_READ_ONLY=1')
