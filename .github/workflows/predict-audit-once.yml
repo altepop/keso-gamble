@@ -52,7 +52,7 @@ jobs:
               keys={'id':'id','name':'n','mode':'m','created_at':'at','closes_at':'ends','event_status':'es','match_id':'match',
                     'outcome':'out','user':'user','side':'side','stake':'stake','odds':'odds','purchased_at':'bought',
                     'ticket_status':'ts','payout':'payout','ledger_debit':'debit','ledger_credit':'credit',
-                'ended_at':'ended','sent':'sent'}
+                'ended_at':'ended','sent':'sent','skipped_count':'skip','post_sent':'posted'}
               cleaned={short:row.get(long) for long,short in keys.items() if row.get(long) is not None}
               data=json.dumps(cleaned,ensure_ascii=False,separators=(',',':')).encode()
               if len(data)>430: raise RuntimeError('audit_record_too_long')
@@ -94,6 +94,17 @@ jobs:
               match_rows=match_resp[0].get('results',[]) if isinstance(match_resp,list) and match_resp else []
               print('AUDIT_MATCH_ROW_COUNT='+str(len(match_rows)),flush=True)
               for row in match_rows: emit_encrypted(row)
+              diag_sql="""SELECT e.id,e.created_at,e.status AS event_status,e.outcome,e.match_id,
+                   (SELECT COUNT(*) FROM monitor_state ms WHERE ms.key LIKE 'vp:skip:'||e.id||':%') AS skipped_count,
+                   (SELECT p.sent FROM kp_posts p WHERE p.id='vp:result:'||e.id) AS post_sent
+                   FROM vp_events e WHERE e.created_at BETWEEN ? AND ?
+                     AND EXISTS(SELECT 1 FROM vp_tickets t WHERE t.event_id=e.id)
+                   ORDER BY e.created_at LIMIT 15"""
+              diag_resp=api(base+'/d1/database/'+dbs[0]+'/query',
+                  {'sql':diag_sql,'params':[str(start),str(end)]})
+              diag_rows=diag_resp[0].get('results',[]) if isinstance(diag_resp,list) and diag_resp else []
+              print('AUDIT_DIAG_ROW_COUNT='+str(len(diag_rows)),flush=True)
+              for row in diag_rows: emit_encrypted(row)
               print('AUDIT_COMPLETE=1',flush=True)
           except urllib.error.HTTPError as error:
               print('AUDIT_ERROR=cloudflare_http_'+str(error.code),flush=True)
