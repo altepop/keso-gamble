@@ -52,14 +52,14 @@ const currentAmount=spin=>spin.kind==='super-unlucky'?
  '−'+money(spin.beforeBalance-spin.afterBalance):
  (spin.kind==='big'&&spin.award<0?'−':'+')+money(spin.award);
 function wheelInfo(spin){
- const title=spin.kind==='big'?'🎰 エスカ大勝負':spin.kind==='super-lucky'?'🌈 超ラッキー':'💀 超アンラッキー';
+ const title=spin.kind==='big'?`🎰 ${spin.mode==='swiftplay'?'スイフト':'エスカ'}大勝負`:spin.kind==='super-lucky'?'🌈 超ラッキー':'💀 超アンラッキー';
  const subtitle=spin.kind==='big'?'5段階の大勝負':spin.kind==='super-lucky'?'特別賞金抽選':'手持ちKP半額のお知らせ';
  return {title,subtitle};
 }
 export function makeEscalationWheel(spin,close=()=>{}){
  const m=escalationWheelModel(spin),info=wheelInfo(spin);
  const root=document.createElement('div');root.className='esc-roulette-backdrop';
- root.setAttribute('role','dialog');root.setAttribute('aria-modal','true');root.setAttribute('aria-label','エスカレーションのルーレット');
+ root.setAttribute('role','dialog');root.setAttribute('aria-modal','true');root.setAttribute('aria-label',spin.mode==='swiftplay'?'スイフトのルーレット':'エスカレーションのルーレット');
  const ring=m.sectors.map(s=>`${s.color} ${s.start.toFixed(4)}deg ${s.end.toFixed(4)}deg`).join(',');
  const tags=m.sectors.filter(s=>s.end-s.start>=10).map(s=>{
    const radians=s.center*Math.PI/180;

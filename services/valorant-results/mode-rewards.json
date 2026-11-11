@@ -27,7 +27,10 @@
     ]
   },
   "swiftplay": {
-    "cleanSweepBonus": 400
+    "cleanSweepBonus": 600,
+    "contributionThreshold": 15,
+    "contributionBonus": 150,
+    "specialScope": "big-only"
   },
   "teamdeathmatch": {
     "lowerKills": 30,
@@ -35,7 +38,16 @@
     "lowerBonus": 200,
     "upperKills": 40,
     "upperKd": 2,
-    "upperBonus": 500
+    "upperBonus": 500,
+    "party": {
+      "minimumMembers": 2,
+      "lowerGap": 20,
+      "lowerContribution": 20,
+      "lowerBonus": 200,
+      "upperGap": 25,
+      "upperContribution": 25,
+      "upperBonus": 500
+    }
   },
   "escalation": {
     "lowerKills": 30,
@@ -91,7 +103,19 @@
         "weight": 50,
         "amount": 1000000
       }
-    ]
+    ],
+    "rating": {
+      "measurementGames": 5,
+      "seriesWins": 3,
+      "seriesLosses": 3,
+      "measurementInitial": 2000,
+      "seriesGains": [
+        100,
+        70,
+        40
+      ],
+      "performanceAdjustment": false
+    }
   },
   "deathmatch": {
     "requiredKills": 40

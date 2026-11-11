@@ -1,0 +1,19 @@
+// Mocked authenticated Activity: measured power, new mode labels and non-paying replay.
+const {chromium,webkit}=require('playwright'),assert=require('node:assert/strict'),{spawn}=require('node:child_process');
+const server=spawn('python3',['-m','http.server','8822','--bind','127.0.0.1'],{cwd:require('node:path').join(__dirname,'..'),stdio:'ignore'});let browser;
+(async()=>{
+ const {createInitialState}=await import('../js/engine.js'),now=Date.now();
+ const state={...createInitialState(now),cash:3000,serverWallet:true,selfUserId:'one',members:[{id:'one',name:'本人'},{id:'two',name:'相棒<img src=x onerror=alert(1)>'}],claims:[],directives:[],ledger:[],modeRewards:{swiftplay:{specialScope:'big-only'}},rewardRates:{unrated:{win:70,loss:-50,bottom:-200}},escalationRating:{rating:2100,grade:'A',measurementGames:5,seriesWins:2,seriesLosses:1,played:8,lastChange:100,lastSeriesWins:3,lastSeriesLosses:0,lastSeriesAt:now-1000,leaders:[{user:'two',rating:2200,grade:'S'},{user:'one',rating:2100,grade:'A'}]},escalationSpins:[{id:'new-swift',mode:'swiftplay',kind:'big',tier:1,award:500,beforeBalance:1000,afterBalance:1500,at:now-49*3600000},{id:'old-esc',mode:'escalation',kind:'big',tier:2,award:1000,beforeBalance:500,afterBalance:1500,at:now-50*3600000}]};
+ for(let i=0;i<50;i++){try{if((await fetch('http://127.0.0.1:8822')).ok)break;}catch{}await new Promise(r=>setTimeout(r,100));}
+ const engine=process.argv[2]||'chromium';browser=await(engine==='webkit'?webkit:chromium).launch(engine==='webkit'?{}:{...(process.env.CHROMIUM_PATH?{executablePath:process.env.CHROMIUM_PATH}:{channel:'chromium'}),args:['--no-sandbox']});
+ const ctx=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true,reducedMotion:'reduce'});await ctx.addInitScript(()=>localStorage.setItem('keso-kp-session-v1','fixture-token'));
+ let mutations=0;const page=await ctx.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
+ await ctx.route('https://valorant-results.tealeaforest.workers.dev/api/kp/**',route=>{const path=new URL(route.request().url()).pathname;if(route.request().method()!=='GET'){mutations++;return route.fulfill({status:500,json:{error:'No writes in replay'}});}return route.fulfill({json:path.endsWith('/state')?state:path.endsWith('/pulse')?{pulse:'unchanged'}:{entries:[]}});});
+ await page.goto('http://127.0.0.1:8822');await page.locator('.title-start').click();await page.locator('.nav-btn[data-screen=play]').click();
+ const rating=page.locator('section.panel').filter({hasText:'エスカパワー'}).first();assert.match(await rating.innerText(),/2,100 · A/);assert.match(await rating.innerText(),/2勝 1敗/);
+ await rating.locator('summary').click();assert.match(await rating.innerText(),/相棒<img src=x onerror=alert\(1\)>/);assert.equal(await rating.locator('img').count(),0);
+ await page.locator('[data-esc-spin=new-swift]').click();await page.locator('[role=dialog][aria-label="スイフトのルーレット"]').waitFor();assert.match(await page.locator('[role=dialog]').innerText(),/スイフト大勝負/);await page.locator('.esc-roulette-close').click();
+ await page.locator('[data-esc-spin=old-esc]').click();await page.locator('[role=dialog][aria-label="エスカレーションのルーレット"]').waitFor();assert.match(await page.locator('[role=dialog]').innerText(),/エスカ大勝負/);await page.locator('.esc-roulette-close').click();
+ for(const width of [320,390,1280]){await page.setViewportSize({width,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);}
+ assert.equal(mutations,0);assert.deepEqual(errors,[]);console.log(engine+': Escalation power and escaped ranking, Swift/legacy Escalation replay labels, no cash mutation and mobile widths passed.');
+})().catch(error=>{console.error(error);process.exitCode=1;}).finally(async()=>{await browser?.close();server.kill();});

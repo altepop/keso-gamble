@@ -54,3 +54,11 @@ test('approved unrated and Skirmish amounts are shown alongside corrected existi
  for(const text of ['勝利 70〜100,000 KP','87.97%で70','当選額全体に遺物補正','3勝750→4勝2,000','5勝なら5,000','1/24','Ⅰ 500 KP：35%','Ⅴ 15,000 KP：4%'])assert(html.includes(text),text);
  assert.doesNotMatch(html,/勝ち \+370 KP|勝っても抽選でマイナス|3勝600|5勝なら1,500|全試合の15%|等級別40／30／20／8／2%/);
 });
+
+
+test('rated Escalation and moved Swift bets keep separate labels; incomplete measurement and unsafe member names stay safe',()=>{
+ const html=playView({...live([]),members:[{id:'two',name:'<img src=x>'}],escalationRating:{rating:2100,grade:'A',seriesWins:2,seriesLosses:1,leaders:[{user:'two',rating:2200,grade:'S'}]},escalationSpins:[{id:'swift',mode:'swiftplay',kind:'big',tier:1,award:500,at:1},{id:'esc',mode:'escalation',kind:'big',tier:2,award:1000,at:1}]});
+ for(const text of ['エスカパワー','2,100 · A','2勝 1敗','スイフト大勝負','エスカ大勝負','差25以上','さらに +150 KP'])assert(html.includes(text),text);
+ assert(html.includes('&lt;img src=x&gt;'));assert(!html.includes('<img src=x>'));
+ assert.match(playView(live([])),/初回計測 0\/5試合/);
+});

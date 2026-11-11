@@ -1,8 +1,9 @@
+import {ensureEscalationRating,invalidateEscalationBoard,ESCALATION_RATING_POLICY} from './escalation-rating.ts';
 import {feedIndex} from './community-feed.ts';
 import {creditVerifiedRelicBonus,creditVerifiedRelicLoss} from './relics.ts';
 import {settleSkirmishMatch} from './skirmish.ts';
 import {settleDmMatch,ensureDmChallenge} from './dm-challenge.ts';
-import {valoKp,ensureModeRewards,MODE_REWARD_VERSION,UNRATED_REWARD_VERSION,UNRATED_JACKPOT,jackpotPost} from './mode-rewards.ts';
+import {valoKp,ensureModeRewards,MODE_REWARD_VERSION,UNRATED_REWARD_VERSION,TEAM_SWIFT_REWARD_VERSION,UNRATED_JACKPOT,jackpotPost} from './mode-rewards.ts';
 import type {EscalationSpin} from './mode-rewards.ts';
 import {escalationBigPost} from './escalation-messages.ts';
 import {enqueue,ensurePosts} from './racing-posts.ts';
@@ -136,10 +137,13 @@ export async function drainKpInbox(env:KpEnv){
    if(!settled){await env.DB.prepare('DELETE FROM kp_inbox WHERE id=?').bind(e.id).run();continue;}
    e={...e,amount:settled.amount,note:settled.note};
   }
+  const ranked=e.mode==='escalation'&&e.policy===ESCALATION_RATING_POLICY&&['win','loss'].includes(e.outcome??'');
+  if(ranked)await ensureEscalationRating(env);
   const settledRows=await env.DB.batch([
    env.DB.prepare(`INSERT INTO kp_events(id,guild,user,puuid,match,mode,outcome,amount,policy,at) SELECT ?,?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM kp_accounts WHERE guild=? AND puuid=? AND user=?) ON CONFLICT(id) DO NOTHING`).bind(e.id,e.guild,e.user,e.puuid,e.match,e.mode,e.outcome,e.amount,e.policy,Date.now(),e.guild,e.puuid,e.user),
    env.DB.prepare('INSERT OR IGNORE INTO kp_reward_notes(id,note) SELECT ?,? WHERE EXISTS(SELECT 1 FROM kp_events WHERE id=?)').bind(e.id,e.note??'',e.id),
   ]);
+  if(ranked&&(settledRows[0]?.meta?.changes??0)>0)invalidateEscalationBoard(env,e.guild);
   // Spike Rush is exceptional: settleSpike's DB trigger inserts kp_events
   // BEFORE the generic INSERT below, so changes===0 even on the FIRST
   // legitimate match. That silently suppressed every Spike relic reward.
@@ -164,7 +168,7 @@ export async function drainKpInbox(env:KpEnv){
    const loss=Math.max(0,e.penalty-lotteryLoss);
    if(loss>0)try{await creditVerifiedRelicLoss(env,e.guild,e.user,e.id,e.mode,loss);}catch{console.warn('relic_match_loss_pending');}
   }
-  if(e.mode==='escalation'&&e.escalation){
+  if((e.mode==='escalation'||e.mode==='swiftplay')&&e.escalation){
    await ensureModeRewards(env);
    const spin=e.escalation;
    if(!['big','super-lucky','super-unlucky'].includes(spin.kind)||!Number.isSafeInteger(spin.award)||spin.tier<0||spin.tier>5)throw Error('Invalid escalation spin');
@@ -183,7 +187,7 @@ export async function drainKpInbox(env:KpEnv){
     const fmt=(n:number)=>n.toLocaleString('ja-JP');
     const lucky=settled.kind==='super-lucky';
     const notice=lucky
-      ? `📩 **1通のお知らせです。**\n\n平素よりKESO PLAYをご利用いただき、誠にありがとうございます。\n\n<@${e.user}> 様、エスカレーションの抽選結果をご案内いたします。\n\n🌈 **【超ラッキー】**\n**+${fmt(settled.award)} KP** が当選しました。\n\n手持ちKP：${fmt(settled.balance_before)} → **${fmt(settled.balance_after)} KP**\n\n今後ともKESO PLAYをよろしくお願いいたします。\n― 等しいbot`
+      ? `📩 **1通のお知らせです。**\n\n平素よりKESO PLAYをご利用いただき、誠にありがとうございます。\n\n<@${e.user}> 様、${e.mode==='swiftplay'?'スイフト':'エスカレーション'}の抽選結果をご案内いたします。\n\n🌈 **【超ラッキー】**\n**+${fmt(settled.award)} KP** が当選しました。\n\n手持ちKP：${fmt(settled.balance_before)} → **${fmt(settled.balance_after)} KP**\n\n今後ともKESO PLAYをよろしくお願いいたします。\n― 等しいbot`
       : `📩 **1通のお知らせです。**\n\n平素よりKESO PLAYをご利用いただき、誠にありがとうございます。\n\n<@${e.user}> 様、KP口座について重要なお知らせがございます。\n\n💀 **【超アンラッキー】**\n誠に残念ながら、手持ちKPを半額とさせていただきました。\n\n手持ちKP：${fmt(settled.balance_before)} → **${fmt(settled.balance_after)} KP**\n差引：**−${fmt(settled.balance_before-settled.balance_after)} KP**\n\nなお、本件に関する異議申し立ては受け付けておりません。\n今後ともKESO PLAYをよろしくお願いいたします。\n― 等しいbot`;
     // A failed post enqueue keeps the inbox event pending, so it is retried safely.
     await ensurePosts(env);await enqueue(env,'esc-notice:'+e.id,notice,Date.now());
@@ -194,8 +198,8 @@ export async function drainKpInbox(env:KpEnv){
   // Only rare IV/V events get a second equal-bot post: I-III already have a
   // witty description in the existing VALORANT result. Stable post IDs prevent
   // duplicate messages on inbox retry, and failed delivery never re-settles KP.
-  if(e.mode==='escalation'&&e.escalation?.kind==='big'&&e.escalation.tier>=4&&net!==null){
-   const post=escalationBigPost(e.user,e.escalation.tier,e.escalation.award,net,owed);
+  if((e.mode==='escalation'||e.mode==='swiftplay')&&e.escalation?.kind==='big'&&e.escalation.tier>=4&&net!==null){
+   const post=escalationBigPost(e.user,e.escalation.tier,e.escalation.award,net,owed,e.mode);
    if(post){try{await ensurePosts(env);await enqueue(env,'esc-big:'+e.id,post,Date.now());}catch{console.warn('escalation_big_post_pending');}}
   }
   const notice=await env.DB.prepare('SELECT n.riot_id,n.message FROM notifications n JOIN kp_accounts a ON n.riot_id=a.riot WHERE a.guild=? AND a.puuid=? AND n.match_id=?').bind(e.guild,e.puuid,e.match).first<{riot_id:string;message:string}>();
@@ -293,25 +297,28 @@ export async function collectKpMatch(env:KpEnv,mapping:KpMapping,raw:Match,puuid
  }
  const spike=status.mode==='spikerush'?spikeMatch(raw,puuid):null;
  if(status.mode==='spikerush'&&!spike)return null;
- const modeStart=await env.DB.prepare(status.mode==='unrated'
-  ?"SELECT value,(SELECT value FROM kp_settings WHERE key='unrated_v7_started_at') AS unrated_v7_started_at FROM kp_settings WHERE key='mode_rewards_started_at'"
-  :"SELECT value FROM kp_settings WHERE key='mode_rewards_started_at'").first<{value:string;unrated_v7_started_at?:string}>();
+ const modeStart=await env.DB.prepare(['unrated','swiftplay','teamdeathmatch','escalation'].includes(status.mode)
+  ?"SELECT value,(SELECT value FROM kp_settings WHERE key='valo_v7_started_at') AS valo_v7_started_at FROM kp_settings WHERE key='mode_rewards_started_at'"
+  :"SELECT value FROM kp_settings WHERE key='mode_rewards_started_at'").first<{value:string;valo_v7_started_at?:string}>();
  const modern=start>=Number(modeStart?.value??Infinity);
- const unratedV7=status.mode==='unrated'&&modern&&start>=Number(modeStart?.unrated_v7_started_at??Infinity);
+ const modeV7=modern&&['unrated','swiftplay','teamdeathmatch','escalation'].includes(status.mode)&&start>=Number(modeStart?.valo_v7_started_at??Infinity);
+ const unratedV7=status.mode==='unrated'&&modeV7;
  if(status.mode==='skirmish'){
   if(!modern||!['win','loss'].includes(status.outcome??''))return null;
   return (await settleSkirmishMatch(env,{guild:mapping.guildId,puuid,user:link.user,match:raw.metadata.match_id,start,end:start+duration,win:status.outcome==='win',now:Date.now()})).delta;
  }
  // Older pending results keep the old 3%/±1,000 escalation rules; the new draw
  // may only apply to games started after the first v5 schema initialization.
- const escalationStarts=status.mode==='escalation'&&modern
+ const escalationStarts=status.mode==='escalation'&&modern&&!modeV7
    ?(await env.DB.prepare("SELECT key,value FROM kp_settings WHERE key IN ('escalation_v5_started_at','escalation_v6_started_at')").all<{key:string;value:string}>()).results:[];
  const cutoff=(key:string)=>Number(escalationStarts.find(x=>x.key===key)?.value??Infinity);
  const escalationV5=status.mode!=='escalation'||start>=cutoff('escalation_v5_started_at');
  const escalationV6=status.mode!=='escalation'||start>=cutoff('escalation_v6_started_at');
- const {net,note,lottery,escalation}=modern?valoKp(raw,puuid,status.mode,status.outcome,escalationV5,escalationV6,unratedV7):{...legacyValoKp(raw,puuid,status.mode,status.outcome),lottery:undefined,escalation:undefined};
+ const {net,note:rewardNote,lottery,escalation}=modern?valoKp(raw,puuid,status.mode,status.outcome,escalationV5,escalationV6,unratedV7,modeV7):{...legacyValoKp(raw,puuid,status.mode,status.outcome),lottery:undefined,escalation:undefined};
+ const rankedEsc=modeV7&&status.mode==='escalation'&&['win','loss'].includes(status.outcome??'');
+ const note=rewardNote+(rankedEsc?`（エスカパワー：${status.outcome==='win'?'勝利':'敗北'}を記録）`:'');
  // Events hold the earned part (never negative); a cost is a separate debit capped at the balance.
- const e:KpEvent={id,guild:mapping.guildId,user:link.user,puuid,match:raw.metadata.match_id,mode:status.mode,outcome:status.outcome,amount:Math.max(0,net),policy:unratedV7?UNRATED_REWARD_VERSION:modern?(status.mode==='escalation'&&!escalationV5?'mode-rewards-v4':status.mode==='escalation'&&!escalationV6?'mode-rewards-v5':MODE_REWARD_VERSION):policy.version,at:Date.now(),...net<0?{penalty:-net}:{},...note?{note}:{},...(unratedV7&&net>=UNRATED_JACKPOT)?{jackpot:net}:lottery!==undefined&&lottery>=UNRATED_JACKPOT?{jackpot:lottery}:{},...lottery!==undefined?{lottery}:{},...(spike?{kind:'spikerush-growth' as const,spike,policy:SPIKE_POLICY}:{}),...(escalation?{escalation}:{})};
+ const e:KpEvent={id,guild:mapping.guildId,user:link.user,puuid,match:raw.metadata.match_id,mode:status.mode,outcome:status.outcome,amount:Math.max(0,net),policy:unratedV7?UNRATED_REWARD_VERSION:modeV7&&status.mode==='escalation'?ESCALATION_RATING_POLICY:modeV7?TEAM_SWIFT_REWARD_VERSION:modern?(status.mode==='escalation'&&!escalationV5?'mode-rewards-v4':status.mode==='escalation'&&!escalationV6?'mode-rewards-v5':MODE_REWARD_VERSION):policy.version,at:Date.now(),...net<0?{penalty:-net}:{},...note?{note}:{},...(unratedV7&&net>=UNRATED_JACKPOT)?{jackpot:net}:lottery!==undefined&&lottery>=UNRATED_JACKPOT?{jackpot:lottery}:{},...lottery!==undefined?{lottery}:{},...(spike?{kind:'spikerush-growth' as const,spike,policy:SPIKE_POLICY}:{}),...(escalation?{escalation}:{})};
  await env.DB.prepare('INSERT OR IGNORE INTO kp_inbox VALUES(?,?,?)').bind(id,JSON.stringify(e),Date.now()).run();
  await drainKpInbox(env);
  return kpMatchNet(env,id);

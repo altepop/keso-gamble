@@ -6,12 +6,13 @@ import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
 import {readdirSync,readFileSync} from 'node:fs';
 import {URL} from 'node:url';
-import {escalationFor,valoKp} from '../src/mode-rewards.ts';
+import {escalationFor,valoKp as currentValoKp} from '../src/mode-rewards.ts';
 import {collectKpMatch,initializeKp,syncKpAccounts,drainKpInbox} from '../src/kp.ts';
 import {readKpState} from '../src/kp-api.ts';
 import {ensurePosts} from '../src/racing-posts.ts';
 import type {KpEnv,KpMapping} from '../src/kp.ts';
 
+const valoKp=(raw:Parameters<typeof currentValoKp>[0],puuid:string,mode:string,outcome:string|null,v5=true,v6=true)=>currentValoKp(raw,puuid,mode,outcome,v5,v6,false,false);
 const guild='100000000000000100',user='100000000000000101',puuid='escalation-test-puuid';
 const mapping:KpMapping={guildId:guild,accounts:[{riotId:'One#JP1',discordUserId:user}]};
 function match(id:string,win=true){

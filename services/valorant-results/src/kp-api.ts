@@ -1,3 +1,4 @@
+import {escalationRatingView} from './escalation-rating.ts';
 import {festivalTerms,publicFestivalResponse} from './race-festival.ts';
 import {personalVerifiedRelicStats} from './relic-economy.ts';
 import {hoyoApi} from './hoyo.ts';
@@ -84,7 +85,8 @@ export async function readKpState(env:KpEnv,mapping:KpMapping,user:string){
  state.claims.push(...state.stockMarket.dividends.map((d:{day:string;amount:number;at:number})=>({id:'dividend:'+d.day,activity:'株配当',reference:d.day,reward:d.amount,status:'approved',time:d.at})));state.claims.sort((a:{time:number},b:{time:number})=>b.time-a.time);
  state.directives=(await env.DB.prepare('SELECT id,issuer,target,task,game,achievement,cost,status,at AS time FROM kp_directives WHERE guild=? AND (issuer=? OR target=?) ORDER BY at DESC,id LIMIT 100').bind(mapping.guildId,user,user).all()).results;
  state.members=members;
- state.escalationSpins=(await env.DB.prepare("SELECT id,kind,tier,award,balance_before AS beforeBalance,balance_after AS afterBalance,at FROM kp_escalation_spins WHERE guild=? AND user=? ORDER BY at DESC LIMIT 12").bind(mapping.guildId,user).all()).results;
+ state.escalationRating=await escalationRatingView(env,mapping.guildId,user);
+ state.escalationSpins=(await env.DB.prepare("SELECT s.id,s.kind,s.tier,s.award,s.balance_before AS beforeBalance,s.balance_after AS afterBalance,s.at,COALESCE(e.mode,'escalation') AS mode FROM kp_escalation_spins s LEFT JOIN kp_events e ON e.id=s.id WHERE s.guild=? AND s.user=? ORDER BY s.at DESC LIMIT 12").bind(mapping.guildId,user).all()).results;
  // Every wallet movement, for the 入出金履歴 (claims stay for the older views).
  state.ledger=ledger;
  // The Mリーグ screen; a failure here never blocks the wallet.
