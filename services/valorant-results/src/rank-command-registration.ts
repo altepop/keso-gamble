@@ -1,3 +1,4 @@
+import {ESCA_COMMAND} from './esca-command.ts';
 import discord from '../discord-config.json' with { type: 'json' };
 import {kpCommands,KP_COMMAND_VERSION} from './kp-command.ts';
 
@@ -9,12 +10,12 @@ type HttpFetch = typeof fetch;
 export async function rankRegistrationStatus(db: D1Database) {
   const row = await db.prepare('SELECT value FROM monitor_state WHERE key=?')
     .bind(RANK_REGISTRATION_KEY).first<{ value: string }>();
-  return { command: 'kp rank / kp ranks', registered: row?.value === RANK_COMMAND_VERSION,
+  return { command: 'esca rank / esca ranking', registered: row?.value === RANK_COMMAND_VERSION,
     version: RANK_COMMAND_VERSION };
 }
 
 // This job is called once every ten minutes, but usually performs just one indexed
-// read. Discord writes only the single /kp guild command, never bulk-overwrites.
+// read. Discord writes only the owned /esca and /kp guild commands, never bulk-overwrites.
 export async function ensureRankCommand(env: RankRegistrationEnv,
   request: HttpFetch = fetch): Promise<boolean> {
   const status = await rankRegistrationStatus(env.DB);
@@ -34,7 +35,8 @@ export async function ensureRankCommand(env: RankRegistrationEnv,
   const credentials = await tokenReply.json() as { access_token?: unknown; token_type?: unknown };
   if (typeof credentials.access_token !== 'string' || !credentials.access_token
     || credentials.token_type !== 'Bearer') throw Error('Rank command credentials invalid');
-  const command = kpCommands.find(c=>c.name==='kp')!;
+  const commands=[ESCA_COMMAND,kpCommands.find(c=>c.name==='kp')!];
+  for(const command of commands){
   // Upsert only this guild-level command. No token is written to the database.
   const response = await request('https://discord.com/api/v10/applications/' + discord.applicationId
     + '/guilds/' + discord.guildId + '/commands', {
@@ -47,7 +49,8 @@ export async function ensureRankCommand(env: RankRegistrationEnv,
   const saved = await response.json() as { id?: unknown; application_id?: unknown; guild_id?: unknown; name?: unknown; type?: unknown };
   if (typeof saved.id !== 'string' || !/^\d{15,22}$/.test(saved.id)
     || saved.application_id !== discord.applicationId || saved.guild_id !== discord.guildId
-    || saved.name !== 'kp' || saved.type !== 1) throw Error('Rank command registration not confirmed');
+    || saved.name !== command.name || saved.type !== 1) throw Error('Rank command registration not confirmed');
+  }
   await env.DB.prepare('INSERT INTO monitor_state(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value')
     .bind(RANK_REGISTRATION_KEY,RANK_COMMAND_VERSION).run();
   return true;

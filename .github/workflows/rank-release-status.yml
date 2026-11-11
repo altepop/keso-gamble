@@ -9,7 +9,7 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 20
     steps:
       - uses: actions/setup-node@v7
         with: {node-version: '24'}
@@ -19,23 +19,27 @@ jobs:
           const worker='https://valorant-results.tealeaforest.workers.dev';
           const pages='https://altepop.github.io/keso-gamble/assets/escalation-ranks/';
           const get=async url=>{const r=await fetch(url,{signal:AbortSignal.timeout(15000),headers:{'Cache-Control':'no-cache'}});if(!r.ok)throw Error('HTTP '+r.status+' '+new URL(url).pathname);return r;};
-          for(const key of ['unranked','iron','bronze','silver','gold','platinum','diamond','ascendant','immortal','radiant']){
-            const svg=await (await get(pages+key+'.svg')).text();if(!svg.includes('<svg'))throw Error('Missing SVG: '+key);
-            const png=new Uint8Array(await (await get(pages+key+'.png')).arrayBuffer());if(png[0]!==137||png[1]!==80||png[2]!==78||png[3]!==71)throw Error('Missing PNG: '+key);
+          let registered=false,rankRegistered=false,gatewayRegistered=false,images=false,version='';
+          for(let attempt=0;attempt<36;attempt++){
+            const metadata=await (await get(worker+'/api/kp/commands')).json();version=metadata.version;
+            const esca=metadata.commands?.find(c=>c.name==='esca'),kp=metadata.commands?.find(c=>c.name==='kp');
+            const ready=esca?.options?.some(o=>o.name==='rank')&&esca.options.some(o=>o.name==='ranking')&&kp?.options?.some(o=>o.name==='ranking')&&!kp.options.some(o=>['rank','ranks'].includes(o.name));
+            if(ready){
+              if(!images){
+                const source=await (await get(pages+'SOURCE.json')).json();if(source.files?.length!==25)throw Error('Rank image manifest incomplete');
+                for(const file of ['unranked.png',...source.files.map(f=>f.file)]){
+                  const png=new Uint8Array(await (await get(pages+file)).arrayBuffer());if(png[0]!==137||png[1]!==80||png[2]!==78||png[3]!==71)throw Error('Missing rank PNG');
+                }
+                images=true;
+              }
+              const rank=await (await get(worker+'/api/discord/rank/status')).json(),voice=await (await get(worker+'/api/kp/voice/status')).json();
+              rankRegistered=rank.registered===true&&rank.version===metadata.version;
+              gatewayRegistered=voice.commandsRegistered===true&&voice.commandsVersion===metadata.version;
+              if(rankRegistered||gatewayRegistered){registered=true;break;}
+            }
+            console.log('RANK_REGISTRATION_PENDING '+JSON.stringify({attempt:attempt+1,version}));
+            if(attempt<35)await new Promise(done=>setTimeout(done,30000));
           }
-          const metadata=await (await get(worker+'/api/kp/commands')).json();
-          const kp=metadata.commands?.find(c=>c.name==='kp');
-          if(!kp?.options?.some(o=>o.name==='rank')||!kp.options.some(o=>o.name==='ranks'))throw Error('Rank definitions absent');
-          let registered=false,rankRegistered=false,gatewayRegistered=false;
-          for(let attempt=0;attempt<20;attempt++){
-            const rank=await (await get(worker+'/api/discord/rank/status')).json();
-            const voice=await (await get(worker+'/api/kp/voice/status')).json();
-            rankRegistered=rank.registered===true&&rank.version===metadata.version;
-            gatewayRegistered=voice.commandsRegistered===true&&voice.commandsVersion===metadata.version;
-            if(rankRegistered||gatewayRegistered){registered=true;break;}
-            console.log('RANK_REGISTRATION_PENDING '+JSON.stringify({attempt:attempt+1,version:metadata.version}));
-            if(attempt<19)await new Promise(done=>setTimeout(done,30000));
-          }
-          console.log('RANK_RELEASE_STATUS '+JSON.stringify({images:'ok',definitions:'ok',version:metadata.version,rankRegistered,gatewayRegistered,registered}));
-          if(!registered)throw Error('Automatic Discord registration is still pending');
+          console.log('RANK_RELEASE_STATUS '+JSON.stringify({images:images?'ok':'pending',namespace:'esca',version,rankRegistered,gatewayRegistered,registered}));
+          if(!registered)throw Error('Automatic /esca registration is still pending');
           NODE

@@ -2,8 +2,8 @@
 // random number comes from the caller (`rand(n)`: an integer 0..n-1, the server's crypto draw for live wallets), and a
 // game that is not finished keeps nothing secret in the state, so the saved state never reveals what comes next.
 // A finished round always returns {done:{game,…,net}} (net = what the round did to the wallet).
-import { CASINO_MIN, CASINO_MAX, validCard } from './casino.js?v=web-1b4bb156e63886a6';
-import {createTempleRespin} from './slot-temple.js?v=web-1b4bb156e63886a6';
+import { CASINO_MIN, CASINO_MAX, validCard } from './casino.js?v=web-641c6de20a2b28ae';
+import {createTempleRespin} from './slot-temple.js?v=web-641c6de20a2b28ae';
 const validInt=(v,min=0)=>Number.isSafeInteger(v)&&v>=min;
 function stake(state,amount){
  if(!validInt(amount,CASINO_MIN)||amount>CASINO_MAX)throw Error(`賭け金は${CASINO_MIN}〜${CASINO_MAX.toLocaleString('ja-JP')} KPの整数です。`);
