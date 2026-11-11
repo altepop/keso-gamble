@@ -164,11 +164,17 @@ export async function buyPrediction(env:KpEnv,id:string,guild:string,user:string
 }
 export async function settlePredictions(env:KpEnv,match:Match,riot:string,now=Date.now(),override?:KpMapping) {
   if(!match.metadata?.is_completed||!match.metadata.match_id)return 0;
-  const start=Date.parse(match.metadata.started_at);if(!Number.isFinite(start))return 0;
+  const start=Date.parse(match.metadata.started_at);
+  const length=match.metadata.game_length_in_ms;
+  if(!Number.isFinite(start)||!Number.isFinite(length)||length<=0)return 0;
+  const ended=start+length;
+  if(!Number.isFinite(ended))return 0;
   await ensurePredictions(env.DB);
   const mode=storedMode(match.metadata.queue.id);
+  // A card opened while a match was running belongs to that already-ongoing
+  // game, not to the NEXT match: all post-kickoff tickets are refunded.
   const events=(await env.DB.prepare('SELECT * FROM vp_events WHERE riot=? AND mode=? AND status=\'open\' AND created_at<=? ORDER BY created_at LIMIT 5')
-    .bind(riot,mode,start).all<Event>()).results;
+    .bind(riot,mode,ended).all<Event>()).results;
   if(!events.length)return 0;
   const mapping=await initializeKp(env,override);if(!mapping)return 0;
   const row=await env.DB.prepare('SELECT puuid FROM tracked_players WHERE riot_id=?').bind(riot).first<{puuid:string}>();
@@ -185,7 +191,7 @@ export async function settlePredictions(env:KpEnv,match:Match,riot:string,now=Da
     if(e.guild!==mapping.guildId)continue;
     const done=await env.DB.batch([
       env.DB.prepare('UPDATE vp_events SET status=\'resolved\',match_id=?,outcome=? WHERE id=? AND status=\'open\' AND created_at<=?')
-        .bind(match.metadata.match_id,outcome,e.id,start),
+        .bind(match.metadata.match_id,outcome,e.id,ended),
       env.DB.prepare('UPDATE vp_tickets SET status=CASE WHEN purchased_at>? OR ?=\'draw\' THEN \'refunded\' WHEN side=? THEN \'won\' ELSE \'lost\' END,payout=CASE WHEN purchased_at>? OR ?=\'draw\' THEN stake WHEN side=? THEN CAST(stake*odds/100 AS INTEGER) ELSE 0 END WHERE event_id=? AND status=\'pending\' AND EXISTS(SELECT 1 FROM vp_events WHERE id=? AND status=\'resolved\' AND match_id=?)')
         .bind(payoutCutoff,outcome,outcome,payoutCutoff,outcome,outcome,e.id,e.id,match.metadata.match_id),
     ]);
@@ -256,7 +262,6 @@ export async function recoverPendingPredictions(env:KpEnv,
     JOIN notifications n ON n.riot_id=e.riot AND n.mode=e.mode AND n.ended_at>=e.created_at
     WHERE e.status='open' AND e.created_at>=?
       AND EXISTS(SELECT 1 FROM vp_tickets t WHERE t.event_id=e.id AND t.status='pending')
-      AND NOT EXISTS(SELECT 1 FROM monitor_state s WHERE s.key='vp:skip:'||e.id||':'||n.match_id)
     ORDER BY e.created_at,n.ended_at,n.match_id LIMIT 1`)
     .bind(now-6*3600000).first<{id:string;riot:string;mode:string;created_at:number;match_id:string;region:string}>();
   if(!row)return 0;
@@ -266,13 +271,9 @@ export async function recoverPendingPredictions(env:KpEnv,
     throw Error('Prediction recovery match data unavailable');
   const kickoff=Date.parse(match.metadata.started_at);
   if(!Number.isFinite(kickoff))throw Error('Prediction recovery kickoff unavailable');
-  if(kickoff<row.created_at){
-    // An already-running match is not the next eligible match. Skip only
-    // this verified historical game; do not debit/refund tickets or close the card.
-    await env.DB.prepare('INSERT OR IGNORE INTO monitor_state(key,value) VALUES(?,?)')
-      .bind('vp:skip:'+row.id+':'+row.match_id,'preexisting').run();
-    return 0;
-  }
+  // A game already in progress when betting opens is still the first game.
+  // settlePredictions will refund all tickets purchased after its kickoff.
+  if(kickoff+match.metadata.game_length_in_ms<row.created_at)return 0;
   // If another monitor already resolved the event, settlement is idempotent.
   return settlePredictions(env,match,row.riot,now,override);
 }
