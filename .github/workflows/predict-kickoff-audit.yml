@@ -88,5 +88,26 @@ jobs:
             print('INCIDENT_'+t['side'].upper()+'_BET_VALID_AT_FIRST_KICKOFF='+str(t['purchased_at']<=first['kickoff']).lower())
             print('INCIDENT_'+t['side'].upper()+'_PREVIOUS_STATUS='+t['status'])
             print('INCIDENT_'+t['side'].upper()+'_PREVIOUS_PAYOUT_NONZERO='+str(t['payout']>0).lower())
+          # Verify that the completed compensation is reflected atomically in the actual KP ledger.
+          for attempt in range(12):
+            corrected=select("SELECT value FROM monitor_state WHERE key='vp:incident:20261111:corrected'")
+            if corrected:break
+            time.sleep(10)
+          print('INCIDENT_CORRECTION_MARKER='+str(bool(corrected)).lower())
+          state=select("SELECT status,match_id,outcome FROM vp_events WHERE id=?",[e['id']])
+          ledgers=select("""SELECT t.side,t.status,t.payout,t.stake,
+            (SELECT l.delta FROM kp_ledger l WHERE l.id='vp:incident:20261111:reverse-win') AS win_adjustment,
+            (SELECT l.delta FROM kp_ledger l WHERE l.id='vp:incident:20261111:refund-loss') AS loss_adjustment
+            FROM vp_tickets t WHERE t.event_id=? ORDER BY t.side""",[e['id']])
+          if state and ledgers:
+            expected=state[0]['match_id']=='edab9334-5520-4d35-9ded-a92e3fe0b412' and state[0]['outcome']=='loss'
+            expected=expected and len(ledgers)==2 and all(t['status']=='refunded' and t['payout']==t['stake'] for t in ledgers)
+            expected=expected and all(t['win_adjustment']==-17600 and t['loss_adjustment']==5000 for t in ledgers)
+            print('INCIDENT_CORRECTION_LEDGER_VERIFIED='+str(expected).lower())
+          notices=select("SELECT sent FROM kp_posts WHERE id=? LIMIT 1",['vp:correction:'+e['id']])
+          print('INCIDENT_CORRECTION_POST_SENT='+str(bool(notices and notices[0]['sent']==1)).lower())
+          health=select("SELECT error,failures FROM kp_health WHERE feature='prediction_kickoff_audit' LIMIT 1")
+          if health and health[0].get('error'):
+            print('INCIDENT_JOB_LAST_ERROR='+str(health[0]['error'])[:90])
           print('INCIDENT_VERDICT_READ_ONLY=1')
           PY
