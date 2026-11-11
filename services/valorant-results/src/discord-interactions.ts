@@ -1,6 +1,6 @@
 import {isEscalationRanking} from './escalation-rank-command.ts';
 import {SKIRMISH_BUTTON,decideSkirmish,withoutSkirmishButtons} from './skirmish.ts';
-import {PREDICTION_BUTTON,PREDICTION_MODAL,predictionModal,predictionAmount,openPrediction,buyPrediction} from './valo-predictions.ts';
+import {PREDICTION_BUTTON,PREDICTION_MODAL,predictionModal,predictionAmount,openPrediction,buyPrediction,predictionWasAccepted,predictionBetAnnouncement} from './valo-predictions.ts';
 import {activityLaunchComponents} from './activity-link.ts';
 import {MUSIC_BUTTON,runMusicDetails,musicPanel} from './music-command.ts';
 import {CHOOSE_BUTTON,RECRUIT_BUTTON,DUEL_BUTTON,GAME_IDS,gameCenterCard,gameDetailCard,duelInviteCard,recruitCard,type GameId} from './game-center.ts';
@@ -202,6 +202,7 @@ export async function discordInteractions(request: Request, env: Env, ctx: Execu
     let result: { content?: string; components?: unknown[]; embeds?:unknown[]; flags?: number;
       allowed_mentions?: {parse:[];users?:string[]} }, notice: string | undefined;
     let recruitToLink: string|null=null;
+    let predictionAnnouncementUser: string|null=null;
     try {
       if(musicButton||interaction.data?.name==='music'){
         result=musicPanel(await runMusicDetails(env,interaction));
@@ -236,8 +237,12 @@ export async function discordInteractions(request: Request, env: Env, ctx: Execu
       }else if(vpModal){
         const matched=PREDICTION_MODAL.exec(interaction.data!.custom_id!)!;
         const at=Number((BigInt(interaction.id)>>22n)+1420070400000n);
-        result={content:await buyPrediction(env,matched[1],config.guildId,interaction.member!.user!.id,
-          matched[2] as 'win'|'loss',predictionAmount(interaction.data)!,at)};
+        const bettor=interaction.member!.user!.id;
+        const receipt=await buyPrediction(env,matched[1],config.guildId,bettor,
+          matched[2] as 'win'|'loss',predictionAmount(interaction.data)!,at);
+        result={content:receipt};
+        // Announce only a newly committed ticket, never a refusal or replay.
+        if(predictionWasAccepted(receipt))predictionAnnouncementUser=bettor;
       } else if(interaction.data?.name==='predict'){
         const options=interaction.data.options??[];
         const riot=options.find(o=>o.name==='player')?.value??'';
@@ -308,6 +313,19 @@ export async function discordInteractions(request: Request, env: Env, ctx: Execu
           });
           if(!sent.ok)console.warn('game_duel_invite_notify_pending');
         }catch{console.warn('game_duel_invite_notify_pending');}
+      }
+      else if(predictionAnnouncementUser){
+        // The modal receipt is ephemeral; a SECOND message is public only after
+        // Discord confirms the original private reply was edited successfully.
+        // Never include the side, stake, odds, or payout in this message.
+        const announcement=predictionBetAnnouncement(predictionAnnouncementUser);
+        try{
+          const posted=await fetch('https://discord.com/api/v10/webhooks/'+config.applicationId+'/'+encodeURIComponent(interaction.token!),{
+            method:'POST',headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({...announcement,flags:0}),signal:AbortSignal.timeout(10000),
+          });
+          if(!posted.ok)console.warn('prediction_bet_announcement_pending',{status:posted.status});
+        }catch{console.warn('prediction_bet_announcement_pending');}
       }
       else if(recruitToLink){
         const posted=await response.json() as {id?:string;channel_id?:string};
