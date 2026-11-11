@@ -8,6 +8,7 @@
     {id:"ouenka",title:"応援歌",src:"music/assets/応援歌 (Remastered).mp3",icon:"★"},
     {id:"gosa",title:"誤差の女王",src:"music/assets/誤差の女王B.mp3",icon:"◇"},
     {id:"fullpa",title:"フルパなら",src:"music/assets/フルパならB.mp3",icon:"⚡"},
+    {id:"makekowa",title:"負け怖",src:"music/assets/負け怖.mp3",icon:"🔥"},
     {id:"relic",title:"値札のない遺物",src:"music/assets/値札のない遺物B.mp3",icon:"◆"},
     {id:"masakane",title:"まさかね",src:"music/assets/まさかねC.mp3",icon:"♪"}
   ];
