@@ -221,6 +221,11 @@ jobs:
             *) echo 'Invalid Activity entry mode'; exit 1 ;;
           esac
           node scripts/activity-entry-handler.mjs "--$ENTRYPOINT_MODE"
+      - name: Register and verify /predict command in the existing Discord guild
+        working-directory: ${{ runner.temp }}/kp-app/services/valorant-results
+        env:
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+        run: node scripts/sync-predict-command.mjs
       - name: Verify production Activity, Worker and KP reads
         env:
           KESO_SMOKE_WALLET_TOKEN: ${{ secrets.KESO_SMOKE_WALLET_TOKEN }}
