@@ -29,13 +29,14 @@ const stateOriginFrom=value=>{
  catch{return null;}
 };
 let stateOrigin=stateOriginFrom(process.env.MUSIC_STATE_WORKER_URL);
-let restored=false,restorePromise=null;
+let restored=false,restorePromise=null,checkpointClock=0;
 function stateEndpoint(guildId){
  return new URL('/api/discord/music/state?guild='+encodeURIComponent(guildId),stateOrigin);
 }
 async function saveCheckpoint(guildId,snapshot){
  if(!stateOrigin)return;
- const body={guildId,savedAt:Date.now(),snapshot:snapshot?{...snapshot,guildId}:null};
+ checkpointClock=Math.max(Date.now(),checkpointClock+1);
+ const body={guildId,savedAt:checkpointClock,snapshot:snapshot?{...snapshot,guildId}:null};
  const response=await fetch(stateEndpoint(guildId),{
   method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+MUSIC_BRIDGE_TOKEN},
   body:JSON.stringify(body),signal:AbortSignal.timeout(2_500)});
