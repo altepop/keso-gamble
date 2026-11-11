@@ -1,0 +1,92 @@
+name: One-time encrypted predict audit
+on:
+  push:
+    paths:
+      - '.github/workflows/predict-audit-once.yml'
+permissions:
+  contents: read
+jobs:
+  audit:
+    if: github.repository == 'altepop/keso-gamble' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Inspect only Nov 11 23:10-23:45 JST predictions (no DB writes)
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > /tmp/predict_audit_pub.pem <<'PEM'
+          -----BEGIN PUBLIC KEY-----
+          MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEAhwRX8OBRncL+qyuaIjmI
+          LfMMRqkdUqpqzzmKOzitTHsDhqR4py8yVHh8QXwMUJ9SJStJolbXGvKY0TGJdsTc
+          ES6/G7YVjF1NNyXRpnvA2JklmfqvNRB0tJIyD5g5KevhS6e9JYsEnuIeIsUf/ykQ
+          auCr/iCIx9cdh6bkWrL4d9NO7Qcu7G4B9nQEVqoaZRp1SUg46J6H9od+80YwCb4L
+          RhG9JxkrFjPyzAY1kcW8cEA0c0ugEnziwg3ExdKbvI9sz79GMX/Pgf2QoIqzcY1R
+          E+GH5KR5z72VCRfioyiPmktqwKwI+tIWQuc3IYSPvUgIzRfc9beUH5yID078bD/1
+          6Kf0CbxCUr4YbU7sB8fvJ7Sfo1ObGXLmyxCqLqtpa0y3KbfzVlyHb8WYoYD36+Xt
+          Oyw3729Yu2pG7CWuJr3kcqVSd6uk3evptOUAes1GWqr163x18R+svd+1Lgln5LHn
+          n5r9+6Kxg3/cPgj7gB6qk9Y7N3FBqFbk3UIkzXF7U2Fef+4crCE1Brrso6uEdp76
+          OHAvdZsQ4EkU2L/72ddZQ1JOr/YNyrb7bDA0FYtnm9hqenodyZehLPWwNLmansw1
+          t8NUeFYcpOVN08/MGC7Y+lTwWncnACTLlChhUGEMZkd2sQylGr0X/R/9WL18UgJw
+          wj4g+k3d1Cfiw9BqepjQE+MCAwEAAQ==
+          -----END PUBLIC KEY-----
+          PEM
+          python3 - <<'PY'
+          import base64, json, os, subprocess, urllib.request, urllib.error, sys
+          from datetime import datetime
+          from zoneinfo import ZoneInfo
+          
+          def api(url, body=None):
+              headers={'Authorization':'Bearer '+os.environ['CF_TOKEN']}
+              if body is not None: headers['Content-Type']='application/json'
+              request=urllib.request.Request(url,data=json.dumps(body).encode() if body else None,headers=headers,method='POST' if body else 'GET')
+              with urllib.request.urlopen(request,timeout=25) as response:
+                  result=json.load(response)
+              if not result.get('success'): raise RuntimeError('cloudflare_response_unsuccessful')
+              return result['result']
+          
+          def emit_encrypted(row):
+              keys={'id':'id','name':'n','mode':'m','created_at':'at','closes_at':'ends','event_status':'es','match_id':'match',
+                    'outcome':'out','user':'user','side':'side','stake':'stake','odds':'odds','purchased_at':'bought',
+                    'ticket_status':'ts','payout':'payout','ledger_debit':'debit','ledger_credit':'credit'}
+              cleaned={short:row.get(long) for long,short in keys.items() if row.get(long) is not None}
+              data=json.dumps(cleaned,ensure_ascii=False,separators=(',',':')).encode()
+              if len(data)>430: raise RuntimeError('audit_record_too_long')
+              done=subprocess.run(['openssl','pkeyutl','-encrypt','-pubin','-inkey','/tmp/predict_audit_pub.pem',
+                '-pkeyopt','rsa_padding_mode:oaep','-pkeyopt','rsa_oaep_md:sha256','-pkeyopt','rsa_mgf1_md:sha256'],
+                input=data,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,check=True)
+              print('AUDIT_ENCRYPTED='+base64.b64encode(done.stdout).decode(),flush=True)
+          
+          try:
+              account=os.environ['CF_ACCOUNT']
+              script='valorant-results'
+              base='https://api.cloudflare.com/client/v4/accounts/'+account
+              settings=api(base+'/workers/scripts/'+script+'/settings')
+              bindings=settings.get('bindings',[])
+              dbs=[x['id'] for x in bindings if x.get('type')=='d1' and x.get('name')=='DB']
+              if len(dbs)!=1: raise RuntimeError('database_binding_missing')
+              start=int(datetime(2026,11,11,23,10,tzinfo=ZoneInfo('Asia/Tokyo')).timestamp()*1000)
+              end=int(datetime(2026,11,11,23,45,tzinfo=ZoneInfo('Asia/Tokyo')).timestamp()*1000)
+              sql="""SELECT e.id,e.name,e.mode,e.created_at,e.closes_at,e.status AS event_status,
+                     e.match_id,e.outcome,t.user,t.side,t.stake,t.odds,t.purchased_at,
+                     t.status AS ticket_status,t.payout,
+                     (SELECT l.delta FROM kp_ledger l WHERE l.id='vp:stake:'||e.id||':'||t.user LIMIT 1) AS ledger_debit,
+                     (SELECT l.delta FROM kp_ledger l WHERE l.id='vp:pay:'||e.id||':'||t.user LIMIT 1) AS ledger_credit
+                     FROM vp_events e LEFT JOIN vp_tickets t ON t.event_id=e.id
+                     WHERE e.created_at BETWEEN ? AND ?
+                     ORDER BY e.created_at,t.purchased_at LIMIT 60"""
+              response=api(base+'/d1/database/'+dbs[0]+'/query',{'sql':sql,'params':[str(start),str(end)]})
+              rows=response[0].get('results',[]) if isinstance(response,list) and response else []
+              print('AUDIT_ROW_COUNT='+str(len(rows)),flush=True)
+              for row in rows: emit_encrypted(row)
+              print('AUDIT_COMPLETE=1',flush=True)
+          except urllib.error.HTTPError as error:
+              print('AUDIT_ERROR=cloudflare_http_'+str(error.code),flush=True)
+              sys.exit(1)
+          except Exception as error:
+              print('AUDIT_ERROR='+type(error).__name__,flush=True)
+              sys.exit(1)
+          PY
