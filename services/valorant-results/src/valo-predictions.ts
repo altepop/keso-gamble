@@ -47,8 +47,11 @@ export async function ensurePredictions(db: D1Database) {
 }
 export function predictionOdds(wins: number, losses: number) {
   const p = Math.max(.2, Math.min(.8, (wins + 3) / (wins + losses + 6)));
-  return { win: Math.max(110, Math.min(500, Math.floor(92 / p))),
-    loss: Math.max(110, Math.min(500, Math.floor(92 / (1 - p)))) };
+  // Community-friendly odds: 2.10x at an even match, while keeping a
+  // hard 5.00x cap for scarce underdog outcomes. Existing cards retain their
+  // originally snapshotted odds and all wallet/settlement rules stay unchanged.
+  const quote = (chance: number) => Math.max(125, Math.min(500, Math.floor(105 / chance)));
+  return { win: quote(p), loss: quote(1 - p) };
 }
 export function predictionCard(e: Event) {
   const until = new Date(e.closes_at + 9*3600000).toISOString().slice(11,16);
