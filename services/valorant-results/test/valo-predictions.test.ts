@@ -127,12 +127,13 @@ test('expiry refunds funds and is idempotent',async()=>{
   assert.equal(await expirePredictions(f.env,start+6*3600000+1),0);
   assert.equal(f.balance(),100000);
 });
-test('late-match card cannot select a game started before the card opened',async()=>{
+test('late-match card refunds post-kickoff wagers on the first game already underway',async()=>{
   const f=await fixture();
   await f.open();await f.buy();
-  assert.equal(await settlePredictions(f.env,f.match(start-5000),'One#JP1',start+999999,mapping),0);
-  assert.equal(f.balance(),99000);
-  assert.equal((f.sqlite.prepare('SELECT status FROM vp_events').get() as {status:string}).status,'open');
+  assert.equal(await settlePredictions(f.env,f.match(start-5000),'One#JP1',start+999999,mapping),1);
+  assert.equal(f.balance(),100000);
+  assert.equal((f.sqlite.prepare('SELECT status FROM vp_events').get() as {status:string}).status,'resolved');
+  assert.equal((f.sqlite.prepare('SELECT status FROM vp_tickets').get() as {status:string}).status,'refunded');
 });
 test('ACT odds are snapshotted from indexed notifications',async()=>{
   const f=await fixture();
@@ -291,17 +292,23 @@ test('already published match result recovers an unsettled prediction without do
   assert.equal(f.balance(),101100);
 });
 
-test('a result from a match already running before card creation is skipped safely',async()=>{
+test('recovery refunds the first game already running before a card; no next-match windfall',async()=>{
   const f=await fixture();
   await f.open();await f.buy();
   f.sqlite.prepare('INSERT INTO notifications(riot_id,match_id,message,ended_at,mode,act_id,act_name,outcome,sent) VALUES(?,?,?,?,?,?,?,?,1)')
-    .run('One#JP1','m1','posted',start+300000,'competitive','act','E9A1','win');
-  const fetchOld=async()=>f.match(start-10000,true);
-  assert.equal(await recoverPendingPredictions(f.env,fetchOld,start+900000,mapping),0);
+    .run('One#JP1','m1','posted',start+300000,'competitive','act','E9A1','loss');
+  const first=async()=>f.match(start-10000,false);
+  assert.equal(await recoverPendingPredictions(f.env,first,start+900000,mapping),1);
+  assert.equal((f.sqlite.prepare('SELECT status,payout FROM vp_tickets').get() as {status:string;payout:number}).status,'refunded');
+  assert.equal(f.balance(),100000);
+  assert.equal(await settlePredictions(f.env,f.match(start+35*60000,true),'One#JP1',start+40*60000,mapping),0);
+  assert.equal(f.balance(),100000);
+});
+
+test('match finished before card was opened is never selected for settlement',async()=>{
+  const f=await fixture();
+  await f.open();await f.buy();
+  assert.equal(await settlePredictions(f.env,f.match(start-700000,false),'One#JP1',start+1000000,mapping),0);
   assert.equal((f.sqlite.prepare('SELECT status FROM vp_tickets').get() as {status:string}).status,'pending');
   assert.equal(f.balance(),99000);
-  // Verified preexisting games are excluded on the next recovery scan.
-  let calls=0;
-  assert.equal(await recoverPendingPredictions(f.env,async()=>{calls++;return f.match();},start+900000,mapping),0);
-  assert.equal(calls,0);
 });
