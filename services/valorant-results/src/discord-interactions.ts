@@ -170,6 +170,8 @@ export async function discordInteractions(request: Request, env: Env, ctx: Execu
   }
   if((gcRecruit||gcDuel)&&(!interaction.member?.user?.id||!/^\d{15,22}$/.test(interaction.member.user.id)))
     return respond('Discordのユーザーを確認できない。');
+  if(gcRecruit&&(!/^\d{15,22}$/.test(interaction.message?.id??'')||!/^\d{15,22}$/.test(interaction.message?.channel_id??'')))
+    return respond('募集投稿を確認できない。');
   if (vpButton) {
     const matched = PREDICTION_BUTTON.exec(interaction.data!.custom_id!)!;
     if (!interaction.member?.user?.id) return respond('Discordのユーザーを確認できません。');
