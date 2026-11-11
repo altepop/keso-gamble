@@ -97,14 +97,16 @@ export async function openPrediction(env:KpEnv,id:string,guild:string,riot:strin
   if(!player)throw Error('対象者を登録済み一覧から選んでください。');
   await ensurePredictions(env.DB);
   await expirePredictions(env,now);
-  // An unused, expired card must not block the next card for six hours.
-  // Never cancel an event with tickets: those must remain eligible for
-  // authenticated match settlement or receive a normal timed refund.
-  await env.DB.prepare("UPDATE vp_events SET status='cancelled' WHERE guild=? AND riot=? AND mode=? AND status='open' AND closes_at<? AND NOT EXISTS(SELECT 1 FROM vp_tickets t WHERE t.event_id=vp_events.id)")
-    .bind(guild,riot,mode,now).run();
-  const old=await env.DB.prepare('SELECT id FROM vp_events WHERE guild=? AND riot=? AND mode=? AND status=\'open\' LIMIT 1')
-    .bind(guild,riot,mode).first<{id:string}>();
-  if(old)throw Error('この対象者・モードは受付中です。既存のカードを使用してください。');
+  const old=await env.DB.prepare('SELECT id,closes_at FROM vp_events WHERE guild=? AND riot=? AND mode=? AND status=\'open\' LIMIT 1')
+    .bind(guild,riot,mode).first<{id:string;closes_at:number}>();
+  if(old){
+    if(old.closes_at>=now)throw Error('この対象者・モードは受付中です。既存のカードを使用してください。');
+    // Only an expired, unused card can be retired to let the next card open.
+    // Skip the UPDATE for ordinary openings to preserve the D1 write budget.
+    const retired=await env.DB.prepare("UPDATE vp_events SET status='cancelled' WHERE id=? AND status='open' AND closes_at<? AND NOT EXISTS(SELECT 1 FROM vp_tickets WHERE event_id=?)")
+      .bind(old.id,now,old.id).run();
+    if(!retired.meta.changes)throw Error('この対象者・モードは受付中です。既存のカードを使用してください。');
+  }
   const act=await env.DB.prepare('SELECT act_id,act_name FROM notifications WHERE riot_id=? AND mode=? AND act_id IS NOT NULL AND outcome IN (\'win\',\'loss\') ORDER BY ended_at DESC,match_id DESC LIMIT 1')
     .bind(riot,mode).first<{act_id:string;act_name:string|null}>();
   const count=act?await env.DB.prepare('SELECT SUM(CASE WHEN outcome=\'win\' THEN 1 ELSE 0 END) AS wins,SUM(CASE WHEN outcome=\'loss\' THEN 1 ELSE 0 END) AS losses FROM notifications WHERE riot_id=? AND mode=? AND act_id=?')
