@@ -61,7 +61,7 @@ async function fixture(){
     players:[{puuid:'p-one',team_id:'red'}],
     teams:[{team_id:'red',won},{team_id:'blue',won:!won}],
   });
-  return {env,sqlite,balance,open,buy,match};
+  return {env,sqlite,balance,open,buy,match,roster};
 }
 test('prediction cards use Components V2 and modal amount is validated',()=>{
   assert.deepEqual(predictionOdds(0,0),{win:210,loss:210});
@@ -216,4 +216,22 @@ test('an expired 10-minute card cannot be bought despite upstream match results 
   const receipt=await f.buy('100000000000001001',1000,start+600001);
   assert.match(receipt,/受付が終了/);
   assert.equal(f.balance(),100000);
+});
+
+test('an unused expired prediction card can be replaced without waiting for six-hour refund',async()=>{
+  const f=await fixture();
+  await f.open();
+  const next=await openPrediction(f.env,'100000000000001002',guild,'One#JP1','competitive',f.roster,start+600001,mapping);
+  assert.equal(next.flags,32768);
+  const rows=f.sqlite.prepare('SELECT id,status FROM vp_events ORDER BY created_at').all() as Array<{id:string;status:string}>;
+  assert.deepEqual(rows.map(r=>r.status),['cancelled','open']);
+  assert.equal(f.sqlite.prepare('SELECT COUNT(*) AS n FROM vp_tickets').get()!.n,0);
+});
+
+test('an expired card with existing tickets is NOT cancelled early, preserving settlement',async()=>{
+  const f=await fixture();
+  await f.open();await f.buy();
+  await assert.rejects(()=>openPrediction(f.env,'100000000000001002',guild,'One#JP1','competitive',f.roster,start+600001,mapping),/受付中/);
+  const row=f.sqlite.prepare('SELECT status FROM vp_events').get() as {status:string};
+  assert.equal(row.status,'open');
 });
