@@ -7,9 +7,10 @@ const DISCORD_BOT_TOKEN=process.env.DISCORD_BOT_TOKEN;
 const MUSIC_BRIDGE_TOKEN=process.env.MUSIC_BRIDGE_TOKEN;
 const MUSIC_GUILD_ID=process.env.MUSIC_GUILD_ID;
 const PORT=Number(process.env.PORT??10000);
-if(!DISCORD_BOT_TOKEN||!MUSIC_BRIDGE_TOKEN||MUSIC_BRIDGE_TOKEN.length<32
-  ||!/^\d{15,22}$/.test(MUSIC_GUILD_ID??'')||!Number.isInteger(PORT)||PORT<1||PORT>65535){
- console.error('Music voice service configuration incomplete (token, bridge token, guild or port)');
+const configured=Boolean(DISCORD_BOT_TOKEN&&MUSIC_BRIDGE_TOKEN&&MUSIC_BRIDGE_TOKEN.length>=32
+  &&/^\d{15,22}$/.test(MUSIC_GUILD_ID??''));
+if(!Number.isInteger(PORT)||PORT<1||PORT>65535){
+ console.error('Music voice service port invalid');
  process.exit(1);
 }
 function equal(a,b){
@@ -41,10 +42,12 @@ async function readBody(req){
 const server=createServer(async(req,res)=>{
  const path=new URL(req.url??'/', 'http://localhost').pathname;
  if(req.method==='GET'&&path==='/health'){
-  return reply(res,200,{status:music.health().ready?'ready':'starting',active:music.health().active});
+  return reply(res,200,{status:!configured?'configuration_required':music.health().ready?'ready':'starting',
+    active:music.health().active});
  }
  if(req.method!=='POST'||path!=='/v1/music')
   return reply(res,404,{ok:false,message:'Not found'});
+ if(!configured)return reply(res,503,{ok:false,message:'Music voice service is not configured'});
  const token=String(req.headers.authorization??'').replace(/^Bearer /,'');
  if(!equal(token,MUSIC_BRIDGE_TOKEN))return reply(res,401,{ok:false,message:'Unauthorized'});
  try{
@@ -78,10 +81,11 @@ const server=createServer(async(req,res)=>{
 server.requestTimeout=30_000;
 server.listen(PORT,'0.0.0.0',()=>console.info('music_voice_http_ready'));
 client.once('clientReady',()=>console.info('music_voice_discord_ready'));
-client.login(DISCORD_BOT_TOKEN).catch(()=>{
+if(configured)client.login(DISCORD_BOT_TOKEN).catch(()=>{
  console.error('music_voice_discord_login_failed');
  process.exitCode=1;server.close();client.destroy();
 });
+else console.info('music_voice_configuration_required');
 function shutdown(){
  server.close();client.destroy();
 }
