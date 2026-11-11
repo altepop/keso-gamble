@@ -352,3 +352,16 @@ test('music modal can be closed from backdrop, close button and Escape; controls
  assert.equal(s.element('#music-panel').hidden,true);
  assert.equal(s.ctx.KesoMusic.getState().playing,true,'closing panel should not stop playback');
 });
+
+
+test('index references content-hashed player, lyrics and stylesheet; stale 8-song cache cannot persist',()=>{
+ const {createHash}=require('node:crypto');
+ const html=readFileSync(new URL('../index.html',import.meta.url),'utf8');
+ for(const path of ['music/player.css','music/lyrics.js','music/player.js']){
+  const bytes=readFileSync(new URL('../'+path,import.meta.url));
+  const hash=createHash('sha1').update('blob '+bytes.length+String.fromCharCode(0))
+   .update(bytes).digest('hex').slice(0,12);
+  assert.ok(html.includes('./'+path+'?v=music-'+hash),'outdated version: '+path);
+ }
+ assert.match(source,/id:"makekowa",title:"負け怖"/);
+});
