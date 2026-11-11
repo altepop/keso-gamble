@@ -105,10 +105,15 @@
       }
     ],
     "rating": {
-      "measurementGames": 5,
+      "measurementGames": 3,
+      "actPlacementGames": 1,
+      "episodePlacementGames": 3,
+      "episodeDefaultDrop": 600,
+      "rankDivisionPoints": 100,
+      "rankTierPoints": 300,
       "seriesWins": 3,
       "seriesLosses": 3,
-      "measurementInitial": 2000,
+      "measurementInitial": 900,
       "seriesGains": [
         100,
         70,

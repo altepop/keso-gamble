@@ -324,7 +324,7 @@ export async function collectKpMatch(env:KpEnv,mapping:KpMapping,raw:Match,puuid
  const {net,note:rewardNote,lottery,escalation}=modern?valoKp(raw,puuid,status.mode,status.outcome,escalationV5,escalationV6,unratedV7,modeV7):{...legacyValoKp(raw,puuid,status.mode,status.outcome),lottery:undefined,escalation:undefined};
  const rankedEsc=modeV7&&status.mode==='escalation'&&['win','loss'].includes(status.outcome??'');
  const rating=rankedEsc?escalationPowerProof(raw,puuid):null;
- const note=rewardNote+(rankedEsc?(rating?`（エスカパワー：${status.outcome==='win'?'勝利':'敗北'}・成績補正${rating.performance}）`:'（エスカパワー：ACT情報取得待ち）'):'');
+ const note=rewardNote+(rankedEsc?(rating?`（エスカランク：${status.outcome==='win'?'勝利':'敗北'}・成績補正${rating.performance}）`:'（エスカランク：ACT・エピソード情報取得待ち）'):'');
  // Events hold the earned part (never negative); a cost is a separate debit capped at the balance.
  const e:KpEvent={id,guild:mapping.guildId,user:link.user,puuid,match:raw.metadata.match_id,mode:status.mode,outcome:status.outcome,amount:Math.max(0,net),policy:unratedV7?UNRATED_REWARD_VERSION:modeV7&&status.mode==='escalation'?ESCALATION_RATING_POLICY:modeV7?TEAM_SWIFT_REWARD_VERSION:modern?(status.mode==='escalation'&&!escalationV5?'mode-rewards-v4':status.mode==='escalation'&&!escalationV6?'mode-rewards-v5':MODE_REWARD_VERSION):policy.version,at:Date.now(),...net<0?{penalty:-net}:{},...note?{note}:{},...(unratedV7&&net>=UNRATED_JACKPOT)?{jackpot:net}:lottery!==undefined&&lottery>=UNRATED_JACKPOT?{jackpot:lottery}:{},...lottery!==undefined?{lottery}:{},...(spike?{kind:'spikerush-growth' as const,spike,policy:SPIKE_POLICY}:{}),...(escalation?{escalation}:{}),...(rating?{rating}:{})};
  await env.DB.prepare('INSERT OR IGNORE INTO kp_inbox VALUES(?,?,?)').bind(id,JSON.stringify(e),Date.now()).run();
@@ -370,11 +370,11 @@ export async function flushKpDirectives(env:KpEnv & {DISCORD_WEBHOOK_URL:string;
 /** Per monitor run: lazily load only the exact matches Henrik returned.
  * The old cron preloaded a 200-result 5-table JOIN every minute even if no game
  * was played: 451,540 D1 rows/day (2026-11-01 Insights). */
-export interface KpRun { mapping:KpMapping; startsAt:number; credits:Map<string,number>; relicBonuses:Map<string,number>; messages:Map<string,string>; notes?:Map<string,string>; loaded:Set<string>;pendingPower?:Set<string>;act?:{id:string;name:string|null;startedAt:number}|null }
+export interface KpRun { mapping:KpMapping; startsAt:number; credits:Map<string,number>; relicBonuses:Map<string,number>; messages:Map<string,string>; notes?:Map<string,string>; loaded:Set<string>;pendingPower?:Set<string>;act?:{id:string;name:string|null;startedAt:number;episode?:string|null}|null }
 export async function prepareKpRun(env:KpEnv,mapping:KpMapping):Promise<KpRun>{
  await ensureEscalationRating(env);
- const start=await env.DB.prepare("SELECT s.value,a.act,a.name,a.started_at FROM kp_settings s LEFT JOIN kp_escalation_current_acts a ON a.guild=? WHERE s.key='starts_at'").bind(mapping.guildId).first<{value:string;act:string|null;name:string|null;started_at:number|null}>();
- return {mapping,startsAt:Number(start?.value??Infinity),credits:new Map(),relicBonuses:new Map(),messages:new Map(),notes:new Map(),loaded:new Set(),pendingPower:new Set(),act:start?.act?{id:start.act,name:start.name,startedAt:Number(start.started_at)}:null};
+ const start=await env.DB.prepare("SELECT s.value,a.act,a.name,a.episode,a.started_at FROM kp_settings s LEFT JOIN kp_escalation_current_acts a ON a.guild=? WHERE s.key='starts_at'").bind(mapping.guildId).first<{value:string;act:string|null;name:string|null;episode:string|null;started_at:number|null}>();
+ return {mapping,startsAt:Number(start?.value??Infinity),credits:new Map(),relicBonuses:new Map(),messages:new Map(),notes:new Map(),loaded:new Set(),pendingPower:new Set(),act:start?.act?{id:start.act,name:start.name,episode:start.episode,startedAt:Number(start.started_at)}:null};
 }
 /** Indexed id lookup: preserves old-match payouts, edited result messages and
  * delayed KP recovery without scanning all historic results for every poll.

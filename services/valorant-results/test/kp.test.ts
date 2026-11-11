@@ -1178,16 +1178,16 @@ test('v7 reuses the existing per-match settings read without adding database rou
 });
 
 
-test('Escalation power measures five games, closes at three wins/losses, stays separate from KP and never rerates duplicates',async()=>{
+test('Escalation rank measures three games, closes at three wins/losses, stays separate from KP and never rerates duplicates',async()=>{
  const f=await fixture();f.enableHistory();seed(f.sql,one,1000000);f.sql.exec("UPDATE kp_settings SET value='0' WHERE key IN ('mode_rewards_started_at','valo_v7_started_at')");
- let n=0;const play=async(win:boolean)=>{const raw=game('power-'+(++n),'ggteam',win);raw.metadata={...raw.metadata,season:{id:'act-a',short:'ACT A'}} as any;await collectKpMatch(f.env,mapping,raw,'p-one');const before=JSON.stringify(f.sql.prepare('SELECT * FROM kp_escalation_ratings').get());await collectKpMatch(f.env,mapping,raw,'p-one');assert.equal(JSON.stringify(f.sql.prepare('SELECT * FROM kp_escalation_ratings').get()),before);};
- for(const win of [true,true,false,true])await play(win);
+ let n=0;const play=async(win:boolean)=>{const raw=game('power-'+(++n),'ggteam',win);raw.metadata={...raw.metadata,season:{id:'act-a',short:'e11a1'}} as any;await collectKpMatch(f.env,mapping,raw,'p-one');const before=JSON.stringify(f.sql.prepare('SELECT * FROM kp_escalation_ratings').get());await collectKpMatch(f.env,mapping,raw,'p-one');assert.equal(JSON.stringify(f.sql.prepare('SELECT * FROM kp_escalation_ratings').get()),before);};
+ for(const win of [true,false])await play(win);
  assert.equal((await readKpState(f.env,mapping,one)).escalationRating.rating,null);
- await play(false);let view=(await readKpState(f.env,mapping,one)).escalationRating;assert.equal(view.rating,2100);assert.equal(view.measurementGames,5);assert.equal(view.seriesWins,0);assert.equal(view.seriesLosses,0);assert.equal(view.leaders[0].rating,2100);
- for(const win of [true,true,true])await play(win);view=(await readKpState(f.env,mapping,one)).escalationRating;assert.equal(view.rating,2200);assert.equal(view.lastChange,100);assert.equal(view.seriesWins,0);
- for(const win of [false,false,false])await play(win);assert.equal((await readKpState(f.env,mapping,one)).escalationRating.rating,2100);
- for(const win of [true,false,true,false,true])await play(win);view=(await readKpState(f.env,mapping,one)).escalationRating;assert.equal(view.rating,2140);assert.equal(view.lastChange,40);
- for(const win of [false,true,false,true,false])await play(win);view=(await readKpState(f.env,mapping,one)).escalationRating;assert.equal(view.rating,2100);assert.equal(view.lastChange,-40);
+ await play(true);let view=(await readKpState(f.env,mapping,one)).escalationRating;assert.equal(view.rating,1000);assert.equal(view.measurementGames,3);assert.equal(view.seriesWins,0);assert.equal(view.seriesLosses,0);assert.equal(view.leaders[0].rating,1000);
+ for(const win of [true,true,true])await play(win);view=(await readKpState(f.env,mapping,one)).escalationRating;assert.equal(view.rating,1100);assert.equal(view.lastChange,100);assert.equal(view.seriesWins,0);
+ for(const win of [false,false,false])await play(win);assert.equal((await readKpState(f.env,mapping,one)).escalationRating.rating,1000);
+ for(const win of [true,false,true,false,true])await play(win);view=(await readKpState(f.env,mapping,one)).escalationRating;assert.equal(view.rating,1040);assert.equal(view.lastChange,40);
+ for(const win of [false,true,false,true,false])await play(win);view=(await readKpState(f.env,mapping,one)).escalationRating;assert.equal(view.rating,1000);assert.equal(view.lastChange,-40);
  assert.equal(view.played,n);assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM kp_events WHERE mode='escalation'").get()!.n,n);
  assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM kp_escalation_spins').get()!.n,0,'rated games have no special lottery');
  assert(!String(f.sql.prepare('SELECT note FROM kp_reward_notes ORDER BY rowid DESC LIMIT 1').get()!.note).includes('大勝負'));
@@ -1196,7 +1196,7 @@ test('Escalation power and KP commit atomically; failed rating update leaves no 
  const f=await fixture();f.enableHistory();seed(f.sql,one,1000000);f.sql.exec("UPDATE kp_settings SET value='0' WHERE key IN ('mode_rewards_started_at','valo_v7_started_at')");
  const {ensureEscalationRating}=await import('../src/escalation-rating.ts');await ensureEscalationRating(f.env);
  f.sql.exec("CREATE TRIGGER fixture_rating_failure BEFORE UPDATE ON kp_escalation_ratings BEGIN SELECT RAISE(ABORT,'fixture rating failure'); END");
- const raw=game('power-rollback','ggteam');raw.metadata={...raw.metadata,season:{id:'act-a',short:'ACT A'}} as any;await collectKpMatch(f.env,mapping,raw,'p-one');assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM kp_events').get()!.n,0);assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM kp_escalation_ratings').get()!.n,0);assert.equal((await readKpState(f.env,mapping,one)).cash,1000000);
+ const raw=game('power-rollback','ggteam');raw.metadata={...raw.metadata,season:{id:'act-a',short:'e11a1'}} as any;await collectKpMatch(f.env,mapping,raw,'p-one');assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM kp_events').get()!.n,0);assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM kp_escalation_ratings').get()!.n,0);assert.equal((await readKpState(f.env,mapping,one)).cash,1000000);
  f.sql.exec('DROP TRIGGER fixture_rating_failure');await drainKpInbox(f.env);await drainKpInbox(f.env);assert.equal(f.sql.prepare('SELECT played FROM kp_escalation_ratings').get()!.played,1);assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM kp_events').get()!.n,1);
 });
 test('new Swift big bets preserve sweep/contribution bonuses, retain their own mode in replay and pay once',async()=>{
@@ -1219,17 +1219,17 @@ test('two confirmed party members each receive only the selected TDM bonus and r
 
 test('unknown ACT defers only power; later verified ACT is reflected once without repaying KP and the hot monitor sees pending receipts',async()=>{
  const f=await fixture();f.enableHistory();f.sql.exec("UPDATE kp_settings SET value='0' WHERE key IN ('mode_rewards_started_at','valo_v7_started_at')");
- const raw:any=game('power-late-act','ggteam');const id=kpEventId(guild,raw.metadata.match_id,'p-one');
+ const raw:any=game('power-late-act','ggteam');raw.metadata.season={id:'act-old'};const id=kpEventId(guild,raw.metadata.match_id,'p-one');
  const amount=await collectKpMatch(f.env,mapping,raw,'p-one');assert.notEqual(amount,null);
  const cash=(await readKpState(f.env,mapping,one)).cash;
  assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM kp_escalation_power_matches').get()!.n,0);
  let run=await prepareKpRun(f.env,mapping);await loadKpRunMatch(f.env,run,id);assert(run.pendingPower?.has(id));
- assert.match(run.notes?.get(id)??'',/ACT情報取得待ち/);
+ assert.match(run.notes?.get(id)??'',/ACT・エピソード情報取得待ち/);
  const {observeEscalationAct,matchAct,syncEscalationPower}=await import('../src/escalation-rating.ts');
- const newer:any=game('new-act-observation');newer.metadata.season={id:'act-new',short:'ACT NEW'};newer.metadata.started_at=new Date(Date.now()-5000).toISOString();
+ const newer:any=game('new-act-observation');newer.metadata.season={id:'act-new',short:'e11a2'};newer.metadata.started_at=new Date(Date.now()-5000).toISOString();
  await observeEscalationAct(f.env,guild,matchAct(newer)!);
  await collectKpMatch(f.env,mapping,raw,'p-one');assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM kp_escalation_power_matches').get()!.n,0,'missing season never borrows the current ACT');
- raw.metadata.season={id:'act-old',short:'ACT OLD'};raw.players[0].stats={kills:30,deaths:10,assists:15};
+ raw.metadata.season={id:'act-old',short:'e11a1'};raw.players[0].stats={kills:30,deaths:10,assists:15};
  assert.equal(await syncEscalationPower(f.env,guild,one,id,raw,'p-one'),true);
  assert.equal(await syncEscalationPower(f.env,guild,one,id,raw,'p-one'),false);
  assert.equal(await collectKpMatch(f.env,mapping,raw,'p-one'),amount);

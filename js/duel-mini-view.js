@@ -1,4 +1,4 @@
-import {connect4LegalMoves,pokerHandName,pokerShowdownReason,validBluffBid} from './duel-mini-games.js?v=web-ed53af5a48aaf137';
+import {connect4LegalMoves,pokerHandName,pokerShowdownReason,validBluffBid} from './duel-mini-games.js?v=web-e6fd0d5f454c89ff';
 const h=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const safeData=r=>{try{return JSON.parse(r.board);}catch{return {};}};
 const privateValue=r=>{try{return JSON.parse(r.private_hand);}catch{return r.private_hand??null;}};
