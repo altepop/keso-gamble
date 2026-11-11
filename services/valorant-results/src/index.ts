@@ -2,6 +2,8 @@ import {matchAct,observeEscalationAct,syncEscalationPower} from './escalation-ra
 import {runSpikeCompensation} from './spike-compensation.ts';
 import {settlePredictions,expirePredictions} from './valo-predictions.ts';
 import {ensurePredictionCommand,predictionRegistrationStatus} from './predict-registration.ts';
+import {ensureGameCommands,gameCommandStatus} from './game-command-registration.ts';
+import {pruneGameRecruits} from './game-recruit.ts';
 import {storedMode} from './modes.ts';
 import {queueCommunityNews} from './community-news.ts';
 import {queueRelicPress} from './relic-press.ts';
@@ -571,6 +573,9 @@ export default {
   fetch(request: Request, env: Env, ctx: ExecutionContext) {
     if(new URL(request.url).pathname.startsWith('/api/racing/'))return raceVideoApi(request,env).catch(()=>new Response('Unavailable',{status:503}));
     if(request.method==='GET'&&new URL(request.url).pathname==='/api/mahjong/status')return mahjongStatus(env).then(status=>Response.json(status,{headers:{'Cache-Control':'no-store'}})).catch(()=>Response.json({enabled:false,error:'configuration_unavailable'},{status:503}));
+    if(request.method==='GET'&&new URL(request.url).pathname==='/api/discord/games/status')
+      return gameCommandStatus(env.DB).then(info=>Response.json(info,{headers:{'Cache-Control':'no-store'}}))
+        .catch(()=>Response.json({registered:false,error:'status_unavailable'},{status:503}));
     if(request.method==='GET'&&new URL(request.url).pathname==='/api/discord/predict/status')
       return predictionRegistrationStatus(env.DB).then(s=>Response.json(s,{headers:{'Cache-Control':'no-store'}}))
         .catch(()=>Response.json({command:'predict',registered:false,error:'status_unavailable'},{status:503}));
@@ -591,9 +596,16 @@ export default {
       ctx.waitUntil(track(env,'prediction_command',()=>ensurePredictionCommand(env).then(ok=>{
         if(!ok)throw Error('Prediction command credentials unavailable');
       })));
+    // Upsert only the three new game commands using the existing scoped OAuth setup.
+    if(Math.floor((_event.scheduledTime??Date.now())/60000)%10===0)
+      ctx.waitUntil(track(env,'game_commands',()=>ensureGameCommands(env).then(ok=>{
+        if(!ok)throw Error('Game center credentials unavailable');
+      })));
     // Expire unanswered prediction cards and refund reserved KP without another match API poll.
     if(Math.floor((_event.scheduledTime??Date.now())/60000)%30===0)
       ctx.waitUntil(track(env,'prediction_expiry',()=>expirePredictions(env)));
+    if(Math.floor((_event.scheduledTime??Date.now())/60000)%30===0)
+      ctx.waitUntil(track(env,'game_recruit_cleanup',()=>pruneGameRecruits(env.DB)));
     // Every five minutes, finish abandoned KP board matches; indexed and skipped until first use.
     if(Math.floor((_event.scheduledTime??Date.now())/60000)%5===0)
       ctx.waitUntil(track(env,'board_duel_timeout',async()=>{const mapping=await initializeKp(env);if(mapping)await settleExpiredBoardDuels(env,mapping.guildId);}));

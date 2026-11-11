@@ -47,7 +47,7 @@ test('Gateway identifies with voice-only metadata intents, tracks humans, resume
   assert.equal(JSON.stringify([...storage.data.values()]).includes(token),false);
   await gateway.alarm();const socket=sockets[0]!;
   socket.packet({op:10,d:{heartbeat_interval:1000}});await gateway.fetch(new Request('https://voice/status'));await new Promise(r=>setTimeout(r,5));
-  assert.equal(socket.sent.find(p=>p.op===2).d.intents,129);
+  assert.equal(socket.sent.find(p=>p.op===2).d.intents,1153,'voice state and guild reaction events only');
   socket.packet({op:11});socket.packet({op:0,s:1,t:'READY',d:{session_id:'fixture-session',resume_gateway_url:'wss://gateway.discord.gg'}});
   socket.packet({op:0,s:2,t:'GUILD_CREATE',d:{id:discord.guildId,afk_channel_id:'afk',channels:[{id:'normal',type:2},{id:'afk',type:2},{id:'stage',type:13}],members:[{user:{id:user}},{user:{id:bot,bot:true}}],voice_states:[{user_id:user,channel_id:'normal'},{user_id:bot,channel_id:'normal'}]}});
   let status=await (await gateway.fetch(new Request('https://voice/status'))).json() as {connected:boolean;tracked:number};assert.equal(status.connected,true);assert.equal(status.tracked,1);

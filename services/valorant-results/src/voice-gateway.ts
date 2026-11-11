@@ -2,6 +2,8 @@ import {KP_COMMAND_VERSION,registerKpCommands} from './kp-command.ts';
 import discord from '../discord-config.json' with {type:'json'};
 import {VoiceClock,eligibleVoice,creditVoiceSlot} from './voice-rewards.ts';
 import type {KpEnv} from './kp.ts';
+import {reactionRecruit} from './game-recruit.ts';
+import {recruitCard} from './game-center.ts';
 export interface VoiceEnv extends KpEnv {KP_BOOTSTRAP_PRIVATE_KEY?:string;VOICE_GATEWAY?:DurableObjectNamespace}
 interface Packet {op:number;s?:number|null;t?:string;d?:any}
 const bytes=(s:string)=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
@@ -17,6 +19,7 @@ export class VoiceGateway {
  private heartbeatTimer:ReturnType<typeof setInterval>|undefined;private firstHeartbeat:ReturnType<typeof setTimeout>|undefined;
  private voices=new Map<string,string|null>();private bots=new Map<string,boolean>();private channels=new Map<string,number>();private afk:string|null=null;
  private commandsRegistered=false;private commandsAfter=0;private commandsError='';
+ private recruitSweepAfter=0;
  private apiAfter=0;private nextConnect=0;private error='unconfigured';private stopped=false;private tail:Promise<unknown>=Promise.resolve();private init:Promise<void>;private clock:VoiceClock;
  private ctx:DurableObjectState;private env:VoiceEnv;
  constructor(ctx:DurableObjectState,env:VoiceEnv){
@@ -74,7 +77,7 @@ export class VoiceGateway {
      if(this.interval<1000||this.interval>120000){this.disconnect('invalid_heartbeat');return;}
      this.firstHeartbeat=setTimeout(()=>{this.heartbeat();this.heartbeatTimer=setInterval(()=>this.heartbeat(),this.interval);},Math.floor(Math.random()*this.interval));
      if(this.session)this.send({op:6,d:{token:this.token,session_id:this.session,seq:this.seq}});
-     else this.send({op:2,d:{token:this.token,intents:129,properties:{os:'linux',browser:'keso-voice',device:'keso-voice'},...(shards>1?{shard:[Number((BigInt(this.guild)>>22n)%BigInt(shards)),shards]}:{})}});
+     else this.send({op:2,d:{token:this.token,intents:1153,properties:{os:'linux',browser:'keso-voice',device:'keso-voice'},...(shards>1?{shard:[Number((BigInt(this.guild)>>22n)%BigInt(shards)),shards]}:{})}});
      return;
     }
     if(packet.op===11){this.waitingAck=false;this.lastAck=receivedAt;return;}
@@ -93,7 +96,21 @@ export class VoiceGateway {
      this.ready=true;this.error='';await this.clock.checkpoint(receivedAt,[],false);return;
     }
     if(data?.guild_id!==this.guild&&data?.id!==this.guild)return;
-    if(packet.t==='VOICE_STATE_UPDATE'){
+    if((packet.t==='MESSAGE_REACTION_ADD'||packet.t==='MESSAGE_REACTION_REMOVE')
+      &&data?.emoji?.name==='✅'&&/^\d{15,22}$/.test(data.message_id??'')
+      &&/^\d{15,22}$/.test(data.channel_id??'')&&/^\d{15,22}$/.test(data.user_id??'')
+      &&data.user_id!==discord.applicationId&&!data.member?.user?.bot&&!this.bots.get(data.user_id)){
+     const key='gc:recruit:'+data.message_id;
+     const until=await this.ctx.storage.get<number>(key);
+     if(!until)return;
+     if(until<receivedAt){await this.ctx.storage.delete(key);return;}
+     const updated=await reactionRecruit(this.env,this.guild,data.channel_id,data.message_id,
+       data.user_id,packet.t==='MESSAGE_REACTION_ADD',receivedAt);
+     if(!updated){await this.ctx.storage.delete(key);return;}
+     try{await this.api('/channels/'+data.channel_id+'/messages/'+data.message_id,this.token,
+       'PATCH',{components:recruitCard(updated,discord.applicationId).components,allowed_mentions:{parse:[]}});}
+     catch{console.warn('game_recruit_message_update_pending');}
+    }else if(packet.t==='VOICE_STATE_UPDATE'){
      await this.checkpoint(receivedAt);
      if(data.member?.user?.id===data.user_id)this.bots.set(data.user_id,Boolean(data.member.user.bot));
      if(data.channel_id)this.voices.set(data.user_id,data.channel_id);else this.voices.delete(data.user_id);
@@ -114,6 +131,12 @@ export class VoiceGateway {
     try{const member=await this.api('/guilds/'+this.guild+'/members/'+user);if(member.user?.id===user)this.bots.set(user,Boolean(member.user.bot));}catch{break;}
    }
    await this.connect();
+   if(Date.now()>=this.recruitSweepAfter){
+     this.recruitSweepAfter=Date.now()+3600_000;
+     try{const values=await this.ctx.storage.list<number>({prefix:'gc:recruit:'});
+       for(const [key,until] of values)if(until<Date.now())await this.ctx.storage.delete(key);}
+     catch{console.warn('game_recruit_storage_cleanup_pending');}
+   }
    if(this.token&&!this.stopped&&!this.commandsRegistered&&Date.now()>=this.commandsAfter){
     try{
      if(await this.ctx.storage.get('kp_command_version')!==KP_COMMAND_VERSION){await registerKpCommands(discord.applicationId,this.guild,(path,method,body)=>this.api(path,this.token,method,body));await this.ctx.storage.put('kp_command_version',KP_COMMAND_VERSION);}
@@ -141,6 +164,25 @@ export class VoiceGateway {
    this.encrypted=body.encryptedToken;
    await this.ctx.storage.put('config',{encryptedToken:this.encrypted,guildId:this.guild});await this.ctx.storage.setAlarm(Date.now()+1000);
    return Response.json({accepted:true});
+  }
+  if(url.pathname==='/recruit/register'&&request.method==='POST'){
+    if(!this.token)return new Response('Bot unavailable',{status:503});
+    const raw=await request.text();if(raw.length>512)return new Response('Too large',{status:413});
+    let body:{guild?:string;channel?:string;message?:string};
+    try{body=JSON.parse(raw);}catch{return new Response('Invalid JSON',{status:400});}
+    if(body.guild!==this.guild||!/^\d{15,22}$/.test(body.channel??'')
+       ||!/^\d{15,22}$/.test(body.message??''))return new Response('Invalid recruitment',{status:400});
+    const row=await this.env.DB.prepare('SELECT expires_at FROM gc_recruits WHERE guild=? AND channel_id=? AND message_id=? AND expires_at>?')
+      .bind(this.guild,body.channel,body.message,Date.now()).first<{expires_at:number}>();
+    if(!row)return new Response('Recruitment not found',{status:404});
+    await this.ctx.storage.put('gc:recruit:'+body.message,row.expires_at);
+    try{
+      const endpoint='https://discord.com/api/v10/channels/'+body.channel+'/messages/'+body.message
+        +'/reactions/'+encodeURIComponent('✅')+'/@me';
+      const added=await fetch(endpoint,{method:'PUT',headers:{Authorization:'Bot '+this.token},signal:AbortSignal.timeout(10000)});
+      if(!added.ok)throw Error('reaction HTTP '+added.status);
+    }catch{console.warn('game_recruit_reaction_seed_pending');}
+    return Response.json({registered:true});
   }
   if(url.pathname==='/ensure'){await this.connect();if(this.token)await this.ctx.storage.setAlarm(Date.now()+30000);return Response.json(this.status());}
   if(url.pathname==='/progress'){
