@@ -53,7 +53,8 @@ export function predictionOdds(wins: number, losses: number) {
   // Community-friendly odds: 2.10x at an even match, while keeping a
   // hard 5.00x cap for scarce underdog outcomes. Existing cards retain their
   // originally snapshotted odds and all wallet/settlement rules stay unchanged.
-  const quote = (chance: number) => Math.max(125, Math.min(500, Math.floor(105 / chance)));
+  // Avoid IEEE-754 rounding turning a mathematically exact 2.45x into 2.44x.
+  const quote = (chance: number) => Math.max(125, Math.min(500, Math.floor(105 / chance + 1e-9)));
   return { win: quote(p), loss: quote(1 - p) };
 }
 export function predictionCard(e: Event) {
