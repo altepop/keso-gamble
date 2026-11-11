@@ -144,7 +144,11 @@ export async function musicKeepalive(env:Env,origin?:string,request:typeof fetch
   return false;
  try{
   const headers:Record<string,string>={Authorization:'Bearer '+env.MUSIC_BRIDGE_TOKEN};
-  if(origin&&allowedOrigin(origin))headers['X-Keso-Music-State-URL']=origin;
+  if(origin){
+   try{const candidate=new URL(origin).origin;
+    if(allowedOrigin(candidate))headers['X-Keso-Music-State-URL']=candidate;
+   }catch{ /* Omit an invalid URL hint. */ }
+  }
   const res=await request(new URL('/health',env.MUSIC_VOICE_URL),{
    headers,signal:AbortSignal.timeout(8_000)});
   if(!res.ok)return false;
