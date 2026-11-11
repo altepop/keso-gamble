@@ -354,11 +354,11 @@ async function reconcileDollyPredictionIncident(env:Env):Promise<void>{
   const firstMatch='edab9334-5520-4d35-9ded-a92e3fe0b412';
   const marker='vp:incident:20261111:corrected';
   const correctionPost='vp:correction:'+eventId;
-  const msg='🎯 **勝敗予想の精算訂正｜VDK（コンペ）**\\n'
+  const msg='🎯 **勝敗予想の精算訂正｜VDK（コンペ）**\n'
     +'23:27:18に試合開始、23:27:33に予想カードが発行されたため、すべて試合開始後の購入でした。'
-    +'先に終了した敗北試合を飛ばして次の勝利で判定していた不具合を修正しました。\\n'
-    +'**勝利予想 10,000 KPは全額返金**（誤払戻しとの差額17,600 KPを調整）\\n'
-    +'**敗北予想 5,000 KPも全額返金**\\n'
+    +'先に終了した敗北試合を飛ばして次の勝利で判定していた不具合を修正しました。\n'
+    +'**勝利予想 10,000 KPは全額返金**（誤払戻しとの差額17,600 KPを調整）\n'
+    +'**敗北予想 5,000 KPも全額返金**\n'
     +'-# 試合開始時刻まで有効。返金・調整は重複して行いません。';
   if(await state(env,marker)>0){
     if(env.KP_EARNINGS_WEBHOOK_URL){await ensurePosts(env);await enqueue(env,correctionPost,msg,Date.now());}
