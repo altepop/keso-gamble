@@ -6,7 +6,7 @@ import { URL as NodeURL } from 'node:url';
 import {
   PREDICTION_BUTTON, PREDICTION_MODAL, predictionAmount, predictionModal, predictionCard,
   predictionOdds, openPrediction, buyPrediction, settlePredictions, expirePredictions,
-  predictionWasAccepted, predictionBetAnnouncement,
+  predictionWasAccepted, predictionBetAnnouncement, reconcilePredictionPosts,
 } from '../src/valo-predictions.ts';
 import { initializeKp } from '../src/kp.ts';
 import type { KpEnv, KpMapping } from '../src/kp.ts';
@@ -239,4 +239,33 @@ test('an expired card with existing tickets is NOT cancelled early, preserving s
   await assert.rejects(()=>openPrediction(f.env,'100000000000001002',guild,'One#JP1','competitive',f.roster,start+600001,mapping),/受付中/);
   const row=f.sqlite.prepare('SELECT status FROM vp_events').get() as {status:string};
   assert.equal(row.status,'open');
+});
+
+test('a settled ticket without an enqueued outcome post is recovered exactly once',async()=>{
+  const f=await fixture();
+  await f.open();await f.buy();
+  await settlePredictions(f.env,f.match(),'One#JP1',start+999999,mapping);
+  // Simulate outcome delivery being unavailable during settlement.
+  const env=f.env as KpEnv & {KP_EARNINGS_WEBHOOK_URL?:string};
+  env.KP_EARNINGS_WEBHOOK_URL='https://discord.com/api/webhooks/test/unused';
+  assert.equal(await reconcilePredictionPosts(env,start+60_000),1);
+  const record=f.sqlite.prepare("SELECT body FROM kp_posts WHERE id='vp:result:100000000000001001'").get() as {body:string};
+  const body=JSON.parse(record.body) as {content:string};
+  assert.match(body.content,/試合結果：\\*\\*勝利\\*\\*/);
+  assert.match(body.content,/的中 1件/);
+  assert.equal(await reconcilePredictionPosts(env,start+60_000),0);
+  assert.equal((f.sqlite.prepare('SELECT COUNT(*) AS n FROM kp_posts').get() as {n:number}).n,1);
+  assert.equal(f.balance(),101100); // Posting never changes the settled wallet.
+});
+
+test('expired prediction with reserved KP gets a visible refund outcome',async()=>{
+  const f=await fixture();
+  await f.open();await f.buy();
+  await expirePredictions(f.env,start+6*3600000+1);
+  const env=f.env as KpEnv & {KP_EARNINGS_WEBHOOK_URL?:string};
+  env.KP_EARNINGS_WEBHOOK_URL='https://discord.com/api/webhooks/test/unused';
+  assert.equal(await reconcilePredictionPosts(env,start+6*3600000+1),1);
+  const record=f.sqlite.prepare("SELECT body FROM kp_posts WHERE id='vp:result:100000000000001001'").get() as {body:string};
+  assert.match((JSON.parse(record.body) as {content:string}).content,/全額返金/);
+  assert.equal(f.balance(),100000);
 });
