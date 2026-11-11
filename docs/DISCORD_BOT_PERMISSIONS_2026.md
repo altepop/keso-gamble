@@ -2,7 +2,7 @@
 
 ## 方針
 
-管理者・BAN・キック、ロール・絵文字・スタンプの管理権限は付与しない。KESO PLAYはゲームBotとして、利用者のコンテンツやサーバー全体を変更できる管理権限を持たせない。現行の権限申請スクリプトは **18項目の基本権限** に限定した。音声チャンネルへの他人の移動とプライベートスレッド作成は明示的な追加オプションにした。
+管理者・BAN・キック、ロール・絵文字・スタンプの管理権限は付与しない。KESO PLAYはゲームBotとして、利用者のコンテンツやサーバー全体を変更できる管理権限を持たせない。現行の権限申請スクリプトは **19項目の基本権限** に限定した。音声チャンネルへの他人の移動とプライベートスレッド作成は明示的な追加オプションにした。
 
 **Discord権限を許可するだけでは機能は実装されない**。本番Botの稼働コード・既存の通話Gateway・D1・KP精算は、このPRでは変更しない。
 
@@ -31,16 +31,18 @@ node services/valorant-results/scripts/discord-permission-upgrade.mjs --with-pri
 
 移動は本人の同意を得た試合募集・自動チーム分けでしか使用しない。非公開スレッドは本当に必要な場合に限る。サーバー全体へのチャンネル管理・イベント管理・スレッド管理はオプションでも要求しない。
 
-## 基本権限 18項目
+## 基本権限 19項目
 
 | 分野 | 権限 |
 |---|---|
 | 投稿・結果通知 | VIEW_CHANNEL / SEND_MESSAGES / EMBED_LINKS / ATTACH_FILES / READ_MESSAGE_HISTORY |
-| 投票・告知 | ADD_REACTIONS / SEND_POLLS / PIN_MESSAGES |
+| 投票・告知 | ADD_REACTIONS / SEND_POLLS / PIN_MESSAGES / MENTION_EVERYONE |
 | 公開スレッド | CREATE_PUBLIC_THREADS / SEND_MESSAGES_IN_THREADS |
 | イベント | CREATE_EVENTS （Bot自身のイベントの編集・削除も可能） |
 | 通話・既存のサウンド | CONNECT / SPEAK / USE_SOUNDBOARD / USE_EXTERNAL_SOUNDS / SET_VOICE_CHANNEL_STATUS |
 | Activityとコマンド | USE_EMBEDDED_ACTIVITIES / USE_APPLICATION_COMMANDS |
+
+※ MENTION_EVERYONE は重大イベントでのみ、運営が事前に許可した投稿種別・チャンネルに限り使用する。通常の勝敗速報・KP精算・繰り返し通知では使わない。通常のBot投稿は `allowed_mentions: {parse: []}` を維持し、承認済みの特別イベントだけ明示的に `everyone` を許可する。
 
 ※ PIN_MESSAGES はほかの投稿にも作用するため、実装する際はBotが投稿したメッセージだけを固定・解除する。音声演出はデフォルトOFF、明示的な操作で起動する。
 
@@ -49,7 +51,7 @@ node services/valorant-results/scripts/discord-permission-upgrade.mjs --with-pri
 - 絶対禁止：`ADMINISTRATOR` / `KICK_MEMBERS` / `BAN_MEMBERS`
 - 容量・管理方針：`MANAGE_ROLES` / `CREATE_GUILD_EXPRESSIONS` / `MANAGE_GUILD_EXPRESSIONS` / `USE_EXTERNAL_EMOJIS` / `USE_EXTERNAL_STICKERS`
 - 他者に影響する管理：`MANAGE_CHANNELS` / `MANAGE_MESSAGES` / `MANAGE_WEBHOOKS` / `MANAGE_GUILD` / `MODERATE_MEMBERS` / `MUTE_MEMBERS` / `DEAFEN_MEMBERS` / `MANAGE_NICKNAMES`
-- 通知・権限範囲：`MENTION_EVERYONE` / `MANAGE_EVENTS` / `MANAGE_THREADS`
+- 管理範囲：`MANAGE_EVENTS` / `MANAGE_THREADS`
 
 非公開スレッド作成とメンバー移動は、上記2つのオプションを使うときに限り承認する。Discordの音声チャンネル移動機能は悪用すれば通話を妨害できるため、対象チャンネルの上書き制限、実装上の参加同意を前提とする。
 
