@@ -6,6 +6,7 @@ import { URL as NodeURL } from 'node:url';
 import {
   PREDICTION_BUTTON, PREDICTION_MODAL, predictionAmount, predictionModal, predictionCard,
   predictionOdds, openPrediction, buyPrediction, settlePredictions, expirePredictions,
+  predictionWasAccepted, predictionBetAnnouncement,
 } from '../src/valo-predictions.ts';
 import { initializeKp } from '../src/kp.ts';
 import type { KpEnv, KpMapping } from '../src/kp.ts';
@@ -141,4 +142,20 @@ test('ACT odds are snapshotted from indexed notifications',async()=>{
   assert.match(JSON.stringify(card),/ACT E9A1/);
   const odds=f.sqlite.prepare('SELECT win_odds,loss_odds,wins,losses FROM vp_events').get() as {win_odds:number;loss_odds:number;wins:number;losses:number};
   assert.deepEqual({...odds},{win_odds:161,loss_odds:214,wins:1,losses:0});
+});
+
+
+test('public bet announcement mentions only the bettor and never reveals the wager',async()=>{
+  const f=await fixture();
+  await f.open();
+  const receipt=await f.buy();
+  assert.equal(predictionWasAccepted(receipt),true);
+  const notice=predictionBetAnnouncement(two);
+  assert.deepEqual(notice.allowed_mentions,{parse:[],users:[two]});
+  assert.match(notice.content,new RegExp('<@'+two+'>'));
+  assert.match(notice.content,/賭けたぞ/);
+  assert.doesNotMatch(notice.content,/勝利|敗北|win|loss|1000|1,000|1\\.84|的中|払い戻し/);
+  assert.equal(predictionWasAccepted(await f.buy()),false); // A duplicate must never trigger a second ping.
+  assert.equal(predictionWasAccepted(await buyPrediction(f.env,'100000000000001001',guild,visitor,'loss',1000,start+1000,mapping)),false);
+  assert.throws(()=>predictionBetAnnouncement('invalid'));
 });
