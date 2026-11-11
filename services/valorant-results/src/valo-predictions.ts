@@ -96,6 +96,11 @@ export async function openPrediction(env:KpEnv,id:string,guild:string,riot:strin
   if(!player)throw Error('対象者を登録済み一覧から選んでください。');
   await ensurePredictions(env.DB);
   await expirePredictions(env,now);
+  // An unused, expired card must not block the next card for six hours.
+  // Never cancel an event with tickets: those must remain eligible for
+  // authenticated match settlement or receive a normal timed refund.
+  await env.DB.prepare("UPDATE vp_events SET status='cancelled' WHERE guild=? AND riot=? AND mode=? AND status='open' AND closes_at<? AND NOT EXISTS(SELECT 1 FROM vp_tickets t WHERE t.event_id=vp_events.id)")
+    .bind(guild,riot,mode,now).run();
   const old=await env.DB.prepare('SELECT id FROM vp_events WHERE guild=? AND riot=? AND mode=? AND status=\'open\' LIMIT 1')
     .bind(guild,riot,mode).first<{id:string}>();
   if(old)throw Error('この対象者・モードは受付中です。既存のカードを使用してください。');
