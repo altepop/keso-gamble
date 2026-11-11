@@ -179,7 +179,7 @@ export async function discordInteractions(request: Request, env: Env, ctx: Execu
     const matched = PREDICTION_BUTTON.exec(interaction.data!.custom_id!)!;
     if (!interaction.member?.user?.id) return respond('Discordのユーザーを確認できません。');
     const openedAt=Number((BigInt(matched[1])>>22n)+1420070400000n);
-    if(Date.now()>openedAt+60*60000)return respond('このカードは受付終了しています。');
+    if(Date.now()>openedAt+10*60000)return respond('このカードは受付終了しています。');
     return Response.json(predictionModal(matched[1],matched[2] as 'win'|'loss'));
   }
   if (vpModal && (!interaction.member?.user?.id || predictionAmount(interaction.data)===null))
