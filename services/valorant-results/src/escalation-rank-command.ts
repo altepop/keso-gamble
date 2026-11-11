@@ -4,7 +4,7 @@ import type {KpEnv} from './kp.ts';
 import {escalationArt} from '../../../js/escalation-rank-assets.js';
 type RankView=Awaited<ReturnType<typeof escalationRatingView>>;
 const clean=(s:unknown)=>String(s??'').replace(/[@`*_~<>|\r\n]/g,'').slice(0,100);
-const image=(rank?:{tier:number;division?:number|null})=>'https://altepop.github.io/keso-gamble/assets/escalation-ranks/'+escalationArt(rank?.tier,rank?.division).file+'?art=2';
+const image=(rank?:{tier:number;division?:number|null})=>'https://altepop.github.io/keso-gamble/assets/escalation-ranks/'+escalationArt(rank?.tier,rank?.division).file+'?art=3';
 const signed=(n:number)=>(n>=0?'+':'')+n;
 const color=(tier:unknown)=>parseInt(escalationArt(tier).color.slice(1),16);
 const pending=(v:RankView)=>!v.act?'ACT情報が届くのを待ってるで。':v.placementKind==='waiting'?'エピソード情報を確認中や。':`${v.placementKind==='act'?'ACT更新':v.placementKind==='episode'?'エピソード更新':'初回'}認定 ${v.measurementGames}/${v.measurementRequired??3}試合 · あと${Math.max(0,(v.measurementRequired??3)-v.measurementGames)}試合やで。`;
