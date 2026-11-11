@@ -1,6 +1,7 @@
 import {matchAct,observeEscalationAct,syncEscalationPower} from './escalation-rating.ts';
 import {runSpikeCompensation} from './spike-compensation.ts';
 import {settlePredictions,expirePredictions} from './valo-predictions.ts';
+import {ensurePredictionCommand,predictionRegistrationStatus} from './predict-registration.ts';
 import {storedMode} from './modes.ts';
 import {queueCommunityNews} from './community-news.ts';
 import {queueRelicPress} from './relic-press.ts';
@@ -570,6 +571,9 @@ export default {
   fetch(request: Request, env: Env, ctx: ExecutionContext) {
     if(new URL(request.url).pathname.startsWith('/api/racing/'))return raceVideoApi(request,env).catch(()=>new Response('Unavailable',{status:503}));
     if(request.method==='GET'&&new URL(request.url).pathname==='/api/mahjong/status')return mahjongStatus(env).then(status=>Response.json(status,{headers:{'Cache-Control':'no-store'}})).catch(()=>Response.json({enabled:false,error:'configuration_unavailable'},{status:503}));
+    if(request.method==='GET'&&new URL(request.url).pathname==='/api/discord/predict/status')
+      return predictionRegistrationStatus(env.DB).then(s=>Response.json(s,{headers:{'Cache-Control':'no-store'}}))
+        .catch(()=>Response.json({command:'predict',registered:false,error:'status_unavailable'},{status:503}));
     if(request.method==='GET'&&new URL(request.url).pathname==='/api/discord/activity-entry/status')return silentEntryStatus(env).then(info=>Response.json(info,{headers:{'Cache-Control':'no-store'}})).catch(()=>Response.json({handlerConfirmed:false},{status:503}));
     if(new URL(request.url).pathname.startsWith('/api/discord/app-webhook/'))return appWebhookApi(request,env).catch(()=>new Response('Unavailable',{status:503}));
     if(new URL(request.url).pathname.startsWith('/api/mahjong/paipu/'))return paipuApi(request,env).catch(()=>new Response('Unavailable',{status:503}));
@@ -582,6 +586,11 @@ export default {
       ctx.waitUntil((async()=>{const mapping=await initializeKp(env);if(mapping)await cleanupBoardDuels(env,mapping.guildId);})()
        .catch(()=>console.warn('board_duel_retention_pending')));
     }
+    // Register only /predict through scoped client credentials. No new Bot Token secret is needed.
+    if(Math.floor((_event.scheduledTime??Date.now())/60000)%10===0)
+      ctx.waitUntil(track(env,'prediction_command',()=>ensurePredictionCommand(env).then(ok=>{
+        if(!ok)throw Error('Prediction command credentials unavailable');
+      })));
     // Expire unanswered prediction cards and refund reserved KP without another match API poll.
     if(Math.floor((_event.scheduledTime??Date.now())/60000)%30===0)
       ctx.waitUntil(track(env,'prediction_expiry',()=>expirePredictions(env)));
