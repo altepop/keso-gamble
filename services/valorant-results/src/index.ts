@@ -2,7 +2,7 @@ import {approvedEscalationPress,escaPressActive,escalationPressStatus} from './e
 import {ensureRankCommand,rankRegistrationStatus} from './rank-command-registration.ts';
 import {ESCALATION_SHIELD_VERSION,ESCALATION_RR_VERSION,matchAct,observeEscalationAct,syncEscalationPower} from './escalation-rating.ts';
 import {runSpikeCompensation} from './spike-compensation.ts';
-import {settlePredictions,expirePredictions} from './valo-predictions.ts';
+import {settlePredictions,expirePredictions,reconcilePredictionPosts} from './valo-predictions.ts';
 import {ensurePredictionCommand,predictionRegistrationStatus} from './predict-registration.ts';
 import {ensureGameCommands,gameCommandStatus} from './game-command-registration.ts';
 import {MUSIC_COMMAND_VERSION,MUSIC_COMMAND} from './music-command.ts';
@@ -640,6 +640,9 @@ export default {
     // Refresh only the owned /kp command; existing /death, /valo and Activity commands stay intact.
     if(Math.floor((_event.scheduledTime??Date.now())/60000)%10===0)
       ctx.waitUntil(track(env,'rank_command',()=>ensureRankCommand(env).then(ok=>{if(!ok)throw Error('Rank command credentials unavailable');})));
+    // Repair result notices missed after wallet settlement (bounded, indexed, every five minutes).
+    if(Math.floor((_event.scheduledTime??Date.now())/60000)%5===0)
+      ctx.waitUntil(track(env,'prediction_posts',()=>reconcilePredictionPosts(env)));
     // Expire unanswered prediction cards and refund reserved KP without another match API poll.
     if(Math.floor((_event.scheduledTime??Date.now())/60000)%30===0)
       ctx.waitUntil(track(env,'prediction_expiry',()=>expirePredictions(env)));
