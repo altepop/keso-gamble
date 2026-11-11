@@ -48,7 +48,7 @@ const seriesDelta=`CASE WHEN NEW.outcome='win' THEN CASE series_losses WHEN 0 TH
 const placementWins="measurement_wins+(NEW.outcome='win')";
 // Keep the internal estimate across resets. At most +one whole rank on an episode placement.
 const placementRating=`CASE placement_kind
- WHEN 'initial' THEN 600+200*(${placementWins})+${measureBonus}
+ WHEN 'initial' THEN 200*(${placementWins})+${measureBonus}
  WHEN 'act' THEN seed_rating+CASE WHEN NEW.outcome='win' THEN 20+${measureBonus} ELSE 0 END
  ELSE MAX(0,seed_rating-600+MIN(900,MAX(0,seed_mmr-seed_rating+100*(2*(${placementWins})-measurement_required)+${measureBonus}))) END`;
 const placementPerformance=`((${placementRating})-(${placementRating.replaceAll(measureBonus,'0')}))`;
@@ -59,7 +59,7 @@ export async function ensureEscalationRating(env:KpEnv){
  const job=(async()=>{await env.DB.batch([
   env.DB.prepare('CREATE TABLE IF NOT EXISTS kp_escalation_current_acts(guild TEXT PRIMARY KEY,act TEXT NOT NULL,name TEXT,episode TEXT,started_at INTEGER NOT NULL)'),
   env.DB.prepare(`CREATE TABLE IF NOT EXISTS kp_escalation_ratings(
-   guild TEXT NOT NULL,user TEXT NOT NULL,act TEXT NOT NULL,act_name TEXT,episode TEXT NOT NULL,started_at INTEGER NOT NULL,placement_kind TEXT NOT NULL,measurement_required INTEGER NOT NULL,seed_rating INTEGER NOT NULL,seed_mmr INTEGER NOT NULL,mmr INTEGER NOT NULL DEFAULT 900,peak_rating INTEGER NOT NULL DEFAULT 0,rating INTEGER NOT NULL DEFAULT 900 CHECK(rating BETWEEN 0 AND 9007199254740991),
+   guild TEXT NOT NULL,user TEXT NOT NULL,act TEXT NOT NULL,act_name TEXT,episode TEXT NOT NULL,started_at INTEGER NOT NULL,placement_kind TEXT NOT NULL,measurement_required INTEGER NOT NULL,seed_rating INTEGER NOT NULL,seed_mmr INTEGER NOT NULL,mmr INTEGER NOT NULL DEFAULT 300,peak_rating INTEGER NOT NULL DEFAULT 0,rating INTEGER NOT NULL DEFAULT 300 CHECK(rating BETWEEN 0 AND 9007199254740991),
    measured INTEGER NOT NULL DEFAULT 0,measurement_games INTEGER NOT NULL DEFAULT 0,measurement_wins INTEGER NOT NULL DEFAULT 0,measurement_performance INTEGER NOT NULL DEFAULT 0,
    series_wins INTEGER NOT NULL DEFAULT 0,series_losses INTEGER NOT NULL DEFAULT 0,series_performance INTEGER NOT NULL DEFAULT 0,
    played INTEGER NOT NULL DEFAULT 0,wins INTEGER NOT NULL DEFAULT 0,losses INTEGER NOT NULL DEFAULT 0,
@@ -76,7 +76,7 @@ export async function ensureEscalationRating(env:KpEnv){
    INSERT OR IGNORE INTO kp_escalation_ratings(guild,user,act,act_name,episode,started_at,placement_kind,measurement_required,seed_rating,seed_mmr,rating,mmr,at)
     SELECT NEW.guild,NEW.user,NEW.act,NEW.act_name,NEW.episode,NEW.started_at,
      CASE WHEN p.act IS NULL THEN 'initial' WHEN p.episode=NEW.episode THEN 'act' ELSE 'episode' END,
-     CASE WHEN p.episode=NEW.episode THEN 1 ELSE 3 END,COALESCE(p.rating,900),COALESCE(p.mmr,900),COALESCE(p.rating,900),COALESCE(p.mmr,900),NEW.ended_at
+     CASE WHEN p.episode=NEW.episode THEN 1 ELSE 3 END,COALESCE(p.rating,300),COALESCE(p.mmr,300),COALESCE(p.rating,300),COALESCE(p.mmr,300),NEW.ended_at
     FROM (SELECT 1) LEFT JOIN kp_escalation_ratings p ON p.guild=NEW.guild AND p.user=NEW.user AND p.act=(
      SELECT act FROM kp_escalation_ratings WHERE guild=NEW.guild AND user=NEW.user AND measured=1 AND started_at<NEW.started_at ORDER BY started_at DESC LIMIT 1);
    UPDATE kp_escalation_ratings SET
