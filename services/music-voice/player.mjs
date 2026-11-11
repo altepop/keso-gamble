@@ -45,7 +45,7 @@ export class MusicController {
   const guild=this.client.guilds.cache.get(guildId);
   if(!guild||!this.client.isReady())throw Error('音楽Botはまだ起動中だ。');
   const room=this.session(guildId);
-  if(action==='queue'||action==='status'){
+  if(action==='queue'||action==='status'||action==='panel'){
    if(!room)return '🎵 再生中の音楽はない。/music play でVCに呼び出せる。';
    return this.description(room);
   }
