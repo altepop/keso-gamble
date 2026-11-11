@@ -39,3 +39,31 @@ test('malformed or unknown snapshot cannot corrupt existing music state',()=>{
   assert.deepEqual(q.serialize(before.channelId),before);
  }
 });
+
+test('three-hour simulated radio playback survives many restarts without duplicate cycle songs',()=>{
+ let seed=31;const random=()=>{seed=(seed*16807)%2147483647;return seed/2147483647;};
+ const album=[...songs.values()];
+ let q=new MusicQueue({random});
+ q.loadPlaylist(album,user,{radio:true});
+ let elapsed=0,previous='',seen=new Set(),cycle=q.cycle;
+ // 180 minutes with 3-minute songs; no wall-clock sleep or Discord network.
+ while(elapsed<180*60){
+  const track=q.next({skip:true});
+  assert.ok(track);
+  if(cycle!==q.cycle){assert.equal(seen.size,8);seen=new Set();cycle=q.cycle;}
+  assert.notEqual(track.track.id,previous);
+  assert.ok(!seen.has(track.track.id));
+  seen.add(track.track.id);previous=track.track.id;
+  assert.ok(q.upcoming.length<=8);
+  if(elapsed%900===0){
+   const checkpoint=JSON.parse(JSON.stringify(q.serialize('100000000000000111')));
+   const replacement=new MusicQueue({random});
+   replacement.restore(checkpoint,songs);
+   assert.deepEqual(replacement.serialize(checkpoint.channelId),checkpoint);
+   q=replacement;
+  }
+  elapsed+=3*60;
+ }
+ assert.equal(elapsed,180*60);
+ assert.equal(q.mode,'radio');
+});
