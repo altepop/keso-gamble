@@ -64,8 +64,8 @@ async function fixture(){
   return {env,sqlite,balance,open,buy,match};
 }
 test('prediction cards use Components V2 and modal amount is validated',()=>{
-  assert.deepEqual(predictionOdds(0,0),{win:184,loss:184});
-  assert.deepEqual(predictionOdds(50,0),{win:115,loss:460});
+  assert.deepEqual(predictionOdds(0,0),{win:210,loss:210});
+  assert.deepEqual(predictionOdds(50,0),{win:131,loss:500});
   assert.match('vp:bet:100000000000001001:win',PREDICTION_BUTTON);
   assert.match('vp:submit:100000000000001001:loss',PREDICTION_MODAL);
   const modal=predictionModal('100000000000001001','loss');
@@ -106,10 +106,10 @@ test('next match settles once, awards payout only on correct side',async()=>{
   const result=f.match();
   assert.equal(await settlePredictions(f.env,result,'One#JP1',start+999999,mapping),1);
   const ticket=f.sqlite.prepare('SELECT status,payout FROM vp_tickets').get() as {status:string;payout:number};
-  assert.equal(ticket.status,'won');assert.equal(ticket.payout,1840);
-  assert.equal(f.balance(),100840);
+  assert.equal(ticket.status,'won');assert.equal(ticket.payout,2100);
+  assert.equal(f.balance(),101100);
   assert.equal(await settlePredictions(f.env,result,'One#JP1',start+999999,mapping),0);
-  assert.equal(f.balance(),100840);
+  assert.equal(f.balance(),101100);
 });
 test('bets entered after actual match start are refunded, not paid',async()=>{
   const f=await fixture();
@@ -141,7 +141,7 @@ test('ACT odds are snapshotted from indexed notifications',async()=>{
   const card=await f.open();
   assert.match(JSON.stringify(card),/ACT E9A1/);
   const odds=f.sqlite.prepare('SELECT win_odds,loss_odds,wins,losses FROM vp_events').get() as {win_odds:number;loss_odds:number;wins:number;losses:number};
-  assert.deepEqual({...odds},{win_odds:161,loss_odds:214,wins:1,losses:0});
+  assert.deepEqual({...odds},{win_odds:183,loss_odds:245,wins:1,losses:0});
 });
 
 
@@ -154,8 +154,23 @@ test('public bet announcement mentions only the bettor and never reveals the wag
   assert.deepEqual(notice.allowed_mentions,{parse:[],users:[two]});
   assert.match(notice.content,new RegExp('<@'+two+'>'));
   assert.match(notice.content,/賭けたぞ/);
-  assert.doesNotMatch(notice.content,/勝利|敗北|win|loss|1000|1,000|1\\.84|的中|払い戻し/);
+  assert.doesNotMatch(notice.content.replace(/<@\\d+>/g,''),/勝利|敗北|win|loss|1000|1,000|2\\.10|的中|払い戻し/);
   assert.equal(predictionWasAccepted(await f.buy()),false); // A duplicate must never trigger a second ping.
   assert.equal(predictionWasAccepted(await buyPrediction(f.env,'100000000000001001',guild,visitor,'loss',1000,start+1000,mapping)),false);
   assert.throws(()=>predictionBetAnnouncement('invalid'));
+});
+
+test('new odds are bounded and fixed on each issued card',async()=>{
+  for(let wins=0;wins<=50;wins+=5) for(let losses=0;losses<=50;losses+=5){
+    const odds=predictionOdds(wins,losses);
+    assert.ok(odds.win>=125&&odds.win<=500);
+    assert.ok(odds.loss>=125&&odds.loss<=500);
+  }
+  const f=await fixture();
+  await f.open();
+  const first=f.sqlite.prepare('SELECT win_odds,loss_odds FROM vp_events').get() as {win_odds:number;loss_odds:number};
+  assert.deepEqual({...first},{win_odds:210,loss_odds:210});
+  await f.buy();
+  const ticket=f.sqlite.prepare('SELECT odds FROM vp_tickets').get() as {odds:number};
+  assert.equal(ticket.odds,210); // The rate is fixed before the result comes in.
 });
