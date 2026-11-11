@@ -45,8 +45,13 @@ test('checkpoint accepts catalog-only bounded state, rejects oversized or invali
  const bad={...state,snapshot:{...state.snapshot,upcoming:new Array(31).fill({id:'mou',requester:user})}};
  assert.equal((await session.fetch(new Request('https://music.internal/checkpoint',
    {method:'POST',body:JSON.stringify(bad)}))).status,400);
+ const stopped={...state,savedAt:state.savedAt+1,snapshot:null};
  assert.equal((await session.fetch(new Request('https://music.internal/checkpoint',
-   {method:'POST',body:JSON.stringify({...state,snapshot:null})}))).status,200);
+   {method:'POST',body:JSON.stringify(stopped)}))).status,200);
+ // A delayed old write cannot resurrect a queue after stop/leave.
+ const stale=await session.fetch(new Request('https://music.internal/checkpoint',
+   {method:'POST',body:JSON.stringify(state)}));
+ assert.deepEqual(await stale.json(),{saved:false,stale:true});
  assert.equal((await (await session.fetch(new Request('https://music.internal/checkpoint'))).json() as {snapshot:unknown}).snapshot,null);
 });
 test('external state API has bearer and guild gates independent of KP or D1',async()=>{
