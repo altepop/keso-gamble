@@ -32,14 +32,15 @@ export async function createRecruit(env:Pick<KpEnv,'DB'>,id:string,guild:string,
   .bind(guild,owner,now).first<{n:number}>();
  if((count?.n??0)>=3)throw Error('参加募集中の投稿は一人3件までだ。');
  await env.DB.batch([
-  env.DB.prepare('INSERT OR IGNORE INTO gc_recruits(id,guild,game,owner,slots,created_at,expires_at) VALUES(?,?,?,?,?,?,?)')
-   .bind(id,guild,game,owner,slots,now,now+RECRUIT_LIFETIME_MS),
+  env.DB.prepare('INSERT OR IGNORE INTO gc_recruits(id,guild,game,owner,slots,created_at,expires_at) SELECT ?,?,?,?,?,?,? WHERE (SELECT COUNT(*) FROM gc_recruits WHERE guild=? AND owner=? AND expires_at>?)<3')
+   .bind(id,guild,game,owner,slots,now,now+RECRUIT_LIFETIME_MS,guild,owner,now),
   env.DB.prepare('INSERT OR IGNORE INTO gc_recruit_members(recruit_id,user,joined_at) SELECT ?,?,? WHERE EXISTS(SELECT 1 FROM gc_recruits WHERE id=? AND guild=? AND owner=?)')
    .bind(id,owner,now,id,guild,owner),
  ]);
  const row=await env.DB.prepare('SELECT * FROM gc_recruits WHERE id=? AND guild=? AND owner=?')
   .bind(id,guild,owner).first<Row>();
- if(!row||row.game!==game||row.slots!==slots)throw Error('募集IDは使用済みだ。');
+ if(!row)throw Error('参加募集中の投稿は一人3件までだ。');
+ if(row.game!==game||row.slots!==slots)throw Error('募集IDは使用済みだ。');
  return snapshot(env.DB,row);
 }
 export async function linkRecruitMessage(db:D1Database,id:string,guild:string,channel:string,message:string){
