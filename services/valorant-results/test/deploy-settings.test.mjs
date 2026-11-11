@@ -86,3 +86,18 @@ test('a lazily initialized JSON module is read once, statically; a second assign
 test('Worker sources avoid dynamic imports, which make esbuild lazily initialize the configuration',()=>{
  for(const name of readdirSync(new URL('../src/',import.meta.url)).filter(n=>n.endsWith('.ts')))assert.doesNotMatch(readFileSync(new URL('../src/'+name,import.meta.url),'utf8'),/(?<!\bas\s)\bimport\(/,name); // type-only `as import(...)` is erased
 });
+
+
+test('the private deploy copy contains sibling JSON dependencies of Worker sources',()=>{
+ const root=new URL('../../../',import.meta.url),service=new URL('services/valorant-results/',root),workflow=readFileSync(new URL('.github/workflows/valorant-results.yml',root),'utf8');
+ const copies=[...workflow.matchAll(/cp ([\w/.-]+\.json) "\$RUNNER_TEMP\/kp-app\/([^"\n]+)\/"/g)].map(m=>[m[1],m[2]+'/'+m[1].split('/').at(-1)]);
+ let checked=0;
+ for(const file of readdirSync(new URL('src/',service)).filter(f=>f.endsWith('.ts'))){
+  const source=new URL('src/'+file,service),text=readFileSync(source,'utf8');
+  for(const [,relative]of text.matchAll(/from ['"]((?:\.\.\/)+[^'"\n]+\.json)['"]/g)){
+   const dependency=new URL(relative,source);if(dependency.href.startsWith(service.href))continue;
+   const path=dependency.href.slice(root.href.length);assert(copies.some(([from,to])=>from===path&&to===path),path+' must exist at the same relative path in the private deploy copy');checked++;
+  }
+ }
+ assert(checked>0,'at least the music catalogue is checked');
+});

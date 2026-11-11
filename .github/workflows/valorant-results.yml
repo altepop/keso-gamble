@@ -169,6 +169,8 @@ jobs:
           cp -R services/valorant-results/. "$RUNNER_TEMP/kp-app/services/valorant-results/"
           mkdir -p "$RUNNER_TEMP/kp-app/js"
           cp js/*.js "$RUNNER_TEMP/kp-app/js/"
+          mkdir -p "$RUNNER_TEMP/kp-app/services/music-voice"
+          cp services/music-voice/catalog.json "$RUNNER_TEMP/kp-app/services/music-voice/"
           cd "$RUNNER_TEMP/kp-app/services/valorant-results"
           npm ci
       - name: Recover existing Worker configuration
