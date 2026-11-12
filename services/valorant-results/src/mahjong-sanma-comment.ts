@@ -2,6 +2,7 @@ import type {PaipuSummary} from './mahjong-summary.ts';
 import type {ValueMetric} from './mahjong-sanma-value.ts';
 import type {Efficiency} from './mahjong-sanma-efficiency.ts';
 import type {AcceptedSanmaReport} from './mahjong-sanma-report.ts';
+import {selectSanmaFindings} from './mahjong-sanma-selection.ts';
 // Do not import the search engine in the Worker: signed, bounded findings only.
 const tile=/^(?:[19]m|[1-9][ps]|5[ps]r|[ESWNPFC])$/;
 const int=(v:unknown,a:number,b:number)=>Number.isSafeInteger(v)&&Number(v)>=a&&Number(v)<=b;
@@ -34,49 +35,25 @@ const show=(t:string)=>t.endsWith('r')?'赤'+t.slice(0,-1):({E:'東',S:'南',W:'
 const clean=(s:string)=>s.replace(/[@`*_~<>|#\\\[\]()\r\n]/g,'').slice(0,16)||'名無し';
 export function equalSanmaComments(s:PaipuSummary,raw:unknown,members:Map<number,{name:string}>):string[]{
  const r=acceptedSanmaReport(s,raw);if(!r)return [];
- const fs=r.findings.filter(f=>members.has(f.seat));
- const alt=fs.find(f=>f.actual!==f.recommended),praise=fs.find(f=>f.actual===f.recommended);
- const chosen=alt&&praise?[alt,praise]:fs.slice(0,2);
+ const chosen=selectSanmaFindings(r.findings.filter(f=>members.has(f.seat)),2);
  return chosen.map(f=>{
   const name=clean(members.get(f.seat)!.name),at=s.rounds[f.round].label+'の'+f.turn+'打目',a=show(f.actual),b=show(f.recommended);
   if(f.basis==='tsumo-value'){
-   const m=f.recommendedValue;
-   const range=m.min===m.max?`${m.min}点`:`${m.min}〜${m.max}点`;
+   const x=f.actualValue,m=f.recommendedValue;
+   const range=(v:ValueMetric)=>v.min===v.max?`${v.min}点`:`${v.min}〜${v.max}点`;
    const premise=(f.doubleRiichi?'ダブルリーチ後ツモ':f.riichi?'リーチ後ツモ':f.menzen?'門前ツモ':'ツモ和了')+'・ツモ損で、本場と供託を抜いた試算';
-   if(f.actual===f.recommended)return [
-    `🎙️「${name}、${at}の${a}やね。この待ち選びもええですねぇ。見えてへん待ち牌が${m.live}枚、${premise}なら${range}ありますわ」`,
-    `🎙️「${at}、${name}は${a}切りですねぇ。${premise}で${range}。待ちの枚数も残せてますわ」`,
-   ][(f.round+f.turn+f.seat)%2];
-   return [
-    `🎙️「${name}、${at}の${a}なあ。${b}でも待ちの枚数を減らさず、${premise}なら${range}になりますねぇ。打点も見るならこっちを考えますわ」`,
-    `🎙️「${at}、${name}は${a}ですかぁ。僕は${b}も見たいですねぇ。見えてへん待ち牌は${m.live}枚、${premise}で${range}ですわ」`,
-   ][(f.round+f.turn+f.seat)%2];
+   return `🎙️「${name}、${at}は${a}切りで${range(x)}、${b}切りなら${range(m)}。見えてへん待ち牌も${x.live}枚から${m.live}枚で減りませんねぇ。${premise}ですわ。待ちの広さと打点を一緒に比べたい場面やね。和了しやすさや押し引きまでは、この試算では決められません」`;
   }
   if(f.basis==='genbutsu'){
    const opponent=clean(members.get(f.against)?.name??s.seats[f.against]?.nickname??'リーチした人');
-   const patterns=f.actual===f.recommended?[
-    `🎙️「${name}、${at}の${a}は${opponent}の現物ですねぇ。そのリーチには落ち着いて合わせてますわ」`,
-    `🎙️「${at}、${name}は${a}やね。${opponent}が自分で捨ててる牌ですから、そのリーチ相手にはええ選び方やと思いますわ」`,
-    `🎙️「${name}、${at}。${a}は${opponent}の河にありますねぇ。対${opponent}ではちゃんと止まれてますわ」`,
-   ]:[
-    `🎙️「${name}、${at}の${a}ですかぁ。対${opponent}のリーチだけ考えるなら、僕は現物の${b}も考えますねぇ」`,
-    `🎙️「${at}、${name}は${a}ね。手がまだ遠いですし、${opponent}の河にある${b}を合わせる手もありますわ」`,
-    `🎙️「${name}、${at}やね。${opponent}への受けを優先するなら、現物の${b}も選べますねぇ」`,
-   ];
-   return patterns[(f.round+f.turn+f.seat)%patterns.length];
+   return `🎙️「${name}、${at}は${f.shanten}向聴で${a}切りやね。${a}は${opponent}の現物ではないけど、手には現物の${b}もありますわ。守備を選ぶなら${b}が比較候補です。ただ、${a}が危険と決まったわけでも、他の相手にも${b}が安全なわけでもありません。押すか降りるかの正解までは出してへんで」`;
   }
-  const m=f.recommendedMetric;
-  const variant=(f.round+f.turn+f.seat)%3;
-  if(f.actual===f.recommended)return [
-   `🎙️「${name}、${at}の${a}ね。手の進み方だけなら僕もそれですわ。次に手が進む牌は見えてへん分で${m.ukeire}枚ありますねぇ」`,
-   `🎙️「${at}、${name}の${a}切り。これはええですねぇ。牌のつながりだけ見ると僕も同じですわ」`,
-   `🎙️「${name}、${at}は${a}やね。受け入れを残せてますねぇ。僕もここはそうしますわ」`,
-  ][variant];
-  const reason=m.shanten<f.actualMetric.shanten?`${b}なら${m.shanten}向聴で、${a}やと${f.actualMetric.shanten}向聴になりますねぇ`:`次に手が進む牌が、見えてへん分で${f.actualMetric.ukeire}枚から${m.ukeire}枚になるんですよねぇ`;
-  return [
-   `🎙️「${name}、${at}の${a}なあ。手の進み方だけなら僕は${b}ですかね。${reason}」`,
-   `🎙️「${at}、${name}は${a}ですかぁ。形だけ見たら僕は${b}を切りたいですねぇ。${reason}」`,
-   `🎙️「${name}、${at}やね。僕は牌のつながりを残して${b}ですわ。${reason}」`,
-  ][variant];
+  const x=f.actualMetric,m=f.recommendedMetric;
+  const reason=m.shanten<x.shanten
+   ?`${a}切りでは${x.shanten}向聴、${b}切りなら${m.shanten}向聴です。テンパイまでの距離に差がありますねぇ`
+   :`どちらも${m.shanten}向聴ですが、次に手が進む牌は見えてへん分で${x.ukeire}枚と${m.ukeire}枚。${b}切りの方が${m.ukeire-x.ukeire}枚多いですわ`;
+  const added=m.improving.filter(t=>!x.improving.includes(t));
+  const examples=added.length?`。${added.slice(0,4).map(show).join('・')}${added.length>4?'など':''}でも手が進むようになります`:'';
+  return `🎙️「${name}、${at}は${a}切りでしたね。形だけ比べると${b}切りもあります。${reason}${examples}。シャンテン数と受け入れの比較で、役や将来の変化、押し引きは評価してへんで」`;
  });
 }

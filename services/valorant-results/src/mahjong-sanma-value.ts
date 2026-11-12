@@ -39,7 +39,7 @@ export function sanmaValueFinding(d:ReviewDecision,metrics:ValueMetric[]):SanmaV
  const actual=metrics.find(m=>m.tile===d.actual);if(!actual)return null;
  const dominates=(a:ValueMetric,b:ValueMetric)=>a.live>=b.live&&a.min>=b.max+1000;
  const best=metrics.filter(m=>dominates(m,actual)).sort((a,b)=>b.min-a.min||b.live-a.live)[0];
- const praise=!best&&!metrics.some(m=>dominates(m,actual))&&metrics.some(m=>dominates(actual,m));
- if(!best&&!praise)return null;
- return {seat:d.seat,round:d.round,turn:d.turn,actual:d.actual,recommended:best?.tile??d.actual,basis:'tsumo-value',riichi:Boolean(d.declaringReach),doubleRiichi:Boolean(d.declaringDoubleReach),menzen:(d.melds[d.seat]??[]).every(m=>m.kind==='ankan'),actualValue:actual,recommendedValue:best??actual};
+ // Beating an inferior candidate is not evidence of a difficult, instructive choice.
+ if(!best)return null;
+ return {seat:d.seat,round:d.round,turn:d.turn,actual:d.actual,recommended:best.tile,basis:'tsumo-value',riichi:Boolean(d.declaringReach),doubleRiichi:Boolean(d.declaringDoubleReach),menzen:(d.melds[d.seat]??[]).every(m=>m.kind==='ankan'),actualValue:actual,recommendedValue:best};
 }

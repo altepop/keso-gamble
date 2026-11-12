@@ -14,11 +14,14 @@ test('far hands may offer a real genbutsu against a single opponent, with no fab
  const lines=equalSanmaComments(summary,r,new Map([[0,{name:'けそ'}],[1,{name:'@everyone **相手**'}]]));
  assert.match(lines.join(''),/現物|河にある/);assert.match(lines.join(''),/相手/);assert.match(lines.join(''),/8打目/);
  assert.doesNotMatch(lines.join(''),/@|絶対|必ず|放銃率|c3|AI/i);
+ assert.match(lines[0],/向聴/);assert.match(lines[0],/他の相手/);assert.match(lines[0],/正解までは出してへん/);
 });
-test('choosing an actual genbutsu gets a factual positive note rather than a fictional blunder',()=>{
- const d=position();d.actual='9m';const f=sanmaDefenseFinding(d,summary.game);assert.ok(f);assert.equal(f.actual,f.recommended);assert.equal(f.actualOnRiver,true);
- const r={version:2,source:'sanma-rules',model:'sanma-rules-v2',uuid:summary.uuid,findings:[f]};
- assert.match(equalSanmaComments(summary,r,new Map([[0,{name:'けそ'}]])).join(''),/落ち着いて|ええ選び方|止まれ/);
+test('a routine genbutsu choice is omitted, including old signed positive findings',()=>{
+ const d=position();d.actual='9m';assert.equal(sanmaDefenseFinding(d,summary.game),null);
+ const old={seat:0,round:0,turn:8,actual:'9m',recommended:'9m',basis:'genbutsu',against:1,againstRiichi:true,recommendedOnRiver:true,actualOnRiver:true,shanten:4};
+ const r={version:2,source:'sanma-rules',model:'sanma-rules-v2',uuid:summary.uuid,findings:[old]};
+ assert.ok(acceptedSanmaReport(summary,r),'backward-compatible validation is retained');
+ assert.deepEqual(equalSanmaComments(summary,r,new Map([[0,{name:'けそ'}]])),[]);
 });
 test('defensive notes require precise threat, context and a known held genbutsu',()=>{
  const d=position();

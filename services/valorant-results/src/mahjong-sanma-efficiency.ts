@@ -71,7 +71,7 @@ export function sanmaShapeFinding(d:ReviewDecision,game:string):SanmaFinding|nul
  const metrics=sanmaDiscardMetrics(d),actual=metrics.find(m=>m.tile===d.actual),best=metrics[0];
  if(!actual||!best||best.shanten<1||best.bonus<actual.bonus)return null;
  const alternative=best.shanten<actual.shanten||best.shanten===actual.shanten&&best.ukeire>=actual.ukeire+8;
- const praise=best.tile===actual.tile&&metrics.filter(m=>m.shanten===best.shanten&&m.ukeire===best.ukeire&&m.bonus===best.bonus).length===1&&metrics.some(m=>m.shanten>best.shanten||m.ukeire+8<=best.ukeire);
- if(!alternative&&!praise)return null;
+ // Agreement alone has no counterfactual evidence: do not praise an obvious discard.
+ if(!alternative)return null;
  return {seat:d.seat,round:d.round,turn:d.turn,actual:d.actual,recommended:best.tile,basis:'shape',actualMetric:actual,recommendedMetric:best};
 }

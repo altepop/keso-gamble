@@ -13,6 +13,8 @@ export function sanmaDefenseFinding(d:ReviewDecision,game:string):SanmaDefenseFi
  const shanten=sanmaShanten(d.hand,open);if(shanten===null||shanten<3)return null;
  const metrics=sanmaDiscardMetrics(d),safe=metrics.filter(m=>river.has(tileKind(m.tile)));
  if(!safe.length)return null;
- const actualOnRiver=river.has(tileKind(d.actual)),recommended=actualOnRiver?d.actual:safe[0].tile;
+ // A routine genbutsu discard does not need a congratulatory review.
+ const actualOnRiver=river.has(tileKind(d.actual));if(actualOnRiver)return null;
+ const recommended=safe[0].tile;
  return {seat:d.seat,round:d.round,turn:d.turn,actual:d.actual,recommended,basis:'genbutsu',against,againstRiichi:true,recommendedOnRiver:true,actualOnRiver,shanten};
 }
