@@ -149,3 +149,24 @@ test('a pon cannot immediately discard its fourth matching tile (kuikae)',()=>{
  const t=f.pool.pop()!;f.actions.push(draw(2,t),discard(2,t,{moqie:true}));
  const diagnostics={acceptedRounds:0,blocked:{}};assert.deepEqual(reviewDecisions(f.actions,f.summary(),256,diagnostics),[]);assert.equal((diagnostics.blocked as Record<string,number>).kuikae,1);
 });
+
+
+test('a best shape discard is not praised merely because weak alternatives exist',()=>{
+ const d=decision(),best=sanmaDiscardMetrics(d)[0];d.actual=best.tile;
+ assert.equal(sanmaShapeFinding(d,'3-hanchan'),null);
+ const f=setup(),s=f.summary();
+ const old={seat:0,round:0,turn:4,actual:best.tile,recommended:best.tile,basis:'shape',actualMetric:best,recommendedMetric:best};
+ const report={version:1,source:'sanma-shape',model:'sanma-shape-v1',uuid:s.uuid,findings:[old]};
+ assert.ok(acceptedSanmaReport(s,report));
+ assert.deepEqual(equalSanmaComments(s,report,new Map([[0,{name:'けそ'}]])),[]);
+});
+
+test('shape explanation compares equal-shanten acceptance and names the newly improving tiles',()=>{
+ const s=setup().summary(),a={tile:'1p',shanten:2,ukeire:12,improving:['2p'],bonus:0};
+ const b={tile:'9p',shanten:2,ukeire:20,improving:['2p','3s'],bonus:0};
+ const finding={seat:0,round:0,turn:4,actual:'1p',recommended:'9p',basis:'shape',actualMetric:a,recommendedMetric:b};
+ const r={version:1,source:'sanma-shape',model:'sanma-shape-v1',uuid:s.uuid,findings:[finding]};
+ const text=equalSanmaComments(s,r,new Map([[0,{name:'けそ'}]])).join('');
+ assert.match(text,/どちらも2向聴/);assert.match(text,/12枚と20枚/);assert.match(text,/8枚多い/);assert.match(text,/3s/);
+ assert.match(text,/見えてへん分/);assert.match(text,/将来の変化/);assert.doesNotMatch(text,/ええですね|残せてます|山に20枚/);
+});

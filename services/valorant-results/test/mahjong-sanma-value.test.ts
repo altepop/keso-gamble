@@ -39,7 +39,7 @@ test('value comparisons require non-decreasing live waits and a robust condition
  assert.equal(sanmaValueFinding(d,[metric('2s'),metric('5s',6,6000)]),null);
  assert.equal(sanmaValueFinding(d,[metric('2s',7,3000,6000),metric('5s',7,6000)]),null);
  const f=sanmaValueFinding(d,[metric('2s'),metric('5s',7,6000)])!;assert.ok(f);assert.equal(f.recommended,'5s');
- const p=sanmaValueFinding({...d,actual:'5s'},[metric('2s'),metric('5s',7,6000)])!;assert.equal(p.actual,p.recommended);
+ assert.equal(sanmaValueFinding({...d,actual:'5s'},[metric('2s'),metric('5s',7,6000)]),null,'a better choice is not automatically an instructive positive finding');
  assert.equal(sanmaValueFinding(d,[metric('2s'),metric('5s',7,Infinity)]),null);
 });
 test('v3 validates numeric evidence and presents conditional value without claiming EV or guaranteed wins',()=>{
@@ -47,7 +47,7 @@ test('v3 validates numeric evidence and presents conditional value without claim
  const report={version:3,source:'sanma-rules',model:'sanma-rules-v3',uuid:summary.uuid,findings:[f]};
  assert.ok(acceptedSanmaReport(summary,report));
  const text=equalSanmaComments(summary,report,new Map([[1,{name:'@everyone'}]])).join('');
- assert.match(text,/6000点/);assert.match(text,/試算/);assert.match(text,/ツモ損/);assert.doesNotMatch(text,/@|c3|期待値|絶対|確実|AI/i);
+ assert.match(text,/3000点/);assert.match(text,/6000点/);assert.match(text,/7枚から7枚/);assert.match(text,/試算/);assert.match(text,/ツモ損/);assert.doesNotMatch(text,/@|c3|期待値|絶対|確実|AI/i);
  assert.equal(acceptedSanmaReport(summary,{...report,version:2,model:'sanma-rules-v2'}),null);
  assert.equal(acceptedSanmaReport(summary,{...report,findings:[{...f,recommendedValue:metric('5s',1,6000)}]}),null);
 });
