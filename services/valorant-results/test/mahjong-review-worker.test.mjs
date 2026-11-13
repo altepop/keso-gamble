@@ -64,3 +64,20 @@ test('actual isolated sanma worker recognizes a recorded riichi and offers a rea
   assert.ok(river.includes(defensive.recommended));
  }finally{await reviewer.close();}
 });
+
+test('diagnostics distinguish no decisions, real worker errors and deadlines without exposing messages',async()=>{
+ const real=createPaipuReviewer({sanmaEnabled:true});const got=[];
+ try{assert.equal(await real.review(three,[],d=>got.push(d)),null);assert.equal(got[0].status,'no-decisions');assert.equal(got[0].replayed,0);}finally{await real.close();}
+ for(const [event,status] of [['error','worker-error'],['exit','worker-exit'],['stall','timeout']]){
+  const diagnostics=[],reviewer=createPaipuReviewer({sanmaEnabled:true,timeoutMs:15,workerFactory(){const w=new EventEmitter();w.postMessage=()=>{if(event!=='stall')queueMicrotask(()=>w.emit(event,Error('PRIVATE_ERROR')));};w.terminate=async()=>{};return w;}});
+  try{assert.equal(await reviewer.review(three,[],d=>diagnostics.push(d)),null);assert.equal(diagnostics[0].status,status);assert.doesNotMatch(JSON.stringify(diagnostics),/PRIVATE/);}finally{await reviewer.close();}
+ }
+});
+test('diagnostic messages whitelist fields and callbacks cannot interrupt a successful report',async()=>{
+ const {reviewDiagnostic,displayDiagnostic}=await import('../scripts/mahjong-review-diagnostics.mjs');
+ const raw={status:'no-findings',findings:0,replayed:17,secret:'PRIVATE',uuid:'PRIVATE',valueStatus:'PRIVATE',rounds:-1};
+ assert.deepEqual(reviewDiagnostic(raw),{status:'no-findings',replayed:17,findings:0});
+ assert.deepEqual(displayDiagnostic({status:'no-member-findings',memberFindings:0,private:'PRIVATE'}),{status:'no-member-findings',memberFindings:0});
+ const report={test:true},reviewer=createPaipuReviewer({sanmaEnabled:true,workerFactory(){const w=new EventEmitter();w.postMessage=()=>queueMicrotask(()=>w.emit('message',{kind:'equal-review-result-v1',report,diagnostic:raw}));w.terminate=async()=>{};return w;}});
+ try{assert.deepEqual(await reviewer.review(three,[],()=>{throw Error('callback');}),report);}finally{await reviewer.close();}
+});

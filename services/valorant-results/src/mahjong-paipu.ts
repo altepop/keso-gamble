@@ -211,8 +211,10 @@ export async function queuePaipuMessages(env:PaipuEnv,uuid:string,posts:PaipuMes
 /** Settles a fetched summary, then atomically stores it and its outbox. `players` are the
  * registered accounts of the result watcher, roasted by name until they are linked to Discord. */
 export async function applySummary(env:PaipuEnv,mapping:KpMapping,summary:PaipuSummary,now=Date.now(),players:Array<{id:number;name:string}>=[]){
+ const hadReview=(summary.players===3?summary.review:summary.c3)!==undefined;
  // The signed ingestion may carry a C3 review, but invalid review data never becomes a bot claim.
- summary={...summary,c3:acceptedC3Report(summary,summary.c3)??undefined,review:acceptedSanmaReport(summary,summary.review)??undefined};
+ const sanmaReview=acceptedSanmaReport(summary,summary.review),c3Review=acceptedC3Report(summary,summary.c3);
+ summary={...summary,c3:c3Review??undefined,review:sanmaReview??undefined};
  const claims=(await env.DB.prepare(`SELECT id,user,paipu,rank,status FROM kp_mahjong_claims WHERE guild=? AND paipu=? AND status!='rejected'`).bind(mapping.guildId,summary.uuid).all<{id:string;user:string;paipu:string;rank:number;status:string}>()).results;
  const members=new Map<number,Member>(),outcomes:string[]=[];
  for(const p of summary.seats){const r=players.find(x=>x.id===p.accountId&&p.accountId>0);if(r)members.set(p.seat,{name:r.name});}
@@ -233,6 +235,12 @@ export async function applySummary(env:PaipuEnv,mapping:KpMapping,summary:PaipuS
   posts=paipuPostMessages(summary,members,await roastLevelsOf(env,mapping),outcomes);
  }
  await queuePaipuMessages(env,summary.uuid,posts,now,{guild:mapping.guildId,summary});
+ const report=summary.players===3?sanmaReview:c3Review;
+ const findings=report?.findings??[];
+ const memberFindings=findings.filter(f=>members.has(f.seat)).length;
+ const comments=(summary.players===3?equalSanmaComments(summary,report,members):equalC3Comments(summary,report,members)).length;
+ const status=!report?(hadReview?'invalid-report':'missing-report'):!memberFindings?'no-member-findings':!comments?'no-comparison-findings':!posts.length?'posting-disabled':'queued';
+ return {status,findings:findings.length,memberFindings,comments,posts:posts.length};
 }
 /** GET /api/mahjong/paipu/queue and POST /api/mahjong/paipu/summaries, both signed. */
 export async function paipuApi(request:Request,env:PaipuEnv,override?:KpMapping,playersOverride?:Array<{id:number;name:string}>):Promise<Response>{
@@ -244,21 +252,22 @@ export async function paipuApi(request:Request,env:PaipuEnv,override?:KpMapping,
  await ensureMahjongClaims(env);
  if(request.method==='GET'&&path==='/api/mahjong/paipu/queue')return Response.json({paipu:await paipuQueue(env,mapping.guildId)});
  if(request.method!=='POST'||path!=='/api/mahjong/paipu/summaries')return new Response('Not found',{status:404});
- let results:Array<{uuid:string;summary?:unknown;error?:string}>;
- try{results=JSON.parse(body).results;}catch{return new Response('Invalid body',{status:400});}
+ let results:Array<{uuid:string;summary?:unknown;error?:string}>,diagnosticRequested=false;
+ try{const parsed=JSON.parse(body);results=parsed.results;diagnosticRequested=parsed.reviewDiagnostics===true;}catch{return new Response('Invalid body',{status:400});}
  if(!Array.isArray(results)||results.length>10)return new Response('Invalid body',{status:400});
  const queued=new Set(await paipuQueue(env,mapping.guildId));let stored=0,failed=0;
+ const reviewDiagnostics:Array<Awaited<ReturnType<typeof applySummary>>>=[];
  const failure=async(uuid:string,error:string)=>env.DB.prepare('INSERT INTO kp_mahjong_paipu(guild,paipu,error,attempts,at) VALUES(?,?,?,1,?) ON CONFLICT(guild,paipu) DO UPDATE SET error=excluded.error,attempts=attempts+1,at=excluded.at WHERE kp_mahjong_paipu.summary IS NULL').bind(mapping.guildId,uuid,error,Date.now()).run();
  const players=playersOverride??(override?[]:await mahjongPlayers(env));
  for(const r of results){
   if(typeof r?.uuid!=='string'||!PAIPU.test(r.uuid)||!queued.has(r.uuid))continue;
   if(validSummary(r.summary,r.uuid)){
-   try{await applySummary(env,mapping,r.summary,Date.now(),players);stored++;}
+   try{const diagnostic=await applySummary(env,mapping,r.summary,Date.now(),players);if(diagnosticRequested)reviewDiagnostics.push(diagnostic);stored++;}
    catch{await failure(r.uuid,'summary_apply_failed');failed++;}
    queued.delete(r.uuid);continue;
   }
   const error=typeof r.error==='string'?r.error.replace(/[^\w:,.-]/g,'').slice(0,80):'invalid_summary';
   await failure(r.uuid,error);queued.delete(r.uuid);
  }
- return Response.json({stored,...failed?{failed}:{}});
+ return Response.json({stored,...failed?{failed}:{},...diagnosticRequested?{reviewDiagnostics}:{}});
 }
