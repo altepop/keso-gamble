@@ -1,3 +1,5 @@
+import {DatabaseSync} from 'node:sqlite';
+import {ensureRelicEffectLog} from '../src/relics.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {MORE_MAHJONG_VOICE_RELICS} from '../src/relic-more-voice-mahjong.ts';
@@ -52,4 +54,20 @@ test('Mahjong specialist powers are verified and never apply to casino/market',(
  const c=make([d.id]);
  assert.ok(evaluateRelicBonus(c,'mahjong',{amount:400,win:true}).bonus>1000);
  assert.equal(evaluateRelicBonus(c,'market',{amount:400,win:true}).bonus,0);
+});
+
+test('live relic effect logs are initialized only once without changing reward receipt state', async()=>{
+ const sqlite=new DatabaseSync(':memory:');
+ let creates=0;
+ const db={prepare:(sql:string)=>({run:async()=>{creates++;sqlite.exec(sql);return {meta:{changes:0}};}})} as unknown as D1Database;
+ try{
+  await ensureRelicEffectLog(db);
+  await ensureRelicEffectLog(db);
+  assert.equal(creates,1);
+  const table=sqlite.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='relic_effect_logs'").get();
+  assert.equal(table?.name,'relic_effect_logs');
+  sqlite.prepare("INSERT INTO relic_effect_logs(id,guild,user,mode,base,bonus,details,at) VALUES(?,?,?,?,?,?,?,?)")
+   .run('receipt-1','guild','user','voice',15,5305,'{}',0);
+  assert.equal(sqlite.prepare("SELECT bonus FROM relic_effect_logs WHERE id=?").get('receipt-1')?.bonus,5305);
+ }finally{sqlite.close();}
 });
