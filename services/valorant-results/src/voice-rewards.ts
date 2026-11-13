@@ -4,7 +4,9 @@ import {creditVerifiedRelicBonus} from './relics.ts';
 import type {KpEnv} from './kp.ts';
 /** Each 5-minute slot pays 15 KP: the 5 KP event plus a 10 KP bonus. */
 export const VOICE_BONUS=10;
-export const voicePolicy={intervalMs:300000,amount:5+VOICE_BONUS,dailyCap:48*(5+VOICE_BONUS),slots:48};
+// A UTC day is 288 five-minute slots (09:00 JST reset). Base KP stays deliberately modest.
+export const VOICE_DAILY_SLOTS=288;
+export const voicePolicy={intervalMs:300000,amount:5+VOICE_BONUS,dailyCap:VOICE_DAILY_SLOTS*(5+VOICE_BONUS),slots:VOICE_DAILY_SLOTS};
 export function voiceSlices(from:number,to:number){
  const slices:Array<{day:string;ms:number}>=[];
  if(!Number.isSafeInteger(from)||!Number.isSafeInteger(to)||to<from)return slices;
@@ -16,23 +18,29 @@ const ready=new WeakSet<object>();
 export async function ensureVoiceLedger(env:KpEnv){if(ready.has(env.DB))return;await env.DB.batch([
  env.DB.prepare(`CREATE TABLE IF NOT EXISTS kp_voice_events(id TEXT PRIMARY KEY,guild TEXT NOT NULL,user TEXT NOT NULL,day TEXT NOT NULL,slot INTEGER NOT NULL CHECK(slot BETWEEN 1 AND 48),amount INTEGER NOT NULL CHECK(amount=5),at INTEGER NOT NULL,UNIQUE(guild,user,day,slot))`),
  env.DB.prepare(voiceRewardHistoryIndex),
+ // Leave legacy 1–48 CHECK rows untouched. The extension stores only slots 49–288,
+ // avoiding a costly D1 table rewrite and preserving old event IDs and receipts.
+ env.DB.prepare(`CREATE TABLE IF NOT EXISTS kp_voice_events_ext(id TEXT PRIMARY KEY,guild TEXT NOT NULL,user TEXT NOT NULL,day TEXT NOT NULL,slot INTEGER NOT NULL CHECK(slot BETWEEN 49 AND 288),amount INTEGER NOT NULL CHECK(amount=5),at INTEGER NOT NULL,UNIQUE(guild,user,day,slot))`),
+ env.DB.prepare(`CREATE INDEX IF NOT EXISTS kp_voice_events_ext_member_latest ON kp_voice_events_ext(guild,user,at DESC)`),
+ env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS kp_voice_apply_ext AFTER INSERT ON kp_voice_events_ext BEGIN INSERT INTO kp_ledger(id,guild,user,delta,kind,at) VALUES(NEW.id,NEW.guild,NEW.user,NEW.amount,'voice',NEW.at); END`),
+ env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS kp_voice_bonus_ext AFTER INSERT ON kp_voice_events_ext BEGIN INSERT OR IGNORE INTO kp_ledger(id,guild,user,delta,kind,at) VALUES('bonus:'||NEW.id,NEW.guild,NEW.user,${VOICE_BONUS},'voice',NEW.at); END`),
  env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS kp_voice_apply AFTER INSERT ON kp_voice_events BEGIN INSERT INTO kp_ledger(id,guild,user,delta,kind,at) VALUES(NEW.id,NEW.guild,NEW.user,NEW.amount,'voice',NEW.at); END`),
  // The stored events keep their original 5 KP (a CHECK in the live table); each slot now adds a 10 KP bonus row.
  env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS kp_voice_bonus_v2 AFTER INSERT ON kp_voice_events BEGIN INSERT OR IGNORE INTO kp_ledger(id,guild,user,delta,kind,at) VALUES('bonus:'||NEW.id,NEW.guild,NEW.user,${VOICE_BONUS},'voice',NEW.at); END`),
 ]);ready.add(env.DB);}
 export async function creditVoiceSlot(env:KpEnv,guild:string,user:string,day:string,slot:number,at:number){
- if(!/^\d{15,22}$/.test(user)||!/^\d{15,22}$/.test(guild)||!/^\d{4}-\d{2}-\d{2}$/.test(day)||!Number.isInteger(slot)||slot<1||slot>48)throw Error('Invalid voice slot');
+ if(!/^\d{15,22}$/.test(user)||!/^\d{15,22}$/.test(guild)||!/^\d{4}-\d{2}-\d{2}$/.test(day)||!Number.isInteger(slot)||slot<1||slot>voicePolicy.slots)throw Error('Invalid voice slot');
  await ensureQuizKp(env);await ensureVoiceLedger(env);
  // Participant/wallet/state and credit are one atomic D1 batch, including new members.
  const settledRows=await env.DB.batch([
   env.DB.prepare('INSERT OR IGNORE INTO kp_participants VALUES(?,?)').bind(guild,user),
   env.DB.prepare('INSERT OR IGNORE INTO kp_wallets(guild,user) VALUES(?,?)').bind(guild,user),
   env.DB.prepare('INSERT OR IGNORE INTO kp_state(guild,user,data) VALUES(?,?,?)').bind(guild,user,JSON.stringify(newKpState())),
-  env.DB.prepare('INSERT INTO kp_voice_events VALUES(?,?,?,?,?,5,?) ON CONFLICT DO NOTHING').bind('voice:'+guild+':'+user+':'+day+':'+slot,guild,user,day,slot,at),
+  env.DB.prepare(`INSERT INTO ${slot<=48?'kp_voice_events':'kp_voice_events_ext'} VALUES(?,?,?,?,?,5,?) ON CONFLICT DO NOTHING`).bind('voice:'+guild+':'+user+':'+day+':'+slot,guild,user,day,slot,at),
  ]);
- // Once every fourth genuine 5-minute slot: 12 bonus checks/day max, no extra idle cron reads.
- if(slot%4===0&&(settledRows[3]?.meta?.changes??0)>0)
-  try{await creditVerifiedRelicBonus(env,guild,user,'voice:'+guild+':'+user+':'+day+':'+slot,'voice',voicePolicy.amount,true,at);}catch{console.warn('relic_voice_bonus_pending');}
+ // Every fourth verified slot settles relics. Retry after transient failures without
+ // duplicating base KP: INSERT OR IGNORE and the relic receipt ID are both idempotent.
+ if(slot%4===0)await creditVerifiedRelicBonus(env,guild,user,'voice:'+guild+':'+user+':'+day+':'+slot,'voice',voicePolicy.amount,true,at);
 }
 export interface VoiceRewardEntry {id:string;day:string;slot:number;amount:number;at:number}
 /** A member's last 100 voice rewards don't change unless a new ledger row
@@ -49,8 +57,8 @@ export async function voiceRewardHistory(env:KpEnv,guild:string,user:string,wall
  const key=guild+':'+user,cached=entries.get(key);
  if(cached&&cached.version===walletVersion&&now>=cached.at&&now-cached.at<VOICE_HISTORY_TTL)return cached.promise;
  // D1 returns a Promise; the in-memory SQL fixtures return an object directly.
- const promise=Promise.resolve(env.DB.prepare("SELECT e.id,e.day,e.slot,e.amount+COALESCE((SELECT delta FROM kp_ledger WHERE id='bonus:'||e.id),0) AS amount,e.at FROM kp_voice_events e WHERE e.guild=? AND e.user=? ORDER BY e.at DESC LIMIT 50")
-  .bind(guild,user).all<VoiceRewardEntry>()).then(row=>row.results);
+ const promise=Promise.resolve(env.DB.prepare("SELECT e.id,e.day,e.slot,e.amount+COALESCE((SELECT delta FROM kp_ledger WHERE id='bonus:'||e.id),0) AS amount,e.at FROM (SELECT id,day,slot,amount,at FROM kp_voice_events WHERE guild=? AND user=? UNION ALL SELECT id,day,slot,amount,at FROM kp_voice_events_ext WHERE guild=? AND user=?) e ORDER BY e.at DESC LIMIT 50")
+  .bind(guild,user,guild,user).all<VoiceRewardEntry>()).then(row=>row.results);
  entries.set(key,{version:walletVersion,at:now,promise});
  if(entries.size>8)entries.delete(entries.keys().next().value!);
  try{return await promise;}catch(error){if(entries.get(key)?.promise===promise)entries.delete(key);throw error;}
@@ -67,7 +75,7 @@ export class VoiceClock {
   if(confirmed&&now>=from&&now-from<=120000){
    for(const user of active)for(const part of voiceSlices(from,now)){
     const key='voice:'+part.day+':'+user,r=await this.store.get<VoiceRecord>(key)??{user,day:part.day,ms:0,paid:0};
-    r.ms=Math.min(voicePolicy.intervalMs*48,r.ms+part.ms);await this.store.put(key,r);
+    r.ms=Math.min(voicePolicy.intervalMs*voicePolicy.slots,r.ms+part.ms);await this.store.put(key,r);
    }
   }
   await this.drain(now);
@@ -75,7 +83,7 @@ export class VoiceClock {
  async drain(now:number){
   const records=await this.store.list<VoiceRecord>({prefix:'voice:'});
   for(const [key,r] of records){
-   const earned=Math.min(48,Math.floor(r.ms/voicePolicy.intervalMs));
+   const earned=Math.min(voicePolicy.slots,Math.floor(r.ms/voicePolicy.intervalMs));
    for(let slot=r.paid+1;slot<=earned;slot++){
     try{await this.credit(r,slot,now);r.paid=slot;await this.store.put(key,r);}catch{console.warn('voice_credit_pending');break;}
    }
