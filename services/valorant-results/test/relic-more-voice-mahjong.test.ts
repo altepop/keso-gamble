@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {MORE_MAHJONG_VOICE_RELICS} from '../src/relic-more-voice-mahjong.ts';
 import {ALL_NORMAL_RELICS,RELIC_CATALOG_COUNT,NORMAL_RELIC_BY_ID} from '../src/relic-catalog.ts';
-import {evaluateRelicBonus,type RelicCollection} from '../src/relics.ts';
+import {evaluateRelicBonus,winLoadout,type RelicCollection} from '../src/relics.ts';
 
 const gears=['normal.voice.riddle.three','normal.voice.riddle.five','normal.voice.riddle.fifteen','normal.voice.riddle.crown'];
 const make=(ids:string[]):RelicCollection=>({totalSummons:0,items:Object.fromEntries(ids.map(id=>{
@@ -27,6 +27,22 @@ test('secret voice build: each gear looks unimpressive, full four-slot resonance
  assert.equal(evaluateRelicBonus(make(gears),'casino',{amount:15,win:true}).bonus,0);
  assert.equal(evaluateRelicBonus(make(gears),'voice',{amount:14,win:true}).lines.find(x=>x.id===gears[3])?.exotic,0);
 });
+test('four normal voice relics, with no transcendent, settle 10k–20k KP per verified hour',()=>{
+ const ids=[...gears.slice(0,3),'normal.voice.alarm'];
+ assert.ok(ids.every(id=>NORMAL_RELIC_BY_ID.get(id)?.rarity!=='transcendent'));
+ const loadout=make(ids),settled=evaluateRelicBonus(loadout,'voice',{amount:15,win:true});
+ assert.equal(settled.lines.find(x=>x.id==='normal.voice.riddle.fifteen')?.exotic,4800);
+ // Base 15 KP for all twelve five-minute slots; three 20-minute relic receipts.
+ const hourly=12*15+3*Math.min(settled.bonus,15*400);
+ assert.ok(hourly>=10000&&hourly<=20000,`unexpected voice hourly yield: ${hourly}`);
+ assert.ok(evaluateRelicBonus(make(ids.slice(1)),'voice',{amount:15,win:true}).bonus<1000);
+ assert.equal(evaluateRelicBonus(loadout,'quiz',{amount:15,win:true}).bonus,0);
+ // Anti-swap protection applies until 20 verified minutes pass, not to other modes.
+ const at=Date.parse('2026-11-14T12:00:00Z');
+ assert.equal(evaluateRelicBonus(winLoadout({...loadout,loadoutChangedAt:at-19*60000},'voice',15,at),'voice',{amount:15,win:true}).bonus,0);
+ assert.equal(evaluateRelicBonus(winLoadout({...loadout,loadoutChangedAt:at-20*60000},'voice',15,at),'voice',{amount:15,win:true}).bonus,settled.bonus);
+});
+
 test('Mahjong specialist powers are verified and never apply to casino/market',()=>{
  const d=NORMAL_RELIC_BY_ID.get('normal.mahjong.ryuuiisou')!;
  const c=make([d.id]);
