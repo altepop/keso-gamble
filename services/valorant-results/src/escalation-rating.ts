@@ -8,8 +8,9 @@ export const ESCALATION_SHIELD_VERSION='rank-shields-v1';
 const SHIELD_SCHEMA_KEY='escalation_shield_schema';
 // A separate marker keeps old shield workers from reinstalling their trigger.
 const PLACEMENT_SCHEMA_KEY='escalation_initial_placement_schema';
-export const ESCALATION_PLACEMENT_VERSION='initial-win-100-v1';
-export const ESCALATION_INITIAL_WIN_POINTS=100;
+export const ESCALATION_PLACEMENT_VERSION='initial-win-curve-0-500-900-1200-v1';
+/** Initial placement rewards consecutive milestones, not a flat amount per win. */
+export const ESCALATION_INITIAL_RATINGS=[0,500,900,1200] as const;
 export const escalationShieldEligible=(rating:number)=>Number.isSafeInteger(rating)&&rating>=300&&rating<2400&&rating%300<100;
 export interface EscalationAct {id:string;name:string|null;startedAt:number;endedAt:number;episode?:string|null}
 export interface EscalationPowerProof {act:EscalationAct;performance:number;kdPositive?:boolean;rrPerformance?:number}
@@ -82,9 +83,10 @@ const measureBonus='MIN(5,measurement_performance+NEW.performance)';
 const matchDelta="CASE WHEN NEW.outcome='win' THEN 20 ELSE -20 END+NEW.rr_performance";
 const consistencyBonus="CASE WHEN placement_kind='initial' AND measurement_positive_kd+NEW.kd_positive=3 THEN 100 ELSE 0 END";
 const placementWins="measurement_wins+(NEW.outcome='win')";
+const initialPlacementBase=`CASE (${placementWins}) WHEN 0 THEN ${ESCALATION_INITIAL_RATINGS[0]} WHEN 1 THEN ${ESCALATION_INITIAL_RATINGS[1]} WHEN 2 THEN ${ESCALATION_INITIAL_RATINGS[2]} ELSE ${ESCALATION_INITIAL_RATINGS[3]} END`;
 // Keep the internal estimate across resets. At most +one whole rank on an episode placement.
 const placementRating=`CASE placement_kind
- WHEN 'initial' THEN ${ESCALATION_INITIAL_WIN_POINTS}*(${placementWins})+${measureBonus}+(${consistencyBonus})
+ WHEN 'initial' THEN (${initialPlacementBase})+${measureBonus}+(${consistencyBonus})
  WHEN 'act' THEN seed_rating+CASE WHEN NEW.outcome='win' THEN 20+${measureBonus} ELSE 0 END
  ELSE MAX(0,seed_rating-600+MIN(900,MAX(0,seed_mmr-seed_rating+100*(2*(${placementWins})-measurement_required)+${measureBonus}))) END`;
 const placementPerformance=`((${placementRating})-(${placementRating.replaceAll(measureBonus,'0')}))`;
