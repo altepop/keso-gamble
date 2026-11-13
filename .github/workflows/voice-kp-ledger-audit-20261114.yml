@@ -49,7 +49,7 @@ jobs:
             const response=await fetch(root+'/d1/database/'+db+'/query',{method:'POST',
               headers:{...headers,'Content-Type':'application/json'},
               body:JSON.stringify({sql}),signal:AbortSignal.timeout(25000)});
-            if(!response.ok)throw Error('Read-only D1 query HTTP '+response.status+' for '+label);
+            if(!response.ok){ const err=await response.json().catch(()=>({})); console.error('D1 diagnostic error',label,JSON.stringify((err.errors??[]).map(e=>({code:e.code,message:String(e.message??'').slice(0,240)})))); throw Error('Read-only D1 query HTTP '+response.status+' for '+label); }
             const data=await response.json();
             if(!data.success||!data.result?.[0]?.success)throw Error('Read-only D1 query failed for '+label);
             const row=data.result[0].results?.[0]??{};
