@@ -8,8 +8,10 @@ test('voice reward history uses member/date index, preserves latest 100 and all 
  const sql=new DatabaseSync(':memory:');
  sql.exec('CREATE TABLE kp_ledger(id TEXT PRIMARY KEY,guild TEXT,user TEXT,delta INTEGER,kind TEXT,at INTEGER)');
  class Statement {
-  text:string;
-  constructor(text:string){this.text=text;}
+  text:string;values:unknown[];
+  constructor(text:string,values:unknown[]=[]){this.text=text;this.values=values;}
+  bind(...values:unknown[]){return new Statement(this.text,values);}
+  all(){return {results:sql.prepare(this.text).all(...this.values as never[])};}
   run(){sql.exec(this.text);return {meta:{changes:0}};}
  }
  const db={prepare:(text:string)=>new Statement(text),batch:async(queries:Statement[])=>{
