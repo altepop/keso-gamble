@@ -13,6 +13,9 @@ import type { KpEnv, KpMapping } from './kp.ts';
 export interface Entry { horseId:string; name:string; ability:number; style:number; owner:string; ownerName:string; nickname?:string|null; person?:boolean; condition?:number; record?:{races:number;wins:number;seconds:number;thirds:number}; recentRanks?:number[] }
 export interface Horse { id:string; owner:string; name:string; grade:number; ability:number; style:number; box:string; price:number; created_at:number; races:number; wins:number; seconds:number; thirds:number; earnings:number; retired_at:number|null; sold_at:number|null; last_race:number|null }
 export const ENTRY_CHANCE=.4,REST=60*60000,CONSOLATION_RATE=.05;
+// One-off proof: enter Fujimura's real, never-raced horse in the next undecided
+// field. Do not rewrite any existing race, odds, settlement or horse name.
+export const FUJIMURA_PROOF_PREFIX='horse_debut_proof_20261114:';
 // Prioritize the four minutes after a finish. Hourly retry preserves eventual settlement.
 export function shouldSettleHorsePrizes(now:number){
  if(!Number.isSafeInteger(now)||now<0)return false;
@@ -123,7 +126,24 @@ export async function decideEntries(env:KpEnv,mapping:KpMapping,race:number,now=
  const size=raceCard(race).size;
  const eligible=(await env.DB.prepare(`SELECT id FROM kp_horses h WHERE guild=? AND grade=? AND sold_at IS NULL AND retired_at IS NULL AND created_at<=?
   AND NOT EXISTS(SELECT 1 FROM kp_race_entries e WHERE e.guild=h.guild AND e.horse=h.id AND e.race>? AND e.race<?)`).bind(mapping.guildId,raceClass(race),now,race-REST,race+REST).all<{id:string}>()).results.map(r=>r.id);
- const picked=eligible.filter(()=>cryptoRng()<chance).map(id=>({id,order:cryptoRng()})).sort((a,b)=>a.order-b.order).slice(0,size);
+ // One real debut, even if the next available race is a different class.
+ // A public notice is posted before betting. Race odds, outcome and prizes
+ // still use the horse's actual attributes and the normal seeded algorithm.
+ const proofKey=FUJIMURA_PROOF_PREFIX+mapping.guildId;
+ let proofHorse:string|null=null;
+ if(!await env.DB.prepare('SELECT 1 FROM kp_settings WHERE key=?').bind(proofKey).first()){
+  const account=mapping.accounts.find(a=>/藤村|fujimura|^frin$/i.test(memberName(mapping,a.discordUserId))||
+   /fujimura|^frin$/i.test(a.riotId.split('#')[0]??''));
+  if(account){
+   const horse=await env.DB.prepare(`SELECT h.id FROM kp_horses h WHERE h.guild=? AND h.owner=?
+    AND h.sold_at IS NULL AND h.retired_at IS NULL AND h.races=0 AND h.created_at<=?
+    AND NOT EXISTS(SELECT 1 FROM kp_race_entries e WHERE e.guild=h.guild AND e.horse=h.id)
+    ORDER BY h.created_at DESC LIMIT 1`).bind(mapping.guildId,account.discordUserId,now).first<{id:string}>();
+   proofHorse=horse?.id??null;
+  }
+ }
+ const picked=[...(proofHorse?[{id:proofHorse,order:-1}]:[]),
+  ...eligible.filter(id=>id!==proofHorse&&cryptoRng()<chance).map(id=>({id,order:cryptoRng()})).sort((a,b)=>a.order-b.order)].slice(0,size);
  // Each runner's condition comes from its owner's (or namesake's) play, fixed now with the entries.
  const owners=new Map((picked.length?(await env.DB.prepare(`SELECT id,owner FROM kp_horses WHERE id IN (${picked.map(()=>'?').join(',')})`).bind(...picked.map(p=>p.id)).all<{id:string;owner:string}>()).results:[]).map(r=>[r.id,r.owner]));
  const crown=await crownFor(env,mapping.guildId,race);
@@ -132,7 +152,11 @@ export async function decideEntries(env:KpEnv,mapping:KpMapping,race:number,now=
  // Entries, conditions and the marker go in one transaction; a concurrent decision inserts nothing.
  await env.DB.batch([
   ...runners.map(r=>env.DB.prepare('INSERT INTO kp_entry_conditions(guild,race,horse,condition) SELECT ?,?,?,? WHERE NOT EXISTS(SELECT 1 FROM kp_race_fields WHERE guild=? AND race=?)').bind(mapping.guildId,race,r.horse,conditions.get(r.user)!,mapping.guildId,race)),
-  ...picked.map((p,i)=>env.DB.prepare('INSERT INTO kp_race_entries(guild,race,gate_order,horse) SELECT ?,?,?,? WHERE NOT EXISTS(SELECT 1 FROM kp_race_fields WHERE guild=? AND race=?)').bind(mapping.guildId,race,i,p.id,mapping.guildId,race)),
+  ...picked.map((p,i)=>env.DB.prepare('INSERT INTO kp_race_entries(guild,race,gate_order,horse) SELECT ?,?,?,? WHERE NOT EXISTS(SELECT 1 FROM kp_race_fields WHERE guild=? AND race=?)'
+    +(p.id===proofHorse?' AND NOT EXISTS (SELECT 1 FROM kp_settings WHERE key=?)':''))
+    .bind(mapping.guildId,race,i,p.id,mapping.guildId,race,...(p.id===proofHorse?[proofKey]:[]))),
+  ...(proofHorse?[env.DB.prepare('INSERT OR IGNORE INTO kp_settings(key,value) SELECT ?,? WHERE EXISTS (SELECT 1 FROM kp_race_entries WHERE guild=? AND race=? AND horse=?)')
+    .bind(proofKey,JSON.stringify({race,horse:proofHorse}),mapping.guildId,race,proofHorse)]:[]),
   env.DB.prepare('INSERT OR IGNORE INTO kp_race_fields(guild,race,decided_at) VALUES(?,?,?)').bind(mapping.guildId,race,now),
  ]);
  return raceEntries(env,mapping,race);
