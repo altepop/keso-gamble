@@ -644,6 +644,18 @@ export const STEAM_RELIC_CAP_USED_SQL=`SELECT COALESCE(SUM(l.delta),0) AS n FROM
  * `lottery` is the legacy signed アンレ split. Legacy receipts keep their original base-only calculation.
  * V7 receipts pass zero: the entire 70/500/2,000/10,000/100,000 award receives relics.
  */
+// D1 production may predate the optional per-receipt breakdown table.
+// Create it lazily on the first real paid relic receipt in each Worker isolate.
+// A missing logging table must never roll back the actual KP award.
+const relicEffectLogReady=new WeakSet<object>();
+export async function ensureRelicEffectLog(db:D1Database):Promise<void>{
+ if(relicEffectLogReady.has(db))return;
+ await db.prepare(`CREATE TABLE IF NOT EXISTS relic_effect_logs(
+  id TEXT PRIMARY KEY,guild TEXT NOT NULL,user TEXT NOT NULL,
+  mode TEXT NOT NULL,base INTEGER NOT NULL,bonus INTEGER NOT NULL,
+  details TEXT NOT NULL,at INTEGER NOT NULL)`).run();
+ relicEffectLogReady.add(db);
+}
 export async function creditVerifiedRelicBonus(
  env:{DB:D1Database},guild:string,user:string,receipt:string,mode:string,amount:number,win:boolean,at=Date.now(),lottery=0,
 ):Promise<number> {
@@ -696,6 +708,7 @@ export async function creditVerifiedRelicBonus(
   .bind(id,guild,user,bonus,'relic',at).run();
  // Log only real credited receipts; write is independently idempotent on retries.
  try{
+  await ensureRelicEffectLog(env.DB);
   await env.DB.prepare(
    'INSERT OR IGNORE INTO relic_effect_logs(id,guild,user,mode,base,bonus,details,at) SELECT ?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM kp_ledger WHERE id=? AND guild=? AND user=?)'
   ).bind(id,guild,user,mode,amount,bonus,JSON.stringify({lines:detail.lines,sets:detail.sets,resonance:detail.resonance,curseReversed:detail.curseReversed,spikeOpening:detail.spikeOpening,kind}),at,id,guild,user).run();
