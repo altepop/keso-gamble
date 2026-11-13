@@ -1359,7 +1359,7 @@ test('a failed multi-player reservation rolls back every participant and keeps a
   assert.equal(await runDeathCommand(env.DB, interaction, config), result);
   assert.equal((await env.DB.prepare('SELECT COUNT(*) AS n FROM death_unrated_sessions').first<{ n: number }>())!.n, 0);
 });
-test('competitive draws notify once with details and group teammates while escalation draws remain record-only', async () => {
+test('competitive and escalation draws both notify once without fabricating a winner', async () => {
   const env = environment(); const original = globalThis.fetch;
   const config = [{ riotId: 'one#JP1', name: 'プレイヤーA' }, { riotId: 'two#JP1', name: 'プレイヤーC' }];
   for (const [n, player] of config.entries()) await env.DB.prepare('INSERT INTO tracked_players VALUES(?,?,?,?)')
@@ -1370,7 +1370,7 @@ test('competitive draws notify once with details and group teammates while escal
       stats: { kills: 20, deaths: 18, assists: 5, score: 5600, headshots: 10, bodyshots: 30, legshots: 0 } })),
   };
   draw.teams.forEach(team => { team.won = false; team.rounds.won = 14; });
-  const arcade = match('escalation-draw', 'ggteam'); arcade.teams.forEach(team => { team.won = false; });
+  const arcade = match('escalation-draw', 'ggteam'); arcade.teams.forEach(team => { team.won = false; team.rounds.won = 0; });
   const messages: string[] = [];
   globalThis.fetch = async (url, init) => {
     if (String(url).includes('api.henrikdev.xyz')) return Response.json({ data: String(url).includes('user-1') ? [draw, arcade] : [draw] });
@@ -1378,7 +1378,7 @@ test('competitive draws notify once with details and group teammates while escal
   };
   try {
     await monitor(env, config); await monitor(env, config);
-    assert.equal(messages.length, 1);
+    assert.equal(messages.length, 2);
     assert.match(messages[0], /同じ試合の結果（2人）/);
     for (const name of ['プレイヤーA', 'プレイヤーC']) assert.ok(messages[0].includes(name + 'は14対14で引き分け（コンペ）'));
     assert.match(messages[0], /20K \/ 18D \/ 5A｜ACS 200｜HS命中率 25.0%/);
@@ -1386,7 +1386,11 @@ test('competitive draws notify once with details and group teammates while escal
     assert.match(messages[0], /連勝・連敗なし（引き分けでリセット）/);
     assert.match(messages[0], /勝率の分母|引分除く|相性はまだ調査中/);
     assert.doesNotMatch(messages[0], /\d+連敗|\d+連勝|負け！|エスカレーション/);
+    assert.match(messages[1], /プレイヤーAは引き分け（エスカレーション）/);
+    assert.match(messages[1], /0勝0敗1分/);
+    assert.doesNotMatch(messages[1], /勝ち！！|負け！|エスカ大勝負|\+\d+ KP|\+\d+ RR/);
     assert.equal((await env.DB.prepare('SELECT COUNT(*) AS n FROM notifications WHERE sent=1').first<{ n: number }>())!.n, 3);
+    assert.equal((await env.DB.prepare("SELECT COUNT(*) AS n FROM notifications WHERE mode='escalation' AND outcome='draw' AND sent=1").first<{ n: number }>())!.n, 1);
   } finally { globalThis.fetch = original; }
 });
 
