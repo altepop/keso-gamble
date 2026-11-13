@@ -339,7 +339,7 @@ test('legacy expensive horse boxes are refunded exactly once, including sold/ret
 
 test('Fujimura SQL-like horse name is invited once to the next race, announced, and finishes safely', async()=>{
  const f=await fixture(0);
- const fujimura:KpMapping={guildId:guild,accounts:[{riotId:'Fujimura#JP1',discordUserId:one}]};
+ const fujimura:KpMapping={guildId:guild,accounts:[{riotId:'frin#JP1',discordUserId:one}]};
  const race=raceOfClass(0,openRaceStart(T0)+RACE_INTERVAL);
  const opening=race-RACE_INTERVAL+10_000;
  const dangerousName="';DROP;--";
