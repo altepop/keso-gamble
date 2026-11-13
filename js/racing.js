@@ -379,9 +379,9 @@ export const BOXES=[
  {id:'normal',label:'ノーマル',price:3000,odds:[90,10,0,0,0]},
  {id:'silver',label:'シルバー',price:15000,odds:[15,75,10,0,0]},
  {id:'gold',label:'ゴールド',price:60000,odds:[0,15,75,10,0]},
- {id:'platinum',label:'プラチナ',price:250000,odds:[0,0,30,70,0]},
- {id:'legend',label:'レジェンド',price:1000000,odds:[0,0,0,70,30]},
- {id:'apex',label:'頂上級確定',price:3500000,odds:[0,0,0,0,100]},
+ {id:'platinum',label:'プラチナ',price:200000,odds:[0,0,30,70,0]},
+ {id:'legend',label:'レジェンド',price:650000,odds:[0,0,0,70,30]},
+ {id:'apex',label:'頂上級確定',price:1500000,odds:[0,0,0,0,100]},
 ];
 /** A new horse from a box, drawn with the given random source (the Worker uses crypto). */
 export function drawHorse(boxId,rng){
@@ -389,8 +389,11 @@ export function drawHorse(boxId,rng){
  const grade=pickWeighted(rng,box.odds);
  return {grade,ability:Math.round((CLASSES[grade].mean+normal(rng)*.25)*1000)/1000,style:Math.floor(rng()*STYLES.length)};
 }
-/** Prize for a finishing place (0-based); grows with the race class. */
+/** Base prize for a finishing place (0-based). Also used by free namesake horses. */
 export const prizeFor=(card,rank)=>rank<PRIZES.length?PRIZES[rank]*CLASSES[card.raceClass].mult:0;
+/** Paid/owned horses get an additional class-dependent prize. Do not increase free namesake-horse payouts. */
+export const OWNED_PRIZE_MULTIPLIERS=[1,1,1,2,3.5];
+export const ownedPrizeFor=(card,rank)=>Math.round(prizeFor(card,rank)*OWNED_PRIZE_MULTIPLIERS[card.raceClass]);
 /** Buy-back price: 20% when new, falling to 10% at retirement. */
 export const sellValue=(price,races)=>Math.floor(price*(20-10*Math.min(races,RETIRE_RACES)/RETIRE_RACES)/100);
 export function validHorseName(name){
