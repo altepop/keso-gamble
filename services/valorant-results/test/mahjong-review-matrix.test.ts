@@ -30,7 +30,7 @@ for(const players of [3,4] as const)for(const length of ['tonpu','hanchan'] as c
    if(end.name==='RecordHule')assert.ok(text.includes('**主な和了**'));
   }
  });
- test(`${players}-${length}: final-round metadata and bust results are retained; sanma omits unverified placement advice`,()=>{
+ test(`${players}-${length}: final-round metadata and bust results are retained; sanma requires explicit supported placement conditions`,()=>{
   const fixture=players===3?threeValueScenario():fourScenario('reach'),actions=structuredClone(fixture.actions),n=players-1;
   const remap=(s:number)=>(s+n)%players;
   const start=actions[0].data,hands=Array.from({length:players},(_,seat)=>start['tiles'+seat]);hands.forEach((hand,seat)=>start['tiles'+remap(seat)]=hand);
@@ -42,7 +42,10 @@ for(const players of [3,4] as const)for(const length of ['tonpu','hanchan'] as c
   }
   const head={uuid:'synthetic-final-'+players,start_time:0,end_time:1,config:{mode:{mode:players===3?(length==='tonpu'?11:12):(length==='tonpu'?1:2)}},accounts:Array.from({length:players},(_,seat)=>({seat,account_id:seat+1,nickname:'test'+seat})),result:{players:Array.from({length:players},(_,seat)=>({seat,part_point_1:seat===n?-1000:35000}))}};
   const summary=summarizePaipu(head,actions),frames=reviewDecisions(actions,summary);assert.ok(frames.length);assert.ok(frames.every(d=>d.dealer===n));
-  if(players===3)assert.ok(frames.every(d=>sanmaValueCase(d,summary.game)===null));
+  if(players===3){
+   assert.ok(frames.filter(d=>d.seat===n).every(d=>sanmaValueCase(d,summary.game)===null),'dealer continuation is not treated as an ending');
+   assert.ok(frames.every(d=>sanmaValueCase({...d,honba:1},summary.game)===null),'unknown honba conditions still abstain');
+  }
   const text=paipuPostMessages(summary,new Map([[n,{name:'test'+n}]]),()=> 'full').map(m=>m.content+(m.embeds??[]).map(e=>e.description).join('')).join('');assert.match(text,/トビ/);
  });
 }

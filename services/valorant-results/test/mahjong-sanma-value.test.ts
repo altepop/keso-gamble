@@ -18,7 +18,7 @@ test('conditional hand value request includes only focal hand and public known f
  assert.ok(c.candidates.every(c=>c.hand.length===13));
  const keep=c.candidates.find(c=>c.tile==='5s')!;assert.deepEqual(keep.waits,[{tile:'1s',left:3},{tile:'4s',left:4}]);
  assert.equal(JSON.stringify(c).includes('tiles0'),false);assert.deepEqual(d.publicRed,[]);
- for(const change of [{publicRed:undefined},{turn:1},{wind:1,dealer:2},{riichi:[false,true,false]},{hand:['N',...d.hand.slice(1)]}])assert.equal(sanmaValueCase({...d,...change},'3-hanchan'),null);
+ for(const change of [{publicRed:undefined},{turn:1},{wind:1,dealer:2,honba:1},{riichi:[false,true,false]},{hand:['N',...d.hand.slice(1)]}])assert.equal(sanmaValueCase({...d,...change},'3-hanchan'),null);
 });
 test('red wait availability is based on public red tiles and focal hand only',()=>{
  const {d}=frame();

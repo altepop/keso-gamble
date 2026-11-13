@@ -4,6 +4,8 @@ import type {SanmaRuleFinding} from './mahjong-sanma-report.ts';
 // Prefer demonstrated value gaps, then lost shanten, then lost ukeire. A mere
 // agreement never proves educational value, including in older signed reports.
 function priority(f:SanmaRuleFinding):[number,number,number]{
+ if(f.basis==='placement')return [5,f.recommendedValue.min-f.actualValue.max,0];
+ if(f.basis==='genbutsu'&&f.river)return [4,f.shanten,0];
  if(f.basis==='tsumo-value')return [3,f.recommendedValue.min-f.actualValue.max,f.recommendedValue.live-f.actualValue.live];
  if(f.basis==='shape'){
   const gap=f.actualMetric.shanten-f.recommendedMetric.shanten;

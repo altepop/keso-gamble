@@ -88,8 +88,8 @@ def evaluate_case(case):
             # Ambiguous/unsupported limit hands suppress the whole comparison.
             if result.error or not result.cost or result.han >= 13 or any(y.is_yakuman for y in result.yaku):
                 return None
-            wins.append((w['left'], result.cost['main'] + result.cost['additional'], result.han, result.fu))
-        metrics.append(dict(tile=c['tile'], live=sum(x[0] for x in wins), min=min(x[1] for x in wins), max=max(x[1] for x in wins),
+            wins.append((w['left'], result.cost['main'] + result.cost['additional'], result.han, result.fu, result.cost['main'], result.cost['additional']))
+        metrics.append(dict(payments=[dict(main=p[0], additional=p[1]) for p in sorted(set((x[4], x[5]) for x in wins))], tile=c['tile'], live=sum(x[0] for x in wins), min=min(x[1] for x in wins), max=max(x[1] for x in wins),
                             hanMin=min(x[2] for x in wins), hanMax=max(x[2] for x in wins), fuMin=min(x[3] for x in wins), fuMax=max(x[3] for x in wins)))
     return metrics
 
