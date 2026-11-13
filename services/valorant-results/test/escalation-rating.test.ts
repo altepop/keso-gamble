@@ -24,8 +24,8 @@ async function fixture(){
 test('three initial placements set a visible rank; prior policies, other modes and duplicate IDs never count',async()=>{
  const f=await fixture();assert.equal((await escalationRatingView(f.env,'guild','u')).measurementRequired,3);
  for(const win of [true,false])await f.play('u',win);assert.equal((await escalationRatingView(f.env,'guild','u')).rating,null);
- const id=await f.play('u',true);let v=await escalationRatingView(f.env,'guild','u');assert.equal(v.rating,300);assert.equal(v.grade,'ブロンズ Ⅰ');assert.equal(v.rank!.rr,0);assert.equal(v.measurementGames,3);assert.equal(v.seriesWins,0);
- await f.play('u',false,'escalation',ESCALATION_RATING_POLICY,id);await f.play('u',true,'swiftplay');await f.play('u',true,'escalation','mode-rewards-v6');v=await escalationRatingView(f.env,'guild','u');assert.equal(v.played,3);assert.equal(v.rating,300);
+ const id=await f.play('u',true);let v=await escalationRatingView(f.env,'guild','u');assert.equal(v.rating,200);assert.equal(v.grade,'アイアン Ⅲ');assert.equal(v.rank!.rr,0);assert.equal(v.measurementGames,3);assert.equal(v.seriesWins,0);
+ await f.play('u',false,'escalation',ESCALATION_RATING_POLICY,id);await f.play('u',true,'swiftplay');await f.play('u',true,'escalation','mode-rewards-v6');v=await escalationRatingView(f.env,'guild','u');assert.equal(v.played,3);assert.equal(v.rating,200);
  assert(!JSON.stringify(v).includes('mmr'),'internal MMR is never returned by the Activity API');
 });
 test('every certified match changes RR immediately across the full correction range; duplicates remain unchanged',async()=>{
@@ -43,7 +43,7 @@ test('same-episode ACT uses one placement, never demotes for that loss, clears p
  const f=await fixture();for(const w of [true,false,true])await f.play('u',w);await f.play('u',true);
  const before=f.sql.prepare('SELECT rating,mmr FROM kp_escalation_ratings').get()!;
  await observeEscalationAct(f.env,'guild',{id:'act-b',name:'e11a2',episode:'e11',startedAt:100000,endedAt:100100});
- let v=await escalationRatingView(f.env,'guild','u');assert.equal(v.measurementRequired,1);assert.equal(v.placementKind,'act');assert.equal(v.inheritedRank!.name,'ブロンズ Ⅰ');assert.equal(v.rating,null);
+ let v=await escalationRatingView(f.env,'guild','u');assert.equal(v.measurementRequired,1);assert.equal(v.placementKind,'act');assert.equal(v.inheritedRank!.name,'アイアン Ⅲ');assert.equal(v.rating,null);
  await f.play('u',false,'escalation',ESCALATION_RATING_POLICY,'new-act','act-b',0,100000);
  v=await escalationRatingView(f.env,'guild','u');assert.equal(v.act!.id,'act-b');assert.equal(v.measurementGames,1);assert.equal(v.seriesWins,0);assert.equal(v.rating,before.rating);assert.equal(v.lastChange,0);assert.equal(v.previousActs[0].played,4);
  assert.equal(f.sql.prepare('SELECT mmr FROM kp_escalation_ratings WHERE act=?').get('act-b')!.mmr,Number(before.mmr)-30);
@@ -55,7 +55,7 @@ test('same-episode ACT uses one placement, never demotes for that loss, clears p
 test('ACT placement win can advance slightly; skipped ACTs inherit the last certified rank and never repeat an episode reset',async()=>{
  const f=await fixture();for(const w of [true,false,true])await f.play('u',w);
  await f.play('u',true,'escalation',ESCALATION_RATING_POLICY,'act-c','act-c',3,100000);
- let v=await escalationRatingView(f.env,'guild','u');assert.equal(v.rating,323);assert.equal(v.measurementRequired,1);assert.equal(v.seriesWins,0);
+ let v=await escalationRatingView(f.env,'guild','u');assert.equal(v.rating,223);assert.equal(v.measurementRequired,1);assert.equal(v.seriesWins,0);
  await f.play('u',false,'escalation',ESCALATION_RATING_POLICY,'ep1','new-episode',0,200000,'e12');
  await f.play('u',false,'escalation',ESCALATION_RATING_POLICY,'ep2','new-episode',0,201000,'e12');
  await f.play('u',false,'escalation',ESCALATION_RATING_POLICY,'ep3','new-episode',0,202000,'e12');
@@ -76,8 +76,8 @@ test('episode placements usually drop two whole ranks; strong internal estimates
 });
 test('placement bonuses remain separate from signed per-match correction and highest rank survives losses',async()=>{
  const f=await fixture();for(let i=0;i<3;i++)await f.play('u',true,'escalation',ESCALATION_RATING_POLICY,'measure-'+i,'act-a',3,undefined,'e11',true);
- let v=await escalationRatingView(f.env,'guild','u');assert.equal(v.rating,555);assert.equal(v.lastPerformance,5);assert.equal(v.lastUpdateKind,'placement');
- for(let i=0;i<2;i++)await f.play('u',true,'escalation',ESCALATION_RATING_POLICY,'climb-'+i,'act-a',0,undefined,'e11',false,10);
+ let v=await escalationRatingView(f.env,'guild','u');assert.equal(v.rating,405);assert.equal(v.lastPerformance,5);assert.equal(v.lastUpdateKind,'placement');
+ for(let i=0;i<7;i++)await f.play('u',true,'escalation',ESCALATION_RATING_POLICY,'climb-'+i,'act-a',0,undefined,'e11',false,10);
  v=await escalationRatingView(f.env,'guild','u');assert.equal(v.rating,615);assert.equal(v.rankShields!.remaining,2);
  await f.play('u',false,'escalation',ESCALATION_RATING_POLICY,'great-loss','act-a',3,undefined,'e11',false,10);
  v=await escalationRatingView(f.env,'guild','u');assert.equal(v.rating,605);assert.equal(v.lastChange,-10);assert.equal(v.rankShields!.remaining,2);assert.equal(v.rankShields!.lastConsumed,false);assert.equal(v.lastPerformance,10);assert.equal(v.peakGrade,'シルバー Ⅰ');
@@ -110,8 +110,8 @@ test('floor, top-ten and inheritance use bounded indexes; leaderboards are cache
 });
 
 
-test('new initial placement cutoffs reduce win points from 200 to 150 without changing performance RR',async()=>{
- const cases=[[0,0,'アイアン Ⅰ'],[1,150,'アイアン Ⅱ'],[2,300,'ブロンズ Ⅰ'],[3,450,'ブロンズ Ⅱ']] as const;
+test('new initial placement cutoffs reduce win points from 200 to 100 without changing performance RR',async()=>{
+ const cases=[[0,0,'アイアン Ⅰ'],[1,100,'アイアン Ⅱ'],[2,200,'アイアン Ⅲ'],[3,300,'ブロンズ Ⅰ']] as const;
  for(const [wins,points,name] of cases)for(const performance of [0,3]){
   const f=await fixture();for(let i=0;i<3;i++)await f.play('u',i<wins,'escalation',ESCALATION_RATING_POLICY,undefined,'act-a',performance);
   const v=await escalationRatingView(f.env,'guild','u');assert.equal(v.rating,points+(performance?5:0));assert.equal(v.grade,name);assert.equal(v.rank!.rr,(points+(performance?5:0))%100);
@@ -120,7 +120,7 @@ test('new initial placement cutoffs reduce win points from 200 to 150 without ch
 
 
 test('positive KD in all three initial games adds one division once, while one missing or equal KD prevents it',async()=>{
- for(const [wins,points,name] of [[0,100,'アイアン Ⅱ'],[1,250,'アイアン Ⅲ'],[2,400,'ブロンズ Ⅱ'],[3,550,'ブロンズ Ⅲ']] as const){
+ for(const [wins,points,name] of [[0,100,'アイアン Ⅱ'],[1,200,'アイアン Ⅲ'],[2,300,'ブロンズ Ⅰ'],[3,400,'ブロンズ Ⅱ']] as const){
   const f=await fixture();let last='';for(let i=0;i<3;i++)last=await f.play('u',i<wins,'escalation',ESCALATION_RATING_POLICY,undefined,'act-a',0,undefined,'e11',true);
   let v=await escalationRatingView(f.env,'guild','u');assert.equal(v.rating,points);assert.equal(v.grade,name);assert.equal(v.placementConsistencyBonus,100);assert.equal(v.measurementPositiveKd,3);assert.equal(v.lastPerformance,0);
   await f.play('u',false,'escalation',ESCALATION_RATING_POLICY,last,'act-a',0,undefined,'e11',true);v=await escalationRatingView(f.env,'guild','u');assert.equal(v.rating,points);assert.equal(v.measurementPositiveKd,3);
@@ -156,8 +156,8 @@ test('upgrading a real old receipt table preserves ranks/history, replaces the o
  const f=await fixture();for(const w of [true,false,true])await f.play('u',w);
  f.sql.exec("DROP TRIGGER kp_escalation_power_apply; ALTER TABLE kp_escalation_power_matches DROP COLUMN rr_performance; DELETE FROM kp_settings WHERE key IN ('escalation_rr_schema','escalation_shield_schema','escalation_initial_placement_schema'); UPDATE kp_escalation_ratings SET series_wins=2,series_losses=1; CREATE TRIGGER kp_escalation_power_apply AFTER INSERT ON kp_escalation_power_matches BEGIN UPDATE kp_escalation_ratings SET rating=rating+100; END;");
  const env={...f.env,DB:{...f.env.DB}} as unknown as KpEnv;await ensureEscalationRating(env);
- assert.equal(f.sql.prepare('SELECT rating FROM kp_escalation_ratings').get()!.rating,300);assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM kp_escalation_power_matches').get()!.n,3);
- await f.play('u',true);const v=await escalationRatingView(f.env,'guild','u');assert.equal(v.rating,320);assert.equal(v.lastChange,20);assert.equal(v.seriesWins,0);assert.equal(v.seriesLosses,0);
+ assert.equal(f.sql.prepare('SELECT rating FROM kp_escalation_ratings').get()!.rating,200);assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM kp_escalation_power_matches').get()!.n,3);
+ await f.play('u',true);const v=await escalationRatingView(f.env,'guild','u');assert.equal(v.rating,220);assert.equal(v.lastChange,20);assert.equal(v.seriesWins,0);assert.equal(v.seriesLosses,0);
  assert.equal(f.sql.prepare("SELECT value FROM kp_settings WHERE key='escalation_rr_schema'").get()!.value,'per-match-v2');
  let reads=0;const cached={...f.env,DB:{...f.env.DB,prepare(t:string){reads++;return f.env.DB.prepare(t);}}} as unknown as KpEnv;await Promise.all([ensureEscalationRating(cached),ensureEscalationRating(cached)]);await ensureEscalationRating(cached);assert.equal(reads,1);
 });
@@ -212,8 +212,9 @@ test('ACT recognition inherits consumed shields; episode recognition can grant s
  f.sql.prepare("UPDATE kp_escalation_ratings SET rating=1200,mmr=1200 WHERE act='act-c'").run();
  for(let i=0;i<3;i++)await f.play('u',false,'escalation',ESCALATION_RATING_POLICY,undefined,'episode-new',0,300000+i*1000,'e12');v=await f.view();assert.equal(v.rating,600);assert.equal(v.rankShields!.remaining,2);assert.equal(v.rankShields!.lastConsumed,false);
  const initial=await fixture();for(let i=0;i<3;i++)await initial.play('u',true);
- assert.equal((await escalationRatingView(initial.env,'guild','u')).rankShields!.remaining,0);
- for(let i=0;i<8;i++)await initial.play('u',true);
+ assert.equal((await escalationRatingView(initial.env,'guild','u')).rating,300);
+ assert.equal((await escalationRatingView(initial.env,'guild','u')).rankShields!.remaining,2);
+ for(let i=0;i<16;i++)await initial.play('u',true);
  assert.equal((await escalationRatingView(initial.env,'guild','u')).rankShields!.remaining,2);
 });
 test('old per-match-v2 schema gains shields once without changing RR/history and retains the rolling v2 compatibility marker',async()=>{
@@ -231,9 +232,9 @@ test('placement policy upgrade preserves spent shields and existing certified ra
  await ensureEscalationRating({...f.env,DB:{...f.env.DB}} as unknown as KpEnv);
  assert.deepEqual(f.sql.prepare('SELECT rating,peak_rating,mmr,rank_shields,played FROM kp_escalation_ratings WHERE user=?').get('u'),original);
  assert.equal(f.sql.prepare("SELECT value FROM kp_settings WHERE key='escalation_shield_schema'").get()!.value,'rank-shields-v1');
- assert.equal(f.sql.prepare("SELECT value FROM kp_settings WHERE key='escalation_initial_placement_schema'").get()!.value,'initial-win-150-v1');
+ assert.equal(f.sql.prepare("SELECT value FROM kp_settings WHERE key='escalation_initial_placement_schema'").get()!.value,'initial-win-100-v1');
  for(let i=0;i<3;i++)await f.play('new',true);
- assert.equal((await escalationRatingView(f.env,'guild','new')).rating,450);
+ assert.equal((await escalationRatingView(f.env,'guild','new')).rating,300);
 });
 test('a second initializer with a stale marker cannot refill a shield spent before its upgrade transaction',async()=>{
  const f=await shieldFixture(1200,2);let consumed=false;
