@@ -175,9 +175,9 @@ test('thrill negative results grow by the relic strength, beyond the balance as 
  assert.equal(await creditVerifiedRelicBonus(g.env,'g','u','match:5','unrated',100370,true,now,100000),onWin);
 });
 
-test('safe modes: the bonus is at most the base; one-off rewards: LOOP 20,000 per receipt, Steam 20,000 and 30,000 a day',async()=>{
+test('safe modes keep their limits; voice has a dedicated ceiling, LOOP and Steam keep their caps',async()=>{
  const s=strong(),f=await db(s.relics);
- assert.equal(await creditVerifiedRelicBonus(f.env,'g','u','voice:1','voice',30,true,now),30);
+ assert.equal(await creditVerifiedRelicBonus(f.env,'g','u','voice:1','voice',30,true,now),Math.min(evaluateRelicBonus(s.relics,'voice',{amount:30,win:true}).bonus,30*400));
  assert.equal(await creditVerifiedRelicBonus(f.env,'g','u','loop:1','loop',300000,true,now),20000);
  for(const id of ['steam:a','steam:b','steam:c'])f.sql.prepare('INSERT INTO kp_steam_events VALUES(?)').run(id);
  assert.equal(await creditVerifiedRelicBonus(f.env,'g','u','steam:a','steam',5000,true,now),Math.min(20000,evaluateRelicBonus(s.relics,'steam',{amount:5000,win:true}).bonus));
@@ -264,6 +264,6 @@ test('Spike Rush: final bonus caps at 400/200 including opening blessing; missin
   assert.equal(await creditVerifiedRelicBonus(f.env,'g','u','match:cap','spikerush',5000,win,now),base*10);
   assert.equal(f.balance(),1000+base*10);
   assert.equal(await creditVerifiedRelicBonus(f.env,'g','u','match:missing','spikerush',5000,win,now),0);
-  assert.equal(await creditVerifiedRelicBonus(f.env,'g','u','voice:cap','voice',30,true,now),30,'other safe modes retain their original ceiling');
+  assert.equal(await creditVerifiedRelicBonus(f.env,'g','u','voice:cap','voice',30,true,now),Math.min(evaluateRelicBonus(relics,'voice',{amount:30,win:true}).bonus,30*400),'voice uses its own limit without changing Spike Rush');
  }
 });

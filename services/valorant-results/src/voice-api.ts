@@ -5,8 +5,8 @@ import {voicePolicy} from './voice-rewards.ts';
 const bytes=(s:string)=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
 export function voiceStub(env:KpEnv){return env.VOICE_GATEWAY?.get(env.VOICE_GATEWAY.idFromName('guild:'+discord.guildId));}
 export async function voiceStatus(env:KpEnv,user?:string){
- try{const stub=voiceStub(env);if(stub){const response=await stub.fetch('https://voice/'+(user?'progress?user='+encodeURIComponent(user):'status'));if(response.ok)return await response.json() as {enabled:boolean;connected:boolean;eligible?:boolean;observedMs?:number;error?:string;tracked?:number;lastConfirmedAt?:number};}}catch{}
- return {enabled:false,connected:false,error:'not_configured',eligible:false,observedMs:0};
+ try{const stub=voiceStub(env);if(stub){const response=await stub.fetch('https://voice/'+(user?'progress?user='+encodeURIComponent(user):'status'));if(response.ok)return await response.json() as {enabled:boolean;connected:boolean;eligible?:boolean;observedMs?:number;paidSlots?:number;error?:string;tracked?:number;lastConfirmedAt?:number};}}catch{}
+ return {enabled:false,connected:false,error:'not_configured',eligible:false,observedMs:0,paidSlots:0};
 }
 export async function ensureVoice(env:KpEnv){const stub=voiceStub(env);if(stub)await stub.fetch('https://voice/ensure');}
 export async function voiceControl(request:Request,env:KpEnv,publicKey=policy.publicKey){

@@ -318,10 +318,13 @@ test('voice slots pay once with a daily cap, keep accounts usable, and roll back
  const f=await fixture();await ensureQuizKp(f.env);const user='100000000000000188',day='2026-10-27';
  for(let slot=1;slot<=48;slot++){await creditVoiceSlot(f.env,guild,user,day,slot,Date.now());await creditVoiceSlot(f.env,guild,user,day,slot,Date.now());}
  assert.equal((await readKpState(f.env,mapping,user)).cash,720,'48 slots of 15 KP (5 + 10 bonus)');
- await assert.rejects(creditVoiceSlot(f.env,guild,user,day,49,Date.now()));assert.equal((await readKpState(f.env,mapping,user)).cash,720);
+ for(let slot=49;slot<=288;slot++){await creditVoiceSlot(f.env,guild,user,day,slot,Date.now());await creditVoiceSlot(f.env,guild,user,day,slot,Date.now());}
+ assert.equal((await readKpState(f.env,mapping,user)).cash,4320,'288 verified slots of 15 KP');
+ await assert.rejects(creditVoiceSlot(f.env,guild,user,day,289,Date.now()));
+ assert.equal((await readKpState(f.env,mapping,user)).cash,4320);
  f.sql.exec("CREATE TRIGGER voice_fixture_fail BEFORE INSERT ON kp_ledger WHEN NEW.kind='voice' BEGIN SELECT RAISE(ABORT,'fixture'); END");
  await assert.rejects(creditVoiceSlot(f.env,guild,user,'2026-10-28',1,Date.now()));assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM kp_voice_events WHERE day='2026-10-28'").get()!.n,0);
- f.sql.exec('DROP TRIGGER voice_fixture_fail');await creditVoiceSlot(f.env,guild,user,'2026-10-28',1,Date.now());assert.equal((await readKpState(f.env,mapping,user)).cash,735);
+ f.sql.exec('DROP TRIGGER voice_fixture_fail');await creditVoiceSlot(f.env,guild,user,'2026-10-28',1,Date.now());assert.equal((await readKpState(f.env,mapping,user)).cash,4335);
 });
 test('monitor records the agent of each new result for mastery, once',async()=>{
  const {monitor}=await import('../src/index.ts');const f=await fixture();f.enableHistory();const original=globalThis.fetch;

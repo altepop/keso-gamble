@@ -226,6 +226,15 @@ export type RelicBonusResult={
 const RELIC_NATIVE_MODES=new Set(['casino','market','racing','mleague']);
 /** Only certified game receipts get a flat ability; no native casino/stocks arbitrage. */
 const HIDDEN_VOICE_GEARS=['normal.voice.riddle.three','normal.voice.riddle.five','normal.voice.riddle.fifteen'] as const;
+// Alternate four-piece resonance. Unlike the existing fourth gear, this one
+// can be assembled without a transcendent rarity item. No public announcements.
+const VOICE_RESONANCE_FOURTH='normal.voice.alarm';
+const VOICE_RESONANCE_KP=4800;
+function voiceResonanceReady(c:RelicCollection,equipped:Set<string>):boolean {
+ return [...HIDDEN_VOICE_GEARS,VOICE_RESONANCE_FOURTH].every(id=>
+   equipped.has(id)&&c.items[id]?.origin==='normal'&&c.items[id]?.rarity!=='transcendent'
+   &&(c.items[id]?.count??0)>0);
+}
 const RELIC_ABILITY_MODES=new Set(['competitive','unrated','swiftplay','spikerush','teamdeathmatch',
  'escalation','deathmatch','skirmish','quiz','voice','mahjong','unite','steam','loop','dmchallenge']);
 const safeReward=(n:number)=>Number.isFinite(n)?Math.max(0,Math.min(Number.MAX_SAFE_INTEGER-1,Math.floor(n))):0;
@@ -316,8 +325,14 @@ export function evaluateRelicBonus(
    else if(special==='root')exotic=Math.floor(Math.sqrt(amount))*3;
    else if(special==='comeback')exotic=50;
    else if(special==='threshold')exotic=250;
-   else if(special==='voice_key')exotic=id.endsWith('.three')?1:id.endsWith('.five')?3:9;
-   else if(special==='voice_ritual')exotic=900;
+   else if(special==='voice_key'){
+     exotic=id.endsWith('.three')?1:id.endsWith('.five')?3:9;
+     // Only a verified 20-minute voice receipt and the complete non-transcendent
+     // four-slot combination unlock this fixed synergy. Other modes are unaffected.
+     if(mode==='voice'&&id==='normal.voice.riddle.fifteen'&&amount===15
+       &&voiceResonanceReady(collection,equipped))exotic=VOICE_RESONANCE_KP;
+    }
+   else if(special==='voice_ritual')exotic=5400;
   }
   lines.push({id,name:def?.name??item.name,mode:sourceMode,
    short:def?.short??item.ability,percent:basePercent,effectivePercent:percent,
@@ -561,7 +576,7 @@ export function nativeRelicLoss(
  * - THRILL modes (コンペ・アンレ・エスカレーション・デスマッチ・DM一発勝負・スカーミッシュ・雀魂): a WIN gets the full relic bonus with no
  *   cap ("数倍"). A normal loss keeps its base reward with no bonus. A NEGATIVE result (最下位・ラス・大勝負の負け) grows by the same
  *   relic strength: the extra loss is taken even beyond the balance, as 借KP (borrowShortfall), like the base penalty.
- * - SAFE modes (スパイクラッシュ〔基礎だけ〕・TDM・スイフト・レプリケーション・ユナイト・通話・QUIZ): the bonus is at most the base reward (Spike Rush: ten times its base).
+ * - SAFE modes (スパイクラッシュ〔基礎だけ〕・TDM・スイフト・レプリケーション・ユナイト・通話・QUIZ): ordinarily at most the base reward; Spike Rush up to 10x base, voice up to 400x base only on verified 20-minute receipts.
  * - ONE-OFF rewards: LOOP up to 20,000 per receipt; Steam up to 20,000 per receipt and 30,000 per day.
  * - アンレの特別抽選 is computed apart: the bonus is on the match reward without the lottery prize.
  * Special effects (they multiply the relic part only): 竜騎士4点 win ×1.25 / extra loss ×0.5; 色違い (thrill wins) ×1.5;
@@ -597,7 +612,10 @@ function view(c:RelicCollection,items:RelicItem[]):RelicCollection{
 /** The loadout that counts for a WIN settled at `at`: if the current one was put on less than 90 minutes before,
  * the weaker of it and the loadout it replaced. */
 export function winLoadout(c:RelicCollection,mode:string,amount:number,at:number,event:{spikeGamesBefore?:number}={}):RelicCollection{
- if(!(Number(c.loadoutChangedAt)>at-RELIC_EQUIP_LEAD_MS))return c;
+ // Voice has a shorter, still verified 20-minute preparation window.
+ // Every other mode keeps the 90-minute anti-switching rule.
+ const leadMs=mode==='voice'?20*60_000:RELIC_EQUIP_LEAD_MS;
+ if(!(Number(c.loadoutChangedAt)>at-leadMs))return c;
  const previous=(c.recentLoadouts??[])[0];
  const before=previous?view(c,previous.items):view(c,[]);
  const now=evaluateRelicBonus(c,mode,{amount,win:true,...event}).bonus,then=evaluateRelicBonus(before,mode,{amount,win:true,...event}).bonus;
@@ -662,7 +680,7 @@ export async function creditVerifiedRelicBonus(
  if(!detail.bonus)return 0;
  let bonus=Math.floor(detail.bonus*relicWinFactor(relicFlags(loadout),kind==='thrill'));
  // Spike Rush keeps its 40/20 calculation base; only its final payout ceiling is raised.
- if(kind==='safe')bonus=Math.min(bonus,amount*(mode==='spikerush'?10:1));
+ if(kind==='safe')bonus=Math.min(bonus,amount*(mode==='voice'?400:mode==='spikerush'?10:1));
  if(kind==='oneoff'){
   const cap=ONE_OFF_CAPS[mode]!;
   bonus=Math.min(bonus,cap.receipt);
