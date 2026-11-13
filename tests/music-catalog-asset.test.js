@@ -26,3 +26,17 @@ test('ゆず庵⁉️は採用録音版1曲のみをWeb・Voice・歌詞に同�
   '6db8b0747957e329f33f78615f3020b795c3c6fa744aca71d04d96c1e6f1605e',
   '録音データがユーザー採用版と一致しない');
 });
+
+
+test('アリマスカ・アポフェニアは採用音源1本をWeb・Voice・歌詞に同期する',()=>{
+ const recording=new URL('../music/assets/arimasuka-apophenia.mp3',import.meta.url);
+ assert.deepEqual(catalog.filter(t=>t.id==='arimasuka'),
+  [{id:'arimasuka',title:'アリマスカ・アポフェニア',file:'arimasuka-apophenia.mp3'}]);
+ assert.ok(browser.includes('id:"arimasuka",title:"アリマスカ・アポフェニア",src:"music/assets/arimasuka-apophenia.mp3"'));
+ assert.ok(lyrics.includes('"arimasuka":'));
+ assert.ok(existsSync(recording),'採用録音版 arimasuka-apophenia.mp3 が未配置。PRへのアップロード後にマージする');
+ assert.equal(statSync(recording).size,4088038,'採用録音版のファイルサイズ不一致');
+ assert.equal(createHash('sha256').update(readFileSync(recording)).digest('hex'),
+  'a5beedd9334dcc2f84bbb4b0cef16f212d67cf82cdc15aa693494c502d477cba',
+  '採用音源のSHA-256が違う。別テイクへの差し替えを検出');
+});
