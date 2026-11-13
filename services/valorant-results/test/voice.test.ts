@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {VoiceClock,voiceSlices,eligibleVoice} from '../src/voice-rewards.ts';
+import {VoiceClock,voiceSlices,eligibleVoice,voicePolicy} from '../src/voice-rewards.ts';
 import type {VoiceStore,VoiceRecord} from '../src/voice-rewards.ts';
 class Store implements VoiceStore{
  data=new Map<string,unknown>();
@@ -23,11 +23,13 @@ test('five observed minutes accumulate over leave/rejoin; unknown time and resta
  for(let i=0;i<12;i++){at+=30000;await clock.checkpoint(at,[user],false);}assert.equal(paid.length,1);
  at+=180000;await clock.checkpoint(at,[user],true);assert.equal(paid.length,1);
 });
-test('daily cap is 48 five-KP slots and resets at JST09:00; long stalls are not guessed',async()=>{
+test('daily cap is 288 five-minute slots and resets at JST09:00; long stalls are not guessed',async()=>{
  const store=new Store(),paid:Array<{day:string;slot:number}>=[];let at=Date.parse('2026-10-27T00:00:00Z');const clock=new VoiceClock(store,async(r,s)=>{paid.push({day:r.day,slot:s});},at);
- for(let i=0;i<270;i++){at+=60000;await clock.checkpoint(at,[user],true);}assert.equal(paid.length,48);
- at=Date.parse('2026-10-28T00:00:00Z');await clock.checkpoint(at,[user],false);
- for(let i=0;i<5;i++){at+=60000;await clock.checkpoint(at,[user],true);}assert.equal(paid.length,49);assert.deepEqual(paid.at(-1),{day:'2026-10-28',slot:1});
+ assert.equal(voicePolicy.amount,15);assert.equal(voicePolicy.slots,288);assert.equal(voicePolicy.dailyCap,4320);
+ for(let i=0;i<1440;i++){at+=60000;await clock.checkpoint(at,[user],true);}
+ assert.equal(paid.length,288);assert.equal(paid.at(-1)?.slot,288);
+ for(let i=0;i<60;i++){at+=60000;await clock.checkpoint(at,[user],true);}
+ assert.equal(paid.length,300);assert.deepEqual(paid.at(-1),{day:'2026-10-28',slot:12});
  assert.deepEqual(voiceSlices(Date.parse('2026-10-27T23:59:30Z'),Date.parse('2026-10-28T00:00:30Z')),[{day:'2026-10-27',ms:30000},{day:'2026-10-28',ms:30000}]);
 });
 test('a backward clock cannot award the same seconds again',async()=>{
