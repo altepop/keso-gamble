@@ -115,18 +115,19 @@ export async function queueRacePosts(env:PostEnv,mapping:KpMapping,now=Date.now(
  const proofRow=await env.DB.prepare('SELECT value FROM kp_settings WHERE key=?')
   .bind(FUJIMURA_PROOF_PREFIX+mapping.guildId).first<{value:string}>();
  const proof=proofRow?JSON.parse(proofRow.value) as {race:number;horse:string}:null;
+ const proofHorseId=proof?.horse??'';
  for(const c of crowns)await enqueue(env,'race-crown:'+c.race,crownPost(c),now);
  // The card of a big race or a crown named after someone goes out once betting has opened for it.
  const open=openRaceStart(now),openCrown=await crownFor(env,mapping.guildId,open);
  if(proof?.race===open&&now>=open-RACE_INTERVAL&&now<open-CLOSE_BEFORE){
   const entries=await raceEntries(env,mapping,open);
   const card=raceCard(open,undefined,entries);
-  const horse=card.horses.find((h:{horseId?:string})=>h.horseId===proof.horse);
+  const horse=card.horses.find((h:{horseId?:string})=>h.horseId===proofHorseId);
   if(horse){
    await enqueue(env,'horse-debut-proof:'+open,
     ['🏇 **藤村の馬、出走確定！**',
      `馬名「${clean(horse.name)}」は、${clock(open)}発走の${clean(card.name)}・${horse.number}番に正式登録されたで！`,
-     `登録馬ID: \`${proof.horse}\``,
+     `登録馬ID: \`${proofHorseId}\``,
      'SQLに馬名を実行させたわけやないで。正式な出走データを保存して、次は実際の着順を報告する。',
      '※初回限定の特別招待枠。通常のレースと階級が異なる場合がある。馬券・オッズ・勝敗は通常の処理に従う。'].join('\n'),now);
   }
@@ -161,7 +162,7 @@ export async function queueRacePosts(env:PostEnv,mapping:KpMapping,now=Date.now(
   const ownerWon=Boolean(seed)&&Boolean(card.horses[raceResult(card,seed!.seed).order[0]-1].ownerName);
   if(!worthPosting(card,bets,Boolean(crown),ownerWon)&&proof?.race!==id){await skip();continue;}
   if(seed){
-   const debut=proof?.race===id?card.horses.find((h:{horseId?:string})=>h.horseId===proof.horse):null;
+   const debut=proof?.race===id?card.horses.find((h:{horseId?:string})=>h.horseId===proofHorseId):null;
    const proofResult=debut?`\n🏁 **藤村の馬「${clean(debut.name)}」が実際に出走、${raceResult(card,seed.seed).order.indexOf(debut.number)+1}着でゴール！** 馬名を含む出走表と結果が正常に処理されたで。`:'';
    levelOf??=await roastLevelsOf(env,mapping);
    const titles=await titlesOf(env,mapping.guildId);
