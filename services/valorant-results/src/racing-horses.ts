@@ -8,6 +8,7 @@ import {ensureRacing,raceSeed} from './racing-kp.ts';
 import configuredPlayers from '../players.json' with { type: 'json' };
 import { kpRandom } from './kp.ts';
 import {spendMyHorseVoucher} from './relic-exchange.ts';
+import {kpTargetMembers} from './kp-target-members.ts';
 import type {RelicCollection} from './relics.ts';
 import type { KpEnv, KpMapping } from './kp.ts';
 export interface Entry { horseId:string; name:string; ability:number; style:number; owner:string; ownerName:string; nickname?:string|null; person?:boolean; condition?:number; record?:{races:number;wins:number;seconds:number;thirds:number}; recentRanks?:number[] }
@@ -132,13 +133,16 @@ export async function decideEntries(env:KpEnv,mapping:KpMapping,race:number,now=
  const proofKey=FUJIMURA_PROOF_PREFIX+mapping.guildId;
  let proofHorse:string|null=null;
  if(!await env.DB.prepare('SELECT 1 FROM kp_settings WHERE key=?').bind(proofKey).first()){
-  const account=mapping.accounts.find(a=>/藤村|fujimura|^frin$/i.test(memberName(mapping,a.discordUserId))||
-   /fujimura|^frin$/i.test(a.riotId.split('#')[0]??''));
-  if(account){
+  // Some horse owners use KESO PLAY without monitored VALORANT accounts.
+  // Resolve the exact registered Discord member, including encrypted aliases,
+  // rather than assuming every wallet owner is in the five-user Riot mapping.
+  const roster=await kpTargetMembers(env,mapping);
+  const candidates=roster.filter(member=>member.name==='藤村');
+  if(candidates.length===1){
    const horse=await env.DB.prepare(`SELECT h.id FROM kp_horses h WHERE h.guild=? AND h.owner=?
     AND h.sold_at IS NULL AND h.retired_at IS NULL AND h.races=0 AND h.created_at<=?
     AND NOT EXISTS(SELECT 1 FROM kp_race_entries e WHERE e.guild=h.guild AND e.horse=h.id)
-    ORDER BY h.created_at DESC LIMIT 1`).bind(mapping.guildId,account.discordUserId,now).first<{id:string}>();
+    ORDER BY h.created_at DESC LIMIT 1`).bind(mapping.guildId,candidates[0]!.id,now).first<{id:string}>();
    proofHorse=horse?.id??null;
   }
  }
