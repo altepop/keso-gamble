@@ -8,8 +8,8 @@ export const ESCALATION_SHIELD_VERSION='rank-shields-v1';
 const SHIELD_SCHEMA_KEY='escalation_shield_schema';
 // A separate marker keeps old shield workers from reinstalling their trigger.
 const PLACEMENT_SCHEMA_KEY='escalation_initial_placement_schema';
-export const ESCALATION_PLACEMENT_VERSION='initial-win-150-v1';
-export const ESCALATION_INITIAL_WIN_POINTS=150;
+export const ESCALATION_PLACEMENT_VERSION='initial-win-100-v1';
+export const ESCALATION_INITIAL_WIN_POINTS=100;
 export const escalationShieldEligible=(rating:number)=>Number.isSafeInteger(rating)&&rating>=300&&rating<2400&&rating%300<100;
 export interface EscalationAct {id:string;name:string|null;startedAt:number;endedAt:number;episode?:string|null}
 export interface EscalationPowerProof {act:EscalationAct;performance:number;kdPositive?:boolean;rrPerformance?:number}
