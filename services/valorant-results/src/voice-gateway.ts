@@ -187,7 +187,7 @@ export class VoiceGateway {
   if(url.pathname==='/ensure'){await this.connect();if(this.token)await this.ctx.storage.setAlarm(Date.now()+30000);return Response.json(this.status());}
   if(url.pathname==='/progress'){
    const user=url.searchParams.get('user')??'';const record=await this.clock.progress(user,Date.now());
-   return Response.json({...this.status(),observedMs:record.ms,eligible:this.active().includes(user)});
+   return Response.json({...this.status(),observedMs:record.ms,paidSlots:record.paid,eligible:this.active().includes(user)});
   }
   return Response.json(this.status());
  });}
