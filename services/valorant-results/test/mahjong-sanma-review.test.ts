@@ -94,7 +94,7 @@ test('shape comments omit strategic uncertainty, value sacrifice, north choice, 
  assert.ok(finding.recommendedMetric.shanten<finding.actualMetric.shanten||finding.recommendedMetric.ukeire>=finding.actualMetric.ukeire+8);
  const f=setup(),s=f.summary(),r={version:1,source:'sanma-shape',model:'sanma-shape-v1',uuid:s.uuid,findings:[finding]};
  assert.ok(acceptedSanmaReport(s,r));const members=new Map([[0,{name:'@everyone **X**'}]]);
- const lines=equalSanmaComments(s,r,members);assert.equal(lines.length,1);assert.match(lines[0],/だけなら|形だけ|つながり/);assert.match(lines[0],/4打目/);assert.doesNotMatch(lines.join(''),/@|c3|完璧|神プレイ|放銃率|期待値/i);
+ const lines=equalSanmaComments(s,r,members);assert.equal(lines.length,1);assert.match(lines[0],/形を優先するなら、僕は.+切りが好み/);assert.match(lines[0],/4打目/);assert.doesNotMatch(lines.join(''),/@|c3|完璧|神プレイ|放銃率|期待値/i);
  const old=paipuPost(s,members,()=> 'normal',['✅ KP +100']),post=paipuPost({...s,review:r},members,()=> 'normal',['✅ KP +100']);
  assert.match(post,/松本等しいのひと言/);assert.ok(post.length<=1900);
  for(const line of old.split('\n').filter(Boolean))assert.ok(post.includes(line));
