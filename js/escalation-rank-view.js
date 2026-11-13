@@ -27,7 +27,7 @@ export function escalationRankPanel(state){
  ${p.lastSeriesAt?`<p class="helper">${previous} ${num(p.lastSeriesWins)}勝${num(p.lastSeriesLosses)}敗 ／ RR ${num(p.lastChange)>=0?'+':''}${num(p.lastChange)}（成績補正${signed(p.lastPerformance)}を含む）</p>`:''}
  ${p.placementConsistencyBonus?'<p class="esca-bonus">初回認定：3試合連続KDプラス ＋100 RR</p>':''}
  <p class="esca-command">Discordでも <code>/esca rank</code> で確認できるで。</p>
- <details class="rules esca-details"><summary>更新幅・ランキング</summary><p class="helper">初回は認定3試合。3試合ともキル数がデス数を上回れば認定に＋100 RR。全敗でもアイアンⅡになります。ACT更新は認定1試合で前のランクを引き継ぎ、この認定では降格しません。エピソード更新は認定3試合で、基本は2ランク下から再開。内部レートと認定成績が高ければ1ランク下・据え置き・昇格もあります。VALORANT本体とは別のKESO独自ランクです。ランク画像 © Riot Games。Riot Gamesの公認・提供ではありません。</p>
+ <details class="rules esca-details"><summary>更新幅・ランキング</summary><p class="helper">初回は認定3試合。3試合ともキル数がデス数を上回れば認定に＋100 RR。全敗ならアイアンⅠです。3勝でブロンズⅢ、3試合ともKDプラスならシルバーⅠになります。ACT更新は認定1試合で前のランクを引き継ぎ、この認定では降格しません。エピソード更新は認定3試合で、基本は2ランク下から再開。内部レートと認定成績が高ければ1ランク下・据え置き・昇格もあります。VALORANT本体とは別のKESO独自ランクです。ランク画像 © Riot Games。Riot Gamesの公認・提供ではありません。</p>
  <p class="helper">アイアン〜イモータルはⅠ・Ⅱ・Ⅲ、さらにレディアント。100 RRで1段階、3段階で1ランク。認定後は毎試合更新。勝ち＋20／負け−20 RRを基準に、KD・チーム内キル数・アシストで−10〜＋10を補正します。勝ちは＋10〜＋30、負けは−30〜−10 RR。低キル・低デスだけで高評価にはなりません。成績データが欠ける場合の補正は0。RRが残った状態から負けても、その段階の0 RRで止まります。ブロンズ〜イモータルのⅠにはシールド2枚。0 RRで負けるたび1枚消費し、2敗まで耐えられます。残り0枚でさらに負けると降格。勝利だけでは補充されず、昇格・降格でⅠへ移動した場合に2枚補充します。Ⅱ・Ⅲとレディアントはシールドなし。アイアンⅠは全体の下限です。同じACTで認定済みの上位10人を表示します。</p>
  <h3>今ACTのランキング</h3>${board?`<ol class="esca-board">${board}</ol>`:'<p class="helper">認定を終えたメンバーがここに並びます。</p>'}
  ${archives?'<h3>前ACTの記録</h3><div class="esca-archives">'+archives+'</div>':''}
