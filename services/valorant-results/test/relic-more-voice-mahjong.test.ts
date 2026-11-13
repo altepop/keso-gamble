@@ -17,6 +17,22 @@ test('20 additional relics; 10 voice/10 Mahjong; all IDs unique and old catalog 
  assert.equal(MORE_MAHJONG_VOICE_RELICS.filter(x=>x.mode==='mahjong').length,10);
  assert.equal(MORE_MAHJONG_VOICE_RELICS.filter(x=>x.mode==='voice').length,10);
 });
+test('voice riddles hint at the missing fourth note without spoiling the exact loadout',()=>{
+ const three=NORMAL_RELIC_BY_ID.get('normal.voice.riddle.three')!;
+ const five=NORMAL_RELIC_BY_ID.get('normal.voice.riddle.five')!;
+ const fifteen=NORMAL_RELIC_BY_ID.get('normal.voice.riddle.fifteen')!;
+ const alarm=NORMAL_RELIC_BY_ID.get('normal.voice.alarm')!;
+ const crown=NORMAL_RELIC_BY_ID.get('normal.voice.riddle.crown')!;
+ assert.match(three.ability,/それだけでは/);
+ assert.match(five.ability,/空いた席/);
+ assert.match(fifteen.ability,/最後の音/);
+ assert.match(alarm.ability,/時計/);
+ assert.match(crown.ability,/四つ目/);
+ // Lore must never change ability IDs or grant an early two/three-piece bonus.
+ assert.ok(evaluateRelicBonus(make([three.id,five.id]),'voice',{amount:15,win:true}).bonus<100);
+ assert.ok(evaluateRelicBonus(make([three.id,five.id,fifteen.id]),'voice',{amount:15,win:true}).bonus<100);
+ assert.ok(evaluateRelicBonus(make([three.id,five.id,fifteen.id,alarm.id]),'voice',{amount:15,win:true}).bonus>=4800);
+});
 test('secret voice build: each gear looks unimpressive, full four-slot resonance is immense',()=>{
  const single=gears.map(id=>evaluateRelicBonus(make([id]),'voice',{amount:15,win:true}).bonus);
  assert.deepEqual(single,[1,3,9,0]);
