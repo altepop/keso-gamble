@@ -11,7 +11,8 @@
     {id:"makekowa",title:"負け怖",src:"music/assets/負け怖.mp3",icon:"🔥"},
     {id:"relic",title:"値札のない遺物",src:"music/assets/値札のない遺物B.mp3",icon:"◆"},
     {id:"masakane",title:"まさかね",src:"music/assets/まさかねC.mp3",icon:"♪"},
-    {id:"yuzuan",title:"ゆず庵⁉️",src:"music/assets/ゆず庵.mp3",icon:"🍈"}
+    {id:"yuzuan",title:"ゆず庵⁉️",src:"music/assets/ゆず庵.mp3",icon:"🍈"},
+    {id:"arimasuka",title:"アリマスカ・アポフェニア",src:"music/assets/arimasuka-apophenia.mp3",icon:"✳"}
   ];
   var playable=tracks.filter(function(t){return !!t.src;});
   var lyrics=globalThis.KesoMusicLyrics||{};

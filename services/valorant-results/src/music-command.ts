@@ -1,7 +1,7 @@
 import tracks from '../../music-voice/catalog.json' with {type:'json'};
 import discord from '../discord-config.json' with {type:'json'};
 
-export const MUSIC_COMMAND_VERSION='music-voice-v4-ten-tracks-yuzuan';
+export const MUSIC_COMMAND_VERSION='music-voice-v5-eleven-tracks-arimasuka';
 export const MUSIC_BUTTON=/^ms:(pause|resume|skip|stop|queue|leave|all|radio|shuffle)$/;
 export const musicControls=()=>[
  {type:1,components:[

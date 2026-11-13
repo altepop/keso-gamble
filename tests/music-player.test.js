@@ -166,11 +166,11 @@ test('two new official MP3s are selectable and match exact GitHub filenames',asy
  assert.equal(s.saved.get('keso.music.track'),'ouenka');
 });
 
-test('background playback advances across ten songs then wraps to beginning',async()=>{
+test('background playback advances across eleven songs then wraps to beginning',async()=>{
  const s=setup();
  await tick();
  s.document.hidden=true;
- const expected=['genkai-rhapsody.mp3','午前二時の共犯者 (1).mp3','応援歌 (Remastered).mp3','誤差の女王B.mp3','フルパならB.mp3','負け怖.mp3','値札のない遺物B.mp3','まさかねC.mp3','ゆず庵.mp3','mou-isshu.mp3'];
+ const expected=['genkai-rhapsody.mp3','午前二時の共犯者 (1).mp3','応援歌 (Remastered).mp3','誤差の女王B.mp3','フルパならB.mp3','負け怖.mp3','値札のない遺物B.mp3','まさかねC.mp3','ゆず庵.mp3','arimasuka-apophenia.mp3','mou-isshu.mp3'];
  for(const name of expected){
   s.audio.listeners.get('ended')();await tick();
   assert.ok(decodeURI(s.audio.src).endsWith(name),'next song '+name);
@@ -225,7 +225,7 @@ test('repeat-one restarts same song, repeat-off stops at end of queue, settings 
  assert.equal(s.ctx.KesoMusic.getState().track,'mou');
  s.fire('#music-repeat','click'); // one => off
  assert.equal(s.saved.get('keso.music.repeat'),'off');
- s.element('#music-track').value='yuzuan';
+ s.element('#music-track').value='arimasuka';
  s.fire('#music-track','change');await tick();
  const before=s.audio.src;
  s.audio.paused=true;s.audio.listeners.get('ended')();await tick();
@@ -288,7 +288,8 @@ test('adopted MP3s including makekowa are immediately selectable with correct fi
   ['makekowa','負け怖.mp3','負け怖'],
   ['relic','値札のない遺物B.mp3','七KP'],
   ['masakane','まさかねC.mp3','まさかね'],
-  ['yuzuan','ゆず庵.mp3','メロンソーダフロート']
+  ['yuzuan','ゆず庵.mp3','メロンソーダフロート'],
+  ['arimasuka','arimasuka-apophenia.mp3','未一致か']
  ]){
   assert.match(s.root.innerHTML,new RegExp('<option value="'+id+'">'));
   s.element('#music-track').value=id;
@@ -299,23 +300,23 @@ test('adopted MP3s including makekowa are immediately selectable with correct fi
   assert.ok(s.element('#music-lyrics-content').textContent.includes(excerpt),'wrong lyrics for '+id);
   s.fire('#music-tab-library','click');
  }
- assert.match(s.root.innerHTML,/10曲配信中/);
+ assert.match(s.root.innerHTML,/11曲配信中/);
  const restored=setup({savedEntries:[['keso.music.track','masakane']]});await tick();
  assert.equal(restored.element('#music-track').value,'masakane');
  assert.match(decodeURI(restored.audio.src),/まさかねC\.mp3$/);
 });
 
-test('shuffle plays all ten official songs once; repeat off ends without cycling',async()=>{
+test('shuffle plays all eleven official songs once; repeat off ends without cycling',async()=>{
  const s=setup();await tick();
  s.fire('#music-repeat','click'); // all -> one
  s.fire('#music-repeat','click'); // one -> off
  s.fire('#music-shuffle','click'); // on
  const seen=[s.ctx.KesoMusic.getState().track];
- for(let i=0;i<9;i++){
+ for(let i=0;i<10;i++){
   s.audio.listeners.get('ended')();await tick();
   seen.push(s.ctx.KesoMusic.getState().track);
  }
- assert.equal(new Set(seen).size,10,'ten official songs should appear once per shuffle cycle');
+ assert.equal(new Set(seen).size,11,'eleven official songs should appear once per shuffle cycle');
  const played=s.audio.played;
  s.audio.paused=true;
  s.audio.listeners.get('ended')();await tick();
@@ -366,4 +367,20 @@ test('index references content-hashed player, lyrics and stylesheet; stale 8-son
  }
  assert.match(source,/id:"makekowa",title:"負け怖"/);
  assert.match(source,/id:"yuzuan",title:"ゆず庵⁉️"/);
+ assert.match(source,/id:"arimasuka",title:"アリマスカ・アポフェニア"/);
+});
+
+test('アリマスカ・アポフェニア displays all seven approved lyric corrections without Suno performance tags',async()=>{
+ const s=setup();await tick();
+ s.fire('#music-song-arimasuka','click');await tick();
+ s.fire('#music-tab-lyrics','click');
+ const text=s.element('#music-lyrics-content').textContent;
+ for(const phrase of ["「未一致か」の根拠へ","校正綴りに","暴音が躓き","結果の点が","背後で弾けてた","芝居に透ける","僕の証印"])assert.ok(text.includes(phrase),'missing agreed correction '+phrase);
+ assert.match(text,/アポフェニア、アポフェニア。/);
+ assert.match(text,/ありますか！？/);
+ assert.match(text,/台本/);
+ assert.match(text,/逃げ/);
+ assert.match(text,/どひゃーwww/);
+ assert.doesNotMatch(text,/\[(Intro|Verse|Chorus|Bridge|Outro)/);
+ assert.equal(s.element('#music-lyrics-source').textContent,'採用録音版に合わせた公式歌詞（2026-11-13校訂）');
 });
