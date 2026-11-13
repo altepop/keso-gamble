@@ -2,7 +2,7 @@
 // finishing place, retired after RETIRE_RACES and sellable for 10-20% of the price.
 // Buying and selling ride on the wallet operation insert (one transaction with the KP change).
 // @ts-expect-error The shared pure browser engine has no TypeScript declarations.
-import { BOXES, CLASSES, MAX_OWNED, RETIRE_RACES, RACE_INTERVAL, RUN_MS, conditionFromActivity, drawHorse, horseNickname, prizeFor, raceCard, raceClass, raceOdds, raceResult, sellValue, validHorseName } from '../../../js/racing.js';
+import { BOXES, CLASSES, MAX_OWNED, RETIRE_RACES, RACE_INTERVAL, RUN_MS, conditionFromActivity, drawHorse, horseNickname, prizeFor, raceCard, raceClass, raceOdds, raceResult, ownedPrizeFor, sellValue, validHorseName } from '../../../js/racing.js';
 import { crownFor, ensureCrowns } from './racing-crowns.ts';
 import {ensureRacing,raceSeed} from './racing-kp.ts';
 import configuredPlayers from '../players.json' with { type: 'json' };
@@ -55,7 +55,27 @@ export async function ensureHorses(env:KpEnv){
    SELECT CASE WHEN changes()!=1 THEN RAISE(ABORT,'kp_horse_not_sellable') END;
   END`),
  ]);
+ await refundLegacyHorseOverpayments(env);
  initialized.add(env.DB);
+}
+/** One-time, idempotent adjustment for ALL previously purchased horses, including retired/sold ones.
+ * Use each horse's original server-stored purchase price; voucher and free gift horses (price=0)
+ * cannot qualify. The original price is kept for historical records and legacy sale calculations.
+ * A global marker prevents repeated scans on normal requests; unique ledger IDs prevent double credits
+ * if multiple Workers reach the migration simultaneously. No cron or new table required. */
+export async function refundLegacyHorseOverpayments(env:KpEnv, now=Date.now()){
+ const marker='horse_box_reprice_20261114_v1';
+ if(await env.DB.prepare('SELECT 1 FROM kp_settings WHERE key=?').bind(marker).first())return;
+ await env.DB.batch([
+  env.DB.prepare(`INSERT OR IGNORE INTO kp_ledger(id,guild,user,delta,kind,at)
+    SELECT 'horse-reprice-20261114:'||h.id,h.guild,h.owner,
+      h.price - CASE h.box WHEN 'platinum' THEN 200000 WHEN 'legend' THEN 650000 WHEN 'apex' THEN 1500000 END,
+      'horse-reprice',?
+    FROM kp_horses h JOIN kp_wallets w ON w.guild=h.guild AND w.user=h.owner
+    WHERE ((h.box='platinum' AND h.price>200000) OR (h.box='legend' AND h.price>650000) OR (h.box='apex' AND h.price>1500000))
+      AND NOT EXISTS(SELECT 1 FROM kp_settings WHERE key=?)`).bind(now,marker),
+  env.DB.prepare('INSERT OR IGNORE INTO kp_settings(key,value) VALUES(?,?)').bind(marker,'done'),
+ ]);
 }
 const memberName=(mapping:KpMapping,user:string)=>{const a=mapping.accounts.find(a=>a.discordUserId===user);return a?(configuredPlayers.find(p=>p.riotId.toLowerCase()===a.riotId.toLowerCase())?.name??a.riotId.split('#')[0]):'メンバー';};
 const cryptoRng=()=>crypto.getRandomValues(new Uint32Array(1))[0]/4294967296;
@@ -148,7 +168,7 @@ export async function settleHorsePrizes(env:KpEnv,mapping:KpMapping,now=Date.now
   const odds=raceOdds(card),favourite=card.horses.map((h:{number:number})=>h.number).sort((a:number,b:number)=>odds.winProb[b]-odds.winProb[a])[0];
   for(const h of card.horses.filter((h:{horseId?:string})=>h.horseId)){
    const rank=order.indexOf(h.number),soldAt=sold.get(h.horseId);
-   let prize=soldAt!==undefined&&soldAt<race?0:prizeFor(card,rank);
+   let prize=soldAt!==undefined&&soldAt<race?0:h.person?prizeFor(card,rank):ownedPrizeFor(card,rank);
    if(h.person){
     const others=await env.DB.prepare("SELECT COALESCE(SUM(json_extract(b.value,'$.amount')),0) AS n FROM kp_state s,json_each(s.data,'$.raceBets') b WHERE s.guild=? AND s.user!=? AND json_extract(b.value,'$.raceId')=? AND json_extract(b.value,'$.horse')=?").bind(mapping.guildId,h.owner,race,h.number).first<{n:number}>();
     prize+=Math.floor((others?.n??0)*CONSOLATION_RATE);
