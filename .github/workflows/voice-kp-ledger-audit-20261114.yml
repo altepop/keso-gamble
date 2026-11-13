@@ -31,7 +31,7 @@ jobs:
             voiceSlotsLastHour:`WITH e AS (
               SELECT id,user,at FROM kp_voice_events WHERE at>=${sinceHour}
               UNION ALL SELECT id,user,at FROM kp_voice_events_ext WHERE at>=${sinceHour}
-            ) SELECT COUNT(*) AS slots,COUNT(DISTINCT user) AS recipients,MAX(at) AS lastAt,
+            ) SELECT COUNT(*) AS slots,COUNT(DISTINCT e.user) AS recipients,MAX(e.at) AS lastAt,
               COALESCE(SUM(CASE WHEN base.id IS NULL OR base.delta!=5 THEN 1 ELSE 0 END),0) AS missingBase5,
               COALESCE(SUM(CASE WHEN bonus.id IS NULL OR bonus.delta!=10 THEN 1 ELSE 0 END),0) AS missingBonus10
               FROM e LEFT JOIN kp_ledger base ON base.id=e.id
