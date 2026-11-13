@@ -377,10 +377,10 @@ test('rank slash commands return an image card and public ranks stay read only, 
  }
  const extra:{embeds?:any[]}={};const own={...interaction('kp'),data:{name:'esca',options:[{type:1,name:'rank'}]}};
  const before=f.sql.prepare('SELECT COUNT(*) n FROM kp_ledger').get()!.n;
- assert.match(await runKpCommand(f.env,own,mapping,extra),/シルバー Ⅰ/);assert.equal(extra.embeds![0].title,'シルバー Ⅰ');assert.match(extra.embeds![0].thumbnail.url,/silver-1\.png\?art=3$/);assert(!JSON.stringify(extra).includes('mmr'));
+ assert.match(await runKpCommand(f.env,own,mapping,extra),/ブロンズ Ⅱ/);assert.equal(extra.embeds![0].title,'ブロンズ Ⅱ');assert.match(extra.embeds![0].thumbnail.url,/bronze-2\.png\?art=3$/);assert(!JSON.stringify(extra).includes('mmr'));
  const other={...interaction('kp',newUser),data:{name:'esca',options:[{type:1,name:'rank',options:[{type:6,name:'user',value:one}]}]}};
- assert.match(await runKpCommand(f.env,other,mapping,{}),/シルバー Ⅰ/);assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM kp_wallets WHERE user=?').get(newUser)!.n,0);
- const board={...interaction('kp',newUser),data:{name:'esca',options:[{type:1,name:'ranking'}]}};assert.match(await runKpCommand(f.env,board,mapping,extra),/シルバー Ⅰ/);
+ assert.match(await runKpCommand(f.env,other,mapping,{}),/ブロンズ Ⅱ/);assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM kp_wallets WHERE user=?').get(newUser)!.n,0);
+ const board={...interaction('kp',newUser),data:{name:'esca',options:[{type:1,name:'ranking'}]}};assert.match(await runKpCommand(f.env,board,mapping,extra),/ブロンズ Ⅱ/);
  assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM kp_ledger').get()!.n,before);
  f.sql.prepare('UPDATE kp_escalation_ratings SET rating=650').run();
  const id='rank-poor-loss';await f.env.DB.batch([
