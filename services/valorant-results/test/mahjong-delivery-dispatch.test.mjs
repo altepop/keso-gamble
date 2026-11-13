@@ -16,3 +16,9 @@ test('an explicitly marked verification release may request the owner-only singl
 test('explicit recovery reuses the already delivered verification release and never selects an arbitrary ref',async()=>{
  const result=await dispatchDeliveryAudit({PAIPU_DISPATCH_TOKEN:'private',REVIEW_DELIVERY_RESUME:'true'},async(_url,options)=>{assert.deepEqual(JSON.parse(options.body),{ref:'main',inputs:{delivery_probe:true,review_audit:true,enable_sanma:true,probe_release:'4192e3a6be43bdff05cb5b0dc22d89f807d62964'}});return {status:204};});assert.equal(result.started,true);
 });
+
+test('analysis audit starts a read-only real-record check without a probe, delivery or activation',async()=>{
+ const r=await dispatchDeliveryAudit({PAIPU_DISPATCH_TOKEN:'private',REVIEW_ANALYSIS_AUDIT:'true'},async(_url,options)=>{
+  assert.deepEqual(JSON.parse(options.body),{ref:'main',inputs:{review_audit:true}});return {status:204};
+ });assert.equal(r.started,true);
+});

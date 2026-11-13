@@ -4,7 +4,10 @@ import type {SanmaRuleFinding} from './mahjong-sanma-report.ts';
 // Prefer demonstrated value gaps, then lost shanten, then lost ukeire. A mere
 // agreement never proves educational value, including in older signed reports.
 function priority(f:SanmaRuleFinding):[number,number,number]{
- if(f.basis==='placement')return [5,f.recommendedValue.min-f.actualValue.max,0];
+ if(f.basis==='riichi-choice')return [6,f.riichiValue.min-f.damaValue.max,0];
+ if(f.basis==='push-fold-choice')return [4,3-f.shanten,0];
+ if(f.basis==='wait-value-tradeoff')return [3,Math.abs(f.actualValue.live-f.recommendedValue.live),0];
+ if(f.basis==='placement')return [7,f.recommendedValue.min-f.actualValue.max,0];
  if(f.basis==='genbutsu'&&f.river)return [4,f.shanten,0];
  if(f.basis==='tsumo-value')return [3,f.recommendedValue.min-f.actualValue.max,f.recommendedValue.live-f.actualValue.live];
  if(f.basis==='shape'){
@@ -15,7 +18,7 @@ function priority(f:SanmaRuleFinding):[number,number,number]{
 }
 export function selectSanmaFindings(findings:SanmaRuleFinding[],limit=4):SanmaRuleFinding[]{
  if(!Number.isInteger(limit)||limit<1||limit>4)return [];
- const ranked=findings.filter(f=>f.actual!==f.recommended).slice().sort((a,b)=>{
+ const ranked=findings.filter(f=>f.basis==='riichi-choice'||f.actual!==f.recommended).slice().sort((a,b)=>{
   const x=priority(a),y=priority(b);
   return y[0]-x[0]||y[1]-x[1]||y[2]-x[2]||a.round-b.round||a.turn-b.turn||a.seat-b.seat;
  });

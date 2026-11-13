@@ -42,13 +42,13 @@ def bounded_int(v, lo, hi):
     return type(v) is int and lo <= v <= hi
 
 
-def evaluate_case(case):
+def evaluate_case(case, compare=True):
     # No metadata from the game summary is accepted by this process.
     if set(case) != {'candidates', 'doras', 'north', 'seatWind', 'roundWind', 'riichi', 'doubleRiichi', 'melds'}:
         raise ValueError('schema')
     if type(case['doubleRiichi']) is not bool or case['doubleRiichi'] and not case['riichi'] or type(case['riichi']) is not bool or not bounded_int(case['north'], 0, 4) or not bounded_int(case['seatWind'], 0, 2) or not bounded_int(case['roundWind'], 0, 1):
         raise ValueError('context')
-    if not 1 <= len(case['doras']) <= 5 or not 2 <= len(case['candidates']) <= 14:
+    if not 1 <= len(case['doras']) <= 5 or not (1 if case['riichi'] or not compare else 2) <= len(case['candidates']) <= 14:
         raise ValueError('size')
     if not isinstance(case['melds'], list) or len(case['melds']) > 4:
         raise ValueError('melds')
@@ -91,6 +91,14 @@ def evaluate_case(case):
             wins.append((w['left'], result.cost['main'] + result.cost['additional'], result.han, result.fu, result.cost['main'], result.cost['additional']))
         metrics.append(dict(payments=[dict(main=p[0], additional=p[1]) for p in sorted(set((x[4], x[5]) for x in wins))], tile=c['tile'], live=sum(x[0] for x in wins), min=min(x[1] for x in wins), max=max(x[1] for x in wins),
                             hanMin=min(x[2] for x in wins), hanMax=max(x[2] for x in wins), fuMin=min(x[3] for x in wins), fuMax=max(x[3] for x in wins)))
+    if compare and case['riichi']:
+        # Reuse exactly the same known hand, waits and public bonuses. Do not
+        # assume future ura, ippatsu or a legal ron on every tsumo-winning tile.
+        dama_case = dict(case, candidates=case['candidates'][:1], riichi=False, doubleRiichi=False)
+        dama = evaluate_case(dama_case, compare=False)
+        if dama:
+            # The trusted coordinator places the actual declared discard first.
+            metrics[0]['dama'] = dama[0]
     return metrics
 
 

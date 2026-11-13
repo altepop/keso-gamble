@@ -1,3 +1,5 @@
+import {reviewDiagnostic} from './mahjong-review-diagnostics.mjs';
+import {sanmaDiscardMetrics} from '../src/mahjong-sanma-efficiency.ts';
 // Trusted owner-only CI diagnostic. One bounded SELECT; re-fetch <=2 existing
 // successful games, at most two record requests per size. No ingestion, Discord, KP, D1 writes, artifacts, names or game IDs.
 import {pathToFileURL} from 'node:url';
@@ -98,15 +100,23 @@ export function auditSample(head,actions,saved,report){
  for(const f of findings){
   const c=cases.find(c=>c.seat===f.seat&&c.round===f.round&&c.turn===f.turn&&c.actual===f.actual);
   if(!c||!(c.legal??c.hand)?.includes(f.recommended))throw Error('audit_discard_invalid');
-  if(f.basis==='tsumo-value'||f.basis==='placement'){
+  if(f.basis==='tsumo-value'||f.basis==='wait-value-tradeoff'||f.basis==='placement'){
    const value=sanmaValueCase(c,summary.game);
    for(const m of [f.actualValue,f.recommendedValue]){
     const candidate=value?.candidates.find(x=>x.tile===m.tile);
-    if(!value||f.basis==='tsumo-value'&&(value.riichi!==f.riichi||value.doubleRiichi!==f.doubleRiichi||value.melds.every(m=>m.kind==='ankan')!==f.menzen)||f.basis==='placement'&&(JSON.stringify(c.scores)!==JSON.stringify(f.scores)||c.dealer!==f.dealer||c.honba!==0||c.sticks!==0||c.declaringReach)||!candidate||candidate.waits.reduce((sum,w)=>sum+w.left,0)!==m.live)throw Error('audit_value_unverified');
+    if(!value||(f.basis==='tsumo-value'||f.basis==='wait-value-tradeoff')&&(value.riichi!==f.riichi||value.doubleRiichi!==f.doubleRiichi||value.melds.every(m=>m.kind==='ankan')!==f.menzen)||f.basis==='placement'&&(JSON.stringify(c.scores)!==JSON.stringify(f.scores)||c.dealer!==f.dealer||c.honba!==0||c.sticks!==0||c.declaringReach)||!candidate||candidate.waits.reduce((sum,w)=>sum+w.left,0)!==m.live)throw Error('audit_value_unverified');
    }
   }
-  if(f.basis==='genbutsu'){
+  if(f.basis==='riichi-choice'){
+   const value=sanmaValueCase(c,summary.game),candidate=value?.candidates.find(x=>x.tile===f.actual);
+   if(!c.declaringReach||!value?.riichi||value.doubleRiichi!==f.doubleRiichi||!candidate||candidate.waits.reduce((sum,w)=>sum+w.left,0)!==f.riichiValue.live)throw Error('audit_riichi_unverified');
+  }
+  if(f.basis==='genbutsu'||f.basis==='push-fold-choice'){
    const river=c.rivers?.[f.against]?.map(tileKind)??[];
+   if(f.basis==='push-fold-choice'){
+    const metrics=sanmaDiscardMetrics(c);
+    if(JSON.stringify(metrics.find(m=>m.tile===f.actual))!==JSON.stringify(f.actualMetric)||JSON.stringify(metrics.find(m=>m.tile===f.recommended))!==JSON.stringify(f.recommendedMetric))throw Error('audit_defense_unverified');
+   }
    if(f.river&&(JSON.stringify(f.river.tiles)!==JSON.stringify(c.rivers[f.against])||f.river.dealer!==(c.dealer===f.against)||f.river.held.some(t=>!c.hand.includes(t))))throw Error('audit_defense_unverified');
    if(c.riichi?.[f.against]!==true||!river.includes(tileKind(f.recommended))||river.includes(tileKind(f.actual))!==f.actualOnRiver)throw Error('audit_defense_unverified');
   }
@@ -135,7 +145,7 @@ export async function liveAudit(env=process.env,{query,connect=login,decode=fetc
  onPhase('login');const session=await connect(env);onPhase('reviewer');const reviewer=reviewerFactory({root:env.C3_ASSETS_ROOT,fourEnabled:true,sanmaEnabled:true,timeoutMs:45000,budgetMs:90000});
  try{
   const samples=[],unavailableRecords=[],recordMetadata=[];let recordRequests=0;
-  for(const {players,candidates} of selected)for(const row of candidates){onPhase('record');let decoded;recordMetadata.push(auditRecordMetadata(row));recordRequests++;try{decoded=await decode(session,row.paipu);}catch(error){unavailableRecords.push({players,...auditFailure(error,'record')});continue;}const {head,actions}=decoded;onPhase('summary');const summary=summarizePaipu(head,actions);onPhase('review');const report=confirmedStandardReviewRules(head)?await reviewer.review(summary,actions):null;onPhase('verify');samples.push({...auditSample(head,actions,JSON.parse(row.summary),report),...persistedReviewStatus(JSON.parse(row.summary),row.delivery)});break;}
+  for(const {players,candidates} of selected)for(const row of candidates){onPhase('record');let decoded;recordMetadata.push(auditRecordMetadata(row));recordRequests++;try{decoded=await decode(session,row.paipu);}catch(error){unavailableRecords.push({players,...auditFailure(error,'record')});continue;}const {head,actions}=decoded;onPhase('summary');const summary=summarizePaipu(head,actions);onPhase('review');let analysis;const report=confirmedStandardReviewRules(head)?await reviewer.review(summary,actions,d=>{analysis=reviewDiagnostic(d);}):null;onPhase('verify');samples.push({...analysis?{analysis}:{},...auditSample(head,actions,JSON.parse(row.summary),report),...persistedReviewStatus(JSON.parse(row.summary),row.delivery)});break;}
   return {selected:samples.length,recordRequests,unavailableRecords,recordMetadata,handValueBackendConfigured:Boolean(env.SANMA_PYTHON),standardProfilesVerified:samples.length>0&&samples.every(s=>s.confirmedStandardRules),standardSanmaProfileVerified:samples.some(s=>s.players===3&&s.confirmedStandardRules),samples};
  }finally{await reviewer.close();session.close();}
 }
