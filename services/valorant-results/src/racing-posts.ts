@@ -128,7 +128,7 @@ export async function queueRacePosts(env:PostEnv,mapping:KpMapping,now=Date.now(
      `馬名「${clean(horse.name)}」は、${clock(open)}発走の${clean(card.name)}・${horse.number}番に正式登録されたで！`,
      `登録馬ID: \`${proof.horse}\``,
      'SQLに馬名を実行させたわけやないで。正式な出走データを保存して、次は実際の着順を報告する。',
-     '※初回限定の特別招待枠。通常のレースと階級が異なる場合がある。馬券・オッズ・勝敗は通常の処理に従う。'].join('\\n'),now);
+     '※初回限定の特別招待枠。通常のレースと階級が異なる場合がある。馬券・オッズ・勝敗は通常の処理に従う。'].join('\n'),now);
   }
  }
  if((bigRaceName(open)||openCrown||raceEvent(open)||proof?.race===open)&&now>=open-RACE_INTERVAL&&now<open-CLOSE_BEFORE){
@@ -162,7 +162,7 @@ export async function queueRacePosts(env:PostEnv,mapping:KpMapping,now=Date.now(
   if(!worthPosting(card,bets,Boolean(crown),ownerWon)&&proof?.race!==id){await skip();continue;}
   if(seed){
    const debut=proof?.race===id?card.horses.find((h:{horseId?:string})=>h.horseId===proof.horse):null;
-   const proofResult=debut?`\\n🏁 **藤村の馬「${clean(debut.name)}」が実際に出走、${raceResult(card,seed.seed).order.indexOf(debut.number)+1}着でゴール！** 馬名を含む出走表と結果が正常に処理されたで。`:'';
+   const proofResult=debut?`\n🏁 **藤村の馬「${clean(debut.name)}」が実際に出走、${raceResult(card,seed.seed).order.indexOf(debut.number)+1}着でゴール！** 馬名を含む出走表と結果が正常に処理されたで。`:'';
    levelOf??=await roastLevelsOf(env,mapping);
    const titles=await titlesOf(env,mapping.guildId);
    await enqueue(env,'race-result:'+id,resultPost(card,seed.seed,bets,levelOf,u=>titles.get(u))
