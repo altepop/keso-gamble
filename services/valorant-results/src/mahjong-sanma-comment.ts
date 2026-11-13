@@ -1,3 +1,4 @@
+import {placementImproves,tsumoRanks,riverSuji} from './mahjong-sanma-context.ts';
 import type {PaipuSummary} from './mahjong-summary.ts';
 import type {ValueMetric} from './mahjong-sanma-value.ts';
 import type {Efficiency} from './mahjong-sanma-efficiency.ts';
@@ -10,16 +11,24 @@ const valueMetric=(m:ValueMetric,t:string)=>m&&m.tile===t&&int(m.live,1,108)&&in
 const metric=(m:Efficiency,t:string)=>m&&m.tile===t&&int(m.shanten,1,6)&&int(m.ukeire,0,108)&&int(m.bonus,0,40)&&Array.isArray(m.improving)&&m.improving.length<=27&&new Set(m.improving).size===m.improving.length&&m.improving.every(t=>typeof t==='string'&&tile.test(t));
 export function acceptedSanmaReport(s:PaipuSummary,raw:unknown):AcceptedSanmaReport|null{
  const r=raw as AcceptedSanmaReport;
- if(s.players!==3||!/^3-(tonpu|hanchan)$/.test(s.game)||!r||!(r.version===1&&r.source==='sanma-shape'&&r.model==='sanma-shape-v1'||r.version===2&&r.source==='sanma-rules'&&r.model==='sanma-rules-v2'||r.version===3&&r.source==='sanma-rules'&&r.model==='sanma-rules-v3')||r.uuid!==s.uuid||!Array.isArray(r.findings)||!r.findings.length||r.findings.length>4)return null;
+ if(s.players!==3||!/^3-(tonpu|hanchan)$/.test(s.game)||!r||!(r.version===1&&r.source==='sanma-shape'&&r.model==='sanma-shape-v1'||r.version===2&&r.source==='sanma-rules'&&r.model==='sanma-rules-v2'||r.version===3&&r.source==='sanma-rules'&&r.model==='sanma-rules-v3'||r.version===4&&r.source==='sanma-rules'&&r.model==='sanma-rules-v4')||r.uuid!==s.uuid||!Array.isArray(r.findings)||!r.findings.length||r.findings.length>4)return null;
  const seen=new Set<string>();
  for(const f of r.findings){
   if(!f||!int(f.seat,0,2)||!int(f.round,0,s.rounds.length-1)||typeof f.actual!=='string'||!tile.test(f.actual)||typeof f.recommended!=='string'||!tile.test(f.recommended))return null;
-  if(f.basis==='tsumo-value'){
-   if(r.version!==3||typeof f.riichi!=='boolean'||typeof f.doubleRiichi!=='boolean'||f.doubleRiichi&&!f.riichi||typeof f.menzen!=='boolean'||f.riichi&&!f.menzen||!int(f.turn,f.doubleRiichi?1:2,16)||f.actual==='N'||f.recommended==='N'||!valueMetric(f.actualValue,f.actual)||!valueMetric(f.recommendedValue,f.recommended))return null;
+  if(f.basis==='placement'){
+   if(r.version!==4||f.dealer!==2||f.seat===2||!int(f.turn,2,16)||f.actual===f.recommended||f.actual==='N'||f.recommended==='N'||!Array.isArray(f.scores)||!valueMetric(f.actualValue,f.actual)||!valueMetric(f.recommendedValue,f.recommended)||f.recommendedValue.live<f.actualValue.live||!placementImproves(f))return null;
+   const label=s.game==='3-tonpu'?'東3局':'南3局';
+   if(s.rounds[f.round].label!==label)return null;
+  }else if(f.basis==='tsumo-value'){
+   if((r.version!==3&&r.version!==4)||typeof f.riichi!=='boolean'||typeof f.doubleRiichi!=='boolean'||f.doubleRiichi&&!f.riichi||typeof f.menzen!=='boolean'||f.riichi&&!f.menzen||!int(f.turn,f.doubleRiichi?1:2,16)||f.actual==='N'||f.recommended==='N'||!valueMetric(f.actualValue,f.actual)||!valueMetric(f.recommendedValue,f.recommended))return null;
    const a=f.actualValue,b=f.recommendedValue;
    if(f.actual===f.recommended?JSON.stringify(a)!==JSON.stringify(b):b.live<a.live||b.min<a.max+1000)return null;
   }else if(f.basis==='genbutsu'){
    if(r.version===1||!int(f.turn,6,24)||!int(f.against,0,2)||f.against===f.seat||f.againstRiichi!==true||f.recommendedOnRiver!==true||typeof f.actualOnRiver!=='boolean'||f.actualOnRiver!==(f.actual===f.recommended)||!int(f.shanten,3,6)||f.actual==='N'||f.recommended==='N')return null;
+   if(f.river){
+    const rv=f.river,norm=(t:string)=>t.replace(/r$/,'');
+    if(r.version!==4||!Array.isArray(rv.tiles)||rv.tiles.length>32||!rv.tiles.every(t=>typeof t==='string'&&tile.test(t))||!Array.isArray(rv.held)||!rv.held.length||rv.held.length>14||!rv.held.every(t=>typeof t==='string'&&tile.test(t)&&rv.tiles.some(r=>norm(r)===norm(t)))||!rv.held.includes(f.recommended)||rv.tiles.some(t=>norm(t)===norm(f.actual))||typeof rv.dealer!=='boolean')return null;
+   }
   }else if(f.basis==='shape'){
    if(!int(f.turn,1,10)||!metric(f.actualMetric,f.actual)||!metric(f.recommendedMetric,f.recommended))return null;
    const a=f.actualMetric,b=f.recommendedMetric;
@@ -38,6 +47,14 @@ export function equalSanmaComments(s:PaipuSummary,raw:unknown,members:Map<number
  const chosen=selectSanmaFindings(r.findings.filter(f=>members.has(f.seat)),2);
  return chosen.map(f=>{
   const name=clean(members.get(f.seat)!.name),at=s.rounds[f.round].label+'の'+f.turn+'打目',a=show(f.actual),b=show(f.recommended);
+  if(f.basis==='placement'){
+   const x=f.actualValue,m=f.recommendedValue;
+   const ranks=(rs:number[])=>Math.min(...rs)===Math.max(...rs)?`${rs[0]}位`:`${Math.min(...rs)}〜${Math.max(...rs)}位`;
+   const points=(v:ValueMetric)=>v.min===v.max?`${v.min}点`:`${v.min}〜${v.max}点`;
+   const above=f.scores.map((score,seat)=>({score,seat})).filter(p=>p.score>f.scores[f.seat]).sort((x,y)=>x.score-y.score)[0];
+   const gap=above?`一つ上とは${above.score-f.scores[f.seat]}点差。`:'';
+   return `🎙️「${name}、${at}は${gap}${a}切りでツモると${points(x)}で、その直後は${ranks(tsumoRanks(f.scores,f.seat,f.dealer,x)!)}。${b}切りなら${points(m)}で${ranks(tsumoRanks(f.scores,f.seat,f.dealer,m)!)}になりますわ。見えてへん待ち牌も${x.live}枚から${m.live}枚で減りません。順位を上げたいなら打点まで比べたいですねぇ。リーチ・裏ドラなし、本場・供託なしのツモ損計算です。ロンの条件や和了率、対局終了までは別の話やで」`;
+  }
   if(f.basis==='tsumo-value'){
    const x=f.actualValue,m=f.recommendedValue;
    const range=(v:ValueMetric)=>v.min===v.max?`${v.min}点`:`${v.min}〜${v.max}点`;
@@ -46,6 +63,11 @@ export function equalSanmaComments(s:PaipuSummary,raw:unknown,members:Map<number
   }
   if(f.basis==='genbutsu'){
    const opponent=clean(members.get(f.against)?.name??s.seats[f.against]?.nickname??'リーチした人');
+   if(f.river){
+    const rv=f.river,suji=riverSuji(f.actual,rv.tiles);
+    const relation=suji===null?'字牌なので筋では判断できません':suji?'筋には当たりますが、カンチャンや単騎への安全までは保証しません':'この河に対しては無筋です';
+    return `🎙️「${name}、${at}の${a}は${relation}。${rv.dealer?'親の':''}${opponent}の河は${rv.tiles.length>6?'…・':''}${rv.tiles.slice(-6).map(show).join('・')}で、手には現物の${rv.held.map(show).join('・')}が残ってますわ。まだ${f.shanten}向聴なので、守備を選ぶなら${b}切りも比較したいですねぇ。筋だけで当たり牌とは決められませんし、他家への安全と押し引きの正解までは出してへんで」`;
+   }
    return `🎙️「${name}、${at}は${f.shanten}向聴で${a}切りやね。${a}は${opponent}の現物ではないけど、手には現物の${b}もありますわ。守備を選ぶなら${b}が比較候補です。ただ、${a}が危険と決まったわけでも、他の相手にも${b}が安全なわけでもありません。押すか降りるかの正解までは出してへんで」`;
   }
   const x=f.actualMetric,m=f.recommendedMetric;

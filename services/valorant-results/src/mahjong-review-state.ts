@@ -23,7 +23,7 @@ export function hasReachAcceptance(value:any):boolean{return Boolean(value&&!val
 export interface ReviewTransition {type:'ankan'|'kakan';actor:number;pai?:string;consumed:string[]}
 export interface ReviewDiagnostics {acceptedRounds:number;blocked:Record<string,number>}
 /** Decode known standard Mahjong Soul rules only; variant rounds fail closed. */
-export function reviewDecisions(actions:PaipuAction[],summary:PaipuSummary,cap=256,diagnostics?:ReviewDiagnostics,transitions?:Map<number,ReviewTransition>):ReviewDecision[]{
+export function reviewDecisions(actions:PaipuAction[],summary:PaipuSummary,cap=256,diagnostics?:ReviewDiagnostics,transitions?:Map<number,ReviewTransition>,preferFinal=false):ReviewDecision[]{
  if(![3,4].includes(summary.players)||!new RegExp('^'+summary.players+'-(tonpu|hanchan)$').test(summary.game)||!Array.isArray(actions)||actions.length>10000||!integer(cap,1,512))return [];
  const activeExtension=(v:unknown)=>Boolean(v&&typeof v==='object'&&Object.entries(v).some(([k,x])=>k!=='seat'&&(typeof x==='number'?x>0:typeof x==='boolean'?x:false)));
  const reject=(reason:string)=>{if(diagnostics)diagnostics.blocked[reason]=(diagnostics.blocked[reason]??0)+1;};
@@ -84,7 +84,12 @@ export function reviewDecisions(actions:PaipuAction[],summary:PaipuSummary,cap=2
     if(call?.kind==='pon'&&tileKind(t)===tileKind(call.tiles[0]))throw Error('kuikae');
     if((d.is_liqi||d.is_wliqi)&&melds[d.seat].some(m=>m.kind!=='ankan'))throw Error('open reach');
     // A discard ordinal stays unambiguous even after calls and replacement draws.
-    if((pending.draw!==null||pending.afterCall)&&out.length<cap&&!riichi[d.seat]&&(n===3||!d.is_liqi&&!d.is_wliqi)){
+    // The optional sanma reviewer may reserve space for late scheduled-final
+    // decisions without increasing the replay cap or inspecting future hands.
+    const finalWind=summary.game==='3-tonpu'?0:1;
+    const evict=preferFinal&&n===3&&wind===finalWind&&dealer===2&&out.length>=cap?out.findIndex(f=>f.wind!==finalWind||f.dealer!==2):-1;
+    if((pending.draw!==null||pending.afterCall)&&(out.length<cap||evict>=0)&&!riichi[d.seat]&&(n===3||!d.is_liqi&&!d.is_wliqi)){
+     if(evict>=0)out.splice(evict,1);
      out.push({seat:d.seat,round,actionIndex,turn:rivers[d.seat].length+1,actual:t,draw:pending.draw,hand:hands[d.seat].slice(),players:n,dealer,wind,honba,sticks,scores:scores.slice(),rivers:rivers.map(r=>r.slice()),melds:structuredClone(melds),north:north.slice(),riichi:riichi.slice(),doubleRiichi:doubleRiichi.slice(),doras:doras.slice(),visible:visible.slice(),publicRed:[...publicRed],declaringReach:Boolean(d.is_liqi||d.is_wliqi),declaringDoubleReach:Boolean(d.is_wliqi),afterCall:Boolean(pending.afterCall),interrupted});
     }
     if(riichi[d.seat]&&pending.draw!==t)throw Error('locked reach hand');

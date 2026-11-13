@@ -1,13 +1,14 @@
 import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
-import {sanmaValueCase,sanmaValueFinding} from '../src/mahjong-sanma-value.ts';
+import {sanmaValueCase,sanmaValueFinding,sanmaPlacementFinding} from '../src/mahjong-sanma-value.ts';
 /** One bounded child per paipu, no shell, credentials or inherited runtime env.
  * Missing calculator affects only conditional value comments, never KP/paipu. */
 export function reviewSanmaValues(decisions,game,{python=process.env.SANMA_PYTHON,runner=spawnSync,diagnostics={}}={}){
  Object.assign(diagnostics,{configured:Boolean(python),eligibleCases:0,evaluatedCases:0,findingCount:0,status:python?'no-cases':'not-configured'});
  if(!python)return [];
  const frames=[],cases=[],counts=new Map();
- for(const d of decisions){
+ // Reserve the existing bounded budget for final-round decisions first.
+ for(const d of decisions.slice().sort((a,b)=>Number(b.dealer===2&&b.wind===(game==='3-tonpu'?0:1))-Number(a.dealer===2&&a.wind===(game==='3-tonpu'?0:1)))){
   if((counts.get(d.seat)??0)>=4)continue;
   const c=sanmaValueCase(d,game);if(!c)continue;
   frames.push(d);cases.push(c);counts.set(d.seat,(counts.get(d.seat)??0)+1);if(cases.length===12)break;
@@ -24,7 +25,8 @@ export function reviewSanmaValues(decisions,game,{python=process.env.SANMA_PYTHO
    if(!Array.isArray(result)||result.length!==cases[i].candidates.length)return [];
    if(result.some(m=>{const c=cases[i].candidates.find(c=>c.tile===m?.tile);return !c||m.live!==c.waits.reduce((sum,w)=>sum+w.left,0);}))return [];
    diagnostics.evaluatedCases++;
-   const f=sanmaValueFinding(frames[i],result);return f?[f]:[];
+   const final=frames[i].dealer===2&&frames[i].wind===(game==='3-tonpu'?0:1);
+   const f=final?sanmaPlacementFinding(frames[i],game,result):sanmaValueFinding(frames[i],result);return f?[f]:[];
   });
   diagnostics.findingCount=findings.length;return findings;
  }catch{return [];}

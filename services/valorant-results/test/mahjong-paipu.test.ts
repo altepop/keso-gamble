@@ -233,7 +233,7 @@ test('signed version-2 finding envelopes reach the existing queued post without 
  assert.deepEqual(body.allowed_mentions,{parse:[]});
 });
 
-test('real sanma worker v3 crosses signed ingestion, queue and mocked Discord delivery without extra KP or posts',{skip:!process.env.SANMA_PYTHON},async t=>{
+test('real sanma worker v4 crosses signed ingestion, queue and mocked Discord delivery without extra KP or posts',{skip:!process.env.SANMA_PYTHON},async t=>{
  t.mock.timers.enable({apis:['Date'],now:T0});
  const {threeValueScenario}=await import('./fixtures/mahjong-review-three.ts');
  // @ts-expect-error Standalone isolated worker host used by Actions.
@@ -242,7 +242,7 @@ test('real sanma worker v3 crosses signed ingestion, queue and mocked Discord de
  const input=threeValueScenario(),s={...input.summary,uuid:PAIPU};
  const reviewer=createPaipuReviewer({sanmaEnabled:true,timeoutMs:15000});let report;
  try{report=await reviewer.review(s,input.actions);}finally{await reviewer.close();}
- assert.equal(report?.version,3);assert.ok(report.findings.some((f:any)=>f.basis==='tsumo-value'));
+ assert.equal(report?.version,4);assert.ok(report.findings.some((f:any)=>f.basis==='tsumo-value'));
  const run=async(review:unknown)=>{
   const f=await fixture();await f.call('/api/mahjong/paipu/queue');
   f.sql.prepare('INSERT INTO kp_mahjong_links VALUES(?,?,?)').run(guild,one,2);
@@ -404,7 +404,7 @@ test('a sanma result and its actual rule-based finding survive an ingestion retr
  const {threeDefenseScenario}=await import('./fixtures/mahjong-review-three.ts');const {reviewDecisions}=await import('../src/mahjong-review-state.ts');const {sanmaDefenseFinding}=await import('../src/mahjong-sanma-defense.ts');
  const scenario=threeDefenseScenario(),s={...scenario.summary,uuid:PAIPU};
  const findings=reviewDecisions(scenario.actions,s).map(frame=>sanmaDefenseFinding(frame,s.game)).filter((v):v is NonNullable<typeof v>=>Boolean(v));assert.ok(findings.length);
- const reviewed={...s,review:{version:2,source:'sanma-rules',model:'sanma-rules-v2',uuid:PAIPU,findings:findings.slice(0,4)}};
+ const reviewed={...s,review:{version:4,source:'sanma-rules',model:'sanma-rules-v4',uuid:PAIPU,findings:findings.slice(0,4)}};
  f.sql.prepare('INSERT INTO kp_mahjong_links VALUES(?,?,?)').run(guild,one,s.seats[0].accountId);
  f.sql.exec("CREATE TRIGGER fail_paipu_post BEFORE INSERT ON kp_posts WHEN NEW.id LIKE 'paipu:%' BEGIN SELECT RAISE(ABORT,'fixture sanma failure'); END");
  assert.deepEqual(await (await f.call('/api/mahjong/paipu/summaries',{results:[{uuid:PAIPU,summary:reviewed}]})).json(),{stored:0,failed:1});

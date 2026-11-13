@@ -37,7 +37,7 @@ test('live diagnostic verifies defensive claims against the exact earlier public
  const {head,actions,summary}=threeDefenseScenario();
  const frame=reviewDecisions(actions,summary).find(d=>d.seat===0&&d.turn===6)!;
  const finding=sanmaDefenseFinding(frame,summary.game)!;assert.ok(finding);
- const report={version:2,source:'sanma-rules',model:'sanma-rules-v2',uuid:summary.uuid,findings:[finding]};
+ const report={version:4,source:'sanma-rules',model:'sanma-rules-v4',uuid:summary.uuid,findings:[finding]};
  assert.equal(auditSample(head,actions,summary,report).verifiedFindings,1);
  assert.throws(()=>auditSample(head,actions,summary,{...report,findings:[{...finding,against:2}]}),/audit_defense_unverified/);
 });

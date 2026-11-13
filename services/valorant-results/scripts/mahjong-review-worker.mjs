@@ -10,7 +10,7 @@ let four;
 parentPort.on('message',async ({summary,actions})=>{
  try{
   if(summary.players===3){
-   const frames=reviewDecisions(actions,summary,256);
+   const frames=reviewDecisions(actions,summary,256,undefined,undefined,true);
    const values=reviewSanmaValues(frames,summary.game);
    const all=[];const perSeat=new Map(),defenseCounts=new Map();
    for(const d of frames){
@@ -21,7 +21,7 @@ parentPort.on('message',async ({summary,actions})=>{
     const finding=sanmaShapeFinding(d,summary.game);if(finding)all.push(finding);
    }
    const selected=selectSanmaFindings([...values,...all]);
-   parentPort.postMessage(selected.length?{version:values.length?3:2,source:'sanma-rules',model:values.length?'sanma-rules-v3':'sanma-rules-v2',uuid:summary.uuid,findings:selected.slice(0,4)}:null);
+   parentPort.postMessage(selected.length?{version:4,source:'sanma-rules',model:'sanma-rules-v4',uuid:summary.uuid,findings:selected.slice(0,4)}:null);
   }else if(summary.players===4&&buildC3Cases(actions,summary,1).length){
    if(!four){
     // Cache restore is cheap; download, SHA verification and model init happen

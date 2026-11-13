@@ -1,16 +1,18 @@
 // Conditional hand-value comparisons, not win probabilities or push/fold EV.
 // The external calculator receives only the focal concealed hand/public facts.
+import {placementImproves} from './mahjong-sanma-context.ts';
+import type {PlacementFinding,Payment} from './mahjong-sanma-context.ts';
 import type {ReviewDecision} from './mahjong-review-state.ts';
 import {tileKind,sanmaKind,kindTile} from './mahjong-review-state.ts';
 import {sanmaShanten,sanmaDiscardMetrics} from './mahjong-sanma-efficiency.ts';
-export interface ValueMetric {tile:string;live:number;min:number;max:number;hanMin:number;hanMax:number;fuMin:number;fuMax:number}
+export interface ValueMetric {payments?:Payment[];tile:string;live:number;min:number;max:number;hanMin:number;hanMax:number;fuMin:number;fuMax:number}
 export interface SanmaValueFinding {seat:number;round:number;turn:number;actual:string;recommended:string;basis:'tsumo-value';riichi:boolean;doubleRiichi:boolean;menzen:boolean;actualValue:ValueMetric;recommendedValue:ValueMetric}
 export interface ValueCandidate {tile:string;hand:string[];waits:Array<{tile:string;left:number}>}
 export interface SanmaValueCase {candidates:ValueCandidate[];doras:string[];north:number;seatWind:number;roundWind:number;riichi:boolean;doubleRiichi:boolean;melds:Array<{kind:'pon'|'kan'|'ankan';tiles:string[]}>}
 export function sanmaValueCase(d:ReviewDecision,game:string):SanmaValueCase|null{
  const finalWind=game==='3-tonpu'?0:1,ownMelds=d.melds[d.seat]??[];
  const menzen=ownMelds.every(m=>m.kind==='ankan');
- if(!/^3-(tonpu|hanchan)$/.test(game)||d.players!==3||d.turn<(d.declaringDoubleReach?1:2)||d.turn>16||d.declaringDoubleReach&&(!d.declaringReach||d.interrupted)||!d.publicRed||d.hand.includes('N')||d.riichi.some(Boolean)||ownMelds.some(m=>m.kind==='chi')||d.declaringReach&&!menzen||d.wind>finalWind||d.wind===finalWind&&d.dealer===2||d.scores.some(s=>s<10000||s>60000)||sanmaShanten(d.hand,ownMelds.length)===-1)return null;
+ if(!/^3-(tonpu|hanchan)$/.test(game)||d.players!==3||d.turn<(d.declaringDoubleReach?1:2)||d.turn>16||d.declaringDoubleReach&&(!d.declaringReach||d.interrupted)||!d.publicRed||d.hand.includes('N')||d.riichi.some(Boolean)||ownMelds.some(m=>m.kind==='chi')||d.declaringReach&&!menzen||d.wind>finalWind||(d.wind===finalWind&&d.dealer===2?(d.honba!==0||d.sticks!==0||d.seat===d.dealer||d.scores.some(s=>s<0||s>100000)):d.scores.some(s=>s<10000||s>60000))||sanmaShanten(d.hand,ownMelds.length)===-1)return null;
  const metrics=sanmaDiscardMetrics(d),actual=metrics.find(m=>m.tile===d.actual);
  if(!actual||actual.shanten!==0)return null;
  const own=Array<number>(34).fill(0);d.hand.forEach(t=>own[tileKind(t)]++);
@@ -42,4 +44,17 @@ export function sanmaValueFinding(d:ReviewDecision,metrics:ValueMetric[]):SanmaV
  // Beating an inferior candidate is not evidence of a difficult, instructive choice.
  if(!best)return null;
  return {seat:d.seat,round:d.round,turn:d.turn,actual:d.actual,recommended:best.tile,basis:'tsumo-value',riichi:Boolean(d.declaringReach),doubleRiichi:Boolean(d.declaringDoubleReach),menzen:(d.melds[d.seat]??[]).every(m=>m.kind==='ankan'),actualValue:actual,recommendedValue:best};
+}
+
+/** Last scheduled round, child seat, no honba/deposits: compare actual
+ * conditional payments, not total points as though both opponents paid alike. */
+export function sanmaPlacementFinding(d:ReviewDecision,game:string,metrics:ValueMetric[]):PlacementFinding|null{
+ if(!/^3-(tonpu|hanchan)$/.test(game)||d.wind!==(game==='3-tonpu'?0:1)||d.dealer!==2||d.seat===d.dealer||d.honba!==0||d.sticks!==0||d.declaringReach||!sanmaValueCase(d,game))return null;
+ if(!Array.isArray(metrics)||metrics.length<2||metrics.length>14||metrics.some(m=>!d.hand.includes(m.tile)||!Number.isSafeInteger(m.live)||m.live<1||m.live>108))return null;
+ const actual=metrics.find(m=>m.tile===d.actual);if(!actual)return null;
+ for(const best of metrics.filter(m=>m.tile!==d.actual&&m.live>=actual.live).sort((a,b)=>b.min-a.min)){
+  const finding:PlacementFinding={seat:d.seat,round:d.round,turn:d.turn,actual:d.actual,recommended:best.tile,basis:'placement',scores:d.scores.slice(),dealer:d.dealer,actualValue:actual,recommendedValue:best};
+  if(placementImproves(finding))return finding;
+ }
+ return null;
 }

@@ -9,12 +9,12 @@ function position():ReviewDecision{return {seat:0,round:0,turn:8,actionIndex:0,a
 const s4=summarizePaipu(head,sample),summary={...s4,players:3,game:'3-hanchan',seats:s4.seats.slice(0,3)};
 test('far hands may offer a real genbutsu against a single opponent, with no fabricated danger claim',()=>{
  const d=position(),f=sanmaDefenseFinding(d,summary.game);assert.ok(f);assert.equal(f.against,1);assert.equal(f.actualOnRiver,false);assert.ok(['9m','E'].includes(f.recommended));assert.ok(d.hand.includes(f.recommended));
- const r={version:2,source:'sanma-rules',model:'sanma-rules-v2',uuid:summary.uuid,findings:[f]};
+ const r={version:4,source:'sanma-rules',model:'sanma-rules-v4',uuid:summary.uuid,findings:[f]};
  assert.ok(acceptedSanmaReport(summary,r));
  const lines=equalSanmaComments(summary,r,new Map([[0,{name:'けそ'}],[1,{name:'@everyone **相手**'}]]));
  assert.match(lines.join(''),/現物|河にある/);assert.match(lines.join(''),/相手/);assert.match(lines.join(''),/8打目/);
  assert.doesNotMatch(lines.join(''),/@|絶対|必ず|放銃率|c3|AI/i);
- assert.match(lines[0],/向聴/);assert.match(lines[0],/他の相手/);assert.match(lines[0],/正解までは出してへん/);
+ assert.match(lines[0],/向聴/);assert.match(lines[0],/他家/);assert.match(lines[0],/正解までは出してへん/);
 });
 test('a routine genbutsu choice is omitted, including old signed positive findings',()=>{
  const d=position();d.actual='9m';assert.equal(sanmaDefenseFinding(d,summary.game),null);
@@ -27,7 +27,7 @@ test('defensive notes require precise threat, context and a known held genbutsu'
  const d=position();
  const near={...d,hand:['1p','2p','3p','4p','5p','6p','7s','8s','9s','E','E','E','P','P'],actual:'P'};
  for(const x of [near,{...d,riichi:[false,false,false]},{...d,riichi:[false,true,true]},{...d,riichi:[true,true,false]},{...d,rivers:[[],['1s'],[]]},{...d,turn:5},{...d,wind:1,dealer:2},{...d,scores:[1000,50000,54000]},{...d,hand:['N',...d.hand.slice(1)]}])assert.equal(sanmaDefenseFinding(x,summary.game),null);
- const f=sanmaDefenseFinding(d,summary.game)!;const report={version:2,source:'sanma-rules',model:'sanma-rules-v2',uuid:summary.uuid,findings:[f]};
+ const f=sanmaDefenseFinding(d,summary.game)!;const report={version:4,source:'sanma-rules',model:'sanma-rules-v4',uuid:summary.uuid,findings:[f]};
  for(const bad of [{...f,against:0},{...f,againstRiichi:false},{...f,recommendedOnRiver:false},{...f,shanten:1},{...f,turn:2},{...f,actualOnRiver:true}])assert.equal(acceptedSanmaReport(summary,{...report,findings:[bad]}),null);
  assert.equal(acceptedSanmaReport(summary,{...report,version:1}),null);
 });

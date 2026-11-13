@@ -82,7 +82,7 @@ export function persistedReviewStatus(saved,rawDelivery){
 }
 
 export function auditSample(head,actions,saved,report){
- const summary=summarizePaipu(head,actions),diagnostics={acceptedRounds:0,blocked:{}},frames=reviewDecisions(actions,summary,256,diagnostics);
+ const summary=summarizePaipu(head,actions),diagnostics={acceptedRounds:0,blocked:{}},frames=reviewDecisions(actions,summary,256,diagnostics,undefined,true);
  const kinds={};for(const a of actions)if(/^Record(?:NewRound|DealTile|DiscardTile|ChiPengGang|AnGangAddGang|BaBei|Hule|NoTile|LiuJu|LiqiSuccess)$/.test(a.name))kinds[a.name]=(kinds[a.name]??0)+1;
  const roundShapes=actions.filter(a=>a.name==='RecordNewRound').map(a=>{
   const d=a.data;
@@ -98,15 +98,16 @@ export function auditSample(head,actions,saved,report){
  for(const f of findings){
   const c=cases.find(c=>c.seat===f.seat&&c.round===f.round&&c.turn===f.turn&&c.actual===f.actual);
   if(!c||!(c.legal??c.hand)?.includes(f.recommended))throw Error('audit_discard_invalid');
-  if(f.basis==='tsumo-value'){
+  if(f.basis==='tsumo-value'||f.basis==='placement'){
    const value=sanmaValueCase(c,summary.game);
    for(const m of [f.actualValue,f.recommendedValue]){
     const candidate=value?.candidates.find(x=>x.tile===m.tile);
-    if(value.riichi!==f.riichi||value.doubleRiichi!==f.doubleRiichi||value.melds.every(m=>m.kind==='ankan')!==f.menzen||!candidate||candidate.waits.reduce((sum,w)=>sum+w.left,0)!==m.live)throw Error('audit_value_unverified');
+    if(!value||f.basis==='tsumo-value'&&(value.riichi!==f.riichi||value.doubleRiichi!==f.doubleRiichi||value.melds.every(m=>m.kind==='ankan')!==f.menzen)||f.basis==='placement'&&(JSON.stringify(c.scores)!==JSON.stringify(f.scores)||c.dealer!==f.dealer||c.honba!==0||c.sticks!==0||c.declaringReach)||!candidate||candidate.waits.reduce((sum,w)=>sum+w.left,0)!==m.live)throw Error('audit_value_unverified');
    }
   }
   if(f.basis==='genbutsu'){
    const river=c.rivers?.[f.against]?.map(tileKind)??[];
+   if(f.river&&(JSON.stringify(f.river.tiles)!==JSON.stringify(c.rivers[f.against])||f.river.dealer!==(c.dealer===f.against)||f.river.held.some(t=>!c.hand.includes(t))))throw Error('audit_defense_unverified');
    if(c.riichi?.[f.against]!==true||!river.includes(tileKind(f.recommended))||river.includes(tileKind(f.actual))!==f.actualOnRiver)throw Error('audit_defense_unverified');
   }
  }
