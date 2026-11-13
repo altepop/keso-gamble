@@ -415,3 +415,19 @@ test('a sanma result and its actual rule-based finding survive an ingestion retr
  const saved=JSON.parse(String(f.sql.prepare('SELECT summary FROM kp_mahjong_paipu').get()!.summary));assert.ok(saved.review?.findings.length);
  assert.match(JSON.stringify(f.sql.prepare('SELECT body FROM kp_posts').all()),/松本等しいのひと言/);assert.equal(f.posts().length,1);
 });
+
+test('signed opt-in display diagnostics distinguish missing, invalid, nonmember and queued reviews without IDs',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:T0});
+ const other=summary.seats.find(p=>p.seat!==0&&p.rank!==1)!.seat;
+ const report=(seat:number)=>({version:2,source:'c3',model:'c3-v1.0-observation-1',uuid:PAIPU,findings:[{seat,round:0,turn:4,actual:'6p',recommended:'3p',position:'discard'}]});
+ for(const [c3,status] of [[undefined,'missing-report'],[{invalid:true},'invalid-report'],[report(other),'no-member-findings'],[report(0),'queued']] as const){
+  const f=await fixture();await f.claim(one,1);
+  const response=await f.call('/api/mahjong/paipu/summaries',{results:[{uuid:PAIPU,summary:{...summary,c3}}],reviewDiagnostics:true},KEY,[{id:summary.seats[0].accountId,name:'登録者'}]);
+  const body=await response.json() as {stored:number;reviewDiagnostics:Array<{status:string;comments:number}>};
+  assert.equal(body.stored,1);assert.equal(body.reviewDiagnostics[0].status,status);
+  assert.equal(body.reviewDiagnostics[0].comments,status==='queued'?1:0);
+  assert.doesNotMatch(JSON.stringify(body),/synthetic|登録者|10000000000000010|uuid|paipu/);
+  const before=f.balance(one);await f.call('/api/mahjong/paipu/summaries',{results:[{uuid:PAIPU,summary:{...summary,c3}}],reviewDiagnostics:true});
+  assert.equal(f.balance(one),before,'diagnostic retries cannot add KP');assert.equal(f.posts().length,1);
+ }
+});

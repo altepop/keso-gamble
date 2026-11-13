@@ -1,3 +1,4 @@
+import {displayDiagnostic,reviewDiagnostic} from './mahjong-review-diagnostics.mjs';
 // Fetches paipu that /paifu claims are waiting on, summarizes them and sends the summaries to the
 // Worker. Runs in GitHub Actions (the Worker's CPU limit cannot decode the game's protobuf).
 // Logs counts and error codes only: never nicknames, ids, tokens or paipu contents (public logs).
@@ -138,13 +139,15 @@ export async function fetchSummary(session,uuid,reviewer=null){
  const summary=summarizePaipu(head,actions);
  if(reviewer&&confirmedStandardReviewRules(head)){
   try{
-   const review=await reviewer.review(summary,actions);
+   let diagnostic;
+   const review=await reviewer.review(summary,actions,d=>{diagnostic=d;});
+   if(diagnostic)console.log('equal_review_diagnostic: '+JSON.stringify(reviewDiagnostic(diagnostic)));
    if(review){if(summary.players===3)summary.review=review;else summary.c3=review;}
   }catch(error){
    // Read-only AI review must NEVER interrupt current paipu/KP settlement.
    console.log('equal_review: skipped; existing paipu settlement preserved');
   }
- }
+ }else if(reviewer){console.log('equal_review_diagnostic: '+JSON.stringify({status:'unsupported-rules'}));}
  return summary;
 }
 
@@ -172,7 +175,8 @@ export async function run(env=process.env,check=process.argv.includes('--check')
  }finally{await reviewer?.close().catch(()=>{});session.close();}
  if(results.length){
   console.log('equal_review: '+results.filter(r=>r.summary?.c3||r.summary?.review).length+' reports (no game identifiers)');
-  const reply=await worker(env,'/api/mahjong/paipu/summaries',{results});
+  const reply=await worker(env,'/api/mahjong/paipu/summaries',{results,reviewDiagnostics:true});
+  for(const diagnostic of (Array.isArray(reply.reviewDiagnostics)?reply.reviewDiagnostics:[]).slice(0,10))console.log('equal_review_display: '+JSON.stringify(displayDiagnostic(diagnostic)));
   console.log(`paipu: ${results.filter(r=>r.summary).length} fetched, ${results.filter(r=>r.error).length} fetch failed (${[...new Set(results.map(r=>r.error).filter(Boolean))].join(',')}); stored ${reply.stored??0}, apply failed ${reply.failed??0}`);
   if(reply.failed>0)throw Error('paipu_summary_apply_failed');
  }
