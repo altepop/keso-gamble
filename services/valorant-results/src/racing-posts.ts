@@ -8,7 +8,7 @@ import {activityLaunchComponents} from './activity-link.ts';
 import { BET_TYPES, CLOSE_BEFORE, GOINGS, RACE_INTERVAL, RUN_MS, bigRaceName, latestRaceStart, openRaceStart, prizeFor, raceCard, raceOdds, raceResult, placeSlots, raceEvent, FORM_REFORM_FROM, runningNotes, raceBrief } from '../../../js/racing.js';
 import { raceSeed, ensureRacing } from './racing-kp.ts';
 import { crownFor, defaultRoastLevel, validRoastLevel } from './racing-crowns.ts';
-import { raceEntries } from './racing-horses.ts';
+import { raceEntries, FUJIMURA_PROOF_PREFIX } from './racing-horses.ts';
 import { titlesOf } from './luxury.ts';
 import {raceCatchphrase,raceAside,raceBanter} from './racing-voice.ts';
 import type { RoastLevel } from './racing-crowns.ts';
@@ -110,10 +110,29 @@ export async function queueRacePosts(env:PostEnv,mapping:KpMapping,now=Date.now(
  if(!earningsWebhook(env))return;
  await ensureRacing(env);await ensurePosts(env);
  await queueFestivalAnnouncements(env,now);
+ // Only a server-recorded and already fixed race can be announced as proof.
+ // This row is written atomically with the owner's real horse entry.
+ const proofRow=await env.DB.prepare('SELECT value FROM kp_settings WHERE key=?')
+  .bind(FUJIMURA_PROOF_PREFIX+mapping.guildId).first<{value:string}>();
+ const proof=proofRow?JSON.parse(proofRow.value) as {race:number;horse:string}:null;
+ const proofHorseId=proof?.horse??'';
  for(const c of crowns)await enqueue(env,'race-crown:'+c.race,crownPost(c),now);
  // The card of a big race or a crown named after someone goes out once betting has opened for it.
  const open=openRaceStart(now),openCrown=await crownFor(env,mapping.guildId,open);
- if((bigRaceName(open)||openCrown||raceEvent(open))&&now>=open-RACE_INTERVAL&&now<open-CLOSE_BEFORE){
+ if(proof?.race===open&&now>=open-RACE_INTERVAL&&now<open-CLOSE_BEFORE){
+  const entries=await raceEntries(env,mapping,open);
+  const card=raceCard(open,undefined,entries);
+  const horse=card.horses.find((h:{horseId?:string})=>h.horseId===proofHorseId);
+  if(horse){
+   await enqueue(env,'horse-debut-proof:'+open,
+    ['🏇 **藤村の馬、出走確定！**',
+     `馬名「${clean(horse.name)}」は、${clock(open)}発走の${clean(card.name)}・${horse.number}番に正式登録されたで！`,
+     `登録馬ID: \`${proofHorseId}\``,
+     'SQLに馬名を実行させたわけやないで。正式な出走データを保存して、次は実際の着順を報告する。',
+     '※初回限定の特別招待枠。通常のレースと階級が異なる場合がある。馬券・オッズ・勝敗は通常の処理に従う。'].join('\n'),now);
+  }
+ }
+ if((bigRaceName(open)||openCrown||raceEvent(open)||proof?.race===open)&&now>=open-RACE_INTERVAL&&now<open-CLOSE_BEFORE){
   // A card is immutable once enqueued; skip expensive horse/seed reads
   // rather than reconstruct it every minute until betting closes.
   const present=await env.DB.prepare('SELECT 1 AS n FROM kp_posts WHERE id=?').bind('race-card:'+open).first();
@@ -141,8 +160,15 @@ export async function queueRacePosts(env:PostEnv,mapping:KpMapping,now=Date.now(
   const seed=await env.DB.prepare('SELECT seed FROM kp_races WHERE guild=? AND id=?').bind(mapping.guildId,id).first<{seed:string}>();
   const card={...raceCard(id,undefined,entries),...(crown?{name:crown.name}:{})};
   const ownerWon=Boolean(seed)&&Boolean(card.horses[raceResult(card,seed!.seed).order[0]-1].ownerName);
-  if(!worthPosting(card,bets,Boolean(crown),ownerWon)){await skip();continue;}
-  if(seed){levelOf??=await roastLevelsOf(env,mapping);const titles=await titlesOf(env,mapping.guildId);await enqueue(env,'race-result:'+id,resultPost(card,seed.seed,bets,levelOf,u=>titles.get(u))+(card.event?.id==='festival'?await festivalResultProof(env,mapping.guildId,id):''),now);}
+  if(!worthPosting(card,bets,Boolean(crown),ownerWon)&&proof?.race!==id){await skip();continue;}
+  if(seed){
+   const debut=proof?.race===id?card.horses.find((h:{horseId?:string})=>h.horseId===proofHorseId):null;
+   const proofResult=debut?`\n🏁 **藤村の馬「${clean(debut.name)}」が実際に出走、${raceResult(card,seed.seed).order.indexOf(debut.number)+1}着でゴール！** 馬名を含む出走表と結果が正常に処理されたで。`:'';
+   levelOf??=await roastLevelsOf(env,mapping);
+   const titles=await titlesOf(env,mapping.guildId);
+   await enqueue(env,'race-result:'+id,resultPost(card,seed.seed,bets,levelOf,u=>titles.get(u))
+    +proofResult+(card.event?.id==='festival'?await festivalResultProof(env,mapping.guildId,id):''),now);
+  }
  }
 }
 export async function flushRacePosts(env:PostEnv,limit=5){

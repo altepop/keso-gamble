@@ -8,6 +8,7 @@ import type { KpEnv, KpMapping } from '../src/kp.ts';
 import { operateKp, readKpState } from '../src/kp-api.ts';
 import { decideEntries, ensureRaceField, ensureHorses, raceEntries, settleHorsePrizes, repairRecordedHorseStats, shouldSettleHorsePrizes, horsePrizeLookback, refundLegacyHorseOverpayments } from '../src/racing-horses.ts';
 import { raceSeed, settleKpRaces } from '../src/racing-kp.ts';
+import { queueRacePosts } from '../src/racing-posts.ts';
 // @ts-expect-error The shared pure browser engine has no TypeScript declarations.
 import { BOXES, RACE_INTERVAL, RETIRE_RACES, RUN_MS, openRaceStart, prizeFor, raceCard, raceClass, raceOdds, raceResult, ownedPrizeFor } from '../../../js/racing.js';
 const guild='100000000000000100',one='100000000000000101',two='100000000000000102';
@@ -334,4 +335,47 @@ test('legacy expensive horse boxes are refunded exactly once, including sold/ret
  assert.equal(balance(f.sql),2400000,'idempotent after marker loss');
  assert.equal(Number(f.sql.prepare("SELECT price FROM kp_horses WHERE id='old-apex'").get()!.price),3500000,
   'historical purchase price remains intact for sale calculations');
+});
+
+test('Fujimura SQL-like horse name is invited once to the next race, announced, and finishes safely', async()=>{
+ const f=await fixture(0);
+ const fujimura:KpMapping={guildId:guild,accounts:[{riotId:'Fujimura#JP1',discordUserId:one}]};
+ const race=raceOfClass(0,openRaceStart(T0)+RACE_INTERVAL);
+ const opening=race-RACE_INTERVAL+10_000;
+ const dangerousName="';DROP;--";
+ addHorse(f.sql,'horse-sql-debut',4,{name:dangerousName,owner:one,created_at:opening-1000});
+ const entries=await decideEntries(f.env,fujimura,race,opening,0);
+ assert.deepEqual(entries.map(e=>e.name),[dangerousName],'real named horse must enter, not a fake runner');
+ assert.equal(entries[0].horseId,'horse-sql-debut');
+ const proof=JSON.parse(String(f.sql.prepare("SELECT value FROM kp_settings WHERE key=?")
+  .get('horse_debut_proof_20261114:'+guild)!.value));
+ assert.deepEqual(proof,{race,horse:'horse-sql-debut'});
+ const live=f.sql.prepare("SELECT name FROM kp_horses WHERE id=?").get('horse-sql-debut');
+ assert.equal(live!.name,dangerousName,'SQL-like name is stored as plain text');
+ assert.equal(Number(f.sql.prepare("SELECT COUNT(*) AS n FROM kp_horses").get()!.n),1,'horse table remains intact');
+ // Replays and concurrent decisions cannot rewrite the fixed field.
+ assert.deepEqual((await decideEntries(f.env,fujimura,race,opening,0)).map(x=>x.horseId),['horse-sql-debut']);
+ const other=race+RACE_INTERVAL;
+ const otherEntries=await decideEntries(f.env,fujimura,other,other-RACE_INTERVAL+10_000,0);
+ assert.ok(!otherEntries.some(e=>e.horseId==='horse-sql-debut'),'showcase invitation is strictly once');
+ // Announcements are queued only from a committed field, never fabricated.
+ Object.assign(f.env,{KP_EARNINGS_WEBHOOK_URL:'https://discord.com/api/webhooks/123/demo'});
+ await queueRacePosts(f.env,fujimura,opening);
+ const before=f.sql.prepare("SELECT body FROM kp_posts WHERE id=?").get('horse-debut-proof:'+race) as {body:string}|undefined;
+ assert.ok(before,'pre-race proof must be enqueued');
+ const beforeBody=JSON.parse(before!.body).content as string;
+ assert.match(beforeBody,/出走確定/);
+ assert.ok(beforeBody.includes(dangerousName));
+ assert.ok(beforeBody.includes('horse-sql-debut'));
+ const seed=await raceSeed(f.env,guild,race);
+ const card=raceCard(race,undefined,entries);
+ const expectedRank=raceResult(card,seed.seed).order.indexOf(card.horses.find((x:{horseId?:string})=>x.horseId==='horse-sql-debut').number)+1;
+ await settleHorsePrizes(f.env,fujimura,race+RUN_MS);
+ await queueRacePosts(f.env,fujimura,race+RUN_MS+1000);
+ const post=f.sql.prepare("SELECT body FROM kp_posts WHERE id=?").get('race-result:'+race) as {body:string}|undefined;
+ assert.ok(post,'even a losing invited horse should receive an official finish post');
+ assert.ok((JSON.parse(post!.body).content as string).includes(expectedRank+'着でゴール'));
+ const horse=f.sql.prepare("SELECT name,races FROM kp_horses WHERE id=?").get('horse-sql-debut') as {name:string;races:number};
+ assert.equal(horse.name,dangerousName);
+ assert.equal(horse.races,1,'normal horse settlement updates the real record exactly once');
 });
