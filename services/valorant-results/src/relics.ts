@@ -332,7 +332,7 @@ export function evaluateRelicBonus(
      if(mode==='voice'&&id==='normal.voice.riddle.fifteen'&&amount===15
        &&voiceResonanceReady(collection,equipped))exotic=VOICE_RESONANCE_KP;
     }
-   else if(special==='voice_ritual')exotic=900;
+   else if(special==='voice_ritual')exotic=5400;
   }
   lines.push({id,name:def?.name??item.name,mode:sourceMode,
    short:def?.short??item.ability,percent:basePercent,effectivePercent:percent,
