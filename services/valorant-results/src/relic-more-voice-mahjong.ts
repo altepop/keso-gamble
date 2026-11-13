@@ -17,12 +17,12 @@ export const MORE_MAHJONG_VOICE_RELICS:ReadonlyArray<NormalRelicDefinition>=[
  {id:'normal.voice.mic',name:'片耳の通話石',mode:'voice',rarity:'common',power:32,skill:'triple',percent:28,cap:0,short:'3の倍数KP：＋28%',ability:'通話の確定KPが3の倍数なら＋28%。'},
  {id:'normal.voice.coffee',name:'夜更かしの珈琲',mode:'voice',rarity:'uncommon',power:60,skill:'odd',percent:45,cap:0,short:'奇数KP：＋45%',ability:'通話の確定KPが奇数なら＋45%。'},
  {id:'normal.voice.pulse',name:'拍子木の共振器',mode:'voice',rarity:'rare',power:104,skill:'near',percent:95,cap:0,short:'小額報酬：＋95%',ability:'通話の基本ライン近辺の確定KPを＋95%。'},
- {id:'normal.voice.alarm',name:'眠気の反転儀',mode:'voice',rarity:'legendary',power:160,skill:'master',percent:125,cap:0,short:'通話の確定報酬：＋125%',ability:'通話の確定達成時に＋125%。'},
+ {id:'normal.voice.alarm',name:'眠気の反転儀',mode:'voice',rarity:'legendary',power:160,skill:'master',percent:125,cap:0,short:'通話の確定報酬：＋125%',ability:'通話の確定達成時に＋125%。鳴らない時計を起こす音があるという。'},
  {id:'normal.voice.midnight',name:'午前零時の星環',mode:'voice',rarity:'mythic',power:239,skill:'odd',percent:215,cap:0,short:'奇数KP：＋215%',ability:'通話の確定KPが奇数なら＋215%。'},
  {id:'normal.voice.dawn',name:'夜明けの残響',mode:'voice',rarity:'transcendent',power:495,skill:'master',percent:355,cap:0,short:'通話の確定報酬：＋355%',trait:'運命突破：発動条件を外しても固定KPを獲得',ability:'通話の確定達成報酬に＋355%。運命突破。'},
  // The first three activate along three unrelated integer divisibility axes.
- {id:'normal.voice.riddle.three',name:'三分割の歯車',mode:'voice',rarity:'rare',power:102,skill:'spark',percent:0,cap:0,special:'voice_key',short:'三で割った余白を拾う',trait:'隠し歯車・Ⅰ',ability:'3の倍数と、眠っている四番目の音に反応する。'},
- {id:'normal.voice.riddle.five',name:'五拍目の針',mode:'voice',rarity:'mythic',power:251,skill:'spark',percent:0,cap:0,special:'voice_key',short:'五で割った余白を拾う',trait:'隠し歯車・Ⅱ',ability:'5の倍数に反応する。別の歯車を知らないままでは眠り続ける。'},
- {id:'normal.voice.riddle.fifteen',name:'十五番目の空席',mode:'voice',rarity:'ancient',power:348,skill:'spark',percent:0,cap:0,special:'voice_key',short:'十五が揃うと静かに鳴る',trait:'隠し歯車・Ⅲ',ability:'15の倍数に反応する。ほかの二つの歯車との関係を探せ。'},
- {id:'normal.voice.riddle.crown',name:'無音の王冠',mode:'voice',rarity:'transcendent',power:523,skill:'spark',percent:0,cap:0,special:'voice_ritual',short:'沈黙の四重奏。三つの歯車は何を指す？',trait:'裏和音',ability:'意味のない小さな数字の合計に見えるが、揃った四枠でだけ隠れた和音を開く。'},
+ {id:'normal.voice.riddle.three',name:'三分割の歯車',mode:'voice',rarity:'rare',power:102,skill:'spark',percent:0,cap:0,special:'voice_key',short:'三で割った余白。まだ音は足りない',trait:'隠し歯車・Ⅰ',ability:'3の倍数に反応する。針と重なっても、それだけでは時計は動かない。'},
+ {id:'normal.voice.riddle.five',name:'五拍目の針',mode:'voice',rarity:'mythic',power:251,skill:'spark',percent:0,cap:0,special:'voice_key',short:'五拍目の先には、まだ続きがある',trait:'隠し歯車・Ⅱ',ability:'5の倍数に反応する。二つの数字が重なっても、空いた席は埋まらない。'},
+ {id:'normal.voice.riddle.fifteen',name:'十五番目の空席',mode:'voice',rarity:'ancient',power:348,skill:'spark',percent:0,cap:0,special:'voice_key',short:'十五の空席。最後の音はまだない',trait:'隠し歯車・Ⅲ',ability:'15の倍数に反応する。三つの歯車が噛み合っても、空席に最後の音がなければ静かなままだ。'},
+ {id:'normal.voice.riddle.crown',name:'無音の王冠',mode:'voice',rarity:'transcendent',power:523,skill:'spark',percent:0,cap:0,special:'voice_ritual',short:'沈黙の四重奏。最後の一音はどこに',trait:'裏和音',ability:'小さな数字の響きは、四つ目の音を迎えるまで旋律にならない。'},
 ];
