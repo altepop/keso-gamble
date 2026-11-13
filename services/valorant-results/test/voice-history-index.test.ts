@@ -35,6 +35,16 @@ test('voice reward history uses member/date index, preserves latest 100 and all 
  assert.ok(rows.every(r=>r.amount===15));
  assert.ok(rows.every((r,i)=>i===0||rows[i-1].at>=r.at));
  assert.equal(sql.prepare('SELECT SUM(delta) AS total FROM kp_ledger').get()!.total,720*15);
+ // Legacy 1–48 remain readable while 49–288 are stored in the extension.
+ const extra='voice:'+guild+':'+users[0]+':2026-10-01:49';
+ sql.prepare('INSERT INTO kp_voice_events_ext VALUES(?,?,?,?,?,5,?)')
+  .run(extra,guild,users[0],'2026-10-01',49,1000000);
+ assert.equal(sql.prepare('SELECT SUM(delta) AS total FROM kp_ledger').get()!.total,720*15+15);
+ assert.equal(sql.prepare('SELECT COUNT(*) AS n FROM kp_ledger WHERE id=? OR id=?').get(extra,'bonus:'+extra)!.n,2);
+ const merged=await voiceRewardHistory(env,guild,users[0],999,1000010);
+ assert.equal(merged[0]?.slot,49);
+ assert.equal(merged[0]?.amount,15);
+ assert.equal(merged.length,50);
  sql.close();
 });
 
