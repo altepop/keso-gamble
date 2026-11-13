@@ -19,8 +19,8 @@ test('secret voice build: each gear looks unimpressive, full four-slot resonance
  const single=gears.map(id=>evaluateRelicBonus(make([id]),'voice',{amount:15,win:true}).bonus);
  assert.deepEqual(single,[1,3,9,0]);
  const all=evaluateRelicBonus(make(gears),'voice',{amount:15,win:true});
- assert.equal(all.lines.find(x=>x.id===gears[3])?.exotic,900);
- assert.ok(all.bonus>=900);
+ assert.equal(all.lines.find(x=>x.id===gears[3])?.exotic,5400);
+ assert.ok(all.bonus>=5400);
  assert.ok(all.bonus>Math.max(...single)*50);
  assert.equal(evaluateRelicBonus(make(gears.slice(1)),'voice',{amount:15,win:true}).lines.find(x=>x.id===gears[3])?.exotic,0);
  assert.equal(evaluateRelicBonus(make(gears),'quiz',{amount:15,win:true}).bonus,0);
@@ -35,6 +35,10 @@ test('four normal voice relics, with no transcendent, settle 10k–20k KP per ve
  // Base 15 KP for all twelve five-minute slots; three 20-minute relic receipts.
  const hourly=12*15+3*Math.min(settled.bonus,15*400);
  assert.ok(hourly>=10000&&hourly<=20000,`unexpected voice hourly yield: ${hourly}`);
+ const transcendent=make(gears);
+ const advanced=evaluateRelicBonus(transcendent,'voice',{amount:15,win:true});
+ const advancedHourly=12*15+3*Math.min(advanced.bonus,15*400);
+ assert.ok(advancedHourly>hourly&&advancedHourly<=20000,'the transcendent quartet should be slightly stronger');
  assert.ok(evaluateRelicBonus(make(ids.slice(1)),'voice',{amount:15,win:true}).bonus<1000);
  assert.equal(evaluateRelicBonus(loadout,'quiz',{amount:15,win:true}).bonus,0);
  // Anti-swap protection applies until 20 verified minutes pass, not to other modes.
