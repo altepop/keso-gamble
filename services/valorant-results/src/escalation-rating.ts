@@ -6,6 +6,10 @@ export const ESCALATION_MEASUREMENT_GAMES=3;
 export const ESCALATION_RR_VERSION='per-match-v2';
 export const ESCALATION_SHIELD_VERSION='rank-shields-v1';
 const SHIELD_SCHEMA_KEY='escalation_shield_schema';
+// A separate marker keeps old shield workers from reinstalling their trigger.
+const PLACEMENT_SCHEMA_KEY='escalation_initial_placement_schema';
+export const ESCALATION_PLACEMENT_VERSION='initial-win-175-v1';
+export const ESCALATION_INITIAL_WIN_POINTS=175;
 export const escalationShieldEligible=(rating:number)=>Number.isSafeInteger(rating)&&rating>=300&&rating<2400&&rating%300<100;
 export interface EscalationAct {id:string;name:string|null;startedAt:number;endedAt:number;episode?:string|null}
 export interface EscalationPowerProof {act:EscalationAct;performance:number;kdPositive?:boolean;rrPerformance?:number}
@@ -80,7 +84,7 @@ const consistencyBonus="CASE WHEN placement_kind='initial' AND measurement_posit
 const placementWins="measurement_wins+(NEW.outcome='win')";
 // Keep the internal estimate across resets. At most +one whole rank on an episode placement.
 const placementRating=`CASE placement_kind
- WHEN 'initial' THEN 200*(${placementWins})+${measureBonus}+(${consistencyBonus})
+ WHEN 'initial' THEN ${ESCALATION_INITIAL_WIN_POINTS}*(${placementWins})+${measureBonus}+(${consistencyBonus})
  WHEN 'act' THEN seed_rating+CASE WHEN NEW.outcome='win' THEN 20+${measureBonus} ELSE 0 END
  ELSE MAX(0,seed_rating-600+MIN(900,MAX(0,seed_mmr-seed_rating+100*(2*(${placementWins})-measurement_required)+${measureBonus}))) END`;
 const placementPerformance=`((${placementRating})-(${placementRating.replaceAll(measureBonus,'0')}))`;
@@ -95,8 +99,8 @@ const nextShields=`CASE WHEN ${finishMeasure} THEN CASE WHEN ${nextEligible} THE
 export async function ensureEscalationRating(env:KpEnv){
  const previous=ready.get(env.DB);if(previous)return previous;
  const job=(async()=>{
- const marker=await env.DB.prepare('SELECT value FROM kp_settings WHERE key=?').bind(SHIELD_SCHEMA_KEY).first<{value:string}>();
- if(marker?.value===ESCALATION_SHIELD_VERSION)return;
+ const marker=await env.DB.prepare('SELECT value FROM kp_settings WHERE key=?').bind(PLACEMENT_SCHEMA_KEY).first<{value:string}>();
+ if(marker?.value===ESCALATION_PLACEMENT_VERSION)return;
  await env.DB.batch([
   env.DB.prepare('CREATE TABLE IF NOT EXISTS kp_escalation_current_acts(guild TEXT PRIMARY KEY,act TEXT NOT NULL,name TEXT,episode TEXT,started_at INTEGER NOT NULL)'),
   env.DB.prepare(`CREATE TABLE IF NOT EXISTS kp_escalation_ratings(
@@ -125,7 +129,8 @@ export async function ensureEscalationRating(env:KpEnv){
   catch(error){if(!(await ratingColumns()).has(column))throw error;}
  }
  // Marker guard prevents a second isolate from refilling shields consumed after the first upgrade.
- // Keep the per-match-v2 marker as well: rolling old v2 isolates must not reinstall the old trigger.
+ // Keep both old schema markers so rolling old workers do not reinstall old triggers.
+ // Guard shield migration by its old marker so spent shields are not replenished.
  // D1 batch is transactional: no request can observe a gap between the two triggers.
  await env.DB.batch([
   env.DB.prepare("UPDATE kp_escalation_ratings SET rank_shields=CASE WHEN rating>=300 AND rating<2400 AND rating%300<100 THEN 2 ELSE 0 END WHERE NOT EXISTS(SELECT 1 FROM kp_settings WHERE key=? AND value=?)").bind(SHIELD_SCHEMA_KEY,ESCALATION_SHIELD_VERSION),
@@ -161,6 +166,7 @@ export async function ensureEscalationRating(env:KpEnv){
   END`),
   env.DB.prepare('INSERT OR REPLACE INTO kp_settings(key,value) VALUES(?,?)').bind('escalation_rr_schema',ESCALATION_RR_VERSION),
   env.DB.prepare('INSERT OR REPLACE INTO kp_settings(key,value) VALUES(?,?)').bind(SHIELD_SCHEMA_KEY,ESCALATION_SHIELD_VERSION),
+  env.DB.prepare('INSERT OR REPLACE INTO kp_settings(key,value) VALUES(?,?)').bind(PLACEMENT_SCHEMA_KEY,ESCALATION_PLACEMENT_VERSION),
  ]);})();ready.set(env.DB,job);try{await job;}catch(error){ready.delete(env.DB);throw error;}
 }
 export function escalationPowerStatement(env:KpEnv,e:{id:string;guild:string;user:string;outcome:string|null},proof:EscalationPowerProof){
