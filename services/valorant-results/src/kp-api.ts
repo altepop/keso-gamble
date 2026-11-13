@@ -79,7 +79,10 @@ export async function readKpState(env:KpEnv,mapping:KpMapping,user:string){
  // below on every request to handle midnight without a D1 history scan.
  const {rewards,quiz,ledger}=await kpRewardHistory(env,mapping.guildId,user,wallet.version);
  const voice=await voiceRewardHistory(env,mapping.guildId,user,wallet.version);
- state.voiceRewards={...await voiceStatus(env,user),...voicePolicy,earned:voice.filter(e=>e.day===new Date().toISOString().slice(0,10)).reduce((n,e)=>n+e.amount,0)};
+ // Progress comes from the durable clock which certifies credited slots.
+ // Avoid rescanning 288 voice history rows on each Activity refresh.
+ const voiceState=await voiceStatus(env,user);
+ state.voiceRewards={...voiceState,...voicePolicy,earned:Math.max(0,Math.min(voicePolicy.slots,voiceState.paidSlots??0))*voicePolicy.amount};
  state.quizRates=quizKpRates;state.quizDay=new Date().toISOString().slice(0,10);state.quizLimits=quizKpLimits;state.quizCounts=Object.fromEntries(Object.keys(quizKpRates).map(mode=>[mode,quiz.filter(e=>e.day===state.quizDay&&e.mode===mode).length]));state.quizCompleted=Object.keys(quizKpLimits).filter(mode=>state.quizCounts[mode]>=quizKpLimits[mode]!);
  state.claims=rewards.map(e=>({id:e.id,activity:e.mode,reference:e.match,reward:e.amount,status:'approved',time:e.at})).concat(quiz.map(e=>({id:e.id,activity:'quiz.'+e.mode,reference:e.game,reward:e.amount,status:'approved',time:e.completed_at}))).concat(voice.map(e=>({id:e.id,activity:'voice',reference:'通話 '+e.slot+'回目',reward:e.amount,status:'approved',time:e.at}))).sort((a:{time:number},b:{time:number})=>b.time-a.time).slice(0,100);
  state.claims.push(...state.stockMarket.dividends.map((d:{day:string;amount:number;at:number})=>({id:'dividend:'+d.day,activity:'株配当',reference:d.day,reward:d.amount,status:'approved',time:d.at})));state.claims.sort((a:{time:number},b:{time:number})=>b.time-a.time);
