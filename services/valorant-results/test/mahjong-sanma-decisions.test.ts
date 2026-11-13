@@ -14,7 +14,7 @@ test('a real speed/value tradeoff is explained in both directions without callin
   const finding=sanmaTradeoffFinding(d,metrics)!;assert.ok(finding);
   const report={version:5,source:'sanma-rules',model:'sanma-rules-v5',uuid:summary.uuid,findings:[finding]};
   assert.ok(acceptedSanmaReport(summary,report));const text=equalSanmaComments(summary,report,new Map([[1,{name:'検証者'}]])).join('');
-  assert.match(text,/8枚/);assert.match(text,/4枚/);assert.match(text,/3000点/);assert.match(text,/6000点/);assert.match(text,/分かれ道/);assert.doesNotMatch(text,/ミス|間違い|ええ選択/);
+  assert.match(text,/8枚/);assert.match(text,/4枚/);assert.match(text,/3000点/);assert.match(text,/6000点/);assert.match(text,/分かれ道/);assert.match(text,/待ちの広さを優先するなら、僕は.+切りが好み/);assert.doesNotMatch(text,/ミス|間違い|ええ選択/);
   assert.equal(acceptedSanmaReport(summary,{...report,version:4,model:'sanma-rules-v4'}),null);
  }
  assert.equal(sanmaTradeoffFinding(d,[m('2s',8,3000),m('5s',8,6000)]),null,'ordinary domination remains a separate finding');
@@ -27,7 +27,7 @@ test('near hands can compare keeping efficiency against a real held genbutsu',()
  const finding=sanmaPushFoldFinding(d,summary.game)!;assert.ok(finding);assert.ok(finding.shanten<=2);assert.equal(finding.recommended,'E');
  const report={version:5,source:'sanma-rules',model:'sanma-rules-v5',uuid:summary.uuid,findings:[finding]};
  assert.ok(acceptedSanmaReport(summary,report));const text=equalSanmaComments(summary,report,new Map([[0,{name:'検証者'}]])).join('');
- assert.match(text,/現物の東/);assert.match(text,/向聴/);assert.match(text,/放銃率/);assert.match(text,/正解までは計算してへん/);
+ assert.match(text,/守備に寄せるなら、僕は現物の東切りが好み/);assert.match(text,/向聴/);assert.match(text,/放銃率/);assert.match(text,/正解までは計算してへん/);
  assert.equal(sanmaPushFoldFinding({...d,riichi:[true,true,false]},summary.game),null);
  assert.equal(sanmaPushFoldFinding({...d,riichi:[false,true,true]},summary.game),null);
  assert.equal(acceptedSanmaReport(summary,{...report,findings:[{...finding,recommendedMetric:{...finding.recommendedMetric,tile:'9m'}}]}),null);

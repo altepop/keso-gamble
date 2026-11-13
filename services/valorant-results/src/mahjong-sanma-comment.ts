@@ -54,12 +54,13 @@ export function equalSanmaComments(s:PaipuSummary,raw:unknown,members:Map<number
   const name=clean(members.get(f.seat)!.name),at=s.rounds[f.round].label+'の'+f.turn+'打目',a=show(f.actual),b=show(f.recommended);
   if(f.basis==='riichi-choice'){
    const range=(m:ValueMetric)=>m.min===m.max?`${m.min}点`:`${m.min}〜${m.max}点`;
-   return `🎙️「${name}、${at}は${a}切りで${f.doubleRiichi?'ダブルリーチ':'リーチ'}やね。同じ手をダマでツモると${range(f.damaValue)}、宣言した条件なら${range(f.riichiValue)}ですわ。見えてへん待ち牌は${f.riichiValue.live}枚で、宣言そのものでは増えません。打点と引き換えに1000点を供託し、以後は自由に手を変えたり降りたりできなくなります。この得失を見たいですねぇ。ツモ損・本場供託抜き、一発と裏ドラは含めてへんで。ロンの可否や和了率まで比べた結論ではありません」`;
+   return `🎙️「${name}、${at}は${a}切りで${f.doubleRiichi?'ダブルリーチ':'リーチ'}やね。同じ手をダマでツモると${range(f.damaValue)}、宣言した条件なら${range(f.riichiValue)}ですわ。見えてへん待ち牌は${f.riichiValue.live}枚で、宣言そのものでは増えません。打点と引き換えに1000点を供託し、以後は自由に手を変えたり降りたりできなくなります。この打点差を取りにいくなら、僕は${f.doubleRiichi?'ダブルリーチ':'リーチ'}が好みですねぇ。ツモ損・本場供託抜き、一発と裏ドラは含めてへんで。ロンの可否や和了率まで比べた結論ではありません」`;
   }
   if(f.basis==='wait-value-tradeoff'){
    const x=f.actualValue,m=f.recommendedValue,range=(v:ValueMetric)=>v.min===v.max?`${v.min}点`:`${v.min}〜${v.max}点`;
+   const wide=x.live>m.live?a:b,narrow=x.live>m.live?b:a;
    const premise=f.doubleRiichi?'ダブルリーチ後':f.riichi?'リーチ後':f.menzen?'門前':'副露した手の';
-   return `🎙️「${name}、${at}の${a}切りは待ちが見えてへん分で${x.live}枚、${range(x)}。${b}切りなら${m.live}枚で${range(m)}ですわ。待ちの広さを取るか、打点を取るかの分かれ道やね。${premise}ツモ・ツモ損で、本場供託抜きの試算です。枚数だけで和了率は決まりませんし、相手の攻撃や点差まで含めた正解は断定してへんで」`;
+   return `🎙️「${name}、${at}の${a}切りは待ちが見えてへん分で${x.live}枚、${range(x)}。${b}切りなら${m.live}枚で${range(m)}ですわ。待ちの広さを優先するなら、僕は${wide}切りが好みですねぇ。打点を取りにいくなら${narrow}切りもある。この分かれ道をどう見るかやね。${premise}ツモ・ツモ損で、本場供託抜きの試算です。枚数だけで和了率は決まりませんし、相手の攻撃や点差まで含めた正解は断定してへんで」`;
   }
   if(f.basis==='placement'){
    const x=f.actualValue,m=f.recommendedValue;
@@ -67,26 +68,26 @@ export function equalSanmaComments(s:PaipuSummary,raw:unknown,members:Map<number
    const points=(v:ValueMetric)=>v.min===v.max?`${v.min}点`:`${v.min}〜${v.max}点`;
    const above=f.scores.map((score,seat)=>({score,seat})).filter(p=>p.score>f.scores[f.seat]).sort((x,y)=>x.score-y.score)[0];
    const gap=above?`一つ上とは${above.score-f.scores[f.seat]}点差。`:'';
-   return `🎙️「${name}、${at}は${gap}${a}切りでツモると${points(x)}で、その直後は${ranks(tsumoRanks(f.scores,f.seat,f.dealer,x)!)}。${b}切りなら${points(m)}で${ranks(tsumoRanks(f.scores,f.seat,f.dealer,m)!)}になりますわ。見えてへん待ち牌も${x.live}枚から${m.live}枚で減りません。順位を上げたいなら打点まで比べたいですねぇ。リーチ・裏ドラなし、本場・供託なしのツモ損計算です。ロンの条件や和了率、対局終了までは別の話やで」`;
+   return `🎙️「${name}、${at}は${gap}${a}切りでツモると${points(x)}で、その直後は${ranks(tsumoRanks(f.scores,f.seat,f.dealer,x)!)}。${b}切りなら${points(m)}で${ranks(tsumoRanks(f.scores,f.seat,f.dealer,m)!)}になりますわ。見えてへん待ち牌も${x.live}枚から${m.live}枚で減りません。順位を上げにいくなら、僕は${b}切りが好みですねぇ。リーチ・裏ドラなし、本場・供託なしのツモ損計算です。ロンの条件や和了率、対局終了までは別の話やで」`;
   }
   if(f.basis==='tsumo-value'){
    const x=f.actualValue,m=f.recommendedValue;
    const range=(v:ValueMetric)=>v.min===v.max?`${v.min}点`:`${v.min}〜${v.max}点`;
    const premise=(f.doubleRiichi?'ダブルリーチ後ツモ':f.riichi?'リーチ後ツモ':f.menzen?'門前ツモ':'ツモ和了')+'・ツモ損で、本場と供託を抜いた試算';
-   return `🎙️「${name}、${at}は${a}切りで${range(x)}、${b}切りなら${range(m)}。見えてへん待ち牌も${x.live}枚から${m.live}枚で減りませんねぇ。${premise}ですわ。待ちの広さと打点を一緒に比べたい場面やね。和了しやすさや押し引きまでは、この試算では決められません」`;
+   return `🎙️「${name}、${at}は${a}切りで${range(x)}、${b}切りなら${range(m)}。見えてへん待ち牌も${x.live}枚から${m.live}枚で減りませんねぇ。${premise}ですわ。待ちを減らさず打点を取れるなら、僕は${b}切りが好きですわ。和了しやすさや押し引きまでは、この試算では決められません」`;
   }
   if(f.basis==='genbutsu'||f.basis==='push-fold-choice'){
    const opponent=clean(members.get(f.against)?.name??s.seats[f.against]?.nickname??'リーチした人');
    if(f.basis==='push-fold-choice'){
     const x=f.actualMetric,m=f.recommendedMetric;
-    return `🎙️「${name}、${at}は${opponent}のリーチに${a}切り。これなら${x.shanten}向聴で、次に進む牌は見えてへん分で${x.ukeire}枚です。現物の${b}を切ると${m.shanten}向聴・${m.ukeire}枚になりますわ。攻めを残す代わりに現物以外を押すか、手の進み方を変えて守るかの場面やね。${b}の安全はこのリーチ相手に対しての話で、打点や放銃率を含めた押し引きの正解までは計算してへんで」`;
+    return `🎙️「${name}、${at}は${opponent}のリーチに${a}切り。これなら${x.shanten}向聴で、次に進む牌は見えてへん分で${x.ukeire}枚です。現物の${b}を切ると${m.shanten}向聴・${m.ukeire}枚になりますわ。ここで守備に寄せるなら、僕は現物の${b}切りが好みですねぇ。${b}の安全はこのリーチ相手に対しての話で、打点や放銃率を含めた押し引きの正解までは計算してへんで」`;
    }
    if(f.river){
     const rv=f.river,suji=riverSuji(f.actual,rv.tiles);
     const relation=suji===null?'字牌なので筋では判断できません':suji?'筋には当たりますが、カンチャンや単騎への安全までは保証しません':'この河に対しては無筋です';
-    return `🎙️「${name}、${at}の${a}は${relation}。${rv.dealer?'親の':''}${opponent}の河は${rv.tiles.length>6?'…・':''}${rv.tiles.slice(-6).map(show).join('・')}で、手には現物の${rv.held.map(show).join('・')}が残ってますわ。まだ${f.shanten}向聴なので、守備を選ぶなら${b}切りも比較したいですねぇ。筋だけで当たり牌とは決められませんし、他家への安全と押し引きの正解までは出してへんで」`;
+    return `🎙️「${name}、${at}の${a}は${relation}。${rv.dealer?'親の':''}${opponent}の河は${rv.tiles.length>6?'…・':''}${rv.tiles.slice(-6).map(show).join('・')}で、手には現物の${rv.held.map(show).join('・')}が残ってますわ。まだ${f.shanten}向聴ですし、僕なら現物の${b}切りでいったん受けたいですねぇ。筋だけで当たり牌とは決められませんし、他家への安全と押し引きの正解までは出してへんで」`;
    }
-   return `🎙️「${name}、${at}は${f.shanten}向聴で${a}切りやね。${a}は${opponent}の現物ではないけど、手には現物の${b}もありますわ。守備を選ぶなら${b}が比較候補です。ただ、${a}が危険と決まったわけでも、他の相手にも${b}が安全なわけでもありません。押すか降りるかの正解までは出してへんで」`;
+   return `🎙️「${name}、${at}は${f.shanten}向聴で${a}切りやね。${a}は${opponent}の現物ではないけど、手には現物の${b}もありますわ。この相手に守備を寄せるなら、僕は${b}切りが好みですねぇ。ただ、${a}が危険と決まったわけでも、他の相手にも${b}が安全なわけでもありません。押すか降りるかの正解までは出してへんで」`;
   }
   const x=f.actualMetric,m=f.recommendedMetric;
   const reason=m.shanten<x.shanten
@@ -94,6 +95,6 @@ export function equalSanmaComments(s:PaipuSummary,raw:unknown,members:Map<number
    :`どちらも${m.shanten}向聴ですが、次に手が進む牌は見えてへん分で${x.ukeire}枚と${m.ukeire}枚。${b}切りの方が${m.ukeire-x.ukeire}枚多いですわ`;
   const added=m.improving.filter(t=>!x.improving.includes(t));
   const examples=added.length?`。${added.slice(0,4).map(show).join('・')}${added.length>4?'など':''}でも手が進むようになります`:'';
-  return `🎙️「${name}、${at}は${a}切りでしたね。形だけ比べると${b}切りもあります。${reason}${examples}。シャンテン数と受け入れの比較で、役や将来の変化、押し引きは評価してへんで」`;
+  return `🎙️「${name}、${at}は${a}切りでしたね。形を優先するなら、僕は${b}切りが好みですねぇ。${reason}${examples}。シャンテン数と受け入れの比較で、役や将来の変化、押し引きは評価してへんで」`;
  });
 }
