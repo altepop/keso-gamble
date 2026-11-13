@@ -233,7 +233,7 @@ test('signed version-2 finding envelopes reach the existing queued post without 
  assert.deepEqual(body.allowed_mentions,{parse:[]});
 });
 
-test('real sanma worker v4 crosses signed ingestion, queue and mocked Discord delivery without extra KP or posts',{skip:!process.env.SANMA_PYTHON},async t=>{
+test('real sanma worker v5 crosses signed ingestion, queue and mocked Discord delivery without extra KP or posts',{skip:!process.env.SANMA_PYTHON},async t=>{
  t.mock.timers.enable({apis:['Date'],now:T0});
  const {threeValueScenario}=await import('./fixtures/mahjong-review-three.ts');
  // @ts-expect-error Standalone isolated worker host used by Actions.
@@ -242,7 +242,7 @@ test('real sanma worker v4 crosses signed ingestion, queue and mocked Discord de
  const input=threeValueScenario(),s={...input.summary,uuid:PAIPU};
  const reviewer=createPaipuReviewer({sanmaEnabled:true,timeoutMs:15000});let report;
  try{report=await reviewer.review(s,input.actions);}finally{await reviewer.close();}
- assert.equal(report?.version,4);assert.ok(report.findings.some((f:any)=>f.basis==='tsumo-value'));
+ assert.equal(report?.version,5);assert.ok(report.findings.some((f:any)=>f.basis==='tsumo-value'));
  const run=async(review:unknown)=>{
   const f=await fixture();await f.call('/api/mahjong/paipu/queue');
   f.sql.prepare('INSERT INTO kp_mahjong_links VALUES(?,?,?)').run(guild,one,2);
@@ -430,4 +430,25 @@ test('signed opt-in display diagnostics distinguish missing, invalid, nonmember 
   const before=f.balance(one);await f.call('/api/mahjong/paipu/summaries',{results:[{uuid:PAIPU,summary:{...summary,c3}}],reviewDiagnostics:true});
   assert.equal(f.balance(one),before,'diagnostic retries cannot add KP');assert.equal(f.posts().length,1);
  }
+});
+
+test('recorded riichi comparison survives real worker, signed ingestion and queue even with the same discard',{skip:!process.env.SANMA_PYTHON},async t=>{
+ t.mock.timers.enable({apis:['Date'],now:T0});
+ const {threeValueScenario}=await import('./fixtures/mahjong-review-three.ts');
+ // @ts-expect-error Actions worker.
+ const {createPaipuReviewer}=await import('../scripts/mahjong-review.mjs');
+ const input=threeValueScenario(),s={...input.summary,uuid:PAIPU};
+ input.actions.at(-1)!.data.tile='5s';input.actions.at(-1)!.data.is_liqi=true;
+ const reviewer=createPaipuReviewer({sanmaEnabled:true,timeoutMs:15000});let report;
+ try{report=await reviewer.review(s,input.actions);}finally{await reviewer.close();}
+ assert.equal(report?.version,5);assert.ok(report.findings.some((f:any)=>f.basis==='riichi-choice'&&f.actual===f.recommended));
+ const f=await fixture();await f.call('/api/mahjong/paipu/queue');
+ f.sql.prepare('INSERT INTO kp_mahjong_links VALUES(?,?,?)').run(guild,one,2);
+ f.sql.prepare('INSERT INTO mahjong_paipu_auto VALUES(?,?,?)').run(PAIPU,2,T0);
+ const r=await f.call('/api/mahjong/paipu/summaries',{results:[{uuid:PAIPU,summary:{...s,review:report}}],reviewDiagnostics:true});
+ const body=await r.json() as {stored:number;reviewDiagnostics:Array<{status:string;comments:number}>};
+ assert.equal(body.stored,1);assert.equal(body.reviewDiagnostics[0].status,'queued');assert.ok(body.reviewDiagnostics[0].comments>0);
+ assert.match(f.posts().join(''),/ダマ/);assert.match(f.posts().join(''),/1000点を供託/);
+ const before=f.balance(one);await f.call('/api/mahjong/paipu/summaries',{results:[{uuid:PAIPU,summary:{...s,review:report}}]});
+ assert.equal(f.balance(one),before);assert.equal(f.posts().length,1);
 });

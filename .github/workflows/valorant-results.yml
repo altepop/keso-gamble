@@ -241,6 +241,7 @@ jobs:
         working-directory: services/valorant-results
         env:
           PAIPU_DISPATCH_TOKEN: ${{ secrets.PAIPU_DISPATCH_TOKEN }}
+          REVIEW_ANALYSIS_AUDIT: ${{ contains(github.event.head_commit.message, '[mahjong-review-audit]') && 'true' || 'false' }}
           REVIEW_DELIVERY_PROBE: ${{ contains(github.event.head_commit.message, '[mahjong-review-probe]') && 'true' || 'false' }}
           REVIEW_DELIVERY_RESUME: ${{ contains(github.event.head_commit.message, '[mahjong-review-resume]') && 'true' || 'false' }}
         run: node scripts/dispatch-mahjong-delivery-audit.mjs

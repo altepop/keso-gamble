@@ -63,7 +63,7 @@ test('endgame context survives the real isolated replay worker',{skip:!process.e
  const reviewer=createPaipuReviewer({sanmaEnabled:true,timeoutMs:15000});
  try{
   const r=await reviewer.review(summary,actions);assert.ok(acceptedSanmaReport(summary,r));
-  assert.equal(r.version,4);assert.ok(r.findings.some((v:any)=>v.basis==='placement'));
+  assert.equal(r.version,5);assert.ok(r.findings.some((v:any)=>v.basis==='placement'));
   const text=equalSanmaComments(summary,r,new Map([[0,{name:'検証者'}]])).join('');
   assert.match(text,/3位/);assert.match(text,/2位/);
  }finally{await reviewer.close();}
