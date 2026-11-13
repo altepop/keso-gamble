@@ -1,0 +1,48 @@
+name: One-time Escalation notification diagnosis
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/escalation-notice-diagnosis.yml']
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    if: github.repository == 'altepop/keso-gamble'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Read aggregate production D1 notification status without user data
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          node --input-type=module <<'NODE'
+          const token=process.env.CLOUDFLARE_API_TOKEN,account=process.env.CLOUDFLARE_ACCOUNT_ID;
+          if(!token||!account)throw Error('Cloudflare credentials missing');
+          const db='bf23ab40-814f-4626-9e0b-36739ac41750';
+          const url='https://api.cloudflare.com/client/v4/accounts/'+account+'/d1/database/'+db+'/query';
+          async function query(sql,params=[]){
+           if(!/^SELECT\b/i.test(sql))throw Error('Read-only query required');
+           const response=await fetch(url,{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({sql,params}),signal:AbortSignal.timeout(20000)});
+           if(!response.ok)throw Error('D1 HTTP '+response.status);
+           const data=await response.json();
+           if(data.success!==true||data.result?.[0]?.success!==true)throw Error('D1 query unsuccessful');
+           return data.result[0].results;
+          }
+          const now=Date.now(),since72=now-72*3600000,since7=now-7*86400000;
+          const tasks=[
+           ['monitor',"SELECT key,value FROM monitor_state WHERE key IN ('monitor_started','monitor_finished','api_after','discord_after','delivery:last')",[]],
+           ['valorant_health',"SELECT feature,last_ok,last_error,error,failures FROM kp_health WHERE feature='valorant'",[]],
+           ['checked_summary',"SELECT COUNT(*) AS tracked,MAX(CAST(value AS INTEGER)) AS latest FROM monitor_state WHERE key LIKE 'checked:%'",[]],
+           ['mode_recent_72h',"SELECT mode,COUNT(*) AS n,SUM(CASE WHEN sent=0 THEN 1 ELSE 0 END) AS pending,MAX(ended_at) AS latest FROM notifications WHERE ended_at>=? GROUP BY mode ORDER BY n DESC LIMIT 20",[since72]],
+           ['escalation_recent_7d',"SELECT outcome,sent,COUNT(*) AS n,MAX(ended_at) AS latest FROM notifications WHERE mode='escalation' AND ended_at>=? GROUP BY outcome,sent ORDER BY outcome,sent",[since7]],
+           ['escalation_unsent',"SELECT COUNT(*) AS n,MIN(ended_at) AS oldest FROM notifications WHERE sent=0 AND mode='escalation'",[]],
+           ['pending_modes',"SELECT mode,COUNT(*) AS n FROM notifications WHERE sent=0 GROUP BY mode ORDER BY n DESC LIMIT 20",[]],
+           ['escalation_rating_7d',"SELECT COUNT(*) AS n,MAX(ended_at) AS latest FROM kp_escalation_power_matches WHERE ended_at>=?",[since7]],
+           ['tracked_total',"SELECT COUNT(*) AS n FROM tracked_players",[]],
+          ];
+          const safe=Object.fromEntries(await Promise.all(tasks.map(async([name,sql,params])=>{
+           try{return[name,await query(sql,params)]}catch(error){return[name,{error:String(error?.message??error).slice(0,80)}]}
+          })));
+          console.log('ESCALATION_DIAGNOSTIC '+JSON.stringify({at:new Date(now).toISOString(),...safe}));
+          NODE
