@@ -278,9 +278,10 @@ async function saveMatch(env: Env, match: Match, player: Player, account: Accoun
     if(predictionActive)try { await settlePredictions(env,match,player.riotId); } catch { console.warn('prediction_settlement_retry_pending'); }
     return 'duplicates';
   }
+  // Draws must be delivered as match results too; no KP or rank RR is awarded without a confirmed winner.
   const inserted = await env.DB.prepare('INSERT OR IGNORE INTO notifications(riot_id,match_id,message,ended_at,mode,act_id,act_name,outcome,sent,team_id) VALUES(?,?,?,?,?,?,?,?,?,?)')
     .bind(player.riotId, match.metadata.match_id, result.message, result.endedAt, result.mode, result.actId, result.actName,
-      result.outcome, result.outcome === 'draw' && result.mode === 'escalation' ? 1 : 0, result.teamId).run();
+      result.outcome, 0, result.teamId).run();
   saved.add(savedKey);
   // The match's immutable start time is checked against each ticket at settlement.
   // A failure is retried from the duplicate-result path on the next monitor run.
@@ -297,8 +298,8 @@ async function saveMatch(env: Env, match: Match, player: Player, account: Accoun
       finishToDetectionMs: Math.max(0, Date.now() - result.endedAt) });
     return 'newResults';
   }
-  if (kpActive || isDeathNotice(result.mode)) await env.DB.prepare("UPDATE notifications SET message=?,outcome=?,mode=CASE WHEN ?=1 THEN ? ELSE mode END,sent=CASE WHEN mode='escalation' AND ?='draw' THEN 1 ELSE 0 END WHERE riot_id=? AND match_id=? AND (message!=? OR (?=1 AND mode IS NOT ?))")
-    .bind(result.message, result.outcome, isDeathNotice(result.mode)?1:0, result.mode, result.outcome, player.riotId, match.metadata.match_id, result.message, isDeathNotice(result.mode)?1:0, result.mode).run();
+  if (kpActive || isDeathNotice(result.mode)) await env.DB.prepare("UPDATE notifications SET message=?,outcome=?,mode=CASE WHEN ?=1 THEN ? ELSE mode END,sent=0 WHERE riot_id=? AND match_id=? AND (message!=? OR (?=1 AND mode IS NOT ?))")
+    .bind(result.message, result.outcome, isDeathNotice(result.mode)?1:0, result.mode, player.riotId, match.metadata.match_id, result.message, isDeathNotice(result.mode)?1:0, result.mode).run();
   return 'duplicates';
 }
 
@@ -372,7 +373,6 @@ export async function flushNotifications(env: Env, players: Player[]): Promise<v
     try {
       // Include sent participants when another player's result arrives on a later poll.
       const notices = await env.DB.prepare(`SELECT * FROM notifications WHERE match_id=?
-        AND (outcome IS NULL OR outcome!='draw' OR mode!='escalation')
         AND (mode IS NULL OR (mode!='unrated' AND substr(mode,1,6)!='death_') OR EXISTS(SELECT 1 FROM death_unrated_sessions s
           WHERE s.riot_id=notifications.riot_id AND s.match_id=notifications.match_id AND s.cancelled_at IS NULL)) ORDER BY riot_id`).bind(pendingMatch.match_id).all<Notice>();
       if (!notices.results.length) continue;
