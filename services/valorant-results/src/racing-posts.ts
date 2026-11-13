@@ -159,7 +159,7 @@ export async function queueRacePosts(env:PostEnv,mapping:KpMapping,now=Date.now(
   const seed=await env.DB.prepare('SELECT seed FROM kp_races WHERE guild=? AND id=?').bind(mapping.guildId,id).first<{seed:string}>();
   const card={...raceCard(id,undefined,entries),...(crown?{name:crown.name}:{})};
   const ownerWon=Boolean(seed)&&Boolean(card.horses[raceResult(card,seed!.seed).order[0]-1].ownerName);
-  if(!worthPosting(card,bets,Boolean(crown),ownerWon)||(!seed&&proof?.race===id)){await skip();continue;}
+  if(!worthPosting(card,bets,Boolean(crown),ownerWon)&&proof?.race!==id){await skip();continue;}
   if(seed){
    const debut=proof?.race===id?card.horses.find((h:{horseId?:string})=>h.horseId===proof.horse):null;
    const proofResult=debut?`\\n🏁 **藤村の馬「${clean(debut.name)}」が実際に出走、${raceResult(card,seed.seed).order.indexOf(debut.number)+1}着でゴール！** 馬名を含む出走表と結果が正常に処理されたで。`:'';
