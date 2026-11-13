@@ -6,10 +6,10 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { initializeKp, syncKpAccounts } from '../src/kp.ts';
 import type { KpEnv, KpMapping } from '../src/kp.ts';
 import { operateKp, readKpState } from '../src/kp-api.ts';
-import { decideEntries, ensureRaceField, ensureHorses, raceEntries, settleHorsePrizes, repairRecordedHorseStats, shouldSettleHorsePrizes, horsePrizeLookback } from '../src/racing-horses.ts';
+import { decideEntries, ensureRaceField, ensureHorses, raceEntries, settleHorsePrizes, repairRecordedHorseStats, shouldSettleHorsePrizes, horsePrizeLookback, refundLegacyHorseOverpayments } from '../src/racing-horses.ts';
 import { raceSeed, settleKpRaces } from '../src/racing-kp.ts';
 // @ts-expect-error The shared pure browser engine has no TypeScript declarations.
-import { BOXES, RACE_INTERVAL, RETIRE_RACES, RUN_MS, openRaceStart, prizeFor, raceCard, raceClass, raceOdds, raceResult } from '../../../js/racing.js';
+import { BOXES, RACE_INTERVAL, RETIRE_RACES, RUN_MS, openRaceStart, prizeFor, raceCard, raceClass, raceOdds, raceResult, ownedPrizeFor } from '../../../js/racing.js';
 const guild='100000000000000100',one='100000000000000101',two='100000000000000102';
 const mapping:KpMapping={guildId:guild,accounts:[{riotId:'One#JP1',discordUserId:one},{riotId:'Two#JP1',discordUserId:two}]};
 const T0=Date.parse('2026-10-27T16:05:30+09:00');
@@ -292,4 +292,46 @@ test('a recorded race whose old counter was accidentally lost is repaired on own
  assert.equal(await repairRecordedHorseStats(f.env,mapping,one),0,'repeat visits do not write anything');
  // D1: once an owner is repaired, later refreshes read one settings row instead of every result again.
  assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM kp_settings WHERE key=?').get('horse_stats_repaired_v1:'+guild+':'+one)!.n,1);
+});
+
+test('high-class owned horse gets boosted prizes atomically; stored history and repeated settlement stay stable',async()=>{
+ const f=await fixture(0);
+ const race=raceOfClass(4,openRaceStart(T0));
+ addHorse(f.sql,'profitable-apex',4,{ability:1,box:'apex',price:1500000});
+ await decideEntries(f.env,mapping,race,race-RACE_INTERVAL,1);
+ const seed=(await raceSeed(f.env,guild,race)).seed;
+ const card=raceCard(race,undefined,await raceEntries(f.env,mapping,race));
+ const number=card.horses.find((h:{horseId?:string})=>h.horseId==='profitable-apex')!.number;
+ const rank=raceResult(card,seed).order.indexOf(number);
+ await settleHorsePrizes(f.env,mapping,race+RUN_MS);
+ const prize=ownedPrizeFor(card,rank);
+ assert.equal(balance(f.sql),prize);
+ assert.equal(Number(f.sql.prepare('SELECT earnings FROM kp_horses WHERE id=?').get('profitable-apex')!.earnings),prize);
+ await settleHorsePrizes(f.env,mapping,race+RUN_MS+60000);
+ assert.equal(balance(f.sql),prize,'no replay double prize');
+ assert.equal(Number(f.sql.prepare("SELECT COUNT(*) n FROM kp_ledger WHERE kind='prize'").get()!.n),prize>0?1:0);
+});
+
+test('legacy expensive horse boxes are refunded exactly once, including sold/retired horses',async()=>{
+ const f=await fixture(0);
+ // Simulate existing horses from before the revised pricing; fixture initialized the new database already.
+ addHorse(f.sql,'old-apex',4,{box:'apex',price:3500000});
+ addHorse(f.sql,'old-legend',3,{box:'legend',price:1000000});
+ addHorse(f.sql,'old-platinum',3,{box:'platinum',price:250000});
+ addHorse(f.sql,'new-apex',4,{box:'apex',price:1500000});
+ addHorse(f.sql,'free-gift',4,{box:'apex',price:0});
+ f.sql.prepare('UPDATE kp_horses SET sold_at=1 WHERE id=?').run('old-legend');
+ f.sql.prepare('UPDATE kp_horses SET retired_at=1 WHERE id=?').run('old-platinum');
+ f.sql.prepare("DELETE FROM kp_settings WHERE key='horse_box_reprice_20261114_v1'").run();
+ await refundLegacyHorseOverpayments(f.env,T0);
+ assert.equal(balance(f.sql),2400000,'2m apex + 350k legend + 50k platinum');
+ assert.equal(Number(f.sql.prepare("SELECT COUNT(*) n FROM kp_ledger WHERE kind='horse-reprice'").get()!.n),3);
+ await refundLegacyHorseOverpayments(f.env,T0+60000);
+ assert.equal(balance(f.sql),2400000,'re-entry does not refund again');
+ // Even if a stale Worker attempts the migration again, UNIQUE ledger IDs stop duplicate credits.
+ f.sql.prepare("DELETE FROM kp_settings WHERE key='horse_box_reprice_20261114_v1'").run();
+ await refundLegacyHorseOverpayments(f.env,T0+120000);
+ assert.equal(balance(f.sql),2400000,'idempotent after marker loss');
+ assert.equal(Number(f.sql.prepare("SELECT price FROM kp_horses WHERE id='old-apex'").get()!.price),3500000,
+  'historical purchase price remains intact for sale calculations');
 });
