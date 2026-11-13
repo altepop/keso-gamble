@@ -32,7 +32,7 @@ export async function creditVoiceSlot(env:KpEnv,guild:string,user:string,day:str
  if(!/^\d{15,22}$/.test(user)||!/^\d{15,22}$/.test(guild)||!/^\d{4}-\d{2}-\d{2}$/.test(day)||!Number.isInteger(slot)||slot<1||slot>voicePolicy.slots)throw Error('Invalid voice slot');
  await ensureQuizKp(env);await ensureVoiceLedger(env);
  // Participant/wallet/state and credit are one atomic D1 batch, including new members.
- const settledRows=await env.DB.batch([
+ await env.DB.batch([
   env.DB.prepare('INSERT OR IGNORE INTO kp_participants VALUES(?,?)').bind(guild,user),
   env.DB.prepare('INSERT OR IGNORE INTO kp_wallets(guild,user) VALUES(?,?)').bind(guild,user),
   env.DB.prepare('INSERT OR IGNORE INTO kp_state(guild,user,data) VALUES(?,?,?)').bind(guild,user,JSON.stringify(newKpState())),
