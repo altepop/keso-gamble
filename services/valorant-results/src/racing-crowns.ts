@@ -122,8 +122,9 @@ export async function scheduleCrowns(env:KpEnv,mapping:KpMapping,now=Date.now())
  // spaced 30 minutes apart, so the card/field is never changed after betting opens.
  // Unique source and (guild,race) constraints make cron retries idempotent.
  if(now>=VDK_SERIES_FROM&&now<VDK_SERIES_UNTIL){
+  const sourcePrefix=VDK_SERIES_SOURCE_PREFIX+mapping.guildId+':';
   const scheduled=(await env.DB.prepare('SELECT source,race FROM kp_crowns WHERE guild=? AND source LIKE ?')
-   .bind(mapping.guildId,VDK_SERIES_SOURCE_PREFIX+'%').all<{source:string;race:number}>()).results;
+   .bind(mapping.guildId,sourcePrefix+'%').all<{source:string;race:number}>()).results;
   if(scheduled.length<VDK_SERIES_NAMES.length){
    const subject=mapping.accounts.find(a=>memberName(mapping,a.discordUserId)?.toLowerCase()==='vdk'||a.riotId.split('#')[0].toLowerCase()==='vdk');
    // A registered member who has opted out of roasting is never targeted.
@@ -132,7 +133,7 @@ export async function scheduleCrowns(env:KpEnv,mapping:KpMapping,now=Date.now())
      .bind(mapping.guildId,now).all<{race:number}>()).results.map(r=>r.race));
     let earliest=Math.ceil((now+30*60000)/RACE_INTERVAL)*RACE_INTERVAL;
     for(let i=0;i<VDK_SERIES_NAMES.length;i++){
-     const source=VDK_SERIES_SOURCE_PREFIX+i,previous=scheduled.find(c=>c.source===source);
+     const source=sourcePrefix+i,previous=scheduled.find(c=>c.source===source);
      if(previous){earliest=Math.max(earliest,previous.race+30*60000);continue;}
      let claimed=false;
      for(let race=earliest,attempt=0;attempt<96&&race<VDK_SERIES_UNTIL;attempt++,race+=RACE_INTERVAL){
