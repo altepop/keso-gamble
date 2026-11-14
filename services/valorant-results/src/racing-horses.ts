@@ -117,7 +117,9 @@ export async function raceEntries(env:KpEnv,mapping:KpMapping,race:number):Promi
  // Conditions were fixed when the race opened; races decided before that rule keep the card's own.
  const fixed=new Map((await env.DB.prepare('SELECT horse,condition FROM kp_entry_conditions WHERE guild=? AND race=?').bind(mapping.guildId,race).all<{horse:string;condition:number}>()).results.map(r=>[r.horse,r.condition]));
  const owned:Entry[]=rows.map(h=>({horseId:h.id,name:h.name,ability:h.ability,style:h.style,owner:h.owner,ownerName:memberName(mapping,h.owner),nickname:nick.get(h.id)?.nickname??null,record:{races:h.races,wins:h.wins,seconds:h.seconds,thirds:h.thirds},recentRanks:nick.get(h.id)?.recentRanks??[]}));
- const all=crown?[personEntry(mapping,race,crown.user),...owned]:owned;
+ // The old VDK memorial used a display-only placeholder, not a Discord wallet.
+ // Never create a phantom owner or pay a non-existent member for such a crown.
+ const all=crown&&crown.user!=='VDK'?[personEntry(mapping,race,crown.user),...owned]:owned;
  return all.map(e=>fixed.has(e.horseId)?{...e,condition:fixed.get(e.horseId)}:e);
 }
 /** Decides once which owned horses run in a race. Called when betting opens, before any bet. */
@@ -151,7 +153,7 @@ export async function decideEntries(env:KpEnv,mapping:KpMapping,race:number,now=
  // Each runner's condition comes from its owner's (or namesake's) play, fixed now with the entries.
  const owners=new Map((picked.length?(await env.DB.prepare(`SELECT id,owner FROM kp_horses WHERE id IN (${picked.map(()=>'?').join(',')})`).bind(...picked.map(p=>p.id)).all<{id:string;owner:string}>()).results:[]).map(r=>[r.id,r.owner]));
  const crown=await crownFor(env,mapping.guildId,race);
- const runners=[...picked.map(p=>({horse:p.id,user:owners.get(p.id)!})),...(crown?[{horse:'person-'+crown.user,user:crown.user}]:[])];
+ const runners=[...picked.map(p=>({horse:p.id,user:owners.get(p.id)!})),...(crown&&crown.user!=='VDK'?[{horse:'person-'+crown.user,user:crown.user}]:[])];
  const conditions=await activityConditions(env,mapping.guildId,runners.map(r=>r.user),now);
  // Entries, conditions and the marker go in one transaction; a concurrent decision inserts nothing.
  await env.DB.batch([
