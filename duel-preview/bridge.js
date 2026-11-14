@@ -45,7 +45,7 @@
     frame.className='keso-cpu-practice-frame';
     frame.title='CPUとの練習';
     frame.setAttribute('allow','autoplay');
-    frame.src=new URL('./duel-demo.html?cpu=1',document.baseURI).href;
+    frame.src=new URL('./duel-demo.html?cpu=1&v=cpu-20261114-v1',document.baseURI).href;
     shell.append(header,frame);
 
     overlay=shell;
