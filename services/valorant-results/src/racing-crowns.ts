@@ -123,8 +123,11 @@ export async function scheduleCrowns(env:KpEnv,mapping:KpMapping,now=Date.now())
  // Unique source and (guild,race) constraints make cron retries idempotent.
  if(now>=VDK_SERIES_FROM&&now<VDK_SERIES_UNTIL){
   const sourcePrefix=VDK_SERIES_SOURCE_PREFIX+mapping.guildId+':';
-  const scheduled=(await env.DB.prepare('SELECT source,race FROM kp_crowns WHERE guild=? AND source LIKE ?')
-   .bind(mapping.guildId,sourcePrefix+'%').all<{source:string;race:number}>()).results;
+  // D1 rejects long LIKE patterns (the guild-scoped prefix exceeds its limit).
+  // Four exact keys use the existing UNIQUE(source) index and avoid a range scan.
+  const sourceKeys=VDK_SERIES_NAMES.map((_,i)=>sourcePrefix+i);
+  const scheduled=(await env.DB.prepare('SELECT source,race FROM kp_crowns WHERE guild=? AND source IN (?,?,?,?)')
+   .bind(mapping.guildId,...sourceKeys).all<{source:string;race:number}>()).results;
   if(scheduled.length<VDK_SERIES_NAMES.length){
    const subject=mapping.accounts.find(a=>memberName(mapping,a.discordUserId)?.toLowerCase()==='vdk'||a.riotId.split('#')[0].toLowerCase()==='vdk');
    // A registered member who has opted out of roasting is never targeted.

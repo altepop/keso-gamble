@@ -129,6 +129,18 @@ test('four VDK special crowns are announced, guaranteed to run, and never re-sch
  assert.equal((await scheduleCrowns(f.env,mapping,Date.parse('2026-11-16T00:00:00+09:00'))).length,0);
 });
 
+test('VDK reservation avoids Cloudflare D1 long LIKE/GLOB limitation',async()=>{
+ const f=await fixture(),prepare=f.env.DB.prepare.bind(f.env.DB);
+ (f.env.DB as unknown as {prepare:(text:string)=>unknown}).prepare=(sql:string)=>{
+  if(sql.includes('source LIKE'))throw Error('D1_ERROR: LIKE or GLOB pattern too complex: SQLITE_ERROR');
+  return prepare(sql);
+ };
+ const booked=await scheduleCrowns(f.env,mapping,Date.parse('2026-11-15T03:04:00+09:00'));
+ assert.equal(booked.length,4);
+ assert.equal(new Set(booked.map(c=>c.race)).size,4);
+ assert.equal((await scheduleCrowns(f.env,mapping,Date.parse('2026-11-15T03:05:00+09:00'))).length,0);
+});
+
 test('VDK special crowns respect an explicitly mild roast setting',async()=>{
  const f=await fixture();
  await operateKp(f.env,mapping,one,'vdk-roast-optout-0001','roast-level',{level:'mild'});
