@@ -6,8 +6,9 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { initializeKp, syncKpAccounts } from '../src/kp.ts';
 import type { KpMapping } from '../src/kp.ts';
 import { operateKp, readKpState } from '../src/kp-api.ts';
-import { scheduleCrowns, crownEvents, recordMelts, crownName, BACK_GAP, VDK_SPECIAL_NAME, VDK_SPECIAL_SOURCE } from '../src/racing-crowns.ts';
+import { scheduleCrowns, crownEvents, recordMelts, crownName, BACK_GAP, VDK_SPECIAL_NAME, VDK_SPECIAL_SOURCE, VDK_TRIAL_NAMES, VDK_TRIAL_SOURCE_PREFIX } from '../src/racing-crowns.ts';
 import { racingView } from '../src/racing-kp.ts';
+import {raceShow} from '../src/racing-broadcast.ts';
 import { queueRacePosts, flushRacePosts } from '../src/racing-posts.ts';
 import type { PostEnv } from '../src/racing-posts.ts';
 // @ts-expect-error The shared pure browser engine has no TypeScript declarations.
@@ -106,6 +107,42 @@ test('one free VDK near-zero-death memorial race schedules idempotently, runs an
  assert.match(sent[0],/VDKやらかし追悼レース/);assert.match(sent[0],/終了直前に1デス/);
  assert.doesNotMatch(sent[0],/<@VDK>/);assert.match(sent[1],/VDK 0デス完走目前/);
 });
+test('2026-11-15 VDK trial schedules four different races once, without betting or settlement side effects',async()=>{
+ const now=Date.parse('2026-11-15T02:45:00+09:00'),f=await fixture(true);
+ // Another crown already occupies the first eligible slot; never steal it.
+ const blocked=Date.parse('2026-11-15T03:15:00+09:00');
+ f.sql.prepare('INSERT INTO kp_crowns(guild,race,name,user,kind,source,created_at) VALUES(?,?,?,?,?,?,?)')
+  .run(guild,blocked,'既存冠レース',one,'streak3','test:blocked',now);
+ const created=await scheduleCrowns(f.env,mapping,now);
+ assert.equal(created.length,4);
+ assert.deepEqual(created.map(c=>c.name),[...VDK_TRIAL_NAMES]);
+ assert.ok(created.every(c=>c.special&&c.kind==='vdktrial'));
+ assert.ok(created.every(c=>c.race>=now+30*60000&&c.race%RACE_INTERVAL===0));
+ assert.equal(new Set(created.map(c=>c.race)).size,4);
+ assert.ok(created.every(c=>c.race!==blocked));
+ assert.equal(crowns(f.sql).find(c=>c.race===blocked)?.name,'既存冠レース');
+ const sources=f.sql.prepare("SELECT source FROM kp_crowns WHERE kind='vdktrial' ORDER BY race").all() as Array<{source:string}>;
+ assert.deepEqual(sources.map(x=>x.source),VDK_TRIAL_NAMES.map((_,i)=>VDK_TRIAL_SOURCE_PREFIX+guild+':'+i));
+ assert.equal((await scheduleCrowns(f.env,mapping,now+60000)).length,0,'cron re-runs are idempotent');
+ assert.equal((await scheduleCrowns(f.env,mapping,Date.parse('2026-11-16T00:00:00+09:00'))).length,0,'event expires');
+ await queueRacePosts(f.env,mapping,now,created);
+ const announcements=f.sql.prepare("SELECT body FROM kp_posts WHERE id LIKE 'race-crown:%' ORDER BY id").all() as Array<{body:string}>;
+ assert.equal(announcements.length,4);
+ assert.ok(announcements.every(row=>{
+  const message=JSON.parse(row.body);
+  return message.content.includes('VDK戦犯裁判・怒涛の4連戦')
+   &&message.content.includes('馬券ゼロでも開催')
+   &&message.allowed_mentions.parse.length===0
+   &&!message.content.includes('<@VDK>');
+ }));
+ const start=created[0].race;
+ const view=await racingView(f.env,mapping,start+5000);
+ assert.equal(view.watch.runs,true);
+ assert.equal(view.watch.crown,VDK_TRIAL_NAMES[0]);
+ const show=raceShow(raceCard(start),'test-seed',false,true);
+ assert.match(show.commentary.map(x=>x.text).join(' '),/VDK戦犯裁判/);
+});
+
 test('weekend :30 races are crown races in the shared card, and always run', () => {
  const sat=Date.parse('2026-10-31T15:30:00+09:00'),card=raceCard(sat);
  assert.equal(card.crown,true);assert.notEqual(card.name,`第${card.number}レース`);
