@@ -1,13 +1,13 @@
 // Crown races: a normal race renamed after something that just happened to a member (3 losses in a
 // row, a broken win streak, a big KP loss...). How harsh the name is follows that person's roast level.
 // @ts-expect-error The shared pure browser engine has no TypeScript declarations.
-import { RACE_INTERVAL, bigRaceName, fillerCrownName, crownSlotAllowed, openRaceStart } from '../../../js/racing.js';
+import { RACE_INTERVAL, bigRaceName, fillerCrownName, festivalRace, crownSlotAllowed, openRaceStart } from '../../../js/racing.js';
 import configuredPlayers from '../players.json' with { type: 'json' };
 import type { KpEnv, KpMapping } from './kp.ts';
 export type RoastLevel='mild'|'normal'|'full';
 export const ROAST_LEVELS:RoastLevel[]=['mild','normal','full'];
 export type CrownKind='streak3'|'streak5'|'streak10'|'stopped'|'night'|'back'|'melt';
-export type SpecialCrownKind='vdklastdeath';
+export type SpecialCrownKind='vdklastdeath'|'vdktrial';
 const NAMES:Record<Exclude<RoastLevel,'mild'>,Record<CrownKind,(n:string)=>string>>={
  full:{streak3:n=>`${n}戦犯レース しばくぞ杯`,streak5:n=>`${n}をみんなで介護するレース あかんかったなぁ賞`,streak10:n=>`${n}そろそろ引退しろレース 了解お兄さん杯`,stopped:n=>`${n}調子に乗った罰レース 効いてて草賞`,night:n=>`${n}もう寝ろレース マイクロスリープ杯`,back:n=>`${n}生きてた記念レース うおw杯`,melt:n=>`${n}KP溶かし大会 5億マジかw杯`},
  normal:{streak3:n=>`${n}おつかれレース 一旦な杯`,streak5:n=>`${n}がんばれレース 大丈夫だよ杯`,streak10:n=>`${n}ひと休みレース 次のVTR賞`,stopped:n=>`${n}連勝ストップ記念レース 良かったこの距離で杯`,night:n=>`${n}夜ふかしレース 寝ないチャレンジではない賞`,back:n=>`${n}おかえりレース お祭り男か杯`,melt:n=>`${n}ドンマイ大会 3がある杯`},
@@ -79,6 +79,17 @@ export const VDK_SPECIAL_NAME='VDK 0デス完走目前・終了間際の1デス�
 export const VDK_SPECIAL_SOURCE='special:vdk-0death-lastdeath:20261102';
 const VDK_SPECIAL_FROM=Date.parse('2026-11-02T00:00:00+09:00');
 const VDK_SPECIAL_UNTIL=Date.parse('2026-11-02T18:00:00+09:00');
+// Four one-time bonus crown races, each in an existing 15-minute slot.
+// The time window prevents a forgotten deployment from creating surprise future races.
+export const VDK_TRIAL_NAMES=[
+ 'VDK戦犯裁判 第1審・味方の証言杯',
+ 'VDK戦犯裁判 第2審・戦績開示杯',
+ 'VDK戦犯裁判 第3審・言い訳却下杯',
+ 'VDK戦犯裁判 最終審・汚名返上なるか杯',
+] as const;
+export const VDK_TRIAL_SOURCE_PREFIX='special:vdk-trial:20261115:';
+const VDK_TRIAL_FROM=Date.parse('2026-11-15T00:00:00+09:00');
+const VDK_TRIAL_UNTIL=Date.parse('2026-11-16T00:00:00+09:00');
 const memberName=(mapping:KpMapping,user:string)=>{const a=mapping.accounts.find(a=>a.discordUserId===user);return a?(configuredPlayers.find(p=>p.riotId.toLowerCase()===a.riotId.toLowerCase())?.name??a.riotId.split('#')[0]):null;};
 const clock=(time:number)=>new Date(time).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});
 export function crownNoticeLine(name:string,race:number){return `\n🏇 ${clock(race)}発走『${name}』開催決定`;}
@@ -107,6 +118,40 @@ export async function scheduleCrowns(env:KpEnv,mapping:KpMapping,now=Date.now())
    }
   }
  }
+ // VDK's latest blunder gets four distinct, guaranteed-to-run bonus races.
+ // Reserve only unclaimed slots at least 30 minutes away, so fields, odds
+ // and bets already opened are never moved. Every source is unique per guild
+ // and chapter; repeated / overlapping Cron executions cannot double-book it.
+ if(now>=VDK_TRIAL_FROM&&now<VDK_TRIAL_UNTIL){
+  const subject=mapping.accounts.find(a=>memberName(mapping,a.discordUserId)?.toLowerCase()==='vdk'||a.riotId.split('#')[0].toLowerCase()==='vdk');
+  if(!subject||await levelOf(subject.discordUserId)!=='mild'){
+   const prefix=VDK_TRIAL_SOURCE_PREFIX+mapping.guildId+':';
+   const existing=(await env.DB.prepare('SELECT source FROM kp_crowns WHERE guild=? AND source LIKE ?')
+     .bind(mapping.guildId,prefix+'%').all<{source:string}>()).results;
+   const savedSources=new Set(existing.map(row=>row.source));
+   if(savedSources.size<VDK_TRIAL_NAMES.length){
+    const first=Math.ceil((now+30*60000)/RACE_INTERVAL)*RACE_INTERVAL;
+    const reserved=(await env.DB.prepare('SELECT race FROM kp_crowns WHERE guild=? AND race>=? AND race<?')
+      .bind(mapping.guildId,first,first+40*RACE_INTERVAL).all<{race:number}>()).results;
+    const taken=new Set(reserved.map(row=>row.race));
+    let chapter=VDK_TRIAL_NAMES.findIndex((_,i)=>!savedSources.has(prefix+i));
+    for(let step=0;step<40&&chapter>=0;step++){
+     const race=first+step*RACE_INTERVAL,source=prefix+chapter;
+     if(bigRaceName(race)||fillerCrownName(race)||festivalRace(race)||taken.has(race))continue;
+     const inserted=await env.DB.prepare('INSERT INTO kp_crowns(guild,race,name,user,kind,source,created_at) VALUES(?,?,?,?,?,?,?) ON CONFLICT DO NOTHING')
+       .bind(mapping.guildId,race,VDK_TRIAL_NAMES[chapter],'VDK','vdktrial',source,now).run();
+     taken.add(race);
+     if(inserted.meta.changes){
+      created.push({race,name:VDK_TRIAL_NAMES[chapter],user:'VDK',kind:'vdktrial',special:true});
+      savedSources.add(source);
+     }
+     chapter=VDK_TRIAL_NAMES.findIndex((_,i)=>!savedSources.has(prefix+i));
+     // A competing Cron may have just claimed the source. Retry next minute.
+     if(!inserted.meta.changes)break;
+    }
+   }
+  }
+ }
  for(const e of await crownEvents(env,mapping,now)){
   const person=memberName(mapping,e.user);
   if(!person||await env.DB.prepare('SELECT 1 FROM kp_crowns WHERE source=?').bind(e.source).first())continue;
@@ -126,5 +171,5 @@ export async function scheduleCrowns(env:KpEnv,mapping:KpMapping,now=Date.now())
   const message=split<0?notice.message+line:notice.message.slice(0,split)+line+notice.message.slice(split);
   await env.DB.prepare("UPDATE notifications SET message=?,sent=CASE WHEN mode='escalation' AND outcome='draw' THEN 1 ELSE 0 END WHERE riot_id=? AND match_id=?").bind(message,c.riotId,c.match).run();
  }
- return created.map(c=>({...c,reason:c.kind==='vdklastdeath'?'0デスチャレンジ終了直前の1デス事件':REASONS[c.kind]}));
+ return created.map(c=>({...c,reason:c.kind==='vdklastdeath'?'0デスチャレンジ終了直前の1デス事件':c.kind==='vdktrial'?'戦犯級のやらかし記念（ネタ）':REASONS[c.kind]}));
 }
