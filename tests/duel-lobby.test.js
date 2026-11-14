@@ -117,3 +117,20 @@ test('unconfirmed operation is shown even in a selected active game',()=>{
  assert.match(html,/data-duel-retry/);
  assert.match(html,/id="duel-guess"/);
 });
+
+
+test('Hit & Blow owner-only opponent code renders only when explicitly authorized by the API',()=>{
+ const base={id:'room',game:'hitblow',status:'active',user_a:self,user_b:friend,black_user:self,
+  private_hand:'0123',board:'{"history":[]}',stake:1000,version:3,turn_user:self,deadline_at:Date.now()+60000};
+ const context={games:{hitblow:{name:'Hit & Blow'}},members:users};
+ const normal=miniBoardView(base,context,self,false);
+ assert.doesNotMatch(normal,/相手の数字（専用表示）/);
+ assert.doesNotMatch(normal,/9876/);
+ const owner=miniBoardView({...base,opponent_hand:'9876'},context,self,false);
+ assert.match(owner,/相手の数字（専用表示）/);
+ assert.match(owner,/>9876<\/strong>/);
+ const finished=miniBoardView({...base,status:'finished',winner:self,opponent_hand:'9876'},context,self,false);
+ assert.doesNotMatch(finished,/相手の数字（専用表示）/);
+ const malformed=miniBoardView({...base,opponent_hand:'<img src=x onerror=alert(1)>'},context,self,false);
+ assert.doesNotMatch(malformed,/相手の数字（専用表示）|<img/);
+});

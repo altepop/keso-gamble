@@ -3,6 +3,7 @@ import {debtOf} from './kp-debt.ts';
 // @ts-expect-error Pure shared ledger verifier, independently covered by node:test.
 import {checkDuelLedger} from '../../../js/duel-kp-audit.js';
 import {kpTargetMembers,kpTargetAllowed} from './kp-target-members.ts';
+import {privateCasinoAllowed} from './private-casino.ts';
 // @ts-expect-error Shared pure browser-side rules (no declaration file).
 import {initialDuelBoard,playDuelMove,DUEL_GAMES} from '../../../js/duel-rules.js';
 
@@ -21,6 +22,7 @@ export interface BoardDuel{
  status:DuelStatus;board:string;black_user:string|null;turn_user:string|null;
  winner:string|null;version:number;created_at:number;updated_at:number;deadline_at:number;
  private_hand?:string|null;
+ opponent_hand?:string|null;
 }
 interface DuelAction{ id:string;guild:string;duel_id:string;actor:string;kind:string;version:number;at:number;
  board:string|null;next_turn:string|null;winner:string|null;first_user:string|null;deadline_at:number; }
@@ -135,12 +137,17 @@ export async function ensureBoardDuels(env:KpEnv){
 }
 async function room(env:KpEnv,guild:string,id:string,user:string):Promise<BoardDuel>{
  if(!UUID.test(id))throw Error('対戦IDが不正です。');
+ const ownerPeek=await privateCasinoAllowed(env,guild,user);
  const row=await env.DB.prepare(`SELECT d.*,
    CASE WHEN d.black_user=? THEN json_extract(s.data,'$.privateA')
-        ELSE json_extract(s.data,'$.privateB') END AS private_hand
+        ELSE json_extract(s.data,'$.privateB') END AS private_hand,
+   CASE WHEN ?=1 AND d.game='hitblow' AND d.status='active' THEN
+     CASE WHEN d.black_user=? THEN json_extract(s.data,'$.privateB')
+          ELSE json_extract(s.data,'$.privateA') END
+   ELSE NULL END AS opponent_hand
    FROM kp_board_duels d LEFT JOIN kp_board_duel_secrets s ON s.guild=d.guild AND s.id=d.id
    WHERE d.guild=? AND d.id=? AND (d.user_a=? OR d.user_b=?)`)
-  .bind(user,guild,id,user,user).first<BoardDuel>();
+  .bind(user,ownerPeek?1:0,user,guild,id,user,user).first<BoardDuel>();
  if(!row)throw Error('対戦が見つかりません。');return row;
 }
 // Check real transitions only, using one indexed ledger-ID lookup per escrow/settlement.
@@ -170,15 +177,20 @@ export async function boardDuelList(env:KpEnv,m:KpMapping,user:string,cursor:str
   if(!Number.isSafeInteger(cutoff))throw Error('履歴の読み込み位置が不正です。');
  }
  const condition=cutoff===null?'':' AND (d.updated_at<? OR (d.updated_at=? AND d.id<?))';
+ const ownerPeek=await privateCasinoAllowed(env,m.guildId,user);
  const query=`SELECT d.*,
   CASE WHEN d.black_user=? THEN json_extract(s.data,'$.privateA')
-       ELSE json_extract(s.data,'$.privateB') END AS private_hand
+       ELSE json_extract(s.data,'$.privateB') END AS private_hand,
+  CASE WHEN ?=1 AND d.game='hitblow' AND d.status='active' THEN
+    CASE WHEN d.black_user=? THEN json_extract(s.data,'$.privateB')
+         ELSE json_extract(s.data,'$.privateA') END
+  ELSE NULL END AS opponent_hand
   FROM kp_board_duels d LEFT JOIN kp_board_duel_secrets s ON s.guild=d.guild AND s.id=d.id
   WHERE d.guild=? AND (d.user_a=? OR d.user_b=?)${condition}
   ORDER BY d.updated_at DESC,d.id DESC LIMIT 20`;
  const stmt=env.DB.prepare(query);
- const matches=(await (cutoff===null?stmt.bind(user,m.guildId,user,user):
-   stmt.bind(user,m.guildId,user,user,cutoff,cutoff,id)).all<BoardDuel>()).results;
+ const matches=(await (cutoff===null?stmt.bind(user,ownerPeek?1:0,user,m.guildId,user,user):
+   stmt.bind(user,ownerPeek?1:0,user,m.guildId,user,user,cutoff,cutoff,id)).all<BoardDuel>()).results;
  return {games:GAMES,limit:DUEL_MAX_STAKE,turnMs:DUEL_TURN_MS,invitationMs:DUEL_INVITE_MS,
    // Only first page needs a roster. Subsequent pages reuse already loaded members.
    members:cursor===null?await kpTargetMembers(env,m):[],matches,hasMore:matches.length===20};
