@@ -49,7 +49,7 @@ test('CPU practice is an overlay, not navigation; closes without unmounting the 
   assert.equal(s.app.inert,true);
   assert.equal(s.body.style.overflow,'hidden');
   const frame=shell.children[1];
-  assert.match(frame.src,/\/duel-demo\.html\?cpu=1$/);
+  assert.match(frame.src,/\/duel-demo\.html\?cpu=1&v=cpu-20261114-v1$/);
   s.winHandlers.get('message')({origin:'https://not-our-site.com',source:frame.contentWindow,data:{type:'keso:close-cpu-practice'}});
   assert.equal(s.app.inert,true,'reject untrusted origin');
   s.winHandlers.get('message')({origin:'https://example.org',source:{},data:{type:'keso:close-cpu-practice'}});
