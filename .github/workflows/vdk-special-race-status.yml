@@ -50,6 +50,8 @@ jobs:
           console.log('VDK_EVENT_DIAGNOSIS '+JSON.stringify({reservedRaces:rows.length,notices:statuses,webhookConfigured:hasWebhook,minuteCronConfigured:crons.some(x=>x.cron==='* * * * *'),health:healthRows}));
           const lines=['# VDK special race reservation and notification check','','Production D1 was queried read-only. No data was changed.','','- Reserved races: '+rows.length+'/4','- Earnings webhook binding exists: '+hasWebhook,'- Every-minute cron exists: '+crons.some(x=>x.cron==='* * * * *'),''];
           for(const s of statuses)lines.push('- '+s.time+' JST: '+s.notice);
+          lines.push('','## Cron health');
+          for(const h of healthRows)lines.push('- '+h.feature+': '+(h.failures>0?'FAILED':'OK')+' last_ok='+String(h.lastOk??'-')+' last_error='+String(h.lastError??'-')+(h.failures>0?' error='+String(h.error??'unknown'):''));
           if(!rows.length)lines.push('','No VDK 4-race reservation rows were found at this check.');
           appendFileSync(process.env.GITHUB_STEP_SUMMARY,lines.join('\n')+'\n');
           NODE
