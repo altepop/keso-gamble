@@ -116,7 +116,7 @@ test('four VDK special crowns are announced, guaranteed to run, and never re-sch
  assert.deepEqual(created.map(c=>c.race),[0,1,2,3].map(i=>first+i*30*60000));
  assert(created.every(c=>c.kind==='vdkseries'&&c.special));
  assert.deepEqual((f.sql.prepare("SELECT source FROM kp_crowns WHERE kind='vdkseries' ORDER BY race").all() as Array<{source:string}>).map(r=>r.source),
-  [0,1,2,3].map(i=>VDK_SERIES_SOURCE_PREFIX+i));
+  [0,1,2,3].map(i=>VDK_SERIES_SOURCE_PREFIX+guild+':'+i));
  assert.equal((await scheduleCrowns(f.env,mapping,now+60000)).length,0);
  await queueRacePosts(f.env,mapping,now,created);await flushRacePosts(f.env);
  assert.equal(sent.length,4);assert(sent.every(msg=>msg.includes('VDK戦犯4連戦')));
