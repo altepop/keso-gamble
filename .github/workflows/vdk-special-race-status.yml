@@ -44,7 +44,10 @@ jobs:
           const rows=Array.isArray(data)?data[0]?.results??[]:[];
           const clock=v=>new Date(v).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
           const statuses=rows.map(x=>({time:clock(Number(x.race)),notice:x.sent===null?'NOT_QUEUED':Number(x.sent)===1?'SENT':'PENDING'}));
-          console.log('VDK_EVENT_DIAGNOSIS '+JSON.stringify({reservedRaces:rows.length,notices:statuses,webhookConfigured:hasWebhook,minuteCronConfigured:crons.some(x=>x.cron==='* * * * *')}));
+          const healthSql="SELECT feature,last_ok,last_error,error,failures FROM kp_health WHERE feature IN ('crown_schedule','earnings_post','horse_race','stock_market') ORDER BY feature";
+          const healthResult=await getJson(base+'/d1/database/'+db+'/query',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sql:healthSql})});
+          const healthRows=(Array.isArray(healthResult)?healthResult[0]?.results??[]:[]).map(h=>({feature:h.feature,lastOk:h.last_ok?clock(Number(h.last_ok)):null,lastError:h.last_error?clock(Number(h.last_error)):null,error:h.error,failures:h.failures}));
+          console.log('VDK_EVENT_DIAGNOSIS '+JSON.stringify({reservedRaces:rows.length,notices:statuses,webhookConfigured:hasWebhook,minuteCronConfigured:crons.some(x=>x.cron==='* * * * *'),health:healthRows}));
           const lines=['# VDK special race reservation and notification check','','Production D1 was queried read-only. No data was changed.','','- Reserved races: '+rows.length+'/4','- Earnings webhook binding exists: '+hasWebhook,'- Every-minute cron exists: '+crons.some(x=>x.cron==='* * * * *'),''];
           for(const s of statuses)lines.push('- '+s.time+' JST: '+s.notice);
           if(!rows.length)lines.push('','No VDK 4-race reservation rows were found at this check.');
