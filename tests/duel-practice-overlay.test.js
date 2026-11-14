@@ -63,10 +63,11 @@ test('CPU practice is an overlay, not navigation; closes without unmounting the 
 test('closing via Escape restores the app; no audio pause or external API required',()=>{
   const s=mount();
   s.click();
+  const shell=s.body.children[0];
   let prevented=false;
   s.docHandlers.get('keydown')({key:'Escape',preventDefault(){prevented=true;}});
   assert.equal(prevented,true);
   assert.equal(s.app.inert,false);
-  assert.equal(s.body.children[0].isConnected,false);
+  assert.equal(shell.isConnected,false);
   assert.doesNotMatch(code,/\.pause\s*\(|fetch\s*\(|api\/kp|location\.(?:href|assign|replace)/);
 });
