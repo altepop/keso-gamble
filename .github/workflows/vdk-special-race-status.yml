@@ -1,4 +1,5 @@
 name: VDK special race read-only status
+# Repeat a read-only status check after the production D1 SQL hotfix.
 
 on:
   push:
