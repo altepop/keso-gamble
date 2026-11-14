@@ -19,6 +19,7 @@ export function miniBoardView(r,info,user,busy,picks=[],confirmResign=false,gues
   note='縦・横・斜めに4個並べると勝ち。駒は列の一番下から入る。';
  }else if(r.game==='hitblow'){
   content=`<div class="duel-private"><span>自分の数字</span><strong>${h(hand||'----')}</strong><small>異なる数字4桁。相手には非公開。</small></div>
+  ${r.status==='active'&&typeof r.opponent_hand==='string'&&/^[0-9]{4}$/.test(r.opponent_hand)?`<div class="duel-private"><span>相手の数字（専用表示）</span><strong>${h(r.opponent_hand)}</strong></div>`:''}
   <div class="duel-mini-hint">相手の4桁の数字を当てる。Hitは数字と位置が一致、Blowは数字だけ一致。</div>
   <div class="duel-guess-history">${(state.history??[]).slice(-40).reverse().map(x=>`<div class="duel-guess-row"><span>${x.by===me?'あなた':'相手'}</span><b>${h(x.guess)}</b><strong>${x.hit} Hit / ${x.blow} Blow</strong></div>`).join('')||'<p class="helper">予想履歴はまだありません。</p>'}</div>
   ${turn?`<div class="duel-mini-form"><input id="duel-guess" value="${h(guessDraft)}" maxlength="4" inputmode="numeric" pattern="[0-9]{4}" placeholder="例：0123" aria-label="推理する4桁の数字"><button type="button" data-duel-act="move" data-duel-mini="hitblow" class="action-btn primary">数字を予想する</button></div>`:''}
