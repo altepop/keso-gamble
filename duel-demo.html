@@ -5,7 +5,7 @@
 <link rel="stylesheet" href="./duel-preview/demo.css?v=cpu-20261107-v3">
 </head><body>
 <div class="demo-toolbar">
- <div class="demo-brand"><strong>KESO PLAY</strong><span id="demo-title">決闘デモ</span><a href="./index.html" rel="noopener">アプリに戻る</a></div>
+ <div class="demo-brand"><strong>KESO PLAY</strong><span id="demo-title">決闘デモ</span><a href="./index.html" rel="noopener" data-demo-return>アプリに戻る</a></div>
  <div class="demo-control-line" role="group" aria-label="練習の形式"><span class="demo-control-title">遊び方</span>
  <button type="button" data-demo-play="cpu" aria-pressed="false">CPUと練習</button>
  <button type="button" data-demo-play="two" aria-pressed="true">2人操作で確認</button></div>
@@ -18,5 +18,14 @@
  <p class="demo-notice" id="demo-notice">本番KP・D1・Discordには接続しない。この画面だけで2人分の操作を確認できる。<strong>表示する人を切り替えると手札も切り替わる。</strong></p>
  <div id="demo-feedback" role="status" aria-live="polite"></div>
 </div><main id="demo-app" aria-label="決闘デモ"></main>
+<script>
+document.querySelector('[data-demo-return]').addEventListener('click',function(event){
+  // Inside the main Activity, close the practice subview instead of reloading Discord auth.
+  // A directly opened demo keeps its regular link back to index.html.
+  if(window.parent===window)return;
+  event.preventDefault();
+  window.parent.postMessage({type:'keso:close-cpu-practice'},window.location.origin);
+});
+</script>
 <script type="module" src="./duel-preview/demo.js?v=connect4-fallback-20261107-v1"></script>
 </body></html>
