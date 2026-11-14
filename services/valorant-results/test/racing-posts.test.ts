@@ -227,3 +227,40 @@ test('festival reminders are queued once on three separate JST mornings, then on
  await queueFestivalAnnouncements(fail,day+12*3600000);
  assert.equal(festivalReminders(day+2*86400000+9*3600000).length,0);
 });
+
+
+test('festival sends one pre-sale @everyone announcement, and every other racing post remains silent',async t=>{
+ // @ts-expect-error Shared deterministic festival schedule.
+ const {FESTIVAL_FIRST}=await import('../../../js/racing.js');
+ const {festivalHypeRace,festivalHypeAnnouncement}=await import('../src/festival-announcements.ts');
+ const {queueFestivalAnnouncements}=await import('../src/racing-posts.ts');
+ const race=FESTIVAL_FIRST,f=await fixture(),sent=captureFetch(t);
+ await ensurePosts(f.env);
+ assert.equal(festivalHypeRace(race-31*60000),null);
+ assert.equal(festivalHypeRace(race-30*60000),race);
+ assert.equal(festivalHypeRace(race-15*60000),null);
+ assert.equal(festivalHypeRace(race+60000),null);
+ assert.equal(festivalHypeAnnouncement(race).split('@everyone').length,2);
+ assert.match(festivalHypeAnnouncement(race),/21:45〜21:59/);
+ assert.match(festivalHypeAnnouncement(race),/最大1億KP/);
+ assert.match(festivalHypeAnnouncement(race),/保証するものではありません/);
+ assert.ok(festivalHypeAnnouncement(race).length<2000);
+ await queueFestivalAnnouncements(f.env,race-31*60000);
+ assert.deepEqual(posts(f.sql),[]);
+ await Promise.all([
+  queueFestivalAnnouncements(f.env,race-30*60000),
+  queueFestivalAnnouncements({...f.env,DB:{...f.env.DB} as D1Database},race-27*60000)
+ ]);
+ await queueFestivalAnnouncements(f.env,race-16*60000);
+ await queueFestivalAnnouncements(f.env,race-15*60000);
+ assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM kp_posts WHERE id LIKE 'race-festival-hype:%'").get()!.n,1);
+ const body=JSON.parse(String(f.sql.prepare("SELECT body FROM kp_posts WHERE id=?").get('race-festival-hype:'+race)!.body));
+ assert.equal(body.content.startsWith('@everyone\n'),true);
+ assert.deepEqual(body.allowed_mentions,{parse:['everyone']});
+ await queueRacePosts(f.env,mapping,race-14*60000);
+ const card=JSON.parse(String(f.sql.prepare('SELECT body FROM kp_posts WHERE id=?').get('race-card:'+race)!.body));
+ assert.deepEqual(card.allowed_mentions,{parse:[]});
+ await flushRacePosts(f.env,5);
+ assert.equal(sent.filter(m=>JSON.stringify(m.allowed_mentions)==='{"parse":["everyone"]}').length,1);
+ assert.equal(sent.filter(m=>m.content.includes('@everyone')).length,1);
+});

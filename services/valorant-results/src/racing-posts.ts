@@ -1,4 +1,4 @@
-import {festivalReminders,festivalAnnouncement} from './festival-announcements.ts';
+import {festivalReminders,festivalAnnouncement,festivalHypeRace,festivalHypeAnnouncement} from './festival-announcements.ts';
 import {festivalTerms} from './race-festival.ts';
 import {activityLaunchComponents} from './activity-link.ts';
 // Horse racing posts for the earnings channel. Posts are queued once under a fixed ID and sent by
@@ -88,7 +88,7 @@ export function worthPosting(card:Card,bets:Bet[],crowned=false,ownerWon=false){
 async function raceBets(env:KpEnv,guild:string,id:number){
  return (await env.DB.prepare("SELECT s.user,b.value FROM kp_state s,json_each(s.data,'$.raceBets') b WHERE s.guild=? AND json_extract(b.value,'$.raceId')=?").bind(guild,id).all<{user:string;value:string}>()).results.map(r=>({...JSON.parse(r.value) as Bet,user:r.user}));
 }
-export async function enqueue(env:KpEnv,id:string,body:string,now:number,embeds?:Array<{title?:string;description:string}>){await env.DB.prepare('INSERT OR IGNORE INTO kp_posts(id,body,at) VALUES(?,?,?)').bind(id,JSON.stringify({content:body,allowed_mentions:{parse:[]},...(embeds?.length?{embeds}:{})}),now).run();}
+export async function enqueue(env:KpEnv,id:string,body:string,now:number,embeds?:Array<{title?:string;description:string}>){await env.DB.prepare('INSERT OR IGNORE INTO kp_posts(id,body,at) VALUES(?,?,?)').bind(id,JSON.stringify({content:body,allowed_mentions:{parse:id.startsWith('race-festival-hype:')&&body.startsWith('@everyone\n')?['everyone']:[]},...(embeds?.length?{embeds}:{})}),now).run();}
 export function crownPost(c:{race:number;name:string;user:string;reason:string;special?:boolean}){
  if(c.special)return [
   '🏇 **緊急特別開催｜VDKやらかし追悼レース**',
@@ -190,6 +190,8 @@ export async function flushRacePosts(env:PostEnv,limit=5){
 async function festivalResultProof(env:KpEnv,guild:string,id:number){const terms=await festivalTerms(env,guild,id);return terms?'\n🎆 **秘蔵倍率 ×'+terms.factor.toLocaleString('ja-JP')+' 解禁！** 当選馬券にはこの補正を適用（最大1億KP）。\n配当抽選シード: `'+terms.seed+'`':'';}
 
 export async function queueFestivalAnnouncements(env:KpEnv,now:number){
+ const hype=festivalHypeRace(now);
+ if(hype!==null)await enqueue(env,`race-festival-hype:${hype}`,festivalHypeAnnouncement(hype),now);
  for(const {race,stage} of festivalReminders(now)){
   const id=`race-festival-reminder:${race}:${stage}`;
   const present=await env.DB.prepare('SELECT 1 AS n FROM kp_posts WHERE id=?').bind(id).first();
