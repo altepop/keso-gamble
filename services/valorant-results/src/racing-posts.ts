@@ -89,7 +89,15 @@ async function raceBets(env:KpEnv,guild:string,id:number){
  return (await env.DB.prepare("SELECT s.user,b.value FROM kp_state s,json_each(s.data,'$.raceBets') b WHERE s.guild=? AND json_extract(b.value,'$.raceId')=?").bind(guild,id).all<{user:string;value:string}>()).results.map(r=>({...JSON.parse(r.value) as Bet,user:r.user}));
 }
 export async function enqueue(env:KpEnv,id:string,body:string,now:number,embeds?:Array<{title?:string;description:string}>){await env.DB.prepare('INSERT OR IGNORE INTO kp_posts(id,body,at) VALUES(?,?,?)').bind(id,JSON.stringify({content:body,allowed_mentions:{parse:id.startsWith('race-festival-hype:')&&body.startsWith('@everyone\n')?['everyone']:[]},...(embeds?.length?{embeds}:{})}),now).run();}
-export function crownPost(c:{race:number;name:string;user:string;reason:string;special?:boolean}){
+export function crownPost(c:{race:number;name:string;user:string;reason:string;special?:boolean;kind?:string}){
+ if(c.special&&c.kind==='vdktrial')return [
+  '🏇 **緊急特別イベント｜VDK戦犯裁判・怒涛の4連戦**',
+  '『'+clean(c.name)+'』',
+  '🕒 '+clock(c.race)+'発走',
+  '⚖️ VDKの戦犯ぶりを検証する特別冠レース。これはゲーム内のネタイベントであり、結果やKPの操作は一切なし。',
+  '馬券は発走15分前から `/bet` またはKESO PLAY「勝負 → 競馬」で受付。参加費・特別料金なし（馬券購入には通常のKPが必要）。',
+  '📢 4レースとも馬券ゼロでも開催。勝者・オッズ・払戻しは通常の競馬ルールで決定。',
+ ].join('\n');
  if(c.special)return [
   '🏇 **緊急特別開催｜VDKやらかし追悼レース**',
   '『'+clean(c.name)+'』',
@@ -106,7 +114,7 @@ export async function roastLevelsOf(env:KpEnv,mapping:KpMapping){
  return (user:string):RoastLevel=>{const level=rows.find(r=>r.user===user)?.level;return validRoastLevel(level)?level:defaultRoastLevel(mapping,user);};
 }
 
-export async function queueRacePosts(env:PostEnv,mapping:KpMapping,now=Date.now(),crowns:Array<{race:number;name:string;user:string;reason:string}>=[]){
+export async function queueRacePosts(env:PostEnv,mapping:KpMapping,now=Date.now(),crowns:Array<{race:number;name:string;user:string;reason:string;kind?:string;special?:boolean}>=[]){
  if(!earningsWebhook(env))return;
  await ensureRacing(env);await ensurePosts(env);
  await queueFestivalAnnouncements(env,now);
