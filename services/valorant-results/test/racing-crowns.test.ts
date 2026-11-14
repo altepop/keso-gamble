@@ -8,6 +8,7 @@ import type { KpMapping } from '../src/kp.ts';
 import { operateKp, readKpState } from '../src/kp-api.ts';
 import { scheduleCrowns, crownEvents, recordMelts, crownName, BACK_GAP, VDK_SPECIAL_NAME, VDK_SPECIAL_SOURCE, VDK_SERIES_NAMES, VDK_SERIES_SOURCE_PREFIX } from '../src/racing-crowns.ts';
 import { racingView } from '../src/racing-kp.ts';
+import { raceShow } from '../src/racing-broadcast.ts';
 import { queueRacePosts, flushRacePosts } from '../src/racing-posts.ts';
 import type { PostEnv } from '../src/racing-posts.ts';
 // @ts-expect-error The shared pure browser engine has no TypeScript declarations.
@@ -123,6 +124,8 @@ test('four VDK special crowns are announced, guaranteed to run, and never re-sch
  const race=created[0].race,view=await racingView(f.env,mapping,race+5000);
  assert.equal(view.watch.runs,true);assert.equal(view.watch.crown,VDK_SERIES_NAMES[0]);
  assert(!view.watch.entries.some((entry:{person?:boolean})=>entry.person),'display-only VDK is not a fake wallet owner');
+ const show=raceShow(raceCard(race),'test-seed',false,true);
+ assert.match(show.commentary.map(c=>c.text).join(' '),/VDK戦犯特別4連戦/);
  assert.equal((await scheduleCrowns(f.env,mapping,Date.parse('2026-11-16T00:00:00+09:00'))).length,0);
 });
 
