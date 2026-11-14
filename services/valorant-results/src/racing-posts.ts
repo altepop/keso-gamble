@@ -89,7 +89,15 @@ async function raceBets(env:KpEnv,guild:string,id:number){
  return (await env.DB.prepare("SELECT s.user,b.value FROM kp_state s,json_each(s.data,'$.raceBets') b WHERE s.guild=? AND json_extract(b.value,'$.raceId')=?").bind(guild,id).all<{user:string;value:string}>()).results.map(r=>({...JSON.parse(r.value) as Bet,user:r.user}));
 }
 export async function enqueue(env:KpEnv,id:string,body:string,now:number,embeds?:Array<{title?:string;description:string}>){await env.DB.prepare('INSERT OR IGNORE INTO kp_posts(id,body,at) VALUES(?,?,?)').bind(id,JSON.stringify({content:body,allowed_mentions:{parse:id.startsWith('race-festival-hype:')&&body.startsWith('@everyone\n')?['everyone']:[]},...(embeds?.length?{embeds}:{})}),now).run();}
-export function crownPost(c:{race:number;name:string;user:string;reason:string;special?:boolean}){
+export function crownPost(c:{race:number;name:string;user:string;reason:string;kind?:string;special?:boolean}){
+ if(c.kind==='vdkseries')return [
+  '🏇 **緊急特別開催｜VDK戦犯4連戦**',
+  '『'+clean(c.name)+'』',
+  clock(c.race)+'発走・馬券なしでも必ず開催',
+  '🎙️「ここまで戦犯が続くなら、競馬場で再審査や！」',
+  '馬券は発走15分前から `/bet` またはKESO PLAYの「勝負 → 競馬」で購入可能。馬券代・配当・着順は通常ルールどおり。',
+  '※特別開催のためのKP徴収なし。既存の馬券、抽選結果、試合報酬は変更しません。',
+ ].join('\n');
  if(c.special)return [
   '🏇 **緊急特別開催｜VDKやらかし追悼レース**',
   '『'+clean(c.name)+'』',
