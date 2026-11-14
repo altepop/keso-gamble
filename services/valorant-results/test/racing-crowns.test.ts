@@ -110,6 +110,7 @@ test('one free VDK near-zero-death memorial race schedules idempotently, runs an
 test('2026-11-15 VDK trial schedules four different races once, without betting or settlement side effects',async()=>{
  const now=Date.parse('2026-11-15T02:45:00+09:00'),f=await fixture(true);
  // Another crown already occupies the first eligible slot; never steal it.
+ await scheduleCrowns(f.env,mapping,Date.parse('2026-11-14T02:45:00+09:00')); // Initialize schema before seeding a reserved crown.
  const blocked=Date.parse('2026-11-15T03:15:00+09:00');
  f.sql.prepare('INSERT INTO kp_crowns(guild,race,name,user,kind,source,created_at) VALUES(?,?,?,?,?,?,?)')
   .run(guild,blocked,'既存冠レース',one,'streak3','test:blocked',now);
