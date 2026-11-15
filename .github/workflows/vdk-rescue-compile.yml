@@ -1,0 +1,32 @@
+name: VDK rescue one-time Activity cache build
+on:
+  push:
+    branches:
+      - feat/vdk-rescue-episode
+    paths:
+      - .github/workflows/vdk-rescue-compile.yml
+permissions:
+  contents: write
+jobs:
+  build-and-cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/vdk-rescue-episode
+          persist-credentials: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: node --test tests/vdk-rescue.test.js
+      - run: npm run build:activity && npm run check:activity
+      - name: Commit generated versions and remove this one-time workflow
+        run: |
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git add js css index.html
+          git rm .github/workflows/vdk-rescue-compile.yml
+          git commit -m "build: cache-bust Platinum 2 VDK rescue special"
+          git push origin HEAD:refs/heads/feat/vdk-rescue-episode
