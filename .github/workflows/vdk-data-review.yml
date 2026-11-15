@@ -1,0 +1,77 @@
+name: VDK factual match data review (read-only)
+on:
+  push:
+    branches: [feat/vdk-factual-coaching-report]
+    paths: ['.github/workflows/vdk-data-review.yml']
+permissions:
+  contents: read
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Gather recorded VDK matches for human review
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          node --input-type=module <<'NODE'
+          const id='bf23ab40-814f-4626-9e0b-36739ac41750';
+          if(!process.env.CF_TOKEN||!process.env.CF_ACCOUNT)throw Error('D1 credentials unavailable');
+          const endpoint='https://api.cloudflare.com/client/v4/accounts/'+process.env.CF_ACCOUNT+'/d1/database/'+id+'/query';
+          async function sql(statement,params=[]){
+            if(!/^\s*SELECT\s/i.test(statement))throw Error('not read-only');
+            const res=await fetch(endpoint,{method:'POST',headers:{Authorization:'Bearer '+process.env.CF_TOKEN,'Content-Type':'application/json'},body:JSON.stringify({sql:statement,params}),signal:AbortSignal.timeout(25000)});
+            if(!res.ok)throw Error('D1 HTTP '+res.status);
+            const j=await res.json();
+            if(!j.success||!j.result?.[0]?.success)throw Error('D1 read failure');
+            return j.result[0].results;
+          }
+          const target='dolly#sdgs';
+          const rows=await sql("SELECT ended_at,outcome,act_name,mode,message FROM notifications WHERE lower(riot_id)=? AND mode='competitive' ORDER BY ended_at DESC LIMIT 1000",[target]);
+          const others=await sql("SELECT mode,COUNT(*) AS n,SUM(outcome='win') AS wins,SUM(outcome='loss') AS losses,MIN(ended_at) AS first,MAX(ended_at) AS last FROM notifications WHERE lower(riot_id)=? GROUP BY mode ORDER BY n DESC",[target]);
+          const ranks=await sql("SELECT at,delta,substr(id,1,9) AS kind FROM kp_ledger WHERE id LIKE 'rank-%' AND user IN (SELECT user FROM kp_accounts WHERE lower(riot)=?) ORDER BY at DESC LIMIT 35",[target]).catch(()=>[]);
+          const tracks=await sql("SELECT since FROM tracked_players WHERE lower(riot_id)=? LIMIT 1",[target]).catch(()=>[]);
+          const clean=s=>String(s||'').replace(/[\r\n]+/g,' ').slice(0,160);
+          const parse=row=>{
+            const msg=String(row.message||'');
+            const combat=/(\d+)K\s*\/\s*(\d+)D\s*\/\s*(\d+)A/.exec(msg);
+            const acs=/ACS\s+(\d+)/.exec(msg);
+            const hs=/HS命中率\s+(\d+(?:\.\d+)?)%/.exec(msg);
+            const location=/🗺️\s*([^\n]+)/.exec(msg)?.[1]||'';
+            const loc=location.split('｜');
+            const rounds=/(\d+)対(\d+)で/.exec(msg);
+            const rank=/🔻\s*\*?\*?降格\*?\*?\s*[\s\S]*?(プラチナ[123])\s*→\s*(プラチナ[123])/.exec(msg);
+            return {
+              day:new Date(Number(row.ended_at)).toISOString().slice(0,16).replace('T',' ')+' UTC',
+              t:row.ended_at,act:clean(row.act_name),result:row.outcome,map:clean(loc[0]),agent:clean(loc[1]),
+              k:combat?Number(combat[1]):null,d:combat?Number(combat[2]):null,a:combat?Number(combat[3]):null,
+              acs:acs?Number(acs[1]):null,hs:hs?Number(hs[1]):null,
+              rounds:rounds?[Number(rounds[1]),Number(rounds[2])]:null,
+              rankChange:rank?rank[1]+' > '+rank[2]:null
+            }
+          };
+          const games=rows.map(parse);
+          const sum=(xs,k)=>xs.reduce((n,x)=>n+(Number.isFinite(x[k])?x[k]:0),0);
+          const avg=(xs,k)=>{const ys=xs.map(x=>x[k]).filter(Number.isFinite);return ys.length?Math.round(ys.reduce((a,b)=>a+b,0)/ys.length*10)/10:null};
+          function summarize(xs){const wl=xs.filter(x=>['win','loss'].includes(x.result));const w=wl.filter(x=>x.result==='win').length;
+            return {matches:xs.length,wins:w,losses:wl.length-w,draws:xs.filter(x=>x.result==='draw').length,
+              winRate:wl.length?Math.round(w/wl.length*1000)/10:null,kills:sum(xs,'k'),deaths:sum(xs,'d'),assists:sum(xs,'a'),
+              kd:sum(xs,'d')?Math.round(sum(xs,'k')/sum(xs,'d')*100)/100:null,
+              acs:avg(xs,'acs'),hsMean:avg(xs,'hs'),avgDeaths:avg(xs,'d'),avgKills:avg(xs,'k'),
+              avgAssists:avg(xs,'a'),closeLosses:xs.filter(x=>x.result==='loss'&&x.rounds&&(x.rounds[1]-x.rounds[0])<=2).length,
+              blowoutLosses:xs.filter(x=>x.result==='loss'&&x.rounds&&(x.rounds[1]-x.rounds[0])>=7).length,
+              missing:xs.filter(x=>x.k===null).length};}
+          const by=(key)=>Object.entries(Object.groupBy(games,x=>x[key]||'unknown')).map(([name,rows])=>({name,...summarize(rows)})).sort((a,b)=>b.matches-a.matches);
+          const months=Object.entries(Object.groupBy(games,x=>x.day.slice(0,7))).map(([name,rows])=>({name,...summarize(rows)}));
+          const report={generatedAt:new Date().toISOString(),trackedSince:tracks[0]?.since?new Date(tracks[0].since).toISOString():'unknown',totalFetched:games.length,limit:1000,
+             total:summarize(games),recent10:summarize(games.slice(0,10)),recent20:summarize(games.slice(0,20)),recent50:summarize(games.slice(0,50)),
+             maps:by('map'),agents:by('agent'),months,byResult:Object.fromEntries(['win','loss'].map(k=>[k,summarize(games.filter(x=>x.result===k))])),
+             otherModes:others,ranks:ranks.map(x=>({day:new Date(x.at).toISOString().slice(0,16),delta:x.delta,kind:x.kind})),recent:games.slice(0,55)};
+          console.log('VDK_MATCH_REPORT_START');
+          console.log(JSON.stringify(report,null,2));
+          console.log('VDK_MATCH_REPORT_END');
+          NODE
