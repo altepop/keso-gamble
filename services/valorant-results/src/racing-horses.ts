@@ -201,9 +201,11 @@ export async function settleHorsePrizes(env:KpEnv,mapping:KpMapping,now=Date.now
   for(const h of card.horses.filter((h:{horseId?:string})=>h.horseId)){
    const rank=order.indexOf(h.number),soldAt=sold.get(h.horseId);
    let prize=soldAt!==undefined&&soldAt<race?0:h.person?prizeFor(card,rank):ownedPrizeFor(card,rank);
-   if(h.person&&!isFujimuraLateNamesake(eventCrown,h)){
+   if(h.person){
+    if(!isFujimuraLateNamesake(eventCrown,h)){
     const others=await env.DB.prepare("SELECT COALESCE(SUM(json_extract(b.value,'$.amount')),0) AS n FROM kp_state s,json_each(s.data,'$.raceBets') b WHERE s.guild=? AND s.user!=? AND json_extract(b.value,'$.raceId')=? AND json_extract(b.value,'$.horse')=?").bind(mapping.guildId,h.owner,race,h.number).first<{n:number}>();
     prize+=Math.floor((others?.n??0)*CONSOLATION_RATE);
+    }
    }else await env.DB.prepare('INSERT OR IGNORE INTO kp_horse_runs(id,guild,race,horse,rank,win_odds,favourite) VALUES(?,?,?,?,?,?,?)').bind(`${race}:${h.horseId}`,mapping.guildId,race,h.horseId,rank+1,odds.win[h.number],h.number===favourite?1:0).run();
    prize=fujimuraLatePrize(eventCrown,h,prize);
    const r=await env.DB.prepare('INSERT OR IGNORE INTO kp_horse_results(id,guild,race,horse,owner,rank,prize,at) VALUES(?,?,?,?,?,?,?,?)').bind(`${race}:${h.horseId}`,mapping.guildId,race,h.horseId,h.owner,rank+1,prize,now).run();
