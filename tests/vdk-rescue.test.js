@@ -48,3 +48,13 @@ test('renders score and actions safely without changing KP economy',()=>{
   assert.equal(vdkRescueVerdict(0).heading,'VDK救済本部・緊急延長');
   assert.equal(vdkRescueVerdict(80).heading,'VDK救済成功');
 });
+
+test('demotion memorial is a fictional coaching exercise, not a real rank adjustment',()=>{
+  const first=VDK_RESCUE_QUESTIONS[0];
+  const last=VDK_RESCUE_QUESTIONS.at(-1);
+  assert.match(first.title,/プラチナ2/);
+  assert.match(last.title,/プラチナ3/);
+  assert.match(vdkRescuePanel(createVdkRescueState()),/原因は未検証/);
+  assert.match(vdkRescuePanel(createVdkRescueState()),/架空の戦術訓練/);
+  assert.doesNotMatch(vdkRescueShareText(createVdkRescueState()),/救済成功/);
+});
