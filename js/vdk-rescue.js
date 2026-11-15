@@ -2,14 +2,14 @@
 export const VDK_RESCUE_TITLE = '今回はVDKを救いたい。';
 export const VDK_RESCUE_QUESTIONS = Object.freeze([
   {
-    chapter: 'CASE 01', title: '7キル1デス、なぜ救われなかったのか',
-    setup: '2026年11月2日。パールのチェンバーは4対1で勝利、7K/1D/0A、ACS367。それでも0デス覚醒は未達成。救済会議で最初にすべきことは？',
+    chapter: 'CASE 01', title: '緊急事態：プラチナ2へ降格',
+    setup: 'VDKがプラチナ2へ降格した。救済委員会は大騒ぎ。しかし、ランクだけでは何が悪かったのか分からない。プラチナ3への復帰を目指して、最初にすべきことは？',
     choices: [
-      {label: '「7キルなら無罪！」と全員に宣言する', points: 8, reaction: '擁護はありがたい。しかし失敗の理由はまだ何も分かっていない。'},
-      {label: '1デスを戦犯認定し、反省文を要求する', points: 0, reaction: '審査委員会が感情だけで暴走。VDKより先に会議を救う必要がある。'},
-      {label: '録画でデス時の位置・情報・味方の配置を確認する', points: 20, reaction: '事件と原因を分離。ようやく救済活動に知性が宿った。'},
+      {label: '「エイムさえ良ければ勝てる！」と即断する', points: 8, reaction: 'エイム強化は有効かもしれないが、まずは何が負けにつながったかを見極めたい。'},
+      {label: '味方のせいだと決めつけ、データを見ない', points: 0, reaction: '証拠ゼロの責任転嫁。救済委員会の判断力から降格してしまった。'},
+      {label: '直近試合の攻守・マップ別成績を調べ、録画で判断を検証する', points: 20, reaction: '原因を数字と映像で切り分けた。ようやくプラ3復帰計画が始まった。'},
     ],
-    lesson: '戦績だけでプレイの正誤は決まらない。デス時の射線、情報、味方との連携を映像で確認する。',
+    lesson: '降格は結果であり、原因そのものではない。戦績の傾向を調べ、映像でデス時の射線・情報・連携を確認する。',
   },
   {
     chapter: 'CASE 02', title: '5対3、ここから負けることはあるのか',
@@ -42,14 +42,14 @@ export const VDK_RESCUE_QUESTIONS = Object.freeze([
     lesson: 'リテイクでは残り時間、情報獲得、同時進入とトレードの可能性を同時に考える。',
   },
   {
-    chapter: 'FINAL', title: '最後の1デスを防げ',
-    setup: '架空の最終試験。0デス達成が目標のスパイクラッシュ。味方が人数有利で、敵の位置は不明。残り時間に余裕がある。次の一手は？',
+    chapter: 'FINAL', title: 'プラチナ3への帰還作戦',
+    setup: '架空の最終試験。コンペで人数有利の最終ラウンド。相手の位置は不明、残り時間には余裕がある。かつて「あと1デス」が話題になったVDK。今回はどう勝ちを取りに行く？',
     choices: [
-      {label: '勝利条件と味方の位置を確認し、安全に情報を取る', points: 20, reaction: '救済完了への道が見えた。キルへの欲望より勝利への判断。'},
-      {label: '最後の一人を探して無警戒に走り回る', points: 0, reaction: 'あの1デスの影が再び。救済委員会、審査を延長。'},
-      {label: '味方との距離に関係なく一生その場から動かない', points: 8, reaction: '0デスだけを守って勝ちを逃しては、別の悲劇になる。'},
+      {label: '勝利条件と味方の位置を確認し、連携して安全に情報を取る', points: 20, reaction: 'プラ3復帰への道は見えた。キル欲よりラウンド勝利を優先した。'},
+      {label: '最後の敵を探して単独で無警戒に走り回る', points: 0, reaction: '不要な勝負が始まった。救済委員会、プラチナ2での追試を決定。'},
+      {label: '味方と離れたまま、安全な場所に隠れ続ける', points: 8, reaction: '生存はしたが勝利に貢献できるとは限らない。プラ3復帰には判断が必要だ。'},
     ],
-    lesson: '0デスそのものを目的にせず、ラウンド勝利と必要なリスクを両立させる。',
+    lesson: 'ランクを戻すにはキルや生存だけでなくラウンド勝率を高める判断が重要。必要なリスクは味方と一緒に取る。',
   },
 ]);
 
@@ -91,15 +91,15 @@ export function restartVdkRescue(raw){
   return {...createVdkRescueState(),best};
 }
 export function vdkRescueVerdict(score){
-  if(score>=80)return {heading:'VDK救済成功',icon:'🏆',line:'ようやく戦犯査問から、勝ち方を考える時間へ。VDKにはまだ未来がある。'};
-  if(score>=40)return {heading:'救済継続審議',icon:'🧯',line:'可能性は確認された。だが救済会議を解散するには、もう一度判断を磨く必要がある。'};
-  return {heading:'VDK救済本部・緊急延長',icon:'🚨',line:'救いに来たはずの委員会まで迷走。VDKと一緒に、最初の判断からやり直そう。'};
+  if(score>=80)return {heading:'VDK救済成功',icon:'🏆',line:'プラチナ2からの逆襲計画、承認。プラチナ3への復帰は本人の実戦次第だ！'};
+  if(score>=40)return {heading:'救済継続審議',icon:'🧯',line:'プラチナ2からの復帰案は提出された。ただし委員会の戦術理解には再審査が必要だ。'};
+  return {heading:'VDK救済本部・緊急延長',icon:'🚨',line:'救済に来た委員会まで降格危機。まずはプラチナ2から抜けるための判断を学び直そう。'};
 }
 export function vdkRescueShareText(raw){
   const state=normalizeVdkRescueState(raw);
   if(state.step!==VDK_RESCUE_QUESTIONS.length)return '';
   const score=vdkRescueScore(state),verdict=vdkRescueVerdict(score);
-  return '【KESO PLAY｜今回はVDKを救いたい。】\n'+verdict.icon+' '+verdict.heading+
+  return '【KESO PLAY｜プラチナ2降格記念・今回はVDKを救いたい。】\n'+verdict.icon+' '+verdict.heading+
     '\n救済スコア：'+score+'/'+MAX_SCORE+'点（自己ベスト：'+state.best+'点）'+
     '\n全5問の判断を検証。これは架空訓練の結果であり、VDK本人の戦績・KP・ランクには影響しない。';
 }
@@ -108,11 +108,11 @@ export function vdkRescuePanel(raw){
   const done=state.step===VDK_RESCUE_QUESTIONS.length;
   const score=vdkRescueScore(state);
   const intro='<section class="vdk-rescue" aria-label="VDK救済エピソード">'+
-    '<div class="vdk-hero"><div class="vdk-eyebrow">KESO TOWN SPECIAL PROJECT / EPISODE 01</div>'+
-    '<h2>今回はVDKを救いたい。</h2><p>あの日、VDKは7キルした。<br>だが、たった1デスが全てを変えた。</p>'+
+    '<div class="vdk-hero"><div class="vdk-eyebrow">緊急特番 / プラチナ2降格記念</div>'+ 
+    '<h2>今回はVDKを救いたい。</h2><p>ついにプラチナ2へ降格。<br>かつて7キル1デスで泣いた男を、今度こそ救えるのか。</p>'+ 
     '<div class="vdk-chips"><span>全5問</span><span>参加0 KP</span><span>報酬0 KP</span><span>何度でも再挑戦</span></div></div>'+
-    '<div class="vdk-case"><strong>事件記録</strong><span>2026/11/02｜Pearl｜Chamber｜4–1 WIN｜7K / 1D / 0A｜ACS 367</span>'+
-    '<small>0デス覚醒は未達成。死亡時刻や原因を試合の数字だけで断定しない。以降の問題は創作した訓練シナリオだ。</small></div>';
+    '<div class="vdk-case"><strong>今回の開催理由：プラチナ2降格</strong><span>過去の事件：2026/11/02｜Pearl｜Chamber｜4–1 WIN｜7K / 1D / 0A｜ACS 367</span>'+ 
+    '<small>過去の0デス覚醒は未達成。プラチナ2降格の原因は未検証だ。設問は架空の戦術訓練であり、実際の試合内容とは異なる。</small></div>';
   if(done){
     const verdict=vdkRescueVerdict(score);
     return intro+'<div class="vdk-card vdk-ending" aria-live="polite"><div class="vdk-big-icon">'+verdict.icon+'</div>'+
