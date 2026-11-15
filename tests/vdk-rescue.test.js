@@ -20,6 +20,7 @@ test('all five missions are playable, finish at 100 and preserve best',()=>{
   assert.equal(vdkRescueScore(state),100);
   assert.equal(state.best,100);
   assert.match(vdkRescueShareText(state),/救済成功/);
+  assert.match(vdkRescueShareText(state),/プラチナ2降格記念/);
   assert.equal(restartVdkRescue(state).best,100);
 });
 test('cannot advance without answering, skip questions, or inject points',()=>{
@@ -35,6 +36,8 @@ test('cannot advance without answering, skip questions, or inject points',()=>{
 });
 test('renders score and actions safely without changing KP economy',()=>{
   const start=vdkRescuePanel(createVdkRescueState());
+  assert.match(start,/プラチナ2降格記念/);
+  assert.match(start,/プラチナ2へ降格/);
   assert.match(start,/参加0 KP/);
   assert.match(start,/報酬0 KP/);
   assert.match(start,/data-vdk-choice="0"/);
