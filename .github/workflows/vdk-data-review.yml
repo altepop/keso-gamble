@@ -75,3 +75,32 @@ jobs:
           console.log(JSON.stringify(report,null,2));
           console.log('VDK_MATCH_REPORT_END');
           NODE
+
+      - name: Check Abema shared matches (read-only aggregates)
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          node --input-type=module <<'NODE'
+          const endpoint='https://api.cloudflare.com/client/v4/accounts/'+process.env.CF_ACCOUNT+'/d1/database/bf23ab40-814f-4626-9e0b-36739ac41750/query';
+          const sql="SELECT d.ended_at,d.outcome,d.message,d.team_id AS dolly_team,a.team_id AS abema_team,a.message AS abema_message FROM notifications d LEFT JOIN notifications a ON a.match_id=d.match_id AND lower(a.riot_id)=? AND a.mode='competitive' WHERE lower(d.riot_id)=? AND d.mode='competitive' ORDER BY d.ended_at DESC LIMIT 1000";
+          const res=await fetch(endpoint,{method:'POST',headers:{Authorization:'Bearer '+process.env.CF_TOKEN,'Content-Type':'application/json'},body:JSON.stringify({sql,params:['abema#ttv','dolly#sdgs']}),signal:AbortSignal.timeout(30000)});
+          if(!res.ok)throw Error('D1 status '+res.status);
+          const j=await res.json();
+          if(!j.success||!j.result?.[0]?.success)throw Error('D1 query failed');
+          const rows=j.result[0].results;
+          function agent(m){const loc=String(m||'').match(/🗺️\s*([^\n]+)/)?.[1]||'';return loc.split('｜')[1]||'unknown'}
+          const overlap=rows.filter(x=>x.abema_message&&x.dolly_team&&x.abema_team&&x.dolly_team===x.abema_team);
+          const other=rows.filter(x=>!overlap.includes(x));
+          const cross=rows.filter(x=>x.abema_message&&x.dolly_team!==x.abema_team);
+          function compact(r){const w=r.filter(x=>x.outcome==='win').length,l=r.filter(x=>x.outcome==='loss').length;
+            const ks=r.map(x=>/(\d+)K\s*\/\s*(\d+)D\s*\/\s*(\d+)A/.exec(x.message));
+            const k=ks.reduce((s,x)=>s+Number(x?.[1]??0),0),deaths=ks.reduce((s,x)=>s+Number(x?.[2]??0),0);
+            const acs=r.map(x=>Number(/ACS\s+(\d+)/.exec(x.message)?.[1])).filter(Number.isFinite);
+            return {n:r.length,w,l,draws:r.filter(x=>x.outcome==='draw').length,wr:w+l?+(w/(w+l)*100).toFixed(1):null,kd:deaths?+(k/deaths).toFixed(2):null,
+              acs:acs.length?+(acs.reduce((a,b)=>a+b,0)/acs.length).toFixed(1):null,
+              vdkAgents:Object.entries(Object.groupBy(r,x=>agent(x.message))).map(([name,x])=>({name,n:x.length,w:x.filter(y=>y.outcome==='win').length,l:x.filter(y=>y.outcome==='loss').length})),
+              abemaAgents:Object.entries(Object.groupBy(r,x=>agent(x.abema_message))).map(([name,x])=>({name,n:x.length}))};
+          }
+          console.log('DUO_COMPARISON '+JSON.stringify({total:rows.length,overlap:compact(overlap),other:compact(other),opponents:cross.length,notice:'Shared-match same-team counts do not prove duo party. Other includes any not jointly tracked.'}));
+          NODE
