@@ -111,7 +111,7 @@ export function vdkRescuePanel(raw){
     '<div class="vdk-hero"><div class="vdk-eyebrow">緊急特番 / プラチナ2降格記念</div>'+ 
     '<h2>今回はVDKを救いたい。</h2><p>ついにプラチナ2へ降格。<br>かつて7キル1デスで泣いた男を、今度こそ救えるのか。</p>'+ 
     '<div class="vdk-chips"><span>全5問</span><span>参加0 KP</span><span>報酬0 KP</span><span>何度でも再挑戦</span></div></div>'+
-    '<div class="vdk-case"><strong>今回の開催理由：プラチナ2降格</strong><span>過去の事件：2026/11/02｜Pearl｜Chamber｜4–1 WIN｜7K / 1D / 0A｜ACS 367</span>'+ 
+    '<div class="vdk-case"><strong>今回の開催理由：プラチナ2降格</strong><span>過去の事件：2026/11/02｜パール｜チェンバー｜4–1 勝利｜7K / 1D / 0A｜ACS 367</span>'+ 
     '<small>過去の0デス覚醒は未達成。プラチナ2降格の原因は未検証だ。設問は架空の戦術訓練であり、実際の試合内容とは異なる。</small></div>';
   if(done){
     const verdict=vdkRescueVerdict(score);
