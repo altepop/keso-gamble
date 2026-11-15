@@ -1,4 +1,5 @@
 import {festivalRace,FESTIVAL_PRICE,festivalFactor} from './racing.js?v=web-332712cc932d20c7';
+import {createVdkRescueState,normalizeVdkRescueState,chooseVdkRescue,advanceVdkRescue,restartVdkRescue,vdkRescuePanel,vdkRescueShareText} from './vdk-rescue.js?v=web-332712cc932d20c7';
 import {stockOrderQuote,STOCK_ORDER_VERSION,STOCK_PRICE_SCALE} from './stock-order.js?v=web-332712cc932d20c7';
 import {steamConnectionMessage} from './steam-view.js?v=web-332712cc932d20c7';
 import {relicsPanel} from './relics-view.js?v=web-332712cc932d20c7';
@@ -208,10 +209,21 @@ function renderRow(item){
 }
 
 // Bottom tabs and the screens under each. 遊ぶ = 競馬・カジノ・株、使う = 指名・馬主・高級品.
-const GROUPS={race:[['race','競馬'],['mleague','Mリーグ'],['casino','カジノ'],['duels','決闘'],['market','株']],directives:[['directives','指名'],['stable','馬主'],['shop','高級品'],['relics','遺物']]};
+const GROUPS={race:[['race','競馬'],['mleague','Mリーグ'],['casino','カジノ'],['duels','決闘'],['vdk','VDK救済'],['market','株']],directives:[['directives','指名'],['stable','馬主'],['shop','高級品'],['relics','遺物']]};
 const groupOf=id=>Object.keys(GROUPS).find(g=>GROUPS[g].some(([s])=>s===id))??id;
 function tabsFor(group){return `<div class="sub-tabs">${GROUPS[group].map(([id,label])=>`<button class="sub-tab ${screen===id?'active':''}" data-screen="${id}">${label}</button>`).join('')}</div>`;}
 function subTabs(){return tabsFor('race');}
+const VDK_RESCUE_SAVE_KEY='keso:vdk-rescue:v1';
+function loadVdkRescue(){
+ try{return normalizeVdkRescueState(JSON.parse(localStorage.getItem(VDK_RESCUE_SAVE_KEY)));}
+ catch{return createVdkRescueState();}
+}
+let vdkRescue=loadVdkRescue();
+function saveVdkRescue(){try{localStorage.setItem(VDK_RESCUE_SAVE_KEY,JSON.stringify(vdkRescue));}catch{/* In-app browsers can disable persistent storage. */}}
+function screenVdk(){
+ return '<div class="screen"><header class="topbar"><div class="toprow"><h1 class="title">VDK救済作戦</h1><span class="badge">無料</span></div></header>'+
+   subTabs()+vdkRescuePanel(vdkRescue)+bottomNav()+'</div>';
+}
 
 // Race playback state. The card, result and odds are pure functions of the race start time.
 let raceDraft={type:'win',horse:null,order:[null,null,null]};
@@ -416,7 +428,7 @@ function render(){
   const gomokuPreviewCell=duelGomokuPreview&&activeDuel&&duelGomokuPreview.id===activeDuel.id&&duelGomokuPreview.version===activeDuel.version&&activeDuel.turn_user===state.selfUserId?duelGomokuPreview.cell:null;
   let html = screen==='title'?titleView(state,wallet.remembered,autoState,autoMessage,wallet.connected):screen==='home'?homeView(state,bottomNav()):screen==='play'?playView(state,drafts,bottomNav(),steamView,hoyoView):screen==='directives'?directivesView(state,drafts,bottomNav(),tabsFor('directives')):screen==='stable'?screenStable():screen==='shop'?screenShop():screen==='relics'?screenRelics():screen==='market'?screenMarket():screen==='casino'?screenCasino():screen==='duels'?duelScreen({info:duelData,user:state.selfUserId,live,cash:state.cash,selectedId:duelActiveId,game:duelGame,stake:duelStake,target:duelTarget,busy:duelBusy,error:duelError,confirmResign:duelResignConfirm,pokerPicks:duelPokerPicks,fallbackMembers:state.members??[],opponentPickerOpen:duelOpponentPickerOpen,loading:duelLoading,gomokuPreviewCell,recentMoves:duelRecentMoves,localMoveHistory:duelMoveHistory,guessDraft:duelGuessDraft,
 lastSynced:duelLastGoodFetch,pendingRetry:!!duelPendingAction,historyHasMore:duelHasMore,
- riskConfirm:duelRiskConfirm===`create:${duelGame}:${duelTarget}:${duelStake}`?'create':activeDuel&&duelRiskConfirm===`accept:${activeDuel.id}:${activeDuel.version}:${activeDuel.stake}`?'accept':'',nav:bottomNav()}):screen==='mleague'?mleagueScreen({state,live,draft:{...mlDraft,amount:drafts['ml-amount']},tabs:subTabs(),nav:bottomNav()}):screen==='race'?screenRace():screenAssets();
+ riskConfirm:duelRiskConfirm===`create:${duelGame}:${duelTarget}:${duelStake}`?'create':activeDuel&&duelRiskConfirm===`accept:${activeDuel.id}:${activeDuel.version}:${activeDuel.stake}`?'accept':'',nav:bottomNav()}):screen==='mleague'?mleagueScreen({state,live,draft:{...mlDraft,amount:drafts['ml-amount']},tabs:subTabs(),nav:bottomNav()}):screen==='race'?screenRace():screen==='vdk'?screenVdk():screenAssets();
   // 効果音 switch for the casino and racing screens (off unless the player turns it on).
   setBgmScene(screen==='casino'||screen==='race'?screen:'');
   if((screen==='casino'||screen==='race')&&sfxEnabled())preloadSfx(); // fetch the rendered sounds before the first win
@@ -717,6 +729,16 @@ for(const eventName of ['input','change'])addEventListener(eventName,e=>{
 });
 addEventListener('click',async e=>{
   const t=e.target.closest?.('button,[data-open]'); if(!t) return;
+  if(t.dataset.vdkChoice!==undefined){vdkRescue=chooseVdkRescue(vdkRescue,Number(t.dataset.vdkChoice));saveVdkRescue();render();return;}
+  if(t.dataset.vdkNext!==undefined){vdkRescue=advanceVdkRescue(vdkRescue);saveVdkRescue();render();return;}
+  if(t.dataset.vdkRestart!==undefined){vdkRescue=restartVdkRescue(vdkRescue);saveVdkRescue();render();return;}
+  if(t.dataset.vdkShare!==undefined){
+    const message=vdkRescueShareText(vdkRescue);
+    if(!message){toast('先に最終判定まで進めてください');return;}
+    try{if(!navigator.clipboard?.writeText)throw Error('clipboard unsupported');await navigator.clipboard.writeText(message);toast('救済結果をコピーしました');}
+    catch{toast('コピーできませんでした。ブラウザの権限を確認してください');}
+    return;
+  }
   if(t.dataset.duelTargetToggle){duelOpponentPickerOpen=!duelOpponentPickerOpen;render();return;}
   if(t.dataset.duelTargetOption){duelTarget=t.dataset.duelTargetOption;duelRiskConfirm=null;duelOpponentPickerOpen=false;render();return;}
   if(t.dataset.duelSelect){duelActiveId=t.dataset.duelSelect;duelResignConfirm=false;duelPokerPicks=[];duelGuessDraft='';duelRiskConfirm=null;duelGomokuPreview=null;render();return;}
