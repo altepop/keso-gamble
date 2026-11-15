@@ -4,10 +4,12 @@
 import { RACE_INTERVAL, bigRaceName, fillerCrownName, crownSlotAllowed, openRaceStart, raceEvent } from '../../../js/racing.js';
 import configuredPlayers from '../players.json' with { type: 'json' };
 import type { KpEnv, KpMapping } from './kp.ts';
+import {kpTargetMembers} from './kp-target-members.ts';
+import {FUJIMURA_LATE_KIND,FUJIMURA_LATE_DAY_END,FUJIMURA_LATE_DAY_START,FUJIMURA_LATE_TITLES,FUJIMURA_LATE_SOURCE_PREFIX,fujimuraLateSlots} from './fujimura-lateness.ts';
 export type RoastLevel='mild'|'normal'|'full';
 export const ROAST_LEVELS:RoastLevel[]=['mild','normal','full'];
 export type CrownKind='streak3'|'streak5'|'streak10'|'stopped'|'night'|'back'|'melt';
-export type SpecialCrownKind='vdklastdeath'|'vdkseries';
+export type SpecialCrownKind='vdklastdeath'|'vdkseries'|'fujimura20';
 const NAMES:Record<Exclude<RoastLevel,'mild'>,Record<CrownKind,(n:string)=>string>>={
  full:{streak3:n=>`${n}戦犯レース しばくぞ杯`,streak5:n=>`${n}をみんなで介護するレース あかんかったなぁ賞`,streak10:n=>`${n}そろそろ引退しろレース 了解お兄さん杯`,stopped:n=>`${n}調子に乗った罰レース 効いてて草賞`,night:n=>`${n}もう寝ろレース マイクロスリープ杯`,back:n=>`${n}生きてた記念レース うおw杯`,melt:n=>`${n}KP溶かし大会 5億マジかw杯`},
  normal:{streak3:n=>`${n}おつかれレース 一旦な杯`,streak5:n=>`${n}がんばれレース 大丈夫だよ杯`,streak10:n=>`${n}ひと休みレース 次のVTR賞`,stopped:n=>`${n}連勝ストップ記念レース 良かったこの距離で杯`,night:n=>`${n}夜ふかしレース 寝ないチャレンジではない賞`,back:n=>`${n}おかえりレース お祭り男か杯`,melt:n=>`${n}ドンマイ大会 3がある杯`},
@@ -157,6 +159,32 @@ export async function scheduleCrowns(env:KpEnv,mapping:KpMapping,now=Date.now())
    }
   }
  }
+ // November 16 only: a 24-hour parody festival with one namesake race every hour.
+ // Reserve each hourly slot 25–90 minutes before departure. This avoids dumping
+ // 24 announcements at once, and NEVER renames a card whose bets are already open.
+ // Matching an exact participant name also avoids guessing or inventing a wallet.
+ if(now>=FUJIMURA_LATE_DAY_START-90*60000&&now<FUJIMURA_LATE_DAY_END){
+  for(let hour=0;hour<24;hour++){
+   const options=fujimuraLateSlots(hour).filter(race=>now>=race-90*60000&&now<race-25*60000);
+   if(!options.length)continue;
+   const source=FUJIMURA_LATE_SOURCE_PREFIX+mapping.guildId+':'+hour;
+   if(await env.DB.prepare('SELECT 1 FROM kp_crowns WHERE source=?').bind(source).first())continue;
+   const members=(await kpTargetMembers(env,mapping)).filter(m=>m.name==='藤村');
+   if(members.length!==1)continue; // Fail closed for ambiguous or unregistered names.
+   const subject=members[0]!;
+   if(await levelOf(subject.id)==='mild')continue; // Respect the member's roast opt-out.
+   for(const race of options){
+    if(bigRaceName(race)||fillerCrownName(race)||raceEvent(race))continue;
+    const saved=await env.DB.prepare('INSERT INTO kp_crowns(guild,race,name,user,kind,source,created_at) VALUES(?,?,?,?,?,?,?) ON CONFLICT DO NOTHING')
+     .bind(mapping.guildId,race,FUJIMURA_LATE_TITLES[hour],subject.id,FUJIMURA_LATE_KIND,source,now).run();
+    if(saved.meta.changes){
+     created.push({race,name:FUJIMURA_LATE_TITLES[hour],user:subject.id,kind:FUJIMURA_LATE_KIND,special:true});
+     break;
+    }
+    if(await env.DB.prepare('SELECT 1 FROM kp_crowns WHERE source=?').bind(source).first())break;
+   }
+  }
+ }
  for(const e of await crownEvents(env,mapping,now)){
   const person=memberName(mapping,e.user);
   if(!person||await env.DB.prepare('SELECT 1 FROM kp_crowns WHERE source=?').bind(e.source).first())continue;
@@ -176,5 +204,5 @@ export async function scheduleCrowns(env:KpEnv,mapping:KpMapping,now=Date.now())
   const message=split<0?notice.message+line:notice.message.slice(0,split)+line+notice.message.slice(split);
   await env.DB.prepare("UPDATE notifications SET message=?,sent=CASE WHEN mode='escalation' AND outcome='draw' THEN 1 ELSE 0 END WHERE riot_id=? AND match_id=?").bind(message,c.riotId,c.match).run();
  }
- return created.map(c=>({...c,reason:c.kind==='vdklastdeath'?'0デスチャレンジ終了直前の1デス事件':c.kind==='vdkseries'?'VDK戦犯特別4連戦':REASONS[c.kind]}));
+ return created.map(c=>({...c,reason:c.kind==='vdklastdeath'?'0デスチャレンジ終了直前の1デス事件':c.kind==='vdkseries'?'VDK戦犯特別4連戦':c.kind==='fujimura20'?'集合時間20分遅刻の反省競馬祭':REASONS[c.kind]}));
 }
