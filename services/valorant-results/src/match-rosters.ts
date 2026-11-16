@@ -21,6 +21,7 @@ export function compactCompetitiveRoster(match:Match,now=Date.now()) {
   if(teams.some(t=>!t.id)||teams[0].id===teams[1].id)return null;
   const players=match.players.map(p=>({
     puuid:short(p.puuid,128),team_id:short(p.team_id,80),
+    name:short(p.name,40),tag:short(p.tag,16),
     party_id:short(p.party_id,128),agent:short(p.agent?.name,64),
     k:safeInt(p.stats?.kills),d:safeInt(p.stats?.deaths),
     a:safeInt(p.stats?.assists),score:safeInt(p.stats?.score)
