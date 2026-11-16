@@ -56,7 +56,8 @@ jobs:
           const stats={saved:0,unavailable:0,deferred:0,cooldown:0,throttled:0,complete:0,disabled:0};
           let reason='limit';
           try{
-            if(flag[0]?.value==='Dolly#SDGs')for(let i=0;i<60;i++){
+            if(flag[0]?.value==='Dolly#SDGs')for(let i=0;i<100;i++){
+              if(Date.now()>expiration-35_000){reason='token_expiry';break;}
               const r=await fetch(endpoint,{method:'POST',
                 headers:{Authorization:'Bearer '+token},
                 signal:AbortSignal.timeout(25000)});
@@ -67,7 +68,16 @@ jobs:
               if(!(status in stats))throw Error('Unexpected archive status');
               stats[status]++;
               if(status==='complete'||status==='disabled'){reason=status;break;}
-              if(status==='cooldown'){reason='provider_cooldown';break;}
+              if(status==='cooldown'){
+                const state=await q("SELECT value FROM monitor_state WHERE key='api_after'");
+                const until=Number(state[0]?.value??0);
+                const pause=Math.max(10_000,Math.min(150_000,until-Date.now()+1500));
+                if(Date.now()+pause>expiration-35_000){reason='provider_cooldown';break;}
+                console.log('VDK_BACKFILL_COOLDOWN '+JSON.stringify({pauseSeconds:Math.ceil(pause/1000)}));
+                await sleep(pause);
+                continue;
+              }
+              if(stats.deferred>5 && stats.saved+stats.unavailable+stats.complete===0){reason='all_currently_deferred';break;}
               await sleep(6700);
             }
           }finally{
