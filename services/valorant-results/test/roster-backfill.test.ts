@@ -27,11 +27,14 @@ function fixture(){
  sql.prepare('INSERT INTO tracked_players VALUES(?,?,?,?)').run('Dolly#SDGs','vdk-puuid','ap',0);
  sql.prepare('INSERT INTO tracked_players VALUES(?,?,?,?)').run('mecael#2489','kobayashi-puuid','ap',0);
  sql.prepare('INSERT INTO notifications VALUES(?,?,?,?)').run('Dolly#SDGs','match-one','competitive',end);
- const db={prepare:(statement:string)=>({bind:(...args:unknown[])=>({
-   first:async()=>sql.prepare(statement).get(...args as never[])??null,
-   all:async()=>({results:sql.prepare(statement).all(...args as never[])}),
-   run:async()=>({meta:{changes:Number(sql.prepare(statement).run(...args as never[]).changes)}})
- })})} as unknown as D1Database;
+ const db={prepare:(statement:string)=>{
+   const make=(args:unknown[])=>({
+     first:async()=>sql.prepare(statement).get(...args as never[])??null,
+     all:async()=>({results:sql.prepare(statement).all(...args as never[])}),
+     run:async()=>({meta:{changes:Number(sql.prepare(statement).run(...args as never[]).changes)}}),
+   });
+   return {...make([]),bind:(...args:unknown[])=>make(args)};
+ }} as unknown as D1Database;
  const enable=()=>sql.prepare('INSERT INTO monitor_state(key,value) VALUES(?,?)').run(ROSTER_BACKFILL_SWITCH,'Dolly#SDGs');
  const count=(table:string)=>Number((sql.prepare('SELECT COUNT(*) AS n FROM '+table).get() as {n:number}).n);
  return {sql,db,enable,count,close:()=>sql.close()};
