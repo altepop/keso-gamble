@@ -21,7 +21,7 @@ jobs:
           if(!account||!token)throw Error('D1 credentials missing');
           const url='https://api.cloudflare.com/client/v4/accounts/'+account+'/d1/database/'+db+'/query';
           async function select(sql,params=[]){
-           if(!/^SELECT\\s/i.test(sql.trim()))throw Error('SELECT only');
+           if(!/^SELECT\s/i.test(sql.trim()))throw Error('SELECT only');
            const res=await fetch(url,{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({sql,params}),signal:AbortSignal.timeout(22000)});
            if(!res.ok)throw Error('Cloudflare HTTP '+res.status);
            const data=await res.json();
