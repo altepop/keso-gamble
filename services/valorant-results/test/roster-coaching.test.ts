@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {analyzeArchivedCoaching,archivedCoachingReport,type ArchivedCoachingRow} from '../src/roster-coaching.ts';
 import {valoCommand} from '../src/valo-command.ts';
+import {runValoCommand} from '../src/valo-queries.ts';
 
 const member=(name:string,tag:string,puuid:string,team_id:string,party_id:string|null,k=10,d=10,a=5)=>
  ({name,tag,puuid,team_id,party_id,k,d,a});
@@ -77,7 +78,31 @@ test('coach is read-only subcommand; partner is free text not a notified roster 
  const commands=valoCommand([{name:'VDK',riotId:'Dolly#SDGs'}]);
  const coach=commands.options.find((x:{name:string})=>x.name==='coach');
  assert.ok(coach);
- assert.equal(coach.options?.[0].required,true);
+ assert.equal(coach.options?.[0].required,false);
  assert.deepEqual(coach.options?.[1].choices,[]);
  assert.equal(coach.options?.[1].required,false);
+});
+
+test('VDK coaching compares Abema by default, even without any slash command options',async()=>{
+ const sql:string[]=[];
+ const db={prepare:(stmt:string)=>{sql.push(stmt);return {bind:()=>({
+  first:async()=>({puuid:'vdk'}),
+  all:async()=>({results:rows}),
+ })};}} as unknown as D1Database;
+ const interaction={data:{options:[{type:1,name:'coach',options:[]}]}} as unknown as Parameters<typeof runValoCommand>[1];
+ const players=[{riotId:'Dolly#SDGs',name:'VDK'}] as Parameters<typeof runValoCommand>[2];
+ const report=await runValoCommand(db,interaction,players);
+ assert.match(report,/VDK専用コーチング/);
+ assert.match(report,/Abema#ttv と同チーム：1勝1敗0分/);
+ assert.match(report,/改善検証ポイント/);
+ assert.ok(sql.every(s=>/^SELECT /i.test(s.trim())));
+});
+test('VDK coaching flags a repeatedly losing map for replay review, without asserting causation',()=>{
+ const synthetic=Array.from({length:6},(_,i)=>make('m'+i,'loss',
+  [member('Dolly','SDGs','vdk','red','solo',4,15,2)],'Bind'));
+ const x=analyzeArchivedCoaching(synthetic,'Dolly#SDGs','vdk');
+ assert.equal(x.maps[0].games,6);
+ assert.equal(x.maps[0].result.loss,6);
+ assert.equal(x.partyResults['1'].loss,6);
+ assert.equal(x.recentTen.loss,6);
 });
