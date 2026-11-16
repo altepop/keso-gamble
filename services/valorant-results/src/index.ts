@@ -22,7 +22,9 @@ import {markDeliveredNotices} from './notification-delivery.ts';
 import {pendingNotificationMatches} from './notification-pending.ts';
 import {cleanupMonitorData} from './monitor-cleanup.ts';
 import {recordCompetitiveRoster} from './match-rosters.ts';
+import {recordCompetitiveRoundEvents} from './round-events.ts';
 import {backfillRecordedVdkMatches} from './roster-backfill.ts';
+import {backfillVdkRoundEvents} from './round-backfill.ts';
 import {monitorSteam} from './steam-rewards.ts';
 import {readModeNote} from './mode-rewards.ts';
 import {skirmishResultButtons} from './skirmish.ts';
@@ -294,6 +296,7 @@ async function saveMatch(env: Env, match: Match, player: Player, account: Accoun
     // A compact roster is saved only for new competitive results; failures must
     // never block notices or KP, and duplicates never incur extra writes.
     try { await recordCompetitiveRoster(env.DB,match); } catch { console.warn('match_roster_save_pending'); }
+    try { await recordCompetitiveRoundEvents(env.DB,match); } catch { console.warn('round_event_save_pending'); }
     // Agent mastery counts new results only; a failure never blocks the result post.
     if (kpRun) try {
       const subject = match.players.find(p => p.puuid === account.puuid), mapping = kpRun.mapping;
@@ -633,6 +636,14 @@ export default {
         const outcome=await backfillRecordedVdkMatches(env.DB,
           (region,id)=>api<Match>(env,'/valorant/v4/match/'+encodeURIComponent(region)+'/'+encodeURIComponent(id)));
         if(outcome.status!=='disabled')console.info('roster_backfill_result',{status:outcome.status});
+      }));
+    // Dedicated opt-in historical round replay: at most one match detail call per five minutes.
+    // Uses a different minute than the roster backfill and cannot modify notices or KP.
+    if(Math.floor((_event.scheduledTime??Date.now())/60000)%5===4)
+      ctx.waitUntil(track(env,'coach_round_backfill',async()=>{
+        const outcome=await backfillVdkRoundEvents(env.DB,
+          (region,id)=>api<Match>(env,'/valorant/v4/match/'+encodeURIComponent(region)+'/'+encodeURIComponent(id)));
+        if(outcome.status!=='disabled')console.info('coach_round_backfill_result',{status:outcome.status});
       }));
     // Read-only ping on the existing Cron, no D1 and no new scheduled trigger.
     if(Math.floor((_event.scheduledTime??Date.now())/60_000)%5===0)
