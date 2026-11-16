@@ -51,7 +51,9 @@ test('opt in: backfills only known VDK match and completes without duplicates',a
   const fetch=async(region:string,id:string)=>{requests++;assert.equal(region,'ap');assert.equal(id,'match-one');return match(id)};
   assert.equal((await backfillVdkRoundEvents(f.db,fetch,now)).status,'saved');
   assert.equal((await backfillVdkRoundEvents(f.db,fetch,now)).status,'complete');
-  // The compatibility pass inspects previously partial archives once.
+  // Historic compatibility pass, then the one-shot final retry scan, before
+  // the switch is sealed. Neither pass should call Henrik for complete rows.
+  assert.equal((await backfillVdkRoundEvents(f.db,fetch,now)).status,'complete');
   assert.equal((await backfillVdkRoundEvents(f.db,fetch,now)).status,'complete');
   assert.equal((await backfillVdkRoundEvents(f.db,fetch,now)).status,'disabled');
   assert.equal(requests,1);
@@ -123,6 +125,7 @@ test('historically complete opt-in repairs old partial rows once but never fetch
   let fetched=0;
   const fetch=async()=>{fetched++;return match()};
   assert.equal((await backfillVdkRoundEvents(f.db,fetch,now)).status,'saved');
+  assert.equal((await backfillVdkRoundEvents(f.db,fetch,now)).status,'complete');
   assert.equal((await backfillVdkRoundEvents(f.db,fetch,now)).status,'complete');
   assert.equal((await backfillVdkRoundEvents(f.db,fetch,now)).status,'disabled');
   assert.equal(fetched,1);
