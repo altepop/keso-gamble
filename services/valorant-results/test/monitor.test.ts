@@ -1418,7 +1418,7 @@ test('slash command definitions preserve death permissions and expose thirteen r
   assert.ok(deathMode.choices.some(choice => choice.value === 'custom'));
   assert.equal(deathMode.required, false, 'Existing /death starts remain usable through the mode menu');
   assert.equal('default_member_permissions' in commands[1], false);
-  assert.equal(commands[1].options.length, 13);
+  assert.equal(commands[1].options.length, 14);
   assert.equal(commands[2].name,'predict');
   assert.equal(commands[2].options[0].required,true);
   assert.equal(commands[2].options[1].required,false);
