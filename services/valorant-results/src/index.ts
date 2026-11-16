@@ -20,6 +20,7 @@ import {ensureNotificationReadIndexes} from './notification-indexes.ts';
 import {markDeliveredNotices} from './notification-delivery.ts';
 import {pendingNotificationMatches} from './notification-pending.ts';
 import {cleanupMonitorData} from './monitor-cleanup.ts';
+import {recordCompetitiveRoster} from './match-rosters.ts';
 import {monitorSteam} from './steam-rewards.ts';
 import {readModeNote} from './mode-rewards.ts';
 import {skirmishResultButtons} from './skirmish.ts';
@@ -287,6 +288,9 @@ async function saveMatch(env: Env, match: Match, player: Player, account: Accoun
   if(predictionActive)try { await settlePredictions(env,match,player.riotId); } catch { console.warn('prediction_settlement_pending'); }
   if(kpRun&&kpRun.credits.has(kpId))kpRun.messages.set(kpId,result.message);
   if (inserted.meta.changes) {
+    // A compact roster is saved only for new competitive results; failures must
+    // never block notices or KP, and duplicates never incur extra writes.
+    try { await recordCompetitiveRoster(env.DB,match); } catch { console.warn('match_roster_save_pending'); }
     // Agent mastery counts new results only; a failure never blocks the result post.
     if (kpRun) try {
       const subject = match.players.find(p => p.puuid === account.puuid), mapping = kpRun.mapping;
