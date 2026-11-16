@@ -1,6 +1,8 @@
 name: One-off secure VDK full roster restoration
 on:
-  workflow_dispatch:
+  push:
+    branches: [audit/kobayashi-live-20261116]
+    paths: ['.github/workflows/vdk-oneoff-full-restoration.yml']
 permissions: {contents: read}
 jobs:
   run:
