@@ -195,3 +195,33 @@ jobs:
           });
           console.log('SHARED_MATCH_ROWS '+JSON.stringify(items));
           NODE
+
+      - name: Abema saved participant presence audit (read-only)
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          node --input-type=module <<'NODE'
+          const url='https://api.cloudflare.com/client/v4/accounts/'+process.env.CF_ACCOUNT+'/d1/database/bf23ab40-814f-4626-9e0b-36739ac41750/query';
+          async function sql(statement,params=[]){
+            if(!/^\s*SELECT\b/i.test(statement))throw Error('non-read-only SQL');
+            const r=await fetch(url,{method:'POST',headers:{Authorization:'Bearer '+process.env.CF_TOKEN,'Content-Type':'application/json'},body:JSON.stringify({sql:statement,params}),signal:AbortSignal.timeout(25000)});
+            if(!r.ok)throw Error('D1 HTTP '+r.status);
+            const j=await r.json();if(!j.success||!j.result?.[0]?.success)throw Error('D1 SELECT failed');
+            return j.result[0].results;
+          }
+          const [tables,tracked,counts,variants]=await Promise.all([
+            sql("SELECT name,sql FROM sqlite_master WHERE type='table' AND (lower(name) LIKE '%match%' OR lower(name) LIKE '%player%' OR lower(name) LIKE '%roster%' OR lower(name) LIKE '%participant%' OR lower(name) LIKE '%notice%' OR lower(name) LIKE '%team%') ORDER BY name"),
+            sql("SELECT riot_id,region FROM tracked_players WHERE lower(riot_id) LIKE '%abema%' ORDER BY riot_id"),
+            sql("SELECT lower(riot_id) AS riot_id,COUNT(*) AS n FROM notifications WHERE lower(riot_id) LIKE '%abema%' GROUP BY lower(riot_id) ORDER BY n DESC"),
+            sql("SELECT key,substr(value,1,80) AS sample FROM monitor_state WHERE (lower(key) LIKE '%abema%' OR lower(value) LIKE '%abema%') LIMIT 6").catch(()=>[])
+          ]);
+          console.log('ABEMA_LOG_SCHEMA '+JSON.stringify({
+            tableNames:tables.map(x=>x.name),
+            roster:tracked,
+            notices:counts,
+            matchingStateKeys:variants.map(x=>x.key),
+            rawTeamRosterTables:tables.filter(x=>/player|roster|participant|match/i.test(x.name) && x.name!=='tracked_players'&&x.name!=='notifications').map(x=>({table:x.name,hasMatchId:/match_id/i.test(x.sql||''),hasPlayerList:/players|participants|roster|team_members/i.test(x.sql||'')})),
+            noticeSchemaHasMatchId:tables.find(x=>x.name==='notifications')?.sql?.includes('match_id')
+          }));
+          NODE
