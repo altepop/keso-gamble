@@ -2,6 +2,7 @@ import configuredPlayers from '../players.json' with { type: 'json' };
 import type { Player } from './index.ts';
 import type { Interaction } from './discord-interactions.ts';
 import type { Notice, Outcome } from './results.ts';
+import {archivedCoachingReport} from './roster-coaching.ts';
 
 const clean = (value: string, size = 40) => value.replace(/[\r\n`*_~|<>]/g, '').slice(0, size);
 const label = (player: Player) => clean(player.name || player.riotId.split('#')[0]);
@@ -42,6 +43,7 @@ const help = `📖 コマンド一覧
 /valo week [player] [mode]：今週の成績（月曜から）
 /valo act [player] [mode]：最新ACTの勝敗・勝率・連勝連敗
 /valo recent player [mode]：直近3試合と個人成績
+/valo coach player [partner]：保存済みコンペの人数・勝敗・指定相手との同チーム分析
 /valo pair player partner [mode]：最新ACTの同チーム成績
 /valo versus player partner [mode]：最新ACTの直接対決
 /valo compare player partner [mode]：最新ACTの2人成績比較
@@ -64,7 +66,7 @@ const help = `📖 コマンド一覧
 export async function runValoCommand(db: D1Database, interaction: Interaction, players: Player[] = configuredPlayers): Promise<string> {
   const action = interaction.data?.options?.[0];
   const allowed: Record<string, string[]> = { yesterday: ['player', 'mode'], week: ['player', 'mode'], streaks: ['player', 'mode'], players: [],
-    versus: ['player', 'partner', 'mode'], compare: ['player', 'partner', 'mode'], today: ['player', 'mode'], act: ['player', 'mode'], recent: ['player', 'mode'],
+    versus: ['player', 'partner', 'mode'], compare: ['player', 'partner', 'mode'], today: ['player', 'mode'], act: ['player', 'mode'], recent: ['player', 'mode'], coach: ['player', 'partner'],
     pair: ['player', 'partner', 'mode'], ranking: ['mode'], status: [], help: [] };
   if (!action || action.type !== 1 || !Object.hasOwn(allowed, action.name) || interaction.data?.options?.length !== 1) return help;
   const options = action.options ?? [];
@@ -74,12 +76,18 @@ export async function runValoCommand(db: D1Database, interaction: Interaction, p
   if (values.mode && !['competitive', 'escalation'].includes(values.mode)) return 'モードはコンペかエスカレーションを選んでください。';
   const mode = values.mode || 'competitive', modeName = mode === 'competitive' ? 'コンペ' : 'エスカレーション';
   for (const key of ['player', 'partner']) {
+    if (action.name === 'coach' && key === 'partner') continue;
     if (values[key] && !(key === 'player' && ['today', 'yesterday', 'week', 'act', 'streaks'].includes(action.name) && values[key] === 'all')
       && !players.some(player => player.riotId === values[key])) return '対象者は登録済みの選択肢から選んでください。';
   }
   const twoPlayers = ['pair', 'versus', 'compare'].includes(action.name);
-  if (((action.name === 'recent' || twoPlayers) && !values.player) || (twoPlayers && !values.partner)) return '対象者を指定してください。';
+  if (((action.name === 'recent' || action.name === 'coach' || twoPlayers) && !values.player) || (twoPlayers && !values.partner)) return '対象者を指定してください。';
   if (twoPlayers && values.player === values.partner) return 'ペアは異なる2人を選んでください。';
+  if (action.name === 'coach') {
+    if (values.mode) return 'コーチング集計はコンペのみ対応しています。';
+    if (values.partner && !/^[^#\r\n]{1,40}#[^#\r\n]{1,16}$/.test(values.partner)) return '相手のRiot IDは Name#Tag の形式で指定してください。';
+    return archivedCoachingReport(db, values.player, values.partner || (values.player === 'Dolly#SDGs' ? 'Abema#ttv' : null));
+  }
   if (action.name === 'help') return help;
   if (!players.length) return '対象者が登録されていません。';
   if (action.name === 'players') return '👥 登録者\n' + players.map(player => label(player) + '：' + clean(player.riotId, 100)).join('\n');
