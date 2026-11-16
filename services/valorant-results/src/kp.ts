@@ -14,6 +14,7 @@ import type {SpikeMatch} from './spikerush-growth.ts';
 import policy from '../legacy-kp-policy.json' with { type: 'json' };
 import { applyLuck, chance, luckFor, luckLabel } from './luck.ts';
 import sealed from '../kp-bootstrap.encrypted.json' with { type: 'json' };
+import extraSealed from '../kp-extra-accounts.encrypted.json' with { type: 'json' };
 import configuredPlayers from '../players.json' with { type: 'json' };
 import discord from '../discord-config.json' with { type: 'json' };
 import { assessRewardReadiness } from './reward-readiness.ts';
@@ -86,7 +87,16 @@ export async function initializeKp(env:KpEnv,override?:KpMapping):Promise<KpMapp
  if(!policy.enabled||(!env.KP_BOOTSTRAP_PRIVATE_KEY&&!override))return null;
  if(!override&&setups.has(env.DB))return setups.get(env.DB)!;
  const job=(async()=>{
-  const mapping=override??await decryptKpMapping(env.KP_BOOTSTRAP_PRIVATE_KEY!);
+  const mapping=override??await (async()=>{
+   // The original four accounts stay encrypted and untouched. The additional
+   // account is an independently encrypted, same-key addendum; never store
+   // private Discord/Riot links in plain source or replace the base envelope.
+   const base=await decryptKpMapping(env.KP_BOOTSTRAP_PRIVATE_KEY!);
+   if(extraSealed.keyFingerprint!==sealed.keyFingerprint || extraSealed.version!==1)throw Error('KP addendum key mismatch');
+   const extra=await decryptKpMapping(env.KP_BOOTSTRAP_PRIVATE_KEY!,extraSealed);
+   if(!Array.isArray(extra.accounts)||extra.accounts.length!==1||(extra.guildId&&extra.guildId!==base.guildId))throw Error('Invalid additional KP accounts');
+   return {...base,accounts:[...base.accounts,...extra.accounts]};
+  })();
   if(!/^\d{15,22}$/.test(mapping.guildId)||(!override&&mapping.guildId!==discord.guildId)||!Array.isArray(mapping.accounts)||!mapping.accounts.length||mapping.accounts.length>5)throw Error('Invalid KP mapping');
   const users=new Set(),riots=new Set();for(const a of mapping.accounts){if(!/^\d{15,22}$/.test(a.discordUserId)||typeof a.riotId!=='string'||(!override&&!configuredPlayers.some(p=>p.riotId.toLowerCase()===a.riotId.toLowerCase()))||users.has(a.discordUserId)||riots.has(a.riotId.toLowerCase()))throw Error('Invalid KP account');users.add(a.discordUserId);riots.add(a.riotId.toLowerCase());}
   const version=await kpSchemaVersion(env);
