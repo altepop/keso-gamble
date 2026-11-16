@@ -14,7 +14,15 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
     totalVdkRosterMatches:44,archivedMatches:3,usableMatches:3,invalidMatches:0,killDataMissing:0,roundDataMissing:0,
     overall:{rounds:68,firstKillWinPct:70,firstKillWins:21,firstKillOutcomesKnown:30,comebackWins:7,roundsWithSides:0,repeatedVictimRounds:1},
     maps:[{map:'Corrode',matches:1,rounds:22,ourFirstKills:13,firstKillWins:8,firstKillLosses:5,firstKillWinPct:61.5}],
-    trioComparisons:[{map:'Corrode',composition:'Fade + Clove',matches:1,firstKillWins:8,firstKillLosses:5,firstKillWinPct:61.5}]
+    trioComparisons:[{map:'Corrode',composition:'Fade + Clove',matches:1,firstKillWins:8,firstKillLosses:5,firstKillWinPct:61.5}],
+    individual:[
+      {player:'VDK',matches:3,rounds:68,observedOpeningRounds:68,firstKills:4,firstDeaths:6,fkFdDiff:-2,firstKillWins:3,firstKillLosses:1,firstKillWinPct:75,openingKillerDiedWithin5s:0,firstDeathKillerEliminatedWithin5s:2},
+      {player:'Abema',matches:3,rounds:68,observedOpeningRounds:68,firstKills:9,firstDeaths:7,fkFdDiff:2,firstKillWins:6,firstKillLosses:3,firstKillWinPct:66.7,openingKillerDiedWithin5s:1,firstDeathKillerEliminatedWithin5s:1},
+      {player:'石原',matches:3,rounds:68,observedOpeningRounds:68,firstKills:8,firstDeaths:3,fkFdDiff:5,firstKillWins:7,firstKillLosses:1,firstKillWinPct:87.5,openingKillerDiedWithin5s:1,firstDeathKillerEliminatedWithin5s:0}
+    ],
+    individualMapAgent:[
+      {player:'VDK',map:'Corrode',agent:'Fade',matches:1,firstKills:0,firstDeaths:1,fkFdDiff:-1,firstKillWinPct:null,openingKillerDiedWithin5s:0,firstDeathKillerEliminatedWithin5s:0}
+    ]
   };
   const ctx=await browser.newContext({viewport:{width:375,height:812},isMobile:true,hasTouch:true});
   await ctx.addInitScript(t=>localStorage.setItem('keso-kp-session-v1',t),token);
@@ -30,6 +38,11 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   assert.match(await page.locator('#totals').innerText(),/44/);
   assert.match(await page.locator('#maps').innerText(),/61\.5%/);
   assert.match(await page.locator('#trio').innerText(),/Fade/);
+  assert.match(await page.locator('#players').innerText(),/VDK/);
+  assert.match(await page.locator('#players').innerText(),/石原/);
+  assert.match(await page.locator('#players').innerText(),/5秒以内/);
+  assert.match(await page.locator('#player-map').innerText(),/Corrode \/ Fade/);
+  assert.match(await page.locator('#player-map').innerText(),/−1|-1/);
   assert.match(await page.locator('#quality').innerText(),/複数回死亡/);
   assert.equal(requests.length,1,'no extra polling or KPI writes');
   assert.equal(requests[0].method,'GET');
