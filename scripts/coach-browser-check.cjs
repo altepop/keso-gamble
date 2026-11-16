@@ -93,7 +93,42 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   await page.locator('#reload').click();
   assert.equal(requests.length,2,'refresh is manual only');
   assert.deepEqual(errors,[]);
+  assert.equal(await page.locator('#resume-backfill').isHidden(),true,
+    'an active backfill must not show resume');
   await ctx.close();
+  // The resume control only appears for the previously opted-in linked owner,
+  // after an explicit user click; no recurring or surprise POSTs.
+  const resumeCtx=await browser.newContext({viewport:{width:375,height:812},isMobile:true,hasTouch:true});
+  await resumeCtx.addInitScript(t=>sessionStorage.setItem('keso-coach-session-v1',t),token);
+  let resumed=false,postCount=0,getCount=0;
+  await resumeCtx.route('https://valorant-results.tealeaforest.workers.dev/**',async route=>{
+    const req=route.request();
+    if(req.method()==='POST'&&req.url().endsWith('/api/kp/coach/backfill/resume')){
+      postCount++;resumed=true;
+      assert.equal(req.headers().authorization,'Bearer '+token);
+      return route.fulfill({status:200,contentType:'application/json',
+        body:JSON.stringify({status:'resumed'})});
+    }
+    if(req.method()==='GET'&&req.url().endsWith('/api/kp/coach/rounds')){
+      getCount++;
+      return route.fulfill({status:200,contentType:'application/json',
+        body:JSON.stringify({...report,canResume:true,
+          backfill:{...report.backfill,status:resumed?'running':'complete'}})});
+    }
+    throw Error('unexpected coach request: '+req.method()+' '+req.url());
+  });
+  const resumePage=await resumeCtx.newPage();
+  await resumePage.goto('http://127.0.0.1:18784/coach.html');
+  await resumePage.locator('#report:not([hidden])').waitFor();
+  await resumePage.locator('#resume-backfill').waitFor({state:'visible'});
+  assert.equal(postCount,0,'no automatic backfill restart');
+  assert.equal(getCount,1);
+  await resumePage.locator('#resume-backfill').click();
+  await resumePage.waitForFunction(()=>document.getElementById('status').textContent.includes('補完を再開した'));
+  assert.equal(postCount,1);
+  assert.equal(getCount,2,'one fresh read after successful resume');
+  assert.equal(await resumePage.locator('#resume-backfill').isHidden(),true);
+  await resumeCtx.close();
   const guest=await browser.newContext({viewport:{width:320,height:568},isMobile:true});
   const second=await guest.newPage();
   await second.route('https://valorant-results.tealeaforest.workers.dev/**',async route=>{
@@ -104,6 +139,8 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   await second.locator('#connection').waitFor({state:'visible'});
   assert.equal(await second.locator('#report').isHidden(),true);
   assert.equal(await second.locator('#share').isDisabled(),true,'anonymous users cannot copy a report');
+  assert.equal(await second.locator('#resume-backfill').isHidden(),true,
+    'anonymous users cannot resume a backfill');
   await second.locator('#code').fill('b'.repeat(48));
   await second.locator('#connect-form button').click();
   await second.locator('#report:not([hidden])').waitFor();
