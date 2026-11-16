@@ -1,0 +1,90 @@
+name: One-off secure VDK full roster restoration
+on:
+  workflow_dispatch:
+permissions: {contents: read}
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - name: Backfill archived VDK matches via authenticated live Worker
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          node --input-type=module <<'NODE'
+          import {randomBytes,createHash} from 'node:crypto';
+          import {setTimeout as sleep} from 'node:timers/promises';
+          const account=process.env.CF_ACCOUNT,cloudflare=process.env.CF_TOKEN;
+          if(!account||!cloudflare)throw Error('Cloudflare credentials unavailable');
+          const api='https://api.cloudflare.com/client/v4/accounts/'+account;
+          const db=api+'/d1/database/bf23ab40-814f-4626-9e0b-36739ac41750/query';
+          async function q(sql,params=[]){
+            if(!/^(SELECT|INSERT|UPDATE)\s/i.test(sql.trim()))throw Error('Unexpected SQL');
+            const r=await fetch(db,{method:'POST',headers:{Authorization:'Bearer '+cloudflare,'Content-Type':'application/json'},
+              body:JSON.stringify({sql,params}),signal:AbortSignal.timeout(20000)});
+            if(!r.ok)throw Error('D1 HTTP '+r.status);
+            const j=await r.json();if(!j.success||!j.result?.[0]?.success)throw Error('D1 query error');
+            return j.result[0].results??[];
+          }
+          const n=async(s,p=[])=>Number((await q(s,p))[0]?.n??0);
+          const res=await fetch(api+'/workers/subdomain',{headers:{Authorization:'Bearer '+cloudflare},signal:AbortSignal.timeout(15000)});
+          const info=await res.json();if(!info.success||!info.result?.subdomain)throw Error('Worker subdomain not found');
+          const endpoint='https://valorant-results.'+info.result.subdomain+'.workers.dev/api/internal/roster-backfill';
+          const probe=await fetch(endpoint,{signal:AbortSignal.timeout(10000)});
+          const probeBody=await probe.json().catch(()=>null);
+          if(probe.status!==405||probeBody?.error!=='method_not_allowed')throw Error('Secure archive endpoint not deployed');
+          const [total,existing,silentNotices,silentKp,flag]=await Promise.all([
+            n("SELECT COUNT(DISTINCT match_id) AS n FROM notifications WHERE riot_id='Dolly#SDGs' AND mode='competitive'"),
+            n('SELECT COUNT(*) AS n FROM tracked_players'),
+            n("SELECT COUNT(*) AS n FROM notifications WHERE lower(riot_id)='abema#ttv'"),
+            n("SELECT COUNT(*) AS n FROM kp_accounts WHERE lower(riot)='abema#ttv'"),
+            q("SELECT value FROM monitor_state WHERE key='roster_backfill:enabled'")
+          ]);
+          if(total<1||existing!==5||silentNotices!==0||silentKp!==0||!['Dolly#SDGs','complete'].includes(flag[0]?.value))
+            throw Error('Live safety gates failed; refusing to run');
+          const token=randomBytes(32).toString('hex');
+          const digest=createHash('sha256').update(token).digest('hex');
+          const upsert="INSERT INTO monitor_state(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value";
+          const started=Date.now();
+          const expiration=started+16*60_000;
+          // If already marked complete, no external API requests are needed.
+          if(flag[0]?.value==='Dolly#SDGs'){
+            await q(upsert,['roster_backfill:fast_sha256',digest]);
+            await q(upsert,['roster_backfill:fast_expires',String(expiration)]);
+          }
+          const stats={saved:0,unavailable:0,deferred:0,cooldown:0,throttled:0,complete:0,disabled:0};
+          let reason='limit';
+          try{
+            if(flag[0]?.value==='Dolly#SDGs')for(let i=0;i<60;i++){
+              const r=await fetch(endpoint,{method:'POST',
+                headers:{Authorization:'Bearer '+token},
+                signal:AbortSignal.timeout(25000)});
+              if(r.status===429){stats.throttled++;await sleep(6700);continue;}
+              if(r.status!==200)throw Error('Worker invocation status '+r.status);
+              const body=await r.json();
+              const status=body?.status;
+              if(!(status in stats))throw Error('Unexpected archive status');
+              stats[status]++;
+              if(status==='complete'||status==='disabled'){reason=status;break;}
+              if(status==='cooldown'){reason='provider_cooldown';break;}
+              await sleep(6700);
+            }
+          }finally{
+            await q(upsert,['roster_backfill:fast_expires','0']);
+            await q(upsert,['roster_backfill:fast_sha256','']);
+          }
+          const [done,failed,remaining,abema,three,marker]=await Promise.all([
+            n("SELECT COUNT(DISTINCT n.match_id) AS n FROM notifications n JOIN valorant_match_rosters r ON r.match_id=n.match_id WHERE n.riot_id='Dolly#SDGs' AND n.mode='competitive'"),
+            n("SELECT COUNT(*) AS n FROM monitor_state WHERE key LIKE 'roster_backfill:unavailable:%'"),
+            n("SELECT COUNT(DISTINCT n.match_id) AS n FROM notifications n WHERE n.riot_id='Dolly#SDGs' AND n.mode='competitive' AND NOT EXISTS(SELECT 1 FROM valorant_match_rosters r WHERE r.match_id=n.match_id) AND NOT EXISTS(SELECT 1 FROM monitor_state s WHERE s.key='roster_backfill:unavailable:'||n.match_id)"),
+            n("SELECT COUNT(DISTINCT r.match_id) AS n FROM valorant_match_rosters r,json_each(r.players_json) p JOIN notifications n ON n.match_id=r.match_id WHERE n.riot_id='Dolly#SDGs' AND n.mode='competitive' AND lower(json_extract(p.value,'$.name'))='abema' AND lower(json_extract(p.value,'$.tag'))='ttv'"),
+            n("SELECT COUNT(*) AS n FROM valorant_match_rosters WHERE match_id='88e69e18-6b40-4572-84fb-4f09fe4f463b'"),
+            q("SELECT value FROM monitor_state WHERE key='roster_backfill:enabled'")
+          ]);
+          console.log('VDK_FULL_RESTORATION '+JSON.stringify({total,restored:done,unavailable:failed,
+            remainingUnknown:remaining,abemaPresentInRestored:abema,knownCorrodeSaved:three===1,
+            finishState:marker[0]?.value??null,runnerReason:reason,attempts:stats,
+            noAbemaNoticesOrKp:true}));
+          if(done+failed<total)console.log('PARTIAL_RESTORATION_PROVIDER_OR_TIME_LIMIT; scheduled archive remains enabled');
+          NODE
