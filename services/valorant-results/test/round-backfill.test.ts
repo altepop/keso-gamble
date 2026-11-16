@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
 import {readFileSync} from 'node:fs';
 import {URL as NodeURL} from 'node:url';
-import {backfillVdkRoundEvents,ROUND_BACKFILL_SWITCH} from '../src/round-backfill.ts';
+import {backfillVdkRoundEvents,resumeVdkRoundBackfill,ROUND_BACKFILL_SWITCH} from '../src/round-backfill.ts';
 import type {Match} from '../src/results.ts';
 
 const start=Date.parse('2026-11-12T05:00:00Z'),end=start+1200000,now=Date.parse('2026-11-16T12:00:00Z');
@@ -140,5 +140,45 @@ test('old completed opt-in does not fetch unarchived matches',async()=>{
   assert.equal(fetched,0);
   assert.equal((f.sql.prepare('SELECT value FROM monitor_state WHERE key=?')
     .get(ROUND_BACKFILL_SWITCH) as {value:string}).value,'repaired');
+ }finally{f.close()}
+});
+
+test('historical alias is not skipped when current tracked PUUID differs',async()=>{
+ const f=fixture();try{
+  f.enable();
+  // Previously this caused "complete" while the archived match remained absent.
+  f.sql.prepare("UPDATE tracked_players SET puuid=? WHERE riot_id='Dolly#SDGs'")
+    .run('different-current-puuid');
+  let fetched=0;
+  const r=await backfillVdkRoundEvents(f.db,async(region,id)=>{
+    fetched++;
+    assert.equal(region,'ap');
+    assert.equal(id,'match-one');
+    return match(id);
+  },now);
+  assert.equal(r.status,'saved');
+  assert.equal(fetched,1);
+  assert.equal(f.count('valorant_match_round_events'),1);
+  assert.equal(f.count('kp_events'),0);
+  assert.equal(f.count('notifications'),0);
+ }finally{f.close()}
+});
+
+test('resume requires a previously opted-in completion; never starts a fresh task',async()=>{
+ const f=fixture();try{
+  assert.equal(await resumeVdkRoundBackfill(f.db),'not_opted_in');
+  assert.equal(f.count('monitor_state'),0);
+  f.sql.prepare('INSERT INTO monitor_state VALUES(?,?)')
+    .run(ROUND_BACKFILL_SWITCH,'unrelated');
+  assert.equal(await resumeVdkRoundBackfill(f.db),'not_opted_in');
+  assert.equal((f.sql.prepare('SELECT value FROM monitor_state WHERE key=?')
+    .get(ROUND_BACKFILL_SWITCH) as {value:string}).value,'unrelated');
+  f.sql.prepare("UPDATE monitor_state SET value='repaired' WHERE key=?")
+    .run(ROUND_BACKFILL_SWITCH);
+  assert.equal(await resumeVdkRoundBackfill(f.db),'resumed');
+  assert.equal(await resumeVdkRoundBackfill(f.db),'already_running');
+  assert.equal((await backfillVdkRoundEvents(f.db,async()=>match(),now)).status,'saved');
+  assert.equal(f.count('kp_events'),0);
+  assert.equal(f.count('notifications'),0);
  }finally{f.close()}
 });

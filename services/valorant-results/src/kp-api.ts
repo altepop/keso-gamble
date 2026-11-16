@@ -51,7 +51,8 @@ import {transcendentGodPullPost} from './relic-god-pull.ts';
 import { hydrateMleague, placeMlBet } from '../../../js/mleague.js';
 import { kpRewardHistory } from './kp-reward-history.ts';
 import { healthReport } from './health.ts';
-import { readCoachRoundReport } from './coach-round-analysis.ts';
+import {readCoachRoundReport,invalidateCoachRoundReport} from './coach-round-analysis.ts';
+import {resumeVdkRoundBackfill} from './round-backfill.ts';
 import { mlActivityView, mlClosed, mlData, mlLineupTimes, mlResults, seasonStats } from './mleague.ts';
 import { racingView, raceSeed } from './racing-kp.ts';
 import { defaultRoastLevel, validRoastLevel } from './racing-crowns.ts';
@@ -407,11 +408,21 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping,deferP
   const token=/^Bearer ([a-f0-9]{48})$/.exec(request.headers.get('Authorization')??'')?.[1];
   const owner=token?await kpSession(env,token):null;
   if(!owner||owner.guild!==mapping.guildId||!await isKpParticipant(env,mapping,owner.user))return response({error:'接続が切れました。/valo status のコードで接続してください。'},401);
-  // Explicit authenticated read only. Not included in wallet polling or scheduled jobs.
-  // Never return opponents, PUUIDs, match IDs, or raw event timelines.
+  // The report remains read-only. Operational reactivation is an explicit
+  // one-time user action restricted to the server-linked Dolly KP account.
+  // Do not infer permission from a Riot ID typed by the browser.
+  const coachOwner=mapping.accounts.some(a=>a.discordUserId===owner.user&&a.riotId.toLowerCase()==='dolly#sdgs');
   if(request.method==='GET'&&path==='/api/kp/coach/rounds'){
     if(await d1OptionalMode(env))return response({error:'D1節約モード中です。時間を置いてから確認してください。'},429);
-    return response(await readCoachRoundReport(env.DB));
+    return response({...await readCoachRoundReport(env.DB),canResume:coachOwner});
+  }
+  if(request.method==='POST'&&path==='/api/kp/coach/backfill/resume'){
+    if(!coachOwner)return response({error:'VDK本人の連携口座からのみ再開できる。'},403);
+    if(await d1OptionalMode(env))return response({error:'D1節約モード中のため再開できない。'},429);
+    const result=await resumeVdkRoundBackfill(env.DB);
+    if(result==='not_opted_in')return response({error:'過去に許可された補完設定がない。管理者による初回設定が必要だ。'},409);
+    invalidateCoachRoundReport(env.DB);
+    return response({status:result,note:'既存の5分間隔で、保存済みVDK競技試合のみを補完する。'});
   }
   if(path==='/api/kp/duels')return boardDuelApi(request,env,mapping,owner.user,headers);
   if(path.startsWith('/api/kp/steam/')){const r=await steamApi(request,env,owner,token!);return new Response(r.body,{status:r.status,headers:{...Object.fromEntries(r.headers),...headers}});}

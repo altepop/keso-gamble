@@ -6,12 +6,16 @@ const TARGET='Dolly#SDGs';
 const PREFIX='coach_round_backfill:';
 export type RoundBackfillStatus='disabled'|'cooldown'|'deferred'|'complete'|'saved'|'unavailable';
 export interface RoundBackfillOutcome{status:RoundBackfillStatus;matchId?:string}
+// Do not require the historical roster PUUID to equal the current tracked
+// profile PUUID. Riot aliases and account re-linking may change independently.
+// The request is still confined to known Dolly#SDGs competitive rosters and
+// is verified against the immutable match ID and finish time before archival.
 const candidate=`SELECT r.match_id,t.region,r.ended_at FROM valorant_match_rosters r
  JOIN json_each(r.players_json) p
  JOIN tracked_players t ON t.riot_id=?
  WHERE json_extract(p.value,'$.name')='Dolly'
  AND json_extract(p.value,'$.tag')='SDGs'
- AND json_extract(p.value,'$.puuid')=t.puuid
+
  AND r.ended_at<?
  AND NOT EXISTS(SELECT 1 FROM valorant_match_round_events e WHERE e.match_id=r.match_id
  AND e.rounds_json IS NOT NULL AND e.kills_json IS NOT NULL)
@@ -25,7 +29,7 @@ const remaining=`SELECT COUNT(*) AS n FROM valorant_match_rosters r
  JOIN tracked_players t ON t.riot_id=?
  WHERE json_extract(p.value,'$.name')='Dolly'
  AND json_extract(p.value,'$.tag')='SDGs'
- AND json_extract(p.value,'$.puuid')=t.puuid
+
  AND NOT EXISTS(SELECT 1 FROM valorant_match_round_events e WHERE e.match_id=r.match_id
  AND e.rounds_json IS NOT NULL AND e.kills_json IS NOT NULL)
  AND (?=0 OR EXISTS(SELECT 1 FROM valorant_match_round_events p
@@ -85,4 +89,17 @@ export async function backfillVdkRoundEvents(db:D1Database,fetchDetail:(region:s
   await state(db,PREFIX+(missing?'unavailable:':'defer:')+row.match_id,missing?'404':String(now+30*60_000));
   return {status:missing?'unavailable':'deferred',matchId:row.match_id};
  }
+}
+
+export async function resumeVdkRoundBackfill(db:D1Database):Promise<'resumed'|'already_running'|'not_opted_in'>{
+ // Only reopen a previously authorized task. The authenticated route must
+ // separately verify the caller owns the Dolly#SDGs linked KP account.
+ const changed=await db.prepare(`UPDATE monitor_state
+  SET value='Dolly#SDGs'
+  WHERE key=? AND value IN ('complete','repaired')`)
+  .bind(ROUND_BACKFILL_SWITCH).run();
+ if(Number(changed.meta.changes??0)>0)return 'resumed';
+ const row=await db.prepare('SELECT value FROM monitor_state WHERE key=?')
+  .bind(ROUND_BACKFILL_SWITCH).first<{value:string}>();
+ return row?.value===TARGET?'already_running':'not_opted_in';
 }

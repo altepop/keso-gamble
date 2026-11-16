@@ -231,6 +231,7 @@ type CoachReport=ReturnType<typeof summarizeCoachRounds>&{
  coachingNotes:ReturnType<typeof coachNotes>;
 };
 const readCache=new WeakMap<object,{until:number;value:CoachReport}>();
+export function invalidateCoachRoundReport(db:D1Database){readCache.delete(db);}
 export async function readCoachRoundReport(db:D1Database,now=Date.now()){
  const cached=readCache.get(db);
  if(cached&&now<cached.until)return cached.value;

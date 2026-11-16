@@ -75,6 +75,8 @@ tr:last-child td{border-bottom:0}
 <p class="muted small">完全保存・一部欠損・未取得を区別する。数字は更新時点でのD1保存状況であり、取得元に存在しないデータは補わない。</p>
 <div class="cards" id="backfill-counts"></div>
 <p id="backfill-message" class="small muted"></p>
+<div class="actions"><button id="resume-backfill" type="button" hidden>未取得試合の補完を再開</button></div>
+<p id="resume-explain" class="small muted" hidden>VDK本人の連携口座から、以前許可した試合補完を再開する。5分に最大1試合、保存済みの競技試合だけを取得する。KP・通知・勝敗予想は変更しない。</p>
 </section>
 <section class="panel">
 <h2>次の試合で意識すること</h2>
@@ -148,6 +150,9 @@ $('review-rounds').innerHTML=reviews.length?reviews.map((r,i)=>`
  <p class="small muted">${r.firstKiller?'最初の撃破：'+escape(r.firstKiller)+' · ':''}${escape(r.focus)}</p>
  </article>`).join(''):'<p class="empty">条件を満たす見直しラウンドがまだない。</p>';
 const b=data.backfill||null;
+const resumeAllowed=Boolean(data.canResume&&b&&b.status==='complete'&&b.pending>0);
+$('resume-backfill').hidden=!resumeAllowed;
+$('resume-explain').hidden=!resumeAllowed;
 if(b){
   $('backfill-counts').innerHTML=card('完全保存',int(b.complete),'ラウンドとキルの双方あり')
     +card('一部欠損',int(b.partial),'いずれかのデータが不足')
@@ -253,6 +258,21 @@ $('share').addEventListener('click',async()=>{
    const area=$('share-fallback');area.value=text;area.hidden=false;area.focus();area.select();
    setStatus('自動コピーできない環境だ。表示した診断レポートを選択してコピーしてほしい。');
  }
+});
+$('resume-backfill').addEventListener('click',async()=>{
+ if(busy)return;
+ const b=$('resume-backfill');b.disabled=true;
+ try{
+   setStatus('既存の補完設定を確認中…');
+   const tokenValue=token();
+   if(!tokenValue)throw Error('接続が切れている。再ログインしてほしい。');
+   const r=await request('/api/kp/coach/backfill/resume',{
+     method:'POST',headers:{Authorization:'Bearer '+tokenValue}});
+   await load();
+   setStatus(r.status==='resumed'?'補完を再開した。次の定期処理から5分に最大1試合ずつ取得する。':
+     '補完は既に有効だ。データの反映を確認してほしい。');
+ }catch(e){setStatus(e.message||'再開できなかった。',true);}
+ finally{b.disabled=false}
 });
 $('reload').addEventListener('click',load);
 $('connect-form').addEventListener('submit',async event=>{
