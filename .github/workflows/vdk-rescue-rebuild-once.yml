@@ -1,0 +1,32 @@
+name: Build VDK rescue activity browser cache (one-time)
+on:
+  push:
+    branches: [feat/vdk-rescue-episode]
+    paths:
+      - .github/workflows/vdk-rescue-rebuild-once.yml
+permissions:
+  contents: write
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/vdk-rescue-episode
+          persist-credentials: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: node --test tests/vdk-rescue.test.js
+      - run: npm run build:activity && npm run check:activity
+      - name: Update release hashes in branch; delete one-shot helper
+        run: |
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git add js css index.html
+          git rm .github/workflows/vdk-rescue-rebuild-once.yml
+          git commit -m "build: refresh VDK rescue recon coaching activity release"
+          git push origin HEAD:refs/heads/feat/vdk-rescue-episode
