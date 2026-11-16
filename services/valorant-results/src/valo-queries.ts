@@ -43,7 +43,7 @@ const help = `📖 コマンド一覧
 /valo week [player] [mode]：今週の成績（月曜から）
 /valo act [player] [mode]：最新ACTの勝敗・勝率・連勝連敗
 /valo recent player [mode]：直近3試合と個人成績
-/valo coach player [partner]：保存済みコンペの人数・勝敗・指定相手との同チーム分析
+/valo coach [player] [partner]：VDKの改善検証（省略するとVDK＋Abemaを分析）
 /valo pair player partner [mode]：最新ACTの同チーム成績
 /valo versus player partner [mode]：最新ACTの直接対決
 /valo compare player partner [mode]：最新ACTの2人成績比較
@@ -81,12 +81,14 @@ export async function runValoCommand(db: D1Database, interaction: Interaction, p
       && !players.some(player => player.riotId === values[key])) return '対象者は登録済みの選択肢から選んでください。';
   }
   const twoPlayers = ['pair', 'versus', 'compare'].includes(action.name);
-  if (((action.name === 'recent' || action.name === 'coach' || twoPlayers) && !values.player) || (twoPlayers && !values.partner)) return '対象者を指定してください。';
+  if (((action.name === 'recent' || twoPlayers) && !values.player) || (twoPlayers && !values.partner)) return '対象者を指定してください。';
   if (twoPlayers && values.player === values.partner) return 'ペアは異なる2人を選んでください。';
   if (action.name === 'coach') {
     if (values.mode) return 'コーチング集計はコンペのみ対応しています。';
     if (values.partner && !/^[^#\r\n]{1,40}#[^#\r\n]{1,16}$/.test(values.partner)) return '相手のRiot IDは Name#Tag の形式で指定してください。';
-    return archivedCoachingReport(db, values.player, values.partner || (values.player === 'Dolly#SDGs' ? 'Abema#ttv' : null));
+    const focus=values.player || 'Dolly#SDGs';
+    if(!players.some(player=>player.riotId===focus))return 'VDKの監視設定がまだ利用できません。';
+    return archivedCoachingReport(db, focus, values.partner || (focus === 'Dolly#SDGs' ? 'Abema#ttv' : null));
   }
   if (action.name === 'help') return help;
   if (!players.length) return '対象者が登録されていません。';
