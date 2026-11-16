@@ -131,8 +131,7 @@ test('per-player opening rounds distinguish a fast loss, a fast reply and an FK 
 test('a support player absent from a match, and missing kill timelines, are not called zero FK rate',()=>{
  const a=fixture('one','Abyss','Omen','Gekko',[{r:0,winner:'Blue'}],
   [{r:0,t:1000,killer:'p5',victim:'p1'}]);
- const b=fixture('two','Lotus','Skye','Clove',[{r:0,winner:'Blue'}],[]);
- b.kills_json=null;
+ const b={...fixture('two','Lotus','Skye','Clove',[{r:0,winner:'Blue'}],[]),kills_json:null};
  const report=summarizeCoachRounds([a,b]);
  const vdk=report.individual.find(p=>p.player==='VDK')!;
  assert.equal(vdk.matches,2);
