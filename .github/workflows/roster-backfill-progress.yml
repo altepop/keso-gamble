@@ -34,6 +34,8 @@ jobs:
            q("SELECT value FROM monitor_state WHERE key='roster_backfill:enabled'"),
            q("SELECT value FROM monitor_state WHERE key='roster_backfill:last_saved'")
           ]);
+          const workerState=await q("SELECT key,substr(value,1,100) AS value FROM monitor_state WHERE key IN ('monitor_started','monitor_finished','api_after','roster_backfill:enabled','roster_backfill:last_saved') OR key LIKE 'roster_backfill:defer:%' OR key LIKE 'roster_backfill:unavailable:%' ORDER BY key LIMIT 80");
+          console.log('VDK_BACKFILL_WORKER_STATE '+JSON.stringify(workerState));
           console.log('VDK_BACKFILL_PROGRESS '+JSON.stringify({eligible:scope,archived:saved,
             abemaKnownRiotIdMatches:abema,sharedCorrodeExampleArchived:known===1,
             unavailable,temporarilyDeferred:deferred,enabledStatus:flag[0]?.value??'absent',
