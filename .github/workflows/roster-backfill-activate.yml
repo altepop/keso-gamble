@@ -1,6 +1,8 @@
 name: Historical roster backfill activation (manual staging)
 on:
-  workflow_dispatch:
+  push:
+    branches: [audit/kobayashi-live-20261116]
+    paths: ['.github/workflows/roster-backfill-activate.yml']
 permissions: {contents: read}
 jobs:
   enable:
