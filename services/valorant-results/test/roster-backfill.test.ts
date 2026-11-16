@@ -64,7 +64,7 @@ test('enabled: archives exactly one known match, including silent Abema, without
 test('404 is marked unavailable, not interpreted as player absence, and never loops',async()=>{
  const f=fixture();try{
   f.enable();let calls=0;
-  const fetch=async()=>{calls++;throw Error('Match API HTTP 404')} as unknown as (region:string,id:string)=>Promise<Match>;
+  const fetch=async(_region:string,_id:string):Promise<Match>=>{calls++;throw Error('Match API HTTP 404')};
   assert.equal((await backfillRecordedVdkMatches(f.db,fetch,now)).status,'unavailable');
   assert.equal((await backfillRecordedVdkMatches(f.db,fetch,now)).status,'complete');
   assert.equal(calls,1);assert.equal(f.count('valorant_match_rosters'),0);
