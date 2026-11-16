@@ -87,3 +87,5 @@ jobs:
           NODE
 
 # Recheck after first scheduled archival window.
+
+# Verify currently recovered historical match rosters before one-off acceleration.
