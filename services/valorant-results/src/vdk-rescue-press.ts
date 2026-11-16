@@ -33,7 +33,7 @@ async function ensure(env:Env){
 function webhook(env:Env){
  if(!env.VDK_RESCUE_WEBHOOK_URL)return null;
  const url=new URL(env.VDK_RESCUE_WEBHOOK_URL);
- if(url.protocol!=='https:'||url.hostname!=='discord.com'||!/^\\/api\\/webhooks\\/\\d{15,22}\\/[A-Za-z0-9._-]+\\/?$/.test(url.pathname))return null;
+ if(url.protocol!=='https:'||url.hostname!=='discord.com'||!/^\/api\/webhooks\/\d{15,22}\/[A-Za-z0-9._-]+\/?$/.test(url.pathname))return null;
  return url;
 }
 export async function vdkRescuePress(env:Env,request:typeof fetch=fetch,now=Date.now()){
@@ -57,7 +57,7 @@ export async function vdkRescuePress(env:Env,request:typeof fetch=fetch,now=Date
   receipt.httpStatus=response.status;
   if(response.ok){
    const msg=await response.json() as {id?:string;channel_id?:string;content?:string};
-   if(/^\\d{15,22}$/.test(msg.id??'')&&msg.channel_id===VDK_RESCUE_CHANNEL&&msg.content===VDK_RESCUE_BODY){
+   if(/^\d{15,22}$/.test(msg.id??'')&&msg.channel_id===VDK_RESCUE_CHANNEL&&msg.content===VDK_RESCUE_BODY){
     receipt.state='posted';receipt.channelId=msg.channel_id;receipt.messageId=msg.id;
    }else receipt.state='unknown';
   }else receipt.state=response.status>=400&&response.status<500?'rejected':'unknown';
