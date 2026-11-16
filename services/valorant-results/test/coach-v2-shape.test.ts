@@ -4,6 +4,7 @@ import {classifyV2Shape} from '../src/coach-v2-shape.ts';
 test('v2 shape diagnostics distinguish absent, empty and nested kill events',()=>{
  assert.equal(classifyV2Shape(null),'no_payload');
  assert.equal(classifyV2Shape({metadata:{}}),'no_kill_array');
+ assert.equal(classifyV2Shape({data:{kills:[{}],metadata:{},players:{}}}),'wrapped_data');
  assert.equal(classifyV2Shape({kills:[]}), 'empty_kill_array');
  assert.equal(classifyV2Shape({rounds:[{player_stats:[{kill_events:[{}]}]}]}),'nested_round_events');
  assert.equal(classifyV2Shape({rounds:[{kill_events:[]}]}),'nested_round_events');
