@@ -51,6 +51,8 @@ test('opt in: backfills only known VDK match and completes without duplicates',a
   const fetch=async(region:string,id:string)=>{requests++;assert.equal(region,'ap');assert.equal(id,'match-one');return match(id)};
   assert.equal((await backfillVdkRoundEvents(f.db,fetch,now)).status,'saved');
   assert.equal((await backfillVdkRoundEvents(f.db,fetch,now)).status,'complete');
+  // The compatibility pass inspects previously partial archives once.
+  assert.equal((await backfillVdkRoundEvents(f.db,fetch,now)).status,'complete');
   assert.equal((await backfillVdkRoundEvents(f.db,fetch,now)).status,'disabled');
   assert.equal(requests,1);
   assert.equal(f.count('valorant_match_round_events'),1);
