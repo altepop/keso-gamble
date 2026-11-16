@@ -69,6 +69,12 @@ tr:last-child td{border-bottom:0}
 <div id="report" hidden>
 <section class="cards" id="totals" aria-label="補完状況の概要"></section>
 <section class="panel">
+<h2>44試合の補完状況</h2>
+<p class="muted small">完全保存・一部欠損・未取得を区別する。数字は更新時点でのD1保存状況であり、取得元に存在しないデータは補わない。</p>
+<div class="cards" id="backfill-counts"></div>
+<p id="backfill-message" class="small muted"></p>
+</section>
+<section class="panel">
 <h2>次の試合で意識すること</h2>
 <p class="muted small">取得済みログから作成する観察・録画確認の提案だ。キルの順序だけで「戦犯」やポジションミスとは断定しない。</p>
 <div id="coach-notes"></div>
@@ -136,6 +142,22 @@ $('review-rounds').innerHTML=reviews.length?reviews.map((r,i)=>`
  <p class="small">${escape(r.evidence)}</p>
  <p class="small muted">${r.firstKiller?'最初の撃破：'+escape(r.firstKiller)+' · ':''}${escape(r.focus)}</p>
  </article>`).join(''):'<p class="empty">条件を満たす見直しラウンドがまだない。</p>';
+const b=data.backfill||null;
+if(b){
+  $('backfill-counts').innerHTML=card('完全保存',int(b.complete),'ラウンドとキルの双方あり')
+    +card('一部欠損',int(b.partial),'いずれかのデータが不足')
+    +card('未取得',int(b.missing),'保存レコードなし')
+    +card('取得不可',int(b.unavailable),'一部欠損・未取得と重複');
+  const state=b.status==='running'?'補完処理は有効':
+    b.status==='complete'?'補完処理は終了':'補完処理は無効';
+  const next=b.pending>0?' 未処理：'+int(b.pending)+'試合。':'';
+  const exception=b.status!=='running'&&b.pending>0?
+    ' 未処理分は自動取得されない。管理者が補完設定を確認する必要がある。':'';
+  $('backfill-message').textContent=state+'。'+next+exception;
+}else{
+  $('backfill-counts').innerHTML='<p class="empty">補完状況を取得できない。</p>';
+  $('backfill-message').textContent='APIの更新状況を確認してほしい。';
+}
 const maps=data.maps||[];
 $('maps').innerHTML=maps.length?simpleTable(
  ['マップ','試合','ラウンド','味方FK','FK後勝利','FK後敗北','FK後勝率'],
