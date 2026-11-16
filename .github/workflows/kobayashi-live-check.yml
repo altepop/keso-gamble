@@ -1,0 +1,49 @@
+name: Kobayashi post-deploy verification (read-only)
+on:
+  push:
+    branches: [audit/kobayashi-live-20261116]
+    paths: ['.github/workflows/kobayashi-live-check.yml']
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Read D1 monitoring, KP mapping and match-roster state (no writes)
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          node --input-type=module <<'NODE'
+          const db='bf23ab40-814f-4626-9e0b-36739ac41750';
+          const account=process.env.CF_ACCOUNT, token=process.env.CF_TOKEN;
+          if(!account||!token)throw Error('D1 credentials missing');
+          const url='https://api.cloudflare.com/client/v4/accounts/'+account+'/d1/database/'+db+'/query';
+          async function select(sql,params=[]){
+           if(!/^SELECT\\s/i.test(sql.trim()))throw Error('SELECT only');
+           const res=await fetch(url,{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({sql,params}),signal:AbortSignal.timeout(22000)});
+           if(!res.ok)throw Error('Cloudflare HTTP '+res.status);
+           const data=await res.json();
+           if(!data.success||!data.result?.[0]?.success)throw Error('D1 query rejected: '+String(data.errors?.[0]?.message??'unknown').slice(0,110));
+           return data.result[0].results;
+          }
+          const n=async(sql,params=[])=>Number((await select(sql,params))[0]?.n??0);
+          const registered=await n("SELECT COUNT(*) AS n FROM tracked_players WHERE lower(riot_id)=?",['mecael#2489']);
+          const preserved=await n("SELECT COUNT(*) AS n FROM tracked_players WHERE riot_id IN (?,?,?,?)",['Aquatopia#toppy','Dolly#SDGs','frin#怖すぎ','h1d3g1g4s#1037']);
+          const count=await n('SELECT COUNT(*) AS n FROM tracked_players');
+          const kpLinked=await n("SELECT COUNT(*) AS n FROM kp_accounts WHERE lower(riot)=? AND user=?",['mecael#2489','827801943928995840']);
+          const kpOwners=await n("SELECT COUNT(*) AS n FROM kp_accounts WHERE lower(riot)=?",['mecael#2489']);
+          const notificationCount=await n("SELECT COUNT(*) AS n FROM notifications WHERE lower(riot_id)=?",['mecael#2489']);
+          const kpEventCount=await n("SELECT COUNT(*) AS n FROM kp_events WHERE lower(puuid) IN (SELECT lower(puuid) FROM tracked_players WHERE lower(riot_id)=?)",['mecael#2489']);
+          const table=await n("SELECT COUNT(*) AS n FROM sqlite_master WHERE type='table' AND name='valorant_match_rosters'");
+          const saved=table?await n('SELECT COUNT(*) AS n FROM valorant_match_rosters'):0;
+          const ten=table?await n("SELECT COUNT(*) AS n FROM valorant_match_rosters WHERE json_array_length(players_json)=10"):0;
+          console.log('KOBAYASHI_LIVE_AUDIT '+JSON.stringify({
+           monitoredCount:count,fourOriginalAccountsPreserved:preserved===4,
+           kobayashiMonitorRegistered:registered===1,kobayashiCorrectKpOwnerLinked:kpLinked===1,
+           kobayashiKpAccountRows:kpOwners,noticeRows:notificationCount,kpEventRows:kpEventCount,
+           participantTableExists:table===1,participantSnapshots:saved,validTenParticipantSnapshots:ten,
+           note:'No fake matches, notices or KP grants have been created. New account starts with its registration time.'
+          }));
+          NODE
