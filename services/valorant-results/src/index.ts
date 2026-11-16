@@ -25,6 +25,7 @@ import {recordCompetitiveRoster} from './match-rosters.ts';
 import {recordCompetitiveRoundEvents} from './round-events.ts';
 import {backfillRecordedVdkMatches} from './roster-backfill.ts';
 import {backfillVdkRoundEvents} from './round-backfill.ts';
+import {recoverVdkV2Kills,type LegacyV2} from './coach-v2-recovery.ts';
 import {monitorSteam} from './steam-rewards.ts';
 import {readModeNote} from './mode-rewards.ts';
 import {skirmishResultButtons} from './skirmish.ts';
@@ -644,6 +645,11 @@ export default {
         const outcome=await backfillVdkRoundEvents(env.DB,
           (region,id)=>api<Match>(env,'/valorant/v4/match/'+encodeURIComponent(region)+'/'+encodeURIComponent(id)));
         if(outcome.status!=='disabled')console.info('coach_round_backfill_result',{status:outcome.status});
+        // The v4 source lacked kills for one already-opted-in archived match.
+        // Run at most one v2 lookup from the same Cron slot after v4 is sealed.
+        const legacy=await recoverVdkV2Kills(env.DB,
+          (id)=>api<LegacyV2>(env,'/valorant/v2/match/'+encodeURIComponent(id)));
+        if(legacy!=='disabled')console.info('coach_v2_recovery_result',{status:legacy});
       }));
     // Read-only ping on the existing Cron, no D1 and no new scheduled trigger.
     if(Math.floor((_event.scheduledTime??Date.now())/60_000)%5===0)
