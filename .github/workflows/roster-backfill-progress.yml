@@ -1,0 +1,41 @@
+name: VDK roster restoration progress (read-only)
+on:
+  push:
+    branches: [audit/kobayashi-live-20261116]
+    paths: ['.github/workflows/roster-backfill-progress.yml']
+permissions: {contents: read}
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Count verified rosters, Abema appearances and unavailable match details
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          node --input-type=module <<'NODE'
+          const url='https://api.cloudflare.com/client/v4/accounts/'+process.env.CF_ACCOUNT+'/d1/database/bf23ab40-814f-4626-9e0b-36739ac41750/query';
+          async function q(sql,params=[]){
+           if(!/^(SELECT|WITH)\s/i.test(sql.trim()))throw Error('Read-only only');
+           const response=await fetch(url,{method:'POST',headers:{Authorization:'Bearer '+process.env.CF_TOKEN,'Content-Type':'application/json'},body:JSON.stringify({sql,params}),signal:AbortSignal.timeout(20000)});
+           if(!response.ok)throw Error('D1 HTTP '+response.status);
+           const data=await response.json();if(!data.success||!data.result?.[0]?.success)throw Error('D1 read failed');
+           return data.result[0].results;
+          }
+          const n=async(s,p=[])=>Number((await q(s,p))[0]?.n??0);
+          const [scope,saved,abema,known,unavailable,deferred,flag,last]=await Promise.all([
+           n("SELECT COUNT(DISTINCT match_id) AS n FROM notifications WHERE riot_id='Dolly#SDGs' AND mode='competitive'"),
+           n('SELECT COUNT(*) AS n FROM valorant_match_rosters'),
+           n("SELECT COUNT(DISTINCT r.match_id) AS n FROM valorant_match_rosters r,json_each(r.players_json) p WHERE lower(json_extract(p.value,'$.name'))='abema' AND lower(json_extract(p.value,'$.tag'))='ttv'"),
+           n("SELECT COUNT(*) AS n FROM valorant_match_rosters WHERE match_id='88e69e18-6b40-4572-84fb-4f09fe4f463b'"),
+           n("SELECT COUNT(*) AS n FROM monitor_state WHERE key LIKE 'roster_backfill:unavailable:%'"),
+           n("SELECT COUNT(*) AS n FROM monitor_state WHERE key LIKE 'roster_backfill:defer:%' AND CAST(value AS INTEGER)>?",[Date.now()]),
+           q("SELECT value FROM monitor_state WHERE key='roster_backfill:enabled'"),
+           q("SELECT value FROM monitor_state WHERE key='roster_backfill:last_saved'")
+          ]);
+          console.log('VDK_BACKFILL_PROGRESS '+JSON.stringify({eligible:scope,archived:saved,
+            abemaKnownRiotIdMatches:abema,sharedCorrodeExampleArchived:known===1,
+            unavailable,temporarilyDeferred:deferred,enabledStatus:flag[0]?.value??'absent',
+            hasSavedMatch:Boolean(last.length),caution:'Matching historical name/tag is not the same as globally stable PUUID; missing match is unknown'}));
+          NODE
