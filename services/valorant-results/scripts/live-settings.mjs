@@ -82,6 +82,11 @@ export async function prepareLiveSettings(directory,env=process.env,request=fetc
   const kpConnected=/from ['"]\.\/kp(?:-api)?\.ts['"]/.test(entry);
   const sealed=kpConnected?JSON.parse(readFileSync(resolve(directory,'kp-bootstrap.encrypted.json'),'utf8')):null;
   if(kpConnected&&(!sealed||sealed.version!==1||!sealed.ciphertext||!sealed.wrappedKey||!/^[a-f0-9]{64}$/.test(sealed.keyFingerprint)))throw Error('Encrypted private KP bootstrap is required before wallet deployment');
+  if(kpConnected){
+    const extra=JSON.parse(readFileSync(resolve(directory,'kp-extra-accounts.encrypted.json'),'utf8'));
+    if(extra.version!==1||extra.keyFingerprint!==sealed.keyFingerprint||!extra.wrappedKey||!extra.ciphertext||!extra.iv)
+      throw Error('Additional account envelope does not match the existing KP key');
+  }
   const base=`https://api.cloudflare.com/client/v4/accounts/${account}/workers/scripts/${worker}`;
   async function get(path,json=true) {
     const response=await request(base+path,{headers:{Authorization:`Bearer ${token}`},signal:AbortSignal.timeout(30000)});
@@ -105,10 +110,16 @@ export async function prepareLiveSettings(directory,env=process.env,request=fetc
   } else if (/javascript/.test(content.headers.get('content-type')??'')) sources=[await content.text()];
   if (sources.length!==1) throw Error('Expected one deployed JavaScript module; refusing to guess configuration');
   const {players,discord}=extractSettings(sources[0]);
+  // Keep the deployed roster unchanged, except for the explicitly approved
+  // standard notification/KP account. The silent Kobe subaccount is not added.
+  const kobayashi={riotId:'mecael#2489',name:'小林'};
+  const mergedPlayers=players.some(p=>p.riotId.toLowerCase()===kobayashi.riotId.toLowerCase())
+    ? players : [...players,kobayashi];
+  if(mergedPlayers.length>5)throw Error('Monitored player limit reached; refuse to evict existing players');
   const wrangler=deploymentConfig(settings,Array.isArray(scheduleResult)?scheduleResult:scheduleResult.schedules,worker);
   // Only these two JSON imports are used by the active monitor/Interactions entry.
   // The unpublished account mapping is not inferred, synced or uploaded to D1.
-  for (const [file,value] of Object.entries({'players.json':players,'discord-config.json':discord,'wrangler.jsonc':wrangler,'reward-accounts.json':{guildId:discord.guildId,accounts:[]}}))
+  for (const [file,value] of Object.entries({'players.json':mergedPlayers,'discord-config.json':discord,'wrangler.jsonc':wrangler,'reward-accounts.json':{guildId:discord.guildId,accounts:[]}}))
     writeFileSync(resolve(directory,file),JSON.stringify(value,null,2)+'\n',{mode:0o600});
   console.log('Recovered live monitor/Discord/DB/cron configuration. No private values logged.');
 }
