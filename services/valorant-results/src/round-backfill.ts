@@ -24,6 +24,23 @@ const candidate=`SELECT r.match_id,t.region,r.ended_at FROM valorant_match_roste
  AND NOT EXISTS(SELECT 1 FROM monitor_state s WHERE s.key='coach_round_backfill:unavailable:'||r.match_id)
  AND NOT EXISTS(SELECT 1 FROM monitor_state s WHERE s.key='coach_round_backfill:defer:'||r.match_id AND CAST(s.value AS INTEGER)>?)
  ORDER BY r.ended_at DESC LIMIT 1`;
+// An older already-authorized task can safely re-check one upstream
+// missing-kills response once. Never include unarchived games, 404s, or
+// a match with any other unavailable reason.
+const retryPreviouslyIncomplete=`SELECT r.match_id,t.region,r.ended_at
+ FROM valorant_match_rosters r
+ JOIN json_each(r.players_json) p
+ JOIN tracked_players t ON t.riot_id=?
+ JOIN valorant_match_round_events e ON e.match_id=r.match_id
+ WHERE json_extract(p.value,'$.name')='Dolly'
+  AND json_extract(p.value,'$.tag')='SDGs'
+  AND e.rounds_json IS NOT NULL AND e.kills_json IS NULL
+  AND r.ended_at<?
+  AND EXISTS(SELECT 1 FROM monitor_state s WHERE
+   s.key='coach_round_backfill:unavailable:'||r.match_id AND s.value='missing_kills')
+  AND NOT EXISTS(SELECT 1 FROM monitor_state s WHERE
+   s.key='coach_round_backfill:retry_once:'||r.match_id)
+ ORDER BY r.ended_at DESC LIMIT 1`;
 const remaining=`SELECT COUNT(*) AS n FROM valorant_match_rosters r
  JOIN json_each(r.players_json) p
  JOIN tracked_players t ON t.riot_id=?
@@ -40,21 +57,37 @@ async function state(db:D1Database,key:string,value:string){
 }
 export async function backfillVdkRoundEvents(db:D1Database,fetchDetail:(region:string,id:string)=>Promise<Match>,now=Date.now()):Promise<RoundBackfillOutcome>{
  const enabled=await db.prepare('SELECT value FROM monitor_state WHERE key=?').bind(ROUND_BACKFILL_SWITCH).first<{value:string}>();
- if(enabled?.value!==TARGET&&enabled?.value!=='complete')return {status:'disabled'};
- // Older versions marked the switch "complete" even with partially saved
- // matches. Repair ONLY those already-archived rows once, never new matches.
+ if(enabled?.value!==TARGET&&enabled?.value!=='complete'&&enabled?.value!=='repaired')
+  return {status:'disabled'};
+ // Already authorized historical archive: use one final attempt only for a
+ // partial missing-kills payload, never for 404 or a new match.
+ const retryOnly=enabled.value==='repaired';
  const repairOnly=enabled.value==='complete';
  const cooldown=await db.prepare("SELECT value FROM monitor_state WHERE key='api_after'").first<{value:string}>();
  if(Number(cooldown?.value??0)>now)return {status:'cooldown'};
- const row=await db.prepare(candidate).bind(TARGET,now-120_000,repairOnly?1:0,now)
-  .first<{match_id:string;region:string;ended_at:number}>();
+ const row=retryOnly?
+  await db.prepare(retryPreviouslyIncomplete).bind(TARGET,now-120_000)
+   .first<{match_id:string;region:string;ended_at:number}>():
+  await db.prepare(candidate).bind(TARGET,now-120_000,repairOnly?1:0,now)
+   .first<{match_id:string;region:string;ended_at:number}>();
  if(!row){
+  if(retryOnly){
+   await state(db,ROUND_BACKFILL_SWITCH,'rechecked');
+   return {status:'complete'};
+  }
   const left=await db.prepare(remaining).bind(TARGET,repairOnly?1:0).first<{n:number}>();
   if((left?.n??0)===0){
    await state(db,ROUND_BACKFILL_SWITCH,repairOnly?'repaired':'complete');
    return {status:'complete'};
   }
   return {status:'deferred'};
+ }
+ if(retryOnly){
+  // Claim atomically: overlapping Cron invocations must never both call Henrik.
+  // INSERT OR IGNORE preserves the original attempt marker on every later tick.
+  const claim=await db.prepare('INSERT OR IGNORE INTO monitor_state(key,value) VALUES(?,?)')
+   .bind(PREFIX+'retry_once:'+row.match_id,String(now)).run();
+  if(Number(claim.meta.changes??0)!==1)return {status:'deferred'};
  }
  try{
   const detail=await fetchDetail(row.region,row.match_id);
@@ -82,6 +115,11 @@ export async function backfillVdkRoundEvents(db:D1Database,fetchDetail:(region:s
    await state(db,PREFIX+'unavailable:'+row.match_id,missing);
    return {status:saved?'saved':'unavailable',matchId:row.match_id};
   }
+  // A late successful upstream response supersedes the previous
+  // missing-kills failure. Never keep a stale "unavailable" flag.
+  if(retryOnly)
+   await db.prepare('DELETE FROM monitor_state WHERE key=?')
+    .bind(PREFIX+'unavailable:'+row.match_id).run();
   return {status:'saved',matchId:row.match_id};
  }catch(error){
   const message=error instanceof Error?error.message:'';
@@ -96,7 +134,7 @@ export async function resumeVdkRoundBackfill(db:D1Database):Promise<'resumed'|'a
  // separately verify the caller owns the Dolly#SDGs linked KP account.
  const changed=await db.prepare(`UPDATE monitor_state
   SET value='Dolly#SDGs'
-  WHERE key=? AND value IN ('complete','repaired')`)
+  WHERE key=? AND value IN ('complete','repaired','rechecked')`)
   .bind(ROUND_BACKFILL_SWITCH).run();
  if(Number(changed.meta.changes??0)>0)return 'resumed';
  const row=await db.prepare('SELECT value FROM monitor_state WHERE key=?')

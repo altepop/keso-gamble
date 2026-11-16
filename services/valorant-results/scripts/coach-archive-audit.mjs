@@ -76,8 +76,8 @@ export async function auditCoachArchive(directory,env=process.env,request=fetch,
   historicalPuuidMismatch:number(row.historical_puuid_mismatch),
   eligibleBacklog:number(row.eligible_backlog),
   trackedProfileExists:Number(row.tracked_profile_exists)===1,
-  switchStatus:['Dolly#SDGs','complete','repaired'].includes(row.switch_value)
-    ?({ 'Dolly#SDGs':'running',complete:'complete',repaired:'repaired'})[row.switch_value]
+  switchStatus:['Dolly#SDGs','complete','repaired','rechecked'].includes(row.switch_value)
+    ?({ 'Dolly#SDGs':'running',complete:'complete',repaired:'repaired',rechecked:'rechecked'})[row.switch_value]
     :'disabled',
   cooldownActive:Number(row.api_cooldown_until??0)>now
  };
