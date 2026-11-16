@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
 import {readFileSync} from 'node:fs';
+import {URL as NodeURL} from 'node:url';
 import {recordCompetitiveRoster,compactCompetitiveRoster} from '../src/match-rosters.ts';
 import type {Match} from '../src/results.ts';
 
@@ -31,7 +32,7 @@ test('ignores noncompetitive, incomplete and malformed teams',()=>{
 });
 test('same match from two monitored players is stored once and survives later reads',async()=>{
  const sql=new DatabaseSync(':memory:');
- sql.exec(readFileSync(new URL('../migrations/0006_competitive_match_rosters.sql',import.meta.url),'utf8'));
+ sql.exec(readFileSync(new NodeURL('../migrations/0006_competitive_match_rosters.sql',import.meta.url),'utf8'));
  const db={prepare:(text:string)=>({bind:(...args:unknown[])=>({
     first:async()=>sql.prepare(text).get(...args as never[])??null,
     run:async()=>({meta:{changes:Number(sql.prepare(text).run(...args as never[]).changes)}})
