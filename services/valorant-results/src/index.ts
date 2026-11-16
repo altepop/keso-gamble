@@ -21,6 +21,7 @@ import {markDeliveredNotices} from './notification-delivery.ts';
 import {pendingNotificationMatches} from './notification-pending.ts';
 import {cleanupMonitorData} from './monitor-cleanup.ts';
 import {recordCompetitiveRoster} from './match-rosters.ts';
+import {backfillRecordedVdkMatches} from './roster-backfill.ts';
 import {monitorSteam} from './steam-rewards.ts';
 import {readModeNote} from './mode-rewards.ts';
 import {skirmishResultButtons} from './skirmish.ts';
@@ -620,6 +621,14 @@ export default {
   },
   async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
     if(escaPressActive(Date.now()))ctx.waitUntil(approvedEscalationPress(env).catch(()=>console.warn('approved_escalation_press_unknown')));
+    // The archival backfill is DB-opt-in and strictly isolated from notices and KP.
+    // At most one extra Henrik detail call per five minutes; stop automatically when complete.
+    if(Math.floor((_event.scheduledTime??Date.now())/60000)%5===2)
+      ctx.waitUntil(track(env,'roster_backfill',async()=>{
+        const outcome=await backfillRecordedVdkMatches(env.DB,
+          (region,id)=>api<Match>(env,'/valorant/v4/match/'+encodeURIComponent(region)+'/'+encodeURIComponent(id)));
+        if(outcome.status!=='disabled')console.info('roster_backfill_result',{status:outcome.status});
+      }));
     // Read-only ping on the existing Cron, no D1 and no new scheduled trigger.
     if(Math.floor((_event.scheduledTime??Date.now())/60_000)%5===0)
       ctx.waitUntil(musicKeepalive(env,musicDiscord.workerUrl)
