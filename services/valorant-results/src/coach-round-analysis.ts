@@ -226,6 +226,7 @@ export function summarizeCoachRounds(rows:readonly ArchivedRow[]){
 // Repeated Activity opens on one Worker isolate should not rescan D1.
 type CoachReport=ReturnType<typeof summarizeCoachRounds>&{
  totalVdkRosterMatches:number;
+ backfill:{status:'running'|'complete'|'disabled';complete:number;partial:number;missing:number;unavailable:number;pending:number};
  reviewRounds:ReturnType<typeof recommendReviewRounds>;
  coachingNotes:ReturnType<typeof coachNotes>;
 };
