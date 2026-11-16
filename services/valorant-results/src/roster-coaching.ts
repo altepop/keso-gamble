@@ -18,7 +18,8 @@ const asMembers=(s:string):Member[]=>{
 };
 export interface CoachingSummary{
   totalRows:number; analyzed:number; missingIdentity:number;
-  overall:Count; partySizes:Record<string,number>;
+  overall:Count; recentTen:Count; previousTen:Count; partySizes:Record<string,number>;
+  partyResults:Record<string,Count>;
   kd:{kills:number;deaths:number;assists:number;games:number};
   maps:{name:string;games:number;result:Count}[];
   partner?:{id:string;withTeam:Count;withParty:Count;opponent:Count;without:Count;
@@ -35,7 +36,8 @@ export function analyzeArchivedCoaching(rows:ArchivedCoachingRow[],riotId:string
   }
   const mapCounts=new Map<string,{games:number;result:Count}>();
   const result:CoachingSummary={totalRows:rows.length,analyzed:0,missingIdentity:0,
-    overall:empty(),partySizes:{},kd:{kills:0,deaths:0,assists:0,games:0},maps:[]};
+    overall:empty(),recentTen:empty(),previousTen:empty(),partySizes:{},partyResults:{},
+    kd:{kills:0,deaths:0,assists:0,games:0},maps:[]};
   if(other)result.partner={id:companionRiotId!,withTeam:empty(),withParty:empty(),
     opponent:empty(),without:empty(),teamGames:0,partyGames:0,unknownPartyGames:0};
   for(const row of rows){
@@ -48,11 +50,17 @@ export function analyzeArchivedCoaching(rows:ArchivedCoachingRow[],riotId:string
       result.missingIdentity++;continue;
     }
     result.analyzed++;add(result.overall,row.outcome);
+    if(result.analyzed<=10)add(result.recentTen,row.outcome);
+    else if(result.analyzed<=20)add(result.previousTen,row.outcome);
     const ownParty=subject.party_id;
     if(ownParty){
       const size=players.filter(p=>p.team_id===subject.team_id&&p.party_id===ownParty).length;
       const k=String(size);result.partySizes[k]=(result.partySizes[k]??0)+1;
-    }else result.partySizes['unknown']=(result.partySizes['unknown']??0)+1;
+      result.partyResults[k]??=empty();add(result.partyResults[k],row.outcome);
+    }else {
+      result.partySizes['unknown']=(result.partySizes['unknown']??0)+1;
+      result.partyResults['unknown']??=empty();add(result.partyResults['unknown'],row.outcome);
+    }
     if([subject.k,subject.d,subject.a].every(x=>Number.isSafeInteger(x)&&x!>=0)){
       result.kd.games++;result.kd.kills+=subject.k!;result.kd.deaths+=subject.d!;result.kd.assists+=subject.a!;
     }
@@ -71,7 +79,7 @@ export function analyzeArchivedCoaching(rows:ArchivedCoachingRow[],riotId:string
     }
   }
   result.maps=[...mapCounts].map(([name,v])=>({name,...v}))
-    .sort((a,b)=>b.games-a.games||a.name.localeCompare(b.name)).slice(0,3);
+    .sort((a,b)=>b.games-a.games||a.name.localeCompare(b.name));
   return result;
 }
 const score=(c:Count)=>`${c.win}勝${c.loss}敗${c.draw}分`;
@@ -98,7 +106,8 @@ export async function archivedCoachingReport(db:D1Database,riotId:string,compani
   if(!r.analyzed)return '保存した参加者の中に対象者のIDが確認できません。データを確認してください。';
   const party=Object.entries(r.partySizes).sort(([a],[b])=>a.localeCompare(b,'ja',{numeric:true}))
     .map(([n,c])=>(n==='unknown'?'パーティー不明':n+'人')+':'+c).join(' / ');
-  const lines=[`🎯 コーチング資料｜${label(riotId)}（コンペ）`,
+  const isVdk=normalize(riotId)==='dolly#sdgs';
+  const lines=[isVdk?'🎯 VDK専用コーチング｜Dolly#SDGs（コンペ）':`🎯 コーチング資料｜${label(riotId)}（コンペ）`,
     `保存済み ${r.analyzed}試合：${score(r.overall)}｜勝率${rate(r.overall)}（引分除く）`,
     `パーティー人数：${party}`];
   if(r.kd.games)lines.push(`K/D ${r.kd.deaths?(r.kd.kills/r.kd.deaths).toFixed(2):'—'}｜平均K/A/D ${(r.kd.kills/r.kd.games).toFixed(1)}/${(r.kd.assists/r.kd.games).toFixed(1)}/${(r.kd.deaths/r.kd.games).toFixed(1)}（${r.kd.games}試合）`);
@@ -108,7 +117,22 @@ export async function archivedCoachingReport(db:D1Database,riotId:string,compani
       `同一パーティー確認：${p.partyGames}試合${p.unknownPartyGames?'（組み方不明 '+p.unknownPartyGames+'試合）':''}`,
       `対戦：${score(p.opponent)}｜不在：${score(p.without)}`);
   }
-  if(r.maps.length)lines.push('マップ上位：'+r.maps.map(m=>`${label(m.name)} ${m.games}戦 ${score(m.result)}`).join(' / '));
+  if(r.maps.length)lines.push('マップ上位：'+r.maps.slice(0,3).map(m=>`${label(m.name)} ${m.games}戦 ${score(m.result)}`).join(' / '));
+  if(isVdk){
+    lines.push('📝 VDKの改善検証ポイント（保存データから抽出）');
+    const weak=r.maps.filter(m=>m.name!=='不明'&&m.games>=4&&(m.result.win+m.result.loss)>=4&&m.result.win/(m.result.win+m.result.loss)<0.4)
+      .sort((a,b)=>a.result.win/(a.result.win+a.result.loss)-b.result.win/(b.result.win+b.result.loss)||b.games-a.games)
+      .slice(0,2);
+    if(weak.length)lines.push('・マップ重点確認：'+weak.map(m=>`${label(m.name)} ${score(m.result)}（${rate(m.result)}）`).join('、')+'。攻守別の序盤・人数有利時の落とし方を録画で確認。');
+    if(r.analyzed>=20)lines.push(`・直近10試合：${score(r.recentTen)}（${rate(r.recentTen)}）。その前10試合：${score(r.previousTen)}（${rate(r.previousTen)}）。短期変動を確認。`);
+    const solo=r.partyResults['1'],party=Object.entries(r.partyResults).filter(([size])=>size!=='1'&&size!=='unknown');
+    if(solo&&solo.win+solo.loss>=5&&party.length){
+      const group=empty();for(const [,c]of party){group.win+=c.win;group.loss+=c.loss;group.draw+=c.draw;}
+      if(group.win+group.loss>=5)lines.push(`・構成別：ソロ ${score(solo)}（${rate(solo)}）、複数人 ${score(group)}（${rate(group)}）。対戦条件の違いに注意しつつ検証。`);
+    }
+    if(!weak.length)lines.push('・失点の多かったラウンドを3件選び、初動死亡・トレード・設置後の立ち位置をリプレイで確認。');
+    lines.push('次に必要な詳細：ラウンド別の初動・トレード・攻守・購入とウルト使用。現在の保存データだけでは原因を断定しません。');
+  }
   lines.push(`対象IDを特定できない記録：${r.missingIdentity}件`,
     '※保存済みの直近最大150試合のみ。未記録試合は含まず、勝率差を相性・原因と断定しません。',
     '※参加者情報のみでは初動、復活、位置取り、交戦判断は判定できません。API追加取得・速報・KP付与は行いません。');
