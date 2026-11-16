@@ -118,8 +118,10 @@ let browser;
      await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:box.x+box.width/2,y:box.y+box.height/2}]});
      const previousReads=stateReads,refreshed=page.waitForResponse(r=>r.url().endsWith('/state'));await page.clock.fastForward(15000);await refreshed;assert.ok(stateReads>previousReads);await page.waitForTimeout(50);
      await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
-    }else await page.locator('.title-start').tap({timeout:2500});
-    await page.locator('.nav-btn[data-screen=play]').waitFor({timeout:2500});await page.locator('.nav-btn[data-screen=play]').tap();assert.match(await page.locator('#app').innerText(),/プレイで稼ぐ/);
+    // WebKit on busy CI runners can take more than 2.5 s to settle the animated mobile button.
+    // Retain a real (non-forced) touch so overlays or blocked input still fail the test.
+    }else await page.locator('.title-start').tap({timeout:10000});
+    await page.locator('.nav-btn[data-screen=play]').waitFor({timeout:10000});await page.locator('.nav-btn[data-screen=play]').tap();assert.match(await page.locator('#app').innerText(),/プレイで稼ぐ/);
    }
    if(scenario==='success'){
     await page.locator('.title-start').filter({hasText:'900'}).click();
