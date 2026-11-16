@@ -14,7 +14,7 @@ function fixture(match_id:string,map:string,vdkAgent:string,abemaAgent:string,
   tag:i===0?'SDGs':i===1?'ttv':i===2?'1037':'N',
   agent:i===0?vdkAgent:i===1?abemaAgent:i===2?'Phoenix':'Sova'
  }));
- return {match_id,map,players_json:JSON.stringify(players),
+ return {match_id,map,ended_at:1794666339000,players_json:JSON.stringify(players),
   rounds_json:JSON.stringify(rounds),kills_json:JSON.stringify(kills)};
 }
 test('separates opening kills, converted rounds, lost advantages and comebacks',()=>{
