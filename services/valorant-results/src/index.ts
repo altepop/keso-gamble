@@ -82,7 +82,7 @@ export interface Env {
   HENRIK_API_KEY: string;
   DISCORD_WEBHOOK_URL: string;
   KP_EARNINGS_WEBHOOK_URL?: string;
-  VDK_RESCUE_WEBHOOK_URL?: string;
+  KESO_COACH_WEBHOOK_URL?: string;
   MAHJONG_INGEST_KEY?: string;
   AMAE_KOROMO_TOKEN?: string;
   PAIPU_DISPATCH_TOKEN?: string;
@@ -625,7 +625,7 @@ export default {
   },
   async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
     if(escaPressActive(Date.now()))ctx.waitUntil(approvedEscalationPress(env).catch(()=>console.warn('approved_escalation_press_unknown')));
-    if(env.VDK_RESCUE_WEBHOOK_URL)ctx.waitUntil(vdkRescuePress(env).catch(()=>console.warn('vdk_rescue_press_unknown')));
+    if(env.KESO_COACH_WEBHOOK_URL)ctx.waitUntil(vdkRescuePress(env).catch(()=>console.warn('vdk_rescue_press_unknown')));
     // The archival backfill is DB-opt-in and strictly isolated from notices and KP.
     // At most one extra Henrik detail call per five minutes; stop automatically when complete.
     if(Math.floor((_event.scheduledTime??Date.now())/60000)%5===2)
