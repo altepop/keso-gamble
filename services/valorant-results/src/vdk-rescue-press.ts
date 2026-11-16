@@ -22,7 +22,7 @@ export const VDK_RESCUE_BODY=[
 '――これは、ひとりの男の再起を懸けた挑戦である。',
 '-# 戦績は確認時点の記録。現在ランクは本人からの申告。',
 ].join('\n');
-type Env={DB:D1Database;VDK_RESCUE_WEBHOOK_URL?:string};
+type Env={DB:D1Database;KESO_COACH_WEBHOOK_URL?:string};
 type Receipt={state:'claimed'|'posted'|'unknown'|'rejected';at:number;channelId?:string;messageId?:string;httpStatus?:number};
 const ready=new WeakSet<object>();
 async function ensure(env:Env){
@@ -31,8 +31,8 @@ async function ensure(env:Env){
  ready.add(env.DB);
 }
 function webhook(env:Env){
- if(!env.VDK_RESCUE_WEBHOOK_URL)return null;
- const url=new URL(env.VDK_RESCUE_WEBHOOK_URL);
+ if(!env.KESO_COACH_WEBHOOK_URL)return null;
+ const url=new URL(env.KESO_COACH_WEBHOOK_URL);
  if(url.protocol!=='https:'||url.hostname!=='discord.com'||!/^\/api\/webhooks\/\d{15,22}\/[A-Za-z0-9._-]+\/?$/.test(url.pathname))return null;
  return url;
 }
