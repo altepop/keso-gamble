@@ -172,3 +172,26 @@ jobs:
           console.log('VDK_ISHIHARA_SHARED '+JSON.stringify({allMatches:tally(rows),sameTeam:tally(team),opponents:oppose.length,teamIdMissing:ambiguous.length,
             note:'Identical match/team IDs indicate same game/side, not necessarily premade party. Missing link does not prove solo.'}));
           NODE
+
+      - name: Ishihara VDK individual shared games (read-only)
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          node --input-type=module <<'NODE'
+          const url='https://api.cloudflare.com/client/v4/accounts/'+process.env.CF_ACCOUNT+'/d1/database/bf23ab40-814f-4626-9e0b-36739ac41750/query';
+          const sql="SELECT v.ended_at,v.outcome,v.message AS vm,i.message AS im FROM notifications v INNER JOIN notifications i ON v.match_id=i.match_id AND v.team_id=i.team_id AND lower(i.riot_id)=? AND i.mode='competitive' WHERE lower(v.riot_id)=? AND v.mode='competitive' ORDER BY v.ended_at DESC LIMIT 100";
+          const res=await fetch(url,{method:'POST',headers:{Authorization:'Bearer '+process.env.CF_TOKEN,'Content-Type':'application/json'},body:JSON.stringify({sql,params:['h1d3g1g4s#1037','dolly#sdgs']}),signal:AbortSignal.timeout(30000)});
+          if(!res.ok)throw Error('D1 HTTP '+res.status);
+          const j=await res.json();if(!j.success||!j.result?.[0]?.success)throw Error('D1 read failed');
+          const items=j.result[0].results.map(r=>{
+            const loc=(/🗺️\s*([^\n]+)/.exec(r.vm||'')?.[1]||'').split('｜');
+            const iloc=(/🗺️\s*([^\n]+)/.exec(r.im||'')?.[1]||'').split('｜');
+            const stats=m=>{const x=/(\d+)K\s*\/\s*(\d+)D\s*\/\s*(\d+)A/.exec(m||'');return {k:x?+x[1]:null,d:x?+x[2]:null,a:x?+x[3]:null,acs:/ACS\s+(\d+)/.exec(m||'')?+(/ACS\s+(\d+)/.exec(m||''))[1]:null}};
+            const rounds=/(\d+)対(\d+)で/.exec(r.vm||'');
+            return {at:new Date(Number(r.ended_at)+9*3600000).toISOString().slice(5,16).replace('T',' '),
+              outcome:r.outcome,map:loc[0],vdk:loc[1],ishihara:iloc[1],vdkStats:stats(r.vm),ishiharaStats:stats(r.im),
+              score:rounds?rounds[1]+'-'+rounds[2]:null};
+          });
+          console.log('SHARED_MATCH_ROWS '+JSON.stringify(items));
+          NODE
