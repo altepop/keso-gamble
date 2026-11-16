@@ -36,6 +36,36 @@ const validId=(v:unknown)=>typeof v==='string'&&v.length>0&&v.length<=128;
 const validRound=(n:unknown)=>Number.isSafeInteger(n)&&Number(n)>=0&&Number(n)<=60;
 const validTime=(n:unknown)=>Number.isSafeInteger(n)&&Number(n)>=0&&Number(n)<=900000;
 type Bucket=Totals & {map?:string;composition?:string};
+// Per-player metrics are counts of observed opening events, not a player rating.
+// Never infer that a support agent with 0 FK performed poorly.
+type CoachPlayer='VDK'|'Abema'|'石原';
+interface PlayerBucket{
+  player:CoachPlayer;
+  map?:string;
+  agent?:string;
+  matches:number;rounds:number;roundsWithKillData:number;observedOpeningRounds:number;
+  firstKills:number;firstDeaths:number;firstKillWins:number;firstKillLosses:number;
+  openingKillerDiedWithin5s:number;firstDeathKillerEliminatedWithin5s:number;
+}
+const playerIdentity:ReadonlyArray<{name:string;tag:string;label:CoachPlayer}>=[
+  {name:'Dolly',tag:'SDGs',label:'VDK'},
+  {name:'Abema',tag:'ttv',label:'Abema'},
+  {name:'h1d3g1g4s',tag:'1037',label:'石原'}
+];
+const emptyPlayer=(player:CoachPlayer,map?:string,agent?:string):PlayerBucket=>({
+  player,...(map?{map}:{}),...(agent?{agent}:{}),
+  matches:0,rounds:0,roundsWithKillData:0,observedOpeningRounds:0,
+  firstKills:0,firstDeaths:0,firstKillWins:0,firstKillLosses:0,
+  openingKillerDiedWithin5s:0,firstDeathKillerEliminatedWithin5s:0
+});
+const playerReport=(p:PlayerBucket)=>({
+  ...p,
+  fkFdDiff:p.firstKills-p.firstDeaths,
+  firstKillWinPct:p.firstKillWins+p.firstKillLosses
+    ?Math.round(p.firstKillWins*1000/(p.firstKillWins+p.firstKillLosses))/10:null,
+  firstKillPerObservedRoundPct:p.observedOpeningRounds
+    ?Math.round(p.firstKills*1000/p.observedOpeningRounds)/10:null
+});
 function emit(t:Bucket){
   return {...t,firstKillWinPct:t.firstKillOutcomesKnown
     ?Math.round(1000*t.firstKillWins/t.firstKillOutcomesKnown)/10:null};
@@ -44,6 +74,8 @@ export function summarizeCoachRounds(rows:readonly ArchivedRow[]){
   const overall=empty();
   const maps=new Map<string,Bucket>();
   const compositions=new Map<string,Bucket>();
+  const individual=new Map<CoachPlayer,PlayerBucket>();
+  const individualMapAgent=new Map<string,PlayerBucket>();
   let archivedMatches=0,usableMatches=0,invalidMatches=0,roundDataMissing=0,killDataMissing=0;
   const get=(store:Map<string,Bucket>,key:string,extra:Partial<Bucket>)=>{
     let value=store.get(key);
@@ -90,6 +122,26 @@ export function summarizeCoachRounds(rows:readonly ArchivedRow[]){
     const trio=Boolean(abema&&ishihara);
     const map=typeof row.map==='string'&&row.map.length<=80?row.map:'Unknown';
     const composition=trio?(vdk.agent==='Fade'&&abema?.agent==='Clove'?'Fade + Clove':'Other trio'):null;
+    const participants=playerIdentity.flatMap(identity=>{
+      const p=ps.find(p=>p.name===identity.name&&p.tag===identity.tag&&p.team_id===vdk.team_id);
+      if(!p)return [];
+      const agent=typeof p.agent==='string'&&p.agent.length<=60&&p.agent
+        ?p.agent:'Unknown';
+      let overallPlayer=individual.get(identity.label);
+      if(!overallPlayer){
+        overallPlayer=emptyPlayer(identity.label);
+        individual.set(identity.label,overallPlayer);
+      }
+      const key=identity.label+'|'+map+'|'+agent;
+      let mapPlayer=individualMapAgent.get(key);
+      if(!mapPlayer){
+        mapPlayer=emptyPlayer(identity.label,map,agent);
+        individualMapAgent.set(key,mapPlayer);
+      }
+      overallPlayer.matches++;
+      mapPlayer.matches++;
+      return [{puuid:p.puuid,all:[overallPlayer,mapPlayer]}];
+    });
     const buckets:Bucket[]=[overall,get(maps,map,{map})];
     if(composition)buckets.push(get(compositions,map+'|'+composition,{map,composition}));
     for(const bucket of buckets)bucket.matches++;
@@ -107,6 +159,29 @@ export function summarizeCoachRounds(rows:readonly ArchivedRow[]){
         seen.add(e.victim);
       }
       const ourFk=first?roster.get(first.killer!)!.team_id===vdk.team_id:null;
+      for(const participant of participants){
+        const pFirstKill=Boolean(first&&first.killer===participant.puuid);
+        const pFirstDeath=Boolean(first&&first.victim===participant.puuid);
+        const pFirstKillWin=pFirstKill&&won===vdk.team_id;
+        const pFirstKillLoss=pFirstKill&&won!==null&&won!==vdk.team_id;
+        // A death within 5s is a timing fact, not proof of a tactical trade.
+        const pFastLost=pFirstKill&&events.slice(1).some(e=>
+          e.t>=first!.t&&e.t-first!.t<=5000&&e.victim===participant.puuid);
+        const pFastTraded=pFirstDeath&&events.slice(1).some(e=>
+          e.t>=first!.t&&e.t-first!.t<=5000&&e.victim===first!.killer&&
+          roster.get(e.killer!)?.team_id===vdk.team_id);
+        for(const bucket of participant.all){
+          bucket.rounds++;
+          if(validKills)bucket.roundsWithKillData++;
+          if(first&&validKills)bucket.observedOpeningRounds++;
+          if(pFirstKill)bucket.firstKills++;
+          if(pFirstDeath)bucket.firstDeaths++;
+          if(pFirstKillWin)bucket.firstKillWins++;
+          if(pFirstKillLoss)bucket.firstKillLosses++;
+          if(pFastLost)bucket.openingKillerDiedWithin5s++;
+          if(pFastTraded)bucket.firstDeathKillerEliminatedWithin5s++;
+        }
+      }
       for(const bucket of buckets){
         bucket.rounds++;
         if(won){bucket.winnerKnown++;if(won===vdk.team_id)bucket.ourRoundWins++;}
@@ -136,7 +211,13 @@ export function summarizeCoachRounds(rows:readonly ArchivedRow[]){
     maps:[...maps.values()].map(emit).sort((a,b)=>b.rounds-a.rounds||a.map!.localeCompare(b.map!)),
     trioComparisons:[...compositions.values()].map(emit)
       .sort((a,b)=>a.map!.localeCompare(b.map!)||a.composition!.localeCompare(b.composition!)),
-    note:'Only opposing-player kills count for FK. Repeat victims may reflect revives and are not excluded. Missing rounds, kills, winners and sides are never estimated.'
+    individual:[...individual.values()].map(playerReport)
+      .sort((a,b)=>playerIdentity.findIndex(x=>x.label===a.player)-
+        playerIdentity.findIndex(x=>x.label===b.player)),
+    individualMapAgent:[...individualMapAgent.values()].map(playerReport)
+      .sort((a,b)=>a.player.localeCompare(b.player,'ja')||
+        (a.map??'').localeCompare(b.map??'')||(a.agent??'').localeCompare(b.agent??'')),
+    note:'Only opposing-player kills count for FK or FD. 5-second follow-up kills are timing observations, not proven tactical trades. Support agents are not rated by FK alone. Repeat victims may reflect revives. Missing rounds, kills, winners and sides are never estimated.'
   };
 }
 // Repeated Activity opens on one Worker isolate should not rescan D1.

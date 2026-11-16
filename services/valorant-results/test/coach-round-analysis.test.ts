@@ -93,3 +93,58 @@ test('D1 report reads only stored archives and counts historical roster candidat
   assert.equal(writes,0);
  }finally{sql.close()}
 });
+
+test('per-player opening rounds distinguish a fast loss, a fast reply and an FK conversion',()=>{
+ const match=fixture('team','Corrode','Fade','Clove',[
+  {r:0,winner:'Red'}, {r:1,winner:'Blue'}, {r:2,winner:'Blue'},
+  {r:3,winner:null}
+ ],[
+  {r:0,t:1000,killer:'p2',victim:'p5'},
+  {r:0,t:1200,killer:'p6',victim:'p2'}, // Ishihara gets traded in 0.2s.
+  {r:1,t:1000,killer:'p5',victim:'p1'}, // Abema initial death.
+  {r:1,t:1400,killer:'p0',victim:'p5'}, // VDK eliminates FK killer in 0.4s.
+  {r:2,t:1000,killer:'p1',victim:'p7'}, // Abema opening converted.
+  {r:2,t:1200,killer:'p8',victim:'p1'},
+  {r:2,t:1400,killer:'p8',victim:'p1'}, // Clove may self-revive.
+  {r:3,t:1000,killer:'p0',victim:'p8'} // Unknown winner is not a loss.
+ ]);
+ const report=summarizeCoachRounds([match]);
+ const vdk=report.individual.find(p=>p.player==='VDK')!;
+ const abema=report.individual.find(p=>p.player==='Abema')!;
+ const ishihara=report.individual.find(p=>p.player==='石原')!;
+ assert.equal(vdk.firstKills,1);
+ assert.equal(vdk.firstDeaths,0);
+ assert.equal(vdk.firstKillWinPct,null,'unknown winner is not an FK loss');
+ assert.equal(abema.firstKills,1);
+ assert.equal(abema.firstDeaths,1);
+ assert.equal(abema.firstDeathKillerEliminatedWithin5s,1);
+ assert.equal(abema.openingKillerDiedWithin5s,1,'revive does not double-count');
+ assert.equal(abema.firstKillWins,1);
+ assert.equal(abema.firstKillWinPct,100);
+ assert.equal(ishihara.firstKills,1);
+ assert.equal(ishihara.firstDeaths,0);
+ assert.equal(ishihara.firstKillLosses,1);
+ assert.equal(ishihara.openingKillerDiedWithin5s,1);
+ assert.equal(report.individualMapAgent.find(p=>p.player==='VDK')?.agent,'Fade');
+ assert.equal(JSON.stringify(report).includes('p1'),false,'no raw PUUIDs in response');
+});
+test('a support player absent from a match, and missing kill timelines, are not called zero FK rate',()=>{
+ const a=fixture('one','Abyss','Omen','Gekko',[{r:0,winner:'Blue'}],
+  [{r:0,t:1000,killer:'p5',victim:'p1'}]);
+ const b={...fixture('two','Lotus','Skye','Clove',[{r:0,winner:'Blue'}],[]),kills_json:null};
+ const report=summarizeCoachRounds([a,b]);
+ const vdk=report.individual.find(p=>p.player==='VDK')!;
+ assert.equal(vdk.matches,2);
+ assert.equal(vdk.rounds,2);
+ assert.equal(vdk.observedOpeningRounds,1);
+ assert.equal(vdk.firstKills,0);
+ assert.equal(vdk.firstKillPerObservedRoundPct,0);
+ const skye=report.individualMapAgent.find(p=>p.map==='Lotus'&&p.player==='VDK')!;
+ assert.equal(skye.observedOpeningRounds,0);
+ assert.equal(skye.firstKillPerObservedRoundPct,null);
+ const corrupt=fixture('three','Abyss','Omen','Gekko',[{r:0,winner:'Blue'}],
+  [{r:0,t:1000,killer:'p5',victim:'unknown'}]);
+ const report2=summarizeCoachRounds([corrupt]);
+ assert.equal(report2.individual[0].firstDeaths,0);
+ assert.equal(report2.individual[0].observedOpeningRounds,0);
+});
