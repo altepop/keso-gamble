@@ -1,0 +1,41 @@
+name: Historical roster backfill activation (manual staging)
+on:
+  workflow_dispatch:
+permissions: {contents: read}
+jobs:
+  enable:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Validate unchanged five monitored accounts and arm VDK-only archive restoration
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          node --input-type=module <<'NODE'
+          const url='https://api.cloudflare.com/client/v4/accounts/'+process.env.CF_ACCOUNT+'/d1/database/bf23ab40-814f-4626-9e0b-36739ac41750/query';
+          async function q(sql,params=[]){
+           const response=await fetch(url,{method:'POST',headers:{Authorization:'Bearer '+process.env.CF_TOKEN,'Content-Type':'application/json'},body:JSON.stringify({sql,params}),signal:AbortSignal.timeout(25000)});
+           if(!response.ok)throw Error('D1 HTTP '+response.status);
+           const data=await response.json();if(!data.success||!data.result?.[0]?.success)throw Error('D1 query failed');
+           return data.result[0].results??[];
+          }
+          const number=async(sql,p=[])=>Number((await q(sql,p))[0]?.n??0);
+          const target='Dolly#SDGs';
+          const [five,vdk,silent,oldKp,eligible,table,marker]=await Promise.all([
+           number('SELECT COUNT(*) AS n FROM tracked_players'),
+           number('SELECT COUNT(*) AS n FROM tracked_players WHERE riot_id=?',[target]),
+           number("SELECT COUNT(*) AS n FROM tracked_players WHERE lower(riot_id)='abema#ttv'"),
+           number("SELECT COUNT(*) AS n FROM kp_accounts WHERE lower(riot)='abema#ttv'"),
+           number("SELECT COUNT(DISTINCT match_id) AS n FROM notifications WHERE riot_id=? AND mode='competitive'",[target]),
+           number("SELECT COUNT(*) AS n FROM sqlite_master WHERE type='table' AND name='valorant_match_rosters'"),
+           q("SELECT value FROM monitor_state WHERE key='roster_backfill:enabled'"),
+          ]);
+          if(five!==5||vdk!==1||silent!==0||oldKp!==0||eligible<1||table!==1)throw Error('Safety preconditions fail; no activation');
+          if(marker.length && marker[0].value!=='Dolly#SDGs')throw Error('Existing marker not safe to override');
+          if(!marker.length)await q("INSERT OR IGNORE INTO monitor_state(key,value) VALUES('roster_backfill:enabled','Dolly#SDGs')");
+          const enabled=await q("SELECT value FROM monitor_state WHERE key='roster_backfill:enabled'");
+          if(enabled[0]?.value!=='Dolly#SDGs')throw Error('Marker verification failed');
+          console.log('VDK_BACKFILL_ENABLED '+JSON.stringify({target:'Dolly#SDGs',eligibleMatches:eligible,fiveNormalPlayers:five,
+            silentAbemaRemainsUnpaid:true,snapshotTableReady:true,previouslyActive:Boolean(marker.length)}));
+          NODE
