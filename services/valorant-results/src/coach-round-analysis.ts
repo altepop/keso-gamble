@@ -270,7 +270,7 @@ export async function readCoachRoundReport(db:D1Database,now=Date.now()){
  const missing=Number(row?.missing_n??0);
  const partial=Number(row?.partial_n??0);
  const unavailable=Number(row?.unavailable_n??0);
- const status=row?.switch_value==='Dolly#SDGs'?'running':
+ const status:CoachReport['backfill']['status']=row?.switch_value==='Dolly#SDGs'?'running':
    row?.switch_value==='complete'||row?.switch_value==='repaired'?'complete':'disabled';
  const value={...report,totalVdkRosterMatches,
    backfill:{status,complete,partial,missing,unavailable,
