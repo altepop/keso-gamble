@@ -21,7 +21,9 @@ export async function auditCoachArchive(directory,env=process.env,request=fetch,
        AND json_extract(p.value,'$.tag')='SDGs'
        AND json_extract(p.value,'$.puuid')=t.puuid) AS current_puuid_match,
     (SELECT value FROM monitor_state s
-     WHERE s.key='coach_round_backfill:unavailable:'||r.match_id) AS unavailable_reason
+     WHERE s.key='coach_round_backfill:unavailable:'||r.match_id) AS unavailable_reason,
+    EXISTS(SELECT 1 FROM monitor_state s
+     WHERE s.key='coach_round_backfill:retry_once:'||r.match_id) AS retry_attempted
    FROM valorant_match_rosters r
    LEFT JOIN valorant_match_round_events e ON e.match_id=r.match_id
    WHERE EXISTS(SELECT 1 FROM json_each(r.players_json) p
@@ -41,6 +43,9 @@ export async function auditCoachArchive(directory,env=process.env,request=fetch,
    COALESCE(SUM(CASE WHEN unavailable_reason='missing_rounds' THEN 1 ELSE 0 END),0) AS reason_missing_rounds,
    COALESCE(SUM(CASE WHEN unavailable_reason='no_round_data' THEN 1 ELSE 0 END),0) AS reason_no_round_data,
    COALESCE(SUM(CASE WHEN unavailable_reason='404' THEN 1 ELSE 0 END),0) AS reason_not_found,
+   COALESCE(SUM(CASE WHEN retry_attempted=1 THEN 1 ELSE 0 END),0) AS retry_attempts,
+   COALESCE(SUM(CASE WHEN retry_attempted=1 AND rounds_json IS NOT NULL
+      AND kills_json IS NULL THEN 1 ELSE 0 END),0) AS retry_still_missing_kills,
    COALESCE(SUM(CASE WHEN current_puuid_match=0 THEN 1 ELSE 0 END),0) AS historical_puuid_mismatch,
    COALESCE(SUM(CASE WHEN (rounds_json IS NULL OR kills_json IS NULL)
      AND unavailable_reason IS NULL AND ended_at<${Math.floor(now-120000)}
@@ -67,6 +72,8 @@ export async function auditCoachArchive(directory,env=process.env,request=fetch,
   unavailable:number(row.unavailable_count),
   missingKillsOnly:number(row.missing_kills_only),
   missingRoundsOnly:number(row.missing_rounds_only),
+  oneTimeRetries:number(row.retry_attempts),
+  retryStillMissingKills:number(row.retry_still_missing_kills),
   unavailableReasons:{
     missingKills:number(row.reason_missing_kills),
     missingRounds:number(row.reason_missing_rounds),
@@ -83,10 +90,14 @@ export async function auditCoachArchive(directory,env=process.env,request=fetch,
  };
  if([result.rosterCount,result.complete,result.missing,result.partial,
       result.unavailable,result.missingKillsOnly,result.missingRoundsOnly,
+      result.oneTimeRetries,result.retryStillMissingKills,
       ...Object.values(result.unavailableReasons),result.historicalPuuidMismatch,
       result.eligibleBacklog].some(v=>v===null) ||
    result.rosterCount!==result.complete+result.missing+result.partial ||
    result.missingKillsOnly+result.missingRoundsOnly>result.partial ||
+   result.oneTimeRetries>result.rosterCount ||
+   result.retryStillMissingKills>result.missingKillsOnly ||
+   result.retryStillMissingKills>result.oneTimeRetries ||
    Object.values(result.unavailableReasons).reduce((a,b)=>a+b,0)>result.unavailable)
    throw Error('Inconsistent archive counts, will not report invalid totals');
  return result;
