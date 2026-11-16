@@ -1,7 +1,6 @@
 // One-shot fallback for the archived VDK match whose v4 details lacked kills.
 // Henrik's documented v2 endpoint has a different response schema. Store only
 // validated kill timelines; never infer events or touch KP, notices, or bets.
-const TARGET='Dolly#SDGs';
 const ONCE='coach_round_backfill:legacy_v2_once:';
 const UNAVAILABLE='coach_round_backfill:unavailable:';
 const PICK=`SELECT r.match_id,r.ended_at,r.players_json
@@ -43,7 +42,8 @@ export function verifiedLegacyV2Kills(raw:LegacyV2,row:Archived):string|null {
  if(!Array.isArray(roster)||roster.length!==10||
    !roster.every(p=>id(p?.puuid)&&id(p?.team_id))||
    new Set(roster.map(p=>p.puuid)).size!==10)return null;
- const expected=new Map<string,string>(roster.map(p=>[p.puuid,p.team_id.toLowerCase()]));
+ const expected=new Map<string,string>();
+ for(const p of roster)expected.set(p.puuid,p.team_id.toLowerCase());
  const ps=raw.players?.all_players;
  if(!Array.isArray(ps)||ps.length!==10||!ps.every(p=>
    id(p?.puuid)&&typeof p.team==='string'&&
