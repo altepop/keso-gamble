@@ -1,0 +1,26 @@
+name: Probe private Worker origin for one-time safe backfill
+on:
+  push:
+    branches: [audit/kobayashi-live-20261116]
+    paths: ['.github/workflows/backfill-probe-origin.yml']
+permissions: {contents: read}
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Determine official Worker hostname without exposing tokens
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          node --input-type=module <<'NODE'
+          const root='https://api.cloudflare.com/client/v4/accounts/'+process.env.CF_ACCOUNT;
+          const get=async path=>{const r=await fetch(root+path,{headers:{Authorization:'Bearer '+process.env.CF_TOKEN},signal:AbortSignal.timeout(13000)});const j=await r.json();return {status:r.status,ok:j.success,result:j.result};};
+          const [account,script]=await Promise.all([get('/workers/subdomain'),get('/workers/scripts/valorant-results/subdomain')]);
+          const sub=account.result?.subdomain;
+          const url=sub?'https://valorant-results.'+sub+'.workers.dev/api/discord/predict/status':null;
+          let originStatus='no_origin';
+          if(url){try{const r=await fetch(url,{signal:AbortSignal.timeout(10000)});originStatus='http_'+r.status;}catch{originStatus='connection_failed';}}
+          console.log('WORKER_ORIGIN_PROBE '+JSON.stringify({subdomainFound:Boolean(sub),scriptSubdomainEnabled:script.result?.enabled??null,accountStatus:account.status,scriptStatus:script.status,originStatus}));
+          NODE
