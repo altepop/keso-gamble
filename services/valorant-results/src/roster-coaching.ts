@@ -5,7 +5,7 @@ export interface ArchivedCoachingRow {
   match_id:string; outcome:Outcome; map:string|null; players_json:string;
 }
 type Member={puuid?:string|null;name?:string|null;tag?:string|null;team_id?:string|null;party_id?:string|null;
-  k?:number|null;d?:number|null;a?:number|null};
+  k?:number|null;d?:number|null;a?:number|null;score?:number|null;agent?:string|null};
 type Count={win:number;loss:number;draw:number};
 const empty=():Count=>({win:0,loss:0,draw:0});
 const add=(c:Count,v:Outcome)=>{if(v in c)c[v]++;};
@@ -22,6 +22,8 @@ export interface CoachingSummary{
   partyResults:Record<string,Count>;
   kd:{kills:number;deaths:number;assists:number;games:number};
   maps:{name:string;games:number;result:Count}[];
+  agents:{name:string;games:number;result:Count}[];
+  teamScore:{games:number;topTwo:number;bottomTwo:number};
   partner?:{id:string;withTeam:Count;withParty:Count;opponent:Count;without:Count;
     teamGames:number;partyGames:number;unknownPartyGames:number};
 }
@@ -35,9 +37,11 @@ export function analyzeArchivedCoaching(rows:ArchivedCoachingRow[],riotId:string
       if(memberId(m)===other&&m.puuid)knownCompanions.add(m.puuid);
   }
   const mapCounts=new Map<string,{games:number;result:Count}>();
+  const agentCounts=new Map<string,{games:number;result:Count}>();
   const result:CoachingSummary={totalRows:rows.length,analyzed:0,missingIdentity:0,
     overall:empty(),recentTen:empty(),previousTen:empty(),partySizes:{},partyResults:{},
-    kd:{kills:0,deaths:0,assists:0,games:0},maps:[]};
+    kd:{kills:0,deaths:0,assists:0,games:0},maps:[],agents:[],
+    teamScore:{games:0,topTwo:0,bottomTwo:0}};
   if(other)result.partner={id:companionRiotId!,withTeam:empty(),withParty:empty(),
     opponent:empty(),without:empty(),teamGames:0,partyGames:0,unknownPartyGames:0};
   for(const row of rows){
@@ -67,6 +71,17 @@ export function analyzeArchivedCoaching(rows:ArchivedCoachingRow[],riotId:string
     const map=row.map&&row.map.length<=80?row.map:'不明';
     const m=mapCounts.get(map)??{games:0,result:empty()};
     m.games++;add(m.result,row.outcome);mapCounts.set(map,m);
+    const agent=typeof subject.agent==='string'&&subject.agent.length<=64?subject.agent:'不明';
+    const ag=agentCounts.get(agent)??{games:0,result:empty()};
+    ag.games++;add(ag.result,row.outcome);agentCounts.set(agent,ag);
+    const teammates=players.filter(p=>p.team_id===subject.team_id);
+    if(teammates.length===5&&Number.isSafeInteger(subject.score)&&subject.score!>=0&&
+      teammates.every(p=>Number.isSafeInteger(p.score)&&p.score!>=0)){
+      const rank=1+teammates.filter(p=>p.score!>subject.score!).length;
+      result.teamScore.games++;
+      if(rank<=2)result.teamScore.topTwo++;
+      if(rank>=4)result.teamScore.bottomTwo++;
+    }
     if(other&&result.partner){
       const partner=players.find(p=>Boolean(p.puuid)&&knownCompanions.has(p.puuid!))
         ??players.find(p=>memberId(p)===other);
@@ -79,6 +94,8 @@ export function analyzeArchivedCoaching(rows:ArchivedCoachingRow[],riotId:string
     }
   }
   result.maps=[...mapCounts].map(([name,v])=>({name,...v}))
+    .sort((a,b)=>b.games-a.games||a.name.localeCompare(b.name));
+  result.agents=[...agentCounts].map(([name,v])=>({name,...v}))
     .sort((a,b)=>b.games-a.games||a.name.localeCompare(b.name));
   return result;
 }
@@ -118,6 +135,8 @@ export async function archivedCoachingReport(db:D1Database,riotId:string,compani
       `対戦：${score(p.opponent)}｜不在：${score(p.without)}`);
   }
   if(r.maps.length)lines.push('マップ上位：'+r.maps.slice(0,3).map(m=>`${label(m.name)} ${m.games}戦 ${score(m.result)}`).join(' / '));
+  if(r.agents.length)lines.push('使用エージェント：'+r.agents.slice(0,3).map(a=>`${label(a.name)} ${a.games}戦 ${score(a.result)}`).join(' / '));
+  if(r.teamScore.games>=5)lines.push(`チーム内スコア上位2位 ${r.teamScore.topTwo}/${r.teamScore.games}試合｜下位2位 ${r.teamScore.bottomTwo}/${r.teamScore.games}試合（スコアのみではサポート貢献は測れません）`);
   if(isVdk){
     lines.push('📝 VDKの改善検証ポイント（保存データから抽出）');
     const weak=r.maps.filter(m=>m.name!=='不明'&&m.games>=4&&(m.result.win+m.result.loss)>=4&&m.result.win/(m.result.win+m.result.loss)<0.4)
