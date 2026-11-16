@@ -11,7 +11,7 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
  try{
   const token='a'.repeat(48);
   const report={
-    totalVdkRosterMatches:44,archivedMatches:3,usableMatches:3,invalidMatches:0,killDataMissing:0,roundDataMissing:0,
+    totalVdkRosterMatches:44,archivedMatches:4,usableMatches:3,invalidMatches:0,killDataMissing:1,roundDataMissing:0,
     backfill:{status:'running',complete:3,partial:1,missing:40,unavailable:0,pending:41},
     overall:{rounds:68,firstKillWinPct:70,firstKillWins:21,firstKillOutcomesKnown:30,comebackWins:7,roundsWithSides:0,repeatedVictimRounds:1},
     maps:[{map:'Corrode',matches:1,rounds:22,ourFirstKills:13,firstKillWins:8,firstKillLosses:5,firstKillWinPct:61.5}],
@@ -28,12 +28,12 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
       firstKillSecond:2.7,lostAfterOpening:true,distinctEnemyKillsBeforeAllyDeath:2,
       rapidAllyDeaths:1,openerDiedWithin5s:false}],
     individual:[
-      {player:'VDK',matches:3,rounds:68,observedOpeningRounds:68,firstKills:4,firstDeaths:6,fkFdDiff:-2,firstKillWins:3,firstKillLosses:1,firstKillWinPct:75,openingKillerDiedWithin5s:0,firstDeathKillerEliminatedWithin5s:2},
-      {player:'Abema',matches:3,rounds:68,observedOpeningRounds:68,firstKills:9,firstDeaths:7,fkFdDiff:2,firstKillWins:6,firstKillLosses:3,firstKillWinPct:66.7,openingKillerDiedWithin5s:1,firstDeathKillerEliminatedWithin5s:1},
-      {player:'石原',matches:3,rounds:68,observedOpeningRounds:68,firstKills:8,firstDeaths:3,fkFdDiff:5,firstKillWins:7,firstKillLosses:1,firstKillWinPct:87.5,openingKillerDiedWithin5s:1,firstDeathKillerEliminatedWithin5s:0}
+      {player:'VDK',matches:3,rounds:68,observedOpeningRounds:68,firstKills:4,firstDeaths:6,fkFdDiff:-2,firstKillWins:3,firstKillLosses:1,firstKillWinPct:75,firstDeathWins:2,firstDeathLosses:4,firstDeathRecoveryPct:33.3,openingKillerDiedWithin5s:0,firstDeathKillerEliminatedWithin5s:2},
+      {player:'Abema',matches:3,rounds:68,observedOpeningRounds:68,firstKills:9,firstDeaths:7,fkFdDiff:2,firstKillWins:6,firstKillLosses:3,firstKillWinPct:66.7,firstDeathWins:3,firstDeathLosses:4,firstDeathRecoveryPct:42.9,openingKillerDiedWithin5s:1,firstDeathKillerEliminatedWithin5s:1},
+      {player:'石原',matches:3,rounds:68,observedOpeningRounds:68,firstKills:8,firstDeaths:3,fkFdDiff:5,firstKillWins:7,firstKillLosses:1,firstKillWinPct:87.5,firstDeathWins:1,firstDeathLosses:2,firstDeathRecoveryPct:33.3,openingKillerDiedWithin5s:1,firstDeathKillerEliminatedWithin5s:0}
     ],
     individualMapAgent:[
-      {player:'VDK',map:'Corrode',agent:'Fade',matches:1,firstKills:0,firstDeaths:1,fkFdDiff:-1,firstKillWinPct:null,openingKillerDiedWithin5s:0,firstDeathKillerEliminatedWithin5s:0}
+      {player:'VDK',map:'Corrode',agent:'Fade',matches:1,firstKills:0,firstDeaths:1,fkFdDiff:-1,firstKillWinPct:null,firstDeathWins:0,firstDeathLosses:1,firstDeathRecoveryPct:0,openingKillerDiedWithin5s:0,firstDeathKillerEliminatedWithin5s:0}
     ]
   };
   // Fields present in a bad upstream payload must never leak into diagnostics.
@@ -46,9 +46,12 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
       value:{writeText:async text=>{window.__copiedDiagnostic=text}}});
   });
   const requests=[];
+  let use43Report=false;
   await ctx.route('https://valorant-results.tealeaforest.workers.dev/**',async route=>{
    const req=route.request();requests.push({url:req.url(),method:req.method(),auth:req.headers().authorization});
-   await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(report)});
+   const actual=use43Report?{...report,archivedMatches:44,usableMatches:43,
+     backfill:{status:'complete',complete:43,partial:1,missing:0,unavailable:1,pending:0}}:report;
+   await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(actual)});
   });
   const page=await ctx.newPage();
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
@@ -64,6 +67,9 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   assert.match(await page.locator('#players').innerText(),/VDK/);
   assert.match(await page.locator('#players').innerText(),/石原/);
   assert.match(await page.locator('#players').innerText(),/5秒以内/);
+  assert.match(await page.locator('#players').innerText(),/先制デス後にチームが勝利/);
+  assert.match(await page.locator('#players').innerText(),/42\\.9%/);
+  assert.match(await page.locator('#player-map').innerText(),/FD後勝率/);
   assert.match(await page.locator('#player-map').innerText(),/Corrode \/ Fade/);
   assert.match(await page.locator('#coach-notes').innerText(),/個人評価は保留/);
   assert.match(await page.locator('#coach-notes').innerText(),/先制キル後の敗北/);
@@ -85,12 +91,18 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   assert.equal(diagnostic.archive.complete,3);
   assert.equal(diagnostic.totalVdkRosterMatches,44);
   assert.equal(diagnostic.individual.length,3);
+  assert.equal(diagnostic.individual.find(p=>p.player==='Abema').firstDeathRecoveryPct,42.9);
   assert.equal(diagnostic.reviewRounds[0].round,0);
   assert.ok(!exported.includes(token),'no session token in exported text');
   for(const secret of ['secret-match-id','secret-puuid','secret-raw-puuid','private-enemy'])
     assert.ok(!exported.includes(secret),'private match data excluded: '+secret);
   assert.equal(requests.length,1,'copy does not trigger new D1/HTTP reads');
+  use43Report=true;
   await page.locator('#reload').click();
+  await page.waitForFunction(()=>document.querySelector('#totals').textContent.includes('43'));
+  assert.match(await page.locator('#totals').innerText(),/成績の分析対象[\\s\\S]*43/);
+  assert.match(await page.locator('#totals').innerText(),/データ不足で除外[\\s\\S]*1/);
+  assert.match(await page.locator('#backfill-message').innerText(),/欠損1試合は個人・チーム成績の分母から除外/);
   assert.equal(requests.length,2,'refresh is manual only');
   assert.deepEqual(errors,[]);
   assert.equal(await page.locator('#resume-backfill').isHidden(),true,
