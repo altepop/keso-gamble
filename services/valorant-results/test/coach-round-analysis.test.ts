@@ -78,16 +78,18 @@ test('D1 report reads only stored archives and counts historical roster candidat
     [{r:0,t:300,killer:'p0',victim:'p5'}]);
   sql.prepare('INSERT INTO valorant_match_rosters VALUES(?,?,?,?)').run(row.match_id,row.map,1000,row.players_json);
   sql.prepare('INSERT INTO valorant_match_round_events VALUES(?,?,?)').run(row.match_id,row.rounds_json,row.kills_json);
-  let writes=0;
+  let writes=0,reads=0;
   const db={prepare:(query:string)=>({
-   all:async()=>({results:sql.prepare(query).all()}),
-   first:async()=>sql.prepare(query).get()??null,
+   all:async()=>{reads++;return {results:sql.prepare(query).all()}},
+   first:async()=>{reads++;return sql.prepare(query).get()??null;},
    run:async()=>{writes++;throw Error('read-only violated');}
   })} as unknown as D1Database;
   const report=await readCoachRoundReport(db);
   assert.equal(report.totalVdkRosterMatches,1);
   assert.equal(report.archivedMatches,1);
   assert.equal(report.overall.firstKillWinPct,100);
+  assert.equal((await readCoachRoundReport(db)).overall.firstKillWinPct,100);
+  assert.equal(reads,2,'subsequent requests within the five-minute cache should not rescan D1');
   assert.equal(writes,0);
  }finally{sql.close()}
 });
