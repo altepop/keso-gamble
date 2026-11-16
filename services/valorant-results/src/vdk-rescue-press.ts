@@ -1,8 +1,8 @@
 // One-time, opt-in VDK rescue press. Only the designated Discord channel is accepted.
 export const VDK_RESCUE_CHANNEL='1571645754903371899';
-export const VDK_RESCUE_ID='vdk-rescue-press:2026-11-16:platinum2-v1';
+export const VDK_RESCUE_ID='vdk-rescue-press:2026-11-16:platinum2-mention-v2';
 export const VDK_RESCUE_BODY=[
-'🗞️ **【緊急プレス】VDKを救いたい。**',
+'<@822082339776495616>\n🗞️ **【緊急プレス】VDKを救いたい。**',
 '**――かつてのダイヤモンド、プラチナ2へ転落。**',
 '',
 'KESOTOWNは、VALORANTプレイヤー「VDK（Dolly#SDGs）」の成績不振を受け、特別コーチング企画 **「VDKを救いたい」** の始動を発表する。',
@@ -53,7 +53,7 @@ export async function vdkRescuePress(env:Env,request:typeof fetch=fetch,now=Date
  // Claim before send: a lost response is unknown and must never be automatically retried.
  url.searchParams.set('wait','true');
  try{
-  const response=await request(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({content:VDK_RESCUE_BODY,allowed_mentions:{parse:[]},username:'バチコーンbot'}),signal:AbortSignal.timeout(15000)});
+  const response=await request(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({content:VDK_RESCUE_BODY,allowed_mentions:{parse:[],users:['822082339776495616']},username:'バチコーンbot'}),signal:AbortSignal.timeout(15000)});
   receipt.httpStatus=response.status;
   if(response.ok){
    const msg=await response.json() as {id?:string;channel_id?:string;content?:string};
