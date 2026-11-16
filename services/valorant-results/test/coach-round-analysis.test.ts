@@ -153,8 +153,10 @@ test('a support player absent from a match, and missing kill timelines, are not 
  const corrupt=fixture('three','Abyss','Omen','Gekko',[{r:0,winner:'Blue'}],
   [{r:0,t:1000,killer:'p5',victim:'unknown'}]);
  const report2=summarizeCoachRounds([corrupt]);
- assert.equal(report2.individual[0].firstDeaths,0);
- assert.equal(report2.individual[0].observedOpeningRounds,0);
+ assert.equal(report2.individual.length,0,'corrupt kill stream is excluded, not counted as zero deaths');
+ assert.equal(report2.archivedMatches,1);
+ assert.equal(report2.usableMatches,0);
+ assert.equal(report2.killDataMissing,1);
 });
 
 test('backfill progress separates complete, partial, absent and source-unavailable matches',async()=>{
