@@ -1,0 +1,44 @@
+/* KESO PLAY: free VDK rescue campaign. All styles are scoped to the episode. */
+.vdk-rescue{padding:14px 14px 30px;color:#eaf0ff}
+.vdk-hero{position:relative;overflow:hidden;padding:23px 19px 20px;border-radius:19px;border:1px solid #9c4343;background:radial-gradient(circle at 95% 4%,rgba(244,101,91,.36),transparent 41%),linear-gradient(150deg,#28101c,#101630 62%,#07152a);box-shadow:0 11px 32px rgba(0,0,0,.3)}
+.vdk-eyebrow{font-size:10px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#ffb0a4}
+.vdk-hero h2{margin:13px 0 12px;font-size:clamp(24px,6.8vw,31px);letter-spacing:-.04em;line-height:1.3;color:#fff}
+.vdk-hero p{font-size:14px;line-height:1.8;margin:0 0 17px;color:#ffe5e0}
+.vdk-chips{display:flex;gap:6px;flex-wrap:wrap}
+.vdk-chips span{border:1px solid rgba(255,184,166,.32);background:rgba(255,255,255,.07);border-radius:999px;padding:5px 9px;font-size:11px;font-weight:600;color:#fff}
+.vdk-case{display:grid;gap:6px;margin:12px 0;padding:13px 15px;border-radius:12px;border:1px solid #2c4269;background:#08162d}
+.vdk-case strong{font-size:12px;color:#ffb0a4}
+.vdk-case span{font-size:12px;font-weight:700;line-height:1.6}
+.vdk-case small{font-size:11px;line-height:1.6;color:#9fb1cf}
+.vdk-card{padding:19px 16px;border:1px solid #354970;border-radius:17px;background:linear-gradient(170deg,#111d38,#09132c);margin-top:12px}
+.vdk-progress-head{display:flex;gap:8px;align-items:center;justify-content:space-between;font-size:12px;color:#c3d3ed}
+.vdk-progress-head span{color:#ffbd9a;font-weight:700}
+.vdk-progress{overflow:hidden;background:#27334f;border-radius:99px;height:7px;margin:11px 0 18px}
+.vdk-progress>div{height:100%;border-radius:99px;background:linear-gradient(90deg,#dc5756,#ffb56f);transition:width .25s}
+.vdk-card h3{font-size:21px;line-height:1.4;margin:0 0 10px;color:#fff}
+.vdk-setup{font-size:14px;line-height:1.8;color:#d0dcf2;margin:0 0 19px}
+.vdk-options{display:grid;gap:10px}
+.vdk-option{display:flex;align-items:center;gap:12px;text-align:left;min-height:60px;width:100%;padding:12px;border-radius:12px;border:1px solid #40587c;background:#121f3b;color:#eef4ff;font-size:13px;line-height:1.55;font-weight:700;cursor:pointer;touch-action:manipulation;transition:background .12s,border-color .12s}
+.vdk-option:focus-visible,.vdk-actions button:focus-visible,.vdk-next:focus-visible{outline:3px solid #ffa586;outline-offset:2px}
+.vdk-option:not(:disabled):active{transform:scale(.99)}
+.vdk-option-index{display:grid;place-items:center;flex:none;width:31px;height:31px;border:1px solid #63769b;border-radius:9px;color:#c6d9ff;font-size:13px}
+.vdk-option-points{margin-left:auto;flex:none;color:#ffcb98}
+.vdk-option.picked{border-color:#f3a46b;background:#3b2c39}
+.vdk-option.correct{box-shadow:inset 3px 0 #60c8a8}
+.vdk-option:disabled{cursor:default;opacity:.8}
+.vdk-option.picked:disabled{opacity:1}
+.vdk-feedback{margin-top:17px;padding:13px;border-left:3px solid #efb16f;border-radius:7px;background:#182846}
+.vdk-feedback strong{color:#ffd5a7;font-size:13px;line-height:1.7;display:block}
+.vdk-feedback p{font-size:12px;line-height:1.7;color:#c7d6ee;margin:7px 0 0}
+.vdk-next{width:100%;margin-top:15px;min-height:47px}
+.vdk-subtle{color:#a9bad5;font-size:12px;line-height:1.7;margin:13px 0 0}
+.vdk-note{font-size:11px;color:#8ea0bf;line-height:1.7;margin:13px 2px 0}
+.vdk-ending{text-align:center;padding:25px 15px}
+.vdk-big-icon{font-size:44px;margin-bottom:8px}
+.vdk-ending h3{font-size:25px;margin:12px 0}
+.vdk-final-score{font-size:52px;font-weight:900;color:#ffb58f;line-height:1.1;margin:13px 0}
+.vdk-final-score small{font-size:17px;color:#c7d5ec}
+.vdk-ending>p{font-size:14px;line-height:1.8;color:#e0e9f8}
+.vdk-actions{display:grid;gap:9px;margin-top:21px}
+.vdk-actions button{width:100%;min-height:48px}
+@media(prefers-reduced-motion:reduce){.vdk-rescue *{transition:none!important}}
