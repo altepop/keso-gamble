@@ -15,7 +15,12 @@ export interface Match {
     puuid: string; team_id: string; name?: string; tag?: string; party_id?: string | null; agent?: { id?: string; name?: string } | null;
     stats?: { kills?: number; deaths?: number; assists?: number; score?: number; headshots?: number; bodyshots?: number; legshots?: number } | null;
   }>;
-  rounds?: Array<{ id: number }>;
+  rounds?: Array<{
+    id: number;
+    winning_team?: string | null;
+    attacking_team?: string | null;
+    defending_team?: string | null;
+  }>;
   kills?: Array<{ round: number; time_in_round_in_ms: number; killer?: { puuid: string } | null; victim: { puuid: string } }>;
   teams: Array<{ team_id: string; won: boolean; rounds?: { won: number } }>;
 }
