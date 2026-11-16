@@ -73,7 +73,7 @@ test('D1 report reads only stored archives and counts historical roster candidat
  const sql=new DatabaseSync(':memory:');
  try{
   sql.exec(`CREATE TABLE valorant_match_rosters(match_id TEXT PRIMARY KEY,map TEXT,ended_at INTEGER,players_json TEXT);
-   CREATE TABLE valorant_match_round_events(match_id TEXT PRIMARY KEY,rounds_json TEXT,kills_json TEXT);`);
+   CREATE TABLE valorant_match_round_events(match_id TEXT PRIMARY KEY,rounds_json TEXT,kills_json TEXT);\n   CREATE TABLE monitor_state(key TEXT PRIMARY KEY,value TEXT NOT NULL);`);
   const row=fixture('a','Corrode','Fade','Clove',[{r:0,winner:'Blue'}],
     [{r:0,t:300,killer:'p0',victim:'p5'}]);
   sql.prepare('INSERT INTO valorant_match_rosters VALUES(?,?,?,?)').run(row.match_id,row.map,1000,row.players_json);
@@ -86,6 +86,7 @@ test('D1 report reads only stored archives and counts historical roster candidat
   })} as unknown as D1Database;
   const report=await readCoachRoundReport(db);
   assert.equal(report.totalVdkRosterMatches,1);
+  assert.deepEqual(report.backfill,{status:'disabled',complete:1,partial:0,missing:0,unavailable:0,pending:0});
   assert.equal(report.archivedMatches,1);
   assert.equal(report.overall.firstKillWinPct,100);
   assert.equal((await readCoachRoundReport(db)).overall.firstKillWinPct,100);
@@ -147,4 +148,43 @@ test('a support player absent from a match, and missing kill timelines, are not 
  const report2=summarizeCoachRounds([corrupt]);
  assert.equal(report2.individual[0].firstDeaths,0);
  assert.equal(report2.individual[0].observedOpeningRounds,0);
+});
+
+test('backfill progress separates complete, partial, absent and source-unavailable matches',async()=>{
+ const sql=new DatabaseSync(':memory:');
+ try{
+  sql.exec(`CREATE TABLE valorant_match_rosters(match_id TEXT PRIMARY KEY,map TEXT,ended_at INTEGER,players_json TEXT);
+   CREATE TABLE valorant_match_round_events(match_id TEXT PRIMARY KEY,rounds_json TEXT,kills_json TEXT);
+   CREATE TABLE monitor_state(key TEXT PRIMARY KEY,value TEXT NOT NULL);`);
+  const r1=fixture('complete','Corrode','Fade','Clove',[{r:0,winner:'Blue'}],
+   [{r:0,t:1000,killer:'p2',victim:'p7'}]);
+  const r2=fixture('partial','Lotus','Skye','Clove',[{r:0,winner:'Blue'}],[]);
+  const r3=fixture('absent','Abyss','Omen','Gekko',[{r:0,winner:'Blue'}],[]);
+  for(const [i,r] of [r1,r2,r3].entries()){
+   sql.prepare('INSERT INTO valorant_match_rosters VALUES(?,?,?,?)')
+    .run(r.match_id,r.map,1000+i,r.players_json);
+  }
+  sql.prepare('INSERT INTO valorant_match_round_events VALUES(?,?,?)')
+   .run(r1.match_id,r1.rounds_json,r1.kills_json);
+  sql.prepare('INSERT INTO valorant_match_round_events VALUES(?,?,?)')
+   .run(r2.match_id,r2.rounds_json,null);
+  sql.prepare('INSERT INTO monitor_state VALUES(?,?)').run('coach_round_backfill:enabled','Dolly#SDGs');
+  sql.prepare('INSERT INTO monitor_state VALUES(?,?)')
+   .run('coach_round_backfill:unavailable:partial','missing_kills');
+  let reads=0;
+  const db={prepare:(query:string)=>({
+    all:async()=>{reads++;return {results:sql.prepare(query).all()}},
+    first:async()=>{reads++;return sql.prepare(query).get()??null;}
+  })} as unknown as D1Database;
+  const report=await readCoachRoundReport(db);
+  assert.equal(report.totalVdkRosterMatches,3);
+  assert.equal(report.backfill.status,'running');
+  assert.equal(report.backfill.complete,1);
+  assert.equal(report.backfill.partial,1);
+  assert.equal(report.backfill.missing,1);
+  assert.equal(report.backfill.unavailable,1);
+  assert.equal(report.backfill.pending,1);
+  assert.equal(reads,2,'one archive read and one expanded count query');
+  assert.equal(report.overall.ourFirstKills,1,'partial does not fabricate opening kills');
+ }finally{sql.close()}
 });

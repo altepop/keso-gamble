@@ -51,6 +51,8 @@ test('opt in: backfills only known VDK match and completes without duplicates',a
   const fetch=async(region:string,id:string)=>{requests++;assert.equal(region,'ap');assert.equal(id,'match-one');return match(id)};
   assert.equal((await backfillVdkRoundEvents(f.db,fetch,now)).status,'saved');
   assert.equal((await backfillVdkRoundEvents(f.db,fetch,now)).status,'complete');
+  // The compatibility pass inspects previously partial archives once.
+  assert.equal((await backfillVdkRoundEvents(f.db,fetch,now)).status,'complete');
   assert.equal((await backfillVdkRoundEvents(f.db,fetch,now)).status,'disabled');
   assert.equal(requests,1);
   assert.equal(f.count('valorant_match_round_events'),1);
@@ -71,5 +73,72 @@ test('invalid replay identity and API 429 are deferred, never written',async()=>
   assert.equal((await backfillVdkRoundEvents(f.db,async()=>match('other-match'),now)).status,'deferred');
   assert.equal((await backfillVdkRoundEvents(f.db,async()=>match('match-one'),now+60_000)).status,'deferred');
   assert.equal(f.count('valorant_match_round_events'),0);
+ }finally{f.close()}
+});
+
+test('already saved partial archive is fetched again and repaired without duplicate rows',async()=>{
+ const f=fixture();try{
+  f.enable();
+  const partial=match();delete partial.kills;
+  f.sql.prepare('INSERT INTO valorant_match_round_events VALUES(?,?,?,?)')
+    .run('match-one',JSON.stringify([{r:1,winner:'Blue'}]),null,now-3600000);
+  let requests=0;
+  const fetch=async()=>{requests++;return match()};
+  assert.equal((await backfillVdkRoundEvents(f.db,fetch,now)).status,'saved');
+  assert.equal(requests,1);
+  const stored=f.sql.prepare('SELECT rounds_json,kills_json FROM valorant_match_round_events WHERE match_id=?')
+    .get('match-one') as {rounds_json:string;kills_json:string};
+  assert.equal(JSON.parse(stored.rounds_json)[0].winner,'Blue','existing observed rounds preserved');
+  assert.equal(JSON.parse(stored.kills_json).length,1,'missing kill array is filled');
+  assert.equal(f.count('valorant_match_round_events'),1);
+  assert.equal((await backfillVdkRoundEvents(f.db,fetch,now)).status,'complete');
+  assert.equal(requests,1);
+ }finally{f.close()}
+});
+test('unrecoverable partial kill timelines are identified and not refetched forever',async()=>{
+ const f=fixture();try{
+  f.enable();
+  const partial=match();delete partial.kills;
+  let requests=0;
+  const fetch=async()=>{requests++;return partial};
+  assert.equal((await backfillVdkRoundEvents(f.db,fetch,now)).status,'saved');
+  const archive=f.sql.prepare('SELECT rounds_json,kills_json FROM valorant_match_round_events').get() as
+    {rounds_json:string;kills_json:string|null};
+  assert.ok(archive.rounds_json);
+  assert.equal(archive.kills_json,null);
+  const flag=f.sql.prepare("SELECT value FROM monitor_state WHERE key='coach_round_backfill:unavailable:match-one'")
+   .get() as {value:string};
+  assert.equal(flag.value,'missing_kills');
+  assert.equal((await backfillVdkRoundEvents(f.db,fetch,now)).status,'complete');
+  assert.equal(requests,1,'partial unsupported upstream data is not polled indefinitely');
+ }finally{f.close()}
+});
+
+test('historically complete opt-in repairs old partial rows once but never fetches new matches',async()=>{
+ const f=fixture();try{
+  f.sql.prepare('INSERT INTO monitor_state VALUES(?,?)').run(ROUND_BACKFILL_SWITCH,'complete');
+  const before=match();delete before.kills;
+  f.sql.prepare('INSERT INTO valorant_match_round_events VALUES(?,?,?,?)')
+   .run('match-one',JSON.stringify([{r:1,winner:'Blue'}]),null,now-86400000);
+  let fetched=0;
+  const fetch=async()=>{fetched++;return match()};
+  assert.equal((await backfillVdkRoundEvents(f.db,fetch,now)).status,'saved');
+  assert.equal((await backfillVdkRoundEvents(f.db,fetch,now)).status,'complete');
+  assert.equal((await backfillVdkRoundEvents(f.db,fetch,now)).status,'disabled');
+  assert.equal(fetched,1);
+  const switchRow=f.sql.prepare('SELECT value FROM monitor_state WHERE key=?')
+    .get(ROUND_BACKFILL_SWITCH) as {value:string};
+  assert.equal(switchRow.value,'repaired');
+  assert.equal(f.count('valorant_match_round_events'),1);
+ }finally{f.close()}
+});
+test('old completed opt-in does not fetch unarchived matches',async()=>{
+ const f=fixture();try{
+  f.sql.prepare('INSERT INTO monitor_state VALUES(?,?)').run(ROUND_BACKFILL_SWITCH,'complete');
+  let fetched=0;
+  assert.equal((await backfillVdkRoundEvents(f.db,async()=>{fetched++;return match()},now)).status,'complete');
+  assert.equal(fetched,0);
+  assert.equal((f.sql.prepare('SELECT value FROM monitor_state WHERE key=?')
+    .get(ROUND_BACKFILL_SWITCH) as {value:string}).value,'repaired');
  }finally{f.close()}
 });

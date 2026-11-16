@@ -48,8 +48,17 @@ export function compactCompetitiveRoundEvents(match:Match,now=Date.now()){
 export async function recordCompetitiveRoundEvents(db:D1Database,match:Match,now=Date.now()):Promise<boolean>{
   const compact=compactCompetitiveRoundEvents(match,now);
   if(!compact)return false;
-  const result=await db.prepare(`INSERT OR IGNORE INTO valorant_match_round_events
-    (match_id,rounds_json,kills_json,recorded_at) VALUES(?,?,?,?)`)
+  // An early Henrik response may have rounds but no kill timeline, or vice versa.
+  // Fill ONLY missing columns when a later verified fetch supplies them. Never
+  // replace already-observed events or rewrite the archive timestamp on no-op.
+  const result=await db.prepare(`INSERT INTO valorant_match_round_events
+    (match_id,rounds_json,kills_json,recorded_at) VALUES(?,?,?,?)
+    ON CONFLICT(match_id) DO UPDATE SET
+      rounds_json=COALESCE(valorant_match_round_events.rounds_json,excluded.rounds_json),
+      kills_json=COALESCE(valorant_match_round_events.kills_json,excluded.kills_json),
+      recorded_at=excluded.recorded_at
+    WHERE (valorant_match_round_events.rounds_json IS NULL AND excluded.rounds_json IS NOT NULL)
+       OR (valorant_match_round_events.kills_json IS NULL AND excluded.kills_json IS NOT NULL)`)
     .bind(compact.id,compact.roundsJson,compact.killsJson,compact.recordedAt).run();
   return Boolean(result.meta.changes);
 }
