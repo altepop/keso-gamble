@@ -48,6 +48,37 @@ jobs:
               caution:'Party IDs absent/null do not prove not queued together'
             }));
           }
+          const joined=await q("SELECT n.match_id,n.ended_at,n.outcome,r.map,r.players_json FROM notifications n JOIN valorant_match_rosters r ON r.match_id=n.match_id WHERE n.riot_id='Dolly#SDGs' AND n.mode='competitive' ORDER BY n.ended_at DESC LIMIT 100");
+          const first=joined.find(x=>x.match_id==='88e69e18-6b40-4572-84fb-4f09fe4f463b');
+          const normalize=(p)=>String(p?.name??'').toLowerCase()+'#'+String(p?.tag??'').toLowerCase();
+          const abemaIdentity=first?JSON.parse(first.players_json).find(p=>normalize(p)==='abema#ttv')?.puuid:null;
+          const report=joined.map(row=>{
+            const players=JSON.parse(row.players_json);
+            const vdk=players.find(p=>normalize(p)==='dolly#sdgs');
+            const abema=players.find(p=>normalize(p)==='abema#ttv'||(abemaIdentity&&p.puuid===abemaIdentity));
+            const ishihara=players.find(p=>normalize(p)==='h1d3g1g4s#1037');
+            const sameTeam=(p)=>Boolean(vdk&&p&&vdk.team_id===p.team_id);
+            const sameParty=(p)=>Boolean(sameTeam(p)&&vdk.party_id&&p.party_id===vdk.party_id);
+            return {matchId:row.match_id,date:new Date(row.ended_at).toISOString().slice(0,10),map:row.map,
+              outcome:row.outcome,abemaPresent:Boolean(abema),abemaSameTeam:sameTeam(abema),
+              abemaSameParty:sameParty(abema),ishiharaPresent:Boolean(ishihara),
+              ishiharaSameTeam:sameTeam(ishihara),ishiharaSameParty:sameParty(ishihara),
+              threeSameTeam:sameTeam(abema)&&sameTeam(ishihara),
+              threeSameParty:sameParty(abema)&&sameParty(ishihara),
+              partyMembers:vdk?.party_id?players.filter(p=>p.party_id===vdk.party_id).length:0};
+          });
+          const count=(field)=>report.filter(x=>x[field]).length;
+          console.log('VDK_THREE_PLAYER_REPORT '+JSON.stringify({
+            restoredMatched:report.length,abemaPresent:count('abemaPresent'),
+            abemaSameTeam:count('abemaSameTeam'),abemaSameParty:count('abemaSameParty'),
+            ishiharaSameTeam:count('ishiharaSameTeam'),ishiharaSameParty:count('ishiharaSameParty'),
+            threeSameTeam:count('threeSameTeam'),threeSameParty:count('threeSameParty'),
+            analyzed:report.map(({matchId,date,map,outcome,abemaPresent,abemaSameTeam,abemaSameParty,ishiharaSameTeam,threeSameParty,partyMembers})=>({
+              matchId,date,map,outcome,abemaPresent,abemaSameTeam,abemaSameParty,ishiharaSameTeam,threeSameParty,partyMembers
+            })),
+            identityEvidence:abemaIdentity?'Known Corrode PUUID + Riot ID/name':'Match-by-match name/tag only',
+            note:'Numbers cover restored competitive match roster rows only. Unrestored matches remain unknown.'
+          }));
           console.log('VDK_BACKFILL_WORKER_STATE '+JSON.stringify(workerState));
           console.log('VDK_BACKFILL_PROGRESS '+JSON.stringify({eligible:scope,archived:saved,
             abemaKnownRiotIdMatches:abema,sharedCorrodeExampleArchived:known===1,
