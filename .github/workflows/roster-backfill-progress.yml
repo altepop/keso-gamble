@@ -91,3 +91,5 @@ jobs:
 # Verify currently recovered historical match rosters before one-off acceleration.
 
 # Mid-run audit of accelerated historical restoration.
+
+# Later mid-run audit of all historical VDK match recovery.
