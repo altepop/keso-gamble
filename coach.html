@@ -39,6 +39,11 @@ tr:last-child td{border-bottom:0}
 .bar{height:100%;background:#6eacff}
 #status{min-height:21px;margin:10px 0;font-size:13px;color:#b9d6ff}
 #status[role=alert]{color:#ffb8b8}
+.review-item{background:#0d1830;border:1px solid #283c60;border-radius:12px;padding:12px 14px;margin-top:10px;overflow-wrap:anywhere}
+.review-item p{margin:6px 0 0}
+.review-heading{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 12px;justify-content:space-between}
+.review-heading strong{font-size:14px}
+.review-kind{font-size:12px;font-weight:750;letter-spacing:.01em;color:#a9caff}
 #connection{display:none}
 .empty{padding:18px 4px;color:#b6c6df;text-align:center}
 @media(max-width:470px){.panel{padding:12px}.card{padding:12px}.card strong{font-size:23px}}
@@ -63,6 +68,17 @@ tr:last-child td{border-bottom:0}
 </section>
 <div id="report" hidden>
 <section class="cards" id="totals" aria-label="補完状況の概要"></section>
+<section class="panel">
+<h2>次の試合で意識すること</h2>
+<p class="muted small">取得済みログから作成する観察・録画確認の提案だ。キルの順序だけで「戦犯」やポジションミスとは断定しない。</p>
+<div id="coach-notes"></div>
+</section>
+<section class="panel">
+<h2>優先して見直すラウンド</h2>
+<p class="muted small">先制キルを取ったのに敗北したラウンドから、連続撃破・短時間の死亡など、事実として検証できる場面を抽出する。ラウンド番号は0始まりだ。</p>
+<div id="review-rounds"></div>
+<p class="foot">表示する試合日時は日本時間。キル時刻はそのラウンド開始からの経過時間である。位置・購入・スキル・スパイクの記録はないため、理由は試合録画で確認する必要がある。</p>
+</section>
 <section class="panel"><h2>マップ別：先制キルを勝利に変えた割合</h2><div id="maps"></div><p class="foot">FK後勝率＝味方が敵を最初に倒したラウンドのうち、ラウンド勝者が分かるものに限った勝率。5対4からの敗北を探す指標で、プレイヤー個人の戦犯判定ではない。</p></section>
 <section class="panel">
 <h2>VDK・Abema・石原：個人別FK / FD</h2>
@@ -103,6 +119,23 @@ $('totals').innerHTML=card('過去の対象試合',int(total),'VDKの保存済�
  +card('補完済み試合',int(completed),'分析利用可能 '+int(usable)+' 試合')
  +card('先制キル後の勝率',pct(o.firstKillWinPct),int(o.firstKillWins)+'勝 / '+int(o.firstKillOutcomesKnown)+'ラウンド')
  +card('人数不利からの逆転',int(o.comebackWins),'保存済みデータの範囲');
+const notes=data.coachingNotes||[];
+$('coach-notes').innerHTML=notes.length?notes.map(n=>{
+ const tone=n.kind==='review'?'要確認':n.kind==='collect'?'データ補完':'継続観察';
+ return `<article class="review-item">
+  <div class="review-heading"><span class="review-kind">${escape(tone)} · ${escape(n.subject)}</span><strong>${escape(n.title)}</strong></div>
+  <p class="small muted">${escape(n.evidence)}</p>
+  <p class="small"><b>次の行動：</b>${escape(n.action)}</p>
+ </article>`;
+}).join(''):'<p class="empty">現時点で個別の提案はない。データ補完後に再確認してほしい。</p>';
+const reviews=data.reviewRounds||[];
+$('review-rounds').innerHTML=reviews.length?reviews.map((r,i)=>`
+ <article class="review-item">
+ <div class="review-heading"><span class="review-kind">優先 ${int(i+1)} · ${escape(r.map)} / R${int(r.round)}</span>
+ <strong>${escape(r.matchJst)} JST</strong></div>
+ <p class="small">${escape(r.evidence)}</p>
+ <p class="small muted">${r.firstKiller?'最初の撃破：'+escape(r.firstKiller)+' · ':''}${escape(r.focus)}</p>
+ </article>`).join(''):'<p class="empty">条件を満たす見直しラウンドがまだない。</p>';
 const maps=data.maps||[];
 $('maps').innerHTML=maps.length?simpleTable(
  ['マップ','試合','ラウンド','味方FK','FK後勝利','FK後敗北','FK後勝率'],
