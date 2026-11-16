@@ -1,8 +1,11 @@
+import {coachNotes,recommendReviewRounds} from './coach-review.ts';
+
 // Read-only, opt-in-on-request analysis of the match archives already in D1.
 // Never infer missing winner/attack/defence fields, or treat a Clove revive as invalid.
 interface ArchivedRow{
   match_id:string;
   map:string|null;
+  ended_at:number;
   players_json:string;
   rounds_json:string|null;
   kills_json:string|null;
@@ -221,19 +224,28 @@ export function summarizeCoachRounds(rows:readonly ArchivedRow[]){
   };
 }
 // Repeated Activity opens on one Worker isolate should not rescan D1.
-const readCache=new WeakMap<object,{until:number;value:ReturnType<typeof summarizeCoachRounds>&{totalVdkRosterMatches:number}}>();
+type CoachReport=ReturnType<typeof summarizeCoachRounds>&{
+ totalVdkRosterMatches:number;
+ reviewRounds:ReturnType<typeof recommendReviewRounds>;
+ coachingNotes:ReturnType<typeof coachNotes>;
+};
+const readCache=new WeakMap<object,{until:number;value:CoachReport}>();
 export async function readCoachRoundReport(db:D1Database,now=Date.now()){
  const cached=readCache.get(db);
  if(cached&&now<cached.until)return cached.value;
- const result=await db.prepare(`SELECT r.match_id,r.map,r.players_json,e.rounds_json,e.kills_json
+ const result=await db.prepare(`SELECT r.match_id,r.map,r.ended_at,r.players_json,e.rounds_json,e.kills_json
    FROM valorant_match_round_events e JOIN valorant_match_rosters r ON r.match_id=e.match_id
+   WHERE EXISTS (SELECT 1 FROM json_each(r.players_json) p
+     WHERE json_extract(p.value,'$.name')='Dolly'
+       AND json_extract(p.value,'$.tag')='SDGs')
    ORDER BY r.ended_at DESC LIMIT 100`).all<ArchivedRow>();
  const report=summarizeCoachRounds(result.results);
  const row=await db.prepare(`SELECT COUNT(*) AS n FROM valorant_match_rosters r
    WHERE EXISTS(SELECT 1 FROM json_each(r.players_json) p
     WHERE json_extract(p.value,'$.name')='Dolly'
       AND json_extract(p.value,'$.tag')='SDGs')`).first<{n:number}>();
- const value={...report,totalVdkRosterMatches:Number(row?.n??0)};
+ const value={...report,totalVdkRosterMatches:Number(row?.n??0),
+   reviewRounds:recommendReviewRounds(result.results),coachingNotes:coachNotes(report)};
  readCache.set(db,{until:now+5*60000,value});
  return value;
 }
