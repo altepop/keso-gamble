@@ -31,6 +31,7 @@ test('audits only aggregate SQL and never prints accounts, secrets or raw result
     missing_kills_only:1,missing_rounds_only:0,
     reason_missing_kills:1,reason_missing_rounds:0,reason_no_round_data:0,reason_not_found:0,
     retry_attempts:1,retry_still_missing_kills:1,
+    legacy_v2_attempts:1,legacy_v2_still_missing_kills:1,
     switch_value:'repaired',api_cooldown_until:'0',tracked_profile_exists:1
    }]}]})};
   };
@@ -38,6 +39,7 @@ test('audits only aggregate SQL and never prints accounts, secrets or raw result
   assert.equal(calls,1);
   assert.deepEqual(got,{rosterCount:44,complete:3,missing:40,partial:1,unavailable:1,
    missingKillsOnly:1,missingRoundsOnly:0,oneTimeRetries:1,retryStillMissingKills:1,
+   legacyV2Attempts:1,legacyV2StillMissingKills:1,
    unavailableReasons:{missingKills:1,missingRounds:0,noRoundData:0,notFound:0},
    historicalPuuidMismatch:2,eligibleBacklog:39,trackedProfileExists:true,
    switchStatus:'repaired',cooldownActive:false});
@@ -51,7 +53,8 @@ test('rejects inconsistent totals and malformed configuration',async()=>{
    async()=>({ok:true,json:async()=>({success:true,result:[{success:true,results:[{
      roster_count:44,complete_count:44,missing_count:3,partial_count:1,
      unavailable_count:0,historical_puuid_mismatch:0,eligible_backlog:0,
-     missing_kills_only:0,missing_rounds_only:0,retry_attempts:0,retry_still_missing_kills:0,reason_missing_kills:0,
+     missing_kills_only:0,missing_rounds_only:0,retry_attempts:0,retry_still_missing_kills:0,
+     legacy_v2_attempts:0,legacy_v2_still_missing_kills:0,reason_missing_kills:0,
      reason_missing_rounds:0,reason_no_round_data:0,reason_not_found:0,
      tracked_profile_exists:1,switch_value:'complete'
    }]}]})})),/Inconsistent archive counts/);
