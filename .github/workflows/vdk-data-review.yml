@@ -146,3 +146,29 @@ jobs:
             total:summary(games),recent10:summary(games.slice(0,10)),maps:by('map'),agents:by('agent'),
             otherModes:allModes,first:games.at(-1)?.at,last:games[0]?.at}));
           NODE
+
+      - name: Ishihara and VDK match overlap (read-only)
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          node --input-type=module <<'NODE'
+          const url='https://api.cloudflare.com/client/v4/accounts/'+process.env.CF_ACCOUNT+'/d1/database/bf23ab40-814f-4626-9e0b-36739ac41750/query';
+          const sql="SELECT v.ended_at,v.outcome, v.match_id, v.team_id AS vt, i.team_id AS it,v.message AS vm,i.message AS im FROM notifications v INNER JOIN notifications i ON v.match_id=i.match_id AND lower(i.riot_id)=? AND i.mode='competitive' WHERE lower(v.riot_id)=? AND v.mode='competitive' ORDER BY v.ended_at DESC LIMIT 300";
+          const res=await fetch(url,{method:'POST',headers:{Authorization:'Bearer '+process.env.CF_TOKEN,'Content-Type':'application/json'},body:JSON.stringify({sql,params:['h1d3g1g4s#1037','dolly#sdgs']}),signal:AbortSignal.timeout(30000)});
+          if(!res.ok)throw Error('HTTP '+res.status);
+          const j=await res.json();if(!j.success||!j.result?.[0]?.success)throw Error('D1 SELECT failure');
+          const rows=j.result[0].results;
+          const team=rows.filter(r=>r.vt&&r.it&&r.vt===r.it);
+          const oppose=rows.filter(r=>r.vt&&r.it&&r.vt!==r.it);
+          const ambiguous=rows.filter(r=>!r.vt||!r.it);
+          const agent=m=>(/🗺️\s*([^\n]+)/.exec(m||'')?.[1]||'').split('｜')[1]||'unknown';
+          const map=m=>(/🗺️\s*([^\n]+)/.exec(m||'')?.[1]||'').split('｜')[0]||'unknown';
+          const tally=rs=>({n:rs.length,w:rs.filter(r=>r.outcome==='win').length,l:rs.filter(r=>r.outcome==='loss').length,
+            draw:rs.filter(r=>r.outcome==='draw').length,
+            pairs:Object.entries(Object.groupBy(rs,r=>agent(r.vm)+' + '+agent(r.im))).map(([name,x])=>({name,n:x.length,w:x.filter(y=>y.outcome==='win').length,l:x.filter(y=>y.outcome==='loss').length})).sort((a,b)=>b.n-a.n),
+            maps:Object.entries(Object.groupBy(rs,r=>map(r.vm))).map(([name,x])=>({name,n:x.length,w:x.filter(y=>y.outcome==='win').length,l:x.filter(y=>y.outcome==='loss').length})).sort((a,b)=>b.n-a.n)
+          });
+          console.log('VDK_ISHIHARA_SHARED '+JSON.stringify({allMatches:tally(rows),sameTeam:tally(team),opponents:oppose.length,teamIdMissing:ambiguous.length,
+            note:'Identical match/team IDs indicate same game/side, not necessarily premade party. Missing link does not prove solo.'}));
+          NODE
