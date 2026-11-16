@@ -12,6 +12,7 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   const token='a'.repeat(48);
   const report={
     totalVdkRosterMatches:44,archivedMatches:3,usableMatches:3,invalidMatches:0,killDataMissing:0,roundDataMissing:0,
+    backfill:{status:'running',complete:3,partial:1,missing:40,unavailable:0,pending:41},
     overall:{rounds:68,firstKillWinPct:70,firstKillWins:21,firstKillOutcomesKnown:30,comebackWins:7,roundsWithSides:0,repeatedVictimRounds:1},
     maps:[{map:'Corrode',matches:1,rounds:22,ourFirstKills:13,firstKillWins:8,firstKillLosses:5,firstKillWinPct:61.5}],
     trioComparisons:[{map:'Corrode',composition:'Fade + Clove',matches:1,firstKillWins:8,firstKillLosses:5,firstKillWinPct:61.5}],
@@ -47,6 +48,10 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   await page.goto('http://127.0.0.1:18784/coach.html');
   await page.locator('#report:not([hidden])').waitFor();
   assert.match(await page.locator('#totals').innerText(),/44/);
+  assert.match(await page.locator('#backfill-counts').innerText(),/完全保存/);
+  assert.match(await page.locator('#backfill-counts').innerText(),/一部欠損/);
+  assert.match(await page.locator('#backfill-counts').innerText(),/40/);
+  assert.match(await page.locator('#backfill-message').innerText(),/補完処理は有効/);
   assert.match(await page.locator('#maps').innerText(),/61\.5%/);
   assert.match(await page.locator('#trio').innerText(),/Fade/);
   assert.match(await page.locator('#players').innerText(),/VDK/);
