@@ -58,3 +58,13 @@ test('demotion memorial is a fictional coaching exercise, not a real rank adjust
   assert.match(vdkRescuePanel(createVdkRescueState()),/架空の戦術訓練/);
   assert.doesNotMatch(vdkRescueShareText(createVdkRescueState()),/救済成功/);
 });
+
+test('VDK recon habit training rewards timing with the Clove duo',()=>{
+  const recon=VDK_RESCUE_QUESTIONS[3];
+  assert.match(recon.title,/リコン/);
+  assert.match(recon.setup,/Abema/);
+  assert.match(recon.setup,/架空の訓練/);
+  assert.equal(recon.choices.filter(x=>x.points===20).length,1);
+  assert.match(recon.choices.find(x=>x.points===20).label,/進入タイミング/);
+  assert.match(recon.lesson,/早い索敵.*有効/);
+});
