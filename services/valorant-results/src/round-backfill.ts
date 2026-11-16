@@ -82,8 +82,13 @@ export async function backfillVdkRoundEvents(db:D1Database,fetchDetail:(region:s
   }
   return {status:'deferred'};
  }
- if(retryOnly)
-  await state(db,PREFIX+'retry_once:'+row.match_id,String(now));
+ if(retryOnly){
+  // Claim atomically: overlapping Cron invocations must never both call Henrik.
+  // INSERT OR IGNORE preserves the original attempt marker on every later tick.
+  const claim=await db.prepare('INSERT OR IGNORE INTO monitor_state(key,value) VALUES(?,?)')
+   .bind(PREFIX+'retry_once:'+row.match_id,String(now)).run();
+  if(Number(claim.meta.changes??0)!==1)return {status:'deferred'};
+ }
  try{
   const detail=await fetchDetail(row.region,row.match_id);
   const compact=compactCompetitiveRoundEvents(detail,now);
