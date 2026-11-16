@@ -104,3 +104,45 @@ jobs:
           }
           console.log('DUO_COMPARISON '+JSON.stringify({total:rows.length,overlap:compact(overlap),other:compact(other),opponents:cross.length,notice:'Shared-match same-team counts do not prove duo party. Other includes any not jointly tracked.'}));
           NODE
+
+      - name: Ishihara ACT review (read-only aggregate; no posting)
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          node --input-type=module <<'NODE'
+          const account=process.env.CF_ACCOUNT,token=process.env.CF_TOKEN;
+          if(!account||!token)throw Error('D1 credentials not configured');
+          const base='https://api.cloudflare.com/client/v4/accounts/'+account+'/d1/database/bf23ab40-814f-4626-9e0b-36739ac41750/query';
+          async function q(sql,params=[]){
+            if(!/^\s*SELECT\b/i.test(sql))throw Error('not read only');
+            const r=await fetch(base,{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({sql,params}),signal:AbortSignal.timeout(25000)});
+            if(!r.ok)throw Error('Database HTTP '+r.status);
+            const x=await r.json();
+            if(!x.success||!x.result?.[0]?.success)throw Error('Database SELECT failed');
+            return x.result[0].results;
+          }
+          const who='h1d3g1g4s#1037';
+          const [rows,allModes]=await Promise.all([
+            q("SELECT ended_at,outcome,act_name,message,mode FROM notifications WHERE lower(riot_id)=? AND mode='competitive' ORDER BY ended_at DESC LIMIT 1000",[who]),
+            q("SELECT mode,COUNT(*) AS n,SUM(outcome='win') AS w,SUM(outcome='loss') AS l FROM notifications WHERE lower(riot_id)=? GROUP BY mode ORDER BY n DESC",[who])
+          ]);
+          const games=rows.map(r=>{
+            const msg=String(r.message||''),stats=/(\d+)K\s*\/\s*(\d+)D\s*\/\s*(\d+)A/.exec(msg);
+            const loc=(/🗺️\s*([^\n]+)/.exec(msg)?.[1]||'').split('｜');
+            return {at:r.ended_at,result:r.outcome,act:r.act_name,map:loc[0]||'unknown',agent:loc[1]||'unknown',
+              k:stats?+stats[1]:null,d:stats?+stats[2]:null,a:stats?+stats[3]:null,acs:/ACS\s+(\d+)/.exec(msg)?+(/ACS\s+(\d+)/.exec(msg))[1]:null};
+          });
+          function summary(xs){
+            const sum=f=>xs.reduce((a,b)=>a+(Number.isFinite(b[f])?b[f]:0),0);
+            const ks=sum('k'),ds=sum('d');
+            const acs=xs.map(x=>x.acs).filter(Number.isFinite);
+            return {n:xs.length,w:xs.filter(x=>x.result==='win').length,l:xs.filter(x=>x.result==='loss').length,
+              draws:xs.filter(x=>x.result==='draw').length,kd:ds?+(ks/ds).toFixed(2):null,
+              acs:acs.length?+(acs.reduce((a,b)=>a+b,0)/acs.length).toFixed(1):null};
+          }
+          const by=k=>Object.entries(Object.groupBy(games,x=>x[k])).map(([name,v])=>({name,...summary(v)})).sort((a,b)=>b.n-a.n);
+          console.log('ISHIHARA_ACT_REVIEW '+JSON.stringify({name:who,scope:'only matches monitored in KESO PLAY, not full Tracker ACT',
+            total:summary(games),recent10:summary(games.slice(0,10)),maps:by('map'),agents:by('agent'),
+            otherModes:allModes,first:games.at(-1)?.at,last:games[0]?.at}));
+          NODE
