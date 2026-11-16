@@ -122,9 +122,16 @@ jobs:
         run: node scripts/race-video/run.mjs --check
   # Activity flows in a real browser against mocked Worker answers (demo, live wallet, racing, Discord login,
   # casino, stocks, Mリーグ/履歴/pulse). No secrets and no network beyond the runner.
-  browser:
+  # Keep every existing Chromium/WebKit browser case; run independent halves on
+  # separate runners. The 'browser' fan-in below keeps the required CI status stable.
+  browser-shards:
+    name: Browser (${{ matrix.suite }})
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [core, extended]
     steps:
       - uses: actions/checkout@v7
         with:
@@ -140,7 +147,17 @@ jobs:
         run: |
           npm install --no-save playwright@1.63.0
           npx playwright install --with-deps chromium webkit
-      - run: npm run test:browser:all
+      - run: npm run test:browser:${{ matrix.suite }}
+  # A failed or cancelled shard must fail the original 'browser' status.
+  browser:
+    needs: browser-shards
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every browser shard to pass
+        env:
+          SHARDS_RESULT: ${{ needs.browser-shards.result }}
+        run: test "$SHARDS_RESULT" = "success"
   deploy:
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     needs: [check, browser]
