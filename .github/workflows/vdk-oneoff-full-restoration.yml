@@ -88,7 +88,7 @@ jobs:
             n("SELECT COUNT(DISTINCT n.match_id) AS n FROM notifications n JOIN valorant_match_rosters r ON r.match_id=n.match_id WHERE n.riot_id='Dolly#SDGs' AND n.mode='competitive'"),
             n("SELECT COUNT(*) AS n FROM monitor_state WHERE key LIKE 'roster_backfill:unavailable:%'"),
             n("SELECT COUNT(DISTINCT n.match_id) AS n FROM notifications n WHERE n.riot_id='Dolly#SDGs' AND n.mode='competitive' AND NOT EXISTS(SELECT 1 FROM valorant_match_rosters r WHERE r.match_id=n.match_id) AND NOT EXISTS(SELECT 1 FROM monitor_state s WHERE s.key='roster_backfill:unavailable:'||n.match_id)"),
-            n("SELECT COUNT(DISTINCT r.match_id) AS n FROM valorant_match_rosters r,json_each(r.players_json) p JOIN notifications n ON n.match_id=r.match_id WHERE n.riot_id='Dolly#SDGs' AND n.mode='competitive' AND lower(json_extract(p.value,'$.name'))='abema' AND lower(json_extract(p.value,'$.tag'))='ttv'"),
+            n("SELECT COUNT(DISTINCT r.match_id) AS n FROM valorant_match_rosters r JOIN notifications n ON n.match_id=r.match_id, json_each(r.players_json) p WHERE n.riot_id='Dolly#SDGs' AND n.mode='competitive' AND lower(json_extract(p.value,'$.name'))='abema' AND lower(json_extract(p.value,'$.tag'))='ttv'"),
             n("SELECT COUNT(*) AS n FROM valorant_match_rosters WHERE match_id='88e69e18-6b40-4572-84fb-4f09fe4f463b'"),
             q("SELECT value FROM monitor_state WHERE key='roster_backfill:enabled'")
           ]);
