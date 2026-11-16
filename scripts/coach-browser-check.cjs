@@ -68,7 +68,7 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   assert.match(await page.locator('#players').innerText(),/石原/);
   assert.match(await page.locator('#players').innerText(),/5秒以内/);
   assert.match(await page.locator('#players').innerText(),/先制デス後にチームが勝利/);
-  assert.match(await page.locator('#players').innerText(),/42\\.9%/);
+  assert.match(await page.locator('#players').innerText(),/42\.9%/);
   assert.match(await page.locator('#player-map').innerText(),/FD後勝率/);
   assert.match(await page.locator('#player-map').innerText(),/Corrode \/ Fade/);
   assert.match(await page.locator('#coach-notes').innerText(),/個人評価は保留/);
@@ -100,8 +100,8 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   use43Report=true;
   await page.locator('#reload').click();
   await page.waitForFunction(()=>document.querySelector('#totals').textContent.includes('43'));
-  assert.match(await page.locator('#totals').innerText(),/成績の分析対象[\\s\\S]*43/);
-  assert.match(await page.locator('#totals').innerText(),/データ不足で除外[\\s\\S]*1/);
+  assert.match(await page.locator('#totals').innerText(),/成績の分析対象[\s\S]*43/);
+  assert.match(await page.locator('#totals').innerText(),/データ不足で除外[\s\S]*1/);
   assert.match(await page.locator('#backfill-message').innerText(),/欠損1試合は個人・チーム成績の分母から除外/);
   assert.equal(requests.length,2,'refresh is manual only');
   assert.deepEqual(errors,[]);
