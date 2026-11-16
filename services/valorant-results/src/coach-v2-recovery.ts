@@ -32,8 +32,9 @@ export function verifiedLegacyV2Kills(raw:LegacyV2,row:Archived):string|null {
    !integer(m.game_length,1,4*3600_000))return null;
  // v2 game_length can be seconds or milliseconds, depending on the upstream
  // serializer. Require either interpretation to agree with the archived end.
- if(![m.game_length,m.game_length*1000].some(ms=>
-   ms>0&&ms<=4*3600_000&&Math.abs(m.game_start*1000+ms-row.ended_at)<=120000))return null;
+ const gameStart=m.game_start,gameLength=m.game_length;
+ if(![gameLength,gameLength*1000].some(ms=>
+   ms>0&&ms<=4*3600_000&&Math.abs(gameStart*1000+ms-row.ended_at)<=120000))return null;
  const queue=typeof m.queue==='string'?m.queue.toLowerCase():
    typeof m.mode_id==='string'?m.mode_id.toLowerCase():'';
  if(queue!=='competitive')return null;
