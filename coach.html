@@ -54,7 +54,7 @@ tr:last-child td{border-bottom:0}
 <header>
 <div class="top"><div><div class="eyebrow">KESO PLAY / VALORANT</div><h1>KESO COACH</h1></div>
 <a href="./index.html">KESO PLAYに戻る</a></div>
-<p class="lead muted">保存済みの試合から、先制キルをラウンド勝利に変えられているかを分析する。データのない項目は推測しない。</p>
+<p class="lead muted">ラウンド・キル履歴がそろった試合だけで先制キル、先制デスと勝敗を分析する。欠損した試合は評価から除外し、データのない項目は推測しない。</p>
 <div class="actions"><button id="reload" type="button">分析を更新</button><button id="share" class="secondary" type="button" disabled>診断レポートをコピー</button><span class="small muted">手動更新 · KPの増減なし</span></div>
 <p class="small muted">診断レポートには認証トークン・接続コード・試合ID・PUUID・相手の名前を含めない。このチャットに貼れば保存状況と3人の結果を詳しく分析できる。</p>
 <textarea id="share-fallback" hidden readonly aria-label="診断レポート" rows="6" style="width:100%;background:#09152a;color:#e9eef9;border:1px solid #435779;border-radius:10px;margin-top:8px;font:12px/1.4 monospace"></textarea>
@@ -72,7 +72,7 @@ tr:last-child td{border-bottom:0}
 <section class="cards" id="totals" aria-label="補完状況の概要"></section>
 <section class="panel">
 <h2>対象試合の補完状況</h2>
-<p class="muted small">完全保存・一部欠損・未取得を区別する。数字は更新時点でのD1保存状況であり、取得元に存在しないデータは補わない。</p>
+<p class="muted small">完全保存・一部欠損・未取得を区別する。分析の母数は完全保存済み試合だけ。数字は更新時点のD1保存状況であり、取得元に存在しないデータは補わない。</p>
 <div class="cards" id="backfill-counts"></div>
 <p id="backfill-message" class="small muted"></p>
 <div class="actions"><button id="resume-backfill" type="button" hidden>未取得試合の補完を再開</button></div>
@@ -92,7 +92,7 @@ tr:last-child td{border-bottom:0}
 <section class="panel"><h2>マップ別：先制キルを勝利に変えた割合</h2><div id="maps"></div><p class="foot">FK後勝率＝味方が敵を最初に倒したラウンドのうち、ラウンド勝者が分かるものに限った勝率。5対4からの敗北を探す指標で、プレイヤー個人の戦犯判定ではない。</p></section>
 <section class="panel">
 <h2>VDK・Abema・石原：個人別FK / FD</h2>
-<p class="muted small">ラウンドの最初の敵味方間キルのみで判定。役割やマップ、サンプル数の違いがあるため、FKの大小だけで良し悪しは決められない。</p>
+<p class="muted small">ラウンドの最初の敵味方間キルのみで判定。FD後勝率は、先制デスしたラウンドで味方が勝利した割合（勝敗判明分のみ）である。役割やマップ、サンプル数の違いがあるため、FK/FDだけで良し悪しは決められない。</p>
 <div class="cards" id="players"></div>
 <p class="foot">「5秒以内の死亡」は、先制キルを取った本人が直後に倒された回数。「5秒以内の取り返し」は、最初に倒された味方の敵キラーを味方が5秒以内に倒した回数である。意図的なトレードの証明ではない。</p>
 </section>
@@ -128,8 +128,9 @@ const total=data.totalVdkRosterMatches??0;
 const completed=data.archivedMatches??0;
 const usable=data.usableMatches??0;
 const o=data.overall||{};
-$('totals').innerHTML=card('過去の対象試合',int(total),'VDKの保存済みロスター')
- +card('補完済み試合',int(completed),'分析利用可能 '+int(usable)+' 試合')
+$('totals').innerHTML=card('保存済みロスター',int(total),'VDKの対象試合')
+ +card('成績の分析対象',int(usable),'完全保存 '+int(data.backfill?.complete??usable)+' 試合')
+ +card('データ不足で除外',int(Math.max(0,completed-usable)),'ラウンド・キル情報不足')
  +card('先制キル後の勝率',pct(o.firstKillWinPct),int(o.firstKillWins)+'勝 / '+int(o.firstKillOutcomesKnown)+'ラウンド')
  +card('人数不利からの逆転',int(o.comebackWins),'保存済みデータの範囲');
 const notes=data.coachingNotes||[];
@@ -163,7 +164,8 @@ if(b){
   const next=b.pending>0?' 未処理：'+int(b.pending)+'試合。':'';
   const exception=b.status!=='running'&&b.pending>0?
     ' 未処理分は自動取得されない。管理者が補完設定を確認する必要がある。':'';
-  $('backfill-message').textContent=state+'。'+next+exception;
+  const excluded=b.partial>0?' 欠損'+int(b.partial)+'試合は個人・チーム成績の分母から除外。':'';
+  $('backfill-message').textContent=state+'。'+next+exception+excluded;
 }else{
   $('backfill-counts').innerHTML='<p class="empty">補完状況を取得できない。</p>';
   $('backfill-message').textContent='APIの更新状況を確認してほしい。';
@@ -180,14 +182,15 @@ $('players').innerHTML=people.length?people.map(p=>{
  <div class="small muted">FK − FD （${int(p.firstKills)} FK / ${int(p.firstDeaths)} FD）</div>
  <p class="small muted">対象 ${int(p.matches)}試合・記録あり ${int(p.observedOpeningRounds)}ラウンド</p>
  <div class="small">先制キルから勝利：${int(p.firstKillWins)}勝 / ${int(p.firstKillWins+p.firstKillLosses)}回（${pct(p.firstKillWinPct)}）</div>
+ <div class="small">先制デス後にチームが勝利：${int(p.firstDeathWins)}勝 / ${int((p.firstDeathWins??0)+(p.firstDeathLosses??0))}回（${pct(p.firstDeathRecoveryPct)}）</div>
  <div class="small">FK直後5秒以内に死亡：${int(p.openingKillerDiedWithin5s)}回</div>
  <div class="small">FD後5秒以内に取り返し：${int(p.firstDeathKillerEliminatedWithin5s)}回</div>
  </article>`;
 }).join(''):'<p class="empty">個人別データはまだない。</p>';
 const playerMaps=data.individualMapAgent||[];
 $('player-map').innerHTML=playerMaps.length?simpleTable(
- ['選手 / マップ / エージェント','試合','FK','FD','FK−FD','FK後勝率','FK直後5秒以内に死亡','FD後5秒以内に取り返し'],
- playerMaps.map(p=>[p.player+' / '+p.map+' / '+p.agent,p.matches,p.firstKills,p.firstDeaths,(p.fkFdDiff>0?'+':'')+p.fkFdDiff,pct(p.firstKillWinPct),p.openingKillerDiedWithin5s,p.firstDeathKillerEliminatedWithin5s]))
+ ['選手 / マップ / エージェント','試合','FK','FD','FK−FD','FK後勝率','FD後勝率','FK直後5秒以内に死亡','FD後5秒以内に取り返し'],
+ playerMaps.map(p=>[p.player+' / '+p.map+' / '+p.agent,p.matches,p.firstKills,p.firstDeaths,(p.fkFdDiff>0?'+':'')+p.fkFdDiff,pct(p.firstKillWinPct),pct(p.firstDeathRecoveryPct),p.openingKillerDiedWithin5s,p.firstDeathKillerEliminatedWithin5s]))
  :'<p class="empty">マップ別データはまだない。</p>';
 const comps=data.trioComparisons||[];
 $('trio').innerHTML=comps.length?simpleTable(
@@ -233,7 +236,7 @@ function diagnosticPayload(d){
  const maps=(d.maps||[]).map(m=>pick(m,
   ['map','matches','rounds','ourFirstKills','enemyFirstKills','firstKillWins','firstKillLosses','firstKillWinPct','comebackWins']));
  const individual=(d.individual||[]).map(p=>pick(p,
-  ['player','matches','observedOpeningRounds','firstKills','firstDeaths','fkFdDiff','firstKillWins','firstKillLosses','firstKillWinPct','openingKillerDiedWithin5s','firstDeathKillerEliminatedWithin5s']));
+  ['player','matches','observedOpeningRounds','firstKills','firstDeaths','fkFdDiff','firstKillWins','firstKillLosses','firstKillWinPct','firstDeathWins','firstDeathLosses','firstDeathRecoveryPct','openingKillerDiedWithin5s','firstDeathKillerEliminatedWithin5s']));
  const reviews=(d.reviewRounds||[]).slice(0,12).map(r=>pick(r,
   ['map','matchJst','round','category','evidence','firstKiller','focus']));
  const notes=(d.coachingNotes||[]).map(n=>pick(n,['subject','kind','title','evidence','action']));

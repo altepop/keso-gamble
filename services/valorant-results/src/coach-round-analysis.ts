@@ -48,6 +48,7 @@ interface PlayerBucket{
   agent?:string;
   matches:number;rounds:number;roundsWithKillData:number;observedOpeningRounds:number;
   firstKills:number;firstDeaths:number;firstKillWins:number;firstKillLosses:number;
+  firstDeathWins:number;firstDeathLosses:number;
   openingKillerDiedWithin5s:number;firstDeathKillerEliminatedWithin5s:number;
 }
 const playerIdentity:ReadonlyArray<{name:string;tag:string;label:CoachPlayer}>=[
@@ -59,6 +60,7 @@ const emptyPlayer=(player:CoachPlayer,map?:string,agent?:string):PlayerBucket=>(
   player,...(map?{map}:{}),...(agent?{agent}:{}),
   matches:0,rounds:0,roundsWithKillData:0,observedOpeningRounds:0,
   firstKills:0,firstDeaths:0,firstKillWins:0,firstKillLosses:0,
+  firstDeathWins:0,firstDeathLosses:0,
   openingKillerDiedWithin5s:0,firstDeathKillerEliminatedWithin5s:0
 });
 const playerReport=(p:PlayerBucket)=>({
@@ -67,7 +69,9 @@ const playerReport=(p:PlayerBucket)=>({
   firstKillWinPct:p.firstKillWins+p.firstKillLosses
     ?Math.round(p.firstKillWins*1000/(p.firstKillWins+p.firstKillLosses))/10:null,
   firstKillPerObservedRoundPct:p.observedOpeningRounds
-    ?Math.round(p.firstKills*1000/p.observedOpeningRounds)/10:null
+    ?Math.round(p.firstKills*1000/p.observedOpeningRounds)/10:null,
+  firstDeathRecoveryPct:p.firstDeathWins+p.firstDeathLosses
+    ?Math.round(p.firstDeathWins*1000/(p.firstDeathWins+p.firstDeathLosses))/10:null
 });
 function emit(t:Bucket){
   return {...t,firstKillWinPct:t.firstKillOutcomesKnown
@@ -111,7 +115,10 @@ export function summarizeCoachRounds(rows:readonly ArchivedRow[]){
       kills.every((k:KillEvent)=>validRound(k?.r)&&validTime(k?.t)&&
         validId(k?.victim)&&roster.has(k.victim)&&
         (k.killer===null||(validId(k.killer)&&roster.has(k.killer))));
-    if(!validKills)killDataMissing++;
+    // The user chose to analyze complete archives only. Retain the partial
+    // match in quality/coverage counts, but never mix its known winners into
+    // team win denominators or treat unknown openings as zero FK/FD.
+    if(!validKills){killDataMissing++;continue;}
     const killByRound=new Map<number,Array<KillEvent&{order:number}>>();
     if(validKills)(kills as KillEvent[]).forEach((k,i)=>{
       const killer=k.killer?roster.get(k.killer):null,victim=roster.get(k.victim);
@@ -167,6 +174,8 @@ export function summarizeCoachRounds(rows:readonly ArchivedRow[]){
         const pFirstDeath=Boolean(first&&first.victim===participant.puuid);
         const pFirstKillWin=pFirstKill&&won===vdk.team_id;
         const pFirstKillLoss=pFirstKill&&won!==null&&won!==vdk.team_id;
+        const pFirstDeathWin=pFirstDeath&&won===vdk.team_id;
+        const pFirstDeathLoss=pFirstDeath&&won!==null&&won!==vdk.team_id;
         // A death within 5s is a timing fact, not proof of a tactical trade.
         const pFastLost=pFirstKill&&events.slice(1).some(e=>
           e.t>=first!.t&&e.t-first!.t<=5000&&e.victim===participant.puuid);
@@ -181,6 +190,8 @@ export function summarizeCoachRounds(rows:readonly ArchivedRow[]){
           if(pFirstDeath)bucket.firstDeaths++;
           if(pFirstKillWin)bucket.firstKillWins++;
           if(pFirstKillLoss)bucket.firstKillLosses++;
+          if(pFirstDeathWin)bucket.firstDeathWins++;
+          if(pFirstDeathLoss)bucket.firstDeathLosses++;
           if(pFastLost)bucket.openingKillerDiedWithin5s++;
           if(pFastTraded)bucket.firstDeathKillerEliminatedWithin5s++;
         }
@@ -220,7 +231,7 @@ export function summarizeCoachRounds(rows:readonly ArchivedRow[]){
     individualMapAgent:[...individualMapAgent.values()].map(playerReport)
       .sort((a,b)=>a.player.localeCompare(b.player,'ja')||
         (a.map??'').localeCompare(b.map??'')||(a.agent??'').localeCompare(b.agent??'')),
-    note:'Only opposing-player kills count for FK or FD. 5-second follow-up kills are timing observations, not proven tactical trades. Support agents are not rated by FK alone. Repeat victims may reflect revives. Missing rounds, kills, winners and sides are never estimated.'
+    note:'Only complete match archives (rounds and valid kills) contribute to performance metrics; partial matches are coverage-only. Only opposing-player kills count for FK or FD. 5-second follow-up kills are timing observations, not proven tactical trades. Support agents are not rated by FK alone. Repeat victims may reflect revives. Missing winners and sides are never estimated.'
   };
 }
 // Repeated Activity opens on one Worker isolate should not rescan D1.
