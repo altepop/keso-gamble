@@ -39,3 +39,5 @@ jobs:
             unavailable,temporarilyDeferred:deferred,enabledStatus:flag[0]?.value??'absent',
             hasSavedMatch:Boolean(last.length),caution:'Matching historical name/tag is not the same as globally stable PUUID; missing match is unknown'}));
           NODE
+
+# Recheck after first scheduled archival window.
