@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#080f22">
+<title>KESO COACH | VALORANT ラウンド分析</title>
+<style>
+:root{color-scheme:dark;font:15px/1.55 system-ui,-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN",Meiryo,sans-serif;background:#080f22;color:#e9eef9}
+*{box-sizing:border-box}
+body{margin:0;padding:env(safe-area-inset-top) 14px calc(24px + env(safe-area-inset-bottom));min-width:300px}
+main{max-width:1020px;margin:auto}a{color:#9fcbff}header{padding:24px 2px 18px}
+.top{display:flex;align-items:center;gap:12px;justify-content:space-between;flex-wrap:wrap}
+.eyebrow{font-size:12px;letter-spacing:.16em;color:#8ca4db;font-weight:750}
+h1{font-size:clamp(28px,7vw,40px);line-height:1.18;margin:5px 0 6px}
+h2{font-size:17px;margin:0 0 10px}h3{font-size:15px;margin:14px 0 6px}
+.muted{color:#a1afc8}.small{font-size:12px}.lead{margin:0 0 14px}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(42vw,180px),1fr));gap:9px}
+.card,.panel{border:1px solid #273659;border-radius:14px;background:#121b31;box-shadow:0 8px 23px #0001}
+.card{padding:14px}.card strong{font-size:26px;display:block;line-height:1.1;margin:5px 0}.card .label{font-size:12px;color:#abbdd8}
+.panel{padding:16px;margin:13px 0}
+button{background:#264e86;border:1px solid #4b78b8;color:white;border-radius:10px;padding:10px 14px;font:inherit;font-weight:650;cursor:pointer;min-height:44px}
+button:disabled{opacity:.55;cursor:wait}
+button.secondary{background:#18253f;border-color:#344c73}
+button:focus-visible,input:focus-visible{outline:3px solid #85c4ff;outline-offset:2px}
+.actions{display:flex;align-items:center;flex-wrap:wrap;gap:9px}
+input{background:#09152a;color:white;border:1px solid #4c638a;border-radius:10px;padding:10px;font:inherit;min-height:44px;width:min(100%,500px)}
+label{display:block;margin:0 0 8px}
+code{word-break:break-all}
+.table-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13px;min-width:580px}
+th{text-align:left;color:#b0c4df;font-size:12px;font-weight:650}
+th,td{padding:11px 9px;border-bottom:1px solid #2c3952;white-space:nowrap}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+tr:last-child td{border-bottom:0}
+.positive{color:#8be3b0}.negative{color:#ffadad}
+.foot{margin:13px 0 0;font-size:12px;color:#aab7cd}
+.barrow{height:8px;background:#253551;border-radius:20px;overflow:hidden;margin-top:10px}
+.bar{height:100%;background:#6eacff}
+#status{min-height:21px;margin:10px 0;font-size:13px;color:#b9d6ff}
+#status[role=alert]{color:#ffb8b8}
+#connection{display:none}
+.empty{padding:18px 4px;color:#b6c6df;text-align:center}
+@media(max-width:470px){.panel{padding:12px}.card{padding:12px}.card strong{font-size:23px}}
+</style>
+</head>
+<body>
+<main>
+<header>
+<div class="top"><div><div class="eyebrow">KESO PLAY / VALORANT</div><h1>KESO COACH</h1></div>
+<a href="./index.html">KESO PLAYに戻る</a></div>
+<p class="lead muted">保存済みの試合から、先制キルをラウンド勝利に変えられているかを分析する。データのない項目は推測しない。</p>
+<div class="actions"><button id="reload" type="button">分析を更新</button><span class="small muted">手動更新 · KPの増減なし</span></div>
+<div id="status" role="status" aria-live="polite">データを確認中…</div>
+</header>
+<section id="connection" class="panel">
+<h2>KP口座への接続が必要だ</h2>
+<p class="muted">KESO PLAYを同じブラウザーで接続済みなら自動認証される。接続できない場合は、Discordの <code>/valo status</code> で取得した接続コードを入力してほしい。コードはここに保存しない。</p>
+<form id="connect-form"><label for="code">接続コード（48桁）</label><div class="actions">
+<input id="code" type="password" inputmode="text" autocomplete="off" minlength="48" maxlength="48" required placeholder="48文字の接続コード">
+<button type="submit">接続して表示</button>
+</div></form>
+</section>
+<div id="report" hidden>
+<section class="cards" id="totals" aria-label="補完状況の概要"></section>
+<section class="panel"><h2>マップ別：先制キルを勝利に変えた割合</h2><div id="maps"></div><p class="foot">FK後勝率＝味方が敵を最初に倒したラウンドのうち、ラウンド勝者が分かるものに限った勝率。5対4からの敗北を探す指標で、プレイヤー個人の戦犯判定ではない。</p></section>
+<section class="panel"><h2>3人が共闘した試合の構成比較</h2><p class="muted small">VDK・Abema・石原が同じチームにいる試合だけを、マップと構成ごとに比較する。</p><div id="trio"></div></section>
+<section class="panel"><h2>データの確認事項</h2><div id="quality"></div><p class="foot">同一ラウンドで同じプレイヤーが2回倒されていても、Cloveの自己蘇生などがあるため自動的に不正とはしない。攻守情報がない場合も「不明」として扱う。</p></section>
+</div>
+</main>
+<script>
+(()=>{
+'use strict';
+const ROOT='https://valorant-results.tealeaforest.workers.dev';
+const KEY='keso-coach-session-v1';
+const $=id=>document.getElementById(id);
+const escape=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const pct=v=>v===null||v===undefined?'—':Number(v).toFixed(1)+'%';
+const int=v=>Number(v??0).toLocaleString('ja-JP');
+let busy=false;
+const read=(key,store)=>{try{return store.getItem(key)}catch{return null}};
+const token=()=>read(KEY,sessionStorage)||read('keso-kp-session-v1',localStorage)||read('keso-kp-session-v1',sessionStorage);
+const setStatus=(msg,error=false)=>{const el=$('status');el.textContent=msg;el.setAttribute('role',error?'alert':'status')};
+const card=(label,value,sub='')=>`<article class="card"><div class="label">${escape(label)}</div><strong>${escape(value)}</strong><div class="small muted">${escape(sub)}</div></article>`;
+const simpleTable=(headers,rows)=>`<div class="table-wrap"><table><thead><tr>${headers.map((h,i)=>`<th class="${i?'num':''}">${escape(h)}</th>`).join('')}</tr></thead><tbody>${rows.map(a=>`<tr>${a.map((cell,i)=>`<td class="${i?'num':''}">${escape(cell)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+function render(data){
+const total=data.totalVdkRosterMatches??0;
+const completed=data.archivedMatches??0;
+const usable=data.usableMatches??0;
+const o=data.overall||{};
+$('totals').innerHTML=card('過去の対象試合',int(total),'VDKの保存済みロスター')
+ +card('補完済み試合',int(completed),'分析利用可能 '+int(usable)+' 試合')
+ +card('先制キル後の勝率',pct(o.firstKillWinPct),int(o.firstKillWins)+'勝 / '+int(o.firstKillOutcomesKnown)+'ラウンド')
+ +card('人数不利からの逆転',int(o.comebackWins),'保存済みデータの範囲');
+const maps=data.maps||[];
+$('maps').innerHTML=maps.length?simpleTable(
+ ['マップ','試合','ラウンド','味方FK','FK後勝利','FK後敗北','FK後勝率'],
+ maps.map(m=>[m.map,m.matches,m.rounds,m.ourFirstKills,m.firstKillWins,m.firstKillLosses,pct(m.firstKillWinPct)]))
+ :'<p class="empty">分析できる試合がまだない。</p>';
+const comps=data.trioComparisons||[];
+$('trio').innerHTML=comps.length?simpleTable(
+ ['マップ / 構成','試合','FK後勝利','FK後敗北','FK後勝率'],
+ comps.map(m=>[m.map+' / '+(m.composition==='Fade + Clove'?'VDK Fade ＋ Abema Clove':'その他の3人構成'),m.matches,m.firstKillWins,m.firstKillLosses,pct(m.firstKillWinPct)]))
+ :'<p class="empty">3人共闘の分析対象はまだない。</p>';
+$('quality').innerHTML=simpleTable(
+ ['確認項目','件数'],
+ [['キルデータが不十分な試合',int(data.killDataMissing)],
+  ['ラウンド情報が不足した試合',int(data.roundDataMissing)],
+  ['ロスターが不正な試合',int(data.invalidMatches)],
+  ['攻守判定ができたラウンド',int(o.roundsWithSides)],
+  ['同一人物の複数回死亡があるラウンド',int(o.repeatedVictimRounds)]]);
+$('report').hidden=false;
+$('connection').style.display='none';
+setStatus('集計を表示した。更新 '+new Date().toLocaleTimeString('ja-JP')+' · 認証済み · 読み取り専用');
+}
+async function request(path,opts={}){
+ const r=await fetch(ROOT+path,{...opts,cache:'no-store',signal:AbortSignal.timeout(15000)});
+ let data={};try{data=await r.json()}catch{}
+ if(!r.ok){const err=new Error(data.error||'通信エラー ('+r.status+')');err.status=r.status;throw err}
+ return data;
+}
+async function load(){
+ if(busy)return;
+ busy=true;$('reload').disabled=true;setStatus('保存済みのラウンドデータを集計中…');
+ try{
+  const t=token();
+  if(!t){$('connection').style.display='block';$('report').hidden=true;setStatus('KP口座を接続してください');return}
+  const report=await request('/api/kp/coach/rounds',{headers:{Authorization:'Bearer '+t}});
+  render(report);
+ }catch(e){
+  if(e.status===401){try{sessionStorage.removeItem(KEY)}catch{}
+   $('connection').style.display='block';$('report').hidden=true;
+   setStatus('認証が切れている。接続コードを再入力してください。',true);
+  }else setStatus(e.message||'読み込みに失敗した。再試行してください。',true);
+ }finally{busy=false;$('reload').disabled=false;}
+}
+$('reload').addEventListener('click',load);
+$('connect-form').addEventListener('submit',async event=>{
+ event.preventDefault();
+ const code=$('code').value.trim();
+ if(!/^[a-f0-9]{48}$/.test(code)){setStatus('接続コードの形式を確認してください。',true);return}
+ try{
+  setStatus('認証中…');
+  const r=await request('/api/kp/auth',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code})});
+  $('code').value='';
+  sessionStorage.setItem(KEY,r.token);
+  await load();
+ }catch(e){setStatus(e.message||'接続に失敗した。',true)}
+});
+load();
+})();
+</script>
+</body>
+</html>
