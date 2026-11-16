@@ -13,7 +13,8 @@ const candidate=`SELECT r.match_id,t.region,r.ended_at FROM valorant_match_roste
  AND json_extract(p.value,'$.tag')='SDGs'
  AND json_extract(p.value,'$.puuid')=t.puuid
  AND r.ended_at<?
- AND NOT EXISTS(SELECT 1 FROM valorant_match_round_events e WHERE e.match_id=r.match_id)
+ AND NOT EXISTS(SELECT 1 FROM valorant_match_round_events e WHERE e.match_id=r.match_id
+ AND e.rounds_json IS NOT NULL AND e.kills_json IS NOT NULL)
  AND NOT EXISTS(SELECT 1 FROM monitor_state s WHERE s.key='coach_round_backfill:unavailable:'||r.match_id)
  AND NOT EXISTS(SELECT 1 FROM monitor_state s WHERE s.key='coach_round_backfill:defer:'||r.match_id AND CAST(s.value AS INTEGER)>?)
  ORDER BY r.ended_at DESC LIMIT 1`;
@@ -23,7 +24,8 @@ const remaining=`SELECT COUNT(*) AS n FROM valorant_match_rosters r
  WHERE json_extract(p.value,'$.name')='Dolly'
  AND json_extract(p.value,'$.tag')='SDGs'
  AND json_extract(p.value,'$.puuid')=t.puuid
- AND NOT EXISTS(SELECT 1 FROM valorant_match_round_events e WHERE e.match_id=r.match_id)
+ AND NOT EXISTS(SELECT 1 FROM valorant_match_round_events e WHERE e.match_id=r.match_id
+ AND e.rounds_json IS NOT NULL AND e.kills_json IS NOT NULL)
  AND NOT EXISTS(SELECT 1 FROM monitor_state s WHERE s.key='coach_round_backfill:unavailable:'||r.match_id)`;
 async function state(db:D1Database,key:string,value:string){
  await db.prepare('INSERT INTO monitor_state(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind(key,value).run();
@@ -56,9 +58,17 @@ export async function backfillVdkRoundEvents(db:D1Database,fetchDetail:(region:s
    return {status:'unavailable',matchId:row.match_id};
   }
   const saved=await recordCompetitiveRoundEvents(db,detail,now);
-  if(!saved){
-   const exists=await db.prepare('SELECT 1 FROM valorant_match_round_events WHERE match_id=?').bind(row.match_id).first();
-   if(!exists)throw Error('Round archive write failed');
+  const archive=await db.prepare(
+   'SELECT rounds_json,kills_json FROM valorant_match_round_events WHERE match_id=?'
+  ).bind(row.match_id).first<{rounds_json:string|null;kills_json:string|null}>();
+  if(!archive)throw Error('Round archive write failed');
+  if(!archive.rounds_json||!archive.kills_json){
+   // Henrik returned no additional compatible event details. Keep the partial
+   // archive and avoid burning Henrik quota forever; operators may explicitly
+   // clear this marker if the upstream source is later repaired.
+   const missing=!archive.rounds_json?'missing_rounds':'missing_kills';
+   await state(db,PREFIX+'unavailable:'+row.match_id,missing);
+   return {status:saved?'saved':'unavailable',matchId:row.match_id};
   }
   return {status:'saved',matchId:row.match_id};
  }catch(error){
