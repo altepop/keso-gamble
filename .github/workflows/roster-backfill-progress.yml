@@ -35,6 +35,19 @@ jobs:
            q("SELECT value FROM monitor_state WHERE key='roster_backfill:last_saved'")
           ]);
           const workerState=await q("SELECT key,substr(value,1,100) AS value FROM monitor_state WHERE key IN ('monitor_started','monitor_finished','api_after','roster_backfill:enabled','roster_backfill:last_saved') OR key LIKE 'roster_backfill:defer:%' OR key LIKE 'roster_backfill:unavailable:%' ORDER BY key LIMIT 80");
+          const savedCase=await q("SELECT players_json FROM valorant_match_rosters WHERE match_id='88e69e18-6b40-4572-84fb-4f09fe4f463b'");
+          if(savedCase.length){
+            const players=JSON.parse(savedCase[0].players_json);
+            const wanted=['dolly#sdgs','abema#ttv','h1d3g1g4s#1037'];
+            const known=players.filter(p=>wanted.includes((p.name+'#'+p.tag).toLowerCase()));
+            console.log('FIRST_ARCHIVED_KNOWN_TEAM '+JSON.stringify({
+              matched:known.map(p=>({riotId:p.name+'#'+p.tag,agent:p.agent,k:p.k,d:p.d,a:p.a})),
+              allThreeFound:known.length===3,
+              allThreeSameTeam:known.length===3&&known.every(p=>p.team_id===known[0].team_id),
+              allThreeSameParty:known.length===3&&known[0].party_id!==null&&known.every(p=>p.party_id===known[0].party_id),
+              caution:'Party IDs absent/null do not prove not queued together'
+            }));
+          }
           console.log('VDK_BACKFILL_WORKER_STATE '+JSON.stringify(workerState));
           console.log('VDK_BACKFILL_PROGRESS '+JSON.stringify({eligible:scope,archived:saved,
             abemaKnownRiotIdMatches:abema,sharedCorrodeExampleArchived:known===1,
