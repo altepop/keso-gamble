@@ -36,8 +36,15 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
       {player:'VDK',map:'Corrode',agent:'Fade',matches:1,firstKills:0,firstDeaths:1,fkFdDiff:-1,firstKillWinPct:null,openingKillerDiedWithin5s:0,firstDeathKillerEliminatedWithin5s:0}
     ]
   };
+  // Fields present in a bad upstream payload must never leak into diagnostics.
+  report._raw={match_id:'secret-match-id',puuid:'secret-puuid',opponent:'private-enemy'};
+  report.maps[0].puuid='secret-raw-puuid';
   const ctx=await browser.newContext({viewport:{width:375,height:812},isMobile:true,hasTouch:true});
   await ctx.addInitScript(t=>localStorage.setItem('keso-kp-session-v1',t),token);
+  await ctx.addInitScript(()=>{
+    Object.defineProperty(navigator,'clipboard',{configurable:true,
+      value:{writeText:async text=>{window.__copiedDiagnostic=text}}});
+  });
   const requests=[];
   await ctx.route('https://valorant-results.tealeaforest.workers.dev/**',async route=>{
    const req=route.request();requests.push({url:req.url(),method:req.method(),auth:req.headers().authorization});
@@ -70,6 +77,19 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   assert.equal(requests[0].auth,'Bearer '+token);
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'phone-width layout');
   assert.ok(!(await page.locator('body').innerText()).includes(token),'no token in visible markup');
+  await page.locator('#share').click();
+  await page.waitForFunction(()=>typeof window.__copiedDiagnostic==='string');
+  const exported=await page.evaluate(()=>window.__copiedDiagnostic);
+  const diagnostic=JSON.parse(exported);
+  assert.equal(diagnostic.format,'KESO_COACH_SAFE_DIAGNOSTIC_V1');
+  assert.equal(diagnostic.archive.complete,3);
+  assert.equal(diagnostic.totalVdkRosterMatches,44);
+  assert.equal(diagnostic.individual.length,3);
+  assert.equal(diagnostic.reviewRounds[0].round,0);
+  assert.ok(!exported.includes(token),'no session token in exported text');
+  for(const secret of ['secret-match-id','secret-puuid','secret-raw-puuid','private-enemy'])
+    assert.ok(!exported.includes(secret),'private match data excluded: '+secret);
+  assert.equal(requests.length,1,'copy does not trigger new D1/HTTP reads');
   await page.locator('#reload').click();
   assert.equal(requests.length,2,'refresh is manual only');
   assert.deepEqual(errors,[]);
@@ -83,12 +103,13 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   await second.goto('http://127.0.0.1:18784/coach.html');
   await second.locator('#connection').waitFor({state:'visible'});
   assert.equal(await second.locator('#report').isHidden(),true);
+  assert.equal(await second.locator('#share').isDisabled(),true,'anonymous users cannot copy a report');
   await second.locator('#code').fill('b'.repeat(48));
   await second.locator('#connect-form button').click();
   await second.locator('#report:not([hidden])').waitFor();
   assert.equal(await second.locator('#code').inputValue(),'','code cleared after login');
   assert.equal(await second.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
   await guest.close();
-  console.log('KESO COACH mobile browser passed: login, authenticated GET, no auto polling, table and ratio, manual refresh, 320/375 widths.');
+  console.log('KESO COACH mobile browser passed: auth, manual fetch, privacy-allowlisted report copy, 320/375 widths.');
  }finally{await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1}).finally(()=>server.kill());
