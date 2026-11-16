@@ -223,7 +223,7 @@ test('partial match with a known winner cannot bias team or individual denominat
  assert.equal(result.maps[0].map,'Corrode');
  assert.equal(result.individual.find(p=>p.player==='VDK')?.matches,1);
  assert.equal(result.individual.find(p=>p.player==='VDK')?.observedOpeningRounds,2);
- assert.equal(result.reviewRounds,undefined,'pure aggregate has no review queue');
+ assert.ok(result.individual.every(p=>p.matches===1),'only complete match contributes per-player sample');
 });
 
 test('first-death round recovery uses only observed winners and preserves all revive events',()=>{
