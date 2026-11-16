@@ -15,6 +15,8 @@ const candidate=`SELECT r.match_id,t.region,r.ended_at FROM valorant_match_roste
  AND r.ended_at<?
  AND NOT EXISTS(SELECT 1 FROM valorant_match_round_events e WHERE e.match_id=r.match_id
  AND e.rounds_json IS NOT NULL AND e.kills_json IS NOT NULL)
+ AND (?=0 OR EXISTS(SELECT 1 FROM valorant_match_round_events p
+   WHERE p.match_id=r.match_id AND (p.rounds_json IS NULL OR p.kills_json IS NULL)))
  AND NOT EXISTS(SELECT 1 FROM monitor_state s WHERE s.key='coach_round_backfill:unavailable:'||r.match_id)
  AND NOT EXISTS(SELECT 1 FROM monitor_state s WHERE s.key='coach_round_backfill:defer:'||r.match_id AND CAST(s.value AS INTEGER)>?)
  ORDER BY r.ended_at DESC LIMIT 1`;
@@ -26,21 +28,27 @@ const remaining=`SELECT COUNT(*) AS n FROM valorant_match_rosters r
  AND json_extract(p.value,'$.puuid')=t.puuid
  AND NOT EXISTS(SELECT 1 FROM valorant_match_round_events e WHERE e.match_id=r.match_id
  AND e.rounds_json IS NOT NULL AND e.kills_json IS NOT NULL)
+ AND (?=0 OR EXISTS(SELECT 1 FROM valorant_match_round_events p
+   WHERE p.match_id=r.match_id AND (p.rounds_json IS NULL OR p.kills_json IS NULL)))
  AND NOT EXISTS(SELECT 1 FROM monitor_state s WHERE s.key='coach_round_backfill:unavailable:'||r.match_id)`;
 async function state(db:D1Database,key:string,value:string){
  await db.prepare('INSERT INTO monitor_state(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind(key,value).run();
 }
 export async function backfillVdkRoundEvents(db:D1Database,fetchDetail:(region:string,id:string)=>Promise<Match>,now=Date.now()):Promise<RoundBackfillOutcome>{
  const enabled=await db.prepare('SELECT value FROM monitor_state WHERE key=?').bind(ROUND_BACKFILL_SWITCH).first<{value:string}>();
- if(enabled?.value!==TARGET)return {status:'disabled'};
+ if(enabled?.value!==TARGET&&enabled?.value!=='complete')return {status:'disabled'};
+ // Older versions marked the switch "complete" even with partially saved
+ // matches. Repair ONLY those already-archived rows once, never new matches.
+ const repairOnly=enabled.value==='complete';
  const cooldown=await db.prepare("SELECT value FROM monitor_state WHERE key='api_after'").first<{value:string}>();
  if(Number(cooldown?.value??0)>now)return {status:'cooldown'};
- const row=await db.prepare(candidate).bind(TARGET,now-120_000,now)
+ const row=await db.prepare(candidate).bind(TARGET,now-120_000,repairOnly?1:0,now)
   .first<{match_id:string;region:string;ended_at:number}>();
  if(!row){
-  const left=await db.prepare(remaining).bind(TARGET).first<{n:number}>();
+  const left=await db.prepare(remaining).bind(TARGET,repairOnly?1:0).first<{n:number}>();
   if((left?.n??0)===0){
-   await state(db,ROUND_BACKFILL_SWITCH,'complete');return {status:'complete'};
+   await state(db,ROUND_BACKFILL_SWITCH,repairOnly?'repaired':'complete');
+   return {status:'complete'};
   }
   return {status:'deferred'};
  }
