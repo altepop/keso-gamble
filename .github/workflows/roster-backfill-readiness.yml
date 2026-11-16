@@ -1,0 +1,34 @@
+name: Historical VALORANT roster backfill readiness (read-only)
+on:
+  push:
+    branches: [audit/kobayashi-live-20261116]
+    paths: ['.github/workflows/roster-backfill-readiness.yml']
+permissions: {contents: read}
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Verify eligible match scope and silent account exclusion
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          node --input-type=module <<'NODE'
+          const url='https://api.cloudflare.com/client/v4/accounts/'+process.env.CF_ACCOUNT+'/d1/database/bf23ab40-814f-4626-9e0b-36739ac41750/query';
+          async function q(sql,params=[]){
+            if(!/^(SELECT|WITH)\s/i.test(sql.trim()))throw Error('Read-only statements only');
+            const res=await fetch(url,{method:'POST',headers:{Authorization:'Bearer '+process.env.CF_TOKEN,'Content-Type':'application/json'},body:JSON.stringify({sql,params}),signal:AbortSignal.timeout(20000)});
+            if(!res.ok)throw Error('D1 HTTP '+res.status);const j=await res.json();
+            if(!j.success||!j.result?.[0]?.success)throw Error('D1 read unsuccessful');
+            return j.result[0].results;
+          }
+          const [total,regions,archive,silent,kp]=await Promise.all([
+            q("SELECT COUNT(DISTINCT match_id) AS n,MIN(ended_at) AS earliest,MAX(ended_at) AS newest FROM notifications WHERE riot_id=? AND mode='competitive'",['Dolly#SDGs']),
+            q("SELECT riot_id,region FROM tracked_players WHERE riot_id IN (?,?)",['Dolly#SDGs','Abema#ttv']),
+            q("SELECT COUNT(*) AS n FROM valorant_match_rosters"),
+            q("SELECT COUNT(*) AS n FROM notifications WHERE lower(riot_id)='abema#ttv'"),
+            q("SELECT COUNT(*) AS n FROM kp_accounts WHERE lower(riot)='abema#ttv'")
+          ]);
+          console.log('BACKFILL_READINESS '+JSON.stringify({VDK:total[0],regions,rosterRows:archive[0].n,silentAbemaNotificationRows:silent[0].n,silentAbemaKpAccountRows:kp[0].n}));
+          NODE
