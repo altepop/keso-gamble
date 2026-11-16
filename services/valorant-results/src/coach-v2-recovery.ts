@@ -16,7 +16,7 @@ const PICK=`SELECT r.match_id,r.ended_at,r.players_json
    WHERE s.key='coach_round_backfill:legacy_v2_once:'||r.match_id)
  ORDER BY r.ended_at DESC LIMIT 1`;
 
-type LegacyV2 = {
+export type LegacyV2 = {
  metadata?:{matchid?:unknown;game_start?:unknown;game_length?:unknown;queue?:unknown;mode_id?:unknown};
  players?:{all_players?:Array<{puuid?:unknown;team?:unknown}>};
  kills?:Array<{round?:unknown;kill_time_in_round?:unknown;killer_puuid?:unknown;victim_puuid?:unknown}>;
