@@ -79,6 +79,25 @@ jobs:
             identityEvidence:abemaIdentity?'Known Corrode PUUID + Riot ID/name':'Match-by-match name/tag only',
             note:'Numbers cover restored competitive match roster rows only. Unrestored matches remain unknown.'
           }));
+          const [abemaNotices,abemaKp,temporaryAuth]=await Promise.all([
+            n("SELECT COUNT(*) AS n FROM notifications WHERE lower(riot_id)='abema#ttv'"),
+            n("SELECT COUNT(*) AS n FROM kp_accounts WHERE lower(riot)='abema#ttv'"),
+            q("SELECT key,value FROM monitor_state WHERE key IN ('roster_backfill:fast_sha256','roster_backfill:fast_expires')")
+          ]);
+          const temporary=Object.fromEntries(temporaryAuth.map(x=>[x.key,x.value]));
+          const partySizes=Object.fromEntries([1,2,3,4,5].map(size=>[String(size),report.filter(r=>r.partyMembers===size).length]));
+          const abemaGames=report.filter(r=>r.abemaPresent);
+          const stats=items=>({n:items.length,w:items.filter(r=>r.outcome==='win').length,
+            l:items.filter(r=>r.outcome==='loss').length,
+            draw:items.filter(r=>r.outcome==='draw').length});
+          console.log('VDK_BACKFILL_FINAL_AUDIT '+JSON.stringify({
+            restored:report.length,abema:stats(abemaGames),all:stats(report),
+            samePartyWithAbema:count('abemaSameParty'),
+            sameTeamWithIshihara:count('ishiharaSameTeam'),
+            allThreeSameParty:count('threeSameParty'),partySizes,
+            abemaUnwantedNoticeRows:abemaNotices,abemaUnwantedKpAccounts:abemaKp,
+            oneOffTokenRevoked:temporary['roster_backfill:fast_sha256']===''&&Number(temporary['roster_backfill:fast_expires'])===0
+          }));
           console.log('VDK_BACKFILL_WORKER_STATE '+JSON.stringify(workerState));
           console.log('VDK_BACKFILL_PROGRESS '+JSON.stringify({eligible:scope,archived:saved,
             abemaKnownRiotIdMatches:abema,sharedCorrodeExampleArchived:known===1,
