@@ -1,0 +1,25 @@
+name: Fast isolated historical roster tests (read-only)
+on:
+  push:
+    branches: [audit/kobayashi-live-20261116]
+    paths: ['.github/workflows/fast-roster-ci.yml']
+permissions: {contents: read}
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: services/valorant-results
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feat/valorant-historical-roster-backfill
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: services/valorant-results/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: node --experimental-strip-types --test test/roster-backfill.test.ts
