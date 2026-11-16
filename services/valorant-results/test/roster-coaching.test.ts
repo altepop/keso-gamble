@@ -106,3 +106,17 @@ test('VDK coaching flags a repeatedly losing map for replay review, without asse
  assert.equal(x.partyResults['1'].loss,6);
  assert.equal(x.recentTen.loss,6);
 });
+
+test('VDK coaching uses observed agent and verified five-player team scores only',()=>{
+ const five=(outcome:ArchivedCoachingRow['outcome'],id:string)=>{
+  const players=[member('Dolly','SDGs','vdk','a','p',13,11,6),...Array.from({length:4},(_,i)=>
+     member('A'+i,'JP1','a'+i,'a','p'))].map((p,i)=>({...p,score:i===0?500:600+i,agent:i===0?'Fade':'Clove'}));
+  return make(id,outcome,[...players,...Array.from({length:5},(_,i)=>({...member('B'+i,'JP1','b'+i,'b','q'),score:300,agent:'Sova'}))]);
+ };
+ const s=analyzeArchivedCoaching([five('win','1'),five('loss','2')],'Dolly#SDGs','vdk');
+ assert.equal(s.agents[0].name,'Fade');
+ assert.deepEqual(s.agents[0].result,{win:1,loss:1,draw:0});
+ assert.equal(s.teamScore.games,2);
+ assert.equal(s.teamScore.topTwo,0);
+ assert.equal(s.teamScore.bottomTwo,2);
+});
