@@ -240,11 +240,40 @@ export async function readCoachRoundReport(db:D1Database,now=Date.now()){
        AND json_extract(p.value,'$.tag')='SDGs')
    ORDER BY r.ended_at DESC LIMIT 100`).all<ArchivedRow>();
  const report=summarizeCoachRounds(result.results);
- const row=await db.prepare(`SELECT COUNT(*) AS n FROM valorant_match_rosters r
+ // This is the *same* second query as the historical roster count, with
+ // conditional aggregates. It distinguishes wholly absent matches from partial
+ // archives and shows whether the opted-in 5-min backfill is still operating.
+ const row=await db.prepare(`SELECT
+    COUNT(*) AS n,
+    COALESCE(SUM(CASE WHEN e.rounds_json IS NOT NULL
+      AND e.kills_json IS NOT NULL THEN 1 ELSE 0 END),0) AS complete_n,
+    COALESCE(SUM(CASE WHEN e.match_id IS NULL THEN 1 ELSE 0 END),0) AS missing_n,
+    COALESCE(SUM(CASE WHEN e.match_id IS NOT NULL AND
+      (e.rounds_json IS NULL OR e.kills_json IS NULL) THEN 1 ELSE 0 END),0) AS partial_n,
+    COALESCE(SUM(CASE WHEN
+      (e.match_id IS NULL OR e.rounds_json IS NULL OR e.kills_json IS NULL)
+      AND EXISTS(SELECT 1 FROM monitor_state s
+       WHERE s.key='coach_round_backfill:unavailable:'||r.match_id)
+      THEN 1 ELSE 0 END),0) AS unavailable_n,
+    (SELECT value FROM monitor_state WHERE key='coach_round_backfill:enabled') AS switch_value
+   FROM valorant_match_rosters r
+   LEFT JOIN valorant_match_round_events e ON e.match_id=r.match_id
    WHERE EXISTS(SELECT 1 FROM json_each(r.players_json) p
     WHERE json_extract(p.value,'$.name')='Dolly'
-      AND json_extract(p.value,'$.tag')='SDGs')`).first<{n:number}>();
- const value={...report,totalVdkRosterMatches:Number(row?.n??0),
+      AND json_extract(p.value,'$.tag')='SDGs')`).first<{
+     n:number;complete_n:number;missing_n:number;partial_n:number;
+     unavailable_n:number;switch_value:string|null
+   }>();
+ const totalVdkRosterMatches=Number(row?.n??0);
+ const complete=Number(row?.complete_n??0);
+ const missing=Number(row?.missing_n??0);
+ const partial=Number(row?.partial_n??0);
+ const unavailable=Number(row?.unavailable_n??0);
+ const status=row?.switch_value==='Dolly#SDGs'?'running':
+   row?.switch_value==='complete'?'complete':'disabled';
+ const value={...report,totalVdkRosterMatches,
+   backfill:{status,complete,partial,missing,unavailable,
+     pending:Math.max(0,missing+partial-unavailable)},
    reviewRounds:recommendReviewRounds(result.results),coachingNotes:coachNotes(report)};
  readCache.set(db,{until:now+5*60000,value});
  return value;
