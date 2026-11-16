@@ -15,6 +15,17 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
     overall:{rounds:68,firstKillWinPct:70,firstKillWins:21,firstKillOutcomesKnown:30,comebackWins:7,roundsWithSides:0,repeatedVictimRounds:1},
     maps:[{map:'Corrode',matches:1,rounds:22,ourFirstKills:13,firstKillWins:8,firstKillLosses:5,firstKillWinPct:61.5}],
     trioComparisons:[{map:'Corrode',composition:'Fade + Clove',matches:1,firstKillWins:8,firstKillLosses:5,firstKillWinPct:61.5}],
+    coachingNotes:[
+      {subject:'チーム',kind:'review',title:'先制キル後の敗北を優先して検証',
+       evidence:'25ラウンド中8ラウンドで敗北',action:'録画で位置関係を確認'},
+      {subject:'VDK',kind:'collect',title:'個人評価は保留',
+       evidence:'3試合・68ラウンド',action:'補完して再比較'}
+    ],
+    reviewRounds:[{map:'Corrode',matchJst:'2026-11-15 06:25',round:0,priority:4,
+      category:'two_opening_kills_lost',evidence:'味方が先に敵2人を倒したが、ラウンドは敗北（最初のキル：2.7秒）',
+      focus:'人数有利を失った時点を録画で確認',firstKiller:'石原',
+      firstKillSecond:2.7,lostAfterOpening:true,distinctEnemyKillsBeforeAllyDeath:2,
+      rapidAllyDeaths:1,openerDiedWithin5s:false}],
     individual:[
       {player:'VDK',matches:3,rounds:68,observedOpeningRounds:68,firstKills:4,firstDeaths:6,fkFdDiff:-2,firstKillWins:3,firstKillLosses:1,firstKillWinPct:75,openingKillerDiedWithin5s:0,firstDeathKillerEliminatedWithin5s:2},
       {player:'Abema',matches:3,rounds:68,observedOpeningRounds:68,firstKills:9,firstDeaths:7,fkFdDiff:2,firstKillWins:6,firstKillLosses:3,firstKillWinPct:66.7,openingKillerDiedWithin5s:1,firstDeathKillerEliminatedWithin5s:1},
@@ -42,6 +53,11 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   assert.match(await page.locator('#players').innerText(),/石原/);
   assert.match(await page.locator('#players').innerText(),/5秒以内/);
   assert.match(await page.locator('#player-map').innerText(),/Corrode \/ Fade/);
+  assert.match(await page.locator('#coach-notes').innerText(),/個人評価は保留/);
+  assert.match(await page.locator('#coach-notes').innerText(),/先制キル後の敗北/);
+  assert.match(await page.locator('#review-rounds').innerText(),/R0/);
+  assert.match(await page.locator('#review-rounds').innerText(),/2026-11-15 06:25/);
+  assert.match(await page.locator('#review-rounds').innerText(),/石原/);
   assert.match(await page.locator('#player-map').innerText(),/−1|-1/);
   assert.match(await page.locator('#quality').innerText(),/複数回死亡/);
   assert.equal(requests.length,1,'no extra polling or KPI writes');
