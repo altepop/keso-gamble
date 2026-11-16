@@ -243,3 +243,30 @@ test('post-complete retry never revives old 404 or a wholly absent archive',asyn
   assert.equal((await backfillVdkRoundEvents(f.db,async()=>{throw Error('must not fetch')},now)).status,'disabled');
  }finally{f.close()}
 });
+
+
+test('overlapping Cron invocations cannot fetch the same one-shot missing-kills record twice',async()=>{
+ const f=fixture();try{
+  f.sql.prepare('INSERT INTO monitor_state VALUES(?,?)').run(ROUND_BACKFILL_SWITCH,'repaired');
+  f.sql.prepare('INSERT INTO monitor_state VALUES(?,?)')
+   .run('coach_round_backfill:unavailable:match-one','missing_kills');
+  f.sql.prepare('INSERT INTO valorant_match_round_events VALUES(?,?,?,?)')
+   .run('match-one',JSON.stringify([{r:1,winner:'Blue'}]),null,now-1000000);
+  let entered!:()=>void,release!:()=>void;
+  const started=new Promise<void>(resolve=>{entered=resolve});
+  const gate=new Promise<void>(resolve=>{release=resolve});
+  let calls=0;
+  const fetch=async()=>{calls++;entered();await gate;return match()};
+  const first=backfillVdkRoundEvents(f.db,fetch,now);
+  await started;
+  const second=await backfillVdkRoundEvents(f.db,fetch,now);
+  release();
+  assert.equal(second.status,'complete');
+  assert.equal((await first).status,'saved');
+  assert.equal(calls,1,'parallel Cron ticks must not double-fetch Henrik');
+  assert.equal((f.sql.prepare("SELECT COUNT(*) AS n FROM monitor_state WHERE key='coach_round_backfill:retry_once:match-one'")
+   .get() as {n:number}).n,1);
+  assert.equal(f.count('kp_events'),0);
+  assert.equal(f.count('notifications'),0);
+ }finally{f.close()}
+});
