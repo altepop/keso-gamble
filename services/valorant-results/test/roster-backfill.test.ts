@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
+import {rosterFastBackfill,type Env} from '../src/index.ts';
 import {DatabaseSync} from 'node:sqlite';
 import {readFileSync} from 'node:fs';
 import {URL as NodeURL} from 'node:url';
@@ -88,5 +90,27 @@ test('mismatched match ID or timing is never archived',async()=>{
   f.enable();
   assert.equal((await backfillRecordedVdkMatches(f.db,async()=>detail('wrong'),now)).status,'deferred');
   assert.equal(f.count('valorant_match_rosters'),0);
+ }finally{f.close();}
+});
+
+test('fast archive endpoint denies missing and expired tokens; denies parallel calls; no KP impact',async()=>{
+ const f=fixture();
+ try{
+  const env={DB:f.db,HENRIK_API_KEY:'unused'} as Env;
+  const uri='https://valorant-results.example/api/internal/roster-backfill';
+  const token='a'.repeat(64);
+  const hash=createHash('sha256').update(token).digest('hex');
+  const req=()=>new Request(uri,{method:'POST',headers:{Authorization:'Bearer '+token}});
+  const none=await rosterFastBackfill(new Request(uri,{method:'POST'}),env);
+  assert.equal(none.status,401);
+  f.sql.prepare('INSERT INTO monitor_state(key,value) VALUES(?,?)').run('roster_backfill:fast_sha256',hash);
+  f.sql.prepare('INSERT INTO monitor_state(key,value) VALUES(?,?)').run('roster_backfill:fast_expires',String(Date.now()-1));
+  assert.equal((await rosterFastBackfill(req(),env)).status,401);
+  f.sql.prepare('UPDATE monitor_state SET value=? WHERE key=?').run(String(Date.now()+60_000),'roster_backfill:fast_expires');
+  assert.deepEqual(await (await rosterFastBackfill(req(),env)).json(),{status:'disabled'});
+  assert.equal((await rosterFastBackfill(req(),env)).status,429);
+  assert.equal(f.count('notifications'),1);
+  assert.equal(f.count('kp_events'),0);
+  assert.equal(f.count('discord_posts'),0);
  }finally{f.close();}
 });
