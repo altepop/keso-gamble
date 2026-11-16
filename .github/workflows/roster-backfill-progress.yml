@@ -59,7 +59,7 @@ jobs:
             const ishihara=players.find(p=>normalize(p)==='h1d3g1g4s#1037');
             const sameTeam=(p)=>Boolean(vdk&&p&&vdk.team_id===p.team_id);
             const sameParty=(p)=>Boolean(sameTeam(p)&&vdk.party_id&&p.party_id===vdk.party_id);
-            return {matchId:row.match_id,date:new Date(row.ended_at).toISOString().slice(0,10),map:row.map,
+            return {matchId:row.match_id,date:new Date(Number(row.ended_at)+9*3600_000).toISOString().slice(0,10),map:row.map,
               outcome:row.outcome,abemaPresent:Boolean(abema),abemaSameTeam:sameTeam(abema),
               abemaSameParty:sameParty(abema),ishiharaPresent:Boolean(ishihara),
               ishiharaSameTeam:sameTeam(ishihara),ishiharaSameParty:sameParty(ishihara),
