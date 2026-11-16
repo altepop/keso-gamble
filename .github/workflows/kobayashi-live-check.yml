@@ -47,3 +47,5 @@ jobs:
            note:'No fake matches, notices or KP grants have been created. New account starts with its registration time.'
           }));
           NODE
+
+# Read-only recheck after deployed main build e69926a8, 2026-11-16.
