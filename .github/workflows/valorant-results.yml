@@ -243,6 +243,12 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: node scripts/ensure-round-events.mjs
+      - name: Read-only KESO COACH historical archive audit (aggregate counts only)
+        working-directory: ${{ runner.temp }}/kp-app/services/valorant-results
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/coach-archive-audit.mjs
       - name: Deploy existing Bot (additive KP setup; existing commands retained)
         working-directory: ${{ runner.temp }}/kp-app/services/valorant-results
         env:
