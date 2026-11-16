@@ -55,7 +55,9 @@ tr:last-child td{border-bottom:0}
 <div class="top"><div><div class="eyebrow">KESO PLAY / VALORANT</div><h1>KESO COACH</h1></div>
 <a href="./index.html">KESO PLAYに戻る</a></div>
 <p class="lead muted">保存済みの試合から、先制キルをラウンド勝利に変えられているかを分析する。データのない項目は推測しない。</p>
-<div class="actions"><button id="reload" type="button">分析を更新</button><span class="small muted">手動更新 · KPの増減なし</span></div>
+<div class="actions"><button id="reload" type="button">分析を更新</button><button id="share" class="secondary" type="button" disabled>診断レポートをコピー</button><span class="small muted">手動更新 · KPの増減なし</span></div>
+<p class="small muted">診断レポートには認証トークン・接続コード・試合ID・PUUID・相手の名前を含めない。このチャットに貼れば保存状況と3人の結果を詳しく分析できる。</p>
+<textarea id="share-fallback" hidden readonly aria-label="診断レポート" rows="6" style="width:100%;background:#09152a;color:#e9eef9;border:1px solid #435779;border-radius:10px;margin-top:8px;font:12px/1.4 monospace"></textarea>
 <div id="status" role="status" aria-live="polite">データを確認中…</div>
 </header>
 <section id="connection" class="panel">
@@ -69,7 +71,7 @@ tr:last-child td{border-bottom:0}
 <div id="report" hidden>
 <section class="cards" id="totals" aria-label="補完状況の概要"></section>
 <section class="panel">
-<h2>44試合の補完状況</h2>
+<h2>対象試合の補完状況</h2>
 <p class="muted small">完全保存・一部欠損・未取得を区別する。数字は更新時点でのD1保存状況であり、取得元に存在しないデータは補わない。</p>
 <div class="cards" id="backfill-counts"></div>
 <p id="backfill-message" class="small muted"></p>
@@ -111,12 +113,15 @@ const escape=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>'
 const pct=v=>v===null||v===undefined?'—':Number(v).toFixed(1)+'%';
 const int=v=>Number(v??0).toLocaleString('ja-JP');
 let busy=false;
+let latestReport=null;
 const read=(key,store)=>{try{return store.getItem(key)}catch{return null}};
 const token=()=>read(KEY,sessionStorage)||read('keso-kp-session-v1',localStorage)||read('keso-kp-session-v1',sessionStorage);
 const setStatus=(msg,error=false)=>{const el=$('status');el.textContent=msg;el.setAttribute('role',error?'alert':'status')};
 const card=(label,value,sub='')=>`<article class="card"><div class="label">${escape(label)}</div><strong>${escape(value)}</strong><div class="small muted">${escape(sub)}</div></article>`;
 const simpleTable=(headers,rows)=>`<div class="table-wrap"><table><thead><tr>${headers.map((h,i)=>`<th class="${i?'num':''}">${escape(h)}</th>`).join('')}</tr></thead><tbody>${rows.map(a=>`<tr>${a.map((cell,i)=>`<td class="${i?'num':''}">${escape(cell)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
 function render(data){
+latestReport=data;
+$('share').disabled=false;
 const total=data.totalVdkRosterMatches??0;
 const completed=data.archivedMatches??0;
 const usable=data.usableMatches??0;
@@ -206,16 +211,49 @@ async function load(){
  busy=true;$('reload').disabled=true;setStatus('保存済みのラウンドデータを集計中…');
  try{
   const t=token();
-  if(!t){$('connection').style.display='block';$('report').hidden=true;setStatus('KP口座を接続してください');return}
+  if(!t){latestReport=null;$('share').disabled=true;$('connection').style.display='block';$('report').hidden=true;setStatus('KP口座を接続してください');return}
   const report=await request('/api/kp/coach/rounds',{headers:{Authorization:'Bearer '+t}});
   render(report);
  }catch(e){
-  if(e.status===401){try{sessionStorage.removeItem(KEY)}catch{}
+  if(e.status===401){latestReport=null;$('share').disabled=true;try{sessionStorage.removeItem(KEY)}catch{}
    $('connection').style.display='block';$('report').hidden=true;
    setStatus('認証が切れている。接続コードを再入力してください。',true);
   }else setStatus(e.message||'読み込みに失敗した。再試行してください。',true);
  }finally{busy=false;$('reload').disabled=false;}
 }
+// Explicit allowlist: no bearer token, Discord account, PUUID, match ID or raw roster
+// is read from the server response or copied. This report is only user-initiated.
+function diagnosticPayload(d){
+ const pick=(obj,keys)=>Object.fromEntries(keys.map(k=>[k,obj?.[k]??null]));
+ const maps=(d.maps||[]).map(m=>pick(m,
+  ['map','matches','rounds','ourFirstKills','enemyFirstKills','firstKillWins','firstKillLosses','firstKillWinPct','comebackWins']));
+ const individual=(d.individual||[]).map(p=>pick(p,
+  ['player','matches','observedOpeningRounds','firstKills','firstDeaths','fkFdDiff','firstKillWins','firstKillLosses','firstKillWinPct','openingKillerDiedWithin5s','firstDeathKillerEliminatedWithin5s']));
+ const reviews=(d.reviewRounds||[]).slice(0,12).map(r=>pick(r,
+  ['map','matchJst','round','category','evidence','firstKiller','focus']));
+ const notes=(d.coachingNotes||[]).map(n=>pick(n,['subject','kind','title','evidence','action']));
+ return {format:'KESO_COACH_SAFE_DIAGNOSTIC_V1',
+  generatedAt:new Date().toISOString(),totalVdkRosterMatches:d.totalVdkRosterMatches??null,
+  archive:pick(d.backfill,['status','complete','partial','missing','unavailable','pending']),
+  archivedMatches:d.archivedMatches??null,usableMatches:d.usableMatches??null,
+  totalRowsRead:d.totalRowsRead??null,limitReached:d.limitReached??null,
+  quality:pick(d,['invalidMatches','roundDataMissing','killDataMissing']),
+  overall:pick(d.overall,['matches','rounds','winnerKnown','ourRoundWins','roundsWithFk','ourFirstKills','enemyFirstKills','firstKillWins','firstKillLosses','firstKillWinPct','comebackWins','repeatedVictimRounds','roundsWithSides']),
+  maps,individual,reviewRounds:reviews,coachingNotes:notes};
+}
+$('share').addEventListener('click',async()=>{
+ if(!latestReport||busy)return;
+ const text=JSON.stringify(diagnosticPayload(latestReport),null,2);
+ try{
+   if(!navigator.clipboard?.writeText)throw Error('Clipboard API unavailable');
+   await navigator.clipboard.writeText(text);
+   $('share-fallback').hidden=true;
+   setStatus('認証情報を含まない診断レポートをコピーした。このチャットに貼り付けられる。');
+ }catch{
+   const area=$('share-fallback');area.value=text;area.hidden=false;area.focus();area.select();
+   setStatus('自動コピーできない環境だ。表示した診断レポートを選択してコピーしてほしい。');
+ }
+});
 $('reload').addEventListener('click',load);
 $('connect-form').addEventListener('submit',async event=>{
  event.preventDefault();
