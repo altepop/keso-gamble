@@ -14,7 +14,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: feat/valorant-historical-roster-backfill
+          ref: feat/vdk-backfill-accelerator
       - uses: actions/setup-node@v7
         with:
           node-version: '24'
