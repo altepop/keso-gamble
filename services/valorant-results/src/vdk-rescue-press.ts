@@ -53,7 +53,7 @@ export async function vdkRescuePress(env:Env,request:typeof fetch=fetch,now=Date
  // Claim before send: a lost response is unknown and must never be automatically retried.
  url.searchParams.set('wait','true');
  try{
-  const response=await request(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({content:VDK_RESCUE_BODY,allowed_mentions:{parse:[]},username:'KESO PLAY プレス'}),signal:AbortSignal.timeout(15000)});
+  const response=await request(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({content:VDK_RESCUE_BODY,allowed_mentions:{parse:[]},username:'バチコーンbot'}),signal:AbortSignal.timeout(15000)});
   receipt.httpStatus=response.status;
   if(response.ok){
    const msg=await response.json() as {id?:string;channel_id?:string;content?:string};
