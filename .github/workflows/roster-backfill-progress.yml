@@ -89,3 +89,5 @@ jobs:
 # Recheck after first scheduled archival window.
 
 # Verify currently recovered historical match rosters before one-off acceleration.
+
+# Mid-run audit of accelerated historical restoration.
