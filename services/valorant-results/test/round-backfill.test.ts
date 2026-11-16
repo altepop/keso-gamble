@@ -182,3 +182,61 @@ test('resume requires a previously opted-in completion; never starts a fresh tas
   assert.equal(f.count('notifications'),0);
  }finally{f.close()}
 });
+
+test('previously authorized missing-kills record receives one final retry and clears stale unavailable marker',async()=>{
+ const f=fixture();try{
+  f.sql.prepare('INSERT INTO monitor_state VALUES(?,?)').run(ROUND_BACKFILL_SWITCH,'repaired');
+  f.sql.prepare('INSERT INTO monitor_state VALUES(?,?)')
+   .run('coach_round_backfill:unavailable:match-one','missing_kills');
+  f.sql.prepare('INSERT INTO valorant_match_round_events VALUES(?,?,?,?)')
+   .run('match-one',JSON.stringify([{r:1,winner:'Blue'}]),null,now-1000000);
+  let fetchCount=0;
+  assert.equal((await backfillVdkRoundEvents(f.db,async()=>{fetchCount++;return match()},now)).status,'saved');
+  assert.equal(fetchCount,1);
+  const record=f.sql.prepare('SELECT rounds_json,kills_json FROM valorant_match_round_events').get() as
+   {rounds_json:string;kills_json:string};
+  assert.equal(JSON.parse(record.kills_json).length,1);
+  assert.equal(JSON.parse(record.rounds_json)[0].winner,'Blue','existing rounds unchanged');
+  assert.equal((f.sql.prepare("SELECT COUNT(*) AS n FROM monitor_state WHERE key='coach_round_backfill:unavailable:match-one'").get() as {n:number}).n,0);
+  assert.equal((await backfillVdkRoundEvents(f.db,async()=>{throw Error('no second fetch')},now)).status,'complete');
+  assert.equal((f.sql.prepare('SELECT value FROM monitor_state WHERE key=?')
+   .get(ROUND_BACKFILL_SWITCH) as {value:string}).value,'rechecked');
+  assert.equal((await backfillVdkRoundEvents(f.db,async()=>{throw Error('disabled')},now)).status,'disabled');
+  assert.equal(f.count('kp_events'),0);
+  assert.equal(f.count('notifications'),0);
+ }finally{f.close()}
+});
+
+test('one-time retry stops even when Henrik still omits kills',async()=>{
+ const f=fixture();try{
+  f.sql.prepare('INSERT INTO monitor_state VALUES(?,?)').run(ROUND_BACKFILL_SWITCH,'repaired');
+  f.sql.prepare('INSERT INTO monitor_state VALUES(?,?)')
+   .run('coach_round_backfill:unavailable:match-one','missing_kills');
+  f.sql.prepare('INSERT INTO valorant_match_round_events VALUES(?,?,?,?)')
+   .run('match-one',JSON.stringify([{r:1,winner:'Blue'}]),null,now-1000000);
+  let fetchCount=0;
+  const incomplete=match();delete incomplete.kills;
+  assert.equal((await backfillVdkRoundEvents(f.db,async()=>{fetchCount++;return incomplete},now)).status,'unavailable');
+  assert.equal((await backfillVdkRoundEvents(f.db,async()=>{fetchCount++;return match()},now)).status,'complete');
+  assert.equal(fetchCount,1,'retry_once marker prevents unbounded re-fetches');
+  assert.equal((await backfillVdkRoundEvents(f.db,async()=>{throw Error('disabled')},now)).status,'disabled');
+  const flag=f.sql.prepare("SELECT value FROM monitor_state WHERE key='coach_round_backfill:unavailable:match-one'")
+   .get() as {value:string};
+  assert.equal(flag.value,'missing_kills');
+  assert.equal(f.count('kp_events'),0);
+  assert.equal(f.count('notifications'),0);
+ }finally{f.close()}
+});
+
+test('post-complete retry never revives old 404 or a wholly absent archive',async()=>{
+ const f=fixture();try{
+  f.sql.prepare('INSERT INTO monitor_state VALUES(?,?)').run(ROUND_BACKFILL_SWITCH,'repaired');
+  f.sql.prepare('INSERT INTO monitor_state VALUES(?,?)')
+   .run('coach_round_backfill:unavailable:match-one','404');
+  f.sql.prepare('INSERT INTO valorant_match_round_events VALUES(?,?,?,?)')
+   .run('match-one',JSON.stringify([{r:1,winner:'Blue'}]),null,now-1000000);
+  assert.equal((await backfillVdkRoundEvents(f.db,async()=>{throw Error('must not fetch')},now)).status,'complete');
+  assert.equal(f.count('valorant_match_round_events'),1);
+  assert.equal((await backfillVdkRoundEvents(f.db,async()=>{throw Error('must not fetch')},now)).status,'disabled');
+ }finally{f.close()}
+});
