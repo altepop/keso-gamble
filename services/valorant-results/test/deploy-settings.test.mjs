@@ -34,7 +34,7 @@ const env={CLOUDFLARE_API_TOKEN:'example-token-never-write',CLOUDFLARE_ACCOUNT_I
 test('live settings are written only after successful API reads and validations',async t=>{
  const dir=fixture(t);const requests=[];const request=async(url,options)=>{requests.push(url);assert.equal(options.headers.Authorization,'Bearer '+env.CLOUDFLARE_API_TOKEN);if(url.endsWith('/content/v2')){const form=new FormData();form.set('index.js',new Blob([source],{type:'application/javascript'}),'index.js');return new Response(form);}return Response.json({success:true,result:url.endsWith('/schedules')?{schedules}:settings});};
  await prepareLiveSettings(dir,env,request);assert.equal(requests.length,3);assert.ok(requests[2].endsWith('/content/v2'));
- assert.deepEqual(JSON.parse(readFileSync(join(dir,'players.json'))),players);
+ assert.deepEqual(JSON.parse(readFileSync(join(dir,'players.json'))),[...players,{riotId:'mecael#2489',name:'小林'}]);
  assert.equal(JSON.parse(readFileSync(join(dir,'discord-config.json'))).guildId,discord.guildId);
  assert.deepEqual(JSON.parse(readFileSync(join(dir,'reward-accounts.json'))),{guildId:discord.guildId,accounts:[]});
  for(const name of ['players.json','discord-config.json','wrangler.jsonc','reward-accounts.json'])assert.ok(!readFileSync(join(dir,name),'utf8').includes(env.CLOUDFLARE_API_TOKEN));
@@ -51,11 +51,13 @@ test('wallet deployment requires the already-provisioned key and a matching encr
  const dir=fixture(t),publicKey=generateKeyPairSync('rsa',{modulusLength:2048,publicKeyEncoding:{type:'spki',format:'pem'}}).publicKey;
  writeFileSync(join(dir,'src/index.ts'),"import {initializeKp} from './kp.ts';");
  writeFileSync(join(dir,'kp-bootstrap.encrypted.json'),JSON.stringify({version:1,keyFingerprint:'0'.repeat(64),ciphertext:'cipher',wrappedKey:'wrapped'}));
+ writeFileSync(join(dir,'kp-extra-accounts.encrypted.json'),JSON.stringify({version:1,keyFingerprint:'0'.repeat(64),ciphertext:'cipher',wrappedKey:'wrapped',iv:'nonce'}));
  await assert.rejects(prepareLiveSettings(dir,env,async()=>Response.json({success:true,result:settings})),/not provisioned/);
  const active={...settings,bindings:[...settings.bindings,{type:'plain_text',name:'KP_BOOTSTRAP_PUBLIC_KEY',text:publicKey},{type:'secret_text',name:'KP_BOOTSTRAP_PRIVATE_KEY'}]};
  await assert.rejects(prepareLiveSettings(dir,env,async()=>Response.json({success:true,result:active})),/another key/);
  const keyFingerprint=createHash('sha256').update(createPublicKey(publicKey).export({type:'spki',format:'der'})).digest('hex');
  writeFileSync(join(dir,'kp-bootstrap.encrypted.json'),JSON.stringify({version:1,keyFingerprint,ciphertext:'cipher',wrappedKey:'wrapped'}));
+ writeFileSync(join(dir,'kp-extra-accounts.encrypted.json'),JSON.stringify({version:1,keyFingerprint,ciphertext:'cipher',wrappedKey:'wrapped',iv:'nonce'}));
  await prepareLiveSettings(dir,env,async url=>{if(url.endsWith('/content/v2'))return new Response(source,{headers:{'Content-Type':'application/javascript'}});return Response.json({success:true,result:url.endsWith('/schedules')?{schedules}:active});});
  assert.equal(JSON.parse(readFileSync(join(dir,'wrangler.jsonc'))).vars.KP_BOOTSTRAP_PUBLIC_KEY,publicKey);
 });

@@ -14,6 +14,7 @@ import type {SpikeMatch} from './spikerush-growth.ts';
 import policy from '../legacy-kp-policy.json' with { type: 'json' };
 import { applyLuck, chance, luckFor, luckLabel } from './luck.ts';
 import sealed from '../kp-bootstrap.encrypted.json' with { type: 'json' };
+import extraSealed from '../kp-extra-accounts.encrypted.json' with { type: 'json' };
 import configuredPlayers from '../players.json' with { type: 'json' };
 import discord from '../discord-config.json' with { type: 'json' };
 import { assessRewardReadiness } from './reward-readiness.ts';
@@ -86,7 +87,27 @@ export async function initializeKp(env:KpEnv,override?:KpMapping):Promise<KpMapp
  if(!policy.enabled||(!env.KP_BOOTSTRAP_PRIVATE_KEY&&!override))return null;
  if(!override&&setups.has(env.DB))return setups.get(env.DB)!;
  const job=(async()=>{
-  const mapping=override??await decryptKpMapping(env.KP_BOOTSTRAP_PRIVATE_KEY!);
+  const mapping=override??await (async()=>{
+   // The original four accounts stay encrypted and untouched. The additional
+   // account is an independently encrypted, same-key addendum; never store
+   // private Discord/Riot links in plain source or replace the base envelope.
+   const base=await decryptKpMapping(env.KP_BOOTSTRAP_PRIVATE_KEY!);
+   // An invalid addendum must NEVER disable KP for the four existing players.
+   // Reject unexpected IDs / reused owners rather than awarding the wrong account.
+   try {
+    if(extraSealed.keyFingerprint!==sealed.keyFingerprint || extraSealed.version!==1)throw Error('Addendum key mismatch');
+    const extra=await decryptKpMapping(env.KP_BOOTSTRAP_PRIVATE_KEY!,extraSealed);
+    if(!Array.isArray(extra.accounts)||extra.accounts.length!==1||(extra.guildId&&extra.guildId!==base.guildId))
+      throw Error('Invalid addendum account count or guild');
+    const account=extra.accounts[0];
+    if(account.riotId?.toLowerCase()!=='mecael#2489'||!/^\d{15,22}$/.test(account.discordUserId)||base.accounts.some(a=>a.riotId.toLowerCase()===account.riotId.toLowerCase()||a.discordUserId===account.discordUserId))
+      throw Error('Unexpected account ID or already-linked owner');
+    return {...base,accounts:[...base.accounts,account]};
+   } catch {
+    console.warn('kp_addendum_unavailable_existing_accounts_preserved');
+    return base;
+   }
+  })();
   if(!/^\d{15,22}$/.test(mapping.guildId)||(!override&&mapping.guildId!==discord.guildId)||!Array.isArray(mapping.accounts)||!mapping.accounts.length||mapping.accounts.length>5)throw Error('Invalid KP mapping');
   const users=new Set(),riots=new Set();for(const a of mapping.accounts){if(!/^\d{15,22}$/.test(a.discordUserId)||typeof a.riotId!=='string'||(!override&&!configuredPlayers.some(p=>p.riotId.toLowerCase()===a.riotId.toLowerCase()))||users.has(a.discordUserId)||riots.has(a.riotId.toLowerCase()))throw Error('Invalid KP account');users.add(a.discordUserId);riots.add(a.riotId.toLowerCase());}
   const version=await kpSchemaVersion(env);
