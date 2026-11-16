@@ -78,6 +78,6 @@ test('coach is read-only subcommand; partner is free text not a notified roster 
  const coach=commands.options.find((x:{name:string})=>x.name==='coach');
  assert.ok(coach);
  assert.equal(coach.options?.[0].required,true);
- assert.equal(coach.options?.[1].choices,undefined);
+ assert.deepEqual(coach.options?.[1].choices,[]);
  assert.equal(coach.options?.[1].required,false);
 });
