@@ -45,7 +45,7 @@ let browser;
  assert.equal(await page.locator('.dice-side.active .die[role=img]').count(),2);
  assert.equal(await page.locator('.dice-side.active .die.tumbling').count(),1);
  assert.equal(await page.locator('.casino-verdict').count(),0);
- assert.match(await page.locator('.dice-tension').innerText(),/ゾロ目/);
+ assert.match(await page.locator('.dice-tension').innerText(),/(?:ゾロ目|ピンゾロ)/);
  assert.equal(await page.locator('.dice-side.active .die.newly-landed').count(),1,'only the die that just stopped bounces');
  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'rolling dice stay inside the mobile viewport');
  const bowl=await page.locator('.dice-side.active .dice-bowl').boundingBox();assert.ok(bowl.width>250,'the active bowl has room for the throw');

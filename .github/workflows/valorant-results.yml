@@ -237,6 +237,12 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: node scripts/ensure-match-rosters.mjs
+      - name: Ensure additive coaching round event table (no legacy migrations)
+        working-directory: ${{ runner.temp }}/kp-app/services/valorant-results
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/ensure-round-events.mjs
       - name: Deploy existing Bot (additive KP setup; existing commands retained)
         working-directory: ${{ runner.temp }}/kp-app/services/valorant-results
         env:
