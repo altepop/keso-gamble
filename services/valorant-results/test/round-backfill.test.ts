@@ -131,7 +131,7 @@ test('historically complete opt-in repairs old partial rows once but never fetch
   assert.equal(fetched,1);
   const switchRow=f.sql.prepare('SELECT value FROM monitor_state WHERE key=?')
     .get(ROUND_BACKFILL_SWITCH) as {value:string};
-  assert.equal(switchRow.value,'repaired');
+  assert.equal(switchRow.value,'rechecked','the one-shot scan is sealed after old partial records are repaired');
   assert.equal(f.count('valorant_match_round_events'),1);
  }finally{f.close()}
 });
