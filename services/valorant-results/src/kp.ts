@@ -92,10 +92,21 @@ export async function initializeKp(env:KpEnv,override?:KpMapping):Promise<KpMapp
    // account is an independently encrypted, same-key addendum; never store
    // private Discord/Riot links in plain source or replace the base envelope.
    const base=await decryptKpMapping(env.KP_BOOTSTRAP_PRIVATE_KEY!);
-   if(extraSealed.keyFingerprint!==sealed.keyFingerprint || extraSealed.version!==1)throw Error('KP addendum key mismatch');
-   const extra=await decryptKpMapping(env.KP_BOOTSTRAP_PRIVATE_KEY!,extraSealed);
-   if(!Array.isArray(extra.accounts)||extra.accounts.length!==1||(extra.guildId&&extra.guildId!==base.guildId))throw Error('Invalid additional KP accounts');
-   return {...base,accounts:[...base.accounts,...extra.accounts]};
+   // An invalid addendum must NEVER disable KP for the four existing players.
+   // Reject unexpected IDs / reused owners rather than awarding the wrong account.
+   try {
+    if(extraSealed.keyFingerprint!==sealed.keyFingerprint || extraSealed.version!==1)throw Error('Addendum key mismatch');
+    const extra=await decryptKpMapping(env.KP_BOOTSTRAP_PRIVATE_KEY!,extraSealed);
+    if(!Array.isArray(extra.accounts)||extra.accounts.length!==1||(extra.guildId&&extra.guildId!==base.guildId))
+      throw Error('Invalid addendum account count or guild');
+    const account=extra.accounts[0];
+    if(account.riotId?.toLowerCase()!=='mecael#2489'||!/^\d{15,22}$/.test(account.discordUserId)||base.accounts.some(a=>a.riotId.toLowerCase()===account.riotId.toLowerCase()||a.discordUserId===account.discordUserId))
+      throw Error('Unexpected account ID or already-linked owner');
+    return {...base,accounts:[...base.accounts,account]};
+   } catch {
+    console.warn('kp_addendum_unavailable_existing_accounts_preserved');
+    return base;
+   }
   })();
   if(!/^\d{15,22}$/.test(mapping.guildId)||(!override&&mapping.guildId!==discord.guildId)||!Array.isArray(mapping.accounts)||!mapping.accounts.length||mapping.accounts.length>5)throw Error('Invalid KP mapping');
   const users=new Set(),riots=new Set();for(const a of mapping.accounts){if(!/^\d{15,22}$/.test(a.discordUserId)||typeof a.riotId!=='string'||(!override&&!configuredPlayers.some(p=>p.riotId.toLowerCase()===a.riotId.toLowerCase()))||users.has(a.discordUserId)||riots.has(a.riotId.toLowerCase()))throw Error('Invalid KP account');users.add(a.discordUserId);riots.add(a.riotId.toLowerCase());}
