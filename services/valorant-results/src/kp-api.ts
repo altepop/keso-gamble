@@ -51,6 +51,7 @@ import {transcendentGodPullPost} from './relic-god-pull.ts';
 import { hydrateMleague, placeMlBet } from '../../../js/mleague.js';
 import { kpRewardHistory } from './kp-reward-history.ts';
 import { healthReport } from './health.ts';
+import { readCoachRoundReport } from './coach-round-analysis.ts';
 import { mlActivityView, mlClosed, mlData, mlLineupTimes, mlResults, seasonStats } from './mleague.ts';
 import { racingView, raceSeed } from './racing-kp.ts';
 import { defaultRoastLevel, validRoastLevel } from './racing-crowns.ts';
@@ -406,6 +407,12 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping,deferP
   const token=/^Bearer ([a-f0-9]{48})$/.exec(request.headers.get('Authorization')??'')?.[1];
   const owner=token?await kpSession(env,token):null;
   if(!owner||owner.guild!==mapping.guildId||!await isKpParticipant(env,mapping,owner.user))return response({error:'接続が切れました。/valo status のコードで接続してください。'},401);
+  // Explicit authenticated read only. Not included in wallet polling or scheduled jobs.
+  // Never return opponents, PUUIDs, match IDs, or raw event timelines.
+  if(request.method==='GET'&&path==='/api/kp/coach/rounds'){
+    if(await d1OptionalMode(env))return response({error:'D1節約モード中です。時間を置いてから確認してください。'},429);
+    return response(await readCoachRoundReport(env.DB));
+  }
   if(path==='/api/kp/duels')return boardDuelApi(request,env,mapping,owner.user,headers);
   if(path.startsWith('/api/kp/steam/')){const r=await steamApi(request,env,owner,token!);return new Response(r.body,{status:r.status,headers:{...Object.fromEntries(r.headers),...headers}});}
   if(path.startsWith('/api/kp/hoyo/')){const r=await hoyoApi(request,env,owner);return new Response(r.body,{status:r.status,headers:{...Object.fromEntries(r.headers),...headers}});}
