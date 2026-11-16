@@ -50,8 +50,10 @@ test('unknown winners, missing events and unpaired players are not treated as lo
  ]);
  const absent={...fixture('missing','Abyss','Omen','Gekko',[{r:0,winner:'Blue'}],[]),kills_json:null};
  const report=summarizeCoachRounds([a,absent]);
- assert.equal(report.overall.matches,2);
- assert.equal(report.overall.winnerKnown,2);
+ assert.equal(report.archivedMatches,2);
+ assert.equal(report.usableMatches,1,'only fully observed match is evaluated');
+ assert.equal(report.overall.matches,1);
+ assert.equal(report.overall.winnerKnown,1);
  assert.equal(report.overall.roundsWithFk,2);
  assert.equal(report.overall.firstKillOutcomesKnown,0);
  assert.equal(report.overall.firstKillWinPct,null);
@@ -118,6 +120,9 @@ test('per-player opening rounds distinguish a fast loss, a fast reply and an FK 
  assert.equal(vdk.firstKillWinPct,null,'unknown winner is not an FK loss');
  assert.equal(abema.firstKills,1);
  assert.equal(abema.firstDeaths,1);
+ assert.equal(abema.firstDeathWins,1);
+ assert.equal(abema.firstDeathLosses,0);
+ assert.equal(abema.firstDeathRecoveryPct,100);
  assert.equal(abema.firstDeathKillerEliminatedWithin5s,1);
  assert.equal(abema.openingKillerDiedWithin5s,1,'revive does not double-count');
  assert.equal(abema.firstKillWins,1);
@@ -135,14 +140,16 @@ test('a support player absent from a match, and missing kill timelines, are not 
  const b={...fixture('two','Lotus','Skye','Clove',[{r:0,winner:'Blue'}],[]),kills_json:null};
  const report=summarizeCoachRounds([a,b]);
  const vdk=report.individual.find(p=>p.player==='VDK')!;
- assert.equal(vdk.matches,2);
- assert.equal(vdk.rounds,2);
+ assert.equal(report.archivedMatches,2);
+ assert.equal(report.usableMatches,1);
+ assert.equal(vdk.matches,1);
+ assert.equal(vdk.rounds,1);
  assert.equal(vdk.observedOpeningRounds,1);
  assert.equal(vdk.firstKills,0);
  assert.equal(vdk.firstKillPerObservedRoundPct,0);
- const skye=report.individualMapAgent.find(p=>p.map==='Lotus'&&p.player==='VDK')!;
- assert.equal(skye.observedOpeningRounds,0);
- assert.equal(skye.firstKillPerObservedRoundPct,null);
+ const skye=report.individualMapAgent.find(p=>p.map==='Lotus'&&p.player==='VDK');
+ assert.equal(skye,undefined,'partial-only map is excluded from performance rankings');
+ assert.equal(report.killDataMissing,1);
  const corrupt=fixture('three','Abyss','Omen','Gekko',[{r:0,winner:'Blue'}],
   [{r:0,t:1000,killer:'p5',victim:'unknown'}]);
  const report2=summarizeCoachRounds([corrupt]);
@@ -186,5 +193,58 @@ test('backfill progress separates complete, partial, absent and source-unavailab
   assert.equal(report.backfill.pending,1);
   assert.equal(reads,2,'one archive read and one expanded count query');
   assert.equal(report.overall.ourFirstKills,1,'partial does not fabricate opening kills');
+  assert.equal(report.overall.matches,1,'partial is excluded from denominators');
+  assert.equal(report.archivedMatches,2);
+  assert.equal(report.usableMatches,1);
  }finally{sql.close()}
+});
+
+test('partial match with a known winner cannot bias team or individual denominators',()=>{
+ const full=fixture('full','Corrode','Fade','Clove',[
+   {r:0,winner:'Red'},{r:1,winner:'Blue'}
+ ],[
+   {r:0,t:1000,killer:'p5',victim:'p0'},
+   {r:1,t:1000,killer:'p0',victim:'p5'}
+ ]);
+ const partial={...fixture('partial','Lotus','Fade','Clove',
+   [{r:0,winner:'Blue'},{r:1,winner:'Blue'},{r:2,winner:'Blue'}],[]),
+   kills_json:null};
+ const result=summarizeCoachRounds([partial,full]);
+ assert.equal(result.archivedMatches,2);
+ assert.equal(result.usableMatches,1);
+ assert.equal(result.killDataMissing,1);
+ assert.equal(result.overall.matches,1);
+ assert.equal(result.overall.rounds,2);
+ assert.equal(result.overall.winnerKnown,2);
+ assert.equal(result.overall.ourRoundWins,1,'three partial winners must not alter win rate');
+ assert.equal(result.maps.length,1);
+ assert.equal(result.maps[0].map,'Corrode');
+ assert.equal(result.individual.find(p=>p.player==='VDK')?.matches,1);
+ assert.equal(result.individual.find(p=>p.player==='VDK')?.observedOpeningRounds,2);
+ assert.equal(result.reviewRounds,undefined,'pure aggregate has no review queue');
+});
+
+test('first-death round recovery uses only observed winners and preserves all revive events',()=>{
+ const data=fixture('fd','Corrode','Fade','Clove',[
+  {r:0,winner:'Blue'},{r:1,winner:'Red'},{r:2,winner:null},
+  {r:3,winner:'Blue'}
+ ],[
+  {r:0,t:1000,killer:'p5',victim:'p1'},
+  {r:0,t:1100,killer:'p0',victim:'p5'},
+  {r:1,t:2000,killer:'p6',victim:'p1'},
+  {r:2,t:3000,killer:'p7',victim:'p1'},
+  {r:3,t:1000,killer:'p1',victim:'p8'},
+  {r:3,t:1200,killer:'p8',victim:'p1'},
+  {r:3,t:1400,killer:'p8',victim:'p1'}
+ ]);
+ const result=summarizeCoachRounds([data]);
+ const abema=result.individual.find(x=>x.player==='Abema')!;
+ assert.equal(abema.firstDeaths,3);
+ assert.equal(abema.firstDeathWins,1);
+ assert.equal(abema.firstDeathLosses,1);
+ assert.equal(abema.firstDeathRecoveryPct,50,'unknown winner excluded');
+ assert.equal(abema.firstKills,1);
+ assert.equal(abema.openingKillerDiedWithin5s,1,'revive does not duplicate FK metrics');
+ assert.equal(abema.firstDeathKillerEliminatedWithin5s,1);
+ assert.equal(result.overall.repeatedVictimRounds,1);
 });
