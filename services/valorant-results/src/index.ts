@@ -590,8 +590,38 @@ export async function monitor(env: Env, players: Player[] = configuredPlayers): 
   }
 }
 
+/** Time-limited one-off archival accelerator. No mutable account, notices, or KP inputs. */
+export async function rosterFastBackfill(request:Request,env:Env):Promise<Response>{
+ const headers={'Cache-Control':'no-store','Content-Type':'application/json'};
+ const json=(body:object,status=200)=>Response.json(body,{status,headers});
+ if(request.method!=='POST')return json({error:'method_not_allowed'},405);
+ const bearer=request.headers.get('Authorization')??'';
+ if(!/^Bearer [a-f0-9]{64}$/.test(bearer))return json({error:'unauthorized'},401);
+ const supplied=new TextEncoder().encode(bearer.slice(7));
+ const digest=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',supplied))).map(n=>n.toString(16).padStart(2,'0')).join('');
+ const row=await env.DB.prepare("SELECT key,value FROM monitor_state WHERE key IN ('roster_backfill:fast_sha256','roster_backfill:fast_expires')").all<{key:string;value:string}>();
+ const stateMap=new Map(row.results.map(x=>[x.key,x.value]));
+ const expected=stateMap.get('roster_backfill:fast_sha256')??'';
+ const expires=Number(stateMap.get('roster_backfill:fast_expires')??0);
+ // Hash-only token storage and a hard expiry; bearer never appears in logs.
+ let different=digest.length===expected.length?0:1;
+ for(let i=0;i<Math.max(digest.length,expected.length);i++)different|=digest.charCodeAt(i)!==expected.charCodeAt(i)?1:0;
+ if(different||!Number.isFinite(expires)||Date.now()>=expires)return json({error:'unauthorized'},401);
+ // At most one extra request every six seconds, to preserve Henrik quota for normal alerts.
+ const now=Date.now(),next=now+6_000;
+ const acquired=await env.DB.prepare(
+   "INSERT INTO monitor_state(key,value) VALUES('roster_backfill:fast_next',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value WHERE CAST(monitor_state.value AS INTEGER)<?"
+ ).bind(String(next),now).run();
+ if(!acquired.meta.changes)return json({status:'throttled'},429);
+ const outcome=await backfillRecordedVdkMatches(env.DB,(region,id)=>
+   api<Match>(env,'/valorant/v4/match/'+encodeURIComponent(region)+'/'+encodeURIComponent(id)),now);
+ // Do not return player names, exact historical match identifiers or any API secrets.
+ return json({status:outcome.status});
+}
+
 export default {
   fetch(request: Request, env: Env, ctx: ExecutionContext) {
+    if(new URL(request.url).pathname==='/api/internal/roster-backfill')return rosterFastBackfill(request,env).catch(()=>new Response('Unavailable',{status:503}));
     if(new URL(request.url).pathname.startsWith('/api/racing/'))return raceVideoApi(request,env).catch(()=>new Response('Unavailable',{status:503}));
     if(request.method==='GET'&&new URL(request.url).pathname==='/api/mahjong/status')return mahjongStatus(env).then(status=>Response.json(status,{headers:{'Cache-Control':'no-store'}})).catch(()=>Response.json({enabled:false,error:'configuration_unavailable'},{status:503}));
     if(request.method==='GET'&&new URL(request.url).pathname==='/api/discord/escalation-press/status')
