@@ -17,7 +17,7 @@ export function valoCommand(configured = players) {
       { type: 1, name: 'act', description: '最新ACTの勝敗・勝率・連勝連敗', options: [player(), mode] },
       { type: 1, name: 'recent', description: '選んだ人の直近3試合と個人成績', options: [player('player', true, false), mode] },
       { type: 1, name: 'coach', description: '保存済みコンペから人数・K/D・相手との同チーム成績を分析', options: [
-        player('player', true, false), { type: 3, name: 'partner', description: '任意の相手のRiot ID（Name#Tag。VDKは省略時Abema#ttv）', required: false, choices: undefined },
+        player('player', true, false), { type: 3, name: 'partner', description: '任意の相手のRiot ID（Name#Tag。VDKは省略時Abema#ttv）', required: false, choices: [] },
       ] },
       { type: 1, name: 'pair', description: '2人が同じチームで参加した試合の勝率', options: [player('player', true, false), player('partner', true, false), mode] },
       { type: 1, name: 'versus', description: '2人が敵同士だった直接対決の成績', options: [player('player', true, false), player('partner', true, false), mode] },
