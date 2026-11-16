@@ -8,7 +8,7 @@ const commands = name => scripts[name].split(' && ').map(command => command.trim
 test('parallel browser shards cover all existing tests in the same order, exactly once', () => {
   const complete = commands('test:browser:all');
   const sharded = [...commands('test:browser:core'), ...commands('test:browser:extended')];
-  assert.equal(complete.length, 28);
+  assert.equal(complete.length, 29);
   assert.deepEqual(sharded, complete);
   assert.equal(new Set(sharded).size, sharded.length);
 });
