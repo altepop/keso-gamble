@@ -95,8 +95,9 @@ export function summarizeCoachRounds(rows:readonly ArchivedRow[]){
     for(const bucket of buckets)bucket.matches++;
     usableMatches++;
     for(const rr of rounds as RoundEvent[]){
-      const won=teams.has(rr.winner)?rr.winner:null;
-      const sideKnown=teams.has(rr.attack)&&teams.has(rr.defense)&&rr.attack!==rr.defense;
+      const won=typeof rr.winner==='string'&&teams.has(rr.winner)?rr.winner:null;
+      const sideKnown=typeof rr.attack==='string'&&typeof rr.defense==='string'&&
+        teams.has(rr.attack)&&teams.has(rr.defense)&&rr.attack!==rr.defense;
       const events=(killByRound.get(rr.r)??[]).sort((a,b)=>a.t-b.t||a.order-b.order);
       const first=events[0]??null;
       const repeated=new Set<string>();
