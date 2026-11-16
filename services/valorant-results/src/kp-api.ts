@@ -411,7 +411,7 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping,deferP
   // The report remains read-only. Operational reactivation is an explicit
   // one-time user action restricted to the server-linked Dolly KP account.
   // Do not infer permission from a Riot ID typed by the browser.
-  const coachOwner=mapping.accounts.some(a=>a.discordUserId===owner.user&&a.riotId==='Dolly#SDGs');
+  const coachOwner=mapping.accounts.some(a=>a.discordUserId===owner.user&&a.riotId.toLowerCase()==='dolly#sdgs');
   if(request.method==='GET'&&path==='/api/kp/coach/rounds'){
     if(await d1OptionalMode(env))return response({error:'D1節約モード中です。時間を置いてから確認してください。'},429);
     return response({...await readCoachRoundReport(env.DB),canResume:coachOwner});
