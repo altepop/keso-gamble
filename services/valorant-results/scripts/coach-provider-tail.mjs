@@ -36,7 +36,7 @@ export async function observeProvider(env=process.env,request=fetch,Socket=WebSo
  }
 }
 if(process.argv[1]?.endsWith('/coach-provider-tail.mjs')){
- try{let evidence=null;for(let i=0;i<2&&!evidence;i++)evidence=await observeProvider();
+ try{let evidence=null;for(let i=0;i<6&&!evidence;i++)evidence=await observeProvider();
   console.log('COACH_DIRECT_PROVIDER_EVIDENCE '+JSON.stringify(evidence??{status:'no-normal-response-observed',extraHenrikRequests:0,d1Mutations:0}));
  }catch{console.error('COACH_DIRECT_PROVIDER_EVIDENCE_UNAVAILABLE (no trace, URL or credentials logged)');process.exitCode=1;}
 }

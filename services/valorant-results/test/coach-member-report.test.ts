@@ -4,7 +4,7 @@ import {DatabaseSync} from 'node:sqlite';
 import {recordCompetitiveRoster} from '../src/match-rosters.ts';
 import {recordCompetitiveRoundEvents} from '../src/round-events.ts';
 import {enableAllMemberArchive} from '../src/coach-member-archive.ts';
-import {readCoachMemberReport} from '../src/coach-member-report.ts';
+import {readCoachMemberReport,readCoachComparison} from '../src/coach-member-report.ts';
 import type {Match} from '../src/results.ts';
 
 const now=Date.parse('2026-11-17T08:00:00Z');
@@ -38,15 +38,15 @@ function setup(){
  status TEXT NOT NULL DEFAULT 'pending',attempts INTEGER NOT NULL DEFAULT 0,
  next_at INTEGER NOT NULL DEFAULT 0);
  CREATE TABLE coach_member_links(riot_id TEXT NOT NULL,match_id TEXT NOT NULL,PRIMARY KEY(riot_id,match_id));`);
- let writes=0;
- const db={prepare:(text:string)=>{
+ let writes=0;const queries:string[]=[];
+ const db={prepare:(text:string)=>{queries.push(text);
   const wrap=(args:unknown[])=>({
    first:async()=>sql.prepare(text).get(...args as never[])??null,
    all:async()=>({results:sql.prepare(text).all(...args as never[])}),
    run:async()=>{writes++;return {meta:{changes:Number(sql.prepare(text).run(...args as never[]).changes)}}}
   });return {...wrap([]),bind:(...args:unknown[])=>wrap(args)};
  }} as unknown as D1Database;
- return {sql,db,writes:()=>writes,close:()=>sql.close()};
+ return {sql,db,queries,writes:()=>writes,close:()=>sql.close()};
 }
 test('personal baseline includes own games without VDK; no duplicate game when co-playing',async()=>{
  const f=setup();try{
@@ -133,5 +133,15 @@ test('two Kobe accounts in one match row are deduplicated by match_id, not twice
   assert.equal(result.usableMatches,1);
   assert.equal(result.individual[0]?.matches,1);
   assert.equal(result.individual[0]?.player,'神戸');
+ }finally{f.close()}
+});
+
+test('comparison validates the cohort before reads and preserves independent per-person profiles',async()=>{
+ const f=setup();try{
+  await enableAllMemberArchive(f.db);await recordCompetitiveRoster(f.db,game('own-only','Dolly','SDGs','vdk-id'),now);
+  const before=f.writes(),start=f.queries.length,result=await readCoachComparison(f.db,['VDK','小林']);
+  assert.equal(f.queries.slice(start).filter(q=>q.includes('GROUP BY s.riot_id')).length,1,'coverage aggregation shared across profiles');
+  assert.equal(result.profiles[0].performance.overall.matches,1);assert.equal(result.profiles[1].performance.overall.matches,0);assert.equal(f.writes(),before);
+  await assert.rejects(()=>readCoachComparison(f.db,['VDK','VDK']));await assert.rejects(()=>readCoachComparison(f.db,['untrusted']));await assert.rejects(()=>readCoachComparison(f.db,[]));
  }finally{f.close()}
 });

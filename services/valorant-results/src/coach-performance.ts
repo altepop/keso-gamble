@@ -51,12 +51,17 @@ export function coachPerformance(rows:readonly Row[],accounts:readonly Account[]
    kpr:sum(kr,'rounds')?sum(kr,'k')/sum(kr,'rounds'):null,dpr:sum(dr,'rounds')?sum(dr,'d')/sum(dr,'rounds'):null,apr:sum(ar,'rounds')?sum(ar,'a')/sum(ar,'rounds'):null,rateRounds:r,
    rateBases:{kpr:{numerator:sum(kr,'k'),rounds:sum(kr,'rounds'),matches:kr.length},dpr:{numerator:sum(dr,'d'),rounds:sum(dr,'rounds'),matches:dr.length},apr:{numerator:sum(ar,'a'),rounds:sum(ar,'rounds'),matches:ar.length}},
    acs:sr?sum(scores,'score')/sr:null,scoreTotal:sum(scores,'score'),scoreRounds:sr,
-   medianKd:median(ratios),kdStandardDeviation:sd(ratios),killStandardDeviation:sd(konly.map(m=>m.k!)),deathStandardDeviation:sd(donly.map(m=>m.d!)),killVariance:sd(konly.map(m=>m.k!))===null?null:sd(konly.map(m=>m.k!))!**2,deathVariance:sd(donly.map(m=>m.d!))===null?null:sd(donly.map(m=>m.d!))!**2,ratioMatches:ratios.length,zeroDeathRatioExclusions:kd.filter(m=>m.d===0).length,
-   wins:ms.filter(m=>m.outcome==='win').length,knownOutcomes:ms.filter(m=>m.outcome!=='unknown').length,
+   meanMatchKd:mean(ratios),medianKd:median(ratios),kdStandardDeviation:sd(ratios),killStandardDeviation:sd(konly.map(m=>m.k!)),deathStandardDeviation:sd(donly.map(m=>m.d!)),killVariance:sd(konly.map(m=>m.k!))===null?null:sd(konly.map(m=>m.k!))!**2,deathVariance:sd(donly.map(m=>m.d!))===null?null:sd(donly.map(m=>m.d!))!**2,ratioMatches:ratios.length,zeroDeathRatioExclusions:kd.filter(m=>m.d===0).length,
+   winPct:ms.some(m=>m.outcome!=='unknown')?ms.filter(m=>m.outcome==='win').length*100/ms.filter(m=>m.outcome!=='unknown').length:null,losses:ms.filter(m=>m.outcome==='loss').length,draws:ms.filter(m=>m.outcome==='draw').length,unknownOutcomes:ms.filter(m=>m.outcome==='unknown').length,wins:ms.filter(m=>m.outcome==='win').length,knownOutcomes:ms.filter(m=>m.outcome!=='unknown').length,
    negativeKdMatches:kd.filter(m=>m.k!<m.d!).length};
  }
  const interval=(ms:typeof matches)=>{const times=ms.flatMap(m=>m.recordedAt===null?[]:[m.recordedAt]);return {valid:ms.length,excluded:matches.length-ms.length,recordedAt:times.length?{oldest:Math.min(...times),newest:Math.max(...times)}:null,missingTimestamps:ms.length-times.length};};
  const metricCoverage={kd:interval(matches.filter(m=>m.k!==null&&m.d!==null)),kpr:interval(matches.filter(m=>m.k!==null&&m.rounds!==null)),dpr:interval(matches.filter(m=>m.d!==null&&m.rounds!==null)),apr:interval(matches.filter(m=>m.a!==null&&m.rounds!==null)),acs:interval(matches.filter(m=>m.score!==null&&m.rounds!==null)),hs:interval(matches.filter(m=>m.hs!==null&&m.bs!==null&&m.ls!==null)),adr:interval(matches.filter(m=>m.damageDealt!==null&&m.rounds!==null)),ddDelta:interval(matches.filter(m=>m.damageDealt!==null&&m.damageReceived!==null&&m.rounds!==null))};
+ const missingFields={kills:matches.filter(m=>m.k===null).length,deaths:matches.filter(m=>m.d===null).length,assists:matches.filter(m=>m.a===null).length,score:matches.filter(m=>m.score===null).length,verifiedRounds:matches.filter(m=>m.rounds===null).length,hitTriple:matches.filter(m=>m.hs===null||m.bs===null||m.ls===null).length,damageDealt:matches.filter(m=>m.damageDealt===null).length,damageReceived:matches.filter(m=>m.damageReceived===null).length};
+ const conditionalWindows=[...new Set(matches.filter(m=>m.agent!=='不明'&&m.map!=='不明').map(m=>m.mapAgent))].map(value=>{
+  const same=matches.filter(m=>m.mapAgent===value);
+  return {value,control:'same-map-and-agent',uncontrolled:['相手の強さ','party人数','構成','攻守'],recent:summary(same.slice(0,10)),previous:summary(same.slice(10,20))};
+ });
  const overall=summary(matches),groups=(key:'map'|'agent'|'outcome'|'partySize'|'role'|'mapAgent'|'composition')=>[...new Set(matches.map(m=>m[key]))].map(value=>({value,...summary(matches.filter(m=>m[key]===value))}));
  const windows=[5,10,20,50].map(n=>({requested:n,recent:summary(matches.slice(0,n)),previous:summary(matches.slice(n,2*n)),sameCondition:false}));
  const stamps=rows.map(r=>r.recorded_at).filter((n):n is number=>typeof n==='number'&&Number.isSafeInteger(n)&&n>0);
@@ -72,7 +77,7 @@ export function coachPerformance(rows:readonly Row[],accounts:readonly Account[]
  });
  const streak=(state:string)=>{let n=0;for(const s of formStates){if(s!==state)break;n++;}return n;};
  const form={valid:formStates.filter(s=>s!=='unclassified').length,positive:formStates.filter(s=>s==='positive').length,negative:formStates.filter(s=>s==='negative').length,unclassified:formStates.filter(s=>s==='unclassified').length,currentPositiveStreak:streak('positive'),currentNegativeStreak:streak('negative'),definition:'同エージェントの過去最大10試合（5試合/80R以上）に対し、KPR+20%以上かつDPR-20%以上を好調候補、逆を不調候補。対象試合は12R以上。ローカル規則であり実力やミスの確定ではない。マップ・相手・攻守は未補正。'};
- const quality={metricCoverage,recordedAt:stamps.length?{oldest:Math.min(...stamps),newest:Math.max(...stamps)}:null,source:'saved competitive roster / team round totals',candidateMatches:rows.length,distinctMatches:seen.size,selectedMatches:matches.length,excluded,
+ const quality={metricCoverage,missingFields,recordedAt:stamps.length?{oldest:Math.min(...stamps),newest:Math.max(...stamps)}:null,source:'saved competitive roster / team round totals',candidateMatches:rows.length,distinctMatches:seen.size,selectedMatches:matches.length,excluded,
   kd:{valid:overall.kdMatches,excluded:matches.length-overall.kdMatches,reason:'missing-or-invalid-kills/deaths'},
   kpr:{...overall.rateBases.kpr,excluded:matches.length-overall.rateBases.kpr.matches},dpr:{...overall.rateBases.dpr,excluded:matches.length-overall.rateBases.dpr.matches},apr:{...overall.rateBases.apr,excluded:matches.length-overall.rateBases.apr.matches},
   adr:{valid:overall.damageMatches,numerator:overall.damageTotal,denominator:overall.damageRounds},ddDelta:{valid:overall.damageDeltaMatches,numerator:overall.damageDeltaTotal,denominator:overall.damageDeltaRounds},acs:{valid:overall.acsMatches,excluded:matches.length-overall.acsMatches,reason:'missing-score-or-unverified-round-total'},hs:{valid:overall.hitMatches,excluded:matches.length-overall.hitMatches,numerator:overall.headHits,denominator:overall.totalHits},snapshotSource:'roster recorded_at is the original archive timestamp; per-field API correction times are not archived'};
@@ -89,6 +94,14 @@ export function coachPerformance(rows:readonly Row[],accounts:readonly Account[]
   if(base.matches>=5&&old.matches>=5&&base.rounds>=80&&old.rounds>=80&&a[key]!==null&&b[key]!==null){
    const change=a[key]!-b[key]!,good=direction==='higher'?change>0:change<0;
    notes.unshift({kind:Math.abs(change)<.1?'observation':good?'strength':'review',title:label+'の直近変化',evidence:`${a[key]!.toFixed(3)} (${base.numerator}/${base.rounds}R) vs ${b[key]!.toFixed(3)} (${old.numerator}/${old.rounds}R)。差 ${change.toFixed(3)}。各5試合/80R以上、絶対差0.1を検討目安とするローカル規則。相手・マップ・役割は未補正。`,action});
+  }
+ }
+ for(const c of conditionalWindows){
+  for(const [key,label,goodSign,action] of [['kpr','キル効率',1,'接敵地点・交戦に参加できたタイミング・味方との距離を同じマップの録画で比較する'],['dpr','死亡頻度',-1,'死亡地点・再ピーク・リテイクの人数差を同じマップの録画で比較する']] as const){
+   const a=c.recent,b=c.previous,x=a.rateBases[key],y=b.rateBases[key];
+   if(x.matches<5||y.matches<5||x.rounds<80||y.rounds<80||a[key]===null||b[key]===null)continue;
+   const diff=a[key]!-b[key]!;if(Math.abs(diff)<.1)continue;
+   notes.unshift({kind:diff*goodSign>0?'strength':'review',title:c.value+' の同条件期間比較：'+label,evidence:`同じマップ・エージェントの直近${x.matches}件 ${a[key]!.toFixed(3)} (${x.numerator}/${x.rounds}R) vs 直前${y.matches}件 ${b[key]!.toFixed(3)} (${y.numerator}/${y.rounds}R)。差 ${diff.toFixed(3)}。各5件/80R以上・差0.1以上はローカル抽出規則。相手・party・構成・攻守は未補正。`,action});
   }
  }
  if(overall.kdMatches>=10&&overall.kdStandardDeviation!==null)notes.push({kind:'observation',title:'試合ごとの振れ幅',evidence:`合計KD ${overall.kd?.toFixed(2)??'算出不可'} / 試合KD中央値 ${overall.medianKd?.toFixed(2)??'算出不可'} / 母標準偏差 ${overall.kdStandardDeviation.toFixed(2)}。D=0試合は試合KDの分布から除外。`,action:'突出した試合と通常の試合を、マップ・エージェント・ラウンド数が近い条件で比較する'});
@@ -108,7 +121,7 @@ export function coachPerformance(rows:readonly Row[],accounts:readonly Account[]
    }
   }
  }
- return {priorityPolicy:'強みと改善候補を分け、ラウンド基準の直近変化、試合平均の変化、ばらつきの順で提示。各閾値と標本数はカード内に明示。総合実力スコアは作らない。',quality,overall,windows,maps:groups('map'),agents:groups('agent'),outcomes:groups('outcome'),form,mapAgents:groups('mapAgent'),compositions:groups('composition'),teammates:[...new Set(matches.flatMap(m=>m.teammates))].map(person=>({person,with:summary(matches.filter(m=>m.teammates.includes(person))),without:summary(matches.filter(m=>!m.teammates.includes(person)))})),roles:groups('role'),parties:groups('partySize'),notes,
-  timeline:matches.slice(0,50).map((m,i)=>({rollingKd5:summary(matches.slice(i,i+5)).kd,rollingKd5Matches:matches.slice(i,i+5).length,form:formStates[i],date:Number.isFinite(m.at)&&Math.abs(m.at)<=8640000000000000?new Date(m.at).toISOString():null,map:m.map,agent:m.agent,kills:m.k,deaths:m.d,assists:m.a,kd:m.k!==null&&m.d!==null&&m.d>0?m.k/m.d:null,acs:m.score!==null&&m.rounds?m.score/m.rounds:null,outcome:m.outcome})),
+ return {priorityPolicy:'強みと改善候補を分け、同じマップ・エージェントの期間比較、ラウンド基準の直近変化、試合平均の変化、ばらつきの順で提示。各閾値と標本数はカード内に明示。総合実力スコアは作らない。',quality,overall,windows,conditionalWindows,maps:groups('map'),agents:groups('agent'),outcomes:groups('outcome'),form,mapAgents:groups('mapAgent'),compositions:groups('composition'),teammates:[...new Set(matches.flatMap(m=>m.teammates))].map(person=>({person,with:summary(matches.filter(m=>m.teammates.includes(person))),without:summary(matches.filter(m=>!m.teammates.includes(person)))})),roles:groups('role'),parties:groups('partySize'),notes,
+  timeline:matches.slice(0,50).map((m,i)=>({adr:m.damageDealt!==null&&m.rounds?m.damageDealt/m.rounds:null,hsPct:m.hs!==null&&m.bs!==null&&m.ls!==null&&(m.hs+m.bs+m.ls)>0?100*m.hs/(m.hs+m.bs+m.ls):null,rollingWinPct5:summary(matches.slice(i,i+5)).winPct,rollingKd5:summary(matches.slice(i,i+5)).kd,rollingKd5Matches:matches.slice(i,i+5).length,form:formStates[i],date:Number.isFinite(m.at)&&Math.abs(m.at)<=8640000000000000?new Date(m.at).toISOString():null,map:m.map,agent:m.agent,kills:m.k,deaths:m.d,assists:m.a,kd:m.k!==null&&m.d!==null&&m.d>0?m.k/m.d:null,acs:m.score!==null&&m.rounds?m.score/m.rounds:null,outcome:m.outcome})),
   limitations:['ACSはチームの総ラウンド数で割った値。個人のAFK・途中参加による参加ラウンド数補正は未確認。','比較期間のマップ・役割・試合長は未補正。数値の変化だけで原因や本人の判断ミスを断定しない。','ADR・DDΔは対応するダメージ値が保存された試合だけ。HS%は命中部位を保存した試合だけ。KASTは未算出。欠損を0と扱わない。','VODなしで位置・視線・VC・スキル使用を診断しない。']};
 }
