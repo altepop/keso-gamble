@@ -186,9 +186,13 @@ export function summarizeCoachRounds(rows:readonly ArchivedRow[],focusName='Doll
       ?[{name:vdk.name??focusName,tag:vdk.tag??focusTag,label:focusLabel}]:[];
     const identities=[...playerIdentity,...focusIdentity];
     const participants=identities.flatMap(identity=>{
+      // A confirmed PUUID wins over names/tags for the selected account. A
+      // player using the old display name cannot masquerade as the target.
+      const targetIdKnown=Boolean(focusPuuid&&ps.some(x=>x.puuid===focusPuuid));
       const p=ps.find(p=>p.team_id===vdk.team_id&&(
-        (p.name===identity.name&&p.tag===identity.tag)||
-        (identity.label===focusLabel&&focusPuuid&&p.puuid===focusPuuid)));
+        identity.label===focusLabel&&targetIdKnown
+          ?p.puuid===focusPuuid
+          :(p.name===identity.name&&p.tag===identity.tag)));
       if(!p)return [];
       const agent=typeof p.agent==='string'&&p.agent.length<=60&&p.agent
         ?p.agent:'Unknown';
