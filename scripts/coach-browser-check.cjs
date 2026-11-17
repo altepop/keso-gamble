@@ -96,6 +96,7 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
     return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({
      person,profile,accounts:person==='神戸'?['Abema#ttv','Aquatopia#toppy']:[person],
      usableMatches:2,coverage:{discovered:5,complete:2,discoveryDone:false},
+     sourcePuuid:'secret-member-puuid',
      individual:[{player:profile,matches:2,matchWins:1,matchLosses:1,matchDraws:0,
        statsMatches:2,totalKills:27,totalDeaths:24,observedOpeningRounds:40,
        firstKills:4,firstDeaths:6,firstKillWins:3,firstKillLosses:1,
@@ -106,6 +107,7 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
        firstDeaths:6,firstKillWins:3,firstKillLosses:1}],
      fullDiagnosis:{items:[
        {subject:profile,category:'先制',status:'focus',title:'FK後の動きを確認',
+        secretMatchId:'secret-member-match',
         evidence:'2 / 10（20%）',reason:'映像による確認が必要',
         nextAction:'味方のカバーと退避を確認'},
        {subject:profile,category:'攻撃・防衛',status:'focus',title:'攻撃側の初動リスク',
@@ -221,6 +223,17 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
    'render real side and map/agent bars rather than invented trendlines');
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,
    'all member charts must fit mobile width');
+  assert.match(await page.locator('#share').innerText(),/神戸の全診断をコピー/);
+  await page.locator('#share').click();
+  await page.waitForFunction(()=>JSON.parse(window.__copiedDiagnostic||'{}').format===
+   'KESO_COACH_SAFE_MEMBER_DIAGNOSTIC_V1');
+  const personExport=JSON.parse(await page.evaluate(()=>window.__copiedDiagnostic));
+  assert.deepEqual(personExport.accounts,['Abema#ttv','Aquatopia#toppy']);
+  assert.equal(personExport.fullDiagnosis.items.length,4,'all selected-person diagnosis entries exported');
+  assert.equal(personExport.individualMapAgent[0].map,'Ascent');
+  assert.equal(personExport.quality.roundDataMissing??null,null);
+  assert.ok(!JSON.stringify(personExport).includes('secret-member-match'));
+  assert.ok(!JSON.stringify(personExport).includes('secret-member-puuid'));
   assert.equal(requests.length,3,'one own-match read only upon clicking the person');
   await page.locator('#start-member-archive').click();
   await page.waitForFunction(()=>document.querySelector('#status').textContent.includes('履歴収集を有効化'));
