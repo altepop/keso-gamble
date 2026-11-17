@@ -132,3 +132,55 @@ test('source validation, absent kill timelines and missing upstream games cannot
    'coverage is only counted for candidates linked to that person, never guessed');
  }finally{f.close()}
 });
+
+test('partial kill timelines are retried after cooldown and repaired without rewriting earlier rounds',async()=>{
+ const f=setup();
+ try{
+  await enableAllMemberArchive(f.db);
+  const riot=COACH_MEMBER_ACCOUNTS[0].riotId,id='repairable';
+  const start=Date.parse(started);
+  f.sql.prepare(`INSERT INTO coach_member_queue VALUES(?,?,?,?,?,'pending',0,0)`)
+   .run(id,'ap',riot,'player-0',start);
+  let calls=0;
+  const detail=async()=>{
+   calls++;
+   const m=makeMatch(id);
+   if(calls===1)delete m.kills;
+   return m;
+  };
+  assert.equal(await fetchNextCoachMemberMatch(f.db,detail,now),'partial');
+  assert.equal(await fetchNextCoachMemberMatch(f.db,detail,now+14*60_000),'idle',
+    'a partial game must not cause uncontrolled repeat requests');
+  assert.equal(await fetchNextCoachMemberMatch(f.db,detail,now+16*60_000),'saved');
+  assert.equal(calls,2);
+  assert.equal(f.count('valorant_match_rosters'),1,'same game must not be duplicated');
+  assert.equal(f.count('valorant_match_round_events'),1);
+  const status=f.sql.prepare('SELECT status,attempts FROM coach_member_queue WHERE match_id=?')
+   .get(id) as {status:string;attempts:number};
+  assert.equal(status.status,'complete');
+  assert.equal(status.attempts,2);
+  const row=f.sql.prepare('SELECT rounds_json,kills_json FROM valorant_match_round_events WHERE match_id=?')
+   .get(id) as {rounds_json:string;kills_json:string};
+  assert.ok(JSON.parse(row.rounds_json).length>0);
+  assert.ok(JSON.parse(row.kills_json).length>0);
+  assert.equal(await fetchNextCoachMemberMatch(f.db,detail,now+32*60_000),'idle');
+ }finally{f.close()}
+});
+test('incomplete match after three tries stays explicitly partial rather than claiming a clean archive',async()=>{
+ const f=setup();try{
+  await enableAllMemberArchive(f.db);
+  const id='persistently-partial',riot=COACH_MEMBER_ACCOUNTS[0].riotId;
+  f.sql.prepare(`INSERT INTO coach_member_queue VALUES(?,?,?,?,?,'pending',0,0)`)
+   .run(id,'ap',riot,'player-0',Date.parse(started));
+  let calls=0;
+  const incomplete=async()=>{calls++;const m=makeMatch(id);delete m.kills;return m};
+  for(let n=0;n<3;n++)assert.equal(
+   await fetchNextCoachMemberMatch(f.db,incomplete,now+n*16*60_000),'partial');
+  assert.equal(await fetchNextCoachMemberMatch(f.db,incomplete,now+4*16*60_000),'idle');
+  assert.equal(calls,3);
+  const status=f.sql.prepare('SELECT status,attempts FROM coach_member_queue WHERE match_id=?')
+   .get(id) as {status:string;attempts:number};
+  assert.equal(status.status,'partial');
+  assert.equal(status.attempts,3);
+ }finally{f.close()}
+});
