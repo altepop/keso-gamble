@@ -415,7 +415,7 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping,deferP
   // Do not infer permission from a Riot ID typed by the browser.
   const coachOwner=mapping.accounts.some(a=>a.discordUserId===owner.user&&a.riotId.toLowerCase()==='dolly#sdgs');
   const memberHistoryOwner=mapping.accounts.some(a=>a.discordUserId===owner.user&&
-    ['aquatopia#toppy','dolly#sdgs'].includes(a.riotId.toLowerCase()));
+    ['aquatopia#toppy','abema#ttv','dolly#sdgs'].includes(a.riotId.toLowerCase()));
   if(request.method==='GET'&&path==='/api/kp/coach/rounds'){
     if(await d1OptionalMode(env))return response({error:'D1節約モード中です。時間を置いてから確認してください。'},429);
     return response({...await readCoachRoundReport(env.DB),canResume:coachOwner,
