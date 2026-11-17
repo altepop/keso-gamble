@@ -1,10 +1,11 @@
 // Observed kill-round contributions only; never labelled official KAST or survival.
-type Row={match_id:string;players_json:string;teams_json:string|null;rounds_json:string|null;kills_json:string|null};
+type Row={match_id:string;players_json:string;teams_json:string|null;rounds_json:string|null;kills_json:string|null;events_recorded_at?:number|null};
 type Account={name:string;tag:string;puuid:string|null};
 const parse=(v:string|null):any=>{try{return v?JSON.parse(v):null}catch{return null}};
 const n=(x:unknown,max=10000)=>Number.isSafeInteger(x)&&Number(x)>=0&&Number(x)<=max;
 export function coachRoundContribution(rows:readonly Row[],accounts:readonly Account[]){
  const seen=new Set<string>(),excluded:Record<string,number>={};
+ const stamps:number[]=[];
  const histogram=[0,0,0,0,0,0,0];let matches=0,rounds=0,noDeath=0,multiWins=0,multiKnown=0;
  const combatFollowup={enemyKills:0,totalDeaths:0,enemyKnownKillerDeaths:0,teammateRetaliations5s:0,tradeKills5s:0,diedAfterKill5s:0};
  const sides={attack:{rounds:0,kills:0,deaths:0},defense:{rounds:0,kills:0,deaths:0}};
@@ -31,7 +32,7 @@ export function coachRoundContribution(rows:readonly Row[],accounts:readonly Acc
   if(ps.some(x=>(deathsById.get(x.puuid)??0)!==x.d||(killsById.get(x.puuid)??0)!==x.k)){reject('kill-totals-do-not-match-roster');continue;}
   const allByRound=new Map<number,typeof ks>();
   for(const k of ks){const group=allByRound.get(k.r)??[];group.push(k);allByRound.set(k.r,group);}
-  matches++;
+  matches++;if(Number.isSafeInteger(row.events_recorded_at)&&Number(row.events_recorded_at)>0)stamps.push(row.events_recorded_at!);
   for(const r of rs){
    const {kills=0,deaths=0}=ownByRound.get(r.r)??{};
    const events=allByRound.get(r.r)??[],ownKills=events.filter((k:any)=>enemyKill(k,p.puuid)),ownDeaths=events.filter((k:any)=>k.victim===p.puuid);
@@ -52,7 +53,7 @@ export function coachRoundContribution(rows:readonly Row[],accounts:readonly Acc
    if(side){sides[side].rounds++;sides[side].kills+=kills;sides[side].deaths+=deaths;}
   }
  }
- return {quality:{source:'rounds/kills verified against all ten roster K/D totals',candidateMatches:rows.length,validMatches:matches,excluded},
+ return {quality:{recordedAt:stamps.length?{oldest:Math.min(...stamps),newest:Math.max(...stamps)}:null,missingTimestamps:matches-stamps.length,source:'rounds/kills verified against all ten roster K/D totals',candidateMatches:rows.length,validMatches:matches,excluded},
   combatFollowup,rounds,killHistogram:histogram.map((count,kills)=>({kills:kills===6?'6+':String(kills),count,denominator:rounds})),
   noDeathRounds:noDeath,multiKillRounds:histogram.slice(2).reduce((a,b)=>a+b,0),multiKillWins:multiWins,multiKillKnownOutcomes:multiKnown,sides,
   limitations:['5秒の追随は全キル/デスの時系列観測。同時刻は順序不明として数えない。位置上のトレード機会や公式トレード率ではなく、復活・意図・射線は未確認。','無死亡ラウンドは復活後を含む終了時生存率ではない。','KAST・ラウンド別アシスト・位置上のトレード機会・クラッチは未算出。','マルチキル後の勝率は関連の観察であり、個人の因果的な勝利貢献率ではない。']};

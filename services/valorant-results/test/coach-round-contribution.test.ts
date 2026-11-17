@@ -25,3 +25,9 @@ test('own response kills use exact five-second boundary and exclude simultaneous
  const run=(at:number)=>coachRoundContribution([{...row,players_json:JSON.stringify(players),kills_json:JSON.stringify([{r:0,t:1000,killer:'other4',victim:'other0'},{r:0,t:at,killer:'private-self',victim:'other4'},{r:0,t:10000,killer:'private-self',victim:'other5'}])}],accounts).combatFollowup;
  assert.equal(run(6000).tradeKills5s,1);assert.equal(run(6001).tradeKills5s,0);assert.equal(run(1000).tradeKills5s,0);
 });
+
+test('event acquisition timestamps are independent of roster timestamps and never filled with zero',()=>{
+ const r=coachRoundContribution([{...fixture(),events_recorded_at:1700000000000}],accounts);
+ assert.deepEqual(r.quality.recordedAt,{oldest:1700000000000,newest:1700000000000});assert.equal(r.quality.missingTimestamps,0);
+ assert.equal(coachRoundContribution([fixture()],accounts).quality.recordedAt,null);
+});
