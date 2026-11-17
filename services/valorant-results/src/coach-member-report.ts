@@ -1,3 +1,5 @@
+import {coachRoundContribution} from './coach-round-contribution.ts';
+import {coachPerformance} from './coach-performance.ts';
 import {COACH_MEMBER_ACCOUNTS,coachMemberCoverage} from './coach-member-archive.ts';
 import {summarizeCoachRounds} from './coach-round-analysis.ts';
 import {comprehensiveCoachDiagnosis} from './coach-comprehensive.ts';
@@ -12,12 +14,12 @@ type Profile='VDK'|'Abema'|'石原'|'藤村'|'Aquatopia'|'小林'|'神戸';
 const labelFor=(person:string):Profile=>{
  switch(person){
   case '神戸':return '神戸';
-  case 'VDK':case 'Abema':case '石原':case '藤村':case '小林':return person;
+  case 'Aquatopia':case 'VDK':case 'Abema':case '石原':case '藤村':case '小林':return person;
   default:throw Error('Unknown profile');
  }
 };
-export async function readCoachMemberReport(db:D1Database,person:string){
- const entry=COACH_MEMBER_ACCOUNTS.find(x=>x.person===person);
+export async function readCoachMemberReport(db:D1Database,person:string,preloadedCoverage?:Awaited<ReturnType<typeof coachMemberCoverage>>){
+ const entry=COACH_MEMBER_ACCOUNTS.find(x=>x.person===(person==='Aquatopia'?'神戸':person));
  if(!entry)throw Error('Unrecognized coaching person');
  // The user confirmed Kobe owns Abema#ttv AND Aquatopia#toppy.
  // Keep independent account views, but Kobe's person view must cover both.
@@ -37,16 +39,18 @@ export async function readCoachMemberReport(db:D1Database,person:string){
   json_extract(p.value,'$.tag')=?) OR
   (? IS NOT NULL AND json_extract(p.value,'$.puuid')=?))`).join(' OR ');
  const bindArgs=accounts.flatMap(a=>[a.name,a.tag,a.puuid,a.puuid]);
- const rows=await db.prepare(`SELECT r.match_id,r.ended_at,r.map,r.players_json,r.teams_json,
+ const rows=await db.prepare(`SELECT r.match_id,r.ended_at,r.recorded_at,r.map,r.players_json,r.teams_json,
   e.rounds_json,e.kills_json
   FROM valorant_match_rosters r
   LEFT JOIN valorant_match_round_events e ON e.match_id=r.match_id
   WHERE EXISTS(SELECT 1 FROM json_each(r.players_json) p WHERE ${clauses})
   ORDER BY r.ended_at DESC LIMIT ?`)
   .bind(...bindArgs,MAX_ROWS).all<{
-   match_id:string;ended_at:number;map:string|null;players_json:string;teams_json:string|null;
+   match_id:string;ended_at:number;recorded_at:number;map:string|null;players_json:string;teams_json:string|null;
    rounds_json:string|null;kills_json:string|null}>();
  const [primary,...alternates]=accounts;
+ const performance=coachPerformance(rows.results,accounts,COACH_MEMBER_ACCOUNTS);
+ const roundContribution=coachRoundContribution(rows.results,accounts);
  const matchTrend=buildCoachMatchTrend(rows.results,accounts);
  const report=summarizeCoachRounds(rows.results,primary.name,primary.tag,
   primary.puuid??undefined,labelFor(person),
@@ -57,8 +61,8 @@ export async function readCoachMemberReport(db:D1Database,person:string){
  // cohort.  Other teammates can be co-occurring in these same matches.
  const onlySelf={...report,individual,individualMapAgent};
  const diagnosis=comprehensiveCoachDiagnosis(onlySelf);
- const coverage=await coachMemberCoverage(db);
- const sourceState=coverage.people.find(x=>x.person===person);
+ const coverage=preloadedCoverage??await coachMemberCoverage(db);
+ const sourceState=coverage.people.find(x=>x.person===(person==='Aquatopia'?'神戸':person));
  const kobeCombined=person==='神戸'
   ?await db.prepare(`SELECT
     COUNT(DISTINCT l.match_id) AS discovered,
@@ -88,7 +92,7 @@ export async function readCoachMemberReport(db:D1Database,person:string){
   archivedMatches:report.archivedMatches,usableMatches:report.usableMatches,
   invalidMatches:report.invalidMatches,roundDataMissing:report.roundDataMissing,
   killDataMissing:report.killDataMissing,overall:report.overall,
-  individual,individualMapAgent,matchTrend,
+  individual,individualMapAgent,matchTrend,performance,roundContribution,
   fullDiagnosis:diagnosis,coachingNotes:coachNotes(onlySelf),
   coachSignals:detectCoachSignals(onlySelf)
  };

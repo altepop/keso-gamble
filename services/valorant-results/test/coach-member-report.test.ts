@@ -93,6 +93,9 @@ test('personal baseline includes own games without VDK; no duplicate game when c
   const abema=await readCoachMemberReport(f.db,'Abema');
   assert.equal(abema.usableMatches,1,'account-specific view remains available');
   assert.equal(abema.individual[0]?.player,'Abema');
+  const aqua=await readCoachMemberReport(f.db,'Aquatopia');
+  assert.deepEqual(aqua.accounts,['Aquatopia#toppy']);assert.equal(aqua.performance.overall.matches,2);
+  assert.equal(me.performance.overall.matches,3);
   const ishihara=await readCoachMemberReport(f.db,'石原');
   assert.equal(ishihara.usableMatches,0);
   assert.equal(ishihara.individual.length,0);

@@ -3,6 +3,7 @@ import type {Match} from './results.ts';
 // Persist the information already present in the Henrik match response.
 // This is independent of monitored-user notices, payouts and betting.
 const short=(value:unknown,max=100):string|null=>typeof value==='string'&&value.length>0&&value.length<=max?value:null;
+const damage=(n:unknown):number|null=>typeof n==='number'&&Number.isFinite(n)&&n>=0&&n<=10000000?n:null;
 const safeInt=(n:unknown):number|null=>Number.isSafeInteger(n)&&Number(n)>=0&&Number(n)<=10_000_000?Number(n):null;
 export function compactCompetitiveRoster(match:Match,now=Date.now()) {
   const m=match?.metadata;
@@ -19,12 +20,17 @@ export function compactCompetitiveRoster(match:Match,now=Date.now()) {
     rounds:safeInt(t.rounds?.won)
   }));
   if(teams.some(t=>!t.id)||teams[0].id===teams[1].id)return null;
-  const players=match.players.map(p=>({
+  const players=match.players.map((p,index)=>({
     puuid:short(p.puuid,128),team_id:short(p.team_id,80),
     name:short(p.name,40),tag:short(p.tag,16),
     party_id:short(p.party_id,128),agent:short(p.agent?.name,64),
     k:safeInt(p.stats?.kills),d:safeInt(p.stats?.deaths),
-    a:safeInt(p.stats?.assists),score:safeInt(p.stats?.score)
+    a:safeInt(p.stats?.assists),score:safeInt(p.stats?.score),
+    damageDealt:damage(p.stats?.damage?.dealt),damageReceived:damage(p.stats?.damage?.received),hs:safeInt(p.stats?.headshots),bs:safeInt(p.stats?.bodyshots),ls:safeInt(p.stats?.legshots),
+    ...(index===0?{sourceFields:match._coachProviderShape??{version:1,players:match.players.length,
+      headshots:match.players.filter(x=>safeInt(x.stats?.headshots)!==null).length,
+      bodyshots:match.players.filter(x=>safeInt(x.stats?.bodyshots)!==null).length,
+      legshots:match.players.filter(x=>safeInt(x.stats?.legshots)!==null).length}}:{})
   }));
   if(players.some(p=>!p.puuid||!teams.some(t=>t.id===p.team_id))||
      new Set(players.map(p=>p.puuid)).size!==10||

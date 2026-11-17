@@ -45,3 +45,10 @@ test('same match from two monitored players is stored once and survives later re
  assert.equal((sql.prepare('SELECT COUNT(*) AS n FROM valorant_match_rosters').get() as {n:number}).n,1);
  sql.close();
 });
+
+test('hit locations retain missing values and fixed schema counts without extra API calls',()=>{
+ const m=fixture();m.players[0].stats!.headshots=4;m.players[0].stats!.bodyshots=12;m.players[0].stats!.legshots=4;
+ const ps=JSON.parse(compactCompetitiveRoster(m)!.players);
+ assert.equal(ps[0].hs,4);assert.equal(ps[1].hs,null);assert.equal(ps[0].sourceFields.headshots,1);
+ assert.equal(ps[0].sourceFields.players,10);assert.equal(ps[1].sourceFields,undefined);
+});

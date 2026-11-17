@@ -1,3 +1,4 @@
+import {coachProviderShape} from './coach-provider-shape.ts';
 import {vdkRescuePress,vdkRescueStatus} from './vdk-rescue-press.ts';
 import {approvedEscalationPress,escaPressActive,escalationPressStatus} from './escalation-press.ts';
 import {ensureRankCommand,rankRegistrationStatus} from './rank-command-registration.ts';
@@ -173,6 +174,15 @@ async function api<T>(env: Env, path: string): Promise<T> {
   if (!response.ok) throw new Error(`Match API HTTP ${response.status}`);
   const body = await response.json() as { data: T };
   if (body.data === undefined) throw new Error('Unexpected API data');
+  try{if(path.startsWith('/valorant/v4/match/')||path.startsWith('/valorant/v4/matches/')||path.startsWith('/valorant/v4/by-puuid/matches/')){
+    let observed=false;
+    for(const raw of (Array.isArray(body.data)?body.data:[body.data])){
+      const shape=coachProviderShape(raw);if(shape&&raw&&typeof raw==='object'){
+        Object.defineProperty(raw,'_coachProviderShape',{value:shape,enumerable:false,configurable:true});
+        if(!observed){console.info('coach_provider_shape',shape);observed=true;}
+      }
+    }
+  }}catch{console.info('coach_provider_shape_unavailable');}
   return body.data;
 }
 
