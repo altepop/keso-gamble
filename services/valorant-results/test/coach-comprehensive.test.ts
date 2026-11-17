@@ -11,7 +11,7 @@ function sample(){
  const team={
   rounds:500,winnerKnown:500,ourRoundWins:285,
   firstKillWins:150,firstKillLosses:50,firstKillOutcomesKnown:200,
-  enemyFkWins:35,enemyFkLosses:160,doubleOpeningWins:56,doubleOpeningLosses:14,
+  enemyFkWins:35,enemyFkLosses:160,doubleOpeningWins:63,doubleOpeningLosses:7,
   roundsWithSides:350
  };
  const player={
@@ -52,7 +52,7 @@ test('complete-case team, personal FK/FD, two-kill, side and map/agent signals h
  assert.equal(find('VDK','Corrode / Fade：FK後勝率')?.numerator,15);
  assert.equal(find('VDK','Lotus / Fade：FK後勝率')?.status,'insufficient');
  assert.ok(diagnosis.items.every(x=>!JSON.stringify(x).includes('secret-puuid')));
- assert.equal(diagnosis.synopsis.find(x=>x.subject==='VDK')?.priority?.category,'生存・取り返し');
+ assert.equal(diagnosis.synopsis.find(x=>x.subject==='VDK')?.priority?.status,'focus');
  assert.equal(diagnosis.limitations.length>=4,true);
 });
 
