@@ -14,13 +14,13 @@ function game(id:string,playerName:string,playerTag:string,puuid:string,
   puuid:i===0?puuid:i===1&&alsoVdk?'vdk-id':'other-'+i+'-'+id,
   team_id:i<5?'Blue':'Red',name:i===0?playerName:i===1&&alsoVdk?'Dolly':'other'+i,
   tag:i===0?playerTag:i===1&&alsoVdk?'SDGs':'J',
-  agent:{name:'Fade'},stats:{kills:5,deaths:3,assists:2,score:1400}
+  agent:{name:'Fade'},stats:{kills:i===0?1:0,deaths:i===5?1:0,assists:0,score:i===0?200:0}
  }));
  return {metadata:{match_id:id,is_completed:true,
   started_at:'2026-11-12T10:00:00Z',game_length_in_ms:1_200_000,queue:{id:'competitive'}},
   players:names,teams:[{team_id:'Blue',won:true,rounds:{won:13}},
    {team_id:'Red',won:false,rounds:{won:8}}],
-  rounds:[{id:0,winning_team:'Blue',attacking_team:'Blue',defending_team:'Red'}],
+  rounds:Array.from({length:21},(_,id)=>({id,winning_team:id<13?'Blue':'Red',attacking_team:id<12?'Blue':'Red',defending_team:id<12?'Red':'Blue'})),
   kills:[{round:0,time_in_round_in_ms:600,killer:{puuid},victim:{puuid:'other-5-'+id}}]};
 }
 function setup(){
@@ -80,7 +80,7 @@ test('personal baseline includes own games without VDK; no duplicate game when c
   assert.equal(me.overall.matches,3);
   assert.equal(me.coverage.analysisMatches,3);
   assert.equal(me.matchTrend.length,3,'same three complete person-matches create the visible trend');
-  assert.ok(me.matchTrend.every(x=>x.outcome==='win'&&x.kills===5));
+  assert.ok(me.matchTrend.every(x=>x.outcome==='win'&&x.kills===1));
   assert.equal(JSON.stringify(me.matchTrend).includes('aqua-id'),false,'chart cannot leak PUUID');
   assert.equal(me.coverage.allMatchesGuaranteed,false);
   assert.equal(me.fullDiagnosis.synopsis.find(s=>s.subject==='神戸')?.subject,'神戸');
@@ -143,5 +143,13 @@ test('comparison validates the cohort before reads and preserves independent per
   assert.equal(f.queries.slice(start).filter(q=>q.includes('GROUP BY s.riot_id')).length,1,'coverage aggregation shared across profiles');
   assert.equal(result.profiles[0].performance.overall.matches,1);assert.equal(result.profiles[1].performance.overall.matches,0);assert.equal(f.writes(),before);
   await assert.rejects(()=>readCoachComparison(f.db,['VDK','VDK']));await assert.rejects(()=>readCoachComparison(f.db,['untrusted']));await assert.rejects(()=>readCoachComparison(f.db,[]));
+ }finally{f.close()}
+});
+
+test('incomplete round events never drive FK diagnosis but still allow valid roster performance',async()=>{
+ const f=setup();try{
+  await enableAllMemberArchive(f.db);const m=game('missing-events','Dolly','SDGs','vdk-id');
+  await recordCompetitiveRoster(f.db,m,now);await recordCompetitiveRoundEvents(f.db,{...m,kills:[]},now);
+  const r=await readCoachMemberReport(f.db,'VDK');assert.equal(r.archivedMatches,1);assert.equal(r.performance.overall.kdMatches,1);assert.equal(r.usableMatches,0);assert.equal(r.individual.length,0);assert.equal(r.killDataMissing,1);
  }finally{f.close()}
 });

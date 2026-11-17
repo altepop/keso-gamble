@@ -10,6 +10,7 @@ import {buildCoachMatchTrend} from './coach-match-trend.ts';
 // the shared match_id archive. The focus person's team becomes "our team".
 // A fixed row cap is explicit so numbers are never presented as lifetime totals.
 const MAX_ROWS=250;
+const hasEventArray=(s:string|null)=>{try{const a=JSON.parse(s??'null');return Array.isArray(a)&&a.length>0;}catch{return false;}};
 type Profile='VDK'|'Abema'|'石原'|'藤村'|'Aquatopia'|'小林'|'神戸';
 const labelFor=(person:string):Profile=>{
  switch(person){
@@ -40,19 +41,20 @@ export async function readCoachMemberReport(db:D1Database,person:string,preloade
   (? IS NOT NULL AND json_extract(p.value,'$.puuid')=?))`).join(' OR ');
  const bindArgs=accounts.flatMap(a=>[a.name,a.tag,a.puuid,a.puuid]);
  const rows=await db.prepare(`SELECT r.match_id,r.ended_at,r.recorded_at,r.map,r.players_json,r.teams_json,
-  e.rounds_json,e.kills_json
+  e.rounds_json,e.kills_json,e.recorded_at AS events_recorded_at
   FROM valorant_match_rosters r
   LEFT JOIN valorant_match_round_events e ON e.match_id=r.match_id
   WHERE EXISTS(SELECT 1 FROM json_each(r.players_json) p WHERE ${clauses})
   ORDER BY r.ended_at DESC LIMIT ?`)
   .bind(...bindArgs,MAX_ROWS).all<{
    match_id:string;ended_at:number;recorded_at:number;map:string|null;players_json:string;teams_json:string|null;
-   rounds_json:string|null;kills_json:string|null}>();
+   rounds_json:string|null;kills_json:string|null;events_recorded_at:number|null}>();
  const [primary,...alternates]=accounts;
  const performance=coachPerformance(rows.results,accounts,COACH_MEMBER_ACCOUNTS);
- const roundContribution=coachRoundContribution(rows.results,accounts);
- const matchTrend=buildCoachMatchTrend(rows.results,accounts);
- const report=summarizeCoachRounds(rows.results,primary.name,primary.tag,
+ const verifiedRows:typeof rows.results=[];
+ const roundContribution=coachRoundContribution(rows.results,accounts,row=>verifiedRows.push(row));
+ const matchTrend=buildCoachMatchTrend(verifiedRows,accounts);
+ const report=summarizeCoachRounds(verifiedRows,primary.name,primary.tag,
   primary.puuid??undefined,labelFor(person),
   alternates.map(a=>({name:a.name,tag:a.tag,puuid:a.puuid??undefined})));
  const individual=report.individual.filter(x=>x.player===labelFor(person));
@@ -86,12 +88,12 @@ export async function readCoachMemberReport(db:D1Database,person:string,preloade
   accounts:owners.map(x=>x.riotId),
   basis:'本人の確認済みアカウントの競技試合（Henrikから発見・保存済みの範囲）',
   coverage:{...combinedCoverage,enabled:coverage.enabled,analysisMatches:report.usableMatches,
-   existingArchiveMatches:report.archivedMatches,
+   existingArchiveMatches:rows.results.length,
    rowLimit:MAX_ROWS,limitReached:rows.results.length>=MAX_ROWS,
    allMatchesGuaranteed:false},
-  archivedMatches:report.archivedMatches,usableMatches:report.usableMatches,
-  invalidMatches:report.invalidMatches,roundDataMissing:report.roundDataMissing,
-  killDataMissing:report.killDataMissing,overall:report.overall,
+  archivedMatches:rows.results.length,usableMatches:report.usableMatches,
+  invalidMatches:performance.quality.excluded['invalid-roster']??0,roundDataMissing:rows.results.filter(r=>!hasEventArray(r.rounds_json)).length,
+  killDataMissing:rows.results.filter(r=>!hasEventArray(r.kills_json)).length,overall:report.overall,
   individual,individualMapAgent,matchTrend,performance,roundContribution,
   fullDiagnosis:diagnosis,coachingNotes:coachNotes(onlySelf),
   coachSignals:detectCoachSignals(onlySelf)
