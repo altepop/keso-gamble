@@ -7,7 +7,14 @@ import {coachNotes,detectCoachSignals} from './coach-review.ts';
 // the shared match_id archive. The focus person's team becomes "our team".
 // A fixed row cap is explicit so numbers are never presented as lifetime totals.
 const MAX_ROWS=250;
-const labelFor=(person:string)=>person==='神戸'?'Aquatopia':person;
+type Profile='VDK'|'Abema'|'石原'|'藤村'|'Aquatopia'|'小林';
+const labelFor=(person:string):Profile=>{
+ switch(person){
+  case '神戸':return 'Aquatopia';
+  case 'VDK':case 'Abema':case '石原':case '藤村':case '小林':return person;
+  default:throw Error('Unknown profile');
+ }
+};
 export async function readCoachMemberReport(db:D1Database,person:string){
  const entry=COACH_MEMBER_ACCOUNTS.find(x=>x.person===person);
  if(!entry)throw Error('Unrecognized coaching person');
