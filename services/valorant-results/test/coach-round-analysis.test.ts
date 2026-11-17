@@ -74,11 +74,11 @@ test('cannot treat friendly fire or an invalid roster as a team opening kill',()
 test('D1 report reads only stored archives and counts historical roster candidates',async()=>{
  const sql=new DatabaseSync(':memory:');
  try{
-  sql.exec(`CREATE TABLE valorant_match_rosters(match_id TEXT PRIMARY KEY,map TEXT,ended_at INTEGER,players_json TEXT);
+  sql.exec(`CREATE TABLE valorant_match_rosters(match_id TEXT PRIMARY KEY,map TEXT,ended_at INTEGER,players_json TEXT,teams_json TEXT);
    CREATE TABLE valorant_match_round_events(match_id TEXT PRIMARY KEY,rounds_json TEXT,kills_json TEXT);\n   CREATE TABLE monitor_state(key TEXT PRIMARY KEY,value TEXT NOT NULL);`);
   const row=fixture('a','Corrode','Fade','Clove',[{r:0,winner:'Blue'}],
     [{r:0,t:300,killer:'p0',victim:'p5'}]);
-  sql.prepare('INSERT INTO valorant_match_rosters VALUES(?,?,?,?)').run(row.match_id,row.map,1000,row.players_json);
+  sql.prepare('INSERT INTO valorant_match_rosters VALUES(?,?,?,?,?)').run(row.match_id,row.map,1000,row.players_json,null);
   sql.prepare('INSERT INTO valorant_match_round_events VALUES(?,?,?)').run(row.match_id,row.rounds_json,row.kills_json);
   let writes=0,reads=0;
   const db={prepare:(query:string)=>({
@@ -162,7 +162,7 @@ test('a support player absent from a match, and missing kill timelines, are not 
 test('backfill progress separates complete, partial, absent and source-unavailable matches',async()=>{
  const sql=new DatabaseSync(':memory:');
  try{
-  sql.exec(`CREATE TABLE valorant_match_rosters(match_id TEXT PRIMARY KEY,map TEXT,ended_at INTEGER,players_json TEXT);
+  sql.exec(`CREATE TABLE valorant_match_rosters(match_id TEXT PRIMARY KEY,map TEXT,ended_at INTEGER,players_json TEXT,teams_json TEXT);
    CREATE TABLE valorant_match_round_events(match_id TEXT PRIMARY KEY,rounds_json TEXT,kills_json TEXT);
    CREATE TABLE monitor_state(key TEXT PRIMARY KEY,value TEXT NOT NULL);`);
   const r1=fixture('complete','Corrode','Fade','Clove',[{r:0,winner:'Blue'}],
@@ -170,8 +170,8 @@ test('backfill progress separates complete, partial, absent and source-unavailab
   const r2=fixture('partial','Lotus','Skye','Clove',[{r:0,winner:'Blue'}],[]);
   const r3=fixture('absent','Abyss','Omen','Gekko',[{r:0,winner:'Blue'}],[]);
   for(const [i,r] of [r1,r2,r3].entries()){
-   sql.prepare('INSERT INTO valorant_match_rosters VALUES(?,?,?,?)')
-    .run(r.match_id,r.map,1000+i,r.players_json);
+   sql.prepare('INSERT INTO valorant_match_rosters VALUES(?,?,?,?,?)')
+    .run(r.match_id,r.map,1000+i,r.players_json,null);
   }
   sql.prepare('INSERT INTO valorant_match_round_events VALUES(?,?,?)')
    .run(r1.match_id,r1.rounds_json,r1.kills_json);
@@ -249,4 +249,38 @@ test('first-death round recovery uses only observed winners and preserves all re
  assert.equal(abema.openingKillerDiedWithin5s,1,'revive does not duplicate FK metrics');
  assert.equal(abema.firstDeathKillerEliminatedWithin5s,1);
  assert.equal(result.overall.repeatedVictimRounds,1);
+});
+
+test('trusted roster team flags and player KDA/party are counted only for complete archives',()=>{
+ const source=fixture('complete','Corrode','Fade','Clove',[{r:0,winner:'Blue'}],
+  [{r:0,t:800,killer:'p0',victim:'p5'}]);
+ const players=JSON.parse(source.players_json);
+ players[0].k=18;players[0].d=11;players[0].a=6;players[0].score=4200;players[0].party_id='p-party';
+ players[1].k=20;players[1].d=12;players[1].a=5;players[1].score=4400;players[1].party_id='p-party';
+ players[2].k=10;players[2].d=14;players[2].a=9;players[2].score=3600;players[2].party_id=null;
+ const row={...source,players_json:JSON.stringify(players),
+  teams_json:JSON.stringify([{id:'Blue',won:true,rounds:13},{id:'Red',won:false,rounds:8}])};
+ const partial={...row,match_id:'partial',kills_json:null};
+ const report=summarizeCoachRounds([row,partial]);
+ assert.equal(report.archivedMatches,2);
+ assert.equal(report.usableMatches,1);
+ assert.equal(report.overall.matchWins,1);
+ assert.equal(report.overall.matchLosses,0);
+ assert.equal(report.individual.find(x=>x.player==='VDK')?.statsMatches,1);
+ assert.equal(report.individual.find(x=>x.player==='VDK')?.averageKills,18);
+ assert.equal(report.individual.find(x=>x.player==='VDK')?.averageScore,4200);
+ assert.equal(report.individual.find(x=>x.player==='Abema')?.samePartyAsVdk,1);
+ assert.equal(report.individual.find(x=>x.player==='石原')?.partyUnknown,1);
+ const undetermined={...row,match_id:'bad-teams',teams_json:JSON.stringify([
+  {id:'Blue',won:false},{id:'Red',won:false}
+ ])};
+ const unknown=summarizeCoachRounds([undetermined]);
+ assert.equal(unknown.overall.matchWins+unknown.overall.matchLosses,0,
+  'absence of winning flag is unknown, never guessed as a loss or draw');
+ assert.equal(unknown.overall.matchDraws,0);
+ const drawn={...row,match_id:'draw',teams_json:JSON.stringify([
+  {id:'Blue',won:false,rounds:14},{id:'Red',won:false,rounds:14}
+ ])};
+ const draws=summarizeCoachRounds([drawn]);
+ assert.equal(draws.overall.matchDraws,1,'equal completed team round scores confirm a draw');
 });

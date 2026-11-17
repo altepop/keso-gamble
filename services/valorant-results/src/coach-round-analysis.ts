@@ -1,4 +1,5 @@
-import {coachNotes,recommendReviewRounds,detectCoachSignals} from './coach-review.ts';
+import {coachNotes,recommendReviewRounds,recommendSuccessRounds,detectCoachSignals} from './coach-review.ts';
+import {comprehensiveCoachDiagnosis} from './coach-comprehensive.ts';
 
 // Read-only, opt-in-on-request analysis of the match archives already in D1.
 // Never infer missing winner/attack/defence fields, or treat a Clove revive as invalid.
@@ -7,11 +8,13 @@ interface ArchivedRow{
   map:string|null;
   ended_at:number;
   players_json:string;
+  teams_json?:string|null;
   rounds_json:string|null;
   kills_json:string|null;
 }
 interface Player {
   puuid:string;team_id:string;name?:string;tag?:string;agent?:string|null;
+  party_id?:string|null;k?:number|null;d?:number|null;a?:number|null;score?:number|null;
 }
 interface RoundEvent {
   r:number;winner?:string|null;attack?:string|null;defense?:string|null;
@@ -20,16 +23,22 @@ interface KillEvent {
   r:number;t:number;killer:string|null;victim:string;
 }
 interface Totals{
-  matches:number;rounds:number;winnerKnown:number;ourRoundWins:number;
+  matches:number;matchWins:number;matchLosses:number;matchDraws:number;
+  rounds:number;winnerKnown:number;ourRoundWins:number;
   roundsWithFk:number;ourFirstKills:number;enemyFirstKills:number;
   firstKillWins:number;firstKillLosses:number;firstKillOutcomesKnown:number;
-  comebackWins:number;roundsWithSides:number;repeatedVictimRounds:number;
+  comebackWins:number;enemyFkWins:number;enemyFkLosses:number;
+  doubleOpeningWins:number;doubleOpeningLosses:number;
+  roundsWithSides:number;repeatedVictimRounds:number;
 }
 const empty=():Totals=>({
-  matches:0,rounds:0,winnerKnown:0,ourRoundWins:0,
+  matches:0,matchWins:0,matchLosses:0,matchDraws:0,
+  rounds:0,winnerKnown:0,ourRoundWins:0,
   roundsWithFk:0,ourFirstKills:0,enemyFirstKills:0,
   firstKillWins:0,firstKillLosses:0,firstKillOutcomesKnown:0,
-  comebackWins:0,roundsWithSides:0,repeatedVictimRounds:0
+  comebackWins:0,enemyFkWins:0,enemyFkLosses:0,
+  doubleOpeningWins:0,doubleOpeningLosses:0,
+  roundsWithSides:0,repeatedVictimRounds:0
 });
 const safeJson=(value:string|null):unknown=>{
   if(value===null)return null;
@@ -42,14 +51,22 @@ type Bucket=Totals & {map?:string;composition?:string};
 // Per-player metrics are counts of observed opening events, not a player rating.
 // Never infer that a support agent with 0 FK performed poorly.
 type CoachPlayer='VDK'|'Abema'|'石原';
+interface SideOpening{rounds:number;observedOpeningRounds:number;firstKills:number;firstDeaths:number;
+ firstKillWins:number;firstKillLosses:number;firstDeathWins:number;firstDeathLosses:number;}
+const emptySide=():SideOpening=>({rounds:0,observedOpeningRounds:0,firstKills:0,firstDeaths:0,
+ firstKillWins:0,firstKillLosses:0,firstDeathWins:0,firstDeathLosses:0});
 interface PlayerBucket{
   player:CoachPlayer;
   map?:string;
   agent?:string;
-  matches:number;rounds:number;roundsWithKillData:number;observedOpeningRounds:number;
+  matches:number;matchWins:number;matchLosses:number;matchDraws:number;
+  statsMatches:number;totalKills:number;totalDeaths:number;totalAssists:number;scoreMatches:number;totalScore:number;
+  samePartyAsVdk:number;differentPartyFromVdk:number;partyUnknown:number;
+  rounds:number;roundsWithKillData:number;observedOpeningRounds:number;
   firstKills:number;firstDeaths:number;firstKillWins:number;firstKillLosses:number;
   firstDeathWins:number;firstDeathLosses:number;
   openingKillerDiedWithin5s:number;firstDeathKillerEliminatedWithin5s:number;
+  attack:SideOpening;defense:SideOpening;
 }
 const playerIdentity:ReadonlyArray<{name:string;tag:string;label:CoachPlayer}>=[
   {name:'Dolly',tag:'SDGs',label:'VDK'},
@@ -58,20 +75,33 @@ const playerIdentity:ReadonlyArray<{name:string;tag:string;label:CoachPlayer}>=[
 ];
 const emptyPlayer=(player:CoachPlayer,map?:string,agent?:string):PlayerBucket=>({
   player,...(map?{map}:{}),...(agent?{agent}:{}),
-  matches:0,rounds:0,roundsWithKillData:0,observedOpeningRounds:0,
+  matches:0,matchWins:0,matchLosses:0,matchDraws:0,
+  statsMatches:0,totalKills:0,totalDeaths:0,totalAssists:0,scoreMatches:0,totalScore:0,
+  samePartyAsVdk:0,differentPartyFromVdk:0,partyUnknown:0,
+  rounds:0,roundsWithKillData:0,observedOpeningRounds:0,
   firstKills:0,firstDeaths:0,firstKillWins:0,firstKillLosses:0,
   firstDeathWins:0,firstDeathLosses:0,
-  openingKillerDiedWithin5s:0,firstDeathKillerEliminatedWithin5s:0
+  openingKillerDiedWithin5s:0,firstDeathKillerEliminatedWithin5s:0,
+  attack:emptySide(),defense:emptySide()
 });
 const playerReport=(p:PlayerBucket)=>({
   ...p,
   fkFdDiff:p.firstKills-p.firstDeaths,
+  matchWinPct:p.matchWins+p.matchLosses+p.matchDraws
+    ?Math.round(1000*p.matchWins/(p.matchWins+p.matchLosses+p.matchDraws))/10:null,
+  averageKills:p.statsMatches?Math.round(p.totalKills*10/p.statsMatches)/10:null,
+  averageDeaths:p.statsMatches?Math.round(p.totalDeaths*10/p.statsMatches)/10:null,
+  averageAssists:p.statsMatches?Math.round(p.totalAssists*10/p.statsMatches)/10:null,
+  kdRatio:p.totalDeaths?Math.round(p.totalKills*100/p.totalDeaths)/100:null,
+  averageScore:p.scoreMatches?Math.round(p.totalScore/p.scoreMatches):null,
   firstKillWinPct:p.firstKillWins+p.firstKillLosses
     ?Math.round(p.firstKillWins*1000/(p.firstKillWins+p.firstKillLosses))/10:null,
   firstKillPerObservedRoundPct:p.observedOpeningRounds
     ?Math.round(p.firstKills*1000/p.observedOpeningRounds)/10:null,
   firstDeathRecoveryPct:p.firstDeathWins+p.firstDeathLosses
-    ?Math.round(p.firstDeathWins*1000/(p.firstDeathWins+p.firstDeathLosses))/10:null
+    ?Math.round(p.firstDeathWins*1000/(p.firstDeathWins+p.firstDeathLosses))/10:null,
+  firstDeathPerObservedRoundPct:p.observedOpeningRounds
+    ?Math.round(p.firstDeaths*1000/p.observedOpeningRounds)/10:null
 });
 function emit(t:Bucket){
   return {...t,firstKillWinPct:t.firstKillOutcomesKnown
@@ -102,6 +132,21 @@ export function summarizeCoachRounds(rows:readonly ArchivedRow[]){
     const teams=new Set(ps.map(p=>p.team_id));
     if(teams.size!==2||[...teams].some(team=>ps.filter(p=>p.team_id===team).length!==5)){
       invalidMatches++;continue;
+    }
+    const teamsRaw=safeJson(row.teams_json??null);
+    // A draw is verified only when BOTH won flags are false and the stored
+    // round scores are equal and positive. Missing flags/scores stay unknown.
+    let outcome:'win'|'loss'|'draw'|null=null;
+    if(Array.isArray(teamsRaw)&&teamsRaw.length===2&&
+      teamsRaw.every(t=>validId(t?.id)&&typeof t.won==='boolean')&&
+      teamsRaw.filter(t=>t.id===vdk.team_id).length===1){
+      const ours=teamsRaw.find(t=>t.id===vdk.team_id)!;
+      const theirs=teamsRaw.find(t=>t.id!==vdk.team_id)!;
+      if(ours.won===true&&theirs.won===false)outcome='win';
+      else if(ours.won===false&&theirs.won===true)outcome='loss';
+      else if(ours.won===false&&theirs.won===false&&
+        Number.isSafeInteger(ours.rounds)&&ours.rounds>0&&
+        ours.rounds===theirs.rounds)outcome='draw';
     }
     const rounds=safeJson(row.rounds_json);
     const kills=safeJson(row.kills_json);
@@ -148,18 +193,44 @@ export function summarizeCoachRounds(rows:readonly ArchivedRow[]){
         mapPlayer=emptyPlayer(identity.label,map,agent);
         individualMapAgent.set(key,mapPlayer);
       }
-      overallPlayer.matches++;
-      mapPlayer.matches++;
+      for(const bucket of [overallPlayer,mapPlayer]){
+        bucket.matches++;
+        if(outcome==='win')bucket.matchWins++;
+        if(outcome==='loss')bucket.matchLosses++;
+        if(outcome==='draw')bucket.matchDraws++;
+        if(Number.isSafeInteger(p.k)&&Number(p.k)>=0&&Number.isSafeInteger(p.d)&&Number(p.d)>=0&&
+          Number.isSafeInteger(p.a)&&Number(p.a)>=0){
+          bucket.statsMatches++;
+          bucket.totalKills+=Number(p.k);
+          bucket.totalDeaths+=Number(p.d);
+          bucket.totalAssists+=Number(p.a);
+        }
+        if(Number.isSafeInteger(p.score)&&Number(p.score)>=0){
+          bucket.scoreMatches++;bucket.totalScore+=Number(p.score);
+        }
+        if(identity.label!=='VDK'){
+          if(validId(vdk.party_id)&&validId(p.party_id)){
+            if(vdk.party_id===p.party_id)bucket.samePartyAsVdk++;
+            else bucket.differentPartyFromVdk++;
+          }else bucket.partyUnknown++;
+        }
+      }
       return [{puuid:p.puuid,all:[overallPlayer,mapPlayer]}];
     });
     const buckets:Bucket[]=[overall,get(maps,map,{map})];
     if(composition)buckets.push(get(compositions,map+'|'+composition,{map,composition}));
-    for(const bucket of buckets)bucket.matches++;
+    for(const bucket of buckets){
+      bucket.matches++;
+      if(outcome==='win')bucket.matchWins++;
+      if(outcome==='loss')bucket.matchLosses++;
+        if(outcome==='draw')bucket.matchDraws++;
+    }
     usableMatches++;
     for(const rr of rounds as RoundEvent[]){
       const won=typeof rr.winner==='string'&&teams.has(rr.winner)?rr.winner:null;
       const sideKnown=typeof rr.attack==='string'&&typeof rr.defense==='string'&&
         teams.has(rr.attack)&&teams.has(rr.defense)&&rr.attack!==rr.defense;
+      const side=sideKnown?(rr.attack===vdk.team_id?'attack':'defense'):null;
       const events=(killByRound.get(rr.r)??[]).sort((a,b)=>a.t-b.t||a.order-b.order);
       const first=events[0]??null;
       const repeated=new Set<string>();
@@ -183,6 +254,17 @@ export function summarizeCoachRounds(rows:readonly ArchivedRow[]){
           e.t>=first!.t&&e.t-first!.t<=5000&&e.victim===first!.killer&&
           roster.get(e.killer!)?.team_id===vdk.team_id);
         for(const bucket of participant.all){
+          if(side){
+            const sb=bucket[side];
+            sb.rounds++;
+            if(first)sb.observedOpeningRounds++;
+            if(pFirstKill)sb.firstKills++;
+            if(pFirstDeath)sb.firstDeaths++;
+            if(pFirstKillWin)sb.firstKillWins++;
+            if(pFirstKillLoss)sb.firstKillLosses++;
+            if(pFirstDeathWin)sb.firstDeathWins++;
+            if(pFirstDeathLoss)sb.firstDeathLosses++;
+          }
           bucket.rounds++;
           if(validKills)bucket.roundsWithKillData++;
           if(first&&validKills)bucket.observedOpeningRounds++;
@@ -196,8 +278,18 @@ export function summarizeCoachRounds(rows:readonly ArchivedRow[]){
           if(pFastTraded)bucket.firstDeathKillerEliminatedWithin5s++;
         }
       }
+      // Number advantage before any ally casualty is a timeline observation,
+      // not proof that spikes, trades or correct positioning were involved.
+      const firstAllyDeath=events.find(e=>roster.get(e.victim)?.team_id===vdk.team_id);
+      const enemyBeforeAllyDeath=new Set(events.filter(e=>
+        roster.get(e.killer!)?.team_id===vdk.team_id&&
+        (!firstAllyDeath||e.t<firstAllyDeath.t)).map(e=>e.victim)).size;
       for(const bucket of buckets){
         bucket.rounds++;
+        if(enemyBeforeAllyDeath>=2&&won){
+          if(won===vdk.team_id)bucket.doubleOpeningWins++;
+          else bucket.doubleOpeningLosses++;
+        }
         if(won){bucket.winnerKnown++;if(won===vdk.team_id)bucket.ourRoundWins++;}
         if(sideKnown)bucket.roundsWithSides++;
         if(repeated.size)bucket.repeatedVictimRounds++;
@@ -212,7 +304,10 @@ export function summarizeCoachRounds(rows:readonly ArchivedRow[]){
             }
           }else{
             bucket.enemyFirstKills++;
-            if(won===vdk.team_id)bucket.comebackWins++;
+            if(won){
+              if(won===vdk.team_id){bucket.comebackWins++;bucket.enemyFkWins++;}
+              else bucket.enemyFkLosses++;
+            }
           }
         }
       }
@@ -239,15 +334,17 @@ type CoachReport=ReturnType<typeof summarizeCoachRounds>&{
  totalVdkRosterMatches:number;
  backfill:{status:'running'|'complete'|'disabled';complete:number;partial:number;missing:number;unavailable:number;pending:number};
  reviewRounds:ReturnType<typeof recommendReviewRounds>;
+ successRounds:ReturnType<typeof recommendSuccessRounds>;
  coachingNotes:ReturnType<typeof coachNotes>;
  coachSignals:ReturnType<typeof detectCoachSignals>;
+ fullDiagnosis:ReturnType<typeof comprehensiveCoachDiagnosis>;
 };
 const readCache=new WeakMap<object,{until:number;value:CoachReport}>();
 export function invalidateCoachRoundReport(db:D1Database){readCache.delete(db);}
 export async function readCoachRoundReport(db:D1Database,now=Date.now()){
  const cached=readCache.get(db);
  if(cached&&now<cached.until)return cached.value;
- const result=await db.prepare(`SELECT r.match_id,r.map,r.ended_at,r.players_json,e.rounds_json,e.kills_json
+ const result=await db.prepare(`SELECT r.match_id,r.map,r.ended_at,r.players_json,r.teams_json,e.rounds_json,e.kills_json
    FROM valorant_match_round_events e JOIN valorant_match_rosters r ON r.match_id=e.match_id
    WHERE EXISTS (SELECT 1 FROM json_each(r.players_json) p
      WHERE json_extract(p.value,'$.name')='Dolly'
@@ -288,8 +385,10 @@ export async function readCoachRoundReport(db:D1Database,now=Date.now()){
  const value={...report,totalVdkRosterMatches,
    backfill:{status,complete,partial,missing,unavailable,
      pending:Math.max(0,missing+partial-unavailable)},
-   reviewRounds:recommendReviewRounds(result.results),coachingNotes:coachNotes(report),
-   coachSignals:detectCoachSignals(report)};
+   reviewRounds:recommendReviewRounds(result.results),
+   successRounds:recommendSuccessRounds(result.results),coachingNotes:coachNotes(report),
+   coachSignals:detectCoachSignals(report),
+   fullDiagnosis:comprehensiveCoachDiagnosis(report)};
  readCache.set(db,{until:now+5*60000,value});
  return value;
 }
