@@ -16,6 +16,31 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
     overall:{rounds:68,firstKillWinPct:70,firstKillWins:21,firstKillOutcomesKnown:30,comebackWins:7,roundsWithSides:0,repeatedVictimRounds:1},
     maps:[{map:'Corrode',matches:1,rounds:22,ourFirstKills:13,firstKillWins:8,firstKillLosses:5,firstKillWinPct:61.5}],
     trioComparisons:[{map:'Corrode',composition:'Fade + Clove',matches:1,firstKillWins:8,firstKillLosses:5,firstKillWinPct:61.5}],
+    fullDiagnosis:{
+     items:[
+      {subject:'チーム',category:'試合全体',title:'味方FK後のラウンド勝率',status:'good',
+       numerator:21,denominator:30,ratePct:70,referencePct:null,differencePp:null,
+       evidence:'21 / 30（70.0%）',reason:'良い傾向。ただし戦術の証明ではない',
+       nextAction:'FK後に勝った場面のカバーを確認',rawSecret:'private-vod-identifier'},
+      {subject:'VDK',category:'先制',title:'先制デス率',status:'context',
+       numerator:6,denominator:68,ratePct:8.8,referencePct:null,differencePp:null,
+       evidence:'6 / 68（8.8%）',reason:'役割によって変化する',
+       nextAction:'味方の距離とサイドを確認'},
+      {subject:'Abema',category:'生存・取り返し',title:'FD後5秒以内に味方が同じ敵を倒した率',
+       status:'focus',numerator:1,denominator:7,ratePct:14.3,referencePct:null,differencePp:null,
+       evidence:'1 / 7（14.3%）',reason:'参考値',nextAction:'録画でカバー位置を確認'},
+      {subject:'石原',category:'攻撃・防衛',title:'攻撃時のFK−FD収支',status:'insufficient',
+       numerator:0,denominator:0,ratePct:null,referencePct:null,differencePp:null,
+       evidence:'攻守情報不足',reason:'判定保留',nextAction:'記録が得られた試合で比較'}
+     ],
+     synopsis:[
+      {subject:'チーム',strengths:1,focuses:0,other:0,strongest:{title:'味方FK後のラウンド勝率'},priority:null},
+      {subject:'VDK',strengths:0,focuses:0,other:1,strongest:null,priority:null},
+      {subject:'Abema',strengths:0,focuses:1,other:0,strongest:null,priority:{title:'FD後5秒以内に味方が同じ敵を倒した率'}},
+      {subject:'石原',strengths:0,focuses:0,other:1,strongest:null,priority:null}
+     ],
+     limitations:['スキル・設置・位置取りはログから確認できない']
+    },
     coachSignals:[
       {subject:'チーム',kind:'strength',metric:'team_fk_conversion',title:'FK後の勝利につながる傾向',
        evidence:'味方がFKした30ラウンドのうち21勝',action:'勝ったラウンドを録画で確認',
@@ -79,6 +104,13 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   assert.match(await page.locator('#players').innerText(),/42\.9%/);
   assert.match(await page.locator('#player-map').innerText(),/FD後勝率/);
   assert.match(await page.locator('#player-map').innerText(),/Corrode \/ Fade/);
+  assert.match(await page.locator('#diagnosis-summary').innerText(),/良い傾向/);
+  assert.match(await page.locator('#diagnosis-summary').innerText(),/見直し/);
+  assert.match(await page.locator('#diagnosis-full').innerText(),/先制デス率/);
+  assert.match(await page.locator('#diagnosis-full').innerText(),/21 \/ 30/);
+  assert.match(await page.locator('#diagnosis-limits').innerText(),/スキル/);
+  await page.locator('#diagnosis-full details').last().locator('summary').click();
+  assert.match(await page.locator('#diagnosis-full details').last().innerText(),/攻守情報不足/);
   assert.match(await page.locator('#coach-signals').innerText(),/良い傾向/);
   assert.match(await page.locator('#coach-signals').innerText(),/見直し候補/);
   assert.match(await page.locator('#coach-signals').innerText(),/Abema/);
@@ -102,6 +134,10 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   assert.equal(diagnostic.archive.complete,3);
   assert.equal(diagnostic.totalVdkRosterMatches,44);
   assert.equal(diagnostic.individual.length,3);
+  assert.equal(diagnostic.fullDiagnosis.items.length,4);
+  assert.equal(diagnostic.fullDiagnosis.items[0].numerator,21);
+  assert.equal(diagnostic.fullDiagnosis.synopsis.length,4);
+  assert.ok(!JSON.stringify(diagnostic.fullDiagnosis).includes('private-vod-identifier'));
   assert.equal(diagnostic.coachSignals.length,2);
   assert.equal(diagnostic.coachSignals[0].numerator,21);
   assert.equal(diagnostic.individual.find(p=>p.player==='Abema').firstDeathRecoveryPct,42.9);
