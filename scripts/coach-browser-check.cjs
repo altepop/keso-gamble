@@ -98,6 +98,7 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
     'all the old audit tables must be tucked away by default');
   assert.match(await page.locator('#focus-content').innerText(),/VDKのコーチング/);
   await page.locator('#focus-content > details.focus-details > summary').click();
+  await page.locator('#focus-content .focus-breakdown > details').first().locator('summary').click();
   assert.match(await page.locator('#focus-content').innerText(),/先制デス率/);
   assert.match(await page.locator('#focus-content').innerText(),/明確な弱点候補は未検出/);
   await page.locator('#tab-Abema').click();
