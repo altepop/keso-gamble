@@ -93,6 +93,32 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
   await page.goto('http://127.0.0.1:18784/coach.html');
   await page.locator('#report:not([hidden])').waitFor();
+  assert.equal(await page.locator('#tab-VDK').getAttribute('aria-selected'),'true');
+  assert.equal(await page.locator('#archive-drawer').evaluate(el=>el.open),false,
+    'all the old audit tables must be tucked away by default');
+  assert.match(await page.locator('#focus-content').innerText(),/VDKのコーチング/);
+  assert.match(await page.locator('#focus-content').innerText(),/先制デス率/);
+  assert.match(await page.locator('#focus-content').innerText(),/明確な弱点候補は未検出/);
+  await page.locator('#tab-Abema').click();
+  assert.equal(await page.locator('#tab-Abema').getAttribute('aria-selected'),'true');
+  assert.match(await page.locator('#focus-content').innerText(),/最優先の弱点候補/);
+  assert.match(await page.locator('#focus-content').innerText(),/FD後5秒以内に味方が同じ敵を倒した率/);
+  assert.match(await page.locator('#focus-content').innerText(),/1 \/ 7/);
+  assert.ok(!(await page.locator('#focus-content').innerText()).includes('攻撃時のFK−FD収支'),
+    'another player must not clutter the current subject');
+  await page.locator('#tab-石原').click();
+  assert.match(await page.locator('#focus-content').innerText(),/石原のコーチング/);
+  assert.match(await page.locator('#focus-content').innerText(),/明確な弱点候補は未検出/);
+  await page.locator('#tab-チーム').click();
+  assert.match(await page.locator('#focus-content').innerText(),/チームのコーチング/);
+  assert.match(await page.locator('#focus-content').innerText(),/味方FK後のラウンド勝率/);
+  await page.locator('#tab-VDK').focus();
+  await page.keyboard.press('ArrowRight');
+  assert.equal(await page.locator('#tab-Abema').getAttribute('aria-selected'),'true',
+    'tab key navigation should work without any request');
+  assert.equal(requests.length,1,'changing tabs only uses existing data');
+  await page.locator('#archive-drawer > summary').click();
+  assert.equal(await page.locator('#archive-drawer').evaluate(el=>el.open),true);
   assert.match(await page.locator('#totals').innerText(),/44/);
   assert.match(await page.locator('#backfill-counts').innerText(),/完全保存/);
   assert.match(await page.locator('#backfill-counts').innerText(),/一部欠損/);
@@ -131,6 +157,8 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   assert.equal(requests[0].method,'GET');
   assert.equal(requests[0].auth,'Bearer '+token);
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'phone-width layout');
+  assert.equal(await page.locator('#coach-tabs').evaluate(el=>el.scrollWidth<=el.clientWidth),true,
+    'tabs never overflow phone width');
   assert.ok(!(await page.locator('body').innerText()).includes(token),'no token in visible markup');
   await page.locator('#share').click();
   await page.waitForFunction(()=>typeof window.__copiedDiagnostic==='string');
@@ -157,6 +185,8 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   use43Report=true;
   await page.locator('#reload').click();
   await page.waitForFunction(()=>document.querySelector('#totals').textContent.includes('43'));
+  assert.equal(await page.locator('#tab-Abema').getAttribute('aria-selected'),'true',
+    'manual refresh retains chosen player');
   assert.match(await page.locator('#totals').innerText(),/成績の分析対象[\s\S]*43/);
   assert.match(await page.locator('#totals').innerText(),/データ不足で除外[\s\S]*1/);
   assert.match(await page.locator('#backfill-message').innerText(),/欠損1試合は個人・チーム成績の分母から除外/);
