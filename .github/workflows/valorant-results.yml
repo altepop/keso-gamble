@@ -284,6 +284,13 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           KESO_SMOKE_WALLET_TOKEN: ${{ secrets.KESO_SMOKE_WALLET_TOKEN }}
         run: node scripts/coach-performance-audit.mjs
+      - name: Observe fixed Henrik fields from normal requests (no added API calls)
+        if: contains(github.event.head_commit.message, '[coach-performance-audit]')
+        working-directory: ${{ runner.temp }}/kp-app/services/valorant-results
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/coach-provider-tail.mjs
       - name: Start read-only review delivery verification after changed analysis is deployed
         if: needs.check.outputs.review_changed == 'true'
         continue-on-error: true
