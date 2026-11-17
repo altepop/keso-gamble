@@ -107,6 +107,7 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   assert.match(await page.locator('#diagnosis-summary').innerText(),/良い傾向/);
   assert.match(await page.locator('#diagnosis-summary').innerText(),/見直し/);
   assert.match(await page.locator('#diagnosis-full').innerText(),/先制デス率/);
+  await page.locator('#diagnosis-full details').first().locator('summary').click();
   assert.match(await page.locator('#diagnosis-full').innerText(),/21 \/ 30/);
   assert.match(await page.locator('#diagnosis-limits').innerText(),/スキル/);
   await page.locator('#diagnosis-full details').last().locator('summary').click();
