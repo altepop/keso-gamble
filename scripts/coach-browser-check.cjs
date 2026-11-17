@@ -31,13 +31,23 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
        evidence:'1 / 7（14.3%）',reason:'参考値',nextAction:'録画でカバー位置を確認'},
       {subject:'石原',category:'攻撃・防衛',title:'攻撃時のFK−FD収支',status:'insufficient',
        numerator:0,denominator:0,ratePct:null,referencePct:null,differencePp:null,
-       evidence:'攻守情報不足',reason:'判定保留',nextAction:'記録が得られた試合で比較'}
+       evidence:'攻守情報不足',reason:'判定保留',nextAction:'記録が得られた試合で比較'},
+      {subject:'藤村',category:'先制',title:'藤村の初動カバーを見直す',status:'focus',
+       numerator:2,denominator:12,ratePct:16.7,referencePct:null,differencePp:null,
+       evidence:'2 / 12（16.7%）',reason:'これはモック値で実試合の評価ではない',
+       nextAction:'交戦後の位置をVODで確認'},
+      {subject:'Aquatopia',category:'先制',title:'先制キル後の勝利が多い',status:'good',
+       numerator:8,denominator:10,ratePct:80,referencePct:null,differencePp:null,
+       evidence:'8 / 10（80.0%）',reason:'これはモック値で実試合の評価ではない',
+       nextAction:'成功した立ち回りを録画で確認'}
      ],
      synopsis:[
       {subject:'チーム',strengths:1,focuses:0,other:0,strongest:{title:'味方FK後のラウンド勝率'},priority:null},
       {subject:'VDK',strengths:0,focuses:0,other:1,strongest:null,priority:null},
       {subject:'Abema',strengths:0,focuses:1,other:0,strongest:null,priority:{title:'FD後5秒以内に味方が同じ敵を倒した率'}},
-      {subject:'石原',strengths:0,focuses:0,other:1,strongest:null,priority:null}
+      {subject:'石原',strengths:0,focuses:0,other:1,strongest:null,priority:null},
+      {subject:'藤村',strengths:0,focuses:1,other:0,strongest:null,priority:{title:'藤村の初動カバーを見直す'}},
+      {subject:'Aquatopia',strengths:1,focuses:0,other:0,strongest:{title:'先制キル後の勝利が多い'},priority:null}
      ],
      limitations:['スキル・設置・位置取りはログから確認できない']
     },
@@ -66,7 +76,9 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
     individual:[
       {player:'VDK',matches:3,rounds:68,observedOpeningRounds:68,firstKills:4,firstDeaths:6,fkFdDiff:-2,firstKillWins:3,firstKillLosses:1,firstKillWinPct:75,firstDeathWins:2,firstDeathLosses:4,firstDeathRecoveryPct:33.3,openingKillerDiedWithin5s:0,firstDeathKillerEliminatedWithin5s:2},
       {player:'Abema',matches:3,rounds:68,observedOpeningRounds:68,firstKills:9,firstDeaths:7,fkFdDiff:2,firstKillWins:6,firstKillLosses:3,firstKillWinPct:66.7,firstDeathWins:3,firstDeathLosses:4,firstDeathRecoveryPct:42.9,openingKillerDiedWithin5s:1,firstDeathKillerEliminatedWithin5s:1},
-      {player:'石原',matches:3,rounds:68,observedOpeningRounds:68,firstKills:8,firstDeaths:3,fkFdDiff:5,firstKillWins:7,firstKillLosses:1,firstKillWinPct:87.5,firstDeathWins:1,firstDeathLosses:2,firstDeathRecoveryPct:33.3,openingKillerDiedWithin5s:1,firstDeathKillerEliminatedWithin5s:0}
+      {player:'石原',matches:3,rounds:68,observedOpeningRounds:68,firstKills:8,firstDeaths:3,fkFdDiff:5,firstKillWins:7,firstKillLosses:1,firstKillWinPct:87.5,firstDeathWins:1,firstDeathLosses:2,firstDeathRecoveryPct:33.3,openingKillerDiedWithin5s:1,firstDeathKillerEliminatedWithin5s:0},
+      {player:'藤村',matches:2,rounds:40,observedOpeningRounds:40,firstKills:4,firstDeaths:7,fkFdDiff:-3,firstKillWins:2,firstKillLosses:2,firstKillWinPct:50,firstDeathWins:1,firstDeathLosses:6,firstDeathRecoveryPct:14.3,openingKillerDiedWithin5s:2,firstDeathKillerEliminatedWithin5s:1},
+      {player:'Aquatopia',matches:3,rounds:68,observedOpeningRounds:68,firstKills:9,firstDeaths:4,fkFdDiff:5,firstKillWins:8,firstKillLosses:1,firstKillWinPct:88.9,firstDeathWins:2,firstDeathLosses:2,firstDeathRecoveryPct:50,openingKillerDiedWithin5s:1,firstDeathKillerEliminatedWithin5s:2}
     ],
     individualMapAgent:[
       {player:'VDK',map:'Corrode',agent:'Fade',matches:1,firstKills:0,firstDeaths:1,fkFdDiff:-1,firstKillWinPct:null,firstDeathWins:0,firstDeathLosses:1,firstDeathRecoveryPct:0,openingKillerDiedWithin5s:0,firstDeathKillerEliminatedWithin5s:0}
@@ -111,6 +123,19 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   await page.locator('#tab-石原').click();
   assert.match(await page.locator('#focus-content').innerText(),/石原のコーチング/);
   assert.match(await page.locator('#focus-content').innerText(),/明確な弱点候補は未検出/);
+  await page.locator('#tab-藤村').click();
+  assert.match(await page.locator('#focus-content').innerText(),/藤村のコーチング/);
+  assert.match(await page.locator('#focus-content').innerText(),/最優先の弱点候補/);
+  assert.match(await page.locator('#focus-content').innerText(),/藤村の初動カバーを見直す/);
+  await page.locator('#tab-Aquatopia').click();
+  assert.match(await page.locator('#focus-content').innerText(),/Aquatopiaのコーチング/);
+  assert.match(await page.locator('#focus-content').innerText(),/先制キル後の勝利が多い/);
+  await page.locator('#tab-神戸').click();
+  assert.match(await page.locator('#focus-content').innerText(),/未紐づけ／対象試合なし/);
+  assert.ok(!(await page.locator('#focus-content').innerText()).includes('Abemaのコーチング'),
+    'never attribute Abema metrics to Kobe without verified ID');
+  await page.locator('#tab-小林').click();
+  assert.match(await page.locator('#focus-content').innerText(),/小林は未紐づけ/);
   await page.locator('#tab-チーム').click();
   assert.match(await page.locator('#focus-content').innerText(),/チームのコーチング/);
   assert.match(await page.locator('#focus-content').innerText(),/味方FK後のラウンド勝率/);
@@ -169,10 +194,10 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   assert.equal(diagnostic.format,'KESO_COACH_SAFE_DIAGNOSTIC_V1');
   assert.equal(diagnostic.archive.complete,3);
   assert.equal(diagnostic.totalVdkRosterMatches,44);
-  assert.equal(diagnostic.individual.length,3);
-  assert.equal(diagnostic.fullDiagnosis.items.length,4);
+  assert.equal(diagnostic.individual.length,5);
+  assert.equal(diagnostic.fullDiagnosis.items.length,6);
   assert.equal(diagnostic.fullDiagnosis.items[0].numerator,21);
-  assert.equal(diagnostic.fullDiagnosis.synopsis.length,4);
+  assert.equal(diagnostic.fullDiagnosis.synopsis.length,6);
   assert.ok(!JSON.stringify(diagnostic.fullDiagnosis).includes('private-vod-identifier'));
   assert.equal(diagnostic.coachSignals.length,2);
   assert.equal(diagnostic.coachSignals[0].numerator,21);
