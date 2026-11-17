@@ -60,6 +60,27 @@ tr:last-child td{border-bottom:0}
 .diag-summaries .card strong{font-size:17px}
 .diag-empty{color:#b6c6df;font-size:13px}
 @media(max-width:470px){.diag-row{padding:9px}.diag-details{padding:8px 10px}}
+
+.member-selector{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin:12px 0}
+.member-selector button{min-width:0;white-space:normal;font-size:clamp(12px,3vw,14px);padding:10px 5px;text-align:center;border:1px solid #506583;border-radius:10px}
+.member-selector button[aria-pressed=true]{border-color:#9ecbff;background:#28466b;color:#fff}
+.member-result{line-height:1.5}
+.member-summary{border:1px solid #a57c53;border-left:5px solid #e8aa65;border-radius:11px;padding:15px;margin:10px 0;background:#1e202e}
+.member-summary.good{border-color:#587f66;border-left-color:#82d6a6;background:#132c29}
+.member-summary strong{display:block;font-size:19px;margin:5px 0}
+.member-summary .overline{font-size:12px;color:#e9b877;font-weight:800}
+.member-summary.good .overline{color:#9ce9bc}
+.member-summary p{margin:8px 0;font-size:13px;overflow-wrap:anywhere}
+.member-small{font-size:12px;color:#bed1e6}
+.member-coverage{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,210px),1fr));gap:9px;margin:10px 0}
+.member-coverage article{border:1px solid #364762;border-radius:9px;padding:11px;background:#13213a}
+.member-coverage strong{display:block;margin:0 0 5px}
+.member-coverage p{font-size:12px;margin:4px 0;color:#bcd0e7}
+.member-detail{border:1px solid #42516e;border-radius:9px;padding:9px 12px;margin:9px 0}
+.member-detail summary{cursor:pointer;font-size:13px;font-weight:700}
+#legacy-coach{margin-top:18px}#legacy-coach>summary{cursor:pointer;padding:6px;font-weight:700}
+@media(max-width:380px){.member-selector{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
 #connection{display:none}
 .empty{padding:18px 4px;color:#b6c6df;text-align:center}
 @media(max-width:470px){.panel{padding:12px}.card{padding:12px}.card strong{font-size:23px}}
@@ -85,6 +106,26 @@ tr:last-child td{border-bottom:0}
 </div></form>
 </section>
 <div id="report" hidden>
+<section class="panel" id="member-coaching-panel">
+<h2>選手ごとの弱点・強みを確認</h2>
+<p class="muted small">各選手本人が参加した試合から評価する。VDKと一緒に遊んだ試合だけの分析ではない。収集途中の結果は確定評価ではない。</p>
+<div id="member-selector" class="member-selector" role="group" aria-label="分析する選手">
+<button type="button" data-member="神戸" aria-pressed="false">神戸（Aquatopia）</button>
+<button type="button" data-member="VDK" aria-pressed="false">VDK</button>
+<button type="button" data-member="Abema" aria-pressed="false">Abema</button>
+<button type="button" data-member="石原" aria-pressed="false">石原</button>
+<button type="button" data-member="藤村" aria-pressed="false">藤村</button>
+<button type="button" data-member="小林" aria-pressed="false">小林</button>
+</div>
+<div id="member-result" aria-live="polite" class="member-result">選手を選ぶと、本人の試合を基準に弱点候補と良い点を表示する。</div>
+</section>
+<section class="panel" id="member-archive-panel">
+<h2>6人の試合収集状況</h2>
+<p class="muted small">Henrikで発見できた競技試合を段階的に保存する。API未収録の過去試合もあるため「全試合収集済み」とは断定しない。</p>
+<div id="member-archive-status"></div>
+<button type="button" id="start-member-archive" hidden>全員の試合履歴収集を開始</button>
+</section>
+<details id="legacy-coach" class="panel"><summary>従来のVDK中心の詳細分析・保存状況を開く</summary>
 <section class="cards" id="totals" aria-label="補完状況の概要"></section>
 <section class="panel">
 <h2>対象試合の補完状況</h2>
@@ -137,6 +178,7 @@ tr:last-child td{border-bottom:0}
 </section>
 <section class="panel"><h2>3人が共闘した試合の構成比較</h2><p class="muted small">VDK・Abema・石原が同じチームにいる試合だけを、マップと構成ごとに比較する。</p><div id="trio"></div></section>
 <section class="panel"><h2>データの確認事項</h2><div id="quality"></div><p class="foot">同一ラウンドで同じプレイヤーが2回倒されていても、Cloveの自己蘇生などがあるため自動的に不正とはしない。攻守情報がない場合も「不明」として扱う。</p></section>
+</details>
 </div>
 </main>
 <script>
@@ -155,7 +197,89 @@ const token=()=>read(KEY,sessionStorage)||read('keso-kp-session-v1',localStorage
 const setStatus=(msg,error=false)=>{const el=$('status');el.textContent=msg;el.setAttribute('role',error?'alert':'status')};
 const card=(label,value,sub='')=>`<article class="card"><div class="label">${escape(label)}</div><strong>${escape(value)}</strong><div class="small muted">${escape(sub)}</div></article>`;
 const simpleTable=(headers,rows)=>`<div class="table-wrap"><table><thead><tr>${headers.map((h,i)=>`<th class="${i?'num':''}">${escape(h)}</th>`).join('')}</tr></thead><tbody>${rows.map(a=>`<tr>${a.map((cell,i)=>`<td class="${i?'num':''}">${escape(cell)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+
+const memberNames=['神戸','VDK','Abema','石原','藤村','小林'];
+let activeMember=null;
+let memberPending=false;
+function renderMemberArchiveStatus(data){
+ const history=data.memberHistory;
+ const owned=Boolean(data.canStartMemberHistory);
+ $('start-member-archive').hidden=!owned||Boolean(history?.enabled);
+ if(!history){
+  $('member-archive-status').innerHTML='<p class="small muted">収集進捗を確認できない。接続を確認してほしい。</p>';
+  return;
+ }
+ $('member-archive-status').innerHTML='<div class="member-coverage">'+(history.people||[]).map(p=>{
+  const phase=!history.enabled?'未開始':p.truncated?'上限到達':
+   p.discoveryDone?'履歴探索終了':'履歴探索中';
+  return `<article><strong>${escape(p.person)} · ${escape(phase)}</strong>
+   <p>発見 ${int(p.discovered)}件 ／ 完全保存 ${int(p.complete)}件</p>
+   <p>待機 ${int(p.pending)}件 · 欠損 ${int(p.partial)}件 · 取得不能 ${int(p.unavailable)}件</p>
+   </article>`;
+ }).join('')+'</div>';
+ if(!history.enabled&&!owned)$('member-archive-status').innerHTML+=
+  '<p class="small muted">開始には神戸のAquatopia#toppyなど、許可された紐づけKP口座で接続する必要がある。</p>';
+}
+const renderMemberDiagnosis=d=>{
+ const items=(d.fullDiagnosis?.items||[]).filter(x=>x.subject===d.profile);
+ const priorities=items.filter(x=>x.status==='focus');
+ const goods=items.filter(x=>x.status==='good');
+ const report=(item,good=false)=>item?
+  `<article class="member-summary ${good?'good':''}">
+    <span class="overline">${good?'良かった点':'最優先の弱点候補（映像確認が必要）'}</span>
+    <strong>${escape(item.title)}</strong>
+    <p><b>数字の根拠：</b>${escape(item.evidence)}</p>
+    <p><b>次のアクション：</b>${escape(item.nextAction)}</p>
+    <p class="member-small">${escape(item.reason)}</p>
+   </article>`:null;
+ const empty='<p class="small muted">判定に必要な件数が不足、または明確な差がないため、弱点を断定できない。</p>';
+ const coverage=d.coverage||{};
+ const quality=`<p class="member-small">対象は${int(d.usableMatches)}試合（発見${int(coverage.discovered)}件 / 完全保存${int(coverage.complete)}件）。
+  履歴探索 ${coverage.discoveryDone?'終了':'継続中'}。全試合の網羅を保証しない。</p>`;
+ $('member-result').innerHTML=`<h3>${escape(d.person)}の個別診断</h3>`+quality+
+  (priorities.length?report(priorities[0]):empty)+
+  '<h3>そのほかの見直し候補</h3>'+
+  (priorities.length>1?priorities.slice(1).map(x=>report(x)).join(''):'<p class="member-small">該当する候補なし。</p>')+
+  '<h3>良い点</h3>'+
+  (goods.length?goods.slice(0,3).map(x=>report(x,true)).join(''):'<p class="member-small">現段階では明確な良い傾向を判定できない。</p>')+
+  `<details class="member-detail"><summary>全${int(items.length)}項目を確認（参考・判定保留も表示）</summary>
+   ${items.map(x=>`<article class="review-item"><strong>${escape(x.title)}</strong><p class="small">
+    ${escape(x.evidence)} · ${escape(x.reason)}</p><p class="small">${escape(x.nextAction)}</p></article>`).join('')}</details>`;
+};
+async function loadMember(person){
+ if(memberPending||!memberNames.includes(person))return;
+ memberPending=true;activeMember=person;
+ for(const el of $('member-selector').querySelectorAll('[data-member]'))
+  el.setAttribute('aria-pressed',String(el.dataset.member===person));
+ $('member-result').textContent=person+'の試合記録を読込中…';
+ try{
+  const t=token();if(!t)throw Error('KP口座の接続が必要だ。');
+  const data=await request('/api/kp/coach/member?person='+encodeURIComponent(person),
+   {headers:{Authorization:'Bearer '+t}});
+  if(activeMember===person)renderMemberDiagnosis(data);
+ }catch(e){
+  $('member-result').textContent='診断を読み込めない：'+(e.message||'取得エラー');
+ }finally{memberPending=false}
+}
+$('member-selector').addEventListener('click',event=>{
+ const btn=event.target.closest('[data-member]');
+ if(btn&&$('member-selector').contains(btn))void loadMember(btn.dataset.member);
+});
+$('start-member-archive').addEventListener('click',async()=>{
+ if(busy)return;
+ const btn=$('start-member-archive');btn.disabled=true;
+ try{
+  const t=token();if(!t)throw Error('KP口座の接続が必要だ。');
+  const result=await request('/api/kp/coach/members/start',{
+    method:'POST',headers:{Authorization:'Bearer '+t}});
+  await load();
+  setStatus(result.status==='enabled'?'本人別の履歴収集を有効化した。収集進捗はこの画面で確認できる。':'開始状態を確認してほしい。');
+ }catch(e){setStatus(e.message||'開始に失敗した。',true)}
+ finally{btn.disabled=false}
+});
+
 function render(data){
+renderMemberArchiveStatus(data);
 latestReport=data;
 $('share').disabled=false;
 const total=data.totalVdkRosterMatches??0;
