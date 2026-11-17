@@ -73,6 +73,10 @@ test('personal baseline includes own games without VDK; no duplicate game when c
   assert.equal(me.usableMatches,3,'Kobe includes Abema alone and Aquatopia with/without VDK');
   assert.equal(me.individual.length,1);
   assert.equal(me.individual[0]?.matches,3);
+  assert.equal(me.individual[0]?.samePartyAsVdk,0,
+   'the owner must never be compared with their own party ID');
+  assert.equal(me.individual[0]?.partyUnknown,3,
+   'VDK-absent and missing party IDs are not fake same-party successes');
   assert.equal(me.overall.matches,3);
   assert.equal(me.coverage.analysisMatches,3);
   assert.equal(me.coverage.allMatchesGuaranteed,false);
