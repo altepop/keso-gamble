@@ -305,7 +305,9 @@ $('coach-tabs').addEventListener('click',event=>{
 });
 $('coach-tabs').addEventListener('keydown',event=>{
  if(!['ArrowRight','ArrowLeft','Home','End'].includes(event.key))return;
- const i=coachSubjects.indexOf(chosenCoachSubject);
+ const source=event.target.closest('[data-coach-subject]');
+ if(!source||!$('coach-tabs').contains(source))return;
+ const i=coachSubjects.indexOf(source.dataset.coachSubject);
  const next=event.key==='Home'?0:event.key==='End'?coachSubjects.length-1:
    (i+(event.key==='ArrowRight'?1:-1)+coachSubjects.length)%coachSubjects.length;
  chosenCoachSubject=coachSubjects[next];
