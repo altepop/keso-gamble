@@ -220,6 +220,7 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   const resumePage=await resumeCtx.newPage();
   await resumePage.goto('http://127.0.0.1:18784/coach.html');
   await resumePage.locator('#report:not([hidden])').waitFor();
+  await resumePage.locator('#legacy-coach > summary').click();
   await resumePage.locator('#resume-backfill').waitFor({state:'visible'});
   assert.equal(postCount,0,'no automatic backfill restart');
   assert.equal(getCount,1);
