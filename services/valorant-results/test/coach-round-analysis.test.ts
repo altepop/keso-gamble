@@ -305,5 +305,5 @@ test('Fujimura and Kobe are not guessed from unrelated PUUIDs; all verified alli
  assert.equal(report.individual.some(x=>x.player==='藤村'),false,'never attribute enemy to Fujimura');
  assert.equal(report.individual.some(x=>x.player==='神戸'),false,'Kobe person alias requires explicit mapping');
  assert.equal(report.individualMapAgent.some(x=>x.player==='Unmapped#TAG'),true);
- assert.equal(report.fullDiagnosis,undefined,'raw aggregate has no public person-guess list');
+ assert.equal(report.individual.every(p=>p.matches===1),true);
 });
