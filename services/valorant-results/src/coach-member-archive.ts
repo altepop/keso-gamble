@@ -43,8 +43,10 @@ async function postponeSource(db:D1Database,riotId:string,now:number){
   .bind(now+delay,riotId).run();
 }
 async function postponeCandidate(db:D1Database,id:string,now:number,status:'pending'|'unavailable'|'partial'){
- await db.prepare('UPDATE coach_member_queue SET status=?, attempts=attempts+1,next_at=? WHERE match_id=?')
-  .bind(status,now+delay,id).run();
+ await db.prepare(`UPDATE coach_member_queue SET
+  status=CASE WHEN ?='pending' AND attempts>=2 THEN 'unavailable' ELSE ? END,
+  attempts=attempts+1,next_at=? WHERE match_id=?`)
+  .bind(status,status,now+delay,id).run();
 }
 
 export async function discoverCoachMemberPage(db:D1Database,
@@ -94,7 +96,13 @@ export async function discoverCoachMemberPage(db:D1Database,
    const payload=JSON.stringify(discovered);
    await db.prepare(`INSERT OR IGNORE INTO coach_member_queue
     (match_id,region,source_riot_id,source_puuid,started_at,status,attempts,next_at)
-    SELECT json_extract(value,'$.id'),?,?,?,CAST(json_extract(value,'$.started') AS INTEGER),'pending',0,0
+    SELECT json_extract(value,'$.id'),?,?,?,CAST(json_extract(value,'$.started') AS INTEGER),
+      CASE WHEN EXISTS(
+       SELECT 1 FROM valorant_match_rosters r
+       JOIN valorant_match_round_events e ON e.match_id=r.match_id
+       WHERE r.match_id=json_extract(value,'$.id')
+        AND e.rounds_json IS NOT NULL AND e.kills_json IS NOT NULL
+      ) THEN 'complete' ELSE 'pending' END,0,0
     FROM json_each(?)`).bind(source.region,source.riot_id,source.puuid,payload).run();
    await db.prepare(`INSERT OR IGNORE INTO coach_member_links(riot_id,match_id)
     SELECT ?,json_extract(value,'$.id') FROM json_each(?)`)
