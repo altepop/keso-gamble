@@ -252,8 +252,10 @@ function renderCoachFocus(data){
  const other=own.filter(d=>d.status==='mixed'||d.status==='context');
  const selected=focus[0]||null;
  const firstGood=good[0]||null;
+ const sample=current==='チーム'?data.usableMatches:
+   data.individual?.find(p=>p.player===current)?.matches;
  const overview=`<div class="subject-head"><h3>${escape(current)}のコーチング</h3>
-  <p>${escape(String(data.usableMatches??'—'))}試合の完全保存データから分析</p></div>
+  <p>分析対象 ${sample===undefined||sample===null?'—':int(sample)}試合</p></div>
   <p class="focus-counter">見直し候補 ${int(focus.length)}件 ／ 良い傾向 ${int(good.length)}件 ／ 参考・保留 ${int(other.length+pending.length)}件</p>`;
  const top=selected?`<div class="focus-main" aria-label="一番の弱点候補">
   <span class="overline">最優先の弱点候補 · 要VOD確認</span>
