@@ -55,6 +55,9 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
       {subject:'VDK',kind:'collect',title:'個人評価は保留',
        evidence:'3試合・68ラウンド',action:'補完して再比較'}
     ],
+    successRounds:[{map:'Corrode',matchJst:'2026-11-15 06:25',round:2,
+     category:'early_two_kills_won',evidence:'先制2キルから勝利',focus:'勝利した配置をVODで確認',
+     firstKiller:'石原',secretMatchId:'never-export'}],
     reviewRounds:[{map:'Corrode',matchJst:'2026-11-15 06:25',round:0,priority:4,
       category:'two_opening_kills_lost',evidence:'味方が先に敵2人を倒したが、ラウンドは敗北（最初のキル：2.7秒）',
       focus:'人数有利を失った時点を録画で確認',firstKiller:'石原',
@@ -117,6 +120,8 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   assert.match(await page.locator('#coach-signals').innerText(),/Abema/);
   assert.match(await page.locator('#coach-notes').innerText(),/個人評価は保留/);
   assert.match(await page.locator('#coach-notes').innerText(),/先制キル後の敗北/);
+  assert.match(await page.locator('#success-rounds').innerText(),/先制2キルから勝利/);
+  assert.match(await page.locator('#success-rounds').innerText(),/石原/);
   assert.match(await page.locator('#review-rounds').innerText(),/R0/);
   assert.match(await page.locator('#review-rounds').innerText(),/2026-11-15 06:25/);
   assert.match(await page.locator('#review-rounds').innerText(),/石原/);
@@ -143,6 +148,8 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   assert.equal(diagnostic.coachSignals[0].numerator,21);
   assert.equal(diagnostic.individual.find(p=>p.player==='Abema').firstDeathRecoveryPct,42.9);
   assert.equal(diagnostic.reviewRounds[0].round,0);
+  assert.equal(diagnostic.successRounds[0].round,2);
+  assert.ok(!exported.includes('never-export'));
   assert.ok(!exported.includes(token),'no session token in exported text');
   for(const secret of ['secret-match-id','secret-puuid','secret-raw-puuid','private-enemy'])
     assert.ok(!exported.includes(secret),'private match data excluded: '+secret);
