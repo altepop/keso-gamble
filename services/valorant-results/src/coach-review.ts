@@ -18,6 +18,9 @@ const label=(p:Player):string|null=>{
  if(p.name==='Dolly'&&p.tag==='SDGs')return 'VDK';
  if(p.name==='Abema'&&p.tag==='ttv')return 'Abema';
  if(p.name==='h1d3g1g4s'&&p.tag==='1037')return '石原';
+ if(p.name==='frin'&&p.tag==='怖すぎ')return '藤村';
+ if(p.name==='Aquatopia'&&p.tag==='toppy')return 'Aquatopia';
+ if(p.name==='mecael'&&p.tag==='2489')return '小林';
  return null;
 };
 export function recommendReviewRounds(rows:readonly Archived[],maximum=12):CoachReview[]{
