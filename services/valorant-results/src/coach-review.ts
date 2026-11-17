@@ -183,7 +183,7 @@ export function detectCoachSignals(report:SignalReport):CoachSignal[]{
  const push=(subject:string,kind:CoachSignal['kind'],metric:CoachSignal['metric'],
   title:string,num:number,den:number,evidence:string,action:string)=>{
   out.push({subject,kind,metric,title,numerator:num,denominator:den,
-   ratePct:den?Math.round(num*1000/den)/10:null,evidence,action});
+   ratePct:kind==='insufficient'||!den?null:Math.round(num*1000/den)/10,evidence,action});
  };
  const team=report.overall,teamN=team.firstKillWins+team.firstKillLosses;
  if(teamN>=20){
