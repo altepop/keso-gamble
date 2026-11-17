@@ -16,6 +16,14 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
     overall:{rounds:68,firstKillWinPct:70,firstKillWins:21,firstKillOutcomesKnown:30,comebackWins:7,roundsWithSides:0,repeatedVictimRounds:1},
     maps:[{map:'Corrode',matches:1,rounds:22,ourFirstKills:13,firstKillWins:8,firstKillLosses:5,firstKillWinPct:61.5}],
     trioComparisons:[{map:'Corrode',composition:'Fade + Clove',matches:1,firstKillWins:8,firstKillLosses:5,firstKillWinPct:61.5}],
+    coachSignals:[
+      {subject:'チーム',kind:'strength',metric:'team_fk_conversion',title:'FK後の勝利につながる傾向',
+       evidence:'味方がFKした30ラウンドのうち21勝',action:'勝ったラウンドを録画で確認',
+       numerator:21,denominator:30,ratePct:70},
+      {subject:'Abema',kind:'review',metric:'fk_survival',title:'FK直後の生存・カバーを確認',
+       evidence:'本人の9FK中5秒以内に4回死亡',action:'再ピークかカバーかを録画で確認',
+       numerator:4,denominator:9,ratePct:44.4}
+    ],
     coachingNotes:[
       {subject:'チーム',kind:'review',title:'先制キル後の敗北を優先して検証',
        evidence:'25ラウンド中8ラウンドで敗北',action:'録画で位置関係を確認'},
@@ -71,6 +79,9 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   assert.match(await page.locator('#players').innerText(),/42\.9%/);
   assert.match(await page.locator('#player-map').innerText(),/FD後勝率/);
   assert.match(await page.locator('#player-map').innerText(),/Corrode \/ Fade/);
+  assert.match(await page.locator('#coach-signals').innerText(),/良い傾向/);
+  assert.match(await page.locator('#coach-signals').innerText(),/見直し候補/);
+  assert.match(await page.locator('#coach-signals').innerText(),/Abema/);
   assert.match(await page.locator('#coach-notes').innerText(),/個人評価は保留/);
   assert.match(await page.locator('#coach-notes').innerText(),/先制キル後の敗北/);
   assert.match(await page.locator('#review-rounds').innerText(),/R0/);
@@ -91,6 +102,8 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   assert.equal(diagnostic.archive.complete,3);
   assert.equal(diagnostic.totalVdkRosterMatches,44);
   assert.equal(diagnostic.individual.length,3);
+  assert.equal(diagnostic.coachSignals.length,2);
+  assert.equal(diagnostic.coachSignals[0].numerator,21);
   assert.equal(diagnostic.individual.find(p=>p.player==='Abema').firstDeathRecoveryPct,42.9);
   assert.equal(diagnostic.reviewRounds[0].round,0);
   assert.ok(!exported.includes(token),'no session token in exported text');
