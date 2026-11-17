@@ -9,6 +9,7 @@ test('production coach smoke verifies actual published page and authenticated Wo
  const seen=[];const request=async(url,init)=>{seen.push({url,init});return url.includes('coach.html')?new Response('<button id="compare-members">'):Response.json({person:'神戸',accounts:['fixture-one','fixture-two'],performance:{quality:{metricCoverage:{}},windows:[5,10,20,50]},roundContribution:{quality:{}}});};
  assert.deepEqual(await coachProductionSmoke('a'.repeat(48),request),{page:'verified',authenticatedApi:'verified',metricQuality:'verified',mutations:0});
  assert.equal(seen.length,2);assert.ok(seen.every(x=>!x.init.method));assert.equal(seen[1].init.headers.Authorization,'Bearer '+'a'.repeat(48));
- await assert.rejects(()=>coachProductionSmoke('',request));
+ assert.equal((await coachProductionSmoke('',request)).authenticatedApi,'unverified-no-session');
+ await assert.rejects(()=>coachProductionSmoke('malformed',request));
  await assert.rejects(()=>coachProductionSmoke('a'.repeat(48),async()=>new Response('stale')));
 });

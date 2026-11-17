@@ -79,3 +79,21 @@ test('teammate splits describe the selected player and never disclose party or u
  assert.equal(out.teammates[0].person,'小林');assert.equal(out.teammates[0].with.matches,1);assert.equal(out.teammates[0].without.matches,1);
  assert.equal(JSON.stringify(out).includes('Known'),false);
 });
+
+test('same-map/agent history compares disjoint ten-game periods and exposes uncontrolled factors',()=>{
+ const rows=Array.from({length:40},(_,i)=>{const r=row(i),ps=JSON.parse(r.players_json);ps[0].k=i<20?10:30;ps[0].d=i<20?20:5;return {...r,map:i%2?'Lotus':'Ascent',players_json:JSON.stringify(ps)};});
+ const result=coachPerformance(rows,accounts);
+ assert.equal(result.conditionalWindows.length,2);assert.ok(result.conditionalWindows.every(w=>w.recent.matches===10&&w.previous.matches===10));
+ assert.ok(result.notes.some(n=>n.kind==='strength'&&n.title.includes('同条件期間比較：キル効率')));
+ assert.ok(result.notes.some(n=>n.kind==='strength'&&n.title.includes('同条件期間比較：死亡頻度')));
+ assert.ok(result.conditionalWindows[0].uncontrolled.includes('相手の強さ'));
+ assert.equal(coachPerformance(rows.slice(0,8),accounts).notes.some(n=>n.title.includes('同条件期間比較')),false);
+});
+test('win trend names its draw-inclusive denominator; unknown results are excluded, not losses',()=>{
+ const loss=row(1,{teams_json:JSON.stringify([{id:'Blue',won:false,rounds:7},{id:'Red',won:true,rounds:13}])});
+ const draw=row(2,{teams_json:JSON.stringify([{id:'Blue',won:false,rounds:12},{id:'Red',won:false,rounds:12}])});
+ const out=coachPerformance([row(0),loss,draw,row(3,{teams_json:null})],accounts);
+ assert.equal(out.overall.knownOutcomes,3);assert.equal(out.overall.unknownOutcomes,1);assert.equal(out.overall.winPct,100/3);
+ assert.equal(out.overall.draws,1);assert.equal(out.timeline[0].rollingWinPct5,100/3);
+ assert.equal(coachPerformance([row(0,{teams_json:null})],accounts).overall.winPct,null);
+});

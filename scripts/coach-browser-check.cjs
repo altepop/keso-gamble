@@ -93,11 +93,10 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   let use43Report=false;
   await ctx.route('https://valorant-results.tealeaforest.workers.dev/**',async route=>{
    const req=route.request();requests.push({url:req.url(),method:req.method(),auth:req.headers().authorization});
-   if(req.url().includes('/api/kp/coach/member?')){
-    const person=new URL(req.url()).searchParams.get('person');
-    const profile=person==='神戸'?'神戸':person;
-    return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({
-     person,profile,performance,accounts:person==='神戸'?['Abema#ttv','Aquatopia#toppy']:[person],
+   if(req.url().includes('/api/kp/coach/member?')||req.url().includes('/api/kp/coach/comparison?')){
+    const makeMember=person=>{const profile=person==='神戸'?'神戸':person;
+    return {
+     person,profile,performance:person==='Aquatopia'?{...performance,timeline:performance.timeline.map((g,i)=>i===10?{...g,kd:null,acs:null}:g)}:performance,accounts:person==='神戸'?['Abema#ttv','Aquatopia#toppy']:[person],
      usableMatches:2,archivedMatches:2,roundDataMissing:0,killDataMissing:0,
      coverage:{discovered:0,complete:0,discoveryDone:false,allMatchesGuaranteed:false},
      individual:[{player:profile,matches:2,matchWins:1,matchLosses:1,matchDraws:0,
@@ -126,7 +125,9 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
        {subject:profile,category:'生存・取り返し',status:'good',title:'FK後の勝利',
         numerator:6,denominator:8,evidence:'6 / 8',reason:'味方込みの観測',
         nextAction:'勝てた場面を再現'}
-     ]}})});
+     ]}};};
+    const u=new URL(req.url()),comparison=u.pathname.endsWith('/comparison');
+    return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(comparison?{profiles:u.searchParams.get('people').split(',').map(makeMember)}:makeMember(u.searchParams.get('person')))});
    }
    if(req.url().endsWith('/api/kp/coach/members/start'))
     return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({status:'enabled',enabled:true})});
@@ -272,12 +273,20 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   await page.waitForFunction(()=>!document.getElementById('compare-members').disabled);
   assert.equal(await page.locator('#member-comparison tbody tr').count(),5);
   assert.match(await page.locator('#member-comparison').innerText(),/小林/);
-  assert.equal(requests.filter(r=>r.url.includes('/coach/member?')).length,beforeCompare+4,'reuse the selected profile; only the other four profiles need reads');
+  assert.equal(requests.filter(r=>r.url.includes('/coach/member?')).length,beforeCompare,'reuse the selected profile');
+  const batch=requests.filter(r=>r.url.includes('/coach/comparison?'));assert.equal(batch.length,1);
+  assert.equal(new URL(batch[0].url).searchParams.get('people').split(',').length,4,'only four missing profiles in one batch with shared coverage');
   const afterCompare=requests.length;
   await page.locator('#compare-members').click();
   await page.waitForFunction(()=>!document.getElementById('compare-members').disabled);
   assert.equal(requests.length,afterCompare,'repeat within sixty seconds uses per-session in-memory cache');
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+  await page.locator('[data-member="Aquatopia"]').click();
+  await page.locator('[data-coach-view="time"]').waitFor();
+  await page.locator('[data-coach-view="time"]').click();
+  assert.equal(await page.locator('#coach-view-time svg').first().locator('circle').count(),19,'missing match ratio is not drawn at zero');
+  assert.equal(await page.locator('#coach-view-time svg').first().locator('polyline').count(),2,'missing ratio breaks the line');
+  assert.match(await page.locator('#coach-view-time').innerText(),/ADR：データ不足/);
   await ctx.close();
   // The resume control only appears for the previously opted-in linked owner,
   // after an explicit user click; no recurring or surprise POSTs.

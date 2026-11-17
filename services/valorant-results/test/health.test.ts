@@ -51,6 +51,7 @@ test('監視：たまっているもの（未精算・承認待ち・借KP・送
  assert.equal(r.backlog.mahjongClaims,null,'a feature never set up shows as unknown, not 0');
  assert.doesNotMatch(JSON.stringify(r),new RegExp(one),'no member ids');
  const res=await kpApi(new Request('https://worker/api/kp/health'),f.env,mapping);assert.equal(res.status,401);
+ for(const path of ['coach/member?person=VDK','coach/comparison?people=VDK']){const denied=await kpApi(new Request('https://worker/api/kp/'+path),f.env,mapping);assert.equal(denied.status,401,'coaching metrics need the existing KP participant session');}
 });
 
 test('cold bindings share the durable five-minute success throttle; failure and immediate recovery are never suppressed',async t=>{

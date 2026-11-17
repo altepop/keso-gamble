@@ -16,9 +16,9 @@ export async function auditPerformance(db){
   const before={...db.state},r=await readCoachMemberReport(db,person,coverage),p=r.performance;
   people.push({person,archiveMatches:r.archivedMatches,roundAnalysisMatches:r.usableMatches,performanceMatches:p.overall.matches,
    kdMatches:p.overall.kdMatches,kprMatches:p.overall.rateBases.kpr.matches,dprMatches:p.overall.rateBases.dpr.matches,aprMatches:p.overall.rateBases.apr.matches,acsMatches:p.overall.acsMatches,hsMatches:p.overall.hitMatches,
-   roundContributionMatches:r.roundContribution.quality.validMatches,
+   adrMatches:p.overall.damageMatches,ddDeltaMatches:p.overall.damageDeltaMatches,roundContributionMatches:r.roundContribution.quality.validMatches,
    coverage:{enabled:r.coverage.enabled,discovered:r.coverage.discovered,pending:r.coverage.pending,unavailable:r.coverage.unavailable,partial:r.coverage.partial},
-   excluded:p.quality.excluded,queries:db.state.queries-before.queries,rowsRead:before.rowsReadKnown&&db.state.rowsReadKnown?db.state.rowsRead-before.rowsRead:null});
+   excluded:p.quality.excluded,missingFields:p.quality.missingFields,queries:db.state.queries-before.queries,rowsRead:before.rowsReadKnown&&db.state.rowsReadKnown?db.state.rowsRead-before.rowsRead:null});
  }
  const schemas=await db.prepare("SELECT json_extract(CASE WHEN json_valid(players_json) THEN players_json ELSE '[]' END,'$[0].sourceFields') AS fields FROM valorant_match_rosters WHERE rowid>(SELECT COALESCE(MAX(rowid),0)-32 FROM valorant_match_rosters)").all();
  const evidence=schemas.results.flatMap(r=>{try{const f=JSON.parse(r.fields);return f?.contract==='henrik-v4-direct'?[f]:[];}catch{return [];}});
@@ -27,9 +27,10 @@ export async function auditPerformance(db){
  return {people,directProviderFields,queries:db.state.queries,rowsRead:db.state.rowsReadKnown?db.state.rowsRead:null,mutations:0};
 }
 export async function coachProductionSmoke(token,request=fetch){
- if(!/^[a-f0-9]{48}$/.test(token??''))throw Error('smoke_session_missing');
  const page=await request('https://altepop.github.io/keso-gamble/coach.html',{signal:AbortSignal.timeout(15000),redirect:'error'});
  if(!page.ok||(await page.text()).includes('id="compare-members"')===false)throw Error('coach_page_stale');
+ if(!token)return {page:'verified',authenticatedApi:'unverified-no-session',metricQuality:'unverified-no-session',mutations:0};
+ if(!/^[a-f0-9]{48}$/.test(token))throw Error('smoke_session_invalid');
  const res=await request('https://valorant-results.tealeaforest.workers.dev/api/kp/coach/member?person='+encodeURIComponent('神戸'),{headers:{Authorization:'Bearer '+token},signal:AbortSignal.timeout(30000),redirect:'error'});
  if(!res.ok)throw Error('coach_http');const body=await res.json();
  if(body.person!=='神戸'||body.accounts?.length!==2||!body.performance?.quality?.metricCoverage||!Array.isArray(body.performance.windows)||body.performance.windows.length!==4||!body.roundContribution?.quality)throw Error('coach_contract');

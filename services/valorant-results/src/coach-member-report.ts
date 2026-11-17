@@ -97,3 +97,13 @@ export async function readCoachMemberReport(db:D1Database,person:string,preloade
   coachSignals:detectCoachSignals(onlySelf)
  };
 }
+
+// Fixed opt-in cohort only. Shared coverage avoids rescanning the archive queue
+// once per profile during an explicit comparison request.
+export async function readCoachComparison(db:D1Database,people:string[]){
+ const allowed=['神戸','VDK','石原','藤村','小林'];
+ if(!Array.isArray(people)||!people.length||people.length>5||new Set(people).size!==people.length||people.some(p=>!allowed.includes(p)))throw Error('Invalid comparison people');
+ const coverage=await coachMemberCoverage(db),profiles=[];
+ for(const person of people)profiles.push(await readCoachMemberReport(db,person,coverage));
+ return {profiles};
+}
