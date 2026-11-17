@@ -229,7 +229,7 @@ let chosenCoachSubject='神戸';
 const fixedCoachSubjects=['VDK','Abema','石原','藤村','神戸','Aquatopia','小林','チーム'];
 let coachSubjects=[...fixedCoachSubjects];
 // User-confirmed account ownership: 神戸 (this user) = Aquatopia#toppy.
-// Abema#ttv and Dolly#SDGs (VDK) are different players, never aliases.
+// Abema#ttv and Dolly#SDGs (VDK) are NOT confirmed as Kobe's accounts, so do not alias them.
 // Ignore previously saved, unverified identity overrides from old UI versions.
 const personAlias=(subject)=>subject==='神戸'?'Aquatopia':null;
 const readableStatus=s=>s==='focus'?'要見直し':s==='good'?'良い傾向':
@@ -289,9 +289,9 @@ function renderCoachFocus(data){
  if(noAccount){
   const manual='';
   $('focus-content').innerHTML=overview+
-   `<div class="focus-empty"><strong>${escape(current)}は未紐づけ／対象試合なし</strong>
+   `<div class="focus-empty"><strong>${escape(current)}は${current==='神戸'?'参加記録なし':'未紐づけ／対象試合なし'}</strong>
    <p>${current==='神戸'?'神戸のRiot IDはAquatopia#toppyとして確認済みだが、保存済みのVDK参加試合に該当アカウントが見つからない。':'この名前に該当するRiotアカウントの参加記録がない。'}0キル・0勝ではなく、分析対象の記録がない状態である。</p>
-   <p>VDKと一緒にプレーしていない試合は、現在の43試合の収集範囲には入っていない。</p></div>`+manual;
+   <p>VDKと一緒にプレーしていない試合は、この画面の保存対象には入っていない。</p></div>`+manual;
   return;
  }
  const top=selected?`<div class="focus-main" aria-label="一番の弱点候補">
