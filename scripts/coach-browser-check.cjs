@@ -176,8 +176,9 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   await page.locator('#diagnosis-full details').first().locator('summary').click();
   assert.match(await page.locator('#diagnosis-full').innerText(),/21 \/ 30/);
   assert.match(await page.locator('#diagnosis-limits').innerText(),/スキル/);
-  await page.locator('#diagnosis-full details').last().locator('summary').click();
-  assert.match(await page.locator('#diagnosis-full details').last().innerText(),/攻守情報不足/);
+  const ishiharaDetail=page.locator('#diagnosis-full details').filter({has:page.locator('summary', {hasText:'石原の全評価項目'})});
+  await ishiharaDetail.locator('summary').click();
+  assert.match(await ishiharaDetail.innerText(),/攻守情報不足/);
   assert.match(await page.locator('#coach-signals').innerText(),/良い傾向/);
   assert.match(await page.locator('#coach-signals').innerText(),/見直し候補/);
   assert.match(await page.locator('#coach-signals').innerText(),/Abema/);
