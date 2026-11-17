@@ -98,7 +98,7 @@ export function comprehensiveCoachDiagnosis(data:CoachMetrics):CoachComprehensiv
   const matchesKnown=p.matchWins+p.matchLosses+p.matchDraws;
   add(p.player,'試合全体','参加試合の勝率',
    p.matchWins,matchesKnown,5,'descriptive',
-   'この選手がVDKと同じチームにいた完全保存試合だけ。役割やマップ構成は未補正。',
+   'この選手自身が参加した完全保存試合のみ。VDK不在試合も含む。役割やマップ構成は未補正。',
    '同じマップ・エージェントの複数試合を比較する');
   const statsKnown=p.statsMatches;
   const average=(n:number)=>statsKnown?(n/statsKnown).toFixed(1):'不明';
@@ -190,6 +190,21 @@ export function comprehensiveCoachDiagnosis(data:CoachMetrics):CoachComprehensiv
   if(!own)continue;
   const known=p.firstKillWins+p.firstKillLosses,overallKnown=own.firstKillWins+own.firstKillLosses;
   const reference=overallKnown>=20?pct(own.firstKillWins,overallKnown):null;
+  const allOpening=own.observedOpeningRounds;
+  const selfFdRate=allOpening>=100?pct(own.firstDeaths,allOpening):null;
+  // Same-player baseline is a descriptive overlap, never an independent
+  // control group or an external competitive benchmark.
+  add(p.player,'マップ・エージェント',
+   `${p.map??'マップ不明'} / ${p.agent??'エージェント不明'}：先制デス率`,
+   p.firstDeaths,p.observedOpeningRounds,40,'lower',
+   '同じ選手の全マップ・全エージェントの先制デス率との参考比較。母集団が重複し、攻守や相手は未補正。',
+   'FD発生時の味方との距離、攻守、射線をVODで確認し、同じ条件で再測定',
+   p.matches>=4?selfFdRate:null,7);
+  add(p.player,'マップ・エージェント',
+   `${p.map??'マップ不明'} / ${p.agent??'エージェント不明'}：試合勝率`,
+   p.matchWins,p.matchWins+p.matchLosses+p.matchDraws,5,'descriptive',
+   '勝敗が確認できた試合のみ。同じ選手でも相手・攻守・パーティーが違うので実力順位には使わない。',
+   '勝ち負けの両方がある同じマップ・エージェントの試合を比較');
   add(p.player,'マップ・エージェント',
    `${p.map??'マップ不明'} / ${p.agent??'エージェント不明'}：FK後勝率`,
    p.firstKillWins,known,8,'higher',

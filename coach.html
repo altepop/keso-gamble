@@ -81,6 +81,24 @@ tr:last-child td{border-bottom:0}
 #legacy-coach{margin-top:18px}#legacy-coach>summary{cursor:pointer;padding:6px;font-weight:700}
 @media(max-width:380px){.member-selector{grid-template-columns:repeat(2,minmax(0,1fr))}}
 
+
+.member-section{margin:18px 0;padding-top:12px;border-top:1px solid #31445f}
+.member-section h3{margin:2px 0 8px}
+.member-kpis,.member-chart-grid,.member-map-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,235px),1fr));gap:10px}
+.member-kpi,.member-chart-group,.member-map-card{border:1px solid #314560;border-radius:12px;padding:12px;background:#101d35;min-width:0}
+.member-kpi strong{font-size:22px;display:block;line-height:1.5}
+.member-kpi span{display:block}
+.member-bar-row{margin:12px 0 2px}
+.member-bar-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px;font-size:13px}
+.member-bar-head strong{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.member-bar-track{height:10px;border-radius:12px;background:#293c57;overflow:hidden;margin-top:5px}
+.member-bar-fill{height:100%;background:#6eacff;border-radius:12px}
+.member-chart-group h4{margin:0 0 5px;font-size:14px}
+.member-map-card>strong{font-size:14px;overflow-wrap:anywhere}
+.member-map-card p{margin:5px 0 10px}
+@media(max-width:400px){.member-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+.member-kpi{padding:9px}.member-kpi strong{font-size:19px}}
+
 #connection{display:none}
 .empty{padding:18px 4px;color:#b6c6df;text-align:center}
 @media(max-width:470px){.panel{padding:12px}.card{padding:12px}.card strong{font-size:23px}}
@@ -93,7 +111,7 @@ tr:last-child td{border-bottom:0}
 <a href="./index.html">KESO PLAYに戻る</a></div>
 <p class="lead muted">ラウンド・キル履歴がそろった試合だけで先制キル、先制デスと勝敗を分析する。欠損した試合は評価から除外し、データのない項目は推測しない。</p>
 <div class="actions"><button id="reload" type="button">分析を更新</button><button id="share" class="secondary" type="button" disabled>診断レポートをコピー</button><span class="small muted">手動更新 · KPの増減なし</span></div>
-<p class="small muted">診断レポートには認証トークン・接続コード・試合ID・PUUID・相手の名前を含めない。このチャットに貼れば保存状況と3人の結果を詳しく分析できる。</p>
+<p class="small muted">診断レポートには認証トークン・接続コード・試合ID・PUUID・相手の名前を含めない。選手を選んだ後はその人の全診断をコピーできる。</p>
 <textarea id="share-fallback" hidden readonly aria-label="診断レポート" rows="6" style="width:100%;background:#09152a;color:#e9eef9;border:1px solid #435779;border-radius:10px;margin-top:8px;font:12px/1.4 monospace"></textarea>
 <div id="status" role="status" aria-live="polite">データを確認中…</div>
 </header>
@@ -200,6 +218,7 @@ const simpleTable=(headers,rows)=>`<div class="table-wrap"><table><thead><tr>${h
 
 const memberNames=['神戸','VDK','Abema','石原','藤村','小林'];
 let activeMember=null;
+let latestMemberReport=null;
 let memberPending=false;
 function renderMemberArchiveStatus(data){
  const history=data.memberHistory;
@@ -220,37 +239,102 @@ function renderMemberArchiveStatus(data){
  if(!history.enabled&&!owned)$('member-archive-status').innerHTML+=
   '<p class="small muted">開始には神戸のAquatopia#toppyなど、許可された紐づけKP口座で接続する必要がある。</p>';
 }
-const renderMemberDiagnosis=d=>{
- const items=(d.fullDiagnosis?.items||[]).filter(x=>x.subject===d.profile);
- const priorities=items.filter(x=>x.status==='focus');
- const goods=items.filter(x=>x.status==='good');
- const report=(item,good=false)=>item?
-  `<article class="member-summary ${good?'good':''}">
-    <span class="overline">${good?'良かった点':'最優先の弱点候補（映像確認が必要）'}</span>
-    <strong>${escape(item.title)}</strong>
-    <p><b>数字の根拠：</b>${escape(item.evidence)}</p>
-    <p><b>次のアクション：</b>${escape(item.nextAction)}</p>
-    <p class="member-small">${escape(item.reason)}</p>
-   </article>`:null;
- const empty='<p class="small muted">判定に必要な件数が不足、または明確な差がないため、弱点を断定できない。</p>';
+const renderMemberDiagnosis=function renderMemberDiagnosisV2(d){
+ const items=Array.isArray(d.fullDiagnosis?.items)?
+  d.fullDiagnosis.items.filter(x=>x.subject===d.profile):[];
+ const per=Array.isArray(d.individual)?d.individual.find(x=>x.player===d.profile):null;
+ const maps=Array.isArray(d.individualMapAgent)?
+  d.individualMapAgent.filter(x=>x.player===d.profile):[];
+ const asNum=v=>typeof v==='number'&&Number.isFinite(v)?v:0;
+ const rate=(n,base)=>asNum(base)>0?Math.round(1000*asNum(n)/base)/10:null;
+ const displayRate=n=>n===null?'データなし':n.toFixed(1)+'%';
+ const classes={focus:'focus',good:'good',mixed:'insufficient',insufficient:'insufficient',context:'insufficient'};
+ const statusText={focus:'改善候補',good:'良い傾向',mixed:'明確な差なし',insufficient:'サンプル不足',context:'参考記録'};
+ const categories=['先制','生存・取り返し','攻撃・防衛','マップ・エージェント','試合全体'];
+ const order={focus:0,good:1,mixed:2,context:3,insufficient:4};
+ const sorted=[...items].sort((a,b)=>(order[a.status]??8)-(order[b.status]??8)||
+  asNum(b.denominator)-asNum(a.denominator)||a.title.localeCompare(b.title,'ja'));
+ const focus=sorted.filter(x=>x.status==='focus');
+ const good=sorted.filter(x=>x.status==='good');
+ const other=sorted.filter(x=>x.status!=='focus'&&x.status!=='good');
+ const finding=x=>`<article class="diag-row ${classes[x.status]||'insufficient'}">
+  <div class="review-heading"><span class="kind">${escape(statusText[x.status]||'参考')} · ${escape(x.category)}</span>
+   <strong>${escape(x.title)}</strong></div>
+  <p class="small"><b>根拠：</b>${escape(x.evidence)}</p>
+  <p class="small muted">${escape(x.reason)}</p>
+  <p class="small"><b>次の確認・改善：</b>${escape(x.nextAction)}</p></article>`;
+ const bounded=v=>Math.max(0,Math.min(100,asNum(v)));
+ const bar=(label,n,base)=>{
+  const value=rate(n,base);
+  return `<div class="member-bar-row"><div class="member-bar-head"><span>${escape(label)}</span>
+   <strong>${value===null?'—':displayRate(value)} <span class="member-small">(${int(asNum(n))}/${int(asNum(base))})</span></strong></div>
+   <div class="member-bar-track" role="img" aria-label="${escape(label)}：${value===null?'算出不可':displayRate(value)}">
+    <div class="member-bar-fill" style="width:${bounded(value)}%"></div></div></div>`;
+ };
+ const cardMetric=(label,value,detail)=>`<article class="member-kpi"><span class="member-small">${escape(label)}</span>
+  <strong>${escape(value)}</strong><span class="member-small">${escape(detail)}</span></article>`;
  const coverage=d.coverage||{};
- const accountInfo=Array.isArray(d.accounts)&&d.accounts.length
-  ?`<p class="member-small">対象アカウント：${d.accounts.map(escape).join(' ＋ ')}${d.person==='神戸'?'（人物単位で重複排除）':''}</p>`:'';
- const quality=`<p class="member-small">対象は${int(d.usableMatches)}試合（発見${int(coverage.discovered)}件 / 完全保存${int(coverage.complete)}件）。
-  履歴探索 ${coverage.discoveryDone?'終了':'継続中'}。全試合の網羅を保証しない。</p>`;
- $('member-result').innerHTML=`<h3>${escape(d.person)}の個別診断</h3>`+accountInfo+quality+
-  (priorities.length?report(priorities[0]):empty)+
-  '<h3>そのほかの見直し候補</h3>'+
-  (priorities.length>1?priorities.slice(1).map(x=>report(x)).join(''):'<p class="member-small">該当する候補なし。</p>')+
-  '<h3>良い点</h3>'+
-  (goods.length?goods.slice(0,3).map(x=>report(x,true)).join(''):'<p class="member-small">現段階では明確な良い傾向を判定できない。</p>')+
-  `<details class="member-detail"><summary>全${int(items.length)}項目を確認（参考・判定保留も表示）</summary>
-   ${items.map(x=>`<article class="review-item"><strong>${escape(x.title)}</strong><p class="small">
-    ${escape(x.evidence)} · ${escape(x.reason)}</p><p class="small">${escape(x.nextAction)}</p></article>`).join('')}</details>`;
+ const accountInfo=Array.isArray(d.accounts)&&d.accounts.length?
+  `<p class="member-small">対象：${d.accounts.map(escape).join(' ＋ ')}${d.person==='神戸'?'（同じ試合は1件）':''}</p>`:'';
+ const quality=`<p class="member-small">分析対象 ${int(d.usableMatches)} 試合 ／ 発見 ${int(coverage.discovered)} 件 ／ 完全保存 ${int(coverage.complete)} 件。
+  履歴探索：${coverage.discoveryDone?'終了':'継続中'}${coverage.limitReached||coverage.truncated?'・上限到達':''}。
+  取得元に存在しない試合は含まれず、全履歴の網羅は保証しない。</p>`;
+ const stats=per?`<div class="member-kpis">
+  ${cardMetric('参加試合勝率',displayRate(rate(per.matchWins,per.matchWins+per.matchLosses+per.matchDraws)),
+   `${int(per.matchWins)}勝 / ${int(per.matchWins+per.matchLosses+per.matchDraws)}試合（勝敗判明）`)}
+  ${cardMetric('K/D',asNum(per.totalDeaths)>0?(per.totalKills/per.totalDeaths).toFixed(2):'—',
+   `K ${int(per.totalKills)} / D ${int(per.totalDeaths)}・有効 ${int(per.statsMatches)} 試合`)}
+  ${cardMetric('FK / FD',`${int(per.firstKills)} / ${int(per.firstDeaths)}`,
+   `${int(per.observedOpeningRounds)}ラウンドで初動判定`)}
+  ${cardMetric('FK後のラウンド勝率',displayRate(rate(per.firstKillWins,per.firstKillWins+per.firstKillLosses)),
+   `${int(per.firstKillWins)}勝 / ${int(per.firstKillWins+per.firstKillLosses)}回`)}
+  </div>`:'<p class="member-small">個人戦績をまだ取得できない。未取得を0キル・0デスと扱わない。</p>';
+ const sides=per?[['攻撃',per.attack],['防衛',per.defense]]:[];
+ const sideCharts=sides.map(([name,s])=>`<section class="member-chart-group"><h4>${name}：初動のFKとFD</h4>
+  <p class="member-small">初動を判定できた ${int(s?.observedOpeningRounds)} Rを分母に集計（数値は割合、スキル・立ち位置は不明）</p>
+  ${bar('FK',s?.firstKills,s?.observedOpeningRounds)}${bar('FD',s?.firstDeaths,s?.observedOpeningRounds)}
+  ${asNum(s?.observedOpeningRounds)<25?'<p class="member-small">25R未満のため攻守の優劣は保留</p>':''}</section>`).join('');
+ const safeMaps=[...maps].sort((a,b)=>asNum(b.matches)-asNum(a.matches)||
+  String(a.map).localeCompare(String(b.map),'ja'));
+ const mapCards=safeMaps.map(m=>{
+  const known=asNum(m.matchWins)+asNum(m.matchLosses)+asNum(m.matchDraws);
+  return `<article class="member-map-card"><strong>${escape(m.map||'マップ不明')} / ${escape(m.agent||'エージェント不明')}</strong>
+   <p class="member-small">${int(m.matches)}試合・初動判定 ${int(m.observedOpeningRounds)}R
+   ${m.matches<5?'（5試合未満：参考）':''}</p>
+   ${bar('試合勝率',m.matchWins,known)}
+   ${bar('先制デス率',m.firstDeaths,m.observedOpeningRounds)}
+   ${bar('FK後の勝率',m.firstKillWins,asNum(m.firstKillWins)+asNum(m.firstKillLosses))}
+   </article>`;
+ }).join('');
+ const grouped=categories.map(cat=>{
+  const sub=other.filter(x=>x.category===cat);
+  return sub.length?`<details class="member-detail"><summary>${escape(cat)}：参考・保留 ${int(sub.length)}項目</summary>
+   <div class="diag-list">${sub.map(finding).join('')}</div></details>`:'';
+ }).join('');
+ $('member-result').innerHTML=`<h3>${escape(d.person)}の個別診断</h3>${accountInfo}${quality}
+  <h3>個人成績の全体像</h3>${stats}
+  <section class="member-section"><h3>改善候補 <span class="member-small">${int(focus.length)}項目</span></h3>
+   <p class="member-small">改善候補は同じ人の記録内で見えた傾向であり、ミスの断定や他者との実力順位ではない。</p>
+   <div class="diag-list">${focus.length?focus.map(finding).join(''):
+    '<p class="member-small">現在の記録では明確な改善候補を判定できない。サンプル不足の場合もある。</p>'}</div></section>
+  <section class="member-section"><h3>良い傾向 <span class="member-small">${int(good.length)}項目</span></h3>
+   <div class="diag-list">${good.length?good.map(finding).join(''):
+    '<p class="member-small">まだ数値上の明確な強みを判定できない。強みが存在しないことは意味しない。</p>'}</div></section>
+  <section class="member-section"><h3>攻撃・防衛のFK/FD比較</h3>
+   <p class="member-small">棒の長さは初動が記録されたラウンドに占める割合で、K/Dや勝率ではない。</p>
+   <div class="member-chart-grid">${sideCharts||'<p class="member-small">攻守データなし</p>'}</div></section>
+  <section class="member-section"><h3>マップ・エージェント別</h3>
+   <p class="member-small">全組合せを試合数順に表示。少数の試合で得られた高低は参考値である。</p>
+   <div class="member-map-grid">${mapCards||'<p class="member-small">組合せ別のデータなし</p>'}</div></section>
+  <section class="member-section"><h3>参考値・判定保留 <span class="member-small">${int(other.length)}項目</span></h3>
+   ${grouped||'<p class="member-small">対象項目なし。</p>'}</section>
+  <p class="member-small">直近10・20試合の推移は現在の集計APIから復元できないため、折れ線グラフを捏造しない。
+   将来は試合単位の匿名集計データを別途提供して検証する。</p>`;
 };
 async function loadMember(person){
  if(memberPending||!memberNames.includes(person))return;
- memberPending=true;activeMember=person;
+ memberPending=true;activeMember=person;latestMemberReport=null;
+ $('share').textContent='診断レポートをコピー';
  for(const el of $('member-selector').querySelectorAll('[data-member]'))
   el.setAttribute('aria-pressed',String(el.dataset.member===person));
  $('member-result').textContent=person+'の試合記録を読込中…';
@@ -258,7 +342,8 @@ async function loadMember(person){
   const t=token();if(!t)throw Error('KP口座の接続が必要だ。');
   const data=await request('/api/kp/coach/member?person='+encodeURIComponent(person),
    {headers:{Authorization:'Bearer '+t}});
-  if(activeMember===person)renderMemberDiagnosis(data);
+  if(activeMember===person){latestMemberReport=data;renderMemberDiagnosis(data);
+   $('share').textContent=person+'の全診断をコピー';}
  }catch(e){
   $('member-result').textContent='診断を読み込めない：'+(e.message||'取得エラー');
  }finally{memberPending=false}
@@ -427,6 +512,7 @@ async function request(path,opts={}){
 }
 async function load(){
  if(busy)return;
+ latestMemberReport=null;$('share').textContent='診断レポートをコピー';
  busy=true;$('reload').disabled=true;setStatus('保存済みのラウンドデータを集計中…');
  try{
   const t=token();
@@ -468,9 +554,38 @@ function diagnosticPayload(d){
   overall:pick(d.overall,['matches','rounds','winnerKnown','ourRoundWins','roundsWithFk','ourFirstKills','enemyFirstKills','firstKillWins','firstKillLosses','firstKillWinPct','comebackWins','repeatedVictimRounds','roundsWithSides']),
   maps,individual,reviewRounds:reviews,successRounds,coachingNotes:notes,coachSignals:signals,fullDiagnosis};
 }
+const memberDiagnosticPayload=function memberDiagnosticPayloadV2(d){
+ const pick=(obj,keys)=>Object.fromEntries(keys.map(k=>[k,obj?.[k]??null]));
+ const safeIds=new Set(['Dolly#SDGs','Abema#ttv','Aquatopia#toppy','h1d3g1g4s#1037','frin#怖すぎ','mecael#2489']);
+ const safeAccounts=(Array.isArray(d.accounts)?d.accounts:[]).filter(x=>safeIds.has(x));
+ const sideFields=['rounds','observedOpeningRounds','firstKills','firstDeaths',
+  'firstKillWins','firstKillLosses','firstDeathWins','firstDeathLosses'];
+ const individuals=(Array.isArray(d.individual)?d.individual:[]).map(p=>({
+  ...pick(p,['player','matches','matchWins','matchLosses','matchDraws','statsMatches',
+   'totalKills','totalDeaths','totalAssists','scoreMatches','totalScore','observedOpeningRounds',
+   'firstKills','firstDeaths','firstKillWins','firstKillLosses','firstDeathWins','firstDeathLosses',
+   'openingKillerDiedWithin5s','firstDeathKillerEliminatedWithin5s']),
+  attack:pick(p.attack,sideFields),defense:pick(p.defense,sideFields)
+ }));
+ const mapAgent=(Array.isArray(d.individualMapAgent)?d.individualMapAgent:[]).map(m=>pick(m,
+  ['player','map','agent','matches','matchWins','matchLosses','matchDraws',
+   'observedOpeningRounds','firstKills','firstDeaths','firstKillWins','firstKillLosses',
+   'firstDeathWins','firstDeathLosses']));
+ const diagnosis=(Array.isArray(d.fullDiagnosis?.items)?d.fullDiagnosis.items:[]).map(x=>pick(x,
+  ['subject','category','title','status','evidence','reason','nextAction',
+   'numerator','denominator','ratePct','referencePct','differencePp']));
+ return {format:'KESO_COACH_SAFE_MEMBER_DIAGNOSTIC_V1',
+  generatedAt:new Date().toISOString(),person:d.person,profile:d.profile,
+  accounts:safeAccounts,archivedMatches:d.archivedMatches??null,usableMatches:d.usableMatches??null,
+  coverage:pick(d.coverage,['discovered','complete','partial','pending','unavailable',
+   'analysisMatches','discoveryDone','truncated','rowLimit','limitReached','allMatchesGuaranteed']),
+  quality:pick(d,['invalidMatches','roundDataMissing','killDataMissing']),
+  individual:individuals,individualMapAgent:mapAgent,fullDiagnosis:{items:diagnosis}};
+};
 $('share').addEventListener('click',async()=>{
  if(!latestReport||busy)return;
- const text=JSON.stringify(diagnosticPayload(latestReport),null,2);
+ const text=JSON.stringify(latestMemberReport?
+  memberDiagnosticPayload(latestMemberReport):diagnosticPayload(latestReport),null,2);
  try{
    if(!navigator.clipboard?.writeText)throw Error('Clipboard API unavailable');
    await navigator.clipboard.writeText(text);
