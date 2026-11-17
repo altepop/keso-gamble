@@ -238,6 +238,8 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   await page.locator('[data-coach-view="improve"]').click();
   assert.match(await page.locator('#coach-view-improve').innerText(),/攻撃の先制収支/);
   assert.match(await page.locator('#coach-view-improve').innerText(),/キル数のラウンド分布/);
+  assert.match(await page.locator('#coach-view-improve').innerText(),/先制に限定しないキル・デス後の動き/);
+  assert.match(await page.locator('#coach-view-improve').innerText(),/公式トレード率ではない/);
   assert.match(await page.locator('[data-round-rate="kpr-attack"]').getAttribute('style'),/width:100%/);
   assert.equal(await page.locator('[data-round-rate="kpr-defense"]').count(),0,'unknown side is not a zero-valued bar');
   assert.match(await page.locator('#coach-view-improve').innerText(),/FK後の勝利/);

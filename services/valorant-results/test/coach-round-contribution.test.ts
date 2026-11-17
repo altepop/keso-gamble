@@ -13,3 +13,15 @@ test('legitimate kill times after ten seconds remain valid',()=>{
  const r=fixture(),kills=JSON.parse(r.kills_json);kills[0].t=40000;kills[1].t=125000;
  assert.equal(coachRoundContribution([{...r,kills_json:JSON.stringify(kills)}],accounts).rounds,1);
 });
+
+test('all-death followups include mid-round deaths, not just opening deaths; no opportunity claim',()=>{
+ const row=fixture(),players=JSON.parse(row.players_json);players[0].d=1;players[1].k=1;players[7].k=1;players[7].d=1;
+ const kills=[{r:0,t:1000,killer:'private-self',victim:'other4'},{r:0,t:2000,killer:'private-self',victim:'other5'},{r:0,t:3000,killer:'other6',victim:'private-self'},{r:0,t:6000,killer:'other0',victim:'other6'}];
+ const r=coachRoundContribution([{...row,players_json:JSON.stringify(players),kills_json:JSON.stringify(kills)}],accounts);
+ assert.equal(r.combatFollowup.enemyKills,2);assert.equal(r.combatFollowup.totalDeaths,1);assert.equal(r.combatFollowup.enemyKnownKillerDeaths,1);assert.equal(r.combatFollowup.teammateRetaliations5s,1);assert.equal(r.combatFollowup.diedAfterKill5s,2);
+});
+test('own response kills use exact five-second boundary and exclude simultaneous unknown ordering',()=>{
+ const row=fixture(),players=JSON.parse(row.players_json);players[1].d=1;players[5].k=1;
+ const run=(at:number)=>coachRoundContribution([{...row,players_json:JSON.stringify(players),kills_json:JSON.stringify([{r:0,t:1000,killer:'other4',victim:'other0'},{r:0,t:at,killer:'private-self',victim:'other4'},{r:0,t:10000,killer:'private-self',victim:'other5'}])}],accounts).combatFollowup;
+ assert.equal(run(6000).tradeKills5s,1);assert.equal(run(6001).tradeKills5s,0);assert.equal(run(1000).tradeKills5s,0);
+});
