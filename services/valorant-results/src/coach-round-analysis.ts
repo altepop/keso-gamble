@@ -50,7 +50,7 @@ const validTime=(n:unknown)=>Number.isSafeInteger(n)&&Number(n)>=0&&Number(n)<=9
 type Bucket=Totals & {map?:string;composition?:string};
 // Per-player metrics are counts of observed opening events, not a player rating.
 // Never infer that a support agent with 0 FK performed poorly.
-type CoachPlayer='VDK'|'Abema'|'石原';
+type CoachPlayer=string;
 interface SideOpening{rounds:number;observedOpeningRounds:number;firstKills:number;firstDeaths:number;
  firstKillWins:number;firstKillLosses:number;firstDeathWins:number;firstDeathLosses:number;}
 const emptySide=():SideOpening=>({rounds:0,observedOpeningRounds:0,firstKills:0,firstDeaths:0,
@@ -68,11 +68,23 @@ interface PlayerBucket{
   openingKillerDiedWithin5s:number;firstDeathKillerEliminatedWithin5s:number;
   attack:SideOpening;defense:SideOpening;
 }
-const playerIdentity:ReadonlyArray<{name:string;tag:string;label:CoachPlayer}>=[
+// Only *allies of the opted-in VDK match owner* are profiled, never opponents.
+const knownPlayerLabels:ReadonlyArray<{name:string;tag:string;label:string}>=[
   {name:'Dolly',tag:'SDGs',label:'VDK'},
   {name:'Abema',tag:'ttv',label:'Abema'},
-  {name:'h1d3g1g4s',tag:'1037',label:'石原'}
+  {name:'h1d3g1g4s',tag:'1037',label:'石原'},
+  {name:'mecael',tag:'2489',label:'小林'},
+  {name:'Aquatopia',tag:'toppy',label:'Aquatopia'}
 ];
+const teammateLabel=(p:Player):string|null=>{
+  const known=knownPlayerLabels.find(x=>x.name===p.name&&x.tag===p.tag);
+  if(known)return known.label;
+  // Unregistered teammates are available under their actual game names.
+  // Never guess that a Riot account belongs to Fujimura/Kobe.
+  if(typeof p.name!=='string'||!p.name.trim()||p.name.length>48||
+     typeof p.tag!=='string'||!p.tag.trim()||p.tag.length>24)return null;
+  return p.name+'#'+p.tag;
+};
 const emptyPlayer=(player:CoachPlayer,map?:string,agent?:string):PlayerBucket=>({
   player,...(map?{map}:{}),...(agent?{agent}:{}),
   matches:0,matchWins:0,matchLosses:0,matchDraws:0,
@@ -177,20 +189,20 @@ export function summarizeCoachRounds(rows:readonly ArchivedRow[]){
     const trio=Boolean(abema&&ishihara);
     const map=typeof row.map==='string'&&row.map.length<=80?row.map:'Unknown';
     const composition=trio?(vdk.agent==='Fade'&&abema?.agent==='Clove'?'Fade + Clove':'Other trio'):null;
-    const participants=playerIdentity.flatMap(identity=>{
-      const p=ps.find(p=>p.name===identity.name&&p.tag===identity.tag&&p.team_id===vdk.team_id);
-      if(!p)return [];
+    const participants=ps.filter(p=>p.team_id===vdk.team_id).flatMap(p=>{
+      const label=teammateLabel(p);
+      if(!label)return [];
       const agent=typeof p.agent==='string'&&p.agent.length<=60&&p.agent
         ?p.agent:'Unknown';
-      let overallPlayer=individual.get(identity.label);
+      let overallPlayer=individual.get(label);
       if(!overallPlayer){
-        overallPlayer=emptyPlayer(identity.label);
-        individual.set(identity.label,overallPlayer);
+        overallPlayer=emptyPlayer(label);
+        individual.set(label,overallPlayer);
       }
-      const key=identity.label+'|'+map+'|'+agent;
+      const key=label+'|'+map+'|'+agent;
       let mapPlayer=individualMapAgent.get(key);
       if(!mapPlayer){
-        mapPlayer=emptyPlayer(identity.label,map,agent);
+        mapPlayer=emptyPlayer(label,map,agent);
         individualMapAgent.set(key,mapPlayer);
       }
       for(const bucket of [overallPlayer,mapPlayer]){
@@ -208,7 +220,7 @@ export function summarizeCoachRounds(rows:readonly ArchivedRow[]){
         if(Number.isSafeInteger(p.score)&&Number(p.score)>=0){
           bucket.scoreMatches++;bucket.totalScore+=Number(p.score);
         }
-        if(identity.label!=='VDK'){
+        if(label!=='VDK'){
           if(validId(vdk.party_id)&&validId(p.party_id)){
             if(vdk.party_id===p.party_id)bucket.samePartyAsVdk++;
             else bucket.differentPartyFromVdk++;
@@ -321,8 +333,11 @@ export function summarizeCoachRounds(rows:readonly ArchivedRow[]){
     trioComparisons:[...compositions.values()].map(emit)
       .sort((a,b)=>a.map!.localeCompare(b.map!)||a.composition!.localeCompare(b.composition!)),
     individual:[...individual.values()].map(playerReport)
-      .sort((a,b)=>playerIdentity.findIndex(x=>x.label===a.player)-
-        playerIdentity.findIndex(x=>x.label===b.player)),
+      .sort((a,b)=>{
+        const core=['VDK','Abema','石原','小林','Aquatopia'];
+        const ix=(n:string)=>core.includes(n)?core.indexOf(n):core.length;
+        return ix(a.player)-ix(b.player)||b.matches-a.matches||a.player.localeCompare(b.player,'ja');
+      }),
     individualMapAgent:[...individualMapAgent.values()].map(playerReport)
       .sort((a,b)=>a.player.localeCompare(b.player,'ja')||
         (a.map??'').localeCompare(b.map??'')||(a.agent??'').localeCompare(b.agent??'')),
