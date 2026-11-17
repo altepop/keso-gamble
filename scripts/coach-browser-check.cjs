@@ -213,7 +213,7 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
     'an active backfill must not show resume');
   await page.locator('[data-member="神戸"]').click();
   await page.waitForFunction(()=>document.querySelector('#member-result').textContent.includes('FK後の動きを確認'));
-  assert.match(await page.locator('#member-result').innerText(),/神戸の個別診断/);
+  assert.match(await page.locator('#member-result').innerText(),/神戸 個別コーチング/);
   assert.match(await page.locator('#member-result').innerText(),/Abema#ttv/);
   assert.match(await page.locator('#member-result').innerText(),/Aquatopia#toppy/);
   assert.match(await page.locator('#member-result').innerText(),/最初に見るべき改善候補/);
