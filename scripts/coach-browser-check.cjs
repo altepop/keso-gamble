@@ -233,7 +233,7 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   assert.match(await page.locator('#coach-view-improve').innerText(),/攻撃の先制収支/);
   assert.match(await page.locator('#coach-view-improve').innerText(),/FK後の勝利/);
   await page.locator('[data-coach-view="metrics"]').click();
-  await page.locator('#coach-view-metrics details').first().locator('summary').click();
+  await page.locator('#coach-view-metrics > details.member-detail > summary').filter({hasText:/^先制（/}).click();
   assert.match(await page.locator('#coach-view-metrics').innerText(),/先制デス率/);
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,
     'dashboard must not overflow on 375px iPhone');
