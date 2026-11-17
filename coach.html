@@ -79,6 +79,12 @@ tr:last-child td{border-bottom:0}
 <p id="resume-explain" class="small muted" hidden>VDK本人の連携口座から、以前許可した試合補完を再開する。5分に最大1試合、保存済みの競技試合だけを取得する。KP・通知・勝敗予想は変更しない。</p>
 </section>
 <section class="panel">
+<h2>FK / FDから分かる強みと見直し候補</h2>
+<p class="muted small">判定は保存済みの実測値と最低サンプル数に基づく暫定的な目安であり、ランク帯の平均値や実力評価ではない。FK後勝率とFD後の取り返しはチーム全体の結果を含む。スキル・位置・役割は映像を見ないと断定できない。</p>
+<div id="coach-signals"></div>
+<p class="foot">判定目安：個人は3試合かつ40ラウンド以上。FK後勝率は勝敗判明10回以上で70%以上を良い傾向、45%以下を見直し候補とする。FK直後の生存やFD後の取り返しは8回以上で判定する。これはコーチング用の仮説抽出基準であり、ゲーム全体の標準値ではない。</p>
+</section>
+<section class="panel">
 <h2>次の試合で意識すること</h2>
 <p class="muted small">取得済みログから作成する観察・録画確認の提案だ。キルの順序だけで「戦犯」やポジションミスとは断定しない。</p>
 <div id="coach-notes"></div>
@@ -133,6 +139,15 @@ $('totals').innerHTML=card('保存済みロスター',int(total),'VDKの対象�
  +card('データ不足で除外',int(Math.max(0,completed-usable)),'ラウンド・キル情報不足')
  +card('先制キル後の勝率',pct(o.firstKillWinPct),int(o.firstKillWins)+'勝 / '+int(o.firstKillOutcomesKnown)+'ラウンド')
  +card('人数不利からの逆転',int(o.comebackWins),'保存済みデータの範囲');
+const signals=data.coachSignals||[];
+$('coach-signals').innerHTML=signals.length?signals.map(s=>{
+ const tone=s.kind==='strength'?'良い傾向':s.kind==='review'?'見直し候補':'判定保留';
+ return `<article class="review-item">
+ <div class="review-heading"><span class="review-kind">${escape(tone)} · ${escape(s.subject)}</span><strong>${escape(s.title)}</strong></div>
+ <p class="small muted">${escape(s.evidence)}</p>
+ <p class="small"><b>次に確認：</b>${escape(s.action)}</p>
+ </article>`;
+}).join(''):'<p class="empty">判定に必要な条件を満たす指標がまだない。</p>';
 const notes=data.coachingNotes||[];
 $('coach-notes').innerHTML=notes.length?notes.map(n=>{
  const tone=n.kind==='review'?'要確認':n.kind==='collect'?'データ補完':'継続観察';
@@ -240,6 +255,7 @@ function diagnosticPayload(d){
  const reviews=(d.reviewRounds||[]).slice(0,12).map(r=>pick(r,
   ['map','matchJst','round','category','evidence','firstKiller','focus']));
  const notes=(d.coachingNotes||[]).map(n=>pick(n,['subject','kind','title','evidence','action']));
+ const signals=(d.coachSignals||[]).map(s=>pick(s,['subject','kind','metric','title','evidence','action','numerator','denominator','ratePct']));
  return {format:'KESO_COACH_SAFE_DIAGNOSTIC_V1',
   generatedAt:new Date().toISOString(),totalVdkRosterMatches:d.totalVdkRosterMatches??null,
   archive:pick(d.backfill,['status','complete','partial','missing','unavailable','pending']),
@@ -247,7 +263,7 @@ function diagnosticPayload(d){
   totalRowsRead:d.totalRowsRead??null,limitReached:d.limitReached??null,
   quality:pick(d,['invalidMatches','roundDataMissing','killDataMissing']),
   overall:pick(d.overall,['matches','rounds','winnerKnown','ourRoundWins','roundsWithFk','ourFirstKills','enemyFirstKills','firstKillWins','firstKillLosses','firstKillWinPct','comebackWins','repeatedVictimRounds','roundsWithSides']),
-  maps,individual,reviewRounds:reviews,coachingNotes:notes};
+  maps,individual,reviewRounds:reviews,coachingNotes:notes,coachSignals:signals};
 }
 $('share').addEventListener('click',async()=>{
  if(!latestReport||busy)return;
