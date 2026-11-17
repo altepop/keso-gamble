@@ -16,8 +16,8 @@ export async function observeProvider(env=process.env,request=fetch,Socket=WebSo
  const base='https://api.cloudflare.com/client/v4/accounts/'+account+'/workers/scripts/valorant-results/tails';
  const headers={Authorization:'Bearer '+token,'Content-Type':'application/json'};
  const created=await request(base,{method:'POST',headers,body:JSON.stringify({filters:[]}),redirect:'error',signal:AbortSignal.timeout(15000)});
- if(!created.ok)throw Error('tail_create');const payload=await created.json(),tail=payload.result;
- if(!payload.success||!/^[a-f0-9-]{36}$/i.test(tail?.id??''))throw Error('tail_response');
+ if(!created.ok)throw Object.assign(Error('tail_create'),{httpStatus:created.status});const payload=await created.json(),tail=payload.result;
+ if(!payload.success||!/^(?:[a-f0-9]{32}|[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12})$/i.test(tail?.id??''))throw Error('tail_response');
  let socket;
  try{
   const target=new URL(tail.url);if(target.protocol!=='wss:'||!(/(?:^|\.)workers\.dev$|(?:^|\.)cloudflare\.com$/.test(target.hostname)))throw Error('tail_host');
@@ -32,11 +32,15 @@ export async function observeProvider(env=process.env,request=fetch,Socket=WebSo
  }finally{
   socket?.terminate();
   const removed=await request(base+'/'+tail.id,{method:'DELETE',headers,redirect:'error',signal:AbortSignal.timeout(15000)});
-  if(!removed.ok)throw Error('tail_cleanup');
+  if(!removed.ok)throw Object.assign(Error('tail_cleanup'),{httpStatus:removed.status});
  }
+}
+export function safeTailError(error){
+ const stages=['tail_config','tail_create','tail_response','tail_host','tail_cleanup'];
+ return {stage:stages.includes(error?.message)?error.message:'tail_transport',httpStatus:Number.isSafeInteger(error?.httpStatus)&&error.httpStatus>=100&&error.httpStatus<=599?error.httpStatus:null};
 }
 if(process.argv[1]?.endsWith('/coach-provider-tail.mjs')){
  try{let evidence=null;for(let i=0;i<6&&!evidence;i++)evidence=await observeProvider();
   console.log('COACH_DIRECT_PROVIDER_EVIDENCE '+JSON.stringify(evidence??{status:'no-normal-response-observed',extraHenrikRequests:0,d1Mutations:0}));
- }catch{console.error('COACH_DIRECT_PROVIDER_EVIDENCE_UNAVAILABLE (no trace, URL or credentials logged)');process.exitCode=1;}
+ }catch(e){console.error('COACH_DIRECT_PROVIDER_EVIDENCE_UNAVAILABLE '+JSON.stringify(safeTailError(e)));process.exitCode=1;}
 }
