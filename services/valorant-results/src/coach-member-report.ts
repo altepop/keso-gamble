@@ -2,6 +2,7 @@ import {COACH_MEMBER_ACCOUNTS,coachMemberCoverage} from './coach-member-archive.
 import {summarizeCoachRounds} from './coach-round-analysis.ts';
 import {comprehensiveCoachDiagnosis} from './coach-comprehensive.ts';
 import {coachNotes,detectCoachSignals} from './coach-review.ts';
+import {buildCoachMatchTrend} from './coach-match-trend.ts';
 
 // Unlike the old VDK-only summary, every profile reads its OWN games from
 // the shared match_id archive. The focus person's team becomes "our team".
@@ -46,6 +47,7 @@ export async function readCoachMemberReport(db:D1Database,person:string){
    match_id:string;ended_at:number;map:string|null;players_json:string;teams_json:string|null;
    rounds_json:string|null;kills_json:string|null}>();
  const [primary,...alternates]=accounts;
+ const matchTrend=buildCoachMatchTrend(rows.results,accounts);
  const report=summarizeCoachRounds(rows.results,primary.name,primary.tag,
   primary.puuid??undefined,labelFor(person),
   alternates.map(a=>({name:a.name,tag:a.tag,puuid:a.puuid??undefined})));
@@ -79,13 +81,14 @@ export async function readCoachMemberReport(db:D1Database,person:string){
   person,riotId:owners.map(x=>x.riotId).join(' / '),profile:labelFor(person),
   accounts:owners.map(x=>x.riotId),
   basis:'本人の確認済みアカウントの競技試合（Henrikから発見・保存済みの範囲）',
-  coverage:{...combinedCoverage,analysisMatches:report.usableMatches,
+  coverage:{...combinedCoverage,enabled:coverage.enabled,analysisMatches:report.usableMatches,
+   existingArchiveMatches:report.archivedMatches,
    rowLimit:MAX_ROWS,limitReached:rows.results.length>=MAX_ROWS,
    allMatchesGuaranteed:false},
   archivedMatches:report.archivedMatches,usableMatches:report.usableMatches,
   invalidMatches:report.invalidMatches,roundDataMissing:report.roundDataMissing,
   killDataMissing:report.killDataMissing,overall:report.overall,
-  individual,individualMapAgent,
+  individual,individualMapAgent,matchTrend,
   fullDiagnosis:diagnosis,coachingNotes:coachNotes(onlySelf),
   coachSignals:detectCoachSignals(onlySelf)
  };
