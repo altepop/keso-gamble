@@ -1,4 +1,4 @@
-import {coachNotes,recommendReviewRounds,detectCoachSignals} from './coach-review.ts';
+import {coachNotes,recommendReviewRounds,recommendSuccessRounds,detectCoachSignals} from './coach-review.ts';
 import {comprehensiveCoachDiagnosis} from './coach-comprehensive.ts';
 
 // Read-only, opt-in-on-request analysis of the match archives already in D1.
@@ -334,6 +334,7 @@ type CoachReport=ReturnType<typeof summarizeCoachRounds>&{
  totalVdkRosterMatches:number;
  backfill:{status:'running'|'complete'|'disabled';complete:number;partial:number;missing:number;unavailable:number;pending:number};
  reviewRounds:ReturnType<typeof recommendReviewRounds>;
+ successRounds:ReturnType<typeof recommendSuccessRounds>;
  coachingNotes:ReturnType<typeof coachNotes>;
  coachSignals:ReturnType<typeof detectCoachSignals>;
  fullDiagnosis:ReturnType<typeof comprehensiveCoachDiagnosis>;
@@ -384,7 +385,8 @@ export async function readCoachRoundReport(db:D1Database,now=Date.now()){
  const value={...report,totalVdkRosterMatches,
    backfill:{status,complete,partial,missing,unavailable,
      pending:Math.max(0,missing+partial-unavailable)},
-   reviewRounds:recommendReviewRounds(result.results),coachingNotes:coachNotes(report),
+   reviewRounds:recommendReviewRounds(result.results),
+   successRounds:recommendSuccessRounds(result.results),coachingNotes:coachNotes(report),
    coachSignals:detectCoachSignals(report),
    fullDiagnosis:comprehensiveCoachDiagnosis(report)};
  readCache.set(db,{until:now+5*60000,value});
