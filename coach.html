@@ -229,15 +229,20 @@ let chosenCoachSubject='VDK';
 const fixedCoachSubjects=['VDK','Abema','石原','藤村','神戸','Aquatopia','小林','チーム'];
 let coachSubjects=[...fixedCoachSubjects];
 const LOCAL_IDENTITIES_KEY='keso-coach-member-mapping-v1';
-// Kobe's exact Riot ID is not confirmed: never invent an Abema/Kobe alias.
-// Owner-confirmed Fujimura#frin and Aquatopia#toppy are assigned server-side.
+// Owner-confirmed: Kobe uses Abema#ttv. The two tabs show one account's
+// recorded match sample without duplicating rows or inferring separate games.
+// Owner-confirmed Fujimura=frin#怖すぎ and Aquatopia=Aquatopia#toppy.
 const getPersonAliases=()=>{
  try{
   const o=JSON.parse(localStorage.getItem(LOCAL_IDENTITIES_KEY)||'{}');
   return o&&typeof o==='object'&&!Array.isArray(o)?o:{};
  }catch{return {}}
 };
-const personAlias=(subject)=>subject==='神戸'?getPersonAliases().神戸||null:null;
+const personAlias=(subject)=>{
+ if(subject!=='神戸')return null;
+ const stored=getPersonAliases();
+ return Object.prototype.hasOwnProperty.call(stored,'神戸')?stored.神戸:'Abema';
+};
 const setPersonAlias=(subject,account)=>{
  if(subject!=='神戸')return;
  const state=getPersonAliases();
