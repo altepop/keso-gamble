@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {recommendReviewRounds,coachNotes} from '../src/coach-review.ts';
+import {recommendReviewRounds,coachNotes,detectCoachSignals} from '../src/coach-review.ts';
 
 function match(id:string,map:string,ended_at:number,
  rounds:Array<{r:number;winner:string|null}>,
@@ -87,4 +87,45 @@ test('notes are conservative with small samples, and use exact observed counts',
  assert.ok(ready.some(x=>x.subject==='Abema'&&x.title.includes('先制キル直後')));
  assert.ok(ready.some(x=>x.subject==='Abema'&&x.title.includes('先制デス')));
  assert.ok(ready.every(x=>!x.action.includes('戦犯')));
+});
+
+test('signals distinguish strong FK conversion, risky fast re-death, and teammate FD response',()=>{
+ const report={overall:{firstKillWins:22,firstKillLosses:8,firstKillOutcomesKnown:30},
+  individual:[
+   {player:'VDK',matches:8,observedOpeningRounds:160,firstKills:12,firstDeaths:12,
+    firstKillWins:10,firstKillLosses:2,firstDeathWins:2,firstDeathLosses:10,
+    openingKillerDiedWithin5s:1,firstDeathKillerEliminatedWithin5s:1},
+   {player:'Abema',matches:8,observedOpeningRounds:160,firstKills:10,firstDeaths:10,
+    firstKillWins:3,firstKillLosses:7,firstDeathWins:1,firstDeathLosses:9,
+    openingKillerDiedWithin5s:6,firstDeathKillerEliminatedWithin5s:6}
+  ]};
+ const signals=detectCoachSignals(report);
+ assert.ok(signals.some(s=>s.subject==='チーム'&&s.kind==='strength'));
+ assert.ok(signals.some(s=>s.subject==='VDK'&&s.metric==='fk_conversion'&&
+  s.kind==='strength'&&s.ratePct===83.3&&s.denominator===12));
+ assert.ok(signals.some(s=>s.subject==='VDK'&&s.metric==='fk_survival'&&s.kind==='strength'));
+ assert.ok(signals.some(s=>s.subject==='VDK'&&s.metric==='fd_response'&&s.kind==='review'));
+ assert.ok(signals.some(s=>s.subject==='Abema'&&s.metric==='fk_conversion'&&s.kind==='review'));
+ assert.ok(signals.some(s=>s.subject==='Abema'&&s.metric==='fk_survival'&&s.kind==='review'));
+ assert.ok(signals.some(s=>s.subject==='Abema'&&s.metric==='fd_response'&&s.kind==='strength'));
+ assert.ok(signals.every(s=>!s.evidence.includes('戦犯')&&!s.action.includes('確定')));
+ assert.ok(signals.every(s=>Number.isFinite(s.ratePct??0)));
+});
+
+test('signals withhold FK and FD labels when sample or outcomes are insufficient',()=>{
+ const p={player:'石原',matches:2,observedOpeningRounds:35,firstKills:8,firstDeaths:10,
+  firstKillWins:0,firstKillLosses:0,firstDeathWins:0,firstDeathLosses:0,
+  openingKillerDiedWithin5s:8,firstDeathKillerEliminatedWithin5s:0};
+ const report={overall:{firstKillWins:1,firstKillLosses:0,firstKillOutcomesKnown:1},individual:[p]};
+ const signals=detectCoachSignals(report);
+ assert.equal(signals.length,1);
+ assert.equal(signals[0].kind,'insufficient');
+ assert.equal(signals[0].ratePct,87.5);
+ assert.ok(!signals.some(s=>s.kind==='strength'||s.kind==='review'));
+ const enough={...p,matches:5,observedOpeningRounds:120,firstKills:0,firstDeaths:0,
+  openingKillerDiedWithin5s:0,firstDeathKillerEliminatedWithin5s:0};
+ const neutral=detectCoachSignals({...report,individual:[enough]});
+ assert.equal(neutral.length,1);
+ assert.equal(neutral[0].kind,'insufficient','zero FK is not evidence of poor support play');
+ assert.equal(neutral[0].ratePct,100);
 });
