@@ -73,6 +73,7 @@ const knownPlayerLabels:ReadonlyArray<{name:string;tag:string;label:string}>=[
   {name:'Dolly',tag:'SDGs',label:'VDK'},
   {name:'Abema',tag:'ttv',label:'Abema'},
   {name:'h1d3g1g4s',tag:'1037',label:'石原'},
+  {name:'frin',tag:'怖すぎ',label:'藤村'},
   {name:'mecael',tag:'2489',label:'小林'},
   {name:'Aquatopia',tag:'toppy',label:'Aquatopia'}
 ];
@@ -334,7 +335,7 @@ export function summarizeCoachRounds(rows:readonly ArchivedRow[]){
       .sort((a,b)=>a.map!.localeCompare(b.map!)||a.composition!.localeCompare(b.composition!)),
     individual:[...individual.values()].map(playerReport)
       .sort((a,b)=>{
-        const core=['VDK','Abema','石原','小林','Aquatopia'];
+        const core=['VDK','Abema','石原','藤村','Aquatopia','小林'];
         const ix=(n:string)=>core.includes(n)?core.indexOf(n):core.length;
         return ix(a.player)-ix(b.player)||b.matches-a.matches||a.player.localeCompare(b.player,'ja');
       }),
