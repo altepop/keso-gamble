@@ -131,9 +131,10 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   assert.match(await page.locator('#focus-content').innerText(),/Aquatopiaのコーチング/);
   assert.match(await page.locator('#focus-content').innerText(),/先制キル後の勝利が多い/);
   await page.locator('#tab-神戸').click();
-  assert.match(await page.locator('#focus-content').innerText(),/未紐づけ／対象試合なし/);
-  assert.ok(!(await page.locator('#focus-content').innerText()).includes('Abemaのコーチング'),
-    'never attribute Abema metrics to Kobe without verified ID');
+  assert.match(await page.locator('#focus-content').innerText(),/神戸のコーチング/);
+  assert.match(await page.locator('#focus-content').innerText(),/Abema#ttv/);
+  assert.match(await page.locator('#focus-content').innerText(),/FD後5秒以内に味方が同じ敵を倒した率/);
+  assert.match(await page.locator('#focus-content').innerText(),/二重計上はしない/);
   await page.locator('#tab-小林').click();
   assert.match(await page.locator('#focus-content').innerText(),/小林は未紐づけ/);
   await page.locator('#tab-チーム').click();
