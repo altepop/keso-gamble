@@ -182,7 +182,7 @@ export function summarizeCoachRounds(rows:readonly ArchivedRow[],focusName='Doll
     const trio=focusName==='Dolly'&&focusTag==='SDGs'&&Boolean(abema&&ishihara);
     const map=typeof row.map==='string'&&row.map.length<=80?row.map:'Unknown';
     const composition=trio?(vdk.agent==='Fade'&&abema?.agent==='Clove'?'Fade + Clove':'Other trio'):null;
-    const focusIdentity=focusLabel&&vdk&&!playerIdentity.some(x=>x.name===vdk.name&&x.tag===vdk.tag)
+    const focusIdentity=focusLabel&&vdk&&!playerIdentity.some(x=>x.label===focusLabel)
       ?[{name:vdk.name??focusName,tag:vdk.tag??focusTag,label:focusLabel}]:[];
     const identities=[...playerIdentity,...focusIdentity];
     const participants=identities.flatMap(identity=>{
