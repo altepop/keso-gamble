@@ -1,8 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
-import {readFileSync} from 'node:fs';
-import {URL as NodeURL} from 'node:url';
 import {COACH_MEMBER_ACCOUNTS,enableAllMemberArchive,discoverCoachMemberPage,
  fetchNextCoachMemberMatch,coachMemberCoverage} from '../src/coach-member-archive.ts';
 import type {Match} from '../src/results.ts';
