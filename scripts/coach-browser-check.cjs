@@ -222,7 +222,7 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   assert.match(await page.locator('#coach-view-overview').innerText(),/試合ごとの推移/);
   assert.equal(await page.locator('.trend-game').count(),2,'two complete matches in trend');
   assert.equal(await page.locator('.coach-kpi').count(),4,'four top-level KPI cards');
-  assert.match(await page.locator('#coach-view-overview').innerText(),/75.0%[\\s\\S]*\\(6 \\/ 8\\)/,
+  assert.match(await page.locator('#coach-view-overview').innerText(),/75\.0%[\s\S]*\(6 \/ 8\)/,
     'FK conversion chart divides by resolved outcomes only, never unknowns');
   await page.locator('[data-coach-view="strategy"]').click();
   assert.equal(await page.locator('#coach-view-strategy').isVisible(),true);
