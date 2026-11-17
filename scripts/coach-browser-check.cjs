@@ -267,6 +267,17 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   await page.waitForFunction(()=>document.querySelector('#status').textContent.includes('履歴収集を有効化'));
   assert.equal(requests.filter(x=>x.method==='POST'&&x.url.endsWith('/api/kp/coach/members/start')).length,1);
   assert.deepEqual(errors,[]);
+  const beforeCompare=requests.filter(r=>r.url.includes('/coach/member?')).length;
+  await page.locator('#compare-members').click();
+  await page.waitForFunction(()=>!document.getElementById('compare-members').disabled);
+  assert.equal(await page.locator('#member-comparison tbody tr').count(),5);
+  assert.match(await page.locator('#member-comparison').innerText(),/小林/);
+  assert.equal(requests.filter(r=>r.url.includes('/coach/member?')).length,beforeCompare+4,'reuse the selected profile; only the other four profiles need reads');
+  const afterCompare=requests.length;
+  await page.locator('#compare-members').click();
+  await page.waitForFunction(()=>!document.getElementById('compare-members').disabled);
+  assert.equal(requests.length,afterCompare,'repeat within sixty seconds uses per-session in-memory cache');
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
   await ctx.close();
   // The resume control only appears for the previously opted-in linked owner,
   // after an explicit user click; no recurring or surprise POSTs.

@@ -186,6 +186,9 @@ tr:last-child td{border-bottom:0}
 <button type="button" data-member="藤村" aria-pressed="false">藤村</button>
 <button type="button" data-member="小林" aria-pressed="false">小林</button>
 </div>
+<button type="button" id="compare-members">5人のプレースタイルを比較</button>
+<p class="muted small">押した時だけ各人の独立した成績を読み込みます。60秒以内の同じ診断は再利用します。役割・相手・マップ・期間が異なるため、実力順位にはしません。</p>
+<div id="member-comparison" aria-live="polite"></div>
 <div id="member-result" aria-live="polite" class="member-result">選手を選ぶと、本人の試合を基準に弱点候補と良い点を表示する。</div>
 </section>
 <section class="panel" id="member-archive-panel">
@@ -271,6 +274,14 @@ const memberNames=['神戸','VDK','Aquatopia','Abema','石原','藤村','小林'
 let activeMember=null;
 let latestMemberReport=null;
 let memberPending=false;
+const memberCache=new Map();
+async function fetchMember(person){
+ const t=token();if(!t)throw Error('KP口座の接続が必要だ。');
+ const cached=memberCache.get(person);
+ if(cached&&cached.token===t&&Date.now()-cached.at<60000)return cached.data;
+ const data=await request('/api/kp/coach/member?person='+encodeURIComponent(person),{headers:{Authorization:'Bearer '+t}});
+ memberCache.set(person,{data,at:Date.now(),token:t});return data;
+}
 function renderMemberArchiveStatus(data){
  const history=data.memberHistory;
  const owned=Boolean(data.canStartMemberHistory);
@@ -513,15 +524,27 @@ async function loadMember(person){
   el.setAttribute('aria-pressed',String(el.dataset.member===person));
  $('member-result').textContent=person+'の試合記録を読込中…';
  try{
-  const t=token();if(!t)throw Error('KP口座の接続が必要だ。');
-  const data=await request('/api/kp/coach/member?person='+encodeURIComponent(person),
-   {headers:{Authorization:'Bearer '+t}});
+  const data=await fetchMember(person);
   if(activeMember===person){latestMemberReport=data;renderMemberDiagnosis(data);
    $('share').textContent=person+'の全診断をコピー';}
  }catch(e){
   $('member-result').textContent='診断を読み込めない：'+(e.message||'取得エラー');
  }finally{memberPending=false}
 }
+$('compare-members').addEventListener('click',async()=>{
+ const button=$('compare-members');button.disabled=true;const rows=[];
+ $('member-comparison').textContent='各人の独立した試合を確認中…';
+ try{
+  for(const person of ['神戸','VDK','石原','藤村','小林']){
+   try{const d=await fetchMember(person),p=d.performance,o=p?.overall;
+    rows.push({person,o,role:p?.roles?.slice().sort((a,b)=>b.matches-a.matches)[0]?.value??'未取得'});
+   }catch{rows.push({person,o:null,role:'取得できませんでした'});}
+  }
+  const f=n=>typeof n==='number'&&Number.isFinite(n)?n.toFixed(3):'データ不足';
+  $('member-comparison').innerHTML=simpleTable(['人物','KD有効試合','K/D','KPR（K/R）','DPR（D/R）','主なロール'],rows.map(r=>[r.person,r.o?.kdMatches??'データ不足',f(r.o?.kd),r.o?f(r.o.kpr)+'（'+r.o.rateBases.kpr.numerator+'/'+r.o.rateBases.kpr.rounds+'R）':'データ不足',r.o?f(r.o.dpr)+'（'+r.o.rateBases.dpr.numerator+'/'+r.o.rateBases.dpr.rounds+'R）':'データ不足',r.role]))+
+   '<p>キル参加と死亡頻度の違いを確認する比較です。多い・少ないだけで役割の遂行や勝利貢献は判定できません。詳細の分母・期間・マップ・エージェントも確認してください。</p>';
+ }finally{button.disabled=false;}
+});
 $('member-selector').addEventListener('click',event=>{
  const btn=event.target.closest('[data-member]');
  if(btn&&$('member-selector').contains(btn))void loadMember(btn.dataset.member);
