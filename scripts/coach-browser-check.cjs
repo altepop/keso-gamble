@@ -225,7 +225,7 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   assert.match(await page.locator('#member-result').innerText(),/最初に見るべき改善候補/);
   assert.match(await page.locator('#member-result').innerText(),/2 \/ 10/);
   assert.match(await page.locator('#coach-view-overview').innerText(),/既存の保存済み記録から2試合/);
-  assert.match(await page.locator('#coach-view-overview').innerText(),/試合ごとの推移/);
+  assert.match(await page.locator('#coach-view-overview').innerText(),/ラウンド記録を照合できた試合の推移/);
   assert.equal(await page.locator('.trend-game').count(),2,'two complete matches in trend');
   assert.equal(await page.locator('.coach-kpi').count(),4,'four top-level KPI cards');
   assert.match(await page.locator('#coach-view-overview').innerText(),/75\.0%[\s\S]*\(6 \/ 8\)/,
