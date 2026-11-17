@@ -209,7 +209,7 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   assert.match(await page.locator('#member-result').innerText(),/神戸の個別診断/);
   assert.match(await page.locator('#member-result').innerText(),/Abema#ttv/);
   assert.match(await page.locator('#member-result').innerText(),/Aquatopia#toppy/);
-  assert.match(await page.locator('#member-result').innerText(),/最優先の弱点候補/);
+  assert.match(await page.locator('#member-result').innerText(),/改善候補/);
   assert.match(await page.locator('#member-result').innerText(),/2 \/ 10/);
   assert.match(await page.locator('#member-result').innerText(),/攻撃側の初動リスク/,
    'second review signal must not be hidden behind a one-item priority');
