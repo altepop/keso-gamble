@@ -79,6 +79,9 @@ test('personal baseline includes own games without VDK; no duplicate game when c
    'VDK-absent and missing party IDs are not fake same-party successes');
   assert.equal(me.overall.matches,3);
   assert.equal(me.coverage.analysisMatches,3);
+  assert.equal(me.matchTrend.length,3,'same three complete person-matches create the visible trend');
+  assert.ok(me.matchTrend.every(x=>x.outcome==='win'&&x.kills===5));
+  assert.equal(JSON.stringify(me.matchTrend).includes('aqua-id'),false,'chart cannot leak PUUID');
   assert.equal(me.coverage.allMatchesGuaranteed,false);
   assert.equal(me.fullDiagnosis.synopsis.find(s=>s.subject==='神戸')?.subject,'神戸');
   assert.equal(me.fullDiagnosis.synopsis.some(s=>s.subject==='Abema'||s.subject==='Aquatopia'),false,
