@@ -195,6 +195,7 @@ export function summarizeCoachRounds(rows:readonly ArchivedRow[],focusName='Doll
       ?[...playerIdentity.filter(x=>x.label!==focusLabel&&!aliases.includes(x.label)),
         {name:vdk.name??focusName,tag:vdk.tag??focusTag,label:focusLabel}]
       :[...playerIdentity];
+    const actualVdk=ps.find(p=>p.name==='Dolly'&&p.tag==='SDGs'&&p.team_id===vdk.team_id);
     const participants=identities.flatMap(identity=>{
       // A confirmed PUUID wins over names/tags for the selected account. A
       // player using the old display name cannot masquerade as the target.
@@ -232,8 +233,9 @@ export function summarizeCoachRounds(rows:readonly ArchivedRow[],focusName='Doll
           bucket.scoreMatches++;bucket.totalScore+=Number(p.score);
         }
         if(identity.label!=='VDK'){
-          if(validId(vdk.party_id)&&validId(p.party_id)){
-            if(vdk.party_id===p.party_id)bucket.samePartyAsVdk++;
+          if(actualVdk&&actualVdk.puuid!==p.puuid&&
+            validId(actualVdk.party_id)&&validId(p.party_id)){
+            if(actualVdk.party_id===p.party_id)bucket.samePartyAsVdk++;
             else bucket.differentPartyFromVdk++;
           }else bucket.partyUnknown++;
         }
