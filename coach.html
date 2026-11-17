@@ -378,6 +378,7 @@ const renderMemberDiagnosis=d=>{
  <span>既存DBで発見 ${int(archive)}件 · 新規履歴キュー発見 ${int(queueDiscovered)}件
  · キュー内完全保存 ${int(queueComplete)}件</span>
  <span>ラウンド欠損 ${int(d.roundDataMissing)}件 · キル記録欠損 ${int(d.killDataMissing)}件
+ · 新規履歴探索 ${coverage.enabled?(coverage.discoveryDone?'探索終了':'収集中'):'未開始'}
  · 全試合の網羅 ${coverage.allMatchesGuaranteed?'確認済み':'保証なし'}${coverage.limitReached?' · 250試合表示上限到達':''}</span>
  ${cohortWarning}</section>`;
  const actionables=all.filter(x=>x.status==='focus'||x.status==='mixed'||x.status==='context')
