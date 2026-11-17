@@ -277,4 +277,10 @@ test('trusted roster team flags and player KDA/party are counted only for comple
  const unknown=summarizeCoachRounds([undetermined]);
  assert.equal(unknown.overall.matchWins+unknown.overall.matchLosses,0,
   'absence of winning flag is unknown, never guessed as a loss or draw');
+ assert.equal(unknown.overall.matchDraws,0);
+ const drawn={...row,match_id:'draw',teams_json:JSON.stringify([
+  {id:'Blue',won:false,rounds:14},{id:'Red',won:false,rounds:14}
+ ])};
+ const draws=summarizeCoachRounds([drawn]);
+ assert.equal(draws.overall.matchDraws,1,'equal completed team round scores confirm a draw');
 });
