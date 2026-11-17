@@ -11,6 +11,8 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
  const browser=await engine.launch({headless:true,...engine===chromium?{args:['--no-sandbox'],...(process.env.COACH_CHROMIUM_EXECUTABLE?{executablePath:process.env.COACH_CHROMIUM_EXECUTABLE}:{})}: {}});
  const {coachPerformance}=await import('../services/valorant-results/src/coach-performance.ts');
  const performance=coachPerformance(Array.from({length:20},(_,i)=>({match_id:'fixture-'+i,ended_at:1700000000000+i*86400000,map:i%2?'Lotus':'Ascent',rounds_json:null,teams_json:JSON.stringify([{id:'Blue',won:i%2===0,rounds:13},{id:'Red',won:i%2!==0,rounds:7}]),players_json:JSON.stringify([{puuid:'fixture-self',name:'Fixture',tag:'T',team_id:'Blue',agent:'Sage',k:20+i%4,d:10+i%3,a:6,score:4000},...Array.from({length:9},(_,j)=>({puuid:'fixture-other'+j,team_id:j<4?'Blue':'Red'}))])})),[{name:'Fixture',tag:'T',puuid:'fixture-self'}]);
+ const {coachRoundContribution}=await import('../services/valorant-results/src/coach-round-contribution.ts');
+ const roundContribution=coachRoundContribution([{match_id:'fixture-rounds',players_json:JSON.stringify([{puuid:'self',team_id:'Blue',k:2,d:0},...Array.from({length:9},(_,i)=>({puuid:'other'+i,team_id:i<4?'Blue':'Red',k:0,d:i===4||i===5?1:0}))]),teams_json:JSON.stringify([{id:'Blue',rounds:1},{id:'Red',rounds:0}]),rounds_json:JSON.stringify([{r:0,winner:'Blue',attack:'Blue',defense:'Red'}]),kills_json:JSON.stringify([{r:0,t:40000,killer:'self',victim:'other4'},{r:0,t:50000,killer:'self',victim:'other5'}])}],[{name:'Fixture',tag:'T',puuid:'self'}]);
  try{
   const token='a'.repeat(48);
   const report={
@@ -96,7 +98,7 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
    if(req.url().includes('/api/kp/coach/member?')||req.url().includes('/api/kp/coach/comparison?')){
     const makeMember=person=>{const profile=person==='神戸'?'神戸':person;
     return {
-     person,profile,performance:person==='Aquatopia'?{...performance,timeline:performance.timeline.map((g,i)=>i===10?{...g,kd:null,acs:null}:g)}:performance,accounts:person==='神戸'?['Abema#ttv','Aquatopia#toppy']:[person],
+     person,profile,roundContribution,performance:person==='Aquatopia'?{...performance,timeline:performance.timeline.map((g,i)=>i===10?{...g,kd:null,acs:null}:g)}:performance,accounts:person==='神戸'?['Abema#ttv','Aquatopia#toppy']:[person],
      usableMatches:2,archivedMatches:2,roundDataMissing:0,killDataMissing:0,
      coverage:{discovered:0,complete:0,discoveryDone:false,allMatchesGuaranteed:false},
      individual:[{player:profile,matches:2,matchWins:1,matchLosses:1,matchDraws:0,
@@ -235,6 +237,9 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   assert.equal(await page.locator('.coach-side').count(),2);
   await page.locator('[data-coach-view="improve"]').click();
   assert.match(await page.locator('#coach-view-improve').innerText(),/攻撃の先制収支/);
+  assert.match(await page.locator('#coach-view-improve').innerText(),/キル数のラウンド分布/);
+  assert.match(await page.locator('[data-round-rate="kpr-attack"]').getAttribute('style'),/width:100%/);
+  assert.equal(await page.locator('[data-round-rate="kpr-defense"]').count(),0,'unknown side is not a zero-valued bar');
   assert.match(await page.locator('#coach-view-improve').innerText(),/FK後の勝利/);
   await page.locator('[data-coach-view="metrics"]').click();
   await page.locator('#coach-view-metrics > details.member-detail > summary').filter({hasText:/^先制（/}).click();
@@ -244,7 +249,7 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   assert.equal(await page.locator('[data-coach-view]').count(),7);
   for(const width of [320,375]){
    await page.setViewportSize({width,height:812});
-   for(const view of ['guns','time','team','metrics','strategy']){
+   for(const view of ['overview','guns','improve','time','team','metrics','strategy']){
     await page.locator('[data-coach-view="'+view+'"]').click();
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'performance dashboard at '+width+' / '+view);
    }
