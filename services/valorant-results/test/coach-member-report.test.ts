@@ -55,27 +55,37 @@ test('personal baseline includes own games without VDK; no duplicate game when c
    .run('aqua-id','ap','Aquatopia#toppy');
   f.sql.prepare('UPDATE coach_member_sources SET puuid=?,region=? WHERE riot_id=?')
    .run('vdk-id','ap','Dolly#SDGs');
+  f.sql.prepare('UPDATE coach_member_sources SET puuid=?,region=? WHERE riot_id=?')
+   .run('abema-id','ap','Abema#ttv');
   const alone=game('aqua-alone','Aquatopia','toppy','aqua-id');
   const duo=game('with-vdk','Aquatopia','toppy','aqua-id',true);
   const vdk=game('vdk-only','Dolly','SDGs','vdk-id');
-  for(const m of [alone,duo,vdk]){
+  const otherAccount=game('abema-alone','Abema','ttv','abema-id');
+  for(const m of [alone,duo,vdk,otherAccount]){
    await recordCompetitiveRoster(f.db,m,now);
    await recordCompetitiveRoundEvents(f.db,m,now);
   }
   const before=f.writes();
   const me=await readCoachMemberReport(f.db,'神戸');
   assert.equal(me.person,'神戸');
-  assert.equal(me.profile,'Aquatopia');
-  assert.equal(me.usableMatches,2);
-  assert.equal(me.individual[0]?.matches,2);
-  assert.equal(me.overall.matches,2);
-  assert.equal(me.coverage.analysisMatches,2);
+  assert.equal(me.profile,'神戸');
+  assert.deepEqual(me.accounts,['Abema#ttv','Aquatopia#toppy']);
+  assert.equal(me.usableMatches,3,'Kobe includes Abema alone and Aquatopia with/without VDK');
+  assert.equal(me.individual.length,1);
+  assert.equal(me.individual[0]?.matches,3);
+  assert.equal(me.overall.matches,3);
+  assert.equal(me.coverage.analysisMatches,3);
   assert.equal(me.coverage.allMatchesGuaranteed,false);
-  assert.equal(me.fullDiagnosis.synopsis.find(s=>s.subject==='Aquatopia')?.subject,'Aquatopia');
+  assert.equal(me.fullDiagnosis.synopsis.find(s=>s.subject==='神戸')?.subject,'神戸');
+  assert.equal(me.fullDiagnosis.synopsis.some(s=>s.subject==='Abema'||s.subject==='Aquatopia'),false,
+   'person summary should not score the same owner as two different people');
   assert.equal(JSON.stringify(me).includes('aqua-id'),false,'PUUID is never leaked');
   const dolly=await readCoachMemberReport(f.db,'VDK');
   assert.equal(dolly.usableMatches,2,'VDK has its own game plus shared game');
   assert.equal(dolly.individual[0]?.matches,2);
+  const abema=await readCoachMemberReport(f.db,'Abema');
+  assert.equal(abema.usableMatches,1,'account-specific view remains available');
+  assert.equal(abema.individual[0]?.player,'Abema');
   const ishihara=await readCoachMemberReport(f.db,'石原');
   assert.equal(ishihara.usableMatches,0);
   assert.equal(ishihara.individual.length,0);
@@ -92,8 +102,26 @@ test('an old in-game alias is still matched to confirmed PUUID without attributi
   await recordCompetitiveRoundEvents(f.db,old,now);
   const result=await readCoachMemberReport(f.db,'神戸');
   assert.equal(result.usableMatches,1);
-  assert.equal(result.individual[0]?.player,'Aquatopia');
+  assert.equal(result.individual[0]?.player,'神戸');
   assert.equal(result.individual[0]?.firstKills,1);
+  assert.deepEqual(result.accounts,['Abema#ttv','Aquatopia#toppy']);
   await assert.rejects(()=>readCoachMemberReport(f.db,'untrusted#account'),/Unrecognized/);
+ }finally{f.close()}
+});
+
+test('two Kobe accounts in one match row are deduplicated by match_id, not twice in the person sample',async()=>{
+ const f=setup();try{
+  await enableAllMemberArchive(f.db);
+  f.sql.prepare('UPDATE coach_member_sources SET puuid=?,region=? WHERE riot_id=?')
+   .run('abema-id','ap','Abema#ttv');
+  f.sql.prepare('UPDATE coach_member_sources SET puuid=?,region=? WHERE riot_id=?')
+   .run('aqua-id','ap','Aquatopia#toppy');
+  const m=game('shared-id','Abema','ttv','abema-id');
+  await recordCompetitiveRoster(f.db,m,now);
+  await recordCompetitiveRoundEvents(f.db,m,now);
+  const result=await readCoachMemberReport(f.db,'神戸');
+  assert.equal(result.usableMatches,1);
+  assert.equal(result.individual[0]?.matches,1);
+  assert.equal(result.individual[0]?.player,'神戸');
  }finally{f.close()}
 });
