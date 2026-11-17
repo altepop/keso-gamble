@@ -180,6 +180,7 @@ tr:last-child td{border-bottom:0}
 <div id="member-selector" class="member-selector" role="group" aria-label="分析する選手">
 <button type="button" data-member="神戸" aria-pressed="false">神戸（2アカウント統合）</button>
 <button type="button" data-member="VDK" aria-pressed="false">VDK</button>
+<button type="button" data-member="Aquatopia" aria-pressed="false">Aquatopia#toppyだけ</button>
 <button type="button" data-member="Abema" aria-pressed="false">Abema#ttvだけ</button>
 <button type="button" data-member="石原" aria-pressed="false">石原</button>
 <button type="button" data-member="藤村" aria-pressed="false">藤村</button>
@@ -266,7 +267,7 @@ const setStatus=(msg,error=false)=>{const el=$('status');el.textContent=msg;el.s
 const card=(label,value,sub='')=>`<article class="card"><div class="label">${escape(label)}</div><strong>${escape(value)}</strong><div class="small muted">${escape(sub)}</div></article>`;
 const simpleTable=(headers,rows)=>`<div class="table-wrap"><table><thead><tr>${headers.map((h,i)=>`<th class="${i?'num':''}">${escape(h)}</th>`).join('')}</tr></thead><tbody>${rows.map(a=>`<tr>${a.map((cell,i)=>`<td class="${i?'num':''}">${escape(cell)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
 
-const memberNames=['神戸','VDK','Abema','石原','藤村','小林'];
+const memberNames=['神戸','VDK','Aquatopia','Abema','石原','藤村','小林'];
 let activeMember=null;
 let latestMemberReport=null;
 let memberPending=false;
@@ -363,6 +364,40 @@ const coachSideBlock=(label,s)=>{
    <p class="coach-side-net">FK−FD収支：${net===null?'不明':(net>=0?'+':'')+numeric(net,1)+'件 / 100R'}</p>
   </article>`;
 };
+const coachSeries=(games,key,label)=>{
+ const valid=games.map(g=>g[key]).filter(v=>typeof v==='number'&&Number.isFinite(v));
+ if(!valid.length)return '<p>'+escape(label)+'：データ不足</p>';
+ const max=Math.max(1,...valid),x=i=>35+i*535/Math.max(1,games.length-1),y=v=>165-v/max*130;
+ let runs=[],run=[];games.forEach((g,i)=>{if(typeof g[key]==='number'&&Number.isFinite(g[key]))run.push(x(i)+','+y(g[key]));else{if(run.length)runs.push(run);run=[];}});if(run.length)runs.push(run);
+ return '<h4>'+escape(label)+'</h4><svg role="img" aria-label="'+escape(label)+'。左が過去、右が最新。欠損は接続しない" viewBox="0 0 600 200" style="width:100%;max-height:230px"><text x="2" y="30" fill="currentColor">'+max.toFixed(1)+'</text><text x="12" y="168" fill="currentColor">0</text>'+runs.map(r=>'<polyline fill="none" stroke="#eabf7a" stroke-width="2" points="'+r.join(' ')+'"/>').join('')+games.map((g,i)=>typeof g[key]!=='number'||!Number.isFinite(g[key])?'':'<circle cx="'+x(i)+'" cy="'+y(g[key])+'" r="3" fill="#eabf7a"><title>'+escape((g.date??'日付不明')+' '+label+' '+g[key].toFixed(2))+'</title></circle>').join('')+'<text x="35" y="192" fill="currentColor">過去</text><text x="535" y="192" fill="currentColor">最新</text></svg>';
+};
+const performancePanel=(p,section)=>{
+ if(!p)return '<p class="coach-empty">指標別の保存データは未取得。</p>';
+ const f=(n,d=2)=>typeof n==='number'&&Number.isFinite(n)?escape(n.toFixed(d)):'データ不足';
+ const table=(rows,cols)=>'<div style="overflow:auto"><table><thead><tr>'+cols.map(c=>'<th>'+escape(c[0])+'</th>').join('')+'</tr></thead><tbody>'+rows.map(r=>'<tr>'+cols.map(c=>'<td>'+escape(typeof r[c[1]]==='number'?r[c[1]].toFixed(2):r[c[1]]??'データ不足')+'</td>').join('')+'</tr>').join('')+'</tbody></table></div>';
+ if(section==='guns')return '<h3>撃ち合いとラウンド効率</h3>'+table([p.overall],[['試合','matches'],['KD有効試合','kdMatches'],['K/D','kd'],['平均K','averageKills'],['平均D','averageDeaths'],['平均A','averageAssists'],['KPR','kpr'],['DPR','dpr'],['APR','apr'],['ACS（試合R）','acs'],['HS%','hsPct'],['ADR','adr'],['DDΔ/R','ddDeltaPerRound']])+
+ '<p>K/Dは合計K÷合計D。ACSはスコア合計÷検証済みラウンド数。KPR・DPR・APRは個別の有効データで計算する。</p><h4>勝利・敗北での差</h4>'+table(p.outcomes,[['結果','value'],['試合','matches'],['K/D','kd'],['KPR','kpr'],['DPR','dpr'],['ACS（試合R）','acs']]);
+ if(section==='time'){
+  const games=p.timeline.slice().reverse(),values=games.map(g=>g.kd),valid=values.filter(v=>typeof v==='number'&&Number.isFinite(v));
+  let chart='<p class="coach-empty">グラフはデータ不足。</p>';
+  if(valid.length){const max=Math.max(1,...valid);const x=i=>20+i*560/Math.max(1,games.length-1),y=v=>175-v/max*150;let segments=[],run=[];
+   values.forEach((v,i)=>{if(typeof v==='number'&&Number.isFinite(v))run.push(x(i)+','+y(v));else{if(run.length)segments.push(run);run=[];}});if(run.length)segments.push(run);
+   chart='<svg role="img" aria-label="試合K/Dの推移。欠損は線を接続しない" viewBox="0 0 600 200" style="width:100%;max-height:240px">'+segments.map(s=>'<polyline fill="none" stroke="#78cba8" stroke-width="3" points="'+s.join(' ')+'"/>').join('')+games.map((g,i)=>typeof g.kd!=='number'||!Number.isFinite(g.kd)?'':'<circle cx="'+x(i)+'" cy="'+y(g.kd)+'" r="4" fill="#a9d7ff"><title>'+escape((g.date??'日付不明')+' KD '+f(g.kd))+'</title></circle>').join('')+'</svg>';
+  }
+  return '<h3>安定性と時系列</h3><h4>試合K/D（左が過去・右が最新）</h4>'+chart+coachSeries(games,'rollingKd5','直近最大5試合の合計K/D')+coachSeries(games,'acs','ACS（試合R）')+coachSeries(games,'kills','試合ごとのキル数')+coachSeries(games,'deaths','試合ごとのデス数')+(p.form?'<p>好調候補 '+int(p.form.positive)+' / 不調候補 '+int(p.form.negative)+' / 判定可能 '+int(p.form.valid)+'試合。直近の連続：好調候補 '+int(p.form.currentPositiveStreak)+'・不調候補 '+int(p.form.currentNegativeStreak)+'。</p><p>'+escape(p.form.definition)+'</p>':'')+'<p>合計KD '+f(p.overall.kd)+' / 試合KD中央値 '+f(p.overall.medianKd)+' / 母標準偏差 '+f(p.overall.kdStandardDeviation)+'。D=0試合は比率分布から除外。</p>'+p.windows.map(w=>'<h4>直近'+w.requested+'試合と直前区間（条件未補正）</h4>'+table([{value:'直近',...w.recent},{value:'直前',...w.previous}],[['区間','value'],['実件数','matches'],['KD','kd'],['KPR','kpr'],['DPR','dpr'],['ACS（試合R）','acs']])).join('');
+ }
+ const bars=groups=>{const ns=groups.map(g=>g.kpr).filter(v=>typeof v==='number'&&Number.isFinite(v)),max=Math.max(1,...ns);return groups.map(g=>'<div class="coach-quality"><b>'+escape(g.value)+' · '+int(g.matches)+'試合</b><span>KPR '+f(g.kpr,3)+'</span>'+(typeof g.kpr==='number'&&Number.isFinite(g.kpr)?'<div style="height:8px;background:#a9d7ff;width:'+Math.round(g.kpr/max*100)+'%"></div>':'<p>データ不足</p>')+'</div>').join('');};
+ if(section==='maps')return '<h3>基本性能のマップ・エージェント差</h3><h4>マップ別KPR</h4>'+bars(p.maps)+'<h4>エージェント別KPR</h4>'+bars(p.agents)+table(p.maps,[['マップ','value'],['試合','matches'],['KD','kd'],['KPR','kpr'],['DPR','dpr'],['ACS（試合R）','acs'],['HS%','hsPct'],['ADR','adr'],['DDΔ/R','ddDeltaPerRound']])+table(p.agents,[['エージェント','value'],['試合','matches'],['KD','kd'],['KPR','kpr'],['DPR','dpr'],['ACS（試合R）','acs'],['HS%','hsPct'],['ADR','adr'],['DDΔ/R','ddDeltaPerRound']])+'<h4>マップ×エージェント</h4>'+table(p.mapAgents||[],[['条件','value'],['試合','matches'],['KD','kd'],['ACS（試合R）','acs'],['KD標準偏差','kdStandardDeviation']])+'<h4>ロール別KPR</h4>'+bars(p.roles||[])+table(p.roles||[],[['ロール','value'],['試合','matches'],['KD','kd'],['KPR','kpr'],['DPR','dpr'],['ACS（試合R）','acs'],['HS%','hsPct'],['ADR','adr'],['DDΔ/R','ddDeltaPerRound']])+'<p>構成・ロール・相手の強さは未補正。少数試合の優劣は断定しない。</p>';
+ if(section==='team')return '<h3>パーティー人数ごとの基本性能</h3>'+table(p.parties||[],[['構成','value'],['試合','matches'],['KD','kd'],['KPR','kpr'],['DPR','dpr'],['ACS（試合R）','acs'],['HS%','hsPct'],['ADR','adr'],['DDΔ/R','ddDeltaPerRound']])+'<h4>一緒に参加したメンバーによる本人の成績差</h4>'+(p.teammates||[]).map(t=>'<h5>'+escape(t.person)+'</h5>'+table([{value:'同席',...t.with},{value:'不在',...t.without}],[['条件','value'],['試合','matches'],['KD','kd'],['KPR','kpr'],['DPR','dpr'],['ACS（試合R）','acs']])).join('')+'<h4>本人チームのロール構成</h4>'+table(p.compositions||[],[['構成','value'],['試合','matches'],['KPR','kpr'],['DPR','dpr']])+'<p>同じparty_idを持つ同一チームの人数。パーティー不明をソロと扱わない。構成別の差は本人の貢献の因果効果ではない。</p>';
+ if(section==='quality')return '<h3>基本性能の指標別品質と分母</h3><pre style="white-space:pre-wrap;overflow-wrap:anywhere">'+escape(JSON.stringify({quality:p.quality,statTotals:p.overall.statTotals,rateBases:p.overall.rateBases,scoreTotal:p.overall.scoreTotal,scoreRounds:p.overall.scoreRounds},null,2))+'</pre>'+p.limitations.map(s=>'<p>'+escape(s)+'</p>').join('');
+ return '<h3>基本性能からの観察と次の行動</h3><p>'+escape(p.priorityPolicy||'')+'</p>'+['strength','review','observation'].map(kind=>'<h4>'+escape(kind==='strength'?'継続したい強みの候補':kind==='review'?'優先して確認する改善候補':'安定性と参考観察')+'</h4>'+(p.notes.filter(n=>n.kind===kind).map(n=>'<article class="coach-quality"><strong>'+escape(n.title)+'</strong><p>'+escape(n.evidence)+'</p><p>'+escape(n.action)+'</p></article>').join('')||'<p>判定に必要な比較データが不足しています。</p>')).join('');
+};
+
+const contributionPanel=r=>{
+ if(!r||!r.rounds)return '<p>ラウンド別貢献はデータ不足。完全性を照合できる試合がありません。</p>';
+ const max=Math.max(1,...r.killHistogram.map(x=>x.count));
+ return '<h3>キル数のラウンド分布</h3><p>全10人のロスターK/D合計とイベント数を照合した'+int(r.quality.validMatches)+'試合・'+int(r.rounds)+'R。</p>'+r.killHistogram.map(h=>'<div class="coach-quality"><b>'+escape(h.kills)+'キル：'+int(h.count)+' / '+int(h.denominator)+'R</b><div style="background:#78cba8;height:8px;width:'+Math.round(h.count/max*100)+'%"></div></div>').join('')+'<p>無死亡 '+int(r.noDeathRounds)+' / '+int(r.rounds)+'R。終了時生存やKASTとは異なる。</p><p>マルチキル後の勝利 '+int(r.multiKillWins)+' / 勝敗判明 '+int(r.multiKillKnownOutcomes)+'R。</p><h4>攻守のKPR・DPR</h4>'+['attack','defense'].map(side=>{const x=r.sides[side];return '<p>'+(side==='attack'?'攻撃':'防衛')+'：'+int(x.rounds)+'R / K '+int(x.kills)+' / D '+int(x.deaths)+(x.rounds?' · KPR '+numeric(x.kills/x.rounds,3)+' · DPR '+numeric(x.deaths/x.rounds,3):' · データ不足')+'</p>';}).join('')+['kpr','dpr'].map(key=>'<h5>'+key.toUpperCase()+'</h5>'+['attack','defense'].map(side=>{const x=r.sides[side],v=x.rounds?(key==='kpr'?x.kills:x.deaths)/x.rounds:null;return '<div class="coach-quality">'+(side==='attack'?'攻撃':'防衛')+' '+(v===null?'データ不足':numeric(v,3))+(v===null?'':'<div style="height:8px;background:#a9d7ff;width:'+Math.min(100,v*60)+'%"></div>')+'</div>';}).join('')).join('')+'<p>'+r.limitations.map(escape).join(' ')+'</p>';
+};
 const renderMemberDiagnosis=d=>{
  const all=(d.fullDiagnosis?.items||[]).filter(x=>x.subject===d.profile);
  const own=Array.isArray(d.individual)?d.individual.find(x=>x.player===d.profile):null;
@@ -375,7 +410,7 @@ const renderMemberDiagnosis=d=>{
  const cohortWarning=queueDiscovered===0&&archive>0?
   `<p class="coach-hint">既存の保存済み記録から${int(archive)}試合を見つけたが、新しい履歴収集キューではまだ0件だ。両者は別の集計であり、試合数が矛盾しているわけではない。</p>`:'';
  const quality=`<section class="coach-quality">
- <strong>判定に使用した試合 ${int(usable)}件</strong>
+ <strong>ラウンド分析の対象 ${int(usable)}件</strong>
  <span>既存DBで発見 ${int(archive)}件 · 新規履歴キュー発見 ${int(queueDiscovered)}件
  · キュー内完全保存 ${int(queueComplete)}件</span>
  <span>ラウンド欠損 ${int(d.roundDataMissing)}件 · キル記録欠損 ${int(d.killDataMissing)}件
@@ -390,17 +425,18 @@ const renderMemberDiagnosis=d=>{
  const highest=actionables.filter(x=>x.status==='focus');
  const selected=[...highest.slice(0,5),...actionables.filter(x=>x.status!=='focus')].slice(0,8);
  const positives=all.filter(x=>x.status==='good').sort((a,b)=>safeNumber(b.denominator)-safeNumber(a.denominator));
- const matchKnown=safeNumber(own?.matchWins)+safeNumber(own?.matchLosses)+safeNumber(own?.matchDraws);
- const rate=percentValue(own?.matchWins??0,matchKnown);
- const kd=own&&safeNumber(own.totalDeaths)>0?safeNumber(own.totalKills)/safeNumber(own.totalDeaths):null;
+ const matchWins=d.performance?.overall.wins??safeNumber(own?.matchWins);
+ const matchKnown=d.performance?.overall.knownOutcomes??(safeNumber(own?.matchWins)+safeNumber(own?.matchLosses)+safeNumber(own?.matchDraws));
+ const rate=percentValue(matchWins,matchKnown);
+ const kd=d.performance?d.performance.overall.kd:own&&safeNumber(own.totalDeaths)>0?safeNumber(own.totalKills)/safeNumber(own.totalDeaths):null;
  const fk=safeNumber(own?.firstKills),fd=safeNumber(own?.firstDeaths);
  const kpi=(label,value,detail)=>`<article class="coach-kpi"><span>${escape(label)}</span>
   <strong>${escape(value)}</strong><small>${escape(detail)}</small></article>`;
  const kpis='<div class="coach-kpis">'+
-  kpi('対象試合',int(usable),'完全保存された競技試合')+
-  kpi('試合勝率',rate===null?'—':numeric(rate,1)+'%',int(own?.matchWins)+'勝 / '+int(matchKnown)+'試合')+
-  kpi('K/D',kd===null?'—':numeric(kd,2),'K '+int(own?.totalKills)+' / D '+int(own?.totalDeaths))+
-  kpi('FK − FD',(fk-fd>=0?'+':'')+int(fk-fd),'FK '+int(fk)+' / FD '+int(fd))+
+  kpi('対象試合',int(d.performance?.overall.matches??usable),d.performance?'ロスターから判定できた競技試合':'完全保存された競技試合')+
+  kpi('試合勝率',rate===null?'—':numeric(rate,1)+'%',int(matchWins)+'勝 / '+int(matchKnown)+'試合')+
+  kpi('K/D',kd===null?'—':numeric(kd,2),'K '+int(d.performance?.overall.kills??own?.totalKills)+' / D '+int(d.performance?.overall.deaths??own?.totalDeaths))+
+  (d.performance?kpi('ACS（試合R）',d.performance.overall.acs===null?'—':numeric(d.performance.overall.acs,1),int(d.performance.overall.acsMatches)+'試合 / '+int(d.performance.overall.scoreRounds)+'R'):kpi('FK − FD',(fk-fd>=0?'+':'')+int(fk-fd),'FK '+int(fk)+' / FD '+int(fd)))+
  '</div>';
  const rateCharts=own?
   metricBar('本人のFK後・チームが勝利',own.firstKillWins??0,
@@ -418,7 +454,7 @@ const renderMemberDiagnosis=d=>{
   :`<p class="coach-lead">現行の判定条件では<strong>確定的な弱点候補なし</strong>。問題がないという意味ではない。下の観察項目でVODを確認する。</p>`;
  const overview=`<div class="coach-hero"><h3>${escape(d.person)} <small>個別コーチング</small></h3>
   <p class="member-small">対象アカウント：${inputs.map(escape).join(' ＋ ')||'登録情報なし'}</p></div>`+
-  quality+kpis+
+  quality+kpis+performancePanel(d.performance,'notes')+
   `<div class="coach-section-heading"><h3>最初に見るべき改善候補</h3><span>${int(highest.length)}件が要検証</span></div>`+
   reviewSummary+(selected.length?selected.slice(0,3).map(x=>diagnosticCard(x)).join(''):
   '<p class="coach-empty">十分な観測がまだないため、個人の改善事項を提示できない。</p>')+
@@ -444,15 +480,18 @@ const renderMemberDiagnosis=d=>{
   <summary>${escape(cat)}（${int(all.filter(x=>x.category===cat).length)}項目）</summary>
   ${all.filter(x=>x.category===cat).map(x=>diagnosticCard(x)).join('')}
  </details>`).join('')||'<p class="coach-empty">判定可能な指標はまだない。</p>';
- const tabs=[['overview','概要・グラフ'],['improve','改善候補'],['strategy','攻守・マップ'],['metrics','全指標']];
+ const tabs=[['overview','総合診断'],['guns','撃ち合い'],['improve','ラウンド分析'],['strategy','マップ・攻守'],['time','時系列'],['team','チーム分析'],['metrics','根拠・品質']];
  $('member-result').innerHTML=`<div class="coach-dashboard-tabs" role="tablist" aria-label="${escape(d.person)}の分析画面">`+
   tabs.map(([id,title],i)=>`<button type="button" role="tab" data-coach-view="${id}"
     id="coach-tab-${id}" aria-controls="coach-view-${id}" aria-selected="${i===0}" tabindex="${i===0?0:-1}">${title}</button>`).join('')+
   '</div>'+
   `<div class="coach-dashboard-view" id="coach-view-overview" role="tabpanel" aria-labelledby="coach-tab-overview">${overview}</div>`+
-  `<div class="coach-dashboard-view" id="coach-view-improve" role="tabpanel" aria-labelledby="coach-tab-improve" hidden>${improvements}</div>`+
-  `<div class="coach-dashboard-view" id="coach-view-strategy" role="tabpanel" aria-labelledby="coach-tab-strategy" hidden>${strategy}</div>`+
-  `<div class="coach-dashboard-view" id="coach-view-metrics" role="tabpanel" aria-labelledby="coach-tab-metrics" hidden>${allMetrics}</div>`;
+  `<div class="coach-dashboard-view" id="coach-view-guns" role="tabpanel" aria-labelledby="coach-tab-guns" hidden>${performancePanel(d.performance,'guns')}</div>`+
+  `<div class="coach-dashboard-view" id="coach-view-time" role="tabpanel" aria-labelledby="coach-tab-time" hidden>${performancePanel(d.performance,'time')}</div>`+
+  `<div class="coach-dashboard-view" id="coach-view-team" role="tabpanel" aria-labelledby="coach-tab-team" hidden>${performancePanel(d.performance,'team')}<p>同時交戦とトレード機会は位置データがないため未取得。</p>${rateCharts}</div>`+
+  `<div class="coach-dashboard-view" id="coach-view-improve" role="tabpanel" aria-labelledby="coach-tab-improve" hidden>${contributionPanel(d.roundContribution)}${improvements}</div>`+
+  `<div class="coach-dashboard-view" id="coach-view-strategy" role="tabpanel" aria-labelledby="coach-tab-strategy" hidden>${performancePanel(d.performance,'maps')}${strategy}</div>`+
+  `<div class="coach-dashboard-view" id="coach-view-metrics" role="tabpanel" aria-labelledby="coach-tab-metrics" hidden>${performancePanel(d.performance,'quality')}${allMetrics}</div>`;
 };
 $('member-result').addEventListener('click',e=>{
  const btn=e.target.closest('[data-coach-view]');
@@ -694,6 +733,14 @@ const memberDiagnosticPayload=function memberDiagnosticPayloadV2(d){
  const safeAccounts=(Array.isArray(d.accounts)?d.accounts:[]).filter(x=>safeIds.has(x));
  const sideFields=['rounds','observedOpeningRounds','firstKills','firstDeaths',
   'firstKillWins','firstKillLosses','firstDeathWins','firstDeathLosses'];
+ const statsFields=['matches','kdMatches','kd','kills','deaths','assists','averageKills','averageDeaths','averageAssists','kpr','dpr','apr','acs','scoreTotal','scoreRounds','acsMatches','hsPct','headHits','totalHits','hitMatches','adr','damageMatches','damageRounds','damageTotal','ddDeltaPerRound','damageDeltaMatches','damageDeltaRounds','damageDeltaTotal','medianKd','kdStandardDeviation','killStandardDeviation','deathStandardDeviation','killVariance','deathVariance','ratioMatches','zeroDeathRatioExclusions','wins','knownOutcomes'];
+ const perf=d.performance?{overall:pick(d.performance.overall,statsFields),
+  maps:(d.performance.maps||[]).map(x=>pick(x,['value',...statsFields])),agents:(d.performance.agents||[]).map(x=>pick(x,['value',...statsFields])),
+  windows:(d.performance.windows||[]).map(x=>({requested:x.requested,recent:pick(x.recent,statsFields),previous:pick(x.previous,statsFields),sameCondition:false})),
+  timeline:(d.performance.timeline||[]).map(x=>pick(x,['date','map','agent','outcome','kills','deaths','assists','kd','acs','rollingKd5','rollingKd5Matches','form'])),
+  notes:(d.performance.notes||[]).map(x=>pick(x,['kind','title','evidence','action'])),
+  rateBases:Object.fromEntries(['kpr','dpr','apr'].map(k=>[k,pick(d.performance.overall?.rateBases?.[k],['numerator','rounds','matches'])])),
+  quality:pick(d.performance.quality,['candidateMatches','distinctMatches','selectedMatches'])}:null;
  const individuals=(Array.isArray(d.individual)?d.individual:[]).map(p=>({
   ...pick(p,['player','matches','matchWins','matchLosses','matchDraws','statsMatches',
    'totalKills','totalDeaths','totalAssists','scoreMatches','totalScore','observedOpeningRounds',
@@ -714,7 +761,7 @@ const memberDiagnosticPayload=function memberDiagnosticPayloadV2(d){
   coverage:pick(d.coverage,['discovered','complete','partial','pending','unavailable',
    'analysisMatches','discoveryDone','truncated','rowLimit','limitReached','allMatchesGuaranteed']),
   quality:pick(d,['invalidMatches','roundDataMissing','killDataMissing']),
-  individual:individuals,individualMapAgent:mapAgent,fullDiagnosis:{items:diagnosis},
+  performance:perf,individual:individuals,individualMapAgent:mapAgent,fullDiagnosis:{items:diagnosis},
   matchTrend:(Array.isArray(d.matchTrend)?d.matchTrend:[]).map(m=>pick(m,
    ['date','map','agent','outcome','kills','deaths','assists','firstKills','firstDeaths','observedOpeningRounds']))};
 };

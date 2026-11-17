@@ -1,13 +1,16 @@
 // The independent KESO COACH page must work on phone and never poll, write KP,
 // or disclose the bearer token into markup. All responses are mocked.
-const {chromium}=require('playwright');
+const {chromium,webkit}=require('playwright');
+const engine=process.argv.includes('webkit')?webkit:chromium;
 const assert=require('node:assert/strict');
 const {spawn}=require('node:child_process');
 const root=require('node:path').join(__dirname,'..');
 const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{cwd:root,stdio:'ignore'});
 (async()=>{
- for(let i=0;i<40;i++){try{if((await fetch('http://127.0.0.1:18784/coach.html')).ok)break;}catch{}await new Promise(r=>setTimeout(r,100));}
- const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
+ for(let i=0;i<40;i++){try{const ready=await fetch('http://127.0.0.1:18784/coach.html');await ready.arrayBuffer();if(ready.ok)break;}catch{}await new Promise(r=>setTimeout(r,100));}
+ const browser=await engine.launch({headless:true,...engine===chromium?{args:['--no-sandbox'],...(process.env.COACH_CHROMIUM_EXECUTABLE?{executablePath:process.env.COACH_CHROMIUM_EXECUTABLE}:{})}: {}});
+ const {coachPerformance}=await import('../services/valorant-results/src/coach-performance.ts');
+ const performance=coachPerformance(Array.from({length:20},(_,i)=>({match_id:'fixture-'+i,ended_at:1700000000000+i*86400000,map:i%2?'Lotus':'Ascent',rounds_json:null,teams_json:JSON.stringify([{id:'Blue',won:i%2===0,rounds:13},{id:'Red',won:i%2!==0,rounds:7}]),players_json:JSON.stringify([{puuid:'fixture-self',name:'Fixture',tag:'T',team_id:'Blue',agent:'Sage',k:20+i%4,d:10+i%3,a:6,score:4000},...Array.from({length:9},(_,j)=>({puuid:'fixture-other'+j,team_id:j<4?'Blue':'Red'}))])})),[{name:'Fixture',tag:'T',puuid:'fixture-self'}]);
  try{
   const token='a'.repeat(48);
   const report={
@@ -94,7 +97,7 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
     const person=new URL(req.url()).searchParams.get('person');
     const profile=person==='神戸'?'神戸':person;
     return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({
-     person,profile,accounts:person==='神戸'?['Abema#ttv','Aquatopia#toppy']:[person],
+     person,profile,performance,accounts:person==='神戸'?['Abema#ttv','Aquatopia#toppy']:[person],
      usableMatches:2,archivedMatches:2,roundDataMissing:0,killDataMissing:0,
      coverage:{discovered:0,complete:0,discoveryDone:false,allMatchesGuaranteed:false},
      individual:[{player:profile,matches:2,matchWins:1,matchLosses:1,matchDraws:0,
@@ -237,11 +240,25 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   assert.match(await page.locator('#coach-view-metrics').innerText(),/先制デス率/);
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,
     'dashboard must not overflow on 375px iPhone');
+  assert.equal(await page.locator('[data-coach-view]').count(),7);
+  for(const width of [320,375]){
+   await page.setViewportSize({width,height:812});
+   for(const view of ['guns','time','team','metrics','strategy']){
+    await page.locator('[data-coach-view="'+view+'"]').click();
+    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'performance dashboard at '+width+' / '+view);
+   }
+   await page.locator('[data-coach-view="guns"]').click();assert.match(await page.locator('#coach-view-guns').innerText(),/KPR/);
+   await page.locator('[data-coach-view="time"]').click();assert.equal(await page.locator('#coach-view-time svg').first().locator('circle').count(),20);
+  }
+  assert.deepEqual(errors,[]);
   assert.equal(requests.length,3,'changing dashboard tabs never triggers extra API calls');
   await page.locator('#share').click();
   const exportedMember=JSON.parse(await page.evaluate(()=>window.__copiedDiagnostic));
   assert.equal(exportedMember.format,'KESO_COACH_SAFE_MEMBER_DIAGNOSTIC_V1');
   assert.equal(exportedMember.person,'神戸');
+  assert.equal(exportedMember.performance.overall.kd,performance.overall.kd);
+  assert.equal(exportedMember.performance.timeline.length,20);
+  assert.equal(exportedMember.performance.rateBases.kpr.rounds,400);
   assert.equal(exportedMember.matchTrend.length,2,'safe copy includes anonymous date-based trend');
   assert.equal(JSON.stringify(exportedMember).includes('private-vod-identifier'),false);
   assert.equal(JSON.stringify(exportedMember).includes('secret-puuid'),false);

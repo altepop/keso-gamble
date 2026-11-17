@@ -1,0 +1,44 @@
+// Observed kill-round contributions only; never labelled official KAST or survival.
+type Row={match_id:string;players_json:string;teams_json:string|null;rounds_json:string|null;kills_json:string|null};
+type Account={name:string;tag:string;puuid:string|null};
+const parse=(v:string|null):any=>{try{return v?JSON.parse(v):null}catch{return null}};
+const n=(x:unknown,max=10000)=>Number.isSafeInteger(x)&&Number(x)>=0&&Number(x)<=max;
+export function coachRoundContribution(rows:readonly Row[],accounts:readonly Account[]){
+ const seen=new Set<string>(),excluded:Record<string,number>={};
+ const histogram=[0,0,0,0,0,0,0];let matches=0,rounds=0,noDeath=0,multiWins=0,multiKnown=0;
+ const sides={attack:{rounds:0,kills:0,deaths:0},defense:{rounds:0,kills:0,deaths:0}};
+ const reject=(reason:string)=>{excluded[reason]=(excluded[reason]??0)+1;};
+ for(const row of rows){
+  if(seen.has(row.match_id)){reject('duplicate-match');continue;}seen.add(row.match_id);
+  const ps=parse(row.players_json),rs=parse(row.rounds_json),ks=parse(row.kills_json),ts=parse(row.teams_json);
+  if(!Array.isArray(ps)||ps.length!==10||!Array.isArray(rs)||!rs.length||!Array.isArray(ks)||!ks.length||!Array.isArray(ts)||ts.length!==2){reject('missing-roster-rounds-or-kills');continue;}
+  const own=ps.filter(p=>p&&accounts.some(a=>a.puuid?p.puuid===a.puuid:p.name===a.name&&p.tag===a.tag));
+  if(own.length!==1){reject('account-unresolved-or-ambiguous');continue;}
+  const p=own[0],byId=new Map(ps.map(x=>[x?.puuid,x]));
+  if(new Set(ts.map(t=>t?.id)).size!==2||ts.some(t=>typeof t?.id!=='string'||ps.filter(p=>p?.team_id===t.id).length!==5)||byId.size!==10||ps.some(x=>typeof x?.puuid!=='string'||!x.puuid||typeof x.team_id!=='string'||!n(x.k)||!n(x.d))||ts.some(t=>!n(t?.rounds))||ts[0].rounds+ts[1].rounds!==rs.length||new Set(rs.map(r=>r?.r)).size!==rs.length||rs.some(r=>!n(r?.r,60))){reject('invalid-or-inconsistent-rounds');continue;}
+  const roundIds=new Set(rs.map(r=>r.r));
+  const valid=ks.every(k=>k&&n(k.r,60)&&n(k.t,900000)&&roundIds.has(k.r)&&byId.has(k.victim)&&(k.killer===null||byId.has(k.killer)));
+  if(!valid){reject('invalid-kill-events');continue;}
+  const enemyKill=(k:any,puuid:string)=>k.killer===puuid&&byId.get(k.victim)?.team_id!==byId.get(puuid)?.team_id;
+  const deathsById=new Map<string,number>(),killsById=new Map<string,number>(),ownByRound=new Map<number,{kills:number;deaths:number}>();
+  for(const k of ks){
+   deathsById.set(k.victim,(deathsById.get(k.victim)??0)+1);
+   if(k.killer!==null&&enemyKill(k,k.killer))killsById.set(k.killer,(killsById.get(k.killer)??0)+1);
+   let v=ownByRound.get(k.r);if(!v){v={kills:0,deaths:0};ownByRound.set(k.r,v);}
+   if(enemyKill(k,p.puuid))v.kills++;if(k.victim===p.puuid)v.deaths++;
+  }
+  if(ps.some(x=>(deathsById.get(x.puuid)??0)!==x.d||(killsById.get(x.puuid)??0)!==x.k)){reject('kill-totals-do-not-match-roster');continue;}
+  matches++;
+  for(const r of rs){
+   const {kills=0,deaths=0}=ownByRound.get(r.r)??{};
+   rounds++;histogram[Math.min(6,kills)]++;if(!deaths)noDeath++;
+   if(kills>=2&&ts.some(t=>t.id===r.winner)){multiKnown++;if(r.winner===p.team_id)multiWins++;}
+   const side=r.attack===r.defense?null:r.attack===p.team_id?'attack':r.defense===p.team_id?'defense':null;
+   if(side){sides[side].rounds++;sides[side].kills+=kills;sides[side].deaths+=deaths;}
+  }
+ }
+ return {quality:{source:'rounds/kills verified against all ten roster K/D totals',candidateMatches:rows.length,validMatches:matches,excluded},
+  rounds,killHistogram:histogram.map((count,kills)=>({kills:kills===6?'6+':String(kills),count,denominator:rounds})),
+  noDeathRounds:noDeath,multiKillRounds:histogram.slice(2).reduce((a,b)=>a+b,0),multiKillWins:multiWins,multiKillKnownOutcomes:multiKnown,sides,
+  limitations:['無死亡ラウンドは復活後を含む終了時生存率ではない。','KAST・ラウンド別アシスト・位置上のトレード機会・クラッチは未算出。','マルチキル後の勝率は関連の観察であり、個人の因果的な勝利貢献率ではない。']};
+}
