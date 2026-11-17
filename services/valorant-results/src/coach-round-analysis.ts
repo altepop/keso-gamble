@@ -134,15 +134,20 @@ export function summarizeCoachRounds(rows:readonly ArchivedRow[]){
       invalidMatches++;continue;
     }
     const teamsRaw=safeJson(row.teams_json??null);
-    // Only confirmed opposing won flags establish match outcome.
-    // Both false is not sufficient to infer a draw from incomplete sources.
-    const outcome=Array.isArray(teamsRaw)&&teamsRaw.length===2&&
+    // A draw is verified only when BOTH won flags are false and the stored
+    // round scores are equal and positive. Missing flags/scores stay unknown.
+    let outcome:'win'|'loss'|'draw'|null=null;
+    if(Array.isArray(teamsRaw)&&teamsRaw.length===2&&
       teamsRaw.every(t=>validId(t?.id)&&typeof t.won==='boolean')&&
-      teamsRaw.filter(t=>t.id===vdk.team_id).length===1
-      ?(teamsRaw.find(t=>t.id===vdk.team_id).won===true&&
-        teamsRaw.find(t=>t.id!==vdk.team_id)?.won===false?'win':
-        teamsRaw.find(t=>t.id===vdk.team_id).won===false&&
-        teamsRaw.find(t=>t.id!==vdk.team_id)?.won===true?'loss':null):null;
+      teamsRaw.filter(t=>t.id===vdk.team_id).length===1){
+      const ours=teamsRaw.find(t=>t.id===vdk.team_id)!;
+      const theirs=teamsRaw.find(t=>t.id!==vdk.team_id)!;
+      if(ours.won===true&&theirs.won===false)outcome='win';
+      else if(ours.won===false&&theirs.won===true)outcome='loss';
+      else if(ours.won===false&&theirs.won===false&&
+        Number.isSafeInteger(ours.rounds)&&ours.rounds>0&&
+        ours.rounds===theirs.rounds)outcome='draw';
+    }
     const rounds=safeJson(row.rounds_json);
     const kills=safeJson(row.kills_json);
     if(!Array.isArray(rounds)||rounds.length<1||rounds.length>60||
@@ -192,6 +197,7 @@ export function summarizeCoachRounds(rows:readonly ArchivedRow[]){
         bucket.matches++;
         if(outcome==='win')bucket.matchWins++;
         if(outcome==='loss')bucket.matchLosses++;
+        if(outcome==='draw')bucket.matchDraws++;
         if(Number.isSafeInteger(p.k)&&Number(p.k)>=0&&Number.isSafeInteger(p.d)&&Number(p.d)>=0&&
           Number.isSafeInteger(p.a)&&Number(p.a)>=0){
           bucket.statsMatches++;
@@ -217,6 +223,7 @@ export function summarizeCoachRounds(rows:readonly ArchivedRow[]){
       bucket.matches++;
       if(outcome==='win')bucket.matchWins++;
       if(outcome==='loss')bucket.matchLosses++;
+        if(outcome==='draw')bucket.matchDraws++;
     }
     usableMatches++;
     for(const rr of rounds as RoundEvent[]){
