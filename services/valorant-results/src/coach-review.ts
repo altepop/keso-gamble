@@ -311,7 +311,7 @@ export function recommendSuccessRounds(rows:readonly Archived[],maximum=8):Coach
      ?'人数不利からの取り返し、カバーと時間の使い方をVODで確認'
      :'先制キル後の退避・味方カバーをVODで確認';
    found.push({map,matchJst,round:rr.r,category,evidence,focus,
-    firstKiller:label(roster.get(first.killer)!),priority,endedAt:row.ended_at});
+    firstKiller:ourFirst?label(roster.get(first.killer)!):null,priority,endedAt:row.ended_at});
   }
  }
  return found.sort((a,b)=>b.priority-a.priority||b.endedAt-a.endedAt||a.round-b.round)
