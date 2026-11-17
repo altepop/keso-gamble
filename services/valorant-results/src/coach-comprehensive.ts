@@ -173,8 +173,8 @@ export function comprehensiveCoachDiagnosis(data:CoachMetrics):CoachComprehensiv
       reference!==null&&ownNet!==null&&ownNet-reference>=8?'good':
       reference!==null&&ownNet!==null&&ownNet-reference<=-8?'focus':'mixed',
     goodDirection:'higher',numerator:s.firstKills-s.firstDeaths,
-    denominator:s.observedOpeningRounds,ratePct:ownNet,
-    referencePct:reference,differencePp:delta(ownNet,reference),
+    denominator:s.observedOpeningRounds,ratePct:null,
+    referencePct:null,differencePp:null,
     evidence:`${name}：FK ${s.firstKills} / FD ${s.firstDeaths}、判定可能 ${s.observedOpeningRounds}R、差 ${ownNet===null?'不明':ownNet.toFixed(1)+'件/100R'}`+
       (reference===null?'':`（反対側 ${reference.toFixed(1)}件/100R）`),
     reason:bothSides?'同じ選手の攻守間の参考差。マップ・味方の違いは補正していない。':
