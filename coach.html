@@ -60,6 +60,50 @@ tr:last-child td{border-bottom:0}
 .diag-summaries .card strong{font-size:17px}
 .diag-empty{color:#b6c6df;font-size:13px}
 @media(max-width:470px){.diag-row{padding:9px}.diag-details{padding:8px 10px}}
+
+/* The default view is a short per-subject decision summary, not an endless audit. */
+.focus-panel{border-color:#425476;padding:20px}
+.focus-lead{font-size:13px;color:#b7c8e1;margin:0 0 15px}
+.coach-tabs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin:14px 0 18px}
+.coach-tab{min-width:0;border:1px solid #354d70;background:#101e37;padding:10px 2px;font-size:clamp(12px,3.3vw,15px);font-weight:780}
+.coach-tab[aria-selected=true]{border-color:#95c7ff;background:#284e7a;box-shadow:inset 0 -3px #a9d6ff}
+.coach-tab:focus-visible,.archive-drawer summary:focus-visible,.focus-details summary:focus-visible{outline:3px solid #85c4ff;outline-offset:2px}
+.subject-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin:0 0 12px}
+.subject-head h3{font-size:23px;margin:0}
+.subject-head p{margin:0;font-size:12px;color:#adc3db}
+.focus-section{margin:13px 0 0}
+.focus-section h3{font-size:16px;margin:0 0 9px}
+.focus-main{border:1px solid #b18b58;background:#211e20;border-left:5px solid #f3b666;border-radius:13px;padding:16px;overflow-wrap:anywhere}
+.focus-main.good{border-color:#436d68;border-left-color:#83d5ab;background:#142b2e}
+.focus-main .overline{font-size:12px;font-weight:800;color:#f5c791}
+.focus-main.good .overline{color:#a1efd0}
+.focus-main strong{display:block;margin:6px 0 4px;font-size:clamp(18px,4.7vw,24px);line-height:1.38}
+.focus-main .evidence{font-size:16px;font-weight:800;margin:10px 0}
+.focus-main .action{font-size:13px;line-height:1.6;margin:10px 0 0}
+.focus-main .caution{font-size:12px;color:#bfcadb;margin:8px 0 0}
+.focus-stat{font-variant-numeric:tabular-nums}
+.focus-note{font-size:12px;color:#bccce1;margin:8px 0}
+.focus-item{border:1px solid #364b64;border-radius:11px;padding:12px 13px;margin-top:8px;background:#101e35;overflow-wrap:anywhere}
+.focus-item strong{font-size:15px;display:block;line-height:1.45}
+.focus-item p{font-size:12px;margin:6px 0 0}
+.focus-item .data{color:#e3efff;font-weight:750;font-variant-numeric:tabular-nums}
+.focus-item.good{border-left:4px solid #76cea9}.focus-item.focus{border-left:4px solid #f0ae6b}
+.focus-items{display:grid;gap:0}
+.focus-empty{border:1px solid #34435b;border-radius:10px;color:#c4d1e5;background:#0d192c;padding:13px;font-size:13px}
+.focus-details{border:1px solid #34435b;border-radius:11px;margin-top:12px;padding:8px 11px}
+.focus-details summary{cursor:pointer;font-size:13px;font-weight:750;padding:7px 2px}
+.focus-details[open] summary{border-bottom:1px solid #34435b}
+.focus-counter{font-size:12px;color:#bfd1e9}
+.focus-breakdown{display:grid;gap:8px;margin:10px 0}
+.focus-breakdown > details{border:1px solid #35445e;border-radius:9px;padding:8px}
+.focus-breakdown summary{font-size:13px;cursor:pointer}
+.focus-breakdown .diag-row{margin-top:7px}
+.archive-drawer{margin:20px 0;border:1px solid #30435e;border-radius:13px;padding:10px}
+.archive-drawer>summary{cursor:pointer;font-weight:750;padding:10px;color:#cad9ee}
+.archive-drawer[open]>summary{border-bottom:1px solid #34465e}
+.archive-drawer>.panel{margin:12px 0}
+@media(max-width:470px){.focus-panel{padding:13px}.focus-main{padding:13px}.focus-main strong{font-size:19px}.coach-tabs{gap:4px}.coach-tab{padding:10px 1px}}
+
 #connection{display:none}
 .empty{padding:18px 4px;color:#b6c6df;text-align:center}
 @media(max-width:470px){.panel{padding:12px}.card{padding:12px}.card strong{font-size:23px}}
@@ -85,6 +129,19 @@ tr:last-child td{border-bottom:0}
 </div></form>
 </section>
 <div id="report" hidden>
+<section id="focus-panel" class="panel focus-panel" aria-label="個人別の強みと弱点">
+<h2>誰の弱点を見る？</h2>
+<p class="focus-lead">選手を選ぶと「最優先で見直す点 → 良い点 → 全指標」の順に表示する。判定は映像での確認が必要な仮説である。</p>
+<div class="coach-tabs" id="coach-tabs" role="tablist" aria-label="コーチング対象">
+<button type="button" class="coach-tab" role="tab" id="tab-VDK" data-coach-subject="VDK" aria-controls="focus-content" aria-selected="true">VDK</button>
+<button type="button" class="coach-tab" role="tab" id="tab-Abema" data-coach-subject="Abema" aria-controls="focus-content" aria-selected="false">Abema</button>
+<button type="button" class="coach-tab" role="tab" id="tab-石原" data-coach-subject="石原" aria-controls="focus-content" aria-selected="false">石原</button>
+<button type="button" class="coach-tab" role="tab" id="tab-チーム" data-coach-subject="チーム" aria-controls="focus-content" aria-selected="false">チーム</button>
+</div>
+<div id="focus-content" role="tabpanel" aria-labelledby="tab-VDK" tabindex="0"></div>
+</section>
+<details id="archive-drawer" class="archive-drawer">
+<summary>データ保存状況・従来の詳細分析を開く（必要なときだけ）</summary>
 <section class="cards" id="totals" aria-label="補完状況の概要"></section>
 <section class="panel">
 <h2>対象試合の補完状況</h2>
@@ -137,6 +194,7 @@ tr:last-child td{border-bottom:0}
 </section>
 <section class="panel"><h2>3人が共闘した試合の構成比較</h2><p class="muted small">VDK・Abema・石原が同じチームにいる試合だけを、マップと構成ごとに比較する。</p><div id="trio"></div></section>
 <section class="panel"><h2>データの確認事項</h2><div id="quality"></div><p class="foot">同一ラウンドで同じプレイヤーが2回倒されていても、Cloveの自己蘇生などがあるため自動的に不正とはしない。攻守情報がない場合も「不明」として扱う。</p></section>
+</details>
 </div>
 </main>
 <script>
@@ -155,6 +213,105 @@ const token=()=>read(KEY,sessionStorage)||read('keso-kp-session-v1',localStorage
 const setStatus=(msg,error=false)=>{const el=$('status');el.textContent=msg;el.setAttribute('role',error?'alert':'status')};
 const card=(label,value,sub='')=>`<article class="card"><div class="label">${escape(label)}</div><strong>${escape(value)}</strong><div class="small muted">${escape(sub)}</div></article>`;
 const simpleTable=(headers,rows)=>`<div class="table-wrap"><table><thead><tr>${headers.map((h,i)=>`<th class="${i?'num':''}">${escape(h)}</th>`).join('')}</tr></thead><tbody>${rows.map(a=>`<tr>${a.map((cell,i)=>`<td class="${i?'num':''}">${escape(cell)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+
+let chosenCoachSubject='VDK';
+const coachSubjects=['VDK','Abema','石原','チーム'];
+const readableStatus=s=>s==='focus'?'要見直し':s==='good'?'良い傾向':
+ s==='insufficient'?'データ不足':s==='mixed'?'明確な差なし':'参考値';
+const evidenceCard=(d,kind)=>`<article class="focus-item ${kind}">
+  <strong>${escape(d.title)}</strong>
+  <p class="data">${escape(d.evidence)}</p>
+  <p>確認すること：${escape(d.nextAction)}</p>
+  <p class="muted">${escape(d.reason)}</p>
+</article>`;
+const significant=(d)=>Number.isFinite(d?.denominator)&&d.denominator>0;
+function renderCoachFocus(data){
+ const deep=data.fullDiagnosis;
+ const current=coachSubjects.includes(chosenCoachSubject)?chosenCoachSubject:'VDK';
+ for(const btn of $('coach-tabs').querySelectorAll('[data-coach-subject]')){
+  const selected=btn.dataset.coachSubject===current;
+  btn.setAttribute('aria-selected',String(selected));
+  btn.tabIndex=selected?0:-1;
+ }
+ $('focus-content').setAttribute('aria-labelledby','tab-'+current);
+ if(!deep||!Array.isArray(deep.items)){
+  $('focus-content').innerHTML='<p class="focus-empty">詳細な診断データがまだない。データを更新してほしい。</p>';
+  return;
+ }
+ const own=deep.items.filter(d=>d.subject===current);
+ // Give sufficient samples and personally actionable events priority. Map splits
+ // are valuable, but should not hide repeated opening/cover issues.
+ const categoryOrder={'先制':0,'生存・取り返し':1,'攻撃・防衛':2,'試合全体':3,'マップ・エージェント':4};
+ const ranked=(arr)=>[...arr].sort((a,b)=>
+  (categoryOrder[a.category]??9)-(categoryOrder[b.category]??9)||
+  (significant(b)?b.denominator:0)-(significant(a)?a.denominator:0)||
+  String(a.title).localeCompare(String(b.title),'ja'));
+ const focus=ranked(own.filter(d=>d.status==='focus'));
+ const good=ranked(own.filter(d=>d.status==='good'));
+ const pending=own.filter(d=>d.status==='insufficient');
+ const other=own.filter(d=>d.status==='mixed'||d.status==='context');
+ const selected=focus[0]||null;
+ const firstGood=good[0]||null;
+ const overview=`<div class="subject-head"><h3>${escape(current)}のコーチング</h3>
+  <p>${escape(String(data.usableMatches??'—'))}試合の完全保存データから分析</p></div>
+  <p class="focus-counter">見直し候補 ${int(focus.length)}件 ／ 良い傾向 ${int(good.length)}件 ／ 参考・保留 ${int(other.length+pending.length)}件</p>`;
+ const top=selected?`<div class="focus-main" aria-label="一番の弱点候補">
+  <span class="overline">最優先の弱点候補 · 要VOD確認</span>
+  <strong>${escape(selected.title)}</strong>
+  <p class="evidence focus-stat">${escape(selected.evidence)}</p>
+  <p class="action"><b>次の試合で確認すること：</b>${escape(selected.nextAction)}</p>
+  <p class="caution">${escape(selected.reason)}</p>
+ </div>`:
+ `<div class="focus-main good"><span class="overline">明確な弱点候補は未検出</span>
+ <strong>${firstGood?escape(firstGood.title):'今は「悪い」と断定できる傾向がない'}</strong>
+ <p class="evidence">${firstGood?escape(firstGood.evidence):'評価条件を満たしていない、または差が小さい指標は無理に弱点としない。'}</p>
+ <p class="caution">弱点がないことを保証するものではない。映像での確認は引き続き必要である。</p></div>`;
+ const extraFocus=focus.slice(1);
+ const focusMarkup=extraFocus.length?
+  '<div class="focus-items">'+extraFocus.slice(0,3).map(d=>evidenceCard(d,'focus')).join('')+'</div>'+
+  (extraFocus.length>3?`<details class="focus-details"><summary>その他の見直し候補 ${int(extraFocus.length-3)}件</summary>
+    ${extraFocus.slice(3).map(d=>evidenceCard(d,'focus')).join('')}</details>`:''):
+  '<p class="focus-note">その他の明確な見直し候補はない。</p>';
+ const goodMarkup=good.length?
+   '<div class="focus-items">'+good.slice(0,3).map(d=>evidenceCard(d,'good')).join('')+'</div>'+
+   (good.length>3?`<details class="focus-details"><summary>その他の良い点 ${int(good.length-3)}件</summary>
+    ${good.slice(3).map(d=>evidenceCard(d,'good')).join('')}</details>`:''):
+   '<p class="focus-empty">良いと断定できる十分な数値はまだない。良いプレーがなかったという意味ではない。</p>';
+ const categories=[...new Set(own.map(d=>d.category))].sort((a,b)=>(categoryOrder[a]??9)-(categoryOrder[b]??9));
+ const breakdown=categories.map(category=>{
+  const records=own.filter(d=>d.category===category);
+  return `<details><summary>${escape(category)}（${int(records.length)}項目）</summary>
+   <div class="diag-list">${records.map(d=>`<article class="diag-row ${escape(d.status)}">
+    <strong>${escape(d.title)}</strong>
+    <p class="small"><b>${escape(readableStatus(d.status))}：</b>${escape(d.evidence)}</p>
+    <p class="small muted">${escape(d.reason)}</p>
+    <p class="small">次に確認：${escape(d.nextAction)}</p></article>`).join('')}</div>
+  </details>`;
+ }).join('');
+ $('focus-content').innerHTML=overview+top+
+  '<section class="focus-section"><h3>ほかに見直す点</h3>'+focusMarkup+'</section>'+
+  '<section class="focus-section"><h3>ここは良い点</h3>'+goodMarkup+'</section>'+
+  `<details class="focus-details"><summary>全${int(own.length)}指標を分野別に見る（参考値・判定保留を含む）</summary>
+  <div class="focus-breakdown">${breakdown||'<p class="focus-empty">観測値なし</p>'}</div></details>`+
+  '<p class="focus-note">見直し候補は統計的な検証対象であり、本人のミスや因果関係を示す確定判定ではない。</p>';
+}
+$('coach-tabs').addEventListener('click',event=>{
+ const btn=event.target.closest('[data-coach-subject]');
+ if(!btn||!$('coach-tabs').contains(btn))return;
+ chosenCoachSubject=btn.dataset.coachSubject;
+ if(latestReport)renderCoachFocus(latestReport);
+});
+$('coach-tabs').addEventListener('keydown',event=>{
+ if(!['ArrowRight','ArrowLeft','Home','End'].includes(event.key))return;
+ const i=coachSubjects.indexOf(chosenCoachSubject);
+ const next=event.key==='Home'?0:event.key==='End'?coachSubjects.length-1:
+   (i+(event.key==='ArrowRight'?1:-1)+coachSubjects.length)%coachSubjects.length;
+ chosenCoachSubject=coachSubjects[next];
+ if(latestReport)renderCoachFocus(latestReport);
+ $('tab-'+chosenCoachSubject).focus();
+ event.preventDefault();
+});
+
 function render(data){
 latestReport=data;
 $('share').disabled=false;
@@ -289,6 +446,7 @@ $('quality').innerHTML=simpleTable(
   ['ロスターが不正な試合',int(data.invalidMatches)],
   ['攻守判定ができたラウンド',int(o.roundsWithSides)],
   ['同一人物の複数回死亡があるラウンド',int(o.repeatedVictimRounds)]]);
+renderCoachFocus(data);
 $('report').hidden=false;
 $('connection').style.display='none';
 setStatus('集計を表示した。更新 '+new Date().toLocaleTimeString('ja-JP')+' · 認証済み · 読み取り専用');
