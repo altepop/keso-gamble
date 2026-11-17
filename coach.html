@@ -402,7 +402,9 @@ const renderMemberDiagnosis=d=>{
   kpi('FK − FD',(fk-fd>=0?'+':'')+int(fk-fd),'FK '+int(fk)+' / FD '+int(fd))+
  '</div>';
  const rateCharts=own?
-  metricBar('本人のFK後・チームが勝利',own.firstKillWins??0,fk,'本人が最初のキルを取ったラウンド。勝利には味方も影響する。','good')+
+  metricBar('本人のFK後・チームが勝利',own.firstKillWins??0,
+   safeNumber(own.firstKillWins)+safeNumber(own.firstKillLosses),
+   '本人FK後、勝敗が判明したラウンドのみ。勝利には味方の行動も影響する。','good')+
   metricBar('本人が先制デス後・味方が勝利',own.firstDeathWins??0,
    safeNumber(own.firstDeathWins)+safeNumber(own.firstDeathLosses),'本人が倒された後の逆転。本人だけの責任ではない。','neutral')+
   metricBar('FD後5秒以内の味方による取り返し',own.firstDeathKillerEliminatedWithin5s??0,fd,
