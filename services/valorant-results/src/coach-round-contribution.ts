@@ -3,7 +3,7 @@ type Row={match_id:string;players_json:string;teams_json:string|null;rounds_json
 type Account={name:string;tag:string;puuid:string|null};
 const parse=(v:string|null):any=>{try{return v?JSON.parse(v):null}catch{return null}};
 const n=(x:unknown,max=10000)=>Number.isSafeInteger(x)&&Number(x)>=0&&Number(x)<=max;
-export function coachRoundContribution(rows:readonly Row[],accounts:readonly Account[]){
+export function coachRoundContribution<T extends Row>(rows:readonly T[],accounts:readonly Account[],onVerified?:(row:T)=>void){
  const seen=new Set<string>(),excluded:Record<string,number>={};
  const stamps:number[]=[];
  const histogram=[0,0,0,0,0,0,0];let matches=0,rounds=0,noDeath=0,multiWins=0,multiKnown=0;
@@ -32,7 +32,7 @@ export function coachRoundContribution(rows:readonly Row[],accounts:readonly Acc
   if(ps.some(x=>(deathsById.get(x.puuid)??0)!==x.d||(killsById.get(x.puuid)??0)!==x.k)){reject('kill-totals-do-not-match-roster');continue;}
   const allByRound=new Map<number,typeof ks>();
   for(const k of ks){const group=allByRound.get(k.r)??[];group.push(k);allByRound.set(k.r,group);}
-  matches++;if(Number.isSafeInteger(row.events_recorded_at)&&Number(row.events_recorded_at)>0)stamps.push(row.events_recorded_at!);
+  onVerified?.(row);matches++;if(Number.isSafeInteger(row.events_recorded_at)&&Number(row.events_recorded_at)>0)stamps.push(row.events_recorded_at!);
   for(const r of rs){
    const {kills=0,deaths=0}=ownByRound.get(r.r)??{};
    const events=allByRound.get(r.r)??[],ownKills=events.filter((k:any)=>enemyKill(k,p.puuid)),ownDeaths=events.filter((k:any)=>k.victim===p.puuid);

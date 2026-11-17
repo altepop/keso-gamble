@@ -197,7 +197,7 @@ tr:last-child td{border-bottom:0}
 <div id="member-archive-status"></div>
 <button type="button" id="start-member-archive" hidden>全員の試合履歴収集を開始</button>
 </section>
-<details id="legacy-coach" class="panel"><summary>従来のVDK中心の詳細分析・保存状況を開く</summary>
+<details id="legacy-coach" class="panel"><summary>従来のVDK中心の詳細分析・保存状況を開く</summary><p class="small muted">以下は従来の列保存基準による参考表示です。全10人のK/Dを照合する選手別ラウンド分析とは対象件数が異なります。基本性能は上の選手別画面を確認してください。</p>
 <section class="cards" id="totals" aria-label="補完状況の概要"></section>
 <section class="panel">
 <h2>対象試合の補完状況</h2>
@@ -478,7 +478,7 @@ const renderMemberDiagnosis=d=>{
   '<p class="coach-empty">十分な観測がまだないため、個人の改善事項を提示できない。</p>')+
   '<p class="member-small">すべての改善観察と判定保留は「改善候補」タブで確認できる。</p>'+
   '<h3>先制と生存：観測グラフ</h3>'+rateCharts+
-  '<h3>試合ごとの推移</h3>'+coachTrendGraph(trends);
+  '<h3>ラウンド記録を照合できた試合の推移</h3>'+coachTrendGraph(trends);
  const improvements=reviewSummary+
   (selected.length?selected.map(x=>diagnosticCard(x)).join(''):
   '<p class="coach-empty">観察対象がまだない。試合・ラウンドデータの収集が必要だ。</p>')+
