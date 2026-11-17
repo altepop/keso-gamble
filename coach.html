@@ -118,6 +118,11 @@ tr:last-child td{border-bottom:0}
 <div id="review-rounds"></div>
 <p class="foot">表示する試合日時は日本時間。キル時刻はそのラウンド開始からの経過時間である。位置・購入・スキル・スパイクの記録はないため、理由は試合録画で確認する必要がある。</p>
 </section>
+<section class="panel">
+<h2>良かったラウンド：再現したい勝ち方</h2>
+<p class="muted small">同じ43試合の勝利ラウンドから、先制2キルを勝ちにつなげた場面・FK担当者が初動5秒間倒されなかった場面・敵FKから逆転した場面を抽出する。正しい戦術と断定せず、VODで再現可能な行動を探す。</p>
+<div id="success-rounds"></div>
+</section>
 <section class="panel"><h2>マップ別：先制キルを勝利に変えた割合</h2><div id="maps"></div><p class="foot">FK後勝率＝味方が敵を最初に倒したラウンドのうち、ラウンド勝者が分かるものに限った勝率。5対4からの敗北を探す指標で、プレイヤー個人の戦犯判定ではない。</p></section>
 <section class="panel">
 <h2>VDK・Abema・石原：個人別FK / FD</h2>
@@ -223,6 +228,13 @@ $('review-rounds').innerHTML=reviews.length?reviews.map((r,i)=>`
  <p class="small">${escape(r.evidence)}</p>
  <p class="small muted">${r.firstKiller?'最初の撃破：'+escape(r.firstKiller)+' · ':''}${escape(r.focus)}</p>
  </article>`).join(''):'<p class="empty">条件を満たす見直しラウンドがまだない。</p>';
+const success=data.successRounds||[];
+$('success-rounds').innerHTML=success.length?success.map((r,i)=>`<article class="review-item">
+ <div class="review-heading"><span class="review-kind">良い例 ${int(i+1)} · ${escape(r.map)} / R${int(r.round)}</span>
+ <strong>${escape(r.matchJst)} JST</strong></div>
+ <p class="small">${escape(r.evidence)}</p>
+ <p class="small muted">${r.firstKiller?'最初の撃破：'+escape(r.firstKiller)+' · ':''}${escape(r.focus)}</p>
+ </article>`).join(''):'<p class="empty">再現候補の勝利ラウンドがまだ見つからない。</p>';
 const b=data.backfill||null;
 const resumeAllowed=Boolean(data.canResume&&b&&b.status==='complete'&&b.pending>0);
 $('resume-backfill').hidden=!resumeAllowed;
@@ -313,6 +325,8 @@ function diagnosticPayload(d){
  const reviews=(d.reviewRounds||[]).slice(0,12).map(r=>pick(r,
   ['map','matchJst','round','category','evidence','firstKiller','focus']));
  const notes=(d.coachingNotes||[]).map(n=>pick(n,['subject','kind','title','evidence','action']));
+ const successRounds=(d.successRounds||[]).slice(0,8).map(r=>pick(r,
+  ['map','matchJst','round','category','evidence','firstKiller','focus']));
  const signals=(d.coachSignals||[]).map(s=>pick(s,['subject','kind','metric','title','evidence','action','numerator','denominator','ratePct']));
  const fullDiagnosis={
   items:(d.fullDiagnosis?.items||[]).map(x=>pick(x,['subject','category','title','status','evidence','reason','nextAction','numerator','denominator','ratePct','referencePct','differencePp'])),
@@ -326,7 +340,7 @@ function diagnosticPayload(d){
   totalRowsRead:d.totalRowsRead??null,limitReached:d.limitReached??null,
   quality:pick(d,['invalidMatches','roundDataMissing','killDataMissing']),
   overall:pick(d.overall,['matches','rounds','winnerKnown','ourRoundWins','roundsWithFk','ourFirstKills','enemyFirstKills','firstKillWins','firstKillLosses','firstKillWinPct','comebackWins','repeatedVictimRounds','roundsWithSides']),
-  maps,individual,reviewRounds:reviews,coachingNotes:notes,coachSignals:signals,fullDiagnosis};
+  maps,individual,reviewRounds:reviews,successRounds,coachingNotes:notes,coachSignals:signals,fullDiagnosis};
 }
 $('share').addEventListener('click',async()=>{
  if(!latestReport||busy)return;
