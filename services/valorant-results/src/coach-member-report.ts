@@ -81,7 +81,7 @@ export async function readCoachMemberReport(db:D1Database,person:string){
   person,riotId:owners.map(x=>x.riotId).join(' / '),profile:labelFor(person),
   accounts:owners.map(x=>x.riotId),
   basis:'本人の確認済みアカウントの競技試合（Henrikから発見・保存済みの範囲）',
-  coverage:{...combinedCoverage,analysisMatches:report.usableMatches,
+  coverage:{...combinedCoverage,enabled:coverage.enabled,analysisMatches:report.usableMatches,
    existingArchiveMatches:report.archivedMatches,
    rowLimit:MAX_ROWS,limitReached:rows.results.length>=MAX_ROWS,
    allMatchesGuaranteed:false},
