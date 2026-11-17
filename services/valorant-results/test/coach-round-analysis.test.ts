@@ -250,3 +250,31 @@ test('first-death round recovery uses only observed winners and preserves all re
  assert.equal(abema.firstDeathKillerEliminatedWithin5s,1);
  assert.equal(result.overall.repeatedVictimRounds,1);
 });
+
+test('trusted roster team flags and player KDA/party are counted only for complete archives',()=>{
+ const source=fixture('complete','Corrode','Fade','Clove',[{r:0,winner:'Blue'}],
+  [{r:0,t:800,killer:'p0',victim:'p5'}]);
+ const players=JSON.parse(source.players_json);
+ players[0].k=18;players[0].d=11;players[0].a=6;players[0].score=4200;players[0].party_id='p-party';
+ players[1].k=20;players[1].d=12;players[1].a=5;players[1].score=4400;players[1].party_id='p-party';
+ players[2].k=10;players[2].d=14;players[2].a=9;players[2].score=3600;players[2].party_id=null;
+ const row={...source,players_json:JSON.stringify(players),
+  teams_json:JSON.stringify([{id:'Blue',won:true,rounds:13},{id:'Red',won:false,rounds:8}])};
+ const partial={...row,match_id:'partial',kills_json:null};
+ const report=summarizeCoachRounds([row,partial]);
+ assert.equal(report.archivedMatches,2);
+ assert.equal(report.usableMatches,1);
+ assert.equal(report.overall.matchWins,1);
+ assert.equal(report.overall.matchLosses,0);
+ assert.equal(report.individual.find(x=>x.player==='VDK')?.statsMatches,1);
+ assert.equal(report.individual.find(x=>x.player==='VDK')?.averageKills,18);
+ assert.equal(report.individual.find(x=>x.player==='VDK')?.averageScore,4200);
+ assert.equal(report.individual.find(x=>x.player==='Abema')?.samePartyAsVdk,1);
+ assert.equal(report.individual.find(x=>x.player==='石原')?.partyUnknown,1);
+ const undetermined={...row,match_id:'bad-teams',teams_json:JSON.stringify([
+  {id:'Blue',won:false},{id:'Red',won:false}
+ ])};
+ const unknown=summarizeCoachRounds([undetermined]);
+ assert.equal(unknown.overall.matchWins+unknown.overall.matchLosses,0,
+  'absence of winning flag is unknown, never guessed as a loss or draw');
+});
