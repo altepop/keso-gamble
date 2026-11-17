@@ -40,7 +40,9 @@ test('separates opening kills, converted rounds, lost advantages and comebacks',
  assert.equal(report.overall.roundsWithSides,0);
  assert.deepEqual(report.trioComparisons.map(r=>r.composition),['Fade + Clove']);
  assert.equal(JSON.stringify(report).includes('p0'),false,'never leak a PUUID');
- assert.equal(JSON.stringify(report).includes('member3'),false,'never leak opponents');
+ assert.ok(report.individual.some(p=>p.player==='member3#N'),'previously excluded allies are now included');
+ assert.ok(report.individual.some(p=>p.player==='member4#N'),'all four ally slots are scanned');
+ assert.equal(report.individual.some(p=>p.player==='member5#N'),false,'never profile opponents');
 });
 test('unknown winners, missing events and unpaired players are not treated as losses',()=>{
  const a=fixture('a','Lotus','Skye','Clove',[
@@ -283,4 +285,25 @@ test('trusted roster team flags and player KDA/party are counted only for comple
  ])};
  const draws=summarizeCoachRounds([drawn]);
  assert.equal(draws.overall.matchDraws,1,'equal completed team round scores confirm a draw');
+});
+
+test('Fujimura and Kobe are not guessed from unrelated PUUIDs; all verified allies are included',()=>{
+ const raw=fixture('all-allies','Lotus','Fade','Clove',[
+  {r:0,winner:'Blue'},{r:1,winner:'Red'}
+ ],[
+  {r:0,t:1000,killer:'p3',victim:'p5'},
+  {r:1,t:1000,killer:'p8',victim:'p4'}
+ ]);
+ const players=JSON.parse(raw.players_json);
+ players[3].name='Unmapped';players[3].tag='TAG';
+ players[4].name='Another';players[4].tag='VAL';
+ players[8].name='藤村';players[8].tag='UNKNOWN'; // opposing roster must remain absent
+ const report=summarizeCoachRounds([{...raw,players_json:JSON.stringify(players)}]);
+ assert.equal(report.individual.length,5,'VDK and four allies, no opposing participants');
+ assert.equal(report.individual.find(x=>x.player==='Unmapped#TAG')?.firstKills,1);
+ assert.equal(report.individual.find(x=>x.player==='Another#VAL')?.firstDeaths,1);
+ assert.equal(report.individual.some(x=>x.player==='藤村'),false,'never attribute enemy to Fujimura');
+ assert.equal(report.individual.some(x=>x.player==='神戸'),false,'Kobe person alias requires explicit mapping');
+ assert.equal(report.individualMapAgent.some(x=>x.player==='Unmapped#TAG'),true);
+ assert.equal(report.fullDiagnosis,undefined,'raw aggregate has no public person-guess list');
 });
