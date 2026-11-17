@@ -50,7 +50,7 @@ const validTime=(n:unknown)=>Number.isSafeInteger(n)&&Number(n)>=0&&Number(n)<=9
 type Bucket=Totals & {map?:string;composition?:string};
 // Per-player metrics are counts of observed opening events, not a player rating.
 // Never infer that a support agent with 0 FK performed poorly.
-type CoachPlayer='VDK'|'Abema'|'石原';
+type CoachPlayer='VDK'|'Abema'|'石原'|'藤村'|'Aquatopia'|'小林';
 interface SideOpening{rounds:number;observedOpeningRounds:number;firstKills:number;firstDeaths:number;
  firstKillWins:number;firstKillLosses:number;firstDeathWins:number;firstDeathLosses:number;}
 const emptySide=():SideOpening=>({rounds:0,observedOpeningRounds:0,firstKills:0,firstDeaths:0,
@@ -71,7 +71,10 @@ interface PlayerBucket{
 const playerIdentity:ReadonlyArray<{name:string;tag:string;label:CoachPlayer}>=[
   {name:'Dolly',tag:'SDGs',label:'VDK'},
   {name:'Abema',tag:'ttv',label:'Abema'},
-  {name:'h1d3g1g4s',tag:'1037',label:'石原'}
+  {name:'h1d3g1g4s',tag:'1037',label:'石原'},
+  {name:'frin',tag:'怖すぎ',label:'藤村'},
+  {name:'Aquatopia',tag:'toppy',label:'Aquatopia'},
+  {name:'mecael',tag:'2489',label:'小林'}
 ];
 const emptyPlayer=(player:CoachPlayer,map?:string,agent?:string):PlayerBucket=>({
   player,...(map?{map}:{}),...(agent?{agent}:{}),
@@ -107,7 +110,8 @@ function emit(t:Bucket){
   return {...t,firstKillWinPct:t.firstKillOutcomesKnown
     ?Math.round(1000*t.firstKillWins/t.firstKillOutcomesKnown)/10:null};
 }
-export function summarizeCoachRounds(rows:readonly ArchivedRow[]){
+export function summarizeCoachRounds(rows:readonly ArchivedRow[],focusName='Dolly',focusTag='SDGs',
+ focusPuuid?:string,focusLabel?:CoachPlayer){
   const overall=empty();
   const maps=new Map<string,Bucket>();
   const compositions=new Map<string,Bucket>();
@@ -126,7 +130,8 @@ export function summarizeCoachRounds(rows:readonly ArchivedRow[]){
       new Set(players.map((p:Player)=>p.puuid)).size!==10){invalidMatches++;continue;}
     const ps=players as Player[];
     const roster=new Map(ps.map(p=>[p.puuid,p]));
-    const vdk=ps.find(p=>p.name==='Dolly'&&p.tag==='SDGs');
+    const vdk=ps.find(p=>(focusPuuid&&p.puuid===focusPuuid)||
+   (p.name===focusName&&p.tag===focusTag));
     if(!vdk)continue;
     archivedMatches++;
     const teams=new Set(ps.map(p=>p.team_id));
@@ -174,11 +179,20 @@ export function summarizeCoachRounds(rows:readonly ArchivedRow[]){
     });
     const abema=ps.find(p=>p.name==='Abema'&&p.tag==='ttv'&&p.team_id===vdk.team_id);
     const ishihara=ps.find(p=>p.name==='h1d3g1g4s'&&p.tag==='1037'&&p.team_id===vdk.team_id);
-    const trio=Boolean(abema&&ishihara);
+    const trio=focusName==='Dolly'&&focusTag==='SDGs'&&Boolean(abema&&ishihara);
     const map=typeof row.map==='string'&&row.map.length<=80?row.map:'Unknown';
     const composition=trio?(vdk.agent==='Fade'&&abema?.agent==='Clove'?'Fade + Clove':'Other trio'):null;
-    const participants=playerIdentity.flatMap(identity=>{
-      const p=ps.find(p=>p.name===identity.name&&p.tag===identity.tag&&p.team_id===vdk.team_id);
+    const focusIdentity=focusLabel&&vdk&&!playerIdentity.some(x=>x.label===focusLabel)
+      ?[{name:vdk.name??focusName,tag:vdk.tag??focusTag,label:focusLabel}]:[];
+    const identities=[...playerIdentity,...focusIdentity];
+    const participants=identities.flatMap(identity=>{
+      // A confirmed PUUID wins over names/tags for the selected account. A
+      // player using the old display name cannot masquerade as the target.
+      const targetIdKnown=Boolean(focusPuuid&&ps.some(x=>x.puuid===focusPuuid));
+      const p=ps.find(p=>p.team_id===vdk.team_id&&(
+        identity.label===focusLabel&&targetIdKnown
+          ?p.puuid===focusPuuid
+          :(p.name===identity.name&&p.tag===identity.tag)));
       if(!p)return [];
       const agent=typeof p.agent==='string'&&p.agent.length<=60&&p.agent
         ?p.agent:'Unknown';
@@ -321,8 +335,10 @@ export function summarizeCoachRounds(rows:readonly ArchivedRow[]){
     trioComparisons:[...compositions.values()].map(emit)
       .sort((a,b)=>a.map!.localeCompare(b.map!)||a.composition!.localeCompare(b.composition!)),
     individual:[...individual.values()].map(playerReport)
-      .sort((a,b)=>playerIdentity.findIndex(x=>x.label===a.player)-
-        playerIdentity.findIndex(x=>x.label===b.player)),
+      .sort((a,b)=>{
+        const idx=(x:string)=>{const n=playerIdentity.findIndex(p=>p.label===x);return n<0?999:n};
+        return idx(a.player)-idx(b.player)||a.player.localeCompare(b.player,'ja');
+      }),
     individualMapAgent:[...individualMapAgent.values()].map(playerReport)
       .sort((a,b)=>a.player.localeCompare(b.player,'ja')||
         (a.map??'').localeCompare(b.map??'')||(a.agent??'').localeCompare(b.agent??'')),

@@ -25,6 +25,7 @@ import {recordCompetitiveRoster} from './match-rosters.ts';
 import {recordCompetitiveRoundEvents} from './round-events.ts';
 import {backfillRecordedVdkMatches} from './roster-backfill.ts';
 import {backfillVdkRoundEvents} from './round-backfill.ts';
+import {discoverCoachMemberPage,fetchNextCoachMemberMatch} from './coach-member-archive.ts';
 import {recoverVdkV2Kills,type LegacyV2} from './coach-v2-recovery.ts';
 import {monitorSteam} from './steam-rewards.ts';
 import {readModeNote} from './mode-rewards.ts';
@@ -637,6 +638,29 @@ export default {
         const outcome=await backfillRecordedVdkMatches(env.DB,
           (region,id)=>api<Match>(env,'/valorant/v4/match/'+encodeURIComponent(region)+'/'+encodeURIComponent(id)));
         if(outcome.status!=='disabled')console.info('roster_backfill_result',{status:outcome.status});
+      }));
+    // Bounded multi-member archive, separately opted in by the authenticated owner.
+    // Henrik lifetime has incomplete historical coverage: report actual status, never "all games".
+    if(Math.floor((_event.scheduledTime??Date.now())/60000)%5===1)
+      ctx.waitUntil(track(env,'coach_member_discovery',async()=>{
+        const step=await discoverCoachMemberPage(env.DB,async riotId=>{
+          const account=await env.DB.prepare('SELECT puuid,region FROM tracked_players WHERE riot_id=?')
+           .bind(riotId).first<{puuid:string;region:string}>();
+          if(account?.puuid&&account?.region)return account;
+          const at=riotId.lastIndexOf('#');
+          if(at<=0)throw Error('Invalid Riot ID');
+          return api<{puuid:string;region:string}>(env,
+           '/valorant/v2/account/'+encodeURIComponent(riotId.slice(0,at))+'/'+encodeURIComponent(riotId.slice(at+1)));
+        },(region,puuid,page,size)=>api<unknown>(env,
+         '/valorant/v1/by-puuid/lifetime/matches/'+encodeURIComponent(region)+'/'+encodeURIComponent(puuid)+
+         '?mode=competitive&size='+size+'&page='+page));
+        if(step!=='disabled'&&step!=='idle')console.info('coach_member_discovery',{status:step});
+      }));
+    if(Math.floor((_event.scheduledTime??Date.now())/60000)%5===3)
+      ctx.waitUntil(track(env,'coach_member_archive',async()=>{
+        const step=await fetchNextCoachMemberMatch(env.DB,
+         (region,id)=>api<Match>(env,'/valorant/v4/match/'+encodeURIComponent(region)+'/'+encodeURIComponent(id)));
+        if(step!=='disabled'&&step!=='idle')console.info('coach_member_archive',{status:step});
       }));
     // Dedicated opt-in historical round replay: at most one match detail call per five minutes.
     // Uses a different minute than the roster backfill and cannot modify notices or KP.

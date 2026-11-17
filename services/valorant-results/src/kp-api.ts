@@ -53,6 +53,8 @@ import { kpRewardHistory } from './kp-reward-history.ts';
 import { healthReport } from './health.ts';
 import {readCoachRoundReport,invalidateCoachRoundReport} from './coach-round-analysis.ts';
 import {resumeVdkRoundBackfill} from './round-backfill.ts';
+import {enableAllMemberArchive,coachMemberCoverage} from './coach-member-archive.ts';
+import {readCoachMemberReport} from './coach-member-report.ts';
 import { mlActivityView, mlClosed, mlData, mlLineupTimes, mlResults, seasonStats } from './mleague.ts';
 import { racingView, raceSeed } from './racing-kp.ts';
 import { defaultRoastLevel, validRoastLevel } from './racing-crowns.ts';
@@ -412,9 +414,30 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping,deferP
   // one-time user action restricted to the server-linked Dolly KP account.
   // Do not infer permission from a Riot ID typed by the browser.
   const coachOwner=mapping.accounts.some(a=>a.discordUserId===owner.user&&a.riotId.toLowerCase()==='dolly#sdgs');
+  const memberHistoryOwner=mapping.accounts.some(a=>a.discordUserId===owner.user&&
+    ['aquatopia#toppy','dolly#sdgs'].includes(a.riotId.toLowerCase()));
   if(request.method==='GET'&&path==='/api/kp/coach/rounds'){
     if(await d1OptionalMode(env))return response({error:'D1節約モード中です。時間を置いてから確認してください。'},429);
-    return response({...await readCoachRoundReport(env.DB),canResume:coachOwner});
+    return response({...await readCoachRoundReport(env.DB),canResume:coachOwner,
+      memberHistory:await coachMemberCoverage(env.DB),canStartMemberHistory:memberHistoryOwner});
+  }
+  if(request.method==='GET'&&path==='/api/kp/coach/member'){
+    if(await d1OptionalMode(env))return response({error:'D1節約モード中のため診断できない。'},429);
+    const person=new URL(request.url).searchParams.get('person')??'';
+    if(!['VDK','Abema','石原','藤村','神戸','小林'].includes(person))
+      return response({error:'診断対象が不正である。'},400);
+    return response(await readCoachMemberReport(env.DB,person));
+  }
+  if(request.method==='GET'&&path==='/api/kp/coach/members/status'){
+    return response({...await coachMemberCoverage(env.DB),canStartMemberHistory:memberHistoryOwner});
+  }
+  if(request.method==='POST'&&path==='/api/kp/coach/members/start'){
+    if(!memberHistoryOwner)return response({error:'本人の紐づけ済みKP口座のみが履歴収集を開始できる。'},403);
+    if(await d1OptionalMode(env))return response({error:'D1節約モード中のため開始できない。'},429);
+    const result=await enableAllMemberArchive(env.DB);
+    invalidateCoachRoundReport(env.DB);
+    return response({status:'enabled',...result,
+      note:'各登録者のHenrik履歴で確認できる試合を段階的に収集。API側にない試合は完全保証できない。'});
   }
   if(request.method==='POST'&&path==='/api/kp/coach/backfill/resume'){
     if(!coachOwner)return response({error:'VDK本人の連携口座からのみ再開できる。'},403);
