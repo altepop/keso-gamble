@@ -64,7 +64,7 @@ tr:last-child td{border-bottom:0}
 /* The default view is a short per-subject decision summary, not an endless audit. */
 .focus-panel{border-color:#425476;padding:20px}
 .focus-lead{font-size:13px;color:#b7c8e1;margin:0 0 15px}
-.coach-tabs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin:14px 0 18px}
+.coach-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin:14px 0 18px}
 .coach-tab{min-width:0;border:1px solid #354d70;background:#101e37;padding:10px 2px;font-size:clamp(12px,3.3vw,15px);font-weight:780}
 .coach-tab[aria-selected=true]{border-color:#95c7ff;background:#284e7a;box-shadow:inset 0 -3px #a9d6ff}
 .coach-tab:focus-visible,.archive-drawer summary:focus-visible,.focus-details summary:focus-visible{outline:3px solid #85c4ff;outline-offset:2px}
@@ -89,6 +89,11 @@ tr:last-child td{border-bottom:0}
 .focus-item .data{color:#e3efff;font-weight:750;font-variant-numeric:tabular-nums}
 .focus-item.good{border-left:4px solid #76cea9}.focus-item.focus{border-left:4px solid #f0ae6b}
 .focus-items{display:grid;gap:0}
+select{width:100%;max-width:600px;padding:10px;border-radius:9px;color:#eef2fa;background:#10213b;border:1px solid #526584;min-height:44px;font:inherit}
+.other-player{margin:5px 0 15px}
+.other-player label,.link-account label{font-weight:650;font-size:13px;margin:7px 0}
+.link-account{margin-top:14px;display:grid;gap:8px}
+.link-account button{width:max-content;max-width:100%}
 .focus-empty{border:1px solid #34435b;border-radius:10px;color:#c4d1e5;background:#0d192c;padding:13px;font-size:13px}
 .focus-details{border:1px solid #34435b;border-radius:11px;margin-top:12px;padding:8px 11px}
 .focus-details summary{cursor:pointer;font-size:13px;font-weight:750;padding:7px 2px}
@@ -136,8 +141,12 @@ tr:last-child td{border-bottom:0}
 <button type="button" class="coach-tab" role="tab" id="tab-VDK" data-coach-subject="VDK" aria-controls="focus-content" aria-selected="true">VDK</button>
 <button type="button" class="coach-tab" role="tab" id="tab-Abema" data-coach-subject="Abema" aria-controls="focus-content" aria-selected="false">Abema</button>
 <button type="button" class="coach-tab" role="tab" id="tab-石原" data-coach-subject="石原" aria-controls="focus-content" aria-selected="false">石原</button>
+<button type="button" class="coach-tab" role="tab" id="tab-藤村" data-coach-subject="藤村" aria-controls="focus-content" aria-selected="false">藤村</button>
+<button type="button" class="coach-tab" role="tab" id="tab-神戸" data-coach-subject="神戸" aria-controls="focus-content" aria-selected="false">神戸</button>
 <button type="button" class="coach-tab" role="tab" id="tab-チーム" data-coach-subject="チーム" aria-controls="focus-content" aria-selected="false">チーム</button>
 </div>
+<div class="other-player"><label for="coach-other-select">ほかの味方のアカウント別診断</label>
+<select id="coach-other-select" aria-label="保存試合に登場したその他の味方"><option value="">選手を選択</option></select></div>
 <div id="focus-content" role="tabpanel" aria-labelledby="tab-VDK" tabindex="0"></div>
 </section>
 <details id="archive-drawer" class="archive-drawer">
@@ -177,12 +186,12 @@ tr:last-child td{border-bottom:0}
 </section>
 <section class="panel">
 <h2>良かったラウンド：再現したい勝ち方</h2>
-<p class="muted small">同じ43試合の勝利ラウンドから、先制2キルを勝ちにつなげた場面・FK担当者が初動5秒間倒されなかった場面・敵FKから逆転した場面を抽出する。正しい戦術と断定せず、VODで再現可能な行動を探す。</p>
+<p class="muted small">同じ保存済み完全試合の勝利ラウンドから、先制2キルを勝ちにつなげた場面・FK担当者が初動5秒間倒されなかった場面・敵FKから逆転した場面を抽出する。正しい戦術と断定せず、VODで再現可能な行動を探す。</p>
 <div id="success-rounds"></div>
 </section>
 <section class="panel"><h2>マップ別：先制キルを勝利に変えた割合</h2><div id="maps"></div><p class="foot">FK後勝率＝味方が敵を最初に倒したラウンドのうち、ラウンド勝者が分かるものに限った勝率。5対4からの敗北を探す指標で、プレイヤー個人の戦犯判定ではない。</p></section>
 <section class="panel">
-<h2>VDK・Abema・石原：個人別FK / FD</h2>
+<h2>保存試合に登場した味方全員：個人別FK / FD</h2>
 <p class="muted small">ラウンドの最初の敵味方間キルのみで判定。FD後勝率は、先制デスしたラウンドで味方が勝利した割合（勝敗判明分のみ）である。役割やマップ、サンプル数の違いがあるため、FK/FDだけで良し悪しは決められない。</p>
 <div class="cards" id="players"></div>
 <p class="foot">「5秒以内の死亡」は、先制キルを取った本人が直後に倒された回数。「5秒以内の取り返し」は、最初に倒された味方の敵キラーを味方が5秒以内に倒した回数である。意図的なトレードの証明ではない。</p>
@@ -215,7 +224,27 @@ const card=(label,value,sub='')=>`<article class="card"><div class="label">${esc
 const simpleTable=(headers,rows)=>`<div class="table-wrap"><table><thead><tr>${headers.map((h,i)=>`<th class="${i?'num':''}">${escape(h)}</th>`).join('')}</tr></thead><tbody>${rows.map(a=>`<tr>${a.map((cell,i)=>`<td class="${i?'num':''}">${escape(cell)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
 
 let chosenCoachSubject='VDK';
-const coachSubjects=['VDK','Abema','石原','チーム'];
+const fixedCoachSubjects=['VDK','Abema','石原','藤村','神戸','チーム'];
+let coachSubjects=[...fixedCoachSubjects];
+const LOCAL_IDENTITIES_KEY='keso-coach-member-mapping-v1';
+// Kobe's previously confirmed Abema#ttv sub-account is ONE recorded account,
+// not an additional independent sample. The owner can change the mapping.
+const defaultPersonAliases={神戸:'Abema'};
+const getPersonAliases=()=>{
+ try{
+  const o=JSON.parse(localStorage.getItem(LOCAL_IDENTITIES_KEY)||'{}');
+  return o&&typeof o==='object'&&!Array.isArray(o)?o:{};
+ }catch{return {}}
+};
+const personAlias=(subject)=>Object.prototype.hasOwnProperty.call(getPersonAliases(),subject)
+ ?getPersonAliases()[subject]:(defaultPersonAliases[subject]||null);
+const setPersonAlias=(subject,account)=>{
+ if(!['藤村','神戸'].includes(subject))return;
+ const state=getPersonAliases();
+ if(account)state[subject]=account;
+ else state[subject]=null;
+ try{localStorage.setItem(LOCAL_IDENTITIES_KEY,JSON.stringify(state));}catch{}
+};
 const readableStatus=s=>s==='focus'?'要見直し':s==='good'?'良い傾向':
  s==='insufficient'?'データ不足':s==='mixed'?'明確な差なし':'参考値';
 const evidenceCard=(d,kind)=>`<article class="focus-item ${kind}">
@@ -228,17 +257,26 @@ const significant=(d)=>Number.isFinite(d?.denominator)&&d.denominator>0;
 function renderCoachFocus(data){
  const deep=data.fullDiagnosis;
  const current=coachSubjects.includes(chosenCoachSubject)?chosenCoachSubject:'VDK';
+ const people=(data.individual||[]).map(p=>p.player).filter(x=>typeof x==='string');
+ const extras=people.filter(name=>!fixedCoachSubjects.includes(name));
+ coachSubjects=[...fixedCoachSubjects,...extras];
+ $('coach-other-select').innerHTML='<option value="">その他の味方を選ぶ</option>'+extras.map(name=>
+  `<option value="${escape(name)}">${escape(name)}</option>`).join('');
+ $('coach-other-select').value=extras.includes(current)?current:'';
+ const aliasSource=['藤村','神戸'].includes(current)?personAlias(current):null;
+ const account=aliasSource&&people.includes(aliasSource)?aliasSource:current;
  for(const btn of $('coach-tabs').querySelectorAll('[data-coach-subject]')){
   const selected=btn.dataset.coachSubject===current;
   btn.setAttribute('aria-selected',String(selected));
   btn.tabIndex=selected?0:-1;
  }
- $('focus-content').setAttribute('aria-labelledby','tab-'+current);
+ $('focus-content').setAttribute('aria-labelledby',
+    fixedCoachSubjects.includes(current)?'tab-'+current:'coach-other-select');
  if(!deep||!Array.isArray(deep.items)){
   $('focus-content').innerHTML='<p class="focus-empty">詳細な診断データがまだない。データを更新してほしい。</p>';
   return;
  }
- const own=deep.items.filter(d=>d.subject===current);
+ const own=deep.items.filter(d=>d.subject===account);
  // Give sufficient samples and personally actionable events priority. Map splits
  // are valuable, but should not hide repeated opening/cover issues.
  const categoryOrder={'先制':0,'生存・取り返し':1,'攻撃・防衛':2,'試合全体':3,'マップ・エージェント':4};
@@ -253,10 +291,29 @@ function renderCoachFocus(data){
  const selected=focus[0]||null;
  const firstGood=good[0]||null;
  const sample=current==='チーム'?data.usableMatches:
-   data.individual?.find(p=>p.player===current)?.matches;
+   data.individual?.find(p=>p.player===account)?.matches;
+ const aliasNote=account!==current&&sample!==undefined
+  ?`<p class="focus-note">紐づけ中のRiotアカウント：${escape(account)}。同じ戦績を別人の試合として二重計上していない。</p>`:'';
  const overview=`<div class="subject-head"><h3>${escape(current)}のコーチング</h3>
   <p>分析対象 ${sample===undefined||sample===null?'—':int(sample)}試合</p></div>
+  ${aliasNote}
   <p class="focus-counter">見直し候補 ${int(focus.length)}件 ／ 良い傾向 ${int(good.length)}件 ／ 参考・保留 ${int(other.length+pending.length)}件</p>`;
+ const noAccount=!people.includes(account)&&current!=='チーム';
+ if(noAccount){
+  const choices=people.filter(x=>x!=='VDK');
+  const manual=['藤村','神戸'].includes(current)?`<div class="link-account">
+    <label for="coach-account-map">${escape(current)}のRiotアカウントを選んで紐づける</label>
+    <select id="coach-account-map"><option value="">候補を選ぶ（推測で紐づけない）</option>
+    ${choices.map(x=>`<option value="${escape(x)}">${escape(x)}</option>`).join('')}</select>
+    <button id="coach-link-account" type="button" ${choices.length?'':'disabled'}>このアカウントを紐づける</button>
+    <p class="small muted">選択はこのブラウザー内だけに保存する。本人か確認できない場合は選ばないでほしい。</p>
+   </div>`:'';
+  $('focus-content').innerHTML=overview+
+   `<div class="focus-empty"><strong>${escape(current)}は未紐づけ／対象試合なし</strong>
+   <p>保存済みのVDK参加試合から、本人のRiotアカウントを特定できていない。0キル・0勝ではなく、判定不能である。</p>
+   <p>VDKと一緒にプレーしていない試合は、現在の43試合の収集範囲には入っていない。</p></div>`+manual;
+  return;
+ }
  const top=selected?`<div class="focus-main" aria-label="一番の弱点候補">
   <span class="overline">最優先の弱点候補 · 要VOD確認</span>
   <strong>${escape(selected.title)}</strong>
@@ -303,14 +360,29 @@ $('coach-tabs').addEventListener('click',event=>{
  chosenCoachSubject=btn.dataset.coachSubject;
  if(latestReport)renderCoachFocus(latestReport);
 });
+$('coach-other-select').addEventListener('change',event=>{
+ const value=event.target.value;
+ if(!coachSubjects.includes(value)||fixedCoachSubjects.includes(value))return;
+ chosenCoachSubject=value;
+ if(latestReport)renderCoachFocus(latestReport);
+});
+$('focus-content').addEventListener('click',event=>{
+ if(!event.target.closest('#coach-link-account'))return;
+ const subject=chosenCoachSubject;
+ const account=$('coach-account-map')?.value;
+ if(!['藤村','神戸'].includes(subject)||!account||
+    !(latestReport?.individual||[]).some(p=>p.player===account))return;
+ setPersonAlias(subject,account);
+ renderCoachFocus(latestReport);
+});
 $('coach-tabs').addEventListener('keydown',event=>{
  if(!['ArrowRight','ArrowLeft','Home','End'].includes(event.key))return;
  const source=event.target.closest('[data-coach-subject]');
  if(!source||!$('coach-tabs').contains(source))return;
- const i=coachSubjects.indexOf(source.dataset.coachSubject);
- const next=event.key==='Home'?0:event.key==='End'?coachSubjects.length-1:
-   (i+(event.key==='ArrowRight'?1:-1)+coachSubjects.length)%coachSubjects.length;
- chosenCoachSubject=coachSubjects[next];
+ const i=fixedCoachSubjects.indexOf(source.dataset.coachSubject);
+ const next=event.key==='Home'?0:event.key==='End'?fixedCoachSubjects.length-1:
+   (i+(event.key==='ArrowRight'?1:-1)+fixedCoachSubjects.length)%fixedCoachSubjects.length;
+ chosenCoachSubject=fixedCoachSubjects[next];
  if(latestReport)renderCoachFocus(latestReport);
  $('tab-'+chosenCoachSubject).focus();
  event.preventDefault();
@@ -338,7 +410,7 @@ $('coach-signals').innerHTML=signals.length?signals.map(s=>{
  </article>`;
 }).join(''):'<p class="empty">判定に必要な条件を満たす指標がまだない。</p>';
 const deep=data.fullDiagnosis||null;
-const deepTargets=['チーム','VDK','Abema','石原'];
+const deepTargets=['チーム',...(data.individual||[]).map(p=>p.player)];
 const statLabel=s=>s==='good'?'良い傾向':s==='focus'?'見直し候補':
  s==='insufficient'?'データ不足':s==='mixed'?'差が小さい／未確定':'参考値';
 const diagnosticLine=d=>`<article class="diag-row ${escape(d.status)}">
