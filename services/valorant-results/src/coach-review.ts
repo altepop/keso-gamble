@@ -250,3 +250,71 @@ export function detectCoachSignals(report:SignalReport):CoachSignal[]{
  }
  return out;
 }
+
+
+// Positive examples from the SAME complete match archive as the review queue.
+// A win alone does not prove a sound tactic; the VOD prompt asks what to verify.
+export type CoachSuccessRound={
+ map:string;matchJst:string;round:number;
+ category:'early_two_kills_won'|'fk_survived_won'|'enemy_fk_comeback_won';
+ evidence:string;focus:string;firstKiller:string|null;
+};
+export function recommendSuccessRounds(rows:readonly Archived[],maximum=8):CoachSuccessRound[]{
+ const found:Array<CoachSuccessRound&{priority:number;endedAt:number}>=[];
+ for(const row of rows){
+  const players=safe(row.players_json),rounds=safe(row.rounds_json),kills=safe(row.kills_json);
+  if(!Array.isArray(players)||players.length!==10||!Array.isArray(rounds)||
+   rounds.length<1||rounds.length>60||!Array.isArray(kills)||kills.length<1||
+   !Number.isSafeInteger(row.ended_at)||row.ended_at<=0||
+   !players.every((p:Player)=>id(p?.puuid)&&id(p?.team_id))||
+   new Set(players.map((p:Player)=>p.puuid)).size!==10||
+   !rounds.every((r:Round)=>validRound(r?.r))||
+   !kills.every((k:Kill)=>validRound(k?.r)&&validTime(k?.t)&&
+    id(k.victim)&&players.some((p:Player)=>p.puuid===k.victim)&&
+    (k.killer===null||(id(k.killer)&&players.some((p:Player)=>p.puuid===k.killer)))))continue;
+  const ps=players as Player[],roster=new Map(ps.map(p=>[p.puuid!,p]));
+  const vdk=ps.find(p=>p.name==='Dolly'&&p.tag==='SDGs');
+  const teams=new Set(ps.map(p=>p.team_id));
+  if(!vdk||teams.size!==2||[...teams].some(t=>ps.filter(p=>p.team_id===t).length!==5))continue;
+  const events=new Map<number,Array<{t:number;order:number;killer:string;victim:string;kTeam:string;vTeam:string}>>();
+  (kills as Kill[]).forEach((k,i)=>{
+   if(!k.killer)return;
+   const kTeam=roster.get(k.killer)?.team_id,vTeam=roster.get(k.victim!)?.team_id;
+   if(!kTeam||!vTeam||kTeam===vTeam)return;
+   const list=events.get(k.r!)??[];
+   list.push({t:k.t!,order:i,killer:k.killer,victim:k.victim!,kTeam,vTeam});
+   events.set(k.r!,list);
+  });
+  const map=typeof row.map==='string'&&row.map.length<=80?row.map:'Unknown';
+  const matchJst=new Date(row.ended_at+9*3600_000).toISOString().slice(0,16).replace('T',' ');
+  for(const rr of rounds as Round[]){
+   if(rr.winner!==vdk.team_id||!validRound(rr.r))continue;
+   const list=(events.get(rr.r)??[]).sort((a,b)=>a.t-b.t||a.order-b.order);
+   if(!list.length)continue;
+   const first=list[0],ourFirst=first.kTeam===vdk.team_id;
+   const allyDeathTime=list.find(e=>e.vTeam===vdk.team_id)?.t??Infinity;
+   const earlyEnemies=new Set(list.filter(e=>e.kTeam===vdk.team_id&&e.t<allyDeathTime).map(e=>e.victim)).size;
+   const survived5=ourFirst&&!list.some(e=>e.victim===first.killer&&
+    e.t>first.t&&e.t-first.t<=5000);
+   const category:CoachSuccessRound['category']=earlyEnemies>=2
+    ?'early_two_kills_won':survived5?'fk_survived_won':'enemy_fk_comeback_won';
+   if(category==='enemy_fk_comeback_won'&&ourFirst)continue;
+   const priority=category==='early_two_kills_won'?3:category==='enemy_fk_comeback_won'?2:1;
+   const evidence=category==='early_two_kills_won'
+    ?`味方が先に別々の敵${earlyEnemies}人を倒し、ラウンド勝利`
+    :category==='enemy_fk_comeback_won'
+     ?'敵が先制キルを取ったが、味方が逆転してラウンド勝利'
+     :'味方が先制キルし、初動5秒以内にFK担当者は倒されずラウンド勝利';
+   const focus=category==='early_two_kills_won'
+    ?'人数有利を維持できた場面の時間・配置・設置をVODで確認'
+    :category==='enemy_fk_comeback_won'
+     ?'人数不利からの取り返し、カバーと時間の使い方をVODで確認'
+     :'先制キル後の退避・味方カバーをVODで確認';
+   found.push({map,matchJst,round:rr.r,category,evidence,focus,
+    firstKiller:label(roster.get(first.killer)!),priority,endedAt:row.ended_at});
+  }
+ }
+ return found.sort((a,b)=>b.priority-a.priority||b.endedAt-a.endedAt||a.round-b.round)
+  .slice(0,Math.max(0,Math.min(15,maximum)))
+  .map(({priority:_priority,endedAt:_endedAt,...r})=>r);
+}
