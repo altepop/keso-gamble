@@ -1,4 +1,4 @@
-import {coachNotes,recommendReviewRounds} from './coach-review.ts';
+import {coachNotes,recommendReviewRounds,detectCoachSignals} from './coach-review.ts';
 
 // Read-only, opt-in-on-request analysis of the match archives already in D1.
 // Never infer missing winner/attack/defence fields, or treat a Clove revive as invalid.
@@ -240,6 +240,7 @@ type CoachReport=ReturnType<typeof summarizeCoachRounds>&{
  backfill:{status:'running'|'complete'|'disabled';complete:number;partial:number;missing:number;unavailable:number;pending:number};
  reviewRounds:ReturnType<typeof recommendReviewRounds>;
  coachingNotes:ReturnType<typeof coachNotes>;
+ coachSignals:ReturnType<typeof detectCoachSignals>;
 };
 const readCache=new WeakMap<object,{until:number;value:CoachReport}>();
 export function invalidateCoachRoundReport(db:D1Database){readCache.delete(db);}
@@ -287,7 +288,8 @@ export async function readCoachRoundReport(db:D1Database,now=Date.now()){
  const value={...report,totalVdkRosterMatches,
    backfill:{status,complete,partial,missing,unavailable,
      pending:Math.max(0,missing+partial-unavailable)},
-   reviewRounds:recommendReviewRounds(result.results),coachingNotes:coachNotes(report)};
+   reviewRounds:recommendReviewRounds(result.results),coachingNotes:coachNotes(report),
+   coachSignals:detectCoachSignals(report)};
  readCache.set(db,{until:now+5*60000,value});
  return value;
 }
