@@ -95,10 +95,35 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
     const profile=person==='神戸'?'神戸':person;
     return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({
      person,profile,accounts:person==='神戸'?['Abema#ttv','Aquatopia#toppy']:[person],
-     usableMatches:2,coverage:{discovered:5,complete:2,discoveryDone:false},
-     fullDiagnosis:{items:[{subject:profile,status:'focus',title:'FK後の動きを確認',
-       evidence:'2 / 10（20%）',reason:'映像による確認が必要',
-       nextAction:'味方のカバーと退避を確認'}]}})});
+     usableMatches:2,archivedMatches:2,roundDataMissing:0,killDataMissing:0,
+     coverage:{discovered:0,complete:0,discoveryDone:false,allMatchesGuaranteed:false},
+     individual:[{player:profile,matches:2,matchWins:1,matchLosses:1,matchDraws:0,
+       totalKills:36,totalDeaths:24,firstKills:8,firstDeaths:10,
+       firstKillWins:6,firstKillLosses:2,firstDeathWins:3,firstDeathLosses:7,
+       firstDeathKillerEliminatedWithin5s:2,openingKillerDiedWithin5s:1,
+       attack:{observedOpeningRounds:16,firstKills:5,firstDeaths:3},
+       defense:{observedOpeningRounds:17,firstKills:3,firstDeaths:7}}],
+     individualMapAgent:[{player:profile,map:'Ascent',agent:'Sage',matches:2,
+       observedOpeningRounds:33,firstKills:8,firstDeaths:10,matchWins:1,matchLosses:1,matchDraws:0}],
+     matchTrend:[
+       {date:'11/16',map:'Ascent',agent:'Sage',outcome:'win',kills:20,deaths:10,assists:6,
+         firstKills:5,firstDeaths:4,observedOpeningRounds:17},
+       {date:'11/15',map:'Lotus',agent:'Sage',outcome:'loss',kills:16,deaths:14,assists:5,
+         firstKills:3,firstDeaths:6,observedOpeningRounds:16}],
+     fullDiagnosis:{items:[
+       {subject:profile,category:'生存・取り返し',status:'focus',title:'FK後の動きを確認',
+        numerator:2,denominator:10,evidence:'2 / 10（20%）',reason:'映像による確認が必要',
+        nextAction:'味方のカバーと退避を確認'},
+       {subject:profile,category:'攻撃・防衛',status:'mixed',title:'攻撃の先制収支',
+        numerator:2,denominator:16,evidence:'FK5 FD3 / 16R',reason:'サイド差は暫定',
+        nextAction:'攻撃側の映像を比較'},
+       {subject:profile,category:'先制',status:'context',title:'先制デス率',
+        numerator:10,denominator:33,evidence:'10 / 33',reason:'役割依存',
+        nextAction:'倒された位置を確認'},
+       {subject:profile,category:'生存・取り返し',status:'good',title:'FK後の勝利',
+        numerator:6,denominator:8,evidence:'6 / 8',reason:'味方込みの観測',
+        nextAction:'勝てた場面を再現'}
+     ]}})});
    }
    if(req.url().endsWith('/api/kp/coach/members/start'))
     return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({status:'enabled',enabled:true})});
@@ -191,9 +216,26 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   assert.match(await page.locator('#member-result').innerText(),/神戸の個別診断/);
   assert.match(await page.locator('#member-result').innerText(),/Abema#ttv/);
   assert.match(await page.locator('#member-result').innerText(),/Aquatopia#toppy/);
-  assert.match(await page.locator('#member-result').innerText(),/最優先の弱点候補/);
+  assert.match(await page.locator('#member-result').innerText(),/最初に見るべき改善候補/);
   assert.match(await page.locator('#member-result').innerText(),/2 \/ 10/);
-  assert.equal(requests.length,3,'one own-match read only upon clicking the person');
+  assert.match(await page.locator('#coach-view-overview').innerText(),/既存の保存済み記録から2試合/);
+  assert.match(await page.locator('#coach-view-overview').innerText(),/試合ごとの推移/);
+  assert.equal(await page.locator('.trend-game').count(),2,'two complete matches in trend');
+  assert.equal(await page.locator('.coach-kpi').count(),4,'four top-level KPI cards');
+  await page.locator('[data-coach-view="strategy"]').click();
+  assert.equal(await page.locator('#coach-view-strategy').isVisible(),true);
+  assert.match(await page.locator('#coach-view-strategy').innerText(),/攻撃と防衛の先制動向/);
+  assert.match(await page.locator('#coach-view-strategy').innerText(),/Ascent \/ Sage/);
+  assert.equal(await page.locator('.coach-side').count(),2);
+  await page.locator('[data-coach-view="improve"]').click();
+  assert.match(await page.locator('#coach-view-improve').innerText(),/攻撃の先制収支/);
+  assert.match(await page.locator('#coach-view-improve').innerText(),/FK後の勝利/);
+  await page.locator('[data-coach-view="metrics"]').click();
+  await page.locator('#coach-view-metrics details').first().locator('summary').click();
+  assert.match(await page.locator('#coach-view-metrics').innerText(),/先制デス率/);
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,
+    'dashboard must not overflow on 375px iPhone');
+  assert.equal(requests.length,3,'changing dashboard tabs never triggers extra API calls');
   await page.locator('#start-member-archive').click();
   await page.waitForFunction(()=>document.querySelector('#status').textContent.includes('履歴収集を有効化'));
   assert.equal(requests.filter(x=>x.method==='POST'&&x.url.endsWith('/api/kp/coach/members/start')).length,1);
