@@ -23,13 +23,17 @@ interface Totals{
   matches:number;rounds:number;winnerKnown:number;ourRoundWins:number;
   roundsWithFk:number;ourFirstKills:number;enemyFirstKills:number;
   firstKillWins:number;firstKillLosses:number;firstKillOutcomesKnown:number;
-  comebackWins:number;roundsWithSides:number;repeatedVictimRounds:number;
+  comebackWins:number;enemyFkWins:number;enemyFkLosses:number;
+  doubleOpeningWins:number;doubleOpeningLosses:number;
+  roundsWithSides:number;repeatedVictimRounds:number;
 }
 const empty=():Totals=>({
   matches:0,rounds:0,winnerKnown:0,ourRoundWins:0,
   roundsWithFk:0,ourFirstKills:0,enemyFirstKills:0,
   firstKillWins:0,firstKillLosses:0,firstKillOutcomesKnown:0,
-  comebackWins:0,roundsWithSides:0,repeatedVictimRounds:0
+  comebackWins:0,enemyFkWins:0,enemyFkLosses:0,
+  doubleOpeningWins:0,doubleOpeningLosses:0,
+  roundsWithSides:0,repeatedVictimRounds:0
 });
 const safeJson=(value:string|null):unknown=>{
   if(value===null)return null;
@@ -42,6 +46,10 @@ type Bucket=Totals & {map?:string;composition?:string};
 // Per-player metrics are counts of observed opening events, not a player rating.
 // Never infer that a support agent with 0 FK performed poorly.
 type CoachPlayer='VDK'|'Abema'|'石原';
+interface SideOpening{rounds:number;observedOpeningRounds:number;firstKills:number;firstDeaths:number;
+ firstKillWins:number;firstKillLosses:number;firstDeathWins:number;firstDeathLosses:number;}
+const emptySide=():SideOpening=>({rounds:0,observedOpeningRounds:0,firstKills:0,firstDeaths:0,
+ firstKillWins:0,firstKillLosses:0,firstDeathWins:0,firstDeathLosses:0});
 interface PlayerBucket{
   player:CoachPlayer;
   map?:string;
@@ -50,6 +58,7 @@ interface PlayerBucket{
   firstKills:number;firstDeaths:number;firstKillWins:number;firstKillLosses:number;
   firstDeathWins:number;firstDeathLosses:number;
   openingKillerDiedWithin5s:number;firstDeathKillerEliminatedWithin5s:number;
+  attack:SideOpening;defense:SideOpening;
 }
 const playerIdentity:ReadonlyArray<{name:string;tag:string;label:CoachPlayer}>=[
   {name:'Dolly',tag:'SDGs',label:'VDK'},
@@ -61,7 +70,8 @@ const emptyPlayer=(player:CoachPlayer,map?:string,agent?:string):PlayerBucket=>(
   matches:0,rounds:0,roundsWithKillData:0,observedOpeningRounds:0,
   firstKills:0,firstDeaths:0,firstKillWins:0,firstKillLosses:0,
   firstDeathWins:0,firstDeathLosses:0,
-  openingKillerDiedWithin5s:0,firstDeathKillerEliminatedWithin5s:0
+  openingKillerDiedWithin5s:0,firstDeathKillerEliminatedWithin5s:0,
+  attack:emptySide(),defense:emptySide()
 });
 const playerReport=(p:PlayerBucket)=>({
   ...p,
@@ -71,7 +81,9 @@ const playerReport=(p:PlayerBucket)=>({
   firstKillPerObservedRoundPct:p.observedOpeningRounds
     ?Math.round(p.firstKills*1000/p.observedOpeningRounds)/10:null,
   firstDeathRecoveryPct:p.firstDeathWins+p.firstDeathLosses
-    ?Math.round(p.firstDeathWins*1000/(p.firstDeathWins+p.firstDeathLosses))/10:null
+    ?Math.round(p.firstDeathWins*1000/(p.firstDeathWins+p.firstDeathLosses))/10:null,
+  firstDeathPerObservedRoundPct:p.observedOpeningRounds
+    ?Math.round(p.firstDeaths*1000/p.observedOpeningRounds)/10:null
 });
 function emit(t:Bucket){
   return {...t,firstKillWinPct:t.firstKillOutcomesKnown
@@ -160,6 +172,7 @@ export function summarizeCoachRounds(rows:readonly ArchivedRow[]){
       const won=typeof rr.winner==='string'&&teams.has(rr.winner)?rr.winner:null;
       const sideKnown=typeof rr.attack==='string'&&typeof rr.defense==='string'&&
         teams.has(rr.attack)&&teams.has(rr.defense)&&rr.attack!==rr.defense;
+      const side=sideKnown?(rr.attack===vdk.team_id?'attack':'defense'):null;
       const events=(killByRound.get(rr.r)??[]).sort((a,b)=>a.t-b.t||a.order-b.order);
       const first=events[0]??null;
       const repeated=new Set<string>();
@@ -183,6 +196,17 @@ export function summarizeCoachRounds(rows:readonly ArchivedRow[]){
           e.t>=first!.t&&e.t-first!.t<=5000&&e.victim===first!.killer&&
           roster.get(e.killer!)?.team_id===vdk.team_id);
         for(const bucket of participant.all){
+          if(side){
+            const sb=bucket[side];
+            sb.rounds++;
+            if(first)sb.observedOpeningRounds++;
+            if(pFirstKill)sb.firstKills++;
+            if(pFirstDeath)sb.firstDeaths++;
+            if(pFirstKillWin)sb.firstKillWins++;
+            if(pFirstKillLoss)sb.firstKillLosses++;
+            if(pFirstDeathWin)sb.firstDeathWins++;
+            if(pFirstDeathLoss)sb.firstDeathLosses++;
+          }
           bucket.rounds++;
           if(validKills)bucket.roundsWithKillData++;
           if(first&&validKills)bucket.observedOpeningRounds++;
@@ -196,8 +220,18 @@ export function summarizeCoachRounds(rows:readonly ArchivedRow[]){
           if(pFastTraded)bucket.firstDeathKillerEliminatedWithin5s++;
         }
       }
+      // Number advantage before any ally casualty is a timeline observation,
+      // not proof that spikes, trades or correct positioning were involved.
+      const firstAllyDeath=events.find(e=>roster.get(e.victim)?.team_id===vdk.team_id);
+      const enemyBeforeAllyDeath=new Set(events.filter(e=>
+        roster.get(e.killer!)?.team_id===vdk.team_id&&
+        (!firstAllyDeath||e.t<firstAllyDeath.t)).map(e=>e.victim)).size;
       for(const bucket of buckets){
         bucket.rounds++;
+        if(enemyBeforeAllyDeath>=2&&won){
+          if(won===vdk.team_id)bucket.doubleOpeningWins++;
+          else bucket.doubleOpeningLosses++;
+        }
         if(won){bucket.winnerKnown++;if(won===vdk.team_id)bucket.ourRoundWins++;}
         if(sideKnown)bucket.roundsWithSides++;
         if(repeated.size)bucket.repeatedVictimRounds++;
@@ -212,7 +246,10 @@ export function summarizeCoachRounds(rows:readonly ArchivedRow[]){
             }
           }else{
             bucket.enemyFirstKills++;
-            if(won===vdk.team_id)bucket.comebackWins++;
+            if(won){
+              if(won===vdk.team_id){bucket.comebackWins++;bucket.enemyFkWins++;}
+              else bucket.enemyFkLosses++;
+            }
           }
         }
       }
