@@ -9,6 +9,7 @@ function sample(){
   firstKillWins:0,firstKillLosses:0,firstDeathWins:0,firstDeathLosses:0
  });
  const team={
+  matchWins:12,matchLosses:8,matchDraws:0,
   rounds:500,winnerKnown:500,ourRoundWins:285,
   firstKillWins:150,firstKillLosses:50,firstKillOutcomesKnown:200,
   enemyFkWins:35,enemyFkLosses:160,doubleOpeningWins:63,doubleOpeningLosses:7,
@@ -18,12 +19,18 @@ function sample(){
   player:'VDK',matches:21,observedOpeningRounds:450,
   firstKills:40,firstDeaths:42,firstKillWins:34,firstKillLosses:6,
   firstDeathWins:10,firstDeathLosses:32,
+  matchWins:11,matchLosses:10,matchDraws:0,
+  statsMatches:21,totalKills:350,totalDeaths:260,totalAssists:160,
+  scoreMatches:21,totalScore:85000,samePartyAsVdk:0,differentPartyFromVdk:0,partyUnknown:0,
   openingKillerDiedWithin5s:3,firstDeathKillerEliminatedWithin5s:9,
   attack:side(160,25,12),defense:side(170,8,21)
  };
  const support={...player,player:'石原',matches:1,observedOpeningRounds:20,
   firstKills:0,firstDeaths:1,firstKillWins:0,firstKillLosses:0,
   firstDeathWins:0,firstDeathLosses:1,
+  matchWins:0,matchLosses:1,matchDraws:0,
+  statsMatches:1,totalKills:4,totalDeaths:15,totalAssists:7,
+  scoreMatches:1,totalScore:5000,samePartyAsVdk:0,differentPartyFromVdk:0,partyUnknown:1,
   openingKillerDiedWithin5s:0,firstDeathKillerEliminatedWithin5s:0,
   attack:side(10,0,0),defense:side(10,0,1)};
  return {archivedMatches:44,usableMatches:43,killDataMissing:1,roundDataMissing:0,
@@ -44,6 +51,9 @@ test('complete-case team, personal FK/FD, two-kill, side and map/agent signals h
  assert.equal(find('チーム','味方FK後のラウンド勝率')?.status,'good');
  assert.equal(find('チーム','味方が先に2キル以上取得したラウンドの勝率')?.status,'good');
  assert.equal(find('VDK','本人FK後の勝率')?.status,'mixed');
+ assert.equal(find('VDK','K / D / A の試合平均')?.status,'context');
+ assert.equal(find('チーム','試合勝率（勝敗判明）')?.ratePct,60);
+ assert.ok(diagnosis.items.some(x=>x.subject==='石原'&&x.title==='パーティー情報の不明件数'));
  assert.equal(find('VDK','先制デス率')?.status,'context','FD volume by role is never called a weakness');
  assert.equal(find('VDK','FD後5秒以内に味方が同じ敵を倒した率')?.status,'focus');
  assert.equal(find('VDK','FK後5秒以内に倒されなかった率')?.status,'good');
