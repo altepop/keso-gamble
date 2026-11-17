@@ -56,7 +56,7 @@ export async function discoverCoachMemberPage(db:D1Database,
  if(!await getSwitch(db))return 'disabled';
  const source=await db.prepare(`SELECT riot_id,puuid,region,next_page,done,truncated,next_at
   FROM coach_member_sources WHERE done=0 AND next_at<=?
-  ORDER BY next_page ASC,riot_id ASC LIMIT 1`).bind(now).first<Source>();
+  ORDER BY CASE WHEN puuid IS NULL THEN 0 ELSE 1 END, next_page ASC,riot_id ASC LIMIT 1`).bind(now).first<Source>();
  if(!source)return 'idle';
  if(!isId(source.puuid)||!isRegion(source.region)){
   try{
