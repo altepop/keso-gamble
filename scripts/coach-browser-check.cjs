@@ -238,6 +238,14 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,
     'dashboard must not overflow on 375px iPhone');
   assert.equal(requests.length,3,'changing dashboard tabs never triggers extra API calls');
+  await page.locator('#share').click();
+  const exportedMember=JSON.parse(await page.evaluate(()=>window.__copiedDiagnostic));
+  assert.equal(exportedMember.format,'KESO_COACH_SAFE_MEMBER_DIAGNOSTIC_V1');
+  assert.equal(exportedMember.person,'神戸');
+  assert.equal(exportedMember.matchTrend.length,2,'safe copy includes anonymous date-based trend');
+  assert.equal(JSON.stringify(exportedMember).includes('private-vod-identifier'),false);
+  assert.equal(JSON.stringify(exportedMember).includes('secret-puuid'),false);
+  assert.equal(requests.length,3,'copying selected report is purely client-side');
   await page.locator('#start-member-archive').click();
   await page.waitForFunction(()=>document.querySelector('#status').textContent.includes('履歴収集を有効化'));
   assert.equal(requests.filter(x=>x.method==='POST'&&x.url.endsWith('/api/kp/coach/members/start')).length,1);
