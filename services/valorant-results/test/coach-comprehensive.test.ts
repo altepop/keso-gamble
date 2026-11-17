@@ -37,8 +37,12 @@ function sample(){
   overall:team,individual:[player,support],
   individualMapAgent:[
    {...player,map:'Corrode',agent:'Fade',matches:7,
-    firstKillWins:15,firstKillLosses:3,firstKills:18,firstDeaths:12},
+    matchWins:4,matchLosses:3,matchDraws:0,statsMatches:7,
+    observedOpeningRounds:140,
+    firstKillWins:15,firstKillLosses:3,firstKills:18,firstDeaths:30},
    {...player,map:'Lotus',agent:'Fade',matches:1,
+    matchWins:0,matchLosses:1,matchDraws:0,statsMatches:1,
+    observedOpeningRounds:20,
     firstKillWins:0,firstKillLosses:1,firstKills:1,firstDeaths:4}
   ],maps:[{...team,map:'Corrode',matches:8,firstKillWins:38,firstKillLosses:10},
    {...team,map:'Lotus',matches:2,firstKillWins:2,firstKillLosses:7}]
@@ -60,12 +64,12 @@ test('complete-case team, personal FK/FD, two-kill, side and map/agent signals h
  assert.equal(find('VDK','攻撃時のFK−FD収支')?.status,'good');
  assert.equal(find('VDK','防衛時のFK−FD収支')?.status,'focus');
  assert.equal(find('VDK','Corrode / Fade：FK後勝率')?.numerator,15);
- assert.equal(find('VDK','Corrode / Fade：先制デス率')?.numerator,12);
- assert.equal(find('VDK','Corrode / Fade：先制デス率')?.status,'good');
- assert.equal(find('VDK','Lotus / Fade：先制デス率')?.status,'context',
+ assert.equal(find('VDK','Corrode / Fade：先制デス率')?.numerator,30);
+ assert.equal(find('VDK','Corrode / Fade：先制デス率')?.status,'focus');
+ assert.equal(find('VDK','Lotus / Fade：先制デス率')?.status,'insufficient',
   'one match must not be labeled a weakness by a self-overlapping reference');
- assert.equal(find('VDK','Corrode / Fade：試合勝率')?.denominator,21,
-  'this fixture spreads the known match totals: label must not imply a separate benchmark');
+ assert.equal(find('VDK','Corrode / Fade：試合勝率')?.denominator,7,
+  'map outcome denominator must use the map-agent cohort rather than all matches');
  assert.equal(find('VDK','Lotus / Fade：FK後勝率')?.status,'insufficient');
  assert.ok(diagnosis.items.every(x=>!JSON.stringify(x).includes('secret-puuid')));
  assert.equal(diagnosis.synopsis.find(x=>x.subject==='VDK')?.priority?.status,'focus');
