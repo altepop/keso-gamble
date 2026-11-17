@@ -307,3 +307,40 @@ test('Fujimura and Kobe are not guessed from unrelated PUUIDs; all verified alli
  assert.equal(report.individualMapAgent.some(x=>x.player==='Unmapped#TAG'),true);
  assert.equal(report.individual.every(p=>p.matches===1),true);
 });
+
+test('owner-confirmed Fujimura frin#怖すぎ and Aquatopia#toppy get separate, exact accounts',()=>{
+ const row=fixture('confirmed-players','Ascent','Fade','Clove',[
+  {r:0,winner:'Blue'}, {r:1,winner:'Blue'}, {r:2,winner:'Red'}
+ ],[
+  {r:0,t:1000,killer:'p3',victim:'p5'},
+  {r:1,t:1000,killer:'p4',victim:'p5'},
+  {r:2,t:1000,killer:'p5',victim:'p3'}
+ ]);
+ const players=JSON.parse(row.players_json);
+ players[3].name='frin';players[3].tag='怖すぎ';
+ players[4].name='Aquatopia';players[4].tag='toppy';
+ // Same display names with different tags must never be silently merged.
+ const other=JSON.parse(row.players_json);
+ other[3].name='frin';other[3].tag='別人';
+ other[4].name='Aquatopia';other[4].tag='違う';
+ const data=summarizeCoachRounds([
+  {...row,match_id:'confirmed',players_json:JSON.stringify(players)},
+  {...row,match_id:'wrong-tags',players_json:JSON.stringify(other)}
+ ]);
+ assert.equal(data.usableMatches,2);
+ const fujimura=data.individual.find(x=>x.player==='藤村');
+ const aquatopia=data.individual.find(x=>x.player==='Aquatopia');
+ assert.ok(fujimura);
+ assert.ok(aquatopia);
+ assert.equal(fujimura.matches,1,'unconfirmed same-name match not merged');
+ assert.equal(fujimura.firstKills,1);
+ assert.equal(fujimura.firstDeaths,1);
+ assert.equal(aquatopia.matches,1);
+ assert.equal(aquatopia.firstKills,1);
+ assert.equal(data.individual.find(x=>x.player==='frin#別人')?.matches,1);
+ assert.equal(data.individual.find(x=>x.player==='Aquatopia#違う')?.matches,1);
+ assert.equal(data.individual.some(x=>x.player==='神戸'),false,'Kobe is not Abema by default');
+ const same=data.individualMapAgent.filter(x=>x.player==='藤村');
+ assert.equal(same.length,1);
+ assert.equal(same[0].map,'Ascent');
+});
