@@ -212,7 +212,9 @@ export function comprehensiveCoachDiagnosis(data:CoachMetrics):CoachComprehensiv
  }
  // Rank only sufficiently sampled, attributable *review candidates*, not
  // people. Equal status is sorted by evidence volume before metric category.
- const subjects=['チーム','VDK','Abema','石原'];
+ // Keep every observed ally visible, including previously unregistered
+ // players. Players with missing/unknown identity are not guessed or merged.
+ const subjects=['チーム',...data.individual.map(p=>p.player)];
  const synopsis=subjects.map(subject=>{
   const own=items.filter(x=>x.subject===subject);
   const rank=(kind:CoachDiagnostic['status'])=>own.filter(x=>x.status===kind)
