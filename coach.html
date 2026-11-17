@@ -268,6 +268,7 @@ const simpleTable=(headers,rows)=>`<div class="table-wrap"><table><thead><tr>${h
 
 const memberNames=['神戸','VDK','Abema','石原','藤村','小林'];
 let activeMember=null;
+let latestMemberReport=null;
 let memberPending=false;
 function renderMemberArchiveStatus(data){
  const history=data.memberHistory;
@@ -467,7 +468,8 @@ $('member-result').addEventListener('click',e=>{
 
 async function loadMember(person){
  if(memberPending||!memberNames.includes(person))return;
- memberPending=true;activeMember=person;
+ memberPending=true;activeMember=person;latestMemberReport=null;
+ $('share').textContent='診断レポートをコピー';
  for(const el of $('member-selector').querySelectorAll('[data-member]'))
   el.setAttribute('aria-pressed',String(el.dataset.member===person));
  $('member-result').textContent=person+'の試合記録を読込中…';
@@ -475,7 +477,8 @@ async function loadMember(person){
   const t=token();if(!t)throw Error('KP口座の接続が必要だ。');
   const data=await request('/api/kp/coach/member?person='+encodeURIComponent(person),
    {headers:{Authorization:'Bearer '+t}});
-  if(activeMember===person)renderMemberDiagnosis(data);
+  if(activeMember===person){latestMemberReport=data;renderMemberDiagnosis(data);
+   $('share').textContent=person+'の全診断をコピー';}
  }catch(e){
   $('member-result').textContent='診断を読み込めない：'+(e.message||'取得エラー');
  }finally{memberPending=false}
@@ -685,9 +688,41 @@ function diagnosticPayload(d){
   overall:pick(d.overall,['matches','rounds','winnerKnown','ourRoundWins','roundsWithFk','ourFirstKills','enemyFirstKills','firstKillWins','firstKillLosses','firstKillWinPct','comebackWins','repeatedVictimRounds','roundsWithSides']),
   maps,individual,reviewRounds:reviews,successRounds,coachingNotes:notes,coachSignals:signals,fullDiagnosis};
 }
+const memberDiagnosticPayload=function memberDiagnosticPayloadV2(d){
+ const pick=(obj,keys)=>Object.fromEntries(keys.map(k=>[k,obj?.[k]??null]));
+ const safeIds=new Set(['Dolly#SDGs','Abema#ttv','Aquatopia#toppy','h1d3g1g4s#1037','frin#怖すぎ','mecael#2489']);
+ const safeAccounts=(Array.isArray(d.accounts)?d.accounts:[]).filter(x=>safeIds.has(x));
+ const sideFields=['rounds','observedOpeningRounds','firstKills','firstDeaths',
+  'firstKillWins','firstKillLosses','firstDeathWins','firstDeathLosses'];
+ const individuals=(Array.isArray(d.individual)?d.individual:[]).map(p=>({
+  ...pick(p,['player','matches','matchWins','matchLosses','matchDraws','statsMatches',
+   'totalKills','totalDeaths','totalAssists','scoreMatches','totalScore','observedOpeningRounds',
+   'firstKills','firstDeaths','firstKillWins','firstKillLosses','firstDeathWins','firstDeathLosses',
+   'openingKillerDiedWithin5s','firstDeathKillerEliminatedWithin5s']),
+  attack:pick(p.attack,sideFields),defense:pick(p.defense,sideFields)
+ }));
+ const mapAgent=(Array.isArray(d.individualMapAgent)?d.individualMapAgent:[]).map(m=>pick(m,
+  ['player','map','agent','matches','matchWins','matchLosses','matchDraws',
+   'observedOpeningRounds','firstKills','firstDeaths','firstKillWins','firstKillLosses',
+   'firstDeathWins','firstDeathLosses']));
+ const diagnosis=(Array.isArray(d.fullDiagnosis?.items)?d.fullDiagnosis.items:[]).map(x=>pick(x,
+  ['subject','category','title','status','evidence','reason','nextAction',
+   'numerator','denominator','ratePct','referencePct','differencePp']));
+ return {format:'KESO_COACH_SAFE_MEMBER_DIAGNOSTIC_V1',
+  generatedAt:new Date().toISOString(),person:d.person,profile:d.profile,
+  accounts:safeAccounts,archivedMatches:d.archivedMatches??null,usableMatches:d.usableMatches??null,
+  coverage:pick(d.coverage,['discovered','complete','partial','pending','unavailable',
+   'analysisMatches','discoveryDone','truncated','rowLimit','limitReached','allMatchesGuaranteed']),
+  quality:pick(d,['invalidMatches','roundDataMissing','killDataMissing']),
+  individual:individuals,individualMapAgent:mapAgent,fullDiagnosis:{items:diagnosis},
+  matchTrend:(Array.isArray(d.matchTrend)?d.matchTrend:[]).map(m=>pick(m,
+   ['date','map','agent','outcome','kills','deaths','assists','firstKills','firstDeaths','observedOpeningRounds']))};
+};
+
 $('share').addEventListener('click',async()=>{
  if(!latestReport||busy)return;
- const text=JSON.stringify(diagnosticPayload(latestReport),null,2);
+ const text=JSON.stringify(latestMemberReport?
+  memberDiagnosticPayload(latestMemberReport):diagnosticPayload(latestReport),null,2);
  try{
    if(!navigator.clipboard?.writeText)throw Error('Clipboard API unavailable');
    await navigator.clipboard.writeText(text);
