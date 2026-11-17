@@ -558,11 +558,15 @@ const memberDiagnosticPayload=function memberDiagnosticPayloadV2(d){
  const pick=(obj,keys)=>Object.fromEntries(keys.map(k=>[k,obj?.[k]??null]));
  const safeIds=new Set(['Dolly#SDGs','Abema#ttv','Aquatopia#toppy','h1d3g1g4s#1037','frin#怖すぎ','mecael#2489']);
  const safeAccounts=(Array.isArray(d.accounts)?d.accounts:[]).filter(x=>safeIds.has(x));
- const individuals=(Array.isArray(d.individual)?d.individual:[]).map(p=>pick(p,
-  ['player','matches','matchWins','matchLosses','matchDraws','statsMatches','totalKills',
-   'totalDeaths','totalAssists','scoreMatches','totalScore','observedOpeningRounds',
+ const sideFields=['rounds','observedOpeningRounds','firstKills','firstDeaths',
+  'firstKillWins','firstKillLosses','firstDeathWins','firstDeathLosses'];
+ const individuals=(Array.isArray(d.individual)?d.individual:[]).map(p=>({
+  ...pick(p,['player','matches','matchWins','matchLosses','matchDraws','statsMatches',
+   'totalKills','totalDeaths','totalAssists','scoreMatches','totalScore','observedOpeningRounds',
    'firstKills','firstDeaths','firstKillWins','firstKillLosses','firstDeathWins','firstDeathLosses',
-   'openingKillerDiedWithin5s','firstDeathKillerEliminatedWithin5s','attack','defense']));
+   'openingKillerDiedWithin5s','firstDeathKillerEliminatedWithin5s']),
+  attack:pick(p.attack,sideFields),defense:pick(p.defense,sideFields)
+ }));
  const mapAgent=(Array.isArray(d.individualMapAgent)?d.individualMapAgent:[]).map(m=>pick(m,
   ['player','map','agent','matches','matchWins','matchLosses','matchDraws',
    'observedOpeningRounds','firstKills','firstDeaths','firstKillWins','firstKillLosses',
