@@ -55,7 +55,8 @@ test('complete-case team, personal FK/FD, two-kill, side and map/agent signals h
  assert.equal(find('チーム','試合勝率（勝敗判明）')?.ratePct,60);
  assert.ok(diagnosis.items.some(x=>x.subject==='石原'&&x.title==='パーティー情報の不明件数'));
  assert.equal(find('VDK','先制デス率')?.status,'context','FD volume by role is never called a weakness');
- assert.equal(find('VDK','FD後5秒以内に味方が同じ敵を倒した率')?.status,'focus');
+ assert.equal(find('VDK','FD後5秒以内に味方が同じ敵を倒した率')?.status,'context',
+  'teammate trade timing is not evidence of an individual failure');
  assert.equal(find('VDK','FK後5秒以内に倒されなかった率')?.status,'good');
  assert.equal(find('VDK','攻撃時のFK−FD収支')?.status,'good');
  assert.equal(find('VDK','防衛時のFK−FD収支')?.status,'focus');
