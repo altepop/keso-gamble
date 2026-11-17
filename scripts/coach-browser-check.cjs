@@ -11,6 +11,11 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
  try{
   const token='a'.repeat(48);
   const report={
+    canStartMemberHistory:true,
+    memberHistory:{enabled:false,source:'Henrik known games only',
+      people:['VDK','Abema','石原','藤村','神戸','小林'].map(person=>({
+       person,discovered:0,complete:0,partial:0,unavailable:0,pending:0,
+       discoveryDone:false,truncated:false}))},
     totalVdkRosterMatches:44,archivedMatches:4,usableMatches:3,invalidMatches:0,killDataMissing:1,roundDataMissing:0,
     backfill:{status:'running',complete:3,partial:1,missing:40,unavailable:0,pending:41},
     overall:{rounds:68,firstKillWinPct:70,firstKillWins:21,firstKillOutcomesKnown:30,comebackWins:7,roundsWithSides:0,repeatedVictimRounds:1},
@@ -85,6 +90,17 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   let use43Report=false;
   await ctx.route('https://valorant-results.tealeaforest.workers.dev/**',async route=>{
    const req=route.request();requests.push({url:req.url(),method:req.method(),auth:req.headers().authorization});
+   if(req.url().includes('/api/kp/coach/member?')){
+    const person=new URL(req.url()).searchParams.get('person');
+    const profile=person==='神戸'?'Aquatopia':person;
+    return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({
+     person,profile,usableMatches:2,coverage:{discovered:5,complete:2,discoveryDone:false},
+     fullDiagnosis:{items:[{subject:profile,status:'focus',title:'FK後の動きを確認',
+       evidence:'2 / 10（20%）',reason:'映像による確認が必要',
+       nextAction:'味方のカバーと退避を確認'}]}})});
+   }
+   if(req.url().endsWith('/api/kp/coach/members/start'))
+    return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({status:'enabled',enabled:true})});
    const actual=use43Report?{...report,archivedMatches:44,usableMatches:43,
      backfill:{status:'complete',complete:43,partial:1,missing:0,unavailable:1,pending:0}}:report;
    await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(actual)});
@@ -93,6 +109,11 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
   await page.goto('http://127.0.0.1:18784/coach.html');
   await page.locator('#report:not([hidden])').waitFor();
+  assert.equal(await page.locator('#legacy-coach').evaluate(el=>el.open),false,
+    'legacy 43-match audit stays collapsed by default');
+  assert.match(await page.locator('#member-archive-status').innerText(),/未開始/);
+  assert.equal(await page.locator('#start-member-archive').isVisible(),true);
+  await page.locator('#legacy-coach > summary').click();
   assert.match(await page.locator('#totals').innerText(),/44/);
   assert.match(await page.locator('#backfill-counts').innerText(),/完全保存/);
   assert.match(await page.locator('#backfill-counts').innerText(),/一部欠損/);
@@ -164,6 +185,16 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   assert.deepEqual(errors,[]);
   assert.equal(await page.locator('#resume-backfill').isHidden(),true,
     'an active backfill must not show resume');
+  await page.locator('[data-member="神戸"]').click();
+  await page.waitForFunction(()=>document.querySelector('#member-result').textContent.includes('FK後の動きを確認'));
+  assert.match(await page.locator('#member-result').innerText(),/神戸の個別診断/);
+  assert.match(await page.locator('#member-result').innerText(),/最優先の弱点候補/);
+  assert.match(await page.locator('#member-result').innerText(),/2 \/ 10/);
+  assert.equal(requests.length,3,'one own-match read only upon clicking the person');
+  await page.locator('#start-member-archive').click();
+  await page.waitForFunction(()=>document.querySelector('#status').textContent.includes('履歴収集を有効化'));
+  assert.equal(requests.filter(x=>x.method==='POST'&&x.url.endsWith('/api/kp/coach/members/start')).length,1);
+  assert.deepEqual(errors,[]);
   await ctx.close();
   // The resume control only appears for the previously opted-in linked owner,
   // after an explicit user click; no recurring or surprise POSTs.
