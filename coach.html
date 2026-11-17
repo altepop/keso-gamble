@@ -81,6 +81,74 @@ tr:last-child td{border-bottom:0}
 #legacy-coach{margin-top:18px}#legacy-coach>summary{cursor:pointer;padding:6px;font-weight:700}
 @media(max-width:380px){.member-selector{grid-template-columns:repeat(2,minmax(0,1fr))}}
 
+
+/* KESO COACH v2: data-first individual dashboard, touch-first, 320px safe. */
+.coach-dashboard-tabs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px;margin:18px 0 16px}
+.coach-dashboard-tabs button{min-width:0;overflow-wrap:anywhere;padding:12px 3px;font-size:clamp(11px,2.75vw,14px);border:1px solid #45617f;background:#142a47;line-height:1.4}
+.coach-dashboard-tabs [aria-selected=true]{background:#315a83;border-color:#a7cfff;box-shadow:inset 0 -3px #a7cfff}
+.coach-dashboard-tabs button:focus-visible{outline:3px solid #b8dfff;outline-offset:2px}
+.coach-dashboard-view[hidden]{display:none!important}
+.coach-hero h3{font-size:22px;margin:6px 0}
+.coach-hero h3 small{font-size:12px;color:#bed2ec}
+.coach-hero p{margin:5px 0 12px}
+.coach-quality{border:1px solid #385273;border-radius:10px;padding:12px;background:#0d1c34;display:grid;gap:4px;font-size:12px;color:#c1cee1}
+.coach-quality strong{font-size:15px;color:#fff}
+.coach-hint{padding:9px;border-left:3px solid #9cc7ff;background:#22324a;font-size:12px;margin:6px 0}
+.coach-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:13px 0 18px}
+.coach-kpi{min-width:0;background:#172947;border:1px solid #3c5478;border-radius:10px;padding:13px 9px}
+.coach-kpi span{font-size:11px;color:#b7cce7;display:block}
+.coach-kpi strong{display:block;font-size:clamp(20px,4vw,29px);font-variant-numeric:tabular-nums;line-height:1.3}
+.coach-kpi small{font-size:10px;color:#adbfda;overflow-wrap:anywhere}
+.coach-section-heading{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+.coach-section-heading h3{font-size:17px}.coach-section-heading span{font-size:11px;color:#d5b28b}
+.coach-lead{font-size:13px;line-height:1.7;color:#d2def1}
+.coach-action{background:#131f35;border:1px solid #3a4d68;border-left:4px solid #6985ac;border-radius:11px;padding:12px 14px;margin:9px 0;overflow-wrap:anywhere}
+.coach-action.focus{border-left-color:#e7a96b}.coach-action.good{border-left-color:#79c9a7}
+.coach-action strong{display:block;font-size:16px;line-height:1.5;margin:5px 0}
+.coach-action-head{display:flex;align-items:center;gap:8px}
+.coach-chip{border-radius:6px;background:#2d3d55;color:#e4efff;font-size:11px;font-weight:700;padding:3px 8px}
+.coach-action.focus .coach-chip{background:#563a24}.coach-action.good .coach-chip{background:#20483d}
+.coach-cat{font-size:11px;color:#a9bdd9}
+.coach-data{font-weight:750;font-size:14px;font-variant-numeric:tabular-nums;margin:7px 0}
+.coach-step{font-size:13px;margin:7px 0}
+.coach-action details{border-top:1px solid #33445c;margin:9px 0 0;padding:7px 0 0;font-size:12px}
+.coach-action summary{cursor:pointer;color:#bdcfe6}
+.coach-empty{padding:14px;color:#bdcee4;border:1px dashed #3e5170;border-radius:10px;font-size:13px;line-height:1.6}
+.metric-bar{margin:12px 0;padding:2px 0}
+.metric-line{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.metric-line strong{font-size:12px;font-weight:700}
+.metric-value{white-space:nowrap;font-size:17px;font-weight:750;font-variant-numeric:tabular-nums}
+.metric-value small{font-size:11px;font-weight:500;color:#b5c8e4}
+.metric-track{background:#24334f;height:11px;border-radius:8px;overflow:hidden;margin:5px 0}
+.metric-fill{height:100%;border-radius:8px;background:#8db4e7}
+.metric-fill.good{background:#74c8a9}.metric-fill.focus{background:#dca36d}
+.metric-bar>.member-small{margin:2px 0 0}
+.coach-trend-heading{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px}
+.trend-legend{font-size:11px;color:#c2d0e2;display:flex;align-items:center;gap:5px}
+.trend-legend i{display:inline-block;width:10px;height:10px;border-radius:3px}
+.legend-k{background:#78cba8}.legend-d{background:#e5a477}
+.trend-scroll{overflow-x:auto;border:1px solid #344d6b;border-radius:12px;margin:10px 0;padding:8px 5px 4px}
+.trend-chart{display:grid;grid-template-columns:repeat(12,minmax(43px,1fr));min-width:580px;gap:4px;align-items:end;height:190px}
+.trend-game{height:180px;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;min-width:0}
+.trend-game:focus-visible{outline:2px solid #a9d7ff}
+.trend-columns{height:128px;width:100%;display:flex;align-items:flex-end;gap:3px;justify-content:center;border-bottom:1px solid #57718d}
+.trend-col{width:30%;border-radius:4px 4px 0 0;min-height:0}
+.trend-k{background:#78cba8}.trend-d{background:#e5a477}
+.trend-result{font-weight:800;font-size:11px;padding:0 5px;border-radius:5px;margin-top:4px}
+.trend-result.win{color:#92e3be}.trend-result.loss{color:#f6b591}
+.trend-game small{font-size:10px;color:#adbfda}
+.coach-side-grid,.coach-map-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,265px),1fr));gap:10px}
+.coach-side,.coach-map-card{border:1px solid #3b526d;border-radius:12px;background:#111f36;padding:12px;min-width:0}
+.coach-side h4{margin:0;font-size:16px}.coach-side h4 small{font-weight:400;font-size:11px;color:#b7c9e0}
+.coach-side-net{font-size:13px;font-weight:700;border-top:1px solid #40506a;padding-top:8px}
+.coach-map-card strong{display:block;overflow-wrap:anywhere}
+.coach-map-card p{margin:4px 0}
+.coach-map-numbers{display:flex;flex-wrap:wrap;gap:10px;font-size:12px}
+.mini-pair{height:7px;display:flex;gap:3px;margin-top:10px;overflow:hidden}
+.mini-fk{background:#80caa9;border-radius:5px}.mini-fd{background:#eca96e;border-radius:5px}
+@media(max-width:570px){.coach-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.coach-dashboard-tabs{gap:4px}.coach-dashboard-tabs button{padding:10px 1px}.coach-trend-heading{display:block}}
+@media(max-width:350px){.coach-kpi{padding:10px 7px}.metric-line{flex-wrap:wrap}.metric-value{font-size:15px}}
+
 #connection{display:none}
 .empty{padding:18px 4px;color:#b6c6df;text-align:center}
 @media(max-width:470px){.panel{padding:12px}.card{padding:12px}.card strong{font-size:23px}}
@@ -93,7 +161,7 @@ tr:last-child td{border-bottom:0}
 <a href="./index.html">KESO PLAYに戻る</a></div>
 <p class="lead muted">ラウンド・キル履歴がそろった試合だけで先制キル、先制デスと勝敗を分析する。欠損した試合は評価から除外し、データのない項目は推測しない。</p>
 <div class="actions"><button id="reload" type="button">分析を更新</button><button id="share" class="secondary" type="button" disabled>診断レポートをコピー</button><span class="small muted">手動更新 · KPの増減なし</span></div>
-<p class="small muted">診断レポートには認証トークン・接続コード・試合ID・PUUID・相手の名前を含めない。このチャットに貼れば保存状況と3人の結果を詳しく分析できる。</p>
+<p class="small muted">診断レポートには認証トークン・接続コード・試合ID・PUUID・相手の名前を含めない。個別の分析は選手を選ぶと表示する。</p>
 <textarea id="share-fallback" hidden readonly aria-label="診断レポート" rows="6" style="width:100%;background:#09152a;color:#e9eef9;border:1px solid #435779;border-radius:10px;margin-top:8px;font:12px/1.4 monospace"></textarea>
 <div id="status" role="status" aria-live="polite">データを確認中…</div>
 </header>
@@ -220,34 +288,180 @@ function renderMemberArchiveStatus(data){
  if(!history.enabled&&!owned)$('member-archive-status').innerHTML+=
   '<p class="small muted">開始には神戸のAquatopia#toppyなど、許可された紐づけKP口座で接続する必要がある。</p>';
 }
-const renderMemberDiagnosis=d=>{
- const items=(d.fullDiagnosis?.items||[]).filter(x=>x.subject===d.profile);
- const priorities=items.filter(x=>x.status==='focus');
- const goods=items.filter(x=>x.status==='good');
- const report=(item,good=false)=>item?
-  `<article class="member-summary ${good?'good':''}">
-    <span class="overline">${good?'良かった点':'最優先の弱点候補（映像確認が必要）'}</span>
-    <strong>${escape(item.title)}</strong>
-    <p><b>数字の根拠：</b>${escape(item.evidence)}</p>
-    <p><b>次のアクション：</b>${escape(item.nextAction)}</p>
-    <p class="member-small">${escape(item.reason)}</p>
-   </article>`:null;
- const empty='<p class="small muted">判定に必要な件数が不足、または明確な差がないため、弱点を断定できない。</p>';
- const coverage=d.coverage||{};
- const accountInfo=Array.isArray(d.accounts)&&d.accounts.length
-  ?`<p class="member-small">対象アカウント：${d.accounts.map(escape).join(' ＋ ')}${d.person==='神戸'?'（人物単位で重複排除）':''}</p>`:'';
- const quality=`<p class="member-small">対象は${int(d.usableMatches)}試合（発見${int(coverage.discovered)}件 / 完全保存${int(coverage.complete)}件）。
-  履歴探索 ${coverage.discoveryDone?'終了':'継続中'}。全試合の網羅を保証しない。</p>`;
- $('member-result').innerHTML=`<h3>${escape(d.person)}の個別診断</h3>`+accountInfo+quality+
-  (priorities.length?report(priorities[0]):empty)+
-  '<h3>そのほかの見直し候補</h3>'+
-  (priorities.length>1?priorities.slice(1).map(x=>report(x)).join(''):'<p class="member-small">該当する候補なし。</p>')+
-  '<h3>良い点</h3>'+
-  (goods.length?goods.slice(0,3).map(x=>report(x,true)).join(''):'<p class="member-small">現段階では明確な良い傾向を判定できない。</p>')+
-  `<details class="member-detail"><summary>全${int(items.length)}項目を確認（参考・判定保留も表示）</summary>
-   ${items.map(x=>`<article class="review-item"><strong>${escape(x.title)}</strong><p class="small">
-    ${escape(x.evidence)} · ${escape(x.reason)}</p><p class="small">${escape(x.nextAction)}</p></article>`).join('')}</details>`;
+
+const percentValue=(n,d)=>Number.isFinite(Number(n))&&Number(d)>0
+  ?Math.round(Number(n)*1000/Number(d))/10:null;
+const numeric=(n,digits=0)=>Number.isFinite(Number(n))?Number(n).toFixed(digits):'—';
+const safeNumber=n=>Number.isFinite(Number(n))?Number(n):0;
+const clipPct=n=>Math.max(0,Math.min(100,safeNumber(n)));
+const metricBar=(label,num,den,description,category='neutral')=>{
+ const rate=percentValue(num,den);
+ return `<div class="metric-bar">
+  <div class="metric-line"><strong>${escape(label)}</strong>
+   <span class="metric-value">${rate===null?'データ不足':numeric(rate,1)+'%'}
+   <small>(${int(num)} / ${int(den)})</small></span></div>
+  <div class="metric-track" role="img" aria-label="${escape(label)} ${rate===null?'未算出':numeric(rate,1)+'パーセント'}">
+   <div class="metric-fill ${category}" style="width:${rate===null?0:clipPct(rate)}%"></div></div>
+  <p class="member-small">${escape(description)}</p>
+ </div>`;
 };
+const coachMetricState=s=>({
+ focus:'要検証',good:'良い傾向',mixed:'参考（差が小さい）',
+ context:'参考記録',insufficient:'データ不足'
+})[s]||'参考記録';
+const diagnosticCard=(item,mode='review')=>`
+ <article class="coach-action ${item.status==='focus'?'focus':item.status==='good'?'good':'neutral'}">
+  <div class="coach-action-head">
+    <span class="coach-chip">${escape(coachMetricState(item.status))}</span>
+    <span class="coach-cat">${escape(item.category)}</span></div>
+  <strong>${escape(item.title)}</strong>
+  <p class="coach-data">${escape(item.evidence)}</p>
+  <p class="coach-step"><b>${mode==='review'?'次に確認すること':'再現・確認すること'}：</b>${escape(item.nextAction)}</p>
+  <details><summary>判定理由・注意点</summary><p class="member-small">${escape(item.reason)}</p></details>
+ </article>`;
+const coachMapCard=p=>{
+ const fk=p.firstKills??0,fd=p.firstDeaths??0,observed=p.observedOpeningRounds??0;
+ const outcome=(p.matchWins??0)+(p.matchLosses??0)+(p.matchDraws??0);
+ const win=percentValue(p.matchWins??0,outcome);
+ return `<article class="coach-map-card">
+  <strong>${escape(p.map||'不明')} / ${escape(p.agent||'不明')}</strong>
+  <p class="member-small">${int(p.matches)}試合・先制確認${int(observed)}R</p>
+  <div class="coach-map-numbers"><span>FK <b>${int(fk)}</b></span><span>FD <b>${int(fd)}</b></span>
+   <span>勝率 <b>${win===null?'—':numeric(win,1)+'%'}</b></span></div>
+  <div class="mini-pair" role="img" aria-label="FK ${int(fk)} FD ${int(fd)}">
+  <span class="mini-fk" style="width:${observed?clipPct(fk*100/observed):0}%"></span>
+  <span class="mini-fd" style="width:${observed?clipPct(fd*100/observed):0}%"></span></div>
+ </article>`;
+};
+const coachTrendGraph=trends=>{
+ if(!trends.length)return '<p class="coach-empty">グラフ化できる完全保存試合がない。収集データが増えると、ここに試合ごとのK/Dと勝敗が表示される。</p>';
+ const games=trends.slice(0,12).reverse();
+ const max=Math.max(1,...games.flatMap(g=>[safeNumber(g.kills),safeNumber(g.deaths)]));
+ const chart=games.map((g,i)=>`<div class="trend-game" tabindex="0"
+   aria-label="${escape(g.date)}、${escape(g.map)}、K${g.kills===null?'不明':int(g.kills)}、D${g.deaths===null?'不明':int(g.deaths)}、${g.outcome==='win'?'勝利':g.outcome==='loss'?'敗北':g.outcome==='draw'?'引分':'不明'}">
+   <div class="trend-columns">
+    <div class="trend-col trend-k" style="height:${g.kills===null?0:Math.max(3,g.kills/max*100)}%" title="K ${int(g.kills)}"></div>
+    <div class="trend-col trend-d" style="height:${g.deaths===null?0:Math.max(3,g.deaths/max*100)}%" title="D ${int(g.deaths)}"></div>
+   </div>
+   <span class="trend-result ${g.outcome}">${g.outcome==='win'?'W':g.outcome==='loss'?'L':g.outcome==='draw'?'D':'?'}</span>
+   <small>${escape(g.date)}</small>
+  </div>`).join('');
+ return `<div class="coach-trend-heading"><b>直近${int(games.length)}試合のK/D推移</b>
+   <span class="trend-legend"><i class="legend-k"></i>K <i class="legend-d"></i>D · W勝利 / L敗北</span></div>
+   <div class="trend-scroll"><div class="trend-chart" role="group" aria-label="試合別K/D推移">${chart}</div></div>
+   <p class="member-small">各棒は一試合のキル数・デス数。高さは表示中の最大値を基準とする。横にスクロールして比較できる。</p>`;
+};
+const coachSideBlock=(label,s)=>{
+ const base=s?.observedOpeningRounds??0;
+ const fk=s?.firstKills??0,fd=s?.firstDeaths??0;
+ const net=base?(fk-fd)*100/base:null;
+ return `<article class="coach-side">
+   <h4>${escape(label)} <small>${int(base)}Rで先制確認</small></h4>
+   ${metricBar('先制キル',fk,base,'ラウンドの最初に敵を倒した回数','good')}
+   ${metricBar('先制デス',fd,base,'ラウンドの最初に倒された回数','focus')}
+   <p class="coach-side-net">FK−FD収支：${net===null?'不明':(net>=0?'+':'')+numeric(net,1)+'件 / 100R'}</p>
+  </article>`;
+};
+const renderMemberDiagnosis=d=>{
+ const all=(d.fullDiagnosis?.items||[]).filter(x=>x.subject===d.profile);
+ const own=Array.isArray(d.individual)?d.individual.find(x=>x.player===d.profile):null;
+ const splits=Array.isArray(d.individualMapAgent)?d.individualMapAgent.filter(x=>x.player===d.profile):[];
+ const trends=Array.isArray(d.matchTrend)?d.matchTrend:[];
+ const coverage=d.coverage||{};
+ const archive=safeNumber(d.archivedMatches),usable=safeNumber(d.usableMatches);
+ const queueDiscovered=safeNumber(coverage.discovered),queueComplete=safeNumber(coverage.complete);
+ const inputs=Array.isArray(d.accounts)?d.accounts:[];
+ const cohortWarning=queueDiscovered===0&&archive>0?
+  `<p class="coach-hint">既存の保存済み記録から${int(archive)}試合を見つけたが、新しい履歴収集キューではまだ0件だ。両者は別の集計であり、試合数が矛盾しているわけではない。</p>`:'';
+ const quality=`<section class="coach-quality">
+ <strong>判定に使用した試合 ${int(usable)}件</strong>
+ <span>既存DBで発見 ${int(archive)}件 · 新規履歴キュー発見 ${int(queueDiscovered)}件
+ · キュー内完全保存 ${int(queueComplete)}件</span>
+ <span>ラウンド欠損 ${int(d.roundDataMissing)}件 · キル記録欠損 ${int(d.killDataMissing)}件
+ · 全試合の網羅 ${coverage.allMatchesGuaranteed?'確認済み':'保証なし'}${coverage.limitReached?' · 250試合表示上限到達':''}</span>
+ ${cohortWarning}</section>`;
+ const actionables=all.filter(x=>x.status==='focus'||x.status==='mixed'||x.status==='context')
+   .filter(x=>['先制','生存・取り返し','攻撃・防衛','マップ・エージェント'].includes(x.category))
+   .sort((a,b)=>(a.status==='focus'?0:a.status==='mixed'?1:2)-
+                 (b.status==='focus'?0:b.status==='mixed'?1:2)||
+           safeNumber(b.denominator)-safeNumber(a.denominator));
+ const highest=actionables.filter(x=>x.status==='focus');
+ const selected=[...highest.slice(0,5),...actionables.filter(x=>x.status!=='focus')].slice(0,8);
+ const positives=all.filter(x=>x.status==='good').sort((a,b)=>safeNumber(b.denominator)-safeNumber(a.denominator));
+ const matchKnown=safeNumber(own?.matchWins)+safeNumber(own?.matchLosses)+safeNumber(own?.matchDraws);
+ const rate=percentValue(own?.matchWins??0,matchKnown);
+ const kd=own&&safeNumber(own.totalDeaths)>0?safeNumber(own.totalKills)/safeNumber(own.totalDeaths):null;
+ const fk=safeNumber(own?.firstKills),fd=safeNumber(own?.firstDeaths);
+ const kpi=(label,value,detail)=>`<article class="coach-kpi"><span>${escape(label)}</span>
+  <strong>${escape(value)}</strong><small>${escape(detail)}</small></article>`;
+ const kpis='<div class="coach-kpis">'+
+  kpi('対象試合',int(usable),'完全保存された競技試合')+
+  kpi('試合勝率',rate===null?'—':numeric(rate,1)+'%',int(own?.matchWins)+'勝 / '+int(matchKnown)+'試合')+
+  kpi('K/D',kd===null?'—':numeric(kd,2),'K '+int(own?.totalKills)+' / D '+int(own?.totalDeaths))+
+  kpi('FK − FD',(fk-fd>=0?'+':'')+int(fk-fd),'FK '+int(fk)+' / FD '+int(fd))+
+ '</div>';
+ const rateCharts=own?
+  metricBar('本人のFK後・チームが勝利',own.firstKillWins??0,fk,'本人が最初のキルを取ったラウンド。勝利には味方も影響する。','good')+
+  metricBar('本人が先制デス後・味方が勝利',own.firstDeathWins??0,
+   safeNumber(own.firstDeathWins)+safeNumber(own.firstDeathLosses),'本人が倒された後の逆転。本人だけの責任ではない。','neutral')+
+  metricBar('FD後5秒以内の味方による取り返し',own.firstDeathKillerEliminatedWithin5s??0,fd,
+   '味方の距離や生存状況に左右される連携指標。本人のミス率ではない。','neutral')+
+  metricBar('FK後5秒間生存',fk-safeNumber(own.openingKillerDiedWithin5s),fk,
+   '最初のキル直後の生存。正しい退避や再ピークかは映像確認が必要。','good'):
+  '<p class="coach-empty">個人別の先制データは未取得だ。</p>';
+ const reviewSummary=highest.length
+  ?`<p class="coach-lead">${int(highest.length)}件の<strong>見直し候補</strong>がある。ただし因果的なミス確定ではない。以下に、参考観測も含めて最大8件表示する。</p>`
+  :`<p class="coach-lead">現行の判定条件では<strong>確定的な弱点候補なし</strong>。問題がないという意味ではない。下の観察項目でVODを確認する。</p>`;
+ const overview=`<div class="coach-hero"><h3>${escape(d.person)} <small>個別コーチング</small></h3>
+  <p class="member-small">対象アカウント：${inputs.map(escape).join(' ＋ ')||'登録情報なし'}</p></div>`+
+  quality+kpis+
+  `<div class="coach-section-heading"><h3>最初に見るべき改善候補</h3><span>${int(highest.length)}件が要検証</span></div>`+
+  reviewSummary+(selected.length?selected.slice(0,3).map(x=>diagnosticCard(x)).join(''):
+  '<p class="coach-empty">十分な観測がまだないため、個人の改善事項を提示できない。</p>')+
+  '<p class="member-small">すべての改善観察と判定保留は「改善候補」タブで確認できる。</p>'+
+  '<h3>先制と生存：観測グラフ</h3>'+rateCharts+
+  '<h3>試合ごとの推移</h3>'+coachTrendGraph(trends);
+ const improvements=reviewSummary+
+  (selected.length?selected.map(x=>diagnosticCard(x)).join(''):
+  '<p class="coach-empty">観察対象がまだない。試合・ラウンドデータの収集が必要だ。</p>')+
+  `<details class="member-detail"><summary>その他の評価保留・参考観測 ${int(Math.max(0,all.length-selected.length-positives.length))}項目</summary>`+
+  all.filter(x=>!selected.includes(x)&&x.status!=='good').map(x=>diagnosticCard(x)).join('')+'</details>'+
+  '<h3>再現したい良い傾向</h3>'+
+  (positives.length?positives.map(x=>diagnosticCard(x,'good')).join(''):
+   '<p class="coach-empty">良い点なし、という意味ではない。現状は良い傾向と判定できる十分な比較データがない。</p>');
+ const strategy='<h3>攻撃と防衛の先制動向</h3>'+
+  '<div class="coach-side-grid">'+coachSideBlock('攻撃',own?.attack)+coachSideBlock('防衛',own?.defense)+'</div>'+
+  '<p class="member-small">攻撃・防衛の役割や使用エージェントが違うため、数値だけで戦術の優劣を断定しない。</p>'+
+  '<h3>マップ × エージェント</h3>'+
+  (splits.length?'<div class="coach-map-grid">'+[...splits].sort((a,b)=>b.matches-a.matches).map(coachMapCard).join('')+'</div>':
+  '<p class="coach-empty">マップ・エージェント別のデータがない。</p>');
+ const categories=[...new Set(all.map(x=>x.category))];
+ const allMetrics=categories.map(cat=>`<details class="member-detail">
+  <summary>${escape(cat)}（${int(all.filter(x=>x.category===cat).length)}項目）</summary>
+  ${all.filter(x=>x.category===cat).map(x=>diagnosticCard(x)).join('')}
+ </details>`).join('')||'<p class="coach-empty">判定可能な指標はまだない。</p>';
+ const tabs=[['overview','概要・グラフ'],['improve','改善候補'],['strategy','攻守・マップ'],['metrics','全指標']];
+ $('member-result').innerHTML=`<div class="coach-dashboard-tabs" role="tablist" aria-label="${escape(d.person)}の分析画面">`+
+  tabs.map(([id,title],i)=>`<button type="button" role="tab" data-coach-view="${id}"
+    id="coach-tab-${id}" aria-controls="coach-view-${id}" aria-selected="${i===0}" tabindex="${i===0?0:-1}">${title}</button>`).join('')+
+  '</div>'+
+  `<div class="coach-dashboard-view" id="coach-view-overview" role="tabpanel" aria-labelledby="coach-tab-overview">${overview}</div>`+
+  `<div class="coach-dashboard-view" id="coach-view-improve" role="tabpanel" aria-labelledby="coach-tab-improve" hidden>${improvements}</div>`+
+  `<div class="coach-dashboard-view" id="coach-view-strategy" role="tabpanel" aria-labelledby="coach-tab-strategy" hidden>${strategy}</div>`+
+  `<div class="coach-dashboard-view" id="coach-view-metrics" role="tabpanel" aria-labelledby="coach-tab-metrics" hidden>${allMetrics}</div>`;
+};
+$('member-result').addEventListener('click',e=>{
+ const btn=e.target.closest('[data-coach-view]');
+ if(!btn)return;
+ const view=btn.dataset.coachView;
+ const root=$('member-result');
+ for(const tab of root.querySelectorAll('[data-coach-view]')){
+  const on=tab.dataset.coachView===view;tab.setAttribute('aria-selected',String(on));tab.tabIndex=on?0:-1;
+ }
+ for(const panel of root.querySelectorAll('.coach-dashboard-view'))
+  panel.hidden=panel.id!=='coach-view-'+view;
+});
+
 async function loadMember(person){
  if(memberPending||!memberNames.includes(person))return;
  memberPending=true;activeMember=person;
