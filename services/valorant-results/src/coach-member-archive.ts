@@ -122,10 +122,11 @@ export async function fetchNextCoachMemberMatch(db:D1Database,
  fetchDetail:(region:string,id:string)=>Promise<Match>,now=Date.now()):Promise<ArchiveStep>{
  if(!await getSwitch(db))return 'disabled';
  // One candidate per tick. The unique match_id queue avoids duplicates across
- // all discovered players, while skipping the known VDK partial archival error.
+ // all discovered players. Partial archives are retried at a cooldown until
+ // all three total requests are exhausted; never treat missing kills as zero.
  const row=await db.prepare(`SELECT q.match_id,q.region,q.source_riot_id AS riot_id,
   q.source_puuid AS puuid,q.started_at,q.attempts FROM coach_member_queue q
-  WHERE q.status='pending' AND q.next_at<=? AND q.attempts<3
+  WHERE q.status IN ('pending','partial') AND q.next_at<=? AND q.attempts<3
   ORDER BY q.started_at DESC LIMIT 1`).bind(now).first<Candidate>();
  if(!row)return 'idle';
  const complete=await db.prepare(`SELECT
@@ -159,8 +160,8 @@ export async function fetchNextCoachMemberMatch(db:D1Database,
   const saved=await db.prepare(`SELECT rounds_json,kills_json FROM valorant_match_round_events
    WHERE match_id=?`).bind(row.match_id).first<{rounds_json:string|null;kills_json:string|null}>();
   const status=saved?.rounds_json&&saved.kills_json?'complete':'partial';
-  await db.prepare('UPDATE coach_member_queue SET status=?,attempts=attempts+1 WHERE match_id=?')
-   .bind(status,row.match_id).run();
+  await db.prepare('UPDATE coach_member_queue SET status=?,attempts=attempts+1,next_at=? WHERE match_id=?')
+   .bind(status,status==='partial'?now+delay:0,row.match_id).run();
   return status==='complete'?'saved':'partial';
  }catch(e){
   const notFound=e instanceof Error&&/\b(?:HTTP|API) 404\b/.test(e.message);
