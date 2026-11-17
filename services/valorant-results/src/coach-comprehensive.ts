@@ -7,10 +7,14 @@ type Player={
  player:string;map?:string;agent?:string;matches:number;observedOpeningRounds:number;
  firstKills:number;firstDeaths:number;firstKillWins:number;firstKillLosses:number;
  firstDeathWins:number;firstDeathLosses:number;
+ matchWins:number;matchLosses:number;matchDraws:number;
+ statsMatches:number;totalKills:number;totalDeaths:number;totalAssists:number;
+ scoreMatches:number;totalScore:number;samePartyAsVdk:number;differentPartyFromVdk:number;partyUnknown:number;
  openingKillerDiedWithin5s:number;firstDeathKillerEliminatedWithin5s:number;
  attack:Side;defense:Side;
 };
 type Team={
+ matchWins:number;matchLosses:number;matchDraws:number;
  rounds:number;ourRoundWins:number;winnerKnown:number;
  firstKillWins:number;firstKillLosses:number;firstKillOutcomesKnown:number;
  enemyFkWins:number;enemyFkLosses:number;
@@ -68,6 +72,11 @@ export function comprehensiveCoachDiagnosis(data:CoachMetrics):CoachComprehensiv
    nextAction});
  }
  const team=data.overall;
+ const teamMatchesKnown=team.matchWins+team.matchLosses+team.matchDraws;
+ add('チーム','試合全体','試合勝率（勝敗判明）',
+  team.matchWins,teamMatchesKnown,10,'descriptive',
+  'チームの試合結果。ランク帯、相手の強さ、参加人数の違いは未補正。',
+  '勝敗が分かる試合のマップ、構成、先制時の結果と合わせて確認');
  const teamFkKnown=team.firstKillWins+team.firstKillLosses;
  const teamEnemyKnown=team.enemyFkWins+team.enemyFkLosses;
  const teamFkRate=pct(team.firstKillWins,teamFkKnown);
@@ -86,6 +95,38 @@ export function comprehensiveCoachDiagnosis(data:CoachMetrics):CoachComprehensiv
   '2キル有利から敗北した場面を優先して動画で確認',
   null,15,{good:v=>v>=85,focus:v=>v<=65});
  for(const p of data.individual){
+  const matchesKnown=p.matchWins+p.matchLosses+p.matchDraws;
+  add(p.player,'試合全体','参加試合の勝率',
+   p.matchWins,matchesKnown,5,'descriptive',
+   'この選手がVDKと同じチームにいた完全保存試合だけ。役割やマップ構成は未補正。',
+   '同じマップ・エージェントの複数試合を比較する');
+  const statsKnown=p.statsMatches;
+  const average=(n:number)=>statsKnown?(n/statsKnown).toFixed(1):'不明';
+  items.push({subject:p.player,category:'試合全体',title:'K / D / A の試合平均',
+    status:statsKnown>=3?'context':'insufficient',goodDirection:'descriptive',
+    numerator:statsKnown,denominator:p.matches,ratePct:null,referencePct:null,differencePp:null,
+    evidence:`有効${jp(statsKnown)}/${jp(p.matches)}試合｜K ${average(p.totalKills)} / D ${average(p.totalDeaths)} / A ${average(p.totalAssists)}、通算K/D ${p.totalDeaths?(p.totalKills/p.totalDeaths).toFixed(2):'算出不可'}`,
+    reason:'KDAは役割・ラウンド数・使用エージェントに左右され、単独では良し悪しを証明しない。',
+    nextAction:'FK/FDとラウンド勝敗の数字を併記し、少なくとも同じエージェント同士で比較する'});
+  items.push({subject:p.player,category:'試合全体',title:'平均スコア（保存値）',
+    status:p.scoreMatches>=3?'context':'insufficient',goodDirection:'descriptive',
+    numerator:p.scoreMatches,denominator:p.matches,ratePct:null,referencePct:null,differencePp:null,
+    evidence:`有効${jp(p.scoreMatches)}/${jp(p.matches)}試合｜保存されたスコア平均 ${p.scoreMatches?jp(Math.round(p.totalScore/p.scoreMatches)):'不明'}`,
+    reason:'保存されたスコアはマッチ単位の合計値であり、ラウンド数や役割を補正していない。',
+    nextAction:'スコア単独で貢献を決めず、試合ごとのラウンド数とキル時系列を確認'});
+  if(p.player!=='VDK'){
+   const partyKnown=p.samePartyAsVdk+p.differentPartyFromVdk;
+   add(p.player,'試合全体','VDKと同パーティーだった割合',
+    p.samePartyAsVdk,partyKnown,5,'descriptive',
+    'パーティーIDが両者とも保存されている場合のみ。同じチームと同じパーティーは別である。',
+    'パーティーに関係なく相互カバーやFD後の取り返しを比較');
+   items.push({subject:p.player,category:'試合全体',title:'パーティー情報の不明件数',
+    status:'context',goodDirection:'descriptive',numerator:p.partyUnknown,
+    denominator:p.matches,ratePct:null,referencePct:null,differencePp:null,
+    evidence:`パーティー不明 ${jp(p.partyUnknown)} / ${jp(p.matches)}試合`,
+    reason:'ID欠損をソロプレイ扱いせず、不明として表示している。',
+    nextAction:'同チームと同パーティーの違いを考慮して連携の検証を行う'});
+  }
   const rounds=p.observedOpeningRounds,knownFk=p.firstKillWins+p.firstKillLosses;
   const knownFd=p.firstDeathWins+p.firstDeathLosses;
   add(p.player,'先制','先制キル率',p.firstKills,rounds,40,'descriptive',
@@ -157,6 +198,11 @@ export function comprehensiveCoachDiagnosis(data:CoachMetrics):CoachComprehensiv
    p.matches>=3?reference:null,20);
  }
  for(const m of data.maps){
+  const teamWinKnown=m.matchWins+m.matchLosses+m.matchDraws;
+  add('チーム','マップ・エージェント',
+   `${m.map??'マップ不明'}：試合勝率`,m.matchWins,teamWinKnown,5,'descriptive',
+   'そのマップの試合結果。敵の強さ・エージェント構成・参加人数は未補正。',
+   '勝敗やFK後勝率に一貫した傾向があるか同じマップの試合を比較');
   const known=m.firstKillWins+m.firstKillLosses;
   add('チーム','マップ・エージェント',
    `${m.map??'マップ不明'}：FK後勝率`,m.firstKillWins,known,12,'higher',
@@ -179,7 +225,7 @@ export function comprehensiveCoachDiagnosis(data:CoachMetrics):CoachComprehensiv
  return {items,synopsis,limitations:[
   '評価は保存済み完全試合の観察結果であり、ランク帯・世界全体の平均値や因果的な実力判定ではない。',
   'FK/FDの絶対数、攻守別の収支、トレード窓は役割・使用エージェント・味方・対戦相手の影響を受ける。',
-  'エコ・武器購入・設置/解除・立ち位置・視線・スキル・音声・相手ランクは、今回のラウンドログから判定できない。',
+  'エコ・武器購入・設置/解除・立ち位置・視線・スキル・音声・相手ランクは、今回の保存情報から判定できない。',
   '同一選手のマップ別・エージェント別やチーム平均との差は独立した比較ではなく、少数サンプルでは判定を保留する。',
   '未判定は悪い点ではない。行動の改善を確定させるにはVODで事実確認が必要である。'
  ]};
