@@ -50,7 +50,7 @@ const validTime=(n:unknown)=>Number.isSafeInteger(n)&&Number(n)>=0&&Number(n)<=9
 type Bucket=Totals & {map?:string;composition?:string};
 // Per-player metrics are counts of observed opening events, not a player rating.
 // Never infer that a support agent with 0 FK performed poorly.
-type CoachPlayer='VDK'|'Abema'|'石原'|'藤村'|'Aquatopia'|'小林';
+type CoachPlayer='VDK'|'Abema'|'石原'|'藤村'|'Aquatopia'|'小林'|'神戸';
 interface SideOpening{rounds:number;observedOpeningRounds:number;firstKills:number;firstDeaths:number;
  firstKillWins:number;firstKillLosses:number;firstDeathWins:number;firstDeathLosses:number;}
 const emptySide=():SideOpening=>({rounds:0,observedOpeningRounds:0,firstKills:0,firstDeaths:0,
@@ -111,7 +111,8 @@ function emit(t:Bucket){
     ?Math.round(1000*t.firstKillWins/t.firstKillOutcomesKnown)/10:null};
 }
 export function summarizeCoachRounds(rows:readonly ArchivedRow[],focusName='Dolly',focusTag='SDGs',
- focusPuuid?:string,focusLabel?:CoachPlayer){
+ focusPuuid?:string,focusLabel?:CoachPlayer,
+ alternateFocusAccounts:readonly {name:string;tag:string;puuid?:string}[]=[]){
   const overall=empty();
   const maps=new Map<string,Bucket>();
   const compositions=new Map<string,Bucket>();
@@ -130,8 +131,12 @@ export function summarizeCoachRounds(rows:readonly ArchivedRow[],focusName='Doll
       new Set(players.map((p:Player)=>p.puuid)).size!==10){invalidMatches++;continue;}
     const ps=players as Player[];
     const roster=new Map(ps.map(p=>[p.puuid,p]));
-    const vdk=ps.find(p=>(focusPuuid&&p.puuid===focusPuuid)||
-   (p.name===focusName&&p.tag===focusTag));
+    // One person may own multiple Riot accounts. Use their permanent PUUID
+    // first, fall back to exact name AND tag, and select at most one profile
+    // per match. This is not a roster-wide VDK-only cohort anymore.
+    const owned=[{name:focusName,tag:focusTag,puuid:focusPuuid},...alternateFocusAccounts];
+    const vdk=ps.find(p=>owned.some(a=>a.puuid&&p.puuid===a.puuid))??
+      ps.find(p=>owned.some(a=>p.name===a.name&&p.tag===a.tag));
     if(!vdk)continue;
     archivedMatches++;
     const teams=new Set(ps.map(p=>p.team_id));
@@ -182,16 +187,20 @@ export function summarizeCoachRounds(rows:readonly ArchivedRow[],focusName='Doll
     const trio=focusName==='Dolly'&&focusTag==='SDGs'&&Boolean(abema&&ishihara);
     const map=typeof row.map==='string'&&row.map.length<=80?row.map:'Unknown';
     const composition=trio?(vdk.agent==='Fade'&&abema?.agent==='Clove'?'Fade + Clove':'Other trio'):null;
-    const focusIdentity=focusLabel&&vdk&&!playerIdentity.some(x=>x.label===focusLabel)
-      ?[{name:vdk.name??focusName,tag:vdk.tag??focusTag,label:focusLabel}]:[];
-    const identities=[...playerIdentity,...focusIdentity];
+    // In a person-level report, suppress *all* of this person's account
+    // labels, and expose exactly one merged personal profile instead.
+    const aliases=focusLabel?playerIdentity.filter(x=>owned.some(a=>
+      a.name===x.name&&a.tag===x.tag)).map(x=>x.label):[];
+    const identities=focusLabel
+      ?[...playerIdentity.filter(x=>x.label!==focusLabel&&!aliases.includes(x.label)),
+        {name:vdk.name??focusName,tag:vdk.tag??focusTag,label:focusLabel}]
+      :[...playerIdentity];
     const participants=identities.flatMap(identity=>{
       // A confirmed PUUID wins over names/tags for the selected account. A
       // player using the old display name cannot masquerade as the target.
-      const targetIdKnown=Boolean(focusPuuid&&ps.some(x=>x.puuid===focusPuuid));
       const p=ps.find(p=>p.team_id===vdk.team_id&&(
-        identity.label===focusLabel&&targetIdKnown
-          ?p.puuid===focusPuuid
+        focusLabel&&identity.label===focusLabel
+          ?p.puuid===vdk.puuid
           :(p.name===identity.name&&p.tag===identity.tag)));
       if(!p)return [];
       const agent=typeof p.agent==='string'&&p.agent.length<=60&&p.agent
