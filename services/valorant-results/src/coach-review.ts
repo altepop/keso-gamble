@@ -157,3 +157,96 @@ export function coachNotes(report:Aggregate):CoachingNote[]{
   action:'次の試合を補完してから、同じ条件で継続観察'});
  return notes.slice(0,12);
 }
+
+
+// Evidence-driven *review signals*, not a skill rating. Thresholds are local,
+// deliberately conservative screening heuristics, not VALORANT rank norms.
+// Never attribute a teammate's failure to trade/convert to the opening player.
+type SignalPlayer={
+ player:string; matches:number; observedOpeningRounds:number;
+ firstKills:number; firstDeaths:number; firstKillWins:number; firstKillLosses:number;
+ firstDeathWins:number; firstDeathLosses:number;
+ openingKillerDiedWithin5s:number; firstDeathKillerEliminatedWithin5s:number;
+};
+type SignalReport={
+ overall:{firstKillWins:number;firstKillLosses:number;firstKillOutcomesKnown:number};
+ individual:readonly SignalPlayer[];
+};
+export type CoachSignal={
+ subject:string; kind:'strength'|'review'|'insufficient';
+ metric:'team_fk_conversion'|'fk_conversion'|'fk_survival'|'fd_response'|'sample';
+ title:string; evidence:string; action:string; numerator:number;denominator:number;
+ ratePct:number|null;
+};
+export function detectCoachSignals(report:SignalReport):CoachSignal[]{
+ const out:CoachSignal[]=[];
+ const push=(subject:string,kind:CoachSignal['kind'],metric:CoachSignal['metric'],
+  title:string,num:number,den:number,evidence:string,action:string)=>{
+  out.push({subject,kind,metric,title,numerator:num,denominator:den,
+   ratePct:den?Math.round(num*1000/den)/10:null,evidence,action});
+ };
+ const team=report.overall,teamN=team.firstKillWins+team.firstKillLosses;
+ if(teamN>=20){
+  const ratio=team.firstKillWins/teamN;
+  if(ratio>=.7)push('チーム','strength','team_fk_conversion','FK後の勝利につながる傾向',
+   team.firstKillWins,teamN,
+   `味方がFKした勝者判明${teamN}ラウンドのうち${team.firstKillWins}勝`,
+   '勝ったラウンドの設置・カバー・人数有利の維持を録画で再確認');
+  else if(ratio<=.45)push('チーム','review','team_fk_conversion','先制後の人数有利維持を見直す',
+   team.firstKillWins,teamN,
+   `味方がFKした勝者判明${teamN}ラウンドのうち${team.firstKillLosses}敗`,
+   '先制後に敗北したラウンドの位置関係・設置・時間の使い方を確認');
+ }
+ for(const p of report.individual){
+  // Even with a large team history, one player's participation may be small.
+  if(p.matches<3||p.observedOpeningRounds<40){
+   push(p.player,'insufficient','sample','個人の強み・課題の判定を保留',
+    p.observedOpeningRounds,40,
+    `対象${p.matches}試合・オープニング判定可能${p.observedOpeningRounds}ラウンド（目安：3試合かつ40ラウンド）`,
+    '同じ役割・マップを含む完全保存試合を追加し再評価');
+   continue;
+  }
+  const fkN=p.firstKillWins+p.firstKillLosses;
+  if(fkN>=10){
+   const ratio=p.firstKillWins/fkN;
+   if(ratio>=.7)push(p.player,'strength','fk_conversion','本人のFK後のチーム勝率が高い傾向',
+     p.firstKillWins,fkN,`本人FK後の勝敗判明${fkN}ラウンドで${p.firstKillWins}勝`,
+     '勝利につながった先制キル後の行動を録画から再現可能な形にする');
+   else if(ratio<=.45)push(p.player,'review','fk_conversion','本人のFK後に落とすラウンドを確認',
+     p.firstKillWins,fkN,`本人FK後の勝敗判明${fkN}ラウンドで${p.firstKillLosses}敗`,
+     '先制キルを評価しつつ、その後の味方全体の動きを録画で検証');
+  }
+  if(p.firstKills>=8){
+   const survived=p.firstKills-p.openingKillerDiedWithin5s;
+   const deathRatio=p.openingKillerDiedWithin5s/p.firstKills;
+   if(deathRatio<=.125)push(p.player,'strength','fk_survival','FK直後5秒間の生存が多い傾向',
+     survived,p.firstKills,
+     `本人の${p.firstKills}FK中、5秒以内の本人死亡は${p.openingKillerDiedWithin5s}回`,
+     '撃破直後の退避・味方との位置関係を録画で確認し、再現条件を探す');
+   else if(deathRatio>=.4)push(p.player,'review','fk_survival','FK直後の生存・カバーを確認',
+     p.openingKillerDiedWithin5s,p.firstKills,
+     `本人の${p.firstKills}FK中、5秒以内の本人死亡は${p.openingKillerDiedWithin5s}回`,
+     '同じ敵からのトレードか再ピークかを映像で確認。時間だけでミスと断定しない');
+  }
+  if(p.firstDeaths>=8){
+   const replyRatio=p.firstDeathKillerEliminatedWithin5s/p.firstDeaths;
+   const fdKnown=p.firstDeathWins+p.firstDeathLosses;
+   const after=`。FD後のチーム勝利は${p.firstDeathWins}勝 / ${fdKnown}回（勝敗判明分）`;
+   if(replyRatio>=.5)push(p.player,'strength','fd_response','FD直後の味方の取り返しが多い傾向',
+     p.firstDeathKillerEliminatedWithin5s,p.firstDeaths,
+     `本人${p.firstDeaths}FD中、味方が同じ敵を5秒以内に倒したのは${p.firstDeathKillerEliminatedWithin5s}回${after}`,
+     '味方が素早く取り返せた場面の交戦距離・カバーを録画で確認');
+   else if(replyRatio<=.25)push(p.player,'review','fd_response','FD後の味方の取り返し条件を確認',
+     p.firstDeathKillerEliminatedWithin5s,p.firstDeaths,
+     `本人${p.firstDeaths}FD中、味方が同じ敵を5秒以内に倒したのは${p.firstDeathKillerEliminatedWithin5s}回${after}`,
+     '孤立・カバー距離・相手の逃走などを録画で確認。本人の責任とは断定しない');
+  }
+  if(!out.some(s=>s.subject===p.player)){
+   push(p.player,'insufficient','sample','明確な良し悪しは断定できない',
+    p.observedOpeningRounds,p.observedOpeningRounds,
+    `対象${p.matches}試合、FK${p.firstKills}回・FD${p.firstDeaths}回。十分な件数の判定指標が設定目安に達していないか、中間の範囲`,
+    'FK/FDの絶対数ではなく、使用エージェントと録画の行動を確認');
+  }
+ }
+ return out;
+}
