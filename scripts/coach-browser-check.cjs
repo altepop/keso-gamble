@@ -89,6 +89,8 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   report.maps[0].puuid='secret-raw-puuid';
   const ctx=await browser.newContext({viewport:{width:375,height:812},isMobile:true,hasTouch:true});
   await ctx.addInitScript(t=>localStorage.setItem('keso-kp-session-v1',t),token);
+  // The old broken build could persist Kobe=Abema. A confirmed identity must win.
+  await ctx.addInitScript(()=>localStorage.setItem('keso-coach-member-mapping-v1',JSON.stringify({神戸:'Abema'})));
   await ctx.addInitScript(()=>{
     Object.defineProperty(navigator,'clipboard',{configurable:true,
       value:{writeText:async text=>{window.__copiedDiagnostic=text}}});
@@ -105,9 +107,16 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
   await page.goto('http://127.0.0.1:18784/coach.html');
   await page.locator('#report:not([hidden])').waitFor();
-  assert.equal(await page.locator('#tab-VDK').getAttribute('aria-selected'),'true');
+  assert.equal(await page.locator('#tab-神戸').getAttribute('aria-selected'),'true');
+  assert.match(await page.locator('#focus-content').innerText(),/神戸のコーチング/);
+  assert.match(await page.locator('#focus-content').innerText(),/Aquatopia#toppy/);
+  assert.match(await page.locator('#focus-content').innerText(),/先制キル後の勝利が多い/);
+  assert.match(await page.locator('#focus-content').innerText(),/8 \/ 10/);
+  assert.ok(!(await page.locator('#focus-content').innerText()).includes('Abema#ttv'),
+    'outdated Kobe=Abema alias must never override verified Kobe=Aquatopia');
   assert.equal(await page.locator('#archive-drawer').evaluate(el=>el.open),false,
     'all the old audit tables must be tucked away by default');
+  await page.locator('#tab-VDK').click();
   assert.match(await page.locator('#focus-content').innerText(),/VDKのコーチング/);
   await page.locator('#focus-content > details.focus-details > summary').click();
   await page.locator('#focus-content .focus-breakdown > details').first().locator('summary').click();
@@ -132,9 +141,9 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   assert.match(await page.locator('#focus-content').innerText(),/先制キル後の勝利が多い/);
   await page.locator('#tab-神戸').click();
   assert.match(await page.locator('#focus-content').innerText(),/神戸のコーチング/);
-  assert.match(await page.locator('#focus-content').innerText(),/Abema#ttv/);
-  assert.match(await page.locator('#focus-content').innerText(),/FD後5秒以内に味方が同じ敵を倒した率/);
-  assert.match(await page.locator('#focus-content').innerText(),/二重計上はしない/);
+  assert.match(await page.locator('#focus-content').innerText(),/Aquatopia#toppy/);
+  assert.match(await page.locator('#focus-content').innerText(),/先制キル後の勝利が多い/);
+  assert.match(await page.locator('#focus-content').innerText(),/二重計上しない/);
   await page.locator('#tab-小林').click();
   assert.match(await page.locator('#focus-content').innerText(),/小林は未紐づけ/);
   await page.locator('#tab-チーム').click();
