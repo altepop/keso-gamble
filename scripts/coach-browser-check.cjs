@@ -96,9 +96,27 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
     return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({
      person,profile,accounts:person==='神戸'?['Abema#ttv','Aquatopia#toppy']:[person],
      usableMatches:2,coverage:{discovered:5,complete:2,discoveryDone:false},
-     fullDiagnosis:{items:[{subject:profile,status:'focus',title:'FK後の動きを確認',
-       evidence:'2 / 10（20%）',reason:'映像による確認が必要',
-       nextAction:'味方のカバーと退避を確認'}]}})});
+     individual:[{player:profile,matches:2,matchWins:1,matchLosses:1,matchDraws:0,
+       statsMatches:2,totalKills:27,totalDeaths:24,observedOpeningRounds:40,
+       firstKills:4,firstDeaths:6,firstKillWins:3,firstKillLosses:1,
+       attack:{observedOpeningRounds:20,firstKills:3,firstDeaths:5},
+       defense:{observedOpeningRounds:20,firstKills:1,firstDeaths:1}}],
+     individualMapAgent:[{player:profile,map:'Ascent',agent:'Fade',matches:2,
+       matchWins:1,matchLosses:1,matchDraws:0,observedOpeningRounds:40,
+       firstDeaths:6,firstKillWins:3,firstKillLosses:1}],
+     fullDiagnosis:{items:[
+       {subject:profile,category:'先制',status:'focus',title:'FK後の動きを確認',
+        evidence:'2 / 10（20%）',reason:'映像による確認が必要',
+        nextAction:'味方のカバーと退避を確認'},
+       {subject:profile,category:'攻撃・防衛',status:'focus',title:'攻撃側の初動リスク',
+        evidence:'5 / 20（25%）',reason:'参考の差を見直す',
+        nextAction:'攻撃側の初動デスをVODで確認'},
+       {subject:profile,category:'生存・取り返し',status:'good',title:'FK後の生存',
+        evidence:'4 / 4（100%）',reason:'継続観察',
+        nextAction:'良い場面を再現する'},
+       {subject:profile,category:'試合全体',status:'context',title:'参考勝率',
+        evidence:'1 / 2（50%）',reason:'試合数が少ない',
+        nextAction:'試合を追加して比較'}]}})});
    }
    if(req.url().endsWith('/api/kp/coach/members/start'))
     return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({status:'enabled',enabled:true})});
@@ -193,6 +211,16 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   assert.match(await page.locator('#member-result').innerText(),/Aquatopia#toppy/);
   assert.match(await page.locator('#member-result').innerText(),/最優先の弱点候補/);
   assert.match(await page.locator('#member-result').innerText(),/2 \/ 10/);
+  assert.match(await page.locator('#member-result').innerText(),/攻撃側の初動リスク/,
+   'second review signal must not be hidden behind a one-item priority');
+  assert.match(await page.locator('#member-result').innerText(),/FK後の生存/,
+   'all supported strengths are immediately visible');
+  assert.match(await page.locator('#member-result').innerText(),/攻撃・防衛のFK\/FD比較/);
+  assert.match(await page.locator('#member-result').innerText(),/Ascent \/ Fade/);
+  assert.equal(await page.locator('#member-result .member-bar-track').count()>=7,true,
+   'render real side and map/agent bars rather than invented trendlines');
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,
+   'all member charts must fit mobile width');
   assert.equal(requests.length,3,'one own-match read only upon clicking the person');
   await page.locator('#start-member-archive').click();
   await page.waitForFunction(()=>document.querySelector('#status').textContent.includes('履歴収集を有効化'));
