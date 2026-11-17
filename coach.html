@@ -298,7 +298,7 @@ function renderCoachFocus(data){
  const sample=current==='チーム'?data.usableMatches:
    data.individual?.find(p=>p.player===account)?.matches;
  const aliasNote=account!==current&&sample!==undefined
-  ?`<p class="focus-note">紐づけ中のRiotアカウント：${escape(account)}。同じ戦績を別人の試合として二重計上していない。</p>`:'';
+  ?`<p class="focus-note">紐づけ済みRiot ID：${escape(current==='神戸'&&account==='Abema'?'Abema#ttv':account)}。このアカウントの戦績を共用し、二重計上はしない。</p>`:'';
  const overview=`<div class="subject-head"><h3>${escape(current)}のコーチング</h3>
   <p>分析対象 ${sample===undefined||sample===null?'—':int(sample)}試合</p></div>
   ${aliasNote}
