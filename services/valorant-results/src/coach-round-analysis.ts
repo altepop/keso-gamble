@@ -110,7 +110,8 @@ function emit(t:Bucket){
   return {...t,firstKillWinPct:t.firstKillOutcomesKnown
     ?Math.round(1000*t.firstKillWins/t.firstKillOutcomesKnown)/10:null};
 }
-export function summarizeCoachRounds(rows:readonly ArchivedRow[],focusName='Dolly',focusTag='SDGs'){
+export function summarizeCoachRounds(rows:readonly ArchivedRow[],focusName='Dolly',focusTag='SDGs',
+ focusPuuid?:string,focusLabel?:CoachPlayer){
   const overall=empty();
   const maps=new Map<string,Bucket>();
   const compositions=new Map<string,Bucket>();
@@ -129,7 +130,8 @@ export function summarizeCoachRounds(rows:readonly ArchivedRow[],focusName='Doll
       new Set(players.map((p:Player)=>p.puuid)).size!==10){invalidMatches++;continue;}
     const ps=players as Player[];
     const roster=new Map(ps.map(p=>[p.puuid,p]));
-    const vdk=ps.find(p=>p.name===focusName&&p.tag===focusTag);
+    const vdk=ps.find(p=>(focusPuuid&&p.puuid===focusPuuid)||
+   (p.name===focusName&&p.tag===focusTag));
     if(!vdk)continue;
     archivedMatches++;
     const teams=new Set(ps.map(p=>p.team_id));
@@ -180,8 +182,13 @@ export function summarizeCoachRounds(rows:readonly ArchivedRow[],focusName='Doll
     const trio=focusName==='Dolly'&&focusTag==='SDGs'&&Boolean(abema&&ishihara);
     const map=typeof row.map==='string'&&row.map.length<=80?row.map:'Unknown';
     const composition=trio?(vdk.agent==='Fade'&&abema?.agent==='Clove'?'Fade + Clove':'Other trio'):null;
-    const participants=playerIdentity.flatMap(identity=>{
-      const p=ps.find(p=>p.name===identity.name&&p.tag===identity.tag&&p.team_id===vdk.team_id);
+    const focusIdentity=focusLabel&&vdk&&!playerIdentity.some(x=>x.name===vdk.name&&x.tag===vdk.tag)
+      ?[{name:vdk.name??focusName,tag:vdk.tag??focusTag,label:focusLabel}]:[];
+    const identities=[...playerIdentity,...focusIdentity];
+    const participants=identities.flatMap(identity=>{
+      const p=ps.find(p=>p.team_id===vdk.team_id&&(
+        (p.name===identity.name&&p.tag===identity.tag)||
+        (identity.label===focusLabel&&focusPuuid&&p.puuid===focusPuuid)));
       if(!p)return [];
       const agent=typeof p.agent==='string'&&p.agent.length<=60&&p.agent
         ?p.agent:'Unknown';
@@ -324,8 +331,10 @@ export function summarizeCoachRounds(rows:readonly ArchivedRow[],focusName='Doll
     trioComparisons:[...compositions.values()].map(emit)
       .sort((a,b)=>a.map!.localeCompare(b.map!)||a.composition!.localeCompare(b.composition!)),
     individual:[...individual.values()].map(playerReport)
-      .sort((a,b)=>playerIdentity.findIndex(x=>x.label===a.player)-
-        playerIdentity.findIndex(x=>x.label===b.player)),
+      .sort((a,b)=>{
+        const idx=(x:string)=>{const n=playerIdentity.findIndex(p=>p.label===x);return n<0?999:n};
+        return idx(a.player)-idx(b.player)||a.player.localeCompare(b.player,'ja');
+      }),
     individualMapAgent:[...individualMapAgent.values()].map(playerReport)
       .sort((a,b)=>a.player.localeCompare(b.player,'ja')||
         (a.map??'').localeCompare(b.map??'')||(a.agent??'').localeCompare(b.agent??'')),
