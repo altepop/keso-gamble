@@ -143,11 +143,15 @@ export function comprehensiveCoachDiagnosis(data:CoachMetrics):CoachComprehensiv
    '死亡しなかった割合であり、意図的に退避できたとは限らない。',
    'FK後の再ピークと味方の射線をVODで確認',null,15,
    {good:v=>v>=87.5,focus:v=>v<=60});
+  // This is the entire TEAM'S response after a player's first death.
+  // A low value alone cannot identify the dead player's positioning error:
+  // economy, spacing, teammate rotations and intentional time plays matter.
+  // Keep it visible as a cooperation observation, never label it the person's
+  // confirmed good/bad skill or top weakness without spatial/VOD evidence.
   add(p.player,'生存・取り返し','FD後5秒以内に味方が同じ敵を倒した率',
-   p.firstDeathKillerEliminatedWithin5s,p.firstDeaths,8,'higher',
-   '味方による時間内の取り返し。本人のミスや成功と断定しない。',
-   '味方がトレードできた／できなかった場面の距離と相手位置を比較',
-   null,15,{good:v=>v>=50,focus:v=>v<=25});
+   p.firstDeathKillerEliminatedWithin5s,p.firstDeaths,8,'descriptive',
+   '味方が5秒以内に同じ敵を倒したというチーム連携の観察値。低値でも本人のミス・連携不足とは断定できない。',
+   '味方がトレードできた／できなかった場面の距離、経済状況、相手位置を映像で比較');
   add(p.player,'生存・取り返し','本人FD後のチーム逆転勝率',
    p.firstDeathWins,knownFd,10,'higher',
    '同じチーム全体の敵FKからの逆転率との参考比較。個人責任ではない。',
