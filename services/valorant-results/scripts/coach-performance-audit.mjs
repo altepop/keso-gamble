@@ -26,6 +26,15 @@ export async function auditPerformance(db){
  for(const key of ['kills','deaths','assists','score','headshots','bodyshots','legshots','statsDamageDealt','statsDamageReceived','statsDamageMade','roundPlayers','roundPlayerStats','killAssistants','damageEvents','roundPlant','roundDefuse'])directProviderFields[key]=evidence.filter(f=>Number.isSafeInteger(f[key])&&f[key]>0&&f[key]<=10).length;
  return {people,directProviderFields,queries:db.state.queries,rowsRead:db.state.rowsReadKnown?db.state.rowsRead:null,mutations:0};
 }
+export async function coachProductionSmoke(token,request=fetch){
+ if(!/^[a-f0-9]{48}$/.test(token??''))throw Error('smoke_session_missing');
+ const page=await request('https://altepop.github.io/keso-gamble/coach.html',{signal:AbortSignal.timeout(15000),redirect:'error'});
+ if(!page.ok||(await page.text()).includes('id="compare-members"')===false)throw Error('coach_page_stale');
+ const res=await request('https://valorant-results.tealeaforest.workers.dev/api/kp/coach/member?person='+encodeURIComponent('神戸'),{headers:{Authorization:'Bearer '+token},signal:AbortSignal.timeout(30000),redirect:'error'});
+ if(!res.ok)throw Error('coach_http');const body=await res.json();
+ if(body.person!=='神戸'||body.accounts?.length!==2||!body.performance?.quality?.metricCoverage||!Array.isArray(body.performance.windows)||body.performance.windows.length!==4||!body.roundContribution?.quality)throw Error('coach_contract');
+ return {page:'verified',authenticatedApi:'verified',metricQuality:'verified',mutations:0};
+}
 if(process.argv[1]?.endsWith('/coach-performance-audit.mjs')){
  try{
   const config=JSON.parse(readFileSync('wrangler.jsonc','utf8')),binding=config.d1_databases?.find(b=>b.binding==='DB'),env=process.env;
@@ -35,5 +44,6 @@ if(process.argv[1]?.endsWith('/coach-performance-audit.mjs')){
    if(!r.ok)throw Error('read');const b=await r.json(),q=b.result?.[0];if(!b.success||!q?.success)throw Error('read');return {rows:q.results??[],rowsRead:q.meta?.rows_read};
   });
   console.log('COACH_PERFORMANCE_AUDIT '+JSON.stringify(await auditPerformance(db)));
+  console.log('COACH_PRODUCTION_SMOKE '+JSON.stringify(await coachProductionSmoke(env.KESO_SMOKE_WALLET_TOKEN)));
  }catch{console.error('COACH_PERFORMANCE_AUDIT_FAILED (no SQL, identifiers or raw errors logged)');process.exitCode=1;}
 }
