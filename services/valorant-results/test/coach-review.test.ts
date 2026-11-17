@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {recommendReviewRounds,coachNotes,detectCoachSignals} from '../src/coach-review.ts';
+import {recommendReviewRounds,recommendSuccessRounds,coachNotes,detectCoachSignals} from '../src/coach-review.ts';
 
 function match(id:string,map:string,ended_at:number,
  rounds:Array<{r:number;winner:string|null}>,
@@ -128,4 +128,34 @@ test('signals withhold FK and FD labels when sample or outcomes are insufficient
  assert.equal(neutral.length,1);
  assert.equal(neutral[0].kind,'insufficient','zero FK is not evidence of poor support play');
  assert.equal(neutral[0].ratePct,null);
+});
+
+test('winning-round examples require verified outcomes, valid rosters and complete kill timelines',()=>{
+ const matchRows=match('private-example','Corrode',1794666339000,[
+  {r:0,winner:'Blue'},{r:1,winner:'Blue'},{r:2,winner:'Blue'},
+  {r:3,winner:'Red'},{r:4,winner:null}
+ ],[
+  {r:0,t:1000,killer:'p0',victim:'p5'},
+  {r:0,t:1200,killer:'p1',victim:'p6'},
+  {r:0,t:9000,killer:'p7',victim:'p0'},
+  {r:1,t:1000,killer:'p5',victim:'p0'},
+  {r:1,t:1200,killer:'p1',victim:'p5'},
+  {r:2,t:1000,killer:'p2',victim:'p5'},
+  {r:2,t:10000,killer:'p7',victim:'p2'},
+  {r:3,t:1000,killer:'p2',victim:'p5'},
+  {r:4,t:1000,killer:'p2',victim:'p5'}
+ ]);
+ const result=recommendSuccessRounds([matchRows]);
+ assert.equal(result.length,3);
+ const byRound=new Map(result.map(x=>[x.round,x]));
+ assert.equal(byRound.get(0)?.category,'early_two_kills_won');
+ assert.equal(byRound.get(1)?.category,'enemy_fk_comeback_won');
+ assert.equal(byRound.get(1)?.firstKiller,null,'enemy identities are never displayed');
+ assert.equal(byRound.get(2)?.category,'fk_survived_won');
+ assert.equal(byRound.get(2)?.firstKiller,'石原');
+ assert.ok(!JSON.stringify(result).includes('private-example'));
+ assert.ok(!JSON.stringify(result).includes('anonymous'));
+ const invalid={...matchRows,kills_json:null};
+ assert.deepEqual(recommendSuccessRounds([invalid]),[]);
+ assert.equal(recommendSuccessRounds([matchRows],2).length,2);
 });
