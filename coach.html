@@ -138,18 +138,18 @@ select{width:100%;max-width:600px;padding:10px;border-radius:9px;color:#eef2fa;b
 <h2>誰の弱点を見る？</h2>
 <p class="focus-lead">選手を選ぶと「最優先で見直す点 → 良い点 → 全指標」の順に表示する。判定は映像での確認が必要な仮説である。</p>
 <div class="coach-tabs" id="coach-tabs" role="tablist" aria-label="コーチング対象">
-<button type="button" class="coach-tab" role="tab" id="tab-VDK" data-coach-subject="VDK" aria-controls="focus-content" aria-selected="true">VDK</button>
+<button type="button" class="coach-tab" role="tab" id="tab-VDK" data-coach-subject="VDK" aria-controls="focus-content" aria-selected="false">VDK</button>
 <button type="button" class="coach-tab" role="tab" id="tab-Abema" data-coach-subject="Abema" aria-controls="focus-content" aria-selected="false">Abema</button>
 <button type="button" class="coach-tab" role="tab" id="tab-石原" data-coach-subject="石原" aria-controls="focus-content" aria-selected="false">石原</button>
 <button type="button" class="coach-tab" role="tab" id="tab-藤村" data-coach-subject="藤村" aria-controls="focus-content" aria-selected="false">藤村</button>
-<button type="button" class="coach-tab" role="tab" id="tab-神戸" data-coach-subject="神戸" aria-controls="focus-content" aria-selected="false">神戸</button>
+<button type="button" class="coach-tab" role="tab" id="tab-神戸" data-coach-subject="神戸" aria-controls="focus-content" aria-selected="true">神戸（本人）</button>
 <button type="button" class="coach-tab" role="tab" id="tab-Aquatopia" data-coach-subject="Aquatopia" aria-controls="focus-content" aria-selected="false">Aquatopia</button>
 <button type="button" class="coach-tab" role="tab" id="tab-小林" data-coach-subject="小林" aria-controls="focus-content" aria-selected="false">小林</button>
 <button type="button" class="coach-tab" role="tab" id="tab-チーム" data-coach-subject="チーム" aria-controls="focus-content" aria-selected="false">チーム</button>
 </div>
 <div class="other-player"><label for="coach-other-select">ほかの味方のアカウント別診断</label>
 <select id="coach-other-select" aria-label="保存試合に登場したその他の味方"><option value="">選手を選択</option></select></div>
-<div id="focus-content" role="tabpanel" aria-labelledby="tab-VDK" tabindex="0"></div>
+<div id="focus-content" role="tabpanel" aria-labelledby="tab-神戸" tabindex="0"></div>
 </section>
 <details id="archive-drawer" class="archive-drawer">
 <summary>データ保存状況・従来の詳細分析を開く（必要なときだけ）</summary>
@@ -225,31 +225,13 @@ const setStatus=(msg,error=false)=>{const el=$('status');el.textContent=msg;el.s
 const card=(label,value,sub='')=>`<article class="card"><div class="label">${escape(label)}</div><strong>${escape(value)}</strong><div class="small muted">${escape(sub)}</div></article>`;
 const simpleTable=(headers,rows)=>`<div class="table-wrap"><table><thead><tr>${headers.map((h,i)=>`<th class="${i?'num':''}">${escape(h)}</th>`).join('')}</tr></thead><tbody>${rows.map(a=>`<tr>${a.map((cell,i)=>`<td class="${i?'num':''}">${escape(cell)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
 
-let chosenCoachSubject='VDK';
+let chosenCoachSubject='神戸';
 const fixedCoachSubjects=['VDK','Abema','石原','藤村','神戸','Aquatopia','小林','チーム'];
 let coachSubjects=[...fixedCoachSubjects];
-const LOCAL_IDENTITIES_KEY='keso-coach-member-mapping-v1';
-// Owner-confirmed: Kobe uses Abema#ttv. The two tabs show one account's
-// recorded match sample without duplicating rows or inferring separate games.
-// Owner-confirmed Fujimura=frin#怖すぎ and Aquatopia=Aquatopia#toppy.
-const getPersonAliases=()=>{
- try{
-  const o=JSON.parse(localStorage.getItem(LOCAL_IDENTITIES_KEY)||'{}');
-  return o&&typeof o==='object'&&!Array.isArray(o)?o:{};
- }catch{return {}}
-};
-const personAlias=(subject)=>{
- if(subject!=='神戸')return null;
- const stored=getPersonAliases();
- return Object.prototype.hasOwnProperty.call(stored,'神戸')?stored.神戸:'Abema';
-};
-const setPersonAlias=(subject,account)=>{
- if(subject!=='神戸')return;
- const state=getPersonAliases();
- if(account)state[subject]=account;
- else state[subject]=null;
- try{localStorage.setItem(LOCAL_IDENTITIES_KEY,JSON.stringify(state));}catch{}
-};
+// User-confirmed account ownership: 神戸 (this user) = Aquatopia#toppy.
+// Abema#ttv and Dolly#SDGs (VDK) are different players, never aliases.
+// Ignore previously saved, unverified identity overrides from old UI versions.
+const personAlias=(subject)=>subject==='神戸'?'Aquatopia':null;
 const readableStatus=s=>s==='focus'?'要見直し':s==='good'?'良い傾向':
  s==='insufficient'?'データ不足':s==='mixed'?'明確な差なし':'参考値';
 const evidenceCard=(d,kind)=>`<article class="focus-item ${kind}">
@@ -298,24 +280,17 @@ function renderCoachFocus(data){
  const sample=current==='チーム'?data.usableMatches:
    data.individual?.find(p=>p.player===account)?.matches;
  const aliasNote=account!==current&&sample!==undefined
-  ?`<p class="focus-note">紐づけ済みRiot ID：${escape(current==='神戸'&&account==='Abema'?'Abema#ttv':account)}。このアカウントの戦績を共用し、二重計上はしない。</p>`:'';
+  ?`<p class="focus-note">本人のRiot ID：${escape(current==='神戸'?'Aquatopia#toppy':account)}。Aquatopiaタブと同じ保存記録を参照し、試合数を二重計上しない。</p>`:'';
  const overview=`<div class="subject-head"><h3>${escape(current)}のコーチング</h3>
   <p>分析対象 ${sample===undefined||sample===null?'—':int(sample)}試合</p></div>
   ${aliasNote}
   <p class="focus-counter">見直し候補 ${int(focus.length)}件 ／ 良い傾向 ${int(good.length)}件 ／ 参考・保留 ${int(other.length+pending.length)}件</p>`;
  const noAccount=!people.includes(account)&&current!=='チーム';
  if(noAccount){
-  const choices=people.filter(x=>x!=='VDK');
-  const manual=current==='神戸'?`<div class="link-account">
-    <label for="coach-account-map">${escape(current)}のRiotアカウントを選んで紐づける</label>
-    <select id="coach-account-map"><option value="">候補を選ぶ（推測で紐づけない）</option>
-    ${choices.map(x=>`<option value="${escape(x)}">${escape(x)}</option>`).join('')}</select>
-    <button id="coach-link-account" type="button" ${choices.length?'':'disabled'}>このアカウントを紐づける</button>
-    <p class="small muted">選択はこのブラウザー内だけに保存する。本人か確認できない場合は選ばないでほしい。</p>
-   </div>`:'';
+  const manual='';
   $('focus-content').innerHTML=overview+
    `<div class="focus-empty"><strong>${escape(current)}は未紐づけ／対象試合なし</strong>
-   <p>保存済みのVDK参加試合から、本人のRiotアカウントを特定できていない。0キル・0勝ではなく、判定不能である。</p>
+   <p>${current==='神戸'?'神戸のRiot IDはAquatopia#toppyとして確認済みだが、保存済みのVDK参加試合に該当アカウントが見つからない。':'この名前に該当するRiotアカウントの参加記録がない。'}0キル・0勝ではなく、分析対象の記録がない状態である。</p>
    <p>VDKと一緒にプレーしていない試合は、現在の43試合の収集範囲には入っていない。</p></div>`+manual;
   return;
  }
@@ -370,15 +345,6 @@ $('coach-other-select').addEventListener('change',event=>{
  if(!coachSubjects.includes(value)||fixedCoachSubjects.includes(value))return;
  chosenCoachSubject=value;
  if(latestReport)renderCoachFocus(latestReport);
-});
-$('focus-content').addEventListener('click',event=>{
- if(!event.target.closest('#coach-link-account'))return;
- const subject=chosenCoachSubject;
- const account=$('coach-account-map')?.value;
- if(subject!=='神戸'||!account||
-    !(latestReport?.individual||[]).some(p=>p.player===account))return;
- setPersonAlias(subject,account);
- renderCoachFocus(latestReport);
 });
 $('coach-tabs').addEventListener('keydown',event=>{
  if(!['ArrowRight','ArrowLeft','Home','End'].includes(event.key))return;
