@@ -44,6 +44,22 @@ tr:last-child td{border-bottom:0}
 .review-heading{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 12px;justify-content:space-between}
 .review-heading strong{font-size:14px}
 .review-kind{font-size:12px;font-weight:750;letter-spacing:.01em;color:#a9caff}
+.diag-list{display:grid;gap:9px;margin-top:10px}
+.diag-row{border:1px solid #30445f;border-left:4px solid #73849c;border-radius:10px;padding:11px;background:#0d1830}
+.diag-row.good{border-left-color:#78d8ae}.diag-row.focus{border-left-color:#ffb06e}
+.diag-row.insufficient{border-left-color:#8c9bb4}
+.diag-row p{margin:5px 0 0;overflow-wrap:anywhere}
+.diag-row strong{font-size:14px}
+.diag-row .kind{font-size:12px;font-weight:750;letter-spacing:.025em}
+.diag-row.good .kind{color:#8be3b0}.diag-row.focus .kind{color:#ffc492}
+.diag-details{border:1px solid #2c3952;border-radius:12px;padding:10px 12px;margin-top:12px}
+.diag-details summary{cursor:pointer;font-weight:750;padding:8px 0;list-style-position:inside}
+.diag-details[open] summary{border-bottom:1px solid #2c3952}
+.diag-stats{font-size:12px;color:#bdcce1;font-weight:500}
+.diag-summaries{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,210px),1fr));gap:9px}
+.diag-summaries .card strong{font-size:17px}
+.diag-empty{color:#b6c6df;font-size:13px}
+@media(max-width:470px){.diag-row{padding:9px}.diag-details{padding:8px 10px}}
 #connection{display:none}
 .empty{padding:18px 4px;color:#b6c6df;text-align:center}
 @media(max-width:470px){.panel{padding:12px}.card{padding:12px}.card strong{font-size:23px}}
@@ -77,6 +93,13 @@ tr:last-child td{border-bottom:0}
 <p id="backfill-message" class="small muted"></p>
 <div class="actions"><button id="resume-backfill" type="button" hidden>未取得試合の補完を再開</button></div>
 <p id="resume-explain" class="small muted" hidden>VDK本人の連携口座から、以前許可した試合補完を再開する。5分に最大1試合、保存済みの競技試合だけを取得する。KP・通知・勝敗予想は変更しない。</p>
+</section>
+<section class="panel">
+<h2>全項目診断：ここが良い／ここを見直す</h2>
+<p class="muted small">43試合の完全保存データを利用し、チーム・VDK・Abema・石原のFK・FD・トレード候補・人数有利の維持・攻守・マップ／エージェントをまとめる。良い傾向と見直し候補は暫定的な判定であり、役割・味方・相手や試合状況によって結果が変わる。</p>
+<div id="diagnosis-summary"></div>
+<div id="diagnosis-full"></div>
+<div id="diagnosis-limits" class="small muted"></div>
 </section>
 <section class="panel">
 <h2>FK / FDから分かる強みと見直し候補</h2>
@@ -148,6 +171,41 @@ $('coach-signals').innerHTML=signals.length?signals.map(s=>{
  <p class="small"><b>次に確認：</b>${escape(s.action)}</p>
  </article>`;
 }).join(''):'<p class="empty">判定に必要な条件を満たす指標がまだない。</p>';
+const deep=data.fullDiagnosis||null;
+const deepTargets=['チーム','VDK','Abema','石原'];
+const statLabel=s=>s==='good'?'良い傾向':s==='focus'?'見直し候補':
+ s==='insufficient'?'データ不足':s==='mixed'?'差が小さい／未確定':'参考値';
+const diagnosticLine=d=>`<article class="diag-row ${escape(d.status)}">
+  <div class="review-heading"><span class="kind">${escape(statLabel(d.status))} · ${escape(d.category)}</span>
+  <strong>${escape(d.title)}</strong></div>
+  <p class="small"><b>根拠：</b>${escape(d.evidence)}</p>
+  <p class="small muted">${escape(d.reason)}</p>
+  <p class="small"><b>確認・改善：</b>${escape(d.nextAction)}</p>
+  </article>`;
+if(deep){
+ const synopsis=deep.synopsis||[];
+ $('diagnosis-summary').innerHTML='<div class="diag-summaries">'+synopsis.map(s=>
+  `<article class="card"><h3>${escape(s.subject)}</h3>
+   <p class="small"><span class="positive">良い傾向 ${int(s.strengths)}件</span> / <span class="negative">見直し ${int(s.focuses)}件</span></p>
+   <p class="small">良い点：${escape(s.strongest?.title||'現段階で断定できない')}</p>
+   <p class="small">優先確認：${escape(s.priority?.title||'現段階で断定できない')}</p></article>`).join('')+'</div>';
+ const all=deep.items||[];
+ $('diagnosis-full').innerHTML=deepTargets.map((subject,i)=>{
+  const own=all.filter(s=>s.subject===subject);
+  const priority={focus:0,good:1,mixed:2,context:3,insufficient:4};
+  const ordered=[...own].sort((a,b)=>(priority[a.status]??9)-(priority[b.status]??9)||
+   a.category.localeCompare(b.category,'ja')||a.title.localeCompare(b.title,'ja'));
+  return `<details class="diag-details" ${i===1?'open':''}><summary>${escape(subject)}の全評価項目
+   <span class="diag-stats">（${int(own.length)}項目。見直し：${int(own.filter(s=>s.status==='focus').length)}）</span></summary>
+   <div class="diag-list">${ordered.map(diagnosticLine).join('')||'<p class="diag-empty">対象指標なし</p>'}</div></details>`;
+ }).join('');
+ $('diagnosis-limits').innerHTML='<h3>ログだけでは分からないこと</h3>'+
+  (deep.limitations||[]).map(s=>'<p class="small muted">・'+escape(s)+'</p>').join('');
+}else{
+ $('diagnosis-summary').innerHTML='<p class="empty">詳細診断のデータを取得できない。</p>';
+ $('diagnosis-full').innerHTML='';
+ $('diagnosis-limits').innerHTML='';
+}
 const notes=data.coachingNotes||[];
 $('coach-notes').innerHTML=notes.length?notes.map(n=>{
  const tone=n.kind==='review'?'要確認':n.kind==='collect'?'データ補完':'継続観察';
@@ -256,6 +314,11 @@ function diagnosticPayload(d){
   ['map','matchJst','round','category','evidence','firstKiller','focus']));
  const notes=(d.coachingNotes||[]).map(n=>pick(n,['subject','kind','title','evidence','action']));
  const signals=(d.coachSignals||[]).map(s=>pick(s,['subject','kind','metric','title','evidence','action','numerator','denominator','ratePct']));
+ const fullDiagnosis={
+  items:(d.fullDiagnosis?.items||[]).map(x=>pick(x,['subject','category','title','status','evidence','reason','nextAction','numerator','denominator','ratePct','referencePct','differencePp'])),
+  synopsis:(d.fullDiagnosis?.synopsis||[]).map(x=>pick(x,['subject','strengths','focuses','other'])),
+  limitations:[...(d.fullDiagnosis?.limitations||[])].filter(x=>typeof x==='string').slice(0,10)
+ };
  return {format:'KESO_COACH_SAFE_DIAGNOSTIC_V1',
   generatedAt:new Date().toISOString(),totalVdkRosterMatches:d.totalVdkRosterMatches??null,
   archive:pick(d.backfill,['status','complete','partial','missing','unavailable','pending']),
@@ -263,7 +326,7 @@ function diagnosticPayload(d){
   totalRowsRead:d.totalRowsRead??null,limitReached:d.limitReached??null,
   quality:pick(d,['invalidMatches','roundDataMissing','killDataMissing']),
   overall:pick(d.overall,['matches','rounds','winnerKnown','ourRoundWins','roundsWithFk','ourFirstKills','enemyFirstKills','firstKillWins','firstKillLosses','firstKillWinPct','comebackWins','repeatedVictimRounds','roundsWithSides']),
-  maps,individual,reviewRounds:reviews,coachingNotes:notes,coachSignals:signals};
+  maps,individual,reviewRounds:reviews,coachingNotes:notes,coachSignals:signals,fullDiagnosis};
 }
 $('share').addEventListener('click',async()=>{
  if(!latestReport||busy)return;
