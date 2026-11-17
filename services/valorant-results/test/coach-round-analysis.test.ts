@@ -74,11 +74,11 @@ test('cannot treat friendly fire or an invalid roster as a team opening kill',()
 test('D1 report reads only stored archives and counts historical roster candidates',async()=>{
  const sql=new DatabaseSync(':memory:');
  try{
-  sql.exec(`CREATE TABLE valorant_match_rosters(match_id TEXT PRIMARY KEY,map TEXT,ended_at INTEGER,players_json TEXT);
+  sql.exec(`CREATE TABLE valorant_match_rosters(match_id TEXT PRIMARY KEY,map TEXT,ended_at INTEGER,players_json TEXT,teams_json TEXT);
    CREATE TABLE valorant_match_round_events(match_id TEXT PRIMARY KEY,rounds_json TEXT,kills_json TEXT);\n   CREATE TABLE monitor_state(key TEXT PRIMARY KEY,value TEXT NOT NULL);`);
   const row=fixture('a','Corrode','Fade','Clove',[{r:0,winner:'Blue'}],
     [{r:0,t:300,killer:'p0',victim:'p5'}]);
-  sql.prepare('INSERT INTO valorant_match_rosters VALUES(?,?,?,?)').run(row.match_id,row.map,1000,row.players_json);
+  sql.prepare('INSERT INTO valorant_match_rosters VALUES(?,?,?,?,?)').run(row.match_id,row.map,1000,row.players_json,null);
   sql.prepare('INSERT INTO valorant_match_round_events VALUES(?,?,?)').run(row.match_id,row.rounds_json,row.kills_json);
   let writes=0,reads=0;
   const db={prepare:(query:string)=>({
@@ -162,7 +162,7 @@ test('a support player absent from a match, and missing kill timelines, are not 
 test('backfill progress separates complete, partial, absent and source-unavailable matches',async()=>{
  const sql=new DatabaseSync(':memory:');
  try{
-  sql.exec(`CREATE TABLE valorant_match_rosters(match_id TEXT PRIMARY KEY,map TEXT,ended_at INTEGER,players_json TEXT);
+  sql.exec(`CREATE TABLE valorant_match_rosters(match_id TEXT PRIMARY KEY,map TEXT,ended_at INTEGER,players_json TEXT,teams_json TEXT);
    CREATE TABLE valorant_match_round_events(match_id TEXT PRIMARY KEY,rounds_json TEXT,kills_json TEXT);
    CREATE TABLE monitor_state(key TEXT PRIMARY KEY,value TEXT NOT NULL);`);
   const r1=fixture('complete','Corrode','Fade','Clove',[{r:0,winner:'Blue'}],
@@ -170,8 +170,8 @@ test('backfill progress separates complete, partial, absent and source-unavailab
   const r2=fixture('partial','Lotus','Skye','Clove',[{r:0,winner:'Blue'}],[]);
   const r3=fixture('absent','Abyss','Omen','Gekko',[{r:0,winner:'Blue'}],[]);
   for(const [i,r] of [r1,r2,r3].entries()){
-   sql.prepare('INSERT INTO valorant_match_rosters VALUES(?,?,?,?)')
-    .run(r.match_id,r.map,1000+i,r.players_json);
+   sql.prepare('INSERT INTO valorant_match_rosters VALUES(?,?,?,?,?)')
+    .run(r.match_id,r.map,1000+i,r.players_json,null);
   }
   sql.prepare('INSERT INTO valorant_match_round_events VALUES(?,?,?)')
    .run(r1.match_id,r1.rounds_json,r1.kills_json);
