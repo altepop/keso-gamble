@@ -143,11 +143,12 @@ export function comprehensiveCoachDiagnosis(data:CoachMetrics):CoachComprehensiv
    '死亡しなかった割合であり、意図的に退避できたとは限らない。',
    'FK後の再ピークと味方の射線をVODで確認',null,15,
    {good:v=>v>=87.5,focus:v=>v<=60});
+  // Teammates' reaction timing is a TEAM observation. Without position,
+  // utility, timing context or VOD, it cannot prove the dead player erred.
   add(p.player,'生存・取り返し','FD後5秒以内に味方が同じ敵を倒した率',
-   p.firstDeathKillerEliminatedWithin5s,p.firstDeaths,8,'higher',
-   '味方による時間内の取り返し。本人のミスや成功と断定しない。',
-   '味方がトレードできた／できなかった場面の距離と相手位置を比較',
-   null,15,{good:v=>v>=50,focus:v=>v<=25});
+   p.firstDeathKillerEliminatedWithin5s,p.firstDeaths,8,'descriptive',
+   '味方の5秒以内の取り返しを示す連携の観測値。低値でも本人のミスとは断定できない。',
+   '味方の位置、人数差、経済状況、相手位置をVODで照合');
   add(p.player,'生存・取り返し','本人FD後のチーム逆転勝率',
    p.firstDeathWins,knownFd,10,'higher',
    '同じチーム全体の敵FKからの逆転率との参考比較。個人責任ではない。',
