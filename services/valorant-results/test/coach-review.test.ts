@@ -120,12 +120,12 @@ test('signals withhold FK and FD labels when sample or outcomes are insufficient
  const signals=detectCoachSignals(report);
  assert.equal(signals.length,1);
  assert.equal(signals[0].kind,'insufficient');
- assert.equal(signals[0].ratePct,87.5);
+ assert.equal(signals[0].ratePct,null,'sample completeness is not a skill percentage');
  assert.ok(!signals.some(s=>s.kind==='strength'||s.kind==='review'));
  const enough={...p,matches:5,observedOpeningRounds:120,firstKills:0,firstDeaths:0,
   openingKillerDiedWithin5s:0,firstDeathKillerEliminatedWithin5s:0};
  const neutral=detectCoachSignals({...report,individual:[enough]});
  assert.equal(neutral.length,1);
  assert.equal(neutral[0].kind,'insufficient','zero FK is not evidence of poor support play');
- assert.equal(neutral[0].ratePct,100);
+ assert.equal(neutral[0].ratePct,null);
 });
