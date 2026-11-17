@@ -143,6 +143,8 @@ select{width:100%;max-width:600px;padding:10px;border-radius:9px;color:#eef2fa;b
 <button type="button" class="coach-tab" role="tab" id="tab-石原" data-coach-subject="石原" aria-controls="focus-content" aria-selected="false">石原</button>
 <button type="button" class="coach-tab" role="tab" id="tab-藤村" data-coach-subject="藤村" aria-controls="focus-content" aria-selected="false">藤村</button>
 <button type="button" class="coach-tab" role="tab" id="tab-神戸" data-coach-subject="神戸" aria-controls="focus-content" aria-selected="false">神戸</button>
+<button type="button" class="coach-tab" role="tab" id="tab-Aquatopia" data-coach-subject="Aquatopia" aria-controls="focus-content" aria-selected="false">Aquatopia</button>
+<button type="button" class="coach-tab" role="tab" id="tab-小林" data-coach-subject="小林" aria-controls="focus-content" aria-selected="false">小林</button>
 <button type="button" class="coach-tab" role="tab" id="tab-チーム" data-coach-subject="チーム" aria-controls="focus-content" aria-selected="false">チーム</button>
 </div>
 <div class="other-player"><label for="coach-other-select">ほかの味方のアカウント別診断</label>
@@ -224,22 +226,20 @@ const card=(label,value,sub='')=>`<article class="card"><div class="label">${esc
 const simpleTable=(headers,rows)=>`<div class="table-wrap"><table><thead><tr>${headers.map((h,i)=>`<th class="${i?'num':''}">${escape(h)}</th>`).join('')}</tr></thead><tbody>${rows.map(a=>`<tr>${a.map((cell,i)=>`<td class="${i?'num':''}">${escape(cell)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
 
 let chosenCoachSubject='VDK';
-const fixedCoachSubjects=['VDK','Abema','石原','藤村','神戸','チーム'];
+const fixedCoachSubjects=['VDK','Abema','石原','藤村','神戸','Aquatopia','小林','チーム'];
 let coachSubjects=[...fixedCoachSubjects];
 const LOCAL_IDENTITIES_KEY='keso-coach-member-mapping-v1';
-// Kobe's previously confirmed Abema#ttv sub-account is ONE recorded account,
-// not an additional independent sample. The owner can change the mapping.
-const defaultPersonAliases={神戸:'Abema'};
+// Kobe's exact Riot ID is not confirmed: never invent an Abema/Kobe alias.
+// Owner-confirmed Fujimura#frin and Aquatopia#toppy are assigned server-side.
 const getPersonAliases=()=>{
  try{
   const o=JSON.parse(localStorage.getItem(LOCAL_IDENTITIES_KEY)||'{}');
   return o&&typeof o==='object'&&!Array.isArray(o)?o:{};
  }catch{return {}}
 };
-const personAlias=(subject)=>Object.prototype.hasOwnProperty.call(getPersonAliases(),subject)
- ?getPersonAliases()[subject]:(defaultPersonAliases[subject]||null);
+const personAlias=(subject)=>subject==='神戸'?getPersonAliases().神戸||null:null;
 const setPersonAlias=(subject,account)=>{
- if(!['藤村','神戸'].includes(subject))return;
+ if(subject!=='神戸')return;
  const state=getPersonAliases();
  if(account)state[subject]=account;
  else state[subject]=null;
@@ -263,7 +263,7 @@ function renderCoachFocus(data){
  $('coach-other-select').innerHTML='<option value="">その他の味方を選ぶ</option>'+extras.map(name=>
   `<option value="${escape(name)}">${escape(name)}</option>`).join('');
  $('coach-other-select').value=extras.includes(current)?current:'';
- const aliasSource=['藤村','神戸'].includes(current)?personAlias(current):null;
+ const aliasSource=current==='神戸'?personAlias(current):null;
  const account=aliasSource&&people.includes(aliasSource)?aliasSource:current;
  for(const btn of $('coach-tabs').querySelectorAll('[data-coach-subject]')){
   const selected=btn.dataset.coachSubject===current;
@@ -301,7 +301,7 @@ function renderCoachFocus(data){
  const noAccount=!people.includes(account)&&current!=='チーム';
  if(noAccount){
   const choices=people.filter(x=>x!=='VDK');
-  const manual=['藤村','神戸'].includes(current)?`<div class="link-account">
+  const manual=current==='神戸'?`<div class="link-account">
     <label for="coach-account-map">${escape(current)}のRiotアカウントを選んで紐づける</label>
     <select id="coach-account-map"><option value="">候補を選ぶ（推測で紐づけない）</option>
     ${choices.map(x=>`<option value="${escape(x)}">${escape(x)}</option>`).join('')}</select>
@@ -370,7 +370,7 @@ $('focus-content').addEventListener('click',event=>{
  if(!event.target.closest('#coach-link-account'))return;
  const subject=chosenCoachSubject;
  const account=$('coach-account-map')?.value;
- if(!['藤村','神戸'].includes(subject)||!account||
+ if(subject!=='神戸'||!account||
     !(latestReport?.individual||[]).some(p=>p.player===account))return;
  setPersonAlias(subject,account);
  renderCoachFocus(latestReport);
