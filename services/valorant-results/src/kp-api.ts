@@ -54,6 +54,7 @@ import { healthReport } from './health.ts';
 import {readCoachRoundReport,invalidateCoachRoundReport} from './coach-round-analysis.ts';
 import {resumeVdkRoundBackfill} from './round-backfill.ts';
 import {enableAllMemberArchive,coachMemberCoverage} from './coach-member-archive.ts';
+import {readCoachMemberReport} from './coach-member-report.ts';
 import { mlActivityView, mlClosed, mlData, mlLineupTimes, mlResults, seasonStats } from './mleague.ts';
 import { racingView, raceSeed } from './racing-kp.ts';
 import { defaultRoastLevel, validRoastLevel } from './racing-crowns.ts';
@@ -419,6 +420,13 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping,deferP
     if(await d1OptionalMode(env))return response({error:'D1節約モード中です。時間を置いてから確認してください。'},429);
     return response({...await readCoachRoundReport(env.DB),canResume:coachOwner,
       memberHistory:await coachMemberCoverage(env.DB),canStartMemberHistory:memberHistoryOwner});
+  }
+  if(request.method==='GET'&&path==='/api/kp/coach/member'){
+    if(await d1OptionalMode(env))return response({error:'D1節約モード中のため診断できない。'},429);
+    const person=new URL(request.url).searchParams.get('person')??'';
+    if(!['VDK','Abema','石原','藤村','神戸','小林'].includes(person))
+      return response({error:'診断対象が不正である。'},400);
+    return response(await readCoachMemberReport(env.DB,person));
   }
   if(request.method==='GET'&&path==='/api/kp/coach/members/status'){
     return response({...await coachMemberCoverage(env.DB),canStartMemberHistory:memberHistoryOwner});
