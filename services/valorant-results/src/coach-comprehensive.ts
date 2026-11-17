@@ -118,13 +118,13 @@ export function comprehensiveCoachDiagnosis(data:CoachMetrics):CoachComprehensiv
    const partyKnown=p.samePartyAsVdk+p.differentPartyFromVdk;
    add(p.player,'試合全体','VDKと同パーティーだった割合',
     p.samePartyAsVdk,partyKnown,5,'descriptive',
-    'パーティーIDが両者とも保存されている場合のみ。同じチームと同じパーティーは別である。',
+    'VDKが同じ試合の同チームに参加し、両者のパーティーIDが保存されている場合のみ。同じチームと同じパーティーは別である。',
     'パーティーに関係なく相互カバーやFD後の取り返しを比較');
    items.push({subject:p.player,category:'試合全体',title:'パーティー情報の不明件数',
     status:'context',goodDirection:'descriptive',numerator:p.partyUnknown,
     denominator:p.matches,ratePct:null,referencePct:null,differencePp:null,
-    evidence:`パーティー不明 ${jp(p.partyUnknown)} / ${jp(p.matches)}試合`,
-    reason:'ID欠損をソロプレイ扱いせず、不明として表示している。',
+    evidence:`VDK不在またはパーティーID不明 ${jp(p.partyUnknown)} / ${jp(p.matches)}試合`,
+    reason:'VDKが不在の試合は比較不能とする。ID欠損もソロプレイ扱いしない。',
     nextAction:'同チームと同パーティーの違いを考慮して連携の検証を行う'});
   }
   const rounds=p.observedOpeningRounds,knownFk=p.firstKillWins+p.firstKillLosses;

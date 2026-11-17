@@ -92,9 +92,10 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
    const req=route.request();requests.push({url:req.url(),method:req.method(),auth:req.headers().authorization});
    if(req.url().includes('/api/kp/coach/member?')){
     const person=new URL(req.url()).searchParams.get('person');
-    const profile=person==='神戸'?'Aquatopia':person;
+    const profile=person==='神戸'?'神戸':person;
     return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({
-     person,profile,usableMatches:2,coverage:{discovered:5,complete:2,discoveryDone:false},
+     person,profile,accounts:person==='神戸'?['Abema#ttv','Aquatopia#toppy']:[person],
+     usableMatches:2,coverage:{discovered:5,complete:2,discoveryDone:false},
      fullDiagnosis:{items:[{subject:profile,status:'focus',title:'FK後の動きを確認',
        evidence:'2 / 10（20%）',reason:'映像による確認が必要',
        nextAction:'味方のカバーと退避を確認'}]}})});
@@ -188,6 +189,8 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   await page.locator('[data-member="神戸"]').click();
   await page.waitForFunction(()=>document.querySelector('#member-result').textContent.includes('FK後の動きを確認'));
   assert.match(await page.locator('#member-result').innerText(),/神戸の個別診断/);
+  assert.match(await page.locator('#member-result').innerText(),/Abema#ttv/);
+  assert.match(await page.locator('#member-result').innerText(),/Aquatopia#toppy/);
   assert.match(await page.locator('#member-result').innerText(),/最優先の弱点候補/);
   assert.match(await page.locator('#member-result').innerText(),/2 \/ 10/);
   assert.equal(requests.length,3,'one own-match read only upon clicking the person');

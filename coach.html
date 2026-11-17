@@ -110,9 +110,9 @@ tr:last-child td{border-bottom:0}
 <h2>選手ごとの弱点・強みを確認</h2>
 <p class="muted small">各選手本人が参加した試合から評価する。VDKと一緒に遊んだ試合だけの分析ではない。収集途中の結果は確定評価ではない。</p>
 <div id="member-selector" class="member-selector" role="group" aria-label="分析する選手">
-<button type="button" data-member="神戸" aria-pressed="false">神戸（Aquatopia）</button>
+<button type="button" data-member="神戸" aria-pressed="false">神戸（2アカウント統合）</button>
 <button type="button" data-member="VDK" aria-pressed="false">VDK</button>
-<button type="button" data-member="Abema" aria-pressed="false">Abema</button>
+<button type="button" data-member="Abema" aria-pressed="false">Abema#ttvだけ</button>
 <button type="button" data-member="石原" aria-pressed="false">石原</button>
 <button type="button" data-member="藤村" aria-pressed="false">藤村</button>
 <button type="button" data-member="小林" aria-pressed="false">小林</button>
@@ -120,8 +120,8 @@ tr:last-child td{border-bottom:0}
 <div id="member-result" aria-live="polite" class="member-result">選手を選ぶと、本人の試合を基準に弱点候補と良い点を表示する。</div>
 </section>
 <section class="panel" id="member-archive-panel">
-<h2>6人の試合収集状況</h2>
-<p class="muted small">Henrikで発見できた競技試合を段階的に保存する。API未収録の過去試合もあるため「全試合収集済み」とは断定しない。</p>
+<h2>6アカウントの試合収集状況（5人分）</h2>
+<p class="muted small">神戸のAbema#ttvとAquatopia#toppyは2アカウントを別々に収集し、神戸の人物診断で合算する。以下はアカウント別の進捗。API未収録の過去試合は完全回収を保証できない。</p>
 <div id="member-archive-status"></div>
 <button type="button" id="start-member-archive" hidden>全員の試合履歴収集を開始</button>
 </section>
@@ -234,9 +234,11 @@ const renderMemberDiagnosis=d=>{
    </article>`:null;
  const empty='<p class="small muted">判定に必要な件数が不足、または明確な差がないため、弱点を断定できない。</p>';
  const coverage=d.coverage||{};
+ const accountInfo=Array.isArray(d.accounts)&&d.accounts.length
+  ?`<p class="member-small">対象アカウント：${d.accounts.map(escape).join(' ＋ ')}${d.person==='神戸'?'（人物単位で重複排除）':''}</p>`:'';
  const quality=`<p class="member-small">対象は${int(d.usableMatches)}試合（発見${int(coverage.discovered)}件 / 完全保存${int(coverage.complete)}件）。
   履歴探索 ${coverage.discoveryDone?'終了':'継続中'}。全試合の網羅を保証しない。</p>`;
- $('member-result').innerHTML=`<h3>${escape(d.person)}の個別診断</h3>`+quality+
+ $('member-result').innerHTML=`<h3>${escape(d.person)}の個別診断</h3>`+accountInfo+quality+
   (priorities.length?report(priorities[0]):empty)+
   '<h3>そのほかの見直し候補</h3>'+
   (priorities.length>1?priorities.slice(1).map(x=>report(x)).join(''):'<p class="member-small">該当する候補なし。</p>')+
