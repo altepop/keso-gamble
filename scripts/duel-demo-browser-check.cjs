@@ -118,6 +118,10 @@ const a='[data-demo-view=a]',b='[data-demo-view=b]';
  assert.equal(await page.locator('[data-gomoku-zoom-label]').innerText(),'100%','initial zoom is touch-safe 44px');
  await page.locator('[data-gomoku-zoom-action="in"]').click();
  assert.equal(await page.locator('[data-gomoku-zoom-label]').innerText(),'118%');
+ await page.waitForFunction(()=>Math.round(document.querySelector('[data-duel-board-scroll] .duel-gomoku')?.getBoundingClientRect().width||0)===780,null,{timeout:5000}).catch(async()=>{
+   const actual=await gomokuViewport.evaluate(el=>({inline:el.querySelector('.duel-gomoku').style.cssText,computed:getComputedStyle(el.querySelector('.duel-gomoku')).width,label:document.querySelector('[data-gomoku-zoom-label]')?.textContent}));
+   throw Error('zoom must change measured cell size: '+JSON.stringify(actual));
+ });
  const enlarged=await gomokuViewport.evaluate(el=>({board:el.querySelector('.duel-gomoku').getBoundingClientRect().width,left:el.scrollLeft,top:el.scrollTop}));
  assert.equal(enlarged.board,780,'zoom is 52px per cell');
  assert.ok(enlarged.left>dimensions.left&&enlarged.top>dimensions.top,'zoom preserves the viewed logical centre');
