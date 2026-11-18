@@ -6,8 +6,10 @@ import type {KpEnv} from './kp.ts';
 import {relicCollection,type RelicCollection} from './relics.ts';
 import {DUEL_PVP_SELECT_ID,DUEL_PVP_CONSUMABLE,DUEL_PVP_ANCIENT_ID,DUEL_PVP_ANCIENT} from './relic-consumables.ts';
 
-/** Rewards continue for every verified natural match. To discourage paired farming,
- * later matches still earn shards but high-value roll odds decline, never to zero. */
+/** High-value drops have a per-opponent limit, not a total daily hard stop.
+ * Repeat matches beyond this cap remain playable, but have no skill or loot.
+ * Caps are based on verified server-authoritative completion records.
+ */
 export const DUEL_LOOT_DAILY_FULL_RATE=12;
 export const DUEL_LOOT_PAIR_DAILY_FULL_RATE=4;
 export {DUEL_PVP_SELECT_ID,DUEL_PVP_CONSUMABLE,DUEL_PVP_ANCIENT_ID,DUEL_PVP_ANCIENT} from './relic-consumables.ts';
@@ -17,21 +19,19 @@ export type DuelLootReceipt={
 };
 export function skillStage(rating:number){return Math.max(0,Math.min(4,Math.floor(Math.max(0,rating)/500)));}
 export const skillTierName=(rating:number)=>['見習い','挑戦者','名人','達人','超人'][skillStage(rating)]!;
-export function duelDropChance(rating:number,outcome:DuelLootReceipt['outcome']){
- const rates=[10000,18000,30000,45000,60000] as const;
- const winner=rates[skillStage(rating)]!;
- return outcome==='win'?winner:Math.floor(winner/2);
+/** PvP rare chance is independent of skill: a strong player beating a novice
+ * receives no more than a novice beating another novice.
+ * PvE will have its own skill-dependent tables in a separate implementation.
+ */
+export function duelDropChance(_rating:number,outcome:DuelLootReceipt['outcome']){
+ return outcome==='win'?40000:20000; // 4% / 2%
 }
 /** Extra-high prize, unattainable via the ordinary shard exchange. */
-export function duelAncientChance(rating:number,outcome:DuelLootReceipt['outcome']){
- const rates=[200,400,1000,2500,8000] as const; // 0.02% to 0.8% of wins
- const winner=rates[skillStage(rating)]!;
- return outcome==='win'?winner:Math.floor(winner/2);
+export function duelAncientChance(_rating:number,outcome:DuelLootReceipt['outcome']){
+ return outcome==='win'?2000:1000; // 0.2% / 0.1%
 }
-export function duelUsefulChance(rating:number,outcome:DuelLootReceipt['outcome']){
- const rates=[70000,90000,120000,150000,200000] as const; // 7-20% of wins
- const winner=rates[skillStage(rating)]!;
- return outcome==='win'?winner:Math.floor(winner/2);
+export function duelUsefulChance(_rating:number,outcome:DuelLootReceipt['outcome']){
+ return outcome==='win'?140000:70000; // 14% / 7%
 }
 export const randomDuelTicket=()=>{
  const values=new Uint32Array(1),range=1_000_000,limit=Math.floor(0x1_0000_0000/range)*range;
@@ -89,7 +89,7 @@ export async function ensureDuelLoot(env:KpEnv){
     game TEXT NOT NULL,opponent TEXT NOT NULL,
     outcome TEXT NOT NULL CHECK(outcome IN ('win','loss','draw')),
     rating INTEGER NOT NULL,day INTEGER NOT NULL,settled_at INTEGER NOT NULL,
-    claimed_at INTEGER,drop_id TEXT,reward_scale REAL NOT NULL DEFAULT 1 CHECK(reward_scale IN (1,0.5,0.25)),
+    claimed_at INTEGER,drop_id TEXT,reward_scale REAL NOT NULL DEFAULT 1 CHECK(reward_scale IN (1,0.5)),
     PRIMARY KEY(guild,duel_id,user))`),
    env.DB.prepare('CREATE INDEX IF NOT EXISTS kp_duel_loot_daily ON kp_duel_loot_receipts(guild,user,day,opponent)'),
    env.DB.prepare("INSERT OR IGNORE INTO kp_settings(key,value) VALUES('duel_loot_started_at',?)").bind(String(Date.now())),
@@ -101,23 +101,31 @@ export async function ensureDuelLoot(env:KpEnv){
       AND a.kind='move' AND a.winner IS NOT NULL)
     BEGIN
      INSERT INTO kp_duel_skill(guild,user,game,rating,peak,games,wins,losses,draws,updated_at)
-      VALUES(NEW.guild,NEW.user_a,NEW.game,CASE WHEN NEW.winner=NEW.user_a THEN 35 WHEN NEW.winner=NEW.user_b THEN 7 ELSE 12 END,
-       CASE WHEN NEW.winner=NEW.user_a THEN 35 WHEN NEW.winner=NEW.user_b THEN 7 ELSE 12 END,1,
+      VALUES(NEW.guild,NEW.user_a,NEW.game,CASE WHEN (SELECT COUNT(*) FROM kp_duel_loot_receipts WHERE guild=NEW.guild AND user=NEW.user_a
+       AND opponent=NEW.user_b AND day=CAST((NEW.updated_at+32400000)/86400000 AS INTEGER))>=4 THEN 0 ELSE (CASE WHEN NEW.winner=NEW.user_a THEN 35 WHEN NEW.winner=NEW.user_b THEN 7 ELSE 12 END) END,
+       CASE WHEN (SELECT COUNT(*) FROM kp_duel_loot_receipts WHERE guild=NEW.guild AND user=NEW.user_a
+       AND opponent=NEW.user_b AND day=CAST((NEW.updated_at+32400000)/86400000 AS INTEGER))>=4 THEN 0 ELSE (CASE WHEN NEW.winner=NEW.user_a THEN 35 WHEN NEW.winner=NEW.user_b THEN 7 ELSE 12 END) END,1,
        CASE WHEN NEW.winner=NEW.user_a THEN 1 ELSE 0 END,CASE WHEN NEW.winner=NEW.user_b THEN 1 ELSE 0 END,
        CASE WHEN NEW.winner='draw' THEN 1 ELSE 0 END,NEW.updated_at)
       ON CONFLICT(guild,user,game) DO UPDATE SET
-       rating=MAX(0,MIN(2500,rating+CASE WHEN NEW.winner=NEW.user_a THEN 35 WHEN NEW.winner=NEW.user_b THEN 7 ELSE 12 END)),
-       peak=MAX(peak,MAX(0,MIN(2500,rating+CASE WHEN NEW.winner=NEW.user_a THEN 35 WHEN NEW.winner=NEW.user_b THEN 7 ELSE 12 END))),
+       rating=MAX(0,MIN(2500,rating+CASE WHEN (SELECT COUNT(*) FROM kp_duel_loot_receipts WHERE guild=NEW.guild AND user=NEW.user_a
+       AND opponent=NEW.user_b AND day=CAST((NEW.updated_at+32400000)/86400000 AS INTEGER))>=4 THEN 0 ELSE (CASE WHEN NEW.winner=NEW.user_a THEN 35 WHEN NEW.winner=NEW.user_b THEN 7 ELSE 12 END) END)),
+       peak=MAX(peak,MAX(0,MIN(2500,rating+CASE WHEN (SELECT COUNT(*) FROM kp_duel_loot_receipts WHERE guild=NEW.guild AND user=NEW.user_a
+       AND opponent=NEW.user_b AND day=CAST((NEW.updated_at+32400000)/86400000 AS INTEGER))>=4 THEN 0 ELSE (CASE WHEN NEW.winner=NEW.user_a THEN 35 WHEN NEW.winner=NEW.user_b THEN 7 ELSE 12 END) END))),
        games=games+1,wins=wins+(NEW.winner=NEW.user_a),
        losses=losses+(NEW.winner=NEW.user_b),draws=draws+(NEW.winner='draw'),updated_at=NEW.updated_at;
      INSERT INTO kp_duel_skill(guild,user,game,rating,peak,games,wins,losses,draws,updated_at)
-      VALUES(NEW.guild,NEW.user_b,NEW.game,CASE WHEN NEW.winner=NEW.user_b THEN 35 WHEN NEW.winner=NEW.user_a THEN 7 ELSE 12 END,
-       CASE WHEN NEW.winner=NEW.user_b THEN 35 WHEN NEW.winner=NEW.user_a THEN 7 ELSE 12 END,1,
+      VALUES(NEW.guild,NEW.user_b,NEW.game,CASE WHEN (SELECT COUNT(*) FROM kp_duel_loot_receipts WHERE guild=NEW.guild AND user=NEW.user_b
+       AND opponent=NEW.user_a AND day=CAST((NEW.updated_at+32400000)/86400000 AS INTEGER))>=4 THEN 0 ELSE (CASE WHEN NEW.winner=NEW.user_b THEN 35 WHEN NEW.winner=NEW.user_a THEN 7 ELSE 12 END) END,
+       CASE WHEN (SELECT COUNT(*) FROM kp_duel_loot_receipts WHERE guild=NEW.guild AND user=NEW.user_b
+       AND opponent=NEW.user_a AND day=CAST((NEW.updated_at+32400000)/86400000 AS INTEGER))>=4 THEN 0 ELSE (CASE WHEN NEW.winner=NEW.user_b THEN 35 WHEN NEW.winner=NEW.user_a THEN 7 ELSE 12 END) END,1,
        CASE WHEN NEW.winner=NEW.user_b THEN 1 ELSE 0 END,CASE WHEN NEW.winner=NEW.user_a THEN 1 ELSE 0 END,
        CASE WHEN NEW.winner='draw' THEN 1 ELSE 0 END,NEW.updated_at)
       ON CONFLICT(guild,user,game) DO UPDATE SET
-       rating=MAX(0,MIN(2500,rating+CASE WHEN NEW.winner=NEW.user_b THEN 35 WHEN NEW.winner=NEW.user_a THEN 7 ELSE 12 END)),
-       peak=MAX(peak,MAX(0,MIN(2500,rating+CASE WHEN NEW.winner=NEW.user_b THEN 35 WHEN NEW.winner=NEW.user_a THEN 7 ELSE 12 END))),
+       rating=MAX(0,MIN(2500,rating+CASE WHEN (SELECT COUNT(*) FROM kp_duel_loot_receipts WHERE guild=NEW.guild AND user=NEW.user_b
+       AND opponent=NEW.user_a AND day=CAST((NEW.updated_at+32400000)/86400000 AS INTEGER))>=4 THEN 0 ELSE (CASE WHEN NEW.winner=NEW.user_b THEN 35 WHEN NEW.winner=NEW.user_a THEN 7 ELSE 12 END) END)),
+       peak=MAX(peak,MAX(0,MIN(2500,rating+CASE WHEN (SELECT COUNT(*) FROM kp_duel_loot_receipts WHERE guild=NEW.guild AND user=NEW.user_b
+       AND opponent=NEW.user_a AND day=CAST((NEW.updated_at+32400000)/86400000 AS INTEGER))>=4 THEN 0 ELSE (CASE WHEN NEW.winner=NEW.user_b THEN 35 WHEN NEW.winner=NEW.user_a THEN 7 ELSE 12 END) END))),
        games=games+1,wins=wins+(NEW.winner=NEW.user_b),
        losses=losses+(NEW.winner=NEW.user_a),draws=draws+(NEW.winner='draw'),updated_at=NEW.updated_at;
      INSERT OR IGNORE INTO kp_duel_loot_receipts(guild,duel_id,user,game,opponent,outcome,rating,day,settled_at,reward_scale)
@@ -125,23 +133,23 @@ export async function ensureDuelLoot(env:KpEnv){
        CASE WHEN NEW.winner='draw' THEN 'draw' WHEN NEW.winner=NEW.user_a THEN 'win' ELSE 'loss' END,
        p.rating,CAST((NEW.updated_at+32400000)/86400000 AS INTEGER),NEW.updated_at,
        CASE WHEN (SELECT COUNT(*) FROM kp_duel_loot_receipts WHERE guild=NEW.guild AND user=NEW.user_a
-        AND opponent=NEW.user_b AND day=CAST((NEW.updated_at+32400000)/86400000 AS INTEGER))>=4 THEN 0.25
-       WHEN (SELECT COUNT(*) FROM kp_duel_loot_receipts WHERE guild=NEW.guild AND user=NEW.user_a
         AND day=CAST((NEW.updated_at+32400000)/86400000 AS INTEGER))>=12 THEN 0.5
        ELSE 1 END
       FROM kp_duel_skill p WHERE p.guild=NEW.guild AND p.user=NEW.user_a AND p.game=NEW.game
-       AND (SELECT COUNT(*) FROM kp_board_duel_actions WHERE duel_id=NEW.id AND kind='move')>=1;
+       AND (SELECT COUNT(*) FROM kp_board_duel_actions WHERE duel_id=NEW.id AND kind='move')>=1
+       AND (SELECT COUNT(*) FROM kp_duel_loot_receipts WHERE guild=NEW.guild AND user=NEW.user_a
+        AND opponent=NEW.user_b AND day=CAST((NEW.updated_at+32400000)/86400000 AS INTEGER))<4;
      INSERT OR IGNORE INTO kp_duel_loot_receipts(guild,duel_id,user,game,opponent,outcome,rating,day,settled_at,reward_scale)
       SELECT NEW.guild,NEW.id,NEW.user_b,NEW.game,NEW.user_a,
        CASE WHEN NEW.winner='draw' THEN 'draw' WHEN NEW.winner=NEW.user_b THEN 'win' ELSE 'loss' END,
        p.rating,CAST((NEW.updated_at+32400000)/86400000 AS INTEGER),NEW.updated_at,
        CASE WHEN (SELECT COUNT(*) FROM kp_duel_loot_receipts WHERE guild=NEW.guild AND user=NEW.user_b
-        AND opponent=NEW.user_a AND day=CAST((NEW.updated_at+32400000)/86400000 AS INTEGER))>=4 THEN 0.25
-       WHEN (SELECT COUNT(*) FROM kp_duel_loot_receipts WHERE guild=NEW.guild AND user=NEW.user_b
         AND day=CAST((NEW.updated_at+32400000)/86400000 AS INTEGER))>=12 THEN 0.5
        ELSE 1 END
       FROM kp_duel_skill p WHERE p.guild=NEW.guild AND p.user=NEW.user_b AND p.game=NEW.game
-       AND (SELECT COUNT(*) FROM kp_board_duel_actions WHERE duel_id=NEW.id AND kind='move')>=1;
+       AND (SELECT COUNT(*) FROM kp_board_duel_actions WHERE duel_id=NEW.id AND kind='move')>=1
+       AND (SELECT COUNT(*) FROM kp_duel_loot_receipts WHERE guild=NEW.guild AND user=NEW.user_b
+        AND opponent=NEW.user_a AND day=CAST((NEW.updated_at+32400000)/86400000 AS INTEGER))<4;
     END`),
    env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS kp_duel_reward_claim_once
     AFTER INSERT ON kp_operations
