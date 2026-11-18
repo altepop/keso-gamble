@@ -115,12 +115,28 @@ const a='[data-demo-view=a]',b='[data-demo-view=b]';
  const dimensions=await gomokuViewport.evaluate(el=>({width:el.clientWidth,scrollWidth:el.scrollWidth,left:el.scrollLeft,top:el.scrollTop}));
  assert.ok(dimensions.scrollWidth>=660&&dimensions.width<660,'Gomoku board must pan instead of shrinking on iPhone');
  assert.ok(dimensions.left>0&&dimensions.top>0,'first open centers on the middle of the board');
- assert.ok((await page.locator('[data-duel-cell="112"]').boundingBox()).width>=42,'touch target is at least 42px wide');
+ assert.equal(await page.locator('[data-gomoku-zoom-label]').innerText(),'100%','initial zoom is touch-safe 44px');
+ await page.locator('[data-gomoku-zoom-action="in"]').click();
+ assert.equal(await page.locator('[data-gomoku-zoom-label]').innerText(),'118%');
+ await page.waitForFunction(()=>Math.round(document.querySelector('[data-duel-board-scroll] .duel-gomoku')?.getBoundingClientRect().width||0)===780,null,{timeout:5000}).catch(async()=>{
+   const actual=await gomokuViewport.evaluate(el=>({inline:el.querySelector('.duel-gomoku').style.cssText,computed:getComputedStyle(el.querySelector('.duel-gomoku')).width,label:document.querySelector('[data-gomoku-zoom-label]')?.textContent}));
+   throw Error('zoom must change measured cell size: '+JSON.stringify(actual));
+ });
+ const enlarged=await gomokuViewport.evaluate(el=>({board:el.querySelector('.duel-gomoku').getBoundingClientRect().width,left:el.scrollLeft,top:el.scrollTop}));
+ assert.equal(enlarged.board,780,'zoom is 52px per cell');
+ assert.ok(enlarged.left>dimensions.left&&enlarged.top>dimensions.top,'zoom preserves the viewed logical centre');
+ await page.locator('[data-gomoku-zoom-action="out"]').click();
+ assert.equal(await page.locator('[data-gomoku-zoom-label]').innerText(),'100%');
+ await page.locator('[data-gomoku-zoom-action="center"]').click();
+ assert.equal(await page.locator('.duel-counts').innerText().then(x=>x.includes('黒 0')),true,'zoom never sends a turn');
+ const dimensionsAfterZoom=await gomokuViewport.evaluate(el=>({left:el.scrollLeft,top:el.scrollTop}));
+ assert.ok(dimensionsAfterZoom.left>0&&dimensionsAfterZoom.top>0,'board remains pannable and centred');
+  assert.ok((await page.locator('[data-duel-cell="112"]').boundingBox()).width>=42,'touch target is at least 42px wide');
  await click(112);
  assert.equal(await page.locator('.duel-preview-cell').count(),1,'tap only selects a candidate');
  assert.equal(await page.locator('.duel-counts').innerText().then(x=>x.includes('黒 0')),true,'preview does not commit a move');
  const selectedPosition=await gomokuViewport.evaluate(el=>({left:el.scrollLeft,top:el.scrollTop}));
- assert.ok(Math.abs(selectedPosition.left-dimensions.left)<3&&Math.abs(selectedPosition.top-dimensions.top)<3,'preview re-render retains pan position');
+ assert.ok(Math.abs(selectedPosition.left-dimensionsAfterZoom.left)<3&&Math.abs(selectedPosition.top-dimensionsAfterZoom.top)<3,'preview re-render retains pan position after zoom');
  await page.locator('[data-duel-cancel-cell]').click();
  assert.equal(await page.locator('.duel-preview-cell').count(),0,'cancel clears selection');
  await page.locator('.duel-create-collapse>summary').click();
@@ -132,6 +148,11 @@ const a='[data-demo-view=a]',b='[data-demo-view=b]';
   await click(cell);
   assert.equal(await page.locator('.duel-preview-cell').count(),1,'must select before placing');
   await page.locator('[data-duel-confirm-cell="'+cell+'"]').click();
+  if(i===0){
+   await page.locator('.duel-gomoku-last-confirmed[data-duel-cell="0"]').waitFor();
+   assert.match(await page.locator('[data-gomoku-last-status]').innerText(),/1行 1列/);
+   assert.equal(await page.locator('.duel-gomoku-last-confirmed').evaluate(el=>getComputedStyle(el).animationName),'none','reduced motion suppresses movement');
+  }
  }
  await checkWinner('a');
  // Connect Four — four stacked chips in one column.

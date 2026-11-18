@@ -1,6 +1,6 @@
-import {miniBoardView} from './duel-mini-view.js?v=web-affaa89469001f2a';
-import {EXTRA_DUEL_GAMES} from './duel-mini-games.js?v=web-affaa89469001f2a';
-import {DUEL_GAMES,duelLegalMoves,duelScore,playDuelMove} from './duel-rules.js?v=web-affaa89469001f2a';
+import {miniBoardView} from './duel-mini-view.js?v=web-60411cdd2200ee3b';
+import {EXTRA_DUEL_GAMES} from './duel-mini-games.js?v=web-60411cdd2200ee3b';
+import {DUEL_GAMES,duelLegalMoves,duelScore,playDuelMove} from './duel-rules.js?v=web-60411cdd2200ee3b';
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const kp=n=>Number(n||0).toLocaleString('ja-JP')+' KP';
 const title=(r)=>DUEL_GAMES[r.game]?.name||EXTRA_DUEL_GAMES[r.game]?.name||r.game;
@@ -29,7 +29,14 @@ function boardView(r,info,user,busy,confirmResign,gomokuPreviewCell=null,recentM
  const previewRow=previewValid?Math.floor(gomokuPreviewCell/size)+1:0;
  const previewCol=previewValid?gomokuPreviewCell%size+1:0;
  const gomokuTools=r.game==='gomoku'? `<div class="duel-gomoku-tools" role="group" aria-label="五目並べの着手">
- <p class="duel-gomoku-help">盤面は指で上下左右に動かせる。マスを選んでから着手を確定する。</p>
+ <p class="duel-gomoku-help">指で上下左右に移動できる15×15の盤面。マスを選んでから着手を確定する。拡大しても着手位置は変わらない。</p>
+ <div class="duel-gomoku-zoom" role="group" aria-label="五目並べの盤面拡大と移動">
+   <button type="button" data-gomoku-zoom-action="out" aria-label="盤面を縮小" disabled>−</button>
+   <output data-gomoku-zoom-label="1" aria-live="off">100%</output>
+   <button type="button" data-gomoku-zoom-action="in" aria-label="盤面を拡大">＋</button>
+   <button type="button" data-gomoku-zoom-action="center" aria-label="盤面の中央を表示">中央へ</button>
+ </div>
+ <p class="duel-gomoku-last-status" data-gomoku-last-status="1" aria-live="polite">この端末で観測した直前の確定手を強調表示する。</p>
  <div class="duel-gomoku-selection" role="status" aria-live="polite">
  ${previewValid?`<span><strong>${previewRow}行 ${previewCol}列</strong> を選択中</span><div class="duel-gomoku-confirm-actions"><button type="button" class="action-btn primary" data-duel-confirm-cell="${gomokuPreviewCell}" ${busy?'disabled':''}>ここに置く</button><button type="button" class="action-btn" data-duel-cancel-cell="1">取り消す</button></div>`:
  `<span>${canPlay?'置きたいマスをタップして選択':'相手の手番または対局終了まで待機'}</span>`}
@@ -60,7 +67,7 @@ function boardView(r,info,user,busy,confirmResign,gomokuPreviewCell=null,recentM
  ${r.status==='active'?`<div class="duel-turn ${turn?'my-turn':''}">${turn?'🟢 あなたの番':esc(name(r.turn_user))+'の番'}　<span data-duel-timer="${r.deadline_at}">残り${Math.ceil(timeLeft(r.deadline_at)/60)}分</span></div>`:''}
  ${gomokuTools}
  ${r.game==='gomoku'?`<div class="duel-board-scroll" data-duel-board-scroll="${esc(r.id)}" tabindex="0" role="region" aria-label="五目並べの拡大盤面。指で上下左右に移動できる">`:''}
- <div class="duel-board ${r.game==='gomoku'?'duel-gomoku':'duel-othello'}" role="grid" aria-label="${esc(title(r))}の盤面" data-othello-playing="${r.game==='othello'&&canPlay?color:'' }" style="--duel-size:${size}">
+ <div class="duel-board ${r.game==='gomoku'?'duel-gomoku':'duel-othello'}" role="grid" aria-label="${esc(title(r))}の盤面" data-othello-playing="${r.game==='othello'&&canPlay?color:'' }" ${r.game==='gomoku'?`data-gomoku-match="${esc(r.id)}" data-gomoku-version="${Number(r.version)||0}"`:''} style="--duel-size:${size}">
  ${[...r.board].map((cell,i)=>{
    const active=canPlay&&playable.has(i);
    const classes=[cell==='B'?'black':cell==='W'?'white':'empty',active?'available':'',previewValid&&i===gomokuPreviewCell?'duel-preview-cell':'',recentMove?.version===r.version&&recentMove?.cell===i?'duel-last-cell':''].join(' ');

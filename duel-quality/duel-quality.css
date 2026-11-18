@@ -435,3 +435,19 @@
  .duel-hb-feedback-new,.duel-hb-feedback-new .duel-hb-hit,
  .duel-hb-feedback-new .duel-hb-blow,.duel-hb-victory-new{animation:none!important}
 }
+
+
+/* Gomoku mobile strategy controls. Zoom preserves 44px minimum touch targets. */
+.duel-gomoku-zoom{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:8px}
+.duel-gomoku-zoom button{display:grid;place-items:center;min-width:45px;min-height:45px;padding:6px 11px;background:#18526a;color:#f2faff;border:1px solid #5d9faf;border-radius:10px;font-size:18px;font-weight:800;touch-action:manipulation;cursor:pointer}
+.duel-gomoku-zoom button[data-gomoku-zoom-action="center"]{margin-left:auto;font-size:12px;padding:8px 12px}
+.duel-gomoku-zoom button:disabled{opacity:.43;cursor:not-allowed}
+.duel-gomoku-zoom button:focus-visible{outline:3px solid #fff09d;outline-offset:2px}
+.duel-gomoku-zoom output{display:inline-grid;min-width:53px;text-align:center;font:800 15px ui-monospace,monospace;color:#ffe4a1}
+.duel-gomoku-last-status{margin:0 0 7px;padding:7px 9px;border-left:3px solid #e4c76e;border-radius:3px;background:#163948;color:#cce4e1;font-size:11px;line-height:1.4}
+.duel-gomoku .duel-square.duel-gomoku-last-confirmed{z-index:2;outline:3px solid #fce686;outline-offset:-3px;box-shadow:inset 0 0 0 1px #182f26,0 0 0 2px #ffbb42}
+.duel-gomoku .duel-square.duel-gomoku-last-confirmed::after{content:'';position:absolute;right:1px;top:1px;width:9px;height:9px;border-radius:50%;background:#ef9520;border:2px solid #fff1ac;box-shadow:0 0 0 1px #553307;pointer-events:none}
+.duel-gomoku .duel-square.duel-gomoku-confirmed-motion{animation:duel-gomoku-confirmed .75s ease-out both;animation-delay:var(--gomoku-move-delay,0ms)}
+@keyframes duel-gomoku-confirmed{0%{filter:brightness(1.55);box-shadow:0 0 0 7px rgba(255,235,124,.75)}65%{filter:brightness(1.18);box-shadow:0 0 0 3px rgba(255,235,124,.45)}100%{filter:none;box-shadow:inset 0 0 0 1px #182f26,0 0 0 2px #ffbb42}}
+@media(max-width:355px){.duel-gomoku-zoom{gap:5px}.duel-gomoku-zoom button{min-width:43px;padding:6px}.duel-gomoku-zoom button[data-gomoku-zoom-action="center"]{font-size:11px}}
+@media(prefers-reduced-motion:reduce){.duel-gomoku .duel-square.duel-gomoku-confirmed-motion{animation:none!important;transition:none!important}}
