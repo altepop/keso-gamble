@@ -1,5 +1,6 @@
 import type {KpEnv,KpMapping} from './kp.ts';
 import {debtOf} from './kp-debt.ts';
+import {ensureDuelLoot} from './duel-loot.ts';
 // @ts-expect-error Pure shared ledger verifier, independently covered by node:test.
 import {checkDuelLedger} from '../../../js/duel-kp-audit.js';
 import {kpTargetMembers,kpTargetAllowed} from './kp-target-members.ts';
@@ -161,7 +162,7 @@ async function present(env:KpEnv,mapping:KpMapping,user:string,id:string){
 function validateActionId(id:unknown){if(typeof id!=='string'||!UUID.test(id))throw Error('操作IDが不正です。');return id;}
 
 export async function boardDuelList(env:KpEnv,m:KpMapping,user:string,cursor:string|null=null){
- await ensureBoardDuels(env);
+ await ensureBoardDuels(env);await ensureDuelLoot(env);
  let cutoff:number|null=null,id='';
  if(cursor!==null){
   const parsed=/^([0-9]{10,15}):([0-9a-f-]{36})$/i.exec(cursor);
@@ -171,20 +172,25 @@ export async function boardDuelList(env:KpEnv,m:KpMapping,user:string,cursor:str
  }
  const condition=cutoff===null?'':' AND (d.updated_at<? OR (d.updated_at=? AND d.id<?))';
  const query=`SELECT d.*,
+  CASE WHEN cr.duel_id IS NOT NULL AND cr.claimed_at IS NULL THEN 1 ELSE 0 END AS reward_claimable,
+  cr.claimed_at AS reward_claimed_at,cr.rating AS reward_rating,cr.outcome AS reward_outcome,
   CASE WHEN d.black_user=? THEN json_extract(s.data,'$.privateA')
        ELSE json_extract(s.data,'$.privateB') END AS private_hand
   FROM kp_board_duels d LEFT JOIN kp_board_duel_secrets s ON s.guild=d.guild AND s.id=d.id
+  LEFT JOIN kp_duel_loot_receipts cr ON cr.guild=d.guild AND cr.duel_id=d.id AND cr.user=?
   WHERE d.guild=? AND (d.user_a=? OR d.user_b=?)${condition}
   ORDER BY d.updated_at DESC,d.id DESC LIMIT 20`;
  const stmt=env.DB.prepare(query);
- const matches=(await (cutoff===null?stmt.bind(user,m.guildId,user,user):
-   stmt.bind(user,m.guildId,user,user,cutoff,cutoff,id)).all<BoardDuel>()).results;
- return {games:GAMES,limit:DUEL_MAX_STAKE,turnMs:DUEL_TURN_MS,invitationMs:DUEL_INVITE_MS,
+ const matches=(await (cutoff===null?stmt.bind(user,user,m.guildId,user,user):
+   stmt.bind(user,user,m.guildId,user,user,cutoff,cutoff,id)).all<BoardDuel>()).results;
+ const skills=cursor===null?(await env.DB.prepare('SELECT game,rating,peak,games,wins,losses,draws FROM kp_duel_skill WHERE guild=? AND user=?')
+  .bind(m.guildId,user).all<{game:string;rating:number;peak:number;games:number;wins:number;losses:number;draws:number}>()).results:[];
+ return {games:GAMES,skills,limit:DUEL_MAX_STAKE,turnMs:DUEL_TURN_MS,invitationMs:DUEL_INVITE_MS,
    // Only first page needs a roster. Subsequent pages reuse already loaded members.
    members:cursor===null?await kpTargetMembers(env,m):[],matches,hasMore:matches.length===20};
 }
 export async function boardDuelAction(env:KpEnv,m:KpMapping,user:string,body:Record<string,unknown>){
- await ensureBoardDuels(env);
+ await ensureBoardDuels(env);await ensureDuelLoot(env);
  const id=validateActionId(body.id),kind=String(body.action??'');
  const existing=await env.DB.prepare('SELECT guild,duel_id,actor,kind FROM kp_board_duel_actions WHERE id=?')
   .bind(id).first<Pick<DuelAction,'guild'|'duel_id'|'actor'|'kind'>>();
