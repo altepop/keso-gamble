@@ -7,7 +7,14 @@ applyAudioMix();
 const root=document.getElementById('app');
 let stage='Discordの起動確認';
 try{
- await prepareDiscordActivity();
+ try{
+  await prepareDiscordActivity();
+ }catch(error){
+  // Discord iOS READY may be delayed or unavailable after a client update.
+  // Do not strand users behind a retry-only screen: app.js offers a safe
+  // server-verified /valo code login even when automatic SDK auth fails.
+  console.warn('Discord SDK startup unavailable; showing recoverable login',error?.message||'unknown');
+ }
  stage='画面の読み込み';
  await import('./app.js?v=web-47dd91f75e5884c0');
 }catch(error){
