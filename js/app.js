@@ -49,11 +49,16 @@ let duelPendingAction=null,duelPokerPicks=[],duelOpponentPickerOpen=false,duelLo
 let duelGuessDraft='',duelRiskConfirm=null,duelLastGoodFetch=0,duelRetryNotBefore=0,duelRefreshFailures=0;
 const DUEL_PENDING_KEY='keso-duel-action-v1',DUEL_HISTORY_KEY='keso-duel-moves-v1-';
 let duelHistoryOwner=null,duelListOwner=null,duelHasMore=false;
+let duelEventsAbort=null,duelEventsOnline=false,duelEventsRetryAt=0,duelEventsFailures=0,duelEventsDirty=false;
 function mergeDuelPages(fresh){
  const owner=state.selfUserId;
  if(duelListOwner!==owner){duelData=null;duelListOwner=owner;duelHasMore=!!fresh.hasMore;}
  const byId=new Map((duelData?.matches??[]).map(r=>[r.id,r]));
- for(const match of fresh.matches??[])byId.set(match.id,match);
+ for(const match of fresh.matches??[]){
+  const old=byId.get(match.id);
+  // A slow GET must never roll back a newer confirmed turn or KP result.
+  if(!old||Number(match.version)>=Number(old.version))byId.set(match.id,match);
+ }
  return {...fresh,matches:[...byId.values()].sort((a,b)=>b.updated_at-a.updated_at||b.id.localeCompare(a.id))};
 }
 function applyConfirmedDuelMatch(match){
@@ -61,6 +66,7 @@ function applyConfirmedDuelMatch(match){
  if(!match||typeof match.id!=='string')return;
  observeDuelChanges({matches:[match]});
  const known=new Map((duelData?.matches??[]).map(row=>[row.id,row]));
+ if(Number(known.get(match.id)?.version??-1)>Number(match.version))return;
  known.set(match.id,match);
  duelData={...(duelData??{members:[],hasMore:false}),matches:[...known.values()].sort((a,b)=>b.updated_at-a.updated_at||b.id.localeCompare(a.id))};
  duelLastGoodFetch=Date.now();
@@ -1331,20 +1337,61 @@ function paintDuelBusy(){
  }
  app.querySelectorAll('.duel-new button[data-duel-act]').forEach(button=>{button.disabled=true;});
 }
+function stopDuelEvents(){
+ if(duelEventsAbort){duelEventsAbort.abort();duelEventsAbort=null;}
+ duelEventsOnline=false;
+}
+function startDuelEvents(){
+ if(duelEventsAbort||!live||!wallet.connected||screen!=='duels'||document.hidden||
+    Date.now()<duelEventsRetryAt)return;
+ const ctl=new AbortController();duelEventsAbort=ctl;
+ wallet.duelEvents({
+  signal:ctl.signal,
+  onOpen:()=>{if(duelEventsAbort!==ctl)return;duelEventsOnline=true;duelEventsFailures=0;},
+  onHint:hint=>{
+   if(duelEventsAbort!==ctl||screen!=='duels'||document.hidden)return;
+   const known=duelData?.matches?.find(match=>match.id===hint.id);
+   if(known&&Number(known.version)>=hint.version)return;
+   // D1 remains authoritative. The hint only prompts a read, never a local
+   // board mutation or a guessed wallet balance.
+   duelEventsDirty=true;
+   if(!duelBusy&&!duelLoading){duelEventsDirty=false;refreshDuel(true);}
+  }
+ }).catch(error=>{
+  if(ctl.signal.aborted)return;
+  // Proxy/SSE unavailability is normal on some Discord clients.
+  // Keep the original 10-second active-room D1 polling as a safe fallback.
+  if(duelEventsFailures===0)console.info('Duel event stream unavailable; using polling',error?.message??'');
+ }).finally(()=>{
+  if(duelEventsAbort!==ctl)return;
+  duelEventsAbort=null;duelEventsOnline=false;
+  if(!ctl.signal.aborted){
+   duelEventsFailures=Math.min(5,duelEventsFailures+1);
+   duelEventsRetryAt=Date.now()+Math.min(60000,2500*2**(duelEventsFailures-1));
+  }
+ });
+}
 async function refreshDuel(force=false){
  if(screen!=='duels'||!live||document.hidden||duelBusy||duelLoading||!wallet.connected)return;
+ startDuelEvents();
  loadDuelHistory();loadDuelPending();
  const now=Date.now();if(!force&&now<duelRetryNotBefore)return;const active=duelData?.matches?.some(m=>m.status==='active'&&m.deadline_at>now);
  const pending=duelData?.matches?.some(m=>m.status==='pending'&&m.deadline_at>now);
- // Preserve the D1 cadence. Unchanged snapshots only update the sync label.
- const cadence=active?10000:pending?20000:30000;
+ // Event notifications eliminate frequent D1 polling while a stream is live.
+ // Still check periodically to recover missed notifications, cron timeouts,
+ // Discord command actions and stalled proxy streams.
+ const cadence=duelEventsOnline?(active?30000:pending?45000:60000):(active?10000:pending?20000:30000);
  if(!force&&now-duelLastFetch<cadence)return;
  duelLastFetch=now;duelLoading=true;paintDuelSync();
  try{
   const fresh=await wallet.duels();
   if(screen!=='duels'||!live)return;
   const previous=JSON.stringify(duelData),hadError=!!duelError;
-  observeDuelChanges(fresh);duelData=mergeDuelPages(fresh);duelError='';duelLastGoodFetch=Date.now();duelRefreshFailures=0;duelRetryNotBefore=0;
+  const safe={...fresh,matches:(fresh.matches??[]).filter(match=>{
+   const known=duelData?.matches?.find(row=>row.id===match.id);
+   return !known||Number(match.version)>=Number(known.version);
+  })};
+  observeDuelChanges(safe);duelData=mergeDuelPages(safe);duelError='';duelLastGoodFetch=Date.now();duelRefreshFailures=0;duelRetryNotBefore=0;
   if(!duelActiveId||!fresh.matches.some(r=>r.id===duelActiveId)){
    duelActiveId=fresh.matches.find(r=>r.status==='active'||r.status==='pending')?.id??fresh.matches[0]?.id??null;
   }
@@ -1356,7 +1403,13 @@ async function refreshDuel(force=false){
   render();
  }finally{duelLoading=false;paintDuelSync();}
 }
-setInterval(()=>{if(screen==='duels')refreshDuel();},10000);
+setInterval(()=>{
+ if(screen==='duels'&&live&&!document.hidden&&wallet.connected){
+  startDuelEvents();
+  if(duelEventsDirty&&!duelBusy&&!duelLoading){duelEventsDirty=false;refreshDuel(true);}
+  else refreshDuel();
+ }else stopDuelEvents();
+},2000);
 // Countdown updates are purely in-browser and do not query D1.
 setInterval(()=>{
  if(screen!=='duels'||document.hidden)return;
@@ -1367,7 +1420,10 @@ setInterval(()=>{
 },1000);
 // When an Activity resumes after being backgrounded, refresh once if its data is stale.
 // The existing 10-second poll remains the maximum active cadence.
-addEventListener('visibilitychange',()=>{if(!document.hidden&&screen==='duels'&&Date.now()-duelLastFetch>=6000)refreshDuel(true);});
+addEventListener('visibilitychange',()=>{
+ if(document.hidden){stopDuelEvents();return;}
+ if(screen==='duels'){startDuelEvents();if(Date.now()-duelLastFetch>=6000)refreshDuel(true);}
+});
 addEventListener('storage', e => {
   if(!live&&(e.key === null || [KEY,LEGACY_KEY].includes(e.key))) {
     store.refresh();
