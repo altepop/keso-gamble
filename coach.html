@@ -451,6 +451,27 @@ const nextMatchPanel=p=>!p?'':`<section class="coach-quality" data-next-match>
  <p>比較の基準：${escape(p.basis)}・${int(p.matches)}試合</p>
  ${(p.check.metrics||[]).map(m=>'<p>'+escape(m.label)+' '+numeric(m.value,3)+'（'+int(m.numerator)+' / '+int(m.rounds)+'R、'+int(m.matches)+'試合）</p>').join('')}
  <p class="small muted">${escape(p.check.caveat)}</p></article></section>`;
+const lessonBody=l=>`<h4>${escape(l.title)}</h4><p>${escape(l.meaning)}</p>
+ <h4>${int(l.practice.minutes)}分の練習：${escape(l.practice.name)}</h4>
+ <ol>${l.practice.steps.map(s=>'<li>'+escape(s)+'</li>').join('')}</ol>
+ <h4>次の1試合でやること</h4><p><strong>${escape(l.nextGame)}</strong></p>
+ <p>試合後の自己チェック：${escape(l.selfCheck)}</p>
+ <details class="member-detail"><summary>なぜこの練習？ 別の可能性は？</summary><p>${escape(l.why)}</p><p>${escape(l.alternatives)}</p></details>`;
+const feedbackDate=date=>Number.isFinite(Date.parse(date))?new Date(date).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo',year:'numeric',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})+' JST':'日時未取得';
+const feedbackBody=s=>`<section class="coach-quality" data-match-feedback data-topic="${escape(s.topic)}">
+ <h3>この試合のフィードバック</h3><p>${escape(feedbackDate(s.date))} · ${escape(s.map)} / ${escape(s.agent)} · ${escape({win:'勝ち',loss:'負け',draw:'引き分け'}[s.outcome]||'勝敗未取得')}
+ · ${s.kills===null?'—':int(s.kills)}K / ${s.deaths===null?'—':int(s.deaths)}D / ${s.assists===null?'—':int(s.assists)}A</p>
+ <h4>前の試合との振り返り：${escape(s.followUp.title)}</h4><p>${escape(s.followUp.text)}</p>
+ ${lessonBody(s.lesson)}
+ <details class="member-detail"><summary>今回の選び方と数字の根拠</summary><p>比較対象：${escape(s.scope)}・${int(s.baselineMatches)}試合</p>${s.evidence.map(e=>'<p>'+escape(e)+'</p>').join('')}</details></section>`;
+const matchFeedbackPanel=f=>{
+ if(!f)return '';
+ const latest=f.sessions?.[0];
+ return '<section data-coach-learning>'+(latest?feedbackBody(latest):'<section class="coach-quality" data-coach-starter><h3>最初の1試合の前に</h3>'+lessonBody(f.starter)+'</section>')+
+ '<p class="small muted">'+escape(f.delivery)+'</p>'+
+ (f.sessions.length>1?'<h3>試合ごとのフィードバック</h3>'+f.sessions.slice(1).map(s=>'<details class="member-detail" data-feedback-history><summary>'+escape(feedbackDate(s.date))+' · '+escape(s.map)+' / '+escape(s.agent)+' · '+escape(s.lesson.title)+'</summary>'+feedbackBody(s)+'</details>').join(''):'')+
+ '<details class="member-detail"><summary>解説の対象と選択ルール</summary><p>表示 '+int(f.quality.shown)+' / 時刻判明 '+int(f.quality.availableChronologicalMatches)+'試合、上限 '+int(f.quality.limit)+'件。日時不明除外 '+int(f.quality.undatedExcluded)+'件。同時刻の順序不明 '+int(f.quality.ambiguousTimeMatches)+'件。</p><p>'+escape(f.rules)+'</p></details></section>';
+};
 const renderMemberDiagnosis=d=>{
  const all=(d.fullDiagnosis?.items||[]).filter(x=>x.subject===d.profile);
  const own=Array.isArray(d.individual)?d.individual.find(x=>x.player===d.profile):null;
@@ -506,14 +527,15 @@ const renderMemberDiagnosis=d=>{
   ?`<p class="coach-lead">${int(highest.length)}件の<strong>見直し候補</strong>がある。ただし因果的なミス確定ではない。以下に、参考観測も含めて最大8件表示する。</p>`
   :`<p class="coach-lead">継続した弱点の判断は保留です。次の1試合では、先頭の課題を1つ試して振り返ってください。</p>`;
  const overview=`<div class="coach-hero"><h3>${escape(d.person)} <small>個別コーチング</small></h3>
-  <p class="member-small">対象アカウント：${inputs.map(escape).join(' ＋ ')||'登録情報なし'}</p></div>`+
+  <p class="member-small">対象アカウント：${inputs.map(escape).join(' ＋ ')||'登録情報なし'}</p><button type="button" data-feedback-refresh>この人の解説を更新</button></div>`+
+  matchFeedbackPanel(d.matchFeedback)+(d.matchFeedback?'<details class="member-detail"><summary>戦績・長期診断の根拠を見る</summary>':'')+
   nextMatchPanel(d.nextMatch)+quality+kpis+performancePanel(d.performance,'notes')+
   `<div class="coach-section-heading"><h3>最初に見るべき改善候補</h3><span>${int(highest.length)}件が要検証</span></div>`+
   reviewSummary+(selected.length?selected.slice(0,3).map(x=>diagnosticCard(x)).join(''):
   '<p class="coach-empty">継続した弱点の判定は保留です。まず上の課題を1つ試し、次の試合を振り返ってください。</p>')+
   '<p class="member-small">すべての改善観察と判定保留は「改善候補」タブで確認できる。</p>'+
   '<h3>先制と生存：観測グラフ</h3>'+rateCharts+
-  '<h3>ラウンド記録を照合できた試合の推移</h3>'+coachTrendGraph(trends);
+  '<h3>ラウンド記録を照合できた試合の推移</h3>'+coachTrendGraph(trends)+(d.matchFeedback?'</details>':'');
  const improvements=reviewSummary+
   (selected.length?selected.map(x=>diagnosticCard(x)).join(''):
   '<p class="coach-empty">観察対象がまだない。試合・ラウンドデータの収集が必要だ。</p>')+
@@ -547,6 +569,7 @@ const renderMemberDiagnosis=d=>{
   `<div class="coach-dashboard-view" id="coach-view-metrics" role="tabpanel" aria-labelledby="coach-tab-metrics" hidden>${performancePanel(d.performance,'quality')}${contextPanel(d.roundContext,'quality')}${allMetrics}</div>`;
 };
 $('member-result').addEventListener('click',e=>{
+ if(e.target.closest('[data-feedback-refresh]')){void refreshMember();return;}
  const btn=e.target.closest('[data-coach-view]');
  if(!btn)return;
  const view=btn.dataset.coachView;
@@ -561,6 +584,7 @@ $('member-result').addEventListener('click',e=>{
 async function loadMember(person){
  if(memberPending||!memberNames.includes(person))return;
  memberPending=true;activeMember=person;latestMemberReport=null;
+ $('share').disabled=true;
  $('share').textContent='診断レポートをコピー';
  for(const el of $('member-selector').querySelectorAll('[data-member]'))
   el.setAttribute('aria-pressed',String(el.dataset.member===person));
@@ -571,7 +595,11 @@ async function loadMember(person){
    $('share').textContent=person+'の全診断をコピー';}
  }catch(e){
   $('member-result').textContent='診断を読み込めない：'+(e.message||'取得エラー');
- }finally{memberPending=false}
+ }finally{memberPending=false;$('share').disabled=!latestMemberReport}
+}
+async function refreshMember(){
+ if(busy||memberPending||!activeMember)return;
+ memberCache.delete(activeMember);await loadMember(activeMember);
 }
 $('compare-members').addEventListener('click',async()=>{
  const button=$('compare-members');button.disabled=true;const rows=[];
@@ -822,6 +850,7 @@ function diagnosticPayload(d){
 }
 const memberDiagnosticPayload=function memberDiagnosticPayloadV2(d){
  const pick=(obj,keys)=>Object.fromEntries(keys.map(k=>[k,obj?.[k]??null]));
+ const safeLesson=l=>l?{...pick(l,['title','meaning','why','alternatives','nextGame','selfCheck','track']),practice:{...pick(l.practice,['name','minutes']),steps:(l.practice?.steps||[]).filter(x=>typeof x==='string')}}:null;
  const safeIds=new Set(['Dolly#SDGs','Abema#ttv','Aquatopia#toppy','h1d3g1g4s#1037','frin#怖すぎ','mecael#2489']);
  const safeAccounts=(Array.isArray(d.accounts)?d.accounts:[]).filter(x=>safeIds.has(x));
  const sideFields=['rounds','observedOpeningRounds','firstKills','firstDeaths',
@@ -864,6 +893,10 @@ const memberDiagnosticPayload=function memberDiagnosticPayloadV2(d){
    matchAbilities:Object.fromEntries(['grenade','ability1','ability2','ultimate'].map(k=>[k,pick(d.roundContext.matchAbilities?.[k],['casts','matches','rateCasts','rounds','rateMatches'])])),
    spike:Object.fromEntries(['plant','defuse'].map(k=>[k,pick(d.roundContext.spike?.[k],['events','rounds','matches'])])),
    weapons:pick(d.roundContext.weapons,['knownKills','totalKills','matches']),pistols:pick(d.roundContext.pistols,['rounds','knownOutcomes','wins','kills','deaths'])}:null,
+  matchFeedback:d.matchFeedback?{version:d.matchFeedback.version,quality:pick(d.matchFeedback.quality,['availableChronologicalMatches','shown','limit','undatedExcluded','ambiguousTimeMatches','eventVerified']),starter:safeLesson(d.matchFeedback.starter),
+   sessions:(d.matchFeedback.sessions||[]).map(s=>({...pick(s,['date','map','agent','outcome','kills','deaths','assists','rounds','topic','scope','baselineMatches','eventVerified','previousTopic']),lesson:safeLesson(s.lesson),
+    followUp:pick(s.followUp,['status','title','text','practiceVerified']),evidence:(s.evidence||[]).filter(x=>typeof x==='string'),
+    metrics:(s.metrics||[]).map(m=>({...pick(m,['key','label']),current:m.current?pick(m.current,['value','numerator','rounds','matches']):null,baseline:m.baseline?pick(m.baseline,['value','numerator','rounds','matches']):null}))}))}:null,
   nextMatch:d.nextMatch?{...pick(d.nextMatch,['version','basis','matches','confidence','timeCoverageNote']),
    strength:pick(d.nextMatch.strength,['title','evidence','action']),focus:pick(d.nextMatch.focus,['title','evidence','action']),
    lastReview:(d.nextMatch.lastReview||[]).map(m=>pick(m,['key','label','currentNumerator','currentRounds','current','previousNumerator','previousRounds','previous','previousMatches'])),
@@ -902,7 +935,7 @@ $('resume-backfill').addEventListener('click',async()=>{
  }catch(e){setStatus(e.message||'再開できなかった。',true);}
  finally{b.disabled=false}
 });
-$('reload').addEventListener('click',load);
+$('reload').addEventListener('click',()=>activeMember?refreshMember():load());
 $('connect-form').addEventListener('submit',async event=>{
  event.preventDefault();
  const code=$('code').value.trim();

@@ -17,6 +17,7 @@ export async function auditPerformance(db){
   const before={...db.state},r=await readCoachMemberReport(db,person,coverage),p=r.performance;
   people.push({person,archiveMatches:r.archivedMatches,roundAnalysisMatches:r.usableMatches,performanceMatches:p.overall.matches,
    nextMatch:{version:r.nextMatch.version,baselineMatches:r.nextMatch.matches,hasFocus:Boolean(r.nextMatch.focus.action),hasReflection:Boolean(r.nextMatch.strength.action),comparisonMetrics:r.nextMatch.check.metrics.length,lastReviewMetrics:r.nextMatch.lastReview.length},
+   matchFeedback:{version:r.matchFeedback.version,sessions:r.matchFeedback.sessions.length,eventVerified:r.matchFeedback.quality.eventVerified,topics:[...new Set(r.matchFeedback.sessions.map(s=>s.topic))],withThreeSteps:r.matchFeedback.sessions.filter(s=>s.lesson.practice.steps.length===3).length,followUpCounts:Object.fromEntries(['baseline','self-check','improving','mixed','steady','review'].map(status=>[status,r.matchFeedback.sessions.filter(s=>s.followUp.status===status).length]))},
    kdMatches:p.overall.kdMatches,kprMatches:p.overall.rateBases.kpr.matches,dprMatches:p.overall.rateBases.dpr.matches,aprMatches:p.overall.rateBases.apr.matches,acsMatches:p.overall.acsMatches,hsMatches:p.overall.hitMatches,
    roundAssistMatches:r.roundContribution.assistQuality?.validMatches??0,adrMatches:p.overall.damageMatches,ddDeltaMatches:p.overall.damageDeltaMatches,roundContributionMatches:r.roundContribution.quality.validMatches,
    roundContext:{equipmentMatches:r.roundContext.quality.economy.matches,equipmentRounds:r.roundContext.quality.economy.rounds,abilityMatches:r.roundContext.quality.abilities.matches,abilityRounds:r.roundContext.quality.abilities.rounds,plantRounds:r.roundContext.spike.plant.rounds,defuseRounds:r.roundContext.spike.defuse.rounds,knownWeaponKills:r.roundContext.weapons.knownKills,weaponCandidateKills:r.roundContext.weapons.totalKills,pistolRounds:r.roundContext.pistols.rounds,contextSizeCapMatches:r.roundContext.quality.contextSizeCapMatches},
@@ -35,12 +36,14 @@ export async function coachProductionSmoke(token,request=fetch){
  const suffix=/^[a-f0-9]{40}$/i.test(process.env.GITHUB_SHA??'')?'?verify='+process.env.GITHUB_SHA:'';
  const page=await request('https://altepop.github.io/keso-gamble/coach.html'+suffix,{signal:AbortSignal.timeout(15000),redirect:'error'});
  if(!page.ok)throw Error('coach_page_stale');const html=await page.text();
- if(!html.includes('id="compare-members"')||!html.includes('同じマップ・ロール内の味方との比較')||!html.includes('記録された装備額とラウンド結果')||!html.includes('data-next-match'))throw Error('coach_page_stale');
+ if(!html.includes('id="compare-members"')||!html.includes('同じマップ・ロール内の味方との比較')||!html.includes('記録された装備額とラウンド結果')||!html.includes('data-next-match')||!html.includes('data-coach-learning'))throw Error('coach_page_stale');
  if(!token)return {page:'verified',authenticatedApi:'unverified-no-session',metricQuality:'unverified-no-session',mutations:0};
  if(!/^[a-f0-9]{48}$/.test(token))throw Error('smoke_session_invalid');
  const res=await request('https://valorant-results.tealeaforest.workers.dev/api/kp/coach/member?person='+encodeURIComponent('神戸'),{headers:{Authorization:'Bearer '+token},signal:AbortSignal.timeout(30000),redirect:'error'});
  if(!res.ok)throw Error('coach_http');const body=await res.json();
  if(body.person!=='神戸'||body.accounts?.length!==2||!body.performance?.quality?.metricCoverage||!Array.isArray(body.performance.windows)||body.performance.windows.length!==4||!Array.isArray(body.performance.rolePeers)||!body.roundContribution?.quality||!Array.isArray(body.roundContext?.quality?.metricCoverage)||body.nextMatch?.version!==1||!body.nextMatch.focus?.action||!Array.isArray(body.nextMatch.check?.metrics))throw Error('coach_contract');
+ const lesson=body.matchFeedback?.sessions?.[0]?.lesson??body.matchFeedback?.starter;
+ if(body.matchFeedback?.version!==1||!Array.isArray(body.matchFeedback.sessions)||lesson?.practice?.steps?.length!==3||!lesson.nextGame)throw Error('coach_lesson_contract');
  return {page:'verified',authenticatedApi:'verified',metricQuality:'verified',mutations:0};
 }
 if(process.argv[1]?.endsWith('/coach-performance-audit.mjs')){

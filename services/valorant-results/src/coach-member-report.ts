@@ -1,4 +1,5 @@
-import {coachRoundContribution} from './coach-round-contribution.ts';
+import {coachRoundContribution,type CoachCombatObservation} from './coach-round-contribution.ts';
+import {coachMatchFeedback} from './coach-match-feedback.ts';
 import {coachRoundContext} from './coach-round-context.ts';
 import {coachPerformance} from './coach-performance.ts';
 import {coachNextMatch} from './coach-next-match.ts';
@@ -54,7 +55,11 @@ export async function readCoachMemberReport(db:D1Database,person:string,preloade
  const [primary,...alternates]=accounts;
  const performance=coachPerformance(rows.results,accounts,COACH_MEMBER_ACCOUNTS);
  const verifiedRows:typeof rows.results=[];
- const roundContribution=coachRoundContribution(rows.results,accounts,row=>verifiedRows.push(row));
+ const combatByTime=new Map<number,CoachCombatObservation|null>();
+ const roundContribution=coachRoundContribution(rows.results,accounts,(row,observation)=>{
+  verifiedRows.push(row);
+  combatByTime.set(row.ended_at,combatByTime.has(row.ended_at)?null:observation);
+ });
  const roundContext=coachRoundContext(rows.results,accounts,new Set(verifiedRows.map(row=>row.match_id)));
  const matchTrend=buildCoachMatchTrend(verifiedRows,accounts);
  const report=summarizeCoachRounds(verifiedRows,primary.name,primary.tag,
@@ -97,7 +102,7 @@ export async function readCoachMemberReport(db:D1Database,person:string,preloade
   archivedMatches:rows.results.length,usableMatches:report.usableMatches,
   invalidMatches:performance.quality.excluded['invalid-roster']??0,roundDataMissing:rows.results.filter(r=>!hasEventArray(r.rounds_json)).length,
   killDataMissing:rows.results.filter(r=>!hasEventArray(r.kills_json)).length,overall:report.overall,
-  individual,individualMapAgent,matchTrend,performance,nextMatch:coachNextMatch(performance),roundContribution,roundContext,
+  individual,individualMapAgent,matchTrend,performance,nextMatch:coachNextMatch(performance),matchFeedback:coachMatchFeedback(performance,combatByTime),roundContribution,roundContext,
   fullDiagnosis:diagnosis,coachingNotes:coachNotes(onlySelf),
   coachSignals:detectCoachSignals(onlySelf)
  };
