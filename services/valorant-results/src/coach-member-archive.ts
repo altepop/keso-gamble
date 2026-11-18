@@ -13,6 +13,21 @@ export const COACH_MEMBER_ACCOUNTS=[
  {person:'小林',riotId:'mecael#2489'}
 ] as const;
 export const ALL_MEMBER_SWITCH='coach_all_members:enabled';
+const ROSTER_SCHEMA_SQL="json_extract(CASE WHEN json_valid(r.players_json) THEN r.players_json ELSE '[]' END,'$[0].coachSchema')=2";
+const ASSIST_SCHEMA_SQL="json_extract(CASE WHEN json_valid(e.kills_json) THEN e.kills_json ELSE '[]' END,'$[0].assistSchema')=1";
+async function upgradeCaptureQueue(db:D1Database){
+ const key='coach_capture_v2:ready';
+ if(await db.prepare('SELECT value FROM monitor_state WHERE key=?').bind(key).first())return;
+ // Only executes after the existing owner opt-in check. No records are removed,
+ // and previously unavailable sources keep their backoff/unavailable state.
+ await db.prepare(`UPDATE coach_member_queue SET status='pending',attempts=0,next_at=0
+  WHERE status='complete' AND NOT EXISTS(SELECT 1 FROM valorant_match_rosters r
+   JOIN valorant_match_round_events e ON e.match_id=r.match_id
+   WHERE r.match_id=coach_member_queue.match_id AND ${ROSTER_SCHEMA_SQL} AND ${ASSIST_SCHEMA_SQL}
+    AND e.rounds_json IS NOT NULL AND e.kills_json IS NOT NULL)`).run();
+ await db.prepare('INSERT OR IGNORE INTO monitor_state(key,value) VALUES(?,?)').bind(key,'1').run();
+}
+
 type Account={puuid:string;region:string};
 type Source={riot_id:string;puuid:string|null;region:string|null;
  next_page:number;done:number;truncated:number;next_at:number};
@@ -101,7 +116,7 @@ export async function discoverCoachMemberPage(db:D1Database,
        SELECT 1 FROM valorant_match_rosters r
        JOIN valorant_match_round_events e ON e.match_id=r.match_id
        WHERE r.match_id=json_extract(value,'$.id')
-        AND e.rounds_json IS NOT NULL AND e.kills_json IS NOT NULL
+        AND e.rounds_json IS NOT NULL AND e.kills_json IS NOT NULL AND ${ROSTER_SCHEMA_SQL} AND ${ASSIST_SCHEMA_SQL}
       ) THEN 'complete' ELSE 'pending' END,0,0
     FROM json_each(?)`).bind(source.region,source.riot_id,source.puuid,payload).run();
    await db.prepare(`INSERT OR IGNORE INTO coach_member_links(riot_id,match_id)
@@ -121,6 +136,7 @@ export async function discoverCoachMemberPage(db:D1Database,
 export async function fetchNextCoachMemberMatch(db:D1Database,
  fetchDetail:(region:string,id:string)=>Promise<Match>,now=Date.now()):Promise<ArchiveStep>{
  if(!await getSwitch(db))return 'disabled';
+ await upgradeCaptureQueue(db);
  // One candidate per tick. The unique match_id queue avoids duplicates across
  // all discovered players. Partial archives are retried at a cooldown until
  // all three total requests are exhausted; never treat missing kills as zero.
@@ -130,9 +146,9 @@ export async function fetchNextCoachMemberMatch(db:D1Database,
   ORDER BY q.started_at DESC LIMIT 1`).bind(now).first<Candidate>();
  if(!row)return 'idle';
  const complete=await db.prepare(`SELECT
-  (SELECT COUNT(*) FROM valorant_match_rosters WHERE match_id=?) AS roster,
-  (SELECT COUNT(*) FROM valorant_match_round_events
-   WHERE match_id=? AND rounds_json IS NOT NULL AND kills_json IS NOT NULL) AS events,
+  (SELECT COUNT(*) FROM valorant_match_rosters r WHERE match_id=? AND ${ROSTER_SCHEMA_SQL}) AS roster,
+  (SELECT COUNT(*) FROM valorant_match_round_events e
+   WHERE match_id=? AND rounds_json IS NOT NULL AND kills_json IS NOT NULL AND ${ASSIST_SCHEMA_SQL}) AS events,
   (SELECT value FROM monitor_state WHERE key=?) AS unavailable`)
   .bind(row.match_id,row.match_id,'coach_round_backfill:unavailable:'+row.match_id)
   .first<{roster:number;events:number;unavailable:string|null}>();
@@ -157,9 +173,11 @@ export async function fetchNextCoachMemberMatch(db:D1Database,
   }
   await recordCompetitiveRoster(db,detail,now);
   await recordCompetitiveRoundEvents(db,detail,now);
-  const saved=await db.prepare(`SELECT rounds_json,kills_json FROM valorant_match_round_events
-   WHERE match_id=?`).bind(row.match_id).first<{rounds_json:string|null;kills_json:string|null}>();
-  const status=saved?.rounds_json&&saved.kills_json?'complete':'partial';
+  const saved=await db.prepare(`SELECT e.rounds_json,e.kills_json,
+   (${ROSTER_SCHEMA_SQL}) AS roster_schema,(${ASSIST_SCHEMA_SQL}) AS assist_schema
+   FROM valorant_match_round_events e LEFT JOIN valorant_match_rosters r ON r.match_id=e.match_id
+   WHERE e.match_id=?`).bind(row.match_id).first<{rounds_json:string|null;kills_json:string|null;roster_schema:number|null;assist_schema:number|null}>();
+  const status=saved?.rounds_json&&saved.kills_json&&saved.roster_schema===1&&saved.assist_schema===1?'complete':'partial';
   await db.prepare('UPDATE coach_member_queue SET status=?,attempts=attempts+1,next_at=? WHERE match_id=?')
    .bind(status,status==='partial'?now+delay:0,row.match_id).run();
   return status==='complete'?'saved':'partial';

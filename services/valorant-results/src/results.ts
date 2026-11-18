@@ -24,7 +24,7 @@ export interface Match {
     attacking_team?: string | null;
     defending_team?: string | null;
   }>;
-  kills?: Array<{ round: number; time_in_round_in_ms: number; killer?: { puuid: string } | null; victim: { puuid: string } }>;
+  kills?: Array<{ round: number; time_in_round_in_ms: number; killer?: { puuid: string } | null; victim: { puuid: string }; assistants?: Array<{puuid?:string}> | null }>;
   teams: Array<{ team_id: string; won: boolean; rounds?: { won: number } }>;
 }
 export interface Notice {

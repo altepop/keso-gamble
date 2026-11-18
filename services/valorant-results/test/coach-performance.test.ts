@@ -97,3 +97,24 @@ test('win trend names its draw-inclusive denominator; unknown results are exclud
  assert.equal(out.overall.draws,1);assert.equal(out.timeline[0].rollingWinPct5,100/3);
  assert.equal(coachPerformance([row(0,{teams_json:null})],accounts).overall.winPct,null);
 });
+
+test('same-map/role comparisons use teammate player-rounds, not opponent or whole-team averages',()=>{
+ const a=row(0),ps=JSON.parse(a.players_json);ps[1]={...ps[1],agent:'Sage',k:10,d:20,a:15};ps[2]={...ps[2],agent:'Killjoy',k:30,d:5,a:5};ps[5]={...ps[5],agent:'Sage',k:100,d:0,a:99};a.players_json=JSON.stringify(ps);
+ const b={...a,match_id:'second'};const ps2=JSON.parse(b.players_json);delete ps2[1].k;b.players_json=JSON.stringify(ps2);
+ const out=coachPerformance([a,b],accounts),g=out.rolePeers[0];
+ assert.equal(g.value,'Ascent / センチネル');assert.equal(g.kpr.ownRate,1);assert.equal(g.kpr.peerRate,1);assert.equal(g.kpr.peerPlayerGames,2);assert.equal(g.kpr.peerRounds,40);assert.equal(g.kpr.matches,1);assert.equal(g.kpr.excluded,1);
+ assert.equal(g.dpr.ownRate,.5);assert.equal(g.dpr.peerRate,.625);assert.equal(g.dpr.matches,2);assert.equal(g.apr.peerRate,.5);
+ assert.equal(JSON.stringify(g).includes('private'),false);assert.equal(coachPerformance([row()],accounts).rolePeers.length,0);
+});
+test('ACT and JST end-time groups retain unknown dates and do not pretend to know start/sleep',()=>{
+ const out=coachPerformance([row(0,{ended_at:Date.parse('2026-11-17T14:59:59Z'),act_name:'e11a1'}),row(1,{ended_at:Date.parse('2026-11-17T15:00:00Z'),act_name:'e11a2'}),row(2,{ended_at:NaN})],accounts);
+ assert.deepEqual(out.acts.map(g=>g.value).sort(),['ACT未取得','e11a1','e11a2']);
+ assert.ok(out.timeBuckets.some(g=>g.value==='20–24時終了（JST）'));assert.ok(out.timeBuckets.some(g=>g.value==='00–04時終了（JST）'));assert.ok(out.timeBuckets.some(g=>g.value==='終了時刻未取得'));
+ assert.equal(out.overall.matches,3);assert.equal(out.timeline.length,2);assert.equal(out.windows[0].recent.matches,2);assert.equal(out.quality.timeSeries.excluded,1);assert.equal(out.form.currentPositiveStreak,null);
+});
+
+test('enriched hit/damage provenance never makes the old KDA snapshot appear freshly fetched',()=>{
+ const r=row(0,{recorded_at:1000}),ps=JSON.parse(r.players_json);Object.assign(ps[0],{hs:4,bs:12,ls:4,hsAt:2000,damageDealt:2400,damageReceived:3000,damageDealtAt:2500,damagePairAt:3000});r.players_json=JSON.stringify(ps);
+ const q=coachPerformance([r],accounts).quality.metricCoverage;
+ assert.equal(q.kd.recordedAt!.newest,1000);assert.equal(q.hs.recordedAt!.newest,2000);assert.equal(q.adr.recordedAt!.newest,2500);assert.equal(q.ddDelta.recordedAt!.newest,3000);
+});

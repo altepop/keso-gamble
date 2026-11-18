@@ -31,3 +31,12 @@ test('event acquisition timestamps are independent of roster timestamps and neve
  assert.deepEqual(r.quality.recordedAt,{oldest:1700000000000,newest:1700000000000});assert.equal(r.quality.missingTimestamps,0);
  assert.equal(coachRoundContribution([fixture()],accounts).quality.recordedAt,null);
 });
+
+test('round assists need complete assistant IDs and agreement with all ten roster assist totals',()=>{
+ const row=fixture(),ps=JSON.parse(row.players_json);for(const p of ps)p.a=0;ps[0].a=1;ps[1].k=1;ps[7].d=1;
+ const ks=JSON.parse(row.kills_json).map((k:object)=>({...k,assistants:[]}));ks.push({r:0,t:30000,killer:'other0',victim:'other6',assistants:['private-self']});
+ const valid={...row,players_json:JSON.stringify(ps),kills_json:JSON.stringify(ks)},r=coachRoundContribution([valid],accounts);
+ assert.equal(r.rounds,1);assert.equal(r.assistQuality.validMatches,1);assert.equal(r.assistQuality.assistRounds,1);assert.equal(r.assistQuality.killOrAssistRounds,1);
+ delete ks[0].assistants;const missing=coachRoundContribution([{...valid,kills_json:JSON.stringify(ks)}],accounts);assert.equal(missing.rounds,1);assert.equal(missing.assistQuality.validMatches,0);
+ ps[0].a=2;const mismatch=coachRoundContribution([{...valid,players_json:JSON.stringify(ps)}],accounts);assert.equal(mismatch.rounds,1);assert.equal(mismatch.assistQuality.excluded['assist-totals-do-not-match-roster'],1);
+});

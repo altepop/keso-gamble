@@ -1,3 +1,4 @@
+import {enrichExistingCoachEvidence} from './coach-evidence-enrichment.ts';
 import {coachProviderShape} from './coach-provider-shape.ts';
 import {vdkRescuePress,vdkRescueStatus} from './vdk-rescue-press.ts';
 import {approvedEscalationPress,escaPressActive,escalationPressStatus} from './escalation-press.ts';
@@ -507,6 +508,7 @@ export async function monitor(env: Env, players: Player[] = configuredPlayers): 
       .map(e=>JSON.stringify([e.riot,e.mode])) : []);
     const deathDetails: DeathDetails = { remaining: 1, matches: new Map(),reservations };
     const pvpSeen=new Set<string>();
+    let coachEvidenceBudget=2;
     let pvpExtraDetail=1;
     // Deliver a previously queued result before spending time polling the API again.
     if (players.length) await flushNotifications(env, players);
@@ -543,6 +545,11 @@ export async function monitor(env: Env, players: Player[] = configuredPlayers): 
           .bind(...ids).all<{ riot_id: string; match_id: string }>()).results) saved.add(JSON.stringify([r.riot_id, r.match_id]));
         stage = 'save_result';
         for (const match of [...matches].sort((a, b) => Date.parse(a.metadata.started_at) - Date.parse(b.metadata.started_at))) {
+          if(coachEvidenceBudget>0){
+            coachEvidenceBudget--;
+            try{if(await enrichExistingCoachEvidence(env.DB,match)==='skipped')coachEvidenceBudget++;}
+            catch{console.warn('coach_evidence_enrichment_pending');}
+          }
           if(kpRun&&match.metadata?.match_id&&!pvpSeen.has(match.metadata.match_id)){
             pvpSeen.add(match.metadata.match_id);
             try {
