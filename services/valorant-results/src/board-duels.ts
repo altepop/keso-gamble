@@ -174,17 +174,26 @@ export async function boardDuelList(env:KpEnv,m:KpMapping,user:string,cursor:str
  const query=`SELECT d.*,
   CASE WHEN cr.duel_id IS NOT NULL AND cr.claimed_at IS NULL THEN 1 ELSE 0 END AS reward_claimable,
   cr.claimed_at AS reward_claimed_at,cr.rating AS reward_rating,cr.outcome AS reward_outcome,
+  sp.rating AS skill_rating,sp.peak AS skill_peak,sp.games AS skill_games,
+  sp.wins AS skill_wins,sp.losses AS skill_losses,sp.draws AS skill_draws,
   CASE WHEN d.black_user=? THEN json_extract(s.data,'$.privateA')
        ELSE json_extract(s.data,'$.privateB') END AS private_hand
   FROM kp_board_duels d LEFT JOIN kp_board_duel_secrets s ON s.guild=d.guild AND s.id=d.id
   LEFT JOIN kp_duel_loot_receipts cr ON cr.guild=d.guild AND cr.duel_id=d.id AND cr.user=?
+  LEFT JOIN kp_duel_skill sp ON sp.guild=d.guild AND sp.user=? AND sp.game=d.game
   WHERE d.guild=? AND (d.user_a=? OR d.user_b=?)${condition}
   ORDER BY d.updated_at DESC,d.id DESC LIMIT 20`;
  const stmt=env.DB.prepare(query);
- const matches=(await (cutoff===null?stmt.bind(user,user,m.guildId,user,user):
-   stmt.bind(user,user,m.guildId,user,user,cutoff,cutoff,id)).all<BoardDuel>()).results;
- const skills=cursor===null?(await env.DB.prepare('SELECT game,rating,peak,games,wins,losses,draws FROM kp_duel_skill WHERE guild=? AND user=?')
-  .bind(m.guildId,user).all<{game:string;rating:number;peak:number;games:number;wins:number;losses:number;draws:number}>()).results:[];
+ const matches=(await (cutoff===null?stmt.bind(user,user,user,m.guildId,user,user):
+   stmt.bind(user,user,user,m.guildId,user,user,cutoff,cutoff,id)).all<BoardDuel & {
+    skill_rating:number|null;skill_peak:number|null;skill_games:number|null;
+    skill_wins:number|null;skill_losses:number|null;skill_draws:number|null;
+   }>()).results;
+ // Reuse the indexed match query rather than adding an extra D1 read every 30s.
+ const skills=[...new Map(matches.filter(row=>row.skill_rating!==null).map(row=>[
+   row.game,{game:row.game,rating:row.skill_rating??0,peak:row.skill_peak??0,
+    games:row.skill_games??0,wins:row.skill_wins??0,losses:row.skill_losses??0,draws:row.skill_draws??0}
+ ])).values()];
  return {games:GAMES,skills,limit:DUEL_MAX_STAKE,turnMs:DUEL_TURN_MS,invitationMs:DUEL_INVITE_MS,
    // Only first page needs a roster. Subsequent pages reuse already loaded members.
    members:cursor===null?await kpTargetMembers(env,m):[],matches,hasMore:matches.length===20};
