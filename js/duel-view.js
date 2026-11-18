@@ -60,7 +60,7 @@ function boardView(r,info,user,busy,confirmResign,gomokuPreviewCell=null,recentM
  ${r.status==='active'?`<div class="duel-turn ${turn?'my-turn':''}">${turn?'🟢 あなたの番':esc(name(r.turn_user))+'の番'}　<span data-duel-timer="${r.deadline_at}">残り${Math.ceil(timeLeft(r.deadline_at)/60)}分</span></div>`:''}
  ${gomokuTools}
  ${r.game==='gomoku'?`<div class="duel-board-scroll" data-duel-board-scroll="${esc(r.id)}" tabindex="0" role="region" aria-label="五目並べの拡大盤面。指で上下左右に移動できる">`:''}
- <div class="duel-board ${r.game==='gomoku'?'duel-gomoku':'duel-othello'}" role="grid" aria-label="${esc(title(r))}の盤面" style="--duel-size:${size}">
+ <div class="duel-board ${r.game==='gomoku'?'duel-gomoku':'duel-othello'}" role="grid" aria-label="${esc(title(r))}の盤面" data-othello-playing="${r.game==='othello'&&canPlay?color:'' }" style="--duel-size:${size}">
  ${[...r.board].map((cell,i)=>{
    const active=canPlay&&playable.has(i);
    const classes=[cell==='B'?'black':cell==='W'?'white':'empty',active?'available':'',previewValid&&i===gomokuPreviewCell?'duel-preview-cell':'',recentMove?.version===r.version&&recentMove?.cell===i?'duel-last-cell':''].join(' ');
