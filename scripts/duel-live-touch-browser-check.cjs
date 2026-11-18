@@ -60,8 +60,10 @@ let browser;
  assert.ok(before.left>0&&before.top>0,'pan viewport starts centered');
  await page.locator('[data-gomoku-zoom-action="in"]').click();
  assert.equal(operations.length,0,'zoom must not request a paid move');
+ await page.waitForFunction(()=>Math.round(document.querySelector('[data-duel-board-scroll] .duel-gomoku')?.getBoundingClientRect().width||0)===780,null,{timeout:6000});
  assert.equal(await viewport.locator('.duel-gomoku').evaluate(el=>Math.round(el.getBoundingClientRect().width)),780);
  await page.locator('[data-gomoku-zoom-action="out"]').click();
+ await page.waitForFunction(()=>Math.round(document.querySelector('[data-duel-board-scroll] .duel-gomoku')?.getBoundingClientRect().width||0)===660,null,{timeout:6000});
  assert.equal(operations.length,0,'zoom out cannot trigger KP');
 
  const cell=page.locator('[data-duel-cell="112"]');
