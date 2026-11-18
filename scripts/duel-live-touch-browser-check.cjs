@@ -12,9 +12,9 @@ let browser;
  const {createInitialState}=await import('../js/engine.js');
  const {initialDuelBoard,playDuelMove}=await import('../js/duel-rules.js');
  const state={...createInitialState(),cash:20000,serverWallet:true,selfUserId:'one',members:[{id:'one',name:'自分'},{id:'two',name:'対戦相手'}],claims:[],directives:[]};
- let room={id:'duel-gomoku-test',guild:'test',user_a:'one',user_b:'two',black_user:'one',turn_user:'one',game:'gomoku',stake:1000,status:'active',
+ let room={id:'11111111-2222-4333-8444-555555555555',guild:'test',user_a:'one',user_b:'two',black_user:'one',turn_user:'one',game:'gomoku',stake:1000,status:'active',
   board:initialDuelBoard('gomoku'),winner:null,version:0,deadline_at:Date.now()+600000};
- const operations=[],errors=[];
+ const operations=[],errors=[];let liveHints=false,streams=0,duelReads=0;
  for(let i=0;i<80;i++){try{if((await fetch('http://127.0.0.1:'+port+'/')).ok)break;}catch{}await new Promise(r=>setTimeout(r,100));}
  browser=await (engine==='webkit'?webkit:chromium).launch(engine==='webkit'?{}:{executablePath:process.env.CHROMIUM_PATH||(existsSync('/usr/bin/chromium')?'/usr/bin/chromium':undefined),args:['--no-sandbox']});
  const ctx=await browser.newContext({viewport:{width:390,height:844},isMobile:engine==='webkit',hasTouch:true,reducedMotion:'reduce'});
@@ -27,7 +27,10 @@ let browser;
   else if(p.endsWith('/feed'))response={entries:[]};
   else if(p.endsWith('/duels/events')){
    assert.equal(route.request().headers().authorization,'Bearer '+'a'.repeat(48));
-   return route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:'SSE unavailable in this legacy test'})});
+   if(!liveHints)return route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:'SSE unavailable'})});
+   streams++;
+   return route.fulfill({status:200,contentType:'text/event-stream',
+    body:': connected\n\ndata: '+JSON.stringify({id:room.id,version:room.version})+'\n\n'});
   }
   else if(p.endsWith('/duels')){
    if(route.request().method()==='POST'){
@@ -37,7 +40,7 @@ let browser;
     const next=playDuelMove('gomoku',room.board,'B',body.cell);
     room={...room,board:next.board,turn_user:'two',version:room.version+1};
     response={match:room};
-   }else response={matches:[room],members:state.members,games:{gomoku:{name:'五目並べ'}}};
+   }else{duelReads++;response={matches:[room],members:state.members,games:{gomoku:{name:'五目並べ'}}};}
   }else throw Error('Unexpected KP endpoint: '+p);
   await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(response)});
  });
@@ -73,6 +76,16 @@ let browser;
  assert.equal(room.version,1);
  assert.equal(room.board[112],'B');
  assert.equal(await page.locator('.duel-gomoku-selection [data-duel-confirm-cell]').count(),0,'new turn clears preview');
+ // After an initially unavailable stream, a later participant event refreshes
+ // the authoritative board without sending an extra paid operation.
+ const previousReads=duelReads;
+ const remote=playDuelMove('gomoku',room.board,'W',111);
+ room={...room,board:remote.board,turn_user:'one',version:2};
+ liveHints=true;
+ await page.locator('.duel-square.white[data-duel-cell="111"]').waitFor({timeout:14000});
+ assert.ok(streams>=1,'SSE reconnected after the initial unavailable endpoint');
+ assert.ok(duelReads>previousReads,'SSE hint triggers an authenticated authoritative GET');
+ assert.equal(operations.length,1,'SSE never submits a second move or KP charge');
  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'no horizontal overflow');
  assert.deepEqual(errors,[],'no browser errors');
  console.log('PRODUCTION DUEL GOMOKU OK ('+engine+'): no request on preview/cancel, one server-authoritative move on confirm, scroll stable, active room first.');
