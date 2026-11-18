@@ -44,7 +44,7 @@ export function grantVerifiedPvPReward(state:{relics?:RelicCollection},receipt:D
   throw Error('熟練度の記録が不正です。');
  const relics=relicCollection(state);
  const scale=receipt.reward_scale??1;
- if(![1,0.5,0.25].includes(scale))throw Error('報酬補正の記録が不正です。');
+ if(![1,0.5].includes(scale))throw Error('報酬補正の記録が不正です。');
  const baseShards=receipt.outcome==='win'?6:receipt.outcome==='draw'?4:3;
  // Never go to zero: genuine repeat play still progresses, but coordinated farming
  // cannot mint full-value shards endlessly without changing opponents.
