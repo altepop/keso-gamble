@@ -72,12 +72,28 @@ export function classifyHitBlowFeedback(before,after){
  if(!Number.isInteger(hit)||!Number.isInteger(blow)||hit<0||blow<0||hit+blow>4)return null;
  return {id:after.id,version:after.version,hit,blow,key:after.last};
 }
+// Only one newly observed server-confirmed stone is a new last move.
+// Full reconnect snapshots and corrupted board changes must never fabricate one.
+export function classifyGomokuTransition(previous,next){
+ if(typeof previous!=='string'||typeof next!=='string'||previous.length!==225||next.length!==225||
+  !/^[.BW]{225}$/.test(previous)||!/^[.BW]{225}$/.test(next))return null;
+ let index=-1;
+ for(let i=0;i<225;i++){
+  if(previous[i]===next[i])continue;
+  if(index!==-1||previous[i]!=='.'||!['B','W'].includes(next[i]))return null;
+  index=i;
+ }
+ return index<0?null:{index,color:next[index],row:Math.floor(index/15)+1,column:index%15+1};
+}
 function enhance(root) {
   let previous = null, motion = null, lastBoard = null;
   let c4Previous=null,c4Motion=null,lastC4Board=null;
   let bluffPrevious=null,bluffMotion=null,lastBluffTable=null;
   let pokerPrevious=null,pokerMotion=null,lastPokerTable=null;
   let hbPrevious=null,hbMotion=null,lastHbTable=null;
+  let gomokuPrevious=null,gomokuLast=null,gomokuBoard=null;
+  const gomokuZoom=new Map();
+  const zoomLevels=[44,52,60,72];
   function scanHitBlow(){
    const table=root.querySelector('.duel-hb-table[data-hb-match]');
    if(!table){hbPrevious=null;hbMotion=null;lastHbTable=null;return;}
@@ -195,11 +211,73 @@ function enhance(root) {
     cell.style.setProperty('--c4-drop-delay',(-Math.min(elapsed,duration))+'ms');
     cell.classList.add('duel-c4-new-chip');
   }
+
+  function scanGomoku(){
+    const board=root.querySelector('.duel-board.duel-gomoku[data-gomoku-match]');
+    if(!board){gomokuPrevious=null;gomokuLast=null;gomokuBoard=null;return;}
+    const scroll=board.closest('[data-duel-board-scroll]');
+    if(!scroll)return;
+    const id=board.dataset.gomokuMatch;
+    const version=Number(board.dataset.gomokuVersion);
+    const index=gomokuZoom.get(id)??0;
+    const width=zoomLevels[index]*15;
+    // The Activity reconstructs the DOM on every accepted snapshot; preserve
+    // the visible board centre when reapplying a previously chosen zoom.
+    if(board.style.width!==width+'px'){
+      const beforeWidth=board.getBoundingClientRect().width||660;
+      const centreX=(scroll.scrollLeft+scroll.clientWidth/2)/beforeWidth;
+      const centreY=(scroll.scrollTop+scroll.clientHeight/2)/beforeWidth;
+      board.style.width=width+'px';
+      board.style.minWidth=width+'px';
+      board.style.maxWidth='none';
+      scroll.scrollLeft=centreX*width-scroll.clientWidth/2;
+      scroll.scrollTop=centreY*width-scroll.clientHeight/2;
+    }
+    const arena=board.closest('.duel-arena');
+    const output=arena?.querySelector('[data-gomoku-zoom-label]');
+    if(output)output.textContent=Math.round(zoomLevels[index]/44*100)+'%';
+    const plus=arena?.querySelector('[data-gomoku-zoom-action="in"]');
+    const minus=arena?.querySelector('[data-gomoku-zoom-action="out"]');
+    if(plus)plus.disabled=index===zoomLevels.length-1;
+    if(minus)minus.disabled=index===0;
+    if(board!==gomokuBoard){
+      gomokuBoard=board;
+      const cells=[...board.querySelectorAll('.duel-square')];
+      if(cells.length!==225){gomokuPrevious=null;gomokuLast=null;return;}
+      const state=cells.map(cell=>cell.classList.contains('black')?'B':cell.classList.contains('white')?'W':'.').join('');
+      const now=performance.now();
+      const before=gomokuPrevious;
+      const change=before&&before.id===id&&version===before.version+1&&
+        now-before.at<20000&&!document.hidden
+        ?classifyGomokuTransition(before.state,state):null;
+      // After any version change without exactly one observed legal new cell,
+      // forget the earlier last-move marker rather than label an old move new.
+      if(before&&(before.id!==id||before.version!==version)&&!change)gomokuLast=null;
+      gomokuPrevious={id,version,state,at:now};
+      if(change)gomokuLast={...change,id,version,state,started:now};
+    }
+    const last=gomokuLast;
+    const status=arena?.querySelector('[data-gomoku-last-status]');
+    if(!last||last.id!==id||last.version!==version||last.state!==gomokuPrevious?.state){
+      if(status)status.textContent='新しい確定手を観測したら、その場所を強調する。';
+      return;
+    }
+    const newest=board.querySelector('.duel-square[data-duel-cell="'+last.index+'"]');
+    if(!newest)return;
+    newest.classList.add('duel-gomoku-last-confirmed');
+    if(status)status.textContent='直前の確定手：'+last.row+'行 '+last.column+'列（'+(last.color==='B'?'黒':'白')+'）';
+    const elapsed=performance.now()-last.started;
+    if(elapsed<850&&!document.hidden&&!matchMedia('(prefers-reduced-motion: reduce)').matches){
+      newest.style.setProperty('--gomoku-move-delay',(-elapsed)+'ms');
+      newest.classList.add('duel-gomoku-confirmed-motion');
+    }
+  }
   function scan() {
     scanConnect4();
     scanBluffDice();
     scanPoker();
     scanHitBlow();
+    scanGomoku();
     const board = root.querySelector('.duel-board.duel-othello');
     if (!board) { previous = null; motion = null; lastBoard = null; return; }
     if (board === lastBoard) return; // Ignore mutations outside the board, such as the timer.
@@ -240,6 +318,27 @@ function enhance(root) {
       square.classList.add('duel-flipped-stone');
     }
   }
+  // Zoom is local presentation state only: never invokes a move, Worker or KP.
+  root.addEventListener('click',event=>{
+    const control=event.target.closest?.('[data-gomoku-zoom-action]');
+    if(!control||!root.contains(control))return;
+    const board=root.querySelector('.duel-board.duel-gomoku[data-gomoku-match]');
+    const scroll=board?.closest('[data-duel-board-scroll]');
+    if(!board||!scroll)return;
+    const action=control.dataset.gomokuZoomAction;
+    const id=board.dataset.gomokuMatch;
+    if(action==='center'){
+      scroll.scrollLeft=(scroll.scrollWidth-scroll.clientWidth)/2;
+      scroll.scrollTop=(scroll.scrollHeight-scroll.clientHeight)/2;
+      return;
+    }
+    const oldIndex=gomokuZoom.get(id)??0;
+    const nextIndex=Math.min(zoomLevels.length-1,Math.max(0,oldIndex+(action==='in'?1:action==='out'?-1:0)));
+    if(nextIndex===oldIndex)return;
+    gomokuZoom.set(id,nextIndex);
+    if(gomokuZoom.size>8)gomokuZoom.delete(gomokuZoom.keys().next().value);
+    scanGomoku();
+  });
   const observer = new MutationObserver(scan);
   observer.observe(root, {childList: true, subtree: true});
   root.addEventListener('input',event=>{
@@ -264,7 +363,7 @@ function enhance(root) {
   for (const event of ['pointerup', 'pointercancel']) {
     root.addEventListener(event, () => root.querySelectorAll('.duel-tap-feedback').forEach(x => x.classList.remove('duel-tap-feedback')), {passive: true});
   }
-  addEventListener('visibilitychange', () => { if (document.hidden) { previous = null; c4Previous=null; c4Motion=null; bluffPrevious=null; bluffMotion=null; pokerPrevious=null; pokerMotion=null; hbPrevious=null; hbMotion=null; delete root.__duelTapAt; } });
+  addEventListener('visibilitychange', () => { if (document.hidden) { previous = null; c4Previous=null; c4Motion=null; bluffPrevious=null; bluffMotion=null; pokerPrevious=null; pokerMotion=null; hbPrevious=null; hbMotion=null; gomokuPrevious=null; gomokuLast=null; gomokuBoard=null; delete root.__duelTapAt; } });
   scan();
 }
 if (typeof document !== 'undefined' && typeof MutationObserver !== 'undefined') {
