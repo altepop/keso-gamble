@@ -25,6 +25,10 @@ let browser;
   if(p.endsWith('/state'))response=state;
   else if(p.endsWith('/pulse'))response={pulse:'test'};
   else if(p.endsWith('/feed'))response={entries:[]};
+  else if(p.endsWith('/duels/events')){
+   assert.equal(route.request().headers().authorization,'Bearer '+'a'.repeat(48));
+   return route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:'SSE unavailable in this legacy test'})});
+  }
   else if(p.endsWith('/duels')){
    if(route.request().method()==='POST'){
     const body=route.request().postDataJSON();operations.push(body);
