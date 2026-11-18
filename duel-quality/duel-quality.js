@@ -22,34 +22,46 @@ function readBoard(board) {
   return {squares, state: squares.map(square => square.classList.contains('black') ? 'B' : square.classList.contains('white') ? 'W' : '.')};
 }
 function enhance(root) {
-  let previous = null;
+  let previous = null, motion = null, lastBoard = null;
   function scan() {
     const board = root.querySelector('.duel-board.duel-othello');
-    if (!board) { previous = null; return; }
+    if (!board) { previous = null; motion = null; lastBoard = null; return; }
+    if (board === lastBoard) return; // Ignore mutations outside the board, such as the timer.
+    lastBoard = board;
     const current = readBoard(board);
-    if (!current) { previous = null; return; }
+    if (!current) { previous = null; motion = null; return; }
     const players = root.querySelector('.duel-arena .duel-players')?.textContent || '';
     const identity = (root.querySelector('.duel-arena .duel-tag')?.textContent || '') + '|' + players;
-    const now = performance.now();
+    const now = performance.now(), signature = current.state.join('');
     const changes = previous && previous.identity === identity && now - previous.at < 20000 && !document.hidden
       ? classifyOthelloTransition(previous.state, current.state) : null;
     previous = {state: current.state, identity, at: now};
-    if (!changes || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    const {placed, flipped} = changes;
+    if (changes) {
+      motion = {changes, identity, signature, started: now};
+      // Local tap-to-confirmed-render metric is diagnostic only; not a network benchmark.
+      if (root.__duelTapAt !== undefined) {
+        root.__duelTapToConfirmedMs = Math.round(now - root.__duelTapAt);
+        delete root.__duelTapAt;
+      }
+    }
+    // The existing UI redraws twice around an API refresh. Resume the same
+    // animation on the replacement DOM instead of cancelling it halfway.
+    if (!motion || motion.identity !== identity || motion.signature !== signature
+        || now - motion.started >= 550 || document.hidden || matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      motion = null; return;
+    }
+    const {placed, flipped} = motion.changes;
+    const elapsed = Math.max(0, Math.round(now - motion.started));
     const placement = current.squares[placed];
+    placement.querySelector('.duel-piece')?.style.setProperty('animation-delay', -elapsed + 'ms');
     placement.classList.add('duel-new-stone');
     // The new board is already authoritative; animation cannot delay or undo a turn.
     for (const {index, from} of flipped) {
       const square = current.squares[index];
       const distance = Math.max(Math.abs(Math.floor(index / 8) - Math.floor(placed / 8)), Math.abs(index % 8 - placed % 8));
-      square.style.setProperty('--duel-flip-delay', Math.min(distance * 38, 152) + 'ms');
+      square.style.setProperty('--duel-flip-delay', (Math.min(distance * 38, 152) - elapsed) + 'ms');
       square.dataset.duelFrom = from;
       square.classList.add('duel-flipped-stone');
-    }
-    // Local tap-to-confirmed-render metric is diagnostic only; not a network benchmark.
-    if (root.__duelTapAt !== undefined) {
-      root.__duelTapToConfirmedMs = Math.round(now - root.__duelTapAt);
-      delete root.__duelTapAt;
     }
   }
   const observer = new MutationObserver(scan);
