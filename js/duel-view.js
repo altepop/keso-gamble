@@ -83,7 +83,7 @@ export function duelScreen({info,user,live,cash,selectedId,game='othello',stake=
  const stageIndex=Math.min(4,Math.floor(rating/500));
  const tier=['見習い','挑戦者','名人','達人','超人'][stageIndex];
  const odds=info?.lootRates?.[stageIndex]?.win;
- const rateText=odds?'<p class="helper">通常抽選の勝利時：欠片増幅瓶 '+Number(odds.vial).toFixed(2)+'% ／ 覇者の選定書 '+Number(odds.select).toFixed(2)+'% ／ 覇王の古代選定書 '+Number(odds.ancient).toFixed(2)+'%。同じ相手との連戦・1日の大量周回で抽選率と欠片は段階的に下がるが、報酬が完全にゼロになることはない。</p>':'';
+ const rateText=odds?'<p class="helper">通常抽選の勝利時：欠片増幅瓶 '+Number(odds.vial).toFixed(2)+'% ／ 覇者の選定書 '+Number(odds.select).toFixed(2)+'% ／ 覇王の古代選定書 '+Number(odds.ancient).toFixed(2)+'%。同じ相手との報酬対象は日本時間1日4戦まで。5戦目以降も対戦可能だが熟練度・ドロップ報酬は対象外。別の相手との対戦は継続可能で、1日の通算12戦を超えた分は抽選率・欠片が半分になる。</p>':'';
  const selectedClaim=chosen?.status==='finished'?
   '<section class="panel"><div class="card-body"><h2 class="panel-title">🎁 決闘の戦利品</h2>'+
   (Number(chosen.reward_claimable)===1?
@@ -91,11 +91,11 @@ export function duelScreen({info,user,live,cash,selectedId,game='othello',stake=
     '<button type="button" class="action-btn primary" data-duel-claim="'+esc(chosen.id)+'" '+(busy?'disabled':'')+'>⚔️ 報酬を受け取る</button>'
    :chosen.reward_claimed_at?
     '<p class="helper">✅ この対局の戦利品は受け取り済みだ。消耗品は「遺物 → 消耗品」で使用できる。</p>'
-   :'<p class="helper">この対局には未受取の戦利品がない。投了・時間切れ・対象外の過去対局などは対象外だ。</p>')+
+   :'<p class="helper">この対局には未受取の戦利品がない。投了・時間切れ・過去の対局・同じ相手との当日5戦目以降などは対象外だ。</p>')+
   '</div></section>':'';
- const skillView='<section class="panel"><div class="card-body"><h2 class="panel-title">🏅 種目別熟練度</h2>'+
+ const skillView='<section class="panel"><div class="card-body"><h2 class="panel-title">🏅 PvP種目別熟練度</h2>'+
   '<p><strong>'+esc(title({game:chosen?.game??game}))+'：'+rating+' / 2500</strong>　'+esc(tier)+'</p>'+
-  '<p class="helper">自己最高 '+peak+' ／ 対人 '+(skill?.games??0)+'戦（'+(skill?.wins??0)+'勝・'+(skill?.losses??0)+'敗・'+(skill?.draws??0)+'分）。勝てば大きく、負けても少し熟練度が伸びる。熟練度が上がるとレアドロップ率も上がる。</p>'+rateText+
+  '<p class="helper">自己最高 '+peak+' ／ 対人 '+(skill?.games??0)+'戦（'+(skill?.wins??0)+'勝・'+(skill?.losses??0)+'敗・'+(skill?.draws??0)+'分）。勝てば大きく、負けても少し熟練度が伸びる。PvPのレアドロップ率は熟練度に関係なく勝敗で決まり、既存遺物による勝敗補正はない。</p>'+rateText+
   '</div></section>';
  const formMarkup=`<div class="duel-new panel"><div class="card-body">
  <h2 class="panel-title">対戦を申し込む</h2><div class="duel-formrow">
