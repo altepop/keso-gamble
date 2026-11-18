@@ -3,7 +3,8 @@ type Row={match_id:string;players_json:string;teams_json:string|null;rounds_json
 type Account={name:string;tag:string;puuid:string|null};
 const parse=(v:string|null):any=>{try{return v?JSON.parse(v):null}catch{return null}};
 const n=(x:unknown,max=10000)=>Number.isSafeInteger(x)&&Number(x)>=0&&Number(x)<=max;
-export function coachRoundContribution<T extends Row>(rows:readonly T[],accounts:readonly Account[],onVerified?:(row:T)=>void){
+export type CoachCombatObservation={rounds:number;enemyKills:number;totalDeaths:number;enemyKnownKillerDeaths:number;teammateRetaliations5s:number;tradeKills5s:number;diedAfterKill5s:number};
+export function coachRoundContribution<T extends Row>(rows:readonly T[],accounts:readonly Account[],onVerified?:(row:T,observation:CoachCombatObservation)=>void){
  const seen=new Set<string>(),excluded:Record<string,number>={};
  const stamps:number[]=[];
  const histogram=[0,0,0,0,0,0,0];let matches=0,rounds=0,noDeath=0,multiWins=0,multiKnown=0;
@@ -41,7 +42,8 @@ export function coachRoundContribution<T extends Row>(rows:readonly T[],accounts
   if(assistantsComplete)assistQuality.validMatches++;
   const allByRound=new Map<number,typeof ks>();
   for(const k of ks){const group=allByRound.get(k.r)??[];group.push(k);allByRound.set(k.r,group);}
-  onVerified?.(row);matches++;if(Number.isSafeInteger(row.events_recorded_at)&&Number(row.events_recorded_at)>0)stamps.push(row.events_recorded_at!);
+  const before={...combatFollowup};
+  matches++;if(Number.isSafeInteger(row.events_recorded_at)&&Number(row.events_recorded_at)>0)stamps.push(row.events_recorded_at!);
   for(const r of rs){
    const {kills=0,deaths=0}=ownByRound.get(r.r)??{};
    const events=allByRound.get(r.r)??[],ownKills=events.filter((k:any)=>enemyKill(k,p.puuid)),ownDeaths=events.filter((k:any)=>k.victim===p.puuid);
@@ -62,6 +64,7 @@ export function coachRoundContribution<T extends Row>(rows:readonly T[],accounts
    const side=r.attack===r.defense?null:r.attack===p.team_id?'attack':r.defense===p.team_id?'defense':null;
    if(side){sides[side].rounds++;sides[side].kills+=kills;sides[side].deaths+=deaths;}
   }
+  onVerified?.(row,{rounds:rs.length,...Object.fromEntries(Object.entries(combatFollowup).map(([key,value])=>[key,value-before[key as keyof typeof before]]))} as CoachCombatObservation);
  }
  return {quality:{recordedAt:stamps.length?{oldest:Math.min(...stamps),newest:Math.max(...stamps)}:null,missingTimestamps:matches-stamps.length,source:'rounds/kills verified against all ten roster K/D totals',candidateMatches:rows.length,validMatches:matches,excluded},
   assistQuality,combatFollowup,rounds,killHistogram:histogram.map((count,kills)=>({kills:kills===6?'6+':String(kills),count,denominator:rounds})),
