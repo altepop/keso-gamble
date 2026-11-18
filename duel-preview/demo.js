@@ -176,6 +176,14 @@ document.addEventListener('click',e=>{
   render();return;
  }
  if(e.target.closest('[data-duel-refresh]')){note('デモは通信せず、この端末だけで更新します');render();return;}
+ const rematch=e.target.closest('[data-duel-rematch]');
+ if(rematch&&match?.status==='finished'){
+  if(againstCpu){restart(match.game);return;}
+  if(rematch.dataset.duelRematch!==match.id)return;
+  game=match.game;stake=match.stake;target=match.user_a===current()?match.user_b:match.user_a;
+  note('前と同じ相手・ゲーム・金額を設定しました。申し込みを確認してください。');render();
+  $('#duel-game')?.focus({preventScroll:true});return;
+ }
  const selection=e.target.closest('[data-duel-select]');
  if(selection){note('');render();return;}
  const button=e.target.closest('[data-duel-act],[data-duel-cell],[data-duel-confirm-cell],[data-duel-cancel-cell]');
