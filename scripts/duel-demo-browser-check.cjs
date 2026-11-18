@@ -149,9 +149,22 @@ const a='[data-demo-view=a]',b='[data-demo-view=b]';
  await turn('b');
  const codeB=await page.locator('.duel-private strong').innerText();
  assert.equal(codeA.length,4);assert.equal(codeB.length,4);
- await turn('a');await page.locator('#duel-guess').fill(codeB);
+ await turn('a');
+ assert.equal(await page.locator('.duel-hitblow-key').count(),12,'mobile number pad has 10 digits plus correction');
+ assert.equal(await page.locator('[data-hitblow-slot]').count(),4,'four visible guess slots');
+ assert.equal(await page.locator('[data-hitblow-submit]').isDisabled(),true,'incomplete guess cannot be sent');
+ await page.locator('[data-hitblow-key="0"]').click();
+ await page.locator('[data-hitblow-key="0"]').click();
+ assert.equal(await page.locator('#duel-guess').inputValue(),'0','duplicate digits are ignored');
+ await page.locator('[data-hitblow-key="delete"]').click();
+ assert.equal(await page.locator('#duel-guess').inputValue(),'','correction key works');
+ await page.locator('#duel-guess').fill(codeB);
+ assert.equal(await page.locator('[data-hitblow-submit]').isEnabled(),true,'four different digits unlock confirm');
+
  await page.locator('[data-duel-mini=hitblow]').click();
- assert.match(await page.locator('.duel-guess-history').innerText(),/4 Hit/);
+ assert.match(await page.locator('.duel-hitblow-history').innerText(),/4 HIT/);
+ assert.equal(await page.locator('.duel-hitblow-history-row').count(),1,'one real confirmed guess');
+ assert.equal(await page.locator('.duel-hitblow-history-row').first().evaluate(el=>getComputedStyle(el).animationName),'none','reduced motion disables feedback entrance');
  await checkWinner('a');
  // Bluff dice — an impossible-to-reach ten-six bid is correctly challenged twice.
  await chooseMode('bluffdice');
@@ -305,6 +318,28 @@ const a='[data-demo-view=a]',b='[data-demo-view=b]';
   assert.equal(await animatedPage.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'poker no horizontal overflow at '+width);
  }
  if(shotDir)await animatedPage.screenshot({path:resolve(shotDir,'06-poker-card-flip-'+engine+'.png'),fullPage:true,animations:'disabled'});
+ // Real WebKit and Chromium: only a newly confirmed guess animates the feedback.
+ await animatedPage.locator('#demo-mode').selectOption('hitblow');
+ await animatedPage.locator('[data-duel-target-toggle]').click();
+ await animatedPage.locator('[data-duel-target-option]').click();
+ await animatedPage.locator('[data-duel-act=create]').click();
+ await animatedPage.locator('[data-demo-view=b]').click();
+ await animatedPage.locator('[data-duel-act=accept]').click();
+ const hitSecretB=await animatedPage.locator('.duel-hitblow-secret-digits').getAttribute('aria-label');
+ const hitCodeB=hitSecretB.split(' ').at(-1);
+ assert.match(hitCodeB,/^[0-9]{4}$/);
+ await animatedPage.locator('[data-demo-view=a]').click();
+ assert.equal(await animatedPage.locator('.duel-hitblow-reveal').count(),0,'other secret not published before completion');
+ await animatedPage.locator('#duel-guess').fill(hitCodeB);
+ await animatedPage.locator('[data-hitblow-submit]').click();
+ const hitArrived=animatedPage.locator('.duel-hitblow-feedback-arrived');
+ await hitArrived.waitFor({timeout:5000});
+ assert.match(await hitArrived.evaluate(el=>getComputedStyle(el).animationName),/duel-hitblow-feedback/);
+ assert.equal(await animatedPage.locator('.duel-hitblow-history-row').count(),1);
+ for(const width of [320,375,390,430]){
+   await animatedPage.setViewportSize({width,height:844});
+   assert.equal(await animatedPage.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'Hit & Blow fits mobile '+width);
+ }
  await animatedCtx.close();
  assert.deepEqual(requests,[],'demo must never call KP/Discord or Worker endpoints');
  assert.deepEqual(errors,[],'browser runtime errors');
