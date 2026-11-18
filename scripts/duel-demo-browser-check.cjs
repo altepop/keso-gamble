@@ -158,18 +158,21 @@ const a='[data-demo-view=a]',b='[data-demo-view=b]';
  assert.equal(await page.locator('.duel-bluff-hand .duel-bluff-die').count(),5,'own five dice, opponent hand never present');
  assert.equal(await page.locator('.duel-bluff-showdown').count(),0,'no reveal while private');
  async function bluffRound(){
+  const previousHistory=Number(await page.locator('.duel-bluff-table').getAttribute('data-bluff-history-count'));
   await turn('a');
   await page.locator('#duel-bid-count').selectOption('10');
   await page.locator('#duel-bid-face').selectOption('6');
   await page.locator('[data-duel-mini=bid]').click();
   await turn('b');
   assert.equal(await page.locator('.duel-bluff-hand .duel-bluff-die').count(),5,'B sees only their own five dice');
-  assert.equal(await page.locator('.duel-bluff-showdown').count(),0,'unresolved challenge shows no opponent hand');
+  assert.equal(await page.locator('.duel-bluff-showdown').count(),previousHistory?1:0,'the *new* round stays private; an already revealed prior round may remain visible');
+  assert.equal(Number(await page.locator('.duel-bluff-table').getAttribute('data-bluff-history-count')),previousHistory,'making a bid does not reveal this round');
   assert.match(await page.locator('.duel-bluff-odds').innerText(),/相手5個を公平なダイスと仮定/);
   await page.locator('[data-duel-mini=challenge]').click();
   assert.equal(await page.locator('.duel-bluff-reveal-dice .duel-bluff-die').count(),10,'ten dice are revealed only after challenge');
   assert.equal(await page.locator('.duel-bluff-reveal-row').count(),2,'both sides are visibly revealed');
   assert.equal(await page.locator('.duel-bluff-showdown').count(),1,'latest showdown occupies one visible panel');
+  assert.equal(Number(await page.locator('.duel-bluff-table').getAttribute('data-bluff-history-count')),previousHistory+1,'only the actual challenge publishes a new round result');
   assert.equal(await page.locator('.duel-bluff-showdown').evaluate(el=>getComputedStyle(el).animationName),'none','reduced motion suppresses the theater animation');
  }
  await bluffRound();assert.match(await page.locator('.duel-mini-round').innerText(),/ラウンド1/);
