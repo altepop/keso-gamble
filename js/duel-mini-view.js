@@ -1,3 +1,4 @@
+import {hitBlowView} from './duel-hitblow-view.js?v=web-ade08bbf96bdbce5';
 import {pokerView} from './duel-poker-view.js?v=web-ade08bbf96bdbce5';
 import {bluffDiceView} from './duel-bluff-view.js?v=web-ade08bbf96bdbce5';
 import {connect4LegalMoves,connect4WinningLine,pokerHandName,pokerShowdownReason} from './duel-mini-games.js?v=web-ade08bbf96bdbce5';
@@ -26,12 +27,8 @@ export function miniBoardView(r,info,user,busy,picks=[],confirmResign=false,gues
  ${hasLine?`<div class="duel-c4-celebration" role="status" aria-live="polite"><span aria-hidden="true">✦</span><strong>FOUR IN A ROW!</strong><span aria-hidden="true">✦</span><small>${h(name(r.winner))} が4つそろえた！</small></div>`:''}`;
   note='縦・横・斜めに4個並べると勝ち。駒は列の一番下から入る。';
  }else if(r.game==='hitblow'){
-  content=`<div class="duel-private"><span>自分の数字</span><strong>${h(hand||'----')}</strong><small>異なる数字4桁。相手には非公開。</small></div>
-  <div class="duel-mini-hint">相手の4桁の数字を当てる。Hitは数字と位置が一致、Blowは数字だけ一致。</div>
-  <div class="duel-guess-history">${(state.history??[]).slice(-40).reverse().map(x=>`<div class="duel-guess-row"><span>${x.by===me?'あなた':'相手'}</span><b>${h(x.guess)}</b><strong>${x.hit} Hit / ${x.blow} Blow</strong></div>`).join('')||'<p class="helper">予想履歴はまだありません。</p>'}</div>
-  ${turn?`<div class="duel-mini-form"><input id="duel-guess" value="${h(guessDraft)}" maxlength="4" inputmode="numeric" pattern="[0-9]{4}" placeholder="例：0123" aria-label="推理する4桁の数字"><button type="button" data-duel-act="move" data-duel-mini="hitblow" class="action-btn primary">数字を予想する</button></div>`:''}
-  ${state.reveal?`<p class="duel-mini-hint">正解：${h(state.reveal.a)} / ${h(state.reveal.b)}</p>`:''}`;
-  note='交互に数字を予想し、先に4 Hitで勝ち。40手で終わらなければ引き分け。';
+  content=hitBlowView({r,state,hand,turn,me,finished,guessDraft});
+  note='交互に重複のない4桁を予想し、先に4 Hitで勝利。40手で引き分け。';
  }else if(r.game==='bluffdice'){
   content=bluffDiceView({r,state,hand,turn,me,a,b,name});
   note='各自5個のダイス。数を大きく宣言するか、相手を疑う。結果公開後、宣言が正しければ宣言者、違えば疑った人がラウンドを取る。先に2勝。';
