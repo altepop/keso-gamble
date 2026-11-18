@@ -1,6 +1,6 @@
 import type {KpEnv} from './kp.ts';
 import {initializeKp} from './kp.ts';
-import {boardDuelAction,ensureBoardDuels,type BoardDuel} from './board-duels.ts';
+import {boardDuelAction,ensureBoardDuels,notifyCommittedDuel,type BoardDuel} from './board-duels.ts';
 import {GAME_IDS} from './game-center.ts';
 const ID=/^\d{15,22}$/;
 const UUID=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
@@ -17,8 +17,10 @@ export async function startDiscordDuel(env:KpEnv,guild:string,issuer:string,oppo
     issuer===opponent||!GAME_IDS.has(game)||!Number.isSafeInteger(stake)||stake<100||stake>100000)
     throw Error('対戦相手、ゲーム、KP額を確認してください。');
  const m=await initializeKp(env);if(!m||m.guildId!==guild)throw Error('KPを利用できない。');
- return boardDuelAction(env,m,issuer,{id:await duelOperationId(requestId),action:'create',
+ const match=await boardDuelAction(env,m,issuer,{id:await duelOperationId(requestId),action:'create',
   opponent,game,stake});
+ await notifyCommittedDuel(env,match);
+ return match;
 }
 export async function respondDiscordDuel(env:KpEnv,guild:string,user:string,duel:string,
  decision:'accept'|'decline',interactionId:string):Promise<BoardDuel>{
@@ -33,6 +35,8 @@ export async function respondDiscordDuel(env:KpEnv,guild:string,user:string,duel
   throw Error('この招待は本人しか操作できない。');
  if(match.status!=='pending')throw Error('この招待は終了している。');
  const action=decision==='accept'?'accept':'cancel';
- return boardDuelAction(env,m,user,{id:await duelOperationId(interactionId),
+ const changed=await boardDuelAction(env,m,user,{id:await duelOperationId(interactionId),
   action,duel,version:match.version});
+ await notifyCommittedDuel(env,changed);
+ return changed;
 }
