@@ -1,4 +1,4 @@
-name: Hit Blow quality one-shot cache sync
+name: Hit Blow quality one-shot cache sync v2
 on:
   push:
     branches: [feat/hitblow-investigation-ux-20261119]
