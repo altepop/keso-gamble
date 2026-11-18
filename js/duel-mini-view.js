@@ -1,5 +1,6 @@
-import {bluffDiceView} from './duel-bluff-view.js?v=web-d61cdf10e9913b2c';
-import {connect4LegalMoves,connect4WinningLine,pokerHandName,pokerShowdownReason} from './duel-mini-games.js?v=web-d61cdf10e9913b2c';
+import {pokerView} from './duel-poker-view.js?v=web-ade08bbf96bdbce5';
+import {bluffDiceView} from './duel-bluff-view.js?v=web-ade08bbf96bdbce5';
+import {connect4LegalMoves,connect4WinningLine,pokerHandName,pokerShowdownReason} from './duel-mini-games.js?v=web-ade08bbf96bdbce5';
 const h=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const safeData=r=>{try{return JSON.parse(r.board);}catch{return {};}};
 const privateValue=r=>{try{return JSON.parse(r.private_hand);}catch{return r.private_hand??null;}};
@@ -35,12 +36,7 @@ export function miniBoardView(r,info,user,busy,picks=[],confirmResign=false,gues
   content=bluffDiceView({r,state,hand,turn,me,a,b,name});
   note='各自5個のダイス。数を大きく宣言するか、相手を疑う。結果公開後、宣言が正しければ宣言者、違えば疑った人がラウンドを取る。先に2勝。';
  }else if(r.game==='poker'){
-  const cards=Array.isArray(hand)?hand:[],picked=new Set(picks);
-  content=`<div class="duel-private"><span>自分の手札5枚</span></div>
-  <div class="duel-cards">${cards.map((c,i)=>`<button type="button" class="duel-card ${cardColor(c)} ${picked.has(i)?'selected':''}" data-duel-card="${i}" ${turn?'':'disabled'}><b>${h(cardName(c))}</b><small>${picked.has(i)?'交換':'保持'}</small></button>`).join('')}</div>
-  <div class="duel-mini-hint">現在の自分の役：${cards.length===5?h(pokerHandName(cards)):'確認中'}。先手：${state.doneA?'交換済み':'未確定'}　後手：${state.doneB?'交換済み':'未確定'}</div>
-  ${turn?`<button type="button" class="action-btn primary duel-poker-submit" data-duel-act="move" data-duel-mini="poker">${picked.size}枚交換して確定（最大3枚）</button>`:''}
-  ${state.showdown?`<div class="duel-showdown"><p>カード公開</p><span>${h(name(a))}：${state.showdown.a.map(cardName).join(' ')}（${h(pokerHandName(state.showdown.a))}）</span><span>${h(name(b))}：${state.showdown.b.map(cardName).join(' ')}（${h(pokerHandName(state.showdown.b))}）</span><p class="duel-mini-hint">${h(pokerShowdownReason(state.showdown.a,state.showdown.b))}</p></div>`:''}`;
+  content=pokerView({r,state,hand,picks,turn,finished,a,b,name});
   note='各自5枚を配り、0〜3枚を1回だけ交換できる。両者の交換が終わったら役を比較。同点は引き分け。';
  }
  const outcome=finished?(r.winner==='draw'?'引き分け：賭け金を返金':r.winner===user?'勝利：受取 '+kp(r.stake*2)+'（差引 +'+kp(r.stake)+'）':'敗北：差引 −'+kp(r.stake)):'';

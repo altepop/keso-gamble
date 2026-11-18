@@ -49,10 +49,45 @@ export function classifyBluffReveal(before,after){
  if(!Number.isInteger(Number(parts[0]))||Number(parts[0])<1)return null;
  return {round:Number(parts[0]),version:after.version};
 }
+// The reveal may animate only after a newly observed confirmed second swap.
+// Reconnection snapshots and resign/timeout never manufacture showdown cards.
+export function classifyPokerReveal(before,after){
+ if(!before||!after||!before.id||before.id!==after.id||
+  !Number.isSafeInteger(before.version)||after.version!==before.version+1||
+  before.revealed||!after.revealed||after.done!=='1:1')return null;
+ if(before.done!=='1:0'&&before.done!=='0:1')return null;
+ return {id:after.id,version:after.version};
+}
 function enhance(root) {
   let previous = null, motion = null, lastBoard = null;
   let c4Previous=null,c4Motion=null,lastC4Board=null;
   let bluffPrevious=null,bluffMotion=null,lastBluffTable=null;
+  let pokerPrevious=null,pokerMotion=null,lastPokerTable=null;
+  function scanPoker(){
+   const table=root.querySelector('.duel-poker-table[data-poker-match]');
+   if(!table){pokerPrevious=null;pokerMotion=null;lastPokerTable=null;return;}
+   if(table===lastPokerTable)return;
+   lastPokerTable=table;
+   const now=performance.now();
+   const current={id:table.dataset.pokerMatch,version:Number(table.dataset.pokerVersion),
+     revealed:table.dataset.pokerRevealed==='true',done:table.dataset.pokerDone};
+   const change=pokerPrevious&&now-pokerPrevious.at<20000&&!document.hidden
+     ?classifyPokerReveal(pokerPrevious,current):null;
+   pokerPrevious={...current,at:now};
+   if(change)pokerMotion={...change,started:now};
+   const elapsed=pokerMotion?now-pokerMotion.started:Infinity;
+   const scene=table.querySelector('.duel-poker-showdown');
+   if(!scene||!pokerMotion||pokerMotion.id!==current.id||pokerMotion.version!==current.version||
+      elapsed>=1500||document.hidden||matchMedia('(prefers-reduced-motion: reduce)').matches){
+     if(elapsed>=1500)pokerMotion=null;
+     return;
+   }
+   scene.style.setProperty('--poker-reveal-delay',(-elapsed)+'ms');
+   scene.querySelectorAll('.duel-poker-reveal-card').forEach((card,i)=>{
+     card.style.setProperty('--poker-stagger',(i%5*65+(i>=5?135:0))+'ms');
+   });
+   scene.classList.add('duel-poker-arrival');
+  }
   function scanBluffDice(){
    const table=root.querySelector('.duel-bluff-table[data-bluff-match]');
    if(!table){bluffPrevious=null;bluffMotion=null;lastBluffTable=null;return;}
@@ -120,6 +155,7 @@ function enhance(root) {
   function scan() {
     scanConnect4();
     scanBluffDice();
+    scanPoker();
     const board = root.querySelector('.duel-board.duel-othello');
     if (!board) { previous = null; motion = null; lastBoard = null; return; }
     if (board === lastBoard) return; // Ignore mutations outside the board, such as the timer.
@@ -172,7 +208,7 @@ function enhance(root) {
   for (const event of ['pointerup', 'pointercancel']) {
     root.addEventListener(event, () => root.querySelectorAll('.duel-tap-feedback').forEach(x => x.classList.remove('duel-tap-feedback')), {passive: true});
   }
-  addEventListener('visibilitychange', () => { if (document.hidden) { previous = null; c4Previous=null; c4Motion=null; bluffPrevious=null; bluffMotion=null; delete root.__duelTapAt; } });
+  addEventListener('visibilitychange', () => { if (document.hidden) { previous = null; c4Previous=null; c4Motion=null; bluffPrevious=null; bluffMotion=null; pokerPrevious=null; pokerMotion=null; delete root.__duelTapAt; } });
   scan();
 }
 if (typeof document !== 'undefined' && typeof MutationObserver !== 'undefined') {

@@ -314,3 +314,59 @@
 .duel-bluff-history-item{margin:8px 0;padding:9px;border-radius:8px;background:#102c40;display:grid;gap:4px}
 .duel-bluff-history-item b{font-size:12px;color:#e5f2ff}
 .duel-bluff-history-item small{font-size:11px;color:#bdd1df}
+
+/* Poker premium table: visual-only presentation of private and published cards. */
+.duel-poker-table{display:grid;gap:12px;min-width:0;margin:14px 0}
+.duel-poker-table-head{display:flex;justify-content:space-between;align-items:center;gap:8px;color:#d3eddf;font-size:12px}
+.duel-poker-table-head strong{font-size:13px;letter-spacing:.12em;color:#ffe6a0}
+.duel-poker-steps{display:grid;grid-template-columns:minmax(0,1fr) 12px minmax(0,1fr);gap:7px;align-items:center;background:#102a36;border:1px solid #3f6266;border-radius:11px;padding:11px 8px}
+.duel-poker-steps>span{font-size:10px;min-width:0;overflow-wrap:anywhere;color:#adcad4}
+.duel-poker-steps>span:nth-child(2){color:#c5bd8c;text-align:center}
+.duel-poker-steps b{display:block;color:#dde9ef;margin-top:5px;font-size:11px}
+.duel-poker-steps>span.done b{color:#91f3be}
+.duel-poker-private{background:radial-gradient(ellipse at 50% 0,#206857,#102f3d 72%);border-color:#488d80}
+.duel-poker-private>span{color:#e9fff4;font-size:13px;font-weight:800}
+.duel-poker-private>span small{color:#b2d3ce;font-size:10px;font-weight:500}
+.duel-poker-hand{gap:clamp(3px,1.3vw,8px);margin:6px 0 3px}
+.duel-poker-table .duel-card{height:clamp(88px,25vw,112px);position:relative;min-width:0;overflow:hidden;
+ border-radius:8px;padding:6px 2px;display:flex;align-items:center;justify-content:center;flex-direction:column;
+ background:linear-gradient(155deg,#fffef8,#e1eaf2 78%);box-shadow:0 3px 5px #0004,inset 0 1px #fff}
+.duel-poker-table .duel-card.red{color:#c93350}
+.duel-poker-table .duel-card.black{color:#192d3f}
+.duel-poker-hand-card:not(:disabled){cursor:pointer;touch-action:manipulation;transition:transform .15s ease,box-shadow .15s ease,border-color .15s ease}
+.duel-poker-hand-card:not(:disabled):is(:hover,:focus-visible){box-shadow:0 0 0 2px #a7f9de,0 6px 10px #0005;outline:2px solid #a7f9de;outline-offset:0}
+.duel-poker-table .duel-card.selected{background:linear-gradient(155deg,#ffecae,#fffef2 75%);border:3px solid #ffd86d;box-shadow:0 4px 10px #ffd36b5c;transform:translateY(-7px)}
+.duel-poker-table .duel-card:disabled{opacity:.95}
+.duel-poker-corner{position:absolute;top:5px;left:6px;display:grid;line-height:1;font-size:clamp(10px,3.4vw,16px);text-align:center}
+.duel-poker-corner b{font-size:clamp(11px,3.5vw,17px)!important;letter-spacing:0!important}
+.duel-poker-corner span{font-size:clamp(11px,3.2vw,17px)}
+.duel-poker-center{font-size:clamp(23px,8vw,39px);line-height:1}
+.duel-poker-card-bottom{position:absolute;right:4px;bottom:7px;font-size:10px}
+.duel-poker-hand-card small{position:absolute;left:0;right:0;bottom:2px;font-size:10px;font-weight:800;color:#53617a}
+.duel-poker-table .duel-card.selected small{color:#745617}
+.duel-poker-choice-summary{display:flex;align-items:center;flex-wrap:wrap;justify-content:space-between;gap:8px;background:#133c36;padding:10px 12px;border-radius:8px;font-size:12px;color:#cbebe4}
+.duel-poker-choice-summary strong{color:#ffe09b}
+.duel-poker-selected-count b{font-size:18px;color:#fcdf87}
+.duel-poker-guide{margin:0;font-size:12px;color:#b6d3d4;line-height:1.6}
+.duel-poker-submit{min-height:48px;margin:0;touch-action:manipulation;font-weight:850}
+.duel-poker-wait{grid-column:1/-1;display:grid;place-items:center;min-height:88px;color:#bed8d8}
+.duel-poker-showdown{display:grid;gap:14px;padding:15px 9px;border:1px solid #d2a967;background:linear-gradient(155deg,#1c3c40,#0d2838 62%,#1f364d);box-shadow:0 8px 22px #0006}
+.duel-poker-showdown-title{text-align:center;display:grid;gap:5px;color:#fae6a4}
+.duel-poker-showdown-title span{font-size:11px;letter-spacing:.16em}
+.duel-poker-showdown-title strong{font-size:20px;color:#fff0b7}
+.duel-poker-reveal-row{display:grid;gap:7px;min-width:0}
+.duel-poker-reveal-name{display:flex;justify-content:space-between;gap:8px;min-width:0;align-items:center;overflow-wrap:anywhere;font-size:12px;color:#e6fbf6}
+.duel-poker-reveal-name strong{color:#ffe7a1;font-size:12px}
+.duel-poker-reveal-cards{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:clamp(3px,1.3vw,8px)}
+.duel-poker-reveal-cards .duel-card{height:clamp(75px,23vw,103px)}
+.duel-poker-verdict{padding:12px 10px;border-radius:9px;background:#433d29;color:#fff1ba!important;text-align:center;line-height:1.55}
+.duel-poker-showdown.duel-poker-arrival{animation:duel-poker-scene-in .5s ease-out both;animation-delay:var(--poker-reveal-delay,0ms)}
+.duel-poker-arrival .duel-poker-reveal-card{animation:duel-poker-flip .6s cubic-bezier(.12,.72,.25,1) both;animation-delay:calc(var(--poker-reveal-delay,0ms) + var(--poker-stagger,0ms))}
+.duel-poker-arrival .duel-poker-verdict{animation:duel-poker-verdict .55s ease-out both;animation-delay:calc(var(--poker-reveal-delay,0ms) + 400ms)}
+@keyframes duel-poker-scene-in{from{opacity:.2;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+@keyframes duel-poker-flip{0%{opacity:.15;transform:perspective(500px) rotateY(-90deg) translateY(-10px)}58%{opacity:1;transform:perspective(500px) rotateY(12deg) translateY(0)}100%{opacity:1;transform:perspective(500px) rotateY(0)}}
+@keyframes duel-poker-verdict{from{opacity:0;transform:scale(.89)}to{opacity:1;transform:scale(1)}}
+@media(prefers-reduced-motion:reduce){
+ .duel-poker-hand-card,.duel-poker-showdown.duel-poker-arrival,
+ .duel-poker-arrival .duel-poker-reveal-card,.duel-poker-arrival .duel-poker-verdict{animation:none!important;transition:none!important}
+}
