@@ -1,0 +1,37 @@
+# Temporary feature-branch-only generated imports and safety check, removed after completion.
+name: Duel realtime Activity cache synchronization
+on:
+  push:
+    branches:
+      - feat/duel-realtime-sse-gateway-20261119
+    paths:
+      - .github/workflows/duel-realtime-cache-sync.yml
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 13
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - name: Generate cache hash and verify front-end safety tests
+        run: |
+          npm run build:activity
+          npm run check:activity
+          node --test tests/kp-client.test.js
+      - name: Commit generated browser module import versions
+        run: |
+          git add js index.html
+          if git diff --cached --quiet; then
+            echo "Content versions consistent"
+            exit 0
+          fi
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'build(activity): synchronize duel-realtime client import versions'
+          git push origin HEAD:refs/heads/feat/duel-realtime-sse-gateway-20261119
