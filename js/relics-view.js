@@ -76,6 +76,8 @@ export function relicsPanel(state,{proofs=null,notice='',loading=false,view={},r
   const owned=Number(collection.consumables?.[def.id]??0);
   const targets=def.id==='consumable.duel.pvp_selector'
    ?catalog.filter(item=>!item.special&&['common','uncommon','rare','legendary'].includes(item.rarity))
+   :def.id==='consumable.duel.ancient_selector'
+   ?catalog.filter(item=>!item.special&&item.rarity==='ancient')
    :items.filter(item=>{
     const original=source.get(item.id);
     if(!original||item.origin!=='normal'||item.rarity!==original.rarity||item.foil||item.mutation)return false;
