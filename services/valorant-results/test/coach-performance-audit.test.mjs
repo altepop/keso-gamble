@@ -6,7 +6,7 @@ test('coaching audit refuses every write and measures actual D1 rows_read, not e
 });
 
 test('production coach smoke verifies actual published page and authenticated Worker contract using GET only',async()=>{
- const seen=[];const request=async(url,init)=>{seen.push({url,init});return url.includes('coach.html')?new Response('<button id="compare-members">同じマップ・ロール内の味方との比較'):Response.json({person:'神戸',accounts:['fixture-one','fixture-two'],performance:{quality:{metricCoverage:{}},windows:[5,10,20,50],rolePeers:[]},roundContribution:{quality:{}}});};
+ const seen=[];const request=async(url,init)=>{seen.push({url,init});return url.includes('coach.html')?new Response('<button id="compare-members">同じマップ・ロール内の味方との比較 記録された装備額とラウンド結果'):Response.json({person:'神戸',accounts:['fixture-one','fixture-two'],performance:{quality:{metricCoverage:{}},windows:[5,10,20,50],rolePeers:[]},roundContribution:{quality:{}},roundContext:{quality:{metricCoverage:[]}}});};
  assert.deepEqual(await coachProductionSmoke('a'.repeat(48),request),{page:'verified',authenticatedApi:'verified',metricQuality:'verified',mutations:0});
  assert.equal(seen.length,2);assert.ok(seen.every(x=>!x.init.method));assert.equal(seen[1].init.headers.Authorization,'Bearer '+'a'.repeat(48));
  assert.equal((await coachProductionSmoke('',request)).authenticatedApi,'unverified-no-session');

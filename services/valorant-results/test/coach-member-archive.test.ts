@@ -18,7 +18,7 @@ function makeMatch(id:string,sourcePuuid='player-0'):Match{
    stats:{kills:5,deaths:10,assists:3,score:1600,headshots:4,bodyshots:12,legshots:4,damage:{dealt:2400,received:3000}},agent:{name:'Fade'}
   })),
   teams:[{team_id:'Blue',won:true,rounds:{won:13}},{team_id:'Red',won:false,rounds:{won:8}}],
-  rounds:[{id:0,winning_team:'Blue',attacking_team:'Blue',defending_team:'Red'}],
+  rounds:[{id:0,winning_team:'Blue',attacking_team:'Blue',defending_team:'Red',stats:[]}],
   kills:[{round:0,time_in_round_in_ms:2300,killer:{puuid:sourcePuuid},victim:{puuid:'other-5'},assistants:[]}]};
 }
 function setup(){

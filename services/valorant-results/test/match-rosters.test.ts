@@ -86,3 +86,14 @@ test('a concurrent team-context change prevents the enrichment CAS from mixing s
   assert.equal(await recordCompetitiveRoster(db,m,2000),false);assert.equal(sql.prepare('SELECT players_json FROM valorant_match_rosters').get()!.players_json,before);
  }finally{sql.close()}
 });
+
+test('match ability counts preserve real zero, omit unknown slots and enrich an existing roster once',async()=>{
+ const sql=new DatabaseSync(':memory:');sql.exec(readFileSync(new NodeURL('../migrations/0006_competitive_match_rosters.sql',import.meta.url),'utf8'));
+ const db={prepare:(text:string)=>({bind:(...args:unknown[])=>({first:async()=>sql.prepare(text).get(...args as never[])??null,run:async()=>({meta:{changes:Number(sql.prepare(text).run(...args as never[]).changes)}})})})} as unknown as D1Database;
+ try{
+  await recordCompetitiveRoster(db,fixture(),1000);const m=fixture();m.players[0].ability_casts={grenade:0,ability1:4,ability2:null,ultimate:-1};
+  assert.equal(await recordCompetitiveRoster(db,m,2000),true);assert.equal(await recordCompetitiveRoster(db,m,3000),false);
+  const saved=sql.prepare('SELECT * FROM valorant_match_rosters').get() as {players_json:string;recorded_at:number},p=JSON.parse(saved.players_json)[0];assert.deepEqual(p.casts,{grenade:0,ability1:4});assert.equal(p.castsAt,2000);assert.equal(saved.recorded_at,1000);
+  m.players[0].ability_casts={grenade:99,ability1:5};assert.equal(await recordCompetitiveRoster(db,m,4000),false);
+ }finally{sql.close()}
+});

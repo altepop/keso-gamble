@@ -7,9 +7,11 @@ export function safeProviderEvidence(trace){
   const message=log?.message;if(!Array.isArray(message)||message[0]!=='coach_provider_shape')continue;
   let shape=message[1];if(typeof shape==='string'){try{shape=JSON.parse(shape)}catch{continue;}}
   if(shape?.contract!=='henrik-v4-direct'||shape.version!==1||shape.players!==10||keys.some(k=>!Number.isSafeInteger(shape[k])||shape[k]<0||shape[k]>10))continue;
-  const optional=['killAssistantIdsComplete','roundStats','roundStatDirectIds','roundStatPlayerIds','roundStatKdaDirect','roundStatKdaNested','roundStatDamageDirect','roundStatDamageNested','roundDamageEvents','roundEconomy','roundAbilityCasts','roundSurvived','roundAlive','roundPlantAlternate','roundDefuseAlternate','killWeapon','killLocations'];
+  const optional=['killAssistantIdsComplete','roundStats','roundStatDirectIds','roundStatPlayerIds','roundStatKdaDirect','roundStatKdaNested','roundStatDamageDirect','roundStatDamageNested','roundDamageEvents','roundEconomy','roundAbilityCasts','roundSurvived','roundAlive','roundPlantAlternate','roundDefuseAlternate','killWeapon','killLocations','roundEconomyLoadout','roundAbilityCounts','roundPlantActor','roundDefuseActor','roundPlantNull','roundDefuseNull','killWeaponKnown'];
   const safe={contract:'henrik-v4-direct',version:1,players:10,...Object.fromEntries(keys.map(k=>[k,shape[k]])),...Object.fromEntries(optional.filter(k=>[0,1].includes(shape[k])).map(k=>[k,shape[k]])),...(['competitive','other','unverified'].includes(shape.queue)?{queue:shape.queue}:{}),...(typeof shape.completed==='boolean'?{completed:shape.completed}:{}),...(['detail','history'].includes(shape.endpoint)?{endpoint:shape.endpoint}:{})};
   const score=(safe.queue==='competitive'?4:0)+(safe.completed?2:0)+(safe.endpoint==='detail'?1:0);if(score>bestScore){best=safe;bestScore=score;}
+  if(best===safe&&Number.isSafeInteger(shape.playerAbilityCounts)&&shape.playerAbilityCounts>=0&&shape.playerAbilityCounts<=10)Object.assign(safe,{playerAbilityCounts:shape.playerAbilityCounts});
+  if(best===safe&&[0,1].includes(shape.roundDerivedSides))Object.assign(safe,{roundDerivedSides:shape.roundDerivedSides});
  }
  return best;
 }

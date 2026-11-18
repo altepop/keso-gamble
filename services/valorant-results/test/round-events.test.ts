@@ -124,3 +124,27 @@ test('existing-only normal-monitor enrichment cannot create a previously uncolle
   assert.equal(await recordCompetitiveRoundEvents(db,m,2000),true);
  }finally{sql.close()}
 });
+
+test('new round contexts and weapon names fill only matching old observations and replay is a no-op',async()=>{
+ const {sql,db}=store();try{
+  const m=match();await recordCompetitiveRoundEvents(db,m,1000);
+  m.rounds![0].stats=m.players.map(p=>({player:{puuid:p.puuid},economy:{loadout_value:3000},ability_casts:{grenade:0}}));
+  m.rounds![0].plant=null;m.kills![0].weapon={name:'Vandal'};
+  assert.equal(await recordCompetitiveRoundEvents(db,m,2000,{existingOnly:true}),true);
+  const saved=sql.prepare('SELECT * FROM valorant_match_round_events').get() as {rounds_json:string;kills_json:string;recorded_at:number};
+  assert.equal(JSON.parse(saved.rounds_json)[0].context.e.at,2000);assert.equal(JSON.parse(saved.kills_json)[0].w,'Vandal');assert.equal(JSON.parse(saved.kills_json)[0].wAt,2000);
+  assert.equal(await recordCompetitiveRoundEvents(db,m,3000,{existingOnly:true}),false);
+  m.rounds![0].stats=m.players.map(p=>({player:{puuid:p.puuid},economy:{loadout_value:4500},ability_casts:{grenade:1}}));m.kills![0].weapon={name:'Phantom'};
+  assert.equal(await recordCompetitiveRoundEvents(db,m,4000,{existingOnly:true}),false);
+  assert.equal((sql.prepare('SELECT rounds_json FROM valorant_match_round_events').get() as {rounds_json:string}).rounds_json,saved.rounds_json);
+  delete m.rounds![0].plant;m.rounds![1].plant=null;m.kills![0].time_in_round_in_ms=99999;
+  assert.equal(await recordCompetitiveRoundEvents(db,m,5000,{existingOnly:true}),false,'a changed timeline cannot supply joint equipment evidence');
+ }finally{sql.close()}
+});
+
+test('additional context bytes are bounded without discarding the existing round skeleton or kills',()=>{
+ const m=match();m.players.forEach((p,i)=>p.puuid=('x'.repeat(120)+i));m.kills=[];
+ m.rounds=Array.from({length:60},(_,id)=>({id,winning_team:'Blue',stats:m.players.map(p=>({player:{puuid:p.puuid},economy:{loadout_value:5000},ability_casts:{grenade:100,ability1:100,ability2:100,ultimate:100}}))}));
+ const c=compactCompetitiveRoundEvents(m,1000)!;const rs=JSON.parse(c.roundsJson!);
+ assert.equal(rs.length,60);assert.equal(rs[0].contextSchema,1);assert.equal(rs[0].contextOmitted,'size-cap');assert.equal(rs.some((r:any)=>r.context!==undefined),false);assert.equal(rs[59].r,59);
+});

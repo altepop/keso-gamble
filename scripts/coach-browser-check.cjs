@@ -12,7 +12,18 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
  const {coachPerformance}=await import('../services/valorant-results/src/coach-performance.ts');
  const performance=coachPerformance(Array.from({length:20},(_,i)=>({match_id:'fixture-'+i,ended_at:1700000000000+i*86400000,map:i%2?'Lotus':'Ascent',rounds_json:null,teams_json:JSON.stringify([{id:'Blue',won:i%2===0,rounds:13},{id:'Red',won:i%2!==0,rounds:7}]),players_json:JSON.stringify([{puuid:'fixture-self',name:'Fixture',tag:'T',team_id:'Blue',agent:'Sage',k:20+i%4,d:10+i%3,a:6,score:4000},...Array.from({length:9},(_,j)=>({puuid:'fixture-other'+j,team_id:j<4?'Blue':'Red',...(j===0?{agent:'Killjoy',k:10,d:15,a:4}:{})}))])})),[{name:'Fixture',tag:'T',puuid:'fixture-self'}]);
  const {coachRoundContribution}=await import('../services/valorant-results/src/coach-round-contribution.ts');
- const roundContribution=coachRoundContribution([{match_id:'fixture-rounds',players_json:JSON.stringify([{puuid:'self',team_id:'Blue',k:2,d:0,a:1},...Array.from({length:9},(_,i)=>({puuid:'other'+i,team_id:i<4?'Blue':'Red',k:i===0?1:0,d:i===4||i===5||i===6?1:0,a:0}))]),teams_json:JSON.stringify([{id:'Blue',rounds:1},{id:'Red',rounds:0}]),rounds_json:JSON.stringify([{r:0,winner:'Blue',attack:'Blue',defense:'Red'}]),kills_json:JSON.stringify([{r:0,t:40000,killer:'self',victim:'other4',assistants:[]},{r:0,t:50000,killer:'self',victim:'other5',assistants:[]},{r:0,t:60000,killer:'other0',victim:'other6',assistants:['self']}])}],[{name:'Fixture',tag:'T',puuid:'self'}]);
+ const roundRows=[{match_id:'fixture-rounds',players_json:JSON.stringify([{puuid:'self',team_id:'Blue',k:2,d:0,a:1},...Array.from({length:9},(_,i)=>({puuid:'other'+i,team_id:i<4?'Blue':'Red',k:i===0?1:0,d:i===4||i===5||i===6?1:0,a:0}))]),teams_json:JSON.stringify([{id:'Blue',rounds:1},{id:'Red',rounds:0}]),rounds_json:JSON.stringify([{r:0,winner:'Blue',attack:'Blue',defense:'Red'}]),kills_json:JSON.stringify([{r:0,t:40000,killer:'self',victim:'other4',assistants:[]},{r:0,t:50000,killer:'self',victim:'other5',assistants:[]},{r:0,t:60000,killer:'other0',victim:'other6',assistants:['self']}])}];
+ const {coachRoundContext,compactRoundContext}=await import('../services/valorant-results/src/coach-round-context.ts');
+ const contextPlayers=JSON.parse(roundRows[0].players_json),contextTeams=new Map(contextPlayers.map(p=>[p.puuid,p.team_id]));
+ contextPlayers[0].casts={grenade:0,ability1:3,ultimate:0};contextPlayers[0].castsAt=1700000000000;roundRows[0].players_json=JSON.stringify(contextPlayers);
+ const rawContext={stats:contextPlayers.map(p=>({player:{puuid:p.puuid},economy:{loadout_value:p.puuid==='self'?700:4500},ability_casts:{grenade:0,ability1:1,ultimate:0}})),plant:{player:{puuid:'self'},round_time_in_ms:30000},defuse:null};
+ const contextRound=JSON.parse(roundRows[0].rounds_json)[0];
+ roundRows[0].rounds_json=JSON.stringify([{...contextRound,contextSchema:1,context:compactRoundContext(rawContext,contextTeams,1700000000000)}]);
+ const contextKills=JSON.parse(roundRows[0].kills_json);contextKills[0].w='Vandal';contextKills[0].wAt=1700000000000;roundRows[0].kills_json=JSON.stringify(contextKills);
+ const verifiedContext=new Set();
+ const roundContribution=coachRoundContribution(roundRows,[{name:'Fixture',tag:'T',puuid:'self'}],row=>verifiedContext.add(row.match_id));
+ const roundContext=coachRoundContext(roundRows,[{name:'Fixture',tag:'T',puuid:'self'}],verifiedContext);
+ roundContext._raw={puuid:'private-context-puuid',match_id:'private-context-match'};
  try{
   const token='a'.repeat(48);
   const report={
@@ -98,7 +109,7 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
    if(req.url().includes('/api/kp/coach/member?')||req.url().includes('/api/kp/coach/comparison?')){
     const makeMember=person=>{const profile=person==='神戸'?'神戸':person;
     return {
-     person,profile,roundContribution,performance:person==='Aquatopia'?{...performance,timeline:performance.timeline.map((g,i)=>i===10?{...g,kd:null,acs:null}:g)}:performance,accounts:person==='神戸'?['Abema#ttv','Aquatopia#toppy']:[person],
+     person,profile,roundContribution,roundContext:person==='Aquatopia'?coachRoundContext([],[],new Set()):roundContext,performance:person==='Aquatopia'?{...performance,timeline:performance.timeline.map((g,i)=>i===10?{...g,kd:null,acs:null}:g)}:performance,accounts:person==='神戸'?['Abema#ttv','Aquatopia#toppy']:[person],
      usableMatches:2,archivedMatches:2,roundDataMissing:0,killDataMissing:0,
      coverage:{discovered:0,complete:0,discoveryDone:false,allMatchesGuaranteed:false},
      individual:[{player:profile,matches:2,matchWins:1,matchLosses:1,matchDraws:0,
@@ -241,6 +252,8 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   assert.match(await page.locator('#coach-view-improve').innerText(),/先制に限定しないキル・デス後の動き/);
   assert.match(await page.locator('#coach-view-improve').innerText(),/ラウンド単位のアシスト/);assert.match(await page.locator('#coach-view-improve').innerText(),/KASTではありません/);
   assert.match(await page.locator('#coach-view-improve').innerText(),/公式トレード率ではない/);
+  assert.match(await page.locator('#coach-view-improve').innerText(),/記録された装備額とラウンド結果/);
+  assert.equal(await page.locator('[data-context-band]').count(),3);
   assert.match(await page.locator('[data-round-rate="kpr-attack"]').getAttribute('style'),/width:100%/);
   assert.equal(await page.locator('[data-round-rate="kpr-defense"]').count(),0,'unknown side is not a zero-valued bar');
   assert.match(await page.locator('#coach-view-improve').innerText(),/FK後の勝利/);
@@ -256,8 +269,9 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
     await page.locator('[data-coach-view="'+view+'"]').click();
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'performance dashboard at '+width+' / '+view);
    }
-   await page.locator('[data-coach-view="guns"]').click();assert.match(await page.locator('#coach-view-guns').innerText(),/KPR/);
+   await page.locator('[data-coach-view="guns"]').click();assert.match(await page.locator('#coach-view-guns').innerText(),/KPR/);assert.match(await page.locator('#coach-view-guns').innerText(),/Vandal/);
    await page.locator('[data-coach-view="team"]').click();assert.match(await page.locator('#coach-view-team').innerText(),/同じマップ・ロール内/);assert.match(await page.locator('#coach-view-team').innerText(),/センチネル/);
+   assert.match(await page.locator('#coach-view-team').innerText(),/設置・解除の記録/);assert.match(await page.locator('#coach-view-team').innerText(),/スキル使用回数/);
    await page.locator('[data-coach-view="time"]').click();assert.equal(await page.locator('#coach-view-time svg').first().locator('circle').count(),20);
   }
   assert.deepEqual(errors,[]);
@@ -270,6 +284,10 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   assert.equal(exportedMember.performance.timeline.length,20);
   assert.ok(exportedMember.performance.rolePeers.length>0);assert.equal(exportedMember.performance.rolePeers[0].kpr.peerRate,.5);
   assert.equal(exportedMember.performance.rateBases.kpr.rounds,400);
+  assert.equal(exportedMember.roundContext.economy.rounds,1);assert.equal(exportedMember.roundContext.spike.plant.events,1);
+  assert.equal(exportedMember.roundContext.abilities.grenade.casts,0);assert.equal(exportedMember.roundContext.weapons.knownKills,1);
+  assert.equal(exportedMember.roundContext.matchAbilities.ability1.casts,3);
+  assert.equal(JSON.stringify(exportedMember).includes('private-context'),false);
   assert.equal(exportedMember.matchTrend.length,2,'safe copy includes anonymous date-based trend');
   assert.equal(JSON.stringify(exportedMember).includes('private-vod-identifier'),false);
   assert.equal(JSON.stringify(exportedMember).includes('secret-puuid'),false);
@@ -297,6 +315,9 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   assert.equal(await page.locator('#coach-view-time svg').first().locator('circle').count(),19,'missing match ratio is not drawn at zero');
   assert.equal(await page.locator('#coach-view-time svg').first().locator('polyline').count(),2,'missing ratio breaks the line');
   assert.match(await page.locator('#coach-view-time').innerText(),/ADR：データ不足/);
+  await page.locator('[data-coach-view="improve"]').click();assert.equal(await page.locator('[data-context-band]').count(),0,'missing equipment is not a zero-valued distribution');
+  assert.match(await page.locator('#coach-view-improve').innerText(),/装備額はデータ不足/);
+  await page.locator('[data-coach-view="team"]').click();assert.match(await page.locator('#coach-view-team').innerText(),/データ不足/);
   await ctx.close();
   // The resume control only appears for the previously opted-in linked owner,
   // after an explicit user click; no recurring or surprise POSTs.

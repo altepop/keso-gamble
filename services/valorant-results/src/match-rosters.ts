@@ -1,4 +1,5 @@
 import type {Match} from './results.ts';
+import {compactAbilityCasts} from './coach-round-context.ts';
 
 // Persist the information already present in the Henrik match response.
 // This is independent of monitored-user notices, payouts and betting.
@@ -27,6 +28,7 @@ export function compactCompetitiveRoster(match:Match,now=Date.now()) {
     party_id:short(p.party_id,128),agent:short(p.agent?.name,64),
     k:safeInt(p.stats?.kills),d:safeInt(p.stats?.deaths),
     a:safeInt(p.stats?.assists),score:safeInt(p.stats?.score),
+    ...(compactAbilityCasts(p.ability_casts)?{casts:compactAbilityCasts(p.ability_casts),castsAt:now}:{}),
     damageDealt:damage(p.stats?.damage?.dealt),damageReceived:damage(p.stats?.damage?.received),hs:safeInt(p.stats?.headshots),bs:safeInt(p.stats?.bodyshots),ls:safeInt(p.stats?.legshots),
     ...(safeInt(p.stats?.headshots)!==null&&safeInt(p.stats?.bodyshots)!==null&&safeInt(p.stats?.legshots)!==null?{hsAt:now}:{}),
     ...(damage(p.stats?.damage?.dealt)!==null?{damageDealtAt:now}:{}),
@@ -63,6 +65,7 @@ export async function recordCompetitiveRoster(db:D1Database,match:Match,now=Date
     const enriched=previous.map(p=>{
       const next=byId.get(p.puuid)!;if(['k','d','a','score'].some(k=>safeInt(p[k])===null||p[k]!==next[k]))return p;
       const copy={...p};
+      if(p.casts==null&&next.casts!=null){copy.casts=next.casts;copy.castsAt=now;changed=true;}
       const fill=(fields:string[],time:string)=>{
         if(fields.some(k=>next[k]===null||next[k]===undefined||p[k]!==null&&p[k]!==undefined&&p[k]!==next[k]))return;
         if(!fields.some(k=>p[k]===null||p[k]===undefined))return;
