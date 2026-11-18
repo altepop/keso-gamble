@@ -43,11 +43,14 @@ export function grantVerifiedPvPReward(state:{relics?:RelicCollection},receipt:D
  if(!Number.isSafeInteger(receipt.rating)||receipt.rating<0||receipt.rating>2500)
   throw Error('熟練度の記録が不正です。');
  const relics=relicCollection(state);
- const shards=receipt.outcome==='win'?6:receipt.outcome==='draw'?4:3;
- if(!Number.isSafeInteger(relics.shards??0)||(relics.shards??0)<0||
-  !Number.isSafeInteger((relics.shards??0)+shards))throw Error('欠片の所持上限です。');
  const scale=receipt.reward_scale??1;
  if(![1,0.5,0.25].includes(scale))throw Error('報酬補正の記録が不正です。');
+ const baseShards=receipt.outcome==='win'?6:receipt.outcome==='draw'?4:3;
+ // Never go to zero: genuine repeat play still progresses, but coordinated farming
+ // cannot mint full-value shards endlessly without changing opponents.
+ const shards=Math.max(1,Math.floor(baseShards*scale));
+ if(!Number.isSafeInteger(relics.shards??0)||(relics.shards??0)<0||
+  !Number.isSafeInteger((relics.shards??0)+shards))throw Error('欠片の所持上限です。');
  const rate=Math.floor(duelDropChance(receipt.rating,receipt.outcome)*scale);
  const ancientRate=Math.floor(duelAncientChance(receipt.rating,receipt.outcome)*scale);
  const usefulRate=Math.floor(duelUsefulChance(receipt.rating,receipt.outcome)*scale);
