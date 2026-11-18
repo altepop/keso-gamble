@@ -231,3 +231,82 @@
  }
  .duel-connect4-space.duel-c4-new-chip::after{display:none}
 }
+
+/* Bluff Dice theater. All content reflects an authorized, settled server state. */
+.duel-bluff-table{display:grid;gap:10px;margin:13px 0 8px;min-width:0}
+.duel-bluff-header{display:flex;align-items:center;justify-content:space-between;padding:4px 2px;color:#abd9ed;font-size:12px;letter-spacing:.11em;font-weight:800}
+.duel-bluff-header strong{letter-spacing:0;color:#c2ffdb}
+.duel-bluff-score{margin:0;padding:11px 9px;border-radius:12px;border:1px solid #3a6489;background:linear-gradient(110deg,#102b42,#142e3d)}
+.duel-bluff-score>span{display:flex;gap:7px;align-items:center;min-width:0;overflow-wrap:anywhere}
+.duel-bluff-score>span:last-child{text-align:right}
+.duel-bluff-score b{font-size:21px;color:#ffedab;font-variant-numeric:tabular-nums}
+.duel-bluff-score .duel-bluff-score-divider{color:#90a8ba;font-size:11px;white-space:nowrap}
+.duel-bluff-hand{gap:10px;padding:15px 8px;background:radial-gradient(ellipse at top,#214c64,#11243c 75%);border-color:#42758d}
+.duel-bluff-hand>span{display:flex;gap:7px;justify-content:center;align-items:center;flex-wrap:wrap;font-size:13px;font-weight:750;color:#e6fbff}
+.duel-bluff-hand>span small{font-weight:500;font-size:10px;color:#b4d0d9}
+.duel-bluff-hand .duel-own-dice{gap:clamp(3px,1.6vw,9px)}
+.duel-bluff-die{width:clamp(36px,10vw,52px);height:clamp(36px,10vw,52px);flex:0 0 auto;display:grid;place-items:center;
+ border-radius:12px;border:1px solid #f4fbff;
+ background:linear-gradient(145deg,#fffef9 3%,#d6e5f0 75%,#b6c6d5);
+ box-shadow:0 4px 0 #657e92,0 7px 10px #0008,inset 0 1px 2px #fff;
+ transform:translateZ(0)}
+.duel-bluff-die[data-value="0"]{background:linear-gradient(140deg,#43657c,#1c334e);border-color:#6e90a7;box-shadow:0 3px 0 #182c40}
+.duel-bluff-pips{width:76%;height:76%;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);place-items:center}
+.duel-bluff-pip{height:clamp(5px,1.45vw,8px);width:clamp(5px,1.45vw,8px);border-radius:50%;background:#21354b;visibility:hidden;box-shadow:0 1px 1px #0004}
+.duel-bluff-die[data-value="1"] .duel-bluff-pip:nth-child(5),
+.duel-bluff-die[data-value="2"] .duel-bluff-pip:is(:nth-child(1),:nth-child(9)),
+.duel-bluff-die[data-value="3"] .duel-bluff-pip:is(:nth-child(1),:nth-child(5),:nth-child(9)),
+.duel-bluff-die[data-value="4"] .duel-bluff-pip:is(:nth-child(1),:nth-child(3),:nth-child(7),:nth-child(9)),
+.duel-bluff-die[data-value="5"] .duel-bluff-pip:is(:nth-child(1),:nth-child(3),:nth-child(5),:nth-child(7),:nth-child(9)),
+.duel-bluff-die[data-value="6"] .duel-bluff-pip:is(:nth-child(1),:nth-child(3),:nth-child(4),:nth-child(6),:nth-child(7),:nth-child(9)){visibility:visible}
+.duel-bluff-claim{gap:9px;padding:14px 10px;background:linear-gradient(140deg,#172e49,#20314e);border-color:#4b6688}
+.duel-bluff-claim>span{color:#9acbe7;letter-spacing:.06em;font-size:12px;font-weight:750}
+.duel-bluff-claim-main{display:flex;align-items:center;justify-content:center;gap:13px;flex-wrap:wrap}
+.duel-bluff-claim-main .duel-bluff-die{width:42px;height:42px}
+.duel-bluff-claim-main strong{font-size:clamp(15px,4.2vw,21px);color:#ffe8a0}
+.duel-bluff-odds{margin:5px 0 0;padding:8px;border-radius:7px;background:#081f34a8;color:#d9e8ef;line-height:1.5;font-size:11px}
+.duel-bluff-odds strong{color:#ffe7a1;font-size:13px}
+.duel-bluff-odds small{display:block;margin-top:3px;font-size:10px;color:#9eb8c7}
+.duel-bluff-actions{margin:0;gap:9px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+.duel-bluff-actions label{min-width:0}
+.duel-bluff-actions select{min-height:44px;font-size:16px;touch-action:manipulation}
+.duel-bluff-actions button{min-height:46px;grid-column:1/-1;font-weight:800;font-size:15px}
+.duel-bluff-actions .duel-challenge{background:linear-gradient(115deg,#a12e5c,#71244c)!important;border:1px solid #e391b3;box-shadow:0 3px 12px #cb2a6a35}
+.duel-bluff-actions small{grid-column:1/-1;color:#f1d9e1}
+.duel-bluff-showdown{border:1px solid #d5b16c;border-radius:14px;padding:14px 10px;display:grid;gap:10px;
+ background:linear-gradient(150deg,#1e3c50,#12283d 65%,#193348);box-shadow:0 6px 16px #0004}
+.duel-bluff-reveal-heading{display:grid;text-align:center;gap:6px}
+.duel-bluff-reveal-heading span{font-size:11px;color:#f1d59e;font-weight:800;letter-spacing:.07em}
+.duel-bluff-reveal-heading strong{font-size:clamp(15px,4.3vw,20px);color:#ffe19a;text-shadow:0 0 11px #dfad714a}
+.duel-bluff-showdown>p{margin:0;text-align:center;font-size:12px;line-height:1.5;color:#dbe8f3}
+.duel-bluff-showdown>p b{color:#ffebac;font-size:16px}
+.duel-bluff-reveal-row{display:grid;gap:6px;min-width:0}
+.duel-bluff-reveal-row>span{color:#a9d4ec;font-size:11px;overflow-wrap:anywhere}
+.duel-bluff-reveal-dice{display:flex;justify-content:center;gap:clamp(2px,1.4vw,8px)}
+.duel-bluff-reveal-dice .duel-bluff-die{width:clamp(35px,10vw,47px);height:clamp(35px,10vw,47px)}
+.duel-bluff-verdict{text-align:center;padding:9px;border-radius:8px;font-size:14px;font-weight:900;color:#ffeaad;background:#473c2d}
+.duel-bluff-history{border-radius:9px;border:1px solid #34536d;padding:6px 10px;font-size:12px}
+.duel-bluff-history summary{cursor:pointer;min-height:32px;display:flex;align-items:center;font-weight:750;color:#c5dae8;touch-action:manipulation}
+.duel-bluff-history .duel-mini-round{margin:8px 0}
+.duel-bluff-showdown.duel-bluff-reveal-animated{animation:duel-bluff-reveal-in 600ms cubic-bezier(.16,.84,.34,1) both;animation-delay:var(--duel-bluff-delay,0ms)}
+.duel-bluff-reveal-animated .duel-bluff-reveal-dice .duel-bluff-die{
+ animation:duel-bluff-dice-roll 640ms cubic-bezier(.16,.78,.22,1) both;
+ animation-delay:calc(var(--duel-bluff-delay,0ms) + var(--duel-bluff-die-stagger,0ms));
+}
+.duel-bluff-reveal-animated .duel-bluff-verdict{
+ animation:duel-bluff-verdict-pop 380ms ease-out both;
+ animation-delay:calc(var(--duel-bluff-delay,0ms) + 500ms)
+}
+@keyframes duel-bluff-reveal-in{from{opacity:.2;transform:translateY(10px) scale(.98)}to{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes duel-bluff-dice-roll{
+ 0%{opacity:.2;transform:translateY(-18px) rotate(140deg) scale(.7)}
+ 65%{opacity:1;transform:translateY(4px) rotate(-11deg) scale(1.07)}
+ 83%{transform:translateY(-3px) rotate(5deg) scale(.98)}
+ 100%{transform:translateY(0) rotate(0) scale(1)}
+}
+@keyframes duel-bluff-verdict-pop{from{opacity:0;transform:scale(.85)}to{opacity:1;transform:scale(1)}}
+@media(prefers-reduced-motion:reduce){
+ .duel-bluff-showdown.duel-bluff-reveal-animated,
+ .duel-bluff-reveal-animated .duel-bluff-reveal-dice .duel-bluff-die,
+ .duel-bluff-reveal-animated .duel-bluff-verdict{animation:none!important;transition:none!important}
+}
