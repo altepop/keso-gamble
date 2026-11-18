@@ -1,0 +1,19 @@
+name: Regenerate Activity cache for fair PvP (temporary)
+on:
+  push:
+    branches: [feat/duel-pvp-skill-loot-20261118]
+permissions:
+  contents: write
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '24'}
+      - run: node scripts/build-activity.mjs
+      - run: |
+          git add js css index.html
+          if git diff --cached --quiet; then exit 0; fi
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -m "build(activity): update fair PvP cache versions"
+          git push origin HEAD:feat/duel-pvp-skill-loot-20261118
