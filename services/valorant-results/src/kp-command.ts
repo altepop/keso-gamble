@@ -25,7 +25,7 @@ export const kpCommands=[
  ]},
  {type:1,name:'keiba',description:'KESO PLAY｜受付中のレース・馬番・倍率を確認'},
  {type:1,name:'bet',description:'KESO PLAY｜今受付中のレースの馬券を買う（馬は一覧から選ぶだけ・取消不可）',options:[
-  {type:4,name:'horse',description:'馬（タップすると馬名と倍率の一覧が出ます）',required:true,min_value:1,max_value:10,autocomplete:true},
+  {type:4,name:'horse',description:'馬（タップすると馬名と倍率の一覧が出ます）',required:true,min_value:1,max_value:16,autocomplete:true},
   {type:4,name:'amount',description:'掛け金（100 KP単位。例 500）',required:true,min_value:100,max_value:80000},
   {type:3,name:'type',description:'券種（選ばなければ1着当て）',required:false,choices:[{name:'1着当て（単勝）',value:'win'},{name:'3着以内当て（複勝・倍率低め）',value:'place'}]},
  ]},
