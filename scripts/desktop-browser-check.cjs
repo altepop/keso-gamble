@@ -40,7 +40,22 @@ let browser;
   else assert.ok(sizes.screen<=(width<720?520:680)+1,view+' keeps its narrow layout');
   assert.equal(sizes.overflow,false,view+' horizontal overflow '+width);
  }
- async function sideBySide(left,right,label){const a=await bounds(left),b=await bounds(right);assert.ok(a&&b,label+' exists');assert.ok(Math.abs(b.x-a.x-a.width-18)<2&&Math.abs(b.y-a.y)<2,label+' has adjacent desktop columns');}
+ async function sideBySide(left,right,label){
+  // The race view replaces its DOM at each 15-minute race boundary. Two
+  // separate boundingBox() awaits can see elements from different frames,
+  // falsely reporting a missing column exactly during the rollover.
+  // Read both rectangles synchronously in the same browser frame instead.
+  const boxes=await page.evaluate(({left,right})=>{
+   const first=document.querySelector(left),second=document.querySelector(right);
+   if(!first||!second)return null;
+   const a=first.getBoundingClientRect(),b=second.getBoundingClientRect();
+   return {a:{x:a.x,y:a.y,width:a.width,height:a.height},b:{x:b.x,y:b.y,width:b.width,height:b.height}};
+  },{left,right});
+  assert.ok(boxes,label+' exists');
+  const {a,b}=boxes;
+  assert.ok(a.width>0&&b.width>0&&a.height>0&&b.height>0,label+' columns are visible');
+  assert.ok(Math.abs(b.x-a.x-a.width-18)<2&&Math.abs(b.y-a.y)<2,label+' has adjacent desktop columns');
+ }
  for(const view of ['home','play','race','mleague','market','casino','directives','stable','shop','assets']){
   const direct=page.locator(`.nav-btn[data-screen="${view}"]`);
   if(await direct.count())await direct.click();else{
