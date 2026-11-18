@@ -229,9 +229,9 @@ function enhance(root) {
       const beforeWidth=board.getBoundingClientRect().width||660;
       const centreX=(left+scroll.clientWidth/2)/beforeWidth;
       const centreY=(top+scroll.clientHeight/2)/beforeWidth;
-      board.style.width=width+'px';
-      board.style.minWidth=width+'px';
-      board.style.maxWidth='none';
+      board.style.setProperty('width',width+'px','important');
+      board.style.setProperty('min-width',width+'px','important');
+      board.style.setProperty('max-width','none','important');
       // The app already restores old pixel offsets after rerender. Keep those
       // exact offsets for a replaced node, or each automatic refresh drifts.
       // Only a direct local zoom click should scale around the visual centre.
