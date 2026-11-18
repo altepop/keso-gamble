@@ -65,6 +65,7 @@ const a='[data-demo-view=a]',b='[data-demo-view=b]';
  assert.equal(await page.locator('.duel-square.available').count(),4);
  await click(19);
  assert.match(await page.locator('.duel-counts').innerText(),/黒 4/);
+ assert.equal(await page.locator('.duel-square.duel-new-stone').count(),0,'reduced-motion disables decorative animation');
  await turn('b');
  await page.locator('.duel-square.available').first().click();
  await page.locator('[data-duel-act=resign-preview]').click();
