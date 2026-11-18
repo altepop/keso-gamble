@@ -1,5 +1,5 @@
-import {escapeHTML} from './progression-views.js?v=web-d818d7a5cb4a9fa6';
-import {MARKET} from './engine.js?v=web-d818d7a5cb4a9fa6';
+import {escapeHTML} from './progression-views.js?v=web-60582d125c33a6de';
+import {MARKET} from './engine.js?v=web-60582d125c33a6de';
 const kp=n=>Number(n).toLocaleString('ja-JP')+' KP';
 export function communityRows(entries){
  return entries.length?entries.map(e=>{
