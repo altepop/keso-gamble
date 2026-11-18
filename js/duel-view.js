@@ -1,6 +1,6 @@
-import {miniBoardView} from './duel-mini-view.js?v=web-096ec70dec390116';
-import {EXTRA_DUEL_GAMES} from './duel-mini-games.js?v=web-096ec70dec390116';
-import {DUEL_GAMES,duelLegalMoves,duelScore} from './duel-rules.js?v=web-096ec70dec390116';
+import {miniBoardView} from './duel-mini-view.js?v=web-49824b44aa08aedf';
+import {EXTRA_DUEL_GAMES} from './duel-mini-games.js?v=web-49824b44aa08aedf';
+import {DUEL_GAMES,duelLegalMoves,duelScore} from './duel-rules.js?v=web-49824b44aa08aedf';
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const kp=n=>Number(n||0).toLocaleString('ja-JP')+' KP';
 const title=(r)=>DUEL_GAMES[r.game]?.name||EXTRA_DUEL_GAMES[r.game]?.name||r.game;
