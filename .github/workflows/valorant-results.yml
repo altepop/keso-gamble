@@ -128,7 +128,9 @@ jobs:
   # separate runners. The 'browser' fan-in below keeps the required CI status stable.
   browser-shards:
     name: Browser (${{ matrix.suite }})
-    runs-on: ubuntu-latest
+    # Keep Playwright dependencies on a supported LTS image. The newer latest
+    # image repeatedly stalled while fetching its changed multimedia packages.
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     strategy:
       fail-fast: false
