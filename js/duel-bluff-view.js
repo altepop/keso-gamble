@@ -1,5 +1,5 @@
 // Pure, server-authoritative Bluff Dice view. No API or private opponent hand.
-import {nextBluffBid,bluffBidEvidence,validBluffBid} from './duel-mini-games.js?v=web-dafc35aef65a55d0';
+import {nextBluffBid,bluffBidEvidence,validBluffBid} from './duel-mini-games.js?v=web-10abee12e5cd61de';
 const escape=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const pips=Array.from({length:9},()=>'<span class="duel-bluff-pip"></span>').join('');
 export function bluffDie(value,{revealed=false}={}){
