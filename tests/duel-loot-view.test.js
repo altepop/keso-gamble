@@ -32,6 +32,6 @@ test('PvP selector is usable on unowned eligible relic, but not in the normal su
  assert.match(html,/data-consumable-target="consumable.duel.pvp_selector"/);
  assert.match(html,/value="normal.special.legend"/);
  assert.match(html,/data-action="relic-consumable-use" data-consumable="consumable.duel.pvp_selector"/);
- assert.match(html,/通常召喚では入手できない/);
+ assert.match(html,/通常召喚や欠片交換では入手できない/);
  assert.doesNotMatch(html,/0%／回/);
 });
