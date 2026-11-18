@@ -47,7 +47,7 @@ let browser;const errors=[],requests=[];
  await mode('hitblow');
  await page.locator('#duel-guess').fill('0123');
  await page.locator('[data-duel-mini=hitblow]').click();await after();
- assert.ok((await page.locator('.duel-guess-row').count())>=1);
+ assert.ok((await page.locator('.duel-hitblow-history-row').count())>=1,'a real confirmed guess appears in the new feedback list');
  await mode('bluffdice');
  await page.locator('#duel-bid-count').selectOption('10');
  await page.locator('#duel-bid-face').selectOption('6');
