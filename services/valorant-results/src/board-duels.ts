@@ -1,6 +1,6 @@
 import type {KpEnv,KpMapping} from './kp.ts';
 import {debtOf} from './kp-debt.ts';
-import {ensureDuelLoot} from './duel-loot.ts';
+import {ensureDuelLoot,duelDropChance,duelAncientChance,duelUsefulChance} from './duel-loot.ts';
 // @ts-expect-error Pure shared ledger verifier, independently covered by node:test.
 import {checkDuelLedger} from '../../../js/duel-kp-audit.js';
 import {kpTargetMembers,kpTargetAllowed} from './kp-target-members.ts';
@@ -194,7 +194,13 @@ export async function boardDuelList(env:KpEnv,m:KpMapping,user:string,cursor:str
    row.game,{game:row.game,rating:row.skill_rating??0,peak:row.skill_peak??0,
     games:row.skill_games??0,wins:row.skill_wins??0,losses:row.skill_losses??0,draws:row.skill_draws??0}
  ])).values()];
- return {games:GAMES,skills,limit:DUEL_MAX_STAKE,turnMs:DUEL_TURN_MS,invitationMs:DUEL_INVITE_MS,
+ const lootRates=[0,500,1000,1500,2000].map(rating=>({
+  rating,win:{select:duelDropChance(rating,'win')/10000,ancient:duelAncientChance(rating,'win')/10000,
+   vial:duelUsefulChance(rating,'win')/10000},
+  loss:{select:duelDropChance(rating,'loss')/10000,ancient:duelAncientChance(rating,'loss')/10000,
+   vial:duelUsefulChance(rating,'loss')/10000}
+ }));
+ return {games:GAMES,skills,lootRates,limit:DUEL_MAX_STAKE,turnMs:DUEL_TURN_MS,invitationMs:DUEL_INVITE_MS,
    // Only first page needs a roster. Subsequent pages reuse already loaded members.
    members:cursor===null?await kpTargetMembers(env,m):[],matches,hasMore:matches.length===20};
 }
