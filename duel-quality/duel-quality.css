@@ -65,3 +65,84 @@
   .duel-othello .duel-square.duel-flipped-stone::after{display:none}
   .duel-connect4-head button:active,.duel-card:active{transform:none}
 }
+
+/* Othello quality pass: readable move strength, board depth, and score movement.
+   Entirely decorative: no pointer handlers, no predicted outcomes, no KP. */
+.duel-othello{
+  border-radius:10px;
+  border-color:#0a3928;
+  background:#175b43;
+  box-shadow:0 0 0 1px #6bbf9460,0 12px 22px #0005,inset 0 0 0 1px #d0ffdb20;
+}
+.duel-othello .duel-square{
+  background:linear-gradient(150deg,#2b8d67,#227651);
+  border-color:rgba(2,51,31,.46);
+  transition:background-color .13s ease,box-shadow .13s ease;
+}
+.duel-othello .duel-square.available{
+  background:linear-gradient(150deg,#36a476,#268b60);
+  touch-action:manipulation;
+}
+.duel-othello .duel-square.available::before{
+  width:57%;height:57%;
+  background:rgba(3,55,36,.48);
+  border:1px solid rgba(205,255,221,.75);
+  box-shadow:0 0 0 1px #052b1a30;
+  transition:transform .13s ease,background-color .13s ease;
+}
+.duel-othello[data-othello-playing="W"] .duel-square.available::before{
+  background:rgba(242,252,244,.83);
+  border-color:#fff;
+}
+.duel-othello .duel-square .duel-capture-count{
+  position:absolute;inset:0;z-index:2;
+  display:grid;place-items:center;pointer-events:none;
+  color:#f1ffeb;font-size:clamp(10px,2.8vw,13px);
+  font-weight:900;line-height:1;
+  text-shadow:0 1px 2px #00271c;
+}
+.duel-othello[data-othello-playing="W"] .duel-capture-count{
+  color:#143f34;text-shadow:none;
+}
+.duel-othello .duel-square.available:is(:hover,:focus-visible,:active)::before,
+.duel-othello .duel-square.duel-tap-feedback::before{
+  transform:scale(1.13);
+  box-shadow:0 0 0 2px #ecffce75;
+}
+.duel-othello .duel-square.available:focus-visible{
+  outline:3px solid #fff0a4;outline-offset:-3px;z-index:3;
+}
+.duel-othello .duel-square.duel-new-stone::after{
+  content:'';position:absolute;inset:7%;border:2px solid #fff1a3;
+  border-radius:50%;z-index:2;pointer-events:none;
+  animation:duel-placement-wave .52s cubic-bezier(.17,.67,.22,1) both;
+}
+@keyframes duel-placement-wave{
+  0%{opacity:.96;transform:scale(.66)}
+  85%{opacity:.4}
+  100%{opacity:0;transform:scale(1.35)}
+}
+.duel-othello-dashboard{
+  margin:13px 0 2px;display:grid;gap:8px;
+}
+.duel-othello-scorebar{
+  display:flex;width:100%;height:12px;overflow:hidden;border-radius:99px;
+  background:#184e3c;box-shadow:0 0 0 1px #9fd9c255,inset 0 2px 4px #0007;
+}
+.duel-othello-scorebar span{display:block;min-width:0;transition:width .3s ease}
+.duel-score-black{background:linear-gradient(#58636c,#070a0b);box-shadow:inset 0 1px 2px #fff3}
+.duel-score-empty{background:repeating-linear-gradient(45deg,#1d654d,#1d654d 8px,#247355 8px,#247355 16px)}
+.duel-score-white{background:linear-gradient(#fff,#bbc9bb);box-shadow:inset 0 1px 2px #fff9}
+.duel-othello-coach{
+  margin:0;text-align:center;color:#c8e8d8;font-size:11px;
+  line-height:1.55;font-weight:650;
+}
+@media(max-width:350px){
+  .duel-othello .duel-square .duel-capture-count{font-size:10px}
+  .duel-othello-coach{font-size:10px}
+}
+@media(prefers-reduced-motion:reduce){
+  .duel-othello .duel-square,.duel-othello .duel-square.available::before,
+  .duel-othello-scorebar span{transition:none!important}
+  .duel-othello .duel-square.duel-new-stone::after{animation:none!important;display:none}
+}
