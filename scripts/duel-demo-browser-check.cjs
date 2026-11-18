@@ -71,6 +71,11 @@ const a='[data-demo-view=a]',b='[data-demo-view=b]';
  await page.locator('[data-duel-act=resign-preview]').click();
  await page.locator('[data-duel-act=resign]').click();
  await checkWinner('a');
+ assert.equal(await page.locator('[data-duel-rematch]').count(),1,'finished match offers rematch preset');
+ await page.locator('[data-duel-rematch]').click();
+ assert.equal(await page.locator('#duel-game').inputValue(),'othello','rematch retains the game');
+ assert.equal(await page.locator('#duel-stake').inputValue(),'1000','rematch retains the stake');
+ assert.match(await page.locator('.duel-result').innerText(),/敗北/,'rematch is not automatically accepted or charged');
  await screenshot('02-othello-result');
  // Gomoku — alternating 9 moves, five in a row wins.
  await chooseMode('gomoku');
