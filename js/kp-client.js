@@ -69,6 +69,38 @@ export function createKpClient({storage,temporaryStorage,request=globalThis.fetc
   relics:()=>api('relics'),
   privateRace:()=>api('private/race'),
   duels:cursor=>api('duels'+(cursor?'?cursor='+encodeURIComponent(cursor):'')),duelAction:body=>api('duels',body),
+  // SSE subscription is read-only. The bearer token is sent in an HTTP header,
+  // never placed in a URL, Discord log, or WebSocket subprotocol.
+  async duelEvents({signal,onOpen,onHint}={}){
+   if(!token)throw Error('KP口座の接続が必要です。');
+   const response=await request(root+'/api/kp/duels/events',{
+    headers:{Authorization:'Bearer '+token,Accept:'text/event-stream'},
+    cache:'no-store',signal
+   });
+   if(!response.ok||!response.body||!response.headers.get('content-type')?.includes('text/event-stream'))
+    throw Error('リアルタイム通信は利用できません。定期更新を継続します。');
+   onOpen?.();
+   const reader=response.body.getReader(),decoder=new TextDecoder();
+   let buffer='';
+   try{
+    while(true){
+     const {value,done}=await reader.read();if(done)break;
+     buffer+=decoder.decode(value,{stream:true});
+     if(buffer.length>8192)throw Error('リアルタイム通知が長すぎます。');
+     let i;
+     while((i=buffer.indexOf('\n\n'))>=0){
+      const frame=buffer.slice(0,i);buffer=buffer.slice(i+2);
+      const data=frame.split('\n').filter(line=>line.startsWith('data:')).map(line=>line.slice(5).trim()).join('');
+      if(!data||data.length>256)continue;
+      try{
+       const hint=JSON.parse(data);
+       if(typeof hint.id==='string'&&/^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i.test(hint.id)&&
+         Number.isSafeInteger(hint.version)&&hint.version>=0)onHint?.(hint);
+      }catch{/* A malformed hint is ignored; the regular poll is authoritative. */}
+     }
+    }
+   }finally{try{await reader.cancel();}catch{}}
+  },
   get steamLinkRequest(){return steamLink;},
   steamStatus:()=>api('steam/status'),steamLibrary:()=>api('steam/library'),
   async startSteam(){const link=await api('steam/link',{});write(steamKey,JSON.stringify(link));steamLink=link;return link;},
