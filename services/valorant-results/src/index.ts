@@ -176,13 +176,14 @@ async function api<T>(env: Env, path: string): Promise<T> {
   const body = await response.json() as { data: T };
   if (body.data === undefined) throw new Error('Unexpected API data');
   try{if(path.startsWith('/valorant/v4/match/')||path.startsWith('/valorant/v4/matches/')||path.startsWith('/valorant/v4/by-puuid/matches/')){
-    let observed=false;
+    let observed:ReturnType<typeof coachProviderShape>=null;
     for(const raw of (Array.isArray(body.data)?body.data:[body.data])){
-      const shape=coachProviderShape(raw);if(shape&&raw&&typeof raw==='object'){
+      const shape=coachProviderShape(raw,path.startsWith('/valorant/v4/match/')?'detail':'history');if(shape&&raw&&typeof raw==='object'){
         Object.defineProperty(raw,'_coachProviderShape',{value:shape,enumerable:false,configurable:true});
-        if(!observed){console.info('coach_provider_shape',shape);observed=true;}
+        if(!observed||shape.queue==='competitive'&&observed.queue!=='competitive'||shape.queue===observed.queue&&shape.completed&&!observed.completed)observed=shape;
       }
     }
+    if(observed)console.info('coach_provider_shape',observed);
   }}catch{console.info('coach_provider_shape_unavailable');}
   return body.data;
 }

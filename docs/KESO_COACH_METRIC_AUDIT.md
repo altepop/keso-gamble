@@ -96,3 +96,5 @@ Phase 2の基本性能と品質分離を実装中。役割・攻守・味方/パ
 本人承認済み履歴キューでは、scalar schema2/assistant schema1を取得済み判定に使う。旧complete行の不足項目は有効化済みの収集処理で一度だけ再キュー化し、既存の1試合/5分・最大3試行・API cooldownを維持する。これは資料の再要求やKP/通知の再処理ではない。フィールド保存完了と、各指標の論理的な分析可能性（K/D/A一致・R一致など）は別に扱う。
 
 ラウンドの追加フィールドは `rounds[].stats` の最初の最大20件にある固定パス（ID、KDA/ダメージ、economy、ability_casts、survived/alive）とplant/defuse別名、killのweapon/player_locationsの有無だけを観測する。任意キーや値は出さず、未観測をAPI全体の不存在と断定しない。数式や意味を検証するまでは診断へ使用しない。
+
+観測にはdetail/historyの固定区分とcompetitive/other/unverified・完了フラグも付ける。同一呼び出し/traceでは完了済みcompetitiveを優先して選び、他モードや履歴概要だけの欠損を全APIの欠損として扱わない。モードの任意文字列やURLは出力しない。
