@@ -218,7 +218,10 @@ test('festival reminders are queued once on three separate JST mornings, then on
   const text=festivalAnnouncement(race,reminder.stage);assert.match(text,/1,000 KPで1人1枚/);assert.match(text,/最大1億KP/);assert.match(text,/今はまだ買えへん/);assert.match(text,/日本時間/);assert.match(text,/22:00/);assert.match(text,/21:45〜21:59/);assert.doesNotMatch(text,/秘蔵倍率 ×/);
  }
  const bodies=f.sql.prepare("SELECT body FROM kp_posts WHERE id LIKE 'race-festival-reminder:%'").all().map(r=>JSON.parse(String(r.body)));
- for(const body of bodies)assert.deepEqual(body.allowed_mentions,{parse:[]});
+ for(const body of bodies){
+  assert.equal(body.content.startsWith('@everyone\n'),true,'every scheduled morning reminder must visibly mention everyone');
+  assert.deepEqual(body.allowed_mentions,{parse:['everyone']},'Discord webhook must allow the actual group ping');
+ }
  // At the opening only the normal immutable card is added, without catch-up spam.
  await queueRacePosts(f.env,mapping,race-14*60000);await queueRacePosts(f.env,mapping,race-10*60000);
  assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM kp_posts WHERE id LIKE 'race-festival-reminder:%'").get()!.n,3);
@@ -229,7 +232,7 @@ test('festival reminders are queued once on three separate JST mornings, then on
 });
 
 
-test('festival sends one pre-sale @everyone announcement, and every other racing post remains silent',async t=>{
+test('festival sends one pre-sale @everyone announcement while ordinary racing posts remain silent',async t=>{
  // @ts-expect-error Shared deterministic festival schedule.
  const {FESTIVAL_FIRST}=await import('../../../js/racing.js');
  const {festivalHypeRace,festivalHypeAnnouncement}=await import('../src/festival-announcements.ts');
