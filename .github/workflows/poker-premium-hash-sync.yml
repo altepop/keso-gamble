@@ -1,4 +1,4 @@
-name: Poker premium one-shot cache sync
+name: Poker premium one-shot cache sync v2
 on:
   push:
     branches: [feat/poker-premium-hand-reveal-20261119]
