@@ -28,7 +28,7 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   const token='a'.repeat(48);
   const report={
     canStartMemberHistory:true,
-    memberHistory:{enabled:false,source:'Henrik known games only',
+    memberHistory:{enabled:false,supportsPause:true,refreshIntervalMinutes:60,refreshPageSize:50,source:'Henrik known games only',
       people:['VDK','Abema','石原','藤村','神戸','小林'].map(person=>({
        person,discovered:0,complete:0,partial:0,unavailable:0,pending:0,
        discoveryDone:false,truncated:false}))},
@@ -142,8 +142,14 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
     const u=new URL(req.url()),comparison=u.pathname.endsWith('/comparison');
     return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(comparison?{profiles:u.searchParams.get('people').split(',').map(makeMember)}:makeMember(u.searchParams.get('person')))});
    }
-   if(req.url().endsWith('/api/kp/coach/members/start'))
+   if(req.url().endsWith('/api/kp/coach/members/start')){
+    report.memberHistory.enabled=true;
     return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({status:'enabled',enabled:true})});
+   }
+   if(req.url().endsWith('/api/kp/coach/members/pause')){
+    report.memberHistory.enabled=false;
+    return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({status:'paused',enabled:false})});
+   }
    const actual=use43Report?{...report,archivedMatches:44,usableMatches:43,
      backfill:{status:'complete',complete:43,partial:1,missing:0,unavailable:1,pending:0}}:report;
    await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(actual)});
@@ -154,7 +160,7 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   await page.locator('#report:not([hidden])').waitFor();
   assert.equal(await page.locator('#legacy-coach').evaluate(el=>el.open),false,
     'legacy 43-match audit stays collapsed by default');
-  assert.match(await page.locator('#member-archive-status').innerText(),/未開始/);
+  assert.match(await page.locator('#member-archive-status').innerText(),/収集停止中/);
   assert.equal(await page.locator('#start-member-archive').isVisible(),true);
   await page.locator('#legacy-coach > summary').click();
   assert.match(await page.locator('#totals').innerText(),/44/);
@@ -303,7 +309,7 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   assert.match(await page.locator('#member-comparison').innerText(),/小林/);
   assert.equal(requests.filter(r=>r.url.includes('/coach/member?')).length,beforeCompare,'reuse the selected profile');
   const batch=requests.filter(r=>r.url.includes('/coach/comparison?'));assert.equal(batch.length,1);
-  assert.equal(new URL(batch[0].url).searchParams.get('people').split(',').length,4,'only four missing profiles in one batch with shared coverage');
+  assert.equal(new URL(batch[0].url).searchParams.get('people').split(',').length,5,'start invalidates old coverage; refresh all five profiles in one shared batch');
   const afterCompare=requests.length;
   await page.locator('#compare-members').click();
   await page.waitForFunction(()=>!document.getElementById('compare-members').disabled);
@@ -318,6 +324,10 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   await page.locator('[data-coach-view="improve"]').click();assert.equal(await page.locator('[data-context-band]').count(),0,'missing equipment is not a zero-valued distribution');
   assert.match(await page.locator('#coach-view-improve').innerText(),/装備額はデータ不足/);
   await page.locator('[data-coach-view="team"]').click();assert.match(await page.locator('#coach-view-team').innerText(),/データ不足/);
+  await page.locator('#pause-member-archive').click();
+  await page.waitForFunction(()=>document.getElementById('status').textContent.includes('追加収集を停止'));
+  assert.equal(await page.locator('#pause-member-archive').isHidden(),true);assert.equal(await page.locator('#start-member-archive').isVisible(),true);
+  assert.equal(requests.filter(r=>r.method==='POST'&&r.url.endsWith('/members/pause')).length,1);
   await ctx.close();
   // The resume control only appears for the previously opted-in linked owner,
   // after an explicit user click; no recurring or surprise POSTs.
@@ -353,11 +363,27 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   assert.equal(getCount,2,'one fresh read after successful resume');
   assert.equal(await resumePage.locator('#resume-backfill').isHidden(),true);
   await resumeCtx.close();
+  // Optional report throttling must keep the owner's acquisition stop usable.
+  const budgetCtx=await browser.newContext({viewport:{width:320,height:568},isMobile:true});
+  await budgetCtx.addInitScript(t=>sessionStorage.setItem('keso-coach-session-v1',t),token);
+  let budgetPaused=false,budgetPosts=0;
+  await budgetCtx.route('https://valorant-results.tealeaforest.workers.dev/**',async route=>{
+   const path=new URL(route.request().url()).pathname;
+   if(path.endsWith('/members/status'))return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({...report.memberHistory,enabled:!budgetPaused,canStartMemberHistory:true})});
+   if(path.endsWith('/members/pause')){budgetPaused=true;budgetPosts++;return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({status:'paused',enabled:false})});}
+   return route.fulfill({status:429,contentType:'application/json',body:JSON.stringify({error:'D1節約モード中です'})});
+  });
+  const budgetPage=await budgetCtx.newPage();await budgetPage.goto('http://127.0.0.1:18784/coach.html');
+  await budgetPage.locator('#pause-member-archive').waitFor({state:'visible'});
+  assert.match(await budgetPage.locator('#status').innerText(),/D1節約/);assert.equal(await budgetPage.locator('#share').isDisabled(),true);
+  assert.equal(await budgetPage.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+  await budgetPage.locator('#pause-member-archive').click();await budgetPage.waitForFunction(()=>document.getElementById('status').textContent.includes('追加収集を停止'));
+  assert.equal(budgetPosts,1);assert.equal(await budgetPage.locator('#pause-member-archive').isHidden(),true);await budgetCtx.close();
   const guest=await browser.newContext({viewport:{width:320,height:568},isMobile:true});
   const second=await guest.newPage();
   await second.route('https://valorant-results.tealeaforest.workers.dev/**',async route=>{
    if(route.request().url().endsWith('/api/kp/auth'))await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({token})});
-   else await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(report)});
+   else await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({...report,canStartMemberHistory:false,memberHistory:{...report.memberHistory,enabled:true}})});
   });
   await second.goto('http://127.0.0.1:18784/coach.html');
   await second.locator('#connection').waitFor({state:'visible'});
@@ -369,6 +395,7 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   await second.locator('#connect-form button').click();
   await second.locator('#report:not([hidden])').waitFor();
   assert.equal(await second.locator('#code').inputValue(),'','code cleared after login');
+  assert.equal(await second.locator('#pause-member-archive').isHidden(),true,'ordinary participant has no owner controls');
   assert.equal(await second.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
   await guest.close();
   console.log('KESO COACH mobile browser passed: auth, manual fetch, privacy-allowlisted report copy, 320/375 widths.');

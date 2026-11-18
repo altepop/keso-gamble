@@ -34,11 +34,12 @@ type Source={riot_id:string;puuid:string|null;region:string|null;
  next_page:number;done:number;truncated:number;next_at:number};
 type Candidate={match_id:string;region:string;riot_id:string;puuid:string;started_at:number;attempts:number};
 type LifetimeMatch={meta?:{id?:unknown;mode?:unknown;started_at?:unknown};metadata?:{match_id?:unknown;queue?:{id?:unknown};started_at?:unknown}};
-export type ArchiveStep='disabled'|'resolved'|'discovered'|'discovery_done'|'saved'|'already_saved'|'partial'|'unavailable'|'deferred'|'idle';
+export type ArchiveStep='disabled'|'resolved'|'discovered'|'discovery_done'|'refreshed'|'saved'|'already_saved'|'partial'|'unavailable'|'deferred'|'idle';
 const isId=(x:unknown):x is string=>typeof x==='string'&&x.length>0&&x.length<=128;
 const isRegion=(x:unknown):x is string=>typeof x==='string'&&['ap','na','eu','kr','br','latam'].includes(x);
 const safeTime=(s:unknown)=>typeof s==='string'?Date.parse(s):NaN;
 const delay=15*60_000;
+export const COACH_REFRESH_INTERVAL=60*60_000;
 async function repairLifetimeCaseDiscovery(db:D1Database){
  const key='coach_lifetime_case_v1:ready';
  if(await db.prepare('SELECT value FROM monitor_state WHERE key=?').bind(key).first())return;
@@ -63,6 +64,11 @@ export async function enableAllMemberArchive(db:D1Database){
  }
  return {enabled:true,persons:COACH_MEMBER_ACCOUNTS.map(x=>x.person)};
 }
+export async function pauseAllMemberArchive(db:D1Database){
+ await db.prepare("INSERT INTO monitor_state(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value WHERE monitor_state.value<>excluded.value")
+  .bind(ALL_MEMBER_SWITCH,'disabled').run();
+ return {enabled:false};
+}
 
 async function postponeSource(db:D1Database,riotId:string,now:number){
  await db.prepare('UPDATE coach_member_sources SET next_at=? WHERE riot_id=?')
@@ -82,8 +88,8 @@ export async function discoverCoachMemberPage(db:D1Database,
  if(!await getSwitch(db))return 'disabled';
  await repairLifetimeCaseDiscovery(db);
  const source=await db.prepare(`SELECT riot_id,puuid,region,next_page,done,truncated,next_at
-  FROM coach_member_sources WHERE done=0 AND next_at<=?
-  ORDER BY CASE WHEN puuid IS NULL THEN 0 ELSE 1 END, next_page ASC,riot_id ASC LIMIT 1`).bind(now).first<Source>();
+  FROM coach_member_sources WHERE next_at<=?
+  ORDER BY CASE WHEN puuid IS NULL THEN 0 ELSE 1 END, next_at ASC,next_page ASC,riot_id ASC LIMIT 1`).bind(now).first<Source>();
  if(!source)return 'idle';
  if(!isId(source.puuid)||!isRegion(source.region)){
   try{
@@ -97,14 +103,14 @@ export async function discoverCoachMemberPage(db:D1Database,
    return 'deferred';
   }
  }
- const size=50,maxPages=40; // explicit 2,000-match discovery cap per Riot ID
- if(source.next_page>maxPages){
-  await db.prepare('UPDATE coach_member_sources SET done=1,truncated=1 WHERE riot_id=?')
-   .bind(source.riot_id).run();
+ const size=50,maxPages=40,refresh=source.done===1; // bounded history plus hourly newest-page checks
+ if(!refresh&&source.next_page>maxPages){
+  await db.prepare('UPDATE coach_member_sources SET done=1,truncated=1,next_at=? WHERE riot_id=?')
+   .bind(now+COACH_REFRESH_INTERVAL,source.riot_id).run();
   return 'discovery_done';
  }
  try{
-  const data=await lifetime(source.region,source.puuid,source.next_page,size);
+  const data=await lifetime(source.region,source.puuid,refresh?1:source.next_page,size);
   if(!Array.isArray(data))throw Error('invalid history');
   const seen=new Set<string>();
   const discovered:Array<{id:string;started:number}>=[];
@@ -119,8 +125,14 @@ export async function discoverCoachMemberPage(db:D1Database,
   }
   // A shared match is queued once by match_id, even if all five teammates find
   // the same game. Preserve every source-to-match link for coverage auditing.
-  if(discovered.length){
-   const payload=JSON.stringify(discovered);
+  let newMatches=discovered;
+  if(refresh&&discovered.length){
+   const known=await db.prepare("SELECT match_id FROM coach_member_links WHERE riot_id=? AND match_id IN (SELECT json_extract(value,'$.id') FROM json_each(?))")
+    .bind(source.riot_id,JSON.stringify(discovered)).all<{match_id:string}>();
+   const ids=new Set(known.results.map(r=>r.match_id));newMatches=discovered.filter(m=>!ids.has(m.id));
+  }
+  if(newMatches.length){
+   const payload=JSON.stringify(newMatches);
    await db.prepare(`INSERT OR IGNORE INTO coach_member_queue
     (match_id,region,source_riot_id,source_puuid,started_at,status,attempts,next_at)
     SELECT json_extract(value,'$.id'),?,?,?,CAST(json_extract(value,'$.started') AS INTEGER),
@@ -135,9 +147,13 @@ export async function discoverCoachMemberPage(db:D1Database,
     SELECT ?,json_extract(value,'$.id') FROM json_each(?)`)
     .bind(source.riot_id,payload).run();
   }
+  if(refresh){
+   await db.prepare('UPDATE coach_member_sources SET next_at=? WHERE riot_id=?').bind(now+COACH_REFRESH_INTERVAL,source.riot_id).run();
+   return 'refreshed';
+  }
   const done=data.length<size||source.next_page>=maxPages;
-  await db.prepare('UPDATE coach_member_sources SET next_page=?,done=?,truncated=?,next_at=0 WHERE riot_id=?')
-   .bind(source.next_page+1,done?1:0,data.length===size&&source.next_page>=maxPages?1:0,source.riot_id).run();
+  await db.prepare('UPDATE coach_member_sources SET next_page=?,done=?,truncated=?,next_at=? WHERE riot_id=?')
+   .bind(source.next_page+1,done?1:0,data.length===size&&source.next_page>=maxPages?1:0,now+(done?COACH_REFRESH_INTERVAL:5*60_000),source.riot_id).run();
   return done?'discovery_done':'discovered';
  }catch{
   await postponeSource(db,source.riot_id,now);
@@ -214,7 +230,7 @@ export async function coachMemberCoverage(db:D1Database){
    GROUP BY s.riot_id,s.next_page,s.done,s.truncated`).all<{
     riot_id:string;next_page:number;done:number;truncated:number;discovered:number;
     complete:number;partial:number;unavailable:number;pending:number}>();
- return {enabled,source:'Henrik lifetime matches (API-known history; not guaranteed exhaustive)',
+ return {enabled,refreshIntervalMinutes:COACH_REFRESH_INTERVAL/60000,refreshPageSize:50,supportsPause:true,source:'Henrik lifetime matches (API-known history; not guaranteed exhaustive)',
   people:COACH_MEMBER_ACCOUNTS.map(person=>{
    const row=sources.results.find(s=>s.riot_id===person.riotId);
    return {person:person.person,riotId:person.riotId,

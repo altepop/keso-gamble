@@ -54,7 +54,7 @@ import { kpRewardHistory } from './kp-reward-history.ts';
 import { healthReport } from './health.ts';
 import {readCoachRoundReport,invalidateCoachRoundReport} from './coach-round-analysis.ts';
 import {resumeVdkRoundBackfill} from './round-backfill.ts';
-import {enableAllMemberArchive,coachMemberCoverage} from './coach-member-archive.ts';
+import {enableAllMemberArchive,pauseAllMemberArchive,coachMemberCoverage} from './coach-member-archive.ts';
 import {readCoachMemberReport,readCoachComparison} from './coach-member-report.ts';
 import { mlActivityView, mlClosed, mlData, mlLineupTimes, mlResults, seasonStats } from './mleague.ts';
 import { racingView, raceSeed } from './racing-kp.ts';
@@ -446,6 +446,12 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping,deferP
     invalidateCoachRoundReport(env.DB);
     return response({status:'enabled',...result,
       note:'各登録者のHenrik履歴で確認できる試合を段階的に収集。API側にない試合は完全保証できない。'});
+  }
+  if(request.method==='POST'&&path==='/api/kp/coach/members/pause'){
+    if(!memberHistoryOwner)return response({error:'本人の紐づけ済みKP口座のみが履歴の追加収集を停止できる。'},403);
+    const result=await pauseAllMemberArchive(env.DB);
+    invalidateCoachRoundReport(env.DB);
+    return response({status:'paused',...result,note:'次回から履歴の追加取得を停止。保存済み戦績と通常の速報・KPは維持する。'});
   }
   if(request.method==='POST'&&path==='/api/kp/coach/backfill/resume'){
     if(!coachOwner)return response({error:'VDK本人の連携口座からのみ再開できる。'},403);

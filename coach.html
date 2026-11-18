@@ -196,6 +196,7 @@ tr:last-child td{border-bottom:0}
 <p class="muted small">神戸のAbema#ttvとAquatopia#toppyは2アカウントを別々に収集し、神戸の人物診断で合算する。以下はアカウント別の進捗。API未収録の過去試合は完全回収を保証できない。</p>
 <div id="member-archive-status"></div>
 <button type="button" id="start-member-archive" hidden>全員の試合履歴収集を開始</button>
+<button type="button" id="pause-member-archive" hidden>履歴の追加収集を一時停止</button>
 </section>
 <details id="legacy-coach" class="panel"><summary>従来のVDK中心の詳細分析・保存状況を開く</summary><p class="small muted">以下は従来の列保存基準による参考表示です。全10人のK/Dを照合する選手別ラウンド分析とは対象件数が異なります。基本性能は上の選手別画面を確認してください。</p>
 <section class="cards" id="totals" aria-label="補完状況の概要"></section>
@@ -286,18 +287,20 @@ function renderMemberArchiveStatus(data){
  const history=data.memberHistory;
  const owned=Boolean(data.canStartMemberHistory);
  $('start-member-archive').hidden=!owned||Boolean(history?.enabled);
+ $('pause-member-archive').hidden=!owned||!history?.enabled||!history?.supportsPause;
  if(!history){
   $('member-archive-status').innerHTML='<p class="small muted">収集進捗を確認できない。接続を確認してほしい。</p>';
   return;
  }
  $('member-archive-status').innerHTML='<div class="member-coverage">'+(history.people||[]).map(p=>{
-  const phase=!history.enabled?'未開始':p.truncated?'上限到達':
+  const phase=!history.enabled?'収集停止中':p.truncated?'上限到達':
    p.discoveryDone?'履歴探索終了':'履歴探索中';
   return `<article><strong>${escape(p.person)} · ${escape(phase)}</strong>
    <p>発見 ${int(p.discovered)}件 ／ 完全保存 ${int(p.complete)}件</p>
    <p>待機 ${int(p.pending)}件 · 欠損 ${int(p.partial)}件 · 取得不能 ${int(p.unavailable)}件</p>
    </article>`;
  }).join('')+'</div>';
+ if(history.enabled&&Number.isFinite(history.refreshIntervalMinutes))$('member-archive-status').innerHTML+='<p class="small muted">過去履歴の探索後も、新しいコンペを各アカウント約'+int(history.refreshIntervalMinutes)+'分ごとに確認します。詳細保存は全体で5分に1試合ずつ進みます。</p>';
  if(!history.enabled&&!owned)$('member-archive-status').innerHTML+=
   '<p class="small muted">開始には神戸のAquatopia#toppyなど、許可された紐づけKP口座で接続する必要がある。</p>';
 }
@@ -591,10 +594,24 @@ $('start-member-archive').addEventListener('click',async()=>{
   const t=token();if(!t)throw Error('KP口座の接続が必要だ。');
   const result=await request('/api/kp/coach/members/start',{
     method:'POST',headers:{Authorization:'Bearer '+t}});
+  memberCache.clear();
   await load();
   setStatus(result.status==='enabled'?'本人別の履歴収集を有効化した。収集進捗はこの画面で確認できる。':'開始状態を確認してほしい。');
  }catch(e){setStatus(e.message||'開始に失敗した。',true)}
  finally{btn.disabled=false}
+});
+$('pause-member-archive').addEventListener('click',async()=>{
+ if(busy)return;
+ const btn=$('pause-member-archive');btn.disabled=true;
+ try{
+  const t=token();if(!t)throw Error('KP口座の接続が必要です。');
+  const result=await request('/api/kp/coach/members/pause',{method:'POST',headers:{Authorization:'Bearer '+t}});
+  if(result.status!=='paused'||result.enabled!==false)throw Error('停止状態を確認できませんでした。');
+  btn.hidden=true;$('start-member-archive').hidden=false;
+  memberCache.clear();await load();
+  setStatus('履歴の追加収集を停止しました。保存済み戦績・通常の速報・KPはそのまま使えます。');
+ }catch(e){setStatus(e.message||'停止状態を確認できませんでした。',true);}
+ finally{btn.disabled=false;}
 });
 
 function render(data){
@@ -754,7 +771,14 @@ async function load(){
   if(e.status===401){latestReport=null;$('share').disabled=true;try{sessionStorage.removeItem(KEY)}catch{}
    $('connection').style.display='block';$('report').hidden=true;
    setStatus('認証が切れている。接続コードを再入力してください。',true);
-  }else setStatus(e.message||'読み込みに失敗した。再試行してください。',true);
+  }else{
+   if(e.status===429&&token())try{
+    const state=await request('/api/kp/coach/members/status',{headers:{Authorization:'Bearer '+token()}});
+    renderMemberArchiveStatus({memberHistory:state,canStartMemberHistory:state.canStartMemberHistory});
+    $('report').hidden=false;$('connection').style.display='none';
+   }catch{}
+   setStatus(e.message||'読み込みに失敗した。再試行してください。',true);
+  }
  }finally{busy=false;$('reload').disabled=false;}
 }
 // Explicit allowlist: no bearer token, Discord account, PUUID, match ID or raw roster

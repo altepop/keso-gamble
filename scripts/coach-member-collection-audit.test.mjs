@@ -2,7 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {auditMemberCollection} from './coach-member-collection-audit.mjs';
 const now=1_800_000_000_000,env={CLOUDFLARE_ACCOUNT_ID:'a'.repeat(32),CLOUDFLARE_API_TOKEN:'private-token'};
-function fixture({missingCost=false,fail=false}={}){
+function fixture({missingCost=false,fail=false,done=0}={}){
  const requests=[];
  const request=async(url,init)=>{
   requests.push({url,...init});
@@ -10,7 +10,7 @@ function fixture({missingCost=false,fail=false}={}){
   if(fail)return new Response('private upstream failure',{status:503});
   const {sql}=JSON.parse(init.body);assert.match(sql,/^SELECT\b/);assert.equal(sql.includes(';'),false);
   const results=sql.includes('FROM monitor_state')?[{key:'coach_all_members:enabled',value:'enabled'},{key:'api_after',value:String(now+5000)}]
-   :sql.includes('FROM coach_member_sources')?[{riot_id:'Dolly#SDGs',resolved:1,next_page:2,done:0,truncated:0,next_at:now+9000,discovered:7,complete:2,pending:4,partial:1,unavailable:0,puuid:'private-player'}]
+   :sql.includes('FROM coach_member_sources')?[{riot_id:'Dolly#SDGs',resolved:1,next_page:2,done,truncated:0,next_at:now+9000,discovered:7,complete:2,pending:4,partial:1,unavailable:0,puuid:'private-player'}]
    :[{feature:'coach_member_discovery',last_ok:now-60000,last_error:null,failures:0}];
   return Response.json({success:true,result:[{success:true,results,meta:missingCost?{}:{rows_read:10}}]});
  };return {request,requests};
@@ -29,4 +29,8 @@ test('unknown D1 costs stay unknown and upstream failures never enter the report
 });
 test('invalid target configuration fails before any network access',async()=>{
  let calls=0;await assert.rejects(auditMemberCollection({},()=>{calls++;},now));assert.equal(calls,0);
+});
+test('regular newest-page waiting is labelled separately from error retry backoff',async()=>{
+ const r=await auditMemberCollection(env,fixture({done:1}).request,now);
+ assert.equal(r.accounts[0].nextCheckWaitSeconds,9);assert.equal(r.accounts[0].retryWaitSeconds,null);assert.equal(r.apiWaitSeconds,5);
 });

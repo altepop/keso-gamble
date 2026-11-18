@@ -41,7 +41,7 @@ export async function auditMemberCollection(env=process.env,request=fetch,now=Da
   accounts:COACH_MEMBER_ACCOUNTS.map(a=>{const s=sources.find(s=>s.riot_id===a.riotId);return {
    person:a.person==='Abema'?'神戸・メイン':a.person==='神戸'?'神戸・別アカウント':a.person,
    initialized:Boolean(s),resolved:s? s.resolved===1:false,nextPage:s?count(s.next_page):null,
-   discoveryDone:s? s.done===1:false,truncated:s? s.truncated===1:false,retryWaitSeconds:s?seconds(s.next_at):null,
+   discoveryDone:s? s.done===1:false,truncated:s? s.truncated===1:false,retryWaitSeconds:s&&s.done!==1?seconds(s.next_at):null,nextCheckWaitSeconds:s&&s.done===1?seconds(s.next_at):null,
    ...Object.fromEntries(['discovered','complete','pending','partial','unavailable'].map(k=>[k,s?count(s[k]):0]))};}),
   jobs:['coach_member_discovery','coach_member_archive'].map(feature=>{const j=jobs.find(j=>j.feature===feature);return {feature,lastOkAgeSeconds:age(j?.last_ok),lastErrorAgeSeconds:age(j?.last_error),failures:j?count(j.failures):null};}),
   queries,rowsRead:known?rowsRead:null,mutations:0,extraHenrikRequests:0};
