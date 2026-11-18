@@ -409,7 +409,8 @@ const performancePanel=(p,section)=>{
   const rows=[['K/D',o.kdMatches,o.kills,o.deaths],['KPR',o.rateBases.kpr.matches,o.rateBases.kpr.numerator,o.rateBases.kpr.rounds],['DPR',o.rateBases.dpr.matches,o.rateBases.dpr.numerator,o.rateBases.dpr.rounds],['APR',o.rateBases.apr.matches,o.rateBases.apr.numerator,o.rateBases.apr.rounds],['ACS（試合R）',o.acsMatches,o.scoreTotal,o.scoreRounds],['HS%',o.hitMatches,o.headHits,o.totalHits],['ADR',o.damageMatches,o.damageTotal,o.damageRounds],['DDΔ/R',o.damageDeltaMatches,o.damageDeltaTotal,o.damageDeltaRounds]].map(([value,valid,numerator,denominator])=>({value,valid,excluded:o.matches-valid,numerator,denominator}));
   return '<h3>基本性能の指標別品質と分母</h3>'+table(rows,[['指標','value'],['有効試合','valid'],['除外試合','excluded'],['分子','numerator'],['分母','denominator']])+'<p>保存ロスター・チーム総Rが取得元です。候補 '+int(q.candidateMatches)+'件、人物を特定できた試合 '+int(q.selectedMatches)+'件。各指標は別の対象試合で計算するため、行をまたいで分子を組み合わせないでください。</p><details><summary>欠損理由・各指標の保存時点と計算の詳細</summary><pre style="white-space:pre-wrap;overflow-wrap:anywhere">'+escape(JSON.stringify({quality:p.quality,statTotals:p.overall.statTotals,rateBases:p.overall.rateBases,scoreTotal:p.overall.scoreTotal,scoreRounds:p.overall.scoreRounds},null,2))+'</pre>'+p.limitations.map(s=>'<p>'+escape(s)+'</p>').join('')+'</details>';
  }
- return '<h3>基本性能からの観察と次の行動</h3><p>'+escape(p.priorityPolicy||'')+'</p>'+['strength','review','observation'].map(kind=>'<h4>'+escape(kind==='strength'?'継続したい強みの候補':kind==='review'?'優先して確認する改善候補':'安定性と参考観察')+'</h4>'+(p.notes.filter(n=>n.kind===kind).map(n=>'<article class="coach-quality"><strong>'+escape(n.title)+'</strong><p>'+escape(n.evidence)+'</p><p>'+escape(n.action)+'</p></article>').join('')||'<p>判定に必要な比較データが不足しています。</p>')).join('');
+ if(!p.notes.length)return '<details class="member-detail"><summary>長期的な得意不得意の評価について</summary><p>まだ継続した傾向とは決めていません。上の課題は次の1試合から試せます。記録が増えれば、同じ条件での比較もここに追加します。</p></details>';
+ return '<h3>基本性能からの観察と次の行動</h3><p>'+escape(p.priorityPolicy||'')+'</p>'+['strength','review','observation'].filter(kind=>p.notes.some(n=>n.kind===kind)).map(kind=>'<h4>'+escape(kind==='strength'?'継続したい強みの候補':kind==='review'?'優先して確認する改善候補':'安定性と参考観察')+'</h4>'+(p.notes.filter(n=>n.kind===kind).map(n=>'<article class="coach-quality"><strong>'+escape(n.title)+'</strong><p>'+escape(n.evidence)+'</p><p>'+escape(n.action)+'</p></article>').join('')||'<p>判定に必要な比較データが不足しています。</p>')).join('');
 };
 
 const contributionPanel=r=>{
@@ -440,6 +441,16 @@ const contextPanel=(c,section)=>{
  }
  return '<h3>装備・行動記録の品質と分母</h3>'+table(c.quality.metricCoverage,[['指標','metric'],['有効試合','matches'],['有効件数','valid'],['欠損・除外','excluded'],['分子','numerator'],['分母','denominator'],['単位','unit']])+'<p>有効なラウンド骨格 '+int(c.quality.validRoundMatches)+'試合。候補 '+int(c.quality.candidateRounds)+'R。追加保存量の上限による省略履歴 '+int(c.quality.contextSizeCapMatches)+'試合。武器の分母は敵キルで、ほかの行のRとは異なります。</p><details><summary>取得元・保存時点・除外理由</summary><pre style="white-space:pre-wrap;overflow-wrap:anywhere">'+escape(JSON.stringify(c.quality,null,2))+'</pre></details>'+c.limitations.map(s=>'<p>'+escape(s)+'</p>').join('');
 };
+const nextMatchPanel=p=>!p?'':`<section class="coach-quality" data-next-match>
+ <h3>次の1試合で試すこと</h3><p>${escape(p.confidence)}</p>
+ ${p.timeCoverageNote?'<p>'+escape(p.timeCoverageNote)+'</p>':''}
+ <article><h4>今回の手応え：${escape(p.strength.title)}</h4><p>${escape(p.strength.evidence)}</p><p>${escape(p.strength.action)}</p></article>
+ <article><h4>${escape(p.focus.title)}</h4><p>${escape(p.focus.evidence)}</p><p>${escape(p.focus.action)}</p></article>
+ ${(p.lastReview||[]).length?'<article><h4>直近1試合と、その前の最大5試合</h4>'+p.lastReview.map(m=>'<p>'+escape(m.label)+'：今回 '+numeric(m.current,3)+'（'+int(m.currentNumerator)+' / '+int(m.currentRounds)+'R）・直前 '+numeric(m.previous,3)+'（'+int(m.previousNumerator)+' / '+int(m.previousRounds)+'R、'+int(m.previousMatches)+'試合）</p>').join('')+'<p>課題を試せたかは録画でも確認してください。この増減だけで課題の効果や実力は決めません。</p></article>':''}
+ <article><h4>${escape(p.check.title)}</h4><p>${escape(p.check.action)}</p>
+ <p>比較の基準：${escape(p.basis)}・${int(p.matches)}試合</p>
+ ${(p.check.metrics||[]).map(m=>'<p>'+escape(m.label)+' '+numeric(m.value,3)+'（'+int(m.numerator)+' / '+int(m.rounds)+'R、'+int(m.matches)+'試合）</p>').join('')}
+ <p class="small muted">${escape(p.check.caveat)}</p></article></section>`;
 const renderMemberDiagnosis=d=>{
  const all=(d.fullDiagnosis?.items||[]).filter(x=>x.subject===d.profile);
  const own=Array.isArray(d.individual)?d.individual.find(x=>x.player===d.profile):null;
@@ -493,13 +504,13 @@ const renderMemberDiagnosis=d=>{
   '<p class="coach-empty">個人別の先制データは未取得だ。</p>';
  const reviewSummary=highest.length
   ?`<p class="coach-lead">${int(highest.length)}件の<strong>見直し候補</strong>がある。ただし因果的なミス確定ではない。以下に、参考観測も含めて最大8件表示する。</p>`
-  :`<p class="coach-lead">現行の判定条件では<strong>確定的な弱点候補なし</strong>。問題がないという意味ではない。下の観察項目でVODを確認する。</p>`;
+  :`<p class="coach-lead">継続した弱点の判断は保留です。次の1試合では、先頭の課題を1つ試して振り返ってください。</p>`;
  const overview=`<div class="coach-hero"><h3>${escape(d.person)} <small>個別コーチング</small></h3>
   <p class="member-small">対象アカウント：${inputs.map(escape).join(' ＋ ')||'登録情報なし'}</p></div>`+
-  quality+kpis+performancePanel(d.performance,'notes')+
+  nextMatchPanel(d.nextMatch)+quality+kpis+performancePanel(d.performance,'notes')+
   `<div class="coach-section-heading"><h3>最初に見るべき改善候補</h3><span>${int(highest.length)}件が要検証</span></div>`+
   reviewSummary+(selected.length?selected.slice(0,3).map(x=>diagnosticCard(x)).join(''):
-  '<p class="coach-empty">十分な観測がまだないため、個人の改善事項を提示できない。</p>')+
+  '<p class="coach-empty">継続した弱点の判定は保留です。まず上の課題を1つ試し、次の試合を振り返ってください。</p>')+
   '<p class="member-small">すべての改善観察と判定保留は「改善候補」タブで確認できる。</p>'+
   '<h3>先制と生存：観測グラフ</h3>'+rateCharts+
   '<h3>ラウンド記録を照合できた試合の推移</h3>'+coachTrendGraph(trends);
@@ -822,7 +833,7 @@ const memberDiagnosticPayload=function memberDiagnosticPayloadV2(d){
   maps:(d.performance.maps||[]).map(x=>pick(x,['value',...statsFields])),agents:(d.performance.agents||[]).map(x=>pick(x,['value',...statsFields])),
   windows:(d.performance.windows||[]).map(x=>({requested:x.requested,recent:pick(x.recent,statsFields),previous:pick(x.previous,statsFields),sameCondition:false})),
   conditionalWindows:(d.performance.conditionalWindows||[]).map(x=>({value:x.value,control:'same-map-and-agent',recent:pick(x.recent,statsFields),previous:pick(x.previous,statsFields)})),
-  timeline:(d.performance.timeline||[]).map(x=>pick(x,['date','map','agent','outcome','kills','deaths','assists','kd','acs','adr','hsPct','rollingWinPct5','rollingKd5','rollingKd5Matches','form'])),
+  timeline:(d.performance.timeline||[]).map(x=>pick(x,['date','map','agent','rounds','outcome','kills','deaths','assists','kd','acs','adr','hsPct','rollingWinPct5','rollingKd5','rollingKd5Matches','form'])),
   notes:(d.performance.notes||[]).map(x=>pick(x,['kind','title','evidence','action'])),
   rateBases:Object.fromEntries(['kpr','dpr','apr'].map(k=>[k,pick(d.performance.overall?.rateBases?.[k],['numerator','rounds','matches'])])),
   quality:pick(d.performance.quality,['candidateMatches','distinctMatches','selectedMatches'])}:null;
@@ -853,6 +864,10 @@ const memberDiagnosticPayload=function memberDiagnosticPayloadV2(d){
    matchAbilities:Object.fromEntries(['grenade','ability1','ability2','ultimate'].map(k=>[k,pick(d.roundContext.matchAbilities?.[k],['casts','matches','rateCasts','rounds','rateMatches'])])),
    spike:Object.fromEntries(['plant','defuse'].map(k=>[k,pick(d.roundContext.spike?.[k],['events','rounds','matches'])])),
    weapons:pick(d.roundContext.weapons,['knownKills','totalKills','matches']),pistols:pick(d.roundContext.pistols,['rounds','knownOutcomes','wins','kills','deaths'])}:null,
+  nextMatch:d.nextMatch?{...pick(d.nextMatch,['version','basis','matches','confidence','timeCoverageNote']),
+   strength:pick(d.nextMatch.strength,['title','evidence','action']),focus:pick(d.nextMatch.focus,['title','evidence','action']),
+   lastReview:(d.nextMatch.lastReview||[]).map(m=>pick(m,['key','label','currentNumerator','currentRounds','current','previousNumerator','previousRounds','previous','previousMatches'])),
+   check:{...pick(d.nextMatch.check,['title','action','caveat']),metrics:(d.nextMatch.check?.metrics||[]).map(m=>pick(m,['key','label','value','numerator','rounds','matches']))}}:null,
   performance:perf,individual:individuals,individualMapAgent:mapAgent,fullDiagnosis:{items:diagnosis},
   matchTrend:(Array.isArray(d.matchTrend)?d.matchTrend:[]).map(m=>pick(m,
    ['date','map','agent','outcome','kills','deaths','assists','firstKills','firstDeaths','observedOpeningRounds']))};
