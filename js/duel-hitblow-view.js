@@ -62,7 +62,7 @@ export function hitBlowView({r,state,hand,turn,me,finished,guessDraft=''}) {
   </div>
   <div class="duel-hb-intro"><strong>HIT &amp; BLOW</strong><span>Hit：数字と位置が一致　／　Blow：数字だけ一致</span></div>
   <div class="duel-hb-logic"><div><span>あなたの推理 ${own.length}回</span><span>相手の推理 ${theirs.length}回</span></div>
-   <p>自分の公開済みヒントから絞った候補 <strong>${remaining===null?'確認中':remaining.toLocaleString('ja-JP')} 通り</strong><small>初期 5,040通り。相手の秘密番号は参照していない。</small></p>
+   <p>自分の公開済みヒントから絞った残り候補 <strong>${remaining===null?'確認中':remaining.toLocaleString('ja-JP')} 通り</strong><small>初期 5,040通り。相手の秘密番号は参照していない。</small></p>
    <div class="duel-hb-progress" role="progressbar" aria-label="候補を絞り込んだ割合" aria-valuenow="${Math.round(progress)}" aria-valuemin="0" aria-valuemax="100"><span style="width:${progress.toFixed(2)}%"></span></div>
   </div>
   ${turn?`<div class="duel-hb-entry">
