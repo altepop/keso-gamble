@@ -105,13 +105,15 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
       value:{writeText:async text=>{window.__copiedDiagnostic=text}}});
   });
   const requests=[];
-  let use43Report=false;
+  let use43Report=false,feedbackRevision=0;
   await ctx.route('https://valorant-results.tealeaforest.workers.dev/**',async route=>{
    const req=route.request();requests.push({url:req.url(),method:req.method(),auth:req.headers().authorization});
    if(req.url().includes('/api/kp/coach/member?')||req.url().includes('/api/kp/coach/comparison?')){
     const makeMember=person=>{const profile=person==='神戸'?'神戸':person;
+    const lessons=coachMatchFeedback(performance);
+    if(feedbackRevision)lessons.sessions[0].lesson={...lessons.sessions[0].lesson,title:'更新された試合の解説'+feedbackRevision};
     return {
-     person,profile,matchFeedback:{...coachMatchFeedback(performance),privateId:'never-export-lessons'},nextMatch:{...coachNextMatch(performance),privateId:'never-export-plan'},roundContribution,roundContext:person==='Aquatopia'?coachRoundContext([],[],new Set()):roundContext,performance:person==='Aquatopia'?{...performance,timeline:performance.timeline.map((g,i)=>i===10?{...g,kd:null,acs:null}:g)}:performance,accounts:person==='神戸'?['Abema#ttv','Aquatopia#toppy']:[person],
+     person,profile,matchFeedback:{...lessons,privateId:'never-export-lessons'},nextMatch:{...coachNextMatch(performance),privateId:'never-export-plan'},roundContribution,roundContext:person==='Aquatopia'?coachRoundContext([],[],new Set()):roundContext,performance:person==='Aquatopia'?{...performance,timeline:performance.timeline.map((g,i)=>i===10?{...g,kd:null,acs:null}:g)}:performance,accounts:person==='神戸'?['Abema#ttv','Aquatopia#toppy']:[person],
      usableMatches:2,archivedMatches:2,roundDataMissing:0,killDataMissing:0,
      coverage:{discovered:0,complete:0,discoveryDone:false,allMatchesGuaranteed:false},
      individual:[{player:profile,matches:2,matchWins:1,matchLosses:1,matchDraws:0,
@@ -344,6 +346,19 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   await page.waitForFunction(()=>document.getElementById('status').textContent.includes('追加収集を停止'));
   assert.equal(await page.locator('#pause-member-archive').isHidden(),true);assert.equal(await page.locator('#start-member-archive').isVisible(),true);
   assert.equal(requests.filter(r=>r.method==='POST'&&r.url.endsWith('/members/pause')).length,1);
+  await page.locator('[data-member="Aquatopia"]').click();
+  await page.locator('[data-coach-learning]').waitFor({state:'visible'});
+  const rootReads=requests.filter(r=>r.url.endsWith('/coach/rounds')).length;
+  const memberReads=requests.filter(r=>r.url.includes('/coach/member?')).length;
+  await page.locator('[data-coach-view="overview"]').click();
+  feedbackRevision=1;await page.locator('[data-feedback-refresh]').click();
+  await page.waitForFunction(()=>document.querySelector('[data-match-feedback]')?.textContent.includes('更新された試合の解説1'));
+  assert.equal(requests.filter(r=>r.url.includes('/coach/member?')).length,memberReads+1,'manual profile refresh bypasses stale in-memory cache');
+  feedbackRevision=2;await page.locator('#reload').click();
+  await page.waitForFunction(()=>document.querySelector('[data-match-feedback]')?.textContent.includes('更新された試合の解説2'));
+  assert.equal(requests.filter(r=>r.url.includes('/coach/member?')).length,memberReads+2);
+  assert.equal(requests.filter(r=>r.url.endsWith('/coach/rounds')).length,rootReads,'selected profile refresh does not scan the legacy report');
+  assert.deepEqual(errors,[]);
   await ctx.close();
   // The resume control only appears for the previously opted-in linked owner,
   // after an explicit user click; no recurring or surprise POSTs.

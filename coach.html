@@ -527,7 +527,7 @@ const renderMemberDiagnosis=d=>{
   ?`<p class="coach-lead">${int(highest.length)}件の<strong>見直し候補</strong>がある。ただし因果的なミス確定ではない。以下に、参考観測も含めて最大8件表示する。</p>`
   :`<p class="coach-lead">継続した弱点の判断は保留です。次の1試合では、先頭の課題を1つ試して振り返ってください。</p>`;
  const overview=`<div class="coach-hero"><h3>${escape(d.person)} <small>個別コーチング</small></h3>
-  <p class="member-small">対象アカウント：${inputs.map(escape).join(' ＋ ')||'登録情報なし'}</p></div>`+
+  <p class="member-small">対象アカウント：${inputs.map(escape).join(' ＋ ')||'登録情報なし'}</p><button type="button" data-feedback-refresh>この人の解説を更新</button></div>`+
   matchFeedbackPanel(d.matchFeedback)+(d.matchFeedback?'<details class="member-detail"><summary>戦績・長期診断の根拠を見る</summary>':'')+
   nextMatchPanel(d.nextMatch)+quality+kpis+performancePanel(d.performance,'notes')+
   `<div class="coach-section-heading"><h3>最初に見るべき改善候補</h3><span>${int(highest.length)}件が要検証</span></div>`+
@@ -569,6 +569,7 @@ const renderMemberDiagnosis=d=>{
   `<div class="coach-dashboard-view" id="coach-view-metrics" role="tabpanel" aria-labelledby="coach-tab-metrics" hidden>${performancePanel(d.performance,'quality')}${contextPanel(d.roundContext,'quality')}${allMetrics}</div>`;
 };
 $('member-result').addEventListener('click',e=>{
+ if(e.target.closest('[data-feedback-refresh]')){void refreshMember();return;}
  const btn=e.target.closest('[data-coach-view]');
  if(!btn)return;
  const view=btn.dataset.coachView;
@@ -583,6 +584,7 @@ $('member-result').addEventListener('click',e=>{
 async function loadMember(person){
  if(memberPending||!memberNames.includes(person))return;
  memberPending=true;activeMember=person;latestMemberReport=null;
+ $('share').disabled=true;
  $('share').textContent='診断レポートをコピー';
  for(const el of $('member-selector').querySelectorAll('[data-member]'))
   el.setAttribute('aria-pressed',String(el.dataset.member===person));
@@ -593,7 +595,11 @@ async function loadMember(person){
    $('share').textContent=person+'の全診断をコピー';}
  }catch(e){
   $('member-result').textContent='診断を読み込めない：'+(e.message||'取得エラー');
- }finally{memberPending=false}
+ }finally{memberPending=false;$('share').disabled=!latestMemberReport}
+}
+async function refreshMember(){
+ if(busy||memberPending||!activeMember)return;
+ memberCache.delete(activeMember);await loadMember(activeMember);
 }
 $('compare-members').addEventListener('click',async()=>{
  const button=$('compare-members');button.disabled=true;const rows=[];
@@ -929,7 +935,7 @@ $('resume-backfill').addEventListener('click',async()=>{
  }catch(e){setStatus(e.message||'再開できなかった。',true);}
  finally{b.disabled=false}
 });
-$('reload').addEventListener('click',load);
+$('reload').addEventListener('click',()=>activeMember?refreshMember():load());
 $('connect-form').addEventListener('submit',async event=>{
  event.preventDefault();
  const code=$('code').value.trim();

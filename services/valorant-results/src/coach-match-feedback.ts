@@ -87,5 +87,5 @@ export function coachMatchFeedback(p:Performance,events:ReadonlyMap<number,Coach
  return {version:1,sessions,starter:sessions.length?null:curriculum.foundation,
   quality:{availableChronologicalMatches:p.quality.timeSeries.valid,shown:sessions.length,limit:12,undatedExcluded:p.quality.timeSeries.excluded,ambiguousTimeMatches:games.filter(g=>times.get(Date.parse(g.date!))!>1).length,eventVerified:sessions.filter(s=>s.eventVerified).length},
   rules:'比較は本人の過去だけを使う。同条件2件を優先し最大5件、変化抽出は各2試合/20R以上・今回12R以上・KPR/DPR差0.1をローカルな練習選択の目安とする。ダメージとキルの変化、交戦参加、死亡ペースの変化を先に確認し、次にキル直後死亡と味方の取り返しを確認する。キル直後死亡は4キル以上かつ2件以上/3分の1以上、取り返しは既知の敵による4死亡以上/4分の1未満。実力・判断ミスの基準や公式値ではない。',
-  delivery:'新しく保存された競技試合は、画面を更新して本人の診断を開くと追加される。最長12件の保存済み試合の解説で、即時通知・全履歴回収・練習の自動採点は保証しない。'};
+  delivery:'新しい試合の保存後に「この人の解説を更新」を押すと、最新の解説を読めます。表示は保存済みの直近最大12試合です。記録の取得には待ち時間があり、試合直後の通知や全履歴の回収を保証するものではありません。'};
 }
