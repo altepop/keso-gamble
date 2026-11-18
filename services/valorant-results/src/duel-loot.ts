@@ -4,14 +4,11 @@
  */
 import type {KpEnv} from './kp.ts';
 import {relicCollection,type RelicCollection} from './relics.ts';
+import {DUEL_PVP_SELECT_ID,DUEL_PVP_CONSUMABLE} from './relic-consumables.ts';
 
 export const DUEL_LOOT_DAILY_LIMIT=3;
 export const DUEL_LOOT_PAIR_DAILY_LIMIT=2;
-export const DUEL_PVP_SELECT_ID='consumable.duel.pvp_selector';
-export const DUEL_PVP_CONSUMABLE={
- id:DUEL_PVP_SELECT_ID,name:'覇者の選定書',ratePerMillion:0,
- description:'決闘PvP限定。一般〜伝説の通常遺物から好きな1種類を確定入手する。装備枠不要・使い切り。',
-} as const;
+export {DUEL_PVP_SELECT_ID,DUEL_PVP_CONSUMABLE} from './relic-consumables.ts';
 export type DuelLootReceipt={
  duel_id:string;guild:string;user:string;game:string;opponent:string;
  outcome:'win'|'loss'|'draw';rating:number;day:number;settled_at:number;claimed_at:number|null;
