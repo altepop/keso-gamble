@@ -19,6 +19,10 @@ test('one stored match teaches a hypothesis without inventing a prior decline or
  const a=coachMatchFeedback(perf([row(1,10,20)])).sessions[0];assert.equal(a.topic,'pressure');assert.match(a.lesson.meaning,/これだけで以前より悪化したとは決めず/);assert.equal(a.followUp.status,'baseline');
  const b=coachMatchFeedback(perf([row(1,20,10)])).sessions[0];assert.equal(b.topic,'repeat');assert.match(b.lesson.meaning,/上達の証明にはしない/);
 });
+test('the documented 0.1 per round boundary survives binary floating point representation',()=>{
+ const f=coachMatchFeedback(perf([row(3,13,15,1800),row(2),row(1)])).sessions[0];
+ assert.equal(f.metrics[0].current!.value,.65);assert.equal(f.metrics[0].baseline!.value,.75);assert.equal(f.topic,'participation');
+});
 test('verified event observations select post-kill reset or cover, and missing observations never become zero followups',()=>{
  for(const [topic,event] of [['reset',events({diedAfterKill5s:4})],['cover',events({teammateRetaliations5s:1})]] as const){
   const r=coachMatchFeedback(perf([row(1)]),new Map([[start+10000,event]])).sessions[0];assert.equal(r.topic,topic);assert.equal(r.eventVerified,true);assert.match(r.lesson.alternatives,/決めない|確定値ではなく/);

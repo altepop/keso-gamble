@@ -30,9 +30,11 @@ function lessonFor(g:Game,older:Game[],event:CoachCombatObservation|null){
  });
  const k=metrics[0],d=metrics[1],a=metrics[2];
  const compared=Boolean(g.rounds&&g.rounds>=12&&k.current&&d.current&&k.baseline&&d.baseline&&k.baseline.matches>=2&&d.baseline.matches>=2&&k.baseline.rounds>=20&&d.baseline.rounds>=20);
- const kd=compared?k.current!.value-k.baseline!.value:null,dd=compared?d.current!.value-d.baseline!.value:null;
+ // The displayed 0.1/R boundary must not change because 0.65-0.75 rounds
+ // to -0.09999999999999998 in binary floating point.
+ const kd=compared?Number((k.current!.value-k.baseline!.value).toFixed(9)):null,dd=compared?Number((d.current!.value-d.baseline!.value).toFixed(9)):null;
  let topic:Topic='foundation';
- if(compared&&kd!<=-.1&&a.current&&a.baseline&&a.baseline.matches>=2&&a.current.value>=a.baseline.value)topic='conversion';
+ if(compared&&kd!<=-.1&&a.current&&a.baseline&&a.baseline.matches>=2&&a.current.value>=a.baseline.value-1e-9)topic='conversion';
  else if(compared&&kd!<=-.1&&dd!<=.05)topic='participation';
  else if(compared&&dd!>=.1&&kd!<.1)topic='pressure';
  else if(event&&event.enemyKills>=4&&event.diedAfterKill5s>=2&&event.diedAfterKill5s/event.enemyKills>=1/3)topic='reset';
