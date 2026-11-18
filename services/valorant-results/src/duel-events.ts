@@ -11,7 +11,7 @@ const bytes=(text:string)=>encoder.encode(text);
 export function duelEventHint(value:unknown):{id:string;version:number}|null{
  if(!value||typeof value!=='object')return null;
  const r=value as Record<string,unknown>;
- if(typeof r.id!=='string'||!UUID.test(r.id)||!Number.isSafeInteger(r.version)||Number(r.version)<0)return null;
+ if(typeof r.id!=='string'||!UUID.test(r.id)||typeof r.version!=='number'||!Number.isSafeInteger(r.version)||r.version<0)return null;
  return {id:r.id,version:Number(r.version)};
 }
 export class DuelEventHub{
