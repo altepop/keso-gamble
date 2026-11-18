@@ -58,11 +58,48 @@ export function classifyPokerReveal(before,after){
  if(before.done!=='1:0'&&before.done!=='0:1')return null;
  return {id:after.id,version:after.version};
 }
+// Only a newly confirmed authoritative history entry may animate.
+export function classifyHitBlowFeedback(before,after){
+ if(!before||!after||!before.id||before.id!==after.id||
+  !Number.isSafeInteger(before.version)||after.version!==before.version+1||
+  !Number.isSafeInteger(before.count)||after.count!==before.count+1)return null;
+ return {id:after.id,version:after.version};
+}
+function normalizeHitBlowInput(raw){
+ let out='';
+ for(const char of String(raw??'').replace(/[^0-9]/g,'')){
+  if(!out.includes(char)&&out.length<4)out+=char;
+ }
+ return out;
+}
 function enhance(root) {
   let previous = null, motion = null, lastBoard = null;
   let c4Previous=null,c4Motion=null,lastC4Board=null;
   let bluffPrevious=null,bluffMotion=null,lastBluffTable=null;
   let pokerPrevious=null,pokerMotion=null,lastPokerTable=null;
+  let hitPrevious=null,hitMotion=null,lastHitTable=null;
+  function scanHitBlow(){
+    const table=root.querySelector('.duel-hitblow-stage[data-hitblow-match]');
+    if(!table){hitPrevious=null;hitMotion=null;lastHitTable=null;return;}
+    if(table===lastHitTable)return;
+    lastHitTable=table;
+    const now=performance.now();
+    const current={id:table.dataset.hitblowMatch,version:Number(table.dataset.hitblowVersion),count:Number(table.dataset.hitblowCount)};
+    const change=hitPrevious&&now-hitPrevious.at<20000&&!document.hidden
+      ?classifyHitBlowFeedback(hitPrevious,current):null;
+    hitPrevious={...current,at:now};
+    if(change)hitMotion={...change,started:now};
+    const elapsed=hitMotion?now-hitMotion.started:Infinity;
+    if(!hitMotion||hitMotion.id!==current.id||hitMotion.version!==current.version||
+      elapsed>=1100||document.hidden||matchMedia('(prefers-reduced-motion: reduce)').matches){
+      if(elapsed>=1100)hitMotion=null;
+      return;
+    }
+    const newest=table.querySelector('[data-hitblow-latest]');
+    if(!newest)return;
+    newest.style.setProperty('--hitblow-fade-delay',(-elapsed)+'ms');
+    newest.classList.add('duel-hitblow-feedback-arrived');
+  }
   function scanPoker(){
    const table=root.querySelector('.duel-poker-table[data-poker-match]');
    if(!table){pokerPrevious=null;pokerMotion=null;lastPokerTable=null;return;}
@@ -156,6 +193,7 @@ function enhance(root) {
     scanConnect4();
     scanBluffDice();
     scanPoker();
+    scanHitBlow();
     const board = root.querySelector('.duel-board.duel-othello');
     if (!board) { previous = null; motion = null; lastBoard = null; return; }
     if (board === lastBoard) return; // Ignore mutations outside the board, such as the timer.
@@ -196,6 +234,33 @@ function enhance(root) {
       square.classList.add('duel-flipped-stone');
     }
   }
+  // Keypad works in production Activity and offline demo using the same input event.
+  // It sends no mutation; only the existing explicit confirm button does.
+  root.addEventListener('input',event=>{
+    if(event.target?.id!=='duel-guess')return;
+    const input=event.target;
+    const value=normalizeHitBlowInput(input.value);
+    input.value=value;
+    const panel=input.closest('.duel-hitblow-entry');
+    panel?.querySelectorAll('[data-hitblow-slot]').forEach((slot,i)=>{
+      slot.textContent=value[i]??'•';
+      slot.classList.toggle('filled',!!value[i]);
+    });
+    const submit=panel?.querySelector('[data-hitblow-submit]');
+    if(submit)submit.disabled=value.length!==4;
+    const help=panel?.querySelector('[data-hitblow-help]');
+    if(help)help.textContent=value.length===4?'4桁がそろった。予想を確定できる。':'異なる数字をあと'+(4-value.length)+'種類選ぶ。';
+  });
+  root.addEventListener('click',event=>{
+    const key=event.target.closest?.('[data-hitblow-key]');
+    if(!key||!root.contains(key))return;
+    const input=key.closest('.duel-hitblow-entry')?.querySelector('#duel-guess');
+    if(!input||input.disabled)return;
+    const value=key.dataset.hitblowKey;
+    input.value=value==='delete'?input.value.slice(0,-1):
+      value==='clear'?'':normalizeHitBlowInput(input.value+value);
+    input.dispatchEvent(new Event('input',{bubbles:true}));
+  });
   const observer = new MutationObserver(scan);
   observer.observe(root, {childList: true, subtree: true});
   root.addEventListener('pointerdown', event => {
@@ -208,7 +273,7 @@ function enhance(root) {
   for (const event of ['pointerup', 'pointercancel']) {
     root.addEventListener(event, () => root.querySelectorAll('.duel-tap-feedback').forEach(x => x.classList.remove('duel-tap-feedback')), {passive: true});
   }
-  addEventListener('visibilitychange', () => { if (document.hidden) { previous = null; c4Previous=null; c4Motion=null; bluffPrevious=null; bluffMotion=null; pokerPrevious=null; pokerMotion=null; delete root.__duelTapAt; } });
+  addEventListener('visibilitychange', () => { if (document.hidden) { previous = null; c4Previous=null; c4Motion=null; bluffPrevious=null; bluffMotion=null; pokerPrevious=null; pokerMotion=null; hitPrevious=null; hitMotion=null; delete root.__duelTapAt; } });
   scan();
 }
 if (typeof document !== 'undefined' && typeof MutationObserver !== 'undefined') {
