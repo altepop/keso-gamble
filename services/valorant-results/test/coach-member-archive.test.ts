@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
 import {COACH_MEMBER_ACCOUNTS,enableAllMemberArchive,discoverCoachMemberPage,
  fetchNextCoachMemberMatch,coachMemberCoverage} from '../src/coach-member-archive.ts';
+import {recordCompetitiveRoster} from '../src/match-rosters.ts';
+import {recordCompetitiveRoundEvents} from '../src/round-events.ts';
 import type {Match} from '../src/results.ts';
 
 const now=Date.parse('2026-11-17T08:00:00Z');
@@ -13,11 +15,11 @@ function makeMatch(id:string,sourcePuuid='player-0'):Match{
   players:Array.from({length:10},(_,i)=>({
    puuid:i===0?sourcePuuid:'other-'+i,team_id:i<5?'Blue':'Red',
    name:i===0?'Dolly':'player'+i,tag:i===0?'SDGs':'JP',
-   stats:{kills:5,deaths:10,assists:3,score:1600},agent:{name:'Fade'}
+   stats:{kills:5,deaths:10,assists:3,score:1600,headshots:4,bodyshots:12,legshots:4,damage:{dealt:2400,received:3000}},agent:{name:'Fade'}
   })),
   teams:[{team_id:'Blue',won:true,rounds:{won:13}},{team_id:'Red',won:false,rounds:{won:8}}],
   rounds:[{id:0,winning_team:'Blue',attacking_team:'Blue',defending_team:'Red'}],
-  kills:[{round:0,time_in_round_in_ms:2300,killer:{puuid:sourcePuuid},victim:{puuid:'other-5'}}]};
+  kills:[{round:0,time_in_round_in_ms:2300,killer:{puuid:sourcePuuid},victim:{puuid:'other-5'},assistants:[]}]};
 }
 function setup(){
  const sql=new DatabaseSync(':memory:');
@@ -55,7 +57,7 @@ test('off until explicitly enabled, no account API calls, match writes or KP',as
  const f=setup();try{
   assert.equal(await discoverCoachMemberPage(f.db,async()=>{throw Error('network')},async()=>[],now),'disabled');
   assert.equal(await fetchNextCoachMemberMatch(f.db,async()=>{throw Error('network')},now),'disabled');
-  assert.equal(f.count('coach_member_queue'),0);
+  assert.equal(f.count('coach_member_queue'),0);assert.equal(f.requests().writes,0,'no queue upgrade or archive writes before owner opt-in');
  }finally{f.close()}
 });
 test('all six accounts including Kobe/Aquatopia, Fujimura, Ishihara, Abema have separate history sources',async()=>{
@@ -182,5 +184,22 @@ test('incomplete match after three tries stays explicitly partial rather than cl
    .get(id) as {status:string;attempts:number};
   assert.equal(status.status,'partial');
   assert.equal(status.attempts,3);
+ }finally{f.close()}
+});
+
+test('owner opt-in requeues a legacy complete capture and fills its missing fields within the existing single-fetch slot',async()=>{
+ const f=setup();try{
+  await enableAllMemberArchive(f.db);const id='legacy-complete',full=makeMatch(id);
+  await recordCompetitiveRoster(f.db,full,now-1000);await recordCompetitiveRoundEvents(f.db,full,now-1000);
+  const ps=JSON.parse(String(f.sql.prepare('SELECT players_json FROM valorant_match_rosters').get()!.players_json));
+  for(const p of ps)for(const key of ['hs','bs','ls','damageDealt','damageReceived','coachSchema'])delete p[key];
+  const ks=JSON.parse(String(f.sql.prepare('SELECT kills_json FROM valorant_match_round_events').get()!.kills_json));
+  for(const k of ks){delete k.assistants;delete k.assistantsAt;delete k.assistSchema;}
+  f.sql.prepare('UPDATE valorant_match_rosters SET players_json=?').run(JSON.stringify(ps));f.sql.prepare('UPDATE valorant_match_round_events SET kills_json=?').run(JSON.stringify(ks));
+  f.sql.prepare("INSERT INTO coach_member_queue VALUES(?,?,?,?,?,'complete',1,0)").run(id,'ap',COACH_MEMBER_ACCOUNTS[0].riotId,'player-0',Date.parse(started));
+  let calls=0;assert.equal(await fetchNextCoachMemberMatch(f.db,async()=>{calls++;return full;},now),'saved');assert.equal(calls,1);
+  const saved=f.sql.prepare('SELECT players_json,recorded_at FROM valorant_match_rosters').get()!;
+  assert.equal(JSON.parse(String(saved.players_json))[0].coachSchema,2);assert.equal(saved.recorded_at,now-1000);
+  assert.equal(await fetchNextCoachMemberMatch(f.db,async()=>{calls++;return full;},now+16*60_000),'idle');assert.equal(calls,1);
  }finally{f.close()}
 });

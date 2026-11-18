@@ -10,9 +10,9 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
  for(let i=0;i<40;i++){try{const ready=await fetch('http://127.0.0.1:18784/coach.html');await ready.arrayBuffer();if(ready.ok)break;}catch{}await new Promise(r=>setTimeout(r,100));}
  const browser=await engine.launch({headless:true,...engine===chromium?{args:['--no-sandbox'],...(process.env.COACH_CHROMIUM_EXECUTABLE?{executablePath:process.env.COACH_CHROMIUM_EXECUTABLE}:{})}: {}});
  const {coachPerformance}=await import('../services/valorant-results/src/coach-performance.ts');
- const performance=coachPerformance(Array.from({length:20},(_,i)=>({match_id:'fixture-'+i,ended_at:1700000000000+i*86400000,map:i%2?'Lotus':'Ascent',rounds_json:null,teams_json:JSON.stringify([{id:'Blue',won:i%2===0,rounds:13},{id:'Red',won:i%2!==0,rounds:7}]),players_json:JSON.stringify([{puuid:'fixture-self',name:'Fixture',tag:'T',team_id:'Blue',agent:'Sage',k:20+i%4,d:10+i%3,a:6,score:4000},...Array.from({length:9},(_,j)=>({puuid:'fixture-other'+j,team_id:j<4?'Blue':'Red'}))])})),[{name:'Fixture',tag:'T',puuid:'fixture-self'}]);
+ const performance=coachPerformance(Array.from({length:20},(_,i)=>({match_id:'fixture-'+i,ended_at:1700000000000+i*86400000,map:i%2?'Lotus':'Ascent',rounds_json:null,teams_json:JSON.stringify([{id:'Blue',won:i%2===0,rounds:13},{id:'Red',won:i%2!==0,rounds:7}]),players_json:JSON.stringify([{puuid:'fixture-self',name:'Fixture',tag:'T',team_id:'Blue',agent:'Sage',k:20+i%4,d:10+i%3,a:6,score:4000},...Array.from({length:9},(_,j)=>({puuid:'fixture-other'+j,team_id:j<4?'Blue':'Red',...(j===0?{agent:'Killjoy',k:10,d:15,a:4}:{})}))])})),[{name:'Fixture',tag:'T',puuid:'fixture-self'}]);
  const {coachRoundContribution}=await import('../services/valorant-results/src/coach-round-contribution.ts');
- const roundContribution=coachRoundContribution([{match_id:'fixture-rounds',players_json:JSON.stringify([{puuid:'self',team_id:'Blue',k:2,d:0},...Array.from({length:9},(_,i)=>({puuid:'other'+i,team_id:i<4?'Blue':'Red',k:0,d:i===4||i===5?1:0}))]),teams_json:JSON.stringify([{id:'Blue',rounds:1},{id:'Red',rounds:0}]),rounds_json:JSON.stringify([{r:0,winner:'Blue',attack:'Blue',defense:'Red'}]),kills_json:JSON.stringify([{r:0,t:40000,killer:'self',victim:'other4'},{r:0,t:50000,killer:'self',victim:'other5'}])}],[{name:'Fixture',tag:'T',puuid:'self'}]);
+ const roundContribution=coachRoundContribution([{match_id:'fixture-rounds',players_json:JSON.stringify([{puuid:'self',team_id:'Blue',k:2,d:0,a:1},...Array.from({length:9},(_,i)=>({puuid:'other'+i,team_id:i<4?'Blue':'Red',k:i===0?1:0,d:i===4||i===5||i===6?1:0,a:0}))]),teams_json:JSON.stringify([{id:'Blue',rounds:1},{id:'Red',rounds:0}]),rounds_json:JSON.stringify([{r:0,winner:'Blue',attack:'Blue',defense:'Red'}]),kills_json:JSON.stringify([{r:0,t:40000,killer:'self',victim:'other4',assistants:[]},{r:0,t:50000,killer:'self',victim:'other5',assistants:[]},{r:0,t:60000,killer:'other0',victim:'other6',assistants:['self']}])}],[{name:'Fixture',tag:'T',puuid:'self'}]);
  try{
   const token='a'.repeat(48);
   const report={
@@ -239,6 +239,7 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   assert.match(await page.locator('#coach-view-improve').innerText(),/攻撃の先制収支/);
   assert.match(await page.locator('#coach-view-improve').innerText(),/キル数のラウンド分布/);
   assert.match(await page.locator('#coach-view-improve').innerText(),/先制に限定しないキル・デス後の動き/);
+  assert.match(await page.locator('#coach-view-improve').innerText(),/ラウンド単位のアシスト/);assert.match(await page.locator('#coach-view-improve').innerText(),/KASTではありません/);
   assert.match(await page.locator('#coach-view-improve').innerText(),/公式トレード率ではない/);
   assert.match(await page.locator('[data-round-rate="kpr-attack"]').getAttribute('style'),/width:100%/);
   assert.equal(await page.locator('[data-round-rate="kpr-defense"]').count(),0,'unknown side is not a zero-valued bar');
@@ -256,6 +257,7 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'performance dashboard at '+width+' / '+view);
    }
    await page.locator('[data-coach-view="guns"]').click();assert.match(await page.locator('#coach-view-guns').innerText(),/KPR/);
+   await page.locator('[data-coach-view="team"]').click();assert.match(await page.locator('#coach-view-team').innerText(),/同じマップ・ロール内/);assert.match(await page.locator('#coach-view-team').innerText(),/センチネル/);
    await page.locator('[data-coach-view="time"]').click();assert.equal(await page.locator('#coach-view-time svg').first().locator('circle').count(),20);
   }
   assert.deepEqual(errors,[]);
@@ -266,6 +268,7 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   assert.equal(exportedMember.person,'神戸');
   assert.equal(exportedMember.performance.overall.kd,performance.overall.kd);
   assert.equal(exportedMember.performance.timeline.length,20);
+  assert.ok(exportedMember.performance.rolePeers.length>0);assert.equal(exportedMember.performance.rolePeers[0].kpr.peerRate,.5);
   assert.equal(exportedMember.performance.rateBases.kpr.rounds,400);
   assert.equal(exportedMember.matchTrend.length,2,'safe copy includes anonymous date-based trend');
   assert.equal(JSON.stringify(exportedMember).includes('private-vod-identifier'),false);

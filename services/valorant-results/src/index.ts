@@ -1,3 +1,4 @@
+import {enrichExistingCoachEvidence} from './coach-evidence-enrichment.ts';
 import {coachProviderShape} from './coach-provider-shape.ts';
 import {vdkRescuePress,vdkRescueStatus} from './vdk-rescue-press.ts';
 import {approvedEscalationPress,escaPressActive,escalationPressStatus} from './escalation-press.ts';
@@ -175,13 +176,14 @@ async function api<T>(env: Env, path: string): Promise<T> {
   const body = await response.json() as { data: T };
   if (body.data === undefined) throw new Error('Unexpected API data');
   try{if(path.startsWith('/valorant/v4/match/')||path.startsWith('/valorant/v4/matches/')||path.startsWith('/valorant/v4/by-puuid/matches/')){
-    let observed=false;
+    let observed:ReturnType<typeof coachProviderShape>=null;
     for(const raw of (Array.isArray(body.data)?body.data:[body.data])){
-      const shape=coachProviderShape(raw);if(shape&&raw&&typeof raw==='object'){
+      const shape=coachProviderShape(raw,path.startsWith('/valorant/v4/match/')?'detail':'history');if(shape&&raw&&typeof raw==='object'){
         Object.defineProperty(raw,'_coachProviderShape',{value:shape,enumerable:false,configurable:true});
-        if(!observed){console.info('coach_provider_shape',shape);observed=true;}
+        if(!observed||shape.queue==='competitive'&&observed.queue!=='competitive'||shape.queue===observed.queue&&shape.completed&&!observed.completed)observed=shape;
       }
     }
+    if(observed)console.info('coach_provider_shape',observed);
   }}catch{console.info('coach_provider_shape_unavailable');}
   return body.data;
 }
@@ -507,6 +509,7 @@ export async function monitor(env: Env, players: Player[] = configuredPlayers): 
       .map(e=>JSON.stringify([e.riot,e.mode])) : []);
     const deathDetails: DeathDetails = { remaining: 1, matches: new Map(),reservations };
     const pvpSeen=new Set<string>();
+    let coachEvidenceBudget=2;
     let pvpExtraDetail=1;
     // Deliver a previously queued result before spending time polling the API again.
     if (players.length) await flushNotifications(env, players);
@@ -543,6 +546,11 @@ export async function monitor(env: Env, players: Player[] = configuredPlayers): 
           .bind(...ids).all<{ riot_id: string; match_id: string }>()).results) saved.add(JSON.stringify([r.riot_id, r.match_id]));
         stage = 'save_result';
         for (const match of [...matches].sort((a, b) => Date.parse(a.metadata.started_at) - Date.parse(b.metadata.started_at))) {
+          if(coachEvidenceBudget>0){
+            coachEvidenceBudget--;
+            try{if(await enrichExistingCoachEvidence(env.DB,match)==='skipped')coachEvidenceBudget++;}
+            catch{console.warn('coach_evidence_enrichment_pending');}
+          }
           if(kpRun&&match.metadata?.match_id&&!pvpSeen.has(match.metadata.match_id)){
             pvpSeen.add(match.metadata.match_id);
             try {

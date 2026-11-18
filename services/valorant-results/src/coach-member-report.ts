@@ -40,14 +40,14 @@ export async function readCoachMemberReport(db:D1Database,person:string,preloade
   json_extract(p.value,'$.tag')=?) OR
   (? IS NOT NULL AND json_extract(p.value,'$.puuid')=?))`).join(' OR ');
  const bindArgs=accounts.flatMap(a=>[a.name,a.tag,a.puuid,a.puuid]);
- const rows=await db.prepare(`SELECT r.match_id,r.ended_at,r.recorded_at,r.map,r.players_json,r.teams_json,
+ const rows=await db.prepare(`SELECT r.match_id,r.ended_at,r.recorded_at,r.map,r.act_name,r.players_json,r.teams_json,
   e.rounds_json,e.kills_json,e.recorded_at AS events_recorded_at
   FROM valorant_match_rosters r
   LEFT JOIN valorant_match_round_events e ON e.match_id=r.match_id
   WHERE EXISTS(SELECT 1 FROM json_each(r.players_json) p WHERE ${clauses})
   ORDER BY r.ended_at DESC LIMIT ?`)
   .bind(...bindArgs,MAX_ROWS).all<{
-   match_id:string;ended_at:number;recorded_at:number;map:string|null;players_json:string;teams_json:string|null;
+   match_id:string;ended_at:number;recorded_at:number;map:string|null;act_name:string|null;players_json:string;teams_json:string|null;
    rounds_json:string|null;kills_json:string|null;events_recorded_at:number|null}>();
  const [primary,...alternates]=accounts;
  const performance=coachPerformance(rows.results,accounts,COACH_MEMBER_ACCOUNTS);

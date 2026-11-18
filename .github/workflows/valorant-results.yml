@@ -38,7 +38,9 @@ permissions:
   contents: read
 concurrency:
   group: valorant-results-${{ github.event_name == 'pull_request' && github.ref || 'production' }}
-  cancel-in-progress: false
+  # Superseded PR checks must not block verification of the latest commit.
+  # Production runs remain serialized and are never interrupted here.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   check:
     outputs:
@@ -144,6 +146,7 @@ jobs:
       - name: Refresh Activity cache versions for browser tests
         run: npm run build:activity
       - name: Install Playwright, Chromium and WebKit
+        timeout-minutes: 5
         run: |
           npm install --no-save playwright@1.63.0
           npx playwright install --with-deps chromium webkit
@@ -276,6 +279,13 @@ jobs:
         env:
           KESO_SMOKE_WALLET_TOKEN: ${{ secrets.KESO_SMOKE_WALLET_TOKEN }}
         run: node scripts/post-deploy-smoke.mjs
+      - name: Observe fixed Henrik fields from normal requests (no added API calls)
+        if: contains(github.event.head_commit.message, '[coach-performance-audit]')
+        working-directory: ${{ runner.temp }}/kp-app/services/valorant-results
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/coach-provider-tail.mjs
       - name: Read-only per-person coaching performance and D1 cost audit
         if: contains(github.event.head_commit.message, '[coach-performance-audit]')
         working-directory: ${{ runner.temp }}/kp-app/services/valorant-results
@@ -284,13 +294,6 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           KESO_SMOKE_WALLET_TOKEN: ${{ secrets.KESO_SMOKE_WALLET_TOKEN }}
         run: node scripts/coach-performance-audit.mjs
-      - name: Observe fixed Henrik fields from normal requests (no added API calls)
-        if: contains(github.event.head_commit.message, '[coach-performance-audit]')
-        working-directory: ${{ runner.temp }}/kp-app/services/valorant-results
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: node scripts/coach-provider-tail.mjs
       - name: Start read-only review delivery verification after changed analysis is deployed
         if: needs.check.outputs.review_changed == 'true'
         continue-on-error: true

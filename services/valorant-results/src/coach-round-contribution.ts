@@ -7,6 +7,7 @@ export function coachRoundContribution<T extends Row>(rows:readonly T[],accounts
  const seen=new Set<string>(),excluded:Record<string,number>={};
  const stamps:number[]=[];
  const histogram=[0,0,0,0,0,0,0];let matches=0,rounds=0,noDeath=0,multiWins=0,multiKnown=0;
+ const assistQuality={validMatches:0,rounds:0,assistRounds:0,killOrAssistRounds:0,excluded:{} as Record<string,number>};
  const combatFollowup={enemyKills:0,totalDeaths:0,enemyKnownKillerDeaths:0,teammateRetaliations5s:0,tradeKills5s:0,diedAfterKill5s:0};
  const sides={attack:{rounds:0,kills:0,deaths:0},defense:{rounds:0,kills:0,deaths:0}};
  const reject=(reason:string)=>{excluded[reason]=(excluded[reason]??0)+1;};
@@ -30,12 +31,21 @@ export function coachRoundContribution<T extends Row>(rows:readonly T[],accounts
    if(enemyKill(k,p.puuid))v.kills++;if(k.victim===p.puuid)v.deaths++;
   }
   if(ps.some(x=>(deathsById.get(x.puuid)??0)!==x.d||(killsById.get(x.puuid)??0)!==x.k)){reject('kill-totals-do-not-match-roster');continue;}
+  let assistantsComplete=ks.every(k=>Array.isArray(k.assistants)&&new Set(k.assistants).size===k.assistants.length&&k.assistants.every((id:any)=>typeof id==='string'&&byId.has(id)&&id!==k.killer&&id!==k.victim&&byId.get(id)?.team_id===byId.get(k.killer)?.team_id));
+  if(!assistantsComplete)assistQuality.excluded['missing-or-invalid-assistant-ids']=(assistQuality.excluded['missing-or-invalid-assistant-ids']??0)+1;
+  else{
+    const totals=new Map<string,number>();for(const k of ks)for(const id of k.assistants)totals.set(id,(totals.get(id)??0)+1);
+    assistantsComplete=ps.every(x=>n(x.a)&&(totals.get(x.puuid)??0)===x.a);
+    if(!assistantsComplete)assistQuality.excluded['assist-totals-do-not-match-roster']=(assistQuality.excluded['assist-totals-do-not-match-roster']??0)+1;
+  }
+  if(assistantsComplete)assistQuality.validMatches++;
   const allByRound=new Map<number,typeof ks>();
   for(const k of ks){const group=allByRound.get(k.r)??[];group.push(k);allByRound.set(k.r,group);}
   onVerified?.(row);matches++;if(Number.isSafeInteger(row.events_recorded_at)&&Number(row.events_recorded_at)>0)stamps.push(row.events_recorded_at!);
   for(const r of rs){
    const {kills=0,deaths=0}=ownByRound.get(r.r)??{};
    const events=allByRound.get(r.r)??[],ownKills=events.filter((k:any)=>enemyKill(k,p.puuid)),ownDeaths=events.filter((k:any)=>k.victim===p.puuid);
+   if(assistantsComplete){assistQuality.rounds++;const assisted=events.some((k:any)=>k.assistants.includes(p.puuid));if(assisted)assistQuality.assistRounds++;if(assisted||ownKills.length)assistQuality.killOrAssistRounds++;}
    const after=(a:any,b:any)=>a.t>b.t&&a.t-b.t<=5000;
    combatFollowup.enemyKills+=ownKills.length;combatFollowup.totalDeaths+=ownDeaths.length;
    for(const death of ownDeaths){
@@ -54,7 +64,7 @@ export function coachRoundContribution<T extends Row>(rows:readonly T[],accounts
   }
  }
  return {quality:{recordedAt:stamps.length?{oldest:Math.min(...stamps),newest:Math.max(...stamps)}:null,missingTimestamps:matches-stamps.length,source:'rounds/kills verified against all ten roster K/D totals',candidateMatches:rows.length,validMatches:matches,excluded},
-  combatFollowup,rounds,killHistogram:histogram.map((count,kills)=>({kills:kills===6?'6+':String(kills),count,denominator:rounds})),
+  assistQuality,combatFollowup,rounds,killHistogram:histogram.map((count,kills)=>({kills:kills===6?'6+':String(kills),count,denominator:rounds})),
   noDeathRounds:noDeath,multiKillRounds:histogram.slice(2).reduce((a,b)=>a+b,0),multiKillWins:multiWins,multiKillKnownOutcomes:multiKnown,sides,
-  limitations:['5秒の追随は全キル/デスの時系列観測。同時刻は順序不明として数えない。位置上のトレード機会や公式トレード率ではなく、復活・意図・射線は未確認。','無死亡ラウンドは復活後を含む終了時生存率ではない。','KAST・ラウンド別アシスト・位置上のトレード機会・クラッチは未算出。','マルチキル後の勝率は関連の観察であり、個人の因果的な勝利貢献率ではない。']};
+  limitations:['5秒の追随は全キル/デスの時系列観測。同時刻は順序不明として数えない。位置上のトレード機会や公式トレード率ではなく、復活・意図・射線は未確認。','無死亡ラウンドは復活後を含む終了時生存率ではない。','KAST・終了時生存・位置上のトレード機会・クラッチは未算出。','マルチキル後の勝率は関連の観察であり、個人の因果的な勝利貢献率ではない。']};
 }
