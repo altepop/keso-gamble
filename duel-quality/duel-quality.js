@@ -235,7 +235,7 @@ function enhance(root) {
     }
     const arena=board.closest('.duel-arena');
     const output=arena?.querySelector('[data-gomoku-zoom-label]');
-    if(output)output.textContent=Math.round(zoomLevels[index]/44*100)+'%';
+    if(output){const label=Math.round(zoomLevels[index]/44*100)+'%';if(output.textContent!==label)output.textContent=label;}
     const plus=arena?.querySelector('[data-gomoku-zoom-action="in"]');
     const minus=arena?.querySelector('[data-gomoku-zoom-action="out"]');
     if(plus)plus.disabled=index===zoomLevels.length-1;
@@ -259,13 +259,13 @@ function enhance(root) {
     const last=gomokuLast;
     const status=arena?.querySelector('[data-gomoku-last-status]');
     if(!last||last.id!==id||last.version!==version||last.state!==gomokuPrevious?.state){
-      if(status)status.textContent='新しい確定手を観測したら、その場所を強調する。';
+      if(status){const message='新しい確定手を観測したら、その場所を強調する。';if(status.textContent!==message)status.textContent=message;}
       return;
     }
     const newest=board.querySelector('.duel-square[data-duel-cell="'+last.index+'"]');
     if(!newest)return;
     newest.classList.add('duel-gomoku-last-confirmed');
-    if(status)status.textContent='直前の確定手：'+last.row+'行 '+last.column+'列（'+(last.color==='B'?'黒':'白')+'）';
+    if(status){const message='直前の確定手：'+last.row+'行 '+last.column+'列（'+(last.color==='B'?'黒':'白')+'）';if(status.textContent!==message)status.textContent=message;}
     const elapsed=performance.now()-last.started;
     if(elapsed<850&&!document.hidden&&!matchMedia('(prefers-reduced-motion: reduce)').matches){
       newest.style.setProperty('--gomoku-move-delay',(-elapsed)+'ms');
