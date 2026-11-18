@@ -341,7 +341,18 @@ export async function cleanupBoardDuels(env:KpEnv,guild:string,now=Date.now()){
  return {expired:Number(expired.meta.changes??0),removed:rows.length};
 }
 
-export async function boardDuelApi(request:Request,env:KpEnv,m:KpMapping,user:string,headers:Record<string,string>={}){
+// Notification delivery happens strictly *after* the D1 transaction commits.
+// A DO outage cannot reverse a move, double a payment, or block the response.
+export function notifyCommittedDuel(env:KpEnv,match:BoardDuel):Promise<void>{
+ if(!env.RACE_BROADCAST)return Promise.resolve();
+ const hub=env.RACE_BROADCAST.get(env.RACE_BROADCAST.idFromName('duel:'+match.guild));
+ return hub.fetch('https://internal/duel/notify',{method:'POST',body:JSON.stringify({
+  userA:match.user_a,userB:match.user_b,id:match.id,version:match.version
+ })}).then(response=>{if(!response.ok)console.warn('duel-realtime-hint-unavailable',response.status);})
+ .catch(()=>{console.warn('duel-realtime-hint-unavailable');});
+}
+export async function boardDuelApi(request:Request,env:KpEnv,m:KpMapping,user:string,headers:Record<string,string>={},
+ deferPostCommit?:(job:Promise<void>)=>void){
  const response=(body:unknown,status=200)=>Response.json(body,{status,headers:{'Cache-Control':'no-store',...headers}});
  try{
   if(request.method==='GET')return response(await boardDuelList(env,m,user,new URL(request.url).searchParams.get('cursor')));
@@ -349,7 +360,10 @@ export async function boardDuelApi(request:Request,env:KpEnv,m:KpMapping,user:st
   const raw=await request.text();if(raw.length>1024)return response({error:'操作内容が長すぎます。'},400);
   const body=JSON.parse(raw) as Record<string,unknown>;
   if(!body||typeof body!=='object'||Array.isArray(body))return response({error:'操作内容が不正です。'},400);
-  return response({match:await boardDuelAction(env,m,user,body)});
+  const match=await boardDuelAction(env,m,user,body);
+  const hint=notifyCommittedDuel(env,match);
+  if(deferPostCommit)deferPostCommit(hint);else await hint;
+  return response({match});
  }catch(error){
   const message=error instanceof Error?error.message:'';
   const safe=/[ぁ-んァ-ヶ一-龯]/.test(message)&&!message.includes('SQL');
