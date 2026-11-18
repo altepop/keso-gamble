@@ -57,6 +57,13 @@ jobs:
           node-version: '24'
           cache: npm
           cache-dependency-path: services/valorant-results/package-lock.json
+      - name: Use the official Ubuntu archive with bounded download waits
+        working-directory: .
+        run: |
+          if [ -f /etc/apt/apt-mirrors.txt ]; then
+            printf '%s\n' 'https://archive.ubuntu.com/ubuntu/' | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
+          fi
+          printf '%s\n' 'Acquire::http::Timeout "20";' 'Acquire::https::Timeout "20";' 'Acquire::Retries "2";' | sudo tee /etc/apt/apt.conf.d/80-playwright-downloads >/dev/null
       - name: Report proposed sanma release configuration without accessing Mahjong or D1
         env:
           SANMA_CONFIGURATION: ${{ vars.MAHJONG_SANMA_REVIEW_ENABLED == 'true' && 'enabled' || vars.MAHJONG_SANMA_REVIEW_ENABLED == 'false' && 'disabled' || vars.MAHJONG_SANMA_REVIEW_ENABLED == '' && 'enabled-release-default' || 'invalid' }}
@@ -117,6 +124,7 @@ jobs:
         working-directory: .
         run: node --test scripts/post-deploy-smoke.test.mjs
       - name: Prepare race video verification
+        timeout-minutes: 5
         working-directory: .
         run: bash scripts/race-video/prepare.sh
       - name: Render a fixture replay (no Discord delivery)
