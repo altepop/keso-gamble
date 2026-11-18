@@ -31,7 +31,7 @@ test('win line detects rows, columns and diagonal; never guesses a win from inva
  assert.deepEqual(connect4WinningLine(row,'a'),[35,36,37,38]);
  const diag=[...connect4Board()];
  for(let i=0;i<4;i++)diag[(5-i)*7+i]='b';
- assert.deepEqual(connect4WinningLine(diag.join(''),'b'),[14,22,30,38]);
+ assert.deepEqual(connect4WinningLine(diag.join(''),'b'),[17,23,29,35]);
 });
 test('finished board shows a celebration only for a line that matches server winner',()=>{
  let board=connect4Board();
