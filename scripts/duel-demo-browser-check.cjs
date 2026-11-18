@@ -138,6 +138,16 @@ const a='[data-demo-view=a]',b='[data-demo-view=b]';
   await page.setViewportSize({width,height:844});
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth),false,'horizontal overflow '+width);
  }
+ // A separate motion-enabled context verifies an actual Othello move on both engines.
+ const animatedCtx=await browser.newContext({viewport:{width:390,height:844},deviceScaleFactor:1,isMobile:engine==='webkit',hasTouch:true,reducedMotion:'no-preference'});
+ const animatedPage=await animatedCtx.newPage();animatedPage.on('pageerror',e=>errors.push(e.message));
+ await animatedPage.goto(url+'?cpu=1',{waitUntil:'networkidle'});
+ await animatedPage.locator('.duel-othello .duel-square.available').first().click();
+ await animatedPage.locator('.duel-othello .duel-square.duel-new-stone').waitFor();
+ assert.ok(await animatedPage.locator('.duel-othello .duel-square.duel-flipped-stone').count()>=1,'captured stone gets a flip');
+ const animation=await animatedPage.locator('.duel-othello .duel-new-stone .duel-piece').evaluate(el=>getComputedStyle(el).animationName);
+ assert.match(animation,/duel-stone-land/,'motion-enabled browser plays landing animation');
+ await animatedCtx.close();
  assert.deepEqual(requests,[],'demo must never call KP/Discord or Worker endpoints');
  assert.deepEqual(errors,[],'browser runtime errors');
  console.log('DUEL DEMO SUCCESS ('+engine+'): 6 modes, challenge+accept, real rules, hands/privacy, payout mock, screenshot UI, mobile widths, 0 D1 requests.');
