@@ -1,6 +1,7 @@
 import {coachRoundContribution} from './coach-round-contribution.ts';
 import {coachRoundContext} from './coach-round-context.ts';
 import {coachPerformance} from './coach-performance.ts';
+import {coachNextMatch} from './coach-next-match.ts';
 import {COACH_MEMBER_ACCOUNTS,coachMemberCoverage} from './coach-member-archive.ts';
 import {summarizeCoachRounds} from './coach-round-analysis.ts';
 import {comprehensiveCoachDiagnosis} from './coach-comprehensive.ts';
@@ -96,7 +97,7 @@ export async function readCoachMemberReport(db:D1Database,person:string,preloade
   archivedMatches:rows.results.length,usableMatches:report.usableMatches,
   invalidMatches:performance.quality.excluded['invalid-roster']??0,roundDataMissing:rows.results.filter(r=>!hasEventArray(r.rounds_json)).length,
   killDataMissing:rows.results.filter(r=>!hasEventArray(r.kills_json)).length,overall:report.overall,
-  individual,individualMapAgent,matchTrend,performance,roundContribution,roundContext,
+  individual,individualMapAgent,matchTrend,performance,nextMatch:coachNextMatch(performance),roundContribution,roundContext,
   fullDiagnosis:diagnosis,coachingNotes:coachNotes(onlySelf),
   coachSignals:detectCoachSignals(onlySelf)
  };

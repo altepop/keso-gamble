@@ -10,6 +10,7 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
  for(let i=0;i<40;i++){try{const ready=await fetch('http://127.0.0.1:18784/coach.html');await ready.arrayBuffer();if(ready.ok)break;}catch{}await new Promise(r=>setTimeout(r,100));}
  const browser=await engine.launch({headless:true,...engine===chromium?{args:['--no-sandbox'],...(process.env.COACH_CHROMIUM_EXECUTABLE?{executablePath:process.env.COACH_CHROMIUM_EXECUTABLE}:{})}: {}});
  const {coachPerformance}=await import('../services/valorant-results/src/coach-performance.ts');
+ const {coachNextMatch}=await import('../services/valorant-results/src/coach-next-match.ts');
  const performance=coachPerformance(Array.from({length:20},(_,i)=>({match_id:'fixture-'+i,ended_at:1700000000000+i*86400000,map:i%2?'Lotus':'Ascent',rounds_json:null,teams_json:JSON.stringify([{id:'Blue',won:i%2===0,rounds:13},{id:'Red',won:i%2!==0,rounds:7}]),players_json:JSON.stringify([{puuid:'fixture-self',name:'Fixture',tag:'T',team_id:'Blue',agent:'Sage',k:20+i%4,d:10+i%3,a:6,score:4000},...Array.from({length:9},(_,j)=>({puuid:'fixture-other'+j,team_id:j<4?'Blue':'Red',...(j===0?{agent:'Killjoy',k:10,d:15,a:4}:{})}))])})),[{name:'Fixture',tag:'T',puuid:'fixture-self'}]);
  const {coachRoundContribution}=await import('../services/valorant-results/src/coach-round-contribution.ts');
  const roundRows=[{match_id:'fixture-rounds',players_json:JSON.stringify([{puuid:'self',team_id:'Blue',k:2,d:0,a:1},...Array.from({length:9},(_,i)=>({puuid:'other'+i,team_id:i<4?'Blue':'Red',k:i===0?1:0,d:i===4||i===5||i===6?1:0,a:0}))]),teams_json:JSON.stringify([{id:'Blue',rounds:1},{id:'Red',rounds:0}]),rounds_json:JSON.stringify([{r:0,winner:'Blue',attack:'Blue',defense:'Red'}]),kills_json:JSON.stringify([{r:0,t:40000,killer:'self',victim:'other4',assistants:[]},{r:0,t:50000,killer:'self',victim:'other5',assistants:[]},{r:0,t:60000,killer:'other0',victim:'other6',assistants:['self']}])}];
@@ -109,7 +110,7 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
    if(req.url().includes('/api/kp/coach/member?')||req.url().includes('/api/kp/coach/comparison?')){
     const makeMember=person=>{const profile=person==='神戸'?'神戸':person;
     return {
-     person,profile,roundContribution,roundContext:person==='Aquatopia'?coachRoundContext([],[],new Set()):roundContext,performance:person==='Aquatopia'?{...performance,timeline:performance.timeline.map((g,i)=>i===10?{...g,kd:null,acs:null}:g)}:performance,accounts:person==='神戸'?['Abema#ttv','Aquatopia#toppy']:[person],
+     person,profile,nextMatch:{...coachNextMatch(performance),privateId:'never-export-plan'},roundContribution,roundContext:person==='Aquatopia'?coachRoundContext([],[],new Set()):roundContext,performance:person==='Aquatopia'?{...performance,timeline:performance.timeline.map((g,i)=>i===10?{...g,kd:null,acs:null}:g)}:performance,accounts:person==='神戸'?['Abema#ttv','Aquatopia#toppy']:[person],
      usableMatches:2,archivedMatches:2,roundDataMissing:0,killDataMissing:0,
      coverage:{discovered:0,complete:0,discoveryDone:false,allMatchesGuaranteed:false},
      individual:[{player:profile,matches:2,matchWins:1,matchLosses:1,matchDraws:0,
@@ -286,6 +287,10 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   const exportedMember=JSON.parse(await page.evaluate(()=>window.__copiedDiagnostic));
   assert.equal(exportedMember.format,'KESO_COACH_SAFE_MEMBER_DIAGNOSTIC_V1');
   assert.equal(exportedMember.person,'神戸');
+  assert.match(exportedMember.nextMatch.focus.action,/次|録画|確認/);
+  assert.equal(JSON.stringify(exportedMember).includes('never-export-plan'),false);
+  assert.match(await page.locator('[data-next-match]').innerText(),/次の1試合で試すこと/);
+  assert.match(await page.locator('[data-next-match]').innerText(),/KPR/);
   assert.equal(exportedMember.performance.overall.kd,performance.overall.kd);
   assert.equal(exportedMember.performance.timeline.length,20);
   assert.ok(exportedMember.performance.rolePeers.length>0);assert.equal(exportedMember.performance.rolePeers[0].kpr.peerRate,.5);
@@ -363,6 +368,25 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   assert.equal(getCount,2,'one fresh read after successful resume');
   assert.equal(await resumePage.locator('#resume-backfill').isHidden(),true);
   await resumeCtx.close();
+  // Few/no matches must still show one useful experiment, with no invented
+  // trend, positive result or zero-filled comparison at either phone width.
+  for(const width of [320,375])for(const count of [0,1]){
+   const sparse=coachPerformance(count?[{match_id:'single',ended_at:1700000000000,map:'Ascent',rounds_json:null,
+    teams_json:JSON.stringify([{id:'Blue',rounds:13,won:true},{id:'Red',rounds:7,won:false}]),
+    players_json:JSON.stringify([{puuid:'self',team_id:'Blue',agent:'Sage',k:12,d:16,a:5},...Array.from({length:9},(_,i)=>({puuid:'other'+i,team_id:i<4?'Blue':'Red'}))])}]:[],[{puuid:'self',name:'Fixture',tag:'X'}]);
+   const sparseCtx=await browser.newContext({viewport:{width,height:812},isMobile:true});
+   await sparseCtx.addInitScript(t=>sessionStorage.setItem('keso-coach-session-v1',t),token);
+   await sparseCtx.route('https://valorant-results.tealeaforest.workers.dev/**',route=>route.fulfill({status:200,contentType:'application/json',
+    body:JSON.stringify(route.request().url().includes('/coach/member?')?{person:'VDK',profile:'VDK',accounts:['Fixture'],performance:sparse,nextMatch:coachNextMatch(sparse),
+     archivedMatches:count,usableMatches:0,coverage:{},individual:[],fullDiagnosis:{items:[]}}:report)}));
+   const sparsePage=await sparseCtx.newPage();const sparseErrors=[];sparsePage.on('pageerror',e=>sparseErrors.push(e.message));
+   await sparsePage.goto('http://127.0.0.1:18784/coach.html');await sparsePage.locator('[data-member="VDK"]').click();
+   await sparsePage.locator('[data-next-match]').waitFor({state:'visible'});
+   const text=await sparsePage.locator('[data-next-match]').innerText();assert.match(text,/1つ録画/);
+   assert.match(text,count?/12K・16D/:/最初の記録待ち/);assert.equal(text.includes('NaN'),false);
+   assert.equal(await sparsePage.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+   assert.deepEqual(sparseErrors,[]);await sparseCtx.close();
+  }
   // Optional report throttling must keep the owner's acquisition stop usable.
   const budgetCtx=await browser.newContext({viewport:{width:320,height:568},isMobile:true});
   await budgetCtx.addInitScript(t=>sessionStorage.setItem('keso-coach-session-v1',t),token);
