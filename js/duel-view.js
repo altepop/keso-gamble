@@ -1,6 +1,6 @@
-import {miniBoardView} from './duel-mini-view.js?v=web-096ec70dec390116';
-import {EXTRA_DUEL_GAMES} from './duel-mini-games.js?v=web-096ec70dec390116';
-import {DUEL_GAMES,duelLegalMoves,duelScore} from './duel-rules.js?v=web-096ec70dec390116';
+import {miniBoardView} from './duel-mini-view.js?v=web-47dd91f75e5884c0';
+import {EXTRA_DUEL_GAMES} from './duel-mini-games.js?v=web-47dd91f75e5884c0';
+import {DUEL_GAMES,duelLegalMoves,duelScore} from './duel-rules.js?v=web-47dd91f75e5884c0';
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const kp=n=>Number(n||0).toLocaleString('ja-JP')+' KP';
 const title=(r)=>DUEL_GAMES[r.game]?.name||EXTRA_DUEL_GAMES[r.game]?.name||r.game;
@@ -107,6 +107,7 @@ export function duelScreen({info,user,live,cash,selectedId,game='othello',stake=
  <div class="action-row">${!mine&&timeLeft(chosen.deadline_at)>0?`<button class="action-btn primary" data-duel-act="accept" ${busy?'disabled':''}>${chosen.stake>=50000&&riskConfirm==='accept'?'金額を確認して承認':'承認して始める'}（${kp(chosen.stake)}）</button>`:''}
  <button class="action-btn" data-duel-act="cancel" ${busy?'disabled':''}>${mine?'招待を取り消す':'断る'}</button></div></div></div>`:''}
  ${chosen.status!=='pending'&&chosen.status!=='cancelled'?(Object.hasOwn(EXTRA_DUEL_GAMES,chosen.game)?miniBoardView(chosen,info,user,busy,pokerPicks,confirmResign,guessDraft):boardView(chosen,info,user,busy,confirmResign,gomokuPreviewCell,recentMoves?.get(chosen.id),localMoveHistory?.get(chosen.id)??[])):''}
+ ${chosen?.status==='finished'&&live&&(chosen.user_a===user||chosen.user_b===user)?`<div class="duel-rematch panel"><div class="card-body"><button type="button" class="action-btn primary" data-duel-rematch="${esc(chosen.id)}" ${busy?'disabled':''}>同じ相手・同じ金額で再戦を準備</button><p class="helper">申し込み内容を確認して送信すると、相手の承認後に新しい対戦が始まる。自動でKPは賭けられない。</p></div></div>`:''}
  </div>`:''}
  ${!chosen?'<div class="duel-intro"><span>対人ゲーム</span><h2>KPを賭けて対戦</h2><p>ゲームと対戦相手、賭け金を選んで申し込む。相手が承認すると対戦が始まり、勝った人が双方の賭け金を受け取る。引き分けは返金。</p></div>':''}
  ${error?`<div class="storage-warning duel-error" role="alert">${esc(error)}</div>`:''}
