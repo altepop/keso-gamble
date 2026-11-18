@@ -99,7 +99,7 @@ export async function ensureDuelLoot(env:KpEnv){
        CASE WHEN NEW.winner='draw' THEN 'draw' WHEN NEW.winner=NEW.user_a THEN 'win' ELSE 'loss' END,
        p.rating,CAST(NEW.updated_at/86400000 AS INTEGER),NEW.updated_at
       FROM kp_duel_skill p WHERE p.guild=NEW.guild AND p.user=NEW.user_a AND p.game=NEW.game
-       AND (SELECT COUNT(*) FROM kp_board_duel_actions WHERE duel_id=NEW.id AND kind='move')>=2
+       AND (SELECT COUNT(*) FROM kp_board_duel_actions WHERE duel_id=NEW.id AND kind='move')>=1
        AND (SELECT COUNT(*) FROM kp_duel_loot_receipts WHERE guild=NEW.guild AND user=NEW.user_a
         AND day=CAST(NEW.updated_at/86400000 AS INTEGER))<3
        AND (SELECT COUNT(*) FROM kp_duel_loot_receipts WHERE guild=NEW.guild AND user=NEW.user_a
@@ -109,7 +109,7 @@ export async function ensureDuelLoot(env:KpEnv){
        CASE WHEN NEW.winner='draw' THEN 'draw' WHEN NEW.winner=NEW.user_b THEN 'win' ELSE 'loss' END,
        p.rating,CAST(NEW.updated_at/86400000 AS INTEGER),NEW.updated_at
       FROM kp_duel_skill p WHERE p.guild=NEW.guild AND p.user=NEW.user_b AND p.game=NEW.game
-       AND (SELECT COUNT(*) FROM kp_board_duel_actions WHERE duel_id=NEW.id AND kind='move')>=2
+       AND (SELECT COUNT(*) FROM kp_board_duel_actions WHERE duel_id=NEW.id AND kind='move')>=1
        AND (SELECT COUNT(*) FROM kp_duel_loot_receipts WHERE guild=NEW.guild AND user=NEW.user_b
         AND day=CAST(NEW.updated_at/86400000 AS INTEGER))<3
        AND (SELECT COUNT(*) FROM kp_duel_loot_receipts WHERE guild=NEW.guild AND user=NEW.user_b
