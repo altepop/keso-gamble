@@ -461,7 +461,20 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping,deferP
     invalidateCoachRoundReport(env.DB);
     return response({status:result,note:'既存の5分間隔で、保存済みVDK競技試合のみを補完する。'});
   }
-  if(path==='/api/kp/duels')return boardDuelApi(request,env,mapping,owner.user,headers);
+  if(request.method==='GET'&&path==='/api/kp/duels/events'){
+   // The same Bearer KP session and member authorization above protect this
+   // stream. Only participant-specific change hints, never secret hands or KP,
+   // are sent. No additional D1 schema or per-event database reads.
+   if(!env.RACE_BROADCAST)return response({error:'Real-time notifications unavailable; polling remains active.'},503);
+   const hub=env.RACE_BROADCAST.get(env.RACE_BROADCAST.idFromName('duel:'+mapping.guildId));
+   const stream=await hub.fetch('https://internal/duel/subscribe',{
+    method:'POST',body:JSON.stringify({user:owner.user})
+   });
+   return new Response(stream.body,{status:stream.status,headers:{
+    ...Object.fromEntries(stream.headers),...headers,'Cache-Control':'no-cache, no-transform'
+   }});
+  }
+  if(path==='/api/kp/duels')return boardDuelApi(request,env,mapping,owner.user,headers,deferPostCommit);
   if(path.startsWith('/api/kp/steam/')){const r=await steamApi(request,env,owner,token!);return new Response(r.body,{status:r.status,headers:{...Object.fromEntries(r.headers),...headers}});}
   if(path.startsWith('/api/kp/hoyo/')){const r=await hoyoApi(request,env,owner);return new Response(r.body,{status:r.status,headers:{...Object.fromEntries(r.headers),...headers}});}
   if(request.method==='POST'&&path==='/api/kp/logout'){await revokeKpSession(env,token!);return response({disconnected:true});}
