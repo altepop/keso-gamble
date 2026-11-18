@@ -38,6 +38,16 @@ const isId=(x:unknown):x is string=>typeof x==='string'&&x.length>0&&x.length<=1
 const isRegion=(x:unknown):x is string=>typeof x==='string'&&['ap','na','eu','kr','br','latam'].includes(x);
 const safeTime=(s:unknown)=>typeof s==='string'?Date.parse(s):NaN;
 const delay=15*60_000;
+async function repairLifetimeCaseDiscovery(db:D1Database){
+ const key='coach_lifetime_case_v1:ready';
+ if(await db.prepare('SELECT value FROM monitor_state WHERE key=?').bind(key).first())return;
+ // The v1 index uses display labels such as "Competitive". Earlier discovery
+ // rejected these while still advancing the page. Revisit those pages once,
+ // retaining resolved accounts, saved matches, links and the existing API budget.
+ // This function is called only after the existing explicit owner opt-in.
+ await db.prepare('UPDATE coach_member_sources SET next_page=1,done=0,truncated=0,next_at=0 WHERE next_page>1').run();
+ await db.prepare('INSERT OR IGNORE INTO monitor_state(key,value) VALUES(?,?)').bind(key,'1').run();
+}
 const getSwitch=async(db:D1Database)=>(await db.prepare('SELECT value FROM monitor_state WHERE key=?')
  .bind(ALL_MEMBER_SWITCH).first<{value:string}>())?.value==='enabled';
 
@@ -69,6 +79,7 @@ export async function discoverCoachMemberPage(db:D1Database,
  lifetime:(region:string,puuid:string,page:number,size:number)=>Promise<unknown>,
  now=Date.now()):Promise<ArchiveStep>{
  if(!await getSwitch(db))return 'disabled';
+ await repairLifetimeCaseDiscovery(db);
  const source=await db.prepare(`SELECT riot_id,puuid,region,next_page,done,truncated,next_at
   FROM coach_member_sources WHERE done=0 AND next_at<=?
   ORDER BY CASE WHEN puuid IS NULL THEN 0 ELSE 1 END, next_page ASC,riot_id ASC LIMIT 1`).bind(now).first<Source>();
@@ -101,7 +112,7 @@ export async function discoverCoachMemberPage(db:D1Database,
    const id=raw?.meta?.id??raw?.metadata?.match_id;
    const queue=raw?.meta?.mode??raw?.metadata?.queue?.id;
    const started=safeTime(meta?.started_at);
-   if(queue!=='competitive'||!isId(id)||seen.has(id)||!Number.isFinite(started)||
+   if(typeof queue!=='string'||queue.toLowerCase()!=='competitive'||!isId(id)||seen.has(id)||!Number.isFinite(started)||
       started<=0||started>now+120_000)continue;
    seen.add(id);discovered.push({id,started});
   }

@@ -107,6 +107,40 @@ test('paged lifetime index deduplicates shared matches and only fetches new comp
   assert.equal(coverage.people.every(x=>x.discoveryDone),true);
  }finally{f.close()}
 });
+test('v1 display-case modes are queued, other modes and invalid dates stay excluded',async()=>{
+ const f=setup();try{
+  await enableAllMemberArchive(f.db);
+  f.sql.exec("UPDATE coach_member_sources SET puuid='player-0',region='ap',done=1; UPDATE coach_member_sources SET done=0 WHERE riot_id='Dolly#SDGs'");
+  const rows=[
+   {meta:{id:'display-case',mode:'Competitive',started_at:started}},
+   {meta:{id:'upper-case',mode:'COMPETITIVE',started_at:started}},
+   {metadata:{match_id:'v4-id',queue:{id:'competitive'},started_at:started}},
+   {meta:{id:'wrong-mode',mode:'Unrated',started_at:started}},
+   {meta:{id:'unknown-mode',mode:null,started_at:started}},
+   {meta:{id:'wrong-date',mode:'Competitive',started_at:'bad'}}
+  ];
+  assert.equal(await discoverCoachMemberPage(f.db,async()=>{throw Error('unneeded')},async()=>rows,now),'discovery_done');
+  assert.deepEqual(f.sql.prepare('SELECT match_id FROM coach_member_queue ORDER BY match_id').all().map(r=>r.match_id),['display-case','upper-case','v4-id']);
+ }finally{f.close()}
+});
+test('owner-opted-in legacy pages restart once without losing identities or existing data',async()=>{
+ const f=setup();try{
+  await enableAllMemberArchive(f.db);
+  f.sql.exec("UPDATE coach_member_sources SET puuid='player-0',region='ap',next_page=2,done=1,next_at=9999999999999");
+  const rows=Array.from({length:50},(_,i)=>({meta:{id:'recovered-'+i,mode:'Competitive',started_at:started}}));
+  let calls=0;
+  const history=async(_region:string,_puuid:string,page:number)=>{calls++;assert.equal(page,1);return rows;};
+  assert.equal(await discoverCoachMemberPage(f.db,async()=>{throw Error('must retain resolved identity')},history,now),'discovered');
+  assert.equal(calls,1);assert.equal(f.count('coach_member_queue'),50);
+  assert.equal((f.sql.prepare('SELECT COUNT(*) n FROM coach_member_sources WHERE next_page=1').get() as {n:number}).n,5);
+  f.sql.exec("UPDATE coach_member_sources SET next_page=3,done=1");
+  const writes=f.requests().writes;
+  assert.equal(await discoverCoachMemberPage(f.db,async()=>{throw Error('unneeded')},history,now),'idle');
+  assert.equal(f.requests().writes,writes,'repair does not reset pages on subsequent Cron runs');
+  assert.equal(f.count('coach_member_queue'),50);assert.equal(f.count('coach_member_links'),50);
+  assert.equal(calls,1);
+ }finally{f.close()}
+});
 test('source validation, absent kill timelines and missing upstream games cannot appear as complete',async()=>{
  const f=setup();try{
   await enableAllMemberArchive(f.db);
