@@ -80,7 +80,10 @@ export function duelScreen({info,user,live,cash,selectedId,game='othello',stake=
  const skill=(info?.skills??[]).find(row=>row.game===(chosen?.game??game));
  const rating=Math.max(0,Math.min(2500,Number(skill?.rating)||0));
  const peak=Math.max(rating,Number(skill?.peak)||0);
- const tier=['見習い','挑戦者','名人','達人','超人'][Math.min(4,Math.floor(rating/500))];
+ const stageIndex=Math.min(4,Math.floor(rating/500));
+ const tier=['見習い','挑戦者','名人','達人','超人'][stageIndex];
+ const odds=info?.lootRates?.[stageIndex]?.win;
+ const rateText=odds?'<p class="helper">通常抽選の勝利時：欠片増幅瓶 '+Number(odds.vial).toFixed(2)+'% ／ 覇者の選定書 '+Number(odds.select).toFixed(2)+'% ／ 覇王の古代選定書 '+Number(odds.ancient).toFixed(2)+'%。同じ相手との連戦・1日の大量周回で抽選率と欠片は段階的に下がるが、報酬が完全にゼロになることはない。</p>':'';
  const selectedClaim=chosen?.status==='finished'?
   '<section class="panel"><div class="card-body"><h2 class="panel-title">🎁 決闘の戦利品</h2>'+
   (Number(chosen.reward_claimable)===1?
@@ -88,11 +91,11 @@ export function duelScreen({info,user,live,cash,selectedId,game='othello',stake=
     '<button type="button" class="action-btn primary" data-duel-claim="'+esc(chosen.id)+'" '+(busy?'disabled':'')+'>⚔️ 報酬を受け取る</button>'
    :chosen.reward_claimed_at?
     '<p class="helper">✅ この対局の戦利品は受け取り済みだ。消耗品は「遺物 → 消耗品」で使用できる。</p>'
-   :'<p class="helper">この対局には未受取の戦利品がない。投了・時間切れ・対象外の過去対局・日次上限などは対象外だ。</p>')+
+   :'<p class="helper">この対局には未受取の戦利品がない。投了・時間切れ・対象外の過去対局などは対象外だ。</p>')+
   '</div></section>':'';
  const skillView='<section class="panel"><div class="card-body"><h2 class="panel-title">🏅 種目別熟練度</h2>'+
   '<p><strong>'+esc(title({game:chosen?.game??game}))+'：'+rating+' / 2500</strong>　'+esc(tier)+'</p>'+
-  '<p class="helper">自己最高 '+peak+' ／ 対人 '+(skill?.games??0)+'戦（'+(skill?.wins??0)+'勝・'+(skill?.losses??0)+'敗・'+(skill?.draws??0)+'分）。勝敗で熟練度が増減し、レアドロップ率が段階的に上がる。</p>'+
+  '<p class="helper">自己最高 '+peak+' ／ 対人 '+(skill?.games??0)+'戦（'+(skill?.wins??0)+'勝・'+(skill?.losses??0)+'敗・'+(skill?.draws??0)+'分）。勝てば大きく、負けても少し熟練度が伸びる。熟練度が上がるとレアドロップ率も上がる。</p>'+rateText+
   '</div></section>';
  const formMarkup=`<div class="duel-new panel"><div class="card-body">
  <h2 class="panel-title">対戦を申し込む</h2><div class="duel-formrow">
