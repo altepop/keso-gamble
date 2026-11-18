@@ -180,12 +180,19 @@ const a='[data-demo-view=a]',b='[data-demo-view=b]';
  // Poker — both players can confirm their own exchange; board shows showdown only after both finish.
  await chooseMode('poker');
  assert.equal(await page.locator('.duel-card').count(),5);
+ assert.equal(await page.locator('.duel-poker-reveal-card').count(),0,'opponent cards are private before the showdown');
+ assert.equal(await page.locator('.duel-poker-hand-card').count(),5);
+ assert.match(await page.locator('.duel-poker-choice-summary').innerText(),/交換予定/);
  await page.locator('[data-duel-card="0"]').click();
  assert.match(await page.locator('.duel-card.selected').innerText(),/交換/);
  await page.locator('[data-duel-mini=poker]').click();
  assert.equal(await page.locator('.duel-showdown').count(),0);
- await turn('b');await page.locator('[data-duel-mini=poker]').click();
+ assert.match(await page.locator('.duel-poker-steps').innerText(),/交換確定/);
+ await turn('b');assert.equal(await page.locator('.duel-poker-reveal-card').count(),0,'other hand remains private while second swap pending');
+ await page.locator('[data-duel-mini=poker]').click();
  assert.equal(await page.locator('.duel-showdown').count(),1);
+ assert.equal(await page.locator('.duel-poker-reveal-card').count(),10,'only confirmed showdown reveals all ten cards');
+ assert.equal(await page.locator('.duel-poker-showdown').evaluate(el=>getComputedStyle(el).animationName),'none','reduced motion removes poker flip animation');
  assert.equal(await page.locator('.duel-result').count(),1);
  await screenshot('02-poker-showdown');
  for(const width of [320,375,390,768,1280]){
@@ -273,6 +280,31 @@ const a='[data-demo-view=a]',b='[data-demo-view=b]';
   await animatedPage.setViewportSize({width:390,height:844});
   await animatedPage.screenshot({path:resolve(shotDir,'05-bluffdice-true-reveal-'+engine+'.png'),fullPage:true,animations:'disabled'});
  }
+ // Test a real two-player poker exchange progression and card flips in
+ // motion-enabled Chromium and iPhone WebKit. No test KP or D1 is touched.
+ await animatedPage.locator('#demo-mode').selectOption('poker');
+ await animatedPage.locator('[data-duel-target-toggle]').click();
+ await animatedPage.locator('[data-duel-target-option]').click();
+ await animatedPage.locator('[data-duel-act=create]').click();
+ await animatedPage.locator('[data-demo-view=b]').click();
+ await animatedPage.locator('[data-duel-act=accept]').click();
+ await animatedPage.locator('[data-demo-view=a]').click();
+ assert.equal(await animatedPage.locator('.duel-poker-reveal-card').count(),0);
+ await animatedPage.locator('[data-duel-card="0"]').click();
+ assert.equal(await animatedPage.locator('.duel-card.selected').count(),1);
+ await animatedPage.locator('[data-duel-mini=poker]').click();
+ assert.equal(await animatedPage.locator('.duel-poker-reveal-card').count(),0,'first swap never reveals the opponent');
+ await animatedPage.locator('[data-demo-view=b]').click();
+ await animatedPage.locator('[data-duel-mini=poker]').click();
+ const pokerReveal=animatedPage.locator('.duel-poker-showdown.duel-poker-arrival');
+ await pokerReveal.waitFor({timeout:7000});
+ assert.equal(await pokerReveal.locator('.duel-poker-reveal-card').count(),10);
+ assert.match(await pokerReveal.locator('.duel-poker-reveal-card').first().evaluate(el=>getComputedStyle(el).animationName),/duel-poker-flip/);
+ for(const width of [320,375,390,430]){
+  await animatedPage.setViewportSize({width,height:844});
+  assert.equal(await animatedPage.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'poker no horizontal overflow at '+width);
+ }
+ if(shotDir)await animatedPage.screenshot({path:resolve(shotDir,'06-poker-card-flip-'+engine+'.png'),fullPage:true,animations:'disabled'});
  await animatedCtx.close();
  assert.deepEqual(requests,[],'demo must never call KP/Discord or Worker endpoints');
  assert.deepEqual(errors,[],'browser runtime errors');
