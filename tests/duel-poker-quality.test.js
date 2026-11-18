@@ -34,7 +34,7 @@ test('a finished match without published showdown never exposes other private ca
 test('published showdown reveals 10 legitimate cards with real rank explanation',()=>{
  const a=[0,4,8,12,16],b=[1,5,9,13,17];
  const shown=createView({state:{doneA:true,doneB:true,showdown:{a,b}},turn:false,finished:true});
- assert.equal((shown.match(/duel-poker-reveal-card/g)||[]).length,10);
+ assert.equal((shown.match(/class="duel-poker-reveal-card duel-card/g)||[]).length,10);
  assert.equal((shown.match(/duel-poker-reveal-row/g)||[]).length,2);
  assert.match(shown,/カード公開/);
  assert.match(shown,/Alice/);assert.match(shown,/Bob/);
