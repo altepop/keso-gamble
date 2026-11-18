@@ -38,7 +38,9 @@ permissions:
   contents: read
 concurrency:
   group: valorant-results-${{ github.event_name == 'pull_request' && github.ref || 'production' }}
-  cancel-in-progress: false
+  # Superseded PR checks must not block verification of the latest commit.
+  # Production runs remain serialized and are never interrupted here.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   check:
     outputs:
