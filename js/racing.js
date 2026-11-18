@@ -81,6 +81,8 @@ export const CHAOS_RACE_TYPES=[
 export const FESTIVAL_FROM=Date.parse('2026-11-11T00:00:00+09:00');
 export const FESTIVAL_FIRST=Date.parse('2026-11-14T22:00:00+09:00');
 export const FESTIVAL_PRICE=1000,FESTIVAL_MAX_ODDS10=1000000;
+// A date gate preserves every previously committed festival card and its payouts.
+export const FESTIVAL_EXPANDED_FROM=Date.parse('2026-11-19T00:00:00+09:00');
 export function festivalRace(start){
  if(!isRaceStart(start)||start<FESTIVAL_FROM)return null;
  const week=weekStart(start);
@@ -92,6 +94,21 @@ export function festivalRace(start){
   if(start!==week+chosenDay*86400000+(chosenHour*60+45)*60000)return null;
  }
  return {id:'festival',name:'一枚で億り人杯',effect:'1人1枚・オッズ非公開・最大1億KP',desc:'馬券は全員1,000 KP。倍率はゴールまで秘密。的中した馬券に秘蔵倍率を適用。購入後の追加・変更はできません。'};
+}
+export const festivalExpanded=start=>start>=FESTIVAL_EXPANDED_FROM&&!!festivalRace(start);
+// Festival-only race-paper gossip. A little real signal, plenty of uncertainty;
+// this is presentation only, never changes performance, ranking or settlement.
+export function festivalRumor(card,h){
+ const rng=rngFrom(`festival-rumor-v1:${card.id}:${h.horseId??h.number}`);
+ const ability=h.ability-CLASSES[card.raceClass].mean;
+ const trainingScore=ability*1.1+(rng()-.5)*1.6;
+ const conditionScore=(h.condition-2)*.18+(rng()-.5)*1.25;
+ const fit=runningNotes(card,h).trackFit;
+ const groundScore=(fit==='◎'?.35:fit==='○'?.08:-.25)+(rng()-.5)*1.1;
+ const training=trainingScore>.45?'鋭い動きとの目撃談':trainingScore>-.2?'仕上がりは悪くないという声':'調教班の評価は割れている';
+ const condition=conditionScore>.32?'元気そうとの噂':conditionScore>-.28?'今日の気配は読めない':'落ち着きがないとの声も';
+ const ground=groundScore>.3?'この馬場が合うとの説':groundScore>-.28?'馬場への適性は未知数':'馬場に不安ありとの噂';
+ return {training,condition,ground};
 }
 export function festivalFactor(seed){
  const r=rngFrom('festival-payout-v1:'+seed)();
@@ -143,7 +160,7 @@ export function raceClass(start){if(festivalRace(start))return 4;const base=pick
 export function raceCard(start,salt=PUBLIC_SALT,entries=[]){
  if(!isRaceStart(start))throw Error('レースが見つかりません');
  const rng=rngFrom(`${salt}:card:${start}`);
- const big=bigRaceName(start),size=big||festivalRace(start)?10:8,cls=raceClass(start);
+ const big=bigRaceName(start),size=festivalExpanded(start)?16:(big||festivalRace(start)?10:8),cls=raceClass(start);
  const names=start<NAME_EXPANSION_FROM?[...LEGACY_HORSE_NAMES]:[...HORSE_NAMES];
  for(let i=names.length-1;i>0;i--){const j=Math.floor(rng()*(i+1));[names[i],names[j]]=[names[j],names[i]];}
  const horses=names.slice(0,size).map((name,i)=>({number:i+1,name,ability:CLASSES[cls].mean+normal(rng)*.35,style:Math.floor(rng()*STYLES.length),condition:pickWeighted(rng,[1,2,4,2,1])}));
