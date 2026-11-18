@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
-import {COACH_MEMBER_ACCOUNTS,enableAllMemberArchive,discoverCoachMemberPage,
+import {COACH_MEMBER_ACCOUNTS,COACH_REFRESH_INTERVAL,enableAllMemberArchive,pauseAllMemberArchive,discoverCoachMemberPage,
  fetchNextCoachMemberMatch,coachMemberCoverage} from '../src/coach-member-archive.ts';
 import {recordCompetitiveRoster} from '../src/match-rosters.ts';
 import {recordCompetitiveRoundEvents} from '../src/round-events.ts';
@@ -110,7 +110,8 @@ test('paged lifetime index deduplicates shared matches and only fetches new comp
 test('v1 display-case modes are queued, other modes and invalid dates stay excluded',async()=>{
  const f=setup();try{
   await enableAllMemberArchive(f.db);
-  f.sql.exec("UPDATE coach_member_sources SET puuid='player-0',region='ap',done=1; UPDATE coach_member_sources SET done=0 WHERE riot_id='Dolly#SDGs'");
+  f.sql.prepare("UPDATE coach_member_sources SET puuid='player-0',region='ap',done=1,next_at=?").run(now+COACH_REFRESH_INTERVAL);
+  f.sql.exec("UPDATE coach_member_sources SET done=0,next_at=0 WHERE riot_id='Dolly#SDGs'");
   const rows=[
    {meta:{id:'display-case',mode:'Competitive',started_at:started}},
    {meta:{id:'upper-case',mode:'COMPETITIVE',started_at:started}},
@@ -133,7 +134,7 @@ test('owner-opted-in legacy pages restart once without losing identities or exis
   assert.equal(await discoverCoachMemberPage(f.db,async()=>{throw Error('must retain resolved identity')},history,now),'discovered');
   assert.equal(calls,1);assert.equal(f.count('coach_member_queue'),50);
   assert.equal((f.sql.prepare('SELECT COUNT(*) n FROM coach_member_sources WHERE next_page=1').get() as {n:number}).n,5);
-  f.sql.exec("UPDATE coach_member_sources SET next_page=3,done=1");
+  f.sql.prepare("UPDATE coach_member_sources SET next_page=3,done=1,next_at=?").run(now+COACH_REFRESH_INTERVAL);
   const writes=f.requests().writes;
   assert.equal(await discoverCoachMemberPage(f.db,async()=>{throw Error('unneeded')},history,now),'idle');
   assert.equal(f.requests().writes,writes,'repair does not reset pages on subsequent Cron runs');
@@ -235,5 +236,47 @@ test('owner opt-in requeues a legacy complete capture and fills its missing fiel
   const saved=f.sql.prepare('SELECT players_json,recorded_at FROM valorant_match_rosters').get()!;
   assert.equal(JSON.parse(String(saved.players_json))[0].coachSchema,2);assert.equal(saved.recorded_at,now-1000);
   assert.equal(await fetchNextCoachMemberMatch(f.db,async()=>{calls++;return full;},now+16*60_000),'idle');assert.equal(calls,1);
+ }finally{f.close()}
+});
+
+test('completed history refreshes only the newest page on schedule and skips all known links',async()=>{
+ const f=setup();try{
+  await enableAllMemberArchive(f.db);f.sql.exec("INSERT INTO monitor_state VALUES('coach_lifetime_case_v1:ready','1')");
+  f.sql.prepare("UPDATE coach_member_sources SET puuid='player-0',region='ap',done=1,next_page=5,next_at=?").run(now+COACH_REFRESH_INTERVAL);
+  const riot=COACH_MEMBER_ACCOUNTS[0].riotId;f.sql.prepare('UPDATE coach_member_sources SET next_at=0 WHERE riot_id=?').run(riot);
+  let calls=0;const history=async(_r:string,_p:string,page:number,size:number)=>{calls++;assert.equal(page,1);assert.equal(size,50);return [{meta:{id:'new-competitive',mode:'Competitive',started_at:started}}];};
+  assert.equal(await discoverCoachMemberPage(f.db,async()=>{throw Error('resolved already')},history,now),'refreshed');
+  const source=f.sql.prepare('SELECT * FROM coach_member_sources WHERE riot_id=?').get(riot)!;
+  assert.equal(source.next_page,5);assert.equal(source.done,1);assert.equal(source.next_at,now+COACH_REFRESH_INTERVAL);assert.equal(f.count('coach_member_queue'),1);assert.equal(f.count('coach_member_links'),1);
+  assert.equal(await discoverCoachMemberPage(f.db,async()=>{throw Error('unneeded')},history,now+COACH_REFRESH_INTERVAL-1),'idle');assert.equal(calls,1);
+  f.sql.prepare('UPDATE coach_member_sources SET next_at=? WHERE riot_id<>?').run(now+2*COACH_REFRESH_INTERVAL,riot);
+  const before=f.requests().writes;
+  assert.equal(await discoverCoachMemberPage(f.db,async()=>{throw Error('unneeded')},history,now+COACH_REFRESH_INTERVAL),'refreshed');assert.equal(calls,2);
+  assert.equal(f.requests().writes-before,1,'known-page refresh updates only its schedule, no queue/link writes');assert.equal(f.count('coach_member_queue'),1);
+ }finally{f.close()}
+});
+
+test('refresh includes a new competitive game once, preserves shared matches and historical truncation',async()=>{
+ const f=setup();try{
+  await enableAllMemberArchive(f.db);f.sql.exec("INSERT INTO monitor_state VALUES('coach_lifetime_case_v1:ready','1')");
+  f.sql.prepare("UPDATE coach_member_sources SET puuid='player-0',region='ap',done=1,next_page=41,truncated=1,next_at=?").run(now+COACH_REFRESH_INTERVAL);
+  const first=COACH_MEMBER_ACCOUNTS[0].riotId,second=COACH_MEMBER_ACCOUNTS[1].riotId;
+  const rows=[{meta:{id:'shared-new',mode:'Competitive',started_at:started}},{meta:{id:'skip-casual',mode:'Unrated',started_at:started}}];
+  for(const riot of [first,second]){
+   f.sql.prepare('UPDATE coach_member_sources SET next_at=0 WHERE riot_id=?').run(riot);
+   assert.equal(await discoverCoachMemberPage(f.db,async()=>{throw Error('unneeded')},async()=>rows,now),'refreshed');
+  }
+  assert.equal(f.count('coach_member_queue'),1);assert.equal(f.count('coach_member_links'),2);
+  assert.equal(f.sql.prepare('SELECT truncated FROM coach_member_sources WHERE riot_id=?').get(first)!.truncated,1);
+ }finally{f.close()}
+});
+
+test('pausing stops both discovery and detail acquisition without deleting saved progress; re-enable resumes',async()=>{
+ const f=setup();try{
+  await enableAllMemberArchive(f.db);await pauseAllMemberArchive(f.db);let calls=0;
+  const no=async()=>{calls++;throw Error('network must stay off')};
+  assert.equal(await discoverCoachMemberPage(f.db,no,no,now),'disabled');assert.equal(await fetchNextCoachMemberMatch(f.db,no,now),'disabled');assert.equal(calls,0);assert.equal(f.count('coach_member_sources'),6);
+  assert.equal((await coachMemberCoverage(f.db)).enabled,false);
+  await enableAllMemberArchive(f.db);assert.equal((await coachMemberCoverage(f.db)).enabled,true);assert.equal(f.count('coach_member_sources'),6);
  }finally{f.close()}
 });
