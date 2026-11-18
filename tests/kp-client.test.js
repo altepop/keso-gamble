@@ -62,3 +62,25 @@ test('stored-session recovery validates the pending owner and never submits a pe
  assert.equal(wrong.pending,true);
  assert.equal(operations.length,0);
 });
+
+test('duel SSE uses bearer header, accepts only bounded version hints and never sends payment actions',async()=>{
+ const saved=storage();saved.setItem('keso-kp-session-v1','a'.repeat(48));
+ const calls=[],hints=[];
+ const eventBody=new TextEncoder().encode(': connected\n\ndata: {"id":"11111111-2222-4333-8444-555555555555","version":3}\n\ndata: {"id":"bad","version":4}\n\n');
+ const client=createKpClient({storage:saved,request:async(url,init)=>{
+  calls.push({url,method:init.method??'GET',authorization:init.headers.Authorization});
+  return new Response(new ReadableStream({start(c){c.enqueue(eventBody);c.close();}}),{headers:{'Content-Type':'text/event-stream; charset=utf-8'}});
+ }});
+ await client.duelEvents({onOpen:()=>hints.push('open'),onHint:v=>hints.push(v)});
+ assert.deepEqual(hints,['open',{id:'11111111-2222-4333-8444-555555555555',version:3}]);
+ assert.equal(calls.length,1);
+ assert.equal(calls[0].method,'GET');
+ assert.equal(calls[0].authorization,'Bearer '+'a'.repeat(48));
+ assert.ok(calls[0].url.endsWith('/api/kp/duels/events'));
+ assert.doesNotMatch(calls[0].url,/aaaaaaaa|token=/);
+});
+test('duel SSE gracefully rejects unavailable event streams; regular polling stays separate',async()=>{
+ const saved=storage();saved.setItem('keso-kp-session-v1','a'.repeat(48));
+ const client=createKpClient({storage:saved,request:async()=>Response.json({error:'unsupported'},{status:503})});
+ await assert.rejects(client.duelEvents({onHint:()=>assert.fail('must not emit')}),/定期更新/);
+});
