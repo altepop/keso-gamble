@@ -87,8 +87,13 @@ const a='[data-demo-view=a]',b='[data-demo-view=b]';
  await chooseMode('othello');
  await assertOthelloGeometry(page,'reduced motion starting board');
  assert.equal(await page.locator('.duel-square.available').count(),4);
+ assert.equal(await page.locator('.duel-othello .duel-capture-count').count(),4,'all four legal squares show a capture number');
+ assert.deepEqual(await page.locator('.duel-othello .duel-capture-count').allInnerTexts(),['1','1','1','1']);
+ assert.equal(await page.locator('.duel-othello-scorebar').getAttribute('aria-label'),'黒 2枚、白 2枚、空き 60マス');
+ assert.match(await page.locator('.duel-othello-coach').innerText(),/置ける場所 4か所/);
  await click(19);
  assert.match(await page.locator('.duel-counts').innerText(),/黒 4/);
+ assert.equal(await page.locator('.duel-othello-scorebar').getAttribute('aria-label'),'黒 4枚、白 1枚、空き 59マス');
  await assertOthelloGeometry(page,'reduced motion after first move');
  assert.equal(await page.locator('.duel-square.duel-new-stone').count(),0,'reduced-motion disables decorative animation');
  await turn('b');
@@ -179,6 +184,8 @@ const a='[data-demo-view=a]',b='[data-demo-view=b]';
  assert.ok(await animatedPage.locator('.duel-othello .duel-square.duel-flipped-stone').count()>=1,'captured stone gets a flip');
  const animation=await animatedPage.locator('.duel-othello .duel-new-stone .duel-piece').evaluate(el=>getComputedStyle(el).animationName);
  assert.match(animation,/duel-stone-land/,'motion-enabled browser plays landing animation');
+ const halo=await animatedPage.locator('.duel-othello .duel-new-stone').evaluate(el=>getComputedStyle(el,'::after').animationName);
+ assert.match(halo,/duel-placement-wave/,'move confirmation includes a lightweight impact ripple');
  await assertOthelloGeometry(animatedPage,'animated placement and flip');
  // Check mobile widths and after the delayed CPU return; neither the grid
  // nor the stones may stretch between moves or during an animated redraw.

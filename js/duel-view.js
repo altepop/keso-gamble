@@ -1,6 +1,6 @@
-import {miniBoardView} from './duel-mini-view.js?v=web-47dd91f75e5884c0';
-import {EXTRA_DUEL_GAMES} from './duel-mini-games.js?v=web-47dd91f75e5884c0';
-import {DUEL_GAMES,duelLegalMoves,duelScore} from './duel-rules.js?v=web-47dd91f75e5884c0';
+import {miniBoardView} from './duel-mini-view.js?v=web-d818d7a5cb4a9fa6';
+import {EXTRA_DUEL_GAMES} from './duel-mini-games.js?v=web-d818d7a5cb4a9fa6';
+import {DUEL_GAMES,duelLegalMoves,duelScore,playDuelMove} from './duel-rules.js?v=web-d818d7a5cb4a9fa6';
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const kp=n=>Number(n||0).toLocaleString('ja-JP')+' KP';
 const title=(r)=>DUEL_GAMES[r.game]?.name||EXTRA_DUEL_GAMES[r.game]?.name||r.game;
@@ -35,6 +35,22 @@ function boardView(r,info,user,busy,confirmResign,gomokuPreviewCell=null,recentM
  `<span>${canPlay?'置きたいマスをタップして選択':'相手の手番または対局終了まで待機'}</span>`}
  </div></div>`:'';
  const score=duelScore(r.board);
+ // A UI-only capture preview. Each count comes from the same pure move rule
+ // used by the Worker; it never commits a move or predicts an outcome.
+ const captureCounts=new Map();
+ if(r.game==='othello'&&canPlay)for(const index of legal){
+  const hypothetical=playDuelMove('othello',r.board,color,index).board;
+  const changed=[...hypothetical].reduce((n,cell,i)=>n+(r.board[i]!=='.'&&r.board[i]!==cell?1:0),0);
+  captureCounts.set(index,changed);
+ }
+ const scorebar=r.game==='othello'? `<div class="duel-othello-dashboard">
+ <div class="duel-othello-scorebar" role="img" aria-label="黒 ${score.B}枚、白 ${score.W}枚、空き ${64-score.B-score.W}マス">
+ <span class="duel-score-black" style="width:${score.B/64*100}%"></span>
+ <span class="duel-score-empty" style="width:${(64-score.B-score.W)/64*100}%"></span>
+ <span class="duel-score-white" style="width:${score.W/64*100}%"></span>
+ </div>
+ <p class="duel-othello-coach">${canPlay?`置ける場所 ${legal.length}か所。丸の数字はひっくり返せる石の数。`:r.status==='finished'?'対局終了。確定した石数と勝敗を表示している。':'黒と白の石数を表示中。相手の着手を待とう。'}</p>
+ </div>`:'';
  const result=r.winner==='draw'?'引き分け：賭け金を返金':r.winner===user?'勝利：受取 '+kp(r.stake*2)+'（差引 +'+kp(r.stake)+'）':r.winner?'敗北：差引 −'+kp(r.stake):'';
  const expired=timeLeft(r.deadline_at)===0;
  const section=`<div class="duel-arena">
@@ -44,13 +60,15 @@ function boardView(r,info,user,busy,confirmResign,gomokuPreviewCell=null,recentM
  ${r.status==='active'?`<div class="duel-turn ${turn?'my-turn':''}">${turn?'🟢 あなたの番':esc(name(r.turn_user))+'の番'}　<span data-duel-timer="${r.deadline_at}">残り${Math.ceil(timeLeft(r.deadline_at)/60)}分</span></div>`:''}
  ${gomokuTools}
  ${r.game==='gomoku'?`<div class="duel-board-scroll" data-duel-board-scroll="${esc(r.id)}" tabindex="0" role="region" aria-label="五目並べの拡大盤面。指で上下左右に移動できる">`:''}
- <div class="duel-board ${r.game==='gomoku'?'duel-gomoku':'duel-othello'}" role="grid" aria-label="${esc(title(r))}の盤面" style="--duel-size:${size}">
+ <div class="duel-board ${r.game==='gomoku'?'duel-gomoku':'duel-othello'}" role="grid" aria-label="${esc(title(r))}の盤面" data-othello-playing="${r.game==='othello'&&canPlay?color:'' }" style="--duel-size:${size}">
  ${[...r.board].map((cell,i)=>{
    const active=canPlay&&playable.has(i);
    const classes=[cell==='B'?'black':cell==='W'?'white':'empty',active?'available':'',previewValid&&i===gomokuPreviewCell?'duel-preview-cell':'',recentMove?.version===r.version&&recentMove?.cell===i?'duel-last-cell':''].join(' ');
-   return `<button type="button" class="duel-square ${classes}" role="gridcell" data-duel-cell="${i}" title="${Math.floor(i/size)+1}行${i%size+1}列" aria-label="${Math.floor(i/size)+1}行${i%size+1}列 ${cell==='B'?'黒':cell==='W'?'白':previewValid&&i===gomokuPreviewCell?'選択中':active?'着手可能':'空き'}" ${r.game==='gomoku'&&active?`aria-pressed="${previewValid&&i===gomokuPreviewCell}"`:''} ${active?'':'disabled'}><span class="duel-piece"></span></button>`;
+   const captures=r.game==='othello'&&active?captureCounts.get(i):null;
+   return `<button type="button" class="duel-square ${classes}" role="gridcell" data-duel-cell="${i}" title="${Math.floor(i/size)+1}行${i%size+1}列" aria-label="${Math.floor(i/size)+1}行${i%size+1}列 ${cell==='B'?'黒':cell==='W'?'白':previewValid&&i===gomokuPreviewCell?'選択中':active?'着手可能':'空き'}${captures?`、${captures}枚返せる`:''}" ${r.game==='gomoku'&&active?`aria-pressed="${previewValid&&i===gomokuPreviewCell}"`:''} ${active?'':'disabled'}><span class="duel-piece"></span>${captures?`<span class="duel-capture-count" aria-hidden="true">${captures}</span>`:''}</button>`;
  }).join('')}</div>
  ${r.game==='gomoku'?'</div>':''}
+ ${scorebar}
  <div class="duel-counts"><span>⚫ 黒 ${score.B}</span><span>⚪ 白 ${score.W}</span></div>
   ${recentMove?.version===r.version?`<p class="duel-footnote">この端末で確認した直前の着手：${Math.floor(recentMove.cell/size)+1}行 ${recentMove.cell%size+1}列（盤面で強調表示）</p>`:''}
   ${localHistory.length?`<details class="duel-move-history"><summary>この端末で確認した着手履歴（最新${localHistory.length}手）</summary><ol>${localHistory.slice().reverse().map(x=>`<li>${x.color==='B'?'黒':'白'}：${Math.floor(x.cell/size)+1}行${x.cell%size+1}列</li>`).join('')}</ol><small>オフライン中の着手など、確認できなかった手は含めない。</small></details>`:''}
