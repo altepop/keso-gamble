@@ -81,7 +81,7 @@ test('Hit & Blow keeps locally typed number, escapes text and shows remaining ti
   private_hand:'0123',board:'{"history":[]}',stake:1000,version:5,turn_user:self,deadline_at:Date.now()+60000
  }]};
  const html=render({info,selectedId:'room',guessDraft:'0123'});
- assert.match(html,/id="duel-guess" value="0123"/);
+ assert.match(html,/<input\b[^>]*\bid="duel-guess"[^>]*\bvalue="0123"[^>]*>/);
  assert.match(html,/data-duel-timer=/);
 });
 test('bluff dice cannot submit a stronger bid after maximum declaration',()=>{
