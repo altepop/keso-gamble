@@ -60,7 +60,7 @@ export function hitBlowView({r,state={},hand,me='a',turn=false,finished=false,gu
     (turn?'<div class="duel-hitblow-entry"><p>相手の秘密を推理する。重複しない4桁を入力。</p>'+
       '<div class="duel-hitblow-slots" role="group" aria-label="推理中の4桁">'+Array.from({length:4},(_,i)=>
       '<span data-hitblow-slot="'+i+'" class="'+(draft[i]?'filled':'')+'">'+(draft[i]||'•')+'</span>').join('')+'</div>'+
-      '<input id="duel-guess" type="text" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="off" autocorrect="off" spellcheck="false" value="'+escapeHtml(draft)+'" aria-label="推理する数字4桁。重複不可" placeholder="例：0123">'+
+      '<input id="duel-guess" value="'+escapeHtml(draft)+'" type="text" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="off" autocorrect="off" spellcheck="false" aria-label="推理する数字4桁。重複不可" placeholder="例：0123">'+
       '<div class="duel-hitblow-keypad" role="group" aria-label="数字の入力盤">'+buttons+'</div>'+
       '<button type="button" class="action-btn primary duel-hitblow-submit" data-hitblow-submit="1" data-duel-act="move" data-duel-mini="hitblow" '+(hitBlowInputValid(draft)?'':'disabled')+'>この4桁で予想する</button>'+
       '<small class="duel-hitblow-entry-help" aria-live="polite" data-hitblow-help="1">4種類の数字を選ぶ。0から始まってもよい。</small></div>':
