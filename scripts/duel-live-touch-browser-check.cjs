@@ -58,6 +58,12 @@ let browser;
  const viewport=page.locator('[data-duel-board-scroll]');
  const before=await viewport.evaluate(el=>({left:el.scrollLeft,top:el.scrollTop}));
  assert.ok(before.left>0&&before.top>0,'pan viewport starts centered');
+ await page.locator('[data-gomoku-zoom-action="in"]').click();
+ assert.equal(operations.length,0,'zoom must not request a paid move');
+ assert.equal(await viewport.locator('.duel-gomoku').evaluate(el=>Math.round(el.getBoundingClientRect().width)),780);
+ await page.locator('[data-gomoku-zoom-action="out"]').click();
+ assert.equal(operations.length,0,'zoom out cannot trigger KP');
+
  const cell=page.locator('[data-duel-cell="112"]');
  assert.ok((await cell.boundingBox()).width>=42,'44px touch target');
  await cell.click();
@@ -83,6 +89,9 @@ let browser;
  room={...room,board:remote.board,turn_user:'one',version:2};
  liveHints=true;
  await page.locator('.duel-square.white[data-duel-cell="111"]').waitFor({timeout:14000});
+ await page.locator('.duel-gomoku-last-confirmed[data-duel-cell="111"]').waitFor({timeout:5000});
+ assert.match(await page.locator('[data-gomoku-last-status]').innerText(),/8行 7列（白）/,'remote confirmed update is clearly identified');
+
  assert.ok(streams>=1,'SSE reconnected after the initial unavailable endpoint');
  assert.ok(duelReads>previousReads,'SSE hint triggers an authenticated authoritative GET');
  assert.equal(operations.length,1,'SSE never submits a second move or KP charge');
