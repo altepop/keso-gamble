@@ -1,40 +1,40 @@
-import {festivalRace,FESTIVAL_PRICE,festivalFactor} from './racing.js?v=web-096ec70dec390116';
-import {stockOrderQuote,STOCK_ORDER_VERSION,STOCK_PRICE_SCALE} from './stock-order.js?v=web-096ec70dec390116';
-import {steamConnectionMessage} from './steam-view.js?v=web-096ec70dec390116';
-import {relicsPanel} from './relics-view.js?v=web-096ec70dec390116';
-import {primeRelicAudio,playRelicSound,previewRelicSound,stopRelicSound,setRelicSoundVolume,toggleRelicSound} from './relics-audio.js?v=web-096ec70dec390116';
-import {relicDefaultView} from './relics-v4.js?v=web-096ec70dec390116';
-import {privateCasinoPanel} from './private-casino-view.js?v=web-096ec70dec390116';
-import {communityPanel,communityRows} from './community-feed.js?v=web-096ec70dec390116';
-import {stockPanel,stockCandles,stockPrice,privateStockOperator} from './stock-view.js?v=web-096ec70dec390116';
-import {stockStoryChoices,validateCustomStory} from './stock-stories.js?v=web-096ec70dec390116';
-import {wheelView,covered,redNumbers,outcomeAngle} from './roulette-view.js?v=web-096ec70dec390116';
-import {makeEscalationWheel} from './escalation-roulette.js?v=web-096ec70dec390116';
-import {connectDiscordActivity,isDiscordActivity,openSteamLogin,openCompanionGame}from './discord-activity-auth.js?v=web-096ec70dec390116';
-import { createKpClient } from './kp-client.js?v=web-096ec70dec390116';
-import { fullRefreshInterval, communityRefreshEnabled, COMMUNITY_REFRESH_INTERVAL } from './live-refresh-policy.js?v=web-096ec70dec390116';
-import { fmt, fmt0 } from './format.js?v=web-096ec70dec390116';
-import { submitClaim, approveClaim, issueDirective, completeDirective } from './progression.js?v=web-096ec70dec390116';
-import { titleView, homeView, playView, directivesView, escapeHTML } from './progression-views.js?v=web-096ec70dec390116';
-import { genCandles, movingAverage, svgCandles } from './charts.js?v=web-096ec70dec390116';
-import { MARKET, createInitialState, portfolioValue, assets, advanceMarket, trade, spin, spinNumbers, validateNumberBets, grantDemoSalary, cryptoRouletteNumber } from './engine.js?v=web-096ec70dec390116';
-import { KEY, LEGACY_KEY } from './storage.js?v=web-096ec70dec390116';
-import { PUBLIC_SALT, RUN_MS, WEEKLY_LIMIT, openRaceStart, latestRaceStart, raceCard, raceOdds, raceResult, raceTimeline, raceCommentary, raceRuns, placeRaceBet, settleRaceBets, weeklySpent } from './racing.js?v=web-096ec70dec390116';
-import { LUXURY } from './luxury.js?v=web-096ec70dec390116';
-import { raceScreen, racePreview, drawRace, raceElapsed, ownerPanel, luxuryPanel, roastPanel } from './racing-view.js?v=web-096ec70dec390116';
-import { createStore } from './store.js?v=web-096ec70dec390116';
-import { healthPanel } from './health-view.js?v=web-096ec70dec390116';
-import { trendPanel } from './trend-view.js?v=web-096ec70dec390116';
-import { mleagueScreen, mleaguePreview } from './mleague-view.js?v=web-096ec70dec390116';
-import {duelScreen} from './duel-view.js?v=web-096ec70dec390116';
-import { gamePicker, chinchiroView, blackjackView } from './casino-view.js?v=web-096ec70dec390116';
-import {casinoFrames,createRelicRevealGate} from './casino-animation.js?v=web-096ec70dec390116';
-import { playChinchiro, bjStart, bjHit, bjStand, bjDouble, cryptoDie, cryptoCard, cryptoInt } from './casino.js?v=web-096ec70dec390116';
-import { showBigWin } from './bigwin.js?v=web-096ec70dec390116';
-import { audioMixEnabled, audioMixSupported, setAudioMix } from './audio-mix.js?v=web-096ec70dec390116';
-import { sfxEnabled, toggleSfx, unlockSfx, preloadSfx, play as playSfx, playResult, announce, sfxVolume, setSfxVolume, bgmEnabled, setBgmScene, toggleBgm, BGM_TRACKS } from './sfx.js?v=web-096ec70dec390116';
-import { minesStart, minesPick, minesCashout, playSlot, slotWinTier, vpDeal, vpDraw, playBaccarat, VP_NAMES } from './casino-more.js?v=web-096ec70dec390116';
-import { minesView, slotView, videoPokerView, baccaratView } from './casino-more-view.js?v=web-096ec70dec390116';
+import {festivalRace,FESTIVAL_PRICE,festivalFactor} from './racing.js?v=web-4eb51cb278a2c935';
+import {stockOrderQuote,STOCK_ORDER_VERSION,STOCK_PRICE_SCALE} from './stock-order.js?v=web-4eb51cb278a2c935';
+import {steamConnectionMessage} from './steam-view.js?v=web-4eb51cb278a2c935';
+import {relicsPanel} from './relics-view.js?v=web-4eb51cb278a2c935';
+import {primeRelicAudio,playRelicSound,previewRelicSound,stopRelicSound,setRelicSoundVolume,toggleRelicSound} from './relics-audio.js?v=web-4eb51cb278a2c935';
+import {relicDefaultView} from './relics-v4.js?v=web-4eb51cb278a2c935';
+import {privateCasinoPanel} from './private-casino-view.js?v=web-4eb51cb278a2c935';
+import {communityPanel,communityRows} from './community-feed.js?v=web-4eb51cb278a2c935';
+import {stockPanel,stockCandles,stockPrice,privateStockOperator} from './stock-view.js?v=web-4eb51cb278a2c935';
+import {stockStoryChoices,validateCustomStory} from './stock-stories.js?v=web-4eb51cb278a2c935';
+import {wheelView,covered,redNumbers,outcomeAngle} from './roulette-view.js?v=web-4eb51cb278a2c935';
+import {makeEscalationWheel} from './escalation-roulette.js?v=web-4eb51cb278a2c935';
+import {connectDiscordActivity,isDiscordActivity,openSteamLogin,openCompanionGame}from './discord-activity-auth.js?v=web-4eb51cb278a2c935';
+import { createKpClient } from './kp-client.js?v=web-4eb51cb278a2c935';
+import { fullRefreshInterval, communityRefreshEnabled, COMMUNITY_REFRESH_INTERVAL } from './live-refresh-policy.js?v=web-4eb51cb278a2c935';
+import { fmt, fmt0 } from './format.js?v=web-4eb51cb278a2c935';
+import { submitClaim, approveClaim, issueDirective, completeDirective } from './progression.js?v=web-4eb51cb278a2c935';
+import { titleView, homeView, playView, directivesView, escapeHTML } from './progression-views.js?v=web-4eb51cb278a2c935';
+import { genCandles, movingAverage, svgCandles } from './charts.js?v=web-4eb51cb278a2c935';
+import { MARKET, createInitialState, portfolioValue, assets, advanceMarket, trade, spin, spinNumbers, validateNumberBets, grantDemoSalary, cryptoRouletteNumber } from './engine.js?v=web-4eb51cb278a2c935';
+import { KEY, LEGACY_KEY } from './storage.js?v=web-4eb51cb278a2c935';
+import { PUBLIC_SALT, RUN_MS, WEEKLY_LIMIT, openRaceStart, latestRaceStart, raceCard, raceOdds, raceResult, raceTimeline, raceCommentary, raceRuns, placeRaceBet, settleRaceBets, weeklySpent } from './racing.js?v=web-4eb51cb278a2c935';
+import { LUXURY } from './luxury.js?v=web-4eb51cb278a2c935';
+import { raceScreen, racePreview, drawRace, raceElapsed, ownerPanel, luxuryPanel, roastPanel } from './racing-view.js?v=web-4eb51cb278a2c935';
+import { createStore } from './store.js?v=web-4eb51cb278a2c935';
+import { healthPanel } from './health-view.js?v=web-4eb51cb278a2c935';
+import { trendPanel } from './trend-view.js?v=web-4eb51cb278a2c935';
+import { mleagueScreen, mleaguePreview } from './mleague-view.js?v=web-4eb51cb278a2c935';
+import {duelScreen} from './duel-view.js?v=web-4eb51cb278a2c935';
+import { gamePicker, chinchiroView, blackjackView } from './casino-view.js?v=web-4eb51cb278a2c935';
+import {casinoFrames,createRelicRevealGate} from './casino-animation.js?v=web-4eb51cb278a2c935';
+import { playChinchiro, bjStart, bjHit, bjStand, bjDouble, cryptoDie, cryptoCard, cryptoInt } from './casino.js?v=web-4eb51cb278a2c935';
+import { showBigWin } from './bigwin.js?v=web-4eb51cb278a2c935';
+import { audioMixEnabled, audioMixSupported, setAudioMix } from './audio-mix.js?v=web-4eb51cb278a2c935';
+import { sfxEnabled, toggleSfx, unlockSfx, preloadSfx, play as playSfx, playResult, announce, sfxVolume, setSfxVolume, bgmEnabled, setBgmScene, toggleBgm, BGM_TRACKS } from './sfx.js?v=web-4eb51cb278a2c935';
+import { minesStart, minesPick, minesCashout, playSlot, slotWinTier, vpDeal, vpDraw, playBaccarat, VP_NAMES } from './casino-more.js?v=web-4eb51cb278a2c935';
+import { minesView, slotView, videoPokerView, baccaratView } from './casino-more-view.js?v=web-4eb51cb278a2c935';
 const $=(s,el=document)=>el.querySelector(s);
 const wallet=createKpClient();
 const embedded=isDiscordActivity();
@@ -750,6 +750,20 @@ addEventListener('click',async e=>{
     finally{duelBusy=false;render();}
     return;
    }
+  if(t.dataset.duelClaim){
+    if(!live||!wallet.connected||duelBusy){toast('KP口座または処理中の対戦操作を確認してください。');return;}
+    const target=duelData?.matches?.find(row=>row.id===t.dataset.duelClaim);
+    if(target?.status!=='finished'||Number(target.reward_claimable)!==1){toast('受け取れる戦利品がありません。');return;}
+    duelBusy=true;duelError='';render();
+    try{
+      const result=await liveOperation('duel-reward-claim',{duel:target.id});
+      toast(result.droppedName?'🎉 '+result.droppedName+'を獲得！欠片＋'+result.shards+'個':'戦利品を受け取った！ 欠片＋'+result.shards+'個');
+      try{const [fresh,info]=await Promise.all([wallet.state(),wallet.duels()]);state=fresh;duelData=mergeDuelPages(info);}
+      catch{duelError='報酬の受け取りは確定したが画面の再取得に失敗した。更新して確認してください。';}
+    }catch(error){duelError='戦利品を受け取れませんでした。'+(error.message??'');}
+    finally{duelBusy=false;render();}
+    return;
+  }
   if(t.dataset.duelCancelCell!==undefined){duelGomokuPreview=null;render();return;}
   if(t.dataset.duelCell!==undefined||t.dataset.duelConfirmCell!==undefined){
    const chosen=duelData?.matches?.find(r=>r.id===duelActiveId)||duelData?.matches?.find(r=>r.status==='active'||r.status==='pending')||duelData?.matches?.[0];

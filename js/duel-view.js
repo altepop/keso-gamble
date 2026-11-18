@@ -1,6 +1,6 @@
-import {miniBoardView} from './duel-mini-view.js?v=web-096ec70dec390116';
-import {EXTRA_DUEL_GAMES} from './duel-mini-games.js?v=web-096ec70dec390116';
-import {DUEL_GAMES,duelLegalMoves,duelScore} from './duel-rules.js?v=web-096ec70dec390116';
+import {miniBoardView} from './duel-mini-view.js?v=web-4eb51cb278a2c935';
+import {EXTRA_DUEL_GAMES} from './duel-mini-games.js?v=web-4eb51cb278a2c935';
+import {DUEL_GAMES,duelLegalMoves,duelScore} from './duel-rules.js?v=web-4eb51cb278a2c935';
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const kp=n=>Number(n||0).toLocaleString('ja-JP')+' KP';
 const title=(r)=>DUEL_GAMES[r.game]?.name||EXTRA_DUEL_GAMES[r.game]?.name||r.game;
@@ -77,6 +77,26 @@ export function duelScreen({info,user,live,cash,selectedId,game='othello',stake=
   const vs=vsMatches.reduce((a,r)=>(a[r.winner===user?'win':r.winner==='draw'?'draw':'lose']++,a),{win:0,draw:0,lose:0});
  info={...info,members:[...(info?.members??[]),...members.filter(m=>!(info?.members??[]).some(x=>x.id===m.id))]};
  const focus=chosen?.status==='active'||chosen?.status==='pending';
+ const skill=(info?.skills??[]).find(row=>row.game===(chosen?.game??game));
+ const rating=Math.max(0,Math.min(2500,Number(skill?.rating)||0));
+ const peak=Math.max(rating,Number(skill?.peak)||0);
+ const stageIndex=Math.min(4,Math.floor(rating/500));
+ const tier=['見習い','挑戦者','名人','達人','超人'][stageIndex];
+ const odds=info?.lootRates?.[stageIndex]?.win;
+ const rateText=odds?'<p class="helper">通常抽選の勝利時：欠片増幅瓶 '+Number(odds.vial).toFixed(2)+'% ／ 覇者の選定書 '+Number(odds.select).toFixed(2)+'% ／ 覇王の古代選定書 '+Number(odds.ancient).toFixed(2)+'%。同じ相手との報酬対象は日本時間1日4戦まで。5戦目以降も対戦可能だが熟練度・ドロップ報酬は対象外。別の相手との対戦は継続可能で、1日の通算12戦を超えた分は抽選率・欠片が半分になる。</p>':'';
+ const selectedClaim=chosen?.status==='finished'?
+  '<section class="panel"><div class="card-body"><h2 class="panel-title">🎁 決闘の戦利品</h2>'+
+  (Number(chosen.reward_claimable)===1?
+    '<p>サーバー検証済みの自然終了試合。双方に欠片＋専用消耗品の抽選権がある。</p><p class="helper">この対局の熟練度：'+kp(chosen.reward_rating).replace(' KP','')+' · PvP限定：覇者の選定書／超大当たり「覇王の古代選定書」</p>'+
+    '<button type="button" class="action-btn primary" data-duel-claim="'+esc(chosen.id)+'" '+(busy?'disabled':'')+'>⚔️ 報酬を受け取る</button>'
+   :chosen.reward_claimed_at?
+    '<p class="helper">✅ この対局の戦利品は受け取り済みだ。消耗品は「遺物 → 消耗品」で使用できる。</p>'
+   :'<p class="helper">この対局には未受取の戦利品がない。投了・時間切れ・過去の対局・同じ相手との当日5戦目以降などは対象外だ。</p>')+
+  '</div></section>':'';
+ const skillView='<section class="panel"><div class="card-body"><h2 class="panel-title">🏅 PvP種目別熟練度</h2>'+
+  '<p><strong>'+esc(title({game:chosen?.game??game}))+'：'+rating+' / 2500</strong>　'+esc(tier)+'</p>'+
+  '<p class="helper">自己最高 '+peak+' ／ 対人 '+(skill?.games??0)+'戦（'+(skill?.wins??0)+'勝・'+(skill?.losses??0)+'敗・'+(skill?.draws??0)+'分）。勝てば大きく、負けても少し熟練度が伸びる。PvPのレアドロップ率は熟練度に関係なく勝敗で決まり、既存遺物による勝敗補正はない。</p>'+rateText+
+  '</div></section>';
  const formMarkup=`<div class="duel-new panel"><div class="card-body">
  <h2 class="panel-title">対戦を申し込む</h2><div class="duel-formrow">
  <label>ゲーム<select id="duel-game" class="select"><option value="othello" ${game==='othello'?'selected':''}>⚫ オセロ</option><option value="gomoku" ${game==='gomoku'?'selected':''}>⚪ 五目並べ</option><option value="connect4" ${game==='connect4'?'selected':''}>🔴 四目並べ</option><option value="hitblow" ${game==='hitblow'?'selected':''}>🔢 Hit & Blow</option><option value="bluffdice" ${game==='bluffdice'?'selected':''}>🎲 ブラフダイス</option><option value="poker" ${game==='poker'?'selected':''}>🃏 5カードポーカー</option></select></label>
@@ -100,7 +120,7 @@ export function duelScreen({info,user,live,cash,selectedId,game='othello',stake=
  const moreNotice=historyHasMore?'<div class="duel-history-more"><button type="button" class="action-btn" data-duel-history-more="1" '+(busy?'disabled':'')+'>過去の対戦を20件ずつ読み込む</button><p class="helper">このボタンを押した場合だけ過去の対戦を取得する。</p></div>':'';
  return `<div class="screen"><header class="topbar"><div class="toprow"><h1 class="title">⚔️ 決闘</h1><div class="small-actions"><span class="badge">${kp(cash)}</span></div></div></header>
  <div class="duel-practice-entry"><div><strong>CPUと練習する</strong><p>相手が手を返してくる練習対戦。6モードすべて、実KP消費なし。iPhoneでも何度でも試せる。</p></div><a class="action-btn primary" href="./duel-demo.html?cpu=1">CPUとの練習を始める</a></div>
- ${syncNotice}${retryNotice}
+ ${syncNotice}${retryNotice}${skillView}
  ${chosen?`<div class="duel-current">
  ${invited?`<div class="panel"><div class="card-body"><h2 class="panel-title">${mine?'相手の返答待ち':'対戦の申し込み'}</h2>
  <p class="helper">${esc(title(chosen))} / ${kp(chosen.stake)}ずつ。招待期限まで約${Math.ceil(timeLeft(chosen.deadline_at)/60)}分。</p>
@@ -108,6 +128,7 @@ export function duelScreen({info,user,live,cash,selectedId,game='othello',stake=
  <button class="action-btn" data-duel-act="cancel" ${busy?'disabled':''}>${mine?'招待を取り消す':'断る'}</button></div></div></div>`:''}
  ${chosen.status!=='pending'&&chosen.status!=='cancelled'?(Object.hasOwn(EXTRA_DUEL_GAMES,chosen.game)?miniBoardView(chosen,info,user,busy,pokerPicks,confirmResign,guessDraft):boardView(chosen,info,user,busy,confirmResign,gomokuPreviewCell,recentMoves?.get(chosen.id),localMoveHistory?.get(chosen.id)??[])):''}
  </div>`:''}
+ ${selectedClaim}
  ${!chosen?'<div class="duel-intro"><span>対人ゲーム</span><h2>KPを賭けて対戦</h2><p>ゲームと対戦相手、賭け金を選んで申し込む。相手が承認すると対戦が始まり、勝った人が双方の賭け金を受け取る。引き分けは返金。</p></div>':''}
  ${error?`<div class="storage-warning duel-error" role="alert">${esc(error)}</div>`:''}
  ${focus?` <div class="duel-history panel"><div class="card-body">

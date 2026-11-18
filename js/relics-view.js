@@ -1,8 +1,8 @@
-import {relicSoundEnabled,relicSoundVolume,RELIC_SOUND_DESIGNS} from './relics-audio.js?v=web-096ec70dec390116';
-import {relicBuildSection,relicPresetsSection,relicSummonHistorySection,relicSpecialSection,relicEffectLogSection,relicEconomySection} from './relics-v7.js?v=web-096ec70dec390116';
-import {relicInventory,relicFilterControls,relicItemCard,relicInventoryPages,relicRevealPanel,relicBonusDashboard} from './relics-v4.js?v=web-096ec70dec390116';
-import {relicExchangeSection} from './relic-exchange-view.js?v=web-096ec70dec390116';
-import {relicMarketSection} from './relic-market-view.js?v=web-096ec70dec390116';
+import {relicSoundEnabled,relicSoundVolume,RELIC_SOUND_DESIGNS} from './relics-audio.js?v=web-4eb51cb278a2c935';
+import {relicBuildSection,relicPresetsSection,relicSummonHistorySection,relicSpecialSection,relicEffectLogSection,relicEconomySection} from './relics-v7.js?v=web-4eb51cb278a2c935';
+import {relicInventory,relicFilterControls,relicItemCard,relicInventoryPages,relicRevealPanel,relicBonusDashboard} from './relics-v4.js?v=web-4eb51cb278a2c935';
+import {relicExchangeSection} from './relic-exchange-view.js?v=web-4eb51cb278a2c935';
+import {relicMarketSection} from './relic-market-view.js?v=web-4eb51cb278a2c935';
 // Three independent origins: common summons, Steam achievements, and Unite results.
 // Never recommend cross-game combinations or require another game's relic for an upgrade.
 const esc=s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -74,16 +74,20 @@ export function relicsPanel(state,{proofs=null,notice='',loading=false,view={},r
  const consumableCatalog=Array.isArray(proofs?.consumableCatalog)?proofs.consumableCatalog:[];
  const consumableCards=consumableCatalog.map(def=>{
   const owned=Number(collection.consumables?.[def.id]??0);
-  const targets=items.filter(item=>{
-   const original=source.get(item.id);
-   if(!original||item.origin!=='normal'||item.rarity!==original.rarity||item.foil||item.mutation)return false;
-   if(def.id==='consumable.foil_seal')return item.rarity!=='transcendent'&&!original.special;
-   return Number(item.count)>=2;
-  });
-  const options=targets.map(item=>'<option value="'+esc(item.id)+'">'+esc(item.name)+'（'+yen(item.count)+'個）</option>').join('');
+  const targets=def.id==='consumable.duel.pvp_selector'
+   ?catalog.filter(item=>!item.special&&['common','uncommon','rare','legendary'].includes(item.rarity))
+   :def.id==='consumable.duel.ancient_selector'
+   ?catalog.filter(item=>!item.special&&item.rarity==='ancient')
+   :items.filter(item=>{
+    const original=source.get(item.id);
+    if(!original||item.origin!=='normal'||item.rarity!==original.rarity||item.foil||item.mutation)return false;
+    if(def.id==='consumable.foil_seal')return item.rarity!=='transcendent'&&!original.special;
+    return Number(item.count)>=2;
+   });
+  const options=targets.map(item=>'<option value="'+esc(item.id)+'">'+esc(item.name)+(item.count?'（'+yen(item.count)+'個）':'')+'</option>').join('');
   return '<article class="panel"><div class="card-body"><h3 class="panel-title">🧪 '+esc(def.name)+'　×'+yen(owned)+'</h3>'+
    '<p class="helper">'+esc(def.description)+'</p>'+
-   '<p class="helper">通常召喚の追加抽選：'+(Number(def.ratePerMillion)/10000)+'%／回。通常遺物の排出率は変わらない。</p>'+
+   '<p class="helper">'+(def.ratePerMillion>0?'通常召喚の追加抽選：'+(Number(def.ratePerMillion)/10000)+'%／回。通常遺物の排出率は変わらない。':'決闘PvP限定ドロップ。通常召喚や欠片交換では入手できない。')+'</p>'+
    '<label>使用対象<select class="select" data-consumable-target="'+esc(def.id)+'">'+(options||'<option value="">対象となる所持遺物がない</option>')+'</select></label>'+
    '<button type="button" class="action-btn primary" data-action="relic-consumable-use" data-consumable="'+esc(def.id)+'" '+(!state.serverWallet||owned<1||!targets.length?'disabled':'')+'>この消耗品を使う</button></div></article>';
  }).join('');
