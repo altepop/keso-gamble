@@ -145,13 +145,23 @@ const a='[data-demo-view=a]',b='[data-demo-view=b]';
  await checkWinner('a');
  // Hit & Blow — private digits differ per player and are not disclosed to the other viewer.
  await chooseMode('hitblow');
- const codeA=await page.locator('.duel-private strong').innerText();
+ const digits=async view=>(await view.locator('.duel-hb-own-code .duel-hb-digit').allInnerTexts()).join('');
+ const codeA=await digits(page);
  await turn('b');
- const codeB=await page.locator('.duel-private strong').innerText();
+ const codeB=await digits(page);
  assert.equal(codeA.length,4);assert.equal(codeB.length,4);
- await turn('a');await page.locator('#duel-guess').fill(codeB);
+ assert.equal(await page.locator('.duel-hb-code-reveal').count(),0,'opponent code stays secret until confirmed finish');
+ await turn('a');
+ assert.match(await page.locator('.duel-hb-logic').innerText(),/5,040 通り/);
+ await page.locator('#duel-guess').fill('0011');
+ assert.match(await page.locator('#duel-hb-draft-help').innerText(),/同じ数字は使えません/);
+ await page.locator('#duel-guess').fill(codeB);
+ assert.match(await page.locator('#duel-hb-draft-help').innerText(),/入力OK/);
  await page.locator('[data-duel-mini=hitblow]').click();
  assert.match(await page.locator('.duel-guess-history').innerText(),/4 Hit/);
+ assert.match(await page.locator('.duel-hb-code-reveal').innerText(),/CODE BREAKER/);
+ assert.match(await page.locator('.duel-hb-logic').innerText(),/1 通り/);
+ assert.equal(await page.locator('.duel-hb-code-reveal').evaluate(el=>getComputedStyle(el).animationName),'none','reduced motion disables Hit & Blow celebration');
  await checkWinner('a');
  // Bluff dice — an impossible-to-reach ten-six bid is correctly challenged twice.
  await chooseMode('bluffdice');
@@ -305,6 +315,29 @@ const a='[data-demo-view=a]',b='[data-demo-view=b]';
   assert.equal(await animatedPage.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'poker no horizontal overflow at '+width);
  }
  if(shotDir)await animatedPage.screenshot({path:resolve(shotDir,'06-poker-card-flip-'+engine+'.png'),fullPage:true,animations:'disabled'});
+ // The same real DOM renderer plays confirmed Hit/Blow feedback on WebKit
+ // and Chromium without querying or modifying the production opponent secret.
+ await animatedPage.locator('#demo-mode').selectOption('hitblow');
+ await animatedPage.locator('[data-duel-target-toggle]').click();
+ await animatedPage.locator('[data-duel-target-option]').click();
+ await animatedPage.locator('[data-duel-act=create]').click();
+ await animatedPage.locator('[data-demo-view=b]').click();
+ await animatedPage.locator('[data-duel-act=accept]').click();
+ const opponentCode=(await animatedPage.locator('.duel-hb-own-code .duel-hb-digit').allInnerTexts()).join('');
+ assert.equal(opponentCode.length,4);
+ await animatedPage.locator('[data-demo-view=a]').click();
+ assert.equal(await animatedPage.locator('.duel-hb-code-reveal').count(),0,'public board never shows hidden opponent code');
+ await animatedPage.locator('#duel-guess').fill(opponentCode);
+ await animatedPage.locator('[data-duel-mini=hitblow]').click();
+ const newFeedback=animatedPage.locator('.duel-hb-row.duel-hb-feedback-new');
+ await newFeedback.waitFor({timeout:7000});
+ assert.match(await newFeedback.evaluate(el=>getComputedStyle(el).animationName),/duel-hb-feedback-pulse/);
+ assert.equal(await animatedPage.locator('.duel-hb-code-reveal').count(),1,'four Hit publishes code at resolution only');
+ for(const width of [320,375,390,430]){
+  await animatedPage.setViewportSize({width,height:844});
+  assert.equal(await animatedPage.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'Hit & Blow fits iPhone width '+width);
+ }
+ if(shotDir)await animatedPage.screenshot({path:resolve(shotDir,'07-hitblow-new-feedback-'+engine+'.png'),fullPage:true,animations:'disabled'});
  await animatedCtx.close();
  assert.deepEqual(requests,[],'demo must never call KP/Discord or Worker endpoints');
  assert.deepEqual(errors,[],'browser runtime errors');

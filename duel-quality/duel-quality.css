@@ -370,3 +370,68 @@
  .duel-poker-hand-card,.duel-poker-showdown.duel-poker-arrival,
  .duel-poker-arrival .duel-poker-reveal-card,.duel-poker-arrival .duel-poker-verdict{animation:none!important;transition:none!important}
 }
+
+/* Hit & Blow detective UI: use only public feedback and viewer-owned code. */
+.duel-hb-table{display:grid;gap:11px;min-width:0;margin:12px 0}
+.duel-hb-private{gap:10px;padding:15px 8px;background:radial-gradient(ellipse at top,#183b60,#0c2942 76%);border-color:#3b729d}
+.duel-hb-private>span{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;font-weight:800;color:#dff9ff}
+.duel-hb-private>span small{font-size:10px;font-weight:500;color:#b2cfdf}
+.duel-hb-own-code{display:flex;justify-content:center;gap:8px}
+.duel-hb-digit{display:inline-grid;place-items:center;min-width:0;flex:0 1 49px;height:55px;
+ background:linear-gradient(145deg,#f7f9ff,#d9e8ef);border:1px solid #f5fbff;border-radius:9px;
+ box-shadow:0 4px 0 #7190ab,0 5px 12px #0005;color:#15314e;font-size:28px;font-weight:900;
+ font-variant-numeric:tabular-nums;line-height:1}
+.duel-hb-intro{display:grid;gap:5px;text-align:center;color:#b3d5e9;font-size:11px}
+.duel-hb-intro strong{font-size:17px;letter-spacing:.15em;color:#efde9d}
+.duel-hb-logic{padding:12px 10px;background:linear-gradient(140deg,#113b49,#132d4d);
+ border:1px solid #306383;border-radius:11px;display:grid;gap:8px}
+.duel-hb-logic>div:first-child{display:flex;justify-content:space-between;gap:8px;color:#b7d8e5;font-size:11px}
+.duel-hb-logic>p{margin:0;text-align:center;color:#cbdde8;font-size:12px}
+.duel-hb-logic>p strong{display:inline-block;color:#ffe9a0;font-size:20px;font-variant-numeric:tabular-nums}
+.duel-hb-logic>p small{display:block;font-size:10px;color:#a5c4d4;margin-top:3px}
+.duel-hb-progress{height:9px;border-radius:50px;background:#092334;overflow:hidden;border:1px solid #356078}
+.duel-hb-progress>span{display:block;height:100%;max-width:100%;border-radius:50px;background:linear-gradient(90deg,#2fd3bc,#f8d879);transition:width .3s ease}
+.duel-hb-entry{display:grid;gap:7px;padding:12px 9px;background:#152b49;border:1px solid #395e8c;border-radius:11px}
+.duel-hb-entry>label{font-size:12px;color:#daeafb;font-weight:800}
+.duel-hb-entry-row{margin:0;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:7px}
+.duel-hb-entry-row input{min-width:0;width:100%;height:49px;letter-spacing:.23em;font-size:22px;
+ text-align:center;font-weight:800;font-variant-numeric:tabular-nums;touch-action:manipulation}
+.duel-hb-entry-row button{min-height:49px;font-size:12px;white-space:nowrap;padding:8px 11px;flex:initial}
+.duel-hb-draft-help{margin:0;color:#edca9d;font-size:11px;min-height:16px}
+.duel-hb-draft-help.valid{color:#9ff2c9}
+.duel-hb-history-head{display:flex;align-items:center;justify-content:space-between;font-size:12px;color:#e2f2ff}
+.duel-hb-history-head small{color:#a8c4d7}
+.duel-hb-history{margin:0;gap:7px;max-height:340px;padding:1px}
+.duel-hb-row{display:grid;grid-template-columns:42px minmax(0,1fr) auto;gap:6px;
+ align-items:center;padding:9px 7px;background:#122b45;border:1px solid #3d5e7c;border-radius:10px;
+ font-size:12px;min-width:0}
+.duel-hb-row.opponent{background:#19283f;border-color:#5b4f77}
+.duel-hb-row .duel-hb-side{font-size:11px;color:#b5d8eb}
+.duel-hb-row .duel-hb-guess{display:flex;gap:3px;min-width:0}
+.duel-hb-row .duel-hb-digit{height:clamp(28px,8vw,39px);flex:1 1 0;
+ font-size:clamp(13px,4.5vw,19px);box-shadow:0 2px 0 #7695a9;border-radius:5px}
+.duel-hb-feedback{display:grid;gap:4px;text-align:center;font-size:11px;min-width:49px}
+.duel-hb-hit{color:#96f1ba;background:#145047;border-radius:5px;padding:4px 5px}
+.duel-hb-blow{color:#ffe39c;background:#644920;border-radius:5px;padding:4px 5px}
+.duel-hb-code-reveal{text-align:center;border:1px solid #e5bb74;border-radius:11px;padding:14px 9px;
+ background:linear-gradient(120deg,#264e54,#1b385a);color:#ffe8aa;display:grid;gap:6px}
+.duel-hb-code-reveal strong{font-size:clamp(16px,4.5vw,22px);letter-spacing:.09em}
+.duel-hb-code-reveal p{margin:0;font-size:12px;color:#e7f2ff}
+.duel-hb-feedback-new{animation:duel-hb-feedback-pulse .65s ease-out both;animation-delay:var(--hb-feedback-delay,0ms)}
+.duel-hb-feedback-new .duel-hb-hit,.duel-hb-feedback-new .duel-hb-blow{
+ animation:duel-hb-badge-in .5s ease-out both;animation-delay:var(--hb-feedback-delay,0ms)}
+.duel-hb-victory-new{animation:duel-hb-victory-in .85s ease-out both;animation-delay:var(--hb-feedback-delay,0ms)}
+@keyframes duel-hb-feedback-pulse{0%{opacity:.3;transform:translateY(10px);box-shadow:0 0 0 1px #ffe9a0}100%{opacity:1;transform:translateY(0);box-shadow:none}}
+@keyframes duel-hb-badge-in{0%{transform:scale(.78)}65%{transform:scale(1.1)}100%{transform:scale(1)}}
+@keyframes duel-hb-victory-in{0%{opacity:.3;transform:scale(.93);filter:brightness(.7)}68%{opacity:1;transform:scale(1.03);filter:brightness(1.28)}100%{transform:scale(1);filter:none}}
+@media(max-width:355px){
+ .duel-hb-row{grid-template-columns:33px minmax(0,1fr) auto;gap:4px;padding:7px 4px}
+ .duel-hb-row .duel-hb-digit{height:30px;font-size:14px}
+ .duel-hb-entry-row{gap:5px}
+ .duel-hb-entry-row button{font-size:11px;padding:7px}
+}
+@media(prefers-reduced-motion:reduce){
+ .duel-hb-progress>span{transition:none!important}
+ .duel-hb-feedback-new,.duel-hb-feedback-new .duel-hb-hit,
+ .duel-hb-feedback-new .duel-hb-blow,.duel-hb-victory-new{animation:none!important}
+}

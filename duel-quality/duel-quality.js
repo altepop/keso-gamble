@@ -58,11 +58,54 @@ export function classifyPokerReveal(before,after){
  if(before.done!=='1:0'&&before.done!=='0:1')return null;
  return {id:after.id,version:after.version};
 }
+// A new visible deduction may animate only after one confirmed server turn.
+// Never replay older guesses on reconnect or expose private codes.
+export function classifyHitBlowFeedback(before,after){
+ if(!before||!after||!before.id||before.id!==after.id||
+  !Number.isSafeInteger(before.version)||after.version!==before.version+1||
+  !Number.isSafeInteger(before.count)||after.count!==before.count+1||
+  typeof after.last!=='string')return null;
+ const parts=after.last.split(':');
+ if(parts.length!==4||!['a','b'].includes(parts[0])||
+  !/^[0-9]{4}$/.test(parts[1])||new Set(parts[1]).size!==4)return null;
+ const hit=Number(parts[2]),blow=Number(parts[3]);
+ if(!Number.isInteger(hit)||!Number.isInteger(blow)||hit<0||blow<0||hit+blow>4)return null;
+ return {id:after.id,version:after.version,hit,blow,key:after.last};
+}
 function enhance(root) {
   let previous = null, motion = null, lastBoard = null;
   let c4Previous=null,c4Motion=null,lastC4Board=null;
   let bluffPrevious=null,bluffMotion=null,lastBluffTable=null;
   let pokerPrevious=null,pokerMotion=null,lastPokerTable=null;
+  let hbPrevious=null,hbMotion=null,lastHbTable=null;
+  function scanHitBlow(){
+   const table=root.querySelector('.duel-hb-table[data-hb-match]');
+   if(!table){hbPrevious=null;hbMotion=null;lastHbTable=null;return;}
+   if(table===lastHbTable)return;
+   lastHbTable=table;
+   const now=performance.now();
+   const current={id:table.dataset.hbMatch,version:Number(table.dataset.hbVersion),
+      count:Number(table.dataset.hbHistoryCount),last:table.dataset.hbLast};
+   const change=hbPrevious&&now-hbPrevious.at<20000&&!document.hidden
+      ?classifyHitBlowFeedback(hbPrevious,current):null;
+   hbPrevious={...current,at:now};
+   if(change)hbMotion={...change,started:now};
+   const elapsed=hbMotion?now-hbMotion.started:Infinity;
+   const row=table.querySelector('.duel-hb-row');
+   if(!row||!hbMotion||hbMotion.id!==current.id||hbMotion.version!==current.version||
+      hbMotion.key!==current.last||elapsed>=1200||document.hidden||
+      matchMedia('(prefers-reduced-motion: reduce)').matches){
+     if(elapsed>=1200)hbMotion=null;
+     return;
+   }
+   row.style.setProperty('--hb-feedback-delay',(-elapsed)+'ms');
+   row.classList.add('duel-hb-feedback-new');
+   const win=table.querySelector('.duel-hb-code-reveal');
+   if(win&&hbMotion.hit===4){
+      win.style.setProperty('--hb-feedback-delay',(-elapsed)+'ms');
+      win.classList.add('duel-hb-victory-new');
+   }
+  }
   function scanPoker(){
    const table=root.querySelector('.duel-poker-table[data-poker-match]');
    if(!table){pokerPrevious=null;pokerMotion=null;lastPokerTable=null;return;}
@@ -156,6 +199,7 @@ function enhance(root) {
     scanConnect4();
     scanBluffDice();
     scanPoker();
+    scanHitBlow();
     const board = root.querySelector('.duel-board.duel-othello');
     if (!board) { previous = null; motion = null; lastBoard = null; return; }
     if (board === lastBoard) return; // Ignore mutations outside the board, such as the timer.
@@ -198,6 +242,18 @@ function enhance(root) {
   }
   const observer = new MutationObserver(scan);
   observer.observe(root, {childList: true, subtree: true});
+  root.addEventListener('input',event=>{
+    if(event.target?.id!=='duel-guess')return;
+    const value=String(event.target.value??'');
+    const help=root.querySelector('#duel-hb-draft-help');
+    if(!help)return;
+    const valid=/^[0-9]{4}$/.test(value)&&new Set(value).size===4;
+    help.textContent=!value?'異なる数字4桁を入力（先頭の0も使用可能）':
+      !/^[0-9]*$/.test(value)?'数字だけを入力してください':
+      value.length!==4?'あと'+Math.max(0,4-value.length)+'桁で完成':
+      !valid?'同じ数字は使えません':'入力OK。この4桁で予想できる';
+    help.classList.toggle('valid',valid);
+  },{passive:true});
   root.addEventListener('pointerdown', event => {
     const square = event.target.closest?.('.duel-othello .duel-square.available:not(:disabled)');
     if (square) {
@@ -208,7 +264,7 @@ function enhance(root) {
   for (const event of ['pointerup', 'pointercancel']) {
     root.addEventListener(event, () => root.querySelectorAll('.duel-tap-feedback').forEach(x => x.classList.remove('duel-tap-feedback')), {passive: true});
   }
-  addEventListener('visibilitychange', () => { if (document.hidden) { previous = null; c4Previous=null; c4Motion=null; bluffPrevious=null; bluffMotion=null; pokerPrevious=null; pokerMotion=null; delete root.__duelTapAt; } });
+  addEventListener('visibilitychange', () => { if (document.hidden) { previous = null; c4Previous=null; c4Motion=null; bluffPrevious=null; bluffMotion=null; pokerPrevious=null; pokerMotion=null; hbPrevious=null; hbMotion=null; delete root.__duelTapAt; } });
   scan();
 }
 if (typeof document !== 'undefined' && typeof MutationObserver !== 'undefined') {
