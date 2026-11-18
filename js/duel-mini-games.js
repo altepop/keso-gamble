@@ -85,6 +85,29 @@ export function pokerShowdownReason(a,b){
 export function validBluffBid(bid,count,face){
  return Number.isSafeInteger(count)&&count>=1&&count<=10&&Number.isSafeInteger(face)&&face>=1&&face<=6&&(!bid||count>bid.count||(count===bid.count&&face>bid.face));
 }
+// UI-only helpers. Never inspect, infer or publish the opponent's private hand.
+export function nextBluffBid(bid){
+ if(!bid)return {count:1,face:1};
+ if(!Number.isInteger(bid.count)||bid.count<1||bid.count>10||
+    !Number.isInteger(bid.face)||bid.face<1||bid.face>6)return null;
+ return bid.face<6?{count:bid.count,face:bid.face+1}:
+   bid.count<10?{count:bid.count+1,face:1}:null;
+}
+// Conditional probability of a claim being true given *only* five dice in
+// the current user's private hand. Opponent dice are five unknown fair dice.
+// This is a strategic estimate, not a claim about the actual hidden result.
+export function bluffBidEvidence(hand,bid){
+ if(!Array.isArray(hand)||hand.length!==5||hand.some(x=>!Number.isInteger(x)||x<1||x>6)||
+    !bid||!Number.isInteger(bid.face)||bid.face<1||bid.face>6||
+    !Number.isInteger(bid.count)||bid.count<1||bid.count>10)return null;
+ const own=hand.filter(x=>x===bid.face).length,needed=bid.count-own;
+ let chance=0;
+ for(let k=Math.max(0,needed);k<=5;k++){
+  const choose=[1,5,10,10,5,1][k];
+  chance+=choose*(1/6)**k*(5/6)**(5-k);
+ }
+ return {own,needed,chance:Math.max(0,Math.min(1,chance))};
+}
 function digits(rand){const array=Array.from({length:10},(_,i)=>String(i));for(let i=9;i>0;i--){const j=rand(i+1);[array[i],array[j]]=[array[j],array[i]];}return array.slice(0,4).join('');}
 function dice(rand){return Array.from({length:5},()=>rand(6)+1);}
 function shuffledDeck(rand){const a=Array.from({length:52},(_,i)=>i);for(let i=51;i>0;i--){const j=rand(i+1);[a[i],a[j]]=[a[j],a[i]];}return a;}

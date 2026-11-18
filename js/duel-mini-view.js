@@ -1,4 +1,5 @@
-import {connect4LegalMoves,connect4WinningLine,pokerHandName,pokerShowdownReason,validBluffBid} from './duel-mini-games.js?v=web-36e19d63b4ea9213';
+import {bluffDiceView} from './duel-bluff-view.js?v=web-d61cdf10e9913b2c';
+import {connect4LegalMoves,connect4WinningLine,pokerHandName,pokerShowdownReason} from './duel-mini-games.js?v=web-d61cdf10e9913b2c';
 const h=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const safeData=r=>{try{return JSON.parse(r.board);}catch{return {};}};
 const privateValue=r=>{try{return JSON.parse(r.private_hand);}catch{return r.private_hand??null;}};
@@ -31,16 +32,8 @@ export function miniBoardView(r,info,user,busy,picks=[],confirmResign=false,gues
   ${state.reveal?`<p class="duel-mini-hint">正解：${h(state.reveal.a)} / ${h(state.reveal.b)}</p>`:''}`;
   note='交互に数字を予想し、先に4 Hitで勝ち。40手で終わらなければ引き分け。';
  }else if(r.game==='bluffdice'){
-  const bid=state.bid,canRaise=turn&&(bid?.by!==me),canChallenge=canRaise&&bid;
-   const noHigher=!!bid&&!validBluffBid(bid,10,6),firstCount=bid?(bid.face===6?Math.min(bid.count+1,10):bid.count):1,firstFace=bid&&bid.face<6?bid.face+1:1;
-  content=`<div class="duel-private"><span>自分のダイス5個</span><div class="duel-own-dice">${Array.isArray(hand)?hand.map(n=>`<b>${h(n)}</b>`).join(''):'－'}</div></div>
-  <div class="duel-dual-score"><span>${h(name(a))}：${state.winsA??0}勝</span><b>先に2勝</b><span>${h(name(b))}：${state.winsB??0}勝</span></div>
-  <div class="duel-dice-bid">${bid?`現在の宣言 <strong>「${bid.face}の目が ${bid.count}個以上」</strong><small>${bid.by===me?'自分の宣言':'相手の宣言'}</small>`:'個数と目を宣言してください。'}</div>
-  ${turn?`<div class="duel-mini-form"><label>個数<select id="duel-bid-count">${Array.from({length:10},(_,i)=>`<option value="${i+1}" ${bid&&i+1<bid.count?"disabled":""} ${i+1===firstCount?"selected":""}>${i+1}個</option>`).join('')}</select></label><label>目<select id="duel-bid-face">${Array.from({length:6},(_,i)=>`<option value="${i+1}" ${!validBluffBid(bid,firstCount,i+1)?"disabled":""} ${i+1===firstFace?"selected":""}>${i+1}の目</option>`).join('')}</select></label>
-  <button type="button" data-duel-act="move" data-duel-mini="bid" class="action-btn primary" ${noHigher?'disabled':''}>宣言する</button>${noHigher?'<small>これ以上の宣言はできない。相手の宣言を疑ってください。</small>':''}
-  ${canChallenge?'<button type="button" data-duel-act="move" data-duel-mini="challenge" class="action-btn duel-challenge">宣言を疑う</button>':''}</div>`:''}
-  ${(state.history??[]).slice().reverse().map(x=>`<div class="duel-mini-round"><b>ラウンド${x.round}：${h(name(x.winner==='a'?a:b))}勝利</b><small>宣言 ${x.bid.face}の目 ${x.bid.count}個 ／ 実際 ${x.actual}個</small><small>公開：${x.diceA.join(' ')} 対 ${x.diceB.join(' ')}</small></div>`).join('')}`;
-  note='各自5個のダイスを使う。前の宣言より大きな数を宣言するか、相手の宣言を疑う。宣言が正しければ宣言した人、違えば疑った人がそのラウンドの勝ち。1はワイルドではない。';
+  content=bluffDiceView({r,state,hand,turn,me,a,b,name});
+  note='各自5個のダイス。数を大きく宣言するか、相手を疑う。結果公開後、宣言が正しければ宣言者、違えば疑った人がラウンドを取る。先に2勝。';
  }else if(r.game==='poker'){
   const cards=Array.isArray(hand)?hand:[],picked=new Set(picks);
   content=`<div class="duel-private"><span>自分の手札5枚</span></div>

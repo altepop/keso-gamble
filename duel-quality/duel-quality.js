@@ -37,9 +37,53 @@ export function classifyConnect4Transition(previous,next){
  if(row<5&&previous[(row+1)*7+column]==='.')return null;
  return {index:added,row,column,side:next[added]};
 }
+// Round-reveal animation is strictly cosmetic and only runs when exactly one
+// server-confirmed challenge follows a previously observed live bid.
+export function classifyBluffReveal(before,after){
+ if(!before||!after||!before.id||before.id!==after.id||
+    !Number.isSafeInteger(before.version)||after.version!==before.version+1||
+    !Number.isSafeInteger(before.history)||after.history!==before.history+1||
+    !before.bid||typeof after.last!=='string')return null;
+ const parts=after.last.split(':');
+ if(parts.length!==4||parts.slice(1).join(':')!==before.bid)return null;
+ if(!Number.isInteger(Number(parts[0]))||Number(parts[0])<1)return null;
+ return {round:Number(parts[0]),version:after.version};
+}
 function enhance(root) {
   let previous = null, motion = null, lastBoard = null;
   let c4Previous=null,c4Motion=null,lastC4Board=null;
+  let bluffPrevious=null,bluffMotion=null,lastBluffTable=null;
+  function scanBluffDice(){
+   const table=root.querySelector('.duel-bluff-table[data-bluff-match]');
+   if(!table){bluffPrevious=null;bluffMotion=null;lastBluffTable=null;return;}
+   if(table===lastBluffTable)return;
+   lastBluffTable=table;
+   const now=performance.now();
+   const current={
+    id:table.dataset.bluffMatch,
+    version:Number(table.dataset.bluffVersion),
+    history:Number(table.dataset.bluffHistoryCount),
+    bid:table.dataset.bluffBid,
+    last:table.dataset.bluffLast
+   };
+   const change=bluffPrevious&&now-bluffPrevious.at<20000&&!document.hidden
+      ?classifyBluffReveal(bluffPrevious,current):null;
+   bluffPrevious={...current,at:now};
+   if(change)bluffMotion={...change,id:current.id,last:current.last,started:now};
+   const elapsed=bluffMotion?now-bluffMotion.started:Infinity;
+   const scene=table.querySelector('.duel-bluff-showdown');
+   if(!scene||!bluffMotion||bluffMotion.id!==current.id||
+      bluffMotion.version!==current.version||bluffMotion.last!==current.last||
+      elapsed>=1400||document.hidden||matchMedia('(prefers-reduced-motion: reduce)').matches){
+     if(elapsed>=1400)bluffMotion=null;
+     return;
+   }
+   scene.style.setProperty('--duel-bluff-delay',(-elapsed)+'ms');
+   scene.querySelectorAll('.duel-bluff-reveal-dice .duel-bluff-die').forEach((die,i)=>{
+     die.style.setProperty('--duel-bluff-die-stagger',(i%5*65+(i>=5?135:0))+'ms');
+   });
+   scene.classList.add('duel-bluff-reveal-animated');
+  }
   function scanConnect4(){
     const board=root.querySelector('.duel-connect4-board[data-c4-match]');
     if(!board){c4Previous=null;c4Motion=null;lastC4Board=null;return;}
@@ -75,6 +119,7 @@ function enhance(root) {
   }
   function scan() {
     scanConnect4();
+    scanBluffDice();
     const board = root.querySelector('.duel-board.duel-othello');
     if (!board) { previous = null; motion = null; lastBoard = null; return; }
     if (board === lastBoard) return; // Ignore mutations outside the board, such as the timer.
@@ -127,7 +172,7 @@ function enhance(root) {
   for (const event of ['pointerup', 'pointercancel']) {
     root.addEventListener(event, () => root.querySelectorAll('.duel-tap-feedback').forEach(x => x.classList.remove('duel-tap-feedback')), {passive: true});
   }
-  addEventListener('visibilitychange', () => { if (document.hidden) { previous = null; c4Previous=null; c4Motion=null; delete root.__duelTapAt; } });
+  addEventListener('visibilitychange', () => { if (document.hidden) { previous = null; c4Previous=null; c4Motion=null; bluffPrevious=null; bluffMotion=null; delete root.__duelTapAt; } });
   scan();
 }
 if (typeof document !== 'undefined' && typeof MutationObserver !== 'undefined') {

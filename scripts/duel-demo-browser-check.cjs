@@ -155,12 +155,25 @@ const a='[data-demo-view=a]',b='[data-demo-view=b]';
  await checkWinner('a');
  // Bluff dice — an impossible-to-reach ten-six bid is correctly challenged twice.
  await chooseMode('bluffdice');
+ assert.equal(await page.locator('.duel-bluff-hand .duel-bluff-die').count(),5,'own five dice, opponent hand never present');
+ assert.equal(await page.locator('.duel-bluff-showdown').count(),0,'no reveal while private');
  async function bluffRound(){
+  const previousHistory=Number(await page.locator('.duel-bluff-table').getAttribute('data-bluff-history-count'));
   await turn('a');
   await page.locator('#duel-bid-count').selectOption('10');
   await page.locator('#duel-bid-face').selectOption('6');
   await page.locator('[data-duel-mini=bid]').click();
-  await turn('b');await page.locator('[data-duel-mini=challenge]').click();
+  await turn('b');
+  assert.equal(await page.locator('.duel-bluff-hand .duel-bluff-die').count(),5,'B sees only their own five dice');
+  assert.equal(await page.locator('.duel-bluff-showdown').count(),previousHistory?1:0,'the *new* round stays private; an already revealed prior round may remain visible');
+  assert.equal(Number(await page.locator('.duel-bluff-table').getAttribute('data-bluff-history-count')),previousHistory,'making a bid does not reveal this round');
+  assert.match(await page.locator('.duel-bluff-odds').innerText(),/相手5個を公平なダイスと仮定/);
+  await page.locator('[data-duel-mini=challenge]').click();
+  assert.equal(await page.locator('.duel-bluff-reveal-dice .duel-bluff-die').count(),10,'ten dice are revealed only after challenge');
+  assert.equal(await page.locator('.duel-bluff-reveal-row').count(),2,'both sides are visibly revealed');
+  assert.equal(await page.locator('.duel-bluff-showdown').count(),1,'latest showdown occupies one visible panel');
+  assert.equal(Number(await page.locator('.duel-bluff-table').getAttribute('data-bluff-history-count')),previousHistory+1,'only the actual challenge publishes a new round result');
+  assert.equal(await page.locator('.duel-bluff-showdown').evaluate(el=>getComputedStyle(el).animationName),'none','reduced motion suppresses the theater animation');
  }
  await bluffRound();assert.match(await page.locator('.duel-mini-round').innerText(),/ラウンド1/);
  await bluffRound();await checkWinner('b');
@@ -229,6 +242,36 @@ const a='[data-demo-view=a]',b='[data-demo-view=b]';
   });
   assert.equal(geometry.count,42,'all 42 Connect Four spaces render');
   assert.ok(Math.abs(geometry.first-geometry.last)<1,'all columns have uniform widths');
+ }
+
+ // A second two-view page checks the genuine challenge->10 dice reveal motion.
+ // No GPU tricks or staged fake dice: this is the same local mini-game rule path.
+ await animatedPage.locator('[data-demo-play="two"]').click();
+ await animatedPage.locator('#demo-mode').selectOption('bluffdice');
+ await animatedPage.locator('[data-duel-target-toggle]').click();
+ await animatedPage.locator('[data-duel-target-option]').click();
+ await animatedPage.locator('[data-duel-act="create"]').click();
+ await animatedPage.locator('[data-demo-view="b"]').click();
+ await animatedPage.locator('[data-duel-act="accept"]').click();
+ await animatedPage.locator('[data-demo-view="a"]').click();
+ await animatedPage.locator('#duel-bid-count').selectOption('10');
+ await animatedPage.locator('#duel-bid-face').selectOption('6');
+ await animatedPage.locator('[data-duel-mini="bid"]').click();
+ assert.equal(await animatedPage.locator('.duel-bluff-reveal-row').count(),0,'before challenge other dice remain secret');
+ await animatedPage.locator('[data-demo-view="b"]').click();
+ await animatedPage.locator('[data-duel-mini="challenge"]').click();
+ const reveal=animatedPage.locator('.duel-bluff-showdown.duel-bluff-reveal-animated');
+ await reveal.waitFor({timeout:6500});
+ const rollAnimation=await reveal.locator('.duel-bluff-reveal-dice .duel-bluff-die').first().evaluate(el=>getComputedStyle(el).animationName);
+ assert.match(rollAnimation,/duel-bluff-dice-roll/,'real WebKit/Chromium plays the dice reveal roll');
+ assert.match(await reveal.innerText(),/ブラフを見破った/,'the result is grounded in the true declared count');
+ for(const width of [320,375,390,430]){
+  await animatedPage.setViewportSize({width,height:844});
+  assert.equal(await animatedPage.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'Bluff Dice fits iPhone width '+width);
+ }
+ if(shotDir){
+  await animatedPage.setViewportSize({width:390,height:844});
+  await animatedPage.screenshot({path:resolve(shotDir,'05-bluffdice-true-reveal-'+engine+'.png'),fullPage:true,animations:'disabled'});
  }
  await animatedCtx.close();
  assert.deepEqual(requests,[],'demo must never call KP/Discord or Worker endpoints');
