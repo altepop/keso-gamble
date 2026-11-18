@@ -224,14 +224,19 @@ function enhance(root) {
     // The Activity reconstructs the DOM on every accepted snapshot; preserve
     // the visible board centre when reapplying a previously chosen zoom.
     if(board.style.width!==width+'px'){
+      const replaced=board!==gomokuBoard;
+      const left=scroll.scrollLeft,top=scroll.scrollTop;
       const beforeWidth=board.getBoundingClientRect().width||660;
-      const centreX=(scroll.scrollLeft+scroll.clientWidth/2)/beforeWidth;
-      const centreY=(scroll.scrollTop+scroll.clientHeight/2)/beforeWidth;
+      const centreX=(left+scroll.clientWidth/2)/beforeWidth;
+      const centreY=(top+scroll.clientHeight/2)/beforeWidth;
       board.style.width=width+'px';
       board.style.minWidth=width+'px';
       board.style.maxWidth='none';
-      scroll.scrollLeft=centreX*width-scroll.clientWidth/2;
-      scroll.scrollTop=centreY*width-scroll.clientHeight/2;
+      // The app already restores old pixel offsets after rerender. Keep those
+      // exact offsets for a replaced node, or each automatic refresh drifts.
+      // Only a direct local zoom click should scale around the visual centre.
+      scroll.scrollLeft=replaced?left:centreX*width-scroll.clientWidth/2;
+      scroll.scrollTop=replaced?top:centreY*width-scroll.clientHeight/2;
     }
     const arena=board.closest('.duel-arena');
     const output=arena?.querySelector('[data-gomoku-zoom-label]');
