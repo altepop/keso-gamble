@@ -229,7 +229,7 @@ tr:last-child td{border-bottom:0}
 <h2>優先して見直すラウンド</h2>
 <p class="muted small">先制キルを取ったのに敗北したラウンドから、連続撃破・短時間の死亡など、事実として検証できる場面を抽出する。ラウンド番号は0始まりだ。</p>
 <div id="review-rounds"></div>
-<p class="foot">表示する試合日時は日本時間。キル時刻はそのラウンド開始からの経過時間である。位置・購入・スキル・スパイクの記録はないため、理由は試合録画で確認する必要がある。</p>
+<p class="foot">表示する試合日時は日本時間。キル時刻はそのラウンド開始からの経過時間です。射線・購入指示・スキルの効果・VCの確認には試合録画が必要です。</p>
 </section>
 <section class="panel">
 <h2>良かったラウンド：再現したい勝ち方</h2>
@@ -417,6 +417,26 @@ const contributionPanel=r=>{
 
  return '<h3>キル数のラウンド分布</h3><p>全10人のロスターK/D合計とイベント数を照合した'+int(r.quality.validMatches)+'試合・'+int(r.rounds)+'R。</p>'+r.killHistogram.map(h=>'<div class="coach-quality"><b>'+escape(h.kills)+'キル：'+int(h.count)+' / '+int(h.denominator)+'R</b><div style="background:#78cba8;height:8px;width:'+Math.round(h.count/max*100)+'%"></div></div>').join('')+'<p>無死亡 '+int(r.noDeathRounds)+' / '+int(r.rounds)+'R。終了時生存やKASTとは異なる。</p><p>マルチキル後の勝利 '+int(r.multiKillWins)+' / 勝敗判明 '+int(r.multiKillKnownOutcomes)+'R。</p><h4>攻守のKPR・DPR</h4>'+['attack','defense'].map(side=>{const x=r.sides[side];return '<p>'+(side==='attack'?'攻撃':'防衛')+'：'+int(x.rounds)+'R / K '+int(x.kills)+' / D '+int(x.deaths)+(x.rounds?' · KPR '+numeric(x.kills/x.rounds,3)+' · DPR '+numeric(x.deaths/x.rounds,3):' · データ不足')+'</p>';}).join('')+['kpr','dpr'].map(key=>{const values=['attack','defense'].map(side=>{const x=r.sides[side];return x.rounds?(key==='kpr'?x.kills:x.deaths)/x.rounds:null;}),max=Math.max(1,...values.filter(v=>v!==null));return '<h5>'+key.toUpperCase()+'</h5>'+['attack','defense'].map((side,i)=>{const v=values[i];return '<div class="coach-quality">'+(side==='attack'?'攻撃':'防衛')+' '+(v===null?'データ不足':numeric(v,3))+(v===null?'':'<div data-round-rate="'+key+'-'+side+'" style="height:8px;background:#a9d7ff;width:'+v/max*100+'%"></div>')+'</div>';}).join('');}).join('')+(r.assistQuality?.rounds?'<h4>ラウンド単位のアシスト</h4><p>全10人のA合計とassistant記録が一致した '+int(r.assistQuality.validMatches)+'試合。アシストが記録された '+int(r.assistQuality.assistRounds)+' / '+int(r.assistQuality.rounds)+'R。キルまたはアシストの関与 '+int(r.assistQuality.killOrAssistRounds)+' / '+int(r.assistQuality.rounds)+'R。生存・トレードを含むKASTではありません。</p>':'<p>ラウンド別アシストはデータ不足。欠損を0として計算しません。</p>')+followup+'<p>'+r.limitations.map(escape).join(' ')+'</p><details><summary>ラウンド指標の保存時点・除外理由</summary><pre style="white-space:pre-wrap;overflow-wrap:anywhere">'+escape(JSON.stringify({events:r.quality,assists:r.assistQuality},null,2))+'</pre></details>';
 };
+const contextPanel=(c,section)=>{
+ if(!c)return '<p class="coach-empty">ラウンド別の装備・スキル・設置解除は未取得です。</p>';
+ const ratio=(n,d)=>d>0?n/d:null;
+ const table=(rows,cols)=>!rows.length?'<p class="coach-empty">データ不足</p>':'<div style="overflow:auto"><table><thead><tr>'+cols.map(x=>'<th>'+escape(x[0])+'</th>').join('')+'</tr></thead><tbody>'+rows.map(r=>'<tr>'+cols.map(x=>{const v=r[x[1]];return '<td>'+escape(v===null||v===undefined?'データ不足':typeof v==='number'?Number.isFinite(v)?v.toFixed(2):'データ不足':v)+'</td>';}).join('')+'</tr>').join('')+'</tbody></table></div>';
+ if(section==='weapons')return '<h3>確認できた撃破手段</h3><p>'+int(c.weapons.knownKills)+' / '+int(c.weapons.totalKills)+'敵キルで武器名を確認。全10人のK/Dとイベントを照合できた試合だけが対象です。</p>'+table(c.weapons.counts,[['武器・撃破手段','weapon'],['敵キル','kills']])+'<p>発射数・命中率・武器別ダメージ効率は未取得。表示されない武器を使っていないという意味ではありません。</p>';
+ if(section==='economy'){
+  const labels={under1000:'1,000未満','1000to3999':'1,000〜3,999', '4000plus':'4,000以上'};
+  const rows=c.bands.map(b=>({...b,label:labels[b.key]||'未確認',winPct:ratio(b.wins*100,b.knownOutcomes),kpr:ratio(b.kills,b.combatRounds),dpr:ratio(b.deaths,b.combatRounds)}));
+  const max=Math.max(1,...rows.map(b=>b.rounds));
+  const bars=c.quality.economy.rounds?rows.map(b=>'<div class="coach-quality">'+escape(b.label)+'：'+int(b.rounds)+'R<div data-context-band="'+escape(b.key)+'" style="height:8px;background:#a9d7ff;width:'+b.rounds/max*100+'%"></div></div>').join(''):'<p class="coach-empty">装備額はデータ不足です。</p>';
+  return '<h3>記録された装備額とラウンド結果</h3><p>'+int(c.quality.economy.matches)+'試合・'+int(c.quality.economy.rounds)+' / '+int(c.quality.candidateRounds)+'Rで本人の装備額を取得。独自の参考区分で、公式のエコ・フルバイ判定ではありません。</p>'+bars+table(rows,[['装備評価額','label'],['有効R','rounds'],['勝敗判明R','knownOutcomes'],['勝率%','winPct'],['K/D照合済みR','combatRounds'],['KPR','kpr'],['DPR','dpr']])+'<p>装備額別の勝率は関連の観察です。役割・相手・攻守・所持金・購入指示は未補正。味方の他4人と比較できた '+int(c.peerComparableRounds)+'Rのうち、本人1,000未満・味方平均4,000以上が '+int(c.lowWithArmedPeers)+'R。購入忘れとは断定しません。</p>'+c.notes.map(n=>diagnosticCard(n)).join('')+'<h4>通常の規定ピストルラウンド</h4><p>'+escape(c.pistols.definition)+'</p>'+table([{...c.pistols,winPct:ratio(c.pistols.wins*100,c.pistols.knownOutcomes),kpr:ratio(c.pistols.kills,c.pistols.rounds),dpr:ratio(c.pistols.deaths,c.pistols.rounds)}],[['K/D照合済みR','rounds'],['勝敗判明R','knownOutcomes'],['勝率%','winPct'],['KPR','kpr'],['DPR','dpr']]);
+ }
+ if(section==='utility'){
+  const labels={grenade:'グレネード枠',ability1:'スキル1',ability2:'スキル2',ultimate:'ULT'};
+  const casts=Object.entries(labels).map(([key,label])=>({label,...c.abilities[key],per100:ratio(c.abilities[key].casts*100,c.abilities[key].rounds),observed:c.abilities[key].rounds?c.abilities[key].casts:null}));
+  const matchCasts=Object.entries(labels).map(([key,label])=>{const a=c.matchAbilities?.[key]||{casts:0,matches:0,rateCasts:0,rounds:0};return {label,...a,observed:a.matches?a.casts:null,perMatch:ratio(a.casts,a.matches),per100:ratio(a.rateCasts*100,a.rounds)};});
+  return '<h3>設置・解除の記録</h3>'+table(['plant','defuse'].map(key=>({label:key==='plant'?'設置':'解除',...c.spike[key],observed:c.spike[key].rounds?c.spike[key].events:null})),[['行動','label'],['有効試合','matches'],['確認できたR','rounds'],['本人の回数','observed']])+'<p>記録上の実行者を確認した回数です。未取得を0として数えず、設置・解除が少ないことだけで低評価にはしません。</p><h3>スキル使用回数（試合合計）</h3>'+table(matchCasts,[['枠','label'],['有効試合','matches'],['合計回数','observed'],['1試合当たり','perMatch'],['R確認済みの分母','rounds'],['100R当たり','per100']])+'<p>試合合計とラウンド別は別の記録です。両表を足し合わせません。100R当たりは、その回数とRの両方が有効な試合だけを使用します。</p><h4>ラウンド別記録</h4>'+table(casts,[['枠','label'],['有効試合','matches'],['確認できたR','rounds'],['使用回数','observed'],['100R当たり','per100']])+'<p>使用回数からスキルの有効性やスキル由来アシストは判断できません。異なるエージェントの回数をそのまま優劣にしません。</p>';
+ }
+ return '<h3>装備・行動記録の品質と分母</h3>'+table(c.quality.metricCoverage,[['指標','metric'],['有効試合','matches'],['有効件数','valid'],['欠損・除外','excluded'],['分子','numerator'],['分母','denominator'],['単位','unit']])+'<p>有効なラウンド骨格 '+int(c.quality.validRoundMatches)+'試合。候補 '+int(c.quality.candidateRounds)+'R。追加保存量の上限による省略履歴 '+int(c.quality.contextSizeCapMatches)+'試合。武器の分母は敵キルで、ほかの行のRとは異なります。</p><details><summary>取得元・保存時点・除外理由</summary><pre style="white-space:pre-wrap;overflow-wrap:anywhere">'+escape(JSON.stringify(c.quality,null,2))+'</pre></details>'+c.limitations.map(s=>'<p>'+escape(s)+'</p>').join('');
+};
 const renderMemberDiagnosis=d=>{
  const all=(d.fullDiagnosis?.items||[]).filter(x=>x.subject===d.profile);
  const own=Array.isArray(d.individual)?d.individual.find(x=>x.player===d.profile):null;
@@ -505,12 +525,12 @@ const renderMemberDiagnosis=d=>{
     id="coach-tab-${id}" aria-controls="coach-view-${id}" aria-selected="${i===0}" tabindex="${i===0?0:-1}">${title}</button>`).join('')+
   '</div>'+
   `<div class="coach-dashboard-view" id="coach-view-overview" role="tabpanel" aria-labelledby="coach-tab-overview">${overview}</div>`+
-  `<div class="coach-dashboard-view" id="coach-view-guns" role="tabpanel" aria-labelledby="coach-tab-guns" hidden>${performancePanel(d.performance,'guns')}</div>`+
+  `<div class="coach-dashboard-view" id="coach-view-guns" role="tabpanel" aria-labelledby="coach-tab-guns" hidden>${performancePanel(d.performance,'guns')}${contextPanel(d.roundContext,'weapons')}</div>`+
   `<div class="coach-dashboard-view" id="coach-view-time" role="tabpanel" aria-labelledby="coach-tab-time" hidden>${performancePanel(d.performance,'time')}</div>`+
-  `<div class="coach-dashboard-view" id="coach-view-team" role="tabpanel" aria-labelledby="coach-tab-team" hidden>${performancePanel(d.performance,'team')}<p>同時交戦とトレード機会は位置データがないため未取得。</p>${rateCharts}</div>`+
-  `<div class="coach-dashboard-view" id="coach-view-improve" role="tabpanel" aria-labelledby="coach-tab-improve" hidden>${contributionPanel(d.roundContribution)}${improvements}</div>`+
+  `<div class="coach-dashboard-view" id="coach-view-team" role="tabpanel" aria-labelledby="coach-tab-team" hidden>${performancePanel(d.performance,'team')}${contextPanel(d.roundContext,'utility')}<p>同時交戦と位置上のトレード機会は、継続的な位置・視界の記録がないため未取得。</p>${rateCharts}</div>`+
+  `<div class="coach-dashboard-view" id="coach-view-improve" role="tabpanel" aria-labelledby="coach-tab-improve" hidden>${contributionPanel(d.roundContribution)}${contextPanel(d.roundContext,'economy')}${improvements}</div>`+
   `<div class="coach-dashboard-view" id="coach-view-strategy" role="tabpanel" aria-labelledby="coach-tab-strategy" hidden>${performancePanel(d.performance,'maps')}${strategy}</div>`+
-  `<div class="coach-dashboard-view" id="coach-view-metrics" role="tabpanel" aria-labelledby="coach-tab-metrics" hidden>${performancePanel(d.performance,'quality')}${allMetrics}</div>`;
+  `<div class="coach-dashboard-view" id="coach-view-metrics" role="tabpanel" aria-labelledby="coach-tab-metrics" hidden>${performancePanel(d.performance,'quality')}${contextPanel(d.roundContext,'quality')}${allMetrics}</div>`;
 };
 $('member-result').addEventListener('click',e=>{
  const btn=e.target.closest('[data-coach-view]');
@@ -802,6 +822,13 @@ const memberDiagnosticPayload=function memberDiagnosticPayloadV2(d){
   coverage:pick(d.coverage,['discovered','complete','partial','pending','unavailable',
    'analysisMatches','discoveryDone','truncated','rowLimit','limitReached','allMatchesGuaranteed']),
   quality:pick(d,['invalidMatches','roundDataMissing','killDataMissing']),
+  roundContext:d.roundContext?{
+   economy:pick(d.roundContext.quality?.economy,['matches','rounds','loadoutTotal']),
+   bands:(d.roundContext.bands||[]).filter(b=>['under1000','1000to3999','4000plus'].includes(b.key)).map(b=>pick(b,['key','rounds','knownOutcomes','wins','combatRounds','kills','deaths'])),
+   abilities:Object.fromEntries(['grenade','ability1','ability2','ultimate'].map(k=>[k,pick(d.roundContext.abilities?.[k],['casts','rounds','matches'])])),
+   matchAbilities:Object.fromEntries(['grenade','ability1','ability2','ultimate'].map(k=>[k,pick(d.roundContext.matchAbilities?.[k],['casts','matches','rateCasts','rounds','rateMatches'])])),
+   spike:Object.fromEntries(['plant','defuse'].map(k=>[k,pick(d.roundContext.spike?.[k],['events','rounds','matches'])])),
+   weapons:pick(d.roundContext.weapons,['knownKills','totalKills','matches']),pistols:pick(d.roundContext.pistols,['rounds','knownOutcomes','wins','kills','deaths'])}:null,
   performance:perf,individual:individuals,individualMapAgent:mapAgent,fullDiagnosis:{items:diagnosis},
   matchTrend:(Array.isArray(d.matchTrend)?d.matchTrend:[]).map(m=>pick(m,
    ['date','map','agent','outcome','kills','deaths','assists','firstKills','firstDeaths','observedOpeningRounds']))};

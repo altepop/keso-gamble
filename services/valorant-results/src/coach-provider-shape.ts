@@ -1,4 +1,5 @@
 import {verifiedAssistants} from './coach-assist-evidence.ts';
+import {CAST_KEYS,observedWeapon,observedRoundSides} from './coach-round-context.ts';
 // Observe fixed field paths on the *direct* Henrik v4 HTTP payload.
 // No values, names, IDs or arbitrary field names are retained here.
 const object=(v:unknown):Record<string,unknown>|null=>v!==null&&typeof v==='object'&&!Array.isArray(v)?v as Record<string,unknown>:null;
@@ -19,6 +20,7 @@ export function coachProviderShape(raw:unknown,endpoint?:'detail'|'history'){
  return {contract:'henrik-v4-direct' as const,version:1,players:10,...(endpoint?{endpoint}:{}),queue:(path(raw,['metadata','queue','id'])==='competitive'?'competitive':typeof path(raw,['metadata','queue','id'])==='string'?'other':'unverified') as 'competitive'|'other'|'unverified',completed:path(raw,['metadata','is_completed'])===true,killAssistantIdsComplete:assistantIdsComplete,
   kills:count(['stats','kills']),deaths:count(['stats','deaths']),assists:count(['stats','assists']),score:count(['stats','score']),
   headshots:count(['stats','headshots']),bodyshots:count(['stats','bodyshots']),legshots:count(['stats','legshots']),
+  playerAbilityCounts:ps.filter(p=>CAST_KEYS.some(k=>numeric(path(p,['ability_casts',k])))).length,
   statsDamageDealt:count(['stats','damage','dealt']),statsDamageReceived:count(['stats','damage','received']),statsDamageMade:count(['stats','damage','made']),
   roundStats:arrays(rounds,'stats'),roundStatDirectIds:anyStat(['puuid'],knownId),roundStatPlayerIds:anyStat(['player','puuid'],knownId),
   roundStatKdaDirect:roundStats.some(kda)?1:0,roundStatKdaNested:anyStat(['stats'],kda),
@@ -26,6 +28,14 @@ export function coachProviderShape(raw:unknown,endpoint?:'detail'|'history'){
   roundStatDamageNested:roundStats.some(s=>numeric(path(s,['stats','damage','dealt']))&&numeric(path(s,['stats','damage','received'])))?1:0,
   roundDamageEvents:roundStats.some(s=>Array.isArray(path(s,['damage_events'])))?1:0,
   roundEconomy:anyStat(['economy'],v=>object(v)!==null),roundAbilityCasts:anyStat(['ability_casts'],v=>object(v)!==null),
+  roundEconomyLoadout:anyStat(['economy','loadout_value'],numeric),
+  roundDerivedSides:Array.isArray(rounds)&&rounds.some(r=>observedRoundSides(r,new Set(playerTeams.values())).derived)?1:0,
+  roundAbilityCounts:anyStat(['ability_casts'],v=>CAST_KEYS.some(k=>numeric(path(v,[k])))),
+  roundPlantActor:Array.isArray(rounds)&&rounds.some(r=>knownId(path(r,['plant','player','puuid']))&&numeric(path(r,['plant','round_time_in_ms'])))?1:0,
+  roundDefuseActor:Array.isArray(rounds)&&rounds.some(r=>knownId(path(r,['defuse','player','puuid']))&&numeric(path(r,['defuse','round_time_in_ms'])))?1:0,
+  roundPlantNull:Array.isArray(rounds)&&rounds.some(r=>path(r,['plant'])===null)?1:0,
+  roundDefuseNull:Array.isArray(rounds)&&rounds.some(r=>path(r,['defuse'])===null)?1:0,
+  killWeaponKnown:Array.isArray(kills)&&kills.some(k=>observedWeapon(path(k,['weapon']))!==null)?1:0,
   roundSurvived:anyStat(['survived'],v=>typeof v==='boolean'),roundAlive:anyStat(['alive'],v=>typeof v==='boolean'),
   roundPlantAlternate:has(rounds,'plant'),roundDefuseAlternate:has(rounds,'defuse'),killWeapon:has(kills,'weapon'),killLocations:arrays(kills,'player_locations'),
   roundPlayers:arrays(rounds,'players'),roundPlayerStats:arrays(rounds,'player_stats'),killAssistants:arrays(kills,'assistants'),damageEvents:arrays(raw? [raw]:[],'damage'),roundPlant:has(rounds,'plant_events'),roundDefuse:has(rounds,'defuse_events')};

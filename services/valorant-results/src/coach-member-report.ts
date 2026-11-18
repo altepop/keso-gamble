@@ -1,4 +1,5 @@
 import {coachRoundContribution} from './coach-round-contribution.ts';
+import {coachRoundContext} from './coach-round-context.ts';
 import {coachPerformance} from './coach-performance.ts';
 import {COACH_MEMBER_ACCOUNTS,coachMemberCoverage} from './coach-member-archive.ts';
 import {summarizeCoachRounds} from './coach-round-analysis.ts';
@@ -53,6 +54,7 @@ export async function readCoachMemberReport(db:D1Database,person:string,preloade
  const performance=coachPerformance(rows.results,accounts,COACH_MEMBER_ACCOUNTS);
  const verifiedRows:typeof rows.results=[];
  const roundContribution=coachRoundContribution(rows.results,accounts,row=>verifiedRows.push(row));
+ const roundContext=coachRoundContext(rows.results,accounts,new Set(verifiedRows.map(row=>row.match_id)));
  const matchTrend=buildCoachMatchTrend(verifiedRows,accounts);
  const report=summarizeCoachRounds(verifiedRows,primary.name,primary.tag,
   primary.puuid??undefined,labelFor(person),
@@ -94,7 +96,7 @@ export async function readCoachMemberReport(db:D1Database,person:string,preloade
   archivedMatches:rows.results.length,usableMatches:report.usableMatches,
   invalidMatches:performance.quality.excluded['invalid-roster']??0,roundDataMissing:rows.results.filter(r=>!hasEventArray(r.rounds_json)).length,
   killDataMissing:rows.results.filter(r=>!hasEventArray(r.kills_json)).length,overall:report.overall,
-  individual,individualMapAgent,matchTrend,performance,roundContribution,
+  individual,individualMapAgent,matchTrend,performance,roundContribution,roundContext,
   fullDiagnosis:diagnosis,coachingNotes:coachNotes(onlySelf),
   coachSignals:detectCoachSignals(onlySelf)
  };
