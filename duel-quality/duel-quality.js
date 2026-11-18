@@ -1,0 +1,75 @@
+// Progressive visual enhancement only. Never sends actions, determines winners or reads KP.
+export function classifyOthelloTransition(previous, next) {
+  if (!Array.isArray(previous) || !Array.isArray(next) || previous.length !== 64 || next.length !== 64) return null;
+  let placed = -1;
+  const flipped = [];
+  for (let i = 0; i < 64; i++) {
+    const a = previous[i], b = next[i];
+    if (!['.', 'B', 'W'].includes(a) || !['.', 'B', 'W'].includes(b)) return null;
+    if (a === b) continue;
+    if (a === '.' && b !== '.') {
+      if (placed !== -1) return null; // Multiple moves received after an inactive tab.
+      placed = i;
+    } else if (a !== '.' && b !== '.' && a !== b) {
+      flipped.push({index: i, from: a});
+    } else return null; // A stone vanished: changed match or corrupted state.
+  }
+  return placed === -1 ? null : {placed, flipped};
+}
+function readBoard(board) {
+  const squares = [...board.querySelectorAll('.duel-square')];
+  if (squares.length !== 64) return null;
+  return {squares, state: squares.map(square => square.classList.contains('black') ? 'B' : square.classList.contains('white') ? 'W' : '.')};
+}
+function enhance(root) {
+  let previous = null;
+  function scan() {
+    const board = root.querySelector('.duel-board.duel-othello');
+    if (!board) { previous = null; return; }
+    const current = readBoard(board);
+    if (!current) { previous = null; return; }
+    const players = root.querySelector('.duel-arena .duel-players')?.textContent || '';
+    const identity = (root.querySelector('.duel-arena .duel-tag')?.textContent || '') + '|' + players;
+    const now = performance.now();
+    const changes = previous && previous.identity === identity && now - previous.at < 20000 && !document.hidden
+      ? classifyOthelloTransition(previous.state, current.state) : null;
+    previous = {state: current.state, identity, at: now};
+    if (!changes || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const {placed, flipped} = changes;
+    const placement = current.squares[placed];
+    placement.classList.add('duel-new-stone');
+    // The new board is already authoritative; animation cannot delay or undo a turn.
+    for (const {index, from} of flipped) {
+      const square = current.squares[index];
+      const distance = Math.max(Math.abs(Math.floor(index / 8) - Math.floor(placed / 8)), Math.abs(index % 8 - placed % 8));
+      square.style.setProperty('--duel-flip-delay', Math.min(distance * 38, 152) + 'ms');
+      square.dataset.duelFrom = from;
+      square.classList.add('duel-flipped-stone');
+    }
+    // Local tap-to-confirmed-render metric is diagnostic only; not a network benchmark.
+    if (root.__duelTapAt !== undefined) {
+      root.__duelTapToConfirmedMs = Math.round(now - root.__duelTapAt);
+      delete root.__duelTapAt;
+    }
+  }
+  const observer = new MutationObserver(scan);
+  observer.observe(root, {childList: true, subtree: true});
+  root.addEventListener('pointerdown', event => {
+    const square = event.target.closest?.('.duel-othello .duel-square.available:not(:disabled)');
+    if (square) {
+      root.__duelTapAt = performance.now();
+      square.classList.add('duel-tap-feedback');
+    }
+  }, {passive: true});
+  for (const event of ['pointerup', 'pointercancel']) {
+    root.addEventListener(event, () => root.querySelectorAll('.duel-tap-feedback').forEach(x => x.classList.remove('duel-tap-feedback')), {passive: true});
+  }
+  addEventListener('visibilitychange', () => { if (document.hidden) { previous = null; delete root.__duelTapAt; } });
+  scan();
+}
+if (typeof document !== 'undefined' && typeof MutationObserver !== 'undefined') {
+  for (const id of ['app', 'demo-app']) {
+    const root = document.getElementById(id);
+    if (root) enhance(root);
+  }
+}
