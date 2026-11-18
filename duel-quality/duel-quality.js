@@ -21,9 +21,60 @@ function readBoard(board) {
   if (squares.length !== 64) return null;
   return {squares, state: squares.map(square => square.classList.contains('black') ? 'B' : square.classList.contains('white') ? 'W' : '.')};
 }
+// Pure transition detector. Never animate reconnect snapshots containing
+// multiple moves, illegal gravity, changed matches or a disappearing chip.
+export function classifyConnect4Transition(previous,next){
+ if(typeof previous!=='string'||typeof next!=='string'||previous.length!==42||next.length!==42
+    ||!/^[.ab]{42}$/.test(previous)||!/^[.ab]{42}$/.test(next))return null;
+ let added=-1;
+ for(let i=0;i<42;i++){
+  if(previous[i]===next[i])continue;
+  if(previous[i]!=='.'||!['a','b'].includes(next[i])||added!==-1)return null;
+  added=i;
+ }
+ if(added===-1)return null;
+ const row=Math.floor(added/7),column=added%7;
+ if(row<5&&previous[(row+1)*7+column]==='.')return null;
+ return {index:added,row,column,side:next[added]};
+}
 function enhance(root) {
   let previous = null, motion = null, lastBoard = null;
+  let c4Previous=null,c4Motion=null,lastC4Board=null;
+  function scanConnect4(){
+    const board=root.querySelector('.duel-connect4-board[data-c4-match]');
+    if(!board){c4Previous=null;c4Motion=null;lastC4Board=null;return;}
+    if(board===lastC4Board)return;
+    lastC4Board=board;
+    const cells=[...board.querySelectorAll('.duel-connect4-space')];
+    if(cells.length!==42){c4Previous=null;c4Motion=null;return;}
+    const id=board.dataset.c4Match;
+    const version=Number(board.dataset.c4Version);
+    const state=cells.map(cell=>cell.classList.contains('a')?'a':cell.classList.contains('b')?'b':'.').join('');
+    const now=performance.now();
+    const change=c4Previous&&c4Previous.id===id&&version===c4Previous.version+1
+      &&now-c4Previous.at<20000&&!document.hidden
+      ?classifyConnect4Transition(c4Previous.state,state):null;
+    c4Previous={id,version,state,at:now};
+    if(change)c4Motion={...change,id,version,state,started:now};
+    // The same confirmed move may be rerendered after a KP refresh. Resume
+    // its progress; do not animate untouched chips or overwrite server state.
+    const move=c4Motion,elapsed=move?now-move.started:Infinity;
+    if(!move||move.id!==id||move.version!==version||move.state!==state||elapsed>1100
+       ||document.hidden||matchMedia('(prefers-reduced-motion: reduce)').matches){
+      if(move&&elapsed>1100)c4Motion=null;
+      return;
+    }
+    const cell=cells[move.index];
+    const from=board.getBoundingClientRect(),to=cell.getBoundingClientRect();
+    const fallDistance=Math.max(to.height, to.top-from.top+to.height+14);
+    const duration=460+move.row*62;
+    cell.style.setProperty('--c4-drop-distance',fallDistance.toFixed(1)+'px');
+    cell.style.setProperty('--c4-drop-duration',duration+'ms');
+    cell.style.setProperty('--c4-drop-delay',(-Math.min(elapsed,duration))+'ms');
+    cell.classList.add('duel-c4-new-chip');
+  }
   function scan() {
+    scanConnect4();
     const board = root.querySelector('.duel-board.duel-othello');
     if (!board) { previous = null; motion = null; lastBoard = null; return; }
     if (board === lastBoard) return; // Ignore mutations outside the board, such as the timer.
@@ -76,7 +127,7 @@ function enhance(root) {
   for (const event of ['pointerup', 'pointercancel']) {
     root.addEventListener(event, () => root.querySelectorAll('.duel-tap-feedback').forEach(x => x.classList.remove('duel-tap-feedback')), {passive: true});
   }
-  addEventListener('visibilitychange', () => { if (document.hidden) { previous = null; delete root.__duelTapAt; } });
+  addEventListener('visibilitychange', () => { if (document.hidden) { previous = null; c4Previous=null; c4Motion=null; delete root.__duelTapAt; } });
   scan();
 }
 if (typeof document !== 'undefined' && typeof MutationObserver !== 'undefined') {

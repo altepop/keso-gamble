@@ -138,6 +138,10 @@ const a='[data-demo-view=a]',b='[data-demo-view=b]';
  await chooseMode('connect4');
  for(let i=0;i<7;i++){await turn(i%2?'b':'a');await click(i%2?1:0);}
  assert.equal(await page.locator('.duel-connect4-space.a').count(),4);
+ assert.equal(await page.locator('.duel-c4-victory-board .duel-c4-win').count(),4,'winning line glows only on confirmed four');
+ assert.equal(await page.locator('.duel-c4-celebration').count(),1,'winning celebration displayed once');
+ assert.match(await page.locator('.duel-c4-celebration').innerText(),/FOUR IN A ROW/);
+ assert.equal(await page.locator('.duel-c4-victory-board .duel-c4-win i').first().evaluate(el=>getComputedStyle(el).animationName),'none','reduced motion disables winning shimmer');
  await checkWinner('a');
  // Hit & Blow — private digits differ per player and are not disclosed to the other viewer.
  await chooseMode('hitblow');
@@ -197,6 +201,34 @@ const a='[data-demo-view=a]',b='[data-demo-view=b]';
  if(shotDir){
   await animatedPage.setViewportSize({width:390,height:844});
   await animatedPage.screenshot({path:resolve(shotDir,'03-othello-stone-geometry-'+engine+'.png'),fullPage:true,animations:'disabled'});
+ }
+ // Connect Four motion is measured in a real mobile browser, not inferred
+ // from CSS source. One authoritative move creates a downward fall animation.
+ await animatedPage.locator('#demo-mode').selectOption('connect4');
+ const beforeChipCount=await animatedPage.locator('.duel-connect4-space.a').count();
+ assert.equal(beforeChipCount,0,'Connect Four starts empty');
+ await animatedPage.locator('.duel-connect4-head [data-duel-cell="0"]').click();
+ const freshChip=animatedPage.locator('.duel-connect4-space.duel-c4-new-chip');
+ await freshChip.waitFor();
+ assert.equal(await freshChip.getAttribute('data-c4-index'),'35','the piece lands in the lowest slot');
+ const drop=await freshChip.locator('i').evaluate(el=>({
+  name:getComputedStyle(el).animationName,
+  duration:getComputedStyle(el).animationDuration,
+  distance:getComputedStyle(el.parentElement).getPropertyValue('--c4-drop-distance')
+ }));
+ assert.match(drop.name,/duel-c4-drop/,'real fall/bounce keyframes are active');
+ assert.ok(parseFloat(drop.distance)>20,'drop distance is computed from rendered cell geometry');
+ assert.ok(parseFloat(drop.duration)>0.45,'drop has a perceptible animated duration');
+ if(shotDir)await animatedPage.screenshot({path:resolve(shotDir,'04-connect4-falling-chip-'+engine+'.png'),fullPage:true,animations:'disabled'});
+ for(const width of [320,375,390,430]){
+  await animatedPage.setViewportSize({width,height:844});
+  assert.equal(await animatedPage.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'Connect Four has no mobile horizontal overflow at '+width);
+  const geometry=await animatedPage.locator('.duel-connect4-board').evaluate(el=>{
+   const all=[...el.querySelectorAll('.duel-connect4-space')];
+   return {count:all.length,first:all[0].getBoundingClientRect().width,last:all.at(-1).getBoundingClientRect().width};
+  });
+  assert.equal(geometry.count,42,'all 42 Connect Four spaces render');
+  assert.ok(Math.abs(geometry.first-geometry.last)<1,'all columns have uniform widths');
  }
  await animatedCtx.close();
  assert.deepEqual(requests,[],'demo must never call KP/Discord or Worker endpoints');

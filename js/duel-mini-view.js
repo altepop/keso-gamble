@@ -1,4 +1,4 @@
-import {connect4LegalMoves,pokerHandName,pokerShowdownReason,validBluffBid} from './duel-mini-games.js?v=web-3c30bd7ec73920ce';
+import {connect4LegalMoves,connect4WinningLine,pokerHandName,pokerShowdownReason,validBluffBid} from './duel-mini-games.js?v=web-36e19d63b4ea9213';
 const h=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const safeData=r=>{try{return JSON.parse(r.board);}catch{return {};}};
 const privateValue=r=>{try{return JSON.parse(r.private_hand);}catch{return r.private_hand??null;}};
@@ -14,8 +14,14 @@ export function miniBoardView(r,info,user,busy,picks=[],confirmResign=false,gues
  let content='',note='';
  if(r.game==='connect4'){
   const can=turn?new Set(connect4LegalMoves(r.board)) : new Set();
-  content=`<div class="duel-connect4-head">${Array.from({length:7},(_,i)=>`<button type="button" data-duel-cell="${i}" ${can.has(i)?'':'disabled'} aria-label="${i+1}列に落とす">▼</button>`).join('')}</div>
- <div class="duel-connect4-board">${[...r.board].map(c=>`<span class="duel-connect4-space ${c==='a'?'a':c==='b'?'b':''}"><i></i></span>`).join('')}</div>`;
+  const winningSide=finished?(r.winner===a?'a':r.winner===b?'b':null):null;
+  const winCells=new Set(winningSide?connect4WinningLine(r.board,winningSide):[]);
+  const hasLine=winCells.size===4;
+  content=`<div class="duel-connect4-head" aria-label="列を選んでコマを落とす">${Array.from({length:7},(_,i)=>`<button type="button" data-duel-cell="${i}" ${can.has(i)?'':'disabled'} aria-label="${i+1}列に落とす">▼</button>`).join('')}</div>
+ <div class="duel-connect4-board ${hasLine?'duel-c4-victory-board':''}" data-c4-match="${h(r.id)}" data-c4-version="${Number(r.version)||0}" aria-label="四目並べの7列6行の盤面">
+ ${[...r.board].map((c,i)=>`<span class="duel-connect4-space ${c==='a'?'a':c==='b'?'b':''} ${winCells.has(i)?'duel-c4-win':''}" data-c4-index="${i}" aria-label="${Math.floor(i/7)+1}行${i%7+1}列、${c==='a'?'赤':c==='b'?'黄':'空き'}"><i></i></span>`).join('')}
+ </div>
+ ${hasLine?`<div class="duel-c4-celebration" role="status" aria-live="polite"><span aria-hidden="true">✦</span><strong>FOUR IN A ROW!</strong><span aria-hidden="true">✦</span><small>${h(name(r.winner))} が4つそろえた！</small></div>`:''}`;
   note='縦・横・斜めに4個並べると勝ち。駒は列の一番下から入る。';
  }else if(r.game==='hitblow'){
   content=`<div class="duel-private"><span>自分の数字</span><strong>${h(hand||'----')}</strong><small>異なる数字4桁。相手には非公開。</small></div>

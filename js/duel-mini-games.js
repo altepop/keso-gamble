@@ -28,6 +28,22 @@ export function connect4Move(board,side,column){
  const next=arr.join('');
  return {board:next,turnSide:won||!next.includes('.')?null:opposite(side),winner:won?side:!next.includes('.')?'draw':null};
 }
+// Presentation-only: return four indices for a visible winning line. The
+// server remains the sole authority for the actual winner and KP settlement.
+export function connect4WinningLine(board,side){
+ if(typeof board!=='string'||board.length!==42||!/^[.ab]{42}$/.test(board)||!['a','b'].includes(side))return [];
+ for(let row=0;row<6;row++)for(let col=0;col<7;col++){
+  if(board[row*7+col]!==side)continue;
+  for(const [dr,dc] of [[0,1],[1,0],[1,1],[1,-1]]){
+   const indices=Array.from({length:4},(_,i)=>(row+dr*i)*7+col+dc*i);
+   if(indices.every((index,i)=>{
+    const r=row+dr*i,c=col+dc*i;
+    return r>=0&&r<6&&c>=0&&c<7&&board[index]===side;
+   }))return indices;
+  }
+ }
+ return [];
+}
 export function hitBlowAnswer(guess,code){
  if(typeof guess!=='string'||!/^[0-9]{4}$/.test(guess)||new Set(guess).size!==4)throw Error('異なる数字4桁を入力してください。');
  return {hit:[...guess].filter((v,i)=>v===code[i]).length,blow:[...guess].filter((v,i)=>v!==code[i]&&code.includes(v)).length};

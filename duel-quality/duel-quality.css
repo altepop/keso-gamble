@@ -146,3 +146,88 @@
   .duel-othello-scorebar span{transition:none!important}
   .duel-othello .duel-square.duel-new-stone::after{animation:none!important;display:none}
 }
+
+/* Connect Four premium motion. Never blocks input, state changes or KP. */
+.duel-connect4-board{
+  grid-template-rows:repeat(6,minmax(0,1fr));
+  overflow:hidden;
+  box-shadow:0 9px 24px #0006,inset 0 1px 1px #e1f7ff60;
+  background:linear-gradient(130deg,#218ed3,#1260a4 58%,#064375);
+}
+.duel-connect4-space{position:relative;isolation:isolate;overflow:visible}
+.duel-connect4-space i{
+  aspect-ratio:1/1;
+  min-height:0;
+  box-shadow:inset 0 2px 6px #0008,0 1px 2px #0008;
+}
+.duel-connect4-head button:not(:disabled){
+  cursor:pointer;touch-action:manipulation;
+  transition:background .14s ease,box-shadow .14s ease,transform .12s ease;
+}
+.duel-connect4-head button:not(:disabled):is(:hover,:focus-visible){
+  background:#247daf;box-shadow:0 0 0 2px #aee7ff9c;outline:2px solid #fff;
+}
+.duel-connect4-space.duel-c4-new-chip{z-index:3}
+.duel-connect4-space.duel-c4-new-chip i{
+  animation:duel-c4-drop var(--c4-drop-duration,680ms) linear var(--c4-drop-delay,0ms) both;
+  will-change:transform;
+}
+@keyframes duel-c4-drop{
+  0%{transform:translate3d(0,calc(0px - var(--c4-drop-distance,250px)),0) scale(.88);filter:brightness(1.15)}
+  66%{transform:translate3d(0,8px,0) scale(1.07,.86);filter:brightness(1.13)}
+  79%{transform:translate3d(0,-7px,0) scale(.97,1.05);filter:brightness(1)}
+  91%{transform:translate3d(0,3px,0) scale(1.02,.96)}
+  100%{transform:translate3d(0,0,0) scale(1);filter:none}
+}
+.duel-connect4-space.duel-c4-new-chip::after{
+  content:'';position:absolute;inset:1px;border:2px solid #c8f9ff;border-radius:50%;
+  z-index:4;pointer-events:none;opacity:0;
+  animation:duel-c4-impact 280ms ease-out calc(var(--c4-drop-duration,680ms) - 180ms + var(--c4-drop-delay,0ms)) both;
+}
+@keyframes duel-c4-impact{
+  0%{opacity:.82;transform:scale(.65)}
+  100%{opacity:0;transform:scale(1.43)}
+}
+/* A four-in-a-row line is derived from an already server-confirmed winner. */
+.duel-c4-victory-board .duel-c4-win{z-index:2}
+.duel-c4-victory-board .duel-c4-win i{
+  box-shadow:0 0 0 2px #fff0ae,0 0 13px 4px #fce575b0,inset 0 1px 2px #fffb;
+  animation:duel-c4-victory-pulse 900ms ease-in-out 2 alternate;
+}
+.duel-c4-victory-board .duel-c4-win::after{
+  content:'';position:absolute;inset:-4px;border:2px solid #fff5c2;
+  border-radius:50%;box-shadow:0 0 9px #fff4a7;pointer-events:none;
+  animation:duel-c4-glow 1.2s ease-in-out 2 alternate;
+}
+@keyframes duel-c4-victory-pulse{
+  0%{transform:scale(.95);filter:brightness(1)}
+  100%{transform:scale(1.08);filter:brightness(1.33)}
+}
+@keyframes duel-c4-glow{0%{opacity:.35}100%{opacity:1}}
+.duel-c4-celebration{
+  display:flex;flex-wrap:wrap;align-items:center;justify-content:center;
+  gap:5px 11px;margin:11px 0 3px;padding:12px 9px;
+  border:1px solid #fce28ac7;border-radius:12px;
+  background:linear-gradient(115deg,#123850,#174a4d,#1c345f);
+  box-shadow:0 0 18px #fff1a52a;
+  text-align:center;color:#ffe9a1;
+  animation:duel-c4-celebrate-in 470ms ease-out both;
+}
+.duel-c4-celebration strong{font-size:clamp(13px,4vw,19px);letter-spacing:.11em}
+.duel-c4-celebration>span{color:#ffe177;animation:duel-c4-sparkle 600ms ease-in-out 3 alternate}
+.duel-c4-celebration small{flex-basis:100%;color:#e3f4fb;font-size:12px}
+@keyframes duel-c4-celebrate-in{
+  from{opacity:0;transform:translateY(10px) scale(.95)}
+  to{opacity:1;transform:translateY(0) scale(1)}
+}
+@keyframes duel-c4-sparkle{from{opacity:.35;transform:scale(.65)}to{opacity:1;transform:scale(1.2)}}
+@media (prefers-reduced-motion:reduce){
+ .duel-connect4-space.duel-c4-new-chip i,
+ .duel-connect4-space.duel-c4-new-chip::after,
+ .duel-c4-victory-board .duel-c4-win i,
+ .duel-c4-victory-board .duel-c4-win::after,
+ .duel-c4-celebration,.duel-c4-celebration>span{
+  animation:none!important;transition:none!important;
+ }
+ .duel-connect4-space.duel-c4-new-chip::after{display:none}
+}
