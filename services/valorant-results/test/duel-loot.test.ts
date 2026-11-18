@@ -10,12 +10,12 @@ const proof=(rating=0,outcome:'win'|'loss'|'draw'='win'):DuelLootReceipt=>({
  duel_id:'duel-1',guild:'guild',user:'a',game:'othello',opponent:'b',
  outcome,rating,day:1,settled_at:1,claimed_at:null
 });
-test('five-stage PvP drop thresholds are a monotonic per-game progression',()=>{
+test('PvP drop probabilities are identical for novice and veteran winners and losers',()=>{
  assert.deepEqual([0,499,500,999,1000,1499,1500,1999,2000,2500].map(skillStage),[0,0,1,1,2,2,3,3,4,4]);
- assert.deepEqual([0,500,1000,1500,2000].map(x=>duelDropChance(x,'win')),[10000,18000,30000,45000,60000]);
- assert.deepEqual([0,500,1000,1500,2000].map(x=>duelDropChance(x,'loss')),[5000,9000,15000,22500,30000]);
- assert.deepEqual([0,500,1000,1500,2000].map(x=>duelAncientChance(x,'win')),[200,400,1000,2500,8000]);
- assert.deepEqual([0,500,1000,1500,2000].map(x=>duelUsefulChance(x,'win')),[70000,90000,120000,150000,200000]);
+ assert.deepEqual([0,500,1000,1500,2000].map(x=>duelDropChance(x,'win')),[40000,40000,40000,40000,40000]);
+ assert.deepEqual([0,500,1000,1500,2000].map(x=>duelDropChance(x,'loss')),[20000,20000,20000,20000,20000]);
+ assert.deepEqual([0,500,1000,1500,2000].map(x=>duelAncientChance(x,'win')),[2000,2000,2000,2000,2000]);
+ assert.deepEqual([0,500,1000,1500,2000].map(x=>duelUsefulChance(x,'win')),[140000,140000,140000,140000,140000]);
 });
 test('both winner and loser earn shards, while only server draws can grant PvP selector',()=>{
  const a:{relics?:any}={},b:{relics?:any}={};
@@ -32,13 +32,14 @@ test('both winner and loser earn shards, while only server draws can grant PvP s
  assert.equal(a.relics.consumables[DUEL_PVP_ANCIENT_ID],1);
  const useful=grantVerifiedPvPReward(a,proof(2000,'win'),70000);
  assert.equal(useful.droppedItem,'consumable.shard_vial');
- const reduced=grantVerifiedPvPReward(a,{...proof(2000,'win'),reward_scale:0.25},0);
- assert.equal(reduced.rewardScale,0.25);
- assert.equal(reduced.shards,1);
+ const reduced=grantVerifiedPvPReward(a,{...proof(2000,'win'),reward_scale:0.5},0);
+ assert.equal(reduced.rewardScale,0.5);
+ assert.equal(reduced.shards,3);
+ assert.throws(()=>grantVerifiedPvPReward(a,{...proof(2000,'win'),reward_scale:0.25},0),/補正/);
  assert.equal(reduced.droppedItem,DUEL_PVP_ANCIENT_ID);
  const miss=grantVerifiedPvPReward(a,proof(0,'loss'),999999);
  assert.equal(miss.droppedItem,null);
- assert.equal(a.relics.shards,22);
+ assert.equal(a.relics.shards,24);
  assert.throws(()=>grantVerifiedPvPReward(a,proof(),-1),/不正/);
  assert.throws(()=>grantVerifiedPvPReward(a,proof(2501),0),/不正/);
 });
@@ -112,18 +113,20 @@ test('SQLite natural finish issues exactly one claim receipt per member, with du
  assert.equal(raw.prepare('SELECT COUNT(*) AS n FROM kp_duel_loot_receipts').get()?.n,2);
  raw.close();
 });
-test('unlimited verified matches still issue loot receipts with anti-farm odds and growing skill',async()=>{
+test('repeating a fixed opponent never issues loot or skill after four verified matches in one JST day',async()=>{
  const {raw,env}=fakeSqlite();
  await ensureDuelLoot(env as any);
  for(let i=1;i<=6;i++)mk(raw,'g'+i,'a','b');
- assert.equal(raw.prepare("SELECT COUNT(*) AS n FROM kp_duel_loot_receipts WHERE user='a'").get()?.n,6);
- assert.equal(raw.prepare("SELECT COUNT(*) AS n FROM kp_duel_loot_receipts WHERE user='a' AND opponent='b'").get()?.n,6);
- assert.deepEqual(raw.prepare("SELECT reward_scale FROM kp_duel_loot_receipts WHERE user='a' ORDER BY settled_at,duel_id").all()
-  .map((x:any)=>x.reward_scale).sort(),[0.25,0.25,1,1,1,1].sort());
- for(let i=7;i<=14;i++)mk(raw,'g'+i,'a','member'+i);
- assert.equal(raw.prepare("SELECT COUNT(*) AS n FROM kp_duel_loot_receipts WHERE user='a'").get()?.n,14);
- assert.equal(raw.prepare("SELECT reward_scale FROM kp_duel_loot_receipts WHERE user='a' AND duel_id='g14'").get()?.reward_scale,0.5);
- assert.equal(raw.prepare("SELECT games FROM kp_duel_skill WHERE user='a'").get()?.games,14);
+ assert.equal(raw.prepare("SELECT COUNT(*) AS n FROM kp_duel_loot_receipts WHERE user='a'").get()?.n,4);
+ assert.equal(raw.prepare("SELECT COUNT(*) AS n FROM kp_duel_loot_receipts WHERE user='b'").get()?.n,4);
+ assert.equal(raw.prepare("SELECT rating FROM kp_duel_skill WHERE user='a'").get()?.rating,140);
+ assert.equal(raw.prepare("SELECT rating FROM kp_duel_skill WHERE user='b'").get()?.rating,28);
+ assert.equal(raw.prepare("SELECT games FROM kp_duel_skill WHERE user='a'").get()?.games,6);
+ for(let i=7;i<=18;i++)mk(raw,'g'+i,'a','member'+i);
+ assert.equal(raw.prepare("SELECT COUNT(*) AS n FROM kp_duel_loot_receipts WHERE user='a'").get()?.n,16);
+ assert.equal(raw.prepare("SELECT reward_scale FROM kp_duel_loot_receipts WHERE user='a' AND duel_id='g18'").get()?.reward_scale,0.5);
+ assert.equal(raw.prepare("SELECT reward_scale FROM kp_duel_loot_receipts WHERE user='a' AND duel_id='g7'").get()?.reward_scale,1);
+ assert.equal(raw.prepare("SELECT games FROM kp_duel_skill WHERE user='a'").get()?.games,18);
  const pre=Number(raw.prepare("SELECT CAST(value AS INTEGER) AS t FROM kp_settings WHERE key='duel_loot_started_at'").get()?.t);
  mk(raw,'old','v','w','v','move',pre-10000);
  assert.equal(raw.prepare("SELECT COUNT(*) AS n FROM kp_duel_loot_receipts WHERE user='v'").get()?.n,0);
