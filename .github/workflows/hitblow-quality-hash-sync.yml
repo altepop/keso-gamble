@@ -1,0 +1,31 @@
+name: Hit Blow quality one-shot cache sync
+on:
+  push:
+    branches: [feat/hitblow-investigation-ux-20261119]
+    paths: [.github/workflows/hitblow-quality-hash-sync.yml]
+permissions:
+  contents: write
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 13
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: true}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - name: Test 5040 codes, privacy and confirmed feedback presentation
+        run: node --test tests/duel-hitblow-quality.test.js
+      - name: Build and verify content-addressed Activity import URLs
+        run: |
+          npm run build:activity
+          npm run check:activity
+      - name: Commit only generated web module import hashes
+        run: |
+          git add js index.html
+          if git diff --cached --quiet; then exit 0; fi
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'build(activity): sync Hit Blow deduction UI module versions'
+          git push origin HEAD:refs/heads/feat/hitblow-investigation-ux-20261119
