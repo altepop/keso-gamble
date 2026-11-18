@@ -98,3 +98,34 @@ Phase 2の基本性能と品質分離を実装中。役割・攻守・味方/パ
 ラウンドの追加フィールドは `rounds[].stats` の最初の最大20件にある固定パス（ID、KDA/ダメージ、economy、ability_casts、survived/alive）とplant/defuse別名、killのweapon/player_locationsの有無だけを観測する。任意キーや値は出さず、未観測をAPI全体の不存在と断定しない。数式や意味を検証するまでは診断へ使用しない。
 
 観測にはdetail/historyの固定区分とcompetitive/other/unverified・完了フラグも付ける。同一呼び出し/traceでは完了済みcompetitiveを優先して選び、他モードや履歴概要だけの欠損を全APIの欠損として扱わない。モードの任意文字列やURLは出力しない。
+
+## 2026-11-18 本番検証（#533）
+
+マージSHA `82ceaeb8789da5ece0c686ac1099f7e2fc019928`、Worker version `f8773e20-fbc1-425c-931e-47310239d633`。PRとmainのChromium/WebKit検査が成功し、COACHの7タブを320/375pxで検証。型検査、サービス1103/1103、配置84/84、予算5/5、Activity318/318、build dry-run成功。本番CIの依存導入はUbuntuミラーの取得遅延で一度タイムアウトし、該当ブラウザジョブの再実行後に成功した。検査は削除していない。
+
+[本番CI・配備・監査ログ](https://github.com/altepop/keso-gamble/actions/runs/44212356487) は成功。Activity/bootstrap/status、最新COACH公開ページの確認も成功。認証付きAPI/metricQualityは `unverified-no-session`、walletは `not-configured`。公開ページの成功を認証付き検証の成功とは扱わない。
+
+01:12 UTC時点のSELECT限定監査:
+
+|人物|保存/KD有効|KPR・DPR・APR・ACS有効|10人K/D照合済みR分析|HS・ADR・DDΔ有効|全10人A照合済みR分析|
+|---|---:|---:|---:|---:|---:|
+|神戸（2アカウント統合）|23|22|15|2|1|
+|VDK|44|42|31|2|1|
+|石原|25|24|16|2|1|
+|藤村|6|6|5|2|1|
+|小林|4|4|4|2|1|
+
+合計15 SELECT、実測 `rows_read=2172`、監査書き込み0。HS・ADR・DDΔは前回の0件から各人2件に増加した。ただし2件では安定した個人評価を確定できない。全員の独立履歴は依然 `enabled=false`、発見/保留キュー0。上表は現保存データの件数であり、独立した全履歴を収集した件数ではない。KPR等のR不明除外は神戸1件、VDK2件、石原1件、藤村/小林0件。HS/ダメージ欠損は順に21/42/23/4/2件。過去の取得不能理由はこの未開始状態と分けて扱う。
+
+通常の**完了済みcompetitive・v4 history**レスポンスを実観測した。10人全員の命中部位とdamage.dealt/received、完全なassistant ID配列を確認。さらに `rounds[].stats`、その `player.puuid`、`damage_events`、`economy`、`ability_casts`、roundの`plant`/`defuse`、killの`weapon`/`player_locations`も存在する。従って、装備・スキル・設置解除の情報がAPI全体に存在しないとは言えない。一方、statsの直接/nested KDA・damage.dealt/received、survived/aliveは今回の固定パスでは未観測。detailエンドポイントの同等性は未確認。フィールドの存在だけでゲーム上の意味・完全性・利用可能な分母を証明したとは扱わない。
+
+最新32行を対象とする保存側sourceFieldsサンプルは0件だった。これはAPIにフィールドがないことを示さない。上記の実レスポンス観測と指標別有効件数を証拠として分けて記録する。追加Henrikリクエスト0、生レスポンス/ID/値の公開ログ出力0、短時間tailは終了後に削除済み。
+
+### 全面強化の残作業
+
+1. 既存の認証済み所有者画面から「全員の試合履歴収集を開始」を実行する。本番D1のフラグ直接変更や本人セッションの偽造は行わない。開始後、各人の独立収集件数・欠損理由・上限到達を再監査する。
+2. 認証付き本番APIと実データを描く画面を確認する。セッション未設定を成功として扱わず、チャットにトークン提出を求めない。
+3. 新たに存在を確認したround stats/economy/ability/plant/defuse/weaponの内部固定フィールド・数値型・ID整合性・意味を照合する。公式ドキュメント本文/Swaggerは現環境で取得できていない。第三者の旧v3型を現v4の実体として代用しない。
+4. 検証できたラウンド装備・設置解除等から、保持する最小項目と保存容量/読み取り費用を決め、高度分析と回帰テストを追加する。終了時生存・復活・位置上のトレード機会の完全性がない現段階では、公式KAST・クラッチ率・機会率を実装済みとしない。
+
+FK/FD偏重の解消、基本性能・安定性・勝敗/マップ/agent/role/party比較、品質別分母、7タブ実測グラフは配備済み。上の残作業があるため、総合コーチング全面強化の全体完了ではない。
