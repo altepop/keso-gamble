@@ -40,7 +40,7 @@ test('existing race DO routing remains intact, while duel subscription stays iso
  const actor=new RaceBroadcaster(ctx,{DB:{} as D1Database});
  const conn=await actor.fetch(new Request('https://internal/duel/subscribe',{method:'POST',body:JSON.stringify({user:A})}));
  assert.equal(conn.status,200);
- assert.equal((await actor.fetch(new Request('https://internal/duel/notify',{method:'POST',body:JSON.stringify({userA:A,userB:B,id,version:2})})).status,200);
- assert.equal((await actor.fetch(new Request('https://internal/duel/notify',{method:'GET'})).status,404);
+ const notify=await actor.fetch(new Request('https://internal/duel/notify',{method:'POST',body:JSON.stringify({userA:A,userB:B,id,version:2})}));assert.equal(notify.status,200);
+ const forbidden=await actor.fetch(new Request('https://internal/duel/notify',{method:'GET'}));assert.equal(forbidden.status,404);
  await conn.body?.cancel();
 });
