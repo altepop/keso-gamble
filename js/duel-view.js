@@ -84,7 +84,7 @@ export function duelScreen({info,user,live,cash,selectedId,game='othello',stake=
  const selectedClaim=chosen?.status==='finished'?
   '<section class="panel"><div class="card-body"><h2 class="panel-title">🎁 決闘の戦利品</h2>'+
   (Number(chosen.reward_claimable)===1?
-    '<p>サーバー検証済みの自然終了試合。双方に欠片＋専用消耗品の抽選権がある。</p><p class="helper">この対局の熟練度：'+kp(chosen.reward_rating).replace(' KP','')+' · 当たりはPvP限定「覇者の選定書」</p>'+
+    '<p>サーバー検証済みの自然終了試合。双方に欠片＋専用消耗品の抽選権がある。</p><p class="helper">この対局の熟練度：'+kp(chosen.reward_rating).replace(' KP','')+' · PvP限定：覇者の選定書／超大当たり「覇王の古代選定書」</p>'+
     '<button type="button" class="action-btn primary" data-duel-claim="'+esc(chosen.id)+'" '+(busy?'disabled':'')+'>⚔️ 報酬を受け取る</button>'
    :chosen.reward_claimed_at?
     '<p class="helper">✅ この対局の戦利品は受け取り済みだ。消耗品は「遺物 → 消耗品」で使用できる。</p>'
