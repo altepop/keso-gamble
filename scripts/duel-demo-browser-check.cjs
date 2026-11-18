@@ -50,6 +50,29 @@ const a='[data-demo-view=a]',b='[data-demo-view=b]';
   const data=await page.locator('#demo-app .badge').first().innerText();
   assert.match(data,/19,000 KP/,mode+' escrow debited locally');
  }
+ const assertOthelloGeometry=async(view,stage)=>{
+  // Layout sizes must remain square even when a transition is in progress.
+  // offsetWidth/offsetHeight avoid interpreting a temporary 3D flip as deformation.
+  const measured=await view.locator('.duel-board.duel-othello').evaluate(board=>{
+   const cells=[...board.querySelectorAll('.duel-square')];
+   const rect=element=>{const r=element.getBoundingClientRect();return {width:r.width,height:r.height};};
+   return {
+    board:rect(board),
+    cells:cells.map(rect),
+    pieces:cells.map(cell=>cell.querySelector('.duel-piece')).filter(Boolean).map(piece=>({width:piece.offsetWidth,height:piece.offsetHeight}))
+   };
+  });
+  assert.equal(measured.cells.length,64,stage+' still renders all 64 Othello cells');
+  assert.ok(Math.abs(measured.board.width-measured.board.height)<=1.5,stage+' board remains square '+JSON.stringify(measured.board));
+  for(const [i,cell] of measured.cells.entries()){
+   assert.ok(Math.abs(cell.width-cell.height)<=1.5,stage+' cell '+i+' is square '+JSON.stringify(cell));
+   assert.ok(Math.abs(cell.width-measured.cells[0].width)<=1.5,stage+' cell '+i+' has equal width');
+   assert.ok(Math.abs(cell.height-measured.cells[0].height)<=1.5,stage+' row '+i+' has equal height');
+  }
+  for(const [i,piece] of measured.pieces.entries()){
+   assert.ok(Math.abs(piece.width-piece.height)<=1.5,stage+' stone '+i+' is circular '+JSON.stringify(piece));
+  }
+ };
  const click=async(cell)=>page.locator('[data-duel-cell="'+cell+'"]').click();
  async function turn(side){await page.locator(side==='a'?a:b).click();}
  async function checkWinner(winner){
@@ -62,9 +85,11 @@ const a='[data-demo-view=a]',b='[data-demo-view=b]';
  }
  // Othello — move, flip, then resign (the full 60-turn finish is covered by the D1 service integration suite).
  await chooseMode('othello');
+ await assertOthelloGeometry(page,'reduced motion starting board');
  assert.equal(await page.locator('.duel-square.available').count(),4);
  await click(19);
  assert.match(await page.locator('.duel-counts').innerText(),/黒 4/);
+ await assertOthelloGeometry(page,'reduced motion after first move');
  assert.equal(await page.locator('.duel-square.duel-new-stone').count(),0,'reduced-motion disables decorative animation');
  await turn('b');
  await page.locator('.duel-square.available').first().click();
@@ -154,6 +179,18 @@ const a='[data-demo-view=a]',b='[data-demo-view=b]';
  assert.ok(await animatedPage.locator('.duel-othello .duel-square.duel-flipped-stone').count()>=1,'captured stone gets a flip');
  const animation=await animatedPage.locator('.duel-othello .duel-new-stone .duel-piece').evaluate(el=>getComputedStyle(el).animationName);
  assert.match(animation,/duel-stone-land/,'motion-enabled browser plays landing animation');
+ await assertOthelloGeometry(animatedPage,'animated placement and flip');
+ // Check mobile widths and after the delayed CPU return; neither the grid
+ // nor the stones may stretch between moves or during an animated redraw.
+ await animatedPage.waitForTimeout(900);
+ for(const width of [320,375,390,430]){
+  await animatedPage.setViewportSize({width,height:844});
+  await assertOthelloGeometry(animatedPage,'CPU WebKit/Chromium at '+width+'px');
+ }
+ if(shotDir){
+  await animatedPage.setViewportSize({width:390,height:844});
+  await animatedPage.screenshot({path:resolve(shotDir,'03-othello-stone-geometry-'+engine+'.png'),fullPage:true,animations:'disabled'});
+ }
  await animatedCtx.close();
  assert.deepEqual(requests,[],'demo must never call KP/Discord or Worker endpoints');
  assert.deepEqual(errors,[],'browser runtime errors');

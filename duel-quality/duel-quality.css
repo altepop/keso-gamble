@@ -1,4 +1,19 @@
 /* Optional duel motion layer. Compatible with the existing server-authenticated DOM UI. */
+/* Keep all 64 Othello cells square on iOS WebKit as well as Chromium.
+   Percentage-height stones inside implicit grid rows can make one row twice
+   as tall as the others, stretching the discs into vertical ellipses. */
+.duel-board {
+  grid-template-rows:repeat(var(--duel-size),minmax(0,1fr));
+}
+.duel-board .duel-piece {
+  aspect-ratio:1 / 1;
+  height:auto;
+}
+/* The zoomable 15x15 board has a more-specific rule in styles.css. */
+.duel-board-scroll .duel-gomoku .duel-piece {
+  aspect-ratio:1 / 1;
+  height:auto;
+}
 .duel-othello .duel-piece{backface-visibility:hidden;transform-style:preserve-3d}
 .duel-othello .duel-square.available:active,
 .duel-othello .duel-square.duel-tap-feedback{background:#4dbe84;box-shadow:inset 0 0 0 3px #c6ffe1}
