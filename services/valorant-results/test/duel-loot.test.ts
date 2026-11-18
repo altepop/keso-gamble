@@ -34,10 +34,11 @@ test('both winner and loser earn shards, while only server draws can grant PvP s
  assert.equal(useful.droppedItem,'consumable.shard_vial');
  const reduced=grantVerifiedPvPReward(a,{...proof(2000,'win'),reward_scale:0.25},0);
  assert.equal(reduced.rewardScale,0.25);
+ assert.equal(reduced.shards,1);
  assert.equal(reduced.droppedItem,DUEL_PVP_ANCIENT_ID);
  const miss=grantVerifiedPvPReward(a,proof(0,'loss'),999999);
  assert.equal(miss.droppedItem,null);
- assert.equal(a.relics.shards,27);
+ assert.equal(a.relics.shards,22);
  assert.throws(()=>grantVerifiedPvPReward(a,proof(),-1),/不正/);
  assert.throws(()=>grantVerifiedPvPReward(a,proof(2501),0),/不正/);
 });
