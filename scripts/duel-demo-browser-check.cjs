@@ -145,9 +145,9 @@ const a='[data-demo-view=a]',b='[data-demo-view=b]';
  await checkWinner('a');
  // Hit & Blow — private digits differ per player and are not disclosed to the other viewer.
  await chooseMode('hitblow');
- const codeA=await page.locator('.duel-private strong').innerText();
+ const codeA=(await page.locator('.duel-hitblow-secret-digits').getAttribute('aria-label')).split(' ').at(-1);
  await turn('b');
- const codeB=await page.locator('.duel-private strong').innerText();
+ const codeB=(await page.locator('.duel-hitblow-secret-digits').getAttribute('aria-label')).split(' ').at(-1);
  assert.equal(codeA.length,4);assert.equal(codeB.length,4);
  await turn('a');
  assert.equal(await page.locator('.duel-hitblow-key').count(),12,'mobile number pad has 10 digits plus correction');
