@@ -750,6 +750,20 @@ addEventListener('click',async e=>{
     finally{duelBusy=false;render();}
     return;
    }
+  if(t.dataset.duelClaim){
+    if(!live||!wallet.connected||duelBusy){toast('KP口座または処理中の対戦操作を確認してください。');return;}
+    const target=duelData?.matches?.find(row=>row.id===t.dataset.duelClaim);
+    if(target?.status!=='finished'||Number(target.reward_claimable)!==1){toast('受け取れる戦利品がありません。');return;}
+    duelBusy=true;duelError='';render();
+    try{
+      const result=await liveOperation('duel-reward-claim',{duel:target.id});
+      toast(result.droppedName?'🎉 '+result.droppedName+'を獲得！欠片＋'+result.shards+'個':'戦利品を受け取った！ 欠片＋'+result.shards+'個');
+      try{const [fresh,info]=await Promise.all([wallet.state(),wallet.duels()]);state=fresh;duelData=mergeDuelPages(info);}
+      catch{duelError='報酬の受け取りは確定したが画面の再取得に失敗した。更新して確認してください。';}
+    }catch(error){duelError='戦利品を受け取れませんでした。'+(error.message??'');}
+    finally{duelBusy=false;render();}
+    return;
+  }
   if(t.dataset.duelCancelCell!==undefined){duelGomokuPreview=null;render();return;}
   if(t.dataset.duelCell!==undefined||t.dataset.duelConfirmCell!==undefined){
    const chosen=duelData?.matches?.find(r=>r.id===duelActiveId)||duelData?.matches?.find(r=>r.status==='active'||r.status==='pending')||duelData?.matches?.[0];
