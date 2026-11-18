@@ -56,6 +56,15 @@ function mergeDuelPages(fresh){
  for(const match of fresh.matches??[])byId.set(match.id,match);
  return {...fresh,matches:[...byId.values()].sort((a,b)=>b.updated_at-a.updated_at||b.id.localeCompare(a.id))};
 }
+function applyConfirmedDuelMatch(match){
+ // Only the server-confirmed match is displayed before the optional refresh.
+ if(!match||typeof match.id!=='string')return;
+ observeDuelChanges({matches:[match]});
+ const known=new Map((duelData?.matches??[]).map(row=>[row.id,row]));
+ known.set(match.id,match);
+ duelData={...(duelData??{members:[],hasMore:false}),matches:[...known.values()].sort((a,b)=>b.updated_at-a.updated_at||b.id.localeCompare(a.id))};
+ duelLastGoodFetch=Date.now();
+}
 function duelStorage(){try{return window.sessionStorage??null;}catch{return null;}}
 function saveDuelPending(){
  try{const store=duelStorage();if(store)duelPendingAction?store.setItem(DUEL_PENDING_KEY,JSON.stringify(duelPendingAction)):store.removeItem(DUEL_PENDING_KEY);}catch{}
@@ -719,6 +728,20 @@ addEventListener('click',async e=>{
   const t=e.target.closest?.('button,[data-open]'); if(!t) return;
   if(t.dataset.duelTargetToggle){duelOpponentPickerOpen=!duelOpponentPickerOpen;render();return;}
   if(t.dataset.duelTargetOption){duelTarget=t.dataset.duelTargetOption;duelRiskConfirm=null;duelOpponentPickerOpen=false;render();return;}
+  if(t.dataset.duelRematch){
+   if(duelBusy||duelPendingAction){toast('未確認の操作を確認してから再戦してください。');return;}
+   const old=duelData?.matches?.find(row=>row.id===t.dataset.duelRematch);
+   if(!old||old.status!=='finished'||(old.user_a!==state.selfUserId&&old.user_b!==state.selfUserId))return;
+   const opponent=old.user_a===state.selfUserId?old.user_b:old.user_a;
+   if(!(duelData?.members??state.members??[]).some(member=>member.id===opponent)){
+    toast('対戦相手を確認できません。更新後に相手を選んでください。');return;
+   }
+   duelGame=old.game;duelStake=old.stake;duelTarget=opponent;duelRiskConfirm=null;duelOpponentPickerOpen=false;
+   render();
+   document.getElementById('duel-game')?.scrollIntoView({block:'center',behavior:'smooth'});
+   document.getElementById('duel-game')?.focus({preventScroll:true});
+   toast('同じ条件を入力した。金額を確認し、申し込みボタンを押してください。');return;
+  }
   if(t.dataset.duelSelect){duelActiveId=t.dataset.duelSelect;duelResignConfirm=false;duelPokerPicks=[];duelGuessDraft='';duelRiskConfirm=null;duelGomokuPreview=null;render();return;}
   if(t.dataset.duelCard!==undefined){const i=Number(t.dataset.duelCard);if(!Number.isInteger(i)||i<0||i>4)return;if(duelPokerPicks.includes(i))duelPokerPicks=duelPokerPicks.filter(x=>x!==i);else if(duelPokerPicks.length<3)duelPokerPicks=[...duelPokerPicks,i];else{toast('交換できるのは3枚までだ');return;}render();return;}
   if(t.dataset.duelRefresh){await refreshDuel(true);return;}
@@ -785,10 +808,11 @@ addEventListener('click',async e=>{
      duelError='前回の操作結果が未確認のため、新しい操作を送れません。「前回の操作を確認」を押してください。';render();return;
     }
     if(!duelPendingAction){duelPendingAction={id:crypto.randomUUID(),args,owner:state.selfUserId,at:Date.now()};saveDuelPending();}
-   duelBusy=true;duelError='';render();
+   duelBusy=true;const hadDuelError=!!duelError;duelError='';if(hadDuelError)render();else paintDuelBusy();
    try{
     const result=await wallet.duelAction({...duelPendingAction.args,id:duelPendingAction.id});
     duelPendingAction=null;saveDuelPending();duelActiveId=result.match.id;duelResignConfirm=false;duelPokerPicks=[];duelGomokuPreview=null;duelOpponentPickerOpen=false;if(action==='move')duelGuessDraft='';
+    applyConfirmedDuelMatch(result.match);render();
     try{const [next,info]=await Promise.all([wallet.state(),wallet.duels()]);observeDuelChanges(info);state=next;duelData=mergeDuelPages(info);}
     catch{duelError='対戦操作は確定したが、最新の盤面または口座の取得に失敗した。更新を押してください。';}
     toast(action==='create'?'挑戦状を送った！':action==='accept'?'決闘開始！':'盤面を更新した');
@@ -1293,30 +1317,44 @@ async function refreshMarket() {
   try { const steps=await commit(next => advanceMarket(next)); if(steps && !detail)render(); }
   catch(error) { toast(error.message); }
 }
+function paintDuelSync(){
+ const label=app.querySelector('.duel-sync')?.firstChild;
+ if(label?.nodeType===3){
+  label.textContent='対戦情報：'+(duelLastGoodFetch?'最終更新 '+new Date(duelLastGoodFetch).toLocaleTimeString('ja-JP'):'確認中')+(duelLoading?'・更新中':'')+'。';
+ }
+}
+function paintDuelBusy(){
+ const current=app.querySelector('.duel-current');
+ if(current){
+  current.setAttribute('aria-busy','true');
+  current.querySelectorAll('button[data-duel-act],button[data-duel-cell],button[data-duel-confirm-cell],button[data-duel-mini]').forEach(button=>{button.disabled=true;});
+ }
+ app.querySelectorAll('.duel-new button[data-duel-act]').forEach(button=>{button.disabled=true;});
+}
 async function refreshDuel(force=false){
  if(screen!=='duels'||!live||document.hidden||duelBusy||duelLoading||!wallet.connected)return;
  loadDuelHistory();loadDuelPending();
  const now=Date.now();if(!force&&now<duelRetryNotBefore)return;const active=duelData?.matches?.some(m=>m.status==='active'&&m.deadline_at>now);
  const pending=duelData?.matches?.some(m=>m.status==='pending'&&m.deadline_at>now);
- // Preserve 10-second updates during play but reduce idle reads: 20s for invites, 30s otherwise.
+ // Preserve the D1 cadence. Unchanged snapshots only update the sync label.
  const cadence=active?10000:pending?20000:30000;
  if(!force&&now-duelLastFetch<cadence)return;
- duelLastFetch=now;duelLoading=true;render();
+ duelLastFetch=now;duelLoading=true;paintDuelSync();
  try{
   const fresh=await wallet.duels();
   if(screen!=='duels'||!live)return;
+  const previous=JSON.stringify(duelData),hadError=!!duelError;
   observeDuelChanges(fresh);duelData=mergeDuelPages(fresh);duelError='';duelLastGoodFetch=Date.now();duelRefreshFailures=0;duelRetryNotBefore=0;
   if(!duelActiveId||!fresh.matches.some(r=>r.id===duelActiveId)){
    duelActiveId=fresh.matches.find(r=>r.status==='active'||r.status==='pending')?.id??fresh.matches[0]?.id??null;
   }
-  render();
-  }catch(error){
+  if(previous!==JSON.stringify(duelData)||hadError)render();
+ }catch(error){
   duelRefreshFailures=Math.min(4,duelRefreshFailures+1);
   duelRetryNotBefore=Date.now()+Math.min(60000,10000*2**(duelRefreshFailures-1));
   duelError='対戦情報を取得できませんでした。最後に受信した盤面を表示しています。通信状況を確認して「更新」を押してください。'+(error?.message?'（'+error.message+'）':'');
   render();
- }
- finally{duelLoading=false;render();}
+ }finally{duelLoading=false;paintDuelSync();}
 }
 setInterval(()=>{if(screen==='duels')refreshDuel();},10000);
 // Countdown updates are purely in-browser and do not query D1.
