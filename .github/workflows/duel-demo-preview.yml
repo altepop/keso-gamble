@@ -3,6 +3,9 @@ on:
   pull_request:
     paths:
       - 'duel-demo.html'
+      - 'index.html'
+      - 'duel-quality/**'
+      - 'tests/duel-othello-quality.test.js'
       - 'duel-preview/**'
       - 'js/duel-*.js'
       - 'scripts/duel-demo-browser-check.cjs'
@@ -14,6 +17,9 @@ on:
     branches: [main]
     paths:
       - 'duel-demo.html'
+      - 'index.html'
+      - 'duel-quality/**'
+      - 'tests/duel-othello-quality.test.js'
       - 'duel-preview/**'
       - 'js/duel-*.js'
       - 'scripts/duel-demo-browser-check.cjs'
@@ -27,7 +33,7 @@ jobs:
   six-modes:
     name: Screenshot and test all six PvP games
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -35,8 +41,19 @@ jobs:
           node-version: '24'
           cache: npm
       - run: npm ci
+      - name: Verify safe Othello board transition classification
+        run: node --test tests/duel-othello-quality.test.js
       - run: npm install --no-save playwright@1.63.0
-      - run: npx playwright install --with-deps chromium webkit
+      - name: Use official Ubuntu archive with bounded download waits
+        run: |
+          # Avoid slow regional mirrors during Playwright system dependency setup.
+          if [ -f /etc/apt/apt-mirrors.txt ]; then
+            printf '%s\n' 'https://archive.ubuntu.com/ubuntu/' | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
+          fi
+          printf '%s\n' 'Acquire::http::Timeout "20";' 'Acquire::https::Timeout "20";' 'Acquire::Retries "2";' | sudo tee /etc/apt/apt.conf.d/80-playwright-downloads >/dev/null
+      - name: Install Chromium and WebKit with signed Ubuntu dependencies
+        timeout-minutes: 5
+        run: npx playwright install --with-deps chromium webkit
       - name: Walk through all 6 modes on mobile Chromium
         env:
           DUEL_DEMO_SHOTS: ${{ runner.temp }}/duel-screens
