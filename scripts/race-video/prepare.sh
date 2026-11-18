@@ -7,7 +7,7 @@ if ! command -v ffmpeg >/dev/null; then
   sudo apt-get update -qq
   sudo apt-get install -y ffmpeg
 fi
-curl -fsSL --retry 3 https://raw.githubusercontent.com/notofonts/noto-cjk/main/Sans/OTF/Japanese/NotoSansCJKjp-Regular.otf -o "$RUNNER_TEMP/race-font.otf"
+curl -fsSL --connect-timeout 15 --max-time 120 --retry 3 --retry-max-time 180 https://raw.githubusercontent.com/notofonts/noto-cjk/main/Sans/OTF/Japanese/NotoSansCJKjp-Regular.otf -o "$RUNNER_TEMP/race-font.otf"
 {
   echo "VIDEO_PYTHON=$RUNNER_TEMP/video-python/bin/python"
   echo "RACE_VIDEO_FONT=$RUNNER_TEMP/race-font.otf"
