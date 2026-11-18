@@ -2,6 +2,9 @@
 // The KP Worker authenticates subscribers before reaching this DO.
 // No board state, private hands, wallet values or credentials are broadcast.
 export const DUEL_STREAM_MAX_MS=150_000;
+// Per guild UTC-day safety budget: cap non-hibernating SSE at 2 hours.
+// On exhaustion return to the existing authenticated 10s D1 polling.
+export const DUEL_STREAM_DAILY_BUDGET_MS=2*60*60_000;
 const ID=/^\d{15,22}$/;
 const UUID=/^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i;
 type Stream={controller:ReadableStreamDefaultController<Uint8Array>;opened:number};
@@ -17,14 +20,41 @@ export function duelEventHint(value:unknown):{id:string;version:number}|null{
 export class DuelEventHub{
  private listeners=new Map<string,Set<Stream>>();
  private heartbeat:ReturnType<typeof setInterval>|null=null;
+ private budgetDay=-1;private budgetUsed=0;private activeSince:number|null=null;
+ private budgetLoaded:Promise<void>|null=null;
+ constructor(private storage?:Pick<DurableObjectStorage,'get'|'put'>){}
+ private async loadBudget(){
+  if(!this.budgetLoaded)this.budgetLoaded=(async()=>{
+   if(!this.storage){this.budgetDay=Math.floor(Date.now()/86400_000);return;}
+   const row=await this.storage.get<{day:number;used:number}>('duel-sse-budget-v1');
+   const today=Math.floor(Date.now()/86400_000);
+   this.budgetDay=today;
+   this.budgetUsed=row?.day===today&&Number.isFinite(row.used)&&row.used>=0?row.used:0;
+  })();
+  await this.budgetLoaded;
+ }
+ private async charge(now=Date.now()){
+  if(this.activeSince===null)return;
+  // Slightly overcharging a midnight-spanning stream is safer than overrunning
+  // the budget. Only explicit new subscriptions reset the UTC-day counter.
+  this.budgetUsed+=Math.max(0,now-this.activeSince);this.activeSince=now;
+  try{await this.storage?.put('duel-sse-budget-v1',{day:this.budgetDay,used:this.budgetUsed});}
+  catch{this.budgetUsed=DUEL_STREAM_DAILY_BUDGET_MS;this.closeAll();return;}
+  if(this.budgetUsed>=DUEL_STREAM_DAILY_BUDGET_MS)this.closeAll();
+ }
  private count(){let n=0;for(const set of this.listeners.values())n+=set.size;return n;}
  private remove(user:string,stream:Stream){
   const set=this.listeners.get(user);if(!set)return;
   set.delete(stream);if(!set.size)this.listeners.delete(user);
-  if(!this.listeners.size&&this.heartbeat!==null){clearInterval(this.heartbeat);this.heartbeat=null;}
+  if(!this.listeners.size&&this.heartbeat!==null){
+   clearInterval(this.heartbeat);this.heartbeat=null;
+   void this.charge().catch(()=>this.closeAll());
+   this.activeSince=null;
+  }
  }
  private tick(){
   const now=Date.now();
+  void this.charge(now).catch(()=>this.closeAll());
   for(const [user,streams] of this.listeners)for(const stream of [...streams]){
    if(now-stream.opened>=DUEL_STREAM_MAX_MS){
     try{stream.controller.close();}catch{}
@@ -34,14 +64,20 @@ export class DuelEventHub{
    }
   }
  }
- subscribe(user:unknown):Response{
+ async subscribe(user:unknown):Promise<Response>{
   if(typeof user!=='string'||!ID.test(user))return new Response('Invalid participant',{status:400});
+  try{await this.loadBudget();}catch{return new Response('Budget unavailable',{status:503,headers:{'Retry-After':'60'}});}
+  const day=Math.floor(Date.now()/86400_000);
+  if(this.budgetDay!==day){this.budgetDay=day;this.budgetUsed=0;}
+  if(this.budgetUsed>=DUEL_STREAM_DAILY_BUDGET_MS)
+   return new Response('Real-time budget reached; polling remains available',{status:429,headers:{'Retry-After':'3600'}});
   if(this.count()>=24||(this.listeners.get(user)?.size??0)>=2)
    return new Response('Too many streams',{status:429,headers:{'Retry-After':'10'}});
   let streamRef:Stream|null=null;
   const body=new ReadableStream<Uint8Array>({
    start:controller=>{
     const item={controller,opened:Date.now()};streamRef=item;
+    if(this.activeSince===null)this.activeSince=item.opened;
     const set=this.listeners.get(user)??new Set<Stream>();set.add(item);this.listeners.set(user,set);
     controller.enqueue(bytes(': connected\n\n'));
     if(this.heartbeat===null)this.heartbeat=setInterval(()=>this.tick(),20000);
