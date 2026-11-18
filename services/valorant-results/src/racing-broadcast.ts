@@ -79,8 +79,8 @@ export class RaceBroadcaster {
  private ctx:DurableObjectState;private env:BroadcastEnv;
  // Duel channels use a separate DO ID ('duel:<guild>') from the racing alarm
  // ('guild:<guild>'). Neither alters the other object's storage or schedule.
- private duelEvents=new DuelEventHub();
- constructor(ctx:DurableObjectState,env:BroadcastEnv){this.ctx=ctx;this.env=env;}
+ private duelEvents:DuelEventHub;
+ constructor(ctx:DurableObjectState,env:BroadcastEnv){this.ctx=ctx;this.env=env;this.duelEvents=new DuelEventHub(ctx.storage);}
  async fetch(request:Request){
   const path=new URL(request.url).pathname;
   if(request.method==='POST'&&path==='/duel/subscribe'){
