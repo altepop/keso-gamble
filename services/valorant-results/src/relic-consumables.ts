@@ -17,8 +17,14 @@ export const NORMAL_CONSUMABLES=[
  {id:'consumable.foil_seal',name:'虹彩刻印',ratePerMillion:1500,
   description:'超越以外の通常遺物1種に、1回だけ特殊外観を確定付与する。'},
 ] as const;
+export const DUEL_PVP_SELECT_ID='consumable.duel.pvp_selector';
+export const DUEL_PVP_CONSUMABLE={
+ id:DUEL_PVP_SELECT_ID,name:'覇者の選定書',ratePerMillion:0,
+ description:'決闘PvP限定。一般〜伝説の通常遺物から好きな1種類を確定入手する。装備枠不要・使い切り。',
+} as const;
+export const CONSUMABLE_CATALOG=[...NORMAL_CONSUMABLES,DUEL_PVP_CONSUMABLE];
 export type NormalConsumableId=(typeof NORMAL_CONSUMABLES)[number]['id'];
-const consumableById=new Map<string,(typeof NORMAL_CONSUMABLES)[number]>(NORMAL_CONSUMABLES.map(x=>[x.id,x]));
+const consumableById=new Map<string,(typeof CONSUMABLE_CATALOG)[number]>(CONSUMABLE_CATALOG.map(x=>[x.id,x]));
 const FOIL_KINDS=['holographic','starlit','abyss'] as const;
 const randomIndex=(max:number)=>{const bytes=crypto.getRandomValues(new Uint32Array(1));return bytes[0]!%max;};
 const nextPower=(base:number,count:number)=>base+Math.min(60,Math.floor(Math.log2(count))*5);
@@ -46,6 +52,7 @@ export function normalConsumableDrops(c:RelicCollection,rolls:Uint32Array){
 
 export function consumableTargetAllowed(id:string,item:RelicItem|undefined,consumable:string):boolean{
  const def=NORMAL_RELIC_BY_ID.get(id);
+ if(consumable===DUEL_PVP_SELECT_ID)return Boolean(def&&!def.special&&['common','uncommon','rare','legendary'].includes(def.rarity));
  if(!item||!def||item.origin!=='normal'||item.rarity!==def.rarity||
   !Number.isSafeInteger(item.count)||item.count<1||item.mutation||item.foil)return false;
  if(consumable==='consumable.mirror'||consumable==='consumable.shard_vial')return item.count>=2;
@@ -66,7 +73,14 @@ export function useNormalConsumable(state:{relics?:RelicCollection},consumable:s
  let effect:string;
  let gained:string|undefined;
  let shards:number|undefined;
- if(consumable==='consumable.mirror'){
+ if(consumable===DUEL_PVP_SELECT_ID){
+  const heldItem=c!.items[target];
+  if(heldItem&&(!Number.isSafeInteger(heldItem.count)||heldItem.count<1||heldItem.count>=Number.MAX_SAFE_INTEGER||heldItem.origin!=='normal'||heldItem.rarity!==source.rarity))throw Error('選定先の所持状態が不正です。');
+  if(heldItem){heldItem.count++;heldItem.power=nextPower(source.power,heldItem.count);}
+  else c!.items[target]={id:source.id,name:source.name,origin:'normal',rarity:source.rarity,power:source.power,ability:source.ability,mode:source.mode,skill:source.skill,count:1};
+  gained=source.name;
+  effect=source.name+'を確定入手';
+ }else if(consumable==='consumable.mirror'){
   const candidates=NORMAL_RELIC_BY_RARITY.get(source.rarity)!.filter(x=>x.id!==target);
   const choice=draw(candidates.length);
   if(!Number.isSafeInteger(choice)||choice<0||choice>=candidates.length)throw Error('再鑑定の抽選が不正です。');
