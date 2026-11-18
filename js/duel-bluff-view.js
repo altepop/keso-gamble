@@ -21,15 +21,15 @@ export function bluffDiceView({r,state,hand,turn,me,a,b,name}){
    ${Array.from({length:5},(_,i)=>bluffDie(Array.isArray(hand)?hand[i]:null)).join('')}
   </div></div>`;
  const latest=last&&Array.isArray(last.diceA)&&Array.isArray(last.diceB)
-  ?`<div class="duel-bluff-showdown" data-bluff-resolved-round="${Number(last.round)||0}">
-   <div class="duel-bluff-reveal-heading"><span>ROUND ${escape(last.round)} · 結果公開</span>
+  ?`<div class="duel-bluff-showdown duel-mini-round" data-bluff-resolved-round="${Number(last.round)||0}">
+   <div class="duel-bluff-reveal-heading"><span>ラウンド${escape(last.round)} · 結果公開</span>
     <strong>${escape(name(last.winner==='a'?a:b))} のラウンド勝利</strong></div>
    <p>「${escape(last.bid?.face)} の目が ${escape(last.bid?.count)} 個以上」→ 実際は <b>${escape(last.actual)} 個</b></p>
    <div class="duel-bluff-reveal-row"><span>${escape(name(a))}</span><div class="duel-bluff-reveal-dice">${diceRow(last.diceA)}</div></div>
    <div class="duel-bluff-reveal-row"><span>${escape(name(b))}</span><div class="duel-bluff-reveal-dice">${diceRow(last.diceB)}</div></div>
    <div class="duel-bluff-verdict">${Number(last.actual)>=Number(last.bid?.count)?'宣言は本当だった！':'ブラフを見破った！'}</div>
   </div>`:'';
- const summary=history.slice().reverse().map(x=>`<div class="duel-mini-round"><b>ラウンド${escape(x.round)}：${escape(name(x.winner==='a'?a:b))}勝利</b>
+ const summary=history.slice().reverse().map(x=>`<div class="duel-bluff-history-item"><b>ラウンド${escape(x.round)}：${escape(name(x.winner==='a'?a:b))}勝利</b>
   <small>宣言 ${escape(x.bid?.face)} の目 ${escape(x.bid?.count)}個 ／ 実際 ${escape(x.actual)}個</small></div>`).join('');
  const actions=turn?`<div class="duel-mini-form duel-bluff-actions">
   <label>個数<select id="duel-bid-count" aria-label="宣言する個数">
