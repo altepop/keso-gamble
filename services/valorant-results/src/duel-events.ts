@@ -22,7 +22,8 @@ export class DuelEventHub{
  private heartbeat:ReturnType<typeof setInterval>|null=null;
  private budgetDay=-1;private budgetUsed=0;private activeSince:number|null=null;
  private budgetLoaded:Promise<void>|null=null;
- constructor(private storage?:Pick<DurableObjectStorage,'get'|'put'>){}
+ private storage?:Pick<DurableObjectStorage,'get'|'put'>;
+ constructor(storage?:Pick<DurableObjectStorage,'get'|'put'>){this.storage=storage;}
  private async loadBudget(){
   if(!this.budgetLoaded)this.budgetLoaded=(async()=>{
    if(!this.storage){this.budgetDay=Math.floor(Date.now()/86400_000);return;}
