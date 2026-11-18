@@ -6,7 +6,7 @@
  * on, the count has a coin shower, each step a fanfare, and an announcer calls the title. Tap to skip the count; tap
  * again (or wait) to close. The show is display only: the wallet was already settled by the server.
  */
-import {play,announce,stopAnnounce} from './sfx.js?v=web-ade08bbf96bdbce5';
+import {play,announce,stopAnnounce} from './sfx.js?v=web-dafc35aef65a55d0';
 
 export const BIG_WIN_TIERS=Object.freeze([
  {id:'big',label:'BIG WIN',call:'Big win!'},
