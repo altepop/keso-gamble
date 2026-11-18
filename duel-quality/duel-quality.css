@@ -310,3 +310,7 @@
  .duel-bluff-reveal-animated .duel-bluff-reveal-dice .duel-bluff-die,
  .duel-bluff-reveal-animated .duel-bluff-verdict{animation:none!important;transition:none!important}
 }
+
+.duel-bluff-history-item{margin:8px 0;padding:9px;border-radius:8px;background:#102c40;display:grid;gap:4px}
+.duel-bluff-history-item b{font-size:12px;color:#e5f2ff}
+.duel-bluff-history-item small{font-size:11px;color:#bdd1df}
