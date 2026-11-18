@@ -1347,9 +1347,12 @@ function startDuelEvents(){
  const ctl=new AbortController();duelEventsAbort=ctl;
  wallet.duelEvents({
   signal:ctl.signal,
-  onOpen:()=>{if(duelEventsAbort!==ctl)return;duelEventsOnline=true;duelEventsFailures=0;},
+  onOpen:()=>{if(duelEventsAbort!==ctl)return;duelEventsFailures=0;},
   onHint:hint=>{
    if(duelEventsAbort!==ctl||screen!=='duels'||document.hidden)return;
+   // A Discord proxy may accept the SSE headers but buffer every frame.
+   // Only receiving a valid actual event justifies a longer D1 cadence.
+   duelEventsOnline=true;
    const known=duelData?.matches?.find(match=>match.id===hint.id);
    if(known&&Number(known.version)>=hint.version)return;
    // D1 remains authoritative. The hint only prompts a read, never a local
