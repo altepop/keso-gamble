@@ -75,7 +75,9 @@ const a='[data-demo-view=a]',b='[data-demo-view=b]';
  await page.locator('[data-duel-rematch]').click();
  assert.equal(await page.locator('#duel-game').inputValue(),'othello','rematch retains the game');
  assert.equal(await page.locator('#duel-stake').inputValue(),'1000','rematch retains the stake');
- assert.match(await page.locator('.duel-result').innerText(),/敗北/,'rematch is not automatically accepted or charged');
+ assert.match(await page.locator('.duel-result').innerText(),/敗北/,'rematch does not create a second game');
+ assert.match(await page.locator('#demo-app .badge').first().innerText(),/19,000 KP/,'rematch preparation cannot deduct KP');
+ assert.equal(await page.locator('[data-duel-act=accept]').count(),0,'rematch preparation cannot send an invitation');
  await screenshot('02-othello-result');
  // Gomoku — alternating 9 moves, five in a row wins.
  await chooseMode('gomoku');
