@@ -22,7 +22,12 @@ export const DUEL_PVP_CONSUMABLE={
  id:DUEL_PVP_SELECT_ID,name:'覇者の選定書',ratePerMillion:0,
  description:'決闘PvP限定。一般〜伝説の通常遺物から好きな1種類を確定入手する。装備枠不要・使い切り。',
 } as const;
-export const CONSUMABLE_CATALOG=[...NORMAL_CONSUMABLES,DUEL_PVP_CONSUMABLE];
+export const DUEL_PVP_ANCIENT_ID='consumable.duel.ancient_selector';
+export const DUEL_PVP_ANCIENT={
+ id:DUEL_PVP_ANCIENT_ID,name:'覇王の古代選定書',ratePerMillion:0,
+ description:'決闘PvPの超希少ドロップ。古代級の通常遺物から好きな1種類を確定入手。使い切り・装備枠不要。',
+} as const;
+export const CONSUMABLE_CATALOG=[...NORMAL_CONSUMABLES,DUEL_PVP_CONSUMABLE,DUEL_PVP_ANCIENT];
 export type NormalConsumableId=(typeof NORMAL_CONSUMABLES)[number]['id'];
 const consumableById=new Map<string,(typeof CONSUMABLE_CATALOG)[number]>(CONSUMABLE_CATALOG.map(x=>[x.id,x]));
 const FOIL_KINDS=['holographic','starlit','abyss'] as const;
@@ -53,6 +58,7 @@ export function normalConsumableDrops(c:RelicCollection,rolls:Uint32Array){
 export function consumableTargetAllowed(id:string,item:RelicItem|undefined,consumable:string):boolean{
  const def=NORMAL_RELIC_BY_ID.get(id);
  if(consumable===DUEL_PVP_SELECT_ID)return Boolean(def&&!def.special&&['common','uncommon','rare','legendary'].includes(def.rarity));
+ if(consumable===DUEL_PVP_ANCIENT_ID)return Boolean(def&&def.rarity==='ancient'&&!def.special);
  if(!item||!def||item.origin!=='normal'||item.rarity!==def.rarity||
   !Number.isSafeInteger(item.count)||item.count<1||item.mutation||item.foil)return false;
  if(consumable==='consumable.mirror'||consumable==='consumable.shard_vial')return item.count>=2;
@@ -73,7 +79,7 @@ export function useNormalConsumable(state:{relics?:RelicCollection},consumable:s
  let effect:string;
  let gained:string|undefined;
  let shards:number|undefined;
- if(consumable===DUEL_PVP_SELECT_ID){
+ if(consumable===DUEL_PVP_SELECT_ID||consumable===DUEL_PVP_ANCIENT_ID){
   const heldItem=c!.items[target];
   if(heldItem&&(!Number.isSafeInteger(heldItem.count)||heldItem.count<1||heldItem.count>=Number.MAX_SAFE_INTEGER||heldItem.origin!=='normal'||heldItem.rarity!==source.rarity))throw Error('選定先の所持状態が不正です。');
   if(heldItem){heldItem.count++;heldItem.power=nextPower(source.power,heldItem.count);}
