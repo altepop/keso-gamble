@@ -479,9 +479,9 @@ function enhance(root) {
     if(guide.dataset.duelRematchStep===String(state.step))return;
     guide.dataset.duelRematchStep=String(state.step);
     const labels=['結果確認','申込内容確認','新しい招待'];
-    guide.innerHTML='<ol class="duel-rematch-progress" aria-label="再戦までの流れ">'+labels.map((label,i)=>
+    guide.innerHTML='<details class="duel-rematch-steps"><summary>再戦までの3ステップ</summary><ol class="duel-rematch-progress" aria-label="再戦までの流れ">'+labels.map((label,i)=>
       '<li'+(i===state.step?' aria-current="step"':'')+' class="'+(i===state.step?'current':'')+'">'+label+'</li>').join('')+
-      '</ol><strong>'+state.title+'</strong><p>'+state.description+'</p>';
+      '</ol></details><strong>'+state.title+'</strong><p>'+state.description+'</p>';
   }
   function scanDuelJourney(){
     const current=root.querySelector('.duel-current');
