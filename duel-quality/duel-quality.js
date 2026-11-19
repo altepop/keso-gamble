@@ -199,7 +199,7 @@ function enhance(root) {
     const ms=Math.round(now-tap.at);
     if(document.hidden||ms<0||ms>20000)return;
     const samples=Array.isArray(root.__duelRenderSamples)?root.__duelRenderSamples:[];
-    samples.push({game,ms,confirmed:true});
+    samples.push({game,ms,confirmed:true,method:'local-gesture-to-confirmed-render'});
     if(samples.length>100)samples.splice(0,samples.length-100);
     root.__duelRenderSamples=samples;
     root.__duelRenderSummary=summarizeDuelRenderSamples(samples);
@@ -758,7 +758,7 @@ function enhance(root) {
         if(duration >= 0 && duration <= 20000 && !document.hidden){
           root.__duelTapToConfirmedMs = duration;
           const samples = Array.isArray(root.__duelRenderSamples) ? root.__duelRenderSamples : [];
-          samples.push({game:'othello',ms:duration,confirmed:true});
+          samples.push({game:'othello',ms:duration,confirmed:true,method:'local-gesture-to-confirmed-render'});
           if(samples.length>100)samples.splice(0,samples.length-100);
           root.__duelRenderSamples = samples;
           root.__duelRenderSummary = summarizeDuelRenderSamples(samples);
