@@ -40,7 +40,7 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).hr
   if(last.ready===last.expected||last.conflicts||last.orphans||last.misbound)break;
   if(i<6)await new Promise(r=>setTimeout(r,55000));
  }
- if(last.ready!==last.expected||last.expected===0||last.conflicts||last.orphans||last.misbound||last.privateProfiles!==last.profiles)throw Error('Coaching identity validation incomplete');
+ if(last.ready!==last.expected||last.expected===0||last.conflicts||last.orphans||last.misbound||last.privateProfiles>last.profiles)throw Error('Coaching identity validation incomplete');
  console.log('COACH_SELF_ACCESS_PROBE',JSON.stringify(await probeCoachBoundary()));
  console.log('COACH_SELF_PAGE_PROBE',JSON.stringify(await coachProductionSmoke(process.env.KESO_SMOKE_WALLET_TOKEN)));
 })().catch(e=>{console.error(e.message);process.exitCode=1;});

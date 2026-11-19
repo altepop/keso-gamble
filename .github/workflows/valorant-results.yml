@@ -310,7 +310,9 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: node scripts/ensure-coach-goals.mjs
+        run: |
+          node scripts/ensure-coach-goals.mjs
+          node scripts/ensure-coach-sharing.mjs
       - name: Read-only KESO COACH historical archive audit (aggregate counts only)
         working-directory: ${{ runner.temp }}/kp-app/services/valorant-results
         env:
@@ -355,6 +357,7 @@ jobs:
         run: |
           node scripts/coach-profile-audit.mjs
           node scripts/coach-goals-audit.mjs
+          node scripts/coach-sharing-audit.mjs
       - name: Audit isolated position storage (aggregate evidence only)
         working-directory: ${{ runner.temp }}/kp-app/services/valorant-results
         env:
