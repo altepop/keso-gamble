@@ -87,6 +87,7 @@
   next.querySelectorAll(':scope > p')[1].textContent='映像やご自身のメモで振り返る内容です。記録から確認できる数字は、次回この画面へ戻った時にご覧いただけます。';
   const checkTemplate=next.querySelector('.checks li').cloneNode(true),checks=next.querySelector('.checks');checks.replaceChildren();
   chosen.forEach(e=>{const li=checkTemplate.cloneNode(true);li.lastElementChild.textContent=copy.polite(fill(e.check,plan.context).replace(/か。?$/,'かを確認します。'));checks.appendChild(li);});
+  $('#acceptBtn').disabled=!first;
   text('#acceptNote','承知しました。この画面を開いている間の実施予定として表示します。練習の達成や、映像での確認が完了したことを記録する操作ではありません。');
   const subs=$('.subs'),subTemplate=subs.querySelector('.sub-task').cloneNode(true);subs.replaceChildren();
   chosen.slice(1).forEach(e=>{const b=subTemplate.cloneNode(true);b.dataset.task=e.id;b.querySelector('.pid').textContent=e.id;b.querySelector('.a').textContent=copy.title(e.title);b.querySelector('p').textContent=fill(copy.polite(copy.action(e.action)),plan.context);subs.appendChild(b);});

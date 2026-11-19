@@ -1,4 +1,4 @@
-import test from 'node:test';import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';import vm from 'node:vm';
+import {createHash} from 'node:crypto';import test from 'node:test';import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';import vm from 'node:vm';
 import '../coach/practice.js';
 const html=readFileSync(new URL('../coach.html',import.meta.url),'utf8');const start=html.indexOf('const CoachPresentation=');const end=html.indexOf('const coachParagraphs=',start);const ctx={};vm.runInNewContext(html.slice(start,end)+';globalThis.copy=CoachPresentation;',ctx);const copy=ctx.copy;
 test('display copy is polite and stable when a panel is rendered more than once',()=>{
@@ -44,5 +44,5 @@ test('every catalogue action has a complete courteous display sentence',()=>{
 test('prototype binding is a local display adapter with a content-addressed cache URL',()=>{
  const code=readFileSync(new URL('../coach/prototype-view.js',import.meta.url),'utf8');
  assert.doesNotMatch(code,/\bfetch\s*\(|\b(?:sessionStorage|localStorage)\b|XMLHttpRequest|sendBeacon/);
- assert.ok(html.includes('prototype-view.js?v=coach-'));
+ assert.ok(html.includes('prototype-view.js?v=coach-'+createHash('sha256').update(code).digest('hex').slice(0,12)));
 });
