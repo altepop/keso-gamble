@@ -1,3 +1,4 @@
+import {syncCoachProfiles} from './coach-identity.ts';
 import {runCoachPositionArchiveSlot} from './coach-position-backfill.ts';
 import {captureCompetitivePositions} from './coach-position-storage.ts';
 import {coachPositionQuality} from './coach-position-quality.ts';
@@ -656,6 +657,13 @@ export default {
   async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
     if(escaPressActive(Date.now()))ctx.waitUntil(approvedEscalationPress(env).catch(()=>console.warn('approved_escalation_press_unknown')));
     if(env.KESO_COACH_WEBHOOK_URL)ctx.waitUntil(vdkRescuePress(env).catch(()=>console.warn('vdk_rescue_press_unknown')));
+    // Separate, idempotent identity provisioning from trusted KP links. Never
+    // changes rewards or fails the monitor, and page reads remain read-only.
+    if(Math.floor((_event.scheduledTime??Date.now())/60000)%5===0)
+      ctx.waitUntil(track(env,'coach_identity',async()=>{
+        const mapping=await initializeKp(env);if(!mapping)return;
+        console.info('coach_identity_sync',await syncCoachProfiles(env.DB,mapping));
+      }));
     // The archival backfill is DB-opt-in and strictly isolated from notices and KP.
     // At most one extra Henrik detail call per five minutes; stop automatically when complete.
     if(Math.floor((_event.scheduledTime??Date.now())/60000)%5===2)

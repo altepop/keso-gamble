@@ -218,7 +218,7 @@ export async function fetchNextCoachMemberMatch(db:D1Database,
  }
 }
 
-export async function coachMemberCoverage(db:D1Database){
+export async function coachMemberCoverage(db:D1Database,onlyRiots?:readonly string[]){
  // No PUUID, tokens or raw match identifiers leave the authenticated API.
  const enabled=await getSwitch(db);
  const sources=await db.prepare(`SELECT s.riot_id,s.next_page,s.done,s.truncated,
@@ -229,11 +229,12 @@ export async function coachMemberCoverage(db:D1Database){
    COALESCE(SUM(CASE WHEN q.status='pending' THEN 1 ELSE 0 END),0) AS pending
    FROM coach_member_sources s LEFT JOIN coach_member_links l ON l.riot_id=s.riot_id
    LEFT JOIN coach_member_queue q ON q.match_id=l.match_id
-   GROUP BY s.riot_id,s.next_page,s.done,s.truncated`).all<{
+   ${onlyRiots?'WHERE s.riot_id IN ('+onlyRiots.map(()=>'?').join(',')+')':''}
+   GROUP BY s.riot_id,s.next_page,s.done,s.truncated`).bind(...(onlyRiots??[])).all<{
     riot_id:string;next_page:number;done:number;truncated:number;discovered:number;
     complete:number;partial:number;unavailable:number;pending:number}>();
  return {enabled,refreshIntervalMinutes:COACH_REFRESH_INTERVAL/60000,refreshPageSize:50,supportsPause:true,source:'Henrik lifetime matches (API-known history; not guaranteed exhaustive)',
-  people:COACH_MEMBER_ACCOUNTS.map(person=>{
+  people:COACH_MEMBER_ACCOUNTS.filter(p=>!onlyRiots||onlyRiots.includes(p.riotId)).map(person=>{
    const row=sources.results.find(s=>s.riot_id===person.riotId);
    return {person:person.person,riotId:person.riotId,
     discovered:row?.discovered??0,complete:row?.complete??0,

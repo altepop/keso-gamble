@@ -18,11 +18,9 @@ test('approved v6 CSS and structural template are copied literally, not reinterp
  let template=proto.slice(proto.indexOf('<div class="wrap">')+'<div class="wrap">'.length,proto.indexOf('\n</div>\n\n<script>'));template=template.slice(0,template.indexOf('  <footer>'));
  assert.equal(html.match(/<template id="coach-prototype-template">\n([\s\S]*?)\n<\/template>/)[1],template);
 });
-test('legacy prose is polite, including unsupported negative forms and sentence endings',()=>{
- const legacy=html.slice(html.indexOf('<details id="legacy-coach"'),html.indexOf('<template id="coach-prototype-template">'));
- assert.ok(legacy.includes('分析の母数は完全保存済み試合だけです。'));
- assert.ok(legacy.includes('取得元に存在しないデータは補いません。'));
- for(const ending of ['だけ。','補わない。','比較する。','提案だ。','回数である。'])assert.ok(!legacy.includes(ending),ending);
+test('retired legacy data is absent while courtesy conversion still handles negative forms and sentence endings',()=>{
+ assert.ok(html.includes('<div id="legacy-coach" hidden></div>'));
+ assert.ok(!html.includes("request('/api/kp/coach/rounds'"),'retired API is never fetched');
  assert.equal(copy.polite('分析の母数は完全保存済み試合だけ。取得元に存在しないデータは補わない。'),'分析の母数は完全保存済み試合だけです。取得元に存在しないデータは補いません。');
  assert.equal(copy.polite('死亡は5.5回。'),'死亡は5.5回。','facts must not turn into prescribed repetitions');
 });

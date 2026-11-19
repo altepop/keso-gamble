@@ -22,7 +22,7 @@ const labelFor=(person:string):Profile=>{
   default:throw Error('Unknown profile');
  }
 };
-export async function readCoachMemberReport(db:D1Database,person:string,preloadedCoverage?:Awaited<ReturnType<typeof coachMemberCoverage>>){
+export async function readCoachMemberReport(db:D1Database,person:string,preloadedCoverage?:Awaited<ReturnType<typeof coachMemberCoverage>>,verifiedAccounts?:readonly {riotId:string;puuid:string}[]){
  const entry=COACH_MEMBER_ACCOUNTS.find(x=>x.person===(person==='Aquatopia'?'神戸':person));
  if(!entry)throw Error('Unrecognized coaching person');
  // The user confirmed Kobe owns Abema#ttv AND Aquatopia#toppy.
@@ -30,7 +30,7 @@ export async function readCoachMemberReport(db:D1Database,person:string,preloade
  const owners=person==='神戸'
   ?COACH_MEMBER_ACCOUNTS.filter(x=>x.person==='神戸'||x.person==='Abema')
   :[entry];
- const accounts=await Promise.all(owners.map(async owner=>{
+ const accounts=verifiedAccounts?verifiedAccounts.filter(a=>owners.some(o=>o.riotId===a.riotId)).map(a=>{const at=a.riotId.lastIndexOf('#');return {...a,name:a.riotId.slice(0,at),tag:a.riotId.slice(at+1)};}):await Promise.all(owners.map(async owner=>{
   const at=owner.riotId.lastIndexOf('#');
   const source=await db.prepare('SELECT puuid FROM coach_member_sources WHERE riot_id=?')
    .bind(owner.riotId).first<{puuid:string|null}>();
@@ -39,10 +39,11 @@ export async function readCoachMemberReport(db:D1Database,person:string,preloade
  }));
  // The AND on exact name + tag avoids accidentally merging a same-name user;
  // the known PUUID also allows legitimate Riot name changes.
- const clauses=accounts.map(()=>`((json_extract(p.value,'$.name')=? AND
+ if(!accounts.length)throw Error('No verified own account');
+ const clauses=verifiedAccounts?accounts.map(()=>"json_extract(p.value,'$.puuid')=?").join(' OR '):accounts.map(()=>`((json_extract(p.value,'$.name')=? AND
   json_extract(p.value,'$.tag')=?) OR
   (? IS NOT NULL AND json_extract(p.value,'$.puuid')=?))`).join(' OR ');
- const bindArgs=accounts.flatMap(a=>[a.name,a.tag,a.puuid,a.puuid]);
+ const bindArgs=verifiedAccounts?accounts.map(a=>a.puuid):accounts.flatMap(a=>[a.name,a.tag,a.puuid,a.puuid]);
  const rows=await db.prepare(`SELECT r.match_id,r.ended_at,r.recorded_at,r.map,r.act_name,r.players_json,r.teams_json,
   e.rounds_json,e.kills_json,e.recorded_at AS events_recorded_at
   FROM valorant_match_rosters r
@@ -52,8 +53,13 @@ export async function readCoachMemberReport(db:D1Database,person:string,preloade
   .bind(...bindArgs,MAX_ROWS).all<{
    match_id:string;ended_at:number;recorded_at:number;map:string|null;act_name:string|null;players_json:string;teams_json:string|null;
    rounds_json:string|null;kills_json:string|null;events_recorded_at:number|null}>();
+ // Remove non-owner names BEFORE generating any prose or member recognition.
+ // Raw IDs remain internal only to verify round events against the roster.
+ if(verifiedAccounts)for(const row of rows.results){
+  try{const players=JSON.parse(row.players_json);row.players_json=JSON.stringify(players.map((p:any)=>accounts.some(a=>a.puuid===p.puuid)?p:{...p,name:null,tag:null}));}catch{row.players_json='[]';}
+ }
  const [primary,...alternates]=accounts;
- const performance=coachPerformance(rows.results,accounts,COACH_MEMBER_ACCOUNTS);
+ const performance=coachPerformance(rows.results,accounts,verifiedAccounts?[]:COACH_MEMBER_ACCOUNTS);
  const verifiedRows:typeof rows.results=[];
  const combatByTime=new Map<number,CoachCombatObservation|null>();
  const roundContribution=coachRoundContribution(rows.results,accounts,(row,observation)=>{
@@ -71,7 +77,7 @@ export async function readCoachMemberReport(db:D1Database,person:string,preloade
  // cohort.  Other teammates can be co-occurring in these same matches.
  const onlySelf={...report,individual,individualMapAgent};
  const diagnosis=comprehensiveCoachDiagnosis(onlySelf);
- const coverage=preloadedCoverage??await coachMemberCoverage(db);
+ const coverage=preloadedCoverage??await coachMemberCoverage(db,verifiedAccounts?accounts.map(a=>a.riotId):undefined);
  const sourceState=coverage.people.find(x=>x.person===(person==='Aquatopia'?'神戸':person));
  const kobeCombined=person==='神戸'
   ?await db.prepare(`SELECT
@@ -81,8 +87,8 @@ export async function readCoachMemberReport(db:D1Database,person:string,preloade
     COUNT(DISTINCT CASE WHEN q.status='pending' THEN l.match_id END) AS pending,
     COUNT(DISTINCT CASE WHEN q.status='unavailable' THEN l.match_id END) AS unavailable
     FROM coach_member_links l LEFT JOIN coach_member_queue q ON q.match_id=l.match_id
-    WHERE l.riot_id IN (?,?)`)
-    .bind(...owners.map(x=>x.riotId))
+    WHERE l.riot_id IN (${accounts.map(()=>'?').join(',')})`)
+    .bind(...accounts.map(x=>x.riotId))
     .first<{discovered:number;complete:number;partial:number;pending:number;unavailable:number}>()
   :null;
  const ownerSources=coverage.people.filter(p=>owners.some(o=>o.riotId===p.riotId));
@@ -92,8 +98,8 @@ export async function readCoachMemberReport(db:D1Database,person:string,preloade
   truncated:ownerSources.some(p=>p.truncated)
  }:sourceState;
  return {
-  person,riotId:owners.map(x=>x.riotId).join(' / '),profile:labelFor(person),
-  accounts:owners.map(x=>x.riotId),
+  person,riotId:accounts.map(x=>x.riotId).join(' / '),profile:labelFor(person),
+  accounts:accounts.map(x=>x.riotId),
   basis:'本人の確認済みアカウントの競技試合（Henrikから発見・保存済みの範囲）',
   coverage:{...combinedCoverage,enabled:coverage.enabled,analysisMatches:report.usableMatches,
    existingArchiveMatches:rows.results.length,

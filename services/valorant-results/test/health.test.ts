@@ -1,3 +1,4 @@
+import {syncCoachProfiles} from '../src/coach-identity.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
@@ -67,11 +68,11 @@ test('member collection controls require the linked owner session and preserve K
 });
 test('read throttling never prevents an authenticated owner from pausing history acquisition',async()=>{
  const f=await fixture(ownerMapping);try{
-  memberTables(f.sql);await enableAllMemberArchive(f.env.DB);
+  memberTables(f.sql);await enableAllMemberArchive(f.env.DB);await syncCoachProfiles(f.env.DB,ownerMapping);
   f.sql.prepare('INSERT INTO kp_settings(key,value) VALUES(?,?)').run('d1_optional_conserve_utc_day',new Date().toISOString().slice(0,10));
   const token=await createKpSession(f.env,guild,one),headers={Authorization:'Bearer '+token};
-  assert.equal((await kpApi(new Request('https://worker/api/kp/coach/rounds',{headers}),f.env,ownerMapping)).status,429);
-  const status=await kpApi(new Request('https://worker/api/kp/coach/members/status',{headers}),f.env,ownerMapping);assert.equal(status.status,200);assert.equal((await status.json() as {supportsPause:boolean}).supportsPause,true);
+  assert.equal((await kpApi(new Request('https://worker/api/kp/coach/me',{headers}),f.env,ownerMapping)).status,429);
+  const status=await kpApi(new Request('https://worker/api/kp/coach/members/status',{headers}),f.env,ownerMapping);assert.equal(status.status,200);assert.equal((await status.json() as {memberHistory:{supportsPause:boolean}}).memberHistory.supportsPause,true);
   const pause=await kpApi(new Request('https://worker/api/kp/coach/members/pause',{method:'POST',headers}),f.env,ownerMapping);assert.equal(pause.status,200);assert.equal((await pause.json() as {enabled:boolean}).enabled,false);
  }finally{f.sql.close()}
 });

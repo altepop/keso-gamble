@@ -284,6 +284,12 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: node scripts/ensure-coach-member-archive.mjs
+      - name: Ensure private coaching identity tables and immutable ownership
+        working-directory: ${{ runner.temp }}/kp-app/services/valorant-results
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/ensure-coach-profiles.mjs
       - name: Read-only KESO COACH historical archive audit (aggregate counts only)
         working-directory: ${{ runner.temp }}/kp-app/services/valorant-results
         env:
@@ -318,6 +324,14 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: node scripts/coach-provider-tail.mjs
+      - name: Verify private coach identity provisioning and unauthenticated boundaries
+        timeout-minutes: 8
+        working-directory: ${{ runner.temp }}/kp-app/services/valorant-results
+        env:
+          KESO_SMOKE_WALLET_TOKEN: ${{ secrets.KESO_SMOKE_WALLET_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/coach-profile-audit.mjs
       - name: Audit isolated position storage (aggregate evidence only)
         working-directory: ${{ runner.temp }}/kp-app/services/valorant-results
         env:
