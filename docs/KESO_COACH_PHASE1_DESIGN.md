@@ -29,6 +29,8 @@
 | 旧レポート・人物別レポート・比較には、他メンバーを識別できる情報や全体収集状況が含まれます。 | [coach-member-report.ts](../services/valorant-results/src/coach-member-report.ts)、[coach-performance.ts](../services/valorant-results/src/coach-performance.ts)、[coach-round-analysis.ts](../services/valorant-results/src/coach-round-analysis.ts) | 本人向けと共有要約向けのレスポンスを別々の許可リストで構成します。 |
 | クライアントの人物キャッシュはtokenを照合しますが、旧集計キャッシュはDB単位です。診断のコピー機能もあります。 | [coach.html](../coach.html)、[coach-round-analysis.ts](../services/valorant-results/src/coach-round-analysis.ts) | 認証変更時の画面消去と、閲覧許可を確認してからキャッシュを返す順序を保証します。 |
 
+関連する未マージPR [#498](https://github.com/altepop/keso-gamble/pull/498) は、VDK既定の私的な`/valo coach`を提案しています。これは現在のmainの実装ではなく、本人既定の画面・目標登録を完成させたものとも扱いません。後で取り込む場合は、非公開のDiscord応答であることだけを認可とせず、本設計と同じ人物単位の所有者照合を適用します。分析ロジックを採用するかの判断と、任意の他人を指定できる権限の判断を分けます。
+
 この監査では秘密の連携設定の中身や本番D1を読み出していません。実装時の本人対応は本番のサーバー管理設定と既存リンクの一致を検証して決めます。
 
 ## 3. 本人を特定する流れ
