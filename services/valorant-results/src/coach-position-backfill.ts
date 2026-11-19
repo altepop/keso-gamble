@@ -1,0 +1,53 @@
+import type {Match} from './results.ts';
+import {ALL_MEMBER_SWITCH,COACH_MEMBER_ACCOUNTS,fetchNextCoachMemberMatch} from './coach-member-archive.ts';
+import {compactCompetitivePositions,recordCompetitivePositions} from './coach-position-storage.ts';
+export type PositionBackfillStep='disabled'|'idle'|'cooldown'|'claimed_elsewhere'|'saved'|'unavailable'|'deferred';
+const DELAY=15*60_000;
+// Runs ONLY in an unused existing five-minute archive slot. Never increases
+// the collector's one-detail-per-slot budget or replays rewards/notifications.
+export async function backfillCoachPositions(db:D1Database,fetchDetail:(region:string,id:string)=>Promise<Match>,now=Date.now()):Promise<PositionBackfillStep>{
+ const switches=await db.prepare('SELECT key,value FROM monitor_state WHERE key IN (?,?)').bind(ALL_MEMBER_SWITCH,'api_after').all<{key:string;value:string}>();
+ if(!switches.results.some(s=>s.key===ALL_MEMBER_SWITCH&&s.value==='enabled'))return 'disabled';
+ if(Number(switches.results.find(s=>s.key==='api_after')?.value)>now)return 'cooldown';
+ const row=await db.prepare(`SELECT q.match_id,q.region,q.source_puuid,q.started_at FROM coach_member_queue q
+  LEFT JOIN valorant_match_positions p ON p.match_id=q.match_id
+  LEFT JOIN coach_position_backfill b ON b.match_id=q.match_id
+  WHERE q.status='complete' AND COALESCE(p.has_coordinates,0)=0
+   AND q.source_riot_id IN (${COACH_MEMBER_ACCOUNTS.map(()=>'?').join(',')})
+   AND EXISTS(SELECT 1 FROM coach_member_links l JOIN coach_member_sources s ON s.riot_id=l.riot_id
+    WHERE l.match_id=q.match_id AND s.riot_id=q.source_riot_id AND s.puuid=q.source_puuid)
+   AND (b.match_id IS NULL OR (b.status IN ('retry','running') AND b.attempts<3 AND b.next_at<=?))
+  ORDER BY q.started_at DESC LIMIT 1`).bind(...COACH_MEMBER_ACCOUNTS.map(p=>p.riotId),now).first<{match_id:string;region:string;source_puuid:string;started_at:number}>();
+ if(!row)return 'idle';
+ const claim=await db.prepare(`INSERT INTO coach_position_backfill(match_id,status,attempts,next_at,reason,updated_at)
+  VALUES(?,'running',1,?,'in-progress',?) ON CONFLICT(match_id) DO UPDATE SET
+  status='running',attempts=coach_position_backfill.attempts+1,next_at=excluded.next_at,reason='in-progress',updated_at=excluded.updated_at
+  WHERE coach_position_backfill.status IN ('retry','running') AND coach_position_backfill.attempts<3 AND coach_position_backfill.next_at<=?`)
+  .bind(row.match_id,now+DELAY,now,now).run();
+ if(!claim.meta.changes)return 'claimed_elsewhere';
+ const finish=async(status:string,reason:string)=>{await db.prepare('UPDATE coach_position_backfill SET status=?,reason=?,updated_at=? WHERE match_id=? AND updated_at=? AND status=\'running\'').bind(status,reason,now,row.match_id,now).run();};
+ try{
+  const detail=await fetchDetail(row.region,row.match_id);
+  const started=Date.parse(detail?.metadata?.started_at);
+  if(detail?.metadata?.match_id!==row.match_id||!Number.isFinite(started)||Math.abs(started-row.started_at)>120000||!detail?.players?.some(p=>p.puuid===row.source_puuid))throw Error('position response mismatch');
+  const compact=compactCompetitivePositions(detail,'detail',now);
+  if(!compact||!compact.hasCoordinates){await finish('unavailable','no-usable-position-response');return 'unavailable';}
+  await recordCompetitivePositions(db,detail,'detail',now);
+  const saved=await db.prepare('SELECT has_coordinates FROM valorant_match_positions WHERE match_id=?').bind(row.match_id).first<{has_coordinates:number}>();
+  if(saved?.has_coordinates!==1)throw Error('position save pending');
+  await finish('saved','captured');return 'saved';
+ }catch(error){
+  if(error instanceof Error&&/\b(?:HTTP|API) 404\b/.test(error.message)){await finish('unavailable','not-found');return 'unavailable';}
+  await db.prepare(`UPDATE coach_position_backfill SET status=CASE WHEN attempts>=3 THEN 'unavailable' ELSE 'retry' END,
+   reason=CASE WHEN attempts>=3 THEN 'retry-exhausted' ELSE 'transient-or-invalid-response' END,updated_at=?
+   WHERE match_id=? AND updated_at=? AND status='running'`).bind(now,row.match_id,now).run();
+  return 'deferred';
+ }
+}
+
+export async function runCoachPositionArchiveSlot(db:D1Database,fetchDetail:(region:string,id:string)=>Promise<Match>,now=Date.now(),archive=fetchNextCoachMemberMatch){
+ let requested=false;
+ const result=await archive(db,(region,id)=>{requested=true;return fetchDetail(region,id);},now);
+ const positions=!requested&&(result==='idle'||result==='already_saved')?await backfillCoachPositions(db,fetchDetail,now):null;
+ return {archive:result,positions};
+}

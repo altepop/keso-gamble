@@ -1,3 +1,4 @@
+import {runCoachPositionArchiveSlot} from './coach-position-backfill.ts';
 import {captureCompetitivePositions} from './coach-position-storage.ts';
 import {coachPositionQuality} from './coach-position-quality.ts';
 import {enrichExistingCoachEvidence} from './coach-evidence-enrichment.ts';
@@ -29,7 +30,7 @@ import {recordCompetitiveRoster} from './match-rosters.ts';
 import {recordCompetitiveRoundEvents} from './round-events.ts';
 import {backfillRecordedVdkMatches} from './roster-backfill.ts';
 import {backfillVdkRoundEvents} from './round-backfill.ts';
-import {discoverCoachMemberPage,fetchNextCoachMemberMatch} from './coach-member-archive.ts';
+import {discoverCoachMemberPage} from './coach-member-archive.ts';
 import {recoverVdkV2Kills,type LegacyV2} from './coach-v2-recovery.ts';
 import {monitorSteam} from './steam-rewards.ts';
 import {readModeNote} from './mode-rewards.ts';
@@ -682,9 +683,10 @@ export default {
       }));
     if(Math.floor((_event.scheduledTime??Date.now())/60000)%5===3)
       ctx.waitUntil(track(env,'coach_member_archive',async()=>{
-        const step=await fetchNextCoachMemberMatch(env.DB,
+        const step=await runCoachPositionArchiveSlot(env.DB,
          (region,id)=>api<Match>(env,'/valorant/v4/match/'+encodeURIComponent(region)+'/'+encodeURIComponent(id)));
-        if(step!=='disabled'&&step!=='idle')console.info('coach_member_archive',{status:step});
+        if(step.archive!=='disabled'&&step.archive!=='idle')console.info('coach_member_archive',{status:step.archive});
+        if(step.positions&&step.positions!=='disabled'&&step.positions!=='idle')console.info('coach_position_backfill',{status:step.positions});
       }));
     // Dedicated opt-in historical round replay: at most one match detail call per five minutes.
     // Uses a different minute than the roster backfill and cannot modify notices or KP.
