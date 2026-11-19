@@ -126,6 +126,16 @@ export function describeInviteReadiness({hasMembers=true,hasOpponent=false,canAf
  if(canAfford===true)return {type:'ready',title:highStake?'高額のため再確認が必要':'招待の準備ができた',detail:highStake?'対戦相手と賭けKPを確認してから送る。':'申し込み時にはKPは減らず、相手が承認すると対戦が始まる。'};
  return {type:'waiting',title:'選択内容を確認',detail:'対戦相手と賭けKPを確認してから申し込む。'};
 }
+
+/* A read-only connectivity explanation. Navigator.online says only whether
+   the browser reports a network interface, never that Discord/Worker responds. */
+export function describeDuelConnection({online=true,retry=false,refreshing=false,recovered=false}={}){
+ if(retry)return {type:'retry',heading:'対戦操作の結果が未確認',description:'新しい着手を送らず、「前回の操作を確認」から同じ操作IDの結果を確認する。'};
+ if(!online)return {type:'offline',heading:'ブラウザがオフライン',description:'確定前の着手を繰り返し送らない。接続が戻ってから対戦情報を更新して確認する。'};
+ if(recovered)return {type:'recovered',heading:'ブラウザの接続が戻った',description:'サーバーの同期はまだ確認していない。「更新」で確定した盤面を確認する。'};
+ if(refreshing)return {type:'refreshing',heading:'対戦情報を更新中',description:'着手・結果はサーバーが確定した情報だけを表示する。'};
+ return null;
+}
 function enhance(root) {
   let previous = null, motion = null, lastBoard = null, lastOthello = null;
   let c4Previous=null,c4Motion=null,lastC4Board=null;
@@ -388,9 +398,34 @@ function enhance(root) {
       '</ol><p class="duel-journey-title" role="status" aria-live="polite">'+state.title+
       '</p><p class="duel-journey-help">'+state.detail+'</p>';
   }
+
+  let connectionRecovered=false;
+  function scanDuelConnection(){
+    const screen=root.querySelector('.screen');
+    const rail=screen?.querySelector(':scope > [data-duel-journey]');
+    if(!screen||!rail)return;
+    const sync=root.querySelector('.duel-sync')?.textContent||'';
+    const refreshing=sync.includes('更新中');
+    const retry=!!root.querySelector('[data-duel-retry]');
+    const info=describeDuelConnection({online:navigator.onLine!==false,retry,refreshing,recovered:connectionRecovered});
+    let bar=screen.querySelector(':scope > [data-duel-connection]');
+    if(!info){bar?.remove();return;}
+    if(!bar){
+      bar=document.createElement('section');
+      bar.dataset.duelConnection='1';bar.className='duel-connection';
+      bar.setAttribute('role','status');bar.setAttribute('aria-live','polite');
+      rail.after(bar);
+    }
+    const key=JSON.stringify(info);
+    if(bar.dataset.duelConnectionKey===key)return;
+    bar.dataset.duelConnectionKey=key;
+    bar.dataset.duelConnectionType=info.type;
+    bar.innerHTML='<strong>'+info.heading+'</strong><span>'+info.description+'</span>';
+  }
   function scan() {
     scanDuelJourney();
     scanInviteReadiness();
+    scanDuelConnection();
     scanConnect4();
     scanBluffDice();
     scanPoker();
@@ -492,6 +527,12 @@ function enhance(root) {
     if(gomokuZoom.size>8)gomokuZoom.delete(gomokuZoom.keys().next().value);
     scanGomoku();
   });
+  // Passive browser connectivity indicators: no implicit replay or server writes.
+  addEventListener('offline',()=>{connectionRecovered=false;scanDuelConnection();});
+  addEventListener('online',()=>{connectionRecovered=true;scanDuelConnection();});
+  root.addEventListener('click',event=>{
+    if(event.target.closest?.('[data-duel-refresh],[data-duel-retry]'))connectionRecovered=false;
+  },{passive:true});
   const observer = new MutationObserver(scan);
   observer.observe(root, {childList: true, subtree: true});
   root.addEventListener('input',event=>{
