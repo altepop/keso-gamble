@@ -666,3 +666,20 @@
 .duel-insights li{font-size:12px;line-height:1.65;color:#e2dff3;overflow-wrap:anywhere}
 @media(max-width:350px){.duel-insights summary{font-size:12px;padding:10px}.duel-insights li{font-size:11px}}
 @media(prefers-reduced-motion:reduce){.duel-insights,.duel-insights *{animation:none!important;transition:none!important}}
+
+
+/* Phase 3: no guessed progress, only states already exposed by the client. */
+.duel-status-help{min-height:44px;display:grid;gap:3px;align-content:center;
+ padding:10px 12px;margin:7px 0 12px;background:#17374b;
+ border:1px solid #517d90;border-radius:12px;color:#f1faff;line-height:1.55}
+.duel-status-help strong{font-size:13px;font-weight:800}
+.duel-status-help p{font-size:12px;margin:0;color:#d1e7f2}
+.duel-status-help[data-duel-status-help-kind="error"],
+.duel-status-help[data-duel-status-help-kind="retry"]{
+ background:#443023;border-color:#d2a16d;color:#fff1d6}
+.duel-status-help[data-duel-status-help-kind="error"] p,
+.duel-status-help[data-duel-status-help-kind="retry"] p{color:#ffe5c9}
+.duel-status-help[data-duel-status-help-kind="initial"],
+.duel-status-help[data-duel-status-help-kind="refresh"]{background:#173749}
+@media(max-width:350px){.duel-status-help{padding:9px 8px}.duel-status-help strong{font-size:12px}.duel-status-help p{font-size:11px}}
+@media(prefers-reduced-motion:reduce){.duel-status-help,.duel-status-help *{animation:none!important;transition:none!important}}
