@@ -1,4 +1,5 @@
 import test from 'node:test';import assert from 'node:assert/strict';import {readOnlyCoachDb,coachProductionSmoke} from '../scripts/coach-performance-audit.mjs';
+import {createHash} from 'node:crypto';
 test('coaching audit refuses every write and measures actual D1 rows_read, not estimated counts',async()=>{
  const calls=[],db=readOnlyCoachDb(async(sql,params)=>{calls.push({sql,params});return {rows:[{count:2}],rowsRead:18};});
  for(const sql of ['DELETE FROM kp_wallets','UPDATE coach_member_sources SET done=1','PRAGMA table_info(x)','SELECT 1; DELETE FROM kp_wallets'])assert.throws(()=>db.prepare(sql));
@@ -6,10 +7,12 @@ test('coaching audit refuses every write and measures actual D1 rows_read, not e
 });
 
 test('production coach smoke verifies actual published page and authenticated Worker contract using GET only',async()=>{
- const seen=[];const request=async(url,init)=>{seen.push({url,init});return url.includes('coach.html')?new Response('<button id="compare-members">同じマップ・ロール内の味方との比較 記録された装備額とラウンド結果 <section data-next-match data-coach-learning>'):Response.json({person:'神戸',matchFeedback:{version:1,sessions:[],starter:{practice:{steps:['one','two','three']},nextGame:'try fixture'}},accounts:['fixture-one','fixture-two'],nextMatch:{version:1,focus:{action:'verify fixture'},check:{metrics:[]}},performance:{quality:{metricCoverage:{}},windows:[5,10,20,50],rolePeers:[]},roundContribution:{quality:{}},roundContext:{quality:{metricCoverage:[]}}});};
+ const code='globalThis.KesoCoachReader = {};',version='coach-'+createHash('sha256').update(code).digest('hex').slice(0,12);
+ const seen=[];const request=async(url,init)=>{seen.push({url,init});return url.includes('coach.html')?new Response('<button id="compare-members">同じマップ・ロール内の味方との比較 記録された装備額とラウンド結果 <section data-next-match data-coach-learning data-reader-board><script src="./coach/reader.js?v='+version+'"></script>'):url.includes('/coach/reader.js')?new Response(code):Response.json({person:'神戸',matchFeedback:{version:1,sessions:[],starter:{practice:{steps:['one','two','three']},nextGame:'try fixture'}},accounts:['fixture-one','fixture-two'],nextMatch:{version:1,focus:{action:'verify fixture'},check:{metrics:[]}},performance:{quality:{metricCoverage:{}},windows:[5,10,20,50],rolePeers:[]},roundContribution:{quality:{}},roundContext:{quality:{metricCoverage:[]}}});};
  assert.deepEqual(await coachProductionSmoke('a'.repeat(48),request),{page:'verified',authenticatedApi:'verified',metricQuality:'verified',mutations:0});
- assert.equal(seen.length,2);assert.ok(seen.every(x=>!x.init.method));assert.equal(seen[1].init.headers.Authorization,'Bearer '+'a'.repeat(48));
+ assert.equal(seen.length,3);assert.ok(seen.every(x=>!x.init.method));assert.equal(seen[2].init.headers.Authorization,'Bearer '+'a'.repeat(48));assert.equal(seen[1].init.headers,undefined);
  assert.equal((await coachProductionSmoke('',request)).authenticatedApi,'unverified-no-session');
  await assert.rejects(()=>coachProductionSmoke('malformed',request));
  await assert.rejects(()=>coachProductionSmoke('a'.repeat(48),async()=>new Response('stale')));
+ await assert.rejects(()=>coachProductionSmoke('',async(url,init)=>url.includes('/coach/reader.js')?new Response('stale reader'):request(url,init)),/coach_reader_stale/);
 });
