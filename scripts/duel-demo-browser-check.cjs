@@ -25,7 +25,7 @@ const a='[data-demo-view=a]',b='[data-demo-view=b]';
  await page.evaluate(()=>{
    const warn=document.createElement('div');
    warn.className='duel-error';warn.setAttribute('role','alert');
-   warn.dataset.DuelTestError='1';warn.textContent='テスト用の通信エラー';
+   warn.dataset.duelTestError='1';warn.textContent='テスト用の通信エラー';
    document.querySelector('#demo-app .screen').append(warn);
  });
  await page.locator('[data-duel-status-help-kind="error"]').waitFor();
