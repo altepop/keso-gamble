@@ -48,6 +48,15 @@ function lessonFor(g:Game,older:Game[],event:CoachCombatObservation|null){
  let lesson=curriculum[topic];
  if(topic==='pressure')lesson={...lesson,title:'倒され方と交戦の選び方を分けて考える',meaning:compared&&dd!>=.1?`本人の直前の記録に比べ、死亡のペースが${f(dd!)} / R増え、キルの増加は${f(kd!)} / Rだった。今回は死亡した交戦の選び方を確認したい。`:`今回は${g.kills}K・${g.deaths}Dで、キルよりデスが多かった。これだけで以前より悪化したとは決めず、まず死亡した交戦の選び方を一つ確認する。`};
  if(topic==='repeat'&&!(compared&&kd!>=.1&&dd!<=-.1))lesson={...lesson,meaning:`今回は${g.kills}K・${g.deaths}Dで、キルがデスを上回った。相手や役割の違いもあるため上達の証明にはしないが、うまくいった準備を具体化して次へ持ち越せる。`};
+ // The role plan uses this match only; historical sessions never see future data.
+ const rolePlans:Record<string,string>={
+  'デュエリスト':'味方の準備ができた合図で入る入口を一つ決める。最初に入った後、カバーが届く所まで進む動きをカスタムで5回試す。',
+  'コントローラー':'味方が入る合図に合わせて必要なスモークを置き、武器へ戻して同じ交戦に参加する手順を5回試す。',
+  'イニシエーター':'味方一人と仕掛ける合図を決め、索敵や妨害の後に武器へ戻して追従する手順を5回試す。',
+  'センチネル':'担当する裏・別入口と合流条件を一つ決める。守る地点から退く遮蔽と、味方へ合流する経路を5回歩く。'
+ };
+ const rolePlan=rolePlans[g.role];
+ if(rolePlan)lesson={...lesson,meaning:`${g.map} / ${g.agent}（${g.role}）の記録。`+lesson.meaning,practice:{...lesson.practice,steps:[lesson.practice.steps[0],lesson.practice.steps[1],rolePlan]},nextGame:lesson.nextGame+` ${g.agent}では、練習した役割の手順を最初の3Rで一度試す。`,alternatives:lesson.alternatives+' 役割別の手順は次回の練習案であり、今回のスキル使用・位置取りを観測した判定ではない。'};
  return {topic,lesson,metrics,evidence,scope,baselineMatches:baseline.length,event};
 }
 function followUp(current:ReturnType<typeof lessonFor>,previous:ReturnType<typeof lessonFor>|null){

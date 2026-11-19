@@ -307,6 +307,18 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
    await page.locator('[data-coach-view="time"]').click();assert.equal(await page.locator('#coach-view-time [data-reader-advanced] svg').first().locator('circle').count(),20);
   }
   assert.deepEqual(errors,[]);
+  await page.locator('[data-coach-view="guns"]').click();
+  const benchmarkRequests=requests.length;
+  const ref=page.locator('[data-benchmark-reference]');
+  await page.setViewportSize({width:320,height:812});
+  assert.ok((await ref.boundingBox()).height>=44);
+  await ref.selectOption('pro');
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'pro selector also fits 320px');
+  assert.equal(await page.locator('[data-benchmark-metric="hs"]').innerText().then(t=>t.includes('比較値なし')),true);
+  await page.locator('[data-benchmark-reference]').selectOption('gold');
+  assert.match(await page.locator('[data-benchmark-metric="acs"]').innerText(),/200.00〜239.00/);
+  assert.match(await page.locator('[data-personal-analysis]').innerText(),/Gold/);
+  assert.equal(requests.length,benchmarkRequests,'reference changes reuse saved report without API/D1 calls');
   assert.equal(requests.length,3,'changing dashboard tabs never triggers extra API calls');
   await page.locator('#share').click();
   const exportedMember=JSON.parse(await page.evaluate(()=>window.__copiedDiagnostic));

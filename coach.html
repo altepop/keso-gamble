@@ -22,9 +22,10 @@ h2{font-size:17px;margin:0 0 10px}h3{font-size:15px;margin:14px 0 6px}
 button{background:#264e86;border:1px solid #4b78b8;color:white;border-radius:10px;padding:10px 14px;font:inherit;font-weight:650;cursor:pointer;min-height:44px}
 button:disabled{opacity:.55;cursor:wait}
 button.secondary{background:#18253f;border-color:#344c73}
-button:focus-visible,input:focus-visible{outline:3px solid #85c4ff;outline-offset:2px}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid #85c4ff;outline-offset:2px}
 .actions{display:flex;align-items:center;flex-wrap:wrap;gap:9px}
 input{background:#09152a;color:white;border:1px solid #4c638a;border-radius:10px;padding:10px;font:inherit;min-height:44px;width:min(100%,500px)}
+[data-benchmark-reference]{display:block;width:100%;min-width:0;min-height:44px;background:#09152a;color:#fff;border:1px solid #829fc4;border-radius:10px;padding:10px;font:inherit;margin-top:8px}
 label{display:block;margin:0 0 8px}
 code{word-break:break-all}
 .table-wrap{overflow-x:auto}
@@ -281,7 +282,8 @@ tr:last-child td{border-bottom:0}
 </details>
 </div>
 </main>
-<script src="./coach/reader.js?v=coach-3fcebb7bb854"></script>
+<script src="./coach/benchmarks.js?v=coach-4721e7e852a8"></script>
+<script src="./coach/reader.js?v=coach-61dd527b972c"></script>
 <script>
 const CoachReader=globalThis.KesoCoachReader;
 (()=>{
@@ -480,13 +482,24 @@ const nextMatchPanel=p=>!p?'':`<section class="coach-quality" data-next-match>
  <p>比較の基準：${escape(p.basis)}・${int(p.matches)}試合</p>
  ${(p.check.metrics||[]).map(m=>'<p>'+escape(m.label)+' '+numeric(m.value,3)+'（'+int(m.numerator)+' / '+int(m.rounds)+'R、'+int(m.matches)+'試合）</p>').join('')}
  <p class="small muted">${escape(p.check.caveat)}</p></article></section>`;
-const readerWords=s=>String(s??'').replace(/\bKPR\b/g,'1R当たりのキル').replace(/\bDPR\b/g,'1R当たりのデス').replace(/\bAPR\b/g,'1R当たりのアシスト').replace(/\bADR\b/g,'1R当たりの与ダメージ').replace(/\bACS\b/g,'戦闘スコア').replace(/\bVOD\b/g,'録画').replace(/エージェント/g,'キャラ').replace(/\bFK\b/g,'最初に敵を倒した場面').replace(/\bFD\b/g,'最初に倒された場面').replace(/(\d+)K・(\d+)D/g,'$1キル・$2デス');
+const readerWords=s=>String(s??'').replace(/\bKPR\b/g,'1R当たりのキル').replace(/\bDPR\b/g,'1R当たりのデス').replace(/\bAPR\b/g,'1R当たりのアシスト').replace(/\bVOD\b/g,'録画').replace(/\bFK\b/g,'最初に敵を倒した場面').replace(/\bFD\b/g,'最初に倒された場面').replace(/(\d+)K・(\d+)D/g,'$1キル・$2デス');
 const readerCard=v=>`<article class="reader-card reader-${escape(v.kind)}" data-reader-verdict="${escape(v.kind)}">
  <span class="reader-badge">${{good:'＋',bad:'！',check:'？',unknown:'…',neutral:'→'}[v.kind]||'→'} ${escape(v.label)}</span>
  <h3>${escape(readerWords(v.title))}</h3><p>${escape(readerWords(v.text))}</p>${v.action?'<p class="reader-next"><b>次にやること：</b>'+escape(readerWords(v.action))+'</p>':''}${v.detail?'<details><summary>根拠の数字を詳しく見る</summary><p>'+escape(v.detail)+'</p></details>':''}</article>`;
 const readerLegend=()=>'<div class="reader-legend" aria-label="色と判定の見方"><span style="color:#a1f2cc">＋ GOOD＝続けたい</span><span style="color:#ffb2bb">！ BAD候補＝見直す</span><span style="color:#ffdc96">？ CHECK＝理由を確認</span><span>… 未判定＝まだ決めない</span></div><p class="member-small">色だけでなくラベルと文章で読めます。BAD候補は見直すきっかけで、本人のミスや実力が確定したという意味ではありません。</p>';
 const readerBoard=d=>{const v=CoachReader.verdicts(d);return '<section data-reader-board aria-label="良いところと見直したいところ">'+readerLegend()+'<div class="reader-board">'+readerCard(v.good)+readerCard(v.bad)+'</div></section>';};
-const readerGlossary=view=>'<section class="reader-glossary" data-reader-glossary="'+escape(view)+'"><h3>このページの言葉をやさしく読む</h3>'+CoachReader.panels[view].keys.map(key=>{const t=CoachReader.terms[key];return '<details data-reader-term="'+escape(key)+'"><summary>'+escape(t.name)+'ってなに？</summary><p><b>意味：</b>'+escape(t.meaning)+'</p><p><b>たとえば：</b>'+escape(t.example)+'</p><p><b>良い・悪いの読み方：</b>'+escape(t.read)+'</p><p><b>練習につなげるなら：</b>'+escape(t.practice)+'</p></details>';}).join('')+'</section>';
+let benchmarkReference='gold';
+const benchmarkPanel=d=>{
+ const B=globalThis.KesoCoachBenchmarks,p=B.personal(d.performance,benchmarkReference),b=p.comparison;
+ if(!b)return '';
+ const value=v=>typeof v==='number'&&Number.isFinite(v)?v.toFixed(2):'未取得';
+ return '<section data-coach-benchmarks class="reader-guide"><h3>公開データと比べる</h3><label>比較する目標・参考群 <select data-benchmark-reference>'+[['pro','Champions 2026（プロ大会・全ロール）'],...Object.entries(B.ranks).map(([key,r])=>[key,r.label])].map(([key,label])=>'<option value="'+key+'"'+(key===benchmarkReference?' selected':'')+'>'+escape(label)+'</option>').join('')+'</select></label><p>選択したランクは本人の実ランクではありません。ロール混合の参考値です。プロ大会との数字の一致も、プロ相当の実力を示しません。</p><div class="reader-stats">'+b.rows.map(row=>'<article class="reader-stat" data-benchmark-metric="'+row.key+'"><span>'+{kd:'KD',acs:'ACS',adr:'ADR',hs:'HS%'}[row.key]+' · 本人'+int(row.matches)+'試合</span><strong>'+value(row.value)+'</strong><p><b>'+escape(row.label)+'</b></p><p>'+(row.range?'参考中央帯 '+value(row.range.q25)+'〜'+value(row.range.q75)+' / 中央値 '+value(row.range.median):row.mean!==null?'公開平均 '+value(row.mean):'定義を照合できる比較値なし')+'</p><p>'+escape(B.sources[row.sourceId].name)+(row.referenceN?' · '+row.referenceN+'人':' · 指標別人数は未公開')+'</p></article>').join('')+'</div><p>'+escape(b.rule)+'</p><details><summary>出典・取得日・集計条件を確認する</summary>'+Object.entries(B.sources).map(([id,source])=>'<p><b>'+escape(source.name)+'</b> · '+escape(source.date)+'<br>'+escape(source.population)+'<br>'+escape(source.method)+'<br>'+escape(source.limits)+' '+Object.entries(source.urls||{source:source.url}).map(([key,url])=>'<a href="'+escape(url)+'" target="_blank" rel="noopener noreferrer">出典 '+escape(key)+'</a>').join(' / ')+'</p>').join('')+'</details></section>';
+};
+const personalPanel=d=>{
+ const p=globalThis.KesoCoachBenchmarks.personal(d.performance,benchmarkReference);
+ return '<section data-personal-analysis><h3>数字の組み合わせから選ぶ確認点</h3><p>'+escape(p.signature)+'。比較参考：'+escape(p.comparison?.label||'未選択')+'。公開比較の仮説は選択した参考群に基づき、本人のミスの確定ではありません。</p>'+p.cards.map(card=>readerCard({...card,label:card.kind==='neutral'?'本人の記録':'CHECK｜条件を分けて確認'})).join('')+(p.focus?readerCard({kind:'check',label:'今回の個別練習案',title:p.focus.title,text:'上の組み合わせから選んだ仮説を、次の試合で確認します。',action:p.focus.action}):'')+'</section>';
+};
+const readerGlossary=view=>'<section class="reader-glossary" data-reader-glossary="'+escape(view)+'"><h3>用語と読み方を確認する</h3>'+CoachReader.panels[view].keys.map(key=>{const t=CoachReader.terms[key];return '<details data-reader-term="'+escape(key)+'"><summary>'+escape(t.name)+'ってなに？</summary><p><b>意味：</b>'+escape(t.meaning)+'</p><p><b>たとえば：</b>'+escape(t.example)+'</p><p><b>良い・悪いの読み方：</b>'+escape(t.read)+'</p><p><b>練習につなげるなら：</b>'+escape(t.practice)+'</p></details>';}).join('')+'</section>';
 const readerGuide=view=>{const g=CoachReader.panels[view];return '<section class="reader-guide" data-reader-guide="'+escape(view)+'"><h3>'+escape(g.question)+'</h3><p>'+escape(g.read)+'</p><p><b>このページからやること：</b>'+escape(g.action)+'</p></section>';};
 const readerAdvanced=content=>'<details class="reader-advanced" data-reader-advanced><summary>詳しい数字・グラフ・計算を見る</summary>'+content+'</details>';
 const readerStats=(d,view)=>{
@@ -496,7 +509,7 @@ const readerStats=(d,view)=>{
  const ten=key=>o?.rateBases?.[key]?.rounds>0&&known(o?.[key])?o[key]*10:null;
  const base=key=>{const b=o?.rateBases?.[key];return b?.rounds>0?b.numerator+'回 / '+b.rounds+'R・'+b.matches+'試合から10R換算。':'その回数とラウンド数の両方が必要です。';};
  const wrap=html=>'<div class="reader-stats">'+html+'</div>';
- if(view==='guns')return wrap(card('倒された1回に対して、倒した人数',o?.kd,'人','1人を超えるとキルがデスを上回ります。役割やキルのタイミングも一緒に見ます。',2)+card('10ラウンドで倒す人数',ten('kpr'),'人',base('kpr'))+card('10ラウンドで倒される回数',ten('dpr'),'回',base('dpr'))+card('1ラウンドで与えるダメージ',o?.adr,'ダメージ','敵を削った量の目安。ダメージが高くてもキルになったとは限りません。')+card('ラウンドごとの戦闘スコア',o?.acs,'点','ACSのこと。点数より、味方が動く時に自分の役割を果たせたかも見ます。')+card('当たった弾のうち頭に当たった割合',o?.hsPct,'%','HS%のこと。武器によって変わるので、低いだけでエイム不足とは決めません。'));
+ if(view==='guns')return wrap(card('KD',o?.kd,'','1人を超えるとキルがデスを上回ります。役割やキルのタイミングも一緒に見ます。',2)+card('10ラウンドで倒す人数',ten('kpr'),'人',base('kpr'))+card('10ラウンドで倒される回数',ten('dpr'),'回',base('dpr'))+card('ADR',o?.adr,'','敵を削った量の目安。ダメージが高くてもキルになったとは限りません。')+card('ACS',o?.acs,'','ACSのこと。点数より、味方が動く時に自分の役割を果たせたかも見ます。')+card('HS',o?.hsPct,'%','HS%のこと。武器によって変わるので、低いだけでエイム不足とは決めません。'));
  if(view==='improve')return wrap(card('同じRで2人以上倒した場面',r?.rounds?r.multiKillRounds:null,'回','マルチキルです。次も2人目を無理に狙うより、その時の準備を再現します。',0)+card('敵を倒した後5秒以内に自分も死亡',c?.enemyKills?c.diedAfterKill5s:null,'件',c?.enemyKills?'敵を倒した'+c.enemyKills+'件から確認。1回の死亡が複数のキル後に当たる場合もあります。':'キルと死亡の記録が正しく揃うと確認できます。',0)+card('味方が倒された敵を自分が取り返した',c?.enemyKills?c.tradeKills5s:null,'回','5秒以内の同じ敵へのキルです。近くにいたか、取り返せる場所だったかまでは分かりません。',0));
  if(view==='team')return wrap(card('10ラウンドで味方を助けた回数',ten('apr'),'回',base('apr'))+card('自分が倒された敵を味方が取り返した',c?.enemyKnownKillerDeaths?c.teammateRetaliations5s:null,'回',c?.enemyKnownKillerDeaths?'相手を確認できた'+c.enemyKnownKillerDeaths+'死亡のうち5秒以内に取り返した記録。味方全員の位置や判断にも左右されます。':'キル・死亡の記録が揃った試合で確認します。',0))+'<p>アシストと取り返しは、味方と関わった場面を探す材料です。少ない数字だけで「連携できていない」とは決めません。</p>';
  if(view==='strategy')return '<h3>自分のマップ別の記録</h3>'+wrap((p?.maps||[]).slice(0,6).map(g=>card(g.value+' · '+g.matches+'試合',g.kd,'人','倒された1回に対するキル数。'+(g.matches<5?'少数の参考記録です。':'役割・キャラ・相手の違いもあります。')+' 得意不得意をこの数だけで決めません。',2)).join(''))+'<h3>自分のキャラ別の記録</h3>'+wrap((p?.agents||[]).slice(0,6).map(g=>card(g.value+' · '+g.matches+'試合',g.kd,'人','同じキャラでも担当や相手で変わります。良かった入り方・苦しかった角を一つ振り返ります。',2)).join(''));
@@ -618,8 +631,8 @@ const renderMemberDiagnosis=d=>{
   tabs.map(([id,title],i)=>`<button type="button" role="tab" data-coach-view="${id}"
     id="coach-tab-${id}" aria-controls="coach-view-${id}" aria-selected="${i===0}" tabindex="${i===0?0:-1}">${title}</button>`).join('')+
   '</div>'+
-  `<div class="coach-dashboard-view" id="coach-view-overview" role="tabpanel" aria-labelledby="coach-tab-overview">${readerBoard(d)}${readerGuide('overview')}${overview}${readerGlossary('overview')}</div>`+
-  `<div class="coach-dashboard-view" id="coach-view-guns" role="tabpanel" aria-labelledby="coach-tab-guns" hidden>${readerGuide('guns')}${readerStats(d,'guns')}${readerGlossary('guns')}${readerAdvanced(performancePanel(d.performance,'guns')+contextPanel(d.roundContext,'weapons'))}</div>`+
+  `<div class="coach-dashboard-view" id="coach-view-overview" role="tabpanel" aria-labelledby="coach-tab-overview">${readerBoard(d)}${personalPanel(d)}${readerGuide('overview')}${overview}${readerGlossary('overview')}</div>`+
+  `<div class="coach-dashboard-view" id="coach-view-guns" role="tabpanel" aria-labelledby="coach-tab-guns" hidden>${readerGuide('guns')}${readerStats(d,'guns')}${benchmarkPanel(d)}${readerGlossary('guns')}${readerAdvanced(performancePanel(d.performance,'guns')+contextPanel(d.roundContext,'weapons'))}</div>`+
   `<div class="coach-dashboard-view" id="coach-view-time" role="tabpanel" aria-labelledby="coach-tab-time" hidden>${readerGuide('time')}${readerStats(d,'time')}${readerGlossary('time')}${readerAdvanced(performancePanel(d.performance,'time'))}</div>`+
   `<div class="coach-dashboard-view" id="coach-view-team" role="tabpanel" aria-labelledby="coach-tab-team" hidden>${readerGuide('team')}${readerStats(d,'team')}${readerGlossary('team')}${readerAdvanced(performancePanel(d.performance,'team')+contextPanel(d.roundContext,'utility')+'<p>同時交戦と位置上のトレード機会は、継続的な位置・視界の記録がないため未取得。</p>'+rateCharts)}</div>`+
   `<div class="coach-dashboard-view" id="coach-view-improve" role="tabpanel" aria-labelledby="coach-tab-improve" hidden>${readerGuide('improve')}${readerStats(d,'improve')}${readerGlossary('improve')}${readerAdvanced(contributionPanel(d.roundContribution)+contextPanel(d.roundContext,'economy')+improvements)}</div>`+
@@ -637,6 +650,15 @@ $('member-result').addEventListener('click',e=>{
  }
  for(const panel of root.querySelectorAll('.coach-dashboard-view'))
   panel.hidden=panel.id!=='coach-view-'+view;
+});
+
+$('member-result').addEventListener('change',e=>{
+ if(!e.target.matches('[data-benchmark-reference]')||!latestMemberReport)return;
+ benchmarkReference=e.target.value;
+ const view=$('member-result').querySelector('[data-coach-view][aria-selected="true"]')?.dataset.coachView||'guns';
+ renderMemberDiagnosis(latestMemberReport);
+ $('member-result').querySelector('[data-coach-view="'+view+'"]').click();
+ $('member-result').querySelector('[data-benchmark-reference]')?.focus();
 });
 
 $('member-result').addEventListener('keydown',e=>{
@@ -928,7 +950,7 @@ const memberDiagnosticPayload=function memberDiagnosticPayloadV2(d){
   maps:(d.performance.maps||[]).map(x=>pick(x,['value',...statsFields])),agents:(d.performance.agents||[]).map(x=>pick(x,['value',...statsFields])),
   windows:(d.performance.windows||[]).map(x=>({requested:x.requested,recent:pick(x.recent,statsFields),previous:pick(x.previous,statsFields),sameCondition:false})),
   conditionalWindows:(d.performance.conditionalWindows||[]).map(x=>({value:x.value,control:'same-map-and-agent',recent:pick(x.recent,statsFields),previous:pick(x.previous,statsFields)})),
-  timeline:(d.performance.timeline||[]).map(x=>pick(x,['date','map','agent','rounds','outcome','kills','deaths','assists','kd','acs','adr','hsPct','rollingWinPct5','rollingKd5','rollingKd5Matches','form'])),
+  timeline:(d.performance.timeline||[]).map(x=>pick(x,['date','map','agent','role','rounds','outcome','kills','deaths','assists','kd','acs','adr','hsPct','rollingWinPct5','rollingKd5','rollingKd5Matches','form'])),
   notes:(d.performance.notes||[]).map(x=>pick(x,['kind','title','evidence','action'])),
   rateBases:Object.fromEntries(['kpr','dpr','apr'].map(k=>[k,pick(d.performance.overall?.rateBases?.[k],['numerator','rounds','matches'])])),
   quality:pick(d.performance.quality,['candidateMatches','distinctMatches','selectedMatches'])}:null;

@@ -1,6 +1,7 @@
 import {coachMemberCoverage} from '../src/coach-member-archive.ts';
 import {readFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
+import '../../../coach/benchmarks.js';
 import '../../../coach/reader.js';
 import {readCoachMemberReport} from '../src/coach-member-report.ts';
 import {CAST_KEYS} from '../src/coach-round-context.ts';
@@ -19,6 +20,7 @@ export async function auditPerformance(db){
   const before={...db.state},r=await readCoachMemberReport(db,person,coverage),p=r.performance;
   const reading=globalThis.KesoCoachReader.verdicts(r);
   people.push({person,archiveMatches:r.archivedMatches,roundAnalysisMatches:r.usableMatches,performanceMatches:p.overall.matches,
+   publicReference:{reference:'gold',rankVerified:false,levels:globalThis.KesoCoachBenchmarks.compare(p,'gold').rows.map(x=>({metric:x.key,level:x.level,matches:x.matches})),focus:globalThis.KesoCoachBenchmarks.personal(p,'gold').focus?.topic??null},
    beginnerReading:{good:reading.good.kind,review:reading.bad.kind,change:globalThis.KesoCoachReader.trend(r).kind},
    nextMatch:{version:r.nextMatch.version,baselineMatches:r.nextMatch.matches,hasFocus:Boolean(r.nextMatch.focus.action),hasReflection:Boolean(r.nextMatch.strength.action),comparisonMetrics:r.nextMatch.check.metrics.length,lastReviewMetrics:r.nextMatch.lastReview.length},
    matchFeedback:{version:r.matchFeedback.version,sessions:r.matchFeedback.sessions.length,eventVerified:r.matchFeedback.quality.eventVerified,topics:[...new Set(r.matchFeedback.sessions.map(s=>s.topic))],withThreeSteps:r.matchFeedback.sessions.filter(s=>s.lesson.practice.steps.length===3).length,followUpCounts:Object.fromEntries(['baseline','self-check','improving','mixed','steady','review'].map(status=>[status,r.matchFeedback.sessions.filter(s=>s.followUp.status===status).length]))},
@@ -41,11 +43,13 @@ export async function coachProductionSmoke(token,request=fetch){
  const page=await request('https://altepop.github.io/keso-gamble/coach.html'+suffix,{signal:AbortSignal.timeout(15000),redirect:'error'});
  if(!page.ok)throw Error('coach_page_stale');const html=await page.text();
  if(!html.includes('id="compare-members"')||!html.includes('同じマップ・ロール内の味方との比較')||!html.includes('記録された装備額とラウンド結果')||!html.includes('data-next-match')||!html.includes('data-coach-learning'))throw Error('coach_page_stale');
- const readerVersion=html.match(/src="\.\/coach\/reader\.js\?v=(coach-[a-f0-9]{12})"/)?.[1];
- if(!readerVersion||!html.includes('data-reader-board'))throw Error('coach_reader_stale');
- const reader=await request('https://altepop.github.io/keso-gamble/coach/reader.js?v='+readerVersion,{signal:AbortSignal.timeout(15000),redirect:'error'});
- if(!reader.ok)throw Error('coach_reader_unavailable');const readerCode=await reader.text();
- if(readerVersion!=='coach-'+createHash('sha256').update(readerCode).digest('hex').slice(0,12)||!readerCode.includes('KesoCoachReader'))throw Error('coach_reader_stale');
+ for(const [asset,globalName] of [['reader','KesoCoachReader'],['benchmarks','KesoCoachBenchmarks']]){
+  const version=html.match(new RegExp('src="\\.\\/coach\\/'+asset+'\\.js\\?v=(coach-[a-f0-9]{12})"'))?.[1];
+  if(!version||!html.includes('data-reader-board'))throw Error('coach_'+asset+'_stale');
+  const response=await request('https://altepop.github.io/keso-gamble/coach/'+asset+'.js?v='+version,{signal:AbortSignal.timeout(15000),redirect:'error'});
+  if(!response.ok)throw Error('coach_'+asset+'_unavailable');const code=await response.text();
+  if(version!=='coach-'+createHash('sha256').update(code).digest('hex').slice(0,12)||!code.includes(globalName))throw Error('coach_'+asset+'_stale');
+ }
  if(!token)return {page:'verified',authenticatedApi:'unverified-no-session',metricQuality:'unverified-no-session',mutations:0};
  if(!/^[a-f0-9]{48}$/.test(token))throw Error('smoke_session_invalid');
  const res=await request('https://valorant-results.tealeaforest.workers.dev/api/kp/coach/member?person='+encodeURIComponent('神戸'),{headers:{Authorization:'Bearer '+token},signal:AbortSignal.timeout(30000),redirect:'error'});
