@@ -30,10 +30,23 @@ const a='[data-demo-view=a]',b='[data-demo-view=b]';
   await page.locator('#demo-mode').selectOption(mode);
   assert.equal(await page.locator('#duel-game').inputValue(),mode);
   assert.equal(await page.locator('#demo-app .duel-opponent-toggle').count(),1,'opponent picker exists');
+  await page.locator('[data-duel-invite-guide]').waitFor();
+  const selectedLabel=(await page.locator('.duel-opponent-toggle > span').first().innerText()).trim();
+  const inviteMessage=await page.locator('.duel-invite-guide').innerText();
+  if(selectedLabel==='相手を選択')assert.match(inviteMessage,/まず相手を選択/);
+  else assert.match(inviteMessage,/招待の準備ができた|高額のため再確認が必要/,'remembered opponent stays ready');
   // Native select is intentionally replaced with a touch-accessible in-page picker.
   await page.locator('[data-duel-target-toggle]').click();
   assert.equal(await page.locator('[data-duel-target-option]').count(),1);
   await page.locator('[data-duel-target-option]').click();
+  assert.match(await page.locator('.duel-invite-guide').innerText(),/招待の準備ができた/);
+  if(mode==='othello'){
+   await page.locator('#duel-stake').selectOption('50000');
+   assert.match(await page.locator('.duel-invite-guide').innerText(),/KPが不足/);
+   assert.equal(await page.locator('[data-duel-act=create]').isDisabled(),true,'insufficient balance prevents invite');
+   await page.locator('#duel-stake').selectOption('1000');
+   assert.match(await page.locator('.duel-invite-guide').innerText(),/招待の準備ができた/);
+  }
   await page.locator('[data-duel-journey]').waitFor();
   assert.match(await page.locator('.duel-journey-title').innerText(),/相手を選んで申し込む/);
   await page.locator('[data-duel-act=create]').click();
