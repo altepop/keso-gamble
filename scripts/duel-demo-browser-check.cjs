@@ -29,6 +29,14 @@ const a='[data-demo-view=a]',b='[data-demo-view=b]';
  assert.equal(await page.locator('[data-duel-act=create]').count(),1,'invite control survives landscape');
  await page.setViewportSize({width:390,height:844});
  assert.equal(await page.locator('#duel-game').inputValue(),'poker','portrait restores without losing choice');
+ // Phase 8: an actual 375px mobile viewport must preserve all modes and the
+ // invite control. This is visual/layout coverage, not live 2-account latency.
+ await page.setViewportSize({width:375,height:812});
+ assert.equal(await page.locator('#duel-game option').count(),6,'375px retains all six duel modes');
+ assert.equal(await page.locator('[data-duel-act=create]').isVisible(),true,'375px invite action visible');
+ assert.ok(await page.locator('[data-duel-act=create]').evaluate(el=>el.getBoundingClientRect().height>=44),'375px invite touch target at least 44px');
+ await page.setViewportSize({width:390,height:844});
+
  await page.locator('#demo-mode').selectOption('othello');
  // Simulate only a visible error label in the mock Activity. No API or wallet call.
  await page.evaluate(()=>{
