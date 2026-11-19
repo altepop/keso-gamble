@@ -934,8 +934,23 @@ function enhance(root) {
     historyFilter=clicked.dataset.duelHistoryFilter;
     scanHistoryReview();
   });
-  const observer = new MutationObserver(scan);
+  // Batch unrelated DOM mutations into a single visual enhancement pass.
+  // Direct game actions remain owned by the app; never delay or replay writes.
+  // Browsers throttle rAF in hidden tabs, so perform bounded background scans.
+  let enhancementScanQueued=false;
+  const flushEnhancementScan=()=>{
+    enhancementScanQueued=false;
+    if(root.isConnected)scan();
+  };
+  const scheduleEnhancementScan=()=>{
+    if(enhancementScanQueued)return;
+    enhancementScanQueued=true;
+    if(document.hidden)setTimeout(flushEnhancementScan,80);
+    else requestAnimationFrame(flushEnhancementScan);
+  };
+  const observer = new MutationObserver(scheduleEnhancementScan);
   observer.observe(root, {childList: true, subtree: true});
+  addEventListener('visibilitychange',()=>{if(!document.hidden)scheduleEnhancementScan();});
   root.addEventListener('input',event=>{
     if(event.target?.id==='duel-guess')scanGameHint();
     if(event.target?.id!=='duel-guess')return;
