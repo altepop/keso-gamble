@@ -1,0 +1,24 @@
+[
+  {
+    "width": 375,
+    "height": 1000,
+    "artworks": "all seven original PNGs loaded",
+    "computedStyles": "all compared prototype selectors match",
+    "data": "artificial member fixture, not a production member record",
+    "fonts": {
+      "requested": [],
+      "body": "\"Noto Sans JP\", system-ui, sans-serif"
+    }
+  },
+  {
+    "width": 1440,
+    "height": 1000,
+    "artworks": "all seven original PNGs loaded",
+    "computedStyles": "all compared prototype selectors match",
+    "data": "artificial member fixture, not a production member record",
+    "fonts": {
+      "requested": [],
+      "body": "\"Noto Sans JP\", system-ui, sans-serif"
+    }
+  }
+]
