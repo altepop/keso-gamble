@@ -29,6 +29,14 @@ const a='[data-demo-view=a]',b='[data-demo-view=b]';
  assert.equal(await page.locator('[data-duel-act=create]').count(),1,'invite control survives landscape');
  await page.setViewportSize({width:390,height:844});
  assert.equal(await page.locator('#duel-game').inputValue(),'poker','portrait restores without losing choice');
+ // Phase 8: an actual 375px mobile viewport must preserve all modes and the
+ // invite control. This is visual/layout coverage, not live 2-account latency.
+ await page.setViewportSize({width:375,height:812});
+ assert.equal(await page.locator('#duel-game option').count(),6,'375px retains all six duel modes');
+ assert.equal(await page.locator('[data-duel-act=create]').isVisible(),true,'375px invite action visible');
+ assert.ok(await page.locator('[data-duel-act=create]').evaluate(el=>el.getBoundingClientRect().height>=44),'375px invite touch target at least 44px');
+ await page.setViewportSize({width:390,height:844});
+
  await page.locator('#demo-mode').selectOption('othello');
  // Simulate only a visible error label in the mock Activity. No API or wallet call.
  await page.evaluate(()=>{
@@ -209,9 +217,9 @@ const a='[data-demo-view=a]',b='[data-demo-view=b]';
  assert.match(await page.locator('.duel-journey-title').innerText(),/対戦終了・結果確定/);
  assert.match(await page.locator('.duel-journey-step[aria-current=step]').innerText(),/再戦/);
  assert.equal(await page.locator('[data-duel-rematch]').count(),1,'finished match offers rematch preset');
- assert.equal(await page.locator('.duel-rematch-steps').evaluate(el=>el.open),false,'rematch step details are optional on mobile');
+ assert.equal(await page.locator('.duel-rematch-steps').evaluate(el=>el.open),false,'rematch steps optional');
  await page.locator('.duel-rematch-steps > summary').click();
- assert.equal(await page.locator('.duel-rematch-steps').evaluate(el=>el.open),true,'rematch steps remain accessible');
+ assert.equal(await page.locator('.duel-rematch-steps').evaluate(el=>el.open),true,'rematch steps accessible');
  assert.match(await page.locator('[data-duel-rematch-guide]').innerText(),/同じ条件で、もう一戦/);
  assert.match(await page.locator('[data-duel-rematch-guide]').innerText(),/押しただけでは招待もKPの操作も発生しない/);
  assert.equal(await page.locator('.duel-journey').evaluate(el=>getComputedStyle(el).animationName),'none','shared flow guide honours reduced motion');
