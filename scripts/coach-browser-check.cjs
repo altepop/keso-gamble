@@ -9,6 +9,7 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
 (async()=>{
  for(let i=0;i<40;i++){try{const ready=await fetch('http://127.0.0.1:18784/coach.html');await ready.arrayBuffer();if(ready.ok)break;}catch{}await new Promise(r=>setTimeout(r,100));}
  const browser=await engine.launch({headless:true,...engine===chromium?{args:['--no-sandbox'],...(process.env.COACH_CHROMIUM_EXECUTABLE?{executablePath:process.env.COACH_CHROMIUM_EXECUTABLE}:{})}: {}});
+ const {projectCoachSelfReport}=await import('../services/valorant-results/src/coach-self-report.ts');
  const {coachPerformance}=await import('../services/valorant-results/src/coach-performance.ts');
  const {coachNextMatch}=await import('../services/valorant-results/src/coach-next-match.ts');
  const {coachMatchFeedback}=await import('../services/valorant-results/src/coach-match-feedback.ts');
@@ -27,89 +28,8 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
  const roundContext=coachRoundContext(roundRows,[{name:'Fixture',tag:'T',puuid:'self'}],verifiedContext);
  roundContext._raw={puuid:'private-context-puuid',match_id:'private-context-match'};
  try{
-  const token='a'.repeat(48);
-  const report={
-    canStartMemberHistory:true,
-    memberHistory:{enabled:false,supportsPause:true,refreshIntervalMinutes:60,refreshPageSize:50,source:'Henrik known games only',
-      people:['VDK','Abema','石原','藤村','神戸','小林'].map(person=>({
-       person,discovered:0,complete:0,partial:0,unavailable:0,pending:0,
-       discoveryDone:false,truncated:false}))},
-    totalVdkRosterMatches:44,archivedMatches:4,usableMatches:3,invalidMatches:0,killDataMissing:1,roundDataMissing:0,
-    backfill:{status:'running',complete:3,partial:1,missing:40,unavailable:0,pending:41},
-    overall:{rounds:68,firstKillWinPct:70,firstKillWins:21,firstKillOutcomesKnown:30,comebackWins:7,roundsWithSides:0,repeatedVictimRounds:1},
-    maps:[{map:'Corrode',matches:1,rounds:22,ourFirstKills:13,firstKillWins:8,firstKillLosses:5,firstKillWinPct:61.5}],
-    trioComparisons:[{map:'Corrode',composition:'Fade + Clove',matches:1,firstKillWins:8,firstKillLosses:5,firstKillWinPct:61.5}],
-    fullDiagnosis:{
-     items:[
-      {subject:'チーム',category:'試合全体',title:'味方FK後のラウンド勝率',status:'good',
-       numerator:21,denominator:30,ratePct:70,referencePct:null,differencePp:null,
-       evidence:'21 / 30（70.0%）',reason:'良い傾向。ただし戦術の証明ではない',
-       nextAction:'FK後に勝った場面のカバーを確認',rawSecret:'private-vod-identifier'},
-      {subject:'VDK',category:'先制',title:'先制デス率',status:'context',
-       numerator:6,denominator:68,ratePct:8.8,referencePct:null,differencePp:null,
-       evidence:'6 / 68（8.8%）',reason:'役割によって変化する',
-       nextAction:'味方の距離とサイドを確認'},
-      {subject:'Abema',category:'生存・取り返し',title:'FD後5秒以内に味方が同じ敵を倒した率',
-       status:'focus',numerator:1,denominator:7,ratePct:14.3,referencePct:null,differencePp:null,
-       evidence:'1 / 7（14.3%）',reason:'参考値',nextAction:'録画でカバー位置を確認'},
-      {subject:'石原',category:'攻撃・防衛',title:'攻撃時のFK−FD収支',status:'insufficient',
-       numerator:0,denominator:0,ratePct:null,referencePct:null,differencePp:null,
-       evidence:'攻守情報不足',reason:'判定保留',nextAction:'記録が得られた試合で比較'}
-     ],
-     synopsis:[
-      {subject:'チーム',strengths:1,focuses:0,other:0,strongest:{title:'味方FK後のラウンド勝率'},priority:null},
-      {subject:'VDK',strengths:0,focuses:0,other:1,strongest:null,priority:null},
-      {subject:'Abema',strengths:0,focuses:1,other:0,strongest:null,priority:{title:'FD後5秒以内に味方が同じ敵を倒した率'}},
-      {subject:'石原',strengths:0,focuses:0,other:1,strongest:null,priority:null}
-     ],
-     limitations:['スキル・設置・位置取りはログから確認できない']
-    },
-    coachSignals:[
-      {subject:'チーム',kind:'strength',metric:'team_fk_conversion',title:'FK後の勝利につながる傾向',
-       evidence:'味方がFKした30ラウンドのうち21勝',action:'勝ったラウンドを録画で確認',
-       numerator:21,denominator:30,ratePct:70},
-      {subject:'Abema',kind:'review',metric:'fk_survival',title:'FK直後の生存・カバーを確認',
-       evidence:'本人の9FK中5秒以内に4回死亡',action:'再ピークかカバーかを録画で確認',
-       numerator:4,denominator:9,ratePct:44.4}
-    ],
-    coachingNotes:[
-      {subject:'チーム',kind:'review',title:'先制キル後の敗北を優先して検証',
-       evidence:'25ラウンド中8ラウンドで敗北',action:'録画で位置関係を確認'},
-      {subject:'VDK',kind:'collect',title:'個人評価は保留',
-       evidence:'3試合・68ラウンド',action:'補完して再比較'}
-    ],
-    successRounds:[{map:'Corrode',matchJst:'2026-11-15 06:25',round:2,
-     category:'early_two_kills_won',evidence:'先制2キルから勝利',focus:'勝利した配置をVODで確認',
-     firstKiller:'石原',secretMatchId:'never-export'}],
-    reviewRounds:[{map:'Corrode',matchJst:'2026-11-15 06:25',round:0,priority:4,
-      category:'two_opening_kills_lost',evidence:'味方が先に敵2人を倒したが、ラウンドは敗北（最初のキル：2.7秒）',
-      focus:'人数有利を失った時点を録画で確認',firstKiller:'石原',
-      firstKillSecond:2.7,lostAfterOpening:true,distinctEnemyKillsBeforeAllyDeath:2,
-      rapidAllyDeaths:1,openerDiedWithin5s:false}],
-    individual:[
-      {player:'VDK',matches:3,rounds:68,observedOpeningRounds:68,firstKills:4,firstDeaths:6,fkFdDiff:-2,firstKillWins:3,firstKillLosses:1,firstKillWinPct:75,firstDeathWins:2,firstDeathLosses:4,firstDeathRecoveryPct:33.3,openingKillerDiedWithin5s:0,firstDeathKillerEliminatedWithin5s:2},
-      {player:'Abema',matches:3,rounds:68,observedOpeningRounds:68,firstKills:9,firstDeaths:7,fkFdDiff:2,firstKillWins:6,firstKillLosses:3,firstKillWinPct:66.7,firstDeathWins:3,firstDeathLosses:4,firstDeathRecoveryPct:42.9,openingKillerDiedWithin5s:1,firstDeathKillerEliminatedWithin5s:1},
-      {player:'石原',matches:3,rounds:68,observedOpeningRounds:68,firstKills:8,firstDeaths:3,fkFdDiff:5,firstKillWins:7,firstKillLosses:1,firstKillWinPct:87.5,firstDeathWins:1,firstDeathLosses:2,firstDeathRecoveryPct:33.3,openingKillerDiedWithin5s:1,firstDeathKillerEliminatedWithin5s:0}
-    ],
-    individualMapAgent:[
-      {player:'VDK',map:'Corrode',agent:'Fade',matches:1,firstKills:0,firstDeaths:1,fkFdDiff:-1,firstKillWinPct:null,firstDeathWins:0,firstDeathLosses:1,firstDeathRecoveryPct:0,openingKillerDiedWithin5s:0,firstDeathKillerEliminatedWithin5s:0}
-    ]
-  };
-  // Fields present in a bad upstream payload must never leak into diagnostics.
-  report._raw={match_id:'secret-match-id',puuid:'secret-puuid',opponent:'private-enemy'};
-  report.maps[0].puuid='secret-raw-puuid';
-  const ctx=await browser.newContext({viewport:{width:375,height:812},isMobile:true,hasTouch:true});
-  await ctx.addInitScript(t=>localStorage.setItem('keso-kp-session-v1',t),token);
-  await ctx.addInitScript(()=>{
-    Object.defineProperty(navigator,'clipboard',{configurable:true,
-      value:{writeText:async text=>{window.__copiedDiagnostic=text}}});
-  });
-  const requests=[];
-  let use43Report=false,feedbackRevision=0;
-  await ctx.route('https://valorant-results.tealeaforest.workers.dev/**',async route=>{
-   const req=route.request();requests.push({url:req.url(),method:req.method(),auth:req.headers().authorization});
-   if(req.url().includes('/api/kp/coach/member?')||req.url().includes('/api/kp/coach/comparison?')){
-    const makeMember=person=>{const profile=person==='神戸'?'神戸':person;
+  const token='a'.repeat(48);let feedbackRevision=0;
+  const makeMember=person=>{const profile=person==='神戸'?'神戸':person;
     const lessons=coachMatchFeedback(performance);
     if(feedbackRevision)lessons.sessions[0].lesson={...lessons.sessions[0].lesson,title:'更新された試合の解説'+feedbackRevision};
     return {
@@ -143,111 +63,29 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
         numerator:6,denominator:8,evidence:'6 / 8',reason:'味方込みの観測',
         nextAction:'勝てた場面を再現'}
      ]}};};
-    const u=new URL(req.url()),comparison=u.pathname.endsWith('/comparison');
-    return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(comparison?{profiles:u.searchParams.get('people').split(',').map(makeMember)}:makeMember(u.searchParams.get('person')))});
-   }
-   if(req.url().endsWith('/api/kp/coach/members/start')){
-    report.memberHistory.enabled=true;
-    return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({status:'enabled',enabled:true})});
-   }
-   if(req.url().endsWith('/api/kp/coach/members/pause')){
-    report.memberHistory.enabled=false;
-    return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({status:'paused',enabled:false})});
-   }
-   const actual=use43Report?{...report,archivedMatches:44,usableMatches:43,
-     backfill:{status:'complete',complete:43,partial:1,missing:0,unavailable:1,pending:0}}:report;
-   await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(actual)});
-  });
-  const page=await ctx.newPage();
-  const errors=[];page.on('pageerror',e=>errors.push(e.message));
-  await page.goto('http://127.0.0.1:18784/coach.html');
-  await page.locator('#report:not([hidden])').waitFor();
-  assert.equal(await page.locator('#legacy-coach').evaluate(el=>el.open),false,
-    'legacy 43-match audit stays collapsed by default');
-  assert.equal(await page.locator('#coach-operations').evaluate(el=>el.open),false,'operations are collapsed at the bottom');
-  await page.locator('#coach-operations > summary').click();
-  assert.match(await page.locator('#member-archive-status').innerText(),/収集停止中/);
-  assert.equal(await page.locator('#start-member-archive').isVisible(),true);
-  await page.locator('#legacy-coach > summary').click();
-  assert.match(await page.locator('#totals').innerText(),/44/);
-  assert.match(await page.locator('#backfill-counts').innerText(),/完全保存/);
-  assert.match(await page.locator('#backfill-counts').innerText(),/一部欠損/);
-  assert.match(await page.locator('#backfill-counts').innerText(),/40/);
-  assert.match(await page.locator('#backfill-message').innerText(),/補完処理は有効/);
-  assert.match(await page.locator('#maps').innerText(),/61\.5%/);
-  assert.match(await page.locator('#trio').innerText(),/Fade/);
-  assert.match(await page.locator('#players').innerText(),/VDK/);
-  assert.match(await page.locator('#players').innerText(),/石原/);
-  assert.match(await page.locator('#players').innerText(),/5秒以内/);
-  assert.match(await page.locator('#players').innerText(),/先制デス後にチームが勝利/);
-  assert.match(await page.locator('#players').innerText(),/42\.9%/);
-  assert.match(await page.locator('#player-map').innerText(),/FD後勝率/);
-  assert.match(await page.locator('#player-map').innerText(),/Corrode \/ Fade/);
-  assert.match(await page.locator('#diagnosis-summary').innerText(),/良い傾向/);
-  assert.match(await page.locator('#diagnosis-summary').innerText(),/見直し/);
-  assert.match(await page.locator('#diagnosis-full').innerText(),/先制デス率/);
-  await page.locator('#diagnosis-full details').first().locator('summary').click();
-  assert.match(await page.locator('#diagnosis-full').innerText(),/21 \/ 30/);
-  assert.match(await page.locator('#diagnosis-limits').innerText(),/スキル/);
-  await page.locator('#diagnosis-full details').last().locator('summary').click();
-  assert.match(await page.locator('#diagnosis-full details').last().innerText(),/攻守情報不足/);
-  assert.match(await page.locator('#coach-signals').innerText(),/良い傾向/);
-  assert.match(await page.locator('#coach-signals').innerText(),/見直し候補/);
-  assert.match(await page.locator('#coach-signals').innerText(),/Abema/);
-  assert.match(await page.locator('#coach-notes').innerText(),/個人評価は保留/);
-  assert.match(await page.locator('#coach-notes').innerText(),/先制キル後の敗北/);
-  assert.match(await page.locator('#success-rounds').innerText(),/先制2キルから勝利/);
-  assert.match(await page.locator('#success-rounds').innerText(),/石原/);
-  assert.match(await page.locator('#review-rounds').innerText(),/R0/);
-  assert.match(await page.locator('#review-rounds').innerText(),/2026-11-15 06:25/);
-  assert.match(await page.locator('#review-rounds').innerText(),/石原/);
-  assert.match(await page.locator('#player-map').innerText(),/−1|-1/);
-  assert.match(await page.locator('#quality').innerText(),/複数回死亡/);
-  const legacyParagraphs=await page.locator('#legacy-coach p').allTextContents();
-  for(const t of legacyParagraphs)assert.doesNotMatch(t,/(?:だけ|補わない|提案だ|である|とする|決められない|含めない|する|変わる|含む|始まりだ|必要だ)。/,'legacy courtesy: '+t);
-  assert.ok(legacyParagraphs.some(t=>t.includes('分析の母数は完全保存済み試合だけです。')));
-  assert.ok(legacyParagraphs.some(t=>t.includes('取得元に存在しないデータは補いません。')));
-  if(process.env.COACH_COPY_AUDIT)require('node:fs').writeFileSync(process.env.COACH_COPY_AUDIT,legacyParagraphs.join('\n'));
 
-  assert.equal(requests.length,1,'no extra polling or KPI writes');
-  assert.equal(requests[0].method,'GET');
-  assert.equal(requests[0].auth,'Bearer '+token);
-  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'phone-width layout');
-  assert.ok(!(await page.locator('body').innerText()).includes(token),'no token in visible markup');
-  await page.locator('#share').click();
-  await page.waitForFunction(()=>typeof window.__copiedDiagnostic==='string');
-  const exported=await page.evaluate(()=>window.__copiedDiagnostic);
-  const diagnostic=JSON.parse(exported);
-  assert.equal(diagnostic.format,'KESO_COACH_SAFE_DIAGNOSTIC_V1');
-  assert.equal(diagnostic.archive.complete,3);
-  assert.equal(diagnostic.totalVdkRosterMatches,44);
-  assert.equal(diagnostic.individual.length,3);
-  assert.equal(diagnostic.fullDiagnosis.items.length,4);
-  assert.equal(diagnostic.fullDiagnosis.items[0].numerator,21);
-  assert.equal(diagnostic.fullDiagnosis.synopsis.length,4);
-  assert.ok(!JSON.stringify(diagnostic.fullDiagnosis).includes('private-vod-identifier'));
-  assert.equal(diagnostic.coachSignals.length,2);
-  assert.equal(diagnostic.coachSignals[0].numerator,21);
-  assert.equal(diagnostic.individual.find(p=>p.player==='Abema').firstDeathRecoveryPct,42.9);
-  assert.equal(diagnostic.reviewRounds[0].round,0);
-  assert.equal(diagnostic.successRounds[0].round,2);
-  assert.ok(!exported.includes('never-export'));
-  assert.ok(!exported.includes(token),'no session token in exported text');
-  for(const secret of ['secret-match-id','secret-puuid','secret-raw-puuid','private-enemy'])
-    assert.ok(!exported.includes(secret),'private match data excluded: '+secret);
-  assert.equal(requests.length,1,'copy does not trigger new D1/HTTP reads');
-  use43Report=true;
-  await page.locator('#reload').click();
-  await page.waitForFunction(()=>document.querySelector('#totals').textContent.includes('43'));
-  assert.match(await page.locator('#totals').innerText(),/成績の分析対象[\s\S]*43/);
-  assert.match(await page.locator('#totals').innerText(),/データ不足で除外[\s\S]*1/);
-  assert.match(await page.locator('#backfill-message').innerText(),/欠損1試合は個人・チーム成績の分母から除外/);
-  assert.equal(requests.length,2,'refresh is manual only');
-  assert.deepEqual(errors,[]);
-  assert.equal(await page.locator('#resume-backfill').isHidden(),true,
-    'an active backfill must not show resume');
-  await page.locator('[data-member="神戸"]').click();
-  await page.waitForFunction(()=>document.querySelector('#member-result').textContent.includes('FK後の動きを確認'));
+  const ctx=await browser.newContext({viewport:{width:375,height:812},isMobile:true,hasTouch:true});
+  await ctx.addInitScript(t=>{localStorage.setItem('keso-kp-session-v1',t);sessionStorage.setItem('keso-coach-session-v1',t);},token);
+  await ctx.addInitScript(()=>Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async text=>{window.__copiedDiagnostic=text;}}}));
+  const requests=[];
+  const identity={status:'linked',displayName:'神戸',defaultProfile:'神戸',visibility:'private',pendingAccounts:0,accountOptions:[{profile:'Abema',label:'Abema#ttv'},{profile:'Aquatopia',label:'Aquatopia#toppy'}]};
+  const state={identity,memberHistory:{enabled:true,supportsPause:true,people:[{person:'神戸',discovered:2,complete:2}]},canStartMemberHistory:false};
+  await ctx.route('https://valorant-results.tealeaforest.workers.dev/**',async route=>{
+   const req=route.request(),url=new URL(req.url());requests.push({url:req.url(),method:req.method(),auth:req.headers().authorization});
+   if(req.headers().authorization==='Bearer '+'b'.repeat(48))return route.fulfill({json:{identity:{status:'unregistered'},report:null}});
+   if(url.pathname==='/api/kp/coach/me')return route.fulfill({json:{...state,report:projectCoachSelfReport(makeMember('神戸'))}});
+   if(url.pathname==='/api/kp/coach/member')return route.fulfill({json:projectCoachSelfReport(makeMember(url.searchParams.get('person')))});
+   if(url.pathname==='/api/kp/coach/members/status')return route.fulfill({json:state});
+   throw Error('Unexpected coaching request '+url.pathname);
+  });
+  const page=await ctx.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
+  await page.goto('http://127.0.0.1:18784/coach.html?person=VDK');
+  await page.locator('[data-primary-mission]').waitFor();
+  assert.equal(requests.length,1);assert.ok(requests[0].url.endsWith('/coach/me'));assert.equal(requests[0].auth,'Bearer '+token);
+  assert.equal(await page.locator('[data-member="VDK"]').count(),0,'no other-person selector');
+  assert.equal(await page.locator('#legacy-coach').innerText(),'');
+  assert.ok(!(await page.locator('body').innerText()).includes(token));
+  await page.locator('#coach-operations').evaluate(el=>el.open=true);
   assert.equal(await page.locator('.prototype-top .playerline .name').innerText(),'神戸');
   assert.equal(await page.locator('[data-primary-mission]').count(),1);
   assert.equal(await page.locator('.prototype-top .block').count(),3,'selected recipes become the three prototype blocks');
@@ -264,7 +102,6 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   assert.equal(await page.locator('[data-analysis-details]').evaluate(el=>el.open),false);
   assert.equal(await page.locator('[data-other-practice]').evaluate(el=>el.open),false);
   assert.equal(await page.locator('[data-pdca-step="task"]').getAttribute('aria-current'),'step');
-  if(process.env.COACH_PDCA_SCREENSHOT){const ops=await page.locator('#coach-operations').evaluate(el=>el.open);await page.locator('#coach-operations').evaluate(el=>el.open=false);await page.locator('#legacy-coach').evaluate(el=>el.open=false);await page.setViewportSize({width:375,height:812});await page.evaluate(()=>scrollTo(0,0));await page.screenshot({path:process.env.COACH_PDCA_SCREENSHOT.replace('.png','-top.png')});await page.locator('#coach-operations').evaluate((el,open)=>el.open=open,ops);await page.locator('#legacy-coach').evaluate(el=>el.open=true);}
   if(process.env.COACH_V6_SCREENSHOTS_DIR)await require('./coach-prototype-visual.cjs')({browser,page,root,output:process.env.COACH_V6_SCREENSHOTS_DIR});
   await page.locator('[data-analysis-details] > summary').click();
   assert.match(await page.locator('#member-result').innerText(),/Abema#ttv/);
@@ -386,7 +223,7 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   assert.equal(requests.length,benchmarkRequests,'practice preferences, search and exchanges never query APIs');
   if(process.env.COACH_PRACTICE_SCREENSHOT){await page.setViewportSize({width:320,height:812});await page.locator('.practice-controls').screenshot({path:process.env.COACH_PRACTICE_SCREENSHOT});await page.locator('[data-practice-recommendations]').screenshot({path:process.env.COACH_PRACTICE_SCREENSHOT.replace('.png','-plan.png')});}
 
-  assert.equal(requests.length,3,'changing dashboard tabs never triggers extra API calls');
+  assert.equal(requests.length,1,'changing dashboard tabs never triggers extra API calls');
   await page.locator('#share').click();
   const exportedMember=JSON.parse(await page.evaluate(()=>window.__copiedDiagnostic));
   assert.equal(exportedMember.format,'KESO_COACH_SAFE_MEMBER_DIAGNOSTIC_V1');
@@ -410,159 +247,42 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   assert.equal(exportedMember.matchTrend.length,2,'safe copy includes anonymous date-based trend');
   assert.equal(JSON.stringify(exportedMember).includes('private-vod-identifier'),false);
   assert.equal(JSON.stringify(exportedMember).includes('secret-puuid'),false);
-  assert.equal(requests.length,3,'copying selected report is purely client-side');
-  await page.locator('#start-member-archive').click();
-  await page.waitForFunction(()=>document.querySelector('#status').textContent.includes('履歴収集を有効化'));
-  assert.equal(requests.filter(x=>x.method==='POST'&&x.url.endsWith('/api/kp/coach/members/start')).length,1);
+  assert.equal(requests.length,1,'copying selected report is purely client-side');
+
   assert.deepEqual(errors,[]);
-  const beforeCompare=requests.filter(r=>r.url.includes('/coach/member?')).length;
-  await page.locator('[data-member-compare]').evaluate(el=>el.open=true);
-  await page.locator('#compare-members').click();
-  await page.waitForFunction(()=>!document.getElementById('compare-members').disabled);
-  assert.equal(await page.locator('#member-comparison tbody tr').count(),5);
-  assert.match(await page.locator('#member-comparison').innerText(),/小林/);
-  assert.equal(requests.filter(r=>r.url.includes('/coach/member?')).length,beforeCompare,'reuse the selected profile');
-  const batch=requests.filter(r=>r.url.includes('/coach/comparison?'));assert.equal(batch.length,1);
-  assert.equal(new URL(batch[0].url).searchParams.get('people').split(',').length,5,'start invalidates old coverage; refresh all five profiles in one shared batch');
-  const afterCompare=requests.length;
-  await page.locator('[data-member-compare]').evaluate(el=>el.open=true);
-  await page.locator('#compare-members').click();
-  await page.waitForFunction(()=>!document.getElementById('compare-members').disabled);
-  assert.equal(requests.length,afterCompare,'repeat within sixty seconds uses per-session in-memory cache');
-  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
-  await page.locator('#coach-account-options').evaluate(el=>el.open=true);
+  await page.locator('#member-coaching-panel').evaluate(el=>el.open=true);
   await page.locator('[data-member="Aquatopia"]').click();
-  await page.locator('[data-analysis-navigation]').evaluate(el=>el.open=true);
-  await page.locator('[data-coach-view="time"]').waitFor();
-  assert.equal(await page.locator('[data-practice-option="lineups"]').inputValue(),'unknown','another profile does not inherit a memorisation preference');
-  assert.equal(await page.locator('[data-practice-option="goal"]').inputValue(),'auto','manual focus stays with its profile');
-  await page.locator('[data-coach-view="time"]').click();
-  await page.locator('#coach-view-time > [data-reader-advanced]').evaluate(el=>el.open=true);
-  assert.equal(await page.locator('#coach-view-time [data-reader-advanced] svg').first().locator('circle').count(),19,'missing match ratio is not drawn at zero');
-  assert.equal(await page.locator('#coach-view-time [data-reader-advanced] svg').first().locator('polyline').count(),2,'missing ratio breaks the line');
-  assert.match(await page.locator('#coach-view-time').innerText(),/ADR：データ不足/);
-  await page.locator('[data-coach-view="improve"]').click();await page.locator('#coach-view-improve > [data-reader-advanced]').evaluate(el=>el.open=true);assert.equal(await page.locator('[data-context-band]').count(),0,'missing equipment is not a zero-valued distribution');
-  assert.match(await page.locator('#coach-view-improve').innerText(),/装備額はデータ不足/);
-  await page.locator('[data-coach-view="team"]').click();await page.locator('#coach-view-team > [data-reader-advanced]').evaluate(el=>el.open=true);assert.match(await page.locator('#coach-view-team').innerText(),/データ不足/);
-  await page.locator('#pause-member-archive').click();
-  await page.waitForFunction(()=>document.getElementById('status').textContent.includes('追加収集を停止'));
-  assert.equal(await page.locator('#pause-member-archive').isHidden(),true);assert.equal(await page.locator('#start-member-archive').isVisible(),true);
-  assert.equal(requests.filter(r=>r.method==='POST'&&r.url.endsWith('/members/pause')).length,1);
-  await page.locator('#coach-account-options').evaluate(el=>el.open=true);
-  await page.locator('[data-member="Aquatopia"]').click();
-  await page.locator('[data-primary-mission]').waitFor({state:'visible'});
-  await page.locator('[data-analysis-details]').evaluate(el=>el.open=true);
-  await page.locator('[data-analysis-navigation]').evaluate(el=>el.open=true);
-  await page.locator('[data-coach-learning]').waitFor({state:'visible'});
-  const rootReads=requests.filter(r=>r.url.endsWith('/coach/rounds')).length;
-  const memberReads=requests.filter(r=>r.url.includes('/coach/member?')).length;
-  await page.locator('[data-coach-view="overview"]').click();
-  feedbackRevision=1;await page.locator('[data-analysis-details] [data-feedback-refresh]').first().click();
-  await page.waitForFunction(()=>document.querySelector('[data-match-feedback]')?.textContent.includes('更新された試合の解説1'));
-  assert.equal(requests.filter(r=>r.url.includes('/coach/member?')).length,memberReads+1,'manual profile refresh bypasses stale in-memory cache');
-  feedbackRevision=2;await page.locator('#reload').click();
-  await page.waitForFunction(()=>document.querySelector('[data-match-feedback]')?.textContent.includes('更新された試合の解説2'));
-  assert.equal(requests.filter(r=>r.url.includes('/coach/member?')).length,memberReads+2);
-  assert.equal(requests.filter(r=>r.url.endsWith('/coach/rounds')).length,rootReads,'selected profile refresh does not scan the legacy report');
-  assert.deepEqual(errors,[]);
+  await page.waitForFunction(()=>document.querySelector('.prototype-top .playerline .name')?.textContent==='Aquatopia');
+  assert.equal(requests.length,2);assert.ok(requests[1].url.includes('person=Aquatopia'));
+  await page.locator('#return-self').click();
+  await page.waitForFunction(()=>document.querySelector('.prototype-top .playerline .name')?.textContent==='神戸');
+  assert.equal(requests.length,3);assert.ok(requests[2].url.endsWith('/coach/me'));
+  for(const width of [320,375,1440]){await page.setViewportSize({width,height:900});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'layout '+width);}
+  await page.locator('#coach-operations').evaluate(el=>el.open=true);
+  await page.evaluate(()=>Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async()=>{throw Error('clipboard unavailable');}}}));
+  await page.locator('#share').click();await page.locator('#share-fallback:not([hidden])').waitFor();assert.ok((await page.locator('#share-fallback').inputValue()).includes('神戸'));
+  await page.evaluate(()=>{localStorage.setItem('keso-kp-session-v1','b'.repeat(48));window.dispatchEvent(new Event('focus'));});
+  await page.getByRole('alert').filter({hasText:'まだ連携'}).first().waitFor();assert.equal(await page.locator('#share-fallback').inputValue(),'');assert.equal(await page.locator('[data-primary-mission]').count(),0);assert.equal(await page.locator('#report').isHidden(),true);
   await ctx.close();
-  // The resume control only appears for the previously opted-in linked owner,
-  // after an explicit user click; no recurring or surprise POSTs.
-  const resumeCtx=await browser.newContext({viewport:{width:375,height:812},isMobile:true,hasTouch:true});
-  await resumeCtx.addInitScript(t=>sessionStorage.setItem('keso-coach-session-v1',t),token);
-  let resumed=false,postCount=0,getCount=0;
-  await resumeCtx.route('https://valorant-results.tealeaforest.workers.dev/**',async route=>{
-    const req=route.request();
-    if(req.method()==='POST'&&req.url().endsWith('/api/kp/coach/backfill/resume')){
-      postCount++;resumed=true;
-      assert.equal(req.headers().authorization,'Bearer '+token);
-      return route.fulfill({status:200,contentType:'application/json',
-        body:JSON.stringify({status:'resumed'})});
-    }
-    if(req.method()==='GET'&&req.url().endsWith('/api/kp/coach/rounds')){
-      getCount++;
-      return route.fulfill({status:200,contentType:'application/json',
-        body:JSON.stringify({...report,canResume:true,
-          backfill:{...report.backfill,status:resumed?'running':'complete'}})});
-    }
-    throw Error('unexpected coach request: '+req.method()+' '+req.url());
+  // Account switching must erase old graphs, copied text and late requests.
+  const race=await browser.newContext({viewport:{width:375,height:812}});await race.addInitScript(t=>localStorage.setItem('keso-kp-session-v1',t),token);
+  let release;let calls=0;
+  await race.route('https://valorant-results.tealeaforest.workers.dev/**',async route=>{
+    calls++;if(calls===1){await new Promise(r=>release=r);return route.fulfill({json:{...state,report:projectCoachSelfReport(makeMember('神戸'))}}).catch(()=>{});}
+    return route.fulfill({json:{identity:{status:'unregistered'},report:null}});
   });
-  const resumePage=await resumeCtx.newPage();
-  await resumePage.goto('http://127.0.0.1:18784/coach.html');
-  await resumePage.locator('#report:not([hidden])').waitFor();
-  await resumePage.locator('#legacy-coach > summary').click();
-  await resumePage.locator('#resume-backfill').waitFor({state:'visible'});
-  assert.equal(postCount,0,'no automatic backfill restart');
-  assert.equal(getCount,1);
-  await resumePage.locator('#resume-backfill').click();
-  await resumePage.waitForFunction(()=>document.getElementById('status').textContent.includes('補完を再開しました'));
-  assert.equal(postCount,1);
-  assert.equal(getCount,2,'one fresh read after successful resume');
-  assert.equal(await resumePage.locator('#resume-backfill').isHidden(),true);
-  await resumeCtx.close();
-  // Few/no matches must still show one useful experiment, with no invented
-  // trend, positive result or zero-filled comparison at either phone width.
-  for(const width of [320,375])for(const count of [0,1]){
-   const sparse=coachPerformance(count?[{match_id:'single',ended_at:1700000000000,map:'Ascent',rounds_json:null,
-    teams_json:JSON.stringify([{id:'Blue',rounds:13,won:true},{id:'Red',rounds:7,won:false}]),
-    players_json:JSON.stringify([{puuid:'self',team_id:'Blue',agent:'Sage',k:12,d:16,a:5},...Array.from({length:9},(_,i)=>({puuid:'other'+i,team_id:i<4?'Blue':'Red'}))])}]:[],[{puuid:'self',name:'Fixture',tag:'X'}]);
-   const sparseCtx=await browser.newContext({viewport:{width,height:812},isMobile:true});
-   await sparseCtx.addInitScript(t=>sessionStorage.setItem('keso-coach-session-v1',t),token);
-   await sparseCtx.route('https://valorant-results.tealeaforest.workers.dev/**',route=>route.fulfill({status:200,contentType:'application/json',
-    body:JSON.stringify(route.request().url().includes('/coach/member?')?{person:'VDK',profile:'VDK',accounts:['Fixture'],performance:sparse,nextMatch:coachNextMatch(sparse),
-     matchFeedback:coachMatchFeedback(sparse),archivedMatches:count,usableMatches:0,coverage:{},individual:[],fullDiagnosis:{items:[]}}:report)}));
-   const sparsePage=await sparseCtx.newPage();const sparseErrors=[];sparsePage.on('pageerror',e=>sparseErrors.push(e.message));
-   await sparsePage.goto('http://127.0.0.1:18784/coach.html');await sparsePage.locator('[data-member="VDK"]').click();
-   await sparsePage.locator('[data-primary-mission]').waitFor({state:'visible'});
-   assert.equal(await sparsePage.locator('[data-improvement]').isVisible(),true);
-   await sparsePage.locator('[data-analysis-details] > summary').click();
-   await sparsePage.locator('[data-coach-learning]').waitFor({state:'visible'});
-   const text=await sparsePage.locator('[data-coach-learning]').innerText();assert.match(text,/分で.*取り組みます/);
-   assert.match(text,/次の一戦で試すこと/);assert.match(text,count?/12キル・16デス/:/最初の一戦に向けて準備します/);
-   if(count===0)assert.equal(await sparsePage.locator('[data-reader-board] [data-reader-verdict="bad"]').count(),0,'missing data must not be presented as BAD');
-   if(count===1&&width===320&&process.env.COACH_READER_SCREENSHOT)await sparsePage.locator('[data-reader-board]').screenshot({path:process.env.COACH_READER_SCREENSHOT.replace('.png','-bad.png')});
-   assert.equal(text.includes('NaN'),false);
-   assert.equal(await sparsePage.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
-   assert.deepEqual(sparseErrors,[]);await sparseCtx.close();
-  }
-  // Optional report throttling must keep the owner's acquisition stop usable.
-  const budgetCtx=await browser.newContext({viewport:{width:320,height:568},isMobile:true});
-  await budgetCtx.addInitScript(t=>sessionStorage.setItem('keso-coach-session-v1',t),token);
-  let budgetPaused=false,budgetPosts=0;
-  await budgetCtx.route('https://valorant-results.tealeaforest.workers.dev/**',async route=>{
-   const path=new URL(route.request().url()).pathname;
-   if(path.endsWith('/members/status'))return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({...report.memberHistory,enabled:!budgetPaused,canStartMemberHistory:true})});
-   if(path.endsWith('/members/pause')){budgetPaused=true;budgetPosts++;return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({status:'paused',enabled:false})});}
-   return route.fulfill({status:429,contentType:'application/json',body:JSON.stringify({error:'D1節約モード中です'})});
-  });
-  const budgetPage=await budgetCtx.newPage();await budgetPage.goto('http://127.0.0.1:18784/coach.html');
-  await budgetPage.locator('#coach-ui-message[role="alert"]').waitFor({state:'visible'});
-  assert.match(await budgetPage.locator('#coach-ui-message').innerText(),/D1節約/);
-  await budgetPage.locator('#coach-operations').evaluate(el=>el.open=true);
-  await budgetPage.locator('#pause-member-archive').waitFor({state:'visible'});
-  assert.match(await budgetPage.locator('#status').innerText(),/D1節約/);assert.equal(await budgetPage.locator('#share').isDisabled(),true);
-  assert.equal(await budgetPage.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
-  await budgetPage.locator('#pause-member-archive').click();await budgetPage.waitForFunction(()=>document.getElementById('status').textContent.includes('追加収集を停止'));
-  assert.equal(budgetPosts,1);assert.equal(await budgetPage.locator('#pause-member-archive').isHidden(),true);await budgetCtx.close();
-  const guest=await browser.newContext({viewport:{width:320,height:568},isMobile:true});
-  const second=await guest.newPage();
-  await second.route('https://valorant-results.tealeaforest.workers.dev/**',async route=>{
-   if(route.request().url().endsWith('/api/kp/auth'))await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({token})});
-   else await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({...report,canStartMemberHistory:false,memberHistory:{...report.memberHistory,enabled:true}})});
-  });
-  await second.goto('http://127.0.0.1:18784/coach.html');
-  await second.locator('#connection').waitFor({state:'visible'});
-  assert.equal(await second.locator('#report').isHidden(),true);
-  assert.equal(await second.locator('#share').isDisabled(),true,'anonymous users cannot copy a report');
-  assert.equal(await second.locator('#resume-backfill').isHidden(),true,
-    'anonymous users cannot resume a backfill');
-  await second.locator('#code').fill('b'.repeat(48));
-  await second.locator('#connect-form button').click();
-  await second.locator('#report:not([hidden])').waitFor();
-  assert.equal(await second.locator('#code').inputValue(),'','code cleared after login');
-  assert.equal(await second.locator('#pause-member-archive').isHidden(),true,'ordinary participant has no owner controls');
-  assert.equal(await second.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
-  await guest.close();
-  console.log('KESO COACH mobile browser passed: auth, manual fetch, privacy-allowlisted report copy, 320/375 widths.');
- }finally{await browser.close();}
-})().catch(e=>{console.error(e);process.exitCode=1}).finally(()=>server.kill());
+  const rp=await race.newPage();await rp.goto('http://127.0.0.1:18784/coach.html');await rp.waitForFunction(()=>!!document.querySelector('#reload').disabled);
+  while(!release)await new Promise(r=>setTimeout(r,20));
+  await rp.evaluate(()=>{localStorage.setItem('keso-kp-session-v1','b'.repeat(48));window.dispatchEvent(new StorageEvent('storage',{key:'keso-kp-session-v1'}));});
+  await rp.getByRole('alert').filter({hasText:'まだ連携'}).first().waitFor();release();await rp.waitForTimeout(100);
+  assert.equal(await rp.locator('[data-primary-mission]').count(),0);assert.equal(await rp.locator('#share-fallback').inputValue(),'');assert.equal(await rp.locator('#report').isHidden(),true);
+  await race.close();
+  const guest=await browser.newContext();let guestCalls=0;await guest.route('https://valorant-results.tealeaforest.workers.dev/**',()=>{guestCalls++;});const gp=await guest.newPage();await gp.goto('http://127.0.0.1:18784/coach.html');assert.equal(await gp.locator('#connection').isVisible(),true);assert.equal(guestCalls,0);await guest.close();
+  // A linked player with no saved matches still gets a useful self screen.
+  const emptyPerformance=coachPerformance([],[]),emptyReport=projectCoachSelfReport({...makeMember('VDK'),accounts:['Dolly#SDGs'],archivedMatches:0,usableMatches:0,performance:emptyPerformance,nextMatch:coachNextMatch(emptyPerformance),matchFeedback:coachMatchFeedback(emptyPerformance),individual:[],individualMapAgent:[],matchTrend:[],fullDiagnosis:{items:[]},roundContribution:coachRoundContribution([],[]),roundContext:coachRoundContext([],[],new Set())});
+  const emptyCtx=await browser.newContext({viewport:{width:320,height:812}});await emptyCtx.addInitScript(t=>localStorage.setItem('keso-kp-session-v1',t),token);
+  await emptyCtx.route('https://valorant-results.tealeaforest.workers.dev/**',route=>route.fulfill({json:{...state,identity:{...identity,displayName:'VDK',defaultProfile:'VDK',accountOptions:[{profile:'VDK',label:'Dolly#SDGs'}]},report:emptyReport}}));
+  const emptyPage=await emptyCtx.newPage(),emptyErrors=[];emptyPage.on('pageerror',e=>emptyErrors.push(e.message));await emptyPage.goto('http://127.0.0.1:18784/coach.html');await emptyPage.locator('[data-primary-mission]').waitFor();assert.equal(await emptyPage.locator('.prototype-top .playerline .name').innerText(),'VDK');assert.equal(await emptyPage.locator('.prototype-top .rankbox .r').first().innerText(),'未取得');assert.match(await emptyPage.locator('.prototype-top').innerText(),/記録|試合/);assert.equal(emptyReport.performance.overall.kd,null);assert.equal(await emptyPage.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);assert.deepEqual(emptyErrors,[]);await emptyCtx.close();
+  console.log('KESO COACH self-first, private sessions, v6/practice regression and 320/375/1440 layout: OK');
+ }finally{await browser.close();server.kill();}
+})().catch(e=>{console.error(e);server.kill();process.exitCode=1;});

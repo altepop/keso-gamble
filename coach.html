@@ -551,7 +551,7 @@
  <img class="bgimg" src="assets/abyss-splash.png" alt="VALORANTのマップ、アビスの公式アート">
  <div class="shade"></div><div class="diag" aria-hidden="true"></div>
  <img class="chamber" src="assets/chamber-cut.png" alt="エージェント、チェンバーの公式アート">
- <div class="tophero-inner"><div class="playerline"><span class="micro">KESO <b>//</b> Coach Brief</span><h1 class="name">KESO COACH</h1></div><p class="coach-intro">記録を確認し、次の試合に向けた練習をご案内します。</p><p class="coach-intro">接続後、下の選手選択から分析する方を選んでください。</p></div>
+ <div class="tophero-inner"><div class="playerline"><span class="micro">KESO <b>//</b> Coach Brief</span><h1 class="name">KESO COACH</h1></div><p class="coach-intro">記録を確認し、次の試合に向けた練習をご案内します。</p><p class="coach-intro">接続すると、ご本人のコーチングを表示します。</p></div>
 </header>
 <p id="coach-ui-message" role="status" aria-live="polite">データを確認しています。</p>
 <details id="connection" class="coach-disclosure" open><summary>接続してコーチングを確認します <span class="chev" aria-hidden="true">⌄</span></summary><div class="detail-body coach-existing">
@@ -562,85 +562,24 @@
 <button type="submit">接続して表示</button>
 </div></form>
 </div></details>
+<div id="legacy-coach" hidden></div>
 <div id="report" hidden>
 <div id="member-result" aria-live="polite"></div>
-<details id="member-coaching-panel" class="coach-disclosure" open><summary>分析する選手を選びます <span class="chev" aria-hidden="true">⌄</span></summary><div class="detail-body coach-existing">
-
-<p class="muted small">各選手が参加した試合を使って、変化を確認します。</p>
-<div id="member-selector" class="member-selector" role="group" aria-label="分析する選手"><div class="person-buttons"><button type="button" data-member="神戸" aria-pressed="false" aria-label="神戸（2アカウント統合）">神戸</button>
-<button type="button" data-member="VDK" aria-pressed="false">VDK</button>
-<button type="button" data-member="石原" aria-pressed="false">石原</button>
-<button type="button" data-member="藤村" aria-pressed="false">藤村</button>
-<button type="button" data-member="小林" aria-pressed="false">小林</button></div><details id="coach-account-options"><summary>神戸の各アカウントを確認します</summary><div class="person-buttons"><button type="button" data-member="Aquatopia" aria-pressed="false">Aquatopia#toppyだけ</button>
-<button type="button" data-member="Abema" aria-pressed="false">Abema#ttvだけ</button></div></details></div>
-<details data-member-compare><summary>5人の違いを詳しく比べます</summary><button type="button" id="compare-members">5人のプレースタイルを比較</button>
-<p class="muted small">同じ数字でも、役割によって強みは変わります。詳しく比べたいときに開いてください。</p>
-<div id="member-comparison" aria-live="polite"></div>
-</details>
-</div></details>
-<details id="legacy-coach" class="coach-disclosure"><summary>従来の分析と保存状況を確認します <span class="chev" aria-hidden="true">⌄</span></summary><div class="detail-body coach-existing"><p class="small muted">以下は従来の列保存基準による参考表示です。全10人のK/Dを照合する選手別ラウンド分析とは対象件数が異なります。基本性能は上の選手別画面を確認してください。</p>
-<section class="cards" id="totals" aria-label="補完状況の概要"></section>
-<section class="panel">
-<h2>対象試合の補完状況</h2>
-<p class="muted small">完全保存・一部欠損・未取得を区別します。分析の母数は完全保存済み試合だけです。数字は更新時点のD1保存状況です。取得元に存在しないデータは補いません。</p>
-<div class="cards" id="backfill-counts"></div>
-<p id="backfill-message" class="small muted"></p>
-<div class="actions"><button id="resume-backfill" type="button" hidden>未取得試合の補完を再開</button></div>
-<p id="resume-explain" class="small muted" hidden>VDK本人の連携口座から、以前許可した試合補完を再開します。5分に最大1試合、保存済みの競技試合だけを取得します。KP・通知・勝敗予想は変更しません。</p>
-</section>
-<section class="panel">
-<h2>全項目診断：ここが良い／ここを見直す</h2>
-<p class="muted small">完全保存された試合データを利用し、チーム・VDK・Abema・石原のFK・FD・トレード候補・人数有利の維持・攻守・マップ／エージェントをまとめます。良い傾向と見直し候補は暫定的な判定であり、役割・味方・相手や試合状況によって結果が変わります。</p>
-<div id="diagnosis-summary"></div>
-<div id="diagnosis-full"></div>
-<div id="diagnosis-limits" class="small muted"></div>
-</section>
-<section class="panel">
-<h2>FK / FDから分かる強みと見直し候補</h2>
-<p class="muted small">判定は保存済みの実測値と最低サンプル数に基づく暫定的な目安であり、ランク帯の平均値や実力評価ではない。FK後勝率とFD後の取り返しはチーム全体の結果を含みます。スキル・位置・役割は映像を見ないと断定できない。</p>
-<div id="coach-signals"></div>
-<p class="foot">判定目安：個人は3試合かつ40ラウンド以上。FK後勝率は勝敗判明10回以上で70%以上を良い傾向、45%以下を見直し候補とします。FK直後の生存やFD後の取り返しは8回以上で判定します。これはコーチング用の仮説抽出基準であり、ゲーム全体の標準値ではない。</p>
-</section>
-<section class="panel">
-<h2>次の試合で意識すること</h2>
-<p class="muted small">取得済みログから作成する観察・録画確認の提案です。キルの順序だけで「戦犯」やポジションミスとは断定しない。</p>
-<div id="coach-notes"></div>
-</section>
-<section class="panel">
-<h2>優先して見直すラウンド</h2>
-<p class="muted small">先制キルを取ったのに敗北したラウンドから、連続撃破・短時間の死亡など、事実として検証できる場面を抽出します。ラウンド番号は0始まりです。</p>
-<div id="review-rounds"></div>
-<p class="foot">表示する試合日時は日本時間です。キル時刻はそのラウンド開始からの経過時間です。射線・購入指示・スキルの効果・VCの確認には試合録画が必要です。</p>
-</section>
-<section class="panel">
-<h2>良かったラウンド：再現したい勝ち方</h2>
-<p class="muted small">保存済みの勝利ラウンドから、先制2キルを勝ちにつなげた場面・FK担当者が初動5秒間倒されなかった場面・敵FKから逆転した場面を抽出します。正しい戦術と断定せず、VODで再現可能な行動を探してください。</p>
-<div id="success-rounds"></div>
-</section>
-<section class="panel"><h2>マップ別：先制キルを勝利に変えた割合</h2><div id="maps"></div><p class="foot">FK後勝率＝味方が敵を最初に倒したラウンドのうち、ラウンド勝者が分かるものに限った勝率です。5対4からの敗北を探す指標で、プレイヤー個人の戦犯判定ではない。</p></section>
-<section class="panel">
-<h2>VDK・Abema・石原：個人別FK / FD</h2>
-<p class="muted small">ラウンドの最初の敵味方間キルのみで判定します。FD後勝率は、先制デスしたラウンドで味方が勝利した割合です（勝敗判明分のみ）。役割やマップ、サンプル数の違いがあるため、FK/FDだけで良し悪しは決められない。</p>
-<div class="cards" id="players"></div>
-<p class="foot">「5秒以内の死亡」は、先制キルを取った本人が直後に倒された回数です。「5秒以内の取り返し」は、最初に倒された味方の敵キラーを味方が5秒以内に倒した回数です。意図的なトレードの証明ではない。</p>
-</section>
-<section class="panel">
-<h2>マップ・使用エージェント別の違い</h2>
-<div id="player-map"></div>
-<p class="foot">FK/FD率の母数はキルイベントが記録されているラウンドに限ります。キルデータ不足は集計に含めない。試合数が少ない組合せは参考値です。</p>
-</section>
-<section class="panel"><h2>3人が共闘した試合の構成比較</h2><p class="muted small">VDK・Abema・石原が同じチームにいる試合だけを、マップと構成ごとに比較します。</p><div id="trio"></div></section>
-<section class="panel"><h2>データの確認事項</h2><div id="quality"></div><p class="foot">同一ラウンドで同じプレイヤーが2回倒されていても、Cloveの自己蘇生などがあるため自動的に不正とはしない。攻守情報がない場合も「不明」として扱います。</p></section>
+<details id="member-coaching-panel" class="coach-disclosure"><summary>自分のアカウントを確認します <span class="chev" aria-hidden="true">⌄</span></summary><div class="detail-body coach-existing">
+<p id="coach-owner-label"></p><p>公開範囲：本人のみ</p>
+<button type="button" id="return-self">自分の人物統合画面に戻る</button>
+<div id="member-selector" class="member-selector" role="group" aria-label="自分のアカウント"></div>
 </div></details>
 <details class="coach-disclosure" id="coach-operations"><summary>収集状況や更新設定を確認します <span class="chev" aria-hidden="true">⌄</span></summary><div class="detail-body coach-existing">
 <div id="coach-operation-actions"><div id="status" role="status" aria-live="polite">データを確認中…</div><textarea id="share-fallback" hidden readonly aria-label="診断レポート" rows="6" style="width:100%;background:#09152a;color:#e9eef9;border:1px solid #435779;border-radius:10px;margin-top:8px;font:12px/1.4 monospace"></textarea><div class="actions"><button id="reload" type="button">分析を更新</button><button id="share" class="secondary" type="button" disabled>診断レポートをコピー</button><span class="small muted">手動更新 · KPの増減なし</span></div>
-<p class="small muted">診断レポートには認証トークン・接続コード・試合ID・PUUID・相手の名前を含めない。個別の分析は選手を選ぶと表示します。</p>
+<p class="small muted">ご本人の診断をコピーできます。認証情報・試合ID・PUUID・相手の名前は含めません。</p>
 </div>
 <section class="panel" id="member-archive-panel">
-<h2>5人分の収集状況を確認します</h2>
-<p class="muted small">神戸のAbema#ttvとAquatopia#toppyは2アカウントを別々に収集し、神戸の人物診断で合算します。以下はアカウント別の進捗です。API未収録の過去試合は完全回収を保証できない。</p>
+<h2>自分の試合の取得状況を確認します</h2>
+<p class="muted small">本人に確認済みのアカウントだけの進捗です。APIに残っていない過去試合は取得できません。</p>
 <div id="member-archive-status"></div>
 <button type="button" id="start-member-archive" hidden>全員の試合履歴収集を開始</button>
+<button type="button" id="resume-backfill" hidden>未取得試合の補完設定を確認</button>
 <button type="button" id="pause-member-archive" hidden>履歴の追加収集を一時停止</button>
 </section>
 </div></details>
@@ -967,7 +906,7 @@ const CoachPresentation=(()=>{
   "マップ・使用エージェント別の違い": "マップ・使用エージェント別の違いを確認します",
   "3人が共闘した試合の構成比較": "3人が共闘した試合の構成比較を確認します",
   "データの確認事項": "記録の欠損や例外を確認します",
-  "5人分の収集状況を確認します": "5人分の収集状況を確認します",
+  "自分の試合の取得状況を確認します": "自分の試合の取得状況を確認します",
   "本日の練習は、順番と時間までこちらで決めてあります。そのまま開始していただければ大丈夫です": "本日の練習は、順番と時間までこちらで決めてあります。そのまま開始していただければ大丈夫です",
   "最初の3分は射撃場で、動く相手に対して置きと止まりを両立させます": "最初の3分は射撃場で、動く相手に対して置きと止まりを両立させます",
   "次の4分はデスマッチで、実戦の速度のまま置きのルールを守ります": "次の4分はデスマッチで、実戦の速度のまま置きのルールを守ります",
@@ -1226,7 +1165,11 @@ const setStatus=(msg,error=false)=>{const el=$('status');el.textContent=CoachPre
 const card=(label,value,sub='')=>`<article class="card"><div class="label">${escape(label)}</div><strong>${escape(value)}</strong><div class="small muted">${escape(sub)}</div></article>`;
 const simpleTable=(headers,rows)=>`<div class="table-wrap"><table><thead><tr>${headers.map((h,i)=>`<th class="${i?'num':''}">${escape(h)}</th>`).join('')}</tr></thead><tbody>${rows.map(a=>`<tr>${a.map((cell,i)=>`<td class="${i?'num':''}">${escape(cell)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
 
-const memberNames=['神戸','VDK','Aquatopia','Abema','石原','藤村','小林'];
+let memberNames=[];
+let selfIdentity=null;
+let authGeneration=0;
+let credentialState='';
+const credentials=()=>[read(KEY,sessionStorage),read('keso-kp-session-v1',localStorage),read('keso-kp-session-v1',sessionStorage)].join('|');
 let activeMember=null;
 let latestMemberReport=null;
 let memberPending=false;
@@ -1235,12 +1178,15 @@ async function fetchMember(person){
  const t=token();if(!t)throw Error('KP口座の接続が必要だ。');
  const cached=memberCache.get(person);
  if(cached&&cached.token===t&&Date.now()-cached.at<60000)return cached.data;
+ const generation=authGeneration;
  const data=await request('/api/kp/coach/member?person='+encodeURIComponent(person),{headers:{Authorization:'Bearer '+t}});
+ if(generation!==authGeneration||token()!==t)throw Error('接続が変更されました。');
  memberCache.set(person,{data,at:Date.now(),token:t});return data;
 }
 function renderMemberArchiveStatus(data){
  const history=data.memberHistory;
  const owned=Boolean(data.canStartMemberHistory);
+ $('resume-backfill').hidden=!data.canResume;
  $('start-member-archive').hidden=!owned||Boolean(history?.enabled);
  $('pause-member-archive').hidden=!owned||!history?.enabled||!history?.supportsPause;
  if(!history){
@@ -1257,7 +1203,7 @@ function renderMemberArchiveStatus(data){
  }).join('')+'</div>';
  if(history.enabled&&Number.isFinite(history.refreshIntervalMinutes))$('member-archive-status').innerHTML+='<p class="small muted">過去履歴の探索後も、新しいコンペを各アカウント約'+int(history.refreshIntervalMinutes)+'分ごとに確認します。詳細保存は全体で5分に1試合ずつ進みます。</p>';
  if(!history.enabled&&!owned)$('member-archive-status').innerHTML+=
-  '<p class="small muted">開始には神戸のAquatopia#toppyなど、許可された紐づけKP口座で接続する必要がある。</p>';
+  '<p class="small muted">追加取得の開始・停止は、許可された運用アカウントで行います。</p>';
 }
 
 const percentValue=(n,d)=>Number.isFinite(Number(n))&&Number(d)>0
@@ -1651,7 +1597,9 @@ $('member-result').addEventListener('keydown',e=>{
 
 async function loadMember(person){
  if(memberPending||!memberNames.includes(person))return;
- memberPending=true;activeMember=person;latestMemberReport=null;
+ const generation=authGeneration,t=token();
+ memberPending=true;activeMember=person;latestMemberReport=null;latestReport=null;
+ $('share-fallback').value='';$('share-fallback').hidden=true;
  $('share').disabled=true;
  $('share').textContent='診断レポートをコピー';
  for(const el of $('member-selector').querySelectorAll('[data-member]'))
@@ -1659,37 +1607,16 @@ async function loadMember(person){
  globalThis.KesoCoachPrototype.stop();$('member-result').textContent=person+'の試合記録を読み込んでいます。';
  try{
   const data=await fetchMember(person);
-  if(activeMember===person){latestMemberReport=data;renderMemberDiagnosis(data);
+  if(activeMember===person&&generation===authGeneration&&token()===t){latestReport=data;latestMemberReport=data;renderMemberDiagnosis(data);$('return-self').disabled=person===selfIdentity?.defaultProfile;
    $('share').textContent=person+'の全診断をコピー';}
  }catch(e){
-  $('member-result').textContent='診断を読み込めない：'+(e.message||'取得エラー');
- }finally{memberPending=false;$('share').disabled=!latestMemberReport}
+  if(generation===authGeneration){$('member-result').textContent='診断を読み込めません：'+(e.message||'取得エラー');if(e.status===401){clearCoachView();$('connection').style.display='block';}}
+ }finally{if(generation===authGeneration){memberPending=false;$('share').disabled=!latestMemberReport;}}
 }
 async function refreshMember(){
  if(busy||memberPending||!activeMember)return;
  memberCache.delete(activeMember);await loadMember(activeMember);
 }
-$('compare-members').addEventListener('click',async()=>{
- const button=$('compare-members');button.disabled=true;const rows=[];
- $('member-comparison').textContent='各人の独立した試合を確認中…';
- try{
-  const people=['神戸','VDK','石原','藤村','小林'],t=token();
-  const missing=people.filter(person=>{const c=memberCache.get(person);return !c||c.token!==t||Date.now()-c.at>=60000;});
-  let failed=false;
-  if(missing.length){try{
-   if(!t)throw Error('接続が必要です');
-   const result=await request('/api/kp/coach/comparison?people='+encodeURIComponent(missing.join(',')),{headers:{Authorization:'Bearer '+t}});
-   for(const d of result.profiles||[])if(missing.includes(d.person))memberCache.set(d.person,{data:d,at:Date.now(),token:t});
-  }catch{failed=true;}}
-  for(const person of people){
-   const cached=memberCache.get(person),d=cached&&cached.token===t&&Date.now()-cached.at<60000?cached.data:null;
-   const p=d?.performance;rows.push({person,o:p?.overall??null,role:p?.roles?.slice().sort((a,b)=>b.matches-a.matches)[0]?.value??(failed?'取得できませんでした':'未取得')});
-  }
-  const f=n=>typeof n==='number'&&Number.isFinite(n)?n.toFixed(3):'データ不足';
-  $('member-comparison').innerHTML=simpleTable(['人物','KD有効試合','K/D','KPR（K/R）','DPR（D/R）','主なロール'],rows.map(r=>[r.person,r.o?.kdMatches??'データ不足',f(r.o?.kd),r.o?f(r.o.kpr)+'（'+r.o.rateBases.kpr.numerator+'/'+r.o.rateBases.kpr.rounds+'R）':'データ不足',r.o?f(r.o.dpr)+'（'+r.o.rateBases.dpr.numerator+'/'+r.o.rateBases.dpr.rounds+'R）':'データ不足',r.role]))+
-   '<p>キル参加と死亡頻度の違いを確認する比較です。多い・少ないだけで役割の遂行や勝利貢献は判定できません。詳細の分母・期間・マップ・エージェントも確認してください。</p>';
- }finally{button.disabled=false;}
-});
 $('member-selector').addEventListener('click',event=>{
  const btn=event.target.closest('[data-member]');
  if(btn&&$('member-selector').contains(btn))void loadMember(btn.dataset.member);
@@ -1721,202 +1648,62 @@ $('pause-member-archive').addEventListener('click',async()=>{
  finally{btn.disabled=false;}
 });
 
-function render(data){
-renderMemberArchiveStatus(data);
-latestReport=data;
-$('share').disabled=false;
-const total=data.totalVdkRosterMatches??0;
-const completed=data.archivedMatches??0;
-const usable=data.usableMatches??0;
-const o=data.overall||{};
-$('totals').innerHTML=card('保存済みロスター',int(total),'VDKの対象試合')
- +card('成績の分析対象',int(usable),'完全保存 '+int(data.backfill?.complete??usable)+' 試合')
- +card('データ不足で除外',int(Math.max(0,completed-usable)),'ラウンド・キル情報不足')
- +card('先制キル後の勝率',pct(o.firstKillWinPct),int(o.firstKillWins)+'勝 / '+int(o.firstKillOutcomesKnown)+'ラウンド')
- +card('人数不利からの逆転',int(o.comebackWins),'保存済みデータの範囲');
-const signals=data.coachSignals||[];
-$('coach-signals').innerHTML=signals.length?signals.map(s=>{
- const tone=s.kind==='strength'?'良い傾向':s.kind==='review'?'見直し候補':'判定保留';
- return `<article class="review-item">
- <div class="review-heading"><span class="review-kind">${escape(tone)} · ${escape(s.subject)}</span><strong>${escape(s.title)}</strong></div>
- <p class="small muted">${escape(s.evidence)}</p>
- <p class="small"><b>次に確認：</b>${escape(s.action)}</p>
- </article>`;
-}).join(''):'<p class="empty">判定に必要な条件を満たす指標がまだない。</p>';
-const deep=data.fullDiagnosis||null;
-const deepTargets=['チーム','VDK','Abema','石原'];
-const statLabel=s=>s==='good'?'良い傾向':s==='focus'?'見直し候補':
- s==='insufficient'?'データ不足':s==='mixed'?'差が小さい／未確定':'参考値';
-const diagnosticLine=d=>`<article class="diag-row ${escape(d.status)}">
-  <div class="review-heading"><span class="kind">${escape(statLabel(d.status))} · ${escape(d.category)}</span>
-  <strong>${escape(d.title)}</strong></div>
-  <p class="small"><b>根拠：</b>${escape(d.evidence)}</p>
-  <p class="small muted">${escape(d.reason)}</p>
-  <p class="small"><b>確認・改善：</b>${escape(d.nextAction)}</p>
-  </article>`;
-if(deep){
- const synopsis=deep.synopsis||[];
- $('diagnosis-summary').innerHTML='<div class="diag-summaries">'+synopsis.map(s=>
-  `<article class="card"><h3>${escape(s.subject)}</h3>
-   <p class="small"><span class="positive">良い傾向 ${int(s.strengths)}件</span> / <span class="negative">見直し ${int(s.focuses)}件</span></p>
-   <p class="small">良い点：${escape(s.strongest?.title||'現段階で断定できない')}</p>
-   <p class="small">優先確認：${escape(s.priority?.title||'現段階で断定できない')}</p></article>`).join('')+'</div>';
- const all=deep.items||[];
- $('diagnosis-full').innerHTML=deepTargets.map((subject,i)=>{
-  const own=all.filter(s=>s.subject===subject);
-  const priority={focus:0,good:1,mixed:2,context:3,insufficient:4};
-  const ordered=[...own].sort((a,b)=>(priority[a.status]??9)-(priority[b.status]??9)||
-   a.category.localeCompare(b.category,'ja')||a.title.localeCompare(b.title,'ja'));
-  return `<details class="diag-details" ${i===1?'open':''}><summary>${escape(subject)}の全評価項目
-   <span class="diag-stats">（${int(own.length)}項目。見直し：${int(own.filter(s=>s.status==='focus').length)}）</span></summary>
-   <div class="diag-list">${ordered.map(diagnosticLine).join('')||'<p class="diag-empty">対象指標なし</p>'}</div></details>`;
- }).join('');
- $('diagnosis-limits').innerHTML='<h3>ログだけでは分からないこと</h3>'+
-  (deep.limitations||[]).map(s=>'<p class="small muted">・'+escape(s)+'</p>').join('');
-}else{
- $('diagnosis-summary').innerHTML='<p class="empty">詳細診断のデータを取得できない。</p>';
- $('diagnosis-full').innerHTML='';
- $('diagnosis-limits').innerHTML='';
-}
-const notes=data.coachingNotes||[];
-$('coach-notes').innerHTML=notes.length?notes.map(n=>{
- const tone=n.kind==='review'?'要確認':n.kind==='collect'?'データ補完':'継続観察';
- return `<article class="review-item">
-  <div class="review-heading"><span class="review-kind">${escape(tone)} · ${escape(n.subject)}</span><strong>${escape(n.title)}</strong></div>
-  <p class="small muted">${escape(n.evidence)}</p>
-  <p class="small"><b>次の行動：</b>${escape(n.action)}</p>
- </article>`;
-}).join(''):'<p class="empty">現時点で個別の提案はない。データ補完後に再確認してほしい。</p>';
-const reviews=data.reviewRounds||[];
-$('review-rounds').innerHTML=reviews.length?reviews.map((r,i)=>`
- <article class="review-item">
- <div class="review-heading"><span class="review-kind">優先 ${int(i+1)} · ${escape(r.map)} / R${int(r.round)}</span>
- <strong>${escape(r.matchJst)} JST</strong></div>
- <p class="small">${escape(r.evidence)}</p>
- <p class="small muted">${r.firstKiller?'最初の撃破：'+escape(r.firstKiller)+' · ':''}${escape(r.focus)}</p>
- </article>`).join(''):'<p class="empty">条件を満たす見直しラウンドがまだない。</p>';
-const success=data.successRounds||[];
-$('success-rounds').innerHTML=success.length?success.map((r,i)=>`<article class="review-item">
- <div class="review-heading"><span class="review-kind">良い例 ${int(i+1)} · ${escape(r.map)} / R${int(r.round)}</span>
- <strong>${escape(r.matchJst)} JST</strong></div>
- <p class="small">${escape(r.evidence)}</p>
- <p class="small muted">${r.firstKiller?'最初の撃破：'+escape(r.firstKiller)+' · ':''}${escape(r.focus)}</p>
- </article>`).join(''):'<p class="empty">再現候補の勝利ラウンドがまだ見つからない。</p>';
-const b=data.backfill||null;
-const resumeAllowed=Boolean(data.canResume&&b&&b.status==='complete'&&b.pending>0);
-$('resume-backfill').hidden=!resumeAllowed;
-$('resume-explain').hidden=!resumeAllowed;
-if(b){
-  $('backfill-counts').innerHTML=card('完全保存',int(b.complete),'ラウンドとキルの双方あり')
-    +card('一部欠損',int(b.partial),'いずれかのデータが不足')
-    +card('未取得',int(b.missing),'保存レコードなし')
-    +card('取得不可',int(b.unavailable),'一部欠損・未取得と重複');
-  const state=b.status==='running'?'補完処理は有効です':
-    b.status==='complete'?'補完処理は終了しました':'補完処理は無効です';
-  const next=b.pending>0?' 未処理：'+int(b.pending)+'試合。':'';
-  const exception=b.status!=='running'&&b.pending>0?
-    ' 未処理分は自動取得されない。管理者が補完設定を確認する必要がある。':'';
-  const excluded=b.partial>0?' 欠損'+int(b.partial)+'試合は個人・チーム成績の分母から除外しています。':'';
-  $('backfill-message').textContent=state+'。'+next+exception+excluded;
-}else{
-  $('backfill-counts').innerHTML='<p class="empty">補完状況を取得できない。</p>';
-  $('backfill-message').textContent='APIの更新状況を確認してほしい。';
-}
-const maps=data.maps||[];
-$('maps').innerHTML=maps.length?simpleTable(
- ['マップ','試合','ラウンド','味方FK','FK後勝利','FK後敗北','FK後勝率'],
- maps.map(m=>[m.map,m.matches,m.rounds,m.ourFirstKills,m.firstKillWins,m.firstKillLosses,pct(m.firstKillWinPct)]))
- :'<p class="empty">分析できる試合がまだない。</p>';
-const people=data.individual||[];
-$('players').innerHTML=people.length?people.map(p=>{
- const diff=p.fkFdDiff??0,sign=diff>0?'+':'';
- return `<article class="card"><h3>${escape(p.player)}</h3><strong>${escape(sign+diff)}</strong>
- <div class="small muted">FK − FD （${int(p.firstKills)} FK / ${int(p.firstDeaths)} FD）</div>
- <p class="small muted">対象 ${int(p.matches)}試合・記録あり ${int(p.observedOpeningRounds)}ラウンド</p>
- <div class="small">先制キルから勝利：${int(p.firstKillWins)}勝 / ${int(p.firstKillWins+p.firstKillLosses)}回（${pct(p.firstKillWinPct)}）</div>
- <div class="small">先制デス後にチームが勝利：${int(p.firstDeathWins)}勝 / ${int((p.firstDeathWins??0)+(p.firstDeathLosses??0))}回（${pct(p.firstDeathRecoveryPct)}）</div>
- <div class="small">FK直後5秒以内に死亡：${int(p.openingKillerDiedWithin5s)}回</div>
- <div class="small">FD後5秒以内に取り返し：${int(p.firstDeathKillerEliminatedWithin5s)}回</div>
- </article>`;
-}).join(''):'<p class="empty">個人別データはまだない。</p>';
-const playerMaps=data.individualMapAgent||[];
-$('player-map').innerHTML=playerMaps.length?simpleTable(
- ['選手 / マップ / エージェント','試合','FK','FD','FK−FD','FK後勝率','FD後勝率','FK直後5秒以内に死亡','FD後5秒以内に取り返し'],
- playerMaps.map(p=>[p.player+' / '+p.map+' / '+p.agent,p.matches,p.firstKills,p.firstDeaths,(p.fkFdDiff>0?'+':'')+p.fkFdDiff,pct(p.firstKillWinPct),pct(p.firstDeathRecoveryPct),p.openingKillerDiedWithin5s,p.firstDeathKillerEliminatedWithin5s]))
- :'<p class="empty">マップ別データはまだない。</p>';
-const comps=data.trioComparisons||[];
-$('trio').innerHTML=comps.length?simpleTable(
- ['マップ / 構成','試合','FK後勝利','FK後敗北','FK後勝率'],
- comps.map(m=>[m.map+' / '+(m.composition==='Fade + Clove'?'VDK Fade ＋ Abema Clove':'その他の3人構成'),m.matches,m.firstKillWins,m.firstKillLosses,pct(m.firstKillWinPct)]))
- :'<p class="empty">3人共闘の分析対象はまだない。</p>';
-$('quality').innerHTML=simpleTable(
- ['確認項目','件数'],
- [['キルデータが不十分な試合',int(data.killDataMissing)],
-  ['ラウンド情報が不足した試合',int(data.roundDataMissing)],
-  ['ロスターが不正な試合',int(data.invalidMatches)],
-  ['攻守判定ができたラウンド',int(o.roundsWithSides)],
-  ['同一人物の複数回死亡があるラウンド',int(o.repeatedVictimRounds)]]);
-polishCoachCopy($('legacy-coach'));polishCoachCopy($('coach-operations'));
-$('report').hidden=false;
-$('connection').style.display='none';
-setStatus('集計を表示した。更新 '+new Date().toLocaleTimeString('ja-JP')+' · 認証済み · 読み取り専用');
-}
 async function request(path,opts={}){
  const r=await fetch(ROOT+path,{...opts,cache:'no-store',signal:AbortSignal.timeout(15000)});
  let data={};try{data=await r.json()}catch{}
  if(!r.ok){const err=new Error(data.error||'通信エラー ('+r.status+')');err.status=r.status;throw err}
  return data;
 }
+function clearCoachView(){
+ authGeneration++;latestReport=null;latestMemberReport=null;selfIdentity=null;activeMember=null;memberNames=[];
+ memberCache.clear();practiceProfiles.clear();practiceExcluded.clear();
+ globalThis.KesoCoachPrototype.stop();$('member-result').replaceChildren();$('member-selector').replaceChildren();
+ $('member-archive-status').replaceChildren();$('coach-owner-label').textContent='';
+ $('share-fallback').value='';$('share-fallback').hidden=true;$('share').disabled=true;
+ $('report').hidden=true;$('coach-welcome').hidden=false;
+}
 async function load(){
  if(busy)return;
- busy=true;$('reload').disabled=true;setStatus('保存済みのラウンドデータを集計中…');
+ clearCoachView();let generation=authGeneration;const t=token();credentialState=credentials();
+ busy=true;memberPending=false;$('reload').disabled=true;setStatus('ご本人のコーチングを読み込み中…');
  try{
-  const t=token();
-  if(!t){latestReport=null;$('share').disabled=true;$('connection').style.display='block';$('report').hidden=true;setStatus('KP口座を接続してください');return}
-  const report=await request('/api/kp/coach/rounds',{headers:{Authorization:'Bearer '+t}});
-  render(report);
- }catch(e){
-  if(e.status===401){latestReport=null;$('share').disabled=true;try{sessionStorage.removeItem(KEY)}catch{}
-   $('connection').style.display='block';$('report').hidden=true;
-   setStatus('認証が切れている。接続コードを再入力してください。',true);
-  }else{
-   if(e.status===429&&token())try{
-    const state=await request('/api/kp/coach/members/status',{headers:{Authorization:'Bearer '+token()}});
-    renderMemberArchiveStatus({memberHistory:state,canStartMemberHistory:state.canStartMemberHistory});
-    $('report').hidden=false;$('connection').style.display='none';
-   }catch{}
-   setStatus(e.message||'読み込みに失敗した。再試行してください。',true);
+  if(!t){$('connection').style.display='block';setStatus('KP口座を接続してください');return;}
+  const data=await request('/api/kp/coach/me',{headers:{Authorization:'Bearer '+t}});
+  if(generation!==authGeneration||token()!==t||credentials()!==credentialState)return;
+  if(data.identity?.status!=='linked'){
+   $('connection').style.display='block';setStatus('コーチ対象のアカウントがまだ連携されていません。確認済みのKP口座で接続してください。',true);return;
   }
- }finally{busy=false;$('reload').disabled=false;}
+  selfIdentity=data.identity;memberNames=[selfIdentity.defaultProfile,...selfIdentity.accountOptions.map(a=>a.profile)];
+  $('coach-owner-label').textContent=selfIdentity.displayName+'さんのコーチングです。'+(selfIdentity.pendingAccounts?'一部の別アカウントは確認待ちです。':'');
+  for(const account of selfIdentity.accountOptions){const button=document.createElement('button');button.type='button';button.dataset.member=account.profile;button.textContent=account.label+'だけ';button.setAttribute('aria-pressed','false');$('member-selector').appendChild(button);}
+  $('return-self').disabled=true;
+  $('member-coaching-panel').hidden=false;
+  latestReport=data.report;latestMemberReport=data.report;activeMember=selfIdentity.defaultProfile;
+  renderMemberArchiveStatus(data);renderMemberDiagnosis(data.report);
+  $('report').hidden=false;$('connection').style.display='none';$('share').disabled=false;
+  setStatus('自分のコーチングを表示しています。公開範囲は本人のみです。');
+ }catch(e){
+  if(generation!==authGeneration)return;
+  clearCoachView();generation=authGeneration;
+  if(e.status===401){try{sessionStorage.removeItem(KEY)}catch{}$('connection').style.display='block';setStatus('接続が切れました。接続コードでログインしてください。',true);}
+  else if(e.status===429&&t){
+   try{const state=await request('/api/kp/coach/members/status',{headers:{Authorization:'Bearer '+t}});if(generation===authGeneration&&token()===t&&state.identity?.status==='linked'){renderMemberArchiveStatus(state);$('report').hidden=false;$('member-coaching-panel').hidden=true;}}catch{}
+   if(generation===authGeneration)setStatus(e.message,true);
+  }else{$('connection').style.display='block';setStatus(e.message||'本人の対応を確認できませんでした。',true);}
+ }finally{if(generation===authGeneration){busy=false;$('reload').disabled=false;}}
 }
+function checkCoachSession(event){
+ if(event?.type==='storage'&&(event.key===null||event.key==='keso-kp-session-v1')||credentials().split('|').slice(1).join('|')!==credentialState.split('|').slice(1).join('|'))try{sessionStorage.removeItem(KEY)}catch{}
+ if(credentials()===credentialState)return;
+ clearCoachView();busy=false;memberPending=false;void load();
+}
+window.addEventListener('storage',checkCoachSession);
+window.addEventListener('focus',checkCoachSession);
+window.addEventListener('pageshow',checkCoachSession);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)checkCoachSession();});
+$('return-self').addEventListener('click',()=>void load());
 // Explicit allowlist: no bearer token, Discord account, PUUID, match ID or raw roster
 // is read from the server response or copied. This report is only user-initiated.
-function diagnosticPayload(d){
- const pick=(obj,keys)=>Object.fromEntries(keys.map(k=>[k,obj?.[k]??null]));
- const maps=(d.maps||[]).map(m=>pick(m,
-  ['map','matches','rounds','ourFirstKills','enemyFirstKills','firstKillWins','firstKillLosses','firstKillWinPct','comebackWins']));
- const individual=(d.individual||[]).map(p=>pick(p,
-  ['player','matches','observedOpeningRounds','firstKills','firstDeaths','fkFdDiff','firstKillWins','firstKillLosses','firstKillWinPct','firstDeathWins','firstDeathLosses','firstDeathRecoveryPct','openingKillerDiedWithin5s','firstDeathKillerEliminatedWithin5s']));
- const reviews=(d.reviewRounds||[]).slice(0,12).map(r=>pick(r,
-  ['map','matchJst','round','category','evidence','firstKiller','focus']));
- const notes=(d.coachingNotes||[]).map(n=>pick(n,['subject','kind','title','evidence','action']));
- const successRounds=(d.successRounds||[]).slice(0,8).map(r=>pick(r,
-  ['map','matchJst','round','category','evidence','firstKiller','focus']));
- const signals=(d.coachSignals||[]).map(s=>pick(s,['subject','kind','metric','title','evidence','action','numerator','denominator','ratePct']));
- const fullDiagnosis={
-  items:(d.fullDiagnosis?.items||[]).map(x=>pick(x,['subject','category','title','status','evidence','reason','nextAction','numerator','denominator','ratePct','referencePct','differencePp'])),
-  synopsis:(d.fullDiagnosis?.synopsis||[]).map(x=>pick(x,['subject','strengths','focuses','other'])),
-  limitations:[...(d.fullDiagnosis?.limitations||[])].filter(x=>typeof x==='string').slice(0,10)
- };
- return {format:'KESO_COACH_SAFE_DIAGNOSTIC_V1',
-  generatedAt:new Date().toISOString(),totalVdkRosterMatches:d.totalVdkRosterMatches??null,
-  archive:pick(d.backfill,['status','complete','partial','missing','unavailable','pending']),
-  archivedMatches:d.archivedMatches??null,usableMatches:d.usableMatches??null,
-  totalRowsRead:d.totalRowsRead??null,limitReached:d.limitReached??null,
-  quality:pick(d,['invalidMatches','roundDataMissing','killDataMissing']),
-  overall:pick(d.overall,['matches','rounds','winnerKnown','ourRoundWins','roundsWithFk','ourFirstKills','enemyFirstKills','firstKillWins','firstKillLosses','firstKillWinPct','comebackWins','repeatedVictimRounds','roundsWithSides']),
-  maps,individual,reviewRounds:reviews,successRounds,coachingNotes:notes,coachSignals:signals,fullDiagnosis};
-}
 const memberDiagnosticPayload=function memberDiagnosticPayloadV2(d){
  const pick=(obj,keys)=>Object.fromEntries(keys.map(k=>[k,obj?.[k]??null]));
  const safeLesson=l=>l?{...pick(l,['title','meaning','why','alternatives','nextGame','selfCheck','track']),practice:{...pick(l.practice,['name','minutes']),steps:(l.practice?.steps||[]).filter(x=>typeof x==='string')}}:null;
@@ -1976,33 +1763,29 @@ const memberDiagnosticPayload=function memberDiagnosticPayloadV2(d){
 };
 
 $('share').addEventListener('click',async()=>{
- if(!latestReport||busy)return;
- const text=JSON.stringify(latestMemberReport?
-  memberDiagnosticPayload(latestMemberReport):diagnosticPayload(latestReport),null,2);
+ if(credentials()!==credentialState){checkCoachSession();return;}
+ if(!latestMemberReport||busy)return;
+ const generation=authGeneration,t=token();
+ const text=JSON.stringify(memberDiagnosticPayload(latestMemberReport),null,2);
  try{
    if(!navigator.clipboard?.writeText)throw Error('Clipboard API unavailable');
    await navigator.clipboard.writeText(text);
+   if(generation!==authGeneration||token()!==t)return;
    $('share-fallback').hidden=true;
    setStatus('認証情報を含まない診断レポートをコピーした。このチャットに貼り付けられる。');
  }catch{
+   if(generation!==authGeneration||token()!==t)return;
    const area=$('share-fallback');area.value=text;area.hidden=false;area.focus();area.select();
    setStatus('自動コピーできない環境だ。表示した診断レポートを選択してコピーしてほしい。');
  }
 });
 $('resume-backfill').addEventListener('click',async()=>{
- if(busy)return;
- const b=$('resume-backfill');b.disabled=true;
- try{
-   setStatus('既存の補完設定を確認中…');
-   const tokenValue=token();
-   if(!tokenValue)throw Error('接続が切れている。再ログインしてほしい。');
-   const r=await request('/api/kp/coach/backfill/resume',{
-     method:'POST',headers:{Authorization:'Bearer '+tokenValue}});
-   await load();
-   setStatus(r.status==='resumed'?'補完を再開した。次の定期処理から5分に最大1試合ずつ取得する。':
-     '補完は既に有効だ。データの反映を確認してほしい。');
- }catch(e){setStatus(e.message||'再開できなかった。',true);}
- finally{b.disabled=false}
+ if(busy)return;const b=$('resume-backfill');b.disabled=true;
+ try{const t=token();if(!t)throw Error('接続が必要です。');const generation=authGeneration;
+  const r=await request('/api/kp/coach/backfill/resume',{method:'POST',headers:{Authorization:'Bearer '+t}});
+  if(generation!==authGeneration||token()!==t)return;
+  await load();setStatus(r.status==='resumed'?'補完を再開しました。':'補完設定を確認しました。');
+ }catch(e){setStatus(e.message||'補完設定を確認できませんでした。',true);}finally{b.disabled=false;}
 });
 $('reload').addEventListener('click',()=>activeMember?refreshMember():load());
 $('connect-form').addEventListener('submit',async event=>{
@@ -2013,6 +1796,7 @@ $('connect-form').addEventListener('submit',async event=>{
   setStatus('認証中…');
   const r=await request('/api/kp/auth',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code})});
   $('code').value='';
+  clearCoachView();busy=false;
   sessionStorage.setItem(KEY,r.token);
   await load();
  }catch(e){setStatus(e.message||'接続に失敗した。',true)}

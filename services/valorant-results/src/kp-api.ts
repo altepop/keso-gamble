@@ -1,3 +1,5 @@
+import {resolveCoachIdentity,publicCoachIdentity} from './coach-identity.ts';
+import {projectCoachSelfReport} from './coach-self-report.ts';
 import {escalationRatingView} from './escalation-rating.ts';
 import {festivalTerms,publicFestivalResponse} from './race-festival.ts';
 import {personalVerifiedRelicStats} from './relic-economy.ts';
@@ -52,10 +54,10 @@ import {transcendentGodPullPost} from './relic-god-pull.ts';
 import { hydrateMleague, placeMlBet } from '../../../js/mleague.js';
 import { kpRewardHistory } from './kp-reward-history.ts';
 import { healthReport } from './health.ts';
-import {readCoachRoundReport,invalidateCoachRoundReport} from './coach-round-analysis.ts';
+import {invalidateCoachRoundReport} from './coach-round-analysis.ts';
 import {resumeVdkRoundBackfill} from './round-backfill.ts';
 import {enableAllMemberArchive,pauseAllMemberArchive,coachMemberCoverage} from './coach-member-archive.ts';
-import {readCoachMemberReport,readCoachComparison} from './coach-member-report.ts';
+import {readCoachMemberReport} from './coach-member-report.ts';
 import { mlActivityView, mlClosed, mlData, mlLineupTimes, mlResults, seasonStats } from './mleague.ts';
 import { racingView, raceSeed } from './racing-kp.ts';
 import { defaultRoastLevel, validRoastLevel } from './racing-crowns.ts';
@@ -418,33 +420,29 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping,deferP
   const coachOwner=mapping.accounts.some(a=>a.discordUserId===owner.user&&a.riotId.toLowerCase()==='dolly#sdgs');
   const memberHistoryOwner=mapping.accounts.some(a=>a.discordUserId===owner.user&&
     ['aquatopia#toppy','abema#ttv','dolly#sdgs'].includes(a.riotId.toLowerCase()));
-  if(request.method==='GET'&&path==='/api/kp/coach/rounds'){
-    if(await d1OptionalMode(env))return response({error:'D1節約モード中です。時間を置いてから確認してください。'},429);
-    return response({...await readCoachRoundReport(env.DB),canResume:coachOwner,
-      memberHistory:await coachMemberCoverage(env.DB),canStartMemberHistory:memberHistoryOwner});
-  }
-  if(request.method==='GET'&&path==='/api/kp/coach/comparison'){
-    if(await d1OptionalMode(env))return response({error:'D1節約モード中のため診断できない。'},429);
-    const people=(new URL(request.url).searchParams.get('people')??'神戸,VDK,石原,藤村,小林').split(',');
-    if(!people.length||people.length>5||new Set(people).size!==people.length||people.some(p=>!['神戸','VDK','石原','藤村','小林'].includes(p)))return response({error:'比較対象が不正である。'},400);
-    return response(await readCoachComparison(env.DB,people));
-  }
-  if(request.method==='GET'&&path==='/api/kp/coach/member'){
-    if(await d1OptionalMode(env))return response({error:'D1節約モード中のため診断できない。'},429);
-    const person=new URL(request.url).searchParams.get('person')??'';
-    if(!['VDK','Abema','Aquatopia','石原','藤村','神戸','小林'].includes(person))
-      return response({error:'診断対象が不正である。'},400);
-    return response(await readCoachMemberReport(env.DB,person));
-  }
-  if(request.method==='GET'&&path==='/api/kp/coach/members/status'){
-    return response({...await coachMemberCoverage(env.DB),canStartMemberHistory:memberHistoryOwner});
+  if(request.method==='GET'&&path.startsWith('/api/kp/coach/')){
+    if(path==='/api/kp/coach/rounds')return response({error:'表示方法が更新されました。ページを再読み込みしてください。'},410);
+    if(path==='/api/kp/coach/comparison'||path==='/api/kp/coach/summary')return response({error:'この表示は利用できません。'},404);
+    if(path==='/api/kp/coach/directory')return response({people:[],sharingAvailable:false});
+    if(['/api/kp/coach/me','/api/kp/coach/member','/api/kp/coach/members/status'].includes(path)){
+      const identity=await resolveCoachIdentity(env.DB,mapping,owner.user);
+      if(identity.status==='conflict')return response({identity:{status:'conflict'},error:'本人のアカウント対応を確認する必要があります。'},409);
+      if(identity.status!=='linked')return path==='/api/kp/coach/member'?response({error:'この表示は利用できません。'},404):response({identity:publicCoachIdentity(identity),memberHistory:null,report:null,canStartMemberHistory:false});
+      const person=path==='/api/kp/coach/member'?(new URL(request.url).searchParams.get('person')??''):identity.person;
+      if(person!==identity.person&&!identity.accounts.some(a=>a.profile===person))return response({error:'この表示は利用できません。'},404);
+      if(path!=='/api/kp/coach/members/status'&&await d1OptionalMode(env))return response({error:'D1節約モード中です。時間を置いてから確認してください。'},429);
+      const coverage=await coachMemberCoverage(env.DB,identity.accounts.map(a=>a.riotId));
+      if(path==='/api/kp/coach/members/status')return response({identity:publicCoachIdentity(identity),memberHistory:coverage,canStartMemberHistory:memberHistoryOwner,canResume:coachOwner});
+      const report=projectCoachSelfReport(await readCoachMemberReport(env.DB,person,coverage,identity.accounts));
+      return path==='/api/kp/coach/member'?response(report):response({identity:publicCoachIdentity(identity),report,memberHistory:coverage,canStartMemberHistory:memberHistoryOwner,canResume:coachOwner});
+    }
   }
   if(request.method==='POST'&&path==='/api/kp/coach/members/start'){
     if(!memberHistoryOwner)return response({error:'本人の紐づけ済みKP口座のみが履歴収集を開始できる。'},403);
     if(await d1OptionalMode(env))return response({error:'D1節約モード中のため開始できない。'},429);
     const result=await enableAllMemberArchive(env.DB);
     invalidateCoachRoundReport(env.DB);
-    return response({status:'enabled',...result,
+    return response({status:'enabled',enabled:result.enabled,personsCount:result.persons.length,
       note:'各登録者のHenrik履歴で確認できる試合を段階的に収集。API側にない試合は完全保証できない。'});
   }
   if(request.method==='POST'&&path==='/api/kp/coach/members/pause'){
