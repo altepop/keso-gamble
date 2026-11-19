@@ -45,6 +45,7 @@ let autoMessage='';
 let live=wallet.connected&&!embedded;
 let steamView=null;
 let hoyoView=null;
+let pveOwner=null;
 let pveMatch=null,pveBusy=false,pveError='',pvePending=null,pveGame='othello',pveLevel='normal',pveSelected=null,pvePicks=[],pveGuessDraft='';
 const PVE_PENDING_KEY='keso-server-pve-pending-v1',PVE_SESSION_PREFIX='keso-server-pve-session-v1-';
 function pveStorage(){try{return window.sessionStorage??null;}catch{return null;}}
@@ -440,6 +441,12 @@ function detailSheet(){
 }
 
 function render(){
+  // A saved CPU room is scoped to its authenticated owner, never another login.
+  if(screen==='duels'&&state.selfUserId!==pveOwner){
+   pveOwner=state.selfUserId;pveMatch=null;pvePending=null;
+   pveSelected=null;pvePicks=[];pveGuessDraft='';
+  }
+  if(screen==='duels')loadPvePending();
   const activeDuel=duelData?.matches?.find(r=>r.id===duelActiveId)||duelData?.matches?.find(r=>r.status==='active'||r.status==='pending')||duelData?.matches?.[0];
   const gomokuPreviewCell=duelGomokuPreview&&activeDuel&&duelGomokuPreview.id===activeDuel.id&&duelGomokuPreview.version===activeDuel.version&&activeDuel.turn_user===state.selfUserId?duelGomokuPreview.cell:null;
   let html = screen==='title'?titleView(state,wallet.remembered,autoState,autoMessage,wallet.connected):screen==='home'?homeView(state,bottomNav()):screen==='play'?playView(state,drafts,bottomNav(),steamView,hoyoView):screen==='directives'?directivesView(state,drafts,bottomNav(),tabsFor('directives')):screen==='stable'?screenStable():screen==='shop'?screenShop():screen==='relics'?screenRelics():screen==='market'?screenMarket():screen==='casino'?screenCasino():screen==='duels'?duelScreen({pveMarkup:pvePanel({match:pveMatch,connected:live&&wallet.connected,busy:pveBusy,error:pveError,pending:!!pvePending,selected:pveSelected,picks:pvePicks,game:pveGame,level:pveLevel,guessDraft:pveGuessDraft,savedId:!!pveSavedId()}),info:duelData,user:state.selfUserId,live,cash:state.cash,selectedId:duelActiveId,game:duelGame,stake:duelStake,target:duelTarget,busy:duelBusy,error:duelError,confirmResign:duelResignConfirm,pokerPicks:duelPokerPicks,fallbackMembers:state.members??[],opponentPickerOpen:duelOpponentPickerOpen,loading:duelLoading,gomokuPreviewCell,recentMoves:duelRecentMoves,localMoveHistory:duelMoveHistory,guessDraft:duelGuessDraft,
