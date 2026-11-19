@@ -212,7 +212,7 @@ body{color:var(--text);line-height:1.9}
 .member-selector{display:block}.person-buttons{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--space-2)}#coach-account-options{margin-top:var(--space-3)}#coach-account-options summary,[data-member-compare]>summary{min-height:44px;cursor:pointer}.member-selector button{font-size:16px;padding:var(--space-2)}.analysis-navigation{margin-top:var(--space-6)}
 p,li,label,summary,button,input,select,textarea,td,th,.small,.member-small,.coach-lead,.reader-card,.reader-guide,.reader-stat,.reader-glossary,.member-detail summary,.coach-quality,.foot{font-size:16px;line-height:1.9;color:var(--text)}
 p,li,h1,h2,h3,h4,summary{word-break:normal;overflow-wrap:break-word;line-break:strict;text-wrap:pretty}
-.coach-word{display:inline-block;white-space:nowrap;max-width:100%}
+.coach-word{display:inline-block;white-space:normal;overflow-wrap:normal;max-width:100%}
 main :is(p,li,label,summary,td,th,input,select,textarea){font-size:16px!important;line-height:1.9}
 p{max-width:65ch}pre,code{overflow-wrap:anywhere}
 header{padding:var(--space-4) 0}.lead{margin-top:var(--space-3)}
@@ -446,7 +446,7 @@ const polishCoachCopy=root=>{
     if(i%2){chunks.push(protectedParts[i]);continue;}
     for(const part of segmenter.segment(protectedParts[i])){
      const text=part.segment;
-     if(chunks.length&&/^[\p{Script=Hiragana}、。！？]+$/u.test(text))chunks[chunks.length-1]+=text;else chunks.push(text);
+     if(chunks.length&&/^[\p{Script=Hiragana}、。！？]+$/u.test(text)&&(/^[、。！？]+$/u.test(text)||[...chunks[chunks.length-1]+text].length<=10))chunks[chunks.length-1]+=text;else chunks.push(text);
     }
    }
    const fragment=document.createDocumentFragment();for(const text of chunks){const span=document.createElement('span');span.className='coach-word';span.textContent=text;fragment.appendChild(span);}node.replaceWith(fragment);
