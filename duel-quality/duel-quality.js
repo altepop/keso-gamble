@@ -774,7 +774,12 @@ function enhance(root) {
       if(!note){
         note=document.createElement('p');note.dataset.othelloPosition='1';
         note.className='duel-othello-position';
-        dashboard.after(note);
+        const details=document.createElement('details');
+        details.className='duel-othello-position-details';
+        const summary=document.createElement('summary');
+        summary.textContent='石数・局面の補足';
+        details.append(summary,note);
+        dashboard.after(details);
       }
       const legal=[...board.querySelectorAll('.duel-square.available .duel-capture-count')]
         .map(el=>Number(el.textContent)).filter(n=>Number.isInteger(n)&&n>0);
