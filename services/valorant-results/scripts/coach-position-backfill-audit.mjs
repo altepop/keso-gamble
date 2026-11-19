@@ -27,7 +27,7 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).hr
  // Observe at most one existing five-minute slot. No API calls or writes here.
  for(let i=0;i<7;i++){
   const v=await auditPositionBackfill(process.cwd());console.log('COACH_POSITION_BACKFILL_AUDIT',JSON.stringify(v));
-  if(!v.enabled||v.pending===0||v.attempted>0)break;
+  if(process.env.WAIT_FOR_POSITION_BACKFILL!=='true'||!v.enabled||v.pending===0||v.attempted>0)break;
   if(i<6)await new Promise(r=>setTimeout(r,55000));
  }
  console.log('COACH_POSITION_STORAGE_AUDIT',JSON.stringify(await auditPositions(process.cwd())));
