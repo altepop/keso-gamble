@@ -27,6 +27,7 @@ import { healthPanel } from './health-view.js?v=web-60411cdd2200ee3b';
 import { trendPanel } from './trend-view.js?v=web-60411cdd2200ee3b';
 import { mleagueScreen, mleaguePreview } from './mleague-view.js?v=web-60411cdd2200ee3b';
 import {duelScreen} from './duel-view.js?v=web-60411cdd2200ee3b';
+import {pvePanel} from './duel-pve-view.js?v=p94c';
 import { gamePicker, chinchiroView, blackjackView } from './casino-view.js?v=web-60411cdd2200ee3b';
 import {casinoFrames,createRelicRevealGate} from './casino-animation.js?v=web-60411cdd2200ee3b';
 import { playChinchiro, bjStart, bjHit, bjStand, bjDouble, cryptoDie, cryptoCard, cryptoInt } from './casino.js?v=web-60411cdd2200ee3b';
@@ -44,6 +45,18 @@ let autoMessage='';
 let live=wallet.connected&&!embedded;
 let steamView=null;
 let hoyoView=null;
+let pveMatch=null,pveBusy=false,pveError='',pvePending=null,pveGame='othello',pveLevel='normal',pveSelected=null,pvePicks=[],pveGuessDraft='';
+const PVE_PENDING_KEY='keso-server-pve-pending-v1',PVE_SESSION_PREFIX='keso-server-pve-session-v1-';
+function pveStorage(){try{return window.sessionStorage??null;}catch{return null;}}
+function pveSavedId(){try{return pveStorage()?.getItem(PVE_SESSION_PREFIX+state.selfUserId)??null;}catch{return null;}}
+function savePveSession(id){try{pveStorage()?.setItem(PVE_SESSION_PREFIX+state.selfUserId,id);}catch{}}
+function savePvePending(){try{if(pvePending)pveStorage()?.setItem(PVE_PENDING_KEY,JSON.stringify(pvePending));
+ else pveStorage()?.removeItem(PVE_PENDING_KEY);}catch{}}
+function loadPvePending(){if(pvePending||!state.selfUserId)return;
+ try{const value=JSON.parse(pveStorage()?.getItem(PVE_PENDING_KEY)??'null');
+ if(value?.owner===state.selfUserId&&Number.isFinite(value.at)&&Date.now()-value.at<86400000
+  &&/^[a-f0-9-]{36}$/i.test(value.requestId)&&typeof value.args?.action==='string')pvePending=value;
+ }catch{}}
 let duelData=null,duelError='',duelActiveId=null,duelGame='othello',duelStake=1000,duelTarget='',duelBusy=false,duelResignConfirm=false,duelLastFetch=0;
 let duelPendingAction=null,duelPokerPicks=[],duelOpponentPickerOpen=false,duelLoading=false,duelGomokuPreview=null;
 let duelGuessDraft='',duelRiskConfirm=null,duelLastGoodFetch=0,duelRetryNotBefore=0,duelRefreshFailures=0;
@@ -429,7 +442,7 @@ function detailSheet(){
 function render(){
   const activeDuel=duelData?.matches?.find(r=>r.id===duelActiveId)||duelData?.matches?.find(r=>r.status==='active'||r.status==='pending')||duelData?.matches?.[0];
   const gomokuPreviewCell=duelGomokuPreview&&activeDuel&&duelGomokuPreview.id===activeDuel.id&&duelGomokuPreview.version===activeDuel.version&&activeDuel.turn_user===state.selfUserId?duelGomokuPreview.cell:null;
-  let html = screen==='title'?titleView(state,wallet.remembered,autoState,autoMessage,wallet.connected):screen==='home'?homeView(state,bottomNav()):screen==='play'?playView(state,drafts,bottomNav(),steamView,hoyoView):screen==='directives'?directivesView(state,drafts,bottomNav(),tabsFor('directives')):screen==='stable'?screenStable():screen==='shop'?screenShop():screen==='relics'?screenRelics():screen==='market'?screenMarket():screen==='casino'?screenCasino():screen==='duels'?duelScreen({info:duelData,user:state.selfUserId,live,cash:state.cash,selectedId:duelActiveId,game:duelGame,stake:duelStake,target:duelTarget,busy:duelBusy,error:duelError,confirmResign:duelResignConfirm,pokerPicks:duelPokerPicks,fallbackMembers:state.members??[],opponentPickerOpen:duelOpponentPickerOpen,loading:duelLoading,gomokuPreviewCell,recentMoves:duelRecentMoves,localMoveHistory:duelMoveHistory,guessDraft:duelGuessDraft,
+  let html = screen==='title'?titleView(state,wallet.remembered,autoState,autoMessage,wallet.connected):screen==='home'?homeView(state,bottomNav()):screen==='play'?playView(state,drafts,bottomNav(),steamView,hoyoView):screen==='directives'?directivesView(state,drafts,bottomNav(),tabsFor('directives')):screen==='stable'?screenStable():screen==='shop'?screenShop():screen==='relics'?screenRelics():screen==='market'?screenMarket():screen==='casino'?screenCasino():screen==='duels'?duelScreen({pveMarkup:pvePanel({match:pveMatch,connected:live&&wallet.connected,busy:pveBusy,error:pveError,pending:!!pvePending,selected:pveSelected,picks:pvePicks,game:pveGame,level:pveLevel,guessDraft:pveGuessDraft,savedId:!!pveSavedId()}),info:duelData,user:state.selfUserId,live,cash:state.cash,selectedId:duelActiveId,game:duelGame,stake:duelStake,target:duelTarget,busy:duelBusy,error:duelError,confirmResign:duelResignConfirm,pokerPicks:duelPokerPicks,fallbackMembers:state.members??[],opponentPickerOpen:duelOpponentPickerOpen,loading:duelLoading,gomokuPreviewCell,recentMoves:duelRecentMoves,localMoveHistory:duelMoveHistory,guessDraft:duelGuessDraft,
 lastSynced:duelLastGoodFetch,pendingRetry:!!duelPendingAction,historyHasMore:duelHasMore,
  riskConfirm:duelRiskConfirm===`create:${duelGame}:${duelTarget}:${duelStake}`?'create':activeDuel&&duelRiskConfirm===`accept:${activeDuel.id}:${activeDuel.version}:${activeDuel.stake}`?'accept':'',nav:bottomNav()}):screen==='mleague'?mleagueScreen({state,live,draft:{...mlDraft,amount:drafts['ml-amount']},tabs:subTabs(),nav:bottomNav()}):screen==='race'?screenRace():screenAssets();
   // 効果音 switch for the casino and racing screens (off unless the player turns it on).
