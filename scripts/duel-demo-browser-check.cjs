@@ -21,6 +21,18 @@ const a='[data-demo-view=a]',b='[data-demo-view=b]';
  await page.goto(url,{waitUntil:'networkidle'});
  assert.match(await page.title(),/決闘デモ/);
  assert.equal(await page.locator('#duel-game option').count(),6);
+ // Simulate only a visible error label in the mock Activity. No API or wallet call.
+ await page.evaluate(()=>{
+   const warn=document.createElement('div');
+   warn.className='duel-error';warn.setAttribute('role','alert');
+   warn.dataset.duelTestError='1';warn.textContent='テスト用の通信エラー';
+   document.querySelector('#demo-app .screen').append(warn);
+ });
+ await page.locator('[data-duel-status-help-kind="error"]').waitFor();
+ assert.match(await page.locator('[data-duel-status-help]').innerText(),/操作結果が未確認なら連続送信せず/);
+ await page.evaluate(()=>document.querySelector('[data-duel-test-error]')?.remove());
+ await page.locator('[data-duel-status-help-kind="error"]').waitFor({state:'detached'});
+ assert.equal(await page.locator('#duel-game option').count(),6,'status help never changes duel setup');
  const screenshot=async(name)=>{
   if(!shotDir)return;
   mkdirSync(shotDir,{recursive:true});

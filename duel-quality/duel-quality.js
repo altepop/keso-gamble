@@ -1,3 +1,4 @@
+import {describeDuelIssue} from './duel-status-help.js?v=p3d';
 import {DUEL_POKER_HAND_ORDER,DUEL_BLUFF_BID_RULES,summarizeVisibleOthelloCorners} from './duel-insights.js?v=p3c';
 import {getDuelBeginnerRules} from './duel-beginner.js?v=p3a';
 // Progressive visual enhancement only. Never sends actions, determines winners or reads KP.
@@ -667,6 +668,40 @@ function enhance(root) {
     }
     details.append(list);anchor.after(details);
   }
+
+  function scanStatusHelp(){
+    const screen=root.querySelector('.screen');
+    if(!screen)return;
+    const sync=screen.querySelector('.duel-sync')?.textContent||'';
+    const pendingRetry=!!screen.querySelector('[data-duel-retry]');
+    const error=!!screen.querySelector('.duel-error[role="alert"]');
+    const opponentNote=screen.querySelector('.duel-opponent-help[role="status"]')?.textContent||'';
+    const loading=sync.includes('更新中')||(!sync.includes('最終更新')&&sync.includes('確認中'))||opponentNote.includes('確認しています');
+    const noOpponent=!!opponentNote&&!loading;
+    const info=describeDuelIssue({retry:pendingRetry,error,loading,hasSynced:sync.includes('最終更新'),noOpponent});
+    let notice=screen.querySelector(':scope > [data-duel-status-help]');
+    if(!info){notice?.remove();return;}
+    const anchor=screen.querySelector(':scope > .duel-sync')||
+      screen.querySelector(':scope > .duel-current')||
+      screen.querySelector(':scope > .duel-intro')||
+      screen.querySelector(':scope > .duel-new')||
+      screen.querySelector(':scope > .topbar');
+    if(!anchor)return;
+    if(!notice){
+      notice=document.createElement('section');
+      notice.dataset.duelStatusHelp='1';notice.className='duel-status-help';
+      notice.setAttribute('role','status');
+      notice.setAttribute('aria-live','polite');
+      anchor.after(notice);
+    }
+    const key=info.kind+'|'+info.title+'|'+info.message;
+    if(notice.dataset.duelStatusHelpKey===key)return;
+    notice.dataset.duelStatusHelpKey=key;
+    notice.dataset.duelStatusHelpKind=info.kind;
+    const title=document.createElement('strong');title.textContent=info.title;
+    const detail=document.createElement('p');detail.textContent=info.message;
+    notice.replaceChildren(title,detail);
+  }
   function scan() {
     scanBeginnerRules();
     scanGameInsights();
@@ -676,6 +711,7 @@ function enhance(root) {
     scanRematchGuide();
     scanInviteReadiness();
     scanDuelConnection();
+    scanStatusHelp();
     scanGameHint();
     scanConnect4();
     scanBluffDice();
