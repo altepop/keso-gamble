@@ -581,3 +581,35 @@
 .duel-rematch-guide p{font-size:12px;color:#d2e4ef;margin:0;line-height:1.6}
 @media(max-width:350px){.duel-rematch-progress li{font-size:10px}.duel-rematch-guide{padding:8px}}
 @media(prefers-reduced-motion:reduce){.duel-rematch-guide,.duel-rematch-guide *{animation:none!important;transition:none!important}}
+
+
+/* Shared six-game action cues: no overlay, optimistic pieces or new controls. */
+.duel-action-hint{
+ margin:8px 0 12px;padding:10px 11px;border:1px solid #4c8f83;
+ border-left:4px solid #a7eed3;border-radius:9px;background:#163b36;
+ color:#e5fff0;font-size:12px;line-height:1.65;font-weight:690;
+}
+.duel-arena [data-duel-cell]:not(:disabled),
+.duel-arena [data-duel-mini]:not(:disabled),
+.duel-arena .duel-poker-hand-card:not(:disabled){
+ touch-action:manipulation;cursor:pointer;
+}
+.duel-arena [data-duel-mini]:not(:disabled),
+.duel-arena .duel-poker-hand-card:not(:disabled){
+ min-height:44px;
+}
+.duel-arena [data-duel-mini]:not(:disabled):active,
+.duel-arena .duel-poker-hand-card:not(:disabled):active{
+ filter:brightness(1.15);transform:scale(.98);
+}
+.duel-arena [data-duel-mini]:focus-visible,
+.duel-arena .duel-poker-hand-card:focus-visible,
+.duel-arena .duel-connect4-head button:focus-visible{
+ outline:3px solid #ffef99;outline-offset:2px;
+}
+@media(max-width:350px){.duel-action-hint{font-size:11px;padding:9px 8px}}
+@media(prefers-reduced-motion:reduce){
+ .duel-action-hint{animation:none!important;transition:none!important}
+ .duel-arena [data-duel-mini]:active,
+ .duel-arena .duel-poker-hand-card:active{transform:none!important;transition:none!important}
+}
