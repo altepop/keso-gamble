@@ -315,7 +315,8 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
    await page.setViewportSize({width,height:812});
    for(const view of ['overview','guns','improve','time','team','metrics','strategy']){
     await page.locator('[data-coach-view="'+view+'"]').click();
-    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'performance dashboard at '+width+' / '+view);
+    const overflow=await page.evaluate(()=>({viewport:innerWidth,width:document.documentElement.scrollWidth,nodes:[...document.querySelectorAll('main *')].filter(n=>n.getBoundingClientRect().right>innerWidth&&n.getBoundingClientRect().height&&getComputedStyle(n).visibility!=='hidden').slice(0,12).map(n=>({tag:n.tagName,cls:n.className,text:n.textContent.slice(0,90),right:n.getBoundingClientRect().right,width:n.getBoundingClientRect().width}))}));
+    assert.ok(overflow.width<=width,'performance dashboard at '+width+' / '+view+' '+JSON.stringify(overflow));
     assert.ok(await page.locator('#coach-view-'+view+' p').evaluateAll(nodes=>nodes.filter(n=>n.offsetHeight).every(n=>parseFloat(getComputedStyle(n).fontSize)>=16)),'all visible body paragraphs keep 16px at '+width+' / '+view);
     assert.equal(await page.locator('#coach-view-'+view+' [data-reader-guide]').isVisible(),true,'every tab teaches how to read it');
     assert.ok(await page.locator('#coach-view-'+view+' [data-reader-glossary] [data-reader-term]').count()>0);
