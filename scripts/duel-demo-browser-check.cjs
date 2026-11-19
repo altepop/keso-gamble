@@ -162,7 +162,8 @@ const a='[data-demo-view=a]',b='[data-demo-view=b]';
  // Othello — move, flip, then resign (the full 60-turn finish is covered by the D1 service integration suite).
  await chooseMode('othello');
  await assertOthelloGeometry(page,'reduced motion starting board');
- await page.locator('[data-othello-position]').waitFor();
+ await page.locator('.duel-othello-position-details > summary').click();
+  await page.locator('[data-othello-position]').waitFor();
  assert.match(await page.locator('[data-othello-position]').innerText(),/石数は同数.*空き60マス/);
  assert.match(await page.locator('[data-othello-position]').innerText(),/一度に最大1枚返せる/);
  assert.equal(await page.locator('.duel-square.available').count(),4);
