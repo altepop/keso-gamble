@@ -310,7 +310,10 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   await page.locator('[data-coach-view="guns"]').click();
   const benchmarkRequests=requests.length;
   const ref=page.locator('[data-benchmark-reference]');
+  await page.setViewportSize({width:320,height:812});
+  assert.ok((await ref.boundingBox()).height>=44);
   await ref.selectOption('pro');
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'pro selector also fits 320px');
   assert.equal(await page.locator('[data-benchmark-metric="hs"]').innerText().then(t=>t.includes('比較値なし')),true);
   await page.locator('[data-benchmark-reference]').selectOption('gold');
   assert.match(await page.locator('[data-benchmark-metric="acs"]').innerText(),/200.00〜239.00/);
