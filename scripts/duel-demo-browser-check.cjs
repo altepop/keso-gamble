@@ -89,6 +89,12 @@ const a='[data-demo-view=a]',b='[data-demo-view=b]';
    assert.equal(await page.locator('[data-duel-act=create]').isDisabled(),false,'passive offline guide cannot replace submit logic');
    await page.evaluate(()=>dispatchEvent(new Event('online')));
    assert.match(await page.locator('[data-duel-connection]').innerText(),/同期はまだ確認していない/);
+   // Browser offline emulation rather than a synthetic event.
+   await ctx.setOffline(true);
+   await page.locator('[data-duel-connection-type="offline"]').waitFor();
+   assert.match(await page.locator('[data-duel-connection]').innerText(),/ブラウザがオフライン/);
+   await ctx.setOffline(false);
+   await page.locator('[data-duel-connection-type="offline"]').waitFor({state:'detached'});
   }
   assert.match(await page.locator('.duel-journey-title').innerText(),/相手を選んで申し込む/);
   await page.locator('[data-duel-act=create]').click();
@@ -201,8 +207,13 @@ const a='[data-demo-view=a]',b='[data-demo-view=b]';
   assert.match(await page.locator('.duel-result').innerText(),/敗北/);
   assert.match(await page.locator('#demo-app .badge').first().innerText(),/19,000 KP/);
  }
+ // Emulate a low-end CPU during a complete first duel entry and render-burst check.
+ // This emulation is not evidence of performance on a physical phone.
+ const slowCPU=engine==='chromium'?await ctx.newCDPSession(page):null;
+ if(slowCPU)await slowCPU.send('Emulation.setCPUThrottlingRate',{rate:4});
  // Othello — move, flip, then resign (the full 60-turn finish is covered by the D1 service integration suite).
  await chooseMode('othello');
+ if(slowCPU){await slowCPU.send('Emulation.setCPUThrottlingRate',{rate:1});await slowCPU.detach();}
  await assertOthelloGeometry(page,'reduced motion starting board');
  await page.locator('.duel-othello-position-details > summary').click();
   await page.locator('[data-othello-position]').waitFor();
