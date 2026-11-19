@@ -1,3 +1,4 @@
+import {captureCompetitivePositions} from './coach-position-storage.ts';
 import type {Match} from './results.ts';
 import {recordCompetitiveRoster} from './match-rosters.ts';
 import {recordCompetitiveRoundEvents} from './round-events.ts';
@@ -201,6 +202,7 @@ export async function fetchNextCoachMemberMatch(db:D1Database,
   }
   await recordCompetitiveRoster(db,detail,now);
   await recordCompetitiveRoundEvents(db,detail,now);
+  await captureCompetitivePositions(db,detail,'detail',now);
   const saved=await db.prepare(`SELECT e.rounds_json,e.kills_json,
    (${ROSTER_SCHEMA_SQL}) AS roster_schema,(${ASSIST_SCHEMA_SQL}) AS assist_schema,(${CONTEXT_SCHEMA_SQL}) AS context_schema
    FROM valorant_match_round_events e LEFT JOIN valorant_match_rosters r ON r.match_id=e.match_id
