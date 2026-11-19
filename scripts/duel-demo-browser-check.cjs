@@ -33,7 +33,7 @@ const a='[data-demo-view=a]',b='[data-demo-view=b]';
   await formGuide.waitFor();
   assert.equal(await formGuide.getAttribute('data-duel-beginner'),mode,'setup rules follow selected mode');
   await formGuide.locator('summary').click();
-  assert.match(await formGuide.innerText(),/勝利条件[\\s\\S]*最初にすること[\\s\\S]*覚えておくこと/);
+  assert.match(await formGuide.innerText(),/勝利条件[\s\S]*最初にすること[\s\S]*覚えておくこと/);
   assert.equal(await formGuide.evaluate(el=>el.open),true,'native disclosure opens on mobile');
   assert.equal(await page.locator('#demo-app .duel-opponent-toggle').count(),1,'opponent picker exists');
   await page.locator('[data-duel-invite-guide]').waitFor();
