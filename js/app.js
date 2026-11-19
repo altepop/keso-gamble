@@ -756,8 +756,91 @@ for(const eventName of ['input','change'])addEventListener(eventName,e=>{
   if(caret[0]!==null&&caret[1]!==null)field?.setSelectionRange(caret[0],caret[1]);
  }
 });
+// PvE sends exactly one idempotent authenticated server action per deliberate tap.
+// Until it is confirmed, do not issue a new move or assume a local CPU result.
+async function handlePveClick(t){
+ if(screen!=='duels'||!t.closest('.duel-pve-panel'))return false;
+ if(t.dataset.pveCard!==undefined){
+  const i=Number(t.dataset.pveCard);
+  if(!pveMatch||pveMatch.game!=='poker'||pveBusy||pvePending||!Number.isInteger(i)||i<0||i>4)return true;
+  if(pvePicks.includes(i))pvePicks=pvePicks.filter(n=>n!==i);
+  else if(pvePicks.length<3)pvePicks=[...pvePicks,i];
+  else{pveError='交換するカードは3枚まで選べます。';}
+  render();return true;
+ }
+ if(t.dataset.pveCancel!==undefined){pveSelected=null;render();return true;}
+ if(t.dataset.pveCell!==undefined&&pveMatch?.game==='gomoku'){
+  const idx=Number(t.dataset.pveCell);
+  if(!pveBusy&&!pvePending&&Number.isInteger(idx)&&idx>=0&&idx<225){
+   pveSelected=idx;render();
+  }
+  return true;
+ }
+ const refresh=t.dataset.pveRefresh!==undefined||t.dataset.pveResume!==undefined;
+ if(refresh){
+  if(!live||pveBusy){pveError='接続状態を確認してください。';render();return true;}
+  const id=pveMatch?.id||pveSavedId();
+  if(!id){pveError='再開するCPU戦がありません。';render();return true;}
+  pveBusy=true;pveError='';render();
+  try{const result=await wallet.pveSession(id);pveMatch=result.match;pveSelected=null;pvePicks=[];pveGuessDraft='';}
+  catch(error){pveError=error.message||'CPU戦を再取得できませんでした。';}
+  finally{pveBusy=false;render();}
+  return true;
+ }
+ const retry=t.dataset.pveRetry!==undefined;
+ const start=t.dataset.pveSubmit==='start';
+ const kind=t.dataset.pveSubmit;
+ const isCell=t.dataset.pveCell!==undefined||t.dataset.pveConfirm!==undefined;
+ const isCol=t.dataset.pveCol!==undefined;
+ if(!retry&&!start&&!kind&&!isCell&&!isCol)return false;
+ if(pveBusy||!live||!wallet.connected){pveError='本番KP口座への接続を確認してください。';render();return true;}
+ if(pvePending&&!retry){pveError='未確認操作があります。同じ操作IDで結果を確認してください。';render();return true;}
+ let args=pvePending?.args;
+ if(!retry){
+  if(start)args={action:'start',game:pveGame,level:pveLevel};
+  else {
+   if(!pveMatch||pveMatch.turn!=='human'){pveError='現在の手番を確認してください。';render();return true;}
+   let move;
+   if(isCell){
+    const cell=Number(t.dataset.pveConfirm??t.dataset.pveCell);
+    if(pveMatch.game==='gomoku'&&(t.dataset.pveConfirm===undefined||pveSelected!==cell)){
+     pveError='マスを選択した後に着手を確定してください。';render();return true;
+    }
+    move={cell};
+   }else if(isCol)move={cell:Number(t.dataset.pveCol)};
+   else if(kind==='hitblow'){
+    const guess=document.getElementById('pve-guess')?.value??pveGuessDraft;
+    if(!/^[0-9]{4}$/.test(guess)||new Set(guess).size!==4){
+     pveError='異なる数字4桁を入力してください。';render();return true;
+    }
+    move={guess};
+   }else if(kind==='bid')move={choice:'bid',count:Number(document.getElementById('pve-bid-count')?.value),face:Number(document.getElementById('pve-bid-face')?.value)};
+   else if(kind==='challenge')move={choice:'challenge'};
+   else if(kind==='poker')move={cells:[...pvePicks]};
+   else return false;
+   args={action:'move',session:pveMatch.id,version:pveMatch.version,...move};
+  }
+  pvePending={owner:state.selfUserId,requestId:crypto.randomUUID(),args,at:Date.now()};
+  savePvePending();
+ }
+ if(!pvePending||pvePending.owner!==state.selfUserId){pveError='操作の所有者を確認できません。';render();return true;}
+ pveBusy=true;pveError='';render();
+ try{
+  const outcome=await wallet.pveAction({...args,requestId:pvePending.requestId});
+  if(!outcome.match||typeof outcome.match.id!=='string')throw Error('確定結果を確認できませんでした。');
+  pveMatch=outcome.match;
+  savePveSession(pveMatch.id);
+  pvePending=null;savePvePending();
+  pvePicks=[];pveSelected=null;pveGuessDraft='';
+ }catch(error){
+  // Unknown delivery outcome must remain pending; never send a fresh ID.
+  pveError='操作結果が未確認です。前回と同じ操作IDで確認してください。 '+(error.message||'');
+ }finally{pveBusy=false;render();}
+ return true;
+}
 addEventListener('click',async e=>{
   const t=e.target.closest?.('button,[data-open]'); if(!t) return;
+  if(await handlePveClick(t))return;
   if(t.dataset.duelTargetToggle){duelOpponentPickerOpen=!duelOpponentPickerOpen;render();return;}
   if(t.dataset.duelTargetOption){duelTarget=t.dataset.duelTargetOption;duelRiskConfirm=null;duelOpponentPickerOpen=false;render();return;}
   if(t.dataset.duelRematch){
