@@ -810,7 +810,7 @@ function enhance(root) {
       if(!lastNote){
         lastNote=document.createElement('p');lastNote.dataset.othelloLastNote='1';
         lastNote.className='duel-othello-last-note';lastNote.setAttribute('aria-live','polite');
-        (arena?.querySelector('[data-othello-position]')||dashboard||board).after(lastNote);
+        (arena?.querySelector('.duel-othello-position-details')||dashboard||board).after(lastNote);
       }
       const label='直前に確認した確定手：'+(Math.floor(last.index/8)+1)+'行'+(last.index%8+1)+'列（'+last.flips+'枚返した）';
       if(lastNote.textContent!==label)lastNote.textContent=label;
