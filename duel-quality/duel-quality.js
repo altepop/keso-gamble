@@ -1,3 +1,4 @@
+import {summarizeDuelRenderSamples} from './duel-latency-samples.js?v=p5a';
 import {describeDuelIssue} from './duel-status-help.js?v=p3d';
 import {DUEL_POKER_HAND_ORDER,DUEL_BLUFF_BID_RULES,summarizeVisibleOthelloCorners} from './duel-insights.js?v=p3c';
 import {getDuelBeginnerRules} from './duel-beginner.js?v=p3a';
@@ -736,9 +737,18 @@ function enhance(root) {
       lastOthello={identity,signature,index:changes.placed,flips:changes.flipped.length};
       motion = {changes, identity, signature, started: now};
       // Local tap-to-confirmed-render metric is diagnostic only; not a network benchmark.
-      if (root.__duelTapAt !== undefined) {
-        root.__duelTapToConfirmedMs = Math.round(now - root.__duelTapAt);
+      if (root.__duelTapAt !== undefined && root.__duelTapIdentity === identity) {
+        const duration = Math.round(now - root.__duelTapAt);
         delete root.__duelTapAt;
+        // Local pointer-to-confirmed-board display only; never a server/SSE benchmark.
+        if(duration >= 0 && duration <= 20000 && !document.hidden){
+          root.__duelTapToConfirmedMs = duration;
+          const samples = Array.isArray(root.__duelRenderSamples) ? root.__duelRenderSamples : [];
+          samples.push({game:'othello',ms:duration,confirmed:true});
+          if(samples.length>100)samples.splice(0,samples.length-100);
+          root.__duelRenderSamples = samples;
+          root.__duelRenderSummary = summarizeDuelRenderSamples(samples);
+        }
       }
     }
     // Scores and last-observed moves are presentation-only, never decisions.
@@ -854,13 +864,15 @@ function enhance(root) {
     const square = event.target.closest?.('.duel-othello .duel-square.available:not(:disabled)');
     if (square) {
       root.__duelTapAt = performance.now();
+      // Match identity prevents an unrelated game update from consuming this tap.
+      root.__duelTapIdentity = (root.querySelector('.duel-arena .duel-tag')?.textContent || '') + '|' + (root.querySelector('.duel-arena .duel-players')?.textContent || '');
       square.classList.add('duel-tap-feedback');
     }
   }, {passive: true});
   for (const event of ['pointerup', 'pointercancel']) {
     root.addEventListener(event, () => root.querySelectorAll('.duel-tap-feedback').forEach(x => x.classList.remove('duel-tap-feedback')), {passive: true});
   }
-  addEventListener('visibilitychange', () => { if (document.hidden) { previous = null; c4Previous=null; c4Motion=null; bluffPrevious=null; bluffMotion=null; pokerPrevious=null; pokerMotion=null; hbPrevious=null; hbMotion=null; gomokuPrevious=null; gomokuLast=null; gomokuBoard=null; delete root.__duelTapAt; } });
+  addEventListener('visibilitychange', () => { if (document.hidden) { previous = null; c4Previous=null; c4Motion=null; bluffPrevious=null; bluffMotion=null; pokerPrevious=null; pokerMotion=null; hbPrevious=null; hbMotion=null; gomokuPrevious=null; gomokuLast=null; gomokuBoard=null; delete root.__duelTapAt; delete root.__duelTapIdentity; } });
   scan();
 }
 if (typeof document !== 'undefined' && typeof MutationObserver !== 'undefined') {
