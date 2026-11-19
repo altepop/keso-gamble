@@ -713,3 +713,24 @@
 @media(max-width:480px){
  .duel-arena:has(.duel-connect4-board) .duel-action-hint{margin:4px 0 6px;padding:5px 8px;border-left-width:2px;font-size:11px;line-height:1.4;font-weight:600}
 }
+
+/* Phase 8: keep essential duel controls legible on small devices.
+   No server state, hidden cards, or pending-action warnings are altered. */
+@media (max-width: 390px) {
+ .duel-arena, .duel-current, .duel-journey { min-width:0; }
+ .duel-arena .duel-turn,
+ .duel-arena .duel-state,
+ .duel-connection,
+ .duel-status-help,
+ .duel-error[role="alert"] { overflow-wrap:break-word; }
+ .duel-arena button:not(.duel-square):not(.duel-connect4-space),
+ .duel-rematch button,
+ .duel-new [data-duel-act="create"] { min-height:44px; }
+ .duel-rematch .duel-rematch-progress { min-width:0; }
+}
+/* When the user requests less animation, eliminate optional decorative motion
+   without affecting visibility, turn state, or confirmation actions. */
+@media (prefers-reduced-motion: reduce) {
+ .duel-journey, .duel-journey *,
+ .duel-rematch-guide, .duel-rematch-guide * { animation:none !important; transition:none !important; }
+}
