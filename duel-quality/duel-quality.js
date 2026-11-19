@@ -85,6 +85,27 @@ export function classifyGomokuTransition(previous,next){
  }
  return index<0?null:{index,color:next[index],row:Math.floor(index/15)+1,column:index%15+1};
 }
+
+// A shared, read-only journey guide. The only inputs are already-visible,
+// server-backed screen states; no guessing turn ownership or optimistic results.
+export function describeDuelJourney({stage='setup',outgoing=false,myTurn=false,retry=false,refreshing=false,canRematch=false}={}){
+ const phases=['招待','対戦','結果・再戦'];
+ const step=stage==='setup'||stage==='pending'?0:stage==='active'?1:2;
+ let title='相手を選んで申し込む',detail='ゲーム・相手・賭けKPを確認して招待する。';
+ if(stage==='pending'){
+   title=outgoing?'相手の承諾待ち':'対戦の招待が届いた';
+   detail=outgoing?'承諾されると対戦が始まる。':'相手と賭けKPを確認して承諾する。';
+ }else if(stage==='active'){
+   title=myTurn?'あなたの番':'相手の番';
+   detail=myTurn?'盤面の操作で着手する。確定までは結果に反映されない。':'相手の確定した着手が届くのを待つ。';
+ }else if(stage==='finished'){
+   title='対戦終了・結果確定';
+   detail=canRematch?'結果を確認し、同じ相手・金額で再戦を準備できる。':'結果を確認し、必要なら別の対戦を申し込める。';
+ }
+ if(retry){title='前回の操作結果が未確認';detail='同じ操作IDで結果を確認する。新しい操作を送らない。';}
+ else if(refreshing){detail='最新情報を更新中。盤面と結果はサーバー確定表示を優先する。';}
+ return {step,phases,title,detail,stage};
+}
 function enhance(root) {
   let previous = null, motion = null, lastBoard = null;
   let c4Previous=null,c4Motion=null,lastC4Board=null;
@@ -277,7 +298,46 @@ function enhance(root) {
       newest.classList.add('duel-gomoku-confirmed-motion');
     }
   }
+
+  // This enhancement never sends moves, changes selection, or modifies wallet state.
+  function scanDuelJourney(){
+    const current=root.querySelector('.duel-current');
+    const intro=root.querySelector('.duel-intro');
+    const form=root.querySelector('.duel-new');
+    const anchor=current||intro||form;
+    if(!anchor)return;
+    const arena=current?.querySelector('.duel-arena');
+    const finished=!!arena?.querySelector('.duel-result')||arena?.querySelector('.duel-state')?.textContent?.trim()==='終了';
+    const stage=arena?(finished?'finished':'active'):current?'pending':'setup';
+    const outgoing=!!current?.querySelector('h2')?.textContent?.includes('相手の返答待ち');
+    const turnText=arena?.querySelector('.duel-turn')?.textContent||'';
+    const myTurn=turnText.includes('あなたの番');
+    const retry=!!root.querySelector('[data-duel-retry]');
+    const refreshing=!!root.querySelector('.duel-sync')?.textContent?.includes('更新中');
+    const canRematch=!!current?.querySelector('[data-duel-rematch]');
+    const state=describeDuelJourney({stage,outgoing,myTurn,retry,refreshing,canRematch});
+    const signature=JSON.stringify(state);
+    const screen=anchor.closest('.screen');
+    if(!screen)return;
+    let rail=screen.querySelector(':scope > [data-duel-journey]');
+    if(!rail){
+      rail=document.createElement('section');
+      rail.className='duel-journey';
+      rail.dataset.duelJourney='1';
+      rail.setAttribute('aria-label','決闘の進行');
+      anchor.before(rail);
+    }
+    if(rail.dataset.duelJourneySignature===signature)return;
+    rail.dataset.duelJourneySignature=signature;
+    // Fixed Japanese copy only; no names, private cards, guessed moves or user HTML.
+    rail.innerHTML='<ol class="duel-journey-steps" aria-label="進行段階">'+state.phases.map((name,index)=>
+      '<li class="duel-journey-step '+(index===state.step?'is-current':index<state.step?'is-done':'is-next')+'"'+
+      (index===state.step?' aria-current="step"':'')+'><span aria-hidden="true">'+(index+1)+'</span>'+name+'</li>').join('')+
+      '</ol><p class="duel-journey-title" role="status" aria-live="polite">'+state.title+
+      '</p><p class="duel-journey-help">'+state.detail+'</p>';
+  }
   function scan() {
+    scanDuelJourney();
     scanConnect4();
     scanBluffDice();
     scanPoker();

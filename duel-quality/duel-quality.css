@@ -451,3 +451,49 @@
 @keyframes duel-gomoku-confirmed{0%{filter:brightness(1.55);box-shadow:0 0 0 7px rgba(255,235,124,.75)}65%{filter:brightness(1.18);box-shadow:0 0 0 3px rgba(255,235,124,.45)}100%{filter:none;box-shadow:inset 0 0 0 1px #182f26,0 0 0 2px #ffbb42}}
 @media(max-width:355px){.duel-gomoku-zoom{gap:5px}.duel-gomoku-zoom button{min-width:43px;padding:6px}.duel-gomoku-zoom button[data-gomoku-zoom-action="center"]{font-size:11px}}
 @media(prefers-reduced-motion:reduce){.duel-gomoku .duel-square.duel-gomoku-confirmed-motion{animation:none!important;transition:none!important}}
+
+
+/* Phase 2: the same quiet invite → play → rematch guide in all six games.
+   Never captures pointer events or obstructs the original action controls. */
+.duel-journey{
+  margin:10px 0 14px;padding:12px 13px;border:1px solid #406078;
+  border-radius:14px;background:linear-gradient(125deg,#142c42,#0d2334);
+  color:#eef7ff;min-width:0;
+}
+.duel-journey-steps{
+  display:grid;grid-template-columns:repeat(3,minmax(0,1fr));
+  padding:0;margin:0 0 12px;list-style:none;gap:5px;
+}
+.duel-journey-step{
+  display:flex;align-items:center;justify-content:center;gap:5px;
+  min-width:0;border-radius:9px;padding:7px 2px;
+  font-size:clamp(10px,2.8vw,12px);font-weight:750;
+  color:#92aabe;background:#15283a;white-space:nowrap;
+}
+.duel-journey-step>span{
+  width:19px;height:19px;display:inline-grid;place-items:center;
+  border-radius:50%;background:#3c556b;color:#fff;flex:0 0 auto;
+  font-size:11px;font-variant-numeric:tabular-nums;
+}
+.duel-journey-step.is-done{color:#bde8d7;background:#1d493d}
+.duel-journey-step.is-done>span{background:#338366}
+.duel-journey-step.is-current{
+  color:#112a36;background:#aee9fb;
+  box-shadow:inset 0 0 0 1px #d8f8ff;
+}
+.duel-journey-step.is-current>span{background:#15374c;color:#fff}
+.duel-journey-title{
+  margin:0 0 3px;font-weight:850;font-size:clamp(14px,4vw,18px);
+  letter-spacing:.015em;line-height:1.35;
+}
+.duel-journey-help{
+  margin:0;color:#c7dae6;font-size:12px;line-height:1.6;
+}
+@media (max-width:350px){
+ .duel-journey{padding:10px 8px}
+ .duel-journey-step{gap:3px}
+ .duel-journey-step>span{width:17px;height:17px;font-size:10px}
+}
+@media (prefers-reduced-motion:reduce){
+ .duel-journey,.duel-journey *{animation:none!important;transition:none!important}
+}
