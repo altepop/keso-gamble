@@ -653,3 +653,16 @@
 .duel-finished-review p{padding:2px 12px 11px;margin:0;color:#c8e5d9;font-size:11px}
 @media(max-width:350px){.duel-history-filter button{font-size:11px;padding:7px}.duel-finished-review summary{font-size:12px}}
 @media(prefers-reduced-motion:reduce){.duel-history-filter *, .duel-finished-review,.duel-finished-review *{animation:none!important;transition:none!important}}
+
+
+/* Phase 3: optional factual deep-dive. No cards, dice or secrets rendered. */
+.duel-insights{margin:10px 0 13px;border:1px solid #776a9a;border-radius:12px;
+ background:#25263f;color:#f4f1ff;overflow:hidden}
+.duel-insights summary{min-height:44px;line-height:1.5;font-size:13px;font-weight:770;
+ cursor:pointer;touch-action:manipulation;padding:12px 13px}
+.duel-insights summary:focus-visible{outline:3px solid #ffeba6;outline-offset:-3px}
+.duel-insights[open] summary{background:#353452;border-bottom:1px solid #63578c}
+.duel-insights ul{margin:0;padding:10px 15px 12px 31px;display:grid;gap:8px}
+.duel-insights li{font-size:12px;line-height:1.65;color:#e2dff3;overflow-wrap:anywhere}
+@media(max-width:350px){.duel-insights summary{font-size:12px;padding:10px}.duel-insights li{font-size:11px}}
+@media(prefers-reduced-motion:reduce){.duel-insights,.duel-insights *{animation:none!important;transition:none!important}}

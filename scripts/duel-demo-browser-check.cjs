@@ -81,6 +81,17 @@ const a='[data-demo-view=a]',b='[data-demo-view=b]';
   assert.equal(await page.locator('.duel-current').evaluate(el=>el.compareDocumentPosition(document.querySelector('.duel-history'))&Node.DOCUMENT_POSITION_FOLLOWING?true:false),true,'active board precedes history in DOM');
   assert.match(await page.locator('.duel-state').innerText(),/対局中|対戦中/);
   assert.ok((await page.locator('.duel-arena').innerText()).includes(modeName[mode]),'arena title '+mode);
+  if(['othello','poker','bluffdice'].includes(mode)){
+    const deep=page.locator('.duel-arena > [data-duel-insights]');
+    await deep.waitFor();
+    assert.equal(await deep.getAttribute('data-duel-insights'),mode,'game-specific confirmed/public guide');
+    await deep.locator('summary').click();
+    const content=await deep.innerText();
+    if(mode==='othello')assert.match(content,/四隅：黒0か所／白0か所／空き4か所/);
+    if(mode==='poker')assert.match(content,/ストレートフラッシュ ＞ フォーカード ＞ フルハウス/);
+    if(mode==='bluffdice')assert.match(content,/ワイルドではなく/);
+    assert.equal(await deep.evaluate(el=>el.open),true,'mobile native detail opens');
+  }
   await page.locator(a).click();
   const hasTurn=await page.locator('.duel-turn.my-turn').count()===1;
   if(!hasTurn)await page.locator(b).click();

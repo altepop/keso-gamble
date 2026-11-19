@@ -1,3 +1,4 @@
+import {DUEL_POKER_HAND_ORDER,DUEL_BLUFF_BID_RULES,summarizeVisibleOthelloCorners} from './duel-insights.js?v=p3c';
 import {getDuelBeginnerRules} from './duel-beginner.js?v=p3a';
 // Progressive visual enhancement only. Never sends actions, determines winners or reads KP.
 // A factual score summary from the visible server-confirmed 8x8 board.
@@ -628,8 +629,47 @@ function enhance(root) {
     const caveat=document.createElement('p');caveat.textContent='表示済みの確定情報のみ。取得していない過去の手や非公開情報は補完しない。';
     details.append(caveat);result.after(details);
   }
+
+  function scanGameInsights(){
+    const arena=root.querySelector('.duel-current .duel-arena');
+    if(!arena)return;
+    const board=arena.querySelector('.duel-board.duel-othello');
+    const poker=arena.querySelector('.duel-poker-table');
+    const bluff=arena.querySelector('.duel-bluff-table');
+    const anchor=board||poker||bluff;
+    const old=arena.querySelector('[data-duel-insights]');
+    if(!anchor){old?.remove();return;}
+    const type=board?'othello':poker?'poker':'bluffdice';
+    const corners=board?summarizeVisibleOthelloCorners(readBoard(board)?.state):null;
+    const key=type+'|'+(corners?Object.values(corners).join(':'):'static');
+    if(old?.dataset.duelInsightsKey===key)return;
+    const stayOpen=!!old?.open;
+    old?.remove();
+    if(board&&!corners)return;
+    const details=document.createElement('details');
+    details.className='duel-insights';details.dataset.duelInsights=type;
+    details.dataset.duelInsightsKey=key;
+    details.open=stayOpen;
+    const title=document.createElement('summary');
+    title.textContent=type==='othello'?'オセロの局面を読む｜四隅の確定状態':
+      type==='poker'?'ポーカーの役の強さ｜比較早見表':'ブラフダイスの宣言｜判断の仕組み';
+    details.append(title);
+    const lines=type==='othello'?[
+      '四隅：黒'+corners.black+'か所／白'+corners.white+'か所／空き'+corners.open+'か所',
+      '四隅の確定配置だけを表示している。石数や四隅の優劣から勝敗は予測できない。'
+    ]:type==='poker'?[
+      '強い順：'+DUEL_POKER_HAND_ORDER.join(' ＞ '),
+      '同じ役は上位の数字などを順に比較する。相手のカードは公開決着まで分からない。'
+    ]:DUEL_BLUFF_BID_RULES;
+    const list=document.createElement('ul');
+    for(const line of lines){
+      const item=document.createElement('li');item.textContent=line;list.append(item);
+    }
+    details.append(list);anchor.after(details);
+  }
   function scan() {
     scanBeginnerRules();
+    scanGameInsights();
     scanHistoryReview();
     scanFinishedReview();
     scanDuelJourney();
