@@ -497,3 +497,32 @@
 @media (prefers-reduced-motion:reduce){
  .duel-journey,.duel-journey *{animation:none!important;transition:none!important}
 }
+
+
+/* Phase 2 invitation readiness: informative only, never a second submit. */
+.duel-invite-guide{
+  display:grid;gap:3px;padding:10px 12px;margin:9px 0 11px;
+  border-radius:11px;border:1px solid #467791;
+  background:#18364b;color:#ecf8ff;line-height:1.5;
+}
+.duel-invite-guide strong{font-size:13px;line-height:1.35}
+.duel-invite-guide span{font-size:12px;color:#d4e5f0}
+.duel-invite-guide[data-duel-invite-type="ready"]{
+  background:#174335;border-color:#57a889;
+}
+.duel-invite-guide[data-duel-invite-type="low"],
+.duel-invite-guide[data-duel-invite-type="hold"]{
+  border-color:#cc9a57;background:#493321;
+}
+.duel-invite-guide[data-duel-invite-type="low"] span,
+.duel-invite-guide[data-duel-invite-type="hold"] span{color:#fff0d9}
+.duel-opponent-toggle,.duel-opponent-choice,.duel-match,
+.duel-new [data-duel-act="create"]{
+  min-height:44px;touch-action:manipulation;
+}
+.duel-opponent-choice:not(:disabled):active,.duel-opponent-toggle:not(:disabled):active{
+  filter:brightness(1.16);
+}
+@media (prefers-reduced-motion:reduce){
+ .duel-invite-guide,.duel-opponent-toggle,.duel-opponent-choice{animation:none!important;transition:none!important}
+}
