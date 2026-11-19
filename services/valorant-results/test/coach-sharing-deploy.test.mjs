@@ -1,4 +1,4 @@
-import test from 'node:test';import assert from 'node:assert/strict';import {mkdtempSync,writeFileSync,readFileSync,rmSync} from 'node:fs';import {tmpdir} from 'node:os';import {join} from 'node:path';import {DatabaseSync} from 'node:sqlite';import {createHash} from 'node:crypto';
+import test from 'node:test';import assert from 'node:assert/strict';import {mkdtempSync,writeFileSync,readFileSync,rmSync} from 'node:fs';import {tmpdir} from 'node:os';import {join,dirname} from 'node:path';import {DatabaseSync} from 'node:sqlite';import {createHash} from 'node:crypto';
 import {ensureCoachSharing} from '../scripts/ensure-coach-sharing.mjs';import {ensureCoachProfiles} from '../scripts/ensure-coach-profiles.mjs';import {auditCoachSharing,probeCoachSharing} from '../scripts/coach-sharing-audit.mjs';
 const env={CLOUDFLARE_ACCOUNT_ID:'a'.repeat(32),CLOUDFLARE_API_TOKEN:'private'};
 const reply=results=>({ok:true,json:async()=>({success:true,result:[{success:true,results,meta:{rows_read:5}}]})});
@@ -12,9 +12,15 @@ test('sharing migration applies once, defaults to private and empty, keeps immut
  sql.exec(`UPDATE coach_profiles SET shared_fields_json='["matches","goals"]'`);await assert.rejects(auditCoachSharing(d,env,request),/consent audit failed/);
  assert.throws(()=>sql.exec("UPDATE coach_profiles SET owner_user='stolen'"),/owner cannot change/);
  }finally{sql.close();rmSync(d,{recursive:true,force:true});}});
-test('sharing probe verifies every protected method/origin and exact helper bytes without publishing',async()=>{const code='globalThis.KesoCoachSharing={}',version='coach-'+createHash('sha256').update(code).digest('hex').slice(0,12);let calls=0;
- const request=async(url,opts)=>{calls++;if(url.includes('/api/'))return new Response('',{status:opts.headers.Origin==='https://altepop.github.io'?401:403});return new Response(url.includes('sharing.js')?code:'coachSharing.setData(data.settings)<script src="./coach/sharing.js?v='+version+'"></script>');};
- const r=await probeCoachSharing(request);assert.equal(r.sharingMutations,0);assert.equal(r.helper,'verified');assert.equal(calls,12);
- await assert.rejects(probeCoachSharing(async()=>new Response('oops')),/boundary/);
- await assert.rejects(probeCoachSharing((url,opts)=>url.includes('sharing.js')?Promise.resolve(new Response('stale')):request(url,opts)),/stale/);
+test('sharing probe verifies every protected method/origin and exact helper bytes without publishing',async()=>{const code='globalThis.KesoCoachSharing={}',version='coach-'+createHash('sha256').update(code).digest('hex').slice(0,12);let calls=0;const page='coachSharing.setData(data.settings)<script src="./coach/sharing.js?v='+version+'"></script>',expected={page,helper:code};
+ const request=async(url,opts)=>{calls++;if(url.includes('/api/'))return new Response('',{status:opts.headers.Origin==='https://altepop.github.io'?401:403});return new Response(url.includes('sharing.js')?code:page);};
+ const r=await probeCoachSharing(request,expected);assert.equal(r.sharingMutations,0);assert.equal(r.helper,'verified');assert.equal(calls,12);assert.equal(r.sourceMatch,true);assert.equal(r.pageSha256,createHash('sha256').update(page).digest('hex'));assert.equal(r.helperSha256,createHash('sha256').update(code).digest('hex'));assert.equal(r.routes.length,10);
+ await assert.rejects(probeCoachSharing(async()=>new Response('oops'),expected),/boundary/);
+ await assert.rejects(probeCoachSharing((url,opts)=>url.includes('sharing.js')?Promise.resolve(new Response('stale')):request(url,opts),expected),/stale/);
+ await assert.rejects(probeCoachSharing(request,{...expected,page:page+'<!-- newer source -->'}),/page source hash mismatch/);
+ await assert.rejects(probeCoachSharing(request,{...expected,helper:code+'// newer source'}),/helper source hash mismatch/);
+});
+test('the isolated deployment copy includes the source HTML used by strict production hashing',()=>{
+ const workflow=readFileSync(new URL('../../../.github/workflows/valorant-results.yml',import.meta.url),'utf8');
+ assert.ok(workflow.includes('cp coach.html "$RUNNER_TEMP/kp-app/coach.html"'));
 });

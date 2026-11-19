@@ -225,6 +225,7 @@ jobs:
           # Include the trusted P9.4 CPU strategy modules in the isolated Worker bundle.
           mkdir -p "$RUNNER_TEMP/kp-app/duel-preview"
           cp duel-preview/cpu.js duel-preview/cpu-board-search.js duel-preview/cpu-hidden-games.js duel-preview/cpu-poker.js "$RUNNER_TEMP/kp-app/duel-preview/"
+          cp coach.html "$RUNNER_TEMP/kp-app/coach.html"
           mkdir -p "$RUNNER_TEMP/kp-app/coach"
           cp coach/*.js "$RUNNER_TEMP/kp-app/coach/"
           mkdir -p "$RUNNER_TEMP/kp-app/services/music-voice"
