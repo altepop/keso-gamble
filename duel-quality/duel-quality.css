@@ -683,3 +683,23 @@
 .duel-status-help[data-duel-status-help-kind="refresh"]{background:#173749}
 @media(max-width:350px){.duel-status-help{padding:9px 8px}.duel-status-help strong{font-size:12px}.duel-status-help p{font-size:11px}}
 @media(prefers-reduced-motion:reduce){.duel-status-help,.duel-status-help *{animation:none!important;transition:none!important}}
+
+/* Phase 7: smartphone in-match hierarchy. Keep turn, sync, errors and unknown-action alerts visible. */
+@media (max-width: 480px) {
+ .duel-journey[data-duel-journey-stage="active"] {
+  margin: 5px 0 8px;
+  padding: 7px 10px;
+  border-radius: 9px;
+  background: #142c42;
+ }
+ .duel-journey[data-duel-journey-stage="active"] .duel-journey-steps,
+ .duel-journey[data-duel-journey-stage="active"] .duel-journey-help {
+  display: none;
+ }
+ .duel-journey[data-duel-journey-stage="active"] .duel-journey-title {
+  margin: 0;
+  line-height: 1.4;
+ }
+ .duel-journey[data-duel-journey-stage="active"] + .duel-connection,
+ .duel-status-help, .duel-connection { visibility: visible; }
+}
