@@ -48,6 +48,13 @@ const a='[data-demo-view=a]',b='[data-demo-view=b]';
    assert.match(await page.locator('.duel-invite-guide').innerText(),/招待の準備ができた/);
   }
   await page.locator('[data-duel-journey]').waitFor();
+  if(mode==='othello'){
+   await page.evaluate(()=>dispatchEvent(new Event('offline')));
+   assert.match(await page.locator('[data-duel-connection]').innerText(),/ブラウザがオフライン/);
+   assert.equal(await page.locator('[data-duel-act=create]').isDisabled(),false,'passive offline guide cannot replace submit logic');
+   await page.evaluate(()=>dispatchEvent(new Event('online')));
+   assert.match(await page.locator('[data-duel-connection]').innerText(),/同期はまだ確認していない/);
+  }
   assert.match(await page.locator('.duel-journey-title').innerText(),/相手を選んで申し込む/);
   await page.locator('[data-duel-act=create]').click();
   assert.match(await page.locator('.duel-history').innerText(),/招待中/);

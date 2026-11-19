@@ -554,3 +554,15 @@
 @media(prefers-reduced-motion:reduce){
  .duel-othello .duel-square.duel-othello-last-observed::before{animation:none!important;transition:none!important}
 }
+
+
+/* Shared read-only connectivity guidance. No loading mask or disabled moves. */
+.duel-connection{display:grid;gap:3px;margin:0 0 13px;padding:11px 12px;border-radius:12px;
+ border:1px solid #537793;background:#15374e;color:#e6f6ff;line-height:1.45}
+.duel-connection strong{font-size:13px}
+.duel-connection span{font-size:12px;color:#d0e5f4}
+.duel-connection[data-duel-connection-type="retry"],
+.duel-connection[data-duel-connection-type="offline"]{border-color:#c39967;background:#483323;color:#fff2d4}
+.duel-connection[data-duel-connection-type="retry"] span,
+.duel-connection[data-duel-connection-type="offline"] span{color:#ffeacb}
+@media(prefers-reduced-motion:reduce){.duel-connection{animation:none!important;transition:none!important}}
