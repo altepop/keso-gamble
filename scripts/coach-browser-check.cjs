@@ -319,6 +319,39 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   assert.match(await page.locator('[data-benchmark-metric="acs"]').innerText(),/200.00〜239.00/);
   assert.match(await page.locator('[data-personal-analysis]').innerText(),/Gold/);
   assert.equal(requests.length,benchmarkRequests,'reference changes reuse saved report without API/D1 calls');
+  await page.locator('[data-coach-view="overview"]').click();
+  assert.equal(await page.locator('[data-practice-library]').count(),1);
+  assert.ok(await page.locator('[data-practice-recommendations] [data-practice-card]').count()>0);
+  assert.match(await page.locator('[data-practice-agents]').innerText(),/暗記の好みは戦績から分かりません/);
+  for(const width of [320,375]){
+   await page.setViewportSize({width,height:812});
+   await page.locator('[data-practice-option="lineups"]').selectOption('light');
+   assert.match(await page.locator('[data-practice-agents]').innerText(),/Sage/);
+   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'practice controls at '+width);
+  }
+  await page.locator('[data-practice-option="goal"]').selectOption('cover');
+  await page.locator('[data-practice-option="partner"]').selectOption('duo');
+  await page.locator('[data-practice-option="minutes"]').selectOption('20');
+  const firstPractice=await page.locator('[data-practice-recommendations] [data-practice-card]').first().getAttribute('data-practice-card');
+  await page.locator('[data-practice-skip="'+firstPractice+'"]').click();
+  assert.equal(await page.locator('[data-practice-recommendations] [data-practice-card="'+firstPractice+'"]').count(),0,'explicit candidate exchange');
+  await page.locator('[data-practice-reset]').click();
+  assert.equal(await page.locator('[data-practice-recommendations] [data-practice-card="'+firstPractice+'"]').count(),1);
+  await page.locator('[data-practice-catalog] > summary').click();
+  await page.locator('[data-practice-category]').selectOption('all');
+  assert.equal(await page.locator('[data-practice-entry]').count(),100);
+  await page.locator('[data-practice-query]').fill('4スタンス');
+  assert.equal(await page.locator('[data-practice-entry]').count(),1);
+  await page.locator('[data-practice-entry] > summary').click();
+  assert.match(await page.locator('[data-practice-entry]').innerText(),/KDからA1等を判定しない/);
+  assert.match(await page.locator('[data-practice-entry]').innerText(),/上達効果は確認できていません/);
+  await page.locator('[data-practice-query]').fill('');
+  await page.locator('[data-practice-category]').selectOption('map');
+  assert.equal(await page.locator('[data-practice-entry]').count(),10);
+  await page.locator('[data-practice-catalog] > summary').click();
+  assert.equal(requests.length,benchmarkRequests,'practice preferences, search and exchanges never query APIs');
+  if(process.env.COACH_PRACTICE_SCREENSHOT){await page.setViewportSize({width:320,height:812});await page.locator('.practice-controls').screenshot({path:process.env.COACH_PRACTICE_SCREENSHOT});await page.locator('[data-practice-recommendations]').screenshot({path:process.env.COACH_PRACTICE_SCREENSHOT.replace('.png','-plan.png')});}
+
   assert.equal(requests.length,3,'changing dashboard tabs never triggers extra API calls');
   await page.locator('#share').click();
   const exportedMember=JSON.parse(await page.evaluate(()=>window.__copiedDiagnostic));
@@ -329,6 +362,7 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   assert.equal(exportedMember.matchFeedback.sessions.length,12);
   assert.equal(exportedMember.matchFeedback.sessions[0].lesson.practice.steps.length,3);
   assert.equal(JSON.stringify(exportedMember).includes('never-export-lessons'),false);
+  await page.locator('#coach-view-overview > details.member-detail').evaluate(el=>el.open=true);
   assert.match(await page.locator('[data-next-match]').innerText(),/次の1試合で試すこと/);
   assert.match(await page.locator('[data-next-match]').innerText(),/KPR/);
   assert.equal(exportedMember.performance.overall.kd,performance.overall.kd);
@@ -362,6 +396,8 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
   await page.locator('[data-member="Aquatopia"]').click();
   await page.locator('[data-coach-view="time"]').waitFor();
+  assert.equal(await page.locator('[data-practice-option="lineups"]').inputValue(),'unknown','another profile does not inherit a memorisation preference');
+  assert.equal(await page.locator('[data-practice-option="goal"]').inputValue(),'auto','manual focus stays with its profile');
   await page.locator('[data-coach-view="time"]').click();
   await page.locator('#coach-view-time > [data-reader-advanced]').evaluate(el=>el.open=true);
   assert.equal(await page.locator('#coach-view-time [data-reader-advanced] svg').first().locator('circle').count(),19,'missing match ratio is not drawn at zero');
