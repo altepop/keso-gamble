@@ -209,6 +209,7 @@ const a='[data-demo-view=a]',b='[data-demo-view=b]';
  await shared.locator('summary').click();
  const publicOutcome=(await page.locator('.duel-result').innerText()).trim();
  assert.equal(await shared.locator('textarea').inputValue(),publicOutcome,'sharing includes confirmed result only');
+ assert.equal(await shared.locator('textarea').count(),1,'exactly one read-only confirmed result field');
  assert.equal(await shared.locator('textarea').getAttribute('readonly')!==null,true,'sharing text cannot change the result');
 
  assert.match(await recap.innerText(),/次の試合で確認すること/);
