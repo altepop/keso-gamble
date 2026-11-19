@@ -676,6 +676,12 @@ addEventListener('pointermove',e=>{if(e.pointerType==='mouse')trendDay(e);});
 // Client-only filter state; no D1 requests for typing or paging.
 for(const eventName of ['input','change'])addEventListener(eventName,e=>{
  if(eventName==='input'&&screen==='duels'&&e.target.id==='duel-guess'){duelGuessDraft=e.target.value;return;}
+ if(screen==='duels'&&eventName==='input'&&e.target.id==='pve-guess'){pveGuessDraft=e.target.value;return;}
+ if(screen==='duels'&&eventName==='change'&&['pve-game','pve-level'].includes(e.target.id)){
+  if(e.target.id==='pve-game')pveGame=e.target.value;else pveLevel=e.target.value;
+  return;
+ }
+
  if(eventName==='change'&&screen==='duels'&&e.target.id==='duel-bid-count'){
   const match=duelData?.matches?.find(x=>x.id===duelActiveId),face=document.getElementById('duel-bid-face');
   if(match?.game==='bluffdice'&&face){
