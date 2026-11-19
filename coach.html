@@ -5,266 +5,567 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0F1923">
 <title>KESO COACH | VALORANT ラウンド分析</title>
-<style>
-/* One visual system: 3 radii, a 4px spacing rhythm, one action accent. */
-:root{
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Archivo:wght@700;800;900&family=Noto+Sans+JP:wght@400;500;700;900&display=swap" rel="stylesheet">
+<style id="coach-prototype-style">
+  :root{
+    --bg:#0f1923;
+    --bg-2:#16212d;
+    --panel:#1c2a38;
+    --panel-2:#243443;
+    --line:#33465a;
+    --line-soft:#263646;
+    --ink:#edf1f5;
+    --ink-2:#d7dfe8;
+    --ink-3:#a5b5c5;
+    --red:#ff4655;
+    --red-dark:#d13642;
+    --teal:#00c4b3;
+    --paper:#ece8e1;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:"Noto Sans JP",system-ui,sans-serif;font-size:16px;line-height:1.9;letter-spacing:.02em;text-align:left;line-break:strict;overflow-wrap:break-word}
+  /* technical grid — thin lines like a tactical overlay */
+  body::before{content:"";position:fixed;inset:0;pointer-events:none;background-image:linear-gradient(#ffffff07 1px,transparent 1px),linear-gradient(90deg,#ffffff07 1px,transparent 1px);background-size:48px 48px}
+  .num{font-family:"Archivo","Noto Sans JP",sans-serif;font-variant-numeric:tabular-nums}
+  .disp{font-family:"Oswald","Archivo",sans-serif;text-transform:uppercase;letter-spacing:.06em}
+  .nw{white-space:nowrap}
+  .wrap{max-width:600px;margin:0 auto;padding:0 16px 48px;position:relative}
+  .cut{clip-path:polygon(0 0,calc(100% - 14px) 0,100% 14px,100% 100%,14px 100%,0 calc(100% - 14px))}
+  .cut-sm{clip-path:polygon(0 0,calc(100% - 9px) 0,100% 9px,100% 100%,9px 100%,0 calc(100% - 9px))}
+  .micro{font-family:"Oswald",sans-serif;font-size:10px;font-weight:600;letter-spacing:.22em;text-transform:uppercase;color:var(--ink-3)}
+  .micro b{color:var(--red);font-weight:700}
+  .micro::before{content:"// ";color:var(--red)}
+
+  /* ============ TOP HERO with Chamber ============ */
+  .tophero{position:relative;margin:0 -16px;overflow:hidden;background:#0a121a;border-bottom:2px solid var(--red)}
+  .tophero .bgimg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.34}
+  .tophero .shade{position:absolute;inset:0;background:linear-gradient(90deg,#0f1923f2 0%,#0f1923cc 52%,#0f192340 100%),linear-gradient(to top,#0f1923 4%,transparent 55%)}
+  .tophero .diag{position:absolute;top:0;right:34%;width:2px;height:140%;background:var(--red);transform:rotate(18deg);transform-origin:top;opacity:.7}
+  .tophero-inner{position:relative;padding:20px 16px 18px;min-height:218px}
+  .tophero .chamber{position:absolute;right:4px;bottom:0;height:212px;width:auto;object-fit:contain;pointer-events:none;filter:drop-shadow(-10px 8px 18px #00000090)}
+  .playerline{position:relative;z-index:2;max-width:72%}
+  .playerline .name{font-size:26px;font-weight:900;line-height:1.25;letter-spacing:.01em;margin:8px 0 4px}
+  .playerline .ids{font-size:12px;color:var(--ink-2);line-height:1.65}
+  .rankrow{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;position:relative;z-index:2}
+  .rankbox{background:#ece8e1;color:#0f1923;padding:7px 12px 6px;line-height:1.2}
+  .rankbox .r{font-family:"Oswald",sans-serif;font-weight:700;font-size:16px;letter-spacing:.05em}
+  .rankbox .k{font-size:9.5px;font-weight:700;letter-spacing:.12em;color:#4a5a68}
+  .rankbox.ghost{background:#0f1923b8;color:var(--ink);border:1px solid var(--line)}
+  .rankbox.ghost .k{color:var(--ink-3)}
+  .coach-intro{position:relative;z-index:2;margin:16px 0 0;font-size:15px;color:#e8edf2;max-width:94%;line-height:1.9}
+  .coach-intro + .coach-intro{margin-top:6px}
+
+  /* ============ PDCA ============ */
+  .pdca{margin-top:20px;background:var(--bg-2);border:1px solid var(--line-soft);border-left:3px solid var(--red);padding:16px 14px 14px}
+  .pdca-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:8px}
+  .pdca-head .disp{font-size:19px;font-weight:700;color:var(--ink)}
+  .pdca p{margin:0;font-size:14px;color:var(--ink-2);line-height:1.85}
+  .pdca p + p{margin-top:4px}
+  .steps{list-style:none;margin:14px 0 0;padding:0;display:flex;position:relative}
+  .steps::before{content:"";position:absolute;left:10%;right:10%;top:14px;height:2px;background:var(--line)}
+  .steps li{flex:1;text-align:center;position:relative;padding:0 1px;min-width:0}
+  .sq{width:29px;height:29px;margin:0 auto 7px;background:var(--panel-2);border:2px solid var(--line);display:grid;place-items:center;position:relative;z-index:1;font-family:"Oswald",sans-serif;font-weight:700;font-size:12px;color:var(--ink-3);clip-path:polygon(0 0,calc(100% - 7px) 0,100% 7px,100% 100%,7px 100%,0 calc(100% - 7px))}
+  .steps li.done .sq{border-color:var(--teal);background:var(--teal);color:#06231f}
+  .steps li.done .sq svg{width:14px;height:14px}
+  .steps li.now .sq{border-color:var(--red);background:var(--red);color:#fff}
+  .steps .lb{font-size:10.5px;font-weight:700;line-height:1.4;color:var(--ink-2);display:block}
+  .steps li.done .lb{color:var(--ink-3)}
+  .steps li.now .lb{color:var(--ink);font-weight:900}
+  .steps .tag{display:inline-block;margin-top:3px;font-size:9.5px;font-weight:900;color:var(--red);letter-spacing:.08em}
+
+  /* ============ section heads ============ */
+  .sec-head{margin:36px 0 14px;display:flex;align-items:flex-end;gap:12px}
+  .sec-head .disp{font-size:27px;font-weight:700;line-height:1;color:var(--ink)}
+  .sec-head .disp em{font-style:normal;color:var(--red)}
+  .sec-head .rule{flex:1;height:2px;background:var(--line-soft);margin-bottom:5px;position:relative}
+  .sec-head .rule::after{content:"";position:absolute;right:0;top:-3px;width:26px;height:8px;background:var(--red);clip-path:polygon(6px 0,100% 0,calc(100% - 6px) 100%,0 100%)}
+
+  /* ============ image bands ============ */
+  .imgband{position:relative;overflow:hidden;margin:0 -16px;height:172px}
+  .imgband img{width:100%;height:100%;object-fit:cover;display:block}
+  .imgband .shade{position:absolute;inset:0;background:linear-gradient(to top,#0f1923 2%,#0f1923d9 34%,#0f192300 68%),linear-gradient(90deg,#0f1923c9,transparent 62%)}
+  .imgband .cap{position:absolute;left:16px;bottom:12px;z-index:2}
+  .imgband .cap .disp{font-size:21px;font-weight:700;color:#fff;line-height:1.1;text-shadow:0 2px 10px #000}
+  .imgband .agentcut{position:absolute;right:-8px;bottom:0;height:168px;width:auto;z-index:1;filter:drop-shadow(-8px 6px 14px #000000a0)}
+
+  /* ============ coach talk cards ============ */
+  .talk{background:var(--bg-2);border:1px solid var(--line-soft);padding:20px}
+  .talk p{margin:0;font-size:15.5px;color:var(--ink);line-height:1.95}
+  .talk p + p{margin-top:12px}
+  .evidence{display:flex;gap:10px;margin-top:16px}
+  .ev{flex:1;background:var(--panel);border-top:3px solid var(--red);padding:12px}
+  .ev .v{font-family:"Oswald",sans-serif;font-weight:700;font-size:30px;line-height:1.05;color:var(--ink)}
+  .ev .v small{font-size:13px;color:var(--ink-2);font-family:"Noto Sans JP",sans-serif;font-weight:700}
+  .ev p{margin:6px 0 0 !important;font-size:12.5px !important;line-height:1.7 !important;color:#dbe3ec !important}
+
+  /* ============ drill (P082) ============ */
+  .drill{border:2px solid var(--red);background:var(--bg-2);margin-top:12px}
+  .drill-head{padding:18px 18px 0}
+  .drill-head .pidrow{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+  .pid{font-family:"Oswald",sans-serif;font-weight:700;font-size:12px;letter-spacing:.18em;color:var(--red)}
+  .total-badge{flex:none;background:var(--red);color:#fff;text-align:center;padding:8px 12px 7px;line-height:1.15;clip-path:polygon(0 0,calc(100% - 9px) 0,100% 9px,100% 100%,9px 100%,0 calc(100% - 9px))}
+  .total-badge .n{font-family:"Oswald",sans-serif;font-weight:700;font-size:21px;display:block}
+  .total-badge .u{font-size:9.5px;font-weight:700;letter-spacing:.1em}
+  .drill-head h2{margin:8px 0 10px;font-size:19px;font-weight:900;line-height:1.55}
+  .drill-head p{margin:0;font-size:15px;color:var(--ink);line-height:1.9}
+  .drill-head p + p{margin-top:10px}
+  .splitbar{display:flex;gap:6px;margin:16px 18px 0}
+  .splitbar div{height:8px;background:var(--panel-2)}
+  .splitbar div.on{background:var(--red)}
+  .splitlabels{display:flex;gap:6px;margin:6px 18px 0;font-size:10.5px;color:var(--ink-3);font-weight:700}
+  .splitlabels span{display:block}
+  .timerbox{margin:14px 18px 0;background:#0a121a;border:1px solid var(--line-soft);padding:12px;display:flex;align-items:center;gap:12px}
+  .timerbox .clock{font-family:"Oswald",sans-serif;font-weight:700;font-size:32px;line-height:1;color:var(--ink);min-width:92px}
+  .timerbox .tbtns{display:flex;gap:6px;flex-wrap:wrap;flex:1}
+  .tbtn{appearance:none;border:1px solid var(--line);background:var(--panel);color:var(--ink);font-family:inherit;font-weight:700;font-size:12px;padding:8px 10px;cursor:pointer;min-height:38px}
+  .tbtn.main{background:var(--red);border-color:var(--red);color:#fff}
+  .timerbox .hint{font-size:12px;color:var(--ink-2);line-height:1.7}
+
+  .block{padding:24px 18px;border-top:1px solid var(--line-soft);margin-top:20px;position:relative}
+  .block::before{content:"";position:absolute;left:0;top:24px;width:3px;height:34px;background:var(--red)}
+  .block .bhead{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+  .block .bno{font-family:"Oswald",sans-serif;font-weight:700;font-size:13px;letter-spacing:.14em;color:var(--red)}
+  .block .btime{font-family:"Oswald",sans-serif;font-weight:700;font-size:13px;color:var(--ink-3)}
+  .block h3{margin:6px 0 14px;font-size:17px;font-weight:900;line-height:1.6}
+  .setting{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:0 0 18px}
+  .setting div{background:#0a121a;border:1px solid var(--line-soft);padding:10px 12px}
+  .setting .k{font-size:10.5px;font-weight:900;letter-spacing:.14em;color:var(--red);display:block;margin-bottom:3px}
+  .setting .v{font-size:13.5px;font-weight:700;line-height:1.55;color:var(--ink)}
+  .block > p{margin:0 0 16px;font-size:15px;color:var(--ink);line-height:1.9}
+  /* numbered drill steps — one action per line */
+  .dsteps{list-style:none;counter-reset:st;margin:0;padding:0;display:grid;gap:16px}
+  .dsteps li{counter-increment:st;position:relative;padding-left:42px;font-size:15.5px;line-height:1.85;color:var(--ink)}
+  .dsteps li::before{content:counter(st);position:absolute;left:0;top:2px;width:27px;height:27px;background:var(--red);color:#fff;font-family:"Oswald",sans-serif;font-weight:700;font-size:13px;line-height:1;display:grid;place-items:center;clip-path:polygon(0 0,calc(100% - 6px) 0,100% 6px,100% 100%,6px 100%,0 calc(100% - 6px))}
+  .rep{display:flex;gap:10px;align-items:center;margin-top:18px;background:#ff465514;border:1px dashed #ff465570;padding:12px 14px}
+  .rep .rv{font-family:"Oswald",sans-serif;font-weight:700;font-size:22px;color:var(--red);flex:none;line-height:1}
+  .rep p{margin:0;font-size:13.5px;line-height:1.75;color:#e6ebf0}
+
+  .nextcheck{margin:4px 18px 18px;background:var(--panel);border:1px solid var(--line-soft);padding:16px}
+  .nextcheck .disp{font-size:16px;font-weight:700;margin-bottom:8px}
+  .nextcheck > p{margin:0;font-size:14.5px;color:var(--ink);line-height:1.85}
+  .nextcheck > p + p{margin-top:6px}
+  .checks{list-style:none;margin:14px 0 0;padding:0;display:grid;gap:14px}
+  .checks li{display:flex;gap:10px;font-size:14.5px;color:#e2e8ef;line-height:1.8}
+  .checks .box{flex:none;width:20px;height:20px;margin-top:4px;border:2px solid var(--red);display:grid;place-items:center;color:transparent;clip-path:polygon(0 0,calc(100% - 5px) 0,100% 5px,100% 100%,5px 100%,0 calc(100% - 5px))}
+  .drill-cta{display:flex;gap:8px;padding:0 18px 18px}
+  .btn{appearance:none;border:0;cursor:pointer;font-family:inherit;font-weight:900;font-size:14px;min-height:50px;padding:0 18px;clip-path:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px)}
+  .btn-main{background:var(--red);color:#fff;flex:1}
+  .btn-main[aria-pressed="true"]{background:var(--teal);color:#04211d}
+  .btn-sub{background:var(--panel-2);color:var(--ink);border:1px solid var(--line);flex:none}
+  .accept-note{margin:0 18px 18px;font-size:14px;color:var(--ink-2);line-height:1.85}
+
+  /* ============ sub tasks ============ */
+  .subs{display:grid;gap:8px;margin-top:12px}
+  .sub-task{display:flex;gap:12px;width:100%;text-align:left;cursor:pointer;background:var(--bg-2);border:1px solid var(--line-soft);border-left:3px solid var(--line);padding:14px;color:var(--ink);font-family:inherit}
+  .sub-task .left{flex:none;text-align:center}
+  .sub-task .check{width:24px;height:24px;margin:6px auto 0;border:2px solid var(--line);display:grid;place-items:center;color:transparent;clip-path:polygon(0 0,calc(100% - 6px) 0,100% 6px,100% 100%,6px 100%,0 calc(100% - 6px))}
+  .sub-task[aria-pressed="true"]{border-left-color:var(--teal)}
+  .sub-task[aria-pressed="true"] .check{background:var(--teal);border-color:var(--teal);color:#04211d}
+  .sub-task .tt{flex:1;min-width:0}
+  .sub-task .tt .a{font-weight:900;font-size:15px;line-height:1.55}
+  .sub-task .tt p{margin:4px 0 0;font-size:13.5px;color:#d5dde6;line-height:1.8}
+  .total-line{margin:14px 2px 0;font-size:13.5px;color:var(--ink-2);line-height:1.85;text-align:left}
+  .total-line b{color:var(--ink)}
+
+  /* ============ map cards ============ */
+  .mapcard{position:relative;overflow:hidden;border:1px solid var(--line-soft);margin-top:10px;background:var(--bg-2)}
+  .mapcard .mimg{height:148px;position:relative;overflow:hidden}
+  .mapcard .mimg > img.bg{width:100%;height:100%;object-fit:cover;display:block}
+  .mapcard .mimg .shade{position:absolute;inset:0;background:linear-gradient(to top,#16212d 2%,transparent 58%),linear-gradient(90deg,#0f1923a8,transparent 62%)}
+  .mapcard .mimg .agent{position:absolute;right:2px;bottom:0;height:142px;width:auto;z-index:1}
+  .mapcard .mimg .mname{position:absolute;left:14px;bottom:10px;z-index:2}
+  .mapcard .mimg .mname .disp{font-size:25px;font-weight:700;color:#fff;line-height:1;text-shadow:0 2px 10px #000}
+  .mapcard .mbody{padding:16px 18px 18px}
+  .mapcard .mbody p{margin:0;font-size:15px;color:var(--ink);line-height:1.9}
+  .mapcard .mbody p + p{margin-top:10px}
+  .mapstat{display:inline-block;margin-top:12px;font-size:11px;font-weight:700;color:var(--ink-3);border:1px solid var(--line-soft);padding:5px 9px;background:#0a121a}
+  .mapstat b{color:var(--ink);font-family:"Archivo",sans-serif}
+
+  /* ============ remember strip ============ */
+  .remember{margin-top:26px;background:var(--red);color:#fff;padding:18px;position:relative;overflow:hidden}
+  .remember::after{content:"";position:absolute;right:-30px;top:-10px;width:90px;height:160%;background:#ffffff14;transform:rotate(18deg)}
+  .remember .micro{color:#ffd9dd}
+  .remember .micro::before{color:#fff}
+  .remember p{margin:8px 0 0;font-size:16px;font-weight:700;line-height:1.85;position:relative;z-index:1}
+  .remember p + p{font-size:13.5px;font-weight:500}
+
+  /* ============ details ============ */
+  details{margin-top:26px;background:var(--bg-2);border:1px solid var(--line-soft)}
+  summary{cursor:pointer;list-style:none;padding:16px 18px;min-height:52px;display:flex;align-items:center;justify-content:space-between;gap:12px;font-weight:900;font-size:14px;line-height:1.6}
+  summary::-webkit-details-marker{display:none}
+  summary .chev{color:var(--red);font-family:"Oswald",sans-serif;font-weight:700;transition:transform .2s;flex:none}
+  details[open ] summary .chev{transform:rotate(180deg)}
+  .detail-body{padding:0 18px 18px}
+  .stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+  .stat{background:#0a121a;border:1px solid var(--line-soft);border-top:2px solid var(--line);padding:11px 12px}
+  .stat .v{font-family:"Oswald",sans-serif;font-weight:700;font-size:23px;line-height:1.1}
+  .stat .k{font-size:11px;color:var(--ink-3);margin-top:3px;line-height:1.55}
+  .sova{display:flex;gap:14px;margin-top:16px;background:var(--panel);border:1px solid var(--line-soft);overflow:hidden}
+  .sova img{width:108px;height:168px;object-fit:contain;object-position:bottom center;flex:none;background:#101c28;padding-top:8px}
+  .sova div{padding:12px 12px 12px 0}
+  .sova p{margin:0;font-size:13px;color:var(--ink-2);line-height:1.85}
+  .sova p b{color:var(--ink)}
+  .notes{margin:16px 0 0;padding:0;list-style:none;display:grid;gap:12px}
+  .notes li{font-size:13.5px;color:var(--ink-2);line-height:1.85;padding-left:16px;position:relative}
+  .notes li::before{content:"";position:absolute;left:0;top:10px;width:7px;height:7px;background:var(--red);clip-path:polygon(0 0,100% 0,100% 100%)}
+  .notes li b{color:var(--ink)}
+  .caveats{margin-top:16px;padding-top:14px;border-top:1px solid var(--line-soft);font-size:11px;color:var(--ink-3);line-height:1.8}
+  footer{margin-top:22px;font-size:11px;color:var(--ink-3);line-height:1.8}
+  footer a{color:var(--ink-2)}
+
+  @media (min-width:560px){
+    .tophero-inner{min-height:238px}
+    .tophero .chamber{height:232px}
+    .sec-head .disp{font-size:32px}
+    .imgband{height:196px}
+    .imgband .agentcut{height:190px}
+  }
+  @media (prefers-reduced-motion: no-preference){
+    .steps li.now .sq{animation:pulse 2.4s ease-in-out infinite}
+    @keyframes pulse{0%,100%{box-shadow:0 0 0 3px #ff46552b}50%{box-shadow:0 0 0 6px #ff46551c}}
+  }
+</style>
+<style id="coach-legacy-style">
+.coach-existing{
  --radius-control:8px;--radius-panel:12px;--radius-pill:999px;
  --space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-6:24px;--space-8:32px;--space-12:48px;
  --accent:#FF4655;--canvas:#0F1923;--surface:#17232E;--surface-raised:#1E2C38;--surface-inset:#111D28;
  --border:#465561;--text:#F2F3F4;--text-secondary:#C5CDD3;--text-muted:#ABB7C0;
 }
-
-:root{color-scheme:dark;font:15px/1.55 system-ui,-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN",Meiryo,sans-serif;background:var(--surface-inset);color:var(--text)}
-*{box-sizing:border-box}
-body{margin:0;padding:env(safe-area-inset-top) var(--space-3) calc(var(--space-6) + env(safe-area-inset-bottom));min-width:300px}
-main{max-width:1020px;margin:auto}a{color:var(--text)}header{padding:var(--space-6) var(--space-1) var(--space-4)}
-.top{display:flex;align-items:center;gap:var(--space-3);justify-content:space-between;flex-wrap:wrap}
-.eyebrow{font-size:12px;letter-spacing:.16em;color:var(--text-secondary);font-weight:750}
-h1{font-size:clamp(28px,7vw,40px);line-height:1.18;margin:var(--space-1) 0 var(--space-1)}
-h2{font-size:17px;margin:0 0 var(--space-2)}h3{font-size:15px;margin:var(--space-3) 0 var(--space-1)}
-.muted{color:var(--text-secondary)}.small{font-size:12px}.lead{margin:0 0 var(--space-3)}
-.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(42vw,180px),1fr));gap:var(--space-2)}
-.card,.panel{border:1px solid var(--border);border-radius:var(--radius-panel);background:var(--surface-inset);box-shadow:0 8px 23px #0001}
-.card{padding:var(--space-3)}.card strong{font-size:26px;display:block;line-height:1.1;margin:var(--space-1) 0}.card .label{font-size:12px;color:var(--text-secondary)}
-.panel{padding:var(--space-4);margin:var(--space-3) 0}
-button{background:var(--border);border:1px solid var(--text-muted);color:white;border-radius:var(--radius-panel);padding:var(--space-2) var(--space-3);font:inherit;font-weight:650;cursor:pointer;min-height:44px}
-button:disabled{opacity:.55;cursor:wait}
-button.secondary{background:var(--surface-raised);border-color:var(--border)}
-button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid var(--text-secondary);outline-offset:2px}
-.actions{display:flex;align-items:center;flex-wrap:wrap;gap:var(--space-2)}
-input{background:var(--surface-inset);color:white;border:1px solid var(--border);border-radius:var(--radius-panel);padding:var(--space-2);font:inherit;min-height:44px;width:min(100%,500px)}
-[data-benchmark-reference],[data-practice-option], [data-practice-category]{display:block;width:100%;min-width:0;min-height:44px;background:var(--surface-inset);color:var(--text);border:1px solid var(--text-secondary);border-radius:var(--radius-panel);padding:var(--space-2);font:inherit;margin-top:var(--space-2)}
-.practice-controls{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,210px),1fr));gap:var(--space-2)}.practice-menu{border:1px solid var(--text-muted);border-radius:var(--radius-panel);padding:var(--space-3);margin:var(--space-2) 0;overflow-wrap:anywhere}.practice-menu>summary{min-height:44px;cursor:pointer;padding:var(--space-2) 0}.practice-toggle{display:flex;align-items:center;gap:var(--space-2);min-height:44px}.practice-choice{accent-color:var(--text);min-height:24px;width:24px}.practice-card ul{padding-left:var(--space-4)}.practice-catalog{margin:var(--space-4) 0} .practice-catalog input{width:100%}
-label{display:block;margin:0 0 var(--space-2)}
-code{word-break:break-all}
-.table-wrap{overflow-x:auto}
-table{width:100%;border-collapse:collapse;font-size:13px;min-width:580px}
-th{text-align:left;color:var(--text-secondary);font-size:12px;font-weight:650}
-th,td{padding:var(--space-3) var(--space-2);border-bottom:1px solid var(--border);white-space:nowrap}
-td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
-tr:last-child td{border-bottom:0}
-.positive{color:var(--text-secondary)}.negative{color:var(--text-secondary)}
-.foot{margin:var(--space-3) 0 0;font-size:12px;color:var(--text-secondary)}
-.barrow{height:8px;background:var(--border);border-radius:var(--radius-pill);overflow:hidden;margin-top:var(--space-2)}
-.bar{height:100%;background:var(--text-secondary)}
-#status{min-height:21px;margin:var(--space-2) 0;font-size:13px;color:var(--text)}
-#status[role=alert]{color:var(--text)}
-.review-item{background:var(--surface-inset);border:1px solid var(--border);border-radius:var(--radius-panel);padding:var(--space-3) var(--space-3);margin-top:var(--space-2);overflow-wrap:anywhere}
-.review-item p{margin:var(--space-1) 0 0}
-.review-heading{display:flex;flex-wrap:wrap;align-items:baseline;gap:var(--space-1) var(--space-3);justify-content:space-between}
-.review-heading strong{font-size:14px}
-.review-kind{font-size:12px;font-weight:750;letter-spacing:.01em;color:var(--text)}
-.diag-list{display:grid;gap:var(--space-2);margin-top:var(--space-2)}
-.diag-row{border:1px solid var(--border);border-left:4px solid var(--text-muted);border-radius:var(--radius-panel);padding:var(--space-3);background:var(--surface-inset)}
-.diag-row.good{border-left-color:var(--text-secondary)}.diag-row.focus{border-left-color:var(--text-secondary)}
-.diag-row.insufficient{border-left-color:var(--text-secondary)}
-.diag-row p{margin:var(--space-1) 0 0;overflow-wrap:anywhere}
-.diag-row strong{font-size:14px}
-.diag-row .kind{font-size:12px;font-weight:750;letter-spacing:.025em}
-.diag-row.good .kind{color:var(--text-secondary)}.diag-row.focus .kind{color:var(--text-secondary)}
-.diag-details{border:1px solid var(--border);border-radius:var(--radius-panel);padding:var(--space-2) var(--space-3);margin-top:var(--space-3)}
-.diag-details summary{cursor:pointer;font-weight:750;padding:var(--space-2) 0;list-style-position:inside}
-.diag-details[open] summary{border-bottom:1px solid var(--border)}
-.diag-stats{font-size:12px;color:var(--text);font-weight:500}
-.diag-summaries{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,210px),1fr));gap:var(--space-2)}
-.diag-summaries .card strong{font-size:17px}
-.diag-empty{color:var(--text-secondary);font-size:13px}
-@media(max-width:470px){.diag-row{padding:var(--space-2)}.diag-details{padding:var(--space-2) var(--space-2)}}
-
-.member-selector{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--space-2);margin:var(--space-3) 0}
-.member-selector button{min-width:0;white-space:normal;font-size:clamp(12px,3vw,14px);padding:var(--space-2) var(--space-1);text-align:center;border:1px solid var(--border);border-radius:var(--radius-panel)}
-.member-selector button[aria-pressed=true]{border-color:var(--text);background:var(--border);color:var(--text)}
-.member-result{line-height:1.5}
-.member-summary{border:1px solid var(--text-muted);border-left:5px solid var(--text-secondary);border-radius:var(--radius-panel);padding:var(--space-4);margin:var(--space-2) 0;background:var(--surface-raised)}
-.member-summary.good{border-color:var(--border);border-left-color:var(--text-secondary);background:var(--surface-inset)}
-.member-summary strong{display:block;font-size:19px;margin:var(--space-1) 0}
-.member-summary .overline{font-size:12px;color:var(--text-secondary);font-weight:800}
-.member-summary.good .overline{color:var(--text-secondary)}
-.member-summary p{margin:var(--space-2) 0;font-size:13px;overflow-wrap:anywhere}
-.member-small{font-size:12px;color:var(--text)}
-.member-coverage{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,210px),1fr));gap:var(--space-2);margin:var(--space-2) 0}
-.member-coverage article{border:1px solid var(--border);border-radius:var(--radius-panel);padding:var(--space-3);background:var(--surface-raised)}
-.member-coverage strong{display:block;margin:0 0 var(--space-1)}
-.member-coverage p{font-size:12px;margin:var(--space-1) 0;color:var(--text)}
-.member-detail{border:1px solid var(--border);border-radius:var(--radius-panel);padding:var(--space-2) var(--space-3);margin:var(--space-2) 0}
-.member-detail summary{cursor:pointer;font-size:13px;font-weight:700}
-#legacy-coach{margin-top:var(--space-4)}#legacy-coach>summary{cursor:pointer;padding:var(--space-1);font-weight:700}
-@media(max-width:380px){.member-selector{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.coach-existing a{color:var(--text)}
+.coach-existing header{padding:var(--space-6) var(--space-1) var(--space-4)}
+.coach-existing .top{display:flex;align-items:center;gap:var(--space-3);justify-content:space-between;flex-wrap:wrap}
+.coach-existing .eyebrow{font-size:12px;letter-spacing:.16em;color:var(--text-secondary);font-weight:750}
+.coach-existing h1{font-size:clamp(28px,7vw,40px);line-height:1.18;margin:var(--space-1) 0 var(--space-1)}
+.coach-existing h2{font-size:17px;margin:0 0 var(--space-2)}
+.coach-existing h3{font-size:15px;margin:var(--space-3) 0 var(--space-1)}
+.coach-existing .muted{color:var(--text-secondary)}
+.coach-existing .small{font-size:12px}
+.coach-existing .lead{margin:0 0 var(--space-3)}
+.coach-existing .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(42vw,180px),1fr));gap:var(--space-2)}
+.coach-existing .card,.coach-existing .panel{border:1px solid var(--border);border-radius:var(--radius-panel);background:var(--surface-inset);box-shadow:0 8px 23px #0001}
+.coach-existing .card{padding:var(--space-3)}
+.coach-existing .card strong{font-size:26px;display:block;line-height:1.1;margin:var(--space-1) 0}
+.coach-existing .card .label{font-size:12px;color:var(--text-secondary)}
+.coach-existing .panel{padding:var(--space-4);margin:var(--space-3) 0}
+.coach-existing button{background:var(--border);border:1px solid var(--text-muted);color:white;border-radius:var(--radius-panel);padding:var(--space-2) var(--space-3);font:inherit;font-weight:650;cursor:pointer;min-height:44px}
+.coach-existing button:disabled{opacity:.55;cursor:wait}
+.coach-existing button.secondary{background:var(--surface-raised);border-color:var(--border)}
+.coach-existing button:focus-visible,.coach-existing input:focus-visible,.coach-existing select:focus-visible{outline:3px solid var(--text-secondary);outline-offset:2px}
+.coach-existing .actions{display:flex;align-items:center;flex-wrap:wrap;gap:var(--space-2)}
+.coach-existing input{background:var(--surface-inset);color:white;border:1px solid var(--border);border-radius:var(--radius-panel);padding:var(--space-2);font:inherit;min-height:44px;width:min(100%,500px)}
+.coach-existing [data-benchmark-reference],.coach-existing [data-practice-option],.coach-existing [data-practice-category]{display:block;width:100%;min-width:0;min-height:44px;background:var(--surface-inset);color:var(--text);border:1px solid var(--text-secondary);border-radius:var(--radius-panel);padding:var(--space-2);font:inherit;margin-top:var(--space-2)}
+.coach-existing .practice-controls{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,210px),1fr));gap:var(--space-2)}
+.coach-existing .practice-menu{border:1px solid var(--text-muted);border-radius:var(--radius-panel);padding:var(--space-3);margin:var(--space-2) 0;overflow-wrap:anywhere}
+.coach-existing .practice-menu>summary{min-height:44px;cursor:pointer;padding:var(--space-2) 0}
+.coach-existing .practice-toggle{display:flex;align-items:center;gap:var(--space-2);min-height:44px}
+.coach-existing .practice-choice{accent-color:var(--text);min-height:24px;width:24px}
+.coach-existing .practice-card ul{padding-left:var(--space-4)}
+.coach-existing .practice-catalog{margin:var(--space-4) 0}
+.coach-existing .practice-catalog input{width:100%}
+.coach-existing label{display:block;margin:0 0 var(--space-2)}
+.coach-existing code{word-break:break-all}
+.coach-existing .table-wrap{overflow-x:auto}
+.coach-existing table{width:100%;border-collapse:collapse;font-size:13px;min-width:580px}
+.coach-existing th{text-align:left;color:var(--text-secondary);font-size:12px;font-weight:650}
+.coach-existing th,.coach-existing td{padding:var(--space-3) var(--space-2);border-bottom:1px solid var(--border);white-space:nowrap}
+.coach-existing td.num,.coach-existing th.num{text-align:right;font-variant-numeric:tabular-nums}
+.coach-existing tr:last-child td{border-bottom:0}
+.coach-existing .positive{color:var(--text-secondary)}
+.coach-existing .negative{color:var(--text-secondary)}
+.coach-existing .foot{margin:var(--space-3) 0 0;font-size:12px;color:var(--text-secondary)}
+.coach-existing .barrow{height:8px;background:var(--border);border-radius:var(--radius-pill);overflow:hidden;margin-top:var(--space-2)}
+.coach-existing .bar{height:100%;background:var(--text-secondary)}
+.coach-existing #status{min-height:21px;margin:var(--space-2) 0;font-size:13px;color:var(--text)}
+.coach-existing #status[role=alert]{color:var(--text)}
+.coach-existing .review-item{background:var(--surface-inset);border:1px solid var(--border);border-radius:var(--radius-panel);padding:var(--space-3) var(--space-3);margin-top:var(--space-2);overflow-wrap:anywhere}
+.coach-existing .review-item p{margin:var(--space-1) 0 0}
+.coach-existing .review-heading{display:flex;flex-wrap:wrap;align-items:baseline;gap:var(--space-1) var(--space-3);justify-content:space-between}
+.coach-existing .review-heading strong{font-size:14px}
+.coach-existing .review-kind{font-size:12px;font-weight:750;letter-spacing:.01em;color:var(--text)}
+.coach-existing .diag-list{display:grid;gap:var(--space-2);margin-top:var(--space-2)}
+.coach-existing .diag-row{border:1px solid var(--border);border-left:4px solid var(--text-muted);border-radius:var(--radius-panel);padding:var(--space-3);background:var(--surface-inset)}
+.coach-existing .diag-row.good{border-left-color:var(--text-secondary)}
+.coach-existing .diag-row.focus{border-left-color:var(--text-secondary)}
+.coach-existing .diag-row.insufficient{border-left-color:var(--text-secondary)}
+.coach-existing .diag-row p{margin:var(--space-1) 0 0;overflow-wrap:anywhere}
+.coach-existing .diag-row strong{font-size:14px}
+.coach-existing .diag-row .kind{font-size:12px;font-weight:750;letter-spacing:.025em}
+.coach-existing .diag-row.good .kind{color:var(--text-secondary)}
+.coach-existing .diag-row.focus .kind{color:var(--text-secondary)}
+.coach-existing .diag-details{border:1px solid var(--border);border-radius:var(--radius-panel);padding:var(--space-2) var(--space-3);margin-top:var(--space-3)}
+.coach-existing .diag-details summary{cursor:pointer;font-weight:750;padding:var(--space-2) 0;list-style-position:inside}
+.coach-existing .diag-details[open] summary{border-bottom:1px solid var(--border)}
+.coach-existing .diag-stats{font-size:12px;color:var(--text);font-weight:500}
+.coach-existing .diag-summaries{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,210px),1fr));gap:var(--space-2)}
+.coach-existing .diag-summaries .card strong{font-size:17px}
+.coach-existing .diag-empty{color:var(--text-secondary);font-size:13px}
+@media(max-width:470px){
+.coach-existing .diag-row{padding:var(--space-2)}
+.coach-existing .diag-details{padding:var(--space-2) var(--space-2)}}
+.coach-existing .member-selector{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--space-2);margin:var(--space-3) 0}
+.coach-existing .member-selector button{min-width:0;white-space:normal;font-size:clamp(12px,3vw,14px);padding:var(--space-2) var(--space-1);text-align:center;border:1px solid var(--border);border-radius:var(--radius-panel)}
+.coach-existing .member-selector button[aria-pressed=true]{border-color:var(--text);background:var(--border);color:var(--text)}
+.coach-existing .member-result{line-height:1.5}
+.coach-existing .member-summary{border:1px solid var(--text-muted);border-left:5px solid var(--text-secondary);border-radius:var(--radius-panel);padding:var(--space-4);margin:var(--space-2) 0;background:var(--surface-raised)}
+.coach-existing .member-summary.good{border-color:var(--border);border-left-color:var(--text-secondary);background:var(--surface-inset)}
+.coach-existing .member-summary strong{display:block;font-size:19px;margin:var(--space-1) 0}
+.coach-existing .member-summary .overline{font-size:12px;color:var(--text-secondary);font-weight:800}
+.coach-existing .member-summary.good .overline{color:var(--text-secondary)}
+.coach-existing .member-summary p{margin:var(--space-2) 0;font-size:13px;overflow-wrap:anywhere}
+.coach-existing .member-small{font-size:12px;color:var(--text)}
+.coach-existing .member-coverage{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,210px),1fr));gap:var(--space-2);margin:var(--space-2) 0}
+.coach-existing .member-coverage article{border:1px solid var(--border);border-radius:var(--radius-panel);padding:var(--space-3);background:var(--surface-raised)}
+.coach-existing .member-coverage strong{display:block;margin:0 0 var(--space-1)}
+.coach-existing .member-coverage p{font-size:12px;margin:var(--space-1) 0;color:var(--text)}
+.coach-existing .member-detail{border:1px solid var(--border);border-radius:var(--radius-panel);padding:var(--space-2) var(--space-3);margin:var(--space-2) 0}
+.coach-existing .member-detail summary{cursor:pointer;font-size:13px;font-weight:700}
+.coach-existing #legacy-coach{margin-top:var(--space-4)}
+.coach-existing #legacy-coach>summary{cursor:pointer;padding:var(--space-1);font-weight:700}
+@media(max-width:380px){
+.coach-existing .member-selector{grid-template-columns:repeat(2,minmax(0,1fr))}}
 
 
 /* KESO COACH v2: data-first individual dashboard, touch-first, 320px safe. */
-.coach-dashboard-tabs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--space-1);margin:var(--space-4) 0 var(--space-4)}
-.coach-dashboard-tabs button{min-width:0;overflow-wrap:anywhere;padding:var(--space-3) var(--space-1);font-size:clamp(11px,2.75vw,14px);border:1px solid var(--border);background:var(--surface-raised);line-height:1.4}
-.coach-dashboard-tabs [aria-selected=true]{background:var(--border);border-color:var(--text);box-shadow:inset 0 -3px var(--text)}
-.coach-dashboard-tabs button:focus-visible{outline:3px solid var(--text);outline-offset:2px}
-.coach-dashboard-view[hidden]{display:none!important}
-.coach-hero h3{font-size:22px;margin:var(--space-1) 0}
-.coach-hero h3 small{font-size:12px;color:var(--text)}
-.coach-hero p{margin:var(--space-1) 0 var(--space-3)}
-.coach-quality{border:1px solid var(--border);border-radius:var(--radius-panel);padding:var(--space-3);background:var(--surface-inset);display:grid;gap:var(--space-1);font-size:12px;color:var(--text)}
-.coach-quality strong{font-size:15px;color:var(--text)}
-.coach-hint{padding:var(--space-2);border-left:3px solid var(--text-secondary);background:var(--surface-raised);font-size:12px;margin:var(--space-1) 0}
-.coach-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--space-2);margin:var(--space-3) 0 var(--space-4)}
-.coach-kpi{min-width:0;background:var(--surface-raised);border:1px solid var(--border);border-radius:var(--radius-panel);padding:var(--space-3) var(--space-2)}
-.coach-kpi span{font-size:11px;color:var(--text);display:block}
-.coach-kpi strong{display:block;font-size:clamp(20px,4vw,29px);font-variant-numeric:tabular-nums;line-height:1.3}
-.coach-kpi small{font-size:10px;color:var(--text-secondary);overflow-wrap:anywhere}
-.coach-section-heading{display:flex;align-items:baseline;justify-content:space-between;gap:var(--space-2)}
-.coach-section-heading h3{font-size:17px}.coach-section-heading span{font-size:11px;color:var(--text-secondary)}
-.coach-lead{font-size:13px;line-height:1.7;color:var(--text)}
-.coach-action{background:var(--surface-inset);border:1px solid var(--border);border-left:4px solid var(--text-muted);border-radius:var(--radius-panel);padding:var(--space-3) var(--space-3);margin:var(--space-2) 0;overflow-wrap:anywhere}
-.coach-action.focus{border-left-color:var(--text-secondary)}.coach-action.good{border-left-color:var(--text-secondary)}
-.coach-action strong{display:block;font-size:16px;line-height:1.5;margin:var(--space-1) 0}
-.coach-action-head{display:flex;align-items:center;gap:var(--space-2)}
-.coach-chip{border-radius:var(--radius-control);background:var(--border);color:var(--text);font-size:11px;font-weight:700;padding:var(--space-1) var(--space-2)}
-.coach-action.focus .coach-chip{background:var(--border)}.coach-action.good .coach-chip{background:var(--surface-raised)}
-.coach-cat{font-size:11px;color:var(--text-secondary)}
-.coach-data{font-weight:750;font-size:14px;font-variant-numeric:tabular-nums;margin:var(--space-2) 0}
-.coach-step{font-size:13px;margin:var(--space-2) 0}
-.coach-action details{border-top:1px solid var(--border);margin:var(--space-2) 0 0;padding:var(--space-2) 0 0;font-size:12px}
-.coach-action summary{cursor:pointer;color:var(--text)}
-.coach-empty{padding:var(--space-3);color:var(--text);border:1px dashed var(--border);border-radius:var(--radius-panel);font-size:13px;line-height:1.6}
-.metric-bar{margin:var(--space-3) 0;padding:var(--space-1) 0}
-.metric-line{display:flex;align-items:baseline;justify-content:space-between;gap:var(--space-2)}
-.metric-line strong{font-size:12px;font-weight:700}
-.metric-value{white-space:nowrap;font-size:17px;font-weight:750;font-variant-numeric:tabular-nums}
-.metric-value small{font-size:11px;font-weight:500;color:var(--text-secondary)}
-.metric-track{background:var(--border);height:11px;border-radius:var(--radius-control);overflow:hidden;margin:var(--space-1) 0}
-.metric-fill{height:100%;border-radius:var(--radius-control);background:var(--text-secondary)}
-.metric-fill.good{background:var(--text-secondary)}.metric-fill.focus{background:var(--text-secondary)}
-.metric-bar>.member-small{margin:var(--space-1) 0 0}
-.coach-trend-heading{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:var(--space-1)}
-.trend-legend{font-size:11px;color:var(--text);display:flex;align-items:center;gap:var(--space-1)}
-.trend-legend i{display:inline-block;width:10px;height:10px;border-radius:var(--radius-control)}
-.legend-k{background:var(--text-secondary)}.legend-d{background:var(--text-secondary)}
-.trend-scroll{overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius-panel);margin:var(--space-2) 0;padding:var(--space-2) var(--space-1) var(--space-1)}
-.trend-chart{display:grid;grid-template-columns:repeat(12,minmax(43px,1fr));min-width:580px;gap:var(--space-1);align-items:end;height:190px}
-.trend-game{height:180px;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;min-width:0}
-.trend-game:focus-visible{outline:2px solid var(--text)}
-.trend-columns{height:128px;width:100%;display:flex;align-items:flex-end;gap:var(--space-1);justify-content:center;border-bottom:1px solid var(--text-muted)}
-.trend-col{width:30%;border-radius:var(--radius-control);min-height:0}
-.trend-k{background:var(--text-secondary)}.trend-d{background:var(--text-secondary)}
-.trend-result{font-weight:800;font-size:11px;padding:0 var(--space-1);border-radius:var(--radius-control);margin-top:var(--space-1)}
-.trend-result.win{color:var(--text-secondary)}.trend-result.loss{color:var(--text-secondary)}
-.trend-game small{font-size:10px;color:var(--text-secondary)}
-.coach-side-grid,.coach-map-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,265px),1fr));gap:var(--space-2)}
-.coach-side,.coach-map-card{border:1px solid var(--border);border-radius:var(--radius-panel);background:var(--surface-inset);padding:var(--space-3);min-width:0}
-.coach-side h4{margin:0;font-size:16px}.coach-side h4 small{font-weight:400;font-size:11px;color:var(--text-secondary)}
-.coach-side-net{font-size:13px;font-weight:700;border-top:1px solid var(--border);padding-top:var(--space-2)}
-.coach-map-card strong{display:block;overflow-wrap:anywhere}
-.coach-map-card p{margin:var(--space-1) 0}
-.coach-map-numbers{display:flex;flex-wrap:wrap;gap:var(--space-2);font-size:12px}
-.mini-pair{height:7px;display:flex;gap:var(--space-1);margin-top:var(--space-2);overflow:hidden}
-.mini-fk{background:var(--text-secondary);border-radius:var(--radius-control)}.mini-fd{background:var(--text-secondary);border-radius:var(--radius-control)}
-@media(max-width:570px){.coach-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.coach-dashboard-tabs{gap:var(--space-1)}.coach-dashboard-tabs button{padding:var(--space-2) var(--space-1)}.coach-trend-heading{display:block}}
-@media(max-width:350px){.coach-kpi{padding:var(--space-2) var(--space-2)}.metric-line{flex-wrap:wrap}.metric-value{font-size:15px}}
-
-#connection{display:none}
-.empty{padding:var(--space-4) var(--space-1);color:var(--text-secondary);text-align:center}
-@media(max-width:470px){.panel{padding:var(--space-3)}.card{padding:var(--space-3)}.card strong{font-size:23px}}
+.coach-existing .coach-dashboard-tabs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--space-1);margin:var(--space-4) 0 var(--space-4)}
+.coach-existing .coach-dashboard-tabs button{min-width:0;overflow-wrap:anywhere;padding:var(--space-3) var(--space-1);font-size:clamp(11px,2.75vw,14px);border:1px solid var(--border);background:var(--surface-raised);line-height:1.4}
+.coach-existing .coach-dashboard-tabs [aria-selected=true]{background:var(--border);border-color:var(--text);box-shadow:inset 0 -3px var(--text)}
+.coach-existing .coach-dashboard-tabs button:focus-visible{outline:3px solid var(--text);outline-offset:2px}
+.coach-existing .coach-dashboard-view[hidden]{display:none!important}
+.coach-existing .coach-hero h3{font-size:22px;margin:var(--space-1) 0}
+.coach-existing .coach-hero h3 small{font-size:12px;color:var(--text)}
+.coach-existing .coach-hero p{margin:var(--space-1) 0 var(--space-3)}
+.coach-existing .coach-quality{border:1px solid var(--border);border-radius:var(--radius-panel);padding:var(--space-3);background:var(--surface-inset);display:grid;gap:var(--space-1);font-size:12px;color:var(--text)}
+.coach-existing .coach-quality strong{font-size:15px;color:var(--text)}
+.coach-existing .coach-hint{padding:var(--space-2);border-left:3px solid var(--text-secondary);background:var(--surface-raised);font-size:12px;margin:var(--space-1) 0}
+.coach-existing .coach-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--space-2);margin:var(--space-3) 0 var(--space-4)}
+.coach-existing .coach-kpi{min-width:0;background:var(--surface-raised);border:1px solid var(--border);border-radius:var(--radius-panel);padding:var(--space-3) var(--space-2)}
+.coach-existing .coach-kpi span{font-size:11px;color:var(--text);display:block}
+.coach-existing .coach-kpi strong{display:block;font-size:clamp(20px,4vw,29px);font-variant-numeric:tabular-nums;line-height:1.3}
+.coach-existing .coach-kpi small{font-size:10px;color:var(--text-secondary);overflow-wrap:anywhere}
+.coach-existing .coach-section-heading{display:flex;align-items:baseline;justify-content:space-between;gap:var(--space-2)}
+.coach-existing .coach-section-heading h3{font-size:17px}
+.coach-existing .coach-section-heading span{font-size:11px;color:var(--text-secondary)}
+.coach-existing .coach-lead{font-size:13px;line-height:1.7;color:var(--text)}
+.coach-existing .coach-action{background:var(--surface-inset);border:1px solid var(--border);border-left:4px solid var(--text-muted);border-radius:var(--radius-panel);padding:var(--space-3) var(--space-3);margin:var(--space-2) 0;overflow-wrap:anywhere}
+.coach-existing .coach-action.focus{border-left-color:var(--text-secondary)}
+.coach-existing .coach-action.good{border-left-color:var(--text-secondary)}
+.coach-existing .coach-action strong{display:block;font-size:16px;line-height:1.5;margin:var(--space-1) 0}
+.coach-existing .coach-action-head{display:flex;align-items:center;gap:var(--space-2)}
+.coach-existing .coach-chip{border-radius:var(--radius-control);background:var(--border);color:var(--text);font-size:11px;font-weight:700;padding:var(--space-1) var(--space-2)}
+.coach-existing .coach-action.focus .coach-chip{background:var(--border)}
+.coach-existing .coach-action.good .coach-chip{background:var(--surface-raised)}
+.coach-existing .coach-cat{font-size:11px;color:var(--text-secondary)}
+.coach-existing .coach-data{font-weight:750;font-size:14px;font-variant-numeric:tabular-nums;margin:var(--space-2) 0}
+.coach-existing .coach-step{font-size:13px;margin:var(--space-2) 0}
+.coach-existing .coach-action details{border-top:1px solid var(--border);margin:var(--space-2) 0 0;padding:var(--space-2) 0 0;font-size:12px}
+.coach-existing .coach-action summary{cursor:pointer;color:var(--text)}
+.coach-existing .coach-empty{padding:var(--space-3);color:var(--text);border:1px dashed var(--border);border-radius:var(--radius-panel);font-size:13px;line-height:1.6}
+.coach-existing .metric-bar{margin:var(--space-3) 0;padding:var(--space-1) 0}
+.coach-existing .metric-line{display:flex;align-items:baseline;justify-content:space-between;gap:var(--space-2)}
+.coach-existing .metric-line strong{font-size:12px;font-weight:700}
+.coach-existing .metric-value{white-space:nowrap;font-size:17px;font-weight:750;font-variant-numeric:tabular-nums}
+.coach-existing .metric-value small{font-size:11px;font-weight:500;color:var(--text-secondary)}
+.coach-existing .metric-track{background:var(--border);height:11px;border-radius:var(--radius-control);overflow:hidden;margin:var(--space-1) 0}
+.coach-existing .metric-fill{height:100%;border-radius:var(--radius-control);background:var(--text-secondary)}
+.coach-existing .metric-fill.good{background:var(--text-secondary)}
+.coach-existing .metric-fill.focus{background:var(--text-secondary)}
+.coach-existing .metric-bar>.member-small{margin:var(--space-1) 0 0}
+.coach-existing .coach-trend-heading{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:var(--space-1)}
+.coach-existing .trend-legend{font-size:11px;color:var(--text);display:flex;align-items:center;gap:var(--space-1)}
+.coach-existing .trend-legend i{display:inline-block;width:10px;height:10px;border-radius:var(--radius-control)}
+.coach-existing .legend-k{background:var(--text-secondary)}
+.coach-existing .legend-d{background:var(--text-secondary)}
+.coach-existing .trend-scroll{overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius-panel);margin:var(--space-2) 0;padding:var(--space-2) var(--space-1) var(--space-1)}
+.coach-existing .trend-chart{display:grid;grid-template-columns:repeat(12,minmax(43px,1fr));min-width:580px;gap:var(--space-1);align-items:end;height:190px}
+.coach-existing .trend-game{height:180px;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;min-width:0}
+.coach-existing .trend-game:focus-visible{outline:2px solid var(--text)}
+.coach-existing .trend-columns{height:128px;width:100%;display:flex;align-items:flex-end;gap:var(--space-1);justify-content:center;border-bottom:1px solid var(--text-muted)}
+.coach-existing .trend-col{width:30%;border-radius:var(--radius-control);min-height:0}
+.coach-existing .trend-k{background:var(--text-secondary)}
+.coach-existing .trend-d{background:var(--text-secondary)}
+.coach-existing .trend-result{font-weight:800;font-size:11px;padding:0 var(--space-1);border-radius:var(--radius-control);margin-top:var(--space-1)}
+.coach-existing .trend-result.win{color:var(--text-secondary)}
+.coach-existing .trend-result.loss{color:var(--text-secondary)}
+.coach-existing .trend-game small{font-size:10px;color:var(--text-secondary)}
+.coach-existing .coach-side-grid,.coach-existing .coach-map-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,265px),1fr));gap:var(--space-2)}
+.coach-existing .coach-side,.coach-existing .coach-map-card{border:1px solid var(--border);border-radius:var(--radius-panel);background:var(--surface-inset);padding:var(--space-3);min-width:0}
+.coach-existing .coach-side h4{margin:0;font-size:16px}
+.coach-existing .coach-side h4 small{font-weight:400;font-size:11px;color:var(--text-secondary)}
+.coach-existing .coach-side-net{font-size:13px;font-weight:700;border-top:1px solid var(--border);padding-top:var(--space-2)}
+.coach-existing .coach-map-card strong{display:block;overflow-wrap:anywhere}
+.coach-existing .coach-map-card p{margin:var(--space-1) 0}
+.coach-existing .coach-map-numbers{display:flex;flex-wrap:wrap;gap:var(--space-2);font-size:12px}
+.coach-existing .mini-pair{height:7px;display:flex;gap:var(--space-1);margin-top:var(--space-2);overflow:hidden}
+.coach-existing .mini-fk{background:var(--text-secondary);border-radius:var(--radius-control)}
+.coach-existing .mini-fd{background:var(--text-secondary);border-radius:var(--radius-control)}
+@media(max-width:570px){
+.coach-existing .coach-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+.coach-existing .coach-dashboard-tabs{gap:var(--space-1)}
+.coach-existing .coach-dashboard-tabs button{padding:var(--space-2) var(--space-1)}
+.coach-existing .coach-trend-heading{display:block}}
+@media(max-width:350px){
+.coach-existing .coach-kpi{padding:var(--space-2) var(--space-2)}
+.coach-existing .metric-line{flex-wrap:wrap}
+.coach-existing .metric-value{font-size:15px}}
+.coach-existing #connection{display:none}
+.coach-existing .empty{padding:var(--space-4) var(--space-1);color:var(--text-secondary);text-align:center}
+@media(max-width:470px){
+.coach-existing .panel{padding:var(--space-3)}
+.coach-existing .card{padding:var(--space-3)}
+.coach-existing .card strong{font-size:23px}}
 
 /* Readable coaching: labels and symbols carry meaning as well as colour. */
-.reader-legend{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-2);font-size:12px;margin:var(--space-3) 0}
-.reader-legend span,.reader-badge{border:1px solid currentColor;border-radius:var(--radius-control);padding:var(--space-1) var(--space-2);font-weight:800;display:inline-block}
-.reader-good{--tone:#ABB7C0;--wash:#17232E;--ink:#F2F3F4}
-.reader-bad{--tone:#ABB7C0;--wash:#17232E;--ink:#F2F3F4}
-.reader-check{--tone:#ABB7C0;--wash:#17232E;--ink:#F2F3F4}
-.reader-neutral,.reader-unknown{--tone:#ABB7C0;--wash:#17232E;--ink:#F2F3F4}
-.reader-card{border:1px solid var(--tone);border-left:6px solid var(--tone);border-radius:var(--radius-panel);background:var(--wash);color:var(--ink);padding:var(--space-4);margin:var(--space-3) 0;overflow-wrap:anywhere;font-size:15px;line-height:1.75}
-.reader-card h3{font-size:19px;margin:var(--space-2) 0 var(--space-1);color:var(--ink)}
-.reader-card p{margin:var(--space-2) 0}.reader-card .reader-next{border-top:1px solid var(--tone);padding-top:var(--space-2)}
-.reader-badge{font-size:13px}.reader-board{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-3)}
-.reader-board .reader-card{margin:0}.reader-guide{background:var(--surface-raised);border:1px solid var(--text-secondary);border-radius:var(--radius-panel);padding:var(--space-4);margin:var(--space-3) 0;font-size:15px;line-height:1.75}
-.reader-guide h3{font-size:19px;margin:0 0 var(--space-2)}.reader-guide p{margin:var(--space-2) 0}
-.reader-stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-2);margin:var(--space-3) 0}
-.reader-stat{background:var(--surface-raised);border:1px solid var(--text-muted);border-radius:var(--radius-panel);padding:var(--space-3);min-width:0;overflow-wrap:anywhere;font-size:14px}
-.reader-stat strong{display:block;font-size:26px;color:var(--text);margin:var(--space-1) 0}.reader-stat p{margin:var(--space-1) 0;color:var(--text);line-height:1.7}
-.reader-glossary{margin:var(--space-4) 0}.reader-glossary details{border:1px solid var(--text-muted);border-radius:var(--radius-panel);margin:var(--space-2) 0;padding:var(--space-3) var(--space-3);background:var(--surface-raised);font-size:15px;line-height:1.75;overflow-wrap:anywhere}
-.reader-glossary summary{cursor:pointer;font-weight:750;min-height:44px;padding:var(--space-2) 0}.reader-glossary p{margin:var(--space-2) 0}
-.reader-advanced{margin:var(--space-4) 0;border:1px solid var(--text-muted);border-radius:var(--radius-panel);padding:var(--space-3);min-width:0}
-.reader-advanced>summary{font-size:15px;cursor:pointer;min-height:44px;padding:var(--space-2) 0;font-weight:750}.reader-card summary{cursor:pointer;min-height:44px;padding:var(--space-2) 0}
-[data-coach-learning] .coach-quality{font-size:15px;line-height:1.8;color:var(--text)}
-[data-coach-learning] h3{font-size:20px}[data-coach-learning] h4{font-size:17px;margin:var(--space-4) 0 var(--space-1)}
-[data-coach-learning] li{margin:var(--space-2) 0}[data-coach-learning] ol{padding-left:var(--space-6)}
-@media(min-width:701px){.reader-legend{grid-template-columns:repeat(4,minmax(0,1fr))}}
-@media(max-width:700px){.reader-board{grid-template-columns:1fr}}
-@media(max-width:380px){.reader-stats{grid-template-columns:1fr}.reader-card,.reader-guide{padding:var(--space-3)}}
-
-:root{background:var(--canvas);color:var(--text)}
-body{background:var(--canvas)}
-.card,.panel,.reader-guide,.practice-menu,.coach-action,.coach-kpi,.reader-stat{background:var(--surface);border-color:var(--border);box-shadow:none}
-button{background:var(--surface-raised);color:var(--text);border-color:var(--border)}
-a{color:var(--text);text-underline-offset:4px}
-.member-selector button[aria-pressed=true]{background:var(--surface-raised);border-color:var(--accent);box-shadow:inset 0 -3px var(--accent)}
-.coach-dashboard-tabs [aria-selected=true]{background:var(--surface-raised);border-color:var(--border);box-shadow:inset 0 -3px var(--accent)}
-button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
-.reader-legend span{color:var(--text-secondary)!important}
-.reader-badge,.coach-chip,.trend-result{border-radius:var(--radius-pill)}
-.practice-choice{accent-color:var(--accent)}
-header{border-top:4px solid var(--accent)}
-#share-fallback{border-radius:var(--radius-control)!important;background:var(--surface-inset)!important;color:var(--text)!important;border-color:var(--border)!important}
-.reader-legend [style]{color:var(--text-secondary)!important}
-
-/* PDCA presentation: body copy is 16px; charts retain compact axis labels. */
-:root{font-size:16px;line-height:1.9}
-body{color:var(--text);line-height:1.9}
-.member-result{line-height:1.9}
-.member-selector{display:block}.person-buttons{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--space-2)}#coach-account-options{margin-top:var(--space-3)}#coach-account-options summary,[data-member-compare]>summary{min-height:44px;cursor:pointer}.member-selector button{font-size:16px;padding:var(--space-2)}.analysis-navigation{margin-top:var(--space-6)}
-p,li,label,summary,button,input,select,textarea,td,th,.small,.member-small,.coach-lead,.reader-card,.reader-guide,.reader-stat,.reader-glossary,.member-detail summary,.coach-quality,.foot{font-size:16px;line-height:1.9;color:var(--text)}
-p,li,h1,h2,h3,h4,summary{word-break:normal;overflow-wrap:break-word;line-break:strict;text-wrap:pretty}
-.coach-word{display:inline-block;white-space:normal;overflow-wrap:normal;max-width:100%}
-main :is(p,li,label,summary,td,th,input,select,textarea){font-size:16px!important;line-height:1.9}
-p{max-width:65ch}pre,code{overflow-wrap:anywhere}
-header{padding:var(--space-4) 0}.lead{margin-top:var(--space-3)}
-.pdca-flow{border-bottom:1px solid var(--border);padding:var(--space-4) 0}
-.pdca-flow ol{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:var(--space-2);list-style:none;padding:0;margin:0;counter-reset:pdca}
-.pdca-flow li{counter-increment:pdca;padding:var(--space-2);border:1px solid var(--border);border-radius:var(--radius-control);font-size:16px}
-.pdca-flow li::before{content:counter(pdca) ' → ';color:var(--text-muted)}
-.pdca-flow [aria-current=step]{border-color:var(--accent);box-shadow:inset 0 -3px var(--accent);font-weight:750}
-.pdca-flow p{margin:var(--space-2) 0 0}
-.coach-dashboard-tabs{grid-template-columns:repeat(3,minmax(0,1fr))}.coach-dashboard-tabs button{font-size:16px;line-height:1.7;padding:var(--space-3) var(--space-2);word-break:normal;overflow-wrap:break-word}
-.improvement,.mission{padding:var(--space-6);margin:var(--space-4) 0;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-panel)}
-.improvement h3,.mission h3{font-size:clamp(22px,4vw,30px);line-height:1.5;margin:var(--space-2) 0 var(--space-4)}
-.mission{border-top:4px solid var(--accent);position:relative}
-.mission::after{content:'';position:absolute;right:0;top:-4px;width:var(--space-6);height:4px;background:var(--canvas);transform:skew(-35deg);pointer-events:none}
-.section-kicker{font-size:16px;font-weight:750;color:var(--text-secondary);letter-spacing:.04em}
-.mission-flow{padding:0;list-style:none;display:grid;gap:var(--space-6)}
-.mission-flow>li{border-top:1px solid var(--border);padding-top:var(--space-4)}
-.mission-flow h4{font-size:18px;line-height:1.7;margin:0 0 var(--space-3)}
-.mission-flow ol{padding-left:var(--space-6)}.mission-flow ol li{margin:var(--space-3) 0}
-.mission-number{display:flex;flex-wrap:wrap;gap:var(--space-4);align-items:baseline;margin:var(--space-3) 0}.mission-number strong{font-size:40px;line-height:1.2}
-.mission button{background:var(--accent);color:var(--canvas);border-color:var(--accent)}
-.mission-evidence{margin-top:var(--space-6);border-top:1px solid var(--border);padding-top:var(--space-4)}
-.mission details summary{min-height:44px;cursor:pointer}.diamond-drill{border-left:2px solid var(--border);padding-left:var(--space-4);margin-top:var(--space-4)}
-.coach-operations{margin-top:var(--space-12)}.coach-operations>summary{min-height:44px;cursor:pointer}
-[data-analysis-details],[data-other-practice]{margin-top:var(--space-6)}
-@media(max-width:600px){.metric-line,.coach-section-heading,.coach-action-head{flex-wrap:wrap}.reader-board{grid-template-columns:minmax(0,1fr)}.reader-card{min-width:0}.pdca-flow ol{grid-template-columns:repeat(3,minmax(0,1fr))}.coach-dashboard-tabs{grid-template-columns:repeat(2,minmax(0,1fr))}.improvement,.mission{padding:var(--space-4)}}
+.coach-existing .reader-legend{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-2);font-size:12px;margin:var(--space-3) 0}
+.coach-existing .reader-legend span,.coach-existing .reader-badge{border:1px solid currentColor;border-radius:var(--radius-control);padding:var(--space-1) var(--space-2);font-weight:800;display:inline-block}
+.coach-existing .reader-good{--tone:#ABB7C0;--wash:#17232E;--ink:#F2F3F4}
+.coach-existing .reader-bad{--tone:#ABB7C0;--wash:#17232E;--ink:#F2F3F4}
+.coach-existing .reader-check{--tone:#ABB7C0;--wash:#17232E;--ink:#F2F3F4}
+.coach-existing .reader-neutral,.coach-existing .reader-unknown{--tone:#ABB7C0;--wash:#17232E;--ink:#F2F3F4}
+.coach-existing .reader-card{border:1px solid var(--tone);border-left:6px solid var(--tone);border-radius:var(--radius-panel);background:var(--wash);color:var(--ink);padding:var(--space-4);margin:var(--space-3) 0;overflow-wrap:anywhere;font-size:15px;line-height:1.75}
+.coach-existing .reader-card h3{font-size:19px;margin:var(--space-2) 0 var(--space-1);color:var(--ink)}
+.coach-existing .reader-card p{margin:var(--space-2) 0}
+.coach-existing .reader-card .reader-next{border-top:1px solid var(--tone);padding-top:var(--space-2)}
+.coach-existing .reader-badge{font-size:13px}
+.coach-existing .reader-board{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-3)}
+.coach-existing .reader-board .reader-card{margin:0}
+.coach-existing .reader-guide{background:var(--surface-raised);border:1px solid var(--text-secondary);border-radius:var(--radius-panel);padding:var(--space-4);margin:var(--space-3) 0;font-size:15px;line-height:1.75}
+.coach-existing .reader-guide h3{font-size:19px;margin:0 0 var(--space-2)}
+.coach-existing .reader-guide p{margin:var(--space-2) 0}
+.coach-existing .reader-stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-2);margin:var(--space-3) 0}
+.coach-existing .reader-stat{background:var(--surface-raised);border:1px solid var(--text-muted);border-radius:var(--radius-panel);padding:var(--space-3);min-width:0;overflow-wrap:anywhere;font-size:14px}
+.coach-existing .reader-stat strong{display:block;font-size:26px;color:var(--text);margin:var(--space-1) 0}
+.coach-existing .reader-stat p{margin:var(--space-1) 0;color:var(--text);line-height:1.7}
+.coach-existing .reader-glossary{margin:var(--space-4) 0}
+.coach-existing .reader-glossary details{border:1px solid var(--text-muted);border-radius:var(--radius-panel);margin:var(--space-2) 0;padding:var(--space-3) var(--space-3);background:var(--surface-raised);font-size:15px;line-height:1.75;overflow-wrap:anywhere}
+.coach-existing .reader-glossary summary{cursor:pointer;font-weight:750;min-height:44px;padding:var(--space-2) 0}
+.coach-existing .reader-glossary p{margin:var(--space-2) 0}
+.coach-existing .reader-advanced{margin:var(--space-4) 0;border:1px solid var(--text-muted);border-radius:var(--radius-panel);padding:var(--space-3);min-width:0}
+.coach-existing .reader-advanced>summary{font-size:15px;cursor:pointer;min-height:44px;padding:var(--space-2) 0;font-weight:750}
+.coach-existing .reader-card summary{cursor:pointer;min-height:44px;padding:var(--space-2) 0}
+.coach-existing [data-coach-learning] .coach-quality{font-size:15px;line-height:1.8;color:var(--text)}
+.coach-existing [data-coach-learning] h3{font-size:20px}
+.coach-existing [data-coach-learning] h4{font-size:17px;margin:var(--space-4) 0 var(--space-1)}
+.coach-existing [data-coach-learning] li{margin:var(--space-2) 0}
+.coach-existing [data-coach-learning] ol{padding-left:var(--space-6)}
+@media(min-width:701px){
+.coach-existing .reader-legend{grid-template-columns:repeat(4,minmax(0,1fr))}}
+@media(max-width:700px){
+.coach-existing .reader-board{grid-template-columns:1fr}}
+@media(max-width:380px){
+.coach-existing .reader-stats{grid-template-columns:1fr}
+.coach-existing .reader-card,.coach-existing .reader-guide{padding:var(--space-3)}}
+.coach-existing .card,.coach-existing .panel,.coach-existing .reader-guide,.coach-existing .practice-menu,.coach-existing .coach-action,.coach-existing .coach-kpi,.coach-existing .reader-stat{background:var(--surface);border-color:var(--border);box-shadow:none}
+.coach-existing button{background:var(--surface-raised);color:var(--text);border-color:var(--border)}
+.coach-existing a{color:var(--text);text-underline-offset:4px}
+.coach-existing .member-selector button[aria-pressed=true]{background:var(--surface-raised);border-color:var(--accent);box-shadow:inset 0 -3px var(--accent)}
+.coach-existing .coach-dashboard-tabs [aria-selected=true]{background:var(--surface-raised);border-color:var(--border);box-shadow:inset 0 -3px var(--accent)}
+.coach-existing button:focus-visible,.coach-existing input:focus-visible,.coach-existing select:focus-visible,.coach-existing summary:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
+.coach-existing .reader-legend span{color:var(--text-secondary)!important}
+.coach-existing .reader-badge,.coach-existing .coach-chip,.coach-existing .trend-result{border-radius:var(--radius-pill)}
+.coach-existing .practice-choice{accent-color:var(--accent)}
+.coach-existing header{border-top:4px solid var(--accent)}
+.coach-existing #share-fallback{border-radius:var(--radius-control)!important;background:var(--surface-inset)!important;color:var(--text)!important;border-color:var(--border)!important}
+.coach-existing .reader-legend [style]{color:var(--text-secondary)!important}
+.coach-existing .member-result{line-height:1.9}
+.coach-existing .member-selector{display:block}
+.coach-existing .person-buttons{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--space-2)}
+.coach-existing #coach-account-options{margin-top:var(--space-3)}
+.coach-existing #coach-account-options summary,.coach-existing [data-member-compare]>summary{min-height:44px;cursor:pointer}
+.coach-existing .member-selector button{font-size:16px;padding:var(--space-2)}
+.coach-existing .analysis-navigation{margin-top:var(--space-6)}
+.coach-existing p,.coach-existing li,.coach-existing label,.coach-existing summary,.coach-existing button,.coach-existing input,.coach-existing select,.coach-existing textarea,.coach-existing td,.coach-existing th,.coach-existing .small,.coach-existing .member-small,.coach-existing .coach-lead,.coach-existing .reader-card,.coach-existing .reader-guide,.coach-existing .reader-stat,.coach-existing .reader-glossary,.coach-existing .member-detail summary,.coach-existing .coach-quality,.coach-existing .foot{font-size:16px;line-height:1.9;color:var(--text)}
+.coach-existing p,.coach-existing li,.coach-existing h1,.coach-existing h2,.coach-existing h3,.coach-existing h4,.coach-existing summary{word-break:normal;overflow-wrap:break-word;line-break:strict;text-wrap:pretty}
+.coach-existing .coach-word{display:inline-block;white-space:normal;overflow-wrap:normal;max-width:100%}
+.coach-existing :is(p,.coach-existing li,.coach-existing label,.coach-existing summary,.coach-existing td,.coach-existing th,.coach-existing input,.coach-existing select,.coach-existing textarea){font-size:16px!important;line-height:1.9}
+.coach-existing p{max-width:65ch}
+.coach-existing pre,.coach-existing code{overflow-wrap:anywhere}
+.coach-existing header{padding:var(--space-4) 0}
+.coach-existing .lead{margin-top:var(--space-3)}
+.coach-existing .pdca-flow{border-bottom:1px solid var(--border);padding:var(--space-4) 0}
+.coach-existing .pdca-flow ol{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:var(--space-2);list-style:none;padding:0;margin:0;counter-reset:pdca}
+.coach-existing .pdca-flow li{counter-increment:pdca;padding:var(--space-2);border:1px solid var(--border);border-radius:var(--radius-control);font-size:16px}
+.coach-existing .pdca-flow li::before{content:counter(pdca) ' → ';color:var(--text-muted)}
+.coach-existing .pdca-flow [aria-current=step]{border-color:var(--accent);box-shadow:inset 0 -3px var(--accent);font-weight:750}
+.coach-existing .pdca-flow p{margin:var(--space-2) 0 0}
+.coach-existing .coach-dashboard-tabs{grid-template-columns:repeat(3,minmax(0,1fr))}
+.coach-existing .coach-dashboard-tabs button{font-size:16px;line-height:1.7;padding:var(--space-3) var(--space-2);word-break:normal;overflow-wrap:break-word}
+.coach-existing .improvement,.coach-existing .mission{padding:var(--space-6);margin:var(--space-4) 0;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-panel)}
+.coach-existing .improvement h3,.coach-existing .mission h3{font-size:clamp(22px,4vw,30px);line-height:1.5;margin:var(--space-2) 0 var(--space-4)}
+.coach-existing .mission{border-top:4px solid var(--accent);position:relative}
+.coach-existing .mission::after{content:'';position:absolute;right:0;top:-4px;width:var(--space-6);height:4px;background:var(--canvas);transform:skew(-35deg);pointer-events:none}
+.coach-existing .section-kicker{font-size:16px;font-weight:750;color:var(--text-secondary);letter-spacing:.04em}
+.coach-existing .mission-flow{padding:0;list-style:none;display:grid;gap:var(--space-6)}
+.coach-existing .mission-flow>li{border-top:1px solid var(--border);padding-top:var(--space-4)}
+.coach-existing .mission-flow h4{font-size:18px;line-height:1.7;margin:0 0 var(--space-3)}
+.coach-existing .mission-flow ol{padding-left:var(--space-6)}
+.coach-existing .mission-flow ol li{margin:var(--space-3) 0}
+.coach-existing .mission-number{display:flex;flex-wrap:wrap;gap:var(--space-4);align-items:baseline;margin:var(--space-3) 0}
+.coach-existing .mission-number strong{font-size:40px;line-height:1.2}
+.coach-existing .mission button{background:var(--accent);color:var(--canvas);border-color:var(--accent)}
+.coach-existing .mission-evidence{margin-top:var(--space-6);border-top:1px solid var(--border);padding-top:var(--space-4)}
+.coach-existing .mission details summary{min-height:44px;cursor:pointer}
+.coach-existing .diamond-drill{border-left:2px solid var(--border);padding-left:var(--space-4);margin-top:var(--space-4)}
+.coach-existing .coach-operations{margin-top:var(--space-12)}
+.coach-existing .coach-operations>summary{min-height:44px;cursor:pointer}
+.coach-existing [data-analysis-details],.coach-existing [data-other-practice]{margin-top:var(--space-6)}
+@media(max-width:600px){
+.coach-existing .metric-line,.coach-existing .coach-section-heading,.coach-existing .coach-action-head{flex-wrap:wrap}
+.coach-existing .reader-board{grid-template-columns:minmax(0,1fr)}
+.coach-existing .reader-card{min-width:0}
+.coach-existing .pdca-flow ol{grid-template-columns:repeat(3,minmax(0,1fr))}
+.coach-existing .coach-dashboard-tabs{grid-template-columns:repeat(2,minmax(0,1fr))}
+.coach-existing .improvement,.coach-existing .mission{padding:var(--space-4)}}
+/* Existing tools live inside the prototype's disclosure shell. */
+.coach-existing{min-width:0;font-size:16px;line-height:1.9}
+.coach-existing .panel{margin:16px 0;padding:0;background:none;border:0}
+.coach-existing details{margin:16px 0;background:var(--bg-2);border:1px solid var(--line-soft);border-radius:0}
+.coach-existing summary{display:block;padding:16px 18px;font-size:14px;line-height:1.6}
+.coach-existing .coach-dashboard-tabs{margin:0 0 16px}
+.coach-existing .coach-word{max-width:100%;white-space:normal}
+.coach-existing [data-reader-board]{grid-template-columns:minmax(0,1fr)}
+.coach-existing button,.coach-existing input,.coach-existing select{min-height:44px}
+.coach-existing .reader-card{min-width:0}
+</style>
+<style id="coach-integration-style">
+[hidden]{display:none!important}
+.coach-disclosure>.detail-body{min-width:0}
+#member-result:empty{display:none}
+#member-result{margin:0;line-height:inherit}
+#coach-ui-message:empty{display:none}
+@media(max-width:374px){.prototype-top .clock{min-width:76px}.prototype-top .timerbox>div:last-child{min-width:0!important}.prototype-top .timerbox{flex-wrap:wrap}}
+.prototype-top .rankbox .r{overflow-wrap:anywhere}
+.prototype-top .stat-grid .stat{min-width:0}
+.prototype-top .evidence .ev{min-width:0}
+.prototype-top .sub-task .tt{overflow-wrap:break-word}
+.prototype-top .nextcheck .disp{overflow-wrap:break-word}
+.prototype-top .detail-body .coach-existing{margin-top:16px}
 </style>
 </head>
 <body>
-<main>
-<nav class="pdca-flow" aria-label="上達までの流れ" data-pdca-flow>
- <ol><li data-pdca-step="match">試合</li><li data-pdca-step="result">速報</li><li data-pdca-step="analysis" aria-current="step">分析</li><li data-pdca-step="task">今日の課題</li><li data-pdca-step="next"><span class="coach-word">次の</span><span class="coach-word">試合で</span><span class="coach-word">確認</span></li></ol>
- <p data-pdca-location>現在地：分析する選手を選びます。</p>
-</nav>
-<header>
-<div class="top"><div><div class="eyebrow">KESO PLAY / VALORANT</div><h1>KESO COACH</h1></div>
-<a href="./index.html">KESO PLAYに戻る</a></div>
-<p class="lead muted">良かった動きを残し、今日の課題を次の一戦で試します。</p>
-
-<p id="coach-ui-message" role="status" aria-live="polite">データを確認しています。</p>
+<main class="wrap">
+<header class="tophero" id="coach-welcome">
+ <img class="bgimg" src="assets/abyss-splash.png" alt="VALORANTのマップ、アビスの公式アート">
+ <div class="shade"></div><div class="diag" aria-hidden="true"></div>
+ <img class="chamber" src="assets/chamber-cut.png" alt="エージェント、チェンバーの公式アート">
+ <div class="tophero-inner"><div class="playerline"><span class="micro">KESO <b>//</b> Coach Brief</span><h1 class="name">KESO COACH</h1></div><p class="coach-intro">記録を確認し、次の試合に向けた練習をご案内します。</p><p class="coach-intro">接続後、下の選手選択から分析する方を選んでください。</p></div>
 </header>
-<section id="connection" class="panel">
+<p id="coach-ui-message" role="status" aria-live="polite">データを確認しています。</p>
+<details id="connection" class="coach-disclosure" open><summary>接続してコーチングを確認します <span class="chev" aria-hidden="true">⌄</span></summary><div class="detail-body coach-existing">
 <h2>KP口座へ接続すると分析を確認できます</h2>
 <p class="muted">同じブラウザーでKESO PLAYに接続済みの場合は、自動で認証します。接続できない場合は、Discordの <code>/valo status</code> で取得した接続コードを入力してください。コードはこの画面に保存しません。</p>
 <form id="connect-form"><label for="code">接続コード（48桁）</label><div class="actions">
 <input id="code" type="password" inputmode="text" autocomplete="off" minlength="48" maxlength="48" required placeholder="48文字の接続コード">
 <button type="submit">接続して表示</button>
 </div></form>
-</section>
+</div></details>
 <div id="report" hidden>
-<section class="panel" id="member-coaching-panel">
-<h2>分析する選手を選びます</h2>
+<div id="member-result" aria-live="polite"></div>
+<details id="member-coaching-panel" class="coach-disclosure" open><summary>分析する選手を選びます <span class="chev" aria-hidden="true">⌄</span></summary><div class="detail-body coach-existing">
+
 <p class="muted small">各選手が参加した試合を使って、変化を確認します。</p>
 <div id="member-selector" class="member-selector" role="group" aria-label="分析する選手"><div class="person-buttons"><button type="button" data-member="神戸" aria-pressed="false" aria-label="神戸（2アカウント統合）">神戸</button>
 <button type="button" data-member="VDK" aria-pressed="false">VDK</button>
@@ -276,77 +577,347 @@ header{padding:var(--space-4) 0}.lead{margin-top:var(--space-3)}
 <p class="muted small">同じ数字でも、役割によって強みは変わります。詳しく比べたいときに開いてください。</p>
 <div id="member-comparison" aria-live="polite"></div>
 </details>
-<div id="member-result" aria-live="polite" class="member-result">選手を選ぶと、改善された点と今日の課題を表示します。</div>
-</section>
-<details id="legacy-coach" class="panel"><summary>従来のVDK中心の詳細分析・保存状況を開く</summary><p class="small muted">以下は従来の列保存基準による参考表示です。全10人のK/Dを照合する選手別ラウンド分析とは対象件数が異なります。基本性能は上の選手別画面を確認してください。</p>
+</div></details>
+<details id="legacy-coach" class="coach-disclosure"><summary>従来の分析と保存状況を確認します <span class="chev" aria-hidden="true">⌄</span></summary><div class="detail-body coach-existing"><p class="small muted">以下は従来の列保存基準による参考表示です。全10人のK/Dを照合する選手別ラウンド分析とは対象件数が異なります。基本性能は上の選手別画面を確認してください。</p>
 <section class="cards" id="totals" aria-label="補完状況の概要"></section>
 <section class="panel">
 <h2>対象試合の補完状況</h2>
-<p class="muted small">完全保存・一部欠損・未取得を区別する。分析の母数は完全保存済み試合だけ。数字は更新時点のD1保存状況であり、取得元に存在しないデータは補わない。</p>
+<p class="muted small">完全保存・一部欠損・未取得を区別します。分析の母数は完全保存済み試合だけです。数字は更新時点のD1保存状況です。取得元に存在しないデータは補いません。</p>
 <div class="cards" id="backfill-counts"></div>
 <p id="backfill-message" class="small muted"></p>
 <div class="actions"><button id="resume-backfill" type="button" hidden>未取得試合の補完を再開</button></div>
-<p id="resume-explain" class="small muted" hidden>VDK本人の連携口座から、以前許可した試合補完を再開する。5分に最大1試合、保存済みの競技試合だけを取得する。KP・通知・勝敗予想は変更しない。</p>
+<p id="resume-explain" class="small muted" hidden>VDK本人の連携口座から、以前許可した試合補完を再開します。5分に最大1試合、保存済みの競技試合だけを取得します。KP・通知・勝敗予想は変更しません。</p>
 </section>
 <section class="panel">
 <h2>全項目診断：ここが良い／ここを見直す</h2>
-<p class="muted small">完全保存された試合データを利用し、チーム・VDK・Abema・石原のFK・FD・トレード候補・人数有利の維持・攻守・マップ／エージェントをまとめる。良い傾向と見直し候補は暫定的な判定であり、役割・味方・相手や試合状況によって結果が変わる。</p>
+<p class="muted small">完全保存された試合データを利用し、チーム・VDK・Abema・石原のFK・FD・トレード候補・人数有利の維持・攻守・マップ／エージェントをまとめます。良い傾向と見直し候補は暫定的な判定であり、役割・味方・相手や試合状況によって結果が変わります。</p>
 <div id="diagnosis-summary"></div>
 <div id="diagnosis-full"></div>
 <div id="diagnosis-limits" class="small muted"></div>
 </section>
 <section class="panel">
 <h2>FK / FDから分かる強みと見直し候補</h2>
-<p class="muted small">判定は保存済みの実測値と最低サンプル数に基づく暫定的な目安であり、ランク帯の平均値や実力評価ではない。FK後勝率とFD後の取り返しはチーム全体の結果を含む。スキル・位置・役割は映像を見ないと断定できない。</p>
+<p class="muted small">判定は保存済みの実測値と最低サンプル数に基づく暫定的な目安であり、ランク帯の平均値や実力評価ではない。FK後勝率とFD後の取り返しはチーム全体の結果を含みます。スキル・位置・役割は映像を見ないと断定できない。</p>
 <div id="coach-signals"></div>
-<p class="foot">判定目安：個人は3試合かつ40ラウンド以上。FK後勝率は勝敗判明10回以上で70%以上を良い傾向、45%以下を見直し候補とする。FK直後の生存やFD後の取り返しは8回以上で判定する。これはコーチング用の仮説抽出基準であり、ゲーム全体の標準値ではない。</p>
+<p class="foot">判定目安：個人は3試合かつ40ラウンド以上。FK後勝率は勝敗判明10回以上で70%以上を良い傾向、45%以下を見直し候補とします。FK直後の生存やFD後の取り返しは8回以上で判定します。これはコーチング用の仮説抽出基準であり、ゲーム全体の標準値ではない。</p>
 </section>
 <section class="panel">
 <h2>次の試合で意識すること</h2>
-<p class="muted small">取得済みログから作成する観察・録画確認の提案だ。キルの順序だけで「戦犯」やポジションミスとは断定しない。</p>
+<p class="muted small">取得済みログから作成する観察・録画確認の提案です。キルの順序だけで「戦犯」やポジションミスとは断定しない。</p>
 <div id="coach-notes"></div>
 </section>
 <section class="panel">
 <h2>優先して見直すラウンド</h2>
-<p class="muted small">先制キルを取ったのに敗北したラウンドから、連続撃破・短時間の死亡など、事実として検証できる場面を抽出する。ラウンド番号は0始まりだ。</p>
+<p class="muted small">先制キルを取ったのに敗北したラウンドから、連続撃破・短時間の死亡など、事実として検証できる場面を抽出します。ラウンド番号は0始まりです。</p>
 <div id="review-rounds"></div>
-<p class="foot">表示する試合日時は日本時間。キル時刻はそのラウンド開始からの経過時間です。射線・購入指示・スキルの効果・VCの確認には試合録画が必要です。</p>
+<p class="foot">表示する試合日時は日本時間です。キル時刻はそのラウンド開始からの経過時間です。射線・購入指示・スキルの効果・VCの確認には試合録画が必要です。</p>
 </section>
 <section class="panel">
 <h2>良かったラウンド：再現したい勝ち方</h2>
-<p class="muted small">同じ43試合の勝利ラウンドから、先制2キルを勝ちにつなげた場面・FK担当者が初動5秒間倒されなかった場面・敵FKから逆転した場面を抽出する。正しい戦術と断定せず、VODで再現可能な行動を探す。</p>
+<p class="muted small">保存済みの勝利ラウンドから、先制2キルを勝ちにつなげた場面・FK担当者が初動5秒間倒されなかった場面・敵FKから逆転した場面を抽出します。正しい戦術と断定せず、VODで再現可能な行動を探してください。</p>
 <div id="success-rounds"></div>
 </section>
-<section class="panel"><h2>マップ別：先制キルを勝利に変えた割合</h2><div id="maps"></div><p class="foot">FK後勝率＝味方が敵を最初に倒したラウンドのうち、ラウンド勝者が分かるものに限った勝率。5対4からの敗北を探す指標で、プレイヤー個人の戦犯判定ではない。</p></section>
+<section class="panel"><h2>マップ別：先制キルを勝利に変えた割合</h2><div id="maps"></div><p class="foot">FK後勝率＝味方が敵を最初に倒したラウンドのうち、ラウンド勝者が分かるものに限った勝率です。5対4からの敗北を探す指標で、プレイヤー個人の戦犯判定ではない。</p></section>
 <section class="panel">
 <h2>VDK・Abema・石原：個人別FK / FD</h2>
-<p class="muted small">ラウンドの最初の敵味方間キルのみで判定。FD後勝率は、先制デスしたラウンドで味方が勝利した割合（勝敗判明分のみ）である。役割やマップ、サンプル数の違いがあるため、FK/FDだけで良し悪しは決められない。</p>
+<p class="muted small">ラウンドの最初の敵味方間キルのみで判定します。FD後勝率は、先制デスしたラウンドで味方が勝利した割合です（勝敗判明分のみ）。役割やマップ、サンプル数の違いがあるため、FK/FDだけで良し悪しは決められない。</p>
 <div class="cards" id="players"></div>
-<p class="foot">「5秒以内の死亡」は、先制キルを取った本人が直後に倒された回数。「5秒以内の取り返し」は、最初に倒された味方の敵キラーを味方が5秒以内に倒した回数である。意図的なトレードの証明ではない。</p>
+<p class="foot">「5秒以内の死亡」は、先制キルを取った本人が直後に倒された回数です。「5秒以内の取り返し」は、最初に倒された味方の敵キラーを味方が5秒以内に倒した回数です。意図的なトレードの証明ではない。</p>
 </section>
 <section class="panel">
 <h2>マップ・使用エージェント別の違い</h2>
 <div id="player-map"></div>
-<p class="foot">FK/FD率の母数はキルイベントが記録されているラウンドに限る。キルデータ不足は集計に含めない。試合数が少ない組合せは参考値である。</p>
+<p class="foot">FK/FD率の母数はキルイベントが記録されているラウンドに限ります。キルデータ不足は集計に含めない。試合数が少ない組合せは参考値です。</p>
 </section>
-<section class="panel"><h2>3人が共闘した試合の構成比較</h2><p class="muted small">VDK・Abema・石原が同じチームにいる試合だけを、マップと構成ごとに比較する。</p><div id="trio"></div></section>
-<section class="panel"><h2>データの確認事項</h2><div id="quality"></div><p class="foot">同一ラウンドで同じプレイヤーが2回倒されていても、Cloveの自己蘇生などがあるため自動的に不正とはしない。攻守情報がない場合も「不明」として扱う。</p></section>
-</details>
-<details class="panel coach-operations" id="coach-operations"><summary>収集状況や更新設定を確認します</summary>
+<section class="panel"><h2>3人が共闘した試合の構成比較</h2><p class="muted small">VDK・Abema・石原が同じチームにいる試合だけを、マップと構成ごとに比較します。</p><div id="trio"></div></section>
+<section class="panel"><h2>データの確認事項</h2><div id="quality"></div><p class="foot">同一ラウンドで同じプレイヤーが2回倒されていても、Cloveの自己蘇生などがあるため自動的に不正とはしない。攻守情報がない場合も「不明」として扱います。</p></section>
+</div></details>
+<details class="coach-disclosure" id="coach-operations"><summary>収集状況や更新設定を確認します <span class="chev" aria-hidden="true">⌄</span></summary><div class="detail-body coach-existing">
 <div id="coach-operation-actions"><div id="status" role="status" aria-live="polite">データを確認中…</div><textarea id="share-fallback" hidden readonly aria-label="診断レポート" rows="6" style="width:100%;background:#09152a;color:#e9eef9;border:1px solid #435779;border-radius:10px;margin-top:8px;font:12px/1.4 monospace"></textarea><div class="actions"><button id="reload" type="button">分析を更新</button><button id="share" class="secondary" type="button" disabled>診断レポートをコピー</button><span class="small muted">手動更新 · KPの増減なし</span></div>
-<p class="small muted">診断レポートには認証トークン・接続コード・試合ID・PUUID・相手の名前を含めない。個別の分析は選手を選ぶと表示する。</p>
+<p class="small muted">診断レポートには認証トークン・接続コード・試合ID・PUUID・相手の名前を含めない。個別の分析は選手を選ぶと表示します。</p>
 </div>
 <section class="panel" id="member-archive-panel">
 <h2>5人分の収集状況を確認します</h2>
-<p class="muted small">神戸のAbema#ttvとAquatopia#toppyは2アカウントを別々に収集し、神戸の人物診断で合算する。以下はアカウント別の進捗。API未収録の過去試合は完全回収を保証できない。</p>
+<p class="muted small">神戸のAbema#ttvとAquatopia#toppyは2アカウントを別々に収集し、神戸の人物診断で合算します。以下はアカウント別の進捗です。API未収録の過去試合は完全回収を保証できない。</p>
 <div id="member-archive-status"></div>
 <button type="button" id="start-member-archive" hidden>全員の試合履歴収集を開始</button>
 <button type="button" id="pause-member-archive" hidden>履歴の追加収集を一時停止</button>
 </section>
-</details>
+</div></details>
 
 </div>
+<footer>KESO COACH — <a href="./index.html">KESO PLAYに戻る</a><br>画像：Riot Games 公式アート。分析：本人の保存済み戦績。画像のエージェントは装飾であり、推奨キャラの判定を示すものではありません。</footer>
 </main>
+<template id="coach-prototype-template">
+
+
+  <!-- ===== TOP HERO : Chamber, his best agent ===== -->
+  <header class="tophero">
+    <img class="bgimg" src="assets/abyss-splash.png" alt="VALORANTのマップ、アビスの公式アート">
+    <div class="shade"></div><div class="diag" aria-hidden="true"></div>
+    <img class="chamber" src="assets/chamber-cut.png" alt="エージェント、チェンバーの公式アート">
+    <div class="tophero-inner">
+      <div class="playerline">
+        <span class="micro">Act VI <b>//</b> Coach Brief</span>
+        <div class="name">神戸（Kobe）</div>
+        <div class="ids">Aquatopia#toppy（メイン）／ Abema#ttv<br>2つのアカウントを合わせて確認しています</div>
+      </div>
+      <div class="rankrow">
+        <div class="rankbox cut-sm"><span class="k">CURRENT RANK</span><div class="r">DIAMOND 3</div></div>
+        <div class="rankbox ghost cut-sm"><span class="k">PEAK</span><div class="r">ASCENDANT 1</div></div>
+      </div>
+      <p class="coach-intro">昨日の試合は、両アカウントともすべて確認しました。</p>
+      <p class="coach-intro">本日は練習を1つだけご用意しました。</p>
+      <p class="coach-intro">すでにできていることを、次の試合でも再現するための練習です。</p>
+      <p class="coach-intro">10分ほどお時間をいただけますと幸いです。</p>
+    </div>
+  </header>
+
+  <!-- ===== PDCA ===== -->
+  <section class="pdca cut" aria-label="試合から今日の練習までの進み具合">
+    <div class="pdca-head">
+      <span class="disp">Cycle</span>
+      <span class="micro">V26 Act 6 <b>//</b> Competitive</span>
+    </div>
+    <p>試合データはすでに届いており、分析も完了しています。</p>
+    <p>あとは本日の練習を実施し、次の試合で試していただく段階まで来ています。</p>
+    <ol class="steps">
+      <li class="done"><span class="sq"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12.5 9.5 18 20 6.5"/></svg></span><span class="lb">試合</span></li>
+      <li class="done"><span class="sq"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12.5 9.5 18 20 6.5"/></svg></span><span class="lb">速報</span></li>
+      <li class="done"><span class="sq"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12.5 9.5 18 20 6.5"/></svg></span><span class="lb">分析</span></li>
+      <li class="now" aria-current="step"><span class="sq num">4</span><span class="lb">今日の練習</span><br><span class="tag">いまここ</span></li>
+      <li><span class="sq num">5</span><span class="lb">次の試合</span></li>
+    </ol>
+  </section>
+
+  <!-- ===== OPENING : what the coach saw ===== -->
+  <div class="sec-head"><span class="disp">Opening <em>Fights</em></span><span class="rule"></span><span class="micro">What I saw</span></div>
+  <section class="talk cut" aria-label="開幕の接敵についてコーチが見たこと">
+    <p>最も印象に残ったのは、ラウンド開始直後に最初に敵と接敵する回数が多い点です。</p>
+    <p>1試合あたり平均で約2回、ご自身から最初の流れを作りに行っています。</p>
+    <p>うまくいったキルでは、当たる前から<span class="nw">クロスヘア</span>が頭の高さに置けていて、角の手前で一度止まれていました。</p>
+    <p>惜しかった場面は、走ったまま覗いて初弾がずれてしまったところです。本日はその準備の部分だけを、練習で先に潰しておきます。</p>
+    <div class="evidence">
+      <div class="ev"><div class="v num">≈2 <small>回 / 試合</small></div><p>1試合で最初に敵と当たった回数の平均です。</p></div>
+      <div class="ev"><div class="v num">1.17</div><p>メインアカウントのK/Dです。銃の土台は崩れていません。</p></div>
+    </div>
+  </section>
+
+  <!-- ===== DRILL P082 ===== -->
+  <div class="sec-head"><span class="disp">Today's <em>Drill</em></span><span class="rule"></span><span class="micro">P082 <b>//</b> 10 min</span></div>
+
+  <div class="imgband" aria-hidden="true">
+    <img src="assets/range-splash.png" alt="">
+    <div class="shade"></div>
+    <img class="agentcut" src="assets/jett-cut.png" alt="">
+    <div class="cap"><span class="micro" style="color:#ffd9dd">The Range <b>//</b> Deathmatch <b>//</b> Custom</span><div class="disp">Do it exactly<br>like this</div></div>
+  </div>
+
+  <section class="drill cut" aria-label="今日の練習 P082">
+    <div class="drill-head">
+      <div class="pidrow">
+        <div>
+          <span class="pid">P082</span>
+          <h2>本日の練習は、順番と時間までこちらで決めてあります。そのまま開始していただければ大丈夫です</h2>
+        </div>
+        <div class="total-badge"><span class="n num">10</span><span class="u">MIN TOTAL</span></div>
+      </div>
+      <p>目的は、取れたキルの前にあった準備を体に思い出させることです。新しいことを覚える練習ではありません。</p>
+      <p>疲れている日でも、タイマーを押してブロック1から始めれば、最後までそのまま流れるように作ってあります。</p>
+      <p>難易度はダイヤモンド帯を前提に設定しています。イージーのボットは使用しません。</p>
+    </div>
+
+    <div class="splitbar" aria-hidden="true"><div class="on" style="flex:3"></div><div class="on" style="flex:4;opacity:.72"></div><div class="on" style="flex:3;opacity:.45"></div></div>
+    <div class="splitlabels" aria-hidden="true"><span style="flex:3">BLOCK 1 — 3 MIN</span><span style="flex:4">BLOCK 2 — 4 MIN</span><span style="flex:3">BLOCK 3 — 3 MIN</span></div>
+
+    <div class="timerbox">
+      <div class="clock num" id="clock">03:00</div>
+      <div style="flex:1;min-width:150px">
+        <div class="tbtns">
+          <button class="tbtn" type="button" data-min="3">3分</button>
+          <button class="tbtn" type="button" data-min="4">4分</button>
+          <button class="tbtn" type="button" data-min="3">最後の3分</button>
+          <button class="tbtn main" type="button" id="timerBtn">タイマーを開始する</button>
+          <button class="tbtn" type="button" id="timerReset">リセットする</button>
+        </div>
+        <p class="hint" style="margin:7px 0 0">上のボタンで時間を合わせてから開始してください。音は鳴りません。</p>
+      </div>
+    </div>
+
+    <!-- BLOCK 1 -->
+    <div class="block">
+      <div class="bhead"><span class="bno">BLOCK 1</span><span class="btime num">03:00 — THE RANGE</span></div>
+      <h3>最初の3分は射撃場で、動く相手に対して置きと止まりを両立させます</h3>
+      <div class="setting">
+        <div><span class="k">場所</span><span class="v">射撃場 ／ 練習モード</span></div>
+        <div><span class="k">ボット</span><span class="v">前半<span class="nw">ミディアム</span> → 後半<span class="nw">ハード</span> ／ <span class="nw">ストレイフON</span></span></div>
+        <div><span class="k">装備</span><span class="v"><span class="nw">アーマーON</span> ／ <span class="nw">ヴァンダル</span></span></div>
+        <div><span class="k">やる回数</span><span class="v"><span class="nw">ハード</span>で撃破50体、<span class="nw">または</span>3分のタイムドセット</span></div>
+      </div>
+      <ol class="dsteps">
+        <li>射撃場に入り、ボットエリアの角を本番のマップの角と見立てて近づきます。</li>
+        <li><span class="nw">ストレイフ</span>で動くボットに対して、頭が出てきそうな高さと位置に<span class="nw">クロスヘア</span>を先に置きます。</li>
+        <li>自分の体が完全に止まるまで待ってから、初弾を頭に合わせます。</li>
+        <li>前半は<span class="nw">ミディアム</span>、後半は<span class="nw">ハード</span>に切り替え、同じ順番を続けます。</li>
+        <li>走りながら撃った場合や、止まる前に撃ち始めた場合は、その1体は数えません。</li>
+      </ol>
+      <div class="rep"><span class="rv num">×50</span><p>50体をこの順番で倒せれば終了です。3分で届かなかった場合は、止まってから初弾を当てられた回数が前回より増えたかを確認してください。</p></div>
+    </div>
+
+    <!-- BLOCK 2 -->
+    <div class="block">
+      <div class="bhead"><span class="bno">BLOCK 2</span><span class="btime num">04:00 — DEATHMATCH</span></div>
+      <h3>次の4分はデスマッチで、実戦の速度のまま置きのルールを守ります</h3>
+      <div class="setting">
+        <div><span class="k">場所</span><span class="v">デスマッチ ／ フルスピード</span></div>
+        <div><span class="k">武器</span><span class="v"><span class="nw">ヴァンダル</span>（<span class="nw">シェリフ</span>／<span class="nw">ガーディアン</span>も可）</span></div>
+        <div><span class="k">撃ち方</span><span class="v">短いバーストまで ／ 長いスプレーは禁止です</span></div>
+        <div><span class="k">勝ち負け</span><span class="v">キル数は数えなくて構いません</span></div>
+      </div>
+      <p>順位は追わなくて構いません。守っていただく決め事は1つだけです。</p>
+      <ol class="dsteps">
+        <li>角を曲がる前に、<span class="nw">クロスヘア</span>が頭の高さに置けているかを確認します。</li>
+        <li>置けていた時だけ撃ち合いに行き、それ以外では無理に当たりに行きません。</li>
+        <li>置けていないまま飛び出して負けた場合は、準備が間に合わなかっただけです。エイムの問題ではありません。</li>
+        <li>走り撃ちに気づきましたら、リスポーン後に一度止まります。</li>
+        <li>次の角で頭が出る位置を先に思い浮かべてから、歩き出してください。</li>
+      </ol>
+      <div class="rep"><span class="rv num">4 MIN</span><p>4分間この決め事を守れれば終了です。終了後、置けていた接敵が何回あったかを大まかに思い出していただければ十分です。</p></div>
+    </div>
+
+    <!-- BLOCK 3 -->
+    <div class="block">
+      <div class="bhead"><span class="bno">BLOCK 3</span><span class="btime num">03:00 — CUSTOM</span></div>
+      <h3>最後の3分はカスタムで、次の試合の入りを圧をかけた状態で確認します</h3>
+      <div class="setting">
+        <div><span class="k">場所</span><span class="v">カスタムゲーム</span></div>
+        <div><span class="k">マップ</span><span class="v">これから遊ぶマップを1つ選んでください</span></div>
+        <div><span class="k">条件</span><span class="v">制限時間つき ／ 可能であれば味方1名にクロスを持ってもらいます</span></div>
+        <div><span class="k">やる回数</span><span class="v">開幕で当たる場所3つ × 各3回</span></div>
+      </div>
+      <ol class="dsteps">
+        <li>カスタムでマップを開き、開幕で敵と当たる場所を3つ選びます。</li>
+        <li>スポーンからその場所まで、実際に歩いて行きます。</li>
+        <li>角の手前で止まり、頭が出そうな位置に<span class="nw">クロスヘア</span>を置いてから覗きます。</li>
+        <li>ソロの場合は、スポーンから接敵位置までを制限時間内に収めて圧をかけます。</li>
+        <li>味方と行う場合は、1名に反対側のクロスを持ってもらいます。</li>
+        <li>単独で飛び出さない入り方を確認します。</li>
+        <li>1つの場所につき3回、合計9回で終了です。終了後は、そのままコンペティティブのキューを入れて構いません。</li>
+      </ol>
+      <div class="rep"><span class="rv num">3 × 3</span><p>3つの場所で3回ずつできましたら、練習はすべて終了です。ここまででちょうど10分になります。</p></div>
+    </div>
+
+    <!-- NEXT MATCH CHECKS -->
+    <div class="nextcheck cut-sm">
+      <div class="disp">Next Match <span style="color:var(--red)">//</span> What I'll Check</div>
+      <p>次の試合が終わりましたら、下の3点を確認します。</p>
+      <p>すべてを完璧にする必要はありません。最初の3ラウンドだけでも意識していただければ、変化は拾えます。</p>
+      <ul class="checks">
+        <li><span class="box" aria-hidden="true"></span><span>開幕の接敵で、覗く前に<span class="nw">クロスヘア</span>を置いて止まれていたか。最初の3ラウンドだけ確認します。</span></li>
+        <li><span class="box" aria-hidden="true"></span><span>ファーストブラッドへの関与が、現在の平均程度に保てているかも確認します。</span></li>
+        <li><span class="box" aria-hidden="true"></span><span>スキルを持ったまま倒れていなかったかも確認します。使える場面では、先にスキルを使ってから撃ち合ってください。</span></li>
+      </ul>
+    </div>
+
+    <div class="drill-cta">
+      <button class="btn btn-main" id="acceptBtn" type="button" aria-pressed="false">この内容で実施します</button>
+      <button class="btn btn-sub" id="swapBtn" type="button">他の練習を見る</button>
+    </div>
+    <p class="accept-note" id="acceptNote" hidden>承知しました。次の試合では最初の3ラウンドを確認し、止まれていたキルがどれくらい増えたかを数えて並べておきます。</p>
+  </section>
+
+  <!-- sub tasks -->
+  <div class="subs" role="group" aria-label="補助の練習">
+    <button class="sub-task cut-sm" type="button" aria-pressed="false" data-task="P097">
+      <span class="left"><span class="pid num">P097</span><span class="check" aria-hidden="true"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5 9.5 18 20 6.5"/></svg></span></span>
+      <span class="tt"><span class="a">明日の最初に、本日の射撃場ブロックをもう一度実施してください</span><p>一晩経つと、止まり方は少し抜けてしまうことがあります。明日、最初の3分だけブロック1を繰り返すと体に残りやすくなります。</p></span>
+    </button>
+    <button class="sub-task cut-sm" type="button" aria-pressed="false" data-task="P010">
+      <span class="left"><span class="pid num">P010</span><span class="check" aria-hidden="true"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5 9.5 18 20 6.5"/></svg></span></span>
+      <span class="tt"><span class="a">射撃場で止まれるようになりましたら、デスマッチでも同じことができるか試してください</span><p>ブロック2で実施していることが、まさにこれにあたります。本日の分は、すでに上の練習の中に含まれています。</p></span>
+    </button>
+  </div>
+  <p class="total-line">本日の分は、すべて合わせても<b>10分</b>で終わります。長く練習することよりも、決めた順番をそのまま一度通すことの方が合っていると考えています。</p>
+
+  <!-- ===== MAP NOTES with official splashes ===== -->
+  <div class="sec-head"><span class="disp">Map <em>Notes</em></span><span class="rule"></span><span class="micro">Abyss <b>//</b> Summit</span></div>
+  <p style="margin:0 2px;font-size:15px;color:var(--ink);line-height:1.9">あわせてマップについてもお伝えします。感じている苦手意識と、実際の数字が少しずれている点がありました。</p>
+
+  <article class="mapcard cut">
+    <div class="mimg">
+      <img class="bg" src="assets/abyss-splash.png" alt="VALORANTのマップ、アビスの公式スプラッシュアート">
+      <div class="shade"></div>
+      <img class="agent" src="assets/clove-cut.png" alt="エージェント、クローヴの公式アート">
+      <div class="mname"><span class="micro" style="color:#ffd9dd">Map <b>//</b> 01</span><div class="disp">Abyss</div></div>
+    </div>
+    <div class="mbody">
+      <p>アビスについては、苦手だと感じているかもしれません。</p>
+      <p>しかし勝率で見ますと50%あり、最も負けているマップではありません。</p>
+      <p>ただし、ヘッドショット率などの個人の数字は少し沈みがちです。</p>
+      <p>次にアビスが来ましたら<span class="nw">クローヴ</span>で入り、スモークを出す場所を2つだけ決めておいてください。</p>
+      <p>決めるのは試合開始前で構いません。</p>
+      <p>考えることが減る分、撃ち合いに集中しやすくなります。</p>
+      <span class="mapstat">勝率（メイン） <b>50%</b> ／ 感覚ほど負けてはいません</span>
+    </div>
+  </article>
+
+  <article class="mapcard cut">
+    <div class="mimg">
+      <img class="bg" src="assets/summit-splash.png" alt="VALORANTのマップ、サミットの公式スプラッシュアート">
+      <div class="shade"></div>
+      <div class="mname"><span class="micro" style="color:#ffd9dd">Map <b>//</b> 02</span><div class="disp">Summit</div></div>
+    </div>
+    <div class="mbody">
+      <p>サミットは4回実施して、まだ勝利がありません。</p>
+      <p>ただ、個人の数字自体は悪くありません。</p>
+      <p>撃ち合いが原因で負けているとは考えていません。</p>
+      <p>試合終盤で、人数有利な場面を落としてしまっている傾向があります。</p>
+      <p>次にサミットが来ましたら、終盤のラウンドだけを一緒に見返せば十分です。</p>
+      <p>すべてを見直す必要はありません。</p>
+      <span class="mapstat">戦績（メイン） <b>0勝 4敗</b> ／ 個人の数字は出ていますので、ご心配はいりません</span>
+    </div>
+  </article>
+
+  <!-- ===== REMEMBER ===== -->
+  <div class="remember cut">
+    <span class="micro">One thing to remember</span>
+    <p>次の試合で迷いましたら、角に差し掛かるたびに完全に止まってから覗くことだけを思い出してください。</p>
+    <p>それだけで、本日の練習は意味があったことになります。</p>
+  </div>
+
+  <!-- ===== DETAILS ===== -->
+  <details>
+    <summary>数字をご自身でも確認したい場合は、こちらを開いてください <span class="chev" aria-hidden="true">⌄</span></summary>
+    <div class="detail-body">
+      <div class="stat-grid">
+        <div class="stat"><div class="v num">229.8</div><div class="k">ACS（メイン）／ 1ラウンドあたりのダメージと活躍の平均です</div></div>
+        <div class="stat"><div class="v num">149.9</div><div class="k">ADR（メイン）／ 1ラウンドあたりの平均ダメージです</div></div>
+        <div class="stat"><div class="v num">23.5%</div><div class="k">ヘッドショット率 ／ 当たった弾の中で頭に当たった割合です</div></div>
+        <div class="stat"><div class="v num">69.4%</div><div class="k">KAST ／ キル、アシスト、生存、トレードのいずれかで関われたラウンドの割合です</div></div>
+        <div class="stat"><div class="v num">1.17</div><div class="k">K/D（メイン）／ 倒した数と倒された数の比率です</div></div>
+        <div class="stat"><div class="v num">D3</div><div class="k">現在のランク ／ ピークは Ascendant 1 です</div></div>
+      </div>
+
+      <div class="sova cut-sm">
+        <img src="assets/sova-cut.png" alt="エージェント、ソーヴァの公式アート">
+        <div>
+          <span class="micro">Honest note <b>//</b> Sova</span>
+          <p style="margin-top:6px">ソーヴァについても率直にお伝えします。ソーヴァを使用した際はACSが<b>200程度まで落ちており、普段の230近くから下がっている</b>ことが数字でも出ています。ご自身でも感覚としてお分かりかと思いますが、リコンに意識が向くと銃の方がどうしてもおろそかになります。使用する場合は、<b>リコンを出すタイミングをラウンド開始前に決めておいていただけますと助かります。</b></p>
+        </div>
+      </div>
+
+      <ul class="notes">
+        <li>チェンバーについては、他のエージェントよりも数字がはっきり良く、<b>K/Dが1.53まで出ている試合もあります。</b>無理に減らす必要はありませんが、得意な形として覚えておいてください。エージェントを絞ってほしいという話ではありませんので、その点はご安心ください。</li>
+        <li>KASTが69.4%であることは、裏を返しますと<b>約3割のラウンドでは何にも関われないまま終わってしまっている</b>ということでもあります。スキルを持ったまま倒れてしまうラウンドを少しずつ減らしていけますと、次はそこが伸びてくると考えています。</li>
+        <li>脚に当たっている弾が9.2%程度ありますので、クロスヘアをほんの少しだけ高く置く意識を持っていただきますと、頭や胴に当たる弾がその分だけ増えてくると考えています。本日の練習で置く高さを揃えているのは、そうした理由もあります。</li>
+      </ul>
+      <p class="caveats">数字の出典：tracker.gg の公開プロフィール（V26 Act 6 コンペティティブ、2026-11-19 に確認したもの）です。試合数が少ないマップの数字は、傾向としてご覧ください。課題の P082、P097、P010 は KESO COACH が実際に選んだ組み合わせで、合計は10分になっています。エージェントとマップの画像は Riot Games の公式アートで、valorant-api.com 経由で取得したものです。</p>
+    </div>
+  </details>
+
+
+</template>
+<script src="./coach/prototype-view.js?v=coach-fb906e07586f"></script>
 <script src="./coach/benchmarks.js?v=coach-4721e7e852a8"></script>
 <script src="./coach/practice.js?v=coach-1d4e247eb817"></script>
 <script src="./coach/reader.js?v=coach-61dd527b972c"></script>
@@ -364,29 +935,235 @@ let busy=false;
 let latestReport=null;
 const CoachPresentation=(()=>{
  const headings={
- 'Sageの蘇生カバー':'蘇生中の味方を安全に守ります',
- '今回の良い点と、次に直したい点は？':'良かった点を次の一戦につなげます',
- '敵を倒せていない？ それとも倒されすぎ？':'キルの不足とデスの増加を分けて確認します',
- '倒した後や、味方が倒された後はどう動いた？':'キルやデスの後の動きを確認します',
- 'どのマップ・キャラで、いつもの力を出せる？':'力を発揮できるマップとキャラを確認します',
- '以前より良くなった点と、崩れた点は？':'以前の記録と比べて変化を確認します',
- '味方の戦いを助けられた？ 同じ敵へ撃てた？':'味方と同じ敵へ撃てたかを確認します',
- 'この言葉は何を表す？ どこまで分かる？':'指標の意味と読み取れる範囲を確認します',
- 'キルが出た準備を保存':'良かった準備を次の一戦でも再現します',
- '小さな照準修正':'小さな照準修正を安定させます',
- '合流できない理由を分ける':'合流が遅れる理由を整理します',
- '二つの合流経路':'二つの合流経路を使い分けます',
- 'Cypherの罠と自分の射線':'罠の情報を自分の射線につなげます',
- '人数有利の次の一手':'人数有利を次の判断に生かします',
- '作戦を二文で共有':'短い作戦を味方と共有します',
- '日を分けた再確認':'別の日にも同じ準備を再現します',
- '待ち位置を相手の出方に合わせる':'相手の出方に合わせて待ち位置を調整します',
- 'ノーキルRの役割を確認':'キル以外で果たした役割も確認します',
- '照準練習から実戦へ移す':'照準練習の成果を実戦で確かめます',
- '勝敗を隠して判断':'結果を知る前の情報で判断を見直します'
- };
+  "Sageの蘇生カバー": "蘇生中の味方を安全に守ります",
+  "今回の良い点と、次に直したい点は？": "良かった点を次の一戦につなげます",
+  "敵を倒せていない？ それとも倒されすぎ？": "キルの不足とデスの増加を分けて確認します",
+  "倒した後や、味方が倒された後はどう動いた？": "キルやデスの後の動きを確認します",
+  "どのマップ・キャラで、いつもの力を出せる？": "力を発揮できるマップとキャラを確認します",
+  "以前より良くなった点と、崩れた点は？": "以前の記録と比べて変化を確認します",
+  "味方の戦いを助けられた？ 同じ敵へ撃てた？": "味方と同じ敵へ撃てたかを確認します",
+  "この言葉は何を表す？ どこまで分かる？": "指標の意味と読み取れる範囲を確認します",
+  "キルが出た準備を保存": "良かった準備を次の一戦でも再現します",
+  "小さな照準修正": "小さな照準修正を安定させます",
+  "合流できない理由を分ける": "合流が遅れる理由を整理します",
+  "二つの合流経路": "二つの合流経路を使い分けます",
+  "Cypherの罠と自分の射線": "罠の情報を自分の射線につなげます",
+  "人数有利の次の一手": "人数有利を次の判断に生かします",
+  "作戦を二文で共有": "短い作戦を味方と共有します",
+  "日を分けた再確認": "別の日にも同じ準備を再現します",
+  "待ち位置を相手の出方に合わせる": "相手の出方に合わせて待ち位置を調整します",
+  "ノーキルRの役割を確認": "キル以外で果たした役割も確認します",
+  "照準練習から実戦へ移す": "照準練習の成果を実戦で確かめます",
+  "勝敗を隠して判断": "結果を知る前の情報で判断を見直します",
+  "KP口座へ接続すると分析を確認できます": "KP口座へ接続すると分析を確認できます",
+  "対象試合の補完状況": "対象試合の補完状況を確認します",
+  "全項目診断：ここが良い／ここを見直す": "全項目診断：ここが良い／ここを見直します",
+  "FK / FDから分かる強みと見直し候補": "FK / FDから分かる強みと見直し候補を確認します",
+  "次の試合で意識すること": "次の試合で意識することを確認します",
+  "優先して見直すラウンド": "優先して見直すラウンドを確認します",
+  "良かったラウンド：再現したい勝ち方": "良かったラウンド：再現したい勝ち方を確認します",
+  "マップ別：先制キルを勝利に変えた割合": "マップ別：先制キルを勝利に変えた割合を確認します",
+  "VDK・Abema・石原：個人別FK / FD": "VDK・Abema・石原：個人別FK / FDを確認します",
+  "マップ・使用エージェント別の違い": "マップ・使用エージェント別の違いを確認します",
+  "3人が共闘した試合の構成比較": "3人が共闘した試合の構成比較を確認します",
+  "データの確認事項": "データの確認事項を確認します",
+  "5人分の収集状況を確認します": "5人分の収集状況を確認します",
+  "本日の練習は、順番と時間までこちらで決めてあります。そのまま開始していただければ大丈夫です": "本日の練習は、順番と時間までこちらで決めてあります。そのまま開始していただければ大丈夫です",
+  "最初の3分は射撃場で、動く相手に対して置きと止まりを両立させます": "最初の3分は射撃場で、動く相手に対して置きと止まりを両立させます",
+  "次の4分はデスマッチで、実戦の速度のまま置きのルールを守ります": "次の4分はデスマッチで、実戦の速度のまま置きのルールを守ります",
+  "最後の3分はカスタムで、次の試合の入りを圧をかけた状態で確認します": "最後の3分はカスタムで、次の試合の入りを圧をかけた状態で確認します",
+  "改善された点を確認します": "改善された点を確認します",
+  "今日の課題を選び直します": "今日の課題を選び直します",
+  "① 今起きていることを確認します": "① 今起きていることを確認します",
+  "② この手順で取り組みます": "② この手順で取り組みます",
+  "③ 次の一戦で確認します": "③ 次の一戦で確認します",
+  "④ 結果は次回ここで振り返ります": "④ 結果は次回ここで振り返ります",
+  "撃ち合いとラウンド効率": "撃ち合いとラウンド効率を確認します",
+  "勝利・敗北での差": "勝利・敗北での差を確認します",
+  "安定性と時系列": "安定性と時系列を確認します",
+  "試合K/D（左が過去・右が最新）": "試合K/D（左が過去・右が最新）を確認します",
+  "ACT別": "ACT別を確認します",
+  "試合の終了時間帯": "試合の終了時間帯を確認します",
+  "同じマップ・エージェントの期間比較": "同じマップ・エージェントの期間比較を確認します",
+  "基本性能のマップ・エージェント差": "基本性能のマップ・エージェント差を確認します",
+  "マップ別KPR": "マップ別KPRを確認します",
+  "エージェント別KPR": "エージェント別KPRを確認します",
+  "マップ×エージェント": "マップ×エージェントを確認します",
+  "ロール別KPR": "ロール別KPRを確認します",
+  "同じマップ・ロール内の味方との比較": "同じマップ・ロール内の味方との比較を確認します",
+  "パーティー人数ごとの基本性能": "パーティー人数ごとの基本性能を確認します",
+  "一緒に参加したメンバーによる本人の成績差": "一緒に参加したメンバーによる本人の成績差を確認します",
+  "本人チームのロール構成": "本人チームのロール構成を確認します",
+  "基本性能の指標別品質と分母": "基本性能の指標別品質と分母を確認します",
+  "基本性能からの観察と次の行動": "基本性能からの観察と次の行動を確認します",
+  "先制に限定しないキル・デス後の動き": "先制に限定しないキル・デス後の動きを確認します",
+  "キル数のラウンド分布": "キル数のラウンド分布を確認します",
+  "攻守のKPR・DPR": "攻守のKPR・DPRを確認します",
+  "ラウンド単位のアシスト": "ラウンド単位のアシストを確認します",
+  "確認できた撃破手段": "確認できた撃破手段を確認します",
+  "記録された装備額とラウンド結果": "記録された装備額とラウンド結果を確認します",
+  "通常の規定ピストルラウンド": "通常の規定ピストルラウンドを確認します",
+  "設置・解除の記録": "設置・解除の記録を確認します",
+  "スキル使用回数（試合合計）": "スキル使用回数（試合合計）を確認します",
+  "ラウンド別記録": "ラウンド別記録を確認します",
+  "装備・行動記録の品質と分母": "装備・行動記録の品質と分母を確認します",
+  "次の1試合で試すこと": "次の1試合で試すことを確認します",
+  "直近1試合と、その前の最大5試合": "直近1試合と、その前の最大5試合を確認します",
+  "公開データと比べる": "公開データと比べるを確認します",
+  "数字の組み合わせから選ぶ確認点": "数字の組み合わせから選ぶ確認点を確認します",
+  "取り組む練習の条件を選びます": "取り組む練習の条件を選びます",
+  "暗記の好みに合うキャラを確認します": "暗記の好みに合うキャラを確認します",
+  "指標の読み方を確認します": "指標の読み方を確認します",
+  "自分のマップ別の記録": "自分のマップ別の記録を確認します",
+  "自分のキャラ別の記録": "自分のキャラ別の記録を確認します",
+  "数字は何試合から出ている？": "数字は何試合から出ている？を確認します",
+  "次の一戦で試すことを確認します": "次の一戦で試すことを確認します",
+  "この試合のフィードバック": "この試合のフィードバックを確認します",
+  "最初の一戦に向けて準備します": "最初の一戦に向けて準備します",
+  "試合ごとの変化を振り返ります": "試合ごとの変化を振り返ります",
+  "最初に見るべき改善候補": "最初に見るべき改善候補を確認します",
+  "先制と生存：観測グラフ": "先制と生存：観測グラフを確認します",
+  "ラウンド記録を照合できた試合の推移": "ラウンド記録を照合できた試合の推移を確認します",
+  "再現したい良い傾向": "再現したい良い傾向を確認します",
+  "攻撃と防衛の先制動向": "攻撃と防衛の先制動向を確認します",
+  "マップ × エージェント": "マップ × エージェントを確認します",
+  "ログだけでは分からないこと": "ログだけでは分からないことを確認します",
+  "頭の高さを先に作る": "頭の高さを先に作るを確認します",
+  "フリックの行き過ぎ確認": "フリックの行き過ぎ確認を確認します",
+  "ターゲット切替後の1発": "ターゲット切替後の1発を確認します",
+  "横移動する相手を追う": "横移動する相手を追うを確認します",
+  "見えてから急いで撃たない": "見えてから急いで撃たないを確認します",
+  "遠距離の小さい的": "遠距離の小さい的を確認します",
+  "出現位置を決めない照準": "出現位置を決めない照準を確認します",
+  "照準を動かす量の削減": "照準を動かす量の削減を確認します",
+  "停止してから初弾": "停止してから初弾を確認します",
+  "短いバーストの区切り": "短いバーストの区切りを確認します",
+  "連射と撃ち直しの比較": "連射と撃ち直しの比較を確認します",
+  "しゃがむ前の一呼吸": "しゃがむ前の一呼吸を確認します",
+  "反動の形を確認": "反動の形を確認を確認します",
+  "武器ごとの交戦距離": "武器ごとの交戦距離を確認します",
+  "ADSを使う条件": "ADSを使う条件を確認します",
+  "リロードする前に隠れる": "リロードする前に隠れるを確認します",
+  "武器を持って角へ入る": "武器を持って角へ入るを確認します",
+  "ピストルの射撃間隔": "ピストルの射撃間隔を確認します",
+  "一度に一つの角": "一度に一つの角を確認します",
+  "角から離れて見る": "角から離れて見直します",
+  "情報取りと勝負を分ける": "情報取りと勝負を分けます",
+  "キル後の退路": "キル後の退路を確認します",
+  "同じ角を連続で出ない選択": "同じ角を連続で出ない選択を確認します",
+  "オフアングルの逃げ道": "オフアングルの逃げ道を確認します",
+  "足音を出す境界": "足音を出す境界を確認します",
+  "高低差を順に確認": "高低差を順に確認を確認します",
+  "スモーク端を一つずつ見る": "スモーク端を一つずつ見直します",
+  "入口の危険箇所メモ": "入口の危険箇所メモを確認します",
+  "コール名を三つ覚える": "コール名を三つ覚えるを確認します",
+  "設置場所から逆算する": "設置場所から逆算します",
+  "守備位置から退く経路": "守備位置から退く経路を確認します",
+  "リテイクの二入口": "リテイクの二入口を確認します",
+  "味方を見られる高さ": "味方を見られる高さを確認します",
+  "マップ装置を先に触る": "マップ装置を先に触るを確認します",
+  "時間の足りない移動を再現": "時間の足りない移動を再現を確認します",
+  "得意マップの準備を移植": "得意マップの準備を移植を確認します",
+  "同じ敵を撃てる間隔": "同じ敵を撃てる間隔を確認します",
+  "スキル中の銃担当": "スキル中の銃担当を確認します",
+  "短い敵情報の報告": "短い敵情報の報告を確認します",
+  "助けが必要な合図": "助けが必要な合図を確認します",
+  "フラッシュの合図合わせ": "フラッシュの合図合わせを確認します",
+  "二人の射線を分ける": "二人の射線を分けます",
+  "倒された直後の一言": "倒された直後の一言を確認します",
+  "設置者を守る担当": "設置者を守る担当を確認します",
+  "人数不利の勝ち筋": "人数不利の勝ち筋を確認します",
+  "時計を見てから動く": "時計を見てから動くを確認します",
+  "設置後に勝負する理由": "設置後に勝負する理由を確認します",
+  "セーブとリテイクの比較": "セーブとリテイクの比較を確認します",
+  "買い物を味方と合わせる": "買い物を味方と合わせます",
+  "エコの目的を一つ決める": "エコの目的を一つ決めます",
+  "購入したスキルの使い所": "購入したスキルの使い所を確認します",
+  "相手の傾向を仮説にする": "相手の傾向を仮説にします",
+  "ローテーションの根拠": "ローテーションの根拠を確認します",
+  "定点を一つだけ登録": "定点を一つだけ登録を確認します",
+  "定点の安全な出発点": "定点の安全な出発点を確認します",
+  "バウンド数の違い": "バウンド数の違いを確認します",
+  "索敵の見える範囲": "索敵の見える範囲を確認します",
+  "遠投しない直接使用": "遠投しない直接使用を確認します",
+  "味方の侵入と効果を合わせる": "味方の侵入と効果を合わせます",
+  "投げた後の移動": "投げた後の移動を確認します",
+  "定点が使えない時の代案": "定点が使えない時の代案を確認します",
+  "マップ変更後の再確認": "マップ変更後の再確認を確認します",
+  "覚える価値を見直す": "覚える価値を見直します",
+  "Omenの置きスモーク": "Omenの置きスモークを確認します",
+  "Omenの妨害と追従": "Omenの妨害と追従を確認します",
+  "Gekkoの設置担当": "Gekkoの設置担当を確認します",
+  "Gekkoの回収判断": "Gekkoの回収判断を確認します",
+  "Sageの回復前の安全確認": "Sageの回復前の安全確認を確認します",
+  "Breachの壁越しフラッシュ": "Breachの壁越しフラッシュを確認します",
+  "Killjoyの装置配置の比較": "Killjoyの装置配置の比較を確認します",
+  "Reynaのキル依存を確認": "Reynaのキル依存を確認を確認します",
+  "デス一つを因数分解": "デス一つを因数分解を確認します",
+  "勝ち試合と負け試合の同条件": "勝ち試合と負け試合の同条件を確認します",
+  "高ACSの負けを一つ見る": "高ACSの負けを一つ見直します",
+  "味方視点で取り返しを見る": "味方視点で取り返しを見直します",
+  "一週間の同じ課題を並べる": "一週間の同じ課題を並べるを確認します",
+  "プロの一場面を止めて見る": "プロの一場面を止めて見直します",
+  "次の課題を一つに絞る": "次の課題を一つに絞るを確認します",
+  "感度とDPIを記録": "感度とDPIを記録を確認します",
+  "感度を一度に変えすぎない": "感度を一度に変えすぎないを確認します",
+  "見やすいクロスヘア": "見やすいクロスヘアを確認します",
+  "マウスの可動域を確保": "マウスの可動域を確保を確認します",
+  "短い練習と実戦を分ける": "短い練習と実戦を分けます",
+  "集中の言い方を試す": "集中の言い方を試します",
+  "疲れている時は量を下げる": "疲れている時は量を下げるを確認します",
+  "体に合う机周りを試す": "体に合う机周りを試します",
+  "4スタンス理論の扱いを確認": "4スタンス理論の扱いを確認を確認します"
+};
  const sentences=text=>String(text??'').split(/(?<=[。！？])/u).map(x=>x.trim()).filter(Boolean);
- const polite=text=>String(text??'').replace(/ってなに？/g,'の意味を確認します').replace(/やってみる/g,'試します').replace(/しよう/g,'しましょう')
+ const sentenceEdits={
+  "良い傾向。": "良い傾向です。",
+  "射撃場で頭から少し外して構え、小さい修正だけで1発当てる。": "射撃場で頭から少し外して構え、小さい修正だけで1発当ててください。",
+  "左右各10回。": "左右それぞれ10回ずつ取り組んでください。",
+  "カスタムの入口を3つ選び、頭の高さに照準を置いてから出る。": "カスタムの入口を3つ選び、頭の高さに照準を置いてから出てください。",
+  "静止ボット2体の間を1発ずつ20往復。": "静止ボット2体の間で、1発ずつ撃つ手順を20往復続けてください。",
+  "移動するボット2体の間を1発ずつ20往復。": "移動するボット2体の間で、1発ずつ撃つ手順を20往復続けてください。",
+  "10組。": "10組繰り返してください。",
+  "次の敵への移動中に撃った組を数える。": "次の敵への移動中に撃ってしまった組を数えてください。",
+  "Aimlabsの水平トラッキングを1分ずつ2回。": "Aimlabsの水平トラッキングに、1分ずつ2回取り組んでください。",
+  "別ソフトがなければ協力者の横移動を射撃場で追う。": "別ソフトがなければ、射撃場で協力者の横移動を追ってください。",
+  "ランダム出現ボットを10体。": "ランダムに出現するボットを10体倒してください。",
+  "{{map}}の通路を3本歩き、次に見る角へ順番に照準を置く。": "{{map}}の通路を3本歩き、次に見る角へ順番に照準を置いてください。",
+  "壁や床へ照準を置いていた区間を一つ特定。": "壁や床へ照準を置いていた区間を一つ特定してください。",
+  "射撃場で横移動し、移動キーを離して照準が落ち着いてから1発。": "射撃場で横移動し、移動キーを離して照準が落ち着いてから1発撃ってください。",
+  "移動中の誤射を数える。": "移動中に誤って撃った回数を数えてください。",
+  "10セット。": "10セット繰り返してください。",
+  "拡大が必要な距離と近距離での負担を一つずつ。": "拡大が必要な距離と、近距離で感じた負担を一つずつ確認してください。",
+  "カスタムで敵を倒した想定から遮蔽へ戻り、そこでリロードする動きを5回。": "カスタムで敵を倒した場面を想定し、遮蔽へ戻ってからリロードする動きを5回繰り返してください。",
+  "次に使うピストルを射撃場で20発。": "次に使うピストルで、射撃場で20発撃ってください。",
+  "{{map}}の入口一つで、見える敵位置が一つずつ増えるように少しずつ出る。": "{{map}}の入口を一つ選び、見える敵の位置が一つずつ増えるように少しずつ出てください。",
+  "5往復。": "5往復繰り返してください。",
+  "二方向が同時に見えた地点を特定。": "二方向が同時に見えた地点を特定してください。",
+  "入口一つで、情報だけ取って戻る動きと撃つ前提の出方を各5回練習。": "入口を一つ選び、情報だけ取って戻る動きと、撃つ前提の出方をそれぞれ5回練習してください。",
+  "1キルした想定で戻る遮蔽を先に決め、そこへ退く動きを5回。": "1キル取った場面を想定し、戻る遮蔽を先に決めてから、そこへ退く動きを5回繰り返してください。",
+  "{{map}}で高所と足元の両方がある地点を一つ選び、見る順序を5回練習。": "{{map}}で高所と足元の両方を確認できる地点を一つ選び、見る順序を5回練習してください。",
+  "協力者と角一つを見て、先頭と後ろを交代して各5回出る。": "協力者と角を一つ決め、先頭と後ろを交代しながら、それぞれ5回出てください。",
+  "壁に遮られず同じ敵を見られた回数。": "壁に遮られず、同じ敵を見られた回数を確認してください。",
+  "味方一人と、片方がスキルを持つ間はもう片方が銃で角を見る手順を3回。": "味方一人と、片方がスキルを持つ間はもう片方が銃で角を見る手順を3回繰り返してください。",
+  "録画の味方接敵1回を止め、壁・距離・守備担当のどれで参加できなかったか書く。": "味方が接敵した場面を録画で一つ止め、壁・距離・守備担当のどれが参加を妨げていたかを書いてください。",
+  "人数不利になった1Rを見て、情報を取る・味方を待つ・勝負する条件を書く。": "人数不利になった1Rを見て、情報を取る・味方を待つ・勝負する、それぞれの条件を書いてください。",
+  "設置後の死亡1回を見て、撃たずに守れた条件と撃つ必要があった条件を書く。": "設置後に倒された場面を一つ見て、撃たずに守れた条件と、撃つ必要があった条件を書いてください。",
+  "不利な設置後1Rを止め、人数・装備・時間を見て二つの案を並べる。": "不利な設置後の1Rを止め、人数・装備・時間を確認して、二つの案を並べてください。",
+  "直前3Rで実際に見た相手の動きを一つ書き、次Rは外れた時の案も用意。": "直前3Rで実際に見た相手の動きを一つ書き、次のRでは予想が外れた時の案も用意してください。",
+  "使うスキルを近い安全な場所から直接使い、すぐ銃へ戻す動きを5回。": "使うスキルを近い安全な場所から直接使い、すぐ銃へ戻す動きを5回繰り返してください。",
+  "協力者と妨害を使う合図を決め、効果中に入口へ出る動きを3回。": "協力者と妨害を使う合図を決め、効果中に入口へ出る動きを3回繰り返してください。",
+  "敵に立ち位置を取られた想定で、直接使う・別地点へ移る案を一つ用意。": "敵に立ち位置を取られた場面を想定し、直接使う案か、別地点へ移る案を一つ用意してください。",
+  "以前使った定点をカスタムで5回再現し、外れたら古いメモへ修正日を付ける。": "以前使った定点をカスタムで5回再現し、外れた場合は古いメモに修正日を付けてください。",
+  "直近5試合の録画やメモから、練習した定点を実際に使えた場面を数える。": "直近5試合の録画やメモから、練習した定点を実際に使えた場面を数えてください。",
+  "回収したい地点へ行く道を歩き、回収できない時は銃で戦う案も用意。": "回収したい地点までの道を歩き、回収できない時に銃で戦う案も用意してください。",
+  "罠を置いた場所へ相手が来る想定で、自分が撃てる角を一つ作る。": "罠を置いた場所へ相手が来る場面を想定し、自分が撃てる角を一つ作ってください。",
+  "最後の死亡一つを録画で見て、照準・移動・味方・相手の位置を別々に書く。": "最後に倒された場面を録画で一つ見て、照準・移動・味方・相手の位置を別々に書いてください。",
+  "自分と同じマップ・ロールの公開VODを一場面選び、出る前で止めて次を予測。": "自分と同じマップ・ロールの公開VODから一場面を選び、出る前で止めて、次の動きを予測してください。",
+  "録画があれば改善候補を3つ書く。": "録画があれば、改善候補を3つ書いてください。"
+};
+ const polite=text=>String(text??'').replace(/[^。！？]+[。！？]|[^。！？]+$/gu,t=>sentenceEdits[t.trim()]??t).replace(/ってなに？/g,'の意味を確認します').replace(/やってみる/g,'試します').replace(/しよう/g,'しましょう')
+  .replace(/決められない(?=。|$)/g,'決められません').replace(/変わる(?=。|$)/g,'変わります').replace(/含む(?=。|$)/g,'含みます').replace(/確認してほしい(?=。|$)/g,'確認してください').replace(/補わない(?=。|$)/g,'補いません').replace(/含まない(?=。|$)/g,'含みません').replace(/取得されない(?=。|$)/g,'取得されません').replace(/だけ(?=。|$)/g,'だけです').replace(/必要がある(?=。|$)/g,'必要があります').replace(/まだない(?=。|$)/g,'まだありません').replace(/データがない(?=。|$)/g,'データがありません').replace(/だ(?=。|$)/g,'です')
   .replace(/ではない(?=。|$)/g,'ではありません').replace(/できない(?=。|$)/g,'できません').replace(/しない(?=。|$)/g,'しません')
   .replace(/である(?=。|$)/g,'です').replace(/(必要|不明|対象|未取得|状態|参考|提案)だ(?=。|$)/g,'$1です')
   .replace(/(確認|記録|比較|共有|再現|相談)(?=。|$)/g,'$1してください')
@@ -394,8 +1171,8 @@ const CoachPresentation=(()=>{
   .replace(/残す(?=。|$)/g,'残してください').replace(/分ける(?=。|$)/g,'分けてください').replace(/合わせる(?=。|$)/g,'合わせてください')
   .replace(/決める(?=。|$)/g,'決めてください').replace(/探す(?=。|$)/g,'探してください').replace(/歩く(?=。|$)/g,'歩いてください')
   .replace(/確かめる(?=。|$)/g,'確かめてください').replace(/使う(?=。|$)/g,'使ってください').replace(/撃つ(?=。|$)/g,'撃ってください')
-  .replace(/戻る(?=。|$)/g,'戻ってください').replace(/行う(?=。|$)/g,'行ってください').replace(/する(?=。|$)/g,'してください')
-  .replace(/必要(?=。|$)/g,'必要です').replace(/(?<!ま)した(?=。|$)/g,'しました').replace(/できた(?=。|$)/g,'できました').replace(/られる(?=。|$)/g,'られます').replace(/ある(?=。|$)/g,'あります').replace(/なる(?=。|$)/g,'なります').replace(/いる(?=。|$)/g,'います').replace(/分かる(?=。|$)/g,'分かります').replace(/見直そう/g,'見直しましょう').replace(/できていない(?=。|$)/g,'できていません').replace(/揃っていない(?=。|$)/g,'揃っていません').replace(/言えない(?=。|$)/g,'言えません').replace(/決めない(?=。|$)/g,'決めません').replace(/扱わない(?=。|$)/g,'扱いません').replace(/含めない(?=。|$)/g,'含めません').replace(/(\d+(?:〜\d+)?回)(?=。|$)/g,'$1行います');
+  .replace(/戻る(?=。|$)/g,'戻ってください').replace(/行う(?=。|$)/g,'行ってください').replace(/する(?=。|$)/g,'します').replace(/伝える(?=。|$)/g,'伝えてください').replace(/試す(?=。|$)/g,'試してください').replace(/挙げる(?=。|$)/g,'挙げてください')
+  .replace(/必要(?=。|$)/g,'必要です').replace(/(?<!ま)した(?=。|$)/g,'しました').replace(/できた(?=。|$)/g,'できました').replace(/られる(?=。|$)/g,'られます').replace(/ある(?=。|$)/g,'あります').replace(/なる(?=。|$)/g,'なります').replace(/いる(?=。|$)/g,'います').replace(/分かる(?=。|$)/g,'分かります').replace(/見直そう/g,'見直しましょう').replace(/できていない(?=。|$)/g,'できていません').replace(/揃っていない(?=。|$)/g,'揃っていません').replace(/言えない(?=。|$)/g,'言えません').replace(/決めない(?=。|$)/g,'決めません').replace(/扱わない(?=。|$)/g,'扱いません').replace(/含めない(?=。|$)/g,'含めません').replace(/(左右\d+(?:〜\d+)?回)(?=。|$)/g,'$1行います');
  const title=text=>{
   const t=String(text??'');if(headings[t])return headings[t];if(/(?:します|です|ください|ましょう|ます)[。]?$/u.test(t))return t;
   const ends=[[/する$/,'します'],[/見る$/,'見直します'],[/見直す$/,'見直します'],[/分ける$/,'分けます'],[/合わせる$/,'合わせます'],[/選ぶ$/,'選びます'],[/決める$/,'決めます'],[/試す$/,'試します'],[/使う$/,'使います'],[/(確認|比較|共有|記録|保存|整理|調整|確保|削減)$/,'$1します']];
@@ -406,39 +1183,18 @@ const CoachPresentation=(()=>{
  const range=['射撃テストはミディアムから始め、ハードへ進めます。','移動照準の練習はプラクティスで行い、ストレイフをONにします。'];
  const action=text=>String(text??'').replace(/静止ボット/g,'移動するボット').replace(/イージー/g,'ミディアム');
  const issue={precision:'初弾を当てる準備を確認します。照準の高さと、射撃前の停止を分けて見直しましょう。',participation:'交戦に参加できる条件を確認します。担当位置を守る場面と、味方へ合流する場面を整理しましょう。',pressure:'死亡した場面の条件を整理します。見る角と味方の位置を一つずつ確認しましょう。',reset:'キル後の選択を確認します。退く場面と、そのまま味方を支える場面を分けましょう。',cover:'味方と同じ敵へ撃てる条件を確認します。距離と射線、担当する角を見直しましょう。',repeat:'良い結果の前にできていた準備を言葉にします。次の一戦でも再現しましょう。',timing:'味方が動く時間に自分の行動を合わせます。判断に使った情報を整理しましょう。',map:'マップごとの準備を確認します。苦しくなる場所と移動経路を一つずつ整理しましょう。',utility:'スキルを使う目的と、その後の動きを確認します。味方が動く時間に合わせましょう。',foundation:'次の一戦で試すことを一つ決めます。記録がない場合も、基本の手順から始められます。',habits:'練習する条件を一つ整えます。変更前後の違いを同じ手順で確かめましょう。',conversion:'削った後の状況を確認します。倒し切りと味方の回収を分けて見直しましょう。'};
- return {sentences,polite,title,steps,range,action,issue};
+ return {sentences,polite,title,steps,range,action,issue,headings};
 })();
 const coachParagraphs=text=>CoachPresentation.sentences(text).map(t=>'<p>'+escape(CoachPresentation.polite(t))+'</p>').join('');
 const coachSteps=text=>'<ol>'+CoachPresentation.steps(text).map(t=>'<li>'+escape(t)+'</li>').join('')+'</ol>';
-const missionMetric=(d,topic)=>{
- const o=d.performance?.overall||{},spec=topic==='precision'?['HS',o.hsPct,'%']:topic==='participation'?['ADR',o.adr,'']:topic==='pressure'||topic==='reset'?['DPR',o.dpr,'']:topic==='repeat'?['ACS',o.acs,'']:[ '確認した試合',o.matches,'件'];
- return typeof spec[1]==='number'&&Number.isFinite(spec[1])?{label:spec[0],value:spec[1].toFixed(spec[0].includes('試合')?0:spec[0]==='KD'||spec[0]==='DPR'?2:1)+spec[2]}:{label:'保存済み試合',value:String(o.matches||0)+'件'};
-};
-const improvementPanel=d=>{
- const change=CoachReader.trend(d),v=CoachReader.verdicts(d).good;
- return '<section class="improvement" data-improvement><span class="section-kicker">CHECK / 前回からの変化</span><h3>改善された点を確認します</h3>'+
-  (change.kind==='good'?'<h4>'+escape(CoachPresentation.title(change.title))+'</h4>'+coachParagraphs(change.text):'<p>今回の記録を、次の試合との比較に使います。</p><h4>'+(v.kind==='unknown'?'次の一戦で良かった動きを一つ残します':'今回も続けたい点を確認します')+'</h4>'+coachParagraphs(v.kind==='unknown'?'まず一つの課題を試し、次の試合で手応えを確かめましょう。':v.text))+
-  '<details><summary>比較条件と数字を確認します</summary>'+coachParagraphs(v.detail||'現在の保存範囲で確認しています。')+'</details></section>';
-};
-const missionPanel=d=>{
- const pref=practiceProfiles.get(d.person)||defaultPracticePreferences(),plan=globalThis.KesoCoachPractice.choose(d,{...pref,exclude:practiceExcluded.get(d.person)||[]},benchmarkReference),e=plan.selected[0];
- if(!e)return '<section class="mission" data-primary-mission><h3>今日の課題を選び直します</h3><p>練習の条件を変更するか、交換した候補を戻してください。</p><button type="button" data-practice-reset>候補を戻す</button></section>';
- const topic=e.tags[0],m=missionMetric(d,topic),a=globalThis.KesoCoachPractice.fill(e.action,plan.context),check=globalThis.KesoCoachPractice.fill(e.check,plan.context);
- return '<section class="mission" data-primary-mission data-practice-id="'+e.id+'"><span class="section-kicker">PLAN → DO / 今日の課題</span><h3>'+escape(CoachPresentation.title(e.title))+'</h3><ol class="mission-flow">'+
- '<li><h4>① 今起きていることを確認します</h4><p class="mission-number"><span>'+escape(m.label)+'</span><strong>'+escape(m.value)+'</strong></p>'+coachParagraphs(CoachPresentation.issue[topic]||CoachPresentation.issue.foundation)+'</li>'+
- '<li><h4>② この手順で取り組みます</h4>'+coachSteps(CoachPresentation.action(a))+( /射撃場|ボット/.test(a)?'<div class="diamond-drill" data-diamond-drill><strong>ダイヤ帯向けの練習設定です</strong>'+CoachPresentation.range.map(t=>'<p>'+escape(t)+'</p>').join('')+'</div>':'')+'</li>'+
- '<li><h4>③ 次の一戦で確認します</h4>'+coachParagraphs(check.replace(/か。?$/,'かを確認します。'))+'</li>'+
- '<li><h4>④ 結果は次回ここで振り返ります</h4><p>次の試合の記録が届いたら、更新後のこの欄で前回との違いを確認できます。</p><p>実際に試せたかも、一場面ずつ振り返りましょう。</p><button type="button" data-feedback-refresh>試合後にこの人の解説を更新する</button></li></ol>'+
- '<details class="mission-evidence"><summary>選定理由・条件・出典を確認します</summary>'+e.reasons.map(t=>'<p>'+escape(t)+'</p>').join('')+practiceCard(e,plan.context,'')+coachParagraphs(plan.quality)+'</details></section>';
-};
 const polishCoachCopy=root=>{
  for(const paragraph of [...root.querySelectorAll('p')]){
   if(paragraph.id||paragraph.children.length)continue;const lines=CoachPresentation.sentences(paragraph.textContent);if(lines.length<2)continue;
   paragraph.textContent=lines[0];let previous=paragraph;for(const text of lines.slice(1)){const next=paragraph.cloneNode(false);next.textContent=text;previous.after(next);previous=next;}
  }
  const segmenter=typeof Intl.Segmenter==='function'?new Intl.Segmenter('ja',{granularity:'word'}):null;
- for(const el of root.querySelectorAll('p,li,h2,h3,h4,h5,summary')){
-  for(const node of [...el.childNodes])if(node.nodeType===3&&node.textContent.trim()&&!el.closest('pre,code,svg,[data-pdca-flow]')){
+ for(const el of root.querySelectorAll('p,li,h2,h3,h4,h5,summary,div,span')){
+  for(const node of [...el.childNodes])if(node.nodeType===3&&node.textContent.trim()&&!el.closest('pre,code,svg,[data-pdca-flow],.coach-word')){
    let t=CoachPresentation.polite(node.textContent);if(/^H[2-5]$/.test(el.tagName)&&!el.closest('.coach-hero'))t=CoachPresentation.title(node.textContent);
    if(!segmenter){node.textContent=t;continue;}
    const chunks=[],protectedParts=t.split(/((?:振り返|取り組|見直|確かめ|合わせ|やり直|つなげ)[\p{Script=Hiragana}]+)/u);
@@ -449,7 +1205,7 @@ const polishCoachCopy=root=>{
      if(chunks.length&&/^[\p{Script=Hiragana}、。！？]+$/u.test(text)&&(/^[、。！？]+$/u.test(text)||[...chunks[chunks.length-1]+text].length<=10))chunks[chunks.length-1]+=text;else chunks.push(text);
     }
    }
-   const fragment=document.createDocumentFragment();for(const text of chunks){const span=document.createElement('span');span.className='coach-word';span.textContent=text;fragment.appendChild(span);}node.replaceWith(fragment);
+   const fragment=document.createDocumentFragment();for(const text of chunks){if(/^\s+$/.test(text)){fragment.appendChild(document.createTextNode(text));continue;}const span=document.createElement('span');span.className='coach-word';span.textContent=text;fragment.appendChild(span);}node.replaceWith(fragment);
   }
  }
 };
@@ -665,7 +1421,7 @@ let practiceCategory='aim',practiceQuery='';
 const practiceExcluded=new Map();
 const practiceOptions=d=>({...practicePreferences,exclude:practiceExcluded.get(d.person)||[]});
 const practiceSource=id=>{const s=globalThis.KesoCoachPractice.sources[id];return '<a href="'+escape(s.url)+'" target="_blank" rel="noopener noreferrer">'+escape(s.title)+'</a><p class="member-small">'+escape(s.limit)+' 確認日 '+escape(s.checkedAt)+'</p>';};
-const practiceCard=(item,context,why)=>'<article class="practice-menu practice-card" data-practice-card="'+item.id+'"><h4>'+escape(CoachPresentation.title(item.title))+'</h4><p class="practice-duration">'+item.minutes+'分で取り組みます。</p>'+(why?'<p><b>選んだ理由：</b>'+escape(why)+'</p>':'')+'<p><b>やり方：</b>'+escape(CoachPresentation.polite(CoachPresentation.action(globalThis.KesoCoachPractice.fill(item.action,context))))+'</p><p><b>確認すること：</b>'+escape(CoachPresentation.polite(item.check.replace(/か。?$/,'かを確認します。')))+'</p>'+(/射撃場|ボット/.test(item.action)?'<div class="diamond-drill" data-diamond-drill>'+CoachPresentation.range.map(t=>'<p>'+escape(t)+'</p>').join('')+'</div>':'')+'<p>条件：'+(item.requires==='partner'?'協力者が必要':'一人で始められる')+' / '+(item.lineups==='learn'?'定点・配置の暗記あり':'遠投定点の追加暗記を必須にしない')+(item.agent?' / '+escape(item.agent):'')+'</p>'+(item.experimental?'<p><strong>探索・興味がある時だけ。VALORANTでの上達効果は確認できていません。</strong></p>':'')+'<details><summary>根拠と限界</summary><p>この手順・回数はKESOの練習設計です。仕様・実務資料・研究が直接検証した処方ではありません。</p>'+item.sourceIds.map(practiceSource).join('')+'</details></article>';
+const practiceCard=(item,context,why)=>'<article class="practice-menu practice-card" data-practice-card="'+item.id+'"><h4>'+escape(CoachPresentation.title(item.title))+'</h4><p class="practice-duration">'+item.minutes+'分で取り組みます。</p>'+(why?'<p><b>選んだ理由：</b>'+escape(why)+'</p>':'')+'<p><b>やり方：</b>'+escape(globalThis.KesoCoachPractice.fill(CoachPresentation.polite(CoachPresentation.action(item.action)),context))+'</p><p><b>確認すること：</b>'+escape(CoachPresentation.polite(item.check.replace(/か。?$/,'かを確認します。')))+'</p>'+(/射撃場|ボット/.test(item.action)?'<div class="diamond-drill" data-diamond-drill>'+CoachPresentation.range.map(t=>'<p>'+escape(t)+'</p>').join('')+'</div>':'')+'<p>条件：'+(item.requires==='partner'?'協力者が必要':'一人で始められる')+' / '+(item.lineups==='learn'?'定点・配置の暗記あり':'遠投定点の追加暗記を必須にしない')+(item.agent?' / '+escape(item.agent):'')+'</p>'+(item.experimental?'<p><strong>探索・興味がある時だけ。VALORANTでの上達効果は確認できていません。</strong></p>':'')+'<details><summary>根拠と限界</summary><p>この手順・回数はKESOの練習設計です。仕様・実務資料・研究が直接検証した処方ではありません。</p>'+item.sourceIds.map(practiceSource).join('')+'</details></article>';
 const practiceCatalog=d=>{
  const P=globalThis.KesoCoachPractice,c=P.choose(d,practiceOptions(d),benchmarkReference).context,items=P.browse(practiceCategory,practiceQuery);
  return '<p data-practice-count>'+items.length+' / 全'+P.entries.length+'件</p>'+items.map(item=>'<details class="practice-menu" data-practice-entry="'+item.id+'"><summary>'+escape(item.title)+(item.experimental?'（探索）':'')+'</summary>'+practiceCard(item,c,'')+'</details>').join('');
@@ -810,22 +1566,23 @@ const renderMemberDiagnosis=d=>{
   tabs.map(([id,title],i)=>`<button type="button" role="tab" data-coach-view="${id}"
     id="coach-tab-${id}" aria-controls="coach-view-${id}" aria-selected="${i===0}" tabindex="${i===0?0:-1}">${title}</button>`).join('')+
   '</div>'+
-  `<div class="coach-dashboard-view" id="coach-view-overview" role="tabpanel" aria-labelledby="coach-tab-overview"><h2 class="coach-profile-heading">${escape(d.person)}の次戦プランを確認します</h2>${improvementPanel(d)}${missionPanel(d)}<details class="member-detail" data-other-practice><summary>ほかの課題や練習条件を確認します</summary>${practicePanel(d)}</details><details class="member-detail" data-analysis-details><summary>診断の根拠と試合別の解説を確認します</summary>${readerBoard(d)}${personalPanel(d)}${readerGuide('overview')}${overview}${readerGlossary('overview')}</details></div>`+
+  `<div class="coach-dashboard-view" id="coach-view-overview" role="tabpanel" aria-labelledby="coach-tab-overview">${globalThis.KesoCoachPrototype.render(d,{plan:globalThis.KesoCoachPractice.choose(d,{...(practiceProfiles.get(d.person)||defaultPracticePreferences()),exclude:practiceExcluded.get(d.person)||[]},benchmarkReference),copy:CoachPresentation,reader:CoachReader,fill:globalThis.KesoCoachPractice.fill})}<details class="coach-disclosure" data-other-practice><summary>ほかの課題や練習条件を確認します <span class="chev" aria-hidden="true">⌄</span></summary><div class="detail-body coach-existing">${practicePanel(d)}</div></details><details class="coach-disclosure" data-analysis-details><summary>診断の根拠と試合別の解説を確認します <span class="chev" aria-hidden="true">⌄</span></summary><div class="detail-body coach-existing">${readerBoard(d)}${personalPanel(d)}${readerGuide('overview')}${overview}${readerGlossary('overview')}</div></details></div>`+
   `<div class="coach-dashboard-view" id="coach-view-guns" role="tabpanel" aria-labelledby="coach-tab-guns" hidden>${readerGuide('guns')}${readerStats(d,'guns')}${benchmarkPanel(d)}${readerGlossary('guns')}${readerAdvanced(performancePanel(d.performance,'guns')+contextPanel(d.roundContext,'weapons'))}</div>`+
   `<div class="coach-dashboard-view" id="coach-view-time" role="tabpanel" aria-labelledby="coach-tab-time" hidden>${readerGuide('time')}${readerStats(d,'time')}${readerGlossary('time')}${readerAdvanced(performancePanel(d.performance,'time'))}</div>`+
   `<div class="coach-dashboard-view" id="coach-view-team" role="tabpanel" aria-labelledby="coach-tab-team" hidden>${readerGuide('team')}${readerStats(d,'team')}${readerGlossary('team')}${readerAdvanced(performancePanel(d.performance,'team')+contextPanel(d.roundContext,'utility')+'<p>同時交戦と位置上のトレード機会は、継続的な位置・視界の記録がないため未取得。</p>'+rateCharts)}</div>`+
   `<div class="coach-dashboard-view" id="coach-view-improve" role="tabpanel" aria-labelledby="coach-tab-improve" hidden>${readerGuide('improve')}${readerStats(d,'improve')}${readerGlossary('improve')}${readerAdvanced(contributionPanel(d.roundContribution)+contextPanel(d.roundContext,'economy')+improvements)}</div>`+
   `<div class="coach-dashboard-view" id="coach-view-strategy" role="tabpanel" aria-labelledby="coach-tab-strategy" hidden>${readerGuide('strategy')}${readerStats(d,'strategy')}${readerGlossary('strategy')}${readerAdvanced(performancePanel(d.performance,'maps')+strategy)}</div>`+
   `<div class="coach-dashboard-view" id="coach-view-metrics" role="tabpanel" aria-labelledby="coach-tab-metrics" hidden>${readerGuide('metrics')}${readerStats(d,'metrics')}${readerGlossary('metrics')}${readerAdvanced(performancePanel(d.performance,'quality')+contextPanel(d.roundContext,'quality')+allMetrics)}</div>`;
- const navigation=document.createElement('details');navigation.className='member-detail analysis-navigation';navigation.dataset.analysisNavigation='';
+ const navigation=document.createElement('details');navigation.className='coach-disclosure analysis-navigation';navigation.dataset.analysisNavigation='';
  const navHeading=document.createElement('summary');navHeading.textContent='詳しい分析を開きます';navigation.appendChild(navHeading);
- navigation.appendChild($('member-result').querySelector('.coach-dashboard-tabs'));
- for(const panel of [...$('member-result').querySelectorAll('.coach-dashboard-view')])if(panel.id!=='coach-view-overview')navigation.appendChild(panel);
+ const navBody=document.createElement('div');navBody.className='detail-body coach-existing';navigation.appendChild(navBody);navBody.appendChild($('member-result').querySelector('.coach-dashboard-tabs'));
+ for(const panel of [...$('member-result').querySelectorAll('.coach-dashboard-view')])if(panel.id!=='coach-view-overview')navBody.appendChild(panel);
  $('member-result').appendChild(navigation);
  for(const key of keepOpen){const section=$('member-result').querySelector('['+key+']');if(section)section.open=true;}
- polishCoachCopy($('member-result'));
+ for(const section of $('member-result').querySelectorAll('.coach-existing'))polishCoachCopy(section);
+ globalThis.KesoCoachPrototype.mount($('member-result'));$('coach-welcome').hidden=true;
  for(const step of document.querySelectorAll('[data-pdca-step]')){if(step.dataset.pdcaStep==='task')step.setAttribute('aria-current','step');else step.removeAttribute('aria-current');}
- document.querySelector('[data-pdca-location]').textContent='現在地：'+d.person+'の今日の課題を確認しています。';
+
 };
 $('member-result').addEventListener('click',e=>{
  if(e.target.closest('[data-practice-reset]')){if(!latestMemberReport)return;practiceExcluded.delete(latestMemberReport.person);renderMemberDiagnosis(latestMemberReport);return;}
@@ -845,7 +1602,7 @@ $('member-result').addEventListener('click',e=>{
  for(const panel of root.querySelectorAll('.coach-dashboard-view'))
   panel.hidden=panel.id!=='coach-view-'+view;
  const stage=view==='overview'?'task':'analysis';for(const step of document.querySelectorAll('[data-pdca-step]')){if(step.dataset.pdcaStep===stage)step.setAttribute('aria-current','step');else step.removeAttribute('aria-current');}
- document.querySelector('[data-pdca-location]').textContent=view==='overview'?'現在地：今日の課題を確認しています。':'現在地：分析の詳細を確認しています。';
+
 });
 
 $('member-result').addEventListener('input',e=>{
@@ -890,7 +1647,7 @@ async function loadMember(person){
  $('share').textContent='診断レポートをコピー';
  for(const el of $('member-selector').querySelectorAll('[data-member]'))
   el.setAttribute('aria-pressed',String(el.dataset.member===person));
- $('member-result').textContent=person+'の試合記録を読込中…';
+ globalThis.KesoCoachPrototype.stop();$('member-result').textContent=person+'の試合記録を読み込んでいます。';
  try{
   const data=await fetchMember(person);
   if(activeMember===person){latestMemberReport=data;renderMemberDiagnosis(data);
@@ -1045,12 +1802,12 @@ if(b){
     +card('一部欠損',int(b.partial),'いずれかのデータが不足')
     +card('未取得',int(b.missing),'保存レコードなし')
     +card('取得不可',int(b.unavailable),'一部欠損・未取得と重複');
-  const state=b.status==='running'?'補完処理は有効':
-    b.status==='complete'?'補完処理は終了':'補完処理は無効';
+  const state=b.status==='running'?'補完処理は有効です':
+    b.status==='complete'?'補完処理は終了しました':'補完処理は無効です';
   const next=b.pending>0?' 未処理：'+int(b.pending)+'試合。':'';
   const exception=b.status!=='running'&&b.pending>0?
     ' 未処理分は自動取得されない。管理者が補完設定を確認する必要がある。':'';
-  const excluded=b.partial>0?' 欠損'+int(b.partial)+'試合は個人・チーム成績の分母から除外。':'';
+  const excluded=b.partial>0?' 欠損'+int(b.partial)+'試合は個人・チーム成績の分母から除外しています。':'';
   $('backfill-message').textContent=state+'。'+next+exception+excluded;
 }else{
   $('backfill-counts').innerHTML='<p class="empty">補完状況を取得できない。</p>';
@@ -1090,6 +1847,7 @@ $('quality').innerHTML=simpleTable(
   ['ロスターが不正な試合',int(data.invalidMatches)],
   ['攻守判定ができたラウンド',int(o.roundsWithSides)],
   ['同一人物の複数回死亡があるラウンド',int(o.repeatedVictimRounds)]]);
+polishCoachCopy($('legacy-coach'));polishCoachCopy($('coach-operations'));
 $('report').hidden=false;
 $('connection').style.display='none';
 setStatus('集計を表示した。更新 '+new Date().toLocaleTimeString('ja-JP')+' · 認証済み · 読み取り専用');
@@ -1250,7 +2008,7 @@ $('connect-form').addEventListener('submit',async event=>{
   await load();
  }catch(e){setStatus(e.message||'接続に失敗した。',true)}
 });
-polishCoachCopy(document.querySelector('main'));
+for(const section of document.querySelectorAll('.coach-existing'))polishCoachCopy(section);
 load();
 })();
 </script>

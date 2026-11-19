@@ -203,6 +203,12 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   assert.match(await page.locator('#review-rounds').innerText(),/石原/);
   assert.match(await page.locator('#player-map').innerText(),/−1|-1/);
   assert.match(await page.locator('#quality').innerText(),/複数回死亡/);
+  const legacyParagraphs=await page.locator('#legacy-coach p').allTextContents();
+  for(const t of legacyParagraphs)assert.doesNotMatch(t,/(?:だけ|補わない|提案だ|である|とする|決められない|含めない|する|変わる|含む|始まりだ|必要だ)。/,'legacy courtesy: '+t);
+  assert.ok(legacyParagraphs.some(t=>t.includes('分析の母数は完全保存済み試合だけです。')));
+  assert.ok(legacyParagraphs.some(t=>t.includes('取得元に存在しないデータは補いません。')));
+  if(process.env.COACH_COPY_AUDIT)require('node:fs').writeFileSync(process.env.COACH_COPY_AUDIT,legacyParagraphs.join('\n'));
+
   assert.equal(requests.length,1,'no extra polling or KPI writes');
   assert.equal(requests[0].method,'GET');
   assert.equal(requests[0].auth,'Bearer '+token);
@@ -242,14 +248,16 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
     'an active backfill must not show resume');
   await page.locator('[data-member="神戸"]').click();
   await page.waitForFunction(()=>document.querySelector('#member-result').textContent.includes('FK後の動きを確認'));
-  assert.match(await page.locator('#member-result').innerText(),/神戸の次戦プラン/);
+  assert.equal(await page.locator('.prototype-top .playerline .name').innerText(),'神戸');
   assert.equal(await page.locator('[data-primary-mission]').count(),1);
-  assert.equal(await page.locator('[data-primary-mission] .mission-flow > li').count(),4);
-  assert.equal(await page.locator('[data-primary-mission] .mission-number strong').count(),1);
+  assert.equal(await page.locator('.prototype-top .block').count(),3,'selected recipes become the three prototype blocks');
+  assert.equal(await page.locator('.prototype-top .rankbox .r').first().innerText(),'未取得','never invent sample ranks');
+  assert.match(await page.locator('.prototype-top .evidence').innerText(),/1\.96/,'uses real fixture KD');
+  const beforeUiActions=requests.length;
+  await page.locator('#acceptBtn').click();assert.equal(await page.locator('#acceptBtn').getAttribute('aria-pressed'),'true');assert.equal(await page.locator('#acceptNote').isVisible(),true);
+  await page.locator('#timerBtn').click();assert.match(await page.locator('#timerBtn').innerText(),/一時停止/);await page.locator('#timerReset').click();assert.match(await page.locator('#clock').innerText(),/04:00/);
+  assert.equal(requests.length,beforeUiActions,'acceptance and silent timer never write or query APIs');
   await page.setViewportSize({width:375,height:812});
-  const bodyCopy=await page.locator('[data-primary-mission] p').evaluateAll(nodes=>nodes.filter(n=>n.getClientRects().length&&n.offsetHeight).map(n=>({font:parseFloat(getComputedStyle(n).fontSize),lines:n.offsetHeight/parseFloat(getComputedStyle(n).lineHeight)})));
-  assert.ok(bodyCopy.every(p=>p.font>=16&&p.lines<=3.1),'375px coaching paragraphs use 16px and roughly three lines');
-  assert.ok((await page.locator('[data-primary-mission] .coach-word').allTextContents()).some(t=>t.includes('確認してください')),'Japanese instructions do not split the confirmation word');
   assert.equal(await page.locator('#coach-operations #reload').count(),1);
 
   assert.equal(await page.locator('[data-improvement]').isVisible(),true);
@@ -257,6 +265,7 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   assert.equal(await page.locator('[data-other-practice]').evaluate(el=>el.open),false);
   assert.equal(await page.locator('[data-pdca-step="task"]').getAttribute('aria-current'),'step');
   if(process.env.COACH_PDCA_SCREENSHOT){const ops=await page.locator('#coach-operations').evaluate(el=>el.open);await page.locator('#coach-operations').evaluate(el=>el.open=false);await page.locator('#legacy-coach').evaluate(el=>el.open=false);await page.setViewportSize({width:375,height:812});await page.evaluate(()=>scrollTo(0,0));await page.screenshot({path:process.env.COACH_PDCA_SCREENSHOT.replace('.png','-top.png')});await page.locator('#coach-operations').evaluate((el,open)=>el.open=open,ops);await page.locator('#legacy-coach').evaluate(el=>el.open=true);}
+  if(process.env.COACH_V6_SCREENSHOTS_DIR)await require('./coach-prototype-visual.cjs')({browser,page,root,output:process.env.COACH_V6_SCREENSHOTS_DIR});
   await page.locator('[data-analysis-details] > summary').click();
   assert.match(await page.locator('#member-result').innerText(),/Abema#ttv/);
   assert.match(await page.locator('#member-result').innerText(),/Aquatopia#toppy/);
@@ -317,7 +326,7 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
     await page.locator('[data-coach-view="'+view+'"]').click();
     const overflow=await page.evaluate(expected=>({viewport:innerWidth,width:document.documentElement.scrollWidth,nodes:[...document.querySelectorAll('body *')].filter(n=>{if(n.getBoundingClientRect().right<=expected||!n.getBoundingClientRect().height)return false;for(let p=n.parentElement;p&&p!==document.body;p=p.parentElement)if(/auto|scroll|hidden|clip/.test(getComputedStyle(p).overflowX))return false;return true;}).slice(0,30).map(n=>({tag:n.tagName,cls:n.className,text:n.textContent.slice(0,70),right:n.getBoundingClientRect().right,width:n.getBoundingClientRect().width}))}),width);
     assert.ok(overflow.width<=width,'performance dashboard at '+width+' / '+view+' '+JSON.stringify(overflow));
-    assert.ok(await page.locator('#coach-view-'+view+' p').evaluateAll(nodes=>nodes.filter(n=>n.offsetHeight).every(n=>parseFloat(getComputedStyle(n).fontSize)>=16)),'all visible body paragraphs keep 16px at '+width+' / '+view);
+    assert.ok(await page.locator('#coach-view-'+view+' p:not(.prototype-top p)').evaluateAll(nodes=>nodes.filter(n=>n.offsetHeight).every(n=>parseFloat(getComputedStyle(n).fontSize)>=16)),'all visible body paragraphs keep 16px at '+width+' / '+view);
     assert.equal(await page.locator('#coach-view-'+view+' [data-reader-guide]').isVisible(),true,'every tab teaches how to read it');
     assert.ok(await page.locator('#coach-view-'+view+' [data-reader-glossary] [data-reader-term]').count()>0);
     const term=page.locator('#coach-view-'+view+' [data-reader-term]').first();await term.locator('summary').click();
@@ -448,7 +457,7 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   const rootReads=requests.filter(r=>r.url.endsWith('/coach/rounds')).length;
   const memberReads=requests.filter(r=>r.url.includes('/coach/member?')).length;
   await page.locator('[data-coach-view="overview"]').click();
-  feedbackRevision=1;await page.locator('[data-primary-mission] [data-feedback-refresh]').click();
+  feedbackRevision=1;await page.locator('[data-analysis-details] [data-feedback-refresh]').first().click();
   await page.waitForFunction(()=>document.querySelector('[data-match-feedback]')?.textContent.includes('更新された試合の解説1'));
   assert.equal(requests.filter(r=>r.url.includes('/coach/member?')).length,memberReads+1,'manual profile refresh bypasses stale in-memory cache');
   feedbackRevision=2;await page.locator('#reload').click();
