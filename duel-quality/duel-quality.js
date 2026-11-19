@@ -144,6 +144,21 @@ export function describeRematchGuide({finished=false,available=false,prepared=fa
   ?{step:1,title:'再戦の内容を確認中',description:'ゲーム・相手・賭けKPをフォームで確認し、申込ボタンを押すと新しい招待を送る。自動では開始しない。'}
   :{step:0,title:'同じ条件で、もう一戦',description:'再戦の準備ボタンでゲーム・相手・賭けKPを入力できる。押しただけでは招待もKPの操作も発生しない。'};
 }
+
+/* Six-game next-action guidance derived only from already-rendered controls.
+   Never computes outcomes, inspects opponent secrets, or submits a move. */
+export function describeDuelActionHint({game='',canAct=false,available=0,selected=false,count=0,guessValid=false,canChallenge=false}={}){
+ if(!canAct)return null;
+ switch(game){
+  case 'othello':return {title:'オセロ：置く場所を選ぶ',detail:available>0?'光る'+available+'か所から置きたいマスをタップする。':'着手可能なマスは現在表示されていない。'};
+  case 'gomoku':return {title:'五目並べ：選択して確定',detail:selected?'選んだマスを「ここに置く」で確定する。取り消しも可能だ。':'マスをタップして位置を選び、次に「ここに置く」で確定する。'};
+  case 'connect4':return {title:'四目並べ：列を選ぶ',detail:'上の▼から置きたい列をタップする。現在選択できる列は'+available+'列。'};
+  case 'hitblow':return {title:'Hit & Blow：4桁を予想',detail:guessValid?'異なる数字4桁が揃った。「予想を確定」で送信する。':'重複しない数字4桁を入力する。先頭に0も使える。'};
+  case 'bluffdice':return {title:'ブラフダイス：次の宣言',detail:canChallenge?'個数と出目を上げて宣言するか、相手の宣言を疑う。':'個数・出目を選んで宣言する。'};
+  case 'poker':return {title:'ポーカー：交換を選ぶ',detail:'交換予定'+count+'枚。0〜3枚の交換対象を選び、確定ボタンで送信する。'};
+  default:return null;
+ }
+}
 function enhance(root) {
   let previous = null, motion = null, lastBoard = null, lastOthello = null;
   let c4Previous=null,c4Motion=null,lastC4Board=null;
@@ -456,11 +471,44 @@ function enhance(root) {
     bar.dataset.duelConnectionType=info.type;
     bar.innerHTML='<strong>'+info.heading+'</strong><span>'+info.description+'</span>';
   }
+
+  function scanGameHint(){
+    const arena=root.querySelector('.duel-current .duel-arena');
+    if(!arena)return;
+    let note=arena.querySelector('[data-duel-action-hint]');
+    const turn=arena.querySelector('.duel-turn.my-turn');
+    if(!turn){note?.remove();return;}
+    const game=arena.querySelector('.duel-board.duel-othello')?'othello':
+     arena.querySelector('.duel-board.duel-gomoku')?'gomoku':
+     arena.querySelector('.duel-connect4-board')?'connect4':
+     arena.querySelector('.duel-hb-table')?'hitblow':
+     arena.querySelector('.duel-bluff-table')?'bluffdice':
+     arena.querySelector('.duel-poker-table')?'poker':'';
+    const available=game==='othello'?arena.querySelectorAll('.duel-othello .duel-square.available').length:
+     game==='connect4'?arena.querySelectorAll('.duel-connect4-head button:not(:disabled)').length:0;
+    const guess=String(arena.querySelector('#duel-guess')?.value??'');
+    const guessValid=/^[0-9]{4}$/.test(guess)&&new Set(guess).size===4;
+    const selected=!!arena.querySelector('.duel-gomoku-selection [data-duel-confirm-cell]');
+    const count=game==='poker'?arena.querySelectorAll('.duel-poker-hand-card.selected').length:0;
+    const canChallenge=!!arena.querySelector('[data-duel-mini="challenge"]');
+    const state=describeDuelActionHint({game,canAct:true,available,selected,count,guessValid,canChallenge});
+    if(!state){note?.remove();return;}
+    if(!note){
+      note=document.createElement('p');note.className='duel-action-hint';
+      note.dataset.duelActionHint='1';note.setAttribute('role','status');
+      note.setAttribute('aria-live','polite');turn.after(note);
+    }
+    const key=state.title+'|'+state.detail;
+    if(note.dataset.duelActionKey===key)return;
+    note.dataset.duelActionKey=key;
+    note.textContent=state.title+'　'+state.detail;
+  }
   function scan() {
     scanDuelJourney();
     scanRematchGuide();
     scanInviteReadiness();
     scanDuelConnection();
+    scanGameHint();
     scanConnect4();
     scanBluffDice();
     scanPoker();
@@ -580,6 +628,7 @@ function enhance(root) {
   const observer = new MutationObserver(scan);
   observer.observe(root, {childList: true, subtree: true});
   root.addEventListener('input',event=>{
+    if(event.target?.id==='duel-guess')scanGameHint();
     if(event.target?.id!=='duel-guess')return;
     const value=String(event.target.value??'');
     const help=root.querySelector('#duel-hb-draft-help');
