@@ -673,6 +673,22 @@ function enhance(root) {
       arena.querySelector('.duel-hb-history')?'公開済みの予想結果を履歴から確認できる。':
       'この画面に公開されている盤面・結果を確認できる。';
     fields.push(['公開済み記録',publicRecord]);
+    // Educational next-match prompts only. Do not infer skill, hidden hands,
+    // missed moves, performance or unobserved rounds from partial results.
+    const nextFocus=arena.querySelector('.duel-board.duel-othello')
+      ?'次の試合では、自分の手番ごとに置ける場所を確認し、着手前に盤面全体を見直しましょう。'
+      :arena.querySelector('.duel-board.duel-gomoku')
+      ?'次の試合では、選んだ位置を確認してから確定し、直前の確定手を振り返りましょう。'
+      :arena.querySelector('.duel-connect4-board')
+      ?'次の試合では、落とす列を決める前に、横・縦・斜めの並びを確認しましょう。'
+      :arena.querySelector('.duel-hb-table')
+      ?'次の試合では、公開済みのHitとBlowを見直してから、次の予想を確定しましょう。'
+      :arena.querySelector('.duel-bluff-table')
+      ?'次の試合では、公開されている宣言と履歴を確認し、判断の根拠を整理しましょう。'
+      :arena.querySelector('.duel-poker-table')
+      ?'次の試合では、役の強さを確認してから、自分の交換カードを選びましょう。'
+      :'次の試合では、確定結果を見返してから、次に確認することを一つ決めましょう。';
+    fields.push(['次の試合で確認すること',nextFocus]);
     for(const [label,value] of fields){
       const dt=document.createElement('dt');dt.textContent=label;
       const dd=document.createElement('dd');dd.textContent=value;
