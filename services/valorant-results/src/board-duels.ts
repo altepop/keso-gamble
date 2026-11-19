@@ -3,6 +3,7 @@ import {debtOf} from './kp-debt.ts';
 // @ts-expect-error Pure shared ledger verifier, independently covered by node:test.
 import {checkDuelLedger} from '../../../js/duel-kp-audit.js';
 import {kpTargetMembers,kpTargetAllowed} from './kp-target-members.ts';
+import {ensureVerifiedPvpProgression} from './duel-progression-commit.ts';
 // @ts-expect-error Shared pure browser-side rules (no declaration file).
 import {initialDuelBoard,playDuelMove,DUEL_GAMES} from '../../../js/duel-rules.js';
 
@@ -192,6 +193,8 @@ export async function boardDuelAction(env:KpEnv,m:KpMapping,user:string,body:Rec
   if(existing.guild!==m.guildId||existing.actor!==user||existing.kind!==kind||existing.duel_id!==body.duel)throw Error('操作IDの再利用はできません。');
   return present(env,m,user,existing.duel_id);
  }
+ // Install receipt triggers only for trusted moves; no KP/relic rule is changed.
+ if(kind==='move')await ensureVerifiedPvpProgression(env);
  if(kind==='create'){
   const game=String(body.game??''),target=String(body.opponent??''),stake=Number(body.stake);
   if(!Object.hasOwn(GAMES,game))throw Error('ゲームを選んでください。');
