@@ -57,6 +57,41 @@ test('per-minute KP monitor avoids scanning all rewards and lazily reads only re
  assert.equal(next.credits.get(eventId),900,'a new invocation always checks durable state');
  assert.equal(f.sql.prepare("SELECT COUNT(*) AS n FROM kp_ledger WHERE kind='match'").get()!.n,1,'no credits are duplicated');
 });
+test('issue #522: cross-cron KP SQL reads are counted and late ledger/notice updates remain visible',async()=>{
+ const f=await fixture();f.enableHistory();
+ assert.equal(await collectKpMatch(f.env,mapping,game('issue522-cross-cron'),'p-one'),900);
+ const id=kpEventId(guild,'issue522-cross-cron','p-one');
+ const notice='Issue 522 first notice';
+ f.sql.prepare('INSERT INTO notifications(riot_id,match_id,message,ended_at,mode,sent) VALUES(?,?,?,?,?,1)')
+  .run('One#JP1','issue522-cross-cron',notice,Date.now(),'competitive');
+ const observed:string[]=[];
+ const original=f.env.DB.prepare.bind(f.env.DB);
+ f.env.DB.prepare=((query:string)=>{
+  if(query.includes('FROM kp_events e')&&query.includes('LEFT JOIN kp_escalation_power_matches'))observed.push(query);
+  return original(query);
+ }) as typeof f.env.DB.prepare;
+ const first=await prepareKpRun(f.env,mapping);
+ await loadKpRunMatch(f.env,first,id);
+ await loadKpRunMatch(f.env,first,id);
+ assert.equal(observed.length,1,'same-cron repeat should issue one joined SQL read');
+ assert.equal(first.credits.get(id),900);
+ assert.equal(first.messages.get(id),notice);
+ // Simulate an independent delayed relic settlement and notification rewrite
+ // between cron runs, not by changing the production payout path.
+ f.sql.prepare('INSERT INTO kp_ledger(id,guild,user,delta,kind,at) VALUES(?,?,?,?,?,?)')
+  .run('relic:'+id,guild,one,25,'relic',Date.now());
+ f.sql.prepare('UPDATE notifications SET message=? WHERE riot_id=? AND match_id=?')
+  .run('Issue 522 revised notice','One#JP1','issue522-cross-cron');
+ const second=await prepareKpRun(f.env,mapping);
+ await loadKpRunMatch(f.env,second,id);
+ assert.equal(observed.length,2,'new cron must reload durable data after late settlement');
+ assert.equal(second.credits.get(id),925,'delayed relic delta must not be lost');
+ assert.equal(second.relicBonuses.get(id),25);
+ assert.equal(second.messages.get(id),'Issue 522 revised notice');
+ assert.equal(first.credits.get(id),900,'the first cron snapshot remains unchanged');
+ assert.equal(f.sql.prepare("SELECT COUNT(*) AS n FROM kp_ledger WHERE kind='match'").get()!.n,1,'no double credit');
+});
+
 test('schema version cold check reads one exact key and handles only missing kp_settings',async()=>{
  const f=await fixture();
  const calls:string[]=[];
