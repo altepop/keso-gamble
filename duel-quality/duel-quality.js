@@ -399,7 +399,7 @@ function enhance(root) {
       '</p><p class="duel-journey-help">'+state.detail+'</p>';
   }
 
-  let connectionRecovered=false;
+  let connectionRecovered=false, browserOnline=navigator.onLine!==false;
   function scanDuelConnection(){
     const screen=root.querySelector('.screen');
     const rail=screen?.querySelector(':scope > [data-duel-journey]');
@@ -407,7 +407,7 @@ function enhance(root) {
     const sync=root.querySelector('.duel-sync')?.textContent||'';
     const refreshing=sync.includes('更新中');
     const retry=!!root.querySelector('[data-duel-retry]');
-    const info=describeDuelConnection({online:navigator.onLine!==false,retry,refreshing,recovered:connectionRecovered});
+    const info=describeDuelConnection({online:browserOnline,retry,refreshing,recovered:connectionRecovered});
     let bar=screen.querySelector(':scope > [data-duel-connection]');
     if(!info){bar?.remove();return;}
     if(!bar){
@@ -528,8 +528,8 @@ function enhance(root) {
     scanGomoku();
   });
   // Passive browser connectivity indicators: no implicit replay or server writes.
-  addEventListener('offline',()=>{connectionRecovered=false;scanDuelConnection();});
-  addEventListener('online',()=>{connectionRecovered=true;scanDuelConnection();});
+  addEventListener('offline',()=>{browserOnline=false;connectionRecovered=false;scanDuelConnection();});
+  addEventListener('online',()=>{browserOnline=true;connectionRecovered=true;scanDuelConnection();});
   root.addEventListener('click',event=>{
     if(event.target.closest?.('[data-duel-refresh],[data-duel-retry]'))connectionRecovered=false;
   },{passive:true});
