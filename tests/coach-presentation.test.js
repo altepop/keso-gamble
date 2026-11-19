@@ -63,3 +63,12 @@ test('private goal headings are explicitly registered and helper uses content-ad
  assert.ok(html.includes('goals.js?v=coach-'+createHash('sha256').update(code).digest('hex').slice(0,12)));
  assert.doesNotMatch(code,/\b(?:sessionStorage|localStorage)\b|\bfetch\s*\(|innerHTML\s*=/);
 });
+
+test('sharing headings are explicit, helper is content addressed and summary copy rejects nested or unknown private data',()=>{
+ const code=readFileSync(new URL('../coach/sharing.js',import.meta.url),'utf8'),context={};vm.runInNewContext(code,context);
+ for(const text of Object.values(context.KesoCoachSharing.headings))assert.match(text,/ます$/);
+ assert.ok(html.includes('sharing.js?v=coach-'+createHash('sha256').update(code).digest('hex').slice(0,12)));
+ assert.doesNotMatch(code,/\b(?:sessionStorage|localStorage)\b|\bfetch\s*\(|innerHTML\s*=/);
+ const safe=context.KesoCoachSharing.safeSummary({subjectId:'opaque',displayName:'chosen',goals:'secret',period:{from:{secret:'id'},to:null},matches:{analyzed:{secret:'id'}},metrics:{kd:{value:{secret:'id'},formula:'approved',secret:'id'},private:{secret:'id'}}});
+ assert.doesNotMatch(JSON.stringify(safe),/secret/);assert.equal(safe.metrics.kd.value,null);assert.equal(safe.matches.analyzed,null);
+});

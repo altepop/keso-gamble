@@ -21,7 +21,7 @@ test('all legacy/private entry points authorize before reading any match rows',a
   const from=f.queries.length,r=await kpApi(request(path,f.tokens[1]),f.env,f.mapping);assert.equal(r.status,404,path);assert.ok(!f.queries.slice(from).some(q=>q.includes('FROM valorant_match_rosters')),path+' performs no analysis');
  }
  assert.equal((await kpApi(request('rounds',f.tokens[1]),f.env,f.mapping)).status,410);
- assert.deepEqual(await (await kpApi(request('directory',f.tokens[1]),f.env,f.mapping)).json(),{people:[],sharingAvailable:false});
+ assert.deepEqual(await (await kpApi(request('directory',f.tokens[1]),f.env,f.mapping)).json(),{people:[],sharingAvailable:true});
  assert.equal((await kpApi(request('me'),f.env,f.mapping)).status,401);
  assert.equal((await kpApi(request('me',f.tokens[0],'https://evil.invalid'),f.env,f.mapping)).status,403);
  }finally{f.close();}});

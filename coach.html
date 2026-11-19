@@ -551,6 +551,9 @@
 .coach-goals textarea{resize:vertical}.coach-goals button{padding:12px 16px;border-radius:8px;background:#ff4655;color:#fff;font-size:16px;white-space:normal;overflow-wrap:anywhere}.coach-goals button:disabled{opacity:.6}.coach-goals :focus-visible{outline:3px solid #f4f3ef;outline-offset:3px}.coach-goals .goal-actions{display:flex;flex-wrap:wrap;gap:8px}.coach-goals .detail-body{min-width:0}.coach-goals [role=status]:empty{display:none}
 @media(max-width:400px){.coach-goals{padding:16px}.coach-goals .detail-body{padding:12px}}
 </style>
+<style id="coach-sharing-style">
+.coach-sharing{margin:24px 0;color:#ece8e1}.coach-sharing p,.coach-sharing label,.coach-sharing legend{font-size:16px;line-height:1.9;overflow-wrap:anywhere}.coach-sharing label{display:block;margin:12px 0}.coach-sharing input:not([type=checkbox]),.coach-sharing select,.coach-sharing textarea{display:block;width:100%;box-sizing:border-box;max-width:100%;padding:12px;margin:8px 0;background:#0f1923;color:#f4f3ef;border:1px solid #61717e;border-radius:8px;font-size:16px}.coach-sharing fieldset{min-width:0;border:1px solid #61717e;border-radius:8px}.coach-sharing input[type=checkbox]{margin-right:12px;min-width:20px;min-height:20px;accent-color:#ff4655}.coach-sharing button{background:#233542;color:#ece8e1;border:1px solid #394e5d;font-size:16px;white-space:normal;overflow-wrap:anywhere;padding:12px;margin:8px 8px 8px 0;border-radius:8px}.coach-sharing button[type=submit],.coach-sharing [data-summary-open]{background:#ff4655;color:#fff;border-color:#ff4655}.coach-sharing h3{overflow-wrap:anywhere;word-break:normal}.coach-sharing .shared-summary{padding:20px;margin:16px 0;background:#14232f;border-left:2px solid #ff4655;clip-path:polygon(12px 0,100% 0,100% calc(100% - 12px),calc(100% - 12px) 100%,0 100%,0 12px)}.coach-sharing :focus-visible{outline:3px solid #f4f3ef;outline-offset:3px}.coach-sharing [role=status]:empty{display:none}
+</style>
 </head>
 <body>
 <main class="wrap">
@@ -573,10 +576,11 @@
 <div id="report" hidden>
 <div id="member-result" aria-live="polite"></div>
 <details id="member-coaching-panel" class="coach-disclosure"><summary>自分のアカウントを確認します <span class="chev" aria-hidden="true">⌄</span></summary><div class="detail-body coach-existing">
-<p id="coach-owner-label"></p><p>公開範囲：本人のみ</p>
+<p id="coach-owner-label"></p><p>詳細診断・目標：本人のみ</p>
 <button type="button" id="return-self">自分の人物統合画面に戻る</button>
 <div id="member-selector" class="member-selector" role="group" aria-label="自分のアカウント"></div>
 </div></details>
+<div id="coach-sharing-host"></div>
 <details class="coach-disclosure" id="coach-operations"><summary>収集状況や更新設定を確認します <span class="chev" aria-hidden="true">⌄</span></summary><div class="detail-body coach-existing">
 <div id="coach-operation-actions"><div id="status" role="status" aria-live="polite">データを確認中…</div><textarea id="share-fallback" hidden readonly aria-label="診断レポート" rows="6" style="width:100%;background:#09152a;color:#e9eef9;border:1px solid #435779;border-radius:10px;margin-top:8px;font:12px/1.4 monospace"></textarea><div class="actions"><button id="reload" type="button">分析を更新</button><button id="share" class="secondary" type="button" disabled>診断レポートをコピー</button><span class="small muted">手動更新 · KPの増減なし</span></div>
 <p class="small muted">ご本人の診断をコピーできます。認証情報・試合ID・PUUID・相手の名前は含めません。</p>
@@ -863,6 +867,7 @@
 
 
 </template>
+<script src="./coach/sharing.js?v=coach-52d276772aa9"></script>
 <script src="./coach/goals.js?v=coach-ca17bb21a788"></script>
 <script src="./coach/prototype-view.js?v=coach-d946f6f7b53c"></script>
 <script src="./coach/benchmarks.js?v=coach-4721e7e852a8"></script>
@@ -1663,16 +1668,24 @@ async function request(path,opts={}){
  if(!r.ok){const err=new Error(data.error||'通信エラー ('+r.status+')');err.status=r.status;throw err}
  return data;
 }
-const coachGoals=globalThis.KesoCoachGoals.create({request:async(path,opts={})=>{
+const authenticatedCoachRequest=async(path,opts={})=>{
  if(credentials()!==credentialState){clearCoachView();throw Error('接続が変更されました。もう一度ログインしてください。');}
  const generation=authGeneration,t=token();
  try{const result=await request(path,{...opts,headers:{...opts.headers,Authorization:'Bearer '+t}});
   if(generation!==authGeneration||token()!==t)throw Error('接続が変更されました。');return result;
  }catch(e){if(generation===authGeneration&&e.status===401){clearCoachView();$('connection').style.display='block';setStatus('接続が切れました。もう一度ログインしてください。',true);}throw e;}
+};
+const coachGoals=globalThis.KesoCoachGoals.create({request:authenticatedCoachRequest});
+const coachSharing=globalThis.KesoCoachSharing.create({request:authenticatedCoachRequest,onSelf:()=>void load(),onView:()=>{
+ authGeneration++;activeMember=null;latestReport=null;latestMemberReport=null;memberPending=false;
+ memberCache.clear();practiceProfiles.clear();practiceExcluded.clear();coachGoals.clear();
+ globalThis.KesoCoachPrototype.stop();$('member-result').replaceChildren();$('member-coaching-panel').hidden=true;$('coach-operations').hidden=true;
+ $('share-fallback').value='';$('share-fallback').hidden=true;$('share').disabled=true;
 }});
+$('coach-sharing-host').append(coachSharing.element);
 function placeCoachGoals(){const improvement=$('member-result').querySelector('[data-improvement]');if(improvement)improvement.after(coachGoals.element);}
 function clearCoachView(){
- coachGoals.clear();authGeneration++;latestReport=null;latestMemberReport=null;selfIdentity=null;activeMember=null;memberNames=[];
+ coachSharing.clear();$('coach-operations').hidden=false;coachGoals.clear();authGeneration++;latestReport=null;latestMemberReport=null;selfIdentity=null;activeMember=null;memberNames=[];
  memberCache.clear();practiceProfiles.clear();practiceExcluded.clear();
  globalThis.KesoCoachPrototype.stop();$('member-result').replaceChildren();$('member-selector').replaceChildren();
  $('member-archive-status').replaceChildren();$('coach-owner-label').textContent='';
@@ -1696,22 +1709,22 @@ async function load(){
   $('return-self').disabled=true;
   $('member-coaching-panel').hidden=false;
   latestReport=data.report;latestMemberReport=data.report;activeMember=selfIdentity.defaultProfile;
-  coachGoals.setData(data.goals);renderMemberArchiveStatus(data);renderMemberDiagnosis(data.report);
+  coachSharing.setData(data.settings);coachGoals.setData(data.goals);renderMemberArchiveStatus(data);renderMemberDiagnosis(data.report);
   $('report').hidden=false;$('connection').style.display='none';$('share').disabled=false;
-  setStatus('自分のコーチングを表示しています。公開範囲は本人のみです。');
+  setStatus('自分の詳細診断を表示しています。要約の共有範囲は下の設定で確認できます。');
  }catch(e){
   if(generation!==authGeneration)return;
   clearCoachView();generation=authGeneration;
   if(e.status===401){try{sessionStorage.removeItem(KEY)}catch{}$('connection').style.display='block';setStatus('接続が切れました。接続コードでログインしてください。',true);}
   else if(e.status===429&&t){
-   try{const state=await request('/api/kp/coach/members/status',{headers:{Authorization:'Bearer '+t}});if(generation===authGeneration&&token()===t&&state.identity?.status==='linked'){renderMemberArchiveStatus(state);coachGoals.setData(state.goals);$('member-result').replaceChildren(coachGoals.element);$('report').hidden=false;$('member-coaching-panel').hidden=true;}}catch{}
+   try{const state=await request('/api/kp/coach/members/status',{headers:{Authorization:'Bearer '+t}});if(generation===authGeneration&&token()===t&&state.identity?.status==='linked'){renderMemberArchiveStatus(state);coachSharing.setData(state.settings);coachGoals.setData(state.goals);$('member-result').replaceChildren(coachGoals.element);$('report').hidden=false;$('member-coaching-panel').hidden=true;}}catch{}
    if(generation===authGeneration)setStatus(e.message,true);
   }else{$('connection').style.display='block';setStatus(e.message||'本人の対応を確認できませんでした。',true);}
  }finally{if(generation===authGeneration){busy=false;$('reload').disabled=false;}}
 }
 function checkCoachSession(event){
  if(event?.type==='storage'&&(event.key===null||event.key==='keso-kp-session-v1')||credentials().split('|').slice(1).join('|')!==credentialState.split('|').slice(1).join('|'))try{sessionStorage.removeItem(KEY)}catch{}
- if(credentials()===credentialState)return;
+ if(credentials()===credentialState){if(!event||['focus','pageshow'].includes(event.type))coachSharing.invalidate();return;}
  clearCoachView();busy=false;memberPending=false;void load();
 }
 window.addEventListener('storage',checkCoachSession);

@@ -10,7 +10,7 @@ export async function ensureCoachProfiles(directory,env=process.env,request=fetc
  };
  await query(readFileSync(new URL('../migrations/0010_coach_profiles.sql',import.meta.url),'utf8'));
  for(const [name,expected] of [['coach_profiles',PROFILE_COLUMNS],['coach_profile_accounts',ACCOUNT_COLUMNS]]){
-  const r=await query("PRAGMA table_info('"+name+"')");if(JSON.stringify(r[0].results.map(x=>x.name))!==JSON.stringify(expected))throw Error('Incompatible coaching profile schema');
+  const r=await query("PRAGMA table_info('"+name+"')");if(JSON.stringify(r[0].results.map(x=>x.name).slice(0,expected.length))!==JSON.stringify(expected))throw Error('Incompatible coaching profile schema');
  }
  const triggers=await query("SELECT name FROM sqlite_master WHERE type='trigger' AND name IN ('coach_profile_owner_immutable','coach_account_owner_immutable')");
  if(triggers[0].results.length!==2)throw Error('Coaching ownership guards missing');

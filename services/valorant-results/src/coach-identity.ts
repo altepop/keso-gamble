@@ -59,20 +59,20 @@ export type CoachIdentity=Awaited<ReturnType<typeof resolveCoachIdentity>>;
 export async function resolveCoachIdentity(db:D1Database,mapping:KpMapping,user:string){
  const configured=mapping.accounts.filter(a=>a.discordUserId===user);
  if(configured.length!==1)return {status:'unregistered' as const};
- const rows=(await db.prepare(`SELECT p.subject_id,p.person_key,p.display_name,a.puuid,a.account_key,
+ const rows=(await db.prepare(`SELECT p.subject_id,p.person_key,p.display_name,p.visibility,p.policy_version,p.shared_fields_json,a.puuid,a.account_key,
   k.puuid AS primary_puuid,k.riot AS primary_riot,b.user AS bound_owner
   FROM coach_profiles p LEFT JOIN coach_profile_accounts a ON a.guild=p.guild AND a.subject_id=p.subject_id
   LEFT JOIN kp_accounts k ON k.guild=p.guild AND k.user=p.owner_user
   LEFT JOIN kp_accounts b ON b.guild=a.guild AND b.puuid=a.puuid
   WHERE p.guild=? AND p.owner_user=?`).bind(mapping.guildId,user).all<{
-   subject_id:string;person_key:string;display_name:string;puuid:string|null;account_key:string|null;primary_puuid:string|null;primary_riot:string|null;bound_owner:string|null
+   subject_id:string;person_key:string;display_name:string;visibility:string;policy_version:number;shared_fields_json:string;puuid:string|null;account_key:string|null;primary_puuid:string|null;primary_riot:string|null;bound_owner:string|null
   }>()).results;
  if(!rows.length)return {status:'unregistered' as const};
  const first=rows[0],person=COACH_PERSONS.find(p=>p.key===first.person_key);
  if(!person||!first.primary_puuid||lower(first.primary_riot??'')!==lower(configured[0].riotId)||!rows.some(r=>r.puuid===first.primary_puuid)||
  rows.some(r=>r.subject_id!==first.subject_id||!validId(r.puuid)||!r.account_key||!person.accounts.some(a=>lower(a.riotId)===lower(r.account_key!))||r.bound_owner!==null&&r.bound_owner!==user))return {status:'conflict' as const};
  const accounts=rows.map(r=>({riotId:r.account_key!,puuid:r.puuid!,profile:person.accounts.find(a=>lower(a.riotId)===lower(r.account_key!))!.profile}));
- return {status:'linked' as const,subjectId:first.subject_id,displayName:first.display_name,person:person.label,accounts,pendingAccounts:person.accounts.length-accounts.length};
+ return {status:'linked' as const,subjectId:first.subject_id,displayName:first.display_name,summaryVisibility:first.visibility,policyVersion:first.policy_version,sharedFieldsJson:first.shared_fields_json,person:person.label,accounts,pendingAccounts:person.accounts.length-accounts.length};
 }
 export function publicCoachIdentity(identity:CoachIdentity){
  if(identity.status!=='linked')return {status:identity.status};
