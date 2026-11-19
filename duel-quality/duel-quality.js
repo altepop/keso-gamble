@@ -135,7 +135,7 @@ export function describeDuelConnection({online=true,retry=false,refreshing=false
  if(retry)return {type:'retry',heading:'対戦操作の結果が未確認',description:'新しい着手を送らず、「前回の操作を確認」から同じ操作IDの結果を確認する。'};
  if(!online)return {type:'offline',heading:'ブラウザがオフライン',description:'確定前の着手を繰り返し送らない。接続が戻ってから対戦情報を更新して確認する。'};
  if(recovered)return {type:'recovered',heading:'ブラウザの接続が戻った',description:'サーバーの同期はまだ確認していない。「更新」で確定した盤面を確認する。'};
- if(refreshing)return {type:'refreshing',heading:'対戦情報を更新中',description:'着手・結果はサーバーが確定した情報だけを表示する。'};
+ if(refreshing)return {type:'refreshing',heading:'対戦情報を更新中',description:'通信の完了を確認中。表示中の盤面は更新前の可能性がある。連打せず確定した表示を確認する。'};
  return null;
 }
 
@@ -489,6 +489,10 @@ function enhance(root) {
     if(bar.dataset.duelConnectionKey===key)return;
     bar.dataset.duelConnectionKey=key;
     bar.dataset.duelConnectionType=info.type;
+    // A loading state is not an error; an unconfirmed action needs prominent guidance.
+    bar.setAttribute('role',info.type==='retry'||info.type==='offline'?'alert':'status');
+    bar.setAttribute('aria-atomic','true');
+    bar.setAttribute('aria-busy',info.type==='refreshing'?'true':'false');
     bar.innerHTML='<strong>'+info.heading+'</strong><span>'+info.description+'</span>';
   }
 
