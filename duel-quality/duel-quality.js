@@ -296,6 +296,16 @@ function enhance(root) {
     const cells=[...board.querySelectorAll('.duel-connect4-space')];
     if(cells.length!==42){c4Previous=null;c4Motion=null;return;}
     const id=board.dataset.c4Match;
+    // Phase 7: the active board and its controls stay visible; optional hint folds.
+    const hint=root.querySelector('.duel-current .duel-arena [data-duel-action-hint]');
+    if(hint && !hint.closest('[data-duel-mobile-detail="connect4"]')){
+      const details=document.createElement('details');
+      details.dataset.duelMobileDetail='connect4';
+      details.className='duel-mobile-detail';
+      const summary=document.createElement('summary');
+      summary.textContent='落下演出・操作の補足';
+      hint.before(details);details.append(summary,hint);
+    }
     const version=Number(board.dataset.c4Version);
     const state=cells.map(cell=>cell.classList.contains('a')?'a':cell.classList.contains('b')?'b':'.').join('');
     const now=performance.now();
