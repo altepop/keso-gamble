@@ -16,14 +16,14 @@ function connectPanel(m,busy,pending){
  const cells=[...m.board].map((v,i)=>'<span class="duel-pve-disc '+(v==='a'?'human':v==='b'?'cpu':'')+'" aria-label="'+(Math.floor(i/7)+1)+'段 '+(i%7+1)+'列 '+(v==='a'?'あなた':v==='b'?'CPU':'空き')+'">'+(v==='.'?'·':'●')+'</span>').join('');
  return '<div class="duel-pve-columns">'+cols+'</div><div class="duel-pve-connect-board" role="img" aria-label="四目並べの確定盤面">'+cells+'</div>';
 }
-function hiddenPanel(m,busy,pending,picks){
+function hiddenPanel(m,busy,pending,picks,guessDraft=''){
  const pub=JSON.parse(m.board);
  if(m.game==='hitblow'){
   const history=Array.isArray(pub.history)?pub.history:[];
   const latest=history.at(-1);
   return '<p class="helper">異なる数字4桁を入力してください。CPUの秘密の数字は確定まで公開されません。</p>'
    +(latest?'<p role="status">直前の結果：'+esc(latest.by==='a'?'あなた':'CPU')+' '+esc(latest.guess)+'／'+esc(latest.hit)+' Hit・'+esc(latest.blow)+' Blow</p>':'')
-   +'<div class="duel-pve-actions"><label>4桁の予想<input type="text" id="pve-guess" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="off"></label><button class="action-btn primary" data-pve-submit="hitblow" '+disabled(busy,pending,m.turn)+'>予想を確定</button></div>'
+   +'<div class="duel-pve-actions"><label>4桁の予想<input type="text" id="pve-guess" value="'+esc(guessDraft)+'" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="off"></label><button class="action-btn primary" data-pve-submit="hitblow" '+disabled(busy,pending,m.turn)+'>予想を確定</button></div>'
    +(history.length?'<details><summary>これまでの予想 '+history.length+'回</summary><ol>'+history.map(h=>'<li>'+esc(h.by==='a'?'あなた':'CPU')+' '+esc(h.guess)+'：'+esc(h.hit)+' Hit／'+esc(h.blow)+' Blow</li>').join('')+'</ol></details>':'');
  }
  if(m.game==='bluffdice'){
@@ -46,7 +46,7 @@ function hiddenPanel(m,busy,pending,picks){
   +'<button class="action-btn primary" data-pve-submit="poker" '+disabled(busy,pending,m.turn)+'>交換して確定</button>'
   +(pub.showdown?'<details><summary>決着した手札を見る</summary><pre>'+esc(JSON.stringify(pub.showdown))+'</pre></details>':'');
 }
-export function pvePanel({match=null,connected=false,busy=false,error='',pending=false,selected=null,picks=[],game='othello',level='normal',savedId=false}={}){
+export function pvePanel({match=null,connected=false,busy=false,error='',pending=false,selected=null,picks=[],game='othello',level='normal',savedId=false,guessDraft=''}={}){
  const active=match&&Object.hasOwn(games,match.game);
  const status=active?match.turn==='finished'
   ?'確定結果：'+(match.winner==='human'?'あなたの勝ち':match.winner==='cpu'?'CPUの勝ち':'引き分け')
