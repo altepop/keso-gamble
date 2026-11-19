@@ -164,6 +164,8 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   await page.locator('#report:not([hidden])').waitFor();
   assert.equal(await page.locator('#legacy-coach').evaluate(el=>el.open),false,
     'legacy 43-match audit stays collapsed by default');
+  assert.equal(await page.locator('#coach-operations').evaluate(el=>el.open),false,'operations are collapsed at the bottom');
+  await page.locator('#coach-operations > summary').click();
   assert.match(await page.locator('#member-archive-status').innerText(),/収集停止中/);
   assert.equal(await page.locator('#start-member-archive').isVisible(),true);
   await page.locator('#legacy-coach > summary').click();
@@ -240,22 +242,40 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
     'an active backfill must not show resume');
   await page.locator('[data-member="神戸"]').click();
   await page.waitForFunction(()=>document.querySelector('#member-result').textContent.includes('FK後の動きを確認'));
-  assert.match(await page.locator('#member-result').innerText(),/神戸 個別コーチング/);
+  assert.match(await page.locator('#member-result').innerText(),/神戸の次戦プラン/);
+  assert.equal(await page.locator('[data-primary-mission]').count(),1);
+  assert.equal(await page.locator('[data-primary-mission] .mission-flow > li').count(),4);
+  assert.equal(await page.locator('[data-primary-mission] .mission-number strong').count(),1);
+  await page.setViewportSize({width:375,height:812});
+  const bodyCopy=await page.locator('[data-primary-mission] p').evaluateAll(nodes=>nodes.filter(n=>n.getClientRects().length&&n.offsetHeight).map(n=>({font:parseFloat(getComputedStyle(n).fontSize),lines:n.offsetHeight/parseFloat(getComputedStyle(n).lineHeight)})));
+  assert.ok(bodyCopy.every(p=>p.font>=16&&p.lines<=3.1),'375px coaching paragraphs use 16px and roughly three lines');
+  assert.ok((await page.locator('[data-primary-mission] .coach-word').allTextContents()).some(t=>t.includes('確認してください')),'Japanese instructions do not split the confirmation word');
+  assert.equal(await page.locator('#coach-operations #reload').count(),1);
+
+  assert.equal(await page.locator('[data-improvement]').isVisible(),true);
+  assert.equal(await page.locator('[data-analysis-details]').evaluate(el=>el.open),false);
+  assert.equal(await page.locator('[data-other-practice]').evaluate(el=>el.open),false);
+  assert.equal(await page.locator('[data-pdca-step="task"]').getAttribute('aria-current'),'step');
+  if(process.env.COACH_PDCA_SCREENSHOT){const ops=await page.locator('#coach-operations').evaluate(el=>el.open);await page.locator('#coach-operations').evaluate(el=>el.open=false);await page.locator('#legacy-coach').evaluate(el=>el.open=false);await page.setViewportSize({width:375,height:812});await page.evaluate(()=>scrollTo(0,0));await page.screenshot({path:process.env.COACH_PDCA_SCREENSHOT.replace('.png','-top.png')});await page.locator('#coach-operations').evaluate((el,open)=>el.open=open,ops);await page.locator('#legacy-coach').evaluate(el=>el.open=true);}
+  await page.locator('[data-analysis-details] > summary').click();
   assert.match(await page.locator('#member-result').innerText(),/Abema#ttv/);
   assert.match(await page.locator('#member-result').innerText(),/Aquatopia#toppy/);
   assert.equal(await page.locator('[data-coach-learning]').isVisible(),true);
   assert.equal(await page.locator('[data-reader-board] [data-reader-verdict]').count(),2);
   assert.match(await page.locator('[data-reader-board]').innerText(),/GOOD/);
   assert.match(await page.locator('[data-reader-board]').innerText(),/BAD候補|CHECK|次の課題/);
+  await page.locator('[data-analysis-navigation] > summary').click();
   await page.locator('[data-coach-view="overview"]').focus();await page.keyboard.press('ArrowRight');
   assert.equal(await page.locator('#coach-view-guns > [data-reader-guide]').isVisible(),true);
+  assert.equal(await page.locator('[data-pdca-step="analysis"]').getAttribute('aria-current'),'step');
   assert.equal(await page.locator('#coach-view-guns > [data-reader-advanced]').evaluate(el=>el.open),false,'beginners see plain language before expert tables');
   await page.keyboard.press('Home');assert.equal(await page.locator('#coach-view-overview').isVisible(),true);
+  if(process.env.COACH_PDCA_SCREENSHOT){await page.setViewportSize({width:375,height:812});await page.locator('[data-primary-mission]').screenshot({path:process.env.COACH_PDCA_SCREENSHOT});}
   if(process.env.COACH_READER_SCREENSHOT){await page.setViewportSize({width:320,height:812});await page.locator('[data-reader-board]').screenshot({path:process.env.COACH_READER_SCREENSHOT});await page.setViewportSize({width:375,height:812});}
-  assert.match(await page.locator('[data-match-feedback]').first().innerText(),/分の練習/);
+  assert.match(await page.locator('[data-match-feedback]').first().innerText(),/分で.*取り組みます/);
   assert.equal(await page.locator('[data-match-feedback]').first().locator('ol li').count(),3);
   assert.equal(await page.locator('[data-feedback-history]').count(),11);
-  const reference=page.locator('#coach-view-overview > details.member-detail');
+  const reference=page.locator('[data-long-diagnosis]');
   assert.equal(await reference.evaluate(el=>el.open),false,'learning is the default; raw stats are supporting references');
   await reference.locator('> summary').click();
   assert.match(await page.locator('#member-result').innerText(),/最初に見るべき改善候補/);
@@ -278,7 +298,7 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   assert.match(await page.locator('#coach-view-improve').innerText(),/キル数のラウンド分布/);
   assert.match(await page.locator('#coach-view-improve').innerText(),/先制に限定しないキル・デス後の動き/);
   assert.match(await page.locator('#coach-view-improve').innerText(),/ラウンド単位のアシスト/);assert.match(await page.locator('#coach-view-improve').innerText(),/KASTではありません/);
-  assert.match(await page.locator('#coach-view-improve').innerText(),/公式トレード率ではない/);
+  assert.match(await page.locator('#coach-view-improve').innerText(),/公式トレード率ではありません/);
   assert.match(await page.locator('#coach-view-improve').innerText(),/記録された装備額とラウンド結果/);
   assert.equal(await page.locator('[data-context-band]').count(),3);
   assert.match(await page.locator('[data-round-rate="kpr-attack"]').getAttribute('style'),/width:100%/);
@@ -296,7 +316,7 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
    for(const view of ['overview','guns','improve','time','team','metrics','strategy']){
     await page.locator('[data-coach-view="'+view+'"]').click();
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'performance dashboard at '+width+' / '+view);
-    assert.equal(await page.locator('#coach-view-'+view+' > [data-reader-guide]').isVisible(),true,'every tab teaches how to read it');
+    assert.equal(await page.locator('#coach-view-'+view+' [data-reader-guide]').isVisible(),true,'every tab teaches how to read it');
     assert.ok(await page.locator('#coach-view-'+view+' [data-reader-glossary] [data-reader-term]').count()>0);
     const term=page.locator('#coach-view-'+view+' [data-reader-term]').first();await term.locator('summary').click();
     assert.match(await term.innerText(),/意味：[\s\S]*たとえば：[\s\S]*練習につなげるなら：/);await term.locator('summary').click();
@@ -320,6 +340,7 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   assert.match(await page.locator('[data-personal-analysis]').innerText(),/Gold/);
   assert.equal(requests.length,benchmarkRequests,'reference changes reuse saved report without API/D1 calls');
   await page.locator('[data-coach-view="overview"]').click();
+  await page.locator('[data-other-practice] > summary').click();
   assert.equal(await page.locator('[data-practice-library]').count(),1);
   assert.ok(await page.locator('[data-practice-recommendations] [data-practice-card]').count()>0);
   assert.match(await page.locator('[data-practice-agents]').innerText(),/暗記の好みは戦績から分かりません/);
@@ -340,10 +361,12 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   await page.locator('[data-practice-catalog] > summary').click();
   await page.locator('[data-practice-category]').selectOption('all');
   assert.equal(await page.locator('[data-practice-entry]').count(),100);
+  assert.match(await page.locator('[data-practice-entry="P001"]').textContent(),/ミディアム.*ハード/);
+  assert.match(await page.locator('[data-practice-entry="P001"]').textContent(),/ストレイフ.*ON/);
   await page.locator('[data-practice-query]').fill('4スタンス');
   assert.equal(await page.locator('[data-practice-entry]').count(),1);
   await page.locator('[data-practice-entry] > summary').click();
-  assert.match(await page.locator('[data-practice-entry]').innerText(),/KDからA1等を判定しない/);
+  assert.match(await page.locator('[data-practice-entry]').innerText(),/KDからA1等を判定しません/);
   assert.match(await page.locator('[data-practice-entry]').innerText(),/上達効果は確認できていません/);
   await page.locator('[data-practice-query]').fill('');
   await page.locator('[data-practice-category]').selectOption('map');
@@ -362,7 +385,7 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   assert.equal(exportedMember.matchFeedback.sessions.length,12);
   assert.equal(exportedMember.matchFeedback.sessions[0].lesson.practice.steps.length,3);
   assert.equal(JSON.stringify(exportedMember).includes('never-export-lessons'),false);
-  await page.locator('#coach-view-overview > details.member-detail').evaluate(el=>el.open=true);
+  await page.locator('[data-analysis-details]').evaluate(el=>el.open=true);await page.locator('[data-long-diagnosis]').evaluate(el=>el.open=true);
   assert.match(await page.locator('[data-next-match]').innerText(),/次の1試合で試すこと/);
   assert.match(await page.locator('[data-next-match]').innerText(),/KPR/);
   assert.equal(exportedMember.performance.overall.kd,performance.overall.kd);
@@ -382,6 +405,7 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   assert.equal(requests.filter(x=>x.method==='POST'&&x.url.endsWith('/api/kp/coach/members/start')).length,1);
   assert.deepEqual(errors,[]);
   const beforeCompare=requests.filter(r=>r.url.includes('/coach/member?')).length;
+  await page.locator('[data-member-compare]').evaluate(el=>el.open=true);
   await page.locator('#compare-members').click();
   await page.waitForFunction(()=>!document.getElementById('compare-members').disabled);
   assert.equal(await page.locator('#member-comparison tbody tr').count(),5);
@@ -390,11 +414,14 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   const batch=requests.filter(r=>r.url.includes('/coach/comparison?'));assert.equal(batch.length,1);
   assert.equal(new URL(batch[0].url).searchParams.get('people').split(',').length,5,'start invalidates old coverage; refresh all five profiles in one shared batch');
   const afterCompare=requests.length;
+  await page.locator('[data-member-compare]').evaluate(el=>el.open=true);
   await page.locator('#compare-members').click();
   await page.waitForFunction(()=>!document.getElementById('compare-members').disabled);
   assert.equal(requests.length,afterCompare,'repeat within sixty seconds uses per-session in-memory cache');
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+  await page.locator('#coach-account-options').evaluate(el=>el.open=true);
   await page.locator('[data-member="Aquatopia"]').click();
+  await page.locator('[data-analysis-navigation]').evaluate(el=>el.open=true);
   await page.locator('[data-coach-view="time"]').waitFor();
   assert.equal(await page.locator('[data-practice-option="lineups"]').inputValue(),'unknown','another profile does not inherit a memorisation preference');
   assert.equal(await page.locator('[data-practice-option="goal"]').inputValue(),'auto','manual focus stays with its profile');
@@ -410,12 +437,16 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   await page.waitForFunction(()=>document.getElementById('status').textContent.includes('追加収集を停止'));
   assert.equal(await page.locator('#pause-member-archive').isHidden(),true);assert.equal(await page.locator('#start-member-archive').isVisible(),true);
   assert.equal(requests.filter(r=>r.method==='POST'&&r.url.endsWith('/members/pause')).length,1);
+  await page.locator('#coach-account-options').evaluate(el=>el.open=true);
   await page.locator('[data-member="Aquatopia"]').click();
+  await page.locator('[data-primary-mission]').waitFor({state:'visible'});
+  await page.locator('[data-analysis-details]').evaluate(el=>el.open=true);
+  await page.locator('[data-analysis-navigation]').evaluate(el=>el.open=true);
   await page.locator('[data-coach-learning]').waitFor({state:'visible'});
   const rootReads=requests.filter(r=>r.url.endsWith('/coach/rounds')).length;
   const memberReads=requests.filter(r=>r.url.includes('/coach/member?')).length;
   await page.locator('[data-coach-view="overview"]').click();
-  feedbackRevision=1;await page.locator('[data-feedback-refresh]').click();
+  feedbackRevision=1;await page.locator('[data-primary-mission] [data-feedback-refresh]').click();
   await page.waitForFunction(()=>document.querySelector('[data-match-feedback]')?.textContent.includes('更新された試合の解説1'));
   assert.equal(requests.filter(r=>r.url.includes('/coach/member?')).length,memberReads+1,'manual profile refresh bypasses stale in-memory cache');
   feedbackRevision=2;await page.locator('#reload').click();
@@ -453,7 +484,7 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   assert.equal(postCount,0,'no automatic backfill restart');
   assert.equal(getCount,1);
   await resumePage.locator('#resume-backfill').click();
-  await resumePage.waitForFunction(()=>document.getElementById('status').textContent.includes('補完を再開した'));
+  await resumePage.waitForFunction(()=>document.getElementById('status').textContent.includes('補完を再開しました'));
   assert.equal(postCount,1);
   assert.equal(getCount,2,'one fresh read after successful resume');
   assert.equal(await resumePage.locator('#resume-backfill').isHidden(),true);
@@ -471,9 +502,12 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
      matchFeedback:coachMatchFeedback(sparse),archivedMatches:count,usableMatches:0,coverage:{},individual:[],fullDiagnosis:{items:[]}}:report)}));
    const sparsePage=await sparseCtx.newPage();const sparseErrors=[];sparsePage.on('pageerror',e=>sparseErrors.push(e.message));
    await sparsePage.goto('http://127.0.0.1:18784/coach.html');await sparsePage.locator('[data-member="VDK"]').click();
+   await sparsePage.locator('[data-primary-mission]').waitFor({state:'visible'});
+   assert.equal(await sparsePage.locator('[data-improvement]').isVisible(),true);
+   await sparsePage.locator('[data-analysis-details] > summary').click();
    await sparsePage.locator('[data-coach-learning]').waitFor({state:'visible'});
-   const text=await sparsePage.locator('[data-coach-learning]').innerText();assert.match(text,/分の練習/);
-   assert.match(text,/次の1試合でやること/);assert.match(text,count?/12キル・16デス/:/最初の1試合の前に/);
+   const text=await sparsePage.locator('[data-coach-learning]').innerText();assert.match(text,/分で.*取り組みます/);
+   assert.match(text,/次の一戦で試すこと/);assert.match(text,count?/12キル・16デス/:/最初の一戦に向けて準備します/);
    if(count===0)assert.equal(await sparsePage.locator('[data-reader-board] [data-reader-verdict="bad"]').count(),0,'missing data must not be presented as BAD');
    if(count===1&&width===320&&process.env.COACH_READER_SCREENSHOT)await sparsePage.locator('[data-reader-board]').screenshot({path:process.env.COACH_READER_SCREENSHOT.replace('.png','-bad.png')});
    assert.equal(text.includes('NaN'),false);
@@ -491,6 +525,9 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
    return route.fulfill({status:429,contentType:'application/json',body:JSON.stringify({error:'D1節約モード中です'})});
   });
   const budgetPage=await budgetCtx.newPage();await budgetPage.goto('http://127.0.0.1:18784/coach.html');
+  await budgetPage.locator('#coach-ui-message[role="alert"]').waitFor({state:'visible'});
+  assert.match(await budgetPage.locator('#coach-ui-message').innerText(),/D1節約/);
+  await budgetPage.locator('#coach-operations').evaluate(el=>el.open=true);
   await budgetPage.locator('#pause-member-archive').waitFor({state:'visible'});
   assert.match(await budgetPage.locator('#status').innerText(),/D1節約/);assert.equal(await budgetPage.locator('#share').isDisabled(),true);
   assert.equal(await budgetPage.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
