@@ -811,7 +811,12 @@ function enhance(root) {
       if(!note){
         note=document.createElement('p');note.dataset.othelloPosition='1';
         note.className='duel-othello-position';
-        dashboard.after(note);
+        const details=document.createElement('details');
+        details.className='duel-othello-position-details';
+        const summary=document.createElement('summary');
+        summary.textContent='石数・局面の補足';
+        details.append(summary,note);
+        dashboard.after(details);
       }
       const legal=[...board.querySelectorAll('.duel-square.available .duel-capture-count')]
         .map(el=>Number(el.textContent)).filter(n=>Number.isInteger(n)&&n>0);
@@ -829,7 +834,7 @@ function enhance(root) {
       if(!lastNote){
         lastNote=document.createElement('p');lastNote.dataset.othelloLastNote='1';
         lastNote.className='duel-othello-last-note';lastNote.setAttribute('aria-live','polite');
-        (arena?.querySelector('[data-othello-position]')||dashboard||board).after(lastNote);
+        (arena?.querySelector('.duel-othello-position-details')||dashboard||board).after(lastNote);
       }
       const label='直前に確認した確定手：'+(Math.floor(last.index/8)+1)+'行'+(last.index%8+1)+'列（'+last.flips+'枚返した）';
       if(lastNote.textContent!==label)lastNote.textContent=label;
