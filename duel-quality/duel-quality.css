@@ -526,3 +526,31 @@
 @media (prefers-reduced-motion:reduce){
  .duel-invite-guide,.duel-opponent-toggle,.duel-opponent-choice{animation:none!important;transition:none!important}
 }
+
+
+/* Phase 2 Othello: factual scores and exactly one observed server move.
+   No move hints, results or cards are computed optimistically. */
+.duel-othello-position,.duel-othello-last-note{
+  margin:8px 0 3px;padding:8px 10px;
+  border:1px solid #3c745e;border-radius:9px;background:#11392f;
+  color:#d5f8e6;line-height:1.5;font-size:12px;font-weight:650;
+}
+.duel-othello-last-note{
+  border-color:#cfbb74;background:#483b22;color:#fff2c1;
+}
+.duel-othello .duel-square.duel-othello-last-observed{
+  z-index:2;isolation:isolate;
+}
+.duel-othello .duel-square.duel-othello-last-observed::before{
+  content:'';position:absolute;inset:6%;width:auto;height:auto;
+  border:3px solid #ffe089;border-radius:50%;z-index:3;pointer-events:none;
+  background:transparent;box-shadow:0 0 0 1px #3c2e08b0,inset 0 0 0 1px #ffffff80;
+  animation:none;
+}
+@media(max-width:350px){
+ .duel-othello-position,.duel-othello-last-note{font-size:11px;padding:8px}
+ .duel-othello .duel-square.duel-othello-last-observed::before{border-width:2px}
+}
+@media(prefers-reduced-motion:reduce){
+ .duel-othello .duel-square.duel-othello-last-observed::before{animation:none!important;transition:none!important}
+}
