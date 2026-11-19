@@ -628,3 +628,28 @@
 .duel-beginner dd{font-size:12px;line-height:1.6;margin:0;color:#e0eef6}
 @media(max-width:350px){.duel-beginner summary{font-size:12px;padding:10px}.duel-beginner dl{padding:9px 10px}}
 @media(prefers-reduced-motion:reduce){.duel-beginner,.duel-beginner *{transition:none!important;animation:none!important}}
+
+
+/* Phase 3: filter only already-loaded matches. No extra D1 pagination. */
+.duel-history-filter{display:flex;flex-wrap:wrap;align-items:center;gap:6px;
+ margin:10px 0 12px;min-width:0}
+.duel-history-filter button{min-height:44px;padding:7px 10px;border:1px solid #52778c;
+ background:#173348;border-radius:10px;color:#e2eff7;font-size:12px;
+ font-weight:760;touch-action:manipulation}
+.duel-history-filter button[aria-pressed="true"]{background:#91e0e8;color:#0e2b39;
+ border-color:#b7f3f9}
+.duel-history-filter button:focus-visible{outline:3px solid #fff0ab;outline-offset:2px}
+.duel-history-filter-note{flex:1 0 100%;margin:2px 0 0;color:#c6d7e2;
+ font-size:11px;line-height:1.55}
+.duel-history .duel-match[hidden]{display:none!important}
+.duel-finished-review{margin:11px 0 14px;border:1px solid #5c8e7b;border-radius:12px;
+ background:#153b35;color:#edfff6;overflow:hidden}
+.duel-finished-review summary{min-height:44px;padding:11px 12px;
+ cursor:pointer;touch-action:manipulation;font-size:13px;font-weight:770;line-height:1.5}
+.duel-finished-review summary:focus-visible{outline:3px solid #fff0aa;outline-offset:-3px}
+.duel-finished-review dl{margin:0;padding:8px 12px;display:grid;gap:5px}
+.duel-finished-review dt{font-size:11px;font-weight:800;color:#9febcb}
+.duel-finished-review dd{margin:0 0 5px;font-size:12px;line-height:1.55}
+.duel-finished-review p{padding:2px 12px 11px;margin:0;color:#c8e5d9;font-size:11px}
+@media(max-width:350px){.duel-history-filter button{font-size:11px;padding:7px}.duel-finished-review summary{font-size:12px}}
+@media(prefers-reduced-motion:reduce){.duel-history-filter *, .duel-finished-review,.duel-finished-review *{animation:none!important;transition:none!important}}
