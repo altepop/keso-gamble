@@ -34,14 +34,17 @@ test('six authenticated server modes persist CPU decision but only expose public
  const {db,env}=fixture();
  try{
   for(const game of DUEL_PROGRESSION_GAMES){
+   // Each mode is owned by its own authenticated user in this fixture;
+   // keeping all six sessions under one user would correctly hit the cap of 3.
+   const user='alice-'+game;
    const req=randomUUID();
-   const one=await serverPveOperation(env,'guild','alice',{action:'start',requestId:req,game,level:'normal'});
+   const one=await serverPveOperation(env,'guild',user,{action:'start',requestId:req,game,level:'normal'});
    assert.equal(one.game,game);
    assert.equal(one.turn,'human');
    assert.equal(Object.hasOwn(one,'secret'),false);
    const before=db.prepare('SELECT * FROM kp_duel_pve_sessions WHERE id=?').get(one.id) as Record<string,unknown>;
    assert.equal(before?.version,0);
-   const done=await serverPveOperation(env,'guild','alice',{action:'move',session:one.id,requestId:randomUUID(),version:0,...first[game],winner:'human',kp:12345});
+   const done=await serverPveOperation(env,'guild',user,{action:'move',session:one.id,requestId:randomUUID(),version:0,...first[game],winner:'human',kp:12345});
    assert.equal(done.version,1);
    assert.equal(Object.hasOwn(done,'secret'),false);
    assert.equal(Object.hasOwn(done,'kp'),false);
