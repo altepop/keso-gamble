@@ -534,6 +534,32 @@ const a='[data-demo-view=a]',b='[data-demo-view=b]';
   assert.equal(await animatedPage.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'Hit & Blow fits iPhone width '+width);
  }
  if(shotDir)await animatedPage.screenshot({path:resolve(shotDir,'07-hitblow-new-feedback-'+engine+'.png'),fullPage:true,animations:'disabled'});
+ // P9.4c visual-only smoke: use mock confirmed snapshots, never call Worker.
+ for(const mode of ['othello','gomoku','connect4','hitblow','bluffdice','poker']){
+  await animatedPage.evaluate(async game=>{
+   const {pvePanel}=await import('./js/duel-pve-view.js?v=p94c');
+   let host=document.querySelector('#pve-browser-smoke');
+   if(!host){host=document.createElement('section');host.id='pve-browser-smoke';document.body.append(host);}
+   const board=game==='othello'?'.'.repeat(64):game==='gomoku'?'.'.repeat(225):game==='connect4'?'.'.repeat(42):
+    game==='hitblow'?JSON.stringify({history:[],turn:'a'}):
+    game==='bluffdice'?JSON.stringify({round:1,winsA:0,winsB:0,bid:null,history:[]}):
+    JSON.stringify({doneA:false,doneB:false,turn:'a'});
+   const ownHand=game==='hitblow'?{kind:game,value:'0123'}:game==='bluffdice'?{kind:game,value:[1,2,3,4,5]}:
+    game==='poker'?{kind:game,value:[0,6,12,18,24]}:null;
+   host.innerHTML=pvePanel({connected:true,match:{game,level:'normal',turn:'human',winner:null,version:0,board,ownHand}});
+  },mode);
+  for(const width of [375,390]){
+   await animatedPage.setViewportSize({width,height:844});
+   assert.equal(await animatedPage.locator('#pve-browser-smoke .duel-pve-panel').isVisible(),true,'PvE UI visible '+mode);
+   assert.equal(await animatedPage.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'PvE no horizontal overflow '+mode+' '+width);
+   assert.ok(await animatedPage.locator('#pve-browser-smoke .duel-pve-panel button').count()>0,'PvE action buttons '+mode);
+  }
+  if(shotDir){
+   await animatedPage.locator('#pve-browser-smoke').scrollIntoViewIfNeeded();
+   await animatedPage.screenshot({path:resolve(shotDir,'08-pve-'+mode+'-'+engine+'.png'),fullPage:false,animations:'disabled'});
+  }
+ }
+ await animatedPage.locator('#pve-browser-smoke').evaluate(el=>el.remove());
  await animatedCtx.close();
  assert.deepEqual(requests,[],'demo must never call KP/Discord or Worker endpoints');
  assert.deepEqual(errors,[],'browser runtime errors');
