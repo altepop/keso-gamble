@@ -48,3 +48,9 @@ test('Sova-only arrow exercises cannot leak into a Sage or Omen prescription',()
  }
  assert.equal(P.entries.find(e=>e.id==='P064').agent,'Sova');
 });
+
+test('positive output reproduction selects a successful kill review, not an unrelated death analysis',()=>{
+ const r=report('Sage','センチネル',{kd:1.4,acs:270,adr:180,hsPct:30});const p=P.choose(r,{minutes:20});
+ const review=p.selected.find(e=>e.category==='review');assert.equal(review?.id,'P082');assert.ok(!P.entries.find(e=>e.id==='P081').tags.includes('repeat'));
+ const reset=P.choose({}, {goal:'reset',minutes:5});assert.equal(reset.selected[0].id,'P024');
+});
