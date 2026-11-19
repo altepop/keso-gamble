@@ -53,7 +53,7 @@ export function pvePanel({match=null,connected=false,busy=false,error='',pending
   :'あなたの手番（CPUの行動もサーバーで確定済み）':'';
  const body=active?(Object.hasOwn(games,match.game)&&['othello','gomoku'].includes(match.game)
   ?boardPanel(match,selected,busy,pending):match.game==='connect4'
-   ?connectPanel(match,busy,pending):hiddenPanel(match,busy,pending,picks)):'';
+   ?connectPanel(match,busy,pending):hiddenPanel(match,busy,pending,picks,guessDraft)):'';
  const controls='<div class="duel-pve-config"><label>ゲーム<select id="pve-game">'+Object.entries(games).map(([k,v])=>'<option value="'+k+'" '+(game===k?'selected':'')+'>'+esc(v)+'</option>').join('')+'</select></label><label>CPUの強さ<select id="pve-level">'+Object.entries(levels).map(([k,v])=>'<option value="'+k+'" '+(level===k?'selected':'')+'>'+v+'</option>').join('')+'</select></label>'
   +'<button class="action-btn primary" data-pve-submit="start" '+(!connected||busy||pending?'disabled':'')+'>新しくCPU戦を始める</button></div>';
  return '<details class="duel-pve-panel panel" '+(active?'open':'')+'><summary>サーバーCPU攻略（PvE）'+(active?' · '+esc(games[match.game]):'')+'</summary><div class="card-body">'
