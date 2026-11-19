@@ -69,6 +69,8 @@ export function createKpClient({storage,temporaryStorage,request=globalThis.fetc
   relics:()=>api('relics'),
   privateRace:()=>api('private/race'),
   duels:cursor=>api('duels'+(cursor?'?cursor='+encodeURIComponent(cursor):'')),duelAction:body=>api('duels',body),
+  pveSession:session=>api('duels/pve?session='+encodeURIComponent(session)),
+  pveAction:body=>api('duels/pve',body),
   // SSE subscription is read-only. The bearer token is sent in an HTTP header,
   // never placed in a URL, Discord log, or WebSocket subprotocol.
   async duelEvents({signal,onOpen,onHint}={}){
