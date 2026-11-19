@@ -96,6 +96,13 @@ const a='[data-demo-view=a]',b='[data-demo-view=b]';
   assert.equal(await inPlayRules.getAttribute('data-duel-beginner'),mode,'confirmed active game rules are available');
   assert.match(await page.locator('.duel-journey-step[aria-current=step]').innerText(),/対戦/);
   assert.match(await page.locator('.duel-journey-title').innerText(),/あなたの番|相手の番/);
+  // Every game shares a compact mobile-active hierarchy; preserve the turn and safety banners.
+  const compact=page.locator('[data-duel-journey-stage="active"]');
+  assert.equal(await compact.count(),1,'active stage is explicitly marked');
+  assert.equal(await compact.locator('.duel-journey-steps').evaluate(el=>getComputedStyle(el).display),'none','mobile hides redundant progress rail only');
+  assert.equal(await compact.locator('.duel-journey-title').isVisible(),true,'turn remains visible');
+  assert.equal(await page.locator('.duel-turn').isVisible(),true,'confirmed turn remains visible');
+
   assert.equal(await page.locator('.duel-intro').count(),0,'hide intro while playing');
   assert.equal(await page.locator('.duel-create-collapse').count(),1,'new game form collapses during a duel');
   assert.equal(await page.locator('.duel-create-collapse').evaluate(el=>el.open),false);
