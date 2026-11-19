@@ -136,6 +136,14 @@ export function describeDuelConnection({online=true,retry=false,refreshing=false
  if(refreshing)return {type:'refreshing',heading:'対戦情報を更新中',description:'着手・結果はサーバーが確定した情報だけを表示する。'};
  return null;
 }
+
+/* A rematch is only a form prefill, never a second game or KP transaction. */
+export function describeRematchGuide({finished=false,available=false,prepared=false}={}){
+ if(!finished||!available)return null;
+ return prepared
+  ?{step:1,title:'再戦の内容を確認中',description:'ゲーム・相手・賭けKPをフォームで確認し、申込ボタンを押すと新しい招待を送る。自動では開始しない。'}
+  :{step:0,title:'同じ条件で、もう一戦',description:'再戦の準備ボタンでゲーム・相手・賭けKPを入力できる。押しただけでは招待もKPの操作も発生しない。'};
+}
 function enhance(root) {
   let previous = null, motion = null, lastBoard = null, lastOthello = null;
   let c4Previous=null,c4Motion=null,lastC4Board=null;
@@ -362,6 +370,32 @@ function enhance(root) {
     notice.innerHTML='<strong>'+state.title+'</strong><span>'+state.detail+'</span>';
   }
   // This enhancement never sends moves, changes selection, or modifies wallet state.
+
+  let preparedRematchId=null;
+  function scanRematchGuide(){
+    const current=root.querySelector('.duel-current');
+    const control=current?.querySelector('[data-duel-rematch]');
+    const finished=!!current?.querySelector('.duel-result');
+    if(!control||!finished){preparedRematchId=null;return;}
+    const matchId=control.dataset.duelRematch;
+    const state=describeRematchGuide({finished,available:true,prepared:preparedRematchId===matchId});
+    if(!state)return;
+    const parent=control.closest('.duel-rematch .card-body');
+    if(!parent)return;
+    let guide=parent.querySelector('[data-duel-rematch-guide]');
+    if(!guide){
+      guide=document.createElement('section');
+      guide.dataset.duelRematchGuide='1';guide.className='duel-rematch-guide';
+      guide.setAttribute('role','status');guide.setAttribute('aria-live','polite');
+      control.before(guide);
+    }
+    if(guide.dataset.duelRematchStep===String(state.step))return;
+    guide.dataset.duelRematchStep=String(state.step);
+    const labels=['結果確認','申込内容確認','新しい招待'];
+    guide.innerHTML='<ol class="duel-rematch-progress" aria-label="再戦までの流れ">'+labels.map((label,i)=>
+      '<li'+(i===state.step?' aria-current="step"':'')+' class="'+(i===state.step?'current':'')+'">'+label+'</li>').join('')+
+      '</ol><strong>'+state.title+'</strong><p>'+state.description+'</p>';
+  }
   function scanDuelJourney(){
     const current=root.querySelector('.duel-current');
     const intro=root.querySelector('.duel-intro');
@@ -424,6 +458,7 @@ function enhance(root) {
   }
   function scan() {
     scanDuelJourney();
+    scanRematchGuide();
     scanInviteReadiness();
     scanDuelConnection();
     scanConnect4();
@@ -532,6 +567,15 @@ function enhance(root) {
   addEventListener('online',()=>{browserOnline=true;connectionRecovered=true;scanDuelConnection();});
   root.addEventListener('click',event=>{
     if(event.target.closest?.('[data-duel-refresh],[data-duel-retry]'))connectionRecovered=false;
+  },{passive:true});
+  // Informative click tracking only: the original app retains all game actions.
+  root.addEventListener('click',event=>{
+    const rematch=event.target.closest?.('[data-duel-rematch]');
+    if(rematch)preparedRematchId=rematch.dataset.duelRematch;
+    if(event.target.closest?.('[data-duel-act="create"],[data-duel-target-option]'))preparedRematchId=null;
+  },{passive:true});
+  root.addEventListener('change',event=>{
+    if(['duel-game','duel-stake','duel-target'].includes(event.target?.id))preparedRematchId=null;
   },{passive:true});
   const observer = new MutationObserver(scan);
   observer.observe(root, {childList: true, subtree: true});
