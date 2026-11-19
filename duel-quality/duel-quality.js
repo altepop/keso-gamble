@@ -328,16 +328,6 @@ function enhance(root) {
     const scroll=board.closest('[data-duel-board-scroll]');
     if(!scroll)return;
     const id=board.dataset.gomokuMatch;
-    // Phase 7: the active board and its controls stay visible; optional hint folds.
-    const hint=root.querySelector('.duel-current .duel-arena [data-duel-action-hint]');
-    if(hint && !hint.closest('[data-duel-mobile-detail="gomoku"]')){
-      const details=document.createElement('details');
-      details.dataset.duelMobileDetail='gomoku';
-      details.className='duel-mobile-detail';
-      const summary=document.createElement('summary');
-      summary.textContent='ズーム・操作の補足';
-      hint.before(details);details.append(summary,hint);
-    }
     const version=Number(board.dataset.gomokuVersion);
     const index=gomokuZoom.get(id)??0;
     const width=zoomLevels[index]*15;
