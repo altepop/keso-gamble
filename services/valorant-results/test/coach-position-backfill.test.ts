@@ -1,0 +1,34 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {DatabaseSync} from 'node:sqlite';import {readFileSync} from 'node:fs';import {URL as NodeURL} from 'node:url';
+import {backfillCoachPositions,runCoachPositionArchiveSlot} from '../src/coach-position-backfill.ts';
+const now=Date.parse('2026-11-20T01:00:00Z'),started='2026-11-01T12:00:00Z';
+function fixture(){const sql=new DatabaseSync(':memory:');sql.exec(`CREATE TABLE monitor_state(key TEXT PRIMARY KEY,value TEXT);
+ CREATE TABLE coach_member_queue(match_id TEXT PRIMARY KEY,region TEXT,source_riot_id TEXT,source_puuid TEXT,started_at INTEGER,status TEXT,attempts INTEGER DEFAULT 0);
+ CREATE TABLE coach_member_sources(riot_id TEXT PRIMARY KEY,puuid TEXT);
+ CREATE TABLE coach_member_links(riot_id TEXT,match_id TEXT,PRIMARY KEY(riot_id,match_id));
+ INSERT INTO monitor_state VALUES('coach_all_members:enabled','enabled');
+ INSERT INTO coach_member_sources VALUES('Dolly#SDGs','p0');
+ INSERT INTO coach_member_links VALUES('Dolly#SDGs','m1');
+ INSERT INTO coach_member_queue VALUES('m1','ap','Dolly#SDGs','p0',${Date.parse(started)},'complete',0);`);
+ for(const file of ['0008_competitive_positions.sql','0009_coach_position_backfill.sql'])sql.exec(readFileSync(new NodeURL('../migrations/'+file,import.meta.url),'utf8'));
+ let reads=0,writes=0;const db={prepare:(text:string)=>{const bind=(...args:unknown[])=>({first:async()=>{reads++;return sql.prepare(text).get(...args as never[])??null;},all:async()=>{reads++;return {results:sql.prepare(text).all(...args as never[])};},run:async()=>{writes++;return {meta:{changes:Number(sql.prepare(text).run(...args as never[]).changes)}};}});return {...bind(),bind};}} as unknown as D1Database;
+ const match=():any=>({metadata:{match_id:'m1',is_completed:true,queue:{id:'competitive'},started_at:started},players:Array.from({length:10},(_,i)=>({puuid:'p'+i,team_id:i<5?'Blue':'Red'})),kills:[{round:1,time_in_round_in_ms:1000,killer:{puuid:'p0'},victim:{puuid:'p9'},location:{x:0,y:-10},player_locations:[{player:{puuid:'p0'},location:{x:10,y:20},view_radians:1.2}]}]});
+ const state=()=>sql.prepare('SELECT * FROM coach_position_backfill').get() as any;
+ return {sql,db,match,state,counts:()=>({reads,writes})};}
+test('backfills one authorized existing competitive match; returned partial data is saved, never endlessly retried for ten people',async()=>{const f=fixture();try{let calls=0;assert.equal(await backfillCoachPositions(f.db,async(region,id)=>{calls++;assert.equal(region,'ap');assert.equal(id,'m1');return f.match();},now),'saved');assert.equal(f.state().attempts,1);const v=JSON.parse((f.sql.prepare('SELECT positions_json FROM valorant_match_positions').get() as any).positions_json);assert.equal(v.frames[0].coordinateCoverage,.1);assert.equal(v.frames[0].victimListed,false);assert.equal(await backfillCoachPositions(f.db,async()=>{throw Error('must not call');},now+900001),'idle');assert.equal(calls,1);assert.equal(f.counts().writes,3);}finally{f.sql.close();}});
+test('opt-out and provider cooldown make no requests or writes',async()=>{const f=fixture();try{f.sql.exec("UPDATE monitor_state SET value='disabled'");assert.equal(await backfillCoachPositions(f.db,async()=>{throw Error('call');},now),'disabled');assert.equal(f.counts().writes,0);f.sql.exec("UPDATE monitor_state SET value='enabled'; INSERT INTO monitor_state VALUES('api_after','"+(now+60000)+"')");assert.equal(await backfillCoachPositions(f.db,async()=>{throw Error('call');},now),'cooldown');assert.equal(f.counts().writes,0);}finally{f.sql.close();}});
+test('unlinked or incomplete matches are excluded; source identity must be the opted-in one',async()=>{for(const change of ["DELETE FROM coach_member_links","UPDATE coach_member_queue SET status='pending'","UPDATE coach_member_sources SET puuid='different'"]){const f=fixture();try{f.sql.exec(change);assert.equal(await backfillCoachPositions(f.db,async()=>{throw Error('must not call');},now),'idle');assert.equal(f.counts().writes,0);}finally{f.sql.close();}}});
+test('404 and missing returned positions are terminal with concrete reasons; no position rows invented',async()=>{for(const mode of ['404','missing']){const f=fixture();try{let calls=0;assert.equal(await backfillCoachPositions(f.db,async()=>{calls++;if(mode==='404')throw Error('Match API HTTP 404');const m=f.match();delete m.kills;return m;},now),'unavailable');assert.equal(f.state().reason,mode==='404'?'not-found':'no-usable-position-response');assert.equal((f.sql.prepare('SELECT COUNT(*) n FROM valorant_match_positions').get() as any).n,0);assert.equal(await backfillCoachPositions(f.db,async()=>{calls++;return f.match();},now+900001),'idle');assert.equal(calls,1);}finally{f.sql.close();}}});
+test('transient or mismatched responses retry after fifteen minutes, at most three times',async()=>{const f=fixture();try{let calls=0;const bad=async()=>{calls++;const m=f.match();m.metadata.match_id='wrong';return m;};assert.equal(await backfillCoachPositions(f.db,bad,now),'deferred');assert.equal(await backfillCoachPositions(f.db,bad,now+1),'idle');assert.equal(await backfillCoachPositions(f.db,bad,now+900000),'deferred');assert.equal(await backfillCoachPositions(f.db,bad,now+1800000),'deferred');assert.equal(await backfillCoachPositions(f.db,bad,now+2700000),'idle');assert.equal(calls,3);assert.equal(f.state().reason,'retry-exhausted');}finally{f.sql.close();}});
+test('concurrent ticks claim once before the request; crash leases are bounded',async()=>{const f=fixture();try{let calls=0;const run=()=>backfillCoachPositions(f.db,async()=>{calls++;return f.match();},now);const result=await Promise.all([run(),run()]);assert.equal(calls,1);assert.equal(result.filter(s=>s==='saved').length,1);assert.ok(result.some(s=>s==='claimed_elsewhere'||s==='idle'));}finally{f.sql.close();}});
+
+test('the shared slot never adds a second detail request, and existing archive work has priority',async()=>{
+ const f=fixture();try{
+  let calls=0;const fetch=async()=>{calls++;return f.match();};
+  const used=await runCoachPositionArchiveSlot(f.db,fetch,now,async(db,request)=>{await request('ap','m1');return 'saved';});
+  assert.equal(used.positions,null);assert.equal(calls,1);assert.equal(f.counts().writes,0);
+  const unused=await runCoachPositionArchiveSlot(f.db,fetch,now,async()=> 'idle');assert.equal(unused.positions,'saved');assert.equal(calls,2);
+  const disabled=await runCoachPositionArchiveSlot(f.db,fetch,now,async()=> 'disabled');assert.equal(disabled.positions,null);assert.equal(calls,2);
+ }finally{f.sql.close();}
+});
+
+test('partial scalar archives exhausted by the old collector can still recover valid coordinates',async()=>{const f=fixture();try{f.sql.exec("UPDATE coach_member_queue SET status='partial',attempts=3");assert.equal(await backfillCoachPositions(f.db,async()=>f.match(),now),'saved');}finally{f.sql.close();}});
