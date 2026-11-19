@@ -237,6 +237,18 @@ function enhance(root) {
    if(!table){pokerPrevious=null;pokerMotion=null;lastPokerTable=null;return;}
    if(table===lastPokerTable)return;
    lastPokerTable=table;
+   // Phase 7: fold nonessential guidance while preserving actual game controls.
+   const supplementary=table.querySelector('.duel-poker-guide');
+   if(supplementary && !supplementary.closest('[data-duel-mobile-detail="poker"]')){
+     const details=document.createElement('details');
+     details.dataset.duelMobileDetail='poker';
+     details.className='duel-mobile-detail';
+     const heading=document.createElement('summary');
+     heading.textContent='役と交換の補足';
+     supplementary.before(details);
+     details.append(heading,supplementary);
+   }
+
    const now=performance.now();
    const current={id:table.dataset.pokerMatch,version:Number(table.dataset.pokerVersion),
      revealed:table.dataset.pokerRevealed==='true',done:table.dataset.pokerDone};
@@ -475,6 +487,7 @@ function enhance(root) {
       anchor.before(rail);
     }
     if(rail.dataset.duelJourneySignature===signature)return;
+    rail.dataset.duelJourneyStage=stage;
     rail.dataset.duelJourneySignature=signature;
     // Fixed Japanese copy only; no names, private cards, guessed moves or user HTML.
     rail.innerHTML='<ol class="duel-journey-steps" aria-label="進行段階">'+state.phases.map((name,index)=>
