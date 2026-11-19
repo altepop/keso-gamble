@@ -244,6 +244,14 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   assert.match(await page.locator('#member-result').innerText(),/Abema#ttv/);
   assert.match(await page.locator('#member-result').innerText(),/Aquatopia#toppy/);
   assert.equal(await page.locator('[data-coach-learning]').isVisible(),true);
+  assert.equal(await page.locator('[data-reader-board] [data-reader-verdict]').count(),2);
+  assert.match(await page.locator('[data-reader-board]').innerText(),/GOOD/);
+  assert.match(await page.locator('[data-reader-board]').innerText(),/BAD候補|CHECK|次の課題/);
+  await page.locator('[data-coach-view="overview"]').focus();await page.keyboard.press('ArrowRight');
+  assert.equal(await page.locator('#coach-view-guns > [data-reader-guide]').isVisible(),true);
+  assert.equal(await page.locator('#coach-view-guns > [data-reader-advanced]').evaluate(el=>el.open),false,'beginners see plain language before expert tables');
+  await page.keyboard.press('Home');assert.equal(await page.locator('#coach-view-overview').isVisible(),true);
+  if(process.env.COACH_READER_SCREENSHOT){await page.setViewportSize({width:320,height:812});await page.locator('[data-reader-board]').screenshot({path:process.env.COACH_READER_SCREENSHOT});await page.setViewportSize({width:375,height:812});}
   assert.match(await page.locator('[data-match-feedback]').first().innerText(),/分の練習/);
   assert.equal(await page.locator('[data-match-feedback]').first().locator('ol li').count(),3);
   assert.equal(await page.locator('[data-feedback-history]').count(),11);
@@ -259,11 +267,13 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   assert.match(await page.locator('#coach-view-overview').innerText(),/75\.0%[\s\S]*\(6 \/ 8\)/,
     'FK conversion chart divides by resolved outcomes only, never unknowns');
   await page.locator('[data-coach-view="strategy"]').click();
+  await page.locator('#coach-view-strategy > [data-reader-advanced] > summary').click();
   assert.equal(await page.locator('#coach-view-strategy').isVisible(),true);
   assert.match(await page.locator('#coach-view-strategy').innerText(),/攻撃と防衛の先制動向/);
   assert.match(await page.locator('#coach-view-strategy').innerText(),/Ascent \/ Sage/);
   assert.equal(await page.locator('.coach-side').count(),2);
   await page.locator('[data-coach-view="improve"]').click();
+  await page.locator('#coach-view-improve > [data-reader-advanced] > summary').click();
   assert.match(await page.locator('#coach-view-improve').innerText(),/攻撃の先制収支/);
   assert.match(await page.locator('#coach-view-improve').innerText(),/キル数のラウンド分布/);
   assert.match(await page.locator('#coach-view-improve').innerText(),/先制に限定しないキル・デス後の動き/);
@@ -275,7 +285,8 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   assert.equal(await page.locator('[data-round-rate="kpr-defense"]').count(),0,'unknown side is not a zero-valued bar');
   assert.match(await page.locator('#coach-view-improve').innerText(),/FK後の勝利/);
   await page.locator('[data-coach-view="metrics"]').click();
-  await page.locator('#coach-view-metrics > details.member-detail > summary').filter({hasText:/^先制（/}).click();
+  await page.locator('#coach-view-metrics > [data-reader-advanced] > summary').click();
+  await page.locator('#coach-view-metrics [data-reader-advanced] > details.member-detail > summary').filter({hasText:/^先制（/}).click();
   assert.match(await page.locator('#coach-view-metrics').innerText(),/先制デス率/);
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,
     'dashboard must not overflow on 375px iPhone');
@@ -285,11 +296,15 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
    for(const view of ['overview','guns','improve','time','team','metrics','strategy']){
     await page.locator('[data-coach-view="'+view+'"]').click();
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'performance dashboard at '+width+' / '+view);
+    assert.equal(await page.locator('#coach-view-'+view+' > [data-reader-guide]').isVisible(),true,'every tab teaches how to read it');
+    assert.ok(await page.locator('#coach-view-'+view+' [data-reader-glossary] [data-reader-term]').count()>0);
+    const term=page.locator('#coach-view-'+view+' [data-reader-term]').first();await term.locator('summary').click();
+    assert.match(await term.innerText(),/意味：[\s\S]*たとえば：[\s\S]*練習につなげるなら：/);await term.locator('summary').click();
    }
-   await page.locator('[data-coach-view="guns"]').click();assert.match(await page.locator('#coach-view-guns').innerText(),/KPR/);assert.match(await page.locator('#coach-view-guns').innerText(),/Vandal/);
-   await page.locator('[data-coach-view="team"]').click();assert.match(await page.locator('#coach-view-team').innerText(),/同じマップ・ロール内/);assert.match(await page.locator('#coach-view-team').innerText(),/センチネル/);
+   await page.locator('[data-coach-view="guns"]').click();await page.locator('#coach-view-guns > [data-reader-advanced]').evaluate(el=>el.open=true);assert.match(await page.locator('#coach-view-guns').innerText(),/KPR/);assert.match(await page.locator('#coach-view-guns').innerText(),/Vandal/);
+   await page.locator('[data-coach-view="team"]').click();await page.locator('#coach-view-team > [data-reader-advanced]').evaluate(el=>el.open=true);assert.match(await page.locator('#coach-view-team').innerText(),/同じマップ・ロール内/);assert.match(await page.locator('#coach-view-team').innerText(),/センチネル/);
    assert.match(await page.locator('#coach-view-team').innerText(),/設置・解除の記録/);assert.match(await page.locator('#coach-view-team').innerText(),/スキル使用回数/);
-   await page.locator('[data-coach-view="time"]').click();assert.equal(await page.locator('#coach-view-time svg').first().locator('circle').count(),20);
+   await page.locator('[data-coach-view="time"]').click();assert.equal(await page.locator('#coach-view-time [data-reader-advanced] svg').first().locator('circle').count(),20);
   }
   assert.deepEqual(errors,[]);
   assert.equal(requests.length,3,'changing dashboard tabs never triggers extra API calls');
@@ -336,12 +351,13 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   await page.locator('[data-member="Aquatopia"]').click();
   await page.locator('[data-coach-view="time"]').waitFor();
   await page.locator('[data-coach-view="time"]').click();
-  assert.equal(await page.locator('#coach-view-time svg').first().locator('circle').count(),19,'missing match ratio is not drawn at zero');
-  assert.equal(await page.locator('#coach-view-time svg').first().locator('polyline').count(),2,'missing ratio breaks the line');
+  await page.locator('#coach-view-time > [data-reader-advanced]').evaluate(el=>el.open=true);
+  assert.equal(await page.locator('#coach-view-time [data-reader-advanced] svg').first().locator('circle').count(),19,'missing match ratio is not drawn at zero');
+  assert.equal(await page.locator('#coach-view-time [data-reader-advanced] svg').first().locator('polyline').count(),2,'missing ratio breaks the line');
   assert.match(await page.locator('#coach-view-time').innerText(),/ADR：データ不足/);
-  await page.locator('[data-coach-view="improve"]').click();assert.equal(await page.locator('[data-context-band]').count(),0,'missing equipment is not a zero-valued distribution');
+  await page.locator('[data-coach-view="improve"]').click();await page.locator('#coach-view-improve > [data-reader-advanced]').evaluate(el=>el.open=true);assert.equal(await page.locator('[data-context-band]').count(),0,'missing equipment is not a zero-valued distribution');
   assert.match(await page.locator('#coach-view-improve').innerText(),/装備額はデータ不足/);
-  await page.locator('[data-coach-view="team"]').click();assert.match(await page.locator('#coach-view-team').innerText(),/データ不足/);
+  await page.locator('[data-coach-view="team"]').click();await page.locator('#coach-view-team > [data-reader-advanced]').evaluate(el=>el.open=true);assert.match(await page.locator('#coach-view-team').innerText(),/データ不足/);
   await page.locator('#pause-member-archive').click();
   await page.waitForFunction(()=>document.getElementById('status').textContent.includes('追加収集を停止'));
   assert.equal(await page.locator('#pause-member-archive').isHidden(),true);assert.equal(await page.locator('#start-member-archive').isVisible(),true);
@@ -409,7 +425,10 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
    await sparsePage.goto('http://127.0.0.1:18784/coach.html');await sparsePage.locator('[data-member="VDK"]').click();
    await sparsePage.locator('[data-coach-learning]').waitFor({state:'visible'});
    const text=await sparsePage.locator('[data-coach-learning]').innerText();assert.match(text,/分の練習/);
-   assert.match(text,/次の1試合でやること/);assert.match(text,count?/12K・16D/:/最初の1試合の前に/);assert.equal(text.includes('NaN'),false);
+   assert.match(text,/次の1試合でやること/);assert.match(text,count?/12キル・16デス/:/最初の1試合の前に/);
+   if(count===0)assert.equal(await sparsePage.locator('[data-reader-board] [data-reader-verdict="bad"]').count(),0,'missing data must not be presented as BAD');
+   if(count===1&&width===320&&process.env.COACH_READER_SCREENSHOT)await sparsePage.locator('[data-reader-board]').screenshot({path:process.env.COACH_READER_SCREENSHOT.replace('.png','-bad.png')});
+   assert.equal(text.includes('NaN'),false);
    assert.equal(await sparsePage.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
    assert.deepEqual(sparseErrors,[]);await sparseCtx.close();
   }
