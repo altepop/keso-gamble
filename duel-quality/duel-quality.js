@@ -1,4 +1,12 @@
 // Progressive visual enhancement only. Never sends actions, determines winners or reads KP.
+// A factual score summary from the visible server-confirmed 8x8 board.
+// A larger lead is NOT a prediction of the game winner.
+export function summarizeOthelloPosition(state){
+ if(!Array.isArray(state)||state.length!==64||state.some(c=>!['.','B','W'].includes(c)))return null;
+ const black=state.filter(c=>c==='B').length,white=state.filter(c=>c==='W').length,empty=64-black-white;
+ const lead=black===white?'石数は同数':black>white?'黒が'+(black-white)+'枚多い':'白が'+(white-black)+'枚多い';
+ return {black,white,empty,lead};
+}
 export function classifyOthelloTransition(previous, next) {
   if (!Array.isArray(previous) || !Array.isArray(next) || previous.length !== 64 || next.length !== 64) return null;
   let placed = -1;
@@ -119,7 +127,7 @@ export function describeInviteReadiness({hasMembers=true,hasOpponent=false,canAf
  return {type:'waiting',title:'選択内容を確認',detail:'対戦相手と賭けKPを確認してから申し込む。'};
 }
 function enhance(root) {
-  let previous = null, motion = null, lastBoard = null;
+  let previous = null, motion = null, lastBoard = null, lastOthello = null;
   let c4Previous=null,c4Motion=null,lastC4Board=null;
   let bluffPrevious=null,bluffMotion=null,lastBluffTable=null;
   let pokerPrevious=null,pokerMotion=null,lastPokerTable=null;
@@ -389,7 +397,7 @@ function enhance(root) {
     scanHitBlow();
     scanGomoku();
     const board = root.querySelector('.duel-board.duel-othello');
-    if (!board) { previous = null; motion = null; lastBoard = null; return; }
+    if (!board) { previous = null; motion = null; lastBoard = null; lastOthello = null; return; }
     if (board === lastBoard) return; // Ignore mutations outside the board, such as the timer.
     lastBoard = board;
     const current = readBoard(board);
@@ -399,8 +407,11 @@ function enhance(root) {
     const now = performance.now(), signature = current.state.join('');
     const changes = previous && previous.identity === identity && now - previous.at < 20000 && !document.hidden
       ? classifyOthelloTransition(previous.state, current.state) : null;
+    // A reconnect/multi-move replacement cannot fabricate a "last confirmed" move.
+    if(previous&&(previous.identity!==identity||previous.state.join('')!==signature)&&!changes)lastOthello=null;
     previous = {state: current.state, identity, at: now};
     if (changes) {
+      lastOthello={identity,signature,index:changes.placed,flips:changes.flipped.length};
       motion = {changes, identity, signature, started: now};
       // Local tap-to-confirmed-render metric is diagnostic only; not a network benchmark.
       if (root.__duelTapAt !== undefined) {
@@ -408,6 +419,38 @@ function enhance(root) {
         delete root.__duelTapAt;
       }
     }
+    // Scores and last-observed moves are presentation-only, never decisions.
+    const position=summarizeOthelloPosition(current.state);
+    const arena=board.closest('.duel-arena');
+    const dashboard=arena?.querySelector('.duel-othello-dashboard');
+    if(position&&dashboard){
+      let note=arena.querySelector('[data-othello-position]');
+      if(!note){
+        note=document.createElement('p');note.dataset.othelloPosition='1';
+        note.className='duel-othello-position';
+        dashboard.after(note);
+      }
+      const legal=[...board.querySelectorAll('.duel-square.available .duel-capture-count')]
+        .map(el=>Number(el.textContent)).filter(n=>Number.isInteger(n)&&n>0);
+      const max=legal.length?Math.max(...legal):0;
+      const message=position.lead+'｜空き'+position.empty+'マス'+
+        (max?'｜一度に最大'+max+'枚返せる場所あり（最善手とは限らない）':'');
+      if(note.textContent!==message)note.textContent=message;
+    }
+    const last=lastOthello;
+    let lastNote=arena?.querySelector('[data-othello-last-note]');
+    if(last&&last.identity===identity&&last.signature===signature){
+      const square=current.squares[last.index];
+      square.classList.add('duel-othello-last-observed');
+      square.setAttribute('aria-label',square.getAttribute('aria-label')+'、直前に確認した確定手');
+      if(!lastNote){
+        lastNote=document.createElement('p');lastNote.dataset.othelloLastNote='1';
+        lastNote.className='duel-othello-last-note';lastNote.setAttribute('aria-live','polite');
+        (arena?.querySelector('[data-othello-position]')||dashboard||board).after(lastNote);
+      }
+      const label='直前に確認した確定手：'+(Math.floor(last.index/8)+1)+'行'+(last.index%8+1)+'列（'+last.flips+'枚返した）';
+      if(lastNote.textContent!==label)lastNote.textContent=label;
+    }else lastNote?.remove();
     // The existing UI redraws twice around an API refresh. Resume the same
     // animation on the replacement DOM instead of cancelling it halfway.
     if (!motion || motion.identity !== identity || motion.signature !== signature
