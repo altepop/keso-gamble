@@ -613,3 +613,18 @@
  .duel-arena [data-duel-mini]:active,
  .duel-arena .duel-poker-hand-card:active{transform:none!important;transition:none!important}
 }
+
+
+/* Phase 3 beginner guide: native disclosure, no blocking overlay. */
+.duel-beginner{margin:10px 0 13px;border:1px solid #477181;border-radius:12px;
+ background:#102e42;color:#ebf8ff;overflow:hidden}
+.duel-beginner summary{cursor:pointer;list-style-position:inside;padding:12px 13px;
+ font-size:13px;min-height:44px;font-weight:780;line-height:1.5;
+ touch-action:manipulation}
+.duel-beginner summary:focus-visible{outline:3px solid #ffeb92;outline-offset:-3px}
+.duel-beginner[open] summary{border-bottom:1px solid #38556d;background:#1a3b51}
+.duel-beginner dl{margin:0;padding:11px 13px 13px;display:grid;gap:4px}
+.duel-beginner dt{font-size:12px;color:#aee5ef;font-weight:800;margin-top:5px}
+.duel-beginner dd{font-size:12px;line-height:1.6;margin:0;color:#e0eef6}
+@media(max-width:350px){.duel-beginner summary{font-size:12px;padding:10px}.duel-beginner dl{padding:9px 10px}}
+@media(prefers-reduced-motion:reduce){.duel-beginner,.duel-beginner *{transition:none!important;animation:none!important}}
