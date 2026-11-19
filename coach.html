@@ -544,6 +544,13 @@
 .prototype-top .nextcheck .disp{overflow-wrap:break-word}
 .prototype-top .detail-body .coach-existing{margin-top:16px}
 </style>
+<style id="coach-goals-style">
+.coach-goals{margin:32px 0;padding:24px;background:#14232f;border-top:2px solid #ff4655;color:#ece8e1;clip-path:polygon(12px 0,100% 0,100% calc(100% - 12px),calc(100% - 12px) 100%,0 100%,0 12px)}
+.coach-goals h2{font-size:24px}.coach-goals p,.coach-goals label,.coach-goals summary{font-size:16px;line-height:1.9;overflow-wrap:anywhere;word-break:normal}
+.coach-goals label{display:block;margin:16px 0}.coach-goals input,.coach-goals select,.coach-goals textarea{display:block;width:100%;max-width:100%;box-sizing:border-box;margin-top:8px;padding:12px;border:1px solid #61717e;border-radius:8px;background:#0f1923;color:#f4f3ef;font:inherit;font-size:16px}
+.coach-goals textarea{resize:vertical}.coach-goals button{padding:12px 16px;border-radius:8px;background:#ff4655;color:#fff;font-size:16px;white-space:normal;overflow-wrap:anywhere}.coach-goals button:disabled{opacity:.6}.coach-goals :focus-visible{outline:3px solid #f4f3ef;outline-offset:3px}.coach-goals .goal-actions{display:flex;flex-wrap:wrap;gap:8px}.coach-goals .detail-body{min-width:0}.coach-goals [role=status]:empty{display:none}
+@media(max-width:400px){.coach-goals{padding:16px}.coach-goals .detail-body{padding:12px}}
+</style>
 </head>
 <body>
 <main class="wrap">
@@ -856,10 +863,11 @@
 
 
 </template>
+<script src="./coach/goals.js?v=coach-ca17bb21a788"></script>
 <script src="./coach/prototype-view.js?v=coach-d946f6f7b53c"></script>
 <script src="./coach/benchmarks.js?v=coach-4721e7e852a8"></script>
 <script src="./coach/practice.js?v=coach-1d4e247eb817"></script>
-<script src="./coach/reader.js?v=coach-61dd527b972c"></script>
+<script src="./coach/reader.js?v=coach-b714184b6163"></script>
 <script>
 const CoachReader=globalThis.KesoCoachReader;
 (()=>{
@@ -1058,6 +1066,7 @@ const CoachPresentation=(()=>{
 
  const sentences=text=>String(text??'').split(/(?<=[。！？])/u).map(x=>x.trim()).filter(Boolean);
  const sentenceEdits={
+  "同じ1キルでも、味方が動く前に人数差を作る場合と、味方が倒された後に取る場合では、その後の選択肢が違う。": "同じ1キルでも、味方が動く前に人数差を作る場合と、味方が倒された後に取る場合では、その後に選べる行動が異なります。",
   "良い傾向。": "良い傾向です。",
   "射撃場で頭から少し外して構え、小さい修正だけで1発当てる。": "射撃場で頭から少し外して構え、小さい修正だけで1発当ててください。",
   "左右各10回。": "左右それぞれ10回ずつ取り組んでください。",
@@ -1175,7 +1184,7 @@ let latestMemberReport=null;
 let memberPending=false;
 const memberCache=new Map();
 async function fetchMember(person){
- const t=token();if(!t)throw Error('KP口座の接続が必要だ。');
+ const t=token();if(!t)throw Error('KP口座の接続が必要です。');
  const cached=memberCache.get(person);
  if(cached&&cached.token===t&&Date.now()-cached.at<60000)return cached.data;
  const generation=authGeneration;
@@ -1190,7 +1199,7 @@ function renderMemberArchiveStatus(data){
  $('start-member-archive').hidden=!owned||Boolean(history?.enabled);
  $('pause-member-archive').hidden=!owned||!history?.enabled||!history?.supportsPause;
  if(!history){
-  $('member-archive-status').innerHTML='<p class="small muted">収集進捗を確認できない。接続を確認してほしい。</p>';
+  $('member-archive-status').innerHTML='<p class="small muted">収集進捗を確認できません。接続を確認してください。</p>';
   return;
  }
  $('member-archive-status').innerHTML='<div class="member-coverage">'+(history.people||[]).map(p=>{
@@ -1266,7 +1275,7 @@ const coachTrendGraph=trends=>{
  return `<div class="coach-trend-heading"><b>直近${int(games.length)}試合のK/D推移</b>
    <span class="trend-legend"><i class="legend-k"></i>K <i class="legend-d"></i>D · W勝利 / L敗北</span></div>
    <div class="trend-scroll"><div class="trend-chart" role="group" aria-label="試合別K/D推移">${chart}</div></div>
-   <p class="member-small">各棒は一試合のキル数・デス数。高さは表示中の最大値を基準とする。横にスクロールして比較できる。</p>`;
+   <p class="member-small">各棒は一試合のキル数とデス数です。高さは表示中の最大値を基準にしています。横にスクロールして比較できます。</p>`;
 };
 const coachSideBlock=(label,s)=>{
  const base=s?.observedOpeningRounds??0;
@@ -1291,7 +1300,7 @@ const performancePanel=(p,section)=>{
  const f=(n,d=2)=>typeof n==='number'&&Number.isFinite(n)?escape(n.toFixed(d)):'データ不足';
  const table=(rows,cols)=>!rows.length?'<p class="coach-empty">データ不足</p>':'<div style="overflow:auto"><table><thead><tr>'+cols.map(c=>'<th>'+escape(c[0])+'</th>').join('')+'</tr></thead><tbody>'+rows.map(r=>'<tr>'+cols.map(c=>'<td>'+escape(typeof r[c[1]]==='number'?r[c[1]].toFixed(2):r[c[1]]??'データ不足')+'</td>').join('')+'</tr>').join('')+'</tbody></table></div>';
  if(section==='guns')return '<h3>撃ち合いとラウンド効率</h3>'+table([p.overall],[['試合','matches'],['KD有効試合','kdMatches'],['K/D','kd'],['平均K','averageKills'],['平均D','averageDeaths'],['平均A','averageAssists'],['KPR','kpr'],['DPR','dpr'],['APR','apr'],['ACS（試合R）','acs'],['HS%','hsPct'],['ADR','adr'],['DDΔ/R','ddDeltaPerRound']])+
- '<p>K/Dは合計K÷合計D。ACSはスコア合計÷検証済みラウンド数。KPR・DPR・APRは個別の有効データで計算する。</p><h4>勝利・敗北での差</h4>'+table(p.outcomes,[['結果','value'],['試合','matches'],['K/D','kd'],['KPR','kpr'],['DPR','dpr'],['ACS（試合R）','acs']]);
+ '<p>K/Dは合計キル数を合計デス数で割った値です。ACSはスコア合計を検証済みラウンド数で割った値です。KPR・DPR・APRは、それぞれの有効データで計算します。</p><h4>勝利・敗北での差</h4>'+table(p.outcomes,[['結果','value'],['試合','matches'],['K/D','kd'],['KPR','kpr'],['DPR','dpr'],['ACS（試合R）','acs']]);
  const peerTable=(p.rolePeers||[]).flatMap(group=>['kpr','dpr','apr'].map(key=>{const x=group[key];return {value:group.value,metric:key.toUpperCase(),matches:x.matches,excluded:x.excluded,peerGames:x.peerPlayerGames,own:x.ownRate,peers:x.peerRate,ownRounds:x.rounds,peerRounds:x.peerRounds};}));
  if(section==='time'){
   const games=p.timeline.slice().reverse(),values=games.map(g=>g.kd),valid=values.filter(v=>typeof v==='number'&&Number.isFinite(v));
@@ -1303,8 +1312,8 @@ const performancePanel=(p,section)=>{
   return '<h3>安定性と時系列</h3><p>表示期間（UTC）：'+escape(games[0]?.date??'データ不足')+' 〜 '+escape(games.at(-1)?.date??'データ不足')+'。最大50件。表は横へスクロールできます。</p><h4>試合K/D（左が過去・右が最新）</h4>'+chart+coachSeries(games,'rollingKd5','直近最大5試合の合計K/D')+coachSeries(games,'acs','ACS（試合R）')+coachSeries(games,'adr','ADR')+coachSeries(games,'rollingWinPct5','直近最大5試合の勝率（引分を分母に含む）')+coachSeries(games,'kills','試合ごとのキル数')+coachSeries(games,'deaths','試合ごとのデス数')+(p.form?'<p>好調候補 '+int(p.form.positive)+' / 不調候補 '+int(p.form.negative)+' / 判定可能 '+int(p.form.valid)+'試合。直近の連続：好調候補 '+(p.form.currentPositiveStreak===null?'未確認':int(p.form.currentPositiveStreak))+'・不調候補 '+(p.form.currentNegativeStreak===null?'未確認':int(p.form.currentNegativeStreak))+'。</p><p>'+escape(p.form.definition)+'</p>':'')+'<p>合計KD '+f(p.overall.kd)+' / 試合KD中央値 '+f(p.overall.medianKd)+' / 母標準偏差 '+f(p.overall.kdStandardDeviation)+'。D=0試合は比率分布から除外。</p>'+table([p.overall],[['K平均','averageKills'],['K標準偏差','killStandardDeviation'],['K分散','killVariance'],['D平均','averageDeaths'],['D標準偏差','deathStandardDeviation'],['D分散','deathVariance'],['試合KD平均','meanMatchKd'],['試合KD中央値','medianKd'],['比率の有効件数','ratioMatches']])+p.windows.map(w=>'<h4>直近'+w.requested+'試合と直前区間（条件未補正）</h4>'+table([{value:'直近',...w.recent},{value:'直前',...w.previous}],[['区間','value'],['実件数','matches'],['勝率%（引分含む）','winPct'],['KD','kd'],['KPR','kpr'],['DPR','dpr'],['ACS（試合R）','acs']])).join('')+'<h4>ACT別</h4>'+table(p.acts||[],[['ACT','value'],['試合','matches'],['KD','kd'],['KPR','kpr'],['DPR','dpr'],['勝率%（引分含む）','winPct']])+'<h4>試合の終了時間帯</h4>'+table(p.timeBuckets||[],[['終了時間（JST）','value'],['試合','matches'],['KD','kd'],['KPR','kpr'],['DPR','dpr']])+'<p>終了時刻による分類です。開始時刻・睡眠・相手・ACT・役割の差は未補正です。生活習慣による効果や実力差とは断定しません。</p><h4>同じマップ・エージェントの期間比較</h4><p>直近最大10件と、その直前最大10件。相手・party・構成・攻守は未補正。件数が少ない条件は評価を保留します。</p>'+(p.conditionalWindows||[]).map(c=>'<h5>'+escape(c.value)+'</h5>'+table([{value:'直近',...c.recent},{value:'直前',...c.previous}],[['区間','value'],['試合','matches'],['KPR','kpr'],['DPR','dpr'],['ACS（試合R）','acs']])).join('');
  }
  const bars=groups=>{const ns=groups.map(g=>g.kpr).filter(v=>typeof v==='number'&&Number.isFinite(v)),max=Math.max(1,...ns);return groups.map(g=>'<div class="coach-quality"><b>'+escape(g.value)+' · '+int(g.matches)+'試合</b><span>KPR '+f(g.kpr,3)+'</span>'+(typeof g.kpr==='number'&&Number.isFinite(g.kpr)?'<div style="height:8px;background:#a9d7ff;width:'+Math.round(g.kpr/max*100)+'%"></div>':'<p>データ不足</p>')+'</div>').join('');};
- if(section==='maps')return '<h3>基本性能のマップ・エージェント差</h3><h4>マップ別KPR</h4>'+bars(p.maps)+'<h4>エージェント別KPR</h4>'+bars(p.agents)+table(p.maps,[['マップ','value'],['試合','matches'],['KD','kd'],['KPR','kpr'],['DPR','dpr'],['ACS（試合R）','acs'],['HS%','hsPct'],['ADR','adr'],['DDΔ/R','ddDeltaPerRound']])+table(p.agents,[['エージェント','value'],['試合','matches'],['KD','kd'],['KPR','kpr'],['DPR','dpr'],['ACS（試合R）','acs'],['HS%','hsPct'],['ADR','adr'],['DDΔ/R','ddDeltaPerRound']])+'<h4>マップ×エージェント</h4>'+table(p.mapAgents||[],[['条件','value'],['試合','matches'],['KD','kd'],['ACS（試合R）','acs'],['KD標準偏差','kdStandardDeviation']])+'<h4>ロール別KPR</h4>'+bars(p.roles||[])+table(p.roles||[],[['ロール','value'],['試合','matches'],['KD','kd'],['KPR','kpr'],['DPR','dpr'],['ACS（試合R）','acs'],['HS%','hsPct'],['ADR','adr'],['DDΔ/R','ddDeltaPerRound']])+'<p>構成・ロール・相手の強さは未補正。少数試合の優劣は断定しない。</p>';
- if(section==='team')return '<h3>同じマップ・ロール内の味方との比較</h3>'+table(peerTable,[['条件','value'],['指標','metric'],['本人の試合','matches'],['除外試合','excluded'],['味方延べ人数','peerGames'],['本人','own'],['同ロールの味方','peers'],['本人R','ownRounds'],['味方・人R','peerRounds']])+'<p>同じ試合の同チーム・同ロールだけを比較。本人は対象試合のR、味方は延べプレイヤーRが分母です。各5試合/80R未満は特に参考値として扱います。エージェント・武器・担当の違いは未補正で、実力順位や貢献度ではありません。</p><h3>パーティー人数ごとの基本性能</h3>'+table(p.parties||[],[['構成','value'],['試合','matches'],['KD','kd'],['KPR','kpr'],['DPR','dpr'],['ACS（試合R）','acs'],['HS%','hsPct'],['ADR','adr'],['DDΔ/R','ddDeltaPerRound']])+'<h4>一緒に参加したメンバーによる本人の成績差</h4>'+(p.teammates||[]).map(t=>'<h5>'+escape(t.person)+'</h5>'+table([{value:'同席',...t.with},{value:'不在',...t.without}],[['条件','value'],['試合','matches'],['KD','kd'],['KPR','kpr'],['DPR','dpr'],['ACS（試合R）','acs']])).join('')+'<h4>本人チームのロール構成</h4>'+table(p.compositions||[],[['構成','value'],['試合','matches'],['KPR','kpr'],['DPR','dpr']])+'<p>同じparty_idを持つ同一チームの人数。パーティー不明をソロと扱わない。構成別の差は本人の貢献の因果効果ではない。</p>';
+ if(section==='maps')return '<h3>基本性能のマップ・エージェント差</h3><h4>マップ別KPR</h4>'+bars(p.maps)+'<h4>エージェント別KPR</h4>'+bars(p.agents)+table(p.maps,[['マップ','value'],['試合','matches'],['KD','kd'],['KPR','kpr'],['DPR','dpr'],['ACS（試合R）','acs'],['HS%','hsPct'],['ADR','adr'],['DDΔ/R','ddDeltaPerRound']])+table(p.agents,[['エージェント','value'],['試合','matches'],['KD','kd'],['KPR','kpr'],['DPR','dpr'],['ACS（試合R）','acs'],['HS%','hsPct'],['ADR','adr'],['DDΔ/R','ddDeltaPerRound']])+'<h4>マップ×エージェント</h4>'+table(p.mapAgents||[],[['条件','value'],['試合','matches'],['KD','kd'],['ACS（試合R）','acs'],['KD標準偏差','kdStandardDeviation']])+'<h4>ロール別KPR</h4>'+bars(p.roles||[])+table(p.roles||[],[['ロール','value'],['試合','matches'],['KD','kd'],['KPR','kpr'],['DPR','dpr'],['ACS（試合R）','acs'],['HS%','hsPct'],['ADR','adr'],['DDΔ/R','ddDeltaPerRound']])+'<p>構成・ロール・相手の強さは補正していません。少数の試合で優劣を断定しません。</p>';
+ if(section==='team')return '<h3>同じマップ・ロール内の味方との比較</h3>'+table(peerTable,[['条件','value'],['指標','metric'],['本人の試合','matches'],['除外試合','excluded'],['味方延べ人数','peerGames'],['本人','own'],['同ロールの味方','peers'],['本人R','ownRounds'],['味方・人R','peerRounds']])+'<p>同じ試合の同チーム・同ロールだけを比較。本人は対象試合のR、味方は延べプレイヤーRが分母です。各5試合/80R未満は特に参考値として扱います。エージェント・武器・担当の違いは未補正で、実力順位や貢献度ではありません。</p><h3>パーティー人数ごとの基本性能</h3>'+table(p.parties||[],[['構成','value'],['試合','matches'],['KD','kd'],['KPR','kpr'],['DPR','dpr'],['ACS（試合R）','acs'],['HS%','hsPct'],['ADR','adr'],['DDΔ/R','ddDeltaPerRound']])+'<h4>一緒に参加したメンバーによる本人の成績差</h4>'+(p.teammates||[]).map(t=>'<h5>'+escape(t.person)+'</h5>'+table([{value:'同席',...t.with},{value:'不在',...t.without}],[['条件','value'],['試合','matches'],['KD','kd'],['KPR','kpr'],['DPR','dpr'],['ACS（試合R）','acs']])).join('')+'<h4>本人チームのロール構成</h4>'+table(p.compositions||[],[['構成','value'],['試合','matches'],['KPR','kpr'],['DPR','dpr']])+'<p>同じparty_idを持つ同一チームの人数です。パーティーが不明な試合をソロとして扱いません。構成別の差だけで、本人の貢献が原因だとは判断できません。</p>';
  if(section==='quality'){
   const o=p.overall,q=p.quality,coverage=q.metricCoverage||{};
   const rows=[['K/D',o.kdMatches,o.kills,o.deaths],['KPR',o.rateBases.kpr.matches,o.rateBases.kpr.numerator,o.rateBases.kpr.rounds],['DPR',o.rateBases.dpr.matches,o.rateBases.dpr.numerator,o.rateBases.dpr.rounds],['APR',o.rateBases.apr.matches,o.rateBases.apr.numerator,o.rateBases.apr.rounds],['ACS（試合R）',o.acsMatches,o.scoreTotal,o.scoreRounds],['HS%',o.hitMatches,o.headHits,o.totalHits],['ADR',o.damageMatches,o.damageTotal,o.damageRounds],['DDΔ/R',o.damageDeltaMatches,o.damageDeltaTotal,o.damageDeltaRounds]].map(([value,valid,numerator,denominator])=>({value,valid,excluded:o.matches-valid,numerator,denominator}));
@@ -1318,7 +1327,7 @@ const contributionPanel=r=>{
  if(!r||!r.rounds)return '<p>ラウンド別貢献はデータ不足。完全性を照合できる試合がありません。</p>';
  const max=Math.max(1,...r.killHistogram.map(x=>x.count));
  const c=r.combatFollowup;
- const followup=c?'<h4>先制に限定しないキル・デス後の動き</h4>'+metricBar('本人の死亡後5秒以内に味方が同じ敵を倒した',c.teammateRetaliations5s,c.enemyKnownKillerDeaths,'敵のキラーが判明した全デスを分母にする。距離上の機会や本人のミス率ではない。','neutral')+metricBar('味方が死亡後5秒以内に本人がその敵を倒したキル',c.tradeKills5s,c.enemyKills,'全敵キルのうち観測した追随キル。同じキルは一度だけ数える。公式トレード率ではない。','good')+metricBar('敵を倒して5秒以内に本人も死亡',c.diedAfterKill5s,c.enemyKills,'時系列上の観察。復活や意図は不明で、無謀な再ピークとは断定しない。','neutral'):'';
+ const followup=c?'<h4>先制に限定しないキル・デス後の動き</h4>'+metricBar('本人の死亡後5秒以内に味方が同じ敵を倒した',c.teammateRetaliations5s,c.enemyKnownKillerDeaths,'敵のキラーが判明した全デスを分母にする。距離上の機会や本人のミス率ではない。','neutral')+metricBar('味方が死亡後5秒以内に本人がその敵を倒したキル',c.tradeKills5s,c.enemyKills,'全敵キルのうち観測した追随キル。同じキルを重複して数えません。公式トレード率ではない。','good')+metricBar('敵を倒して5秒以内に本人も死亡',c.diedAfterKill5s,c.enemyKills,'時系列上の観察。復活や意図は不明で、無謀な再ピークとは断定しない。','neutral'):'';
 
  return '<h3>キル数のラウンド分布</h3><p>全10人のロスターK/D合計とイベント数を照合した'+int(r.quality.validMatches)+'試合・'+int(r.rounds)+'R。</p>'+r.killHistogram.map(h=>'<div class="coach-quality"><b>'+escape(h.kills)+'キル：'+int(h.count)+' / '+int(h.denominator)+'R</b><div style="background:#78cba8;height:8px;width:'+Math.round(h.count/max*100)+'%"></div></div>').join('')+'<p>無死亡 '+int(r.noDeathRounds)+' / '+int(r.rounds)+'R。終了時生存やKASTとは異なる。</p><p>マルチキル後の勝利 '+int(r.multiKillWins)+' / 勝敗判明 '+int(r.multiKillKnownOutcomes)+'R。</p><h4>攻守のKPR・DPR</h4>'+['attack','defense'].map(side=>{const x=r.sides[side];return '<p>'+(side==='attack'?'攻撃':'防衛')+'：'+int(x.rounds)+'R / K '+int(x.kills)+' / D '+int(x.deaths)+(x.rounds?' · KPR '+numeric(x.kills/x.rounds,3)+' · DPR '+numeric(x.deaths/x.rounds,3):' · データ不足')+'</p>';}).join('')+['kpr','dpr'].map(key=>{const values=['attack','defense'].map(side=>{const x=r.sides[side];return x.rounds?(key==='kpr'?x.kills:x.deaths)/x.rounds:null;}),max=Math.max(1,...values.filter(v=>v!==null));return '<h5>'+key.toUpperCase()+'</h5>'+['attack','defense'].map((side,i)=>{const v=values[i];return '<div class="coach-quality">'+(side==='attack'?'攻撃':'防衛')+' '+(v===null?'データ不足':numeric(v,3))+(v===null?'':'<div data-round-rate="'+key+'-'+side+'" style="height:8px;background:#a9d7ff;width:'+v/max*100+'%"></div>')+'</div>';}).join('');}).join('')+(r.assistQuality?.rounds?'<h4>ラウンド単位のアシスト</h4><p>全10人のA合計とassistant記録が一致した '+int(r.assistQuality.validMatches)+'試合。アシストが記録された '+int(r.assistQuality.assistRounds)+' / '+int(r.assistQuality.rounds)+'R。キルまたはアシストの関与 '+int(r.assistQuality.killOrAssistRounds)+' / '+int(r.assistQuality.rounds)+'R。生存・トレードを含むKASTではありません。</p>':'<p>ラウンド別アシストはデータ不足。欠損を0として計算しません。</p>')+followup+'<p>'+r.limitations.map(escape).join(' ')+'</p><details><summary>ラウンド指標の保存時点・除外理由</summary><pre style="white-space:pre-wrap;overflow-wrap:anywhere">'+escape(JSON.stringify({events:r.quality,assists:r.assistQuality},null,2))+'</pre></details>';
 };
@@ -1443,7 +1452,7 @@ const renderMemberDiagnosis=d=>{
  const queueDiscovered=safeNumber(coverage.discovered),queueComplete=safeNumber(coverage.complete);
  const inputs=Array.isArray(d.accounts)?d.accounts:[];
  const cohortWarning=queueDiscovered===0&&archive>0?
-  `<p class="coach-hint">既存の保存済み記録から${int(archive)}試合を見つけたが、新しい履歴収集キューではまだ0件だ。両者は別の集計であり、試合数が矛盾しているわけではない。</p>`:'';
+  `<p class="coach-hint">既存の保存済み記録から${int(archive)}試合を確認しましたが、新しい履歴収集キューではまだ0件です。両者は別の集計であり、試合数が矛盾しているわけではありません。</p>`:'';
  const quality=`<section class="coach-quality">
  <strong>ラウンド分析の対象 ${int(usable)}件</strong>
  <span>既存DBで発見 ${int(archive)}件 · 新規履歴キュー発見 ${int(queueDiscovered)}件
@@ -1483,9 +1492,9 @@ const renderMemberDiagnosis=d=>{
    '味方の距離や生存状況に左右される連携指標。本人のミス率ではない。','neutral')+
   metricBar('FK後5秒間生存',fk-safeNumber(own.openingKillerDiedWithin5s),fk,
    '最初のキル直後の生存。正しい退避や再ピークかは映像確認が必要。','good'):
-  '<p class="coach-empty">個人別の先制データは未取得だ。</p>';
+  '<p class="coach-empty">個人別の先制データはまだ取得していません。</p>';
  const reviewSummary=highest.length
-  ?`<p class="coach-lead">${int(highest.length)}件の<strong>見直し候補</strong>がある。ただし因果的なミス確定ではない。以下に、参考観測も含めて最大8件表示する。</p>`
+  ?`<p class="coach-lead">${int(highest.length)}件の<strong>見直し候補</strong>があります。ただし、ミスの原因が確定したわけではありません。参考となる観測も含めて、以下に最大8件表示します。</p>`
   :`<p class="coach-lead">継続した弱点の判断は保留です。次の1試合では、先頭の課題を1つ試して振り返ってください。</p>`;
  const overview=`<div class="coach-hero"><h3>${escape(d.person)} <small>個別コーチング</small></h3>
   <p class="member-small">対象アカウント：${inputs.map(escape).join(' ＋ ')||'登録情報なし'}</p><button type="button" data-feedback-refresh>この人の解説を更新</button></div>`+
@@ -1494,28 +1503,28 @@ const renderMemberDiagnosis=d=>{
   `<div class="coach-section-heading"><h3>最初に見るべき改善候補</h3><span>${int(highest.length)}件が要検証</span></div>`+
   reviewSummary+(selected.length?selected.slice(0,3).map(x=>diagnosticCard(x)).join(''):
   '<p class="coach-empty">継続した弱点の判定は保留です。まず上の課題を1つ試し、次の試合を振り返ってください。</p>')+
-  '<p class="member-small">すべての改善観察と判定保留は「改善候補」タブで確認できる。</p>'+
+  '<p class="member-small">すべての改善候補と判断を保留している項目は、「改善候補」タブで確認できます。</p>'+
   '<h3>先制と生存：観測グラフ</h3>'+rateCharts+
   '<h3>ラウンド記録を照合できた試合の推移</h3>'+coachTrendGraph(trends)+(d.matchFeedback?'</details>':'');
  const improvements=reviewSummary+
   (selected.length?selected.map(x=>diagnosticCard(x)).join(''):
-  '<p class="coach-empty">観察対象がまだない。試合・ラウンドデータの収集が必要だ。</p>')+
+  '<p class="coach-empty">観察対象がまだありません。試合・ラウンドデータの収集が必要です。</p>')+
   `<details class="member-detail"><summary>その他の評価保留・参考観測 ${int(Math.max(0,all.length-selected.length-positives.length))}項目</summary>`+
   all.filter(x=>!selected.includes(x)&&x.status!=='good').map(x=>diagnosticCard(x)).join('')+'</details>'+
   '<h3>再現したい良い傾向</h3>'+
   (positives.length?positives.map(x=>diagnosticCard(x,'good')).join(''):
-   '<p class="coach-empty">良い点なし、という意味ではない。現状は良い傾向と判定できる十分な比較データがない。</p>');
+   '<p class="coach-empty">良い点がないという意味ではありません。現状は、良い傾向と判断するための比較データが不足しています。</p>');
  const strategy='<h3>攻撃と防衛の先制動向</h3>'+
   '<div class="coach-side-grid">'+coachSideBlock('攻撃',own?.attack)+coachSideBlock('防衛',own?.defense)+'</div>'+
-  '<p class="member-small">攻撃・防衛の役割や使用エージェントが違うため、数値だけで戦術の優劣を断定しない。</p>'+
+  '<p class="member-small">攻撃・防衛の役割や使用エージェントが違うため、数値だけで戦術の優劣を断定しません。</p>'+
   '<h3>マップ × エージェント</h3>'+
   (splits.length?'<div class="coach-map-grid">'+[...splits].sort((a,b)=>b.matches-a.matches).map(coachMapCard).join('')+'</div>':
-  '<p class="coach-empty">マップ・エージェント別のデータがない。</p>');
+  '<p class="coach-empty">マップ・エージェント別のデータがありません。</p>');
  const categories=[...new Set(all.map(x=>x.category))];
  const allMetrics=categories.map(cat=>`<details class="member-detail">
   <summary>${escape(cat)}（${int(all.filter(x=>x.category===cat).length)}項目）</summary>
   ${all.filter(x=>x.category===cat).map(x=>diagnosticCard(x)).join('')}
- </details>`).join('')||'<p class="coach-empty">判定可能な指標はまだない。</p>';
+ </details>`).join('')||'<p class="coach-empty">判断に使える指標はまだありません。</p>';
  const tabs=[['overview','今日の課題を確認する'],['guns','撃ち合いを見直す'],['improve','ラウンドの動きを見直す'],['strategy','マップごとの違いを見る'],['time','前回からの変化を見る'],['team','味方との連携を確認する'],['metrics','数字の読み方を確認する']];
  $('member-result').innerHTML=`<div class="coach-dashboard-tabs" role="tablist" aria-label="${escape(d.person)}の分析画面">`+
   tabs.map(([id,title],i)=>`<button type="button" role="tab" data-coach-view="${id}"
@@ -1535,7 +1544,7 @@ const renderMemberDiagnosis=d=>{
  $('member-result').appendChild(navigation);
  for(const key of keepOpen){const section=$('member-result').querySelector('['+key+']');if(section)section.open=true;}
  for(const section of $('member-result').querySelectorAll('.coach-existing'))polishCoachCopy(section);
- globalThis.KesoCoachPrototype.mount($('member-result'));$('coach-welcome').hidden=true;
+ globalThis.KesoCoachPrototype.mount($('member-result'));placeCoachGoals();$('coach-welcome').hidden=true;
  for(const step of document.querySelectorAll('[data-pdca-step]')){if(step.dataset.pdcaStep==='task')step.setAttribute('aria-current','step');else step.removeAttribute('aria-current');}
 
 };
@@ -1625,13 +1634,13 @@ $('start-member-archive').addEventListener('click',async()=>{
  if(busy)return;
  const btn=$('start-member-archive');btn.disabled=true;
  try{
-  const t=token();if(!t)throw Error('KP口座の接続が必要だ。');
+  const t=token();if(!t)throw Error('KP口座の接続が必要です。');
   const result=await request('/api/kp/coach/members/start',{
     method:'POST',headers:{Authorization:'Bearer '+t}});
   memberCache.clear();
   await load();
-  setStatus(result.status==='enabled'?'本人別の履歴収集を有効化した。収集進捗はこの画面で確認できる。':'開始状態を確認してほしい。');
- }catch(e){setStatus(e.message||'開始に失敗した。',true)}
+  setStatus(result.status==='enabled'?'本人別の履歴収集を有効にしました。収集の進捗は、この画面で確認できます。':'開始状態を確認してください。');
+ }catch(e){setStatus(e.message||'開始できませんでした。',true)}
  finally{btn.disabled=false}
 });
 $('pause-member-archive').addEventListener('click',async()=>{
@@ -1654,8 +1663,16 @@ async function request(path,opts={}){
  if(!r.ok){const err=new Error(data.error||'通信エラー ('+r.status+')');err.status=r.status;throw err}
  return data;
 }
+const coachGoals=globalThis.KesoCoachGoals.create({request:async(path,opts={})=>{
+ if(credentials()!==credentialState){clearCoachView();throw Error('接続が変更されました。もう一度ログインしてください。');}
+ const generation=authGeneration,t=token();
+ try{const result=await request(path,{...opts,headers:{...opts.headers,Authorization:'Bearer '+t}});
+  if(generation!==authGeneration||token()!==t)throw Error('接続が変更されました。');return result;
+ }catch(e){if(generation===authGeneration&&e.status===401){clearCoachView();$('connection').style.display='block';setStatus('接続が切れました。もう一度ログインしてください。',true);}throw e;}
+}});
+function placeCoachGoals(){const improvement=$('member-result').querySelector('[data-improvement]');if(improvement)improvement.after(coachGoals.element);}
 function clearCoachView(){
- authGeneration++;latestReport=null;latestMemberReport=null;selfIdentity=null;activeMember=null;memberNames=[];
+ coachGoals.clear();authGeneration++;latestReport=null;latestMemberReport=null;selfIdentity=null;activeMember=null;memberNames=[];
  memberCache.clear();practiceProfiles.clear();practiceExcluded.clear();
  globalThis.KesoCoachPrototype.stop();$('member-result').replaceChildren();$('member-selector').replaceChildren();
  $('member-archive-status').replaceChildren();$('coach-owner-label').textContent='';
@@ -1679,7 +1696,7 @@ async function load(){
   $('return-self').disabled=true;
   $('member-coaching-panel').hidden=false;
   latestReport=data.report;latestMemberReport=data.report;activeMember=selfIdentity.defaultProfile;
-  renderMemberArchiveStatus(data);renderMemberDiagnosis(data.report);
+  coachGoals.setData(data.goals);renderMemberArchiveStatus(data);renderMemberDiagnosis(data.report);
   $('report').hidden=false;$('connection').style.display='none';$('share').disabled=false;
   setStatus('自分のコーチングを表示しています。公開範囲は本人のみです。');
  }catch(e){
@@ -1687,7 +1704,7 @@ async function load(){
   clearCoachView();generation=authGeneration;
   if(e.status===401){try{sessionStorage.removeItem(KEY)}catch{}$('connection').style.display='block';setStatus('接続が切れました。接続コードでログインしてください。',true);}
   else if(e.status===429&&t){
-   try{const state=await request('/api/kp/coach/members/status',{headers:{Authorization:'Bearer '+t}});if(generation===authGeneration&&token()===t&&state.identity?.status==='linked'){renderMemberArchiveStatus(state);$('report').hidden=false;$('member-coaching-panel').hidden=true;}}catch{}
+   try{const state=await request('/api/kp/coach/members/status',{headers:{Authorization:'Bearer '+t}});if(generation===authGeneration&&token()===t&&state.identity?.status==='linked'){renderMemberArchiveStatus(state);coachGoals.setData(state.goals);$('member-result').replaceChildren(coachGoals.element);$('report').hidden=false;$('member-coaching-panel').hidden=true;}}catch{}
    if(generation===authGeneration)setStatus(e.message,true);
   }else{$('connection').style.display='block';setStatus(e.message||'本人の対応を確認できませんでした。',true);}
  }finally{if(generation===authGeneration){busy=false;$('reload').disabled=false;}}
@@ -1772,11 +1789,11 @@ $('share').addEventListener('click',async()=>{
    await navigator.clipboard.writeText(text);
    if(generation!==authGeneration||token()!==t)return;
    $('share-fallback').hidden=true;
-   setStatus('認証情報を含まない診断レポートをコピーした。このチャットに貼り付けられる。');
+   setStatus('認証情報を除いた診断レポートをコピーしました。必要な場所へ貼り付けてお使いください。');
  }catch{
    if(generation!==authGeneration||token()!==t)return;
    const area=$('share-fallback');area.value=text;area.hidden=false;area.focus();area.select();
-   setStatus('自動コピーできない環境だ。表示した診断レポートを選択してコピーしてほしい。');
+   setStatus('この環境では自動コピーを利用できません。表示した診断レポートを選択してコピーしてください。');
  }
 });
 $('resume-backfill').addEventListener('click',async()=>{
@@ -1799,7 +1816,7 @@ $('connect-form').addEventListener('submit',async event=>{
   clearCoachView();busy=false;
   sessionStorage.setItem(KEY,r.token);
   await load();
- }catch(e){setStatus(e.message||'接続に失敗した。',true)}
+ }catch(e){setStatus(e.message||'接続できませんでした。',true)}
 });
 for(const section of document.querySelectorAll('.coach-existing'))polishCoachCopy(section);
 load();
