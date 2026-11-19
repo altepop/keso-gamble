@@ -209,6 +209,18 @@ function enhance(root) {
    if(!table){hbPrevious=null;hbMotion=null;lastHbTable=null;return;}
    if(table===lastHbTable)return;
    lastHbTable=table;
+   // Phase 7: fold nonessential guidance while preserving actual game controls.
+   const supplementary=table.querySelector('.duel-hb-intro');
+   if(supplementary && !supplementary.closest('[data-duel-mobile-detail="hitblow"]')){
+     const details=document.createElement('details');
+     details.dataset.duelMobileDetail='hitblow';
+     details.className='duel-mobile-detail';
+     const heading=document.createElement('summary');
+     heading.textContent='推理の説明';
+     supplementary.before(details);
+     details.append(heading,supplementary);
+   }
+
    const now=performance.now();
    const current={id:table.dataset.hbMatch,version:Number(table.dataset.hbVersion),
       count:Number(table.dataset.hbHistoryCount),last:table.dataset.hbLast};
