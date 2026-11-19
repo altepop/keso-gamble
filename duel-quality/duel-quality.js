@@ -875,11 +875,11 @@ function enhance(root) {
     help.classList.toggle('valid',valid);
   },{passive:true});
   root.addEventListener('pointerdown', event => {
-    const c4=event.target.closest?.('.duel-connect4-board [data-duel-col], .duel-connect4-board button');
-    const gomoku=event.target.closest?.('.duel-board.duel-gomoku .duel-square');
+    const c4=event.target.closest?.('.duel-connect4-board [data-duel-cell], .duel-connect4-board button');
+    const gomoku=event.target.closest?.('[data-duel-confirm-cell]');
     const game=c4?'connect4':gomoku?'gomoku':null;
     if(!game||event.target.closest?.(':disabled'))return;
-    const board=event.target.closest?.(game==='connect4'?'[data-c4-match]':'[data-gomoku-match]');
+    const board=game==='connect4'?event.target.closest?.('[data-c4-match]'):root.querySelector('.duel-board.duel-gomoku[data-gomoku-match]');
     const id=game==='connect4'?board?.dataset.c4Match:board?.dataset.gomokuMatch;
     if(id)root.__duelPendingTap={game,id,at:performance.now()};
   },{passive:true});
