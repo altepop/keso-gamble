@@ -1,3 +1,4 @@
+import {getDuelBeginnerRules} from './duel-beginner.js?v=p3a';
 // Progressive visual enhancement only. Never sends actions, determines winners or reads KP.
 // A factual score summary from the visible server-confirmed 8x8 board.
 // A larger lead is NOT a prediction of the game winner.
@@ -503,7 +504,39 @@ function enhance(root) {
     note.dataset.duelActionKey=key;
     note.textContent=state.title+'　'+state.detail;
   }
+
+  function scanBeginnerRules(){
+    // Static explanation only, keyed to the chosen game and the published
+    // game name. No hidden hand, authenticated response or new game action.
+    const areas=[
+      {container:root.querySelector('.duel-new .card-body'),anchor:root.querySelector('.duel-new .duel-mode-guide'),game:root.querySelector('#duel-game')?.value},
+      {container:root.querySelector('.duel-current .duel-arena'),anchor:root.querySelector('.duel-current .duel-arena-head'),game:null}
+    ];
+    const names={オセロ:'othello',五目並べ:'gomoku',四目並べ:'connect4','Hit & Blow':'hitblow',ブラフダイス:'bluffdice','5カード・ドローポーカー':'poker','5カードポーカー':'poker'};
+    for(const area of areas){
+      if(!area.container||!area.anchor)continue;
+      const game=area.game??names[area.container.querySelector('.duel-tag')?.textContent?.trim()];
+      const rules=getDuelBeginnerRules(game);
+      const existing=area.container.querySelector(':scope > [data-duel-beginner]');
+      if(!rules){existing?.remove();continue;}
+      if(existing?.dataset.duelBeginner===game)continue;
+      existing?.remove();
+      const details=document.createElement('details');
+      details.className='duel-beginner';details.dataset.duelBeginner=game;
+      const heading=document.createElement('summary');
+      heading.textContent='はじめての'+rules.name+'｜勝ち方・初手・注意点';
+      details.append(heading);
+      const list=document.createElement('dl');
+      for(const [term,explain] of [['勝利条件',rules.win],['最初にすること',rules.first],['覚えておくこと',rules.caution]]){
+        const dt=document.createElement('dt');dt.textContent=term;
+        const dd=document.createElement('dd');dd.textContent=explain;
+        list.append(dt,dd);
+      }
+      details.append(list);area.anchor.after(details);
+    }
+  }
   function scan() {
+    scanBeginnerRules();
     scanDuelJourney();
     scanRematchGuide();
     scanInviteReadiness();
