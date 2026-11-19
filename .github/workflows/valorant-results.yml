@@ -266,6 +266,12 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: node scripts/ensure-round-events.mjs
+      - name: Ensure isolated coaching position evidence table
+        working-directory: ${{ runner.temp }}/kp-app/services/valorant-results
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/ensure-positions.mjs
       - name: Ensure additive per-person historical archive tables
         working-directory: ${{ runner.temp }}/kp-app/services/valorant-results
         env:
@@ -306,6 +312,12 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: node scripts/coach-provider-tail.mjs
+      - name: Audit isolated position storage (aggregate evidence only)
+        working-directory: ${{ runner.temp }}/kp-app/services/valorant-results
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/coach-position-audit.mjs
       - name: Observe phase 0 position quality from normal responses (no extra Henrik calls)
         if: contains(github.event.head_commit.message, '[coach-position-audit]')
         working-directory: ${{ runner.temp }}/kp-app/services/valorant-results

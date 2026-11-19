@@ -1,3 +1,4 @@
+import {captureCompetitivePositions} from './coach-position-storage.ts';
 import {coachPositionQuality} from './coach-position-quality.ts';
 import {enrichExistingCoachEvidence} from './coach-evidence-enrichment.ts';
 import {coachProviderShape} from './coach-provider-shape.ts';
@@ -314,6 +315,7 @@ async function saveMatch(env: Env, match: Match, player: Player, account: Accoun
     // never block notices or KP, and duplicates never incur extra writes.
     try { await recordCompetitiveRoster(env.DB,match); } catch { console.warn('match_roster_save_pending'); }
     try { await recordCompetitiveRoundEvents(env.DB,match); } catch { console.warn('round_event_save_pending'); }
+    await captureCompetitivePositions(env.DB,match,'history');
     // Agent mastery counts new results only; a failure never blocks the result post.
     if (kpRun) try {
       const subject = match.players.find(p => p.puuid === account.puuid), mapping = kpRun.mapping;
@@ -551,7 +553,8 @@ export async function monitor(env: Env, players: Player[] = configuredPlayers): 
         for (const match of [...matches].sort((a, b) => Date.parse(a.metadata.started_at) - Date.parse(b.metadata.started_at))) {
           if(coachEvidenceBudget>0){
             coachEvidenceBudget--;
-            try{if(await enrichExistingCoachEvidence(env.DB,match)==='skipped')coachEvidenceBudget++;}
+            try{if(await enrichExistingCoachEvidence(env.DB,match)==='skipped')coachEvidenceBudget++;
+              else await captureCompetitivePositions(env.DB,match,'history');}
             catch{console.warn('coach_evidence_enrichment_pending');}
           }
           if(kpRun&&match.metadata?.match_id&&!pvpSeen.has(match.metadata.match_id)){
