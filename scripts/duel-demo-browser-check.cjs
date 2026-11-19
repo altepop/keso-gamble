@@ -203,6 +203,14 @@ const a='[data-demo-view=a]',b='[data-demo-view=b]';
  await recap.waitFor();
  await recap.locator('summary').click();
  assert.match(await recap.innerText(),/確定結果/);
+ const shared=page.locator('[data-duel-public-result-share]');
+ await shared.waitFor();
+ assert.equal(await shared.evaluate(el=>el.open),false,'public result share stays collapsed until selected');
+ await shared.locator('summary').click();
+ const publicOutcome=(await page.locator('.duel-result').innerText()).trim();
+ assert.equal(await shared.locator('textarea').inputValue(),publicOutcome,'sharing includes confirmed result only');
+ assert.equal(await shared.locator('textarea').getAttribute('readonly')!==null,true,'sharing text cannot change the result');
+
  assert.match(await recap.innerText(),/次の試合で確認すること/);
  assert.match(await recap.innerText(),/自分の手番ごとに置ける場所を確認/);
  assert.equal(await recap.locator('dt').filter({hasText:'次の試合で確認すること'}).count(),1,'one next-match focus field from confirmed results');
