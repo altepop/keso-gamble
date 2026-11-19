@@ -1,0 +1,116 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {DatabaseSync} from 'node:sqlite';
+import {randomUUID} from 'node:crypto';
+import {serverPveOperation,ensureServerPveTables,DUEL_PVE_SESSION_DDL} from '../src/duel-pve-sessions.ts';
+import {DUEL_PROGRESSION_GAMES} from '../src/duel-progression.ts';
+
+function fixture(){
+ const db=new DatabaseSync(':memory:');
+ let batches=0;
+ const prepare=(sql:string)=>{
+  const stmt=db.prepare(sql);
+  const wrap=(args:unknown[])=>({
+   run:async()=>stmt.run(...args as []),
+   first:async()=>stmt.get(...args as [])
+  });
+  return {...wrap([]),bind:(...args:unknown[])=>wrap(args)};
+ };
+ const env={DB:{
+  prepare,
+  batch:async(statements:Array<{run:()=>Promise<unknown>}>)=>{
+   batches++;db.exec('BEGIN');
+   try{const result=[];for(const statement of statements)result.push(await statement.run());db.exec('COMMIT');return result;}
+   catch(e){db.exec('ROLLBACK');throw e;}
+  }
+ }};
+ return {db,env:env as never,batches:()=>batches};
+}
+const first:{[key:string]:Record<string,unknown>}={
+ othello:{cell:19},gomoku:{cell:112},connect4:{cell:3},
+ hitblow:{guess:'9876'},bluffdice:{choice:'bid',count:1,face:1},poker:{cells:[]}
+};
+test('six authenticated server modes persist CPU decision but only expose public states',async()=>{
+ const {db,env}=fixture();
+ try{
+  for(const game of DUEL_PROGRESSION_GAMES){
+   // Each mode is owned by its own authenticated user in this fixture;
+   // keeping all six sessions under one user would correctly hit the cap of 3.
+   const user='alice-'+game;
+   const req=randomUUID();
+   const one=await serverPveOperation(env,'guild',user,{action:'start',requestId:req,game,level:'normal'});
+   assert.equal(one.game,game);
+   assert.equal(one.turn,'human');
+   assert.equal(Object.hasOwn(one,'secret'),false);
+   const before=db.prepare('SELECT * FROM kp_duel_pve_sessions WHERE id=?').get(one.id) as Record<string,unknown>;
+   assert.equal(before?.version,0);
+   const done=await serverPveOperation(env,'guild',user,{action:'move',session:one.id,requestId:randomUUID(),version:0,...first[game],winner:'human',kp:12345});
+   assert.equal(done.version,1);
+   assert.equal(Object.hasOwn(done,'secret'),false);
+   assert.equal(Object.hasOwn(done,'kp'),false);
+   const saved=db.prepare('SELECT * FROM kp_duel_pve_sessions WHERE id=?').get(one.id) as Record<string,unknown>;
+   assert.equal(saved?.version,1);
+   assert.equal(saved?.game,game);
+   const secret=db.prepare('SELECT data FROM kp_duel_pve_secrets WHERE id=?').get(one.id) as {data:string|null};
+   assert.ok(secret);
+   assert.ok(!secret.data||!JSON.stringify(done).includes('privateB'));
+  }
+ }finally{db.close();}
+});
+test('identical start or move request cannot mint a second session or turn',async()=>{
+ const {db,env}=fixture();
+ try{
+  const requestId=randomUUID();
+  const one=await serverPveOperation(env,'g','alice',{action:'start',game:'othello',level:'easy',requestId});
+  const twice=await serverPveOperation(env,'g','alice',{action:'start',game:'othello',level:'easy',requestId});
+  assert.equal(one.id,twice.id);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM kp_duel_pve_sessions').get()?.n,1);
+  const moveId=randomUUID();
+  const firstMove=await serverPveOperation(env,'g','alice',{action:'move',session:one.id,version:0,requestId:moveId,cell:19});
+  const replay=await serverPveOperation(env,'g','alice',{action:'move',session:one.id,version:0,requestId:moveId,cell:19});
+  assert.equal(replay.version,firstMove.version);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM kp_duel_pve_actions').get()?.n,1);
+  await assert.rejects(()=>serverPveOperation(env,'g','alice',{action:'move',session:one.id,version:0,requestId:randomUUID(),cell:19}));
+  await assert.rejects(()=>serverPveOperation(env,'g','bob',{action:'get',session:one.id}));
+  await assert.rejects(()=>serverPveOperation(env,'g','bob',{action:'move',session:one.id,version:0,requestId:randomUUID(),cell:19}));
+  await assert.rejects(()=>serverPveOperation(env,'g','alice',{action:'start',requestId,game:'poker',level:'easy'}));
+ }finally{db.close();}
+});
+test('illegal action rolls back without mutating board or saving private data',async()=>{
+ const {db,env}=fixture();
+ try{
+  const one=await serverPveOperation(env,'g','alice',{action:'start',game:'poker',level:'normal',requestId:randomUUID()});
+  const before=db.prepare('SELECT data FROM kp_duel_pve_secrets WHERE id=?').get(one.id);
+  await assert.rejects(()=>serverPveOperation(env,'g','alice',{action:'move',session:one.id,version:0,requestId:randomUUID(),cells:[0,0]}));
+  assert.deepEqual(db.prepare('SELECT data FROM kp_duel_pve_secrets WHERE id=?').get(one.id),before);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM kp_duel_pve_actions').get()?.n,0);
+  assert.equal(db.prepare('SELECT version FROM kp_duel_pve_sessions WHERE id=?').get(one.id)?.version,0);
+ }finally{db.close();}
+});
+test('D1 trigger rejects stale versions and keeps the old snapshot untouched',async()=>{
+ const {db,env}=fixture();
+ try{
+  await ensureServerPveTables(env);
+  const one=await serverPveOperation(env,'g','alice',{action:'start',game:'connect4',level:'normal',requestId:randomUUID()});
+  assert.throws(()=>db.prepare(`INSERT INTO kp_duel_pve_actions
+   (id,guild,user,session_id,expected_version,at,board,turn,winner,human_moves,cpu_moves)
+   VALUES(?,?,?,?,?,?,?,?,?,?,?)`).run(randomUUID(),'g','alice',one.id,100,123,'fake','finished','human',1,0),/version conflict/i);
+  assert.equal(db.prepare('SELECT version FROM kp_duel_pve_sessions WHERE id=?').get(one.id)?.version,0);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM kp_duel_pve_actions').get()?.n,0);
+ }finally{db.close();}
+});
+test('active-session cap limits unbounded D1 cost while preserving idempotent retries',async()=>{
+ const {db,env}=fixture();
+ try{
+  const requests=Array.from({length:4},()=>randomUUID());
+  for(let i=0;i<3;i++)await serverPveOperation(env,'g','alice',{action:'start',game:'gomoku',level:'easy',requestId:requests[i]});
+  await assert.rejects(()=>serverPveOperation(env,'g','alice',{action:'start',game:'gomoku',level:'easy',requestId:requests[3]}));
+  const one=await serverPveOperation(env,'g','alice',{action:'start',game:'gomoku',level:'easy',requestId:requests[0]});
+  assert.equal(one.version,0);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM kp_duel_pve_sessions').get()?.n,3);
+ }finally{db.close();}
+});
+test('schema has dedicated secrets and immutable action identity',()=>{
+ assert.ok(DUEL_PVE_SESSION_DDL.some(sql=>sql.includes('kp_duel_pve_secrets')));
+ assert.ok(DUEL_PVE_SESSION_DDL.some(sql=>sql.includes('PRIMARY KEY')&&sql.includes('kp_duel_pve_actions')));
+});
