@@ -21,6 +21,15 @@ const a='[data-demo-view=a]',b='[data-demo-view=b]';
  await page.goto(url,{waitUntil:'networkidle'});
  assert.match(await page.title(),/決闘デモ/);
  assert.equal(await page.locator('#duel-game option').count(),6);
+ // Rotate the simulated mobile viewport; preserve the selected game and controls.
+ await page.locator('#demo-mode').selectOption('poker');
+ await page.setViewportSize({width:844,height:390});
+ assert.equal(await page.locator('#duel-game').inputValue(),'poker','landscape retains selection');
+ assert.equal(await page.locator('#duel-game option').count(),6,'all games available in landscape');
+ assert.equal(await page.locator('[data-duel-act=create]').count(),1,'invite control survives landscape');
+ await page.setViewportSize({width:390,height:844});
+ assert.equal(await page.locator('#duel-game').inputValue(),'poker','portrait restores without losing choice');
+ await page.locator('#demo-mode').selectOption('othello');
  // Simulate only a visible error label in the mock Activity. No API or wallet call.
  await page.evaluate(()=>{
    const warn=document.createElement('div');
