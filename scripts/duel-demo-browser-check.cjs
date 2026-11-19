@@ -534,6 +534,39 @@ const a='[data-demo-view=a]',b='[data-demo-view=b]';
   assert.equal(await animatedPage.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'Hit & Blow fits iPhone width '+width);
  }
  if(shotDir)await animatedPage.screenshot({path:resolve(shotDir,'07-hitblow-new-feedback-'+engine+'.png'),fullPage:true,animations:'disabled'});
+ // P9.4 responsive standalone PvE page: test public snapshots without a
+ // session token or any production Worker request. This is a UI/layout test.
+ const pvePage=await ctx.newPage();
+ pvePage.on('pageerror',e=>errors.push(e.message));
+ await pvePage.goto('http://127.0.0.1:'+port+'/duel-pve.html',{waitUntil:'networkidle'});
+ assert.match(await pvePage.locator('#pve-root').innerText(),/KP口座/);
+ for(const game of ['othello','gomoku','connect4','hitblow','bluffdice','poker']){
+  await pvePage.evaluate(async mode=>{
+   const {pvePanel}=await import('./duel-pve/view.js?v=p94c');
+   const board=mode==='othello'?'.'.repeat(27)+'WB'+'.'.repeat(6)+'BW'+'.'.repeat(27):
+    mode==='gomoku'?'.'.repeat(225):mode==='connect4'?'.'.repeat(42):
+    mode==='hitblow'?JSON.stringify({history:[],turn:'a'}):
+    mode==='bluffdice'?JSON.stringify({round:1,winsA:0,winsB:0,bid:null,history:[]}):
+    JSON.stringify({doneA:false,doneB:false,turn:'a'});
+   const ownHand=mode==='hitblow'?{kind:mode,value:'0123'}:
+    mode==='bluffdice'?{kind:mode,value:[1,2,3,4,5]}:
+    mode==='poker'?{kind:mode,value:[0,6,12,18,24]}:null;
+   document.querySelector('#pve-root').innerHTML=pvePanel({
+    match:{game:mode,level:'normal',board,ownHand,turn:'human',winner:null,version:0},
+    connected:true
+   });
+  },game);
+  for(const width of [375,390]){
+   await pvePage.setViewportSize({width,height:844});
+   assert.equal(await pvePage.locator('.duel-pve-panel').isVisible(),true,'PvE panel '+game);
+   assert.equal(await pvePage.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'PvE no overflow '+game+' '+width);
+   assert.match(await pvePage.locator('.duel-pve-status').innerText(),/あなたの手番/);
+  }
+  if(shotDir){
+   await pvePage.screenshot({path:resolve(shotDir,'08-pve-'+game+'-'+engine+'.png'),fullPage:true,animations:'disabled'});
+  }
+ }
+ await pvePage.close();
  await animatedCtx.close();
  assert.deepEqual(requests,[],'demo must never call KP/Discord or Worker endpoints');
  assert.deepEqual(errors,[],'browser runtime errors');
