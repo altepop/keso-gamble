@@ -321,7 +321,7 @@ function enhance(root) {
     const hasMembers=!form.querySelector('.duel-opponent-help[role="status"]');
     const stake=Number(form.querySelector('#duel-stake')?.value);
     const displayed=root.querySelector('.topbar .badge')?.textContent||'';
-    const match=/^\\s*([\\d,]+)\\s*KP/.exec(displayed);
+    const match=/^\s*([\d,]+)\s*KP/.exec(displayed);
     const cash=match?Number(match[1].replaceAll(',','')):NaN;
     const canAfford=Number.isSafeInteger(cash)&&Number.isSafeInteger(stake)&&stake>0?cash>=stake:null;
     const retry=!!root.querySelector('[data-duel-retry]');
