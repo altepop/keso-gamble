@@ -286,6 +286,18 @@ function enhance(root) {
    if(!table){bluffPrevious=null;bluffMotion=null;lastBluffTable=null;return;}
    if(table===lastBluffTable)return;
    lastBluffTable=table;
+   // Phase 7: fold nonessential guidance while preserving actual game controls.
+   const supplementary=table.querySelector('.duel-bluff-odds');
+   if(supplementary && !supplementary.closest('[data-duel-mobile-detail="bluffdice"]')){
+     const details=document.createElement('details');
+     details.dataset.duelMobileDetail='bluffdice';
+     details.className='duel-mobile-detail';
+     const heading=document.createElement('summary');
+     heading.textContent='確率・判断の補足';
+     supplementary.before(details);
+     details.append(heading,supplementary);
+   }
+
    const now=performance.now();
    const current={
     id:table.dataset.bluffMatch,

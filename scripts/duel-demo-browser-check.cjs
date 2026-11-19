@@ -310,6 +310,7 @@ const a='[data-demo-view=a]',b='[data-demo-view=b]';
   assert.equal(await page.locator('.duel-bluff-hand .duel-bluff-die').count(),5,'B sees only their own five dice');
   assert.equal(await page.locator('.duel-bluff-showdown').count(),previousHistory?1:0,'the *new* round stays private; an already revealed prior round may remain visible');
   assert.equal(Number(await page.locator('.duel-bluff-table').getAttribute('data-bluff-history-count')),previousHistory,'making a bid does not reveal this round');
+  await page.locator('[data-duel-mobile-detail="bluffdice"] > summary').click();
   assert.match(await page.locator('.duel-bluff-odds').innerText(),/相手5個を公平なダイスと仮定/);
   await page.locator('[data-duel-mini=challenge]').click();
   assert.equal(await page.locator('.duel-bluff-reveal-dice .duel-bluff-die').count(),10,'ten dice are revealed only after challenge');
