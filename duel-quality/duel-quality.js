@@ -160,6 +160,24 @@ export function describeDuelActionHint({game='',canAct=false,available=0,selecte
   default:return null;
  }
 }
+
+// Only classify labels already displayed by the official duel room. Not a
+// replacement for server status or an attempt to count unloaded history.
+export function classifyVisibleDuelHistoryLabel(label){
+ const after=String(label??'').split('·').at(-1)?.trim()??'';
+ if(after==='終了')return 'finished';
+ if(after==='対局中'||after==='招待中')return 'ongoing';
+ return 'other';
+}
+export function summarizeLoadedDuelHistory(labels=[]){
+ if(!Array.isArray(labels))return null;
+ const counts={all:labels.length,ongoing:0,finished:0};
+ for(const label of labels){
+  const state=classifyVisibleDuelHistoryLabel(label);
+  if(state==='ongoing'||state==='finished')counts[state]++;
+ }
+ return counts;
+}
 function enhance(root) {
   let previous = null, motion = null, lastBoard = null, lastOthello = null;
   let c4Previous=null,c4Motion=null,lastC4Board=null;
@@ -535,8 +553,85 @@ function enhance(root) {
       details.append(list);area.anchor.after(details);
     }
   }
+
+  let historyFilter='all';
+  function scanHistoryReview(){
+    const history=root.querySelector('.duel-history .card-body');
+    if(!history)return;
+    const matches=[...history.querySelectorAll('.duel-match[data-duel-select]')];
+    const counts=summarizeLoadedDuelHistory(matches.map(el=>el.querySelector('small')?.textContent));
+    let toolbar=history.querySelector('[data-duel-history-filter-bar]');
+    if(!toolbar){
+      toolbar=document.createElement('div');toolbar.className='duel-history-filter';
+      toolbar.dataset.duelHistoryFilterBar='1';
+      toolbar.setAttribute('role','group');toolbar.setAttribute('aria-label','読み込み済み対戦履歴の絞り込み');
+      const labels=[['all','すべて'],['ongoing','進行中'],['finished','終了済み']];
+      for(const [key,label] of labels){
+        const button=document.createElement('button');button.type='button';
+        button.dataset.duelHistoryFilter=key;button.textContent=label;
+        toolbar.append(button);
+      }
+      const note=document.createElement('p');note.className='duel-history-filter-note';
+      note.dataset.duelHistoryFilterNote='1';toolbar.append(note);
+      const heading=history.querySelector('.duel-heading');
+      if(heading)heading.after(toolbar);else history.prepend(toolbar);
+    }
+    for(const button of toolbar.querySelectorAll('[data-duel-history-filter]')){
+      const mode=button.dataset.duelHistoryFilter;
+      const label=mode==='all'?'すべて':mode==='ongoing'?'進行中':'終了済み';
+      const next=label+' '+counts[mode]+'件';
+      if(button.textContent!==next)button.textContent=next;
+      button.setAttribute('aria-pressed',String(historyFilter===mode));
+    }
+    let visible=0;
+    for(const match of matches){
+      const type=classifyVisibleDuelHistoryLabel(match.querySelector('small')?.textContent);
+      const show=historyFilter==='all'||type===historyFilter;
+      match.hidden=!show;if(show)visible++;
+    }
+    const note=toolbar.querySelector('[data-duel-history-filter-note]');
+    const next=visible?'読み込み済み'+counts.all+'件から表示中。過去の履歴すべてではない。':
+       '該当する対戦は読み込み済みの履歴にない。絞り込みを変えると元に戻せる。';
+    if(note.textContent!==next)note.textContent=next;
+  }
+  function scanFinishedReview(){
+    const arena=root.querySelector('.duel-current .duel-arena');
+    if(!arena)return;
+    const result=arena.querySelector('.duel-result');
+    const existing=arena.querySelector('[data-duel-finished-review]');
+    if(!result){existing?.remove();return;}
+    if(existing?.dataset.duelReviewResult===result.textContent.trim())return;
+    existing?.remove();
+    const details=document.createElement('details');
+    details.className='duel-finished-review';
+    details.dataset.duelFinishedReview='1';
+    details.dataset.duelReviewResult=result.textContent.trim();
+    const head=document.createElement('summary');
+    head.textContent='この対戦を振り返る｜確定結果と公開済み記録';
+    details.append(head);
+    const body=document.createElement('dl');
+    const fields=[['確定結果',result.textContent.trim()]];
+    const counts=arena.querySelector('.duel-counts')?.textContent.trim();
+    if(counts)fields.push(['盤面に表示された石数',counts]);
+    const publicRecord=arena.querySelector('[data-poker-reveal="true"]')?'両者の公開済み手札と役の比較が盤面に表示されている。':
+      arena.querySelector('.duel-bluff-history')?'公開されたラウンド結果を「過去の結果」から確認できる。':
+      arena.querySelector('.duel-move-history')?'この端末で観測した着手だけを確認できる。':
+      arena.querySelector('.duel-hb-history')?'公開済みの予想結果を履歴から確認できる。':
+      'この画面に公開されている盤面・結果を確認できる。';
+    fields.push(['公開済み記録',publicRecord]);
+    for(const [label,value] of fields){
+      const dt=document.createElement('dt');dt.textContent=label;
+      const dd=document.createElement('dd');dd.textContent=value;
+      body.append(dt,dd);
+    }
+    details.append(body);
+    const caveat=document.createElement('p');caveat.textContent='表示済みの確定情報のみ。取得していない過去の手や非公開情報は補完しない。';
+    details.append(caveat);result.after(details);
+  }
   function scan() {
     scanBeginnerRules();
+    scanHistoryReview();
+    scanFinishedReview();
     scanDuelJourney();
     scanRematchGuide();
     scanInviteReadiness();
@@ -658,6 +753,12 @@ function enhance(root) {
   root.addEventListener('change',event=>{
     if(['duel-game','duel-stake','duel-target'].includes(event.target?.id))preparedRematchId=null;
   },{passive:true});
+  root.addEventListener('click',event=>{
+    const clicked=event.target.closest?.('[data-duel-history-filter]');
+    if(!clicked||!root.contains(clicked))return;
+    historyFilter=clicked.dataset.duelHistoryFilter;
+    scanHistoryReview();
+  });
   const observer = new MutationObserver(scan);
   observer.observe(root, {childList: true, subtree: true});
   root.addEventListener('input',event=>{
