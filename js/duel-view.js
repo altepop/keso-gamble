@@ -90,7 +90,7 @@ function boardView(r,info,user,busy,confirmResign,gomokuPreviewCell=null,recentM
  </div>`;
  return section;
 }
-export function duelScreen({info,user,live,cash,selectedId,game='othello',stake=1000,target='',busy=false,error='',confirmResign=false,pokerPicks=[],fallbackMembers=[],opponentPickerOpen=false,loading=false,nav='',gomokuPreviewCell=null,recentMoves=null,localMoveHistory=null,guessDraft='',riskConfirm='',lastSynced=0,pendingRetry=false,historyHasMore=false}){
+export function duelScreen({info,user,live,cash,selectedId,game='othello',stake=1000,target='',busy=false,error='',confirmResign=false,pokerPicks=[],fallbackMembers=[],opponentPickerOpen=false,loading=false,nav='',gomokuPreviewCell=null,recentMoves=null,localMoveHistory=null,guessDraft='',riskConfirm='',lastSynced=0,pendingRetry=false,historyHasMore=false,pveMarkup=''}){
  const matches=info?.matches??[],chosen=matches.find(r=>r.id===selectedId)||matches.find(r=>r.status==='active'||r.status==='pending')||matches[0];
  const members=(info?.members?.length?info.members:fallbackMembers).filter(m=>m&&typeof m.id==='string'&&m.id!==user);
  const invited=chosen?.status==='pending',mine=chosen?.user_a===user;
@@ -124,6 +124,7 @@ export function duelScreen({info,user,live,cash,selectedId,game='othello',stake=
  const retryNotice=pendingRetry?'<div class="storage-warning duel-error" role="alert"><strong>前回の対戦操作が未確認です。</strong><p>別の操作は送らず、同じ操作IDを使って結果を確認してください。</p><button type="button" class="action-btn primary" data-duel-retry="1" '+(busy?'disabled':'')+'>前回の操作を確認</button></div>':'';
  const moreNotice=historyHasMore?'<div class="duel-history-more"><button type="button" class="action-btn" data-duel-history-more="1" '+(busy?'disabled':'')+'>過去の対戦を20件ずつ読み込む</button><p class="helper">このボタンを押した場合だけ過去の対戦を取得する。</p></div>':'';
  return `<div class="screen"><header class="topbar"><div class="toprow"><h1 class="title">⚔️ 決闘</h1><div class="small-actions"><span class="badge">${kp(cash)}</span></div></div></header>
+ ${pveMarkup}
  <div class="duel-practice-entry"><div><strong>CPUと練習する</strong><p>相手が手を返してくる練習対戦。6モードすべて、実KP消費なし。iPhoneでも何度でも試せる。</p></div><a class="action-btn primary" href="./duel-demo.html?cpu=1">CPUとの練習を始める</a></div>
  ${syncNotice}${retryNotice}
  ${chosen?`<div class="duel-current">
