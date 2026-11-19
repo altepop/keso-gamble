@@ -28,7 +28,7 @@ export function evaluateBoardDuelTerminal(
  return evaluateVerifiedDuelProgression({
   origin:'server',guild:row.guild,matchId:row.id,user,opponent,
   mode:'pvp',game:row.game as DuelProgressionGame,status:'finished',
-  finishReason:row.action_kind==='move'?'natural':row.action_kind,
+  finishReason:row.action_kind==='move'?'natural':row.action_kind==='resign'?'resign':'timeout',
   outcome:row.winner==='draw'?'draw':row.winner===user?'win':'loss',
   verifiedTerminal:row.action_kind==='move'
  });
