@@ -29,7 +29,7 @@ test('pending or disconnected sessions cannot send new operations',()=>{
  const disabled=pvePanel({match:state('connect4'),connected:true,pending:true});
  assert.match(disabled,/同じ操作IDで確認/);
  assert.match(disabled,/data-pve-submit="start" disabled/);
- assert.match(disabled,/data-pve-col="3" disabled/);
+ assert.match(disabled,/data-pve-col="3"\s+disabled/);
  const offline=pvePanel({connected:false});
  assert.match(offline,/data-pve-submit="start" disabled/);
 });
