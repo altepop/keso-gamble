@@ -1,3 +1,4 @@
+import {coachPositionQuality} from './coach-position-quality.ts';
 import {enrichExistingCoachEvidence} from './coach-evidence-enrichment.ts';
 import {coachProviderShape} from './coach-provider-shape.ts';
 import {vdkRescuePress,vdkRescueStatus} from './vdk-rescue-press.ts';
@@ -177,13 +178,15 @@ async function api<T>(env: Env, path: string): Promise<T> {
   if (body.data === undefined) throw new Error('Unexpected API data');
   try{if(path.startsWith('/valorant/v4/match/')||path.startsWith('/valorant/v4/matches/')||path.startsWith('/valorant/v4/by-puuid/matches/')){
     let observed:ReturnType<typeof coachProviderShape>=null;
+    let positionEvidence:ReturnType<typeof coachPositionQuality>=null;
     for(const raw of (Array.isArray(body.data)?body.data:[body.data])){
       const shape=coachProviderShape(raw,path.startsWith('/valorant/v4/match/')?'detail':'history');if(shape&&raw&&typeof raw==='object'){
         Object.defineProperty(raw,'_coachProviderShape',{value:shape,enumerable:false,configurable:true});
-        if(!observed||shape.queue==='competitive'&&observed.queue!=='competitive'||shape.queue===observed.queue&&shape.completed&&!observed.completed)observed=shape;
+        if(!observed||shape.queue==='competitive'&&observed.queue!=='competitive'||shape.queue===observed.queue&&shape.completed&&!observed.completed){observed=shape;positionEvidence=coachPositionQuality(raw,path.startsWith('/valorant/v4/match/')?'detail':'history');}
       }
     }
     if(observed)console.info('coach_provider_shape',observed);
+    if(positionEvidence)console.info('coach_position_quality',positionEvidence);
   }}catch{console.info('coach_provider_shape_unavailable');}
   return body.data;
 }
