@@ -190,6 +190,20 @@ function enhance(root) {
   let gomokuPrevious=null,gomokuLast=null,gomokuBoard=null;
   const gomokuZoom=new Map();
   const zoomLevels=[44,52,60,72];
+  // Record only a local gesture followed by a same-match confirmed single move.
+  // Read-only, memory-only. These values cannot establish opponent-side latency.
+  function recordConfirmedLocalMove(game,id,now){
+    const tap=root.__duelPendingTap;
+    if(!tap||tap.game!==game||tap.id!==id)return;
+    delete root.__duelPendingTap;
+    const ms=Math.round(now-tap.at);
+    if(document.hidden||ms<0||ms>20000)return;
+    const samples=Array.isArray(root.__duelRenderSamples)?root.__duelRenderSamples:[];
+    samples.push({game,ms,confirmed:true,method:'local-gesture-to-confirmed-render'});
+    if(samples.length>100)samples.splice(0,samples.length-100);
+    root.__duelRenderSamples=samples;
+    root.__duelRenderSummary=summarizeDuelRenderSamples(samples);
+  }
   function scanHitBlow(){
    const table=root.querySelector('.duel-hb-table[data-hb-match]');
    if(!table){hbPrevious=null;hbMotion=null;lastHbTable=null;return;}
@@ -289,7 +303,7 @@ function enhance(root) {
       &&now-c4Previous.at<20000&&!document.hidden
       ?classifyConnect4Transition(c4Previous.state,state):null;
     c4Previous={id,version,state,at:now};
-    if(change)c4Motion={...change,id,version,state,started:now};
+    if(change){c4Motion={...change,id,version,state,started:now};recordConfirmedLocalMove('connect4',id,now);}
     // The same confirmed move may be rerendered after a KP refresh. Resume
     // its progress; do not animate untouched chips or overwrite server state.
     const move=c4Motion,elapsed=move?now-move.started:Infinity;
@@ -355,7 +369,7 @@ function enhance(root) {
       // forget the earlier last-move marker rather than label an old move new.
       if(before&&(before.id!==id||before.version!==version)&&!change)gomokuLast=null;
       gomokuPrevious={id,version,state,at:now};
-      if(change)gomokuLast={...change,id,version,state,started:now};
+      if(change){gomokuLast={...change,id,version,state,started:now};recordConfirmedLocalMove('gomoku',id,now);}
     }
     const last=gomokuLast;
     const status=arena?.querySelector('[data-gomoku-last-status]');
@@ -744,7 +758,7 @@ function enhance(root) {
         if(duration >= 0 && duration <= 20000 && !document.hidden){
           root.__duelTapToConfirmedMs = duration;
           const samples = Array.isArray(root.__duelRenderSamples) ? root.__duelRenderSamples : [];
-          samples.push({game:'othello',ms:duration,confirmed:true});
+          samples.push({game:'othello',ms:duration,confirmed:true,method:'local-gesture-to-confirmed-render'});
           if(samples.length>100)samples.splice(0,samples.length-100);
           root.__duelRenderSamples = samples;
           root.__duelRenderSummary = summarizeDuelRenderSamples(samples);
@@ -861,6 +875,15 @@ function enhance(root) {
     help.classList.toggle('valid',valid);
   },{passive:true});
   root.addEventListener('pointerdown', event => {
+    const c4=event.target.closest?.('.duel-connect4-board [data-duel-cell], .duel-connect4-board button');
+    const gomoku=event.target.closest?.('[data-duel-confirm-cell]');
+    const game=c4?'connect4':gomoku?'gomoku':null;
+    if(!game||event.target.closest?.(':disabled'))return;
+    const board=game==='connect4'?event.target.closest?.('[data-c4-match]'):root.querySelector('.duel-board.duel-gomoku[data-gomoku-match]');
+    const id=game==='connect4'?board?.dataset.c4Match:board?.dataset.gomokuMatch;
+    if(id)root.__duelPendingTap={game,id,at:performance.now()};
+  },{passive:true});
+  root.addEventListener('pointerdown', event => {
     const square = event.target.closest?.('.duel-othello .duel-square.available:not(:disabled)');
     if (square) {
       root.__duelTapAt = performance.now();
@@ -872,7 +895,7 @@ function enhance(root) {
   for (const event of ['pointerup', 'pointercancel']) {
     root.addEventListener(event, () => root.querySelectorAll('.duel-tap-feedback').forEach(x => x.classList.remove('duel-tap-feedback')), {passive: true});
   }
-  addEventListener('visibilitychange', () => { if (document.hidden) { previous = null; c4Previous=null; c4Motion=null; bluffPrevious=null; bluffMotion=null; pokerPrevious=null; pokerMotion=null; hbPrevious=null; hbMotion=null; gomokuPrevious=null; gomokuLast=null; gomokuBoard=null; delete root.__duelTapAt; delete root.__duelTapIdentity; } });
+  addEventListener('visibilitychange', () => { if (document.hidden) { previous = null; c4Previous=null; c4Motion=null; bluffPrevious=null; bluffMotion=null; pokerPrevious=null; pokerMotion=null; hbPrevious=null; hbMotion=null; gomokuPrevious=null; gomokuLast=null; gomokuBoard=null; delete root.__duelTapAt; delete root.__duelTapIdentity; delete root.__duelPendingTap; } });
   scan();
 }
 if (typeof document !== 'undefined' && typeof MutationObserver !== 'undefined') {
