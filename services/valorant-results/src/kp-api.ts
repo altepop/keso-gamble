@@ -1,3 +1,4 @@
+import {readCoachGoals,parseCoachGoal,saveCoachGoal,GoalError} from './coach-goals.ts';
 import {resolveCoachIdentity,publicCoachIdentity} from './coach-identity.ts';
 import {projectCoachSelfReport} from './coach-self-report.ts';
 import {escalationRatingView} from './escalation-rating.ts';
@@ -420,6 +421,13 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping,deferP
   const coachOwner=mapping.accounts.some(a=>a.discordUserId===owner.user&&a.riotId.toLowerCase()==='dolly#sdgs');
   const memberHistoryOwner=mapping.accounts.some(a=>a.discordUserId===owner.user&&
     ['aquatopia#toppy','abema#ttv','dolly#sdgs'].includes(a.riotId.toLowerCase()));
+  if(path==='/api/kp/coach/goals'&&(request.method==='GET'||request.method==='POST')){
+    const identity=await resolveCoachIdentity(env.DB,mapping,owner.user);
+    if(identity.status!=='linked')return response({error:'本人のアカウント対応を確認してください。'},identity.status==='conflict'?409:404);
+    if(request.method==='GET')return response(await readCoachGoals(env.DB,mapping.guildId,identity.subjectId));
+    try{return response(await saveCoachGoal(env.DB,mapping.guildId,identity.subjectId,await parseCoachGoal(request)));}
+    catch(e){if(e instanceof GoalError)return response({error:e.message},e.status);throw e;}
+  }
   if(request.method==='GET'&&path.startsWith('/api/kp/coach/')){
     if(path==='/api/kp/coach/rounds')return response({error:'表示方法が更新されました。ページを再読み込みしてください。'},410);
     if(path==='/api/kp/coach/comparison'||path==='/api/kp/coach/summary')return response({error:'この表示は利用できません。'},404);
@@ -431,10 +439,11 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping,deferP
       const person=path==='/api/kp/coach/member'?(new URL(request.url).searchParams.get('person')??''):identity.person;
       if(person!==identity.person&&!identity.accounts.some(a=>a.profile===person))return response({error:'この表示は利用できません。'},404);
       if(path!=='/api/kp/coach/members/status'&&await d1OptionalMode(env))return response({error:'D1節約モード中です。時間を置いてから確認してください。'},429);
+      const goals=path==='/api/kp/coach/member'?undefined:await readCoachGoals(env.DB,mapping.guildId,identity.subjectId);
       const coverage=await coachMemberCoverage(env.DB,identity.accounts.map(a=>a.riotId));
-      if(path==='/api/kp/coach/members/status')return response({identity:publicCoachIdentity(identity),memberHistory:coverage,canStartMemberHistory:memberHistoryOwner,canResume:coachOwner});
+      if(path==='/api/kp/coach/members/status')return response({identity:publicCoachIdentity(identity),goals,memberHistory:coverage,canStartMemberHistory:memberHistoryOwner,canResume:coachOwner});
       const report=projectCoachSelfReport(await readCoachMemberReport(env.DB,person,coverage,identity.accounts));
-      return path==='/api/kp/coach/member'?response(report):response({identity:publicCoachIdentity(identity),report,memberHistory:coverage,canStartMemberHistory:memberHistoryOwner,canResume:coachOwner});
+      return path==='/api/kp/coach/member'?response(report):response({identity:publicCoachIdentity(identity),report,goals,memberHistory:coverage,canStartMemberHistory:memberHistoryOwner,canResume:coachOwner});
     }
   }
   if(request.method==='POST'&&path==='/api/kp/coach/members/start'){

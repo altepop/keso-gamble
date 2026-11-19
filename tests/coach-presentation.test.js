@@ -54,3 +54,12 @@ test('all seven prototype artworks preserve the original uploaded PNG bytes',()=
 test('registered headings do not concatenate a dictionary-form verb with a noun suffix',()=>{
  for(const title of Object.values(copy.headings))assert.doesNotMatch(title,/(確認を確認|るを確認|うを確認|くを確認|ないを確認|？を確認)/,title);
 });
+
+test('private goal headings are explicitly registered and helper uses content-addressed URL',()=>{
+ const code=readFileSync(new URL('../coach/goals.js',import.meta.url),'utf8');
+ const context={};vm.runInNewContext(code,context);
+ assert.equal(Object.keys(context.KesoCoachGoals.headings).length,3);
+ for(const text of Object.values(context.KesoCoachGoals.headings))assert.match(text,/ます$/);
+ assert.ok(html.includes('goals.js?v=coach-'+createHash('sha256').update(code).digest('hex').slice(0,12)));
+ assert.doesNotMatch(code,/\b(?:sessionStorage|localStorage)\b|\bfetch\s*\(|innerHTML\s*=/);
+});

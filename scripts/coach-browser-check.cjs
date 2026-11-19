@@ -69,10 +69,19 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   await ctx.addInitScript(()=>Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async text=>{window.__copiedDiagnostic=text;}}}));
   const requests=[];
   const identity={status:'linked',displayName:'神戸',defaultProfile:'神戸',visibility:'private',pendingAccounts:0,accountOptions:[{profile:'Abema',label:'Abema#ttv'},{profile:'Aquatopia',label:'Aquatopia#toppy'}]};
-  const state={identity,memberHistory:{enabled:true,supportsPause:true,people:[{person:'神戸',discovered:2,complete:2}]},canStartMemberHistory:false};
+  const {goalPolicy}=await import('../services/valorant-results/src/coach-goals.ts');
+  const state={goals:{policy:goalPolicy(),goals:[],history:[],historyLimit:20},identity,memberHistory:{enabled:true,supportsPause:true,people:[{person:'神戸',discovered:2,complete:2}]},canStartMemberHistory:false};
   await ctx.route('https://valorant-results.tealeaforest.workers.dev/**',async route=>{
    const req=route.request(),url=new URL(req.url());requests.push({url:req.url(),method:req.method(),auth:req.headers().authorization});
    if(req.headers().authorization==='Bearer '+'b'.repeat(48))return route.fulfill({json:{identity:{status:'unregistered'},report:null}});
+   if(url.pathname==='/api/kp/coach/goals'){
+    if(req.method()==='GET')return route.fulfill({json:state.goals});
+    const b=req.postDataJSON(),old=state.goals.goals.find(g=>g.goalId===b.goalId);
+    if(old&&b.expectedVersion!==old.version)return route.fulfill({status:409,json:{error:'別の画面で更新されています。'}});
+    const goal={...b,version:(old?.version||0)+1,createdAt:0,updatedAt:1};state.goals.goals=state.goals.goals.filter(g=>g.goalId!==goal.goalId);
+    if(goal.status==='active')state.goals.goals.push(goal);else state.goals.history.unshift(goal);
+    return route.fulfill({json:{goal,created:!old}});
+   }
    if(url.pathname==='/api/kp/coach/me')return route.fulfill({json:{...state,report:projectCoachSelfReport(makeMember('神戸'))}});
    if(url.pathname==='/api/kp/coach/member')return route.fulfill({json:projectCoachSelfReport(makeMember(url.searchParams.get('person')))});
    if(url.pathname==='/api/kp/coach/members/status')return route.fulfill({json:state});
@@ -102,7 +111,12 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   assert.equal(await page.locator('[data-analysis-details]').evaluate(el=>el.open),false);
   assert.equal(await page.locator('[data-other-practice]').evaluate(el=>el.open),false);
   assert.equal(await page.locator('[data-pdca-step="task"]').getAttribute('aria-current'),'step');
-  if(process.env.COACH_V6_SCREENSHOTS_DIR)await require('./coach-prototype-visual.cjs')({browser,page,root,output:process.env.COACH_V6_SCREENSHOTS_DIR});
+  if(process.env.COACH_V6_SCREENSHOTS_DIR)await require('./coach-prototype-visual.cjs')({browser,root,output:process.env.COACH_V6_SCREENSHOTS_DIR,createActualPage:async options=>{
+   const context=await browser.newContext(options);
+   await context.addInitScript(t=>localStorage.setItem('keso-kp-session-v1',t),token);
+   await context.route('https://valorant-results.tealeaforest.workers.dev/**',route=>route.fulfill({json:{...state,report:projectCoachSelfReport(makeMember('神戸'))}}));
+   return context.newPage();
+  }});
   await page.locator('[data-analysis-details] > summary').click();
   assert.match(await page.locator('#member-result').innerText(),/Abema#ttv/);
   assert.match(await page.locator('#member-result').innerText(),/Aquatopia#toppy/);
@@ -258,11 +272,51 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   await page.waitForFunction(()=>document.querySelector('.prototype-top .playerline .name')?.textContent==='神戸');
   assert.equal(requests.length,3);assert.ok(requests[2].url.endsWith('/coach/me'));
   for(const width of [320,375,1440]){await page.setViewportSize({width,height:900});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'layout '+width);}
+  const japanese=await page.locator('.coach-existing p,.coach-existing li,#coach-operations p').evaluateAll(nodes=>[...new Set(nodes.flatMap(n=>(n.textContent||'').match(/[^。！？]+[。！？]/gu)||[]))]);
+  const dictionaryEnds=japanese.filter(t=>/(?:[^ま]した|できる|できない|補わない|だけ|ではない|である|必要だ|確認する|断定しない|影響する|数える|決まる|異なる|とする|持つ|わかる|分かる|求める|含まれる|保存される|判断できない|得られる|必要になる|揃わない|少ない|多い|低い|高い|出ない|変わらない|足りない|違う|はない|を指す|と呼ぶ)。(?:$)/u.test(t));
+  assert.deepEqual(dictionaryEnds,[],'all seven tabs and folded legacy paragraphs use courteous sentence endings');
+  if(process.env.COACH_JAPANESE_AUDIT)require('node:fs').writeFileSync(process.env.COACH_JAPANESE_AUDIT,JSON.stringify({sentences:japanese.length,dictionaryEnds},null,2));
+  // Goal registration is optional, private, person-scoped and persisted by explicit saves.
+  const goals=page.locator('[data-coach-goals]'),processCard=goals.locator('[data-goal-kind="process"]');
+  await processCard.locator('> summary').click();
+  const form=processCard.locator('form');const previousCalls=requests.length;
+  await form.locator('[name="action"]').fill('<img src=x onerror=alert(1)> 遮蔽へ戻ります');
+  await form.locator('[name="step0"]').fill('最初の交戦前に遮蔽を決めます');
+  await form.locator('[name="selfCheck"]').fill('録画で最初の3交戦を振り返ります');
+  await form.locator('[name="targetDate"]').fill('2026-01-01');
+  assert.equal(requests.length,previousCalls,'typing never writes');
+  await form.locator('button[type="submit"]').focus();await page.keyboard.press('Enter');
+  await goals.locator('[role="status"]').filter({hasText:'保存しました'}).waitFor();
+  assert.equal(await goals.locator('img').count(),0,'goal HTML is plain text');
+  assert.match(await processCard.innerText(),/目標日を過ぎています/);
+  await page.locator('#member-coaching-panel').evaluate(el=>el.open=true);await page.locator('[data-member="Aquatopia"]').click();
+  await page.waitForFunction(()=>document.querySelector('.prototype-top .playerline .name')?.textContent==='Aquatopia');
+  assert.equal(await form.locator('[name="action"]').inputValue(),'<img src=x onerror=alert(1)> 遮蔽へ戻ります','same person shares goals across own accounts');
+  // Simulate a simultaneous edit on a second device.
+  state.goals.goals[0].version++;state.goals.goals[0].action='別端末で更新した目標';
+  await form.locator('[name="action"]').fill('入力中の変更は消しません');await form.locator('button[type="submit"]').click();
+  await goals.locator('[data-goal-reload]').waitFor();assert.equal(await form.locator('[name="action"]').inputValue(),'入力中の変更は消しません');
+  await goals.locator('[data-goal-reload]').click();await form.locator('[name="action"]').waitFor();
+  await page.waitForFunction(()=>document.querySelector('[name="action"]')?.value==='別端末で更新した目標');
+  await form.locator('[name="action"]').fill('😀'.repeat(201));const beforeLong=requests.length;await form.locator('button[type="submit"]').click();
+  await goals.locator('[role="status"]').filter({hasText:'文字数'}).waitFor();assert.equal(requests.length,beforeLong);
+  await form.locator('[name="action"]').fill('最初の3交戦を確認します');await form.locator('button[type="submit"]').click();
+  await goals.locator('[role="status"]').filter({hasText:'保存しました'}).waitFor();
+  for(const width of [320,375,1440]){await page.setViewportSize({width,height:900});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'goals form fits '+width);if(process.env.COACH_V6_SCREENSHOTS_DIR)await goals.screenshot({path:require('node:path').join(process.env.COACH_V6_SCREENSHOTS_DIR,'goals-form-'+width+'.png')});}
+  await form.locator('[data-goal-status="self-achieved"]').click();await goals.locator('[data-goal-history]').getByText(/本人が達成を記録（自己申告）/).waitFor({state:'attached'});await goals.locator('[data-goal-history]').evaluate(el=>el.open=true);
+  await goals.locator('[data-goal-history]').getByText(/本人が達成を記録（自己申告）/).waitFor();
+  const rank=goals.locator('[data-goal-kind="rank"]');await rank.locator('> summary').click();await rank.locator('select').selectOption('diamond3');await rank.locator('button[type="submit"]').click();
+  await goals.locator('[role="status"]').filter({hasText:'保存しました'}).waitFor();
+  await page.locator('#return-self').click();await page.waitForFunction(()=>document.querySelector('.prototype-top .playerline .name')?.textContent==='神戸');
+  await goals.locator('[data-goal-kind="rank"] > summary').click();assert.equal(await goals.locator('select').inputValue(),'diamond3','saved rank survives reloading');
+  assert.equal(await page.locator('.rankbox .r').first().innerText(),'未取得','target never becomes measured current rank');
+  await goals.locator('[data-goal-status="archived"]').click();await goals.locator('[role="status"]').filter({hasText:'保存しました'}).waitFor();
+  assert.deepEqual(errors,[]);
   await page.locator('#coach-operations').evaluate(el=>el.open=true);
   await page.evaluate(()=>Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async()=>{throw Error('clipboard unavailable');}}}));
   await page.locator('#share').click();await page.locator('#share-fallback:not([hidden])').waitFor();assert.ok((await page.locator('#share-fallback').inputValue()).includes('神戸'));
   await page.evaluate(()=>{localStorage.setItem('keso-kp-session-v1','b'.repeat(48));window.dispatchEvent(new Event('focus'));});
-  await page.getByRole('alert').filter({hasText:'まだ連携'}).first().waitFor();assert.equal(await page.locator('#share-fallback').inputValue(),'');assert.equal(await page.locator('[data-primary-mission]').count(),0);assert.equal(await page.locator('#report').isHidden(),true);
+  await page.getByRole('alert').filter({hasText:'まだ連携'}).first().waitFor();assert.equal(await page.locator('#share-fallback').inputValue(),'');assert.equal(await page.locator('[data-primary-mission]').count(),0);assert.equal(await page.locator('#report').isHidden(),true);assert.equal(await page.locator('[data-coach-goals]').count(),0);assert.equal(await page.locator('body').textContent().then(t=>t.includes('最初の3交戦を確認します')),false);
   await ctx.close();
   // Account switching must erase old graphs, copied text and late requests.
   const race=await browser.newContext({viewport:{width:375,height:812}});await race.addInitScript(t=>localStorage.setItem('keso-kp-session-v1',t),token);
@@ -283,6 +337,25 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   const emptyCtx=await browser.newContext({viewport:{width:320,height:812}});await emptyCtx.addInitScript(t=>localStorage.setItem('keso-kp-session-v1',t),token);
   await emptyCtx.route('https://valorant-results.tealeaforest.workers.dev/**',route=>route.fulfill({json:{...state,identity:{...identity,displayName:'VDK',defaultProfile:'VDK',accountOptions:[{profile:'VDK',label:'Dolly#SDGs'}]},report:emptyReport}}));
   const emptyPage=await emptyCtx.newPage(),emptyErrors=[];emptyPage.on('pageerror',e=>emptyErrors.push(e.message));await emptyPage.goto('http://127.0.0.1:18784/coach.html');await emptyPage.locator('[data-primary-mission]').waitFor();assert.equal(await emptyPage.locator('.prototype-top .playerline .name').innerText(),'VDK');assert.equal(await emptyPage.locator('.prototype-top .rankbox .r').first().innerText(),'未取得');assert.match(await emptyPage.locator('.prototype-top').innerText(),/記録|試合/);assert.equal(emptyReport.performance.overall.kd,null);assert.equal(await emptyPage.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);assert.deepEqual(emptyErrors,[]);await emptyCtx.close();
+  // Saving an old user's goal must never paint it after a session switch.
+  for(const scenario of ['late-save','unauthorized-save']){
+   const sc=await browser.newContext({viewport:{width:375,height:812}});await sc.addInitScript(t=>localStorage.setItem('keso-kp-session-v1',t),token);
+   let releaseSave;await sc.route('https://valorant-results.tealeaforest.workers.dev/**',async route=>{
+    const req=route.request();if(req.headers().authorization==='Bearer '+'b'.repeat(48))return route.fulfill({json:{identity:{status:'unregistered'},report:null}});
+    if(req.method()==='POST'){
+     if(scenario==='unauthorized-save')return route.fulfill({status:401,json:{error:'接続が切れました。'}});
+     await new Promise(resolve=>releaseSave=resolve);return route.fulfill({json:{goal:{...req.postDataJSON(),version:1},created:true}}).catch(()=>{});
+    }
+    return route.fulfill({json:{...state,goals:{...state.goals,goals:[],history:[]},report:projectCoachSelfReport(makeMember('神戸'))}});
+   });
+   const sp=await sc.newPage(),se=[];sp.on('pageerror',e=>se.push(e.message));await sp.goto('http://127.0.0.1:18784/coach.html');await sp.locator('[data-coach-goals]').waitFor();
+   await sp.locator('[data-goal-kind="process"] > summary').click();await sp.locator('[name="action"]').fill('古い所有者だけの目標');await sp.locator('[name="selfCheck"]').fill('録画で確認します');await sp.locator('[data-goal-form="process"] button[type="submit"]').click();
+   if(scenario==='late-save'){
+    while(!releaseSave)await new Promise(r=>setTimeout(r,20));await sp.evaluate(()=>{localStorage.setItem('keso-kp-session-v1','b'.repeat(48));window.dispatchEvent(new Event('focus'));});
+    await sp.getByRole('alert').filter({hasText:'まだ連携'}).first().waitFor();releaseSave();await sp.waitForTimeout(100);
+   }else await sp.getByRole('alert').filter({hasText:'もう一度ログイン'}).waitFor();
+   assert.equal(await sp.locator('[data-coach-goals]').count(),0);assert.ok(!(await sp.locator('body').textContent()).includes('古い所有者だけの目標'));assert.deepEqual(se,[]);await sc.close();
+  }
   console.log('KESO COACH self-first, private sessions, v6/practice regression and 320/375/1440 layout: OK');
  }finally{await browser.close();server.kill();}
 })().catch(e=>{console.error(e);server.kill();process.exitCode=1;});

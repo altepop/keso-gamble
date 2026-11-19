@@ -5,6 +5,8 @@ on:
       - 'services/valorant-results/**'
       - '.github/workflows/valorant-results.yml'
       - 'index.html'
+      - 'coach.html'
+      - 'coach/**'
       - 'js/**'
       - 'css/**'
       - 'assets/escalation-ranks/**'
@@ -22,6 +24,8 @@ on:
       - 'services/valorant-results/**'
       - '.github/workflows/valorant-results.yml'
       - 'index.html'
+      - 'coach.html'
+      - 'coach/**'
       - 'js/**'
       - 'css/**'
       - 'assets/escalation-ranks/**'
@@ -169,6 +173,17 @@ jobs:
           npm install --no-save playwright@1.63.0
           npx playwright install --with-deps chromium webkit
       - run: npm run test:browser:${{ matrix.suite }}
+        env:
+          COACH_V6_SCREENSHOTS_DIR: ${{ runner.temp }}/coach-v6-comparison
+          COACH_JAPANESE_AUDIT: ${{ runner.temp }}/coach-v6-comparison/japanese.json
+      - name: Keep prototype comparison and Japanese check evidence
+        if: always() && matrix.suite == 'extended'
+        uses: actions/upload-artifact@v7
+        with:
+          name: coach-v6-comparison
+          path: ${{ runner.temp }}/coach-v6-comparison
+          if-no-files-found: error
+          retention-days: 7
   # A failed or cancelled shard must fail the original 'browser' status.
   browser:
     needs: browser-shards
@@ -290,6 +305,12 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: node scripts/ensure-coach-profiles.mjs
+      - name: Ensure private coaching goals table
+        working-directory: ${{ runner.temp }}/kp-app/services/valorant-results
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/ensure-coach-goals.mjs
       - name: Read-only KESO COACH historical archive audit (aggregate counts only)
         working-directory: ${{ runner.temp }}/kp-app/services/valorant-results
         env:
@@ -331,7 +352,9 @@ jobs:
           KESO_SMOKE_WALLET_TOKEN: ${{ secrets.KESO_SMOKE_WALLET_TOKEN }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: node scripts/coach-profile-audit.mjs
+        run: |
+          node scripts/coach-profile-audit.mjs
+          node scripts/coach-goals-audit.mjs
       - name: Audit isolated position storage (aggregate evidence only)
         working-directory: ${{ runner.temp }}/kp-app/services/valorant-results
         env:
