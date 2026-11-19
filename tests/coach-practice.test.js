@@ -9,7 +9,7 @@ test('100 distinct authored experiments have actions, checks and inspected sourc
 test('manual goals and actual metric combinations change practice instead of personal names',()=>{
  const a=P.choose(report(),{minutes:20}),b=P.choose(report('Sage','センチネル',{kd:1.4,acs:270,adr:180,hsPct:30}),{minutes:20});
  assert.equal(a.signals[0].topic,'precision');assert.equal(b.signals[0].topic,'repeat');assert.notDeepEqual(a.selected.map(e=>e.id),b.selected.map(e=>e.id));
- const c=P.choose(report(),{goal:'cover',partner:'duo',minutes:20});assert.equal(c.signals[0].topic,'cover');assert.ok(c.selected.some(e=>e.category==='team'));
+ const c=P.choose(report(),{goal:'cover',partner:'duo',minutes:20});assert.equal(c.signals[0].topic,'cover');assert.ok(c.selected.some(e=>e.tags.includes('cover')));
  assert.deepEqual(P.choose({...report(),person:'different name'}),P.choose(report()));
 });
 test('solo/time/memorisation constraints are hard filters and experimental body theories never auto-diagnose',()=>{
@@ -29,7 +29,7 @@ test('lineup preferences select same-role trials, without turning low KD into a 
  assert.ok(P.agents(report(),{lineups:'light'}).items.every(e=>e.role==='センチネル'));
 });
 test('empty data remain a concrete starter without fake skill, inferred preferences or mutations',()=>{
- const p=P.choose({});assert.ok(p.selected.length);assert.equal(p.signals[0].topic,'foundation');assert.equal(p.context.agent,null);assert.equal(p.preferences.lineups,'unknown');assert.ok(p.selected.every(e=>e.tags.includes('foundation')));
+ const p=P.choose({});assert.ok(p.selected.length);assert.equal(p.signals[0].topic,'foundation');assert.equal(p.context.agent,null);assert.equal(p.preferences.lineups,'unknown');assert.ok(p.selected.every(e=>e.tags.includes('foundation')));assert.match(p.selected.find(e=>e.id==='P090').action,/記録がなければ/);
  const r=report(),before=JSON.stringify(r);P.choose(r);P.agents(r,{lineups:'learn'});assert.equal(JSON.stringify(r),before);
  assert.equal(P.fill('{{map}}',p.context),'次に遊ぶマップ');assert.equal(P.fill('{{map}}',P.choose(r).context),'Lotus');
 });
@@ -47,4 +47,15 @@ test('Sova-only arrow exercises cannot leak into a Sage or Omen prescription',()
  const result=P.choose(report(agent,role),{goal,minutes:20,lineups:'learn',partner:'duo'});assert.ok(result.selected.every(e=>!e.agent||e.agent===agent));assert.equal(result.selected.some(e=>['P063','P064'].includes(e.id)),false);
  }
  assert.equal(P.entries.find(e=>e.id==='P064').agent,'Sova');
+});
+
+test('positive output reproduction selects a successful kill review, not an unrelated death analysis',()=>{
+ const r=report('Sage','センチネル',{kd:1.4,acs:270,adr:180,hsPct:30});const p=P.choose(r,{minutes:20});
+ const review=p.selected.find(e=>e.category==='review');assert.equal(review?.id,'P082');assert.ok(!P.entries.find(e=>e.id==='P081').tags.includes('repeat'));
+ const reset=P.choose({}, {goal:'reset',minutes:5});assert.equal(reset.selected[0].id,'P024');
+});
+
+test('high HS with low damage starts with participation review and joining routes, not another aim playlist',()=>{
+ const r=report('Sage','センチネル',{kd:.8,acs:180,adr:100,hsPct:30});r.matchFeedback={sessions:[{topic:'cover'}]};const p=P.choose(r);
+ assert.equal(p.signals[0].topic,'participation');assert.deepEqual(p.selected.slice(0,2).map(e=>e.id),['P048','P032']);assert.ok(p.selected.every(e=>e.category!=='aim'));
 });
