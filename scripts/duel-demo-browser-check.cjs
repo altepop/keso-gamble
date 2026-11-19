@@ -137,6 +137,33 @@ const a='[data-demo-view=a]',b='[data-demo-view=b]';
   assert.match(await page.locator('[data-duel-action-hint]').innerText(),guideByMode[mode],'6 mode action guide '+mode);
   assert.equal(await page.locator('[data-duel-action-hint]').evaluate(el=>getComputedStyle(el).animationName),'none','guide honors reduced motion');
   if(!hasTurn)await page.locator(a).click();
+  // Full six-mode phone quality gate at both requested widths.
+  for(const width of [375,390]){
+   await page.setViewportSize({width,height:844});
+   const layout=await page.evaluate(()=>({
+     overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+1,
+     turn:!!document.querySelector('#demo-app .duel-arena .duel-turn'),
+     state:!!document.querySelector('#demo-app .duel-arena .duel-state')
+   }));
+   assert.equal(layout.overflow,false,mode+' overflow at '+width+'px');
+   assert.equal(layout.turn,true,mode+' missing confirmed turn at '+width+'px');
+   assert.equal(layout.state,true,mode+' missing confirmed state at '+width+'px');
+  }
+  if(mode==='othello'){
+   // Simulate auxiliary UI mutation bursts on slow phones. No game action
+   // or private data is modified, and no server/KP request is issued.
+   await page.evaluate(()=>{
+    const screen=document.querySelector('#demo-app .screen');
+    for(let i=0;i<180;i++){
+     const item=document.createElement('span');
+     item.dataset.duelPhase8Stress='1';
+     screen.append(item);item.remove();
+    }
+   });
+   await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+   assert.equal(await page.locator('[data-duel-journey]').count(),1,'one guide after auxiliary render burst');
+   assert.equal(await page.locator('.duel-turn').isVisible(),true,'confirmed turn survives burst');
+  }
   await screenshot('01-'+mode+'-playing');
   const data=await page.locator('#demo-app .badge').first().innerText();
   assert.match(data,/19,000 KP/,mode+' escrow debited locally');
