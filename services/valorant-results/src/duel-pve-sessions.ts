@@ -4,6 +4,7 @@
  */
 import type {KpEnv,KpMapping} from './kp.ts';
 import {startServerPve,advanceServerPve,pvePublicSnapshot,type TrustedPveState} from './duel-pve-engine.ts';
+import {ensureVerifiedPveProgression} from './duel-pve-progression.ts';
 
 export const DUEL_PVE_SESSION_DDL=[
  `CREATE TABLE IF NOT EXISTS kp_duel_pve_sessions(
@@ -121,6 +122,8 @@ export async function serverPveOperation(env:KpEnv,guild:string,user:string,body
   return publicMatch(row);
  }
  if(action!=='move')throw Error('CPU戦の操作が不正です。');
+ // Natural terminal progress remains in the SAME transaction as the board action.
+ await ensureVerifiedPveProgression(env);
  const session=String(body.session??''),requestId=String(body.requestId??'');
  if(!uuid.test(requestId)||!uuid.test(session))throw Error('操作IDまたはCPU戦IDが不正です。');
  const earlier=await env.DB.prepare('SELECT guild,user,session_id FROM kp_duel_pve_actions WHERE id=?')
