@@ -205,6 +205,7 @@ const a='[data-demo-view=a]',b='[data-demo-view=b]';
  assert.match(await recap.innerText(),/確定結果/);
  assert.match(await recap.innerText(),/次の試合で確認すること/);
  assert.match(await recap.innerText(),/自分の手番ごとに置ける場所を確認/);
+ assert.equal(await recap.locator('dt').filter({hasText:'次の試合で確認すること'}).count(),1,'one next-match focus field from confirmed results');
  assert.match(await recap.innerText(),/敗北/);
  assert.match(await recap.innerText(),/表示済みの確定情報のみ/);
  const historyFilter=page.locator('.duel-history [data-duel-history-filter]');
