@@ -6,6 +6,7 @@ import {festivalTerms,publicFestivalResponse} from './race-festival.ts';
 import {personalVerifiedRelicStats} from './relic-economy.ts';
 import {hoyoApi} from './hoyo.ts';
 import {boardDuelApi} from './board-duels.ts';
+import {serverPveApi} from './duel-pve-sessions.ts';
 import {steamApi,steamCallback} from './steam-auth.ts';
 import {guildVerifiedRelicStats} from './relic-guild-stats.ts';
 import {privateCasinoAllowed,privateCasinoRound} from './private-casino.ts';
@@ -481,6 +482,7 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping,deferP
     ...Object.fromEntries(stream.headers),...headers,'Cache-Control':'no-cache, no-transform'
    }});
   }
+  if(path==='/api/kp/duels/pve')return serverPveApi(request,env,mapping,owner.user,headers);
   if(path==='/api/kp/duels')return boardDuelApi(request,env,mapping,owner.user,headers,deferPostCommit);
   if(path.startsWith('/api/kp/steam/')){const r=await steamApi(request,env,owner,token!);return new Response(r.body,{status:r.status,headers:{...Object.fromEntries(r.headers),...headers}});}
   if(path.startsWith('/api/kp/hoyo/')){const r=await hoyoApi(request,env,owner);return new Response(r.body,{status:r.status,headers:{...Object.fromEntries(r.headers),...headers}});}
