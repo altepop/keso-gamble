@@ -2,13 +2,13 @@ import test from 'node:test';import assert from 'node:assert/strict';import {Dat
 import {backfillCoachPositions,runCoachPositionArchiveSlot} from '../src/coach-position-backfill.ts';
 const now=Date.parse('2026-11-20T01:00:00Z'),started='2026-11-01T12:00:00Z';
 function fixture(){const sql=new DatabaseSync(':memory:');sql.exec(`CREATE TABLE monitor_state(key TEXT PRIMARY KEY,value TEXT);
- CREATE TABLE coach_member_queue(match_id TEXT PRIMARY KEY,region TEXT,source_riot_id TEXT,source_puuid TEXT,started_at INTEGER,status TEXT);
+ CREATE TABLE coach_member_queue(match_id TEXT PRIMARY KEY,region TEXT,source_riot_id TEXT,source_puuid TEXT,started_at INTEGER,status TEXT,attempts INTEGER DEFAULT 0);
  CREATE TABLE coach_member_sources(riot_id TEXT PRIMARY KEY,puuid TEXT);
  CREATE TABLE coach_member_links(riot_id TEXT,match_id TEXT,PRIMARY KEY(riot_id,match_id));
  INSERT INTO monitor_state VALUES('coach_all_members:enabled','enabled');
  INSERT INTO coach_member_sources VALUES('Dolly#SDGs','p0');
  INSERT INTO coach_member_links VALUES('Dolly#SDGs','m1');
- INSERT INTO coach_member_queue VALUES('m1','ap','Dolly#SDGs','p0',${Date.parse(started)},'complete');`);
+ INSERT INTO coach_member_queue VALUES('m1','ap','Dolly#SDGs','p0',${Date.parse(started)},'complete',0);`);
  for(const file of ['0008_competitive_positions.sql','0009_coach_position_backfill.sql'])sql.exec(readFileSync(new NodeURL('../migrations/'+file,import.meta.url),'utf8'));
  let reads=0,writes=0;const db={prepare:(text:string)=>{const bind=(...args:unknown[])=>({first:async()=>{reads++;return sql.prepare(text).get(...args as never[])??null;},all:async()=>{reads++;return {results:sql.prepare(text).all(...args as never[])};},run:async()=>{writes++;return {meta:{changes:Number(sql.prepare(text).run(...args as never[]).changes)}};}});return {...bind(),bind};}} as unknown as D1Database;
  const match=():any=>({metadata:{match_id:'m1',is_completed:true,queue:{id:'competitive'},started_at:started},players:Array.from({length:10},(_,i)=>({puuid:'p'+i,team_id:i<5?'Blue':'Red'})),kills:[{round:1,time_in_round_in_ms:1000,killer:{puuid:'p0'},victim:{puuid:'p9'},location:{x:0,y:-10},player_locations:[{player:{puuid:'p0'},location:{x:10,y:20},view_radians:1.2}]}]});
@@ -30,3 +30,5 @@ test('the shared slot never adds a second detail request, and existing archive w
   const disabled=await runCoachPositionArchiveSlot(f.db,fetch,now,async()=> 'disabled');assert.equal(disabled.positions,null);assert.equal(calls,2);
  }finally{f.sql.close();}
 });
+
+test('partial scalar archives exhausted by the old collector can still recover valid coordinates',async()=>{const f=fixture();try{f.sql.exec("UPDATE coach_member_queue SET status='partial',attempts=3");assert.equal(await backfillCoachPositions(f.db,async()=>f.match(),now),'saved');}finally{f.sql.close();}});

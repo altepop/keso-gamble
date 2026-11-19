@@ -12,7 +12,7 @@ export async function backfillCoachPositions(db:D1Database,fetchDetail:(region:s
  const row=await db.prepare(`SELECT q.match_id,q.region,q.source_puuid,q.started_at FROM coach_member_queue q
   LEFT JOIN valorant_match_positions p ON p.match_id=q.match_id
   LEFT JOIN coach_position_backfill b ON b.match_id=q.match_id
-  WHERE q.status='complete' AND COALESCE(p.has_coordinates,0)=0
+  WHERE (q.status='complete' OR (q.status='partial' AND q.attempts>=3)) AND COALESCE(p.has_coordinates,0)=0
    AND q.source_riot_id IN (${COACH_MEMBER_ACCOUNTS.map(()=>'?').join(',')})
    AND EXISTS(SELECT 1 FROM coach_member_links l JOIN coach_member_sources s ON s.riot_id=l.riot_id
     WHERE l.match_id=q.match_id AND s.riot_id=q.source_riot_id AND s.puuid=q.source_puuid)

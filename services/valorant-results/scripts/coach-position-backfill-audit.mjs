@@ -5,7 +5,7 @@ export async function auditPositionBackfill(directory,env=process.env,request=fe
  if(c.name!=='valorant-results'||!/^[0-9a-f]{32}$/i.test(env.CLOUDFLARE_ACCOUNT_ID??'')||!/^[0-9a-f-]{36}$/i.test(b?.database_id??'')||!env.CLOUDFLARE_API_TOKEN)throw Error('Invalid backfill audit configuration');
  const sql=`WITH targets AS (SELECT q.match_id,p.has_coordinates,b.status,b.reason,b.attempts FROM coach_member_queue q
  LEFT JOIN valorant_match_positions p ON p.match_id=q.match_id LEFT JOIN coach_position_backfill b ON b.match_id=q.match_id
- WHERE q.status='complete' AND EXISTS(SELECT 1 FROM coach_member_links l JOIN coach_member_sources s ON s.riot_id=l.riot_id
+ WHERE (q.status='complete' OR (q.status='partial' AND q.attempts>=3)) AND EXISTS(SELECT 1 FROM coach_member_links l JOIN coach_member_sources s ON s.riot_id=l.riot_id
  WHERE l.match_id=q.match_id AND s.riot_id=q.source_riot_id AND s.puuid=q.source_puuid))
  SELECT COUNT(*) AS targets,COALESCE(SUM(has_coordinates=1),0) AS captured,
  COALESCE(SUM(attempts IS NOT NULL),0) AS attempted,
