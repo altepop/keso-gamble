@@ -57,5 +57,5 @@ test('positive output reproduction selects a successful kill review, not an unre
 
 test('high HS with low damage starts with participation review and joining routes, not another aim playlist',()=>{
  const r=report('Sage','センチネル',{kd:.8,acs:180,adr:100,hsPct:30});r.matchFeedback={sessions:[{topic:'cover'}]};const p=P.choose(r);
- assert.equal(p.signals[0].topic,'participation');assert.deepEqual(p.selected.slice(0,2).map(e=>e.id),['P048','P032']);assert.ok(p.selected.every(e=>e.category!=='aim')); 
+ assert.equal(p.signals[0].topic,'participation');assert.deepEqual(p.selected.slice(0,2).map(e=>e.id),['P048','P032']);assert.ok(p.selected.every(e=>e.category!=='aim'));
 });
