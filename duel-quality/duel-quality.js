@@ -106,6 +106,18 @@ export function describeDuelJourney({stage='setup',outgoing=false,myTurn=false,r
  else if(refreshing){detail='最新情報を更新中。盤面と結果はサーバー確定表示を優先する。';}
  return {step,phases,title,detail,stage};
 }
+
+// Presentation-only invite readiness derived from visible UI values. Never
+// creates invitations, changes stake, reads auth secrets or calls an API.
+export function describeInviteReadiness({hasMembers=true,hasOpponent=false,canAfford=null,busy=false,retry=false,highStake=false}={}){
+ if(retry)return {type:'hold',title:'前回の操作結果を先に確認',detail:'未確認の操作がある間は新しい招待を送らない。'};
+ if(!hasMembers)return {type:'waiting',title:'対戦相手の確認待ち',detail:'候補が表示されない場合は対戦情報を更新する。'};
+ if(!hasOpponent)return {type:'choose',title:'まず相手を選択',detail:'対戦相手の欄をタップして、遊ぶ相手を選ぶ。'};
+ if(canAfford===false)return {type:'low',title:'この賭け金ではKPが不足',detail:'賭け金を下げるか、KPを貯めてから申し込む。'};
+ if(busy)return {type:'hold',title:'操作の完了を確認中',detail:'同じ操作を続けて送らず、画面の更新を確認する。'};
+ if(canAfford===true)return {type:'ready',title:highStake?'高額のため再確認が必要':'招待の準備ができた',detail:highStake?'対戦相手と賭けKPを確認してから送る。':'申し込み時にはKPは減らず、相手が承認すると対戦が始まる。'};
+ return {type:'waiting',title:'選択内容を確認',detail:'対戦相手と賭けKPを確認してから申し込む。'};
+}
 function enhance(root) {
   let previous = null, motion = null, lastBoard = null;
   let c4Previous=null,c4Motion=null,lastC4Board=null;
@@ -299,6 +311,38 @@ function enhance(root) {
     }
   }
 
+
+  function scanInviteReadiness(){
+    const form=root.querySelector('.duel-new');
+    const button=form?.querySelector('[data-duel-act="create"]');
+    if(!form||!button)return;
+    const picked=form.querySelector('[data-duel-target-toggle] > span')?.textContent?.trim()||'';
+    const hasOpponent=!!picked&&picked!=='相手を選択'&&!picked.includes('読み込み中');
+    const hasMembers=!form.querySelector('.duel-opponent-help[role="status"]');
+    const stake=Number(form.querySelector('#duel-stake')?.value);
+    const displayed=root.querySelector('.topbar .badge')?.textContent||'';
+    const match=/^\\s*([\\d,]+)\\s*KP/.exec(displayed);
+    const cash=match?Number(match[1].replaceAll(',','')):NaN;
+    const canAfford=Number.isSafeInteger(cash)&&Number.isSafeInteger(stake)&&stake>0?cash>=stake:null;
+    const retry=!!root.querySelector('[data-duel-retry]');
+    const busy=button.disabled&&hasOpponent&&canAfford===true;
+    const highStake=stake>=50000;
+    const state=describeInviteReadiness({hasMembers,hasOpponent,canAfford,busy,retry,highStake});
+    const signature=JSON.stringify(state);
+    let notice=form.querySelector('[data-duel-invite-guide]');
+    if(!notice){
+      notice=document.createElement('div');
+      notice.className='duel-invite-guide';
+      notice.dataset.duelInviteGuide='1';
+      notice.setAttribute('role','status');
+      notice.setAttribute('aria-live','polite');
+      button.before(notice);
+    }
+    if(notice.dataset.duelInviteSignature===signature)return;
+    notice.dataset.duelInviteSignature=signature;
+    notice.dataset.duelInviteType=state.type;
+    notice.innerHTML='<strong>'+state.title+'</strong><span>'+state.detail+'</span>';
+  }
   // This enhancement never sends moves, changes selection, or modifies wallet state.
   function scanDuelJourney(){
     const current=root.querySelector('.duel-current');
@@ -338,6 +382,7 @@ function enhance(root) {
   }
   function scan() {
     scanDuelJourney();
+    scanInviteReadiness();
     scanConnect4();
     scanBluffDice();
     scanPoker();
