@@ -316,6 +316,7 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
    for(const view of ['overview','guns','improve','time','team','metrics','strategy']){
     await page.locator('[data-coach-view="'+view+'"]').click();
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'performance dashboard at '+width+' / '+view);
+    assert.ok(await page.locator('#coach-view-'+view+' p').evaluateAll(nodes=>nodes.filter(n=>n.offsetHeight).every(n=>parseFloat(getComputedStyle(n).fontSize)>=16)),'all visible body paragraphs keep 16px at '+width+' / '+view);
     assert.equal(await page.locator('#coach-view-'+view+' [data-reader-guide]').isVisible(),true,'every tab teaches how to read it');
     assert.ok(await page.locator('#coach-view-'+view+' [data-reader-glossary] [data-reader-term]').count()>0);
     const term=page.locator('#coach-view-'+view+' [data-reader-term]').first();await term.locator('summary').click();
