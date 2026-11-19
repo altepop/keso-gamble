@@ -475,6 +475,7 @@ function enhance(root) {
       anchor.before(rail);
     }
     if(rail.dataset.duelJourneySignature===signature)return;
+    rail.dataset.duelJourneyStage=stage;
     rail.dataset.duelJourneySignature=signature;
     // Fixed Japanese copy only; no names, private cards, guessed moves or user HTML.
     rail.innerHTML='<ol class="duel-journey-steps" aria-label="進行段階">'+state.phases.map((name,index)=>
