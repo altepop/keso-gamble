@@ -31,7 +31,10 @@ const a='[data-demo-view=a]',b='[data-demo-view=b]';
   assert.equal(await page.locator('#duel-game').inputValue(),mode);
   assert.equal(await page.locator('#demo-app .duel-opponent-toggle').count(),1,'opponent picker exists');
   await page.locator('[data-duel-invite-guide]').waitFor();
-  assert.match(await page.locator('.duel-invite-guide').innerText(),/まず相手を選択/);
+  const selectedLabel=(await page.locator('.duel-opponent-toggle > span').first().innerText()).trim();
+  const inviteMessage=await page.locator('.duel-invite-guide').innerText();
+  if(selectedLabel==='相手を選択')assert.match(inviteMessage,/まず相手を選択/);
+  else assert.match(inviteMessage,/招待の準備ができた|高額のため再確認が必要/,'remembered opponent stays ready');
   // Native select is intentionally replaced with a touch-accessible in-page picker.
   await page.locator('[data-duel-target-toggle]').click();
   assert.equal(await page.locator('[data-duel-target-option]').count(),1);
