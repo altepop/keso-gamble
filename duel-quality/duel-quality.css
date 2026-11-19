@@ -703,3 +703,8 @@
  .duel-journey[data-duel-journey-stage="active"] + .duel-connection,
  .duel-status-help, .duel-connection { visibility: visible; }
 }
+
+/* Phase 7 connect4: keep the actionable hint visible; avoid a large competing card on phones. */
+@media(max-width:480px){
+ .duel-arena:has(.duel-connect4-board) .duel-action-hint{margin:4px 0 6px;padding:5px 8px;border-left-width:2px;font-size:11px;line-height:1.4;font-weight:600}
+}
