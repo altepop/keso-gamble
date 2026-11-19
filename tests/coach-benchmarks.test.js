@@ -37,3 +37,8 @@ test('public reference asset uses a version matching its bytes',()=>{
  const code=readFileSync(new URL('../coach/benchmarks.js',import.meta.url));const v='coach-'+createHash('sha256').update(code).digest('hex').slice(0,12);
  assert.ok(readFileSync(new URL('../coach.html',import.meta.url),'utf8').includes('./coach/benchmarks.js?v='+v));
 });
+
+test('low precision/output and high output select different exercises instead of the same generic aim advice',()=>{
+ const low=B.personal(perf({kd:.7,adr:100,hsPct:12}),'gold');assert.equal(low.focus.topic,'precision');assert.match(low.focus.action,/崩れていた方だけ/);
+ const high=B.personal(perf({acs:260,adr:170}),'gold');assert.equal(high.focus.topic,'repeat');assert.match(high.cards[0].title,/強み候補/);
+});

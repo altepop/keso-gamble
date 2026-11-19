@@ -62,6 +62,13 @@
    cards.push({kind:'check',title:`KD ${fmt(o.kd,'kd')}は高めでもACS ${fmt(o.acs,'acs')}は低め`,text:`倒し合いの比と戦闘ペースは別です。KPR ${fmt(o.kpr,'kpr')}・DPR ${fmt(o.dpr,'dpr')}も見て、生存を維持しながら必要な交戦へ参加できていたかを確認します。`});
    focus={topic:'participation',title:'生き残ることと、戦いに関わることを両立する',action:'担当を守りながら、接敵した味方へ合流するか待つかを最初の3Rで明確に選ぶ。'};
   }
+  if(!focus&&has('kd')&&has('adr')&&has('hs')&&low('kd')&&below('adr')&&below('hs')){
+   cards.push({kind:'check',title:`KD ${fmt(o.kd,'kd')}・ADR ${fmt(o.adr,'adr')}・HS ${fmt(o.hsPct,'hs')}%が参考より低い`,text:'キルの比と削り量の両方に確認点があります。武器の違いもあるのでHSだけを原因にせず、まず録画の1交戦で停止と初弾の高さを確認します。外れていた時だけ射撃練習を優先します。'});
+   focus={topic:'precision',title:'止まって撃てたか、初弾を一つ確認する',action:'直近1交戦を見て、移動中に撃ったか・初弾が頭の高さだったかを確認。崩れていた方だけ、射撃場で「横移動→停止→短い射撃」を左右10回。問題なければ交戦へ間に合う準備を見直す。'};
+  }else if(!focus&&has('acs')&&has('adr')&&high('acs')&&above('adr')){
+   cards.push({kind:'neutral',title:`ACS ${fmt(o.acs,'acs')}・ADR ${fmt(o.adr,'adr')}に戦闘出力の強み候補`,text:`有効${by.acs.matches}/${by.adr.matches}試合で、スコアと削り量の両方が参考より高め。スコアを増やす課題より、どの入口・準備で出せたかを残したい。勝利への貢献や相手の強さまで保証する数字ではありません。`});
+   focus={topic:'repeat',title:'出力を再現する準備を残す',action:'キルになった交戦を一つ選び、最初の照準・遮蔽・味方の動く合図を記録する。次の試合の同じ役割で一つ再現する。無理な連続ピークを増やす目標にはしない。'};
+  }
   const maps=(p.maps||[]).filter(m=>m.matches>=5&&m.acsMatches>=5&&finite(m.acs));
   const sorted=maps.slice().sort((a,b)=>b.acs-a.acs);
   if(sorted.length>=2&&sorted[0].acs-sorted.at(-1).acs>=15){
