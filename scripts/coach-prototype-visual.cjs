@@ -12,6 +12,8 @@ module.exports=async function compare({browser,page,root,output}){
   return Object.fromEntries(Object.entries(rules).map(([selector,properties])=>{const style=getComputedStyle(document.querySelector(selector));return [selector,Object.fromEntries(properties.map(p=>[p,style.getPropertyValue(p)]))];}));
  });
  const summary=[];
+ const accepted=await page.locator('#acceptBtn').getAttribute('aria-pressed');
+ if(accepted==='true')await page.locator('#acceptBtn').click();
  // Collapse operational panels; the mock user has explicitly selected 神戸.
  const folds=await page.locator('details').evaluateAll(nodes=>nodes.map(n=>({id:n.id,open:n.open})));
  await page.locator('details').evaluateAll(nodes=>nodes.forEach(n=>n.open=false));
@@ -30,5 +32,6 @@ module.exports=async function compare({browser,page,root,output}){
  }
  fs.writeFileSync(path.join(output,'comparison.json'),JSON.stringify(summary,null,2)+'\n');
  for(const fold of folds)if(fold.id)await page.locator('#'+fold.id).evaluate((el,on)=>el.open=on,fold.open);
+ if(accepted==='true')await page.locator('#acceptBtn').click();
  await page.setViewportSize({width:375,height:812});await sourceCtx.close();
 };

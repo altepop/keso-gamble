@@ -46,3 +46,13 @@ test('prototype binding is a local display adapter with a content-addressed cach
  assert.doesNotMatch(code,/\bfetch\s*\(|\b(?:sessionStorage|localStorage)\b|XMLHttpRequest|sendBeacon/);
  assert.ok(html.includes('prototype-view.js?v=coach-'+createHash('sha256').update(code).digest('hex').slice(0,12)));
 });
+
+test('all seven prototype artworks preserve the original uploaded PNG bytes',()=>{
+ const manifest=JSON.parse(readFileSync(new URL('../docs/design/v6-assets.json',import.meta.url),'utf8'));
+ const names=[...new Set([...html.matchAll(/src="assets\/([^"/]+\.png)"/g)].map(m=>m[1]))].sort();
+ assert.deepEqual(names,Object.keys(manifest.files).sort());assert.equal(names.length,7);
+ for(const name of names){const bytes=readFileSync(new URL('../assets/'+name,import.meta.url));assert.equal(bytes.length,manifest.files[name].bytes);assert.equal(createHash('sha256').update(bytes).digest('hex'),manifest.files[name].sha256);}
+});
+test('registered headings do not concatenate a dictionary-form verb with a noun suffix',()=>{
+ for(const title of Object.values(copy.headings))assert.doesNotMatch(title,/(確認を確認|るを確認|うを確認|くを確認|ないを確認|？を確認)/,title);
+});
