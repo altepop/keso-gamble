@@ -73,6 +73,14 @@ const a='[data-demo-view=a]',b='[data-demo-view=b]';
   assert.match(await page.locator('.duel-state').innerText(),/対局中|対戦中/);
   assert.ok((await page.locator('.duel-arena').innerText()).includes(modeName[mode]),'arena title '+mode);
   await page.locator(a).click();
+  const hasTurn=await page.locator('.duel-turn.my-turn').count()===1;
+  if(!hasTurn)await page.locator(b).click();
+  const guideByMode={othello:/オセロ：置く場所を選ぶ/,gomoku:/五目並べ：選択して確定/,connect4:/四目並べ：列を選ぶ/,
+   hitblow:/Hit & Blow：4桁を予想/,bluffdice:/ブラフダイス：次の宣言/,poker:/ポーカー：交換を選ぶ/};
+  await page.locator('[data-duel-action-hint]').waitFor();
+  assert.match(await page.locator('[data-duel-action-hint]').innerText(),guideByMode[mode],'6 mode action guide '+mode);
+  assert.equal(await page.locator('[data-duel-action-hint]').evaluate(el=>getComputedStyle(el).animationName),'none','guide honors reduced motion');
+  if(!hasTurn)await page.locator(a).click();
   await screenshot('01-'+mode+'-playing');
   const data=await page.locator('#demo-app .badge').first().innerText();
   assert.match(data,/19,000 KP/,mode+' escrow debited locally');
