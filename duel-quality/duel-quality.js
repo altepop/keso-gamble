@@ -696,7 +696,24 @@ function enhance(root) {
     }
     details.append(body);
     const caveat=document.createElement('p');caveat.textContent='表示済みの確定情報のみ。取得していない過去の手や非公開情報は補完しない。';
-    details.append(caveat);result.after(details);
+    details.append(caveat);
+    // A manual, observer-safe sharing surface. Only the server-confirmed result
+    // text already visible to this player is copied into the read-only field.
+    // Never include hands, codes, loaded opponent state or guessed actions.
+    const sharing=document.createElement('details');
+    sharing.className='duel-public-result-share';
+    sharing.dataset.duelPublicResultShare='1';
+    const heading=document.createElement('summary');
+    heading.textContent='確定した結果を共有する';
+    const intro=document.createElement('p');
+    intro.textContent='この画面に表示された確定結果だけを選択して共有できます。観戦中の未公開情報や相手の秘密情報は含めません。';
+    const output=document.createElement('textarea');
+    output.readOnly=true;
+    output.rows=2;
+    output.setAttribute('aria-label','共有用の確定結果');
+    output.value=result.textContent.trim();
+    sharing.append(heading,intro,output);
+    result.after(details,sharing);
   }
 
   function scanGameInsights(){
