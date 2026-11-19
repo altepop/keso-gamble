@@ -25,7 +25,8 @@ button.secondary{background:#18253f;border-color:#344c73}
 button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid #85c4ff;outline-offset:2px}
 .actions{display:flex;align-items:center;flex-wrap:wrap;gap:9px}
 input{background:#09152a;color:white;border:1px solid #4c638a;border-radius:10px;padding:10px;font:inherit;min-height:44px;width:min(100%,500px)}
-[data-benchmark-reference]{display:block;width:100%;min-width:0;min-height:44px;background:#09152a;color:#fff;border:1px solid #829fc4;border-radius:10px;padding:10px;font:inherit;margin-top:8px}
+[data-benchmark-reference],[data-practice-option], [data-practice-category]{display:block;width:100%;min-width:0;min-height:44px;background:#09152a;color:#fff;border:1px solid #829fc4;border-radius:10px;padding:10px;font:inherit;margin-top:8px}
+.practice-controls{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,210px),1fr));gap:10px}.practice-menu{border:1px solid #6584aa;border-radius:10px;padding:12px;margin:10px 0;overflow-wrap:anywhere}.practice-menu>summary{min-height:44px;cursor:pointer;padding:8px 0}.practice-toggle{display:flex;align-items:center;gap:8px;min-height:44px}.practice-choice{accent-color:#9fcbff;min-height:24px;width:24px}.practice-card ul{padding-left:20px}.practice-catalog{margin:16px 0} .practice-catalog input{width:100%}
 label{display:block;margin:0 0 8px}
 code{word-break:break-all}
 .table-wrap{overflow-x:auto}
@@ -283,6 +284,7 @@ tr:last-child td{border-bottom:0}
 </div>
 </main>
 <script src="./coach/benchmarks.js?v=coach-4721e7e852a8"></script>
+<script src="./coach/practice.js?v=coach-2564cd77bcf3"></script>
 <script src="./coach/reader.js?v=coach-61dd527b972c"></script>
 <script>
 const CoachReader=globalThis.KesoCoachReader;
@@ -499,6 +501,24 @@ const personalPanel=d=>{
  const p=globalThis.KesoCoachBenchmarks.personal(d.performance,benchmarkReference);
  return '<section data-personal-analysis><h3>数字の組み合わせから選ぶ確認点</h3><p>'+escape(p.signature)+'。比較参考：'+escape(p.comparison?.label||'未選択')+'。公開比較の仮説は選択した参考群に基づき、本人のミスの確定ではありません。</p>'+p.cards.map(card=>readerCard({...card,label:card.kind==='neutral'?'本人の記録':'CHECK｜条件を分けて確認'})).join('')+(p.focus?readerCard({kind:'check',label:'今回の個別練習案',title:p.focus.title,text:'上の組み合わせから選んだ仮説を、次の試合で確認します。',action:p.focus.action}):'')+'</section>';
 };
+const defaultPracticePreferences=()=>({goal:'auto',lineups:'unknown',partner:'solo',minutes:10,exploratory:false});
+let practicePreferences=defaultPracticePreferences();
+const practiceProfiles=new Map();
+let practiceCategory='aim',practiceQuery='';
+const practiceExcluded=new Map();
+const practiceOptions=d=>({...practicePreferences,exclude:practiceExcluded.get(d.person)||[]});
+const practiceSource=id=>{const s=globalThis.KesoCoachPractice.sources[id];return '<a href="'+escape(s.url)+'" target="_blank" rel="noopener noreferrer">'+escape(s.title)+'</a><p class="member-small">'+escape(s.limit)+' 確認日 '+escape(s.checkedAt)+'</p>';};
+const practiceCard=(item,context,why)=>'<article class="practice-menu practice-card" data-practice-card="'+item.id+'"><h4>'+escape(item.title)+' · '+item.minutes+'分</h4>'+(why?'<p><b>選んだ理由：</b>'+escape(why)+'</p>':'')+'<p><b>やり方：</b>'+escape(globalThis.KesoCoachPractice.fill(item.action,context))+'</p><p><b>確認すること：</b>'+escape(item.check)+'</p><p>条件：'+(item.requires==='partner'?'協力者が必要':'一人で始められる')+' / '+(item.lineups==='learn'?'定点・配置の暗記あり':'遠投定点の追加暗記を必須にしない')+(item.agent?' / '+escape(item.agent):'')+'</p>'+(item.experimental?'<p><strong>探索・興味がある時だけ。VALORANTでの上達効果は確認できていません。</strong></p>':'')+'<details><summary>根拠と限界</summary><p>この手順・回数はKESOの練習設計です。仕様・実務資料・研究が直接検証した処方ではありません。</p>'+item.sourceIds.map(practiceSource).join('')+'</details></article>';
+const practiceCatalog=d=>{
+ const P=globalThis.KesoCoachPractice,c=P.choose(d,practiceOptions(d),benchmarkReference).context,items=P.browse(practiceCategory,practiceQuery);
+ return '<p data-practice-count>'+items.length+' / 全'+P.entries.length+'件</p>'+items.map(item=>'<details class="practice-menu" data-practice-entry="'+item.id+'"><summary>'+escape(item.title)+(item.experimental?'（探索）':'')+'</summary>'+practiceCard(item,c,'')+'</details>').join('');
+};
+const practicePanel=d=>{
+ practicePreferences=practiceProfiles.get(d.person)||defaultPracticePreferences();practiceProfiles.set(d.person,practicePreferences);
+ const P=globalThis.KesoCoachPractice,plan=P.choose(d,practiceOptions(d),benchmarkReference),agents=P.agents(d,practicePreferences);
+ const select=(key,label,values)=>'<label>'+label+'<select data-practice-option="'+key+'">'+values.map(([value,text])=>'<option value="'+value+'"'+(String(practicePreferences[key])===String(value)?' selected':'')+'>'+escape(text)+'</option>').join('')+'</select></label>';
+ return '<section data-practice-library class="reader-guide"><h3>自分に合う練習を選ぶ</h3><p>成績に加えて、時間・暗記の好み・練習相手に合わせて絞ります。好みや身体タイプを戦績から推測しません。</p><div class="practice-controls">'+select('goal','優先したい課題',[['auto','記録から選ぶ'],...Object.entries(P.topicNames)])+select('lineups','定点の暗記',[['unknown','まだ選ばない'],['light','暗記を増やしたくない'],['learn','少しずつ覚えたい']])+select('partner','練習相手',[['solo','一人で練習する'],['duo','協力者がいる']])+select('minutes','今日の練習時間',[[5,'5分'],[10,'10分'],[20,'20分']])+'</div><label class="practice-toggle"><input type="checkbox" class="practice-choice" data-practice-exploratory'+(practicePreferences.exploratory?' checked':'')+'> 効果未確認の探索案も候補に含める</label><h4>次の1試合に向けた練習（最大3件・合計'+plan.totalMinutes+'分）</h4><p>候補の交換はこの画面を開いている間だけ有効です。練習済み・習得済みの認定には使いません。</p><button type="button" data-practice-reset>交換した候補を戻す</button><div data-practice-recommendations>'+(plan.selected.length?'':'<p>現在の条件に合う候補がありません。条件を変えるか、交換した候補を戻してください。</p>')+plan.selected.map(item=>practiceCard(item,plan.context,item.reasons.join(' / '))+'<button type="button" data-practice-skip="'+item.id+'">この案を別の候補に替える</button>').join('')+'</div><p>'+escape(plan.quality)+'</p><details><summary>選び方を確認する</summary><p>'+escape(plan.rule)+'</p></details><h4>定点・暗記の好みに合うキャラ候補</h4><div data-practice-agents><p>'+escape(agents.note)+'</p>'+agents.items.map(a=>'<article class="practice-menu"><h4>'+escape(a.name)+' / '+escape(a.role)+'</h4><p>'+escape(a.why)+'</p><p><b>必要な練習：</b>'+escape(a.burden)+'</p>'+practiceSource(a.sourceId)+'</article>').join('')+'</div><details class="practice-catalog" data-practice-catalog><summary>100件の練習・検証案から探す</summary><label>分野<select data-practice-category>'+[['all','全分野'],...Object.entries(P.categories)].map(([key,label])=>'<option value="'+key+'"'+(key===practiceCategory?' selected':'')+'>'+escape(label)+'</option>').join('')+'</select></label><label>キーワード<input data-practice-query value="'+escape(practiceQuery)+'" maxlength="80" placeholder="初弾・定点・カバーなど"></label><div data-practice-items>'+practiceCatalog(d)+'</div></details></section>';
+};
 const readerGlossary=view=>'<section class="reader-glossary" data-reader-glossary="'+escape(view)+'"><h3>用語と読み方を確認する</h3>'+CoachReader.panels[view].keys.map(key=>{const t=CoachReader.terms[key];return '<details data-reader-term="'+escape(key)+'"><summary>'+escape(t.name)+'ってなに？</summary><p><b>意味：</b>'+escape(t.meaning)+'</p><p><b>たとえば：</b>'+escape(t.example)+'</p><p><b>良い・悪いの読み方：</b>'+escape(t.read)+'</p><p><b>練習につなげるなら：</b>'+escape(t.practice)+'</p></details>';}).join('')+'</section>';
 const readerGuide=view=>{const g=CoachReader.panels[view];return '<section class="reader-guide" data-reader-guide="'+escape(view)+'"><h3>'+escape(g.question)+'</h3><p>'+escape(g.read)+'</p><p><b>このページからやること：</b>'+escape(g.action)+'</p></section>';};
 const readerAdvanced=content=>'<details class="reader-advanced" data-reader-advanced><summary>詳しい数字・グラフ・計算を見る</summary>'+content+'</details>';
@@ -631,7 +651,7 @@ const renderMemberDiagnosis=d=>{
   tabs.map(([id,title],i)=>`<button type="button" role="tab" data-coach-view="${id}"
     id="coach-tab-${id}" aria-controls="coach-view-${id}" aria-selected="${i===0}" tabindex="${i===0?0:-1}">${title}</button>`).join('')+
   '</div>'+
-  `<div class="coach-dashboard-view" id="coach-view-overview" role="tabpanel" aria-labelledby="coach-tab-overview">${readerBoard(d)}${personalPanel(d)}${readerGuide('overview')}${overview}${readerGlossary('overview')}</div>`+
+  `<div class="coach-dashboard-view" id="coach-view-overview" role="tabpanel" aria-labelledby="coach-tab-overview">${readerBoard(d)}${personalPanel(d)}${practicePanel(d)}${readerGuide('overview')}${overview}${readerGlossary('overview')}</div>`+
   `<div class="coach-dashboard-view" id="coach-view-guns" role="tabpanel" aria-labelledby="coach-tab-guns" hidden>${readerGuide('guns')}${readerStats(d,'guns')}${benchmarkPanel(d)}${readerGlossary('guns')}${readerAdvanced(performancePanel(d.performance,'guns')+contextPanel(d.roundContext,'weapons'))}</div>`+
   `<div class="coach-dashboard-view" id="coach-view-time" role="tabpanel" aria-labelledby="coach-tab-time" hidden>${readerGuide('time')}${readerStats(d,'time')}${readerGlossary('time')}${readerAdvanced(performancePanel(d.performance,'time'))}</div>`+
   `<div class="coach-dashboard-view" id="coach-view-team" role="tabpanel" aria-labelledby="coach-tab-team" hidden>${readerGuide('team')}${readerStats(d,'team')}${readerGlossary('team')}${readerAdvanced(performancePanel(d.performance,'team')+contextPanel(d.roundContext,'utility')+'<p>同時交戦と位置上のトレード機会は、継続的な位置・視界の記録がないため未取得。</p>'+rateCharts)}</div>`+
@@ -640,6 +660,12 @@ const renderMemberDiagnosis=d=>{
   `<div class="coach-dashboard-view" id="coach-view-metrics" role="tabpanel" aria-labelledby="coach-tab-metrics" hidden>${readerGuide('metrics')}${readerStats(d,'metrics')}${readerGlossary('metrics')}${readerAdvanced(performancePanel(d.performance,'quality')+contextPanel(d.roundContext,'quality')+allMetrics)}</div>`;
 };
 $('member-result').addEventListener('click',e=>{
+ if(e.target.closest('[data-practice-reset]')){if(!latestMemberReport)return;practiceExcluded.delete(latestMemberReport.person);renderMemberDiagnosis(latestMemberReport);return;}
+ if(e.target.closest('[data-practice-skip]')){
+  if(!latestMemberReport)return;const id=e.target.closest('[data-practice-skip]').dataset.practiceSkip;
+  practiceExcluded.set(latestMemberReport.person,[...(practiceExcluded.get(latestMemberReport.person)||[]),id]);
+  renderMemberDiagnosis(latestMemberReport);$('member-result').querySelector('[data-practice-library] h3')?.scrollIntoView({block:'start'});return;
+ }
  if(e.target.closest('[data-feedback-refresh]')){void refreshMember();return;}
  const btn=e.target.closest('[data-coach-view]');
  if(!btn)return;
@@ -652,7 +678,25 @@ $('member-result').addEventListener('click',e=>{
   panel.hidden=panel.id!=='coach-view-'+view;
 });
 
+$('member-result').addEventListener('input',e=>{
+ if(!e.target.matches('[data-practice-query]')||!latestMemberReport)return;
+ practiceQuery=e.target.value;
+ $('member-result').querySelector('[data-practice-items]').innerHTML=practiceCatalog(latestMemberReport);
+});
 $('member-result').addEventListener('change',e=>{
+ const key=e.target.dataset.practiceOption;
+ if(key||e.target.matches('[data-practice-exploratory]')){
+  if(!latestMemberReport)return;
+  if(key)practicePreferences[key]=e.target.value;else practicePreferences.exploratory=e.target.checked;
+  const catalogOpen=$('member-result').querySelector('[data-practice-catalog]')?.open;
+  renderMemberDiagnosis(latestMemberReport);
+  $('member-result').querySelector('[data-practice-catalog]').open=catalogOpen;
+  $('member-result').querySelector(key?'[data-practice-option="'+key+'"]':'[data-practice-exploratory]')?.focus();return;
+ }
+ if(e.target.matches('[data-practice-category]')){
+  practiceCategory=e.target.value;
+  $('member-result').querySelector('[data-practice-items]').innerHTML=practiceCatalog(latestMemberReport);return;
+ }
  if(!e.target.matches('[data-benchmark-reference]')||!latestMemberReport)return;
  benchmarkReference=e.target.value;
  const view=$('member-result').querySelector('[data-coach-view][aria-selected="true"]')?.dataset.coachView||'guns';
