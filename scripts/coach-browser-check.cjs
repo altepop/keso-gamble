@@ -111,7 +111,12 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   assert.equal(await page.locator('[data-analysis-details]').evaluate(el=>el.open),false);
   assert.equal(await page.locator('[data-other-practice]').evaluate(el=>el.open),false);
   assert.equal(await page.locator('[data-pdca-step="task"]').getAttribute('aria-current'),'step');
-  if(process.env.COACH_V6_SCREENSHOTS_DIR)await require('./coach-prototype-visual.cjs')({browser,page,root,output:process.env.COACH_V6_SCREENSHOTS_DIR});
+  if(process.env.COACH_V6_SCREENSHOTS_DIR)await require('./coach-prototype-visual.cjs')({browser,root,output:process.env.COACH_V6_SCREENSHOTS_DIR,createActualPage:async options=>{
+   const context=await browser.newContext(options);
+   await context.addInitScript(t=>localStorage.setItem('keso-kp-session-v1',t),token);
+   await context.route('https://valorant-results.tealeaforest.workers.dev/**',route=>route.fulfill({json:{...state,report:projectCoachSelfReport(makeMember('神戸'))}}));
+   return context.newPage();
+  }});
   await page.locator('[data-analysis-details] > summary').click();
   assert.match(await page.locator('#member-result').innerText(),/Abema#ttv/);
   assert.match(await page.locator('#member-result').innerText(),/Aquatopia#toppy/);
