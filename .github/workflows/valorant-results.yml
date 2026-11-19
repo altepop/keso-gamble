@@ -222,6 +222,9 @@ jobs:
           cp -R services/valorant-results/. "$RUNNER_TEMP/kp-app/services/valorant-results/"
           mkdir -p "$RUNNER_TEMP/kp-app/js"
           cp js/*.js "$RUNNER_TEMP/kp-app/js/"
+          # Include the trusted P9.4 CPU strategy modules in the isolated Worker bundle.
+          mkdir -p "$RUNNER_TEMP/kp-app/duel-preview"
+          cp duel-preview/cpu.js duel-preview/cpu-board-search.js duel-preview/cpu-hidden-games.js duel-preview/cpu-poker.js "$RUNNER_TEMP/kp-app/duel-preview/"
           mkdir -p "$RUNNER_TEMP/kp-app/coach"
           cp coach/*.js "$RUNNER_TEMP/kp-app/coach/"
           mkdir -p "$RUNNER_TEMP/kp-app/services/music-voice"
