@@ -25,6 +25,6 @@ test('P10.1 public position is projected for board-only games',()=>{
 });
 test('P10.1 missing or malformed state fails closed',()=>{
  assert.throws(()=>spectatorPublicSnapshot({...base,version:-1}),/unavailable/);
- assert.throws(()=>spectatorPublicSnapshot({...base,game:'unknown'} as SpectatorSource),/unavailable/);
+ assert.throws(()=>spectatorPublicSnapshot({...base,game:'unknown'} as unknown as SpectatorSource),/unavailable/);
  assert.deepEqual(spectatorPublicSnapshot({...base,board:'not json'}).publicState,null);
 });
