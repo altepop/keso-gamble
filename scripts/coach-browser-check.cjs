@@ -115,11 +115,11 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
     if(kind==='notification'){
      if(!teamState.joined)return route.fulfill({status:404,json:{error:'この表示は利用できません。'}});
      if(req.method()==='GET')return route.fulfill({json:{settings:noticeSettings,deliveryReady:false,
-      preview:{message:'KESO COACH：チームの共有課題が更新されました。内容は本人認証後のチーム画面で確認してください。',mode:'送信しないプレビュー',mentions:'なし'}}});
+      preview:{message:'KESO COACH：チームの共有課題が更新されました。内容は本人認証後のチーム画面で確認してください。',mode:'送信しないプレビュー',mentions:'なし',includesPersonalNotes:false,includesMatchIds:false}}});
      const b=req.postDataJSON();if(b.expectedVersion!==noticeSettings.version)return route.fulfill({status:409,json:{error:'古い設定です。'}});
      noticeSettings={enabled:b.enabled,version:noticeSettings.version+1};
      return route.fulfill({json:{settings:noticeSettings,deliveryReady:false,
-      preview:{message:'KESO COACH：チームの共有課題が更新されました。内容は本人認証後のチーム画面で確認してください。',mode:'送信しないプレビュー',mentions:'なし'}}});
+      preview:{message:'KESO COACH：チームの共有課題が更新されました。内容は本人認証後のチーム画面で確認してください。',mode:'送信しないプレビュー',mentions:'なし',includesPersonalNotes:false,includesMatchIds:false}}});
     }
     if(['pdca','challenge','status'].includes(kind)){
      if(!teamState.joined)return route.fulfill({status:404,json:{error:'この表示は利用できません。'}});
@@ -214,18 +214,18 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   // Phase 3-E: manual-only notice preview, opt-in, and opt-out (never send Discord).
   const noticeRequestsBefore=requests.filter(r=>r.url.includes('/team/notification')).length;
   assert.equal(noticeRequestsBefore,0,'no automatic notification request');
-  await page.locator('[data-team-notify-panel] > summary').click();
-  await page.locator('[data-notify-load]').click();
-  await page.locator('[data-notify-form]').waitFor({state:'visible'});
-  assert.equal(await page.locator('[name=teamNoticeOptIn]').isChecked(),false);
-  assert.match(await page.locator('[data-notify-preview]').innerText(),/送信しないプレビュー/);
-  await page.locator('[name=teamNoticeOptIn]').check();
-  await page.locator('[data-notify-form] button[type=submit]').click();
-  await page.waitForFunction(()=>document.querySelector('[data-notify-form] button[type=submit]')?.disabled===false);
-  assert.equal(noticeSettings.enabled,true);assert.equal(await page.locator('[data-notify-preview] img').count(),0);
-  await page.locator('[name=teamNoticeOptIn]').uncheck();
-  await page.locator('[data-notify-form] button[type=submit]').click();
-  await page.waitForFunction(()=>document.querySelector('[data-notify-form] button[type=submit]')?.disabled===false);
+  await page.locator('[data-team-notice] > summary').click();
+  await page.locator('[data-notice-load]').click();
+  await page.locator('[data-notice-form]').waitFor({state:'visible'});
+  assert.equal(await page.locator('[name=noticeEnabled]').isChecked(),false);
+  assert.match(await page.locator('[data-notice-preview]').innerText(),/共有課題が更新/);
+  await page.locator('[name=noticeEnabled]').check();
+  await page.locator('[data-notice-form] button[type=submit]').click();
+  await page.waitForFunction(()=>document.querySelector('[data-notice-form] button[type=submit]')?.disabled===false);
+  assert.equal(noticeSettings.enabled,true);assert.equal(await page.locator('[data-notice-preview] img').count(),0);
+  await page.locator('[name=noticeEnabled]').uncheck();
+  await page.locator('[data-notice-form] button[type=submit]').click();
+  await page.waitForFunction(()=>document.querySelector('[data-notice-form] button[type=submit]')?.disabled===false);
   assert.equal(noticeSettings.enabled,false,'opt-out stops future notification');
   for(const width of [320,375,1440]){
    await page.setViewportSize({width,height:900});
