@@ -365,6 +365,7 @@ jobs:
           node scripts/coach-profile-audit.mjs
           node scripts/coach-goals-audit.mjs
           node scripts/coach-sharing-audit.mjs
+          node scripts/coach-team-consent-audit.mjs
           node scripts/coach-records-audit.mjs
           node scripts/coach-review-audit.mjs
           node scripts/coach-review-cost.mjs
