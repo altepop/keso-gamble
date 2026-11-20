@@ -12,13 +12,14 @@ export function projectTeamMember(member, consent) {
   };
 }
 export function projectTeamRoster(members, consents) {
+  if (!Array.isArray(members) || !Array.isArray(consents)) return [];
   const seen = new Set();
   const result = [];
-  for (const member of members ?? []) {
+  for (const member of members) {
     if (!validId(member?.ownerId) || !validId(member?.teamId) || !validId(member?.guildId)) continue;
     const key = JSON.stringify([member.guildId, member.teamId, member.ownerId]);
     if (seen.has(key)) continue;
-    const consent = consents?.find(c => matchesScope(member, c) && c.shareTeamStatus === true);
+    const consent = consents.find(c => matchesScope(member, c) && c.shareTeamStatus === true);
     const projected = projectTeamMember(member, consent);
     if (projected) { seen.add(key); result.push(projected); }
   }
