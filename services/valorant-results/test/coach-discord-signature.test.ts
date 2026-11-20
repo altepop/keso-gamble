@@ -1,8 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {webcrypto} from 'node:crypto';
 import {verifyCoachDiscordSignature} from '../src/coach-discord-signature.ts';
 test('E2 Ed25519 verifies exact raw body and rejects modified payloads and stale replay',async()=>{
- const subtle=globalThis.crypto.subtle;
+ const subtle=webcrypto.subtle;
  const key=await subtle.generateKey({name:'Ed25519'},true,['sign','verify']);
  const publicKey=Buffer.from(await subtle.exportKey('raw',key.publicKey)).toString('hex');
  const timestamp='1795220000',rawBody='{"type":1}';
