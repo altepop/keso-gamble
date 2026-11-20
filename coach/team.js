@@ -29,16 +29,105 @@
   const view=el('button','許可済みのパーティ指標を確認します',{type:'button','data-team-metrics-load':''});
   const roster=el('button','共有に同意したメンバーを確認します',{type:'button','data-team-roster-load':''});
   const names=el('div',undefined,{'data-team-roster-view':''});
+
+  // The team PDCA card is intentionally loaded only after a member clicks it.
+  // Never automatically turn a personal practice record into a team status.
+  const pdca=el('details',undefined,{class:'coach-disclosure','data-team-pdca':''});
+  pdca.append(el('summary','チームの共有課題と本人申告を確認します'));
+  const pdcaBody=el('div',undefined,{class:'detail-body'});
+  const pdcaLoad=el('button','共有課題を読み込みます',{type:'button','data-team-pdca-load':''});
+  const pdcaStatus=el('p','課題はまだ読み込んでいません。',{role:'status','aria-live':'polite'});
+  const taskCard=el('div',undefined,{'data-team-task':''});
+  const peers=el('div',undefined,{'data-team-participants':''});
+  const history=el('div',undefined,{'data-team-task-history':''});
+  const taskForm=el('form',undefined,{'data-team-task-form':''});
+  const makeField=(form,tag,name,label,limit)=>{const wrap=el('label',label),input=el(tag,undefined,{name});
+   if(limit)input.maxLength=limit;
+   wrap.append(input);form.append(wrap);return input;};
+  const category=makeField(taskForm,'select','category','チームで確認する課題の分類');
+  for(const c of ['連携','序盤','トレード','守り','リテイク','攻め','その他'])category.append(el('option',c,{value:c}));
+  const taskTitle=makeField(taskForm,'input','title','共有課題の名前（50文字まで）',50);
+  const taskAction=makeField(taskForm,'textarea','action','次の試合で試す行動（120文字まで）',120);
+  const taskMeasure=makeField(taskForm,'textarea','measure','試したか確認する方法（120文字まで）',120);
+  const taskEnd=makeField(taskForm,'input','periodEnd','確認の期限');taskEnd.type='date';
+  const taskActive=makeField(taskForm,'input','active','現在の課題を有効にします');taskActive.type='checkbox';taskActive.checked=true;
+  const reason=makeField(taskForm,'input','reason','課題を変更する理由（120文字まで）',120);
+  taskForm.append(el('p','作成した本人だけが、この共有課題を変更できます。過去の課題は履歴に残します。'));
+  const saveTask=el('button','共有課題を保存します',{type:'submit'});taskForm.append(saveTask);
+  const selfForm=el('form',undefined,{'data-team-status-form':''});
+  const selfState=makeField(selfForm,'select','state','本人の取り組み状況');
+  for(const v of ['未着手','実施予定','本人が試した','振り返り待ち','本人が確認','不参加'])selfState.append(el('option',v,{value:v}));
+  const selfAction=makeField(selfForm,'textarea','action','今回試す行動の短い自己申告（100文字まで）',100);
+  selfForm.append(el('p','本人による申告だけを共有します。メモ・実施記録・戦績は共有しません。'));
+  const saveSelf=el('button','自分の状態を共有します',{type:'submit'});selfForm.append(saveSelf);
+  pdcaBody.append(el('p','チームで一つの課題を試し、各自が本人の操作で進捗を申告します。'),
+   pdcaLoad,pdcaStatus,taskCard,peers,taskForm,selfForm,history);
+  pdca.append(pdcaBody);
+  let pdcaData=null;
+  const clearPdca=()=>{pdcaData=null;taskCard.replaceChildren();peers.replaceChildren();history.replaceChildren();
+   taskForm.hidden=true;selfForm.hidden=true;pdcaStatus.textContent='課題はまだ読み込んでいません。';};
+  const showPdca=data=>{
+   clearPdca();pdcaData=data;
+   if(!data?.challenge){taskCard.append(el('p','共有課題はまだありません。本人が作成するとチームに表示されます。'));}
+   else{
+    const c=data.challenge;
+    taskCard.append(el('h3',c.title),el('p','分類：'+c.category),el('p','次の行動：'+c.action),
+     el('p','確認方法：'+c.measure),el('p','期限：'+c.periodEnd),
+     el('p',c.active?'現在取り組む課題です。':'終了した課題です。'));
+   }
+   if(data?.canEdit){
+    taskForm.hidden=false;
+    const c=data.challenge;
+    category.value=c?.category||'連携';taskTitle.value=c?.title||'';
+    taskAction.value=c?.action||'';taskMeasure.value=c?.measure||'';
+    taskEnd.value=c?.periodEnd||'';taskActive.checked=c?.active!==false;reason.value='';
+   }
+   if(data?.challenge?.active&&settings?.joined&&settings.shareStatus){
+    selfForm.hidden=false;
+    selfState.value=data.self?.state||'未着手';
+    selfAction.value=data.self?.action||'';
+   }
+   for(const m of Array.isArray(data?.shared)?data.shared.slice(0,5):[])
+    if(typeof m.displayName==='string'&&typeof m.state==='string'&&typeof m.action==='string')
+     peers.append(el('p',m.displayName.slice(0,40)+'：'+m.state.slice(0,30)+'／'+m.action.slice(0,100)));
+   if(!peers.children.length)peers.append(el('p','本人が共有を許可した進捗はまだありません。'));
+   const revisions=Array.isArray(data?.history)?data.history.slice(0,5):[];
+   if(revisions.length)history.append(el('h3','共有課題の変更履歴'));
+   for(const r of revisions)history.append(el('p','第'+r.version+'版：'+r.title+'（'+r.reason+'）'));
+   pdcaStatus.textContent='同意済みの共有課題と本人申告だけを表示しています。';
+  };
+  const reloadPdca=async at=>{const data=await request('/api/kp/coach/team/pdca');
+   if(at!==epoch)return;showPdca(data);
+  };
+  pdcaLoad.onclick=()=>void guarded(async at=>{clearPdca();await reloadPdca(at);});
+  taskForm.onsubmit=e=>{e.preventDefault();if(!pdcaData?.canEdit)return;
+   const b={expectedVersion:pdcaData.challenge?.version||0,category:category.value,title:taskTitle.value,
+    action:taskAction.value,measure:taskMeasure.value,periodEnd:taskEnd.value,
+    active:taskActive.checked,reason:reason.value};
+   clearPdca();void guarded(async at=>{
+    await request('/api/kp/coach/team/challenge',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});
+    if(at===epoch)await reloadPdca(at);
+   });
+  };
+  selfForm.onsubmit=e=>{e.preventDefault();if(!pdcaData?.challenge?.active||!settings?.shareStatus)return;
+   const b={challengeVersion:pdcaData.challenge.version,expectedVersion:pdcaData.self?.version||0,
+    state:selfState.value,action:selfAction.value};
+   clearPdca();void guarded(async at=>{
+    await request('/api/kp/coach/team/status',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});
+    if(at===epoch)await reloadPdca(at);
+   });
+  };
   body.append(el('p','同意のないメンバーの情報は表示しません。読み込み・保存・集計は操作したときだけ行います。'),
-   load,info,form,view,roster,names,metricHost);
-  const blank=()=>{metricHost.replaceChildren();names.replaceChildren();};
+   load,info,form,view,roster,names,metricHost,pdca);
+  const blank=()=>{metricHost.replaceChildren();names.replaceChildren();clearPdca();};
   const sync=()=>{const allowed=active&&settings!==null;
    form.hidden=!allowed;view.hidden=!allowed||!settings.joined||!settings.shareMetrics;
    roster.hidden=!allowed||!settings.joined;
+   pdca.hidden=!allowed||!settings.joined;
    if(!allowed)return;
    joined.checked=Boolean(settings.joined);status.checked=Boolean(settings.shareStatus);metrics.checked=Boolean(settings.shareMetrics);
   };
-  const enable=()=>{save.disabled=load.disabled=view.disabled=roster.disabled=false;};
+  const enable=()=>{save.disabled=load.disabled=view.disabled=roster.disabled=pdcaLoad.disabled=saveTask.disabled=saveSelf.disabled=false;};
   const clear=()=>{epoch++;active=false;pending=false;enable();settings=null;blank();info.textContent='';
    joined.checked=false;status.checked=false;metrics.checked=false;panel.open=false;sync();};
   const invalidate=()=>{if(!active)return;epoch++;pending=false;enable();settings=null;blank();
@@ -46,9 +135,9 @@
   const setActive=()=>{active=true;settings=null;pending=false;enable();blank();
    info.textContent='初期設定は共有OFFです。同意設定を読み込んでから変更してください。';sync();};
   async function guarded(fn){if(!active||pending)return;pending=true;const at=epoch;
-   save.disabled=load.disabled=view.disabled=roster.disabled=true;
+   save.disabled=load.disabled=view.disabled=roster.disabled=pdcaLoad.disabled=saveTask.disabled=saveSelf.disabled=true;
    try{await fn(at);}catch(e){if(at===epoch){blank();info.textContent=e?.message||'読み込みに失敗しました。';}}
-   finally{if(at===epoch){pending=false;save.disabled=load.disabled=view.disabled=roster.disabled=false;}}
+   finally{if(at===epoch){pending=false;save.disabled=load.disabled=view.disabled=roster.disabled=pdcaLoad.disabled=saveTask.disabled=saveSelf.disabled=false;}}
   }
   load.onclick=()=>void guarded(async at=>{
    blank();const data=await request('/api/kp/coach/team/consent');
