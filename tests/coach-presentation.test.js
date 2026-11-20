@@ -87,7 +87,7 @@ test('Phase 2-C v6 loop is owner-only, read-only until explicit actions, and con
  assert.ok(html.includes('loop.js?v=coach-'+createHash('sha256').update(code).digest('hex').slice(0,12)));
  assert.ok(html.includes('<div id="coach-loop-host"></div>'));
  assert.ok(html.indexOf('id="coach-loop-host"')<html.indexOf('id="member-result"'));
- assert.doesNotMatch(code,/\\b(?:sessionStorage|localStorage)\\b|innerHTML\\s*=|\\bfetch\\s*\\(/);
+ assert.doesNotMatch(code,/\b(?:sessionStorage|localStorage)\b|innerHTML\s*=|\bfetch\s*\(/);
  assert.match(code,/前後の数字は未確認です/);
  assert.match(code,/練習の効果が証明されたとは扱いません/);
 });
