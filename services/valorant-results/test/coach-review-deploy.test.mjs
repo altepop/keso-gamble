@@ -16,9 +16,9 @@ test('all new observation routes deny unauthenticated and forbidden-origin reque
  const r=await probeCoachReview(request,helper);assert.equal(r.routes.length,6);assert.equal(r.sourceMatch,true);assert.equal(r.mutations,0);await assert.rejects(probeCoachReview(request,'changed'),/hash mismatch/);await assert.rejects(probeCoachReview(async()=>new Response(''),helper),/boundary/);
 });
 
-test('read-only D1 benchmark measures metadata separately from row count and exposes no player or match IDs',async()=>{
+test('production copy with an empty account mapping: read-only D1 benchmark measures metadata separately from row count and exposes no player or match IDs',async()=>{
  const {selfFixture}=await import('./coach-self.fixture.ts'),{reviewCost}=await import('../scripts/coach-review-cost.mjs');const f=await selfFixture(),d=mkdtempSync(join(tmpdir(),'review-cost-'));try{
- writeFileSync(join(d,'wrangler.jsonc'),JSON.stringify({name:'valorant-results',d1_databases:[{binding:'DB',database_id:'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'}]}));writeFileSync(join(d,'reward-accounts.json'),JSON.stringify(f.mapping));
+ writeFileSync(join(d,'wrangler.jsonc'),JSON.stringify({name:'valorant-results',d1_databases:[{binding:'DB',database_id:'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'}]}));writeFileSync(join(d,'reward-accounts.json'),JSON.stringify({guildId:f.mapping.guildId,accounts:[]}));writeFileSync(join(d,'discord-config.json'),JSON.stringify({guildId:f.mapping.guildId}));
  const puuid=f.sql.prepare('SELECT puuid FROM coach_profile_accounts WHERE account_key=?').get('Abema#ttv').puuid;
  for(let i=0;i<24;i++){const players=[{puuid,team_id:'Blue',agent:'Sage',k:20,d:10,a:5,score:4000},...Array.from({length:9},(_,j)=>({puuid:'private-'+j,team_id:j<4?'Blue':'Red'}))];f.sql.prepare('INSERT INTO valorant_match_rosters VALUES(?,?,?,?,?,?,?)').run('private-match-'+i,Date.now()-i*10000,'Ascent','ACT1',JSON.stringify([{id:'Blue',rounds:13,won:true},{id:'Red',rounds:7,won:false}]),JSON.stringify(players),Date.now());}
  const statements=[];const request=async(url,opts)=>{const q=JSON.parse(opts.body);assert.match(q.sql,/^(SELECT|EXPLAIN QUERY PLAN)\b/);statements.push(q.sql);return {ok:true,json:async()=>({success:true,result:[{success:true,results:f.sql.prepare(q.sql).all(...q.params),meta:{rows_read:123,duration:0.5}}]})};};
