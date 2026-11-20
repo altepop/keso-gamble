@@ -3,6 +3,8 @@
 import type {KpEnv} from './kp.ts';
 import {prepareStocks} from './stock-market.ts';
 import {stockBulletin} from './stock-bulletins.ts';
+// @ts-expect-error Shared event schedule.
+import {VDK_CRASH_START,VDK_IPO_AT} from '../../../js/vdk-bankruptcy.js';
 // @ts-expect-error Browser and Worker share the same fictional news catalog.
 import {resolveStockStory,validateCustomStory} from '../../../js/stock-stories.js';
 // @ts-expect-error Shared browser's stock table.
@@ -68,6 +70,8 @@ export async function applyStockShock(env:KpEnv,guild:string,user:string,id:stri
  if(!/^[a-zA-Z0-9-]{16,80}$/.test(id))throw Error('操作IDが不正です。');
  if(!/^\d{15,22}$/.test(user)||!/^\d{15,22}$/.test(guild))throw Error('接続情報が不正です。');
  const symbol=args.symbol,direction=args.direction,strength=args.strength;
+  if(symbol==='vdk'&&now>=VDK_CRASH_START)throw Error('倒産イベント中のVDKブラック商事は株価操作できません。');
+  if(symbol==='vdkc'&&now<VDK_IPO_AT)throw Error('VDKブラックコンサルは新規上場前です。');
  const eventId=typeof args.eventId==='string'?args.eventId:'auto';
  // The server independently selects/validates the announcement. Do not trust
  // a client-provided preset text. Custom stories are restricted to the owner.

@@ -235,7 +235,7 @@ test('架空の会社はたまに架空ニュースで大きく動く。外れ�
 
 test('全銘柄の買付は共通価格を上げ、売却は下げる。再送では価格もKPも再更新しない',async t=>{
  t.mock.timers.enable({apis:['Date'],now:T});const f=await fixture();f.credit('order-fund',10000000);
- const initial=await readKpState(f.env,mapping,one),ids=Object.keys(initial.prices);
+ const initial=await readKpState(f.env,mapping,one),ids=Object.keys(initial.prices).filter(symbol=>symbol!=='vdkc'); // VDKC is not listed at this test's historical clock.
  for(const symbol of ids){
   const before=await readKpState(f.env,mapping,one),id='demand-buy-operation-'+symbol;
   const response=await trade(f,id,'buy',2,symbol);const bought=await readKpState(f.env,mapping,one),other=await readKpState(f.env,mapping,two);
