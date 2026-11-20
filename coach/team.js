@@ -119,15 +119,53 @@
   };
   body.append(el('p','同意のないメンバーの情報は表示しません。読み込み・保存・集計は操作したときだけ行います。'),
    load,info,form,view,roster,names,metricHost,pdca);
-  const blank=()=>{metricHost.replaceChildren();names.replaceChildren();clearPdca();};
+  // Phase 3-E: consent-only UI. This does not send Discord messages.
+  const noticePanel=el('details',undefined,{class:'coach-disclosure','data-team-notice':''});
+  noticePanel.append(el('summary','Discord通知の同意とプレビューを確認します'));
+  const noticeBody=el('div',undefined,{class:'detail-body'});
+  const noticeLoad=el('button','通知設定を読み込みます',{type:'button','data-notice-load':''});
+  const noticeStatus=el('p','通知は初期OFFです。',{role:'status','aria-live':'polite'});
+  const noticePreview=el('p','',{'data-notice-preview':''});
+  const noticeForm=el('form',undefined,{'data-notice-form':''});
+  const noticeLabel=el('label'),noticeOptin=el('input',undefined,{type:'checkbox',name:'noticeEnabled'});
+  noticeLabel.append(noticeOptin,document.createTextNode('チーム課題通知を受け取ることに同意します'));
+  noticeForm.append(noticeLabel,el('p','通知には管理者の配信先設定も必要です。現段階では送信されません。'));
+  const noticeSave=el('button','通知の同意を保存します',{type:'submit'});
+  noticeForm.append(noticeSave);noticeBody.append(
+   el('p','個人のメモ・実施記録・戦績は通知に含みません。通知の設定だけを保存します。'),
+   noticeLoad,noticeStatus,noticePreview,noticeForm);noticePanel.append(noticeBody);body.append(noticePanel);
+  let noticeState=null;
+  const hideNotice=()=>{noticeState=null;noticeForm.hidden=true;noticePreview.textContent='';
+   noticeStatus.textContent='通知は初期OFFです。';noticeOptin.checked=false;noticeSave.disabled=false;noticeLoad.disabled=false;};
+  const showNotice=data=>{noticeState=data.settings;
+   noticeForm.hidden=false;noticeOptin.checked=data.settings?.enabled===true;
+   const preview=data.preview;
+   noticePreview.textContent=preview?.mode==='送信しないプレビュー'&&preview?.includesPersonalNotes===false&&preview?.includesMatchIds===false
+    ?preview.message:'プレビューはまだ分かりません。';
+   noticeStatus.textContent=data.deliveryReady===true?'配信準備ができています。':'現在、通知は送信されません。';
+  };
+  noticeLoad.onclick=()=>void guarded(async at=>{
+   hideNotice();const data=await request('/api/kp/coach/team/notification');
+   if(at!==epoch)return;showNotice(data);
+  });
+  noticeForm.onsubmit=e=>{e.preventDefault();if(!noticeState)return;
+   const expectedVersion=noticeState.version,enabled=noticeOptin.checked;
+   hideNotice();void guarded(async at=>{
+    const data=await request('/api/kp/coach/team/notification',{method:'POST',
+     headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled,expectedVersion})});
+    if(at!==epoch)return;showNotice(data);
+   });
+  };
+  const blank=()=>{metricHost.replaceChildren();names.replaceChildren();clearPdca();hideNotice();};
   const sync=()=>{const allowed=active&&settings!==null;
    form.hidden=!allowed;view.hidden=!allowed||!settings.joined||!settings.shareMetrics;
    roster.hidden=!allowed||!settings.joined;
    pdca.hidden=!allowed||!settings.joined;
+    noticePanel.hidden=!allowed||!settings.joined;
    if(!allowed)return;
    joined.checked=Boolean(settings.joined);status.checked=Boolean(settings.shareStatus);metrics.checked=Boolean(settings.shareMetrics);
   };
-  const enable=()=>{save.disabled=load.disabled=view.disabled=roster.disabled=pdcaLoad.disabled=saveTask.disabled=saveSelf.disabled=false;};
+  const enable=()=>{save.disabled=load.disabled=view.disabled=roster.disabled=pdcaLoad.disabled=saveTask.disabled=saveSelf.disabled=noticeLoad.disabled=noticeSave.disabled=false;};
   const clear=()=>{epoch++;active=false;pending=false;enable();settings=null;blank();info.textContent='';
    joined.checked=false;status.checked=false;metrics.checked=false;panel.open=false;sync();};
   const invalidate=()=>{if(!active)return;epoch++;pending=false;enable();settings=null;blank();
@@ -135,9 +173,9 @@
   const setActive=()=>{active=true;settings=null;pending=false;enable();blank();
    info.textContent='初期設定は共有OFFです。同意設定を読み込んでから変更してください。';sync();};
   async function guarded(fn){if(!active||pending)return;pending=true;const at=epoch;
-   save.disabled=load.disabled=view.disabled=roster.disabled=pdcaLoad.disabled=saveTask.disabled=saveSelf.disabled=true;
+   save.disabled=load.disabled=view.disabled=roster.disabled=pdcaLoad.disabled=saveTask.disabled=saveSelf.disabled=noticeLoad.disabled=noticeSave.disabled=true;
    try{await fn(at);}catch(e){if(at===epoch){blank();info.textContent=e?.message||'読み込みに失敗しました。';}}
-   finally{if(at===epoch){pending=false;save.disabled=load.disabled=view.disabled=roster.disabled=pdcaLoad.disabled=saveTask.disabled=saveSelf.disabled=false;}}
+   finally{if(at===epoch){pending=false;save.disabled=load.disabled=view.disabled=roster.disabled=pdcaLoad.disabled=saveTask.disabled=saveSelf.disabled=noticeLoad.disabled=noticeSave.disabled=false;}}
   }
   load.onclick=()=>void guarded(async at=>{
    blank();const data=await request('/api/kp/coach/team/consent');
