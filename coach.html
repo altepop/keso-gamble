@@ -883,9 +883,9 @@
 
 
 </template>
-<script src="./coach/practice-review.js?v=coach-b42dbbe724ff"></script>
-<script src="./coach/loop.js?v=coach-09fefb2dce82"></script>
-<script src="./coach/records.js?v=coach-09c3c24ab23f"></script>
+<script src="./coach/practice-review.js?v=coach-34be17a33636"></script>
+<script src="./coach/loop.js?v=coach-4955e0605085"></script>
+<script src="./coach/records.js?v=coach-c7a5d7296cf1"></script>
 <script src="./coach/sharing.js?v=coach-52d276772aa9"></script>
 <script src="./coach/goals.js?v=coach-ca17bb21a788"></script>
 <script src="./coach/prototype-view.js?v=coach-faf63d5b91b0"></script>
@@ -1696,7 +1696,7 @@ const authenticatedCoachRequest=async(path,opts={})=>{
 };
 const coachGoals=globalThis.KesoCoachGoals.create({request:authenticatedCoachRequest});
 let coachLoop;
-const coachRecords=globalThis.KesoCoachRecords.create({request:authenticatedCoachRequest,copyText:t=>CoachPresentation.polite(CoachPresentation.action(t)),onChange:state=>coachLoop?.update(state)});
+const coachRecords=globalThis.KesoCoachRecords.create({request:authenticatedCoachRequest,copyText:t=>CoachPresentation.polite(CoachPresentation.action(t)),onChange:state=>coachLoop?.update(state),onReview:(id,review)=>coachLoop?.showObservation(id,review)});
 coachLoop=globalThis.KesoCoachLoop.create({records:coachRecords});
 $('coach-loop-host').append(coachLoop.element);
 $('coach-records-host').append(coachRecords.element);
