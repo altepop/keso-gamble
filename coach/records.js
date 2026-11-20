@@ -5,9 +5,9 @@
  const el=(tag,text,attrs={})=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=text;for(const [k,v] of Object.entries(attrs))n.setAttribute(k,v);return n;};
  let catalogPromise;const clientCatalog=()=>catalogPromise??=crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify({policy:'diamond-v1',entries:root.KesoCoachPractice.entries}))).then(bytes=>[...new Uint8Array(bytes)].map(b=>b.toString(16).padStart(2,'0')).join(''));
  const labels={done:'実施しました',partial:'一部試しました',skipped:'今回は試していません',unknown:'覚えていません'};
- function create({request,copyText=t=>t,onChange=()=>{}}){
+ function create({request,copyText=t=>t,onChange=()=>{},onReview=()=>{}}){
   const element=el('section',undefined,{class:'coach-records','data-private-records':''}),status=el('p','',{role:'status','aria-live':'polite'}),guard=el('div',undefined,{'data-record-leave-guard':''});guard.hidden=true;
-  const review=root.KesoCoachPracticeReview.create({copyText});
+  const review=root.KesoCoachPracticeReview.create({copyText,onReview});
   let epoch=0,data=null,notes=[],noteCursor=null,goals=[],state=null,pending=false,newRecord=crypto.randomUUID(),newNote=crypto.randomUUID(),open=false;
   const dirty=()=>[...element.querySelectorAll('form[data-dirty="true"]')];
   function clear(){epoch++;review.clear();data=null;notes=[];goals=[];state=null;noteCursor=null;pending=false;open=false;newRecord=crypto.randomUUID();newNote=crypto.randomUUID();element.replaceChildren();status.textContent='';guard.replaceChildren();guard.hidden=true;onChange(null);}
