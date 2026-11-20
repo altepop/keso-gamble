@@ -15,7 +15,8 @@ async function fixture(){
  for(const name of readdirSync(new NodeURL('../migrations/',import.meta.url)).filter(x=>x.endsWith('.sql')).sort())
   sql.exec(readFileSync(new NodeURL('../migrations/'+name,import.meta.url),'utf8'));
  class Q {
-  constructor(readonly statement:string,readonly values:unknown[]=[]){}
+  statement:string;values:unknown[];
+  constructor(statement:string,values:unknown[]=[]){this.statement=statement;this.values=values;}
   bind(...values:unknown[]){return new Q(this.statement,values);}
   first(){return sql.prepare(this.statement).get(...this.values as never[])??null;}
   all(){return {results:sql.prepare(this.statement).all(...this.values as never[])};}
