@@ -600,6 +600,7 @@
 <div id="coach-records-host"></div>
 <div id="coach-sharing-host"></div>
 <div id="coach-team-host"></div>
+<div id="coach-notify-host"></div>
 <details class="coach-disclosure" id="coach-operations"><summary>収集状況や更新設定を確認します <span class="chev" aria-hidden="true">⌄</span></summary><div class="detail-body coach-existing">
 <div id="coach-operation-actions"><div id="status" role="status" aria-live="polite">データを確認中…</div><textarea id="share-fallback" hidden readonly aria-label="診断レポート" rows="6" style="width:100%;background:#09152a;color:#e9eef9;border:1px solid #435779;border-radius:10px;margin-top:8px;font:12px/1.4 monospace"></textarea><div class="actions"><button id="reload" type="button">分析を更新</button><button id="share" class="secondary" type="button" disabled>診断レポートをコピー</button><span class="small muted">手動更新 · KPの増減なし</span></div>
 <p class="small muted">ご本人の診断をコピーできます。認証情報・試合ID・PUUID・相手の名前は含めません。</p>
@@ -891,6 +892,7 @@
 <script src="./coach/records.js?v=coach-a852350c480e"></script>
 <script src="./coach/sharing.js?v=coach-52d276772aa9"></script>
 <script src="./coach/team.js?v=coach-24db0797b701"></script>
+<script src="./coach/notifications.js?v=coach-phase3e-20261120"></script>
 <script src="./coach/goals.js?v=coach-ca17bb21a788"></script>
 <script src="./coach/prototype-view.js?v=coach-faf63d5b91b0"></script>
 <script src="./coach/benchmarks.js?v=coach-4721e7e852a8"></script>
@@ -1706,16 +1708,18 @@ $('coach-loop-host').append(coachLoop.element);
 $('coach-records-host').append(coachRecords.element);
 const coachSharing=globalThis.KesoCoachSharing.create({request:authenticatedCoachRequest,onSelf:()=>void load(),onView:()=>{
  authGeneration++;activeMember=null;latestReport=null;latestMemberReport=null;memberPending=false;
- memberCache.clear();practiceProfiles.clear();practiceExcluded.clear();coachGoals.clear();coachRecords.clear();coachTeam.clear();
+ memberCache.clear();practiceProfiles.clear();practiceExcluded.clear();coachGoals.clear();coachRecords.clear();coachTeam.clear();coachNotifications.clear();
  globalThis.KesoCoachPrototype.stop();$('member-result').replaceChildren();$('member-coaching-panel').hidden=true;$('coach-operations').hidden=true;
  $('share-fallback').value='';$('share-fallback').hidden=true;$('share').disabled=true;
 }});
 $('coach-sharing-host').append(coachSharing.element);
 const coachTeam=globalThis.KesoCoachTeam.create({request:authenticatedCoachRequest});
 $('coach-team-host').append(coachTeam.element);
+const coachNotifications=globalThis.KesoCoachNotifications.create({request:authenticatedCoachRequest});
+$('coach-notify-host').append(coachNotifications.element);
 function placeCoachGoals(){const improvement=$('member-result').querySelector('[data-improvement]');if(improvement)improvement.after(coachGoals.element);}
 function clearCoachView(){
- coachRecords.clear();coachSharing.clear();coachTeam.clear();$('coach-operations').hidden=false;coachGoals.clear();authGeneration++;latestReport=null;latestMemberReport=null;selfIdentity=null;activeMember=null;memberNames=[];
+ coachRecords.clear();coachSharing.clear();coachTeam.clear();coachNotifications.clear();$('coach-operations').hidden=false;coachGoals.clear();authGeneration++;latestReport=null;latestMemberReport=null;selfIdentity=null;activeMember=null;memberNames=[];
  memberCache.clear();practiceProfiles.clear();practiceExcluded.clear();
  globalThis.KesoCoachPrototype.stop();$('member-result').replaceChildren();$('member-selector').replaceChildren();
  $('member-archive-status').replaceChildren();$('coach-owner-label').textContent='';
@@ -1739,7 +1743,7 @@ async function load(){
   $('return-self').disabled=true;
   $('member-coaching-panel').hidden=false;
   latestReport=data.report;latestMemberReport=data.report;activeMember=selfIdentity.defaultProfile;
-  coachRecords.setState(data.practiceState);coachSharing.setData(data.settings);coachGoals.setData(data.goals);coachTeam.setActive();renderMemberArchiveStatus(data);renderMemberDiagnosis(data.report);
+  coachRecords.setState(data.practiceState);coachSharing.setData(data.settings);coachGoals.setData(data.goals);coachTeam.setActive();coachNotifications.setActive();renderMemberArchiveStatus(data);renderMemberDiagnosis(data.report);
   $('report').hidden=false;$('connection').style.display='none';$('share').disabled=false;
   setStatus('自分の詳細診断を表示しています。要約の共有範囲は下の設定で確認できます。');
  }catch(e){
@@ -1754,7 +1758,7 @@ async function load(){
 }
 function checkCoachSession(event){
  if(event?.type==='storage'&&(event.key===null||event.key==='keso-kp-session-v1')||credentials().split('|').slice(1).join('|')!==credentialState.split('|').slice(1).join('|'))try{sessionStorage.removeItem(KEY)}catch{}
- if(credentials()===credentialState){if(!event||['focus','pageshow'].includes(event.type))coachSharing.invalidate();coachTeam.invalidate();return;}
+ if(credentials()===credentialState){if(!event||['focus','pageshow'].includes(event.type))coachSharing.invalidate();coachTeam.invalidate();coachNotifications.invalidate();return;}
  clearCoachView();busy=false;memberPending=false;void load();
 }
 window.addEventListener('storage',checkCoachSession);
