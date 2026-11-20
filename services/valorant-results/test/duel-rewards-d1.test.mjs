@@ -24,7 +24,7 @@ test('local D1 measures reward rows separately from the existing progression rec
     const baseline = await finish('baseline');
     for (const sql of DUEL_REWARD_DDL) await db.prepare(sql).run();
     const disabled = await finish('disabled');
-    await db.prepare("INSERT INTO kp_duel_reward_policy VALUES('test','pvp',0,3,1,10000,0,0)").run();
+    await db.prepare("INSERT INTO kp_duel_reward_policy_v2 VALUES('test','pvp',0,3,1,10000,0,0)").run();
     const firstAward = await finish('award');
     const pairCapped = await finish('pair-capped');
     const repeatAward = await finish('repeat-award','other-peer');

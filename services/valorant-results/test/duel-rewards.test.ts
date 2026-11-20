@@ -18,7 +18,7 @@ test('reward issuance is opt-in, capped across games, isolated by mode, and idem
 
     finish('unconfigured','a');
     assert.equal(count('rolls'),0);
-    db.exec(`INSERT INTO kp_duel_reward_policy VALUES
+    db.exec(`INSERT INTO kp_duel_reward_policy_v2 VALUES
       ('guild','pvp',0,2,1,10000,0,0),('guild','pve',0,1,NULL,10000,0,0)`);
     finish('unconfigured','a');
     assert.equal(count('rolls'),0);
@@ -50,7 +50,7 @@ test('a 30-day rotated-opponent workload keeps reward writes and quota reads bou
   const start = Date.parse('2026-11-20T00:00:00+09:00');
   try {
     for (const sql of [...DUEL_PROGRESSION_DDL,...DUEL_REWARD_DDL]) db.exec(sql);
-    db.prepare("INSERT INTO kp_duel_reward_policy VALUES('guild','pvp',0,?,1,10000,0,0)")
+    db.prepare("INSERT INTO kp_duel_reward_policy_v2 VALUES('guild','pvp',0,?,1,10000,0,0)")
       .run(dailyCap);
     const finish = db.prepare(`INSERT INTO kp_duel_progress_receipts
       VALUES('guild',?,'player','pvp','othello',?,'win',1,?,?)`);
@@ -73,4 +73,25 @@ test('a 30-day rotated-opponent workload keeps reward writes and quota reads bou
   } finally {
     db.close();
   }
+});
+
+test('approved unlimited PvE and PvP per-opponent cap with 13th daily roll decay', () => {
+  const db = new DatabaseSync(':memory:');
+  const day = Date.parse('2026-11-20T12:00:00+09:00');
+  try {
+    for (const sql of [...DUEL_PROGRESSION_DDL,...DUEL_REWARD_DDL]) db.exec(sql);
+    db.exec("INSERT INTO kp_duel_reward_policy_v2 VALUES ('guild','pve',0,NULL,NULL,1000,0,0),('guild','pvp',0,NULL,4,1000,500,500)");
+    const receipt = db.prepare(`INSERT INTO kp_duel_progress_receipts
+      VALUES('guild',?,'player',?,?,?,'win',1,?,?)`);
+    for (let i=0;i<120;i++) receipt.run('pve-'+i,'pve','othello',null,day,day);
+    assert.equal(db.prepare("SELECT count(*) n FROM kp_duel_reward_rolls WHERE mode='pve'").get()?.n,120);
+    for (let i=0;i<16;i++) receipt.run('pvp-'+i,'pvp','othello','opponent-'+Math.floor(i/4),day,day);
+    assert.equal(db.prepare("SELECT count(*) n FROM kp_duel_reward_rolls WHERE mode='pvp'").get()?.n,16);
+    assert.deepEqual(db.prepare("SELECT chance_bps FROM kp_duel_reward_rolls WHERE mode='pvp' ORDER BY match_id").all().map(r=>Number(r.chance_bps)).sort((a,b)=>a-b), [500,500,500,500,...Array(12).fill(1000)]);
+    receipt.run('blocked','pvp','othello','opponent-0',day,day);
+    assert.equal(db.prepare("SELECT count(*) n FROM kp_duel_reward_rolls WHERE mode='pvp'").get()?.n,16);
+    for (let i=0;i<40;i++) receipt.run('new-'+i,'pvp','othello','fresh-'+i,day,day);
+    assert.equal(db.prepare("SELECT count(*) n FROM kp_duel_reward_rolls WHERE mode='pvp'").get()?.n,56);
+    assert.equal(db.prepare("SELECT count(*) n FROM kp_duel_reward_rolls WHERE mode='pvp' AND chance_bps=500").get()?.n,44);
+  } finally {db.close();}
 });
