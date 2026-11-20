@@ -149,6 +149,6 @@ export async function writeTeamSelfStatus(db:D1Database,mapping:KpMapping,id:Lin
  else result=await db.prepare(`UPDATE coach_team_member_status SET challenge_version=?,version=version+1,self_status=?,self_action=?,updated_at=?
  WHERE guild=? AND team_id=? AND subject_id=? AND owner_user=? AND version=? AND ${guard} RETURNING version`)
   .bind(ch.version,b.state,b.action,now,mapping.guildId,COACH_TEAM_ID,id.subjectId,user,b.expectedVersion,...args).first<{version:number}>();
- if(result?.version!==b.expectedVersion+1)throw stale();
+ if(!result||result.version!==b.expectedVersion+1)throw stale();
  return {saved:true,version:result.version,challengeVersion:ch.version};
 }
