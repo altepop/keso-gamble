@@ -326,6 +326,7 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   const explicitReviewRequests=requests.length;await loop.locator('[data-loop-action="review"]').click();
   await records.locator('[data-review-metric="dpr"]').first().waitFor();
   assert.equal(requests.length,explicitReviewRequests+1,'top loop review reads only after a click');
+  assert.match(await loop.innerText(),/DPR：前/);
   await loop.locator('[data-loop-action="change"]').click();
   assert.equal(await page.locator('[data-other-practice]').evaluate(n=>n.open),true);
   privateSql.prepare("UPDATE valorant_match_rosters SET players_json=json_set(players_json,'$[0].damageDealt',4000,'$[0].damageDealtAt',?) WHERE match_id='review-private-6'").run(Date.now());await reviewPanel.locator('[data-review-load]').click();await reviewPanel.locator('[role="status"]').filter({hasText:'再計算しました'}).waitFor();
