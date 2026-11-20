@@ -306,6 +306,33 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   const dictionaryEnds=japanese.filter(t=>/(?:[^ま]した|できる|できない|補わない|だけ|ではない|である|必要だ|確認する|断定しない|影響する|数える|決まる|異なる|とする|持つ|わかる|分かる|求める|含まれる|保存される|判断できない|得られる|必要になる|揃わない|少ない|多い|低い|高い|出ない|変わらない|足りない|違う|はない|を指す|と呼ぶ)。(?:$)/u.test(t));
   assert.deepEqual(dictionaryEnds,[],'all seven tabs and folded legacy paragraphs use courteous sentence endings');
   if(process.env.COACH_JAPANESE_AUDIT)require('node:fs').writeFileSync(process.env.COACH_JAPANESE_AUDIT,JSON.stringify({sentences:japanese.length,dictionaryEnds},null,2));
+  // Phase 3-C read-only component: isolated visual fixture; no real team API is connected.
+  await page.evaluate(async()=>{
+   const {renderVerifiedPartyMetrics}=await import('./coach/team-metrics-view.js');
+   const host=document.createElement('div');host.dataset.metricsFixture='';
+   document.querySelector('#report').prepend(host);
+   renderVerifiedPartyMetrics(host,{
+    scope:'consented-team-only',ruleVersion:'party-verified-v1',
+    overall:{matches:1,unknownOutcomes:0,winRate:{value:1,numerator:1,denominator:1},
+     kd:{value:2,numerator:30,denominator:15,validPlayerSamples:2,excludedPlayerSamples:0}},
+    quality:{excludedMatches:3,limitReached:false},
+    maps:[{map:'<img src=x onerror=alert(1)>',matches:1,
+     winRate:{value:1,numerator:1,denominator:1},kd:{value:2,numerator:30,denominator:15}}],
+    positionBasedTradeDistance:'評価範囲外'
+   });
+  });
+  const partyFixture=page.locator('[data-metrics-fixture]');
+  assert.equal(await partyFixture.locator('img,script').count(),0,'untrusted map label remains text');
+  assert.match(await partyFixture.innerText(),/勝率：100.0%/);
+  assert.match(await partyFixture.innerText(),/トレード距離など位置解析：評価範囲外/);
+  const partyParagraph=await partyFixture.locator('p').first().evaluate(el=>({font:getComputedStyle(el).fontSize,line:getComputedStyle(el).lineHeight}));
+  assert.equal(partyParagraph.font,'16px');assert.ok(parseFloat(partyParagraph.line)>=30,'read-only copy line-height at least 1.9');
+  for(const width of [320,375,1440]){
+   await page.setViewportSize({width,height:900});
+   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'Phase 3-C party card fits '+width);
+   if(process.env.COACH_V6_SCREENSHOTS_DIR)await partyFixture.screenshot({path:require('node:path').join(process.env.COACH_V6_SCREENSHOTS_DIR,'phase3c-party-fixture-'+width+'.png')});
+  }
+  await partyFixture.evaluate(n=>n.remove());
   // Owner-only practice and memo UI uses the actual SQLite-backed save/list logic.
   const loop=page.locator('[data-coach-loop]');assert.equal(await loop.count(),1);
   assert.match(await loop.innerText(),/前回の実施内容はまだ読み込んでいません/);
