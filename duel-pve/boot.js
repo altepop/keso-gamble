@@ -3,7 +3,7 @@ import {prepareDiscordActivity} from '../js/discord-activity-auth.js?v=p94c';
 const main=document.getElementById('pve-root');
 try{
  await prepareDiscordActivity();
- await import('./controller.js?v=p94c');
+ await import('./controller.js?v=p95');
 }catch(error){
  main.replaceChildren();
  const title=document.createElement('h1');title.textContent='CPU戦を開けませんでした';

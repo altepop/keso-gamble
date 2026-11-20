@@ -1,4 +1,5 @@
 import {readPrivateRecords,savePrivateRecord,readPrivateBody,privatePracticeState,PrivateRecordError} from './coach-private-records.ts';
+import {duelRewardProfile} from './duel-rewards.ts';
 import {coachSharingSettings,saveCoachSharing,coachDirectory,coachSharedSummaries,SharingError} from './coach-sharing.ts';
 import {readCoachGoals,parseCoachGoal,saveCoachGoal,GoalError} from './coach-goals.ts';
 import {resolveCoachIdentity,publicCoachIdentity} from './coach-identity.ts';
@@ -503,6 +504,7 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping,deferP
     ...Object.fromEntries(stream.headers),...headers,'Cache-Control':'no-cache, no-transform'
    }});
   }
+  if(request.method==='GET'&&path==='/api/kp/duels/rewards')return response(await duelRewardProfile(env,mapping.guildId,owner.user));
   if(path==='/api/kp/duels/pve')return serverPveApi(request,env,mapping,owner.user,headers);
   if(path==='/api/kp/duels')return boardDuelApi(request,env,mapping,owner.user,headers,deferPostCommit);
   if(path.startsWith('/api/kp/steam/')){const r=await steamApi(request,env,owner,token!);return new Response(r.body,{status:r.status,headers:{...Object.fromEntries(r.headers),...headers}});}

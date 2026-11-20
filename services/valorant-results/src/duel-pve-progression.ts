@@ -3,7 +3,7 @@
  * from API payloads can be credited by this module.
  */
 import type {KpEnv} from './kp.ts';
-import {ensureDuelProgressionTables} from './duel-progression-schema.ts';
+import {ensureDuelRewards} from './duel-rewards.ts';
 export const DUEL_PVE_PROGRESSION_TRIGGERS=[
  `CREATE TRIGGER IF NOT EXISTS kp_duel_pve_skill_apply
  AFTER INSERT ON kp_duel_progress_receipts
@@ -51,7 +51,7 @@ const ready=new WeakMap<object,Promise<void>>();
 export async function ensureVerifiedPveProgression(env:Pick<KpEnv,'DB'>){
  const prior=ready.get(env.DB);if(prior)return prior;
  const task=(async()=>{
-  await ensureDuelProgressionTables(env);
+  await ensureDuelRewards(env);
   for(const sql of DUEL_PVE_PROGRESSION_TRIGGERS)await env.DB.prepare(sql).run();
  })();
  ready.set(env.DB,task);

@@ -1,16 +1,19 @@
 // P9.4 server-only PvE page. Token is never placed in a URL, body or log.
-import {pvePanel} from './view.js?v=p94c';
+import {pvePanel,duelRewardPanel} from './view.js?v=p95';
 const app=document.getElementById('pve-root');
 const root=location.hostname.endsWith('.discordsays.com')?'/.proxy/kp-api':'https://valorant-results.tealeaforest.workers.dev';
 const token=(()=>{try{return localStorage.getItem('keso-kp-session-v1')||sessionStorage.getItem('keso-kp-session-v1');}catch{return null;}})();
+const openRewardSection=location.hash==='#duel-rewards';
+let rewardProfile=null;
 let owner=null,match=null,busy=false,pending=null,selected=null,picks=[],guess='',game='othello',level='normal',error='',savedId=null;
 const save=(k,value)=>{try{if(value===null)sessionStorage.removeItem(k);else sessionStorage.setItem(k,JSON.stringify(value));}catch{}};
 const load=k=>{try{return JSON.parse(sessionStorage.getItem(k)||'null');}catch{return null;}};
 function render(){
  app.innerHTML='<header class="duel-pve-page-head"><a href="./index.html">← KESO PLAYに戻る</a><h1>⚔️ サーバーCPU攻略</h1></header>'+
- pvePanel({match,connected:!!owner&&!!token,busy,error,pending:!!pending,selected,picks,game,level,savedId:!!savedId,guessDraft:guess});
+ pvePanel({match,connected:!!owner&&!!token,busy,error,pending:!!pending,selected,picks,game,level,savedId:!!savedId,guessDraft:guess,rewardProfile})+duelRewardPanel(rewardProfile);
  // On this dedicated page the only panel should open on first visit.
  const panel=app.querySelector('.duel-pve-panel');if(panel)panel.open=true;
+ if(openRewardSection)app.querySelector('#duel-rewards details:last-child')?.setAttribute('open','');
 }
 async function api(path,body){
  if(!token)throw Error('KP口座への接続が必要です。KESO PLAYでログインしてください。');
@@ -22,6 +25,12 @@ async function api(path,body){
  let data;try{data=await response.json();}catch{throw Error('サーバー応答が未確認です。再取得してください。');}
  if(!response.ok)throw Error(data.error||'CPU戦の操作を確認できませんでした。');
  return data;
+}
+async function loadRewards(){
+ const firstLoad=!rewardProfile;
+ try{rewardProfile=await api('duels/rewards');}catch{return;}
+ render();
+ if(firstLoad&&openRewardSection)app.querySelector('#duel-rewards')?.scrollIntoView();
 }
 async function loadSession(id){
  if(!id||!owner)return;
@@ -44,6 +53,7 @@ async function submit(args,retry=false){
   pending=null;save('pve-pending',null);selected=null;picks=[];guess='';
  }catch(e){error='前回の操作結果を確定できませんでした。新しい操作を送らず、同じ操作IDで確認してください。 '+(e.message||'');}
  finally{busy=false;render();}
+ if(match?.turn==='finished')void loadRewards();
 }
 app.addEventListener('input',e=>{if(e.target.id==='pve-guess')guess=e.target.value;});
 app.addEventListener('change',e=>{
@@ -100,6 +110,7 @@ render();
   savedId=load('pve-id:'+owner);
   if(savedId&&typeof savedId!=='string')savedId=null;
   if(savedId)await loadSession(savedId);
+  void loadRewards();
  }catch(e){error=e.message||'KP口座を確認できませんでした。';}
  render();
 })();

@@ -103,6 +103,7 @@ let browser;const errors=[],requests=[];
  assert.equal(await practiceLink.count(),1,'one CPU practice entry after return');
  assert.equal(await pveLink.count(),1,'one server PvE entry after return');
  assert.equal(await pveLink.getAttribute('href'),'./duel-pve.html');
+ assert.equal(await host.locator('.duel-practice-entry a[href="./duel-pve.html#duel-rewards"]').count(),1);
  await host.close();
  assert.deepEqual(errors,[],'console page errors');
  assert.deepEqual(requests,[],'practice never sends API requests');

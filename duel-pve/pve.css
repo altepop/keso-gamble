@@ -34,3 +34,12 @@
 .duel-pve-panel button:disabled{opacity:.48;cursor:not-allowed}
 @media(max-width:390px){.duel-pve-panel .card-body{padding:9px}.duel-pve-config{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.duel-pve-config .action-btn{grid-column:1 / -1}.duel-pve-board-wrap.wide .duel-pve-board{width:660px}}
 @media(prefers-reduced-motion:reduce){.duel-pve-panel,.duel-pve-panel *{animation:none!important;transition:none!important}}
+
+.duel-reward-panel { margin-top: 1rem; padding: .75rem; }
+.duel-reward-panel summary, .duel-pve-panel details summary {
+  min-height: 44px;
+  align-content: center;
+  cursor: pointer;
+}
+.duel-reward-panel ul { display: grid; gap: .5rem; padding-inline-start: 1.25rem; }
+.duel-reward-panel li span { display: inline-block; margin-inline-start: .35rem; }

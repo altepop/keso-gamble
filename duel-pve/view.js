@@ -2,6 +2,25 @@
 import {duelLegalMoves} from '../js/duel-rules.js?v=p94c';
 const esc=v=>String(v??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const games={othello:'オセロ',gomoku:'五目並べ',connect4:'四目並べ',hitblow:'Hit & Blow',bluffdice:'ブラフダイス',poker:'5カードポーカー'};
+const tactics={
+ othello:'角を取れる手を探し、取れないときは角の斜め隣に置く前に相手の返し手を確認。',
+ gomoku:'自分の列を伸ばす前に、両端が空いた相手の三連を確認。',
+ connect4:'置く列だけでなく、その石の上に相手が置けるようになる段も確認。',
+ hitblow:'直前の予想から数字1つだけを変え、HitとBlowの差を比較。',
+ bluffdice:'先に自分の同じ目を数え、宣言が成立するには相手側に何個必要か考える。',
+ poker:'ペアは残し、他の札を交換する前にストレートやフラッシュの候補を確認。',
+};
+export function duelRewardPanel(profile){
+ if(!profile)return '';
+ return '<section id="duel-rewards" class="panel duel-reward-panel" aria-label="決闘の戦績と報酬">'+
+ ['pve','pvp'].map(mode=>'<details><summary>'+(mode==='pve'?'PvE攻略遺物':'PvP記念章')+'</summary>'+
+  (!profile.enabled.includes(mode)?'<p>報酬の発行は準備中です。</p>':'')+
+  '<ul>'+Object.entries(games).map(([game,label])=>{
+   const record=profile.skills.find(row=>row.mode===mode&&row.game===game);
+   const earned=profile.collection.some(row=>row.mode===mode&&row.game===game);
+   return '<li><strong>'+esc(label)+'</strong> <span>'+esc(record?.wins??0)+'勝 '+esc(record?.losses??0)+'敗 '+esc(record?.draws??0)+'分</span> <span>'+(earned?'獲得済み':'未獲得')+'</span></li>';
+  }).join('')+'</ul></details>').join('')+'</section>';
+}
 const levels={easy:'イージー',normal:'ノーマル',strong:'ストロング'};
 const disabled=(busy,pending,turn)=>busy||pending||turn!=='human'?' disabled':'';
 function boardPanel(m,selected,busy,pending){
@@ -46,7 +65,7 @@ function hiddenPanel(m,busy,pending,picks,guessDraft=''){
   +'<button class="action-btn primary" data-pve-submit="poker" '+disabled(busy,pending,m.turn)+'>交換して確定</button>'
   +(pub.showdown?'<details><summary>決着した手札を見る</summary><pre>'+esc(JSON.stringify(pub.showdown))+'</pre></details>':'');
 }
-export function pvePanel({match=null,connected=false,busy=false,error='',pending=false,selected=null,picks=[],game='othello',level='normal',savedId=false,guessDraft=''}={}){
+export function pvePanel({match=null,connected=false,busy=false,error='',pending=false,selected=null,picks=[],game='othello',level='normal',savedId=false,guessDraft='',rewardProfile=null}={}){
  const active=match&&Object.hasOwn(games,match.game);
  const status=active?match.turn==='finished'
   ?'確定結果：'+(match.winner==='human'?'あなたの勝ち':match.winner==='cpu'?'CPUの勝ち':'引き分け')
@@ -54,13 +73,15 @@ export function pvePanel({match=null,connected=false,busy=false,error='',pending
  const body=active?(Object.hasOwn(games,match.game)&&['othello','gomoku'].includes(match.game)
   ?boardPanel(match,selected,busy,pending):match.game==='connect4'
    ?connectPanel(match,busy,pending):hiddenPanel(match,busy,pending,picks,guessDraft)):'';
+ const hint=active&&match.turn==='human'&&rewardProfile?.collection.some(row=>row.mode==='pve'&&row.game===match.game)
+  ?'<details><summary>攻略遺物のヒント</summary><p>'+esc(tactics[match.game])+'</p></details>':'';
  const controls='<div class="duel-pve-config"><label>ゲーム<select id="pve-game">'+Object.entries(games).map(([k,v])=>'<option value="'+k+'" '+(game===k?'selected':'')+'>'+esc(v)+'</option>').join('')+'</select></label><label>CPUの強さ<select id="pve-level">'+Object.entries(levels).map(([k,v])=>'<option value="'+k+'" '+(level===k?'selected':'')+'>'+v+'</option>').join('')+'</select></label>'
   +'<button class="action-btn primary" data-pve-submit="start" '+(!connected||busy||pending?'disabled':'')+'>新しくCPU戦を始める</button></div>';
  return '<details class="duel-pve-panel panel" '+(active?'open':'')+'><summary>サーバーCPU攻略（PvE）'+(active?' · '+esc(games[match.game]):'')+'</summary><div class="card-body">'
-  +'<p class="helper">CPUも着手・判定をサーバーで確定します。KPと遺物のPvE報酬は未導入で、ブラウザ内の練習モードとは別です。</p>'
+  +'<p class="helper">CPUも着手・判定をサーバーで確定します。ブラウザ内の練習モードとは別です。</p>'
   +(error?'<p class="storage-warning" role="alert">'+esc(error)+'</p>':'')
   +(pending?'<p role="alert">送信結果が未確認です。新しい操作を送らず、同じ操作IDで確認してください。</p><button class="action-btn" data-pve-retry="1" '+(busy?'disabled':'')+'>前回の操作を確認する</button>':'')
-  +(active?'<p class="duel-pve-status" role="status">'+esc(status)+'</p><p class="helper">難易度：'+esc(levels[match.level])+'／サーバー確定操作 '+esc(match.version)+'回</p>'+body+'<button class="action-btn" data-pve-refresh="1" '+(busy?'disabled':'')+'>試合状態を再取得</button>':'')
+  +(active?'<p class="duel-pve-status" role="status">'+esc(status)+'</p><p class="helper">難易度：'+esc(levels[match.level])+'／サーバー確定操作 '+esc(match.version)+'回</p>'+hint+body+'<button class="action-btn" data-pve-refresh="1" '+(busy?'disabled':'')+'>試合状態を再取得</button>':'')
   +(!active&&savedId?'<button class="action-btn" data-pve-resume="1" '+(busy?'disabled':'')+'>保存済みのCPU戦を開く</button>':'')
   +controls+'</div></details>';
 }
