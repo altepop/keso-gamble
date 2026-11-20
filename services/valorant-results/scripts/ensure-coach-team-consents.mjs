@@ -31,6 +31,13 @@ export async function ensureCoachTeamConsents(directory,env=process.env,request=
  const triggers=(await query("SELECT name FROM sqlite_master WHERE type='trigger' AND name IN ('coach_team_challenge_capture_insert','coach_team_challenge_capture_update','coach_team_member_status_owner_guard')"))[0].results;
  if(triggers.length!==3)throw Error('Team PDCA history/ownership triggers missing');
  console.log('COACH_TEAM_PDCA_SCHEMA_READY tables=3 triggers=3 changes=ddl_only');
+ // Notification consent and admin-channel records remain empty and disabled.
+ await query(readFileSync(new URL('../migrations/0017_coach_team_notice_controls.sql',import.meta.url),'utf8'));
+ const noticeTables=(await query("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('coach_team_notice_preferences','coach_team_notice_channels')"))[0].results;
+ const noticeGuards=(await query("SELECT name FROM sqlite_master WHERE type='trigger' AND name='coach_team_notice_owner_guard'"))[0].results;
+ if(noticeTables.length!==2||noticeGuards.length!==1)throw Error('Team notification opt-in schema incomplete');
+ console.log('COACH_TEAM_NOTICE_SCHEMA_READY tables=2 ownerGuard=1 outbound=disabled defaults=off');
+
  console.log('COACH_TEAM_CONSENTS_SCHEMA_READY defaults=all_off changes=ddl_only');
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href)
