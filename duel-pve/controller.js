@@ -1,16 +1,16 @@
 // P9.4 server-only PvE page. Token is never placed in a URL, body or log.
-import {pvePanel,duelRewardPanel} from './view.js?v=p95';
+import {pvePanel,duelRewardPanel,pveBuildPanel} from './view.js?v=p95-build';
 const app=document.getElementById('pve-root');
 const root=location.hostname.endsWith('.discordsays.com')?'/.proxy/kp-api':'https://valorant-results.tealeaforest.workers.dev';
 const token=(()=>{try{return localStorage.getItem('keso-kp-session-v1')||sessionStorage.getItem('keso-kp-session-v1');}catch{return null;}})();
 const openRewardSection=location.hash==='#duel-rewards';
-let rewardProfile=null;
+let rewardProfile=null,build=[],buildBusy=false,buildMessage='';
 let owner=null,match=null,busy=false,pending=null,selected=null,picks=[],guess='',game='othello',level='normal',error='',savedId=null;
 const save=(k,value)=>{try{if(value===null)sessionStorage.removeItem(k);else sessionStorage.setItem(k,JSON.stringify(value));}catch{}};
 const load=k=>{try{return JSON.parse(sessionStorage.getItem(k)||'null');}catch{return null;}};
 function render(){
  app.innerHTML='<header class="duel-pve-page-head"><a href="./index.html">← KESO PLAYに戻る</a><h1>⚔️ サーバーCPU攻略</h1></header>'+
- pvePanel({match,connected:!!owner&&!!token,busy,error,pending:!!pending,selected,picks,game,level,savedId:!!savedId,guessDraft:guess,rewardProfile})+duelRewardPanel(rewardProfile);
+ pvePanel({match,connected:!!owner&&!!token,busy,error,pending:!!pending,selected,picks,game,level,savedId:!!savedId,guessDraft:guess,build})+pveBuildPanel(rewardProfile,build,buildBusy,buildMessage)+duelRewardPanel(rewardProfile);
  // On this dedicated page the only panel should open on first visit.
  const panel=app.querySelector('.duel-pve-panel');if(panel)panel.open=true;
  if(openRewardSection)app.querySelector('#duel-rewards details:last-child')?.setAttribute('open','');
@@ -29,6 +29,9 @@ async function api(path,body){
 async function loadRewards(){
  const firstLoad=!rewardProfile;
  try{rewardProfile=await api('duels/rewards');}catch{return;}
+ if(firstLoad&&rewardProfile.collection.some(row=>row.mode==='pve')){
+  try{build=(await api('duels/pve/build')).build;}catch{buildMessage='ビルドを取得できませんでした。';}
+ }
  render();
  if(firstLoad&&openRewardSection)app.querySelector('#duel-rewards')?.scrollIntoView();
 }
@@ -56,7 +59,16 @@ async function submit(args,retry=false){
  if(match?.turn==='finished')void loadRewards();
 }
 app.addEventListener('input',e=>{if(e.target.id==='pve-guess')guess=e.target.value;});
-app.addEventListener('change',e=>{
+app.addEventListener('change',async e=>{
+ if(e.target.dataset.pveBuild){
+  if(buildBusy)return;
+  const game=e.target.dataset.pveBuild,style=e.target.value||null;
+  buildBusy=true;buildMessage='保存中…';render();
+  try{build=(await api('duels/pve/build',{game,style})).build;buildMessage='攻略ビルドを保存しました。';}
+  catch{buildMessage='保存結果を確認できませんでした。再読み込みして確認してください。';}
+  finally{buildBusy=false;render();app.querySelector('[data-pve-build="'+game+'"]')?.focus();}
+  return;
+ }
  if(e.target.id==='pve-game')game=e.target.value;
  if(e.target.id==='pve-level')level=e.target.value;
 });

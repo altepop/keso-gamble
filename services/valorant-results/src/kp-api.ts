@@ -1,5 +1,6 @@
 import {practiceMatches,savePracticeMatch,practiceReview,ownPracticeRow} from './coach-practice-review.ts';
 import {readPrivateRecords,savePrivateRecord,readPrivateBody,privatePracticeState,PrivateRecordError} from './coach-private-records.ts';
+import {readPveBuild,savePveBuild} from './duel-pve-build.ts';
 import {duelRewardProfile} from './duel-rewards.ts';
 import {coachSharingSettings,saveCoachSharing,coachDirectory,coachSharedSummaries,SharingError} from './coach-sharing.ts';
 import {readCoachGoals,parseCoachGoal,saveCoachGoal,GoalError} from './coach-goals.ts';
@@ -515,6 +516,13 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping,deferP
    return new Response(stream.body,{status:stream.status,headers:{
     ...Object.fromEntries(stream.headers),...headers,'Cache-Control':'no-cache, no-transform'
    }});
+  }
+  if(path==='/api/kp/duels/pve/build'){
+   if(request.method==='GET')return response({build:await readPveBuild(env,mapping.guildId,owner.user)});
+   if(request.method!=='POST')return response({error:'未対応の操作です。'},405);
+   const text=await request.text();
+   if(text.length>512)return response({error:'入力が長すぎます。'},400);
+   return response(await savePveBuild(env,mapping.guildId,owner.user,JSON.parse(text)));
   }
   if(request.method==='GET'&&path==='/api/kp/duels/rewards')return response(await duelRewardProfile(env,mapping.guildId,owner.user));
   if(path==='/api/kp/duels/pve')return serverPveApi(request,env,mapping,owner.user,headers);
