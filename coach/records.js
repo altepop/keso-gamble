@@ -71,7 +71,7 @@
    for(const form of element.querySelectorAll('form')){const values=drafts.get(form.dataset.key);if(!values)continue;for(const v of values){const n=[...form.elements].find(n=>n.name===v.name);if(n){n.value=v.value;if(n.type==='checkbox')n.checked=v.checked;}}form.dataset.dirty='true';for(let d=form.closest('details');d&&element.contains(d);d=d.parentElement.closest('details'))d.open=true;}
    onChange(overview());
   }
-  const overview=()=>({loaded:!!data,active:data?data.active:state?.status==='planned'?state:null,latest:data?.items?.[0]||null});
+  const overview=()=>({loaded:!!data,active:data?data.active:state?.status==='planned'?state:null,latest:data?.items?.[0]||null,recordNotes:data?.items?.[0]?notes.filter(n=>n.recordId===data.items[0].id&&n.status==='active').map(n=>({title:n.title,body:n.body})):[]});
   async function openRecord(id,showReview=false){
    allowLeave(async()=>{
     if(!data&&!await load())return;
