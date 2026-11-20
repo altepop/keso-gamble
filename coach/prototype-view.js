@@ -115,7 +115,7 @@
   all('img').forEach(img=>{if(!img.getAttribute('src').startsWith(art))throw Error('Unexpected artwork path');});
   return host.outerHTML;
  }
- function mount(host){
+ function mount(host,{onPlan}={}){
   stop();
   const box=host.querySelector('.timerbox');if(!box)return;
   let total=Number(box.dataset.initialMinutes)*60,left=total;
@@ -127,7 +127,7 @@
   button.addEventListener('click',()=>{if(timerId!==null){pause();return;}button.textContent='一時停止する';timerId=setInterval(()=>{if(left>0){left--;render();}if(left<=0){pause();button.textContent='終了しました。お疲れさまでした';}},1000);});
   host.querySelector('#timerReset').addEventListener('click',()=>{pause();left=total;render();});
   const accept=host.querySelector('#acceptBtn'),note=host.querySelector('#acceptNote');
-  accept.addEventListener('click',()=>{const on=accept.getAttribute('aria-pressed')==='true';accept.setAttribute('aria-pressed',String(!on));accept.textContent=!on?'実施を確定しました':'この内容で実施します';note.hidden=on;});
+  accept.addEventListener('click',async()=>{if(onPlan){accept.disabled=true;try{if(await onPlan()){accept.setAttribute('aria-pressed','true');accept.textContent='今回試す内容を保存しました';note.textContent='保存した予定です。実施後に本人の結果を記録してください。';note.hidden=false;}}finally{accept.disabled=false;}return;}const on=accept.getAttribute('aria-pressed')==='true';accept.setAttribute('aria-pressed',String(!on));accept.textContent=!on?'実施を確定しました':'この内容で実施します';note.hidden=on;});
   host.querySelectorAll('.sub-task').forEach(b=>b.addEventListener('click',()=>b.setAttribute('aria-pressed',String(b.getAttribute('aria-pressed')!=='true'))));
   host.querySelector('#swapBtn').addEventListener('click',()=>{const options=host.querySelector('[data-other-practice]');if(options){options.open=true;options.scrollIntoView({block:'start',behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'});}});
   render();

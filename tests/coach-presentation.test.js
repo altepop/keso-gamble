@@ -72,3 +72,10 @@ test('sharing headings are explicit, helper is content addressed and summary cop
  const safe=context.KesoCoachSharing.safeSummary({subjectId:'opaque',displayName:'chosen',goals:'secret',period:{from:{secret:'id'},to:null},matches:{analyzed:{secret:'id'}},metrics:{kd:{value:{secret:'id'},formula:'approved',secret:'id'},private:{secret:'id'}}});
  assert.doesNotMatch(JSON.stringify(safe),/secret/);assert.equal(safe.metrics.kd.value,null);assert.equal(safe.matches.analyzed,null);
 });
+
+test('private record headings and cache URL are explicit, with no browser persistence or raw HTML rendering',()=>{
+ const code=readFileSync(new URL('../coach/records.js',import.meta.url),'utf8'),context={};vm.runInNewContext(code,context);
+ for(const text of Object.values(context.KesoCoachRecords.headings))assert.match(text,/ます$/);
+ assert.ok(html.includes('records.js?v=coach-'+createHash('sha256').update(code).digest('hex').slice(0,12)));
+ assert.doesNotMatch(code,/\b(?:localStorage|sessionStorage)\b|innerHTML\s*=|\bfetch\s*\(/);
+});
