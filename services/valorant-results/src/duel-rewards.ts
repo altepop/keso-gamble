@@ -15,6 +15,18 @@ export const DUEL_REWARD_DDL = [
     draw_bps INTEGER NOT NULL CHECK(draw_bps BETWEEN 0 AND 10000),
     PRIMARY KEY(guild,mode)
   ) STRICT`,
+  `CREATE TABLE IF NOT EXISTS kp_duel_reward_policy_v2 (
+    guild TEXT NOT NULL, mode TEXT NOT NULL CHECK(mode IN ('pve','pvp')),
+    starts_at INTEGER NOT NULL CHECK(starts_at>=0),
+    daily_cap INTEGER CHECK(daily_cap IS NULL OR daily_cap>0),
+    pair_cap INTEGER CHECK(
+      (mode='pve' AND pair_cap IS NULL) OR
+      (mode='pvp' AND pair_cap IS NOT NULL AND pair_cap>0)),
+    win_bps INTEGER NOT NULL CHECK(win_bps BETWEEN 0 AND 10000),
+    loss_bps INTEGER NOT NULL CHECK(loss_bps BETWEEN 0 AND 10000),
+    draw_bps INTEGER NOT NULL CHECK(draw_bps BETWEEN 0 AND 10000),
+    PRIMARY KEY(guild,mode)
+  ) STRICT`,
   `CREATE TABLE IF NOT EXISTS kp_duel_reward_rolls (
     guild TEXT NOT NULL, user TEXT NOT NULL, mode TEXT NOT NULL, match_id TEXT NOT NULL,
     game TEXT NOT NULL, opponent TEXT, jst_day INTEGER NOT NULL,
@@ -34,19 +46,26 @@ export const DUEL_REWARD_DDL = [
       INSERT OR IGNORE INTO kp_duel_reward_collection(guild,user,mode,game)
       VALUES(NEW.guild,NEW.user,NEW.mode,NEW.game);
     END`,
-  `CREATE TRIGGER IF NOT EXISTS kp_duel_reward_issue
+  `DROP TRIGGER IF EXISTS kp_duel_reward_issue`,
+  `CREATE TRIGGER kp_duel_reward_issue
     AFTER INSERT ON kp_duel_progress_receipts WHEN NEW.applied_at IS NOT NULL
     BEGIN
       INSERT OR IGNORE INTO kp_duel_reward_rolls
         (guild,user,mode,match_id,game,opponent,jst_day,roll,chance_bps)
       SELECT NEW.guild,NEW.user,NEW.mode,NEW.match_id,NEW.game,NEW.opponent,
         (NEW.occurred_at+32400000)/86400000, (random() & 9223372036854775807)%10000,
-        CASE NEW.outcome WHEN 'win' THEN policy.win_bps WHEN 'loss' THEN policy.loss_bps ELSE policy.draw_bps END
-      FROM kp_duel_reward_policy policy
+        (CASE NEW.outcome WHEN 'win' THEN policy.win_bps WHEN 'loss' THEN policy.loss_bps ELSE policy.draw_bps END) /
+        (CASE WHEN NEW.mode='pvp' AND
+          (SELECT COUNT(*) FROM kp_duel_reward_rolls
+            WHERE guild=NEW.guild AND user=NEW.user AND mode='pvp'
+              AND jst_day=(NEW.occurred_at+32400000)/86400000)>=12
+          THEN 2 ELSE 1 END)
+      FROM kp_duel_reward_policy_v2 policy
       WHERE policy.guild=NEW.guild AND policy.mode=NEW.mode AND policy.starts_at<=NEW.occurred_at
-        AND (SELECT COUNT(*) FROM kp_duel_reward_rolls
-          WHERE guild=NEW.guild AND user=NEW.user AND mode=NEW.mode
-            AND jst_day=(NEW.occurred_at+32400000)/86400000) < policy.daily_cap
+        AND (policy.daily_cap IS NULL OR
+          (SELECT COUNT(*) FROM kp_duel_reward_rolls
+            WHERE guild=NEW.guild AND user=NEW.user AND mode=NEW.mode
+              AND jst_day=(NEW.occurred_at+32400000)/86400000) < policy.daily_cap)
         AND (NEW.mode='pve' OR (SELECT COUNT(*) FROM kp_duel_reward_rolls
           WHERE guild=NEW.guild AND user=NEW.user AND mode=NEW.mode
             AND jst_day=(NEW.occurred_at+32400000)/86400000
@@ -77,7 +96,7 @@ type Skill = {mode: Mode; game: string; wins: number; losses: number; draws: num
 export async function duelRewardProfile(env: KpEnv, guild: string, user: string) {
   await ensureDuelRewards(env);
   const [policy, collection, skills] = await env.DB.batch([
-    env.DB.prepare('SELECT mode FROM kp_duel_reward_policy WHERE guild=? AND starts_at<=?').bind(guild,Date.now()),
+    env.DB.prepare('SELECT mode FROM kp_duel_reward_policy_v2 WHERE guild=? AND starts_at<=?').bind(guild,Date.now()),
     env.DB.prepare('SELECT mode,game FROM kp_duel_reward_collection WHERE guild=? AND user=?').bind(guild,user),
     env.DB.prepare('SELECT mode,game,wins,losses,draws FROM kp_duel_mode_skill WHERE guild=? AND user=?').bind(guild,user),
   ]);
