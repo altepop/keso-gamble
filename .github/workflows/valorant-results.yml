@@ -317,6 +317,7 @@ jobs:
         run: |
           node scripts/ensure-coach-goals.mjs
           node scripts/ensure-coach-sharing.mjs
+          node scripts/ensure-coach-team-consents.mjs
           node scripts/ensure-coach-records.mjs
           node scripts/ensure-coach-review.mjs
       - name: Read-only KESO COACH historical archive audit (aggregate counts only)
