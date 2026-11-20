@@ -64,8 +64,8 @@ export async function auditCoachTeamConsents(directory,env=process.env,request=f
  const noticeRow=nd.result[0].results?.[0]??{};
  for(const k of ['preferences','userOptIns','channels','activeChannels'])
   if(!Number.isSafeInteger(noticeRow[k])||noticeRow[k]<0)throw Error('Invalid team notice count');
- if(row.preferences>5||row.userOptIns>row.preferences||row.channels>1||
-  row.activeChannels>row.channels)throw Error('Team notice policy invariant violation');
+ if(noticeRow.preferences>5||noticeRow.userOptIns>noticeRow.preferences||noticeRow.channels>1||
+  noticeRow.activeChannels>noticeRow.channels)throw Error('Team notice policy invariant violation');
  output.notice={preferences:noticeRow.preferences,userOptIns:noticeRow.userOptIns,channels:noticeRow.channels,activeChannels:noticeRow.activeChannels};
  return output;
 }
