@@ -4,6 +4,7 @@ import {readPveBuild,savePveBuild} from './duel-pve-build.ts';
 import {duelRewardProfile} from './duel-rewards.ts';
 import {coachSharingSettings,saveCoachSharing,coachDirectory,coachSharedSummaries,SharingError} from './coach-sharing.ts';
 import {readCoachTeamConsent,saveCoachTeamConsent,coachTeamRoster,CoachTeamError} from './coach-team-consent.ts';
+import {readTeamPdca,writeTeamChallenge,writeTeamSelfStatus} from './coach-team-pdca.ts';
 import {coachAuthorizedPartyMetrics} from './coach-team-metrics.ts';
 import {readCoachGoals,parseCoachGoal,saveCoachGoal,GoalError} from './coach-goals.ts';
 import {resolveCoachIdentity,publicCoachIdentity} from './coach-identity.ts';
@@ -448,7 +449,7 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping,deferP
     catch(e){if(e instanceof PrivateRecordError)return response({error:e.message},e.status);throw e;}
   }
   // KP-session + server-verified owner; never trust browser supplied guild/team/owner.
-  if(['/api/kp/coach/team/consent','/api/kp/coach/team/roster','/api/kp/coach/team/metrics'].includes(path)){
+  if(['/api/kp/coach/team/consent','/api/kp/coach/team/roster','/api/kp/coach/team/metrics','/api/kp/coach/team/pdca','/api/kp/coach/team/challenge','/api/kp/coach/team/status'].includes(path)){
     const identity=await resolveCoachIdentity(env.DB,mapping,owner.user);
     if(identity.status!=='linked')return response({error:'この表示は利用できません。'},404);
     try{
@@ -458,6 +459,12 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping,deferP
         await saveCoachTeamConsent(env.DB,mapping.guildId,identity,owner.user,request));
       if(path.endsWith('/roster')&&request.method==='GET')
        return response(await coachTeamRoster(env.DB,mapping,identity,owner.user));
+      if(path.endsWith('/pdca')&&request.method==='GET')
+       return response(await readTeamPdca(env.DB,mapping,identity,owner.user));
+      if(path.endsWith('/challenge')&&request.method==='POST')
+       return response(await writeTeamChallenge(env.DB,mapping,identity,owner.user,request));
+      if(path.endsWith('/status')&&request.method==='POST')
+       return response(await writeTeamSelfStatus(env.DB,mapping,identity,owner.user,request));
       if(path.endsWith('/metrics')&&request.method==='GET'){
        if(await d1OptionalMode(env))return response({error:'D1節約モード中です。時間を置いてから確認してください。'},429);
        return response(await coachAuthorizedPartyMetrics(env.DB,mapping,identity,owner.user));
