@@ -4,6 +4,8 @@ import type {KpEnv} from './kp.ts';
 import {prepareStocks} from './stock-market.ts';
 import {ensureStockOperator,stockShockPrice} from './stock-admin.ts';
 import {stockBulletin} from './stock-bulletins.ts';
+// @ts-expect-error Shared event schedule.
+import {VDK_CRASH_START,VDK_IPO_AT} from '../../../js/vdk-bankruptcy.js';
 // @ts-expect-error Shared browser market catalog.
 import {MARKET} from '../../../js/engine.js';
 // @ts-expect-error Fictional stock news catalog shared with the browser.
@@ -71,7 +73,7 @@ export function planGuerrilla(draw:()=>number,previous?:{symbol:string;headline:
    story:{headline:`【続報】${name}、${dir==='up'?'買い戻しが拡大':'売り注文が殺到'}`,
     body:`先日の「${title}」を受けて追加情報が発表された。関係者の説明をめぐり評価が分かれ、${dir==='up'?'売られすぎとの見方から買い注文が広がっている。':'先行きへの不安が拡大し、投資家が保有株を手放している。'}`}};
  }
- const stock=item(stocks,draw),dir=direction(draw),strength=magnitude(draw);
+ const stock=item(stocks.filter(s=>(s.id!=='vdk'||now<VDK_CRASH_START)&&(s.id!=='vdkc'||now>=VDK_IPO_AT)),draw),dir=direction(draw),strength=magnitude(draw);
  const story=resolveStockStory(stock.id,dir,'auto',String(Math.floor(draw()*1000000000))) as Story;
  return {type:'single',moves:[{symbol:stock.id,direction:dir,strength}],story};
 }
@@ -93,7 +95,8 @@ export async function runGuerrillaMarket(env:KpEnv&{KP_EARNINGS_WEBHOOK_URL?:str
  const market=await prepareStocks(env,guild,undefined,now);
  const session=crypto.randomUUID(),nextAt=nextGuerrillaAt(now,draw),impacts:Array<{name:string;symbol:string;before:number;after:number}>=[];
  for(const change of plan.moves){
-  const before=market.prices[change.symbol],after=stockShockPrice(before,change.direction,change.strength);
+  if((change.symbol==='vdk'&&now>=VDK_CRASH_START)||(change.symbol==='vdkc'&&now<VDK_IPO_AT))continue;
+   const before=market.prices[change.symbol],after=stockShockPrice(before,change.direction,change.strength);
   if(before===after)continue; // A price at its clamp cannot move in the requested direction.
   impacts.push({name:stocks.find(s=>s.id===change.symbol)!.name,symbol:change.symbol,before,after});
  }
