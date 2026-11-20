@@ -10,7 +10,7 @@ const stale=()=>new CoachTeamError('別の画面で更新されています。�
 const categories=new Set(['連携','序盤','トレード','守り','リテイク','攻め','その他']);
 const states=new Set(['未着手','実施予定','本人が試した','振り返り待ち','本人が確認','不参加']);
 const clean=(s:unknown,max:number)=>typeof s==='string'&&s.trim()===s&&
- [...s].length<=max&&!/[\u0000-\u001f\u007f]/u.test(s)&&!/<\\/?[a-z!]/i.test(s);
+ [...s].length<=max&&!/[\u0000-\u001f\u007f]/u.test(s)&&!/<[a-z!]/i.test(s);
 const required=(s:unknown,max:number)=>clean(s,max)&&typeof s==='string'&&s.length>0;
 async function body(request:Request){
  const reader=request.body?.getReader();if(!reader)throw new CoachTeamError('入力内容を確認してください。',400);
