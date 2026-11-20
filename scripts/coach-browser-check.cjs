@@ -89,6 +89,7 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
     kd:{value:2,numerator:60,denominator:30}}],
    positionBasedTradeDistance:'評価範囲外',puuid:'must-not-display'};
   let teamChallenge=null,teamHistory=[],teamSelf=null;
+  let noticeSettings={enabled:false,version:0};
   const selfSubject='11111111-1111-4111-8111-111111111111',otherSubject='22222222-2222-4222-8222-222222222222';let otherPublic=true;
   const sharedFixture=(subject)=>({subjectId:subject,displayName:subject===selfSubject?state.settings.displayName:'<img src=x onerror=alert(1)> 共有者',policyVersion:1,period:{from:'2026-11-01',to:'2026-11-20',timezone:'Asia/Tokyo'},matches:{analyzed:20,candidates:22,excluded:2,rowLimit:250,limitReached:false},metrics:subject===selfSubject&&!state.settings.fields.includes('kd')?{}:{kd:{value:1.2,validMatches:20,excludedMatches:0,numerator:240,denominator:200,formula:'合計キル数 ÷ 合計デス数',secret:'never-share-metric'}},goals:'never-share-goals',accounts:['never-share-account'],weakness:'never-share-weakness',puuid:'never-share-id'});
   await ctx.route('https://valorant-results.tealeaforest.workers.dev/**',async route=>{
@@ -110,6 +111,15 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
      const b=req.postDataJSON();if(b.expectedVersion!==teamState.version)return route.fulfill({status:409,json:{error:'同意が更新されています。'}});
      teamState={joined:b.joined,shareStatus:b.shareStatus,shareMetrics:b.shareMetrics,version:teamState.version+1};
      return route.fulfill({json:{team:'確認済みコーチロスター',settings:teamState}});
+    }
+    if(kind==='notification'){
+     if(!teamState.joined)return route.fulfill({status:404,json:{error:'この表示は利用できません。'}});
+     if(req.method()==='GET')return route.fulfill({json:{settings:noticeSettings,deliveryReady:false,
+      preview:{message:'KESO COACH：チームの共有課題が更新されました。内容は本人認証後のチーム画面で確認してください。',mode:'送信しないプレビュー',mentions:'なし'}}});
+     const b=req.postDataJSON();if(b.expectedVersion!==noticeSettings.version)return route.fulfill({status:409,json:{error:'古い設定です。'}});
+     noticeSettings={enabled:b.enabled,version:noticeSettings.version+1};
+     return route.fulfill({json:{settings:noticeSettings,deliveryReady:false,
+      preview:{message:'KESO COACH：チームの共有課題が更新されました。内容は本人認証後のチーム画面で確認してください。',mode:'送信しないプレビュー',mentions:'なし'}}});
     }
     if(['pdca','challenge','status'].includes(kind)){
      if(!teamState.joined)return route.fulfill({status:404,json:{error:'この表示は利用できません。'}});
@@ -201,6 +211,27 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   await page.locator('[data-team-consent-form] button[type="submit"]').click();
   await page.waitForFunction(()=>document.querySelector('[data-team-metrics-load]')?.hidden===true);
   assert.equal(await page.locator('[data-team-metrics-view] [data-coach-party-metrics]').count(),0,'revoking consent clears metric cards');
+  // Phase 3-E: manual-only notice preview, opt-in, and opt-out (never send Discord).
+  const noticeRequestsBefore=requests.filter(r=>r.url.includes('/team/notification')).length;
+  assert.equal(noticeRequestsBefore,0,'no automatic notification request');
+  await page.locator('[data-team-notify-panel] > summary').click();
+  await page.locator('[data-notify-load]').click();
+  await page.locator('[data-notify-form]').waitFor({state:'visible'});
+  assert.equal(await page.locator('[name=teamNoticeOptIn]').isChecked(),false);
+  assert.match(await page.locator('[data-notify-preview]').innerText(),/送信しないプレビュー/);
+  await page.locator('[name=teamNoticeOptIn]').check();
+  await page.locator('[data-notify-form] button[type=submit]').click();
+  await page.waitForFunction(()=>document.querySelector('[data-notify-form] button[type=submit]')?.disabled===false);
+  assert.equal(noticeSettings.enabled,true);assert.equal(await page.locator('[data-notify-preview] img').count(),0);
+  await page.locator('[name=teamNoticeOptIn]').uncheck();
+  await page.locator('[data-notify-form] button[type=submit]').click();
+  await page.waitForFunction(()=>document.querySelector('[data-notify-form] button[type=submit]')?.disabled===false);
+  assert.equal(noticeSettings.enabled,false,'opt-out stops future notification');
+  for(const width of [320,375,1440]){
+   await page.setViewportSize({width,height:900});
+   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'notice card layout '+width);
+  }
+  await page.setViewportSize({width:375,height:812});
   // Phase 3-D: each state is loaded and saved only by an explicit owner action.
   await page.locator('[data-team-pdca] > summary').click();
   await page.locator('[data-team-pdca-load]').click();
