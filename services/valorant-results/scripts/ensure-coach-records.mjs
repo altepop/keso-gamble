@@ -8,7 +8,7 @@ export async function ensureCoachRecords(directory,env=process.env,request=fetch
  };
  await query(readFileSync(new URL('../migrations/0013_coach_private_records.sql',import.meta.url),'utf8'));
  const expected={coach_practice_records:['guild','subject_id','record_id','goal_id','goal_version','goal_snapshot_json','catalog_version','plan_json','execution_json','reflection','planned_at','occurred_date_jst','recorded_at','status','version','create_hash','mutation_hash','created_at','updated_at','deleted_at'],coach_personal_notes:['guild','subject_id','note_id','title','body','record_id','version','create_hash','mutation_hash','created_at','updated_at','deleted_at']};
- for(const [name,columns] of Object.entries(expected)){const r=await query("PRAGMA table_info('"+name+"')");if(JSON.stringify(r[0].results.map(c=>c.name))!==JSON.stringify(columns))throw Error('Incompatible private record schema');}
+ for(const [name,columns] of Object.entries(expected)){const r=await query("PRAGMA table_info('"+name+"')");if(JSON.stringify(r[0].results.slice(0,columns.length).map(c=>c.name))!==JSON.stringify(columns))throw Error('Incompatible private record schema');}
  const guards=await query("SELECT name FROM sqlite_master WHERE (type='index' AND name IN ('coach_practice_one_plan','coach_practice_history','coach_notes_history')) OR (type='trigger' AND name IN ('coach_record_owner_immutable','coach_note_owner_immutable'))");
  if(guards[0].results.length!==5)throw Error('Private record guards missing');
  console.log('COACH_PRIVATE_RECORDS_SCHEMA_READY tables=2 indices=3 ownershipGuards=2');
