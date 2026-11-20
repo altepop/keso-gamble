@@ -1,5 +1,6 @@
 import {festivalRace,FESTIVAL_PRICE,festivalFactor} from './racing.js?v=web-60411cdd2200ee3b';
 import {stockOrderQuote,STOCK_ORDER_VERSION,STOCK_PRICE_SCALE} from './stock-order.js?v=web-60411cdd2200ee3b';
+import {VDK_CRASH_START,VDK_IPO_AT,stockIsListed,stockTradeRestriction} from './vdk-bankruptcy.js';
 import {steamConnectionMessage} from './steam-view.js?v=web-60411cdd2200ee3b';
 import {relicsPanel} from './relics-view.js?v=web-60411cdd2200ee3b';
 import {primeRelicAudio,playRelicSound,previewRelicSound,stopRelicSound,setRelicSoundVolume,toggleRelicSound} from './relics-audio.js?v=web-60411cdd2200ee3b';
@@ -198,11 +199,11 @@ function arrow(v){return v>0?'↑':v<0?'↓':'→'}
 function moneyCompact(n){return fmt0(Math.floor(n))+' KP'}
 
 function playerRows(){
-  return MARKET.map(s=>{
+  return MARKET.filter(s=>stockIsListed(s.id,Date.now())).map(s=>{
     const price=state.prices[s.id];
     const prev=(state.history[s.id].at(-2)??s.initialPrice);
     const diff=price-prev;const pct=(diff/prev)*100;
-    return {id:s.id,name:s.name,code:s.ticker,value:price,change:diff,pct,time:'更新',country:'',holding:state.holdings[s.id],category:s.category};
+    return {id:s.id,name:s.id==='vdk'&&Date.now()>=VDK_IPO_AT?s.name+'（倒産・上場廃止）':s.name,code:s.ticker,value:price,change:diff,pct,time:'更新',country:'',holding:state.holdings[s.id],category:s.category};
   }).sort((a,b)=>b.value-a.value);
 }
 
@@ -326,13 +327,14 @@ function raceFrame(){
 function ensureRaceLoop(){if(screen==='race'&&!detail&&!raceLoop)raceLoop=requestAnimationFrame(raceFrame);}
 
 function screenMarket(){
- return `<div class="screen"><header class="topbar"><div class="toprow"><h1 class="title">株</h1><span class="badge">${moneyCompact(state.cash)}</span></div></header>${subTabs()}<div class="market-disclaimer">KESO TOWNの架空の銘柄。実際の株価とは連動しません。銘柄をタップするとチャート。</div>${stockPanel(state)}<div class="list">${playerRows().map(v=>renderRow({...v,kind:'stock'})).join('')}</div>${tradePanel()}<div class="asset-list">${tradeHistory()}</div>${bottomNav()}</div>`;
+ return `<div class="screen"><header class="topbar"><div class="toprow"><h1 class="title">株</h1><span class="badge">${moneyCompact(state.cash)}</span></div></header>${subTabs()}<div class="market-disclaimer">KESO TOWNの架空の銘柄。実際の株価とは連動しません。銘柄をタップするとチャート。</div>${Date.now()>=VDK_IPO_AT?'<div class="market-disclaimer">☠️ VDKブラック商事は1 KPで倒産・上場廃止。🏢 VDKブラックコンサル（VDKC）が500 KPで新規上場した。旧株は新株に変換されない。</div>':Date.now()>=VDK_CRASH_START?'<div class="market-disclaimer">🚨 VDKブラック商事、経営破綻へカウントダウン中。11月21日0時に上場廃止し、VDKブラックコンサルが新規上場予定。旧VDKの新規買付は停止中。</div>':''}${stockPanel(state)}<div class="list">${playerRows().map(v=>renderRow({...v,kind:'stock'})).join('')}</div>${tradePanel()}<div class="asset-list">${tradeHistory()}</div>${bottomNav()}</div>`;
 }
 
 function tradeEstimate(){
   const qty=Number(drafts['trade-qty'] ?? 1);
   const price=state.prices[activeSymbol];
-  let quote;try{if(live)quote=stockOrderQuote({priceUnits:state.stockMarket?.orderQuotes?.[activeSymbol]??price*STOCK_PRICE_SCALE,initialPrice:MARKET.find(s=>s.id===activeSymbol).initialPrice,side:tradeSide,quantity:qty});}catch(error){return escapeHTML(error.message);}
+  const unavailable=stockTradeRestriction(activeSymbol,tradeSide,Date.now());if(unavailable)return '<p class="helper">'+escapeHTML(unavailable)+'</p>';
+  let quote;try{if(live)quote=stockOrderQuote({priceUnits:state.stockMarket?.orderQuotes?.[activeSymbol]??price*STOCK_PRICE_SCALE,initialPrice:MARKET.find(s=>s.id===activeSymbol).initialPrice,side:tradeSide,quantity:qty,minPrice:activeSymbol==='vdk'?1:20});}catch(error){return escapeHTML(error.message);}
   const gross=quote?.gross??qty*price,fee=quote?.fee??Math.ceil(gross/100);
   if(!Number.isSafeInteger(qty)||qty<1||qty>100000||!Number.isSafeInteger(gross))return '数量は1〜100,000株の整数で入力してください';
   const total=quote?.total??(tradeSide==='buy'?gross+fee:gross-fee);
@@ -345,7 +347,7 @@ function tradeHistory(){
 
 function tradePanel(){
   const s=MARKET.find(v=>v.id===activeSymbol);
-  return `<div class="trade-box"><h3>注文</h3><div class="segment"><button data-trade-side="buy" class="${tradeSide==='buy'?'active':''}">買う</button><button data-trade-side="sell" class="${tradeSide==='sell'?'active':''}">売る</button></div><div class="field"><label for="trade-symbol">銘柄</label><select class="select" id="trade-symbol">${MARKET.map(v=>`<option value="${v.id}" ${v.id===activeSymbol?'selected':''}>${v.name}</option>`).join('')}</select></div><div class="field"><label for="trade-qty">数量（株）</label><input id="trade-qty" class="input" type="number" min="1" max="100000" step="1" value="1"></div><div class="field"><label for="trade-price">現在値</label><input id="trade-price" class="input mono" value="${fmt0(state.prices[s.id])} KP" disabled></div><div class="card-body" id="trade-estimate" aria-live="polite">${tradeEstimate()}</div><div class="action-row"><button class="action-btn primary" data-action="trade">${tradeSide==='buy'?'買付':'売却'}</button></div></div>`;
+  return `<div class="trade-box"><h3>注文</h3><div class="segment"><button data-trade-side="buy" class="${tradeSide==='buy'?'active':''}">買う</button><button data-trade-side="sell" class="${tradeSide==='sell'?'active':''}">売る</button></div><div class="field"><label for="trade-symbol">銘柄</label><select class="select" id="trade-symbol">${MARKET.filter(v=>stockIsListed(v.id,Date.now())).map(v=>`<option value="${v.id}" ${v.id===activeSymbol?'selected':''}>${v.name}</option>`).join('')}</select></div><div class="field"><label for="trade-qty">数量（株）</label><input id="trade-qty" class="input" type="number" min="1" max="100000" step="1" value="1"></div><div class="field"><label for="trade-price">現在値</label><input id="trade-price" class="input mono" value="${fmt0(state.prices[s.id])} KP" disabled></div><div class="card-body" id="trade-estimate" aria-live="polite">${tradeEstimate()}</div><div class="action-row"><button class="action-btn primary" data-action="trade" ${stockTradeRestriction(s.id,tradeSide,Date.now())?'disabled':''}>${tradeSide==='buy'?'買付':'売却'}</button></div></div>`;
 }
 
 // カジノ: one game at a time (ルーレット・チンチロ・ブラックジャック).
@@ -619,7 +621,8 @@ async function liveOperation(action,args){
 async function doTrade(){
   const symbol=$('#trade-symbol')?.value || activeSymbol; const qty=Number($('#trade-qty')?.value);
   const side=tradeSide;
-  activeSymbol=symbol; if(live){const quote=stockOrderQuote({priceUnits:state.stockMarket?.orderQuotes?.[symbol]??state.prices[symbol]*STOCK_PRICE_SCALE,initialPrice:MARKET.find(s=>s.id===symbol).initialPrice,side,quantity:qty});try{await liveOperation('trade',{symbol,side,quantity:qty,pricingVersion:STOCK_ORDER_VERSION,limit:quote.total});}catch(error){if(error.message?.includes('株価が変わった')){try{state=await wallet.state();render();}catch{connectionError='株価を更新できません。残高を更新してください。';render();}}throw error;}}else await commit(next => trade(next,symbol,side,qty)); render(); toast(`${MARKET.find(v=>v.id===symbol).name}を${side==='buy'?'買付':'売却'}した`);
+  const restriction=stockTradeRestriction(symbol,side,Date.now());if(restriction)throw Error(restriction);
+  activeSymbol=symbol; if(live){const quote=stockOrderQuote({priceUnits:state.stockMarket?.orderQuotes?.[symbol]??state.prices[symbol]*STOCK_PRICE_SCALE,initialPrice:MARKET.find(s=>s.id===symbol).initialPrice,side,quantity:qty,minPrice:symbol==='vdk'?1:20});try{await liveOperation('trade',{symbol,side,quantity:qty,pricingVersion:STOCK_ORDER_VERSION,limit:quote.total});}catch(error){if(error.message?.includes('株価が変わった')){try{state=await wallet.state();render();}catch{connectionError='株価を更新できません。残高を更新してください。';render();}}throw error;}}else await commit(next => trade(next,symbol,side,qty)); render(); toast(`${MARKET.find(v=>v.id===symbol).name}を${side==='buy'?'買付':'売却'}した`);
 }
 async function doSpin(){
   if(spinLock)return;
