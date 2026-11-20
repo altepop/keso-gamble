@@ -492,7 +492,7 @@ function enhance(root) {
     const arena=current?.querySelector('.duel-arena');
     const finished=!!arena?.querySelector('.duel-result')||arena?.querySelector('.duel-state')?.textContent?.trim()==='終了';
     const stage=arena?(finished?'finished':'active'):current?'pending':'setup';
-    const outgoing=!!current?.querySelector('h2')?.textContent?.includes('相手の返答待ち');
+    const outgoing=!![...(current?.querySelectorAll('h2.panel-title')??[])].some(heading=>heading.textContent?.includes('相手の返答待ち'));
     const turnText=arena?.querySelector('.duel-turn')?.textContent||'';
     const myTurn=turnText.includes('あなたの番');
     const retry=!!root.querySelector('[data-duel-retry]');
