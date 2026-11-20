@@ -13,7 +13,7 @@ test('E2 policy refuses absent admin signature, opt-in, channel and revoked cons
  }
 });
 test('E2 policy enforces deterministic per-channel cooldown and invalid timestamps fail closed',()=>{
- const g=gate();g.lastDeliveredAt=g.now-COACH_NOTICE_COOLDOWN_MS;
+ const g={...gate(),lastDeliveredAt:gate().now-COACH_NOTICE_COOLDOWN_MS};
  assert.equal(canQueueCoachNotice(g),true);
  assert.equal(canQueueCoachNotice({...g,lastDeliveredAt:g.lastDeliveredAt+1}),false);
  assert.equal(canQueueCoachNotice({...g,now:Number.NaN}),false);
