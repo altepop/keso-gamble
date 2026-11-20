@@ -18,7 +18,10 @@
   const open=(id,review=false)=>{void records.openRecord(id,review);};
   function goToPlan(change=false){
    const overview=document.querySelector('#coach-view-overview');
-   if(overview){overview.hidden=false;for(const t of document.querySelectorAll('[data-coach-view]'))t.setAttribute('aria-selected',String(t.dataset.coachView==='overview'));}
+   if(overview){
+    for(const panel of document.querySelectorAll('.coach-dashboard-view'))panel.hidden=panel!==overview;
+    for(const t of document.querySelectorAll('[data-coach-view]')){const selected=t.dataset.coachView==='overview';t.setAttribute('aria-selected',String(selected));t.tabIndex=selected?0:-1;}
+   }
    const next=change?overview?.querySelector('[data-other-practice]'):overview?.querySelector('.drill');
    if(change&&next)next.open=true;
    next?.scrollIntoView({block:'start',behavior:'auto'});
@@ -32,6 +35,7 @@
    if(!loaded){
     element.append(paragraph(active?'保存済みの予定があります。実施の結果を記録してください。':'前回の実施内容はまだ読み込んでいません。'));
     element.append(button('前回の記録を読み込みます',()=>open(null,false),'load'));
+    if(!active)element.append(button('今日の練習へ進みます',()=>goToPlan(false),'continue'));
     element.append(paragraph('読み込みは本人の操作時だけ行います。'));
     return;
    }
