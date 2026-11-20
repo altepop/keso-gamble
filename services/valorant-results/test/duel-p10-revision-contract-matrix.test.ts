@@ -3,10 +3,10 @@ import test from 'node:test';
 import {compareSpectatorRevision} from '../src/duel-spectator-admission.ts';
 import type {SpectatorSnapshot} from '../src/duel-spectator-public.ts';
 const base:SpectatorSnapshot={id:'match-1',game:'othello',status:'active',participants:['a','b'],turn:'a',winner:null,version:5,updatedAt:100,publicState:{board:'........'}};
-test('P10 readiness: revision comparison has an explicit snapshot/no-change matrix',()=>{
+test('P10 readiness: revision comparison has an explicit monotonic snapshot/no-change matrix',()=>{
  for(const seenVersion of [null,0,4,5,6,Number.MAX_SAFE_INTEGER]){
   const result=compareSpectatorRevision(base,seenVersion);
-  if(seenVersion===5)assert.deepEqual(result,{kind:'no_change',version:5});
+  if(seenVersion!==null&&seenVersion>=5)assert.deepEqual(result,{kind:'no_change',version:seenVersion});
   else assert.deepEqual(result,{kind:'snapshot',snapshot:base});
  }
 });
