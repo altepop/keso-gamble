@@ -4,8 +4,8 @@ import {draftSingleEliminationBracket,mayPublishTournament} from '../src/duel-to
 test('bracket deterministic and no user duplication',()=>{
  const bracket=draftSingleEliminationBracket(['a','b','c','d','e'],16);
  assert.equal(bracket.byes,3); assert.equal(bracket.pairs.length,4);
- assert.deepEqual(bracket.pairs[0],{round:1,slot:0,playerA:'a',playerB:'b'});
- assert.equal(bracket.pairs[3]?.playerB,null);
+ assert.deepEqual(bracket.pairs[0],{round:1,slot:0,playerA:'a',playerB:null});
+ assert.deepEqual(bracket.pairs[3],{round:1,slot:3,playerA:'d',playerB:'e'});
 });
 test('invalid entrants and unauthorized publication denied',()=>{
  assert.throws(()=>draftSingleEliminationBracket(['a','a'],8),/invalid entrants/);

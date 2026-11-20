@@ -10,8 +10,15 @@ export function draftSingleEliminationBracket(players:readonly string[],maxPlaye
  if(players.some(p=>typeof p!=='string'||!/^[a-zA-Z0-9_-]{1,128}$/.test(p))||new Set(players).size!==players.length)throw Error('invalid entrants');
  const size=2**Math.ceil(Math.log2(players.length));
  const pairs:BracketPair[]=[];
- for(let i=0;i<size;i+=2){
-   pairs.push({round:1,slot:i/2,playerA:players[i]!,playerB:players[i+1]??null});
+ // Allocate one BYE per match before pairing remaining entrants.
+ // No empty match or undefined entrant may be produced.
+ for(let slot=0;slot<size/2;slot++){
+   if(slot<size-players.length){
+     pairs.push({round:1,slot,playerA:players[slot]!,playerB:null});
+   }else{
+     const index=(size-players.length)+2*(slot-(size-players.length));
+     pairs.push({round:1,slot,playerA:players[index]!,playerB:players[index+1]!});
+   }
  }
  return {participants:[...players],pairs,byes:size-players.length};
 }
