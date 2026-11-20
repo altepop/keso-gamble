@@ -44,9 +44,9 @@ export async function practiceMatches(db:D1Database,guild:string,identity:Identi
  const linked=await linkedMatch(db,guild,identity,row.match_id);
  return {items,nextCursor:rows.length>20?encode(rows[19]):null,scanned:Math.min(rows.length,20),excluded:Math.min(rows.length,20)-items.length,range,linked:linked?.match??null,recordVersion:row.version,selectionDoesNotVerifyPractice:true};
 }
-async function linkedMatch(db:D1Database,guild:string,identity:Identity,id:string|null){
+async function linkedMatch(db:D1Database,guild:string,identity:Identity,id:string|null,known?:ReviewRow){
  if(!id)return null;
- const row=await db.prepare(`SELECT ${fields} ${from} WHERE r.match_id=? AND ${clause(identity)}`).bind(id,...identity.accounts.map(a=>a.puuid)).first<ReviewRow>();
+ const row=known??await db.prepare(`SELECT ${fields} ${from} WHERE r.match_id=? AND ${clause(identity)}`).bind(id,...identity.accounts.map(a=>a.puuid)).first<ReviewRow>();
  if(!row)return null;const m=verifiedMatch(row,identity);if(!m)return null;
  return {row,performance:m.performance,match:{matchRef:await practiceMatchRef(guild,identity.subjectId,id),endedAt:m.endedAt,map:m.map,agent:m.agent,outcome:m.outcome}};
 }
@@ -104,8 +104,8 @@ export function compareObservation(rows:ReviewRow[],identity:Identity,anchor:num
 export async function practiceReview(db:D1Database,guild:string,identity:Identity,id:string,previous:string|null,now=Date.now(),preloaded?:any){
  if(previous!==null&&!/^[a-f0-9]{64}$/.test(previous))return fail('評価の版を確認してください。');
  const record=preloaded??await ownPracticeRow(db,guild,identity,id),keys=[record.primary_metric??'dpr',...unpack(record.supporting_metrics_json)??[]] as Metric[];
- const linked=await linkedMatch(db,guild,identity,record.match_id);
  const rows=record.planned_at===null?[]:await observationRows(db,identity,record.planned_at,now);
+ const linked=await linkedMatch(db,guild,identity,record.match_id,rows.find(r=>r.match_id===record.match_id));
  const observation=record.planned_at===null?null:compareObservation(rows,identity,record.planned_at,keys);
  const simultaneous=record.planned_at===null?0:await db.prepare("SELECT COUNT(*) AS n FROM coach_practice_records WHERE guild=? AND subject_id=? AND record_id<>? AND deleted_at IS NULL AND planned_at>=? AND planned_at<=?").bind(guild,identity.subjectId,id,record.planned_at-30*DAY,Math.min(now,record.planned_at+30*DAY)).first<{n:number}>();
  const version=await sha(JSON.stringify([REVIEW_RULE,record.version,record.planned_at,keys,rows,linked?.row??null,simultaneous]));

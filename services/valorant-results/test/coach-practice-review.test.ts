@@ -49,7 +49,7 @@ test('opaque refs bind owner/guild; indexed candidate paging, CAS link/unlink, l
  const results=await Promise.all([savePracticeMatch(f.db,f.guild,f.identity,link(m.matchRef,m.endedAt),NOW),savePracticeMatch(f.db,f.guild,f.identity,link(m.matchRef,m.endedAt),NOW)]);assert.equal(results[0].item.version,2);assert.equal(results[1].item.version,2);
  const frozen=f.sql.prepare('SELECT planned_at,plan_json FROM coach_practice_records').get();assert.equal(frozen?.planned_at,ANCHOR);
  await assert.rejects(savePracticeMatch(f.db,f.guild,f.identity,link(null,null),NOW),(e:any)=>e.status===409);
- const r=await practiceReview(f.db,f.guild,f.identity,id,null,NOW);assert.equal(r.linked?.selfReportedApplication,true);assert.equal(r.linked?.metrics.adr.valid,1);
+ const reviewStart=f.queries.length,r=await practiceReview(f.db,f.guild,f.identity,id,null,NOW);assert.ok(!f.queries.slice(reviewStart).some(q=>q.includes('WHERE r.match_id=?')),'reuse linked roster already in the observation window');assert.equal(r.linked?.selfReportedApplication,true);assert.equal(r.linked?.metrics.adr.valid,1);
  const again=await practiceReview(f.db,f.guild,f.identity,id,r.evaluationVersion,NOW+1);assert.equal(again.revisedComparedWithPrevious,false);
  f.sql.prepare("UPDATE valorant_match_rosters SET players_json=json_set(players_json,'$[0].damageDealt',1234,'$[0].damageDealtAt',?) WHERE match_id='m23'").run(NOW+2);
  assert.equal((await practiceReview(f.db,f.guild,f.identity,id,r.evaluationVersion,NOW+3)).revisedComparedWithPrevious,true,'enrichment changes evaluation version');
