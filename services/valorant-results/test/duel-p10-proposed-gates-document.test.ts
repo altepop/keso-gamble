@@ -2,7 +2,10 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import test from 'node:test';
 
-const document=readFileSync(new URL('../../../docs/duel-phase10-proposed-gates.md',import.meta.url),'utf8');
+// This repository's URL typings differ between the DOM and Node libraries;
+// pass an absolute path string to readFileSync for unambiguous UTF-8 output.
+const path=new URL('../../../docs/duel-phase10-proposed-gates.md',import.meta.url).pathname;
+const document=readFileSync(decodeURIComponent(path),'utf8');
 const requiredGates=[
   '観戦の公開ポリシー',
   '観戦同期方式',
