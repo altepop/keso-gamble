@@ -1,8 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {fileURLToPath} from 'node:url';
-const sql=readFileSync(fileURLToPath(new URL('../migrations/0018_coach_team_notice_outbox.sql',import.meta.url)),'utf8');
+const sql=readFileSync(new URL('../migrations/0018_coach_team_notice_outbox.sql',import.meta.url),'utf8');
 test('E2 outbox is additive, dormant, bounded and does not collect personal records',()=>{
  assert.match(sql,/CREATE TABLE IF NOT EXISTS coach_team_notice_outbox/);
  assert.match(sql,/PRIMARY KEY\(guild,team_id,event_key\)/);
