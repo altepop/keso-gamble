@@ -43,22 +43,20 @@ export async function saveCoachTeamConsent(db:D1Database,guild:string,identity:L
  const conflict=()=>new CoachTeamError('別の画面で同意内容が更新されています。最新の設定を確認してください。',409);
  if((current?.version??0)!==b.expectedVersion)throw conflict();
  const flags=[b.joined?1:0,b.shareStatus?1:0,b.shareMetrics?1:0];
- const ownerGuard='EXISTS(SELECT 1 FROM coach_profiles p JOIN kp_accounts k ON k.guild=p.guild AND k.user=p.owner_user WHERE p.guild=? AND p.subject_id=? AND p.owner_user=? AND k.puuid=?)';
+ const ownerGuard='EXISTS(SELECT 1 FROM coach_profiles p JOIN kp_accounts k ON k.guild=p.guild AND k.user=p.owner_user JOIN coach_profile_accounts a ON a.guild=p.guild AND a.subject_id=p.subject_id AND a.puuid=k.puuid WHERE p.guild=? AND p.subject_id=? AND p.owner_user=?)';
  // Bind primary PUUID from a freshly server-verified identity; client cannot select it.
- const primary=identity.accounts[0]?.puuid;
- if(!primary)hidden();
  if(!current){
   const inserted=await db.prepare(`INSERT OR IGNORE INTO coach_team_consents
    (guild,team_id,subject_id,owner_user,joined,share_status,share_metrics,version,updated_at)
    SELECT ?,?,?,?,?,?,?,1,? WHERE ${ownerGuard} RETURNING subject_id,owner_user,joined,share_status,share_metrics,version,updated_at`)
-   .bind(guild,COACH_TEAM_ID,identity.subjectId,user,...flags,now,guild,identity.subjectId,user,primary).first<Row>();
+   .bind(guild,COACH_TEAM_ID,identity.subjectId,user,...flags,now,guild,identity.subjectId,user).first<Row>();
   if(!validRow(inserted,identity.subjectId,user))throw conflict();
   return {team:'確認済みコーチロスター',settings:show(inserted)};
  }
  const updated=await db.prepare(`UPDATE coach_team_consents SET joined=?,share_status=?,share_metrics=?,version=version+1,updated_at=?
  WHERE guild=? AND team_id=? AND subject_id=? AND owner_user=? AND version=?
  AND ${ownerGuard} RETURNING subject_id,owner_user,joined,share_status,share_metrics,version,updated_at`)
-  .bind(...flags,now,guild,COACH_TEAM_ID,identity.subjectId,user,b.expectedVersion,guild,identity.subjectId,user,primary).first<Row>();
+  .bind(...flags,now,guild,COACH_TEAM_ID,identity.subjectId,user,b.expectedVersion,guild,identity.subjectId,user).first<Row>();
  if(!validRow(updated,identity.subjectId,user))throw conflict();
  return {team:'確認済みコーチロスター',settings:show(updated)};
 }
