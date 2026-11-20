@@ -87,7 +87,7 @@ test('approved unlimited PvE and PvP per-opponent cap with 13th daily roll decay
     assert.equal(db.prepare("SELECT count(*) n FROM kp_duel_reward_rolls WHERE mode='pve'").get()?.n,120);
     for (let i=0;i<16;i++) receipt.run('pvp-'+i,'pvp','othello','opponent-'+Math.floor(i/4),day,day);
     assert.equal(db.prepare("SELECT count(*) n FROM kp_duel_reward_rolls WHERE mode='pvp'").get()?.n,16);
-    assert.deepEqual(db.prepare("SELECT chance_bps FROM kp_duel_reward_rolls WHERE mode='pvp' ORDER BY match_id").all().map(r=>r.chance_bps).sort((a,b)=>a-b), [500,500,500,500,...Array(12).fill(1000)]);
+    assert.deepEqual(db.prepare("SELECT chance_bps FROM kp_duel_reward_rolls WHERE mode='pvp' ORDER BY match_id").all().map(r=>Number(r.chance_bps)).sort((a,b)=>a-b), [500,500,500,500,...Array(12).fill(1000)]);
     receipt.run('blocked','pvp','othello','opponent-0',day,day);
     assert.equal(db.prepare("SELECT count(*) n FROM kp_duel_reward_rolls WHERE mode='pvp'").get()?.n,16);
     for (let i=0;i<40;i++) receipt.run('new-'+i,'pvp','othello','fresh-'+i,day,day);
