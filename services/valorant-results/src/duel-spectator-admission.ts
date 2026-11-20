@@ -15,7 +15,8 @@ export function decideSpectatorAdmission(input:SpectatorAdmissionInput):Spectato
  if(!input.viewer||!input.viewerGuild)return {allowed:false,reason:'unauthenticated'};
  if(input.viewerGuild!==input.matchGuild)return {allowed:false,reason:'guild_mismatch'};
  if(!input.matchId||input.matchId.length>256)return {allowed:false,reason:'match_unavailable'};
- if(!input.approvedViewerIds.includes(input.viewer))return {allowed:false,reason:'not_authorized'};
+ // Runtime callers may be untyped; a string or spoofed includes() is not an explicit grant list.
+ if(!Array.isArray(input.approvedViewerIds)||!input.approvedViewerIds.includes(input.viewer))return {allowed:false,reason:'not_authorized'};
  return {allowed:true,viewer:input.viewer,guild:input.matchGuild,matchId:input.matchId};
 }
 export type SpectatorRevision={kind:'no_change';version:number}|{kind:'snapshot';snapshot:SpectatorSnapshot};
