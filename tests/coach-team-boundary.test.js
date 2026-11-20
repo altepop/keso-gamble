@@ -5,6 +5,10 @@ const member = {ownerId:'owner',teamId:'team',guildId:'guild',displayName:'Playe
 const consent = {ownerId:'owner',teamId:'team',guildId:'guild',shareTeamStatus:true};
 test('team status is fail-closed until explicit matching consent',()=>{
   for(const c of [undefined,{}, {...consent,shareTeamStatus:false},{...consent,ownerId:'other'},{...consent,teamId:'other'},{...consent,guildId:'other'}]) assert.equal(projectTeamMember(member,c),null);
+  for(const key of ['ownerId','teamId','guildId']) {
+    assert.equal(projectTeamMember({...member,[key]:''},{...consent,[key]:''}),null);
+    assert.equal(projectTeamMember({...member,[key]:null},{...consent,[key]:null}),null);
+  }
 });
 test('only allowlisted team fields survive, without personal records or identifiers',()=>{
   assert.deepEqual(projectTeamMember(member,consent),{displayName:'Player',status:'取り組み中'});
@@ -13,4 +17,14 @@ test('only allowlisted team fields survive, without personal records or identifi
 test('same Discord owner is counted once across Riot accounts',()=>{
   assert.deepEqual(projectTeamRoster([member,{...member,puuid:'other',displayName:'Second'}],[consent]),[{displayName:'Player',status:'取り組み中'}]);
   assert.deepEqual(projectTeamRoster([member],[]),[]);
+});
+test('consent matching is scoped to owner, team and guild, not first owner match',()=>{
+  const wrong = {...consent,teamId:'other'};
+  assert.deepEqual(projectTeamRoster([member],[wrong,consent]),[{displayName:'Player',status:'取り組み中'}]);
+  assert.deepEqual(projectTeamRoster([member],[wrong]),[]);
+});
+test('deduplication is scoped per team and guild',()=>{
+  const second = {...member,teamId:'team2',displayName:'Other team'};
+  assert.deepEqual(projectTeamRoster([member,second],[consent,{...consent,teamId:'team2'}]),
+    [{displayName:'Player',status:'取り組み中'},{displayName:'Other team',status:'取り組み中'}]);
 });
