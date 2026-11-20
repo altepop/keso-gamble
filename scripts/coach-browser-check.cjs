@@ -79,6 +79,15 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   for(const name of ['0006_competitive_match_rosters.sql','0007_competitive_round_events.sql','0010_coach_profiles.sql','0011_coach_goals.sql','0013_coach_private_records.sql','0014_coach_match_review.sql'])privateSql.exec(require('node:fs').readFileSync(require('node:path').join(root,'services/valorant-results/migrations',name),'utf8'));
   privateSql.exec("INSERT INTO coach_profiles(guild,subject_id,owner_user,person_key,display_name,updated_at) VALUES('fixture','subject','owner','kobe','神戸',0)");
   const query=(text,args=[])=>({bind:(...values)=>query(text,values),first:()=>privateSql.prepare(text).get(...args)||null,all:()=>({results:privateSql.prepare(text).all(...args)})});const privateDb={prepare:query};let losePrivateReply=false;
+  let teamState={joined:false,shareStatus:false,shareMetrics:false,version:0};
+  const partyReport={scope:'consented-team-only',ruleVersion:'party-verified-v1',
+   overall:{matches:2,unknownOutcomes:0,winRate:{value:1,numerator:2,denominator:2},
+    kd:{value:2,numerator:60,denominator:30,validPlayerSamples:4,excludedPlayerSamples:0}},
+   quality:{inspectedMatches:2,eligibleMatches:2,excludedMatches:0,inputLimit:250,limitReached:false},
+   maps:[{map:'<img src=x onerror=alert(1)>',matches:2,
+    winRate:{value:1,numerator:2,denominator:2},
+    kd:{value:2,numerator:60,denominator:30}}],
+   positionBasedTradeDistance:'評価範囲外',puuid:'must-not-display'};
   const selfSubject='11111111-1111-4111-8111-111111111111',otherSubject='22222222-2222-4222-8222-222222222222';let otherPublic=true;
   const sharedFixture=(subject)=>({subjectId:subject,displayName:subject===selfSubject?state.settings.displayName:'<img src=x onerror=alert(1)> 共有者',policyVersion:1,period:{from:'2026-11-01',to:'2026-11-20',timezone:'Asia/Tokyo'},matches:{analyzed:20,candidates:22,excluded:2,rowLimit:250,limitReached:false},metrics:subject===selfSubject&&!state.settings.fields.includes('kd')?{}:{kd:{value:1.2,validMatches:20,excludedMatches:0,numerator:240,denominator:200,formula:'合計キル数 ÷ 合計デス数',secret:'never-share-metric'}},goals:'never-share-goals',accounts:['never-share-account'],weakness:'never-share-weakness',puuid:'never-share-id'});
   await ctx.route('https://valorant-results.tealeaforest.workers.dev/**',async route=>{
@@ -92,6 +101,20 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
     try{const value=req.method()==='GET'?await readPrivateRecords(privateDb,'fixture','subject',kind,url.searchParams.get('cursor')):await savePrivateRecord(privateDb,'fixture','subject',kind,req.postDataJSON());
      if(req.method()==='POST'&&losePrivateReply){losePrivateReply=false;return route.abort('failed');}return route.fulfill({json:value});}
     catch(e){return route.fulfill({status:e.status||500,json:{error:e.message}});}
+   }
+   if(url.pathname.startsWith('/api/kp/coach/team/')){
+    const kind=url.pathname.split('/').pop();
+    if(kind==='consent'){
+     if(req.method()==='GET')return route.fulfill({json:{team:'確認済みコーチロスター',settings:teamState}});
+     const b=req.postDataJSON();if(b.expectedVersion!==teamState.version)return route.fulfill({status:409,json:{error:'同意が更新されています。'}});
+     teamState={joined:b.joined,shareStatus:b.shareStatus,shareMetrics:b.shareMetrics,version:teamState.version+1};
+     return route.fulfill({json:{team:'確認済みコーチロスター',settings:teamState}});
+    }
+    if(kind==='metrics')return route.fulfill(teamState.joined&&teamState.shareMetrics?
+     {json:partyReport}:{status:404,json:{error:'この表示は利用できません。'}});
+    if(kind==='roster')return route.fulfill(teamState.joined?
+     {json:{members:[{displayName:'確認済みの共有者',status:'まだ分かりません'}],participantCount:1}}:
+     {status:404,json:{error:'この表示は利用できません。'}});
    }
    if(url.pathname==='/api/kp/coach/settings'){
     if(req.method()==='GET')return route.fulfill({json:{settings:state.settings}});
@@ -130,6 +153,30 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   assert.equal(await page.locator('.prototype-top .block').count(),3,'selected recipes become the three prototype blocks');
   assert.equal(await page.locator('.prototype-top .rankbox .r').first().innerText(),'未取得','never invent sample ranks');
   assert.match(await page.locator('.prototype-top .evidence').innerText(),/1\.96/,'uses real fixture KD');
+  // Phase 3-C team UI is explicit opt-in. It must not ask for metrics on page load.
+  await page.locator('[data-team-panel] > summary').click();
+  await page.locator('[data-team-load]').click();
+  await page.locator('[data-team-consent-form]').waitFor({state:'visible'});
+  assert.equal(await page.locator('[name="joined"]').isChecked(),false);
+  assert.equal(await page.locator('[data-team-metrics-load]').isVisible(),false);
+  await page.locator('[name="joined"]').check();await page.locator('[name="shareMetrics"]').check();
+  await page.locator('[data-team-consent-form] button[type="submit"]').click();
+  await page.locator('[data-team-metrics-load]').waitFor({state:'visible'});
+  await page.locator('[data-team-metrics-load]').click();
+  await page.locator('[data-team-metrics-view] [data-coach-party-metrics]').waitFor();
+  assert.match(await page.locator('[data-team-metrics-view]').innerText(),/勝率：100.0%/);
+  assert.equal(await page.locator('[data-team-metrics-view] img, [data-team-metrics-view] script').count(),0,'no HTML injection');
+  assert.ok(!(await page.locator('[data-team-metrics-view]').innerText()).includes('must-not-display'),'no extra response fields');
+  for(const width of [320,375,1440]){
+   await page.setViewportSize({width,height:900});
+   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'team cards fit '+width);
+   if(process.env.COACH_V6_SCREENSHOTS_DIR)await page.locator('[data-team-panel]').screenshot({path:require('node:path').join(process.env.COACH_V6_SCREENSHOTS_DIR,'phase3-team-'+width+'.png')});
+  }
+  await page.locator('[name="shareMetrics"]').uncheck();
+  await page.locator('[data-team-consent-form] button[type="submit"]').click();
+  await page.waitForFunction(()=>document.querySelector('[data-team-metrics-load]')?.hidden===true);
+  assert.equal(await page.locator('[data-team-metrics-view] [data-coach-party-metrics]').count(),0,'revoking consent clears metric cards');
+  await page.setViewportSize({width:375,height:812});
   const beforeUiActions=requests.length;
   await page.locator('#acceptBtn').click();await page.waitForFunction(()=>document.querySelector('#acceptBtn')?.getAttribute('aria-pressed')==='true');assert.equal(await page.locator('#acceptBtn').getAttribute('aria-pressed'),'true');assert.equal(await page.locator('#acceptNote').isVisible(),true);
   await page.locator('#timerBtn').click();assert.match(await page.locator('#timerBtn').innerText(),/一時停止/);await page.locator('#timerReset').click();assert.match(await page.locator('#clock').innerText(),/04:00/);
