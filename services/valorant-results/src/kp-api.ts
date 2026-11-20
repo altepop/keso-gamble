@@ -4,6 +4,7 @@ import {readPveBuild,savePveBuild} from './duel-pve-build.ts';
 import {duelRewardProfile} from './duel-rewards.ts';
 import {coachSharingSettings,saveCoachSharing,coachDirectory,coachSharedSummaries,SharingError} from './coach-sharing.ts';
 import {readCoachTeamConsent,saveCoachTeamConsent,coachTeamRoster,CoachTeamError} from './coach-team-consent.ts';
+import {coachAuthorizedPartyMetrics} from './coach-team-metrics.ts';
 import {readCoachGoals,parseCoachGoal,saveCoachGoal,GoalError} from './coach-goals.ts';
 import {resolveCoachIdentity,publicCoachIdentity} from './coach-identity.ts';
 import {projectCoachSelfReport} from './coach-self-report.ts';
@@ -447,7 +448,7 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping,deferP
     catch(e){if(e instanceof PrivateRecordError)return response({error:e.message},e.status);throw e;}
   }
   // KP-session + server-verified owner; never trust browser supplied guild/team/owner.
-  if(['/api/kp/coach/team/consent','/api/kp/coach/team/roster'].includes(path)){
+  if(['/api/kp/coach/team/consent','/api/kp/coach/team/roster','/api/kp/coach/team/metrics'].includes(path)){
     const identity=await resolveCoachIdentity(env.DB,mapping,owner.user);
     if(identity.status!=='linked')return response({error:'この表示は利用できません。'},404);
     try{
@@ -457,11 +458,15 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping,deferP
         await saveCoachTeamConsent(env.DB,mapping.guildId,identity,owner.user,request));
       if(path.endsWith('/roster')&&request.method==='GET')
        return response(await coachTeamRoster(env.DB,mapping,identity,owner.user));
+      if(path.endsWith('/metrics')&&request.method==='GET'){
+       if(await d1OptionalMode(env))return response({error:'D1節約モード中です。時間を置いてから確認してください。'},429);
+       return response(await coachAuthorizedPartyMetrics(env.DB,mapping,identity,owner.user));
+      }
       return response({error:'未対応の操作です。'},405);
     }catch(e){if(e instanceof CoachTeamError)return response({error:e.message},e.status);throw e;}
   }
-  // NO /team/metrics route: Phase 3-C aggregate is private until every subject's
-  // metric opt-in, ownership and viewer privilege are rechecked at query time.
+  // Team metrics are aggregate-only, explicitly opted-in and reauthorized at the end of every read.
+  // Personal reports, execution notes and round events remain inaccessible through this route.
   if(path==='/api/kp/coach/settings'&&(request.method==='GET'||request.method==='POST')){
     const identity=await resolveCoachIdentity(env.DB,mapping,owner.user);
     if(identity.status!=='linked')return response({error:'本人のアカウント対応を確認してください。'},identity.status==='conflict'?409:404);
