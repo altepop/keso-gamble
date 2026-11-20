@@ -57,8 +57,7 @@ export const DUEL_REWARD_DDL = [
         (CASE NEW.outcome WHEN 'win' THEN policy.win_bps WHEN 'loss' THEN policy.loss_bps ELSE policy.draw_bps END) /
         (CASE WHEN NEW.mode='pvp' AND
           (SELECT COUNT(*) FROM kp_duel_reward_rolls
-            WHERE guild=NEW.guild AND user=NEW.user AND mode='pvp'
-              AND jst_day=(NEW.occurred_at+32400000)/86400000)>=12
+            WHERE guild=NEW.guild AND user=NEW.user AND mode='pvp')>=12
           THEN 2 ELSE 1 END)
       FROM kp_duel_reward_policy_v2 policy
       WHERE policy.guild=NEW.guild AND policy.mode=NEW.mode AND policy.starts_at<=NEW.occurred_at
