@@ -22,6 +22,7 @@ export type SpectatorRevision={kind:'no_change';version:number}|{kind:'snapshot'
 export function compareSpectatorRevision(snapshot:SpectatorSnapshot,seenVersion:number|null):SpectatorRevision {
  if(!Number.isSafeInteger(snapshot.version)||snapshot.version<0)throw Error('invalid snapshot version');
  if(seenVersion!==null&&(!Number.isSafeInteger(seenVersion)||seenVersion<0))throw Error('invalid seen version');
- if(seenVersion!==null&&seenVersion===snapshot.version)return {kind:'no_change',version:snapshot.version};
+ // An older source revision must never roll back a newer revision seen by the viewer.
+ if(seenVersion!==null&&seenVersion>=snapshot.version)return {kind:'no_change',version:seenVersion};
  return {kind:'snapshot',snapshot};
 }
