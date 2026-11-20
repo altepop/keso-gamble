@@ -28,3 +28,10 @@ test('deduplication is scoped per team and guild',()=>{
   assert.deepEqual(projectTeamRoster([member,second],[consent,{...consent,teamId:'team2'}]),
     [{displayName:'Player',status:'取り組み中'},{displayName:'Other team',status:'取り組み中'}]);
 });
+
+test('malformed collection input fails closed without throwing',()=>{
+  for (const invalid of [null, undefined, {}, 'text', 1]) {
+    assert.deepEqual(projectTeamRoster(invalid,[consent]),[]);
+    assert.deepEqual(projectTeamRoster([member],invalid),[]);
+  }
+});
