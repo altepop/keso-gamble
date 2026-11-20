@@ -38,11 +38,12 @@
    if(!allowed)return;
    joined.checked=Boolean(settings.joined);status.checked=Boolean(settings.shareStatus);metrics.checked=Boolean(settings.shareMetrics);
   };
-  const clear=()=>{epoch++;active=false;pending=false;settings=null;blank();info.textContent='';
+  const enable=()=>{save.disabled=load.disabled=view.disabled=roster.disabled=false;};
+  const clear=()=>{epoch++;active=false;pending=false;enable();settings=null;blank();info.textContent='';
    joined.checked=false;status.checked=false;metrics.checked=false;panel.open=false;sync();};
-  const invalidate=()=>{if(!active)return;epoch++;pending=false;settings=null;blank();
+  const invalidate=()=>{if(!active)return;epoch++;pending=false;enable();settings=null;blank();
    info.textContent='共有状態が変わった可能性があります。最新の同意を読み直してください。';sync();};
-  const setActive=()=>{active=true;settings=null;pending=false;blank();
+  const setActive=()=>{active=true;settings=null;pending=false;enable();blank();
    info.textContent='初期設定は共有OFFです。同意設定を読み込んでから変更してください。';sync();};
   async function guarded(fn){if(!active||pending)return;pending=true;const at=epoch;
    save.disabled=load.disabled=view.disabled=roster.disabled=true;
