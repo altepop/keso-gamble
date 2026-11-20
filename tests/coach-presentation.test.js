@@ -97,3 +97,16 @@ test('private observation headings, content address and no persistent drafts or 
  assert.ok(html.includes('practice-review.js?v=coach-'+createHash('sha256').update(code).digest('hex').slice(0,12)));
  assert.doesNotMatch(code,/\b(?:localStorage|sessionStorage)\b|innerHTML\s*=|\bfetch\s*\(/);
 });
+
+test('team consent UI uses hashed helper URL and only requests aggregate team metrics with explicit opt-in',()=>{
+ const html=readFileSync(new URL('../coach.html',import.meta.url),'utf8');
+ const code=readFileSync(new URL('../coach/team.js',import.meta.url),'utf8');
+ assert.ok(html.includes('team.js?v=coach-'+createHash('sha256').update(code).digest('hex').slice(0,12)));
+ assert.ok(html.includes('id="coach-team-host"'));
+ assert.match(code,/\/api\/kp\/coach\/team\/metrics/);
+ assert.match(code,/\/api\/kp\/coach\/team\/consent/);
+ assert.doesNotMatch(code,/localStorage|sessionStorage|innerHTML|sendBeacon/);
+ assert.match(code,/clear=\(\)=>/);
+ assert.match(code,/invalidate=\(\)=>/);
+ assert.match(code,/expectedVersion:settings.version/);
+});
