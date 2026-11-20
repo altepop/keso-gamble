@@ -75,7 +75,7 @@ test('a 30-day rotated-opponent workload keeps reward writes and quota reads bou
   }
 });
 
-test('approved unlimited PvE and PvP per-opponent cap with 13th daily roll decay', () => {
+test('approved unlimited PvE and PvP per-opponent cap with 13th lifetime roll decay', () => {
   const db = new DatabaseSync(':memory:');
   const day = Date.parse('2026-11-20T12:00:00+09:00');
   try {
@@ -94,4 +94,24 @@ test('approved unlimited PvE and PvP per-opponent cap with 13th daily roll decay
     assert.equal(db.prepare("SELECT count(*) n FROM kp_duel_reward_rolls WHERE mode='pvp'").get()?.n,56);
     assert.equal(db.prepare("SELECT count(*) n FROM kp_duel_reward_rolls WHERE mode='pvp' AND chance_bps=500").get()?.n,44);
   } finally {db.close();}
+});
+
+test('PvP lifetime decay persists across JST midnight, while pair cap resets daily', () => {
+  const db = new DatabaseSync(':memory:');
+  const before = Date.parse('2026-11-20T23:59:00+09:00');
+  const after = Date.parse('2026-11-21T00:01:00+09:00');
+  try {
+    for (const sql of [...DUEL_PROGRESSION_DDL,...DUEL_REWARD_DDL]) db.exec(sql);
+    db.exec("INSERT INTO kp_duel_reward_policy_v2 VALUES ('guild','pvp',0,NULL,4,1000,500,500)");
+    const receipt = db.prepare(`INSERT INTO kp_duel_progress_receipts
+      VALUES('guild',?,'player','pvp','othello',?,'win',1,?,?)`);
+    for (let i = 0; i < 12; i++) receipt.run('old-'+i,'opponent-'+Math.floor(i/4),before,before);
+    assert.equal(db.prepare("SELECT COUNT(*) n FROM kp_duel_reward_rolls WHERE user='player' AND mode='pvp'").get()?.n,12);
+    receipt.run('new-day-first','opponent-0',after,after);
+    assert.equal(db.prepare("SELECT chance_bps FROM kp_duel_reward_rolls WHERE match_id='new-day-first'").get()?.chance_bps,500);
+    for (let i = 0; i < 4; i++) receipt.run('next-'+i,'fresh',after,after);
+    receipt.run('blocked','fresh',after,after);
+    assert.equal(db.prepare("SELECT COUNT(*) n FROM kp_duel_reward_rolls WHERE user='player' AND mode='pvp'").get()?.n,17);
+    assert.equal(db.prepare("SELECT COUNT(*) n FROM kp_duel_reward_rolls WHERE user='player' AND mode='pvp' AND chance_bps=500").get()?.n,5);
+  } finally { db.close(); }
 });
