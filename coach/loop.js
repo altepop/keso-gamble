@@ -15,23 +15,27 @@
    const b=el('button',label,{'type':'button',...(kind?{'data-loop-action':kind}:{})});
    b.addEventListener('click',action);return b;
   }
-  function recordCopyText(record){
+  function recordCopyText(record,linkedNotes=[]){
    const items=(Array.isArray(record.items)?record.items:[]).slice(0,3);
    const check=items.find(x=>typeof x?.check==='string')?.check||'未記録';
-   return ['KESO COACH｜本人専用の実施記録','実施日：'+(record.occurredDate||'まだ分かりません'),
+   const lines=['KESO COACH｜本人専用の実施記録','実施日：'+(record.occurredDate||'まだ分かりません'),
     '練習：'+(items.map(x=>x.title).filter(x=>typeof x==='string').join('／')||'未記録'),
     '本人の実施申告：'+(outcomes[record.execution?.report]||'まだ分かりません'),
     '振り返り：'+(record.reflection||'未記録'),'次の試合で確認：'+check,
-    '注：本人の記録です。実施・改善の客観的証明ではありません。'].join('\n');
+    '注：本人の記録です。実施・改善の客観的証明ではありません。'];
+   for(const note of linkedNotes.slice(0,20))lines.push('本人の関連メモ：'+note.title+'\n'+note.body);
+   return lines.join('\n');
   }
   async function copyRecord(record){
-   const content=recordCopyText(record);
+   const includeNotes=element.querySelector('[data-copy-include-notes]')?.checked===true;
+   const linkedNotes=includeNotes?(snapshot?.recordNotes||[]):[];
+   const content=recordCopyText(record,linkedNotes);
    const old=element.querySelector('[data-private-copy-fallback]');
    old?.remove();
    try{
     if(!navigator.clipboard?.writeText)throw Error('clipboard unavailable');
     await navigator.clipboard.writeText(content);
-    element.querySelector('[data-private-copy-status]')?.replaceChildren(document.createTextNode('本人の実施記録をコピーしました。共有用診断や個人メモは含まれません。'));
+    element.querySelector('[data-private-copy-status]')?.replaceChildren(document.createTextNode(includeNotes?'本人の実施記録と選択した関連メモをコピーしました。共有用診断は含まれません。':'本人の実施記録をコピーしました。共有用診断や個人メモは含まれません。'));
    }catch{
     const field=el('textarea',undefined,{'data-private-copy-fallback':'','readonly':'','aria-label':'本人の記録を手動でコピー'});
     field.value=content;field.style.width='100%';field.style.minHeight='140px';field.style.fontSize='16px';
@@ -85,9 +89,15 @@
      }else element.append(paragraph(r.backfilled?'後からの記録は、前後の自動比較の評価範囲外です。':'まだ分かりません。比較に使える数値が不足しています。'));
      if(r.nextStep?.explanation)element.append(paragraph('次の提案：'+brief(r.nextStep.explanation,34)));
     }else element.append(paragraph('前後の数字は未確認です。評価する場合は、保存済みの本人の試合を確認します。'));
-    element.append(button('本人の実施記録だけをコピーします',()=>void copyRecord(latest),'copy'));
+    if(snapshot.recordNotes?.length){
+     const label=el('label','関連付けた個人メモもコピーに含めます（初期OFF）');
+     const check=el('input',undefined,{'type':'checkbox','data-copy-include-notes':'','aria-label':'関連付けた本人の個人メモを含める'});
+     check.checked=false;label.prepend(check);element.append(label);
+     element.append(paragraph('読み込んだ範囲の関連メモだけを選択時に含めます。'));
+    }
+    element.append(button('本人の実施記録をコピーします',()=>void copyRecord(latest),'copy'));
     element.append(el('p','',{'role':'status','aria-live':'polite','data-private-copy-status':''}));
-    element.append(paragraph('コピーに個人メモ・試合ID・共有用の診断は含めません。'));
+    element.append(paragraph('個人メモは初期OFFです。試合ID・共有用の診断はコピーに含めません。'));
     element.append(button('前後の数値を確認します',()=>open(latest.id,true),'review'));
     element.append(paragraph('数値が変わっても、練習の効果が証明されたとは扱いません。'));
    }else if(!active){
