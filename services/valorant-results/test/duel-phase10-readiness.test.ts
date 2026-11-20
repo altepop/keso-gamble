@@ -24,7 +24,13 @@ test('Phase 10 integration: revision and voice permission fail closed',()=>{
  assert.equal(JSON.stringify(prepareSpectatorAudioCue(cue,allApproved)).includes('private'),false);
 });
 test('Phase 10 integration: tournament remains unpublishable without operator approval',()=>{
- assert.equal(draftSingleEliminationBracket(['a','b','c'],8).byes,1);
+ const three=draftSingleEliminationBracket(['a','b','c'],8);
+ assert.equal(three.byes,1);
+ assert.deepEqual(three.pairs,[{round:1,slot:0,playerA:'a',playerB:null},{round:1,slot:1,playerA:'b',playerB:'c'}]);
+ const five=draftSingleEliminationBracket(['a','b','c','d','e'],16);
+ assert.equal(five.pairs.length,4);
+ assert.equal(five.pairs.filter(p=>p.playerB===null).length,3);
+ assert.equal(new Set(five.pairs.flatMap(p=>[p.playerA,p.playerB].filter(Boolean))).size,5);
  assert.equal(mayPublishTournament(true,false),false);
  assert.equal(mayPublishTournament(false,true),false);
 });
