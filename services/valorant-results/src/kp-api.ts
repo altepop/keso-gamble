@@ -5,6 +5,7 @@ import {duelRewardProfile} from './duel-rewards.ts';
 import {coachSharingSettings,saveCoachSharing,coachDirectory,coachSharedSummaries,SharingError} from './coach-sharing.ts';
 import {readCoachTeamConsent,saveCoachTeamConsent,coachTeamRoster,CoachTeamError} from './coach-team-consent.ts';
 import {readTeamPdca,writeTeamChallenge,writeTeamSelfStatus} from './coach-team-pdca.ts';
+import {readCoachTeamNotice,saveCoachTeamNotice} from './coach-team-notifications.ts';
 import {coachAuthorizedPartyMetrics} from './coach-team-metrics.ts';
 import {readCoachGoals,parseCoachGoal,saveCoachGoal,GoalError} from './coach-goals.ts';
 import {resolveCoachIdentity,publicCoachIdentity} from './coach-identity.ts';
@@ -449,7 +450,7 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping,deferP
     catch(e){if(e instanceof PrivateRecordError)return response({error:e.message},e.status);throw e;}
   }
   // KP-session + server-verified owner; never trust browser supplied guild/team/owner.
-  if(['/api/kp/coach/team/consent','/api/kp/coach/team/roster','/api/kp/coach/team/metrics','/api/kp/coach/team/pdca','/api/kp/coach/team/challenge','/api/kp/coach/team/status'].includes(path)){
+  if(['/api/kp/coach/team/consent','/api/kp/coach/team/roster','/api/kp/coach/team/metrics','/api/kp/coach/team/pdca','/api/kp/coach/team/challenge','/api/kp/coach/team/status','/api/kp/coach/team/notification'].includes(path)){
     const identity=await resolveCoachIdentity(env.DB,mapping,owner.user);
     if(identity.status!=='linked')return response({error:'この表示は利用できません。'},404);
     try{
@@ -459,6 +460,10 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping,deferP
         await saveCoachTeamConsent(env.DB,mapping.guildId,identity,owner.user,request));
       if(path.endsWith('/roster')&&request.method==='GET')
        return response(await coachTeamRoster(env.DB,mapping,identity,owner.user));
+      if(path.endsWith('/notification')&&(request.method==='GET'||request.method==='POST'))
+       return response(request.method==='GET'?
+        await readCoachTeamNotice(env.DB,mapping.guildId,identity,owner.user):
+        await saveCoachTeamNotice(env.DB,mapping.guildId,identity,owner.user,request));
       if(path.endsWith('/pdca')&&request.method==='GET')
        return response(await readTeamPdca(env.DB,mapping,identity,owner.user));
       if(path.endsWith('/challenge')&&request.method==='POST')
