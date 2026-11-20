@@ -62,7 +62,8 @@ test('consent revocation, missing party proof, wrong side and unknown outcomes d
   assert.equal(data.overall.matches,2);
   assert.equal(data.overall.unknownOutcomes,1);
   assert.equal(data.overall.winRate.value,1);
-  assert.equal(data.quality.excludedMatches,3);
+  // Excluded candidates can include private solo matches and must never leave the Worker.
+  assert.equal(data.quality.excludedMatches,undefined);
   await hit(f,'consent',1,payload(1,false,false));
   const start=f.queries.length;assert.equal((await hit(f,'metrics')).status,404);
   assert.ok(!f.queries.slice(start).some((sql:string)=>sql.includes('FROM valorant_match_rosters')));
