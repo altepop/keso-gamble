@@ -25,6 +25,12 @@ export async function ensureCoachTeamConsents(directory,env=process.env,request=
   throw Error('Incompatible team consent columns or opt-in defaults');
  const guards=(await query("SELECT name FROM sqlite_master WHERE name IN ('coach_team_consent_roster','coach_team_consent_owner_immutable')"))[0].results;
  if(guards.length!==2)throw Error('Team consent index or owner guard missing');
+ await query(readFileSync(new URL('../migrations/0016_coach_team_pdca.sql',import.meta.url),'utf8'));
+ const actual=(await query("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('coach_team_challenges','coach_team_challenge_history','coach_team_member_status')"))[0].results;
+ if(actual.length!==3)throw Error('Team PDCA schema missing');
+ const triggers=(await query("SELECT name FROM sqlite_master WHERE type='trigger' AND name IN ('coach_team_challenge_capture_insert','coach_team_challenge_capture_update','coach_team_member_status_owner_guard')"))[0].results;
+ if(triggers.length!==3)throw Error('Team PDCA history/ownership triggers missing');
+ console.log('COACH_TEAM_PDCA_SCHEMA_READY tables=3 triggers=3 changes=ddl_only');
  console.log('COACH_TEAM_CONSENTS_SCHEMA_READY defaults=all_off changes=ddl_only');
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href)
