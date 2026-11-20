@@ -15,10 +15,12 @@ export type CueDelivery=
   | {ok:false;reason:'publication_unapproved'|'audio_unapproved'|'not_opted_in'|'muted'|'invalid_cue'}
   | {ok:true;event:{kind:SpectatorCue['kind'];matchId:string;version:number;caption:string}};
 export function prepareSpectatorAudioCue(cue:SpectatorCue|null,permission:CuePermission):CueDelivery{
-  if(!permission.publicationApproved)return {ok:false,reason:'publication_unapproved'};
-  if(!permission.audioPolicyApproved)return {ok:false,reason:'audio_unapproved'};
-  if(!permission.viewerOptedIn||!permission.channelOptedIn)return {ok:false,reason:'not_opted_in'};
-  if(permission.muted||permission.reducedMotion)return {ok:false,reason:'muted'};
+  // Runtime permission data is not trustworthy merely because TypeScript types it.
+  // Require literal booleans for every approval, opt-in and suppression flag.
+  if(!permission||permission.publicationApproved!==true)return {ok:false,reason:'publication_unapproved'};
+  if(permission.audioPolicyApproved!==true)return {ok:false,reason:'audio_unapproved'};
+  if(permission.viewerOptedIn!==true||permission.channelOptedIn!==true)return {ok:false,reason:'not_opted_in'};
+  if(permission.muted!==false||permission.reducedMotion!==false)return {ok:false,reason:'muted'};
   if(!cue||!['started','turn','finished'].includes(cue.kind)||
     !/^[a-zA-Z0-9-]{1,128}$/.test(cue.matchId)||
     !Number.isSafeInteger(cue.version)||cue.version<0)return {ok:false,reason:'invalid_cue'};
