@@ -88,6 +88,7 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
     winRate:{value:1,numerator:2,denominator:2},
     kd:{value:2,numerator:60,denominator:30}}],
    positionBasedTradeDistance:'評価範囲外',puuid:'must-not-display'};
+  let teamChallenge=null,teamHistory=[],teamSelf=null;
   const selfSubject='11111111-1111-4111-8111-111111111111',otherSubject='22222222-2222-4222-8222-222222222222';let otherPublic=true;
   const sharedFixture=(subject)=>({subjectId:subject,displayName:subject===selfSubject?state.settings.displayName:'<img src=x onerror=alert(1)> 共有者',policyVersion:1,period:{from:'2026-11-01',to:'2026-11-20',timezone:'Asia/Tokyo'},matches:{analyzed:20,candidates:22,excluded:2,rowLimit:250,limitReached:false},metrics:subject===selfSubject&&!state.settings.fields.includes('kd')?{}:{kd:{value:1.2,validMatches:20,excludedMatches:0,numerator:240,denominator:200,formula:'合計キル数 ÷ 合計デス数',secret:'never-share-metric'}},goals:'never-share-goals',accounts:['never-share-account'],weakness:'never-share-weakness',puuid:'never-share-id'});
   await ctx.route('https://valorant-results.tealeaforest.workers.dev/**',async route=>{
@@ -109,6 +110,30 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
      const b=req.postDataJSON();if(b.expectedVersion!==teamState.version)return route.fulfill({status:409,json:{error:'同意が更新されています。'}});
      teamState={joined:b.joined,shareStatus:b.shareStatus,shareMetrics:b.shareMetrics,version:teamState.version+1};
      return route.fulfill({json:{team:'確認済みコーチロスター',settings:teamState}});
+    }
+    if(['pdca','challenge','status'].includes(kind)){
+     if(!teamState.joined)return route.fulfill({status:404,json:{error:'この表示は利用できません。'}});
+     if(kind==='challenge'&&req.method()==='POST'){
+      const b=req.postDataJSON();if(b.expectedVersion!==(teamChallenge?.version??0))return route.fulfill({status:409,json:{error:'古い版です。'}});
+      teamChallenge={version:b.expectedVersion+1,category:b.category,title:b.title,action:b.action,
+       measure:b.measure,periodEnd:b.periodEnd,active:b.active,updatedAt:1000};
+      teamHistory.unshift({...teamChallenge,reason:b.reason});
+      return route.fulfill({json:{saved:true,version:teamChallenge.version}});
+     }
+     if(kind==='status'&&req.method()==='POST'){
+      if(!teamState.shareStatus)return route.fulfill({status:404,json:{error:'同意が必要です。'}});
+      const b=req.postDataJSON();if(!teamChallenge?.active||b.expectedVersion!==(teamSelf?.version??0)||b.challengeVersion!==teamChallenge.version)
+       return route.fulfill({status:409,json:{error:'古い版です。'}});
+      teamSelf={state:b.state,action:b.action,version:(teamSelf?.version??0)+1,challengeVersion:b.challengeVersion};
+      return route.fulfill({json:{saved:true,version:teamSelf.version,challengeVersion:teamChallenge.version}});
+     }
+     if(kind==='pdca'&&req.method()==='GET')return route.fulfill({json:{
+      challenge:teamChallenge,canEdit:true,history:teamHistory.slice(0,5),
+      self:teamSelf||{version:0,state:'未着手',action:''},
+      shared:teamState.shareStatus&&teamSelf?.challengeVersion===teamChallenge?.version?
+       [{displayName:'<img src=x onerror=alert(1)> 共有者',state:teamSelf.state,action:teamSelf.action}]:[],
+      note:'本人の実施申告です。'
+     }});
     }
     if(kind==='metrics')return route.fulfill(teamState.joined&&teamState.shareMetrics?
      {json:partyReport}:{status:404,json:{error:'この表示は利用できません。'}});
@@ -176,6 +201,39 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   await page.locator('[data-team-consent-form] button[type="submit"]').click();
   await page.waitForFunction(()=>document.querySelector('[data-team-metrics-load]')?.hidden===true);
   assert.equal(await page.locator('[data-team-metrics-view] [data-coach-party-metrics]').count(),0,'revoking consent clears metric cards');
+  // Phase 3-D: each state is loaded and saved only by an explicit owner action.
+  await page.locator('[data-team-pdca] > summary').click();
+  await page.locator('[data-team-pdca-load]').click();
+  await page.locator('[data-team-task-form]').waitFor({state:'visible'});
+  assert.equal(await page.locator('[data-team-status-form]').isVisible(),false,'no status sharing without opt-in');
+  await page.locator('[data-team-task-form] [name=title]').fill('次の試合のピークをそろえます');
+  await page.locator('[data-team-task-form] [name=action]').fill('味方の合図で二人一緒に出ます');
+  await page.locator('[data-team-task-form] [name=measure]').fill('録画で時間を確認します');
+  await page.locator('[data-team-task-form] [name=periodEnd]').fill('2026-12-01');
+  await page.locator('[data-team-task-form] [name=reason]').fill('一つだけ練習するため');
+  await page.locator('[data-team-task-form] button[type=submit]').click();
+  await page.locator('[data-team-task] h3').waitFor();
+  assert.match(await page.locator('[data-team-task]').innerText(),/次の試合のピークをそろえます/);
+  await page.locator('[data-team-consent-form] [name=shareStatus]').check();
+  await page.locator('[data-team-consent-form] button[type=submit]').click();
+  await page.waitForFunction(()=>document.querySelector('[data-team-pdca-load]')?.hidden===false);
+  await page.locator('[data-team-pdca-load]').click();
+  await page.locator('[data-team-status-form]').waitFor({state:'visible'});
+  await page.locator('[data-team-status-form] [name=state]').selectOption('実施予定');
+  await page.locator('[data-team-status-form] [name=action]').fill('合図してピークします');
+  await page.locator('[data-team-status-form] button[type=submit]').click();
+  await page.waitForFunction(()=>document.querySelector('[data-team-participants]')?.textContent?.includes('実施予定'));
+  assert.equal(await page.locator('[data-team-participants] img, [data-team-participants] script').count(),0,'team status is plain text');
+  for(const width of [320,375,1440]){
+   await page.setViewportSize({width,height:900});
+   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'PDCA layout fits '+width);
+   if(process.env.COACH_V6_SCREENSHOTS_DIR)
+    await page.locator('[data-team-pdca]').screenshot({path:require('node:path').join(process.env.COACH_V6_SCREENSHOTS_DIR,'phase3d-pdca-'+width+'.png')});
+  }
+  await page.locator('[data-team-consent-form] [name=shareStatus]').uncheck();
+  await page.locator('[data-team-consent-form] button[type=submit]').click();
+  assert.equal(await page.locator('[data-team-participants]').innerText(),'','revoke removes visible sharing');
+  await page.setViewportSize({width:375,height:812});
   await page.setViewportSize({width:375,height:812});
   const beforeUiActions=requests.length;
   await page.locator('#acceptBtn').click();await page.waitForFunction(()=>document.querySelector('#acceptBtn')?.getAttribute('aria-pressed')==='true');assert.equal(await page.locator('#acceptBtn').getAttribute('aria-pressed'),'true');assert.equal(await page.locator('#acceptNote').isVisible(),true);
