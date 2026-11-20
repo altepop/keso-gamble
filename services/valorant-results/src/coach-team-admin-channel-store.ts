@@ -1,7 +1,6 @@
 import {parseSignedCoachAdminChannelCommand} from './coach-team-signed-admin-command.ts';
 // Not registered as an HTTP handler; no production D1 writes are triggered.
 // This persistence adapter is intentionally disable-only until delivery approval.
-const TEAM='coach-roster-v1';
 export async function saveSignedCoachChannelDisabled(db:D1Database,input:{
  publicKeyHex:string;signatureHex:string;timestamp:string;rawBody:string;
  expectedGuildId:string;expectedApplicationId:string;nowSeconds:number;
@@ -15,14 +14,14 @@ export async function saveSignedCoachChannelDisabled(db:D1Database,input:{
  if(typeof admin!=='string'||!new RegExp('^[0-9]{15,22}$').test(admin)||
   typeof interactionId!=='string'||!new RegExp('^[0-9]{15,22}$').test(interactionId))return null;
  if(command.expectedVersion===0){
-  return await db.prepare(\`INSERT OR IGNORE INTO coach_team_notice_channels
+  return await db.prepare(`INSERT OR IGNORE INTO coach_team_notice_channels
   (guild,team_id,channel_id,enabled,version,configured_by,updated_at)
-  VALUES(?,'coach-roster-v1',?,0,1,?,?) RETURNING version\`)
+  VALUES(?,'coach-roster-v1',?,0,1,?,?) RETURNING version`)
    .bind(input.expectedGuildId,command.channelId,admin,input.nowSeconds*1000).first<{version:number}>();
  }
- return await db.prepare(\`UPDATE coach_team_notice_channels SET channel_id=?,enabled=0,
+ return await db.prepare(`UPDATE coach_team_notice_channels SET channel_id=?,enabled=0,
   version=version+1,configured_by=?,updated_at=?
-  WHERE guild=? AND team_id='coach-roster-v1' AND version=? RETURNING version\`)
+  WHERE guild=? AND team_id='coach-roster-v1' AND version=? RETURNING version`)
   .bind(command.channelId,admin,input.nowSeconds*1000,input.expectedGuildId,command.expectedVersion)
   .first<{version:number}>();
 }
