@@ -50,6 +50,7 @@ let duelPendingAction=null,duelPokerPicks=[],duelOpponentPickerOpen=false,duelLo
 let duelGuessDraft='',duelRiskConfirm=null,duelLastGoodFetch=0,duelRetryNotBefore=0,duelRefreshFailures=0;
 const DUEL_PENDING_KEY='keso-duel-action-v1',DUEL_HISTORY_KEY='keso-duel-moves-v1-';
 let duelHistoryOwner=null,duelListOwner=null,duelHasMore=false;
+let duelParticipantPreview=null,duelParticipantPreviewError='';
 let duelEventsAbort=null,duelEventsOnline=false,duelEventsRetryAt=0,duelEventsFailures=0,duelEventsDirty=false;
 function mergeDuelPages(fresh){
  const owner=state.selfUserId;
@@ -432,7 +433,7 @@ function render(){
   const activeDuel=duelData?.matches?.find(r=>r.id===duelActiveId)||duelData?.matches?.find(r=>r.status==='active'||r.status==='pending')||duelData?.matches?.[0];
   const gomokuPreviewCell=duelGomokuPreview&&activeDuel&&duelGomokuPreview.id===activeDuel.id&&duelGomokuPreview.version===activeDuel.version&&activeDuel.turn_user===state.selfUserId?duelGomokuPreview.cell:null;
   let html = screen==='title'?titleView(state,wallet.remembered,autoState,autoMessage,wallet.connected):screen==='home'?homeView(state,bottomNav()):screen==='play'?playView(state,drafts,bottomNav(),steamView,hoyoView):screen==='directives'?directivesView(state,drafts,bottomNav(),tabsFor('directives')):screen==='stable'?screenStable():screen==='shop'?screenShop():screen==='relics'?screenRelics():screen==='market'?screenMarket():screen==='casino'?screenCasino():screen==='duels'?duelScreen({info:duelData,user:state.selfUserId,live,cash:state.cash,selectedId:duelActiveId,game:duelGame,stake:duelStake,target:duelTarget,busy:duelBusy,error:duelError,confirmResign:duelResignConfirm,pokerPicks:duelPokerPicks,fallbackMembers:state.members??[],opponentPickerOpen:duelOpponentPickerOpen,loading:duelLoading,gomokuPreviewCell,recentMoves:duelRecentMoves,localMoveHistory:duelMoveHistory,guessDraft:duelGuessDraft,
-lastSynced:duelLastGoodFetch,pendingRetry:!!duelPendingAction,historyHasMore:duelHasMore,
+lastSynced:duelLastGoodFetch,pendingRetry:!!duelPendingAction,historyHasMore:duelHasMore,participantPreview:duelParticipantPreview,participantPreviewError:duelParticipantPreviewError,
  riskConfirm:duelRiskConfirm===`create:${duelGame}:${duelTarget}:${duelStake}`?'create':activeDuel&&duelRiskConfirm===`accept:${activeDuel.id}:${activeDuel.version}:${activeDuel.stake}`?'accept':'',nav:bottomNav()}):screen==='mleague'?mleagueScreen({state,live,draft:{...mlDraft,amount:drafts['ml-amount']},tabs:subTabs(),nav:bottomNav()}):screen==='race'?screenRace():screenAssets();
   // 効果音 switch for the casino and racing screens (off unless the player turns it on).
   setBgmScene(screen==='casino'||screen==='race'?screen:'');
@@ -751,8 +752,23 @@ addEventListener('click',async e=>{
    document.getElementById('duel-game')?.focus({preventScroll:true});
    toast('同じ条件を入力した。金額を確認し、申し込みボタンを押してください。');return;
   }
-  if(t.dataset.duelSelect){duelActiveId=t.dataset.duelSelect;duelResignConfirm=false;duelPokerPicks=[];duelGuessDraft='';duelRiskConfirm=null;duelGomokuPreview=null;render();return;}
+  if(t.dataset.duelSelect){duelParticipantPreview=null;duelParticipantPreviewError='';duelActiveId=t.dataset.duelSelect;duelResignConfirm=false;duelPokerPicks=[];duelGuessDraft='';duelRiskConfirm=null;duelGomokuPreview=null;render();return;}
   if(t.dataset.duelCard!==undefined){const i=Number(t.dataset.duelCard);if(!Number.isInteger(i)||i<0||i>4)return;if(duelPokerPicks.includes(i))duelPokerPicks=duelPokerPicks.filter(x=>x!==i);else if(duelPokerPicks.length<3)duelPokerPicks=[...duelPokerPicks,i];else{toast('交換できるのは3枚までだ');return;}render();return;}
+  if(t.dataset.duelPreview){
+    if(!live||!wallet.connected||duelBusy)return;
+    const match=duelData?.matches?.find(row=>row.id===duelActiveId);
+    if(!match)return;
+    duelParticipantPreviewError='';
+    try{
+      const result=await wallet.duelParticipantPreview(match.id);
+      if(result.kind==='snapshot'&&result.snapshot?.id===match.id)duelParticipantPreview=result.snapshot;
+      else if(result.kind!=='no_change')throw Error('公開情報を確認できません。');
+    }catch{
+      duelParticipantPreview=null;
+      duelParticipantPreviewError='参加者向けの公開情報を取得できませんでした。';
+    }
+    render();return;
+  }
   if(t.dataset.duelRefresh){await refreshDuel(true);return;}
    if(t.dataset.duelHistoryMore){
     if(duelLoading||duelBusy||!live||document.hidden||!duelHasMore)return;
