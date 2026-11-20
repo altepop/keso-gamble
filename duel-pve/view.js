@@ -10,6 +10,26 @@ const tactics={
  bluffdice:'先に自分の同じ目を数え、宣言が成立するには相手側に何個必要か考える。',
  poker:'ペアは残し、他の札を交換する前にストレートやフラッシュの候補を確認。',
 };
+const attackTactics={
+ othello:'角を確保したら、その角と同じ色で辺をつなげる手を探す。',
+ gomoku:'次の一手で二方向に同時に脅威を作れる交点を探す。',
+ connect4:'次のターンに異なる二列で四連を作れる形を探す。',
+ hitblow:'候補が多い間は、残った候補を複数の結果に分けられる予想を優先。',
+ bluffdice:'自分の手元で同じ目が多ければ、その目で宣言を続けられるか確認。',
+ poker:'同じスートが4枚なら、1枚交換でフラッシュを狙えるか確認。',
+};
+export function pveBuildPanel(profile,build,busy,message){
+ if(!profile)return '';
+ const owned=Object.entries(games).filter(([game])=>profile.collection.some(row=>row.mode==='pve'&&row.game===game));
+ return '<section class="panel duel-reward-panel" aria-labelledby="pve-build-heading"><h2 id="pve-build-heading">PvE攻略ビルド</h2>'+
+  '<p>種目ごとに攻めか守りのヒントを装備できます。</p>'+
+  (owned.length?owned.map(([game,label])=>{
+   const style=build.find(row=>row.game===game)?.style??'';
+   return '<label class="pve-build-choice">'+esc(label)+'<select data-pve-build="'+game+'"'+(busy?' disabled':'')+'>'+
+    [['','装備なし'],['attack','攻め'],['defense','守り']].map(([key,name])=>'<option value="'+key+'"'+(style===key?' selected':'')+'>'+name+'</option>').join('')+'</select></label>';
+  }).join(''):'<p>種目の攻略遺物を獲得すると装備できます。</p>')+
+  '<p role="status">'+esc(message)+'</p></section>';
+}
 export function duelRewardPanel(profile){
  if(!profile)return '';
  return '<section id="duel-rewards" class="panel duel-reward-panel" aria-label="決闘の戦績と報酬">'+
@@ -65,7 +85,7 @@ function hiddenPanel(m,busy,pending,picks,guessDraft=''){
   +'<button class="action-btn primary" data-pve-submit="poker" '+disabled(busy,pending,m.turn)+'>交換して確定</button>'
   +(pub.showdown?'<details><summary>決着した手札を見る</summary><pre>'+esc(JSON.stringify(pub.showdown))+'</pre></details>':'');
 }
-export function pvePanel({match=null,connected=false,busy=false,error='',pending=false,selected=null,picks=[],game='othello',level='normal',savedId=false,guessDraft='',rewardProfile=null}={}){
+export function pvePanel({match=null,connected=false,busy=false,error='',pending=false,selected=null,picks=[],game='othello',level='normal',savedId=false,guessDraft='',build=[]}={}){
  const active=match&&Object.hasOwn(games,match.game);
  const status=active?match.turn==='finished'
   ?'確定結果：'+(match.winner==='human'?'あなたの勝ち':match.winner==='cpu'?'CPUの勝ち':'引き分け')
@@ -73,8 +93,9 @@ export function pvePanel({match=null,connected=false,busy=false,error='',pending
  const body=active?(Object.hasOwn(games,match.game)&&['othello','gomoku'].includes(match.game)
   ?boardPanel(match,selected,busy,pending):match.game==='connect4'
    ?connectPanel(match,busy,pending):hiddenPanel(match,busy,pending,picks,guessDraft)):'';
- const hint=active&&match.turn==='human'&&rewardProfile?.collection.some(row=>row.mode==='pve'&&row.game===match.game)
-  ?'<details><summary>攻略遺物のヒント</summary><p>'+esc(tactics[match.game])+'</p></details>':'';
+ const style=active&&match.turn==='human'?build.find(row=>row.game===match.game)?.style:null;
+ const hint=style?'<details><summary>攻略遺物のヒント（'+(style==='attack'?'攻め':'守り')+'）</summary><p>'+
+  esc((style==='attack'?attackTactics:tactics)[match.game])+'</p></details>':'';
  const controls='<div class="duel-pve-config"><label>ゲーム<select id="pve-game">'+Object.entries(games).map(([k,v])=>'<option value="'+k+'" '+(game===k?'selected':'')+'>'+esc(v)+'</option>').join('')+'</select></label><label>CPUの強さ<select id="pve-level">'+Object.entries(levels).map(([k,v])=>'<option value="'+k+'" '+(level===k?'selected':'')+'>'+v+'</option>').join('')+'</select></label>'
   +'<button class="action-btn primary" data-pve-submit="start" '+(!connected||busy||pending?'disabled':'')+'>新しくCPU戦を始める</button></div>';
  return '<details class="duel-pve-panel panel" '+(active?'open':'')+'><summary>サーバーCPU攻略（PvE）'+(active?' · '+esc(games[match.game]):'')+'</summary><div class="card-body">'

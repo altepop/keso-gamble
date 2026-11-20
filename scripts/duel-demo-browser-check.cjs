@@ -542,7 +542,7 @@ const a='[data-demo-view=a]',b='[data-demo-view=b]';
  assert.match(await pvePage.locator('#pve-root').innerText(),/KP口座/);
  for(const game of ['othello','gomoku','connect4','hitblow','bluffdice','poker']){
   await pvePage.evaluate(async mode=>{
-   const {pvePanel,duelRewardPanel}=await import('./duel-pve/view.js?v=p95');
+   const {pvePanel,duelRewardPanel,pveBuildPanel}=await import('./duel-pve/view.js?v=p95-build');
    const board=mode==='othello'?'.'.repeat(27)+'WB'+'.'.repeat(6)+'BW'+'.'.repeat(27):
     mode==='gomoku'?'.'.repeat(225):mode==='connect4'?'.'.repeat(42):
     mode==='hitblow'?JSON.stringify({history:[],turn:'a'}):
@@ -552,10 +552,11 @@ const a='[data-demo-view=a]',b='[data-demo-view=b]';
     mode==='bluffdice'?{kind:mode,value:[1,2,3,4,5]}:
     mode==='poker'?{kind:mode,value:[0,6,12,18,24]}:null;
    const rewardProfile={enabled:[],collection:[{mode:'pve',game:mode}],skills:[]};
+   const build=[{game:mode,style:'attack'}];
    document.querySelector('#pve-root').innerHTML=pvePanel({
     match:{game:mode,level:'normal',board,ownHand,turn:'human',winner:null,version:0},
-    connected:true,rewardProfile
-   })+duelRewardPanel(rewardProfile);
+    connected:true,build
+   })+pveBuildPanel(rewardProfile,build,false,'')+duelRewardPanel(rewardProfile);
    document.querySelectorAll('.duel-reward-panel details').forEach(panel=>{panel.open=true;});
   },game);
   for(const width of [375,390]){
@@ -563,13 +564,44 @@ const a='[data-demo-view=a]',b='[data-demo-view=b]';
    assert.equal(await pvePage.locator('.duel-pve-panel').isVisible(),true,'PvE panel '+game);
    assert.equal(await pvePage.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'PvE no overflow '+game+' '+width);
    assert.match(await pvePage.locator('.duel-pve-status').innerText(),/あなたの手番/);
-   assert.equal(await pvePage.getByText('攻略遺物のヒント',{exact:true}).isVisible(),true);
+   assert.equal(await pvePage.getByText('攻略遺物のヒント（攻め）',{exact:true}).isVisible(),true);
    assert.equal(await pvePage.locator('.duel-reward-panel li:visible').count(),12);
   }
   if(shotDir){
    await pvePage.screenshot({path:resolve(shotDir,'08-pve-'+game+'-'+engine+'.png'),fullPage:true,animations:'disabled'});
   }
  }
+ // Use the real controller with test responses for the authenticated build flow.
+ let savedBuild=[];
+ await pvePage.addInitScript(()=>localStorage.setItem('keso-kp-session-v1','build-fixture-token'));
+ await pvePage.route('https://valorant-results.tealeaforest.workers.dev/api/kp/**',async route=>{
+  const request=route.request();
+  const path=new URL(request.url()).pathname;
+  if(request.method()==='OPTIONS'){
+   await route.fulfill({status:204,headers:{'Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'Authorization,Content-Type','Access-Control-Allow-Methods':'GET,POST,OPTIONS'}});
+   return;
+  }
+  assert.equal(request.headers().authorization,'Bearer build-fixture-token');
+  if(path==='/api/kp/duels/pve/build'&&request.method()==='POST'){
+   const {game,style}=request.postDataJSON();
+   assert.equal(game,'othello');
+   savedBuild=style?[{game,style}]:[];
+  }
+  const json=path==='/api/kp/state'?{selfUserId:'test-owner'}:
+   path==='/api/kp/duels/rewards'?{enabled:[],skills:[],collection:[{game:'othello',mode:'pve'}]}:
+   {build:savedBuild};
+  await route.fulfill({json,headers:{'Access-Control-Allow-Origin':'*'}});
+ });
+ await pvePage.goto('http://127.0.0.1:'+port+'/duel-pve.html');
+ const buildChoice=pvePage.locator('[data-pve-build="othello"]');
+ await buildChoice.selectOption('defense');
+ await pvePage.getByText('攻略ビルドを保存しました。',{exact:true}).waitFor();
+ await pvePage.reload();
+ await buildChoice.waitFor();
+ assert.equal(await buildChoice.inputValue(),'defense');
+ await buildChoice.selectOption('');
+ await pvePage.getByText('攻略ビルドを保存しました。',{exact:true}).waitFor();
+ assert.deepEqual(savedBuild,[]);
  await pvePage.close();
  await animatedCtx.close();
  assert.deepEqual(requests,[],'demo must never call KP/Discord or Worker endpoints');
