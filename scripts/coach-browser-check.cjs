@@ -314,12 +314,20 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   await recordForm.locator('button[type="submit"]').focus();await page.keyboard.press('Enter');await records.locator('[role="status"]').filter({hasText:'保存しました'}).waitFor();
   assert.match(await loop.innerText(),/前回ご本人が記録した内容です/);
   assert.match(await loop.innerText(),/自分の振り返り/);
-  await page.evaluate(()=>Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async()=>{throw Error('permission denied');}}}));
+  await page.evaluate(()=>{
+   window.__coachClipboardOriginal=Object.getOwnPropertyDescriptor(navigator,'clipboard')||null;
+   Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async()=>{throw Error('permission denied');}}});
+  });
   await loop.locator('[data-loop-action="copy"]').click();
   const privateCopy=await loop.locator('[data-private-copy-fallback]').inputValue();
   assert.match(privateCopy,/本人専用の実施記録/);
   assert.match(privateCopy,/自分の振り返り/);
   assert.doesNotMatch(privateCopy,/fixture-self|review-private-|個人メモ|Bearer|PUUID|match_id/);
+  await page.evaluate(()=>{
+   if(window.__coachClipboardOriginal)Object.defineProperty(navigator,'clipboard',window.__coachClipboardOriginal);
+   else delete navigator.clipboard;
+   delete window.__coachClipboardOriginal;
+  });
   for(const width of [320,375,1440]){
    await page.setViewportSize({width,height:900});
    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'Phase2-C loop fits '+width);
