@@ -3,6 +3,7 @@ import {pvePanel,duelRewardPanel} from './view.js?v=p95';
 const app=document.getElementById('pve-root');
 const root=location.hostname.endsWith('.discordsays.com')?'/.proxy/kp-api':'https://valorant-results.tealeaforest.workers.dev';
 const token=(()=>{try{return localStorage.getItem('keso-kp-session-v1')||sessionStorage.getItem('keso-kp-session-v1');}catch{return null;}})();
+const openRewardSection=location.hash==='#duel-rewards';
 let rewardProfile=null;
 let owner=null,match=null,busy=false,pending=null,selected=null,picks=[],guess='',game='othello',level='normal',error='',savedId=null;
 const save=(k,value)=>{try{if(value===null)sessionStorage.removeItem(k);else sessionStorage.setItem(k,JSON.stringify(value));}catch{}};
@@ -12,6 +13,7 @@ function render(){
  pvePanel({match,connected:!!owner&&!!token,busy,error,pending:!!pending,selected,picks,game,level,savedId:!!savedId,guessDraft:guess,rewardProfile})+duelRewardPanel(rewardProfile);
  // On this dedicated page the only panel should open on first visit.
  const panel=app.querySelector('.duel-pve-panel');if(panel)panel.open=true;
+ if(openRewardSection)app.querySelector('#duel-rewards details:last-child')?.setAttribute('open','');
 }
 async function api(path,body){
  if(!token)throw Error('KP口座への接続が必要です。KESO PLAYでログインしてください。');
@@ -25,8 +27,10 @@ async function api(path,body){
  return data;
 }
 async function loadRewards(){
+ const firstLoad=!rewardProfile;
  try{rewardProfile=await api('duels/rewards');}catch{return;}
  render();
+ if(firstLoad&&openRewardSection)app.querySelector('#duel-rewards')?.scrollIntoView();
 }
 async function loadSession(id){
  if(!id||!owner)return;

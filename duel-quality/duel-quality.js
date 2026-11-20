@@ -799,7 +799,11 @@ function enhance(root) {
     link.dataset.duelPveLink='1';
     link.textContent='サーバーCPU攻略（PvE）を開く';
     link.setAttribute('aria-label','サーバーが勝敗を確定するPvE攻略画面を開く');
-    entry.prepend(link);
+    const rewards=document.createElement('a');
+    rewards.href='./duel-pve.html#duel-rewards';
+    rewards.className='action-btn';
+    rewards.textContent='決闘の戦績・報酬';
+    entry.prepend(link,rewards);
   }
   function scan() {
     scanPveEntry();
