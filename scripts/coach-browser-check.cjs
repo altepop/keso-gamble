@@ -314,6 +314,18 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   await recordForm.locator('button[type="submit"]').focus();await page.keyboard.press('Enter');await records.locator('[role="status"]').filter({hasText:'保存しました'}).waitFor();
   assert.match(await loop.innerText(),/前回ご本人が記録した内容です/);
   assert.match(await loop.innerText(),/自分の振り返り/);
+  await page.evaluate(()=>Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async()=>{throw Error('permission denied');}}}));
+  await loop.locator('[data-loop-action="copy"]').click();
+  const privateCopy=await loop.locator('[data-private-copy-fallback]').inputValue();
+  assert.match(privateCopy,/本人専用の実施記録/);
+  assert.match(privateCopy,/自分の振り返り/);
+  assert.doesNotMatch(privateCopy,/fixture-self|review-private-|個人メモ|Bearer|PUUID|match_id/);
+  for(const width of [320,375,1440]){
+   await page.setViewportSize({width,height:900});
+   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'Phase2-C loop fits '+width);
+   if(process.env.COACH_V6_SCREENSHOTS_DIR)await loop.screenshot({path:require('node:path').join(process.env.COACH_V6_SCREENSHOTS_DIR,'private-loop-'+width+'.png')});
+  }
+
   assert.equal(privateSql.prepare('SELECT status FROM coach_practice_records').get().status,'recorded');assert.equal(JSON.parse(privateSql.prepare('SELECT execution_json FROM coach_practice_records').get().execution_json).minutes,0);
   recordForm=records.locator('[data-record-form]').first();await recordForm.evaluate(f=>f.closest('details').open=true);await recordForm.locator('[name="reflection"]').fill('競合しても残す振り返り');privateSql.prepare("UPDATE coach_practice_records SET version=version+1,reflection='別端末の修正'").run();await recordForm.locator('button[type="submit"]').click();await records.locator('[data-record-reload]').waitFor();assert.equal(await recordForm.locator('[name="reflection"]').inputValue(),'競合しても残す振り返り');await records.locator('[data-record-reload]').click();await records.locator('[role="status"]').filter({hasText:'読み込みました'}).waitFor();assert.equal(await records.locator('[data-record-form]').first().locator('[name="reflection"]').inputValue(),'別端末の修正');
   // Phase 2-B: real saved roster observations, opaque own-match links and re-evaluation.
