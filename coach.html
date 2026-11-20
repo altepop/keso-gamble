@@ -554,6 +554,9 @@
 <style id="coach-sharing-style">
 .coach-sharing{margin:24px 0;color:#ece8e1}.coach-sharing p,.coach-sharing label,.coach-sharing legend{font-size:16px;line-height:1.9;overflow-wrap:anywhere}.coach-sharing label{display:block;margin:12px 0}.coach-sharing input:not([type=checkbox]),.coach-sharing select,.coach-sharing textarea{display:block;width:100%;box-sizing:border-box;max-width:100%;padding:12px;margin:8px 0;background:#0f1923;color:#f4f3ef;border:1px solid #61717e;border-radius:8px;font-size:16px}.coach-sharing fieldset{min-width:0;border:1px solid #61717e;border-radius:8px}.coach-sharing input[type=checkbox]{margin-right:12px;min-width:20px;min-height:20px;accent-color:#ff4655}.coach-sharing button{background:#233542;color:#ece8e1;border:1px solid #394e5d;font-size:16px;white-space:normal;overflow-wrap:anywhere;padding:12px;margin:8px 8px 8px 0;border-radius:8px}.coach-sharing button[type=submit],.coach-sharing [data-summary-open]{background:#ff4655;color:#fff;border-color:#ff4655}.coach-sharing h3{overflow-wrap:anywhere;word-break:normal}.coach-sharing .shared-summary{padding:20px;margin:16px 0;background:#14232f;border-left:2px solid #ff4655;clip-path:polygon(12px 0,100% 0,100% calc(100% - 12px),calc(100% - 12px) 100%,0 100%,0 12px)}.coach-sharing :focus-visible{outline:3px solid #f4f3ef;outline-offset:3px}.coach-sharing [role=status]:empty{display:none}
 </style>
+<style id="coach-records-style">
+.coach-records{margin:24px 0;color:#ece8e1}.coach-records p,.coach-records label,.coach-records h3{font-size:16px;line-height:1.9;overflow-wrap:anywhere}.coach-records label{display:block;margin:12px 0}.coach-records input,.coach-records textarea,.coach-records select{display:block;box-sizing:border-box;width:100%;max-width:100%;padding:12px;margin-top:8px;background:#0f1923;color:#f4f3ef;border:1px solid #61717e;border-radius:8px;font:inherit;font-size:16px}.coach-records textarea{resize:vertical}.coach-records button{font-size:16px;white-space:normal;overflow-wrap:anywhere;padding:12px;margin:8px 8px 8px 0;border:1px solid #394e5d;border-radius:8px;background:#233542;color:#ece8e1}.coach-records button[type=submit]{background:#ff4655;border-color:#ff4655;color:#fff}.coach-records form{padding:16px 0;border-top:1px solid #394e5d}.coach-records :focus-visible{outline:3px solid #f4f3ef;outline-offset:3px}.coach-records [role=status]:empty{display:none}.coach-records [data-record-leave-guard]:not([hidden]){padding:16px;border:2px solid #ff4655;background:#14232f}
+</style>
 </head>
 <body>
 <main class="wrap">
@@ -580,6 +583,7 @@
 <button type="button" id="return-self">自分の人物統合画面に戻る</button>
 <div id="member-selector" class="member-selector" role="group" aria-label="自分のアカウント"></div>
 </div></details>
+<div id="coach-records-host"></div>
 <div id="coach-sharing-host"></div>
 <details class="coach-disclosure" id="coach-operations"><summary>収集状況や更新設定を確認します <span class="chev" aria-hidden="true">⌄</span></summary><div class="detail-body coach-existing">
 <div id="coach-operation-actions"><div id="status" role="status" aria-live="polite">データを確認中…</div><textarea id="share-fallback" hidden readonly aria-label="診断レポート" rows="6" style="width:100%;background:#09152a;color:#e9eef9;border:1px solid #435779;border-radius:10px;margin-top:8px;font:12px/1.4 monospace"></textarea><div class="actions"><button id="reload" type="button">分析を更新</button><button id="share" class="secondary" type="button" disabled>診断レポートをコピー</button><span class="small muted">手動更新 · KPの増減なし</span></div>
@@ -867,9 +871,10 @@
 
 
 </template>
+<script src="./coach/records.js?v=coach-9ace52c6e3cc"></script>
 <script src="./coach/sharing.js?v=coach-52d276772aa9"></script>
 <script src="./coach/goals.js?v=coach-ca17bb21a788"></script>
-<script src="./coach/prototype-view.js?v=coach-d946f6f7b53c"></script>
+<script src="./coach/prototype-view.js?v=coach-faf63d5b91b0"></script>
 <script src="./coach/benchmarks.js?v=coach-4721e7e852a8"></script>
 <script src="./coach/practice.js?v=coach-1d4e247eb817"></script>
 <script src="./coach/reader.js?v=coach-b714184b6163"></script>
@@ -1549,7 +1554,7 @@ const renderMemberDiagnosis=d=>{
  $('member-result').appendChild(navigation);
  for(const key of keepOpen){const section=$('member-result').querySelector('['+key+']');if(section)section.open=true;}
  for(const section of $('member-result').querySelectorAll('.coach-existing'))polishCoachCopy(section);
- globalThis.KesoCoachPrototype.mount($('member-result'));placeCoachGoals();$('coach-welcome').hidden=true;
+ globalThis.KesoCoachPrototype.mount($('member-result'),{onPlan:()=>{if(!latestMemberReport)return false;const plan=globalThis.KesoCoachPractice.choose(latestMemberReport,{...(practiceProfiles.get(latestMemberReport.person)||defaultPracticePreferences()),exclude:practiceExcluded.get(latestMemberReport.person)||[]},benchmarkReference);return coachRecords.savePlan(plan.selected.map(e=>e.id),plan.context);}});placeCoachGoals();$('coach-welcome').hidden=true;
  for(const step of document.querySelectorAll('[data-pdca-step]')){if(step.dataset.pdcaStep==='task')step.setAttribute('aria-current','step');else step.removeAttribute('aria-current');}
 
 };
@@ -1676,16 +1681,18 @@ const authenticatedCoachRequest=async(path,opts={})=>{
  }catch(e){if(generation===authGeneration&&e.status===401){clearCoachView();$('connection').style.display='block';setStatus('接続が切れました。もう一度ログインしてください。',true);}throw e;}
 };
 const coachGoals=globalThis.KesoCoachGoals.create({request:authenticatedCoachRequest});
+const coachRecords=globalThis.KesoCoachRecords.create({request:authenticatedCoachRequest,copyText:t=>CoachPresentation.polite(CoachPresentation.action(t))});
+$('coach-records-host').append(coachRecords.element);
 const coachSharing=globalThis.KesoCoachSharing.create({request:authenticatedCoachRequest,onSelf:()=>void load(),onView:()=>{
  authGeneration++;activeMember=null;latestReport=null;latestMemberReport=null;memberPending=false;
- memberCache.clear();practiceProfiles.clear();practiceExcluded.clear();coachGoals.clear();
+ memberCache.clear();practiceProfiles.clear();practiceExcluded.clear();coachGoals.clear();coachRecords.clear();
  globalThis.KesoCoachPrototype.stop();$('member-result').replaceChildren();$('member-coaching-panel').hidden=true;$('coach-operations').hidden=true;
  $('share-fallback').value='';$('share-fallback').hidden=true;$('share').disabled=true;
 }});
 $('coach-sharing-host').append(coachSharing.element);
 function placeCoachGoals(){const improvement=$('member-result').querySelector('[data-improvement]');if(improvement)improvement.after(coachGoals.element);}
 function clearCoachView(){
- coachSharing.clear();$('coach-operations').hidden=false;coachGoals.clear();authGeneration++;latestReport=null;latestMemberReport=null;selfIdentity=null;activeMember=null;memberNames=[];
+ coachRecords.clear();coachSharing.clear();$('coach-operations').hidden=false;coachGoals.clear();authGeneration++;latestReport=null;latestMemberReport=null;selfIdentity=null;activeMember=null;memberNames=[];
  memberCache.clear();practiceProfiles.clear();practiceExcluded.clear();
  globalThis.KesoCoachPrototype.stop();$('member-result').replaceChildren();$('member-selector').replaceChildren();
  $('member-archive-status').replaceChildren();$('coach-owner-label').textContent='';
@@ -1709,7 +1716,7 @@ async function load(){
   $('return-self').disabled=true;
   $('member-coaching-panel').hidden=false;
   latestReport=data.report;latestMemberReport=data.report;activeMember=selfIdentity.defaultProfile;
-  coachSharing.setData(data.settings);coachGoals.setData(data.goals);renderMemberArchiveStatus(data);renderMemberDiagnosis(data.report);
+  coachRecords.setState(data.practiceState);coachSharing.setData(data.settings);coachGoals.setData(data.goals);renderMemberArchiveStatus(data);renderMemberDiagnosis(data.report);
   $('report').hidden=false;$('connection').style.display='none';$('share').disabled=false;
   setStatus('自分の詳細診断を表示しています。要約の共有範囲は下の設定で確認できます。');
  }catch(e){
@@ -1717,7 +1724,7 @@ async function load(){
   clearCoachView();generation=authGeneration;
   if(e.status===401){try{sessionStorage.removeItem(KEY)}catch{}$('connection').style.display='block';setStatus('接続が切れました。接続コードでログインしてください。',true);}
   else if(e.status===429&&t){
-   try{const state=await request('/api/kp/coach/members/status',{headers:{Authorization:'Bearer '+t}});if(generation===authGeneration&&token()===t&&state.identity?.status==='linked'){renderMemberArchiveStatus(state);coachSharing.setData(state.settings);coachGoals.setData(state.goals);$('member-result').replaceChildren(coachGoals.element);$('report').hidden=false;$('member-coaching-panel').hidden=true;}}catch{}
+   try{const state=await request('/api/kp/coach/members/status',{headers:{Authorization:'Bearer '+t}});if(generation===authGeneration&&token()===t&&state.identity?.status==='linked'){renderMemberArchiveStatus(state);coachRecords.setState(state.practiceState);coachSharing.setData(state.settings);coachGoals.setData(state.goals);$('member-result').replaceChildren(coachGoals.element);$('report').hidden=false;$('member-coaching-panel').hidden=true;}}catch{}
    if(generation===authGeneration)setStatus(e.message,true);
   }else{$('connection').style.display='block';setStatus(e.message||'本人の対応を確認できませんでした。',true);}
  }finally{if(generation===authGeneration){busy=false;$('reload').disabled=false;}}
@@ -1731,6 +1738,12 @@ window.addEventListener('storage',checkCoachSession);
 window.addEventListener('focus',checkCoachSession);
 window.addEventListener('pageshow',checkCoachSession);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)checkCoachSession();});
+document.addEventListener('click',event=>{
+ const target=event.target.closest('#return-self,[data-summary-open],a[href]');
+ if(!target||target.tagName==='A'&&(target.target==='_blank'||target.getAttribute('href').startsWith('#'))||!coachRecords.isDirty())return;
+ event.preventDefault();event.stopImmediatePropagation();coachRecords.allowLeave(()=>target.click());
+},true);
+window.addEventListener('beforeunload',event=>{if(coachRecords.isDirty()){event.preventDefault();event.returnValue='';}});
 $('return-self').addEventListener('click',()=>void load());
 // Explicit allowlist: no bearer token, Discord account, PUUID, match ID or raw roster
 // is read from the server response or copied. This report is only user-initiated.

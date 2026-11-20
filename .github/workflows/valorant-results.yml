@@ -317,6 +317,7 @@ jobs:
         run: |
           node scripts/ensure-coach-goals.mjs
           node scripts/ensure-coach-sharing.mjs
+          node scripts/ensure-coach-records.mjs
       - name: Read-only KESO COACH historical archive audit (aggregate counts only)
         working-directory: ${{ runner.temp }}/kp-app/services/valorant-results
         env:
@@ -362,6 +363,7 @@ jobs:
           node scripts/coach-profile-audit.mjs
           node scripts/coach-goals-audit.mjs
           node scripts/coach-sharing-audit.mjs
+          node scripts/coach-records-audit.mjs
       - name: Audit isolated position storage (aggregate evidence only)
         working-directory: ${{ runner.temp }}/kp-app/services/valorant-results
         env:

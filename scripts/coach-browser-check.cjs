@@ -72,11 +72,22 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   const {goalPolicy}=await import('../services/valorant-results/src/coach-goals.ts');
   const {SUMMARY_FIELDS}=await import('../services/valorant-results/src/coach-sharing.ts');
   const state={settings:{displayName:'神戸',visibility:'private',fields:[],version:1,options:SUMMARY_FIELDS},goals:{policy:goalPolicy(),goals:[],history:[],historyLimit:20},identity,memberHistory:{enabled:true,supportsPause:true,people:[{person:'神戸',discovered:2,complete:2}]},canStartMemberHistory:false};
+  const {readPrivateRecords,savePrivateRecord}=await import('../services/valorant-results/src/coach-private-records.ts');
+  const {DatabaseSync}=require('node:sqlite'),privateSql=new DatabaseSync(':memory:');privateSql.exec('PRAGMA foreign_keys=ON');
+  for(const name of ['0010_coach_profiles.sql','0011_coach_goals.sql','0013_coach_private_records.sql'])privateSql.exec(require('node:fs').readFileSync(require('node:path').join(root,'services/valorant-results/migrations',name),'utf8'));
+  privateSql.exec("INSERT INTO coach_profiles(guild,subject_id,owner_user,person_key,display_name,updated_at) VALUES('fixture','subject','owner','kobe','神戸',0)");
+  const query=(text,args=[])=>({bind:(...values)=>query(text,values),first:()=>privateSql.prepare(text).get(...args)||null,all:()=>({results:privateSql.prepare(text).all(...args)})});const privateDb={prepare:query};let losePrivateReply=false;
   const selfSubject='11111111-1111-4111-8111-111111111111',otherSubject='22222222-2222-4222-8222-222222222222';let otherPublic=true;
   const sharedFixture=(subject)=>({subjectId:subject,displayName:subject===selfSubject?state.settings.displayName:'<img src=x onerror=alert(1)> 共有者',policyVersion:1,period:{from:'2026-11-01',to:'2026-11-20',timezone:'Asia/Tokyo'},matches:{analyzed:20,candidates:22,excluded:2,rowLimit:250,limitReached:false},metrics:subject===selfSubject&&!state.settings.fields.includes('kd')?{}:{kd:{value:1.2,validMatches:20,excludedMatches:0,numerator:240,denominator:200,formula:'合計キル数 ÷ 合計デス数',secret:'never-share-metric'}},goals:'never-share-goals',accounts:['never-share-account'],weakness:'never-share-weakness',puuid:'never-share-id'});
   await ctx.route('https://valorant-results.tealeaforest.workers.dev/**',async route=>{
    const req=route.request(),url=new URL(req.url());requests.push({url:req.url(),method:req.method(),auth:req.headers().authorization});
    if(req.headers().authorization==='Bearer '+'b'.repeat(48))return route.fulfill({json:{identity:{status:'unregistered'},report:null}});
+   if(['/api/kp/coach/practice/records','/api/kp/coach/notes'].includes(url.pathname)){
+    const kind=url.pathname.endsWith('/notes')?'notes':'records';
+    try{const value=req.method()==='GET'?await readPrivateRecords(privateDb,'fixture','subject',kind,url.searchParams.get('cursor')):await savePrivateRecord(privateDb,'fixture','subject',kind,req.postDataJSON());
+     if(req.method()==='POST'&&losePrivateReply){losePrivateReply=false;return route.abort('failed');}return route.fulfill({json:value});}
+    catch(e){return route.fulfill({status:e.status||500,json:{error:e.message}});}
+   }
    if(url.pathname==='/api/kp/coach/settings'){
     if(req.method()==='GET')return route.fulfill({json:{settings:state.settings}});
     const b=req.postDataJSON();if(b.expectedVersion!==state.settings.version)return route.fulfill({status:409,json:{error:'別の画面で設定が更新されています。'}});
@@ -115,9 +126,9 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   assert.equal(await page.locator('.prototype-top .rankbox .r').first().innerText(),'未取得','never invent sample ranks');
   assert.match(await page.locator('.prototype-top .evidence').innerText(),/1\.96/,'uses real fixture KD');
   const beforeUiActions=requests.length;
-  await page.locator('#acceptBtn').click();assert.equal(await page.locator('#acceptBtn').getAttribute('aria-pressed'),'true');assert.equal(await page.locator('#acceptNote').isVisible(),true);
+  await page.locator('#acceptBtn').click();await page.waitForFunction(()=>document.querySelector('#acceptBtn')?.getAttribute('aria-pressed')==='true');assert.equal(await page.locator('#acceptBtn').getAttribute('aria-pressed'),'true');assert.equal(await page.locator('#acceptNote').isVisible(),true);
   await page.locator('#timerBtn').click();assert.match(await page.locator('#timerBtn').innerText(),/一時停止/);await page.locator('#timerReset').click();assert.match(await page.locator('#clock').innerText(),/04:00/);
-  assert.equal(requests.length,beforeUiActions,'acceptance and silent timer never write or query APIs');
+  assert.equal(requests.length,beforeUiActions+4,'explicit plan save loads private records/notes/goals once and posts once; timer does not write');
   await page.setViewportSize({width:375,height:812});
   assert.equal(await page.locator('#coach-operations #reload').count(),1);
 
@@ -251,7 +262,7 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   assert.equal(requests.length,benchmarkRequests,'practice preferences, search and exchanges never query APIs');
   if(process.env.COACH_PRACTICE_SCREENSHOT){await page.setViewportSize({width:320,height:812});await page.locator('.practice-controls').screenshot({path:process.env.COACH_PRACTICE_SCREENSHOT});await page.locator('[data-practice-recommendations]').screenshot({path:process.env.COACH_PRACTICE_SCREENSHOT.replace('.png','-plan.png')});}
 
-  assert.equal(requests.length,1,'changing dashboard tabs never triggers extra API calls');
+  assert.equal(requests.length,beforeUiActions+4,'changing dashboard tabs never triggers extra API calls');
   await page.locator('#share').click();
   const exportedMember=JSON.parse(await page.evaluate(()=>window.__copiedDiagnostic));
   assert.equal(exportedMember.format,'KESO_COACH_SAFE_MEMBER_DIAGNOSTIC_V1');
@@ -275,21 +286,38 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   assert.equal(exportedMember.matchTrend.length,2,'safe copy includes anonymous date-based trend');
   assert.equal(JSON.stringify(exportedMember).includes('private-vod-identifier'),false);
   assert.equal(JSON.stringify(exportedMember).includes('secret-puuid'),false);
-  assert.equal(requests.length,1,'copying selected report is purely client-side');
+  assert.equal(requests.length,beforeUiActions+4,'copying selected report is purely client-side');
 
   assert.deepEqual(errors,[]);
   await page.locator('#member-coaching-panel').evaluate(el=>el.open=true);
   await page.locator('[data-member="Aquatopia"]').click();
   await page.waitForFunction(()=>document.querySelector('.prototype-top .playerline .name')?.textContent==='Aquatopia');
-  assert.equal(requests.length,2);assert.ok(requests[1].url.includes('person=Aquatopia'));
+  assert.equal(requests.length,beforeUiActions+5);assert.ok(requests.at(-1).url.includes('person=Aquatopia'));
   await page.locator('#return-self').click();
   await page.waitForFunction(()=>document.querySelector('.prototype-top .playerline .name')?.textContent==='神戸');
-  assert.equal(requests.length,3);assert.ok(requests[2].url.endsWith('/coach/me'));
+  assert.equal(requests.length,beforeUiActions+6);assert.ok(requests.at(-1).url.endsWith('/coach/me'));
   for(const width of [320,375,1440]){await page.setViewportSize({width,height:900});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'layout '+width);}
   const japanese=await page.locator('.coach-existing p,.coach-existing li,#coach-operations p').evaluateAll(nodes=>[...new Set(nodes.flatMap(n=>(n.textContent||'').match(/[^。！？]+[。！？]/gu)||[]))]);
   const dictionaryEnds=japanese.filter(t=>/(?:[^ま]した|できる|できない|補わない|だけ|ではない|である|必要だ|確認する|断定しない|影響する|数える|決まる|異なる|とする|持つ|わかる|分かる|求める|含まれる|保存される|判断できない|得られる|必要になる|揃わない|少ない|多い|低い|高い|出ない|変わらない|足りない|違う|はない|を指す|と呼ぶ)。(?:$)/u.test(t));
   assert.deepEqual(dictionaryEnds,[],'all seven tabs and folded legacy paragraphs use courteous sentence endings');
   if(process.env.COACH_JAPANESE_AUDIT)require('node:fs').writeFileSync(process.env.COACH_JAPANESE_AUDIT,JSON.stringify({sentences:japanese.length,dictionaryEnds},null,2));
+  // Owner-only practice and memo UI uses the actual SQLite-backed save/list logic.
+  const records=page.locator('[data-private-records]');await records.locator('[data-record-panel] > summary').click();await records.locator('[data-record-load]').click();await records.locator('[data-record-form]').waitFor();
+  let recordForm=records.locator('[data-record-form]').first();await recordForm.locator('[name="report"]').selectOption('done');await recordForm.locator('[name="minutes"]').fill('0');await recordForm.locator('[name="attempts"]').fill('3');await recordForm.locator('[name="successes"]').fill('2');await recordForm.locator('[name="reflection"]').fill('自分の振り返りです。\n次は退路を確認します。');
+  await recordForm.locator('button[type="submit"]').focus();await page.keyboard.press('Enter');await records.locator('[role="status"]').filter({hasText:'保存しました'}).waitFor();
+  assert.equal(privateSql.prepare('SELECT status FROM coach_practice_records').get().status,'recorded');assert.equal(JSON.parse(privateSql.prepare('SELECT execution_json FROM coach_practice_records').get().execution_json).minutes,0);
+  recordForm=records.locator('[data-record-form]').first();await recordForm.evaluate(f=>f.closest('details').open=true);await recordForm.locator('[name="reflection"]').fill('競合しても残す振り返り');privateSql.prepare("UPDATE coach_practice_records SET version=version+1,reflection='別端末の修正'").run();await recordForm.locator('button[type="submit"]').click();await records.locator('[data-record-reload]').waitFor();assert.equal(await recordForm.locator('[name="reflection"]').inputValue(),'競合しても残す振り返り');await records.locator('[data-record-reload]').click();await records.locator('[role="status"]').filter({hasText:'読み込みました'}).waitFor();assert.equal(await records.locator('[data-record-form]').first().locator('[name="reflection"]').inputValue(),'別端末の修正');
+  await records.locator('[data-personal-notes]').evaluate(d=>d.open=true);let newMemo=records.locator('[data-note-form]').first();await newMemo.locator('[name="title"]').fill('本人だけのメモ');await newMemo.locator('[name="body"]').fill('<img src=x onerror=alert(1)>\n秘密の振り返り');const beforeTyping=requests.length;await newMemo.locator('[name="body"]').press('End');assert.equal(requests.length,beforeTyping,'typing never saves');
+  losePrivateReply=true;await newMemo.locator('button[type="submit"]').click();await records.locator('[data-record-retry]').waitFor();assert.equal(privateSql.prepare('SELECT COUNT(*) n FROM coach_personal_notes').get().n,1);await records.locator('[data-record-retry]').click();await records.locator('[role="status"]').filter({hasText:'保存しました'}).waitFor();assert.equal(privateSql.prepare('SELECT COUNT(*) n FROM coach_personal_notes').get().n,1,'lost ack retry does not duplicate');assert.equal(await records.locator('img').count(),0);
+  await records.locator('[data-personal-notes]').evaluate(d=>d.open=true);let savedMemo=records.locator('[data-note-form]').filter({has:page.locator('[data-note-delete]')}).first();await savedMemo.locator('[name="body"]').fill('修正後の本人メモ');await savedMemo.locator('button[type="submit"]').click();await records.locator('[role="status"]').filter({hasText:'保存しました'}).waitFor();assert.equal(privateSql.prepare('SELECT body FROM coach_personal_notes').get().body,'修正後の本人メモ');
+  for(const width of [320,375,1440]){await page.setViewportSize({width,height:900});await records.locator('[data-personal-notes]').evaluate(d=>d.open=true);assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'private records fit '+width);if(process.env.COACH_V6_SCREENSHOTS_DIR)await records.screenshot({path:require('node:path').join(process.env.COACH_V6_SCREENSHOTS_DIR,'private-records-'+width+'.png')});}
+  newMemo=records.locator('[data-note-form]').first();await newMemo.locator('[name="title"]').fill('未保存の入力');await newMemo.locator('[name="body"]').fill('移動しても勝手に保存しません');await records.locator('[data-record-load]').click();await records.locator('[data-record-leave-guard]:not([hidden])').waitFor();await records.getByRole('button',{name:'入力に戻ります',exact:true}).click();assert.equal(await newMemo.locator('[name="title"]').inputValue(),'未保存の入力');await records.locator('[data-record-load]').click();await records.getByRole('button',{name:'保存して移動します',exact:true}).click();await records.locator('[role="status"]').filter({hasText:'読み込みました'}).waitFor();assert.equal(privateSql.prepare('SELECT COUNT(*) n FROM coach_personal_notes').get().n,2);
+  await records.locator('[data-personal-notes]').evaluate(d=>d.open=true);savedMemo=records.locator('[data-note-form]').filter({has:page.locator('[data-note-delete]')}).first();await savedMemo.locator('[data-note-delete]').click();await records.locator('[role="status"]').filter({hasText:'内容を削除しました'}).waitFor();assert.equal(privateSql.prepare("SELECT COUNT(*) n FROM coach_personal_notes WHERE deleted_at IS NOT NULL AND title='' AND body=''").get().n,1);
+  await records.locator('[data-personal-notes]').evaluate(d=>d.open=true);newMemo=records.locator('[data-note-form]').first();await newMemo.locator('[name="title"]').fill('破棄する入力');await newMemo.locator('[name="body"]').fill('破棄して移動するテスト');await records.locator('[data-record-load]').click();await records.getByRole('button',{name:'破棄して移動します',exact:true}).click();await records.locator('[role="status"]').filter({hasText:'読み込みました'}).waitFor();assert.equal(await records.locator('[data-note-form]').first().locator('[name="body"]').inputValue(),'');
+  // Shared summaries and their copy must not contain private practice/memo state.
+  const privateSentences=await records.locator('p').evaluateAll(nodes=>[...new Set(nodes.flatMap(n=>(n.textContent||'').match(/[^。！？]+[。！？]/gu)||[]))]);
+  const privateBad=privateSentences.filter(t=>/(?:できる|できない|補わない|だけ|ではない|である|必要だ|確認する|断定しない|数える|とする|保存される|判断できない|足りない|違う|はない)。(?:$)/u.test(t));assert.deepEqual(privateBad,[],'private records UI uses courteous Japanese');
+  if(process.env.COACH_JAPANESE_AUDIT)require('node:fs').writeFileSync(process.env.COACH_JAPANESE_AUDIT,JSON.stringify({sentences:japanese.length,privateRecordSentences:privateSentences.length,dictionaryEnds,privateBad},null,2));
   // Goal registration is optional, private, person-scoped and persisted by explicit saves.
   const goals=page.locator('[data-coach-goals]'),processCard=goals.locator('[data-goal-kind="process"]');
   await processCard.locator('> summary').click();
@@ -337,9 +365,9 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   await settingsForm.locator('[name="visibility"]').selectOption('private');await settingsForm.locator('button[type="submit"]').click();await sharing.locator('[role="status"]').filter({hasText:'本人限定にしました'}).waitFor();
   await sharing.locator('[data-sharing-browse] > summary').click();const beforeDirectory=requests.length;await sharing.locator('[data-directory-load]').click();await sharing.locator('[name="sharedSubject"]').waitFor();assert.equal(requests.length,beforeDirectory+1);assert.equal(await sharing.locator('[name="sharedSubject"]').count(),1);assert.equal(await sharing.locator('img').count(),0);
   await sharing.locator('[name="sharedSubject"]').check();await sharing.locator('[data-summary-open]').click();await sharing.locator('.shared-summary').waitFor();
-  assert.equal(await page.locator('[data-primary-mission]').count(),0);assert.equal(await page.locator('#share').isEnabled(),false);assert.equal(await page.locator('#share-fallback').inputValue(),'');assert.equal(await page.locator('[data-coach-goals]').count(),0);
+  assert.equal(await page.locator('[data-primary-mission]').count(),0);assert.equal(await page.locator('#share').isEnabled(),false);assert.equal(await page.locator('#share-fallback').inputValue(),'');assert.equal(await page.locator('[data-coach-goals]').count(),0);assert.equal(await page.locator('[data-note-form]').count(),0);
   assert.ok(!(await sharing.locator('[data-shared-results]').innerText()).includes('never-share'));
-  await sharing.locator('[data-summary-copy]').click();await sharing.locator('[role="status"]').filter({hasText:'コピーしました'}).waitFor();const copied=JSON.parse(await page.evaluate(()=>window.__copiedDiagnostic));assert.equal(copied.format,'KESO_COACH_GUILD_SUMMARY_V1');assert.doesNotMatch(JSON.stringify(copied),/never-share|subjectId|puuid|KESO_COACH_SAFE_MEMBER/);
+  await sharing.locator('[data-summary-copy]').click();await sharing.locator('[role="status"]').filter({hasText:'コピーしました'}).waitFor();const copied=JSON.parse(await page.evaluate(()=>window.__copiedDiagnostic));assert.equal(copied.format,'KESO_COACH_GUILD_SUMMARY_V1');assert.doesNotMatch(JSON.stringify(copied),/never-share|subjectId|puuid|KESO_COACH_SAFE_MEMBER|本人メモ|秘密の振り返り|競合しても残す/);
   await page.evaluate(()=>Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async()=>{throw Error('unavailable');}}}));await sharing.locator('[data-summary-copy]').click();await sharing.locator('[data-summary-fallback]:not([hidden])').waitFor();assert.match(await sharing.locator('[data-summary-fallback]').inputValue(),/KESO_COACH_GUILD_SUMMARY_V1/);
   otherPublic=false;const copyCount=requests.length;await sharing.locator('[data-summary-copy]').click();await sharing.locator('[role="status"]').filter({hasText:'利用できません'}).waitFor();assert.equal(requests.length,copyCount+1,'copy rechecks current consent');assert.equal(await sharing.locator('.shared-summary').count(),0);assert.equal(await sharing.locator('[data-summary-fallback]').inputValue(),'');
   await sharing.locator('[data-summary-self]').click();await page.locator('[data-primary-mission]').waitFor();assert.equal(await page.locator('.prototype-top .playerline .name').innerText(),'神戸');
@@ -410,6 +438,21 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
     await sp.evaluate(()=>{localStorage.setItem('keso-kp-session-v1','b'.repeat(48));window.dispatchEvent(new Event('focus'));});await sp.getByRole('alert').filter({hasText:'まだ連携'}).first().waitFor();releaseSummary();await sp.waitForTimeout(100);
    }else{await sp.locator('[data-sharing-settings] > summary').click();await sp.locator('[data-sharing-form] button[type="submit"]').click();await sp.getByRole('alert').filter({hasText:'もう一度ログイン'}).waitFor();}
    assert.equal(await sp.locator('.shared-summary').count(),0);assert.equal(await sp.locator('[data-sharing-form]').count(),0);assert.equal(await sp.locator('[data-primary-mission]').count(),0);assert.equal(await sp.locator('#share-fallback').inputValue(),'');assert.deepEqual(errors,[]);await sc.close();
+  }
+  for(const scenario of ['late-private','unauthorized-private']){
+   const sc=await browser.newContext({viewport:{width:375,height:812}});await sc.addInitScript(t=>localStorage.setItem('keso-kp-session-v1',t),token);let releasePrivate,privateCalls=0;
+   await sc.route('https://valorant-results.tealeaforest.workers.dev/**',async route=>{
+    const r=route.request(),url=new URL(r.url());if(url.pathname.endsWith('/notes')&&r.method()==='POST')privateCalls++;if(r.headers().authorization==='Bearer '+'b'.repeat(48))return route.fulfill({json:{identity:{status:'unregistered'},report:null}});
+    if(r.method()==='POST'){if(scenario==='unauthorized-private')return route.fulfill({status:401,json:{error:'接続が切れました。'}});await new Promise(resolve=>releasePrivate=resolve);return route.fulfill({json:{item:{id:r.postDataJSON().id,status:'active',title:'古い本人のメモ',body:'戻してはいけない本文',version:1}}}).catch(()=>{});}
+    if(url.pathname.endsWith('/practice/records'))return route.fulfill({json:await readPrivateRecords(privateDb,'fixture','subject','records',null)});
+    if(url.pathname.endsWith('/notes'))return route.fulfill({json:{items:[],nextCursor:null}});
+    if(url.pathname.endsWith('/goals'))return route.fulfill({json:state.goals});
+    return route.fulfill({json:{...state,report:projectCoachSelfReport(makeMember('神戸'))}});
+   });
+   const sp=await sc.newPage(),se=[];sp.on('pageerror',e=>se.push(e.message));await sp.goto('http://127.0.0.1:18784/coach.html');await sp.locator('[data-primary-mission]').waitFor();await sp.locator('[data-record-panel] > summary').click();await sp.locator('[data-record-load]').click();await sp.locator('[data-personal-notes]').evaluate(d=>d.open=true);
+   const f=sp.locator('[data-note-form]').first();await f.locator('[name="title"]').fill('古い本人のメモ');await f.locator('[name="body"]').fill('戻してはいけない本文');await f.evaluate(f=>window.__oldPrivateForm=f);await f.locator('button[type="submit"]').click();
+   if(scenario==='late-private'){while(!releasePrivate)await new Promise(r=>setTimeout(r,20));await sp.evaluate(()=>{localStorage.setItem('keso-kp-session-v1','b'.repeat(48));window.dispatchEvent(new Event('focus'));});await sp.getByRole('alert').filter({hasText:'まだ連携'}).first().waitFor();releasePrivate();await sp.waitForTimeout(100);}else await sp.getByRole('alert').filter({hasText:'もう一度ログイン'}).waitFor();
+   const previousCalls=privateCalls;await sp.evaluate(()=>window.__oldPrivateForm.__save());assert.equal(privateCalls,previousCalls,'stale form cannot post under a later session');assert.equal(await sp.locator('[data-note-form]').count(),0);assert.ok(!(await sp.locator('body').textContent()).includes('戻してはいけない本文'));assert.deepEqual(se,[]);await sc.close();
   }
   console.log('KESO COACH self-first, private sessions, v6/practice regression and 320/375/1440 layout: OK');
  }finally{await browser.close();server.kill();}
