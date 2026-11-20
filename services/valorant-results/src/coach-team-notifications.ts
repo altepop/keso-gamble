@@ -40,7 +40,7 @@ export async function readCoachTeamNotice(db:D1Database,guild:string,id:Linked,u
  if(c.version!==current.version)throw stale();
  const effective=!!p&&p.enabled===1&&p.consent_version===current.version;
  return {settings:{enabled:effective,version:p?.version??0},
-  deliveryReady:effective&&channel?.enabled===1&&/^\d{15,22}$/.test(channel.channel_id),
+  deliveryReady:false,channelConfigured:channel?.enabled===1&&/^\d{15,22}$/.test(channel.channel_id) || false,
   preview:preview(),
   note:'通知は初期OFFです。本人の同意と管理者によるチャンネル設定が揃うまで送信されません。'};
 }
