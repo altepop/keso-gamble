@@ -1,6 +1,6 @@
-import {miniBoardView} from './duel-mini-view.js?v=web-d9cb60d380ea3848';
-import {EXTRA_DUEL_GAMES} from './duel-mini-games.js?v=web-d9cb60d380ea3848';
-import {DUEL_GAMES,duelLegalMoves,duelScore,playDuelMove} from './duel-rules.js?v=web-d9cb60d380ea3848';
+import {miniBoardView} from './duel-mini-view.js?v=web-d088bb3bbdedcd63';
+import {EXTRA_DUEL_GAMES} from './duel-mini-games.js?v=web-d088bb3bbdedcd63';
+import {DUEL_GAMES,duelLegalMoves,duelScore,playDuelMove} from './duel-rules.js?v=web-d088bb3bbdedcd63';
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const kp=n=>Number(n||0).toLocaleString('ja-JP')+' KP';
 const title=(r)=>DUEL_GAMES[r.game]?.name||EXTRA_DUEL_GAMES[r.game]?.name||r.game;
@@ -90,7 +90,7 @@ function boardView(r,info,user,busy,confirmResign,gomokuPreviewCell=null,recentM
  </div>`;
  return section;
 }
-export function duelScreen({info,user,live,cash,selectedId,game='othello',stake=1000,target='',busy=false,error='',confirmResign=false,pokerPicks=[],fallbackMembers=[],opponentPickerOpen=false,loading=false,nav='',gomokuPreviewCell=null,recentMoves=null,localMoveHistory=null,guessDraft='',riskConfirm='',lastSynced=0,pendingRetry=false,historyHasMore=false}){
+export function duelScreen({info,user,live,cash,selectedId,game='othello',stake=1000,target='',busy=false,error='',confirmResign=false,pokerPicks=[],fallbackMembers=[],opponentPickerOpen=false,loading=false,nav='',gomokuPreviewCell=null,recentMoves=null,localMoveHistory=null,guessDraft='',riskConfirm='',lastSynced=0,pendingRetry=false,historyHasMore=false,participantPreview=null,participantPreviewError=''}){
  const matches=info?.matches??[],chosen=matches.find(r=>r.id===selectedId)||matches.find(r=>r.status==='active'||r.status==='pending')||matches[0];
  const members=(info?.members?.length?info.members:fallbackMembers).filter(m=>m&&typeof m.id==='string'&&m.id!==user);
  const invited=chosen?.status==='pending',mine=chosen?.user_a===user;
@@ -127,6 +127,12 @@ export function duelScreen({info,user,live,cash,selectedId,game='othello',stake=
  <div class="duel-practice-entry"><div><strong>CPUと練習する</strong><p>相手が手を返してくる練習対戦。6モードすべて、実KP消費なし。iPhoneでも何度でも試せる。</p></div><a class="action-btn primary" href="./duel-demo.html?cpu=1">CPUとの練習を始める</a></div>
  ${syncNotice}${retryNotice}
  ${chosen?`<div class="duel-current">
+ <div class="panel"><div class="card-body"><h2 class="panel-title">参加者限定・公開情報プレビュー</h2>
+ <p class="helper">この試合の参加者本人だけが閲覧できる確認用画面です。第三者への観戦公開・自動同期は未承認です。</p>
+ <button type="button" class="action-btn" data-duel-preview="1" ${busy||!live?'disabled':''}>公開情報を手動で確認</button>
+ ${participantPreviewError?'<p role="alert">'+esc(participantPreviewError)+'</p>':''}
+ ${participantPreview&&participantPreview.id===chosen.id?'<pre aria-label="試合の公開情報">'+esc(JSON.stringify(participantPreview.publicState??null,null,2))+'</pre><p class="helper">確認した版：'+esc(participantPreview.version)+'</p>':''}
+ </div></div>
  ${invited?`<div class="panel"><div class="card-body"><h2 class="panel-title">${mine?'相手の返答待ち':'対戦の申し込み'}</h2>
  <p class="helper">${esc(title(chosen))} / ${kp(chosen.stake)}ずつ。招待期限まで約${Math.ceil(timeLeft(chosen.deadline_at)/60)}分。</p>
  <div class="action-row">${!mine&&timeLeft(chosen.deadline_at)>0?`<button class="action-btn primary" data-duel-act="accept" ${busy?'disabled':''}>${chosen.stake>=50000&&riskConfirm==='accept'?'金額を確認して承認':'承認して始める'}（${kp(chosen.stake)}）</button>`:''}
