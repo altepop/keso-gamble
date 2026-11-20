@@ -37,7 +37,7 @@
    if(pending){status.textContent='保存が終わるまでお待ちください。';return;}
    const forms=dirty();if(!forms.length){action();return;}
    guard.replaceChildren(el('p','未保存の入力があります。保存・破棄・戻るを選んでください。'));guard.hidden=false;
-   for(const [label,callback] of [['保存して移動します',async()=>{element.inert=true;try{for(const f of forms)if(!await f.__save())return;guard.hidden=true;action();}finally{element.inert=false;}}],['破棄して移動します',()=>{forms.forEach(f=>delete f.dataset.dirty);guard.hidden=true;action();}],['入力に戻ります',()=>{guard.hidden=true;forms[0].querySelector('input,textarea,select')?.focus();}]]){const b=el('button',label,{type:'button'});b.onclick=callback;guard.append(b);}guard.scrollIntoView({block:'center'});
+   for(const [label,callback] of [['保存して移動します',async()=>{element.inert=true;try{for(const f of forms)if(!await f.__save())return;guard.hidden=true;action();}finally{element.inert=false;}}],['破棄して移動します',()=>{forms.forEach(f=>delete f.dataset.dirty);guard.hidden=true;render();action();}],['入力に戻ります',()=>{guard.hidden=true;forms[0].querySelector('input,textarea,select')?.focus();}]]){const b=el('button',label,{type:'button'});b.onclick=callback;guard.append(b);}guard.scrollIntoView({block:'center'});
   }
   function resultForm(r){
    const f=form('record:'+r.id);f.dataset.recordForm=r.id;
