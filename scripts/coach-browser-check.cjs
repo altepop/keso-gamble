@@ -206,11 +206,11 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   await page.locator('[data-team-pdca-load]').click();
   await page.locator('[data-team-task-form]').waitFor({state:'visible'});
   assert.equal(await page.locator('[data-team-status-form]').isVisible(),false,'no status sharing without opt-in');
-  await page.locator('[data-team-task-form] [name=title]').fill('次の試合のピークをそろえます');
-  await page.locator('[data-team-task-form] [name=action]').fill('味方の合図で二人一緒に出ます');
-  await page.locator('[data-team-task-form] [name=measure]').fill('録画で時間を確認します');
-  await page.locator('[data-team-task-form] [name=periodEnd]').fill('2026-12-01');
-  await page.locator('[data-team-task-form] [name=reason]').fill('一つだけ練習するため');
+  await page.locator('[data-team-task-form] [name=teamTitle]').fill('次の試合のピークをそろえます');
+  await page.locator('[data-team-task-form] [name=teamAction]').fill('味方の合図で二人一緒に出ます');
+  await page.locator('[data-team-task-form] [name=teamMeasure]').fill('録画で時間を確認します');
+  await page.locator('[data-team-task-form] [name=teamPeriodEnd]').fill('2026-12-01');
+  await page.locator('[data-team-task-form] [name=teamReason]').fill('一つだけ練習するため');
   await page.locator('[data-team-task-form] button[type=submit]').click();
   await page.locator('[data-team-task] h3').waitFor();
   assert.match(await page.locator('[data-team-task]').innerText(),/次の試合のピークをそろえます/);
@@ -219,8 +219,8 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   await page.waitForFunction(()=>document.querySelector('[data-team-pdca-load]')?.hidden===false);
   await page.locator('[data-team-pdca-load]').click();
   await page.locator('[data-team-status-form]').waitFor({state:'visible'});
-  await page.locator('[data-team-status-form] [name=state]').selectOption('実施予定');
-  await page.locator('[data-team-status-form] [name=action]').fill('合図してピークします');
+  await page.locator('[data-team-status-form] [name=teamState]').selectOption('実施予定');
+  await page.locator('[data-team-status-form] [name=teamSelfAction]').fill('合図してピークします');
   await page.locator('[data-team-status-form] button[type=submit]').click();
   await page.waitForFunction(()=>document.querySelector('[data-team-participants]')?.textContent?.includes('実施予定'));
   assert.equal(await page.locator('[data-team-participants] img, [data-team-participants] script').count(),0,'team status is plain text');
