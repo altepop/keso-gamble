@@ -11,7 +11,7 @@ test('phase 3-A contract requires opt-in, privacy and CAS before team sharing',(
   '個人実施記録、メモ、個人目標本文、PUUID、match ID',
   'versionのCAS','他チームの存在を404で秘匿',
   '同じDiscord所有者の複数Riotアカウント',
-  'party_id欠損は不明','通知の冪等性',
+  'party_id欠損は不明','event_idとversionで重複排除',
   'D1マイグレーションは加算的',
   'HenrikDev以外の新規試合取得を導入しない',
  ])assert.ok(contract.includes(required),'Missing contract: '+required);
