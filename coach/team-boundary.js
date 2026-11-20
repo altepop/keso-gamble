@@ -19,8 +19,10 @@ export function projectTeamRoster(members, consents) {
     if (!validId(member?.ownerId) || !validId(member?.teamId) || !validId(member?.guildId)) continue;
     const key = JSON.stringify([member.guildId, member.teamId, member.ownerId]);
     if (seen.has(key)) continue;
-    const consent = consents.find(c => matchesScope(member, c) && c.shareTeamStatus === true);
-    const projected = projectTeamMember(member, consent);
+    // Ambiguous consent records must not silently turn a revoked share back on.
+    const scopedConsents = consents.filter(c => matchesScope(member, c));
+    if (scopedConsents.length !== 1) continue;
+    const projected = projectTeamMember(member, scopedConsents[0]);
     if (projected) { seen.add(key); result.push(projected); }
   }
   return result;
