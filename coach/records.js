@@ -7,7 +7,7 @@
  const labels={done:'実施しました',partial:'一部試しました',skipped:'今回は試していません',unknown:'覚えていません'};
  function create({request,copyText=t=>t}){
   const element=el('section',undefined,{class:'coach-records','data-private-records':''}),status=el('p','',{role:'status','aria-live':'polite'}),guard=el('div',undefined,{'data-record-leave-guard':''});guard.hidden=true;
-  const review=root.KesoCoachPracticeReview.create();
+  const review=root.KesoCoachPracticeReview.create({copyText});
   let epoch=0,data=null,notes=[],noteCursor=null,goals=[],state=null,pending=false,newRecord=crypto.randomUUID(),newNote=crypto.randomUUID(),open=false;
   const dirty=()=>[...element.querySelectorAll('form[data-dirty="true"]')];
   function clear(){epoch++;review.clear();data=null;notes=[];goals=[];state=null;noteCursor=null;pending=false;open=false;newRecord=crypto.randomUUID();newNote=crypto.randomUUID();element.replaceChildren();status.textContent='';guard.replaceChildren();guard.hidden=true;}
@@ -26,7 +26,7 @@
    if(pending||f.__epoch!==epoch)return false;pending=true;const current=epoch;const controls=[...f.elements];controls.forEach(n=>n.disabled=true);status.textContent='本人限定で保存しています。';
    const apply=result=>{if(path.endsWith('/notes')||body.kind==='note'){notes=notes.filter(n=>n.id!==result.item.id);if(result.item.status!=='deleted')notes.unshift(result.item);if(result.item.id===newNote)newNote=crypto.randomUUID();}
     else{if(data.active?.id===result.item.id)data.active=null;data.items=data.items.filter(r=>r.id!==result.item.id);if(result.item.status==='planned')data.active=result.item;else if(result.item.status!=='deleted')data.items.unshift(result.item);if(result.item.id===newRecord)newRecord=crypto.randomUUID();}
-    delete f.dataset.dirty;status.textContent=result.item.status==='deleted'?'内容を削除しました。再送しても復活しません。':path.endsWith('/match')?'本人の試合と観察指標の設定を保存しました。実施したという証明ではありません。':path.endsWith('/notes')?'本人限定でメモを保存しました。':result.item.status==='planned'?'今回試す予定を保存しました。実施したという申告ではありません。':'本人限定で実施記録を保存しました。内容は本人の申告です。';render(f.dataset.key);
+    delete f.dataset.dirty;status.textContent=result.item.status==='deleted'?'内容を削除しました。再送しても復活しません。':path.endsWith('/match')&&body.kind==='note'?'本人の試合をメモに関連付けました。':path.endsWith('/match')?'本人の試合と観察指標の設定を保存しました。実施したという証明ではありません。':path.endsWith('/notes')?'本人限定でメモを保存しました。':result.item.status==='planned'?'今回試す予定を保存しました。実施したという申告ではありません。':'本人限定で実施記録を保存しました。内容は本人の申告です。';render(f.dataset.key);
    };
    try{const result=await request(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});if(current!==epoch)return false;apply(result);return true;}
    catch(e){if(current!==epoch)return false;status.textContent=e.message+' 入力内容は残しています。';

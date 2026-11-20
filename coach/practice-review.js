@@ -6,7 +6,7 @@
  const el=(tag,text,attrs={})=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=text;for(const [k,v] of Object.entries(attrs))n.setAttribute(k,v);return n;};
  const time=v=>new Date(v).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo',hour12:false});
  const value=n=>n===null?'未取得':Number(n).toFixed(2);
- function create(){
+ function create({copyText=t=>t}={}){
   const fingerprints=new Map(),drafts=new Map(),mounted=new Map();
   function mount({host,record,kind='record',form,save,request,isCurrent}){
    const fold=el('details',undefined,{class:'coach-disclosure','data-practice-review':record.id});fold.append(el('summary',headings.main));const body=el('div',undefined,{class:'detail-body'}),status=el('p','',{role:'status','aria-live':'polite'});fold.append(body);host.append(fold);body.append(status);
@@ -62,7 +62,7 @@
    if(r.backfilled)host.append(el('p','後から登録した記録です。実施前の起点がないため、自動の前後比較は行いません。'));
    if(r.observation){const o=r.observation;host.append(el('p','予定保存時刻：'+time(r.anchor)+'。この終了時刻の前後30日以内で、最大10試合ずつを観察しています。'));
     for(const c of o.comparisons){const card=el('section',undefined,{'data-review-metric':c.key});card.append(el('h4',metrics[c.key]+'：'+(c.state==='provisional'?'暫定の傾向です':'観察中です')));
-     const table=el('table'),caption=el('caption','同じ定義の指標を前後で比較します。'),head=el('tr');for(const h of ['期間','値','有効試合','分子／分母'])head.append(el('th',h,{scope:'col'}));table.append(caption,head);
+     const table=el('table'),caption=el('caption','同じ定義の指標を前後で比較します。'),head=el('tr');for(const h of ['期間','値','有効数','分子／分母'])head.append(el('th',h,{scope:'col'}));table.append(caption,head);
      for(const [label,v] of [['起点より前',c.before],['起点以降',c.after]]){const tr=el('tr');for(const cell of [label,value(v.value),v.valid+'/'+v.total,v.numerator+'／'+v.denominator])tr.append(el('td',cell));table.append(tr);}card.append(table,el('p','数値の差：'+value(c.difference)+'。練習による効果とは断定しません。'));host.append(card);
     }
     const detail=el('details',undefined,{class:'coach-disclosure'});detail.append(el('summary','分母・除外理由・条件の違いを確認します'));const inner=el('div',undefined,{class:'detail-body'});detail.append(inner);
@@ -75,7 +75,7 @@
     for(const g of o.sameMapAgent){inner.append(el('h4',g.map+'／'+g.agent));for(const key of Object.keys(g.before.metrics)){const a=g.before.metrics[key],b=g.after.metrics[key];inner.append(el('p',metrics[key]+'：前'+value(a.value)+'（'+a.valid+'試合）→後'+value(b.value)+'（'+b.valid+'試合）です。'));}}
     host.append(detail);
    }
-   host.append(el('h3',headings.next),el('p',r.nextStep.explanation));for(const item of r.selfReport.items)host.append(el('p','保存した確認方法（'+(item.source==='personal'?'本人の選択':'提案された練習')+'）'),el('blockquote',item.check));
+   host.append(el('h3',headings.next),el('p',r.nextStep.explanation));for(const item of r.selfReport.items)host.append(el('p','保存した確認方法（'+(item.source==='personal'?'本人の選択':'提案された練習')+'）'),el('blockquote',item.source==='catalogue'?copyText(item.check.replace(/か。?$/,'かを確認してください。')):item.check,item.source==='catalogue'?{'data-catalogue-check':''}:{}));
    const caveats=el('details',undefined,{class:'coach-disclosure'});caveats.append(el('summary','数値から分からないことを確認します'));for(const t of r.limitations)caveats.append(el('p',t));host.append(caveats);
   }
   function renderMetrics(host,ms){for(const [k,m] of Object.entries(ms))host.append(el('p',metrics[k]+'：'+value(m.value)+'（分子'+m.numerator+'／分母'+m.denominator+'、有効'+m.valid+'試合）です。'));}
