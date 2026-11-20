@@ -27,8 +27,9 @@ export function renderVerifiedPartyMetrics(host,report){
  main.append(row('チーム参加者のK/D',formatKd(kd.value)+'（キル'+kd.numerator+'／デス'+kd.denominator+'、有効'+kd.validPlayerSamples+'人・試合）'));
  main.append(row('勝敗不明',String(report.overall.unknownOutcomes)+'試合'));
  main.append(row('K/Dの欠損',String(kd.excludedPlayerSamples)+'人・試合'));
- main.append(row('同一パーティ未確認などの除外',String(report.quality.excludedMatches)+'試合'));
- if(report.quality.limitReached)main.append(row('取得上限','最大250試合を確認しています。全履歴とは限りません'));
+ // The authorized API intentionally omits excluded/inspected counts that could reveal solo games.
+ if(Number.isSafeInteger(report.quality?.excludedMatches))main.append(row('同一パーティ未確認などの除外',String(report.quality.excludedMatches)+'試合'));
+ if(report.quality?.limitReached)main.append(row('取得上限','最大250試合を確認しています。全履歴とは限りません'));
  const group=el('div');group.dataset.coachPartyMaps='';
  for(const m of report.maps||[]){
   const card=el('section');
