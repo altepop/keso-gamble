@@ -307,9 +307,33 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   assert.deepEqual(dictionaryEnds,[],'all seven tabs and folded legacy paragraphs use courteous sentence endings');
   if(process.env.COACH_JAPANESE_AUDIT)require('node:fs').writeFileSync(process.env.COACH_JAPANESE_AUDIT,JSON.stringify({sentences:japanese.length,dictionaryEnds},null,2));
   // Owner-only practice and memo UI uses the actual SQLite-backed save/list logic.
+  const loop=page.locator('[data-coach-loop]');assert.equal(await loop.count(),1);
+  assert.match(await loop.innerText(),/前回の実施内容はまだ読み込んでいません/);
   const records=page.locator('[data-private-records]');await records.locator('[data-record-panel] > summary').click();await records.locator('[data-record-load]').click();await records.locator('[data-record-form]').waitFor();
   let recordForm=records.locator('[data-record-form]').first();await recordForm.locator('[name="report"]').selectOption('done');await recordForm.locator('[name="minutes"]').fill('0');await recordForm.locator('[name="attempts"]').fill('3');await recordForm.locator('[name="successes"]').fill('2');await recordForm.locator('[name="reflection"]').fill('自分の振り返りです。\n次は退路を確認します。');
   await recordForm.locator('button[type="submit"]').focus();await page.keyboard.press('Enter');await records.locator('[role="status"]').filter({hasText:'保存しました'}).waitFor();
+  assert.match(await loop.innerText(),/前回ご本人が記録した内容です/);
+  assert.match(await loop.innerText(),/自分の振り返り/);
+  await page.evaluate(()=>{
+   window.__coachClipboardOriginal=Object.getOwnPropertyDescriptor(navigator,'clipboard')||null;
+   Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async()=>{throw Error('permission denied');}}});
+  });
+  await loop.locator('[data-loop-action="copy"]').click();
+  const privateCopy=await loop.locator('[data-private-copy-fallback]').inputValue();
+  assert.match(privateCopy,/本人専用の実施記録/);
+  assert.match(privateCopy,/自分の振り返り/);
+  assert.doesNotMatch(privateCopy,/fixture-self|review-private-|個人メモ|Bearer|PUUID|match_id/);
+  await page.evaluate(()=>{
+   if(window.__coachClipboardOriginal)Object.defineProperty(navigator,'clipboard',window.__coachClipboardOriginal);
+   else delete navigator.clipboard;
+   delete window.__coachClipboardOriginal;
+  });
+  for(const width of [320,375,1440]){
+   await page.setViewportSize({width,height:900});
+   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'Phase2-C loop fits '+width);
+   if(process.env.COACH_V6_SCREENSHOTS_DIR)await loop.screenshot({path:require('node:path').join(process.env.COACH_V6_SCREENSHOTS_DIR,'private-loop-'+width+'.png')});
+  }
+
   assert.equal(privateSql.prepare('SELECT status FROM coach_practice_records').get().status,'recorded');assert.equal(JSON.parse(privateSql.prepare('SELECT execution_json FROM coach_practice_records').get().execution_json).minutes,0);
   recordForm=records.locator('[data-record-form]').first();await recordForm.evaluate(f=>f.closest('details').open=true);await recordForm.locator('[name="reflection"]').fill('競合しても残す振り返り');privateSql.prepare("UPDATE coach_practice_records SET version=version+1,reflection='別端末の修正'").run();await recordForm.locator('button[type="submit"]').click();await records.locator('[data-record-reload]').waitFor();assert.equal(await recordForm.locator('[name="reflection"]').inputValue(),'競合しても残す振り返り');await records.locator('[data-record-reload]').click();await records.locator('[role="status"]').filter({hasText:'読み込みました'}).waitFor();assert.equal(await records.locator('[data-record-form]').first().locator('[name="reflection"]').inputValue(),'別端末の修正');
   // Phase 2-B: real saved roster observations, opaque own-match links and re-evaluation.
@@ -319,6 +343,12 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   let reviewPanel=records.locator('[data-practice-review="'+savedPractice.record_id+'"]').first();await reviewPanel.evaluate(d=>{for(let x=d;x;x=x.parentElement.closest('details')){if(x.tagName==='DETAILS')x.open=true;}});await reviewPanel.locator('[data-match-load]').click();await reviewPanel.locator('[data-match-form]').waitFor();
   await reviewPanel.locator('[data-match-choice]').selectOption({index:1});await reviewPanel.locator('[name="primaryMetric"]').selectOption('dpr');losePrivateReply=true;await reviewPanel.locator('[data-match-save]').click();await records.locator('[data-record-retry]').waitFor();assert.equal(privateSql.prepare('SELECT version FROM coach_practice_records').get().version,4);await records.locator('[data-record-retry]').click();await records.locator('[role="status"]').filter({hasText:'観察指標の設定を保存しました'}).waitFor();assert.equal(privateSql.prepare('SELECT version FROM coach_practice_records').get().version,4,'link retry cannot duplicate the write');
   reviewPanel=records.locator('[data-practice-review="'+savedPractice.record_id+'"]').first();await reviewPanel.evaluate(d=>{for(let x=d;x;x=x.parentElement.closest('details')){if(x.tagName==='DETAILS')x.open=true;}});const beforeReview=requests.length;await reviewPanel.locator('[data-review-load]').click();await reviewPanel.locator('[data-review-metric="dpr"]').waitFor();assert.match(await reviewPanel.innerText(),/本人が残した記録です/);assert.match(await reviewPanel.innerText(),/暫定の傾向です/);assert.match(await reviewPanel.innerText(),/練習による効果とは断定しません/);assert.equal(requests.length,beforeReview+1,'one explicit review read, no poll');
+  const explicitReviewRequests=requests.length;await loop.locator('[data-loop-action="review"]').click();
+  await records.locator('[data-review-metric="dpr"]').first().waitFor();
+  assert.equal(requests.length,explicitReviewRequests+1,'top loop review reads only after a click');
+  assert.match(await loop.innerText(),/DPR：前/);
+  await loop.locator('[data-loop-action="change"]').click();
+  assert.equal(await page.locator('[data-other-practice]').evaluate(n=>n.open),true);
   privateSql.prepare("UPDATE valorant_match_rosters SET players_json=json_set(players_json,'$[0].damageDealt',4000,'$[0].damageDealtAt',?) WHERE match_id='review-private-6'").run(Date.now());await reviewPanel.locator('[data-review-load]').click();await reviewPanel.locator('[role="status"]').filter({hasText:'再計算しました'}).waitFor();
   for(const width of [320,375,1440]){await page.setViewportSize({width,height:900});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'observation fits '+width);if(process.env.COACH_V6_SCREENSHOTS_DIR)await reviewPanel.screenshot({path:require('node:path').join(process.env.COACH_V6_SCREENSHOTS_DIR,'observation-'+width+'.png')});}
   // Preserve an unsaved match selection when another form is saved.
@@ -328,9 +358,18 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   reviewPanel=records.locator('[data-practice-review="'+savedPractice.record_id+'"]').first();await reviewPanel.evaluate(d=>{for(let x=d;x;x=x.parentElement.closest('details')){if(x.tagName==='DETAILS')x.open=true;}});await reviewPanel.locator('[data-review-load]').click();await reviewPanel.locator('[data-review-metric="acs"]').waitFor();
   const observationSentences=await reviewPanel.locator('p,blockquote[data-catalogue-check]').evaluateAll(nodes=>[...new Set(nodes.flatMap(n=>(n.textContent||'').match(/[^。！？]+[。！？]/gu)||[]))]);
   assert.equal(await reviewPanel.locator('body').count(),0);assert.doesNotMatch(await reviewPanel.innerText(),/review-private-|fixture-self/);
-  await records.locator('[data-personal-notes]').evaluate(d=>d.open=true);let newMemo=records.locator('[data-note-form]').first();await newMemo.locator('[name="title"]').fill('本人だけのメモ');await newMemo.locator('[name="body"]').fill('<img src=x onerror=alert(1)>\n秘密の振り返り');const beforeTyping=requests.length;await newMemo.locator('[name="body"]').press('End');assert.equal(requests.length,beforeTyping,'typing never saves');
+  await records.locator('[data-personal-notes]').evaluate(d=>d.open=true);let newMemo=records.locator('[data-note-form]').first();await newMemo.locator('[name="title"]').fill('本人だけのメモ');await newMemo.locator('[name="body"]').fill('<img src=x onerror=alert(1)>\n秘密の振り返り');await newMemo.locator('[name="recordId"]').selectOption(savedPractice.record_id);const beforeTyping=requests.length;await newMemo.locator('[name="body"]').press('End');assert.equal(requests.length,beforeTyping,'typing never saves');
   losePrivateReply=true;await newMemo.locator('button[type="submit"]').click();await records.locator('[data-record-retry]').waitFor();assert.equal(privateSql.prepare('SELECT COUNT(*) n FROM coach_personal_notes').get().n,1);await records.locator('[data-record-retry]').click();await records.locator('[role="status"]').filter({hasText:'保存しました'}).waitFor();assert.equal(privateSql.prepare('SELECT COUNT(*) n FROM coach_personal_notes').get().n,1,'lost ack retry does not duplicate');assert.equal(await records.locator('img').count(),0);
   await records.locator('[data-personal-notes]').evaluate(d=>d.open=true);let savedMemo=records.locator('[data-note-form]').filter({has:page.locator('[data-note-delete]')}).first();await savedMemo.locator('[name="body"]').fill('修正後の本人メモ');await savedMemo.locator('button[type="submit"]').click();await records.locator('[role="status"]').filter({hasText:'保存しました'}).waitFor();assert.equal(privateSql.prepare('SELECT body FROM coach_personal_notes').get().body,'修正後の本人メモ');
+  assert.equal(await loop.locator('[data-copy-include-notes]').isChecked(),false,'individual notes are opt-in OFF');
+  await loop.locator('[data-loop-action="copy"]').click();
+  assert.doesNotMatch(await page.evaluate(()=>window.__copiedDiagnostic),/修正後の本人メモ/);
+  await loop.locator('[data-copy-include-notes]').check();
+  await loop.locator('[data-loop-action="copy"]').click();
+  const recordAndNote=await page.evaluate(()=>window.__copiedDiagnostic);
+  assert.match(recordAndNote,/修正後の本人メモ/);
+  assert.doesNotMatch(recordAndNote,/fixture-self|review-private-|PUUID|match_id|Bearer/);
+
   const savedNoteId=privateSql.prepare('SELECT note_id FROM coach_personal_notes WHERE deleted_at IS NULL').get().note_id;let noteReview=records.locator('[data-practice-review="'+savedNoteId+'"]').first();await noteReview.evaluate(d=>{for(let x=d;x;x=x.parentElement.closest('details')){if(x.tagName==='DETAILS')x.open=true;}});await noteReview.locator('[data-match-load]').click();await noteReview.locator('[data-match-choice]').selectOption({index:1});assert.equal(await noteReview.locator('[name="primaryMetric"]').count(),0);await noteReview.locator('[data-match-save]').click();await records.locator('[role="status"]').filter({hasText:'本人の試合をメモに関連付けました'}).waitFor();assert.ok(privateSql.prepare('SELECT match_id FROM coach_personal_notes WHERE note_id=?').get(savedNoteId).match_id);
   for(const width of [320,375,1440]){await page.setViewportSize({width,height:900});await records.locator('[data-personal-notes]').evaluate(d=>d.open=true);assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'private records fit '+width);if(process.env.COACH_V6_SCREENSHOTS_DIR)await records.screenshot({path:require('node:path').join(process.env.COACH_V6_SCREENSHOTS_DIR,'private-records-'+width+'.png')});}
   newMemo=records.locator('[data-note-form]').first();await newMemo.locator('[name="title"]').fill('未保存の入力');await newMemo.locator('[name="body"]').fill('移動しても勝手に保存しません');await records.locator('[data-record-load]').click();await records.locator('[data-record-leave-guard]:not([hidden])').waitFor();await records.getByRole('button',{name:'入力に戻ります',exact:true}).click();assert.equal(await newMemo.locator('[name="title"]').inputValue(),'未保存の入力');await records.locator('[data-record-load]').click();await records.getByRole('button',{name:'保存して移動します',exact:true}).click();await records.locator('[role="status"]').filter({hasText:'読み込みました'}).waitFor();assert.equal(privateSql.prepare('SELECT COUNT(*) n FROM coach_personal_notes').get().n,2);

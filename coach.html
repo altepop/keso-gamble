@@ -558,6 +558,18 @@
 .coach-records{margin:24px 0;color:#ece8e1}.coach-records p,.coach-records label,.coach-records h3{font-size:16px;line-height:1.9;overflow-wrap:anywhere}.coach-records label{display:block;margin:12px 0}.coach-records input,.coach-records textarea,.coach-records select{display:block;box-sizing:border-box;width:100%;max-width:100%;padding:12px;margin-top:8px;background:#0f1923;color:#f4f3ef;border:1px solid #61717e;border-radius:8px;font:inherit;font-size:16px}.coach-records textarea{resize:vertical}.coach-records button{font-size:16px;white-space:normal;overflow-wrap:anywhere;padding:12px;margin:8px 8px 8px 0;border:1px solid #394e5d;border-radius:8px;background:#233542;color:#ece8e1}.coach-records button[type=submit]{background:#ff4655;border-color:#ff4655;color:#fff}.coach-records form{padding:16px 0;border-top:1px solid #394e5d}.coach-records :focus-visible{outline:3px solid #f4f3ef;outline-offset:3px}.coach-records [role=status]:empty{display:none}.coach-records [data-record-leave-guard]:not([hidden]){padding:16px;border:2px solid #ff4655;background:#14232f}
 .coach-records table{width:100%;table-layout:fixed;border-collapse:collapse;font-size:16px}.coach-records th,.coach-records td{padding:8px 4px;border-bottom:1px solid #334452;overflow-wrap:anywhere}.coach-records pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:16px}.coach-records blockquote{white-space:pre-wrap;overflow-wrap:anywhere;margin:12px 0;padding:8px;border-left:2px solid #FF4655}
 </style>
+<style id="coach-loop-style">
+.coach-loop{margin:20px 0 28px;padding:22px;background:#14232f;color:#ece8e1;border-left:3px solid #ff4655;min-width:0}
+.coach-loop h2{font-size:22px;line-height:1.45;margin:0 0 14px;overflow-wrap:anywhere}
+.coach-loop h3{font-size:18px;line-height:1.6;margin:20px 0 8px;overflow-wrap:anywhere}
+.coach-loop p{font-size:16px;line-height:1.9;margin:8px 0;overflow-wrap:anywhere;white-space:pre-wrap}
+.coach-loop button{font:inherit;font-size:16px;min-height:44px;border:1px solid #ff4655;border-radius:8px;padding:12px 16px;background:#ff4655;color:#fff;white-space:normal;overflow-wrap:anywhere;text-align:left}
+.coach-loop textarea{box-sizing:border-box;max-width:100%;background:#0f1923;color:#ece8e1;border:1px solid #61717e;padding:12px;line-height:1.9}
+.coach-loop label{display:flex;align-items:flex-start;gap:10px;margin:12px 0;font-size:16px;line-height:1.9;overflow-wrap:anywhere}.coach-loop input[type=checkbox]{width:20px;height:20px;min-width:20px;flex:none;margin:4px 0;accent-color:#ff4655}
+.coach-loop-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:12px}.coach-loop-actions button+button{background:#233542;border-color:#61717e}
+.coach-loop :focus-visible{outline:3px solid #fff;outline-offset:3px}
+@media(max-width:400px){.coach-loop{padding:16px}.coach-loop-actions{display:grid;grid-template-columns:minmax(0,1fr)}.coach-loop button{width:100%}}
+</style>
 </head>
 <body>
 <main class="wrap">
@@ -578,6 +590,7 @@
 </div></details>
 <div id="legacy-coach" hidden></div>
 <div id="report" hidden>
+<div id="coach-loop-host"></div>
 <div id="member-result" aria-live="polite"></div>
 <details id="member-coaching-panel" class="coach-disclosure"><summary>自分のアカウントを確認します <span class="chev" aria-hidden="true">⌄</span></summary><div class="detail-body coach-existing">
 <p id="coach-owner-label"></p><p>詳細診断・目標：本人のみ</p>
@@ -872,8 +885,9 @@
 
 
 </template>
-<script src="./coach/practice-review.js?v=coach-b42dbbe724ff"></script>
-<script src="./coach/records.js?v=coach-be2a2947470d"></script>
+<script src="./coach/practice-review.js?v=coach-34be17a33636"></script>
+<script src="./coach/loop.js?v=coach-65988b55b021"></script>
+<script src="./coach/records.js?v=coach-a852350c480e"></script>
 <script src="./coach/sharing.js?v=coach-52d276772aa9"></script>
 <script src="./coach/goals.js?v=coach-ca17bb21a788"></script>
 <script src="./coach/prototype-view.js?v=coach-faf63d5b91b0"></script>
@@ -1683,7 +1697,10 @@ const authenticatedCoachRequest=async(path,opts={})=>{
  }catch(e){if(generation===authGeneration&&e.status===401){clearCoachView();$('connection').style.display='block';setStatus('接続が切れました。もう一度ログインしてください。',true);}throw e;}
 };
 const coachGoals=globalThis.KesoCoachGoals.create({request:authenticatedCoachRequest});
-const coachRecords=globalThis.KesoCoachRecords.create({request:authenticatedCoachRequest,copyText:t=>CoachPresentation.polite(CoachPresentation.action(t))});
+let coachLoop;
+const coachRecords=globalThis.KesoCoachRecords.create({request:authenticatedCoachRequest,copyText:t=>CoachPresentation.polite(CoachPresentation.action(t)),onChange:state=>coachLoop?.update(state),onReview:(id,review)=>coachLoop?.showObservation(id,review)});
+coachLoop=globalThis.KesoCoachLoop.create({records:coachRecords});
+$('coach-loop-host').append(coachLoop.element);
 $('coach-records-host').append(coachRecords.element);
 const coachSharing=globalThis.KesoCoachSharing.create({request:authenticatedCoachRequest,onSelf:()=>void load(),onView:()=>{
  authGeneration++;activeMember=null;latestReport=null;latestMemberReport=null;memberPending=false;

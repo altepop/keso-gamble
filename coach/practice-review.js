@@ -6,7 +6,7 @@
  const el=(tag,text,attrs={})=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=text;for(const [k,v] of Object.entries(attrs))n.setAttribute(k,v);return n;};
  const time=v=>new Date(v).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo',hour12:false});
  const value=n=>n===null?'未取得':Number(n).toFixed(2);
- function create({copyText=t=>t}={}){
+ function create({copyText=t=>t,onReview=()=>{}}={}){
   const fingerprints=new Map(),drafts=new Map(),mounted=new Map();
   function mount({host,record,kind='record',form,save,request,isCurrent}){
    const fold=el('details',undefined,{class:'coach-disclosure','data-practice-review':record.id});fold.append(el('summary',headings.main));const body=el('div',undefined,{class:'detail-body'}),status=el('p','',{role:'status','aria-live':'polite'});fold.append(body);host.append(fold);body.append(status);
@@ -49,7 +49,7 @@
    const review=el('button','前後の数値を確認します',{type:'button','data-review-load':''});
    review.onclick=async()=>{
     if(reading||!alive())return;reading=true;review.disabled=true;status.textContent='本人の記録と、保存済み試合の数値を確認しています。';
-    try{const previous=fingerprints.get(record.id),r=await request('/api/kp/coach/practice/review?record='+record.id+(previous?'&previous='+previous:''));if(!alive())return;fingerprints.set(record.id,r.evaluationVersion);renderReview(reviewHost,r);status.textContent=r.revisedComparedWithPrevious?'記録または試合データの更新を検出し、観察結果を再計算しました。':'現在保存されているデータで観察結果を確認しました。';}
+    try{const previous=fingerprints.get(record.id),r=await request('/api/kp/coach/practice/review?record='+record.id+(previous?'&previous='+previous:''));if(!alive())return;fingerprints.set(record.id,r.evaluationVersion);renderReview(reviewHost,r);onReview(record.id,r);status.textContent=r.revisedComparedWithPrevious?'記録または試合データの更新を検出し、観察結果を再計算しました。':'現在保存されているデータで観察結果を確認しました。';}
     catch(e){if(alive())status.textContent=e.message;}finally{if(alive()){reading=false;review.disabled=false;}}
    };body.append(review,reviewHost);
   }

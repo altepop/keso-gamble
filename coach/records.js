@@ -5,12 +5,12 @@
  const el=(tag,text,attrs={})=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=text;for(const [k,v] of Object.entries(attrs))n.setAttribute(k,v);return n;};
  let catalogPromise;const clientCatalog=()=>catalogPromise??=crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify({policy:'diamond-v1',entries:root.KesoCoachPractice.entries}))).then(bytes=>[...new Uint8Array(bytes)].map(b=>b.toString(16).padStart(2,'0')).join(''));
  const labels={done:'実施しました',partial:'一部試しました',skipped:'今回は試していません',unknown:'覚えていません'};
- function create({request,copyText=t=>t}){
+ function create({request,copyText=t=>t,onChange=()=>{},onReview=()=>{}}){
   const element=el('section',undefined,{class:'coach-records','data-private-records':''}),status=el('p','',{role:'status','aria-live':'polite'}),guard=el('div',undefined,{'data-record-leave-guard':''});guard.hidden=true;
-  const review=root.KesoCoachPracticeReview.create({copyText});
+  const review=root.KesoCoachPracticeReview.create({copyText,onReview});
   let epoch=0,data=null,notes=[],noteCursor=null,goals=[],state=null,pending=false,newRecord=crypto.randomUUID(),newNote=crypto.randomUUID(),open=false;
   const dirty=()=>[...element.querySelectorAll('form[data-dirty="true"]')];
-  function clear(){epoch++;review.clear();data=null;notes=[];goals=[];state=null;noteCursor=null;pending=false;open=false;newRecord=crypto.randomUUID();newNote=crypto.randomUUID();element.replaceChildren();status.textContent='';guard.replaceChildren();guard.hidden=true;}
+  function clear(){epoch++;review.clear();data=null;notes=[];goals=[];state=null;noteCursor=null;pending=false;open=false;newRecord=crypto.randomUUID();newNote=crypto.randomUUID();element.replaceChildren();status.textContent='';guard.replaceChildren();guard.hidden=true;onChange(null);}
   function capture(){return new Map(dirty().map(f=>[f.dataset.key,[...f.elements].filter(e=>e.name).map(e=>({name:e.name,value:e.value,checked:e.checked}))]));}
   function form(key){const f=el('form',undefined,{'data-key':key});f.__epoch=epoch;f.oninput=()=>{f.dataset.dirty='true';};f.onchange=()=>{f.dataset.dirty='true';};return f;}
   function input(f,label,name,type='text',value='',required=false){const wrap=el('label',label),n=el(type==='textarea'?'textarea':type==='select'?'select':'input',undefined,{name,...type==='textarea'?{rows:'3'}:type==='select'?{}:{type}});if(required)n.required=true;if(type==='number'){n.min='0';n.max=name==='minutes'?'180':'100';n.step='1';}if(type==='date'){n.min='2000-01-01';n.max=data?.policy.todayJst||'';}if(type!=='select')n.value=value??'';wrap.append(n);f.append(wrap);return n;}
@@ -56,7 +56,7 @@
    review.capture(skip);const drafts=capture();if(skip)drafts.delete(skip);element.replaceChildren(guard,status);const outer=fold(headings.main,'data-record-panel');outer.d.open=open;element.append(outer.d);
    outer.body.append(el('p','実施記録とメモは本人にだけ表示されます。'),el('p','タイマーの終了だけで、実施済みや効果ありとは判定しません。'));
    const read=el('button','記録と目標の状態を読み込みます',{type:'button','data-record-load':''});read.onclick=()=>allowLeave(()=>void load(true));outer.body.append(read);
-   if(!data){if(state)outer.body.append(el('p','保存した予定があります。記録を読み込んで確認してください。'));return;}
+   if(!data){if(state)outer.body.append(el('p','保存した予定があります。記録を読み込んで確認してください。'));onChange(overview());return;}
    const goalSelect=el('select',undefined,{'data-practice-goal':'','aria-label':'予定に関連付ける目標'});goalSelect.append(el('option','目標は関連付けません',{value:''}));for(const g of goals)goalSelect.append(el('option',g.action,{value:g.goalId}));outer.body.append(el('p','提案された練習は、上の「この内容で実施します」から予定として保存できます。'),goalSelect);
    if(data.active){outer.body.append(el('h3',headings.practice),resultForm(data.active));}
    for(const r of data.items){const d=fold((r.occurredDate||'日付未取得')+'：'+r.items.map(i=>i.title).join('／'));d.body.append(resultForm(r));outer.body.append(d.d);}
@@ -69,6 +69,20 @@
     nf.__save=()=>nf.reportValidity()?save(nf,'/api/kp/coach/notes',{id:n.id,op:n.version?'update':'create',expectedVersion:n.version,title:title.value,body:body.value,recordId:parent.value||null}):Promise.resolve(false);nf.onsubmit=e=>{e.preventDefault();void nf.__save();};nf.append(el('button',n.version?'メモの修正を保存します':'個人メモを保存します',{type:'submit'}));if(n.version){const del=el('button','このメモを削除します',{type:'button','data-note-delete':n.id});del.onclick=()=>void save(nf,'/api/kp/coach/notes',{id:n.id,op:'delete',expectedVersion:n.version});nf.append(del);}memo.body.append(nf);if(n.version&&data.policy.matchLinksAvailable){const current=epoch;review.mount({host:memo.body,record:n,kind:'note',form,save,request,isCurrent:()=>current===epoch});}}
    if(noteCursor){const more=el('button','前のメモを読み込みます',{type:'button','data-note-more':''});more.onclick=async()=>{if(pending)return;pending=true;const current=epoch;try{const r=await request('/api/kp/coach/notes?cursor='+encodeURIComponent(noteCursor));if(current!==epoch)return;const ids=new Set(notes.map(n=>n.id));notes.push(...r.items.filter(n=>!ids.has(n.id)));noteCursor=r.nextCursor;render();}catch(e){if(current===epoch)status.textContent=e.message;}finally{if(current===epoch)pending=false;}};memo.body.append(more);}outer.body.append(memo.d);
    for(const form of element.querySelectorAll('form')){const values=drafts.get(form.dataset.key);if(!values)continue;for(const v of values){const n=[...form.elements].find(n=>n.name===v.name);if(n){n.value=v.value;if(n.type==='checkbox')n.checked=v.checked;}}form.dataset.dirty='true';for(let d=form.closest('details');d&&element.contains(d);d=d.parentElement.closest('details'))d.open=true;}
+   onChange(overview());
+  }
+  const overview=()=>({loaded:!!data,active:data?data.active:state?.status==='planned'?state:null,latest:data?.items?.[0]||null,recordNotes:data?.items?.[0]?notes.filter(n=>n.recordId===data.items[0].id).map(n=>({title:n.title,body:n.body})):[]});
+  async function openRecord(id,showReview=false){
+   allowLeave(async()=>{
+    if(!data&&!await load())return;
+    open=true;render();
+    const f=id?[...element.querySelectorAll('[data-record-form]')].find(n=>n.dataset.recordForm===id):null;
+    let target=f||element.querySelector('[data-record-panel]');
+    for(let d=target?.closest('details');d&&element.contains(d);d=d.parentElement?.closest('details'))d.open=true;
+    if(showReview&&f){const review=f.parentElement?.querySelector('[data-practice-review]');if(review){review.open=true;target=review;review.querySelector('[data-review-load]')?.click();}}
+    target?.scrollIntoView({block:'start',behavior:'auto'});
+    (showReview?target?.querySelector('[data-review-load]'):target?.querySelector('select,button'))?.focus({preventScroll:true});
+   });
   }
   async function savePlan(ids,context={}){
    const current=epoch;open=true;if(!data&&!await load())return false;if(current!==epoch||pending)return false;
@@ -77,7 +91,7 @@
    const f=form('plan');element.append(f);const selected=element.querySelector('[data-practice-goal]')?.value,g=goals.find(g=>g.goalId===selected);
    return save(f,'/api/kp/coach/practice/records',{id:crypto.randomUUID(),op:'create',expectedVersion:0,items:ids.map(practiceId=>({practiceId})),catalogVersion,goal:g?{id:g.goalId,version:g.version}:null,context:{map:context.map||''},status:'planned',execution:null,occurredDate:null,reflection:''});
   }
-  return {element,clear,allowLeave,isDirty:()=>dirty().length>0,setState(v){state=v;render();},savePlan};
+  return {element,clear,allowLeave,isDirty:()=>dirty().length>0,setState(v){state=v;render();},savePlan,openRecord,overview};
  }
  root.KesoCoachRecords=Object.freeze({create,headings});
 })(globalThis);
