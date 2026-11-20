@@ -95,8 +95,8 @@ test('input is capped, quality exposes the limit, malformed players are rejected
 test('read-only rendering requires a trusted DTO and never performs fetch, storage or HTML injection',()=>{
  const renderer=readFileSync(new URL('../coach/team-metrics-view.js',import.meta.url),'utf8');
  const calc=readFileSync(new URL('../coach/team-metrics.js',import.meta.url),'utf8');
- assert.doesNotMatch(renderer,/\\bfetch\\s*\\(|XMLHttpRequest|localStorage|sessionStorage|innerHTML\\s*=|sendBeacon/);
- assert.doesNotMatch(calc,/\\bfetch\\s*\\(|XMLHttpRequest|localStorage|sessionStorage|\\bprepare\\s*\\(|sendBeacon/);
+ assert.doesNotMatch(renderer,/\bfetch\s*\(|XMLHttpRequest|localStorage|sessionStorage|innerHTML\s*=|sendBeacon/);
+ assert.doesNotMatch(calc,/\bfetch\s*\(|XMLHttpRequest|localStorage|sessionStorage|\bprepare\s*\(|sendBeacon/);
  assert.match(renderer,/textContent=text/);
  assert.match(renderer,/font-size:16px;line-height:1.9/);
  assert.match(renderer,/同じ味方チームにいたことだけで/);
