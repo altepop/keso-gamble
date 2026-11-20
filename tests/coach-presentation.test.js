@@ -79,3 +79,10 @@ test('private record headings and cache URL are explicit, with no browser persis
  assert.ok(html.includes('records.js?v=coach-'+createHash('sha256').update(code).digest('hex').slice(0,12)));
  assert.doesNotMatch(code,/\b(?:localStorage|sessionStorage)\b|innerHTML\s*=|\bfetch\s*\(/);
 });
+
+test('private observation headings, content address and no persistent drafts or direct network/copy HTML',()=>{
+ const code=readFileSync(new URL('../coach/practice-review.js',import.meta.url),'utf8'),context={};vm.runInNewContext(code,context);
+ for(const heading of Object.values(context.KesoCoachPracticeReview.headings))assert.match(heading,/(ます|です)$/);
+ assert.ok(html.includes('practice-review.js?v=coach-'+createHash('sha256').update(code).digest('hex').slice(0,12)));
+ assert.doesNotMatch(code,/\b(?:localStorage|sessionStorage)\b|innerHTML\s*=|\bfetch\s*\(/);
+});

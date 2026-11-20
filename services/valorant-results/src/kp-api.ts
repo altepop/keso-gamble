@@ -1,3 +1,4 @@
+import {practiceMatches,savePracticeMatch,practiceReview,ownPracticeRow} from './coach-practice-review.ts';
 import {readPrivateRecords,savePrivateRecord,readPrivateBody,privatePracticeState,PrivateRecordError} from './coach-private-records.ts';
 import {readPveBuild,savePveBuild} from './duel-pve-build.ts';
 import {duelRewardProfile} from './duel-rewards.ts';
@@ -426,6 +427,17 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping,deferP
   const coachOwner=mapping.accounts.some(a=>a.discordUserId===owner.user&&a.riotId.toLowerCase()==='dolly#sdgs');
   const memberHistoryOwner=mapping.accounts.some(a=>a.discordUserId===owner.user&&
     ['aquatopia#toppy','abema#ttv','dolly#sdgs'].includes(a.riotId.toLowerCase()));
+  if((request.method==='GET'&&['/api/kp/coach/practice/matches','/api/kp/coach/practice/review'].includes(path))||(request.method==='POST'&&path==='/api/kp/coach/practice/match')){
+    const identity=await resolveCoachIdentity(env.DB,mapping,owner.user);
+    if(identity.status!=='linked')return response({error:'本人のアカウント対応を確認してください。'},identity.status==='conflict'?409:404);
+    try{
+      const q=new URL(request.url).searchParams;
+      if(request.method==='POST')return response(await savePracticeMatch(env.DB,mapping.guildId,identity,await readPrivateBody(request)));
+      const privateRow=await ownPracticeRow(env.DB,mapping.guildId,identity,q.get('record')??'',path.endsWith('/matches')?(q.get('kind')??'record'):'record');
+      if(await d1OptionalMode(env))return response({error:'D1節約モード中です。記録やメモの保存は利用できます。観察は時間を置いて確認してください。'},429);
+      return response(path.endsWith('/matches')?await practiceMatches(env.DB,mapping.guildId,identity,q.get('record')??'',q.get('kind')??'record',q.get('cursor'),Date.now(),privateRow):await practiceReview(env.DB,mapping.guildId,identity,q.get('record')??'',q.get('previous'),Date.now(),privateRow));
+    }catch(e){if(e instanceof PrivateRecordError)return response({error:e.message},e.status);throw e;}
+  }
   if(['/api/kp/coach/practice/records','/api/kp/coach/notes'].includes(path)&&(request.method==='GET'||request.method==='POST')){
     const identity=await resolveCoachIdentity(env.DB,mapping,owner.user);
     if(identity.status!=='linked')return response({error:'本人のアカウント対応を確認してください。'},identity.status==='conflict'?409:404);
