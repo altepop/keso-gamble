@@ -11,7 +11,7 @@ import {escalationRatingView} from './escalation-rating.ts';
 import {festivalTerms,publicFestivalResponse} from './race-festival.ts';
 import {personalVerifiedRelicStats} from './relic-economy.ts';
 import {hoyoApi} from './hoyo.ts';
-import {boardDuelApi} from './board-duels.ts';
+import {boardDuelApi,boardDuelParticipantPreview} from './board-duels.ts';
 import {serverPveApi} from './duel-pve-sessions.ts';
 import {steamApi,steamCallback} from './steam-auth.ts';
 import {guildVerifiedRelicStats} from './relic-guild-stats.ts';
@@ -520,6 +520,20 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping,deferP
     if(result==='not_opted_in')return response({error:'過去に許可された補完設定がない。管理者による初回設定が必要だ。'},409);
     invalidateCoachRoundReport(env.DB);
     return response({status:result,note:'既存の5分間隔で、保存済みVDK競技試合のみを補完する。'});
+  }
+  if(path==='/api/kp/duels/spectator-preview'){
+    // Authenticated owner session and verified guild mapping already required above.
+    // Participant-only; never a public spectating endpoint.
+    if(request.method!=='GET')return response({error:'未対応の操作です。'},405);
+    const query=new URL(request.url).searchParams;
+    const id=query.get('id')??'';
+    const revision=query.get('version');
+    if(revision!==null&&!/^(0|[1-9][0-9]{0,9})$/.test(revision))return response({error:'更新番号が不正です。'},400);
+    try{
+      return response(await boardDuelParticipantPreview(env,mapping.guildId,owner.user,id,revision===null?null:Number(revision)));
+    }catch{
+      return response({error:'対象の試合は参照できません。'},404);
+    }
   }
   if(request.method==='GET'&&path==='/api/kp/duels/events'){
    // The same Bearer KP session and member authorization above protect this

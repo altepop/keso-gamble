@@ -1,4 +1,6 @@
 import type {KpEnv,KpMapping} from './kp.ts';
+import {spectatorPublicSnapshot} from './duel-spectator-public.ts';
+import {compareSpectatorRevision} from './duel-spectator-admission.ts';
 import {debtOf} from './kp-debt.ts';
 // @ts-expect-error Pure shared ledger verifier, independently covered by node:test.
 import {checkDuelLedger} from '../../../js/duel-kp-audit.js';
@@ -155,6 +157,16 @@ async function verifyDuelLedger(env:KpEnv,match:BoardDuel){
   const verdict=checkDuelLedger(match,rows);
   if(!verdict.ok)console.error('duel-ledger-integrity-anomaly',JSON.stringify({duel:match.id,problems:verdict.problems}));
  }catch(error){console.error('duel-ledger-audit-unavailable',match.id,String(error));}
+}
+/** Authenticated participant-only preview. This is NOT third-party spectating.
+ * No public policy, subscription, polling cadence or Discord sharing is enabled.
+ * The private row is projected through P10.1 allowlist before leaving this module.
+ */
+export async function boardDuelParticipantPreview(env:KpEnv,guild:string,user:string,id:string,seenVersion:number|null){
+ await ensureBoardDuels(env);
+ const match=await room(env,guild,id,user);
+ const snapshot=spectatorPublicSnapshot(match);
+ return compareSpectatorRevision(snapshot,seenVersion);
 }
 async function present(env:KpEnv,mapping:KpMapping,user:string,id:string){
  return room(env,mapping.guildId,id,user);
