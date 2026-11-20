@@ -50,12 +50,29 @@ export async function auditCoachTeamConsents(directory,env=process.env,request=f
  if(values.invalid||values.challenges>1||values.revisions<values.challenges||
   values.selfReports>5)throw Error('PDCA invariants invalid');
  output.pdca={challenges:values.challenges,revisions:values.revisions,selfReports:values.selfReports,invalid:values.invalid};
+ const noticeSql=`SELECT
+ (SELECT COUNT(*) FROM coach_team_notice_preferences WHERE guild=?) AS preferences,
+ (SELECT COUNT(*) FROM coach_team_notice_preferences WHERE guild=? AND enabled=1) AS userOptIns,
+ (SELECT COUNT(*) FROM coach_team_notice_channels WHERE guild=?) AS channels,
+ (SELECT COUNT(*) FROM coach_team_notice_channels WHERE guild=? AND enabled=1) AS activeChannels`;
+ const nr=await request('https://api.cloudflare.com/client/v4/accounts/'+env.CLOUDFLARE_ACCOUNT_ID+
+ '/d1/database/'+b.database_id+'/query',{method:'POST',headers:{
+ Authorization:'Bearer '+env.CLOUDFLARE_API_TOKEN,'Content-Type':'application/json'},
+ body:JSON.stringify({sql:noticeSql,params:[guild,guild,guild,guild]}),signal:AbortSignal.timeout(30000)});
+ if(!nr.ok)throw Error('Coach team notice audit HTTP '+nr.status);
+ const nd=await nr.json();if(!nd.success||!nd.result?.[0]?.success)throw Error('Coach team notice audit query failure');
+ const row=nd.result[0].results?.[0]??{};
+ for(const k of ['preferences','userOptIns','channels','activeChannels'])
+  if(!Number.isSafeInteger(row[k])||row[k]<0)throw Error('Invalid team notice count');
+ if(row.preferences>5||row.userOptIns>row.preferences||row.channels>1||
+  row.activeChannels>row.channels)throw Error('Team notice policy invariant violation');
+ output.notice={preferences:row.preferences,userOptIns:row.userOptIns,channels:row.channels,activeChannels:row.activeChannels};
  return output;
 }
 export async function probeCoachTeamConsents(request=fetch){
  const url='https://valorant-results.tealeaforest.workers.dev/api/kp/coach/team/';
  const routes=[];
- for(const path of ['consent','roster','metrics','pdca','challenge','status']){
+ for(const path of ['consent','roster','metrics','pdca','challenge','status','notification']){
   for(const origin of ['https://altepop.github.io','https://forbidden.example']){
    const result=await request(url+path,{headers:{Origin:origin},signal:AbortSignal.timeout(15000)});
    await result.text();
@@ -67,7 +84,7 @@ export async function probeCoachTeamConsents(request=fetch){
  const result=await request(url+'consent',{method:'POST',headers:{Origin:'https://altepop.github.io','Content-Type':'application/json'},body:'{}',signal:AbortSignal.timeout(15000)});
  await result.text();
  if(result.status!==401)throw Error('Team consent mutation unauth boundary mismatch');
- for(const path of ['challenge','status']){
+ for(const path of ['challenge','status','notification']){
   const denied=await request(url+path,{method:'POST',headers:{Origin:'https://altepop.github.io','Content-Type':'application/json'},body:'{}',signal:AbortSignal.timeout(15000)});
   await denied.text();if(denied.status!==401)throw Error('PDCA unauthenticated mutation accepted');
  }
