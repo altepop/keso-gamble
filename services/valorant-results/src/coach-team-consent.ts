@@ -30,7 +30,7 @@ async function parse(request:Request){
  let length=0;const blocks:Uint8Array[]=[];
  try{for(;;){const r=await reader.read();if(r.done)break;length+=r.value.length;if(length>1024){await reader.cancel();throw new CoachTeamError('入力は1 KiB以内にしてください。',413);}blocks.push(r.value);}}finally{reader.releaseLock();}
  const bytes=new Uint8Array(length);let at=0;for(const part of blocks){bytes.set(part,at);at+=part.length;}
- let b:any;try{b=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(bytes));}catch{throw new CoachTeamError('入力形式を確認してください。',400);}
+ let b:any;try{b=JSON.parse(new TextDecoder('utf-8',{fatal:true,ignoreBOM:false}).decode(bytes));}catch{throw new CoachTeamError('入力形式を確認してください。',400);}
  if(!b||typeof b!=='object'||Array.isArray(b)||Object.keys(b).length!==4||
   Object.keys(b).some(k=>!['joined','shareStatus','shareMetrics','expectedVersion'].includes(k))||
   typeof b.joined!=='boolean'||typeof b.shareStatus!=='boolean'||typeof b.shareMetrics!=='boolean'||
@@ -62,7 +62,7 @@ export async function saveCoachTeamConsent(db:D1Database,guild:string,identity:L
 }
 export async function coachTeamRoster(db:D1Database,mapping:KpMapping,viewer:Linked,user:string){
  const guild=mapping.guildId,own=await row(db,guild,viewer,user);
- if(!own||own.joined!==1)hidden();
+ if(!own||own.joined!==1)throw new CoachTeamError();
  const rows=(await db.prepare(`SELECT c.subject_id,c.owner_user,c.joined,c.share_status,c.share_metrics,c.version,c.updated_at,
  p.display_name FROM coach_team_consents c JOIN coach_profiles p
  ON p.guild=c.guild AND p.subject_id=c.subject_id AND p.owner_user=c.owner_user
@@ -80,7 +80,7 @@ export async function coachTeamRoster(db:D1Database,mapping:KpMapping,viewer:Lin
  }
  // Revalidate viewer membership and ownership immediately before returning.
  const latest=await resolveCoachIdentity(db,mapping,user);
- if(latest.status!=='linked'||latest.subjectId!==viewer.subjectId)hidden();
+ if(latest.status!=='linked'||latest.subjectId!==viewer.subjectId)throw new CoachTeamError();
  const current=await row(db,guild,latest,user);
  if(!current||current.version!==own.version||current.joined!==1)hidden();
  return {team:'確認済みコーチロスター',members,participantCount:members.length,
