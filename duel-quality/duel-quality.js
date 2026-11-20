@@ -787,7 +787,22 @@ function enhance(root) {
     const detail=document.createElement('p');detail.textContent=info.message;
     notice.replaceChildren(title,detail);
   }
+  function scanPveEntry(){
+    // The separately authenticated PvE page is not a wallet operation.
+    // Link only from the main Activity's duel screen, never the mock demo.
+    if(root.id!=='app')return;
+    const entry=root.querySelector('.duel-practice-entry');
+    if(!entry||entry.querySelector('[data-duel-pve-link]'))return;
+    const link=document.createElement('a');
+    link.href='./duel-pve.html';
+    link.className='action-btn primary';
+    link.dataset.duelPveLink='1';
+    link.textContent='サーバーCPU攻略（PvE）を開く';
+    link.setAttribute('aria-label','サーバーが勝敗を確定するPvE攻略画面を開く');
+    entry.prepend(link);
+  }
   function scan() {
+    scanPveEntry();
     scanBeginnerRules();
     scanGameInsights();
     scanHistoryReview();
