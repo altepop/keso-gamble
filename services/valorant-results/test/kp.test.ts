@@ -10,7 +10,7 @@ import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import {readFileSync,readdirSync}from'node:fs';
 import {generateKeyPairSync,randomBytes,createCipheriv,publicEncrypt}from'node:crypto';
-import {initializeKp,syncKpAccounts,collectKpMatch,drainKpInbox,issueKpCode,exchangeKpCode,kpSession,decryptKpMapping,kpCreditLine,createKpSession,prepareKpRun,loadKpRunMatch,kpEventId,kpSchemaVersion,kpRelicBonus}from'../src/kp.ts';
+import {initializeKp,syncKpAccounts,collectKpMatch,drainKpInbox,issueKpCode,exchangeKpCode,kpSession,decryptKpMapping,kpCreditLine,createKpSession,prepareKpRun,loadKpRunMatch,preloadKpRunMatches,kpEventId,kpSchemaVersion,kpRelicBonus}from'../src/kp.ts';
 import type{KpEnv,KpMapping}from'../src/kp.ts';
 import {readKpState,operateKp,kpApi}from'../src/kp-api.ts';
 const guild='100000000000000100',one='100000000000000101',two='100000000000000102';
@@ -90,6 +90,39 @@ test('issue #522: cross-cron KP SQL reads are counted and late ledger/notice upd
  assert.equal(second.messages.get(id),'Issue 522 revised notice');
  assert.equal(first.credits.get(id),900,'the first cron snapshot remains unchanged');
  assert.equal(f.sql.prepare("SELECT COUNT(*) AS n FROM kp_ledger WHERE kind='match'").get()!.n,1,'no double credit');
+});
+
+test('issue #522: batch fresh cross-cron receipts cut joined calls without hiding late changes',async()=>{
+ const f=await fixture();f.enableHistory();
+ for(const id of ['issue522-batch-a','issue522-batch-b','issue522-batch-c'])
+  assert.equal(await collectKpMatch(f.env,mapping,game(id),'p-one'),900);
+ const ids=['issue522-batch-a','issue522-batch-b','issue522-batch-c','issue522-absent']
+  .map(id=>kpEventId(guild,id,'p-one'));
+ const calls:string[]=[];
+ const base=f.env.DB.prepare.bind(f.env.DB);
+ f.env.DB.prepare=((sql:string)=>{
+  if(sql.includes('FROM kp_events e')&&sql.includes('LEFT JOIN kp_escalation_power_matches'))calls.push(sql);
+  return base(sql);
+ }) as typeof f.env.DB.prepare;
+ const first=await prepareKpRun(f.env,mapping);
+ await preloadKpRunMatches(f.env,first,ids);
+ assert.equal(calls.length,1,'four indexed receipts share one SQL call');
+ for(const id of ids)await loadKpRunMatch(f.env,first,id);
+ assert.equal(calls.length,1,'individual access must reuse prefetched data including misses');
+ assert.equal(first.credits.has(ids[3]),false);
+ assert.equal(first.credits.get(ids[0]),900);
+ f.sql.prepare('INSERT INTO kp_ledger(id,guild,user,delta,kind,at) VALUES(?,?,?,?,?,?)')
+  .run('relic:'+ids[0],guild,one,25,'relic',Date.now());
+ f.sql.prepare('INSERT INTO notifications(riot_id,match_id,message,ended_at,mode,sent) VALUES(?,?,?,?,?,1)')
+  .run('One#JP1','issue522-batch-a','late notice',Date.now(),'competitive');
+ const second=await prepareKpRun(f.env,mapping);
+ await preloadKpRunMatches(f.env,second,ids);
+ assert.equal(calls.length,2,'new cron must reload all durable state in one fresh SQL call');
+ assert.equal(second.credits.get(ids[0]),925);
+ assert.equal(second.relicBonuses.get(ids[0]),25);
+ assert.equal(second.messages.get(ids[0]),'late notice');
+ assert.equal(first.credits.get(ids[0]),900,'old snapshot must remain unchanged');
+ assert.equal(f.sql.prepare("SELECT COUNT(*) AS n FROM kp_ledger WHERE kind='match'").get()!.n,3,'no duplicate match credits');
 });
 
 test('schema version cold check reads one exact key and handles only missing kp_settings',async()=>{
