@@ -35,3 +35,11 @@ test('malformed collection input fails closed without throwing',()=>{
     assert.deepEqual(projectTeamRoster([member],invalid),[]);
   }
 });
+
+test('duplicate or contradictory scoped consent fails closed',()=>{
+  assert.deepEqual(projectTeamRoster([member],[consent,consent]),[]);
+  assert.deepEqual(projectTeamRoster([member],[consent,{...consent,shareTeamStatus:false}]),[]);
+  assert.deepEqual(projectTeamRoster([member],[{...consent,shareTeamStatus:false},consent]),[]);
+  assert.deepEqual(projectTeamRoster([member],[{...consent,shareTeamStatus:'true'}]),[]);
+  assert.deepEqual(projectTeamRoster([member],[consent,{...consent,teamId:'other'}]),[{displayName:'Player',status:'取り組み中'}]);
+});
