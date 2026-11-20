@@ -37,7 +37,8 @@ test('one SQL statement admits only one of two competing due claims',async()=>{
   ]);
   assert.deepEqual(results.map(r=>r?.attempts??null).sort(),[1,null].sort());
   const r=sqlite.prepare('SELECT state,attempts FROM coach_team_notice_outbox').get() as {state:string;attempts:number};
-  assert.deepEqual(r,{state:'claimed',attempts:1});
+  assert.equal(r.state,'claimed');
+  assert.equal(r.attempts,1);
  }finally{sqlite.close();}
 });
 test('consent revoked, stale version, channel disabled and extra member prevent claim',async()=>{
