@@ -542,7 +542,7 @@ const a='[data-demo-view=a]',b='[data-demo-view=b]';
  assert.match(await pvePage.locator('#pve-root').innerText(),/KP口座/);
  for(const game of ['othello','gomoku','connect4','hitblow','bluffdice','poker']){
   await pvePage.evaluate(async mode=>{
-   const {pvePanel,duelRewardPanel}=await import('./duel-pve/view.js?v=p95');
+   const {pvePanel,duelRewardPanel,pveBuildPanel}=await import('./duel-pve/view.js?v=p95-build');
    const board=mode==='othello'?'.'.repeat(27)+'WB'+'.'.repeat(6)+'BW'+'.'.repeat(27):
     mode==='gomoku'?'.'.repeat(225):mode==='connect4'?'.'.repeat(42):
     mode==='hitblow'?JSON.stringify({history:[],turn:'a'}):
@@ -552,10 +552,11 @@ const a='[data-demo-view=a]',b='[data-demo-view=b]';
     mode==='bluffdice'?{kind:mode,value:[1,2,3,4,5]}:
     mode==='poker'?{kind:mode,value:[0,6,12,18,24]}:null;
    const rewardProfile={enabled:[],collection:[{mode:'pve',game:mode}],skills:[]};
+   const build=[{game:mode,style:'attack'}];
    document.querySelector('#pve-root').innerHTML=pvePanel({
     match:{game:mode,level:'normal',board,ownHand,turn:'human',winner:null,version:0},
-    connected:true,rewardProfile
-   })+duelRewardPanel(rewardProfile);
+    connected:true,build
+   })+pveBuildPanel(rewardProfile,build,false,'')+duelRewardPanel(rewardProfile);
    document.querySelectorAll('.duel-reward-panel details').forEach(panel=>{panel.open=true;});
   },game);
   for(const width of [375,390]){
@@ -563,7 +564,7 @@ const a='[data-demo-view=a]',b='[data-demo-view=b]';
    assert.equal(await pvePage.locator('.duel-pve-panel').isVisible(),true,'PvE panel '+game);
    assert.equal(await pvePage.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'PvE no overflow '+game+' '+width);
    assert.match(await pvePage.locator('.duel-pve-status').innerText(),/あなたの手番/);
-   assert.equal(await pvePage.getByText('攻略遺物のヒント',{exact:true}).isVisible(),true);
+   assert.equal(await pvePage.getByText('攻略遺物のヒント（攻め）',{exact:true}).isVisible(),true);
    assert.equal(await pvePage.locator('.duel-reward-panel li:visible').count(),12);
   }
   if(shotDir){
