@@ -22,11 +22,10 @@ function publicMetrics(result:any){
  return {scope:'consented-team-only',ruleVersion:'party-verified-v1',
   overall:summary(result.overall),
   maps:result.maps.map((m:any)=>({map:m.map,...summary(m)})),
-  quality:{inspectedMatches:result.quality.inspectedMatches,
-   eligibleMatches:result.quality.eligibleMatches,excludedMatches:result.quality.excludedMatches,
-   inputLimit:result.quality.inputLimit,limitReached:result.quality.limitReached},
+  // Scanned/excluded counts include unrelated solo games: never reveal them to teammates.
+  quality:{eligibleMatches:result.overall.matches},
   positionBasedTradeDistance:'評価範囲外',
-  note:'確認済みの同一パーティ試合のみです。未取得・判定不能は「まだ分かりません」です。'};
+  note:'直近90日・最大250件の候補から、確認済みの同一パーティ試合のみを表示します。候補や個人のソロ試合数は共有しません。'};
 }
 async function permitted(db:D1Database,mapping:KpMapping){
  return (await db.prepare(`SELECT c.subject_id,c.owner_user,c.version,c.joined,c.share_metrics
