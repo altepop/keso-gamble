@@ -9,7 +9,7 @@ export type CoachNoticeGate={
 export const COACH_NOTICE_COOLDOWN_MS=15*60*1000;
 export function canQueueCoachNotice(g:CoachNoticeGate):boolean{
   if(!g.enabled||!g.joined||!g.channelEnabled||!g.adminSignatureVerified)return false;
-  if(!/^\\d{15,22}$/.test(g.channelId))return false;
+  if(!/^\d{15,22}$/.test(g.channelId))return false;
   if(!Number.isSafeInteger(g.consentVersion)||g.consentVersion<1||
     g.preferenceConsentVersion!==g.consentVersion)return false;
   if(g.event==='status'&&!g.shareStatus)return false;
