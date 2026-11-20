@@ -8,7 +8,7 @@
  * an aborted move/payout cannot leave behind a skill receipt.
  */
 import type {KpEnv} from './kp.ts';
-import {ensureDuelProgressionTables} from './duel-progression-schema.ts';
+import {ensureDuelRewards} from './duel-rewards.ts';
 
 export const DUEL_PVP_FINALIZATION_TRIGGERS=[
  `CREATE TRIGGER IF NOT EXISTS kp_duel_pvp_skill_apply
@@ -68,7 +68,7 @@ export async function ensureVerifiedPvpProgression(env:Pick<KpEnv,'DB'>):Promise
  const existing=initialized.get(db);
  if(existing)return existing;
  const work=(async()=>{
-  await ensureDuelProgressionTables(env);
+  await ensureDuelRewards(env);
   for(const ddl of DUEL_PVP_FINALIZATION_TRIGGERS)await db.prepare(ddl).run();
  })();
  initialized.set(db,work);

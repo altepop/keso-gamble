@@ -1,3 +1,4 @@
+import {DUEL_REWARD_DDL} from '../src/duel-rewards.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
@@ -106,6 +107,6 @@ test('trigger installation is idempotent for the same server D1 handle',async()=
   const env={DB:{prepare(sql:string){return {run:async()=>{ddlRuns++;db.exec(sql);}};}}};
   await Promise.all([ensureVerifiedPvpProgression(env as never),ensureVerifiedPvpProgression(env as never)]);
   await ensureVerifiedPvpProgression(env as never);
-  assert.equal(ddlRuns,DUEL_PROGRESSION_DDL.length+DUEL_PVP_FINALIZATION_TRIGGERS.length);
+  assert.equal(ddlRuns,DUEL_PROGRESSION_DDL.length+DUEL_REWARD_DDL.length+DUEL_PVP_FINALIZATION_TRIGGERS.length);
  }finally{db.close();}
 });
