@@ -332,6 +332,11 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: npm run deploy -- --keep-vars
+      - name: Synchronize only the VDK coaching /valo command (no command bulk overwrite)
+        working-directory: ${{ runner.temp }}/kp-app/services/valorant-results
+        env:
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+        run: node scripts/sync-valo-command.mjs
       - name: Update existing Discord Activity entry point after successful Worker deploy
         working-directory: ${{ runner.temp }}/kp-app/services/valorant-results
         env:

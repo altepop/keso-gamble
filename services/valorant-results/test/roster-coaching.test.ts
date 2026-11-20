@@ -1,0 +1,122 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {analyzeArchivedCoaching,archivedCoachingReport,type ArchivedCoachingRow} from '../src/roster-coaching.ts';
+import {valoCommand} from '../src/valo-command.ts';
+import {runValoCommand} from '../src/valo-queries.ts';
+
+const member=(name:string,tag:string,puuid:string,team_id:string,party_id:string|null,k=10,d=10,a=5)=>
+ ({name,tag,puuid,team_id,party_id,k,d,a});
+const make=(match_id:string,outcome:ArchivedCoachingRow['outcome'],players:object[],map='Corrode'):ArchivedCoachingRow=>
+ ({match_id,outcome,map,players_json:JSON.stringify(players)});
+const rows=[
+  make('1','win',[
+    member('Dolly','SDGs','vdk','red','squad',15,12,4),
+    member('Abema','ttv','abema-id','red','squad',20,14,6),
+    member('h1d3g1g4s','1037','h1','red','squad'),
+  ]),
+  make('2','loss',[
+    member('Dolly','SDGs','vdk','blue',null,8,17,3),
+    member('Renamed','AAA','abema-id','blue',null,12,15,4),
+    member('Other','JP1','else','red','enemy'),
+  ],'Lotus'),
+  make('3','draw',[member('Dolly','SDGs','vdk','blue','solo',10,10,5)],'Abyss'),
+];
+test('restored trio uses stable PUUID, never assumes missing party is solo',()=>{
+ const x=analyzeArchivedCoaching(rows,'Dolly#SDGs','vdk','Abema#ttv');
+ assert.equal(x.analyzed,3);
+ assert.deepEqual(x.overall,{win:1,loss:1,draw:1});
+ assert.deepEqual(x.partySizes,{'3':1,unknown:1,'1':1});
+ assert.deepEqual(x.partner?.withTeam,{win:1,loss:1,draw:0});
+ assert.equal(x.partner?.partyGames,1);
+ assert.equal(x.partner?.unknownPartyGames,1);
+ assert.deepEqual(x.partner?.without,{win:0,loss:0,draw:1});
+ assert.equal(x.kd.games,3);
+ assert.equal(x.kd.kills,33);
+ assert.equal(x.maps.length,3);
+});
+test('no guessing when subject not found; duplicate notifications are not double counted',()=>{
+ const x=analyzeArchivedCoaching([...rows,rows[0],make('4','win',[member('Alien','abc','no','red','x')])],
+ 'Dolly#SDGs','vdk');
+ assert.equal(x.totalRows,5);
+ assert.equal(x.analyzed,3);
+ assert.equal(x.missingIdentity,1);
+ assert.equal(x.partySizes['1'],1);
+});
+test('partner on opposing team is not interpreted as same party',()=>{
+ const x=analyzeArchivedCoaching([
+   make('opp','loss',[member('Dolly','SDGs','vdk','a','p'),member('Abema','ttv','abema','b','p')])
+ ],'Dolly#SDGs','vdk','Abema#ttv');
+ assert.equal(x.partner?.teamGames,0);
+ assert.deepEqual(x.partner?.opponent,{win:0,loss:1,draw:0});
+ assert.equal(x.partner?.partyGames,0);
+});
+test('report makes only read-only queries and does not register observer or pay KP',async()=>{
+ const sql:string[]=[];
+ const db={prepare:(stmt:string)=>{
+  sql.push(stmt);
+  assert.match(stmt.trim(),/^SELECT /i);
+  return {bind:(riot:string)=>({
+   first:async()=>{assert.equal(riot,'Dolly#SDGs');return {puuid:'vdk'};},
+   all:async()=>({results:rows}),
+  })};
+ }} as unknown as D1Database;
+ const msg=await archivedCoachingReport(db,'Dolly#SDGs','Abema#ttv');
+ assert.match(msg,/3試合：1勝1敗1分/);
+ assert.match(msg,/Abema#ttv と同チーム：1勝1敗0分/);
+ assert.match(msg,/同一パーティー確認：1試合/);
+ assert.match(msg,/API追加取得・速報・KP付与は行いません/);
+ assert.equal(sql.length,2);
+});
+test('old DB without roster table gets explicit no-data response',async()=>{
+ const db={prepare:(stmt:string)=>({bind:()=>({
+  first:async()=>({puuid:'vdk'}),
+  all:async()=>{throw Error('D1_ERROR: no such table: valorant_match_rosters');}
+ })})} as unknown as D1Database;
+ assert.match(await archivedCoachingReport(db,'Dolly#SDGs'),/まだ利用できません/);
+});
+test('coach is read-only subcommand; partner is free text not a notified roster choice',()=>{
+ const commands=valoCommand([{name:'VDK',riotId:'Dolly#SDGs'}]);
+ const coach=commands.options.find((x:{name:string})=>x.name==='coach');
+ assert.ok(coach);
+ assert.equal(coach.options?.[0].required,false);
+ assert.deepEqual(coach.options?.[1].choices,[]);
+ assert.equal(coach.options?.[1].required,false);
+});
+
+test('VDK coaching compares Abema by default, even without any slash command options',async()=>{
+ const sql:string[]=[];
+ const db={prepare:(stmt:string)=>{sql.push(stmt);return {bind:()=>({
+  first:async()=>({puuid:'vdk'}),
+  all:async()=>({results:rows}),
+ })};}} as unknown as D1Database;
+ const interaction={data:{options:[{type:1,name:'coach',options:[]}]}} as unknown as Parameters<typeof runValoCommand>[1];
+ const players=[{riotId:'Dolly#SDGs',name:'VDK'}] as Parameters<typeof runValoCommand>[2];
+ const report=await runValoCommand(db,interaction,players);
+ assert.match(report,/VDK専用コーチング/);
+ assert.match(report,/Abema#ttv と同チーム：1勝1敗0分/);
+ assert.match(report,/改善検証ポイント/);
+ assert.ok(sql.every(s=>/^SELECT /i.test(s.trim())));
+});
+test('VDK coaching flags a repeatedly losing map for replay review, without asserting causation',()=>{
+ const synthetic=Array.from({length:6},(_,i)=>make('m'+i,'loss',
+  [member('Dolly','SDGs','vdk','red','solo',4,15,2)],'Bind'));
+ const x=analyzeArchivedCoaching(synthetic,'Dolly#SDGs','vdk');
+ assert.equal(x.maps[0].games,6);
+ assert.equal(x.maps[0].result.loss,6);
+ assert.equal(x.partyResults['1'].loss,6);
+ assert.equal(x.recentTen.loss,6);
+});
+
+test('VDK coaching uses observed agent and verified five-player team scores only',()=>{
+ const five=(outcome:ArchivedCoachingRow['outcome'],id:string)=>{
+  const players=[member('Dolly','SDGs','vdk','a','p',13,11,6),...Array.from({length:4},(_,i)=>
+     member('A'+i,'JP1','a'+i,'a','p'))].map((p,i)=>({...p,score:i===0?500:600+i,agent:i===0?'Fade':'Clove'}));
+  return make(id,outcome,[...players,...Array.from({length:5},(_,i)=>({...member('B'+i,'JP1','b'+i,'b','q'),score:300,agent:'Sova'}))]);
+ };
+ const s=analyzeArchivedCoaching([five('win','1'),five('loss','2')],'Dolly#SDGs','vdk');
+ assert.equal(s.agents[0].name,'Fade');
+ assert.deepEqual(s.agents[0].result,{win:1,loss:1,draw:0});
+ assert.equal(s.teamScore.games,2);
+ assert.equal(s.teamScore.topTwo,0);
+ assert.equal(s.teamScore.bottomTwo,2);
+});
