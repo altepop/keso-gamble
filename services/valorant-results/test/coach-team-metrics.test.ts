@@ -44,6 +44,9 @@ test('default deny, viewer must expressly enable metrics and at least one other 
   assert.equal(data.overall.kd.denominator,15);
   assert.equal(data.maps[0].map,'Ascent');
   assert.equal(data.positionBasedTradeDistance,'評価範囲外');
+  assert.deepEqual(data.quality,{eligibleMatches:1});
+  assert.equal(data.quality.excludedMatches,undefined);
+  assert.equal(data.quality.inspectedMatches,undefined);
   const json=JSON.stringify(data);
   assert.doesNotMatch(json,/private-puuid|other-secret|team-party|approved-match|owner_user|subject_id|match_id|players_json|teams_json|personal_notes|goal_id|agent|Viper|discord/i);
   assert.deepEqual(Object.keys(data).sort(),['maps','note','overall','positionBasedTradeDistance','quality','ruleVersion','scope'].sort());
