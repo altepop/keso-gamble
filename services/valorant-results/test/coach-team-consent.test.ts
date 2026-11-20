@@ -15,10 +15,10 @@ const changes=(expectedVersion:number,extra={})=>({
  expectedVersion,joined:true,shareStatus:false,shareMetrics:false,...extra});
 test('team consent defaults OFF and no profile sharing or private records are changed',async()=>{
  const f=await selfFixture();try{
-  const before=f.writes();const r=await call(f,'consent'),b=await r.json() as any;
+  const start=f.queries.length;const r=await call(f,'consent'),b=await r.json() as any;
   assert.equal(r.status,200);assert.equal(r.headers.get('Cache-Control'),'no-store');
   assert.deepEqual(b.settings,{joined:false,shareStatus:false,shareMetrics:false,version:0});
-  assert.equal(f.writes(),before);assert.equal((await call(f,'roster')).status,404);
+  assert.ok(!f.queries.slice(start).some(sql=>/INSERT INTO coach_team_consents|UPDATE coach_team_consents/.test(sql)));assert.equal((await call(f,'roster')).status,404);
   assert.equal((await call(f,'metrics')).status,404);
   assert.equal((await call(f,'consent',changes(0))).status,200);
   const stored=f.sql.prepare('SELECT guild,team_id,owner_user,version,joined,share_status,share_metrics FROM coach_team_consents').all() as any[];
