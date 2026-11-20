@@ -110,3 +110,16 @@ test('team consent UI uses hashed helper URL and only requests aggregate team me
  assert.match(code,/invalidate=\(\)=>/);
  assert.match(code,/expectedVersion:settings.version/);
 });
+
+test('Phase 3-E Discord notice UI never sends messages, persists credentials or renders untrusted markup',()=>{
+ const ui=readFileSync(new URL('../coach/team.js',import.meta.url),'utf8');
+ assert.match(ui,/data-team-notice/);
+ assert.match(ui,/data-notice-load/);
+ assert.match(ui,/data-notice-form/);
+ assert.match(ui,/expectedVersion/);
+ assert.match(ui,/includesPersonalNotes===false/);
+ assert.match(ui,/includesMatchIds===false/);
+ assert.doesNotMatch(ui,/sendBeacon|localStorage|sessionStorage|innerHTML|discord\.com\/api\/webhooks/);
+ const html=readFileSync(new URL('../coach.html',import.meta.url),'utf8');
+ assert.ok(html.includes('team.js?v=coach-'+createHash('sha256').update(ui).digest('hex').slice(0,12)));
+});
