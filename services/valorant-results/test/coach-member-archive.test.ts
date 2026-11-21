@@ -435,3 +435,19 @@ test('pausing stops both discovery and detail acquisition without deleting saved
   await enableAllMemberArchive(f.db);assert.equal((await coachMemberCoverage(f.db)).enabled,true);assert.equal(f.count('coach_member_sources'),6);
  }finally{f.close()}
 });
+
+test('Phase 5 coverage never exposes an unrelated persisted source or its private identifier',async()=>{
+ const f=setup();try{
+  await enableAllMemberArchive(f.db);
+  f.sql.prepare("INSERT INTO coach_member_sources(riot_id,puuid,region,next_page,done,truncated,next_at) VALUES(?,?,?,?,?,?,?)")
+   .run('outsider#private','sensitive-outsider-puuid','ap',2,1,0,0);
+  const coverage=await coachMemberCoverage(f.db);
+  assert.equal(coverage.people.length,COACH_MEMBER_ACCOUNTS.length);
+  assert.ok(coverage.people.every(p=>COACH_MEMBER_ACCOUNTS.some(a=>a.person===p.person)));
+  assert.equal(JSON.stringify(coverage).includes('outsider#private'),false);
+  assert.equal(JSON.stringify(coverage).includes('sensitive-outsider-puuid'),false);
+  const row=f.sql.prepare('SELECT puuid,next_page,done FROM coach_member_sources WHERE riot_id=?')
+   .get('outsider#private') as {puuid:string;next_page:number;done:number};
+  assert.deepEqual({...row},{puuid:'sensitive-outsider-puuid',next_page:2,done:1});
+ }finally{f.close();}
+});
