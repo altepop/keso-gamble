@@ -586,6 +586,7 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   await goals.locator('[role="status"]').filter({hasText:'保存しました'}).waitFor();
   await page.locator('#return-self').click();await page.waitForFunction(()=>document.querySelector('.prototype-top .playerline .name')?.textContent==='神戸');
   await goals.locator('[data-goal-kind="rank"] > summary').click();assert.equal(await goals.locator('select').inputValue(),'diamond3','saved rank survives reloading');
+  await page.locator('[data-full-coach]').evaluate(el=>el.open=true);
   assert.equal(await page.locator('.rankbox .r').first().innerText(),'未取得','target never becomes measured current rank');
   await goals.locator('[data-goal-status="archived"]').click();await goals.locator('[role="status"]').filter({hasText:'保存しました'}).waitFor();
   assert.deepEqual(errors,[]);
