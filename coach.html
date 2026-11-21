@@ -570,10 +570,12 @@
 .coach-loop :focus-visible{outline:3px solid #fff;outline-offset:3px}
 @media(max-width:400px){.coach-loop{padding:16px}.coach-loop-actions{display:grid;grid-template-columns:minmax(0,1fr)}.coach-loop button{width:100%}}
 </style>
+<style>html.coach-embedded [data-coach-back]{display:none}</style>
+<script>if(window.parent!==window && new URLSearchParams(location.search).get("embedded")==="1")document.documentElement.classList.add("coach-embedded");</script>
 </head>
 <body>
 <main class="wrap">
-<p><a href="./" style="display:inline-block;padding:12px 4px;color:#e6f0ff;min-height:44px;font-weight:700">← KESO PLAYに戻る</a></p>
+<p data-coach-back><a href="./" style="display:inline-block;padding:12px 4px;color:#e6f0ff;min-height:44px;font-weight:700">← KESO PLAYに戻る</a></p>
 <header class="tophero" id="coach-welcome">
  <img class="bgimg" src="assets/abyss-splash.png" alt="VALORANTのマップ、アビスの公式アート">
  <div class="shade"></div><div class="diag" aria-hidden="true"></div>
@@ -584,7 +586,7 @@
 <details id="connection" class="coach-disclosure" open><summary>接続してコーチングを確認します <span class="chev" aria-hidden="true">⌄</span></summary><div class="detail-body coach-existing">
 <h2>KP口座へ接続すると分析を確認できます</h2>
 <p class="muted">Discordの <code>/valo coach</code> から「Activityを開く」を押し、KESO PLAYの「コーチ」を選ぶと、Discordの本人認証で接続できます。48桁コードの入力は不要です。同じブラウザーですでにKP口座へ接続済みの場合も自動で認証します。</p>
-<p class="muted"><a href="./" style="color:#e6f0ff">KESO PLAYに戻ってコーチを開く</a></p>
+<p class="muted" data-coach-back><a href="./" style="color:#e6f0ff">KESO PLAYに戻ってコーチを開く</a></p>
 <details><summary>自動接続できない場合の予備手段（接続コード）</summary>
 <p class="muted">通常ブラウザーで自動接続できない場合だけ、<code>/valo status</code> の接続コードを使えます。コードは保存しません。</p>
 <form id="connect-form"><label for="code">接続コード（48桁）</label><div class="actions">
@@ -906,7 +908,9 @@
 const CoachReader=globalThis.KesoCoachReader;
 (()=>{
 'use strict';
-const ROOT='https://valorant-results.tealeaforest.workers.dev';
+// Discord Activities route KP requests through their existing same-origin proxy.
+// Do not call the Worker directly from the Discord embedded browser.
+const ROOT=location.hostname.endsWith('.discordsays.com')?'/.proxy/kp-api':'https://valorant-results.tealeaforest.workers.dev';
 const KEY='keso-coach-session-v1';
 const $=id=>document.getElementById(id);
 const escape=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
