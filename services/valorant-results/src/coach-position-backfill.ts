@@ -27,7 +27,8 @@ export async function backfillCoachPositions(db:D1Database,fetchDetail:(region:s
   LEFT JOIN valorant_match_positions p ON p.match_id=q.match_id
   LEFT JOIN coach_position_backfill b ON b.match_id=q.match_id
   WHERE (q.status='complete' OR (q.status='partial' AND q.attempts>=3)) AND COALESCE(p.has_coordinates,0)=0
-   AND q.source_riot_id IN (${permitted})
+   -- A verified linked cohort member is sufficient even if historical queue
+   -- attribution belongs to an unrelated source. Never fetch via that source.
    AND (b.match_id IS NULL OR (b.status IN ('retry','running') AND b.attempts<3 AND b.next_at<=?))
   ORDER BY q.started_at DESC LIMIT 1`).bind(...COACH_MEMBER_ACCOUNTS.map(p=>p.riotId),...COACH_MEMBER_ACCOUNTS.map(p=>p.riotId),now)
   .first<{match_id:string;region:string;source_puuid:string;started_at:number}>();
