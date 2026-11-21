@@ -194,7 +194,10 @@ export async function fetchNextCoachMemberMatch(db:D1Database,
   WHERE q.status IN ('pending','partial') AND q.next_at<=? AND q.attempts<3
    AND (source.riot_id IS NOT NULL OR NOT EXISTS(
     SELECT 1 FROM coach_member_links l0 WHERE l0.match_id=q.match_id))
-  ORDER BY q.started_at DESC LIMIT 1`)
+  -- Prefer identity-verified linked matches over legacy unlinked rows.
+  -- A missing legacy source must not monopolize a more useful cohort slot.
+  ORDER BY CASE WHEN source.riot_id IS NOT NULL THEN 0 ELSE 1 END,
+   q.started_at DESC LIMIT 1`)
   .bind(...COACH_MEMBER_ACCOUNTS.map(p=>p.riotId),now).first<Candidate>();
  if(!row)return 'idle';
  const complete=await db.prepare(`SELECT
