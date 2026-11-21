@@ -1782,7 +1782,7 @@ const coachTeam=globalThis.KesoCoachTeam.create({request:authenticatedCoachReque
 $('coach-team-host').append(coachTeam.element);
 const coachNotifications=globalThis.KesoCoachNotifications.create({request:authenticatedCoachRequest});
 $('coach-notify-host').append(coachNotifications.element);
-function placeCoachGoals(){const improvement=$('member-result').querySelector('[data-improvement]');if(improvement)improvement.after(coachGoals.element);}
+function placeCoachGoals(){const result=$('member-result');if(result)result.after(coachGoals.element);}
 function clearCoachView(){
  coachRecords.clear();coachSharing.clear();coachTeam.clear();coachNotifications.clear();$('coach-operations').hidden=false;coachGoals.clear();authGeneration++;latestReport=null;latestMemberReport=null;selfIdentity=null;activeMember=null;memberNames=[];
  memberCache.clear();practiceProfiles.clear();practiceExcluded.clear();
