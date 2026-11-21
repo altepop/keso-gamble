@@ -119,6 +119,22 @@
     const sample=Number.isSafeInteger(m.matches)&&m.matches>=0?m.matches:0;
     li.textContent=String(m.map)+'：'+sample+'試合 ／ '+String(m.status)+'。'+
      (agents.length?'使用実績 '+agents.join('、')+'。':'エージェントの使用実績は未取得です。');
+    // Optional map-position evidence is already owner-scoped by the API.
+    // Only aggregated counts are used; do not render frames or coordinates.
+    const pos=d.mapPositionCoverage?.pool?.find(v=>v?.map===m.map);
+    if(pos&&Number.isSafeInteger(pos.verifiedPositionMatches)&&pos.verifiedPositionMatches>=0&&
+     Number.isSafeInteger(pos.sampleMatches)&&pos.sampleMatches>=0&&
+     pos.verifiedPositionMatches<=pos.sampleMatches&&
+     Number.isSafeInteger(pos.knownOwnVictimLocations)&&pos.knownOwnVictimLocations>=0&&
+     Number.isSafeInteger(pos.knownOwnKillerLocations)&&pos.knownOwnKillerLocations>=0&&
+     Number.isSafeInteger(pos.observedOwnVictimEvents)&&pos.observedOwnVictimEvents>=pos.knownOwnVictimLocations&&
+     Number.isSafeInteger(pos.observedOwnKillerEvents)&&pos.observedOwnKillerEvents>=pos.knownOwnKillerLocations){
+     const line=doc.createElement('span');line.style.cssText='display:block;color:var(--ink-3);font-size:12px;';
+     line.textContent='位置データ：取得試合 '+pos.verifiedPositionMatches+' / '+pos.sampleMatches+
+      '、デス時の位置 '+pos.knownOwnVictimLocations+' / '+pos.observedOwnVictimEvents+
+      '、キル時の位置 '+pos.knownOwnKillerLocations+' / '+pos.observedOwnKillerEvents+'。';
+     li.appendChild(line);
+    }
     list.appendChild(li);
    });
    wrap.appendChild(list);
