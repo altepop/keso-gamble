@@ -1203,7 +1203,7 @@ const polishCoachCopy=root=>{
 
 
 const read=(key,store)=>{try{return store.getItem(key)}catch{return null}};
-const token=()=>read(KEY,sessionStorage)||read('keso-kp-session-v1',localStorage)||read('keso-kp-session-v1',sessionStorage);
+const token=()=>read('keso-kp-session-v1',localStorage)||read('keso-kp-session-v1',sessionStorage)||read(KEY,sessionStorage);
 const setStatus=(msg,error=false)=>{const el=$('status');el.textContent=CoachPresentation.polite(msg);el.setAttribute('role',error?'alert':'status');const note=$('coach-ui-message');note.hidden=!error&&!/中…|読み込み/.test(msg);note.textContent=error?CoachPresentation.polite(msg):'データを確認しています。';note.setAttribute('role',error?'alert':'status')};
 const card=(label,value,sub='')=>`<article class="card"><div class="label">${escape(label)}</div><strong>${escape(value)}</strong><div class="small muted">${escape(sub)}</div></article>`;
 const simpleTable=(headers,rows)=>`<div class="table-wrap"><table><thead><tr>${headers.map((h,i)=>`<th class="${i?'num':''}">${escape(h)}</th>`).join('')}</tr></thead><tbody>${rows.map(a=>`<tr>${a.map((cell,i)=>`<td class="${i?'num':''}">${escape(cell)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
