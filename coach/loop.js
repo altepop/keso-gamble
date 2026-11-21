@@ -50,10 +50,10 @@
     for(const panel of document.querySelectorAll('.coach-dashboard-view'))panel.hidden=panel!==overview;
     for(const t of document.querySelectorAll('[data-coach-view]')){const selected=t.dataset.coachView==='overview';t.setAttribute('aria-selected',String(selected));t.tabIndex=selected?0:-1;}
    }
-   const next=change?overview?.querySelector('[data-other-practice]'):overview?.querySelector('.drill');
+   const next=change?overview?.querySelector('[data-other-practice]'):(overview?.querySelector('[data-quick-start]')||overview?.querySelector('.drill'));
    if(change&&next)next.open=true;
    next?.scrollIntoView({block:'start',behavior:'auto'});
-   (change?next?.querySelector('summary'):overview?.querySelector('#acceptBtn'))?.focus({preventScroll:true});
+   (change?next?.querySelector('summary'):next)?.focus({preventScroll:true});
   }
   function render(){
    element.replaceChildren();
