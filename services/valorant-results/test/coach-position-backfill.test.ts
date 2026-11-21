@@ -138,3 +138,27 @@ test('Phase 5 unrelated legacy queue without verified cohort link cannot use a p
   assert.equal(f.counts().writes,0);
  }finally{f.sql.close();}
 });
+
+test('Phase 5 retries position recovery through a verified peer after original source mismatch',async()=>{
+ const f=fixture();try{
+  f.sql.exec("INSERT INTO coach_member_sources VALUES('frin#怖すぎ','p5','eu'); INSERT INTO coach_member_links VALUES('frin#怖すぎ','m1')");
+  const attempted:string[]=[];
+  const fetch=async(region:string,id:string)=>{
+   assert.equal(id,'m1');attempted.push(region);
+   const match=f.match();
+   if(region==='ap')match.players[0].puuid='not-the-original-member';
+   return match;
+  };
+  assert.equal(await backfillCoachPositions(f.db,fetch,now),'deferred',
+   'first attempt keeps existing verified original priority');
+  assert.equal((f.state() as {attempts:number}).attempts,1);
+  assert.equal(await backfillCoachPositions(f.db,fetch,now+900000-1),'idle',
+   'do not exceed existing per-match cooldown');
+  assert.equal(await backfillCoachPositions(f.db,fetch,now+900000),'saved',
+   'retry uses the already-linked independently verified member');
+  assert.deepEqual(attempted,['ap','eu'],'one request per slot; second source is independent of original');
+  assert.equal((f.state() as {attempts:number}).attempts,2);
+  assert.equal((f.sql.prepare("SELECT source_riot_id FROM coach_member_queue WHERE match_id='m1'").get() as {source_riot_id:string}).source_riot_id,'Dolly#SDGs',
+   'the historical attribution remains untouched');
+ }finally{f.sql.close();}
+});
