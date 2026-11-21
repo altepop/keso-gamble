@@ -1,9 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
 import { valoCommand } from '../src/valo-command.ts';
 
 const base = 'https://discord.com/api/v10/applications/';
-const snowflake = /^\\d{15,22}$/;
+const snowflake = /^\d{15,22}$/;
 function shapeOption(o) {
   return { name: o.name, type: o.type, description: o.description ?? '',
     required: o.required === true,
@@ -13,7 +14,7 @@ function shapeOption(o) {
 const shape = d => ({name:d.name,type:d.type,description:d.description,options:(d.options??[]).map(shapeOption)});
 export async function syncValoCommand({config, token, request=fetch}) {
   if (!snowflake.test(config?.applicationId??'') || !snowflake.test(config?.guildId??'')) throw Error('Discordのアプリ・サーバー設定を確認してください。');
-  if (typeof token !== 'string' || !token || /\\s/.test(token)) throw Error('Discordコマンド登録用Bot Tokenが設定されていません。');
+  if (typeof token !== 'string' || !token || /\s/.test(token)) throw Error('Discordコマンド登録用Bot Tokenが設定されていません。');
   const endpoint = base + config.applicationId + '/guilds/' + config.guildId + '/commands';
   const headers = { Authorization: 'Bot ' + token, 'Content-Type': 'application/json' };
   async function call(url,method,body) {
@@ -33,7 +34,7 @@ export async function syncValoCommand({config, token, request=fetch}) {
   return original?'updated':'created';
 }
 
-if(process.argv[1] && fileURLToPath(import.meta.url)===process.argv[1]) {
+if(process.argv[1] && fileURLToPath(import.meta.url)===resolve(process.argv[1])) {
   const config = JSON.parse(readFileSync(new URL('../discord-config.json',import.meta.url),'utf8'));
   const result = await syncValoCommand({config,token:process.env.DISCORD_BOT_TOKEN});
   console.log('valo_coach_command_sync='+result);
