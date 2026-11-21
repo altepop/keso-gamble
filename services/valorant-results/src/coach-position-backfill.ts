@@ -30,7 +30,7 @@ export async function backfillCoachPositions(db:D1Database,fetchDetail:(region:s
    -- A verified linked cohort member is sufficient even if historical queue
    -- attribution belongs to an unrelated source. Never fetch via that source.
    AND (b.match_id IS NULL OR (b.status IN ('retry','running') AND b.attempts<3 AND b.next_at<=?))
-  ORDER BY q.started_at DESC LIMIT 1`).bind(...COACH_MEMBER_ACCOUNTS.map(p=>p.riotId),...COACH_MEMBER_ACCOUNTS.map(p=>p.riotId),now)
+  ORDER BY q.started_at DESC LIMIT 1`).bind(...COACH_MEMBER_ACCOUNTS.map(p=>p.riotId),now)
   .first<{match_id:string;region:string;source_puuid:string;started_at:number}>();
  if(!row)return 'idle';
  const claim=await db.prepare(`INSERT INTO coach_position_backfill(match_id,status,attempts,next_at,reason,updated_at)
