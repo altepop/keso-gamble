@@ -1,3 +1,4 @@
+import {coachOwnPositionCoverage} from './coach-own-position-coverage.ts';
 import {coachRoundContribution,type CoachCombatObservation} from './coach-round-contribution.ts';
 import {coachMatchFeedback} from './coach-match-feedback.ts';
 import {coachRoundContext} from './coach-round-context.ts';
@@ -45,14 +46,15 @@ export async function readCoachMemberReport(db:D1Database,person:string,preloade
   (? IS NOT NULL AND json_extract(p.value,'$.puuid')=?))`).join(' OR ');
  const bindArgs=verifiedAccounts?accounts.map(a=>a.puuid):accounts.flatMap(a=>[a.name,a.tag,a.puuid,a.puuid]);
  const rows=await db.prepare(`SELECT r.match_id,r.ended_at,r.recorded_at,r.map,r.act_name,r.players_json,r.teams_json,
-  e.rounds_json,e.kills_json,e.recorded_at AS events_recorded_at
+  e.rounds_json,e.kills_json,e.recorded_at AS events_recorded_at,pos.positions_json
   FROM valorant_match_rosters r
   LEFT JOIN valorant_match_round_events e ON e.match_id=r.match_id
+  LEFT JOIN valorant_match_positions pos ON pos.match_id=r.match_id
   WHERE EXISTS(SELECT 1 FROM json_each(r.players_json) p WHERE ${clauses})
   ORDER BY r.ended_at DESC LIMIT ?`)
   .bind(...bindArgs,MAX_ROWS).all<{
    match_id:string;ended_at:number;recorded_at:number;map:string|null;act_name:string|null;players_json:string;teams_json:string|null;
-   rounds_json:string|null;kills_json:string|null;events_recorded_at:number|null}>();
+   rounds_json:string|null;kills_json:string|null;events_recorded_at:number|null;positions_json:string|null}>();
  // Remove non-owner names BEFORE generating any prose or member recognition.
  // Raw IDs remain internal only to verify round events against the roster.
  if(verifiedAccounts)for(const row of rows.results){
@@ -60,6 +62,7 @@ export async function readCoachMemberReport(db:D1Database,person:string,preloade
  }
  const [primary,...alternates]=accounts;
  const performance=coachPerformance(rows.results,accounts,verifiedAccounts?[]:COACH_MEMBER_ACCOUNTS);
+ const positionCoverage=coachOwnPositionCoverage(rows.results,accounts);
  const verifiedRows:typeof rows.results=[];
  const combatByTime=new Map<number,CoachCombatObservation|null>();
  const roundContribution=coachRoundContribution(rows.results,accounts,(row,observation)=>{
@@ -108,7 +111,7 @@ export async function readCoachMemberReport(db:D1Database,person:string,preloade
   archivedMatches:rows.results.length,usableMatches:report.usableMatches,
   invalidMatches:performance.quality.excluded['invalid-roster']??0,roundDataMissing:rows.results.filter(r=>!hasEventArray(r.rounds_json)).length,
   killDataMissing:rows.results.filter(r=>!hasEventArray(r.kills_json)).length,overall:report.overall,
-  individual,individualMapAgent,matchTrend,performance,nextMatch:coachNextMatch(performance),matchFeedback:coachMatchFeedback(performance,combatByTime),roundContribution,roundContext,
+  individual,individualMapAgent,matchTrend,performance,positionCoverage,nextMatch:coachNextMatch(performance),matchFeedback:coachMatchFeedback(performance,combatByTime),roundContribution,roundContext,
   fullDiagnosis:diagnosis,coachingNotes:coachNotes(onlySelf),
   coachSignals:detectCoachSignals(onlySelf)
  };
