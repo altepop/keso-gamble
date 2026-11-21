@@ -185,11 +185,15 @@ export async function fetchNextCoachMemberMatch(db:D1Database,
     WHERE l.match_id=q.match_id AND s.riot_id IN (${permitted})
       AND length(s.puuid) BETWEEN 1 AND 128
       AND s.region IN ('ap','na','eu','kr','br','latam')
+      AND (s.riot_id<>q.source_riot_id OR
+       (s.puuid=q.source_puuid AND s.region=q.region))
     ORDER BY CASE WHEN s.riot_id=q.source_riot_id
                    AND s.puuid=q.source_puuid AND s.region=q.region THEN 0 ELSE 1 END,
              s.riot_id ASC LIMIT 1
   )
   WHERE q.status IN ('pending','partial') AND q.next_at<=? AND q.attempts<3
+   AND (source.riot_id IS NOT NULL OR NOT EXISTS(
+    SELECT 1 FROM coach_member_links l0 WHERE l0.match_id=q.match_id))
   ORDER BY q.started_at DESC LIMIT 1`)
   .bind(...COACH_MEMBER_ACCOUNTS.map(p=>p.riotId),now).first<Candidate>();
  if(!row)return 'idle';
