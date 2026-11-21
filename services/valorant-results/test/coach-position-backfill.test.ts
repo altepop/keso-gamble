@@ -57,6 +57,45 @@ test('the shared slot never adds a second detail request, and existing archive w
  }finally{f.sql.close();}
 });
 
+test('a member unavailable without an API request yields the shared slot to another member position backfill',async()=>{
+ const f=fixture();try{
+  let calls=0;
+  const request=async(region:string,id:string)=>{calls++;assert.equal(region,'ap');assert.equal(id,'m1');return f.match();};
+  const result=await runCoachPositionArchiveSlot(f.db,request,now,async()=> 'unavailable');
+  assert.equal(result.archive,'unavailable');
+  assert.equal(result.positions,'saved');
+  assert.equal(calls,1,'one Henrik detail request shared between the two collectors');
+  assert.equal(f.state().attempts,1);
+  assert.equal((f.sql.prepare('SELECT COUNT(*) AS n FROM valorant_match_positions').get() as {n:number}).n,1);
+ }finally{f.sql.close();}
+});
+test('unavailable after an actual archive request never makes an additional position request',async()=>{
+ const f=fixture();try{
+  let calls=0;
+  const request=async()=>{calls++;throw Error('API 404');};
+  const result=await runCoachPositionArchiveSlot(f.db,request,now,async(_db,fetch)=>{
+   try{await fetch('ap','missing-match');}catch{}
+   return 'unavailable';
+  });
+  assert.equal(result.archive,'unavailable');
+  assert.equal(result.positions,null);
+  assert.equal(calls,1);
+  assert.equal(f.counts().writes,0,'do not claim position work after consuming the API budget');
+ }finally{f.sql.close();}
+});
+test('unavailable without a request respects paused collection and global provider cooldown',async()=>{
+ for(const mode of ['disabled','cooldown']){
+  const f=fixture();try{
+   if(mode==='disabled')f.sql.exec("UPDATE monitor_state SET value='disabled' WHERE key='coach_all_members:enabled'");
+   else f.sql.prepare('INSERT INTO monitor_state VALUES(?,?)').run('api_after',String(now+60000));
+   let calls=0;
+   const result=await runCoachPositionArchiveSlot(f.db,async()=>{calls++;return f.match();},now,async()=> 'unavailable');
+   assert.equal(result.archive,'unavailable');
+   assert.equal(result.positions,mode);
+   assert.equal(calls,0);assert.equal(f.counts().writes,0);
+  }finally{f.sql.close();}
+ }
+});
 test('partial scalar archives exhausted by the old collector can still recover valid coordinates',async()=>{const f=fixture();try{f.sql.exec("UPDATE coach_member_queue SET status='partial',attempts=3");assert.equal(await backfillCoachPositions(f.db,async()=>f.match(),now),'saved');}finally{f.sql.close();}});
 
 test('position backfill rejects linked peers with invalid region or missing PUUID without spending the shared slot',async()=>{
