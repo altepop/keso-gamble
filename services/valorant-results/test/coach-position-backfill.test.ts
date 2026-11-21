@@ -162,3 +162,39 @@ test('Phase 5 retries position recovery through a verified peer after original s
    'the historical attribution remains untouched');
  }finally{f.sql.close();}
 });
+
+test('Phase 5 regional 404 retries through another verified cohort member within existing request budget',async()=>{
+ const f=fixture();try{
+  f.sql.exec("INSERT INTO coach_member_sources VALUES('frin#怖すぎ','p5','eu'); INSERT INTO coach_member_links VALUES('frin#怖すぎ','m1')");
+  const regions:string[]=[];
+  const get=async(region:string,id:string)=>{
+   regions.push(region);assert.equal(id,'m1');
+   if(region==='ap')throw Error('Match API HTTP 404');
+   return f.match();
+  };
+  assert.equal(await backfillCoachPositions(f.db,get,now),'deferred');
+  assert.equal(f.state().status,'retry');
+  assert.equal(f.state().reason,'source-404-peer-fallback');
+  assert.equal(await backfillCoachPositions(f.db,get,now+900000-1),'idle');
+  assert.equal(await backfillCoachPositions(f.db,get,now+900000),'saved');
+  assert.deepEqual(regions,['ap','eu']);
+  assert.equal(f.state().attempts,2);
+  assert.equal((f.sql.prepare("SELECT source_riot_id FROM coach_member_queue WHERE match_id='m1'").get() as any).source_riot_id,'Dolly#SDGs');
+ }finally{f.sql.close();}
+});
+test('Phase 5 404 must not retry with an invalid or unrelated fallback',async()=>{
+ for(const peerSql of [
+  "INSERT INTO coach_member_sources VALUES('frin#怖すぎ','p5','eu')",
+  "INSERT INTO coach_member_sources VALUES('frin#怖すぎ',NULL,'eu'); INSERT INTO coach_member_links VALUES('frin#怖すぎ','m1')",
+  "INSERT INTO coach_member_sources VALUES('outsider#private','p5','eu'); INSERT INTO coach_member_links VALUES('outsider#private','m1')"
+ ]){
+  const f=fixture();try{
+   f.sql.exec(peerSql);
+   let calls=0;
+   assert.equal(await backfillCoachPositions(f.db,async()=>{calls++;throw Error('Match API HTTP 404')},now),'unavailable');
+   assert.equal(f.state().reason,'not-found');
+   assert.equal(await backfillCoachPositions(f.db,async()=>{calls++;return f.match()},now+900000),'idle');
+   assert.equal(calls,1);
+  }finally{f.sql.close();}
+ }
+});
