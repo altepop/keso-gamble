@@ -180,6 +180,7 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   await page.locator('[data-quick-start]').waitFor();
   assert.equal(await page.locator('[data-full-coach]').evaluate(el=>el.open),false,'a single priority is shown first');
   assert.equal(await page.locator('[data-quick-start] .coach-quick-steps li').count(),3);
+  assert.equal(await page.evaluate(()=>Boolean(document.querySelector('#member-result').compareDocumentPosition(document.querySelector('#coach-loop-host')) & Node.DOCUMENT_POSITION_FOLLOWING)),true,'today\'s one priority appears before the old review history');
   assert.equal(await page.locator('[data-aim-routine]').count(),1);
   assert.equal(await page.locator('[data-aim-routine]').evaluate(el=>el.open),false,'optional aim routine starts folded');
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'mobile quick start fits');

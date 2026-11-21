@@ -44,7 +44,7 @@
   const m=model(report,plan),chosen=m.primary,minutes=valid(m.minutes)?m.minutes:'短時間';
   const steps=m.steps.map((step,i)=>'<li><span class="coach-quick-count">'+(i+1)+'</span><div><strong>'+esc(step.title)+'</strong><p>'+esc(step.text)+'</p></div></li>').join('');
   const aimSteps=m.aim.map((s,i)=>'<li><strong>'+(i+1)+'. '+esc(s.title)+'（'+s.minutes+'分）</strong><p>'+esc(s.action)+'</p><p class="coach-quick-check">確認：'+esc(s.check)+'</p></li>').join('');
-  return '<section class="coach-quick" data-quick-start data-primary-practice="'+esc(chosen.id)+'" aria-label="今日最初に取り組む練習">'+
+  return '<section class="coach-quick" tabindex="-1" data-quick-start data-primary-practice="'+esc(chosen.id)+'" aria-label="今日最初に取り組む練習">'+
    '<div class="coach-quick-label">最初はこれだけ｜今日の優先課題は1つ</div>'+
    '<h2>'+esc(chosen.title)+'</h2>'+
    '<p class="coach-quick-timing">'+esc(minutes)+'分を目安に取り組みます。</p>'+
