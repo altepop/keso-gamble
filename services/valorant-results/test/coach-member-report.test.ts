@@ -30,6 +30,7 @@ function setup(){
  act_name TEXT,teams_json TEXT,players_json TEXT,recorded_at INTEGER);
  CREATE TABLE valorant_match_round_events(match_id TEXT PRIMARY KEY,rounds_json TEXT,
  kills_json TEXT,recorded_at INTEGER);
+ CREATE TABLE valorant_match_positions(match_id TEXT PRIMARY KEY,positions_json TEXT,recorded_at INTEGER,has_coordinates INTEGER);
  CREATE TABLE coach_member_sources(riot_id TEXT PRIMARY KEY,puuid TEXT,region TEXT,
  next_page INTEGER NOT NULL DEFAULT 1,done INTEGER NOT NULL DEFAULT 0,
  truncated INTEGER NOT NULL DEFAULT 0,next_at INTEGER NOT NULL DEFAULT 0);
@@ -154,4 +155,30 @@ test('incomplete round events never drive FK diagnosis but still allow valid ros
   assert.equal(r.nextMatch.matches,1);assert.ok(r.nextMatch.focus.action);assert.ok(r.nextMatch.check.metrics.length>0,'event log gaps do not prevent a denominator-backed experiment');
   assert.equal(r.matchFeedback.sessions.length,1);assert.equal(r.matchFeedback.sessions[0].eventVerified,false);assert.equal(r.matchFeedback.sessions[0].lesson.practice.steps.length,3);
  }finally{f.close()}
+});
+
+test('authenticated owner report exposes only aggregate Phase 0 location coverage',async()=>{
+ const f=setup();
+ try{
+  await enableAllMemberArchive(f.db);
+  f.sql.prepare('UPDATE coach_member_sources SET puuid=?,region=? WHERE riot_id=?')
+   .run('vdk-id','ap','Dolly#SDGs');
+  const m=game('position-case','Dolly','SDGs','vdk-id');
+  await recordCompetitiveRoster(f.db,m,now);
+  await recordCompetitiveRoundEvents(f.db,m,now);
+  const sorted=[...m.players].sort((a,b)=>a.puuid.localeCompare(b.puuid));
+  const own=sorted.findIndex(p=>p.puuid==='vdk-id');
+  f.sql.prepare('INSERT INTO valorant_match_positions VALUES(?,?,?,?)').run('position-case',JSON.stringify({
+   schema:1,roster:sorted.map(p=>({id:p.puuid,team:p.team_id})),
+   frames:[{victim:own,killer:null,victimLocation:[23,44],locations:[]}]
+  }),now,1);
+  const before=f.writes();
+  const result=await readCoachMemberReport(f.db,'VDK');
+  assert.equal(result.positionCoverage.verifiedPositionMatches,1);
+  assert.equal(result.positionCoverage.knownOwnVictimLocations,1);
+  assert.equal(result.positionCoverage.observedOwnVictimEvents,1);
+  assert.equal(f.writes(),before);
+  assert.equal(JSON.stringify(result.positionCoverage).includes('vdk-id'),false);
+  assert.equal(JSON.stringify(result.positionCoverage).includes('23,44'),false);
+ }finally{f.close();}
 });
