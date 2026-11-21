@@ -1,4 +1,5 @@
 import {coachOwnPositionCoverage} from './coach-own-position-coverage.ts';
+import {coachMapPositionCoverage} from './coach-map-position-coverage.ts';
 import {coachRoundContribution,type CoachCombatObservation} from './coach-round-contribution.ts';
 import {coachMatchFeedback} from './coach-match-feedback.ts';
 import {coachRoundContext} from './coach-round-context.ts';
@@ -63,6 +64,7 @@ export async function readCoachMemberReport(db:D1Database,person:string,preloade
  const [primary,...alternates]=accounts;
  const performance=coachPerformance(rows.results,accounts,verifiedAccounts?[]:COACH_MEMBER_ACCOUNTS);
  const positionCoverage=coachOwnPositionCoverage(rows.results,accounts);
+ const mapPositionCoverage=coachMapPositionCoverage(rows.results,accounts);
  const verifiedRows:typeof rows.results=[];
  const combatByTime=new Map<number,CoachCombatObservation|null>();
  const roundContribution=coachRoundContribution(rows.results,accounts,(row,observation)=>{
@@ -111,7 +113,7 @@ export async function readCoachMemberReport(db:D1Database,person:string,preloade
   archivedMatches:rows.results.length,usableMatches:report.usableMatches,
   invalidMatches:performance.quality.excluded['invalid-roster']??0,roundDataMissing:rows.results.filter(r=>!hasEventArray(r.rounds_json)).length,
   killDataMissing:rows.results.filter(r=>!hasEventArray(r.kills_json)).length,overall:report.overall,
-  individual,individualMapAgent,matchTrend,performance,positionCoverage,nextMatch:coachNextMatch(performance),matchFeedback:coachMatchFeedback(performance,combatByTime),roundContribution,roundContext,
+  individual,individualMapAgent,matchTrend,performance,positionCoverage,mapPositionCoverage,nextMatch:coachNextMatch(performance),matchFeedback:coachMatchFeedback(performance,combatByTime),roundContribution,roundContext,
   fullDiagnosis:diagnosis,coachingNotes:coachNotes(onlySelf),
   coachSignals:detectCoachSignals(onlySelf)
  };
