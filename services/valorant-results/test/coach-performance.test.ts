@@ -118,3 +118,19 @@ test('enriched hit/damage provenance never makes the old KDA snapshot appear fre
  const q=coachPerformance([r],accounts).quality.metricCoverage;
  assert.equal(q.kd.recordedAt!.newest,1000);assert.equal(q.hs.recordedAt!.newest,2000);assert.equal(q.adr.recordedAt!.newest,2500);assert.equal(q.ddDelta.recordedAt!.newest,3000);
 });
+
+test('Phase 4 verified map rotation separates historic and missing maps',()=>{
+ const rows=[...Array.from({length:5},(_,i)=>row(100+i,{map:'Bind'})),row(200,{map:'Corrode'}),row(201,{map:'Ascent'}),row(202,{map:null})];
+ const c=coachPerformance(rows,accounts).mapPoolCoverage;
+ assert.equal(c.version,'2026-act6-patch-13.08');
+ assert.deepEqual(c.pool.map(m=>m.map),['Abyss','Bind','Corrode','Haven','Lotus','Summit','Sunset']);
+ assert.equal(c.pool.find(m=>m.map==='Bind')?.status,'集計可能');
+ assert.deepEqual(c.pool.find(m=>m.map==='Bind')?.observedAgents,[{agent:'Sage',matches:5}]);
+ assert.equal(c.pool.find(m=>m.map==='Corrode')?.status,'まだ分かりません');
+ assert.equal(c.pool.find(m=>m.map==='Abyss')?.status,'未収集');
+ assert.deepEqual(c.outsidePool,[{map:'Ascent',matches:1}]);
+ assert.equal(c.unknownMapMatches,1);
+ assert.equal(c.sampleMatches,8);
+ assert.equal(c.poolComplete,false);
+ for(const secret of ['private-a','private-match','private-other'])assert.equal(JSON.stringify(c).includes(secret),false);
+});
