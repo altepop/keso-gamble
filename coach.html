@@ -1775,7 +1775,9 @@ async function load(){
   latestReport=data.report;latestMemberReport=data.report;activeMember=selfIdentity.defaultProfile;
   coachRecords.setState(data.practiceState);coachSharing.setData(data.settings);coachGoals.setData(data.goals);coachTeam.setActive();coachNotifications.setActive();renderMemberArchiveStatus(data);renderMemberDiagnosis(data.report);
   $('report').hidden=false;$('connection').style.display='none';$('share').disabled=false;
-  setStatus('自分の詳細診断を表示しています。要約の共有範囲は下の設定で確認できます。');
+  setStatus(data.report?.coverage?.positionEvidenceUnavailable?
+   '分析を表示しています。位置データは一時的に取得できていないため、位置に関する判断は保留です。':
+   '自分の詳細診断を表示しています。要約の共有範囲は下の設定で確認できます。');
  }catch(e){
   if(generation!==authGeneration)return;
   clearCoachView();generation=authGeneration;

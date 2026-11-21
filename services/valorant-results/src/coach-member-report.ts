@@ -48,16 +48,29 @@ export async function readCoachMemberReport(db:D1Database,person:string,preloade
   json_extract(p.value,'$.tag')=?) OR
   (? IS NOT NULL AND json_extract(p.value,'$.puuid')=?))`).join(' OR ');
  const bindArgs=verifiedAccounts?accounts.map(a=>a.puuid):accounts.flatMap(a=>[a.name,a.tag,a.puuid,a.puuid]);
- const rows=await db.prepare(`SELECT r.match_id,r.ended_at,r.recorded_at,r.map,r.act_name,r.players_json,r.teams_json,
-  e.rounds_json,e.kills_json,e.recorded_at AS events_recorded_at,pos.positions_json
+ // The 2026-11 D1 limits reject oversized query responses. Position snapshots
+ // are optional evidence: keep reliable combat analysis available if only that
+ // large joined column cannot be returned. Never silently substitute positions.
+ // Guard legacy invalid roster JSON so one malformed row cannot fail every owner.
+ const query=async(includePositions:boolean)=>db.prepare(`SELECT r.match_id,r.ended_at,r.recorded_at,r.map,r.act_name,r.players_json,r.teams_json,
+  e.rounds_json,e.kills_json,e.recorded_at AS events_recorded_at,${includePositions?'pos.positions_json':'NULL AS positions_json'}
   FROM valorant_match_rosters r
   LEFT JOIN valorant_match_round_events e ON e.match_id=r.match_id
-  LEFT JOIN valorant_match_positions pos ON pos.match_id=r.match_id
-  WHERE EXISTS(SELECT 1 FROM json_each(r.players_json) p WHERE ${clauses})
+  ${includePositions?'LEFT JOIN valorant_match_positions pos ON pos.match_id=r.match_id':''}
+  WHERE EXISTS(SELECT 1 FROM json_each(CASE WHEN json_valid(r.players_json) THEN r.players_json ELSE '[]' END) p WHERE ${clauses})
   ORDER BY r.ended_at DESC LIMIT ?`)
   .bind(...bindArgs,MAX_ROWS).all<{
    match_id:string;ended_at:number;recorded_at:number;map:string|null;act_name:string|null;players_json:string;teams_json:string|null;
    rounds_json:string|null;kills_json:string|null;events_recorded_at:number|null;positions_json:string|null}>();
+ let positionEvidenceUnavailable=false;
+ let rows:Awaited<ReturnType<typeof query>>;
+ try{rows=await query(true);}catch(e){
+  const message=e instanceof Error?e.message:'';
+  // Do not mask schema errors, authorization problems or unrelated D1 faults.
+  if(!/query result exceeded|maximum response size|too large|out of memory|too many resources|resource limit/i.test(message))throw e;
+  positionEvidenceUnavailable=true;
+  rows=await query(false);
+ }
  // Remove non-owner names BEFORE generating any prose or member recognition.
  // Raw IDs remain internal only to verify round events against the roster.
  if(verifiedAccounts)for(const row of rows.results){
@@ -113,7 +126,7 @@ export async function readCoachMemberReport(db:D1Database,person:string,preloade
   coverage:{...combinedCoverage,enabled:coverage.enabled,analysisMatches:report.usableMatches,
    existingArchiveMatches:rows.results.length,
    rowLimit:MAX_ROWS,limitReached:rows.results.length>=MAX_ROWS,
-   allMatchesGuaranteed:false},
+   positionEvidenceUnavailable,allMatchesGuaranteed:false},
   archivedMatches:rows.results.length,usableMatches:report.usableMatches,
   invalidMatches:performance.quality.excluded['invalid-roster']??0,roundDataMissing:rows.results.filter(r=>!hasEventArray(r.rounds_json)).length,
   killDataMissing:rows.results.filter(r=>!hasEventArray(r.kills_json)).length,overall:report.overall,

@@ -667,6 +667,13 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping,deferP
   }
   return response({error:'Not found'},404);
  }catch(error){
+  // A read-only coaching request must never suggest a KP payment or wallet
+  // refresh. Only a fixed category enters logs; identifiers, SQL and tokens do not.
+  if(request.method==='GET'&&new URL(request.url).pathname.startsWith('/api/kp/coach/')){
+   const detail=error instanceof Error?error.message:'';
+   console.warn('coach_read_failed',/query result exceeded|maximum response size|too large|out of memory|too many resources|resource limit/i.test(detail)?'resource':'internal');
+   return response({error:'コーチングの分析情報を読み込めませんでした。KP残高とは関係ありません。時間を置いて再表示してください。',code:'COACH_READ_FAILED'},503);
+  }
   const message=error instanceof Error?error.message:'';
   return response({retryable:!(/[ぁ-んァ-ヶ一-龯]/.test(message)&&!message.includes('SQL')),error:/[ぁ-んァ-ヶ一-龯]/.test(message)&&!message.includes('SQL')?message:message.includes('relic_market_sold')?'出品の状態が変わったため購入・取り下げできません。再読み込みしてください。':message.includes('kp_directive_active')||message.includes('kp_directives.guild, kp_directives.target')?'その相手には実行中の指令があります。':message.includes('kp_horse_limit')?'持てる馬は3頭までです。':message.includes('kp_crowns')?'その枠は埋まりました。もう一度お試しください。':message.includes('kp_horse_not_sellable')?'売れる馬が見つかりません。':'処理を確認できませんでした。残高を更新して確認してください。'},400);
  }

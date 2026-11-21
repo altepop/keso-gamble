@@ -182,3 +182,36 @@ test('authenticated owner report exposes only aggregate Phase 0 location coverag
   assert.equal(JSON.stringify(result.positionCoverage).includes('23,44'),false);
  }finally{f.close();}
 });
+
+test('invalid historical roster JSON is ignored without aborting verified owner reporting',async()=>{
+ const f=setup();try{
+  await enableAllMemberArchive(f.db);
+  await recordCompetitiveRoster(f.db,game('valid-legacy','Dolly','SDGs','vdk-id'),now);
+  await recordCompetitiveRoundEvents(f.db,game('valid-legacy','Dolly','SDGs','vdk-id'),now);
+  f.sql.prepare("INSERT INTO valorant_match_rosters(match_id,ended_at,recorded_at,map,act_name,players_json,teams_json) VALUES(?,?,?,?,?,?,?)")
+   .run('broken-legacy',now,now,'Ascent','', '{broken json','[]');
+  const result=await readCoachMemberReport(f.db,'VDK');
+  assert.equal(result.archivedMatches,1);
+  assert.equal(result.coverage.positionEvidenceUnavailable,false);
+ }finally{f.close();}
+});
+
+test('oversized position evidence falls back to position-unavailable without inventing evidence or writing D1',async()=>{
+ const f=setup();try{
+  await enableAllMemberArchive(f.db);
+  const match=game('position-large','Dolly','SDGs','vdk-id');
+  await recordCompetitiveRoster(f.db,match,now);
+  await recordCompetitiveRoundEvents(f.db,match,now);
+  const original=f.db;
+  const db={prepare:(sql:string)=>{
+   if(sql.includes('pos.positions_json'))return {bind:()=>({all:async()=>{throw Error('D1 query result exceeded the maximum response size limit of 50 MB');}})};
+   return original.prepare(sql);
+  }} as unknown as D1Database;
+  const before=f.writes();
+  const result=await readCoachMemberReport(db,'VDK');
+  assert.equal(result.archivedMatches,1);
+  assert.equal(result.coverage.positionEvidenceUnavailable,true);
+  assert.equal(result.positionCoverage.verifiedPositionMatches,0);
+  assert.equal(f.writes(),before);
+ }finally{f.close();}
+});
