@@ -19,6 +19,18 @@ export function coachOwnPositionCoverage(rows:readonly Row[],accounts:readonly A
   if(!Array.isArray(roster)||roster.length!==10||!snapshot||snapshot.schema!==1||
    !Array.isArray(snapshot.roster)||snapshot.roster.length!==10||!Array.isArray(snapshot.frames)||
    snapshot.frames.length>600){result.missingOrInvalidPositionMatches++;continue;}
+  // Require complete match roster identity, not just the owner PUUID.
+  // A snapshot from another match with the same owner is not valid evidence.
+  const sourceIds=roster.map((p:unknown)=>obj(p)?.puuid);
+  const snapshotIds=snapshot.roster.map((p:unknown)=>obj(p)?.id);
+  const validId=(id:unknown):id is string=>typeof id==='string'&&id.length>0&&id.length<=128;
+  if(sourceIds.some((id:unknown)=>!validId(id))||
+   snapshotIds.some((id:unknown)=>!validId(id))||
+   new Set(sourceIds).size!==10||new Set(snapshotIds).size!==10||
+   sourceIds.some((id:unknown)=>!snapshotIds.includes(id))||
+   snapshot.frames.length===0){
+   result.missingOrInvalidPositionMatches++;continue;
+  }
   const matches=roster.filter(p=>obj(p)&&ids.has(p.puuid));
   if(matches.length!==1){result.missingOrInvalidPositionMatches++;continue;}
   const who=matches[0].puuid;
