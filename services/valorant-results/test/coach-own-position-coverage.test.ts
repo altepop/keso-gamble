@@ -46,3 +46,39 @@ test('invalid snapshot cannot leak owner or opponent coordinates',()=>{
  assert.equal(result.knownOwnKillerLocations,0);
  assert.equal(JSON.stringify(result).includes('10,20'),false);
 });
+
+test('same-owner snapshot from a different opponent roster is rejected rather than attributed',()=>{
+ const different=[...players];different[9]={puuid:'different-opponent'};
+ const row={map:'Bind',players_json:JSON.stringify(players),positions_json:JSON.stringify({
+  schema:1,roster:different.map(p=>({id:p.puuid,team:'Blue'})),
+  frames:[frame(0,1,[44,55])]
+ })};
+ const result=coachOwnPositionCoverage([row],[{puuid:'owner-id'}]);
+ assert.equal(result.sampleMatches,1);
+ assert.equal(result.verifiedPositionMatches,0);
+ assert.equal(result.missingOrInvalidPositionMatches,1);
+ assert.equal(result.knownOwnVictimLocations,0);
+ assert.equal(JSON.stringify(result).includes('different-opponent'),false);
+});
+test('duplicated roster identity and empty snapshot frames cannot imply verified evidence',()=>{
+ const duplicates=players.map(p=>({id:p.puuid,team:'Blue'}));
+ duplicates[9]={...duplicates[1]};
+ const rows=[
+  {map:'Corrode',players_json:JSON.stringify(players),
+   positions_json:JSON.stringify({schema:1,roster:duplicates,frames:[frame(0,1,[2,3])]})},
+  {map:'Corrode',players_json:JSON.stringify(players),positions_json:snapshot([])}
+ ];
+ const r=coachOwnPositionCoverage(rows,[{puuid:'owner-id'}]);
+ assert.equal(r.verifiedPositionMatches,0);
+ assert.equal(r.missingOrInvalidPositionMatches,2);
+ assert.equal(r.observedOwnVictimEvents,0);
+});
+test('reordered complete roster retains valid owner-only counts',()=>{
+ const roster=players.slice().reverse().map(p=>({id:p.puuid,team:'Blue'}));
+ const result=coachOwnPositionCoverage([{
+  map:'Haven',players_json:JSON.stringify(players),
+  positions_json:JSON.stringify({schema:1,roster,frames:[frame(9,8,[21,31])]})
+ }],[{puuid:'owner-id'}]);
+ assert.equal(result.verifiedPositionMatches,1);
+ assert.equal(result.knownOwnVictimLocations,1);
+});
