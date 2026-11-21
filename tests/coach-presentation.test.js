@@ -123,3 +123,13 @@ test('Phase 3-E Discord notice UI never sends messages, persists credentials or 
  const html=readFileSync(new URL('../coach.html',import.meta.url),'utf8');
  assert.ok(html.includes('team.js?v=coach-'+createHash('sha256').update(ui).digest('hex').slice(0,12)));
 });
+
+test('Phase 4 position evidence is presented as owner-only counts without coordinates or new fetches',()=>{
+ const code=readFileSync(new URL('../coach/prototype-view.js',import.meta.url),'utf8');
+ assert.match(code,/const position=d\.positionCoverage/);
+ assert.match(code,/立ち位置データの取得状況/);
+ assert.match(code,/位置取得/);
+ assert.match(code,/0mとして扱いません/);
+ assert.doesNotMatch(code,/position\.positions_json|position\.frames|position\.roster|JSON\.stringify\(position\)/);
+ assert.doesNotMatch(code,/\bfetch\s*\(|\b(?:sessionStorage|localStorage)\b|XMLHttpRequest|sendBeacon/);
+});
