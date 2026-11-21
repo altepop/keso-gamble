@@ -573,6 +573,7 @@
 </head>
 <body>
 <main class="wrap">
+<p><a href="./" style="display:inline-block;padding:12px 4px;color:#e6f0ff;min-height:44px;font-weight:700">← KESO PLAYに戻る</a></p>
 <header class="tophero" id="coach-welcome">
  <img class="bgimg" src="assets/abyss-splash.png" alt="VALORANTのマップ、アビスの公式アート">
  <div class="shade"></div><div class="diag" aria-hidden="true"></div>
@@ -582,11 +583,14 @@
 <p id="coach-ui-message" role="status" aria-live="polite">データを確認しています。</p>
 <details id="connection" class="coach-disclosure" open><summary>接続してコーチングを確認します <span class="chev" aria-hidden="true">⌄</span></summary><div class="detail-body coach-existing">
 <h2>KP口座へ接続すると分析を確認できます</h2>
-<p class="muted">同じブラウザーでKESO PLAYに接続済みの場合は、自動で認証します。接続できない場合は、Discordの <code>/valo status</code> で取得した接続コードを入力してください。コードはこの画面に保存しません。</p>
+<p class="muted">Discordの <code>/valo coach</code> から「Activityを開く」を押し、KESO PLAYの「コーチ」を選ぶと、Discordの本人認証で接続できます。48桁コードの入力は不要です。同じブラウザーですでにKP口座へ接続済みの場合も自動で認証します。</p>
+<p class="muted"><a href="./" style="color:#e6f0ff">KESO PLAYに戻ってコーチを開く</a></p>
+<details><summary>自動接続できない場合の予備手段（接続コード）</summary>
+<p class="muted">通常ブラウザーで自動接続できない場合だけ、<code>/valo status</code> の接続コードを使えます。コードは保存しません。</p>
 <form id="connect-form"><label for="code">接続コード（48桁）</label><div class="actions">
 <input id="code" type="password" inputmode="text" autocomplete="off" minlength="48" maxlength="48" required placeholder="48文字の接続コード">
 <button type="submit">接続して表示</button>
-</div></form>
+</div></form></details>
 </div></details>
 <div id="legacy-coach" hidden></div>
 <div id="report" hidden>
@@ -1199,7 +1203,7 @@ const polishCoachCopy=root=>{
 
 
 const read=(key,store)=>{try{return store.getItem(key)}catch{return null}};
-const token=()=>read(KEY,sessionStorage)||read('keso-kp-session-v1',localStorage)||read('keso-kp-session-v1',sessionStorage);
+const token=()=>read('keso-kp-session-v1',localStorage)||read('keso-kp-session-v1',sessionStorage)||read(KEY,sessionStorage);
 const setStatus=(msg,error=false)=>{const el=$('status');el.textContent=CoachPresentation.polite(msg);el.setAttribute('role',error?'alert':'status');const note=$('coach-ui-message');note.hidden=!error&&!/中…|読み込み/.test(msg);note.textContent=error?CoachPresentation.polite(msg):'データを確認しています。';note.setAttribute('role',error?'alert':'status')};
 const card=(label,value,sub='')=>`<article class="card"><div class="label">${escape(label)}</div><strong>${escape(value)}</strong><div class="small muted">${escape(sub)}</div></article>`;
 const simpleTable=(headers,rows)=>`<div class="table-wrap"><table><thead><tr>${headers.map((h,i)=>`<th class="${i?'num':''}">${escape(h)}</th>`).join('')}</tr></thead><tbody>${rows.map(a=>`<tr>${a.map((cell,i)=>`<td class="${i?'num':''}">${escape(cell)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
@@ -1771,7 +1775,7 @@ async function load(){
  }catch(e){
   if(generation!==authGeneration)return;
   clearCoachView();generation=authGeneration;
-  if(e.status===401){try{sessionStorage.removeItem(KEY)}catch{}$('connection').style.display='block';setStatus('接続が切れました。接続コードでログインしてください。',true);}
+  if(e.status===401){try{sessionStorage.removeItem(KEY)}catch{}$('connection').style.display='block';setStatus('接続が切れました。DiscordのActivityからKESO PLAYを開き直してください。',true);}
   else if(e.status===429&&t){
    try{const state=await request('/api/kp/coach/members/status',{headers:{Authorization:'Bearer '+t}});if(generation===authGeneration&&token()===t&&state.identity?.status==='linked'){renderMemberArchiveStatus(state);coachRecords.setState(state.practiceState);coachSharing.setData(state.settings);coachGoals.setData(state.goals);$('member-result').replaceChildren(coachGoals.element);$('report').hidden=false;$('member-coaching-panel').hidden=true;}}catch{}
    if(generation===authGeneration)setStatus(e.message,true);
