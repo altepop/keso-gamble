@@ -451,3 +451,25 @@ test('Phase 5 coverage never exposes an unrelated persisted source or its privat
   assert.deepEqual({...row},{puuid:'sensitive-outsider-puuid',next_page:2,done:1});
  }finally{f.close();}
 });
+
+test('Phase 5 unlinked out-of-cohort legacy row cannot consume a Henrik detail slot',async()=>{
+ const f=setup();try{
+  await enableAllMemberArchive(f.db);
+  const permitted=COACH_MEMBER_ACCOUNTS[0].riotId;
+  f.sql.prepare("INSERT INTO coach_member_queue VALUES(?,?,?,?,?,'pending',0,0)")
+   .run('out-of-cohort-newer','ap','outsider#private','private-puuid',Date.parse(started)+1000);
+  f.sql.prepare("INSERT INTO coach_member_queue VALUES(?,?,?,?,?,'pending',0,0)")
+   .run('cohort-legacy','ap',permitted,'player-0',Date.parse(started));
+  let calls=0;
+  assert.equal(await fetchNextCoachMemberMatch(f.db,async(region,id)=>{
+   calls++;assert.equal(region,'ap');assert.equal(id,'cohort-legacy');
+   return makeMatch(id);
+  },now),'saved');
+  assert.equal(calls,1,'only the opted-in cohort may consume the shared request slot');
+  assert.equal((f.sql.prepare("SELECT status FROM coach_member_queue WHERE match_id='out-of-cohort-newer'").get() as {status:string}).status,'pending');
+  assert.equal(await fetchNextCoachMemberMatch(f.db,async()=>{
+   calls++;throw Error('unrelated source must never be fetched');
+  },now),'idle');
+  assert.equal(calls,1);
+ }finally{f.close();}
+});

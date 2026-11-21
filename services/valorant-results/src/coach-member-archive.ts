@@ -196,13 +196,14 @@ export async function fetchNextCoachMemberMatch(db:D1Database,
              s.riot_id ASC LIMIT 1
   )
   WHERE q.status IN ('pending','partial') AND q.next_at<=? AND q.attempts<3
-   AND (source.riot_id IS NOT NULL OR NOT EXISTS(
-    SELECT 1 FROM coach_member_links l0 WHERE l0.match_id=q.match_id))
+   AND (source.riot_id IS NOT NULL OR (
+    q.source_riot_id IN (${permitted}) AND NOT EXISTS(
+     SELECT 1 FROM coach_member_links l0 WHERE l0.match_id=q.match_id)))
   -- Prefer identity-verified linked matches over legacy unlinked rows.
   -- A missing legacy source must not monopolize a more useful cohort slot.
   ORDER BY CASE WHEN source.riot_id IS NOT NULL THEN 0 ELSE 1 END,
    q.started_at DESC LIMIT 1`)
-  .bind(...COACH_MEMBER_ACCOUNTS.map(p=>p.riotId),now).first<Candidate>();
+  .bind(...COACH_MEMBER_ACCOUNTS.map(p=>p.riotId),now,...COACH_MEMBER_ACCOUNTS.map(p=>p.riotId)).first<Candidate>();
  if(!row)return 'idle';
  const complete=await db.prepare(`SELECT
   (SELECT COUNT(*) FROM valorant_match_rosters r WHERE match_id=? AND ${ROSTER_SCHEMA_SQL}) AS roster,
