@@ -558,6 +558,35 @@
 .coach-records{margin:24px 0;color:#ece8e1}.coach-records p,.coach-records label,.coach-records h3{font-size:16px;line-height:1.9;overflow-wrap:anywhere}.coach-records label{display:block;margin:12px 0}.coach-records input,.coach-records textarea,.coach-records select{display:block;box-sizing:border-box;width:100%;max-width:100%;padding:12px;margin-top:8px;background:#0f1923;color:#f4f3ef;border:1px solid #61717e;border-radius:8px;font:inherit;font-size:16px}.coach-records textarea{resize:vertical}.coach-records button{font-size:16px;white-space:normal;overflow-wrap:anywhere;padding:12px;margin:8px 8px 8px 0;border:1px solid #394e5d;border-radius:8px;background:#233542;color:#ece8e1}.coach-records button[type=submit]{background:#ff4655;border-color:#ff4655;color:#fff}.coach-records form{padding:16px 0;border-top:1px solid #394e5d}.coach-records :focus-visible{outline:3px solid #f4f3ef;outline-offset:3px}.coach-records [role=status]:empty{display:none}.coach-records [data-record-leave-guard]:not([hidden]){padding:16px;border:2px solid #ff4655;background:#14232f}
 .coach-records table{width:100%;table-layout:fixed;border-collapse:collapse;font-size:16px}.coach-records th,.coach-records td{padding:8px 4px;border-bottom:1px solid #334452;overflow-wrap:anywhere}.coach-records pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:16px}.coach-records blockquote{white-space:pre-wrap;overflow-wrap:anywhere;margin:12px 0;padding:8px;border-left:2px solid #FF4655}
 </style>
+<style id="coach-quick-start-style">
+.coach-quick,.coach-aim-routine{box-sizing:border-box;margin:14px 0;color:#e8eef4;border:1px solid #405267;border-radius:12px;background:#132431;max-width:100%;overflow-wrap:anywhere}
+.coach-quick{padding:18px 16px}
+.coach-quick-label{display:inline-block;color:#ffb8be;font-size:13px;font-weight:800;margin-bottom:8px}
+.coach-quick h2{font-size:clamp(21px,5.8vw,28px);margin:0 0 7px;line-height:1.35;color:#fff}
+.coach-quick-timing{font-size:15px;margin:0 0 12px;color:#d5e4f0}
+.coach-quick-reason{font-size:14px;line-height:1.7;margin:0 0 18px;color:#d5e4f0}
+.coach-quick-steps{margin:0;padding:0;list-style:none;display:grid;gap:10px}
+.coach-quick-steps li{display:flex;gap:12px;padding:12px;background:#1a3142;border-radius:9px}
+.coach-quick-count{width:28px;height:28px;flex:0 0 28px;display:grid;place-items:center;border-radius:50%;background:#ff4655;color:#fff;font-weight:800}
+.coach-quick-steps li>div{min-width:0}
+.coach-quick-steps strong{font-size:16px}
+.coach-quick-steps p{font-size:14px;line-height:1.75;margin:5px 0 0;color:#e7f0f7}
+.coach-quick-next{margin-top:14px;padding:12px;border-left:3px solid #ff4655;background:#253343}
+.coach-quick-next strong{font-size:15px}
+.coach-quick-next p{margin:6px 0 0;font-size:14px;line-height:1.75}
+.coach-quick-small{font-size:12px!important;line-height:1.7!important;color:#bfcbd8!important}
+.coach-aim-routine summary{cursor:pointer;padding:15px 16px;font-size:16px;font-weight:800;min-height:48px;box-sizing:border-box}
+.coach-aim-inner{padding:0 16px 16px;font-size:14px;line-height:1.75}
+.coach-aim-inner ol{padding-left:22px}
+.coach-aim-inner li{margin:12px 0}
+.coach-aim-inner p{margin:5px 0 9px}
+.coach-quick-check{color:#ffbdc2}
+.coach-full-guide{margin-top:14px}
+.coach-full-guide>summary{min-height:48px;cursor:pointer;font-size:15px;font-weight:700;padding:12px;border:1px solid #617082;border-radius:9px;background:#182938;color:#e9eff5}
+.coach-full-guide[open]>summary{margin-bottom:14px}
+.coach-quick :focus-visible,.coach-aim-routine :focus-visible,.coach-full-guide :focus-visible{outline:3px solid #fff;outline-offset:2px}
+@media(max-width:400px){.coach-quick{padding:15px 12px}.coach-quick-steps li{padding:10px}}
+</style>
 <style id="coach-loop-style">
 .coach-loop{margin:20px 0 28px;padding:22px;background:#14232f;color:#ece8e1;border-left:3px solid #ff4655;min-width:0}
 .coach-loop h2{font-size:22px;line-height:1.45;margin:0 0 14px;overflow-wrap:anywhere}
@@ -907,6 +936,7 @@
 <script src="./coach/prototype-view.js?v=coach-089424bc19d7"></script>
 <script src="./coach/benchmarks.js?v=coach-4721e7e852a8"></script>
 <script src="./coach/practice.js?v=coach-1d4e247eb817"></script>
+<script src="./coach/quick-start.js?v=coach-20261122-quick1"></script>
 <script src="./coach/reader.js?v=coach-b714184b6163"></script>
 <script>
 const CoachReader=globalThis.KesoCoachReader;
@@ -1485,7 +1515,7 @@ const matchFeedbackPanel=f=>{
  '<details class="member-detail"><summary>解説の対象と選び方を確認します</summary><p>表示 '+int(f.quality.shown)+' / 時刻判明 '+int(f.quality.availableChronologicalMatches)+'試合、上限 '+int(f.quality.limit)+'件。日時不明除外 '+int(f.quality.undatedExcluded)+'件。同時刻の順序不明 '+int(f.quality.ambiguousTimeMatches)+'件。</p><p>'+escape(f.rules)+'</p></details></section>';
 };
 const renderMemberDiagnosis=d=>{
- const keepOpen=['data-analysis-details','data-other-practice','data-long-diagnosis','data-analysis-navigation'].filter(key=>$('member-result').querySelector('['+key+']')?.open);
+ const keepOpen=['data-full-coach','data-analysis-details','data-other-practice','data-long-diagnosis','data-analysis-navigation'].filter(key=>$('member-result').querySelector('['+key+']')?.open);
  const all=(d.fullDiagnosis?.items||[]).filter(x=>x.subject===d.profile);
  const own=Array.isArray(d.individual)?d.individual.find(x=>x.player===d.profile):null;
  const splits=Array.isArray(d.individualMapAgent)?d.individualMapAgent.filter(x=>x.player===d.profile):[];
@@ -1590,11 +1620,12 @@ const renderMemberDiagnosis=d=>{
   ${all.filter(x=>x.category===cat).map(x=>diagnosticCard(x)).join('')}
  </details>`).join('')||'<p class="coach-empty">判断に使える指標はまだありません。</p>';
  const tabs=[['overview','今日の課題を確認する'],['guns','撃ち合いを見直す'],['improve','ラウンドの動きを見直す'],['strategy','マップごとの違いを見る'],['time','前回からの変化を見る'],['team','味方との連携を確認する'],['metrics','数字の読み方を確認する']];
+ const selectedPlan=globalThis.KesoCoachPractice.choose(d,{...(practiceProfiles.get(d.person)||defaultPracticePreferences()),exclude:practiceExcluded.get(d.person)||[]},benchmarkReference);
  $('member-result').innerHTML=`<div class="coach-dashboard-tabs" role="tablist" aria-label="${escape(d.person)}の分析画面">`+
   tabs.map(([id,title],i)=>`<button type="button" role="tab" data-coach-view="${id}"
     id="coach-tab-${id}" aria-controls="coach-view-${id}" aria-selected="${i===0}" tabindex="${i===0?0:-1}">${title}</button>`).join('')+
   '</div>'+
-  `<div class="coach-dashboard-view" id="coach-view-overview" role="tabpanel" aria-labelledby="coach-tab-overview">${globalThis.KesoCoachPrototype.render(d,{plan:globalThis.KesoCoachPractice.choose(d,{...(practiceProfiles.get(d.person)||defaultPracticePreferences()),exclude:practiceExcluded.get(d.person)||[]},benchmarkReference),copy:CoachPresentation,reader:CoachReader,fill:globalThis.KesoCoachPractice.fill})}<details class="coach-disclosure" data-other-practice><summary>ほかの課題や練習条件を確認します <span class="chev" aria-hidden="true">⌄</span></summary><div class="detail-body coach-existing">${practicePanel(d)}</div></details><details class="coach-disclosure" data-analysis-details><summary>診断の根拠と試合別の解説を確認します <span class="chev" aria-hidden="true">⌄</span></summary><div class="detail-body coach-existing">${readerBoard(d)}${personalPanel(d)}${readerGuide('overview')}${overview}${readerGlossary('overview')}</div></details></div>`+
+  `<div class="coach-dashboard-view" id="coach-view-overview" role="tabpanel" aria-labelledby="coach-tab-overview">${globalThis.KesoCoachQuickStart.render(d,selectedPlan)}<details class="coach-full-guide" data-full-coach><summary>長い練習コースとタイマーを見る</summary>${globalThis.KesoCoachPrototype.render(d,{plan:selectedPlan,copy:CoachPresentation,reader:CoachReader,fill:globalThis.KesoCoachPractice.fill})}</details><details class="coach-disclosure" data-other-practice><summary>ほかの課題や練習条件を確認します <span class="chev" aria-hidden="true">⌄</span></summary><div class="detail-body coach-existing">${practicePanel(d)}</div></details><details class="coach-disclosure" data-analysis-details><summary>診断の根拠と試合別の解説を確認します <span class="chev" aria-hidden="true">⌄</span></summary><div class="detail-body coach-existing">${readerBoard(d)}${personalPanel(d)}${readerGuide('overview')}${overview}${readerGlossary('overview')}</div></details></div>`+
   `<div class="coach-dashboard-view" id="coach-view-guns" role="tabpanel" aria-labelledby="coach-tab-guns" hidden>${readerGuide('guns')}${readerStats(d,'guns')}${benchmarkPanel(d)}${readerGlossary('guns')}${readerAdvanced(performancePanel(d.performance,'guns')+contextPanel(d.roundContext,'weapons'))}</div>`+
   `<div class="coach-dashboard-view" id="coach-view-time" role="tabpanel" aria-labelledby="coach-tab-time" hidden>${readerGuide('time')}${readerStats(d,'time')}${readerGlossary('time')}${readerAdvanced(performancePanel(d.performance,'time'))}</div>`+
   `<div class="coach-dashboard-view" id="coach-view-team" role="tabpanel" aria-labelledby="coach-tab-team" hidden>${readerGuide('team')}${readerStats(d,'team')}${readerGlossary('team')}${readerAdvanced(performancePanel(d.performance,'team')+contextPanel(d.roundContext,'utility')+'<p>同時交戦と位置上のトレード機会は、継続的な位置・視界の記録がないため未取得。</p>'+rateCharts)}</div>`+
