@@ -1233,7 +1233,8 @@ function renderMemberArchiveStatus(data){
   return;
  }
  $('member-archive-status').innerHTML='<div class="member-coverage">'+(history.people||[]).map(p=>{
-  const phase=!history.enabled?'収集停止中':p.truncated?'上限到達':
+  const phase=typeof p.collectionStage==='string'?p.collectionStage:
+   !history.enabled?'収集停止中':p.truncated?'上限到達':
    p.discoveryDone?'履歴探索終了':'履歴探索中';
   return `<article><strong>${escape(p.person)} · ${escape(phase)}</strong>
    <p>発見 ${int(p.discovered)}件 ／ 完全保存 ${int(p.complete)}件</p>
