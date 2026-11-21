@@ -27,6 +27,9 @@ export function spectatorPublicSnapshot(source:SpectatorSource):SpectatorSnapsho
   if(!source||!GAMES.has(source.game)||!STATUS.has(source.status)||
     !safeString(source.id)||!safeString(source.guild)||
     !safeString(source.user_a)||!safeString(source.user_b)||
+    // Never pass untyped or structured winner/turn values into a public snapshot.
+    (source.turn_user!==null&&!safeString(source.turn_user))||
+    (source.winner!==null&&!safeString(source.winner))||
     !nonnegative(source.version)||!nonnegative(source.updated_at)||
     typeof source.board!=='string')throw Error('spectator snapshot unavailable');
   const result:SpectatorSnapshot={
