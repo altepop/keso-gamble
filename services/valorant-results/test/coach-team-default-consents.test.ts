@@ -34,7 +34,7 @@ test('explicit owner withdrawal stays OFF across repeated scheduled provisioning
   await provisionConfirmedCoachRosterConsents(f.db,f.mapping,10000);
   const off=await call(f,'consent',{expectedVersion:1,joined:false,shareStatus:false,shareMetrics:false});
   assert.equal(off.status,200);
-  const noticeOff=await call(f,'notification',{expectedVersion:1,enabled:false},undefined,1);
+  const noticeOff=await call(f,'notification',{expectedVersion:1,enabled:false},1);
   assert.equal(noticeOff.status,200,'another roster member can independently withdraw notices');
   const rerun=await provisionConfirmedCoachRosterConsents(f.db,f.mapping,11000);
   assert.equal(rerun.initialized,0);
