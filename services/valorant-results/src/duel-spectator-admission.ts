@@ -11,10 +11,13 @@ export type SpectatorAdmissionInput={
  /** Explicit grant supplied by a future approved authorization service, NEVER inferred. */
  approvedViewerIds:readonly string[];
 };
+const validSpectatorId=(value:unknown):value is string=>
+ typeof value==='string'&&value.trim().length>0&&value.length<=256;
 export function decideSpectatorAdmission(input:SpectatorAdmissionInput):SpectatorDecision {
- if(!input.viewer||!input.viewerGuild)return {allowed:false,reason:'unauthenticated'};
- if(input.viewerGuild!==input.matchGuild)return {allowed:false,reason:'guild_mismatch'};
- if(!input.matchId||input.matchId.length>256)return {allowed:false,reason:'match_unavailable'};
+ // Guard untyped runtime callers before comparing identity and authorization data.
+ if(!input||!validSpectatorId(input.viewer)||!validSpectatorId(input.viewerGuild))return {allowed:false,reason:'unauthenticated'};
+ if(!validSpectatorId(input.matchGuild)||input.viewerGuild!==input.matchGuild)return {allowed:false,reason:'guild_mismatch'};
+ if(!validSpectatorId(input.matchId))return {allowed:false,reason:'match_unavailable'};
  // Runtime callers may be untyped. Only a real array with a real element match is a grant;
  // an array's own includes property can be overridden by untrusted input.
  if(!Array.isArray(input.approvedViewerIds)||
