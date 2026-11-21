@@ -343,6 +343,11 @@ jobs:
             *) echo 'Invalid Activity entry mode'; exit 1 ;;
           esac
           node scripts/activity-entry-handler.mjs "--$ENTRYPOINT_MODE"
+      - name: Register KESO COACH under existing /valo without altering other commands
+        working-directory: ${{ runner.temp }}/kp-app/services/valorant-results
+        env:
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+        run: node --experimental-strip-types scripts/sync-valo-command.mjs
       - name: Verify production Activity, Worker and KP reads
         env:
           KESO_SMOKE_WALLET_TOKEN: ${{ secrets.KESO_SMOKE_WALLET_TOKEN }}
