@@ -9,15 +9,26 @@ export async function backfillCoachPositions(db:D1Database,fetchDetail:(region:s
  const switches=await db.prepare('SELECT key,value FROM monitor_state WHERE key IN (?,?)').bind(ALL_MEMBER_SWITCH,'api_after').all<{key:string;value:string}>();
  if(!switches.results.some(s=>s.key===ALL_MEMBER_SWITCH&&s.value==='enabled'))return 'disabled';
  if(Number(switches.results.find(s=>s.key==='api_after')?.value)>now)return 'cooldown';
- const row=await db.prepare(`SELECT q.match_id,q.region,q.source_puuid,q.started_at FROM coach_member_queue q
+ // A match can belong to multiple verified cohort members. Reuse a linked,
+ // resolved source instead of blocking all participants on the first (VDK)
+ // attribution. Never use unrelated accounts, stale identities or extra calls.
+ const permitted=COACH_MEMBER_ACCOUNTS.map(()=>'?').join(',');
+ const row=await db.prepare(`SELECT q.match_id,s.region,s.puuid AS source_puuid,q.started_at FROM coach_member_queue q
+  JOIN coach_member_sources s ON s.riot_id=(
+   SELECT linked.riot_id FROM coach_member_links l
+   JOIN coach_member_sources linked ON linked.riot_id=l.riot_id
+   WHERE l.match_id=q.match_id AND linked.riot_id IN (${permitted})
+    AND length(linked.puuid) BETWEEN 1 AND 128
+    AND linked.region IN ('ap','na','eu','kr','br','latam')
+   ORDER BY CASE WHEN linked.riot_id=q.source_riot_id AND linked.puuid=q.source_puuid
+      AND linked.region=q.region THEN 0 ELSE 1 END,linked.riot_id ASC LIMIT 1)
   LEFT JOIN valorant_match_positions p ON p.match_id=q.match_id
   LEFT JOIN coach_position_backfill b ON b.match_id=q.match_id
   WHERE (q.status='complete' OR (q.status='partial' AND q.attempts>=3)) AND COALESCE(p.has_coordinates,0)=0
-   AND q.source_riot_id IN (${COACH_MEMBER_ACCOUNTS.map(()=>'?').join(',')})
-   AND EXISTS(SELECT 1 FROM coach_member_links l JOIN coach_member_sources s ON s.riot_id=l.riot_id
-    WHERE l.match_id=q.match_id AND s.riot_id=q.source_riot_id AND s.puuid=q.source_puuid)
+   AND q.source_riot_id IN (${permitted})
    AND (b.match_id IS NULL OR (b.status IN ('retry','running') AND b.attempts<3 AND b.next_at<=?))
-  ORDER BY q.started_at DESC LIMIT 1`).bind(...COACH_MEMBER_ACCOUNTS.map(p=>p.riotId),now).first<{match_id:string;region:string;source_puuid:string;started_at:number}>();
+  ORDER BY q.started_at DESC LIMIT 1`).bind(...COACH_MEMBER_ACCOUNTS.map(p=>p.riotId),...COACH_MEMBER_ACCOUNTS.map(p=>p.riotId),now)
+  .first<{match_id:string;region:string;source_puuid:string;started_at:number}>();
  if(!row)return 'idle';
  const claim=await db.prepare(`INSERT INTO coach_position_backfill(match_id,status,attempts,next_at,reason,updated_at)
   VALUES(?,'running',1,?,'in-progress',?) ON CONFLICT(match_id) DO UPDATE SET
