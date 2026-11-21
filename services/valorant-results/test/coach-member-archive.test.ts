@@ -494,3 +494,50 @@ test('Phase 5 legacy schema upgrade never rewrites an unrelated completed queue 
   assert.equal(calls,1);
  }finally{f.close();}
 });
+
+test('Phase 5 archive detail retry switches from a failing original to a verified linked peer',async()=>{
+ const f=setup();try{
+  await enableAllMemberArchive(f.db);
+  const original=COACH_MEMBER_ACCOUNTS[0].riotId,peer=COACH_MEMBER_ACCOUNTS[3].riotId,id='archive-retry-peer';
+  f.sql.prepare('UPDATE coach_member_sources SET puuid=?,region=? WHERE riot_id=?').run('player-0','ap',original);
+  f.sql.prepare('UPDATE coach_member_sources SET puuid=?,region=? WHERE riot_id=?').run('peer-verified','eu',peer);
+  f.sql.prepare("INSERT INTO coach_member_queue VALUES(?,?,?,?,?,'pending',0,0)")
+   .run(id,'ap',original,'player-0',Date.parse(started));
+  for(const riot of [original,peer])f.sql.prepare('INSERT INTO coach_member_links VALUES(?,?)').run(riot,id);
+  const regions:string[]=[];
+  const detail=async(region:string,matchId:string)=>{
+   regions.push(region);
+   return region==='ap'?makeMatch('wrong-match'):makeMatch(matchId,'peer-verified');
+  };
+  assert.equal(await fetchNextCoachMemberMatch(f.db,detail,now),'deferred',
+   'first detail attempt still prefers the verified original');
+  assert.equal(await fetchNextCoachMemberMatch(f.db,detail,now+14*60_000),'idle',
+   'the original cooldown remains in force');
+  assert.equal(await fetchNextCoachMemberMatch(f.db,detail,now+15*60_000),'saved',
+   'the retry uses the independently verified shared member');
+  assert.deepEqual(regions,['ap','eu'],'one detail request per existing slot');
+  const q=f.sql.prepare("SELECT status,attempts,source_riot_id,source_puuid FROM coach_member_queue WHERE match_id=?").get(id) as any;
+  assert.equal(q.status,'complete');assert.equal(q.attempts,2);
+  assert.equal(q.source_riot_id,original);assert.equal(q.source_puuid,'player-0',
+   'retry never rewrites the original attribution');
+ }finally{f.close();}
+});
+test('Phase 5 archive retry never selects an unregistered or unlinked peer',async()=>{
+ const f=setup();try{
+  await enableAllMemberArchive(f.db);
+  const original=COACH_MEMBER_ACCOUNTS[0].riotId,id='archive-no-peer';
+  f.sql.prepare('UPDATE coach_member_sources SET puuid=?,region=? WHERE riot_id=?').run('player-0','ap',original);
+  f.sql.prepare("INSERT INTO coach_member_queue VALUES(?,?,?,?,?,'pending',0,0)")
+   .run(id,'ap',original,'player-0',Date.parse(started));
+  f.sql.prepare('INSERT INTO coach_member_links VALUES(?,?)').run(original,id);
+  f.sql.prepare("INSERT INTO coach_member_sources(riot_id,puuid,region) VALUES(?,?,?)").run('outsider#private','outsider-puuid','eu');
+  f.sql.prepare('INSERT INTO coach_member_links VALUES(?,?)').run('outsider#private',id);
+  const regions:string[]=[];
+  const detail=async(region:string,matchId:string)=>{
+   regions.push(region);return regions.length===1?makeMatch('mismatched'):makeMatch(matchId);
+  };
+  assert.equal(await fetchNextCoachMemberMatch(f.db,detail,now),'deferred');
+  assert.equal(await fetchNextCoachMemberMatch(f.db,detail,now+15*60_000),'saved');
+  assert.deepEqual(regions,['ap','ap'],'unregistered linked source is not used for a fallback');
+ }finally{f.close();}
+});

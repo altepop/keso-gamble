@@ -193,9 +193,15 @@ export async function fetchNextCoachMemberMatch(db:D1Database,
       AND s.region IN ('ap','na','eu','kr','br','latam')
       AND (s.riot_id<>q.source_riot_id OR
        (s.puuid=q.source_puuid AND s.region=q.region))
-    ORDER BY CASE WHEN s.riot_id=q.source_riot_id
-                   AND s.puuid=q.source_puuid AND s.region=q.region THEN 0 ELSE 1 END,
-             s.riot_id ASC LIMIT 1
+    -- After a failed detail attempt, prefer an independently verified
+    -- linked peer to avoid retrying only the original account (e.g. VDK).
+    -- The queue still permits at most three attempts and one call per slot.
+    ORDER BY CASE WHEN q.attempts>0
+      THEN CASE WHEN s.riot_id=q.source_riot_id
+         AND s.puuid=q.source_puuid AND s.region=q.region THEN 1 ELSE 0 END
+      ELSE CASE WHEN s.riot_id=q.source_riot_id
+         AND s.puuid=q.source_puuid AND s.region=q.region THEN 0 ELSE 1 END
+     END,s.riot_id ASC LIMIT 1
   )
   WHERE q.status IN ('pending','partial') AND q.next_at<=? AND q.attempts<3
    AND (source.riot_id IS NOT NULL OR (
