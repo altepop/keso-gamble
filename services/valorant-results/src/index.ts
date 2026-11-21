@@ -1,4 +1,5 @@
 import {syncCoachProfiles} from './coach-identity.ts';
+import {provisionConfirmedCoachRosterConsents} from './coach-team-default-consents.ts';
 import {runCoachPositionArchiveSlot} from './coach-position-backfill.ts';
 import {captureCompetitivePositions} from './coach-position-storage.ts';
 import {coachPositionQuality} from './coach-position-quality.ts';
@@ -663,6 +664,7 @@ export default {
       ctx.waitUntil(track(env,'coach_identity',async()=>{
         const mapping=await initializeKp(env);if(!mapping)return;
         console.info('coach_identity_sync',await syncCoachProfiles(env.DB,mapping));
+        console.info('coach_roster_consent_defaults',await provisionConfirmedCoachRosterConsents(env.DB,mapping));
       }));
     // The archival backfill is DB-opt-in and strictly isolated from notices and KP.
     // At most one extra Henrik detail call per five minutes; stop automatically when complete.
