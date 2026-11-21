@@ -583,6 +583,10 @@
  <div class="tophero-inner"><div class="playerline"><span class="micro">KESO <b>//</b> Coach Brief</span><h1 class="name">KESO COACH</h1></div><p class="coach-intro">記録を確認し、次の試合に向けた練習をご案内します。</p><p class="coach-intro">接続すると、ご本人のコーチングを表示します。</p></div>
 </header>
 <p id="coach-ui-message" role="status" aria-live="polite">データを確認しています。</p>
+<div id="coach-retry-panel" hidden style="padding:10px 20px 20px">
+ <button id="coach-retry" type="button" style="min-height:48px;width:100%;font:inherit;font-weight:700">コーチの分析を再読み込み</button>
+ <p class="muted">KESO PLAYのKP残高は変更されません。接続コードの再入力は不要です。</p>
+</div>
 <details id="connection" class="coach-disclosure" open><summary>接続してコーチングを確認します <span class="chev" aria-hidden="true">⌄</span></summary><div class="detail-body coach-existing">
 <h2>KP口座へ接続すると分析を確認できます</h2>
 <p class="muted">Discordの <code>/valo coach</code> から「Activityを開く」を押し、KESO PLAYの「コーチ」を選ぶと、Discordの本人認証で接続できます。48桁コードの入力は不要です。同じブラウザーですでにKP口座へ接続済みの場合も自動で認証します。</p>
@@ -1759,7 +1763,7 @@ function clearCoachView(){
 async function load(){
  if(busy)return;
  clearCoachView();let generation=authGeneration;const t=token();credentialState=credentials();
- busy=true;memberPending=false;$('reload').disabled=true;setStatus('ご本人のコーチングを読み込み中…');
+ busy=true;memberPending=false;$('reload').disabled=true;$('coach-retry-panel').hidden=true;setStatus('ご本人のコーチングを読み込み中…');
  try{
   if(!t){$('connection').style.display='block';setStatus('KP口座を接続してください');return;}
   const data=await request('/api/kp/coach/me',{headers:{Authorization:'Bearer '+t}});
@@ -1785,7 +1789,13 @@ async function load(){
   else if(e.status===429&&t){
    try{const state=await request('/api/kp/coach/members/status',{headers:{Authorization:'Bearer '+t}});if(generation===authGeneration&&token()===t&&state.identity?.status==='linked'){renderMemberArchiveStatus(state);coachRecords.setState(state.practiceState);coachSharing.setData(state.settings);coachGoals.setData(state.goals);$('member-result').replaceChildren(coachGoals.element);$('report').hidden=false;$('member-coaching-panel').hidden=true;}}catch{}
    if(generation===authGeneration)setStatus(e.message,true);
-  }else{$('connection').style.display='block';setStatus(e.message||'本人の対応を確認できませんでした。',true);}
+  }else{
+   // A valid KP session plus a backend error must not prompt for a new 48-digit
+   // code. Keep authentication and report availability as separate states.
+   $('connection').style.display=t?'none':'block';
+   $('coach-retry-panel').hidden=!t;
+   setStatus(e.message||'本人のコーチングを読み込めませんでした。',true);
+  }
  }finally{if(generation===authGeneration){busy=false;$('reload').disabled=false;}}
 }
 function checkCoachSession(event){
@@ -1890,6 +1900,7 @@ $('resume-backfill').addEventListener('click',async()=>{
  }catch(e){setStatus(e.message||'補完設定を確認できませんでした。',true);}finally{b.disabled=false;}
 });
 $('reload').addEventListener('click',()=>activeMember?refreshMember():load());
+$('coach-retry').addEventListener('click',()=>load());
 $('connect-form').addEventListener('submit',async event=>{
  event.preventDefault();
  const code=$('code').value.trim();

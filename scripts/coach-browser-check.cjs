@@ -690,6 +690,32 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
    if(scenario==='late-observation'){while(!releaseReview)await new Promise(r=>setTimeout(r,20));await sp.evaluate(()=>{localStorage.setItem('keso-kp-session-v1','b'.repeat(48));window.dispatchEvent(new Event('focus'));});await sp.getByRole('alert').filter({hasText:'まだ連携'}).first().waitFor();releaseReview();await sp.waitForTimeout(100);}else await sp.getByRole('alert').filter({hasText:'もう一度ログイン'}).waitFor();
    await sp.evaluate(()=>window.__staleMatchForm.__save());assert.equal(linkPosts,0,'stale match selector cannot save under another session');assert.equal(await sp.locator('[data-practice-review]').count(),0);assert.ok(!(await sp.locator('body').textContent()).includes('返してはいけない観察'));assert.deepEqual(se,[]);await sc.close();
   }
+  // Real iPhone Activity report failure: an already-connected KP owner must
+  // get a retry action, NEVER the 48-digit fallback for a backend 503/400.
+  {
+   const retryContext=await browser.newContext({viewport:{width:375,height:812}});
+   await retryContext.addInitScript(t=>localStorage.setItem('keso-kp-session-v1',t),token);
+   let firstReport=true;
+   await retryContext.route('https://valorant-results.tealeaforest.workers.dev/**',async route=>{
+    const url=new URL(route.request().url());
+    if(url.pathname==='/api/kp/coach/me'&&firstReport){
+     firstReport=false;
+     return route.fulfill({status:503,json:{error:'コーチングの分析情報を読み込めませんでした。診断コード：COACH_REPORT',code:'COACH_REPORT'}});
+    }
+    return route.fulfill({json:{...state,report:projectCoachSelfReport(makeMember('神戸'))}});
+   });
+   const page=await retryContext.newPage();
+   await page.goto('http://127.0.0.1:18784/coach.html?embedded=1');
+   await page.waitForFunction(()=>!document.getElementById('coach-retry-panel').hidden);
+   assert.equal(await page.locator('#connection').isVisible(),false,'do not ask the linked user to type a 48-digit code');
+   assert.equal(await page.locator('#code').isVisible(),false);
+   assert.match(await page.locator('#coach-ui-message').innerText(),/COACH_REPORT/);
+   await page.locator('#coach-retry').click();
+   await page.locator('[data-primary-mission]').waitFor();
+   assert.equal(await page.locator('#coach-retry-panel').isVisible(),false);
+   assert.equal(await page.locator('#connection').isVisible(),false);
+   await retryContext.close();
+  }
   console.log('KESO COACH self-first, private sessions, v6/practice regression and 320/375/1440 layout: OK');
  }finally{await browser.close();server.kill();}
 })().catch(e=>{console.error(e);server.kill();process.exitCode=1;});
