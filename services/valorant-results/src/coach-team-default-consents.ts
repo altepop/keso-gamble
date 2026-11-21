@@ -11,7 +11,8 @@ export async function provisionConfirmedCoachRosterConsents(
  for(const account of mapping.accounts){
   const owner=account.discordUserId;
   const identity=await resolveCoachIdentity(db,mapping,owner);
-  if(identity.status!=='linked'||identity.pendingAccounts>0){skipped++;continue;}
+  // A verified primary identity is sufficient; optional extra game accounts may still be pending.
+  if(identity.status!=='linked'){skipped++;continue;}
   const inserted=await db.prepare(`INSERT OR IGNORE INTO coach_team_consents
    (guild,team_id,subject_id,owner_user,joined,share_status,share_metrics,version,updated_at)
    SELECT ?,?,?,?,1,1,1,1,? WHERE EXISTS(
