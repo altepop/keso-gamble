@@ -1544,10 +1544,25 @@ const renderMemberDiagnosis=d=>{
   '<h3>再現したい良い傾向</h3>'+
   (positives.length?positives.map(x=>diagnosticCard(x,'good')).join(''):
    '<p class="coach-empty">良い点がないという意味ではありません。現状は、良い傾向と判断するための比較データが不足しています。</p>');
+ const mapEvidencePanel=report=>{
+  const rows=Array.isArray(report?.pool)?report.pool:[];
+  if(!rows.length)return '<p class="member-small">マップ別位置データの照合結果はまだ取得できません。未取得はミスではありません。</p>';
+  return '<details class="member-detail"><summary>マップ別の位置データ照合状況（本人限定）</summary>'+
+   '<p class="member-small">保存済みの位置記録とキル時系列の整合性です。位置取りの良し悪しや本人の責任は判定しません。</p>'+
+   '<div class="member-coverage">'+rows.map(row=>{
+    const total=safeNumber(row.sampleMatches),available=safeNumber(row.comparableMatches),
+     same=safeNumber(row.consistentMatches),different=safeNumber(row.mismatchedMatches),
+     missing=safeNumber(row.unavailableMatches);
+    return '<article><strong>'+escape(row.map||'不明')+' · '+escape(row.status||'未判定')+'</strong>'+
+     '<p>保存 '+int(total)+'試合 ／ 比較可能 '+int(available)+'試合</p>'+
+     '<p>一致 '+int(same)+'件 · 不一致 '+int(different)+'件 · 比較不能 '+int(missing)+'件</p></article>';
+   }).join('')+'</div>'+
+   '<p class="member-small">現行7マップ以外 '+int(report.historicalMatches)+'試合・マップ不明 '+int(report.unknownMapMatches)+'試合は上記7マップに含めていません。比較不能は不一致に含めません。</p></details>';
+ };
  const strategy='<h3>攻撃と防衛の先制動向</h3>'+
   '<div class="coach-side-grid">'+coachSideBlock('攻撃',own?.attack)+coachSideBlock('防衛',own?.defense)+'</div>'+
   '<p class="member-small">攻撃・防衛の役割や使用エージェントが違うため、数値だけで戦術の優劣を断定しません。</p>'+
-  '<h3>マップ × エージェント</h3>'+
+  '<h3>マップ × エージェント</h3>'+mapEvidencePanel(d.mapPositionEventParity)+
   (splits.length?'<div class="coach-map-grid">'+[...splits].sort((a,b)=>b.matches-a.matches).map(coachMapCard).join('')+'</div>':
   '<p class="coach-empty">マップ・エージェント別のデータがありません。</p>');
  const categories=[...new Set(all.map(x=>x.category))];
