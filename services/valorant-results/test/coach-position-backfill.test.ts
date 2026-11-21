@@ -113,3 +113,28 @@ test('position backfill rejects linked peers with invalid region or missing PUUI
   }finally{f.sql.close();}
  }
 });
+
+test('Phase 5 verified member rescues position backfill when legacy queue attribution is outside cohort',async()=>{
+ const f=fixture();try{
+  f.sql.exec("UPDATE coach_member_queue SET source_riot_id='outsider#old',source_puuid='outsider-puuid'; INSERT INTO coach_member_sources VALUES('outsider#old','outsider-puuid','na')");
+  let calls=0;
+  assert.equal(await backfillCoachPositions(f.db,async(region,id)=>{
+   calls++;assert.equal(region,'ap');assert.equal(id,'m1');
+   return f.match();
+  },now),'saved');
+  assert.equal(calls,1,'use only the verified cohort member, never the unrelated source');
+  assert.equal(f.state().attempts,1);
+  const legacy=f.sql.prepare("SELECT source_riot_id,source_puuid FROM coach_member_queue WHERE match_id='m1'").get() as any;
+  assert.equal(legacy.source_riot_id,'outsider#old','do not mutate historical attribution');
+  assert.equal(legacy.source_puuid,'outsider-puuid');
+ }finally{f.sql.close();}
+});
+test('Phase 5 unrelated legacy queue without verified cohort link cannot use a position slot',async()=>{
+ const f=fixture();try{
+  f.sql.exec("UPDATE coach_member_queue SET source_riot_id='outsider#old',source_puuid='outsider-puuid'; DELETE FROM coach_member_links; INSERT INTO coach_member_sources VALUES('outsider#old','outsider-puuid','na'); INSERT INTO coach_member_links VALUES('outsider#old','m1')");
+  let calls=0;
+  assert.equal(await backfillCoachPositions(f.db,async()=>{calls++;return f.match();},now),'idle');
+  assert.equal(calls,0);
+  assert.equal(f.counts().writes,0);
+ }finally{f.sql.close();}
+});
