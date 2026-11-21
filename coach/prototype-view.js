@@ -127,6 +127,28 @@
    if(coverage.unknownMapMatches>0)wrap.appendChild(p(doc,'マップ名不明の試合が'+coverage.unknownMapMatches+'件あります。7マップの成績へ推測で割り当てません。'));
    $('.remember').parentNode.insertBefore(wrap,$('.remember'));
   }
+  // Phase 4: only the owner-scoped aggregate from the authenticated report.
+  // Do not render provider coordinates, raw frames, match IDs or roster details.
+  const position=d.positionCoverage;
+  if(position&&Number.isSafeInteger(position.sampleMatches)&&position.sampleMatches>=0&&
+   Number.isSafeInteger(position.verifiedPositionMatches)&&position.verifiedPositionMatches>=0&&
+   Number.isSafeInteger(position.observedOwnVictimEvents)&&position.observedOwnVictimEvents>=0&&
+   Number.isSafeInteger(position.knownOwnVictimLocations)&&position.knownOwnVictimLocations>=0&&
+   Number.isSafeInteger(position.observedOwnKillerEvents)&&position.observedOwnKillerEvents>=0&&
+   Number.isSafeInteger(position.knownOwnKillerLocations)&&position.knownOwnKillerLocations>=0&&
+   position.verifiedPositionMatches<=position.sampleMatches&&
+   position.knownOwnVictimLocations<=position.observedOwnVictimEvents&&
+   position.knownOwnKillerLocations<=position.observedOwnKillerEvents){
+   const wrap=doc.createElement('section');wrap.className='coach-own-position-coverage';
+   wrap.style.cssText='margin:16px 0;padding:16px;background:var(--bg-2);border:1px solid var(--line);';
+   const h=doc.createElement('h3');h.textContent='立ち位置データの取得状況';
+   h.style.cssText='margin:0 0 8px;font-size:19px;';wrap.appendChild(h);
+   wrap.appendChild(p(doc,'保存済みの本人の'+position.sampleMatches+'試合中、位置情報を確認できたのは'+position.verifiedPositionMatches+'試合です。'));
+   wrap.appendChild(p(doc,'本人が倒された場面：位置取得 '+position.knownOwnVictimLocations+' / 記録 '+position.observedOwnVictimEvents+'件。'));
+   wrap.appendChild(p(doc,'本人が敵を倒した場面：位置取得 '+position.knownOwnKillerLocations+' / 記録 '+position.observedOwnKillerEvents+'件。'));
+   wrap.appendChild(p(doc,'取得できない位置は0mとして扱いません。この情報だけで孤立・立ち位置・判断の良し悪しは判定できません。'));
+   $('.remember').parentNode.insertBefore(wrap,$('.remember'));
+  }
   const remember=all('.remember > p');remember[0].textContent=first?copy.polite(fill(first.check,plan.context).replace(/か。?$/,'かを確認してください。')):'次の試合で確認することを、一つ決めておいてください。';remember[1].textContent='結果だけでなく、決めた手順を試せたかも振り返っていただければ十分です。';
   const detail=$('details');detail.dataset.prototypeNumbers='';
   const metrics=[['ACS',o.acs,1],['ADR',o.adr,1],['HS%',o.hsPct,1],['KAST',null,1],['K/D',o.kd,2],['現在のランク',null,0]];
