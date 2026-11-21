@@ -72,3 +72,44 @@ test('expired lease is unavailable even before another connection reclaims it',a
   }),false);
  }finally{f.close();}
 });
+
+test('independent connections fail closed after each class of postclaim authorization change',async()=>{
+ const revocations=[
+  {name:'membership revoked',sql:'UPDATE coach_team_consents SET joined=0'},
+  {name:'consent version changed',sql:'UPDATE coach_team_consents SET version=version+1'},
+  {name:'notice preference removed',sql:'DELETE FROM coach_team_notice_preferences'},
+  {name:'channel disabled',sql:'UPDATE coach_team_notice_channels SET enabled=0'},
+  {name:'channel configuration invalidated',sql:"UPDATE coach_team_notice_channels SET channel_id='invalid'"},
+  {name:'unanticipated member joined',sql:"INSERT INTO coach_team_consents VALUES('123456789012345678','coach-roster-v1','member-2','234567890123456789',1,1,1)"},
+  {name:'lease cancelled',sql:"UPDATE coach_team_notice_outbox SET state='cancelled'"},
+  {name:'lease identity changed',sql:'UPDATE coach_team_notice_outbox SET claimed_until=claimed_until+1'}
+ ];
+ for(const mutation of revocations){
+  const f=fixture();
+  try{
+   const claim=await claimCoachOutboxWithFreshConsent(f.dbA,base());
+   assert.ok(claim,mutation.name);
+   const check={...base(),now:base().now+1,attempts:claim.attempts,claimedUntil:claim.claimedUntil};
+   assert.equal(await verifyCoachClaimStillConsented(f.dbB,check),true,mutation.name);
+   f.a.exec(mutation.sql);
+   assert.equal(await verifyCoachClaimStillConsented(f.dbB,check),false,mutation.name);
+  }finally{f.close();}
+ }
+});
+test('a reclaimed lease invalidates the previous claimant on another connection',async()=>{
+ const f=fixture();
+ try{
+  const first=await claimCoachOutboxWithFreshConsent(f.dbA,base());
+  assert.ok(first);
+  const nextNow=first.claimedUntil;
+  const replacement=await claimCoachOutboxWithFreshConsent(f.dbB,{...base(),now:nextNow});
+  assert.ok(replacement);
+  assert.equal(replacement.attempts,first.attempts+1);
+  assert.equal(await verifyCoachClaimStillConsented(f.dbA,{
+   ...base(),now:nextNow,attempts:first.attempts,claimedUntil:first.claimedUntil
+  }),false);
+  assert.equal(await verifyCoachClaimStillConsented(f.dbA,{
+   ...base(),now:nextNow+1,attempts:replacement.attempts,claimedUntil:replacement.claimedUntil
+  }),true);
+ }finally{f.close();}
+});
