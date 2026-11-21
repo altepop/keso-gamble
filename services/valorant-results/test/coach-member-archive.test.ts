@@ -111,7 +111,7 @@ test('Phase 5 ignores unregistered lifetime sources without delaying or mutating
   assert.ok(COACH_MEMBER_ACCOUNTS.some(x=>x.riotId===accountIds[0]));
   const extra=f.sql.prepare("SELECT next_page,done,truncated,next_at,puuid FROM coach_member_sources WHERE riot_id=?")
    .get('unregistered#outside') as {next_page:number;done:number;truncated:number;next_at:number;puuid:string|null};
-  assert.deepEqual(extra,{next_page:3,done:1,truncated:1,next_at:0,puuid:null},
+  assert.deepEqual({...extra},{next_page:3,done:1,truncated:1,next_at:0,puuid:null},
    'unregistered source is neither repaired nor fetched');
   f.sql.prepare('UPDATE coach_member_sources SET next_at=? WHERE riot_id<>?')
    .run(now+COACH_REFRESH_INTERVAL,'unregistered#outside');
