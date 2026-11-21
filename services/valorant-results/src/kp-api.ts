@@ -390,6 +390,9 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping,deferP
  const headers:Record<string,string>={'Cache-Control':'no-store','Vary':'Origin'};
  if(origin)Object.assign(headers,{'Access-Control-Allow-Origin':origin,'Access-Control-Allow-Headers':'Authorization,Content-Type','Access-Control-Allow-Methods':'GET,POST,OPTIONS'});
  const response=(body:unknown,status=200)=>Response.json(publicFestivalResponse(body),{status,headers});
+ const coachStep=async<T>(step:'IDENTITY'|'GOALS'|'PRACTICE'|'COVERAGE'|'REPORT',load:()=>Promise<T>):Promise<T>=>{
+  try{return await load();}catch(e){throw Object.assign(new Error('Coaching read failed'),{cause:e,coachReadStep:step});}
+ };
  if(request.method==='GET'&&new URL(request.url).pathname==='/api/kp/commands')return response({applicationId:discord.applicationId,version:KP_COMMAND_VERSION,commands:kpCommands});
  if(request.method==='OPTIONS')return new Response(null,{status:204,headers});
  try{
@@ -502,17 +505,17 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping,deferP
       catch(e){if(e instanceof SharingError)return response({error:e.message},e.status);throw e;}
     }
     if(['/api/kp/coach/me','/api/kp/coach/member','/api/kp/coach/members/status'].includes(path)){
-      const identity=await resolveCoachIdentity(env.DB,mapping,owner.user);
+      const identity=await coachStep('IDENTITY',()=>resolveCoachIdentity(env.DB,mapping,owner.user));
       if(identity.status==='conflict')return response({identity:{status:'conflict'},error:'本人のアカウント対応を確認する必要があります。'},409);
       if(identity.status!=='linked')return path==='/api/kp/coach/member'?response({error:'この表示は利用できません。'},404):response({identity:publicCoachIdentity(identity),memberHistory:null,report:null,canStartMemberHistory:false});
       const person=path==='/api/kp/coach/member'?(new URL(request.url).searchParams.get('person')??''):identity.person;
       if(person!==identity.person&&!identity.accounts.some(a=>a.profile===person))return response({error:'この表示は利用できません。'},404);
       if(path!=='/api/kp/coach/members/status'&&await d1OptionalMode(env))return response({error:'D1節約モード中です。時間を置いてから確認してください。'},429);
-      const goals=path==='/api/kp/coach/member'?undefined:await readCoachGoals(env.DB,mapping.guildId,identity.subjectId);
-      const practiceState=path==='/api/kp/coach/member'?undefined:await privatePracticeState(env.DB,mapping.guildId,identity.subjectId);
-      const coverage=await coachMemberCoverage(env.DB,identity.accounts.map(a=>a.riotId));
+      const goals=path==='/api/kp/coach/member'?undefined:await coachStep('GOALS',()=>readCoachGoals(env.DB,mapping.guildId,identity.subjectId));
+      const practiceState=path==='/api/kp/coach/member'?undefined:await coachStep('PRACTICE',()=>privatePracticeState(env.DB,mapping.guildId,identity.subjectId));
+      const coverage=await coachStep('COVERAGE',()=>coachMemberCoverage(env.DB,identity.accounts.map(a=>a.riotId));
       if(path==='/api/kp/coach/members/status')return response({identity:publicCoachIdentity(identity),settings:coachSharingSettings(identity),practiceState,goals,memberHistory:coverage,canStartMemberHistory:memberHistoryOwner,canResume:coachOwner});
-      const report=projectCoachSelfReport(await readCoachMemberReport(env.DB,person,coverage,identity.accounts));
+      const report=await coachStep('REPORT',async()=>projectCoachSelfReport(await readCoachMemberReport(env.DB,person,coverage,identity.accounts)));
       return path==='/api/kp/coach/member'?response(report):response({identity:publicCoachIdentity(identity),settings:coachSharingSettings(identity),report,practiceState,goals,memberHistory:coverage,canStartMemberHistory:memberHistoryOwner,canResume:coachOwner});
     }
   }
@@ -670,9 +673,11 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping,deferP
   // A read-only coaching request must never suggest a KP payment or wallet
   // refresh. Only a fixed category enters logs; identifiers, SQL and tokens do not.
   if(request.method==='GET'&&new URL(request.url).pathname.startsWith('/api/kp/coach/')){
-   const detail=error instanceof Error?error.message:'';
-   console.warn('coach_read_failed',/query result exceeded|maximum response size|too large|out of memory|too many resources|resource limit/i.test(detail)?'resource':'internal');
-   return response({error:'コーチングの分析情報を読み込めませんでした。KP残高とは関係ありません。時間を置いて再表示してください。',code:'COACH_READ_FAILED'},503);
+   const reason=error instanceof Error&&'cause' in error&&error.cause instanceof Error?error.cause.message:error instanceof Error?error.message:'';
+   const step=error&&typeof error==='object'&&'coachReadStep' in error?String(error.coachReadStep):'UNEXPECTED';
+   const safeStep=['IDENTITY','GOALS','PRACTICE','COVERAGE','REPORT'].includes(step)?step:'UNEXPECTED';
+   console.warn('coach_read_failed',safeStep,/query result exceeded|maximum response size|too large|out of memory|too many resources|resource limit/i.test(reason)?'resource':'internal');
+   return response({error:'コーチングの分析情報を読み込めませんでした。KP残高とは関係ありません。診断コード：COACH_'+safeStep,code:'COACH_'+safeStep},503);
   }
   const message=error instanceof Error?error.message:'';
   return response({retryable:!(/[ぁ-んァ-ヶ一-龯]/.test(message)&&!message.includes('SQL')),error:/[ぁ-んァ-ヶ一-龯]/.test(message)&&!message.includes('SQL')?message:message.includes('relic_market_sold')?'出品の状態が変わったため購入・取り下げできません。再読み込みしてください。':message.includes('kp_directive_active')||message.includes('kp_directives.guild, kp_directives.target')?'その相手には実行中の指令があります。':message.includes('kp_horse_limit')?'持てる馬は3頭までです。':message.includes('kp_crowns')?'その枠は埋まりました。もう一度お試しください。':message.includes('kp_horse_not_sellable')?'売れる馬が見つかりません。':'処理を確認できませんでした。残高を更新して確認してください。'},400);
