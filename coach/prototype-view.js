@@ -99,6 +99,34 @@
    const lines=m?['保存済みの'+m.matches+'試合について確認しました。',known(m.winPct)?'勝率は'+number(m.winPct)+'%です。':'勝敗を確認できた記録が不足しています。',known(m.kd)?'K/Dは'+number(m.kd,2)+'です。':'キルとデスをそろえて確認できる記録が不足しています。','次にこのマップで遊ぶ際は、本日の課題を試せた一場面を残してください。']:['現在の保存範囲では、'+mapName+'の個人成績を確認できません。','記録が増えましたら、この欄で実測値をご確認いただけます。'];
    const body=card.querySelector('.mbody');paragraphs(body,lines);const stat=doc.createElement('span');stat.className='mapstat';stat.textContent=m?'対象 '+m.matches+'試合 ／ '+(m.knownOutcomes??'未取得')+'試合の勝敗を確認しています。':'対象記録を確認できていません。';body.appendChild(stat);
   });
+  // Phase 4: this data comes only from the existing authenticated, owner-scoped
+  // coach response; never request another person's metrics or fetch by name.
+  // Missing and sparse map samples remain explicitly ungraded.
+  const coverage=d.performance?.mapPoolCoverage;
+  if(Array.isArray(coverage?.pool)&&coverage.pool.length===7){
+   const wrap=doc.createElement('section');wrap.className='coach-map-pool-coverage';
+   wrap.dataset.mapPoolVersion=String(coverage.version||'未確認');
+   wrap.style.cssText='margin:16px 0;padding:16px;background:var(--bg-2);border:1px solid var(--line);';
+   const heading=doc.createElement('h3');heading.textContent='現行7マップの本人記録';
+   heading.style.cssText='margin:0 0 8px;font-size:19px;';wrap.appendChild(heading);
+   wrap.appendChild(p(doc,'保存済みの本人の試合だけを集計しています。未収集・サンプル不足は苦手という判定ではありません。'));
+   const list=doc.createElement('ul');list.style.cssText='padding-left:22px;margin:12px 0;';
+   coverage.pool.forEach(m=>{
+    const li=doc.createElement('li');li.style.cssText='margin:7px 0;';
+    const agents=Array.isArray(m.observedAgents)?m.observedAgents
+     .filter(a=>typeof a?.agent==='string'&&Number.isSafeInteger(a.matches)&&a.matches>0)
+     .map(a=>a.agent+' '+a.matches+'試合'):[];
+    const sample=Number.isSafeInteger(m.matches)&&m.matches>=0?m.matches:0;
+    li.textContent=String(m.map)+'：'+sample+'試合 ／ '+String(m.status)+'。'+
+     (agents.length?'使用実績 '+agents.join('、')+'。':'エージェントの使用実績は未取得です。');
+    list.appendChild(li);
+   });
+   wrap.appendChild(list);
+   const historic=Array.isArray(coverage.outsidePool)?coverage.outsidePool:[];
+   if(historic.length)wrap.appendChild(p(doc,'現行プール外の保存試合：'+historic.map(m=>String(m.map)+' '+Number(m.matches)+'試合').join('、')+'。過去の記録として区別しています。'));
+   if(coverage.unknownMapMatches>0)wrap.appendChild(p(doc,'マップ名不明の試合が'+coverage.unknownMapMatches+'件あります。7マップの成績へ推測で割り当てません。'));
+   $('.remember').parentNode.insertBefore(wrap,$('.remember'));
+  }
   const remember=all('.remember > p');remember[0].textContent=first?copy.polite(fill(first.check,plan.context).replace(/か。?$/,'かを確認してください。')):'次の試合で確認することを、一つ決めておいてください。';remember[1].textContent='結果だけでなく、決めた手順を試せたかも振り返っていただければ十分です。';
   const detail=$('details');detail.dataset.prototypeNumbers='';
   const metrics=[['ACS',o.acs,1],['ADR',o.adr,1],['HS%',o.hsPct,1],['KAST',null,1],['K/D',o.kd,2],['現在のランク',null,0]];
