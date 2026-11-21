@@ -473,3 +473,24 @@ test('Phase 5 unlinked out-of-cohort legacy row cannot consume a Henrik detail s
   assert.equal(calls,1);
  }finally{f.close();}
 });
+
+test('Phase 5 legacy schema upgrade never rewrites an unrelated completed queue row',async()=>{
+ const f=setup();try{
+  await enableAllMemberArchive(f.db);
+  f.sql.prepare("INSERT INTO coach_member_queue VALUES(?,?,?,?,?,'complete',1,0)")
+   .run('external-complete','ap','outsider#private','private-key',Date.parse(started)+1000);
+  f.sql.prepare("INSERT INTO coach_member_queue VALUES(?,?,?,?,?,'complete',1,0)")
+   .run('cohort-complete','ap',COACH_MEMBER_ACCOUNTS[0].riotId,'player-0',Date.parse(started));
+  let calls=0;
+  assert.equal(await fetchNextCoachMemberMatch(f.db,async(_region,id)=>{
+   calls++;assert.equal(id,'cohort-complete');return makeMatch(id);
+  },now),'saved','authorized stale complete row is still repaired');
+  assert.equal(calls,1);
+  const external=f.sql.prepare("SELECT status,attempts,next_at FROM coach_member_queue WHERE match_id='external-complete'").get() as {status:string;attempts:number;next_at:number};
+  assert.deepEqual({...external},{status:'complete',attempts:1,next_at:0},'external queue state is immutable to cohort migration');
+  assert.equal(await fetchNextCoachMemberMatch(f.db,async()=>{
+   calls++;throw Error('never query outside cohort');
+  },now),'idle');
+  assert.equal(calls,1);
+ }finally{f.close();}
+});
