@@ -541,3 +541,63 @@ test('Phase 5 archive retry never selects an unregistered or unlinked peer',asyn
   assert.deepEqual(regions,['ap','ap'],'unregistered linked source is not used for a fallback');
  }finally{f.close();}
 });
+
+test('Phase 5 detail 404 from original leaves a verified peer retry while another member continues',async()=>{
+ const f=setup();try{
+  await enableAllMemberArchive(f.db);
+  const original=COACH_MEMBER_ACCOUNTS[0].riotId,peer=COACH_MEMBER_ACCOUNTS[3].riotId,independent=COACH_MEMBER_ACCOUNTS[1].riotId;
+  f.sql.prepare('UPDATE coach_member_sources SET puuid=?,region=? WHERE riot_id=?').run('player-0','ap',original);
+  f.sql.prepare('UPDATE coach_member_sources SET puuid=?,region=? WHERE riot_id=?').run('peer-verified','eu',peer);
+  f.sql.prepare('UPDATE coach_member_sources SET puuid=?,region=? WHERE riot_id=?').run('independent-verified','ap',independent);
+  const base=Date.parse(started);
+  f.sql.prepare("INSERT INTO coach_member_queue VALUES(?,?,?,?,?,'pending',0,0)")
+   .run('shared-regional-404','ap',original,'player-0',base+1000);
+  for(const riot of [original,peer])f.sql.prepare('INSERT INTO coach_member_links VALUES(?,?)').run(riot,'shared-regional-404');
+  f.sql.prepare("INSERT INTO coach_member_queue VALUES(?,?,?,?,?,'pending',0,0)")
+   .run('independent-match','ap',independent,'independent-verified',base);
+  f.sql.prepare('INSERT INTO coach_member_links VALUES(?,?)').run(independent,'independent-match');
+  const requests:string[]=[];
+  const detail=async(region:string,id:string)=>{
+   requests.push(region+':'+id);
+   if(region==='ap'&&id==='shared-regional-404')throw Error('Match API HTTP 404');
+   const match=makeMatch(id,region==='eu'?'peer-verified':'independent-verified');
+   if(id==='shared-regional-404')match.metadata.started_at=new Date(base+1000).toISOString();
+   return match;
+  };
+  assert.equal(await fetchNextCoachMemberMatch(f.db,detail,now),'deferred');
+  const retry=f.sql.prepare("SELECT status,attempts,next_at,source_riot_id FROM coach_member_queue WHERE match_id='shared-regional-404'").get() as any;
+  assert.equal(retry.status,'pending');assert.equal(retry.attempts,1);assert.equal(retry.next_at,now+15*60_000);
+  assert.equal(retry.source_riot_id,original);
+  assert.equal(await fetchNextCoachMemberMatch(f.db,detail,now),'saved',
+   'a missing original must not block the independently verified member');
+  assert.equal(await fetchNextCoachMemberMatch(f.db,detail,now+15*60_000),'saved',
+   'the next eligible slot recovers through the linked peer');
+  assert.deepEqual(requests,['ap:shared-regional-404','ap:independent-match','eu:shared-regional-404']);
+  assert.equal((f.sql.prepare("SELECT attempts FROM coach_member_queue WHERE match_id='shared-regional-404'").get() as any).attempts,2);
+ }finally{f.close();}
+});
+test('Phase 5 detail 404 remains terminal without an independently verified registered link',async()=>{
+ for(const peer of ['unlinked','unregistered','unresolved']){
+  const f=setup();try{
+   await enableAllMemberArchive(f.db);
+   const original=COACH_MEMBER_ACCOUNTS[0].riotId,id='single-404';
+   f.sql.prepare('UPDATE coach_member_sources SET puuid=?,region=? WHERE riot_id=?').run('player-0','ap',original);
+   f.sql.prepare("INSERT INTO coach_member_queue VALUES(?,?,?,?,?,'pending',0,0)")
+    .run(id,'ap',original,'player-0',Date.parse(started));
+   f.sql.prepare('INSERT INTO coach_member_links VALUES(?,?)').run(original,id);
+   if(peer==='unregistered'){
+    f.sql.prepare('INSERT INTO coach_member_sources(riot_id,puuid,region) VALUES(?,?,?)')
+     .run('outsider#private','private-puuid','eu');
+    f.sql.prepare('INSERT INTO coach_member_links VALUES(?,?)').run('outsider#private',id);
+   }
+   if(peer==='unresolved'){
+    f.sql.prepare('INSERT INTO coach_member_links VALUES(?,?)').run(COACH_MEMBER_ACCOUNTS[3].riotId,id);
+   }
+   let calls=0;
+   assert.equal(await fetchNextCoachMemberMatch(f.db,async()=>{calls++;throw Error('Match API HTTP 404')},now),'unavailable');
+   assert.equal((f.sql.prepare("SELECT status FROM coach_member_queue WHERE match_id=?").get(id) as any).status,'unavailable');
+   assert.equal(await fetchNextCoachMemberMatch(f.db,async()=>{calls++;throw Error('no retry')},now+30*60_000),'idle');
+   assert.equal(calls,1);
+  }finally{f.close();}
+ }
+});

@@ -35,7 +35,7 @@ async function upgradeCaptureQueue(db:D1Database){
 type Account={puuid:string;region:string};
 type Source={riot_id:string;puuid:string|null;region:string|null;
  next_page:number;done:number;truncated:number;next_at:number};
-type Candidate={match_id:string;region:string;riot_id:string;puuid:string;started_at:number;attempts:number};
+type Candidate={match_id:string;region:string;riot_id:string;original_riot_id:string;puuid:string;started_at:number;attempts:number};
 type LifetimeMatch={meta?:{id?:unknown;mode?:unknown;started_at?:unknown};metadata?:{match_id?:unknown;queue?:{id?:unknown};started_at?:unknown}};
 export type ArchiveStep='disabled'|'resolved'|'discovered'|'discovery_done'|'refreshed'|'saved'|'already_saved'|'partial'|'unavailable'|'deferred'|'idle';
 const isId=(x:unknown):x is string=>typeof x==='string'&&x.length>0&&x.length<=128;
@@ -184,7 +184,7 @@ export async function fetchNextCoachMemberMatch(db:D1Database,
   COALESCE(source.region,q.region) AS region,
   COALESCE(source.riot_id,q.source_riot_id) AS riot_id,
   COALESCE(source.puuid,q.source_puuid) AS puuid,
-  q.started_at,q.attempts FROM coach_member_queue q
+  q.source_riot_id AS original_riot_id,q.started_at,q.attempts FROM coach_member_queue q
   LEFT JOIN coach_member_sources source ON source.riot_id=(
     SELECT s.riot_id FROM coach_member_links l
     JOIN coach_member_sources s ON s.riot_id=l.riot_id
@@ -252,6 +252,23 @@ export async function fetchNextCoachMemberMatch(db:D1Database,
   return status==='complete'?'saved':'partial';
  }catch(e){
   const notFound=e instanceof Error&&/\b(?:HTTP|API) 404\b/.test(e.message);
+  if(notFound&&row.riot_id===row.original_riot_id&&row.attempts<2){
+   // A 404 can be specific to the original source's region. Only retry if
+   // a separately verified, linked member can fetch in another existing slot.
+   // Do not spend this or a future slot on an unrelated or unresolved account.
+   const peer=await db.prepare(`SELECT 1 AS eligible FROM coach_member_links l
+    JOIN coach_member_sources s ON s.riot_id=l.riot_id
+    WHERE l.match_id=? AND s.riot_id IN (${permitted}) AND s.riot_id<>?
+     AND length(s.puuid) BETWEEN 1 AND 128
+     AND s.region IN ('ap','na','eu','kr','br','latam')
+    LIMIT 1`)
+    .bind(row.match_id,...COACH_MEMBER_ACCOUNTS.map(p=>p.riotId),row.riot_id)
+    .first<{eligible:number}>();
+   if(peer){
+    await postponeCandidate(db,row.match_id,now,'pending');
+    return 'deferred';
+   }
+  }
   await postponeCandidate(db,row.match_id,now,notFound?'unavailable':'pending');
   return notFound?'unavailable':'deferred';
  }
