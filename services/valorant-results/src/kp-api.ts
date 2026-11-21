@@ -513,7 +513,7 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping,deferP
       if(path!=='/api/kp/coach/members/status'&&await d1OptionalMode(env))return response({error:'D1節約モード中です。時間を置いてから確認してください。'},429);
       const goals=path==='/api/kp/coach/member'?undefined:await coachStep('GOALS',()=>readCoachGoals(env.DB,mapping.guildId,identity.subjectId));
       const practiceState=path==='/api/kp/coach/member'?undefined:await coachStep('PRACTICE',()=>privatePracticeState(env.DB,mapping.guildId,identity.subjectId));
-      const coverage=await coachStep('COVERAGE',()=>coachMemberCoverage(env.DB,identity.accounts.map(a=>a.riotId));
+      const coverage=await coachStep('COVERAGE',()=>coachMemberCoverage(env.DB,identity.accounts.map(a=>a.riotId)));
       if(path==='/api/kp/coach/members/status')return response({identity:publicCoachIdentity(identity),settings:coachSharingSettings(identity),practiceState,goals,memberHistory:coverage,canStartMemberHistory:memberHistoryOwner,canResume:coachOwner});
       const report=await coachStep('REPORT',async()=>projectCoachSelfReport(await readCoachMemberReport(env.DB,person,coverage,identity.accounts)));
       return path==='/api/kp/coach/member'?response(report):response({identity:publicCoachIdentity(identity),settings:coachSharingSettings(identity),report,practiceState,goals,memberHistory:coverage,canStartMemberHistory:memberHistoryOwner,canResume:coachOwner});
