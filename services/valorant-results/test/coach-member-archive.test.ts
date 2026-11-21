@@ -234,6 +234,49 @@ test('Phase 5 prioritizes the still-verified original and never borrows unrelate
   assert.equal(called,2);
  }finally{f.close();}
 });
+test('Phase 5 skips a linked match with stale identity so another member can collect within one slot',async()=>{
+ const f=setup();try{
+  await enableAllMemberArchive(f.db);
+  const stale=COACH_MEMBER_ACCOUNTS[0].riotId,ready=COACH_MEMBER_ACCOUNTS[1].riotId;
+  f.sql.prepare('UPDATE coach_member_sources SET puuid=?,region=? WHERE riot_id=?')
+   .run('changed-identity','ap',stale);
+  f.sql.prepare('UPDATE coach_member_sources SET puuid=?,region=? WHERE riot_id=?')
+   .run('player-0','ap',ready);
+  const add=(id:string,riotId:string,puuid:string,time:number)=>{
+   f.sql.prepare("INSERT INTO coach_member_queue VALUES(?,?,?,?,?,'pending',0,0)")
+    .run(id,'ap',riotId,puuid,time);
+   f.sql.prepare('INSERT INTO coach_member_links VALUES(?,?)').run(riotId,id);
+  };
+  add('stale-newer',stale,'stale-identity',Date.parse(started)+1000);
+  add('ready-older',ready,'player-0',Date.parse(started));
+  let calls=0;
+  assert.equal(await fetchNextCoachMemberMatch(f.db,async(region,id)=>{
+   calls++;assert.equal(region,'ap');assert.equal(id,'ready-older');
+   return makeMatch(id);
+  },now),'saved');
+  assert.equal(calls,1,'no wasted detail request to a stale source');
+  assert.equal(f.count('valorant_match_rosters'),1);
+  assert.equal((f.sql.prepare("SELECT status FROM coach_member_queue WHERE match_id='stale-newer'").get() as {status:string}).status,'pending');
+  assert.equal(await fetchNextCoachMemberMatch(f.db,async()=>{calls++;throw Error('not permitted');},now),'idle');
+  assert.equal(calls,1,'unresolved linked source never consumes API budget');
+ }finally{f.close();}
+});
+test('Phase 5 permits a different verified linked source even if original account was replaced',async()=>{
+ const f=setup();try{
+  await enableAllMemberArchive(f.db);
+  const stale=COACH_MEMBER_ACCOUNTS[0].riotId,peer=COACH_MEMBER_ACCOUNTS[3].riotId;
+  f.sql.prepare('UPDATE coach_member_sources SET puuid=?,region=? WHERE riot_id=?').run('changed-identity','ap',stale);
+  f.sql.prepare('UPDATE coach_member_sources SET puuid=?,region=? WHERE riot_id=?').run('player-0','ap',peer);
+  f.sql.prepare("INSERT INTO coach_member_queue VALUES(?,?,?,?,?,'pending',0,0)")
+   .run('linked-peer','ap',stale,'original-stale',Date.parse(started));
+  for(const riot of [stale,peer])f.sql.prepare('INSERT INTO coach_member_links VALUES(?,?)').run(riot,'linked-peer');
+  let calls=0;
+  assert.equal(await fetchNextCoachMemberMatch(f.db,async(region,id)=>{
+   calls++;assert.equal(id,'linked-peer');return makeMatch(id);
+  },now),'saved');
+  assert.equal(calls,1);
+ }finally{f.close();}
+});
 test('partial kill timelines are retried after cooldown and repaired without rewriting earlier rounds',async()=>{
  const f=setup();
  try{
