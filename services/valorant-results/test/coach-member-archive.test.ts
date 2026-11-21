@@ -76,6 +76,27 @@ test('all six accounts including Kobe/Aquatopia, Fujimura, Ishihara, Abema have 
   assert.ok(status.source.includes('not guaranteed exhaustive'));
  }finally{f.close()}
 });
+test('Phase 5 shows each source resolution independently without VDK-derived state or raw PUUID',async()=>{
+ const f=setup();try{
+  await enableAllMemberArchive(f.db);
+  const initial=await coachMemberCoverage(f.db);
+  assert.equal(initial.people.length,6);
+  assert.ok(initial.people.every(p=>p.sourceResolved===false&&p.collectionStage==='本人アカウント確認待ち'));
+  f.sql.prepare("UPDATE coach_member_sources SET puuid=?,region=?,done=1 WHERE riot_id=?")
+   .run('private-source-key','ap','frin#怖すぎ');
+  const state=await coachMemberCoverage(f.db);
+  const fuji=state.people.find(x=>x.person==='藤村')!;
+  assert.equal(fuji.sourceResolved,true);
+  assert.equal(fuji.collectionStage,'新しい試合を確認中');
+  assert.equal(state.people.find(x=>x.person==='VDK')?.sourceResolved,false);
+  assert.equal(state.people.find(x=>x.person==='神戸')?.sourceResolved,false);
+  assert.equal(JSON.stringify(state).includes('private-source-key'),false);
+  const scoped=await coachMemberCoverage(f.db,['frin#怖すぎ']);
+  assert.deepEqual(scoped.people.map(x=>x.person),['藤村']);
+  await pauseAllMemberArchive(f.db);
+  assert.equal((await coachMemberCoverage(f.db)).people.find(x=>x.person==='藤村')?.collectionStage,'停止中');
+ }finally{f.close();}
+});
 test('paged lifetime index deduplicates shared matches and only fetches new competitive matches',async()=>{
  const f=setup();try{
   await enableAllMemberArchive(f.db);
