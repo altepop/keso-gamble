@@ -61,6 +61,10 @@ export async function backfillCoachPositions(db:D1Database,fetchDetail:(region:s
 export async function runCoachPositionArchiveSlot(db:D1Database,fetchDetail:(region:string,id:string)=>Promise<Match>,now=Date.now(),archive=fetchNextCoachMemberMatch){
  let requested=false;
  const result=await archive(db,(region,id)=>{requested=true;return fetchDetail(region,id);},now);
- const positions=!requested&&(result==='idle'||result==='already_saved')?await backfillCoachPositions(db,fetchDetail,now):null;
+ // A previously unavailable match can be rejected from persisted evidence
+ // without issuing a detail request. Reuse that unused slot for a different
+ // member's verified position backlog; never retry after a real API call.
+ const positions=!requested&&(result==='idle'||result==='already_saved'||result==='unavailable')
+  ?await backfillCoachPositions(db,fetchDetail,now):null;
  return {archive:result,positions};
 }
