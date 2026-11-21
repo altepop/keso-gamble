@@ -13,7 +13,8 @@ export async function backfillCoachPositions(db:D1Database,fetchDetail:(region:s
  // resolved source instead of blocking all participants on the first (VDK)
  // attribution. Never use unrelated accounts, stale identities or extra calls.
  const permitted=COACH_MEMBER_ACCOUNTS.map(()=>'?').join(',');
- const row=await db.prepare(`SELECT q.match_id,s.region,s.puuid AS source_puuid,q.started_at FROM coach_member_queue q
+ const row=await db.prepare(`SELECT q.match_id,s.region,s.puuid AS source_puuid,s.riot_id AS chosen_riot_id,
+  q.source_riot_id AS original_riot_id,q.started_at FROM coach_member_queue q
   JOIN coach_member_sources s ON s.riot_id=(
    SELECT linked.riot_id FROM coach_member_links l
    JOIN coach_member_sources linked ON linked.riot_id=l.riot_id
@@ -40,7 +41,7 @@ export async function backfillCoachPositions(db:D1Database,fetchDetail:(region:s
    -- attribution belongs to an unrelated source. Never fetch via that source.
    AND (b.match_id IS NULL OR (b.status IN ('retry','running') AND b.attempts<3 AND b.next_at<=?))
   ORDER BY q.started_at DESC LIMIT 1`).bind(...COACH_MEMBER_ACCOUNTS.map(p=>p.riotId),now)
-  .first<{match_id:string;region:string;source_puuid:string;started_at:number}>();
+  .first<{match_id:string;region:string;source_puuid:string;chosen_riot_id:string;original_riot_id:string;started_at:number}>();
  if(!row)return 'idle';
  const claim=await db.prepare(`INSERT INTO coach_position_backfill(match_id,status,attempts,next_at,reason,updated_at)
   VALUES(?,'running',1,?,'in-progress',?) ON CONFLICT(match_id) DO UPDATE SET
@@ -60,7 +61,29 @@ export async function backfillCoachPositions(db:D1Database,fetchDetail:(region:s
   if(saved?.has_coordinates!==1)throw Error('position save pending');
   await finish('saved','captured');return 'saved';
  }catch(error){
-  if(error instanceof Error&&/\b(?:HTTP|API) 404\b/.test(error.message)){await finish('unavailable','not-found');return 'unavailable';}
+  if(error instanceof Error&&/\b(?:HTTP|API) 404\b/.test(error.message)){
+   // A 404 can be regional. Give a different verified linked cohort account
+   // the next existing slot, but never retry the same missing source indefinitely.
+   if(row.chosen_riot_id===row.original_riot_id){
+    const peer=await db.prepare(`SELECT 1 AS eligible FROM coach_member_links l
+     JOIN coach_member_sources s ON s.riot_id=l.riot_id
+     WHERE l.match_id=? AND s.riot_id IN (${permitted}) AND s.riot_id<>?
+      AND length(s.puuid) BETWEEN 1 AND 128
+      AND s.region IN ('ap','na','eu','kr','br','latam')
+     LIMIT 1`).bind(row.match_id,...COACH_MEMBER_ACCOUNTS.map(p=>p.riotId),row.chosen_riot_id)
+     .first<{eligible:number}>();
+    if(peer){
+     await db.prepare(`UPDATE coach_position_backfill
+      SET status=CASE WHEN attempts>=3 THEN 'unavailable' ELSE 'retry' END,
+       reason=CASE WHEN attempts>=3 THEN 'retry-exhausted' ELSE 'source-404-peer-fallback' END,
+       updated_at=?
+      WHERE match_id=? AND updated_at=? AND status='running'`)
+      .bind(now,row.match_id,now).run();
+     return 'deferred';
+    }
+   }
+   await finish('unavailable','not-found');return 'unavailable';
+  }
   await db.prepare(`UPDATE coach_position_backfill SET status=CASE WHEN attempts>=3 THEN 'unavailable' ELSE 'retry' END,
    reason=CASE WHEN attempts>=3 THEN 'retry-exhausted' ELSE 'transient-or-invalid-response' END,updated_at=?
    WHERE match_id=? AND updated_at=? AND status='running'`).bind(now,row.match_id,now).run();
