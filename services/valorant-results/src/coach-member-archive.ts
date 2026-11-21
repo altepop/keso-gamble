@@ -222,6 +222,7 @@ export async function coachMemberCoverage(db:D1Database,onlyRiots?:readonly stri
  // No PUUID, tokens or raw match identifiers leave the authenticated API.
  const enabled=await getSwitch(db);
  const sources=await db.prepare(`SELECT s.riot_id,s.next_page,s.done,s.truncated,
+   MAX(CASE WHEN s.puuid IS NOT NULL AND length(s.puuid)>0 AND s.region IN ('ap','na','eu','kr','br','latam') THEN 1 ELSE 0 END) AS identity_ready,
    COUNT(l.match_id) AS discovered,
    COALESCE(SUM(CASE WHEN q.status='complete' THEN 1 ELSE 0 END),0) AS complete,
    COALESCE(SUM(CASE WHEN q.status='partial' THEN 1 ELSE 0 END),0) AS partial,
@@ -231,7 +232,7 @@ export async function coachMemberCoverage(db:D1Database,onlyRiots?:readonly stri
    LEFT JOIN coach_member_queue q ON q.match_id=l.match_id
    ${onlyRiots?'WHERE s.riot_id IN ('+onlyRiots.map(()=>'?').join(',')+')':''}
    GROUP BY s.riot_id,s.next_page,s.done,s.truncated`).bind(...(onlyRiots??[])).all<{
-    riot_id:string;next_page:number;done:number;truncated:number;discovered:number;
+    riot_id:string;next_page:number;done:number;truncated:number;identity_ready:number;discovered:number;
     complete:number;partial:number;unavailable:number;pending:number}>();
  return {enabled,refreshIntervalMinutes:COACH_REFRESH_INTERVAL/60000,refreshPageSize:50,supportsPause:true,source:'Henrik lifetime matches (API-known history; not guaranteed exhaustive)',
   people:COACH_MEMBER_ACCOUNTS.filter(p=>!onlyRiots||onlyRiots.includes(p.riotId)).map(person=>{
@@ -240,6 +241,9 @@ export async function coachMemberCoverage(db:D1Database,onlyRiots?:readonly stri
     discovered:row?.discovered??0,complete:row?.complete??0,
     partial:row?.partial??0,unavailable:row?.unavailable??0,
     pending:row?.pending??0,
+    sourceResolved:row?.identity_ready===1,
+    collectionStage:!enabled?'停止中':!row?'未登録':row.identity_ready!==1?'本人アカウント確認待ち':
+     row.truncated?'履歴取得上限':row.done?'新しい試合を確認中':'過去試合を収集中',
     discoveryDone:Boolean(row?.done),truncated:Boolean(row?.truncated)};
   })};
 }
