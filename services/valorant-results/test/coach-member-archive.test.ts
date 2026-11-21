@@ -97,6 +97,32 @@ test('Phase 5 shows each source resolution independently without VDK-derived sta
   assert.equal((await coachMemberCoverage(f.db)).people.find(x=>x.person==='藤村')?.collectionStage,'停止中');
  }finally{f.close();}
 });
+test('Phase 5 ignores unregistered lifetime sources without delaying or mutating six authorized accounts',async()=>{
+ const f=setup();try{
+  await enableAllMemberArchive(f.db);
+  // An unrelated source row must never be resolved, queried or reset by the
+  // one-time migration, regardless of its due time or missing identity.
+  f.sql.prepare("INSERT INTO coach_member_sources(riot_id,next_page,done,truncated,next_at) VALUES(?,3,1,1,0)")
+   .run('unregistered#outside');
+  const accountIds:string[]=[];
+  const account=async(riotId:string)=>{accountIds.push(riotId);return {puuid:'player-0',region:'ap'};};
+  assert.equal(await discoverCoachMemberPage(f.db,account,async()=>{throw Error('history must not run');},now),'resolved');
+  assert.equal(accountIds.length,1);
+  assert.ok(COACH_MEMBER_ACCOUNTS.some(x=>x.riotId===accountIds[0]));
+  const extra=f.sql.prepare("SELECT next_page,done,truncated,next_at,puuid FROM coach_member_sources WHERE riot_id=?")
+   .get('unregistered#outside') as {next_page:number;done:number;truncated:number;next_at:number;puuid:string|null};
+  assert.deepEqual(extra,{next_page:3,done:1,truncated:1,next_at:0,puuid:null},
+   'unregistered source is neither repaired nor fetched');
+  f.sql.prepare('UPDATE coach_member_sources SET next_at=? WHERE riot_id<>?')
+   .run(now+COACH_REFRESH_INTERVAL,'unregistered#outside');
+  let requests=0;
+  assert.equal(await discoverCoachMemberPage(f.db,async()=>{requests++;throw Error('unregistered lookup');},
+   async()=>{requests++;throw Error('unregistered lifetime');},now),'idle');
+  assert.equal(requests,0);
+  assert.equal(f.count('coach_member_links'),0);
+  assert.equal(f.count('coach_member_queue'),0);
+ }finally{f.close();}
+});
 test('paged lifetime index deduplicates shared matches and only fetches new competitive matches',async()=>{
  const f=setup();try{
   await enableAllMemberArchive(f.db);
