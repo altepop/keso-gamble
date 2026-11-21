@@ -58,3 +58,19 @@ test('the shared slot never adds a second detail request, and existing archive w
 });
 
 test('partial scalar archives exhausted by the old collector can still recover valid coordinates',async()=>{const f=fixture();try{f.sql.exec("UPDATE coach_member_queue SET status='partial',attempts=3");assert.equal(await backfillCoachPositions(f.db,async()=>f.match(),now),'saved');}finally{f.sql.close();}});
+
+test('position backfill rejects linked peers with invalid region or missing PUUID without spending the shared slot',async()=>{
+ for(const invalid of [
+  "INSERT INTO coach_member_sources VALUES('frin#怖すぎ','p5','invalid')",
+  "INSERT INTO coach_member_sources VALUES('frin#怖すぎ',NULL,'eu')",
+  "INSERT INTO coach_member_sources VALUES('frin#怖すぎ','', 'eu')",
+ ]){
+  const f=fixture();try{
+   f.sql.exec("UPDATE coach_member_sources SET puuid='stale-puuid'; "+invalid+"; INSERT INTO coach_member_links VALUES('frin#怖すぎ','m1')");
+   let calls=0;
+   assert.equal(await backfillCoachPositions(f.db,async()=>{calls++;return f.match();},now),'idle');
+   assert.equal(calls,0);
+   assert.equal(f.counts().writes,0);
+  }finally{f.sql.close();}
+ }
+});
