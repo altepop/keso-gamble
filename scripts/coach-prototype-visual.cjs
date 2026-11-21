@@ -20,6 +20,8 @@ module.exports=async function compare({browser,createActualPage,root,output}){
   try{
    await source.route('**/docs/design/assets/**',route=>route.fulfill({path:path.join(root,'assets',path.basename(new URL(route.request().url()).pathname)),contentType:'image/png'}));
    await Promise.all([source.goto('http://127.0.0.1:18784/docs/design/coach-prototype-v6.html'),page.goto('http://127.0.0.1:18784/coach.html')]);
+   await page.locator('[data-quick-start]').waitFor();
+   await page.locator('[data-full-coach]').evaluate(el=>{el.open=true;});
    await page.locator('[data-primary-mission]').waitFor();
    for(const p of [source,page])await p.waitForFunction(expected=>innerWidth===expected&&matchMedia('(min-width:560px)').matches===(expected>=560),width);
    await Promise.all([source.evaluate(()=>document.fonts.ready.then(()=>{})),page.evaluate(()=>document.fonts.ready.then(()=>{}))]);
