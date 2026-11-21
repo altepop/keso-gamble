@@ -277,6 +277,28 @@ test('Phase 5 permits a different verified linked source even if original accoun
   assert.equal(calls,1);
  }finally{f.close();}
 });
+test('Phase 5 prioritizes a verified linked member ahead of a newer legacy unlinked match',async()=>{
+ const f=setup();try{
+  await enableAllMemberArchive(f.db);
+  const verified=COACH_MEMBER_ACCOUNTS[3].riotId;
+  f.sql.prepare('UPDATE coach_member_sources SET puuid=?,region=? WHERE riot_id=?').run('player-0','ap',verified);
+  f.sql.prepare("INSERT INTO coach_member_queue VALUES(?,?,?,?,?,'pending',0,0)")
+   .run('legacy-newer','ap',COACH_MEMBER_ACCOUNTS[0].riotId,'old-unverified',Date.parse(started)+1000);
+  f.sql.prepare("INSERT INTO coach_member_queue VALUES(?,?,?,?,?,'pending',0,0)")
+   .run('linked-older','ap',verified,'player-0',Date.parse(started));
+  f.sql.prepare('INSERT INTO coach_member_links VALUES(?,?)').run(verified,'linked-older');
+  const fetched:string[]=[];
+  assert.equal(await fetchNextCoachMemberMatch(f.db,async(region,id)=>{
+   assert.equal(region,'ap');fetched.push(id);return makeMatch(id);
+  },now),'saved');
+  assert.deepEqual(fetched,['linked-older'],'a legacy gap cannot consume the verified member slot');
+  assert.equal((f.sql.prepare("SELECT status FROM coach_member_queue WHERE match_id='legacy-newer'").get() as {status:string}).status,'pending');
+  assert.equal(await fetchNextCoachMemberMatch(f.db,async(region,id)=>{
+   fetched.push(id);throw Error('temporary provider error');
+  },now),'deferred','legacy-only queue retains its historical fallback');
+  assert.deepEqual(fetched,['linked-older','legacy-newer']);
+ }finally{f.close();}
+});
 test('partial kill timelines are retried after cooldown and repaired without rewriting earlier rounds',async()=>{
  const f=setup();
  try{
