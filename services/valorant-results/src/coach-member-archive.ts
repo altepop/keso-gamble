@@ -48,7 +48,9 @@ async function repairLifetimeCaseDiscovery(db:D1Database){
  // rejected these while still advancing the page. Revisit those pages once,
  // retaining resolved accounts, saved matches, links and the existing API budget.
  // This function is called only after the existing explicit owner opt-in.
- await db.prepare('UPDATE coach_member_sources SET next_page=1,done=0,truncated=0,next_at=0 WHERE next_page>1').run();
+ await db.prepare(`UPDATE coach_member_sources SET next_page=1,done=0,truncated=0,next_at=0
+  WHERE next_page>1 AND riot_id IN (${COACH_MEMBER_ACCOUNTS.map(()=>'?').join(',')})`)
+  .bind(...COACH_MEMBER_ACCOUNTS.map(p=>p.riotId)).run();
  await db.prepare('INSERT OR IGNORE INTO monitor_state(key,value) VALUES(?,?)').bind(key,'1').run();
 }
 const getSwitch=async(db:D1Database)=>(await db.prepare('SELECT value FROM monitor_state WHERE key=?')
@@ -90,7 +92,9 @@ export async function discoverCoachMemberPage(db:D1Database,
  await repairLifetimeCaseDiscovery(db);
  const source=await db.prepare(`SELECT riot_id,puuid,region,next_page,done,truncated,next_at
   FROM coach_member_sources WHERE next_at<=?
-  ORDER BY CASE WHEN puuid IS NULL THEN 0 ELSE 1 END, next_at ASC,next_page ASC,riot_id ASC LIMIT 1`).bind(now).first<Source>();
+   AND riot_id IN (${COACH_MEMBER_ACCOUNTS.map(()=>'?').join(',')})
+  ORDER BY CASE WHEN puuid IS NULL THEN 0 ELSE 1 END, next_at ASC,next_page ASC,riot_id ASC LIMIT 1`)
+  .bind(now,...COACH_MEMBER_ACCOUNTS.map(p=>p.riotId)).first<Source>();
  if(!source)return 'idle';
  if(!isId(source.puuid)||!isRegion(source.region)){
   try{
