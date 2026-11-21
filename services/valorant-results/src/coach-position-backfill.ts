@@ -20,6 +20,8 @@ export async function backfillCoachPositions(db:D1Database,fetchDetail:(region:s
    WHERE l.match_id=q.match_id AND linked.riot_id IN (${permitted})
     AND length(linked.puuid) BETWEEN 1 AND 128
     AND linked.region IN ('ap','na','eu','kr','br','latam')
+    AND (linked.riot_id<>q.source_riot_id OR
+      (linked.puuid=q.source_puuid AND linked.region=q.region))
    ORDER BY CASE WHEN linked.riot_id=q.source_riot_id AND linked.puuid=q.source_puuid
       AND linked.region=q.region THEN 0 ELSE 1 END,linked.riot_id ASC LIMIT 1)
   LEFT JOIN valorant_match_positions p ON p.match_id=q.match_id
