@@ -3,10 +3,10 @@ import {backfillCoachPositions,runCoachPositionArchiveSlot} from '../src/coach-p
 const now=Date.parse('2026-11-20T01:00:00Z'),started='2026-11-01T12:00:00Z';
 function fixture(){const sql=new DatabaseSync(':memory:');sql.exec(`CREATE TABLE monitor_state(key TEXT PRIMARY KEY,value TEXT);
  CREATE TABLE coach_member_queue(match_id TEXT PRIMARY KEY,region TEXT,source_riot_id TEXT,source_puuid TEXT,started_at INTEGER,status TEXT,attempts INTEGER DEFAULT 0);
- CREATE TABLE coach_member_sources(riot_id TEXT PRIMARY KEY,puuid TEXT);
+ CREATE TABLE coach_member_sources(riot_id TEXT PRIMARY KEY,puuid TEXT,region TEXT);
  CREATE TABLE coach_member_links(riot_id TEXT,match_id TEXT,PRIMARY KEY(riot_id,match_id));
  INSERT INTO monitor_state VALUES('coach_all_members:enabled','enabled');
- INSERT INTO coach_member_sources VALUES('Dolly#SDGs','p0');
+ INSERT INTO coach_member_sources VALUES('Dolly#SDGs','p0','ap');
  INSERT INTO coach_member_links VALUES('Dolly#SDGs','m1');
  INSERT INTO coach_member_queue VALUES('m1','ap','Dolly#SDGs','p0',${Date.parse(started)},'complete',0);`);
  for(const file of ['0008_competitive_positions.sql','0009_coach_position_backfill.sql'])sql.exec(readFileSync(new NodeURL('../migrations/'+file,import.meta.url),'utf8'));
@@ -16,7 +16,33 @@ function fixture(){const sql=new DatabaseSync(':memory:');sql.exec(`CREATE TABLE
  return {sql,db,match,state,counts:()=>({reads,writes})};}
 test('backfills one authorized existing competitive match; returned partial data is saved, never endlessly retried for ten people',async()=>{const f=fixture();try{let calls=0;assert.equal(await backfillCoachPositions(f.db,async(region,id)=>{calls++;assert.equal(region,'ap');assert.equal(id,'m1');return f.match();},now),'saved');assert.equal(f.state().attempts,1);const v=JSON.parse((f.sql.prepare('SELECT positions_json FROM valorant_match_positions').get() as any).positions_json);assert.equal(v.frames[0].coordinateCoverage,.1);assert.equal(v.frames[0].victimListed,false);assert.equal(await backfillCoachPositions(f.db,async()=>{throw Error('must not call');},now+900001),'idle');assert.equal(calls,1);assert.equal(f.counts().writes,3);}finally{f.sql.close();}});
 test('opt-out and provider cooldown make no requests or writes',async()=>{const f=fixture();try{f.sql.exec("UPDATE monitor_state SET value='disabled'");assert.equal(await backfillCoachPositions(f.db,async()=>{throw Error('call');},now),'disabled');assert.equal(f.counts().writes,0);f.sql.exec("UPDATE monitor_state SET value='enabled'; INSERT INTO monitor_state VALUES('api_after','"+(now+60000)+"')");assert.equal(await backfillCoachPositions(f.db,async()=>{throw Error('call');},now),'cooldown');assert.equal(f.counts().writes,0);}finally{f.sql.close();}});
-test('unlinked or incomplete matches are excluded; source identity must be the opted-in one',async()=>{for(const change of ["DELETE FROM coach_member_links","UPDATE coach_member_queue SET status='pending'","UPDATE coach_member_sources SET puuid='different'"]){const f=fixture();try{f.sql.exec(change);assert.equal(await backfillCoachPositions(f.db,async()=>{throw Error('must not call');},now),'idle');assert.equal(f.counts().writes,0);}finally{f.sql.close();}}});
+test('unlinked or incomplete matches are excluded; source identity must be the opted-in one',async()=>{for(const change of ["DELETE FROM coach_member_links","UPDATE coach_member_queue SET status='pending'","UPDATE coach_member_sources SET puuid=NULL"]){const f=fixture();try{f.sql.exec(change);assert.equal(await backfillCoachPositions(f.db,async()=>{throw Error('must not call');},now),'idle');assert.equal(f.counts().writes,0);}finally{f.sql.close();}}});
+test('shared position backfill selects a verified linked peer when VDK source becomes stale; still one detail request',async()=>{
+ const f=fixture();try{
+  f.sql.exec("UPDATE coach_member_sources SET puuid='stale-puuid'; INSERT INTO coach_member_sources VALUES('frin#怖すぎ','p5','eu'); INSERT INTO coach_member_links VALUES('frin#怖すぎ','m1')");
+  let calls=0;
+  const result=await backfillCoachPositions(f.db,async(region,id)=>{
+   calls++;assert.equal(region,'eu');assert.equal(id,'m1');return f.match();
+  },now);
+  assert.equal(result,'saved');assert.equal(calls,1);
+  assert.equal(f.state().attempts,1);
+  const source=f.sql.prepare("SELECT source_riot_id,source_puuid FROM coach_member_queue WHERE match_id='m1'").get() as any;
+  assert.equal(source.source_riot_id,'Dolly#SDGs','original attribution remains immutable');
+  assert.equal(source.source_puuid,'p0','existing archive metadata unchanged');
+ }finally{f.sql.close();}
+});
+test('position backfill prefers original verified source and refuses unlinked sources',async()=>{
+ const f=fixture();try{
+  f.sql.exec("INSERT INTO coach_member_sources VALUES('frin#怖すぎ','p5','eu'); INSERT INTO coach_member_links VALUES('frin#怖すぎ','m1')");
+  assert.equal(await backfillCoachPositions(f.db,async(region,id)=>{assert.equal(region,'ap');return f.match();},now),'saved');
+ }finally{f.sql.close();}
+ const g=fixture();try{
+  g.sql.exec("UPDATE coach_member_sources SET puuid='stale-puuid'; INSERT INTO coach_member_sources VALUES('frin#怖すぎ','p5','eu')");
+  let calls=0;
+  assert.equal(await backfillCoachPositions(g.db,async()=>{calls++;return g.match();},now),'idle');
+  assert.equal(calls,0);assert.equal(g.counts().writes,0);
+ }finally{g.sql.close();}
+});
 test('404 and missing returned positions are terminal with concrete reasons; no position rows invented',async()=>{for(const mode of ['404','missing']){const f=fixture();try{let calls=0;assert.equal(await backfillCoachPositions(f.db,async()=>{calls++;if(mode==='404')throw Error('Match API HTTP 404');const m=f.match();delete m.kills;return m;},now),'unavailable');assert.equal(f.state().reason,mode==='404'?'not-found':'no-usable-position-response');assert.equal((f.sql.prepare('SELECT COUNT(*) n FROM valorant_match_positions').get() as any).n,0);assert.equal(await backfillCoachPositions(f.db,async()=>{calls++;return f.match();},now+900001),'idle');assert.equal(calls,1);}finally{f.sql.close();}}});
 test('transient or mismatched responses retry after fifteen minutes, at most three times',async()=>{const f=fixture();try{let calls=0;const bad=async()=>{calls++;const m=f.match();m.metadata.match_id='wrong';return m;};assert.equal(await backfillCoachPositions(f.db,bad,now),'deferred');assert.equal(await backfillCoachPositions(f.db,bad,now+1),'idle');assert.equal(await backfillCoachPositions(f.db,bad,now+900000),'deferred');assert.equal(await backfillCoachPositions(f.db,bad,now+1800000),'deferred');assert.equal(await backfillCoachPositions(f.db,bad,now+2700000),'idle');assert.equal(calls,3);assert.equal(f.state().reason,'retry-exhausted');}finally{f.sql.close();}});
 test('concurrent ticks claim once before the request; crash leases are bounded',async()=>{const f=fixture();try{let calls=0;const run=()=>backfillCoachPositions(f.db,async()=>{calls++;return f.match();},now);const result=await Promise.all([run(),run()]);assert.equal(calls,1);assert.equal(result.filter(s=>s==='saved').length,1);assert.ok(result.some(s=>s==='claimed_elsewhere'||s==='idle'));}finally{f.sql.close();}});
