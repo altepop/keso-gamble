@@ -23,10 +23,12 @@ async function upgradeCaptureQueue(db:D1Database){
  // Only executes after the existing owner opt-in check. No records are removed,
  // and previously unavailable sources keep their backoff/unavailable state.
  await db.prepare(`UPDATE coach_member_queue SET status='pending',attempts=0,next_at=0
-  WHERE status='complete' AND NOT EXISTS(SELECT 1 FROM valorant_match_rosters r
+  WHERE status='complete' AND source_riot_id IN (${COACH_MEMBER_ACCOUNTS.map(()=>'?').join(',')})
+   AND NOT EXISTS(SELECT 1 FROM valorant_match_rosters r
    JOIN valorant_match_round_events e ON e.match_id=r.match_id
    WHERE r.match_id=coach_member_queue.match_id AND ${ROSTER_SCHEMA_SQL} AND ${ASSIST_SCHEMA_SQL} AND ${CONTEXT_SCHEMA_SQL}
-    AND e.rounds_json IS NOT NULL AND e.kills_json IS NOT NULL)`).run();
+    AND e.rounds_json IS NOT NULL AND e.kills_json IS NOT NULL)`)
+  .bind(...COACH_MEMBER_ACCOUNTS.map(p=>p.riotId)).run();
  await db.prepare('INSERT OR IGNORE INTO monitor_state(key,value) VALUES(?,?)').bind(key,'1').run();
 }
 
