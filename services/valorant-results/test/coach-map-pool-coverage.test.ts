@@ -34,8 +34,8 @@ test('only the actual observed agent sample is listed for each map',()=>{
 test('invalid pool, duplicated maps and fabricated or malformed input fail closed',()=>{
  assert.throws(()=>coachMapPoolCoverage(maps.slice(0,6),[]));
  assert.throws(()=>coachMapPoolCoverage([...maps.slice(0,6),maps[0]],[]));
- assert.throws(()=>coachMapPoolCoverage([...maps.slice(0,6),'bad\\nname'],[]));
- assert.throws(()=>coachMapPoolCoverage(maps,[{map:'Map-A',agent:'bad\\nname'}]));
+ assert.throws(()=>coachMapPoolCoverage([...maps.slice(0,6),'bad\nname'],[]));
+ assert.throws(()=>coachMapPoolCoverage(maps,[{map:'Map-A',agent:'bad\nname'}]));
  assert.throws(()=>coachMapPoolCoverage(maps,[],0));
  assert.throws(()=>coachMapPoolCoverage(maps,Array.from({length:251},()=>({map:'Map-A',agent:'Fade'}))));
 });
