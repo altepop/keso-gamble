@@ -191,6 +191,49 @@ test('source validation, absent kill timelines and missing upstream games cannot
  }finally{f.close()}
 });
 
+test('Phase 5 shared match selects independently verified linked peer when original source identity is stale',async()=>{
+ const f=setup();try{
+  await enableAllMemberArchive(f.db);
+  const original=COACH_MEMBER_ACCOUNTS[0].riotId,peer=COACH_MEMBER_ACCOUNTS[3].riotId;
+  f.sql.prepare('UPDATE coach_member_sources SET puuid=?,region=? WHERE riot_id=?')
+   .run('peer-verified','ap',peer);
+  f.sql.prepare("INSERT INTO coach_member_queue VALUES(?,?,?,?,?,'pending',0,0)")
+   .run('shared-fallback','na',original,'stale-id',Date.parse(started));
+  f.sql.prepare('INSERT INTO coach_member_links VALUES(?,?)').run(peer,'shared-fallback');
+  let called=0;
+  const result=await fetchNextCoachMemberMatch(f.db,async(region,id)=>{
+   called++;assert.equal(region,'ap');assert.equal(id,'shared-fallback');
+   return makeMatch(id,'peer-verified');
+  },now);
+  assert.equal(result,'saved');assert.equal(called,1,'no second Henrik detail request');
+  assert.equal(f.count('valorant_match_rosters'),1);
+  assert.equal((f.sql.prepare('SELECT source_riot_id FROM coach_member_queue WHERE match_id=?').get('shared-fallback') as {source_riot_id:string}).source_riot_id,original,'preserve queue attribution');
+ }finally{f.close();}
+});
+test('Phase 5 prioritizes the still-verified original and never borrows unrelated source',async()=>{
+ const f=setup();try{
+  await enableAllMemberArchive(f.db);
+  const original=COACH_MEMBER_ACCOUNTS[0].riotId,peer=COACH_MEMBER_ACCOUNTS[3].riotId;
+  f.sql.prepare('UPDATE coach_member_sources SET puuid=?,region=? WHERE riot_id=?').run('player-0','ap',original);
+  f.sql.prepare('UPDATE coach_member_sources SET puuid=?,region=? WHERE riot_id=?').run('peer-verified','eu',peer);
+  f.sql.prepare("INSERT INTO coach_member_queue VALUES(?,?,?,?,?,'pending',0,0)")
+   .run('shared-primary','ap',original,'player-0',Date.parse(started));
+  for(const riot of [peer,original])f.sql.prepare('INSERT INTO coach_member_links VALUES(?,?)').run(riot,'shared-primary');
+  let called=0;
+  assert.equal(await fetchNextCoachMemberMatch(f.db,async(region,id)=>{
+   called++;assert.equal(region,'ap');return makeMatch(id);
+  },now),'saved');
+  assert.equal(called,1);
+  f.sql.prepare("INSERT INTO coach_member_queue VALUES(?,?,?,?,?,'pending',0,0)")
+   .run('unlinked-legacy','ap',original,'player-0',Date.parse(started)-1000);
+  const older=makeMatch('unlinked-legacy');
+  older.metadata.started_at=new Date(Date.parse(started)-1000).toISOString();
+  assert.equal(await fetchNextCoachMemberMatch(f.db,async(region,id)=>{
+   called++;assert.equal(region,'ap');return older;
+  },now),'saved','old unlinked rows retain their original source');
+  assert.equal(called,2);
+ }finally{f.close();}
+});
 test('partial kill timelines are retried after cooldown and repaired without rewriting earlier rounds',async()=>{
  const f=setup();
  try{
