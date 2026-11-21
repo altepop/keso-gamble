@@ -133,3 +133,13 @@ test('Phase 4 position evidence is presented as owner-only counts without coordi
  assert.doesNotMatch(code,/position\.positions_json|position\.frames|position\.roster|JSON\.stringify\(position\)/);
  assert.doesNotMatch(code,/\bfetch\s*\(|\b(?:sessionStorage|localStorage)\b|XMLHttpRequest|sendBeacon/);
 });
+
+test('Phase 4 map-position evidence renders owner-only counts without sensitive source fields',()=>{
+ const code=readFileSync(new URL('../coach/prototype-view.js',import.meta.url),'utf8');
+ assert.match(code,/d\.mapPositionCoverage\?\.pool/);
+ assert.match(code,/位置データ：取得試合/);
+ assert.match(code,/デス時の位置/);
+ assert.match(code,/キル時の位置/);
+ assert.doesNotMatch(code,/mapPositionCoverage\.positions_json|mapPositionCoverage\.frames|mapPositionCoverage\.roster/);
+ assert.doesNotMatch(code,/\bfetch\s*\(|\b(?:sessionStorage|localStorage)\b|XMLHttpRequest|sendBeacon/);
+});
