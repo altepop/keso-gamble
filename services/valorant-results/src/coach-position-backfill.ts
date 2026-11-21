@@ -22,8 +22,17 @@ export async function backfillCoachPositions(db:D1Database,fetchDetail:(region:s
     AND linked.region IN ('ap','na','eu','kr','br','latam')
     AND (linked.riot_id<>q.source_riot_id OR
       (linked.puuid=q.source_puuid AND linked.region=q.region))
-   ORDER BY CASE WHEN linked.riot_id=q.source_riot_id AND linked.puuid=q.source_puuid
-      AND linked.region=q.region THEN 0 ELSE 1 END,linked.riot_id ASC LIMIT 1)
+   -- After a failed position attempt, prefer a different verified member
+   -- rather than spending every retry on the same originally attributed account.
+   -- The position attempt counter is already bounded to three requests.
+   ORDER BY CASE WHEN COALESCE((
+      SELECT attempts FROM coach_position_backfill
+      WHERE match_id=q.match_id),0)>0
+     THEN CASE WHEN linked.riot_id=q.source_riot_id AND linked.puuid=q.source_puuid
+       AND linked.region=q.region THEN 1 ELSE 0 END
+     ELSE CASE WHEN linked.riot_id=q.source_riot_id AND linked.puuid=q.source_puuid
+       AND linked.region=q.region THEN 0 ELSE 1 END
+    END,linked.riot_id ASC LIMIT 1)
   LEFT JOIN valorant_match_positions p ON p.match_id=q.match_id
   LEFT JOIN coach_position_backfill b ON b.match_id=q.match_id
   WHERE (q.status='complete' OR (q.status='partial' AND q.attempts>=3)) AND COALESCE(p.has_coordinates,0)=0
