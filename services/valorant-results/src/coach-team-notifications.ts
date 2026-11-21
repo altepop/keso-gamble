@@ -42,7 +42,7 @@ export async function readCoachTeamNotice(db:D1Database,guild:string,id:Linked,u
  return {settings:{enabled:effective,version:p?.version??0},
   deliveryReady:false,channelConfigured:channel?.enabled===1&&/^\d{15,22}$/.test(channel.channel_id) || false,
   preview:preview(),
-  note:'通知は初期OFFです。本人の同意と管理者によるチャンネル設定が揃うまで送信されません。'};
+  note:'登録済みロスターの通知同意は初期ONです。本人はいつでもOFFにできます。送信先・開始の管理者設定は無効のままであり、通知は送信されません。'};
 }
 export async function saveCoachTeamNotice(db:D1Database,guild:string,id:Linked,user:string,request:Request,now=Date.now()){
  const reader=request.body?.getReader();if(!reader)throw new CoachTeamError('通知設定を確認してください。',400);
