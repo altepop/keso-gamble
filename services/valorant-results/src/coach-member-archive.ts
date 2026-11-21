@@ -169,10 +169,29 @@ export async function fetchNextCoachMemberMatch(db:D1Database,
  // One candidate per tick. The unique match_id queue avoids duplicates across
  // all discovered players. Partial archives are retried at a cooldown until
  // all three total requests are exhausted; never treat missing kills as zero.
- const row=await db.prepare(`SELECT q.match_id,q.region,q.source_riot_id AS riot_id,
-  q.source_puuid AS puuid,q.started_at,q.attempts FROM coach_member_queue q
+ // Phase 5: a shared match may have multiple verified collection sources.
+ // Prefer the queue's original source only while its saved identity still matches;
+ // otherwise select a verified, linked cohort member. No extra network request
+ // or queue ownership mutation is made, including for older unlinked records.
+ const permitted=COACH_MEMBER_ACCOUNTS.map(()=>'?').join(',');
+ const row=await db.prepare(`SELECT q.match_id,
+  COALESCE(source.region,q.region) AS region,
+  COALESCE(source.riot_id,q.source_riot_id) AS riot_id,
+  COALESCE(source.puuid,q.source_puuid) AS puuid,
+  q.started_at,q.attempts FROM coach_member_queue q
+  LEFT JOIN coach_member_sources source ON source.riot_id=(
+    SELECT s.riot_id FROM coach_member_links l
+    JOIN coach_member_sources s ON s.riot_id=l.riot_id
+    WHERE l.match_id=q.match_id AND s.riot_id IN (${permitted})
+      AND length(s.puuid) BETWEEN 1 AND 128
+      AND s.region IN ('ap','na','eu','kr','br','latam')
+    ORDER BY CASE WHEN s.riot_id=q.source_riot_id
+                   AND s.puuid=q.source_puuid AND s.region=q.region THEN 0 ELSE 1 END,
+             s.riot_id ASC LIMIT 1
+  )
   WHERE q.status IN ('pending','partial') AND q.next_at<=? AND q.attempts<3
-  ORDER BY q.started_at DESC LIMIT 1`).bind(now).first<Candidate>();
+  ORDER BY q.started_at DESC LIMIT 1`)
+  .bind(...COACH_MEMBER_ACCOUNTS.map(p=>p.riotId),now).first<Candidate>();
  if(!row)return 'idle';
  const complete=await db.prepare(`SELECT
   (SELECT COUNT(*) FROM valorant_match_rosters r WHERE match_id=? AND ${ROSTER_SCHEMA_SQL}) AS roster,
