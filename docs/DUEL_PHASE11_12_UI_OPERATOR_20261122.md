@@ -24,3 +24,6 @@ Phase 12：
 
 ## 配備ゲート
 全CI成功 → head SHA固定マージ → 同一main SHAのPages/Worker両成功 → 本番スモーク → PR本文への最終結論。結果未確認時は完成としない。既存の報酬・KP台帳・コーチ関連コードには変更を加えない。
+
+## キャッシュ検証
+- GitHub Actionsの内容由来識別子は `npm run build:activity` で生成し、生成後の実際のhead SHAで全CIを再実行してからマージする。キャッシュ識別子を手作業の推測で決めない。
