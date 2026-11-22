@@ -1,0 +1,37 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {evaluateMonitorHeartbeat,inspectMonitorHeartbeat,MONITOR_WORKFLOW} from '../../../scripts/duel-monitor-heartbeat.mjs';
+const now=Date.parse('2026-11-23T09:00:00Z');
+const make=(minutes=30,status='completed',conclusion='success')=>({
+ id:42,name:MONITOR_WORKFLOW,event:'schedule',status,conclusion,
+ created_at:new Date(now-minutes*60000).toISOString()
+});
+test('recent successful scheduled monitor run is healthy',()=>{
+ assert.deepEqual(evaluateMonitorHeartbeat([make()],now),{state:'healthy',ok:true,runId:42,ageMinutes:30});
+});
+test('no schedule, stale schedule and most recent failure fail closed',()=>{
+ assert.equal(evaluateMonitorHeartbeat([],now).state,'missing');
+ assert.equal(evaluateMonitorHeartbeat([make(241)],now).state,'stale');
+ assert.equal(evaluateMonitorHeartbeat([make(30,'completed','failure'),{...make(20,'completed','success'),id:1,event:'pull_request'}],now).state,'failed');
+});
+test('running job has bounded grace, stalled job does not pass',()=>{
+ assert.equal(evaluateMonitorHeartbeat([make(25,'in_progress',null)],now).state,'running');
+ assert.equal(evaluateMonitorHeartbeat([make(46,'in_progress',null)],now).state,'stalled');
+});
+test('future timestamps, malformed IDs, other workflow and events do not create false successes',()=>{
+ assert.equal(evaluateMonitorHeartbeat([{...make(),id:0}],now).ok,false);
+ assert.equal(evaluateMonitorHeartbeat([{...make(),created_at:new Date(now+60_000).toISOString()}],now).ok,false);
+ assert.equal(evaluateMonitorHeartbeat([{...make(),name:'unrelated'}],now).ok,false);
+ assert.equal(evaluateMonitorHeartbeat([{...make(),event:'push'}],now).ok,false);
+ assert.throws(()=>evaluateMonitorHeartbeat(null,now));
+});
+test('GitHub metadata-only GET, no D1 or KP calls',async()=>{
+ let seen;
+ const out=await inspectMonitorHeartbeat({GITHUB_TOKEN:'fixture-token',GITHUB_REPOSITORY:'altepop/keso-gamble'},
+  async(url,options)=>{seen={url,options};return {ok:true,json:async()=>({workflow_runs:[make()]})};},now);
+ assert.equal(out.ok,true);
+ assert.match(seen.url,/\/actions\/workflows\/duel-deployment-watch\.yml\/runs\?event=schedule&per_page=10$/);
+ assert.equal(seen.options.method,undefined);
+ assert.ok(!seen.url.includes('cloudflare'));
+ await assert.rejects(inspectMonitorHeartbeat({GITHUB_REPOSITORY:'altepop/keso-gamble'}),/read access/);
+});
