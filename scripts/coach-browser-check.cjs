@@ -495,8 +495,21 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   assert.match(await loop.innerText(),/今回保存した練習予定です/,'preloaded private records show the real planned practice, without claiming it was completed');
   const records=page.locator('[data-private-records]');await records.locator('[data-record-panel]').evaluate(el=>el.open=true);await records.locator('[data-record-load]').click();await records.locator('[data-record-form]').waitFor();
   let recordForm=records.locator('[data-record-form]').first();await recordForm.locator('[name="minutes"]').fill('0');await recordForm.locator('[name="attempts"]').fill('3');await recordForm.locator('[name="successes"]').fill('2');await recordForm.locator('[name="reflection"]').fill('自分の振り返りです。\n次は退路を確認します。');
-  // Select the required report after other edits: async record refreshes can replace the form.
+  // An asynchronous record refresh can replace the entire form. Select the required
+  // report first, then set and verify EVERY persisted field on the currently live form.
   await recordForm.locator('[name="report"]').selectOption('done');
+  await recordForm.locator('[name="minutes"]').fill('0');
+  await recordForm.locator('[name="attempts"]').fill('3');
+  await recordForm.locator('[name="successes"]').fill('2');
+  await recordForm.locator('[name="reflection"]').fill('自分の振り返りです。\\n次は退路を確認します。');
+  const saveInputs=await recordForm.evaluate(form=>({
+   report:form.elements.namedItem('report')?.value,
+   minutes:form.elements.namedItem('minutes')?.value,
+   attempts:form.elements.namedItem('attempts')?.value,
+   successes:form.elements.namedItem('successes')?.value
+  }));
+  assert.deepEqual(saveInputs,{report:'done',minutes:'0',attempts:'3',successes:'2'},
+   'live form must preserve non-empty zero and attempts before owner-only submit');
   // Explicitly validate and click the owner-only form, rather than relying on implicit Enter submission.
   const valid=await recordForm.evaluate(form=>({valid:form.checkValidity(),invalid:[...form.elements].filter(el=>el.validity&&!el.validity.valid).map(el=>el.name||el.tagName)}));
   assert.equal(valid.valid,true,'owner record form must be valid before saving; invalid controls: '+valid.invalid.join(', '));
@@ -505,6 +518,9 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
    recordForm.locator('button[type="submit"]').click()
   ]);
   assert.equal(saveResponse.ok(),true,'owner record save API must succeed: HTTP '+saveResponse.status());
+  const savedRequest=saveResponse.request().postDataJSON();
+  assert.deepEqual(savedRequest.execution,{report:'done',minutes:0,attempts:3,successes:2},
+   'the actual POST must persist the intended zero-minute value, not a stale or replaced form');
   await records.locator('[role="status"]').filter({hasText:'保存しました'}).waitFor({timeout:12000});
   assert.match(await loop.innerText(),/前回ご本人が記録した内容です/);
   assert.match(await loop.innerText(),/自分の振り返り/);
