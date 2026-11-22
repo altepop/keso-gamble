@@ -5,6 +5,7 @@
 import type {KpEnv,KpMapping} from './kp.ts';
 import {startServerPve,advanceServerPve,pvePublicSnapshot,type TrustedPveState} from './duel-pve-engine.ts';
 import {ensureVerifiedPveProgression} from './duel-pve-progression.ts';
+import {duelDailyChallenge} from './duel-daily-challenge.ts';
 
 export const DUEL_PVE_SESSION_DDL=[
  `CREATE TABLE IF NOT EXISTS kp_duel_pve_sessions(
@@ -82,17 +83,18 @@ function trusted(row:SessionRow):TrustedPveState{
 }
 function publicMatch(row:SessionRow){return {id:row.id,...pvePublicSnapshot(trusted(row))};}
 export async function serverPveOperation(env:KpEnv,guild:string,user:string,body:Record<string,unknown>){
- await ensureServerPveTables(env);
  const action=String(body.action??'');
+ await ensureServerPveTables(env);
  if(action==='get'){
   const row=await find(env,guild,user,String(body.session??''));
   if(!row)throw Error('CPU戦が見つかりません。');
   return publicMatch(row);
  }
- if(action==='start'){
+ if(action==='start'||action==='daily'){
   const requestId=String(body.requestId??'');
   if(!uuid.test(requestId))throw Error('操作IDが不正です。');
-  const game=String(body.game??''),level=String(body.level??'normal');
+  const challenge=action==='daily'?duelDailyChallenge(Date.now()):null;
+  const game=challenge?.game??String(body.game??''),level=challenge?.level??String(body.level??'normal');
   const existing=await env.DB.prepare('SELECT id,game,difficulty FROM kp_duel_pve_sessions WHERE guild=? AND user=? AND request_id=?')
    .bind(guild,user,requestId).first<{id:string;game:string;difficulty:string}>();
   if(existing){
@@ -173,6 +175,8 @@ export async function serverPveApi(request:Request,env:KpEnv,m:KpMapping,user:st
   if(raw.length>1024)return respond({error:'操作内容が長すぎます。'},400);
   const body=JSON.parse(raw) as Record<string,unknown>;
   if(!body||typeof body!=='object'||Array.isArray(body))return respond({error:'操作内容が不正です。'},400);
+  // Preview never creates a D1 table or changes the normal PvE return type.
+  if(body.action==='daily-preview')return respond({challenge:duelDailyChallenge(Date.now())});
   return respond({match:await serverPveOperation(env,m.guildId,user,body)});
  }catch(error){
   const message=error instanceof Error?error.message:'';
