@@ -228,13 +228,6 @@
     @keyframes pulse{0%,100%{box-shadow:0 0 0 3px #ff46552b}50%{box-shadow:0 0 0 6px #ff46551c}}
   }
 
-/* COACH: incomplete match state, consistent with the compact reader layout */
-.coach-pending-note{margin:12px 0 18px;padding:16px 18px;border:1px solid #52647d;border-radius:14px;background:#172338;color:#f3f6fc;font-size:16px;line-height:1.9}
-.coach-pending-note p{margin:0 0 7px;color:#f3f6fc;font-size:16px;line-height:1.9}
-.coach-pending-note p:last-child{margin-bottom:0}
-.coach-pending-note .coach-pending-title{font-weight:700}
-.coach-pending-note .coach-pending-detail{font-size:16px;color:#e7edf8}
-@media(max-width:400px){.coach-pending-note{padding:14px 15px}}
 </style>
 <style id="coach-legacy-style">
 .coach-existing{
@@ -551,6 +544,13 @@
 .prototype-top .sub-task .tt{overflow-wrap:break-word}
 .prototype-top .nextcheck .disp{overflow-wrap:break-word}
 .prototype-top .detail-body .coach-existing{margin-top:16px}
+/* COACH: incomplete match state, consistent with the compact reader layout */
+.coach-pending-note{margin:12px 0 18px;padding:16px 18px;border:1px solid #52647d;border-radius:14px;background:#172338;color:#f3f6fc;font-size:16px;line-height:1.9}
+.coach-pending-note p{margin:0 0 7px;color:#f3f6fc;font-size:16px;line-height:1.9}
+.coach-pending-note p:last-child{margin-bottom:0}
+.coach-pending-note .coach-pending-title{font-weight:700}
+.coach-pending-note .coach-pending-detail{font-size:16px;color:#e7edf8}
+@media(max-width:400px){.coach-pending-note{padding:14px 15px}}
 </style>
 <style id="coach-goals-style">
 .coach-goals{margin:32px 0;padding:24px;background:#14232f;border-top:2px solid #ff4655;color:#ece8e1;clip-path:polygon(12px 0,100% 0,100% calc(100% - 12px),calc(100% - 12px) 100%,0 100%,0 12px)}
