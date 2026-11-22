@@ -857,6 +857,27 @@ addEventListener('click',async e=>{
   const t=e.target.closest?.('button,[data-open]'); if(!t) return;
   // Navigating to a second Activity HTML page repeats Discord SDK ready() and can
   // strand the iPhone iframe. Keep the existing authenticated context alive.
+  if(screen==='duels'&&t.dataset.duelSport!==undefined){
+   e.preventDefault();
+   const game=t.dataset.duelSport;
+   if(!['trio','othello','gomoku','connect4','hitblow','bluffdice','poker'].includes(game))return;
+   if(t.dataset.duelSportMode==='pve'&&duelEntryMode==='pve'){
+    duelPveUi.game=game;duelPveUi.open=true;
+   }else if(t.dataset.duelSportMode==='pvp'&&duelEntryMode==='pvp'){
+    duelGame=game;
+   }else return;
+   render();
+   return;
+  }
+  if(screen==='duels'&&t.dataset.duelPracticeGame!==undefined&&duelEntryMode==='practice'){
+   e.preventDefault();
+   const game=t.dataset.duelPracticeGame;
+   if(!['othello','gomoku','connect4','hitblow','bluffdice','poker'].includes(game))return;
+   // The free practice runs in its existing isolated demo. It never sends KP or skill writes.
+   const url='./duel-demo.html?cpu=1&game='+encodeURIComponent(game);
+   window.location.href=url;
+   return;
+  }
   if(screen==='duels'&&t.dataset.duelEntry!==undefined){
    e.preventDefault();
    if(!['pve','pvp','practice'].includes(t.dataset.duelEntry))return;
