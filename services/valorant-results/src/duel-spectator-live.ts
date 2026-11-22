@@ -9,7 +9,8 @@ const SNOWFLAKE=/^\d{15,22}$/;
 const MAX_VIEWERS=4;
 const FINISHED_VISIBLE_MS=60*60_000;
 export class SpectatorAccessError extends Error{
- constructor(public status:number=404){super('spectator_unavailable');}
+ readonly status:number;
+ constructor(status:number=404){super('spectator_unavailable');this.status=status;}
 }
 export type SpectatorConsent={guild:string;match_id:string;viewer:string;user_a:string;user_b:string;
  approved_a:number;approved_b:number;updated_at:number};
