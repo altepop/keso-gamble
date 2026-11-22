@@ -179,7 +179,7 @@ export function duelScreen({info,user,live,cash,selectedId,game='othello',stake=
   (spectatorUi?.snapshot?'<div role="region" aria-label="サーバー確定の観戦情報">'+
    '<p>ゲーム：'+esc(title(spectatorUi.snapshot))+' ／ 状態：'+(spectatorUi.snapshot.status==='active'?'対局中':'終了')+
    ' ／ 更新番号：'+esc(spectatorUi.snapshot.version)+'</p>'+
-   spectatorBoardPreview(spectatorUi.snapshot)</div>':'')+
+   spectatorBoardPreview(spectatorUi.snapshot)+'</div>':'')+
   '<p class="helper">リアルタイム通知が届けば即更新。通信非対応時は定期取得に切替。音声は端末の設定・再生許可に従う。</p>'+
   '</div></details>':'';
  const syncNotice=live?'<div class="duel-sync" role="status" aria-live="polite">対戦情報：'+(lastSynced?'最終更新 '+new Date(lastSynced).toLocaleTimeString('ja-JP'):'確認中')+(loading?'・更新中':'')+'。<button type="button" class="action-btn" data-duel-refresh="1" '+(busy?'disabled':'')+'>更新</button></div>':'';
