@@ -34,7 +34,7 @@ test('migration preserves rows, constraints, triggers, indexes and is idempotent
   await ensureTrioGameConstraint({DB} as never,'kp_duel_mode_skill');
   await ensureTrioGameConstraint({DB} as never,'kp_duel_progress_receipts');
   await ensureTrioGameConstraint({DB} as never,'kp_duel_progress_receipts');
-  assert.equal(sqlite.prepare("SELECT points FROM kp_duel_mode_skill WHERE guild='g'").get()?.points,11);
+  assert.equal(sqlite.prepare("SELECT points FROM kp_duel_mode_skill WHERE guild='g'").get()?.points,12);
   assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM kp_duel_progress_receipts").get()?.n,1);
   sqlite.prepare("INSERT INTO kp_duel_mode_skill(guild,user,mode,game,updated_at) VALUES(?,?,?,?,?)").run('g','bob','pve','trio',3);
   sqlite.prepare("INSERT INTO kp_duel_progress_receipts(guild,match_id,user,mode,game,outcome,verified_version,occurred_at) VALUES(?,?,?,?,?,?,?,?)")
