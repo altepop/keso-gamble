@@ -1,14 +1,13 @@
 name: P12 duel D1 encrypted backup and isolated restore
 
-# One-shot when this feature lands; manual rerun remains possible.
-# Never restore into production, never log or publish plaintext data.
+# Trigger only after production Worker deploy/smoke completes successfully.
+# The merged PR title contains #768, so unrelated main pushes do not export D1.
+# Manual rerun remains possible, but never repeat automatically for other PRs.
 on:
-  push:
+  workflow_run:
+    workflows: ['VALORANT Bot check and deploy']
+    types: [completed]
     branches: [main]
-    paths:
-      - '.github/workflows/duel-d1-backup.yml'
-      - 'scripts/duel-d1-backup.mjs'
-      - 'services/valorant-results/test/duel-d1-backup.test.mjs'
   workflow_dispatch:
 
 permissions:
@@ -20,7 +19,7 @@ concurrency:
 
 jobs:
   export-verify:
-    if: github.repository == 'altepop/keso-gamble' && (github.event_name == 'push' || github.actor == 'altepop')
+    if: github.repository == 'altepop/keso-gamble' && (github.event_name == 'workflow_dispatch' && github.actor == 'altepop' || github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && contains(github.event.workflow_run.head_commit.message, '#768'))
     runs-on: ubuntu-latest
     timeout-minutes: 16
     env:
