@@ -156,7 +156,7 @@ export function duelScreen({info,user,live,cash,selectedId,game='othello',stake=
  const spectatorMatches=Array.isArray(spectatorUi?.matches)?spectatorUi.matches:[];
  const spectatorRows=spectatorMatches.map(m=>
   '<button type="button" class="duel-match" data-duel-spectator-select="'+esc(m.id)+'">'+
-  '<span><strong>'+esc(guides[m.game]?m.game:'決闘')+'</strong><small>'+
+  '<span><strong>'+esc(title(m))+'</strong><small>'+
   (m.status==='active'?'対局中':'終了')+' · 更新番号 '+esc(m.version)+'</small></span>'+
   '<span class="duel-purse">観戦する</span></button>'
  ).join('');
@@ -177,9 +177,9 @@ export function duelScreen({info,user,live,cash,selectedId,game='othello',stake=
   (spectatorUi?.message?'<p role="status" class="helper">'+esc(spectatorUi.message)+'</p>':'')+
   (spectatorUi?.error?'<p role="alert">'+esc(spectatorUi.error)+'</p>':'')+
   (spectatorUi?.snapshot?'<div role="region" aria-label="サーバー確定の観戦情報">'+
-   '<p>ゲーム：'+esc(spectatorUi.snapshot.game)+' ／ 状態：'+esc(spectatorUi.snapshot.status)+
+   '<p>ゲーム：'+esc(title(spectatorUi.snapshot))+' ／ 状態：'+(spectatorUi.snapshot.status==='active'?'対局中':'終了')+
    ' ／ 更新番号：'+esc(spectatorUi.snapshot.version)+'</p>'+
-   '<pre aria-label="認証済みの公開盤面">'+esc(JSON.stringify(spectatorUi.snapshot.publicState??null,null,2))+'</pre></div>':'')+
+   spectatorBoardPreview(spectatorUi.snapshot)</div>':'')+
   '<p class="helper">リアルタイム通知が届けば即更新。通信非対応時は定期取得に切替。音声は端末の設定・再生許可に従う。</p>'+
   '</div></details>':'';
  const syncNotice=live?'<div class="duel-sync" role="status" aria-live="polite">対戦情報：'+(lastSynced?'最終更新 '+new Date(lastSynced).toLocaleTimeString('ja-JP'):'確認中')+(loading?'・更新中':'')+'。<button type="button" class="action-btn" data-duel-refresh="1" '+(busy?'disabled':'')+'>更新</button></div>':'';
