@@ -30,7 +30,7 @@ const objects=[
 const secret='standalone-fake-32-character-secret-value';
 
 test('repair table-scoped D1 dump with omitted live indexes and triggers, then restore',()=>{
- const partial=sql.split('\\n').filter(line=>!line.startsWith('CREATE INDEX')&&!line.startsWith('CREATE TRIGGER')).join('\\n');
+ const partial=sql.split('\n').filter(line=>!line.startsWith('CREATE INDEX')&&!line.startsWith('CREATE TRIGGER')).join('\n');
  const catalog=[
   ...objects.filter(o=>o.type==='table'),
   {type:'index',name:'duel_action_by_match',sql:'CREATE INDEX duel_action_by_match ON kp_board_duel_actions(duel_id)'},
@@ -41,7 +41,7 @@ test('repair table-scoped D1 dump with omitted live indexes and triggers, then r
  const restored=restoreCheck(fixed,names,objects);
  assert.equal(restored.kp_board_duel_actions,1);
  assert.equal(restored.kp_duel_mode_skill,1);
- assert.equal(completeDuelSchema(fixed,catalog),fixed+'\\n',
+ assert.equal(completeDuelSchema(fixed,catalog),fixed,
   'already-present schema must not be appended twice');
  assert.throws(()=>completeDuelSchema(partial,[{type:'index',name:'duel_action_by_match',sql:''}]));
 });
