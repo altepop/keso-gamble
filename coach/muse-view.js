@@ -2,9 +2,11 @@
    existing read-only member report. This adapter never fetches, never saves
    and never invents a value: anything the report does not contain is shown
    as 未取得 (not fetched) or サンプル不足 (insufficient sample).
-   Turning-point detection uses only aggregates the report actually carries;
-   criteria that need round-by-round sequences stay 未取得, and the weapon
-   pickup judgement is labelled as an inference, never a fact. */
+   Turning-point detection reads the report's round-sequence metrics, which
+   the server computes from the archived per-round kill / economy / ability /
+   plant records, plus the MMR snapshot for rank. Criteria the records cannot
+   support stay 未取得, and the weapon pickup judgement stays labelled as an
+   inference, never a fact. */
 (function(root){
 'use strict';
 let timerIds=[];
@@ -36,12 +38,28 @@ function sampleChip(matches){
  return ['ok','評価対象'];
 }
 
-/* Turning-point criteria (7). Detection is limited to what the report's
-   aggregates can honestly support; everything else stays 未取得. */
+const refText=(refs,max=3)=>{
+ const list=(Array.isArray(refs)?refs:[]).filter(x=>x&&x.map!=null&&known(x.round));
+ if(!list.length)return '';
+ const shown=list.slice(0,max).map(x=>mapJa(String(x.map))+' 第'+fmtInt(x.round)+'ラウンド');
+ return '該当は '+shown.join('、')+(list.length>max?' ほか '+fmtInt(list.length-max)+' 件':'')+' です';};
+
+/* Turning-point criteria (7). The server computes round sequences from the
+   archived records (report.roundSequence); when that block is absent the
+   criteria fall back to what the older aggregates can honestly support. */
 function turningPoints(report){
  const own=ownOf(report),rc=report?.roundContext||null;
+ const seq=report?.roundSequence&&known(report.roundSequence.matches)&&report.roundSequence.matches>0?report.roundSequence:null;
  const items=[];
- items.push({id:'advantage',label:'人数有利を守れなかったラウンド（5v4、特に5v3／5v2から負け）',status:'unknown',
+ if(seq&&known(seq.advantage?.rounds)){
+  const adv=seq.advantage;
+  if(adv.rounds<=0)items.push({id:'advantage',label:'人数有利を守れなかったラウンド（5v4、特に5v3／5v2から負け）',status:'none',
+   detail:'集計できた試合では、人数有利を作ったラウンドがありませんでした'});
+  else if(known(adv.losses)&&adv.losses>0)items.push({id:'advantage',label:'人数有利を守れなかったラウンド（5v4、特に5v3／5v2から負け）',status:'detected',
+   detail:'人数有利を作った '+fmtInt(adv.rounds)+' ラウンドのうち、落としたのは '+fmtInt(adv.losses)+' 件です（勝ちに変えた割合は '+fmtPct(adv.conversionPct)+' です）。'+refText(adv.lossRefs)});
+  else items.push({id:'advantage',label:'人数有利を守れなかったラウンド（5v4、特に5v3／5v2から負け）',status:'none',
+   detail:'人数有利を作った '+fmtInt(adv.rounds)+' ラウンドは、すべて勝ち切っています'});
+ }else items.push({id:'advantage',label:'人数有利を守れなかったラウンド（5v4、特に5v3／5v2から負け）',status:'unknown',
   detail:'ラウンド単位の人数推移は、この集計には含まれていません。人数有利を作った後に落としたラウンドは、データが届き次第ここで検出します'});
  const bands=Array.isArray(rc?.bands)?rc.bands:[];
  const eco=bands.find(b=>b.key==='under1000');
@@ -50,26 +68,55 @@ function turningPoints(report){
   items.push({id:'economy',label:'エコ負け・フォース失敗からの連鎖',status:l>0?'detected':'none',
    detail:'購入1,000未満のラウンド（集計）は '+w+' 勝 '+l+' 敗です。連鎖の起点になったラウンドの特定は未取得です'});
  }else items.push({id:'economy',label:'エコ負け・フォース失敗からの連鎖',status:'unknown',detail:'経済バンドの集計が届いていません'});
- items.push({id:'weapon',label:'落とした武器が起点になった雪崩',status:'unknown',
+ if(seq&&known(seq.snowball?.candidates)){
+  if(seq.snowball.candidates>0)items.push({id:'weapon',label:'落とした武器が起点になった雪崩',status:'estimated',
+   detail:'高額な装備を落とし、相手の勢いの起点になった可能性がある場面が '+fmtInt(seq.snowball.candidates)+' 件あります。'+refText(seq.snowball.refs)+'。武器の拾得そのものは記録に残らないため、これは推定です'});
+  else items.push({id:'weapon',label:'落とした武器が起点になった雪崩',status:'none',
+   detail:'推定の範囲では、雪崩の起点になった候補は見つかりませんでした。武器の拾得そのものは記録に残らないため、断定はしません'});
+ }else items.push({id:'weapon',label:'落とした武器が起点になった雪崩',status:'unknown',
   detail:'武器の拾得そのものは記録に残らないため、候補の断定はしません。その後のキル武器や所持品の変化からの推定が必要な基準です'});
- const plant=rc?.spike?.plant;
- if(plant&&known(plant.events)&&plant.events>0)items.push({id:'postplant',label:'設置後に落としたラウンド',status:'unknown',
-  detail:'設置イベントは '+fmtInt(plant.events)+' 件ありますが、設置したラウンドの勝敗は集計に含まれていません'});
- else items.push({id:'postplant',label:'設置後に落としたラウンド',status:'unknown',detail:'設置イベントの集計が届いていません'});
- const ult=rc?.abilities?.ultimate;
- if(ult&&known(ult.casts)&&ult.casts>0)items.push({id:'ult',label:'ウルトを使って落としたラウンド',status:'unknown',
-  detail:'ウルトの使用は '+fmtInt(ult.casts)+' 回ありますが、使用したラウンドの勝敗は集計に含まれていません'});
- else items.push({id:'ult',label:'ウルトを使って落としたラウンド',status:'unknown',detail:'ウルト使用の集計が届いていません'});
+ if(seq&&known(seq.postPlant?.plants)){
+  const pp=seq.postPlant;
+  if(pp.plants<=0)items.push({id:'postplant',label:'設置後に落としたラウンド',status:'none',
+   detail:'集計できた試合では、設置まで進んだラウンドがありませんでした'});
+  else if(known(pp.losses)&&pp.losses>0)items.push({id:'postplant',label:'設置後に落としたラウンド',status:'detected',
+   detail:'設置まで進んだ '+fmtInt(pp.plants)+' ラウンドのうち、落としたのは '+fmtInt(pp.losses)+' 件です。'+refText(pp.lossRefs)});
+  else items.push({id:'postplant',label:'設置後に落としたラウンド',status:'none',
+   detail:'設置まで進んだ '+fmtInt(pp.plants)+' ラウンドは、すべて勝ち切っています'});
+ }else{
+  const plant=rc?.spike?.plant;
+  if(plant&&known(plant.events)&&plant.events>0)items.push({id:'postplant',label:'設置後に落としたラウンド',status:'unknown',
+   detail:'設置イベントは '+fmtInt(plant.events)+' 件ありますが、設置したラウンドの勝敗は集計に含まれていません'});
+  else items.push({id:'postplant',label:'設置後に落としたラウンド',status:'unknown',detail:'設置イベントの集計が届いていません'});
+ }
+ if(seq&&known(seq.ult?.matches)){
+  const ult2=seq.ult;
+  if(ult2.matches<=0)items.push({id:'ult',label:'ウルトを使って落としたラウンド',status:'unknown',
+   detail:'ウルトを使ったラウンドを判定できる記録が届いていません'});
+  else if(!known(ult2.rounds)||ult2.rounds<=0)items.push({id:'ult',label:'ウルトを使って落としたラウンド',status:'none',
+   detail:'ウルトを使ったラウンドは、集計できた試合にはありませんでした'});
+  else if(known(ult2.losses)&&ult2.losses>0)items.push({id:'ult',label:'ウルトを使って落としたラウンド',status:'detected',
+   detail:'ウルトを使った '+fmtInt(ult2.rounds)+' ラウンドのうち、落としたのは '+fmtInt(ult2.losses)+' 件です。'+refText(ult2.lossRefs)});
+  else items.push({id:'ult',label:'ウルトを使って落としたラウンド',status:'none',
+   detail:'ウルトを使った '+fmtInt(ult2.rounds)+' ラウンドは、すべて勝ち切っています'});
+ }else{
+  const ult=rc?.abilities?.ultimate;
+  if(ult&&known(ult.casts)&&ult.casts>0)items.push({id:'ult',label:'ウルトを使って落としたラウンド',status:'unknown',
+   detail:'ウルトの使用は '+fmtInt(ult.casts)+' 回ありますが、使用したラウンドの勝敗は集計に含まれていません'});
+  else items.push({id:'ult',label:'ウルトを使って落としたラウンド',status:'unknown',detail:'ウルト使用の集計が届いていません'});
+ }
  const pistols=rc?.pistols;
+ const flip=seq?.pistolFlip&&known(seq.pistolFlip.pairs)&&seq.pistolFlip.pairs>0?seq.pistolFlip:null;
  if(pistols&&known(pistols.knownOutcomes)&&pistols.knownOutcomes>0){
   const w=known(pistols.wins)?pistols.wins:0,l=pistols.knownOutcomes-w;
-  items.push({id:'pistol',label:'ピストルと3ラウンド目の反転',status:(w>0&&l>0)?'detected':'none',
-   detail:'ピストルラウンド（集計）は '+w+' 勝 '+l+' 敗です。3ラウンド目の反転そのものは、ラウンドの並びが必要なため未取得です'});
+  items.push({id:'pistol',label:'ピストルと3ラウンド目の反転',status:(w>0&&l>0)||(flip&&known(flip.against)&&flip.against>0)?'detected':'none',
+   detail:'ピストルラウンド（集計）は '+w+' 勝 '+l+' 敗です'+(flip?'。第3ラウンドで流れが反転したのは '+fmtInt(flip.flips)+' 件で、ピストルを取ったのに第3ラウンドを落としたのは '+fmtInt(flip.against)+' 件です':'。3ラウンド目の反転そのものは、ラウンドの並びが必要なため未取得です')});
  }else items.push({id:'pistol',label:'ピストルと3ラウンド目の反転',status:'unknown',detail:'ピストルラウンドの集計が届いていません'});
  if(own&&known(own.firstKillWins)&&known(own.firstKillLosses)&&(own.firstKillWins+own.firstKillLosses)>0){
   const l=own.firstKillLosses;
+  const fbRefs=seq?refText(seq.firstBlood?.lostRefs):'';
   items.push({id:'firstblood',label:'ファーストブラッドを取って落としたラウンド',status:l>0?'detected':'none',
-   detail:'本人がファーストブラッドを取って落としたラウンドは '+fmtInt(l)+' 件です（集計）。該当ラウンドの番号は未取得です'});
+   detail:'本人がファーストブラッドを取って落としたラウンドは '+fmtInt(l)+' 件です（集計）。'+(fbRefs||'該当ラウンドの番号は未取得です')});
  }else items.push({id:'firstblood',label:'ファーストブラッドを取って落としたラウンド',status:'unknown',detail:'開幕キルの集計が届いていません'});
  return items;
 }
@@ -115,13 +162,30 @@ function model(report,options={}){
    winPct:known(a.winPct)?a.winPct:null,kd:known(a.kd)?a.kd:null,acs:known(a.acs)?a.acs:null}));
  const tp=turningPoints(report);
  const detected=tp.filter(x=>x.status==='detected');
+ const estimated=tp.filter(x=>x.status==='estimated');
+ const seq=report?.roundSequence&&known(report.roundSequence.matches)?report.roundSequence:null;
+ const mmrList=Array.isArray(report?.mmr?.accounts)?report.mmr.accounts:[];
+ const mmrByRiot=new Map(mmrList.map(a=>[String(a?.riotId||''),a]));
+ const rankEntry=(Array.isArray(report?.accounts)?report.accounts:[]).map(id=>mmrByRiot.get(String(id))).find(a=>a&&a.tierPatched)
+  ||mmrList.find(a=>a&&a.tierPatched)||null;
+ const rank=rankEntry?{current:String(rankEntry.tierPatched).toUpperCase()+(known(rankEntry.rankingInTier)?' · '+fmtInt(rankEntry.rankingInTier)+' RR':''),
+  peak:rankEntry.peakPatched?String(rankEntry.peakPatched).toUpperCase():null,
+  change:known(rankEntry.mmrChange)?rankEntry.mmrChange:null}:null;
  return {
   person:String(report?.person||''),profile:String(report?.profile||report?.person||''),
   accountNames:Array.isArray(report?.accounts)?report.accounts.map(String):[],
   matches:known(o.matches)?o.matches:null,
   stats:{acs:known(o.acs)?o.acs:null,adr:known(o.adr)?o.adr:null,kd:known(o.kd)?o.kd:null,
    winPct:known(o.winPct)?o.winPct:null,hsPct:known(o.hsPct)?o.hsPct:null,
-   wins:known(o.wins)?o.wins:null,knownOutcomes:known(o.knownOutcomes)?o.knownOutcomes:null},
+   wins:known(o.wins)?o.wins:null,knownOutcomes:known(o.knownOutcomes)?o.knownOutcomes:null,
+   kast:seq&&seq.kast&&known(seq.kast.pct)&&known(seq.kast.rounds)&&seq.kast.rounds>0?seq.kast.pct:null},
+  rank,seqMatches:seq?seq.matches:null,
+  seqLatest:seq?.latest?{tradeDeaths:known(seq.latest.tradeDeaths)?seq.latest.tradeDeaths:null,
+   tradeTraded:known(seq.latest.tradeTraded)?seq.latest.tradeTraded:null,tradePct:known(seq.latest.tradePct)?seq.latest.tradePct:null,
+   advRounds:known(seq.latest.advRounds)?seq.latest.advRounds:null,advWins:known(seq.latest.advWins)?seq.latest.advWins:null,
+   advPct:known(seq.latest.advPct)?seq.latest.advPct:null}:null,
+  seqPostPlant:seq?.postPlant?{plants:known(seq.postPlant.plants)?seq.postPlant.plants:null,
+   losses:known(seq.postPlant.losses)?seq.postPlant.losses:null,lossRefs:Array.isArray(seq.postPlant.lossRefs)?seq.postPlant.lossRefs:[]}:null,
   weak,strong,accounts,maps,agents,
   latest:latest?{date:String(latest.date||''),map:String(latest.map||''),agent:String(latest.agent||''),
    outcome:String(latest.outcome||''),kills:known(latest.kills)?latest.kills:null,
@@ -130,7 +194,7 @@ function model(report,options={}){
   own:own?{firstKills:known(own.firstKills)?own.firstKills:null,firstDeaths:known(own.firstDeaths)?own.firstDeaths:null,
    firstKillWins:known(own.firstKillWins)?own.firstKillWins:null,firstKillLosses:known(own.firstKillLosses)?own.firstKillLosses:null,
    traded:known(own.firstDeathKillerEliminatedWithin5s)?own.firstDeathKillerEliminatedWithin5s:null}:null,
-  turningPoints:tp,topTurning:detected[0]||null,
+  turningPoints:tp,topTurning:detected[0]||estimated[0]||null,
   plan:planItem?{id:String(planItem.id||''),title:String(planItem.title||''),minutes:known(planItem.minutes)?planItem.minutes:null,
    totalMinutes:planTotal,action:String(planItem.action||''),check:String(planItem.check||''),
    reasons:Array.isArray(planItem.reasons)?planItem.reasons.map(String):[]}:null,
@@ -158,6 +222,8 @@ function render(host,report,ctx={}){
  set('personSub',m.profile&&m.profile!==m.person?m.profile:'');
  set('ids',m.accountNames.length?m.accountNames.join(' ／ ')+(m.matches!=null?' ・ 合算 '+fmtInt(m.matches)+' 試合で確認しています':' ・ 合算の記録を確認しています'):'登録アカウントを確認しています');
  set('combined',m.matches!=null?fmtInt(m.matches)+' MATCHES · WR '+fmtPct(m.stats.winPct):NA);
+ set('rankCurrent',m.rank?m.rank.current:NA);
+ set('rankPeak',m.rank&&m.rank.peak?m.rank.peak:NA);
  set('flowMatches',m.matches!=null?fmtInt(m.matches)+'試合を合算':'合算データを確認');
  /* weak / strong from the diagnosis, never from sample claims */
  const fillDiag=(key,items,emptyText)=>{
@@ -217,23 +283,30 @@ function render(host,report,ctx={}){
   set('fScore',m.latest.outcome==='win'?'勝利':m.latest.outcome==='loss'?'敗北':m.latest.outcome==='draw'?'引き分け':NA);
   set('fAgent',m.latest.agent||NA);set('fAcs',fmtNum(m.latest.acs));
   set('fKd',(known(m.latest.kills)&&known(m.latest.deaths))?fmtInt(m.latest.kills)+' / '+fmtInt(m.latest.deaths):NA);
-  set('repConcl','結論：対象は直近の完了試合（'+(m.latest.date||NA)+'、'+(m.latest.map||NA)+'）です。ラウンド単位の項目は未取得のため、読みは合算'+(m.matches!=null?fmtInt(m.matches):'')+'試合の傾向と並べて行います');
+  set('fTrade',m.seqLatest&&known(m.seqLatest.tradePct)?fmtPct(m.seqLatest.tradePct)+'（デス '+fmtInt(m.seqLatest.tradeDeaths)+' 件中 '+fmtInt(m.seqLatest.tradeTraded)+' 件）':NA);
+  set('fAdv',m.seqLatest&&known(m.seqLatest.advPct)?fmtPct(m.seqLatest.advPct)+'（有利 '+fmtInt(m.seqLatest.advRounds)+' ラウンド中 '+fmtInt(m.seqLatest.advWins)+' 勝）':NA);
+  set('repConcl',m.seqMatches!=null&&m.seqMatches>0
+   ?'結論：対象は直近の完了試合（'+(m.latest.date||NA)+'、'+(m.latest.map||NA)+'）です。分かれ目の判定には、保存済みのラウンド記録から計算した人数推移とキル順序も使っています'
+   :'結論：対象は直近の完了試合（'+(m.latest.date||NA)+'、'+(m.latest.map||NA)+'）です。ラウンド単位の項目は未取得のため、読みは合算'+(m.matches!=null?fmtInt(m.matches):'')+'試合の傾向と並べて行います');
  }else set('repConcl','結論：評価できる直近の試合は未取得です。記録が届き次第、ここに表示されます');
  if(m.topTurning){set('tpTitle','ここを1度見てください — '+m.topTurning.label);
-  set('tpDetail',m.topTurning.detail+'。該当ラウンドの番号は未取得ですので、上の優先順を目印に録画から探してください');}
+  set('tpDetail',m.topTurning.detail+(m.topTurning.detail.includes('該当は')?'。録画でその場面をご確認ください':'。該当ラウンドの番号は未取得ですので、上の優先順を目印に録画から探してください'));}
  const critBox=host.querySelector('[data-mb-list="criteria"]');
  if(critBox)for(const c of m.turningPoints){const row=el(doc,'div','mu-brow');
   row.appendChild(el(doc,'div','mu-bn',c.id==='advantage'?'人数有利':c.id==='economy'?'経済の連鎖':c.id==='weapon'?'武器の雪崩':c.id==='postplant'?'設置後':c.id==='ult'?'ウルト投資':c.id==='pistol'?'序盤の反転':'FB'));
   const bd=el(doc,'div','mu-bd');bd.appendChild(el(doc,'b',null,c.label+'。'));bd.appendChild(doc.createTextNode(c.detail+'。この試合での検出：'));
-  bd.appendChild(el(doc,'b',null,c.status==='detected'?'検出あり':c.status==='none'?'該当なし':NA));row.appendChild(bd);
-  row.appendChild(el(doc,'span','mu-chipst '+(c.status==='detected'?'few':c.status==='none'?'ok':'na'),c.status==='detected'?'検出あり':c.status==='none'?'該当なし':NA));
+  bd.appendChild(el(doc,'b',null,c.status==='detected'?'検出あり':c.status==='estimated'?'推定で検出':c.status==='none'?'該当なし':NA));row.appendChild(bd);
+  row.appendChild(el(doc,'span','mu-chipst '+(c.status==='detected'||c.status==='estimated'?'few':c.status==='none'?'ok':'na'),c.status==='detected'?'検出あり':c.status==='estimated'?'推定':c.status==='none'?'該当なし':NA));
   critBox.appendChild(row);}
  const prioBox=host.querySelector('[data-mb-list="priority"]');
  if(prioBox){
   const tradedText=m.own&&known(m.own.firstDeaths)?('本人のデス '+fmtInt(m.own.firstDeaths)+' 件のうち、5秒以内に味方が返せたのは '+(known(m.own.traded)?fmtInt(m.own.traded):NA)+' 件です（集計）。該当ラウンドは未取得です'):'開幕デスの集計が届いていません';
+  const postPlantText=m.seqPostPlant&&known(m.seqPostPlant.plants)
+   ?(m.seqPostPlant.plants>0?('設置まで進んだ '+fmtInt(m.seqPostPlant.plants)+' ラウンドのうち、落としたのは '+fmtInt(m.seqPostPlant.losses)+' 件です。'+refText(m.seqPostPlant.lossRefs)):'集計できた試合では、設置まで進んだラウンドがありませんでした')
+   :'設置後の勝敗は集計に含まれていないため、この試合での該当は未取得です';
   const rows=[
    ['優先 1','トレード','トレードされなかったデスがあったラウンド。'+tradedText,'最優先'],
-   ['優先 2','設置後','設置したのに落としたラウンド。設置後の勝敗は集計に含まれていないため、この試合での該当は未取得です','優先'],
+   ['優先 2','設置後','設置したのに落としたラウンド。'+postPlantText,'優先'],
    ['優先 3','ユーティリティ','ユーティリティを残して死んだラウンド。使用回数の集計はありますが、残して死んだ場面の特定は未取得です','優先']];
   for(const [n,k,t,chip] of rows){const row=el(doc,'div','mu-brow');const bn=el(doc,'div','mu-bn',n);bn.appendChild(el(doc,'br'));bn.appendChild(el(doc,'span',null,k));row.appendChild(bn);
    const bd=el(doc,'div','mu-bd',t);row.appendChild(bd);row.appendChild(el(doc,'span','mu-chipst few',chip));prioBox.appendChild(row);}}
@@ -247,6 +320,9 @@ function render(host,report,ctx={}){
  set('stKd',m.stats.kd!=null?'≈'+fmtNum(m.stats.kd,2):NA);
  set('stWr',fmtPct(m.stats.winPct));
  set('stHs',fmtPct(m.stats.hsPct));
+ set('stKast',fmtPct(m.stats.kast));
+ set('stRank',m.rank?m.rank.current:NA);
+ set('stPeak',m.rank&&m.rank.peak?m.rank.peak:NA);
  set('stMatches',fmtInt(m.matches));
  const accBox=host.querySelector('[data-mb-list="accountRows"]');
  if(accBox){if(!m.accounts.length)accBox.appendChild(el(doc,'p',null,'アカウント別の集計はまだ届いていません'));

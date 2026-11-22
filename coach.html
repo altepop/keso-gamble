@@ -1185,8 +1185,8 @@
         <div class="mu-ids" data-mb="ids">登録アカウントを確認しています</div>
       </div>
       <div class="mu-ranks">
-        <div class="mu-rankbox mu-cut-sm"><span class="mu-k">CURRENT RANK</span><span class="mu-r">未取得</span></div>
-        <div class="mu-rankbox mu-ghost mu-cut-sm"><span class="mu-k">PEAK</span><span class="mu-r">未取得</span></div>
+        <div class="mu-rankbox mu-cut-sm"><span class="mu-k">CURRENT RANK</span><span class="mu-r" data-mb="rankCurrent">未取得</span></div>
+        <div class="mu-rankbox mu-ghost mu-cut-sm"><span class="mu-k">PEAK</span><span class="mu-r" data-mb="rankPeak">未取得</span></div>
         <div class="mu-rankbox mu-ghost mu-cut-sm"><span class="mu-k">COMBINED</span><span class="mu-r" data-mb="combined">未取得</span></div>
       </div>
       <p class="mu-lead" data-mb="leadToday">今日の2件は、データが揃い次第ここに表示されます</p>
@@ -1327,7 +1327,7 @@
 
     <section class="mu-card mu-cut" aria-label="ステップ2 分かれ目">
       <div class="mu-stephd"><div class="mu-pic mu-now"><svg class="mu-ic mu-lg"><use href="#mu-i-branch"/></svg></div><div><span class="mu-sk">Step 2 — 分かれ目</span><h3>VODで見る場所 — コーチが、見るべき場面を指定します</h3></div></div>
-      <p class="mu-concl"><svg class="mu-ic"><use href="#mu-i-eye"/></svg> 結論：見るのは<b>分かれ目の1〜2場面だけ</b>です。この試合の該当ラウンドは未取得のため、下の優先順を目印に録画から探してください。</p>
+      <p class="mu-concl"><svg class="mu-ic"><use href="#mu-i-eye"/></svg> 結論：見るのは<b>分かれ目の1〜2場面だけ</b>です。下の指定と優先順を目印に、録画から該当場面を探してください。</p>
       <div style="border:2px solid var(--red);background:#2a1e28;padding:14px 16px;margin-top:4px">
         <span class="mu-micro" style="color:var(--red)"><svg class="mu-ic mu-sm"><use href="#mu-i-branch"/></svg> Turning Point <b>//</b> この試合の分かれ目</span>
         <p style="margin:6px 0 2px;font-size:16px;font-weight:900;line-height:1.6" data-mb="tpTitle">ここを1度見てください — 未取得</p>
@@ -1511,9 +1511,9 @@
         <div class="mu-stat"><div class="mu-v mu-num" data-mb="stKd">未取得</div><div class="mu-k">K/D（合算）</div></div>
         <div class="mu-stat"><div class="mu-v mu-num" data-mb="stWr">未取得</div><div class="mu-k">勝率（合算）</div></div>
         <div class="mu-stat"><div class="mu-v mu-num" data-mb="stHs">未取得</div><div class="mu-k">ヘッドショット率（合算）</div></div>
-        <div class="mu-stat"><div class="mu-v mu-num">未取得</div><div class="mu-k">KAST（この集計には実測値が含まれていません）</div></div>
-        <div class="mu-stat"><div class="mu-v mu-num">未取得</div><div class="mu-k">現在ランク（この集計には実測値が含まれていません）</div></div>
-        <div class="mu-stat"><div class="mu-v mu-num">未取得</div><div class="mu-k">ピーク（この集計には実測値が含まれていません）</div></div>
+        <div class="mu-stat"><div class="mu-v mu-num" data-mb="stKast">未取得</div><div class="mu-k">KAST（合算）</div></div>
+        <div class="mu-stat"><div class="mu-v mu-num" data-mb="stRank">未取得</div><div class="mu-k">現在ランク</div></div>
+        <div class="mu-stat"><div class="mu-v mu-num" data-mb="stPeak">未取得</div><div class="mu-k">ピーク</div></div>
         <div class="mu-stat"><div class="mu-v mu-num" data-mb="stMatches">未取得</div><div class="mu-k">対象試合数（合算）</div></div></div>
       <p style="margin-top:14px"><b>読み方：</b>今日のアップと座学は、この数字と診断の傾向に基づいて選んでいます。数字が無い項目は、推測で埋めずに未取得と表示します。</p>
     </section>
@@ -1679,7 +1679,7 @@
 
   <footer>
     <b>画面構成（完成形）：</b>全画面共通で、上部にピクトグラムの横型フロー図（現在地を強調）を置き、結論を先に、詳細は折りたたみの先に置く構成です。ホーム（PDCAフロー／弱み・強み／今日の2件／次の試合だけ）／試合後（試合終了→分かれ目→原因→次の対策の4ステップ）／アップ詳細／座学詳細／数字（合算サマリー＋内訳は折りたたみ）／チーム／設定／状態の型。ホームに機能を列挙しないことが、各画面を分けた理由です。<br>
-    <b>数字の方針：</b>本人の保存済み戦績（KESO COACHの集計）だけを表示し、無い値は「未取得」、足りない値は「サンプル不足」と明示します。ランクとKASTは、この集計に実測値が含まれないため未取得と表示します。
+    <b>数字の方針：</b>本人の保存済み戦績（KESO COACHの集計）だけを表示し、無い値は「未取得」、足りない値は「サンプル不足」と明示します。ランクはMMRの記録から、KASTは保存済みのラウンド記録から計算して表示します。記録が届いていない項目だけ、未取得のままにします。
   </footer>
 </template>
 <script src="./coach/practice-review.js?v=coach-34be17a33636"></script>
