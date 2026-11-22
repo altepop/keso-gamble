@@ -70,7 +70,7 @@ export function createKpClient({storage,temporaryStorage,request=globalThis.fetc
   privateRace:()=>api('private/race'),
   duels:cursor=>api('duels'+(cursor?'?cursor='+encodeURIComponent(cursor):'')),duelAction:body=>api('duels',body),
   duelParticipantPreview:(id,version=null)=>api('duels/spectator-preview?id='+encodeURIComponent(id)+(version===null?'':'&version='+encodeURIComponent(version))),
-  duelSpectatorConsent:(id,viewer,approved)=>api('duels/spectator-consent',{id,viewer,approved}),
+  duelSpectatorLobby:()=>api('duels/spectator-lobby'),
   duelSpectate:(id,version=null)=>api('duels/spectate?id='+encodeURIComponent(id)+(version===null?'':'&version='+encodeURIComponent(version))),
   // SSE subscription is read-only. The bearer token is sent in an HTTP header,
   // never placed in a URL, Discord log, or WebSocket subprotocol.
