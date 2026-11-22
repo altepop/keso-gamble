@@ -26,6 +26,18 @@ let browser;
   else if(p.endsWith('/pulse'))response={pulse:'test'};
   else if(p.endsWith('/feed'))response={entries:[]};
   else if(p.endsWith('/duels/operations/access'))response={available:false};
+  else if(p.endsWith('/duels/rewards')){
+   assert.equal(route.request().headers().authorization,'Bearer '+'a'.repeat(48));
+   response={enabled:['pve','pvp'],skills:[{mode:'pve',game:'othello',wins:3,losses:1,draws:0}],collection:[]};
+  }
+  else if(p.endsWith('/duels/pve')){
+   assert.equal(route.request().headers().authorization,'Bearer '+'a'.repeat(48));
+   const data=route.request().postDataJSON();
+   assert.equal(data.action,'start');
+   assert.equal(data.game,'othello');
+   assert.equal(data.level,'normal');
+   response={match:{id:'22222222-3333-4333-8444-555555555555',game:'othello',level:'normal',board:initialDuelBoard('othello'),version:0,turn:'human',winner:null,humanMoves:0,cpuMoves:0,ownHand:null}};
+  }
   else if(p.endsWith('/duels/season/event'))response={event:{id:'2026-11-23',title:'週間ピックアップ：オセロ',game:'othello',kind:'weekly-focus',extraKp:0}};
   else if(p.endsWith('/duels/events')){
    assert.equal(route.request().headers().authorization,'Bearer '+'a'.repeat(48));
@@ -57,6 +69,27 @@ let browser;
  assert.equal(await page.locator('.duel-current').count(),1);
  assert.equal(await page.locator('.duel-create-collapse').count(),1);
  assert.equal(await page.locator('.duel-create-collapse').evaluate(el=>el.open),false);
+ // Real Discord Activity navigation regression: PvE and rewards must stay in
+ // this same document, preserving the authenticated wallet and Play categories.
+ assert.equal(await page.locator('.sub-tabs .sub-tab').count(),5,'all five Play categories stay visible on duel');
+ assert.equal(await page.locator('.sub-tab[data-screen=duels]').getAttribute('class').then(x=>x.includes('active')),true);
+ await page.locator('[data-duel-pve-link]').waitFor();
+ const urlBefore=page.url();
+ assert.equal(await page.locator('[data-duel-pve-link]').evaluate(el=>el.tagName),'BUTTON','PvE must be an in-place button');
+ await page.locator('[data-duel-pve-link]').click();
+ assert.equal(page.url(),urlBefore,'PvE cannot trigger a second Discord SDK handshake');
+ assert.equal(await page.locator('#duel-pve-section').evaluate(el=>el.open),true);
+ await page.locator('[data-duel-pve-custom-start]').click();
+ await page.locator('#duel-pve-section').getByText('サーバーでCPU戦を開始しました。').waitFor();
+ assert.equal(page.url(),urlBefore,'server PvE move stays in the authenticated Activity');
+ await page.locator('[data-duel-pve-rewards]').click();
+ await page.locator('#duel-rewards-in-app').getByText('3勝 1敗 0分').waitFor();
+ assert.equal(page.url(),urlBefore,'rewards must not navigate to standalone auth page');
+ await page.locator('.sub-tab[data-screen=market]').click();
+ await page.locator('.sub-tab[data-screen=duels]').click();
+ await page.locator('[data-duel-pve-link]').waitFor();
+ assert.equal(page.url(),urlBefore,'return via Play categories must preserve the Activity');
+
  const viewport=page.locator('[data-duel-board-scroll]');
  const before=await viewport.evaluate(el=>({left:el.scrollLeft,top:el.scrollTop}));
  assert.ok(before.left>0&&before.top>0,'pan viewport starts centered');
