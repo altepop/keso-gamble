@@ -72,6 +72,8 @@ export function createKpClient({storage,temporaryStorage,request=globalThis.fetc
   duelParticipantPreview:(id,version=null)=>api('duels/spectator-preview?id='+encodeURIComponent(id)+(version===null?'':'&version='+encodeURIComponent(version))),
   duelPvePreview:()=>api('duels/pve',{action:'daily-preview'}),
   duelPveStart:requestId=>api('duels/pve',{action:'daily',requestId}),
+  duelPveCustomStart:({requestId,game,level})=>api('duels/pve',{action:'start',requestId,game,level}),
+  duelRewardProfile:()=>api('duels/rewards'),
   duelPveRead:session=>api('duels/pve?session='+encodeURIComponent(session)),
   duelPveMove:body=>api('duels/pve',body),
   duelOperationsAccess:()=>api('duels/operations/access'),
