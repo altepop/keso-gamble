@@ -24,6 +24,11 @@ function controls(match,busy){
  if(game==='poker')return '<p class="helper">自分の５枚（カード番号）：'+safe(hand?.join(' / ')??'未取得')+'</p><p class="helper">交換するカードを最大３枚選ぶ。０枚でも確定できる。</p><div class="action-row">'+Array.from({length:5},(_,i)=>'<label><input type="checkbox" data-duel-pve-poker="'+i+'" '+(!can?'disabled':'')+'> '+(i+1)+'枚目</label>').join('')+'</div><button class="action-btn primary" data-duel-pve-move="poker" '+(!can?'disabled':'')+'>交換を確定</button>';
  return '<p>このゲームの操作画面は未対応です。</p>';
 }
+export function duelWeeklyEventPanel(event){
+ if(!event||event.kind!=='weekly-focus')return '';
+ return '<div class="panel"><div class="card-body"><strong>🏆 週間イベント</strong><p>'+safe(event.title)+'</p>'+
+ '<p class="helper">毎週月曜日に切替。今回のテーマはおすすめ種目であり、イベント専用の勝率補正・自動参加・追加KPはありません。</p></div></div>';
+}
 export function duelPvePanel({live=false,busy=false,preview=null,match=null,error='',message='',sessionInput='',pending=null}={}){
  const active=match&&typeof match.id==='string';
  const expanded=active||preview||error||message;
@@ -38,12 +43,36 @@ export function duelPvePanel({live=false,busy=false,preview=null,match=null,erro
  (active?'<div class="panel"><div class="card-body"><h3>'+safe(names[match.game]??match.game)+' ／ '+safe(resultName[match.winner]??(match.turn==='human'?'あなたの手番':'処理中'))+'</h3><p class="helper">試合ID：'+safe(match.id)+' ／ 第'+safe(match.version)+'版 ／ あなたの手数：'+safe(match.humanMoves)+'</p>'+
  controls(match,busy)+'</div></div>':''))+'</div></details>';
 }
-export function duelOperationsPanel({available=false,busy=false,report=null,error='',auto=false}={}){
+export function duelOperationsPanel({available=false,busy=false,report=null,error='',auto=false,season=null}={}){
  if(!available)return '';
  const counts=report?.counts;
- return '<details class="panel" id="duel-operations-panel" '+(counts||error||auto?'open':'')+'><summary>🛡️ 決闘の運営監査（所有者限定）</summary><div class="card-body"><p class="helper">読み取り専用。自動削除・KP補正・個人情報の公開は行わない。</p><button class="action-btn" data-duel-operations-read="1" '+(busy?'disabled':'')+'>最新の監査結果を取得</button><button type="button" class="action-btn" data-duel-operations-auto="1" aria-pressed="'+Boolean(auto)+'">'+(auto?'15分ごとの画面監視を停止':'この画面を開いている間、15分ごとに監査')+'</button><p class="helper">画面を閉じた間やアプリ終了後は実行されません。常時監視・通知サービスではありません。</p>'+
+ return '<details class="panel" id="duel-operations-panel" '+(counts||error||auto||season?'open':'')+'><summary>🛡️ 決闘の運営監査（所有者限定）</summary><div class="card-body"><p class="helper">読み取り専用。自動削除・KP補正・個人情報の公開は行わない。</p><button class="action-btn" data-duel-operations-read="1" '+(busy?'disabled':'')+'>最新の監査結果を取得</button><button type="button" class="action-btn" data-duel-operations-auto="1" aria-pressed="'+Boolean(auto)+'">'+(auto?'15分ごとの画面監視を停止':'この画面を開いている間、15分ごとに監査')+'</button><p class="helper">画面を閉じた間やアプリ終了後は実行されません。常時監視・通知サービスではありません。</p>'+
+ '<button type="button" class="action-btn" data-duel-season-read="1" '+(busy?'disabled':'')+'>週間シーズン順位とイベントを見る</button>'+
+ (season?'<div role="region" aria-label="週間決闘シーズン" class="panel"><div class="card-body">'+
+ '<h3>週次シーズン '+safe(season.season?.id)+'</h3><p class="helper">'+safe(season.event?.title)+' ／ 追加KPなし</p>'+
+ '<p class="helper">実データから集計した所有者限定の暫定順位。試合履歴の保存期間と取得上限により、全期間の確定順位ではない。</p>'+
+ (season.partial?'<p role="alert">取得上限500試合のため順位は一部集計です。</p>':'')+
+ '<ol>'+((season.rankings??[]).slice(0,20).map(row=>'<li>登録ID '+safe(row.user)+'：'+safe(row.wins)+'勝 '+safe(row.losses)+'敗 '+safe(row.draws)+'分</li>').join('')||'<li>対象試合はありません。</li>')+'</ol>'+
+ '</div></div>':'')+
  (error?'<p role="alert">'+safe(error)+'</p>':'')+(counts?'<p role="status">集計日時：'+safe(new Date(report.asOf).toLocaleString('ja-JP'))+' ／ 保持状況の見直し基準：'+safe(report.retentionReviewDays)+'日</p>'+
  '<p>終了済み・基準超過：CPU戦 '+safe(counts.staleFinishedPve)+'件 ／ 対人戦 '+safe(counts.staleFinishedPvp)+'件</p><p>進行中：CPU戦 '+safe(counts.activePve)+'件 ／ 対人戦 '+safe(counts.activePvp)+'件</p>'+
  '<p>確認が必要：'+(report.reviewRecommended?'あり':'なし')+' ／ 自動削除：なし</p><button class="action-btn" data-duel-operations-export="1">監査集計を保存</button><button class="action-btn" data-duel-operations-records="1">直近確定対戦の記録を保存</button>':'')+
  '</div></details>';
+}
+
+/** Additional casual game, not a wager or a PvE reward mode. */
+export function duelTrioPanel({board='.........',level='strong',winner=null,error=''}={}){
+ const status=winner==='X'?'あなたの勝ち':winner==='O'?'CPUの勝ち':winner==='draw'?'引き分け':'あなたの番';
+ const cell=String(board);
+ const valid=/^[.XO]{9}$/.test(cell);
+ const safeCells=valid?cell:'.........';
+ const finished=Boolean(winner);
+ return '<details class="panel" id="duel-trio-panel" '+(board!=='.........'||winner?'open':'')+'><summary>🆕 新種目：三目並べ（CPU練習）</summary><div class="card-body">'+
+ '<p class="helper">３つ並べる戦略対戦。強CPUは最後まで読み切る完全探索。ブラウザ内の無料練習のみで、KP・報酬・戦績は変わらない。</p>'+
+ '<label>CPUの強さ <select id="duel-trio-level">'+
+ [['easy','かんたん'],['normal','ふつう'],['strong','つよい（完全探索）']].map(([v,n])=>'<option value="'+v+'" '+(v===level?'selected':'')+'>'+n+'</option>').join('')+'</select></label>'+
+ '<p role="status">'+status+'</p>'+ (error?'<p role="alert">'+safe(error)+'</p>':'')+
+ '<div role="grid" aria-label="三目並べの盤面" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));max-width:280px;gap:6px">'+
+ [...safeCells].map((v,i)=>'<button type="button" role="gridcell" class="action-btn" data-duel-trio-cell="'+i+'" aria-label="'+(Math.floor(i/3)+1)+'行'+(i%3+1)+'列'+(v==='.'?' 空き':v==='X'?' あなた':' CPU')+'" style="min-height:68px;font-size:28px" '+(v!=='.'||finished?'disabled':'')+'>'+(v==='.'?'・':v==='X'?'×':'○')+'</button>').join('')+'</div>'+
+ '<button type="button" class="action-btn" data-duel-trio-reset="1">新しい対戦</button></div></details>';
 }

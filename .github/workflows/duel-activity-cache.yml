@@ -10,7 +10,7 @@ permissions:
   contents: write
 jobs:
   synchronize:
-    if: github.repository == 'altepop/keso-gamble' && github.event.pull_request.head.repo.full_name == 'altepop/keso-gamble' && (github.head_ref == 'feat/duel-p10-approved-observer-20261122' || github.head_ref == 'feat/duel-p11-ui-p12-operator-20261122')
+    if: github.repository == 'altepop/keso-gamble' && github.event.pull_request.head.repo.full_name == 'altepop/keso-gamble' && (github.head_ref == 'feat/duel-p10-approved-observer-20261122' || github.head_ref == 'feat/duel-p11-ui-p12-operator-20261122' || github.head_ref == 'feat/duel-p11-strategy-p12-season-20261122')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
