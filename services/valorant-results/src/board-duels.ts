@@ -356,15 +356,59 @@ export async function cleanupBoardDuels(env:KpEnv,guild:string,now=Date.now()){
  return {expired:Number(expired.meta.changes??0),removed:rows.length};
 }
 
-// Notification delivery happens strictly *after* the D1 transaction commits.
-// A DO outage cannot reverse a move, double a payment, or block the response.
-export function notifyCommittedDuel(env:KpEnv,match:BoardDuel):Promise<void>{
- if(!env.RACE_BROADCAST)return Promise.resolve();
- const hub=env.RACE_BROADCAST.get(env.RACE_BROADCAST.idFromName('duel:'+match.guild));
- return hub.fetch('https://internal/duel/notify',{method:'POST',body:JSON.stringify({
-  userA:match.user_a,userB:match.user_b,id:match.id,version:match.version
- })}).then(response=>{if(!response.ok)console.warn('duel-realtime-hint-unavailable',response.status);})
- .catch(()=>{console.warn('duel-realtime-hint-unavailable');});
+// Notification delivery happens strictly after a server-committed action.
+// Voice notices are purely cosmetic and cannot cause KP rollback or duplicate
+// a committed move. Existing music bot secrets and state are never exposed.
+type DuelVoiceEnv=KpEnv&{MUSIC_VOICE_URL?:string;MUSIC_BRIDGE_TOKEN?:string};
+export function isValidDuelVoiceHost(value:unknown):value is string{
+ try{
+  if(typeof value!=='string')return false;
+  const url=new URL(value);
+  return url.protocol==='https:'&&!url.username&&!url.password&&!url.search&&!url.hash&&
+   url.pathname==='/'&&(url.hostname.endsWith('.onrender.com')||url.hostname.endsWith('.render.com'));
+ }catch{return false;}
+}
+export function duelVoiceCue(match:BoardDuel){
+ if(match.status==='active'&&match.version===1)return {kind:'started',matchId:match.id,version:match.version};
+ if(match.status==='finished'&&Number.isSafeInteger(match.version)&&match.version>1)
+  return {kind:'finished',matchId:match.id,version:match.version};
+ return null;
+}
+export async function sendDuelVoiceCue(env:DuelVoiceEnv,match:BoardDuel,
+ request:typeof fetch=fetch):Promise<boolean>{
+ const cue=duelVoiceCue(match);
+ if(!cue||!isValidDuelVoiceHost(env.MUSIC_VOICE_URL)||
+    !env.MUSIC_BRIDGE_TOKEN||env.MUSIC_BRIDGE_TOKEN.length<32)return false;
+ try{
+  const response=await request(new URL('/v1/duel-cue',env.MUSIC_VOICE_URL),{
+   method:'POST',headers:{Authorization:'Bearer '+env.MUSIC_BRIDGE_TOKEN,
+    'Content-Type':'application/json'},
+   body:JSON.stringify({guildId:match.guild,...cue}),
+   signal:AbortSignal.timeout(3000),redirect:'error'
+  });
+  if(!response.ok)return false;
+  const result=await response.json() as {played?:unknown};
+  return result.played===true;
+ }catch{
+  console.warn('duel_voice_cue_unavailable');
+  return false;
+ }
+}
+export function notifyCommittedDuel(env:DuelVoiceEnv,match:BoardDuel):Promise<void>{
+ const pending:Array<Promise<unknown>>=[];
+ if(env.RACE_BROADCAST){
+  const hub=env.RACE_BROADCAST.get(env.RACE_BROADCAST.idFromName('duel:'+match.guild));
+  pending.push(hub.fetch('https://internal/duel/notify',{
+   method:'POST',body:JSON.stringify({
+    userA:match.user_a,userB:match.user_b,id:match.id,version:match.version
+   })
+  }).then(response=>{
+   if(!response.ok)console.warn('duel-realtime-hint-unavailable',response.status);
+  }).catch(()=>console.warn('duel-realtime-hint-unavailable')));
+ }
+ if(duelVoiceCue(match))pending.push(sendDuelVoiceCue(env,match).catch(()=>
+  console.warn('duel_voice_cue_unavailable')));
+ return Promise.all(pending).then(()=>undefined);
 }
 export async function boardDuelApi(request:Request,env:KpEnv,m:KpMapping,user:string,headers:Record<string,string>={},
  deferPostCommit?:(job:Promise<void>)=>void){
