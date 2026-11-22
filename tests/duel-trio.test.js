@@ -10,7 +10,7 @@ test('new game begins with legal human move and strong CPU reply without KP stat
  assert.deepEqual(Object.keys(state).sort(),['board','cpuCell','winner']);
 });
 test('normal and strong CPU win immediately and block immediate loss',()=>{
- assert.equal(trioCpuChoice('OO.XX....','strong'),2);
+ assert.equal(trioCpuChoice('OO.XX...X','strong'),2);
  assert.equal(trioCpuChoice('XX..O....','normal'),2);
  assert.equal(trioCpuChoice('XX..O....','strong'),2);
 });
