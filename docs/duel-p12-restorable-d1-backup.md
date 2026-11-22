@@ -6,7 +6,7 @@
 - 決闘以外の共有`kp_wallets`、`kp_ledger`、株式・競馬・COACHなどは**この独立バックアップには含めない**。したがって「決闘専有データの完全バックアップ」であり「KESO PLAY全体のDB完全バックアップ」ではない。決闘データを本番に戻す場合は必ず既存KP台帳と突合すること。
 
 ## 安全な実行経路
-1. マージ後に `P12 duel D1 encrypted backup and isolated restore` Actions がmainへのpushで1回起動する。手動再実行も可能。毎時・毎日などの定期実行や本番Workerのスケジュール変更はしない。
+1. マージ後に **同一main SHAのWorker本番配備とスモークがSuccessで完了したときだけ**、`P12 duel D1 encrypted backup and isolated restore` Actions が#768のマージコミットを条件に1回起動する。手動再実行も可能。毎時・毎日などの定期実行や本番Workerのスケジュール変更はしない。
 2. 既存のCloudflare Secretを使い、本番D1への**読取り専用**の`sqlite_master`照会と`wrangler d1 export --remote --table...`を行う。D1上でINSERT/UPDATE/DELETEや復元命令を実行しない。
 3. Runnerの私的な一時領域でSQLを実際に新規SQLiteへ適用する。さらに暗号文から復号したSQLをWranglerの **ローカルCloudflare D1（Miniflare）** にも実際に取り込み、Cloudflare側のSQL互換性を確認する。全対象テーブル・索引・トリガーの存在確認、全テーブル行数、`PRAGMA integrity_check`を検証する。**サーバー権威の決闘操作やKP精算を再実行しない**。
 4. SQLはAES-256-GCM＋scrypt（ランダムsaltとnonce）で暗号化し、暗号文を再度復号して別SQLiteへ復元する。成功時だけ、暗号文JSONをGitHub Actions成果物として**30日間**保存。平文SQL、秘密の対局情報、APIトークンはログや成果物に出さない。
