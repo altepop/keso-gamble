@@ -4,12 +4,16 @@ on:
     paths:
       - '.github/workflows/duel-deployment-watch.yml'
       - 'scripts/duel-deployment-watch.mjs'
+      - 'scripts/duel-deployment-alert.mjs'
+      - 'services/valorant-results/test/duel-deployment-alert.test.mjs'
       - 'services/valorant-results/test/duel-deployment-watch.test.mjs'
   push:
     branches: [main]
     paths:
       - '.github/workflows/duel-deployment-watch.yml'
       - 'scripts/duel-deployment-watch.mjs'
+      - 'scripts/duel-deployment-alert.mjs'
+      - 'services/valorant-results/test/duel-deployment-alert.test.mjs'
       - 'services/valorant-results/test/duel-deployment-watch.test.mjs'
   workflow_dispatch:
   schedule:
@@ -17,6 +21,7 @@ on:
 permissions:
   contents: read
   actions: read
+  issues: write
 concurrency:
   group: duel-deployment-watch-${{ github.ref }}
   cancel-in-progress: false
@@ -31,9 +36,16 @@ jobs:
         with:
           node-version: '24'
       - name: Validate no-write monitor decisions
-        run: node --test services/valorant-results/test/duel-deployment-watch.test.mjs
+        run: node --test services/valorant-results/test/duel-deployment-watch.test.mjs services/valorant-results/test/duel-deployment-alert.test.mjs
       - name: Check recent production deployment statuses without D1 calls
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          DUEL_WATCH_REPORT: ${{ runner.temp }}/duel-watch-report.json
         run: node scripts/duel-deployment-watch.mjs
+      - name: Create at most one open GitHub Issue for a real deployment anomaly
+        if: failure() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          DUEL_WATCH_REPORT: ${{ runner.temp }}/duel-watch-report.json
+        run: node scripts/duel-deployment-alert.mjs
