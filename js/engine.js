@@ -1,7 +1,7 @@
-import { createProgress, hydrateProgress } from './progression.js?v=web-158db737a1fe0feb';
-import { createRacing, hydrateRacing } from './racing.js?v=web-158db737a1fe0feb';
-import { createCasino, hydrateCasino } from './casino.js?v=web-158db737a1fe0feb';
-import { createMoreCasino, hydrateMoreCasino } from './casino-more.js?v=web-158db737a1fe0feb';
+import { createProgress, hydrateProgress } from './progression.js?v=web-d424db8153e4d1ba';
+import { createRacing, hydrateRacing } from './racing.js?v=web-d424db8153e4d1ba';
+import { createCasino, hydrateCasino } from './casino.js?v=web-d424db8153e4d1ba';
+import { createMoreCasino, hydrateMoreCasino } from './casino-more.js?v=web-d424db8153e4d1ba';
 /** KESO EXCHANGE - local prototype engine (NOT authoritative for real multiplayer). */
 const SCHEMA_VERSION = 1;
 const MARKET = [
