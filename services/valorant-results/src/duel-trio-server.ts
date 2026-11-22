@@ -2,6 +2,7 @@
  * Client supplies only a cell; all board, turn, winner and CPU state come
  * from a trusted server session. This module NEVER awards KP itself.
  */
+// @ts-expect-error Shared pure JS rules without a TypeScript declaration file.
 import {trioMove,trioWinner,trioCpuChoice} from '../../../js/duel-trio.js';
 
 export type TrioMark='X'|'O';
