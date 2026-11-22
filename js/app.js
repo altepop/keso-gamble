@@ -516,7 +516,7 @@ lastSynced:duelLastGoodFetch,pendingRetry:!!duelPendingAction,historyHasMore:due
    matches:duelSpectatorMatches,loaded:duelSpectatorLobbyLoaded,loading:duelSpectatorLobbyLoading,
    sound:duelSpectatorSound,snapshot:duelSpectatorSnapshot},
  pveUi:duelPveUi,operationsUi:duelOperationsUi,trioUi:duelTrioUi,eventUi:duelWeeklyEvent,
- riskConfirm:duelRiskConfirm===`create:${duelGame}:${duelTarget}:${duelStake}`?'create':activeDuel&&duelRiskConfirm===`accept:${activeDuel.id}:${activeDuel.version}:${activeDuel.stake}`?'accept':'',nav:bottomNav()}):screen==='mleague'?mleagueScreen({state,live,draft:{...mlDraft,amount:drafts['ml-amount']},tabs:subTabs(),nav:bottomNav()}):screen==='race'?screenRace():screenAssets();
+ riskConfirm:duelRiskConfirm===`create:${duelGame}:${duelTarget}:${duelStake}`?'create':activeDuel&&duelRiskConfirm===`accept:${activeDuel.id}:${activeDuel.version}:${activeDuel.stake}`?'accept':'',tabs:subTabs(),nav:bottomNav()}):screen==='mleague'?mleagueScreen({state,live,draft:{...mlDraft,amount:drafts['ml-amount']},tabs:subTabs(),nav:bottomNav()}):screen==='race'?screenRace():screenAssets();
   // 効果音 switch for the casino and racing screens (off unless the player turns it on).
   setBgmScene(screen==='casino'||screen==='race'?screen:'');
   if((screen==='casino'||screen==='race')&&sfxEnabled())preloadSfx(); // fetch the rendered sounds before the first win
