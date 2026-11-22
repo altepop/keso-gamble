@@ -90,6 +90,29 @@ export async function readCoachMemberReport(db:D1Database,person:string,preloade
  });
  const roundContext=coachRoundContext(rows.results,accounts,new Set(verifiedRows.map(row=>row.match_id)));
  const matchTrend=buildCoachMatchTrend(verifiedRows,accounts);
+ // Only owner matches verified against ten-player round/kill events can drive
+ // actionable per-match feedback. An incomplete newest row remains archived for
+ // existing retry/backfill processing, but must not monopolize the evaluation.
+ const collisionCounts=new Map<number,number>();
+ for(const row of rows.results)collisionCounts.set(row.ended_at,(collisionCounts.get(row.ended_at)??0)+1);
+ const completeTimes=new Set(verifiedRows.map(row=>row.ended_at));
+ const scorable=performance.timeline.filter(g=>{
+  const at=Date.parse(g.date??'');
+  return Number.isFinite(at)&&collisionCounts.get(at)===1&&completeTimes.has(at)&&
+   combatByTime.get(at)!=null&&
+   g.map!=='不明'&&g.agent!=='不明'&&
+   ['win','loss','draw'].includes(g.outcome)&&
+   [g.kills,g.deaths,g.assists,g.acs].every(n=>typeof n==='number'&&Number.isFinite(n)&&n>=0)&&
+   Number.isSafeInteger(g.rounds)&&g.rounds!>0;
+ });
+ const scorableTimes=new Set(scorable.map(g=>Date.parse(g.date??'')));
+ const completeEvaluationRows=verifiedRows.filter(row=>scorableTimes.has(row.ended_at));
+ const measured=coachPerformance(completeEvaluationRows,accounts,verifiedAccounts?[]:COACH_MEMBER_ACCOUNTS);
+ const evaluationPerformance={...measured,timeline:scorable};
+ const basicFeedback=coachMatchFeedback(evaluationPerformance,combatByTime);
+ const matchFeedback={...basicFeedback,quality:{...basicFeedback.quality,
+  incompleteExcluded:performance.timeline.length-scorable.length+(performance.quality.excluded['time-only-record']??0)}};
+ const nextMatch=coachNextMatch(evaluationPerformance,scorable[0]?.date??null);
  const report=summarizeCoachRounds(verifiedRows,primary.name,primary.tag,
   primary.puuid??undefined,labelFor(person),
   alternates.map(a=>({name:a.name,tag:a.tag,puuid:a.puuid??undefined})));
@@ -130,7 +153,7 @@ export async function readCoachMemberReport(db:D1Database,person:string,preloade
   archivedMatches:rows.results.length,usableMatches:report.usableMatches,
   invalidMatches:performance.quality.excluded['invalid-roster']??0,roundDataMissing:rows.results.filter(r=>!hasEventArray(r.rounds_json)).length,
   killDataMissing:rows.results.filter(r=>!hasEventArray(r.kills_json)).length,overall:report.overall,
-  individual,individualMapAgent,matchTrend,performance,positionCoverage,mapPositionCoverage,positionEventParity,mapPositionEventParity,nextMatch:coachNextMatch(performance),matchFeedback:coachMatchFeedback(performance,combatByTime),roundContribution,roundContext,
+  individual,individualMapAgent,matchTrend,performance,positionCoverage,mapPositionCoverage,positionEventParity,mapPositionEventParity,nextMatch,matchFeedback,roundContribution,roundContext,
   fullDiagnosis:diagnosis,coachingNotes:coachNotes(onlySelf),
   coachSignals:detectCoachSignals(onlySelf)
  };

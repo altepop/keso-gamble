@@ -9,7 +9,7 @@ const stats:Schema={...fields('value matches kdMatches kdaMatches rateMatches ac
 const card:Schema=fields('title evidence action');
 const lesson:Schema={...fields('title meaning why alternatives nextGame selfCheck track'),practice:{...fields('name minutes'),steps:['scalar']}};
 const qualityMetric:Schema={...fields('valid excluded missingTimestamps numerator denominator reason'),recordedAt:stamps};
-const exclusions:Schema=fields('invalid-roster invalid-teams multiple-owned-accounts-in-match account-not-found duplicate-match missing-focus invalid-kills invalid-rounds missing-kills missing-rounds roster-mismatch unknownRole unknownMap noSameRoleTeammate unverifiedRounds');
+const exclusions:Schema=fields('invalid-roster time-only-record invalid-teams multiple-owned-accounts-in-match account-not-found duplicate-match missing-focus invalid-kills invalid-rounds missing-kills missing-rounds roster-mismatch unknownRole unknownMap noSameRoleTeammate unverifiedRounds');
 const note:Schema=fields('kind title evidence action category status reason nextAction');
 const opening:Schema={...fields('player map agent matches matchWins matchLosses matchDraws statsMatches totalKills totalDeaths totalAssists scoreMatches totalScore observedOpeningRounds rounds firstKills firstDeaths firstKillWins firstKillLosses firstDeathWins firstDeathLosses openingKillerDiedWithin5s firstDeathKillerEliminatedWithin5s'),attack:fields('rounds observedOpeningRounds firstKills firstDeaths firstKillWins firstKillLosses firstDeathWins firstDeathLosses'),defense:fields('rounds observedOpeningRounds firstKills firstDeaths firstKillWins firstKillLosses firstDeathWins firstDeathLosses')};
 const schema:Schema={
@@ -32,7 +32,7 @@ const schema:Schema={
  nextMatch:{...fields('version basis matches confidence timeCoverageNote'),strength:card,focus:card,
   lastReview:[fields('key label currentNumerator currentRounds current previousNumerator previousRounds previous previousMatches')],
   check:{...fields('title action caveat'),metrics:[{...base,...fields('key label')}]}},
- matchFeedback:{...fields('version rules delivery'),quality:fields('availableChronologicalMatches shown limit undatedExcluded ambiguousTimeMatches eventVerified'),starter:lesson,
+ matchFeedback:{...fields('version rules delivery'),quality:fields('availableChronologicalMatches shown limit undatedExcluded ambiguousTimeMatches eventVerified incompleteExcluded'),starter:lesson,
   sessions:[{...fields('date map agent outcome kills deaths assists rounds topic scope baselineMatches eventVerified previousTopic'),lesson,evidence:['scalar'],
    followUp:fields('status title text practiceVerified'),metrics:[{...fields('key label'),current:base,baseline:base}]}]},
  roundContribution:{...fields('rounds noDeathRounds multiKillRounds multiKillWins multiKillKnownOutcomes'),
