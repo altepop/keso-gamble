@@ -2,6 +2,7 @@ import {practiceMatches,savePracticeMatch,practiceReview,ownPracticeRow} from '.
 import {readPrivateRecords,savePrivateRecord,readPrivateBody,privatePracticeState,PrivateRecordError} from './coach-private-records.ts';
 import {readPveBuild,savePveBuild} from './duel-pve-build.ts';
 import {duelRewardProfile} from './duel-rewards.ts';
+import {duelHistoryRead} from './duel-history.ts';
 import {duelOperationsAudit} from './duel-operations-audit.ts';
 import {duelSeasonRead,duelSeasonEvent} from './duel-season.ts';
 import {listDuelSeasonArchive} from './duel-season-archive.ts';
