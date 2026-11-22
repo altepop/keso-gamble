@@ -263,6 +263,12 @@ export async function boardDuelAction(env:KpEnv,m:KpMapping,user:string,body:Rec
    board=after.board;privateData=after.secret;
    next_turn=after.turnSide?(after.turnSide==='a'?match.black_user:other):null;
    winner=after.winner?(after.winner==='draw'?'draw':after.winner==='a'?match.black_user:other):null;
+  }else if(match.game==='trio'){
+   const side=match.black_user===user?'X':'O';
+   const after=advanceTrustedTrio({board:match.board,turn:side,winner:null,version:match.version},body.cell);
+   board=after.board;
+   next_turn=after.turn?(after.turn==='X'?match.black_user:other):null;
+   winner=after.winner?(after.winner==='draw'?'draw':after.winner==='X'?match.black_user:other):null;
   }else{
    const color=match.black_user===user?'B':'W';
    const after=playDuelMove(match.game,match.board,color,Number(body.cell));
