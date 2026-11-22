@@ -149,3 +149,21 @@ test('muse modules stay free of fetch and storage access', () => {
     assert.ok(!/fetch\(|localStorage|sessionStorage/.test(source), path);
   }
 });
+
+test('MMR rank is limited to an explicitly listed account, never another member', () => {
+  const mmr = {accounts: [
+    {riotId: 'Other#002', tierPatched: 'Immortal 1', rankingInTier: 80},
+    {riotId: 'Main#001', tierPatched: 'Diamond 2', rankingInTier: 40},
+  ]};
+  const own = view.model({...report, mmr}, {date: '2026-11-22'});
+  assert.equal(own.rank.current, 'DIAMOND 2 · 40 RR');
+
+  const missing = view.model({...report, accounts: ['Missing#003'], mmr}, {date: '2026-11-22'});
+  assert.equal(missing.rank, null);
+
+  const noIdentity = view.model({...report, accounts: [], mmr}, {date: '2026-11-22'});
+  assert.equal(noIdentity.rank, null);
+
+  const singleSnapshot = view.model({...report, accounts: [], mmr: {accounts: [mmr.accounts[1]]}}, {date: '2026-11-22'});
+  assert.equal(singleSnapshot.rank.current, 'DIAMOND 2 · 40 RR');
+});
