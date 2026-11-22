@@ -152,7 +152,7 @@ test('incomplete round events never drive FK diagnosis but still allow valid ros
   await enableAllMemberArchive(f.db);const m=game('missing-events','Dolly','SDGs','vdk-id');
   await recordCompetitiveRoster(f.db,m,now);await recordCompetitiveRoundEvents(f.db,{...m,kills:[]},now);
   const r=await readCoachMemberReport(f.db,'VDK');assert.equal(r.archivedMatches,1);assert.equal(r.performance.overall.kdMatches,1);assert.equal(r.usableMatches,0);assert.equal(r.individual.length,0);assert.equal(r.killDataMissing,1);
-  assert.equal(r.nextMatch.matches,1);assert.ok(r.nextMatch.focus.action);assert.ok(r.nextMatch.check.metrics.length>0,'event log gaps do not prevent a denominator-backed experiment');
+  assert.equal(r.nextMatch.matches,0);assert.ok(r.nextMatch.focus.action);assert.equal(r.nextMatch.check.metrics.length,0,'incomplete event history is not treated as a verified comparative game');
   assert.equal(r.matchFeedback.sessions.length,0,'incomplete events cannot become a verified evaluation');assert.ok(r.matchFeedback.starter);assert.equal(r.matchFeedback.quality.incompleteExcluded,1);
  }finally{f.close()}
 });
