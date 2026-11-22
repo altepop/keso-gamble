@@ -1,9 +1,15 @@
 name: DUEL Phase 9 guarded production policy
 on:
+  # Exactly one automatic activation attempt: addition of this new workflow to main.
+  # Later edits to the workflow do not automatically reactivate after a stop.
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/duel-phase9-production-policy.yml'
   workflow_dispatch:
     inputs:
       operation:
-        description: "status (read only), activate (two fixed rows), or stop (remove only policy rows)"
+        description: "status (read only), activate (two fixed rows), or stop (remove policy only)"
         required: true
         type: choice
         options:
@@ -18,31 +24,50 @@ on:
         default: '606131625084059674'
 permissions:
   contents: read
+  actions: read
 concurrency:
   group: duel-p9-production-policy
   cancel-in-progress: false
 jobs:
   production_policy:
-    # No PR, tag, fork or non-owner workflow actor may run production D1 changes.
     if: github.repository == 'altepop/keso-gamble' && github.ref == 'refs/heads/main' && github.actor == 'altepop'
     runs-on: ubuntu-latest
-    timeout-minutes: 6
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
       - uses: actions/setup-node@v7
         with:
           node-version: '24'
-      - name: Confirm production D1 credentials exist without displaying their values
+      - name: Confirm this push first ADDED the release workflow (not a later edit)
+        if: github.event_name == 'push'
+        id: initial
+        run: |
+          if git diff --name-status HEAD^ HEAD -- .github/workflows/duel-phase9-production-policy.yml | grep -q '^A[[:space:]]'; then
+            echo "created=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "created=false" >> "$GITHUB_OUTPUT"
+            echo "Not a first-time release; automatic activation will not run"
+          fi
+      - name: Verify same-main-SHA Pages and Worker production deployments
+        if: (github.event_name == 'push' && steps.initial.outputs.created == 'true') || (github.event_name == 'workflow_dispatch' && inputs.operation == 'activate')
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node services/valorant-results/scripts/duel-phase9-release-gate.mjs
+      - name: Confirm production D1 credentials without logging their values
+        if: github.event_name == 'workflow_dispatch' || steps.initial.outputs.created == 'true'
         env:
           CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           test -n "$CF_TOKEN" || { echo 'Cloudflare token unavailable'; exit 1; }
           test -n "$CF_ACCOUNT" || { echo 'Cloudflare account unavailable'; exit 1; }
-      - name: Execute a scoped Phase 9 policy operation and read back both rows
+      - name: Run the scope-guarded production policy operation
+        if: github.event_name == 'workflow_dispatch' || steps.initial.outputs.created == 'true'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          DUEL_RELEASE_OPERATION: ${{ inputs.operation }}
-          DUEL_RELEASE_GUILD: ${{ inputs.guild_id }}
+          DUEL_RELEASE_OPERATION: ${{ github.event_name == 'push' && 'activate' || inputs.operation }}
+          DUEL_RELEASE_GUILD: ${{ github.event_name == 'push' && '606131625084059674' || inputs.guild_id }}
         run: node services/valorant-results/scripts/duel-phase9-release.mjs
