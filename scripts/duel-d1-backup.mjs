@@ -111,12 +111,22 @@ export async function productionBackup(output,env=process.env,request=fetch){
   const encrypted=encryptDump(sql,key,{formatVersion:1,at:new Date().toISOString(),sourceDbId:D1_PRODUCTION_ID,
    tables,objectCount:schemaObjects.length,rows:before,keySource:source});
   // Reopen from ciphertext, decrypt and restore independently to prove key + dump are usable.
-  const restored=restoreCheck(decryptDump(encrypted,key),tables,schemaObjects);
+  const decrypted=decryptDump(encrypted,key);
+  const restored=restoreCheck(decrypted,tables,schemaObjects);
   if(JSON.stringify(before)!==JSON.stringify(restored))throw Error('Restore count mismatch');
+  // In addition to native SQLite, actually import the decrypted backup into
+  // an isolated local Cloudflare D1 (Miniflare). Never pass --remote here.
+  const localRestoreSql=join(work,'from-encrypted-backup.sql');
+  writeFileSync(localRestoreSql,decrypted,{mode:0o600});
+  execFileSync('npx',['--no-install','wrangler','d1','execute','DB','--config',config,
+   '--local','--persist-to',join(work,'isolated-d1-restore'),'--file',localRestoreSql],{
+   cwd:resolve('services/valorant-results'),timeout:240000,
+   encoding:'utf8',stdio:['ignore','pipe','pipe'],maxBuffer:1024*1024,env:{...env,WRANGLER_SEND_METRICS:'false'}
+  });
   writeFileSync(output,JSON.stringify(encrypted),{mode:0o600,flag:'wx'});
   const report={status:'restored',source:'production-d1',tables:tables.length,objects:schemaObjects.length,
    totalRows:Object.values(restored).reduce((n,x)=>n+x,0),encryptedBytes:statSync(output).size,
-   digest:encrypted.hash.slice(0,16),keySource:source};
+   digest:encrypted.hash.slice(0,16),keySource:source,localD1Restored:true};
   // Schema names and aggregate counts only; NEVER print any per-user data or SQL.
   console.log('DUEL_BACKUP_RESTORE_OK '+JSON.stringify(report));
   if(env.GITHUB_STEP_SUMMARY)appendFileSync(env.GITHUB_STEP_SUMMARY,[
@@ -124,7 +134,7 @@ export async function productionBackup(output,env=process.env,request=fetch){
    'Production D1 was READ-ONLY; no KP wallet, settlement, or other production writes.',
    'Tables restored: '+report.tables+'; schema objects: '+report.objects+'; rows: '+report.totalRows,
    'Encrypted bytes: '+report.encryptedBytes+'; verified SHA256 prefix: '+report.digest,
-   'Restoration: PASSED (fresh in-memory SQLite from decrypted stored artifact)',
+   'Restoration: PASSED (isolated SQLite + Cloudflare local D1 import from decrypted artifact)',
    'Key source: '+source+'. Preserve the ORIGINAL encryption key, including after token rotation.',
    'Artifact stores ciphertext only. Backup expires according to artifact retention.',
    ''
