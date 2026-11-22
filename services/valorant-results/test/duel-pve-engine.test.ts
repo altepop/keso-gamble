@@ -10,9 +10,10 @@ const first={
  connect4:{cell:3},
  hitblow:{guess:'9876'},
  bluffdice:{choice:'bid',count:1,face:1},
- poker:{cells:[]}
+ poker:{cells:[]},
+ trio:{cell:0}
 } as const;
-test('all six games use existing server rules and authoritative CPU turn',()=>{
+test('all seven games use existing server rules and authoritative CPU turn',()=>{
  for(const game of DUEL_PROGRESSION_GAMES){
   const s=startServerPve(game,'normal',randInt);
   const visible=pvePublicSnapshot(s);
