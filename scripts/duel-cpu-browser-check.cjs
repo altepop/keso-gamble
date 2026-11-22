@@ -107,7 +107,7 @@ let browser;const errors=[],requests=[];
   const activityBefore=host.url();
   await host.locator('[data-duel-entry="pve"]').click();
   assert.equal(host.url(),activityBefore,'PvE stays in the same Activity');
-  await host.waitForFunction(()=>document.getElementById('duel-pve-section')?.open===true,null,{timeout:7000});
+  await host.locator('#duel-pve-section .duel-pve-stage-head').waitFor();
  assert.equal(host.url(),activityBefore,'PvE cannot restart Discord Activity');
  assert.equal(await host.evaluate(()=>KesoMusic.getState().playing),true,'PvE keeps the music player alive');
  await host.locator('details.duel-secondary summary').click();
