@@ -48,11 +48,52 @@ export function duelWeeklyEventPanel(event){
  return '<div class="panel"><div class="card-body"><strong>🏆 週間イベント</strong><p>'+safe(event.title)+'</p>'+
  '<p class="helper">毎週月曜日に切替。今回のテーマはおすすめ種目であり、イベント専用の勝率補正・自動参加・追加KPはありません。</p></div></div>';
 }
-export function duelPvePanel({live=false,busy=false,preview=null,match=null,error='',message='',sessionInput='',pending=null,open=false,game='othello',level='normal',rewardsOpen=false,rewards=null,rewardsError=''}={}){
+/** Read-only, member-scoped historical progress; never guesses a reward from an unfinished game. */
+export function duelHistoryPanel({open=false,busy=false,data=null,error='',mode='all',game='all'}={}){
+ if(!open)return '';
+ const choices=[['all','全種目'],...Object.entries(names)];
+ const pick=(id,items,value)=>'<select id="'+id+'">'+items.map(([k,label])=>'<option value="'+k+'" '+(k===value?'selected':'')+'>'+safe(label)+'</option>').join('')+'</select>';
+ const result={win:'勝利',loss:'敗北',draw:'引き分け'};
+ const when=ms=>Number.isFinite(Number(ms))?new Date(Number(ms)).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}):'不明';
+ let html='<section class="panel" id="duel-history-panel" aria-label="決闘の対局履歴と進捗"><div class="card-body"><h3>対局履歴・熟練度</h3>'+
+ '<p class="helper">サーバーで確定した記録だけを表示。ブラウザ内の無料CPU練習は記録対象外。本人以外は閲覧できない。</p>'+
+ '<label>対戦形式'+pick('duel-history-mode',[['all','両方'],['pve','CPU攻略'],['pvp','対人戦']],mode)+'</label>'+
+ '<label>種目'+pick('duel-history-game',choices,game)+'</label>'+
+ '<button type="button" class="action-btn" data-duel-history-refresh="1" '+(busy?'disabled':'')+'>履歴と進捗を更新</button>'+
+ (error?'<p role="alert">'+safe(error)+'</p>':'');
+ if(!data)return html+'<p role="status">「履歴と進捗を更新」で最新の記録を取得する。</p></div></section>';
+ const today=data.today??{};
+ html+='<p role="status">今日の日替わり：'+safe(names[today.game]??today.game??'未取得')+
+ ' ／ '+safe(today.level??'未取得')+' ／ 開始'+safe(today.started??0)+'回・完了'+safe(today.finished??0)+'回・勝利'+safe(today.wins??0)+'回</p>'+
+ '<p class="helper">日替わりの開始記録は今回の保存機能追加後だけ。古い試合や手動開始を日替わり実績と推定しない。特別な追加KPはない。</p>';
+ const skills=Array.isArray(data.skills)?data.skills:[];
+ html+='<h4>7種目の確定済み熟練度</h4>'+
+ ['pve','pvp'].filter(x=>mode==='all'||x===mode).map(m=>
+ '<details '+(m==='pve'?'open':'')+'><summary>'+(m==='pve'?'CPU攻略':'対人戦')+'</summary><ul>'+
+ Object.entries(names).filter(([g])=>game==='all'||g===game).map(([g,label])=>{
+ const item=skills.find(x=>x.mode===m&&x.game===g);
+ const points=item?.points??0;
+ return '<li>'+safe(label)+'：'+safe(item?.wins??0)+'勝 '+safe(item?.losses??0)+'敗 '+safe(item?.draws??0)+'分 ／ 熟練度 '+safe(points)+' ／ 検証済 '+safe(item?.verified_games??0)+'戦</li>';
+ }).join('')+'</ul></details>').join('');
+ const items=Array.isArray(data.history)?data.history:[];
+ html+='<h4>確定した対局（新しい順）</h4>'+
+ (items.length?'<ol>'+items.map(item=>'<li>'+safe(when(item.at))+'　'+safe(names[item.game]??item.game)+' ／ '+(item.mode==='pve'?'CPU':'対人')+' ／ '+safe(result[item.outcome]??'不明')+
+ (item.dailyDay?' ／ 日替わり '+safe(item.dailyDay):'')+'</li>').join('')+'</ol>':'<p>条件に一致する確定対局はまだない。</p>')+
+ (data.historyHasMore?'<p class="helper">最新20件まで表示。過去の記録が続く可能性がある。</p>':'');
+ const sessions=Array.isArray(data.sessions)?data.sessions:[];
+ if(mode!=='pvp')html+='<h4>CPU対局の再開・終了履歴</h4>'+
+ (sessions.length?'<ol>'+sessions.map(item=>'<li>'+safe(when(item.updatedAt))+'　'+safe(names[item.game]??item.game)+' ／ '+safe(item.level)+
+ ' ／ '+(item.status==='active'?'進行中':(item.winner==='human'?'勝利':item.winner==='cpu'?'敗北':item.winner==='draw'?'引き分け':'終了'))+
+ (item.dailyDay?' ／ 日替わり '+safe(item.dailyDay):'')+
+ (item.status==='active'?'<button class="action-btn" data-duel-history-resume="'+safe(item.id)+'">この対局を再開</button>':'')+'</li>').join('')+'</ol>':'<p>CPU対局の保存記録はまだない。</p>');
+ return html+'<p class="helper">'+safe(data.note??'')+'</p></div></section>';
+}
+export function duelPvePanel({live=false,busy=false,preview=null,match=null,error='',message='',sessionInput='',pending=null,open=false,game='othello',level='normal',rewardsOpen=false,rewards=null,rewardsError='',historyUi=null}={}){
  const active=match&&typeof match.id==='string';
  const expanded=open||active||preview||error||message;
  return '<details class="panel" id="duel-pve-section" '+(expanded?'open':'')+'><summary>🗓️ 今日のCPUチャレンジ（サーバー対戦）</summary><div class="card-body">'+
  '<p class="helper">６種目を日替わりで挑戦。KP残高を賭けず、実戦用のサーバー判定で進行する。既存のPvE報酬規則のみ適用され、日替わり特別KPはない。</p>'+
+ '<button type="button" class="action-btn" data-duel-history-open="1" '+(busy?'disabled':'')+'>7種目の対局履歴・熟練度を見る</button>'+
  (!live?'<p>KP口座への接続が必要です。</p>':
  '<div class="action-row"><button class="action-btn" data-duel-pve-preview="1" '+(busy?'disabled':'')+'>今日の種目を確認</button>'+
  '<button class="action-btn primary" data-duel-pve-start="1" '+(busy||pending?'disabled':'')+'>今日のCPU戦を開始</button></div>'+
@@ -62,6 +103,7 @@ export function duelPvePanel({live=false,busy=false,preview=null,match=null,erro
  (error?'<p role="alert">'+safe(error)+'</p>':'')+(pending?'<p class="helper">直前の送信結果が未確定です。別の操作をせず、同じ操作IDで確認してください。</p><button type="button" class="action-btn primary" data-duel-pve-retry="1" '+(busy?'disabled':'')+'>前回の操作を確認</button>':'')+(message?'<p role="status">'+safe(message)+'</p>':'')+
  (active?'<div class="panel"><div class="card-body"><h3>'+safe(names[match.game]??match.game)+' ／ '+safe(resultName[match.winner]??(match.turn==='human'?'あなたの手番':'処理中'))+'</h3><p class="helper">試合ID：'+safe(match.id)+' ／ 第'+safe(match.version)+'版 ／ あなたの手数：'+safe(match.humanMoves)+'</p>'+
  controls(match,busy)+'</div></div>':''))+'</div></details>'+
+ (historyUi?.open?duelHistoryPanel(historyUi):'')+
  (rewardsOpen?'<section class="panel" id="duel-rewards-in-app"><div class="card-body"><h3>決闘の戦績・報酬（サーバー取得）</h3>'+
  (rewardsError?'<p role="alert">'+safe(rewardsError)+'</p>':'')+
  (!rewards?'<p role="status">取得中…</p>':(['pve','pvp'].map(mode=>'<h4>'+(mode==='pve'?'CPU攻略':'対人戦')+'</h4><ul>'+

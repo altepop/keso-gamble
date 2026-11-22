@@ -7,6 +7,7 @@ import {startServerPve,advanceServerPve,pvePublicSnapshot,type TrustedPveState} 
 import {ensureVerifiedPveProgression} from './duel-pve-progression.ts';
 import {duelDailyChallenge} from './duel-daily-challenge.ts';
 import {ensureTrioGameConstraint} from './duel-trio-schema.ts';
+import {ensureDuelDailyHistory} from './duel-history.ts';
 
 export const DUEL_PVE_SESSION_DDL=[
  `CREATE TABLE IF NOT EXISTS kp_duel_pve_sessions(
@@ -107,6 +108,7 @@ export async function serverPveOperation(env:KpEnv,guild:string,user:string,body
    if(!prior)throw Error('CPU戦が見つかりません。');
    return publicMatch(prior);
   }
+  if(challenge)await ensureDuelDailyHistory(env);
   const state=startServerPve(game,level,randomInt);
   const id=crypto.randomUUID(),now=Date.now();
   await env.DB.batch([
@@ -117,7 +119,12 @@ export async function serverPveOperation(env:KpEnv,guild:string,user:string,body
     .bind(id,guild,user,requestId,game,level,state.board,'human',now,now,guild,user,now-86400000),
    env.DB.prepare(`INSERT OR IGNORE INTO kp_duel_pve_secrets(id,guild,user,data)
     SELECT id,guild,user,? FROM kp_duel_pve_sessions WHERE id=? AND guild=? AND user=?`)
-    .bind(state.secret,id,guild,user)
+    .bind(state.secret,id,guild,user),
+   ...(challenge?[env.DB.prepare(`INSERT OR IGNORE INTO kp_duel_pve_daily_entries
+    (guild,user,session_id,jst_day,game,difficulty,created_at)
+    SELECT guild,user,id,?,?,?,created_at FROM kp_duel_pve_sessions
+    WHERE guild=? AND user=? AND request_id=? AND game=? AND difficulty=?`)
+    .bind(challenge.day,game,level,guild,user,requestId,game,level)]:[])
   ]);
   // Retry-compatible even if two requests with the same id raced.
   const saved=await env.DB.prepare('SELECT id FROM kp_duel_pve_sessions WHERE guild=? AND user=? AND request_id=?')
