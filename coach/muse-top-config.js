@@ -13,7 +13,7 @@ function validatePreset(map,entry){
  if(!name||!entry||typeof entry!=='object'||Array.isArray(entry))return null;
  const warm=entry.warmup&&typeof entry.warmup==='object'?entry.warmup:null;
  const study=entry.study&&typeof entry.study==='object'?entry.study:null;
- const links=Array.isArray(study?.sources)?study.sources.filter(v=>v&&safeLink(v.url)).map(v=>({title:norm(v.title)||'情報源',url:safeLink(v.url)})):[];
+ const links=Array.isArray(study?.sources)?study.sources.filter(v=>v&&v.verified===true&&safeLink(v.url)).map(v=>({title:norm(v.title)||'情報源',url:safeLink(v.url)})):[];
  return Object.freeze({map:name,
   warmup:warm&&norm(warm.title)?{title:norm(warm.title),reason:norm(warm.reason)||'まだ分かりません',steps:unique(warm.steps),durationMinutes:Number.isInteger(warm.durationMinutes)&&warm.durationMinutes>0?warm.durationMinutes:null}:null,
   study:study&&norm(study.theme)?{theme:norm(study.theme),reason:norm(study.reason)||'まだ分かりません',points:unique(study.points),sources:links,sourceStatus:links.length?'verified':'unconfigured'}:null});
