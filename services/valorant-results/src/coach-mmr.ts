@@ -73,15 +73,16 @@ const toSnapshot = (row: SnapshotRow, riotId: string): MmrSnapshot => ({
   peakSeason: row.peak_season, fetchedAt: row.fetched_at,
 });
 
-export async function readMmrSnapshots(db: Db, accounts: readonly { riotId: string; puuid: string }[]): Promise<Map<string, MmrSnapshot | null>> {
+export async function readMmrSnapshots(db: Db, accounts: readonly { riotId: string; puuid: string | null }[]): Promise<Map<string, MmrSnapshot | null>> {
   const out = new Map<string, MmrSnapshot | null>(accounts.map(a => [a.riotId, null]));
-  if (!accounts.length) return out;
+  const known = accounts.filter((a): a is { riotId: string; puuid: string } => typeof a.puuid === 'string' && a.puuid.length > 0);
+  if (!known.length) return out;
   await ensureMmrTable(db);
-  const marks = accounts.map(() => '?').join(',');
+  const marks = known.map(() => '?').join(',');
   const { results } = await db.prepare(`SELECT * FROM valorant_mmr_snapshots WHERE puuid IN (${marks})`)
-    .bind(...accounts.map(a => a.puuid)).all<SnapshotRow>();
+    .bind(...known.map(a => a.puuid)).all<SnapshotRow>();
   const byPuuid = new Map(results.map(r => [r.puuid, r]));
-  for (const a of accounts) { const row = byPuuid.get(a.puuid); if (row) out.set(a.riotId, toSnapshot(row, a.riotId)); }
+  for (const a of known) { const row = byPuuid.get(a.puuid); if (row) out.set(a.riotId, toSnapshot(row, a.riotId)); }
   return out;
 }
 
@@ -91,12 +92,16 @@ export async function readMmrSnapshots(db: Db, accounts: readonly { riotId: stri
 // directly (the monitor knows it); otherwise the region recorded by the
 // member archive is used.
 export async function ensureCoachMmr(
-  db: Db, accounts: readonly { riotId: string; puuid: string; region?: string }[],
+  db: Db, accounts: readonly { riotId: string; puuid: string | null; region?: string }[],
   fetcher: MmrFetcher | null, now: number, ttlMs: number = MMR_SNAPSHOT_TTL_MS,
 ): Promise<Map<string, MmrSnapshot | null>> {
   const snapshots = await readMmrSnapshots(db, accounts);
   if (!fetcher) return snapshots;
-  const stale = accounts.filter(a => { const s = snapshots.get(a.riotId); return !s || now - s.fetchedAt >= ttlMs; });
+  const stale = accounts.filter((a): a is { riotId: string; puuid: string; region?: string } => {
+    if (typeof a.puuid !== 'string' || !a.puuid.length) return false;
+    const s = snapshots.get(a.riotId);
+    return !s || now - s.fetchedAt >= ttlMs;
+  });
   if (!stale.length) return snapshots;
   let regions = new Map<string, string>();
   const needRegion = stale.filter(a => !a.region);

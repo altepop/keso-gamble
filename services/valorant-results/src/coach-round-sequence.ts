@@ -39,7 +39,7 @@ type Row = {
   players_json: string | null; teams_json: string | null;
   rounds_json: string | null; kills_json: string | null;
 };
-type Account = { puuid: string };
+type Account = { puuid: string | null };
 type Ref = { map: string; round: number; date: string };
 type Kill = { r: number; t: number; killer: string; victim: string; assistants: string[] | null; w: string | null; idx: number };
 type RoundRow = {
@@ -124,7 +124,7 @@ function parseMatch(row: Row, owned: ReadonlySet<string>) {
 }
 
 export function coachRoundSequence(rows: readonly Row[], accounts: readonly Account[]) {
-  const owned = new Set(accounts.map(a => a.puuid).filter(Boolean));
+  const owned = new Set(accounts.map(a => a.puuid).filter((p): p is string => typeof p === 'string' && p.length > 0));
   let matches = 0, excludedMatches = 0;
   const kast = { matches: 0, excludedMatches: 0, rounds: 0, kastRounds: 0, pct: null as number | null };
   const tiers = new Map<string, { rounds: number; wins: number; losses: number }>(
