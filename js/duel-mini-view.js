@@ -1,7 +1,7 @@
-import {hitBlowView} from './duel-hitblow-view.js?v=web-dc6f49bec78d8e84';
-import {pokerView} from './duel-poker-view.js?v=web-dc6f49bec78d8e84';
-import {bluffDiceView} from './duel-bluff-view.js?v=web-dc6f49bec78d8e84';
-import {connect4LegalMoves,connect4WinningLine,pokerHandName,pokerShowdownReason} from './duel-mini-games.js?v=web-dc6f49bec78d8e84';
+import {hitBlowView} from './duel-hitblow-view.js?v=web-abab4f2b581fc4cb';
+import {pokerView} from './duel-poker-view.js?v=web-abab4f2b581fc4cb';
+import {bluffDiceView} from './duel-bluff-view.js?v=web-abab4f2b581fc4cb';
+import {connect4LegalMoves,connect4WinningLine,pokerHandName,pokerShowdownReason} from './duel-mini-games.js?v=web-abab4f2b581fc4cb';
 const h=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const safeData=r=>{try{return JSON.parse(r.board);}catch{return {};}};
 const privateValue=r=>{try{return JSON.parse(r.private_hand);}catch{return r.private_hand??null;}};
