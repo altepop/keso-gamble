@@ -76,6 +76,11 @@ export async function releaseOperation({operation,guild,repo,ref,actor,token,acc
  const api=createReleaseClient({token,account,request});
  await api.assertBoundDatabase();
  const getRows=async()=>(await api.query(READ_SQL,[GUILD_ID])).results??[];
+ const tableCheck=await api.query("SELECT name FROM sqlite_master WHERE type='table' AND name='kp_duel_reward_policy_v2'",[]);
+ const exists=Array.isArray(tableCheck.results)&&tableCheck.results.length===1;
+ if(!exists&&(operation==='status'||operation==='stop'))
+  return {state:'disabled',guild:GUILD_ID,wasAlreadyStopped:true};
+ if(!exists&&operation==='activate'){
  // The v2 table is normally created lazily by the game Worker.
  // This approved DDL creates NO rewards, collections, KP entries or receipts.
  await api.query(`CREATE TABLE IF NOT EXISTS ${TABLE} (
@@ -89,6 +94,7 @@ export async function releaseOperation({operation,guild,repo,ref,actor,token,acc
    draw_bps INTEGER NOT NULL CHECK(draw_bps BETWEEN 0 AND 10000),
    PRIMARY KEY(guild,mode)
  ) STRICT`,[]);
+ }
  const before=await getRows();
  if(operation==='status'){
   if(before.length===0)return {state:'disabled',guild:GUILD_ID};
