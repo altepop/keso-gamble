@@ -54,7 +54,7 @@ export function duelOperationsPanel({available=false,busy=false,report=null,erro
  (season.partial?'<p role="alert">取得上限500試合のため順位は一部集計です。</p>':'')+
  '<ol>'+((season.rankings??[]).slice(0,20).map(row=>'<li>登録ID '+safe(row.user)+'：'+safe(row.wins)+'勝 '+safe(row.losses)+'敗 '+safe(row.draws)+'分</li>').join('')||'<li>対象試合はありません。</li>')+'</ol>'+
  '</div></div>':'')+
- (error?'<p role="alert">'+safe(error)+'</p>':'')+(counts?'<p role="status">集計日時：'+safe(new Date(report.asOf).toLocaleString('ja-JP'))+' ／ 保持状況の見直し基準：'+safe(report.retentionReviewDays)+'日</p>'+
+ (error?'<p role="alert">'+safe(error)+'</p>':'')+(counts?'<p role="status">集計日時：'+safe(new Date(report.asOf).toLocaleString('ja-JP'))+' ／ 見直し：CPU戦 '+safe(report.retentionReviewDays)+'日、対人戦 '+safe(report.pvpRetentionReviewDays??30)+'日</p>'+
  '<p>終了済み・基準超過：CPU戦 '+safe(counts.staleFinishedPve)+'件 ／ 対人戦 '+safe(counts.staleFinishedPvp)+'件</p><p>進行中：CPU戦 '+safe(counts.activePve)+'件 ／ 対人戦 '+safe(counts.activePvp)+'件</p>'+
  '<p>確認が必要：'+(report.reviewRecommended?'あり':'なし')+' ／ 自動削除：なし</p><button class="action-btn" data-duel-operations-export="1">監査集計を保存</button><button class="action-btn" data-duel-operations-records="1">直近確定対戦の記録を保存</button>':'')+
  '</div></details>';
