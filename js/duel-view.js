@@ -190,7 +190,7 @@ export function duelScreen({info,user,live,cash,selectedId,game='othello',stake=
  ${syncNotice}${retryNotice}
  ${chosen?`<div class="duel-current">
  <div class="panel"><div class="card-body"><h2 class="panel-title">参加者限定・公開情報プレビュー</h2>
- <p class="helper">対戦者本人の確認用プレビュー。第三者の観戦は双方の承認が必要で、招待制観戦から閲覧できます。</p>
+ <p class="helper">対戦者本人の確認用プレビュー。登録済みの本アカウントは同じギルド内の試合を追加同意なしで観戦できます。サブアカウントは観戦できません。</p>
  <button type="button" class="action-btn" data-duel-preview="1" ${busy||!live?'disabled':''}>公開情報を手動で確認</button>
  ${participantPreviewError?'<p role="alert">'+esc(participantPreviewError)+'</p>':''}
  ${participantPreview&&participantPreview.id===chosen.id?'<pre aria-label="試合の公開情報">'+esc(JSON.stringify(participantPreview.publicState??null,null,2))+'</pre><p class="helper">確認した版：'+esc(participantPreview.version)+'</p>':''}
