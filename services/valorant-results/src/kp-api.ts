@@ -3,7 +3,7 @@ import {readPrivateRecords,savePrivateRecord,readPrivateBody,privatePracticeStat
 import {readPveBuild,savePveBuild} from './duel-pve-build.ts';
 import {duelRewardProfile} from './duel-rewards.ts';
 import {duelOperationsAudit} from './duel-operations-audit.ts';
-import {duelSeasonRead} from './duel-season.ts';
+import {duelSeasonRead,duelSeasonEvent} from './duel-season.ts';
 import {duelPreservationExport} from './duel-preservation-export.ts';
 import {coachSharingSettings,saveCoachSharing,coachDirectory,coachSharedSummaries,SharingError} from './coach-sharing.ts';
 import {readCoachTeamConsent,saveCoachTeamConsent,coachTeamRoster,CoachTeamError} from './coach-team-consent.ts';
@@ -586,6 +586,11 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping,deferP
    return new Response(stream.body,{status:stream.status,headers:{
     ...Object.fromEntries(stream.headers),...headers,'Cache-Control':'no-cache, no-transform'
    }});
+  }
+  // Public theme contains no member IDs or D1 data; KP authentication still applies.
+  if(path==='/api/kp/duels/season/event'){
+   if(request.method!=='GET')return response({error:'未対応の操作です。'},405);
+   return response({event:duelSeasonEvent()});
   }
   if(path==='/api/kp/duels/season'){
    if(request.method!=='GET')return response({error:'未対応の操作です。'},405);
