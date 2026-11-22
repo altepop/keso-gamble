@@ -59,3 +59,12 @@ export async function duelSeasonRead(env:Pick<KpEnv,'DB'>,guild:string,now=Date.
   rankingScope:'owner-only-existing-pvp-results' as const,
   rewardGranted:false,notAnAllTimeRanking:true};
 }
+
+/** Existing minute Cron only; run one bounded read-only review daily at 03:17 JST.
+ * Not an alarm service, and no data mutation or reward adjustments occur.
+ */
+export function shouldRunDuelDailyAudit(scheduledTime:number){
+ if(!Number.isSafeInteger(scheduledTime)||scheduledTime<0)return false;
+ const localMinute=Math.floor((scheduledTime+JST)/60_000)%1440;
+ return localMinute===197;
+}
