@@ -103,7 +103,7 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
    operation:process.env.DUEL_RELEASE_OPERATION,
    guild:process.env.DUEL_RELEASE_GUILD,
    repo:process.env.GITHUB_REPOSITORY,ref:process.env.GITHUB_REF,
-   actor:process.env.GITHUB_ACTOR,token:process.env.CLOUDFLARE_API_TOKEN,
+   actor:process.env.DUEL_RELEASE_ACTOR??process.env.GITHUB_ACTOR,token:process.env.CLOUDFLARE_API_TOKEN,
    account:process.env.CLOUDFLARE_ACCOUNT_ID,
   });
   console.log('DUEL_PHASE9_RELEASE '+JSON.stringify(result));
