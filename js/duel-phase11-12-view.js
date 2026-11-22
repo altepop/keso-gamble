@@ -8,7 +8,7 @@ function controls(match,busy){
  const board=String(match.board??''),game=match.game,can=match.turn==='human'&&!busy;
  if(['othello','gomoku','connect4','trio'].includes(game)){
   const columns=game==='trio'?3:game==='connect4'?7:game==='othello'?8:15;
-  if(!(game==='trio'?/^[.XO]{9}$/.test(board):new RegExp('^[.BWab]{'+(game==='connect4'?42:columns*columns)+'}
+  if(!(game==='trio'?/^[.XO]{9}$/.test(board):new RegExp('^[.BWab]{'+(game==='connect4'?42:columns*columns)+'}$').test(board)))
    return '<p role="alert">盤面の形式を確認できません。再取得してください。</p>';
   const pieces={B:'●',W:'○',a:'●',b:'○',X:'×',O:'○','.':'·'};
   const playable=game==='connect4'?Array.from({length:7},(_,i)=>i):[...board].flatMap((v,i)=>v==='.'?[i]:[]);
