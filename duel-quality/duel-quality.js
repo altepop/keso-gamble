@@ -799,6 +799,9 @@ function enhance(root) {
     link.dataset.duelPveLink='1';
     link.textContent='サーバーCPU攻略（PvE）を開く';
     link.setAttribute('aria-label','サーバーが勝敗を確定するPvE攻略画面を開く');
+    // Native details fallback: even when app state rendering is delayed on iOS,
+    // a tap must reveal the already authenticated in-page PvE controls.
+    link.addEventListener('click',()=>{const panel=root.querySelector('#duel-pve-section');if(panel)panel.open=true;});
     const rewards=document.createElement('button');
     rewards.type='button';
     rewards.dataset.duelPveRewards='1';
