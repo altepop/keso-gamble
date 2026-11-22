@@ -38,9 +38,10 @@ export async function ensureBoardDuels(env:KpEnv){
   // Migrate just once, preserving all open escrowed duels and the existing ledger.
   const installed=await env.DB.prepare("SELECT value FROM kp_settings WHERE key='board_duel_schema_version'")
    .first<{value:string}>();
-  if(installed?.value==='2')return;
+  if(installed?.value==='3')return;
   const old=await env.DB.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='kp_board_duels'")
    .first<{sql:string}>();
+  if(old&&old.sql.includes("'connect4'")&&!old.sql.includes("'trio'"))await ensureTrioGameConstraint(env,'kp_board_duels');
   if(old&& !old.sql.includes("'connect4'")){
    await env.DB.batch([
     env.DB.prepare('DROP TRIGGER IF EXISTS kp_board_duel_apply'),
