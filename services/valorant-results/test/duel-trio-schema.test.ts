@@ -8,11 +8,10 @@ import {DUEL_PVE_SESSION_DDL} from '../src/duel-pve-sessions.ts';
 function memoryDb(){
  const sqlite=new DatabaseSync(':memory:');
  const prepare=(sql:string)=>{
-  const stmt=sqlite.prepare(sql);
   const bound=(args:unknown[])=>({
-   run:async()=>stmt.run(...args as []),
-   first:async()=>stmt.get(...args as []),
-   all:async()=>({results:stmt.all(...args as [])})
+   run:async()=>sqlite.prepare(sql).run(...args as []),
+   first:async()=>sqlite.prepare(sql).get(...args as []),
+   all:async()=>({results:sqlite.prepare(sql).all(...args as [])})
   });
   return {...bound([]),bind:(...args:unknown[])=>bound(args)};
  };
