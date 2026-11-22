@@ -21,8 +21,9 @@ function environment(registered:boolean,found:BoardDuel|null=match):KpEnv{
       if(sql.includes("FROM kp_board_duels WHERE guild"))return found;
       return null;
     }};
-   },first:async()=>sql.includes("board_duel_schema_version")?{value:'2'}:null};
+   },first:async()=>sql.includes("board_duel_schema_version")?{value:'2'}:null,run:async()=>({success:true})};
   },
+  batch:async(statements:unknown[])=>statements.map(()=>({success:true})),
  } as unknown as D1Database;
  return {DB};
 }
