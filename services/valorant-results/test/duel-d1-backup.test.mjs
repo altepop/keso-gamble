@@ -48,7 +48,7 @@ test('the actual ciphertext round-trip restores tables, rows, indexes and trigge
  assert.equal(rows.kp_duel_mode_skill,1);
  assert.equal(rows.kp_duel_pve_actions,0);
 });
-test('tamper, incorrect key, deleted table and missing schema object all fail closed',()=>{
+test('tamper, incorrect key, deleted table and missing schema object all fail closed',async()=>{
  const b=encryptDump(sql,secret,{tables:names});
  assert.throws(()=>decryptDump(b,'completely-different-encryption-key-012345'));
  const tampered={...b,data:b.data.slice(0,-3)+'AAA'};
@@ -58,7 +58,7 @@ test('tamper, incorrect key, deleted table and missing schema object all fail cl
  const temp=mkdtempSync(join(tmpdir(),'duel-backup-test-'));
  try{
   const target=join(temp,'duel.enc.json');writeFileSync(target,JSON.stringify(b));
-  return assert.doesNotReject(async()=>{
+  await assert.doesNotReject(async()=>{
    const got=await verifyArtifact(target,{KESO_DUEL_BACKUP_KEY:secret});
    assert.equal(got.kp_board_duels,1);
   });
