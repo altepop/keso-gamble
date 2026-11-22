@@ -1,4 +1,4 @@
-import {duelPvePanel,duelOperationsPanel,duelTrioPanel,duelWeeklyEventPanel} from './duel-phase11-12-view.js?v=web-a8ec6c94dd6a41bc';
+import {duelPvePanel,duelOperationsPanel,duelTrioPanel,duelWeeklyEventPanel} from './duel-phase11-12-view.js?v=duel-sports-20261123';
 import {miniBoardView} from './duel-mini-view.js?v=web-a8ec6c94dd6a41bc';
 import {EXTRA_DUEL_GAMES} from './duel-mini-games.js?v=web-a8ec6c94dd6a41bc';
 import {DUEL_GAMES,duelLegalMoves,duelScore,playDuelMove} from './duel-rules.js?v=web-a8ec6c94dd6a41bc';
