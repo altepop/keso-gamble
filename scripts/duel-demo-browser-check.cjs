@@ -20,7 +20,7 @@ const a='[data-demo-view=a]',b='[data-demo-view=b]';
  page.on('request',req=>{if(/api\/kp|\.workers\.dev|discord\.com/.test(req.url()))requests.push(req.url());});
  await page.goto(url,{waitUntil:'networkidle'});
  assert.match(await page.title(),/決闘デモ/);
- assert.equal(await page.locator('#duel-game option').count(),6);
+ assert.equal(await page.locator('#duel-game option').count(),7);
  // Rotate the simulated mobile viewport; preserve the selected game and controls.
  await page.locator('#demo-mode').selectOption('poker');
  await page.setViewportSize({width:844,height:390});
@@ -32,7 +32,7 @@ const a='[data-demo-view=a]',b='[data-demo-view=b]';
  // Phase 8: an actual 375px mobile viewport must preserve all modes and the
  // invite control. This is visual/layout coverage, not live 2-account latency.
  await page.setViewportSize({width:375,height:812});
- assert.equal(await page.locator('#duel-game option').count(),6,'375px retains all six duel modes');
+ assert.equal(await page.locator('#duel-game option').count(),6,'375px retains seven available duel modes');
  assert.equal(await page.locator('[data-duel-act=create]').isVisible(),true,'375px invite action visible');
  assert.ok(await page.locator('[data-duel-act=create]').evaluate(el=>el.getBoundingClientRect().height>=44),'375px invite touch target at least 44px');
  await page.setViewportSize({width:390,height:844});
