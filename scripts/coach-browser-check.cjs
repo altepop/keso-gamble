@@ -504,20 +504,24 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   // Final select must follow all field edits: a queued owner-record refresh can replace
   // the form during those edits and reset the previously selected required report.
   await recordForm.locator('[name="report"]').selectOption('done');
-  const saveInputs=await recordForm.evaluate(form=>({
-   report:form.elements.namedItem('report')?.value,
-   minutes:form.elements.namedItem('minutes')?.value,
-   attempts:form.elements.namedItem('attempts')?.value,
-   successes:form.elements.namedItem('successes')?.value
-  }));
-  assert.deepEqual(saveInputs,{report:'done',minutes:'0',attempts:'3',successes:'2'},
-   'live form must preserve non-empty zero and attempts before owner-only submit');
-  // Explicitly validate and click the owner-only form, rather than relying on implicit Enter submission.
-  const valid=await recordForm.evaluate(form=>({valid:form.checkValidity(),invalid:[...form.elements].filter(el=>el.validity&&!el.validity.valid).map(el=>el.name||el.tagName)}));
-  assert.equal(valid.valid,true,'owner record form must be valid before saving; invalid controls: '+valid.invalid.join(', '));
+  // The fixture refreshes this form asynchronously. Capture a LIVE form and atomically
+  // restore its intended values and submit in one browser task: no awaits or render gaps.
   const [saveResponse]=await Promise.all([
    page.waitForResponse(response=>new URL(response.url()).pathname==='/api/kp/coach/practice/records'&&response.request().method()==='POST',{timeout:12000}),
-   recordForm.locator('button[type="submit"]').click()
+   recordForm.evaluate(form=>{
+    const expected={report:'done',minutes:'0',attempts:'3',successes:'2'};
+    for(const [name,value] of Object.entries(expected)){
+     const field=form.elements.namedItem(name);
+     if(!field||!('value' in field))throw Error('Missing practice input: '+name);
+     field.value=value;
+    }
+    const fields=Object.fromEntries(Object.keys(expected).map(name=>[name,form.elements.namedItem(name).value]));
+    if(Object.keys(expected).some(name=>fields[name]!==expected[name]))
+     throw Error('Practice input lost before immediate submit');
+    if(!form.checkValidity())throw Error('Invalid practice form before submit');
+    form.requestSubmit();
+    return fields;
+   })
   ]);
   assert.equal(saveResponse.ok(),true,'owner record save API must succeed: HTTP '+saveResponse.status());
   const savedRequest=saveResponse.request().postDataJSON();
