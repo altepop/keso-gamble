@@ -57,6 +57,7 @@ import { claimDeathMatch } from './death-sessions.ts';
 import {ensurePvpDuels,settlePvpDuels} from './pvp-duel.ts';
 import {settleExpiredBoardDuels,cleanupBoardDuels} from './board-duels.ts';
 import {duelOperationsAudit} from './duel-operations-audit.ts';
+import {archivePreviousDuelSeason,shouldArchiveDuelSeason} from './duel-season-archive.ts';
 import {shouldRunDuelDailyAudit} from './duel-season.ts';
 import type { KpRun } from './kp.ts';
 import { shouldRunRetention, cleanupExpiredCredentials } from './retention.ts';
@@ -740,6 +741,17 @@ export default {
           deletionAuthorized:false
         });
       })().catch(()=>console.warn('duel_daily_readonly_audit_pending')));
+    // One immutable weekly snapshot on the existing cron. No payouts or KP writes.
+    // A bounded result is required; partial rankings are never persisted.
+    if(shouldArchiveDuelSeason(_event.scheduledTime??Date.now()))
+      ctx.waitUntil((async()=>{
+        const mapping=await initializeKp(env);if(!mapping)return;
+        const result=await archivePreviousDuelSeason(env,mapping.guildId,_event.scheduledTime);
+        console.info('duel_weekly_season_archive',{
+          seasonId:result.seasonId,status:result.status,
+          ...(result.status==='archived'?{sampledMatches:result.sampledMatches}:{})
+        });
+      })().catch(()=>console.warn('duel_weekly_season_archive_pending')));
     // Register only /predict through scoped client credentials. No new Bot Token secret is needed.
     if(Math.floor((_event.scheduledTime??Date.now())/60000)%10===0)
       ctx.waitUntil(track(env,'prediction_command',()=>ensurePredictionCommand(env).then(ok=>{
