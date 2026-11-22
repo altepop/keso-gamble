@@ -11,7 +11,8 @@ const CPU_MEMBERS=[{id:USERS.a,name:'あなた'},{id:USERS.b,name:'CPU'}];
 const MINI=new Set(Object.keys(EXTRA_DUEL_GAMES));
 const $=s=>document.querySelector(s);
 const rand=n=>{const value=new Uint32Array(1),limit=Math.floor(4294967296/n)*n;do{crypto.getRandomValues(value);}while(value[0]>=limit);return value[0]%n;};
-let game='othello',viewer='a',target=USERS.b,stake=1000,match=null,secret=null,balance={[USERS.a]:20000,[USERS.b]:20000},
+const requestedGame=new URLSearchParams(location.search).get('game');
+let game=['othello','gomoku','connect4','hitblow','bluffdice','poker'].includes(requestedGame)?requestedGame:'othello',viewer='a',target=USERS.b,stake=1000,match=null,secret=null,balance={[USERS.a]:20000,[USERS.b]:20000},
  picks=[],confirmResign=false,pickerOpen=false,lastError='',status='',passNotice='',previewCell=null,guessDraft='',
  againstCpu=new URLSearchParams(location.search).get('cpu')==='1',cpuLevel='normal',cpuBusy=false,cpuTimer=null,roundId=0;
 const recentMoves=new Map(),localMoveHistory=new Map();
