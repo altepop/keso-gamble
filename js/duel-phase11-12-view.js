@@ -10,10 +10,29 @@ function controls(match,busy){
   const columns=game==='trio'?3:game==='connect4'?7:game==='othello'?8:15;
   if(!(game==='trio'?/^[.XO]{9}$/.test(board):new RegExp('^[.BWab]{'+(game==='connect4'?42:columns*columns)+'}$').test(board)))
    return '<p role="alert">盤面の形式を確認できません。再取得してください。</p>';
+  if(game==='connect4'){
+   // 7 column buttons are actions; the 42 visible slots below reflect the server board.
+   // Row zero is the top, matching connect4Move() in duel-mini-games.js.
+   const grid=[...board].map((cell,i)=>{
+    const label=cell==='a'?'あなたの赤い石':cell==='b'?'CPUの黄色い石':'空き';
+    const color=cell==='a'?'#ff6761':cell==='b'?'#ffdb56':'#f1f6ff';
+    return '<span role="gridcell" data-duel-pve-slot="'+i+'" aria-label="'+(Math.floor(i/7)+1)+'行'+(i%7+1)+'列 '+label+'" '+
+     'style="display:grid;place-items:center;min-width:0;aspect-ratio:1;background:#164882;border-radius:50%;'+
+     'font-size:clamp(17px,5vw,31px);font-weight:800;color:'+color+'">'+(cell==='.'?'○':'●')+'</span>';
+   }).join('');
+   const drop=Array.from({length:7},(_,col)=>
+    '<button type="button" class="action-btn" data-duel-pve-cell="'+col+'" aria-label="'+(col+1)+'列に石を落とす" '+
+    'style="min-width:0;min-height:44px;padding:4px 0;font-size:13px" '+
+    (!can||board[col]!=='.'?'disabled':'')+'>'+(col+1)+'列</button>'
+   ).join('');
+   return '<div class="duel-pve-connect4" style="max-width:360px;width:100%">'+
+    '<p class="helper">赤●：あなた ／ 黄●：CPU。縦・横・斜めに４つ並べると勝ち。上の列ボタンで石を落とす。</p>'+
+    '<div role="group" aria-label="四目並べの投入列" style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px">'+drop+'</div>'+
+    '<div role="grid" aria-label="四目並べの盤面（６行７列）" style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));'+
+    'gap:3px;padding:6px;margin-top:5px;border-radius:12px;background:#2162b5;box-sizing:border-box;width:100%">'+grid+'</div></div>';
+  }
   const pieces={X:'×',O:'○',B:'●',W:'○',a:'●',b:'○','.':'·'};
-  const playable=game==='connect4'?Array.from({length:7},(_,i)=>i):[...board].flatMap((v,i)=>v==='.'?[i]:[]);
-  const cells=game==='connect4'?Array.from({length:7},(_,i)=>'<button class="action-btn" data-duel-pve-cell="'+i+'" '+(!can||board[i]!=='.'?'disabled':'')+'>'+(i+1)+'列</button>').join(''):
-   [...board].map((v,i)=>'<button type="button" data-duel-pve-cell="'+i+'" '+(!can||v!=='.'?'disabled':'')+' aria-label="'+(Math.floor(i/columns)+1)+'行'+(i%columns+1)+'列" style="min-height:27px;padding:1px;font-size:14px">'+pieces[v]+'</button>').join('');
+  const cells=[...board].map((v,i)=>'<button type="button" data-duel-pve-cell="'+i+'" '+(!can||v!=='.'?'disabled':'')+' aria-label="'+(Math.floor(i/columns)+1)+'行'+(i%columns+1)+'列" style="min-height:27px;padding:1px;font-size:14px">'+pieces[v]+'</button>').join('');
   return '<div style="display:grid;grid-template-columns:repeat('+columns+',minmax(0,1fr));gap:2px" role="group" aria-label="CPU戦盤面">'+cells+'</div>';
  }
  const pub=(()=>{try{return JSON.parse(board)}catch{return null}})();
