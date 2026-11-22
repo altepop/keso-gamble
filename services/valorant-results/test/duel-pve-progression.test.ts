@@ -45,7 +45,7 @@ test('every game records server-certified natural PvE final exactly once',()=>{
    assert.equal(row.wins+row.losses+row.draws,1);
    assert.equal(row.points,row.wins);
   }
-  assert.equal(db.prepare("SELECT COUNT(*) AS n FROM kp_duel_progress_receipts WHERE mode='pve'").get()?.n,6);
+  assert.equal(db.prepare("SELECT COUNT(*) AS n FROM kp_duel_progress_receipts WHERE mode='pve'").get()?.n,7);
   assert.equal(db.prepare("SELECT COUNT(*) AS n FROM kp_duel_mode_skill WHERE mode='pvp'").get()?.n,0);
  }finally{db.close();}
 });
