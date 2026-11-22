@@ -369,12 +369,53 @@ function render(host,report,ctx={}){
    id=setInterval(()=>{left=Math.max(0,left-1);renderClock();if(left<=0)halt();},1000);timerIds.push(id);
    startBtn.textContent='一時停止する';});
   resetBtn?.addEventListener('click',()=>{halt();left=parseInt(box.dataset.seconds,10)||1200;renderClock();});});
- const doneToggle=(key,msgKey,onText)=>{const b=host.querySelector('[data-mb-btn="'+key+'"]');if(!b)return;
-  b.addEventListener('click',()=>{const on=b.getAttribute('aria-pressed')==='true';b.setAttribute('aria-pressed',String(!on));
-   b.textContent=!on?onText:b.dataset.label||b.textContent;const msg=host.querySelector('[data-mb="'+msgKey+'"]');if(msg)msg.hidden=!on;});};
  all('[data-mb-btn]').forEach(b=>{b.dataset.label=b.textContent;});
- doneToggle('warmDone','warmMsg','実施済みです');
- doneToggle('studyDone','studyMsg','確認済みです');
+ /* Today's two done toggles are backed by the member's own practice
+    records. The host page judges each item through ctx.onDoneChange and
+    hands the recorded state back as ctx.doneState, so the buttons, the
+    notes and the home PDCA flow bar all read the same recorded judgement.
+    A toggle flips optimistically and rolls back when the record cannot be
+    saved: the display never claims a judgement the records do not hold.
+    This adapter itself still never fetches and never saves. */
+ const doneState={warm:!!ctx.doneState?.warm,study:!!ctx.doneState?.study};
+ const doneUi={warm:{btn:host.querySelector('[data-mb-btn="warmDone"]'),msg:host.querySelector('[data-mb="warmMsg"]'),err:host.querySelector('[data-mb="warmErr"]'),onText:'実施済みです'},
+  study:{btn:host.querySelector('[data-mb-btn="studyDone"]'),msg:host.querySelector('[data-mb="studyMsg"]'),err:host.querySelector('[data-mb="studyErr"]'),onText:'確認済みです'}};
+ const setStep=(step,cls)=>{if(!step)return;step.classList.remove('mu-done','mu-now','mu-todo');step.classList.add(cls);};
+ const applyFlow=()=>{
+  const count=(doneState.warm?1:0)+(doneState.study?1:0);
+  const bar=host.querySelector('[data-mb-flow="pdca"]');
+  if(count>=2){
+   setStep(host.querySelector('[data-mb-step="today"]'),'mu-done');set('flowTodaySub','2件とも完了');
+   setStep(host.querySelector('[data-mb-step="comp"]'),'mu-now');set('flowCompSub','いまここ');
+   set('cycleProgress','試合 ✓ → 分析 ✓ → 今日の2件 ✓ → コンペ（いま）→ フィードバック');
+   bar?.setAttribute('aria-label','PDCAの流れ：試合、分析、今日の2件は完了。現在はコンペ。次は試合後フィードバック');
+  }else if(count===1){
+   setStep(host.querySelector('[data-mb-step="today"]'),'mu-now');set('flowTodaySub','残り1件');
+   setStep(host.querySelector('[data-mb-step="comp"]'),'mu-todo');set('flowCompSub','2試合で試す');
+   set('cycleProgress','試合 ✓ → 分析 ✓ → 今日の2件（残り1件）→ コンペ → フィードバック');
+   bar?.setAttribute('aria-label','PDCAの流れ：試合と分析は完了。今日の2件は残り1件。次はコンペ、その後に試合後フィードバック');
+  }else{
+   setStep(host.querySelector('[data-mb-step="today"]'),'mu-now');set('flowTodaySub','いまここ');
+   setStep(host.querySelector('[data-mb-step="comp"]'),'mu-todo');set('flowCompSub','2試合で試す');
+   set('cycleProgress','試合 ✓ → 分析 ✓ → 今日の2件（いま）→ コンペ → フィードバック');
+   bar?.setAttribute('aria-label','PDCAの流れ：試合と分析は完了。現在は今日の2件。次はコンペ、その後に試合後フィードバック');
+  }};
+ const applyDone=()=>{
+  for(const key of ['warm','study']){const ui=doneUi[key];
+   if(ui.btn){ui.btn.setAttribute('aria-pressed',String(doneState[key]));
+    ui.btn.textContent=doneState[key]?ui.onText:ui.btn.dataset.label||ui.btn.textContent;}
+   if(ui.msg)ui.msg.hidden=!doneState[key];}
+  applyFlow();};
+ let doneBusy=false;
+ for(const key of ['warm','study']){const ui=doneUi[key];
+  ui.btn?.addEventListener('click',async()=>{
+   if(doneBusy)return;const next=!doneState[key];
+   if(typeof ctx.onDoneChange!=='function'){doneState[key]=next;applyDone();return;}
+   doneBusy=true;doneState[key]=next;applyDone();if(ui.err)ui.err.hidden=true;
+   let ok=false;try{ok=await ctx.onDoneChange(key,next);}catch{ok=false;}
+   if(!ok){doneState[key]=!next;applyDone();if(ui.err)ui.err.hidden=false;}
+   doneBusy=false;});}
+ applyDone();
  const accept=host.querySelector('[data-mb-btn="accept"]');
  accept?.addEventListener('click',async()=>{const on=accept.getAttribute('aria-pressed')==='true';
   if(!on&&typeof ctx.onPlan==='function'){try{await ctx.onPlan();}catch{}}
