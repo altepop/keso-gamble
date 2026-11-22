@@ -15,6 +15,7 @@ import {festivalTerms,publicFestivalResponse} from './race-festival.ts';
 import {personalVerifiedRelicStats} from './relic-economy.ts';
 import {hoyoApi} from './hoyo.ts';
 import {boardDuelApi,boardDuelParticipantPreview} from './board-duels.ts';
+import {saveSpectatorConsent,readSpectatorMatch,SpectatorAccessError} from './duel-spectator-live.ts';
 import {serverPveApi} from './duel-pve-sessions.ts';
 import {steamApi,steamCallback} from './steam-auth.ts';
 import {guildVerifiedRelicStats} from './relic-guild-stats.ts';
@@ -540,6 +541,29 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping,deferP
     if(result==='not_opted_in')return response({error:'過去に許可された補完設定がない。管理者による初回設定が必要だ。'},409);
     invalidateCoachRoundReport(env.DB);
     return response({status:result,note:'既存の5分間隔で、保存済みVDK競技試合のみを補完する。'});
+  }
+  if(path==='/api/kp/duels/spectator-consent'){
+   // Both match participants explicitly approve each invitee; KP session is required above.
+   if(request.method!=='POST')return response({error:'未対応の操作です。'},405);
+   if(await d1OptionalMode(env))return response({error:'D1節約モード中です。'},429);
+   const text=await request.text();
+   if(text.length>512)return response({error:'入力が長すぎます。'},400);
+   let body:Record<string,unknown>;
+   try{body=JSON.parse(text);}catch{return response({error:'入力が不正です。'},400);}
+   if(!body||typeof body!=='object'||Array.isArray(body))return response({error:'入力が不正です。'},400);
+   try{return response(await saveSpectatorConsent(env,mapping,owner.user,{
+     id:body.id,viewer:body.viewer,approved:body.approved,
+   }));}
+   catch(e){if(e instanceof SpectatorAccessError)return response({error:'対象の試合は参照できません。'},e.status);throw e;}
+  }
+  if(path==='/api/kp/duels/spectate'){
+   if(request.method!=='GET')return response({error:'未対応の操作です。'},405);
+   if(await d1OptionalMode(env))return response({error:'D1節約モード中です。'},429);
+   const query=new URL(request.url).searchParams;
+   const revision=query.get('version');
+   if(revision!==null&&!/^(0|[1-9][0-9]{0,9})$/.test(revision))return response({error:'更新番号が不正です。'},400);
+   try{return response(await readSpectatorMatch(env,mapping.guildId,owner.user,query.get('id')??'',revision===null?null:Number(revision)));}
+   catch(e){if(e instanceof SpectatorAccessError)return response({error:'対象の試合は参照できません。'},e.status);throw e;}
   }
   if(path==='/api/kp/duels/spectator-preview'){
     // Authenticated owner session and verified guild mapping already required above.
