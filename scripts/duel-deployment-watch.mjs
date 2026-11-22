@@ -29,6 +29,10 @@ async function run(){
  if(!res.ok)throw Error('GitHub Actions metadata request failed: '+res.status);
  const data=await res.json();
  const report=evaluateDeploymentRuns(data.workflow_runs);
+ if(process.env.DUEL_WATCH_REPORT){
+  const {writeFileSync}=await import('node:fs');
+  writeFileSync(process.env.DUEL_WATCH_REPORT,JSON.stringify(report),{mode:0o600});
+ }
  for(const item of report.results)console.log('DUEL_DEPLOY_WATCH '+JSON.stringify(item));
  console.log('DUEL_DEPLOY_WATCH_SUMMARY '+JSON.stringify({ok:report.ok,sharedSha:report.sharedSha}));
  if(process.env.GITHUB_STEP_SUMMARY){
