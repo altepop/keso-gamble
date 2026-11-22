@@ -1,6 +1,6 @@
 // Hit & Blow UI only. Derive possibilities from the viewer's own public
 // guesses and feedback. Never access or infer a private opponent secret.
-import {hitBlowAnswer} from './duel-mini-games.js?v=web-b5524b20c6da231a';
+import {hitBlowAnswer} from './duel-mini-games.js?v=web-e1652dbb57906862';
 const h=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const isCode=code=>typeof code==='string'&&/^[0-9]{4}$/.test(code)&&new Set(code).size===4;
 const allCodes=(()=>{
