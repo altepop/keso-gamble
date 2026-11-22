@@ -189,7 +189,8 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   await page.locator('[data-aim-routine] > summary').click();
   await page.locator('[data-full-coach] > summary').click();
   await page.locator('[data-primary-mission]').waitFor();
-  assert.equal(requests.length,1);assert.ok(requests[0].url.endsWith('/coach/me'));assert.equal(requests[0].auth,'Bearer '+token);
+  assert.deepEqual(requests.map(r=>new URL(r.url).pathname).sort(),['/api/kp/coach/me','/api/kp/coach/practice/records','/api/kp/coach/notes','/api/kp/coach/goals'].sort(),'only authenticated self data and today’s three record reads occur on entry');
+  assert.ok(requests.every(r=>r.method==='GET'&&r.auth==='Bearer '+token),'all initial requests use the signed-in member’s token and never mutate records');
   assert.equal(await page.locator('[data-member="VDK"]').count(),0,'no other-person selector');
   assert.equal(await page.locator('#legacy-coach').innerText(),'');
   assert.ok(!(await page.locator('body').innerText()).includes(token));
@@ -280,7 +281,8 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   const beforeUiActions=requests.length;
   await page.locator('#acceptBtn').click();await page.waitForFunction(()=>document.querySelector('#acceptBtn')?.getAttribute('aria-pressed')==='true');assert.equal(await page.locator('#acceptBtn').getAttribute('aria-pressed'),'true');assert.equal(await page.locator('#acceptNote').isVisible(),true);
   await page.locator('#timerBtn').click();assert.match(await page.locator('#timerBtn').innerText(),/一時停止/);await page.locator('#timerReset').click();assert.match(await page.locator('#clock').innerText(),/04:00/);
-  assert.equal(requests.length,beforeUiActions+4,'explicit plan save loads private records/notes/goals once and posts once; timer does not write');
+  assert.equal(requests.length,beforeUiActions+1,'explicit plan save makes only one authenticated POST because private records/notes/goals were preloaded; timer does not write');
+  assert.ok(requests.at(-1).url.endsWith('/api/kp/coach/practice/records')&&requests.at(-1).method==='POST'&&requests.at(-1).auth==='Bearer '+token,'explicit plan save writes only to the signed-in person’s record API');
   await page.setViewportSize({width:375,height:812});
   assert.equal(await page.locator('#coach-operations #reload').count(),1);
 
@@ -414,7 +416,7 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   assert.equal(requests.length,benchmarkRequests,'practice preferences, search and exchanges never query APIs');
   if(process.env.COACH_PRACTICE_SCREENSHOT){await page.setViewportSize({width:320,height:812});await page.locator('.practice-controls').screenshot({path:process.env.COACH_PRACTICE_SCREENSHOT});await page.locator('[data-practice-recommendations]').screenshot({path:process.env.COACH_PRACTICE_SCREENSHOT.replace('.png','-plan.png')});}
 
-  assert.equal(requests.length,beforeUiActions+4,'changing dashboard tabs never triggers extra API calls');
+  assert.equal(requests.length,beforeUiActions+1,'changing dashboard tabs never triggers extra API calls');
   await page.locator('#share').click();
   const exportedMember=JSON.parse(await page.evaluate(()=>window.__copiedDiagnostic));
   assert.equal(exportedMember.format,'KESO_COACH_SAFE_MEMBER_DIAGNOSTIC_V1');
@@ -438,16 +440,24 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   assert.equal(exportedMember.matchTrend.length,2,'safe copy includes anonymous date-based trend');
   assert.equal(JSON.stringify(exportedMember).includes('private-vod-identifier'),false);
   assert.equal(JSON.stringify(exportedMember).includes('secret-puuid'),false);
-  assert.equal(requests.length,beforeUiActions+4,'copying selected report is purely client-side');
+  assert.equal(requests.length,beforeUiActions+1,'copying selected report is purely client-side');
 
   assert.deepEqual(errors,[]);
   await page.locator('#member-coaching-panel').evaluate(el=>el.open=true);
+  const beforeSwitch=requests.length;
   await page.locator('[data-member="Aquatopia"]').click();
   await page.waitForFunction(()=>document.querySelector('.prototype-top .playerline .name')?.textContent==='Aquatopia');
-  assert.equal(requests.length,beforeUiActions+5);assert.ok(requests.at(-1).url.includes('person=Aquatopia'));
+  const memberReads=requests.slice(beforeSwitch);
+  assert.ok(memberReads.some(r=>new URL(r.url).pathname==='/api/kp/coach/member'&&r.url.includes('person=Aquatopia')),'the selected member was loaded');
+  const allowedMemberReads=new Set(['/api/kp/coach/member','/api/kp/coach/practice/records','/api/kp/coach/notes','/api/kp/coach/goals']);
+  assert.ok(memberReads.every(r=>r.method==='GET'&&r.auth==='Bearer '+token&&allowedMemberReads.has(new URL(r.url).pathname)),'switching member may use cached records, but never writes or reads unexpected endpoints');
+  const beforeReturn=requests.length;
   await page.locator('#return-self').click();
   await page.waitForFunction(()=>document.querySelector('.prototype-top .playerline .name')?.textContent==='神戸');
-  assert.equal(requests.length,beforeUiActions+6);assert.ok(requests.at(-1).url.endsWith('/coach/me'));
+  const selfReads=requests.slice(beforeReturn);
+  assert.ok(selfReads.some(r=>new URL(r.url).pathname==='/api/kp/coach/me'),'return to self must load the signed-in profile');
+  const allowedSelfReads=new Set(['/api/kp/coach/me','/api/kp/coach/practice/records','/api/kp/coach/notes','/api/kp/coach/goals']);
+  assert.ok(selfReads.every(r=>r.method==='GET'&&r.auth==='Bearer '+token&&allowedSelfReads.has(new URL(r.url).pathname)),'return to self may use cached records, but never writes or reads unexpected endpoints');
   for(const width of [320,375,1440]){await page.setViewportSize({width,height:900});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'layout '+width);}
   const japanese=await page.locator('.coach-existing p,.coach-existing li,#coach-operations p').evaluateAll(nodes=>[...new Set(nodes.flatMap(n=>(n.textContent||'').match(/[^。！？]+[。！？]/gu)||[]))]);
   const dictionaryEnds=japanese.filter(t=>/(?:[^ま]した|できる|できない|補わない|だけ|ではない|である|必要だ|確認する|断定しない|影響する|数える|決まる|異なる|とする|持つ|わかる|分かる|求める|含まれる|保存される|判断できない|得られる|必要になる|揃わない|少ない|多い|低い|高い|出ない|変わらない|足りない|違う|はない|を指す|と呼ぶ)。(?:$)/u.test(t));
@@ -482,8 +492,8 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   await partyFixture.evaluate(n=>n.remove());
   // Owner-only practice and memo UI uses the actual SQLite-backed save/list logic.
   const loop=page.locator('[data-coach-loop]');assert.equal(await loop.count(),1);
-  assert.match(await loop.innerText(),/前回の実施内容はまだ読み込んでいません/);
-  const records=page.locator('[data-private-records]');await records.locator('[data-record-panel] > summary').click();await records.locator('[data-record-load]').click();await records.locator('[data-record-form]').waitFor();
+  assert.match(await loop.innerText(),/今回保存した練習予定です/,'preloaded private records show the real planned practice, without claiming it was completed');
+  const records=page.locator('[data-private-records]');await records.locator('[data-record-panel]').evaluate(el=>el.open=true);await records.locator('[data-record-load]').click();await records.locator('[data-record-form]').waitFor();
   let recordForm=records.locator('[data-record-form]').first();await recordForm.locator('[name="report"]').selectOption('done');await recordForm.locator('[name="minutes"]').fill('0');await recordForm.locator('[name="attempts"]').fill('3');await recordForm.locator('[name="successes"]').fill('2');await recordForm.locator('[name="reflection"]').fill('自分の振り返りです。\n次は退路を確認します。');
   await recordForm.locator('button[type="submit"]').focus();await page.keyboard.press('Enter');await records.locator('[role="status"]').filter({hasText:'保存しました'}).waitFor();
   assert.match(await loop.innerText(),/前回ご本人が記録した内容です/);
@@ -685,7 +695,7 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
     if(url.pathname.endsWith('/goals'))return route.fulfill({json:state.goals});
     return route.fulfill({json:{...state,report:projectCoachSelfReport(makeMember('神戸'))}});
    });
-   const sp=await sc.newPage(),se=[];sp.on('pageerror',e=>se.push(e.message));await sp.goto('http://127.0.0.1:18784/coach.html');await sp.locator('[data-quick-start]').waitFor();await sp.locator('[data-full-coach]').evaluate(el=>el.open=true);await sp.locator('[data-primary-mission]').waitFor();await sp.locator('[data-record-panel] > summary').click();await sp.locator('[data-record-load]').click();await sp.locator('[data-personal-notes]').evaluate(d=>d.open=true);
+   const sp=await sc.newPage(),se=[];sp.on('pageerror',e=>se.push(e.message));await sp.goto('http://127.0.0.1:18784/coach.html');await sp.locator('[data-quick-start]').waitFor();await sp.locator('[data-full-coach]').evaluate(el=>el.open=true);await sp.locator('[data-primary-mission]').waitFor();await sp.locator('[data-record-panel]').evaluate(el=>el.open=true);await sp.locator('[data-record-load]').click();await sp.locator('[data-private-records] [role="status"]').filter({hasText:'本人限定の記録を読み込みました'}).waitFor();await sp.locator('[data-record-panel]').evaluate(el=>el.open=true);await sp.locator('[data-personal-notes]').evaluate(d=>d.open=true);
    const f=sp.locator('[data-note-form]').first();await f.locator('[name="title"]').fill('古い本人のメモ');await f.locator('[name="body"]').fill('戻してはいけない本文');await f.evaluate(f=>window.__oldPrivateForm=f);await f.locator('button[type="submit"]').click();
    if(scenario==='late-private'){while(!releasePrivate)await new Promise(r=>setTimeout(r,20));await sp.evaluate(()=>{localStorage.setItem('keso-kp-session-v1','b'.repeat(48));window.dispatchEvent(new Event('focus'));});await sp.getByRole('alert').filter({hasText:'まだ連携'}).first().waitFor();releasePrivate();await sp.waitForTimeout(100);}else await sp.getByRole('alert').filter({hasText:'もう一度ログイン'}).waitFor();
    const previousCalls=privateCalls;await sp.evaluate(()=>window.__oldPrivateForm.__save());assert.equal(privateCalls,previousCalls,'stale form cannot post under a later session');assert.equal(await sp.locator('[data-note-form]').count(),0);assert.ok(!(await sp.locator('body').textContent()).includes('戻してはいけない本文'));assert.deepEqual(se,[]);await sc.close();
@@ -698,7 +708,7 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
     if(u.pathname.endsWith('/practice/records'))return route.fulfill({json:await readPrivateRecords(privateDb,'fixture','subject','records',null)});
     if(u.pathname.endsWith('/notes'))return route.fulfill({json:{items:[],nextCursor:null}});if(u.pathname.endsWith('/goals'))return route.fulfill({json:state.goals});return route.fulfill({json:{...state,report:projectCoachSelfReport(makeMember('神戸'))}});
    });
-   const sp=await sc.newPage(),se=[];sp.on('pageerror',e=>se.push(e.message));await sp.goto('http://127.0.0.1:18784/coach.html');await sp.locator('[data-quick-start]').waitFor();await sp.locator('[data-full-coach]').evaluate(el=>el.open=true);await sp.locator('[data-primary-mission]').waitFor();await sp.locator('[data-record-panel] > summary').click();await sp.locator('[data-record-load]').click();const rp=sp.locator('[data-practice-review]').first();await rp.evaluate(d=>{for(let x=d;x;x=x.parentElement.closest('details')){if(x.tagName==='DETAILS')x.open=true;}});await rp.locator('[data-match-load]').click();await rp.locator('[data-match-form]').waitFor();await rp.locator('[name="primaryMetric"]').selectOption('dpr');await rp.locator('[data-match-form]').evaluate(f=>window.__staleMatchForm=f);await rp.locator('[data-review-load]').click();
+   const sp=await sc.newPage(),se=[];sp.on('pageerror',e=>se.push(e.message));await sp.goto('http://127.0.0.1:18784/coach.html');await sp.locator('[data-quick-start]').waitFor();await sp.locator('[data-full-coach]').evaluate(el=>el.open=true);await sp.locator('[data-primary-mission]').waitFor();await sp.locator('[data-record-panel]').evaluate(el=>el.open=true);await sp.locator('[data-record-load]').click();await sp.locator('[data-private-records] [role="status"]').filter({hasText:'本人限定の記録を読み込みました'}).waitFor();await sp.locator('[data-record-panel]').evaluate(el=>el.open=true);const rp=sp.locator('[data-practice-review]').first();await rp.evaluate(d=>{for(let x=d;x;x=x.parentElement.closest('details')){if(x.tagName==='DETAILS')x.open=true;}});await rp.locator('[data-match-load]').click();await rp.locator('[data-match-form]').waitFor();await rp.locator('[name="primaryMetric"]').selectOption('dpr');await rp.locator('[data-match-form]').evaluate(f=>window.__staleMatchForm=f);await rp.locator('[data-review-load]').click();
    if(scenario==='late-observation'){while(!releaseReview)await new Promise(r=>setTimeout(r,20));await sp.evaluate(()=>{localStorage.setItem('keso-kp-session-v1','b'.repeat(48));window.dispatchEvent(new Event('focus'));});await sp.getByRole('alert').filter({hasText:'まだ連携'}).first().waitFor();releaseReview();await sp.waitForTimeout(100);}else await sp.getByRole('alert').filter({hasText:'もう一度ログイン'}).waitFor();
    await sp.evaluate(()=>window.__staleMatchForm.__save());assert.equal(linkPosts,0,'stale match selector cannot save under another session');assert.equal(await sp.locator('[data-practice-review]').count(),0);assert.ok(!(await sp.locator('body').textContent()).includes('返してはいけない観察'));assert.deepEqual(se,[]);await sc.close();
   }

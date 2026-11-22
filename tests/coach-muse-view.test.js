@@ -149,3 +149,45 @@ test('muse modules stay free of fetch and storage access', () => {
     assert.ok(!/fetch\(|localStorage|sessionStorage/.test(source), path);
   }
 });
+
+test('home flow bar exposes the hooks the done toggles drive', () => {
+  const html = readFileSync(new URL('../coach.html', import.meta.url), 'utf8');
+  const template = html.split('<template id="coach-muse-template">')[1].split('</template>')[0];
+  for (const hook of ['data-mb-flow="pdca"', 'data-mb-step="today"', 'data-mb-step="comp"',
+    'data-mb="flowTodaySub"', 'data-mb="flowCompSub"', 'data-mb="cycleProgress"',
+    'data-mb="warmErr"', 'data-mb="studyErr"'])
+    assert.ok(template.includes(hook), hook);
+});
+
+test('done state is judged through the practice records, not held locally', () => {
+  const source = readFileSync(new URL('../coach/muse-view.js', import.meta.url), 'utf8');
+  assert.ok(source.includes('ctx.doneState'));
+  assert.ok(source.includes('ctx.onDoneChange'));
+  const records = readFileSync(new URL('../coach/records.js', import.meta.url), 'utf8');
+  for (const name of ['dailyJudgment', 'judgeDaily', 'unjudgeDaily'])
+    assert.ok(records.includes(name), name);
+  assert.ok(records.includes("save(f,'/api/kp/coach/practice/records'"));
+  const html = readFileSync(new URL('../coach.html', import.meta.url), 'utf8');
+  assert.ok(html.includes('coachRecords.judgeDaily'));
+  assert.ok(html.includes('coachRecords.unjudgeDaily'));
+  assert.ok(html.includes('coachRecords.dailyJudgment'));
+  assert.ok(!html.includes('keso-coach-muse-done-v1'));
+});
+
+test('MMR rank is limited to an explicitly listed account, never another member', () => {
+  const mmr = {accounts: [
+    {riotId: 'Other#002', tierPatched: 'Immortal 1', rankingInTier: 80},
+    {riotId: 'Main#001', tierPatched: 'Diamond 2', rankingInTier: 40},
+  ]};
+  const own = view.model({...report, mmr}, {date: '2026-11-22'});
+  assert.equal(own.rank.current, 'DIAMOND 2 · 40 RR');
+
+  const missing = view.model({...report, accounts: ['Missing#003'], mmr}, {date: '2026-11-22'});
+  assert.equal(missing.rank, null);
+
+  const noIdentity = view.model({...report, accounts: [], mmr}, {date: '2026-11-22'});
+  assert.equal(noIdentity.rank, null);
+
+  const singleSnapshot = view.model({...report, accounts: [], mmr: {accounts: [mmr.accounts[1]]}}, {date: '2026-11-22'});
+  assert.equal(singleSnapshot.rank.current, 'DIAMOND 2 · 40 RR');
+});
