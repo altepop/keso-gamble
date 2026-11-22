@@ -23,3 +23,22 @@ export async function isOwnPrediction(mapping: KpMapping, riot: string,
   if (!/^\d{15,22}$/.test(discordUserId)) return false;
   return aliases.has(await selfBetAliasDigest(riot, discordUserId));
 }
+
+/** A registered alternative Discord account is not a primary spectator.
+ * Reuse the existing exact (Riot ID + Discord ID) hashes rather than
+ * publishing aliases, partial IDs or editable display names.
+ * The mapping is decrypted server-side; neither pair identifiers nor
+ * hashed ownership evidence are sent to the browser.
+ */
+export async function isRegisteredSecondaryDiscordAccount(
+  mapping: KpMapping, discordUserId: string,
+  aliases: ReadonlySet<string> = SELF_BET_ALIAS_DIGESTS
+): Promise<boolean> {
+  if (!/^\d{15,22}$/.test(discordUserId)) return false;
+  // Primary account is authoritative even if another alias is inconsistent.
+  if (mapping.accounts.some(a => a.discordUserId === discordUserId)) return false;
+  for (const account of mapping.accounts) {
+    if (aliases.has(await selfBetAliasDigest(account.riotId, discordUserId))) return true;
+  }
+  return false;
+}
