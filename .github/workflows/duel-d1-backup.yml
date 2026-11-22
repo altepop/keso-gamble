@@ -1,7 +1,7 @@
 name: P12 duel D1 encrypted backup and isolated restore
 
 # Trigger only after production Worker deploy/smoke completes successfully.
-# The merged PR title contains #768, so unrelated main pushes do not export D1.
+# Only the original #768 or its #769 schema-fidelity repair can trigger this one-shot export; unrelated main pushes cannot.
 # Manual rerun remains possible, but never repeat automatically for other PRs.
 on:
   workflow_run:
@@ -19,7 +19,7 @@ concurrency:
 
 jobs:
   export-verify:
-    if: github.repository == 'altepop/keso-gamble' && (github.event_name == 'workflow_dispatch' && github.actor == 'altepop' || github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && contains(github.event.workflow_run.head_commit.message, '#768'))
+    if: github.repository == 'altepop/keso-gamble' && (github.event_name == 'workflow_dispatch' && github.actor == 'altepop' || github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && (contains(github.event.workflow_run.head_commit.message, '#768') || contains(github.event.workflow_run.head_commit.message, '#769')))
     runs-on: ubuntu-latest
     timeout-minutes: 16
     env:
