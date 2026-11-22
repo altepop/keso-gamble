@@ -23,11 +23,17 @@ test('missing map preset must never create fake tactic, evidence or links',()=>{
  assert.equal(r.studySourceStatus,'unconfigured');
 });
 test('map-specific preset has one warmup and one sourced study only',()=>{
- const presets={Summit:{warmup:{title:'20分の実地練習',steps:['確認','反復'],durationMinutes:20},study:{theme:'Aサイトのクロス',points:['確認した位置'],sources:[{title:'検証済み資料',url:'https://example.org/source'},{title:'unsafe',url:'javascript:alert(1)'}]}}};
+ const presets={Summit:{warmup:{title:'20分の実地練習',steps:['確認','反復'],durationMinutes:20},study:{theme:'Aサイトのクロス',points:['確認した位置'],sources:[{title:'検証済み資料',url:'https://example.org/source',verified:true},{title:'unsafe',url:'javascript:alert(1)'}]}}};
  const r=m.chooseToday({date:'2026-11-22',maps:['Summit'],presets});
  assert.equal(r.map,'Summit');
  assert.equal(r.warmup.title,'20分の実地練習');
  assert.equal(r.study.sources.length,1);
  assert.equal(r.study.sourceStatus,'verified');
  assert.equal(r.study.reason,'まだ分かりません');
+});
+
+test('an https link is not automatically evidence without explicit approval',()=>{
+ const row=m.validatePreset('Summit',{study:{theme:'設置後のクロス',sources:[{title:'未検証',url:'https://example.org/unchecked'}]}});
+ assert.equal(row.study.sourceStatus,'unconfigured');
+ assert.equal(row.study.sources.length,0);
 });
