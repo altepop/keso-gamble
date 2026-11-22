@@ -1,0 +1,36 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {buildDuelEvidence,hashDuelEvidence,captureDuelEvidence} from '../../../scripts/duel-admin-evidence.mjs';
+const now='2026-11-23T00:00:00.000Z',sha='a'.repeat(40);
+const run=(name,id,conclusion='success',head_sha=sha)=>({name,id,conclusion,head_sha,status:'completed',created_at:'2026-11-22T23:00:00.000Z'});
+const pages=run('pages build and deployment',1),worker=run('VALORANT Bot check and deploy',2),backup=run('P12 duel D1 encrypted backup and isolated restore',3);
+test('audit manifest pairs only successful matching SHA, no approval claims',()=>{
+ const value=buildDuelEvidence([pages,worker,backup],now);
+ assert.equal(value.pairedDeploymentSha,sha);assert.equal(value.entries.backup.id,3);
+ assert.equal(value.approvalOrRecoveryVerified,false);
+ assert.match(hashDuelEvidence(value),/^[a-f0-9]{64}$/);
+ assert.equal(JSON.stringify(value).includes('GITHUB_TOKEN'),false);
+});
+test('mismatch, failure and unknown outcomes never claim a matched deploy',()=>{
+ assert.equal(buildDuelEvidence([pages,{...worker,head_sha:'b'.repeat(40)}],now).pairedDeploymentSha,null);
+ assert.equal(buildDuelEvidence([pages,{...worker,conclusion:'failure'}],now).pairedDeploymentSha,null);
+ assert.equal(buildDuelEvidence([pages,{...worker,status:'in_progress'}],now).entries.worker,null);
+});
+test('only fixed metadata is emitted; ignore fields containing secrets and personal data',()=>{
+ const v=buildDuelEvidence([{...pages,actor:{login:'secret'},sql:'SELECT * FROM private',secret:'do not include'},worker],now);
+ const raw=JSON.stringify(v);
+ assert.doesNotMatch(raw,/secret|private|SELECT/);
+ assert.equal(v.entries.backup,null);
+});
+test('non-action, malformed inputs are rejected and metadata retrieval is read-only',async()=>{
+ assert.throws(()=>buildDuelEvidence({},now));
+ assert.throws(()=>buildDuelEvidence([],''),/Invalid/);
+ let seen;
+ const evidence=await captureDuelEvidence({GITHUB_REPOSITORY:'altepop/keso-gamble',GITHUB_TOKEN:'fake'},
+  async(url,opts)=>{seen={url,opts};return {ok:true,json:async()=>({workflow_runs:[pages,worker]})};},
+  new Date(now));
+ assert.equal(evidence.pairedDeploymentSha,sha);
+ assert.equal(seen.opts.method,undefined);
+ assert.match(seen.url,/\/actions\/runs\?per_page=100$/);
+ await assert.rejects(captureDuelEvidence({GITHUB_REPOSITORY:'bad',GITHUB_TOKEN:'fake'}),/repository/);
+});
