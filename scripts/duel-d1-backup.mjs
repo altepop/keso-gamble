@@ -91,11 +91,17 @@ export async function productionBackup(output,env=process.env,request=fetch){
  const {key,source}=safeSecret(env),{tables,schemaObjects}=await loadProductionDuelCatalog(env,request);
  const work=mkdtempSync(join(tmpdir(),'keso-duel-backup-'));
  try{
-  const file=join(work,'duel-export.sql');
+  const file=join(work,'duel-export.sql'),config=join(work,'wrangler.jsonc');
+  // This private, throwaway D1 binding only identifies the source DB.
+  // No Worker is deployed and no D1 migrations are run.
+  writeFileSync(config,JSON.stringify({name:'duel-backup-readonly',
+   d1_databases:[{binding:'DB',database_name:'keso-play',database_id:D1_PRODUCTION_ID}]}),{mode:0o600});
   // Flags are explicit: production is an export *source*, never an import target.
-  // Never log raw Wrangler output, SQL, sensitive rows, tokens or private hands.
-  execFileSync('npx',['--no-install','wrangler','d1','export',D1_PRODUCTION_ID,'--remote',
-   ...tables.flatMap(name=>['--table',name]),'--output',file],{
+  // Wrangler's confirmation MUST be explicit in non-interactive CI; without it,
+  // export can silently cancel without generating the file.
+  // Never log raw Wrangler output, signed download URLs, SQL or private hands.
+  execFileSync('npx',['--no-install','wrangler','d1','export','DB','--config',config,
+   '--remote','--skip-confirmation',...tables.flatMap(name=>['--table',name]),'--output',file],{
    cwd:resolve('services/valorant-results'),timeout:240000,
    encoding:'utf8',stdio:['ignore','pipe','pipe'],maxBuffer:1024*1024,env:{...env,WRANGLER_SEND_METRICS:'false'}
   });
