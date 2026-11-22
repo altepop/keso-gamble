@@ -48,11 +48,17 @@ export function duelPvePanel({live=false,busy=false,preview=null,match=null,erro
  (!rewards?'<p role="status">取得中…</p>':(['pve','pvp'].map(mode=>'<h4>'+(mode==='pve'?'CPU攻略':'対人戦')+'</h4><ul>'+
  Object.entries(names).map(([id,label])=>{const row=(rewards.skills??[]).find(x=>x.mode===mode&&x.game===id);const earned=(rewards.collection??[]).some(x=>x.mode===mode&&x.game===id);return '<li>'+safe(label)+'：'+safe(row?.wins??0)+'勝 '+safe(row?.losses??0)+'敗 '+safe(row?.draws??0)+'分 ／ '+(earned?'獲得済み':'未獲得')+'</li>';}).join('')+'</ul>').join('')))+'</div></section>':'');
 }
-export function duelOperationsPanel({available=false,busy=false,report=null,error='',auto=false,season=null}={}){
+export function duelOperationsPanel({available=false,busy=false,report=null,error='',auto=false,season=null,archives=null}={}){
  if(!available)return '';
  const counts=report?.counts;
- return '<details class="panel" id="duel-operations-panel" '+(counts||error||auto||season?'open':'')+'><summary>🛡️ 決闘の運営監査（所有者限定）</summary><div class="card-body"><p class="helper">読み取り専用。自動削除・KP補正・個人情報の公開は行わない。</p><button class="action-btn" data-duel-operations-read="1" '+(busy?'disabled':'')+'>最新の監査結果を取得</button><button type="button" class="action-btn" data-duel-operations-auto="1" aria-pressed="'+Boolean(auto)+'">'+(auto?'15分ごとの画面監視を停止':'この画面を開いている間、15分ごとに監査')+'</button><p class="helper">画面を閉じた間やアプリ終了後は実行されません。常時監視・通知サービスではありません。</p>'+
+ return '<details class="panel" id="duel-operations-panel" '+(counts||error||auto||season||archives?'open':'')+'><summary>🛡️ 決闘の運営監査（所有者限定）</summary><div class="card-body"><p class="helper">読み取り専用。自動削除・KP補正・個人情報の公開は行わない。</p><button class="action-btn" data-duel-operations-read="1" '+(busy?'disabled':'')+'>最新の監査結果を取得</button><button type="button" class="action-btn" data-duel-operations-auto="1" aria-pressed="'+Boolean(auto)+'">'+(auto?'15分ごとの画面監視を停止':'この画面を開いている間、15分ごとに監査')+'</button><p class="helper">画面を閉じた間やアプリ終了後は実行されません。常時監視・通知サービスではありません。</p>'+
  '<button type="button" class="action-btn" data-duel-season-read="1" '+(busy?'disabled':'')+'>週間シーズン順位とイベントを見る</button>'+
+ '<button type="button" class="action-btn" data-duel-season-archive="1" '+(busy?'disabled':'')+'>確定済みシーズン記録を表示</button>'+
+ (archives?'<section class="panel" aria-label="確定済みシーズンの履歴"><div class="card-body"><h3>保存されたシーズン順位</h3>'+
+ '<p class="helper">週次確定後に保存した成績。KP支給なし。対戦全履歴の復元用バックアップではありません。</p>'+
+ ((archives.seasons??[]).map(s=>'<details><summary>'+safe(s.id)+'（'+safe(s.sampledMatches)+'試合）</summary>'+
+ '<ol>'+((s.rankings??[]).slice(0,20).map(r=>'<li>登録ID '+safe(r.user)+'：'+safe(r.wins)+'勝 '+safe(r.losses)+'敗 '+safe(r.draws)+'分</li>').join('')||'<li>該当試合なし</li>')+'</ol></details>').join('')||'<p>確定済みシーズンの保存記録はまだありません。次の週次確定後に反映されます。</p>')+'</div></section>':'')+
+
  (season?'<div role="region" aria-label="週間決闘シーズン" class="panel"><div class="card-body">'+
  '<h3>週次シーズン '+safe(season.season?.id)+'</h3><p class="helper">'+safe(season.event?.title)+' ／ 追加KPなし</p>'+
  '<p class="helper">実データから集計した所有者限定の暫定順位。試合履歴の保存期間と取得上限により、全期間の確定順位ではない。</p>'+
