@@ -12,7 +12,7 @@ import {stockStoryChoices,validateCustomStory} from './stock-stories.js?v=web-a4
 import {wheelView,covered,redNumbers,outcomeAngle} from './roulette-view.js?v=web-a40bae8b648758f3';
 import {makeEscalationWheel} from './escalation-roulette.js?v=web-a40bae8b648758f3';
 import {connectDiscordActivity,isDiscordActivity,openSteamLogin,openCompanionGame}from './discord-activity-auth.js?v=web-a40bae8b648758f3';
-import { createKpClient } from './kp-client.js?v=web-a40bae8b648758f3';
+import { createKpClient } from './kp-client.js?v=duel-p11-p12-20261122';
 import { fullRefreshInterval, communityRefreshEnabled, COMMUNITY_REFRESH_INTERVAL } from './live-refresh-policy.js?v=web-a40bae8b648758f3';
 import { fmt, fmt0 } from './format.js?v=web-a40bae8b648758f3';
 import { submitClaim, approveClaim, issueDirective, completeDirective } from './progression.js?v=web-a40bae8b648758f3';
@@ -27,7 +27,7 @@ import { createStore } from './store.js?v=web-a40bae8b648758f3';
 import { healthPanel } from './health-view.js?v=web-a40bae8b648758f3';
 import { trendPanel } from './trend-view.js?v=web-a40bae8b648758f3';
 import { mleagueScreen, mleaguePreview } from './mleague-view.js?v=web-a40bae8b648758f3';
-import {duelScreen} from './duel-view.js?v=web-a40bae8b648758f3';
+import {duelScreen} from './duel-view.js?v=duel-p11-p12-20261122';
 import { gamePicker, chinchiroView, blackjackView } from './casino-view.js?v=web-a40bae8b648758f3';
 import {casinoFrames,createRelicRevealGate} from './casino-animation.js?v=web-a40bae8b648758f3';
 import { playChinchiro, bjStart, bjHit, bjStand, bjDouble, cryptoDie, cryptoCard, cryptoInt } from './casino.js?v=web-a40bae8b648758f3';
@@ -807,8 +807,8 @@ addEventListener('click',async e=>{
   const t=e.target.closest?.('button,[data-open]'); if(!t) return;
   if(t.dataset.duelPvePreview||t.dataset.duelPveStart||t.dataset.duelPveResume||t.dataset.duelPveCell!==undefined||t.dataset.duelPveMove||t.dataset.duelPveRetry){
    if(!live||!wallet.connected||duelPveUi.busy)return;
-   const kind=t.dataset.duelPvePreview?'preview':t.dataset.duelPveStart?'start':t.dataset.duelPveResume?'resume':'move';
-   duelPveUi.busy=true;duelPveUi.error='';duelPveUi.message='';render();
+   const kind=t.dataset.duelPveRetry?(duelPveUi.pending?.kind??'move'):t.dataset.duelPvePreview?'preview':t.dataset.duelPveStart?'start':t.dataset.duelPveResume?'resume':'move';
+   duelPveUi.busy=true;duelPveUi.error='';duelPveUi.message='';
    try{
     if(kind==='preview'){
      const result=await wallet.duelPvePreview();duelPveUi.preview=result.challenge;
