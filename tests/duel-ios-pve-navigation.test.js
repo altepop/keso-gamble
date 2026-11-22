@@ -14,7 +14,8 @@ test('in-place full PvE selector and rewards preserve server-only win/reward fie
  const rendered=duelPvePanel({live:true,open:true,game:'othello',level:'normal',rewardsOpen:true,rewards:{
   collection:[{mode:'pve',game:'othello'}],skills:[{mode:'pve',game:'othello',wins:3,losses:1,draws:0}]
  }});
- assert.match(rendered,/id="duel-pve-section" open/);
+ assert.match(rendered,/id="duel-pve-section"/);
+ assert.match(rendered,/CPU攻略アリーナ/);
  assert.match(rendered,/data-duel-pve-custom-start/);
  assert.match(rendered,/id="duel-rewards-in-app"/);
  assert.match(rendered,/3勝 1敗 0分/);

@@ -1,42 +1,42 @@
-import {trioPlayTurn} from './duel-trio.js?v=web-a8ec6c94dd6a41bc';
-import {festivalRace,FESTIVAL_PRICE,festivalFactor} from './racing.js?v=web-a8ec6c94dd6a41bc';
-import {stockOrderQuote,STOCK_ORDER_VERSION,STOCK_PRICE_SCALE} from './stock-order.js?v=web-a8ec6c94dd6a41bc';
-import {VDK_CRASH_START,VDK_IPO_AT,stockIsListed,stockTradeRestriction} from './vdk-bankruptcy.js?v=web-a8ec6c94dd6a41bc';
-import {steamConnectionMessage} from './steam-view.js?v=web-a8ec6c94dd6a41bc';
-import {relicsPanel} from './relics-view.js?v=web-a8ec6c94dd6a41bc';
-import {primeRelicAudio,playRelicSound,previewRelicSound,stopRelicSound,setRelicSoundVolume,toggleRelicSound} from './relics-audio.js?v=web-a8ec6c94dd6a41bc';
-import {relicDefaultView} from './relics-v4.js?v=web-a8ec6c94dd6a41bc';
-import {privateCasinoPanel} from './private-casino-view.js?v=web-a8ec6c94dd6a41bc';
-import {communityPanel,communityRows} from './community-feed.js?v=web-a8ec6c94dd6a41bc';
-import {stockPanel,stockCandles,stockPrice,privateStockOperator} from './stock-view.js?v=web-a8ec6c94dd6a41bc';
-import {stockStoryChoices,validateCustomStory} from './stock-stories.js?v=web-a8ec6c94dd6a41bc';
-import {wheelView,covered,redNumbers,outcomeAngle} from './roulette-view.js?v=web-a8ec6c94dd6a41bc';
-import {makeEscalationWheel} from './escalation-roulette.js?v=web-a8ec6c94dd6a41bc';
-import {connectDiscordActivity,isDiscordActivity,openSteamLogin,openCompanionGame}from './discord-activity-auth.js?v=web-a8ec6c94dd6a41bc';
-import { createKpClient } from './kp-client.js?v=web-a8ec6c94dd6a41bc';
-import { fullRefreshInterval, communityRefreshEnabled, COMMUNITY_REFRESH_INTERVAL } from './live-refresh-policy.js?v=web-a8ec6c94dd6a41bc';
-import { fmt, fmt0 } from './format.js?v=web-a8ec6c94dd6a41bc';
-import { submitClaim, approveClaim, issueDirective, completeDirective } from './progression.js?v=web-a8ec6c94dd6a41bc';
-import { titleView, homeView, playView, directivesView, escapeHTML } from './progression-views.js?v=web-a8ec6c94dd6a41bc';
-import { genCandles, movingAverage, svgCandles } from './charts.js?v=web-a8ec6c94dd6a41bc';
-import { MARKET, createInitialState, portfolioValue, assets, advanceMarket, trade, spin, spinNumbers, validateNumberBets, grantDemoSalary, cryptoRouletteNumber } from './engine.js?v=web-a8ec6c94dd6a41bc';
-import { KEY, LEGACY_KEY } from './storage.js?v=web-a8ec6c94dd6a41bc';
-import { PUBLIC_SALT, RUN_MS, WEEKLY_LIMIT, openRaceStart, latestRaceStart, raceCard, raceOdds, raceResult, raceTimeline, raceCommentary, raceRuns, placeRaceBet, settleRaceBets, weeklySpent } from './racing.js?v=web-a8ec6c94dd6a41bc';
-import { LUXURY } from './luxury.js?v=web-a8ec6c94dd6a41bc';
-import { raceScreen, racePreview, drawRace, raceElapsed, ownerPanel, luxuryPanel, roastPanel } from './racing-view.js?v=web-a8ec6c94dd6a41bc';
-import { createStore } from './store.js?v=web-a8ec6c94dd6a41bc';
-import { healthPanel } from './health-view.js?v=web-a8ec6c94dd6a41bc';
-import { trendPanel } from './trend-view.js?v=web-a8ec6c94dd6a41bc';
-import { mleagueScreen, mleaguePreview } from './mleague-view.js?v=web-a8ec6c94dd6a41bc';
-import {duelScreen} from './duel-view.js?v=web-a8ec6c94dd6a41bc';
-import { gamePicker, chinchiroView, blackjackView } from './casino-view.js?v=web-a8ec6c94dd6a41bc';
-import {casinoFrames,createRelicRevealGate} from './casino-animation.js?v=web-a8ec6c94dd6a41bc';
-import { playChinchiro, bjStart, bjHit, bjStand, bjDouble, cryptoDie, cryptoCard, cryptoInt } from './casino.js?v=web-a8ec6c94dd6a41bc';
-import { showBigWin } from './bigwin.js?v=web-a8ec6c94dd6a41bc';
-import { audioMixEnabled, audioMixSupported, setAudioMix } from './audio-mix.js?v=web-a8ec6c94dd6a41bc';
-import { sfxEnabled, toggleSfx, unlockSfx, preloadSfx, play as playSfx, playResult, announce, sfxVolume, setSfxVolume, bgmEnabled, setBgmScene, toggleBgm, BGM_TRACKS } from './sfx.js?v=web-a8ec6c94dd6a41bc';
-import { minesStart, minesPick, minesCashout, playSlot, slotWinTier, vpDeal, vpDraw, playBaccarat, VP_NAMES } from './casino-more.js?v=web-a8ec6c94dd6a41bc';
-import { minesView, slotView, videoPokerView, baccaratView } from './casino-more-view.js?v=web-a8ec6c94dd6a41bc';
+import {trioPlayTurn} from './duel-trio.js?v=web-36f7cab916fd56a2';
+import {festivalRace,FESTIVAL_PRICE,festivalFactor} from './racing.js?v=web-36f7cab916fd56a2';
+import {stockOrderQuote,STOCK_ORDER_VERSION,STOCK_PRICE_SCALE} from './stock-order.js?v=web-36f7cab916fd56a2';
+import {VDK_CRASH_START,VDK_IPO_AT,stockIsListed,stockTradeRestriction} from './vdk-bankruptcy.js?v=web-36f7cab916fd56a2';
+import {steamConnectionMessage} from './steam-view.js?v=web-36f7cab916fd56a2';
+import {relicsPanel} from './relics-view.js?v=web-36f7cab916fd56a2';
+import {primeRelicAudio,playRelicSound,previewRelicSound,stopRelicSound,setRelicSoundVolume,toggleRelicSound} from './relics-audio.js?v=web-36f7cab916fd56a2';
+import {relicDefaultView} from './relics-v4.js?v=web-36f7cab916fd56a2';
+import {privateCasinoPanel} from './private-casino-view.js?v=web-36f7cab916fd56a2';
+import {communityPanel,communityRows} from './community-feed.js?v=web-36f7cab916fd56a2';
+import {stockPanel,stockCandles,stockPrice,privateStockOperator} from './stock-view.js?v=web-36f7cab916fd56a2';
+import {stockStoryChoices,validateCustomStory} from './stock-stories.js?v=web-36f7cab916fd56a2';
+import {wheelView,covered,redNumbers,outcomeAngle} from './roulette-view.js?v=web-36f7cab916fd56a2';
+import {makeEscalationWheel} from './escalation-roulette.js?v=web-36f7cab916fd56a2';
+import {connectDiscordActivity,isDiscordActivity,openSteamLogin,openCompanionGame}from './discord-activity-auth.js?v=web-36f7cab916fd56a2';
+import { createKpClient } from './kp-client.js?v=web-36f7cab916fd56a2';
+import { fullRefreshInterval, communityRefreshEnabled, COMMUNITY_REFRESH_INTERVAL } from './live-refresh-policy.js?v=web-36f7cab916fd56a2';
+import { fmt, fmt0 } from './format.js?v=web-36f7cab916fd56a2';
+import { submitClaim, approveClaim, issueDirective, completeDirective } from './progression.js?v=web-36f7cab916fd56a2';
+import { titleView, homeView, playView, directivesView, escapeHTML } from './progression-views.js?v=web-36f7cab916fd56a2';
+import { genCandles, movingAverage, svgCandles } from './charts.js?v=web-36f7cab916fd56a2';
+import { MARKET, createInitialState, portfolioValue, assets, advanceMarket, trade, spin, spinNumbers, validateNumberBets, grantDemoSalary, cryptoRouletteNumber } from './engine.js?v=web-36f7cab916fd56a2';
+import { KEY, LEGACY_KEY } from './storage.js?v=web-36f7cab916fd56a2';
+import { PUBLIC_SALT, RUN_MS, WEEKLY_LIMIT, openRaceStart, latestRaceStart, raceCard, raceOdds, raceResult, raceTimeline, raceCommentary, raceRuns, placeRaceBet, settleRaceBets, weeklySpent } from './racing.js?v=web-36f7cab916fd56a2';
+import { LUXURY } from './luxury.js?v=web-36f7cab916fd56a2';
+import { raceScreen, racePreview, drawRace, raceElapsed, ownerPanel, luxuryPanel, roastPanel } from './racing-view.js?v=web-36f7cab916fd56a2';
+import { createStore } from './store.js?v=web-36f7cab916fd56a2';
+import { healthPanel } from './health-view.js?v=web-36f7cab916fd56a2';
+import { trendPanel } from './trend-view.js?v=web-36f7cab916fd56a2';
+import { mleagueScreen, mleaguePreview } from './mleague-view.js?v=web-36f7cab916fd56a2';
+import {duelScreen} from './duel-view.js?v=web-36f7cab916fd56a2';
+import { gamePicker, chinchiroView, blackjackView } from './casino-view.js?v=web-36f7cab916fd56a2';
+import {casinoFrames,createRelicRevealGate} from './casino-animation.js?v=web-36f7cab916fd56a2';
+import { playChinchiro, bjStart, bjHit, bjStand, bjDouble, cryptoDie, cryptoCard, cryptoInt } from './casino.js?v=web-36f7cab916fd56a2';
+import { showBigWin } from './bigwin.js?v=web-36f7cab916fd56a2';
+import { audioMixEnabled, audioMixSupported, setAudioMix } from './audio-mix.js?v=web-36f7cab916fd56a2';
+import { sfxEnabled, toggleSfx, unlockSfx, preloadSfx, play as playSfx, playResult, announce, sfxVolume, setSfxVolume, bgmEnabled, setBgmScene, toggleBgm, BGM_TRACKS } from './sfx.js?v=web-36f7cab916fd56a2';
+import { minesStart, minesPick, minesCashout, playSlot, slotWinTier, vpDeal, vpDraw, playBaccarat, VP_NAMES } from './casino-more.js?v=web-36f7cab916fd56a2';
+import { minesView, slotView, videoPokerView, baccaratView } from './casino-more-view.js?v=web-36f7cab916fd56a2';
 const $=(s,el=document)=>el.querySelector(s);
 const wallet=createKpClient();
 const embedded=isDiscordActivity();
@@ -857,6 +857,27 @@ addEventListener('click',async e=>{
   const t=e.target.closest?.('button,[data-open]'); if(!t) return;
   // Navigating to a second Activity HTML page repeats Discord SDK ready() and can
   // strand the iPhone iframe. Keep the existing authenticated context alive.
+  if(screen==='duels'&&t.dataset.duelSport!==undefined){
+   e.preventDefault();
+   const game=t.dataset.duelSport;
+   if(!['trio','othello','gomoku','connect4','hitblow','bluffdice','poker'].includes(game))return;
+   if(t.dataset.duelSportMode==='pve'&&duelEntryMode==='pve'){
+    duelPveUi.game=game;duelPveUi.open=true;
+   }else if(t.dataset.duelSportMode==='pvp'&&duelEntryMode==='pvp'){
+    duelGame=game;
+   }else return;
+   render();
+   return;
+  }
+  if(screen==='duels'&&t.dataset.duelPracticeGame!==undefined&&duelEntryMode==='practice'){
+   e.preventDefault();
+   const game=t.dataset.duelPracticeGame;
+   if(!['othello','gomoku','connect4','hitblow','bluffdice','poker'].includes(game))return;
+   // The free practice runs in its existing isolated demo. It never sends KP or skill writes.
+   const url='./duel-demo.html?cpu=1&game='+encodeURIComponent(game);
+   window.location.href=url;
+   return;
+  }
   if(screen==='duels'&&t.dataset.duelEntry!==undefined){
    e.preventDefault();
    if(!['pve','pvp','practice'].includes(t.dataset.duelEntry))return;

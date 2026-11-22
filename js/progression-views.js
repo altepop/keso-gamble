@@ -1,8 +1,8 @@
-import {escalationRankPanel} from './escalation-rank-view.js?v=web-a8ec6c94dd6a41bc';
-import {hoyoPanel} from './hoyo-view.js?v=web-a8ec6c94dd6a41bc';
-import {steamPanel} from './steam-view.js?v=web-a8ec6c94dd6a41bc';
-import {stockPrice} from './stock-view.js?v=web-a8ec6c94dd6a41bc';
-import { ACTIVITIES, MEMBERS, ORDERS } from './progression.js?v=web-a8ec6c94dd6a41bc';
+import {escalationRankPanel} from './escalation-rank-view.js?v=web-36f7cab916fd56a2';
+import {hoyoPanel} from './hoyo-view.js?v=web-36f7cab916fd56a2';
+import {steamPanel} from './steam-view.js?v=web-36f7cab916fd56a2';
+import {stockPrice} from './stock-view.js?v=web-36f7cab916fd56a2';
+import { ACTIVITIES, MEMBERS, ORDERS } from './progression.js?v=web-36f7cab916fd56a2';
 export const escapeHTML=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const kp=n=>n.toLocaleString('ja-JP')+' KP';
 // A history amount with its own sign: +900 KP / −200 KP / ±0 KP.

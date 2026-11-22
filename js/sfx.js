@@ -8,7 +8,7 @@
  * (see scripts/audio/README.md), fetched only after 効果音 is turned on; until they arrive, or if they cannot load,
  * the synthesized versions below play instead.
  */
-import {relicSoundVolume} from './relics-audio.js?v=web-a8ec6c94dd6a41bc';
+import {relicSoundVolume} from './relics-audio.js?v=web-36f7cab916fd56a2';
 
 const KEY='keso.sfx.v1';
 // Content-hashed names, so a changed sound never comes from a stale cache.
