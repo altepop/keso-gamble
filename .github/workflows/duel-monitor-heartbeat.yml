@@ -4,12 +4,16 @@ on:
     paths:
       - '.github/workflows/duel-monitor-heartbeat.yml'
       - 'scripts/duel-monitor-heartbeat.mjs'
+      - 'scripts/duel-monitor-heartbeat-alert.mjs'
+      - 'services/valorant-results/test/duel-monitor-heartbeat-alert.test.mjs'
       - 'services/valorant-results/test/duel-monitor-heartbeat.test.mjs'
   push:
     branches: [main]
     paths:
       - '.github/workflows/duel-monitor-heartbeat.yml'
       - 'scripts/duel-monitor-heartbeat.mjs'
+      - 'scripts/duel-monitor-heartbeat-alert.mjs'
+      - 'services/valorant-results/test/duel-monitor-heartbeat-alert.test.mjs'
       - 'services/valorant-results/test/duel-monitor-heartbeat.test.mjs'
   workflow_dispatch:
   schedule:
@@ -17,6 +21,7 @@ on:
 permissions:
   contents: read
   actions: read
+  issues: write
 concurrency:
   group: duel-monitor-heartbeat
   cancel-in-progress: false
@@ -31,9 +36,16 @@ jobs:
         with:
           node-version: '24'
       - name: Validate heartbeat states without production access
-        run: node --test services/valorant-results/test/duel-monitor-heartbeat.test.mjs
+        run: node --test services/valorant-results/test/duel-monitor-heartbeat.test.mjs services/valorant-results/test/duel-monitor-heartbeat-alert.test.mjs
       - name: Verify hourly monitor scheduled-run heartbeat
         if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.actor == 'altepop')
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          DUEL_HEARTBEAT_REPORT: ${{ runner.temp }}/duel-heartbeat-report.json
         run: node scripts/duel-monitor-heartbeat.mjs
+      - name: Open at most one GitHub Issue for confirmed heartbeat outage
+        if: failure() && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.actor == 'altepop'))
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          DUEL_HEARTBEAT_REPORT: ${{ runner.temp }}/duel-heartbeat-report.json
+        run: node scripts/duel-monitor-heartbeat-alert.mjs
