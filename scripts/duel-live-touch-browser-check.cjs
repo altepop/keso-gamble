@@ -38,7 +38,11 @@ let browser;
    assert.equal(data.level,'normal');
    response={match:{id:'22222222-3333-4333-8444-555555555555',game:'othello',level:'normal',board:initialDuelBoard('othello'),version:0,turn:'human',winner:null,humanMoves:0,cpuMoves:0,ownHand:null}};
   }
-  else if(p.endsWith('/duels/season/event'))response={event:{id:'2026-11-23',title:'週間ピックアップ：オセロ',game:'othello',kind:'weekly-focus',extraKp:0}};
+  else if(p.endsWith('/duels/history')){
+    assert.equal(route.request().headers().authorization,'Bearer '+'a'.repeat(48));
+    response={skills:[{mode:'pve',game:'othello',points:14,verified_games:4,wins:3},{mode:'pvp',game:'gomoku',points:7,verified_games:2,wins:1}],today:{game:'othello',level:'strong',started:1,finished:1,wins:1},history:[],sessions:[]};
+   }
+   else if(p.endsWith('/duels/season/event'))response={event:{id:'2026-11-23',title:'週間ピックアップ：オセロ',game:'othello',kind:'weekly-focus',extraKp:0}};
   else if(p.endsWith('/duels/events')){
    assert.equal(route.request().headers().authorization,'Bearer '+'a'.repeat(48));
    if(!liveHints)return route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:'SSE unavailable'})});
@@ -63,7 +67,9 @@ let browser;
  await page.locator('.title-start').click();
  await page.locator('.nav-btn[data-screen=race]').click();
  await page.locator('.sub-tab[data-screen=duels]').click();
- await page.locator('[data-duel-board-scroll]').waitFor();
+ assert.equal(await page.locator('#duel-entry-home [data-duel-entry]').count(),3,'entry has exactly three modes');
+  await page.locator('[data-duel-entry="pvp"]').click();
+  await page.locator('[data-duel-board-scroll]').waitFor();
  assert.equal(await page.locator('.screen').getAttribute('data-view'),'duels');
  assert.equal(await page.locator('.community-feed').count(),0,'no global feed above the board');
  assert.equal(await page.locator('.duel-current').count(),1);
@@ -73,21 +79,22 @@ let browser;
  // this same document, preserving the authenticated wallet and Play categories.
  assert.equal(await page.locator('.sub-tabs .sub-tab').count(),5,'all five Play categories stay visible on duel');
  assert.equal(await page.locator('.sub-tab[data-screen=duels]').getAttribute('class').then(x=>x.includes('active')),true);
- await page.locator('[data-duel-pve-link]').waitFor();
  const urlBefore=page.url();
- assert.equal(await page.locator('[data-duel-pve-link]').evaluate(el=>el.tagName),'BUTTON','PvE must be an in-place button');
- await page.locator('[data-duel-pve-link]').click();
- assert.equal(page.url(),urlBefore,'PvE cannot trigger a second Discord SDK handshake');
- await page.waitForFunction(()=>document.getElementById('duel-pve-section')?.open===true,null,{timeout:7000});
+  await page.locator('[data-duel-entry-back]').click();
+  await page.locator('[data-duel-entry="pve"]').click();
+  assert.equal(page.url(),urlBefore,'PvE stays in authenticated Activity');
+  await page.waitForFunction(()=>document.getElementById('duel-pve-section')?.open===true,null,{timeout:7000});
  await page.locator('[data-duel-pve-custom-start]').click();
  await page.locator('#duel-pve-section').getByText('サーバーでCPU戦を開始しました。').waitFor();
  assert.equal(page.url(),urlBefore,'server PvE move stays in the authenticated Activity');
- await page.locator('[data-duel-pve-rewards]').click();
+ await page.locator('details.duel-secondary summary').click();
+  await page.locator('[data-duel-pve-rewards]').click();
  await page.locator('#duel-rewards-in-app').getByText('3勝 1敗 0分').waitFor();
  assert.equal(page.url(),urlBefore,'rewards must not navigate to standalone auth page');
  await page.locator('.sub-tab[data-screen=market]').click();
  await page.locator('.sub-tab[data-screen=duels]').click();
- await page.locator('[data-duel-pve-link]').waitFor();
+ await page.locator('[data-duel-entry="pvp"]').click();
+  await page.locator('[data-duel-board-scroll]').waitFor();
  assert.equal(page.url(),urlBefore,'return via Play categories must preserve the Activity');
 
  const viewport=page.locator('[data-duel-board-scroll]');

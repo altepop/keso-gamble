@@ -4,10 +4,11 @@ import {duelScreen} from '../js/duel-view.js';
 import {duelPvePanel} from '../js/duel-phase11-12-view.js';
 test('duel renders all five Play categories passed by parent, independent of pending invitations',()=>{
  const tabs='<nav class="sub-tabs">'+['race','mleague','casino','duels','market'].map(id=>'<button class="sub-tab" data-screen="'+id+'">'+id+'</button>').join('')+'</nav>';
- const html=duelScreen({info:{matches:[],members:[]},user:'633269291831132161',cash:196671,live:true,tabs,nav:'<footer>bottom navigation</footer>'});
+ const html=duelScreen({info:{matches:[],members:[]},user:'633269291831132161',cash:196671,live:true,tabs,mode:'home',nav:'<footer>bottom navigation</footer>'});
  for(const id of ['race','mleague','casino','duels','market'])assert.match(html,new RegExp('data-screen="'+id+'"'));
  assert.ok(html.indexOf('class="sub-tabs"')>html.indexOf('⚔️ 決闘'));
- assert.ok(html.indexOf('class="sub-tabs"')<html.indexOf('duel-practice-entry'));
+ assert.ok(html.indexOf('class="sub-tabs"')<html.indexOf('duel-entry-home'));
+ assert.deepEqual([...html.matchAll(/data-duel-entry="([^"]+)"/g)].map(x=>x[1]),['pve','pvp','practice']);
 });
 test('in-place full PvE selector and rewards preserve server-only win/reward fields',()=>{
  const rendered=duelPvePanel({live:true,open:true,game:'othello',level:'normal',rewardsOpen:true,rewards:{
