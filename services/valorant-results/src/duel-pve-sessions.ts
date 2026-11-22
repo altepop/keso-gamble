@@ -5,6 +5,7 @@
 import type {KpEnv,KpMapping} from './kp.ts';
 import {startServerPve,advanceServerPve,pvePublicSnapshot,type TrustedPveState} from './duel-pve-engine.ts';
 import {ensureVerifiedPveProgression} from './duel-pve-progression.ts';
+import {duelDailyChallenge} from './duel-daily-challenge.ts';
 
 export const DUEL_PVE_SESSION_DDL=[
  `CREATE TABLE IF NOT EXISTS kp_duel_pve_sessions(
@@ -89,10 +90,12 @@ export async function serverPveOperation(env:KpEnv,guild:string,user:string,body
   if(!row)throw Error('CPU戦が見つかりません。');
   return publicMatch(row);
  }
- if(action==='start'){
+ if(action==='daily-preview')return {challenge:duelDailyChallenge(Date.now())};
+ if(action==='start'||action==='daily'){
   const requestId=String(body.requestId??'');
   if(!uuid.test(requestId))throw Error('操作IDが不正です。');
-  const game=String(body.game??''),level=String(body.level??'normal');
+  const challenge=action==='daily'?duelDailyChallenge(Date.now()):null;
+  const game=challenge?.game??String(body.game??''),level=challenge?.level??String(body.level??'normal');
   const existing=await env.DB.prepare('SELECT id,game,difficulty FROM kp_duel_pve_sessions WHERE guild=? AND user=? AND request_id=?')
    .bind(guild,user,requestId).first<{id:string;game:string;difficulty:string}>();
   if(existing){
