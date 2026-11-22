@@ -1,8 +1,8 @@
-import {relicSoundEnabled,relicSoundVolume,RELIC_SOUND_DESIGNS} from './relics-audio.js?v=web-0170471bc290a67b';
-import {relicBuildSection,relicPresetsSection,relicSummonHistorySection,relicSpecialSection,relicEffectLogSection,relicEconomySection} from './relics-v7.js?v=web-0170471bc290a67b';
-import {relicInventory,relicFilterControls,relicItemCard,relicInventoryPages,relicRevealPanel,relicBonusDashboard} from './relics-v4.js?v=web-0170471bc290a67b';
-import {relicExchangeSection} from './relic-exchange-view.js?v=web-0170471bc290a67b';
-import {relicMarketSection} from './relic-market-view.js?v=web-0170471bc290a67b';
+import {relicSoundEnabled,relicSoundVolume,RELIC_SOUND_DESIGNS} from './relics-audio.js?v=web-b153c5b0f8d5629f';
+import {relicBuildSection,relicPresetsSection,relicSummonHistorySection,relicSpecialSection,relicEffectLogSection,relicEconomySection} from './relics-v7.js?v=web-b153c5b0f8d5629f';
+import {relicInventory,relicFilterControls,relicItemCard,relicInventoryPages,relicRevealPanel,relicBonusDashboard} from './relics-v4.js?v=web-b153c5b0f8d5629f';
+import {relicExchangeSection} from './relic-exchange-view.js?v=web-b153c5b0f8d5629f';
+import {relicMarketSection} from './relic-market-view.js?v=web-b153c5b0f8d5629f';
 // Three independent origins: common summons, Steam achievements, and Unite results.
 // Never recommend cross-game combinations or require another game's relic for an upgrade.
 const esc=s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
