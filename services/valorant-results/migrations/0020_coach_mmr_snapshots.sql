@@ -1,6 +1,6 @@
 -- Coach MMR snapshots (HenrikDev v2 MMR: current tier / RR / last change /
--- peak). Refreshed lazily by the coach report and by the monitor after new
--- competitive results; the table is also created inline by coach-mmr.ts.
+-- peak). Refreshed lazily by the coach report when the stored snapshot is
+-- stale; the table is also created inline by coach-mmr.ts.
 -- Separate additive migration; intentionally not wired into production migration automation.
 CREATE TABLE IF NOT EXISTS valorant_mmr_snapshots(
  puuid TEXT PRIMARY KEY,

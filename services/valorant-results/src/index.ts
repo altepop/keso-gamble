@@ -1,5 +1,4 @@
 import {syncCoachProfiles} from './coach-identity.ts';
-import {ensureCoachMmr} from './coach-mmr.ts';
 import {provisionConfirmedCoachRosterConsents} from './coach-team-default-consents.ts';
 import {runCoachPositionArchiveSlot} from './coach-position-backfill.ts';
 import {captureCompetitivePositions} from './coach-position-storage.ts';
@@ -320,15 +319,6 @@ async function saveMatch(env: Env, match: Match, player: Player, account: Accoun
     // never block notices or KP, and duplicates never incur extra writes.
     try { await recordCompetitiveRoster(env.DB,match); } catch { console.warn('match_roster_save_pending'); }
     try { await recordCompetitiveRoundEvents(env.DB,match); } catch { console.warn('round_event_save_pending'); }
-    // Refresh the coach MMR snapshot at most once per player per monitor run,
-    // so the coach rank display follows new competitive results without
-    // putting extra pressure on the HenrikDev quota.
-    if (mode === 'competitive') try {
-      if (!ranks.get('__mmr:' + account.puuid)) {
-        ranks.set('__mmr:' + account.puuid, '1');
-        await ensureCoachMmr(env.DB, [{ riotId: player.riotId, puuid: account.puuid, region: account.region }], (path) => api(env, path), Date.now());
-      }
-    } catch { console.warn('mmr_snapshot_pending'); }
     await captureCompetitivePositions(env.DB,match,'history');
     // Agent mastery counts new results only; a failure never blocks the result post.
     if (kpRun) try {

@@ -2,10 +2,13 @@
 // change of the last game, and the peak tier. The source is the HenrikDev
 // v2 MMR endpoint (by-puuid). The result bot already proves this data is
 // reachable: its rank-change notices are derived from the sibling
-// mmr-history endpoint. Snapshots live in D1 and are refreshed lazily (when
-// the coach report is read and the stored snapshot is stale) and from the
-// monitor after a new competitive result, so the coach never needs to wait
-// for a backfill and old matches cost no extra HenrikDev quota.
+// mmr-history endpoint. Snapshots live in D1 and are refreshed lazily, when
+// the coach report is read and the stored snapshot is stale, so the coach
+// never needs to wait for a backfill and old matches cost no extra
+// HenrikDev quota. The monitor's delivery path is deliberately untouched:
+// its ordering guarantee (queued posts are delivered before slower history
+// requests finish) is covered by tests, and a snapshot refresh does not
+// belong in that path.
 //
 // Only fields the endpoint actually returns are stored. A failed or empty
 // response leaves the previous snapshot (or no snapshot) untouched, and the
