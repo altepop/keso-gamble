@@ -51,23 +51,45 @@ let duelGuessDraft='',duelRiskConfirm=null,duelLastGoodFetch=0,duelRetryNotBefor
 const DUEL_PENDING_KEY='keso-duel-action-v1',DUEL_HISTORY_KEY='keso-duel-moves-v1-';
 let duelHistoryOwner=null,duelListOwner=null,duelHasMore=false;
 let duelParticipantPreview=null,duelParticipantPreviewError='';
-let duelSpectatorId='',duelSpectatorViewer='',duelSpectatorSnapshot=null,duelSpectatorVersion=null;
+let duelSpectatorId='',duelSpectatorSnapshot=null,duelSpectatorVersion=null,duelSpectatorLastRead=0;
 let duelSpectatorWatching=false,duelSpectatorBusy=false,duelSpectatorMessage='',duelSpectatorError='';
-async function readDuelSpectator(){
- if(duelSpectatorBusy||!duelSpectatorId||!live||!wallet.connected||document.hidden||screen!=='duels')return;
- duelSpectatorBusy=true;
+let duelSpectatorMatches=[],duelSpectatorLobbyLoaded=false,duelSpectatorLobbyLoading=false,duelSpectatorSound=false;
+function announceDuelSpectator(previous,current){
+ if(!duelSpectatorSound||!previous||!current||previous.id!==current.id||
+   !Number.isSafeInteger(previous.version)||current.version<=previous.version)return;
+ const text=current.status==='finished'&&previous.status!=='finished'?'対戦が終了しました':
+  current.status==='active'&&previous.status!=='active'?'対戦が始まりました':
+  current.status==='active'&&current.turn!==previous.turn?'手番が切り替わりました':'盤面が更新されました';
  try{
-  const result=await wallet.duelSpectate(duelSpectatorId,duelSpectatorVersion);
-  if(result.kind==='snapshot'&&result.snapshot?.id===duelSpectatorId){
+  if(typeof SpeechSynthesisUtterance!=='function'||!window.speechSynthesis)return;
+  const item=new SpeechSynthesisUtterance(text);item.lang='ja-JP';item.rate=1.15;
+  window.speechSynthesis.cancel();window.speechSynthesis.speak(item);
+ }catch{/* Optional device audio never blocks game or authenticated viewing. */}
+}
+async function readDuelSpectator(){
+ if(duelSpectatorBusy||!duelSpectatorId||!live||!wallet.connected||
+   !duelSpectatorWatching||document.hidden||screen!=='duels')return;
+ const id=duelSpectatorId,previous=duelSpectatorSnapshot;
+ duelSpectatorBusy=true;duelSpectatorLastRead=Date.now();
+ try{
+  const result=await wallet.duelSpectate(id,duelSpectatorVersion);
+  if(!live||!duelSpectatorWatching||id!==duelSpectatorId)return;
+  if(result.kind==='snapshot'&&result.snapshot?.id===id){
    duelSpectatorSnapshot=result.snapshot;duelSpectatorVersion=result.snapshot.version;
-   duelSpectatorError='';duelSpectatorMessage='認可済みの試合を表示中';
+   duelSpectatorError='';duelSpectatorMessage='サーバー確定の観戦情報を表示中';
+   announceDuelSpectator(previous,result.snapshot);
   }else if(result.kind!=='no_change')throw Error('invalid spectator response');
  }catch{
+  if(id!==duelSpectatorId)return;
   duelSpectatorWatching=false;duelSpectatorSnapshot=null;duelSpectatorVersion=null;
-  duelSpectatorError='観戦権限を確認できませんでした。両対戦者の承認が必要です。';
- }finally{duelSpectatorBusy=false;render();}
+  duelSpectatorError='観戦できません。登録済み本アカウントのKP接続、試合状態を確認してください。';
+ }finally{duelSpectatorBusy=false;if(live&&screen==='duels')render();}
 }
-setInterval(()=>{if(duelSpectatorWatching&&!document.hidden)void readDuelSpectator();},2000);
+setInterval(()=>{
+ if(duelSpectatorWatching&&!document.hidden&&
+   (!duelEventsOnline||Date.now()-duelSpectatorLastRead>=15000))
+  void readDuelSpectator();
+},2000);
 let duelEventsAbort=null,duelEventsOnline=false,duelEventsRetryAt=0,duelEventsFailures=0,duelEventsDirty=false;
 function mergeDuelPages(fresh){
  const owner=state.selfUserId;
@@ -451,9 +473,10 @@ function render(){
   const gomokuPreviewCell=duelGomokuPreview&&activeDuel&&duelGomokuPreview.id===activeDuel.id&&duelGomokuPreview.version===activeDuel.version&&activeDuel.turn_user===state.selfUserId?duelGomokuPreview.cell:null;
   let html = screen==='title'?titleView(state,wallet.remembered,autoState,autoMessage,wallet.connected):screen==='home'?homeView(state,bottomNav()):screen==='play'?playView(state,drafts,bottomNav(),steamView,hoyoView):screen==='directives'?directivesView(state,drafts,bottomNav(),tabsFor('directives')):screen==='stable'?screenStable():screen==='shop'?screenShop():screen==='relics'?screenRelics():screen==='market'?screenMarket():screen==='casino'?screenCasino():screen==='duels'?duelScreen({info:duelData,user:state.selfUserId,live,cash:state.cash,selectedId:duelActiveId,game:duelGame,stake:duelStake,target:duelTarget,busy:duelBusy,error:duelError,confirmResign:duelResignConfirm,pokerPicks:duelPokerPicks,fallbackMembers:state.members??[],opponentPickerOpen:duelOpponentPickerOpen,loading:duelLoading,gomokuPreviewCell,recentMoves:duelRecentMoves,localMoveHistory:duelMoveHistory,guessDraft:duelGuessDraft,
 lastSynced:duelLastGoodFetch,pendingRetry:!!duelPendingAction,historyHasMore:duelHasMore,participantPreview:duelParticipantPreview,participantPreviewError:duelParticipantPreviewError,
-  spectatorUi:{matchId:duelSpectatorId||activeDuel?.id||'',viewerId:duelSpectatorViewer,
+  spectatorUi:{matchId:duelSpectatorId||activeDuel?.id||'',
    watching:duelSpectatorWatching,message:duelSpectatorMessage,error:duelSpectatorError,
-   snapshot:duelSpectatorSnapshot},
+   matches:duelSpectatorMatches,loaded:duelSpectatorLobbyLoaded,loading:duelSpectatorLobbyLoading,
+   sound:duelSpectatorSound,snapshot:duelSpectatorSnapshot},
  riskConfirm:duelRiskConfirm===`create:${duelGame}:${duelTarget}:${duelStake}`?'create':activeDuel&&duelRiskConfirm===`accept:${activeDuel.id}:${activeDuel.version}:${activeDuel.stake}`?'accept':'',nav:bottomNav()}):screen==='mleague'?mleagueScreen({state,live,draft:{...mlDraft,amount:drafts['ml-amount']},tabs:subTabs(),nav:bottomNav()}):screen==='race'?screenRace():screenAssets();
   // 効果音 switch for the casino and racing screens (off unless the player turns it on).
   setBgmScene(screen==='casino'||screen==='race'?screen:'');
@@ -680,7 +703,7 @@ addEventListener('pointermove',e=>{if(e.pointerType==='mouse')trendDay(e);});
 // Client-only filter state; no D1 requests for typing or paging.
 for(const eventName of ['input','change'])addEventListener(eventName,e=>{
  if(eventName==='input'&&screen==='duels'&&e.target.id==='duel-guess'){duelGuessDraft=e.target.value;return;}
- if(screen==='duels'&&eventName==='input'&&e.target.id==='duel-spectator-viewer'){duelSpectatorViewer=e.target.value;return;}
+ 
  if(screen==='duels'&&eventName==='input'&&e.target.id==='duel-spectator-match'){
    duelSpectatorId=e.target.value;duelSpectatorWatching=false;
    duelSpectatorSnapshot=null;duelSpectatorVersion=null;return;
@@ -1420,6 +1443,9 @@ function startDuelEvents(){
    // A Discord proxy may accept the SSE headers but buffer every frame.
    // Only receiving a valid actual event justifies a longer D1 cadence.
    duelEventsOnline=true;
+   if(duelSpectatorWatching&&hint.id===duelSpectatorId&&
+      (duelSpectatorVersion===null||hint.version>duelSpectatorVersion))
+     void readDuelSpectator();
    const known=duelData?.matches?.find(match=>match.id===hint.id);
    if(known&&Number(known.version)>=hint.version)return;
    // D1 remains authoritative. The hint only prompts a read, never a local
