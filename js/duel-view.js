@@ -153,23 +153,35 @@ export function duelScreen({info,user,live,cash,selectedId,game='othello',stake=
  </div></div>`;
 
  const spectatorMatch=spectatorUi?.matchId??chosen?.id??'';
- const spectatorViewer=spectatorUi?.viewerId??'';
- const spectatorAllowed=live&&!!chosen&&(chosen.user_a===user||chosen.user_b===user);
- const spectatorPanel=live?'<details class="panel duel-spectator-controls"><summary>🔭 招待制の観戦・公開設定</summary><div class="card-body">'+
-  '<p class="helper">同一ギルドでKP登録済みの人を、両方の対戦者が承認したときだけ観戦可能。リンクだけでは閲覧できない。</p>'+
-  (spectatorAllowed?'<label class="helper" for="duel-spectator-viewer">承認・撤回する観戦者のDiscord ID</label>'+
-   '<input id="duel-spectator-viewer" class="action-input" inputmode="numeric" autocomplete="off" maxlength="22" value="'+esc(spectatorViewer)+'" placeholder="観戦者ID">'+
-   '<div class="action-row"><button type="button" class="action-btn" data-duel-spectator-consent="approve">観戦者を承認</button>'+
-   '<button type="button" class="action-btn" data-duel-spectator-consent="revoke">許可を撤回</button></div>':'')+
-  '<p class="helper">観戦する試合ID（本人の権限でサーバーが再確認）</p>'+
+ const spectatorMatches=Array.isArray(spectatorUi?.matches)?spectatorUi.matches:[];
+ const spectatorRows=spectatorMatches.map(m=>
+  '<button type="button" class="duel-match" data-duel-spectator-select="'+esc(m.id)+'">'+
+  '<span><strong>'+esc(guides[m.game]?m.game:'決闘')+'</strong><small>'+
+  (m.status==='active'?'対局中':'終了')+' · 更新番号 '+esc(m.version)+'</small></span>'+
+  '<span class="duel-purse">観戦する</span></button>'
+ ).join('');
+ const spectatorPanel=live?'<details class="panel duel-spectator-controls"><summary>🔭 メンバーの試合を観戦</summary><div class="card-body">'+
+  '<p class="helper">登録済みの本アカウントだけが観戦可能。サブアカウントは不可。対戦者の同意は不要。対局の秘密情報・KPは公開しない。</p>'+
+  '<button type="button" class="action-btn" data-duel-spectator-lobby="1" '+
+  (spectatorUi?.loading?'disabled':'')+'>観戦できる試合を探す</button>'+
+  (spectatorUi?.loading?'<p class="helper">確認中…</p>':'')+
+  (spectatorMatches.length?'<div class="duel-history" role="group" aria-label="観戦可能な試合一覧">'+spectatorRows+'</div>':
+   spectatorUi?.loaded?'<p class="helper">今は観戦可能な試合がありません。</p>':'')+
+  '<label class="helper" for="duel-spectator-match">観戦する試合のID（一覧から選択も可能）</label>'+
   '<input id="duel-spectator-match" class="action-input" autocomplete="off" maxlength="36" value="'+esc(spectatorMatch)+'" placeholder="試合ID">'+
-  '<div class="action-row"><button type="button" class="action-btn" data-duel-spectator-watch="1">'+(spectatorUi?.watching?'今の試合を更新':'観戦を開始')+'</button>'+
-  '<button type="button" class="action-btn" data-duel-spectator-stop="1">観戦終了</button></div>'+
-  (spectatorUi?.message?'<p class="helper" role="status">'+esc(spectatorUi.message)+'</p>':'')+
+  '<div class="action-row"><button type="button" class="action-btn primary" data-duel-spectator-watch="1">'+
+  (spectatorUi?.watching?'観戦情報を更新':'この試合を観戦')+'</button>'+
+  '<button type="button" class="action-btn" data-duel-spectator-stop="1">観戦を終了</button></div>'+
+  '<button type="button" class="action-btn" data-duel-spectator-sound="1" aria-pressed="'+
+   Boolean(spectatorUi?.sound)+'">🔊 読み上げ '+(spectatorUi?.sound?'オン':'オフ')+'</button>'+
+  (spectatorUi?.message?'<p role="status" class="helper">'+esc(spectatorUi.message)+'</p>':'')+
   (spectatorUi?.error?'<p role="alert">'+esc(spectatorUi.error)+'</p>':'')+
-  (spectatorUi?.snapshot?'<div role="region" aria-label="認可済みの観戦情報"><p>ゲーム：'+esc(spectatorUi.snapshot.game)+' ／ 状態：'+esc(spectatorUi.snapshot.status)+' ／ 更新番号：'+esc(spectatorUi.snapshot.version)+'</p>'+
-   '<div aria-label="認可済み公開盤面">'+spectatorBoardPreview(spectatorUi.snapshot)+'</div></div>':'')+
-  '<p class="helper">表示中だけ2秒間隔で読み取り、非表示時は停止する。権限失効時は表示内容も消去する。</p></div></details>':'';
+  (spectatorUi?.snapshot?'<div role="region" aria-label="サーバー確定の観戦情報">'+
+   '<p>ゲーム：'+esc(spectatorUi.snapshot.game)+' ／ 状態：'+esc(spectatorUi.snapshot.status)+
+   ' ／ 更新番号：'+esc(spectatorUi.snapshot.version)+'</p>'+
+   '<pre aria-label="認証済みの公開盤面">'+esc(JSON.stringify(spectatorUi.snapshot.publicState??null,null,2))+'</pre></div>':'')+
+  '<p class="helper">リアルタイム通知が届けば即更新。通信非対応時は定期取得に切替。音声は端末の設定・再生許可に従う。</p>'+
+  '</div></details>':'';
  const syncNotice=live?'<div class="duel-sync" role="status" aria-live="polite">対戦情報：'+(lastSynced?'最終更新 '+new Date(lastSynced).toLocaleTimeString('ja-JP'):'確認中')+(loading?'・更新中':'')+'。<button type="button" class="action-btn" data-duel-refresh="1" '+(busy?'disabled':'')+'>更新</button></div>':'';
  const retryNotice=pendingRetry?'<div class="storage-warning duel-error" role="alert"><strong>前回の対戦操作が未確認です。</strong><p>別の操作は送らず、同じ操作IDを使って結果を確認してください。</p><button type="button" class="action-btn primary" data-duel-retry="1" '+(busy?'disabled':'')+'>前回の操作を確認</button></div>':'';
  const moreNotice=historyHasMore?'<div class="duel-history-more"><button type="button" class="action-btn" data-duel-history-more="1" '+(busy?'disabled':'')+'>過去の対戦を20件ずつ読み込む</button><p class="helper">このボタンを押した場合だけ過去の対戦を取得する。</p></div>':'';
