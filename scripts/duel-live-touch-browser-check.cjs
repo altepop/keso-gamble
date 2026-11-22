@@ -83,7 +83,7 @@ let browser;
   await page.locator('[data-duel-entry-back]').click();
   await page.locator('[data-duel-entry="pve"]').click();
   assert.equal(page.url(),urlBefore,'PvE stays in authenticated Activity');
-  await page.waitForFunction(()=>document.getElementById('duel-pve-section')?.open===true,null,{timeout:7000});
+  await page.locator('#duel-pve-section .duel-pve-stage-head').waitFor();
  await page.locator('[data-duel-pve-custom-start]').click();
  await page.locator('#duel-pve-section').getByText('サーバーでCPU戦を開始しました。').waitFor();
  assert.equal(page.url(),urlBefore,'server PvE move stays in the authenticated Activity');
