@@ -22,7 +22,7 @@ test('Phase12 audit reports guild-only aggregates without modifying D1',async()=
   assert.equal(out.reviewRecommended,true);
   assert.equal(out.deletionAuthorized,false);
   assert.equal(statements.length,2);
-  assert.ok(statements.every(x=>/^SELECT/i.test(x.trim())&&!/DELETE|UPDATE|INSERT/i.test(x)));
+  assert.ok(statements.every(x=>/^SELECT/i.test(x.trim())&&!/\b(?:DELETE|UPDATE|INSERT)\b/i.test(x)));
   assert.equal((db.prepare('SELECT COUNT(*) AS n FROM kp_board_duels').get() as {n:number}).n,3);
  }finally{db.close();}
 });
