@@ -78,7 +78,7 @@ let browser;
  assert.equal(await page.locator('[data-duel-pve-link]').evaluate(el=>el.tagName),'BUTTON','PvE must be an in-place button');
  await page.locator('[data-duel-pve-link]').click();
  assert.equal(page.url(),urlBefore,'PvE cannot trigger a second Discord SDK handshake');
- assert.equal(await page.locator('#duel-pve-section').evaluate(el=>el.open),true);
+ await page.waitForFunction(()=>document.getElementById('duel-pve-section')?.open===true,null,{timeout:7000});
  await page.locator('[data-duel-pve-custom-start]').click();
  await page.locator('#duel-pve-section').getByText('サーバーでCPU戦を開始しました。').waitFor();
  assert.equal(page.url(),urlBefore,'server PvE move stays in the authenticated Activity');
