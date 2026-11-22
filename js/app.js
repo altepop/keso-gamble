@@ -55,7 +55,7 @@ let duelSpectatorId='',duelSpectatorSnapshot=null,duelSpectatorVersion=null,duel
 let duelSpectatorWatching=false,duelSpectatorBusy=false,duelSpectatorMessage='',duelSpectatorError='';
 let duelSpectatorMatches=[],duelSpectatorLobbyLoaded=false,duelSpectatorLobbyLoading=false,duelSpectatorSound=false;
 const duelPveUi={busy:false,preview:null,match:null,error:'',message:'',sessionInput:'',pending:null};
-const duelOperationsUi={available:false,busy:false,report:null,error:''};
+const duelOperationsUi={available:false,busy:false,report:null,error:'',auto:false,lastAuditAt:0};
 let duelOperationsAccessKnown=false;
 function saveDuelOperationsFile(value,label){
  // A user-initiated local copy, not a server-side backup or automatic retention.
@@ -65,6 +65,15 @@ function saveDuelOperationsFile(value,label){
  document.body.append(anchor);anchor.click();anchor.remove();
  setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
+
+setInterval(async()=>{
+ if(!duelOperationsUi.auto||!duelOperationsUi.available||duelOperationsUi.busy||
+   !live||!wallet.connected||document.hidden||screen!=='duels'||Date.now()-duelOperationsUi.lastAuditAt<900_000)return;
+ duelOperationsUi.lastAuditAt=Date.now();duelOperationsUi.busy=true;
+ try{duelOperationsUi.report=await wallet.duelOperationsRead();duelOperationsUi.error='';}
+ catch(error){duelOperationsUi.error=error.message||'監査を更新できませんでした。';}
+ finally{duelOperationsUi.busy=false;if(screen==='duels')render();}
+},60_000);
 async function checkDuelOperationsAccess(){
  if(duelOperationsAccessKnown||!live||!wallet.connected)return;
  duelOperationsAccessKnown=true;
@@ -854,13 +863,14 @@ addEventListener('click',async e=>{
    }finally{duelPveUi.busy=false;render();}
    return;
   }
-  if(t.dataset.duelOperationsRead||t.dataset.duelOperationsExport||t.dataset.duelOperationsRecords){
+  if(t.dataset.duelOperationsRead||t.dataset.duelOperationsExport||t.dataset.duelOperationsRecords||t.dataset.duelOperationsAuto){
    if(!duelOperationsUi.available||duelOperationsUi.busy)return;
+   if(t.dataset.duelOperationsAuto){duelOperationsUi.auto=!duelOperationsUi.auto;duelOperationsUi.lastAuditAt=Date.now();render();return;}
    if(t.dataset.duelOperationsExport){
     if(duelOperationsUi.report)saveDuelOperationsFile(duelOperationsUi.report,'audit');
     return;
    }
-   duelOperationsUi.busy=true;duelOperationsUi.error='';render();
+   duelOperationsUi.busy=true;duelOperationsUi.error='';duelOperationsUi.lastAuditAt=Date.now();render();
    try{
     if(t.dataset.duelOperationsRecords)saveDuelOperationsFile(await wallet.duelOperationsExport(),'records-latest');
     else duelOperationsUi.report=await wallet.duelOperationsRead();
@@ -1272,7 +1282,7 @@ addEventListener('click',async e=>{
       privateRacePreview=await wallet.privateRace();render();return;
     }
     if(t.dataset.action==='refresh-kp'){await refreshWallet(true);render();return;}
-    if(t.dataset.action==='disconnect-kp'){stopTempleReplay();slotReveal=null;slotPendingToast='';casinoPresentation=null;relicRewardGate.cancel();await wallet.disconnect();autoState=embedded?'paused':'idle';autoMessage='';live=false;trend=null;trendView={...trendView,error:'',focus:null,day:null};privateRacePreview=null;privateRoundMessage='';steamView=null;hoyoView=null;relicProofs=null;relicNotice='';stopRelicSound();relicReveal=null;relicView={...relicDefaultView(),previewMode:'competitive',previewAmount:500};connectionError='';state=store.state;screen='title';duelData=null;duelActiveId=null;duelPendingAction=null;duelSpectatorWatching=false;duelSpectatorId='';duelSpectatorVersion=null;duelSpectatorSnapshot=null;duelSpectatorMatches=[];duelSpectatorLobbyLoaded=false;duelOpponentPickerOpen=false;duelGomokuPreview=null;duelPveUi.match=null;duelPveUi.preview=null;duelPveUi.pending=null;duelPveUi.sessionInput='';duelOperationsUi.available=false;duelOperationsUi.report=null;duelOperationsAccessKnown=false;render();return;}
+    if(t.dataset.action==='disconnect-kp'){stopTempleReplay();slotReveal=null;slotPendingToast='';casinoPresentation=null;relicRewardGate.cancel();await wallet.disconnect();autoState=embedded?'paused':'idle';autoMessage='';live=false;trend=null;trendView={...trendView,error:'',focus:null,day:null};privateRacePreview=null;privateRoundMessage='';steamView=null;hoyoView=null;relicProofs=null;relicNotice='';stopRelicSound();relicReveal=null;relicView={...relicDefaultView(),previewMode:'competitive',previewAmount:500};connectionError='';state=store.state;screen='title';duelData=null;duelActiveId=null;duelPendingAction=null;duelSpectatorWatching=false;duelSpectatorId='';duelSpectatorVersion=null;duelSpectatorSnapshot=null;duelSpectatorMatches=[];duelSpectatorLobbyLoaded=false;duelOpponentPickerOpen=false;duelGomokuPreview=null;duelPveUi.match=null;duelPveUi.preview=null;duelPveUi.pending=null;duelPveUi.sessionInput='';duelOperationsUi.available=false;duelOperationsUi.report=null;duelOperationsUi.auto=false;duelOperationsUi.lastAuditAt=0;duelOperationsAccessKnown=false;render();return;}
     if(t.dataset.casinoGame){if(spinLock||casinoBusy||slotReveal){toast('演出を閉じてから切り替えてください');return;}casinoGame=t.dataset.casinoGame;render();return;}
     if(t.dataset.screen){if(spinLock||casinoBusy||slotReveal){toast('演出を閉じてから切り替えてください');return;}detail=null;pendingHorseSale=null;luxuryConfirmation=null;screen=t.dataset.screen;render();if(screen==='duels'){await refreshDuel(true);void checkDuelOperationsAccess();}else duelOpponentPickerOpen=false;if(screen==='relics'&&live){relicLoading=true;render();try{relicProofs=await wallet.relics();}catch(error){relicNotice='実績データの取得に失敗した。'+(error.message??'');}finally{relicLoading=false;render();}}if(screen==='race')settleRaces();return;}
     if(t.dataset.action==='slot-close-reveal'){
