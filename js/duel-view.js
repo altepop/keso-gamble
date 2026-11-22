@@ -162,9 +162,10 @@ export function duelEntryPanel({info=null,user='',live=false,progress=null,busy=
     ' ／ 確定'+row.verified+'戦・'+row.wins+'勝';
  };
  const today=progress?.today;
+ const count=value=>Number.isSafeInteger(Number(value))&&Number(value)>=0?Number(value):0;
  const items=[
   ['pve','🤖','PvE','サーバーCPU攻略・今日のチャレンジ',
-   today?'今日 '+Number(today.finished||0)+'回完了・'+Number(today.wins||0)+'勝':busy?'チャレンジ状況を取得中…':'今日の進捗は未取得',
+   today?'今日 '+count(today.finished)+'回完了・'+count(today.wins)+'勝':busy?'チャレンジ状況を取得中…':'今日の進捗は未取得',
    format('pve',points('pve'))],
   ['pvp','⚔️','PvP','招待して対戦・相手の招待を承諾',
    '対局中 '+active+'件 ／ 招待 '+invited+'件',format('pvp',points('pvp'))],
@@ -180,7 +181,7 @@ export function duelEntryPanel({info=null,user='',live=false,progress=null,busy=
  '<span class="duel-entry-chevron" aria-hidden="true">›</span></button>').join('')+
  '<p class="duel-entry-footnote">公式ランク・順位は一般向け未提供のため表示しない。熟練度と確定試合はサーバー取得値。前回比はこの画面で前回取得した時点との差である。</p>'+
  (error?'<p role="alert">'+esc(error)+'</p>':'')+
- (live?'<button type="button" class="action-btn" data-duel-entry-refresh="1" '+(busy?'disabled':'')+'>熟練度・今日の状況を更新</button>':'')+
+ ''+
  '</main>';
 }
 export function duelScreen({info,user,live,cash,selectedId,game='othello',stake=1000,target='',busy=false,error='',confirmResign=false,pokerPicks=[],fallbackMembers=[],opponentPickerOpen=false,loading=false,nav='',gomokuPreviewCell=null,recentMoves=null,localMoveHistory=null,guessDraft='',riskConfirm='',lastSynced=0,pendingRetry=false,historyHasMore=false,participantPreview=null,participantPreviewError='',spectatorUi=null,pveUi=null,operationsUi=null,trioUi=null,seasonUi=null,eventUi=null,tabs='',mode='pvp',entryProgress=null,entryProgressBusy=false,entryProgressError='',entryProgressDelta=null}){
