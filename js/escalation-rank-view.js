@@ -1,4 +1,4 @@
-import {ESCALATION_ART,escalationArt} from './escalation-rank-assets.js?v=web-a40bae8b648758f3';
+import {ESCALATION_ART,escalationArt} from './escalation-rank-assets.js?v=web-ea2b658422679295';
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const num=n=>Number.isFinite(Number(n))?Number(n):0;
 function emblem(tier,alt='',className='',division=1){
