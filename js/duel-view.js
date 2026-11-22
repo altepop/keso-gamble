@@ -184,6 +184,27 @@ export function duelEntryPanel({info=null,user='',live=false,progress=null,busy=
  ''+
  '</main>';
 }
+const sportsGames=[['trio','❎','三目並べ'],['othello','⚫','オセロ'],['gomoku','⚪','五目並べ'],['connect4','🔴','四目並べ'],['hitblow','🔢','ヒット＆ブロー'],['bluffdice','🎲','ブラフダイス'],['poker','🃏','５カードポーカー']];
+/** Each skill is confirmed by the authenticated history API; never infer points from local games. */
+export function duelSportPicker({mode='pve',progress=null,selected='othello',practice=false}={}){
+ const loaded=Array.isArray(progress?.skills);
+ const games=practice?sportsGames.filter(([id])=>id!=='trio'):sportsGames;
+ return '<section class="duel-sports" aria-label="'+(practice?'練習':mode==='pve'?'CPU攻略':'対人戦')+'の種目選択">'+
+ '<div class="duel-sports-heading"><h3>種目を選ぶ</h3><span>熟練度は種目ごとの確定値</span></div>'+
+ '<div class="duel-sports-grid">'+games.map(([id,emoji,label])=>{
+ const skill=loaded?progress.skills.find(s=>s.mode===mode&&s.game===id):null;
+ const points=loaded?Math.max(0,Number(skill?.points)||0)+' pt':'未取得';
+ const picked=id===selected;
+ const action=practice?'data-duel-practice-game="'+id+'"':'data-duel-sport="'+id+'" data-duel-sport-mode="'+mode+'"';
+ return '<button type="button" class="duel-sport-tile'+(picked&&!practice?' is-selected':'')+'" '+action+
+ ' aria-pressed="'+(picked&&!practice)+'" aria-label="'+esc(label)+' 熟練度 '+(practice?'記録対象外':esc(points))+'">'+
+ '<span class="duel-sport-emoji" aria-hidden="true">'+emoji+'</span><span class="duel-sport-name">'+esc(label)+'</span>'+
+ '<span class="duel-sport-points">'+(practice?'練習専用':loaded?'熟練度 '+esc(points):'熟練度 未取得')+'</span>'+
+ '<span class="duel-sport-hint">'+(practice?'選んで練習へ':picked?'選択中 ✓':'この種目を選ぶ')+'</span></button>';
+ }).join('')+'</div>'+
+ (mode==='pvp'&&!practice?'<p class="duel-sports-note">対戦する種目を選び、下の相手と賭け金を確認して申し込む。</p>':'')+
+ (!loaded&&!practice?'<p class="duel-sports-note">熟練度は本人の記録を取得できたときだけ表示する。</p>':'')+'</section>';
+}
 export function duelScreen({info,user,live,cash,selectedId,game='othello',stake=1000,target='',busy=false,error='',confirmResign=false,pokerPicks=[],fallbackMembers=[],opponentPickerOpen=false,loading=false,nav='',gomokuPreviewCell=null,recentMoves=null,localMoveHistory=null,guessDraft='',riskConfirm='',lastSynced=0,pendingRetry=false,historyHasMore=false,participantPreview=null,participantPreviewError='',spectatorUi=null,pveUi=null,operationsUi=null,trioUi=null,seasonUi=null,eventUi=null,tabs='',mode='pvp',entryProgress=null,entryProgressBusy=false,entryProgressError='',entryProgressDelta=null}){
  const matches=info?.matches??[],chosen=matches.find(r=>r.id===selectedId)||matches.find(r=>r.status==='active'||r.status==='pending')||matches[0];
  const members=(info?.members?.length?info.members:fallbackMembers).filter(m=>m&&typeof m.id==='string'&&m.id!==user);
@@ -200,12 +221,12 @@ export function duelScreen({info,user,live,cash,selectedId,game='othello',stake=
  if(mode==='home')return header+duelEntryPanel({info,user,live,progress:entryProgress,busy:entryProgressBusy,error:entryProgressError,delta:entryProgressDelta})+nav+'</div>';
  if(mode==='pve')return header+back+
   '<section class="duel-mode-header"><h2>🤖 PvE・CPU攻略</h2><p>今日のチャレンジか好きな種目を選んで始めよう。</p></section>'+
-  duelWeeklyEventPanel(eventUi)+duelPvePanel({...pveUi,live,open:true})+
+  duelWeeklyEventPanel(eventUi)+duelSportPicker({mode:'pve',progress:entryProgress,selected:pveUi?.game})+duelPvePanel({...pveUi,live,open:true})+
   '<details class="panel duel-secondary"><summary>報酬・詳しい戦績</summary><div class="card-body"><p class="helper">確定済みの履歴は「7種目の対局履歴・熟練度を見る」から確認できる。</p>'+
   '<button type="button" class="action-btn" data-duel-pve-rewards="1">報酬・戦績を取得</button></div></details>'+nav+'</div>';
  if(mode==='practice')return header+back+
   '<section class="duel-mode-header"><h2>🎯 練習</h2><p>実KP・熟練度・ランクに影響しない無料CPU対戦。</p></section>'+
-  '<div class="duel-practice-entry"><div><strong>無料CPU練習（6種目）</strong><p>何度でも遊べる。実KP消費なし。</p></div>'+
+  duelSportPicker({mode:'pve',progress:entryProgress,practice:true})+'<div class="duel-practice-entry"><div><strong>無料CPU練習（6種目）</strong><p>何度でも遊べる。実KP消費なし。</p></div>'+
   '<a class="action-btn primary" href="./duel-demo.html?cpu=1">CPU練習を始める</a></div>'+
   duelTrioPanel(trioUi??{})+nav+'</div>';
  const focus=chosen?.status==='active'||chosen?.status==='pending';
@@ -265,7 +286,7 @@ export function duelScreen({info,user,live,cash,selectedId,game='othello',stake=
  ${tabs}
  <button type="button" class="action-btn duel-entry-back" data-duel-entry-back="1">‹ 3つのモードに戻る</button><section class="duel-mode-header"><h2>⚔️ PvP・対人戦</h2><p>招待を承諾するか、相手を選んで申し込む。</p></section>
 
- ${syncNotice}${retryNotice}
+ ${duelSportPicker({mode:'pvp',progress:entryProgress,selected:game})}${syncNotice}${retryNotice}
  ${chosen?`<div class="duel-current">
  <div class="panel"><div class="card-body"><h2 class="panel-title">参加者限定・公開情報プレビュー</h2>
  <p class="helper">対戦者本人の確認用プレビュー。登録済みの本アカウントは同じギルド内の試合を追加同意なしで観戦できます。サブアカウントは観戦できません。</p>
