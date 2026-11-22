@@ -37,3 +37,13 @@ test('an https link is not automatically evidence without explicit approval',()=
  assert.equal(row.study.sourceStatus,'unconfigured');
  assert.equal(row.study.sources.length,0);
 });
+
+test('coverage counts only previously shown maps in the selected pool',()=>{
+ const r=m.chooseToday({date:'2026-11-22',maps:['Bind','Lotus'],previouslyShown:['Haven','Haven','Bind','Unknown']});
+ assert.equal(r.coverageTarget,2);
+ assert.equal(r.coveredMapCount,1);
+ assert.equal(r.map,'Lotus');
+ const empty=m.chooseToday({date:'2026-11-22',maps:[],previouslyShown:['Haven']});
+ assert.equal(empty.coverageTarget,0);
+ assert.equal(empty.coveredMapCount,0);
+});
