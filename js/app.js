@@ -57,6 +57,32 @@ let duelSpectatorWatching=false,duelSpectatorBusy=false,duelSpectatorMessage='',
 let duelSpectatorMatches=[],duelSpectatorLobbyLoaded=false,duelSpectatorLobbyLoading=false,duelSpectatorSound=false;
 const duelPveUi={busy:false,preview:null,match:null,error:'',message:'',sessionInput:'',pending:null,open:false,game:'othello',level:'normal',rewardsOpen:false,rewards:null,rewardsError:''};
 const duelHistoryUi={open:false,busy:false,data:null,error:'',mode:'all',game:'all'};
+let duelEntryMode='home';
+const duelEntryProgressUi={busy:false,data:null,error:'',delta:null,owner:null,loadedAt:0};
+async function refreshDuelEntryProgress(force=false){
+ if(!live||!wallet.connected||screen!=='duels'||duelEntryProgressUi.busy)return;
+ const owner=state?.selfUserId;
+ if(!owner)return;
+ if(duelEntryProgressUi.owner!==owner){
+  duelEntryProgressUi.owner=owner;duelEntryProgressUi.data=null;
+  duelEntryProgressUi.delta=null;duelEntryProgressUi.loadedAt=0;
+ }
+ if(!force&&duelEntryProgressUi.loadedAt&&Date.now()-duelEntryProgressUi.loadedAt<60000)return;
+ const old=duelEntryProgressUi.data;
+ duelEntryProgressUi.busy=true;duelEntryProgressUi.error='';render();
+ try{
+  const latest=await wallet.duelHistory({mode:'all',game:'all'});
+  if(owner!==state?.selfUserId)return;
+  const total=(data,mode)=>Array.isArray(data?.skills)?data.skills
+   .filter(x=>x.mode===mode).reduce((sum,x)=>sum+Math.max(0,Number(x.points)||0),0):null;
+  if(old)duelEntryProgressUi.delta={
+   pve:total(latest,'pve')-total(old,'pve'),
+   pvp:total(latest,'pvp')-total(old,'pvp')
+  };
+  duelEntryProgressUi.data=latest;duelEntryProgressUi.loadedAt=Date.now();
+ }catch(error){duelEntryProgressUi.error=error.message||'熟練度の取得に失敗しました。';}
+ finally{duelEntryProgressUi.busy=false;if(screen==='duels')render();}
+}
 const duelTrioUi={board:'.........',level:'strong',winner:null,error:''};
 let duelWeeklyEvent=null,duelWeeklyEventChecked=false;
 const duelOperationsUi={available:false,busy:false,report:null,error:'',auto:false,lastAuditAt:0,season:null,archives:null};
@@ -516,7 +542,7 @@ lastSynced:duelLastGoodFetch,pendingRetry:!!duelPendingAction,historyHasMore:due
    watching:duelSpectatorWatching,message:duelSpectatorMessage,error:duelSpectatorError,
    matches:duelSpectatorMatches,loaded:duelSpectatorLobbyLoaded,loading:duelSpectatorLobbyLoading,
    sound:duelSpectatorSound,snapshot:duelSpectatorSnapshot},
- pveUi:{...duelPveUi,historyUi:duelHistoryUi},operationsUi:duelOperationsUi,trioUi:duelTrioUi,eventUi:duelWeeklyEvent,
+ pveUi:{...duelPveUi,historyUi:duelHistoryUi},mode:duelEntryMode,entryProgress:duelEntryProgressUi.data,entryProgressBusy:duelEntryProgressUi.busy,entryProgressError:duelEntryProgressUi.error,entryProgressDelta:duelEntryProgressUi.delta,operationsUi:duelOperationsUi,trioUi:duelTrioUi,eventUi:duelWeeklyEvent,
  riskConfirm:duelRiskConfirm===`create:${duelGame}:${duelTarget}:${duelStake}`?'create':activeDuel&&duelRiskConfirm===`accept:${activeDuel.id}:${activeDuel.version}:${activeDuel.stake}`?'accept':'',tabs:subTabs(),nav:bottomNav()}):screen==='mleague'?mleagueScreen({state,live,draft:{...mlDraft,amount:drafts['ml-amount']},tabs:subTabs(),nav:bottomNav()}):screen==='race'?screenRace():screenAssets();
   // 効果音 switch for the casino and racing screens (off unless the player turns it on).
   setBgmScene(screen==='casino'||screen==='race'?screen:'');
@@ -831,6 +857,21 @@ addEventListener('click',async e=>{
   const t=e.target.closest?.('button,[data-open]'); if(!t) return;
   // Navigating to a second Activity HTML page repeats Discord SDK ready() and can
   // strand the iPhone iframe. Keep the existing authenticated context alive.
+  if(screen==='duels'&&t.dataset.duelEntry!==undefined){
+   e.preventDefault();
+   if(!['pve','pvp','practice'].includes(t.dataset.duelEntry))return;
+   duelEntryMode=t.dataset.duelEntry;
+   if(duelEntryMode==='pve')duelPveUi.open=true;
+   render();window.scrollTo?.({top:0,behavior:'instant'});return;
+  }
+  if(screen==='duels'&&t.dataset.duelEntryBack!==undefined){
+   e.preventDefault();duelEntryMode='home';render();
+   window.scrollTo?.({top:0,behavior:'instant'});void refreshDuelEntryProgress();
+   return;
+  }
+  if(screen==='duels'&&t.dataset.duelEntryRefresh!==undefined){
+   e.preventDefault();void refreshDuelEntryProgress(true);return;
+  }
   if(screen==='duels'&&t.dataset.duelPveLink!==undefined){
    e.preventDefault();duelPveUi.open=true;render();
    requestAnimationFrame(()=>document.getElementById('duel-pve-section')?.scrollIntoView({block:'start',behavior:'auto'}));
@@ -920,6 +961,7 @@ addEventListener('click',async e=>{
      const result=await wallet.duelPveMove(move);
      duelPveUi.match=result.match;duelPveUi.pending=null;
      duelPveUi.message=result.match.turn==='finished'?'CPU戦が確定しました。':'サーバー確定の盤面へ更新しました。';
+      if(result.match.turn==='finished')void refreshDuelEntryProgress(true);
     }
    }catch(error){
     duelPveUi.error=error.message||'CPU戦を確認できません。';
@@ -1355,9 +1397,9 @@ addEventListener('click',async e=>{
       privateRacePreview=await wallet.privateRace();render();return;
     }
     if(t.dataset.action==='refresh-kp'){await refreshWallet(true);render();return;}
-    if(t.dataset.action==='disconnect-kp'){stopTempleReplay();slotReveal=null;slotPendingToast='';casinoPresentation=null;relicRewardGate.cancel();await wallet.disconnect();autoState=embedded?'paused':'idle';autoMessage='';live=false;trend=null;trendView={...trendView,error:'',focus:null,day:null};privateRacePreview=null;privateRoundMessage='';steamView=null;hoyoView=null;relicProofs=null;relicNotice='';stopRelicSound();relicReveal=null;relicView={...relicDefaultView(),previewMode:'competitive',previewAmount:500};connectionError='';state=store.state;screen='title';duelData=null;duelActiveId=null;duelPendingAction=null;duelSpectatorWatching=false;duelSpectatorId='';duelSpectatorVersion=null;duelSpectatorSnapshot=null;duelSpectatorMatches=[];duelSpectatorLobbyLoaded=false;duelOpponentPickerOpen=false;duelGomokuPreview=null;duelTrioUi.board='.........';duelTrioUi.winner=null;duelTrioUi.error='';duelPveUi.match=null;duelPveUi.preview=null;duelPveUi.pending=null;duelPveUi.sessionInput='';duelPveUi.open=false;duelPveUi.rewardsOpen=false;duelPveUi.rewards=null;duelPveUi.rewardsError='';duelOperationsUi.available=false;duelOperationsUi.report=null;duelOperationsUi.season=null;duelOperationsUi.archives=null;duelOperationsUi.auto=false;duelOperationsUi.lastAuditAt=0;duelOperationsAccessKnown=false;render();return;}
+    if(t.dataset.action==='disconnect-kp'){stopTempleReplay();slotReveal=null;slotPendingToast='';casinoPresentation=null;relicRewardGate.cancel();await wallet.disconnect();autoState=embedded?'paused':'idle';autoMessage='';live=false;trend=null;trendView={...trendView,error:'',focus:null,day:null};privateRacePreview=null;privateRoundMessage='';steamView=null;hoyoView=null;relicProofs=null;relicNotice='';stopRelicSound();relicReveal=null;relicView={...relicDefaultView(),previewMode:'competitive',previewAmount:500};connectionError='';state=store.state;screen='title';duelData=null;duelActiveId=null;duelPendingAction=null;duelEntryMode='home';duelEntryProgressUi.data=null;duelEntryProgressUi.delta=null;duelEntryProgressUi.owner=null;duelEntryProgressUi.loadedAt=0;duelEntryProgressUi.error='';duelSpectatorWatching=false;duelSpectatorId='';duelSpectatorVersion=null;duelSpectatorSnapshot=null;duelSpectatorMatches=[];duelSpectatorLobbyLoaded=false;duelOpponentPickerOpen=false;duelGomokuPreview=null;duelTrioUi.board='.........';duelTrioUi.winner=null;duelTrioUi.error='';duelPveUi.match=null;duelPveUi.preview=null;duelPveUi.pending=null;duelPveUi.sessionInput='';duelPveUi.open=false;duelPveUi.rewardsOpen=false;duelPveUi.rewards=null;duelPveUi.rewardsError='';duelOperationsUi.available=false;duelOperationsUi.report=null;duelOperationsUi.season=null;duelOperationsUi.archives=null;duelOperationsUi.auto=false;duelOperationsUi.lastAuditAt=0;duelOperationsAccessKnown=false;render();return;}
     if(t.dataset.casinoGame){if(spinLock||casinoBusy||slotReveal){toast('演出を閉じてから切り替えてください');return;}casinoGame=t.dataset.casinoGame;render();return;}
-    if(t.dataset.screen){if(spinLock||casinoBusy||slotReveal){toast('演出を閉じてから切り替えてください');return;}detail=null;pendingHorseSale=null;luxuryConfirmation=null;screen=t.dataset.screen;render();if(screen==='duels'){await refreshDuel(true);void checkDuelOperationsAccess();void loadDuelWeeklyEvent();}else duelOpponentPickerOpen=false;if(screen==='relics'&&live){relicLoading=true;render();try{relicProofs=await wallet.relics();}catch(error){relicNotice='実績データの取得に失敗した。'+(error.message??'');}finally{relicLoading=false;render();}}if(screen==='race')settleRaces();return;}
+    if(t.dataset.screen){if(spinLock||casinoBusy||slotReveal){toast('演出を閉じてから切り替えてください');return;}detail=null;pendingHorseSale=null;luxuryConfirmation=null;screen=t.dataset.screen;if(screen==='duels')duelEntryMode='home';render();if(screen==='duels'){await refreshDuel(true);void refreshDuelEntryProgress();void checkDuelOperationsAccess();void loadDuelWeeklyEvent();}else duelOpponentPickerOpen=false;if(screen==='relics'&&live){relicLoading=true;render();try{relicProofs=await wallet.relics();}catch(error){relicNotice='実績データの取得に失敗した。'+(error.message??'');}finally{relicLoading=false;render();}}if(screen==='race')settleRaces();return;}
     if(t.dataset.action==='slot-close-reveal'){
       stopTempleReplay();slotReveal=null;casinoPresentation=null;render();
       relicRewardGate.finish();if(slotPendingToast){toast(slotPendingToast);slotPendingToast='';}
