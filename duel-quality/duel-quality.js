@@ -788,19 +788,20 @@ function enhance(root) {
     notice.replaceChildren(title,detail);
   }
   function scanPveEntry(){
-    // The separately authenticated PvE page is not a wallet operation.
-    // Link only from the main Activity's duel screen, never the mock demo.
+    // Discord iOS cannot reliably initialize the SDK twice after page navigation.
+    // Keep the authenticated wallet and PvE API in the already-open Activity.
     if(root.id!=='app')return;
     const entry=root.querySelector('.duel-practice-entry');
     if(!entry||entry.querySelector('[data-duel-pve-link]'))return;
-    const link=document.createElement('a');
-    link.href='./duel-pve.html';
+    const link=document.createElement('button');
+    link.type='button';
     link.className='action-btn primary';
     link.dataset.duelPveLink='1';
     link.textContent='サーバーCPU攻略（PvE）を開く';
     link.setAttribute('aria-label','サーバーが勝敗を確定するPvE攻略画面を開く');
-    const rewards=document.createElement('a');
-    rewards.href='./duel-pve.html#duel-rewards';
+    const rewards=document.createElement('button');
+    rewards.type='button';
+    rewards.dataset.duelPveRewards='1';
     rewards.className='action-btn';
     rewards.textContent='決闘の戦績・報酬';
     entry.prepend(link,rewards);
