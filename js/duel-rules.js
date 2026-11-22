@@ -1,6 +1,6 @@
 // Pure, deterministic rules shared by Discord Activity and the KP server.
 // Board cells: "." empty, "B" black, "W" white. No client-submitted outcome is trusted.
-export const DUEL_GAMES={othello:{name:'オセロ',size:8},gomoku:{name:'五目並べ',size:15}};
+export const DUEL_GAMES={othello:{name:'オセロ',size:8},gomoku:{name:'五目並べ',size:15},tictactoe:{name:'三目並べ',size:3}};
 const dirs=[[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]];
 const opponent=c=>c==='B'?'W':'B';
 export function initialDuelBoard(game){
@@ -16,7 +16,7 @@ export function duelScore(board){return {B:board.split('B').length-1,W:board.spl
 export function duelLegalMoves(game,board,color){
  const n=DUEL_GAMES[game]?.size;
  if(!n||typeof board!=='string'||board.length!==n*n||!/^[.BW]+$/.test(board)||!['B','W'].includes(color))throw Error('盤面が不正です。');
- if(game==='gomoku')return [...board].flatMap((cell,i)=>cell==='.'?[i]:[]);
+ if(game==='gomoku'||game==='tictactoe')return [...board].flatMap((cell,i)=>cell==='.'?[i]:[]);
  const found=[];
  for(let i=0;i<board.length;i++)if(board[i]==='.'){
   const r=Math.floor(i/n),c=i%n;
@@ -59,7 +59,7 @@ export function playDuelMove(game,board,color,index){
     total++;y+=dr*sign;x+=dc*sign;
    }
   }
-  if(total>=5)win=true;
+  if(total>=(game==='tictactoe'?3:5))win=true;
  }
  const result=next.join('');
  return {board:result,nextColor:win||!result.includes('.')?null:opponent(color),
