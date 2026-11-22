@@ -83,14 +83,15 @@ function trusted(row:SessionRow):TrustedPveState{
 }
 function publicMatch(row:SessionRow){return {id:row.id,...pvePublicSnapshot(trusted(row))};}
 export async function serverPveOperation(env:KpEnv,guild:string,user:string,body:Record<string,unknown>){
- await ensureServerPveTables(env);
  const action=String(body.action??'');
+ // Preview is pure: it does not create a table or cost a D1 query.
+ if(action==='daily-preview')return {challenge:duelDailyChallenge(Date.now())};
+ await ensureServerPveTables(env);
  if(action==='get'){
   const row=await find(env,guild,user,String(body.session??''));
   if(!row)throw Error('CPU戦が見つかりません。');
   return publicMatch(row);
  }
- if(action==='daily-preview')return {challenge:duelDailyChallenge(Date.now())};
  if(action==='start'||action==='daily'){
   const requestId=String(body.requestId??'');
   if(!uuid.test(requestId))throw Error('操作IDが不正です。');
