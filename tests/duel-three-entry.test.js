@@ -44,7 +44,7 @@ test('PvE includes server CPU challenges but not PvP invites, administrator audi
 test('PvP preserves invite, wager and live game buttons but does not show other modes by default',()=>{
  const html=duelScreen({...base,mode:'pvp'});
  assert.match(html,/data-duel-act="create"/);
- assert.match(html,/data-duel-act="cancel"/);
+ assert.match(html,/data-duel-act="resign-preview"/);
  assert.match(html,/data-duel-entry-back="1"/);
  assert.doesNotMatch(html,/data-duel-pve-start="1"/);
  assert.doesNotMatch(html,/duel-practice-entry/);
