@@ -166,8 +166,11 @@ function model(report,options={}){
  const seq=report?.roundSequence&&known(report.roundSequence.matches)?report.roundSequence:null;
  const mmrList=Array.isArray(report?.mmr?.accounts)?report.mmr.accounts:[];
  const mmrByRiot=new Map(mmrList.map(a=>[String(a?.riotId||''),a]));
- const rankEntry=(Array.isArray(report?.accounts)?report.accounts:[]).map(id=>mmrByRiot.get(String(id))).find(a=>a&&a.tierPatched)
-  ||mmrList.find(a=>a&&a.tierPatched)||null;
+ const identityAccounts=Array.isArray(report?.accounts)?report.accounts:[];
+ // Never borrow another member's MMR when the authenticated report lists accounts.
+ const rankEntry=identityAccounts.length
+  ?identityAccounts.map(id=>mmrByRiot.get(String(id))).find(a=>a&&a.tierPatched)||null
+  :mmrList.length===1&&mmrList[0]?.tierPatched?mmrList[0]:null;
  const rank=rankEntry?{current:String(rankEntry.tierPatched).toUpperCase()+(known(rankEntry.rankingInTier)?' · '+fmtInt(rankEntry.rankingInTier)+' RR':''),
   peak:rankEntry.peakPatched?String(rankEntry.peakPatched).toUpperCase():null,
   change:known(rankEntry.mmrChange)?rankEntry.mmrChange:null}:null;
