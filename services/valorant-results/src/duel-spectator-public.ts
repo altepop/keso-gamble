@@ -2,7 +2,7 @@
  * This pure module does not expose a network route or authorize spectators.
  * Never pass participant-specific private_hand, secret table rows or tokens.
  */
-export type SpectatorGame='othello'|'gomoku'|'connect4'|'hitblow'|'bluffdice'|'poker';
+export type SpectatorGame='othello'|'gomoku'|'connect4'|'hitblow'|'bluffdice'|'poker'|'tictactoe'|'dotsboxes';
 export type SpectatorStatus='pending'|'active'|'finished'|'cancelled';
 export interface SpectatorSource {
   id:string;guild:string;game:SpectatorGame;status:SpectatorStatus;
@@ -15,9 +15,9 @@ export interface SpectatorSnapshot {
   winner:string|null;version:number;updatedAt:number;
   publicState:unknown;
 }
-const GAMES=new Set<SpectatorGame>(['othello','gomoku','connect4','hitblow','bluffdice','poker']);
+const GAMES=new Set<SpectatorGame>(['othello','gomoku','connect4','hitblow','bluffdice','poker','tictactoe','dotsboxes']);
 const STATUS=new Set<SpectatorStatus>(['pending','active','finished','cancelled']);
-const BOARD_GAMES=new Set<SpectatorGame>(['othello','gomoku','connect4']);
+const BOARD_GAMES=new Set<SpectatorGame>(['othello','gomoku','connect4','tictactoe']);
 const safeString=(v:unknown):v is string=>typeof v==='string'&&v.length>0&&v.length<=256;
 function nonnegative(v:unknown):v is number{return Number.isSafeInteger(v)&&Number(v)>=0;}
 /** A spectator must first pass caller's explicit guild and opt-in authorization.
@@ -61,6 +61,13 @@ export function spectatorPublicSnapshot(source:SpectatorSource):SpectatorSnapsho
       result.publicState={bid:bid?{by:typeof bid.by==='string'?bid.by:null,
         count:nonnegative(bid.count)?bid.count:null,
         face:nonnegative(bid.face)?bid.face:null}:null};
+    }else if(source.game==='dotsboxes'){
+      // The only public state is bounded 24 edges, 9 captured boxes and scores.
+      const edges=data.edges,boxes=data.boxes;
+      if(typeof edges!=='string'||!/^[.ab]{24}$/.test(edges)||
+       typeof boxes!=='string'||!/^[.ab]{9}$/.test(boxes)||
+       !nonnegative(data.scoreA)||!nonnegative(data.scoreB))return result;
+      result.publicState={edges,boxes,scoreA:data.scoreA,scoreB:data.scoreB};
     }else{
       // Poker reveal semantics require a separate approved policy.
       result.publicState={};
