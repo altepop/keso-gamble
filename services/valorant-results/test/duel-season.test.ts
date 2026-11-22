@@ -30,7 +30,7 @@ test('read-only ranking includes only authenticated guild and valid settled matc
    ['5','111111111111111111',a,c,a,-5_000,'finished'],
    ['6',guild,a,b,b,-9*86_400_000,'finished'],
    ['7',guild,a,b,'malformed',-1_000,'finished'],
-  ])db.prepare('INSERT INTO kp_board_duels VALUES(?,?,?,?,?,?,?)').run(id,g,status,aa,bb,w,now+delta);
+  ])db.prepare('INSERT INTO kp_board_duels VALUES(?,?,?,?,?,?,?)').run(id,g,status,aa,bb,w,now+Number(delta));
   const queries:string[]=[];
   const env={DB:{prepare:(sql:string)=>{queries.push(sql);const s=db.prepare(sql);return {bind:(...args:unknown[])=>({all:async()=>({results:s.all(...args as [])})})};}}};
   const out=await duelSeasonRead(env as never,guild,now);
