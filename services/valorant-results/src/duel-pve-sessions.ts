@@ -6,12 +6,13 @@ import type {KpEnv,KpMapping} from './kp.ts';
 import {startServerPve,advanceServerPve,pvePublicSnapshot,type TrustedPveState} from './duel-pve-engine.ts';
 import {ensureVerifiedPveProgression} from './duel-pve-progression.ts';
 import {duelDailyChallenge} from './duel-daily-challenge.ts';
+import {ensureTrioGameConstraint} from './duel-trio-schema.ts';
 
 export const DUEL_PVE_SESSION_DDL=[
  `CREATE TABLE IF NOT EXISTS kp_duel_pve_sessions(
   id TEXT PRIMARY KEY,
   guild TEXT NOT NULL,user TEXT NOT NULL,request_id TEXT NOT NULL,
-  game TEXT NOT NULL CHECK(game IN ('othello','gomoku','connect4','hitblow','bluffdice','poker')),
+  game TEXT NOT NULL CHECK(game IN ('othello','gomoku','connect4','hitblow','bluffdice','poker','trio')),
   difficulty TEXT NOT NULL CHECK(difficulty IN ('easy','normal','strong')),
   board TEXT NOT NULL,
   turn TEXT NOT NULL CHECK(turn IN ('human','finished')),
@@ -52,7 +53,10 @@ export const DUEL_PVE_SESSION_DDL=[
 const ready=new WeakMap<object,Promise<void>>();
 export async function ensureServerPveTables(env:Pick<KpEnv,'DB'>){
  const previous=ready.get(env.DB);if(previous)return previous;
- const promise=(async()=>{for(const sql of DUEL_PVE_SESSION_DDL)await env.DB.prepare(sql).run();})();
+ const promise=(async()=>{
+  await ensureTrioGameConstraint(env,'kp_duel_pve_sessions');
+  for(const sql of DUEL_PVE_SESSION_DDL)await env.DB.prepare(sql).run();
+ })();
  ready.set(env.DB,promise);
  try{await promise;}catch(error){ready.delete(env.DB);throw error;}
 }

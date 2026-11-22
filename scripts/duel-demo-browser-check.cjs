@@ -20,19 +20,19 @@ const a='[data-demo-view=a]',b='[data-demo-view=b]';
  page.on('request',req=>{if(/api\/kp|\.workers\.dev|discord\.com/.test(req.url()))requests.push(req.url());});
  await page.goto(url,{waitUntil:'networkidle'});
  assert.match(await page.title(),/決闘デモ/);
- assert.equal(await page.locator('#duel-game option').count(),6);
+ assert.equal(await page.locator('#duel-game option').count(),7);
  // Rotate the simulated mobile viewport; preserve the selected game and controls.
  await page.locator('#demo-mode').selectOption('poker');
  await page.setViewportSize({width:844,height:390});
  assert.equal(await page.locator('#duel-game').inputValue(),'poker','landscape retains selection');
- assert.equal(await page.locator('#duel-game option').count(),6,'all games available in landscape');
+ assert.equal(await page.locator('#duel-game option').count(),7,'all games available in landscape');
  assert.equal(await page.locator('[data-duel-act=create]').count(),1,'invite control survives landscape');
  await page.setViewportSize({width:390,height:844});
  assert.equal(await page.locator('#duel-game').inputValue(),'poker','portrait restores without losing choice');
  // Phase 8: an actual 375px mobile viewport must preserve all modes and the
  // invite control. This is visual/layout coverage, not live 2-account latency.
  await page.setViewportSize({width:375,height:812});
- assert.equal(await page.locator('#duel-game option').count(),6,'375px retains all six duel modes');
+ assert.equal(await page.locator('#duel-game option').count(),7,'375px retains seven available duel modes');
  assert.equal(await page.locator('[data-duel-act=create]').isVisible(),true,'375px invite action visible');
  assert.ok(await page.locator('[data-duel-act=create]').evaluate(el=>el.getBoundingClientRect().height>=44),'375px invite touch target at least 44px');
  await page.setViewportSize({width:390,height:844});
@@ -49,7 +49,7 @@ const a='[data-demo-view=a]',b='[data-demo-view=b]';
  assert.match(await page.locator('[data-duel-status-help]').innerText(),/操作結果が未確認なら連続送信せず/);
  await page.evaluate(()=>document.querySelector('[data-duel-test-error]')?.remove());
  await page.locator('[data-duel-status-help-kind="error"]').waitFor({state:'detached'});
- assert.equal(await page.locator('#duel-game option').count(),6,'status help never changes duel setup');
+ assert.equal(await page.locator('#duel-game option').count(),7,'status help never changes duel setup');
  const screenshot=async(name)=>{
   if(!shotDir)return;
   mkdirSync(shotDir,{recursive:true});

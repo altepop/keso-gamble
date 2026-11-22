@@ -46,7 +46,7 @@ function terminal(db:DatabaseSync,id:string,kind='move',winner='alice',
 function receiptCount(db:DatabaseSync){
  return Number((db.prepare('SELECT COUNT(*) AS n FROM kp_duel_progress_receipts').get() as {n:number}).n);
 }
-test('all six confirmed natural PvP finals record both players exactly once',()=>{
+test('all seven confirmed natural PvP finals record both players exactly once',()=>{
  const db=fixture();
  try{
   for(const [i,game] of DUEL_PROGRESSION_GAMES.entries()){
@@ -54,7 +54,7 @@ test('all six confirmed natural PvP finals record both players exactly once',()=
    seed(db,id,game);terminal(db,id,'move',i%2===0?'alice':'draw');
    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM kp_duel_progress_receipts WHERE match_id=?').get(id)?.n,2);
   }
-  assert.equal(receiptCount(db),12);
+  assert.equal(receiptCount(db),14);
   for(const game of DUEL_PROGRESSION_GAMES){
    const skill=db.prepare(`SELECT * FROM kp_duel_mode_skill WHERE guild='g' AND user='alice' AND mode='pvp' AND game=?`).get(game) as Record<string,number>;
    assert.equal(skill.verified_games,1);
@@ -104,7 +104,7 @@ test('trigger installation is idempotent for the same server D1 handle',async()=
  try{
   db.exec(`CREATE TABLE kp_board_duels(id TEXT);
    CREATE TABLE kp_board_duel_actions(id TEXT);`);
-  const env={DB:{prepare(sql:string){return {run:async()=>{ddlRuns++;db.exec(sql);}};}}};
+  const env={DB:{prepare(sql:string){return {run:async()=>{ddlRuns++;db.exec(sql);},bind:(...args:unknown[])=>({first:async()=>db.prepare(sql).get(...args as [])})};}}};
   await Promise.all([ensureVerifiedPvpProgression(env as never),ensureVerifiedPvpProgression(env as never)]);
   await ensureVerifiedPvpProgression(env as never);
   assert.equal(ddlRuns,DUEL_PROGRESSION_DDL.length+DUEL_REWARD_DDL.length+DUEL_PVP_FINALIZATION_TRIGGERS.length);

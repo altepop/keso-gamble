@@ -6,18 +6,20 @@ import {debtOf} from './kp-debt.ts';
 import {checkDuelLedger} from '../../../js/duel-kp-audit.js';
 import {kpTargetMembers,kpTargetAllowed} from './kp-target-members.ts';
 import {ensureVerifiedPvpProgression} from './duel-progression-commit.ts';
+import {ensureTrioGameConstraint} from './duel-trio-schema.ts';
+import {startTrustedTrio,advanceTrustedTrio} from './duel-trio-server.ts';
 // @ts-expect-error Shared pure browser-side rules (no declaration file).
 import {initialDuelBoard,playDuelMove,DUEL_GAMES} from '../../../js/duel-rules.js';
 
 // @ts-expect-error Shared pure mini-game rules, no TypeScript declaration file.
 import {EXTRA_DUEL_GAMES,miniStart,miniMove} from '../../../js/duel-mini-games.js';
-const GAMES={...DUEL_GAMES,...EXTRA_DUEL_GAMES};
+const GAMES={...DUEL_GAMES,...EXTRA_DUEL_GAMES,trio:{name:'三目並べ',size:3}};
 const MINIS=new Set(['connect4','hitblow','bluffdice','poker']);
 function randInt(n:number){const raw=new Uint32Array(1),limit=Math.floor(0x1_0000_0000/n)*n;do{crypto.getRandomValues(raw);}while(raw[0]>=limit);return raw[0]%n;}
 export const DUEL_MAX_STAKE=100_000;
 export const DUEL_TURN_MS=10*60_000;
 export const DUEL_INVITE_MS=15*60_000;
-type DuelGame='othello'|'gomoku'|'connect4'|'hitblow'|'bluffdice'|'poker';
+type DuelGame='othello'|'gomoku'|'connect4'|'hitblow'|'bluffdice'|'poker'|'trio';
 type DuelStatus='pending'|'active'|'finished'|'cancelled';
 export interface BoardDuel{
  id:string;guild:string;user_a:string;user_b:string;game:DuelGame;stake:number;
@@ -36,15 +38,16 @@ export async function ensureBoardDuels(env:KpEnv){
   // Migrate just once, preserving all open escrowed duels and the existing ledger.
   const installed=await env.DB.prepare("SELECT value FROM kp_settings WHERE key='board_duel_schema_version'")
    .first<{value:string}>();
-  if(installed?.value==='2')return;
+  if(installed?.value==='3')return;
   const old=await env.DB.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='kp_board_duels'")
    .first<{sql:string}>();
+  if(old&&old.sql.includes("'connect4'")&&!old.sql.includes("'trio'"))await ensureTrioGameConstraint(env,'kp_board_duels');
   if(old&& !old.sql.includes("'connect4'")){
    await env.DB.batch([
     env.DB.prepare('DROP TRIGGER IF EXISTS kp_board_duel_apply'),
     env.DB.prepare(`CREATE TABLE kp_board_duels_upgraded(
      id TEXT PRIMARY KEY,guild TEXT NOT NULL,user_a TEXT NOT NULL,user_b TEXT NOT NULL,
-     game TEXT NOT NULL CHECK(game IN ('othello','gomoku','connect4','hitblow','bluffdice','poker')),
+     game TEXT NOT NULL CHECK(game IN ('othello','gomoku','connect4','hitblow','bluffdice','poker','trio')),
      stake INTEGER NOT NULL CHECK(stake BETWEEN 100 AND 100000),
      status TEXT NOT NULL CHECK(status IN ('pending','active','finished','cancelled')),
      board TEXT NOT NULL,black_user TEXT,turn_user TEXT,winner TEXT,version INTEGER NOT NULL DEFAULT 0,
@@ -59,7 +62,7 @@ export async function ensureBoardDuels(env:KpEnv){
   await env.DB.batch([
   env.DB.prepare(`CREATE TABLE IF NOT EXISTS kp_board_duels(
    id TEXT PRIMARY KEY,guild TEXT NOT NULL,user_a TEXT NOT NULL,user_b TEXT NOT NULL,
-   game TEXT NOT NULL CHECK(game IN ('othello','gomoku','connect4','hitblow','bluffdice','poker')),
+   game TEXT NOT NULL CHECK(game IN ('othello','gomoku','connect4','hitblow','bluffdice','poker','trio')),
    stake INTEGER NOT NULL CHECK(stake BETWEEN 100 AND 100000),
    status TEXT NOT NULL CHECK(status IN ('pending','active','finished','cancelled')),
    board TEXT NOT NULL,black_user TEXT,turn_user TEXT,winner TEXT,version INTEGER NOT NULL DEFAULT 0,
@@ -93,7 +96,7 @@ export async function ensureBoardDuels(env:KpEnv){
    WHERE id=NEW.duel_id AND guild=NEW.guild AND version=NEW.version
      AND (
       (NEW.kind='accept' AND status='pending' AND user_b=NEW.actor AND deadline_at>=NEW.at
-         AND NEW.first_user IN (user_a,user_b) AND (NEW.board=board OR game IN ('connect4','hitblow','bluffdice','poker')))
+         AND NEW.first_user IN (user_a,user_b) AND (NEW.board=board OR game IN ('connect4','hitblow','bluffdice','poker','trio')))
       OR (NEW.kind='cancel' AND status='pending' AND NEW.actor IN (user_a,user_b))
       OR (NEW.kind='move' AND status='active' AND turn_user=NEW.actor AND deadline_at>=NEW.at
           AND (NEW.next_turn IN (user_a,user_b) OR (NEW.next_turn IS NULL AND NEW.winner IS NOT NULL))
@@ -131,7 +134,7 @@ export async function ensureBoardDuels(env:KpEnv){
     SELECT CASE WHEN (NEW.winner='draw' OR NEW.winner IN (NEW.user_a,NEW.user_b))
       THEN 1 ELSE RAISE(ABORT,'duel winner invalid') END;
    END`)
- ,env.DB.prepare("INSERT INTO kp_settings(key,value) VALUES('board_duel_schema_version','2') ON CONFLICT(key) DO UPDATE SET value='2'")
+ ,env.DB.prepare("INSERT INTO kp_settings(key,value) VALUES('board_duel_schema_version','3') ON CONFLICT(key) DO UPDATE SET value='3'")
   ]);
  })();
  ready.set(env.DB,task);try{await task;}catch(e){ready.delete(env.DB);throw e;}
@@ -227,7 +230,7 @@ export async function boardDuelAction(env:KpEnv,m:KpMapping,user:string,body:Rec
   await env.DB.prepare(`INSERT INTO kp_board_duels
    (id,guild,user_a,user_b,game,stake,status,board,black_user,turn_user,winner,version,created_at,updated_at,deadline_at)
    VALUES(?,?,?,?,?,?,'pending',?,NULL,NULL,NULL,0,?,?,?) ON CONFLICT(id) DO NOTHING`)
-   .bind(id,m.guildId,user,target,game,stake,MINIS.has(game)?'.':initialDuelBoard(game),now,now,now+DUEL_INVITE_MS).run();
+   .bind(id,m.guildId,user,target,game,stake,game==='trio'?startTrustedTrio().board:MINIS.has(game)?'.':initialDuelBoard(game),now,now,now+DUEL_INVITE_MS).run();
   return present(env,m,user,id);
  }
  const match=await room(env,m.guildId,String(body.duel??''),user);
@@ -260,6 +263,12 @@ export async function boardDuelAction(env:KpEnv,m:KpMapping,user:string,body:Rec
    board=after.board;privateData=after.secret;
    next_turn=after.turnSide?(after.turnSide==='a'?match.black_user:other):null;
    winner=after.winner?(after.winner==='draw'?'draw':after.winner==='a'?match.black_user:other):null;
+  }else if(match.game==='trio'){
+   const side=match.black_user===user?'X':'O';
+   const after=advanceTrustedTrio({board:match.board,turn:side,winner:null,version:match.version},body.cell);
+   board=after.board;
+   next_turn=after.turn?(after.turn==='X'?match.black_user:other):null;
+   winner=after.winner?(after.winner==='draw'?'draw':after.winner==='X'?match.black_user:other):null;
   }else{
    const color=match.black_user===user?'B':'W';
    const after=playDuelMove(match.game,match.board,color,Number(body.cell));

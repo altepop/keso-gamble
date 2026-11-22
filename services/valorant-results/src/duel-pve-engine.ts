@@ -10,6 +10,8 @@ import {initialDuelBoard,playDuelMove} from '../../../js/duel-rules.js';
 import {miniStart,miniMove,miniPrivate} from '../../../js/duel-mini-games.js';
 // @ts-expect-error Reuse audited bounded CPU strategy without client network access.
 import {chooseCpuMove} from '../../../duel-preview/cpu.js';
+// @ts-expect-error Shared pure triple-board rules.
+import {trioPlayTurn} from '../../../js/duel-trio.js';
 import {DUEL_PROGRESSION_GAMES,type DuelProgressionGame} from './duel-progression.ts';
 
 export type PveLevel='easy'|'normal'|'strong';
@@ -31,14 +33,14 @@ function finish(winner:string|null):PveWinner{
  throw Error('確定していない勝者です。');
 }
 export function pvePublicSnapshot(value:TrustedPveState):PublicPveSnapshot{
- const ownHand=boardGames.has(value.game)?null:miniPrivate(value.game,value.secret,'a');
+ const ownHand=(boardGames.has(value.game)||value.game==='trio')?null:miniPrivate(value.game,value.secret,'a');
  const {secret:_hidden,...safe}=value;
  return {...safe,ownHand};
 }
 export function startServerPve(game:string,level:string,randInt:(n:number)=>number):TrustedPveState{
  if(!DUEL_PROGRESSION_GAMES.includes(game as DuelProgressionGame)||!validLevels.has(level))
   throw Error('ゲームまたはCPU難易度が不正です。');
- const initial=boardGames.has(game)?{board:initialDuelBoard(game),secret:null}:miniStart(game,randInt);
+ const initial=game==='trio'?{board:'.........',secret:null}:boardGames.has(game)?{board:initialDuelBoard(game),secret:null}:miniStart(game,randInt);
  return {game:game as DuelProgressionGame,level:level as PveLevel,
   board:initial.board,secret:initial.secret,turn:'human',
   winner:null,version:0,humanMoves:0,cpuMoves:0};
@@ -50,6 +52,13 @@ export function advanceServerPve(
 ):TrustedPveState{
  if(old.turn!=='human'||old.winner!==null)throw Error('CPU戦の手番が不正です。');
  if(typeof body!=='object'||!body||Array.isArray(body))throw Error('着手が不正です。');
+ if(old.game==='trio'){
+  if(typeof body.cell!=='number'||!Number.isSafeInteger(body.cell))throw Error('着手が不正です。');
+  const result=trioPlayTurn(old.board,body.cell,old.level,random);
+  const winner=result.winner==='X'?'human':result.winner==='O'?'cpu':result.winner==='draw'?'draw':null;
+  return {...old,board:result.board,secret:null,turn:winner?'finished':'human',winner,
+   version:old.version+1,humanMoves:old.humanMoves+1,cpuMoves:old.cpuMoves+(result.cpuCell===null?0:1)};
+ }
  let board=old.board,secret=old.secret;
  let turn:PveTurn='cpu',winner:PveWinner=null;
  const boardMode=boardGames.has(old.game);

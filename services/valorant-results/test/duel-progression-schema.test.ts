@@ -35,7 +35,7 @@ test('a verified duel/user can receive at most one receipt in any mode and game'
 });
 test('additive DDL initializes once for a DB handle and stays retryable',async()=>{
  const db=new DatabaseSync(':memory:');let calls=0;
- const env={DB:{prepare(sql:string){return {run:async()=>{calls++;db.exec(sql);}};}}};
+ const env={DB:{prepare(sql:string){return {run:async()=>{calls++;db.exec(sql);},bind:(...args:unknown[])=>({first:async()=>db.prepare(sql).get(...args as [])})};}}};
  try{
   await Promise.all([ensureDuelProgressionTables(env as never),ensureDuelProgressionTables(env as never)]);
   await ensureDuelProgressionTables(env as never);

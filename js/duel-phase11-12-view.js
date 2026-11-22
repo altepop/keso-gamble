@@ -2,15 +2,15 @@
  * The browser cannot choose the daily game/level or award KP.
  */
 const safe=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const names={othello:'オセロ',gomoku:'五目並べ',connect4:'四目並べ',hitblow:'ヒット＆ブロー',bluffdice:'ブラフダイス',poker:'５カードポーカー'};
+const names={trio:'三目並べ',othello:'オセロ',gomoku:'五目並べ',connect4:'四目並べ',hitblow:'ヒット＆ブロー',bluffdice:'ブラフダイス',poker:'５カードポーカー'};
 const resultName={human:'勝利',cpu:'敗北',draw:'引き分け'};
 function controls(match,busy){
  const board=String(match.board??''),game=match.game,can=match.turn==='human'&&!busy;
- if(['othello','gomoku','connect4'].includes(game)){
-  const columns=game==='connect4'?7:game==='othello'?8:15;
-  if(!new RegExp('^[.BWab]{'+(game==='connect4'?42:columns*columns)+'}$').test(board))
+ if(['othello','gomoku','connect4','trio'].includes(game)){
+  const columns=game==='trio'?3:game==='connect4'?7:game==='othello'?8:15;
+  if(!(game==='trio'?/^[.XO]{9}$/.test(board):new RegExp('^[.BWab]{'+(game==='connect4'?42:columns*columns)+'}$').test(board)))
    return '<p role="alert">盤面の形式を確認できません。再取得してください。</p>';
-  const pieces={B:'●',W:'○',a:'●',b:'○','.':'·'};
+  const pieces={X:'×',O:'○',B:'●',W:'○',a:'●',b:'○','.':'·'};
   const playable=game==='connect4'?Array.from({length:7},(_,i)=>i):[...board].flatMap((v,i)=>v==='.'?[i]:[]);
   const cells=game==='connect4'?Array.from({length:7},(_,i)=>'<button class="action-btn" data-duel-pve-cell="'+i+'" '+(!can||board[i]!=='.'?'disabled':'')+'>'+(i+1)+'列</button>').join(''):
    [...board].map((v,i)=>'<button type="button" data-duel-pve-cell="'+i+'" '+(!can||v!=='.'?'disabled':'')+' aria-label="'+(Math.floor(i/columns)+1)+'行'+(i%columns+1)+'列" style="min-height:27px;padding:1px;font-size:14px">'+pieces[v]+'</button>').join('');
@@ -37,7 +37,7 @@ export function duelPvePanel({live=false,busy=false,preview=null,match=null,erro
  (!live?'<p>KP口座への接続が必要です。</p>':
  '<div class="action-row"><button class="action-btn" data-duel-pve-preview="1" '+(busy?'disabled':'')+'>今日の種目を確認</button>'+
  '<button class="action-btn primary" data-duel-pve-start="1" '+(busy||pending?'disabled':'')+'>今日のCPU戦を開始</button></div>'+
- '<div class="panel"><div class="card-body"><p class="helper">サーバーCPU攻略：６種目から選んで挑戦できる。対局と勝敗はサーバーが確定する。</p><label>種目<select id="duel-pve-game">'+Object.entries(names).map(([key,label])=>'<option value="'+key+'" '+(game===key?'selected':'')+'>'+safe(label)+'</option>').join('')+'</select></label><label>CPU難易度<select id="duel-pve-level">'+[['easy','イージー'],['normal','ノーマル'],['strong','ストロング']].map(([key,label])=>'<option value="'+key+'" '+(level===key?'selected':'')+'>'+label+'</option>').join('')+'</select></label><button class="action-btn primary" data-duel-pve-custom-start="1" '+(busy||pending?'disabled':'')+'>選んだ種目でCPU戦を開始</button></div></div>'+
+ '<div class="panel"><div class="card-body"><p class="helper">サーバーCPU攻略：７種目から選んで挑戦できる。対局と勝敗はサーバーが確定する。</p><label>種目<select id="duel-pve-game">'+Object.entries(names).map(([key,label])=>'<option value="'+key+'" '+(game===key?'selected':'')+'>'+safe(label)+'</option>').join('')+'</select></label><label>CPU難易度<select id="duel-pve-level">'+[['easy','イージー'],['normal','ノーマル'],['strong','ストロング']].map(([key,label])=>'<option value="'+key+'" '+(level===key?'selected':'')+'>'+label+'</option>').join('')+'</select></label><button class="action-btn primary" data-duel-pve-custom-start="1" '+(busy||pending?'disabled':'')+'>選んだ種目でCPU戦を開始</button></div></div>'+
  (preview?'<p class="helper">本日 '+safe(preview.day)+'：'+safe(names[preview.game]??preview.game)+' ／ '+safe(preview.level)+'</p>':'')+
  '<label class="helper">途中のCPU戦を再開（試合ID）<input id="duel-pve-session-input" class="action-input" maxlength="36" placeholder="試合ID" value="'+safe(sessionInput)+'"></label><button class="action-btn" data-duel-pve-resume="1" '+(busy?'disabled':'')+'>再開</button>'+
  (error?'<p role="alert">'+safe(error)+'</p>':'')+(pending?'<p class="helper">直前の送信結果が未確定です。別の操作をせず、同じ操作IDで確認してください。</p><button type="button" class="action-btn primary" data-duel-pve-retry="1" '+(busy?'disabled':'')+'>前回の操作を確認</button>':'')+(message?'<p role="status">'+safe(message)+'</p>':'')+

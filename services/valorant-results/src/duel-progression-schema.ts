@@ -3,10 +3,11 @@
  * server-side duel progression integration. No KP or relic writes occur here.
  */
 import type {KpEnv} from './kp.ts';
+import {ensureTrioGameConstraint} from './duel-trio-schema.ts';
 export const DUEL_PROGRESSION_DDL=[
  `CREATE TABLE IF NOT EXISTS kp_duel_mode_skill (
    guild TEXT NOT NULL,user TEXT NOT NULL,mode TEXT NOT NULL CHECK(mode IN ('pve','pvp')),
-   game TEXT NOT NULL CHECK(game IN ('othello','gomoku','connect4','hitblow','bluffdice','poker')),
+   game TEXT NOT NULL CHECK(game IN ('othello','gomoku','connect4','hitblow','bluffdice','poker','trio')),
    points INTEGER NOT NULL DEFAULT 0 CHECK(points>=0),
    peak_points INTEGER NOT NULL DEFAULT 0 CHECK(peak_points>=0),
    verified_games INTEGER NOT NULL DEFAULT 0 CHECK(verified_games>=0),
@@ -19,7 +20,7 @@ export const DUEL_PROGRESSION_DDL=[
  `CREATE TABLE IF NOT EXISTS kp_duel_progress_receipts (
    guild TEXT NOT NULL,match_id TEXT NOT NULL,user TEXT NOT NULL,
    mode TEXT NOT NULL CHECK(mode IN ('pve','pvp')),
-   game TEXT NOT NULL CHECK(game IN ('othello','gomoku','connect4','hitblow','bluffdice','poker')),
+   game TEXT NOT NULL CHECK(game IN ('othello','gomoku','connect4','hitblow','bluffdice','poker','trio')),
    opponent TEXT,
    outcome TEXT NOT NULL CHECK(outcome IN ('win','loss','draw')),
    verified_version INTEGER NOT NULL CHECK(verified_version>=0),
@@ -36,7 +37,11 @@ const ready=new WeakMap<object,Promise<void>>();
 export async function ensureDuelProgressionTables(env:Pick<KpEnv,'DB'>):Promise<void>{
  const db=env.DB;
  const current=ready.get(db);if(current)return current;
- const pending=(async()=>{for(const sql of DUEL_PROGRESSION_DDL)await db.prepare(sql).run();})();
+ const pending=(async()=>{
+  await ensureTrioGameConstraint(env,'kp_duel_mode_skill');
+  await ensureTrioGameConstraint(env,'kp_duel_progress_receipts');
+  for(const sql of DUEL_PROGRESSION_DDL)await db.prepare(sql).run();
+ })();
  ready.set(db,pending);
  try{await pending;}catch(error){ready.delete(db);throw error;}
 }

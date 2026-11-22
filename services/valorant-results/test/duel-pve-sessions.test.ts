@@ -29,9 +29,9 @@ function fixture(){
 }
 const first:{[key:string]:Record<string,unknown>}={
  othello:{cell:19},gomoku:{cell:112},connect4:{cell:3},
- hitblow:{guess:'9876'},bluffdice:{choice:'bid',count:1,face:1},poker:{cells:[]}
+ hitblow:{guess:'9876'},bluffdice:{choice:'bid',count:1,face:1},poker:{cells:[]},trio:{cell:0}
 };
-test('six authenticated server modes persist CPU decision but only expose public states',async()=>{
+test('seven authenticated server modes persist CPU decision but only expose public states',async()=>{
  const {db,env}=fixture();
  try{
   for(const game of DUEL_PROGRESSION_GAMES){
