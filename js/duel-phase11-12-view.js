@@ -32,8 +32,8 @@ function controls(match,busy){
     'gap:3px;padding:6px;margin-top:5px;border-radius:12px;background:#2162b5;box-sizing:border-box;width:100%">'+grid+'</div></div>';
   }
   const pieces={X:'×',O:'○',B:'●',W:'○',a:'●',b:'○','.':'·'};
-  const cells=[...board].map((v,i)=>'<button type="button" data-duel-pve-cell="'+i+'" '+(!can||v!=='.'?'disabled':'')+' aria-label="'+(Math.floor(i/columns)+1)+'行'+(i%columns+1)+'列" style="min-height:27px;padding:1px;font-size:14px">'+pieces[v]+'</button>').join('');
-  return '<div style="display:grid;grid-template-columns:repeat('+columns+',minmax(0,1fr));gap:2px" role="group" aria-label="CPU戦盤面">'+cells+'</div>';
+  const cells=[...board].map((v,i)=>'<button type="button" data-duel-pve-cell="'+i+'" '+(!can||v!=='.'?'disabled':'')+' aria-label="'+(Math.floor(i/columns)+1)+'行'+(i%columns+1)+'列" class="duel-pve-cell">'+pieces[v]+'</button>').join('');
+  return '<div class="duel-pve-board duel-pve-board-'+game+'" style="--duel-cols:'+columns+'" role="group" aria-label="CPU戦盤面">'+cells+'</div>';
  }
  const pub=(()=>{try{return JSON.parse(board)}catch{return null}})();
  if(!pub||typeof pub!=='object')return '<p role="alert">盤面の形式を確認できません。</p>';
@@ -91,18 +91,18 @@ export function duelHistoryPanel({open=false,busy=false,data=null,error='',mode=
 export function duelPvePanel({live=false,busy=false,preview=null,match=null,error='',message='',sessionInput='',pending=null,open=false,game='othello',level='normal',rewardsOpen=false,rewards=null,rewardsError='',historyUi=null}={}){
  const active=match&&typeof match.id==='string';
  const expanded=open||active||preview||error||message;
- return '<details class="panel" id="duel-pve-section" '+(expanded?'open':'')+'><summary>🗓️ 今日のCPUチャレンジ（サーバー対戦）</summary><div class="card-body">'+
+ return '<section class="duel-pve-stage" id="duel-pve-section" aria-label="CPU攻略の対局画面"><div class="duel-pve-stage-head"><span class="duel-pve-kicker">SERVER CPU · MAIN MODE</span><h3>CPU攻略アリーナ</h3><p>種目を選んで、何度でも本気の対局へ。勝敗と熟練度はサーバーで確定する。</p></div><div class="duel-pve-stage-body">'+
  '<p class="helper">６種目を日替わりで挑戦。KP残高を賭けず、実戦用のサーバー判定で進行する。既存のPvE報酬規則のみ適用され、日替わり特別KPはない。</p>'+
  '<button type="button" class="action-btn" data-duel-history-open="1" '+(busy?'disabled':'')+'>7種目の対局履歴・熟練度を見る</button>'+
  (!live?'<p>KP口座への接続が必要です。</p>':
  '<div class="action-row"><button class="action-btn" data-duel-pve-preview="1" '+(busy?'disabled':'')+'>今日の種目を確認</button>'+
  '<button class="action-btn primary" data-duel-pve-start="1" '+(busy||pending?'disabled':'')+'>今日のCPU戦を開始</button></div>'+
- '<div class="panel"><div class="card-body"><p class="helper">サーバーCPU攻略：７種目から選んで挑戦できる。対局と勝敗はサーバーが確定する。</p><label>種目<select id="duel-pve-game">'+Object.entries(names).map(([key,label])=>'<option value="'+key+'" '+(game===key?'selected':'')+'>'+safe(label)+'</option>').join('')+'</select></label><label>CPU難易度<select id="duel-pve-level">'+[['easy','イージー'],['normal','ノーマル'],['strong','ストロング']].map(([key,label])=>'<option value="'+key+'" '+(level===key?'selected':'')+'>'+label+'</option>').join('')+'</select></label><button class="action-btn primary" data-duel-pve-custom-start="1" '+(busy||pending?'disabled':'')+'>選んだ種目でCPU戦を開始</button></div></div>'+
+ '<div class="duel-pve-setup"><p class="helper">選択した種目：'+safe(names[game]??game)+'。上の種目カードから変更できる。</p><label class="duel-pve-legacy-select">種目<select id="duel-pve-game">'+Object.entries(names).map(([key,label])=>'<option value="'+key+'" '+(game===key?'selected':'')+'>'+safe(label)+'</option>').join('')+'</select></label><label>CPU難易度<select id="duel-pve-level">'+[['easy','イージー'],['normal','ノーマル'],['strong','ストロング']].map(([key,label])=>'<option value="'+key+'" '+(level===key?'selected':'')+'>'+label+'</option>').join('')+'</select></label><button class="action-btn primary" data-duel-pve-custom-start="1" '+(busy||pending?'disabled':'')+'>この種目でCPU戦を始める →</button></div>'+
  (preview?'<p class="helper">本日 '+safe(preview.day)+'：'+safe(names[preview.game]??preview.game)+' ／ '+safe(preview.level)+'</p>':'')+
- '<label class="helper">途中のCPU戦を再開（試合ID）<input id="duel-pve-session-input" class="action-input" maxlength="36" placeholder="試合ID" value="'+safe(sessionInput)+'"></label><button class="action-btn" data-duel-pve-resume="1" '+(busy?'disabled':'')+'>再開</button>'+
+ '<details class="duel-pve-recovery"><summary>以前の試合をIDで再開</summary><label class="helper">途中のCPU戦を再開（試合ID）<input id="duel-pve-session-input" class="action-input" maxlength="36" placeholder="試合ID" value="'+safe(sessionInput)+'"></label><button class="action-btn" data-duel-pve-resume="1" '+(busy?'disabled':'')+'>再開</button></details>'+
  (error?'<p role="alert">'+safe(error)+'</p>':'')+(pending?'<p class="helper">直前の送信結果が未確定です。別の操作をせず、同じ操作IDで確認してください。</p><button type="button" class="action-btn primary" data-duel-pve-retry="1" '+(busy?'disabled':'')+'>前回の操作を確認</button>':'')+(message?'<p role="status">'+safe(message)+'</p>':'')+
- (active?'<div class="panel"><div class="card-body"><h3>'+safe(names[match.game]??match.game)+' ／ '+safe(resultName[match.winner]??(match.turn==='human'?'あなたの手番':'処理中'))+'</h3><p class="helper">試合ID：'+safe(match.id)+' ／ 第'+safe(match.version)+'版 ／ あなたの手数：'+safe(match.humanMoves)+'</p>'+
- controls(match,busy)+'</div></div>':''))+'</div></details>'+
+ (active?'<div class="duel-pve-arena" data-duel-pve-state="'+safe(match.turn)+'"><div class="duel-pve-arena-top"><span>LIVE MATCH · '+safe(names[match.game]??match.game)+'</span><span>第'+safe(match.version)+'版</span></div><h3>'+safe(resultName[match.winner]??(match.turn==='human'?'あなたの手番':'CPU処理中'))+'</h3><p class="duel-pve-turn">あなたの手数 '+safe(match.humanMoves)+' · '+(match.turn==='finished'?'対局終了':'サーバー判定で対局中')+'</p>'+
+ controls(match,busy)+'</div>':''))+'</div></section>'+
  (historyUi?.open?duelHistoryPanel(historyUi):'')+
  (rewardsOpen?'<section class="panel" id="duel-rewards-in-app"><div class="card-body"><h3>決闘の戦績・報酬（サーバー取得）</h3>'+
  (rewardsError?'<p role="alert">'+safe(rewardsError)+'</p>':'')+
