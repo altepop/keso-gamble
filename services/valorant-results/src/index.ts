@@ -728,7 +728,7 @@ export default {
     // Phase 12: use the existing cron once daily for an owner-safe, read-only
     // retention count. Never delete duel records or trigger KP rewards.
     if(shouldRunDuelDailyAudit(_event.scheduledTime??Date.now()))
-      ctx.waitUntil(track(env,'duel_daily_readonly_audit',async()=>{
+      ctx.waitUntil((async()=>{
         const mapping=await initializeKp(env);if(!mapping)return;
         const audit=await duelOperationsAudit({DB:env.DB},mapping.guildId);
         console.info('duel_daily_readonly_audit',{
@@ -739,7 +739,7 @@ export default {
           reviewRecommended:audit.reviewRecommended,
           deletionAuthorized:false
         });
-      }));
+      })().catch(()=>console.warn('duel_daily_readonly_audit_pending')));
     // Register only /predict through scoped client credentials. No new Bot Token secret is needed.
     if(Math.floor((_event.scheduledTime??Date.now())/60000)%10===0)
       ctx.waitUntil(track(env,'prediction_command',()=>ensurePredictionCommand(env).then(ok=>{

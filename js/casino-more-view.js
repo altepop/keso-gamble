@@ -1,6 +1,6 @@
-import { CASINO_MIN, CASINO_MAX, RANKS, SUITS } from './casino.js?v=web-140c0843ea653fe9';
-import {templeRespinScene,templeWinBackdrop} from './slot-temple-view.js?v=web-140c0843ea653fe9';
-import { MINES_CELLS, MINES_CHOICES, MINES_CAP, minesMultiplier, SLOT_SYMBOLS, slotWinTier, JACKPOT_PERCENT, JACKPOT_FULL_BET, VP_PAYS, VP_NAMES, BACCARAT_SIDES } from './casino-more.js?v=web-140c0843ea653fe9';
+import { CASINO_MIN, CASINO_MAX, RANKS, SUITS } from './casino.js?v=web-dc6f49bec78d8e84';
+import {templeRespinScene,templeWinBackdrop} from './slot-temple-view.js?v=web-dc6f49bec78d8e84';
+import { MINES_CELLS, MINES_CHOICES, MINES_CAP, minesMultiplier, SLOT_SYMBOLS, slotWinTier, JACKPOT_PERCENT, JACKPOT_FULL_BET, VP_PAYS, VP_NAMES, BACCARAT_SIDES } from './casino-more.js?v=web-dc6f49bec78d8e84';
 // Screens for マインズ・スロット・ビデオポーカー・バカラ. They only show what the wallet already holds; every draw and
 // payout is decided by casino-more.js (the server's for live wallets).
 const kp=n=>Math.abs(n).toLocaleString('ja-JP')+' KP';
