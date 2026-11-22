@@ -106,8 +106,27 @@ test('issue #522: batch fresh cross-cron receipts cut joined calls without hidin
   if(sql.includes('FROM kp_events e')&&sql.includes('LEFT JOIN kp_escalation_power_matches'))calls.push(sql);
   return base(sql);
  }) as typeof f.env.DB.prepare;
+ // Identical SQLite fixture, same IDs, fresh run snapshots: compare actual
+ // joined-query execution counts rather than a design-time 4-to-1 estimate.
+ const legacy=await prepareKpRun(f.env,mapping);
+ for(const id of ids)await loadKpRunMatch(f.env,legacy,id);
+ const legacyCalls=calls.length;
+ assert.equal(legacyCalls,4,'legacy per-ID path executes four joined reads');
+ calls.length=0;
  const first=await prepareKpRun(f.env,mapping);
  await preloadKpRunMatches(f.env,first,ids);
+ const batchCalls=calls.length;
+ assert.equal(batchCalls,1,'batch path executes one joined read on the same fixture');
+ assert.equal(legacy.credits.get(ids[0]),first.credits.get(ids[0]));
+ assert.equal(legacy.credits.get(ids[1]),first.credits.get(ids[1]));
+ assert.equal(legacy.credits.get(ids[2]),first.credits.get(ids[2]));
+ assert.equal(legacy.credits.has(ids[3]),first.credits.has(ids[3]));
+ // SQLite EXPLAIN on the *executed* batch query, not an assumed index name.
+ const plan=f.sql.prepare('EXPLAIN QUERY PLAN '+calls[0]).all(...ids,guild) as {detail:string}[];
+ assert.ok(plan.some(row=>/SEARCH e USING (?:COVERING )?INDEX|SEARCH e USING INTEGER PRIMARY KEY/.test(row.detail)),
+  'batch must use an indexed kp_events lookup rather than a table scan');
+ // Measured: 4 -> 1 joined calls. SQLite fixture does not expose D1 rows_read.
+ // Keep that metric explicitly unmeasured until D1 Insights can compare it.
  assert.equal(calls.length,1,'four indexed receipts share one SQL call');
  for(const id of ids)await loadKpRunMatch(f.env,first,id);
  assert.equal(calls.length,1,'individual access must reuse prefetched data including misses');
