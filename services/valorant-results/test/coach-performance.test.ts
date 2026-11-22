@@ -138,7 +138,7 @@ test('Phase 4 verified map rotation separates historic and missing maps',()=>{
 test('timestamp-only roster with valid identities is excluded without inventing zero stats',()=>{
  const real=row(1,{ended_at:Date.parse('2026-11-19T15:00:00Z')});
  const blank=row(2,{ended_at:Date.parse('2026-11-21T21:57:00Z'),map:null,teams_json:null});
- const ps=JSON.parse(blank.players_json);ps.forEach(p=>{p.agent=null;p.k=null;p.d=null;p.a=null;p.score=null;});
+ const ps=JSON.parse(blank.players_json);ps.forEach((p:Record<string,unknown>)=>{p.agent=null;p.k=null;p.d=null;p.a=null;p.score=null;});
  const result=coachPerformance([{...blank,players_json:JSON.stringify(ps)},real],accounts);
  assert.equal(result.overall.matches,1);
  assert.equal(result.quality.excluded['time-only-record'],1);
