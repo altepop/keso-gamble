@@ -2,14 +2,16 @@ import {activityLaunchComponents} from './activity-link.ts';
 export const GAME_CHOICES=[
  {name:'オセロ',value:'othello',emoji:'⚫',note:'挟んで石を裏返す'},
  {name:'五目並べ',value:'gomoku',emoji:'🔵',note:'先に5つ並べる'},
+ {name:'三目並べ',value:'tictactoe',emoji:'❌',note:'短時間で3つそろえる'},
  {name:'四目並べ',value:'connect4',emoji:'🟡',note:'落として4つ並べる'},
  {name:'Hit & Blow',value:'hitblow',emoji:'🔢',note:'数字と位置を推理'},
  {name:'ブラフダイス',value:'bluffdice',emoji:'🎲',note:'相手の宣言を見抜く'},
  {name:'簡易ポーカー',value:'poker',emoji:'🃏',note:'役と読み合いで勝負'},
+ {name:'ドット＆ボックス',value:'dotsboxes',emoji:'📦',note:'辺を引き、マスを囲って取る'},
 ] as const;
 export type GameId=typeof GAME_CHOICES[number]['value'];
 export const GAME_IDS=new Set<string>(GAME_CHOICES.map(g=>g.value));
-export const CHOOSE_BUTTON=/^gc:choose:(othello|gomoku|connect4|hitblow|bluffdice|poker)$/;
+export const CHOOSE_BUTTON=/^gc:choose:(othello|gomoku|connect4|hitblow|bluffdice|poker|tictactoe|dotsboxes)$/;
 export const RECRUIT_BUTTON=/^gc:(join|leave):(\d{15,22})$/;
 export const DUEL_BUTTON=/^gc:duel:(accept|decline):([0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12})$/i;
 export const gameName=(id:string)=>GAME_CHOICES.find(g=>g.value===id)?.name??'ゲーム';
