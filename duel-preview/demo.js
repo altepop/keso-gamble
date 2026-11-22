@@ -165,6 +165,10 @@ document.addEventListener('change',e=>{
 document.addEventListener('click',e=>{
  const switcher=e.target.closest('[data-demo-view]');
  if(switcher){if(againstCpu)return;viewer=switcher.dataset.demoView;picks=[];guessDraft='';previewCell=null;confirmResign=false;pickerOpen=false;note('');render();return;}
+ const sport=e.target.closest('[data-duel-sport]');
+ if(sport&&Object.hasOwn(GAMES,sport.dataset.duelSport)){
+  restart(sport.dataset.duelSport);return;
+ }
  const targetOption=e.target.closest('[data-duel-target-option]');
  if(targetOption){target=targetOption.dataset.duelTargetOption;pickerOpen=false;render();return;}
  if(e.target.closest('[data-duel-target-toggle]')){pickerOpen=!pickerOpen;render();return;}
