@@ -14,9 +14,17 @@ export async function ensureTrioGameConstraint(env:Pick<KpEnv,'DB'>,table:string
  if(row.sql.includes("'trio'"))return;
  if(!row.sql.includes(oldGames))throw Error('既存の決闘テーブル制約が未知のため安全に移行できません。');
  // Read under the same D1 connection; migration is never used for other tables.
- const objects=(await env.DB.prepare(
-  "SELECT type,name,sql FROM sqlite_master WHERE tbl_name=? AND type IN ('trigger','index') AND sql IS NOT NULL ORDER BY type,name"
- ).bind(table).all<{type:string;name:string;sql:string}>()).results;
+ const indexes=(await env.DB.prepare(
+  "SELECT name,sql FROM sqlite_master WHERE tbl_name=? AND type='index' AND sql IS NOT NULL ORDER BY name"
+ ).bind(table).all<{name:string;sql:string}>()).results;
+ // SQLite validates triggers on OTHER tables as well when renaming a table.
+ // Temporarily remove every SQL trigger referencing this target and restore
+ // it within the same atomic batch, including cross-table reward triggers.
+ const triggers=(await env.DB.prepare(
+  "SELECT name,sql FROM sqlite_master WHERE type='trigger' AND sql LIKE ? ORDER BY name"
+ ).bind('%'+table+'%').all<{name:string;sql:string}>()).results;
+ if(triggers.some(({name})=>!/^[a-zA-Z0-9_]+$/.test(name)))
+  throw Error('決闘トリガー名が不正です。');
  const oldCreate=row.sql;
  const newName=table+'_trio_upgrade';
  const definition=oldCreate.replace(
@@ -29,11 +37,13 @@ export async function ensureTrioGameConstraint(env:Pick<KpEnv,'DB'>,table:string
  if(!cols.length||cols.some(name=>!/^[a-z_]+$/i.test(name)))throw Error('決闘テーブル列情報を検証できません。');
  const names=cols.map(name=>'"'+name+'"').join(',');
  const commands=[
+  ...triggers.map(obj=>env.DB.prepare('DROP TRIGGER IF EXISTS "'+obj.name+'"')),
   env.DB.prepare(definition),
   env.DB.prepare('INSERT INTO '+newName+' ('+names+') SELECT '+names+' FROM '+table),
   env.DB.prepare('DROP TABLE '+table),
   env.DB.prepare('ALTER TABLE '+newName+' RENAME TO '+table),
-  ...objects.map(obj=>env.DB.prepare(obj.sql))
+  ...indexes.map(obj=>env.DB.prepare(obj.sql)),
+  ...triggers.map(obj=>env.DB.prepare(obj.sql))
  ];
  await env.DB.batch(commands);
 }
