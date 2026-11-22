@@ -31,3 +31,20 @@ test('reject malformed guild and clock instead of querying other tenants',async(
  await assert.rejects(duelOperationsAudit(env as never,'',100));
  await assert.rejects(duelOperationsAudit(env as never,'111111111111111111',NaN));
 });
+
+test('PvP 30-day threshold detects stale rooms before 90-day PvE threshold',async()=>{
+ const now=100*86_400_000;
+ const guild='606131625084059674';
+ const calls:Array<{sql:string;args:unknown[]}>=[];
+ const env={DB:{prepare:(sql:string)=>({bind:(...args:unknown[])=>{
+  calls.push({sql,args});
+  return {first:async()=>({stale:1,active:0})};
+ }})}};
+ const result=await duelOperationsAudit(env as never,guild,now);
+ assert.equal(result.retentionReviewDays,90);
+ assert.equal(result.pvpRetentionReviewDays,30);
+ assert.equal(calls.length,2);
+ assert.equal(calls[0].args[0],now-90*86_400_000);
+ assert.equal(calls[1].args[0],now-30*86_400_000);
+ assert.equal(result.deletionAuthorized,false);
+});
