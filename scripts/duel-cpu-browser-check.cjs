@@ -102,6 +102,15 @@ let browser;const errors=[],requests=[];
  assert.equal(await host.evaluate(()=>KesoMusic.getState().playing),true,'music continues after return');
  await practiceLink.waitFor({state:'visible'});
   assert.equal(await practiceLink.count(),1);
+  const activityBeforeUrl=host.url();
+  // Sport buttons must open inside the overlay, not restart Discord Activity.
+  await host.locator('[data-duel-practice-game="gomoku"]').click();
+  await practice.locator('body.cpu-practice').waitFor();
+  assert.equal(await practice.locator('#demo-mode').inputValue(),'gomoku','selected sport opens in CPU practice');
+  assert.equal(host.url(),activityBeforeUrl,'sport choice keeps the original Activity URL');
+  assert.equal(await host.evaluate(()=>KesoMusic.getState().playing),true,'sport choice keeps music playing');
+  await practice.locator('[data-demo-return]').click();
+  await host.locator('#keso-cpu-practice-overlay').waitFor({state:'detached'});
   await host.locator('[data-duel-entry-back]').click();
   assert.equal(await host.locator('#duel-entry-home [data-duel-entry]').count(),3);
   const activityBefore=host.url();
