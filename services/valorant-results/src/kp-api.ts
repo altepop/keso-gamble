@@ -641,6 +641,11 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping,deferP
    if(text.length>512)return response({error:'入力が長すぎます。'},400);
    return response(await savePveBuild(env,mapping.guildId,owner.user,JSON.parse(text)));
   }
+  if(path==='/api/kp/duels/history'){
+   if(request.method!=='GET')return response({error:'未対応の操作です。'},405);
+   const q=new URL(request.url).searchParams;
+   return response(await duelHistoryRead(env,mapping.guildId,owner.user,{mode:q.get('mode')??'all',game:q.get('game')??'all'}));
+  }
   if(request.method==='GET'&&path==='/api/kp/duels/rewards')return response(await duelRewardProfile(env,mapping.guildId,owner.user));
   if(path==='/api/kp/duels/pve')return serverPveApi(request,env,mapping,owner.user,headers);
   if(path==='/api/kp/duels')return boardDuelApi(request,env,mapping,owner.user,headers,deferPostCommit);
