@@ -35,7 +35,7 @@ test('unknown API data is failed closed',()=>{
 test('schedule keeps hourly read-only watch without additional D1, KP or paid APIs',async()=>{
  const {readFileSync}=await import('node:fs');
  const workflow=readFileSync('.github/workflows/duel-deployment-watch.yml','utf8');
- assert.match(workflow,/cron: '43 \\* \\* \\* \\*'/);
+ assert.ok(workflow.includes("cron: '43 * * * *'"));
  assert.match(workflow,/actions: read/);
  assert.doesNotMatch(workflow,/CLOUDFLARE_API_TOKEN|wrangler d1|database\/query/);
 });
