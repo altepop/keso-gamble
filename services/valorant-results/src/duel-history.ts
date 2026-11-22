@@ -74,7 +74,7 @@ export async function duelHistoryRead(env:KpEnv,guild:string,user:string,filter:
  const todays=daily.results as Array<{session_id:string;turn:string;winner:string|null;game:string;difficulty:string;jst_day:string}>;
  return {asOf:now,filter:filters,today:{...today,started:todays.length,finished:todays.filter(s=>s.turn==='finished').length,
   wins:todays.filter(s=>s.turn==='finished'&&s.winner==='human').length},
-  skills:skills.results,history:entries,sessions,collection:collection.results,
+  skills:skills.results as Array<{mode:string;game:string;points:number;peak_points:number;verified_games:number;wins:number;losses:number;draws:number;updated_at:number}>,history:entries,sessions,collection:collection.results,
   limit,historyHasMore:entries.length===limit,sessionsHasMore:sessions.length===limit,
   note:'履歴は各最新20件まで。初回の記録開始前の試合を日替わりと推定しません。認証済み本人だけが閲覧できます。'};
 }
