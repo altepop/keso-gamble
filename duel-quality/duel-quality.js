@@ -788,19 +788,23 @@ function enhance(root) {
     notice.replaceChildren(title,detail);
   }
   function scanPveEntry(){
-    // The separately authenticated PvE page is not a wallet operation.
-    // Link only from the main Activity's duel screen, never the mock demo.
+    // Discord iOS cannot reliably initialize the SDK twice after page navigation.
+    // Keep the authenticated wallet and PvE API in the already-open Activity.
     if(root.id!=='app')return;
     const entry=root.querySelector('.duel-practice-entry');
     if(!entry||entry.querySelector('[data-duel-pve-link]'))return;
-    const link=document.createElement('a');
-    link.href='./duel-pve.html';
+    const link=document.createElement('button');
+    link.type='button';
     link.className='action-btn primary';
     link.dataset.duelPveLink='1';
     link.textContent='サーバーCPU攻略（PvE）を開く';
     link.setAttribute('aria-label','サーバーが勝敗を確定するPvE攻略画面を開く');
-    const rewards=document.createElement('a');
-    rewards.href='./duel-pve.html#duel-rewards';
+    // Native details fallback: even when app state rendering is delayed on iOS,
+    // a tap must reveal the already authenticated in-page PvE controls.
+    link.addEventListener('click',()=>{const panel=root.querySelector('#duel-pve-section');if(panel)panel.open=true;});
+    const rewards=document.createElement('button');
+    rewards.type='button';
+    rewards.dataset.duelPveRewards='1';
     rewards.className='action-btn';
     rewards.textContent='決闘の戦績・報酬';
     entry.prepend(link,rewards);
