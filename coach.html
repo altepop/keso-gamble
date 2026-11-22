@@ -228,6 +228,225 @@
     @keyframes pulse{0%,100%{box-shadow:0 0 0 3px #ff46552b}50%{box-shadow:0 0 0 6px #ff46551c}}
   }
 </style>
+<style id="coach-muse-style">
+  .muse-ui{position:relative;--bg:#0f1923;--bg2:#16212d;--panel:#1c2a38;--panel2:#243443;--line:#33465a;--soft:#263646;--ink:#edf1f5;--ink2:#d7dfe8;--ink3:#a5b5c5;--red:#ff4655;--teal:#00c4b3;--paper:#ece8e1;--gold:#ffb648}
+  .muse-ui *{box-sizing:border-box}
+  .muse-ui{background:var(--bg);color:var(--ink);font-family:"Noto Sans JP",system-ui,sans-serif;font-size:16px;line-height:1.9;letter-spacing:.02em}
+  .muse-ui::before{content:"";position:absolute;inset:0;pointer-events:none;background-image:linear-gradient(#ffffff07 1px,transparent 1px),linear-gradient(90deg,#ffffff07 1px,transparent 1px);background-size:48px 48px}
+  .mu-num{font-family:"Archivo",sans-serif;font-variant-numeric:tabular-nums}.mu-disp{font-family:"Oswald",sans-serif;text-transform:uppercase;letter-spacing:.06em}
+  .mu-wrap{max-width:960px;margin:0 auto;padding:0 16px 44px;position:relative}
+  .mu-cut{clip-path:polygon(0 0,calc(100% - 14px) 0,100% 14px,100% 100%,14px 100%,0 calc(100% - 14px))}
+  .mu-cut-sm{clip-path:polygon(0 0,calc(100% - 9px) 0,100% 9px,100% 100%,9px 100%,0 calc(100% - 9px))}
+  .mu-micro{font-family:"Oswald",sans-serif;font-size:10px;font-weight:600;letter-spacing:.22em;text-transform:uppercase;color:var(--ink3)} .mu-micro b{color:var(--red)} .mu-micro::before{content:"// ";color:var(--red)}
+  .muse-ui button:focus-visible,.muse-ui a:focus-visible,.muse-ui textarea:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+  /* ===== global app nav (screen switcher + member switcher) ===== */
+  .mu-appnav{position:sticky;top:0;z-index:60;margin:0 -16px;padding:10px 16px 11px;background:#0d1620f2;border-bottom:1px solid var(--soft)}
+  .mu-memberbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:9px}
+  .mu-memberbar .mu-mlab{font-size:11px;font-weight:700;letter-spacing:.1em;color:var(--ink3)}
+  .mu-mchip{appearance:none;cursor:pointer;font-family:inherit;font-size:12.5px;font-weight:700;padding:6px 11px;background:var(--panel);color:var(--ink2);border:1px solid var(--line);min-height:36px}
+  .mu-mchip.mu-on{background:var(--paper);color:#0f1923;border-color:var(--paper)}
+  .mu-mchip small{font-size:10px;font-weight:900;color:var(--teal);margin-left:5px}.mu-mchip.mu-on small{color:#0a7c72}
+  .mu-mchip.mu-na{opacity:.55;cursor:not-allowed}.mu-mchip.mu-na small{color:var(--gold)}
+  .mu-snav{display:flex;gap:6px;flex-wrap:wrap}
+  .mu-snav button{appearance:none;cursor:pointer;font-family:inherit;font-weight:900;font-size:13px;padding:9px 13px;background:var(--bg2);color:var(--ink3);border:1px solid var(--soft);min-height:42px}
+  .mu-snav button[aria-selected="true"]{background:var(--red);color:#fff;border-color:var(--red)}
+  .mu-view{display:none}.mu-view.mu-open{display:block}
+  .mu-backlink{appearance:none;background:none;border:0;cursor:pointer;font-family:inherit;font-size:13px;font-weight:700;color:var(--gold);padding:6px 0;text-decoration:underline;text-underline-offset:3px}
+  .mu-vhead{margin:22px 0 4px}.mu-vhead h2{font-size:24px;font-weight:900;line-height:1.4;margin:5px 0 4px}
+  .mu-vhead p{font-size:15px;color:var(--ink2);margin:0;max-width:680px}
+  .mu-golink{appearance:none;background:none;border:0;cursor:pointer;font-family:inherit;font-size:12.5px;font-weight:700;color:var(--gold);padding:4px 0;text-decoration:underline;text-underline-offset:3px}
+  /* ===== hero (home) ===== */
+  .mu-hero{position:relative;margin:0 -16px;overflow:hidden;background:#0a121a;border-bottom:2px solid var(--red)}
+  .mu-hero .mu-bgimg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.30}
+  .mu-hero .mu-shade{position:absolute;inset:0;background:linear-gradient(90deg,#0f1923f2,#0f1923b8 55%,#0f192340),linear-gradient(to top,#0f1923,transparent 60%)}
+  .mu-hero .mu-chamber{position:absolute;right:2px;bottom:0;height:150px;width:auto;pointer-events:none;filter:drop-shadow(-8px 6px 14px #0009)}
+  .mu-hero-in{position:relative;padding:16px 16px 14px;display:flex;flex-wrap:wrap;gap:10px 22px;align-items:flex-end}
+  .mu-hero h1{font-size:30px;font-weight:900;line-height:1.15;margin:4px 0 2px;letter-spacing:.02em}
+  .mu-hero h1 small{font-size:14px;font-weight:700;color:var(--ink2);letter-spacing:.08em}
+  .mu-hero .mu-ids{font-size:12.5px;color:var(--ink2);line-height:1.7}
+  .mu-ranks{display:flex;gap:8px;flex-wrap:wrap;position:relative;z-index:2}
+  .mu-rankbox{background:var(--paper);color:#0f1923;padding:6px 11px 5px;line-height:1.2}.mu-rankbox .mu-r{font-family:"Oswald",sans-serif;font-weight:700;font-size:15px}.mu-rankbox .mu-k{font-size:9px;font-weight:700;letter-spacing:.12em;color:#4a5a68;display:block}
+  .mu-rankbox.mu-ghost{background:#0f1923b8;color:var(--ink);border:1px solid var(--line)}.mu-rankbox.mu-ghost .mu-k{color:var(--ink3)}
+  .mu-hero .mu-lead{position:relative;z-index:2;width:100%;margin:2px 0 0;font-size:15px;color:#e8edf2;max-width:660px}
+  .mu-hero .mu-lead b{color:#fff;border-bottom:2px solid var(--red)}
+  .mu-lab{display:flex;align-items:center;gap:10px;margin:24px 0 10px}.mu-lab .mu-disp{font-size:20px;font-weight:700}.mu-lab .mu-disp em{font-style:normal;color:var(--red)}.mu-lab .mu-rule{flex:1;height:2px;background:var(--soft)}
+  .mu-cycle{background:var(--bg2);border:1px solid var(--soft);padding:14px}
+  .mu-cycle-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .mu-cyc{padding:13px 14px;background:var(--panel);border:1px solid var(--soft);min-height:118px;position:relative}
+  .mu-cyc .mu-ph{font-family:"Oswald",sans-serif;font-weight:700;font-size:11px;letter-spacing:.16em}
+  .mu-cyc h3{margin:4px 0 4px;font-size:15.5px;font-weight:900;line-height:1.5}
+  .mu-cyc p{margin:0;font-size:13px;color:var(--ink2);line-height:1.75}
+  .mu-cyc.mu-done{opacity:.86}.mu-cyc.mu-done .mu-ph{color:var(--teal)} .mu-cyc.mu-now{border:2px solid var(--red);background:#2a1e28}.mu-cyc.mu-now .mu-ph{color:var(--red)}
+  .mu-cyc.mu-next .mu-ph{color:var(--ink3)}
+  .mu-badge{position:absolute;top:10px;right:10px;font-size:9.5px;font-weight:900;letter-spacing:.08em;padding:3px 7px;background:var(--teal);color:#04211d}
+  .mu-badge.mu-nowb{background:var(--red);color:#fff}.mu-badge.mu-nextb{background:var(--panel2);color:var(--ink3)}
+  .mu-cycle-foot{margin:10px 2px 0;font-size:13px;color:var(--ink2)} .mu-cycle-foot b{color:var(--ink)}
+  .mu-vs{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .mu-vs-card{background:var(--bg2);border:1px solid var(--soft);padding:16px}
+  .mu-vs-card.mu-weak{border-top:3px solid var(--red)} .mu-vs-card.mu-strong{border-top:3px solid var(--teal)}
+  .mu-vs-card h3{margin:2px 0 10px;font-size:16px;font-weight:900}
+  .mu-vs-card ul{list-style:none;margin:0;padding:0;display:grid;gap:10px}
+  .mu-vs-card li{font-size:13.5px;line-height:1.8;color:var(--ink2);padding-left:14px;position:relative}
+  .mu-vs-card li::before{content:"";position:absolute;left:0;top:9px;width:7px;height:7px;background:var(--red);clip-path:polygon(0 0,100% 0,100% 100%)}
+  .mu-vs-card.mu-strong li::before{background:var(--teal)}
+  .mu-vs-card li b{color:var(--ink)} .mu-big{font-family:"Oswald",sans-serif;font-weight:700;font-size:19px;color:var(--ink)}
+  .mu-duo{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:start}
+  .mu-tcard{background:var(--bg2);border:1px solid var(--soft);padding:18px}
+  .mu-tcard.mu-hot{border:2px solid var(--red)}
+  .mu-tcard.mu-study{border-top:3px solid var(--gold)}
+  .mu-tcard h2{margin:6px 0 6px;font-size:19px;font-weight:900;line-height:1.55}
+  .mu-tcard .mu-why{margin:0 0 10px;font-size:14.5px;color:var(--ink2);line-height:1.9}
+  .mu-tcard .mu-why b{color:var(--ink)}
+  .mu-subh{font-size:14px;font-weight:900;margin:12px 0 8px}
+  .mu-pts{list-style:none;margin:0 0 12px;padding:0;display:grid;gap:9px}
+  .mu-pts li{font-size:13.5px;line-height:1.85;color:var(--ink2);padding-left:14px;position:relative}
+  .mu-pts li::before{content:"";position:absolute;left:0;top:9px;width:7px;height:7px;background:var(--gold);clip-path:polygon(0 0,100% 0,100% 100%)}
+  .mu-pts li b{color:var(--ink)}
+  .mu-srcbox{border:1px dashed var(--line);background:#0a121a;padding:11px 13px;font-size:12.5px;line-height:1.8;color:var(--ink2)}
+  .mu-srcbox b{color:var(--ink)}
+  .mu-srclinks{list-style:none;margin:8px 0 2px;padding:0;display:grid;gap:8px}
+  .mu-srclinks li{line-height:1.7}
+  .mu-srclinks a{color:var(--gold);font-weight:700;text-decoration:underline;text-underline-offset:3px;overflow-wrap:anywhere}
+  .mu-srclinks a:hover{color:#ffd08a}
+  .mu-srclinks span{display:block;font-size:12px;color:var(--ink3)}
+  .mu-timer{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:14px;background:#0a121a;border:1px solid var(--soft);padding:10px 12px}
+  .mu-clock{font-family:"Oswald",sans-serif;font-weight:700;font-size:30px;line-height:1;min-width:86px}
+  .mu-tbtn{appearance:none;border:1px solid var(--line);background:var(--panel);color:var(--ink);font-family:inherit;font-weight:700;font-size:12px;padding:8px 10px;cursor:pointer;min-height:38px}.mu-tbtn.mu-main{background:var(--red);border-color:var(--red);color:#fff}
+  .mu-cta{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
+  .mu-btn{appearance:none;border:0;cursor:pointer;font-family:inherit;font-weight:900;font-size:14px;min-height:50px;padding:0 18px;clip-path:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px)}
+  .mu-btn-main{background:var(--red);color:#fff;flex:1;min-width:200px}.mu-btn-main[aria-pressed="true"]{background:var(--teal);color:#04211d}
+  .mu-btn-sub{background:var(--panel2);color:var(--ink);border:1px solid var(--line)}
+  .mu-note{margin:10px 0 0;font-size:13.5px;color:var(--ink2)}
+  .mu-feed{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+  .mu-feed div{background:var(--bg2);border:1px solid var(--soft);padding:12px 14px;font-size:13px;line-height:1.8;color:var(--ink2)} .mu-feed b{color:var(--ink);display:block;font-size:13.5px;margin-bottom:2px}
+  .mu-feed .mu-n{font-family:"Oswald",sans-serif;color:var(--red);font-weight:700;font-size:11px;letter-spacing:.14em}
+  .mu-feedbtn{appearance:none;text-align:left;cursor:pointer;font-family:inherit;width:100%}
+  .mu-remember{margin-top:14px;background:var(--red);color:#fff;padding:14px 16px;font-size:15px;font-weight:700;line-height:1.85}
+  .mu-remember span{display:block;font-size:12.5px;font-weight:500;margin-top:2px}
+  .mu-tabs{display:flex;gap:6px;margin:26px 0 0;flex-wrap:wrap}
+  .mu-tab{appearance:none;cursor:pointer;font-family:inherit;font-weight:900;font-size:13.5px;padding:11px 16px;background:var(--bg2);color:var(--ink3);border:1px solid var(--soft);min-height:46px}
+  .mu-tab[aria-selected="true"]{background:var(--paper);color:#0f1923;border-color:var(--paper)}
+  .mu-panelx{display:none;background:var(--bg2);border:1px solid var(--soft);padding:18px;margin-top:8px}
+  .mu-panelx.mu-open{display:block}
+  .mu-panelx h3{font-size:16px;font-weight:900;margin:20px 0 8px;line-height:1.6}.mu-panelx h3:first-child{margin-top:0}
+  .mu-panelx p{font-size:14.5px;color:var(--ink2);line-height:1.9;margin:0 0 8px}.mu-panelx p b{color:var(--ink)}
+  .mu-dsteps{list-style:none;counter-reset:st;margin:0 0 6px;padding:0;display:grid;gap:12px}
+  .mu-dsteps li{counter-increment:st;position:relative;padding-left:38px;font-size:15px;line-height:1.9;color:var(--ink2)}
+  .mu-dsteps li::before{content:counter(st);position:absolute;left:0;top:2px;width:25px;height:25px;background:var(--red);color:#fff;font-family:"Oswald",sans-serif;font-weight:700;font-size:12px;display:grid;place-items:center}
+  .mu-dsteps li b{color:var(--ink)}
+  .mu-setting{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 12px}.mu-setting span{font-size:12px;background:#0a121a;border:1px solid var(--soft);padding:5px 9px;color:var(--ink2)}.mu-setting b{color:var(--red)}
+  .mu-stat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+  .mu-stat{background:#0a121a;border:1px solid var(--soft);padding:11px 12px}.mu-stat .mu-v{font-family:"Oswald",sans-serif;font-weight:700;font-size:22px}.mu-stat .mu-k{font-size:11px;color:var(--ink3);line-height:1.6}
+  .mu-stat .mu-v.mu-na{font-size:16px;color:var(--gold);font-family:"Noto Sans JP",sans-serif;font-weight:900;letter-spacing:.06em}
+  .mu-rot{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin:10px 0}
+  .mu-rot div{background:#0a121a;border:1px solid var(--soft);padding:12px}
+  .mu-rot .mu-d{font-family:"Oswald",sans-serif;font-weight:700;font-size:11px;letter-spacing:.12em;color:var(--red)}
+  .mu-rot h4{margin:3px 0 3px;font-size:14px;font-weight:900}.mu-rot p{font-size:12.5px;margin:0;line-height:1.75}
+  .mu-maprow{display:grid;grid-template-columns:120px 1fr;gap:14px;padding:12px 0;border-top:1px solid var(--soft)} .mu-maprow:first-of-type{border-top:0}
+  .mu-maprow img{width:120px;height:88px;object-fit:cover;display:block}
+  .mu-chips{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}.mu-chips span{font-size:12px;font-weight:700;border:1px solid var(--line);background:#0a121a;padding:5px 9px;color:var(--ink2)} .mu-chips span b{color:var(--ink)}
+  /* ===== shared blocks for sub-screens ===== */
+  .mu-card{background:var(--bg2);border:1px solid var(--soft);padding:18px;margin-top:10px}
+  .mu-card h3{font-size:17px;font-weight:900;margin:4px 0 8px;line-height:1.6}
+  .mu-card p{font-size:15px;color:var(--ink2);line-height:1.9;margin:0 0 8px}.mu-card p b{color:var(--ink)}
+  .mu-flow{display:flex;flex-wrap:wrap;gap:6px;align-items:stretch;margin-top:10px}
+  .mu-fstep{flex:1;min-width:118px;background:var(--panel);border:1px solid var(--soft);padding:10px 12px}
+  .mu-fstep .mu-fn{font-family:"Oswald",sans-serif;font-weight:700;font-size:10.5px;letter-spacing:.14em;color:var(--red)}
+  .mu-fstep b{display:block;font-size:13.5px;margin-top:2px;line-height:1.6}
+  .mu-fstep span{font-size:12px;color:var(--ink3);line-height:1.6;display:block}
+  .mu-fstep.mu-done{border-top:3px solid var(--teal)}.mu-fstep.mu-done .mu-fn{color:var(--teal)}
+  .mu-fstep.mu-now{border:2px solid var(--red);background:#2a1e28}
+  .mu-fieldgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:10px}
+  .mu-field{background:#0a121a;border:1px solid var(--soft);padding:11px 12px}
+  .mu-field .mu-fk{font-size:11px;color:var(--ink3);letter-spacing:.06em}
+  .mu-field .mu-fv{font-family:"Oswald",sans-serif;font-weight:700;font-size:19px;line-height:1.4}
+  .mu-field .mu-fv.mu-na{font-family:"Noto Sans JP",sans-serif;font-size:14px;font-weight:900;color:var(--gold)}
+  .mu-checklist{list-style:none;margin:0;padding:0;display:grid;gap:10px}
+  .mu-checklist li{font-size:14.5px;line-height:1.85;color:var(--ink2);padding-left:16px;position:relative}
+  .mu-checklist li::before{content:"";position:absolute;left:0;top:9px;width:8px;height:8px;background:var(--teal);clip-path:polygon(0 0,100% 0,100% 100%)}
+  .mu-checklist li b{color:var(--ink)}
+  .mu-brow{display:grid;grid-template-columns:118px 1fr auto;gap:8px 14px;align-items:center;background:#0a121a;border:1px solid var(--soft);padding:12px 14px;margin-top:6px}
+  .mu-brow .mu-bn{font-weight:900;font-size:14.5px;line-height:1.5}
+  .mu-brow .mu-bd{font-size:13px;color:var(--ink2);line-height:1.8}.mu-brow .mu-bd b{color:var(--ink)}
+  .mu-chipst{font-size:10.5px;font-weight:900;letter-spacing:.06em;padding:4px 8px;white-space:nowrap}
+  .mu-chipst.mu-ok{background:var(--teal);color:#04211d}.mu-chipst.mu-few{background:#5a4517;color:#ffd08a;border:1px solid var(--gold)}.mu-chipst.mu-na{background:var(--panel2);color:var(--gold);border:1px solid var(--line)}
+  .mu-record{background:#0a121a;border:1px solid var(--soft);padding:14px;margin-top:14px}
+  .mu-record h4{margin:0 0 6px;font-size:14.5px;font-weight:900}
+  .mu-record p{font-size:13px;color:var(--ink2);margin:0 0 10px}
+  textarea.mu-memo{width:100%;min-height:76px;background:var(--bg2);border:1px solid var(--line);color:var(--ink);font-family:inherit;font-size:14px;line-height:1.8;padding:10px 12px;resize:vertical}
+  .mu-donebtn{appearance:none;cursor:pointer;font-family:inherit;font-weight:900;font-size:13.5px;min-height:46px;padding:0 16px;background:var(--panel2);color:var(--ink);border:1px solid var(--line)}
+  .mu-donebtn[aria-pressed="true"]{background:var(--teal);color:#04211d;border-color:var(--teal)}
+  /* settings rows + switches */
+  .mu-srow{display:flex;gap:14px;align-items:flex-start;justify-content:space-between;background:#0a121a;border:1px solid var(--soft);padding:14px;margin-top:6px}
+  .mu-srow .mu-st{flex:1;min-width:200px}.mu-srow .mu-st b{font-size:14.5px;display:block;line-height:1.6}
+  .mu-srow .mu-st span{font-size:12.5px;color:var(--ink3);line-height:1.75;display:block}
+  .mu-switch{appearance:none;cursor:pointer;flex:none;width:56px;height:30px;border-radius:999px;background:var(--panel2);border:1px solid var(--line);position:relative;margin-top:2px}
+  .mu-switch::after{content:"";position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:var(--ink3);transition:left .15s ease,background .15s ease}
+  .mu-switch[aria-checked="true"]{background:#0b4f47;border-color:var(--teal)}
+  .mu-switch[aria-checked="true"]::after{left:29px;background:var(--teal)}
+  .mu-switch:disabled{opacity:.45;cursor:not-allowed}
+  .mu-swstat{font-size:11px;font-weight:900;letter-spacing:.08em;color:var(--ink3);text-align:right;margin-top:5px}
+  .mu-swstat.mu-on{color:var(--teal)}
+  .mu-goalchips{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+  .mu-goalchips button{appearance:none;cursor:pointer;font-family:inherit;font-size:12.5px;font-weight:700;padding:8px 12px;background:var(--bg2);color:var(--ink2);border:1px solid var(--line);min-height:40px}
+  .mu-goalchips button[aria-pressed="true"]{background:var(--paper);color:#0f1923;border-color:var(--paper)}
+  /* states gallery */
+  .mu-states{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+  .mu-statex{background:var(--bg2);border:1px solid var(--soft);padding:16px}
+  .mu-statex h3{font-size:15.5px;font-weight:900;margin:4px 0 6px}
+  .mu-statex p{font-size:13.5px;color:var(--ink2);line-height:1.85;margin:0 0 10px}.mu-statex p b{color:var(--ink)}
+  .mu-statex .mu-rule{font-size:12px;color:var(--ink3);border-top:1px dashed var(--line);padding-top:8px;margin-top:10px;line-height:1.7}
+  .mu-skl{height:13px;background:#22303f;margin-top:8px;overflow:hidden;position:relative}
+  .mu-skl.mu-w60{width:60%}.mu-skl.mu-w80{width:80%}
+  @media(prefers-reduced-motion:no-preference){.mu-skl::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent,#3b5875aa,transparent);animation:mu-skmove 1.3s infinite}@keyframes mu-skmove{from{transform:translateX(-100%)}to{transform:translateX(100%)}}}
+  /* ===== pictogram system (consistent across all views) ===== */
+  .mu-ic{width:19px;height:19px;flex:none;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;vertical-align:-4px}
+  .mu-ic.mu-sm{width:15px;height:15px;vertical-align:-3px}
+  .mu-ic.mu-lg{width:26px;height:26px}
+  .mu-snav button{display:inline-flex;align-items:center;gap:6px;justify-content:center}
+  .mu-snav .mu-ic{width:16px;height:16px;vertical-align:0}
+  /* ===== horizontal flow bar (top of every view) ===== */
+  .mu-flowbar{display:flex;gap:0;margin:14px 0 4px;background:var(--bg2);border:1px solid var(--soft);overflow:hidden}
+  .mu-fbstep{flex:1;min-width:0;position:relative;padding:10px 6px 9px;text-align:center;color:var(--ink3);border-top:3px solid var(--soft)}
+  .mu-fbstep .mu-ic{width:22px;height:22px;vertical-align:0}
+  .mu-fbstep b{display:block;font-size:11px;font-weight:900;line-height:1.45;margin-top:3px;letter-spacing:.02em}
+  .mu-fbstep span{display:block;font-size:9.5px;line-height:1.5;color:var(--ink3)}
+  .mu-fbstep:not(:last-child)::after{content:"›";position:absolute;right:-4px;top:16px;font-size:16px;font-weight:900;color:var(--line);z-index:2}
+  .mu-fbstep.mu-done{color:var(--teal);border-top-color:var(--teal)} .mu-fbstep.mu-done b{color:var(--ink2)}
+  .mu-fbstep.mu-now{color:#fff;background:#2a1e28;border-top-color:var(--red)} .mu-fbstep.mu-now b{color:#fff} .mu-fbstep.mu-now span{color:#ffb9c0}
+  .mu-fbstep.mu-todo b{color:var(--ink2)}
+  button.mu-fbstep{appearance:none;cursor:pointer;font-family:inherit;background:var(--bg2);border-left:0;border-right:0;border-bottom:0;text-align:center}
+  button.mu-fbstep:hover{border-top-color:var(--gold)}
+  /* ===== step section header + one-line conclusion ===== */
+  .mu-stephd{display:flex;gap:12px;align-items:flex-start;margin-bottom:10px}
+  .mu-stephd .mu-pic{flex:none;width:46px;height:46px;display:grid;place-items:center;background:var(--panel);border:1px solid var(--line);color:var(--ink2)}
+  .mu-stephd .mu-pic.mu-now{background:var(--red);border-color:var(--red);color:#fff}
+  .mu-stephd .mu-pic.mu-done{background:#0b4f47;border-color:var(--teal);color:var(--teal)}
+  .mu-stephd .mu-sk{font-family:"Oswald",sans-serif;font-size:10px;font-weight:700;letter-spacing:.18em;color:var(--ink3);text-transform:uppercase}
+  .mu-stephd h3{margin:1px 0 2px}
+  .mu-concl{font-size:14.5px;font-weight:700;line-height:1.8;color:var(--ink);background:#0a121a;border:1px solid var(--soft);padding:9px 12px;margin:0 0 12px}
+  .mu-concl .mu-ic{color:var(--gold)}
+  .mu-concl b{color:var(--gold)}
+  /* ===== collapsible details (depth behind one tap) ===== */
+  details.mu-acc{background:var(--bg2);border:1px solid var(--soft);margin-top:10px}
+  details.mu-acc>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:10px;padding:13px 16px;font-weight:900;font-size:14.5px;line-height:1.6;min-height:48px}
+  details.mu-acc>summary::-webkit-details-marker{display:none}
+  details.mu-acc>summary .mu-ic{color:var(--red)}
+  details.mu-acc>summary .mu-hint{font-size:11.5px;font-weight:700;color:var(--ink3);margin-left:auto;white-space:nowrap}
+  details.mu-acc>summary .mu-chev{transition:transform .18s ease;color:var(--ink3);margin-left:2px}
+  details.mu-acc[open ]>summary .mu-chev{transform:rotate(180deg)}
+  details.mu-acc[open ]>summary{border-bottom:1px solid var(--soft)}
+  details.mu-acc .mu-accbody{padding:14px 16px 16px}
+  details.mu-acc .mu-accbody>*:first-child{margin-top:0}
+  details.mu-acc.mu-incard{background:#0f1a26}
+  .mu-card details.mu-acc{margin-top:12px}
+  .mu-lab .mu-ic{color:var(--red);width:21px;height:21px;vertical-align:-5px;margin-right:2px}
+  .mu-vs-card h3 .mu-ic,.mu-tcard .mu-micro .mu-ic{vertical-align:-3px}
+  .muse-ui footer{margin-top:26px;font-size:11.5px;color:var(--ink3);line-height:1.9;border-top:1px solid var(--soft);padding-top:12px}
+  footer b{color:var(--ink2)}
+  @media(max-width:640px){.mu-vs,.mu-duo,.mu-feed,.mu-stat-grid,.mu-rot,.mu-states{grid-template-columns:1fr}.mu-cycle-grid{grid-template-columns:1fr 1fr}.mu-cyc{min-height:0;padding:11px}.mu-hero .mu-chamber{height:110px;opacity:.85}.mu-maprow{grid-template-columns:1fr}.mu-maprow img{width:100%;height:120px}.mu-fieldgrid{grid-template-columns:1fr 1fr}.mu-brow{grid-template-columns:1fr}.mu-fstep{min-width:44%}.mu-snav button{flex:1;padding:9px 6px;font-size:12.5px}}
+  @media(prefers-reduced-motion:no-preference){.mu-cyc.mu-now{box-shadow:0 0 0 3px #ff46552b}}
+</style>
 <style id="coach-legacy-style">
 .coach-existing{
  --radius-control:8px;--radius-panel:12px;--radius-pill:999px;
@@ -933,6 +1152,536 @@
 
 
 </template>
+<template id="coach-muse-template">
+
+
+  <div class="mu-appnav">
+    <div class="mu-memberbar" aria-label="表示メンバー">
+      <span class="mu-mlab">表示中</span>
+      <button class="mu-mchip mu-on" type="button" aria-pressed="true"><span data-mb="memberName">未取得</span><small data-mb="memberNote">表示中のメンバー</small></button>
+      <button class="mu-mchip mu-na" type="button" disabled title="データ未取得のため切り替えできません">他メンバー<small>未取得</small></button>
+    </div>
+    <nav class="mu-snav" aria-label="画面切替">
+      <button type="button" data-view="home" aria-selected="true"><svg class="mu-ic"><use href="#mu-i-home"/></svg>ホーム</button>
+      <button type="button" data-view="report" aria-selected="false"><svg class="mu-ic"><use href="#mu-i-flag"/></svg>試合後</button>
+      <button type="button" data-view="warmup" aria-selected="false"><svg class="mu-ic"><use href="#mu-i-flame"/></svg>アップ詳細</button>
+      <button type="button" data-view="study" aria-selected="false"><svg class="mu-ic"><use href="#mu-i-book"/></svg>座学詳細</button>
+      <button type="button" data-view="data" aria-selected="false"><svg class="mu-ic"><use href="#mu-i-chart"/></svg>数字</button>
+      <button type="button" data-view="team" aria-selected="false"><svg class="mu-ic"><use href="#mu-i-users"/></svg>チーム</button>
+      <button type="button" data-view="settings" aria-selected="false"><svg class="mu-ic"><use href="#mu-i-sliders"/></svg>設定</button>
+      <button type="button" data-view="states" aria-selected="false"><svg class="mu-ic"><use href="#mu-i-layers"/></svg>状態の型</button>
+    </nav>
+  </div>
+
+  <!-- ================= VIEW: HOME ================= -->
+  <section class="mu-view mu-open" id="mu-view-home">
+  <header class="mu-hero">
+    <img class="mu-bgimg" src="assets/abyss-splash.png" alt="VALORANTのマップ、アビスの公式アート"><div class="mu-shade"></div>
+    <img class="mu-chamber" src="assets/chamber-cut.png" alt="エージェント、チェンバーの公式アート">
+    <div class="mu-hero-in">
+      <div>
+        <span class="mu-micro">KESO <b>//</b> Coach Brief — Today's Two</span>
+        <h1><span data-mb="person">未取得</span> <small data-mb="personSub"></small></h1>
+        <div class="mu-ids" data-mb="ids">登録アカウントを確認しています</div>
+      </div>
+      <div class="mu-ranks">
+        <div class="mu-rankbox mu-cut-sm"><span class="mu-k">CURRENT RANK</span><span class="mu-r">未取得</span></div>
+        <div class="mu-rankbox mu-ghost mu-cut-sm"><span class="mu-k">PEAK</span><span class="mu-r">未取得</span></div>
+        <div class="mu-rankbox mu-ghost mu-cut-sm"><span class="mu-k">COMBINED</span><span class="mu-r" data-mb="combined">未取得</span></div>
+      </div>
+      <p class="mu-lead" data-mb="leadToday">今日の2件は、データが揃い次第ここに表示されます</p>
+    </div>
+  </header>
+
+  <div class="mu-lab"><span class="mu-disp"><svg class="mu-ic"><use href="#mu-i-swap"/></svg>PDCA <em>Cycle</em></span><span class="mu-rule"></span><span class="mu-micro">いまここが分かる図</span></div>
+  <div class="mu-flowbar" role="img" aria-label="PDCAの流れ：試合と分析は完了。現在は今日の2件。次はコンペ、その後に試合後フィードバック">
+    <div class="mu-fbstep mu-done"><svg class="mu-ic"><use href="#mu-i-target"/></svg><b>試合</b><span>コンペ終了</span></div>
+    <button class="mu-fbstep mu-done" type="button" data-goto="data"><svg class="mu-ic"><use href="#mu-i-search"/></svg><b>分析</b><span data-mb="flowMatches">合算データを確認</span></button>
+    <div class="mu-fbstep mu-now"><svg class="mu-ic"><use href="#mu-i-zap"/></svg><b>今日の2件</b><span>いまここ</span></div>
+    <div class="mu-fbstep mu-todo"><svg class="mu-ic"><use href="#mu-i-play"/></svg><b>コンペ</b><span>2試合で試す</span></div>
+    <button class="mu-fbstep mu-todo" type="button" data-goto="report"><svg class="mu-ic"><use href="#mu-i-flag"/></svg><b>試合後</b><span>VODで確認</span></button>
+  </div>
+  <p class="mu-cycle-foot">進み具合： <b>試合 ✓ → 分析 ✓ → 今日の2件（いま）→ コンペ → フィードバック</b> ／ 1周したら、また分析から回ります。分析の中身（弱みと強み）は、この下の2枚です。</p>
+
+  <div class="mu-lab"><span class="mu-disp"><svg class="mu-ic"><use href="#mu-i-eye"/></svg>At <em>a Glance</em></span><span class="mu-rule"></span><span class="mu-micro">弱みと強み — 合算データから</span></div>
+  <div class="mu-vs">
+    <section class="mu-vs-card mu-weak mu-cut" aria-label="弱み">
+      <span class="mu-micro" style="color:#ff8f99">Weak <b>//</b> 勝ち切る力を上げる</span>
+      <h3><svg class="mu-ic"><use href="#mu-i-alert"/></svg> 弱み — 個人成績が勝敗に繋がっていない</h3>
+      <details class="mu-acc mu-incard"><summary><svg class="mu-ic"><use href="#mu-i-search"/></svg>根拠の内訳（4件）<span class="mu-hint">タップで展開</span><svg class="mu-ic mu-chev"><use href="#mu-i-chev"/></svg></summary><div class="mu-accbody">
+      <ul data-mb-list="weak"></ul>
+      </div></details>
+    </section>
+    <section class="mu-vs-card mu-strong mu-cut" aria-label="強み">
+      <span class="mu-micro" style="color:#7fe8dd">Strong <b>//</b> プロに届く土台がある</span>
+      <h3><svg class="mu-ic"><use href="#mu-i-shield"/></svg> 強み — 数字はすでに高い水準</h3>
+      <details class="mu-acc mu-incard"><summary><svg class="mu-ic"><use href="#mu-i-search"/></svg>根拠の内訳（4件）<span class="mu-hint">タップで展開</span><svg class="mu-ic mu-chev"><use href="#mu-i-chev"/></svg></summary><div class="mu-accbody">
+      <ul data-mb-list="strong"></ul>
+      </div></details>
+    </section>
+  </div>
+
+  <div class="mu-lab"><span class="mu-disp"><svg class="mu-ic"><use href="#mu-i-zap"/></svg>Today <em>Just Two</em></span><span class="mu-rule"></span><span class="mu-micro">今日はこの2件だけ</span></div>
+  <section aria-label="今日の2件">
+    <div class="mu-duo">
+      <article class="mu-tcard mu-hot mu-cut">
+        <span class="mu-micro" style="color:var(--red)"><svg class="mu-ic mu-sm"><use href="#mu-i-flame"/></svg> Warm-up <b>//</b> Hands-on · 20 min</span>
+        <h2 data-mb="warmTitle">本日のアップ — 未設定</h2>
+        <p class="mu-why" data-mb="warmWhy">本人の記録から選んだ、今日の優先課題です</p>
+        <details class="mu-acc mu-incard"><summary><svg class="mu-ic"><use href="#mu-i-flame"/></svg>手順（3ステップ）<span class="mu-hint">タップで展開</span><svg class="mu-ic mu-chev"><use href="#mu-i-chev"/></svg></summary><div class="mu-accbody">
+        <ol class="mu-dsteps" data-mb-list="warmSteps"></ol>
+        </div></details>
+        <div class="mu-timer mu-timerbox" data-seconds="1200">
+          <div class="mu-clock mu-num">00:00</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <button class="mu-tbtn mu-main mu-tstart" type="button">タイマーを開始する</button>
+            <button class="mu-tbtn mu-treset" type="button">リセット</button>
+          </div>
+          <span style="font-size:12px;color:var(--ink2)">20分固定です。音は鳴りません。</span>
+        </div>
+        <button class="mu-golink" type="button" data-goto="warmup">手順の詳細と実施記録をひらく</button>
+      </article>
+
+      <article class="mu-tcard mu-study mu-cut">
+        <span class="mu-micro" style="color:var(--gold)" data-mb="studyMapLabel"><svg class="mu-ic mu-sm"><use href="#mu-i-book"/></svg> Study <b>//</b> Knowledge</span>
+        <h2 data-mb="studyTitle">本日の座学 — 未設定</h2>
+        <p class="mu-why" data-mb="studyWhy">本人の記録をもとに選んでいます</p>
+        <details class="mu-acc mu-incard"><summary><svg class="mu-ic"><use href="#mu-i-book"/></svg>要点（5件）と情報源<span class="mu-hint">タップで展開</span><svg class="mu-ic mu-chev"><use href="#mu-i-chev"/></svg></summary><div class="mu-accbody">
+        <h3 class="mu-subh">学ぶ内容の要点</h3>
+        <ul class="mu-pts" data-mb-list="studyPoints"></ul>
+        <div class="mu-srcbox"><b>情報源リンク</b>
+          <ul class="mu-srclinks" data-mb-list="studySources"></ul>
+        </div>
+        </div></details>
+        <p class="mu-note">座学のテーマは日替わりで、現在のコンペプール全マップ・全エリアを順に回します。今日の対象は、上の見出しの通りです。</p>
+        <button class="mu-golink" type="button" data-goto="study">座学の詳細と確認手順をひらく</button>
+      </article>
+    </div>
+
+    <div class="mu-cta">
+      <button class="mu-btn mu-btn-main" id="mu-acceptBtn" type="button" aria-pressed="false" data-mb-btn="accept">この2件で実施します</button>
+      <button class="mu-btn mu-btn-sub" type="button" data-goto="warmup">アップ詳細をひらく</button>
+      <button class="mu-btn mu-btn-sub" type="button" data-goto="study">座学詳細をひらく</button>
+    </div>
+    <p class="mu-note" id="mu-acceptNote" hidden data-mb="acceptNote">承知しました。アップと座学が終わったらコンペへ。次のコンペでは、トレードが取れた回数と、人数有利を勝ちに変えられたラウンドを数えて並べておきます。</p>
+  </section>
+
+  <div class="mu-lab"><span class="mu-disp"><svg class="mu-ic"><use href="#mu-i-flag"/></svg>Next <em>Match</em></span><span class="mu-rule"></span><span class="mu-micro">コンペ → フィードバック</span></div>
+  <div class="mu-feed">
+    <div class="mu-cut-sm"><span class="mu-n">DO — 01</span><b>コンペを2試合</b>アップと座学を終えたら入ります。1試合目は型を試す場、2試合目は修正する場です。</div>
+    <div class="mu-cut-sm"><span class="mu-n">CHECK — 02</span><b>終盤の3ラウンドだけ見る</b>人数有利だった場面で、挟まれていないか、トレード位置にいたかを確認します。</div>
+    <button class="mu-cut-sm mu-feedbtn" type="button" data-goto="report" style="background:var(--bg2);border:1px solid var(--soft);padding:12px 14px;font-size:13px;line-height:1.8;color:var(--ink2)"><span class="mu-n">FEEDBACK — 03</span><b style="color:var(--ink);display:block;font-size:13.5px;margin-bottom:2px">結果は試合後画面へ</b>試合が終わったら、フラッシュ報告から対策までを1画面で確認します。タップでひらきます。</button>
+  </div>
+  <div class="mu-remember mu-cut">次の試合で迷ったら：1人で勝とうとしない。味方のコンタクトに合わせて動く。<span>トレードが取れる距離にいること。座学で覚えたクロスの形が、今日の型です。</span></div>
+
+  <div class="mu-tabs" role="tablist" aria-label="ローテーション詳細">
+    <button class="mu-tab" role="tab" aria-selected="false" data-tab="maps" type="button">全マップ・ローテーション</button>
+    <button class="mu-tab" role="tab" aria-selected="false" data-tab="agents" type="button">エージェント・ローテーション</button>
+  </div>
+
+  <section class="mu-panelx" id="mu-panel-maps" role="tabpanel">
+    <p><b>マップは絞りません。</b>コンペプール全体を日替わりで回し、どのマップが来ても同じ型で戦える状態を作ります。苦手マップだけを避ける練習はしません。</p>
+    <div data-mb-list="mapRows"></div>
+    <p>マップ別の数字とサンプル状況は、数字の画面で全7マップ分を確認できます。<button class="mu-golink" type="button" data-goto="data">数字の画面をひらく</button></p>
+  </section>
+
+  <section class="mu-panelx" id="mu-panel-agents" role="tabpanel">
+    <p><b>エージェントも絞りません。</b>ご本人の広いプールは強みです。1体に固定せず、ロールごとに「そのロールの仕事」を鍛える形で回します。</p>
+    <ol class="mu-dsteps" data-mb-list="agentRows"></ol>
+    <p>どのキャラでも共通の宿題は同じです。スキルを持ったまま倒れないこと、コールしながらでも撃ち合いの型を崩さないこと。この2つが全ロール共通のプロ基準です。</p>
+  </section>
+  </section>
+
+  <!-- ================= VIEW: POST-MATCH REPORT ================= -->
+  <section class="mu-view" id="mu-view-report">
+    <button class="mu-backlink" type="button" data-goto="home">← ホームへ戻る</button>
+    <div class="mu-vhead">
+      <span class="mu-micro">Post Match <b>//</b> Flash → Feedback</span>
+      <h2>試合後 — 報告から対策まで、ここで一周します</h2>
+      <p>コンペが終わったら開く画面です。結果の速報、根拠のある分析、VODで見る場所の指定、そして次回の2件への接続までを、この順番で確認します。</p>
+    </div>
+
+    <div class="mu-flowbar" role="img" aria-label="試合後の流れ：試合終了、次に分かれ目（現在ここ）、原因、次の対策の4ステップ">
+      <div class="mu-fbstep mu-done"><svg class="mu-ic"><use href="#mu-i-flag"/></svg><b>試合終了</b><span>速報を確認</span></div>
+      <div class="mu-fbstep mu-now"><svg class="mu-ic"><use href="#mu-i-branch"/></svg><b>分かれ目</b><span>いまここ</span></div>
+      <div class="mu-fbstep mu-todo"><svg class="mu-ic"><use href="#mu-i-search"/></svg><b>原因</b><span>デスだけ確認</span></div>
+      <div class="mu-fbstep mu-todo"><svg class="mu-ic"><use href="#mu-i-arrow"/></svg><b>次の対策</b><span>次回の2件へ</span></div>
+    </div>
+
+    <section class="mu-card mu-cut" aria-label="ステップ1 試合終了">
+      <div class="mu-stephd"><div class="mu-pic mu-done"><svg class="mu-ic mu-lg"><use href="#mu-i-flag"/></svg></div><div><span class="mu-sk">Step 1 — 試合終了</span><h3>フラッシュ報告 — 評価できる直近の試合が対象です</h3></div></div>
+      <p class="mu-concl" data-mb="repConcl"><svg class="mu-ic"><use href="#mu-i-check"/></svg> 結論：対象は直近の完了試合です</p>
+      <p>対象は、データが揃った最新の完了試合です。記録が空の試合は評価から外し、前の完了試合に自動で差し替えますので、ここが行き止まりになることはありません。</p>
+      <div class="mu-fieldgrid">
+        <div class="mu-field"><div class="mu-fk">対象試合</div><div class="mu-fv" data-mb="fDate">未取得</div></div>
+        <div class="mu-field"><div class="mu-fk">マップ</div><div class="mu-fv mu-na" data-mb="fMap">未取得</div></div>
+        <div class="mu-field"><div class="mu-fk">スコア</div><div class="mu-fv mu-na" data-mb="fScore">未取得</div></div>
+        <div class="mu-field"><div class="mu-fk">使用エージェント</div><div class="mu-fv mu-na" data-mb="fAgent">未取得</div></div>
+        <div class="mu-field"><div class="mu-fk">ACS（この試合）</div><div class="mu-fv mu-na" data-mb="fAcs">未取得</div></div>
+        <div class="mu-field"><div class="mu-fk">K / D</div><div class="mu-fv mu-na" data-mb="fKd">未取得</div></div>
+        <div class="mu-field"><div class="mu-fk">トレード成立</div><div class="mu-fv mu-na" data-mb="fTrade">未取得</div></div>
+        <div class="mu-field"><div class="mu-fk">人数有利を勝ちに変えた割合</div><div class="mu-fv mu-na" data-mb="fAdv">未取得</div></div>
+      </div>
+      <p class="mu-note">「未取得」は、値がまだ届いていない項目の標準表示です。空白にはしません。届き次第、同じ場所に数字が入ります。評価の土台となる合算分析は、次のカードの通りです。</p>
+    </section>
+
+    <section class="mu-card mu-cut" aria-label="ステップ2 分かれ目">
+      <div class="mu-stephd"><div class="mu-pic mu-now"><svg class="mu-ic mu-lg"><use href="#mu-i-branch"/></svg></div><div><span class="mu-sk">Step 2 — 分かれ目</span><h3>VODで見る場所 — コーチが、見るべき場面を指定します</h3></div></div>
+      <p class="mu-concl"><svg class="mu-ic"><use href="#mu-i-eye"/></svg> 結論：見るのは<b>分かれ目の1〜2場面だけ</b>です。この試合の該当ラウンドは未取得のため、下の優先順を目印に録画から探してください。</p>
+      <div style="border:2px solid var(--red);background:#2a1e28;padding:14px 16px;margin-top:4px">
+        <span class="mu-micro" style="color:var(--red)"><svg class="mu-ic mu-sm"><use href="#mu-i-branch"/></svg> Turning Point <b>//</b> この試合の分かれ目</span>
+        <p style="margin:6px 0 2px;font-size:16px;font-weight:900;line-height:1.6" data-mb="tpTitle">ここを1度見てください — 未取得</p>
+        <p style="margin:0;font-size:13.5px;color:var(--ink2);line-height:1.85" data-mb="tpDetail">この試合で検出された分かれ目の判定理由がここに入ります。データが届いていない間は「未取得」と表示し、場面を推測で作ることはしません。届き次第、勝率の振れ幅が最も大きい場面から順に表示します</p>
+      </div>
+      <details class="mu-acc mu-incard"><summary><svg class="mu-ic"><use href="#mu-i-info"/></svg>この案内の前提<span class="mu-hint">タップで展開</span><svg class="mu-ic mu-chev"><use href="#mu-i-chev"/></svg></summary><div class="mu-accbody">
+      <p><b>はい、指定します。</b>ただし、コーチは ご本人ご本人の録画そのものは見られません。ですので形は「録画を見て感想を言う」ではなく、<b>試合データから、録画の中で止めるべき場面を指定する</b>ものになります。ご自身の録画（リプレイ／録画ファイル）を開き、下の優先順と分かれ目判定に沿って、指定された場面だけをご確認ください。</p>
+      <p>全部を通しで見返す必要はありません。<b>最初に見るのは、分かれ目として指定された1〜2場面です。</b>その中で、ご自身のデス場面だけを止めて確認します。それが、この案内の見方です。</p>
+      </div></details>
+
+      <h3 style="margin-top:20px"><svg class="mu-ic"><use href="#mu-i-video"/></svg> 優先して見るラウンド — この順に探してください</h3>
+      <p>優先の根拠は、合算データで繰り返し出ている傾向です。探す場面は、トレードと終盤に寄せます。</p>
+      <div data-mb-list="priority"></div>
+      <p class="mu-note">該当ラウンドが複数ある日は、上の順に<b>3場面まで</b>で止めてください。3場面を超えて見続けることは、今日の課題にはしません。ラウンド番号が「未取得」の間は、上の3つの種類を目印に、ご自身の録画から該当場面を探してください。</p>
+
+      <details class="mu-acc mu-incard"><summary><svg class="mu-ic"><use href="#mu-i-branch"/></svg>分かれ目判定の基準（7つ）と検出の仕組み<span class="mu-hint">タップで展開</span><svg class="mu-ic mu-chev"><use href="#mu-i-chev"/></svg></summary><div class="mu-accbody">
+      <p>カテゴリで探すだけでは、まだ粗い指定です。もう一段進めて、<b>試合データそのものから「ここが分かれ目だった」と言える場面を検出し、ピンポイントで指す</b>のが、この判定です。</p>
+      <p>検出の前提です。試合データには、<b>キル位置・使用武器・ラウンドごとの人数状況・経済（購入内容と残金）・設置イベント・ウルト使用</b>が含まれます。コーチはこれらを組み合わせて、下の7つの基準に当てはまるラウンドを自動で拾います。当てはまった中から、勝率の振れ幅が大きい順に並べ、最も大きい1〜2場面を「ここを1度見てください」として指定します。</p>
+      <p><b>判定基準 — この7つで検出します。</b>各基準の右側は、この試合での検出結果です。該当がなければ「該当なし」、データが届いていなければ「未取得」です。</p>
+
+      <div data-mb-list="criteria"></div>
+
+      <div class="mu-srcbox" style="margin-top:12px"><b>検出についての正直な留保</b> — 「敵が武器を拾った」こと自体は、試合データに直接の記録としては残りません。分かれ目3の判定は、<b>その後のキルで使われた武器や、次ラウンドの所持品の変化からの推定</b>です。推定であることを明記した上で候補として提示し、断定はしません。VODで実際に拾ったかどうかをご確認いただく前提の指定です。その他の基準（人数状況、経済、設置、ウルト、キル順）は、データに直接含まれる項目から判定します。</div>
+      <p class="mu-note">見方は変わりません。分かれ目として指定された場面も、まずは<b>1度だけ</b>止めてご覧ください。何度も巻き戻す必要はありません。止めたら、次のステップ「原因」の「デスだけレビュー」と6点チェックで、その場面の中のご自身のデスを確認してください。</p>
+      </div></details>
+    </section>
+
+    <section class="mu-card mu-cut" aria-label="ステップ3 原因">
+      <div class="mu-stephd"><div class="mu-pic"><svg class="mu-ic mu-lg"><use href="#mu-i-search"/></svg></div><div><span class="mu-sk">Step 3 — 原因</span><h3>分析 — この試合も、合算の傾向と並べて読みます</h3></div></div>
+      <p class="mu-concl"><svg class="mu-ic"><use href="#mu-i-search"/></svg> 結論：原因探しは<b>自分のデスだけ</b>です。下の3点と照らし、6点チェックで当てはまった1点が、次の対策になります。</p>
+      <p>1試合だけの数字で結論は出しません。合算データで繰り返し出ている傾向と重なるかどうかを見て、初めて課題として扱います。現在の傾向は、ホームの弱み・強みと同じものです。</p>
+      <ul class="mu-checklist" data-mb-list="cause"></ul>
+      <button class="mu-golink" type="button" data-goto="data">数字の根拠をすべてひらく</button>
+      <details class="mu-acc mu-incard"><summary><svg class="mu-ic"><use href="#mu-i-eye"/></svg>見方 — デスだけレビューと6点チェックリスト<span class="mu-hint">タップで展開</span><svg class="mu-ic mu-chev"><use href="#mu-i-chev"/></svg></summary><div class="mu-accbody">
+      <h3 style="margin-top:0"><svg class="mu-ic"><use href="#mu-i-video"/></svg> 見方 — デスだけレビュー</h3>
+      <ol class="mu-dsteps">
+        <li><b>負けた試合を優先します。</b>勝った試合からではなく、敗北した試合の録画を開いてください。</li>
+        <li><b>自分のデス場面だけを止めます。</b>キル場面や他人の場面は飛ばし、倒れた瞬間で止めて、次のチェックリストを確認します。</li>
+        <li><b>デスを3つに分類します。</b>「トレードされた」「トレード可能だったが味方がいなかった」「完全なフリー死」のどれか1つに分けます。フリー死の数が、次に減らす対象です。</li>
+        <li><b>目安は20分、決める課題は1つです。</b>負け試合からデス3件だけを分類し、翌日の課題を1つだけ決めて終えます。</li>
+      </ol>
+
+      <h3 style="margin-top:20px"><svg class="mu-ic"><use href="#mu-i-clip"/></svg> 各デスで確認する — 6点チェックリスト</h3>
+      <p>止めたデス1件ごとに、この6点だけを確認してください。調査レポートのVOD自己レビューチェックリスト（コーチ資料に基づく【意見】）の6点です。</p>
+      <ol class="mu-dsteps">
+        <li><b>デスの原因は、エイムか位置か。</b></li>
+        <li><b>ユーティリティを持って死んでいないか。</b>（未使用のまま倒れていないか）</li>
+        <li><b>トレード可能距離にいたか。</b></li>
+        <li><b>ミニマップ情報を見落としていないか。</b></li>
+        <li><b>経済判断はチームと揃っていたか。</b></li>
+        <li><b>同じミスの2回目か。</b></li>
+      </ol>
+      <p>6点のうち当てはまったものを、次のカード「対策」へ渡してください。全部を直そうとせず、繰り返し出た1点が次回のアップと座学の選定理由になります。分かれ目として指定された場面で当てはまった点は、とくに重みを持ちます。座学で覚えた型と見比べるのは、設置後のラウンドで有効です。</p>
+      <div class="mu-srcbox"><b>チェックリストの情報源</b> — 調査レポート「VALORANT 上達コーチング ナレッジベース拡張調査」（2026-11-22）第4節のVODチェックリストに基づきます。
+        <ul class="mu-srclinks">
+          <li><a href="https://www.scribd.com/document/596606012/Valorant-Improvement-plan" target="_blank" rel="noopener noreferrer">Scribd — Valorant Improvement plan</a><span>コーチ資料。敗北試合を優先するレビュー方針の出典の1つです。</span></li>
+          <li><a href="https://www.vlr.gg/post/6176679/i-quit-valorant" target="_blank" rel="noopener noreferrer">vlr.gg — 自己レビューに関する投稿</a><span>自己レビューの考え方の出典の1つです。チェックリストは【意見】として扱い、検証済みの効果としては提示しません。</span></li>
+        </ul>
+      </div>
+      </div></details>
+    </section>
+
+    <section class="mu-card mu-cut" aria-label="ステップ4 次の対策">
+      <div class="mu-stephd"><div class="mu-pic"><svg class="mu-ic mu-lg"><use href="#mu-i-arrow"/></svg></div><div><span class="mu-sk">Step 4 — 次の対策</span><h3>対策 — 結果は、次回のアップと座学にそのまま渡ります</h3></div></div>
+      <p class="mu-concl"><svg class="mu-ic"><use href="#mu-i-arrow"/></svg> 結論：課題リストは増やしません。繰り返し出た1点だけが、次回の2件の選定理由になります。</p>
+      <p>VODの6点チェックで繰り返し出た1点は、次の分析（CHECK）に記録として戻り、次回の「本日のアップ」と「本日の座学」の選定理由になります。別の課題リストは作りません。やることは、次回も2件だけです。</p>
+      <div class="mu-cta">
+        <button class="mu-btn mu-btn-main" type="button" data-goto="home">ホームへ戻り、今日の2件を確認する</button>
+      </div>
+      <p class="mu-note">データが不足して評価できない日は、この画面ではなく「データ不足」の標準案内が表示され、評価できる直近の試合へご案内します。案内の型は「状態の型」の画面にまとめています。</p>
+    </section>
+  </section>
+
+  <!-- ================= VIEW: WARMUP DETAIL ================= -->
+  <section class="mu-view" id="mu-view-warmup">
+    <button class="mu-backlink" type="button" data-goto="home">← ホームへ戻る</button>
+    <div class="mu-vhead">
+      <span class="mu-micro">Warm-up Detail <b>//</b> Hands-on · 20 min</span>
+      <h2 data-mb="warmTitle">本日のアップ — 未設定</h2>
+      <p data-mb="warmWhy">本人の記録から選んだ、今日の優先課題です</p>
+    </div>
+
+    <div class="mu-flowbar" role="img" aria-label="アップの流れ：準備、手順、タイマー、実施記録の4ステップ"><div class="mu-fbstep mu-done"><svg class="mu-ic"><use href="#mu-i-sliders"/></svg><b>準備</b><span>条件を確認</span></div><div class="mu-fbstep mu-now"><svg class="mu-ic"><use href="#mu-i-target"/></svg><b>手順</b><span>いまここ</span></div><div class="mu-fbstep mu-todo"><svg class="mu-ic"><use href="#mu-i-clock"/></svg><b>タイマー</b><span>時間を計る</span></div><div class="mu-fbstep mu-todo"><svg class="mu-ic"><use href="#mu-i-clip"/></svg><b>実施記録</b><span>メモを残す</span></div></div>
+    <p class="mu-concl" style="margin-top:10px"><svg class="mu-ic"><use href="#mu-i-clock"/></svg> 結論：やることは<b>20分・1件だけ</b>。タイマーを回して、手順に沿って進めてください。</p>
+
+    <section class="mu-card mu-cut" aria-label="アップの手順">
+      
+      <details class="mu-acc mu-incard"><summary><svg class="mu-ic"><use href="#mu-i-flame"/></svg>手順の詳細（4ステップ）<span class="mu-hint">タップで展開</span><svg class="mu-ic mu-chev"><use href="#mu-i-chev"/></svg></summary><div class="mu-accbody">
+      <ol class="mu-dsteps" data-mb-list="warmSteps2"></ol>
+      </div></details>
+      <div class="mu-timer mu-timerbox" data-seconds="1200">
+        <div class="mu-clock mu-num">00:00</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button class="mu-tbtn mu-main mu-tstart" type="button">タイマーを開始する</button>
+          <button class="mu-tbtn mu-treset" type="button">リセット</button>
+        </div>
+        <span style="font-size:12px;color:var(--ink2)">20分固定です。音は鳴りません。</span>
+      </div>
+
+      <div class="mu-record">
+        <h4>実施記録 — 終わったらここに残します</h4>
+        <p>記録は次回の分析（CHECK）に渡され、次のアップと座学の選定に使われます。書くのは効果のメモだけで十分です。</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+          <button class="mu-donebtn" type="button" id="mu-warmDone" aria-pressed="false" data-mb-btn="warmDone">実施しました</button>
+          <button class="mu-tbtn" type="button" id="mu-warmCopy" data-mb-btn="warmCopy">効果メモをコピーする</button>
+        </div>
+        <label style="font-size:12.5px;font-weight:700;color:var(--ink2);display:block;margin-bottom:6px">効果メモ（例：コールの最短形に落としたら後半は崩れませんでした）</label>
+        <textarea class="mu-memo" id="mu-warmMemo" data-mb="warmMemo" placeholder="気づいたことを1〜2文でご記入ください"></textarea>
+        <p class="mu-note" id="mu-warmMsg" hidden data-mb="warmMsg">記録を受け付けました。この内容は次回の分析に渡ります。</p>
+      </div>
+    </section>
+    <p class="mu-note">アップは毎日1件だけです。内容は本人のデータで日替わりになりますが、件数を増やすことはしません。マップとエージェントは当日のプール全体が対象で、特定の組み合わせに固定しません。</p>
+  </section>
+
+  <!-- ================= VIEW: STUDY DETAIL ================= -->
+  <section class="mu-view" id="mu-view-study">
+    <button class="mu-backlink" type="button" data-goto="home">← ホームへ戻る</button>
+    <div class="mu-vhead">
+      <span class="mu-micro" data-mb="studyMapLabel">Study Detail <b>//</b> Knowledge</span>
+      <h2 data-mb="studyTitle">本日の座学 — 未設定</h2>
+      <p data-mb="studyWhy">本人の記録をもとに選んでいます</p>
+    </div>
+
+    <div class="mu-maprow" style="border-top:0">
+      <img src="assets/summit-splash.png" alt="VALORANTのマップ、サミットの公式スプラッシュアート">
+      <div><p style="font-size:14.5px;color:var(--ink2);line-height:1.9;margin:0" data-mb="studyArea">対象エリアを確認しています</p></div>
+    </div>
+
+    <div class="mu-flowbar" role="img" aria-label="座学の流れ：テーマ、要点、カスタム確認、記録の4ステップ"><div class="mu-fbstep mu-now"><svg class="mu-ic"><use href="#mu-i-map"/></svg><b>テーマ</b><span>いまここ</span></div><div class="mu-fbstep mu-todo"><svg class="mu-ic"><use href="#mu-i-book"/></svg><b>要点</b><span>折りたたみ</span></div><div class="mu-fbstep mu-todo"><svg class="mu-ic"><use href="#mu-i-swap"/></svg><b>カスタム確認</b><span>歩いて比べる</span></div><div class="mu-fbstep mu-todo"><svg class="mu-ic"><use href="#mu-i-clip"/></svg><b>記録</b><span>残す</span></div></div>
+    <p class="mu-concl" style="margin-top:10px"><svg class="mu-ic"><use href="#mu-i-book"/></svg> 結論：覚えるのは<b>今日の要点1件だけ</b>です。要点と確認手順は、下の折りたたみにあります。</p>
+
+    <section class="mu-card mu-cut" aria-label="座学の要点">
+      <span class="mu-micro" style="color:var(--gold)">Key Points <b>//</b> 要点</span>
+      <h3><svg class="mu-ic"><use href="#mu-i-book"/></svg> 学ぶ内容の要点</h3>
+      <details class="mu-acc mu-incard"><summary><svg class="mu-ic"><use href="#mu-i-eye"/></svg>要点（5件）と情報源リンク<span class="mu-hint">タップで展開</span><svg class="mu-ic mu-chev"><use href="#mu-i-chev"/></svg></summary><div class="mu-accbody">
+      <ul class="mu-pts" data-mb-list="studyPoints2"></ul>
+      <div class="mu-srcbox"><b>情報源リンク</b> — 内容を確認済みの情報源だけを掲載しています。
+        <ul class="mu-srclinks" data-mb-list="studySources2"></ul>
+      </div>
+      </div></details>
+    </section>
+
+    <section class="mu-card mu-cut" aria-label="カスタムゲームでの確認手順">
+      <span class="mu-micro">In Custom Game <b>//</b> 確認手順</span>
+      <h3><svg class="mu-ic"><use href="#mu-i-map"/></svg> カスタムゲームでの確認手順 — 歩いて、立って、比べます</h3>
+      <details class="mu-acc mu-incard"><summary><svg class="mu-ic"><use href="#mu-i-swap"/></svg>確認手順の詳細（5ステップ）<span class="mu-hint">タップで展開</span><svg class="mu-ic mu-chev"><use href="#mu-i-chev"/></svg></summary><div class="mu-accbody">
+      <ol class="mu-dsteps" data-mb-list="drillSteps"></ol>
+      </div></details>
+      <div class="mu-record">
+        <h4>確認の記録 — 歩き終えたらここに残します</h4>
+        <p>記録は次回の分析（CHECK）に渡されます。座学の巡回は、この記録をもとに未実施のマップ・エリアから順に選ばれます。</p>
+        <button class="mu-donebtn" type="button" id="mu-studyDone" aria-pressed="false" data-mb-btn="studyDone">カスタムで確認しました</button>
+        <p class="mu-note" id="mu-studyMsg" hidden data-mb="studyMsg">確認を受け付けました。お疲れさまでした。今日の座学は以上です。</p>
+      </div>
+    </section>
+    <p class="mu-note">座学のテーマは全マップ・全エリアを順に回します。特定のマップやエージェントに偏ることはありません。マップごとに事前に決めた出し分け（プリセット）がある場合は、その内容が優先されます。</p>
+  </section>
+
+  <!-- ================= VIEW: DATA DETAIL ================= -->
+  <section class="mu-view" id="mu-view-data">
+    <button class="mu-backlink" type="button" data-goto="home">← ホームへ戻る</button>
+    <div class="mu-vhead">
+      <span class="mu-micro">Numbers <b>//</b> Evidence</span>
+      <h2>数字で確認 — 合算 <span data-mb="dataMatches">未取得</span></h2>
+      <p>登録アカウントの合算記録です。数字が足りない項目は、推測で埋めずに「サンプル不足」「未取得」と明示します。それがこの画面の約束です。</p>
+    </div>
+
+    <div class="mu-flowbar" role="img" aria-label="数字の画面の構成：合算サマリー（現在ここ）、アカウント別、マップ別、ロール別の内訳は折りたたみ">
+      <div class="mu-fbstep mu-now"><svg class="mu-ic"><use href="#mu-i-chart"/></svg><b>合算サマリー</b><span>いまここ</span></div>
+      <button class="mu-fbstep mu-todo" type="button" data-open="mu-acc-account"><svg class="mu-ic"><use href="#mu-i-user"/></svg><b>アカウント別</b><span>折りたたみ</span></button>
+      <button class="mu-fbstep mu-todo" type="button" data-open="mu-acc-map"><svg class="mu-ic"><use href="#mu-i-map"/></svg><b>マップ別</b><span>全7マップ</span></button>
+      <button class="mu-fbstep mu-todo" type="button" data-open="mu-acc-agent"><svg class="mu-ic"><use href="#mu-i-users"/></svg><b>ロール別</b><span>折りたたみ</span></button>
+    </div>
+    <p class="mu-concl" style="margin-top:10px"><svg class="mu-ic"><use href="#mu-i-chart"/></svg> 結論：内訳は下の折りたたみにあります。弱みと強みの読みは、ホームの2枚のカードをご覧ください。</p>
+
+    <section class="mu-card mu-cut" aria-label="合算スタッツ">
+      <span class="mu-micro">Combined <b>//</b> 合算</span>
+      <h3><svg class="mu-ic"><use href="#mu-i-chart"/></svg> 合算スタッツ</h3>
+      <div class="mu-stat-grid"><div class="mu-stat"><div class="mu-v mu-num" data-mb="stAcs">未取得</div><div class="mu-k">ACS（合算）</div></div>
+        <div class="mu-stat"><div class="mu-v mu-num" data-mb="stAdr">未取得</div><div class="mu-k">ADR（合算）</div></div>
+        <div class="mu-stat"><div class="mu-v mu-num" data-mb="stKd">未取得</div><div class="mu-k">K/D（合算）</div></div>
+        <div class="mu-stat"><div class="mu-v mu-num" data-mb="stWr">未取得</div><div class="mu-k">勝率（合算）</div></div>
+        <div class="mu-stat"><div class="mu-v mu-num" data-mb="stHs">未取得</div><div class="mu-k">ヘッドショット率（合算）</div></div>
+        <div class="mu-stat"><div class="mu-v mu-num">未取得</div><div class="mu-k">KAST（この集計には実測値が含まれていません）</div></div>
+        <div class="mu-stat"><div class="mu-v mu-num">未取得</div><div class="mu-k">現在ランク（この集計には実測値が含まれていません）</div></div>
+        <div class="mu-stat"><div class="mu-v mu-num">未取得</div><div class="mu-k">ピーク（この集計には実測値が含まれていません）</div></div>
+        <div class="mu-stat"><div class="mu-v mu-num" data-mb="stMatches">未取得</div><div class="mu-k">対象試合数（合算）</div></div></div>
+      <p style="margin-top:14px"><b>読み方：</b>今日のアップと座学は、この数字と診断の傾向に基づいて選んでいます。数字が無い項目は、推測で埋めずに未取得と表示します。</p>
+    </section>
+
+    <details class="mu-acc" id="mu-acc-account"><summary><svg class="mu-ic"><use href="#mu-i-user"/></svg>アカウント別の内訳<span class="mu-hint">2アカウント</span><svg class="mu-ic mu-chev"><use href="#mu-i-chev"/></svg></summary><div class="mu-accbody"><div data-mb-list="accountRows"></div></div></details>
+
+    <details class="mu-acc" id="mu-acc-map"><summary><svg class="mu-ic"><use href="#mu-i-map"/></svg>マップ別の内訳 — 現在のコンペプール全7マップ<span class="mu-hint">7マップ</span><svg class="mu-ic mu-chev"><use href="#mu-i-chev"/></svg></summary><div class="mu-accbody"><div data-mb-list="dataMapRows"></div><p class="mu-note">サンプル不足のマップも、座学とローテーションの対象からは外しません。数字で断定しないことと、練習で扱わないことは、別の話です。</p></div></details>
+
+    <details class="mu-acc" id="mu-acc-agent"><summary><svg class="mu-ic"><use href="#mu-i-users"/></svg>エージェント・ロール別の内訳<span class="mu-hint">ロール別</span><svg class="mu-ic mu-chev"><use href="#mu-i-chev"/></svg></summary><div class="mu-accbody"><div data-mb-list="dataAgentRows"></div><p class="mu-note">数字は本人の保存済み戦績から計算しています。試合数が少ない項目は傾向としてご覧ください。</p></div></details>
+  </section>
+
+  <!-- ================= VIEW: TEAM ================= -->
+  <section class="mu-view" id="mu-view-team">
+    <button class="mu-backlink" type="button" data-goto="home">← ホームへ戻る</button>
+    <div class="mu-vhead">
+      <span class="mu-micro">Team <b>//</b> Separate Screen</span>
+      <h2>チーム — メンバーとチーム指標は、この画面だけに置きます</h2>
+      <p>チームの情報はホームには並べません。見るのは、この画面を開いた時だけです。既定の表示は常に本人で、他メンバーの画面へはメンバー切替から移動します。</p>
+    </div>
+
+    <div class="mu-flowbar" role="img" aria-label="チーム画面の構成：メンバー一覧（現在ここ）、チーム指標（折りたたみ）、集計は同意ONのメンバーだけ">
+      <div class="mu-fbstep mu-now"><svg class="mu-ic"><use href="#mu-i-users"/></svg><b>メンバー一覧</b><span>いまここ</span></div>
+      <button class="mu-fbstep mu-todo" type="button" data-open="mu-acc-team"><svg class="mu-ic"><use href="#mu-i-chart"/></svg><b>チーム指標</b><span>折りたたみ</span></button>
+      <div class="mu-fbstep mu-todo"><svg class="mu-ic"><use href="#mu-i-check"/></svg><b>集計条件</b><span>同意ONのみ</span></div>
+    </div>
+    <p class="mu-concl" style="margin-top:10px"><svg class="mu-ic"><use href="#mu-i-users"/></svg> 結論：表示中は<b>本人のみ</b>です。他メンバーは未取得のため、数字も評価も出しません。</p>
+
+    <section class="mu-card mu-cut" aria-label="メンバー一覧">
+      <span class="mu-micro">Roster <b>//</b> メンバー一覧</span>
+      <h3><svg class="mu-ic"><use href="#mu-i-users"/></svg> メンバー一覧</h3>
+      <div class="mu-brow"><div class="mu-bn">本人（表示中）</div><div class="mu-bd" data-mb="teamSelf">未取得</div><span class="mu-chipst mu-ok">表示中</span></div>
+      <div class="mu-brow"><div class="mu-bn">他のメンバー</div><div class="mu-bd">他のメンバーのデータは<b>未取得</b>です。連携が完了したメンバーから、ここに名簿順で表示されます。未取得のメンバーについて、数字や評価は表示されません。</div><span class="mu-chipst mu-na">未取得</span></div>
+      <p class="mu-note">メンバー切替の既定は自分です。他メンバーの画面でも構成は同じで、今日の2件・弱みと強み・数字が、そのメンバーのデータで表示されます。</p>
+    </section>
+
+    <details class="mu-acc" id="mu-acc-team"><summary><svg class="mu-ic"><use href="#mu-i-chart"/></svg>チーム指標 — 同意ONのメンバーだけで集計します<span class="mu-hint">未取得</span><svg class="mu-ic mu-chev"><use href="#mu-i-chev"/></svg></summary><div class="mu-accbody">
+      <div class="mu-fieldgrid">
+        <div class="mu-field"><div class="mu-fk">チーム勝率</div><div class="mu-fv mu-na">未取得</div></div>
+        <div class="mu-field"><div class="mu-fk">平均 ACS</div><div class="mu-fv mu-na">未取得</div></div>
+        <div class="mu-field"><div class="mu-fk">トレード率（チーム）</div><div class="mu-fv mu-na">未取得</div></div>
+        <div class="mu-field"><div class="mu-fk">集計対象</div><div class="mu-fv mu-na">本人のみ集計可能</div></div>
+      </div>
+      <p class="mu-note">集計に必要な人数分のデータが揃っていないため、チーム指標はまだ表示できません。揃い次第、同じ場所に数字が入ります。個人の数字をチームの数字として代用することはしません。</p>
+    </div></details>
+  </section>
+
+  <!-- ================= VIEW: SETTINGS ================= -->
+  <section class="mu-view" id="mu-view-settings">
+    <button class="mu-backlink" type="button" data-goto="home">← ホームへ戻る</button>
+    <div class="mu-vhead">
+      <span class="mu-micro">Settings <b>//</b> Separate Screen</span>
+      <h2>設定 — 同意・通知・目標は、この画面だけで扱います</h2>
+      <p>設定項目はホームには置きません。変更が必要な時だけ、この画面を開いてください。現在の同意は全員ONの扱いが既定で、ご本人はいつでもここからOFFに戻せます。</p>
+    </div>
+
+    <div class="mu-flowbar" role="img" aria-label="設定画面の構成：アカウント連携（現在ここ）、同意、通知（折りたたみ）、目標（折りたたみ）">
+      <div class="mu-fbstep mu-now"><svg class="mu-ic"><use href="#mu-i-link"/></svg><b>アカウント連携</b><span>いまここ</span></div>
+      <div class="mu-fbstep mu-todo"><svg class="mu-ic"><use href="#mu-i-check"/></svg><b>同意</b><span>既定は全員ON</span></div>
+      <button class="mu-fbstep mu-todo" type="button" data-open="mu-acc-notif"><svg class="mu-ic"><use href="#mu-i-bell"/></svg><b>通知</b><span>折りたたみ</span></button>
+      <button class="mu-fbstep mu-todo" type="button" data-open="mu-acc-goal"><svg class="mu-ic"><use href="#mu-i-target"/></svg><b>目標</b><span>折りたたみ</span></button>
+    </div>
+    <p class="mu-concl" style="margin-top:10px"><svg class="mu-ic"><use href="#mu-i-sliders"/></svg> 結論：変更が必要な項目だけ開いてください。同意と通知の変更は、この下にある共有・チーム・通知の各欄が正の記録です。</p>
+
+    <section class="mu-card mu-cut" aria-label="アカウント連携">
+      <span class="mu-micro">Accounts <b>//</b> 連携</span>
+      <h3><svg class="mu-ic"><use href="#mu-i-link"/></svg> アカウント連携</h3>
+      <div data-mb-list="accountSettings"></div>
+      <p class="mu-note">連携が切れた場合は、空白の画面ではなく「未接続」の案内が表示されます。案内の型は「状態の型」の画面にまとめています。</p>
+    </section>
+
+    <section class="mu-card mu-cut" aria-label="同意設定">
+      <span class="mu-micro">Consent <b>//</b> 同意 — 既定は全員ON</span>
+      <h3><svg class="mu-ic"><use href="#mu-i-check"/></svg> 同意設定</h3>
+      <div class="mu-srow"><div class="mu-st"><b>データの共有</b><span>自分の分析結果を、コーチとチームの範囲で共有します。既定はONです。OFFへの変更はご本人だけが行えます。</span></div><div><div class="mu-swstat mu-on">ON（既定）</div></div></div>
+      <div class="mu-srow"><div class="mu-st"><b>チーム指標への提供</b><span>自分の数字をチーム指標の集計に使います。既定はONです。OFFにすると、チーム指標の集計対象から外れます。</span></div><div><div class="mu-swstat mu-on">ON（既定）</div></div></div>
+      <div class="mu-srow"><div class="mu-st"><b>通知の受け取り</b><span>コーチからのお知らせを受け取ります。既定はONです。送信そのものの開始については、下の通知設定をご覧ください。</span></div><div><div class="mu-swstat mu-on">ON（既定）</div></div></div>
+    </section>
+
+    <details class="mu-acc" id="mu-acc-notif"><summary><svg class="mu-ic"><use href="#mu-i-bell"/></svg>通知設定<span class="mu-hint">Discord送信は未有効</span><svg class="mu-ic mu-chev"><use href="#mu-i-chev"/></svg></summary><div class="mu-accbody">
+      <div class="mu-srow"><div class="mu-st"><b>Discord通知の送信</b><span>送信はまだ有効化されていません。チャンネルと頻度、開始のタイミングは別途決まります。決まるまで、このスイッチは操作できません。</span></div><div><button class="mu-switch" type="button" role="switch" aria-checked="false" aria-label="Discord通知の送信" disabled></button><div class="mu-swstat">未有効</div></div></div>
+      <div class="mu-srow"><div class="mu-st"><b>画面内のお知らせ</b><span>新しい分析や次回の2件の用意ができた時に、このアプリの中でお知らせします。</span></div><div><div class="mu-swstat mu-on">ON（既定）</div></div></div>
+    </div></details>
+
+    <details class="mu-acc" id="mu-acc-goal"><summary><svg class="mu-ic"><use href="#mu-i-target"/></svg>目標 — コーチの選定は、この目標に沿って行われます<span class="mu-hint">未設定</span><svg class="mu-ic mu-chev"><use href="#mu-i-chev"/></svg></summary><div class="mu-accbody"><p>目標ランクは、この下にある「目標」欄で設定できます。コーチの選定は、その目標に沿って行われます。選ばなくても、今日の2件は通常通り用意されます。</p></div></details>
+  </section>
+
+  <!-- ================= VIEW: STATES ================= -->
+  <section class="mu-view" id="mu-view-states">
+    <button class="mu-backlink" type="button" data-goto="home">← ホームへ戻る</button>
+    <div class="mu-vhead">
+      <span class="mu-micro">States <b>//</b> Standard Forms</span>
+      <h2>状態の型 — 行き止まりを作らないための標準形</h2>
+      <p>データが無い、届いていない、失敗した。どの状態でも、次に取る行動が1つは分かる形にします。以下が全画面で共通の標準形です。</p>
+    </div>
+
+    <div class="mu-flowbar" role="img" aria-label="状態の型は6つ：データ不足、未取得、読み込み中、エラー、未接続、他メンバー未取得">
+      <div class="mu-fbstep mu-todo"><svg class="mu-ic"><use href="#mu-i-info"/></svg><b>データ不足</b><span>代替表示</span></div>
+      <div class="mu-fbstep mu-todo"><svg class="mu-ic"><use href="#mu-i-eye"/></svg><b>未取得</b><span>明示する</span></div>
+      <div class="mu-fbstep mu-todo"><svg class="mu-ic"><use href="#mu-i-clock"/></svg><b>読み込み中</b><span>骨組み表示</span></div>
+      <div class="mu-fbstep mu-todo"><svg class="mu-ic"><use href="#mu-i-alert"/></svg><b>エラー</b><span>再試行つき</span></div>
+      <div class="mu-fbstep mu-todo"><svg class="mu-ic"><use href="#mu-i-link"/></svg><b>未接続</b><span>手順を案内</span></div>
+      <div class="mu-fbstep mu-todo"><svg class="mu-ic"><use href="#mu-i-users"/></svg><b>他メンバー</b><span>評価しない</span></div>
+    </div>
+
+    <div class="mu-states">
+      <section class="mu-statex mu-cut-sm">
+        <span class="mu-micro">State 1 <b>//</b> Insufficient Data</span>
+        <h3><svg class="mu-ic"><use href="#mu-i-info"/></svg> データ不足 — 評価できる試合へご案内します</h3>
+        <p>直近の試合だけでは評価に必要な記録が揃っていませんでした。評価できる直近の試合の分析を代わりに表示しますので、そちらをご覧ください。</p>
+        <button class="mu-donebtn" type="button" id="mu-fallbackBtn" data-mb-btn="fallback">評価できる直近の試合を表示する</button>
+        <p class="mu-note" id="mu-fallbackMsg" hidden data-mb="fallbackMsg">合算分析（数字の画面）を表示します。評価が空の試合は対象から外れています。</p>
+        <details class="mu-acc mu-incard"><summary style="padding:9px 12px;font-size:12.5px;min-height:40px"><svg class="mu-ic mu-sm"><use href="#mu-i-info"/></svg>型の決まり<svg class="mu-ic mu-chev mu-sm"><use href="#mu-i-chev"/></svg></summary><div class="mu-accbody" style="padding:10px 12px 12px"><p style="font-size:12px;color:var(--ink3);line-height:1.7;margin:0">型の決まり：理由は1〜2文で簡潔に。必ずフォールバックのボタンを1つ置き、行き止まりにしません。空の試合は評価対象から外すことが前提です。</p></div></details>
+      </section>
+
+      <section class="mu-statex mu-cut-sm">
+        <span class="mu-micro">State 2 <b>//</b> Not Fetched</span>
+        <h3><svg class="mu-ic"><use href="#mu-i-eye"/></svg> 未取得 — 空白ではなく、未取得と明示します</h3>
+        <div class="mu-field" style="margin-bottom:10px"><div class="mu-fk">チーム勝率</div><div class="mu-fv mu-na">未取得</div></div>
+        <p>値がまだ届いていない項目は、場所を空けずに「未取得」と表示します。0や推測の数字で埋めることはしません。</p>
+        <details class="mu-acc mu-incard"><summary style="padding:9px 12px;font-size:12.5px;min-height:40px"><svg class="mu-ic mu-sm"><use href="#mu-i-info"/></svg>型の決まり<svg class="mu-ic mu-chev mu-sm"><use href="#mu-i-chev"/></svg></summary><div class="mu-accbody" style="padding:10px 12px 12px"><p style="font-size:12px;color:var(--ink3);line-height:1.7;margin:0">型の決まり：ラベルは残し、値の場所に「未取得」。届き次第、同じ場所に数字が入ります。</p></div></details>
+      </section>
+
+      <section class="mu-statex mu-cut-sm">
+        <span class="mu-micro">State 3 <b>//</b> Loading</span>
+        <h3><svg class="mu-ic"><use href="#mu-i-clock"/></svg> 読み込み中 — 形だけ先に見せます</h3>
+        <div class="mu-skl mu-w80"></div><div class="mu-skl"></div><div class="mu-skl mu-w60"></div>
+        <p style="margin-top:12px">読み込み中は、表示される形に近い骨組みだけを先に出します。画面全体を真っ白にはしません。</p>
+        <details class="mu-acc mu-incard"><summary style="padding:9px 12px;font-size:12.5px;min-height:40px"><svg class="mu-ic mu-sm"><use href="#mu-i-info"/></svg>型の決まり<svg class="mu-ic mu-chev mu-sm"><use href="#mu-i-chev"/></svg></summary><div class="mu-accbody" style="padding:10px 12px 12px"><p style="font-size:12px;color:var(--ink3);line-height:1.7;margin:0">型の決まり：骨組み表示のみ。読み込みが終わるまで、他の画面への移動は妨げません。</p></div></details>
+      </section>
+
+      <section class="mu-statex mu-cut-sm">
+        <span class="mu-micro">State 4 <b>//</b> Error</span>
+        <h3><svg class="mu-ic"><use href="#mu-i-alert"/></svg> エラー — 再試行の導線を必ず付けます</h3>
+        <div id="mu-errDemo" data-mb="errDemo">
+          <p>データの取得に失敗しました。通信の状態をご確認のうえ、もう一度お試しください。</p>
+          <button class="mu-donebtn" type="button" id="mu-retryBtn" data-mb-btn="retry">再試行する</button>
+        </div>
+        <details class="mu-acc mu-incard"><summary style="padding:9px 12px;font-size:12.5px;min-height:40px"><svg class="mu-ic mu-sm"><use href="#mu-i-info"/></svg>型の決まり<svg class="mu-ic mu-chev mu-sm"><use href="#mu-i-chev"/></svg></summary><div class="mu-accbody" style="padding:10px 12px 12px"><p style="font-size:12px;color:var(--ink3);line-height:1.7;margin:0">型の決まり：何が起きたかを1文で。再試行ボタンを必ず置き、失敗を画面の終わりにしません。</p></div></details>
+      </section>
+
+      <section class="mu-statex mu-cut-sm">
+        <span class="mu-micro">State 5 <b>//</b> Not Connected</span>
+        <h3><svg class="mu-ic"><use href="#mu-i-link"/></svg> 未接続 — 連携の方法をご案内します</h3>
+        <p>戦績がまだ連携されていません。連携が完了すると、分析と今日の2件が自動で用意されます。</p>
+        <ol class="mu-dsteps">
+          <li><b>設定を開く：</b>この画面の「設定」から、アカウント連携の欄へ進みます。</li>
+          <li><b>アカウントを連携する：</b>対象の Riot ID を連携し、公開プロフィールから戦績を取得できる状態にします。</li>
+          <li><b>最初の分析を待つ：</b>連携後、評価できる試合が揃い次第、ホームに弱み・強みと今日の2件が表示されます。</li>
+        </ol>
+        <button class="mu-donebtn" type="button" data-goto="settings">設定の連携欄をひらく</button>
+        <details class="mu-acc mu-incard"><summary style="padding:9px 12px;font-size:12.5px;min-height:40px"><svg class="mu-ic mu-sm"><use href="#mu-i-info"/></svg>型の決まり<svg class="mu-ic mu-chev mu-sm"><use href="#mu-i-chev"/></svg></summary><div class="mu-accbody" style="padding:10px 12px 12px"><p style="font-size:12px;color:var(--ink3);line-height:1.7;margin:0">型の決まり：手順は番号付きで具体的に。連携前でも、連携方法だけは最後まで読めるようにします。</p></div></details>
+      </section>
+
+      <section class="mu-statex mu-cut-sm">
+        <span class="mu-micro">State 6 <b>//</b> Member Not Fetched</span>
+        <h3><svg class="mu-ic"><use href="#mu-i-users"/></svg> 他メンバー未取得 — 人の評価は作りません</h3>
+        <p>このメンバーのデータは未取得です。数字も評価も表示されません。取得が完了したメンバーから、順に表示されます。</p>
+        <button class="mu-donebtn" type="button" data-goto="team">チーム画面で状態を確認する</button>
+        <details class="mu-acc mu-incard"><summary style="padding:9px 12px;font-size:12.5px;min-height:40px"><svg class="mu-ic mu-sm"><use href="#mu-i-info"/></svg>型の決まり<svg class="mu-ic mu-chev mu-sm"><use href="#mu-i-chev"/></svg></summary><div class="mu-accbody" style="padding:10px 12px 12px"><p style="font-size:12px;color:var(--ink3);line-height:1.7;margin:0">型の決まり：未取得のメンバーについて、推測の数字や評価を出すことはしません。切替の既定は常に対象ご本人です。</p></div></details>
+      </section>
+    </div>
+  </section>
+
+  <footer>
+    <b>画面構成（完成形）：</b>全画面共通で、上部にピクトグラムの横型フロー図（現在地を強調）を置き、結論を先に、詳細は折りたたみの先に置く構成です。ホーム（PDCAフロー／弱み・強み／今日の2件／次の試合だけ）／試合後（試合終了→分かれ目→原因→次の対策の4ステップ）／アップ詳細／座学詳細／数字（合算サマリー＋内訳は折りたたみ）／チーム／設定／状態の型。ホームに機能を列挙しないことが、各画面を分けた理由です。<br>
+    <b>数字の方針：</b>本人の保存済み戦績（KESO COACHの集計）だけを表示し、無い値は「未取得」、足りない値は「サンプル不足」と明示します。ランクとKASTは、この集計に実測値が含まれないため未取得と表示します。
+  </footer>
+</template>
 <script src="./coach/practice-review.js?v=coach-34be17a33636"></script>
 <script src="./coach/loop.js?v=coach-b880f3ceab1e"></script>
 <script src="./coach/records.js?v=coach-a852350c480e"></script>
@@ -940,6 +1689,9 @@
 <script src="./coach/team.js?v=coach-018156fbb859"></script>
 <script src="./coach/notifications.js?v=coach-phase3e-20261120"></script>
 <script src="./coach/goals.js?v=coach-ca17bb21a788"></script>
+<script src="./coach/muse-top-config.js?v=coach-0138d7e92ec4"></script>
+<script src="./coach/muse-presets.js?v=coach-ce966f89377e"></script>
+<script src="./coach/muse-view.js?v=coach-f77ab933a1d6"></script>
 <script src="./coach/prototype-view.js?v=coach-089424bc19d7"></script>
 <script src="./coach/benchmarks.js?v=coach-4721e7e852a8"></script>
 <script src="./coach/practice.js?v=coach-1d4e247eb817"></script>
@@ -961,6 +1713,20 @@ let busy=false;
 let latestReport=null;
 const CoachPresentation=(()=>{
  const headings={
+  "本日のアップ — 未設定": "本日のアップ — 未設定",
+  "本日の座学 — 未設定": "本日の座学 — 未設定",
+  "学ぶ内容の要点": "学ぶ内容の要点",
+  "試合後 — 報告から対策まで、ここで一周します": "試合後 — 報告から対策まで、ここで一周します",
+  "フラッシュ報告 — 評価できる直近の試合が対象です": "フラッシュ報告 — 評価できる直近の試合が対象です",
+  "VODで見る場所 — コーチが、見るべき場面を指定します": "VODで見る場所 — コーチが、見るべき場面を指定します",
+  "分析 — この試合も、合算の傾向と並べて読みます": "分析 — この試合も、合算の傾向と並べて読みます",
+  "対策 — 結果は、次回のアップと座学にそのまま渡ります": "対策 — 結果は、次回のアップと座学にそのまま渡ります",
+  "実施記録 — 終わったらここに残します": "実施記録 — 終わったらここに残します",
+  "確認の記録 — 歩き終えたらここに残します": "確認の記録 — 歩き終えたらここに残します",
+  "チーム — メンバーとチーム指標は、この画面だけに置きます": "チーム — メンバーとチーム指標は、この画面だけに置きます",
+  "設定 — 同意・通知・目標は、この画面だけで扱います": "設定 — 同意・通知・目標は、この画面だけで扱います",
+  "状態の型 — 行き止まりを作らないための標準形": "状態の型 — 行き止まりを作らないための標準形",
+
   "Sageの蘇生カバー": "蘇生中の味方を安全に守ります",
   "今回の良い点と、次に直したい点は？": "良かった点を次の一戦につなげます",
   "敵を倒せていない？ それとも倒されすぎ？": "キルの不足とデスの増加を分けて確認します",
@@ -1648,7 +2414,7 @@ const renderMemberDiagnosis=d=>{
  $('member-result').appendChild(navigation);
  for(const key of keepOpen){const section=$('member-result').querySelector('['+key+']');if(section)section.open=true;}
  for(const section of $('member-result').querySelectorAll('.coach-existing'))polishCoachCopy(section);
- globalThis.KesoCoachPrototype.mount($('member-result'),{onPlan:()=>{if(!latestMemberReport)return false;const plan=globalThis.KesoCoachPractice.choose(latestMemberReport,{...(practiceProfiles.get(latestMemberReport.person)||defaultPracticePreferences()),exclude:practiceExcluded.get(latestMemberReport.person)||[]},benchmarkReference);return coachRecords.savePlan(plan.selected.map(e=>e.id),plan.context);}});placeCoachGoals();$('coach-welcome').hidden=true;
+ globalThis.KesoCoachPrototype.mount($('member-result'),{onPlan:()=>{if(!latestMemberReport)return false;const plan=globalThis.KesoCoachPractice.choose(latestMemberReport,{...(practiceProfiles.get(latestMemberReport.person)||defaultPracticePreferences()),exclude:practiceExcluded.get(latestMemberReport.person)||[]},benchmarkReference);return coachRecords.savePlan(plan.selected.map(e=>e.id),plan.context);}});try{const museHost=document.createElement('div');$('member-result').prepend(museHost);globalThis.KesoCoachMuseView?.render(museHost,d,{plan:selectedPlan,copy:CoachPresentation,reader:CoachReader,fill:globalThis.KesoCoachPractice.fill,onPlan:()=>{if(!latestMemberReport)return false;const p=globalThis.KesoCoachPractice.choose(latestMemberReport,{...(practiceProfiles.get(latestMemberReport.person)||defaultPracticePreferences()),exclude:practiceExcluded.get(latestMemberReport.person)||[]},benchmarkReference);return coachRecords.savePlan(p.selected.map(e=>e.id),p.context);}});}catch{}placeCoachGoals();$('coach-welcome').hidden=true;
  for(const step of document.querySelectorAll('[data-pdca-step]')){if(step.dataset.pdcaStep==='task')step.setAttribute('aria-current','step');else step.removeAttribute('aria-current');}
 
 };
@@ -1717,7 +2483,7 @@ async function loadMember(person){
  $('share').textContent='診断レポートをコピー';
  for(const el of $('member-selector').querySelectorAll('[data-member]'))
   el.setAttribute('aria-pressed',String(el.dataset.member===person));
- globalThis.KesoCoachPrototype.stop();$('member-result').textContent=person+'の試合記録を読み込んでいます。';
+ globalThis.KesoCoachPrototype.stop();globalThis.KesoCoachMuseView?.stop();$('member-result').textContent=person+'の試合記録を読み込んでいます。';
  try{
   const data=await fetchMember(person);
   if(activeMember===person&&generation===authGeneration&&token()===t){latestReport=data;latestMemberReport=data;renderMemberDiagnosis(data);$('return-self').disabled=person===selfIdentity?.defaultProfile;
@@ -1783,7 +2549,7 @@ $('coach-records-host').append(coachRecords.element);
 const coachSharing=globalThis.KesoCoachSharing.create({request:authenticatedCoachRequest,onSelf:()=>void load(),onView:()=>{
  authGeneration++;activeMember=null;latestReport=null;latestMemberReport=null;memberPending=false;
  memberCache.clear();practiceProfiles.clear();practiceExcluded.clear();coachGoals.clear();coachRecords.clear();coachTeam.clear();coachNotifications.clear();
- globalThis.KesoCoachPrototype.stop();$('member-result').replaceChildren();$('member-coaching-panel').hidden=true;$('coach-operations').hidden=true;
+ globalThis.KesoCoachPrototype.stop();globalThis.KesoCoachMuseView?.stop();$('member-result').replaceChildren();$('member-coaching-panel').hidden=true;$('coach-operations').hidden=true;
  $('share-fallback').value='';$('share-fallback').hidden=true;$('share').disabled=true;
 }});
 $('coach-sharing-host').append(coachSharing.element);
@@ -1795,7 +2561,7 @@ function placeCoachGoals(){const quick=$('member-result').querySelector('[data-q
 function clearCoachView(){
  coachRecords.clear();coachSharing.clear();coachTeam.clear();coachNotifications.clear();$('coach-operations').hidden=false;coachGoals.clear();authGeneration++;latestReport=null;latestMemberReport=null;selfIdentity=null;activeMember=null;memberNames=[];
  memberCache.clear();practiceProfiles.clear();practiceExcluded.clear();
- globalThis.KesoCoachPrototype.stop();$('member-result').replaceChildren();$('member-selector').replaceChildren();
+ globalThis.KesoCoachPrototype.stop();globalThis.KesoCoachMuseView?.stop();$('member-result').replaceChildren();$('member-selector').replaceChildren();
  $('member-archive-status').replaceChildren();$('coach-owner-label').textContent='';
  $('share-fallback').value='';$('share-fallback').hidden=true;$('share').disabled=true;
  $('report').hidden=true;$('coach-welcome').hidden=false;
