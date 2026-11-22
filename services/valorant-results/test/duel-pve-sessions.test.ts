@@ -4,6 +4,7 @@ import {DatabaseSync} from 'node:sqlite';
 import {randomUUID} from 'node:crypto';
 import {serverPveOperation,ensureServerPveTables,DUEL_PVE_SESSION_DDL} from '../src/duel-pve-sessions.ts';
 import {DUEL_PROGRESSION_GAMES} from '../src/duel-progression.ts';
+import {duelDailyChallenge} from '../src/duel-daily-challenge.ts';
 
 function fixture(){
  const db=new DatabaseSync(':memory:');
@@ -118,12 +119,12 @@ test('schema has dedicated secrets and immutable action identity',()=>{
 test('Phase 11 daily challenge starts server-selected six-mode CPU battle without bonus KP',async()=>{
  const {db,env}=fixture();
  try{
-  const preview=await serverPveOperation(env,'guild','alice',{action:'daily-preview'}) as {challenge:{game:string;level:string;bonusKp:number}};
-  assert.equal(preview.challenge.bonusKp,0);
+  const preview=duelDailyChallenge(Date.now());
+  assert.equal(preview.bonusKp,0);
   const req=randomUUID();
   const one=await serverPveOperation(env,'guild','alice',{action:'daily',requestId:req,game:'invalid',level:'invalid'});
-  assert.equal(one.game,preview.challenge.game);
-  assert.equal(one.level,preview.challenge.level);
+  assert.equal(one.game,preview.game);
+  assert.equal(one.level,preview.level);
   assert.equal(Object.hasOwn(one,'secret'),false);
   const replay=await serverPveOperation(env,'guild','alice',{action:'daily',requestId:req});
   assert.equal(one.id,replay.id);
