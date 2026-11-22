@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
-import {encryptDump,decryptDump,restoreCheck,isDuelTable,loadProductionDuelCatalog,verifyArtifact}
+import {encryptDump,decryptDump,restoreCheck,completeDuelSchema,isDuelTable,loadProductionDuelCatalog,verifyArtifact}
  from '../../../scripts/duel-d1-backup.mjs';
 import {mkdtempSync,writeFileSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
@@ -29,6 +29,22 @@ const objects=[
 ];
 const secret='standalone-fake-32-character-secret-value';
 
+test('repair table-scoped D1 dump with omitted live indexes and triggers, then restore',()=>{
+ const partial=sql.split('\n').filter(line=>!line.startsWith('CREATE INDEX')&&!line.startsWith('CREATE TRIGGER')).join('\n');
+ const catalog=[
+  ...objects.filter(o=>o.type==='table'),
+  {type:'index',name:'duel_action_by_match',sql:'CREATE INDEX duel_action_by_match ON kp_board_duel_actions(duel_id)'},
+  {type:'trigger',name:'duel_audit',sql:'CREATE TRIGGER duel_audit AFTER INSERT ON kp_board_duels BEGIN UPDATE kp_duel_mode_skill SET points=points+1 WHERE id=NEW.id; END'}
+ ];
+ assert.throws(()=>restoreCheck(partial,names,objects));
+ const fixed=completeDuelSchema(partial,catalog);
+ const restored=restoreCheck(fixed,names,objects);
+ assert.equal(restored.kp_board_duel_actions,1);
+ assert.equal(restored.kp_duel_mode_skill,1);
+ assert.equal(completeDuelSchema(fixed,catalog),fixed,
+  'already-present schema must not be appended twice');
+ assert.throws(()=>completeDuelSchema(partial,[{type:'index',name:'duel_action_by_match',sql:''}]));
+});
 test('source tables are duel-owned only; never accidentally export KP wallet or ledger',()=>{
  assert.ok(names.every(isDuelTable));
  for(const name of ['kp_wallets','kp_ledger','kp_state','kp_secrets','kp_duel-evil','kp_board_foo','sqlite_master'])
