@@ -6,6 +6,7 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/duel-phase9-production-policy.yml'
+      - 'services/valorant-results/scripts/duel-phase9-release.mjs'
   workflow_dispatch:
     inputs:
       operation:
@@ -46,9 +47,36 @@ jobs:
         run: |
           if git diff --name-status HEAD^ HEAD -- .github/workflows/duel-phase9-production-policy.yml | grep -q '^A[[:space:]]'; then
             echo "created=true" >> "$GITHUB_OUTPUT"
+          elif [[ "$(git log -1 --format=%s)" == fix\(duel\):\ Phase\ 9\ reward\ release\ retry* ]] && \
+            git diff --name-only HEAD^ HEAD -- services/valorant-results/scripts/duel-phase9-release.mjs | grep -q '^services/valorant-results/scripts/duel-phase9-release.mjs
+      - name: Verify same-main-SHA Pages and Worker production deployments
+        if: (github.event_name == 'push' && steps.initial.outputs.created == 'true') || (github.event_name == 'workflow_dispatch' && inputs.operation == 'activate')
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node services/valorant-results/scripts/duel-phase9-release-gate.mjs
+      - name: Confirm production D1 credentials without logging their values
+        if: github.event_name == 'workflow_dispatch' || steps.initial.outputs.created == 'true'
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          test -n "$CF_TOKEN" || { echo 'Cloudflare token unavailable'; exit 1; }
+          test -n "$CF_ACCOUNT" || { echo 'Cloudflare account unavailable'; exit 1; }
+      - name: Run the scope-guarded production policy operation
+        if: github.event_name == 'workflow_dispatch' || steps.initial.outputs.created == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          DUEL_RELEASE_ACTOR: ${{ github.event_name == 'push' && 'altepop' || github.actor }}
+          DUEL_RELEASE_OPERATION: ${{ github.event_name == 'push' && 'activate' || inputs.operation }}
+          DUEL_RELEASE_GUILD: ${{ github.event_name == 'push' && '606131625084059674' || inputs.guild_id }}
+        run: node services/valorant-results/scripts/duel-phase9-release.mjs
+; then
+            # This exact, one-off approved retry is gated by the same SHA deployment checks.
+            echo "created=true" >> "$GITHUB_OUTPUT"
           else
             echo "created=false" >> "$GITHUB_OUTPUT"
-            echo "Not a first-time release; automatic activation will not run"
+            echo "No new approved release attempt; automatic activation will not run"
           fi
       - name: Verify same-main-SHA Pages and Worker production deployments
         if: (github.event_name == 'push' && steps.initial.outputs.created == 'true') || (github.event_name == 'workflow_dispatch' && inputs.operation == 'activate')

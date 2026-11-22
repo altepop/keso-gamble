@@ -42,7 +42,14 @@ export function createReleaseClient({token,account,request=fetch}){
   const response=await request(root+path,{...options,
    headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
    redirect:'error',signal:AbortSignal.timeout(30000)});
-  if(!response.ok)throw Error('cloudflare_http_'+response.status);
+  if(!response.ok){
+   // Only numeric error code and endpoint category; never raw API contents.
+   let code='unknown';
+   try{const payload=await response.json();const first=payload?.errors?.[0]?.code;
+    if(Number.isInteger(first)&&first>=0&&first<=1000000)code=String(first);}catch{}
+   const category=path.startsWith('/workers/')?'worker_settings':'d1_query';
+   throw Error('cloudflare_'+category+'_http_'+response.status+'_code_'+code);
+  }
   const body=await response.json();
   if(body.success!==true)throw Error('cloudflare_request_failed');
   return body.result;
@@ -69,6 +76,25 @@ export async function releaseOperation({operation,guild,repo,ref,actor,token,acc
  const api=createReleaseClient({token,account,request});
  await api.assertBoundDatabase();
  const getRows=async()=>(await api.query(READ_SQL,[GUILD_ID])).results??[];
+ const tableCheck=await api.query("SELECT name FROM sqlite_master WHERE type='table' AND name='kp_duel_reward_policy_v2'",[]);
+ const exists=Array.isArray(tableCheck.results)&&tableCheck.results.length===1;
+ if(!exists&&(operation==='status'||operation==='stop'))
+  return {state:'disabled',guild:GUILD_ID,wasAlreadyStopped:true};
+ if(!exists&&operation==='activate'){
+ // The v2 table is normally created lazily by the game Worker.
+ // This approved DDL creates NO rewards, collections, KP entries or receipts.
+ await api.query(`CREATE TABLE IF NOT EXISTS ${TABLE} (
+   guild TEXT NOT NULL,mode TEXT NOT NULL CHECK(mode IN ('pve','pvp')),
+   starts_at INTEGER NOT NULL CHECK(starts_at>=0),
+   daily_cap INTEGER CHECK(daily_cap IS NULL OR daily_cap>0),
+   pair_cap INTEGER CHECK((mode='pve' AND pair_cap IS NULL)
+     OR (mode='pvp' AND pair_cap IS NOT NULL AND pair_cap>0)),
+   win_bps INTEGER NOT NULL CHECK(win_bps BETWEEN 0 AND 10000),
+   loss_bps INTEGER NOT NULL CHECK(loss_bps BETWEEN 0 AND 10000),
+   draw_bps INTEGER NOT NULL CHECK(draw_bps BETWEEN 0 AND 10000),
+   PRIMARY KEY(guild,mode)
+ ) STRICT`,[]);
+ }
  const before=await getRows();
  if(operation==='status'){
   if(before.length===0)return {state:'disabled',guild:GUILD_ID};

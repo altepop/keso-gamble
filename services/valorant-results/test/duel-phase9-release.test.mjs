@@ -9,16 +9,18 @@ const policy=startsAt=>[
  {mode:'pvp',starts_at:startsAt,daily_cap:null,pair_cap:4,win_bps:1000,loss_bps:500,draw_bps:500},
 ];
 function mockCloudflare(initial=[],binding=DB_ID){
- let rows=[...initial];const queries=[];
+ let rows=[...initial],schemaExists=initial.length>0;const queries=[];
  async function request(url,options={}){
   if(url.endsWith('/workers/scripts/valorant-results/settings'))
    return {ok:true,json:async()=>({success:true,result:{bindings:[{type:'d1',name:'DB',id:binding}]}})};
   assert.ok(url.includes('/d1/database/'+DB_ID+'/query'));
   const {sql,params}=JSON.parse(options.body);
-  assert.equal(params[0],GUILD_ID);
+  if(params.length)assert.equal(params[0],GUILD_ID);
   queries.push(sql);
   let changes=0,results=[];
-  if(sql.startsWith('SELECT'))results=[...rows];
+  if(sql.startsWith('SELECT name FROM sqlite_master'))results=schemaExists?[{name:'kp_duel_reward_policy_v2'}]:[];
+  else if(sql.startsWith('SELECT'))results=[...rows];
+  else if(sql.startsWith('CREATE TABLE IF NOT EXISTS kp_duel_reward_policy_v2'))schemaExists=true;
   else if(sql.startsWith('INSERT')){
    if(rows.length)throw Error('test_duplicate_insert');
    rows=policy(Number(params[1]));changes=2;
