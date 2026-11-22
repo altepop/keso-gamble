@@ -9,7 +9,7 @@ let stage='Discordの起動確認';
 try{
  await prepareDiscordActivity();
  stage='画面の読み込み';
- await import('./app.js?v=web-a40bae8b648758f3');
+ await import('./app.js?v=duel-p11-p12-20261122');
 }catch(error){
  console.error('KESO startup failed at '+stage,error);
  root.replaceChildren();
