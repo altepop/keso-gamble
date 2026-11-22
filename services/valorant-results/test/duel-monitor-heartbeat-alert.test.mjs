@@ -49,5 +49,5 @@ test('one issue at most, deduplicated and no D1 or discord access',async()=>{
 test('missing and malformed report skip, API failure does not create a duplicate',async()=>{
  const env={GITHUB_REPOSITORY:'altepop/keso-gamble',GITHUB_TOKEN:'fixture',DUEL_HEARTBEAT_REPORT:'/missing/file.json'};
  assert.equal(await notifyHeartbeat(env,async()=>{throw Error('should not call')}),'no-report');
- assert.rejects(notifyHeartbeat({...env,GITHUB_REPOSITORY:'different'}),/authorized/);
+ await assert.rejects(notifyHeartbeat({...env,GITHUB_REPOSITORY:'different'}),/authorized/);
 });
