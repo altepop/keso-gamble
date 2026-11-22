@@ -47,7 +47,8 @@
   return '<section class="coach-quick" tabindex="-1" data-quick-start data-primary-practice="'+esc(chosen.id)+'" aria-label="今日最初に取り組む練習">'+
    '<div class="coach-quick-label">最初はこれだけ｜今日の優先課題は1つ</div>'+
    '<h2>'+esc(chosen.title)+'</h2>'+
-   '<p class="coach-quick-timing">'+esc(minutes)+'分を目安に取り組みます。</p>'+
+   '<p class="coach-quick-timing">'+esc(minutes)+'分を目安に取り組みます。</p>'+ 
+   '<p class="coach-quick-small" data-current-rank>計測済み現在ランク：<strong>未取得</strong>（このAPIには実測ランクの情報がありません）</p>'+
    '<p class="coach-quick-reason"><strong>選んだ理由：</strong>'+esc(m.reason)+'</p>'+
    '<ol class="coach-quick-steps">'+steps+'</ol>'+
    '<div class="coach-quick-next"><strong>次の試合で確認すること</strong><p>'+esc(m.next)+'</p></div>'+

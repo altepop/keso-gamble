@@ -17,7 +17,7 @@ function game(id:string,playerName:string,playerTag:string,puuid:string,
   agent:{name:'Fade'},stats:{kills:i===0?1:0,deaths:i===5?1:0,assists:0,score:i===0?200:0}
  }));
  return {metadata:{match_id:id,is_completed:true,
-  started_at:'2026-11-12T10:00:00Z',game_length_in_ms:1_200_000,queue:{id:'competitive'}},
+  started_at:'2026-11-12T10:00:00Z',game_length_in_ms:1_200_000,map:{name:'Ascent'},queue:{id:'competitive'}},
   players:names,teams:[{team_id:'Blue',won:true,rounds:{won:13}},
    {team_id:'Red',won:false,rounds:{won:8}}],
   rounds:Array.from({length:21},(_,id)=>({id,winning_team:id<13?'Blue':'Red',attacking_team:id<12?'Blue':'Red',defending_team:id<12?'Red':'Blue'})),
@@ -152,8 +152,8 @@ test('incomplete round events never drive FK diagnosis but still allow valid ros
   await enableAllMemberArchive(f.db);const m=game('missing-events','Dolly','SDGs','vdk-id');
   await recordCompetitiveRoster(f.db,m,now);await recordCompetitiveRoundEvents(f.db,{...m,kills:[]},now);
   const r=await readCoachMemberReport(f.db,'VDK');assert.equal(r.archivedMatches,1);assert.equal(r.performance.overall.kdMatches,1);assert.equal(r.usableMatches,0);assert.equal(r.individual.length,0);assert.equal(r.killDataMissing,1);
-  assert.equal(r.nextMatch.matches,1);assert.ok(r.nextMatch.focus.action);assert.ok(r.nextMatch.check.metrics.length>0,'event log gaps do not prevent a denominator-backed experiment');
-  assert.equal(r.matchFeedback.sessions.length,1);assert.equal(r.matchFeedback.sessions[0].eventVerified,false);assert.equal(r.matchFeedback.sessions[0].lesson.practice.steps.length,3);
+  assert.equal(r.nextMatch.matches,0);assert.ok(r.nextMatch.focus.action);assert.equal(r.nextMatch.check.metrics.length,0,'incomplete event history is not treated as a verified comparative game');
+  assert.equal(r.matchFeedback.sessions.length,0,'incomplete events cannot become a verified evaluation');assert.ok(r.matchFeedback.starter);assert.equal(r.matchFeedback.quality.incompleteExcluded,1);
  }finally{f.close()}
 });
 
@@ -213,5 +213,54 @@ test('oversized position evidence falls back to position-unavailable without inv
   assert.equal(result.coverage.positionEvidenceUnavailable,true);
   assert.equal(result.positionCoverage.verifiedPositionMatches,0);
   assert.equal(f.writes(),before);
+ }finally{f.close();}
+});
+
+test('06:57 time-only roster cannot block last fully verified competitive evaluation',async()=>{
+ const f=setup();try{
+  await enableAllMemberArchive(f.db);
+  f.sql.prepare('UPDATE coach_member_sources SET puuid=?,region=? WHERE riot_id=?').run('vdk-id','ap','Dolly#SDGs');
+  const complete=game('verified-older','Dolly','SDGs','vdk-id');
+  assert.equal(await recordCompetitiveRoster(f.db,complete,now),true);
+  assert.equal(await recordCompetitiveRoundEvents(f.db,complete,now),true);
+  const empty=game('timestamp-only','Dolly','SDGs','vdk-id');
+  empty.metadata.started_at='2026-11-21T21:37:00Z';
+  delete empty.metadata.map;
+  empty.teams=empty.teams.map(t=>({...t,won:null,rounds:{won:null}})) as unknown as Match['teams'];
+  empty.players=empty.players.map(p=>({...p,agent:undefined,stats:undefined})) as unknown as Match['players'];
+  empty.rounds=[];empty.kills=[];
+  assert.equal(await recordCompetitiveRoster(f.db,empty,now),true);
+  const before=f.writes();
+  const result=await readCoachMemberReport(f.db,'VDK');
+  assert.equal(f.writes(),before,'evaluation is read only');
+  assert.equal(result.archivedMatches,2,'partial archive remains for retry');
+  assert.equal(result.performance.quality.excluded['time-only-record'],1);
+  assert.equal(result.performance.timeline.length,1);
+  assert.equal(result.matchFeedback.sessions.length,1);
+  assert.equal(result.matchFeedback.sessions[0].map,'Ascent');
+  assert.equal(result.matchFeedback.sessions[0].eventVerified,true);
+  assert.equal(result.matchFeedback.quality.incompleteExcluded,1);
+  assert.doesNotMatch(JSON.stringify(result.matchFeedback),/2026-11-21T21:57/);
+  assert.match(result.nextMatch.strength.evidence,/Ascent/);
+ }finally{f.close();}
+});
+
+test('fifty-five newer incomplete score rows cannot hide the last complete owner game',async()=>{
+ const f=setup();try{
+  await enableAllMemberArchive(f.db);
+  f.sql.prepare('UPDATE coach_member_sources SET puuid=?,region=? WHERE riot_id=?').run('vdk-id','ap','Dolly#SDGs');
+  const older=game('older-complete','Dolly','SDGs','vdk-id');
+  await recordCompetitiveRoster(f.db,older,now);await recordCompetitiveRoundEvents(f.db,older,now);
+  for(let i=0;i<55;i++){
+   const newer=game('newer-no-events-'+i,'Dolly','SDGs','vdk-id');
+   newer.metadata.started_at=new Date(Date.parse('2026-11-13T00:00:00Z')+i*60000).toISOString();
+   await recordCompetitiveRoster(f.db,newer,now);
+  }
+  const before=f.writes(),out=await readCoachMemberReport(f.db,'VDK');
+  assert.equal(f.writes(),before);
+  assert.equal(out.performance.timeline.length,50,'ordinary performance still respects its 50 match bound');
+  assert.equal(out.matchFeedback.sessions.length,1,'evaluation searches all verified source rows, not the first 50 partials');
+  assert.equal(out.matchFeedback.sessions[0].eventVerified,true);
+  assert.equal(out.matchFeedback.quality.incompleteExcluded,55);
  }finally{f.close();}
 });

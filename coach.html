@@ -936,7 +936,7 @@
 <script src="./coach/prototype-view.js?v=coach-089424bc19d7"></script>
 <script src="./coach/benchmarks.js?v=coach-4721e7e852a8"></script>
 <script src="./coach/practice.js?v=coach-1d4e247eb817"></script>
-<script src="./coach/quick-start.js?v=coach-20261122-quick1"></script>
+<script src="./coach/quick-start.js?v=coach-20261122-quick2"></script>
 <script src="./coach/reader.js?v=coach-b714184b6163"></script>
 <script>
 const CoachReader=globalThis.KesoCoachReader;
@@ -1502,14 +1502,16 @@ const feedbackDate=date=>Number.isFinite(Date.parse(date))?new Date(date).toLoca
 const feedbackTone=s=>s.topic==='repeat'?'good':['conversion','participation','pressure','reset'].includes(s.topic)?'bad':['cover','timing'].includes(s.topic)?'check':'neutral';
 const feedbackBody=s=>`<section class="coach-quality reader-card reader-${feedbackTone(s)}" data-match-feedback data-topic="${escape(s.topic)}">
  <span class="reader-badge">${{good:'＋ GOOD｜良かった準備を再現',bad:'！ BAD候補｜ここを見直す',check:'？ CHECK｜理由を確認',neutral:'→ 基礎練習｜弱点の判定ではない'}[feedbackTone(s)]}</span><h3>この試合のフィードバック</h3><p>${escape(feedbackDate(s.date))} · ${escape(s.map)} / ${escape(s.agent)} · ${escape({win:'勝ち',loss:'負け',draw:'引き分け'}[s.outcome]||'勝敗未取得')}
- · ${s.kills===null?'—':int(s.kills)}キル / ${s.deaths===null?'—':int(s.deaths)}デス / ${s.assists===null?'—':int(s.assists)}アシスト</p>
+ · ${s.kills===null?'未取得':int(s.kills)}キル / ${s.deaths===null?'未取得':int(s.deaths)}デス / ${s.assists===null?'未取得':int(s.assists)}アシスト</p>
  <h4>前の試合との振り返り：${escape(s.followUp.title)}</h4><p>${escape(readerWords(s.followUp.text))}</p>
  ${lessonBody(s.lesson)}
  <details class="member-detail"><summary>この課題を選んだ理由を確認します</summary><p>比較対象：${escape(s.scope)}・${int(s.baselineMatches)}試合</p>${s.evidence.map(e=>'<p>'+escape(e)+'</p>').join('')}</details></section>`;
 const matchFeedbackPanel=f=>{
  if(!f)return '';
  const latest=f.sessions?.[0];
- return '<section data-coach-learning>'+(latest?feedbackBody(latest):'<section class="coach-quality" data-coach-starter><h3>最初の一戦に向けて準備します</h3>'+lessonBody(f.starter)+'</section>')+
+ const excluded=Number.isSafeInteger(f.quality?.incompleteExcluded)&&f.quality.incompleteExcluded>0?f.quality.incompleteExcluded:0;
+ const warning=excluded?'<p class="coach-quick-small" data-evaluation-excluded>詳細が不足する'+int(excluded)+'試合は評価から除外しています。最新の評価は詳細を確認できた試合です。不完全な元記録は既存の補完対象として残します。</p>':'';
+ return '<section data-coach-learning>'+warning+(latest?feedbackBody(latest):'<section class="coach-quality" data-coach-starter><h3>最初の一戦に向けて準備します</h3>'+lessonBody(f.starter)+'</section>')+
  '<p class="small muted">'+escape(f.delivery)+'</p>'+
  (f.sessions.length>1?'<h3>試合ごとの変化を振り返ります</h3>'+f.sessions.slice(1).map(s=>'<details class="member-detail" data-feedback-history><summary>'+escape(feedbackDate(s.date))+' · '+escape(s.map)+' / '+escape(s.agent)+' · '+escape(s.lesson.title)+'</summary>'+feedbackBody(s)+'</details>').join(''):'')+
  '<details class="member-detail"><summary>解説の対象と選び方を確認します</summary><p>表示 '+int(f.quality.shown)+' / 時刻判明 '+int(f.quality.availableChronologicalMatches)+'試合、上限 '+int(f.quality.limit)+'件。日時不明除外 '+int(f.quality.undatedExcluded)+'件。同時刻の順序不明 '+int(f.quality.ambiguousTimeMatches)+'件。</p><p>'+escape(f.rules)+'</p></details></section>';

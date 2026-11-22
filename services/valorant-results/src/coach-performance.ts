@@ -34,6 +34,12 @@ export function coachPerformance(rows:readonly Row[],accounts:readonly Account[]
    }
   }
   if(Array.isArray(rounds)&&rounds.length&&denominator!==null&&rounds.length!==denominator)denominator=null;
+  // A valid time and identity are not proof of a scorable competitive match.
+  // Exclude empty placeholders from latest-game ordering, never fill null as 0.
+  if(outcome==='unknown'&&denominator===null&&
+     !['k','d','a','score'].some(stat=>valid(p[stat]))){
+   reject('time-only-record');continue;
+  }
   const partySize=typeof p.party_id==='string'&&p.party_id?String(players.filter(t=>t.team_id===p.team_id&&t.party_id===p.party_id).length)+'人パーティー':'パーティー未取得';
   const teammates=[...new Set(cohort.filter(c=>players.some(t=>t.puuid!==p.puuid&&t.team_id===p.team_id&&t.name===c.riotId.slice(0,c.riotId.lastIndexOf('#'))&&t.tag===c.riotId.slice(c.riotId.lastIndexOf('#')+1))).map(c=>c.person==='Abema'?'神戸':c.person))];
   const roleCounts=new Map<string,number>();for(const t of players.filter(t=>t.team_id===p.team_id)){const role=roles[t.agent]??'ロール未確認';roleCounts.set(role,(roleCounts.get(role)??0)+1);}
