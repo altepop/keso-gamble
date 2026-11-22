@@ -4,7 +4,7 @@
  */
 import type {KpEnv} from './kp.ts';
 import {ensureServerPveTables} from './duel-pve-sessions.ts';
-import {ensureDuelProgressionTables} from './duel-progression-schema.ts';
+import {ensureDuelRewards} from './duel-rewards.ts';
 import {duelDailyChallenge} from './duel-daily-challenge.ts';
 import {DUEL_PROGRESSION_GAMES} from './duel-progression.ts';
 
@@ -36,7 +36,7 @@ export async function duelHistoryRead(env:KpEnv,guild:string,user:string,filter:
  if(mode!=='all'&&!modes.has(mode))throw Error('履歴の種目区分が不正です。');
  if(game!=='all'&&!games.has(game))throw Error('履歴の種目が不正です。');
  await ensureServerPveTables(env);
- await ensureDuelProgressionTables(env);
+ await ensureDuelRewards(env);
  await ensureDuelDailyHistory(env);
  const now=Date.now(),today=duelDailyChallenge(now);
  const filters={mode,game};
