@@ -45,7 +45,11 @@
     frame.className='keso-cpu-practice-frame';
     frame.title='CPUとの練習';
     frame.setAttribute('allow','autoplay');
-    frame.src=new URL('./duel-demo.html?cpu=1&v=cpu-20261114-v1',document.baseURI).href;
+    const selectedGame=trigger?.dataset?.duelPracticeGame;
+    const allowed=['othello','gomoku','connect4','hitblow','bluffdice','poker'];
+    const destination=new URL('./duel-demo.html?cpu=1&v=cpu-20261123-picker',document.baseURI);
+    if(allowed.includes(selectedGame))destination.searchParams.set('game',selectedGame);
+    frame.src=destination.href;
     shell.append(header,frame);
 
     overlay=shell;
@@ -58,6 +62,14 @@
   }
 
   document.addEventListener('click',function(event){
+    const sport=event.target.closest?.('[data-duel-practice-game]');
+    if(sport&&app.contains(sport)){
+      if(!['othello','gomoku','connect4','hitblow','bluffdice','poker'].includes(sport.dataset.duelPracticeGame))return;
+      event.preventDefault();
+      event.stopImmediatePropagation(); // Do not let the app's old button handler leave the Activity.
+      openPractice(sport);
+      return;
+    }
     const anchor=event.target.closest?.('a[href]');
     if(!anchor||!app.contains(anchor))return;
     let url;
