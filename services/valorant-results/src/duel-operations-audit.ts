@@ -22,7 +22,7 @@ export async function duelOperationsAudit(env:Pick<KpEnv,'DB'>,guild:string,now=
     COALESCE(SUM(CASE WHEN status IN ('active','pending') THEN 1 ELSE 0 END),0) AS active
     FROM kp_board_duels WHERE guild=?`).bind(threshold,guild).first<{stale:number;active:number}>()
  ]);
- const count=(n:unknown)=>Number.isSafeInteger(n)&&Number(n)>=0?Number(n):null;
+ const count=(n:unknown)=>typeof n==='number'&&Number.isSafeInteger(n)&&n>=0?n:null;
  const a=count(pve?.stale),b=count(pvp?.stale),c=count(pve?.active),d=count(pvp?.active);
  if([a,b,c,d].some(x=>x===null))throw Error('Invalid duel audit result');
  const counts={staleFinishedPve:a!,staleFinishedPvp:b!,activePve:c!,activePvp:d!};
