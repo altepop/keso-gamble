@@ -101,3 +101,15 @@ test('read-only rendering requires a trusted DTO and never performs fetch, stora
  assert.match(renderer,/font-size:16px;line-height:1.9/);
  assert.match(renderer,/同じ味方チームにいたことだけで/);
 });
+
+test('untrusted position snapshots cannot become team trade distance or leak personal coordinates',()=>{
+ const row=match('position-private',{
+  positions_json:JSON.stringify({puuid:'private-position-owner',x:12345,y:67890,tradeDistance:42}),
+  players_json:JSON.stringify(players().map((p,i)=>({...p,location:{x:100+i,y:200+i}})))
+ });
+ const result=run([row]);
+ assert.equal(result.quality.eligibleMatches,1);
+ assert.equal(result.positionBasedTradeDistance,'評価範囲外');
+ const shared=JSON.stringify(result);
+ assert.doesNotMatch(shared,/private-position-owner|12345|67890|tradeDistance|location|"x"|"y"/);
+});
