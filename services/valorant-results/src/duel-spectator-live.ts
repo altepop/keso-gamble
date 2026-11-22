@@ -18,7 +18,7 @@ export class SpectatorAccessError extends Error {
 }
 export function allowedSpectator(viewer:string,guild:string,match:BoardDuel,now:number):boolean {
  if(!SNOWFLAKE.test(viewer)||!SNOWFLAKE.test(guild)||!match||
-   match.guild!==guild||!UUID.test(match.id)||viewer===match.user_a&&viewer===match.user_b)return false;
+   match.guild!==guild||!UUID.test(match.id)||match.user_a===match.user_b)return false;
  return match.status==='active'||(match.status==='finished'&&
   Number.isSafeInteger(match.updated_at)&&now>=match.updated_at&&
   now-match.updated_at<=FINISHED_VISIBLE_MS);
