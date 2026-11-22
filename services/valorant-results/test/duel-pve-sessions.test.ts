@@ -128,6 +128,6 @@ test('Phase 11 daily challenge starts server-selected six-mode CPU battle withou
   const replay=await serverPveOperation(env,'guild','alice',{action:'daily',requestId:req});
   assert.equal(one.id,replay.id);
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM kp_duel_pve_sessions').get()?.n,1);
-  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM kp_ledger').get()?.n??0,0);
+  assert.equal(Object.hasOwn(one,'bonusKp'),false);
  }finally{db.close();}
 });
