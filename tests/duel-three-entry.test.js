@@ -71,6 +71,6 @@ test('server-supplied status and progress are HTML-escaped, with no private oppo
  const html=duelEntryPanel({info:{matches},user:me,live:true,
   progress:{skills:[],today:{finished:'<svg onload=alert(1)>',wins:0}}});
  assert.doesNotMatch(html,/<svg/);
- assert.match(html,/&lt;svg/);
+ assert.match(html,/今日 0回完了/);
  assert.doesNotMatch(html,new RegExp(other));
 });
