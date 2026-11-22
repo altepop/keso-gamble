@@ -21,7 +21,7 @@ test('music bot host is HTTPS only and cannot be redirected to an arbitrary targ
 });
 test('voice bridge sends only authorized guild, version, kind and match ID, without KP',async()=>{
  const token='x'.repeat(40);let calls=0;
- const env={MUSIC_VOICE_URL:'https://keso-music-voice.onrender.com/',MUSIC_BRIDGE_TOKEN:token,DB:{}};
+ const env={MUSIC_VOICE_URL:'https://keso-music-voice.onrender.com/',MUSIC_BRIDGE_TOKEN:token,DB:{}} as unknown as Parameters<typeof sendDuelVoiceCue>[0];
  const request=async(url:URL,init:RequestInit)=>{
   assert.equal(url.origin,'https://keso-music-voice.onrender.com');
   assert.equal(url.pathname,'/v1/duel-cue');
@@ -38,7 +38,7 @@ test('voice bridge sends only authorized guild, version, kind and match ID, with
 test('unconfigured bridge or other host does not dispatch any request',async()=>{
  let calls=0;const never=async()=>{calls++;throw Error('must not dispatch')};
  const match={...base,status:'finished' as const,version:4};
- const env={DB:{},MUSIC_VOICE_URL:'https://attacker.invalid',MUSIC_BRIDGE_TOKEN:'x'.repeat(40)};
+ const env={DB:{},MUSIC_VOICE_URL:'https://attacker.invalid',MUSIC_BRIDGE_TOKEN:'x'.repeat(40)} as unknown as Parameters<typeof sendDuelVoiceCue>[0];
  assert.equal(await sendDuelVoiceCue(env,match,never as typeof fetch),false);
  assert.equal(calls,0);
 });
