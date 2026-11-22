@@ -62,7 +62,7 @@ let browser;const errors=[],requests=[];
  assert.equal(await page.locator('.duel-showdown').count(),0);
  await page.locator('[data-demo-play=two]').click();
  assert.equal(await page.locator('body.cpu-practice').count(),0);
- assert.equal(await page.locator('#duel-game option').count(),6);
+ assert.equal(await page.locator('#duel-game option').count(),7);
  await page.locator('[data-demo-play=cpu]').click();
  assert.equal(await page.locator('body.cpu-practice').count(),1);
 
