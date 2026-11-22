@@ -47,3 +47,20 @@ export function duelOperationsPanel({available=false,busy=false,report=null,erro
  '<p>確認が必要：'+(report.reviewRecommended?'あり':'なし')+' ／ 自動削除：なし</p><button class="action-btn" data-duel-operations-export="1">監査集計を保存</button><button class="action-btn" data-duel-operations-records="1">直近確定対戦の記録を保存</button>':'')+
  '</div></details>';
 }
+
+/** Additional casual game, not a wager or a PvE reward mode. */
+export function duelTrioPanel({board='.........',level='strong',winner=null,error=''}={}){
+ const status=winner==='X'?'あなたの勝ち':winner==='O'?'CPUの勝ち':winner==='draw'?'引き分け':'あなたの番';
+ const cell=String(board);
+ const valid=/^[.XO]{9}$/.test(cell);
+ const safeCells=valid?cell:'.........';
+ const finished=Boolean(winner);
+ return '<details class="panel" id="duel-trio-panel" open><summary>🆕 新種目：三目並べ（CPU練習）</summary><div class="card-body">'+
+ '<p class="helper">３つ並べる戦略対戦。強CPUは最後まで読み切る完全探索。ブラウザ内の無料練習のみで、KP・報酬・戦績は変わらない。</p>'+
+ '<label>CPUの強さ <select id="duel-trio-level">'+
+ [['easy','かんたん'],['normal','ふつう'],['strong','つよい（完全探索）']].map(([v,n])=>'<option value="'+v+'" '+(v===level?'selected':'')+'>'+n+'</option>').join('')+'</select></label>'+
+ '<p role="status">'+status+'</p>'+ (error?'<p role="alert">'+safe(error)+'</p>':'')+
+ '<div role="grid" aria-label="三目並べの盤面" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));max-width:280px;gap:6px">'+
+ [...safeCells].map((v,i)=>'<button type="button" role="gridcell" class="action-btn" data-duel-trio-cell="'+i+'" aria-label="'+(Math.floor(i/3)+1)+'行'+(i%3+1)+'列'+(v==='.'?' 空き':v==='X'?' あなた':' CPU')+'" style="min-height:68px;font-size:28px" '+(v!=='.'||finished?'disabled':'')+'>'+(v==='.'?'・':v==='X'?'×':'○')+'</button>').join('')+'</div>'+
+ '<button type="button" class="action-btn" data-duel-trio-reset="1">新しい対戦</button></div></details>';
+}
