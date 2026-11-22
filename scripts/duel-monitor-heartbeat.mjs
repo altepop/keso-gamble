@@ -34,7 +34,11 @@ export async function inspectMonitorHeartbeat(env=process.env,request=fetch,now=
  return evaluateMonitorHeartbeat(data.workflow_runs,now);
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
- inspectMonitorHeartbeat().then(result=>{
+ inspectMonitorHeartbeat().then(async result=>{
+  if(process.env.DUEL_HEARTBEAT_REPORT){
+   const {writeFileSync}=await import('node:fs');
+   writeFileSync(process.env.DUEL_HEARTBEAT_REPORT,JSON.stringify(result),{mode:0o600});
+  }
   console.log('DUEL_MONITOR_HEARTBEAT '+JSON.stringify(result));
   if(process.env.GITHUB_STEP_SUMMARY)appendFileSync(process.env.GITHUB_STEP_SUMMARY,
    '# P12 duel monitor heartbeat (read-only)\n\n'+
