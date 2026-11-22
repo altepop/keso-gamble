@@ -16,7 +16,7 @@ export const DUEL_DAILY_HISTORY_DDL = `CREATE TABLE IF NOT EXISTS kp_duel_pve_da
  PRIMARY KEY(guild,user,session_id)
 )`;
 export const DUEL_DAILY_HISTORY_INDEX =
- 'CREATE INDEX IF NOT EXISTS kp_duel_daily_member ON kp_duel_pve_daily_entries(guild,user,created_at DESC)';
+ 'CREATE INDEX IF NOT EXISTS kp_duel_daily_member ON kp_duel_pve_daily_entries(guild,user,jst_day,created_at DESC)';
 const initialized=new WeakMap<object,Promise<void>>();
 export async function ensureDuelDailyHistory(env:Pick<KpEnv,'DB'>){
  const before=initialized.get(env.DB);if(before)return before;
@@ -58,11 +58,13 @@ export async function duelHistoryRead(env:KpEnv,guild:string,user:string,filter:
    WHERE s.guild=? AND s.user=? AND (?='all' OR ?='pve')
      AND (?='all' OR s.game=?)
    ORDER BY s.updated_at DESC,s.id DESC LIMIT ?`).bind(guild,user,mode,mode,game,game,limit),
-  env.DB.prepare(`SELECT d.session_id,d.jst_day,s.turn,s.winner,s.game,s.difficulty
+  env.DB.prepare(`SELECT COUNT(*) AS started,
+    COALESCE(SUM(CASE WHEN s.turn='finished' THEN 1 ELSE 0 END),0) AS finished,
+    COALESCE(SUM(CASE WHEN s.turn='finished' AND s.winner='human' THEN 1 ELSE 0 END),0) AS wins
    FROM kp_duel_pve_daily_entries d JOIN kp_duel_pve_sessions s
    ON s.id=d.session_id AND s.guild=d.guild AND s.user=d.user
-   WHERE d.guild=? AND d.user=? AND d.jst_day=? ORDER BY d.created_at DESC LIMIT ?`)
-   .bind(guild,user,today.day,limit),
+   WHERE d.guild=? AND d.user=? AND d.jst_day=?`)
+   .bind(guild,user,today.day),
   env.DB.prepare('SELECT mode,game FROM kp_duel_reward_collection WHERE guild=? AND user=?').bind(guild,user)
  ]);
  const entries=(receipts.results as Array<{match_id:string;mode:string;game:string;outcome:string;occurred_at:number;daily_day:string|null}>)
@@ -71,9 +73,9 @@ export async function duelHistoryRead(env:KpEnv,guild:string,user:string,filter:
   .map(row=>({id:row.id,game:row.game,level:row.difficulty,status:row.turn==='finished'?'finished':'active',
    winner:row.winner,version:row.version,humanMoves:row.human_moves,cpuMoves:row.cpu_moves,
    createdAt:row.created_at,updatedAt:row.updated_at,dailyDay:row.daily_day}));
- const todays=daily.results as Array<{session_id:string;turn:string;winner:string|null;game:string;difficulty:string;jst_day:string}>;
- return {asOf:now,filter:filters,today:{...today,started:todays.length,finished:todays.filter(s=>s.turn==='finished').length,
-  wins:todays.filter(s=>s.turn==='finished'&&s.winner==='human').length},
+ const todayCount=(daily.results as Array<{started:number;finished:number;wins:number}>)[0]??{started:0,finished:0,wins:0};
+ return {asOf:now,filter:filters,today:{...today,started:todayCount.started,finished:todayCount.finished,
+  wins:todayCount.wins},
   skills:skills.results as Array<{mode:string;game:string;points:number;peak_points:number;verified_games:number;wins:number;losses:number;draws:number;updated_at:number}>,history:entries,sessions,collection:collection.results,
   limit,historyHasMore:entries.length===limit,sessionsHasMore:sessions.length===limit,
   note:'履歴は各最新20件まで。初回の記録開始前の試合を日替わりと推定しません。認証済み本人だけが閲覧できます。'};
