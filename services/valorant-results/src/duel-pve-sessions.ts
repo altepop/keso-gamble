@@ -84,8 +84,6 @@ function trusted(row:SessionRow):TrustedPveState{
 function publicMatch(row:SessionRow){return {id:row.id,...pvePublicSnapshot(trusted(row))};}
 export async function serverPveOperation(env:KpEnv,guild:string,user:string,body:Record<string,unknown>){
  const action=String(body.action??'');
- // Preview is pure: it does not create a table or cost a D1 query.
- if(action==='daily-preview')return {challenge:duelDailyChallenge(Date.now())};
  await ensureServerPveTables(env);
  if(action==='get'){
   const row=await find(env,guild,user,String(body.session??''));
@@ -177,6 +175,8 @@ export async function serverPveApi(request:Request,env:KpEnv,m:KpMapping,user:st
   if(raw.length>1024)return respond({error:'操作内容が長すぎます。'},400);
   const body=JSON.parse(raw) as Record<string,unknown>;
   if(!body||typeof body!=='object'||Array.isArray(body))return respond({error:'操作内容が不正です。'},400);
+  // Preview never creates a D1 table or changes the normal PvE return type.
+  if(body.action==='daily-preview')return respond({challenge:duelDailyChallenge(Date.now())});
   return respond({match:await serverPveOperation(env,m.guildId,user,body)});
  }catch(error){
   const message=error instanceof Error?error.message:'';
