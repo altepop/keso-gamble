@@ -26,6 +26,7 @@ let browser;
   else if(p.endsWith('/pulse'))response={pulse:'test'};
   else if(p.endsWith('/feed'))response={entries:[]};
   else if(p.endsWith('/duels/operations/access'))response={available:false};
+  else if(p.endsWith('/duels/season/event'))response={event:{id:'2026-11-23',title:'週間ピックアップ：オセロ',game:'othello',kind:'weekly-focus',extraKp:0}};
   else if(p.endsWith('/duels/events')){
    assert.equal(route.request().headers().authorization,'Bearer '+'a'.repeat(48));
    if(!liveHints)return route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:'SSE unavailable'})});
