@@ -84,7 +84,7 @@ export function completeDuelSchema(sql,schemaObjects){
  }
  const extras=missing.sort((a,b)=>Number(a.type==='trigger')-Number(b.type==='trigger'))
   .map(o=>String(o.sql).trim().replace(/;*\s*$/,'')+';');
- return sql.trimEnd()+'\n'+extras.join('\n')+'\n';
+ return sql.trimEnd()+'\n'+(extras.length?extras.join('\n')+'\n':'');
 }
 export async function loadProductionDuelCatalog(env=process.env,request=fetch){
  const token=env.CLOUDFLARE_API_TOKEN,account=env.CLOUDFLARE_ACCOUNT_ID;
