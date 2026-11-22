@@ -150,6 +150,30 @@ test('muse modules stay free of fetch and storage access', () => {
   }
 });
 
+test('home flow bar exposes the hooks the done toggles drive', () => {
+  const html = readFileSync(new URL('../coach.html', import.meta.url), 'utf8');
+  const template = html.split('<template id="coach-muse-template">')[1].split('</template>')[0];
+  for (const hook of ['data-mb-flow="pdca"', 'data-mb-step="today"', 'data-mb-step="comp"',
+    'data-mb="flowTodaySub"', 'data-mb="flowCompSub"', 'data-mb="cycleProgress"',
+    'data-mb="warmErr"', 'data-mb="studyErr"'])
+    assert.ok(template.includes(hook), hook);
+});
+
+test('done state is judged through the practice records, not held locally', () => {
+  const source = readFileSync(new URL('../coach/muse-view.js', import.meta.url), 'utf8');
+  assert.ok(source.includes('ctx.doneState'));
+  assert.ok(source.includes('ctx.onDoneChange'));
+  const records = readFileSync(new URL('../coach/records.js', import.meta.url), 'utf8');
+  for (const name of ['dailyJudgment', 'judgeDaily', 'unjudgeDaily'])
+    assert.ok(records.includes(name), name);
+  assert.ok(records.includes("save(f,'/api/kp/coach/practice/records'"));
+  const html = readFileSync(new URL('../coach.html', import.meta.url), 'utf8');
+  assert.ok(html.includes('coachRecords.judgeDaily'));
+  assert.ok(html.includes('coachRecords.unjudgeDaily'));
+  assert.ok(html.includes('coachRecords.dailyJudgment'));
+  assert.ok(!html.includes('keso-coach-muse-done-v1'));
+});
+
 test('MMR rank is limited to an explicitly listed account, never another member', () => {
   const mmr = {accounts: [
     {riotId: 'Other#002', tierPatched: 'Immortal 1', rankingInTier: 80},

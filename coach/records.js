@@ -91,7 +91,42 @@
    const f=form('plan');element.append(f);const selected=element.querySelector('[data-practice-goal]')?.value,g=goals.find(g=>g.goalId===selected);
    return save(f,'/api/kp/coach/practice/records',{id:crypto.randomUUID(),op:'create',expectedVersion:0,items:ids.map(practiceId=>({practiceId})),catalogVersion,goal:g?{id:g.goalId,version:g.version}:null,context:{map:context.map||''},status:'planned',execution:null,occurredDate:null,reflection:''});
   }
-  return {element,clear,allowLeave,isDirty:()=>dirty().length>0,setState(v){state=v;render();},savePlan,openRecord,overview};
+  const dailyDoneRecord=pred=>[data?.active,...(data?.items||[])].filter(Boolean)
+   .find(r=>r.status==='recorded'&&r.execution?.report==='done'&&pred(r))||null;
+  const dailyRef=r=>r?{id:r.id,version:r.version}:null;
+  async function dailyJudgment(lookup){
+   if(!data&&!await load())return null;if(!data)return null;
+   const day=lookup?.date||data.policy.todayJst;
+   return {
+    warm:dailyRef(dailyDoneRecord(r=>r.occurredDate===day&&r.items.some(i=>i.source==='catalogue'&&i.id===lookup?.practiceId))),
+    study:dailyRef(dailyDoneRecord(r=>r.occurredDate===day&&r.items.some(i=>i.source==='personal'&&i.title===lookup?.studyTitle)))};
+  }
+  async function judgeDaily(kind,detail){
+   if(!data&&!await load())return null;if(!data||pending)return null;
+   const day=data.policy.todayJst;
+   const lookup=kind==='practice'?{date:day,practiceId:detail.practiceId}:{date:day,studyTitle:detail.title};
+   const existing=await dailyJudgment(lookup);
+   const found=kind==='practice'?existing?.warm:existing?.study;if(found)return found;
+   let body;
+   if(kind==='practice'){
+    const catalogVersion=await clientCatalog();if(catalogVersion!==data.policy.catalogVersion){status.textContent='練習内容が更新されています。画面全体を再読み込みして確認してください。';return null;}
+    body={id:crypto.randomUUID(),op:'create',expectedVersion:0,items:[{practiceId:detail.practiceId}],catalogVersion,context:{map:detail.map||''},status:'recorded',execution:{report:'done',minutes:null,attempts:null,successes:null},occurredDate:day,reflection:''};
+   }else{
+    body={id:crypto.randomUUID(),op:'create',expectedVersion:0,items:[{title:detail.title,action:detail.action,check:detail.check}],status:'recorded',execution:{report:'done',minutes:null,attempts:null,successes:null},occurredDate:day,reflection:''};
+   }
+   const f=form('muse-daily');element.append(f);
+   const ok=await save(f,'/api/kp/coach/practice/records',body);f.remove();
+   if(!ok)return null;
+   const again=await dailyJudgment(lookup);
+   return kind==='practice'?again?.warm||null:again?.study||null;
+  }
+  async function unjudgeDaily(ref){
+   if(!ref)return true;if(!data&&!await load())return false;if(!data||pending)return false;
+   const f=form('muse-daily');element.append(f);
+   const ok=await save(f,'/api/kp/coach/practice/records',{id:ref.id,op:'delete',expectedVersion:ref.version});f.remove();return ok;
+  }
+  return {element,clear,allowLeave,isDirty:()=>dirty().length>0,setState(v){state=v;render();},savePlan,openRecord,overview,dailyJudgment,judgeDaily,unjudgeDaily};
  }
  root.KesoCoachRecords=Object.freeze({create,headings});
 })(globalThis);
+
