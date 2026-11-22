@@ -56,6 +56,7 @@ let duelSpectatorId='',duelSpectatorSnapshot=null,duelSpectatorVersion=null,duel
 let duelSpectatorWatching=false,duelSpectatorBusy=false,duelSpectatorMessage='',duelSpectatorError='';
 let duelSpectatorMatches=[],duelSpectatorLobbyLoaded=false,duelSpectatorLobbyLoading=false,duelSpectatorSound=false;
 const duelPveUi={busy:false,preview:null,match:null,error:'',message:'',sessionInput:'',pending:null,open:false,game:'othello',level:'normal',rewardsOpen:false,rewards:null,rewardsError:''};
+const duelHistoryUi={open:false,busy:false,data:null,error:'',mode:'all',game:'all'};
 const duelTrioUi={board:'.........',level:'strong',winner:null,error:''};
 let duelWeeklyEvent=null,duelWeeklyEventChecked=false;
 const duelOperationsUi={available:false,busy:false,report:null,error:'',auto:false,lastAuditAt:0,season:null,archives:null};
@@ -515,7 +516,7 @@ lastSynced:duelLastGoodFetch,pendingRetry:!!duelPendingAction,historyHasMore:due
    watching:duelSpectatorWatching,message:duelSpectatorMessage,error:duelSpectatorError,
    matches:duelSpectatorMatches,loaded:duelSpectatorLobbyLoaded,loading:duelSpectatorLobbyLoading,
    sound:duelSpectatorSound,snapshot:duelSpectatorSnapshot},
- pveUi:duelPveUi,operationsUi:duelOperationsUi,trioUi:duelTrioUi,eventUi:duelWeeklyEvent,
+ pveUi:{...duelPveUi,historyUi:duelHistoryUi},operationsUi:duelOperationsUi,trioUi:duelTrioUi,eventUi:duelWeeklyEvent,
  riskConfirm:duelRiskConfirm===`create:${duelGame}:${duelTarget}:${duelStake}`?'create':activeDuel&&duelRiskConfirm===`accept:${activeDuel.id}:${activeDuel.version}:${activeDuel.stake}`?'accept':'',tabs:subTabs(),nav:bottomNav()}):screen==='mleague'?mleagueScreen({state,live,draft:{...mlDraft,amount:drafts['ml-amount']},tabs:subTabs(),nav:bottomNav()}):screen==='race'?screenRace():screenAssets();
   // 効果音 switch for the casino and racing screens (off unless the player turns it on).
   setBgmScene(screen==='casino'||screen==='race'?screen:'');
@@ -741,6 +742,8 @@ addEventListener('click',trendDay);
 addEventListener('pointermove',e=>{if(e.pointerType==='mouse')trendDay(e);});
 // Client-only filter state; no D1 requests for typing or paging.
 for(const eventName of ['input','change'])addEventListener(eventName,e=>{
+ if(eventName==='change'&&screen==='duels'&&e.target.id==='duel-history-mode'){duelHistoryUi.mode=e.target.value;return;}
+ if(eventName==='change'&&screen==='duels'&&e.target.id==='duel-history-game'){duelHistoryUi.game=e.target.value;return;}
  if(eventName==='change'&&screen==='duels'&&e.target.id==='duel-pve-game'){duelPveUi.game=e.target.value;return;}
  if(eventName==='change'&&screen==='duels'&&e.target.id==='duel-pve-level'){duelPveUi.level=e.target.value;return;}
  if(eventName==='input'&&screen==='duels'&&e.target.id==='duel-pve-session-input'){duelPveUi.sessionInput=e.target.value;return;}
@@ -830,6 +833,27 @@ addEventListener('click',async e=>{
   // strand the iPhone iframe. Keep the existing authenticated context alive.
   if(screen==='duels'&&t.dataset.duelPveLink!==undefined){
    e.preventDefault();duelPveUi.open=true;render();
+   requestAnimationFrame(()=>document.getElementById('duel-pve-section')?.scrollIntoView({block:'start',behavior:'auto'}));
+   return;
+  }
+  if(screen==='duels'&&(t.dataset.duelHistoryOpen!==undefined||t.dataset.duelHistoryRefresh!==undefined)){
+   e.preventDefault();if(!live||!wallet.connected){toast('履歴の閲覧にはKP口座への接続が必要です。');return;}
+   if(duelHistoryUi.busy)return;
+   duelHistoryUi.open=true;duelPveUi.open=true;duelHistoryUi.busy=true;duelHistoryUi.error='';render();
+   try{duelHistoryUi.data=await wallet.duelHistory({mode:duelHistoryUi.mode,game:duelHistoryUi.game});}
+   catch(error){duelHistoryUi.error=error.message||'対局履歴を取得できません。';}
+   finally{duelHistoryUi.busy=false;render();}
+   requestAnimationFrame(()=>document.getElementById('duel-history-panel')?.scrollIntoView({block:'start',behavior:'auto'}));
+   return;
+  }
+  if(screen==='duels'&&t.dataset.duelHistoryResume!==undefined){
+   e.preventDefault();if(!live||!wallet.connected||duelPveUi.busy)return;
+   const id=t.dataset.duelHistoryResume;
+   if(!/^[0-9a-f]{8}(-[0-9a-f]{4}){4}-[0-9a-f]{12}$/i.test(id))return;
+   duelPveUi.open=true;duelPveUi.busy=true;duelPveUi.error='';render();
+   try{const result=await wallet.duelPveRead(id);duelPveUi.match=result.match;duelPveUi.sessionInput=id;duelPveUi.message='保存済みCPU戦を再開しました。';}
+   catch(error){duelPveUi.error=error.message||'CPU戦を再開できません。';}
+   finally{duelPveUi.busy=false;render();}
    requestAnimationFrame(()=>document.getElementById('duel-pve-section')?.scrollIntoView({block:'start',behavior:'auto'}));
    return;
   }
