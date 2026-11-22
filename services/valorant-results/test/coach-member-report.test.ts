@@ -244,3 +244,23 @@ test('06:57 time-only roster cannot block last fully verified competitive evalua
   assert.match(result.nextMatch.strength.evidence,/Ascent/);
  }finally{f.close();}
 });
+
+test('fifty-five newer incomplete score rows cannot hide the last complete owner game',async()=>{
+ const f=setup();try{
+  await enableAllMemberArchive(f.db);
+  f.sql.prepare('UPDATE coach_member_sources SET puuid=?,region=? WHERE riot_id=?').run('vdk-id','ap','Dolly#SDGs');
+  const older=game('older-complete','Dolly','SDGs','vdk-id');
+  await recordCompetitiveRoster(f.db,older,now);await recordCompetitiveRoundEvents(f.db,older,now);
+  for(let i=0;i<55;i++){
+   const newer=game('newer-no-events-'+i,'Dolly','SDGs','vdk-id');
+   newer.metadata.started_at=new Date(Date.parse('2026-11-13T00:00:00Z')+i*60000).toISOString();
+   await recordCompetitiveRoster(f.db,newer,now);
+  }
+  const before=f.writes(),out=await readCoachMemberReport(f.db,'VDK');
+  assert.equal(f.writes(),before);
+  assert.equal(out.performance.timeline.length,50,'ordinary performance still respects its 50 match bound');
+  assert.equal(out.matchFeedback.sessions.length,1,'evaluation searches all verified source rows, not the first 50 partials');
+  assert.equal(out.matchFeedback.sessions[0].eventVerified,true);
+  assert.equal(out.matchFeedback.quality.incompleteExcluded,55);
+ }finally{f.close();}
+});

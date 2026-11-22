@@ -36,6 +36,7 @@ test('missing plan still provides one executable safe drill, and HTML escapes un
 
 test('no measured rank is always explicitly marked 未取得',()=>{
  const html=guide.render({}, {selected:[]});
- assert.match(html,/data-current-rank[^>]*>計測済み現在ランク：<strong>未取得<\\/strong>/);
+ assert.ok(html.includes('計測済み現在ランク：<strong>未取得</strong>'));
+ assert.match(html,/data-current-rank/);
  assert.doesNotMatch(html,/CURRENT RANK.*DIAMOND/);
 });

@@ -96,7 +96,8 @@ export async function readCoachMemberReport(db:D1Database,person:string,preloade
  const collisionCounts=new Map<number,number>();
  for(const row of rows.results)collisionCounts.set(row.ended_at,(collisionCounts.get(row.ended_at)??0)+1);
  const completeTimes=new Set(verifiedRows.map(row=>row.ended_at));
- const scorable=performance.timeline.filter(g=>{
+ const verifiedPerformance=coachPerformance(verifiedRows,accounts,verifiedAccounts?[]:COACH_MEMBER_ACCOUNTS);
+ const scorable=verifiedPerformance.timeline.filter(g=>{
   const at=Date.parse(g.date??'');
   return Number.isFinite(at)&&collisionCounts.get(at)===1&&completeTimes.has(at)&&
    combatByTime.get(at)!=null&&
