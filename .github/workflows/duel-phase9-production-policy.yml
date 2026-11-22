@@ -30,7 +30,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   production_policy:
-    if: github.repository == 'altepop/keso-gamble' && github.ref == 'refs/heads/main' && github.actor == 'altepop'
+    if: github.repository == 'altepop/keso-gamble' && github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.actor == 'altepop')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -68,6 +68,7 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          DUEL_RELEASE_ACTOR: ${{ github.event_name == 'push' && 'altepop' || github.actor }}
           DUEL_RELEASE_OPERATION: ${{ github.event_name == 'push' && 'activate' || inputs.operation }}
           DUEL_RELEASE_GUILD: ${{ github.event_name == 'push' && '606131625084059674' || inputs.guild_id }}
         run: node services/valorant-results/scripts/duel-phase9-release.mjs
