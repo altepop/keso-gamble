@@ -3,7 +3,8 @@ export const EXTRA_DUEL_GAMES={
  connect4:{name:'四目並べ',size:7},
  hitblow:{name:'Hit & Blow',size:0},
  bluffdice:{name:'ブラフダイス',size:0},
- poker:{name:'5カード・ドローポーカー',size:0}
+ poker:{name:'5カード・ドローポーカー',size:0},
+ dotsboxes:{name:'ドット＆ボックス',size:0}
 };
 const opposite=side=>side==='a'?'b':'a';
 const validSide=side=>side==='a'||side==='b';
@@ -111,8 +112,31 @@ export function bluffBidEvidence(hand,bid){
 function digits(rand){const array=Array.from({length:10},(_,i)=>String(i));for(let i=9;i>0;i--){const j=rand(i+1);[array[i],array[j]]=[array[j],array[i]];}return array.slice(0,4).join('');}
 function dice(rand){return Array.from({length:5},()=>rand(6)+1);}
 function shuffledDeck(rand){const a=Array.from({length:52},(_,i)=>i);for(let i=51;i>0;i--){const j=rand(i+1);[a[i],a[j]]=[a[j],a[i]];}return a;}
+export function dotsBoxesStart(){
+ return {edges:'.'.repeat(24),boxes:'.'.repeat(9),turn:'a',scoreA:0,scoreB:0};
+}
+export function dotsBoxesMove(state,side,edge){
+ if(!validSide(side)||!state||typeof state!=='object'||
+  typeof state.edges!=='string'||!/^[.ab]{24}$/.test(state.edges)||
+  typeof state.boxes!=='string'||!/^[.ab]{9}$/.test(state.boxes)||
+  state.turn!==side||!Number.isSafeInteger(edge)||edge<0||edge>=24||state.edges[edge]!=='.')
+  throw Error('置けない辺です。');
+ const edges=[...state.edges];edges[edge]=side;
+ const boxes=[...state.boxes];let filled=0;
+ for(let r=0;r<3;r++)for(let c=0;c<3;c++){
+  const b=r*3+c;
+  if(boxes[b]!=='.')continue;
+  const top=r*3+c,bottom=(r+1)*3+c,left=12+r*4+c,right=12+r*4+c+1;
+  if([top,bottom,left,right].every(i=>edges[i]!=='.')){boxes[b]=side;filled++;}
+ }
+ const scoreA=boxes.filter(x=>x==='a').length,scoreB=boxes.filter(x=>x==='b').length;
+ const complete=!edges.includes('.');
+ return {edges:edges.join(''),boxes:boxes.join(''),turn:complete?null:filled?side:opposite(side),
+  scoreA,scoreB,winner:complete?(scoreA===scoreB?'draw':scoreA>scoreB?'a':'b'):null,filled};
+}
 export function miniStart(game,rand){
  if(game==='connect4')return {board:connect4Board(),secret:null};
+ if(game==='dotsboxes')return {board:JSON.stringify(dotsBoxesStart()),secret:null};
  if(game==='hitblow')return {board:JSON.stringify({history:[],turn:'a'}),secret:JSON.stringify({privateA:digits(rand),privateB:digits(rand)})};
  if(game==='bluffdice')return {board:JSON.stringify({round:1,winsA:0,winsB:0,turn:'a',bid:null,history:[]}),
    secret:JSON.stringify({privateA:dice(rand),privateB:dice(rand)})};
@@ -131,6 +155,11 @@ export function miniPrivate(game,secret,side){
 export function miniMove(game,board,secret,side,body,rand){
  if(!validSide(side))throw Error('不正なプレイヤーです。');
  if(game==='connect4')return {...connect4Move(board,side,Number(body.cell)),secret:null};
+ if(game==='dotsboxes'){
+  const state=JSON.parse(board),next=dotsBoxesMove(state,side,body.cell);
+  return {board:JSON.stringify({edges:next.edges,boxes:next.boxes,turn:next.turn,scoreA:next.scoreA,scoreB:next.scoreB}),
+   secret:null,winner:next.winner,turnSide:next.turn};
+ }
  const pub=JSON.parse(board),sec=JSON.parse(secret);
  if(pub.turn!==side)throw Error('今はあなたの番ではありません。');
  if(game==='hitblow'){
