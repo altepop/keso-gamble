@@ -79,6 +79,7 @@ export function createKpClient({storage,temporaryStorage,request=globalThis.fetc
   duelOperationsAccess:()=>api('duels/operations/access'),
   duelOperationsRead:()=>api('duels/operations'),
   duelSeasonRead:()=>api('duels/season'),
+  duelSeasonArchive:()=>api('duels/season/archive'),
   duelSeasonEvent:()=>api('duels/season/event'),
   duelOperationsExport:()=>api('duels/operations/export'),
   duelSpectatorLobby:()=>api('duels/spectator-lobby'),
