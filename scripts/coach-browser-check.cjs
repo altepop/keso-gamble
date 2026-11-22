@@ -494,7 +494,9 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   const loop=page.locator('[data-coach-loop]');assert.equal(await loop.count(),1);
   assert.match(await loop.innerText(),/今回保存した練習予定です/,'preloaded private records show the real planned practice, without claiming it was completed');
   const records=page.locator('[data-private-records]');await records.locator('[data-record-panel]').evaluate(el=>el.open=true);await records.locator('[data-record-load]').click();await records.locator('[data-record-form]').waitFor();
-  let recordForm=records.locator('[data-record-form]').first();await recordForm.locator('[name="report"]').selectOption('done');await recordForm.locator('[name="minutes"]').fill('0');await recordForm.locator('[name="attempts"]').fill('3');await recordForm.locator('[name="successes"]').fill('2');await recordForm.locator('[name="reflection"]').fill('自分の振り返りです。\n次は退路を確認します。');
+  let recordForm=records.locator('[data-record-form]').first();await recordForm.locator('[name="minutes"]').fill('0');await recordForm.locator('[name="attempts"]').fill('3');await recordForm.locator('[name="successes"]').fill('2');await recordForm.locator('[name="reflection"]').fill('自分の振り返りです。\n次は退路を確認します。');
+  // Select the required report after other edits: async record refreshes can replace the form.
+  await recordForm.locator('[name="report"]').selectOption('done');
   // Explicitly validate and click the owner-only form, rather than relying on implicit Enter submission.
   const valid=await recordForm.evaluate(form=>({valid:form.checkValidity(),invalid:[...form.elements].filter(el=>el.validity&&!el.validity.valid).map(el=>el.name||el.tagName)}));
   assert.equal(valid.valid,true,'owner record form must be valid before saving; invalid controls: '+valid.invalid.join(', '));
