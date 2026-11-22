@@ -112,7 +112,7 @@ export async function readCoachMemberReport(db:D1Database,person:string,preloade
  const evaluationPerformance={...measured,timeline:scorable};
  const basicFeedback=coachMatchFeedback(evaluationPerformance,combatByTime);
  const matchFeedback={...basicFeedback,quality:{...basicFeedback.quality,
-  incompleteExcluded:performance.timeline.length-scorable.length+(performance.quality.excluded['time-only-record']??0)}};
+  incompleteExcluded:performance.quality.selectedMatches-scorable.length+(performance.quality.excluded['time-only-record']??0)}};
  const nextMatch=coachNextMatch(evaluationPerformance,scorable[0]?.date??null);
  const report=summarizeCoachRounds(verifiedRows,primary.name,primary.tag,
   primary.puuid??undefined,labelFor(person),
