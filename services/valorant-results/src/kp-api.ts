@@ -2,6 +2,8 @@ import {practiceMatches,savePracticeMatch,practiceReview,ownPracticeRow} from '.
 import {readPrivateRecords,savePrivateRecord,readPrivateBody,privatePracticeState,PrivateRecordError} from './coach-private-records.ts';
 import {readPveBuild,savePveBuild} from './duel-pve-build.ts';
 import {duelRewardProfile} from './duel-rewards.ts';
+import {duelOperationsAudit} from './duel-operations-audit.ts';
+import {duelPreservationExport} from './duel-preservation-export.ts';
 import {coachSharingSettings,saveCoachSharing,coachDirectory,coachSharedSummaries,SharingError} from './coach-sharing.ts';
 import {readCoachTeamConsent,saveCoachTeamConsent,coachTeamRoster,CoachTeamError} from './coach-team-consent.ts';
 import {readTeamPdca,writeTeamChallenge,writeTeamSelfStatus} from './coach-team-pdca.ts';
@@ -583,6 +585,18 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping,deferP
    return new Response(stream.body,{status:stream.status,headers:{
     ...Object.fromEntries(stream.headers),...headers,'Cache-Control':'no-cache, no-transform'
    }});
+  }
+  if(path==='/api/kp/duels/operations/access'){
+   if(request.method!=='GET')return response({error:'未対応の操作です。'},405);
+   return response({available:await privateCasinoAllowed(env,mapping.guildId,owner.user)});
+  }
+  if(path==='/api/kp/duels/operations'||path==='/api/kp/duels/operations/export'){
+   if(request.method!=='GET')return response({error:'未対応の操作です。'},405);
+   if(!await privateCasinoAllowed(env,mapping.guildId,owner.user))return response({error:'運営者以外は閲覧できません。'},403);
+   if(await d1OptionalMode(env))return response({error:'D1節約モード中です。運営監査を一時停止しています。'},429);
+   return response(path.endsWith('/export')?
+     await duelPreservationExport(env,mapping.guildId):
+     await duelOperationsAudit(env,mapping.guildId));
   }
   if(path==='/api/kp/duels/pve/build'){
    if(request.method==='GET')return response({build:await readPveBuild(env,mapping.guildId,owner.user)});

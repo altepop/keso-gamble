@@ -10,13 +10,13 @@ permissions:
   contents: write
 jobs:
   synchronize:
-    if: github.repository == 'altepop/keso-gamble' && github.event.pull_request.head.repo.full_name == 'altepop/keso-gamble' && github.head_ref == 'feat/duel-p10-approved-observer-20261122'
+    if: github.repository == 'altepop/keso-gamble' && github.event.pull_request.head.repo.full_name == 'altepop/keso-gamble' && (github.head_ref == 'feat/duel-p10-approved-observer-20261122' || github.head_ref == 'feat/duel-p11-ui-p12-operator-20261122')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: feat/duel-p10-approved-observer-20261122
+          ref: ${{ github.head_ref }}
           persist-credentials: true
           fetch-depth: 0
       - uses: actions/setup-node@v7
@@ -32,5 +32,5 @@ jobs:
             git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
             git add js css index.html
             git commit -m "chore(duel): regenerate verified Activity cache keys"
-            git push origin HEAD:refs/heads/feat/duel-p10-approved-observer-20261122
+            git push origin "HEAD:refs/heads/${GITHUB_HEAD_REF}"
           fi
