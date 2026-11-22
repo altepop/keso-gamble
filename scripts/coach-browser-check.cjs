@@ -495,13 +495,15 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   assert.match(await loop.innerText(),/今回保存した練習予定です/,'preloaded private records show the real planned practice, without claiming it was completed');
   const records=page.locator('[data-private-records]');await records.locator('[data-record-panel]').evaluate(el=>el.open=true);await records.locator('[data-record-load]').click();await records.locator('[data-record-form]').waitFor();
   let recordForm=records.locator('[data-record-form]').first();
-  // An asynchronous record refresh can replace the entire form. Select the required
-  // report first, then set and verify EVERY persisted field on the currently live form.
-  await recordForm.locator('[name="report"]').selectOption('done');
+  // An asynchronous record refresh can replace the form while editing.
+  // Set required report last, then check the live form and actual outgoing POST.
   await recordForm.locator('[name="minutes"]').fill('0');
   await recordForm.locator('[name="attempts"]').fill('3');
   await recordForm.locator('[name="successes"]').fill('2');
   await recordForm.locator('[name="reflection"]').fill('自分の振り返りです。\n次は退路を確認します。');
+  // Final select must follow all field edits: a queued owner-record refresh can replace
+  // the form during those edits and reset the previously selected required report.
+  await recordForm.locator('[name="report"]').selectOption('done');
   const saveInputs=await recordForm.evaluate(form=>({
    report:form.elements.namedItem('report')?.value,
    minutes:form.elements.namedItem('minutes')?.value,
