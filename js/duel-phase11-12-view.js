@@ -24,6 +24,11 @@ function controls(match,busy){
  if(game==='poker')return '<p class="helper">自分の５枚（カード番号）：'+safe(hand?.join(' / ')??'未取得')+'</p><p class="helper">交換するカードを最大３枚選ぶ。０枚でも確定できる。</p><div class="action-row">'+Array.from({length:5},(_,i)=>'<label><input type="checkbox" data-duel-pve-poker="'+i+'" '+(!can?'disabled':'')+'> '+(i+1)+'枚目</label>').join('')+'</div><button class="action-btn primary" data-duel-pve-move="poker" '+(!can?'disabled':'')+'>交換を確定</button>';
  return '<p>このゲームの操作画面は未対応です。</p>';
 }
+export function duelWeeklyEventPanel(event){
+ if(!event||event.kind!=='weekly-focus')return '';
+ return '<div class="panel"><div class="card-body"><strong>🏆 週間イベント</strong><p>'+safe(event.title)+'</p>'+
+ '<p class="helper">毎週月曜日に切替。今回のテーマはおすすめ種目であり、イベント専用の勝率補正・自動参加・追加KPはありません。</p></div></div>';
+}
 export function duelPvePanel({live=false,busy=false,preview=null,match=null,error='',message='',sessionInput='',pending=null}={}){
  const active=match&&typeof match.id==='string';
  const expanded=active||preview||error||message;
@@ -62,7 +67,7 @@ export function duelTrioPanel({board='.........',level='strong',winner=null,erro
  const valid=/^[.XO]{9}$/.test(cell);
  const safeCells=valid?cell:'.........';
  const finished=Boolean(winner);
- return '<details class="panel" id="duel-trio-panel" open><summary>🆕 新種目：三目並べ（CPU練習）</summary><div class="card-body">'+
+ return '<details class="panel" id="duel-trio-panel" '+(board!=='.........'||winner?'open':'')+'><summary>🆕 新種目：三目並べ（CPU練習）</summary><div class="card-body">'+
  '<p class="helper">３つ並べる戦略対戦。強CPUは最後まで読み切る完全探索。ブラウザ内の無料練習のみで、KP・報酬・戦績は変わらない。</p>'+
  '<label>CPUの強さ <select id="duel-trio-level">'+
  [['easy','かんたん'],['normal','ふつう'],['strong','つよい（完全探索）']].map(([v,n])=>'<option value="'+v+'" '+(v===level?'selected':'')+'>'+n+'</option>').join('')+'</select></label>'+
