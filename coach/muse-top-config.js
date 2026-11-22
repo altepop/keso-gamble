@@ -28,7 +28,7 @@ function chooseToday({date, maps=MAPS, agents=[], previouslyShown=[], presets={}
  const agentPool=unique(agents);
  const agent=agentPool.length?agentPool[((offset(date)%agentPool.length)+agentPool.length)%agentPool.length]:null;
  const preset=map?validatePreset(map,presets[map]):null;
- return {map,agent,coveredMapCount:played.size,coverageTarget:allMaps.length,
+ return {map,agent,coveredMapCount:allMaps.filter(m=>played.has(m)).length,coverageTarget:allMaps.length,
   warmup:preset?.warmup??null,study:preset?.study??null,
   warmupStatus:preset?.warmup?'configured':'unconfigured',
   studyStatus:preset?.study?'configured':'unconfigured',
