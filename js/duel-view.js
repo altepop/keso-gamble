@@ -47,6 +47,26 @@ function summary(r,info,user){
   <span class="duel-purse">${kp(r.stake)}<small>${r.status==='active'?'勝った人が '+kp(r.stake*2)+' 受け取り':r.status==='pending'?'返答待ち':'結果を見る'}</small></span>
  </button>`;
 }
+function trioBoardView(r,info,user,busy,confirmResign){
+ const myTurn=r.status==='active'&&r.turn_user===user;
+ const canPlay=myTurn&&!busy&&timeLeft(r.deadline_at)>0;
+ const mine=r.black_user===user?'X':'O';
+ const tokens={X:'×',O:'○','.':'・'};
+ const result=r.winner==='draw'?'引き分け：賭け金を返金':r.winner===user?'勝利：'+kp(r.stake*2)+' KP受取':r.winner?'敗北：賭け金を失いました':'';
+ const cells=/^[.XO]{9}$/.test(r.board)?[...r.board]:[];
+ return '<section class="panel"><div class="card-body"><h2>三目並べ・認証済み対人戦</h2>'+
+ '<p class="helper">あなたは'+tokens[mine]+'。サーバーが着手・勝敗・KPを確定する。先に3つ並べた側が勝利する。</p>'+
+ '<p role="status">'+(r.status==='finished'?esc(result):canPlay?'あなたの手番':'相手の着手を待っています')+'</p>'+
+ '<div role="grid" aria-label="三目並べ・対人戦盤面" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));max-width:300px;gap:6px">'+
+ cells.map((v,i)=>'<button type="button" role="gridcell" class="action-btn" style="min-height:72px;font-size:30px" data-duel-cell="'+i+'" aria-label="'+(Math.floor(i/3)+1)+'行'+(i%3+1)+'列 '+(v==='.'?'空き':tokens[v])+'" '+(!canPlay||v!=='.'?'disabled':'')+'>'+tokens[v]+'</button>').join('')+'</div>'+
+ (r.status==='active'?
+ '<p class="helper">手番期限まで約'+Math.ceil(timeLeft(r.deadline_at)/60)+'分</p>'+
+ (timeLeft(r.deadline_at)===0?'<button class="action-btn" data-duel-act="timeout" '+(busy?'disabled':'')+'>時間切れを確定</button>':
+ '<button class="action-btn" data-duel-act="'+(confirmResign?'resign':'resign-preview')+'" '+(busy?'disabled':'')+'>'+(confirmResign?'投了を確定':'投了する')+'</button>'+
+ (confirmResign?'<button class="action-btn" data-duel-act="resign-cancel">取り消す</button>':'')):'')+
+ '</div></section>';
+}
+
 function boardView(r,info,user,busy,confirmResign,gomokuPreviewCell=null,recentMove=null,localHistory=[]){
  const ownBlack=r.black_user===user,own=r.user_a===user||r.user_b===user;
  const black=r.black_user===r.user_a?r.user_a:r.user_b;
@@ -127,7 +147,7 @@ export function duelScreen({info,user,live,cash,selectedId,game='othello',stake=
  const members=(info?.members?.length?info.members:fallbackMembers).filter(m=>m&&typeof m.id==='string'&&m.id!==user);
  const invited=chosen?.status==='pending',mine=chosen?.user_a===user;
  const selectedMember=members.find(m=>m.id===target);
-  const guides={othello:'相手の石を挟んで返す。置ける場所がない場合は自動パス。',gomoku:'縦・横・斜めに5個以上並べる。着手は選択後に確定。',connect4:'列を選んで駒を落とし、縦・横・斜めに4個並べる。',hitblow:'異なる数字4桁を推理する。40手で引き分け。',bluffdice:'5個ずつのダイスで宣言か疑いを選び、先に2ラウンド勝つ。',poker:'5枚のうち0〜3枚を1回交換する。強い役が勝ち。'};
+  const guides={trio:'3×3の盤面で縦・横・斜めに3つ並べる。先手Xはランダム。',othello:'相手の石を挟んで返す。置ける場所がない場合は自動パス。',gomoku:'縦・横・斜めに5個以上並べる。着手は選択後に確定。',connect4:'列を選んで駒を落とし、縦・横・斜めに4個並べる。',hitblow:'異なる数字4桁を推理する。40手で引き分け。',bluffdice:'5個ずつのダイスで宣言か疑いを選び、先に2ラウンド勝つ。',poker:'5枚のうち0〜3枚を1回交換する。強い役が勝ち。'};
   const completed=matches.filter(r=>r.status==='finished'&&r.winner);
   const stats=completed.reduce((a,r)=>(a[r.winner===user?'win':r.winner==='draw'?'draw':'lose']++,a),{win:0,draw:0,lose:0});
   const vsMatches=target?completed.filter(r=>r.user_a===target||r.user_b===target):[];
@@ -136,7 +156,7 @@ export function duelScreen({info,user,live,cash,selectedId,game='othello',stake=
  const focus=chosen?.status==='active'||chosen?.status==='pending';
  const formMarkup=`<div class="duel-new panel"><div class="card-body">
  <h2 class="panel-title">対戦を申し込む</h2><div class="duel-formrow">
- <label>ゲーム<select id="duel-game" class="select"><option value="othello" ${game==='othello'?'selected':''}>⚫ オセロ</option><option value="gomoku" ${game==='gomoku'?'selected':''}>⚪ 五目並べ</option><option value="connect4" ${game==='connect4'?'selected':''}>🔴 四目並べ</option><option value="hitblow" ${game==='hitblow'?'selected':''}>🔢 Hit & Blow</option><option value="bluffdice" ${game==='bluffdice'?'selected':''}>🎲 ブラフダイス</option><option value="poker" ${game==='poker'?'selected':''}>🃏 5カードポーカー</option></select></label>
+ <label>ゲーム<select id="duel-game" class="select"><option value="trio" ${game==='trio'?'selected':''}>❎ 三目並べ</option><option value="othello" ${game==='othello'?'selected':''}>⚫ オセロ</option><option value="gomoku" ${game==='gomoku'?'selected':''}>⚪ 五目並べ</option><option value="connect4" ${game==='connect4'?'selected':''}>🔴 四目並べ</option><option value="hitblow" ${game==='hitblow'?'selected':''}>🔢 Hit & Blow</option><option value="bluffdice" ${game==='bluffdice'?'selected':''}>🎲 ブラフダイス</option><option value="poker" ${game==='poker'?'selected':''}>🃏 5カードポーカー</option></select></label>
  <label>賭け金<select id="duel-stake" class="select">${[100,500,1000,5000,10000,50000,100000].map(n=>`<option value="${n}" ${n===stake?'selected':''}>${kp(n)} / 人</option>`).join('')}</select></label>
  </div><p class="duel-mode-guide">${esc(guides[game]??'')}</p><div class="duel-opponent-field"><span class="duel-opponent-label">対戦相手</span>
  <button type="button" class="duel-opponent-toggle" data-duel-target-toggle="1" aria-expanded="${opponentPickerOpen}" aria-controls="duel-opponent-list">
@@ -205,7 +225,7 @@ export function duelScreen({info,user,live,cash,selectedId,game='othello',stake=
  <p class="helper">${esc(title(chosen))} / ${kp(chosen.stake)}ずつ。招待期限まで約${Math.ceil(timeLeft(chosen.deadline_at)/60)}分。</p>
  <div class="action-row">${!mine&&timeLeft(chosen.deadline_at)>0?`<button class="action-btn primary" data-duel-act="accept" ${busy?'disabled':''}>${chosen.stake>=50000&&riskConfirm==='accept'?'金額を確認して承認':'承認して始める'}（${kp(chosen.stake)}）</button>`:''}
  <button class="action-btn" data-duel-act="cancel" ${busy?'disabled':''}>${mine?'招待を取り消す':'断る'}</button></div></div></div>`:''}
- ${chosen.status!=='pending'&&chosen.status!=='cancelled'?(Object.hasOwn(EXTRA_DUEL_GAMES,chosen.game)?miniBoardView(chosen,info,user,busy,pokerPicks,confirmResign,guessDraft):boardView(chosen,info,user,busy,confirmResign,gomokuPreviewCell,recentMoves?.get(chosen.id),localMoveHistory?.get(chosen.id)??[])):''}
+ ${chosen.status!=='pending'&&chosen.status!=='cancelled'?(chosen.game==='trio'?trioBoardView(chosen,info,user,busy,confirmResign):Object.hasOwn(EXTRA_DUEL_GAMES,chosen.game)?miniBoardView(chosen,info,user,busy,pokerPicks,confirmResign,guessDraft):boardView(chosen,info,user,busy,confirmResign,gomokuPreviewCell,recentMoves?.get(chosen.id),localMoveHistory?.get(chosen.id)??[])):''}
  ${chosen?.status==='finished'&&live&&(chosen.user_a===user||chosen.user_b===user)?`<div class="duel-rematch panel"><div class="card-body"><button type="button" class="action-btn primary" data-duel-rematch="${esc(chosen.id)}" ${busy?'disabled':''}>同じ相手・同じ金額で再戦を準備</button><p class="helper">申し込み内容を確認して送信すると、相手の承認後に新しい対戦が始まる。自動でKPは賭けられない。</p></div></div>`:''}
  </div>`:''}
  ${!chosen?'<div class="duel-intro"><span>対人ゲーム</span><h2>KPを賭けて対戦</h2><p>ゲームと対戦相手、賭け金を選んで申し込む。相手が承認すると対戦が始まり、勝った人が双方の賭け金を受け取る。引き分けは返金。</p></div>':''}
