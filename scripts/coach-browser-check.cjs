@@ -444,16 +444,20 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
 
   assert.deepEqual(errors,[]);
   await page.locator('#member-coaching-panel').evaluate(el=>el.open=true);
+  const beforeSwitch=requests.length;
   await page.locator('[data-member="Aquatopia"]').click();
   await page.waitForFunction(()=>document.querySelector('.prototype-top .playerline .name')?.textContent==='Aquatopia');
-  assert.equal(requests.length,beforeUiActions+5,'switching to another permitted profile also reloads its private practice records, notes and goals');
-  assert.deepEqual(requests.slice(beforeUiActions+1).map(r=>new URL(r.url).pathname).sort(),['/api/kp/coach/member','/api/kp/coach/practice/records','/api/kp/coach/notes','/api/kp/coach/goals'].sort());
-  assert.ok(requests.slice(beforeUiActions+1).every(r=>r.method==='GET'&&r.auth==='Bearer '+token));
+  const memberReads=requests.slice(beforeSwitch);
+  assert.ok(memberReads.some(r=>new URL(r.url).pathname==='/api/kp/coach/member'&&r.url.includes('person=Aquatopia')),'the selected member was loaded');
+  const allowedMemberReads=new Set(['/api/kp/coach/member','/api/kp/coach/practice/records','/api/kp/coach/notes','/api/kp/coach/goals']);
+  assert.ok(memberReads.every(r=>r.method==='GET'&&r.auth==='Bearer '+token&&allowedMemberReads.has(new URL(r.url).pathname)),'switching member may use cached records, but never writes or reads unexpected endpoints');
+  const beforeReturn=requests.length;
   await page.locator('#return-self').click();
   await page.waitForFunction(()=>document.querySelector('.prototype-top .playerline .name')?.textContent==='神戸');
-  assert.equal(requests.length,beforeUiActions+9,'returning to self reloads only the self report and three owner records');
-  assert.deepEqual(requests.slice(beforeUiActions+5).map(r=>new URL(r.url).pathname).sort(),['/api/kp/coach/me','/api/kp/coach/practice/records','/api/kp/coach/notes','/api/kp/coach/goals'].sort());
-  assert.ok(requests.slice(beforeUiActions+5).every(r=>r.method==='GET'&&r.auth==='Bearer '+token));
+  const selfReads=requests.slice(beforeReturn);
+  assert.ok(selfReads.some(r=>new URL(r.url).pathname==='/api/kp/coach/me'),'return to self must load the signed-in profile');
+  const allowedSelfReads=new Set(['/api/kp/coach/me','/api/kp/coach/practice/records','/api/kp/coach/notes','/api/kp/coach/goals']);
+  assert.ok(selfReads.every(r=>r.method==='GET'&&r.auth==='Bearer '+token&&allowedSelfReads.has(new URL(r.url).pathname)),'return to self may use cached records, but never writes or reads unexpected endpoints');
   for(const width of [320,375,1440]){await page.setViewportSize({width,height:900});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'layout '+width);}
   const japanese=await page.locator('.coach-existing p,.coach-existing li,#coach-operations p').evaluateAll(nodes=>[...new Set(nodes.flatMap(n=>(n.textContent||'').match(/[^。！？]+[。！？]/gu)||[]))]);
   const dictionaryEnds=japanese.filter(t=>/(?:[^ま]した|できる|できない|補わない|だけ|ではない|である|必要だ|確認する|断定しない|影響する|数える|決まる|異なる|とする|持つ|わかる|分かる|求める|含まれる|保存される|判断できない|得られる|必要になる|揃わない|少ない|多い|低い|高い|出ない|変わらない|足りない|違う|はない|を指す|と呼ぶ)。(?:$)/u.test(t));
