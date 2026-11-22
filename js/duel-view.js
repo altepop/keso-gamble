@@ -5,6 +5,37 @@ const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 const kp=n=>Number(n||0).toLocaleString('ja-JP')+' KP';
 const title=(r)=>DUEL_GAMES[r.game]?.name||EXTRA_DUEL_GAMES[r.game]?.name||r.game;
 const status=r=>r.status==='pending'?'招待中':r.status==='active'?'対局中':r.status==='finished'?'終了':'キャンセル';
+
+export function spectatorBoardPreview(snapshot){
+ const game=snapshot?.game,state=snapshot?.publicState;
+ if(['othello','gomoku','connect4'].includes(game)){
+  const n=game==='othello'?8:game==='gomoku'?15:7;
+  const rows=game==='connect4'?6:n,board=state?.board;
+  const alphabet=game==='connect4'?/^[.ab]{42}$/:game==='othello'?/^[.BW]{64}$/:/^[.BW]{225}$/;
+  if(typeof board!=='string'||!alphabet.test(board))return '<p class="helper">公開盤面は確認できません。</p>';
+  const pieces={'.':'·',B:'●',W:'○',a:'🔴',b:'🟡'};
+  const cells=[...board].map((value,i)=>{
+   const label=value==='.'?'空き':value==='B'?'黒':value==='W'?'白':value==='a'?'赤':'黄';
+   return '<span role="gridcell" aria-label="'+(Math.floor(i/n)+1)+'行'+(i%n+1)+'列 '+label+'" class="duel-spectator-cell duel-spectator-'+esc(value)+'">'+pieces[value]+'</span>';
+  }).join('');
+  return '<div role="grid" aria-label="'+rows+'行'+n+'列の観戦用公開盤面" class="duel-spectator-grid" style="grid-template-columns:repeat('+n+',minmax(0,1fr))">'+cells+'</div>';
+ }
+ if(game==='poker')return '<p class="helper">手札とデッキは公開しない。結果の確定を待ってください。</p>';
+ if(game==='bluffdice'){
+  const bid=state?.bid;
+  return bid&&Number.isSafeInteger(bid.count)&&Number.isSafeInteger(bid.face)
+   ?'<p class="helper">公開された宣言：'+bid.count+'個の「'+bid.face+'」</p>'
+   :'<p class="helper">公開された宣言はまだありません。</p>';
+ }
+ if(game==='hitblow'){
+  const rows=Array.isArray(state?.history)?state.history.slice(-12):[];
+  return rows.length?'<ol class="duel-spectator-history">'+rows.map(r=>
+   '<li>'+esc(r.by)+'：'+esc(r.guess)+'　'+esc(r.hit)+'ヒット／'+esc(r.blow)+'ブロー</li>').join('')+'</ol>'
+   :'<p class="helper">公開済みの予想履歴はありません。</p>';
+ }
+ return '<p class="helper">公開情報を表示できません。</p>';
+}
+
 const timeLeft=deadline=>Math.max(0,Math.ceil((deadline-Date.now())/1000));
 function summary(r,info,user){
  const other=r.user_a===user?r.user_b:r.user_a;
@@ -137,7 +168,7 @@ export function duelScreen({info,user,live,cash,selectedId,game='othello',stake=
   (spectatorUi?.message?'<p class="helper" role="status">'+esc(spectatorUi.message)+'</p>':'')+
   (spectatorUi?.error?'<p role="alert">'+esc(spectatorUi.error)+'</p>':'')+
   (spectatorUi?.snapshot?'<div role="region" aria-label="認可済みの観戦情報"><p>ゲーム：'+esc(spectatorUi.snapshot.game)+' ／ 状態：'+esc(spectatorUi.snapshot.status)+' ／ 更新番号：'+esc(spectatorUi.snapshot.version)+'</p>'+
-   '<pre aria-label="認可済み公開盤面">'+esc(JSON.stringify(spectatorUi.snapshot.publicState??null,null,2))+'</pre></div>':'')+
+   '<div aria-label="認可済み公開盤面">'+spectatorBoardPreview(spectatorUi.snapshot)+'</div></div>':'')+
   '<p class="helper">表示中だけ2秒間隔で読み取り、非表示時は停止する。権限失効時は表示内容も消去する。</p></div></details>':'';
  const syncNotice=live?'<div class="duel-sync" role="status" aria-live="polite">対戦情報：'+(lastSynced?'最終更新 '+new Date(lastSynced).toLocaleTimeString('ja-JP'):'確認中')+(loading?'・更新中':'')+'。<button type="button" class="action-btn" data-duel-refresh="1" '+(busy?'disabled':'')+'>更新</button></div>':'';
  const retryNotice=pendingRetry?'<div class="storage-warning duel-error" role="alert"><strong>前回の対戦操作が未確認です。</strong><p>別の操作は送らず、同じ操作IDを使って結果を確認してください。</p><button type="button" class="action-btn primary" data-duel-retry="1" '+(busy?'disabled':'')+'>前回の操作を確認</button></div>':'';
@@ -147,7 +178,7 @@ export function duelScreen({info,user,live,cash,selectedId,game='othello',stake=
  ${syncNotice}${retryNotice}
  ${chosen?`<div class="duel-current">
  <div class="panel"><div class="card-body"><h2 class="panel-title">参加者限定・公開情報プレビュー</h2>
- <p class="helper">この試合の参加者本人だけが閲覧できる確認用画面です。第三者への観戦公開・自動同期は未承認です。</p>
+ <p class="helper">対戦者本人の確認用プレビュー。第三者の観戦は双方の承認が必要で、招待制観戦から閲覧できます。</p>
  <button type="button" class="action-btn" data-duel-preview="1" ${busy||!live?'disabled':''}>公開情報を手動で確認</button>
  ${participantPreviewError?'<p role="alert">'+esc(participantPreviewError)+'</p>':''}
  ${participantPreview&&participantPreview.id===chosen.id?'<pre aria-label="試合の公開情報">'+esc(JSON.stringify(participantPreview.publicState??null,null,2))+'</pre><p class="helper">確認した版：'+esc(participantPreview.version)+'</p>':''}
