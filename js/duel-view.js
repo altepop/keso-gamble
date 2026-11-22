@@ -1,10 +1,41 @@
-import {miniBoardView} from './duel-mini-view.js?v=web-d088bb3bbdedcd63';
-import {EXTRA_DUEL_GAMES} from './duel-mini-games.js?v=web-d088bb3bbdedcd63';
-import {DUEL_GAMES,duelLegalMoves,duelScore,playDuelMove} from './duel-rules.js?v=web-d088bb3bbdedcd63';
+import {miniBoardView} from './duel-mini-view.js?v=web-a40bae8b648758f3';
+import {EXTRA_DUEL_GAMES} from './duel-mini-games.js?v=web-a40bae8b648758f3';
+import {DUEL_GAMES,duelLegalMoves,duelScore,playDuelMove} from './duel-rules.js?v=web-a40bae8b648758f3';
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const kp=n=>Number(n||0).toLocaleString('ja-JP')+' KP';
 const title=(r)=>DUEL_GAMES[r.game]?.name||EXTRA_DUEL_GAMES[r.game]?.name||r.game;
 const status=r=>r.status==='pending'?'招待中':r.status==='active'?'対局中':r.status==='finished'?'終了':'キャンセル';
+
+export function spectatorBoardPreview(snapshot){
+ const game=snapshot?.game,state=snapshot?.publicState;
+ if(['othello','gomoku','connect4'].includes(game)){
+  const n=game==='othello'?8:game==='gomoku'?15:7;
+  const rows=game==='connect4'?6:n,board=state?.board;
+  const alphabet=game==='connect4'?/^[.ab]{42}$/:game==='othello'?/^[.BW]{64}$/:/^[.BW]{225}$/;
+  if(typeof board!=='string'||!alphabet.test(board))return '<p class="helper">公開盤面は確認できません。</p>';
+  const pieces={'.':'·',B:'●',W:'○',a:'🔴',b:'🟡'};
+  const cells=[...board].map((value,i)=>{
+   const label=value==='.'?'空き':value==='B'?'黒':value==='W'?'白':value==='a'?'赤':'黄';
+   return '<span role="gridcell" aria-label="'+(Math.floor(i/n)+1)+'行'+(i%n+1)+'列 '+label+'" class="duel-spectator-cell duel-spectator-'+esc(value)+'">'+pieces[value]+'</span>';
+  }).join('');
+  return '<div role="grid" aria-label="'+rows+'行'+n+'列の観戦用公開盤面" class="duel-spectator-grid" style="grid-template-columns:repeat('+n+',minmax(0,1fr))">'+cells+'</div>';
+ }
+ if(game==='poker')return '<p class="helper">手札とデッキは公開しない。結果の確定を待ってください。</p>';
+ if(game==='bluffdice'){
+  const bid=state?.bid;
+  return bid&&Number.isSafeInteger(bid.count)&&Number.isSafeInteger(bid.face)
+   ?'<p class="helper">公開された宣言：'+bid.count+'個の「'+bid.face+'」</p>'
+   :'<p class="helper">公開された宣言はまだありません。</p>';
+ }
+ if(game==='hitblow'){
+  const rows=Array.isArray(state?.history)?state.history.slice(-12):[];
+  return rows.length?'<ol class="duel-spectator-history">'+rows.map(r=>
+   '<li>'+esc(r.by)+'：'+esc(r.guess)+'　'+esc(r.hit)+'ヒット／'+esc(r.blow)+'ブロー</li>').join('')+'</ol>'
+   :'<p class="helper">公開済みの予想履歴はありません。</p>';
+ }
+ return '<p class="helper">公開情報を表示できません。</p>';
+}
+
 const timeLeft=deadline=>Math.max(0,Math.ceil((deadline-Date.now())/1000));
 function summary(r,info,user){
  const other=r.user_a===user?r.user_b:r.user_a;
@@ -90,7 +121,7 @@ function boardView(r,info,user,busy,confirmResign,gomokuPreviewCell=null,recentM
  </div>`;
  return section;
 }
-export function duelScreen({info,user,live,cash,selectedId,game='othello',stake=1000,target='',busy=false,error='',confirmResign=false,pokerPicks=[],fallbackMembers=[],opponentPickerOpen=false,loading=false,nav='',gomokuPreviewCell=null,recentMoves=null,localMoveHistory=null,guessDraft='',riskConfirm='',lastSynced=0,pendingRetry=false,historyHasMore=false,participantPreview=null,participantPreviewError=''}){
+export function duelScreen({info,user,live,cash,selectedId,game='othello',stake=1000,target='',busy=false,error='',confirmResign=false,pokerPicks=[],fallbackMembers=[],opponentPickerOpen=false,loading=false,nav='',gomokuPreviewCell=null,recentMoves=null,localMoveHistory=null,guessDraft='',riskConfirm='',lastSynced=0,pendingRetry=false,historyHasMore=false,participantPreview=null,participantPreviewError='',spectatorUi=null}){
  const matches=info?.matches??[],chosen=matches.find(r=>r.id===selectedId)||matches.find(r=>r.status==='active'||r.status==='pending')||matches[0];
  const members=(info?.members?.length?info.members:fallbackMembers).filter(m=>m&&typeof m.id==='string'&&m.id!==user);
  const invited=chosen?.status==='pending',mine=chosen?.user_a===user;
@@ -120,6 +151,37 @@ export function duelScreen({info,user,live,cash,selectedId,game='othello',stake=
  ${stake>=50000&&riskConfirm==='create'?'<p class="duel-risk-note" role="alert">高額対戦の確認：相手と金額を確認し、もう一度押すと申し込みます。</p>':''}
   <button type="button" class="action-btn primary duel-full" data-duel-act="create" ${busy||!target||cash<stake?'disabled':''}>${stake>=50000&&riskConfirm==='create'?'確認して申し込む':'対戦を申し込む'}</button>
  </div></div>`;
+
+ const spectatorMatch=spectatorUi?.matchId??chosen?.id??'';
+ const spectatorMatches=Array.isArray(spectatorUi?.matches)?spectatorUi.matches:[];
+ const spectatorRows=spectatorMatches.map(m=>
+  '<button type="button" class="duel-match" data-duel-spectator-select="'+esc(m.id)+'">'+
+  '<span><strong>'+esc(title(m))+'</strong><small>'+
+  (m.status==='active'?'対局中':'終了')+' · 更新番号 '+esc(m.version)+'</small></span>'+
+  '<span class="duel-purse">観戦する</span></button>'
+ ).join('');
+ const spectatorPanel=live?'<details class="panel duel-spectator-controls"><summary>🔭 メンバーの試合を観戦</summary><div class="card-body">'+
+  '<p class="helper">登録済みの本アカウントだけが観戦可能。サブアカウントは不可。対戦者の同意は不要。対局の秘密情報・KPは公開しない。</p>'+
+  '<button type="button" class="action-btn" data-duel-spectator-lobby="1" '+
+  (spectatorUi?.loading?'disabled':'')+'>観戦できる試合を探す</button>'+
+  (spectatorUi?.loading?'<p class="helper">確認中…</p>':'')+
+  (spectatorMatches.length?'<div class="duel-history" role="group" aria-label="観戦可能な試合一覧">'+spectatorRows+'</div>':
+   spectatorUi?.loaded?'<p class="helper">今は観戦可能な試合がありません。</p>':'')+
+  '<label class="helper" for="duel-spectator-match">観戦する試合のID（一覧から選択も可能）</label>'+
+  '<input id="duel-spectator-match" class="action-input" autocomplete="off" maxlength="36" value="'+esc(spectatorMatch)+'" placeholder="試合ID">'+
+  '<div class="action-row"><button type="button" class="action-btn primary" data-duel-spectator-watch="1">'+
+  (spectatorUi?.watching?'観戦情報を更新':'この試合を観戦')+'</button>'+
+  '<button type="button" class="action-btn" data-duel-spectator-stop="1">観戦を終了</button></div>'+
+  '<button type="button" class="action-btn" data-duel-spectator-sound="1" aria-pressed="'+
+   Boolean(spectatorUi?.sound)+'">🔊 読み上げ '+(spectatorUi?.sound?'オン':'オフ')+'</button>'+
+  (spectatorUi?.message?'<p role="status" class="helper">'+esc(spectatorUi.message)+'</p>':'')+
+  (spectatorUi?.error?'<p role="alert">'+esc(spectatorUi.error)+'</p>':'')+
+  (spectatorUi?.snapshot?'<div role="region" aria-label="サーバー確定の観戦情報">'+
+   '<p>ゲーム：'+esc(title(spectatorUi.snapshot))+' ／ 状態：'+(spectatorUi.snapshot.status==='active'?'対局中':'終了')+
+   ' ／ 更新番号：'+esc(spectatorUi.snapshot.version)+'</p>'+
+   spectatorBoardPreview(spectatorUi.snapshot)+'</div>':'')+
+  '<p class="helper">リアルタイム通知が届けば即更新。通信非対応時は定期取得に切替。音声は端末の設定・再生許可に従う。</p>'+
+  '</div></details>':'';
  const syncNotice=live?'<div class="duel-sync" role="status" aria-live="polite">対戦情報：'+(lastSynced?'最終更新 '+new Date(lastSynced).toLocaleTimeString('ja-JP'):'確認中')+(loading?'・更新中':'')+'。<button type="button" class="action-btn" data-duel-refresh="1" '+(busy?'disabled':'')+'>更新</button></div>':'';
  const retryNotice=pendingRetry?'<div class="storage-warning duel-error" role="alert"><strong>前回の対戦操作が未確認です。</strong><p>別の操作は送らず、同じ操作IDを使って結果を確認してください。</p><button type="button" class="action-btn primary" data-duel-retry="1" '+(busy?'disabled':'')+'>前回の操作を確認</button></div>':'';
  const moreNotice=historyHasMore?'<div class="duel-history-more"><button type="button" class="action-btn" data-duel-history-more="1" '+(busy?'disabled':'')+'>過去の対戦を20件ずつ読み込む</button><p class="helper">このボタンを押した場合だけ過去の対戦を取得する。</p></div>':'';
@@ -128,7 +190,7 @@ export function duelScreen({info,user,live,cash,selectedId,game='othello',stake=
  ${syncNotice}${retryNotice}
  ${chosen?`<div class="duel-current">
  <div class="panel"><div class="card-body"><h2 class="panel-title">参加者限定・公開情報プレビュー</h2>
- <p class="helper">この試合の参加者本人だけが閲覧できる確認用画面です。第三者への観戦公開・自動同期は未承認です。</p>
+ <p class="helper">対戦者本人の確認用プレビュー。登録済みの本アカウントは同じギルド内の試合を追加同意なしで観戦できます。サブアカウントは観戦できません。</p>
  <button type="button" class="action-btn" data-duel-preview="1" ${busy||!live?'disabled':''}>公開情報を手動で確認</button>
  ${participantPreviewError?'<p role="alert">'+esc(participantPreviewError)+'</p>':''}
  ${participantPreview&&participantPreview.id===chosen.id?'<pre aria-label="試合の公開情報">'+esc(JSON.stringify(participantPreview.publicState??null,null,2))+'</pre><p class="helper">確認した版：'+esc(participantPreview.version)+'</p>':''}
@@ -147,6 +209,7 @@ export function duelScreen({info,user,live,cash,selectedId,game='othello',stake=
  ${matches.length?matches.map(r=>summary(r,info,user)).join(''):'<p class="helper">対戦履歴はまだありません。</p>'}
  </div></div>`:''}
  ${moreNotice}
+ ${spectatorPanel}
  ${!live?'<div class="panel"><div class="card-body">KP口座に接続すると対戦できる。</div></div>':focus?
  `<details class="duel-create-collapse"><summary>別の対戦を申し込む</summary>${formMarkup}</details>`:formMarkup}
  ${!focus?` <div class="duel-history panel"><div class="card-body">
