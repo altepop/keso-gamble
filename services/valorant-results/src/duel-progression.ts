@@ -2,7 +2,7 @@
  * Only authenticated, server-verified finalized matches may call this function
  * with origin='server'. Do not copy origin from an untrusted request body.
  */
-export const DUEL_PROGRESSION_GAMES=['othello','gomoku','connect4','hitblow','bluffdice','poker'] as const;
+export const DUEL_PROGRESSION_GAMES=['othello','gomoku','connect4','hitblow','bluffdice','poker','trio'] as const;
 export type DuelProgressionGame=typeof DUEL_PROGRESSION_GAMES[number];
 export type DuelProgressionMode='pve'|'pvp';
 export type DuelProgressionOutcome='win'|'loss'|'draw';
