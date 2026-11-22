@@ -493,7 +493,7 @@ const server=spawn('python3',['-m','http.server','18784','--bind','127.0.0.1'],{
   // Owner-only practice and memo UI uses the actual SQLite-backed save/list logic.
   const loop=page.locator('[data-coach-loop]');assert.equal(await loop.count(),1);
   assert.match(await loop.innerText(),/今回保存した練習予定です/,'preloaded private records show the real planned practice, without claiming it was completed');
-  const records=page.locator('[data-private-records]');await records.locator('[data-record-panel]').evaluate(el=>el.open=true);await records.locator('[data-record-load]').click();await records.locator('[data-record-form]').waitFor();
+  const records=page.locator('[data-private-records]');await records.locator('[data-record-panel]').evaluate(el=>el.open=true);await records.locator('[data-record-load]').click();await records.locator('[role="status"]').filter({hasText:'本人限定の記録を読み込みました。'}).waitFor();await records.locator('[data-record-form]').waitFor();
   let recordForm=records.locator('[data-record-form]').first();
   // An asynchronous record refresh can replace the form while editing.
   // Set required report last, then check the live form and actual outgoing POST.
