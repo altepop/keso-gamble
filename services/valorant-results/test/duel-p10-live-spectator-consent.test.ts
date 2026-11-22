@@ -1,31 +1,52 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {allowedSpectator} from '../src/duel-spectator-live.ts';
+import {allowedSpectator,isEligibleMainSpectator,readSpectatorMatch} from '../src/duel-spectator-live.ts';
 import type {BoardDuel} from '../src/board-duels.ts';
-import type {SpectatorConsent} from '../src/duel-spectator-live.ts';
-const guild='606131625084059674',a='111111111111111111',b='222222222222222222',viewer='333333333333333333';
-const id='11111111-2222-4333-8444-555555555555';
-const now=1_800_000_000_000;
+import type {KpMapping,KpEnv} from '../src/kp.ts';
+const guild='606131625084059674',a='111111111111111111',b='222222222222222222';
+const viewer='333333333333333333',id='11111111-2222-4333-8444-555555555555';
+const now=Date.now();
 const match:BoardDuel={id,guild,user_a:a,user_b:b,game:'othello',stake:100,status:'active',
- board:'........',black_user:null,turn_user:a,winner:null,version:2,
+ board:'.'.repeat(64),black_user:a,turn_user:a,winner:null,version:2,
  created_at:now-60000,updated_at:now-1000,deadline_at:now+60000};
-const consent:SpectatorConsent={guild,match_id:id,viewer,user_a:a,user_b:b,approved_a:1,approved_b:1,updated_at:now};
-test('P10 invited viewer needs matching guild, both participants and server grant',()=>{
- assert.equal(allowedSpectator(viewer,guild,match,consent,now),true);
- for(const changed of [
-  {...consent,approved_a:0},{...consent,approved_b:0},
-  {...consent,viewer:'444444444444444444'},
-  {...consent,guild:'999999999999999999'},
-  {...consent,user_a:b},{...consent,match_id:'different'},
- ])assert.equal(allowedSpectator(viewer,guild,match,changed,now),false);
- assert.equal(allowedSpectator(viewer,'999999999999999999',match,consent,now),false);
- assert.equal(allowedSpectator('invalid',guild,match,consent,now),false);
- assert.equal(allowedSpectator(viewer,guild,match,null,now),false);
+const mapping:KpMapping={guildId:guild,accounts:[{riotId:'Fixture#1',discordUserId:a}]};
+function environment(registered:boolean,found:BoardDuel|null=match):KpEnv{
+ const DB={
+  prepare(sql:string){
+   return {bind(...params:unknown[]){
+    return {first:async()=>{
+      if(sql.includes("board_duel_schema_version"))return {value:'2'};
+      if(sql.includes("FROM kp_participants"))return registered?{user:viewer}:null;
+      if(sql.includes("FROM kp_wallets w"))return registered?{'1':1}:null;
+      if(sql.includes("FROM kp_board_duels WHERE guild"))return found;
+      return null;
+    }};
+   },first:async()=>sql.includes("board_duel_schema_version")?{value:'2'}:null};
+  },
+ } as unknown as D1Database;
+ return {DB};
+}
+test('main-account observation needs server registry and real wallet',async()=>{
+ assert.equal(await isEligibleMainSpectator(environment(true),mapping,viewer),true);
+ assert.equal(await isEligibleMainSpectator(environment(false),mapping,viewer),false);
+ assert.equal(await isEligibleMainSpectator(environment(true),mapping,'not-an-id'),false);
 });
-test('P10 spectator can only view active or recently finished consenting matches',()=>{
- assert.equal(allowedSpectator(viewer,guild,{...match,status:'pending'},consent,now),false);
- assert.equal(allowedSpectator(viewer,guild,{...match,status:'cancelled'},consent,now),false);
- assert.equal(allowedSpectator(viewer,guild,{...match,status:'finished',updated_at:now-3600000},consent,now),true);
- assert.equal(allowedSpectator(viewer,guild,{...match,status:'finished',updated_at:now-3600001},consent,now),false);
- assert.equal(allowedSpectator(viewer,guild,{...match,status:'finished',updated_at:now+1},consent,now),false);
+test('active same-guild public snapshots require no opponent approval',async()=>{
+ const result=await readSpectatorMatch(environment(true),mapping,viewer,id,null);
+ assert.equal(result.kind,'snapshot');
+ if(result.kind==='snapshot'){
+  assert.equal(result.snapshot.id,id);
+  assert.equal(result.snapshot.publicState&&typeof result.snapshot.publicState==='object',true);
+  assert.equal('private_hand' in result.snapshot,false);
+ }
+ await assert.rejects(readSpectatorMatch(environment(false),mapping,viewer,id,null),/spectator_unavailable/);
+ await assert.rejects(readSpectatorMatch(environment(true),mapping,viewer,'bad',null),/spectator_unavailable/);
+});
+test('stale, cancelled or other-guild match is hidden; finished expires after one hour',()=>{
+ assert.equal(allowedSpectator(viewer,guild,match,now),true);
+ assert.equal(allowedSpectator(viewer,guild,{...match,guild:b},now),false);
+ assert.equal(allowedSpectator(viewer,guild,{...match,status:'pending'},now),false);
+ assert.equal(allowedSpectator(viewer,guild,{...match,status:'cancelled'},now),false);
+ assert.equal(allowedSpectator(viewer,guild,{...match,status:'finished',updated_at:now-3600000},now),true);
+ assert.equal(allowedSpectator(viewer,guild,{...match,status:'finished',updated_at:now-3600001},now),false);
 });
