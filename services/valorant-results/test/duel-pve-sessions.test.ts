@@ -114,3 +114,20 @@ test('schema has dedicated secrets and immutable action identity',()=>{
  assert.ok(DUEL_PVE_SESSION_DDL.some(sql=>sql.includes('kp_duel_pve_secrets')));
  assert.ok(DUEL_PVE_SESSION_DDL.some(sql=>sql.includes('PRIMARY KEY')&&sql.includes('kp_duel_pve_actions')));
 });
+
+test('Phase 11 daily challenge starts server-selected six-mode CPU battle without bonus KP',async()=>{
+ const {db,env}=fixture();
+ try{
+  const preview=await serverPveOperation(env,'guild','alice',{action:'daily-preview'}) as {challenge:{game:string;level:string;bonusKp:number}};
+  assert.equal(preview.challenge.bonusKp,0);
+  const req=randomUUID();
+  const one=await serverPveOperation(env,'guild','alice',{action:'daily',requestId:req,game:'invalid',level:'invalid'});
+  assert.equal(one.game,preview.challenge.game);
+  assert.equal(one.level,preview.challenge.level);
+  assert.equal(Object.hasOwn(one,'secret'),false);
+  const replay=await serverPveOperation(env,'guild','alice',{action:'daily',requestId:req});
+  assert.equal(one.id,replay.id);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM kp_duel_pve_sessions').get()?.n,1);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM kp_ledger').get()?.n??0,0);
+ }finally{db.close();}
+});
