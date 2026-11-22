@@ -46,7 +46,7 @@ export function duelPvePanel({live=false,busy=false,preview=null,match=null,erro
  (rewardsOpen?'<section class="panel" id="duel-rewards-in-app"><div class="card-body"><h3>決闘の戦績・報酬（サーバー取得）</h3>'+
  (rewardsError?'<p role="alert">'+safe(rewardsError)+'</p>':'')+
  (!rewards?'<p role="status">取得中…</p>':(['pve','pvp'].map(mode=>'<h4>'+(mode==='pve'?'CPU攻略':'対人戦')+'</h4><ul>'+
- Object.entries(names).map(([id,label)=>{const row=(rewards.skills??[]).find(x=>x.mode===mode&&x.game===id);const earned=(rewards.collection??[]).some(x=>x.mode===mode&&x.game===id);return '<li>'+safe(label)+'：'+safe(row?.wins??0)+'勝 '+safe(row?.losses??0)+'敗 '+safe(row?.draws??0)+'分 ／ '+(earned?'獲得済み':'未獲得')+'</li>';}).join('')+'</ul>').join('')))+'</div></section>':'');
+ Object.entries(names).map(([id,label])=>{const row=(rewards.skills??[]).find(x=>x.mode===mode&&x.game===id);const earned=(rewards.collection??[]).some(x=>x.mode===mode&&x.game===id);return '<li>'+safe(label)+'：'+safe(row?.wins??0)+'勝 '+safe(row?.losses??0)+'敗 '+safe(row?.draws??0)+'分 ／ '+(earned?'獲得済み':'未獲得')+'</li>';}).join('')+'</ul>').join('')))+'</div></section>':'');
 }
 export function duelOperationsPanel({available=false,busy=false,report=null,error='',auto=false,season=null}={}){
  if(!available)return '';
