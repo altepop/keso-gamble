@@ -49,7 +49,17 @@ const schema:Schema={
   ...Object.fromEntries(['abilities','matchAbilities'].map(k=>[k,Object.fromEntries('grenade ability1 ability2 ultimate'.split(' ').map(a=>[a,{...fields('casts matches rateCasts rounds rateMatches'),recordedAt:stamps}]))])),
   spike:Object.fromEntries(['plant','defuse'].map(k=>[k,{...fields('events rounds matches'),recordedAt:stamps}])),
   weapons:{...fields('knownKills totalKills matches validMatches'),recordedAt:stamps,counts:[fields('weapon kills')]},
-  pistols:fields('definition rounds knownOutcomes wins kills deaths'),notes:[note],limitations:['scalar']}
+  pistols:fields('definition rounds knownOutcomes wins kills deaths'),notes:[note],limitations:['scalar']},
+ roundSequence:{...fields('matches excludedMatches'),
+  kast:fields('matches excludedMatches rounds kastRounds pct'),
+  advantage:{...fields('rounds wins losses conversionPct'),tiers:[fields('key rounds wins losses')],lossRefs:[fields('map round date')]},
+  postPlant:{...fields('plants wins losses'),lossRefs:[fields('map round date')]},
+  ult:{...fields('matches rounds wins losses'),lossRefs:[fields('map round date')]},
+  snowball:{...fields('candidates'),refs:[fields('map round date')]},
+  pistolFlip:{...fields('pairs flips against for'),againstRefs:[fields('map round date')]},
+  firstBlood:{lostRefs:[fields('map round date')]},
+  latest:fields('map date tradeDeaths tradeTraded tradePct advRounds advWins advPct')},
+ mmr:{accounts:[fields('riotId tier tierPatched rankingInTier mmrChange peakTier peakPatched peakSeason fetchedAt')]}
 };
 function project(value:any,shape:Schema):any{
  if(value===null||value===undefined)return null;

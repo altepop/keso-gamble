@@ -73,6 +73,7 @@ import {invalidateCoachRoundReport} from './coach-round-analysis.ts';
 import {resumeVdkRoundBackfill} from './round-backfill.ts';
 import {enableAllMemberArchive,pauseAllMemberArchive,coachMemberCoverage} from './coach-member-archive.ts';
 import {readCoachMemberReport} from './coach-member-report.ts';
+import {ensureCoachMmr,mmrReportView} from './coach-mmr.ts';
 import { mlActivityView, mlClosed, mlData, mlLineupTimes, mlResults, seasonStats } from './mleague.ts';
 import { racingView, raceSeed } from './racing-kp.ts';
 import { defaultRoastLevel, validRoastLevel } from './racing-crowns.ts';
@@ -519,7 +520,20 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping,deferP
       const practiceState=path==='/api/kp/coach/member'?undefined:await coachStep('PRACTICE',()=>privatePracticeState(env.DB,mapping.guildId,identity.subjectId));
       const coverage=await coachStep('COVERAGE',()=>coachMemberCoverage(env.DB,identity.accounts.map(a=>a.riotId)));
       if(path==='/api/kp/coach/members/status')return response({identity:publicCoachIdentity(identity),settings:coachSharingSettings(identity),practiceState,goals,memberHistory:coverage,canStartMemberHistory:memberHistoryOwner,canResume:coachOwner});
-      const report=await coachStep('REPORT',async()=>projectCoachSelfReport(await readCoachMemberReport(env.DB,person,coverage,identity.accounts)));
+      const report=await coachStep('REPORT',async()=>{
+        const raw=await readCoachMemberReport(env.DB,person,coverage,identity.accounts);
+        // MMR snapshots (current tier / RR / last change / peak) come from the
+        // HenrikDev v2 MMR endpoint, cached in D1 and refreshed when stale.
+        // A failure here must never break the report; the fields stay unset
+        // and the display keeps its not-acquired state.
+        try{
+          const key=env.HENRIK_API_KEY;
+          const fetcher=key?async(path:string)=>{const res=await fetch('https://api.henrikdev.xyz'+path,{headers:{Authorization:key}});if(!res.ok)throw new Error('henrik_mmr_'+res.status);return res.json();}:null;
+          const snapshots=await ensureCoachMmr(env.DB,identity.accounts,fetcher,Date.now());
+          (raw as unknown as Record<string,unknown>).mmr=mmrReportView(identity.accounts,snapshots);
+        }catch{/* MMR is additive; the report renders without it */}
+        return projectCoachSelfReport(raw);
+      });
       return path==='/api/kp/coach/member'?response(report):response({identity:publicCoachIdentity(identity),settings:coachSharingSettings(identity),report,practiceState,goals,memberHistory:coverage,canStartMemberHistory:memberHistoryOwner,canResume:coachOwner});
     }
   }

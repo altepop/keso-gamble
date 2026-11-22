@@ -90,6 +90,50 @@ test('turning points detect only what the data supports and keep the rest unknow
   assert.ok(byId.weapon.detail.includes('推定'));
 });
 
+test('round sequences and MMR snapshots bind KAST, rank and every turning-point criterion', () => {
+  const full = {
+    ...report,
+    roundSequence: {
+      matches: 8, excludedMatches: 1,
+      kast: {matches: 7, excludedMatches: 1, rounds: 160, kastRounds: 120, pct: 75},
+      advantage: {rounds: 40, wins: 26, losses: 14, conversionPct: 65,
+        tiers: [{key: '5v4', rounds: 30, wins: 20, losses: 10}],
+        lossRefs: [{map: 'Summit', round: 7, date: '2026-11-21'}]},
+      postPlant: {plants: 12, wins: 8, losses: 4, lossRefs: [{map: 'Bind', round: 15, date: '2026-11-20'}]},
+      ult: {matches: 8, rounds: 9, wins: 5, losses: 4, lossRefs: [{map: 'Haven', round: 3, date: '2026-11-19'}]},
+      snowball: {candidates: 2, refs: [{map: 'Lotus', round: 11, date: '2026-11-18'}]},
+      pistolFlip: {pairs: 16, flips: 5, against: 3, for: 2, againstRefs: [{map: 'Summit', round: 3, date: '2026-11-21'}]},
+      firstBlood: {lostRefs: [{map: 'Summit', round: 5, date: '2026-11-21'}]},
+      latest: {map: 'Summit', date: '2026-11-21', tradeDeaths: 10, tradeTraded: 6, tradePct: 60, advRounds: 5, advWins: 3, advPct: 60},
+    },
+    mmr: {accounts: [{riotId: 'Main#001', tier: 20, tierPatched: 'Diamond 3', rankingInTier: 62, mmrChange: 17, peakTier: 23, peakPatched: 'Ascendant 3', peakSeason: 'E9 A1', fetchedAt: 1}]},
+  };
+  const m = view.model(full, {date: '2026-11-22'});
+  assert.equal(m.stats.kast, 75);
+  assert.equal(m.rank.current, 'DIAMOND 3 · 62 RR');
+  assert.equal(m.rank.peak, 'ASCENDANT 3');
+  assert.equal(m.seqLatest.tradePct, 60);
+  const rows = view.turningPoints(full);
+  const byId = Object.fromEntries(rows.map(r => [r.id, r]));
+  assert.equal(byId.advantage.status, 'detected');
+  assert.ok(byId.advantage.detail.includes('該当は サミット 第7ラウンド'));
+  assert.equal(byId.postplant.status, 'detected');
+  assert.ok(byId.postplant.detail.includes('バインド 第15ラウンド'));
+  assert.equal(byId.ult.status, 'detected');
+  assert.equal(byId.weapon.status, 'estimated');
+  assert.ok(byId.weapon.detail.includes('推定'));
+  assert.ok(byId.pistol.detail.includes('第3ラウンドで流れが反転したのは 5 件'));
+  assert.ok(byId.firstblood.detail.includes('該当は サミット 第5ラウンド'));
+  assert.equal(m.topTurning.id, 'advantage');
+});
+
+test('empty report keeps rank and KAST unset', () => {
+  const m = view.model({}, {date: '2026-11-22'});
+  assert.equal(m.rank, null);
+  assert.equal(m.stats.kast, null);
+  assert.equal(m.seqLatest, null);
+});
+
 test('production template carries no prototype sample values', () => {
   const html = readFileSync(new URL('../coach.html', import.meta.url), 'utf8');
   const template = html.split('<template id="coach-muse-template">')[1].split('</template>')[0];

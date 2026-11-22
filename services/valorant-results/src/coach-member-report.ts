@@ -12,6 +12,7 @@ import {summarizeCoachRounds} from './coach-round-analysis.ts';
 import {comprehensiveCoachDiagnosis} from './coach-comprehensive.ts';
 import {coachNotes,detectCoachSignals} from './coach-review.ts';
 import {buildCoachMatchTrend} from './coach-match-trend.ts';
+import {coachRoundSequence} from './coach-round-sequence.ts';
 
 // Unlike the old VDK-only summary, every profile reads its OWN games from
 // the shared match_id archive. The focus person's team becomes "our team".
@@ -89,6 +90,7 @@ export async function readCoachMemberReport(db:D1Database,person:string,preloade
   combatByTime.set(row.ended_at,combatByTime.has(row.ended_at)?null:observation);
  });
  const roundContext=coachRoundContext(rows.results,accounts,new Set(verifiedRows.map(row=>row.match_id)));
+ const roundSequence=coachRoundSequence(verifiedRows,accounts);
  const matchTrend=buildCoachMatchTrend(verifiedRows,accounts);
  // Only owner matches verified against ten-player round/kill events can drive
  // actionable per-match feedback. An incomplete newest row remains archived for
@@ -154,7 +156,7 @@ export async function readCoachMemberReport(db:D1Database,person:string,preloade
   archivedMatches:rows.results.length,usableMatches:report.usableMatches,
   invalidMatches:performance.quality.excluded['invalid-roster']??0,roundDataMissing:rows.results.filter(r=>!hasEventArray(r.rounds_json)).length,
   killDataMissing:rows.results.filter(r=>!hasEventArray(r.kills_json)).length,overall:report.overall,
-  individual,individualMapAgent,matchTrend,performance,positionCoverage,mapPositionCoverage,positionEventParity,mapPositionEventParity,nextMatch,matchFeedback,roundContribution,roundContext,
+  individual,individualMapAgent,matchTrend,performance,positionCoverage,mapPositionCoverage,positionEventParity,mapPositionEventParity,nextMatch,matchFeedback,roundContribution,roundContext,roundSequence,
   fullDiagnosis:diagnosis,coachingNotes:coachNotes(onlySelf),
   coachSignals:detectCoachSignals(onlySelf)
  };
