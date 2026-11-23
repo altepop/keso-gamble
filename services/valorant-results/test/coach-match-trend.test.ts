@@ -54,3 +54,10 @@ test('real-world kill timestamps above ten seconds remain eligible for post-matc
  const outOfRange=[{...kills[0],t:900001},...kills.slice(1)];
  assert.equal(buildCoachMatchTrend([{...row,kills_json:JSON.stringify(outOfRange)}],accounts).length,0);
 });
+
+test('verified PUUID never falls back to matching a reused Riot name',()=>{
+ const reused=saved('Aquatopia','toppy','different-puuid');
+ assert.equal(buildCoachMatchTrend([reused],accounts).length,0);
+ assert.equal(buildCoachMatchTrend([reused],[{name:'Aquatopia',tag:'toppy',puuid:null}]).length,1);
+ assert.equal(buildCoachMatchTrend([saved('OldNick','OLD','kobe-id')],accounts).length,1);
+});
