@@ -116,7 +116,8 @@ export async function ensureCoachMmr(
   } catch { /* region lookup is best-effort; a missing region just skips the refresh */ }
   for (const account of stale) {
     const region = account.region ?? regions.get(account.riotId);
-    if (!region) continue;
+    // Only HenrikDev-supported regions may enter the URL or be persisted.
+    if (!region || !['ap', 'na', 'eu', 'kr', 'br', 'latam'].includes(region)) continue;
     try {
       const json = await fetcher(`/valorant/v2/by-puuid/mmr/${encodeURIComponent(region)}/${encodeURIComponent(account.puuid)}`);
       const parsed = parseHenrikMmr(json);
