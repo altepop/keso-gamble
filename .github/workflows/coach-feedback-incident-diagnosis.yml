@@ -108,6 +108,25 @@ jobs:
                 ...reportStatus});
             }catch(e){detailed.push({person,diagnosisError:String(e?.message??e).slice(0,150)});}
           }
+
+          const ps=JSON.parse(raw?.players_json??'[]'),ks=JSON.parse(raw?.kills_json??'[]');
+          const byId=new Map(ps.map(p=>[p.puuid,p]));
+          const countedK=new Map(),countedD=new Map(),allD=new Map();
+          let friendly=0,unknown=0,enemy=0;
+          for(const k of ks){
+            allD.set(k.victim,(allD.get(k.victim)??0)+1);
+            const same=k.killer!==null&&byId.get(k.killer)?.team_id===byId.get(k.victim)?.team_id;
+            if(same){friendly++;continue;}
+            if(k.killer===null)unknown++;else {enemy++;countedK.set(k.killer,(countedK.get(k.killer)??0)+1);}
+            countedD.set(k.victim,(countedD.get(k.victim)??0)+1);
+          }
+          const mismatch=ps.map(p=>({person:p.name??'hidden',sameAsTracked:rows.some(x=>x.match_id===target&&x.riot_id.toLowerCase()===(String(p.name)+'#'+String(p.tag)).toLowerCase()),
+           scoredK:p.k,observedK:countedK.get(p.puuid)??0,scoredD:p.d,observedD:countedD.get(p.puuid)??0,allObservedD:allD.get(p.puuid)??0}))
+           .filter(p=>p.scoredK!==p.observedK||p.scoredD!==p.observedD);
+          console.log('COACH_NEW_MATCH_PARITY_READONLY '+JSON.stringify({at:new Date().toISOString(),matchId:target,
+           eventCount:ks.length,friendly,unknown,enemy,rosterTotalKills:ps.reduce((a,p)=>a+Number(p.k),0),
+           rosterTotalDeaths:ps.reduce((a,p)=>a+Number(p.d),0),observedEnemyKills:[...countedK.values()].reduce((a,b)=>a+b,0),
+           observedCountedDeaths:[...countedD.values()].reduce((a,b)=>a+b,0),mismatchedPlayers:mismatch,queries,rowsRead:reads,mutations:0}));
           console.log('COACH_NEW_MATCH_DEEP_READONLY '+JSON.stringify({at:new Date().toISOString(),details:detailed,queries,rowsRead:reads,mutations:0,discordPosts:0}));
           console.log('COACH_NEW_MATCHES_READONLY '+JSON.stringify({at:new Date().toISOString(),cutoff:new Date(cutoff).toISOString(),rows:data,orphanRosters:orphan.map(r=>({...r,ended_at:time(r.ended_at),recorded_at:time(r.recorded_at)})),
            replayHealth:health.map(h=>({...h,last_ok:time(h.last_ok),last_error:time(h.last_error)})),
