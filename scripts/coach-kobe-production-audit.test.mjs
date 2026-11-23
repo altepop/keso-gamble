@@ -33,7 +33,7 @@ test('reads unique totals, MMR, retries and masked validation without writes',as
  const {request,requests}=requestMock(),res=await auditKobeProduction(env,request,now);
  assert.deepEqual([res.combined.discovered,res.combined.complete,res.combined.pending,res.combined.partial],[14,2,11,1]);
  assert.deepEqual([res.inspection.archivedSample,res.inspection.verifiedMatches,res.inspection.matchTrendCount],[0,0,0]);
- assert.equal(res.inspection.stage,'archive-empty');assert.equal(res.mmr[0].rr,65);
+ assert.equal(res.inspection.stage,'archive-empty');assert.equal(res.inspection.affectedByTenSecondLimit,0);assert.equal(res.mmr[0].rr,65);
  assert.equal(res.mmr[1].stored,false);assert.equal(res.combined.pendingExhausted,2);
  assert.equal(res.queries,7);assert.equal(res.mutations,0);assert.equal(res.extraHenrikRequests,0);
  assert.ok(requests.every(r=>r.init?.method!=='POST'||JSON.parse(r.init.body).sql.startsWith('SELECT ')));
