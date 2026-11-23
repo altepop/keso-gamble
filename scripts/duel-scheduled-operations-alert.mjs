@@ -5,16 +5,30 @@ import {readFileSync} from 'node:fs';
 import {pathToFileURL} from 'node:url';
 export const OPERATIONS_ALERT_TITLE='P12 duel scheduled operations audit: review required';
 const validCount=v=>Number.isSafeInteger(v)&&v>=0;
+/** Unknown is actionable when an audit report is inconsistent or incomplete.
+ * Never trust malformed counts or a self-asserted successful state.
+ */
+export function classifyOperationsAuditReport(report){
+ const counts=report?.counts;
+ const completeCounts=counts&&typeof counts==='object'&&
+  ['staleFinishedPve','staleFinishedPvp','activePve','activePvp']
+   .every(key=>validCount(counts[key]));
+ if(!report||typeof report!=='object'||Array.isArray(report)||
+    report.deletionAuthorized!==false)return 'unknown';
+ if(report.state==='unknown'&&report.ok===false)return 'unknown';
+ if(report.ok!==true||!completeCounts)return 'unknown';
+ const stale=counts.staleFinishedPve+counts.staleFinishedPvp;
+ if(!Number.isSafeInteger(stale))return 'unknown';
+ if(report.state==='healthy'&&stale===0)return 'healthy';
+ if(report.state==='review'&&stale>0)return 'review';
+ return 'unknown';
+}
 export function buildOperationsAlert(report){
- if(!report||report.deletionAuthorized!==false)return null;
- if(report.state==='healthy'&&report.ok===true)return null;
- const unknown=report.state==='unknown'&&report.ok===false;
- const counts=report.counts;
- const review=report.state==='review'&&report.ok===true&&counts&&
-  validCount(counts.staleFinishedPve)&&validCount(counts.staleFinishedPvp)&&
-  validCount(counts.activePve)&&validCount(counts.activePvp)&&
-  (counts.staleFinishedPve+counts.staleFinishedPvp>0);
- if(!unknown&&!review)return null;
+ const classification=classifyOperationsAuditReport(report);
+ if(classification==='healthy')return null;
+ const unknown=classification==='unknown';
+ const counts=classification==='review'?report.counts:null;
+ const review=classification==='review';
  return {title:OPERATIONS_ALERT_TITLE,body:[
   'P12決闘の定期集計監査で確認が必要な状態を検知した。',
   '判定: '+(unknown?'unknown (監査未実施・判定失敗の可能性)':'review (保管期間超過の終了済み記録あり)'),
