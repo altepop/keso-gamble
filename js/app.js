@@ -911,12 +911,31 @@ addEventListener('click',async e=>{
   if(screen==='duels'&&t.dataset.duelHistoryResume!==undefined){
    e.preventDefault();if(!live||!wallet.connected||duelPveUi.busy)return;
    const id=t.dataset.duelHistoryResume;
-   if(!/^[0-9a-f]{8}(-[0-9a-f]{4}){4}-[0-9a-f]{12}$/i.test(id))return;
+   if(!/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(id))return;
    duelPveUi.open=true;duelPveUi.busy=true;duelPveUi.error='';render();
    try{const result=await wallet.duelPveRead(id);duelPveUi.match=result.match;duelPveUi.sessionInput=id;duelPveUi.message='保存済みCPU戦を再開しました。';}
    catch(error){duelPveUi.error=error.message||'CPU戦を再開できません。';}
    finally{duelPveUi.busy=false;render();}
    requestAnimationFrame(()=>document.getElementById('duel-pve-section')?.scrollIntoView({block:'start',behavior:'auto'}));
+   return;
+  }
+  if(screen==='duels'&&t.dataset.duelPveAbandon!==undefined){
+   e.preventDefault();
+   if(!live||!wallet.connected||duelPveUi.busy||duelPveUi.pending)return;
+   const id=t.dataset.duelPveAbandon;
+   if(!/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(id))return;
+   if(t.dataset.duelPveConfirm!=='yes'){
+    duelPveUi.abandonConfirm=id;render();return;
+   }
+   duelPveUi.busy=true;duelPveUi.error='';render();
+   try{
+    const result=await wallet.duelPveAbandon(id);
+    if(duelPveUi.match?.id===id)duelPveUi.match=null;
+    duelPveUi.abandonConfirm='';
+    duelPveUi.message='進行中の対局を無報酬で破棄しました。新しいCPU戦を開始できます。';
+    if(duelHistoryUi.open)duelHistoryUi.data=await wallet.duelHistory({mode:duelHistoryUi.mode,game:duelHistoryUi.game});
+   }catch(error){duelPveUi.error=error.message||'破棄できませんでした。';}
+   finally{duelPveUi.busy=false;render();}
    return;
   }
   if(screen==='duels'&&t.dataset.duelPveRewards!==undefined){
@@ -981,7 +1000,11 @@ addEventListener('click',async e=>{
      }
      const result=await wallet.duelPveMove(move);
      duelPveUi.match=result.match;duelPveUi.pending=null;
-     duelPveUi.message=result.match.turn==='finished'?'CPU戦が確定しました。':'サーバー確定の盤面へ更新しました。';
+     duelPveUi.message=result.match.turn==='finished'?'CPU戦が確定しました。次の一局へ進めます。':'サーバー確定の盤面へ更新しました。';
+     if(result.match.turn==='finished'){
+      try{duelPveUi.rewards=await wallet.duelRewardProfile();duelPveUi.rewardsOpen=true;}
+      catch(error){duelPveUi.rewardsError=error.message||'報酬の結果を取得できません。';}
+     }
       if(result.match.turn==='finished')void refreshDuelEntryProgress(true);
     }
    }catch(error){
