@@ -16,7 +16,7 @@ test('participant preview wiring remains behind existing KP bearer owner and sco
  const duels=readFileSync(new URL('../src/board-duels.ts',import.meta.url).pathname,'utf8');
  assert.match(api,/path==='\/api\/kp\/duels\/spectator-preview'/);
  assert.match(api,/boardDuelParticipantPreview\(env,mapping\.guildId,owner\.user/);
- assert.match(duels,/FROM kp_board_duels WHERE guild=\\? AND id=\\? AND \\(user_a=\\? OR user_b=\\?\\)/);
+ assert.ok(duels.includes('FROM kp_board_duels WHERE guild=? AND id=? AND (user_a=? OR user_b=?)'));
  assert.match(duels,/const snapshot=spectatorPublicSnapshot\(match\)/);
 });
 
