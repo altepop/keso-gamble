@@ -6,29 +6,38 @@ import {createHash} from 'node:crypto';
 import {writeFileSync,appendFileSync} from 'node:fs';
 import {pathToFileURL} from 'node:url';
 const required=[
- {key:'pages',name:'pages build and deployment'},
- {key:'worker',name:'VALORANT Bot check and deploy'},
- {key:'backup',name:'P12 duel D1 encrypted backup and isolated restore'}
+ {key:'pages',name:'pages build and deployment',events:['dynamic']},
+ {key:'worker',name:'VALORANT Bot check and deploy',events:['push']},
+ {key:'backup',name:'P12 duel D1 encrypted backup and isolated restore',events:['schedule','workflow_dispatch']}
 ];
 const validSha=sha=>typeof sha==='string'&&/^[a-f0-9]{40}$/i.test(sha);
 const validRunId=id=>Number.isSafeInteger(id)&&id>0;
+const MAX_PAIR_GAP_MS=30*60*1000;
+const MAX_EVIDENCE_AGE_MS=24*60*60*1000;
 export function buildDuelEvidence(runs,generatedAt){
  if(!Array.isArray(runs)||typeof generatedAt!=='string'||!Number.isFinite(Date.parse(generatedAt)))
   throw Error('Invalid evidence input');
+ const stamp=Date.parse(generatedAt);
  const entries={};
- for(const {key,name} of required){
-  const filtered=runs.filter(r=>r?.name===name&&r?.status==='completed'&&
+ for(const {key,name,events} of required){
+  const filtered=runs.filter(r=>r?.name===name&&events.includes(r.event)&&
+   r?.repository?.full_name==='altepop/keso-gamble'&&r?.head_branch==='main'&&
+   r?.status==='completed'&&
    validSha(r.head_sha)&&validRunId(r.id)&&
    typeof r.created_at==='string'&&Number.isFinite(Date.parse(r.created_at))&&
+   Date.parse(r.created_at)<=stamp&&stamp-Date.parse(r.created_at)<=MAX_EVIDENCE_AGE_MS&&
    ['success','failure','cancelled','timed_out','action_required','skipped'].includes(r.conclusion));
   filtered.sort((a,b)=>Date.parse(b.created_at)-Date.parse(a.created_at)||b.id-a.id);
   const r=filtered[0];
-  entries[key]=r?{id:r.id,sha:r.head_sha,conclusion:r.conclusion,createdAt:r.created_at}:null;
+  entries[key]=r?{id:r.id,sha:r.head_sha,conclusion:r.conclusion,createdAt:r.created_at,event:r.event}:null;
  }
  const paired=entries.pages?.conclusion==='success'&&entries.worker?.conclusion==='success'&&
-  entries.pages.sha===entries.worker.sha?entries.pages.sha:null;
- return {schema:'duel-admin-evidence-v1',generatedAt,source:'github-actions-metadata',
-  entries,pairedDeploymentSha:paired,approvalOrRecoveryVerified:false};
+  entries.pages.sha===entries.worker.sha&&
+  Math.abs(Date.parse(entries.pages.createdAt)-Date.parse(entries.worker.createdAt))<=MAX_PAIR_GAP_MS
+  ?entries.pages.sha:null;
+ return {schema:'duel-admin-evidence-v2',generatedAt,source:'github-actions-metadata',
+  entries,pairedDeploymentSha:paired,provenanceRules:'main push worker + dynamic pages within 30 minutes',
+  approvalOrRecoveryVerified:false};
 }
 export function hashDuelEvidence(evidence){
  return createHash('sha256').update(JSON.stringify(evidence)).digest('hex');
@@ -42,6 +51,7 @@ export async function captureDuelEvidence(env=process.env,request=fetch,now=new 
  if(!resp.ok)throw Error('Read-only Actions metadata query failed: HTTP '+resp.status);
  const data=await resp.json();
  if(!Array.isArray(data.workflow_runs))throw Error('Invalid Actions metadata response');
+ if(data.workflow_runs.length>=100)throw Error('Actions inventory saturated: cannot prove current paired deployment');
  // A missing record is explicit null, never inferred success. May not cover older runs beyond first 100.
  return buildDuelEvidence(data.workflow_runs,now.toISOString());
 }
