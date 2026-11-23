@@ -44,3 +44,13 @@ test('limits graph to at most 20 rows with no network access',()=>{
  const rows=Array.from({length:24},(_,i)=>({...saved(),ended_at:Date.parse('2026-11-17T10:00:00.000Z')-i*86_400_000}));
  assert.equal(buildCoachMatchTrend(rows,accounts).length,20);
 });
+
+test('real-world kill timestamps above ten seconds remain eligible for post-match',()=>{
+ const row=saved();
+ const kills=JSON.parse(row.kills_json).map((k: {t:number},i:number)=>({...k,t:[18500,82000,30100,109000][i]}));
+ const result=buildCoachMatchTrend([{...row,kills_json:JSON.stringify(kills)}],accounts);
+ assert.equal(result.length,1,'valid 18–109s events must not erase the entire match');
+ assert.deepEqual([result[0].firstKills,result[0].firstDeaths],[1,1]);
+ const outOfRange=[{...kills[0],t:900001},...kills.slice(1)];
+ assert.equal(buildCoachMatchTrend([{...row,kills_json:JSON.stringify(outOfRange)}],accounts).length,0);
+});
