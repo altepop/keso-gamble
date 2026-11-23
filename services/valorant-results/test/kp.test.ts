@@ -136,14 +136,19 @@ test('issue #522: batch fresh cross-cron receipts cut joined calls without hidin
   .run('relic:'+ids[0],guild,one,25,'relic',Date.now());
  f.sql.prepare('INSERT INTO notifications(riot_id,match_id,message,ended_at,mode,sent) VALUES(?,?,?,?,?,1)')
   .run('One#JP1','issue522-batch-a','late notice',Date.now(),'competitive');
+ // The prior cron negatively cached this ID. A newly settled match must
+ // become visible on the next cron without a stale cross-cron miss cache.
+ const lateReward=await collectKpMatch(f.env,mapping,game('issue522-absent'),'p-one');
+ assert.ok(typeof lateReward==='number'&&lateReward>0,'late match is settled between cron runs');
  const second=await prepareKpRun(f.env,mapping);
  await preloadKpRunMatches(f.env,second,ids);
  assert.equal(calls.length,2,'new cron must reload all durable state in one fresh SQL call');
+ assert.equal(second.credits.get(ids[3]),lateReward,'late match must override prior-cron negative cache');
  assert.equal(second.credits.get(ids[0]),925);
  assert.equal(second.relicBonuses.get(ids[0]),25);
  assert.equal(second.messages.get(ids[0]),'late notice');
  assert.equal(first.credits.get(ids[0]),900,'old snapshot must remain unchanged');
- assert.equal(f.sql.prepare("SELECT COUNT(*) AS n FROM kp_ledger WHERE kind='match'").get()!.n,3,'no duplicate match credits');
+ assert.equal(f.sql.prepare("SELECT COUNT(*) AS n FROM kp_ledger WHERE kind='match'").get()!.n,4,'four unique match credits with no duplicates');
 });
 
 test('schema version cold check reads one exact key and handles only missing kp_settings',async()=>{
