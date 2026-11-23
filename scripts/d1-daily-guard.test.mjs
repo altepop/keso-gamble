@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {sumDailyRows,shouldConserve,runGuard,OPTIONAL_THRESHOLD,SETTING_KEY,D1_B_ID} from './d1-daily-guard.mjs';
+import {sumDailyRows,shouldConserve,runGuard,dailyAnalyticsCoverage,ANALYTICS_PAGE_LIMIT,OPTIONAL_THRESHOLD,SETTING_KEY,D1_B_ID} from './d1-daily-guard.mjs';
 const day='2026-11-01';
 const result=(n)=>({data:{viewer:{accounts:[{d1AnalyticsAdaptiveGroups:[
  {dimensions:{date:day,databaseId:'a'},sum:{rowsRead:n,rowsWritten:0}},
@@ -59,4 +59,36 @@ test('daily write estimate includes every database in UTC today, and a write war
  assert.throws(()=>sumDailyWrittenRows({d1AnalyticsAdaptiveGroups:[{dimensions:{date:day},sum:{rowsRead:1}}]},day),/Invalid/);
  let calls=0;const r=await runGuard(env,async()=>{calls++;return {ok:true,json:async()=>payload};},new Date(day+'T15:00:00Z'));
  assert.equal(calls,1);assert.equal(r.status,'ok');assert.equal(r.writtenEstimate,WRITE_WARNING_THRESHOLD+123);
+});
+
+test('account-wide daily analytics reports missing, empty and saturated coverage as unknown',async()=>{
+ const now=new Date(day+'T12:00:00Z');
+ const cases=[
+  {reason:'empty',groups:[]},
+  {reason:'current-day-missing',groups:[{dimensions:{date:'2026-10-31'},sum:{rowsRead:500}}]},
+  {reason:'saturated',groups:Array.from({length:ANALYTICS_PAGE_LIMIT},(_,i)=>({
+   dimensions:{date:day,databaseId:String(i)},
+   sum:{rowsRead:50000,rowsWritten:0}
+  }))}
+ ];
+ for(const item of cases){
+  const account={d1AnalyticsAdaptiveGroups:item.groups};
+  assert.deepEqual(dailyAnalyticsCoverage(account,day),{complete:false,reason:item.reason});
+  const calls=[];
+  const fetcher=async(url,options)=>{
+   calls.push({url,options});
+   assert.match(url,/\/graphql$/);
+   return {ok:true,json:async()=>({data:{viewer:{accounts:[account]}}})};
+  };
+  const outcome=await runGuard(env,fetcher,now);
+  assert.deepEqual(outcome,{status:'unavailable',day,reason:item.reason,hardCapConfigured:false});
+  assert.equal(calls.length,1,'no settings write or D1 mutation with incomplete estimates');
+ }
+});
+test('below page limit with current UTC-day observations remains a soft estimate only',()=>{
+ const groups=Array.from({length:ANALYTICS_PAGE_LIMIT-1},(_,i)=>({
+  dimensions:{date:day,databaseId:String(i)},sum:{rowsRead:0,rowsWritten:0}
+ }));
+ assert.deepEqual(dailyAnalyticsCoverage({d1AnalyticsAdaptiveGroups:groups},day),{complete:true,reason:null});
+ assert.equal(shouldConserve(0),false);
 });
