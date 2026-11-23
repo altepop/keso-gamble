@@ -167,8 +167,15 @@ async function verifyDuelLedger(env:KpEnv,match:BoardDuel){
  * The private row is projected through P10.1 allowlist before leaving this module.
  */
 export async function boardDuelParticipantPreview(env:KpEnv,guild:string,user:string,id:string,seenVersion:number|null){
+ if(!UUID.test(id))throw Error('対戦IDが不正です。');
  await ensureBoardDuels(env);
- const match=await room(env,guild,id,user);
+ // The public projection reads only these fields. Never join or deserialize
+ // the private-hand table for a participant preview (even for private games).
+ const match=await env.DB.prepare(
+  'SELECT id,guild,game,status,user_a,user_b,turn_user,winner,version,updated_at,board '+
+  'FROM kp_board_duels WHERE guild=? AND id=? AND (user_a=? OR user_b=?)'
+ ).bind(guild,id,user,user).first<BoardDuel>();
+ if(!match)throw Error('対戦が見つかりません。');
  const snapshot=spectatorPublicSnapshot(match);
  return compareSpectatorRevision(snapshot,seenVersion);
 }
