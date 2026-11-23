@@ -10,12 +10,16 @@ const SELECT=[
  'CASE WHEN e.rounds_json IS NOT NULL THEN 1 ELSE 0 END AS rounds_saved,',
  'CASE WHEN e.kills_json IS NOT NULL THEN 1 ELSE 0 END AS kills_saved,',
  'CASE WHEN a.subject_id IS NOT NULL THEN 1 ELSE 0 END AS profile_linked,',
- 's.value AS receipt FROM notifications n',
+ 's.value AS receipt,d.value AS replay_diagnostic,',
+ "(SELECT last_ok FROM kp_health WHERE feature='coach_personal_feedback_replay') AS replay_last_ok,",
+ "(SELECT last_error FROM kp_health WHERE feature='coach_personal_feedback_replay') AS replay_last_error,",
+ "(SELECT failures FROM kp_health WHERE feature='coach_personal_feedback_replay') AS replay_failures FROM notifications n',
  'LEFT JOIN valorant_match_rosters r ON r.match_id=n.match_id',
  'LEFT JOIN valorant_match_round_events e ON e.match_id=n.match_id',
  'LEFT JOIN tracked_players t ON lower(t.riot_id)=lower(n.riot_id)',
  'LEFT JOIN coach_profile_accounts a ON a.puuid=t.puuid',
  "LEFT JOIN monitor_state s ON s.key='coach_personal_feedback:v1:'||a.subject_id||':'||n.match_id",
+ "LEFT JOIN monitor_state d ON d.key='coach_feedback_replay_result:v1:'||n.match_id",
  "WHERE lower(n.riot_id) IN ('dolly#sdgs','h1d3g1g4s#1037')",
  "AND n.mode='competitive' AND n.ended_at BETWEEN ? AND ?",
  'ORDER BY n.ended_at DESC LIMIT 12'
@@ -24,7 +28,7 @@ const jst=at=>Number.isFinite(at)&&at>0?new Date(at+9*3600_000).toISOString().re
 function receiptJson(x){try{return x&&typeof x==='string'?JSON.parse(x):null;}catch{return null;}}
 export function summarizeCoachFeedbackAudit(rows){
  return rows.map(r=>{
-  const value=receiptJson(r.receipt),claimedAt=Number(value?.at);
+  const value=receiptJson(r.receipt),diagnostic=receiptJson(r.replay_diagnostic),claimedAt=Number(value?.at);
   let postedAt=null;
   if(typeof value?.messageId==='string'&&/^\d{17,22}$/.test(value.messageId)){
    try{postedAt=jst(Number((BigInt(value.messageId)>>22n)+1420070400000n));}catch{}
@@ -33,7 +37,11 @@ export function summarizeCoachFeedbackAudit(rows){
    matchId:r.match_id,endedJst:jst(Number(r.ended_at)),map:r.map,outcome:r.outcome,agent:r.agent,
    rosterSaved:r.roster_saved===1,roundsSaved:r.rounds_saved===1,killsSaved:r.kills_saved===1,
    profileLinked:r.profile_linked===1,receiptState:value?.state??'none',
-   claimedJst:jst(claimedAt),postedJst:postedAt,httpStatus:value?.httpStatus??null};
+   claimedJst:jst(claimedAt),postedJst:postedAt,httpStatus:value?.httpStatus??null,
+   replayLastOkJst:jst(Number(r.replay_last_ok)),replayLastErrorJst:jst(Number(r.replay_last_error)),
+   replayFailures:r.replay_failures??null,replayResult:diagnostic?.status??null,
+   replayAttemptJst:jst(Number(diagnostic?.at)),
+   postedText:value?.state==='posted'?value.content??null:null};
  });
 }
 export async function auditCoachFeedback(env=process.env,request=fetch){
