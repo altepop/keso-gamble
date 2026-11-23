@@ -78,3 +78,30 @@ test('verified historical rows are filtered by mode/game, not invented from comp
   assert.equal((await duelHistoryRead(env,'g','bob')).history.length,0);
  }finally{db.close();}
 });
+
+test('PvP-only history skips the PvE session query and preserves daily/skill outputs',async()=>{
+ const {db,env}=fixture();
+ try{
+  const pve=await serverPveOperation(env,'guild','alice',
+   {action:'start',game:'trio',level:'easy',requestId:crypto.randomUUID()});
+  const normal=await duelHistoryRead(env,'guild','alice',{mode:'pve'});
+  assert.equal(normal.sessions.some(x=>x.id===pve.id),true);
+  const database=env as unknown as {DB:{prepare:(sql:string)=>unknown}};
+  const original=database.DB.prepare;
+  let sessionQueries=0;
+  database.DB.prepare=(sql:string)=>{
+   if(sql.includes('FROM kp_duel_pve_sessions s')){
+    sessionQueries++;
+    throw Error('PvP-only history must not read PvE session rows');
+   }
+   return original(sql);
+  };
+  const pvp=await duelHistoryRead(env,'guild','alice',{mode:'pvp'});
+  assert.equal(sessionQueries,0);
+  assert.deepEqual(pvp.sessions,[]);
+  assert.equal(pvp.today.started,normal.today.started);
+  assert.deepEqual(pvp.skills,normal.skills);
+  assert.deepEqual(pvp.collection,normal.collection);
+  assert.equal(pvp.filter.mode,'pvp');
+ }finally{db.close();}
+});
