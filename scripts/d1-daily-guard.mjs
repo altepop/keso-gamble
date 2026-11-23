@@ -24,6 +24,17 @@ function sumMetric(account,utcDay,metric){
 export const sumDailyRows=(account,day)=>sumMetric(account,day,'rowsRead');
 export const sumDailyWrittenRows=(account,day)=>sumMetric(account,day,'rowsWritten');
 export const WRITE_WARNING_THRESHOLD=70_000;
+export const ANALYTICS_PAGE_LIMIT=100;
+/** A bounded GraphQL response cannot prove account-wide coverage when saturated.
+ * Empty/current-day-missing data must not be called zero usage.
+ */
+export function dailyAnalyticsCoverage(account,day){
+ const groups=account?.d1AnalyticsAdaptiveGroups;
+ if(!Array.isArray(groups)||groups.length===0)return {complete:false,reason:'empty'};
+ if(groups.length>=ANALYTICS_PAGE_LIMIT)return {complete:false,reason:'saturated'};
+ if(!groups.some(g=>g?.dimensions?.date===day))return {complete:false,reason:'current-day-missing'};
+ return {complete:true,reason:null};
+}
 export function shouldConserve(estimate){return Number.isSafeInteger(estimate)&&estimate>=OPTIONAL_THRESHOLD;}
 export const gqlQuery=`query D1DailyBudget($accountTag: string!, $day: Date!) {
  viewer { accounts(filter:{accountTag:$accountTag}) {
@@ -45,10 +56,20 @@ export async function runGuard(env=process.env,request=fetch,now=new Date()){
  if(!resp.ok)throw Error('D1 GraphQL HTTP '+resp.status);
  const data=await resp.json();
  if(data.errors?.length||data.data?.viewer?.accounts?.length!==1)throw Error('D1 Analytics response unavailable');
- const estimate=sumDailyRows(data.data.viewer.accounts[0],day);
+ const accountData=data.data.viewer.accounts[0];
+ const coverage=dailyAnalyticsCoverage(accountData,day);
+ if(!coverage.complete){
+  console.warn('D1_BUDGET_COVERAGE_UNKNOWN '+day+' reason='+coverage.reason+' sampled=true hard_cap=false');
+  if(env.GITHUB_STEP_SUMMARY)appendFileSync(env.GITHUB_STEP_SUMMARY,
+   '\n## D1 budget telemetry incomplete\n\nUTC day: '+day+
+   '; reason: '+coverage.reason+
+   '. No optional flag written. Account-wide quota and spending **not guaranteed**; hard cap **not configured**.\n');
+  return {status:'unavailable',day,reason:coverage.reason,hardCapConfigured:false};
+ }
+ const estimate=sumDailyRows(accountData,day);
  console.log('D1_ACCOUNT_DAILY_ESTIMATE '+day+' rows='+estimate+' sampled=true alert='+WARNING_THRESHOLD+' conserve='+OPTIONAL_THRESHOLD);
  let writtenEstimate=null;
- try{writtenEstimate=sumDailyWrittenRows(data.data.viewer.accounts[0],day);}
+ try{writtenEstimate=sumDailyWrittenRows(accountData,day);}
  catch{console.warn('D1_WRITE_ESTIMATE_UNAVAILABLE');}
  console.log('D1_ACCOUNT_DAILY_WRITES_ESTIMATE '+day+' rows='+(writtenEstimate??'unknown')+' sampled=true alert='+WRITE_WARNING_THRESHOLD);
  if(writtenEstimate!==null&&writtenEstimate>=WRITE_WARNING_THRESHOLD)console.warn('D1_WRITE_BUDGET_WARNING '+day+' rows='+writtenEstimate+' sampled=true');
@@ -77,7 +98,7 @@ export async function runGuard(env=process.env,request=fetch,now=new Date()){
   '| Optional-history soft mode threshold (estimated) | '+OPTIONAL_THRESHOLD.toLocaleString('en-US')+' |',
   '| Result | '+status+' |',
   '',
-  'Cloudflare GraphQL is adaptively sampled and may lag actual quota. This is a best-effort soft mode, NOT a hard usage guarantee. Core KP/ranking/races/stock/settlements are never stopped.',
+  'Cloudflare GraphQL is adaptively sampled, can be incomplete and may lag actual quota. This is a best-effort soft mode, NOT a hard usage guarantee. No account-wide hard spending cap is configured. Core KP/ranking/races/stock/settlements are never stopped.',
   ''
  ].join('\n'));
  return {status,day,estimate,writtenEstimate};
