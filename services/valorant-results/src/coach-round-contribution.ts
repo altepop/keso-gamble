@@ -24,19 +24,31 @@ export function coachRoundContribution<T extends Row>(rows:readonly T[],accounts
   const valid=ks.every(k=>k&&n(k.r,60)&&n(k.t,900000)&&roundIds.has(k.r)&&byId.has(k.victim)&&(k.killer===null||byId.has(k.killer)));
   if(!valid){reject('invalid-kill-events');continue;}
   const enemyKill=(k:any,puuid:string)=>k.killer===puuid&&byId.get(k.victim)?.team_id!==byId.get(puuid)?.team_id;
-  const deathsById=new Map<string,number>(),killsById=new Map<string,number>(),ownByRound=new Map<number,{kills:number;deaths:number}>();
+  const deathsById=new Map<string,number>(),friendlyDeathsById=new Map<string,number>(),
+   killsById=new Map<string,number>(),ownByRound=new Map<number,{kills:number;deaths:number}>();
   for(const k of ks){
-   // Friendly-fire casualties are observed in the kill feed, but may be
-   // intentionally excluded from the provider's scored ten-player K/D totals.
-   // Retain the original event for round observations, while comparing only
-   // officially credited opposing/unknown-killer deaths against roster D.
+   // Some teammate casualties are included in official D and others are not.
+   // Never assume either rule for the entire match. Compare each victim's
+   // scored deaths to observed opponent/unknown-killer deaths and teammate
+   // casualties independently; ambiguous partial credit must stay unverified.
    const friendly=k.killer!==null&&byId.get(k.killer)?.team_id===byId.get(k.victim)?.team_id;
-   if(!friendly)deathsById.set(k.victim,(deathsById.get(k.victim)??0)+1);
+   const bucket=friendly?friendlyDeathsById:deathsById;
+   bucket.set(k.victim,(bucket.get(k.victim)??0)+1);
    if(k.killer!==null&&enemyKill(k,k.killer))killsById.set(k.killer,(killsById.get(k.killer)??0)+1);
    let v=ownByRound.get(k.r);if(!v){v={kills:0,deaths:0};ownByRound.set(k.r,v);}
    if(enemyKill(k,p.puuid))v.kills++;if(k.victim===p.puuid)v.deaths++;
   }
-  if(ps.some(x=>(deathsById.get(x.puuid)??0)!==x.d||(killsById.get(x.puuid)??0)!==x.k)){reject('kill-totals-do-not-match-roster');continue;}
+  // Per-player reconciliation: if all teammate casualties for a victim are
+  // uncredited, official D equals opponent/unknown deaths. If all are credited,
+  // it equals the total observed deaths. Intermediate credit cannot be mapped
+  // unambiguously to specific events and is intentionally rejected.
+  const deathParity=ps.every(x=>{
+   const normal=deathsById.get(x.puuid)??0,friendly=friendlyDeathsById.get(x.puuid)??0;
+   return x.d===normal||x.d===normal+friendly;
+  });
+  if(!deathParity||ps.some(x=>(killsById.get(x.puuid)??0)!==x.k)){
+   reject('kill-totals-do-not-match-roster');continue;
+  }
   let assistantsComplete=ks.every(k=>Array.isArray(k.assistants)&&new Set(k.assistants).size===k.assistants.length&&k.assistants.every((id:any)=>typeof id==='string'&&byId.has(id)&&id!==k.killer&&id!==k.victim&&byId.get(id)?.team_id===byId.get(k.killer)?.team_id));
   if(!assistantsComplete)assistQuality.excluded['missing-or-invalid-assistant-ids']=(assistQuality.excluded['missing-or-invalid-assistant-ids']??0)+1;
   else{

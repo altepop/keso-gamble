@@ -6,7 +6,7 @@ const mapping={guildId:'guild',accounts:[
  {riotId:'Dolly#SDGs',discordUserId:'123456789012345678'},
  {riotId:'h1d3g1g4s#1037',discordUserId:'234567890123456789'}
 ]};
-const candidate=(riot_id:string,match_id:string,ended_at=NOW-28*60_000)=>({riot_id,match_id,ended_at,puuid:'puuid-'+match_id});
+const candidate=(riot_id:string,match_id:string,ended_at=NOW-28*60_000)=>({riot_id,match_id,ended_at,puuid:'puuid-'+match_id,subject_id:riot_id.toLowerCase().startsWith('dolly')?'subject-vdk':riot_id.toLowerCase().startsWith('h1d3')?'subject-ishihara':'subject-other'});
 function db(rows:ReturnType<typeof candidate>[],history:{sql?:string;args?:unknown[];diagnostics?:Record<string,string>}={}){
  return {prepare(sql:string){
    if(sql.startsWith('INSERT INTO monitor_state(key,value)'))return {bind(key:string,value:string){return {run:async()=>{(history.diagnostics??={})[key]=value;return {meta:{changes:1}};}};}};
@@ -75,11 +75,33 @@ test('replay persists per-match status without creating delivery receipts',async
  assert.equal(result.posted,0);
  assert.deepEqual(result.statuses,{'incomplete':1,'wrong-channel':1});
  assert.deepEqual(Object.keys(history.diagnostics??{}).sort(),[
-  'coach_feedback_replay_result:v1:corrode','coach_feedback_replay_result:v1:sunset'
+  'coach_feedback_replay_result:v2:subject-ishihara:corrode','coach_feedback_replay_result:v2:subject-vdk:sunset'
  ]);
  for(const [key,value] of Object.entries(history.diagnostics??{})){
   const record=JSON.parse(value);
   assert.equal(record.status,key.endsWith(':sunset')?'incomplete':'wrong-channel');
   assert.equal(typeof record.at,'number');
  }
+});
+
+test('three members in the same Sunset match keep independent replay return codes and never create receipts',async()=>{
+ const id='58feed7c-e6db-4c99-9b18-27ea8297153c';
+ const rows=[
+  candidate('Dolly#SDGs',id),
+  candidate('h1d3g1g4s#1037',id),
+  {...candidate('frin#怖すぎ',id),subject_id:'subject-fujimura',puuid:'puuid-fujimura'}
+ ];
+ const allMembers={...mapping,accounts:[...mapping.accounts,{riotId:'frin#怖すぎ',discordUserId:'345678901234567890'}]};
+ const history:{diagnostics?:Record<string,string>}={};
+ const result=await replaySavedCoachFeedback({DB:db(rows,history),KESO_COACH_WEBHOOK_URL:'present'} as any,allMembers,NOW,
+   (async(_env:any,_mapping:any,_id:string,puuid:string)=>puuid==='puuid-fujimura'?'incomplete': 'posted') as any);
+ assert.equal(result.attempted,3);assert.equal(result.posted,2);
+ const keys=Object.keys(history.diagnostics??{}).sort();
+ assert.deepEqual(keys,[
+  'coach_feedback_replay_result:v2:subject-fujimura:'+id,
+  'coach_feedback_replay_result:v2:subject-ishihara:'+id,
+  'coach_feedback_replay_result:v2:subject-vdk:'+id
+ ]);
+ assert.equal(JSON.parse(history.diagnostics![keys[0]]).status,'incomplete');
+ assert.ok(keys.every(k=>!k.startsWith('coach_personal_feedback:v1:')));
 });
