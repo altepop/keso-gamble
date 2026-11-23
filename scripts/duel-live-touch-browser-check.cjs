@@ -11,11 +11,12 @@ let browser;
 (async()=>{
  const {createInitialState}=await import('../js/engine.js');
  const {initialDuelBoard,playDuelMove}=await import('../js/duel-rules.js');
+ const {connect4Board,connect4Move}=await import('../js/duel-mini-games.js');
  const state={...createInitialState(),cash:20000,serverWallet:true,selfUserId:'one',members:[{id:'one',name:'自分'},{id:'two',name:'対戦相手'}],claims:[],directives:[]};
  let room={id:'11111111-2222-4333-8444-555555555555',guild:'test',user_a:'one',user_b:'two',black_user:'one',turn_user:'one',game:'gomoku',stake:1000,status:'active',
   board:initialDuelBoard('gomoku'),winner:null,version:0,deadline_at:Date.now()+600000};
  const operations=[],errors=[];let liveHints=false,streams=0,duelReads=0,pveReads=0,pveAbandons=0,pveStarts=0;
- const pveId='22222222-3333-4333-8444-555555555555';let pveAbandoned=false;
+ const pveId='22222222-3333-4333-8444-555555555555';let pveAbandoned=false,pveGame='othello',pveVersion=0,pveBoard=initialDuelBoard('othello'),pveMoves=0;
  for(let i=0;i<80;i++){try{if((await fetch('http://127.0.0.1:'+port+'/')).ok)break;}catch{}await new Promise(r=>setTimeout(r,100));}
  browser=await (engine==='webkit'?webkit:chromium).launch(engine==='webkit'?{}:{executablePath:process.env.CHROMIUM_PATH||(existsSync('/usr/bin/chromium')?'/usr/bin/chromium':undefined),args:['--no-sandbox']});
  const ctx=await browser.newContext({viewport:{width:390,height:844},isMobile:engine==='webkit',hasTouch:true,reducedMotion:'reduce'});
@@ -36,8 +37,22 @@ let browser;
    const data=route.request().method()==='GET'?null:route.request().postDataJSON();
    if(!data){pveReads++;assert.equal(new URL(route.request().url()).searchParams.get('session'),pveId);}
    else if(data.action==='abandon'){pveAbandons++;assert.equal(data.session,pveId);pveAbandoned=true;}
-   else {assert.equal(data.action,'start');assert.equal(data.game,'othello');assert.equal(data.level,'normal');pveStarts++;pveAbandoned=false;}
-   response={match:{id:pveId,game:'othello',level:'normal',board:initialDuelBoard('othello'),version:pveAbandoned?1:0,turn:pveAbandoned?'finished':'human',winner:null,humanMoves:0,cpuMoves:0,ownHand:null}};
+   else if(data.action==='move'){
+    assert.equal(data.session,pveId);
+    assert.equal(pveGame,'connect4');
+    assert.equal(data.cell,0,'tapping the visible board sends the selected column');
+    assert.equal(data.version,pveVersion);
+    pveBoard=connect4Move(pveBoard,'a',0).board;
+    pveBoard=connect4Move(pveBoard,'b',1).board;
+    pveVersion++;pveMoves++;
+   }else {
+    assert.equal(data.action,'start');
+    assert.ok(['othello','connect4'].includes(data.game),data.game);
+    assert.equal(data.level,'normal');
+    pveGame=data.game;pveVersion=0;pveBoard=pveGame==='connect4'?connect4Board():initialDuelBoard('othello');
+    pveStarts++;pveAbandoned=false;
+   }
+   response={match:{id:pveId,game:pveGame,level:'normal',board:pveBoard,version:pveAbandoned?pveVersion+1:pveVersion,turn:pveAbandoned?'finished':'human',winner:null,humanMoves:pveMoves,cpuMoves:pveMoves,ownHand:null}};
   }
   else if(p.endsWith('/duels/history')){
     assert.equal(route.request().headers().authorization,'Bearer '+'a'.repeat(48));
@@ -100,6 +115,19 @@ let browser;
  await page.locator('[data-duel-pve-custom-start]').click();
  await page.locator('#duel-pve-section').getByText('サーバーでCPU戦を開始しました。').waitFor();
  assert.equal(pveStarts,2,'new CPU game must remain operable after discard');
+ // This is the real Activity: premium PvE Connect Four must have clickable holes,
+ // and the next snapshot must come from the mocked authenticated Worker.
+ await page.locator('[data-duel-sport="connect4"][data-duel-sport-mode="pve"]').click();
+ await page.locator('[data-duel-pve-custom-start]').click();
+ await page.locator('.duel-pve-connect4 .duel-connect4-board').waitFor();
+ assert.equal(await page.locator('.duel-pve-connect4 .duel-connect4-space').count(),42);
+ assert.equal(await page.locator('.duel-pve-connect4 .duel-connect4-head button').count(),7);
+ await page.locator('.duel-pve-connect4 [data-duel-pve-board-col="0"]').first().click();
+ await page.locator('.duel-pve-connect4 .duel-connect4-space.a').first().waitFor();
+ assert.equal(pveMoves,1,'one board tap sends exactly one server move, not a UI-only animation');
+ assert.equal(await page.locator('.duel-pve-connect4 .duel-connect4-space.b').count(),1,'CPU reply comes from Worker data');
+ assert.equal(page.url(),urlBefore,'premium PvE stays in the authenticated Activity');
+
 
  await page.locator('details.duel-secondary summary').click();
   await page.locator('[data-duel-pve-rewards]').click();

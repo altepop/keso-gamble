@@ -1,7 +1,7 @@
-import {duelPvePanel,duelOperationsPanel,duelTrioPanel,duelWeeklyEventPanel} from './duel-phase11-12-view.js?v=web-17645e78dac28527';
-import {miniBoardView} from './duel-mini-view.js?v=web-17645e78dac28527';
-import {EXTRA_DUEL_GAMES} from './duel-mini-games.js?v=web-17645e78dac28527';
-import {DUEL_GAMES,duelLegalMoves,duelScore,playDuelMove} from './duel-rules.js?v=web-17645e78dac28527';
+import {duelPvePanel,duelOperationsPanel,duelTrioPanel,duelWeeklyEventPanel} from './duel-phase11-12-view.js?v=web-599310d979169fe7';
+import {miniBoardView} from './duel-mini-view.js?v=web-599310d979169fe7';
+import {EXTRA_DUEL_GAMES} from './duel-mini-games.js?v=web-599310d979169fe7';
+import {DUEL_GAMES,duelLegalMoves,duelScore,playDuelMove} from './duel-rules.js?v=web-599310d979169fe7';
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const kp=n=>Number(n||0).toLocaleString('ja-JP')+' KP';
 const title=(r)=>r.game==='trio'?'三目並べ':DUEL_GAMES[r.game]?.name||EXTRA_DUEL_GAMES[r.game]?.name||r.game;
