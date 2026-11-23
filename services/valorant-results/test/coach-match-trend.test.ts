@@ -61,3 +61,14 @@ test('verified PUUID never falls back to matching a reused Riot name',()=>{
  assert.equal(buildCoachMatchTrend([reused],[{name:'Aquatopia',tag:'toppy',puuid:null}]).length,1);
  assert.equal(buildCoachMatchTrend([saved('OldNick','OLD','kobe-id')],accounts).length,1);
 });
+
+test('duplicate or missing roster PUUIDs never produce a personal match trend',()=>{
+ const row=saved();
+ const duplicate=roster();
+ duplicate[5].puuid='kobe-id';
+ assert.equal(buildCoachMatchTrend([{...row,players_json:JSON.stringify(duplicate)}],accounts).length,0);
+ const missing=roster();
+ missing[5].puuid='';
+ assert.equal(buildCoachMatchTrend([{...row,players_json:JSON.stringify(missing)}],accounts).length,0);
+ assert.equal(buildCoachMatchTrend([row],accounts).length,1);
+});
