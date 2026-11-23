@@ -19,10 +19,14 @@ export async function duelOperationsAudit(env:Pick<KpEnv,'DB'>,guild:string,now=
     COALESCE(SUM(CASE WHEN turn='finished' AND updated_at<? THEN 1 ELSE 0 END),0) AS stale,
     COALESCE(SUM(CASE WHEN turn='human' THEN 1 ELSE 0 END),0) AS active
     FROM kp_duel_pve_sessions WHERE guild=?`).bind(threshold,guild).first<{stale:number;active:number}>(),
+  // Use the existing (guild,status,updated_at) retention index for each
+  // bounded count instead of evaluating CASE over every duel in the guild.
   env.DB.prepare(`SELECT
-    COALESCE(SUM(CASE WHEN status IN ('finished','cancelled') AND updated_at<? THEN 1 ELSE 0 END),0) AS stale,
-    COALESCE(SUM(CASE WHEN status IN ('active','pending') THEN 1 ELSE 0 END),0) AS active
-    FROM kp_board_duels WHERE guild=?`).bind(pvpThreshold,guild).first<{stale:number;active:number}>()
+    (SELECT COUNT(*) FROM kp_board_duels
+      WHERE guild=? AND status IN ('finished','cancelled') AND updated_at<?) AS stale,
+    (SELECT COUNT(*) FROM kp_board_duels
+      WHERE guild=? AND status IN ('active','pending')) AS active`)
+   .bind(guild,pvpThreshold,guild).first<{stale:number;active:number}>()
  ]);
  const count=(n:unknown)=>typeof n==='number'&&Number.isSafeInteger(n)&&n>=0?n:null;
  const a=count(pve?.stale),b=count(pvp?.stale),c=count(pve?.active),d=count(pvp?.active);
