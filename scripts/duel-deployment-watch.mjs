@@ -6,7 +6,9 @@ const DEPLOYMENTS=Object.freeze([
 export function evaluateDeploymentRuns(runs, now=Date.now(), graceMs=20*60*1000){
  if(!Array.isArray(runs))throw Error('Actions runs must be an array');
  const results=DEPLOYMENTS.map(item=>{
-  const selected=runs.filter(r=>r.name===item.workflow&&r.event!=='pull_request')
+  // Only production main deployments qualify; branch runs and PR checks must not hide an outage.
+  const selected=runs.filter(r=>r?.name===item.workflow&&r.head_branch==='main'&&
+   (item.name==='Pages'?(r.event==='dynamic'||r.event==='push') : r.event==='push'))
    .sort((a,b)=>Date.parse(b.created_at||0)-Date.parse(a.created_at||0))[0];
   if(!selected)return {name:item.name,state:'missing'};
   const created=Date.parse(selected.created_at);
