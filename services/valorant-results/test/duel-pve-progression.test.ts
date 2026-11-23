@@ -102,7 +102,7 @@ test('PvE skill rewards vary by server-stored CPU level, preserve stats, and acc
    create(db,id,'gomoku','normal');finish(db,id,'human');
   }
   const ten=db.prepare("SELECT points,peak_points,verified_games FROM kp_duel_mode_skill WHERE mode='pve' AND game='gomoku'").get() as Record<string,number>;
-  assert.deepEqual(ten,{points:120,peak_points:120,verified_games:10});
+  assert.equal(ten.points,120);assert.equal(ten.peak_points,120);assert.equal(ten.verified_games,10);
  }finally{db.close();}
 });
 
@@ -116,7 +116,8 @@ test('PvE rollout replaces legacy trigger without replaying existing receipt poi
   db.exec(DUEL_PVE_PROGRESSION_TRIGGERS[0]);
   db.exec(DUEL_PVE_PROGRESSION_TRIGGERS[1]);
   const saved=db.prepare("SELECT points,verified_games FROM kp_duel_mode_skill WHERE game='trio'").get();
-  assert.deepEqual(saved,{points:16,verified_games:1});
+  assert.equal((saved as Record<string,number>).points,16);
+  assert.equal((saved as Record<string,number>).verified_games,1);
   const next='00000000-0000-4000-8000-000000004002';
   create(db,next,'trio','easy');finish(db,next,'human');
   assert.equal(db.prepare("SELECT points FROM kp_duel_mode_skill WHERE game='trio'").get()?.points,24);
