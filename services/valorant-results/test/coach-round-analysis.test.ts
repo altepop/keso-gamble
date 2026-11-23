@@ -330,3 +330,27 @@ test('failed or invalidated in-flight report cannot block a fresh read or restor
  await readCoachRoundReport(db,now+2000);
  assert.equal(reads,4,'new cache remains intact');
 });
+
+test('fixture query plan separates indexed match joins from per-roster json_each scans',async()=>{
+ const {readFileSync}=await import('node:fs');
+ const sql=new DatabaseSync(':memory:');
+ try{
+  sql.exec(readFileSync(new URL('../migrations/0006_competitive_match_rosters.sql',import.meta.url),'utf8'));
+  sql.exec(readFileSync(new URL('../migrations/0007_competitive_round_events.sql',import.meta.url),'utf8'));
+  sql.exec('CREATE TABLE monitor_state(key TEXT PRIMARY KEY,value TEXT)');
+  const queries:string[]=[];
+  const db={prepare:(query:string)=>{queries.push(query);return {
+   all:async()=>({results:sql.prepare(query).all()}),
+   first:async()=>sql.prepare(query).get()??null
+  }}} as unknown as D1Database;
+  await readCoachRoundReport(db);
+  assert.equal(queries.length,2,'cache-miss query count stays bounded');
+  const plans=queries.map(query=>sql.prepare('EXPLAIN QUERY PLAN '+query).all()
+   .map((row:any)=>String(row.detail)).join(' / '));
+  assert.match(plans[0],/valorant_match_rosters_recent|SCAN r/);
+  assert.match(plans[0],/SEARCH e .*match_id|SEARCH e USING INDEX/);
+  assert.match(plans[0],/SCAN p VIRTUAL TABLE/);
+  assert.match(plans[1],/SCAN p VIRTUAL TABLE/);
+  // Fixture observations are not a production D1 query plan nor billed Rows read.
+ }finally{sql.close();}
+});
