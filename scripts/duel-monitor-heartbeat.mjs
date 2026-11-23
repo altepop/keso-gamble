@@ -1,7 +1,7 @@
 /** P12 independent heartbeat for the hourly duel deployment monitor.
  * Reads GitHub Actions run metadata only. No Cloudflare/D1/KP operations.
  */
-import {appendFileSync} from 'node:fs';
+import {appendFileSync,writeFileSync} from 'node:fs';
 import {pathToFileURL} from 'node:url';
 
 export const MONITOR_WORKFLOW='P12 duel deployment health (read-only)';
@@ -36,7 +36,6 @@ export async function inspectMonitorHeartbeat(env=process.env,request=fetch,now=
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
  inspectMonitorHeartbeat().then(async result=>{
   if(process.env.DUEL_HEARTBEAT_REPORT){
-   const {writeFileSync}=await import('node:fs');
    writeFileSync(process.env.DUEL_HEARTBEAT_REPORT,JSON.stringify(result),{mode:0o600});
   }
   console.log('DUEL_MONITOR_HEARTBEAT '+JSON.stringify(result));
@@ -51,7 +50,6 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
   // Do not forward untrusted API response bodies, bearer tokens, or raw errors
   // into the retained report or issue.
   if(process.env.DUEL_HEARTBEAT_REPORT){
-   const {writeFileSync}=await import('node:fs');
    writeFileSync(process.env.DUEL_HEARTBEAT_REPORT,
     JSON.stringify({state:'unknown',ok:false,runId:null,ageMinutes:null}),{mode:0o600});
   }
