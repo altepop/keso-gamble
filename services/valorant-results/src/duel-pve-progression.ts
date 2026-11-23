@@ -6,63 +6,31 @@ import type {KpEnv} from './kp.ts';
 import {ensureDuelRewards} from './duel-rewards.ts';
 export const DUEL_PVE_PROGRESSION_TRIGGERS=[
  `DROP TRIGGER IF EXISTS kp_duel_pve_skill_apply`,
- `CREATE TRIGGER IF NOT EXISTS kp_duel_pve_skill_apply
+ `CREATE TRIGGER kp_duel_pve_skill_apply
  AFTER INSERT ON kp_duel_progress_receipts
  WHEN NEW.mode='pve' AND NEW.applied_at IS NOT NULL
  BEGIN
   INSERT INTO kp_duel_mode_skill
    (guild,user,mode,game,points,peak_points,verified_games,wins,losses,draws,updated_at)
-  VALUES(NEW.guild,NEW.user,'pve',NEW.game,
-   CASE NEW.outcome
-    WHEN 'win' THEN COALESCE((SELECT CASE difficulty
-      WHEN 'easy' THEN 8 WHEN 'normal' THEN 12 WHEN 'strong' THEN 16 ELSE 0 END
-      FROM kp_duel_pve_sessions
-      WHERE id=NEW.match_id AND guild=NEW.guild AND user=NEW.user AND game=NEW.game),0)
-    WHEN 'draw' THEN COALESCE((SELECT CASE difficulty
-      WHEN 'easy' THEN 2 WHEN 'normal' THEN 3 WHEN 'strong' THEN 4 ELSE 0 END
-      FROM kp_duel_pve_sessions
-      WHERE id=NEW.match_id AND guild=NEW.guild AND user=NEW.user AND game=NEW.game),0)
-    ELSE 0 END,
-   CASE NEW.outcome
-    WHEN 'win' THEN COALESCE((SELECT CASE difficulty
-      WHEN 'easy' THEN 8 WHEN 'normal' THEN 12 WHEN 'strong' THEN 16 ELSE 0 END
-      FROM kp_duel_pve_sessions
-      WHERE id=NEW.match_id AND guild=NEW.guild AND user=NEW.user AND game=NEW.game),0)
-    WHEN 'draw' THEN COALESCE((SELECT CASE difficulty
-      WHEN 'easy' THEN 2 WHEN 'normal' THEN 3 WHEN 'strong' THEN 4 ELSE 0 END
-      FROM kp_duel_pve_sessions
-      WHERE id=NEW.match_id AND guild=NEW.guild AND user=NEW.user AND game=NEW.game),0)
-    ELSE 0 END,
-   1,
-   CASE WHEN NEW.outcome='win' THEN 1 ELSE 0 END,
-   CASE WHEN NEW.outcome='loss' THEN 1 ELSE 0 END,
-   CASE WHEN NEW.outcome='draw' THEN 1 ELSE 0 END,NEW.occurred_at)
-  ON CONFLICT(guild,user,mode,game) DO UPDATE SET
-   points=points+(CASE NEW.outcome
-    WHEN 'win' THEN COALESCE((SELECT CASE difficulty
-      WHEN 'easy' THEN 8 WHEN 'normal' THEN 12 WHEN 'strong' THEN 16 ELSE 0 END
-      FROM kp_duel_pve_sessions
-      WHERE id=NEW.match_id AND guild=NEW.guild AND user=NEW.user AND game=NEW.game),0)
-    WHEN 'draw' THEN COALESCE((SELECT CASE difficulty
-      WHEN 'easy' THEN 2 WHEN 'normal' THEN 3 WHEN 'strong' THEN 4 ELSE 0 END
-      FROM kp_duel_pve_sessions
-      WHERE id=NEW.match_id AND guild=NEW.guild AND user=NEW.user AND game=NEW.game),0)
-    ELSE 0 END),
-   peak_points=MAX(peak_points,points+(CASE NEW.outcome
-    WHEN 'win' THEN COALESCE((SELECT CASE difficulty
-      WHEN 'easy' THEN 8 WHEN 'normal' THEN 12 WHEN 'strong' THEN 16 ELSE 0 END
-      FROM kp_duel_pve_sessions
-      WHERE id=NEW.match_id AND guild=NEW.guild AND user=NEW.user AND game=NEW.game),0)
-    WHEN 'draw' THEN COALESCE((SELECT CASE difficulty
-      WHEN 'easy' THEN 2 WHEN 'normal' THEN 3 WHEN 'strong' THEN 4 ELSE 0 END
-      FROM kp_duel_pve_sessions
-      WHERE id=NEW.match_id AND guild=NEW.guild AND user=NEW.user AND game=NEW.game),0)
-    ELSE 0 END)),
-   verified_games=verified_games+1,
-   wins=wins+(CASE WHEN NEW.outcome='win' THEN 1 ELSE 0 END),
-   losses=losses+(CASE WHEN NEW.outcome='loss' THEN 1 ELSE 0 END),
-   draws=draws+(CASE WHEN NEW.outcome='draw' THEN 1 ELSE 0 END),
-   updated_at=MAX(updated_at,NEW.occurred_at);
+   SELECT NEW.guild,NEW.user,'pve',NEW.game,x.delta,x.delta,1,
+    CASE WHEN NEW.outcome='win' THEN 1 ELSE 0 END,
+    CASE WHEN NEW.outcome='loss' THEN 1 ELSE 0 END,
+    CASE WHEN NEW.outcome='draw' THEN 1 ELSE 0 END,NEW.occurred_at
+   FROM (SELECT CASE NEW.outcome
+    WHEN 'win' THEN CASE s.difficulty WHEN 'easy' THEN 8 WHEN 'normal' THEN 12 WHEN 'strong' THEN 16 ELSE 0 END
+    WHEN 'draw' THEN CASE s.difficulty WHEN 'easy' THEN 2 WHEN 'normal' THEN 3 WHEN 'strong' THEN 4 ELSE 0 END
+    ELSE 0 END AS delta
+     FROM kp_duel_pve_sessions s
+     WHERE s.id=NEW.match_id AND s.guild=NEW.guild AND s.user=NEW.user AND s.game=NEW.game) x
+   WHERE 1
+   ON CONFLICT(guild,user,mode,game) DO UPDATE SET
+    points=points+excluded.points,
+    peak_points=MAX(peak_points,points+excluded.points),
+    verified_games=verified_games+1,
+    wins=wins+excluded.wins,
+    losses=losses+excluded.losses,
+    draws=draws+excluded.draws,
+    updated_at=MAX(updated_at,NEW.occurred_at);
  END`,
  `CREATE TRIGGER IF NOT EXISTS kp_duel_pve_verified_finish
  AFTER UPDATE OF turn ON kp_duel_pve_sessions
