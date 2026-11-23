@@ -25,6 +25,9 @@ on:
       - 'scripts/d1-read-hotspots.test.mjs'
       - 'scripts/d1-daily-guard.mjs'
       - 'scripts/d1-daily-guard.test.mjs'
+      # Read-only observation after future duel-history production changes.
+      # PR validation remains the normal CI; this does not backfill #824.
+      - 'services/valorant-results/src/duel-history.ts'
   workflow_dispatch:
   schedule:
     - cron: '17 * * * *'
