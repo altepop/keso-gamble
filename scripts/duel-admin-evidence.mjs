@@ -14,6 +14,8 @@ const validSha=sha=>typeof sha==='string'&&/^[a-f0-9]{40}$/i.test(sha);
 const validRunId=id=>Number.isSafeInteger(id)&&id>0;
 const MAX_PAIR_GAP_MS=30*60*1000;
 const MAX_EVIDENCE_AGE_MS=24*60*60*1000;
+export const EVIDENCE_PAGE_SIZE=100;
+export const EVIDENCE_MAX_PAGES=3;
 export function buildDuelEvidence(runs,generatedAt){
  if(!Array.isArray(runs)||typeof generatedAt!=='string'||!Number.isFinite(Date.parse(generatedAt)))
   throw Error('Invalid evidence input');
@@ -46,13 +48,27 @@ export async function captureDuelEvidence(env=process.env,request=fetch,now=new 
  if(env.GITHUB_REPOSITORY!=='altepop/keso-gamble'||!env.GITHUB_TOKEN)
   throw Error('Expected repository and token unavailable');
  const url='https://api.github.com/repos/altepop/keso-gamble/actions/runs?per_page=100';
- const resp=await request(url,{headers:{Authorization:'Bearer '+env.GITHUB_TOKEN,
-  Accept:'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28'},signal:AbortSignal.timeout(20000)});
- if(!resp.ok)throw Error('Read-only Actions metadata query failed: HTTP '+resp.status);
- const data=await resp.json();
- if(!Array.isArray(data.workflow_runs))throw Error('Invalid Actions metadata response');
- // A missing record is explicit null, never inferred success. May not cover older runs beyond first 100.
- return buildDuelEvidence(data.workflow_runs,now.toISOString());
+ const runs=[];
+ const seen=new Set();
+ // Read all bounded pages until an undersized page proves the inventory ended.
+ // Never silently describe a saturated/unknown first page as complete evidence.
+ for(let page=1;page<=EVIDENCE_MAX_PAGES;page++){
+  const endpoint=page===1?url:url+'&page='+page;
+  const resp=await request(endpoint,{headers:{Authorization:'Bearer '+env.GITHUB_TOKEN,
+   Accept:'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28'},signal:AbortSignal.timeout(20000)});
+  if(!resp.ok)throw Error('Read-only Actions metadata query failed: HTTP '+resp.status);
+  const data=await resp.json();
+  if(!Array.isArray(data?.workflow_runs)||data.workflow_runs.length>EVIDENCE_PAGE_SIZE)
+   throw Error('Invalid Actions metadata response');
+  for(const item of data.workflow_runs){
+   if(!Number.isSafeInteger(item?.id)||item.id<=0||seen.has(item.id))
+    throw Error('Duplicated or malformed Actions run inventory');
+   seen.add(item.id);
+   runs.push(item);
+  }
+  if(data.workflow_runs.length<EVIDENCE_PAGE_SIZE)return buildDuelEvidence(runs,now.toISOString());
+ }
+ throw Error('Actions evidence inventory exceeds bounded pagination; cannot assert completeness');
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
  captureDuelEvidence().then(data=>{
