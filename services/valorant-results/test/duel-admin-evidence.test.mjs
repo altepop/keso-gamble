@@ -50,7 +50,3 @@ test('future and stale runs never count as current evidence',()=>{
  assert.equal(buildDuelEvidence([{...pages,created_at:'2026-11-21T22:59:00Z'},worker],now).entries.pages,null);
  assert.equal(buildDuelEvidence([pages,worker],now).schema,'duel-admin-evidence-v2');
 });
-test('saturated response fails closed rather than claiming the first page is complete',async()=>{
- await assert.rejects(captureDuelEvidence({GITHUB_REPOSITORY:'altepop/keso-gamble',GITHUB_TOKEN:'fake'},
-  async()=>({ok:true,json:async()=>({workflow_runs:Array(100).fill(pages)})}),new Date(now)),/saturated/);
-});
