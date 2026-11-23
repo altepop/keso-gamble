@@ -76,6 +76,7 @@ export function createKpClient({storage,temporaryStorage,request=globalThis.fetc
   duelRewardProfile:()=>api('duels/rewards'),
   duelHistory:({mode='all',game='all'}={})=>api('duels/history?mode='+encodeURIComponent(mode)+'&game='+encodeURIComponent(game)),
   duelPveRead:session=>api('duels/pve?session='+encodeURIComponent(session)),
+  duelPveAbandon:session=>api('duels/pve',{action:'abandon',session}),
   duelPveMove:body=>api('duels/pve',body),
   duelOperationsAccess:()=>api('duels/operations/access'),
   duelOperationsRead:()=>api('duels/operations'),
