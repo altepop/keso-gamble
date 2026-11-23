@@ -162,6 +162,41 @@ export async function productionBackup(output,env=process.env,request=fetch){
   return report;
  }finally{rmSync(work,{recursive:true,force:true});}
 }
+/** Strict verification for previously retained production ciphertext during an
+ * isolated recovery drill. Never takes a remote D1 connection or applies SQL
+ * to production. Legacy verifyArtifact stays available for local fixtures.
+ */
+export function verifyRetainedMetadata(meta){
+ if(!meta||meta.formatVersion!==1||meta.sourceDbId!==D1_PRODUCTION_ID||
+    typeof meta.at!=='string'||!Number.isFinite(Date.parse(meta.at))||
+    !Array.isArray(meta.tables)||meta.tables.length<required.length||meta.tables.length>80||
+    new Set(meta.tables).size!==meta.tables.length||
+    meta.tables.some(name=>!isDuelTable(name)||!validName(name))||
+    required.some(name=>!meta.tables.includes(name))||
+    !meta.rows||typeof meta.rows!=='object'||Array.isArray(meta.rows)||
+    Object.keys(meta.rows).length!==meta.tables.length||
+    !Number.isSafeInteger(meta.objectCount)||meta.objectCount<meta.tables.length||
+    !['dedicated','cloudflare-token-fallback'].includes(meta.keySource))
+  throw Error('Retained recovery metadata invalid or incomplete');
+ for(const name of meta.tables){
+  if(!Object.hasOwn(meta.rows,name)||!Number.isSafeInteger(meta.rows[name])||meta.rows[name]<0)
+   throw Error('Retained recovery metadata row counts invalid');
+ }
+ return {tables:meta.tables,expectedRows:meta.rows};
+}
+export async function verifyRetainedArtifact(file,env=process.env){
+ const {key}=safeSecret(env);
+ const payload=JSON.parse(readFileSync(file,'utf8'));
+ // Envelope metadata is NOT authenticated as AES-GCM associated data.
+ // Treat it only as an assertion to cross-check against the decrypted SQL,
+ // never as an independent provenance or cryptographic attestation.
+ const decrypted=decryptDump(payload,key);
+ const {tables,expectedRows}=verifyRetainedMetadata(payload.meta);
+ const actualRows=restoreCheck(decrypted,tables);
+ if(tables.some(name=>actualRows[name]!==expectedRows[name]))
+  throw Error('Retained recovery restored row counts differ from backup metadata');
+ return actualRows;
+}
 export async function verifyArtifact(file,env=process.env){
  const {key}=safeSecret(env),payload=JSON.parse(readFileSync(file,'utf8'));
  const sql=decryptDump(payload,key);
@@ -172,11 +207,12 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
  try{
   if(cmd==='backup')await productionBackup(process.argv[3]||'');
   else if(cmd==='verify')console.log('DUEL_BACKUP_VERIFIED tables='+Object.keys(await verifyArtifact(process.argv[3]||'')).length);
-  else throw Error('Usage: node scripts/duel-d1-backup.mjs backup|verify <output-file>');
+  else if(cmd==='verify-retained')console.log('DUEL_RETAINED_BACKUP_VERIFIED tables='+Object.keys(await verifyRetainedArtifact(process.argv[3]||'')).length);
+  else throw Error('Usage: node scripts/duel-d1-backup.mjs backup|verify|verify-retained <output-file>');
  }catch(error){
   // Never forward raw Wrangler stderr (may contain private data) to public CI.
   console.error('DUEL_BACKUP_FAILED '+(error instanceof Error&&
-    /^(Production D1 schema|Cloudflare credentials|Duel table inventory|Unsafe table|Missing|SQLite integrity|Export empty|Restore count|Backup encryption|Unknown or invalid|Backup content|Invalid|Backup size)/.test(error.message)
+    /^(Production D1 schema|Cloudflare credentials|Duel table inventory|Unsafe table|Missing|SQLite integrity|Export empty|Restore count|Backup encryption|Unknown or invalid|Backup content|Invalid|Backup size|Retained recovery)/.test(error.message)
     ?error.message:'backup or restoration validation failed'));
   process.exitCode=1;
  }

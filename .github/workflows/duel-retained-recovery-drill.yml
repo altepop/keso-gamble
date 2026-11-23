@@ -4,7 +4,9 @@ on:
     paths:
       - '.github/workflows/duel-retained-recovery-drill.yml'
       - 'scripts/duel-recovery-drill-source.mjs'
+      - 'scripts/duel-d1-backup.mjs'
       - 'services/valorant-results/test/duel-recovery-drill-source.test.mjs'
+      - 'services/valorant-results/test/duel-retained-recovery-verify.test.mjs'
   push:
     branches: [main]
     paths:
@@ -34,7 +36,7 @@ jobs:
         with:
           node-version: '24'
       - name: Verify approved provenance and fail-closed source selection
-        run: node --test services/valorant-results/test/duel-recovery-drill-source.test.mjs
+        run: node --test services/valorant-results/test/duel-recovery-drill-source.test.mjs services/valorant-results/test/duel-retained-recovery-verify.test.mjs
   isolated-recovery:
     if: github.repository == 'altepop/keso-gamble' && github.event_name == 'workflow_dispatch' && github.actor == 'altepop'
     needs: [safety-tests]
@@ -69,7 +71,7 @@ jobs:
       - name: Decrypt retained backup and restore ONLY to throwaway SQLite
         run: |
           umask 077
-          node scripts/duel-d1-backup.mjs verify "$RUNNER_TEMP/duel-retained-drill/keso-duel-restorable.enc.json"
+          node scripts/duel-d1-backup.mjs verify-retained "$RUNNER_TEMP/duel-retained-drill/keso-duel-restorable.enc.json"
           echo 'Encrypted retained artifact restored to isolated SQLite; production untouched.'
       - name: Remove retained ciphertext from runner
         if: always()
