@@ -2,7 +2,7 @@
  * Does not download ciphertext or access Cloudflare/D1/KP.
  * Evidence is availability, NOT validation of the backup contents or decryption key.
  */
-import {appendFileSync} from 'node:fs';
+import {appendFileSync,writeFileSync} from 'node:fs';
 import {pathToFileURL} from 'node:url';
 
 export const BACKUP_PREFIX='keso-duel-d1-restorable-';
@@ -74,6 +74,7 @@ export async function assessRetainedBackup(env=process.env,request=fetch,now=Dat
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
  assessRetainedBackup().then(r=>{
+  if(process.env.DUEL_BACKUP_REPORT)writeFileSync(process.env.DUEL_BACKUP_REPORT,JSON.stringify(r));
   console.log('DUEL_RETAINED_BACKUP_READINESS '+JSON.stringify(r));
   if(process.env.GITHUB_STEP_SUMMARY)appendFileSync(process.env.GITHUB_STEP_SUMMARY,
    '# P12 retained duel backup metadata readiness\n\n'+
@@ -82,5 +83,8 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
    ' |\n| Days remaining | '+(r.daysRemaining??'unknown')+
    ' |\n\nMetadata availability only; ciphertext integrity, key possession and restore success NOT checked. No D1/KP access.\n');
   if(!r.ok)process.exitCode=1;
- }).catch(e=>{console.error('DUEL_RETAINED_BACKUP_READINESS_UNKNOWN '+e.message);process.exitCode=1;});
+ }).catch(e=>{
+  if(process.env.DUEL_BACKUP_REPORT)writeFileSync(process.env.DUEL_BACKUP_REPORT,JSON.stringify({state:'unknown',ok:false,artifactId:null,sourceRunId:null,daysRemaining:null}));
+  console.error('DUEL_RETAINED_BACKUP_READINESS_UNKNOWN '+e.message);process.exitCode=1;
+ });
 }
