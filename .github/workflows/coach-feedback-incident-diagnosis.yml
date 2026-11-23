@@ -1,0 +1,103 @@
+name: Incident feedback diagnostic (read only)
+on:
+  push:
+    branches: ['audit/coach-feedback-stop-20261124']
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with: {node-version: '24'}
+      - name: Read-only D1 diagnostics (no webhook, no Henrik)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          node --input-type=module <<'NODE'
+          const account=process.env.CLOUDFLARE_ACCOUNT_ID,token=process.env.CLOUDFLARE_API_TOKEN;
+          if(!/^[a-f0-9]{32}$/i.test(account??'')||!token)throw Error('missing_credentials');
+          const base='https://api.cloudflare.com/client/v4/accounts/'+account,headers={Authorization:'Bearer '+token,'Content-Type':'application/json'};
+          const settings=await fetch(base+'/workers/scripts/valorant-results/settings',{headers,redirect:'error'});
+          if(!settings.ok)throw Error('settings_http_'+settings.status);
+          const config=await settings.json(), bindings=config.result?.bindings?.filter(b=>b.type==='d1'&&b.name==='DB');
+          if(!config.success||bindings?.length!==1)throw Error('db_binding');
+          async function select(sql,params=[]){
+           if(!sql.trim().startsWith('SELECT ')||sql.includes(';'))throw Error('not_select');
+           const r=await fetch(base+'/d1/database/'+bindings[0].id+'/query',{method:'POST',headers,body:JSON.stringify({sql,params}),redirect:'error'});
+           if(!r.ok)throw Error('d1_http_'+r.status);
+           const x=await r.json();if(!x.success||!x.result?.[0]?.success)throw Error('d1_query');
+           return x.result[0].results??[];
+          }
+          const ids=['02721958-7cef-4af0-ae5a-f29b8b2f6484','0af41b46-8bc8-4a73-aba8-60bc5753c85a'];
+          const rows=await select([
+           'SELECT n.riot_id,n.match_id,n.ended_at,n.mode,n.outcome,t.puuid,',
+           'p.subject_id,p.owner_user,p.guild,c.joined,c.version,',
+           'np.enabled,np.consent_version,',
+           'CASE WHEN EXISTS(SELECT 1 FROM kp_accounts k WHERE k.guild=p.guild AND k.user=p.owner_user) THEN 1 ELSE 0 END AS kp_registered,',
+           'r.players_json,e.rounds_json,e.kills_json,s.value AS receipt',
+           'FROM notifications n',
+           'LEFT JOIN tracked_players t ON lower(t.riot_id)=lower(n.riot_id)',
+           'LEFT JOIN coach_profile_accounts a ON a.puuid=t.puuid',
+           'LEFT JOIN coach_profiles p ON p.guild=a.guild AND p.subject_id=a.subject_id',
+           "LEFT JOIN coach_team_consents c ON c.guild=p.guild AND c.team_id='coach-roster-v1' AND c.subject_id=p.subject_id AND c.owner_user=p.owner_user",
+           "LEFT JOIN coach_team_notice_preferences np ON np.guild=c.guild AND np.team_id=c.team_id AND np.subject_id=c.subject_id AND np.owner_user=c.owner_user",
+           'LEFT JOIN valorant_match_rosters r ON r.match_id=n.match_id',
+           'LEFT JOIN valorant_match_round_events e ON e.match_id=n.match_id',
+           "LEFT JOIN monitor_state s ON s.key='coach_personal_feedback:v1:'||p.subject_id||':'||n.match_id",
+           'WHERE n.match_id IN (?,?) AND n.mode=? ORDER BY n.ended_at DESC LIMIT 6'
+          ].join(' '),[...ids,'competitive']);
+          const health=await select("SELECT feature,last_ok,last_error,failures FROM kp_health WHERE feature='coach_personal_feedback_replay'");
+          const candidates=await select([
+           'SELECT n.match_id FROM notifications n',
+           'JOIN tracked_players t ON lower(t.riot_id)=lower(n.riot_id)',
+           'JOIN coach_profile_accounts a ON a.puuid=t.puuid AND a.guild=?',
+           "WHERE lower(n.riot_id) IN ('dolly#sdgs','h1d3g1g4s#1037')",
+           "AND n.mode='competitive' AND n.ended_at BETWEEN ? AND ?",
+           "AND NOT EXISTS(SELECT 1 FROM monitor_state s WHERE s.key='coach_personal_feedback:v1:'||a.subject_id||':'||n.match_id)",
+           'ORDER BY n.ended_at DESC LIMIT 24'
+          ].join(' '),[rows.find(r=>r.guild)?.guild??'',Date.now()-86400000,Date.now()]);
+          const valid=x=>typeof x==='string'&&x.length>0&&x.length<=128;
+          function swing(row){
+           try {
+            const players=JSON.parse(row.players_json||'null'),rounds=JSON.parse(row.rounds_json||'null'),kills=JSON.parse(row.kills_json||'null');
+            if(!Array.isArray(players)||players.length!==10||!Array.isArray(rounds)||!Array.isArray(kills))return false;
+            const me=players.find(p=>p.puuid===row.puuid);
+            if(!me||!valid(me.team_id)||new Set(players.map(p=>p.puuid)).size!==10)return false;
+            const teams=new Map(players.map(p=>[p.puuid,p.team_id]));
+            if([...teams.values()].filter(t=>t===me.team_id).length!==5||new Set(teams.values()).size!==2)return false;
+            for(const raw of rounds){
+             if(!Number.isSafeInteger(raw.r)||raw.r<0||raw.r>60||!valid(raw.winner))continue;
+             const events=kills.filter(k=>k.r===raw.r).sort((a,b)=>a.t-b.t);
+             if(!events.length||events.some(k=>!Number.isFinite(k.t)||k.t<0||!valid(k.victim)||!valid(k.killer)||!teams.has(k.victim)||!teams.has(k.killer)))continue;
+             let us=5,them=5,peakUs=0,peakThem=0,invalid=false;
+             const dead=new Set();
+             for(const k of events){
+              if(dead.has(k.victim)||dead.has(k.killer)||teams.get(k.victim)===teams.get(k.killer)){invalid=true;break;}
+              dead.add(k.victim);if(teams.get(k.victim)===me.team_id)us--;else them--;
+              peakUs=Math.max(peakUs,us-them);peakThem=Math.max(peakThem,them-us);
+             }
+             if(!invalid&&(raw.winner===me.team_id?peakThem:peakUs)>=1)return true;
+            }
+            return false;
+           }catch{return false;}
+          }
+          const result=rows.map(r=>{
+           const permit=r.joined===1&&r.enabled===1&&r.version>=1&&r.consent_version===r.version&&r.kp_registered===1;
+           let receipt=null;try{receipt=r.receipt?JSON.parse(r.receipt)?.state:null;}catch{receipt='invalid-json';}
+           return {member:String(r.riot_id).toLowerCase()==='dolly#sdgs'?'VDK':'石原',matchId:r.match_id,
+            notificationMode:r.mode,reportOutcome:r.outcome,rosterReady:Boolean(r.players_json),
+            roundsReady:Boolean(r.rounds_json),killsReady:Boolean(r.kills_json),
+            profileLinked:Boolean(r.subject_id),consentJoined:r.joined===1,consentVersionPresent:Number.isInteger(r.version),
+            noticeEnabled:r.enabled===1,noticeVersionCurrent:r.consent_version===r.version,
+            kpRegistered:r.kp_registered===1,permissionPass:permit,swingDetected:swing(r),
+            replayQueryCandidate:candidates.some(x=>x.match_id===r.match_id),receiptState:receipt??'none',
+            expectedNextGate:!permit?'suppressed':!swing(r)?'incomplete-swing':'further-report-or-webhook-check'};
+          });
+          console.log('COACH_FEEDBACK_DIAG_READONLY '+JSON.stringify({at:new Date().toISOString(),rows:result,
+           replayHealth:health.map(h=>({feature:h.feature,lastOk:h.last_ok,lastError:h.last_error,failures:h.failures})),
+           candidateCount:candidates.length,mutations:0,discordPosts:0}));
+                    NODE
