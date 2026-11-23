@@ -335,8 +335,8 @@ test('fixture query plan separates indexed match joins from per-roster json_each
  const {readFileSync}=await import('node:fs');
  const sql=new DatabaseSync(':memory:');
  try{
-  sql.exec(readFileSync(new URL('../migrations/0006_competitive_match_rosters.sql',import.meta.url),'utf8'));
-  sql.exec(readFileSync(new URL('../migrations/0007_competitive_round_events.sql',import.meta.url),'utf8'));
+  sql.exec(readFileSync(new URL('../migrations/0006_competitive_match_rosters.sql',import.meta.url).pathname,'utf8'));
+  sql.exec(readFileSync(new URL('../migrations/0007_competitive_round_events.sql',import.meta.url).pathname,'utf8'));
   sql.exec('CREATE TABLE monitor_state(key TEXT PRIMARY KEY,value TEXT)');
   const queries:string[]=[];
   const db={prepare:(query:string)=>{queries.push(query);return {
