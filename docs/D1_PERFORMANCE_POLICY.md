@@ -76,3 +76,9 @@ The read-only GitHub Actions monitor runs each hour using Cloudflare GraphQL `d1
 ## 2026-11-09 additional audit
 
 The [whole-system audit](D1_AUDIT_20261109.md) records the observed baseline, SQL changes and limits. Relic presentation totals use a transactionally maintained per-member projection after a one-time ledger backfill; financial authorization still uses the original wallet/ledger. Health success timestamps also enforce their five-minute limit in SQL across isolate restarts. The existing UTC-day analytics now reports Rows written and warns at an estimated 70,000; this warning never stops settlements. Compare both reads and writes after rollout before declaring Free-tier readiness.
+
+## 2026-11-23 P12: telemetry completeness versus hard spend cap
+
+The existing account-wide D1 GraphQL dataset is adaptively sampled, delayed, and fetched with a bounded 100-group response. A response with **zero groups**, **no group for the current UTC day**, or **100 groups** is treated as **unknown/incomplete** rather than a verified zero or complete account total. The guard logs the limited reason, reports an unavailable estimate and performs **no new** `kp_settings` write in that case. This does not erase an already-active UTC-day optional-history conservation marker; the existing automatic UTC-day expiry still governs it.
+
+**No strict D1 spending or Rows read/written hard cap has been configured.** The 3.5M/4M read estimates, 70k write warning, and optional feed/trend conservation remain soft signals only. A hard account-level limit cannot be asserted from lagged/adaptively sampled analytics or by stopping only optional reads; automated races, financial ledgers, rankings and other D1 usage remain active. Actual provider-enforced limits, availability, and billing controls must be inspected directly in Cloudflare and cannot be proven by this PR. Do not interpret `unavailable` as healthy or as a quantified remaining quota.
