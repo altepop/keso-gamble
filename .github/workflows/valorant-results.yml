@@ -31,6 +31,8 @@ on:
       - 'test/duel-p12-832-public-list-evidence.test.mjs'
       - 'scripts/duel-p12-833-filter-evidence.mjs'
       - 'test/duel-p12-833-filter-evidence.test.mjs'
+      - 'scripts/duel-p12-837-audit-evidence.mjs'
+      - 'test/duel-p12-837-audit-evidence.test.mjs'
       - 'scripts/build-discord-sdk.mjs'
       - 'scripts/build-activity.mjs'
       - 'scripts/*browser-check.cjs'
@@ -134,6 +136,9 @@ jobs:
       - name: Verify #833 indexed receipt filter same-input evidence
         working-directory: .
         run: node --test test/duel-p12-833-filter-evidence.test.mjs
+      - name: Verify #837 same-cutoff PvP audit counterfactual
+        working-directory: .
+        run: node --test test/duel-p12-837-audit-evidence.test.mjs
       - name: Validate optional DAVE music service source and pure queue tests
         run: |
           node --check ../music-voice/server.mjs
