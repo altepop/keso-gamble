@@ -5,7 +5,7 @@ import {readFileSync} from 'node:fs';
 import {pathToFileURL} from 'node:url';
 
 export const HEARTBEAT_ALERT_TITLE='P12 duel monitor heartbeat missing: manual investigation required';
-const actionable=new Set(['missing','stale','stalled','failed']);
+const actionable=new Set(['missing','stale','stalled','failed','unknown']);
 export function buildHeartbeatAlert(report){
  if(!report||report.ok!==false||!actionable.has(report.state))return null;
  const runId=Number.isSafeInteger(report.runId)&&report.runId>0?report.runId:null;
@@ -14,6 +14,7 @@ export function buildHeartbeatAlert(report){
  return {title:HEARTBEAT_ALERT_TITLE,body:[
   'P12決闘の配備監視ワークフロー自体の定期実行に問題がある可能性を検知した。',
   '判定: '+report.state,
+  ...(report.state==='unknown'?['GitHub Actionsメタデータ取得に失敗し、監視の実行有無・配備状態を判定できない。欠落や配備失敗を断定しない。']:[]),
   '監視ワークフローの最新予定実行ID: '+(runId??'不明'),
   '経過時間（分）: '+(minutes??'不明'),
   '',
@@ -28,7 +29,7 @@ export async function notifyHeartbeat(env=process.env,request=fetch){
   throw Error('Heartbeat alert requires authorized repository, token and report path');
  let report;
  try{report=JSON.parse(readFileSync(env.DUEL_HEARTBEAT_REPORT,'utf8'));}
- catch{console.log('DUEL_HEARTBEAT_ALERT_SKIP: no validated heartbeat report');return 'no-report';}
+ catch{report={state:'unknown',ok:false,runId:null,ageMinutes:null};}
  const alert=buildHeartbeatAlert(report);
  if(!alert){console.log('DUEL_HEARTBEAT_ALERT_SKIP: no actionable heartbeat anomaly');return 'healthy';}
  const headers={Authorization:'Bearer '+env.GITHUB_TOKEN,Accept:'application/vnd.github+json',
