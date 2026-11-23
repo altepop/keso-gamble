@@ -13,7 +13,7 @@ const SELECT=[
  's.value AS receipt,d.value AS replay_diagnostic,',
  "(SELECT last_ok FROM kp_health WHERE feature='coach_personal_feedback_replay') AS replay_last_ok,",
  "(SELECT last_error FROM kp_health WHERE feature='coach_personal_feedback_replay') AS replay_last_error,",
- "(SELECT failures FROM kp_health WHERE feature='coach_personal_feedback_replay') AS replay_failures FROM notifications n',
+ '(SELECT failures FROM kp_health WHERE feature=\'coach_personal_feedback_replay\') AS replay_failures FROM notifications n',
  'LEFT JOIN valorant_match_rosters r ON r.match_id=n.match_id',
  'LEFT JOIN valorant_match_round_events e ON e.match_id=n.match_id',
  'LEFT JOIN tracked_players t ON lower(t.riot_id)=lower(n.riot_id)',
