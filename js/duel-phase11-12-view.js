@@ -92,7 +92,7 @@ export function duelPvePanel({live=false,busy=false,preview=null,match=null,erro
  const active=match&&typeof match.id==='string';
  const expanded=open||active||preview||error||message;
  return '<section class="duel-pve-stage" id="duel-pve-section" aria-label="CPU攻略の対局画面"><div class="duel-pve-stage-head"><span class="duel-pve-kicker">SERVER CPU · MAIN MODE</span><h3>CPU攻略アリーナ</h3><p>種目を選んで、何度でも本気の対局へ。勝敗と熟練度はサーバーで確定する。</p></div><div class="duel-pve-stage-body">'+
- '<div class="panel"><div class="card-body"><strong>遊び方は2つ</strong><p class="helper"><b>今日の種目：</b>日付ごとにサーバーが種目・難易度を決定。日替わりの開始・完了・勝利回数を記録。追加KP特典はない。</p><p class="helper"><b>好きな種目：</b>自分で種目と難易度を指定。日替わり回数には含めない。いずれもサーバーで自然終局した場合だけ熟練度・既存報酬の判定対象となる。</p><p class="helper">同時に進行中のCPU戦は直近24時間で最大3件。新規開始は今の盤面を自動破棄しない。不要な対局は下の「破棄」で無報酬終了できる。</p></div></div>'+
+ '<div class="panel"><div class="card-body"><strong>遊び方は2つ</strong><p class="helper"><b>今日の種目：</b>日付ごとにサーバーが種目・難易度を決定。日替わりの開始・完了・勝利回数を記録。日替わり特別KPはない。</p><p class="helper"><b>好きな種目：</b>自分で種目と難易度を指定。日替わり回数には含めない。いずれもサーバーで自然終局した場合だけ熟練度・既存報酬の判定対象となる。</p><p class="helper">同時に進行中のCPU戦は直近24時間で最大3件。新規開始は今の盤面を自動破棄しない。不要な対局は下の「破棄」で無報酬終了できる。</p></div></div>'+
  '<button type="button" class="action-btn" data-duel-history-open="1" '+(busy?'disabled':'')+'>7種目の対局履歴・熟練度を見る</button>'
  '<details class="panel"><summary>ドロップ・報酬の確率と条件</summary><div class="card-body"><p class="helper">自然終局してサーバーで確定した試合のみ抽選対象。報酬は種目別の「獲得済み」記録であり、装備できる遺物や個別アイテムを配る仕組みではない。放棄した試合、練習、未確定試合は抽選しない。</p><p class="helper">確率は運用中の報酬設定に依存する。抽選記録がなければドロップなし。下の結果欄で実際の確率と抽選値を確認できる。</p></div></details>'+
  (!live?'<p>KP口座への接続が必要です。</p>':
