@@ -887,7 +887,7 @@ test('duel list skips secret join for public board games without removing privat
  assert.equal(visible.game,'trio');
  assert.equal(visible.private_hand,null,'public board-game listing never needs secrets');
  const {readFileSync}=await import('node:fs');
- const source=readFileSync(new URL('../src/board-duels.ts',import.meta.url),'utf8');
+ const source=readFileSync(new URL('../src/board-duels.ts',import.meta.url).pathname,'utf8');
  const listSql=source.split('export async function boardDuelList')[1]?.split('export async function boardDuelAction')[0]??'';
  assert.ok(listSql.includes("AND d.game IN ('hitblow','bluffdice','poker')"),
   'a newly added public game must not silently read a secrets row');
