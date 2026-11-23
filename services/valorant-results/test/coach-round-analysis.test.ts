@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
-import {summarizeCoachRounds,readCoachRoundReport} from '../src/coach-round-analysis.ts';
+import {summarizeCoachRounds,readCoachRoundReport,invalidateCoachRoundReport} from '../src/coach-round-analysis.ts';
 
 type Round={r:number;winner?:string|null;attack?:string|null;defense?:string|null};
 type Kill={r:number;t:number;killer:string|null;victim:string};
@@ -283,4 +283,50 @@ test('trusted roster team flags and player KDA/party are counted only for comple
  ])};
  const draws=summarizeCoachRounds([drawn]);
  assert.equal(draws.overall.matchDraws,1,'equal completed team round scores confirm a draw');
+});
+
+test('concurrent first opens share two D1 scans and preserve the five-minute cache',async()=>{
+ let unblock!:()=>void;
+ const gate=new Promise<void>(resolve=>{unblock=resolve;});
+ let reads=0;
+ const db={prepare:(query:string)=>({
+  all:async()=>{reads++;await gate;return {results:[]};},
+  first:async()=>{reads++;return {n:0,complete_n:0,missing_n:0,partial_n:0,
+   unavailable_n:0,switch_value:null};}
+ })} as unknown as D1Database;
+ const now=Date.parse('2026-11-23T09:00:00Z');
+ const first=readCoachRoundReport(db,now);
+ const second=readCoachRoundReport(db,now);
+ assert.equal(reads,1,'one pending roster query instead of two');
+ unblock();
+ const [one,two]=await Promise.all([first,second]);
+ assert.equal(reads,2,'one roster scan and one progress scan in total');
+ assert.deepEqual(one,two);
+ assert.equal((await readCoachRoundReport(db,now+60000)).totalVdkRosterMatches,0);
+ assert.equal(reads,2,'warm cache creates no additional scan');
+ invalidateCoachRoundReport(db);
+ await readCoachRoundReport(db,now+60000);
+ assert.equal(reads,4,'explicit invalidation still re-reads both queries');
+});
+
+test('failed or invalidated in-flight report cannot block a fresh read or restore stale cache',async()=>{
+ let release!:()=>void;
+ const gate=new Promise<void>(resolve=>{release=resolve;});
+ let firstQuery=true,reads=0;
+ const db={prepare:()=>({
+  all:async()=>{reads++;if(firstQuery){firstQuery=false;await gate;return {results:[]};}
+   return {results:[]};},
+  first:async()=>{reads++;return {n:0,complete_n:0,missing_n:0,partial_n:0,
+   unavailable_n:0,switch_value:null};}
+ })} as unknown as D1Database;
+ const now=Date.parse('2026-11-23T09:00:00Z');
+ const stale=readCoachRoundReport(db,now);
+ invalidateCoachRoundReport(db);
+ await readCoachRoundReport(db,now+1000);
+ assert.equal(reads,3,'fresh call does not join invalidated pending query');
+ release();
+ await stale;
+ assert.equal(reads,4,'stale waiter finishes but does not change the fresh cache');
+ await readCoachRoundReport(db,now+2000);
+ assert.equal(reads,4,'new cache remains intact');
 });
