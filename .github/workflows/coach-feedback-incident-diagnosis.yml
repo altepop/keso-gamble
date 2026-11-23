@@ -120,6 +120,8 @@ jobs:
             const result=coachRoundContribution(row,[{name:riot.slice(0,riot.indexOf('#')),tag:riot.slice(riot.indexOf('#')+1),puuid:p.puuid}],()=>verified++);
             quality.push({person,matchId:mid,verified,excluded:result.quality.excluded,validMatches:result.quality.validMatches});
           }
+          const counts=raw.map(r=>{const ps=JSON.parse(r.players_json??'[]'),ks=JSON.parse(r.kills_json??'[]');const observedK=new Map(),observedD=new Map();const byId=new Map(ps.map(p=>[p.puuid,p]));for(const k of ks){if(byId.has(k.victim))observedD.set(k.victim,(observedD.get(k.victim)??0)+1);if(k.killer&&byId.has(k.killer)&&byId.get(k.killer).team_id!==byId.get(k.victim)?.team_id)observedK.set(k.killer,(observedK.get(k.killer)??0)+1);}return {matchId:r.match_id,events:ks.length,rosterKills:ps.reduce((a,p)=>a+Number(p.k??0),0),observedKills:[...observedK.values()].reduce((a,n)=>a+n,0),rosterDeaths:ps.reduce((a,p)=>a+Number(p.d??0),0),observedDeaths:[...observedD.values()].reduce((a,n)=>a+n,0),playersWithMismatch:ps.filter(p=>(observedK.get(p.puuid)??0)!==p.k||(observedD.get(p.puuid)??0)!==p.d).length};});
+          console.log('COACH_FEEDBACK_EVENT_PARITY '+JSON.stringify(counts));
           console.log('COACH_FEEDBACK_ROUND_QUALITY '+JSON.stringify(quality));
           console.log('COACH_FEEDBACK_REPORT_ELIGIBILITY '+JSON.stringify(evaluations));
           console.log('COACH_FEEDBACK_END_TIME_PARITY '+JSON.stringify(times.map(x=>({matchId:x.match_id,noticeEnd:x.notice_end,rosterEnd:x.roster_end,identical:x.notice_end===x.roster_end,map:x.map,act:x.act_name}))));
