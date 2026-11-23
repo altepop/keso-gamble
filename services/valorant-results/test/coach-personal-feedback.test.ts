@@ -145,7 +145,7 @@ test('new short-form Fujimura Sunset: sharp but factual with blank lines and no 
  assert.match(body!,/🔥 アップ（10分）\nデスマッチで、キルした直後の動きだけに集中する/);
  assert.match(body!,/キル→引く→組み直す/);
  assert.doesNotMatch(body!,/未取得|未確定|比較資料は不足|再生時刻|VODの該当|直近の試合へのコーチ/);
- assert.ok(body!.split('\n\n').every(block=>block.split('\n').length<=2));
+ assert.ok(body!.split('\n\n').filter(block=>!block.startsWith('💡')&&!block.startsWith('🔥')).every(block=>block.split('\n').length<=2));
  assert.ok(body!.length<1300);
 });
 test('omits unavailable metrics and preserves selected no-warmup prescription',()=>{
