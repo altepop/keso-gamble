@@ -25,6 +25,8 @@ on:
       - 'scripts/d1-read-hotspots.test.mjs'
       - 'scripts/duel-p12-824-read-evidence.mjs'
       - 'test/duel-p12-824-read-evidence.test.mjs'
+      - 'scripts/duel-p12-827-join-evidence.mjs'
+      - 'test/duel-p12-827-join-evidence.test.mjs'
       - 'scripts/build-discord-sdk.mjs'
       - 'scripts/build-activity.mjs'
       - 'scripts/*browser-check.cjs'
@@ -119,6 +121,9 @@ jobs:
       - name: Verify #824 read-only same-input D1 evidence (mocked Cloudflare only)
         working-directory: .
         run: node --test test/duel-p12-824-read-evidence.test.mjs
+      - name: Verify #827 same-input read-only PvP receipt join counterfactual
+        working-directory: .
+        run: node --test test/duel-p12-827-join-evidence.test.mjs
       - name: Validate optional DAVE music service source and pure queue tests
         run: |
           node --check ../music-voice/server.mjs
