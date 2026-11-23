@@ -42,8 +42,12 @@ export function parseHenrikMmr(json: unknown) {
   const current: any = data?.current_data ?? data?.current ?? null;
   const highest: any = data?.highest_rank ?? null;
   if (!current || typeof current !== 'object') return null;
-  const tier = int(current.currenttier ?? current.tier);
-  const peakTier = int(highest?.tier);
+  // HenrikDev tiers are 0 (unranked) through 27 (Radiant). Reject malformed
+  // values rather than persisting impossible ranks as verified observations.
+  const rawTier = int(current.currenttier ?? current.tier);
+  const tier = rawTier !== null && rawTier >= 0 && rawTier <= 27 ? rawTier : null;
+  const rawPeakTier = int(highest?.tier);
+  const peakTier = rawPeakTier !== null && rawPeakTier >= 0 && rawPeakTier <= 27 ? rawPeakTier : null;
   const season = str(highest?.season), act = str(highest?.act);
   return {
     tier,
