@@ -2,7 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {buildDuelEvidence,hashDuelEvidence,captureDuelEvidence} from '../../../scripts/duel-admin-evidence.mjs';
 const now='2026-11-23T00:00:00.000Z',sha='a'.repeat(40);
-const run=(name,id,conclusion='success',head_sha=sha)=>({name,id,conclusion,head_sha,status:'completed',created_at:'2026-11-22T23:00:00.000Z'});
+const run=(name,id,conclusion='success',head_sha=sha)=>({name,id,conclusion,head_sha,status:'completed',created_at:'2026-11-22T23:00:00.000Z',
+ event:name==='pages build and deployment'?'dynamic':name==='VALORANT Bot check and deploy'?'push':'schedule',
+ repository:{full_name:'altepop/keso-gamble'},head_branch:'main'});
 const pages=run('pages build and deployment',1),worker=run('VALORANT Bot check and deploy',2),backup=run('P12 duel D1 encrypted backup and isolated restore',3);
 test('audit manifest pairs only successful matching SHA, no approval claims',()=>{
  const value=buildDuelEvidence([pages,worker,backup],now);
@@ -33,4 +35,22 @@ test('non-action, malformed inputs are rejected and metadata retrieval is read-o
  assert.equal(seen.opts.method,undefined);
  assert.match(seen.url,/\/actions\/runs\?per_page=100$/);
  await assert.rejects(captureDuelEvidence({GITHUB_REPOSITORY:'bad',GITHUB_TOKEN:'fake'}),/repository/);
+});
+
+test('PR checks and unverified provenance must never be paired with production Pages',()=>{
+ const pr={...worker,event:'pull_request'};
+ assert.equal(buildDuelEvidence([pages,pr],now).pairedDeploymentSha,null);
+ assert.equal(buildDuelEvidence([pages,{...worker,head_branch:'feature'}],now).pairedDeploymentSha,null);
+ assert.equal(buildDuelEvidence([pages,{...worker,repository:{full_name:'other/repo'}}],now).pairedDeploymentSha,null);
+ assert.equal(buildDuelEvidence([{...pages,event:'workflow_dispatch'},worker],now).pairedDeploymentSha,null);
+ assert.equal(buildDuelEvidence([pages,{...worker,created_at:'2026-11-22T22:20:00.000Z'}],now).pairedDeploymentSha,null);
+});
+test('future and stale runs never count as current evidence',()=>{
+ assert.equal(buildDuelEvidence([{...pages,created_at:'2026-11-23T00:01:00Z'},worker],now).pairedDeploymentSha,null);
+ assert.equal(buildDuelEvidence([{...pages,created_at:'2026-11-21T22:59:00Z'},worker],now).entries.pages,null);
+ assert.equal(buildDuelEvidence([pages,worker],now).schema,'duel-admin-evidence-v2');
+});
+test('saturated response fails closed rather than claiming the first page is complete',async()=>{
+ await assert.rejects(captureDuelEvidence({GITHUB_REPOSITORY:'altepop/keso-gamble',GITHUB_TOKEN:'fake'},
+  async()=>({ok:true,json:async()=>({workflow_runs:Array(100).fill(pages)})}),new Date(now)),/saturated/);
 });
