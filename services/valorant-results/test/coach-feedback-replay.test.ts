@@ -7,8 +7,9 @@ const mapping={guildId:'guild',accounts:[
  {riotId:'h1d3g1g4s#1037',discordUserId:'234567890123456789'}
 ]};
 const candidate=(riot_id:string,match_id:string,ended_at=NOW-28*60_000)=>({riot_id,match_id,ended_at,puuid:'puuid-'+match_id});
-function db(rows:ReturnType<typeof candidate>[],history:{sql?:string;args?:unknown[]}={}){
+function db(rows:ReturnType<typeof candidate>[],history:{sql?:string;args?:unknown[];diagnostics?:Record<string,string>}={}){
  return {prepare(sql:string){
+   if(sql.startsWith('INSERT INTO monitor_state(key,value)'))return {bind(key:string,value:string){return {run:async()=>{(history.diagnostics??={})[key]=value;return {meta:{changes:1}};}};}};
    history.sql=sql;assert.match(sql,/NOT EXISTS .*coach_personal_feedback:v1:/);
    assert.match(sql,/n\.mode='competitive'/);assert.match(sql,/a\.guild=\?/);
    return {bind(...args:unknown[]){history.args=args;return {all:async()=>({results:rows})};}};
@@ -64,4 +65,21 @@ test('every page is visited across three five-minute slots even when all candida
    assert.equal(result.posted,0);
  }
  assert.equal(seen.size,9,'older matches must not be starved by incomplete newest matches');
+});
+
+test('replay persists per-match status without creating delivery receipts',async()=>{
+ const history:{diagnostics?:Record<string,string>}={};
+ const rows=[candidate('Dolly#SDGs','sunset'),candidate('h1d3g1g4s#1037','corrode')];
+ const result=await replaySavedCoachFeedback({DB:db(rows,history),KESO_COACH_WEBHOOK_URL:'present'} as any,mapping,NOW,
+  (async(_env:any,_mapping:any,id:string)=>id==='sunset'?'incomplete':'wrong-channel') as any);
+ assert.equal(result.posted,0);
+ assert.deepEqual(result.statuses,{'incomplete':1,'wrong-channel':1});
+ assert.deepEqual(Object.keys(history.diagnostics??{}).sort(),[
+  'coach_feedback_replay_result:v1:corrode','coach_feedback_replay_result:v1:sunset'
+ ]);
+ for(const [key,value] of Object.entries(history.diagnostics??{})){
+  const record=JSON.parse(value);
+  assert.equal(record.status,key.endsWith(':sunset')?'incomplete':'wrong-channel');
+  assert.equal(typeof record.at,'number');
+ }
 });
