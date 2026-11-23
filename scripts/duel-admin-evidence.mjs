@@ -50,8 +50,10 @@ export async function captureDuelEvidence(env=process.env,request=fetch,now=new 
  const url='https://api.github.com/repos/altepop/keso-gamble/actions/runs?per_page=100';
  const runs=[];
  const seen=new Set();
- // Read all bounded pages until an undersized page proves the inventory ended.
- // Never silently describe a saturated/unknown first page as complete evidence.
+ const cutoff=now.getTime()-MAX_EVIDENCE_AGE_MS;
+ let previousTime=Infinity;
+ // Read bounded newest-first pages until the 24h window is covered.
+ // Never silently describe a saturated/unknown window as complete evidence.
  for(let page=1;page<=EVIDENCE_MAX_PAGES;page++){
   const endpoint=page===1?url:url+'&page='+page;
   const resp=await request(endpoint,{headers:{Authorization:'Bearer '+env.GITHUB_TOKEN,
@@ -63,10 +65,17 @@ export async function captureDuelEvidence(env=process.env,request=fetch,now=new 
   for(const item of data.workflow_runs){
    if(!Number.isSafeInteger(item?.id)||item.id<=0||seen.has(item.id))
     throw Error('Duplicated or malformed Actions run inventory');
+   const at=Date.parse(item.created_at);
+   if(!Number.isFinite(at)||at>now.getTime()||at>previousTime)
+    throw Error('Actions evidence timestamps are missing, future-dated or unordered');
+   previousTime=at;
    seen.add(item.id);
    runs.push(item);
   }
-  if(data.workflow_runs.length<EVIDENCE_PAGE_SIZE)return buildDuelEvidence(runs,now.toISOString());
+  // GitHub Actions runs are ordered newest first. An item before the 24h
+  // cutoff proves later pages cannot contain relevant current-day runs.
+  if(data.workflow_runs.length<EVIDENCE_PAGE_SIZE||previousTime<cutoff)
+   return buildDuelEvidence(runs,now.toISOString());
  }
  throw Error('Actions evidence inventory exceeds bounded pagination; cannot assert completeness');
 }
