@@ -27,6 +27,8 @@ on:
       - 'test/duel-p12-824-read-evidence.test.mjs'
       - 'scripts/duel-p12-827-join-evidence.mjs'
       - 'test/duel-p12-827-join-evidence.test.mjs'
+      - 'scripts/duel-p12-832-public-list-evidence.mjs'
+      - 'test/duel-p12-832-public-list-evidence.test.mjs'
       - 'scripts/build-discord-sdk.mjs'
       - 'scripts/build-activity.mjs'
       - 'scripts/*browser-check.cjs'
@@ -124,6 +126,9 @@ jobs:
       - name: Verify #827 same-input read-only PvP receipt join counterfactual
         working-directory: .
         run: node --test test/duel-p12-827-join-evidence.test.mjs
+      - name: Verify #832 public-board list JOIN counterfactual
+        working-directory: .
+        run: node --test test/duel-p12-832-public-list-evidence.test.mjs
       - name: Validate optional DAVE music service source and pure queue tests
         run: |
           node --check ../music-voice/server.mjs
