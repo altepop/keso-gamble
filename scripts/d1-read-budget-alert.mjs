@@ -72,15 +72,23 @@ export async function notifyD1ReadBudget(env=process.env,request=fetch,now=Date.
   if(new Date(existing.created_at).toISOString().slice(0,10)===today)
    return 'deduplicated';
   const body=buildDailyReadEvidence(report,now);
-  const commentsResponse=await request(base+'/issues/'+existing.number+'/comments?per_page=100',{
-   headers,signal:AbortSignal.timeout(15000)});
-  if(!commentsResponse.ok)throw Error('D1 alert Issue comments lookup HTTP '+commentsResponse.status);
-  const comments=await commentsResponse.json();
-  if(!Array.isArray(comments)||comments.length>=100)
-   throw Error('D1 alert Issue comments inventory unavailable or saturated');
+  // Scan all comment pages before posting: a perpetual incident can exceed 100 days.
+  // A full final page is never proof of completeness; fail closed after ten pages.
   const marker='<!-- p12-d1-read-budget-day:'+today+' -->';
-  if(comments.some(item=>typeof item?.body==='string'&&item.body.includes(marker)))
-   return 'deduplicated';
+  let complete=false;
+  for(let page=1;page<=10;page++){
+   const commentsResponse=await request(base+'/issues/'+existing.number+
+    '/comments?per_page=100&page='+page,{
+    headers,signal:AbortSignal.timeout(15000)});
+   if(!commentsResponse.ok)throw Error('D1 alert Issue comments lookup HTTP '+commentsResponse.status);
+   const comments=await commentsResponse.json();
+   if(!Array.isArray(comments)||comments.length>100)
+    throw Error('D1 alert Issue comments inventory unavailable or saturated');
+   if(comments.some(item=>typeof item?.body==='string'&&item.body.includes(marker)))
+    return 'deduplicated';
+   if(comments.length<100){complete=true;break;}
+  }
+  if(!complete)throw Error('D1 alert Issue comments inventory unavailable or saturated');
   const response=await request(base+'/issues/'+existing.number+'/comments',{
    method:'POST',headers:{...headers,'Content-Type':'application/json'},
    body:JSON.stringify({body}),signal:AbortSignal.timeout(15000)});
