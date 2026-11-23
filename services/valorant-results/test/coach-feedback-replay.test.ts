@@ -32,8 +32,8 @@ test('SQL excludes all prior receipts including claimed and unknown',async()=>{
  assert.deepEqual(history.args?.slice(-2),[NOW-COACH_FEEDBACK_REPLAY_WINDOW_MS,NOW]);
 });
 test('mapping, age, and future validation prevent unintended sends',async()=>{
- const rows=[candidate('other#x','other'),candidate('Dolly#SDGs','future',NOW+1000),
- candidate('Dolly#SDGs','old',NOW-COACH_FEEDBACK_REPLAY_WINDOW_MS-1),candidate('Dolly#SDGs','valid')];
+ const rows=[candidate('Dolly#SDGs','valid'),candidate('other#x','other'),candidate('Dolly#SDGs','future',NOW+1000),
+ candidate('Dolly#SDGs','old',NOW-COACH_FEEDBACK_REPLAY_WINDOW_MS-1)];
  const sent:string[]=[];
  const result=await replaySavedCoachFeedback({DB:db(rows),KESO_COACH_WEBHOOK_URL:'present'} as any,mapping,NOW,
   (async(_e:any,_m:any,id:string)=>{sent.push(id);return 'suppressed';}) as any);
@@ -50,4 +50,18 @@ test('bounded retry does not retry errored or duplicate receipts within one run'
  assert.equal(calls,COACH_FEEDBACK_REPLAY_LIMIT);
  assert.equal(result.statuses.error,1);assert.equal(result.statuses.duplicate,2);
  assert.equal(result.posted,0);
+});
+
+test('every page is visited across three five-minute slots even when all candidates remain incomplete',async()=>{
+ const rows=Array.from({length:9},(_,i)=>candidate('Dolly#SDGs','id'+i));
+ const seen=new Set<string>();
+ for(let n=0;n<3;n++){
+   const batch:string[]=[];
+   const result=await replaySavedCoachFeedback({DB:db(rows),KESO_COACH_WEBHOOK_URL:'present'} as any,mapping,NOW+n*5*60_000,
+     (async(_env:any,_mapping:any,id:string)=>{batch.push(id);seen.add(id);return 'incomplete';}) as any);
+   assert.equal(batch.length,COACH_FEEDBACK_REPLAY_LIMIT);
+   assert.equal(result.statuses.incomplete,COACH_FEEDBACK_REPLAY_LIMIT);
+   assert.equal(result.posted,0);
+ }
+ assert.equal(seen.size,9,'older matches must not be starved by incomplete newest matches');
 });
