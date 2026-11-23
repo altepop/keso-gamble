@@ -144,3 +144,24 @@ test('all supported HenrikDev MMR regions retain their existing route', async ()
     assert.equal(result.get(account.riotId)?.tier, 20);
   }
 });
+
+test('impossible Henrik MMR tiers are never persisted as observed rank', async () => {
+  for (const invalidTier of [-1, 28, 999]) {
+    const parsed = parseHenrikMmr({
+      data: {
+        current_data: { currenttier: invalidTier, ranking_in_tier: 99 },
+        highest_rank: { tier: invalidTier },
+      },
+    });
+    assert.equal(parsed?.tier, null);
+    assert.equal(parsed?.peakTier, null);
+    const db = fakeDb({ 'Aquatopia#toppy': 'ap' });
+    const result = await ensureCoachMmr(db, [account], async () => ({
+      data: { current_data: { currenttier: invalidTier } },
+    }), 1_000_000);
+    assert.equal(db.snapshots.size, 0, 'invalid current tier must not be written');
+    assert.equal(result.get(account.riotId), null);
+  }
+  assert.equal(parseHenrikMmr({ data: { current_data: { currenttier: 0 } } })?.tier, 0,
+    'valid unranked tier remains accepted');
+});
