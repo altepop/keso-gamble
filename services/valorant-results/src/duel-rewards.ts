@@ -94,13 +94,16 @@ type Skill = {mode: Mode; game: string; wins: number; losses: number; draws: num
 
 export async function duelRewardProfile(env: KpEnv, guild: string, user: string) {
   await ensureDuelRewards(env);
-  const [policy, collection, skills] = await env.DB.batch([
-    env.DB.prepare('SELECT mode FROM kp_duel_reward_policy_v2 WHERE guild=? AND starts_at<=?').bind(guild,Date.now()),
+  const [policy, collection, skills, rolls] = await env.DB.batch([
+    env.DB.prepare('SELECT mode,win_bps,loss_bps,draw_bps,daily_cap,starts_at FROM kp_duel_reward_policy_v2 WHERE guild=? AND starts_at<=?').bind(guild,Date.now()),
     env.DB.prepare('SELECT mode,game FROM kp_duel_reward_collection WHERE guild=? AND user=?').bind(guild,user),
     env.DB.prepare('SELECT mode,game,wins,losses,draws FROM kp_duel_mode_skill WHERE guild=? AND user=?').bind(guild,user),
+    env.DB.prepare('SELECT mode,match_id,game,roll,chance_bps FROM kp_duel_reward_rolls WHERE guild=? AND user=? ORDER BY rowid DESC LIMIT 20').bind(guild,user),
   ]);
   return {
     enabled: (policy.results as {mode:Mode}[]).map(({mode})=>mode),
+    policy: policy.results as {mode:Mode;win_bps:number;loss_bps:number;draw_bps:number;daily_cap:number|null;starts_at:number}[],
+    rolls: rolls.results as {mode:Mode;match_id:string;game:string;roll:number;chance_bps:number}[],
     collection: collection.results as {mode:Mode;game:string}[],
     skills: skills.results as Skill[],
   };
