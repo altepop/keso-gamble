@@ -53,16 +53,23 @@ export async function assessRetainedBackup(env=process.env,request=fetch,now=Dat
   if(!res.ok)throw Error('GitHub backup metadata HTTP '+res.status);
   return res.json();
  }
- const data=await read(base+'/artifacts?per_page=100');
+ const runs=await read(base+'/workflows/duel-d1-backup.yml/runs?status=success&per_page=100');
+ if(!Array.isArray(runs?.workflow_runs))
+  throw Error('Backup workflow run inventory invalid');
+ // The workflow-run endpoint is already sorted newest first. A saturated
+ // result cannot establish the full inventory but still identifies latest.
+ const run=runs.workflow_runs.find(r=>r?.name===BACKUP_WORKFLOW&&
+  r?.status==='completed'&&r?.conclusion==='success'&&r?.head_branch==='main');
+ if(!run)return {state:'missing',ok:false,artifactId:null,sourceRunId:null,daysRemaining:null};
+ validateRetainedBackupRun(run,run.id);
+ const data=await read(base+'/runs/'+run.id+'/artifacts?per_page=100');
  if(!Array.isArray(data?.artifacts)||!Number.isSafeInteger(data.total_count)||data.total_count<0)
-  throw Error('GitHub backup artifact inventory invalid');
+  throw Error('Backup run artifact inventory invalid');
  if(data.total_count>data.artifacts.length)
-  throw Error('GitHub artifact inventory pagination unresolved');
+  throw Error('Backup run artifact inventory pagination unresolved');
  const outcome=selectRetainedDuelBackup(data.artifacts,now);
- if(outcome.sourceRunId!==null){
-  const run=await read(base+'/runs/'+outcome.sourceRunId);
-  validateRetainedBackupRun(run,outcome.sourceRunId);
- }
+ if(outcome.sourceRunId!==null&&outcome.sourceRunId!==run.id)
+  throw Error('Backup artifact is not linked to the approved source run');
  return outcome;
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
