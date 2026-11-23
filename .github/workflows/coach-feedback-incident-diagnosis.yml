@@ -99,6 +99,7 @@ jobs:
           });
           const deployed=await fetch(base+'/workers/scripts/valorant-results',{headers,redirect:'error'});
           const bundle=deployed.ok?await deployed.text():'';
+          console.log('COACH_FEEDBACK_BUNDLE_MARKERS '+JSON.stringify({monitor:bundle.includes('monitor_start'),oldFeedback:bundle.includes('coach_personal_feedback'),newImport:bundle.includes('replaySavedCoachFeedback'),newMessage:bundle.includes('coach_personal_feedback_replay'),scriptStart:bundle.slice(0,100)}));
           console.log('COACH_FEEDBACK_WORKER_BUNDLE_READONLY '+JSON.stringify({status:deployed.status,hasReplayCode:bundle.includes('coach_personal_feedback_replay'),bytes:bundle.length}));
           console.log('COACH_FEEDBACK_DIAG_READONLY '+JSON.stringify({at:new Date().toISOString(),rows:result,
            replayHealth:health.map(h=>({feature:h.feature,lastOk:h.last_ok,lastError:h.last_error,failures:h.failures})),
