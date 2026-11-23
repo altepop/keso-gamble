@@ -120,7 +120,7 @@ test('PvP receipts omit the daily PvE join without changing receipt values or Pv
   add.run('guild',matchId,'alice','pvp','trio','win',3,200,200);
   add.run('guild',daily.id,'alice','pve',daily.game,'loss',2,100,100);
   const all=await duelHistoryRead(env,'guild','alice');
-  assert.match(all.history.find(row=>row.id===daily.id)?.dailyDay??'',/^\\d{8}$/,
+  assert.match(all.history.find(row=>row.id===daily.id)?.dailyDay??'',/^\d{8}$/,
    'real daily PvE receipt retains its recorded daily provenance');
   const database=env as unknown as {DB:{prepare:(sql:string)=>unknown}};
   const basePrepare=database.DB.prepare;
@@ -128,7 +128,7 @@ test('PvP receipts omit the daily PvE join without changing receipt values or Pv
   database.DB.prepare=(sql:string)=>{
    if(sql.includes('FROM kp_duel_progress_receipts r')){
     receiptStatements++;
-    assert.doesNotMatch(sql,/JOIN\\s+kp_duel_pve_daily_entries/i,
+    assert.doesNotMatch(sql,/JOIN\s+kp_duel_pve_daily_entries/i,
      'PvP-only receipts must not read the PvE daily provenance table');
     assert.match(sql,/NULL AS daily_day/);
    }
