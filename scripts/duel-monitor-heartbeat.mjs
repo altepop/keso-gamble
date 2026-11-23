@@ -46,5 +46,16 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
    ' |\n| Age minutes | '+(result.ageMinutes??'unknown')+' |\n\n'+
    'No D1, KP or Cloudflare operations. GitHub scheduled runs may be delayed or skipped.\n');
   if(!result.ok)process.exitCode=1;
- }).catch(e=>{console.error('DUEL_MONITOR_HEARTBEAT_UNAVAILABLE '+e.message);process.exitCode=1;});
+ }).catch(e=>{
+  // Monitoring blindness is actionable even when the source API cannot respond.
+  // Do not forward untrusted API response bodies, bearer tokens, or raw errors
+  // into the retained report or issue.
+  if(process.env.DUEL_HEARTBEAT_REPORT){
+   const {writeFileSync}=await import('node:fs');
+   writeFileSync(process.env.DUEL_HEARTBEAT_REPORT,
+    JSON.stringify({state:'unknown',ok:false,runId:null,ageMinutes:null}),{mode:0o600});
+  }
+  console.error('DUEL_MONITOR_HEARTBEAT_UNAVAILABLE: monitor metadata could not be verified');
+  process.exitCode=1;
+ });
 }
