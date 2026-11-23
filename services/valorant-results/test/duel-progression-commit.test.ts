@@ -59,7 +59,7 @@ test('all seven confirmed natural PvP finals record both players exactly once',(
    const skill=db.prepare(`SELECT * FROM kp_duel_mode_skill WHERE guild='g' AND user='alice' AND mode='pvp' AND game=?`).get(game) as Record<string,number>;
    assert.equal(skill.verified_games,1);
    assert.equal(skill.wins+skill.losses+skill.draws,1);
-   assert.equal(skill.points,skill.wins,'P9.3 progress counts verified wins, not an inferred rating');
+   assert.equal(skill.points,i%2===0?14:4,'verified win/draw scores use the new PvP progression scale');
   }
   assert.equal(db.prepare("SELECT COUNT(*) AS n FROM kp_duel_mode_skill WHERE mode='pve'").get()?.n,0);
  }finally{db.close();}
@@ -104,9 +104,40 @@ test('trigger installation is idempotent for the same server D1 handle',async()=
  try{
   db.exec(`CREATE TABLE kp_board_duels(id TEXT);
    CREATE TABLE kp_board_duel_actions(id TEXT);`);
-  const env={DB:{prepare(sql:string){return {run:async()=>{ddlRuns++;db.exec(sql);},bind:(...args:unknown[])=>({first:async()=>db.prepare(sql).get(...args as [])})};}}};
+  const env={DB:{prepare(sql:string){return {run:async()=>{ddlRuns++;db.exec(sql);},bind:(...args:unknown[])=>({first:async()=>db.prepare(sql).get(...args as [])}),sql};},batch:async(statements:Array<{sql:string}>)=>{for(const item of statements){ddlRuns++;db.exec(item.sql);}return [];}}};
   await Promise.all([ensureVerifiedPvpProgression(env as never),ensureVerifiedPvpProgression(env as never)]);
   await ensureVerifiedPvpProgression(env as never);
   assert.equal(ddlRuns,DUEL_PROGRESSION_DDL.length+DUEL_REWARD_DDL.length+DUEL_PVP_FINALIZATION_TRIGGERS.length);
+ }finally{db.close();}
+});
+
+test('PvP victory, defeat and draw gain 14, 0 and 4 without affecting win/loss counters',()=>{
+ const db=fixture();
+ try{
+  const outcomes=['alice','bob','draw'] as const;
+  for(const [n,winner] of outcomes.entries()){
+   const id='00000000-0000-4000-8000-'+String(900+n).padStart(12,'0');
+   seed(db,id,'trio');terminal(db,id,'move',winner);
+  }
+  const alice=db.prepare("SELECT * FROM kp_duel_mode_skill WHERE mode='pvp' AND game='trio' AND user='alice'").get() as Record<string,number>;
+  const bob=db.prepare("SELECT * FROM kp_duel_mode_skill WHERE mode='pvp' AND game='trio' AND user='bob'").get() as Record<string,number>;
+  assert.equal(alice.points,18);assert.equal(bob.points,18);
+  assert.equal(alice.peak_points,18);assert.equal(bob.peak_points,18);
+  assert.deepEqual([alice.wins,alice.losses,alice.draws,alice.verified_games],[1,1,1,3]);
+  assert.deepEqual([bob.wins,bob.losses,bob.draws,bob.verified_games],[1,1,1,3]);
+ }finally{db.close();}
+});
+test('reinstalling PvP progression trigger never replays saved points',()=>{
+ const db=fixture();
+ try{
+  const id='00000000-0000-4000-8000-000000005001';
+  seed(db,id,'gomoku');terminal(db,id,'move','alice');
+  db.exec(DUEL_PVP_FINALIZATION_TRIGGERS[0]);
+  db.exec(DUEL_PVP_FINALIZATION_TRIGGERS[1]);
+  assert.equal(db.prepare("SELECT points FROM kp_duel_mode_skill WHERE user='alice' AND game='gomoku'").get()?.points,14);
+  const next='00000000-0000-4000-8000-000000005002';
+  seed(db,next,'gomoku');terminal(db,next,'move','draw');
+  assert.equal(db.prepare("SELECT points FROM kp_duel_mode_skill WHERE user='alice' AND game='gomoku'").get()?.points,18);
+  assert.equal(receiptCount(db),4);
  }finally{db.close();}
 });
