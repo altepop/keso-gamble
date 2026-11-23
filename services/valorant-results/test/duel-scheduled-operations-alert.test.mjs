@@ -48,7 +48,7 @@ test('review creates one deduplicated GitHub issue; metadata only',async()=>{
   assert.equal(await notifyOperationsAudit(env,request),'created');
   assert.deepEqual(calls.map(c=>c.opts.method??'GET'),['GET','POST']);
   assert.equal(JSON.parse(calls[1].opts.body).title,OPERATIONS_ALERT_TITLE);
-  assert.doesNotMatch(JSON.stringify(calls),/fixture-token.*POST/);
+  assert.ok(calls.every(c=>c.url.startsWith('https://api.github.com/repos/altepop/keso-gamble/')));
   assert.equal(await notifyOperationsAudit(env,async()=>({ok:true,json:async()=>[{title:OPERATIONS_ALERT_TITLE}]})),'deduplicated');
  });
 });
