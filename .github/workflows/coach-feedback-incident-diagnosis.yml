@@ -17,7 +17,7 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          node --input-type=module <<'NODE'
+          node --experimental-strip-types --input-type=module <<'NODE'
           const account=process.env.CLOUDFLARE_ACCOUNT_ID,token=process.env.CLOUDFLARE_API_TOKEN;
           if(!/^[a-f0-9]{32}$/i.test(account??'')||!token)throw Error('missing_credentials');
           const base='https://api.cloudflare.com/client/v4/accounts/'+account,headers={Authorization:'Bearer '+token,'Content-Type':'application/json'};
@@ -101,6 +101,17 @@ jobs:
           const bundle=deployed.ok?await deployed.text():'';
           const ordered=await select("SELECT n.match_id,n.ended_at,n.riot_id FROM notifications n JOIN tracked_players t ON lower(t.riot_id)=lower(n.riot_id) JOIN coach_profile_accounts a ON a.puuid=t.puuid WHERE n.mode='competitive' AND n.ended_at BETWEEN ? AND ? AND NOT EXISTS(SELECT 1 FROM monitor_state s WHERE s.key='coach_personal_feedback:v1:'||a.subject_id||':'||n.match_id) ORDER BY n.ended_at DESC LIMIT 24",[Date.now()-86400000,Date.now()]);
           const times=await select("SELECT n.match_id,n.ended_at AS notice_end,r.ended_at AS roster_end,r.map AS map,r.act_name AS act_name FROM notifications n JOIN valorant_match_rosters r ON r.match_id=n.match_id WHERE n.match_id IN (?,?)",ids);
+          const {readCoachMemberReport}=await import('./services/valorant-results/src/coach-member-report.ts');
+          const adapter={prepare(sql){return {bind(...args){return {all:async()=>({results:await select(sql,args)}),first:async()=>{const rows=await select(sql,args);return rows[0]??null;}};}}};
+          const evaluations=[];
+          for(const [person,riot,matchId,ended] of [['VDK','Dolly#SDGs',ids[1],1795448769379],['石原','h1d3g1g4s#1037',ids[0],1795449611356]]){
+            try{const account=(await select('SELECT puuid FROM tracked_players WHERE lower(riot_id)=lower(?)',[riot]))[0];
+              const report=await readCoachMemberReport(adapter,person,undefined,[{riotId:riot,puuid:account.puuid}]);
+              const sessions=report.matchFeedback.sessions??[];
+              evaluations.push({person,matchId,totalSessions:sessions.length,matched:sessions.filter(z=>Date.parse(z.date??'')===ended).length,quality:report.matchFeedback.quality,mostRecent:sessions.slice(0,3).map(z=>({date:z.date,map:z.map,outcome:z.outcome}))});
+            }catch(e){evaluations.push({person,errorType:e?.name??'unknown',message:String(e?.message??'error').slice(0,180)});}
+          }
+          console.log('COACH_FEEDBACK_REPORT_ELIGIBILITY '+JSON.stringify(evaluations));
           console.log('COACH_FEEDBACK_END_TIME_PARITY '+JSON.stringify(times.map(x=>({matchId:x.match_id,noticeEnd:x.notice_end,rosterEnd:x.roster_end,identical:x.notice_end===x.roster_end,map:x.map,act:x.act_name}))));
           console.log('COACH_FEEDBACK_REPLAY_ORDER_READONLY '+JSON.stringify({count:ordered.length,positions:ordered.map((x,i)=>({ordinal:i+1,member:/^dolly#/i.test(x.riot_id)?'VDK':/^h1d3g1g4s#/i.test(x.riot_id)?'石原':'other',matchId:x.match_id,endedAt:x.ended_at})).slice(0,24)}));
           console.log('COACH_FEEDBACK_BUNDLE_MARKERS '+JSON.stringify({monitor:bundle.includes('monitor_start'),oldFeedback:bundle.includes('coach_personal_feedback'),newImport:bundle.includes('replaySavedCoachFeedback'),newMessage:bundle.includes('coach_personal_feedback_replay'),scriptStart:bundle.slice(0,100)}));
