@@ -5,7 +5,7 @@ import {postCoachPersonalFeedback} from './coach-personal-feedback.ts';
 export const COACH_FEEDBACK_REPLAY_WINDOW_MS=24*60*60_000;
 export const COACH_FEEDBACK_REPLAY_LIMIT=3;
 type ReplayEnv=Parameters<typeof postCoachPersonalFeedback>[0];
-type Candidate={riot_id:string;match_id:string;ended_at:number;puuid:string};
+type Candidate={riot_id:string;match_id:string;ended_at:number;puuid:string;subject_id:string};
 type Sender=typeof postCoachPersonalFeedback;
 export async function replaySavedCoachFeedback(env:ReplayEnv,mapping:KpMapping,
  now=Date.now(),send:Sender=postCoachPersonalFeedback
@@ -16,7 +16,7 @@ export async function replaySavedCoachFeedback(env:ReplayEnv,mapping:KpMapping,
  const allowed=new Set(mapping.accounts.map(a=>a.riotId.toLowerCase()));
  const ids=[...allowed].sort();
  const candidates=await env.DB.prepare(
-   'SELECT n.riot_id,n.match_id,n.ended_at,t.puuid FROM notifications n '+
+   'SELECT n.riot_id,n.match_id,n.ended_at,t.puuid,a.subject_id FROM notifications n '+
    'JOIN tracked_players t ON lower(t.riot_id)=lower(n.riot_id) '+
    'JOIN coach_profile_accounts a ON a.puuid=t.puuid AND a.guild=? '+
    'WHERE lower(n.riot_id) IN ('+ids.map(()=>'?').join(',')+') '+
@@ -38,6 +38,7 @@ export async function replaySavedCoachFeedback(env:ReplayEnv,mapping:KpMapping,
    if(!allowed.has(row.riot_id.toLowerCase())||
       typeof row.match_id!=='string'||!row.match_id||
       typeof row.puuid!=='string'||!row.puuid||
+      typeof row.subject_id!=='string'||!row.subject_id||
       !Number.isSafeInteger(row.ended_at)||row.ended_at<now-COACH_FEEDBACK_REPLAY_WINDOW_MS||
       row.ended_at>now)continue;
    result.attempted++;
@@ -53,7 +54,7 @@ export async function replaySavedCoachFeedback(env:ReplayEnv,mapping:KpMapping,
      await env.DB.prepare(
        'INSERT INTO monitor_state(key,value) VALUES(?,?) '+
        'ON CONFLICT(key) DO UPDATE SET value=excluded.value'
-     ).bind('coach_feedback_replay_result:v1:'+row.match_id,
+     ).bind('coach_feedback_replay_result:v2:'+row.subject_id+':'+row.match_id,
        JSON.stringify({at:Date.now(),status})).run();
    }catch{console.warn('coach_feedback_replay_diagnostic_pending');}
    console.info('coach_feedback_replay_result',{matchId:row.match_id,status});
