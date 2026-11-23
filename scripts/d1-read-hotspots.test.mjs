@@ -24,3 +24,24 @@ test('empty or malformed metrics cannot produce invented usage or more than 20 i
  assert.throws(()=>rankReadHotspots(null));
  assert.throws(()=>rankReadHotspots([],21));
 });
+
+test('D1 read-only audit is triggered for future duel-history main pushes without changing its scheduled fallback',async()=>{
+ const {readFileSync}=await import('node:fs');
+ const workflow=readFileSync(new URL('../.github/workflows/d1-insights-report.yml',import.meta.url),'utf8');
+ const push=workflow.split('  push:')[1]?.split('  workflow_dispatch:')[0];
+ const pull=workflow.split('  pull_request:')[1]?.split('  push:')[0];
+ const inspect=workflow.split('  inspect:')[1];
+ assert.ok(push,'push trigger must exist');
+ assert.match(push,/branches: \[main\]/);
+ assert.match(push,/services\/valorant-results\/src\/duel-history\.ts/);
+ assert.doesNotMatch(pull??'',/services\/valorant-results\/src\/duel-history\.ts/,
+  'normal PR CI, not D1 inspection, validates new code');
+ assert.match(workflow,/cron: '17 \* \* \* \*'/);
+ assert.match(inspect??'',/github\.event_name == 'push'/);
+ assert.match(inspect??'',/github\.event_name == 'schedule'/);
+ assert.match(workflow,/node scripts\/d1-read-audit\.mjs/);
+ assert.match(workflow,/node scripts\/d1-daily-guard\.mjs/);
+ assert.match(workflow,/node scripts\/d1-read-budget-alert\.mjs/);
+ assert.doesNotMatch(push,/services\/valorant-results\/src\/coach/,
+  'do not broaden the production D1 audit to unrelated coach changes');
+});
