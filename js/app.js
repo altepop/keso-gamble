@@ -55,7 +55,7 @@ let duelParticipantPreview=null,duelParticipantPreviewError='';
 let duelSpectatorId='',duelSpectatorSnapshot=null,duelSpectatorVersion=null,duelSpectatorLastRead=0;
 let duelSpectatorWatching=false,duelSpectatorBusy=false,duelSpectatorMessage='',duelSpectatorError='';
 let duelSpectatorMatches=[],duelSpectatorLobbyLoaded=false,duelSpectatorLobbyLoading=false,duelSpectatorSound=false;
-const duelPveUi={busy:false,preview:null,match:null,error:'',message:'',sessionInput:'',pending:null,open:false,game:'othello',level:'normal',rewardsOpen:false,rewards:null,rewardsError:''};
+const duelPveUi={busy:false,preview:null,match:null,error:'',message:'',sessionInput:'',pending:null,open:false,game:'othello',level:'normal',rewardsOpen:false,rewards:null,rewardsError:'',abandonConfirm:'',skillSummary:null};
 const duelHistoryUi={open:false,busy:false,data:null,error:'',mode:'all',game:'all'};
 let duelEntryMode='home';
 const duelEntryProgressUi={busy:false,data:null,error:'',delta:null,owner:null,loadedAt:0};
@@ -913,11 +913,14 @@ addEventListener('click',async e=>{
    const id=t.dataset.duelHistoryResume;
    if(!/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(id))return;
    duelPveUi.open=true;duelPveUi.busy=true;duelPveUi.error='';render();
-   try{const result=await wallet.duelPveRead(id);duelPveUi.match=result.match;duelPveUi.sessionInput=id;duelPveUi.message='保存済みCPU戦を再開しました。';}
+   try{const result=await wallet.duelPveRead(id);duelPveUi.match=result.match;duelPveUi.game=result.match.game;duelPveUi.level=result.match.level;duelPveUi.sessionInput=id;duelPveUi.message='保存済みCPU戦を再開しました。';}
    catch(error){duelPveUi.error=error.message||'CPU戦を再開できません。';}
    finally{duelPveUi.busy=false;render();}
    requestAnimationFrame(()=>document.getElementById('duel-pve-section')?.scrollIntoView({block:'start',behavior:'auto'}));
    return;
+  }
+  if(screen==='duels'&&t.dataset.duelPveAbandonCancel!==undefined){
+   duelPveUi.abandonConfirm='';render();return;
   }
   if(screen==='duels'&&t.dataset.duelPveAbandon!==undefined){
    e.preventDefault();
@@ -973,11 +976,13 @@ addEventListener('click',async e=>{
      duelPveUi.pending={kind,id,...(kind==='custom'?{args}:{})};
      const result=kind==='custom'?await wallet.duelPveCustomStart({requestId:id,...args}):await wallet.duelPveStart(id);
      duelPveUi.match=result.match;duelPveUi.sessionInput=result.match.id;
+     duelPveUi.game=result.match.game;duelPveUi.level=result.match.level;
+     duelPveUi.rewardsOpen=false;duelPveUi.rewards=null;duelPveUi.rewardsError='';duelPveUi.skillSummary=null;
      duelPveUi.pending=null;duelPveUi.message='サーバーでCPU戦を開始しました。';
     }else if(kind==='resume'){
      if(!/^[0-9a-f-]{36}$/i.test(duelPveUi.sessionInput))throw Error('正しい試合IDを入力してください。');
      const result=await wallet.duelPveRead(duelPveUi.sessionInput);
-     duelPveUi.match=result.match;duelPveUi.pending=null;duelPveUi.message='保存済みのCPU戦を再開しました。';
+     duelPveUi.match=result.match;duelPveUi.game=result.match.game;duelPveUi.level=result.match.level;duelPveUi.pending=null;duelPveUi.message='保存済みのCPU戦を再開しました。';
     }else{
      const match=duelPveUi.match;if(!match?.id||match.turn!=='human')throw Error('CPU戦の状態を再確認してください。');
      let move=duelPveUi.pending?.kind==='move'&&duelPveUi.pending.session===match.id?duelPveUi.pending.body:null;
@@ -1002,6 +1007,13 @@ addEventListener('click',async e=>{
      duelPveUi.match=result.match;duelPveUi.pending=null;
      duelPveUi.message=result.match.turn==='finished'?'CPU戦が確定しました。次の一局へ進めます。':'サーバー確定の盤面へ更新しました。';
      if(result.match.turn==='finished'){
+      try{
+       const verified=await wallet.duelHistory({mode:'pve',game:result.match.game});
+       const row=(verified.skills??[]).find(x=>x.mode==='pve'&&x.game===result.match.game);
+       const previous=(duelEntryProgressUi.data?.skills??[]).find(x=>x.mode==='pve'&&x.game===result.match.game);
+       duelPveUi.skillSummary=row?{points:row.points,delta:previous?Number(row.points)-Number(previous.points):null}:null;
+       duelHistoryUi.data=verified;
+      }catch{duelPveUi.skillSummary=null;}
       try{duelPveUi.rewards=await wallet.duelRewardProfile();duelPveUi.rewardsOpen=true;}
       catch(error){duelPveUi.rewardsError=error.message||'報酬の結果を取得できません。';}
      }
