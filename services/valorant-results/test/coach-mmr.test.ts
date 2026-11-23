@@ -183,3 +183,17 @@ test('untrusted Henrik patched labels cannot contradict validated tier IDs', asy
   assert.equal(db.snapshots.get(account.puuid)?.tier_patched, 'Diamond 3');
   assert.equal(db.snapshots.get(account.puuid)?.peak_patched, 'Ascendant 3');
 });
+
+
+test('future-dated MMR snapshots are refreshed after a clock rollback', async () => {
+  const db = fakeDb({ 'Aquatopia#toppy': 'ap' });
+  await ensureCoachMmr(db, [account], async () => mmrPayload, 2_000_000);
+  let calls = 0;
+  const refreshed = await ensureCoachMmr(db, [account], async () => {
+    calls++;
+    return mmrPayload;
+  }, 1_000_000);
+  assert.equal(calls, 1, 'a future timestamp must not block refresh indefinitely');
+  assert.equal(refreshed.get(account.riotId)?.fetchedAt, 1_000_000);
+  assert.equal(db.snapshots.get(account.puuid)?.fetched_at, 1_000_000);
+});
