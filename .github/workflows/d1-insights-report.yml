@@ -10,6 +10,8 @@ on:
       - 'scripts/d1-daily-guard.mjs'
       - 'scripts/d1-daily-guard.test.mjs'
       - 'scripts/d1-read-audit.mjs'
+      - 'scripts/d1-read-budget-alert.mjs'
+      - 'scripts/d1-read-budget-alert.test.mjs'
       - 'scripts/d1-read-hotspots.mjs'
       - 'scripts/d1-read-hotspots.test.mjs'
   push:
@@ -17,6 +19,8 @@ on:
     paths:
       - '.github/workflows/d1-insights-report.yml'
       - 'scripts/d1-read-audit.mjs'
+      - 'scripts/d1-read-budget-alert.mjs'
+      - 'scripts/d1-read-budget-alert.test.mjs'
       - 'scripts/d1-read-hotspots.mjs'
       - 'scripts/d1-read-hotspots.test.mjs'
       - 'scripts/d1-daily-guard.mjs'
@@ -72,10 +76,13 @@ jobs:
         with:
           node-version: '24'
       - name: Verify sampled telemetry completeness without Cloudflare access
-        run: node --test scripts/d1-daily-guard.test.mjs scripts/d1-read-hotspots.test.mjs
+        run: node --test scripts/d1-daily-guard.test.mjs scripts/d1-read-hotspots.test.mjs scripts/d1-read-budget-alert.test.mjs
   inspect:
     if: github.repository == 'altepop/keso-gamble' && (github.event_name == 'push' || github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.actor == 'altepop'))
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
     timeout-minutes: 8
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -144,6 +151,8 @@ jobs:
           NODE
 
       - name: Inspect 24h vs 1h top-fifty SQL read patterns
+        env:
+          D1_READ_AUDIT_REPORT: ${{ runner.temp }}/d1-read-audit.json
         run: |
           node --test scripts/d1-read-hotspots.test.mjs
           node --check scripts/d1-read-audit.mjs
@@ -154,3 +163,12 @@ jobs:
         run: |
           node --test scripts/d1-daily-guard.test.mjs
           node scripts/d1-daily-guard.mjs
+      - name: Create or deduplicate D1 read-budget alert for warning or unknown audit
+        if: always() && (github.event_name == 'push' || github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.actor == 'altepop'))
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          D1_READ_AUDIT_REPORT: ${{ runner.temp }}/d1-read-audit.json
+        run: |
+          node --test scripts/d1-read-budget-alert.test.mjs
+          node scripts/d1-read-budget-alert.mjs
