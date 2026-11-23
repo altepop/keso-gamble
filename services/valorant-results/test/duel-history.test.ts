@@ -105,3 +105,47 @@ test('PvP-only history skips the PvE session query and preserves daily/skill out
   assert.equal(pvp.filter.mode,'pvp');
  }finally{db.close();}
 });
+
+test('PvP receipts omit the daily PvE join without changing receipt values or PvE provenance',async()=>{
+ const {db,env}=fixture();
+ try{
+  const daily=await serverPveOperation(env,'guild','alice',
+   {action:'daily',requestId:crypto.randomUUID()});
+  for(const sql of DUEL_PROGRESSION_DDL)db.exec(sql);
+  for(const sql of DUEL_REWARD_DDL)db.exec(sql);
+  const add=db.prepare(`INSERT INTO kp_duel_progress_receipts
+   (guild,match_id,user,mode,game,opponent,outcome,verified_version,occurred_at,applied_at)
+   VALUES (?,?,?,?,?,?,?,?,?,?)`);
+  const matchId=crypto.randomUUID();
+  add.run('guild',matchId,'alice','pvp','trio','bob','win',3,200,200);
+  add.run('guild',daily.id,'alice','pve',daily.game,null,'loss',2,100,100);
+  const all=await duelHistoryRead(env,'guild','alice');
+  assert.match(all.history.find(row=>row.id===daily.id)?.dailyDay??'',/^\d{8}$/,
+   'real daily PvE receipt retains its recorded daily provenance');
+  const database=env as unknown as {DB:{prepare:(sql:string)=>unknown}};
+  const basePrepare=database.DB.prepare;
+  let receiptStatements=0;
+  database.DB.prepare=(sql:string)=>{
+   if(sql.includes('FROM kp_duel_progress_receipts r')){
+    receiptStatements++;
+    assert.doesNotMatch(sql,/JOIN\s+kp_duel_pve_daily_entries/i,
+     'PvP-only receipts must not read the PvE daily provenance table');
+    assert.match(sql,/NULL AS daily_day/);
+   }
+   return basePrepare(sql);
+  };
+  const pvp=await duelHistoryRead(env,'guild','alice',{mode:'pvp',game:'trio'});
+  assert.equal(receiptStatements,1);
+  assert.equal(pvp.history.length,1);
+  assert.deepEqual(pvp.history[0],{
+   id:matchId,mode:'pvp',game:'trio',outcome:'win',at:200,dailyDay:null
+  });
+  assert.deepEqual(pvp.sessions,[]);
+  assert.equal(pvp.today.started,all.today.started);
+  database.DB.prepare=basePrepare;
+  const pve=await duelHistoryRead(env,'guild','alice',{mode:'pve'});
+  assert.equal(pve.history.length,1);
+  assert.equal(pve.history[0].id,daily.id);
+  assert.equal(pve.history[0].dailyDay,all.history.find(row=>row.id===daily.id)?.dailyDay);
+ }finally{db.close();}
+});

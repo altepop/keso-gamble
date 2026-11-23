@@ -40,14 +40,19 @@ export async function duelHistoryRead(env:KpEnv,guild:string,user:string,filter:
  await ensureDuelDailyHistory(env);
  const now=Date.now(),today=duelDailyChallenge(now);
  const filters={mode,game};
+ // PvP receipts cannot originate from daily PvE sessions. Avoid the unused join.
+ // Keep an explicit nullable daily_day column to preserve the response contract.
+ const dailyDayProjection=mode==='pvp'?'NULL AS daily_day':
+  'CASE WHEN d.session_id IS NOT NULL THEN d.jst_day ELSE NULL END AS daily_day';
+ const dailyEntryJoin=mode==='pvp'?'':`
+   LEFT JOIN kp_duel_pve_daily_entries d ON d.guild=r.guild AND d.user=r.user AND d.session_id=r.match_id`;
  // Every SQL query is guild+authenticated-user constrained. Never expose opponent IDs.
  const responses=await env.DB.batch([
   env.DB.prepare(`SELECT mode,game,points,peak_points,verified_games,wins,losses,draws,updated_at
    FROM kp_duel_mode_skill WHERE guild=? AND user=? ORDER BY mode,game`).bind(guild,user),
   env.DB.prepare(`SELECT r.match_id,r.mode,r.game,r.outcome,r.occurred_at,
-   CASE WHEN d.session_id IS NOT NULL THEN d.jst_day ELSE NULL END AS daily_day
-   FROM kp_duel_progress_receipts r
-   LEFT JOIN kp_duel_pve_daily_entries d ON d.guild=r.guild AND d.user=r.user AND d.session_id=r.match_id
+   ${dailyDayProjection}
+   FROM kp_duel_progress_receipts r${dailyEntryJoin}
    WHERE r.guild=? AND r.user=? AND r.applied_at IS NOT NULL
      AND (?='all' OR r.mode=?) AND (?='all' OR r.game=?)
    ORDER BY r.occurred_at DESC,r.match_id DESC LIMIT ?`).bind(guild,user,mode,mode,game,game,limit),
