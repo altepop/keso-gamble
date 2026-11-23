@@ -197,3 +197,41 @@ test('receipt filters use indexable equality predicates and keep all/mode/game r
   assert.deepEqual(all.filter,{mode:'all',game:'all'});
  }finally{db.close();}
 });
+
+test('PvE session history uses direct game predicate and preserves scoped session results',async()=>{
+ const {db,env}=fixture();
+ try{
+  const trio=await serverPveOperation(env,'guild','alice',
+   {action:'start',game:'trio',level:'easy',requestId:crypto.randomUUID()});
+  const othello=await serverPveOperation(env,'guild','alice',
+   {action:'start',game:'othello',level:'easy',requestId:crypto.randomUUID()});
+  await serverPveOperation(env,'guild','bob',
+   {action:'start',game:'trio',level:'easy',requestId:crypto.randomUUID()});
+  await serverPveOperation(env,'other-guild','alice',
+   {action:'start',game:'trio',level:'easy',requestId:crypto.randomUUID()});
+  const database=env as unknown as {DB:{prepare:(sql:string)=>unknown}};
+  const original=database.DB.prepare;
+  const queries:string[]=[];
+  database.DB.prepare=(sql:string)=>{
+   if(sql.includes('FROM kp_duel_pve_sessions s')&&sql.includes('LEFT JOIN kp_duel_pve_daily_entries')){
+    assert.doesNotMatch(sql,/\?\s*=\s*'all'|\?\s*=\s*'pve'/);
+    assert.match(sql,/s.guild=\? AND s.user=\?/);
+    queries.push(sql);
+   }
+   return original(sql);
+  };
+  const all=await duelHistoryRead(env,'guild','alice');
+  const filtered=await duelHistoryRead(env,'guild','alice',{mode:'pve',game:'trio'});
+  const pvp=await duelHistoryRead(env,'guild','alice',{mode:'pvp',game:'trio'});
+  const other=await duelHistoryRead(env,'guild','bob',{mode:'pve'});
+  assert.deepEqual(new Set(all.sessions.map(s=>s.id)),new Set([trio.id,othello.id]));
+  assert.deepEqual(filtered.sessions.map(s=>s.id),[trio.id]);
+  assert.deepEqual(other.sessions.map(s=>s.id).length,1);
+  assert.deepEqual(pvp.sessions,[]);
+  assert.equal(queries.length,3,'PvP skips the session query altogether');
+  assert.doesNotMatch(queries[0],/s\.game=\?/);
+  assert.match(queries[1],/s\.game=\?/);
+  assert.doesNotMatch(queries[2],/s\.game=\?/);
+  assert.equal(filtered.sessions[0].dailyDay,null);
+ }finally{db.close();}
+});

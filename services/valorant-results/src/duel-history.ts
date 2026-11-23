@@ -52,6 +52,11 @@ export async function duelHistoryRead(env:KpEnv,guild:string,user:string,filter:
  const receiptModeSql=mode==='all'?'':' AND r.mode=?';
  const receiptGameSql=game==='all'?'':' AND r.game=?';
  const receiptArgs=[guild,user,...(mode==='all'?[]:[mode]),...(game==='all'?[]:[game]),limit];
+ // PvP-only session reads are already omitted. For PvE or all-mode history,
+ // the prior mode OR predicate is always true; use an indexed guild/user
+ // lookup and a direct game equality only when a game was requested.
+ const sessionGameSql=game==='all'?'':' AND s.game=?';
+ const sessionArgs=[guild,user,...(game==='all'?[]:[game]),limit];
  // Every SQL query is guild+authenticated-user constrained. Never expose opponent IDs.
  const responses=await env.DB.batch([
   env.DB.prepare(`SELECT mode,game,points,peak_points,verified_games,wins,losses,draws,updated_at
@@ -67,9 +72,8 @@ export async function duelHistoryRead(env:KpEnv,guild:string,user:string,filter:
    s.created_at,s.updated_at,d.jst_day AS daily_day
    FROM kp_duel_pve_sessions s
    LEFT JOIN kp_duel_pve_daily_entries d ON d.guild=s.guild AND d.user=s.user AND d.session_id=s.id
-   WHERE s.guild=? AND s.user=? AND (?='all' OR ?='pve')
-     AND (?='all' OR s.game=?)
-   ORDER BY s.updated_at DESC,s.id DESC LIMIT ?`).bind(guild,user,mode,mode,game,game,limit)]),
+   WHERE s.guild=? AND s.user=?${sessionGameSql}
+   ORDER BY s.updated_at DESC,s.id DESC LIMIT ?`).bind(...sessionArgs)]),
   env.DB.prepare(`SELECT COUNT(*) AS started,
     COALESCE(SUM(CASE WHEN s.turn='finished' THEN 1 ELSE 0 END),0) AS finished,
     COALESCE(SUM(CASE WHEN s.turn='finished' AND s.winner='human' THEN 1 ELSE 0 END),0) AS wins
