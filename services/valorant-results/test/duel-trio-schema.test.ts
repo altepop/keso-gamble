@@ -62,3 +62,36 @@ test('PvE session migration preserves running game and action trigger',async()=>
   assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM kp_duel_pve_sessions").get()?.n,2);
  }finally{sqlite.close();}
 });
+
+test('reuses already read board DDL and avoids a duplicate sqlite_master table lookup',async()=>{
+ const run=async(reuse:boolean)=>{
+  const {sqlite,DB}=memoryDb();
+  try{
+   for(const ddl of DUEL_PVE_SESSION_DDL)
+    sqlite.exec(ddl.replaceAll("'bluffdice','poker','trio'","'bluffdice','poker'"));
+   const prior=sqlite.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='kp_duel_pve_sessions'")
+    .get() as {sql:string};
+   assert.ok(prior.sql.includes("'connect4'")&&!prior.sql.includes("'trio'"));
+   let tableDefinitionReads=0,indexReads=0,triggerReads=0;
+   const tracked={
+    prepare(sql:string){
+     if(sql.includes("SELECT sql FROM sqlite_master WHERE type='table'"))tableDefinitionReads++;
+     if(sql.includes("SELECT name,sql FROM sqlite_master WHERE tbl_name"))indexReads++;
+     if(sql.includes("SELECT name,sql FROM sqlite_master WHERE type='trigger'"))triggerReads++;
+     return DB.prepare(sql);
+    },batch:DB.batch
+   };
+   await ensureTrioGameConstraint({DB:tracked} as never,'kp_duel_pve_sessions',
+    reuse?prior.sql:undefined);
+   assert.equal(tableDefinitionReads,reuse?0:1);
+   assert.equal(indexReads,1,'index preservation must not be bypassed');
+   assert.equal(triggerReads,1,'cross-table trigger preservation must not be bypassed');
+   assert.match(String(sqlite.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='kp_duel_pve_sessions'").get()?.sql),/'trio'/);
+   sqlite.prepare("INSERT INTO kp_duel_pve_sessions(id,guild,user,request_id,game,difficulty,board,turn,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)")
+    .run('s','g','alice','req','trio','easy','.........','human',1,1);
+   assert.equal(sqlite.prepare("SELECT game FROM kp_duel_pve_sessions WHERE id='s'").get()?.game,'trio');
+  }finally{sqlite.close();}
+ };
+ await run(false);
+ await run(true);
+});

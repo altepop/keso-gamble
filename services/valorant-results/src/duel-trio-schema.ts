@@ -6,10 +6,14 @@ import type {KpEnv} from './kp.ts';
 
 const oldGames="'othello','gomoku','connect4','hitblow','bluffdice','poker'";
 const allowed=new Set(['kp_board_duels','kp_duel_pve_sessions','kp_duel_mode_skill','kp_duel_progress_receipts']);
-export async function ensureTrioGameConstraint(env:Pick<KpEnv,'DB'>,table:string){
+export async function ensureTrioGameConstraint(env:Pick<KpEnv,'DB'>,table:string,knownCreateSql?:string){
  if(!allowed.has(table))throw Error('Unsupported duel migration table');
- const row=await env.DB.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name=?")
-  .bind(table).first<{sql:string}>();
+ // The board duel initializer already read the exact table DDL on this DB binding.
+ // Reuse it only in that path, avoiding a redundant sqlite_master SELECT.
+ const row=knownCreateSql===undefined
+  ?await env.DB.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name=?")
+    .bind(table).first<{sql:string}>()
+  :{sql:knownCreateSql};
  if(!row)return; // The usual CREATE TABLE path will install the new schema.
  if(row.sql.includes("'trio'"))return;
  if(!row.sql.includes(oldGames))throw Error('既存の決闘テーブル制約が未知のため安全に移行できません。');
