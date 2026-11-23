@@ -18,7 +18,7 @@ test('recent stored member results use existing sender with bounded batch',async
  const hist:{}={};const rows=[candidate('Dolly#SDGs','sunset'),candidate('h1d3g1g4s#1037','corrode')];
  const sends:string[]=[];
  const result=await replaySavedCoachFeedback({DB:db(rows,hist),KESO_COACH_WEBHOOK_URL:'present'} as any,mapping,NOW,
-  (async(_env,_mapping,id)=>{sends.push(id);return 'posted';}) as any);
+  (async(_env:any,_mapping:any,id:string)=>{sends.push(id);return 'posted';}) as any);
  assert.deepEqual(sends,['sunset','corrode']);
  assert.deepEqual(result,{scanned:2,attempted:2,posted:2,statuses:{posted:2}});
  assert.ok((hist as {sql:string}).sql.includes('LIMIT 24'));
@@ -36,7 +36,7 @@ test('mapping, age, and future validation prevent unintended sends',async()=>{
  candidate('Dolly#SDGs','old',NOW-COACH_FEEDBACK_REPLAY_WINDOW_MS-1),candidate('Dolly#SDGs','valid')];
  const sent:string[]=[];
  const result=await replaySavedCoachFeedback({DB:db(rows),KESO_COACH_WEBHOOK_URL:'present'} as any,mapping,NOW,
-  (async(_e,_m,id)=>{sent.push(id);return 'suppressed';}) as any);
+  (async(_e:any,_m:any,id:string)=>{sent.push(id);return 'suppressed';}) as any);
  assert.deepEqual(sent,['valid']);assert.equal(result.posted,0);assert.equal(result.statuses.suppressed,1);
 });
 test('missing webhook cannot read DB or send',async()=>{
