@@ -9,11 +9,16 @@ on:
       - '.github/workflows/d1-insights-report.yml'
       - 'scripts/d1-daily-guard.mjs'
       - 'scripts/d1-daily-guard.test.mjs'
+      - 'scripts/d1-read-audit.mjs'
+      - 'scripts/d1-read-hotspots.mjs'
+      - 'scripts/d1-read-hotspots.test.mjs'
   push:
     branches: [main]
     paths:
       - '.github/workflows/d1-insights-report.yml'
       - 'scripts/d1-read-audit.mjs'
+      - 'scripts/d1-read-hotspots.mjs'
+      - 'scripts/d1-read-hotspots.test.mjs'
       - 'scripts/d1-daily-guard.mjs'
       - 'scripts/d1-daily-guard.test.mjs'
   workflow_dispatch:
@@ -38,7 +43,7 @@ jobs:
         with:
           node-version: '24'
       - name: Verify sampled telemetry completeness without Cloudflare access
-        run: node --test scripts/d1-daily-guard.test.mjs
+        run: node --test scripts/d1-daily-guard.test.mjs scripts/d1-read-hotspots.test.mjs
   inspect:
     if: github.repository == 'altepop/keso-gamble' && (github.event_name == 'push' || github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.actor == 'altepop'))
     runs-on: ubuntu-latest
@@ -111,6 +116,7 @@ jobs:
 
       - name: Inspect 24h vs 1h top-fifty SQL read patterns
         run: |
+          node --test scripts/d1-read-hotspots.test.mjs
           node --check scripts/d1-read-audit.mjs
           node scripts/d1-read-audit.mjs
       - name: Protect optional Activity histories when account D1 estimate exceeds 4M in UTC day
