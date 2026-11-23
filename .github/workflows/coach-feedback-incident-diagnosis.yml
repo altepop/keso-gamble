@@ -12,123 +12,78 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with: {node-version: '24'}
-      - name: Read-only D1 diagnostics (no webhook, no Henrik)
+      - name: Inspect new competitive receipts and replay diagnostics (D1 SELECT only)
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          node --experimental-strip-types --input-type=module <<'NODE'
-          const account=process.env.CLOUDFLARE_ACCOUNT_ID,token=process.env.CLOUDFLARE_API_TOKEN;
-          if(!/^[a-f0-9]{32}$/i.test(account??'')||!token)throw Error('missing_credentials');
-          const base='https://api.cloudflare.com/client/v4/accounts/'+account,headers={Authorization:'Bearer '+token,'Content-Type':'application/json'};
+          node --input-type=module <<'NODE'
+          const a=process.env.CLOUDFLARE_ACCOUNT_ID,t=process.env.CLOUDFLARE_API_TOKEN;
+          if(!/^[a-f0-9]{32}$/i.test(a??'')||!t)throw Error('missing_credentials');
+          const base='https://api.cloudflare.com/client/v4/accounts/'+a;
+          const headers={Authorization:'Bearer '+t,'Content-Type':'application/json'};
           const settings=await fetch(base+'/workers/scripts/valorant-results/settings',{headers,redirect:'error'});
-          if(!settings.ok)throw Error('settings_http_'+settings.status);
-          const config=await settings.json(), bindings=config.result?.bindings?.filter(b=>b.type==='d1'&&b.name==='DB');
-          if(!config.success||bindings?.length!==1)throw Error('db_binding');
+          if(!settings.ok)throw Error('settings');
+          const cfg=await settings.json(),db=cfg.result?.bindings?.filter(x=>x.type==='d1'&&x.name==='DB');
+          if(!cfg.success||db?.length!==1)throw Error('db_binding');
+          let reads=0,queries=0;
           async function select(sql,params=[]){
-           if(!sql.trim().startsWith('SELECT ')||sql.includes(';'))throw Error('not_select');
-           const r=await fetch(base+'/d1/database/'+bindings[0].id+'/query',{method:'POST',headers,body:JSON.stringify({sql,params}),redirect:'error'});
-           if(!r.ok)throw Error('d1_http_'+r.status);
-           const x=await r.json();if(!x.success||!x.result?.[0]?.success)throw Error('d1_query');
-           return x.result[0].results??[];
+            if(!/^SELECT\s/i.test(sql.trim())||sql.includes(';'))throw Error('not_select');
+            const r=await fetch(base+'/d1/database/'+db[0].id+'/query',{method:'POST',headers,redirect:'error',
+              body:JSON.stringify({sql,params}),signal:AbortSignal.timeout(30000)});
+            if(!r.ok)throw Error('d1_http_'+r.status);
+            const v=await r.json(),q=v.result?.[0];
+            if(!v.success||!q?.success||!Array.isArray(q.results))throw Error('d1_query');
+            reads+=q.meta?.rows_read??0;queries++;
+            return q.results;
           }
-          const ids=['02721958-7cef-4af0-ae5a-f29b8b2f6484','0af41b46-8bc8-4a73-aba8-60bc5753c85a'];
+          const cutoff=Date.parse('2026-11-24T02:33:00+09:00'),now=Date.now();
           const rows=await select([
-           'SELECT n.riot_id,n.match_id,n.ended_at,n.mode,n.outcome,t.puuid,',
-           'p.subject_id,p.owner_user,p.guild,c.joined,c.version,',
-           'np.enabled,np.consent_version,',
-           'CASE WHEN EXISTS(SELECT 1 FROM kp_accounts k WHERE k.guild=p.guild AND k.user=p.owner_user) THEN 1 ELSE 0 END AS kp_registered,',
-           'r.players_json,e.rounds_json,e.kills_json,s.value AS receipt',
-           'FROM notifications n',
-           'LEFT JOIN tracked_players t ON lower(t.riot_id)=lower(n.riot_id)',
-           'LEFT JOIN coach_profile_accounts a ON a.puuid=t.puuid',
-           'LEFT JOIN coach_profiles p ON p.guild=a.guild AND p.subject_id=a.subject_id',
-           "LEFT JOIN coach_team_consents c ON c.guild=p.guild AND c.team_id='coach-roster-v1' AND c.subject_id=p.subject_id AND c.owner_user=p.owner_user",
-           "LEFT JOIN coach_team_notice_preferences np ON np.guild=c.guild AND np.team_id=c.team_id AND np.subject_id=c.subject_id AND np.owner_user=c.owner_user",
-           'LEFT JOIN valorant_match_rosters r ON r.match_id=n.match_id',
-           'LEFT JOIN valorant_match_round_events e ON e.match_id=n.match_id',
-           "LEFT JOIN monitor_state s ON s.key='coach_personal_feedback:v1:'||p.subject_id||':'||n.match_id",
-           'WHERE n.match_id IN (?,?) AND n.mode=? ORDER BY n.ended_at DESC LIMIT 6'
-          ].join(' '),[...ids,'competitive']);
-          const health=await select("SELECT feature,last_ok,last_error,failures FROM kp_health WHERE feature IN ('coach_personal_feedback_replay','roster_backfill','valorant')");
-          const candidates=await select([
-           'SELECT n.match_id FROM notifications n',
-           'JOIN tracked_players t ON lower(t.riot_id)=lower(n.riot_id)',
-           'JOIN coach_profile_accounts a ON a.puuid=t.puuid AND a.guild=?',
-           "WHERE lower(n.riot_id) IN ('dolly#sdgs','h1d3g1g4s#1037')",
-           "AND n.mode='competitive' AND n.ended_at BETWEEN ? AND ?",
+           "SELECT n.riot_id,n.match_id,n.ended_at,n.outcome,n.sent,n.mode,r.map,r.recorded_at AS roster_recorded,",
+           "e.recorded_at AS events_recorded,CASE WHEN e.rounds_json IS NOT NULL THEN 1 ELSE 0 END AS rounds_saved,",
+           "CASE WHEN e.kills_json IS NOT NULL THEN 1 ELSE 0 END AS kills_saved,",
+           "a.subject_id,p.owner_user,c.joined,c.version,np.enabled,np.consent_version,",
+           "s.value AS receipt,d.value AS replay_result",
+           "FROM notifications n LEFT JOIN valorant_match_rosters r ON r.match_id=n.match_id",
+           "LEFT JOIN valorant_match_round_events e ON e.match_id=n.match_id",
+           "LEFT JOIN tracked_players t ON lower(t.riot_id)=lower(n.riot_id)",
+           "LEFT JOIN coach_profile_accounts a ON a.puuid=t.puuid",
+           "LEFT JOIN coach_profiles p ON p.guild=a.guild AND p.subject_id=a.subject_id",
+           "LEFT JOIN coach_team_consents c ON c.guild=p.guild AND c.subject_id=p.subject_id AND c.owner_user=p.owner_user AND c.team_id='coach-roster-v1'",
+           "LEFT JOIN coach_team_notice_preferences np ON np.guild=c.guild AND np.subject_id=c.subject_id AND np.owner_user=c.owner_user AND np.team_id=c.team_id",
+           "LEFT JOIN monitor_state s ON s.key='coach_personal_feedback:v1:'||a.subject_id||':'||n.match_id",
+           "LEFT JOIN monitor_state d ON d.key='coach_feedback_replay_result:v1:'||n.match_id",
+           "WHERE n.mode='competitive' AND (n.ended_at>=? OR r.recorded_at>=?)",
+           "ORDER BY n.ended_at DESC LIMIT 100"
+          ].join(' '),[cutoff,cutoff]);
+          const orphan=await select("SELECT r.match_id,r.ended_at,r.recorded_at,r.map FROM valorant_match_rosters r WHERE r.recorded_at>=? AND NOT EXISTS(SELECT 1 FROM notifications n WHERE n.match_id=r.match_id AND n.mode='competitive') ORDER BY r.recorded_at DESC LIMIT 50",[cutoff]);
+          const health=await select("SELECT feature,last_ok,last_error,failures,error FROM kp_health WHERE feature IN ('coach_personal_feedback_replay','valorant')");
+          const pending=await select([
+           "SELECT n.match_id,n.riot_id,n.ended_at FROM notifications n",
+           "JOIN tracked_players t ON lower(t.riot_id)=lower(n.riot_id)",
+           "JOIN coach_profile_accounts a ON a.puuid=t.puuid",
+           "WHERE n.mode='competitive' AND n.ended_at BETWEEN ? AND ?",
            "AND NOT EXISTS(SELECT 1 FROM monitor_state s WHERE s.key='coach_personal_feedback:v1:'||a.subject_id||':'||n.match_id)",
-           'ORDER BY n.ended_at DESC LIMIT 24'
-          ].join(' '),[rows.find(r=>r.guild)?.guild??'',Date.now()-86400000,Date.now()]);
-          const valid=x=>typeof x==='string'&&x.length>0&&x.length<=128;
-          function swing(row){
-           try {
-            const players=JSON.parse(row.players_json||'null'),rounds=JSON.parse(row.rounds_json||'null'),kills=JSON.parse(row.kills_json||'null');
-            if(!Array.isArray(players)||players.length!==10||!Array.isArray(rounds)||!Array.isArray(kills))return false;
-            const me=players.find(p=>p.puuid===row.puuid);
-            if(!me||!valid(me.team_id)||new Set(players.map(p=>p.puuid)).size!==10)return false;
-            const teams=new Map(players.map(p=>[p.puuid,p.team_id]));
-            if([...teams.values()].filter(t=>t===me.team_id).length!==5||new Set(teams.values()).size!==2)return false;
-            for(const raw of rounds){
-             if(!Number.isSafeInteger(raw.r)||raw.r<0||raw.r>60||!valid(raw.winner))continue;
-             const events=kills.filter(k=>k.r===raw.r).sort((a,b)=>a.t-b.t);
-             if(!events.length||events.some(k=>!Number.isFinite(k.t)||k.t<0||!valid(k.victim)||!valid(k.killer)||!teams.has(k.victim)||!teams.has(k.killer)))continue;
-             let us=5,them=5,peakUs=0,peakThem=0,invalid=false;
-             const dead=new Set();
-             for(const k of events){
-              if(dead.has(k.victim)||dead.has(k.killer)||teams.get(k.victim)===teams.get(k.killer)){invalid=true;break;}
-              dead.add(k.victim);if(teams.get(k.victim)===me.team_id)us--;else them--;
-              peakUs=Math.max(peakUs,us-them);peakThem=Math.max(peakThem,them-us);
-             }
-             if(!invalid&&(raw.winner===me.team_id?peakThem:peakUs)>=1)return true;
-            }
-            return false;
-           }catch{return false;}
-          }
-          const result=rows.map(r=>{
-           const permit=r.joined===1&&r.enabled===1&&r.version>=1&&r.consent_version===r.version&&r.kp_registered===1;
-           let receipt=null;try{receipt=r.receipt?JSON.parse(r.receipt)?.state:null;}catch{receipt='invalid-json';}
-           return {member:String(r.riot_id).toLowerCase()==='dolly#sdgs'?'VDK':'石原',matchId:r.match_id,
-            notificationMode:r.mode,reportOutcome:r.outcome,rosterReady:Boolean(r.players_json),
-            roundsReady:Boolean(r.rounds_json),killsReady:Boolean(r.kills_json),
-            profileLinked:Boolean(r.subject_id),consentJoined:r.joined===1,consentVersionPresent:Number.isInteger(r.version),
-            noticeEnabled:r.enabled===1,noticeVersionCurrent:r.consent_version===r.version,
-            kpRegistered:r.kp_registered===1,permissionPass:permit,swingDetected:swing(r),
-            replayQueryCandidate:candidates.some(x=>x.match_id===r.match_id),receiptState:receipt??'none',
-            expectedNextGate:!permit?'suppressed':!swing(r)?'incomplete-swing':'further-report-or-webhook-check'};
+           "ORDER BY n.ended_at DESC LIMIT 24"
+          ].join(' '),[now-86400000,now]);
+          const time=x=>Number.isFinite(Number(x))&&Number(x)>0?new Date(Number(x)).toISOString():null;
+          const parse=x=>{try{return x?JSON.parse(x):null}catch{return null}};
+          const name=riot=>/^dolly#sdgs$/i.test(riot)?'VDK':/^h1d3g1g4s#1037$/i.test(riot)?'石原':/^abema#ttv$/i.test(riot)?'Abema':String(riot||'unknown').replace(/#.*$/,'');
+          const data=rows.map(r=>{
+            const receipt=parse(r.receipt),diagnostic=parse(r.replay_result);
+            return {member:name(r.riot_id),matchId:r.match_id,map:r.map??null,endedAt:time(r.ended_at),
+             rosterRecordedAt:time(r.roster_recorded),eventsRecordedAt:time(r.events_recorded),
+             outcome:r.outcome,noticeSent:r.sent===1,noticePostedAt:null,noticeTimestampReason:'notifications.sent has no timestamp column',
+             roundsSaved:r.rounds_saved===1,killsSaved:r.kills_saved===1,
+             identityLinked:!!r.subject_id,consentJoined:r.joined===1,noticeEnabled:r.enabled===1,
+             noticeConsentCurrent:r.consent_version===r.version,
+             receipt:receipt?.state??'none',postedAt:receipt?.state==='posted'&&receipt?.messageId&&/^\d{17,22}$/.test(receipt.messageId)?time(Number((BigInt(receipt.messageId)>>22n)+1420070400000n)):null,
+             replayStatus:diagnostic?.status??null,replayAttemptAt:time(diagnostic?.at),
+             inReplayTop24:pending.some(x=>x.match_id===r.match_id),
+             secondsSinceEnd:Math.round((now-Number(r.ended_at))/1000)};
           });
-          const deployed=await fetch(base+'/workers/scripts/valorant-results',{headers,redirect:'error'});
-          const bundle=deployed.ok?await deployed.text():'';
-          const ordered=await select("SELECT n.match_id,n.ended_at,n.riot_id FROM notifications n JOIN tracked_players t ON lower(t.riot_id)=lower(n.riot_id) JOIN coach_profile_accounts a ON a.puuid=t.puuid WHERE n.mode='competitive' AND n.ended_at BETWEEN ? AND ? AND NOT EXISTS(SELECT 1 FROM monitor_state s WHERE s.key='coach_personal_feedback:v1:'||a.subject_id||':'||n.match_id) ORDER BY n.ended_at DESC LIMIT 24",[Date.now()-86400000,Date.now()]);
-          const times=await select("SELECT n.match_id,n.ended_at AS notice_end,r.ended_at AS roster_end,r.map AS map,r.act_name AS act_name FROM notifications n JOIN valorant_match_rosters r ON r.match_id=n.match_id WHERE n.match_id IN (?,?)",ids);
-          const {readCoachMemberReport}=await import('./services/valorant-results/src/coach-member-report.ts');
-          const adapter={prepare:sql=>({bind:(...args)=>({all:async()=>({results:await select(sql,args)}),first:async()=>(await select(sql,args))[0]??null})})};
-          const evaluations=[];
-          for(const [person,riot,matchId,ended] of [['VDK','Dolly#SDGs',ids[1],1795448769379],['石原','h1d3g1g4s#1037',ids[0],1795449611356]]){
-            try{const account=(await select('SELECT puuid FROM tracked_players WHERE lower(riot_id)=lower(?)',[riot]))[0];
-              const report=await readCoachMemberReport(adapter,person,undefined,[{riotId:riot,puuid:account.puuid}]);
-              const sessions=report.matchFeedback.sessions??[];
-              evaluations.push({person,matchId,totalSessions:sessions.length,matched:sessions.filter(z=>Date.parse(z.date??'')===ended).length,quality:report.matchFeedback.quality,mostRecent:sessions.slice(0,3).map(z=>({date:z.date,map:z.map,outcome:z.outcome}))});
-            }catch(e){evaluations.push({person,errorType:e?.name??'unknown',message:String(e?.message??'error').slice(0,180)});}
-          }
-          const {coachRoundContribution}=await import('./services/valorant-results/src/coach-round-contribution.ts');
-          const raw=await select("SELECT r.match_id,r.players_json,r.teams_json,e.rounds_json,e.kills_json FROM valorant_match_rosters r JOIN valorant_match_round_events e ON e.match_id=r.match_id WHERE r.match_id IN (?,?)",ids);
-          const quality=[];
-          for(const [person,riot,mid] of [['VDK','Dolly#SDGs',ids[1]],['石原','h1d3g1g4s#1037',ids[0]]]){
-            const p=(await select("SELECT puuid FROM tracked_players WHERE lower(riot_id)=lower(?)",[riot]))[0];
-            const row=raw.filter(x=>x.match_id===mid);let verified=0;
-            const result=coachRoundContribution(row,[{name:riot.slice(0,riot.indexOf('#')),tag:riot.slice(riot.indexOf('#')+1),puuid:p.puuid}],()=>verified++);
-            quality.push({person,matchId:mid,verified,excluded:result.quality.excluded,validMatches:result.quality.validMatches});
-          }
-          const counts=raw.map(r=>{const ps=JSON.parse(r.players_json??'[]'),ks=JSON.parse(r.kills_json??'[]');const observedK=new Map(),observedD=new Map();const byId=new Map(ps.map(p=>[p.puuid,p]));for(const k of ks){if(byId.has(k.victim))observedD.set(k.victim,(observedD.get(k.victim)??0)+1);if(k.killer&&byId.has(k.killer)&&byId.get(k.killer).team_id!==byId.get(k.victim)?.team_id)observedK.set(k.killer,(observedK.get(k.killer)??0)+1);}return {matchId:r.match_id,events:ks.length,rosterKills:ps.reduce((a,p)=>a+Number(p.k??0),0),observedKills:[...observedK.values()].reduce((a,n)=>a+n,0),rosterDeaths:ps.reduce((a,p)=>a+Number(p.d??0),0),observedDeaths:[...observedD.values()].reduce((a,n)=>a+n,0),playersWithMismatch:ps.filter(p=>(observedK.get(p.puuid)??0)!==p.k||(observedD.get(p.puuid)??0)!==p.d).length};});
-          console.log('COACH_FEEDBACK_EVENT_PARITY '+JSON.stringify(counts));
-          console.log('COACH_FEEDBACK_ROUND_QUALITY '+JSON.stringify(quality));
-          console.log('COACH_FEEDBACK_REPORT_ELIGIBILITY '+JSON.stringify(evaluations));
-          console.log('COACH_FEEDBACK_END_TIME_PARITY '+JSON.stringify(times.map(x=>({matchId:x.match_id,noticeEnd:x.notice_end,rosterEnd:x.roster_end,identical:x.notice_end===x.roster_end,map:x.map,act:x.act_name}))));
-          console.log('COACH_FEEDBACK_REPLAY_ORDER_READONLY '+JSON.stringify({count:ordered.length,positions:ordered.map((x,i)=>({ordinal:i+1,member:/^dolly#/i.test(x.riot_id)?'VDK':/^h1d3g1g4s#/i.test(x.riot_id)?'石原':'other',matchId:x.match_id,endedAt:x.ended_at})).slice(0,24)}));
-          console.log('COACH_FEEDBACK_BUNDLE_MARKERS '+JSON.stringify({monitor:bundle.includes('monitor_start'),oldFeedback:bundle.includes('coach_personal_feedback'),newImport:bundle.includes('replaySavedCoachFeedback'),newMessage:bundle.includes('coach_personal_feedback_replay'),scriptStart:bundle.slice(0,100)}));
-          console.log('COACH_FEEDBACK_WORKER_BUNDLE_READONLY '+JSON.stringify({status:deployed.status,hasReplayCode:bundle.includes('coach_personal_feedback_replay'),bytes:bundle.length}));
-          console.log('COACH_FEEDBACK_DIAG_READONLY '+JSON.stringify({at:new Date().toISOString(),rows:result,
-           replayHealth:health.map(h=>({feature:h.feature,lastOk:h.last_ok,lastError:h.last_error,failures:h.failures})),
-           candidateCount:candidates.length,mutations:0,discordPosts:0}));
+          console.log('COACH_NEW_MATCHES_READONLY '+JSON.stringify({at:new Date().toISOString(),cutoff:new Date(cutoff).toISOString(),rows:data,orphanRosters:orphan.map(r=>({...r,ended_at:time(r.ended_at),recorded_at:time(r.recorded_at)})),
+           replayHealth:health.map(h=>({...h,last_ok:time(h.last_ok),last_error:time(h.last_error)})),
+           pendingTop24:pending.map((x,i)=>({position:i+1,member:name(x.riot_id),matchId:x.match_id,endedAt:time(x.ended_at)})),
+           pendingCountTop24:pending.length,queries,rowsRead:reads,mutations:0,discordPosts:0,henrikCalls:0}));
           NODE
