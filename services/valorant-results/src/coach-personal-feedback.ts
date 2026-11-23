@@ -10,7 +10,7 @@ import '../../../coach/muse-top-config.js';
 import '../../../coach/muse-presets.js';
 
 type Env={DB:D1Database;KESO_COACH_WEBHOOK_URL?:string};
-type Receipt={state:'claimed'|'posted'|'unknown'|'rejected';at:number;httpStatus?:number;channelId?:string;messageId?:string};
+type Receipt={state:'claimed'|'posted'|'unknown'|'rejected';at:number;httpStatus?:number;channelId?:string;messageId?:string;content?:string};
 type Snapshot={owner_user:string;subject_id:string;person_key:string;display_name:string};
 type Archive={ended_at:number;map:string|null;players_json:string;rounds_json:string|null;kills_json:string|null};
 type Player={puuid:string;team_id:string};
@@ -248,7 +248,7 @@ export async function postCoachPersonalFeedback(env:Env,mapping:KpMapping,
   if(response.ok){
    const sent=await response.json() as {id?:string;channel_id?:string;content?:string};
    if(/^\d{15,22}$/.test(sent.id??'')&&sent.channel_id===VDK_RESCUE_CHANNEL&&sent.content===content){
-    receipt.state='posted';receipt.channelId=sent.channel_id;receipt.messageId=sent.id;
+    receipt.state='posted';receipt.channelId=sent.channel_id;receipt.messageId=sent.id;receipt.content=content;
    }else receipt.state='unknown';
   }else receipt.state=response.status>=400&&response.status<500?'rejected':'unknown';
  }catch{receipt.state='unknown';}

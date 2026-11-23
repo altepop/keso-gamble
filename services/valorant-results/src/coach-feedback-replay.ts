@@ -25,7 +25,15 @@ export async function replaySavedCoachFeedback(env:ReplayEnv,mapping:KpMapping,
    'ORDER BY n.ended_at DESC LIMIT 24'
  ).bind(mapping.guildId,...ids,now-COACH_FEEDBACK_REPLAY_WINDOW_MS,now).all<Candidate>();
  const result=empty();result.scanned=candidates.results.length;
- for(const row of candidates.results){
+ // Each scheduled five-minute slot advances to a different bounded page.
+ // Without rotation a permanently incomplete newest match starves older
+ // missing-receipt results forever.
+ const pages=Math.max(1,Math.ceil(candidates.results.length/COACH_FEEDBACK_REPLAY_LIMIT));
+ const page=Math.floor(now/(5*60_000))%pages;
+ const selected=candidates.results.slice(
+   page*COACH_FEEDBACK_REPLAY_LIMIT,(page+1)*COACH_FEEDBACK_REPLAY_LIMIT);
+ if(pages>1)console.info('coach_feedback_replay_rotation',{page,pages,candidates:result.scanned});
+ for(const row of selected){
    if(result.attempted>=COACH_FEEDBACK_REPLAY_LIMIT)break;
    if(!allowed.has(row.riot_id.toLowerCase())||
       typeof row.match_id!=='string'||!row.match_id||
@@ -38,6 +46,17 @@ export async function replaySavedCoachFeedback(env:ReplayEnv,mapping:KpMapping,
    catch{status='error';}
    result.statuses[status]=(result.statuses[status]??0)+1;
    if(status==='posted')result.posted++;
+   // Diagnostic metadata only. Never alter the delivery receipt or resend here.
+   // The key is separate from coach_personal_feedback:v1 and is read-only
+   // inspected later; write failures must never affect the actual sender.
+   try{
+     await env.DB.prepare(
+       'INSERT INTO monitor_state(key,value) VALUES(?,?) '+
+       'ON CONFLICT(key) DO UPDATE SET value=excluded.value'
+     ).bind('coach_feedback_replay_result:v1:'+row.match_id,
+       JSON.stringify({at:Date.now(),status})).run();
+   }catch{console.warn('coach_feedback_replay_diagnostic_pending');}
+   console.info('coach_feedback_replay_result',{matchId:row.match_id,status});
  }
  return result;
 }

@@ -26,7 +26,12 @@ export function coachRoundContribution<T extends Row>(rows:readonly T[],accounts
   const enemyKill=(k:any,puuid:string)=>k.killer===puuid&&byId.get(k.victim)?.team_id!==byId.get(puuid)?.team_id;
   const deathsById=new Map<string,number>(),killsById=new Map<string,number>(),ownByRound=new Map<number,{kills:number;deaths:number}>();
   for(const k of ks){
-   deathsById.set(k.victim,(deathsById.get(k.victim)??0)+1);
+   // Friendly-fire casualties are observed in the kill feed, but may be
+   // intentionally excluded from the provider's scored ten-player K/D totals.
+   // Retain the original event for round observations, while comparing only
+   // officially credited opposing/unknown-killer deaths against roster D.
+   const friendly=k.killer!==null&&byId.get(k.killer)?.team_id===byId.get(k.victim)?.team_id;
+   if(!friendly)deathsById.set(k.victim,(deathsById.get(k.victim)??0)+1);
    if(k.killer!==null&&enemyKill(k,k.killer))killsById.set(k.killer,(killsById.get(k.killer)??0)+1);
    let v=ownByRound.get(k.r);if(!v){v={kills:0,deaths:0};ownByRound.set(k.r,v);}
    if(enemyKill(k,p.puuid))v.kills++;if(k.victim===p.puuid)v.deaths++;
