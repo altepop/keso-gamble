@@ -129,28 +129,101 @@ export function selectAdvicePattern(input:{outcome:'win'|'loss'|'draw';swing:{de
  return null;
 }
 // Presentation only. The selected pattern and its prescribed warmup stay unchanged.
-function shortPatternAdvice(pattern:AdvicePattern):string{
- if(pattern===ADVICE_PATTERNS.advantageLost)return '次は1つだけ。有利な場面で、先にピークしない。';
- if(pattern===ADVICE_PATTERNS.cover)return '孤立して倒れる場面を減らせ。次は味方とカバーできる距離で動く。';
- if(pattern===ADVICE_PATTERNS.deaths)return 'デスが増えている。取り返そうと前に出る前に、一度離れて立て直す。';
- if(pattern===ADVICE_PATTERNS.conversion)return '撃ち負けが多い。次は止まってから撃つ。この順番を崩さない。';
- if(pattern===ADVICE_PATTERNS.stalled)return 'キルが減ってデスが増えた。無理な取り返しをやめ、いったん仕切り直す。';
- if(pattern===ADVICE_PATTERNS.improving)return '前回の改善が数字に出ている。次も同じ動きを再現する。';
- if(pattern===ADVICE_PATTERNS.sleepy)return '深夜の無理な続行は判断を鈍らせる。今日はここで切り上げる。';
- if(pattern===ADVICE_PATTERNS.flow)return '逆転できたカバーは良い。次も連携の距離を崩さない。';
- if(pattern===ADVICE_PATTERNS.longSession)return '連戦で判断が雑になる前に5分休む。水を飲んでから次へ。';
- if(pattern===ADVICE_PATTERNS.lateNight)return '深夜の連戦は切りどころを決める。次の1戦で終える。';
- return '大崩れはない。次の試合も今の動きを再現する。';
+// Wording only: reference equality maps the existing selected prescription to
+// detailed coaching. No trigger, severity, receipt or delivery behaviour changes.
+// A swing describes team state; it does not prove who personally made a peek.
+function detailedPatternAdvice(pattern:AdvicePattern,swing:{round:number;description:string}):string{
+ if(pattern===ADVICE_PATTERNS.advantageLost)return [
+  '第'+swing.round+'ラウンド、人数有利を落とした。せっかくの数的優位を勝ちに変えられていない。',
+  '有利な側が先に撃ち合いを作る必要はない。味方の配置がそろわないうちの勝負は、相手に逆転の入口を渡す。',
+  '次戦は有利を取ったら一度止まる。味方とクロスを組み、相手が動いたところを一緒に処理する。'
+ ].join('\n');
+ if(pattern===ADVICE_PATTERNS.cover)return [
+  '今回の課題はカバーの距離だ。味方と離れていると、倒されてもトレードできず人数差がそのまま残る。',
+  '次戦は単独で勝負を始めない。味方が見ている角を確認し、撃ち合いが起きた瞬間にカバーできる位置を取る。'
+ ].join('\n');
+ if(pattern===ADVICE_PATTERNS.deaths)return [
+  '今回はデスが多い。無理に取り返そうと飛び出すほど、次のラウンドにも悪い判断を持ち込む。',
+  '一度席を離れて水を飲む。次戦は遮蔽物のないピークを減らし、退ける位置から撃ち合う。'
+ ].join('\n');
+ if(pattern===ADVICE_PATTERNS.conversion)return [
+  '今回は撃ち合いの決め切りが課題だ。移動したまま撃つと、狙えていても弾がばらける。',
+  '次戦は敵を見たら停止を先に作る。ストレイフ→停止→バーストを崩さず、初弾の精度を優先する。'
+ ].join('\n');
+ if(pattern===ADVICE_PATTERNS.stalled)return [
+  'キルが減ってデスが増えている。焦って取り返す動きは、さらに不利な勝負を増やす。',
+  '次は一度区切る。再開後は勝負の数を増やすより、味方と撃ち合う位置を1つ決めて実行する。'
+ ].join('\n');
+ if(pattern===ADVICE_PATTERNS.improving)return [
+  '前回の課題は数字に改善が見える。ただし1試合で直ったとは言い切れない。',
+  '次戦も新しいことを増やさず、改善した動きを意識して同じ条件で再現する。'
+ ].join('\n');
+ if(pattern===ADVICE_PATTERNS.sleepy)return [
+  '深夜の敗戦だ。疲れた状態で続けると、見るべき情報も判断も雑になる。',
+  '今日はここで切り上げる。次戦は休んでから入り、最初の数ラウンドは味方との連携を優先する。'
+ ].join('\n');
+ if(pattern===ADVICE_PATTERNS.flow)return [
+  '第'+swing.round+'ラウンド、人数不利から逆転した。取り返せた場面を偶然で終わらせるのはもったいない。',
+  '次戦も味方と距離を合わせ、先に倒された味方のカバーへ入れる位置を維持する。'
+ ].join('\n');
+ if(pattern===ADVICE_PATTERNS.longSession)return [
+  '連戦で判断が雑になる前に区切れ。疲れたまま続けることは練習にならない。',
+  '次の試合の前に5分休憩。水を飲み、今回の修正点を1つだけ決めてから戻る。'
+ ].join('\n');
+ if(pattern===ADVICE_PATTERNS.lateNight)return [
+  '深夜に試合を重ねると、集中が切れても無理に続けがちだ。',
+  '次戦を区切りにする。勝敗に関係なく切り上げ、翌日にプレーを見直す。'
+ ].join('\n');
+ return [
+  '大きな崩れはないが、何となく続けても改善にはつながらない。',
+  '次の1試合は照準の高さと味方との距離を確認し、同じ良い動きを再現する。'
+ ].join('\n');
 }
-function shortWarmup(pattern:AdvicePattern|null,fallback:string):string{
- if(pattern===ADVICE_PATTERNS.advantageLost)return 'アップ（10分）：デスマッチで、キルしたら一度引いて、位置を取り直す。それだけを繰り返す。';
- if(pattern===ADVICE_PATTERNS.cover)return 'アップ（10分）：デスマッチで味方の後ろを動き、カバーに入るタイミングを確認する。';
- if(pattern===ADVICE_PATTERNS.deaths)return 'アップ（10分）：デスマッチで無理にピークせず、遮蔽物を使って倒されない動きを徹底する。';
- if(pattern===ADVICE_PATTERNS.conversion)return 'アップ（15分）：デスマッチでストレイフ、停止、バーストの順番を守る。';
- if(pattern===ADVICE_PATTERNS.stalled)return 'アップ：今日は休む選択も含め、次の練習で直すことを1つ決める。';
- if(pattern===ADVICE_PATTERNS.longSession)return 'アップ：5分休憩。立って体を伸ばし、水を飲む。';
- if(pattern===ADVICE_PATTERNS.steady)return 'アップ（3分）：レンジで照準の高さを合わせる。';
- return fallback?'アップ：'+text(fallback,90):'';
+function detailedWarmup(pattern:AdvicePattern|null,fallback:string):string{
+ if(pattern===ADVICE_PATTERNS.advantageLost)return [
+  'アップ（10分）',
+  'デスマッチで、キルした直後の動きだけに集中する。',
+  'キルしたら追撃せず、まず遮蔽物の後ろへ引く。周囲を確認して位置を組み直し、それから次の角を見る。',
+  '「キル→引く→組み直す」を10分繰り返す。連続キルを狙わず、引く判断を練習する。'
+ ].join('\n');
+ if(pattern===ADVICE_PATTERNS.cover)return [
+  'アップ（10分）',
+  'デスマッチで他プレイヤーの少し後ろを動き、同じ角へ同時に飛び出さない。',
+  '先行する味方役が撃ち合ったら、逃げ道を残して一歩遅れて同じ相手へ照準を向ける。',
+  '単独でキルを追わず、カバーへ入る距離とタイミングを10分反復する。'
+ ].join('\n');
+ if(pattern===ADVICE_PATTERNS.deaths)return [
+  'アップ（10分）',
+  'デスマッチで、最初に遮蔽物のある位置を選ぶ。',
+  '角を一つずつ確認し、危ない撃ち合いになったら無理せず引く。射線が重なる場所に居座らない。',
+  'キル数よりも「退ける位置から撃てたか」を基準に10分繰り返す。'
+ ].join('\n');
+ if(pattern===ADVICE_PATTERNS.conversion)return [
+  'アップ（15分）',
+  'デスマッチで、敵を見つけたらストレイフを止めてから撃つ。',
+  '停止を確認して短くバースト。外したら一度動き直し、止まって次のバーストを撃つ。',
+  '移動撃ちでごまかさず「動く→止まる→撃つ」を15分徹底する。'
+ ].join('\n');
+ if(pattern===ADVICE_PATTERNS.stalled)return [
+  'アップ（再開前の準備）',
+  'いったん休み、前の試合で不利な勝負をした場面を一つだけ振り返る。',
+  '次にプレーするときは直す動きを一つに絞り、開始前に声に出して確認する。'
+ ].join('\n');
+ if(pattern===ADVICE_PATTERNS.longSession)return [
+  'アップ（5分休憩）',
+  'まず席を離れて体を伸ばし、水を飲む。画面から目を離す。',
+  '戻ったら次の試合で気をつける動きを一つだけ確認して入る。'
+ ].join('\n');
+ if(pattern===ADVICE_PATTERNS.steady)return [
+  'アップ（3分）',
+  'レンジで敵の頭の高さに照準を合わせ、止まった状態で一発ずつ撃つ。',
+  '高さがずれたら狙い直す。速度よりも同じ高さを維持することを優先する。'
+ ].join('\n');
+ return fallback?[
+  'アップ',
+  text(fallback,90)+'。',
+  '最初はゆっくり正しい動きを確認する。形が崩れたらいったん止め、同じ順序でやり直す。'
+ ].join('\n'):'';
 }
 function shortSwing(swing:{round:number;description:string},outcome:'win'|'loss'|'draw'):string{
  if(swing.description.startsWith('人数有利から敗れた'))
@@ -181,14 +254,14 @@ export function formatPersonalFeedback(input:{
    :metric.key==='dpr'&&difference!==null&&difference>=0.1?'。倒されすぎだ。無理なピークを減らせ。':'。';
   return '📊 '+title+' '+current+(base?'（直近'+base.matches+'試合は'+base.value.toFixed(2)+'）':'')+evaluation;
  })():null;
- const warmup=pattern?.warmup?shortWarmup(pattern,'')
-  :!pattern&&daily.warmup?.title?shortWarmup(null,daily.warmup.title):null;
+ const warmup=pattern?.warmup?detailedWarmup(pattern,'')
+  :!pattern&&daily.warmup?.title?detailedWarmup(null,daily.warmup.title):null;
  const blocks=[
   '<@'+user+'> 🎯 **KESO COACH｜個別フィードバック**\n🕹️ '+text(name,32)+'さん｜'+text(map,24)+'｜'+({win:'勝利',loss:'敗北',draw:'引き分け'}[outcome]),
   '🔎 '+shortSwing(swing,outcome),
   metricLine,
-  pattern?'💡 '+shortPatternAdvice(pattern)
-   :(session.lesson.nextGame?'💡 次は1つだけ。'+text(session.lesson.nextGame,90):null),
+  pattern?'💡 コーチから\n'+detailedPatternAdvice(pattern,swing)
+   :(session.lesson.nextGame?'💡 コーチから\n次の試合では、'+text(session.lesson.nextGame,90)+'。結果だけ見て終わらず、この動きを実際に変える。':null),
   warmup?'🔥 '+warmup:null,
   '📚 座学：'+text(study.map,24)+'・'+text(study.theme,85)
  ];

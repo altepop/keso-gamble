@@ -37,7 +37,7 @@ test('compact direct individual notice uses only supplied session facts and vali
  assert.match(body!,/^<@123456789012345678> 🎯/);
  assert.doesNotMatch(body!,/直近の試合へのコーチからの個別フィードバックです|未取得|未確定|再生時刻/);
  assert.match(body!,/\n\n🔎/);
- assert.ok(body!.split('\n\n').every(block=>block.split('\n').length<=2));
+ assert.ok(body!.split('\n\n').filter(block=>!block.startsWith('💡')&&!block.startsWith('🔥')).every(block=>block.split('\n').length<=2));
  assert.match(body!,/KPR.*0\.80.*0\.60/);
  assert.match(body!,/第1ラウンド/);
  assert.match(body!,/📚 座学：Bind・テレポーターとスプリット/);
@@ -51,8 +51,9 @@ test('advantage-lost turning point selects its pattern, viewpoint and named focu
   daily:{warmup:{title:'止まって撃つ練習'},study:{map:'Haven',theme:'3サイトとミッドの支配',origin:'match'}}});
  assert.ok(body);
  assert.match(body!,/第10ラウンド、人数有利を落とした/);
- assert.match(body!,/次は1つだけ。有利な場面で、先にピークしない/);
- assert.match(body!,/キルしたら一度引いて、位置を取り直す/);
+ assert.match(body!,/人数有利を落とした.*数的優位を勝ちに変えられていない/);
+ assert.match(body!,/味方とクロスを組み/);
+ assert.match(body!,/キルしたら追撃せず、まず遮蔽物の後ろへ引く/);
  assert.doesNotMatch(body!,/止まって撃つ練習/);
  assert.match(body!,/📚 座学：Haven・3サイトとミッドの支配/);
  assert.doesNotMatch(body!,/次のコンペでは|再生時刻|未取得/);
@@ -64,8 +65,8 @@ test('pressure topic selects the death-linked reset prescription over the curric
    metrics:[{key:'dpr',label:'1R当たりのデス（DPR）',current:{value:0.87},baseline:{value:0.63,matches:5}}]},
   daily:{warmup:{title:'一つずつ角を確認する'},study:{map:'Bind',theme:'テレポーターとスプリット',origin:'match'}}});
  assert.ok(body);
- assert.match(body!,/デスが増えている。取り返そうと前に出る前に/);
- assert.match(body!,/遮蔽物を使って倒されない動き/);
+ assert.match(body!,/今回はデスが多い/);
+ assert.match(body!,/遮蔽物のある位置を選ぶ/);
  assert.doesNotMatch(body!,/一つずつ角を確認する/);
  assert.match(body!,/DPR.*0\.87.*5試合.*0\.63/);
 });
@@ -75,7 +76,7 @@ test('comeback win selects the flow pattern, which needs no warmup item',()=>{
   session,daily:{warmup:null,study:{map:'Bind',theme:'テレポーターとスプリット'}}});
  assert.ok(body);
  assert.match(body!,/人数不利から逆転した/);
- assert.match(body!,/逆転できたカバーは良い/);
+ assert.match(body!,/人数不利から逆転した。取り返せた場面/);
  assert.doesNotMatch(body!,/次のアップ/);
  assert.match(body!,/📚 座学/);
 });
@@ -85,11 +86,11 @@ test('fourth match of the day at night suggests a break; a deep-night loss sugge
   daily:{warmup:{title:'止まって撃つ練習'},study:{map:'Bind',theme:'テレポーターとスプリット'}}};
  const evening=formatPersonalFeedback({...base,endedAt:Date.parse('2026-11-23T14:30:00.000Z'),matchesToday:4});
  assert.ok(evening);
- assert.match(evening!,/連戦で判断が雑になる前に5分休む/);
+ assert.match(evening!,/連戦で判断が雑になる前に区切れ/);
  assert.match(evening!,/5分休憩/);
  const deepNight=formatPersonalFeedback({...base,endedAt:Date.parse('2026-11-23T17:00:00.000Z'),matchesToday:2});
  assert.ok(deepNight);
- assert.match(deepNight!,/深夜の無理な続行は判断を鈍らせる/);
+ assert.match(deepNight!,/深夜の敗戦だ/);
  assert.doesNotMatch(deepNight!,/それが今回の1つです|未取得/);
 });
 test('study prefers the played map verified preset; other maps fall back to the labelled daily pick',()=>{
@@ -140,11 +141,12 @@ test('new short-form Fujimura Sunset: sharp but factual with blank lines and no 
  assert.match(body!,/藤村さん｜Sunset｜勝利/);
  assert.match(body!,/第2ラウンド、人数有利を落とした。あれが取れていたら、もっと楽に勝てた試合です/);
  assert.match(body!,/📊 KPR 0\.67（直近5試合は0\.85）/);
- assert.match(body!,/先にピークしない/);
- assert.match(body!,/🔥 アップ（10分）：デスマッチで、キルしたら一度引いて、位置を取り直す/);
+ assert.match(body!,/味方とクロスを組み/);
+ assert.match(body!,/🔥 アップ（10分）\nデスマッチで、キルした直後の動きだけに集中する/);
+ assert.match(body!,/キル→引く→組み直す/);
  assert.doesNotMatch(body!,/未取得|未確定|比較資料は不足|再生時刻|VODの該当|直近の試合へのコーチ/);
- assert.ok(body!.split('\n\n').every(block=>block.split('\n').length<=2));
- assert.ok(body!.length<500);
+ assert.ok(body!.split('\n\n').filter(block=>!block.startsWith('💡')&&!block.startsWith('🔥')).every(block=>block.split('\n').length<=2));
+ assert.ok(body!.length<1300);
 });
 test('omits unavailable metrics and preserves selected no-warmup prescription',()=>{
  const body=formatPersonalFeedback({user:'123456789012345678',name:'選手',map:'Sunset',outcome:'win',
@@ -154,4 +156,29 @@ test('omits unavailable metrics and preserves selected no-warmup prescription',(
  assert.doesNotMatch(body!,/📊|未取得|未確定|🔥/);
  assert.match(body!,/人数不利から逆転した/);
  assert.ok(body!.length<420);
+});
+
+test('detailed advice and drill preserve compact outer blocks and do not invent a personal peek',()=>{
+ const body=formatPersonalFeedback({user:'123456789012345678',name:'藤村',map:'Sunset',outcome:'win',
+  swing:{round:2,description:'人数有利から敗れたラウンド（最大1人差）'},
+  session:{...session,metrics:[]},daily:{warmup:{title:'止まって撃つ練習'},study:{map:'Sunset',theme:'長い視線とミッドのスプリット',origin:'match'}}});
+ assert.ok(body);
+ const blocks=body!.split('\n\n');
+ assert.equal(blocks.length,5); // header, swing, advice, warmup, study; metric omitted
+ assert.match(blocks[2],/^💡 コーチから\n/);
+ assert.ok(blocks[2].split('\n').length>=4);
+ assert.match(blocks[3],/^🔥 アップ（10分）\n/);
+ assert.ok(blocks[3].split('\n').length>=4);
+ assert.ok(blocks.filter((_,i)=>i!==2&&i!==3).every(x=>x.split('\n').length<=2));
+ assert.doesNotMatch(body!,/本人が先にピークして落とした|未取得|未確定|再生時刻/);
+ assert.ok(body!.length<=2000);
+});
+test('coaching advice changes words only: original pattern choice and no-warmup remain intact',()=>{
+ const options={user:'123456789012345678',name:'選手',map:'Bind',outcome:'win' as const,
+  swing:{round:1,description:'人数不利から逆転したラウンド（最大2人差）'},session,
+  daily:{warmup:null,study:{map:'Bind',theme:'テレポーターとスプリット'}}};
+ const body=formatPersonalFeedback(options);
+ assert.match(body!,/💡 コーチから/);
+ assert.doesNotMatch(body!,/🔥/);
+ assert.match(body!,/📚 座学：Bind・テレポーターとスプリット/);
 });
