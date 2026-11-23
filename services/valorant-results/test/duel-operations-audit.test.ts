@@ -21,7 +21,7 @@ test('Phase12 audit reports guild-only aggregates without modifying D1',async()=
   assert.deepEqual(out.counts,{staleFinishedPve:1,staleFinishedPvp:1,activePve:1,activePvp:1});
   assert.equal(out.reviewRecommended,true);
   assert.equal(out.deletionAuthorized,false);
-  assert.equal(statements.length,2);
+  assert.equal(statements.length,1,'one D1 SELECT for all four counters');
   assert.ok(statements.every(x=>/^SELECT/i.test(x.trim())&&!/\b(?:DELETE|UPDATE|INSERT)\b/i.test(x)));
   assert.equal((db.prepare('SELECT COUNT(*) AS n FROM kp_board_duels').get() as {n:number}).n,3);
  }finally{db.close();}
@@ -38,14 +38,13 @@ test('PvP 30-day threshold detects stale rooms before 90-day PvE threshold',asyn
  const calls:Array<{sql:string;args:unknown[]}>=[];
  const env={DB:{prepare:(sql:string)=>({bind:(...args:unknown[])=>{
   calls.push({sql,args});
-  return {first:async()=>({stale:1,active:0})};
+  return {first:async()=>({stale_pve:1,stale_pvp:1,active_pve:0,active_pvp:0})};
  }})}};
  const result=await duelOperationsAudit(env as never,guild,now);
  assert.equal(result.retentionReviewDays,90);
  assert.equal(result.pvpRetentionReviewDays,30);
- assert.equal(calls.length,2);
- assert.equal(calls[0].args[0],now-90*86_400_000);
- assert.deepEqual(calls[1].args,[guild,now-30*86_400_000,guild]);
+ assert.equal(calls.length,1);
+ assert.deepEqual(calls[0].args,[guild,now-30*86_400_000,guild,now-90*86_400_000,guild]);
  assert.equal(result.deletionAuthorized,false);
 });
 
@@ -77,15 +76,80 @@ test('PvP audit uses indexed selective counts with identical status and age sema
   });
   assert.equal(result.reviewRecommended,true);
   assert.equal(result.deletionAuthorized,false);
-  assert.equal(statements.length,2,'no additional D1 round trip');
-  const auditSql=statements[1];
+  assert.equal(statements.length,1,'all counters read with one D1 SELECT');
+  const auditSql=statements[0];
   assert.equal((auditSql.match(/SELECT COUNT\(\*\) FROM kp_board_duels/g)||[]).length,2);
-  assert.doesNotMatch(auditSql,/SUM\(CASE/);
+  // PvP remains COUNT-only; PvE intentionally retains its single SUM(CASE) pass.
+  assert.doesNotMatch(auditSql.split('FROM (')[0],/SUM\(CASE/);
+  assert.match(auditSql,/SUM\(CASE WHEN turn='finished'/);
   const plan=db.prepare('EXPLAIN QUERY PLAN '+auditSql)
-   .all(guild,threshold,guild) as Array<{detail:string}>;
+   .all(guild,threshold,guild,now-90*86_400_000,guild) as Array<{detail:string}>;
   const indexed=plan.filter(row=>row.detail.includes('USING COVERING INDEX kp_board_duels_retention'));
   assert.equal(indexed.length,2,'both aggregates use the pre-existing covering index');
   assert.equal(plan.some(row=>row.detail.includes('SCAN kp_board_duels')),false);
   assert.equal((db.prepare('SELECT COUNT(*) AS n FROM kp_board_duels').get() as {n:number}).n,8);
+ }finally{db.close();}
+});
+
+test('single-query operations audit agrees with legacy two-query aggregates at 90/30-day boundaries',async()=>{
+ const db=new DatabaseSync(':memory:');
+ const guild='606131625084059674',other='222222222222222222';
+ const day=86_400_000,now=150*day,pveCutoff=now-90*day,pvpCutoff=now-30*day;
+ try{
+  db.exec(`CREATE TABLE kp_duel_pve_sessions(guild TEXT,turn TEXT,updated_at INTEGER);
+   CREATE TABLE kp_board_duels(guild TEXT,status TEXT,updated_at INTEGER);
+   CREATE INDEX kp_board_duels_retention ON kp_board_duels(guild,status,updated_at)`);
+  const addPve=db.prepare('INSERT INTO kp_duel_pve_sessions VALUES(?,?,?)');
+  const addPvp=db.prepare('INSERT INTO kp_board_duels VALUES(?,?,?)');
+  for(const [turn,at] of [['finished',pveCutoff-1],['finished',pveCutoff],
+   ['human',pveCutoff-1],['human',now],['finished',now]] as const)
+   addPve.run(guild,turn,at);
+  addPve.run(other,'finished',0);
+  for(const [status,at] of [['finished',pvpCutoff-1],['cancelled',pvpCutoff-1],
+   ['finished',pvpCutoff],['cancelled',pvpCutoff+1],['active',now],['pending',now]] as const)
+   addPvp.run(guild,status,at);
+  addPvp.run(other,'active',now);
+  const priorPve=db.prepare(`SELECT
+    COALESCE(SUM(CASE WHEN turn='finished' AND updated_at<? THEN 1 ELSE 0 END),0) stale,
+    COALESCE(SUM(CASE WHEN turn='human' THEN 1 ELSE 0 END),0) active
+    FROM kp_duel_pve_sessions WHERE guild=?`).get(pveCutoff,guild) as {stale:number;active:number};
+  const priorPvp=db.prepare(`SELECT
+    (SELECT COUNT(*) FROM kp_board_duels WHERE guild=?
+     AND status IN ('finished','cancelled') AND updated_at<?) stale,
+    (SELECT COUNT(*) FROM kp_board_duels WHERE guild=?
+     AND status IN ('active','pending')) active`)
+   .get(guild,pvpCutoff,guild) as {stale:number;active:number};
+  let selects=0;
+  const env={DB:{prepare:(sql:string)=>{
+   selects++;const statement=db.prepare(sql);
+   return {bind:(...args:unknown[])=>({first:async()=>statement.get(...args as [])})};
+  }}};
+  const result=await duelOperationsAudit(env as never,guild,now);
+  assert.equal(selects,1);
+  assert.deepEqual(result.counts,{
+   staleFinishedPve:priorPve.stale,staleFinishedPvp:priorPvp.stale,
+   activePve:priorPve.active,activePvp:priorPvp.active});
+  assert.deepEqual(result.counts,{staleFinishedPve:1,staleFinishedPvp:2,activePve:2,activePvp:2});
+  assert.equal(result.deletionAuthorized,false);
+  const otherResult=await duelOperationsAudit(env as never,other,now);
+  assert.deepEqual(otherResult.counts,{staleFinishedPve:1,staleFinishedPvp:0,activePve:0,activePvp:1});
+ }finally{db.close();}
+});
+
+test('one-query audit returns zero aggregates for empty guild and fails closed on malformed counters',async()=>{
+ const db=new DatabaseSync(':memory:');
+ try{
+  db.exec('CREATE TABLE kp_duel_pve_sessions(guild TEXT,turn TEXT,updated_at INTEGER);CREATE TABLE kp_board_duels(guild TEXT,status TEXT,updated_at INTEGER)');
+  const env={DB:{prepare:(sql:string)=>{
+   const stmt=db.prepare(sql);
+   return {bind:(...args:unknown[])=>({first:async()=>stmt.get(...args as [])})};
+  }}};
+  const result=await duelOperationsAudit(env as never,'606131625084059674',100*86_400_000);
+  assert.deepEqual(result.counts,{staleFinishedPve:0,staleFinishedPvp:0,activePve:0,activePvp:0});
+  assert.equal(result.reviewRecommended,false);
+  const corrupt={DB:{prepare:()=>({bind:()=>({first:async()=>({
+   stale_pve:-1,stale_pvp:0,active_pve:0,active_pvp:0})})})}};
+  await assert.rejects(duelOperationsAudit(corrupt as never,'606131625084059674',100*86_400_000),
+   /Invalid duel audit result/);
  }finally{db.close();}
 });
