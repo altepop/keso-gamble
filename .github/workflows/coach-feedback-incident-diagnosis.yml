@@ -102,7 +102,7 @@ jobs:
           const ordered=await select("SELECT n.match_id,n.ended_at,n.riot_id FROM notifications n JOIN tracked_players t ON lower(t.riot_id)=lower(n.riot_id) JOIN coach_profile_accounts a ON a.puuid=t.puuid WHERE n.mode='competitive' AND n.ended_at BETWEEN ? AND ? AND NOT EXISTS(SELECT 1 FROM monitor_state s WHERE s.key='coach_personal_feedback:v1:'||a.subject_id||':'||n.match_id) ORDER BY n.ended_at DESC LIMIT 24",[Date.now()-86400000,Date.now()]);
           const times=await select("SELECT n.match_id,n.ended_at AS notice_end,r.ended_at AS roster_end,r.map AS map,r.act_name AS act_name FROM notifications n JOIN valorant_match_rosters r ON r.match_id=n.match_id WHERE n.match_id IN (?,?)",ids);
           const {readCoachMemberReport}=await import('./services/valorant-results/src/coach-member-report.ts');
-          const adapter={prepare(sql){return {bind(...args){return {all:async()=>({results:await select(sql,args)}),first:async()=>{const rows=await select(sql,args);return rows[0]??null;}};}}};
+          const adapter={prepare:sql=>({bind:(...args)=>({all:async()=>({results:await select(sql,args)}),first:async()=>(await select(sql,args))[0]??null})})};
           const evaluations=[];
           for(const [person,riot,matchId,ended] of [['VDK','Dolly#SDGs',ids[1],1795448769379],['石原','h1d3g1g4s#1037',ids[0],1795449611356]]){
             try{const account=(await select('SELECT puuid FROM tracked_players WHERE lower(riot_id)=lower(?)',[riot]))[0];
