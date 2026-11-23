@@ -14,7 +14,8 @@ let browser;
  const state={...createInitialState(),cash:20000,serverWallet:true,selfUserId:'one',members:[{id:'one',name:'自分'},{id:'two',name:'対戦相手'}],claims:[],directives:[]};
  let room={id:'11111111-2222-4333-8444-555555555555',guild:'test',user_a:'one',user_b:'two',black_user:'one',turn_user:'one',game:'gomoku',stake:1000,status:'active',
   board:initialDuelBoard('gomoku'),winner:null,version:0,deadline_at:Date.now()+600000};
- const operations=[],errors=[];let liveHints=false,streams=0,duelReads=0;
+ const operations=[],errors=[];let liveHints=false,streams=0,duelReads=0,pveReads=0,pveAbandons=0,pveStarts=0;
+ const pveId='22222222-3333-4333-8444-555555555555';let pveAbandoned=false;
  for(let i=0;i<80;i++){try{if((await fetch('http://127.0.0.1:'+port+'/')).ok)break;}catch{}await new Promise(r=>setTimeout(r,100));}
  browser=await (engine==='webkit'?webkit:chromium).launch(engine==='webkit'?{}:{executablePath:process.env.CHROMIUM_PATH||(existsSync('/usr/bin/chromium')?'/usr/bin/chromium':undefined),args:['--no-sandbox']});
  const ctx=await browser.newContext({viewport:{width:390,height:844},isMobile:engine==='webkit',hasTouch:true,reducedMotion:'reduce'});
@@ -32,15 +33,15 @@ let browser;
   }
   else if(p.endsWith('/duels/pve')){
    assert.equal(route.request().headers().authorization,'Bearer '+'a'.repeat(48));
-   const data=route.request().postDataJSON();
-   assert.equal(data.action,'start');
-   assert.equal(data.game,'othello');
-   assert.equal(data.level,'normal');
-   response={match:{id:'22222222-3333-4333-8444-555555555555',game:'othello',level:'normal',board:initialDuelBoard('othello'),version:0,turn:'human',winner:null,humanMoves:0,cpuMoves:0,ownHand:null}};
+   const data=route.request().method()==='GET'?null:route.request().postDataJSON();
+   if(!data){pveReads++;assert.equal(new URL(route.request().url()).searchParams.get('session'),pveId);}
+   else if(data.action==='abandon'){pveAbandons++;assert.equal(data.session,pveId);pveAbandoned=true;}
+   else {assert.equal(data.action,'start');assert.equal(data.game,'othello');assert.equal(data.level,'normal');pveStarts++;pveAbandoned=false;}
+   response={match:{id:pveId,game:'othello',level:'normal',board:initialDuelBoard('othello'),version:pveAbandoned?1:0,turn:pveAbandoned?'finished':'human',winner:null,humanMoves:0,cpuMoves:0,ownHand:null}};
   }
   else if(p.endsWith('/duels/history')){
     assert.equal(route.request().headers().authorization,'Bearer '+'a'.repeat(48));
-    response={skills:[{mode:'pve',game:'othello',points:14,verified_games:4,wins:3},{mode:'pvp',game:'gomoku',points:7,verified_games:2,wins:1}],today:{game:'othello',level:'strong',started:1,finished:1,wins:1},history:[],sessions:[]};
+    response={skills:[{mode:'pve',game:'othello',points:14,verified_games:4,wins:3},{mode:'pvp',game:'gomoku',points:7,verified_games:2,wins:1}],today:{game:'othello',level:'strong',started:1,finished:1,wins:1},history:[],sessions:[{id:pveId,game:'othello',level:'normal',updatedAt:Date.now(),status:pveAbandoned?'finished':'active'}]};
    }
    else if(p.endsWith('/duels/season/event'))response={event:{id:'2026-11-23',title:'週間ピックアップ：オセロ',game:'othello',kind:'weekly-focus',extraKp:0}};
   else if(p.endsWith('/duels/events')){
@@ -87,6 +88,19 @@ let browser;
  await page.locator('[data-duel-pve-custom-start]').click();
  await page.locator('#duel-pve-section').getByText('サーバーでCPU戦を開始しました。').waitFor();
  assert.equal(page.url(),urlBefore,'server PvE move stays in the authenticated Activity');
+ // Functional browser exercise: saved-session resume, verified discard, and a fresh start.
+ await page.locator('[data-duel-history-open]').click();
+ await page.locator('[data-duel-history-resume="'+pveId+'"]').click();
+ await page.locator('#duel-pve-section').getByText('保存済みCPU戦を再開しました。').waitFor();
+ assert.equal(pveReads,1,'history resume must actually call authenticated GET');
+ await page.locator('.duel-pve-arena [data-duel-pve-abandon]').click();
+ await page.locator('[data-duel-pve-confirm="yes"]').click();
+ await page.locator('#duel-pve-section').getByText('進行中の対局を無報酬で破棄しました。新しいCPU戦を開始できます。').waitFor();
+ assert.equal(pveAbandons,1,'discard must actually call authenticated POST');
+ await page.locator('[data-duel-pve-custom-start]').click();
+ await page.locator('#duel-pve-section').getByText('サーバーでCPU戦を開始しました。').waitFor();
+ assert.equal(pveStarts,2,'new CPU game must remain operable after discard');
+
  await page.locator('details.duel-secondary summary').click();
   await page.locator('[data-duel-pve-rewards]').click();
  await page.locator('#duel-rewards-in-app').getByText('3勝 1敗 0分').waitFor();
