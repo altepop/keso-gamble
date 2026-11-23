@@ -75,7 +75,7 @@ const account = { riotId: 'Aquatopia#toppy', puuid: 'puuid-1' };
 test('a missing snapshot is fetched once and then served from D1 within the TTL', async () => {
   const db = fakeDb({ 'Aquatopia#toppy': 'ap' });
   let calls = 0;
-  const fetcher = async (path: string) => { calls++; assert.ok(path.includes('/valorant/v2/by-puuid/mmr/ap/pc/puuid-1')); return mmrPayload; };
+  const fetcher = async (path: string) => { calls++; assert.equal(path,'/valorant/v2/by-puuid/mmr/ap/puuid-1'); return mmrPayload; };
   const first = await ensureCoachMmr(db, [account], fetcher, 1_000_000);
   assert.equal(calls, 1);
   assert.equal(first.get(account.riotId)?.tierPatched, 'Diamond 3');
@@ -103,4 +103,19 @@ test('an account without a known region is skipped without failing the others', 
   const db = fakeDb({});
   const result = await ensureCoachMmr(db, [account], async () => mmrPayload, 1_000_000);
   assert.equal(result.get(account.riotId), null);
+});
+
+// HenrikDev's MMR v2 has {region}/{puuid}; only v3 MMR and v2 MMR-history
+// include a {platform} component between them. Catch route regressions.
+test('MMR v2 request never inserts the v3 platform segment',async()=>{
+ const db=fakeDb({'Aquatopia#toppy':'ap'});
+ const requested:string[]=[];
+ const result=await ensureCoachMmr(db,[account],async path=>{
+  requested.push(path);
+  if(path!=='/valorant/v2/by-puuid/mmr/ap/puuid-1')throw new Error('unexpected Henrik v2 route');
+  return mmrPayload;
+ },1_000_000);
+ assert.deepEqual(requested,['/valorant/v2/by-puuid/mmr/ap/puuid-1']);
+ assert.equal(result.get(account.riotId)?.rankingInTier,62);
+ assert.equal(result.get(account.riotId)?.peakPatched,'Ascendant 3');
 });
