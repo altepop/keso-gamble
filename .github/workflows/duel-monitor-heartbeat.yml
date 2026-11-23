@@ -9,6 +9,8 @@ on:
       - 'services/valorant-results/test/duel-monitor-heartbeat.test.mjs'
       - 'scripts/duel-d1-schedule-watch.mjs'
       - 'services/valorant-results/test/duel-d1-schedule-watch.test.mjs'
+      - 'scripts/duel-fallback-job-watch.mjs'
+      - 'services/valorant-results/test/duel-fallback-job-watch.test.mjs'
   push:
     branches: [main]
     paths:
@@ -19,6 +21,8 @@ on:
       - 'services/valorant-results/test/duel-monitor-heartbeat.test.mjs'
       - 'scripts/duel-d1-schedule-watch.mjs'
       - 'services/valorant-results/test/duel-d1-schedule-watch.test.mjs'
+      - 'scripts/duel-fallback-job-watch.mjs'
+      - 'services/valorant-results/test/duel-fallback-job-watch.test.mjs'
   workflow_dispatch:
   schedule:
     - cron: '27 */3 * * *'
@@ -40,7 +44,7 @@ jobs:
         with:
           node-version: '24'
       - name: Validate heartbeat states without production access
-        run: node --test services/valorant-results/test/duel-monitor-heartbeat.test.mjs services/valorant-results/test/duel-monitor-heartbeat-alert.test.mjs services/valorant-results/test/duel-d1-schedule-watch.test.mjs
+        run: node --test services/valorant-results/test/duel-monitor-heartbeat.test.mjs services/valorant-results/test/duel-monitor-heartbeat-alert.test.mjs services/valorant-results/test/duel-d1-schedule-watch.test.mjs services/valorant-results/test/duel-fallback-job-watch.test.mjs
       - name: Verify hourly monitor scheduled-run heartbeat
         if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.actor == 'altepop')
         env:
@@ -58,3 +62,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/duel-d1-schedule-watch.mjs
+      - name: Verify scheduled D1 deployment fallback job independently
+        if: always() && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.actor == 'altepop'))
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/duel-fallback-job-watch.mjs
