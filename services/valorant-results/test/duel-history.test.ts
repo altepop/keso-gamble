@@ -120,8 +120,8 @@ test('PvP receipts omit the daily PvE join without changing receipt values or Pv
   add.run('guild',matchId,'alice','pvp','trio','win',3,200,200);
   add.run('guild',daily.id,'alice','pve',daily.game,'loss',2,100,100);
   const all=await duelHistoryRead(env,'guild','alice');
-  assert.equal(all.history.find(row=>row.id===daily.id)?.dailyDay,null,
-   'daily session without a daily receipt should not acquire fictitious provenance');
+  assert.match(all.history.find(row=>row.id===daily.id)?.dailyDay??'',/^\\d{8}$/,
+   'real daily PvE receipt retains its recorded daily provenance');
   const database=env as unknown as {DB:{prepare:(sql:string)=>unknown}};
   const basePrepare=database.DB.prepare;
   let receiptStatements=0;
