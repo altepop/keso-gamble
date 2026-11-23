@@ -81,39 +81,119 @@ export function largestObservedSwing(row:Archive,puuid:string):{round:number;des
  return candidate?{round:candidate.round,description:candidate.description}:null;
 }
 type Metric={key:string;label:string;current?:{value:number}|null;baseline?:{value:number;matches:number}|null};
-type Session={date:string|null;map:string;agent:string;lesson:{practice:{name:string};track:string};followUp?:{title:string};metrics:Metric[]};
-type Daily={warmup:{title:string}|null;study:{map:string;theme:string}|null};
+type Session={date:string|null;map:string;agent:string;topic?:string;lesson:{practice:{name:string};track:string;nextGame?:string};followUp?:{title?:string;status?:string};metrics:Metric[]};
+type Daily={warmup:{title:string}|null;study:{map:string;theme:string;origin?:'match'|'daily'}|null};
+// Advice inventory (feedback-advice-patterns). Only patterns whose trigger is
+// detectable from the saved session, the observed swing, the local hour or the
+// same-day match count are embedded here. Selection never invents wording;
+// unmatched cases fall back to the verified match-feedback curriculum below.
+type AdvicePattern={advice:string;warmup:string|null;closing:string};
+const ADVICE_PATTERNS={
+ advantageLost:{advice:'人数有利のラウンドは、こちらから仕掛けなければほぼ勝てます。次戦は有利な場面で「先にピークしない」を1つだけ意識してください。',warmup:'デスマッチで、キルした直後に一度引いて位置を取り直す動きを繰り返す（10分）',closing:'次のコンペでは、有利な場面で「先にピークしない」ことだけを意識して試してください。'},
+ cover:{advice:'味方と離れた場所で倒される場面がありました。次戦は、味方の近くで動く場面を1つだけ作ってみてください。',warmup:'デスマッチで他のプレイヤーの後ろについて動き、カバーに入るタイミングを見る（10分）',closing:'次のコンペでは、味方の近くで動く場面を1つ作ることだけを意識して試してください。'},
+ deaths:{advice:'今日はデスが多めです。一度お水を飲んで、画面から少し離れてから次に行きましょう。立て直しも実力のうちです。',warmup:'デスマッチを「死なない」テーマで1本。無理なピークをせず、遮蔽物のある位置だけで撃ち合う（10分）',closing:'次のコンペの前に、お水を飲んで少し離れてから入りましょう。それが今回の1つです。'},
+ conversion:{advice:'撃ち負けが目立ちます。まずはデスマッチをしてみましょう。勝敗ではなく、止まって撃てているかだけを見てください。',warmup:'デスマッチ1本。ストレイフ→停止→バーストの順序を崩さない（15分）',closing:'次のコンペでは、止まってから撃つ順序だけを意識して試してください。'},
+ stalled:{advice:'今日は噛み合わない日でした。こういう日は無理に取り返そうとせず、一度休んで仕切り直すのが一番の近道です。',warmup:'今日はここまでにする選択も含め、次にやるときのアップを1つだけ決めておく',closing:'今日はここまでにして、仕切り直しましょう。それが今回の1つです。'},
+ improving:{advice:'前回意識した点が、数字に出ています。その調子です。同じ意識でもう一試合どうぞ。',warmup:null,closing:'次のコンペも、同じ意識のまま行きましょう。それが今回の1つです。'},
+ sleepy:{advice:'眠気が出ています。今日はここまでにして、明日に回しましょう。寝不足の1戦は、だいたい高くつきます。',warmup:null,closing:'今日はここまでにしましょう。それが今回の1つです。'},
+ flow:{advice:'流れが来ています。もう一試合、普通に行きましょう。考えすぎないのが一番の好調キープです。',warmup:null,closing:'もう一試合、普通に行きましょう。それが今回の1つです。'},
+ longSession:{advice:'長くやっています。一度立ち上がって伸びをして、水を飲んでください。それだけで次の試合が変わります。',warmup:'5分の休憩（立って伸びをして、水を飲む）',closing:'次に行く前に、5分の休憩を挟みましょう。それが今回の1つです。'},
+ lateNight:{advice:'深夜帯です。あと1戦で区切るのがおすすめです。勝っても負けても、そこで終われる形にしましょう。',warmup:null,closing:'あと1戦で区切りましょう。それが今回の1つです。'},
+ steady:{advice:'大きな崩れはありませんでした。もう一試合普通に行って、今日の感覚を確かめましょう。',warmup:'レンジで3分だけ、照準の高さを確認する',closing:'もう一試合普通に行って、今日の感覚を確かめましょう。それが今回の1つです。'}
+} satisfies Record<string,AdvicePattern>;
+function metricWorsened(session:Session,key:string,lowerIsBetter:boolean):boolean{
+ const m=session.metrics.find(x=>x.key===key);
+ if(!m||!Number.isFinite(m.current?.value)||!m.baseline||m.baseline.matches<2||!Number.isFinite(m.baseline.value))return false;
+ // Same 0.1/R boundary and float guard as the curriculum's lesson selection.
+ const delta=Number((m.current!.value-m.baseline.value).toFixed(9));
+ return lowerIsBetter?delta>=0.1:delta<=-0.1;
+}
+export function selectAdvicePattern(input:{outcome:'win'|'loss'|'draw';swing:{description:string};
+ session:Session;endedAt?:number;matchesToday?:number}):AdvicePattern|null{
+ const {outcome,swing,session}=input;
+ const hour=typeof input.endedAt==='number'&&Number.isFinite(input.endedAt)
+  ?new Date(input.endedAt+9*3600_000).getUTCHours():null;
+ const deepNight=hour!==null&&hour<5,lateNight=hour!==null&&(hour>=23||hour<5);
+ // The turning point itself comes first, then this match's diagnosed weakness.
+ if(swing.description.startsWith('人数有利から敗れた'))return ADVICE_PATTERNS.advantageLost;
+ if(session.topic==='cover')return ADVICE_PATTERNS.cover;
+ if(session.topic==='pressure'||metricWorsened(session,'dpr',true))return ADVICE_PATTERNS.deaths;
+ if(session.topic==='conversion')return ADVICE_PATTERNS.conversion;
+ if(metricWorsened(session,'kpr',false)&&metricWorsened(session,'dpr',true))return ADVICE_PATTERNS.stalled;
+ if(session.followUp?.status==='improving')return ADVICE_PATTERNS.improving;
+ if(deepNight&&outcome==='loss')return ADVICE_PATTERNS.sleepy;
+ if(outcome==='win'&&(session.topic==='repeat'||swing.description.startsWith('人数不利から逆転した')))return ADVICE_PATTERNS.flow;
+ if((input.matchesToday??0)>=4)return ADVICE_PATTERNS.longSession;
+ if(lateNight)return ADVICE_PATTERNS.lateNight;
+ if(session.topic==='timing')return ADVICE_PATTERNS.steady;
+ return null;
+}
+function swingViewpoint(description:string):string|null{
+ if(description.startsWith('人数有利から敗れた'))
+  return '見るべきポイントは、有利ができてから最初に倒れた場面です。先に仕掛けたのは誰か、その時に味方が取り返せる位置にいたかをご確認ください。';
+ if(description.startsWith('人数不利から逆転した'))
+  return '見るべきポイントは、不利になってから最初に取り返したキルです。誰のカバーで生まれたかをご確認ください。再現できる形が見えてきます。';
+ return null;
+}
 export function formatPersonalFeedback(input:{
  user:string;name:string;map:string;outcome:'win'|'loss'|'draw';swing:{round:number;description:string};
- session:Session;daily:Daily
+ session:Session;daily:Daily;endedAt?:number;matchesToday?:number
 }):string|null{
  const {user,name,map,outcome,swing,session,daily}=input;
- if(!/^\d{15,22}$/.test(user)||!daily.warmup?.title||!daily.study?.theme||
-  !Number.isSafeInteger(swing.round)||swing.round<1||swing.round>61)return null;
+ if(!/^\d{15,22}$/.test(user))return null;
+ if(!Number.isSafeInteger(swing.round)||swing.round<1||swing.round>61)return null;
+ const study=daily.study;if(!study?.theme)return null;
+ const pattern=selectAdvicePattern({outcome,swing,session,endedAt:input.endedAt,matchesToday:input.matchesToday});
+ if(!pattern&&!daily.warmup?.title)return null;
  const metric=session.metrics.find(m=>m.key===session.lesson.track&&Number.isFinite(m.current?.value));
  const metricLine=metric?(text(metric.label,26)+'：今回 '+metric.current!.value.toFixed(2)+
    (metric.baseline&&metric.baseline.matches>=2&&Number.isFinite(metric.baseline.value)
     ?'／比較 '+metric.baseline.value.toFixed(2)+'（'+metric.baseline.matches+'試合）':'（比較資料は不足）')):
    '対象指標は未取得です。次の試合で確認しましょう。';
- return [
+ const point=swingViewpoint(swing.description);
+ const lines=[
   '<@'+user+'> 🎯 **KESO COACH｜個別フィードバック**',
+  'これは、直近の試合へのコーチからの個別フィードバックです。今回の気づきと、次に試すことをお届けします。',
   '🕹️ '+text(name,32)+'さん｜'+text(map,24)+'｜'+({win:'勝利',loss:'敗北',draw:'引き分け'}[outcome]),
-  '🔎 **今回の分かれ目**：第'+swing.round+'ラウンド・'+text(swing.description,75)+'。VODの該当ラウンドをご確認ください（再生時刻は未取得）。',
-  '📊 **重点指標**：'+metricLine+' ※1試合の変化だけで改善・悪化を断定しません。',
-  '🔥 **次のアップ**：'+text(daily.warmup.title,85),
-  '📚 **本日の座学**：'+text(daily.study.map,24)+'・'+text(daily.study.theme,85),
-  '次のコンペでは、まず1つだけ意識して試してください。'
- ].join('\n');
+  '🔎 **今回の分かれ目**：第'+swing.round+'ラウンド・'+text(swing.description,75)+'。'+(point?point+' ':'')+'VODの該当ラウンドをご確認ください（再生時刻は未取得）。',
+  '📊 **重点指標**：'+metricLine+' ※1試合の変化だけで改善・悪化を断定しません。'
+ ];
+ if(pattern)lines.push('💡 **コーチから**：'+text(pattern.advice,120));
+ if(pattern?.warmup)lines.push('🔥 **次のアップ**：'+text(pattern.warmup,120));
+ else if(!pattern)lines.push('🔥 **次のアップ**：'+text(daily.warmup!.title,85));
+ lines.push(study.origin==='match'
+  ?'📚 **今回のマップの座学**：'+text(study.map,24)+'・'+text(study.theme,85)
+  :'📚 **本日の座学（日替わり）**：'+text(study.map,24)+'・'+text(study.theme,85));
+ lines.push(pattern?pattern.closing
+  :(session.lesson.nextGame?text(session.lesson.nextGame,160):'次のコンペでは、まず1つだけ意識して試してください。'));
+ return lines.join('\n');
+}
+type MuseTop={chooseToday:(input:{date:string;presets:Record<string,unknown>})=>{map:string|null;study:{theme:string;sourceStatus:string}|null};
+ canonical?:(map:string)=>string|null;
+ validatePreset?:(map:string,entry:unknown)=>{study:{theme:string;sourceStatus:string}|null}|null};
+export function studyForFeedback(matchMap:string,now:number):Daily['study']{
+ const root=globalThis as typeof globalThis & {
+  KesoCoachMuseTop?:MuseTop;
+  KesoCoachMusePresets?:{PRESETS:Record<string,unknown>}};
+ const presets=root.KesoCoachMusePresets?.PRESETS??{};
+ const top=root.KesoCoachMuseTop;
+ // Prefer the played map's own verified preset, so the study matches the match
+ // the member just played. Only verified registry entries are ever used.
+ const canonical=top?.canonical?.(matchMap);
+ if(canonical&&top?.validatePreset){
+  const own=top.validatePreset(canonical,presets[canonical]);
+  if(own?.study?.theme&&own.study.sourceStatus==='verified')
+   return {map:canonical,theme:own.study.theme,origin:'match'};
+ }
+ const pick=top?.chooseToday({date:localDay(now),presets});
+ return pick?.map&&pick.study?.theme&&pick.study.sourceStatus==='verified'
+  ?{map:pick.map,theme:pick.study.theme,origin:'daily'}:null;
 }
 function dailyFromInventory(now:number,session:Session):Daily{
- const root=globalThis as typeof globalThis & {
-  KesoCoachMuseTop?:{chooseToday:(input:{date:string;presets:Record<string,unknown>})=>{map:string|null;study:{theme:string;sourceStatus:string}|null}};
-  KesoCoachMusePresets?:{PRESETS:Record<string,unknown>}};
- const pick=root.KesoCoachMuseTop?.chooseToday({date:localDay(now),presets:root.KesoCoachMusePresets?.PRESETS??{}});
  // The verified match-feedback curriculum supplies the personal next drill.
  // Study is sourced only from the Muse approved registry, never generated.
  return {warmup:session.lesson.practice?.name?{title:session.lesson.practice.name}:null,
-  study:pick?.map&&pick.study?.theme&&pick.study.sourceStatus==='verified'?{map:pick.map,theme:pick.study.theme}:null};
+  study:studyForFeedback(session.map,now)};
 }
 /**
  * Called only after a new competitive match was durably saved by the monitor.
@@ -140,8 +220,13 @@ export async function postCoachPersonalFeedback(env:Env,mapping:KpMapping,
  const session=sessions[0];
  if(session.map!==row.map||!['win','loss','draw'].includes(session.outcome))return 'incomplete';
  const daily=dailyFromInventory(now,session);
+ // Same-day count from the saved sessions (this match included) and the match
+ // end time only feed the advice-pattern selection; they never gate sending.
+ const today=localDay(endedAt);
+ const matchesToday=report.matchFeedback.sessions.filter(s=>{
+  const at=Date.parse(s.date??'');return Number.isFinite(at)&&localDay(at)===today;}).length;
  const content=formatPersonalFeedback({user:member.owner_user,name:identity.displayName,map:session.map,
-  outcome:session.outcome as 'win'|'loss'|'draw',swing,session,daily});
+  outcome:session.outcome as 'win'|'loss'|'draw',swing,session,daily,endedAt,matchesToday});
  if(!content||content.length>2000)return 'incomplete';
  // Verify the pre-existing webhook destination, without creating a new webhook.
  let info:{channel_id?:string;id?:string};
