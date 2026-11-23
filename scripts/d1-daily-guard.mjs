@@ -8,6 +8,14 @@ import {pathToFileURL} from 'node:url';
 export const OPTIONAL_THRESHOLD=4_000_000,WARNING_THRESHOLD=3_500_000;
 export const D1_B_ID='bf23ab40-814f-4626-9e0b-36739ac41750';
 export const SETTING_KEY='d1_optional_conserve_utc_day';
+/** Operator-facing P12 D1 cap contract: telemetry is sampled and no exact
+ * account-wide D1 hard cap has been installed or verified on this account.
+ * Free-tier quota enforcement is provided by Cloudflare when the plan is Free,
+ * not by this sampled guard. Do not imply any Paid D1 invoice ceiling.
+ */
+export const D1_CAP_STATUS=Object.freeze({hardCapConfigured:false,hardCapVerified:false,
+ hardCapEnforcement:'not-configured',softConserveScope:'optional-feed-and-trend-only'});
+
 
 function sumMetric(account,utcDay,metric){
  if(!account||!Array.isArray(account.d1AnalyticsAdaptiveGroups))throw Error('Missing D1 analytics');
@@ -49,7 +57,7 @@ export async function runGuard(env=process.env,request=fetch,now=new Date()){
  const day=now.toISOString().slice(0,10);
  if(!/^[a-f\d]{32}$/i.test(account??'')||!token){
   console.warn('D1_BUDGET_UNAVAILABLE: Analytics credentials missing');
-  return {status:'unavailable',day};
+  return {status:'unavailable',day,...D1_CAP_STATUS};
  }
  const auth={'Authorization':'Bearer '+token,'Content-Type':'application/json'};
  const resp=await request('https://api.cloudflare.com/client/v4/graphql',{method:'POST',headers:auth,body:JSON.stringify({query:gqlQuery,variables:{accountTag:account,day}}),signal:AbortSignal.timeout(18000)});
@@ -64,7 +72,7 @@ export async function runGuard(env=process.env,request=fetch,now=new Date()){
    '\n## D1 budget telemetry incomplete\n\nUTC day: '+day+
    '; reason: '+coverage.reason+
    '. No optional flag written. Account-wide quota and spending **not guaranteed**; hard cap **not configured**.\n');
-  return {status:'unavailable',day,reason:coverage.reason,hardCapConfigured:false};
+  return {status:'unavailable',day,reason:coverage.reason,...D1_CAP_STATUS};
  }
  const estimate=sumDailyRows(accountData,day);
  console.log('D1_ACCOUNT_DAILY_ESTIMATE '+day+' rows='+estimate+' sampled=true alert='+WARNING_THRESHOLD+' conserve='+OPTIONAL_THRESHOLD);
@@ -101,7 +109,7 @@ export async function runGuard(env=process.env,request=fetch,now=new Date()){
   'Cloudflare GraphQL is adaptively sampled, can be incomplete and may lag actual quota. This is a best-effort soft mode, NOT a hard usage guarantee. No account-wide hard spending cap is configured. Core KP/ranking/races/stock/settlements are never stopped.',
   ''
  ].join('\n'));
- return {status,day,estimate,writtenEstimate};
+ return {status,day,estimate,writtenEstimate,...D1_CAP_STATUS};
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
  runGuard().catch(error=>{console.error('D1_BUDGET_GUARD_ERROR '+(error instanceof Error?error.message:'unknown'));process.exitCode=1;});
