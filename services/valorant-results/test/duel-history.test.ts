@@ -114,11 +114,11 @@ test('PvP receipts omit the daily PvE join without changing receipt values or Pv
   for(const sql of DUEL_PROGRESSION_DDL)db.exec(sql);
   for(const sql of DUEL_REWARD_DDL)db.exec(sql);
   const add=db.prepare(`INSERT INTO kp_duel_progress_receipts
-   (guild,match_id,user,mode,game,outcome,verified_version,occurred_at,applied_at)
-   VALUES (?,?,?,?,?,?,?,?,?)`);
+   (guild,match_id,user,mode,game,opponent,outcome,verified_version,occurred_at,applied_at)
+   VALUES (?,?,?,?,?,?,?,?,?,?)`);
   const matchId=crypto.randomUUID();
-  add.run('guild',matchId,'alice','pvp','trio','win',3,200,200);
-  add.run('guild',daily.id,'alice','pve',daily.game,'loss',2,100,100);
+  add.run('guild',matchId,'alice','pvp','trio','bob','win',3,200,200);
+  add.run('guild',daily.id,'alice','pve',daily.game,null,'loss',2,100,100);
   const all=await duelHistoryRead(env,'guild','alice');
   assert.match(all.history.find(row=>row.id===daily.id)?.dailyDay??'',/^\d{8}$/,
    'real daily PvE receipt retains its recorded daily provenance');
