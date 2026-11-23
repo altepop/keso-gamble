@@ -46,3 +46,18 @@ test('round assists need complete assistant IDs and agreement with all ten roste
  delete ks[0].assistants;const missing=coachRoundContribution([{...valid,kills_json:JSON.stringify(ks)}],accounts);assert.equal(missing.rounds,1);assert.equal(missing.assistQuality.validMatches,0);
  ps[0].a=2;const mismatch=coachRoundContribution([{...valid,players_json:JSON.stringify(ps)}],accounts);assert.equal(mismatch.rounds,1);assert.equal(mismatch.assistQuality.excluded['assist-totals-do-not-match-roster'],1);
 });
+
+test('uncredited teammate casualty is kept as observed event but does not invalidate scored K/D parity',()=>{
+ const row=fixture(),kills=JSON.parse(row.kills_json);
+ kills.push({r:0,t:30,killer:'other1',victim:'other0'});
+ const output=coachRoundContribution([{...row,kills_json:JSON.stringify(kills)}],accounts);
+ assert.equal(output.quality.validMatches,1);
+ assert.equal(output.rounds,1);
+ assert.equal(output.combatFollowup.enemyKills,2);
+ assert.equal(output.quality.excluded['kill-totals-do-not-match-roster'],undefined);
+ // Strictly preserve the rejection of unmatched enemy or unknown-killer deaths.
+ const wrong=[...kills,{r:0,t:40,killer:null,victim:'other2'}];
+ const rejected=coachRoundContribution([{...row,kills_json:JSON.stringify(wrong)}],accounts);
+ assert.equal(rejected.quality.validMatches,0);
+ assert.equal(rejected.quality.excluded['kill-totals-do-not-match-roster'],1);
+});
