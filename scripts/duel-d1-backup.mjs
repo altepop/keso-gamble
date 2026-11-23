@@ -187,9 +187,9 @@ export function verifyRetainedMetadata(meta){
 export async function verifyRetainedArtifact(file,env=process.env){
  const {key}=safeSecret(env);
  const payload=JSON.parse(readFileSync(file,'utf8'));
- // Read metadata only from authenticated ciphertext envelope. An attacker
- // could edit metadata alone, so it is treated as an assertion to cross-check,
- // not as an independent cryptographic attestation.
+ // Envelope metadata is NOT authenticated as AES-GCM associated data.
+ // Treat it only as an assertion to cross-check against the decrypted SQL,
+ // never as an independent provenance or cryptographic attestation.
  const decrypted=decryptDump(payload,key);
  const {tables,expectedRows}=verifyRetainedMetadata(payload.meta);
  const actualRows=restoreCheck(decrypted,tables);
