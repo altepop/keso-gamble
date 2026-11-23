@@ -7,6 +7,8 @@ on:
       - 'scripts/duel-monitor-heartbeat-alert.mjs'
       - 'services/valorant-results/test/duel-monitor-heartbeat-alert.test.mjs'
       - 'services/valorant-results/test/duel-monitor-heartbeat.test.mjs'
+      - 'scripts/duel-d1-schedule-watch.mjs'
+      - 'services/valorant-results/test/duel-d1-schedule-watch.test.mjs'
   push:
     branches: [main]
     paths:
@@ -15,6 +17,8 @@ on:
       - 'scripts/duel-monitor-heartbeat-alert.mjs'
       - 'services/valorant-results/test/duel-monitor-heartbeat-alert.test.mjs'
       - 'services/valorant-results/test/duel-monitor-heartbeat.test.mjs'
+      - 'scripts/duel-d1-schedule-watch.mjs'
+      - 'services/valorant-results/test/duel-d1-schedule-watch.test.mjs'
   workflow_dispatch:
   schedule:
     - cron: '27 */3 * * *'
@@ -36,7 +40,7 @@ jobs:
         with:
           node-version: '24'
       - name: Validate heartbeat states without production access
-        run: node --test services/valorant-results/test/duel-monitor-heartbeat.test.mjs services/valorant-results/test/duel-monitor-heartbeat-alert.test.mjs
+        run: node --test services/valorant-results/test/duel-monitor-heartbeat.test.mjs services/valorant-results/test/duel-monitor-heartbeat-alert.test.mjs services/valorant-results/test/duel-d1-schedule-watch.test.mjs
       - name: Verify hourly monitor scheduled-run heartbeat
         if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.actor == 'altepop')
         env:
@@ -49,3 +53,8 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           DUEL_HEARTBEAT_REPORT: ${{ runner.temp }}/duel-heartbeat-report.json
         run: node scripts/duel-monitor-heartbeat-alert.mjs
+      - name: Detect D1 scheduled audit gaps and notify in a separate GitHub Issue
+        if: always() && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.actor == 'altepop'))
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/duel-d1-schedule-watch.mjs
