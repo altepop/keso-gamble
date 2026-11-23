@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {buildDeploymentAlert,ALERT_TITLE} from '../../../scripts/duel-deployment-alert.mjs';
+import {buildDeploymentAlert,buildMonitorUnavailableAlert,ALERT_TITLE,MONITOR_UNAVAILABLE_TITLE} from '../../../scripts/duel-deployment-alert.mjs';
 const healthy={name:'Pages',state:'healthy',runId:1,sha:'0c817d444f31e19ae1fd12c6267c99aa8f199b90'};
 const failed={name:'Worker',state:'failed',runId:2,sha:'0c817d444f31e19ae1fd12c6267c99aa8f199b90'};
 test('actionable failed Worker creates one minimal, sanitized issue draft',()=>{
@@ -23,4 +23,13 @@ test('run IDs and SHAs are sanitized, no user-supplied text reaches issue body',
 test('stalled and missing production deployment are actionable, but not transient pending',()=>{
  for(const state of ['stalled','missing','invalid-timestamp'])assert.ok(buildDeploymentAlert({ok:false,results:[healthy,{...failed,state}]}));
  assert.equal(buildDeploymentAlert({ok:false,results:[healthy,{...failed,state:'pending'}]}),null);
+});
+
+test('monitor report absence has its own sanitized alert, not a claimed deployment failure',()=>{
+ const result=buildMonitorUnavailableAlert();
+ assert.equal(result.title,MONITOR_UNAVAILABLE_TITLE);
+ assert.match(result.body,/監視自体の異常/);
+ assert.match(result.body,/配備失敗を意味しない/);
+ assert.doesNotMatch(result.body,/token|webhook|秘密/i);
+ assert.notEqual(result.title,ALERT_TITLE);
 });

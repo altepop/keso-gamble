@@ -2,6 +2,17 @@
 // Only explicit failed/stalled/missing deployment decisions can notify.
 import {readFileSync} from 'node:fs';
 export const ALERT_TITLE='P12 duel deployment alert: action required';
+export const MONITOR_UNAVAILABLE_TITLE='P12 duel deployment monitor unavailable: review required';
+/** A missing or unreadable report is a monitor failure, never evidence of a failed deploy. */
+export function buildMonitorUnavailableAlert(){
+ return {title:MONITOR_UNAVAILABLE_TITLE,body:[
+  'P12決闘の配備監視結果を読み取れなかった。これは監視自体の異常であり、Pages/Workerの配備失敗を意味しない。',
+  '',
+  'Actionsの監視実行ログ、レポート出力、権限、Pages/Worker配備状況を手動で照合すること。',
+  '監視はD1/KPの読み書き、自動再配備、復旧操作を行わない。',
+  '同名の未解決Issueは重複起票せず、自動クローズもしない。'
+ ].join('\n')};
+}
 const badStates=new Set(['failed','stalled','missing','invalid-timestamp']);
 export function buildDeploymentAlert(report){
  if(!report||!Array.isArray(report.results)||report.results.length!==2)return null;
@@ -23,16 +34,23 @@ async function execute(){
  const path=process.env.DUEL_WATCH_REPORT,repo=process.env.GITHUB_REPOSITORY,token=process.env.GITHUB_TOKEN;
  if(repo!=='altepop/keso-gamble'||!path||!token)throw Error('Alert requires authorized repository, report and GITHUB_TOKEN');
  let report;
- try{report=JSON.parse(readFileSync(path,'utf8'));}catch(e){console.log('DUEL_ALERT_SKIPPED: no valid monitor report');return;}
- const alert=buildDeploymentAlert(report);
- if(!alert){console.log('DUEL_ALERT_SKIPPED: no actionable deployment anomaly');return;}
+ let alert;
+ try{report=JSON.parse(readFileSync(path,'utf8'));}
+ catch{alert=buildMonitorUnavailableAlert();}
+ if(!alert){
+  alert=buildDeploymentAlert(report);
+  if(!alert){
+   if(!report||!Array.isArray(report.results)||report.results.length!==2)alert=buildMonitorUnavailableAlert();
+   else {console.log('DUEL_ALERT_SKIPPED: no actionable deployment anomaly');return;}
+  }
+}
  const base='https://api.github.com/repos/'+repo;
  const headers={Authorization:'Bearer '+token,Accept:'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28'};
  const list=await fetch(base+'/issues?state=open&per_page=100',{headers,signal:AbortSignal.timeout(15000)});
  if(!list.ok)throw Error('Cannot check existing alert issues: '+list.status);
  const issues=await list.json();
  if(!Array.isArray(issues))throw Error('Unexpected issue response');
- if(issues.some(i=>!i.pull_request&&i.title===ALERT_TITLE)){console.log('DUEL_ALERT_DEDUPED: open issue exists');return;}
+ if(issues.some(i=>!i.pull_request&&i.title===alert.title)){console.log('DUEL_ALERT_DEDUPED: open issue exists');return;}
  // Fail closed rather than creating duplicates if pagination could hide an older alert.
  if(issues.length>=100){console.log('DUEL_ALERT_SKIPPED: issue list saturated, manual review');return;}
  const made=await fetch(base+'/issues',{method:'POST',headers:{...headers,'Content-Type':'application/json'},
