@@ -1,7 +1,7 @@
 name: KESO COACH member collection audit (read-only)
 on:
   pull_request:
-    paths: ['scripts/coach-member-collection-audit*', '.github/workflows/coach-member-collection-audit.yml']
+    paths: ['scripts/coach-member-collection-audit*', 'scripts/coach-kobe-production-audit*', '.github/workflows/coach-member-collection-audit.yml']
   push:
     branches: [main]
     paths: ['scripts/coach-member-collection-audit*', '.github/workflows/coach-member-collection-audit.yml']
