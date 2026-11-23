@@ -29,7 +29,24 @@ export function buildD1ReadBudgetAlert(report){
   'これは単一GitHub Issueの重複防止通知であり、SQL本文やユーザーIDを公開しない。'
  ].join('\n')};
 }
-export async function notifyD1ReadBudget(env=process.env,request=fetch){
+/** Exactly one sanitized observation per UTC day on an existing issue.
+ * A new issue's original creation is already today's incident evidence.
+ * A full comment inventory fails closed rather than accidentally duplicating.
+ */
+export function buildDailyReadEvidence(report,now=Date.now()){
+ if(!Number.isSafeInteger(now)||now<=0)throw Error('Invalid UTC incident time');
+ const state=classifyD1ReadBudget(report);
+ if(state==='healthy')return null;
+ const day=new Date(now).toISOString().slice(0,10);
+ return '<!-- p12-d1-read-budget-day:'+day+' -->\n'+
+  'D1読取り警告の当日継続確認（UTC '+day+'）。\n'+
+  '状態: '+state+'\n'+
+  '1時間上位50SQL読取り下限: '+(state==='warning'?report.readLowerBound:'未確認')+' Rows read\n'+
+  '変更のない既存警告閾値: 80,000 Rows read/h。\n'+
+  '値はCloudflare D1 Insightsの上位50SQL下限であり、全体使用量・請求上限・残余枠ではない。\n'+
+  '厳密D1 hard capは未設定。SQL本文・個人ID・秘密情報は含めない。';
+}
+export async function notifyD1ReadBudget(env=process.env,request=fetch,now=Date.now()){
  if(env.GITHUB_REPOSITORY!=='altepop/keso-gamble'||!env.GITHUB_TOKEN||
   !env.D1_READ_AUDIT_REPORT)throw Error('Authorized D1 alert environment missing');
  let report;
@@ -45,8 +62,36 @@ export async function notifyD1ReadBudget(env=process.env,request=fetch){
  if(!inventory.ok)throw Error('D1 alert Issue lookup HTTP '+inventory.status);
  const issues=await inventory.json();
  if(!Array.isArray(issues))throw Error('D1 alert Issue inventory invalid');
- if(issues.some(item=>!item.pull_request&&item.title===D1_READ_ALERT_TITLE))
-  return 'deduplicated';
+ const existing=issues.find(item=>!item.pull_request&&item.title===D1_READ_ALERT_TITLE);
+ if(existing){
+  if(!Number.isSafeInteger(existing.number)||existing.number<=0||
+   typeof existing.created_at!=='string'||!Number.isFinite(Date.parse(existing.created_at))||
+   Date.parse(existing.created_at)>now)throw Error('D1 alert existing Issue metadata invalid');
+  const today=new Date(now).toISOString().slice(0,10);
+  // The initial Issue already records the first incident of its UTC day.
+  if(new Date(existing.created_at).toISOString().slice(0,10)===today)
+   return 'deduplicated';
+  const body=buildDailyReadEvidence(report,now);
+  const commentsResponse=await request(base+'/issues/'+existing.number+'/comments?per_page=100',{
+   headers,signal:AbortSignal.timeout(15000)});
+  if(!commentsResponse.ok)throw Error('D1 alert Issue comments lookup HTTP '+commentsResponse.status);
+  const comments=await commentsResponse.json();
+  if(!Array.isArray(comments)||comments.length>=100)
+   throw Error('D1 alert Issue comments inventory unavailable or saturated');
+  const marker='<!-- p12-d1-read-budget-day:'+today+' -->';
+  if(comments.some(item=>typeof item?.body==='string'&&item.body.includes(marker)))
+   return 'deduplicated';
+  const response=await request(base+'/issues/'+existing.number+'/comments',{
+   method:'POST',headers:{...headers,'Content-Type':'application/json'},
+   body:JSON.stringify({body}),signal:AbortSignal.timeout(15000)});
+  if(!response.ok)throw Error('D1 alert Issue comment HTTP '+response.status);
+  const created=await response.json();
+  if(!Number.isSafeInteger(created?.id)||created.id<=0)
+   throw Error('D1 alert Issue comment creation unconfirmed');
+  console.log('D1_READ_BUDGET_EVIDENCE_COMMENTED issue='+existing.number+
+   ' day='+today);
+  return 'commented';
+ }
  if(issues.length>=100)throw Error('D1 alert Issue inventory saturated');
  const response=await request(base+'/issues',{method:'POST',
   headers:{...headers,'Content-Type':'application/json'},
