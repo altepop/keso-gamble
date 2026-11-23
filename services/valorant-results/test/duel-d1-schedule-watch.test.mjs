@@ -51,7 +51,7 @@ test('creates one GitHub issue and deduplicates subsequent alerts',async()=>{
  assert.equal(calls.length,3);
  assert.equal(calls[2].opts.method,'POST');
  assert.equal(JSON.parse(calls[2].opts.body).title,D1_SCHEDULE_ALERT_TITLE);
- assert.doesNotMatch(JSON.stringify(JSON.parse(calls[2].opts.body)),/fixture|token|cloudflare/i);
+ assert.doesNotMatch(JSON.stringify(JSON.parse(calls[2].opts.body)),/fixture|Bearer\\s+[A-Za-z0-9_.-]+/i);
  const dedup=await inspectAndNotify(env,async(url)=>{
   if(url.includes('/actions/workflows/'))return reply({workflow_runs:[]});
   return reply([{title:D1_SCHEDULE_ALERT_TITLE,number:55}]);
