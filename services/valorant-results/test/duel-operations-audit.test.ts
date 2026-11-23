@@ -79,7 +79,9 @@ test('PvP audit uses indexed selective counts with identical status and age sema
   assert.equal(statements.length,1,'all counters read with one D1 SELECT');
   const auditSql=statements[0];
   assert.equal((auditSql.match(/SELECT COUNT\(\*\) FROM kp_board_duels/g)||[]).length,2);
-  assert.doesNotMatch(auditSql,/SUM\(CASE/);
+  // PvP remains COUNT-only; PvE intentionally retains its single SUM(CASE) pass.
+  assert.doesNotMatch(auditSql.split('FROM (')[0],/SUM\(CASE/);
+  assert.match(auditSql,/SUM\(CASE WHEN turn='finished'/);
   const plan=db.prepare('EXPLAIN QUERY PLAN '+auditSql)
    .all(guild,threshold,guild,now-90*86_400_000,guild) as Array<{detail:string}>;
   const indexed=plan.filter(row=>row.detail.includes('USING COVERING INDEX kp_board_duels_retention'));
