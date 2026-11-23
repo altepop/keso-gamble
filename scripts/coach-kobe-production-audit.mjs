@@ -71,6 +71,7 @@ export async function auditKobeProduction(env=process.env,request=fetch,now=Date
  const verifiedRows=[];
  const inspected=coachRoundContribution(sampled,accounts,(row)=>verifiedRows.push(row));
  const trend=buildCoachMatchTrend(verifiedRows,accounts);
+ const affectedByTenSecondLimit=verifiedRows.filter(row=>{try{const kills=JSON.parse(row.kills_json??'[]');return Array.isArray(kills)&&kills.some(k=>Number.isSafeInteger(k.t)&&k.t>10000&&k.t<=900000);}catch{return false;}}).length;
  const complete=sampled.length,verified=inspected.quality.validMatches;
  const selection=trend.length;
  const stage=!source.length?'account-unresolved':!sampled.length?'archive-empty':
@@ -90,7 +91,7 @@ export async function auditKobeProduction(env=process.env,request=fetch,now=Date
  return {at:new Date(now).toISOString(),source:'live D1 SELECT-only',enabled:state.find(s=>s.key==='coach_all_members:enabled')?.value==='enabled',
   apiWaitSeconds:Math.max(0,Math.ceil((Number(state.find(s=>s.key==='api_after')?.value??0)-now)/1000)),
   accounts:status,combined:sourceCount,nextRetryAt:epoch(coverage?.nextRetryAt),
-  inspection:{maxRows:MAX_ROWS,archivedSample:complete,verifiedMatches:verified,excluded:inspected.quality.excluded,
+  inspection:{maxRows:MAX_ROWS,archivedSample:complete,verifiedMatches:verified,affectedByTenSecondLimit,excluded:inspected.quality.excluded,
     matchTrendCount:selection,topTrendPresent:selection>0,stage},
   mmrTable,mmr,jobs:work.map(j=>({feature:j.feature,lastOkAt:epoch(j.last_ok),lastErrorAt:epoch(j.last_error),failures:count(j.failures)})),
   queries,rowsRead:rowsReadKnown?rowsRead:null,mutations:0,extraHenrikRequests:0};
