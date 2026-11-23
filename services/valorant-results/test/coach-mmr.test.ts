@@ -119,3 +119,28 @@ test('MMR v2 request never inserts the v3 platform segment',async()=>{
  assert.equal(result.get(account.riotId)?.rankingInTier,62);
  assert.equal(result.get(account.riotId)?.peakPatched,'Ascendant 3');
 });
+
+
+test('unsupported stored MMR region never calls HenrikDev or writes a snapshot', async () => {
+  for (const region of ['unknown', 'ap/../../na', 'AP', '']) {
+    const db = fakeDb({ 'Aquatopia#toppy': region });
+    let calls = 0;
+    const result = await ensureCoachMmr(db, [account], async () => { calls++; return mmrPayload; }, 1_000_000);
+    assert.equal(calls, 0, 'invalid region must not trigger a request');
+    assert.equal(db.snapshots.size, 0, 'invalid region must not persist MMR');
+    assert.equal(result.get(account.riotId), null);
+  }
+});
+
+test('all supported HenrikDev MMR regions retain their existing route', async () => {
+  for (const region of ['ap', 'na', 'eu', 'kr', 'br', 'latam']) {
+    const db = fakeDb({ 'Aquatopia#toppy': region });
+    const paths: string[] = [];
+    const result = await ensureCoachMmr(db, [account], async path => {
+      paths.push(path);
+      return mmrPayload;
+    }, 1_000_000);
+    assert.deepEqual(paths, [`/valorant/v2/by-puuid/mmr/${region}/puuid-1`]);
+    assert.equal(result.get(account.riotId)?.tier, 20);
+  }
+});
