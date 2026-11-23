@@ -6,6 +6,7 @@ import {coachPositionQuality} from './coach-position-quality.ts';
 import {enrichExistingCoachEvidence} from './coach-evidence-enrichment.ts';
 import {coachProviderShape} from './coach-provider-shape.ts';
 import {vdkRescuePress,vdkRescueStatus} from './vdk-rescue-press.ts';
+import {postCoachPersonalFeedback} from './coach-personal-feedback.ts';
 import {approvedEscalationPress,escaPressActive,escalationPressStatus} from './escalation-press.ts';
 import {ensureRankCommand,rankRegistrationStatus} from './rank-command-registration.ts';
 import {ESCALATION_SHIELD_VERSION,ESCALATION_RR_VERSION,matchAct,observeEscalationAct,syncEscalationPower} from './escalation-rating.ts';
@@ -323,6 +324,11 @@ async function saveMatch(env: Env, match: Match, player: Player, account: Accoun
     try { await recordCompetitiveRoster(env.DB,match); } catch { console.warn('match_roster_save_pending'); }
     try { await recordCompetitiveRoundEvents(env.DB,match); } catch { console.warn('round_event_save_pending'); }
     await captureCompetitivePositions(env.DB,match,'history');
+    if(mode==='competitive'&&kpRun&&env.KESO_COACH_WEBHOOK_URL){
+      try{const status=await postCoachPersonalFeedback(env,kpRun.mapping,match.metadata.match_id,account.puuid,result.endedAt);
+        if(status!=='suppressed'&&status!=='incomplete'&&status!=='duplicate')console.info('coach_personal_feedback',{status});
+      }catch{console.warn('coach_personal_feedback_pending');}
+    }
     // Agent mastery counts new results only; a failure never blocks the result post.
     if (kpRun) try {
       const subject = match.players.find(p => p.puuid === account.puuid), mapping = kpRun.mapping;
