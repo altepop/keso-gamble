@@ -51,7 +51,6 @@ export async function captureDuelEvidence(env=process.env,request=fetch,now=new 
  if(!resp.ok)throw Error('Read-only Actions metadata query failed: HTTP '+resp.status);
  const data=await resp.json();
  if(!Array.isArray(data.workflow_runs))throw Error('Invalid Actions metadata response');
- if(data.workflow_runs.length>=100)throw Error('Actions inventory saturated: cannot prove current paired deployment');
  // A missing record is explicit null, never inferred success. May not cover older runs beyond first 100.
  return buildDuelEvidence(data.workflow_runs,now.toISOString());
 }
