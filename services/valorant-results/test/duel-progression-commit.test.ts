@@ -59,7 +59,7 @@ test('all seven confirmed natural PvP finals record both players exactly once',(
    const skill=db.prepare(`SELECT * FROM kp_duel_mode_skill WHERE guild='g' AND user='alice' AND mode='pvp' AND game=?`).get(game) as Record<string,number>;
    assert.equal(skill.verified_games,1);
    assert.equal(skill.wins+skill.losses+skill.draws,1);
-   assert.equal(skill.points,i%2===0?14:4,'verified win/draw scores use the new PvP progression scale');
+   assert.equal(skill.points,DUEL_PROGRESSION_GAMES.indexOf(game)%2===0?14:4,'verified win/draw scores use the new PvP progression scale');
   }
   assert.equal(db.prepare("SELECT COUNT(*) AS n FROM kp_duel_mode_skill WHERE mode='pve'").get()?.n,0);
  }finally{db.close();}
