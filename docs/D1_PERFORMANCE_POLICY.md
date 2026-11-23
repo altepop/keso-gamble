@@ -160,3 +160,15 @@ The `readCoachRoundReport` endpoint already cached completed answers for five mi
 - The fallback permissions are scoped to `contents:read`, `actions:read`, `issues:write` for a deduplicated incident. No additional D1 Insights queries or paid API calls are added. A failed D1 read budget auditor is **still a failure**.
 
 **Remaining:** production D1 1-hour Rows-read reduction unverified; production fallback actual schedule execution unverified; strict D1 spending/Rows read/written **hard cap not configured**, not verified and not enforced by this app. P8 device, P10 real audio, authenticated wallets and 2-person Discord remain human-only unverified gates. P11/P12 not completed.
+
+## 2026-11-23 P12 daily operations audit execution: conditional independent fallback
+
+**Problem and evidence.** The primary read-only operations audit lives in `.github/workflows/duel-operations-audit.yml` at `31 21 * * *` (06:31 JST). GitHub Actions public API `event=schedule` inventory showed **zero scheduled runs** as of the observation. A configured cron is not proof of successful execution; missing runs have no job logs. GitHub does not guarantee that a scheduled event will execute on time. No claim of a GitHub-internal root cause is made.
+
+**Independent fallback**, in `.github/workflows/duel-operations-audit-fallback.yml` at `17 22 * * *` (07:17 JST), first reads the **GitHub Actions metadata** for the original schedule (no D1 reads). Only when there was *no primary scheduled run* created after 21:31 UTC that is successful or still active does the fallback call the existing two aggregate D1 SELECTs. A failed/cancelled original may be reaudited. If GitHub authorization, response integrity, schedule timing or inventory completeness is unknown, it **fails closed**: no D1 query, an existing deduplicated GitHub Issue reports unknown.
+
+The fallback's own report handling reuses `duel-scheduled-operations-audit.mjs` and `duel-scheduled-operations-alert.mjs`. It never executes any SQL beyond the existing two allowlisted aggregate SELECTs, changes KP, authorizes deletion, restarts Workers, changes billing or writes D1. Its active schedule only creates a redundant safety path and **cannot guarantee GitHub schedule delivery**. The normal primary audit remains unchanged and there is no double-audit when its run is already successful or in progress. On PR and push events, only nonproduction tests run; D1 execution is limited to schedule or authorized manual dispatch.
+
+**Verification required:** PR CI and same-SHA Pages/Worker deploy must pass. The first *real* fallback schedule run at 07:17 JST on a following day must be observed separately; PR and push success cannot prove schedule execution. The existing 18:43 JST deployment monitor and 19:17 JST `deployment-watch-fallback` schedule checks are independent of this daily audit fallback and must each be recorded as observed or missing.
+
+**Boundaries:** Strict account-wide D1 hard cap **not configured**. Existing D1 80,000 Rows read/h alert is unchanged. P11/P12 global completion, P8 device, P10 audio, authenticated wallet and 2-person Discord are unverified.
