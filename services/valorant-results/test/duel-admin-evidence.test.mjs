@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {buildDuelEvidence,hashDuelEvidence,captureDuelEvidence} from '../../../scripts/duel-admin-evidence.mjs';
+import {buildDuelEvidence,hashDuelEvidence,captureDuelEvidence,EVIDENCE_PAGE_SIZE,EVIDENCE_MAX_PAGES} from '../../../scripts/duel-admin-evidence.mjs';
 const now='2026-11-23T00:00:00.000Z',sha='a'.repeat(40);
 const run=(name,id,conclusion='success',head_sha=sha)=>({name,id,conclusion,head_sha,status:'completed',created_at:'2026-11-22T23:00:00.000Z',
  event:name==='pages build and deployment'?'dynamic':name==='VALORANT Bot check and deploy'?'push':'schedule',
@@ -49,4 +49,47 @@ test('future and stale runs never count as current evidence',()=>{
  assert.equal(buildDuelEvidence([{...pages,created_at:'2026-11-23T00:01:00Z'},worker],now).pairedDeploymentSha,null);
  assert.equal(buildDuelEvidence([{...pages,created_at:'2026-11-21T22:59:00Z'},worker],now).entries.pages,null);
  assert.equal(buildDuelEvidence([pages,worker],now).schema,'duel-admin-evidence-v2');
+});
+
+test('full first page must be followed by bounded second-page proof',async()=>{
+ const env={GITHUB_REPOSITORY:'altepop/keso-gamble',GITHUB_TOKEN:'fixture'};
+ const filler=Array.from({length:EVIDENCE_PAGE_SIZE},(_,i)=>({
+  ...run('Other workflow',1000+i),event:'push',
+  created_at:'2026-11-21T00:00:00.000Z'
+ }));
+ const urls=[];
+ const data=await captureDuelEvidence(env,async(url,opts)=>{
+  urls.push(url);
+  assert.equal(opts.method,undefined);
+  return {ok:true,json:async()=>({workflow_runs:urls.length===1?filler:[pages,worker]})};
+ },new Date(now));
+ assert.equal(data.pairedDeploymentSha,sha);
+ assert.equal(urls.length,2);
+ assert.match(urls[1],/per_page=100&page=2$/);
+});
+test('three saturated pages fail closed and never produce partial evidence',async()=>{
+ const env={GITHUB_REPOSITORY:'altepop/keso-gamble',GITHUB_TOKEN:'fixture'};
+ let page=0;
+ await assert.rejects(captureDuelEvidence(env,async()=>{
+  const start=(page++)*EVIDENCE_PAGE_SIZE;
+  return {ok:true,json:async()=>({workflow_runs:Array.from({length:EVIDENCE_PAGE_SIZE},(_,i)=>({
+   ...run('Other workflow',10000+start+i),event:'push',
+   created_at:'2026-11-22T23:00:00.000Z'
+  }))})};
+ },new Date(now)),/exceeds bounded pagination/);
+ assert.equal(page,EVIDENCE_MAX_PAGES);
+});
+test('malformed, overfull and duplicated page inventory fail closed',async()=>{
+ const env={GITHUB_REPOSITORY:'altepop/keso-gamble',GITHUB_TOKEN:'fixture'};
+ await assert.rejects(captureDuelEvidence(env,async()=>({ok:true,json:async()=>({
+  workflow_runs:Array.from({length:EVIDENCE_PAGE_SIZE+1},(_,i)=>run('Other workflow',100+i))
+ })}),new Date(now)),/Invalid Actions metadata response/);
+ await assert.rejects(captureDuelEvidence(env,async()=>({ok:true,json:async()=>({
+  workflow_runs:[pages,pages]
+ })}),new Date(now)),/Duplicated or malformed/);
+ let page=0;
+ await assert.rejects(captureDuelEvidence(env,async()=>{
+  page++;
+  return {ok:true,json:async()=>({workflow_runs:page===1?Array.from({length:EVIDENCE_PAGE_SIZE},(_,i)=>run('Other workflow',100+i)):[run('Other workflow',100)]})};
+ },new Date(now)),/Duplicated or malformed/);
 });
