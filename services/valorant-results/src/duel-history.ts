@@ -41,7 +41,7 @@ export async function duelHistoryRead(env:KpEnv,guild:string,user:string,filter:
  const now=Date.now(),today=duelDailyChallenge(now);
  const filters={mode,game};
  // Every SQL query is guild+authenticated-user constrained. Never expose opponent IDs.
- const [skills,receipts,pve,daily,collection]=await env.DB.batch([
+ const responses=await env.DB.batch([
   env.DB.prepare(`SELECT mode,game,points,peak_points,verified_games,wins,losses,draws,updated_at
    FROM kp_duel_mode_skill WHERE guild=? AND user=? ORDER BY mode,game`).bind(guild,user),
   env.DB.prepare(`SELECT r.match_id,r.mode,r.game,r.outcome,r.occurred_at,
@@ -51,13 +51,14 @@ export async function duelHistoryRead(env:KpEnv,guild:string,user:string,filter:
    WHERE r.guild=? AND r.user=? AND r.applied_at IS NOT NULL
      AND (?='all' OR r.mode=?) AND (?='all' OR r.game=?)
    ORDER BY r.occurred_at DESC,r.match_id DESC LIMIT ?`).bind(guild,user,mode,mode,game,game,limit),
-  env.DB.prepare(`SELECT s.id,s.game,s.difficulty,s.turn,s.winner,s.version,s.human_moves,s.cpu_moves,
+  // A PvP-only history must not issue an unused PvE session scan.
+  ...(mode==='pvp'?[]:[env.DB.prepare(`SELECT s.id,s.game,s.difficulty,s.turn,s.winner,s.version,s.human_moves,s.cpu_moves,
    s.created_at,s.updated_at,d.jst_day AS daily_day
    FROM kp_duel_pve_sessions s
    LEFT JOIN kp_duel_pve_daily_entries d ON d.guild=s.guild AND d.user=s.user AND d.session_id=s.id
    WHERE s.guild=? AND s.user=? AND (?='all' OR ?='pve')
      AND (?='all' OR s.game=?)
-   ORDER BY s.updated_at DESC,s.id DESC LIMIT ?`).bind(guild,user,mode,mode,game,game,limit),
+   ORDER BY s.updated_at DESC,s.id DESC LIMIT ?`).bind(guild,user,mode,mode,game,game,limit)]),
   env.DB.prepare(`SELECT COUNT(*) AS started,
     COALESCE(SUM(CASE WHEN s.turn='finished' THEN 1 ELSE 0 END),0) AS finished,
     COALESCE(SUM(CASE WHEN s.turn='finished' AND s.winner='human' THEN 1 ELSE 0 END),0) AS wins
@@ -67,6 +68,10 @@ export async function duelHistoryRead(env:KpEnv,guild:string,user:string,filter:
    .bind(guild,user,today.day),
   env.DB.prepare('SELECT mode,game FROM kp_duel_reward_collection WHERE guild=? AND user=?').bind(guild,user)
  ]);
+ const [skills,receipts]=responses;
+ const [pve,daily,collection]=mode==='pvp'
+  ?[{results:[]},responses[2],responses[3]]
+  :[responses[2],responses[3],responses[4]];
  const entries=(receipts.results as Array<{match_id:string;mode:string;game:string;outcome:string;occurred_at:number;daily_day:string|null}>)
   .map(r=>({id:r.match_id,mode:r.mode,game:r.game,outcome:r.outcome,at:r.occurred_at,dailyDay:r.daily_day}));
  const sessions=mode==='pvp'?[]:(pve.results as Array<{id:string;game:string;difficulty:string;turn:string;winner:string|null;version:number;human_moves:number;cpu_moves:number;created_at:number;updated_at:number;daily_day:string|null}>)
