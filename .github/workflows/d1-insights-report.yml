@@ -33,6 +33,35 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Independent hourly GitHub-schedule fallback: the duel watch's own :43
+  # cron has demonstrably missed runs. This does not depend on D1 inspect,
+  # which may intentionally fail when the 80,000 Rows read/h warning fires.
+  deployment-watch-fallback:
+    if: github.repository == 'altepop/keso-gamble' && github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      contents: read
+      actions: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Verify P12 monitor decisions without D1 or KP
+        run: node --test services/valorant-results/test/duel-deployment-watch.test.mjs services/valorant-results/test/duel-deployment-alert.test.mjs
+      - name: Fallback check of production Pages and Worker via GitHub metadata
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          DUEL_WATCH_REPORT: ${{ runner.temp }}/duel-watch-fallback.json
+        run: node scripts/duel-deployment-watch.mjs
+      - name: Open or deduplicate incident if deployment or fallback check fails
+        if: failure()
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          DUEL_WATCH_REPORT: ${{ runner.temp }}/duel-watch-fallback.json
+        run: node scripts/duel-deployment-alert.mjs
   budget-tests:
     if: github.repository == 'altepop/keso-gamble' && github.event_name == 'pull_request'
     runs-on: ubuntu-latest

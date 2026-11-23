@@ -65,3 +65,20 @@ test('main Pages dynamic and Worker push deployments are accepted',()=>{
  assert.equal(r.ok,true);
  assert.equal(r.sharedSha,'testsha');
 });
+
+test('the independent D1 hourly scheduler also checks deployment health even when the D1 read alert fails',async()=>{
+ const {readFileSync}=await import('node:fs');
+ const workflow=readFileSync(new URL('../../../.github/workflows/d1-insights-report.yml',import.meta.url),'utf8');
+ assert.match(workflow,/cron: '17 \* \* \* \*'/);
+ const fallback=workflow.split('  deployment-watch-fallback:')[1]?.split('  budget-tests:')[0];
+ assert.ok(fallback,'separate deployment-watch-fallback job must exist');
+ assert.match(fallback,/github\.event_name == 'schedule'/);
+ assert.match(fallback,/actions: read/);
+ assert.match(fallback,/issues: write/);
+ assert.match(fallback,/node scripts\/duel-deployment-watch\.mjs/);
+ assert.match(fallback,/node scripts\/duel-deployment-alert\.mjs/);
+ assert.match(fallback,/if: failure\(\)/);
+ assert.doesNotMatch(fallback,/CLOUDFLARE_API_TOKEN|wrangler d1|database\/query|kp_settings/);
+ assert.ok(workflow.indexOf('  deployment-watch-fallback:')<workflow.indexOf('  inspect:'),
+  'fallback is independently scheduled and not gated on success of the D1 inspector');
+});
