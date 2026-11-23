@@ -874,6 +874,27 @@ test('periodic duel timeout sweeps escrow once even with no viewer online',async
 });
 
 
+test('duel list skips secret join for public board games without removing private game hands',async()=>{
+ const {boardDuelAction,boardDuelList}=await import('../src/board-duels.ts');
+ const f=await fixture();seed(f.sql,one,1500);seed(f.sql,two,1500);
+ const id='00000000-0000-4000-8000-000000001831';
+ const created=await boardDuelAction(f.env,mapping,one,{
+  id,action:'create',game:'trio',opponent:two,stake:100
+ });
+ const listing=await boardDuelList(f.env,mapping,one);
+ const visible=listing.matches.find(x=>x.id===created.id);
+ assert.ok(visible);
+ assert.equal(visible.game,'trio');
+ assert.equal(visible.private_hand,null,'public board-game listing never needs secrets');
+ const {readFileSync}=await import('node:fs');
+ const source=readFileSync(new URL('../src/board-duels.ts',import.meta.url).pathname,'utf8');
+ const listSql=source.split('export async function boardDuelList')[1]?.split('export async function boardDuelAction')[0]??'';
+ assert.ok(listSql.includes("AND d.game IN ('hitblow','bluffdice','poker')"),
+  'a newly added public game must not silently read a secrets row');
+ assert.match(listSql,/d\.guild=\? AND \(d\.user_a=\? OR d\.user_b=\?\)/,
+  'existing participant-only guild authorization must be retained');
+});
+
 test('four mini duels keep other hands secret, and Hit & Blow settles two escrowed wallets',async()=>{
  const {boardDuelAction,boardDuelList}=await import('../src/board-duels.ts');
  const f=await fixture();seed(f.sql,one,1500);seed(f.sql,two,1500);
