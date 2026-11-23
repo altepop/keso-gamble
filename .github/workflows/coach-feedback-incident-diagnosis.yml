@@ -111,6 +111,16 @@ jobs:
               evaluations.push({person,matchId,totalSessions:sessions.length,matched:sessions.filter(z=>Date.parse(z.date??'')===ended).length,quality:report.matchFeedback.quality,mostRecent:sessions.slice(0,3).map(z=>({date:z.date,map:z.map,outcome:z.outcome}))});
             }catch(e){evaluations.push({person,errorType:e?.name??'unknown',message:String(e?.message??'error').slice(0,180)});}
           }
+          const {coachRoundContribution}=await import('./services/valorant-results/src/coach-round-contribution.ts');
+          const raw=await select("SELECT r.match_id,r.players_json,r.teams_json,e.rounds_json,e.kills_json FROM valorant_match_rosters r JOIN valorant_match_round_events e ON e.match_id=r.match_id WHERE r.match_id IN (?,?)",ids);
+          const quality=[];
+          for(const [person,riot,mid] of [['VDK','Dolly#SDGs',ids[1]],['石原','h1d3g1g4s#1037',ids[0]]]){
+            const p=(await select("SELECT puuid FROM tracked_players WHERE lower(riot_id)=lower(?)",[riot]))[0];
+            const row=raw.filter(x=>x.match_id===mid);let verified=0;
+            const result=coachRoundContribution(row,[{name:riot.slice(0,riot.indexOf('#')),tag:riot.slice(riot.indexOf('#')+1),puuid:p.puuid}],()=>verified++);
+            quality.push({person,matchId:mid,verified,excluded:result.quality.excluded,validMatches:result.quality.validMatches});
+          }
+          console.log('COACH_FEEDBACK_ROUND_QUALITY '+JSON.stringify(quality));
           console.log('COACH_FEEDBACK_REPORT_ELIGIBILITY '+JSON.stringify(evaluations));
           console.log('COACH_FEEDBACK_END_TIME_PARITY '+JSON.stringify(times.map(x=>({matchId:x.match_id,noticeEnd:x.notice_end,rosterEnd:x.roster_end,identical:x.notice_end===x.roster_end,map:x.map,act:x.act_name}))));
           console.log('COACH_FEEDBACK_REPLAY_ORDER_READONLY '+JSON.stringify({count:ordered.length,positions:ordered.map((x,i)=>({ordinal:i+1,member:/^dolly#/i.test(x.riot_id)?'VDK':/^h1d3g1g4s#/i.test(x.riot_id)?'石原':'other',matchId:x.match_id,endedAt:x.ended_at})).slice(0,24)}));
