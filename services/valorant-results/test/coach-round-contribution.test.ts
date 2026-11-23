@@ -98,3 +98,18 @@ test('#834/#836 two prior competitive cases stay valid with uncredited teammate 
   assert.equal(result.quality.validMatches,1,id);
  }
 });
+
+test('valid focus-player K/D alone never certifies a match with a different player mismatch',()=>{
+ const row=fixture(),ps=JSON.parse(row.players_json);
+ // The focus player has a perfect 2/0 event parity; another player has an
+ // unsupported official death. Do not silently grade only the focus player.
+ ps[1].d=1;
+ const invalid={...row,players_json:JSON.stringify(ps)};
+ const forFocus=coachRoundContribution([invalid],accounts);
+ assert.equal(forFocus.quality.validMatches,0);
+ assert.equal(forFocus.quality.excluded['kill-totals-do-not-match-roster'],1);
+ // Another owner in the same invalid match cannot bypass the team-wide gate.
+ const forTeammate=coachRoundContribution([invalid],[{name:'Other',tag:'X',puuid:'other0'}]);
+ assert.equal(forTeammate.quality.validMatches,0);
+ assert.equal(forTeammate.quality.excluded['kill-totals-do-not-match-roster'],1);
+});
