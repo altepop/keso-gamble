@@ -51,12 +51,12 @@ export function parseHenrikMmr(json: unknown) {
   const season = str(highest?.season), act = str(highest?.act);
   return {
     tier,
-    tierPatched: str(current.currenttier_patched ?? current.patched_tier) ?? tierPatchedEn(tier),
+    tierPatched: tierPatchedEn(tier),
     rankingInTier: int(current.ranking_in_tier),
     mmrChange: int(current.mmr_change_to_last_game),
     elo: int(current.elo),
     peakTier,
-    peakPatched: str(highest?.patched_tier ?? highest?.patched) ?? tierPatchedEn(peakTier),
+    peakPatched: tierPatchedEn(peakTier),
     peakSeason: season || act ? [season, act].filter(Boolean).join(' ').toUpperCase() : null,
   };
 }
