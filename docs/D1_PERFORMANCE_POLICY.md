@@ -82,3 +82,33 @@ The [whole-system audit](D1_AUDIT_20261109.md) records the observed baseline, SQ
 The existing account-wide D1 GraphQL dataset is adaptively sampled, delayed, and fetched with a bounded 100-group response. A response with **zero groups**, **no group for the current UTC day**, or **100 groups** is treated as **unknown/incomplete** rather than a verified zero or complete account total. The guard logs the limited reason, reports an unavailable estimate and performs **no new** `kp_settings` write in that case. This does not erase an already-active UTC-day optional-history conservation marker; the existing automatic UTC-day expiry still governs it.
 
 **No strict D1 spending or Rows read/written hard cap has been configured.** The 3.5M/4M read estimates, 70k write warning, and optional feed/trend conservation remain soft signals only. A hard account-level limit cannot be asserted from lagged/adaptively sampled analytics or by stopping only optional reads; automated races, financial ledgers, rankings and other D1 usage remain active. Actual provider-enforced limits, availability, and billing controls must be inspected directly in Cloudflare and cannot be proven by this PR. Do not interpret `unavailable` as healthy or as a quantified remaining quota.
+
+## 2026-11-23 P12 next slice: D1 threshold proposal, NOT an installed hard cap
+
+**Status: proposed; strict account-wide D1 hard cap is NOT configured, NOT verified, and NOT enforced by KESO PLAY.** This slice only makes that status explicit in every return path of `runGuard`. No paid subscription change, billing setting change, D1 schema migration, balance freeze, settlement freeze, or new data deletion is authorized.
+
+### Proposed numeric thresholds and enforcement boundaries
+
+| Measure | Proposed threshold / reference | What enforces it today | Scope and limitation |
+|---|---:|---|---|
+| Free-tier account rows read | 5,000,000 / UTC day | Cloudflare's Free-tier quota, **only if the account is on Workers Free** | Provider errors after exhaustion; account plan is not verified here. This is not a proactive KESO PLAY hard cap. |
+| Free-tier account rows written | 100,000 / UTC day | Cloudflare's Free-tier quota, **only if the account is on Workers Free** | Same; account-wide and D1 reads/writes may fail, including important financial operations. |
+| KESO PLAY read warning | Sampled 3,500,000 | Scheduled GitHub Actions observation | Warning only; sampling or delays may miss the threshold. |
+| Optional-history read conservation | Sampled 4,000,000 | UTC-day `kp_settings.d1_optional_conserve_utc_day` marker | **Only** optional feed/trend read reductions; core KP/ranking/races/trades/settlements continue. |
+| Proposed urgent read warning | Sampled 4,500,000 | **Not implemented** | Future additional warning only, cannot guarantee cap. |
+| Existing write warning | Sampled 70,000 | Log warning | No write blocking. |
+| Proposed urgent write warning | Sampled 90,000 | **Not implemented** | Future notification and read-only review; never halt ledger/settlement automatically. |
+| Strict D1 account hard budget / billing ceiling | No verified setting / amount | **Not configured** | Cannot claim a D1-specific hard bill limit from sampled GraphQL or a `kp_settings` marker. |
+
+### Proposed escalation / actual enforcement path (future work; not enabled by this PR)
+
+1. Confirm Cloudflare account's actual Workers plan, account-wide D1 rows usage, and Billing settings with read-only evidence. Free daily quotas are **provider-enforced** starting September 1, 2026; when exhausted, D1 queries fail until UTC midnight. Verify this account is on Free before treating them as active enforcement.
+2. Keep the existing 3.5M read / 70k write warning, and existing 4.0M read **optional-history-only** soft conservation. The proposed 4.5M read / 90k write urgent alerts require a separate approved implementation and CI before activation.
+3. If a true spending ceiling is required on a Paid plan, verify whether a provider-side D1-specific control exists and can enforce the desired scope; do **not** equate Workers/Durable Objects spending limits with a D1 cap. Cloudflare states that even supported spending limits may lag and may not bound the final invoice.
+4. A possible application-side future gate may fail closed **only for enumerated non-financial optional endpoints**; it must be server-authoritative, measured under concurrency and explicitly allow all wallet, debt, stock, race, KP settlement, purchased ticket, audit, and regulatory retention paths. It **cannot** be presented as an exact account-wide cap, because other clients/Workers/automations can access D1, and sampled GraphQL metrics may lag.
+5. Do not activate any automatic billing-plan change, D1 query shutdown, financial lock, or account-wide kill switch without a separate reviewed proposal, acceptance criteria, and rollback plan. Unknown telemetry remains **unknown**, not 0, healthy, or hard-cap success.
+
+Official references:
+- D1 pricing and quota: https://developers.cloudflare.com/d1/platform/pricing/
+- Free quota enforcement, 2026-09-01: https://developers.cloudflare.com/changelog/post/2026-09-01-d1-free-tier-limit-enforcement/
+- Spending limits apply to Workers/Durable Objects, and may not guarantee maximum final charge: https://developers.cloudflare.com/billing/manage/spend-management/
