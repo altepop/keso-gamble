@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {evaluateDeploymentRuns} from '../../../scripts/duel-deployment-watch.mjs';
 const now=Date.parse('2026-11-23T04:00:00Z');
-const entry=(name,id,status,conclusion,created_at='2026-11-23T03:00:00Z',head_sha='testsha')=>({name,id,status,conclusion,created_at,head_sha,event:'push'});
+const entry=(name,id,status,conclusion,created_at='2026-11-23T03:00:00Z',head_sha='testsha')=>({name,id,status,conclusion,created_at,head_sha,event:name==='pages build and deployment'?'dynamic':'push',head_branch:'main'});
 const pages=entry('pages build and deployment',10,'completed','success');
 const worker=entry('VALORANT Bot check and deploy',11,'completed','success');
 test('latest paired successful deployment is healthy',()=>{
@@ -38,4 +38,30 @@ test('schedule keeps hourly read-only watch without additional D1, KP or paid AP
  assert.ok(workflow.includes("cron: '43 * * * *'"));
  assert.match(workflow,/actions: read/);
  assert.doesNotMatch(workflow,/CLOUDFLARE_API_TOKEN|wrangler d1|database\/query/);
+});
+
+test('only real production main deployments can mask failures',()=>{
+ const failing=entry(worker.name,12,'completed','failure','2026-11-23T03:15:00Z');
+ const unrelated=entry(worker.name,13,'completed','success','2026-11-23T03:30:00Z');
+ for(const value of [
+  {...unrelated,head_branch:'feature/candidate'},
+  {...unrelated,head_branch:null},
+  {...unrelated,event:'workflow_dispatch'},
+  {...unrelated,event:'pull_request'},
+ ]){
+  const result=evaluateDeploymentRuns([pages,failing,value],now);
+  assert.equal(result.ok,false);
+  assert.equal(result.results[1].runId,12);
+  assert.equal(result.results[1].state,'failed');
+ }
+});
+test('a branch-only successful run is not a production deployment',()=>{
+ const r=evaluateDeploymentRuns([{...pages,head_branch:'gh-pages'}, {...worker,head_branch:'candidate'}],now);
+ assert.equal(r.ok,false);
+ assert.deepEqual(r.results.map(x=>x.state),['missing','missing']);
+});
+test('main Pages dynamic and Worker push deployments are accepted',()=>{
+ const r=evaluateDeploymentRuns([pages,worker],now);
+ assert.equal(r.ok,true);
+ assert.equal(r.sharedSha,'testsha');
 });
