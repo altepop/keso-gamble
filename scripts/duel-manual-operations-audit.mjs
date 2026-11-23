@@ -11,11 +11,16 @@ export const CRITICAL_MANUAL_WORKFLOWS=Object.freeze([
  'P12 duel retained ciphertext recovery drill',
  'P12 duel scheduled operations audit (read-only)',
  'P12 duel administrator deployment evidence',
- 'P12 duel deployment monitor heartbeat'
+ 'P12 duel deployment monitor heartbeat',
+ 'P12 duel deployment health (read-only)',
+ 'P12 duel retained encrypted backup readiness',
+ 'P12 duel retained backup schedule watchdog',
+ 'P12 duel critical manual operations evidence'
 ]);
 const named=new Set(CRITICAL_MANUAL_WORKFLOWS);
 const validSha=sha=>typeof sha==='string'&&/^[a-f0-9]{40}$/i.test(sha);
 const validActor=login=>typeof login==='string'&&/^[a-z0-9-]{1,39}$/i.test(login);
+const validBranch=branch=>typeof branch==='string'&&branch.length>0&&branch.length<=255&&/^[a-zA-Z0-9._/-]+$/.test(branch);
 const DAY_MS=86400000;
 export function summarizeManualOperations(runs,now=Date.now()){
  if(!Array.isArray(runs)||!Number.isSafeInteger(now)||now<DAY_MS)
@@ -28,6 +33,7 @@ export function summarizeManualOperations(runs,now=Date.now()){
   if(r?.event!=='workflow_dispatch'||!named.has(r.name))continue;
   const at=Date.parse(r.created_at);
   if(!Number.isSafeInteger(r.id)||r.id<=0||!validSha(r.head_sha)||
+     r.repository?.full_name!=='altepop/keso-gamble'||!validBranch(r.head_branch)||
      !Number.isFinite(at)||at>now||!validActor(r.actor?.login)||
      !['completed','queued','in_progress','waiting','pending'].includes(r.status)||
      (r.status==='completed'&&!['success','failure','cancelled','timed_out','skipped','action_required'].includes(r.conclusion)))
@@ -35,12 +41,15 @@ export function summarizeManualOperations(runs,now=Date.now()){
   if(at<now-DAY_MS)continue;
   rows.push({runId:r.id,workflow:r.name,sha:r.head_sha,actor:r.actor.login,
    createdAt:new Date(at).toISOString(),status:r.status,
-   conclusion:r.status==='completed'?r.conclusion:null,expectedOwner:r.actor.login==='altepop'});
+   conclusion:r.status==='completed'?r.conclusion:null,expectedOwner:r.actor.login==='altepop',
+   branch:r.head_branch,expectedMain:r.head_branch==='main'});
  }
  rows.sort((a,b)=>b.createdAt.localeCompare(a.createdAt)||b.runId-a.runId);
- return {schema:'duel-manual-operations-audit-v1',asOf:new Date(now).toISOString(),
+ return {schema:'duel-manual-operations-audit-v2',asOf:new Date(now).toISOString(),
   windowHours:24,source:'github-actions-workflow-dispatch',entries:rows,
   unexpectedActorCount:rows.filter(r=>!r.expectedOwner).length,
+  nonMainCount:rows.filter(r=>!r.expectedMain).length,
+  coveredWorkflowNames:[...CRITICAL_MANUAL_WORKFLOWS],
   approvalsVerified:false,allAdminActionsCovered:false};
 }
 export const hashManualOperations=audit=>createHash('sha256').update(JSON.stringify(audit)).digest('hex');
@@ -61,11 +70,13 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
   if(!file)throw Error('Runner evidence path missing');
   writeFileSync(file,JSON.stringify({audit,sha256:hashManualOperations(audit)},null,2)+'\n',{mode:0o600});
   const summary={observed:audit.entries.length,unexpectedActorCount:audit.unexpectedActorCount,
+   nonMainCount:audit.nonMainCount,
    scope:'critical GitHub workflow_dispatch only',approvalVerified:false};
   console.log('DUEL_MANUAL_AUDIT '+JSON.stringify(summary));
   if(process.env.GITHUB_STEP_SUMMARY)appendFileSync(process.env.GITHUB_STEP_SUMMARY,
    '# P12 duel critical manual Actions audit\n\nObserved manual runs (24h): '+audit.entries.length+
    '\nUnexpected actors: '+audit.unexpectedActorCount+
+   '\nNon-main dispatches: '+audit.nonMainCount+
    '\n\nNo approvals verified, no D1/KP access, and no comprehensive admin audit claim.\n');
  }).catch(error=>{console.error('DUEL_MANUAL_AUDIT_FAILED '+error.message);process.exitCode=1;});
 }
