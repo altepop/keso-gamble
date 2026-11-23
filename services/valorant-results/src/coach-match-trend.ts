@@ -28,6 +28,9 @@ export function buildCoachMatchTrend(rows:readonly Row[],accounts:readonly Accou
   if(!Array.isArray(players)||players.length!==10||!Array.isArray(teams)||teams.length!==2||
      !Array.isArray(rounds)||rounds.length===0||!Array.isArray(kills)||kills.length===0)continue;
   const ps=players as Player[];
+  // Ambiguous roster identities cannot support a verified personal trend.
+  // Reject duplicate PUUIDs before matching or attributing opening events.
+  if(ps.some(p=>!id(p?.puuid))||new Set(ps.map(p=>p.puuid)).size!==ps.length)continue;
   const selected=ps.find(p=>accounts.some(a=>a.puuid&&p.puuid===a.puuid))||
    ps.find(p=>accounts.some(a=>!a.puuid&&p.name===a.name&&p.tag===a.tag));
   if(!selected||!id(selected.puuid)||!id(selected.team_id))continue;
