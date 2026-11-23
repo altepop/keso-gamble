@@ -349,8 +349,8 @@ test('fixture query plan separates indexed match joins from per-roster json_each
    .map((row:any)=>String(row.detail)).join(' / '));
   assert.match(plans[0],/valorant_match_rosters_recent|SCAN r/);
   assert.match(plans[0],/SEARCH e .*match_id|SEARCH e USING INDEX/);
-  assert.match(plans[0],/SCAN p VIRTUAL TABLE/);
-  assert.match(plans[1],/SCAN p VIRTUAL TABLE/);
+  assert.match(plans[0],/SCAN p(?: EXISTS)? VIRTUAL TABLE/);
+  assert.match(plans[1],/SCAN p(?: EXISTS)? VIRTUAL TABLE/);
   // Fixture observations are not a production D1 query plan nor billed Rows read.
  }finally{sql.close();}
 });
