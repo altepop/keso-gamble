@@ -38,12 +38,12 @@ export function buildDailyReadEvidence(report,now=Date.now()){
  const state=classifyD1ReadBudget(report);
  if(state==='healthy')return null;
  const day=new Date(now).toISOString().slice(0,10);
- return '<!-- p12-d1-read-budget-day:'+day+' -->\\n'+
-  'D1読取り警告の当日継続確認（UTC '+day+'）。\\n'+
-  '状態: '+state+'\\n'+
-  '1時間上位50SQL読取り下限: '+(state==='warning'?report.readLowerBound:'未確認')+' Rows read\\n'+
-  '変更のない既存警告閾値: 80,000 Rows read/h。\\n'+
-  '値はCloudflare D1 Insightsの上位50SQL下限であり、全体使用量・請求上限・残余枠ではない。\\n'+
+ return '<!-- p12-d1-read-budget-day:'+day+' -->\n'+
+  'D1読取り警告の当日継続確認（UTC '+day+'）。\n'+
+  '状態: '+state+'\n'+
+  '1時間上位50SQL読取り下限: '+(state==='warning'?report.readLowerBound:'未確認')+' Rows read\n'+
+  '変更のない既存警告閾値: 80,000 Rows read/h。\n'+
+  '値はCloudflare D1 Insightsの上位50SQL下限であり、全体使用量・請求上限・残余枠ではない。\n'+
   '厳密D1 hard capは未設定。SQL本文・個人ID・秘密情報は含めない。';
 }
 export async function notifyD1ReadBudget(env=process.env,request=fetch,now=Date.now()){
