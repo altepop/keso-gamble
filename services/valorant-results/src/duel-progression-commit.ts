@@ -11,6 +11,7 @@ import type {KpEnv} from './kp.ts';
 import {ensureDuelRewards} from './duel-rewards.ts';
 
 export const DUEL_PVP_FINALIZATION_TRIGGERS=[
+ `DROP TRIGGER IF EXISTS kp_duel_pvp_skill_apply`,
  `CREATE TRIGGER IF NOT EXISTS kp_duel_pvp_skill_apply
   AFTER INSERT ON kp_duel_progress_receipts
   WHEN NEW.mode='pvp' AND NEW.applied_at IS NOT NULL
@@ -18,15 +19,15 @@ export const DUEL_PVP_FINALIZATION_TRIGGERS=[
    INSERT INTO kp_duel_mode_skill
     (guild,user,mode,game,points,peak_points,verified_games,wins,losses,draws,updated_at)
    VALUES (NEW.guild,NEW.user,'pvp',NEW.game,
-    CASE WHEN NEW.outcome='win' THEN 1 ELSE 0 END,
-    CASE WHEN NEW.outcome='win' THEN 1 ELSE 0 END,
+    CASE NEW.outcome WHEN 'win' THEN 14 WHEN 'draw' THEN 4 ELSE 0 END,
+    CASE NEW.outcome WHEN 'win' THEN 14 WHEN 'draw' THEN 4 ELSE 0 END,
     1,
     CASE WHEN NEW.outcome='win' THEN 1 ELSE 0 END,
     CASE WHEN NEW.outcome='loss' THEN 1 ELSE 0 END,
     CASE WHEN NEW.outcome='draw' THEN 1 ELSE 0 END,NEW.occurred_at)
    ON CONFLICT(guild,user,mode,game) DO UPDATE SET
-    points=points+(CASE WHEN NEW.outcome='win' THEN 1 ELSE 0 END),
-    peak_points=MAX(peak_points,points+(CASE WHEN NEW.outcome='win' THEN 1 ELSE 0 END)),
+    points=points+(CASE NEW.outcome WHEN 'win' THEN 14 WHEN 'draw' THEN 4 ELSE 0 END),
+    peak_points=MAX(peak_points,points+(CASE NEW.outcome WHEN 'win' THEN 14 WHEN 'draw' THEN 4 ELSE 0 END)),
     verified_games=verified_games+1,
     wins=wins+(CASE WHEN NEW.outcome='win' THEN 1 ELSE 0 END),
     losses=losses+(CASE WHEN NEW.outcome='loss' THEN 1 ELSE 0 END),
@@ -69,7 +70,8 @@ export async function ensureVerifiedPvpProgression(env:Pick<KpEnv,'DB'>):Promise
  if(existing)return existing;
  const work=(async()=>{
   await ensureDuelRewards(env);
-  for(const ddl of DUEL_PVP_FINALIZATION_TRIGGERS)await db.prepare(ddl).run();
+  // Atomic replacement preserves exactly-once receipt handling across the upgrade.
+  await db.batch(DUEL_PVP_FINALIZATION_TRIGGERS.map(sql=>db.prepare(sql)));
  })();
  initialized.set(db,work);
  try{await work;}catch(error){initialized.delete(db);throw error;}
