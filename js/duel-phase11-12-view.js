@@ -88,7 +88,7 @@ export function duelHistoryPanel({open=false,busy=false,data=null,error='',mode=
  (item.status==='active'?'<button type="button" class="action-btn" data-duel-history-resume="'+safe(item.id)+'">この対局を再開</button><button type="button" class="action-btn" data-duel-pve-abandon="'+safe(item.id)+'">この対局を破棄</button>':'')+'</li>').join('')+'</ol>':'<p>CPU対局の保存記録はまだない。</p>');
  return html+'<p class="helper">'+safe(data.note??'')+'</p></div></section>';
 }
-export function duelPvePanel({live=false,busy=false,preview=null,match=null,error='',message='',sessionInput='',pending=null,open=false,game='othello',level='normal',rewardsOpen=false,rewards=null,rewardsError='',historyUi=null,abandonConfirm=''}={}){
+export function duelPvePanel({live=false,busy=false,preview=null,match=null,error='',message='',sessionInput='',pending=null,open=false,game='othello',level='normal',rewardsOpen=false,rewards=null,rewardsError='',historyUi=null,abandonConfirm='',skillSummary=null}={}){
  const active=match&&typeof match.id==='string';
  const expanded=open||active||preview||error||message;
  return '<section class="duel-pve-stage" id="duel-pve-section" aria-label="CPU攻略の対局画面"><div class="duel-pve-stage-head"><span class="duel-pve-kicker">SERVER CPU · MAIN MODE</span><h3>CPU攻略アリーナ</h3><p>種目を選んで、何度でも本気の対局へ。勝敗と熟練度はサーバーで確定する。</p></div><div class="duel-pve-stage-body">'+
@@ -104,7 +104,7 @@ export function duelPvePanel({live=false,busy=false,preview=null,match=null,erro
  (error?'<p role="alert">'+safe(error)+'</p>':'')+(pending?'<p class="helper">直前の送信結果が未確定です。別の操作をせず、同じ操作IDで確認してください。</p><button type="button" class="action-btn primary" data-duel-pve-retry="1" '+(busy?'disabled':'')+'>前回の操作を確認</button>':'')+(message?'<p role="status">'+safe(message)+'</p>':'')+
  (active?'<div class="duel-pve-arena" data-duel-pve-state="'+safe(match.turn)+'"><div class="duel-pve-arena-top"><span>LIVE MATCH · '+safe(names[match.game]??match.game)+'</span><span>第'+safe(match.version)+'版</span></div><h3>'+safe(resultName[match.winner]??(match.turn==='human'?'あなたの手番':'CPU処理中'))+'</h3><p class="duel-pve-turn">あなたの手数 '+safe(match.humanMoves)+' · '+(match.turn==='finished'?'対局終了':'サーバー判定で対局中')+'</p>'+
  controls(match,busy)+
- (match.turn==='finished'?'<div class="duel-pve-after"><h3>対局結果</h3><p>熟練度：勝利なら確定1pt、敗北・引き分けは0pt（サーバー記録）。</p><p class="helper">報酬の抽選結果は直下に表示。次も同じ種目・難易度なら「もう一局」で即開始できる。</p><button type="button" class="action-btn primary" data-duel-pve-custom-start="1" '+(busy||pending?'disabled':'')+'>もう一局（選択中の種目・難易度）</button></div>':
+ (match.turn==='finished'?'<div class="duel-pve-after"><h3>対局結果</h3><p>熟練度：'+(skillSummary?'確定 '+safe(skillSummary.points)+'pt'+(skillSummary.delta===null?'（前回値未取得）':'（確認済みの前回値から '+(skillSummary.delta>=0?'+':'')+safe(skillSummary.delta)+'pt）'):'記録を取得できないため増減未確認')+'</p><p class="helper">報酬の抽選結果は直下に表示。次も同じ種目・難易度なら「もう一局」で即開始できる。</p><button type="button" class="action-btn primary" data-duel-pve-custom-start="1" '+(busy||pending?'disabled':'')+'>もう一局（選択中の種目・難易度）</button></div>':
  '<div class="action-row"><button type="button" class="action-btn" data-duel-pve-abandon="'+safe(match.id)+'" '+(busy||pending?'disabled':'')+'>このCPU戦を破棄</button></div>')+'</div>':''))+'</div></section>'+
  (historyUi?.open?duelHistoryPanel(historyUi):'')+
  (abandonConfirm?'<section class="panel"><div class="card-body"><p role="alert">この対局を無報酬で破棄しますか？熟練度・ドロップは発生しません。</p><button type="button" class="action-btn" data-duel-pve-abandon="'+safe(abandonConfirm)+'" data-duel-pve-confirm="yes">破棄を確定する</button><button type="button" class="action-btn" data-duel-pve-abandon-cancel="1">やめる</button></div></section>':'')+
@@ -112,7 +112,7 @@ export function duelPvePanel({live=false,busy=false,preview=null,match=null,erro
  (rewardsError?'<p role="alert">'+safe(rewardsError)+'</p>':'')+
  (!rewards?'<p role="status">取得中…</p>':
   '<h4>CPU戦のドロップ抽選</h4>'+
-  ((rewards.policy??[]).filter(p=>p.mode==='pve').map(p=>'<p class="helper">運用中の確率：勝利 '+safe((p.win_bps/100).toFixed(2))+'% ／ 敗北 '+safe((p.loss_bps/100).toFixed(2))+'% ／ 引き分け '+safe((p.draw_bps/100).toFixed(2))+'%。'+(p.daily_cap===null?'日次抽選上限なし':'日次抽選上限 '+safe(p.daily_cap)+'回')+'</p>').join('')||'<p class="helper">現在有効なCPU戦ドロップ設定は確認できない。確率0%と断定せず、抽選は未設定として扱う。</p>')+
+  ((rewards.policy??[]).filter(p=>p.mode==='pve').map(p=>'<p class="helper">運用中の確率：勝利 '+safe((p.win_bps/100).toFixed(2))+'% ／ 敗北 '+safe((p.loss_bps/100).toFixed(2))+'% ／ 引き分け '+safe((p.draw_bps/100).toFixed(2))+'%。'+(p.daily_cap===null?'日次抽選上限なし':'日次抽選上限 '+safe(p.daily_cap)+'回')+'</p>').join('')||'<p class="helper">現在有効なCPU戦ドロップ設定はない。抽選対象外のため獲得なし。</p>')+
   (match?.turn==='finished'?(()=>{
    const roll=(rewards.rolls??[]).find(r=>r.mode==='pve'&&r.match_id===match.id);
    return roll?'<p role="status">この対局：'+(roll.roll<roll.chance_bps?'ドロップ当選':'ドロップなし')+'（実適用確率 '+safe((roll.chance_bps/100).toFixed(2))+'%、抽選値 '+safe(roll.roll)+'/9999）。種目別の獲得記録として保存。</p>':'<p role="status">この対局：抽選記録なし（ドロップなし／抽選条件未達・未設定など）。</p>';
