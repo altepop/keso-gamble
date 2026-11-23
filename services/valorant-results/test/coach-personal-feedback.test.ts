@@ -29,16 +29,18 @@ test('verified alive-count comeback is the only turning point; absent evidence s
  assert.equal(largestObservedSwing({...archive,players_json:'[]'},'p2'),null);
  assert.equal(largestObservedSwing(archive,'not-a-player'),null);
 });
-test('short polite individual notice uses only supplied session facts and validated daily items',()=>{
+test('compact direct individual notice uses only supplied session facts and validated daily items',()=>{
  const body=formatPersonalFeedback({user:'123456789012345678',name:'選手',map:'Bind',outcome:'loss',
   swing:{round:1,description:'観測済み'},
   session:{...session,topic:'foundation'},daily:{warmup:{title:'止まって撃つ練習'},study:{map:'Bind',theme:'テレポーターとスプリット'}}});
  assert.ok(body);
  assert.match(body!,/^<@123456789012345678> 🎯/);
- assert.match(body!,/直近の試合へのコーチからの個別フィードバックです/);
+ assert.doesNotMatch(body!,/直近の試合へのコーチからの個別フィードバックです|未取得|未確定|再生時刻/);
+ assert.match(body!,/\n\n🔎/);
+ assert.ok(body!.split('\n\n').every(block=>block.split('\n').length<=2));
  assert.match(body!,/KPR.*0\.80.*0\.60/);
  assert.match(body!,/第1ラウンド/);
- assert.match(body!,/本日の座学（日替わり）/);
+ assert.match(body!,/📚 座学：Bind・テレポーターとスプリット/);
  assert.match(body!,/止まって撃つ練習/);
  assert.ok(body!.length<=2000);
 });
@@ -48,12 +50,12 @@ test('advantage-lost turning point selects its pattern, viewpoint and named focu
   session:{...session,topic:'timing'},
   daily:{warmup:{title:'止まって撃つ練習'},study:{map:'Haven',theme:'3サイトとミッドの支配',origin:'match'}}});
  assert.ok(body);
- assert.match(body!,/有利ができてから最初に倒れた場面/);
- assert.match(body!,/人数有利のラウンドは、こちらから仕掛けなければほぼ勝てます/);
- assert.match(body!,/キルした直後に一度引いて位置を取り直す/);
+ assert.match(body!,/第10ラウンド、人数有利を落とした/);
+ assert.match(body!,/次は1つだけ。有利な場面で、先にピークしない/);
+ assert.match(body!,/キルしたら一度引いて、位置を取り直す/);
  assert.doesNotMatch(body!,/止まって撃つ練習/);
- assert.match(body!,/今回のマップの座学/);
- assert.match(body!,/有利な場面で「先にピークしない」ことだけを意識して試してください。$/);
+ assert.match(body!,/📚 座学：Haven・3サイトとミッドの支配/);
+ assert.doesNotMatch(body!,/次のコンペでは|再生時刻|未取得/);
 });
 test('pressure topic selects the death-linked reset prescription over the curriculum drill',()=>{
  const body=formatPersonalFeedback({user:'123456789012345678',name:'選手',map:'Bind',outcome:'loss',
@@ -62,20 +64,20 @@ test('pressure topic selects the death-linked reset prescription over the curric
    metrics:[{key:'dpr',label:'1R当たりのデス（DPR）',current:{value:0.87},baseline:{value:0.63,matches:5}}]},
   daily:{warmup:{title:'一つずつ角を確認する'},study:{map:'Bind',theme:'テレポーターとスプリット',origin:'match'}}});
  assert.ok(body);
- assert.match(body!,/お水を飲んで、画面から少し離れてから/);
- assert.match(body!,/「死なない」テーマで1本/);
+ assert.match(body!,/デスが増えている。取り返そうと前に出る前に/);
+ assert.match(body!,/遮蔽物を使って倒されない動き/);
  assert.doesNotMatch(body!,/一つずつ角を確認する/);
- assert.match(body!,/DPR.*0\.87.*0\.63.*5試合/);
+ assert.match(body!,/DPR.*0\.87.*5試合.*0\.63/);
 });
 test('comeback win selects the flow pattern, which needs no warmup item',()=>{
  const body=formatPersonalFeedback({user:'123456789012345678',name:'選手',map:'Bind',outcome:'win',
   swing:{round:1,description:'人数不利から逆転したラウンド（最大2人差）'},
   session,daily:{warmup:null,study:{map:'Bind',theme:'テレポーターとスプリット'}}});
  assert.ok(body);
- assert.match(body!,/不利になってから最初に取り返したキル/);
- assert.match(body!,/流れが来ています。もう一試合、普通に行きましょう/);
+ assert.match(body!,/人数不利から逆転した/);
+ assert.match(body!,/逆転できたカバーは良い/);
  assert.doesNotMatch(body!,/次のアップ/);
- assert.match(body!,/もう一試合、普通に行きましょう。それが今回の1つです。$/);
+ assert.match(body!,/📚 座学/);
 });
 test('fourth match of the day at night suggests a break; a deep-night loss suggests stopping',()=>{
  const base={user:'123456789012345678',name:'選手',map:'Bind',outcome:'loss' as const,
@@ -83,12 +85,12 @@ test('fourth match of the day at night suggests a break; a deep-night loss sugge
   daily:{warmup:{title:'止まって撃つ練習'},study:{map:'Bind',theme:'テレポーターとスプリット'}}};
  const evening=formatPersonalFeedback({...base,endedAt:Date.parse('2026-11-23T14:30:00.000Z'),matchesToday:4});
  assert.ok(evening);
- assert.match(evening!,/長くやっています。一度立ち上がって伸びをして、水を飲んでください/);
- assert.match(evening!,/5分の休憩/);
+ assert.match(evening!,/連戦で判断が雑になる前に5分休む/);
+ assert.match(evening!,/5分休憩/);
  const deepNight=formatPersonalFeedback({...base,endedAt:Date.parse('2026-11-23T17:00:00.000Z'),matchesToday:2});
  assert.ok(deepNight);
- assert.match(deepNight!,/眠気が出ています。今日はここまでにして/);
- assert.match(deepNight!,/今日はここまでにしましょう。それが今回の1つです。$/);
+ assert.match(deepNight!,/深夜の無理な続行は判断を鈍らせる/);
+ assert.doesNotMatch(deepNight!,/それが今回の1つです|未取得/);
 });
 test('study prefers the played map verified preset; other maps fall back to the labelled daily pick',()=>{
  assert.deepEqual(studyForFeedback('Haven',Date.parse('2026-11-23T00:00:00.000Z')),
@@ -126,4 +128,30 @@ test('atomic claim admits only one sender across concurrent Cron retries',async(
  assert.deepEqual(outcomes.filter(Boolean),[true]);
  assert.equal(rows.size,1);
  assert.deepEqual(JSON.parse(rows.values().next().value!),{state:'claimed',at:100});
+});
+
+test('new short-form Fujimura Sunset: sharp but factual with blank lines and no system status',()=>{
+ const body=formatPersonalFeedback({user:'564073526655582229',name:'藤村',map:'Sunset',outcome:'win',
+  swing:{round:2,description:'人数有利から敗れたラウンド（最大1人差）'},
+  session:{...session,metrics:[{key:'kpr',label:'1R当たりのキル（KPR）',current:{value:0.67},
+   baseline:{value:0.85,matches:5}}]},
+  daily:{warmup:{title:'止まって撃つ練習'},study:{map:'Sunset',theme:'長い視線とミッドのスプリット',origin:'match'}}});
+ assert.ok(body);
+ assert.match(body!,/藤村さん｜Sunset｜勝利/);
+ assert.match(body!,/第2ラウンド、人数有利を落とした。あれが取れていたら、もっと楽に勝てた試合です/);
+ assert.match(body!,/📊 KPR 0\.67（直近5試合は0\.85）/);
+ assert.match(body!,/先にピークしない/);
+ assert.match(body!,/🔥 アップ（10分）：デスマッチで、キルしたら一度引いて、位置を取り直す/);
+ assert.doesNotMatch(body!,/未取得|未確定|比較資料は不足|再生時刻|VODの該当|直近の試合へのコーチ/);
+ assert.ok(body!.split('\n\n').every(block=>block.split('\n').length<=2));
+ assert.ok(body!.length<500);
+});
+test('omits unavailable metrics and preserves selected no-warmup prescription',()=>{
+ const body=formatPersonalFeedback({user:'123456789012345678',name:'選手',map:'Sunset',outcome:'win',
+  swing:{round:11,description:'人数不利から逆転したラウンド（最大3人差）'},
+  session:{...session,metrics:[]},daily:{warmup:null,study:{map:'Sunset',theme:'ミッド'}}});
+ assert.ok(body);
+ assert.doesNotMatch(body!,/📊|未取得|未確定|🔥/);
+ assert.match(body!,/人数不利から逆転した/);
+ assert.ok(body!.length<420);
 });
