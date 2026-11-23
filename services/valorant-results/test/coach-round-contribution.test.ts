@@ -77,7 +77,7 @@ test('2026-11-24 Sunset: 2 teammate deaths can be scored differently per victim,
  assert.equal(verified.quality.validMatches,1);
  assert.equal(verified.quality.excluded['kill-totals-do-not-match-roster'],undefined);
  // Counted friendly death deliberately cannot be uniformly discarded.
- const wronglyExcluded=ps.map(p=>({...p}));wronglyExcluded[2].d=0;
+ const wronglyExcluded=ps.map((p:{puuid:string;team_id:string;k:number;d:number})=>({...p}));wronglyExcluded[2].d=0;
  const rejected=coachRoundContribution([{...row,players_json:JSON.stringify(wronglyExcluded)}],accounts);
  assert.equal(rejected.quality.validMatches,1,'uncredited teammate death is legitimate when roster agrees');
 });
