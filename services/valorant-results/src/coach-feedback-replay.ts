@@ -25,7 +25,15 @@ export async function replaySavedCoachFeedback(env:ReplayEnv,mapping:KpMapping,
    'ORDER BY n.ended_at DESC LIMIT 24'
  ).bind(mapping.guildId,...ids,now-COACH_FEEDBACK_REPLAY_WINDOW_MS,now).all<Candidate>();
  const result=empty();result.scanned=candidates.results.length;
- for(const row of candidates.results){
+ // Each scheduled five-minute slot advances to a different bounded page.
+ // Without rotation a permanently incomplete newest match starves older
+ // missing-receipt results forever.
+ const pages=Math.max(1,Math.ceil(candidates.results.length/COACH_FEEDBACK_REPLAY_LIMIT));
+ const page=Math.floor(now/(5*60_000))%pages;
+ const selected=candidates.results.slice(
+   page*COACH_FEEDBACK_REPLAY_LIMIT,(page+1)*COACH_FEEDBACK_REPLAY_LIMIT);
+ if(pages>1)console.info('coach_feedback_replay_rotation',{page,pages,candidates:result.scanned});
+ for(const row of selected){
    if(result.attempted>=COACH_FEEDBACK_REPLAY_LIMIT)break;
    if(!allowed.has(row.riot_id.toLowerCase())||
       typeof row.match_id!=='string'||!row.match_id||
