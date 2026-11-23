@@ -149,3 +149,51 @@ test('PvP receipts omit the daily PvE join without changing receipt values or Pv
   assert.equal(pve.history[0].dailyDay,all.history.find(row=>row.id===daily.id)?.dailyDay);
  }finally{db.close();}
 });
+
+test('receipt filters use indexable equality predicates and keep all/mode/game results',async()=>{
+ const {db,env}=fixture();
+ try{
+  await duelHistoryRead(env,'guild','alice');
+  for(const sql of DUEL_PROGRESSION_DDL)db.exec(sql);
+  for(const sql of DUEL_REWARD_DDL)db.exec(sql);
+  const insert=db.prepare(`INSERT INTO kp_duel_progress_receipts
+   (guild,match_id,user,mode,game,opponent,outcome,verified_version,occurred_at,applied_at)
+   VALUES (?,?,?,?,?,?,?,?,?,?)`);
+  insert.run('guild','m1','alice','pve','trio',null,'win',1,100,100);
+  insert.run('guild','m2','alice','pve','othello',null,'loss',1,200,200);
+  insert.run('guild','m3','alice','pvp','trio','bob','draw',1,300,300);
+  insert.run('guild','m4','other','pvp','trio','bob','win',1,400,400);
+  insert.run('elsewhere','m5','alice','pvp','trio','bob','win',1,500,500);
+  const database=env as unknown as {DB:{prepare:(sql:string)=>unknown}};
+  const original=database.DB.prepare;
+  const statements:string[]=[];
+  database.DB.prepare=(sql:string)=>{
+   if(sql.includes('FROM kp_duel_progress_receipts r')){
+    assert.doesNotMatch(sql,/\?\s*=\s*'all'/);
+    assert.match(sql,/r.guild=\? AND r.user=\?/);
+    statements.push(sql);
+   }
+   return original(sql);
+  };
+  const all=await duelHistoryRead(env,'guild','alice');
+  const pvp=await duelHistoryRead(env,'guild','alice',{mode:'pvp'});
+  const trio=await duelHistoryRead(env,'guild','alice',{game:'trio'});
+  const pvpTrio=await duelHistoryRead(env,'guild','alice',{mode:'pvp',game:'trio'});
+  const pveOthello=await duelHistoryRead(env,'guild','alice',{mode:'pve',game:'othello'});
+  assert.deepEqual(all.history.map(x=>x.id),['m3','m2','m1']);
+  assert.deepEqual(pvp.history.map(x=>x.id),['m3']);
+  assert.deepEqual(trio.history.map(x=>x.id),['m3','m1']);
+  assert.deepEqual(pvpTrio.history.map(x=>x.id),['m3']);
+  assert.deepEqual(pveOthello.history.map(x=>x.id),['m2']);
+  assert.equal(statements.length,5);
+  assert.doesNotMatch(statements[0],/r\.mode=\?|r\.game=\?/);
+  assert.match(statements[1],/r\.mode=\?/);
+  assert.doesNotMatch(statements[1],/r\.game=\?/);
+  assert.match(statements[2],/r\.game=\?/);
+  assert.doesNotMatch(statements[2],/r\.mode=\?/);
+  assert.match(statements[3],/r\.mode=\?/);
+  assert.match(statements[3],/r\.game=\?/);
+  assert.equal(pvpTrio.history[0].dailyDay,null);
+  assert.deepEqual(all.filter,{mode:'all',game:'all'});
+ }finally{db.close();}
+});

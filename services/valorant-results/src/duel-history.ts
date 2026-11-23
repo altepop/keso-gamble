@@ -46,6 +46,12 @@ export async function duelHistoryRead(env:KpEnv,guild:string,user:string,filter:
   'CASE WHEN d.session_id IS NOT NULL THEN d.jst_day ELSE NULL END AS daily_day';
  const dailyEntryJoin=mode==='pvp'?'':`
    LEFT JOIN kp_duel_pve_daily_entries d ON d.guild=r.guild AND d.user=r.user AND d.session_id=r.match_id`;
+ // Use static equality terms when a filter is selected so the existing
+ // (guild,user,mode,game,occurred_at) index can restrict candidates.
+ // Keep the user/guild scope even for unfiltered reads.
+ const receiptModeSql=mode==='all'?'':' AND r.mode=?';
+ const receiptGameSql=game==='all'?'':' AND r.game=?';
+ const receiptArgs=[guild,user,...(mode==='all'?[]:[mode]),...(game==='all'?[]:[game]),limit];
  // Every SQL query is guild+authenticated-user constrained. Never expose opponent IDs.
  const responses=await env.DB.batch([
   env.DB.prepare(`SELECT mode,game,points,peak_points,verified_games,wins,losses,draws,updated_at
@@ -54,8 +60,8 @@ export async function duelHistoryRead(env:KpEnv,guild:string,user:string,filter:
    ${dailyDayProjection}
    FROM kp_duel_progress_receipts r${dailyEntryJoin}
    WHERE r.guild=? AND r.user=? AND r.applied_at IS NOT NULL
-     AND (?='all' OR r.mode=?) AND (?='all' OR r.game=?)
-   ORDER BY r.occurred_at DESC,r.match_id DESC LIMIT ?`).bind(guild,user,mode,mode,game,game,limit),
+     ${receiptModeSql}${receiptGameSql}
+   ORDER BY r.occurred_at DESC,r.match_id DESC LIMIT ?`).bind(...receiptArgs),
   // A PvP-only history must not issue an unused PvE session scan.
   ...(mode==='pvp'?[]:[env.DB.prepare(`SELECT s.id,s.game,s.difficulty,s.turn,s.winner,s.version,s.human_moves,s.cpu_moves,
    s.created_at,s.updated_at,d.jst_day AS daily_day
