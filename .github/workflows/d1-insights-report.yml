@@ -4,6 +4,11 @@ name: D1 read-only insights report
 # Hourly windows are read-only analytics and do not consume D1 Rows read.
 # Scheduled every two hours to catch approaching the limit well before exhaustion.
 on:
+  pull_request:
+    paths:
+      - '.github/workflows/d1-insights-report.yml'
+      - 'scripts/d1-daily-guard.mjs'
+      - 'scripts/d1-daily-guard.test.mjs'
   push:
     branches: [main]
     paths:
@@ -23,8 +28,19 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  budget-tests:
+    if: github.repository == 'altepop/keso-gamble' && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Verify sampled telemetry completeness without Cloudflare access
+        run: node --test scripts/d1-daily-guard.test.mjs
   inspect:
-    if: github.repository == 'altepop/keso-gamble' && (github.event_name == 'push' || github.event_name == 'schedule' || github.actor == 'altepop')
+    if: github.repository == 'altepop/keso-gamble' && (github.event_name == 'push' || github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.actor == 'altepop'))
     runs-on: ubuntu-latest
     timeout-minutes: 8
     env:
