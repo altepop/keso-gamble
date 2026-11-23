@@ -107,7 +107,7 @@ export async function ensureCoachMmr(
   const stale = accounts.filter((a): a is { riotId: string; puuid: string; region?: string } => {
     if (typeof a.puuid !== 'string' || !a.puuid.length) return false;
     const s = snapshots.get(a.riotId);
-    return !s || now - s.fetchedAt >= ttlMs;
+    return !s || s.fetchedAt > now || now - s.fetchedAt >= ttlMs;
   });
   if (!stale.length) return snapshots;
   let regions = new Map<string, string>();
