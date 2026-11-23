@@ -85,15 +85,16 @@ export function duelHistoryPanel({open=false,busy=false,data=null,error='',mode=
  (sessions.length?'<ol>'+sessions.map(item=>'<li>'+safe(when(item.updatedAt))+'　'+safe(names[item.game]??item.game)+' ／ '+safe(item.level)+
  ' ／ '+(item.status==='active'?'進行中':(item.winner==='human'?'勝利':item.winner==='cpu'?'敗北':item.winner==='draw'?'引き分け':'終了'))+
  (item.dailyDay?' ／ 日替わり '+safe(item.dailyDay):'')+
- (item.status==='active'?'<button class="action-btn" data-duel-history-resume="'+safe(item.id)+'">この対局を再開</button>':'')+'</li>').join('')+'</ol>':'<p>CPU対局の保存記録はまだない。</p>');
+ (item.status==='active'?'<button type="button" class="action-btn" data-duel-history-resume="'+safe(item.id)+'">この対局を再開</button><button type="button" class="action-btn" data-duel-pve-abandon="'+safe(item.id)+'">この対局を破棄</button>':'')+'</li>').join('')+'</ol>':'<p>CPU対局の保存記録はまだない。</p>');
  return html+'<p class="helper">'+safe(data.note??'')+'</p></div></section>';
 }
-export function duelPvePanel({live=false,busy=false,preview=null,match=null,error='',message='',sessionInput='',pending=null,open=false,game='othello',level='normal',rewardsOpen=false,rewards=null,rewardsError='',historyUi=null}={}){
+export function duelPvePanel({live=false,busy=false,preview=null,match=null,error='',message='',sessionInput='',pending=null,open=false,game='othello',level='normal',rewardsOpen=false,rewards=null,rewardsError='',historyUi=null,abandonConfirm='',skillSummary=null}={}){
  const active=match&&typeof match.id==='string';
  const expanded=open||active||preview||error||message;
  return '<section class="duel-pve-stage" id="duel-pve-section" aria-label="CPU攻略の対局画面"><div class="duel-pve-stage-head"><span class="duel-pve-kicker">SERVER CPU · MAIN MODE</span><h3>CPU攻略アリーナ</h3><p>種目を選んで、何度でも本気の対局へ。勝敗と熟練度はサーバーで確定する。</p></div><div class="duel-pve-stage-body">'+
- '<p class="helper">６種目を日替わりで挑戦。KP残高を賭けず、実戦用のサーバー判定で進行する。既存のPvE報酬規則のみ適用され、日替わり特別KPはない。</p>'+
- '<button type="button" class="action-btn" data-duel-history-open="1" '+(busy?'disabled':'')+'>7種目の対局履歴・熟練度を見る</button>'+
+ '<div class="panel"><div class="card-body"><strong>遊び方は2つ</strong><p class="helper"><b>今日の種目：</b>日付ごとにサーバーが種目・難易度を決定。日替わりの開始・完了・勝利回数を記録。日替わり特別KPはない。</p><p class="helper"><b>好きな種目：</b>自分で種目と難易度を指定。日替わり回数には含めない。いずれもサーバーで自然終局した場合だけ熟練度・既存報酬の判定対象となる。</p><p class="helper">同時に進行中のCPU戦は直近24時間で最大3件。新規開始は今の盤面を自動破棄しない。不要な対局は下の「破棄」で無報酬終了できる。</p></div></div>'+
+ '<button type="button" class="action-btn" data-duel-history-open="1" '+(busy?'disabled':'')+'>7種目の対局履歴・熟練度を見る</button>'+ 
+ '<details class="panel"><summary>ドロップ・報酬の確率と条件</summary><div class="card-body"><p class="helper">自然終局してサーバーで確定した試合のみ抽選対象。報酬は種目別の「獲得済み」記録であり、装備できる遺物や個別アイテムを配る仕組みではない。放棄した試合、練習、未確定試合は抽選しない。</p><p class="helper">確率は運用中の報酬設定に依存する。抽選記録がなければドロップなし。下の結果欄で実際の確率と抽選値を確認できる。</p></div></details>'+
  (!live?'<p>KP口座への接続が必要です。</p>':
  '<div class="action-row"><button class="action-btn" data-duel-pve-preview="1" '+(busy?'disabled':'')+'>今日の種目を確認</button>'+
  '<button class="action-btn primary" data-duel-pve-start="1" '+(busy||pending?'disabled':'')+'>今日のCPU戦を開始</button></div>'+
@@ -102,11 +103,21 @@ export function duelPvePanel({live=false,busy=false,preview=null,match=null,erro
  '<details class="duel-pve-recovery"><summary>以前の試合をIDで再開</summary><label class="helper">途中のCPU戦を再開（試合ID）<input id="duel-pve-session-input" class="action-input" maxlength="36" placeholder="試合ID" value="'+safe(sessionInput)+'"></label><button class="action-btn" data-duel-pve-resume="1" '+(busy?'disabled':'')+'>再開</button></details>'+
  (error?'<p role="alert">'+safe(error)+'</p>':'')+(pending?'<p class="helper">直前の送信結果が未確定です。別の操作をせず、同じ操作IDで確認してください。</p><button type="button" class="action-btn primary" data-duel-pve-retry="1" '+(busy?'disabled':'')+'>前回の操作を確認</button>':'')+(message?'<p role="status">'+safe(message)+'</p>':'')+
  (active?'<div class="duel-pve-arena" data-duel-pve-state="'+safe(match.turn)+'"><div class="duel-pve-arena-top"><span>LIVE MATCH · '+safe(names[match.game]??match.game)+'</span><span>第'+safe(match.version)+'版</span></div><h3>'+safe(resultName[match.winner]??(match.turn==='human'?'あなたの手番':'CPU処理中'))+'</h3><p class="duel-pve-turn">あなたの手数 '+safe(match.humanMoves)+' · '+(match.turn==='finished'?'対局終了':'サーバー判定で対局中')+'</p>'+
- controls(match,busy)+'</div>':''))+'</div></section>'+
+ controls(match,busy)+
+ (match.turn==='finished'?'<div class="duel-pve-after"><h3>対局結果</h3><p>熟練度：'+(skillSummary?'確定 '+safe(skillSummary.points)+'pt'+(skillSummary.delta===null?'（前回値未取得）':'（確認済みの前回値から '+(skillSummary.delta>=0?'+':'')+safe(skillSummary.delta)+'pt）'):'記録を取得できないため増減未確認')+'</p><p class="helper">報酬の抽選結果は直下に表示。次も同じ種目・難易度なら「もう一局」で即開始できる。</p><button type="button" class="action-btn primary" data-duel-pve-custom-start="1" '+(busy||pending?'disabled':'')+'>もう一局（選択中の種目・難易度）</button></div>':
+ '<div class="action-row"><button type="button" class="action-btn" data-duel-pve-abandon="'+safe(match.id)+'" '+(busy||pending?'disabled':'')+'>このCPU戦を破棄</button></div>')+'</div>':''))+'</div></section>'+
  (historyUi?.open?duelHistoryPanel(historyUi):'')+
+ (abandonConfirm?'<section class="panel"><div class="card-body"><p role="alert">この対局を無報酬で破棄しますか？熟練度・ドロップは発生しません。</p><button type="button" class="action-btn" data-duel-pve-abandon="'+safe(abandonConfirm)+'" data-duel-pve-confirm="yes">破棄を確定する</button><button type="button" class="action-btn" data-duel-pve-abandon-cancel="1">やめる</button></div></section>':'')+
  (rewardsOpen?'<section class="panel" id="duel-rewards-in-app"><div class="card-body"><h3>決闘の戦績・報酬（サーバー取得）</h3>'+
  (rewardsError?'<p role="alert">'+safe(rewardsError)+'</p>':'')+
- (!rewards?'<p role="status">取得中…</p>':(['pve','pvp'].map(mode=>'<h4>'+(mode==='pve'?'CPU攻略':'対人戦')+'</h4><ul>'+
+ (!rewards?'<p role="status">取得中…</p>':
+  '<h4>CPU戦のドロップ抽選</h4>'+
+  ((rewards.policy??[]).filter(p=>p.mode==='pve').map(p=>'<p class="helper">運用中の確率：勝利 '+safe((p.win_bps/100).toFixed(2))+'% ／ 敗北 '+safe((p.loss_bps/100).toFixed(2))+'% ／ 引き分け '+safe((p.draw_bps/100).toFixed(2))+'%。'+(p.daily_cap===null?'日次抽選上限なし':'日次抽選上限 '+safe(p.daily_cap)+'回')+'</p>').join('')||'<p class="helper">現在有効なCPU戦ドロップ設定はない。抽選対象外のため獲得なし。</p>')+
+  (match?.turn==='finished'?(()=>{
+   const roll=(rewards.rolls??[]).find(r=>r.mode==='pve'&&r.match_id===match.id);
+   return roll?'<p role="status">この対局：'+(roll.roll<roll.chance_bps?'ドロップ当選':'ドロップなし')+'（実適用確率 '+safe((roll.chance_bps/100).toFixed(2))+'%、抽選値 '+safe(roll.roll)+'/9999）。種目別の獲得記録として保存。</p>':'<p role="status">この対局：抽選記録なし（ドロップなし／抽選条件未達・未設定など）。</p>';
+  })():'')+
+  (['pve','pvp'].map(mode=>'<h4>'+(mode==='pve'?'CPU攻略':'対人戦')+'</h4><ul>'+
  Object.entries(names).map(([id,label])=>{const row=(rewards.skills??[]).find(x=>x.mode===mode&&x.game===id);const earned=(rewards.collection??[]).some(x=>x.mode===mode&&x.game===id);return '<li>'+safe(label)+'：'+safe(row?.wins??0)+'勝 '+safe(row?.losses??0)+'敗 '+safe(row?.draws??0)+'分 ／ '+(earned?'獲得済み':'未獲得')+'</li>';}).join('')+'</ul>').join('')))+'</div></section>':'');
 }
 export function duelOperationsPanel({available=false,busy=false,report=null,error='',auto=false,season=null,archives=null}={}){

@@ -95,6 +95,22 @@ export async function serverPveOperation(env:KpEnv,guild:string,user:string,body
   if(!row)throw Error('CPU戦が見つかりません。');
   return publicMatch(row);
  }
+ if(action==='abandon'){
+  const id=String(body.session??'');
+  const row=await find(env,guild,user,id);
+  if(!row)throw Error('CPU戦が見つかりません。');
+  if(row.turn==='finished')return publicMatch(row);
+  // Abandoned games never insert a progress receipt or reward roll.
+  // The version predicate prevents discarding a match after a concurrent move.
+  const result=await env.DB.prepare(`UPDATE kp_duel_pve_sessions
+    SET turn='finished',winner=NULL,version=version+1,updated_at=?
+    WHERE id=? AND guild=? AND user=? AND turn='human' AND version=?`)
+   .bind(Date.now(),id,guild,user,row.version).run();
+  if(result.meta.changes!==1)throw Error('盤面が更新されました。再取得してください。');
+  const updated=await find(env,guild,user,id);
+  if(!updated)throw Error('CPU戦が見つかりません。');
+  return publicMatch(updated);
+ }
  if(action==='start'||action==='daily'){
   const requestId=String(body.requestId??'');
   if(!uuid.test(requestId))throw Error('操作IDが不正です。');
