@@ -50,7 +50,7 @@ jobs:
            "LEFT JOIN monitor_state s ON s.key='coach_personal_feedback:v1:'||p.subject_id||':'||n.match_id",
            'WHERE n.match_id IN (?,?) AND n.mode=? ORDER BY n.ended_at DESC LIMIT 6'
           ].join(' '),[...ids,'competitive']);
-          const health=await select("SELECT feature,last_ok,last_error,failures FROM kp_health WHERE feature='coach_personal_feedback_replay'");
+          const health=await select("SELECT feature,last_ok,last_error,failures FROM kp_health WHERE feature IN ('coach_personal_feedback_replay','roster_backfill','valorant')");
           const candidates=await select([
            'SELECT n.match_id FROM notifications n',
            'JOIN tracked_players t ON lower(t.riot_id)=lower(n.riot_id)',
@@ -100,4 +100,4 @@ jobs:
           console.log('COACH_FEEDBACK_DIAG_READONLY '+JSON.stringify({at:new Date().toISOString(),rows:result,
            replayHealth:health.map(h=>({feature:h.feature,lastOk:h.last_ok,lastError:h.last_error,failures:h.failures})),
            candidateCount:candidates.length,mutations:0,discordPosts:0}));
-                    NODE
+          NODE
