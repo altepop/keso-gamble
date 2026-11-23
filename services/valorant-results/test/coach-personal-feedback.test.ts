@@ -67,7 +67,7 @@ test('pressure topic selects the death-linked reset prescription over the curric
  assert.match(body!,/デスが増えている。取り返そうと前に出る前に/);
  assert.match(body!,/遮蔽物を使って倒されない動き/);
  assert.doesNotMatch(body!,/一つずつ角を確認する/);
- assert.match(body!,/DPR.*0\.87.*0\.63.*5試合/);
+ assert.match(body!,/DPR.*0\.87.*5試合.*0\.63/);
 });
 test('comeback win selects the flow pattern, which needs no warmup item',()=>{
  const body=formatPersonalFeedback({user:'123456789012345678',name:'選手',map:'Bind',outcome:'win',
@@ -86,7 +86,7 @@ test('fourth match of the day at night suggests a break; a deep-night loss sugge
  const evening=formatPersonalFeedback({...base,endedAt:Date.parse('2026-11-23T14:30:00.000Z'),matchesToday:4});
  assert.ok(evening);
  assert.match(evening!,/連戦で判断が雑になる前に5分休む/);
- assert.match(evening!,/5分の休憩/);
+ assert.match(evening!,/5分休憩/);
  const deepNight=formatPersonalFeedback({...base,endedAt:Date.parse('2026-11-23T17:00:00.000Z'),matchesToday:2});
  assert.ok(deepNight);
  assert.match(deepNight!,/深夜の無理な続行は判断を鈍らせる/);
