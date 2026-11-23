@@ -118,7 +118,7 @@ export async function ensureCoachMmr(
     const region = account.region ?? regions.get(account.riotId);
     if (!region) continue;
     try {
-      const json = await fetcher(`/valorant/v2/by-puuid/mmr/${encodeURIComponent(region)}/pc/${encodeURIComponent(account.puuid)}`);
+      const json = await fetcher(`/valorant/v2/by-puuid/mmr/${encodeURIComponent(region)}/${encodeURIComponent(account.puuid)}`);
       const parsed = parseHenrikMmr(json);
       if (!parsed || parsed.tier === null) continue;
       await db.prepare(`INSERT INTO valorant_mmr_snapshots(puuid,riot_id,region,tier,tier_patched,ranking_in_tier,mmr_change,elo,peak_tier,peak_patched,peak_season,fetched_at)
