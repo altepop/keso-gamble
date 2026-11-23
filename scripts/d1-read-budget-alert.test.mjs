@@ -116,11 +116,27 @@ test('same-day follow-up is deduplicated and cannot spam a persistent issue',asy
   assert.equal(calls,2,'never submit another issue or comment');
  });
 });
+test('day evidence scans more than 100 existing comments without duplicating marker',async()=>{
+ const timestamp=Date.parse('2026-11-24T19:00:00Z');
+ const existing={title:D1_READ_ALERT_TITLE,number:818,created_at:'2026-11-23T10:18:35Z'};
+ await withReport(warning,async env=>{
+  const requests=[];
+  const responder=async(url,opts)=>{
+   requests.push(url);
+   if(url.includes('page=1'))return {ok:true,json:async()=>Array.from({length:100},()=>({body:'older day'}))};
+   if(url.includes('page=2'))return {ok:true,json:async()=>[{body:'<!-- p12-d1-read-budget-day:2026-11-24 -->'}]};
+   return {ok:true,json:async()=>[existing]};
+  };
+  assert.equal(await notifyD1ReadBudget(env,responder,timestamp),'deduplicated');
+  assert.equal(requests.length,3);
+  assert.match(requests[2],/page=2/);
+ });
+});
 test('invalid or unavailable comment inventory fails closed without creating duplicate',async()=>{
  const timestamp=Date.parse('2026-11-24T19:00:00Z');
  await withReport(warning,async env=>{
   const existing={title:D1_READ_ALERT_TITLE,number:818,created_at:'2026-11-23T10:18:35Z'};
-  for(const comments of [null,Array.from({length:100},()=>({body:'prior'}))]){
+  for(const comments of [null,Array.from({length:101},()=>({body:'prior'}))]){
    const fetcher=async(url,options)=>({
     ok:true,json:async()=>url.includes('/comments?')?comments:[existing]});
    await assert.rejects(notifyD1ReadBudget(env,fetcher,timestamp),/unavailable or saturated/);
