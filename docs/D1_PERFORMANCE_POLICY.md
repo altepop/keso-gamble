@@ -172,3 +172,19 @@ The fallback's own report handling reuses `duel-scheduled-operations-audit.mjs` 
 **Verification required:** PR CI and same-SHA Pages/Worker deploy must pass. The first *real* fallback schedule run at 07:17 JST on a following day must be observed separately; PR and push success cannot prove schedule execution. The existing 18:43 JST deployment monitor and 19:17 JST `deployment-watch-fallback` schedule checks are independent of this daily audit fallback and must each be recorded as observed or missing.
 
 **Boundaries:** Strict account-wide D1 hard cap **not configured**. Existing D1 80,000 Rows read/h alert is unchanged. P11/P12 global completion, P8 device, P10 audio, authenticated wallet and 2-person Discord are unverified.
+
+## 2026-11-23 P12 D1 read-only warning notification (one independent split)
+
+The hourly D1 Insights audit already returns exit code **2** if the **top-50 SQL 1-hour Rows read lower bound exceeds 80,000**. It still does so. This PR does not alter, suppress, rerun, or reclassify that warning, and never claims this lower bound is total D1 usage.
+
+The new `D1_READ_AUDIT_REPORT` is a mode-0600 JSON report containing **only** `state` (warning/healthy/unknown), the existing **80,000 Rows/h** threshold, validated one-hour lower-bound sum or null, window-coverage counts, and `hardCapConfigured:false`. No SQL text, predicates, user IDs, guild IDs, tokens, or private data are retained.
+
+After the original audit and the existing optional-history protection step, `scripts/d1-read-budget-alert.mjs` reads that *same report* and:
+- for a **validated warning**, opens one redacted GitHub Issue with the verified top-50 lower bound and 80,000 threshold;
+- for **unknown** (missing/malformed report, unavailable Insights), opens one Issue without asserting any usage number;
+- for **validated healthy**, does not call the GitHub Issues API;
+- for an already open Issue with the exact alert title, does not create a duplicate; when the 100-item Issue inventory is saturated, stops rather than creating unbounded issues.
+
+The alert script uses **GitHub API metadata only**, no Cloudflare API, no D1 queries, no KP/financial writes, no notifications to Discord, no automatic cost-limit enforcement. Its write permission is restricted to GitHub Issues. A warning continues to make the audit job fail; an alert is additional operational visibility, not a replacement for the failure.
+
+**Unverified until actual operation:** a postmerge GitHub Issue being created by a real threshold breach, or unknown-report failure, and a measured reduction in real Rows read. A PR mock passing does not establish either. Strict D1 hard cap remains **not configured / not verified / not enforced**. Human-only P8/P10/wallet/two-person tests remain unverified and non-blocking; P11/P12 global completion is not claimed.

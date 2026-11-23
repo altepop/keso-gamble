@@ -1,7 +1,7 @@
 // Read-only Cloudflare D1 Insights report. Never logs SQL text, query literals, IDs, or tokens.
 // Summary totals cover the returned TOP entries, not necessarily all queries.
 import {execFileSync} from 'node:child_process';
-import {appendFileSync} from 'node:fs';
+import {appendFileSync,writeFileSync} from 'node:fs';
 import {rankReadHotspots} from './d1-read-hotspots.mjs';
 const databases=[
  ['D1-A','93625c27-74b4-4154-a0a5-2d7485083f33'],
@@ -85,3 +85,18 @@ if(!success||oneHourOk<databases.length)process.exitCode=1;
 
 if(process.env.GITHUB_STEP_SUMMARY)
  appendFileSync(process.env.GITHUB_STEP_SUMMARY,out.concat(hourlyHotspots,detail).join('\n')+'\n');
+// Retain a minimal, sanitized machine-readable incident report for a separate
+// GitHub-only notification step. Never print SQL, credentials, guild/user IDs,
+// raw D1 results, or treat top-50 lower bounds as account-wide totals.
+if(process.env.D1_READ_AUDIT_REPORT){
+ const state=oneHourOk===databases.length && read1h>WARN_ROWS_PER_HOUR
+  ?'warning':success===4&&errors===0&&oneHourOk===databases.length
+   ?'healthy':'unknown';
+ writeFileSync(process.env.D1_READ_AUDIT_REPORT,JSON.stringify({
+  state,ok:state==='healthy',threshold:WARN_ROWS_PER_HOUR,
+  readLowerBound:oneHourOk===databases.length?Math.floor(read1h):null,
+  oneHourSources:oneHourOk,insightsWindows:success,insightsErrors:errors,
+  source:'top-50-insights-lower-bound',hardCapConfigured:false
+ }),{mode:0o600});
+}
+
