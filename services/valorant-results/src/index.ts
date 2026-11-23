@@ -7,6 +7,7 @@ import {enrichExistingCoachEvidence} from './coach-evidence-enrichment.ts';
 import {coachProviderShape} from './coach-provider-shape.ts';
 import {vdkRescuePress,vdkRescueStatus} from './vdk-rescue-press.ts';
 import {postCoachPersonalFeedback} from './coach-personal-feedback.ts';
+import {replaySavedCoachFeedback} from './coach-feedback-replay.ts';
 import {approvedEscalationPress,escaPressActive,escalationPressStatus} from './escalation-press.ts';
 import {ensureRankCommand,rankRegistrationStatus} from './rank-command-registration.ts';
 import {ESCALATION_SHIELD_VERSION,ESCALATION_RR_VERSION,matchAct,observeEscalationAct,syncEscalationPower} from './escalation-rating.ts';
@@ -793,6 +794,18 @@ export default {
     ctx.waitUntil(track(env,'voice',()=>ensureVoice(env)));
     ctx.waitUntil(track(env,'steam',async()=>{const mapping=await initializeKp(env);if(mapping)await monitorSteam(env,mapping.guildId);}));
     ctx.waitUntil(track(env,'steam_posts',async()=>{const mapping=await initializeKp(env);if(!mapping)return;await queueSteamPosts(env,mapping.guildId);await flushMahjongPosts(env);}));
+    // Replay recent stored competitive results with no personal feedback receipt.
+    // The original sender still checks identity, consent, preferences, swing
+    // evidence and an atomic receipt claim. Never reset claimed/unknown receipts.
+    if(Math.floor((_event.scheduledTime??Date.now())/60000)%5===2)
+      ctx.waitUntil(track(env,'coach_personal_feedback_replay',async()=>{
+        const mapping=await initializeKp(env);
+        if(!mapping)return;
+        const result=await replaySavedCoachFeedback(env,mapping);
+        if(result.attempted)console.info('coach_personal_feedback_replay',{
+          attempted:result.attempted,posted:result.posted,statuses:result.statuses
+        });
+      }));
     ctx.waitUntil(track(env,'valorant',()=>monitor(env)));
     ctx.waitUntil(track(env,'spike_compensation',async()=>{
       const mapping=await initializeKp(env);if(!mapping)return;

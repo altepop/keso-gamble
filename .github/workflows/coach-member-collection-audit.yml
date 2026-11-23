@@ -1,10 +1,10 @@
 name: KESO COACH member collection audit (read-only)
 on:
   pull_request:
-    paths: ['scripts/coach-member-collection-audit*', 'scripts/coach-kobe-production-audit*', '.github/workflows/coach-member-collection-audit.yml']
+    paths: ['scripts/coach-member-collection-audit*', 'scripts/coach-kobe-production-audit*', 'scripts/coach-feedback-receipt-audit*', '.github/workflows/coach-member-collection-audit.yml']
   push:
     branches: [main]
-    paths: ['scripts/coach-member-collection-audit*', '.github/workflows/coach-member-collection-audit.yml']
+    paths: ['scripts/coach-member-collection-audit*', 'scripts/coach-feedback-receipt-audit*', '.github/workflows/coach-member-collection-audit.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -17,6 +17,7 @@ jobs:
         with: {node-version: '24'}
       - run: node --test scripts/coach-member-collection-audit.test.mjs
       - run: node --experimental-strip-types --test scripts/coach-kobe-production-audit.test.mjs
+      - run: node --test scripts/coach-feedback-receipt-audit.test.mjs
   audit:
     needs: test
     if: github.repository == 'altepop/keso-gamble' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
@@ -36,3 +37,8 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: node --experimental-strip-types scripts/coach-kobe-production-audit.mjs
+      - name: Audit two missing coach feedback receipts (read only, no Discord)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/coach-feedback-receipt-audit.mjs
