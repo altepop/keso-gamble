@@ -3,7 +3,7 @@
  * The counts are across guilds in the single configured KESO PLAY D1; per-guild
  * tenant diagnostics remain the responsibility of duelOperationsAudit().
  */
-import {appendFileSync} from 'node:fs';
+import {appendFileSync,writeFileSync} from 'node:fs';
 import {pathToFileURL} from 'node:url';
 import {D1_PRODUCTION_ID} from './duel-d1-backup.mjs';
 
@@ -46,6 +46,12 @@ export async function auditDuelOperations(env=process.env,request=fetch,now=Date
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
  auditDuelOperations().then(result=>{
+  if(process.env.DUEL_OPERATIONS_AUDIT_REPORT)
+   writeFileSync(process.env.DUEL_OPERATIONS_AUDIT_REPORT,JSON.stringify({
+    state:result.reviewRecommended?'review':'healthy',ok:true,
+    asOf:result.asOf,counts:result.counts,
+    deletionAuthorized:false
+   }),{mode:0o600});
   const summary={dateJst:new Date(result.asOf+9*60*60*1000).toISOString().slice(0,10),
    ...result.counts,reviewRecommended:result.reviewRecommended,deletionAuthorized:false};
   console.log('DUEL_OPERATIONS_AUDIT_OK '+JSON.stringify(summary));
@@ -59,5 +65,12 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
    '| Review recommended | '+result.reviewRecommended+' |','',
    'No D1 writes, no KP changes, no deletion authorization. Counts are across guilds; no identifiers or private records are exported.',''
   ].join('\n'));
- }).catch(error=>{console.error('DUEL_OPERATIONS_AUDIT_UNAVAILABLE '+error.message);process.exitCode=1;});
+ }).catch(error=>{
+  if(process.env.DUEL_OPERATIONS_AUDIT_REPORT)
+   writeFileSync(process.env.DUEL_OPERATIONS_AUDIT_REPORT,JSON.stringify({
+    state:'unknown',ok:false,counts:null,deletionAuthorized:false
+   }),{mode:0o600});
+  console.error('DUEL_OPERATIONS_AUDIT_UNAVAILABLE '+error.message);
+  process.exitCode=1;
+ });
 }
