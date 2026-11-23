@@ -7,11 +7,11 @@ import {buildHeartbeatAlert,HEARTBEAT_ALERT_TITLE,notifyHeartbeat}
  from '../../../scripts/duel-monitor-heartbeat-alert.mjs';
 
 test('alert is permitted only for actual heartbeat anomalies',()=>{
- for(const state of ['missing','stale','stalled','failed']){
+ for(const state of ['missing','stale','stalled','failed','unknown']){
   const alert=buildHeartbeatAlert({state,ok:false,runId:21,ageMinutes:246});
   assert.equal(alert.title,HEARTBEAT_ALERT_TITLE);assert.match(alert.body,new RegExp(state));
  }
- for(const state of ['healthy','running','pending','unknown']){
+ for(const state of ['healthy','running','pending']){
   assert.equal(buildHeartbeatAlert({state,ok:false}),null);
  }
  assert.equal(buildHeartbeatAlert({state:'failed',ok:true}),null);
@@ -46,8 +46,22 @@ test('one issue at most, deduplicated and no D1 or discord access',async()=>{
   assert.equal(await notifyHeartbeat(env,async()=>{throw Error('should not call')}),'healthy');
  }finally{rmSync(dir,{recursive:true,force:true});}
 });
-test('missing and malformed report skip, API failure does not create a duplicate',async()=>{
+test('missing report is actionable unknown, API failure still fails closed',async()=>{
  const env={GITHUB_REPOSITORY:'altepop/keso-gamble',GITHUB_TOKEN:'fixture',DUEL_HEARTBEAT_REPORT:'/missing/file.json'};
- assert.equal(await notifyHeartbeat(env,async()=>{throw Error('should not call')}),'no-report');
+ const calls=[];
+ assert.equal(await notifyHeartbeat(env,async(url,opts)=>{
+  calls.push({url,opts});
+  return {ok:true,json:async()=>opts.method==='POST'?{number:43}:[]};
+ }),'created');
+ assert.equal(calls.length,2);
+ assert.match(JSON.parse(calls[1].opts.body).body,/判定: unknown/);
+ await assert.rejects(notifyHeartbeat(env,async()=>({ok:false,status:403})),/HTTP 403/);
  await assert.rejects(notifyHeartbeat({...env,GITHUB_REPOSITORY:'different'}),/authorized/);
+});
+
+test('unknown state explicitly disclaims deployment failure',()=>{
+ const alert=buildHeartbeatAlert({state:'unknown',ok:false,runId:null,ageMinutes:null});
+ assert.match(alert.body,/判定できない/);
+ assert.match(alert.body,/断定しない/);
+ assert.doesNotMatch(alert.body,/Bearer|token|credential/i);
 });
