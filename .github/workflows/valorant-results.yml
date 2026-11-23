@@ -23,6 +23,8 @@ on:
       - 'scripts/d1-read-budget-alert.test.mjs'
       - 'scripts/d1-read-hotspots.mjs'
       - 'scripts/d1-read-hotspots.test.mjs'
+      - 'scripts/duel-p12-824-read-evidence.mjs'
+      - 'test/duel-p12-824-read-evidence.test.mjs'
       - 'scripts/build-discord-sdk.mjs'
       - 'scripts/build-activity.mjs'
       - 'scripts/*browser-check.cjs'
@@ -114,6 +116,9 @@ jobs:
           .venv-mahjong/bin/python -m pip install --disable-pip-version-check --no-deps --only-binary=:all: --require-hashes -r scripts/sanma-requirements.txt
           echo "SANMA_PYTHON=$PWD/.venv-mahjong/bin/python" >> "$GITHUB_ENV"
       - run: npm run check
+      - name: Verify #824 read-only same-input D1 evidence (mocked Cloudflare only)
+        working-directory: .
+        run: node --test test/duel-p12-824-read-evidence.test.mjs
       - name: Validate optional DAVE music service source and pure queue tests
         run: |
           node --check ../music-voice/server.mjs
