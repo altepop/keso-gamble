@@ -13,6 +13,10 @@ export type CoachMatchPoint={date:string;map:string;agent:string;
  firstKills:number;firstDeaths:number;observedOpeningRounds:number};
 const parse=(value:string|null):unknown=>{try{return value?JSON.parse(value):null}catch{return null}};
 const number=(n:unknown):n is number=>Number.isSafeInteger(n)&&Number(n)>=0&&Number(n)<=10000;
+// Henrik kill timestamps are milliseconds within a round (up to 15 minutes),
+// not player stat counts. Using the 10,000 stat cap here silently discarded
+// otherwise verified matches from the match-trend and post-match screen.
+const validKillTime=(n:unknown):n is number=>Number.isSafeInteger(n)&&Number(n)>=0&&Number(n)<=900_000;
 const id=(v:unknown):v is string=>typeof v==='string'&&v.length>0&&v.length<=128;
 export function buildCoachMatchTrend(rows:readonly Row[],accounts:readonly Account[],
  max=20):CoachMatchPoint[]{
@@ -34,7 +38,7 @@ export function buildCoachMatchTrend(rows:readonly Row[],accounts:readonly Accou
   else if(us?.won===false&&them?.won===true)outcome='loss';
   else if(us?.won===false&&them?.won===false&&number(us.rounds)&&us.rounds>0&&us.rounds===them.rounds)outcome='draw';
   let fk=0,fd=0,seen=0;
-  const validKills=(kills as Kill[]).every(k=>number(k.r)&&number(k.t)&&id(k.victim)&&
+  const validKills=(kills as Kill[]).every(k=>number(k.r)&&validKillTime(k.t)&&id(k.victim)&&
    (k.killer===null||id(k.killer))&&
    ps.some(p=>p.puuid===k.victim)&&
    (k.killer===null||ps.some(p=>p.puuid===k.killer)));
