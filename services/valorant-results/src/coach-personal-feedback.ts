@@ -128,45 +128,71 @@ export function selectAdvicePattern(input:{outcome:'win'|'loss'|'draw';swing:{de
  if(session.topic==='timing')return ADVICE_PATTERNS.steady;
  return null;
 }
-function swingViewpoint(description:string):string|null{
- if(description.startsWith('人数有利から敗れた'))
-  return '見るべきポイントは、有利ができてから最初に倒れた場面です。先に仕掛けたのは誰か、その時に味方が取り返せる位置にいたかをご確認ください。';
- if(description.startsWith('人数不利から逆転した'))
-  return '見るべきポイントは、不利になってから最初に取り返したキルです。誰のカバーで生まれたかをご確認ください。再現できる形が見えてきます。';
- return null;
+// Presentation only. The selected pattern and its prescribed warmup stay unchanged.
+function shortPatternAdvice(pattern:AdvicePattern):string{
+ if(pattern===ADVICE_PATTERNS.advantageLost)return '次は1つだけ。有利な場面で、先にピークしない。';
+ if(pattern===ADVICE_PATTERNS.cover)return '孤立して倒れる場面を減らせ。次は味方とカバーできる距離で動く。';
+ if(pattern===ADVICE_PATTERNS.deaths)return 'デスが増えている。取り返そうと前に出る前に、一度離れて立て直す。';
+ if(pattern===ADVICE_PATTERNS.conversion)return '撃ち負けが多い。次は止まってから撃つ。この順番を崩さない。';
+ if(pattern===ADVICE_PATTERNS.stalled)return 'キルが減ってデスが増えた。無理な取り返しをやめ、いったん仕切り直す。';
+ if(pattern===ADVICE_PATTERNS.improving)return '前回の改善が数字に出ている。次も同じ動きを再現する。';
+ if(pattern===ADVICE_PATTERNS.sleepy)return '深夜の無理な続行は判断を鈍らせる。今日はここで切り上げる。';
+ if(pattern===ADVICE_PATTERNS.flow)return '逆転できたカバーは良い。次も連携の距離を崩さない。';
+ if(pattern===ADVICE_PATTERNS.longSession)return '連戦で判断が雑になる前に5分休む。水を飲んでから次へ。';
+ if(pattern===ADVICE_PATTERNS.lateNight)return '深夜の連戦は切りどころを決める。次の1戦で終える。';
+ return '大崩れはない。次の試合も今の動きを再現する。';
+}
+function shortWarmup(pattern:AdvicePattern|null,fallback:string):string{
+ if(pattern===ADVICE_PATTERNS.advantageLost)return 'アップ（10分）：デスマッチで、キルしたら一度引いて、位置を取り直す。それだけを繰り返す。';
+ if(pattern===ADVICE_PATTERNS.cover)return 'アップ（10分）：デスマッチで味方の後ろを動き、カバーに入るタイミングを確認する。';
+ if(pattern===ADVICE_PATTERNS.deaths)return 'アップ（10分）：デスマッチで無理にピークせず、遮蔽物を使って倒されない動きを徹底する。';
+ if(pattern===ADVICE_PATTERNS.conversion)return 'アップ（15分）：デスマッチでストレイフ、停止、バーストの順番を守る。';
+ if(pattern===ADVICE_PATTERNS.stalled)return 'アップ：今日は休む選択も含め、次の練習で直すことを1つ決める。';
+ if(pattern===ADVICE_PATTERNS.longSession)return 'アップ：5分休憩。立って体を伸ばし、水を飲む。';
+ if(pattern===ADVICE_PATTERNS.steady)return 'アップ（3分）：レンジで照準の高さを合わせる。';
+ return fallback?'アップ：'+text(fallback,90):'';
+}
+function shortSwing(swing:{round:number;description:string},outcome:'win'|'loss'|'draw'):string{
+ if(swing.description.startsWith('人数有利から敗れた'))
+  return '第'+swing.round+'ラウンド、人数有利を落とした。'+(outcome==='win'?'あれが取れていたら、もっと楽に勝てた試合です。':'勝てるラウンドを落としたのは痛い。');
+ if(swing.description.startsWith('人数不利から逆転した'))
+  return '第'+swing.round+'ラウンド、人数不利から逆転した。あのカバーは次も再現しよう。';
+ return '第'+swing.round+'ラウンド、'+text(swing.description,66)+'。';
 }
 export function formatPersonalFeedback(input:{
  user:string;name:string;map:string;outcome:'win'|'loss'|'draw';swing:{round:number;description:string};
  session:Session;daily:Daily;endedAt?:number;matchesToday?:number
 }):string|null{
  const {user,name,map,outcome,swing,session,daily}=input;
- if(!/^\d{15,22}$/.test(user))return null;
+ if(!/^\\d{15,22}$/.test(user))return null;
  if(!Number.isSafeInteger(swing.round)||swing.round<1||swing.round>61)return null;
  const study=daily.study;if(!study?.theme)return null;
  const pattern=selectAdvicePattern({outcome,swing,session,endedAt:input.endedAt,matchesToday:input.matchesToday});
  if(!pattern&&!daily.warmup?.title)return null;
  const metric=session.metrics.find(m=>m.key===session.lesson.track&&Number.isFinite(m.current?.value));
- const metricLine=metric?(text(metric.label,26)+'：今回 '+metric.current!.value.toFixed(2)+
-   (metric.baseline&&metric.baseline.matches>=2&&Number.isFinite(metric.baseline.value)
-    ?'／比較 '+metric.baseline.value.toFixed(2)+'（'+metric.baseline.matches+'試合）':'（比較資料は不足）')):
-   '対象指標は未取得です。次の試合で確認しましょう。';
- const point=swingViewpoint(swing.description);
- const lines=[
-  '<@'+user+'> 🎯 **KESO COACH｜個別フィードバック**',
-  'これは、直近の試合へのコーチからの個別フィードバックです。今回の気づきと、次に試すことをお届けします。',
-  '🕹️ '+text(name,32)+'さん｜'+text(map,24)+'｜'+({win:'勝利',loss:'敗北',draw:'引き分け'}[outcome]),
-  '🔎 **今回の分かれ目**：第'+swing.round+'ラウンド・'+text(swing.description,75)+'。'+(point?point+' ':'')+'VODの該当ラウンドをご確認ください（再生時刻は未取得）。',
-  '📊 **重点指標**：'+metricLine+' ※1試合の変化だけで改善・悪化を断定しません。'
+ // Missing metrics simply omit this paragraph. Never expose acquisition state.
+ const metricLine=metric?(()=>{
+  const current=metric.current!.value.toFixed(2);
+  const base=metric.baseline&&metric.baseline.matches>=2&&Number.isFinite(metric.baseline.value)
+   ?metric.baseline:null;
+  const title=metric.key==='kpr'?'KPR':metric.key==='dpr'?'DPR':text(metric.label,24);
+  const difference=base?Number((metric.current!.value-base.value).toFixed(9)):null;
+  const evaluation=metric.key==='kpr'&&difference!==null&&difference<=-0.1?'。キルにつながる動きが減っている。'
+   :metric.key==='dpr'&&difference!==null&&difference>=0.1?'。倒されすぎだ。無理なピークを減らせ。':'。';
+  return '📊 '+title+' '+current+(base?'（直近'+base.matches+'試合は'+base.value.toFixed(2)+'）':'')+evaluation;
+ })():null;
+ const warmup=pattern?.warmup?shortWarmup(pattern,'')
+  :!pattern&&daily.warmup?.title?shortWarmup(null,daily.warmup.title):null;
+ const blocks=[
+  '<@'+user+'> 🎯 **KESO COACH｜個別フィードバック**\\n🕹️ '+text(name,32)+'さん｜'+text(map,24)+'｜'+({win:'勝利',loss:'敗北',draw:'引き分け'}[outcome]),
+  '🔎 '+shortSwing(swing,outcome),
+  metricLine,
+  pattern?'💡 '+shortPatternAdvice(pattern)
+   :(session.lesson.nextGame?'💡 次は1つだけ。'+text(session.lesson.nextGame,90):null),
+  warmup?'🔥 '+warmup:null,
+  '📚 座学：'+text(study.map,24)+'・'+text(study.theme,85)
  ];
- if(pattern)lines.push('💡 **コーチから**：'+text(pattern.advice,120));
- if(pattern?.warmup)lines.push('🔥 **次のアップ**：'+text(pattern.warmup,120));
- else if(!pattern)lines.push('🔥 **次のアップ**：'+text(daily.warmup!.title,85));
- lines.push(study.origin==='match'
-  ?'📚 **今回のマップの座学**：'+text(study.map,24)+'・'+text(study.theme,85)
-  :'📚 **本日の座学（日替わり）**：'+text(study.map,24)+'・'+text(study.theme,85));
- lines.push(pattern?pattern.closing
-  :(session.lesson.nextGame?text(session.lesson.nextGame,160):'次のコンペでは、まず1つだけ意識して試してください。'));
- return lines.join('\n');
+ return blocks.filter((b):b is string=>Boolean(b)).join('\\n\\n');
 }
 type MuseTop={chooseToday:(input:{date:string;presets:Record<string,unknown>})=>{map:string|null;study:{theme:string;sourceStatus:string}|null};
  canonical?:(map:string)=>string|null;
