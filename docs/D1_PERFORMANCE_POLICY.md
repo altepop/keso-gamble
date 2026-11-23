@@ -112,3 +112,22 @@ Official references:
 - D1 pricing and quota: https://developers.cloudflare.com/d1/platform/pricing/
 - Free quota enforcement, 2026-09-01: https://developers.cloudflare.com/changelog/post/2026-09-01-d1-free-tier-limit-enforcement/
 - Spending limits apply to Workers/Durable Objects, and may not guarantee maximum final charge: https://developers.cloudflare.com/billing/manage/spend-management/
+
+## 2026-11-23 P12: 1-hour SQL hotspot evidence and reduction runbook
+
+**Observed GitHub Actions evidence (run 45138534373, inspect job 137570546536; read-only):**
+- `scripts/d1-read-audit.mjs` sets `WARN_ROWS_PER_HOUR=80000`, computes the sum of the returned top-50 SQL rows from D1-A and D1-B over 1h, and intentionally sets exit code **2** when that lower bound exceeds the warning. **Never turn this warning into success by relaxing the threshold or blindly rerunning.**
+- At the audited snapshot, 1-hour lower bounds were **D1-A 75**, **D1-B 102,584**, total **102,659 Rows read**. This was **22,659 (28.3%) above** the 80,000/h warning threshold. `D1_READ_AUDIT_DONE successes=4 errors=0` means both databases supplied the two requested 1h/1d Insights windows. The workflow `inspect` step was Failure as designed; the subsequent optional-history guard ran successfully.
+- UTC-day adaptive GraphQL estimates during that run: **1,846,991 Rows read / 14,402 Rows written**. They are estimates, not an accurate account-wide quota remainder or a strict spending cap.
+- The D1-B **24-hour** top SQL shape read **2,392,110 Rows** over **266 calls** (about **8,992/call**), naming `coach_member_queue`, `coach_member_sources`, `coach_member_links`, `coach_position_backfill`, `valorant_match_positions`. This is an investigation priority **for the 24-hour sample only**; the particular SQL shape responsible for the latest **1-hour** overrun has not yet been established.
+- A separate 24-hour top SQL form that traversed `json_each`, `tracked_players`, `monitor_state`, and match round tables was **256,212 Rows / 44 calls** (around **5,823/call**). Future tuning must verify its actual current frequency and its planner/index behavior, not remove retention or mandatory collection blindly.
+
+**This split adds no Cloudflare calls.** It prints the top five 1-hour SQL shapes from the *existing* `wrangler d1 insights --time-period=1h --limit=50` response into Actions logs and the job summary, including operation, table names, calls, Rows read, and percentage of the returned top-50 lower bound. Raw SQL, identifiers, predicates, literal values, access tokens and individual match data are not logged.
+
+**Safe load-reduction workflow for the next authorized optimization PR:**
+1. Compare two separately recorded 1-hour read-only snapshots (same duration) with 1-hour shape frequency and rows/call. Check whether the `coach_member_*` join remains dominant or whether a different form drove the overrun. Compare D1-A and D1-B independently.
+2. If the high-volume coach join persists, inspect the original SQL, indexes and `EXPLAIN QUERY PLAN` on an isolated fixture or read-only plan query before proposing bounded candidate filters, indexes or incremental projections. Check that archived matches, all registered members, and consent/ownership boundaries remain correct.
+3. If scheduled polling is the culprit, use keyed per-member progress or bounded incremental refresh rather than full-table scans. Never disable active match capture, earned KP, stock/races, reconciliations, debt, immutable ledger or retention obligations. Keep backup/restore safeguards and D1 read/write costs in scope.
+4. Make performance changes in a separate PR with fixed SQL fixture regression tests, a rollback path, and read-only production post-deploy Insights comparing 1-hour rows/call and total lower-bound changes. Do not claim a numeric production reduction until that follow-up observation exists.
+
+**What has not been done:** no SQL query or index has been changed in this PR, no verified drop in Rows read has occurred, and no strict D1 hard cap has been enabled or verified. A top-50 lower bound is not the complete account total.
