@@ -1,48 +1,142 @@
+import {duelLegalMoves} from './duel-rules.js';
+import {hitBlowRemaining} from './duel-hitblow-view.js';
+import {bluffDie} from './duel-bluff-view.js';
+import {pokerCardMarkup} from './duel-poker-view.js';
 /** UI-only rendering for authenticated, server-authoritative six-mode CPU duels.
  * The browser cannot choose the daily game/level or award KP.
  */
 const safe=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const names={trio:'三目並べ',othello:'オセロ',gomoku:'五目並べ',connect4:'四目並べ',hitblow:'ヒット＆ブロー',bluffdice:'ブラフダイス',poker:'５カードポーカー'};
 const resultName={human:'勝利',cpu:'敗北',draw:'引き分け'};
-function controls(match,busy){
+/** Pure UI helpers. The Worker remains the only authority for moves, rewards and winner. */
+const cardSuit=id=>['♠','♥','♦','♣'][id%4];
+const cardRank=id=>['2','3','4','5','6','7','8','9','10','J','Q','K','A'][Math.floor(id/4)];
+function pveWinningLine(board,side){
+ if(typeof board!=='string'||!/^[.ab]{42}$/.test(board)||!['a','b'].includes(side))return [];
+ for(let row=0;row<6;row++)for(let col=0;col<7;col++){
+  if(board[row*7+col]!==side)continue;
+  for(const [dr,dc] of [[0,1],[1,0],[1,1],[1,-1]]){
+   const cells=Array.from({length:4},(_,k)=>(row+dr*k)*7+col+dc*k);
+   if(cells.every((index,k)=>row+dr*k>=0&&row+dr*k<6&&col+dc*k>=0&&col+dc*k<7&&board[index]===side))return cells;
+  }
+ }
+ return [];
+}
+function gravitySlot(board,col){
+ if(!Number.isInteger(col)||col<0||col>6||board[col]!=='.')return -1;
+ for(let row=5;row>=0;row--)if(board[row*7+col]==='.')return row*7+col;
+ return -1;
+}
+/** Returns only real gravity-supported added slots; missed/replaced snapshots never animate. */
+export function classifyPveConnect4Transition(before,after){
+ if(!/^[.ab]{42}$/.test(before??'')||!/^[.ab]{42}$/.test(after??''))return [];
+ const changes=[];
+ for(let i=0;i<42;i++)if(before[i]!==after[i]){
+  if(before[i]!=='.'||!['a','b'].includes(after[i]))return [];
+  changes.push(i);
+ }
+ if(!changes.length||changes.length>2)return [];
+ // Server CPU replies may commit human 'a' and CPU 'b' simultaneously.
+ const ordered=changes.length===2?[changes.find(i=>after[i]==='a'),changes.find(i=>after[i]==='b')]:changes;
+ if(ordered.some(x=>x===undefined))return [];
+ let board=before;
+ for(const i of ordered){
+  if(gravitySlot(board,i%7)!==i)return [];
+  board=board.slice(0,i)+after[i]+board.slice(i+1);
+ }
+ return board===after?ordered:[];
+}
+function controls(match,busy,{selectedCell=null,pokerPicks=[],animationSlots=[]}={}){
  const board=String(match.board??''),game=match.game,can=match.turn==='human'&&!busy;
  if(['othello','gomoku','connect4','trio'].includes(game)){
-  const columns=game==='trio'?3:game==='connect4'?7:game==='othello'?8:15;
-  if(!(game==='trio'?/^[.XO]{9}$/.test(board):new RegExp('^[.BWab]{'+(game==='connect4'?42:columns*columns)+'}$').test(board)))
-   return '<p role="alert">盤面の形式を確認できません。再取得してください。</p>';
+  const n=game==='trio'?3:game==='connect4'?7:game==='othello'?8:15;
+  const valid=game==='trio'?/^[.XO]{9}$/.test(board):game==='connect4'?/^[.ab]{42}$/.test(board):new RegExp('^[.BW]{'+n*n+'}$').test(board);
+  if(!valid)return '<p role="alert">盤面の形式を確認できません。再取得してください。</p>';
   if(game==='connect4'){
-   // 7 column buttons are actions; the 42 visible slots below reflect the server board.
-   // Row zero is the top, matching connect4Move() in duel-mini-games.js.
-   const grid=[...board].map((cell,i)=>{
-    const label=cell==='a'?'あなたの赤い石':cell==='b'?'CPUの黄色い石':'空き';
-    const color=cell==='a'?'#ff6761':cell==='b'?'#ffdb56':'#f1f6ff';
-    return '<span role="gridcell" data-duel-pve-slot="'+i+'" aria-label="'+(Math.floor(i/7)+1)+'行'+(i%7+1)+'列 '+label+'" '+
-     'style="display:grid;place-items:center;min-width:0;aspect-ratio:1;background:#164882;border-radius:50%;'+
-     'font-size:clamp(17px,5vw,31px);font-weight:800;color:'+color+'">'+(cell==='.'?'○':'●')+'</span>';
+   const line=match.turn==='finished'&&match.winner==='human'?pveWinningLine(board,'a'):
+    match.turn==='finished'&&match.winner==='cpu'?pveWinningLine(board,'b'):[];
+   const wins=new Set(line),motion=new Set(animationSlots);
+   const top=Array.from({length:7},(_,col)=>
+    '<button type="button" data-duel-pve-cell="'+col+'" aria-label="'+(col+1)+'列に石を落とす" '+
+    (!can||board[col]!=='.'?'disabled':'')+' aria-disabled="'+(!can||board[col]!=='.')+'">▼<span class="duel-pve-col-number">'+(col+1)+'</span></button>').join('');
+   const cells=[...board].map((v,i)=>{
+    const label=v==='a'?'あなたの赤い石':v==='b'?'CPUの黄色い石':'空き';
+    const active=can&&board[i%7]==='.';
+    return '<button type="button" class="duel-connect4-space '+(v==='.'?'':v)+' '+(wins.has(i)?'duel-c4-win':'')+
+     ' '+(motion.has(i)?'duel-c4-new-chip':'')+'" data-duel-pve-slot="'+i+'" aria-label="'+(Math.floor(i/7)+1)+'行'+(i%7+1)+'列 '+label+
+     '" data-duel-pve-board-col="'+(i%7)+'" '+(active?'':'disabled')+
+     ' style="--c4-drop-duration:620ms;--c4-drop-distance:'+(Math.floor(i/7)+1)*43+'px;--c4-drop-delay:'+(animationSlots.indexOf(i)>0?'-160ms':'0ms')+'"><i aria-hidden="true"></i></button>';
    }).join('');
-   const drop=Array.from({length:7},(_,col)=>
-    '<button type="button" class="action-btn" data-duel-pve-cell="'+col+'" aria-label="'+(col+1)+'列に石を落とす" '+
-    'style="min-width:0;min-height:44px;padding:4px 0;font-size:13px" '+
-    (!can||board[col]!=='.'?'disabled':'')+'>'+(col+1)+'列</button>'
-   ).join('');
-   return '<div class="duel-pve-connect4" style="max-width:360px;width:100%">'+
-    '<p class="helper">赤●：あなた ／ 黄●：CPU。縦・横・斜めに４つ並べると勝ち。上の列ボタンで石を落とす。</p>'+
-    '<div role="group" aria-label="四目並べの投入列" style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px">'+drop+'</div>'+
-    '<div role="grid" aria-label="四目並べの盤面（６行７列）" style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));'+
-    'gap:3px;padding:6px;margin-top:5px;border-radius:12px;background:#2162b5;box-sizing:border-box;width:100%">'+grid+'</div></div>';
+   return '<div class="duel-pve-connect4 duel-pve-premium" style="max-width:360px;width:100%">'+
+    '<p class="helper">赤：あなた ／ 黄：CPU。列の矢印、または盤面内の好きな段をタップして落とす。縦・横・斜めに4つ揃えれば勝ち。</p>'+
+    '<div class="duel-connect4-head" role="group" aria-label="四目並べの投入列" style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr))">'+top+'</div>'+
+    '<div class="duel-connect4-board '+(wins.size?'duel-c4-victory-board':'')+'" data-c4-match="'+safe(match.id)+'" data-c4-version="'+safe(match.version)+
+    '" role="grid" aria-label="四目並べの盤面（６行７列）" style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr))">'+cells+'</div>'+
+    (wins.size?'<div class="duel-c4-celebration" role="status" aria-live="polite"><strong>４つ揃った！</strong></div>':'')+'</div>';
   }
-  const pieces={X:'×',O:'○',B:'●',W:'○',a:'●',b:'○','.':'·'};
-  const cells=[...board].map((v,i)=>'<button type="button" data-duel-pve-cell="'+i+'" '+(!can||v!=='.'?'disabled':'')+' aria-label="'+(Math.floor(i/columns)+1)+'行'+(i%columns+1)+'列" class="duel-pve-cell">'+pieces[v]+'</button>').join('');
-  return '<div class="duel-pve-board duel-pve-board-'+game+'" style="--duel-cols:'+columns+'" role="group" aria-label="CPU戦盤面">'+cells+'</div>';
+  if(game==='trio'){
+   return '<div class="duel-pve-board duel-pve-board-trio" style="--duel-cols:3" role="grid" aria-label="三目並べ">'+
+    [...board].map((v,i)=>'<button type="button" class="duel-pve-cell duel-pve-trio-cell '+(v==='X'?'human':v==='O'?'cpu':'')+
+     '" data-duel-pve-cell="'+i+'" '+(!can||v!=='.'?'disabled':'')+' aria-label="'+(Math.floor(i/3)+1)+'行'+(i%3+1)+'列 '+
+     (v==='X'?'あなた':v==='O'?'CPU':'空き')+'">'+(v==='X'?'×':v==='O'?'○':'')+'</button>').join('')+'</div>';
+  }
+  let allowed=[];
+  try{allowed=duelLegalMoves(game,board,'B');}catch{return '<p role="alert">盤面を検証できません。</p>';}
+  const legal=new Set(allowed);
+  const gomoku=game==='gomoku';
+  const grid=[...board].map((v,i)=>{
+   const open=legal.has(i);
+   const label=(Math.floor(i/n)+1)+'行'+(i%n+1)+'列 '+(v==='B'?'あなたの石':v==='W'?'CPUの石':open?'着手可能':'空き');
+   return '<button type="button" class="duel-pve-cell duel-pve-premium-cell '+(v==='B'?'human':v==='W'?'cpu':open?'available':'')+
+    (selectedCell===i?' is-selected':'')+'" data-duel-pve-cell="'+i+'" '+(!can||!open?'disabled':'')+
+    ' aria-label="'+label+'" aria-pressed="'+(selectedCell===i)+'">'+
+    (v==='.'?(open?'<span class="duel-pve-legal-hint" aria-hidden="true">'+(selectedCell===i?'◎':'·')+'</span>':''):'<span class="duel-pve-stone '+(v==='B'?'human':'cpu')+'" aria-hidden="true"></span>')+'</button>';
+  }).join('');
+  return '<div class="duel-pve-premium duel-pve-premium-'+game+'">'+
+   '<p class="helper">'+(gomoku?'盤面は横・縦スクロール可能。置く位置を選び、確認してから確定する。':'淡い目印が置ける場所。黒があなた、白がCPU。')+'</p>'+
+   '<div class="duel-pve-premium-scroll" '+(gomoku?'role="region" tabindex="0" aria-label="五目並べ盤面（スクロール可能）"':'')+'>'+
+   '<div class="duel-pve-board duel-pve-board-'+game+'" style="--duel-cols:'+n+'" role="grid" aria-label="'+(gomoku?'五目並べ':'オセロ')+'の確定盤面">'+grid+'</div></div>'+
+   (gomoku&&selectedCell!==null?'<div class="duel-pve-confirm-row"><span role="status">選択：'+(Math.floor(selectedCell/15)+1)+'行'+(selectedCell%15+1)+'列</span>'+
+   '<button class="action-btn primary" type="button" data-duel-pve-confirm="'+selectedCell+'" '+(!can?'disabled':'')+'>ここに置く</button>'+
+   '<button class="action-btn" type="button" data-duel-pve-cancel="1">選び直す</button></div>':'')+'</div>';
  }
  const pub=(()=>{try{return JSON.parse(board)}catch{return null}})();
  if(!pub||typeof pub!=='object')return '<p role="alert">盤面の形式を確認できません。</p>';
  const hand=Array.isArray(match.ownHand?.value)?match.ownHand.value:null;
- if(game==='hitblow')return '<p class="helper">重複しない数字４桁を推理。履歴：'+safe(Array.isArray(pub.history)?pub.history.map(h=>h.by+':'+h.guess+' '+h.hit+'H'+h.blow+'B').slice(-8).join(' ／ '):'')+'</p><label>４桁<input id="duel-pve-guess" class="action-input" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" placeholder="0123"></label><button class="action-btn primary" data-duel-pve-move="guess" '+(!can?'disabled':'')+'>推理を確定</button>';
- if(game==='bluffdice')return '<p class="helper">自分のダイス：'+safe(hand?.join(' / ')??'未取得')+' ／ 宣言：'+safe(pub.bid?pub.bid.count+'個・'+pub.bid.face+'の目':'まだなし')+'</p><label>個数<select id="duel-pve-count">'+Array.from({length:10},(_,i)=>'<option value="'+(i+1)+'">'+(i+1)+'</option>').join('')+'</select></label><label>目<select id="duel-pve-face">'+Array.from({length:6},(_,i)=>'<option value="'+(i+1)+'">'+(i+1)+'</option>').join('')+'</select></label><button class="action-btn primary" data-duel-pve-move="bid" '+(!can?'disabled':'')+'>宣言する</button><button class="action-btn" data-duel-pve-move="challenge" '+(!can||!pub.bid||pub.bid.by==='a'?'disabled':'')+'>疑う</button>';
- if(game==='poker')return '<p class="helper">自分の５枚（カード番号）：'+safe(hand?.join(' / ')??'未取得')+'</p><p class="helper">交換するカードを最大３枚選ぶ。０枚でも確定できる。</p><div class="action-row">'+Array.from({length:5},(_,i)=>'<label><input type="checkbox" data-duel-pve-poker="'+i+'" '+(!can?'disabled':'')+'> '+(i+1)+'枚目</label>').join('')+'</div><button class="action-btn primary" data-duel-pve-move="poker" '+(!can?'disabled':'')+'>交換を確定</button>';
+ if(game==='hitblow'){
+  const history=Array.isArray(pub.history)?pub.history:[];
+  const remaining=hitBlowRemaining(history,'a');
+  return '<div class="duel-pve-premium duel-pve-hidden"><p class="helper">重複しない４桁を推理。数字だけ一致＝ブロー、位置も一致＝ヒット。CPUの正解は公開されない。</p>'+
+   (remaining!==null?'<p class="duel-pve-insight" role="status">公開された自分の結果から残る候補：'+safe(remaining)+'通り</p>':'')+
+   '<label>４桁の予想<input id="duel-pve-guess" class="action-input" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="off" placeholder="0123"></label>'+
+   '<button class="action-btn primary" data-duel-pve-move="guess" '+(!can?'disabled':'')+'>予想を確定</button>'+
+   (history.length?'<details class="duel-pve-history"><summary>公開された予想履歴 '+history.length+'件</summary><ol>'+
+     history.map(h=>'<li>'+safe(h.by==='a'?'あなた':'CPU')+' <strong>'+safe(h.guess)+'</strong>　'+safe(h.hit)+'ヒット・'+safe(h.blow)+'ブロー</li>').join('')+'</ol></details>':'')+'</div>';
+ }
+ if(game==='bluffdice'){
+  const dice=hand?.length===5?hand:[];
+  const bid=pub.bid;
+  return '<div class="duel-pve-premium duel-pve-hidden">'+
+   '<p class="helper">あなたのダイス（CPUの手札は非公開）</p><div class="duel-pve-dice-row">'+
+   dice.map(v=>bluffDie(v)).join('')+'</div>'+
+   '<p role="status" class="duel-pve-insight">現在の宣言：'+(bid?safe(bid.count)+'個・'+safe(bid.face)+'の目（'+(bid.by==='a'?'あなた':'CPU')+'）':'まだ宣言なし')+'</p>'+
+   '<div class="duel-pve-bid-row"><label>個数<select id="duel-pve-count">'+Array.from({length:10},(_,i)=>'<option value="'+(i+1)+'">'+(i+1)+'</option>').join('')+'</select></label>'+
+   '<label>目<select id="duel-pve-face">'+Array.from({length:6},(_,i)=>'<option value="'+(i+1)+'">'+(i+1)+'</option>').join('')+'</select></label></div>'+
+   '<div class="duel-pve-confirm-row"><button class="action-btn primary" data-duel-pve-move="bid" '+(!can?'disabled':'')+'>宣言する</button>'+
+   '<button class="action-btn" data-duel-pve-move="challenge" '+(!can||!bid||bid.by==='a'?'disabled':'')+'>相手の宣言を疑う</button></div>'+
+   (Array.isArray(pub.history)&&pub.history.length?'<details><summary>公開されたラウンド履歴 '+pub.history.length+'件</summary><ol>'+pub.history.map(h=>'<li>第'+safe(h.round)+'回：'+safe(h.actual)+'個／'+safe(h.winner==='a'?'あなた':'CPU')+'勝利</li>').join('')+'</ol></details>':'')+'</div>';
+ }
+ if(game==='poker'){
+  const cards=hand?.length===5&&hand.every(v=>Number.isInteger(v)&&v>=0&&v<52)?hand:[];
+  return '<div class="duel-pve-premium duel-pve-hidden"><p class="helper">交換するカードを最大3枚選択。CPUの手札は決着まで非公開。</p>'+
+   '<div class="duel-pve-poker-hand">'+cards.map((v,i)=>pokerCardMarkup(v,{index:i,selected:pokerPicks.includes(i),disabled:!can}).replace('data-duel-card="'+i+'"','data-duel-pve-poker="'+i+'"')).join('')+'</div>'+
+   '<p role="status" class="duel-pve-insight">交換予定：'+pokerPicks.length+' / 3枚</p>'+
+   '<button class="action-btn primary" data-duel-pve-move="poker" '+(!can?'disabled':'')+'>選択したカードを交換</button>'+
+   (pub.showdown?'<details><summary>確定済みの公開決着情報</summary><pre>'+safe(JSON.stringify(pub.showdown))+'</pre></details>':'')+'</div>';
+ }
  return '<p>このゲームの操作画面は未対応です。</p>';
 }
+
 export function duelWeeklyEventPanel(event){
  if(!event||event.kind!=='weekly-focus')return '';
  return '<div class="panel"><div class="card-body"><strong>🏆 週間イベント</strong><p>'+safe(event.title)+'</p>'+
@@ -88,7 +182,7 @@ export function duelHistoryPanel({open=false,busy=false,data=null,error='',mode=
  (item.status==='active'?'<button type="button" class="action-btn" data-duel-history-resume="'+safe(item.id)+'">この対局を再開</button><button type="button" class="action-btn" data-duel-pve-abandon="'+safe(item.id)+'">この対局を破棄</button>':'')+'</li>').join('')+'</ol>':'<p>CPU対局の保存記録はまだない。</p>');
  return html+'<p class="helper">'+safe(data.note??'')+'</p></div></section>';
 }
-export function duelPvePanel({live=false,busy=false,preview=null,match=null,error='',message='',sessionInput='',pending=null,open=false,game='othello',level='normal',rewardsOpen=false,rewards=null,rewardsError='',historyUi=null,abandonConfirm='',skillSummary=null}={}){
+export function duelPvePanel({live=false,busy=false,preview=null,match=null,error='',message='',sessionInput='',pending=null,open=false,game='othello',level='normal',rewardsOpen=false,rewards=null,rewardsError='',historyUi=null,abandonConfirm='',skillSummary=null,selectedCell=null,pokerPicks=[],animationSlots=[]}={}){
  const active=match&&typeof match.id==='string';
  const expanded=open||active||preview||error||message;
  return '<section class="duel-pve-stage" id="duel-pve-section" aria-label="CPU攻略の対局画面"><div class="duel-pve-stage-head"><span class="duel-pve-kicker">SERVER CPU · MAIN MODE</span><h3>CPU攻略アリーナ</h3><p>種目を選んで、何度でも本気の対局へ。勝敗と熟練度はサーバーで確定する。</p></div><div class="duel-pve-stage-body">'+
@@ -103,7 +197,7 @@ export function duelPvePanel({live=false,busy=false,preview=null,match=null,erro
  '<details class="duel-pve-recovery"><summary>以前の試合をIDで再開</summary><label class="helper">途中のCPU戦を再開（試合ID）<input id="duel-pve-session-input" class="action-input" maxlength="36" placeholder="試合ID" value="'+safe(sessionInput)+'"></label><button class="action-btn" data-duel-pve-resume="1" '+(busy?'disabled':'')+'>再開</button></details>'+
  (error?'<p role="alert">'+safe(error)+'</p>':'')+(pending?'<p class="helper">直前の送信結果が未確定です。別の操作をせず、同じ操作IDで確認してください。</p><button type="button" class="action-btn primary" data-duel-pve-retry="1" '+(busy?'disabled':'')+'>前回の操作を確認</button>':'')+(message?'<p role="status">'+safe(message)+'</p>':'')+
  (active?'<div class="duel-pve-arena" data-duel-pve-state="'+safe(match.turn)+'"><div class="duel-pve-arena-top"><span>LIVE MATCH · '+safe(names[match.game]??match.game)+'</span><span>第'+safe(match.version)+'版</span></div><h3>'+safe(resultName[match.winner]??(match.turn==='human'?'あなたの手番':'CPU処理中'))+'</h3><p class="duel-pve-turn">あなたの手数 '+safe(match.humanMoves)+' · '+(match.turn==='finished'?'対局終了':'サーバー判定で対局中')+'</p>'+
- controls(match,busy)+
+ controls(match,busy,{selectedCell,pokerPicks,animationSlots})+
  (match.turn==='finished'?'<div class="duel-pve-after"><h3>対局結果</h3><p>熟練度：'+(skillSummary?'確定 '+safe(skillSummary.points)+'pt'+(skillSummary.delta===null?'（前回値未取得）':'（確認済みの前回値から '+(skillSummary.delta>=0?'+':'')+safe(skillSummary.delta)+'pt）'):'記録を取得できないため増減未確認')+'</p><p class="helper">報酬の抽選結果は直下に表示。次も同じ種目・難易度なら「もう一局」で即開始できる。</p><button type="button" class="action-btn primary" data-duel-pve-custom-start="1" '+(busy||pending?'disabled':'')+'>もう一局（選択中の種目・難易度）</button></div>':
  '<div class="action-row"><button type="button" class="action-btn" data-duel-pve-abandon="'+safe(match.id)+'" '+(busy||pending?'disabled':'')+'>このCPU戦を破棄</button></div>')+'</div>':''))+'</div></section>'+
  (historyUi?.open?duelHistoryPanel(historyUi):'')+
