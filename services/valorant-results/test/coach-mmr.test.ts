@@ -165,3 +165,21 @@ test('impossible Henrik MMR tiers are never persisted as observed rank', async (
   assert.equal(parseHenrikMmr({ data: { current_data: { currenttier: 0 } } })?.tier, 0,
     'valid unranked tier remains accepted');
 });
+
+test('untrusted Henrik patched labels cannot contradict validated tier IDs', async () => {
+  const payload = {
+    data: {
+      current_data: { currenttier: 20, currenttier_patched: 'Radiant' },
+      highest_rank: { tier: 23, patched_tier: 'Iron 1' },
+    },
+  };
+  const parsed = parseHenrikMmr(payload);
+  assert.equal(parsed?.tierPatched, 'Diamond 3');
+  assert.equal(parsed?.peakPatched, 'Ascendant 3');
+  const db = fakeDb({ 'Aquatopia#toppy': 'ap' });
+  const snapshots = await ensureCoachMmr(db, [account], async () => payload, 1_000_000);
+  assert.equal(snapshots.get(account.riotId)?.tierPatched, 'Diamond 3');
+  assert.equal(snapshots.get(account.riotId)?.peakPatched, 'Ascendant 3');
+  assert.equal(db.snapshots.get(account.puuid)?.tier_patched, 'Diamond 3');
+  assert.equal(db.snapshots.get(account.puuid)?.peak_patched, 'Ascendant 3');
+});
