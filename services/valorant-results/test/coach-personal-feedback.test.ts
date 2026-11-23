@@ -36,8 +36,8 @@ test('compact direct individual notice uses only supplied session facts and vali
  assert.ok(body);
  assert.match(body!,/^<@123456789012345678> 🎯/);
  assert.doesNotMatch(body!,/直近の試合へのコーチからの個別フィードバックです|未取得|未確定|再生時刻/);
- assert.match(body!,/\\n\\n🔎/);
- assert.ok(body!.split('\\n\\n').every(block=>block.split('\\n').length<=2));
+ assert.match(body!,/\n\n🔎/);
+ assert.ok(body!.split('\n\n').every(block=>block.split('\n').length<=2));
  assert.match(body!,/KPR.*0\.80.*0\.60/);
  assert.match(body!,/第1ラウンド/);
  assert.match(body!,/📚 座学：Bind・テレポーターとスプリット/);
@@ -143,7 +143,7 @@ test('new short-form Fujimura Sunset: sharp but factual with blank lines and no 
  assert.match(body!,/先にピークしない/);
  assert.match(body!,/🔥 アップ（10分）：デスマッチで、キルしたら一度引いて、位置を取り直す/);
  assert.doesNotMatch(body!,/未取得|未確定|比較資料は不足|再生時刻|VODの該当|直近の試合へのコーチ/);
- assert.ok(body!.split('\\n\\n').every(block=>block.split('\\n').length<=2));
+ assert.ok(body!.split('\n\n').every(block=>block.split('\n').length<=2));
  assert.ok(body!.length<500);
 });
 test('omits unavailable metrics and preserves selected no-warmup prescription',()=>{
