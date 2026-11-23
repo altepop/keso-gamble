@@ -4,12 +4,16 @@ on:
     paths:
       - '.github/workflows/duel-retained-backup-health.yml'
       - 'scripts/duel-retained-backup-health.mjs'
+      - 'scripts/duel-retained-backup-alert.mjs'
+      - 'services/valorant-results/test/duel-retained-backup-alert.test.mjs'
       - 'services/valorant-results/test/duel-retained-backup-health.test.mjs'
   push:
     branches: [main]
     paths:
       - '.github/workflows/duel-retained-backup-health.yml'
       - 'scripts/duel-retained-backup-health.mjs'
+      - 'scripts/duel-retained-backup-alert.mjs'
+      - 'services/valorant-results/test/duel-retained-backup-alert.test.mjs'
       - 'services/valorant-results/test/duel-retained-backup-health.test.mjs'
   workflow_dispatch:
   schedule:
@@ -17,6 +21,7 @@ on:
 permissions:
   contents: read
   actions: read
+  issues: write
 concurrency:
   group: duel-retained-backup-readiness
   cancel-in-progress: false
@@ -31,9 +36,16 @@ jobs:
         with:
           node-version: '24'
       - name: Verify expiration, provenance, no writes and fail-closed outcomes
-        run: node --test services/valorant-results/test/duel-retained-backup-health.test.mjs
+        run: node --test services/valorant-results/test/duel-retained-backup-health.test.mjs services/valorant-results/test/duel-retained-backup-alert.test.mjs
       - name: Inspect successful encrypted backup artifact metadata (no D1 or downloads)
         if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.actor == 'altepop')
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          DUEL_BACKUP_REPORT: ${{ runner.temp }}/duel-retained-backup.json
         run: node scripts/duel-retained-backup-health.mjs
+      - name: Open one GitHub Issue if retained backup is missing, expiring or indeterminate
+        if: failure() && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.actor == 'altepop'))
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          DUEL_BACKUP_REPORT: ${{ runner.temp }}/duel-retained-backup.json
+        run: node scripts/duel-retained-backup-alert.mjs
