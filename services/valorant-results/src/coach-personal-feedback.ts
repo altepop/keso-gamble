@@ -164,7 +164,7 @@ export function formatPersonalFeedback(input:{
  session:Session;daily:Daily;endedAt?:number;matchesToday?:number
 }):string|null{
  const {user,name,map,outcome,swing,session,daily}=input;
- if(!/^\\d{15,22}$/.test(user))return null;
+ if(!/^\d{15,22}$/.test(user))return null;
  if(!Number.isSafeInteger(swing.round)||swing.round<1||swing.round>61)return null;
  const study=daily.study;if(!study?.theme)return null;
  const pattern=selectAdvicePattern({outcome,swing,session,endedAt:input.endedAt,matchesToday:input.matchesToday});
@@ -184,7 +184,7 @@ export function formatPersonalFeedback(input:{
  const warmup=pattern?.warmup?shortWarmup(pattern,'')
   :!pattern&&daily.warmup?.title?shortWarmup(null,daily.warmup.title):null;
  const blocks=[
-  '<@'+user+'> 🎯 **KESO COACH｜個別フィードバック**\\n🕹️ '+text(name,32)+'さん｜'+text(map,24)+'｜'+({win:'勝利',loss:'敗北',draw:'引き分け'}[outcome]),
+  '<@'+user+'> 🎯 **KESO COACH｜個別フィードバック**\n🕹️ '+text(name,32)+'さん｜'+text(map,24)+'｜'+({win:'勝利',loss:'敗北',draw:'引き分け'}[outcome]),
   '🔎 '+shortSwing(swing,outcome),
   metricLine,
   pattern?'💡 '+shortPatternAdvice(pattern)
@@ -192,7 +192,7 @@ export function formatPersonalFeedback(input:{
   warmup?'🔥 '+warmup:null,
   '📚 座学：'+text(study.map,24)+'・'+text(study.theme,85)
  ];
- return blocks.filter((b):b is string=>Boolean(b)).join('\\n\\n');
+ return blocks.filter((b):b is string=>Boolean(b)).join('\n\n');
 }
 type MuseTop={chooseToday:(input:{date:string;presets:Record<string,unknown>})=>{map:string|null;study:{theme:string;sourceStatus:string}|null};
  canonical?:(map:string)=>string|null;
