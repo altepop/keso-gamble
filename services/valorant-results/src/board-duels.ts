@@ -197,7 +197,8 @@ export async function boardDuelList(env:KpEnv,m:KpMapping,user:string,cursor:str
  const query=`SELECT d.*,
   CASE WHEN d.black_user=? THEN json_extract(s.data,'$.privateA')
        ELSE json_extract(s.data,'$.privateB') END AS private_hand
-  FROM kp_board_duels d LEFT JOIN kp_board_duel_secrets s ON s.guild=d.guild AND s.id=d.id
+  FROM kp_board_duels d LEFT JOIN kp_board_duel_secrets s
+   ON s.guild=d.guild AND s.id=d.id AND d.game IN ('hitblow','bluffdice','poker')
   WHERE d.guild=? AND (d.user_a=? OR d.user_b=?)${condition}
   ORDER BY d.updated_at DESC,d.id DESC LIMIT 20`;
  const stmt=env.DB.prepare(query);
