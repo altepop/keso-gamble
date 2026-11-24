@@ -15,7 +15,7 @@ const validRunId=id=>Number.isSafeInteger(id)&&id>0;
 const MAX_PAIR_GAP_MS=30*60*1000;
 const MAX_EVIDENCE_AGE_MS=24*60*60*1000;
 export const EVIDENCE_PAGE_SIZE=100;
-export const EVIDENCE_MAX_PAGES=3;
+export const EVIDENCE_EVENTS=['dynamic','push','schedule','workflow_dispatch'];
 export function buildDuelEvidence(runs,generatedAt){
  if(!Array.isArray(runs)||typeof generatedAt!=='string'||!Number.isFinite(Date.parse(generatedAt)))
   throw Error('Invalid evidence input');
@@ -47,37 +47,40 @@ export function hashDuelEvidence(evidence){
 export async function captureDuelEvidence(env=process.env,request=fetch,now=new Date()){
  if(env.GITHUB_REPOSITORY!=='altepop/keso-gamble'||!env.GITHUB_TOKEN)
   throw Error('Expected repository and token unavailable');
- const url='https://api.github.com/repos/altepop/keso-gamble/actions/runs?per_page=100';
- const runs=[];
- const seen=new Set();
- const cutoff=now.getTime()-MAX_EVIDENCE_AGE_MS;
- let previousTime=Infinity;
- // Read bounded newest-first pages until the 24h window is covered.
- // Never silently describe a saturated/unknown window as complete evidence.
- for(let page=1;page<=EVIDENCE_MAX_PAGES;page++){
-  const endpoint=page===1?url:url+'&page='+page;
-  const resp=await request(endpoint,{headers:{Authorization:'Bearer '+env.GITHUB_TOKEN,
+ const stamp=now.getTime();
+ if(!Number.isSafeInteger(stamp)||stamp<MAX_EVIDENCE_AGE_MS)throw Error('Invalid evidence clock');
+ const cutoff=stamp-MAX_EVIDENCE_AGE_MS;
+ // Fixed snapshot window and disjoint event partitions; no unrelated PR runs.
+ // GitHub created filter is second-granular, so widen to whole seconds and
+ // retain the existing exact millisecond bounds in the projection.
+ const from=new Date(Math.floor(cutoff/1000)*1000).toISOString().replace('.000Z','Z');
+ const to=new Date(Math.ceil(stamp/1000)*1000).toISOString().replace('.000Z','Z');
+ const url='https://api.github.com/repos/altepop/keso-gamble/actions/runs?branch=main&created='+encodeURIComponent(from+'..'+to)+'&per_page='+EVIDENCE_PAGE_SIZE;
+ const runs=[],seen=new Set();
+ for(const event of EVIDENCE_EVENTS){
+  const resp=await request(url+'&event='+event,{headers:{Authorization:'Bearer '+env.GITHUB_TOKEN,
    Accept:'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28'},signal:AbortSignal.timeout(20000)});
   if(!resp.ok)throw Error('Read-only Actions metadata query failed: HTTP '+resp.status);
   const data=await resp.json();
-  if(!Array.isArray(data?.workflow_runs)||data.workflow_runs.length>EVIDENCE_PAGE_SIZE)
+  if(!Number.isSafeInteger(data?.total_count)||data.total_count<0||
+     !Array.isArray(data.workflow_runs)||data.workflow_runs.length>EVIDENCE_PAGE_SIZE)
    throw Error('Invalid Actions metadata response');
+  if(data.total_count>=EVIDENCE_PAGE_SIZE||data.total_count!==data.workflow_runs.length)
+   throw Error('Actions evidence inventory exceeds bounded pagination or is incomplete');
+  let previousTime=Infinity;
   for(const item of data.workflow_runs){
-   if(!Number.isSafeInteger(item?.id)||item.id<=0||seen.has(item.id))
+   if(!validRunId(item?.id)||seen.has(item.id))
     throw Error('Duplicated or malformed Actions run inventory');
    const at=Date.parse(item.created_at);
-   if(!Number.isFinite(at)||at>now.getTime()||at>previousTime)
-    throw Error('Actions evidence timestamps are missing, future-dated or unordered');
+   if(item.event!==event||item.head_branch!=='main'||item.repository?.full_name!=='altepop/keso-gamble'||
+      !Number.isFinite(at)||at<Date.parse(from)||at>Date.parse(to)||at>previousTime)
+    throw Error('Actions evidence metadata outside requested partition or unordered');
    previousTime=at;
    seen.add(item.id);
    runs.push(item);
   }
-  // GitHub Actions runs are ordered newest first. An item before the 24h
-  // cutoff proves later pages cannot contain relevant current-day runs.
-  if(data.workflow_runs.length<EVIDENCE_PAGE_SIZE||previousTime<cutoff)
-   return buildDuelEvidence(runs,now.toISOString());
  }
- throw Error('Actions evidence inventory exceeds bounded pagination; cannot assert completeness');
+ return buildDuelEvidence(runs,now.toISOString());
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
  captureDuelEvidence().then(data=>{
