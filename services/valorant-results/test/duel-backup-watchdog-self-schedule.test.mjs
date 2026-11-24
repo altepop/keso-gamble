@@ -94,3 +94,13 @@ test('workflow schedule wiring executes only on schedule after deployment alert'
  assert.doesNotMatch(tail,/workflow_dispatch|CLOUDFLARE_API_TOKEN|wrangler d1|KP_TOKEN/);
  assert.match(y,/duel-backup-watchdog-self-schedule\.test\.mjs/);
 });
+
+test('post-grace scheduled candidate is late, not missing or healthy; future and next-slot candidates excluded',()=>{
+ const late=FIRST_SLOT+8*60*60_000;
+ const row=fixture(late);
+ assert.equal(evaluateSelfWatchSchedule([row],late-1).state,'missing');
+ assert.deepEqual(evaluateSelfWatchSchedule([row],late),{ok:false,state:'late',slot:FIRST_SLOT,runId:33});
+ assert.equal(evaluateSelfWatchSchedule([fixture(late,{conclusion:'failure'})],late).state,'late');
+ assert.equal(evaluateSelfWatchSchedule([fixture(FIRST_SLOT+24*60*60_000)],FIRST_SLOT+24*60*60_000).state,'missing');
+ assert.match(selfWatchIssue({ok:false,state:'late',slot:FIRST_SLOT,runId:33}).body,/期限内成功とは扱わず/);
+});

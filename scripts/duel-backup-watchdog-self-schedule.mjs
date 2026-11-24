@@ -23,10 +23,11 @@ export function evaluateSelfWatchSchedule(runs,now=Date.now()){
    r.event==='schedule'&&positive(r.id)&&
    typeof r.created_at==='string'&&Number.isFinite(Date.parse(r.created_at))&&
    Date.parse(r.created_at)>=slot-5*60_000&&
-   Date.parse(r.created_at)<=slot+GRACE_MS)
+   Date.parse(r.created_at)<=now&&Date.parse(r.created_at)<slot+DAY-5*60_000)
   .sort((a,b)=>Date.parse(b.created_at)-Date.parse(a.created_at)||b.id-a.id);
  const latest=matches[0];
  if(!latest)return {ok:false,state:'missing',slot,runId:null};
+ if(Date.parse(latest.created_at)>slot+GRACE_MS)return {ok:false,state:'late',slot,runId:latest.id};
  if(latest.status!=='completed')return {ok:false,state:'stalled',slot,runId:latest.id};
  if(latest.conclusion!=='success')return {ok:false,state:'failed',slot,runId:latest.id};
  return {ok:true,state:'healthy',slot,runId:latest.id};
@@ -34,11 +35,12 @@ export function evaluateSelfWatchSchedule(runs,now=Date.now()){
 const headers=env=>({Authorization:'Bearer '+env.GITHUB_TOKEN,
  Accept:'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28'});
 export function selfWatchIssue(report){
- if(!report||report.ok!==false||!['missing','stalled','failed','unknown'].includes(report.state))return null;
+ if(!report||report.ok!==false||!['missing','late','stalled','failed','unknown'].includes(report.state))return null;
  return {title:SELF_WATCH_ISSUE,body:[
   '#791の「バックアップ保管監視の日次実行欠落を検出するウォッチドッグ」そのもののScheduled実行を別経路で監査。',
   '期待cron: 47 3 * * * (UTC 03:47 / JST 12:47)、初回2026-11-24。120分猶予後に判定。',
   '状態: '+report.state,
+  report.state==='late'?'猶予後のScheduled候補を確認。期限内成功とは扱わず、正確な割当枠・完了状態は別途確認する。':'',
   '成熟した期待時刻UTC: '+(report.slot===null?'不明':new Date(report.slot).toISOString()),
   '対象Scheduled run ID: '+(positive(report.runId)?report.runId:'未確認'),
   report.state==='unknown'?'GitHub API監査不能であり未発火と断定しない。':'',
@@ -84,7 +86,7 @@ export async function inspectAndNotifySelfWatchSchedule(env=process.env,request=
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
  inspectAndNotifySelfWatchSchedule().then(r=>{
   console.log('DUEL_BACKUP_WATCHDOG_SELF_SCHEDULE',JSON.stringify(r));
-  if(['missing','stalled','failed','unknown'].includes(r.state))process.exitCode=1;
+  if(['missing','late','stalled','failed','unknown'].includes(r.state))process.exitCode=1;
  }).catch(()=>{
   console.error('DUEL_BACKUP_WATCHDOG_SELF_SCHEDULE_UNAVAILABLE');
   process.exitCode=1;
