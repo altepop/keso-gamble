@@ -19,6 +19,8 @@ function randInt(n:number){const raw=new Uint32Array(1),limit=Math.floor(0x1_000
 export const DUEL_MAX_STAKE=100_000;
 export const DUEL_TURN_MS=10*60_000;
 export const DUEL_INVITE_MS=15*60_000;
+// Only existence of the third qualifying invitation is needed; never count all matches.
+export const PVP_INVITE_FULL_SQL="SELECT 1 AS full FROM kp_board_duels WHERE guild=? AND user_a=? AND status='pending' AND deadline_at>? LIMIT 1 OFFSET 2";
 type DuelGame='othello'|'gomoku'|'connect4'|'hitblow'|'bluffdice'|'poker'|'trio';
 type DuelStatus='pending'|'active'|'finished'|'cancelled';
 export interface BoardDuel{
@@ -251,9 +253,8 @@ export async function boardDuelAction(env:KpEnv,m:KpMapping,user:string,body:Rec
   if(await debtOf(env,m.guildId,user)>0)throw Error('借KPを完済してから決闘してください。');
   const balance=await env.DB.prepare('SELECT balance FROM kp_wallets WHERE guild=? AND user=?').bind(m.guildId,user).first<{balance:number}>();
   if(!balance||balance.balance<stake)throw Error('賭け金のKPが足りません。');
-  const count=await env.DB.prepare(`SELECT COUNT(*) AS n FROM kp_board_duels
-   WHERE guild=? AND user_a=? AND status='pending' AND deadline_at>?`).bind(m.guildId,user,Date.now()).first<{n:number}>();
-  if((count?.n??0)>=3)throw Error('招待中の決闘は3件までです。');
+  const full=await env.DB.prepare(PVP_INVITE_FULL_SQL).bind(m.guildId,user,Date.now()).first<{full:number}>();
+  if(full?.full===1)throw Error('招待中の決闘は3件までです。');
   const now=Date.now();
   await env.DB.prepare(`INSERT INTO kp_board_duels
    (id,guild,user_a,user_b,game,stake,status,board,black_user,turn_user,winner,version,created_at,updated_at,deadline_at)
