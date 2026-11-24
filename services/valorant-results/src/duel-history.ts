@@ -61,12 +61,19 @@ export async function duelHistoryRead(env:KpEnv,guild:string,user:string,filter:
  const responses=await env.DB.batch([
   env.DB.prepare(`SELECT mode,game,points,peak_points,verified_games,wins,losses,draws,updated_at
    FROM kp_duel_mode_skill WHERE guild=? AND user=? ORDER BY mode,game`).bind(guild,user),
+  // P12: bound the receipt candidate set BEFORE the daily provenance join.
+  // The joined daily entry is unique by (guild,user,session_id), so this
+  // preserves ordering, filtering and output while limiting join probes to 20.
   env.DB.prepare(`SELECT r.match_id,r.mode,r.game,r.outcome,r.occurred_at,
    ${dailyDayProjection}
-   FROM kp_duel_progress_receipts r${dailyEntryJoin}
-   WHERE r.guild=? AND r.user=? AND r.applied_at IS NOT NULL
-     ${receiptModeSql}${receiptGameSql}
-   ORDER BY r.occurred_at DESC,r.match_id DESC LIMIT ?`).bind(...receiptArgs),
+   FROM (
+     SELECT r.guild,r.user,r.match_id,r.mode,r.game,r.outcome,r.occurred_at
+     FROM kp_duel_progress_receipts r
+     WHERE r.guild=? AND r.user=? AND r.applied_at IS NOT NULL
+       ${receiptModeSql}${receiptGameSql}
+     ORDER BY r.occurred_at DESC,r.match_id DESC LIMIT ?
+   ) r${dailyEntryJoin}
+   ORDER BY r.occurred_at DESC,r.match_id DESC`).bind(...receiptArgs),
   // A PvP-only history must not issue an unused PvE session scan.
   ...(mode==='pvp'?[]:[env.DB.prepare(`SELECT s.id,s.game,s.difficulty,s.turn,s.winner,s.version,s.human_moves,s.cpu_moves,
    s.created_at,s.updated_at,d.jst_day AS daily_day
