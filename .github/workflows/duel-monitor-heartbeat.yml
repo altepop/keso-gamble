@@ -13,6 +13,8 @@ on:
       - 'services/valorant-results/test/duel-fallback-job-watch.test.mjs'
       - 'scripts/duel-operations-cron-watch.mjs'
       - 'services/valorant-results/test/duel-operations-cron-watch.test.mjs'
+      - 'scripts/duel-admin-evidence-cron-watch.mjs'
+      - 'services/valorant-results/test/duel-admin-evidence-cron-watch.test.mjs'
   push:
     branches: [main]
     paths:
@@ -27,6 +29,8 @@ on:
       - 'services/valorant-results/test/duel-fallback-job-watch.test.mjs'
       - 'scripts/duel-operations-cron-watch.mjs'
       - 'services/valorant-results/test/duel-operations-cron-watch.test.mjs'
+      - 'scripts/duel-admin-evidence-cron-watch.mjs'
+      - 'services/valorant-results/test/duel-admin-evidence-cron-watch.test.mjs'
   workflow_dispatch:
   schedule:
     - cron: '27 */3 * * *'
@@ -48,7 +52,7 @@ jobs:
         with:
           node-version: '24'
       - name: Validate heartbeat states without production access
-        run: node --test services/valorant-results/test/duel-monitor-heartbeat.test.mjs services/valorant-results/test/duel-monitor-heartbeat-alert.test.mjs services/valorant-results/test/duel-d1-schedule-watch.test.mjs services/valorant-results/test/duel-fallback-job-watch.test.mjs services/valorant-results/test/duel-operations-cron-watch.test.mjs
+        run: node --test services/valorant-results/test/duel-monitor-heartbeat.test.mjs services/valorant-results/test/duel-monitor-heartbeat-alert.test.mjs services/valorant-results/test/duel-d1-schedule-watch.test.mjs services/valorant-results/test/duel-fallback-job-watch.test.mjs services/valorant-results/test/duel-operations-cron-watch.test.mjs services/valorant-results/test/duel-admin-evidence-cron-watch.test.mjs
       - name: Verify hourly monitor scheduled-run heartbeat
         if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.actor == 'altepop')
         env:
@@ -76,3 +80,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/duel-operations-cron-watch.mjs
+      - name: Independently detect missing administrator evidence schedule
+        if: always() && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.actor == 'altepop'))
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/duel-admin-evidence-cron-watch.mjs
