@@ -16,6 +16,8 @@ on:
       - 'scripts/d1-read-hotspots.test.mjs'
       - 'scripts/duel-admin-evidence.mjs'
       - 'services/valorant-results/test/duel-admin-evidence.test.mjs'
+      - '.github/workflows/duel-monitor-heartbeat.yml'
+      - 'services/valorant-results/test/duel-monitor-heartbeat.test.mjs'
   push:
     branches: [main]
     paths:
@@ -27,6 +29,8 @@ on:
       - 'scripts/d1-read-hotspots.test.mjs'
       - 'scripts/duel-admin-evidence.mjs'
       - 'services/valorant-results/test/duel-admin-evidence.test.mjs'
+      - '.github/workflows/duel-monitor-heartbeat.yml'
+      - 'services/valorant-results/test/duel-monitor-heartbeat.test.mjs'
       - 'scripts/d1-daily-guard.mjs'
       - 'scripts/d1-daily-guard.test.mjs'
       # Read-only observation after future duel-history production changes.
@@ -94,7 +98,7 @@ jobs:
         with:
           node-version: '24'
       - name: Verify sampled telemetry completeness without Cloudflare access
-        run: node --test scripts/d1-daily-guard.test.mjs scripts/d1-read-hotspots.test.mjs scripts/d1-read-budget-alert.test.mjs services/valorant-results/test/duel-admin-evidence.test.mjs
+        run: node --test scripts/d1-daily-guard.test.mjs scripts/d1-read-hotspots.test.mjs scripts/d1-read-budget-alert.test.mjs services/valorant-results/test/duel-admin-evidence.test.mjs services/valorant-results/test/duel-monitor-heartbeat.test.mjs
   inspect:
     if: github.repository == 'altepop/keso-gamble' && (github.event_name == 'push' || github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.actor == 'altepop'))
     runs-on: ubuntu-latest

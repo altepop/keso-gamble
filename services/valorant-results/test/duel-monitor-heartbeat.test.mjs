@@ -35,3 +35,19 @@ test('GitHub metadata-only GET, no D1 or KP calls',async()=>{
  assert.ok(!seen.url.includes('cloudflare'));
  await assert.rejects(inspectMonitorHeartbeat({GITHUB_REPOSITORY:'altepop/keso-gamble'}),/read access/);
 });
+
+test('heartbeat Scheduled can notify backup watchdog gaps even when previous checks fail',async()=>{
+ const {readFileSync}=await import('node:fs');
+ const read=name=>readFileSync(new URL('../../../.github/workflows/'+name,import.meta.url),'utf8');
+ const yaml=read('duel-monitor-heartbeat.yml');
+ const index=yaml.indexOf('name: Independently detect missing backup watchdog Scheduled');
+ assert.ok(index>yaml.indexOf('name: Open at most one GitHub Issue for confirmed heartbeat outage'));
+ assert.ok(index>yaml.indexOf('name: Independently detect missing :43 deployment health schedule'));
+ const step=yaml.slice(index);
+ assert.match(step,/if: always\(\) && github\.event_name == 'schedule'/);
+ assert.match(step,/run: node scripts\/duel-backup-watchdog-self-schedule\.mjs/);
+ assert.doesNotMatch(step,/workflow_dispatch|CLOUDFLARE_API_TOKEN|wrangler|KP_TOKEN/);
+ assert.match(yaml,/run: node --test [^\n]*duel-backup-watchdog-self-schedule\.test\.mjs/);
+ assert.match(read('duel-deployment-watch.yml'),/run: node scripts\/duel-backup-watchdog-self-schedule\.mjs/);
+ assert.match(read('d1-insights-report.yml'),/run: node scripts\/duel-backup-watchdog-self-schedule\.mjs/);
+});
