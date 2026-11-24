@@ -57,7 +57,7 @@ jobs:
         with:
           node-version: '24'
       - name: Verify P12 monitor decisions without D1 or KP
-        run: node --test services/valorant-results/test/duel-deployment-watch.test.mjs services/valorant-results/test/duel-deployment-alert.test.mjs
+        run: node --test services/valorant-results/test/duel-deployment-watch.test.mjs services/valorant-results/test/duel-deployment-alert.test.mjs services/valorant-results/test/duel-deployment-schedule-watch.test.mjs
       - name: Fallback check of production Pages and Worker via GitHub metadata
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -69,6 +69,12 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           DUEL_WATCH_REPORT: ${{ runner.temp }}/duel-watch-fallback.json
         run: node scripts/duel-deployment-alert.mjs
+      - name: Independently detect missing hourly deployment health schedule
+        if: always() && github.event_name == 'schedule'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/duel-deployment-schedule-watch.mjs
+
   budget-tests:
     if: github.repository == 'altepop/keso-gamble' && github.event_name == 'pull_request'
     runs-on: ubuntu-latest
