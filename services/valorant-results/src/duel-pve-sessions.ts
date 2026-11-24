@@ -116,13 +116,17 @@ export async function serverPveOperation(env:KpEnv,guild:string,user:string,body
   if(!uuid.test(requestId))throw Error('操作IDが不正です。');
   const challenge=action==='daily'?duelDailyChallenge(Date.now()):null;
   const game=challenge?.game??String(body.game??''),level=challenge?.level??String(body.level??'normal');
-  const existing=await env.DB.prepare('SELECT id,game,difficulty FROM kp_duel_pve_sessions WHERE guild=? AND user=? AND request_id=?')
-   .bind(guild,user,requestId).first<{id:string;game:string;difficulty:string}>();
+  const existing=await env.DB.prepare(`SELECT s.id,s.game,s.difficulty,s.board,s.turn,s.winner,
+   s.version,s.human_moves,s.cpu_moves,s.request_id,x.data,x.id AS secret_id
+   FROM kp_duel_pve_sessions s LEFT JOIN kp_duel_pve_secrets x
+   ON x.id=s.id AND x.guild=s.guild AND x.user=s.user
+   WHERE s.guild=? AND s.user=? AND s.request_id=?`)
+   .bind(guild,user,requestId).first<SessionRow & {secret_id:string|null}>();
   if(existing){
    if(existing.game!==game||existing.difficulty!==level)throw Error('操作IDの再利用はできません。');
-   const prior=await find(env,guild,user,existing.id);
-   if(!prior)throw Error('CPU戦が見つかりません。');
-   return publicMatch(prior);
+   if(!uuid.test(existing.id))throw Error('CPU戦IDが不正です。');
+   if(existing.secret_id!==existing.id)throw Error('CPU戦が見つかりません。');
+   return publicMatch(existing);
   }
   if(challenge)await ensureDuelDailyHistory(env);
   const state=startServerPve(game,level,randomInt);
