@@ -11,6 +11,8 @@ on:
       - 'services/valorant-results/test/duel-d1-schedule-watch.test.mjs'
       - 'scripts/duel-operations-cron-watch.mjs'
       - 'services/valorant-results/test/duel-operations-cron-watch.test.mjs'
+      - 'scripts/duel-admin-evidence-cron-watch.mjs'
+      - 'services/valorant-results/test/duel-admin-evidence-cron-watch.test.mjs'
       - 'scripts/duel-backup-watchdog-self-schedule.mjs'
       - 'services/valorant-results/test/duel-backup-watchdog-self-schedule.test.mjs'
   push:
@@ -25,6 +27,8 @@ on:
       - 'services/valorant-results/test/duel-d1-schedule-watch.test.mjs'
       - 'scripts/duel-operations-cron-watch.mjs'
       - 'services/valorant-results/test/duel-operations-cron-watch.test.mjs'
+      - 'scripts/duel-admin-evidence-cron-watch.mjs'
+      - 'services/valorant-results/test/duel-admin-evidence-cron-watch.test.mjs'
       - 'scripts/duel-backup-watchdog-self-schedule.mjs'
       - 'services/valorant-results/test/duel-backup-watchdog-self-schedule.test.mjs'
   workflow_dispatch:
@@ -48,7 +52,7 @@ jobs:
         with:
           node-version: '24'
       - name: Validate no-write monitor decisions
-        run: node --test services/valorant-results/test/duel-deployment-watch.test.mjs services/valorant-results/test/duel-deployment-alert.test.mjs services/valorant-results/test/duel-d1-schedule-watch.test.mjs services/valorant-results/test/duel-backup-watchdog-self-schedule.test.mjs services/valorant-results/test/duel-operations-cron-watch.test.mjs
+        run: node --test services/valorant-results/test/duel-deployment-watch.test.mjs services/valorant-results/test/duel-deployment-alert.test.mjs services/valorant-results/test/duel-d1-schedule-watch.test.mjs services/valorant-results/test/duel-backup-watchdog-self-schedule.test.mjs services/valorant-results/test/duel-operations-cron-watch.test.mjs services/valorant-results/test/duel-admin-evidence-cron-watch.test.mjs
       - name: Check recent production deployment statuses without D1 calls
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         env:
@@ -80,3 +84,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/duel-operations-cron-watch.mjs
+      - name: Independently notify on missing administrator evidence schedule
+        if: always() && github.event_name == 'schedule'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/duel-admin-evidence-cron-watch.mjs
