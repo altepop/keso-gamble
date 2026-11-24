@@ -145,3 +145,19 @@ test('D1 metadata-only fallback independently checks deployment schedule gaps af
  assert.match(fallback,/run: node --test [^\n]*duel-deployment-schedule-watch\.test\.mjs/);
  assert.match(heartbeat,/run: node scripts\/duel-deployment-schedule-watch\.mjs/);
 });
+
+test('D1 metadata-only fallback independently checks backup watchdog schedule after incident handling',async()=>{
+ const {readFileSync}=await import('node:fs');
+ const yaml=readFileSync(new URL('../../../.github/workflows/d1-insights-report.yml',import.meta.url),'utf8');
+ const primary=readFileSync(new URL('../../../.github/workflows/duel-deployment-watch.yml',import.meta.url),'utf8');
+ const fallback=yaml.split('  deployment-watch-fallback:')[1]?.split('  budget-tests:')[0];
+ assert.ok(fallback);
+ const index=fallback.indexOf('name: Independently detect missing backup watchdog Scheduled');
+ assert.ok(index>fallback.indexOf('name: Open or deduplicate incident if deployment or fallback check fails'));
+ const step=fallback.slice(index);
+ assert.match(step,/if: always\(\) && github\.event_name == 'schedule'/);
+ assert.match(step,/run: node scripts\/duel-backup-watchdog-self-schedule\.mjs/);
+ assert.doesNotMatch(fallback,/CLOUDFLARE_API_TOKEN|wrangler d1|database\/query|KP_TOKEN/);
+ assert.match(fallback,/run: node --test [^\n]*duel-backup-watchdog-self-schedule\.test\.mjs/);
+ assert.match(primary,/run: node scripts\/duel-backup-watchdog-self-schedule\.mjs/);
+});
