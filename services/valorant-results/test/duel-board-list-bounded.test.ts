@@ -54,10 +54,10 @@ test('every page and equal-timestamp tie matches original ordering, with other-g
  try{
   let cutoff:number|null=null,id='';
   for(let page=0;page<9;page++){
-   const previous=db.prepare(original(cutoff!==null))
+   const previous: Record<string,unknown>[]=db.prepare(original(cutoff!==null))
     .all(...(cutoff===null?[viewer,guild,viewer,viewer]:
       [viewer,guild,viewer,viewer,cutoff,cutoff,id]));
-   const next=db.prepare(boardDuelListSql(cutoff!==null))
+   const next: Record<string,unknown>[]=db.prepare(boardDuelListSql(cutoff!==null))
     .all(...boardDuelListArgs(viewer,guild,cutoff,id));
    assert.deepEqual(next,previous);
    if(!previous.length)break;
