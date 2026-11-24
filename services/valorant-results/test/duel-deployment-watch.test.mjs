@@ -129,3 +129,19 @@ test('administrator evidence has a second schedule-only route without a new inci
  assert.match(yaml,/run: node --test [^\n]*duel-admin-evidence-cron-watch\.test\.mjs/);
  assert.equal(yaml.split("'scripts/duel-admin-evidence-cron-watch.mjs'").length-1,2);
 });
+
+test('D1 metadata-only fallback independently checks deployment schedule gaps after incident handling',async()=>{
+ const {readFileSync}=await import('node:fs');
+ const yaml=readFileSync(new URL('../../../.github/workflows/d1-insights-report.yml',import.meta.url),'utf8');
+ const heartbeat=readFileSync(new URL('../../../.github/workflows/duel-monitor-heartbeat.yml',import.meta.url),'utf8');
+ const fallback=yaml.split('  deployment-watch-fallback:')[1]?.split('  budget-tests:')[0];
+ assert.ok(fallback);
+ const index=fallback.indexOf('name: Independently detect missing hourly deployment health schedule');
+ assert.ok(index>fallback.indexOf('name: Open or deduplicate incident if deployment or fallback check fails'));
+ const step=fallback.slice(index);
+ assert.match(step,/if: always\(\) && github\.event_name == 'schedule'/);
+ assert.match(step,/run: node scripts\/duel-deployment-schedule-watch\.mjs/);
+ assert.doesNotMatch(fallback,/CLOUDFLARE_API_TOKEN|wrangler d1|database\/query|KP_TOKEN/);
+ assert.match(fallback,/run: node --test [^\n]*duel-deployment-schedule-watch\.test\.mjs/);
+ assert.match(heartbeat,/run: node scripts\/duel-deployment-schedule-watch\.mjs/);
+});
