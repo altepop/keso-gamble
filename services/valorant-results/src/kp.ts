@@ -402,8 +402,7 @@ export async function prepareKpRun(env:KpEnv,mapping:KpMapping):Promise<KpRun>{
  * The loaded set is only per cron run, so other workers never share stale data. */
 export const KP_RUN_MATCH_SQL=`SELECT e.amount+COALESCE(p.delta,0)+COALESCE(r.delta,0)+COALESCE(c.delta,0)+COALESCE(t.delta,0) AS amount,
  COALESCE(r.delta,0)+COALESCE(c.delta,0) AS relic,n.message,d.note,e.mode,e.policy,
- CASE WHEN e.mode='escalation' AND e.policy='${ESCALATION_RATING_POLICY}' THEN CASE WHEN x.id IS NULL THEN 0 ELSE 1 END ELSE 1 END AS power_done FROM kp_events e
- LEFT JOIN kp_escalation_power_matches x ON x.id=e.id AND e.mode='escalation' AND e.policy='${ESCALATION_RATING_POLICY}'
+ CASE WHEN e.mode='escalation' AND e.policy='${ESCALATION_RATING_POLICY}' THEN EXISTS(SELECT 1 FROM kp_escalation_power_matches x WHERE x.id=e.id) ELSE 1 END AS power_done FROM kp_events e
  LEFT JOIN kp_ledger t ON t.id='esc-extra:'||e.id AND e.mode IN ('escalation','swiftplay')
  LEFT JOIN kp_ledger p ON p.id='penalty:'||e.id
  LEFT JOIN kp_ledger r ON r.id='relic:'||e.id

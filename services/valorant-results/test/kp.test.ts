@@ -1149,7 +1149,10 @@ test('monitor reward lookup reads each immutable bonus receipt once and preserve
  assert.equal(run.credits.get(id),985);assert.equal(run.relicBonuses.get(id),125);
  const plan=f.sql.prepare('EXPLAIN QUERY PLAN '+KP_RUN_MATCH_SQL).all(id,guild).map(r=>String(r.detail)).join(' | ');
  for(const alias of ['p','r','c'])assert.match(plan,new RegExp('SEARCH '+alias+' USING INDEX sqlite_autoindex_kp_ledger_1'));
- assert.doesNotMatch(plan,/SCAN kp_ledger|CORRELATED SCALAR SUBQUERY/);
+ assert.doesNotMatch(plan,/SCAN kp_ledger|SCAN x\b/);
+ // Exactly one scalar existence check is permitted: the immutable rank receipt.
+ assert.equal((plan.match(/CORRELATED SCALAR SUBQUERY/g)??[]).length,1);
+ assert.match(plan,/SEARCH x USING COVERING INDEX sqlite_autoindex_kp_escalation_power_matches_1 \(id=\?\)/);
  const other=await prepareKpRun(f.env,{...mapping,guildId:'100000000000009999'});await loadKpRunMatch(f.env,other,id);assert.equal(other.credits.size,0);
 });
 
@@ -1276,4 +1279,55 @@ test('three verified positive-KD losses recognize Iron II and repeated collectio
  }
  const v=(await readKpState(f.env,mapping,one)).escalationRating;assert.equal(v.grade,'アイアン Ⅱ');assert.equal(v.rank?.rr,0);assert.equal(v.placementConsistencyBonus,100);assert.equal(v.played,3);
  assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM kp_events').get()!.n,3);assert.equal((await readKpState(f.env,mapping,one)).cash,1000,'rank RR is separate from spendable KP');
+});
+
+test('conditional power receipt EXISTS preserves every legacy projection including late settlement and historic compensation',async()=>{
+ const {KP_RUN_MATCH_SQL}=await import('../src/kp.ts');
+ const f=await fixture();
+ try{
+  await prepareKpRun(f.env,mapping);
+  const legacy=`SELECT e.amount+COALESCE(p.delta,0)+COALESCE(r.delta,0)+COALESCE(c.delta,0)+COALESCE(t.delta,0) AS amount,
+ COALESCE(r.delta,0)+COALESCE(c.delta,0) AS relic,n.message,d.note,e.mode,e.policy,
+ CASE WHEN e.mode='escalation' AND e.policy='escalation-power-v1' THEN CASE WHEN x.id IS NULL THEN 0 ELSE 1 END ELSE 1 END AS power_done FROM kp_events e
+ LEFT JOIN kp_escalation_power_matches x ON x.id=e.id AND e.mode='escalation' AND e.policy='escalation-power-v1'
+ LEFT JOIN kp_ledger t ON t.id='esc-extra:'||e.id AND e.mode IN ('escalation','swiftplay')
+ LEFT JOIN kp_ledger p ON p.id='penalty:'||e.id
+ LEFT JOIN kp_ledger r ON r.id='relic:'||e.id
+ LEFT JOIN kp_ledger c ON c.id='spike-comp:'||e.id
+ LEFT JOIN kp_reward_notes d ON d.id=e.id
+ LEFT JOIN kp_accounts a ON a.guild=e.guild AND a.puuid=e.puuid
+ LEFT JOIN notifications n ON n.riot_id=a.riot AND n.match_id=e.match
+ WHERE e.id=? AND e.guild=? LIMIT 1`;
+  const add=f.sql.prepare('INSERT INTO kp_events(id,guild,user,puuid,match,mode,outcome,amount,policy,at) VALUES(?,?,?,?,?,?,?,?,?,?)');
+  const ledger=f.sql.prepare('INSERT INTO kp_ledger(id,guild,user,delta,kind,at) VALUES(?,?,?,?,?,?)');
+  const power=f.sql.prepare('INSERT INTO kp_escalation_power_matches(id,guild,user,act,act_name,episode,started_at,ended_at,outcome,performance,kd_positive,rr_performance) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)');
+  const cases=[['escalation','escalation-power-v1'],['escalation','legacy'],['swiftplay','legacy'],['competitive','escalation-power-v1'],['spikerush','legacy']];
+  const before=f.sql.prepare('SELECT COUNT(*) AS n FROM kp_ledger');
+  for(const [i,[mode,policy]] of cases.entries()){
+   const id='p12-power-fixture-'+i,match='p12-match-fixture-'+i;
+   add.run(id,guild,one,'p-one',match,mode,'win',1000,policy,Date.now());
+   for(const [prefix,delta] of [['penalty:',-40],['relic:',50],['spike-comp:',75],['esc-extra:',25]] as const)ledger.run(prefix+id,guild,one,delta,'test-only',Date.now());
+   if(i%2===0){
+    f.sql.prepare('INSERT INTO kp_reward_notes(id,note) VALUES(?,?)').run(id,'historical note');
+    f.sql.prepare('INSERT INTO notifications(riot_id,match_id,message,ended_at,mode,sent) VALUES(?,?,?,?,?,1)').run('One#JP1',match,'historical result',Date.now(),mode);
+   }
+   const compare=(expected:number)=>{
+    const count=before.get()?.n;
+    const old=f.sql.prepare(legacy).all(id,guild);
+    const next=f.sql.prepare(KP_RUN_MATCH_SQL).all(id,guild);
+    assert.deepEqual(next,old);
+    assert.equal(next.length,1);
+    assert.equal(next[0].power_done,expected);
+    assert.equal(next[0].relic,125,'even a historic non-spikerush compensation must remain');
+    assert.equal(next[0].amount,mode==='escalation'||mode==='swiftplay'?1110:1085);
+    assert.equal(before.get()?.n,count,'both reads are side-effect free');
+   };
+   compare(i===0?0:1);
+   power.run(id,guild,one,'fixture-act',null,'fixture-episode',0,1,'win',0,0,0);
+   compare(1);
+   assert.deepEqual(f.sql.prepare(KP_RUN_MATCH_SQL).all(id,'other-guild'),f.sql.prepare(legacy).all(id,'other-guild'));
+   assert.equal(f.sql.prepare(KP_RUN_MATCH_SQL).all(id,'other-guild').length,0);
+  }
+  assert.deepEqual(f.sql.prepare(KP_RUN_MATCH_SQL).all('missing',guild),f.sql.prepare(legacy).all('missing',guild));
+ }finally{f.sql.close();}
 });
