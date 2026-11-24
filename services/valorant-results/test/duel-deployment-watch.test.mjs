@@ -100,3 +100,17 @@ test('independent hourly deployment schedule checks D1 Scheduled outages after i
  assert.match(watch,/d1-insights-report\.yml\/runs\?event=schedule/);
  assert.match(watch,/D1_SCHEDULE_ALERT_TITLE/);
 });
+
+test('operations audit has a second schedule-only notification route after deployment incident handling',async()=>{
+ const {readFileSync}=await import('node:fs');
+ const yaml=readFileSync(new URL('../../../.github/workflows/duel-deployment-watch.yml',import.meta.url),'utf8');
+ const heartbeat=readFileSync(new URL('../../../.github/workflows/duel-monitor-heartbeat.yml',import.meta.url),'utf8');
+ const index=yaml.indexOf('name: Independently notify on missing scheduled operations audit');
+ assert.ok(index>yaml.indexOf('name: Create at most one open GitHub Issue for a real deployment anomaly'));
+ const step=yaml.slice(index);
+ assert.match(step,/if: always\(\) && github\.event_name == 'schedule'/);
+ assert.match(step,/run: node scripts\/duel-operations-cron-watch\.mjs/);
+ assert.doesNotMatch(step,/workflow_dispatch|CLOUDFLARE_API_TOKEN|wrangler|KP_TOKEN/);
+ assert.match(heartbeat,/run: node scripts\/duel-operations-cron-watch\.mjs/);
+ assert.match(yaml,/run: node --test [^\n]*duel-operations-cron-watch\.test\.mjs/);
+});
