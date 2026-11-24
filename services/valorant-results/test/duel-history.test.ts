@@ -244,19 +244,19 @@ test('bounded receipt provenance join preserves newest 20, ties, access boundari
   for(const sql of DUEL_PROGRESSION_DDL)db.exec(sql);
   for(const sql of DUEL_REWARD_DDL)db.exec(sql);
   const add=db.prepare(`INSERT INTO kp_duel_progress_receipts
-   (guild,match_id,user,mode,game,outcome,verified_version,occurred_at,applied_at)
-   VALUES (?,?,?,?,?,?,?,?,?)`);
+   (guild,match_id,user,mode,game,opponent,outcome,verified_version,occurred_at,applied_at)
+   VALUES (?,?,?,?,?,?,?,?,?,?)`);
   const addDaily=db.prepare(`INSERT INTO kp_duel_pve_daily_entries
    (guild,user,session_id,jst_day,game,difficulty,created_at) VALUES(?,?,?,?,?,?,?)`);
   for(let i=0;i<75;i++){
    const match='m'+String(i).padStart(3,'0'),mode=i%3===0?'pve':'pvp';
-   add.run('g',match,'alice',mode,'trio','win',1,1000+Math.floor(i/3),1000);
+   add.run('g',match,'alice',mode,'trio',mode==='pvp'?'bob':null,'win',1,1000+Math.floor(i/3),1000);
    if(mode==='pve' && i%2===0)
     addDaily.run('g','alice',match,'20261124','trio','easy',1000);
   }
-  add.run('g','foreign-user','bob','pve','trio','win',1,9999,9999);
-  add.run('other','foreign-guild','alice','pve','trio','win',1,9999,9999);
-  add.run('g','not-applied','alice','pve','trio','win',1,9999,null);
+  add.run('g','foreign-user','bob','pve','trio',null,'win',1,9999,9999);
+  add.run('other','foreign-guild','alice','pve','trio',null,'win',1,9999,9999);
+  add.run('g','not-applied','alice','pve','trio',null,'win',1,9999,null);
   const dbEnv=env as unknown as {DB:{prepare:(sql:string)=>unknown}};
   const original=dbEnv.DB.prepare;
   const statements:string[]=[];
