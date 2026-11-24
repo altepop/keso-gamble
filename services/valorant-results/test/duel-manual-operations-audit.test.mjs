@@ -35,12 +35,16 @@ test('strict GitHub read-only GET and no untrusted fields emitted',async()=>{
  let request;
  const env={GITHUB_TOKEN:'test',GITHUB_REPOSITORY:'altepop/keso-gamble'};
  const a=await collectManualOperations(env,async(url,options)=>{
-  request={url,options};return {ok:true,json:async()=>({workflow_runs:[row({token:'private',user_id:123,secret:'never log'})]})};
+  request={url,options};return {ok:true,json:async()=>({total_count:1,workflow_runs:[row({token:'private',user_id:123,secret:'never log'})]})};
  },now);
  assert.equal(a.entries.length,1);
  assert.doesNotMatch(JSON.stringify(a),/private|never log|token/);
  assert.equal(request.options.method,undefined);
- assert.match(request.url,/\/actions\/runs\?event=workflow_dispatch&per_page=100$/);
+ const parsed=new URL(request.url);
+ assert.equal(parsed.pathname,'/repos/altepop/keso-gamble/actions/runs');
+ assert.equal(parsed.searchParams.get('event'),'workflow_dispatch');
+ assert.equal(parsed.searchParams.get('per_page'),'100');
+ assert.equal(parsed.searchParams.get('created'),'2026-11-22T09:00:00.000Z..2026-11-23T09:00:00.000Z');
  await assert.rejects(collectManualOperations({...env,GITHUB_TOKEN:''}),/Authorized/);
  await assert.rejects(collectManualOperations(env,async()=>({ok:false,status:500})),/HTTP 500/);
 });
@@ -67,4 +71,24 @@ test('automated workflow runs of newly covered types never masquerade as manual 
   row({name:'P12 duel critical manual operations evidence',event:'pull_request'})
  ],now);
  assert.equal(audit.entries.length,0);
+});
+
+test('real Nov 24 saturated historical inventory is narrowed before safety cap',async()=>{
+ const at=Date.parse('2026-11-24T06:25:03Z');
+ const actualWindowRow=row({created_at:'2026-11-24T00:50:06Z'});
+ const result=await collectManualOperations({GITHUB_TOKEN:'fixture',GITHUB_REPOSITORY:'altepop/keso-gamble'},async url=>{
+  const range=new URL(url).searchParams.get('created');
+  assert.equal(range,'2026-11-23T06:25:03.000Z..2026-11-24T06:25:03.000Z');
+  return {ok:true,json:async()=>({total_count:1,workflow_runs:[actualWindowRow]})};
+ },at);
+ assert.equal(result.entries.length,1);
+ assert.equal(result.approvalsVerified,false);
+});
+test('filtered response saturation or incomplete count fails closed',async()=>{
+ const env={GITHUB_TOKEN:'fixture',GITHUB_REPOSITORY:'altepop/keso-gamble'};
+ for(const payload of [{total_count:101,workflow_runs:[row()]},{total_count:100,workflow_runs:Array.from({length:100},(_,i)=>row({id:i+1}))},{workflow_runs:[]},{total_count:0,workflow_runs:[row()]}]){
+  await assert.rejects(collectManualOperations(env,async()=>({ok:true,json:async()=>payload}),now),/bounded|incomplete|invalid/);
+ }
+ const empty=await collectManualOperations(env,async()=>({ok:true,json:async()=>({total_count:0,workflow_runs:[]})}),now);
+ assert.equal(empty.entries.length,0);
 });

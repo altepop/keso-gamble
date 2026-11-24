@@ -56,12 +56,20 @@ export const hashManualOperations=audit=>createHash('sha256').update(JSON.string
 export async function collectManualOperations(env=process.env,request=fetch,now=Date.now()){
  if(env.GITHUB_REPOSITORY!=='altepop/keso-gamble'||!env.GITHUB_TOKEN)
   throw Error('Authorized read-only Actions access unavailable');
- const res=await request('https://api.github.com/repos/altepop/keso-gamble/actions/runs?event=workflow_dispatch&per_page=100',{
+ if(!Number.isSafeInteger(now)||now<DAY_MS)throw Error('Invalid manual operation evidence input');
+ // Filter the actual rolling 24h server-side before the 100-row safety cap.
+ // The local timestamp checks remain authoritative; never silently truncate.
+ const created=new Date(now-DAY_MS).toISOString()+'..'+new Date(now).toISOString();
+ const url='https://api.github.com/repos/altepop/keso-gamble/actions/runs?event=workflow_dispatch&per_page=100&created='+encodeURIComponent(created);
+ const res=await request(url,{
   headers:{Authorization:'Bearer '+env.GITHUB_TOKEN,Accept:'application/vnd.github+json',
    'X-GitHub-Api-Version':'2022-11-28'},signal:AbortSignal.timeout(20000)});
  if(!res.ok)throw Error('Manual operations Actions query failed: HTTP '+res.status);
  const body=await res.json();
- if(!Array.isArray(body?.workflow_runs))throw Error('Manual operation metadata response invalid');
+ if(!Array.isArray(body?.workflow_runs)||!Number.isSafeInteger(body.total_count)||
+    body.total_count<0||body.total_count!==body.workflow_runs.length)
+  throw Error('Manual operation metadata response invalid or incomplete');
+ if(body.total_count>=100)throw Error('Manual operations list exceeds bounded audit window');
  return summarizeManualOperations(body.workflow_runs,now);
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
