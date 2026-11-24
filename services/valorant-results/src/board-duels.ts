@@ -142,13 +142,15 @@ export async function ensureBoardDuels(env:KpEnv){
  })();
  ready.set(env.DB,task);try{await task;}catch(e){ready.delete(env.DB);throw e;}
 }
+export const BOARD_DUEL_ROOM_SQL=`SELECT d.*,
+   (SELECT CASE WHEN d.black_user=? THEN json_extract(s.data,'$.privateA')
+        ELSE json_extract(s.data,'$.privateB') END
+    FROM kp_board_duel_secrets s WHERE s.guild=d.guild AND s.id=d.id) AS private_hand
+   FROM kp_board_duels d
+   WHERE d.guild=? AND d.id=? AND (d.user_a=? OR d.user_b=?)`;
 async function room(env:KpEnv,guild:string,id:string,user:string):Promise<BoardDuel>{
  if(!UUID.test(id))throw Error('対戦IDが不正です。');
- const row=await env.DB.prepare(`SELECT d.*,
-   CASE WHEN d.black_user=? THEN json_extract(s.data,'$.privateA')
-        ELSE json_extract(s.data,'$.privateB') END AS private_hand
-   FROM kp_board_duels d LEFT JOIN kp_board_duel_secrets s ON s.guild=d.guild AND s.id=d.id
-   WHERE d.guild=? AND d.id=? AND (d.user_a=? OR d.user_b=?)`)
+ const row=await env.DB.prepare(BOARD_DUEL_ROOM_SQL)
   .bind(user,guild,id,user,user).first<BoardDuel>();
  if(!row)throw Error('対戦が見つかりません。');return row;
 }
