@@ -17,6 +17,7 @@ on:
       - 'services/valorant-results/test/duel-admin-evidence.test.mjs'
       - '.github/workflows/duel-monitor-heartbeat.yml'
       - 'services/valorant-results/test/duel-monitor-heartbeat.test.mjs'
+      - 'scripts/duel-monitor-heartbeat.mjs'
       - 'scripts/duel-backup-watchdog-self-schedule.mjs'
       - 'services/valorant-results/test/duel-backup-watchdog-self-schedule.test.mjs'
   push:
@@ -37,6 +38,7 @@ on:
       - 'services/valorant-results/test/duel-admin-evidence.test.mjs'
       - '.github/workflows/duel-monitor-heartbeat.yml'
       - 'services/valorant-results/test/duel-monitor-heartbeat.test.mjs'
+      - 'scripts/duel-monitor-heartbeat.mjs'
       - 'scripts/duel-backup-watchdog-self-schedule.mjs'
       - 'services/valorant-results/test/duel-backup-watchdog-self-schedule.test.mjs'
   workflow_dispatch:
