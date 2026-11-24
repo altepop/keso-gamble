@@ -31,7 +31,34 @@ export async function inspectMonitorHeartbeat(env=process.env,request=fetch,now=
  if(!res.ok)throw Error('Actions heartbeat metadata unavailable (HTTP '+res.status+')');
  const data=await res.json();
  if(!Array.isArray(data?.workflow_runs))throw Error('Unexpected GitHub Actions heartbeat response');
- return evaluateMonitorHeartbeat(data.workflow_runs,now);
+ const result=evaluateMonitorHeartbeat(data.workflow_runs,now);
+ // A completed failed run can be a healthy deployment check followed by
+ // independent schedule alarms. Keep those alarms failing; distinguish liveness.
+ if(result.state!=='failed')return result;
+ const latest=data.workflow_runs.find(r=>r.id===result.runId);
+ if(latest?.conclusion!=='failure')return result;
+ const attempt=latest.run_attempt;
+ if(!Number.isSafeInteger(attempt)||attempt<1)return result;
+ const jobsRes=await request('https://api.github.com/repos/altepop/keso-gamble/actions/runs/'+result.runId+'/attempts/'+attempt+'/jobs?per_page=100',{
+  headers:{Authorization:'Bearer '+env.GITHUB_TOKEN,Accept:'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28'},signal:AbortSignal.timeout(20000)});
+ if(!jobsRes.ok)throw Error('Monitor job metadata unavailable');
+ const jobs=await jobsRes.json();
+ if(!Number.isSafeInteger(jobs?.total_count)||!Array.isArray(jobs.jobs)||jobs.total_count!==jobs.jobs.length||jobs.jobs.length>=100)
+  throw Error('Incomplete monitor job metadata');
+ if(jobs.jobs.length!==1)return result;
+ const job=jobs.jobs[0];
+ if(job?.name!=='monitor'||job.status!=='completed'||job.conclusion!=='failure'||!Array.isArray(job.steps))return result;
+ const steps=job.steps;
+ const primary='Check recent production deployment statuses without D1 calls';
+ const validation='Validate no-write monitor decisions';
+ const allowed=new Set(['Independently notify on missing D1 Insights Scheduled executions','Independently detect missing backup watchdog Scheduled','Independently notify on missing scheduled operations audit','Independently notify on missing administrator evidence schedule']);
+ const passed=name=>steps.filter(s=>s?.name===name).length===1&&steps.some(s=>s.name===name&&s.status==='completed'&&s.conclusion==='success');
+ const failed=steps.filter(s=>s?.conclusion==='failure');
+ if(!passed(primary)||!passed(validation)||failed.length===0||failed.some(s=>s.status!=='completed'||!allowed.has(s.name)))return result;
+ if(steps.some(s=>s?.status!=='completed'||!['success','skipped','failure'].includes(s.conclusion)))return result;
+ // Keep ok:false: the workflow really failed, but do not call this a missing
+ // heartbeat or send a second generic incident for an already isolated alarm.
+ return {...result,state:'secondary-alerts-failed'};
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
  inspectMonitorHeartbeat().then(async result=>{

@@ -51,3 +51,23 @@ test('heartbeat Scheduled can notify backup watchdog gaps even when previous che
  assert.match(read('duel-deployment-watch.yml'),/run: node scripts\/duel-backup-watchdog-self-schedule\.mjs/);
  assert.match(read('d1-insights-report.yml'),/run: node scripts\/duel-backup-watchdog-self-schedule\.mjs/);
 });
+
+test('actual #41 completed deployment check with independent failures is not a generic heartbeat outage',async()=>{
+ const stamp=Date.parse('2026-11-24T13:00:00Z');
+ const row={...make(0,'completed','failure'),id:45398418054,created_at:'2026-11-24T12:56:43Z',run_attempt:1};
+ const steps=['Validate no-write monitor decisions','Check recent production deployment statuses without D1 calls','Create at most one open GitHub Issue for a real deployment anomaly','Independently notify on missing D1 Insights Scheduled executions','Independently detect missing backup watchdog Scheduled','Independently notify on missing scheduled operations audit','Independently notify on missing administrator evidence schedule'].map((name,i)=>({name,status:'completed',conclusion:[3,4,6].includes(i)?'failure':i===2?'skipped':'success'}));
+ const env={GITHUB_TOKEN:'fixture',GITHUB_REPOSITORY:'altepop/keso-gamble'};
+ const inspect=async(items=steps,count=1)=>inspectMonitorHeartbeat(env,async url=>{
+  if(url.includes('/workflows/'))return {ok:true,json:async()=>({workflow_runs:[row]})};
+  assert.match(url,/runs\/45398418054\/attempts\/1\/jobs\?per_page=100$/);
+  return {ok:true,json:async()=>({total_count:count,jobs:[{name:'monitor',status:'completed',conclusion:'failure',steps:items}]})};
+ },stamp);
+ const result=await inspect();
+ assert.equal(result.state,'secondary-alerts-failed');
+ assert.equal(result.ok,false);
+ const {buildHeartbeatAlert}=await import('../../../scripts/duel-monitor-heartbeat-alert.mjs');
+ assert.equal(buildHeartbeatAlert(result),null);
+ assert.equal((await inspect(steps.map((s,i)=>i===1?{...s,conclusion:'failure'}:s))).state,'failed');
+ assert.equal((await inspect([...steps,{name:'unrecognized failure',status:'completed',conclusion:'failure'}])).state,'failed');
+ await assert.rejects(inspect(steps,2),/Incomplete/);
+});
