@@ -10,11 +10,13 @@ const validRun=r=>r&&Number.isSafeInteger(r.id)&&r.id>0&&
  (r.status!=='completed'||['success','failure','cancelled','timed_out','skipped','action_required'].includes(r.conclusion));
 export function decideAuditFallback(runs,now=Date.now()){
  if(!Array.isArray(runs)||runs.length>100||!Number.isSafeInteger(now)||now<DAY)throw Error('Invalid scheduled audit inventory');
- // 21:31 UTC is the original primary audit window. The backup starts 22:17 UTC.
- const midnight=Math.floor(now/DAY)*DAY;
- if(now<midnight+22*3_600_000+17*60_000||now>=midnight+DAY)
-  throw Error('Fallback invoked outside its UTC execution window');
- const due=midnight+21*3_600_000+31*60_000;
+ // Anchor to the most recent 22:17 UTC fallback slot, including the next UTC morning.
+ // Permit at most 12 hours of lateness; outside this bounded window the slot is ambiguous.
+ // The primary for that slot is 46 minutes earlier (21:31 UTC).
+ const fallbackOffset=22*3_600_000+17*60_000;
+ const slot=Math.floor((now-fallbackOffset)/DAY)*DAY+fallbackOffset;
+ if(now-slot>12*3_600_000)throw Error('Fallback invoked outside its UTC execution window');
+ const due=slot-46*60_000;
  if(runs.length>=100)throw Error('Scheduled audit inventory saturated');
  for(const run of runs){
   if(!validRun(run))throw Error('Scheduled audit metadata invalid');
@@ -22,6 +24,9 @@ export function decideAuditFallback(runs,now=Date.now()){
   if(at>now+5*60_000)throw Error('Scheduled audit run timestamp is future');
  }
  const relevant=runs.filter(r=>Date.parse(r.created_at)>=due&&Date.parse(r.created_at)<=now);
+ // A still-active older primary is also unsafe to duplicate, even if its slot is uncertain.
+ if(runs.some(r=>r.status!=='completed'&&Date.parse(r.created_at)<due))
+  throw Error('Older primary audit still active; fallback slot uncertain');
  // A successful or still-running original must not be duplicated. A confirmed
  // failure/cancellation permits a separate read-only retry.
  const already=relevant.some(r=>r.status!=='completed'||r.conclusion==='success');
