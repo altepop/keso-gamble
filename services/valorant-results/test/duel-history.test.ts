@@ -243,11 +243,11 @@ test('bounded receipt provenance join preserves newest 20, ties, access boundari
   await duelHistoryRead(env,'g','alice');
   for(const sql of DUEL_PROGRESSION_DDL)db.exec(sql);
   for(const sql of DUEL_REWARD_DDL)db.exec(sql);
-  const add=db.prepare(\`INSERT INTO kp_duel_progress_receipts
+  const add=db.prepare(`INSERT INTO kp_duel_progress_receipts
    (guild,match_id,user,mode,game,outcome,verified_version,occurred_at,applied_at)
-   VALUES (?,?,?,?,?,?,?,?,?)\`);
-  const addDaily=db.prepare(\`INSERT INTO kp_duel_pve_daily_entries
-   (guild,user,session_id,jst_day,game,difficulty,created_at) VALUES(?,?,?,?,?,?,?)\`);
+   VALUES (?,?,?,?,?,?,?,?,?)`);
+  const addDaily=db.prepare(`INSERT INTO kp_duel_pve_daily_entries
+   (guild,user,session_id,jst_day,game,difficulty,created_at) VALUES(?,?,?,?,?,?,?)`);
   for(let i=0;i<75;i++){
    const match='m'+String(i).padStart(3,'0'),mode=i%3===0?'pve':'pvp';
    add.run('g',match,'alice',mode,'trio','win',1,1000+Math.floor(i/3),1000);
@@ -271,13 +271,13 @@ test('bounded receipt provenance join preserves newest 20, ties, access boundari
    assert.ok(sql.indexOf('LIMIT ?')<sql.indexOf('LEFT JOIN kp_duel_pve_daily_entries') ||
      filter.mode==='pvp','daily join must be applied only after a maximum of 20 receipts');
    const mode=filter.mode ?? 'all',game=filter.game ?? 'all';
-   const old=\`SELECT r.match_id,r.mode,r.game,r.outcome,r.occurred_at,
-     \${mode==='pvp'?'NULL AS daily_day':'d.jst_day AS daily_day'}
+   const old=`SELECT r.match_id,r.mode,r.game,r.outcome,r.occurred_at,
+     ${mode==='pvp'?'NULL AS daily_day':'d.jst_day AS daily_day'}
      FROM kp_duel_progress_receipts r
-     \${mode==='pvp'?'':'LEFT JOIN kp_duel_pve_daily_entries d ON d.guild=r.guild AND d.user=r.user AND d.session_id=r.match_id'}
+     ${mode==='pvp'?'':'LEFT JOIN kp_duel_pve_daily_entries d ON d.guild=r.guild AND d.user=r.user AND d.session_id=r.match_id'}
      WHERE r.guild=? AND r.user=? AND r.applied_at IS NOT NULL
-     \${mode==='all'?'':'AND r.mode=?'} \${game==='all'?'':'AND r.game=?'}
-     ORDER BY r.occurred_at DESC,r.match_id DESC LIMIT 20\`;
+     ${mode==='all'?'':'AND r.mode=?'} ${game==='all'?'':'AND r.game=?'}
+     ORDER BY r.occurred_at DESC,r.match_id DESC LIMIT 20`;
    const args=['g','alice',...(mode==='all'?[]:[mode]),...(game==='all'?[]:[game])];
    const expected=db.prepare(old).all(...args).map(row=>({
     id:row.match_id,mode:row.mode,game:row.game,outcome:row.outcome,
