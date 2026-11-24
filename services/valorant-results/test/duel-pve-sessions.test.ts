@@ -132,3 +132,35 @@ test('Phase 11 daily challenge starts server-selected six-mode CPU battle withou
   assert.equal(Object.hasOwn(one,'bonusKp'),false);
  }finally{db.close();}
 });
+
+test('new daily/custom starts use one scoped post-batch readback, preserve exact snapshot and failure boundaries',async()=>{
+ const {db,env}=fixture();
+ try{
+  await ensureServerPveTables(env);
+  const target=env as unknown as {DB:{prepare:(sql:string)=>unknown}};
+  const original=target.DB.prepare;
+  const reads:string[]=[];
+  target.DB.prepare=(sql:string)=>{
+   if(/^SELECT\s/.test(sql.trim()))reads.push(sql);
+   return original(sql);
+  };
+  for(const action of ['start','daily']){
+   const requestId=randomUUID(),user='alice-'+action;
+   const one=await serverPveOperation(env,'g',user,{action,requestId,game:'trio',level:'easy'});
+   const query=reads.filter(s=>s.includes('AS secret_id'));
+   assert.equal(query.length,1);
+   assert.match(query[0],/s\.guild=\? AND s\.user=\? AND s\.request_id=\?/);
+   assert.equal(reads.filter(s=>s.includes('SELECT id FROM kp_duel_pve_sessions WHERE guild=')).length,0);
+   assert.equal(reads.filter(s=>s.includes('WHERE s.id=? AND s.guild=? AND s.user=?')).length,0);
+   const old=db.prepare('SELECT id FROM kp_duel_pve_sessions WHERE guild=? AND user=? AND request_id=?').get('g',user,requestId) as {id:string};
+   assert.equal(old.id,one.id);
+   const current=await serverPveOperation(env,'g',user,{action:'get',session:old.id});
+   assert.deepEqual(one,current);
+   assert.equal(Object.hasOwn(one,'secret_id'),false);
+   reads.length=0;
+  }
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM kp_duel_pve_daily_entries').get()?.n,1);
+  db.exec("CREATE TRIGGER fixture_skip_secret BEFORE INSERT ON kp_duel_pve_secrets BEGIN SELECT RAISE(IGNORE); END");
+  await assert.rejects(()=>serverPveOperation(env,'g','orphan',{action:'start',requestId:randomUUID(),game:'trio',level:'easy'}),/保存を確認できません/);
+ }finally{db.close();}
+});

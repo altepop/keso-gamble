@@ -149,11 +149,14 @@ export async function serverPveOperation(env:KpEnv,guild:string,user:string,body
     .bind(challenge.day,game,level,guild,user,requestId,game,level)]:[])
   ]);
   // Retry-compatible even if two requests with the same id raced.
-  const saved=await env.DB.prepare('SELECT id FROM kp_duel_pve_sessions WHERE guild=? AND user=? AND request_id=?')
-   .bind(guild,user,requestId).first<{id:string}>();
-  if(!saved)throw Error('進行中のCPU戦が多すぎます。時間をおいてから再開してください。');
-  const row=await find(env,guild,user,saved.id);
-  if(!row)throw Error('CPU戦の保存を確認できません。');
+  const row=await env.DB.prepare(`SELECT s.id,s.game,s.difficulty,s.board,s.turn,s.winner,
+   s.version,s.human_moves,s.cpu_moves,s.request_id,x.data,x.id AS secret_id
+   FROM kp_duel_pve_sessions s LEFT JOIN kp_duel_pve_secrets x
+   ON x.id=s.id AND x.guild=s.guild AND x.user=s.user
+   WHERE s.guild=? AND s.user=? AND s.request_id=?`)
+   .bind(guild,user,requestId).first<SessionRow & {secret_id:string|null}>();
+  if(!row)throw Error('進行中のCPU戦が多すぎます。時間をおいてから再開してください。');
+  if(!uuid.test(row.id)||row.secret_id!==row.id)throw Error('CPU戦の保存を確認できません。');
   return publicMatch(row);
  }
  if(action!=='move')throw Error('CPU戦の操作が不正です。');
