@@ -290,3 +290,50 @@ test('bounded receipt provenance join preserves newest 20, ties, access boundari
   dbEnv.DB.prepare=original;
  }finally{db.close();}
 });
+
+
+test('PvE session history prelimits twenty before daily provenance join, preserving old output',async()=>{
+ const {db,env}=fixture();
+ try{
+  await duelHistoryRead(env,'guild','alice'); // initialize all tables before direct fixture inserts
+  const add=db.prepare('INSERT INTO kp_duel_pve_sessions (id,guild,user,request_id,game,difficulty,board,turn,winner,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)');
+  const daily=db.prepare('INSERT INTO kp_duel_pve_daily_entries (guild,user,session_id,jst_day,game,difficulty,created_at) VALUES(?,?,?,?,?,?,?)');
+  for(let i=0;i<65;i++){
+   const id='pve-'+String(i).padStart(3,'0'),at=1000+Math.floor(i/3);
+   add.run(id,'guild','alice',id,i%3===0?'trio':'othello','easy','{}','finished','human',at,at);
+   if(i%5===0)daily.run('guild','alice',id,'20261124',i%3===0?'trio':'othello','easy',at);
+  }
+  add.run('outsider','guild','bob','outsider','trio','easy','{}','finished','human',99999,99999);
+  add.run('foreign','elsewhere','alice','foreign','trio','easy','{}','finished','human',99999,99999);
+  const target=env as unknown as {DB:{prepare:(sql:string)=>unknown}};
+  const prepare=target.DB.prepare;
+  let captured='';
+  target.DB.prepare=(sql:string)=>{
+   if(sql.includes('FROM kp_duel_pve_sessions s')&&sql.includes('LEFT JOIN kp_duel_pve_daily_entries'))captured=sql;
+   return prepare(sql);
+  };
+  for(const filter of [{mode:'pve'},{mode:'pve',game:'trio'},{mode:'all',game:'othello'}]){
+   const actual=await duelHistoryRead(env,'guild','alice',filter);
+   assert.match(captured,/ORDER BY s\.updated_at DESC,s\.id DESC LIMIT \?/);
+   assert.ok(captured.indexOf('LIMIT ?')<captured.indexOf('LEFT JOIN kp_duel_pve_daily_entries'));
+   const extra=filter.game&&filter.game!=='all'?' AND s.game=?':'';
+   const oldSql=`SELECT s.id,s.game,s.difficulty,s.turn,s.winner,s.version,s.human_moves,s.cpu_moves,
+     s.created_at,s.updated_at,d.jst_day AS daily_day
+     FROM kp_duel_pve_sessions s LEFT JOIN kp_duel_pve_daily_entries d
+     ON d.guild=s.guild AND d.user=s.user AND d.session_id=s.id
+     WHERE s.guild=? AND s.user=?${extra}
+     ORDER BY s.updated_at DESC,s.id DESC LIMIT 20`;
+   const raw=db.prepare(oldSql).all('guild','alice',...(extra?[filter.game]:[]));
+   const expected=raw.map(row=>({id:row.id,game:row.game,level:row.difficulty,
+     status:row.turn==='finished'?'finished':'active',winner:row.winner,version:row.version,
+     humanMoves:row.human_moves,cpuMoves:row.cpu_moves,createdAt:row.created_at,
+     updatedAt:row.updated_at,dailyDay:row.daily_day}));
+   assert.deepEqual(actual.sessions,expected);
+   assert.equal(actual.sessions.length,20);
+   assert.ok(actual.sessions.every(s=>s.id!=='outsider'&&s.id!=='foreign'));
+  }
+  target.DB.prepare=prepare;
+  const pvp=await duelHistoryRead(env,'guild','alice',{mode:'pvp'});
+  assert.deepEqual(pvp.sessions,[]);
+ }finally{db.close();}
+});
