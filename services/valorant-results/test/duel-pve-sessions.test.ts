@@ -148,7 +148,7 @@ test('new daily/custom starts use one scoped post-batch readback, preserve exact
    const requestId=randomUUID(),user='alice-'+action;
    const one=await serverPveOperation(env,'g',user,{action,requestId,game:'trio',level:'easy'});
    const query=reads.filter(s=>s.includes('AS secret_id'));
-   assert.equal(query.length,1);
+   assert.equal(query.length,2,'new start has one miss probe and one post-batch readback');
    assert.match(query[0],/s\.guild=\? AND s\.user=\? AND s\.request_id=\?/);
    assert.equal(reads.filter(s=>s.includes('SELECT id FROM kp_duel_pve_sessions WHERE guild=')).length,0);
    assert.equal(reads.filter(s=>s.includes('WHERE s.id=? AND s.guild=? AND s.user=?')).length,0);
@@ -162,5 +162,42 @@ test('new daily/custom starts use one scoped post-batch readback, preserve exact
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM kp_duel_pve_daily_entries').get()?.n,1);
   db.exec("CREATE TRIGGER fixture_skip_secret BEFORE INSERT ON kp_duel_pve_secrets BEGIN SELECT RAISE(IGNORE); END");
   await assert.rejects(()=>serverPveOperation(env,'g','orphan',{action:'start',requestId:randomUUID(),game:'trio',level:'easy'}),/保存を確認できません/);
+ }finally{db.close();}
+});
+
+test('start/daily replay uses one SELECT and preserves validation precedence and ownership',async()=>{
+ const {db,env,batches}=fixture();
+ try{
+  const target=env as unknown as {DB:{prepare:(sql:string)=>unknown}};
+  const prepare=target.DB.prepare;
+  const reads:string[]=[];
+  for(const action of ['start','daily']){
+   const requestId=randomUUID(),user='replay-'+action;
+   const input={action,requestId,game:'trio',level:'easy'};
+   const original=await serverPveOperation(env,'g',user,input);
+   const snapshot=await serverPveOperation(env,'g',user,{action:'get',session:original.id});
+   const before=batches();
+   target.DB.prepare=(sql:string)=>{if(/^SELECT\s/.test(sql.trim()))reads.push(sql);return prepare(sql);};
+   reads.length=0;
+   const replay=await serverPveOperation(env,'g',user,input);
+   assert.deepEqual(replay,snapshot);
+   assert.equal(reads.length,1);
+   assert.match(reads[0],/s\.guild=\? AND s\.user=\? AND s\.request_id=\?/);
+   assert.equal(batches(),before);
+   assert.equal(Object.hasOwn(replay,'secret_id'),false);
+   if(action==='start'){
+    await assert.rejects(()=>serverPveOperation(env,'g',user,{...input,game:'othello'}),/操作IDの再利用/);
+    await assert.rejects(()=>serverPveOperation(env,'g',user,{...input,level:'strong'}),/操作IDの再利用/);
+   }
+   db.prepare('DELETE FROM kp_duel_pve_secrets WHERE id=?').run(original.id);
+   await assert.rejects(()=>serverPveOperation(env,'g',user,input),/CPU戦が見つかりません/);
+   if(action==='start')await assert.rejects(()=>serverPveOperation(env,'g',user,{...input,level:'strong'}),/操作IDの再利用/);
+   const other=await serverPveOperation(env,'g','other-'+user,input);
+   const foreign=await serverPveOperation(env,'foreign',user,input);
+   assert.notEqual(other.id,original.id);
+   assert.notEqual(foreign.id,original.id);
+   assert.notEqual(other.id,foreign.id);
+   target.DB.prepare=prepare;
+  }
  }finally{db.close();}
 });
