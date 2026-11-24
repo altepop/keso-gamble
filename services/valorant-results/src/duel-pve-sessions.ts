@@ -127,11 +127,17 @@ export async function serverPveOperation(env:KpEnv,guild:string,user:string,body
   if(challenge)await ensureDuelDailyHistory(env);
   const state=startServerPve(game,level,randomInt);
   const id=crypto.randomUUID(),now=Date.now();
+  // P12: only the first three qualifying active sessions are needed to decide
+  // the existing <3 safety gate. Preserve the predicate inside the atomic INSERT.
   await env.DB.batch([
    env.DB.prepare(`INSERT OR IGNORE INTO kp_duel_pve_sessions
     (id,guild,user,request_id,game,difficulty,board,turn,winner,version,human_moves,cpu_moves,created_at,updated_at)
     SELECT ?,?,?,?,?,?,?,?,NULL,0,0,0,?,?
-    WHERE (SELECT COUNT(*) FROM kp_duel_pve_sessions WHERE guild=? AND user=? AND turn='human' AND updated_at>?)<3`)
+    WHERE (SELECT COUNT(*) FROM (
+      SELECT 1 FROM kp_duel_pve_sessions
+      WHERE guild=? AND user=? AND turn='human' AND updated_at>?
+      LIMIT 3
+    ))<3`)
     .bind(id,guild,user,requestId,game,level,state.board,'human',now,now,guild,user,now-86400000),
    env.DB.prepare(`INSERT OR IGNORE INTO kp_duel_pve_secrets(id,guild,user,data)
     SELECT id,guild,user,? FROM kp_duel_pve_sessions WHERE id=? AND guild=? AND user=?`)
