@@ -184,6 +184,31 @@ async function present(env:KpEnv,mapping:KpMapping,user:string,id:string){
 }
 function validateActionId(id:unknown){if(typeof id!=='string'||!UUID.test(id))throw Error('操作IDが不正です。');return id;}
 
+
+/** Two index-backed, disjoint-in-role candidate sets. Each contains at most 20
+ * rows, enough to preserve the newest 20 from their union (including page ties).
+ * Participation requires distinct users, enforced by the table CHECK constraint.
+ */
+export function boardDuelListSql(paged:boolean){
+ const cursor=paged?' AND (updated_at<? OR (updated_at=? AND id<?))':'';
+ const candidate=(role:'a'|'b')=>`SELECT id,guild,updated_at FROM kp_board_duels
+  WHERE guild=? AND user_${role}=?${cursor}
+  ORDER BY updated_at DESC,id DESC LIMIT 20`;
+ return `SELECT d.*,
+  CASE WHEN d.black_user=? THEN json_extract(s.data,'$.privateA')
+       ELSE json_extract(s.data,'$.privateB') END AS private_hand
+  FROM (SELECT id,guild,updated_at FROM (${candidate('a')})
+   UNION ALL SELECT id,guild,updated_at FROM (${candidate('b')})) AS c
+  JOIN kp_board_duels d ON d.guild=c.guild AND d.id=c.id
+  LEFT JOIN kp_board_duel_secrets s
+   ON s.guild=d.guild AND s.id=d.id AND d.game IN ('hitblow','bluffdice','poker')
+  ORDER BY c.updated_at DESC,c.id DESC LIMIT 20`;
+}
+export function boardDuelListArgs(user:string,guild:string,cutoff:number|null,id:string){
+ const single=cutoff===null?[guild,user]:[guild,user,cutoff,cutoff,id];
+ return [user,...single,...single];
+}
+
 export async function boardDuelList(env:KpEnv,m:KpMapping,user:string,cursor:string|null=null){
  await ensureBoardDuels(env);
  let cutoff:number|null=null,id='';
@@ -193,17 +218,11 @@ export async function boardDuelList(env:KpEnv,m:KpMapping,user:string,cursor:str
   cutoff=Number(parsed[1]);id=parsed[2];
   if(!Number.isSafeInteger(cutoff))throw Error('履歴の読み込み位置が不正です。');
  }
- const condition=cutoff===null?'':' AND (d.updated_at<? OR (d.updated_at=? AND d.id<?))';
- const query=`SELECT d.*,
-  CASE WHEN d.black_user=? THEN json_extract(s.data,'$.privateA')
-       ELSE json_extract(s.data,'$.privateB') END AS private_hand
-  FROM kp_board_duels d LEFT JOIN kp_board_duel_secrets s
-   ON s.guild=d.guild AND s.id=d.id AND d.game IN ('hitblow','bluffdice','poker')
-  WHERE d.guild=? AND (d.user_a=? OR d.user_b=?)${condition}
-  ORDER BY d.updated_at DESC,d.id DESC LIMIT 20`;
- const stmt=env.DB.prepare(query);
- const matches=(await (cutoff===null?stmt.bind(user,m.guildId,user,user):
-   stmt.bind(user,m.guildId,user,user,cutoff,cutoff,id)).all<BoardDuel>()).results;
+ // Candidate reads are separately bounded through existing (guild,user_a,updated_at)
+ // and (guild,user_b,updated_at) indexes. Project private hands only after top 20.
+ const query=boardDuelListSql(cutoff!==null);
+ const args=boardDuelListArgs(user,m.guildId,cutoff,id);
+ const matches=(await env.DB.prepare(query).bind(...args).all<BoardDuel>()).results;
  return {games:GAMES,limit:DUEL_MAX_STAKE,turnMs:DUEL_TURN_MS,invitationMs:DUEL_INVITE_MS,
    // Only first page needs a roster. Subsequent pages reuse already loaded members.
    members:cursor===null?await kpTargetMembers(env,m):[],matches,hasMore:matches.length===20};
