@@ -9,6 +9,8 @@ on:
       - 'services/valorant-results/test/duel-deployment-watch.test.mjs'
       - 'scripts/duel-d1-schedule-watch.mjs'
       - 'services/valorant-results/test/duel-d1-schedule-watch.test.mjs'
+      - 'scripts/duel-backup-watchdog-self-schedule.mjs'
+      - 'services/valorant-results/test/duel-backup-watchdog-self-schedule.test.mjs'
   push:
     branches: [main]
     paths:
@@ -19,6 +21,8 @@ on:
       - 'services/valorant-results/test/duel-deployment-watch.test.mjs'
       - 'scripts/duel-d1-schedule-watch.mjs'
       - 'services/valorant-results/test/duel-d1-schedule-watch.test.mjs'
+      - 'scripts/duel-backup-watchdog-self-schedule.mjs'
+      - 'services/valorant-results/test/duel-backup-watchdog-self-schedule.test.mjs'
   workflow_dispatch:
   schedule:
     - cron: '43 * * * *'
@@ -40,7 +44,7 @@ jobs:
         with:
           node-version: '24'
       - name: Validate no-write monitor decisions
-        run: node --test services/valorant-results/test/duel-deployment-watch.test.mjs services/valorant-results/test/duel-deployment-alert.test.mjs services/valorant-results/test/duel-d1-schedule-watch.test.mjs
+        run: node --test services/valorant-results/test/duel-deployment-watch.test.mjs services/valorant-results/test/duel-deployment-alert.test.mjs services/valorant-results/test/duel-d1-schedule-watch.test.mjs services/valorant-results/test/duel-backup-watchdog-self-schedule.test.mjs
       - name: Check recent production deployment statuses without D1 calls
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         env:
@@ -60,3 +64,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/duel-d1-schedule-watch.mjs
+      # Independent #791 self-watch: :47 daily cron can fail as well as #789 readiness.
+      # This follows deployment issue handling, so a backup alarm is never a deployment incident.
+      - name: Independently detect missing backup watchdog Scheduled
+        if: always() && github.event_name == 'schedule'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/duel-backup-watchdog-self-schedule.mjs
