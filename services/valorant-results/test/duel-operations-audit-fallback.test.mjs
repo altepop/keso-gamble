@@ -53,3 +53,24 @@ test('fallback is separate from primary cron and never automatically deletes rec
  assert.match(w,/node scripts\/duel-scheduled-operations-alert\.mjs/);
  assert.doesNotMatch(w,/DELETE FROM|DROP TABLE|TRUNCATE|wrangler d1 execute|kp_wallet/);
 });
+
+test('actual Nov 24 15:08 JST delayed fallback uses previous UTC day primary slot',()=>{
+ const delayed=Date.parse('2026-11-24T06:08:54Z');
+ const actualPrimary=run('completed','success','2026-11-24T05:24:00Z');
+ for(const r of [actualPrimary,run(),run('in_progress',null,'2026-11-24T05:24:00Z'),run('queued',null)]){
+  const result=decideAuditFallback([r],delayed);
+  assert.equal(result.execute,false);assert.equal(result.deleteAuthorized,false);
+ }
+ for(const rows of [[],[run('completed','failure','2026-11-24T05:24:00Z')],[run('completed','success','2026-11-22T21:33:00Z')]]){
+  const result=decideAuditFallback(rows,delayed);
+  assert.equal(result.execute,true);assert.equal(result.deleteAuthorized,false);
+ }
+ assert.throws(()=>decideAuditFallback([run('in_progress',null,'2026-11-22T21:33:00Z')],delayed),/Older primary/);
+});
+test('UTC rollover boundary and bounded lateness preserve fail-closed behavior',()=>{
+ for(const at of ['2026-11-23T23:59:59Z','2026-11-24T00:00:00Z','2026-11-24T10:17:00Z'])
+  assert.equal(decideAuditFallback([run()],Date.parse(at)).execute,false);
+ assert.throws(()=>decideAuditFallback([],Date.parse('2026-11-24T10:17:00.001Z')),/outside/);
+ assert.throws(()=>decideAuditFallback([],Date.parse('2026-11-24T22:16:59Z')),/outside/);
+ assert.equal(decideAuditFallback([run()],Date.parse('2026-11-24T22:17:00Z')).execute,true);
+});
