@@ -114,3 +114,18 @@ test('operations audit has a second schedule-only notification route after deplo
  assert.match(heartbeat,/run: node scripts\/duel-operations-cron-watch\.mjs/);
  assert.match(yaml,/run: node --test [^\n]*duel-operations-cron-watch\.test\.mjs/);
 });
+
+test('administrator evidence has a second schedule-only route without a new incident type',async()=>{
+ const {readFileSync}=await import('node:fs');
+ const yaml=readFileSync(new URL('../../../.github/workflows/duel-deployment-watch.yml',import.meta.url),'utf8');
+ const heartbeat=readFileSync(new URL('../../../.github/workflows/duel-monitor-heartbeat.yml',import.meta.url),'utf8');
+ const index=yaml.indexOf('name: Independently notify on missing administrator evidence schedule');
+ assert.ok(index>yaml.indexOf('name: Create at most one open GitHub Issue for a real deployment anomaly'));
+ const step=yaml.slice(index);
+ assert.match(step,/if: always\(\) && github\.event_name == 'schedule'/);
+ assert.match(step,/run: node scripts\/duel-admin-evidence-cron-watch\.mjs/);
+ assert.doesNotMatch(step,/workflow_dispatch|CLOUDFLARE_API_TOKEN|wrangler|KP_TOKEN/);
+ assert.match(heartbeat,/run: node scripts\/duel-admin-evidence-cron-watch\.mjs/);
+ assert.match(yaml,/run: node --test [^\n]*duel-admin-evidence-cron-watch\.test\.mjs/);
+ assert.equal(yaml.split("'scripts/duel-admin-evidence-cron-watch.mjs'").length-1,2);
+});
