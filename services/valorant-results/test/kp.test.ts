@@ -886,13 +886,14 @@ test('duel list skips secret join for public board games without removing privat
  assert.ok(visible);
  assert.equal(visible.game,'trio');
  assert.equal(visible.private_hand,null,'public board-game listing never needs secrets');
- const {readFileSync}=await import('node:fs');
- const source=readFileSync(new URL('../src/board-duels.ts',import.meta.url).pathname,'utf8');
- const listSql=source.split('export async function boardDuelList')[1]?.split('export async function boardDuelAction')[0]??'';
+ const {boardDuelListSql}=await import('../src/board-duels.ts');
+ const listSql=boardDuelListSql(false);
  assert.ok(listSql.includes("AND d.game IN ('hitblow','bluffdice','poker')"),
   'a newly added public game must not silently read a secrets row');
- assert.match(listSql,/d\.guild=\? AND \(d\.user_a=\? OR d\.user_b=\?\)/,
-  'existing participant-only guild authorization must be retained');
+ assert.match(listSql,/WHERE guild=\? AND user_a=\?/,
+  'viewer must be a participant on the A-side index');
+ assert.match(listSql,/WHERE guild=\? AND user_b=\?/,
+  'viewer must be a participant on the B-side index');
 });
 
 test('four mini duels keep other hands secret, and Hit & Blow settles two escrowed wallets',async()=>{
