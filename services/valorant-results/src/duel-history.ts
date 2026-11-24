@@ -75,12 +75,20 @@ export async function duelHistoryRead(env:KpEnv,guild:string,user:string,filter:
    ) r${dailyEntryJoin}
    ORDER BY r.occurred_at DESC,r.match_id DESC`).bind(...receiptArgs),
   // A PvP-only history must not issue an unused PvE session scan.
+  // P12: choose at most twenty authorized PvE sessions using the existing
+  // (guild,user,updated_at) index before probing daily provenance by unique key.
+  // #824's PvP-only skip and identical date/ID ordering remain unchanged.
   ...(mode==='pvp'?[]:[env.DB.prepare(`SELECT s.id,s.game,s.difficulty,s.turn,s.winner,s.version,s.human_moves,s.cpu_moves,
    s.created_at,s.updated_at,d.jst_day AS daily_day
-   FROM kp_duel_pve_sessions s
+   FROM (
+     SELECT s.id,s.guild,s.user,s.game,s.difficulty,s.turn,s.winner,s.version,
+       s.human_moves,s.cpu_moves,s.created_at,s.updated_at
+     FROM kp_duel_pve_sessions s
+     WHERE s.guild=? AND s.user=?${sessionGameSql}
+     ORDER BY s.updated_at DESC,s.id DESC LIMIT ?
+   ) s
    LEFT JOIN kp_duel_pve_daily_entries d ON d.guild=s.guild AND d.user=s.user AND d.session_id=s.id
-   WHERE s.guild=? AND s.user=?${sessionGameSql}
-   ORDER BY s.updated_at DESC,s.id DESC LIMIT ?`).bind(...sessionArgs)]),
+   ORDER BY s.updated_at DESC,s.id DESC`).bind(...sessionArgs)]),
   env.DB.prepare(`SELECT COUNT(*) AS started,
     COALESCE(SUM(CASE WHEN s.turn='finished' THEN 1 ELSE 0 END),0) AS finished,
     COALESCE(SUM(CASE WHEN s.turn='finished' AND s.winner='human' THEN 1 ELSE 0 END),0) AS wins
