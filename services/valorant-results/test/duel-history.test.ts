@@ -323,7 +323,7 @@ test('PvE session history prelimits twenty before daily provenance join, preserv
      ON d.guild=s.guild AND d.user=s.user AND d.session_id=s.id
      WHERE s.guild=? AND s.user=?${extra}
      ORDER BY s.updated_at DESC,s.id DESC LIMIT 20`;
-   const raw=db.prepare(oldSql).all('guild','alice',...(extra?[filter.game]:[]));
+   const raw=db.prepare(oldSql).all('guild','alice',...(extra?[filter.game!]:[]));
    const expected=raw.map(row=>({id:row.id,game:row.game,level:row.difficulty,
      status:row.turn==='finished'?'finished':'active',winner:row.winner,version:row.version,
      humanMoves:row.human_moves,cpuMoves:row.cpu_moves,createdAt:row.created_at,
