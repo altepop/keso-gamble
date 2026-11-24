@@ -15,6 +15,8 @@ on:
       - 'services/valorant-results/test/duel-admin-evidence-cron-watch.test.mjs'
       - 'scripts/duel-admin-evidence.mjs'
       - 'services/valorant-results/test/duel-admin-evidence.test.mjs'
+      - '.github/workflows/duel-monitor-heartbeat.yml'
+      - 'services/valorant-results/test/duel-monitor-heartbeat.test.mjs'
       - 'scripts/duel-backup-watchdog-self-schedule.mjs'
       - 'services/valorant-results/test/duel-backup-watchdog-self-schedule.test.mjs'
   push:
@@ -33,6 +35,8 @@ on:
       - 'services/valorant-results/test/duel-admin-evidence-cron-watch.test.mjs'
       - 'scripts/duel-admin-evidence.mjs'
       - 'services/valorant-results/test/duel-admin-evidence.test.mjs'
+      - '.github/workflows/duel-monitor-heartbeat.yml'
+      - 'services/valorant-results/test/duel-monitor-heartbeat.test.mjs'
       - 'scripts/duel-backup-watchdog-self-schedule.mjs'
       - 'services/valorant-results/test/duel-backup-watchdog-self-schedule.test.mjs'
   workflow_dispatch:
@@ -56,7 +60,7 @@ jobs:
         with:
           node-version: '24'
       - name: Validate no-write monitor decisions
-        run: node --test services/valorant-results/test/duel-deployment-watch.test.mjs services/valorant-results/test/duel-deployment-alert.test.mjs services/valorant-results/test/duel-d1-schedule-watch.test.mjs services/valorant-results/test/duel-backup-watchdog-self-schedule.test.mjs services/valorant-results/test/duel-operations-cron-watch.test.mjs services/valorant-results/test/duel-admin-evidence-cron-watch.test.mjs services/valorant-results/test/duel-admin-evidence.test.mjs
+        run: node --test services/valorant-results/test/duel-deployment-watch.test.mjs services/valorant-results/test/duel-deployment-alert.test.mjs services/valorant-results/test/duel-d1-schedule-watch.test.mjs services/valorant-results/test/duel-backup-watchdog-self-schedule.test.mjs services/valorant-results/test/duel-operations-cron-watch.test.mjs services/valorant-results/test/duel-admin-evidence-cron-watch.test.mjs services/valorant-results/test/duel-admin-evidence.test.mjs services/valorant-results/test/duel-monitor-heartbeat.test.mjs
       - name: Check recent production deployment statuses without D1 calls
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         env:

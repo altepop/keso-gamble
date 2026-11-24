@@ -17,6 +17,8 @@ on:
       - 'scripts/duel-deployment-schedule-watch.mjs'
       - 'services/valorant-results/test/duel-admin-evidence-cron-watch.test.mjs'
       - 'services/valorant-results/test/duel-deployment-schedule-watch.test.mjs'
+      - 'scripts/duel-backup-watchdog-self-schedule.mjs'
+      - 'services/valorant-results/test/duel-backup-watchdog-self-schedule.test.mjs'
   push:
     branches: [main]
     paths:
@@ -35,6 +37,8 @@ on:
       - 'scripts/duel-deployment-schedule-watch.mjs'
       - 'services/valorant-results/test/duel-admin-evidence-cron-watch.test.mjs'
       - 'services/valorant-results/test/duel-deployment-schedule-watch.test.mjs'
+      - 'scripts/duel-backup-watchdog-self-schedule.mjs'
+      - 'services/valorant-results/test/duel-backup-watchdog-self-schedule.test.mjs'
   workflow_dispatch:
   schedule:
     - cron: '27 */3 * * *'
@@ -56,7 +60,7 @@ jobs:
         with:
           node-version: '24'
       - name: Validate heartbeat states without production access
-        run: node --test services/valorant-results/test/duel-monitor-heartbeat.test.mjs services/valorant-results/test/duel-monitor-heartbeat-alert.test.mjs services/valorant-results/test/duel-d1-schedule-watch.test.mjs services/valorant-results/test/duel-fallback-job-watch.test.mjs services/valorant-results/test/duel-operations-cron-watch.test.mjs services/valorant-results/test/duel-admin-evidence-cron-watch.test.mjs services/valorant-results/test/duel-deployment-schedule-watch.test.mjs
+        run: node --test services/valorant-results/test/duel-monitor-heartbeat.test.mjs services/valorant-results/test/duel-monitor-heartbeat-alert.test.mjs services/valorant-results/test/duel-d1-schedule-watch.test.mjs services/valorant-results/test/duel-fallback-job-watch.test.mjs services/valorant-results/test/duel-operations-cron-watch.test.mjs services/valorant-results/test/duel-admin-evidence-cron-watch.test.mjs services/valorant-results/test/duel-deployment-schedule-watch.test.mjs services/valorant-results/test/duel-backup-watchdog-self-schedule.test.mjs
       - name: Verify hourly monitor scheduled-run heartbeat
         if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.actor == 'altepop')
         env:
@@ -94,3 +98,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/duel-deployment-schedule-watch.mjs
+      - name: Independently detect missing backup watchdog Scheduled
+        if: always() && github.event_name == 'schedule'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/duel-backup-watchdog-self-schedule.mjs
