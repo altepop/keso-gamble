@@ -115,3 +115,31 @@ test('PvP lifetime decay persists across JST midnight, while pair cap resets dai
     assert.equal(db.prepare("SELECT COUNT(*) n FROM kp_duel_reward_rolls WHERE user='player' AND mode='pvp' AND chance_bps=500").get()?.n,5);
   } finally { db.close(); }
 });
+
+
+test('PvP lifetime 12-roll decay uses a bounded candidate count and keeps its exact threshold', () => {
+  const trigger = DUEL_REWARD_DDL.find(sql => sql.includes('CREATE TRIGGER kp_duel_reward_issue'));
+  assert.ok(trigger);
+  assert.match(trigger, /SELECT COUNT\(\*\) FROM \(\s*SELECT 1 FROM kp_duel_reward_rolls[\s\S]*?mode='pvp'\s+LIMIT 12\s*\)\)>=12/);
+  const db = new DatabaseSync(':memory:');
+  try {
+    for (const sql of [...DUEL_PROGRESSION_DDL,...DUEL_REWARD_DDL]) db.exec(sql);
+    db.exec("INSERT INTO kp_duel_reward_policy_v2 VALUES ('guild','pvp',0,NULL,99,1000,0,0)");
+    const add = db.prepare('INSERT INTO kp_duel_progress_receipts VALUES(?,?,?,?,?,?,?,?,?,?)');
+    const record = (id: string, user: string, opponent: string) =>
+      add.run('guild',id,user,'pvp','othello',opponent,'win',1,1000,1000);
+    for (let n=0; n<18; n++) {
+      const opponent='other-'+n;
+      record('m'+n,'alice',opponent);
+      const value=db.prepare('SELECT chance_bps AS value FROM kp_duel_reward_rolls WHERE guild=? AND user=? AND mode=? AND match_id=?')
+        .get('guild','alice','pvp','m'+n) as {value:number}|undefined;
+      assert.equal(value?.value,n>=12?500:1000,'before the 13th roll remains unhalved');
+    }
+    record('bob1','bob','alice');
+    const bob=db.prepare("SELECT chance_bps AS value FROM kp_duel_reward_rolls WHERE user='bob'").get() as {value:number};
+    assert.equal(bob.value,1000,'other user must not inherit lifetime decay');
+    const plan=db.prepare("EXPLAIN QUERY PLAN SELECT COUNT(*) FROM (SELECT 1 FROM kp_duel_reward_rolls WHERE guild=? AND user=? AND mode='pvp' LIMIT 12)")
+      .all('guild','alice');
+    assert.match(JSON.stringify(plan),/USING COVERING INDEX/);
+  } finally { db.close(); }
+});

@@ -47,6 +47,8 @@ export const DUEL_REWARD_DDL = [
       VALUES(NEW.guild,NEW.user,NEW.mode,NEW.game);
     END`,
   `DROP TRIGGER IF EXISTS kp_duel_reward_issue`,
+  // P12: the lifetime PvP 12-roll threshold needs at most 12 qualifying rows.
+  // Retain the exact old >=12 decay policy and atomic receipt-trigger semantics.
   `CREATE TRIGGER kp_duel_reward_issue
     AFTER INSERT ON kp_duel_progress_receipts WHEN NEW.applied_at IS NOT NULL
     BEGIN
@@ -56,8 +58,11 @@ export const DUEL_REWARD_DDL = [
         (NEW.occurred_at+32400000)/86400000, (random() & 9223372036854775807)%10000,
         (CASE NEW.outcome WHEN 'win' THEN policy.win_bps WHEN 'loss' THEN policy.loss_bps ELSE policy.draw_bps END) /
         (CASE WHEN NEW.mode='pvp' AND
-          (SELECT COUNT(*) FROM kp_duel_reward_rolls
-            WHERE guild=NEW.guild AND user=NEW.user AND mode='pvp')>=12
+          (SELECT COUNT(*) FROM (
+            SELECT 1 FROM kp_duel_reward_rolls
+            WHERE guild=NEW.guild AND user=NEW.user AND mode='pvp'
+            LIMIT 12
+          ))>=12
           THEN 2 ELSE 1 END)
       FROM kp_duel_reward_policy_v2 policy
       WHERE policy.guild=NEW.guild AND policy.mode=NEW.mode AND policy.starts_at<=NEW.occurred_at
