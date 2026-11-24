@@ -82,3 +82,21 @@ test('the independent D1 hourly scheduler also checks deployment health even whe
  assert.ok(workflow.indexOf('  deployment-watch-fallback:')<workflow.indexOf('  inspect:'),
   'fallback is independently scheduled and not gated on success of the D1 inspector');
 });
+
+
+test('independent hourly deployment schedule checks D1 Scheduled outages after its own alert step only',async()=>{
+ const {readFileSync}=await import('node:fs');
+ const yaml=readFileSync(new URL('../../../.github/workflows/duel-deployment-watch.yml',import.meta.url),'utf8');
+ assert.match(yaml,/cron: '43 \* \* \* \*'/);
+ assert.match(yaml,/run: node --test [^\n]*duel-d1-schedule-watch\.test\.mjs/);
+ const deployIssue=yaml.indexOf('name: Create at most one open GitHub Issue for a real deployment anomaly');
+ const d1Issue=yaml.indexOf('name: Independently notify on missing D1 Insights Scheduled executions');
+ assert.ok(deployIssue>=0&&d1Issue>deployIssue,'D1 watchdog must not cause deployment incident creation');
+ const separate=yaml.slice(d1Issue);
+ assert.match(separate,/if: always\(\) && github\.event_name == 'schedule'/);
+ assert.match(separate,/run: node scripts\/duel-d1-schedule-watch\.mjs/);
+ assert.doesNotMatch(separate,/workflow_dispatch|CLOUDFLARE_API_TOKEN|wrangler|\/d1\/database\/|KP_TOKEN/);
+ const watch=readFileSync(new URL('../../../scripts/duel-d1-schedule-watch.mjs',import.meta.url),'utf8');
+ assert.match(watch,/d1-insights-report\.yml\/runs\?event=schedule/);
+ assert.match(watch,/D1_SCHEDULE_ALERT_TITLE/);
+});

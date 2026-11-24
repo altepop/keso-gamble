@@ -7,6 +7,8 @@ on:
       - 'scripts/duel-deployment-alert.mjs'
       - 'services/valorant-results/test/duel-deployment-alert.test.mjs'
       - 'services/valorant-results/test/duel-deployment-watch.test.mjs'
+      - 'scripts/duel-d1-schedule-watch.mjs'
+      - 'services/valorant-results/test/duel-d1-schedule-watch.test.mjs'
   push:
     branches: [main]
     paths:
@@ -15,6 +17,8 @@ on:
       - 'scripts/duel-deployment-alert.mjs'
       - 'services/valorant-results/test/duel-deployment-alert.test.mjs'
       - 'services/valorant-results/test/duel-deployment-watch.test.mjs'
+      - 'scripts/duel-d1-schedule-watch.mjs'
+      - 'services/valorant-results/test/duel-d1-schedule-watch.test.mjs'
   workflow_dispatch:
   schedule:
     - cron: '43 * * * *'
@@ -36,7 +40,7 @@ jobs:
         with:
           node-version: '24'
       - name: Validate no-write monitor decisions
-        run: node --test services/valorant-results/test/duel-deployment-watch.test.mjs services/valorant-results/test/duel-deployment-alert.test.mjs
+        run: node --test services/valorant-results/test/duel-deployment-watch.test.mjs services/valorant-results/test/duel-deployment-alert.test.mjs services/valorant-results/test/duel-d1-schedule-watch.test.mjs
       - name: Check recent production deployment statuses without D1 calls
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         env:
@@ -49,3 +53,10 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           DUEL_WATCH_REPORT: ${{ runner.temp }}/duel-watch-report.json
         run: node scripts/duel-deployment-alert.mjs
+      # Independent fallback for :17 D1 Insights; the :27/3h heartbeat may itself miss schedule.
+      # Keep this AFTER the deployment incident step so a D1 gap never opens a deployment issue.
+      - name: Independently notify on missing D1 Insights Scheduled executions
+        if: always() && github.event_name == 'schedule'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/duel-d1-schedule-watch.mjs
