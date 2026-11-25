@@ -4,7 +4,7 @@ let browser;
 (async()=>{
  const{createInitialState}=await import('../js/engine.js');
  browser=await engine.launch(engineName==='chromium'?{executablePath:process.env.CHROMIUM_PATH||(existsSync('/usr/bin/chromium')?'/usr/bin/chromium':undefined),args:['--no-sandbox']}:{});
- for(const scenario of (process.argv[2]?[process.argv[2]]:['success','dm-touch','dm-refresh-touch','guild-touch','guild-refresh-touch','cancel','cancel-saved','unconfigured','different-user'])){
+ for(const scenario of (process.argv[2]?[process.argv[2]]:['success','dm-touch','dm-refresh-touch','guild-touch','guild-refresh-touch','cancel','cancel-saved','unconfigured','different-user','sdk-ready-failure'])){
   const errors=[],ctx=await browser.newContext({viewport:{width:390,height:844},isMobile:engineName==='webkit'||scenario.includes('touch'),hasTouch:engineName==='webkit'||scenario.includes('touch')});let exchanges=0,challenge,operations=0,stateReads=0,failedModule=scenario==='module-failure',failedBootstrap=scenario==='bootstrap-failure';const bareModules=[];let releaseApp;const appGate=scenario==='stalled-module'?new Promise(resolve=>{releaseApp=resolve;}):null;let releaseConfig;const configGate=new Promise(resolve=>{releaseConfig=resolve;});
   await ctx.addInitScript(({scenario})=>{
    if(scenario==='stalled-module')window.kesoBootWatchdogMs=1500;
@@ -50,7 +50,7 @@ let browser;
     let result;
     if(path.endsWith('/activity/config')){
      if(scenario==='slow-config')await configGate;
-     if(scenario==='config-failure'){await route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:'接続設定を確認できませんでした。'})});return;}
+     if(scenario==='config-failure'||scenario==='sdk-ready-failure'){await route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:'接続設定を確認できませんでした。'})});return;}
      result={available:scenario!=='unconfigured',applicationId:'100000000000000000'};
     }
     else if(path.endsWith('/activity/challenge')){challenge=route.request().postDataJSON().codeChallenge;result={nonce:'a'.repeat(48)};}
@@ -66,6 +66,13 @@ let browser;
    const file=resolve(__dirname,'..','.'+(path==='/'?'/index.html':path));assert.ok(file.startsWith(resolve(__dirname,'..')+'/'));
    if(path.endsWith('.js')&&!new URL(route.request().url()).search)bareModules.push(path);
    if(path==='/js/casino-more.js'&&failedModule){await route.abort('failed');return;}
+   if(path==='/js/bootstrap.js'&&scenario==='sdk-ready-failure'){
+    // Simulate the exact preflight failure without delaying CI for a 15s SDK timeout.
+    const module=readFileSync(file,'utf8');
+    assert.ok(module.includes('await prepareDiscordActivity();'));
+    await route.fulfill({status:200,contentType:'text/javascript',body:module.replace('await prepareDiscordActivity();',"throw Error('Simulated SDK READY timeout');")});
+    return;
+   }
    if(path==='/js/discord-activity-auth.js'&&failedBootstrap){await route.abort('failed');return;}
    if(path==='/js/app.js'&&appGate)await appGate;
    const legacy=process.env.KESO_MIXED_CASINO&&path==='/js/casino.js'&&!new URL(route.request().url()).search;
@@ -137,6 +144,12 @@ let browser;
   }else{
    await page.locator('#kp-connect-code').waitFor();assert.equal(await page.locator('.kp-connection').count(),0);assert.equal(operations,0);
    if(scenario==='unconfigured'||scenario==='config-failure'){assert.deepEqual(await page.evaluate(()=>window.__sdkCommands),['READY']);assert.equal(exchanges,0);}
+   if(scenario==='sdk-ready-failure'){
+    assert.equal(await page.getByRole('alert').filter({hasText:'画面を開けませんでした'}).count(),0,'SDK failure must not trap users on retry-only screen');
+    assert.equal(await page.locator('[data-action=auto-connect-kp]').count(),1,'manual/retry login remains available');
+    assert.equal(exchanges,0,'SDK initialization failure must not exchange identity');
+    assert.equal(operations,0,'no KP operations from startup recovery');
+   }
    if(scenario==='cancel'||scenario==='cancel-saved'){assert.equal(exchanges,0);await page.locator('[data-action=auto-connect-kp]').waitFor();}
    if(scenario==='cancel-saved'){
     await page.locator('[data-action=restore-kp]').click();
