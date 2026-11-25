@@ -562,6 +562,6 @@ test('GODO event captures its actual starting quote, affects only its guild and 
  const final=GODO_EVENT_END-STOCK_INTERVAL;
  m=await tickStocks(f.env,m,final,()=>.5);other=await tickStocks(f.env,other,final,()=>.5);
  assert.equal(m.prices.godo,10000);assert.equal(other.prices.godo,1450);
- const expired=await tickStocks(f.env,m,GODO_EVENT_END,()=>0);
+ const expired=await tickStocks(f.env,m,GODO_EVENT_END,()=>.49);
  assert.ok(expired.prices.godo<10000,'normal market is restored immediately at deadline');
 });
