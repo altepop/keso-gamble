@@ -34,7 +34,37 @@ export async function inspectD1Schedule(env=process.env,request=fetch,now=Date.n
  if(!res.ok)throw Error('D1 schedule metadata unavailable (HTTP '+res.status+')');
  const data=await res.json();
  if(!Array.isArray(data?.workflow_runs))throw Error('Unexpected D1 schedule metadata');
- return evaluateD1Schedule(data.workflow_runs,now);
+ const report=evaluateD1Schedule(data.workflow_runs,now);
+ // A recent completed run can have completed D1 inspection but failed an
+ // independently notified deployment alarm. Never relax missing/stale/stalled.
+ if(report.state!=='failed')return report;
+ const latest=data.workflow_runs.find(r=>r.id===report.runId);
+ if(latest?.conclusion!=='failure'||!isPositive(latest.run_attempt))return report;
+ const response=await request(api+'/actions/runs/'+report.runId+'/attempts/'+latest.run_attempt+'/jobs?per_page=100',
+  {headers:headers(env),signal:AbortSignal.timeout(18000)});
+ if(!response.ok)throw Error('D1 schedule job metadata unavailable');
+ const inventory=await response.json();
+ if(!Number.isSafeInteger(inventory?.total_count)||!Array.isArray(inventory.jobs)||
+    inventory.total_count!==inventory.jobs.length||inventory.jobs.length>=100)
+  throw Error('Incomplete D1 schedule job metadata');
+ const jobs=inventory.jobs;
+ const unique=name=>jobs.filter(j=>j?.name===name).length===1?jobs.find(j=>j.name===name):null;
+ const inspect=unique('inspect'),fallback=unique('deployment-watch-fallback'),budget=unique('budget-tests');
+ if(jobs.length!==3||inspect?.status!=='completed'||inspect.conclusion!=='success'||
+    fallback?.status!=='completed'||fallback.conclusion!=='failure'||
+    budget?.status!=='completed'||budget.conclusion!=='skipped'||!Array.isArray(fallback.steps))return report;
+ const steps=fallback.steps;
+ const passed=name=>steps.filter(s=>s?.name===name).length===1&&steps.some(s=>s.name===name&&s.status==='completed'&&s.conclusion==='success');
+ const independent=new Set(['Independently detect missing hourly deployment health schedule','Independently detect missing backup watchdog Scheduled']);
+ const failed=steps.filter(s=>s?.conclusion==='failure');
+ if(!passed('Verify P12 monitor decisions without D1 or KP')||
+    !passed('Fallback check of production Pages and Worker via GitHub metadata')||
+    !failed.length||failed.some(s=>s.status!=='completed'||!independent.has(s.name)||
+     steps.filter(t=>t?.name===s.name).length!==1)||
+    steps.some(s=>s?.status!=='completed'||!['success','failure','skipped'].includes(s.conclusion)))return report;
+ // Keep failure status and the original independent alerts. Do not open a
+ // second, misleading D1 schedule incident for an already isolated alarm.
+ return {...report,state:'secondary-alerts-failed'};
 }
 export function d1ScheduleIssue(report){
  if(!report||report.ok!==false||!validStates.has(report.state))return null;
@@ -58,6 +88,7 @@ export async function inspectAndNotify(env=process.env,request=fetch,now=Date.no
  try{report=await inspectD1Schedule(env,request,now);}
  catch{report={ok:false,state:'unknown',runId:null,ageMinutes:null};}
  const alert=d1ScheduleIssue(report);
+ if(report.state==='secondary-alerts-failed')return {state:report.state,action:'independent-alerts-retained'};
  if(!alert)return {state:report.state,action:'healthy'};
  const list=await request(api+'/issues?state=open&per_page=100',{
   headers:headers(env),signal:AbortSignal.timeout(15000)});
