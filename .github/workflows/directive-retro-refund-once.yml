@@ -11,6 +11,7 @@ on:
       - '.github/workflows/directive-retro-refund-once.yml'
 permissions:
   contents: read
+  actions: read
 concurrency:
   group: directive-retro-refund-20261125
   cancel-in-progress: false
@@ -18,13 +19,22 @@ jobs:
   validate:
     if: github.repository == 'altepop/keso-gamble'
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
           node-version: '24'
       - run: node --test scripts/directive-retro-refund-once.test.mjs
+      - name: Wait for the prerequisite Worker deployment (GitHub only, once)
+        if: >-
+          github.event_name == 'push' && github.ref == 'refs/heads/main' &&
+          startsWith(github.event.head_commit.message, 'fix: historical directive refunds (one-time)')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh run watch 45626857341 --repo altepop/keso-gamble --exit-status --interval 30
+          gh run view 45626857341 --repo altepop/keso-gamble --json headSha,conclusion,jobs --jq '(.headSha == "19d4f08dce6914d16e129d8a1c98a2655f314d33") and (.conclusion == "success") and any(.jobs[]; .name == "deploy" and .conclusion == "success")' | grep -qx true
       - name: One-time approved historical refund and ledger verification
         if: >-
           github.event_name == 'push' && github.ref == 'refs/heads/main' &&
