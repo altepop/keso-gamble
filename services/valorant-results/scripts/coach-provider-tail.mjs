@@ -15,7 +15,7 @@ export function safeProviderEvidence(trace){
  }
  return best;
 }
-export async function observeProvider(env=process.env,request=fetch,Socket=WebSocket,duration=55000){
+export async function observeProvider(env=process.env,request=fetch,Socket=WebSocket,duration=55000,select=safeProviderEvidence){
  const account=env.CLOUDFLARE_ACCOUNT_ID,token=env.CLOUDFLARE_API_TOKEN;
  if(!/^[a-f0-9]{32}$/i.test(account??'')||!token||duration<1||duration>55000)throw Error('tail_config');
  const base='https://api.cloudflare.com/client/v4/accounts/'+account+'/workers/scripts/valorant-results/tails';
@@ -31,7 +31,7 @@ export async function observeProvider(env=process.env,request=fetch,Socket=WebSo
    socket=new Socket(target.toString(),'trace-v1',{maxPayload:256*1024,perMessageDeflate:false});
    timer=setTimeout(()=>done(null),duration);
    socket.on('open',()=>socket.send(JSON.stringify({debug:false})));
-   socket.on('message',data=>{try{const safe=safeProviderEvidence(JSON.parse(data.toString()));if(safe)done(safe);}catch{}});
+   socket.on('message',data=>{try{const safe=select(JSON.parse(data.toString()));if(safe)done(safe);}catch{}});
    socket.on('error',()=>done(null));socket.on('close',()=>done(null));
   });
  }finally{

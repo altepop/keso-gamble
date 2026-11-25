@@ -46,3 +46,70 @@ test('round assists need complete assistant IDs and agreement with all ten roste
  delete ks[0].assistants;const missing=coachRoundContribution([{...valid,kills_json:JSON.stringify(ks)}],accounts);assert.equal(missing.rounds,1);assert.equal(missing.assistQuality.validMatches,0);
  ps[0].a=2;const mismatch=coachRoundContribution([{...valid,players_json:JSON.stringify(ps)}],accounts);assert.equal(mismatch.rounds,1);assert.equal(mismatch.assistQuality.excluded['assist-totals-do-not-match-roster'],1);
 });
+
+test('uncredited teammate casualty is kept as observed event but does not invalidate scored K/D parity',()=>{
+ const row=fixture(),kills=JSON.parse(row.kills_json);
+ kills.push({r:0,t:30,killer:'other1',victim:'other0'});
+ const output=coachRoundContribution([{...row,kills_json:JSON.stringify(kills)}],accounts);
+ assert.equal(output.quality.validMatches,1);
+ assert.equal(output.rounds,1);
+ assert.equal(output.combatFollowup.enemyKills,2);
+ assert.equal(output.quality.excluded['kill-totals-do-not-match-roster'],undefined);
+ // Strictly preserve the rejection of unmatched enemy or unknown-killer deaths.
+ const wrong=[...kills,{r:0,t:40,killer:null,victim:'other2'}];
+ const rejected=coachRoundContribution([{...row,kills_json:JSON.stringify(wrong)}],accounts);
+ assert.equal(rejected.quality.validMatches,0);
+ assert.equal(rejected.quality.excluded['kill-totals-do-not-match-roster'],1);
+});
+
+test('2026-11-24 Sunset: 2 teammate deaths can be scored differently per victim, with strict ten-player parity',()=>{
+ const base=fixture(),ps=JSON.parse(base.players_json),ks=JSON.parse(base.kills_json);
+ // The earlier #836 rule rejected this mixed-credit case: teammate death of
+ // other0 is uncredited but teammate death of other1 is officially scored.
+ ps[2].d=1;
+ ks.push({r:0,t:30,killer:'other2',victim:'other0'});
+ ks.push({r:0,t:40,killer:'other3',victim:'other1'});
+ const row={...base,match_id:'58feed7c-e6db-4c99-9b18-27ea8297153c',
+  players_json:JSON.stringify(ps),kills_json:JSON.stringify(ks)};
+ // Check this synthetic regression with the *matching* victim's scored D.
+ // other1 is ps[2], since ps[0] is the focus player.
+ const verified=coachRoundContribution([row],accounts);
+ assert.equal(verified.quality.validMatches,1);
+ assert.equal(verified.quality.excluded['kill-totals-do-not-match-roster'],undefined);
+ // Counted friendly death deliberately cannot be uniformly discarded.
+ const wronglyExcluded=ps.map((p:{puuid:string;team_id:string;k:number;d:number})=>({...p}));wronglyExcluded[2].d=0;
+ const rejected=coachRoundContribution([{...row,players_json:JSON.stringify(wronglyExcluded)}],accounts);
+ assert.equal(rejected.quality.validMatches,1,'uncredited teammate death is legitimate when roster agrees');
+});
+test('ambiguous partial credit of multiple teammate deaths against one victim stays excluded',()=>{
+ const row=fixture(),ps=JSON.parse(row.players_json),ks=JSON.parse(row.kills_json);
+ ps[1].d=1;
+ ks.push({r:0,t:30,killer:'other2',victim:'other0'});
+ ks.push({r:0,t:40,killer:'other3',victim:'other0'});
+ const r=coachRoundContribution([{...row,players_json:JSON.stringify(ps),kills_json:JSON.stringify(ks)}],accounts);
+ assert.equal(r.quality.validMatches,0);
+ assert.equal(r.quality.excluded['kill-totals-do-not-match-roster'],1);
+});
+test('#834/#836 two prior competitive cases stay valid with uncredited teammate deaths',()=>{
+ for(const id of ['0af41b46-8bc8-4a73-aba8-60bc5753c85a','02721958-7cef-4af0-ae5a-f29b8b2f6484']){
+  const row=fixture(),ks=JSON.parse(row.kills_json);
+  ks.push({r:0,t:30,killer:'other1',victim:'other0'});
+  const result=coachRoundContribution([{...row,match_id:id,kills_json:JSON.stringify(ks)}],accounts);
+  assert.equal(result.quality.validMatches,1,id);
+ }
+});
+
+test('valid focus-player K/D alone never certifies a match with a different player mismatch',()=>{
+ const row=fixture(),ps=JSON.parse(row.players_json);
+ // The focus player has a perfect 2/0 event parity; another player has an
+ // unsupported official death. Do not silently grade only the focus player.
+ ps[1].d=1;
+ const invalid={...row,players_json:JSON.stringify(ps)};
+ const forFocus=coachRoundContribution([invalid],accounts);
+ assert.equal(forFocus.quality.validMatches,0);
+ assert.equal(forFocus.quality.excluded['kill-totals-do-not-match-roster'],1);
+ // Another owner in the same invalid match cannot bypass the team-wide gate.
+ const forTeammate=coachRoundContribution([invalid],[{name:'Other',tag:'X',puuid:'other0'}]);
+ assert.equal(forTeammate.quality.validMatches,0);
+ assert.equal(forTeammate.quality.excluded['kill-totals-do-not-match-roster'],1);
+});

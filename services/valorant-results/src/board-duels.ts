@@ -1,20 +1,27 @@
 import type {KpEnv,KpMapping} from './kp.ts';
+import {spectatorPublicSnapshot} from './duel-spectator-public.ts';
+import {compareSpectatorRevision} from './duel-spectator-admission.ts';
 import {debtOf} from './kp-debt.ts';
 // @ts-expect-error Pure shared ledger verifier, independently covered by node:test.
 import {checkDuelLedger} from '../../../js/duel-kp-audit.js';
 import {kpTargetMembers,kpTargetAllowed} from './kp-target-members.ts';
+import {ensureVerifiedPvpProgression} from './duel-progression-commit.ts';
+import {ensureTrioGameConstraint} from './duel-trio-schema.ts';
+import {startTrustedTrio,advanceTrustedTrio} from './duel-trio-server.ts';
 // @ts-expect-error Shared pure browser-side rules (no declaration file).
 import {initialDuelBoard,playDuelMove,DUEL_GAMES} from '../../../js/duel-rules.js';
 
 // @ts-expect-error Shared pure mini-game rules, no TypeScript declaration file.
 import {EXTRA_DUEL_GAMES,miniStart,miniMove} from '../../../js/duel-mini-games.js';
-const GAMES={...DUEL_GAMES,...EXTRA_DUEL_GAMES};
+const GAMES={...DUEL_GAMES,...EXTRA_DUEL_GAMES,trio:{name:'三目並べ',size:3}};
 const MINIS=new Set(['connect4','hitblow','bluffdice','poker']);
 function randInt(n:number){const raw=new Uint32Array(1),limit=Math.floor(0x1_0000_0000/n)*n;do{crypto.getRandomValues(raw);}while(raw[0]>=limit);return raw[0]%n;}
 export const DUEL_MAX_STAKE=100_000;
 export const DUEL_TURN_MS=10*60_000;
 export const DUEL_INVITE_MS=15*60_000;
-type DuelGame='othello'|'gomoku'|'connect4'|'hitblow'|'bluffdice'|'poker';
+// Only existence of the third qualifying invitation is needed; never count all matches.
+export const PVP_INVITE_FULL_SQL="SELECT 1 AS full FROM kp_board_duels WHERE guild=? AND user_a=? AND status='pending' AND deadline_at>? LIMIT 1 OFFSET 2";
+type DuelGame='othello'|'gomoku'|'connect4'|'hitblow'|'bluffdice'|'poker'|'trio';
 type DuelStatus='pending'|'active'|'finished'|'cancelled';
 export interface BoardDuel{
  id:string;guild:string;user_a:string;user_b:string;game:DuelGame;stake:number;
@@ -33,15 +40,17 @@ export async function ensureBoardDuels(env:KpEnv){
   // Migrate just once, preserving all open escrowed duels and the existing ledger.
   const installed=await env.DB.prepare("SELECT value FROM kp_settings WHERE key='board_duel_schema_version'")
    .first<{value:string}>();
-  if(installed?.value==='2')return;
+  if(installed?.value==='3')return;
   const old=await env.DB.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='kp_board_duels'")
    .first<{sql:string}>();
+  if(old&&old.sql.includes("'connect4'")&&!old.sql.includes("'trio'"))
+   await ensureTrioGameConstraint(env,'kp_board_duels',old.sql);
   if(old&& !old.sql.includes("'connect4'")){
    await env.DB.batch([
     env.DB.prepare('DROP TRIGGER IF EXISTS kp_board_duel_apply'),
     env.DB.prepare(`CREATE TABLE kp_board_duels_upgraded(
      id TEXT PRIMARY KEY,guild TEXT NOT NULL,user_a TEXT NOT NULL,user_b TEXT NOT NULL,
-     game TEXT NOT NULL CHECK(game IN ('othello','gomoku','connect4','hitblow','bluffdice','poker')),
+     game TEXT NOT NULL CHECK(game IN ('othello','gomoku','connect4','hitblow','bluffdice','poker','trio')),
      stake INTEGER NOT NULL CHECK(stake BETWEEN 100 AND 100000),
      status TEXT NOT NULL CHECK(status IN ('pending','active','finished','cancelled')),
      board TEXT NOT NULL,black_user TEXT,turn_user TEXT,winner TEXT,version INTEGER NOT NULL DEFAULT 0,
@@ -56,7 +65,7 @@ export async function ensureBoardDuels(env:KpEnv){
   await env.DB.batch([
   env.DB.prepare(`CREATE TABLE IF NOT EXISTS kp_board_duels(
    id TEXT PRIMARY KEY,guild TEXT NOT NULL,user_a TEXT NOT NULL,user_b TEXT NOT NULL,
-   game TEXT NOT NULL CHECK(game IN ('othello','gomoku','connect4','hitblow','bluffdice','poker')),
+   game TEXT NOT NULL CHECK(game IN ('othello','gomoku','connect4','hitblow','bluffdice','poker','trio')),
    stake INTEGER NOT NULL CHECK(stake BETWEEN 100 AND 100000),
    status TEXT NOT NULL CHECK(status IN ('pending','active','finished','cancelled')),
    board TEXT NOT NULL,black_user TEXT,turn_user TEXT,winner TEXT,version INTEGER NOT NULL DEFAULT 0,
@@ -90,7 +99,7 @@ export async function ensureBoardDuels(env:KpEnv){
    WHERE id=NEW.duel_id AND guild=NEW.guild AND version=NEW.version
      AND (
       (NEW.kind='accept' AND status='pending' AND user_b=NEW.actor AND deadline_at>=NEW.at
-         AND NEW.first_user IN (user_a,user_b) AND (NEW.board=board OR game IN ('connect4','hitblow','bluffdice','poker')))
+         AND NEW.first_user IN (user_a,user_b) AND (NEW.board=board OR game IN ('connect4','hitblow','bluffdice','poker','trio')))
       OR (NEW.kind='cancel' AND status='pending' AND NEW.actor IN (user_a,user_b))
       OR (NEW.kind='move' AND status='active' AND turn_user=NEW.actor AND deadline_at>=NEW.at
           AND (NEW.next_turn IN (user_a,user_b) OR (NEW.next_turn IS NULL AND NEW.winner IS NOT NULL))
@@ -128,18 +137,20 @@ export async function ensureBoardDuels(env:KpEnv){
     SELECT CASE WHEN (NEW.winner='draw' OR NEW.winner IN (NEW.user_a,NEW.user_b))
       THEN 1 ELSE RAISE(ABORT,'duel winner invalid') END;
    END`)
- ,env.DB.prepare("INSERT INTO kp_settings(key,value) VALUES('board_duel_schema_version','2') ON CONFLICT(key) DO UPDATE SET value='2'")
+ ,env.DB.prepare("INSERT INTO kp_settings(key,value) VALUES('board_duel_schema_version','3') ON CONFLICT(key) DO UPDATE SET value='3'")
   ]);
  })();
  ready.set(env.DB,task);try{await task;}catch(e){ready.delete(env.DB);throw e;}
 }
+export const BOARD_DUEL_ROOM_SQL=`SELECT d.*,
+   (SELECT CASE WHEN d.black_user=? THEN json_extract(s.data,'$.privateA')
+        ELSE json_extract(s.data,'$.privateB') END
+    FROM kp_board_duel_secrets s WHERE s.guild=d.guild AND s.id=d.id) AS private_hand
+   FROM kp_board_duels d
+   WHERE d.guild=? AND d.id=? AND (d.user_a=? OR d.user_b=?)`;
 async function room(env:KpEnv,guild:string,id:string,user:string):Promise<BoardDuel>{
  if(!UUID.test(id))throw Error('対戦IDが不正です。');
- const row=await env.DB.prepare(`SELECT d.*,
-   CASE WHEN d.black_user=? THEN json_extract(s.data,'$.privateA')
-        ELSE json_extract(s.data,'$.privateB') END AS private_hand
-   FROM kp_board_duels d LEFT JOIN kp_board_duel_secrets s ON s.guild=d.guild AND s.id=d.id
-   WHERE d.guild=? AND d.id=? AND (d.user_a=? OR d.user_b=?)`)
+ const row=await env.DB.prepare(BOARD_DUEL_ROOM_SQL)
   .bind(user,guild,id,user,user).first<BoardDuel>();
  if(!row)throw Error('対戦が見つかりません。');return row;
 }
@@ -155,10 +166,52 @@ async function verifyDuelLedger(env:KpEnv,match:BoardDuel){
   if(!verdict.ok)console.error('duel-ledger-integrity-anomaly',JSON.stringify({duel:match.id,problems:verdict.problems}));
  }catch(error){console.error('duel-ledger-audit-unavailable',match.id,String(error));}
 }
+/** Authenticated participant-only preview. This is NOT third-party spectating.
+ * No public policy, subscription, polling cadence or Discord sharing is enabled.
+ * The private row is projected through P10.1 allowlist before leaving this module.
+ */
+export async function boardDuelParticipantPreview(env:KpEnv,guild:string,user:string,id:string,seenVersion:number|null){
+ if(!UUID.test(id))throw Error('対戦IDが不正です。');
+ await ensureBoardDuels(env);
+ // The public projection reads only these fields. Never join or deserialize
+ // the private-hand table for a participant preview (even for private games).
+ const match=await env.DB.prepare(
+  'SELECT id,guild,game,status,user_a,user_b,turn_user,winner,version,updated_at,board '+
+  'FROM kp_board_duels WHERE guild=? AND id=? AND (user_a=? OR user_b=?)'
+ ).bind(guild,id,user,user).first<BoardDuel>();
+ if(!match)throw Error('対戦が見つかりません。');
+ const snapshot=spectatorPublicSnapshot(match);
+ return compareSpectatorRevision(snapshot,seenVersion);
+}
 async function present(env:KpEnv,mapping:KpMapping,user:string,id:string){
  return room(env,mapping.guildId,id,user);
 }
 function validateActionId(id:unknown){if(typeof id!=='string'||!UUID.test(id))throw Error('操作IDが不正です。');return id;}
+
+
+/** Two index-backed, disjoint-in-role candidate sets. Each contains at most 20
+ * rows, enough to preserve the newest 20 from their union (including page ties).
+ * Participation requires distinct users, enforced by the table CHECK constraint.
+ */
+export function boardDuelListSql(paged:boolean){
+ const cursor=paged?' AND (updated_at<? OR (updated_at=? AND id<?))':'';
+ const candidate=(role:'a'|'b')=>`SELECT id,guild,updated_at FROM kp_board_duels
+  WHERE guild=? AND user_${role}=?${cursor}
+  ORDER BY updated_at DESC,id DESC LIMIT 20`;
+ return `SELECT d.*,
+  CASE WHEN d.black_user=? THEN json_extract(s.data,'$.privateA')
+       ELSE json_extract(s.data,'$.privateB') END AS private_hand
+  FROM (SELECT id,guild,updated_at FROM (${candidate('a')})
+   UNION ALL SELECT id,guild,updated_at FROM (${candidate('b')})) AS c
+  JOIN kp_board_duels d ON d.guild=c.guild AND d.id=c.id
+  LEFT JOIN kp_board_duel_secrets s
+   ON s.guild=d.guild AND s.id=d.id AND d.game IN ('hitblow','bluffdice','poker')
+  ORDER BY c.updated_at DESC,c.id DESC LIMIT 20`;
+}
+export function boardDuelListArgs(user:string,guild:string,cutoff:number|null,id:string){
+ const single=cutoff===null?[guild,user]:[guild,user,cutoff,cutoff,id];
+ return [user,...single,...single];
+}
 
 export async function boardDuelList(env:KpEnv,m:KpMapping,user:string,cursor:string|null=null){
  await ensureBoardDuels(env);
@@ -169,16 +222,11 @@ export async function boardDuelList(env:KpEnv,m:KpMapping,user:string,cursor:str
   cutoff=Number(parsed[1]);id=parsed[2];
   if(!Number.isSafeInteger(cutoff))throw Error('履歴の読み込み位置が不正です。');
  }
- const condition=cutoff===null?'':' AND (d.updated_at<? OR (d.updated_at=? AND d.id<?))';
- const query=`SELECT d.*,
-  CASE WHEN d.black_user=? THEN json_extract(s.data,'$.privateA')
-       ELSE json_extract(s.data,'$.privateB') END AS private_hand
-  FROM kp_board_duels d LEFT JOIN kp_board_duel_secrets s ON s.guild=d.guild AND s.id=d.id
-  WHERE d.guild=? AND (d.user_a=? OR d.user_b=?)${condition}
-  ORDER BY d.updated_at DESC,d.id DESC LIMIT 20`;
- const stmt=env.DB.prepare(query);
- const matches=(await (cutoff===null?stmt.bind(user,m.guildId,user,user):
-   stmt.bind(user,m.guildId,user,user,cutoff,cutoff,id)).all<BoardDuel>()).results;
+ // Candidate reads are separately bounded through existing (guild,user_a,updated_at)
+ // and (guild,user_b,updated_at) indexes. Project private hands only after top 20.
+ const query=boardDuelListSql(cutoff!==null);
+ const args=boardDuelListArgs(user,m.guildId,cutoff,id);
+ const matches=(await env.DB.prepare(query).bind(...args).all<BoardDuel>()).results;
  return {games:GAMES,limit:DUEL_MAX_STAKE,turnMs:DUEL_TURN_MS,invitationMs:DUEL_INVITE_MS,
    // Only first page needs a roster. Subsequent pages reuse already loaded members.
    members:cursor===null?await kpTargetMembers(env,m):[],matches,hasMore:matches.length===20};
@@ -192,6 +240,8 @@ export async function boardDuelAction(env:KpEnv,m:KpMapping,user:string,body:Rec
   if(existing.guild!==m.guildId||existing.actor!==user||existing.kind!==kind||existing.duel_id!==body.duel)throw Error('操作IDの再利用はできません。');
   return present(env,m,user,existing.duel_id);
  }
+ // Install receipt triggers only for trusted moves; no KP/relic rule is changed.
+ if(kind==='move')await ensureVerifiedPvpProgression(env);
  if(kind==='create'){
   const game=String(body.game??''),target=String(body.opponent??''),stake=Number(body.stake);
   if(!Object.hasOwn(GAMES,game))throw Error('ゲームを選んでください。');
@@ -205,14 +255,13 @@ export async function boardDuelAction(env:KpEnv,m:KpMapping,user:string,body:Rec
   if(await debtOf(env,m.guildId,user)>0)throw Error('借KPを完済してから決闘してください。');
   const balance=await env.DB.prepare('SELECT balance FROM kp_wallets WHERE guild=? AND user=?').bind(m.guildId,user).first<{balance:number}>();
   if(!balance||balance.balance<stake)throw Error('賭け金のKPが足りません。');
-  const count=await env.DB.prepare(`SELECT COUNT(*) AS n FROM kp_board_duels
-   WHERE guild=? AND user_a=? AND status='pending' AND deadline_at>?`).bind(m.guildId,user,Date.now()).first<{n:number}>();
-  if((count?.n??0)>=3)throw Error('招待中の決闘は3件までです。');
+  const full=await env.DB.prepare(PVP_INVITE_FULL_SQL).bind(m.guildId,user,Date.now()).first<{full:number}>();
+  if(full?.full===1)throw Error('招待中の決闘は3件までです。');
   const now=Date.now();
   await env.DB.prepare(`INSERT INTO kp_board_duels
    (id,guild,user_a,user_b,game,stake,status,board,black_user,turn_user,winner,version,created_at,updated_at,deadline_at)
    VALUES(?,?,?,?,?,?,'pending',?,NULL,NULL,NULL,0,?,?,?) ON CONFLICT(id) DO NOTHING`)
-   .bind(id,m.guildId,user,target,game,stake,MINIS.has(game)?'.':initialDuelBoard(game),now,now,now+DUEL_INVITE_MS).run();
+   .bind(id,m.guildId,user,target,game,stake,game==='trio'?startTrustedTrio().board:MINIS.has(game)?'.':initialDuelBoard(game),now,now,now+DUEL_INVITE_MS).run();
   return present(env,m,user,id);
  }
  const match=await room(env,m.guildId,String(body.duel??''),user);
@@ -245,6 +294,12 @@ export async function boardDuelAction(env:KpEnv,m:KpMapping,user:string,body:Rec
    board=after.board;privateData=after.secret;
    next_turn=after.turnSide?(after.turnSide==='a'?match.black_user:other):null;
    winner=after.winner?(after.winner==='draw'?'draw':after.winner==='a'?match.black_user:other):null;
+  }else if(match.game==='trio'){
+   const side=match.black_user===user?'X':'O';
+   const after=advanceTrustedTrio({board:match.board,turn:side,winner:null,version:match.version},body.cell);
+   board=after.board;
+   next_turn=after.turn?(after.turn==='X'?match.black_user:other):null;
+   winner=after.winner?(after.winner==='draw'?'draw':after.winner==='X'?match.black_user:other):null;
   }else{
    const color=match.black_user===user?'B':'W';
    const after=playDuelMove(match.game,match.board,color,Number(body.cell));
@@ -341,15 +396,59 @@ export async function cleanupBoardDuels(env:KpEnv,guild:string,now=Date.now()){
  return {expired:Number(expired.meta.changes??0),removed:rows.length};
 }
 
-// Notification delivery happens strictly *after* the D1 transaction commits.
-// A DO outage cannot reverse a move, double a payment, or block the response.
-export function notifyCommittedDuel(env:KpEnv,match:BoardDuel):Promise<void>{
- if(!env.RACE_BROADCAST)return Promise.resolve();
- const hub=env.RACE_BROADCAST.get(env.RACE_BROADCAST.idFromName('duel:'+match.guild));
- return hub.fetch('https://internal/duel/notify',{method:'POST',body:JSON.stringify({
-  userA:match.user_a,userB:match.user_b,id:match.id,version:match.version
- })}).then(response=>{if(!response.ok)console.warn('duel-realtime-hint-unavailable',response.status);})
- .catch(()=>{console.warn('duel-realtime-hint-unavailable');});
+// Notification delivery happens strictly after a server-committed action.
+// Voice notices are purely cosmetic and cannot cause KP rollback or duplicate
+// a committed move. Existing music bot secrets and state are never exposed.
+type DuelVoiceEnv=KpEnv&{MUSIC_VOICE_URL?:string;MUSIC_BRIDGE_TOKEN?:string};
+export function isValidDuelVoiceHost(value:unknown):value is string{
+ try{
+  if(typeof value!=='string')return false;
+  const url=new URL(value);
+  return url.protocol==='https:'&&!url.username&&!url.password&&!url.search&&!url.hash&&
+   url.pathname==='/'&&(url.hostname.endsWith('.onrender.com')||url.hostname.endsWith('.render.com'));
+ }catch{return false;}
+}
+export function duelVoiceCue(match:BoardDuel){
+ if(match.status==='active'&&match.version===1)return {kind:'started',matchId:match.id,version:match.version};
+ if(match.status==='finished'&&Number.isSafeInteger(match.version)&&match.version>1)
+  return {kind:'finished',matchId:match.id,version:match.version};
+ return null;
+}
+export async function sendDuelVoiceCue(env:DuelVoiceEnv,match:BoardDuel,
+ request:typeof fetch=fetch):Promise<boolean>{
+ const cue=duelVoiceCue(match);
+ if(!cue||!isValidDuelVoiceHost(env.MUSIC_VOICE_URL)||
+    !env.MUSIC_BRIDGE_TOKEN||env.MUSIC_BRIDGE_TOKEN.length<32)return false;
+ try{
+  const response=await request(new URL('/v1/duel-cue',env.MUSIC_VOICE_URL),{
+   method:'POST',headers:{Authorization:'Bearer '+env.MUSIC_BRIDGE_TOKEN,
+    'Content-Type':'application/json'},
+   body:JSON.stringify({guildId:match.guild,...cue}),
+   signal:AbortSignal.timeout(3000),redirect:'error'
+  });
+  if(!response.ok)return false;
+  const result=await response.json() as {played?:unknown};
+  return result.played===true;
+ }catch{
+  console.warn('duel_voice_cue_unavailable');
+  return false;
+ }
+}
+export function notifyCommittedDuel(env:DuelVoiceEnv,match:BoardDuel):Promise<void>{
+ const pending:Array<Promise<unknown>>=[];
+ if(env.RACE_BROADCAST){
+  const hub=env.RACE_BROADCAST.get(env.RACE_BROADCAST.idFromName('duel:'+match.guild));
+  pending.push(hub.fetch('https://internal/duel/notify',{
+   method:'POST',body:JSON.stringify({
+    userA:match.user_a,userB:match.user_b,id:match.id,version:match.version
+   })
+  }).then(response=>{
+   if(!response.ok)console.warn('duel-realtime-hint-unavailable',response.status);
+  }).catch(()=>console.warn('duel-realtime-hint-unavailable')));
+ }
+ if(duelVoiceCue(match))pending.push(sendDuelVoiceCue(env,match).catch(()=>
+  console.warn('duel_voice_cue_unavailable')));
+ return Promise.all(pending).then(()=>undefined);
 }
 export async function boardDuelApi(request:Request,env:KpEnv,m:KpMapping,user:string,headers:Record<string,string>={},
  deferPostCommit?:(job:Promise<void>)=>void){

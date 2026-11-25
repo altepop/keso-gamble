@@ -60,3 +60,20 @@ test('persistent UTC-day budget fails closed after two hours without affecting w
  assert.equal(rejected.headers.get('Retry-After'),'3600');
  hub.closeAll();
 });
+
+test('event hub pushes all-match version hints to authenticated primary observers only',async()=>{
+ const hub=new DuelEventHub();
+ const participant=await hub.subscribe(A),observer=await hub.subscribe(OTHER,true);
+ const unapproved=await hub.subscribe('100000000000000104');
+ const readers=[participant,observer,unapproved].map(x=>x.body!.getReader());
+ for(const reader of readers)assert.match(await read(reader),/^: connected/);
+ assert.equal(hub.publish({id,version:14,userA:A,userB:B,
+  privateHand:'never-public',wallet:123}),2);
+ for(const reader of readers.slice(0,2)){
+  const frame=await read(reader);
+  assert.equal(frame,'data: '+JSON.stringify({id,version:14})+'\n\n');
+  assert.doesNotMatch(frame,/privateHand|wallet|never-public/);
+ }
+ await Promise.all(readers.map(reader=>reader.cancel()));
+ hub.closeAll();
+});

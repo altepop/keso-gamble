@@ -451,3 +451,286 @@
 @keyframes duel-gomoku-confirmed{0%{filter:brightness(1.55);box-shadow:0 0 0 7px rgba(255,235,124,.75)}65%{filter:brightness(1.18);box-shadow:0 0 0 3px rgba(255,235,124,.45)}100%{filter:none;box-shadow:inset 0 0 0 1px #182f26,0 0 0 2px #ffbb42}}
 @media(max-width:355px){.duel-gomoku-zoom{gap:5px}.duel-gomoku-zoom button{min-width:43px;padding:6px}.duel-gomoku-zoom button[data-gomoku-zoom-action="center"]{font-size:11px}}
 @media(prefers-reduced-motion:reduce){.duel-gomoku .duel-square.duel-gomoku-confirmed-motion{animation:none!important;transition:none!important}}
+
+
+/* Phase 2: the same quiet invite → play → rematch guide in all six games.
+   Never captures pointer events or obstructs the original action controls. */
+.duel-journey{
+  margin:10px 0 14px;padding:12px 13px;border:1px solid #406078;
+  border-radius:14px;background:linear-gradient(125deg,#142c42,#0d2334);
+  color:#eef7ff;min-width:0;
+}
+.duel-journey-steps{
+  display:grid;grid-template-columns:repeat(3,minmax(0,1fr));
+  padding:0;margin:0 0 12px;list-style:none;gap:5px;
+}
+.duel-journey-step{
+  display:flex;align-items:center;justify-content:center;gap:5px;
+  min-width:0;border-radius:9px;padding:7px 2px;
+  font-size:clamp(10px,2.8vw,12px);font-weight:750;
+  color:#92aabe;background:#15283a;white-space:nowrap;
+}
+.duel-journey-step>span{
+  width:19px;height:19px;display:inline-grid;place-items:center;
+  border-radius:50%;background:#3c556b;color:#fff;flex:0 0 auto;
+  font-size:11px;font-variant-numeric:tabular-nums;
+}
+.duel-journey-step.is-done{color:#bde8d7;background:#1d493d}
+.duel-journey-step.is-done>span{background:#338366}
+.duel-journey-step.is-current{
+  color:#112a36;background:#aee9fb;
+  box-shadow:inset 0 0 0 1px #d8f8ff;
+}
+.duel-journey-step.is-current>span{background:#15374c;color:#fff}
+.duel-journey-title{
+  margin:0 0 3px;font-weight:850;font-size:clamp(14px,4vw,18px);
+  letter-spacing:.015em;line-height:1.35;
+}
+.duel-journey-help{
+  margin:0;color:#c7dae6;font-size:12px;line-height:1.6;
+}
+@media (max-width:350px){
+ .duel-journey{padding:10px 8px}
+ .duel-journey-step{gap:3px}
+ .duel-journey-step>span{width:17px;height:17px;font-size:10px}
+}
+@media (prefers-reduced-motion:reduce){
+ .duel-journey,.duel-journey *{animation:none!important;transition:none!important}
+}
+
+
+/* Phase 2 invitation readiness: informative only, never a second submit. */
+.duel-invite-guide{
+  display:grid;gap:3px;padding:10px 12px;margin:9px 0 11px;
+  border-radius:11px;border:1px solid #467791;
+  background:#18364b;color:#ecf8ff;line-height:1.5;
+}
+.duel-invite-guide strong{font-size:13px;line-height:1.35}
+.duel-invite-guide span{font-size:12px;color:#d4e5f0}
+.duel-invite-guide[data-duel-invite-type="ready"]{
+  background:#174335;border-color:#57a889;
+}
+.duel-invite-guide[data-duel-invite-type="low"],
+.duel-invite-guide[data-duel-invite-type="hold"]{
+  border-color:#cc9a57;background:#493321;
+}
+.duel-invite-guide[data-duel-invite-type="low"] span,
+.duel-invite-guide[data-duel-invite-type="hold"] span{color:#fff0d9}
+.duel-opponent-toggle,.duel-opponent-choice,.duel-match,
+.duel-new [data-duel-act="create"]{
+  min-height:44px;touch-action:manipulation;
+}
+.duel-opponent-choice:not(:disabled):active,.duel-opponent-toggle:not(:disabled):active{
+  filter:brightness(1.16);
+}
+@media (prefers-reduced-motion:reduce){
+ .duel-invite-guide,.duel-opponent-toggle,.duel-opponent-choice{animation:none!important;transition:none!important}
+}
+
+
+/* Phase 2 Othello: factual scores and exactly one observed server move.
+   No move hints, results or cards are computed optimistically. */
+.duel-othello-position,.duel-othello-last-note{
+  margin:8px 0 3px;padding:8px 10px;
+  border:1px solid #3c745e;border-radius:9px;background:#11392f;
+  color:#d5f8e6;line-height:1.5;font-size:12px;font-weight:650;
+}
+.duel-othello-last-note{
+  border-color:#cfbb74;background:#483b22;color:#fff2c1;
+}
+.duel-othello .duel-square.duel-othello-last-observed{
+  z-index:2;isolation:isolate;
+}
+.duel-othello .duel-square.duel-othello-last-observed::before{
+  content:'';position:absolute;inset:6%;width:auto;height:auto;
+  border:3px solid #ffe089;border-radius:50%;z-index:3;pointer-events:none;
+  background:transparent;box-shadow:0 0 0 1px #3c2e08b0,inset 0 0 0 1px #ffffff80;
+  animation:none;
+}
+@media(max-width:350px){
+ .duel-othello-position,.duel-othello-last-note{font-size:11px;padding:8px}
+ .duel-othello .duel-square.duel-othello-last-observed::before{border-width:2px}
+}
+@media(prefers-reduced-motion:reduce){
+ .duel-othello .duel-square.duel-othello-last-observed::before{animation:none!important;transition:none!important}
+}
+
+
+/* Shared read-only connectivity guidance. No loading mask or disabled moves. */
+.duel-connection{display:grid;gap:3px;margin:0 0 13px;padding:11px 12px;border-radius:12px;
+ border:1px solid #537793;background:#15374e;color:#e6f6ff;line-height:1.45}
+.duel-connection strong{font-size:13px}
+.duel-connection span{font-size:12px;color:#d0e5f4}
+.duel-connection[data-duel-connection-type="retry"],
+.duel-connection[data-duel-connection-type="offline"]{border-color:#c39967;background:#483323;color:#fff2d4}
+.duel-connection[data-duel-connection-type="retry"] span,
+.duel-connection[data-duel-connection-type="offline"] span{color:#ffeacb}
+@media(prefers-reduced-motion:reduce){.duel-connection{animation:none!important;transition:none!important}}
+
+
+/* Phase 2: result-to-rematch clarity; no input interception or auto-submit. */
+.duel-rematch-guide{margin:1px 0 12px;padding:11px 10px;border-radius:12px;
+ background:#19364b;color:#ecf7ff;border:1px solid #466e88;display:grid;gap:6px}
+.duel-rematch-progress{margin:0 0 3px;padding:0;list-style:none;
+ display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}
+.duel-rematch-progress li{display:grid;place-items:center;text-align:center;min-height:37px;
+ border:1px solid #39576c;border-radius:8px;color:#b7cbda;font-size:11px;
+ font-weight:750;line-height:1.35;padding:3px}
+.duel-rematch-progress li.current{border-color:#9addf3;background:#235373;color:#fff}
+.duel-rematch-guide strong{font-size:14px;line-height:1.4}
+.duel-rematch-guide p{font-size:12px;color:#d2e4ef;margin:0;line-height:1.6}
+@media(max-width:350px){.duel-rematch-progress li{font-size:10px}.duel-rematch-guide{padding:8px}}
+@media(prefers-reduced-motion:reduce){.duel-rematch-guide,.duel-rematch-guide *{animation:none!important;transition:none!important}}
+
+
+/* Shared six-game action cues: no overlay, optimistic pieces or new controls. */
+.duel-action-hint{
+ margin:8px 0 12px;padding:10px 11px;border:1px solid #4c8f83;
+ border-left:4px solid #a7eed3;border-radius:9px;background:#163b36;
+ color:#e5fff0;font-size:12px;line-height:1.65;font-weight:690;
+}
+.duel-arena [data-duel-cell]:not(:disabled),
+.duel-arena [data-duel-mini]:not(:disabled),
+.duel-arena .duel-poker-hand-card:not(:disabled){
+ touch-action:manipulation;cursor:pointer;
+}
+.duel-arena [data-duel-mini]:not(:disabled),
+.duel-arena .duel-poker-hand-card:not(:disabled){
+ min-height:44px;
+}
+.duel-arena [data-duel-mini]:not(:disabled):active,
+.duel-arena .duel-poker-hand-card:not(:disabled):active{
+ filter:brightness(1.15);transform:scale(.98);
+}
+.duel-arena [data-duel-mini]:focus-visible,
+.duel-arena .duel-poker-hand-card:focus-visible,
+.duel-arena .duel-connect4-head button:focus-visible{
+ outline:3px solid #ffef99;outline-offset:2px;
+}
+@media(max-width:350px){.duel-action-hint{font-size:11px;padding:9px 8px}}
+@media(prefers-reduced-motion:reduce){
+ .duel-action-hint{animation:none!important;transition:none!important}
+ .duel-arena [data-duel-mini]:active,
+ .duel-arena .duel-poker-hand-card:active{transform:none!important;transition:none!important}
+}
+
+
+/* Phase 3 beginner guide: native disclosure, no blocking overlay. */
+.duel-beginner{margin:10px 0 13px;border:1px solid #477181;border-radius:12px;
+ background:#102e42;color:#ebf8ff;overflow:hidden}
+.duel-beginner summary{cursor:pointer;list-style-position:inside;padding:12px 13px;
+ font-size:13px;min-height:44px;font-weight:780;line-height:1.5;
+ touch-action:manipulation}
+.duel-beginner summary:focus-visible{outline:3px solid #ffeb92;outline-offset:-3px}
+.duel-beginner[open] summary{border-bottom:1px solid #38556d;background:#1a3b51}
+.duel-beginner dl{margin:0;padding:11px 13px 13px;display:grid;gap:4px}
+.duel-beginner dt{font-size:12px;color:#aee5ef;font-weight:800;margin-top:5px}
+.duel-beginner dd{font-size:12px;line-height:1.6;margin:0;color:#e0eef6}
+@media(max-width:350px){.duel-beginner summary{font-size:12px;padding:10px}.duel-beginner dl{padding:9px 10px}}
+@media(prefers-reduced-motion:reduce){.duel-beginner,.duel-beginner *{transition:none!important;animation:none!important}}
+
+
+/* Phase 3: filter only already-loaded matches. No extra D1 pagination. */
+.duel-history-filter{display:flex;flex-wrap:wrap;align-items:center;gap:6px;
+ margin:10px 0 12px;min-width:0}
+.duel-history-filter button{min-height:44px;padding:7px 10px;border:1px solid #52778c;
+ background:#173348;border-radius:10px;color:#e2eff7;font-size:12px;
+ font-weight:760;touch-action:manipulation}
+.duel-history-filter button[aria-pressed="true"]{background:#91e0e8;color:#0e2b39;
+ border-color:#b7f3f9}
+.duel-history-filter button:focus-visible{outline:3px solid #fff0ab;outline-offset:2px}
+.duel-history-filter-note{flex:1 0 100%;margin:2px 0 0;color:#c6d7e2;
+ font-size:11px;line-height:1.55}
+.duel-history .duel-match[hidden]{display:none!important}
+.duel-finished-review{margin:11px 0 14px;border:1px solid #5c8e7b;border-radius:12px;
+ background:#153b35;color:#edfff6;overflow:hidden}
+.duel-finished-review summary{min-height:44px;padding:11px 12px;
+ cursor:pointer;touch-action:manipulation;font-size:13px;font-weight:770;line-height:1.5}
+.duel-finished-review summary:focus-visible{outline:3px solid #fff0aa;outline-offset:-3px}
+.duel-finished-review dl{margin:0;padding:8px 12px;display:grid;gap:5px}
+.duel-finished-review dt{font-size:11px;font-weight:800;color:#9febcb}
+.duel-finished-review dd{margin:0 0 5px;font-size:12px;line-height:1.55}
+.duel-finished-review p{padding:2px 12px 11px;margin:0;color:#c8e5d9;font-size:11px}
+@media(max-width:350px){.duel-history-filter button{font-size:11px;padding:7px}.duel-finished-review summary{font-size:12px}}
+@media(prefers-reduced-motion:reduce){.duel-history-filter *, .duel-finished-review,.duel-finished-review *{animation:none!important;transition:none!important}}
+
+
+/* Phase 3: optional factual deep-dive. No cards, dice or secrets rendered. */
+.duel-insights{margin:10px 0 13px;border:1px solid #776a9a;border-radius:12px;
+ background:#25263f;color:#f4f1ff;overflow:hidden}
+.duel-insights summary{min-height:44px;line-height:1.5;font-size:13px;font-weight:770;
+ cursor:pointer;touch-action:manipulation;padding:12px 13px}
+.duel-insights summary:focus-visible{outline:3px solid #ffeba6;outline-offset:-3px}
+.duel-insights[open] summary{background:#353452;border-bottom:1px solid #63578c}
+.duel-insights ul{margin:0;padding:10px 15px 12px 31px;display:grid;gap:8px}
+.duel-insights li{font-size:12px;line-height:1.65;color:#e2dff3;overflow-wrap:anywhere}
+@media(max-width:350px){.duel-insights summary{font-size:12px;padding:10px}.duel-insights li{font-size:11px}}
+@media(prefers-reduced-motion:reduce){.duel-insights,.duel-insights *{animation:none!important;transition:none!important}}
+
+
+/* Phase 3: no guessed progress, only states already exposed by the client. */
+.duel-status-help{min-height:44px;display:grid;gap:3px;align-content:center;
+ padding:10px 12px;margin:7px 0 12px;background:#17374b;
+ border:1px solid #517d90;border-radius:12px;color:#f1faff;line-height:1.55}
+.duel-status-help strong{font-size:13px;font-weight:800}
+.duel-status-help p{font-size:12px;margin:0;color:#d1e7f2}
+.duel-status-help[data-duel-status-help-kind="error"],
+.duel-status-help[data-duel-status-help-kind="retry"]{
+ background:#443023;border-color:#d2a16d;color:#fff1d6}
+.duel-status-help[data-duel-status-help-kind="error"] p,
+.duel-status-help[data-duel-status-help-kind="retry"] p{color:#ffe5c9}
+.duel-status-help[data-duel-status-help-kind="initial"],
+.duel-status-help[data-duel-status-help-kind="refresh"]{background:#173749}
+@media(max-width:350px){.duel-status-help{padding:9px 8px}.duel-status-help strong{font-size:12px}.duel-status-help p{font-size:11px}}
+@media(prefers-reduced-motion:reduce){.duel-status-help,.duel-status-help *{animation:none!important;transition:none!important}}
+
+/* Phase 7: smartphone in-match hierarchy. Keep turn, sync, errors and unknown-action alerts visible. */
+@media (max-width: 480px) {
+ .duel-journey[data-duel-journey-stage="active"] {
+  margin: 5px 0 8px;
+  padding: 7px 10px;
+  border-radius: 9px;
+  background: #142c42;
+ }
+ .duel-journey[data-duel-journey-stage="active"] .duel-journey-steps,
+ .duel-journey[data-duel-journey-stage="active"] .duel-journey-help {
+  display: none;
+ }
+ .duel-journey[data-duel-journey-stage="active"] .duel-journey-title {
+  margin: 0;
+  line-height: 1.4;
+ }
+ .duel-journey[data-duel-journey-stage="active"] + .duel-connection,
+ .duel-status-help, .duel-connection { visibility: visible; }
+}
+
+/* Phase 7 gomoku: keep the actionable hint visible; avoid a large competing card on phones. */
+@media(max-width:480px){
+ .duel-arena:has(.duel-board.duel-gomoku) .duel-action-hint{margin:4px 0 6px;padding:5px 8px;border-left-width:2px;font-size:11px;line-height:1.4;font-weight:600}
+}
+
+/* Phase 7 Connect4: keep the actionable column hint visible without a competing card. */
+@media(max-width:480px){
+ .duel-arena:has(.duel-connect4-board) .duel-action-hint{margin:4px 0 6px;padding:5px 8px;border-left-width:2px;font-size:11px;line-height:1.4;font-weight:600}
+}
+
+/* Phase 8: keep essential duel controls legible on small devices.
+   No server state, hidden cards, or pending-action warnings are altered. */
+@media (max-width: 390px) {
+ .duel-arena, .duel-current, .duel-journey { min-width:0; }
+ .duel-arena .duel-turn,
+ .duel-arena .duel-state,
+ .duel-connection,
+ .duel-status-help,
+ .duel-error[role="alert"] { overflow-wrap:break-word; }
+ .duel-arena button:not(.duel-square):not(.duel-connect4-space),
+ .duel-rematch button,
+ .duel-new [data-duel-act="create"] { min-height:44px; }
+ .duel-rematch .duel-rematch-progress { min-width:0; }
+}
+/* When the user requests less animation, eliminate optional decorative motion
+   without affecting visibility, turn state, or confirmation actions. */
+@media (prefers-reduced-motion: reduce) {
+ .duel-journey, .duel-journey *,
+ .duel-rematch-guide, .duel-rematch-guide * { animation:none !important; transition:none !important; }
+}

@@ -1,0 +1,380 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<link rel="icon" href="data:,">
+<title>KESO COACH トップ画面プロトタイプ — Godo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Archivo:wght@700;800;900&family=Noto+Sans+JP:wght@400;500;700;900&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#0f1923;--bg2:#16212d;--panel:#1c2a38;--panel2:#243443;--line:#33465a;--soft:#263646;--ink:#edf1f5;--ink2:#d7dfe8;--ink3:#a5b5c5;--red:#ff4655;--teal:#00c4b3;--paper:#ece8e1;--gold:#ffb648}
+  *{box-sizing:border-box} html{-webkit-text-size-adjust:100%}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:"Noto Sans JP",system-ui,sans-serif;font-size:16px;line-height:1.9;letter-spacing:.02em}
+  body::before{content:"";position:fixed;inset:0;pointer-events:none;background-image:linear-gradient(#ffffff07 1px,transparent 1px),linear-gradient(90deg,#ffffff07 1px,transparent 1px);background-size:48px 48px}
+  .num{font-family:"Archivo",sans-serif;font-variant-numeric:tabular-nums}.disp{font-family:"Oswald",sans-serif;text-transform:uppercase;letter-spacing:.06em}
+  .wrap{max-width:960px;margin:0 auto;padding:0 16px 44px;position:relative}
+  .cut{clip-path:polygon(0 0,calc(100% - 14px) 0,100% 14px,100% 100%,14px 100%,0 calc(100% - 14px))}
+  .cut-sm{clip-path:polygon(0 0,calc(100% - 9px) 0,100% 9px,100% 100%,9px 100%,0 calc(100% - 9px))}
+  .micro{font-family:"Oswald",sans-serif;font-size:10px;font-weight:600;letter-spacing:.22em;text-transform:uppercase;color:var(--ink3)} .micro b{color:var(--red)} .micro::before{content:"// ";color:var(--red)}
+  .hero{position:relative;margin:0 -16px;overflow:hidden;background:#0a121a;border-bottom:2px solid var(--red)}
+  .hero .bgimg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.30}
+  .hero .shade{position:absolute;inset:0;background:linear-gradient(90deg,#0f1923f2,#0f1923b8 55%,#0f192340),linear-gradient(to top,#0f1923,transparent 60%)}
+  .hero .chamber{position:absolute;right:2px;bottom:0;height:150px;width:auto;pointer-events:none;filter:drop-shadow(-8px 6px 14px #0009)}
+  .hero-in{position:relative;padding:16px 16px 14px;display:flex;flex-wrap:wrap;gap:10px 22px;align-items:flex-end}
+  .hero h1{font-size:30px;font-weight:900;line-height:1.15;margin:4px 0 2px;letter-spacing:.02em}
+  .hero h1 small{font-size:14px;font-weight:700;color:var(--ink2);letter-spacing:.08em}
+  .hero .ids{font-size:12.5px;color:var(--ink2);line-height:1.7}
+  .ranks{display:flex;gap:8px;flex-wrap:wrap;position:relative;z-index:2}
+  .rankbox{background:var(--paper);color:#0f1923;padding:6px 11px 5px;line-height:1.2}.rankbox .r{font-family:"Oswald",sans-serif;font-weight:700;font-size:15px}.rankbox .k{font-size:9px;font-weight:700;letter-spacing:.12em;color:#4a5a68;display:block}
+  .rankbox.ghost{background:#0f1923b8;color:var(--ink);border:1px solid var(--line)}.rankbox.ghost .k{color:var(--ink3)}
+  .hero .lead{position:relative;z-index:2;width:100%;margin:2px 0 0;font-size:15px;color:#e8edf2;max-width:660px}
+  .hero .lead b{color:#fff;border-bottom:2px solid var(--red)}
+  .lab{display:flex;align-items:center;gap:10px;margin:24px 0 10px}.lab .disp{font-size:20px;font-weight:700}.lab .disp em{font-style:normal;color:var(--red)}.lab .rule{flex:1;height:2px;background:var(--soft)}
+  .cycle{background:var(--bg2);border:1px solid var(--soft);padding:14px}
+  .cycle-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .cyc{padding:13px 14px;background:var(--panel);border:1px solid var(--soft);min-height:118px;position:relative}
+  .cyc .ph{font-family:"Oswald",sans-serif;font-weight:700;font-size:11px;letter-spacing:.16em}
+  .cyc h3{margin:4px 0 4px;font-size:15.5px;font-weight:900;line-height:1.5}
+  .cyc p{margin:0;font-size:13px;color:var(--ink2);line-height:1.75}
+  .cyc.done{opacity:.86}.cyc.done .ph{color:var(--teal)} .cyc.now{border:2px solid var(--red);background:#2a1e28}.cyc.now .ph{color:var(--red)}
+  .cyc.next .ph{color:var(--ink3)}
+  .badge{position:absolute;top:10px;right:10px;font-size:9.5px;font-weight:900;letter-spacing:.08em;padding:3px 7px;background:var(--teal);color:#04211d}
+  .badge.nowb{background:var(--red);color:#fff}.badge.nextb{background:var(--panel2);color:var(--ink3)}
+  .cycle-foot{margin:10px 2px 0;font-size:13px;color:var(--ink2)} .cycle-foot b{color:var(--ink)}
+  .vs{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .vs-card{background:var(--bg2);border:1px solid var(--soft);padding:16px}
+  .vs-card.weak{border-top:3px solid var(--red)} .vs-card.strong{border-top:3px solid var(--teal)}
+  .vs-card h3{margin:2px 0 10px;font-size:16px;font-weight:900}
+  .vs-card ul{list-style:none;margin:0;padding:0;display:grid;gap:10px}
+  .vs-card li{font-size:13.5px;line-height:1.8;color:var(--ink2);padding-left:14px;position:relative}
+  .vs-card li::before{content:"";position:absolute;left:0;top:9px;width:7px;height:7px;background:var(--red);clip-path:polygon(0 0,100% 0,100% 100%)}
+  .vs-card.strong li::before{background:var(--teal)}
+  .vs-card li b{color:var(--ink)} .big{font-family:"Oswald",sans-serif;font-weight:700;font-size:19px;color:var(--ink)}
+  .today{border:2px solid var(--red);background:var(--bg2);padding:18px}
+  .today-top{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap}
+  .today h2{margin:6px 0 6px;font-size:20px;font-weight:900;line-height:1.55;max-width:600px}
+  .today .why{margin:0 0 8px;font-size:14.5px;color:var(--ink2);line-height:1.9;max-width:660px}
+  .today .why b{color:var(--ink)}
+  .duo{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:start}
+  .tcard{background:var(--bg2);border:1px solid var(--soft);padding:18px}
+  .tcard.hot{border:2px solid var(--red)}
+  .tcard.study{border-top:3px solid var(--gold)}
+  .tcard h2{margin:6px 0 6px;font-size:19px;font-weight:900;line-height:1.55}
+  .tcard .why{margin:0 0 10px;font-size:14.5px;color:var(--ink2);line-height:1.9}
+  .tcard .why b{color:var(--ink)}
+  .subh{font-size:14px;font-weight:900;margin:12px 0 8px}
+  .pts{list-style:none;margin:0 0 12px;padding:0;display:grid;gap:9px}
+  .pts li{font-size:13.5px;line-height:1.85;color:var(--ink2);padding-left:14px;position:relative}
+  .pts li::before{content:"";position:absolute;left:0;top:9px;width:7px;height:7px;background:var(--gold);clip-path:polygon(0 0,100% 0,100% 100%)}
+  .pts li b{color:var(--ink)}
+  .srcbox{border:1px dashed var(--line);background:#0a121a;padding:11px 13px;font-size:12.5px;line-height:1.8;color:var(--ink2)}
+  .srcbox b{color:var(--ink)}
+  .srclinks{list-style:none;margin:8px 0 2px;padding:0;display:grid;gap:8px}
+  .srclinks li{line-height:1.7}
+  .srclinks a{color:var(--gold);font-weight:700;text-decoration:underline;text-underline-offset:3px;overflow-wrap:anywhere}
+  .srclinks a:hover{color:#ffd08a}
+  .srclinks span{display:block;font-size:12px;color:var(--ink3)}
+  .total{flex:none;background:var(--red);color:#fff;text-align:center;padding:8px 13px;line-height:1.15}.total .n{font-family:"Oswald",sans-serif;font-weight:700;font-size:26px;display:block}.total .u{font-size:9.5px;font-weight:700;letter-spacing:.1em}
+  .pillars{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+  .pillars span{font-size:11.5px;font-weight:700;background:#0a121a;border:1px solid var(--line);padding:5px 9px;color:var(--ink2)} .pillars span.on{border-color:var(--red);color:#fff}
+  .blocks5{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:14px}
+  .b3{background:#0a121a;border:1px solid var(--soft);padding:12px}
+  .b3.wide{grid-column:span 1}
+  .b3 .t{font-family:"Oswald",sans-serif;font-weight:700;font-size:11.5px;color:var(--red);letter-spacing:.08em}
+  .b3 .t.teal{color:var(--teal)} .b3 .t.gold{color:var(--gold)}
+  .b3 h4{margin:4px 0 4px;font-size:14.5px;font-weight:900;line-height:1.5}.b3 p{margin:0;font-size:12.5px;color:var(--ink2);line-height:1.75}
+  .timer{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:14px;background:#0a121a;border:1px solid var(--soft);padding:10px 12px}
+  .clock{font-family:"Oswald",sans-serif;font-weight:700;font-size:30px;line-height:1;min-width:86px}
+  .tbtn{appearance:none;border:1px solid var(--line);background:var(--panel);color:var(--ink);font-family:inherit;font-weight:700;font-size:12px;padding:8px 10px;cursor:pointer;min-height:38px}.tbtn.main{background:var(--red);border-color:var(--red);color:#fff}
+  .cta{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
+  .btn{appearance:none;border:0;cursor:pointer;font-family:inherit;font-weight:900;font-size:14px;min-height:50px;padding:0 18px;clip-path:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px)}
+  .btn-main{background:var(--red);color:#fff;flex:1;min-width:200px}.btn-main[aria-pressed="true"]{background:var(--teal);color:#04211d}
+  .btn-sub{background:var(--panel2);color:var(--ink);border:1px solid var(--line)}
+  .note{margin:10px 0 0;font-size:13.5px;color:var(--ink2)}
+  .feed{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+  .feed div{background:var(--bg2);border:1px solid var(--soft);padding:12px 14px;font-size:13px;line-height:1.8;color:var(--ink2)} .feed b{color:var(--ink);display:block;font-size:13.5px;margin-bottom:2px}
+  .feed .n{font-family:"Oswald",sans-serif;color:var(--red);font-weight:700;font-size:11px;letter-spacing:.14em}
+  .remember{margin-top:14px;background:var(--red);color:#fff;padding:14px 16px;font-size:15px;font-weight:700;line-height:1.85}
+  .remember span{display:block;font-size:12.5px;font-weight:500;margin-top:2px}
+  .tabs{display:flex;gap:6px;margin:26px 0 0;flex-wrap:wrap}
+  .tab{appearance:none;cursor:pointer;font-family:inherit;font-weight:900;font-size:13.5px;padding:11px 16px;background:var(--bg2);color:var(--ink3);border:1px solid var(--soft);min-height:46px}
+  .tab[aria-selected="true"]{background:var(--paper);color:#0f1923;border-color:var(--paper)}
+  .panelx{display:none;background:var(--bg2);border:1px solid var(--soft);padding:18px;margin-top:8px}
+  .panelx.open{display:block}
+  .panelx h3{font-size:16px;font-weight:900;margin:20px 0 8px;line-height:1.6}.panelx h3:first-child{margin-top:0}
+  .panelx p{font-size:14.5px;color:var(--ink2);line-height:1.9;margin:0 0 8px}.panelx p b{color:var(--ink)}
+  .dsteps{list-style:none;counter-reset:st;margin:0 0 6px;padding:0;display:grid;gap:10px}
+  .dsteps li{counter-increment:st;position:relative;padding-left:38px;font-size:14.5px;line-height:1.85;color:var(--ink2)}
+  .dsteps li::before{content:counter(st);position:absolute;left:0;top:1px;width:25px;height:25px;background:var(--red);color:#fff;font-family:"Oswald",sans-serif;font-weight:700;font-size:12px;display:grid;place-items:center}
+  .dsteps li b{color:var(--ink)}
+  .setting{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 10px}.setting span{font-size:12px;background:#0a121a;border:1px solid var(--soft);padding:5px 9px;color:var(--ink2)}.setting b{color:var(--red)}
+  .stat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+  .stat{background:#0a121a;border:1px solid var(--soft);padding:11px 12px}.stat .v{font-family:"Oswald",sans-serif;font-weight:700;font-size:22px}.stat .k{font-size:11px;color:var(--ink3);line-height:1.6}
+  .rot{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin:10px 0}
+  .rot div{background:#0a121a;border:1px solid var(--soft);padding:12px}
+  .rot .d{font-family:"Oswald",sans-serif;font-weight:700;font-size:11px;letter-spacing:.12em;color:var(--red)}
+  .rot h4{margin:3px 0 3px;font-size:14px;font-weight:900}.rot p{font-size:12.5px;margin:0;line-height:1.75}
+  .maprow{display:grid;grid-template-columns:120px 1fr;gap:14px;padding:12px 0;border-top:1px solid var(--soft)} .maprow:first-of-type{border-top:0}
+  .maprow img{width:120px;height:88px;object-fit:cover;display:block}
+  .chips{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}.chips span{font-size:12px;font-weight:700;border:1px solid var(--line);background:#0a121a;padding:5px 9px;color:var(--ink2)} .chips span b{color:var(--ink)}
+  footer{margin-top:20px;font-size:11px;color:var(--ink3);line-height:1.8}
+  @media(max-width:640px){.vs,.duo,.blocks5,.feed,.stat-grid,.rot{grid-template-columns:1fr}.cycle-grid{grid-template-columns:1fr 1fr}.cyc{min-height:0;padding:11px}.hero .chamber{height:110px;opacity:.85}.maprow{grid-template-columns:1fr}.maprow img{width:100%;height:120px}}
+  @media(prefers-reduced-motion:no-preference){.cyc.now{box-shadow:0 0 0 3px #ff46552b}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <img class="bgimg" src="../../assets/abyss-splash.png" alt="VALORANTのマップ、アビスの公式アート"><div class="shade"></div>
+    <img class="chamber" src="../../assets/chamber-cut.png" alt="エージェント、チェンバーの公式アート">
+    <div class="hero-in">
+      <div>
+        <span class="micro">Act VI <b>//</b> Coach Brief — Today's Two</span>
+        <h1>Godo <small>神戸（ごうど）</small></h1>
+        <div class="ids">Aquatopia#toppy（メイン）／ Abema#ttv（サブ）・ 2アカウント合算 88試合で確認</div>
+      </div>
+      <div class="ranks">
+        <div class="rankbox cut-sm"><span class="k">CURRENT RANK</span><span class="r">DIAMOND 3</span></div>
+        <div class="rankbox ghost cut-sm"><span class="k">PEAK</span><span class="r">ASCENDANT 1</span></div>
+        <div class="rankbox ghost cut-sm"><span class="k">COMBINED</span><span class="r">88 MATCHES · WR 50.0%</span></div>
+      </div>
+      <p class="lead">今日やることは <b>2つだけ</b> です。本日のアップ1件と、本日の座学1件。どちらも Godo さんのデータから選んでいます。それ以外は、今日はやりません。</p>
+    </div>
+  </header>
+
+  <div class="lab"><span class="disp">PDCA <em>Cycle</em></span><span class="rule"></span><span class="micro">いまここが分かる図</span></div>
+  <section class="cycle cut" aria-label="PDCAサイクル">
+    <div class="cycle-grid">
+      <div class="cyc done cut-sm"><span class="ph">CHECK — 分析</span><span class="badge">完了</span><h3>88試合を合算して分析済み</h3><p>弱みと強みは下の2枚にまとめました。課題は「終盤と連携」に絞っています。</p></div>
+      <div class="cyc now cut-sm"><span class="ph">PLAN — 今日の2件</span><span class="badge nowb">いまここ</span><h3>アップ1件 ＋ 座学1件</h3><p>手を動かす練習1件と、知識1件だけ。Godoさんのデータから選んだ本日の2件です。まずここから始めてください。</p></div>
+      <div class="cyc next cut-sm"><span class="ph">DO — 実行</span><span class="badge nextb">次</span><h3>アップ・座学 → コンペ 2試合</h3><p>覚えた型と位置を、そのままコンペで試します。マップもキャラも当日のプール全体が対象です。</p></div>
+      <div class="cyc next cut-sm"><span class="ph">ACT — フィードバック</span><span class="badge nextb">試合後</span><h3>VODで3場面だけ確認</h3><p>トレード・ローテ・スキルの残し方を確認し、結果を次の分析に戻します。</p></div>
+    </div>
+    <p class="cycle-foot">進み具合： <b>試合 ✓ → 速報 ✓ → 分析 ✓ → 今日の2件（いま）→ コンペ → フィードバック</b> ／ 1周したら、また分析から回ります。</p>
+  </section>
+
+  <div class="lab"><span class="disp">Godo <em>At a Glance</em></span><span class="rule"></span><span class="micro">弱みと強み — 合算データから</span></div>
+  <div class="vs">
+    <section class="vs-card weak cut" aria-label="弱み">
+      <span class="micro" style="color:#ff8f99">Weak <b>//</b> 勝ち切る力を上げる</span>
+      <h3>弱み — 個人成績が勝敗に繋がっていない</h3>
+      <ul>
+        <li><b>Summit 0勝4敗。</b>個人の数字は出ているのに勝てていません。原因は撃ち合いではなく、終盤の人数有利の落とし方と連携です。</li>
+        <li><b>トレードが少ない。</b>KAST <span class="big">69.4%</span>（メイン）。味方が倒れた直後に返せていないラウンドが残ります。</li>
+        <li><b>コール中にエイムが落ちる。</b>フルパーティで情報を出しながら撃つと精度が下がります。同時処理の型が必要です。</li>
+        <li>ソーヴァ時は ACS が約 <span class="big">200</span> まで低下（全体は約242）。特定キャラだけの問題ではなく、スキルに意識を割いた時の共通課題です。クローヴも28試合で勝率46.4%と伸びていません。</li>
+      </ul>
+    </section>
+    <section class="vs-card strong cut" aria-label="強み">
+      <span class="micro" style="color:#7fe8dd">Strong <b>//</b> プロに届く土台がある</span>
+      <h3>強み — 数字はすでに高い水準</h3>
+      <ul>
+        <li>合算 ACS 約 <span class="big">242</span> ／ ADR 約 <span class="big">158</span> ／ K/D 約 <span class="big">1.16</span>。ダイヤ帯で十分に戦える火力です。</li>
+        <li><b>デュエリスト 7勝1敗</b>（Abema）。エントリーで流れを作る力は実績で出ています。</li>
+        <li>チェンバーでは K/D <b>1.53</b>。置きエイムとポジションが噛み合うと一気に伸びます。</li>
+        <li>広いプールが使えます。ジェット／レイナ／イソ／フェニックス／クローヴ／チェンバー／サイファー／ソーヴァ／フェイド／スカイ — ロール固定ではなく、編成に合わせて動けるのが強みです。</li>
+      </ul>
+    </section>
+  </div>
+
+  <div class="lab"><span class="disp">Today <em>Just Two</em></span><span class="rule"></span><span class="micro">今日はこの2件だけ</span></div>
+  <section aria-label="今日の2件">
+    <div class="duo">
+      <article class="tcard hot cut">
+        <span class="micro" style="color:var(--red)">Warm-up <b>//</b> Hands-on · 20 min</span>
+        <h2>本日のアップ —「声を出しながら撃つ」デスマッチ</h2>
+        <p class="why">なぜ Godo さんにこれか：フルパーティでコールを出すとエイムが落ちることが、課題としてはっきり出ています。試合前に、撃ち合いと情報出しを同時に行う型を体へ入れます。今日の練習はこの1件だけです。</p>
+        <ol class="dsteps">
+          <li><b>射撃場 5分：</b>ハードボット＋ストレイフON。完全に止まってから初弾を撃ちます。動いたままのキルは数えません。</li>
+          <li><b>デスマッチ 15分：</b>見た敵の位置・人数・使ったスキルを、実際に声に出してコールしながら撃ち合います。声が止まった瞬間が、型が崩れた瞬間です。</li>
+          <li><b>合格基準：</b>コールしながらでもヘッドラインの高さと止まりが崩れないこと。崩れたらコールを最短形に落として、その場で立て直します。</li>
+        </ol>
+        <div class="timer">
+          <div class="clock num" id="clock">20:00</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <button class="tbtn main" type="button" id="timerBtn">タイマーを開始する</button>
+            <button class="tbtn" type="button" id="timerReset">リセット</button>
+          </div>
+          <span style="font-size:12px;color:var(--ink2)">20分固定です。音は鳴りません。</span>
+        </div>
+      </article>
+
+      <article class="tcard study cut">
+        <span class="micro" style="color:var(--gold)">Study <b>//</b> Knowledge · Summit A</span>
+        <h2>本日の座学 —「クロスを組む位置」サミット Aサイト</h2>
+        <p class="why">なぜ Godo さんにこれか：題材は、そのまま弱点のマップです。Summit <b>0勝4敗</b>、KAST <b>69.4%</b>。終盤に味方と視線が重なって同時に倒され、人数有利を落とす場面が課題です。クロスにはマップとエリアごとに正解の位置があります。今日は Summit の Aサイトで、それを1つだけ覚えます。</p>
+        <h3 class="subh">学ぶ内容の要点</h3>
+        <ul class="pts">
+          <li><b>進入：</b>A Mainではヘッドラインを安定させ、Garden・Art・Caveの横の角度と、奥のHall・Linkを分けてクリアします。</li>
+          <li><b>設置前：</b>Gardenを先に潰します。残されると設置後の死角になります。</li>
+          <li><b>設置後：</b>サイト奥のカバー裏とLink側で視線を交差させ、トレードできる形にします。</li>
+          <li><b>壁の状態：</b>A Wall（落とせる壁）が落ちているかでリテイク経路が変わるので、毎ラウンド確認します。</li>
+          <li><b>確認方法：</b>カスタムで同じルートを逆向き（サイト側から）にも歩き、攻めとリテイクで見える角度の違いを比べます。</li>
+        </ul>
+        <div class="srcbox"><b>情報源リンク</b>
+          <ul class="srclinks">
+            <li><a href="https://www.spikeatlas.com/en-gb/maps/summit/" target="_blank" rel="noopener noreferrer">SpikeAtlas — サミット 3Dマップとルート</a><span>A・Mid・Bのルートとカバーが学べます。</span></li>
+            <li><a href="https://www.keengamer.com/articles/guides/valorant-summit-map-guide-best-agents-callouts-and-strategies/" target="_blank" rel="noopener noreferrer">KeenGamer — サミット ガイド</a><span>コールアウトとAサイトの戦い方。</span></li>
+            <li><a href="https://gamgem.com/valorant/maps/summit" target="_blank" rel="noopener noreferrer">GamGem — サミット ガイド</a><span>コールアウト24件とプラン。</span></li>
+            <li><a href="https://www.digitalracer.store/blog/valorant-crosshair-placement-corner-drills/" target="_blank" rel="noopener noreferrer">Digital Racer — クロスヘア配置ガイド</a><span>コーナードリルとヘッドラインの考え方。</span></li>
+          </ul>
+        </div>
+        <p class="note">座学のテーマは日替わりで、現在のコンペプール全マップ・全エリアを順に回します。今日はサミットAサイトです。</p>
+      </article>
+    </div>
+
+    <div class="cta">
+      <button class="btn btn-main" id="acceptBtn" type="button" aria-pressed="false">この2件で実施します</button>
+      <button class="btn btn-sub" type="button" data-open-tab="drill">アップの手順をひらく</button>
+      <button class="btn btn-sub" type="button" data-open-tab="study">座学の進め方をひらく</button>
+    </div>
+    <p class="note" id="acceptNote" hidden>承知しました。アップと座学が終わったらコンペへ。次のコンペでは、トレードが取れた回数と、人数有利を勝ちに変えられたラウンドを数えて並べておきます。</p>
+  </section>
+
+  <div class="lab"><span class="disp">Next <em>Match</em></span><span class="rule"></span><span class="micro">コンペ → フィードバック</span></div>
+  <div class="feed">
+    <div class="cut-sm"><span class="n">DO — 01</span><b>コンペを2試合</b>アップと座学を終えたら入ります。1試合目は型を試す場、2試合目は修正する場です。</div>
+    <div class="cut-sm"><span class="n">CHECK — 02</span><b>終盤の3ラウンドだけ見る</b>人数有利だった場面で、挟まれていないか、トレード位置にいたかを確認します。</div>
+    <div class="cut-sm"><span class="n">FEEDBACK — 03</span><b>結果は次の分析へ</b>トレード率、スキルを持ったまま倒れた回数、ローテ判断の成否を次の CHECK に戻します。</div>
+  </div>
+  <div class="remember cut">次の試合で迷ったら：1人で勝とうとしない。味方のコンタクトに合わせて動く。<span>トレードが取れる距離にいること。座学で覚えたクロスの形が、今日の型です。</span></div>
+
+  <div class="tabs" role="tablist" aria-label="詳細">
+    <button class="tab" role="tab" aria-selected="false" data-tab="drill" type="button">アップの手順</button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="study" type="button">座学の進め方</button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="maps" type="button">全マップ・ローテーション</button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="agents" type="button">エージェント・ローテーション</button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="data" type="button">数字で確認</button>
+  </div>
+
+  <section class="panelx" id="panel-drill" role="tabpanel">
+    <h3>本日のアップ —「声を出しながら撃つ」デスマッチ（20分）</h3>
+    <div class="setting"><span><b>場所</b> 射撃場 → デスマッチ</span><span><b>ボット</b> ハード／ストレイフON（イージーは使いません）</span><span><b>武器</b> ヴァンダル／ファントム</span><span><b>目的</b> コールと撃ち合いの同時処理</span></div>
+    <ol class="dsteps">
+      <li><b>射撃場 5分：</b>カウンターストレイフで完全に止まってから初弾。動いたまま撃ったキルは数えません。ヘッドラインの高さを固定します。</li>
+      <li><b>デスマッチ 15分：</b>敵を見たら「位置・人数・スキル」を声に出してから撃ち合います。本番のコールと同じ速さ、同じ短さで言います。</li>
+      <li><b>崩れた時の直し方：</b>声が止まった／エイムが泳いだら、コールを「Aメイン2」のような最短形に落として立て直します。長い報告は試合中の仕事ではありません。</li>
+      <li><b>合格基準：</b>コールしながらでも、止まりとヘッドラインが崩れないこと。これが今日のアップのゴールです。他の練習は今日は足しません。</li>
+    </ol>
+    <p>アップは毎日1件だけです。内容は本人のデータで日替わりになりますが、件数を増やすことはしません。</p>
+  </section>
+
+  <section class="panelx" id="panel-study" role="tabpanel">
+    <h3>本日の座学の進め方 — クロスを組む位置（サミット Aサイト）</h3>
+    <ol class="dsteps">
+      <li><b>進入の確認：</b>A Mainを歩き、ヘッドラインを安定させたまま、Garden・Art・Caveの横の角度と、奥のHall・Linkを分けてクリアする順番を決めます。</li>
+      <li><b>設置前の確認：</b>Gardenを先に潰す理由を確認します。残されると設置後の死角になる位置なので、サイトに入る前に必ず処理します。</li>
+      <li><b>設置後の確認：</b>サイト奥のカバー裏とLink側に実際に立ち、2人の視線が交差してトレードできる形になっているかを確認します。</li>
+      <li><b>壁の状態の確認：</b>A Wall（落とせる壁）が落ちているかでリテイク経路がどう変わるかを見ます。毎ラウンド確認する習慣にします。</li>
+      <li><b>逆向きの確認：</b>同じルートを逆向き（サイト側から）にも歩き、攻めとリテイクで見える角度の違いを比べます。比べたら終わりです。座学は1テーマだけ。次のテーマは明日、別のマップ・別のエリアになります。</li>
+    </ol>
+    <p>座学のテーマは全マップ・全エリアを順に回します。特定のマップやエージェントに偏ることはありません。今日のテーマの情報源リンクは、座学カードに掲載した4件です。</p>
+  </section>
+
+  <section class="panelx" id="panel-maps" role="tabpanel">
+    <p><b>マップは絞りません。</b>コンペプール全体を日替わりで回し、どのマップが来ても同じ型で戦える状態を作ります。苦手マップだけを避ける練習はしません。</p>
+    <div class="rot">
+      <div><span class="d">ROTATION A</span><h4>ヘイヴン ／ ロータス</h4><p>3サイトのローテと、寄る速さの判断を鍛える日。情報取りとフェイク警戒が中心です。</p></div>
+      <div><span class="d">ROTATION B</span><h4>バインド ／ サンセット</h4><p>テレポーターとミッド支配。エントリー連携と設置後のクロス配置を鍛えます。</p></div>
+      <div><span class="d">ROTATION C</span><h4>アビス</h4><p>ミッドの撃ち合いとオフアングル。アビスは勝率50% — 感覚ほど負けていないので、終盤の守り方を固めます。</p></div>
+      <div><span class="d">ROTATION D</span><h4>コロード ／ サミット ほか</h4><p>新しめのマップと Summit の検証日。Summit 0勝4敗は個人成績と勝敗のズレが一番出たマップなので、VODで終盤だけを重点的に見ます。</p></div>
+    </div>
+    <div class="maprow">
+      <img src="../../assets/abyss-splash.png" alt="VALORANTのマップ、アビスの公式スプラッシュアート">
+      <div><p><b>Abyss — 苦手意識ほど負けていません。</b>勝率（メイン）<b>50%</b>。個人の数字が少し沈むのは入り口の情報不足が理由です。開幕の情報取りの型を全キャラ共通で決めておくと安定します。</p></div>
+    </div>
+    <div class="maprow">
+      <img src="../../assets/summit-splash.png" alt="VALORANTのマップ、サミットの公式スプラッシュアート">
+      <div><p><b>Summit — 0勝4敗、でも撃ち負けていません。</b>だからこそマクロと終盤の課題として扱います。次に来たら、人数有利ラウンドの守り方だけを意識してください。それ以外は普段通りで構いません。</p></div>
+    </div>
+    <div class="maprow">
+      <img src="../../assets/range-splash.png" alt="VALORANTの射撃場の公式アート">
+      <div><p><b>その他のマップも同じ扱いです。</b>ヘイヴン、ロータス、バインド、サンセット、コロード — どのマップでも「型は同じ、舞台が違うだけ」にします。マップごとに覚えるのは、クロス位置とローテの秒数だけです。</p></div>
+    </div>
+  </section>
+
+  <section class="panelx" id="panel-agents" role="tabpanel">
+    <p><b>エージェントも絞りません。</b>Godo さんの広いプールは強みです。1体に固定せず、ロールごとに「そのロールの仕事」を鍛える形で回します。</p>
+    <div class="chips">
+      <span>デュエリスト <b>ジェット／レイナ／イソ／フェニックス</b></span>
+      <span>コントローラー <b>クローヴ ほか</b></span>
+      <span>センチネル <b>チェンバー／サイファー</b></span>
+      <span>イニシエーター <b>ソーヴァ／フェイド／スカイ</b></span>
+    </div>
+    <h3>ロール別の確認ポイント</h3>
+    <ol class="dsteps">
+      <li><b>デュエリストの日：</b>エントリーの質。7勝1敗の形を再現し、トレードしてもらえる入り方を味方と合わせます。</li>
+      <li><b>イニシエーターの日：</b>情報スキルのタイミングをラウンド前に決める。ソーヴァ時の ACS 低下は「スキルと撃ち合いを同時に行わない」型で解消します。ソーヴァ専用メニューではありません。</li>
+      <li><b>コントローラーの日：</b>クローヴ28試合・勝率46.4%の検証。スモークの位置ではなく、スモークの後に味方がどう動くかまでコールします。</li>
+      <li><b>センチネルの日：</b>チェンバー K/D 1.53 の置きと引きを、サイファーのエリア守備にも転用します。得意な形をロール全体へ広げる日です。</li>
+    </ol>
+    <p>どのキャラでも共通の宿題は同じです。スキルを持ったまま倒れないこと、コールしながらでも撃ち合いの型を崩さないこと。この2つが全ロール共通のプロ基準です。</p>
+  </section>
+
+  <section class="panelx" id="panel-data" role="tabpanel">
+    <p style="margin-bottom:12px"><b>2アカウント合算（88試合）</b> — Aquatopia#toppy 31試合 ＋ Abema#ttv 57試合</p>
+    <div class="stat-grid">
+      <div class="stat"><div class="v num">≈242</div><div class="k">ACS（合算）／ メイン 229.8・サブ 249.3</div></div>
+      <div class="stat"><div class="v num">≈158</div><div class="k">ADR（合算）／ メイン 149.9・サブ 161.6</div></div>
+      <div class="stat"><div class="v num">≈1.16</div><div class="k">K/D（合算）／ メイン 1.17・サブ 1.16</div></div>
+      <div class="stat"><div class="v num">50.0%</div><div class="k">勝率（合算）／ メイン 45.2%・サブ 52.6%</div></div>
+      <div class="stat"><div class="v num">23.5%</div><div class="k">ヘッドショット率（メイン）</div></div>
+      <div class="stat"><div class="v num">69.4%</div><div class="k">KAST（メイン）— トレード課題の根拠</div></div>
+      <div class="stat"><div class="v num">D3</div><div class="k">現在ランク（両アカウント）</div></div>
+      <div class="stat"><div class="v num">Asc 1</div><div class="k">ピーク（メイン）</div></div>
+      <div class="stat"><div class="v num">88</div><div class="k">対象試合数（V26 Act 6）</div></div>
+    </div>
+    <p style="margin-top:14px"><b>読み方：</b>火力の数字は揃っています。次に伸ばすのは火力ではなく、勝敗に直結する部分 — トレード、終盤の人数有利、スキルを使い切ること — です。今日のアップと座学は、その読みに基づいて選んでいます。</p>
+    <p>数字の出典：tracker.gg 公開プロフィール（V26 Act 6 コンペティティブ、2026-11-19 確認）。試合数が少ないマップの数字は傾向としてご覧ください。画像は Riot Games 公式アート（valorant-api.com 経由）です。</p>
+  </section>
+
+  <footer>KESO COACH トップ画面の試作です。対象は Godo さん。トップは「サイクル／強み・弱み／今日の2件（アップ・座学）／次の試合」だけに絞り、詳細は上のタブに収納しています。</footer>
+</div>
+
+<script>
+(function(){
+  var tabs=document.querySelectorAll('.tab');
+  function openTab(name){
+    tabs.forEach(function(t){
+      var on=t.getAttribute('data-tab')===name;
+      t.setAttribute('aria-selected',String(on));
+      var p=document.getElementById('panel-'+t.getAttribute('data-tab'));
+      if(p) p.classList.toggle('open',on);
+    });
+    var target=document.getElementById('panel-'+name);
+    if(target) target.scrollIntoView({behavior:'smooth',block:'nearest'});
+  }
+  tabs.forEach(function(t){ t.addEventListener('click',function(){
+    var was=t.getAttribute('aria-selected')==='true';
+    if(was){ t.setAttribute('aria-selected','false'); document.getElementById('panel-'+t.getAttribute('data-tab')).classList.remove('open'); return; }
+    openTab(t.getAttribute('data-tab'));
+  });});
+  document.querySelectorAll('[data-open-tab]').forEach(function(b){ b.addEventListener('click',function(){ openTab(b.getAttribute('data-open-tab')); }); });
+  var acceptBtn=document.getElementById('acceptBtn'), acceptNote=document.getElementById('acceptNote');
+  acceptBtn.addEventListener('click',function(){
+    var on=acceptBtn.getAttribute('aria-pressed')==='true';
+    acceptBtn.setAttribute('aria-pressed',String(!on));
+    acceptBtn.textContent=!on?'実施を確定しました':'この内容で実施します';
+    acceptNote.hidden=on;
+  });
+  var clock=document.getElementById('clock'), timerBtn=document.getElementById('timerBtn'), resetBtn=document.getElementById('timerReset');
+  var total=1200,left=1200,timerId=null;
+  function fmt(s){var m=Math.floor(s/60),r=s%60;return (m<10?'0':'')+m+':'+(r<10?'0':'')+r;}
+  function render(){clock.textContent=fmt(left);}
+  function stop(){if(timerId){clearInterval(timerId);timerId=null;}timerBtn.textContent='タイマーを開始する';}
+  document.querySelectorAll('[data-min]').forEach(function(b){ b.addEventListener('click',function(){ stop(); total=parseInt(b.getAttribute('data-min'),10)*60; left=total; render(); }); });
+  timerBtn.addEventListener('click',function(){
+    if(timerId){stop();return;}
+    timerBtn.textContent='一時停止する';
+    timerId=setInterval(function(){ if(left>0){left--;render();} if(left<=0){stop();timerBtn.textContent='終了しました。お疲れさまでした';} },1000);
+  });
+  resetBtn.addEventListener('click',function(){stop();left=total;render();});
+  render();
+})();
+</script>
+</body>
+</html>

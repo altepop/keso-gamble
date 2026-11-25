@@ -1,6 +1,6 @@
 // Poker presentation only. No hidden opponent cards enter the DOM before
 // the server-published showdown. The server remains sole KP/winner authority.
-import {pokerHandName,pokerShowdownReason} from './duel-mini-games.js?v=web-60411cdd2200ee3b';
+import {pokerHandName,pokerShowdownReason} from './duel-mini-games.js?v=web-ca5d2ee9a5a25ff4';
 const h=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 export const pokerCardLabel=id=>{
  if(!Number.isInteger(id)||id<0||id>=52)return null;

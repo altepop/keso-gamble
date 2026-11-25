@@ -28,6 +28,32 @@ export async function smoke({fetchImpl=fetch,walletToken='',activityUrl=app,work
  const bootstrap=await getWithRetry(new URL('js/bootstrap.js',activity).toString(),{},fetchImpl);
  check(bootstrap.ok,'Activity bootstrap failed: HTTP '+bootstrap.status);
  check((await bootstrap.text()).length>20,'Activity bootstrap is empty');
+ // The Worker health check cannot detect a broken Discord iOS Activity route.
+ // Verify actual Pages assets used by the entry, not only a successful HTTP 200.
+ const release=body.match(/<meta name="keso-release" content="([^"]+)"/)?.[1];
+ check(/^web-[a-f0-9]{16}$/.test(release??''),'Activity content-derived release is missing');
+ const qualityVersion=body.match(/src="\.\/duel-quality\/duel-quality\.js\?v=(duel-[a-f0-9]{16})"/)?.[1];
+ check(Boolean(qualityVersion),'Duel entry does not have a content-derived enhancement cache key');
+ const qualityResponse=await getWithRetry(new URL('duel-quality/duel-quality.js?v='+qualityVersion,activity).toString(),{},fetchImpl);
+ check(qualityResponse.ok,'Duel enhancement asset is missing');
+ const qualityCode=await qualityResponse.text();
+ check(qualityCode.includes("link.dataset.duelPveLink='1'")&&
+       qualityCode.includes("rewards.dataset.duelPveRewards='1'")&&
+       !qualityCode.includes("link.href='./duel-pve.html'"),
+       'Duel PvE is still navigating out of the Discord Activity');
+ const appResponse=await getWithRetry(new URL('js/app.js?v='+release,activity).toString(),{},fetchImpl);
+ check(appResponse.ok,'Activity game module is missing');
+ const appCode=await appResponse.text();
+ check(appCode.includes('tabs:subTabs()')&&appCode.includes('duelPveUi.open=true')&&
+       appCode.includes('duelPveCustomStart'),
+       'Duel Play category or in-place PvE handler is missing');
+ const viewResponse=await getWithRetry(new URL('js/duel-view.js?v='+release,activity).toString(),{},fetchImpl);
+ check(viewResponse.ok,'Duel view module is missing');
+ const viewCode=await viewResponse.text();
+ check(viewCode.includes('trioUi=null,seasonUi=null,eventUi=null,tabs=')&&
+       viewCode.includes('${tabs}')&&viewCode.includes('duelPvePanel'),
+       'Duel categories/PvE rendering are missing in deployed view');
+
  const statusResponse=await getWithRetry(workerUrl+'/api/kp/status',{},fetchImpl);
  check(statusResponse.ok,'Worker KP status failed: HTTP '+statusResponse.status);
  const status=await json(statusResponse);
@@ -41,7 +67,7 @@ export async function smoke({fetchImpl=fetch,walletToken='',activityUrl=app,work
   check(typeof state?.cash==='number'&&Number.isSafeInteger(state.cash),'KP balance missing from state');
   wallet='verified';
  }
- return {activity:'ok',bootstrap:'ok',status:'ok',wallet};
+ return {activity:'ok',bootstrap:'ok',duelNavigation:'ok',status:'ok',wallet};
 }
 export async function notifyFailure({fetchImpl=fetch,webhookUrl='',runLink=''}={}){
  if(!webhookUrl){console.warn('Discord alert webhook not set; GitHub Actions failure is the alert');return false;}

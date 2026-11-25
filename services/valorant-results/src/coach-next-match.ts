@@ -4,10 +4,10 @@ type Performance=ReturnType<typeof coachPerformance>;
 type Card={title:string;evidence:string;action:string};
 // An experiment is useful with one match; a stable strength/weakness still needs
 // the existing comparison rules. No new query, event inference or rank baseline.
-export function coachNextMatch(p:Performance){
+export function coachNextMatch(p:Performance,latestVerifiedDate:string|null|undefined=undefined){
  const recent=p.windows.find(w=>w.requested===5)?.recent;
  const baseline=recent?.matches?recent:p.overall;
- const dated=p.timeline[0];
+ const dated=latestVerifiedDate===undefined?p.timeline[0]:latestVerifiedDate?p.timeline.find(g=>g.date===latestVerifiedDate):undefined;
  const observations=p.quality.timeSeries.excluded;
  const basis=recent?.matches?'時刻を確認できた直近最大5試合':'保存済みの範囲';
  const metrics=(['kpr','dpr','apr'] as const).map(key=>({

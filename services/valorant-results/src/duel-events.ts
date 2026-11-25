@@ -7,7 +7,7 @@ export const DUEL_STREAM_MAX_MS=150_000;
 export const DUEL_STREAM_DAILY_BUDGET_MS=2*60*60_000;
 const ID=/^\d{15,22}$/;
 const UUID=/^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i;
-type Stream={controller:ReadableStreamDefaultController<Uint8Array>;opened:number};
+type Stream={controller:ReadableStreamDefaultController<Uint8Array>;opened:number;observer:boolean;user:string};
 const encoder=new TextEncoder();
 const bytes=(text:string)=>encoder.encode(text);
 
@@ -65,7 +65,7 @@ export class DuelEventHub{
    }
   }
  }
- async subscribe(user:unknown):Promise<Response>{
+ async subscribe(user:unknown,observer=false):Promise<Response>{
   if(typeof user!=='string'||!ID.test(user))return new Response('Invalid participant',{status:400});
   try{await this.loadBudget();}catch{return new Response('Budget unavailable',{status:503,headers:{'Retry-After':'60'}});}
   const day=Math.floor(Date.now()/86400_000);
@@ -77,7 +77,7 @@ export class DuelEventHub{
   let streamRef:Stream|null=null;
   const body=new ReadableStream<Uint8Array>({
    start:controller=>{
-    const item={controller,opened:Date.now()};streamRef=item;
+    const item:Stream={controller,opened:Date.now(),observer:observer===true,user};streamRef=item;
     if(this.activeSince===null)this.activeSince=item.opened;
     const set=this.listeners.get(user)??new Set<Stream>();set.add(item);this.listeners.set(user,set);
     controller.enqueue(bytes(': connected\n\n'));
@@ -94,8 +94,16 @@ export class DuelEventHub{
      typeof event.userB!=='string'||!ID.test(event.userB)||event.userA===event.userB)return 0;
   let delivered=0;
   const frame=bytes('data: '+JSON.stringify(hint)+'\n\n');
-  for(const user of [event.userA,event.userB])for(const stream of [...this.listeners.get(user)??[]]){
-   try{stream.controller.enqueue(frame);delivered++;}catch{this.remove(user,stream);}
+  // Primary-account observers are explicitly authorized by the Worker, NOT
+  // by the DO or by names/IDs in the incoming event. No secret payloads.
+  const audiences=new Set<Stream>();
+  for(const user of [event.userA,event.userB])
+   for(const stream of this.listeners.get(user)??[])audiences.add(stream);
+  for(const streams of this.listeners.values())for(const stream of streams)
+   if(stream.observer)audiences.add(stream);
+  for(const stream of audiences){
+   try{stream.controller.enqueue(frame);delivered++;}
+   catch{this.remove(stream.user,stream);}
   }
   return delivered;
  }

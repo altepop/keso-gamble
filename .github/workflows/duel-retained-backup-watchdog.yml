@@ -1,0 +1,49 @@
+name: P12 duel retained backup schedule watchdog
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/duel-retained-backup-watchdog.yml'
+      - 'scripts/duel-retained-backup-watchdog.mjs'
+      - 'scripts/duel-retained-backup-watchdog-alert.mjs'
+      - 'services/valorant-results/test/duel-retained-backup-watchdog.test.mjs'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/duel-retained-backup-watchdog.yml'
+      - 'scripts/duel-retained-backup-watchdog.mjs'
+      - 'scripts/duel-retained-backup-watchdog-alert.mjs'
+      - 'services/valorant-results/test/duel-retained-backup-watchdog.test.mjs'
+  workflow_dispatch:
+  schedule:
+    - cron: '47 3 * * *'
+permissions:
+  contents: read
+  actions: read
+  issues: write
+concurrency:
+  group: duel-retained-backup-schedule-watchdog
+  cancel-in-progress: false
+jobs:
+  watchdog:
+    if: github.repository == 'altepop/keso-gamble'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Verify missed schedule, stale and duplicate notification handling
+        run: node --test services/valorant-results/test/duel-retained-backup-watchdog.test.mjs
+      - name: Verify daily backup readiness monitor actually ran
+        if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.actor == 'altepop')
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          DUEL_BACKUP_WATCHDOG_REPORT: ${{ runner.temp }}/duel-retained-backup-watchdog.json
+        run: node scripts/duel-retained-backup-watchdog.mjs
+      - name: Open one GitHub Issue for missed or stalled schedule
+        if: failure() && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.actor == 'altepop'))
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          DUEL_BACKUP_WATCHDOG_REPORT: ${{ runner.temp }}/duel-retained-backup-watchdog.json
+        run: node scripts/duel-retained-backup-watchdog-alert.mjs

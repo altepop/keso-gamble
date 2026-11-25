@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {isOwnPrediction,selfBetAliasDigest} from '../src/prediction-identity.ts';
+import {isOwnPrediction,selfBetAliasDigest,isRegisteredSecondaryDiscordAccount} from '../src/prediction-identity.ts';
 import type {KpMapping} from '../src/kp.ts';
 
 const guild='100000000000000100';
@@ -32,4 +32,13 @@ test('unregistered user IDs never match a primary or an alternate account',async
   const aliases=new Set([await selfBetAliasDigest(owner,secondary)]);
   assert.equal(await isOwnPrediction(mapping,owner,'not-a-user-id',aliases),false);
   assert.equal(await isOwnPrediction(mapping,owner,'100000000000000999',aliases),false);
+});
+
+test('spectator registry: exactly registered secondary Discord account is denied',async()=>{
+ const hashes=new Set([await selfBetAliasDigest(owner,secondary)]);
+ assert.equal(await isRegisteredSecondaryDiscordAccount(mapping,secondary,hashes),true);
+ assert.equal(await isRegisteredSecondaryDiscordAccount(mapping,primary,hashes),false);
+ assert.equal(await isRegisteredSecondaryDiscordAccount(mapping,stranger,hashes),false);
+ assert.equal(await isRegisteredSecondaryDiscordAccount(mapping,'100000000000000199',hashes),false);
+ assert.equal(await isRegisteredSecondaryDiscordAccount(mapping,'bad-id',hashes),false);
 });

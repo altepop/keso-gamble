@@ -11,7 +11,8 @@ const CPU_MEMBERS=[{id:USERS.a,name:'あなた'},{id:USERS.b,name:'CPU'}];
 const MINI=new Set(Object.keys(EXTRA_DUEL_GAMES));
 const $=s=>document.querySelector(s);
 const rand=n=>{const value=new Uint32Array(1),limit=Math.floor(4294967296/n)*n;do{crypto.getRandomValues(value);}while(value[0]>=limit);return value[0]%n;};
-let game='othello',viewer='a',target=USERS.b,stake=1000,match=null,secret=null,balance={[USERS.a]:20000,[USERS.b]:20000},
+const requestedGame=new URLSearchParams(location.search).get('game');
+let game=['othello','gomoku','connect4','hitblow','bluffdice','poker'].includes(requestedGame)?requestedGame:'othello',viewer='a',target=USERS.b,stake=1000,match=null,secret=null,balance={[USERS.a]:20000,[USERS.b]:20000},
  picks=[],confirmResign=false,pickerOpen=false,lastError='',status='',passNotice='',previewCell=null,guessDraft='',
  againstCpu=new URLSearchParams(location.search).get('cpu')==='1',cpuLevel='normal',cpuBusy=false,cpuTimer=null,roundId=0;
 const recentMoves=new Map(),localMoveHistory=new Map();
@@ -164,6 +165,10 @@ document.addEventListener('change',e=>{
 document.addEventListener('click',e=>{
  const switcher=e.target.closest('[data-demo-view]');
  if(switcher){if(againstCpu)return;viewer=switcher.dataset.demoView;picks=[];guessDraft='';previewCell=null;confirmResign=false;pickerOpen=false;note('');render();return;}
+ const sport=e.target.closest('[data-duel-sport]');
+ if(sport&&Object.hasOwn(GAMES,sport.dataset.duelSport)){
+  restart(sport.dataset.duelSport);return;
+ }
  const targetOption=e.target.closest('[data-duel-target-option]');
  if(targetOption){target=targetOption.dataset.duelTargetOption;pickerOpen=false;render();return;}
  if(e.target.closest('[data-duel-target-toggle]')){pickerOpen=!pickerOpen;render();return;}

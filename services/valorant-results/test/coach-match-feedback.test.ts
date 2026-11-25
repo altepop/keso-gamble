@@ -59,3 +59,14 @@ test('a missing or zero event denominator asks for self-check rather than announ
  const r=coachMatchFeedback(perf([row(2),row(1)]),new Map([[start+10000,events({diedAfterKill5s:4})],[start+20000,events({enemyKills:0,diedAfterKill5s:0})]]));
  assert.equal(r.sessions[0].previousTopic,'reset');assert.equal(r.sessions[0].followUp.status,'self-check');assert.equal(r.sessions[0].followUp.practiceVerified,false);
 });
+
+test('the same numbers produce role-specific practice, without pretending to observe position or skill usage',()=>{
+ const agents=['Jett','Omen','Sova','Sage'],steps=[];
+ for(const agent of agents){
+  const p=perf([row(1,10,20,2400,agent)]),s=coachMatchFeedback(p).sessions[0];
+  assert.equal(s.topic,'pressure');assert.match(s.lesson.meaning,new RegExp(agent));assert.ok(p.timeline[0].role);assert.match(s.lesson.alternatives,/練習案/);steps.push(s.lesson.practice.steps[2]);
+ }
+ assert.equal(new Set(steps).size,4);
+ assert.match(steps[0],/入る入口/);assert.match(steps[1],/スモーク/);assert.match(steps[2],/索敵/);assert.match(steps[3],/裏・別入口/);
+ const unknown=coachMatchFeedback(perf([row(1,10,20,2400,'Unknown')])).sessions[0];assert.equal(unknown.lesson.practice.steps[2].includes('合流条件'),false);
+});

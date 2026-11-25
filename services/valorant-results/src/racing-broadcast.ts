@@ -85,7 +85,7 @@ export class RaceBroadcaster {
   const path=new URL(request.url).pathname;
   if(request.method==='POST'&&path==='/duel/subscribe'){
    const body=await request.text();if(body.length>120)return new Response('Invalid request',{status:400});
-   try{return this.duelEvents.subscribe((JSON.parse(body) as {user?:unknown}).user);}
+   try{const request=JSON.parse(body) as {user?:unknown;observer?:unknown};return this.duelEvents.subscribe(request.user,request.observer===true);}
    catch{return new Response('Invalid request',{status:400});}
   }
   if(request.method==='POST'&&path==='/duel/notify'){
