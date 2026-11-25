@@ -36,7 +36,7 @@ export const SNAPSHOT=`WITH candidates AS (
  WHERE k.guild=d.guild AND k.user=d.target AND k.mode=CASE WHEN d.task IN ('competitive','solo_competitive') THEN 'competitive' ELSE 'unrated' END
  AND k.at>=d.at AND k.at<=COALESCE(d.next_at,?) AND (v.match_id IS NULL OR v.ended_at IS NULL OR v.mode!=k.mode)) AS missing_notice
  FROM first_match d LEFT JOIN notifications n ON n.riot_id=d.riot AND n.match_id=d.first_match
- LEFT JOIN kp_events e ON e.id=d.guild||':'||d.first_match||':'||d.puuid AND e.guild=d.guild AND e.user=d.target AND e.puuid=d.puuid AND e.match=d.first_match AND e.mode=n.mode
+ LEFT JOIN kp_events e ON e.guild=d.guild AND e.user=d.target AND e.puuid=d.puuid AND e.match=d.first_match AND e.mode=n.mode
  LEFT JOIN coach_member_queue q ON q.match_id=d.first_match
  LEFT JOIN valorant_match_rosters r ON r.match_id=d.first_match
  LEFT JOIN death_unrated_sessions s ON s.riot_id=d.riot AND s.match_id=d.first_match AND s.cancelled_at IS NULL AND s.armed_at>=d.at
