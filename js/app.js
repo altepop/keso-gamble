@@ -1241,7 +1241,7 @@ addEventListener('click',async e=>{
   if(t.matches('[data-bet],[data-race-horse],[data-race-type],[data-race-amount],[data-casino-game],[data-mines-count],[data-number]'))playSfx('tick');
   if(t.dataset.action==='casino-skip'){casinoSkipped=true;skipCasinoPause?.();return;}
   if(casinoBusy&&(t.dataset.screen||t.dataset.casinoGame)){toast('演出をスキップすると移動できます');return;}
-  const mutates=!!t.dataset.approve || !!t.dataset.complete || ['hoyo-status','hoyo-link','hoyo-refresh','hoyo-unlink','relic-market-list','relic-market-cancel','relic-market-buy-confirm','steam-library','steam-status','steam-link','steam-open','steam-confirm','steam-disconnect','steam-game','salary','trade','spin','race-bet','roast-level','horse-buy','horse-sell-approve','luxury-approve','reset','submit-claim','issue-directive','connect-kp','restore-kp','refresh-kp','disconnect-kp','auto-connect-kp','ml-buy','chinchiro','bj-start','bj-hit','bj-stand','bj-double','mines-start','mines-pick','mines-cashout','slot','vp-deal','vp-draw','baccarat','private-round','private-race','stock-shock','stock-shock-approve','stock-guerrilla-toggle','relic-summon','relic-consumable-use','relic-equip','relic-auto-equip','relic-save-preset','relic-overwrite-preset','relic-load-preset','relic-remove-preset','relic-rename-preset','relic-claim-steam','relic-claim-unite','relic-recycle','relic-shop','relic-voucher','relic-voucher-buy'].includes(t.dataset.action);
+  const mutates=!!t.dataset.approve || !!t.dataset.complete || ['hoyo-status','hoyo-link','hoyo-refresh','hoyo-unlink','relic-market-list','relic-market-cancel','relic-market-buy-confirm','steam-library','steam-status','steam-link','steam-open','steam-confirm','steam-disconnect','steam-game','salary','trade','spin','race-bet','roast-level','horse-buy','horse-sell-approve','luxury-approve','reset','submit-claim','issue-directive','directive-transfer','connect-kp','restore-kp','refresh-kp','disconnect-kp','auto-connect-kp','ml-buy','chinchiro','bj-start','bj-hit','bj-stand','bj-double','mines-start','mines-pick','mines-cashout','slot','vp-deal','vp-draw','baccarat','private-round','private-race','stock-shock','stock-shock-approve','stock-guerrilla-toggle','relic-summon','relic-consumable-use','relic-equip','relic-auto-equip','relic-save-preset','relic-overwrite-preset','relic-load-preset','relic-remove-preset','relic-rename-preset','relic-claim-steam','relic-claim-unite','relic-recycle','relic-shop','relic-voucher','relic-voucher-buy'].includes(t.dataset.action);
   if(mutates && mutationPending){
     if(t.dataset.action==='relic-summon'&&Date.now()-lastSummonBlockToast>1200){toast('召喚結果を確認中。連打しても追加購入されません');lastSummonBlockToast=Date.now();}
     return;
@@ -1579,6 +1579,12 @@ addEventListener('click',async e=>{
       await commit(next=>submitClaim(next,data));delete drafts['claim-reference'];render();toast('確認待ちに追加しました。まだKPは支給されません');return;
     }
     if(t.dataset.approve){const reward=await commit(next=>approveClaim(next,Number(t.dataset.approve)));render();toast(`デモ確認：+${moneyCompact(reward)}`);return;}
+    if(t.dataset.action==='directive-transfer'){
+      if(!live)throw Error('本番KP口座を接続してください。');
+      const target=t.closest('article')?.querySelector('[data-directive-transfer-target]')?.value;
+      if(!target)throw Error('乗り換え先を選んでください。');
+      await liveOperation('directive-transfer',{directiveId:t.dataset.directiveId,target});render();toast('追加KPなしで指令の相手を変更しました');return;
+    }
     if(t.dataset.action==='issue-directive'){
       const data={target:$('#directive-target').value,task:$('#directive-task').value,game:$('#directive-game')?.value,achievement:$('#directive-achievement')?.value};
       if(live)await liveOperation('directive',data);else await commit(next=>issueDirective(next,data));render();toast(live?'指名しました。Discordにも順次お知らせします':'デモ指令を発行しました（外部送信なし）');return;
