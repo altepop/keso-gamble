@@ -225,63 +225,74 @@ function detailedWarmup(pattern:AdvicePattern|null,fallback:string):string{
   '最初はゆっくり正しい動きを確認する。形が崩れたらいったん止め、同じ順序でやり直す。'
  ].join('\n'):'';
 }
-// Use the already computed personal curriculum, not a team-swing template.
- // No additional D1 reads, no random selection and no future sessions.
-// Two distinct approaches per persistent topic: diagnose a real engagement
-// or rehearse a different decision in a controlled situation. Neither proves
-// why the player died or whether the previous prescription was performed.
-const REPEAT_DRILLS:Record<string,[[string,string],[string,string]]>={
- reset:[['キル後に続けて戦った場面を一つ選び、残弾・遮蔽・味方の位置から続行と撤退の条件を決めます。','次戦の最初の3キル後、続ける理由を一言で確認し、試合後に選択を記録します。'],['カスタムで同じ角から遮蔽へ戻る経路と味方をカバーし続ける経路を各5回試します。','射撃場で短いバースト後に横へ移動し、照準を置き直す動作を左右10回行います。']],
- cover:[['味方役と同じ角を見られる二つの立ち位置をカスタムで探し、互いの射線を塞がないか確認します。','前の死亡を一つ振り返り、壁・距離・別担当のどれが影響したか確認します。分からなければ次戦で記録します。'],['デュオなら先頭とカバーを5回交代します。一人ならコンペ開始前にカバー相手と合図を一つ決めます。','同じ相手を狙う時に重ならない立ち位置を二つ選び、別の射線から入る手順を確認します。']],
- conversion:[['削った敵を味方が倒したか、自分で追ったかを1交戦だけ振り返ります。確認できない場合は次戦で記録します。','次戦で削った敵の場所を一言伝え、味方が回収できるなら無理に追わないことを試します。'],['射撃場で近距離と中距離を分け、短いバーストから再照準する動作を各10回試します。','外した時は連射で追わず、横移動から停止して次の初弾を撃つ手順を各10回行います。']],
- participation:[['味方が接敵した場面を一つ振り返り、担当位置を維持する条件と合流する条件をそれぞれ決めます。','開始前に自分の担当と合流の合図を一文で決め、次戦で一度確認します。'],['カスタムで担当位置から味方の射線へ入る二つの経路を歩き、武器を出す地点を決めます。','経路ごとに途中で確認すべき角を二つ選び、ナイフのまま危険な射線へ出ない動きを5回試します。']],
- pressure:[['倒された交戦を一つ思い出し、必要なカバーだったか、別の射線が開いていたかを区別します。','次戦の最初の3交戦で、先に確認する角と退く遮蔽を一つずつ決め、倒された場合は理由を記録します。'],['カスタムで同じ入口を使い、遮蔽から角を一つずつ開く入り方と引き直す入り方を各5回試します。','射撃場で停止後の短い射撃と、撃たずに遮蔽へ戻る動きを交互に10回ずつ行います。']],
- timing:[['味方と動く合図を一つ決め、先頭・カバー・スキル担当の順番を声に出して確認します。','次戦の最初の3Rでその合図を試し、味方が動きやすくなったかを振り返ります。'],['カスタムで同じ入口を使い、味方の合図で動く手順と待機してから合流する手順を各5回試します。','入口に着いた時に味方がまだ準備中なら、撃ち合わずに待てる遮蔽を二つ選びます。']],
- repeat:[['前の試合で良かった交戦を一つ選び、照準・遮蔽・味方とのタイミングのうち再現できる要素を記録します。','次戦の最初の3交戦で記録した要素を一つ試し、勝敗ではなく手順ができたか確認します。'],['カスタムで同じ準備を近い角と遠い角で各5回試し、キルではなく準備の順序を採点します。','違う角度から同じ照準の準備を試し、使いにくい場合は位置や距離の違いを確認します。']],
- foundation:[['射撃場で静止射撃と移動停止後の射撃を各10回比較し、外した時の足と照準を分けて確認します。','停止後の初弾が安定した距離を一つ選び、同じ距離で成功回数を数えます。'],['射撃場で左右移動後の短い射撃を各10回行い、停止が安定したら距離を変えて同じ順序を試します。','次は2〜3発ごとに横移動と再照準を挟み、連射せずに再度止まる動作を左右10回行います。']]
+// Compact Discord coaching, not a copy of the analytical report.
+type CompactPlan={why:string;action:string;drills:readonly [string,string];repeat:readonly [readonly [string,string],readonly [string,string]]};
+const COMPACT_PLANS:Record<string,CompactPlan>={
+ pressure:{why:'交戦を増やすより、次のラウンドに有利を残せる生存を優先しましょう。',action:'最初の3交戦は、退路を決めてから角を一つずつ見ましょう。',drills:['退ける遮蔽を2つ確認','角を一つずつ開いて停止射撃を5回'],repeat:[['死亡した1交戦を振り返り、必要なカバーか別射線かを確認','次戦で先に見る角と退路を決める'],['同じ入口で引き直す動きを5回','射撃場で短い射撃→移動を左右10回']]},
+ reset:{why:'取った人数差を手放さないことが大切です。',action:'最初の3キル後、残弾と味方を確認し、続行か撤退かを選びましょう。',drills:['キル後に遮蔽へ戻る動きを5回','残弾確認→再照準を5回'],repeat:[['キル直後の1交戦を振り返る','続行・撤退の条件を一つずつ決める'],['遮蔽へ退く経路を2通り試す','短いバースト→横移動を左右10回']]},
+ cover:{why:'距離だけでなく、同じ敵へ撃てる射線を作りましょう。',action:'攻撃の最初の3Rは、カバーする味方を一人決めましょう。',drills:['同じ角を見られる位置を2つ確認','デュオなら先頭とカバーを5回交代。一人なら合図を決める'],repeat:[['取り返しがなかった1交戦を振り返る','壁・距離・別担当のどれかを確認'],['重ならない射線を2つ探す','味方の合図で同じ角へ出る動きを5回']]},
+ conversion:{why:'削った敵を自分で追う必要はありません。味方の回収も活かしましょう。',action:'次戦は短い射撃で再照準し、削った敵の位置を伝えましょう。',drills:['射撃場で移動→停止→2〜3発を左右10回','削った敵を味方が回収したか1交戦確認'],repeat:[['倒し切れなかった1交戦を振り返る','削った敵の位置を伝える合図を決める'],['近距離・中距離の短いバースト各10回','外したら横移動→停止→再照準を10回']]},
+ participation:{why:'キルを追うより、担当を守りながら味方の交戦に間に合わせましょう。',action:'最初の3Rで、担当位置を維持するか合流するかを意識して選びましょう。',drills:['味方が接敵した1Rを振り返る','担当位置から合流する経路を2つ歩く'],repeat:[['担当を守る条件と合流する条件を決める','合流の合図を味方に一言伝える準備'],['合流経路で武器を出す地点を確認','途中で見る角を2つ選んで5回歩く']]},
+ timing:{why:'個人のキル数だけではラウンドを取り切れません。味方と動くタイミングを揃えましょう。',action:'最初の3Rで、仕掛ける合図を一つ決めて役割を実行しましょう。',drills:['先頭・カバー・スキルの順番を決める','入口で味方を待てる遮蔽を2つ確認'],repeat:[['味方に伝える合図を一つ決める','前の1Rで合図を出せたか振り返る'],['同じ入口で即合流・待機を各5回','準備が遅れた味方を待つ位置を2つ確認']]},
+ repeat:{why:'良かった準備を言葉にして、再現できる形にしましょう。',action:'次戦の最初の3交戦で、良かった照準か位置取りを一つ再現しましょう。',drills:['良かった1交戦の照準・遮蔽をメモ','同じ角への入り方を5回再現'],repeat:[['前の成功場面から再現できる要素を選ぶ','次戦の確認項目を一つ決める'],['近い角と遠い角で同じ準備を各5回','位置・距離が変わった場合の違いを確認']]},
+ foundation:{why:'まだ弱点を絞れません。まず動きの再現性を確認しましょう。',action:'最初の3交戦は、移動→停止→射撃の順序を意識しましょう。',drills:['射撃場で静止射撃を10回','左右移動→停止→短い射撃を各10回'],repeat:[['静止と移動後の射撃を各10回比較','初弾が安定する距離で成功回数を数える'],['距離を変えて停止射撃を左右10回','2〜3発ごとに横移動と再照準を挟む']]}
 };
+const ROLE_DRILLS:Record<string,string>={
+ 'センチネル':'裏・別入口の担当と退避・合流の条件を確認',
+ 'コントローラー':'スモーク設置→武器に戻す手順を5回',
+ 'イニシエーター':'索敵・妨害→武器に戻して味方へ追従する手順を5回',
+ 'デュエリスト':'味方の合図→進入→カバーが届く位置までの動きを5回'
+};
+const AGENT_ROLES:Record<string,string>={Cypher:'センチネル',Clove:'コントローラー',Sova:'イニシエーター'};
+function compactFact(session:Session,older:Session|undefined):string{
+ const metric=(s:Session|undefined,key:string)=>s?.metrics.find(m=>m.key===key);
+ const delta=(key:string)=>{
+  const m=metric(session,key);
+  return m?.baseline&&m.baseline.matches>=2&&Number.isFinite(m.baseline.value)&&Number.isFinite(m.current?.value)
+   ?Number((m.current!.value-m.baseline.value).toFixed(9)):null;
+ };
+ const k=delta('kpr'),d=delta('dpr');
+ const currentK=metric(session,'kpr')?.current?.value,previousK=metric(older,'kpr')?.current?.value;
+ const change=(n:number,label:string)=>label+'約'+Math.abs(n*10).toFixed(1)+'回'+(n>0?'増':'減');
+ if(session.topic==='pressure'&&d!==null&&d>=0.1){
+  const previousUp=Number.isFinite(currentK)&&Number.isFinite(previousK)&&currentK!>previousK!+0.000001;
+  return (previousUp?'前回よりキルのペースは上がりましたが、':'')+'直近平均より10Rあたり'+change(d,'デス')+(k!==null&&k<=-0.1?'、'+change(k,'キル'):'')+'。';
+ }
+ if((session.topic==='conversion'||session.topic==='participation')&&k!==null&&k<=-0.1)
+  return '直近平均より10Rあたり'+change(k,'キル')+'。'+(session.topic==='conversion'?'与ダメージは維持しています。':'');
+ if(session.eventVerified){
+  const evidence=session.evidence?.find(x=>x.startsWith('全10人K/D照合済み'))??'';
+  const m=session.topic==='reset'?evidence.match(/敵キル(\d+)回、その各キルの後5秒以内に本人死亡(\d+)回/):session.topic==='cover'?evidence.match(/既知の敵による死亡(\d+)回、味方の5秒以内の取り返し(\d+)回/):null;
+  if(m)return session.topic==='reset'?'敵を倒した'+m[1]+'回のうち、5秒以内の死亡が'+m[2]+'回。':'敵に倒された'+m[1]+'回のうち、味方の5秒以内の取り返しが'+m[2]+'回。';
+ }
+ const facts=session as Session & {kills?:number|null;deaths?:number|null};
+ if(Number.isFinite(facts.kills)&&Number.isFinite(facts.deaths))return '今回は'+facts.kills+'K・'+facts.deaths+'D。';
+ if(session.topic==='repeat'&&k!==null&&k>=0.1&&d!==null&&d<=-0.1)return '直近平均より10Rあたり'+change(k,'キル')+'、'+change(d,'デス')+'。';
+ return session.topic==='foundation'?'今回の記録を比較の出発点にします。':'今回の記録では'+({pressure:'死亡した交戦',reset:'キル直後',cover:'味方の取り返し',conversion:'倒し切り',participation:'交戦への参加',timing:'味方とのタイミング',repeat:'良かった準備'}[session.topic as 'pressure']??'次戦の行動')+'を確認します。';
+}
 function adaptivePrescription(session:Session,history:readonly Session[]=[]):{advice:string;warmup:string}|null{
- const l=session.lesson,p=l.practice;
- if(!l.meaning||!l.nextGame||!Array.isArray(p.steps)||p.steps.length<3||
+ const l=session.lesson,p=l.practice,plan=COMPACT_PLANS[session.topic??''];
+ if(!plan||!l.meaning||!l.nextGame||!Array.isArray(p.steps)||p.steps.length<3||
   !Number.isFinite(p.minutes)||p.minutes!<1||p.minutes!>20)return null;
  const at=Date.parse(session.date??'');
  const earlier=Number.isFinite(at)?history.filter(s=>{const t=Date.parse(s.date??'');return Number.isFinite(t)&&t<at;})
   .sort((a,b)=>Date.parse(b.date!)-Date.parse(a.date!)).slice(0,10):[];
- // Ambiguous timestamps are not used as an ordered history.
  const unique=earlier.filter((s,i)=>earlier.findIndex(x=>Date.parse(x.date!)===Date.parse(s.date!))===i&&
   earlier.filter(x=>Date.parse(x.date!)===Date.parse(s.date!)).length===1);
  let streak=0;
- for(const older of unique){if(!session.topic||older.topic!==session.topic)break;streak++;}
- if(!unique.length&&session.topic&&session.previousTopic===session.topic)streak=1;
- const context=[session.map,session.agent].filter(x=>x&&x!=='不明').map(x=>text(x,32)).join(' / ');
- const event=session.eventVerified&&['reset','cover'].includes(session.topic??'')
-  ?session.evidence?.find(x=>x.startsWith('全10人K/D照合済み')):undefined;
- const comparison=session.followUp?.text?.split('。')[0];
- const follow=session.followUp?.status==='improving'
-  ?'前回の確認指標は改善方向です。練習の効果が証明されたわけではないため、今回の課題へ進みます。'
-  :streak?'同じ課題が保存済みの試合で続いています。同じ練習を繰り返すだけでなく、確認方法を変えます。':'';
- const advice=[
-  (context?context+'：':'')+text(l.meaning,230),
-  event?text(event,210):null,
-  l.alternatives?text(l.alternatives,170):null,
-  comparison&&['improving','mixed','steady','review'].includes(session.followUp?.status??'')?text(comparison,210)+'。':null,
-  follow,
-  '次戦：'+text(l.nextGame,210)
- ].filter(Boolean).join('\n');
- const repeat=streak>0?REPEAT_DRILLS[session.topic??'']:undefined;
- // Alternate distinct drill actions; preserve the role-specific third step.
- const steps=repeat
-  ?[...repeat[(streak-1)%2],streak%2===0&&l.selfCheck?'確認：'+l.selfCheck:p.steps[2]]
-  :p.steps.slice(0,3);
- // Use the actual map in custom-mode actions, without inventing a site or
- // claiming the member played that particular position.
+ for(const older of unique){if(older.topic!==session.topic)break;streak++;}
+ if(!earlier.length&&session.topic&&session.previousTopic===session.topic)streak=1;
+ const role=l.meaning.match(/（(センチネル|コントローラー|イニシエーター|デュエリスト)）/)?.[1]??AGENT_ROLES[session.agent];
+ const agent=session.agent&&session.agent!=='不明'?text(session.agent,24):'';
  const mapName=session.map&&session.map!=='不明'?text(session.map,24):'';
- const contextualSteps=steps.map(step=>mapName?step.replace('カスタムで',mapName+'のカスタムで'):step);
- const warmup=[
-  'アップ（'+(repeat?6:p.minutes)+'分）',
-  (repeat?'反復課題の別アプローチ':text(p.name,65))+(context?'｜'+context:''),
-  ...contextualSteps.map((step,i)=>(i+1)+'. '+text(step,180))
- ].join('\n');
+ const repeat=streak>0;
+ const focus=session.topic==='pressure'&&role==='センチネル'?(agent?agent+'は':'センチネルは')+'生存しながら守備の価値を残すことを優先しましょう。':plan.why;
+ const follow=repeat?'同じ課題が続いているので練習方法を変えます。':session.followUp?.status==='improving'?'前回の確認指標は改善方向です。':'';
+ const advice=[compactFact(session,unique[0]),focus,follow,plan.action].filter(Boolean).join('\n');
+ const drills=repeat?plan.repeat[(streak-1)%2]:plan.drills;
+ const roleDrill=ROLE_DRILLS[role]??'次戦で確認する動きを一つ決める';
+ const warmup=['アップ（5分）',...(mapName?['マップ：'+mapName]:[]),
+  '2分：'+drills[0],'2分：'+drills[1],'1分：'+roleDrill].join('\n');
  return {advice,warmup};
 }
 function shortSwing(swing:{round:number;description:string},outcome:'win'|'loss'|'draw'):string{
@@ -310,7 +321,7 @@ export function formatPersonalFeedback(input:{
    ?metric.baseline:null;
   const title=metric.key==='kpr'?'KPR':metric.key==='dpr'?'DPR':text(metric.label,24);
   const difference=base?Number((metric.current!.value-base.value).toFixed(9)):null;
-  const evaluation=metric.key==='kpr'&&difference!==null&&difference<=-0.1?'。キルにつながる動きが減っている。'
+  const evaluation=adaptive?'。':metric.key==='kpr'&&difference!==null&&difference<=-0.1?'。キルにつながる動きが減っている。'
    :metric.key==='dpr'&&difference!==null&&difference>=0.1?'。倒されすぎだ。無理なピークを減らせ。':'。';
   return '📊 '+title+' '+current+(base?'（直近'+base.matches+'試合は'+base.value.toFixed(2)+'）':'')+evaluation;
  })():null;
