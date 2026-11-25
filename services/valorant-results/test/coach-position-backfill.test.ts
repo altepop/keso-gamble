@@ -198,3 +198,41 @@ test('Phase 5 404 must not retry with an invalid or unrelated fallback',async()=
   }finally{f.sql.close();}
  }
 });
+
+test('D1 hotspot: completed position history is filtered before linked-source selection',async()=>{
+ const f=fixture();try{
+  const start=Date.parse(started);
+  f.sql.exec("UPDATE coach_member_queue SET started_at="+(start-1000)+" WHERE match_id='m1'");
+  const q=f.sql.prepare("INSERT INTO coach_member_queue VALUES(?,'ap','Dolly#SDGs','p0',?,'complete',0)");
+  const l=f.sql.prepare("INSERT INTO coach_member_links VALUES('Dolly#SDGs',?)");
+  const b=f.sql.prepare("INSERT INTO coach_position_backfill(match_id,status,attempts,next_at,reason,updated_at) VALUES(?,'saved',1,0,'captured',0)");
+  for(let i=0;i<1000;i++){const id='captured-'+i;q.run(id,start+i);l.run(id);b.run(id);}
+  // Capture the real selector's query plan, not a duplicate implementation.
+  const plans:string[][]=[];
+  const original=f.db.prepare.bind(f.db);
+  f.db.prepare=((query:string)=>{
+   const stmt=original(query);
+   if(query.includes('q.started_at')&&query.includes('coach_position_backfill b')){
+    const bind=stmt.bind.bind(stmt);
+    stmt.bind=(...args:unknown[])=>{
+     plans.push(f.sql.prepare('EXPLAIN QUERY PLAN '+query).all(...args as never[]).map(x=>String(x.detail)));
+     return bind(...args);
+    };
+   }
+   return stmt;
+  }) as typeof f.db.prepare;
+  let calls=0;
+  assert.equal(await backfillCoachPositions(f.db,async(region,id)=>{
+   calls++;assert.equal(id,'m1');assert.equal(region,'ap');
+   const m=f.match();m.metadata.started_at=new Date(start-1000).toISOString();return m;
+  },now),'saved');
+  assert.equal(calls,1);
+  assert.equal(plans.length,1);
+  const plan=plans[0];
+  assert.ok(!plan.some(x=>x.includes('CORRELATED SCALAR SUBQUERY')),plan.join('\n'));
+  const guard=plan.findIndex(x=>/SEARCH b\b/.test(x));
+  const links=plan.findIndex(x=>/SEARCH l\b/.test(x));
+  assert.ok(guard>=0&&links>guard,plan.join('\n'));
+  assert.equal(await backfillCoachPositions(f.db,async()=>{throw Error('must not call')},now+900001),'idle');
+ }finally{f.sql.close();}
+});
