@@ -17,3 +17,9 @@ test('diagnostic errors expose only fixed stages and HTTP status, never private 
  assert.deepEqual(safeTailError(Object.assign(Error('tail_create'),{httpStatus:403,token:'private'})),{stage:'tail_create',httpStatus:403});
  assert.deepEqual(safeTailError(Error('wss://private-tail-url/private-token')),{stage:'tail_transport',httpStatus:null});
 });
+
+test('observations identify endpoint and competitive scope without copying arbitrary mode or URL strings',()=>{
+ const chosen=safeProviderEvidence({logs:[{message:['coach_provider_shape',{...shape,queue:'other',endpoint:'history',completed:true}]},{message:['coach_provider_shape',{...shape,queue:'competitive',endpoint:'detail',completed:true}]}]});
+ assert.equal(chosen.queue,'competitive');assert.equal(chosen.endpoint,'detail');
+ const safe=safeProviderEvidence({logs:[{message:['coach_provider_shape',{...shape,queue:'private-name#tag',endpoint:'https://private-token'}]}]});assert.equal(JSON.stringify(safe).includes('private'),false);
+});

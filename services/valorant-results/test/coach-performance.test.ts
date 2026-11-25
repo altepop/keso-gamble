@@ -97,3 +97,50 @@ test('win trend names its draw-inclusive denominator; unknown results are exclud
  assert.equal(out.overall.draws,1);assert.equal(out.timeline[0].rollingWinPct5,100/3);
  assert.equal(coachPerformance([row(0,{teams_json:null})],accounts).overall.winPct,null);
 });
+
+test('same-map/role comparisons use teammate player-rounds, not opponent or whole-team averages',()=>{
+ const a=row(0),ps=JSON.parse(a.players_json);ps[1]={...ps[1],agent:'Sage',k:10,d:20,a:15};ps[2]={...ps[2],agent:'Killjoy',k:30,d:5,a:5};ps[5]={...ps[5],agent:'Sage',k:100,d:0,a:99};a.players_json=JSON.stringify(ps);
+ const b={...a,match_id:'second'};const ps2=JSON.parse(b.players_json);delete ps2[1].k;b.players_json=JSON.stringify(ps2);
+ const out=coachPerformance([a,b],accounts),g=out.rolePeers[0];
+ assert.equal(g.value,'Ascent / センチネル');assert.equal(g.kpr.ownRate,1);assert.equal(g.kpr.peerRate,1);assert.equal(g.kpr.peerPlayerGames,2);assert.equal(g.kpr.peerRounds,40);assert.equal(g.kpr.matches,1);assert.equal(g.kpr.excluded,1);
+ assert.equal(g.dpr.ownRate,.5);assert.equal(g.dpr.peerRate,.625);assert.equal(g.dpr.matches,2);assert.equal(g.apr.peerRate,.5);
+ assert.equal(JSON.stringify(g).includes('private'),false);assert.equal(coachPerformance([row()],accounts).rolePeers.length,0);
+});
+test('ACT and JST end-time groups retain unknown dates and do not pretend to know start/sleep',()=>{
+ const out=coachPerformance([row(0,{ended_at:Date.parse('2026-11-17T14:59:59Z'),act_name:'e11a1'}),row(1,{ended_at:Date.parse('2026-11-17T15:00:00Z'),act_name:'e11a2'}),row(2,{ended_at:NaN})],accounts);
+ assert.deepEqual(out.acts.map(g=>g.value).sort(),['ACT未取得','e11a1','e11a2']);
+ assert.ok(out.timeBuckets.some(g=>g.value==='20–24時終了（JST）'));assert.ok(out.timeBuckets.some(g=>g.value==='00–04時終了（JST）'));assert.ok(out.timeBuckets.some(g=>g.value==='終了時刻未取得'));
+ assert.equal(out.overall.matches,3);assert.equal(out.timeline.length,2);assert.equal(out.windows[0].recent.matches,2);assert.equal(out.quality.timeSeries.excluded,1);assert.equal(out.form.currentPositiveStreak,null);
+});
+
+test('enriched hit/damage provenance never makes the old KDA snapshot appear freshly fetched',()=>{
+ const r=row(0,{recorded_at:1000}),ps=JSON.parse(r.players_json);Object.assign(ps[0],{hs:4,bs:12,ls:4,hsAt:2000,damageDealt:2400,damageReceived:3000,damageDealtAt:2500,damagePairAt:3000});r.players_json=JSON.stringify(ps);
+ const q=coachPerformance([r],accounts).quality.metricCoverage;
+ assert.equal(q.kd.recordedAt!.newest,1000);assert.equal(q.hs.recordedAt!.newest,2000);assert.equal(q.adr.recordedAt!.newest,2500);assert.equal(q.ddDelta.recordedAt!.newest,3000);
+});
+
+test('Phase 4 verified map rotation separates historic and missing maps',()=>{
+ const rows=[...Array.from({length:5},(_,i)=>row(100+i,{map:'Bind'})),row(200,{map:'Corrode'}),row(201,{map:'Ascent'}),row(202,{map:null})];
+ const c=coachPerformance(rows,accounts).mapPoolCoverage;
+ assert.equal(c.version,'2026-act6-patch-13.08');
+ assert.deepEqual(c.pool.map(m=>m.map),['Abyss','Bind','Corrode','Haven','Lotus','Summit','Sunset']);
+ assert.equal(c.pool.find(m=>m.map==='Bind')?.status,'集計可能');
+ assert.deepEqual(c.pool.find(m=>m.map==='Bind')?.observedAgents,[{agent:'Sage',matches:5}]);
+ assert.equal(c.pool.find(m=>m.map==='Corrode')?.status,'まだ分かりません');
+ assert.equal(c.pool.find(m=>m.map==='Abyss')?.status,'未収集');
+ assert.deepEqual(c.outsidePool,[{map:'Ascent',matches:1}]);
+ assert.equal(c.unknownMapMatches,1);
+ assert.equal(c.sampleMatches,8);
+ assert.equal(c.poolComplete,false);
+ for(const secret of ['private-a','private-match','private-other'])assert.equal(JSON.stringify(c).includes(secret),false);
+});
+
+test('timestamp-only roster with valid identities is excluded without inventing zero stats',()=>{
+ const real=row(1,{ended_at:Date.parse('2026-11-19T15:00:00Z')});
+ const blank=row(2,{ended_at:Date.parse('2026-11-21T21:57:00Z'),map:null,teams_json:null});
+ const ps=JSON.parse(blank.players_json);ps.forEach((p:Record<string,unknown>)=>{p.agent=null;p.k=null;p.d=null;p.a=null;p.score=null;});
+ const result=coachPerformance([{...blank,players_json:JSON.stringify(ps)},real],accounts);
+ assert.equal(result.overall.matches,1);
+ assert.equal(result.quality.excluded['time-only-record'],1);
+ assert.equal(result.timeline[0].date,new Date(real.ended_at).toISOString());
+});

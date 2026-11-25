@@ -1,0 +1,47 @@
+name: DUEL Phase 9 guarded production policy
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: "status (read only), activate (approved fixed policy), stop (remove policy only)"
+        required: true
+        type: choice
+        options:
+          - status
+          - activate
+          - stop
+        default: status
+      guild_id:
+        description: "Approved Discord guild ID"
+        required: true
+        type: string
+        default: '606131625084059674'
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: duel-p9-production-policy
+  cancel-in-progress: false
+jobs:
+  production_policy:
+    if: github.repository == 'altepop/keso-gamble' && github.ref == 'refs/heads/main' && github.actor == 'altepop'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Validate current-main production deployments before activating
+        if: inputs.operation == 'activate'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node services/valorant-results/scripts/duel-phase9-release-gate.mjs
+      - name: Execute the guild-scoped policy operation
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          DUEL_RELEASE_ACTOR: ${{ github.actor }}
+          DUEL_RELEASE_OPERATION: ${{ inputs.operation }}
+          DUEL_RELEASE_GUILD: ${{ inputs.guild_id }}
+        run: node services/valorant-results/scripts/duel-phase9-release.mjs

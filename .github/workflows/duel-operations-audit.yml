@@ -1,0 +1,51 @@
+name: P12 duel scheduled operations audit (read-only)
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/duel-operations-audit.yml'
+      - 'scripts/duel-scheduled-operations-audit.mjs'
+      - 'scripts/duel-scheduled-operations-alert.mjs'
+      - 'services/valorant-results/test/duel-scheduled-operations-audit.test.mjs'
+      - 'services/valorant-results/test/duel-scheduled-operations-alert.test.mjs'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/duel-operations-audit.yml'
+      - 'scripts/duel-scheduled-operations-audit.mjs'
+      - 'scripts/duel-scheduled-operations-alert.mjs'
+      - 'services/valorant-results/test/duel-scheduled-operations-audit.test.mjs'
+      - 'services/valorant-results/test/duel-scheduled-operations-alert.test.mjs'
+  workflow_dispatch:
+  schedule:
+    - cron: '31 21 * * *'
+permissions:
+  contents: read
+  issues: write
+concurrency:
+  group: duel-operations-audit
+  cancel-in-progress: false
+jobs:
+  audit:
+    if: github.repository == 'altepop/keso-gamble'
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Verify fixed queries, boundaries and fail-closed behavior
+        run: node --test services/valorant-results/test/duel-scheduled-operations-audit.test.mjs services/valorant-results/test/duel-scheduled-operations-alert.test.mjs
+      - name: Read aggregate counts from production duel D1 (no writes)
+        if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.actor == 'altepop')
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          DUEL_OPERATIONS_AUDIT_REPORT: ${{ runner.temp }}/duel-operations-audit.json
+        run: node scripts/duel-scheduled-operations-audit.mjs
+      - name: Create one GitHub Issue for stale records or unavailable audit
+        if: always() && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.actor == 'altepop'))
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          DUEL_OPERATIONS_AUDIT_REPORT: ${{ runner.temp }}/duel-operations-audit.json
+        run: node scripts/duel-scheduled-operations-alert.mjs

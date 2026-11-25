@@ -20,6 +20,7 @@ function store(){
  const sql=new DatabaseSync(':memory:');
  sql.exec(readFileSync(new NodeURL('../migrations/0007_competitive_round_events.sql',import.meta.url),'utf8'));
  const db={prepare:(text:string)=>({bind:(...args:unknown[])=>({
+  first:async()=>sql.prepare(text).get(...args as never[])??null,
   run:async()=>({meta:{changes:Number(sql.prepare(text).run(...args as never[]).changes)}})
  })})} as unknown as D1Database;
  return {sql,db};
@@ -97,4 +98,53 @@ test('partial kill-only archives accept missing rounds without replacing kills',
   assert.equal(before.kills_json,after.kills_json);
   assert.equal(JSON.parse(after.rounds_json).length,2);
  }finally{sql.close()}
+});
+
+test('validated assistants fill only missing fields of identical old events and never overwrite known observations',async()=>{
+ const {sql,db}=store();try{
+  await recordCompetitiveRoundEvents(db,match(),1000);const m=match();m.kills![0].assistants=[{puuid:'p2'}];m.kills![1].assistants=[];
+  assert.equal(await recordCompetitiveRoundEvents(db,m,2000),true);
+  const a=sql.prepare('SELECT kills_json,recorded_at FROM valorant_match_round_events').get() as {kills_json:string;recorded_at:number};
+  assert.deepEqual(JSON.parse(a.kills_json)[0].assistants,['p2']);assert.equal(JSON.parse(a.kills_json)[0].t,1500);assert.equal(a.recorded_at,2000);
+  m.kills![0].assistants=[{puuid:'p3'}];assert.equal(await recordCompetitiveRoundEvents(db,m,3000),false);
+  assert.equal((sql.prepare('SELECT kills_json FROM valorant_match_round_events').get() as {kills_json:string}).kills_json,a.kills_json);
+  m.kills![0].time_in_round_in_ms=9999;assert.equal(await recordCompetitiveRoundEvents(db,m,4000),false);
+ }finally{sql.close()}
+});
+test('malformed/absent assistant identity is unknown without dropping the valid kill timeline',()=>{
+ const m=match();m.kills![0].assistants=[{puuid:'unknown'}];m.kills![1].assistants=[];
+ const ks=JSON.parse(compactCompetitiveRoundEvents(m,1234)!.killsJson!);assert.equal(ks.length,2);assert.equal('assistants' in ks[0],false);assert.deepEqual(ks[1].assistants,[]);
+});
+
+test('existing-only normal-monitor enrichment cannot create a previously uncollected event row',async()=>{
+ const {sql,db}=store();try{
+  const m=match();m.kills!.forEach(k=>{k.assistants=[];});
+  assert.equal(await recordCompetitiveRoundEvents(db,m,1000,{existingOnly:true}),false);
+  assert.equal((sql.prepare('SELECT COUNT(*) n FROM valorant_match_round_events').get() as {n:number}).n,0);
+  assert.equal(await recordCompetitiveRoundEvents(db,m,2000),true);
+ }finally{sql.close()}
+});
+
+test('new round contexts and weapon names fill only matching old observations and replay is a no-op',async()=>{
+ const {sql,db}=store();try{
+  const m=match();await recordCompetitiveRoundEvents(db,m,1000);
+  m.rounds![0].stats=m.players.map(p=>({player:{puuid:p.puuid},economy:{loadout_value:3000},ability_casts:{grenade:0}}));
+  m.rounds![0].plant=null;m.kills![0].weapon={name:'Vandal'};
+  assert.equal(await recordCompetitiveRoundEvents(db,m,2000,{existingOnly:true}),true);
+  const saved=sql.prepare('SELECT * FROM valorant_match_round_events').get() as {rounds_json:string;kills_json:string;recorded_at:number};
+  assert.equal(JSON.parse(saved.rounds_json)[0].context.e.at,2000);assert.equal(JSON.parse(saved.kills_json)[0].w,'Vandal');assert.equal(JSON.parse(saved.kills_json)[0].wAt,2000);
+  assert.equal(await recordCompetitiveRoundEvents(db,m,3000,{existingOnly:true}),false);
+  m.rounds![0].stats=m.players.map(p=>({player:{puuid:p.puuid},economy:{loadout_value:4500},ability_casts:{grenade:1}}));m.kills![0].weapon={name:'Phantom'};
+  assert.equal(await recordCompetitiveRoundEvents(db,m,4000,{existingOnly:true}),false);
+  assert.equal((sql.prepare('SELECT rounds_json FROM valorant_match_round_events').get() as {rounds_json:string}).rounds_json,saved.rounds_json);
+  delete m.rounds![0].plant;m.rounds![1].plant=null;m.kills![0].time_in_round_in_ms=99999;
+  assert.equal(await recordCompetitiveRoundEvents(db,m,5000,{existingOnly:true}),false,'a changed timeline cannot supply joint equipment evidence');
+ }finally{sql.close()}
+});
+
+test('additional context bytes are bounded without discarding the existing round skeleton or kills',()=>{
+ const m=match();m.players.forEach((p,i)=>p.puuid=('x'.repeat(120)+i));m.kills=[];
+ m.rounds=Array.from({length:60},(_,id)=>({id,winning_team:'Blue',stats:m.players.map(p=>({player:{puuid:p.puuid},economy:{loadout_value:5000},ability_casts:{grenade:100,ability1:100,ability2:100,ultimate:100}}))}));
+ const c=compactCompetitiveRoundEvents(m,1000)!;const rs=JSON.parse(c.roundsJson!);
+ assert.equal(rs.length,60);assert.equal(rs[0].contextSchema,1);assert.equal(rs[0].contextOmitted,'size-cap');assert.equal(rs.some((r:any)=>r.context!==undefined),false);assert.equal(rs[59].r,59);
 });

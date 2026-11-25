@@ -77,6 +77,12 @@ test('future festival fields expand to 16 without rewriting previous ten-runner 
  const betState={...createRacing(),cash:2000};
  const purchased=placeRaceBet(betState,{raceId:future,type:'win',horse:16,amount:1000},future-120000,[],10);
  assert.equal(purchased.horse,16);
+ assert.equal(hydrateRacing(betState).raceBets[0].horse,16,'paid ticket survives hydration');
+ const triState={...createRacing(),cash:2000};
+ placeRaceBet(triState,{raceId:future,type:'trifecta',horse:[16,15,14],amount:1000},future-120000,[],10);
+ assert.deepEqual(hydrateRacing(triState).raceBets[0].horse,[16,15,14]);
+ assert.equal(hydrateRacing({raceBets:[{...purchased,raceId:FESTIVAL_FIRST}]}).raceBets.length,0,'old ten-runner races reject new horse numbers');
+ assert.equal(raceCard(Date.parse('2026-11-21T20:45:00+09:00')).size,raceCard(Date.parse('2026-11-21T20:45:00+09:00')).big||festivalRace(Date.parse('2026-11-21T20:45:00+09:00'))?10:8);
  const html=raceScreen({state:{cash:2000,raceBets:[]},live:true,
   watch:{card,runs:true,finished:false},open:{card,hash:null},openOdds:raceOdds(card),
   draft:{type:'win',horse:16,amount:1000},weeklyLeft:400000,tabs:'',nav:''});

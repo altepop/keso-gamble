@@ -1,4 +1,4 @@
-import {relicCombinationsSection} from './relics-v7.js?v=web-92692bbab9cb89a2';
+import {relicCombinationsSection} from './relics-v7.js?v=web-ca5d2ee9a5a25ff4';
 // Presentation-only helpers; KP, ownership and equipped slots stay server authoritative.
 const esc=x=>String(x??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 const number=x=>Number(x??0).toLocaleString('ja-JP');
@@ -111,7 +111,7 @@ export function relicRevealPanel(reveal){
  const big=['legendary','mythic','ancient','transcendent'].includes(rarity);
  const top=highlights.filter(x=>x.rarity===rarity).slice(0,4);
  const breakdown=rank.filter(k=>Number(summary[k])>0).map(k=>'<span class="relic-result-pill relic-rarity-'+k+'">'+esc(relicRarityNames[k])+' × '+number(summary[k])+'</span>').join('');
- const extra=[...(reveal.mutations??[]).map(x=>'🧬 突然変異 '+x),...(reveal.foils??[]).map(x=>'✨ 特殊個体 '+x)].slice(0,5);
+ const extra=[...(reveal.consumables??[]).map(x=>'🧪 追加ドロップ '+x.name+' ×'+x.count),...(reveal.mutations??[]).map(x=>'🧬 突然変異 '+x),...(reveal.foils??[]).map(x=>'✨ 特殊個体 '+x)].slice(0,8);
  const extraHtml=extra.length?'<div class="relic-v7-extras">'+extra.map(x=>'<strong>'+esc(x)+'</strong>').join('')+'</div>':'';
  const symbols=['✦','◇','✧','✶','✷','⌘','✧','◇'];
  const runes=big?'<div class="relic-cinematic-runes" aria-hidden="true">'+symbols.map((g,i)=>'<span style="--rune-index:'+i+'">'+g+'</span>').join('')+'</div>':'';

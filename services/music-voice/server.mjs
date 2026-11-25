@@ -2,6 +2,7 @@ import {createServer} from 'node:http';
 import {timingSafeEqual} from 'node:crypto';
 import {Client,GatewayIntentBits} from 'discord.js';
 import {MusicController} from './player.mjs';
+import {validDuelCue} from './duel-cue.mjs';
 
 const DISCORD_BOT_TOKEN=process.env.DISCORD_BOT_TOKEN;
 const MUSIC_BRIDGE_TOKEN=process.env.MUSIC_BRIDGE_TOKEN;
@@ -69,6 +70,7 @@ function takeStateHint(request){
 
 client.on('voiceStateUpdate',(oldState,newState)=>music.onVoiceStateUpdate(newState.guild?newState:oldState));
 const receipts=new Map();
+const duelCueReceipts=new Map();
 function pruneReceipts(now){
  if(receipts.size<200)return;
  for(const [id,entry] of receipts)if(entry.expiresAt<now)receipts.delete(id);
@@ -90,6 +92,34 @@ const server=createServer(async(req,res)=>{
   const ready=music.health().ready&&(!stateOrigin||restored);
   return reply(res,200,{status:!configured?'configuration_required':ready?'ready':'starting',
     active:music.health().active});
+ }
+ // The only duel voice endpoint. Worker-to-Node service credential must match
+ // the existing private music bridge. This never joins an unoccupied VC.
+ if(path==='/v1/duel-cue'){
+  if(req.method!=='POST')return reply(res,405,{ok:false,reason:'method'});
+  if(!configured)return reply(res,503,{ok:false,reason:'not_configured'});
+  const token=String(req.headers.authorization??'').replace(/^Bearer /,'');
+  if(!equal(token,MUSIC_BRIDGE_TOKEN))return reply(res,401,{ok:false,reason:'unauthorized'});
+  let data;
+  try{data=await readBody(req);}catch{
+   return reply(res,400,{ok:false,reason:'invalid_cue_body'});
+  }
+  if(data?.guildId!==MUSIC_GUILD_ID||!validDuelCue(data))
+   return reply(res,400,{ok:false,reason:'invalid_cue'});
+  if(!client.isReady())return reply(res,503,{ok:false,reason:'bot_unavailable'});
+  // Two Worker invocations for one committed transition must not repeat audio.
+  const key=[data.guildId,data.matchId,data.version,data.kind].join(':');
+  const now=Date.now();
+  for(const [id,row] of duelCueReceipts)if(row.expiresAt<=now)duelCueReceipts.delete(id);
+  let receipt=duelCueReceipts.get(key);
+  if(!receipt){
+   receipt={expiresAt:now+15*60_000,
+    result:music.playDuelCue(data).catch(()=>({played:false,reason:'audio_unavailable'}))};
+   duelCueReceipts.set(key,receipt);
+   if(duelCueReceipts.size>200)duelCueReceipts.delete(duelCueReceipts.keys().next().value);
+  }
+  const outcome=await receipt.result;
+  return reply(res,200,{ok:true,played:outcome.played,reason:outcome.reason});
  }
  if(req.method!=='POST'||path!=='/v1/music')
   return reply(res,404,{ok:false,message:'Not found'});

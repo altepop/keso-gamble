@@ -1,4 +1,5 @@
 import {activityLaunchComponents} from './activity-link.ts';
+import {DuelEventHub} from './duel-events.ts';
 import type {KpEnv,KpMapping} from './kp.ts';
 import {earningsWebhook} from './racing-posts.ts';
 import type {PostEnv} from './racing-posts.ts';
@@ -76,9 +77,23 @@ export async function prepareRaceBroadcast(env:BroadcastEnv,mapping:KpMapping,no
 }
 export class RaceBroadcaster {
  private ctx:DurableObjectState;private env:BroadcastEnv;
- constructor(ctx:DurableObjectState,env:BroadcastEnv){this.ctx=ctx;this.env=env;}
+ // Duel channels use a separate DO ID ('duel:<guild>') from the racing alarm
+ // ('guild:<guild>'). Neither alters the other object's storage or schedule.
+ private duelEvents:DuelEventHub;
+ constructor(ctx:DurableObjectState,env:BroadcastEnv){this.ctx=ctx;this.env=env;this.duelEvents=new DuelEventHub(ctx.storage);}
  async fetch(request:Request){
-  if(request.method!=='POST'||new URL(request.url).pathname!=='/ensure')return new Response('Not found',{status:404});
+  const path=new URL(request.url).pathname;
+  if(request.method==='POST'&&path==='/duel/subscribe'){
+   const body=await request.text();if(body.length>120)return new Response('Invalid request',{status:400});
+   try{const request=JSON.parse(body) as {user?:unknown;observer?:unknown};return this.duelEvents.subscribe(request.user,request.observer===true);}
+   catch{return new Response('Invalid request',{status:400});}
+  }
+  if(request.method==='POST'&&path==='/duel/notify'){
+   const body=await request.text();if(body.length>300)return new Response('Invalid request',{status:400});
+   try{return Response.json({delivered:this.duelEvents.publish(JSON.parse(body))});}
+   catch{return new Response('Invalid request',{status:400});}
+  }
+  if(request.method!=='POST'||path!=='/ensure')return new Response('Not found',{status:404});
   const {guild}=await request.json() as {guild:string};if(!/^\d{15,22}$/.test(guild))return new Response('Invalid guild',{status:400});
   await this.ctx.storage.put('guild',guild);
   const alarm=await this.ctx.storage.getAlarm();if(!alarm||alarm>Date.now()+1000)await this.ctx.storage.setAlarm(Date.now()+1000);

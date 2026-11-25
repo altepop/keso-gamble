@@ -263,7 +263,7 @@ test('premium solo orders charge once and require verified solo parties and deat
  await collectKpMatch(f.env,mapping,m,'p-one');assert.equal(f.sql.prepare('SELECT status FROM kp_directives').get()!.status,'active');
  m.players.pop();await collectKpMatch(f.env,mapping,m,'p-one');assert.equal(f.sql.prepare('SELECT status FROM kp_directives').get()!.status,'completed');
  await operateKp(f.env,mapping,two,'premium-death-order','directive',{target:one,task:'solo_death_unrated'});
- assert.equal((await readKpState(f.env,mapping,two)).cash,50000,'solo death unrated costs 300,000');f.sql.exec('UPDATE kp_directives SET at=0');
+ assert.equal((await readKpState(f.env,mapping,two)).cash,300000,'old solo competitive directive was fully refunded before the 300,000 KP death order');f.sql.exec('UPDATE kp_directives SET at=0');
  const u={...m,metadata:{...m.metadata,match_id:'death-solo',queue:{id:'unrated'}}};
  await collectKpMatch(f.env,mapping,u,'p-one');assert.equal(f.sql.prepare("SELECT status FROM kp_directives WHERE task='solo_death_unrated'").get()!.status,'active');
  f.sql.prepare('INSERT INTO death_unrated_sessions VALUES(?,?,?,?,?,?)').run('One#JP1','premium',1,Date.now()+10000,'death-solo',null);
@@ -874,6 +874,28 @@ test('periodic duel timeout sweeps escrow once even with no viewer online',async
 });
 
 
+test('duel list skips secret join for public board games without removing private game hands',async()=>{
+ const {boardDuelAction,boardDuelList}=await import('../src/board-duels.ts');
+ const f=await fixture();seed(f.sql,one,1500);seed(f.sql,two,1500);
+ const id='00000000-0000-4000-8000-000000001831';
+ const created=await boardDuelAction(f.env,mapping,one,{
+  id,action:'create',game:'trio',opponent:two,stake:100
+ });
+ const listing=await boardDuelList(f.env,mapping,one);
+ const visible=listing.matches.find(x=>x.id===created.id);
+ assert.ok(visible);
+ assert.equal(visible.game,'trio');
+ assert.equal(visible.private_hand,null,'public board-game listing never needs secrets');
+ const {boardDuelListSql}=await import('../src/board-duels.ts');
+ const listSql=boardDuelListSql(false);
+ assert.ok(listSql.includes("AND d.game IN ('hitblow','bluffdice','poker')"),
+  'a newly added public game must not silently read a secrets row');
+ assert.match(listSql,/WHERE guild=\? AND user_a=\?/,
+  'viewer must be a participant on the A-side index');
+ assert.match(listSql,/WHERE guild=\? AND user_b=\?/,
+  'viewer must be a participant on the B-side index');
+});
+
 test('four mini duels keep other hands secret, and Hit & Blow settles two escrowed wallets',async()=>{
  const {boardDuelAction,boardDuelList}=await import('../src/board-duels.ts');
  const f=await fixture();seed(f.sql,one,1500);seed(f.sql,two,1500);
@@ -962,7 +984,7 @@ test('upgrading a live Othello-only schema preserves active games and upgrades c
  const migrated=f.sql.prepare('SELECT game,user_a,user_b,stake,status FROM kp_board_duels WHERE id=?').get(id(401))!;
  assert.equal(migrated.game,'othello');assert.equal(migrated.stake,500);
  assert.match(String(f.sql.prepare("SELECT sql FROM sqlite_master WHERE name='kp_board_duels'").get()!.sql),/connect4/);
- assert.equal(f.sql.prepare("SELECT value FROM kp_settings WHERE key='board_duel_schema_version'").get()!.value,'2');
+ assert.equal(f.sql.prepare("SELECT value FROM kp_settings WHERE key='board_duel_schema_version'").get()!.value,'3');
  seed(f.sql,one,1000);seed(f.sql,two,1000);
  const invite=await boardDuelAction(f.env,mapping,one,{id:id(402),action:'create',game:'poker',opponent:two,stake:100});
  assert.equal(invite.game,'poker');
@@ -1127,7 +1149,10 @@ test('monitor reward lookup reads each immutable bonus receipt once and preserve
  assert.equal(run.credits.get(id),985);assert.equal(run.relicBonuses.get(id),125);
  const plan=f.sql.prepare('EXPLAIN QUERY PLAN '+KP_RUN_MATCH_SQL).all(id,guild).map(r=>String(r.detail)).join(' | ');
  for(const alias of ['p','r','c'])assert.match(plan,new RegExp('SEARCH '+alias+' USING INDEX sqlite_autoindex_kp_ledger_1'));
- assert.doesNotMatch(plan,/SCAN kp_ledger|CORRELATED SCALAR SUBQUERY/);
+ assert.doesNotMatch(plan,/SCAN kp_ledger|SCAN x\b/);
+ // Exactly one scalar existence check is permitted: the immutable rank receipt.
+ assert.equal((plan.match(/CORRELATED SCALAR SUBQUERY/g)??[]).length,1);
+ assert.match(plan,/SEARCH x USING COVERING INDEX sqlite_autoindex_kp_escalation_power_matches_1 \(id=\?\)/);
  const other=await prepareKpRun(f.env,{...mapping,guildId:'100000000000009999'});await loadKpRunMatch(f.env,other,id);assert.equal(other.credits.size,0);
 });
 
@@ -1254,4 +1279,95 @@ test('three verified positive-KD losses recognize Iron II and repeated collectio
  }
  const v=(await readKpState(f.env,mapping,one)).escalationRating;assert.equal(v.grade,'アイアン Ⅱ');assert.equal(v.rank?.rr,0);assert.equal(v.placementConsistencyBonus,100);assert.equal(v.played,3);
  assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM kp_events').get()!.n,3);assert.equal((await readKpState(f.env,mapping,one)).cash,1000,'rank RR is separate from spendable KP');
+});
+
+test('conditional power receipt EXISTS preserves every legacy projection including late settlement and historic compensation',async()=>{
+ const {KP_RUN_MATCH_SQL}=await import('../src/kp.ts');
+ const f=await fixture();
+ try{
+  await prepareKpRun(f.env,mapping);
+  const legacy=`SELECT e.amount+COALESCE(p.delta,0)+COALESCE(r.delta,0)+COALESCE(c.delta,0)+COALESCE(t.delta,0) AS amount,
+ COALESCE(r.delta,0)+COALESCE(c.delta,0) AS relic,n.message,d.note,e.mode,e.policy,
+ CASE WHEN e.mode='escalation' AND e.policy='escalation-power-v1' THEN CASE WHEN x.id IS NULL THEN 0 ELSE 1 END ELSE 1 END AS power_done FROM kp_events e
+ LEFT JOIN kp_escalation_power_matches x ON x.id=e.id AND e.mode='escalation' AND e.policy='escalation-power-v1'
+ LEFT JOIN kp_ledger t ON t.id='esc-extra:'||e.id AND e.mode IN ('escalation','swiftplay')
+ LEFT JOIN kp_ledger p ON p.id='penalty:'||e.id
+ LEFT JOIN kp_ledger r ON r.id='relic:'||e.id
+ LEFT JOIN kp_ledger c ON c.id='spike-comp:'||e.id
+ LEFT JOIN kp_reward_notes d ON d.id=e.id
+ LEFT JOIN kp_accounts a ON a.guild=e.guild AND a.puuid=e.puuid
+ LEFT JOIN notifications n ON n.riot_id=a.riot AND n.match_id=e.match
+ WHERE e.id=? AND e.guild=? LIMIT 1`;
+  const add=f.sql.prepare('INSERT INTO kp_events(id,guild,user,puuid,match,mode,outcome,amount,policy,at) VALUES(?,?,?,?,?,?,?,?,?,?)');
+  const ledger=f.sql.prepare('INSERT INTO kp_ledger(id,guild,user,delta,kind,at) VALUES(?,?,?,?,?,?)');
+  const power=f.sql.prepare('INSERT INTO kp_escalation_power_matches(id,guild,user,act,act_name,episode,started_at,ended_at,outcome,performance,kd_positive,rr_performance) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)');
+  const cases=[['escalation','escalation-power-v1'],['escalation','legacy'],['swiftplay','legacy'],['competitive','escalation-power-v1'],['spikerush','legacy']];
+  const before=f.sql.prepare('SELECT COUNT(*) AS n FROM kp_ledger');
+  for(const [i,[mode,policy]] of cases.entries()){
+   const id='p12-power-fixture-'+i,match='p12-match-fixture-'+i;
+   add.run(id,guild,one,'p-one',match,mode,'win',1000,policy,Date.now());
+   for(const [prefix,delta] of [['penalty:',-40],['relic:',50],['spike-comp:',75],['esc-extra:',25]] as const)ledger.run(prefix+id,guild,one,delta,'test-only',Date.now());
+   if(i%2===0){
+    f.sql.prepare('INSERT INTO kp_reward_notes(id,note) VALUES(?,?)').run(id,'historical note');
+    f.sql.prepare('INSERT INTO notifications(riot_id,match_id,message,ended_at,mode,sent) VALUES(?,?,?,?,?,1)').run('One#JP1',match,'historical result',Date.now(),mode);
+   }
+   const compare=(expected:number)=>{
+    const count=before.get()?.n;
+    const old=f.sql.prepare(legacy).all(id,guild);
+    const next=f.sql.prepare(KP_RUN_MATCH_SQL).all(id,guild);
+    assert.deepEqual(next,old);
+    assert.equal(next.length,1);
+    assert.equal(next[0].power_done,expected);
+    assert.equal(next[0].relic,125,'even a historic non-spikerush compensation must remain');
+    assert.equal(next[0].amount,mode==='escalation'||mode==='swiftplay'?1110:1085);
+    assert.equal(before.get()?.n,count,'both reads are side-effect free');
+   };
+   compare(i===0?0:1);
+   power.run(id,guild,one,'fixture-act',null,'fixture-episode',0,1,'win',0,0,0);
+   compare(1);
+   assert.deepEqual(f.sql.prepare(KP_RUN_MATCH_SQL).all(id,'other-guild'),f.sql.prepare(legacy).all(id,'other-guild'));
+   assert.equal(f.sql.prepare(KP_RUN_MATCH_SQL).all(id,'other-guild').length,0);
+  }
+  assert.deepEqual(f.sql.prepare(KP_RUN_MATCH_SQL).all('missing',guild),f.sql.prepare(legacy).all('missing',guild));
+ }finally{f.sql.close();}
+});
+
+test('directive refunds are staged, idempotent and never expire active directives',async t=>{
+ const {refundDueDirectives,DIRECTIVE_HOUR:H}=await import('../src/kp-directive-lifecycle.ts');const f=await fixture();seed(f.sql,one,40000);
+ await operateKp(f.env,mapping,one,'directive-refund-fixture','directive',{target:two,task:'competitive'});
+ const at=Date.now();await refundDueDirectives(f.env,mapping,at+24*H-1);
+ assert.equal(f.sql.prepare('SELECT balance FROM kp_wallets WHERE user=?').get(one)?.balance,0);
+ await refundDueDirectives(f.env,mapping,at+24*H);await refundDueDirectives(f.env,mapping,at+24*H);
+ assert.equal(f.sql.prepare('SELECT balance FROM kp_wallets WHERE user=?').get(one)?.balance,20000);
+ await refundDueDirectives(f.env,mapping,at+48*H);await refundDueDirectives(f.env,mapping,at+72*H);
+ assert.equal(f.sql.prepare('SELECT balance FROM kp_wallets WHERE user=?').get(one)?.balance,40000);
+ assert.equal(f.sql.prepare('SELECT status FROM kp_directives').get()?.status,'active');
+});
+test('early directive completion uses verified end and credits once; late completion returns only due portion',async()=>{
+ const {completeDirectiveMatch,DIRECTIVE_HOUR:H,refundDueDirectives}=await import('../src/kp-directive-lifecycle.ts');const f=await fixture();seed(f.sql,one,80000);
+ await operateKp(f.env,mapping,one,'directive-early-fixture','directive',{target:two,task:'competitive'});
+ const at=Date.now();await completeDirectiveMatch(f.env,mapping,two,'competitive',at,at+6*H,'verified-1');await completeDirectiveMatch(f.env,mapping,two,'competitive',at,at+6*H,'verified-1');
+ assert.equal(f.sql.prepare("SELECT SUM(delta) AS n FROM kp_ledger WHERE kind='directive-early'").get()?.n,1000);
+ await operateKp(f.env,mapping,one,'directive-late-fixture','directive',{target:two,task:'competitive'});
+ await completeDirectiveMatch(f.env,mapping,two,'competitive',at+25*H,at+26*H,'verified-2');await refundDueDirectives(f.env,mapping,at+72*H);
+ assert.equal(f.sql.prepare("SELECT SUM(delta) AS n FROM kp_ledger WHERE kind='directive-refund'").get()?.n,20000);
+});
+test('free directive transfer is issuer-only, one time, preserves original refund clock, excludes old matches',async t=>{
+ const {completeDirectiveMatch,DIRECTIVE_HOUR:H,refundDueDirectives}=await import('../src/kp-directive-lifecycle.ts');const f=await fixture();seed(f.sql,one,40000);
+ const third='100000000000000103',m={...mapping,accounts:[...mapping.accounts,{riotId:'Three#JP1',discordUserId:third}]};await initializeKp(f.env,m);
+ await operateKp(f.env,m,one,'directive-transfer-fixture','directive',{target:two,task:'competitive'});
+ const id=String(f.sql.prepare('SELECT id FROM kp_directives').get()?.id),at=Date.now(),args={directiveId:id,target:third};
+ await assert.rejects(operateKp(f.env,m,one,'directive-too-early','directive-transfer',args));
+ t.mock.timers.tick(24*H);await assert.rejects(operateKp(f.env,m,two,'directive-not-owner','directive-transfer',args));
+ await operateKp(f.env,m,one,'directive-move-fixture','directive-transfer',args);await operateKp(f.env,m,one,'directive-move-fixture','directive-transfer',args);
+ assert.equal(f.sql.prepare('SELECT target FROM kp_directives').get()?.target,third);
+ assert.equal(f.sql.prepare('SELECT at FROM kp_directives').get()?.at,at);
+ await assert.rejects(operateKp(f.env,m,one,'directive-move-again','directive-transfer',{directiveId:id,target:two}));
+ await completeDirectiveMatch(f.env,m,two,'competitive',at+24*H,at+25*H,'old-target');
+ await completeDirectiveMatch(f.env,m,third,'competitive',at+23*H,at+25*H,'old-match');
+ assert.equal(f.sql.prepare('SELECT status FROM kp_directives').get()?.status,'active');
+ await refundDueDirectives(f.env,m,at+48*H);
+ await completeDirectiveMatch(f.env,m,third,'competitive',at+48*H,at+49*H,'new-match');
+ assert.equal(f.sql.prepare('SELECT status FROM kp_directives').get()?.status,'completed');
+ assert.equal(f.sql.prepare('SELECT balance FROM kp_wallets WHERE user=?').get(one)?.balance,40000);
 });

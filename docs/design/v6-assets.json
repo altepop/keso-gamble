@@ -1,0 +1,33 @@
+{
+  "source": "User-provided assets.zip; original PNG bytes, no transformation",
+  "files": {
+    "abyss-splash.png": {
+      "sha256": "082d21e5302d943277910bcd0634fdd13cda93d67f13bbaca9b09c125c2cbedd",
+      "bytes": 1541054
+    },
+    "chamber-cut.png": {
+      "sha256": "d27de859af97a5c86fcaee29cafb25ea9f3e7a0839da0779ee4efb8fa68453ff",
+      "bytes": 571991
+    },
+    "clove-cut.png": {
+      "sha256": "d1d71a0052790568ead8832986b56f89e141aa2962d997b5e0107bcf46f8b542",
+      "bytes": 534593
+    },
+    "jett-cut.png": {
+      "sha256": "da631a347b54b0df3b3e169c8d687004aa2c00ea3cab3cc08d2be2a7efc66082",
+      "bytes": 569134
+    },
+    "range-splash.png": {
+      "sha256": "38b8ae4da9f089e9c61c8a556b18e7ef011210efcb4f8119c6aa8b3173f266d0",
+      "bytes": 2229333
+    },
+    "sova-cut.png": {
+      "sha256": "feec82aeee722780d098581bc734e36a3afd8edf00a3e386288f084ed7c2ff42",
+      "bytes": 766674
+    },
+    "summit-splash.png": {
+      "sha256": "a505ac79390c7b9926b22ca3f6081c20a1388ab5e4a2bf2d27a43e409824000b",
+      "bytes": 2466673
+    }
+  }
+}

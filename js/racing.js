@@ -1,4 +1,4 @@
-import {EXTRA_HORSE_NAMES,EXTRA_CROWN_NAMES,REGULAR_RACE_NAMES} from './racing-name-catalog.js?v=web-92692bbab9cb89a2';
+import {EXTRA_HORSE_NAMES,EXTRA_CROWN_NAMES,REGULAR_RACE_NAMES} from './racing-name-catalog.js?v=web-ca5d2ee9a5a25ff4';
 // Horse racing. Pure logic with no DOM or clock reads, shared by the browser and the Worker.
 // Cards and odds are public (PUBLIC_SALT). The run uses a per-race seed: the demo uses the public
 // salt, while the Worker keeps a random seed secret until the start and publishes its hash first.
@@ -82,7 +82,7 @@ export const FESTIVAL_FROM=Date.parse('2026-11-11T00:00:00+09:00');
 export const FESTIVAL_FIRST=Date.parse('2026-11-14T22:00:00+09:00');
 export const FESTIVAL_PRICE=1000,FESTIVAL_MAX_ODDS10=1000000;
 // A date gate preserves every previously committed festival card and its payouts.
-export const FESTIVAL_EXPANDED_FROM=Date.parse('2026-11-19T00:00:00+09:00');
+export const FESTIVAL_EXPANDED_FROM=Date.parse('2026-11-27T00:00:00+09:00');
 export function festivalRace(start){
  if(!isRaceStart(start)||start<FESTIVAL_FROM)return null;
  const week=weekStart(start);
@@ -340,7 +340,7 @@ export function raceCommentary(card,result,timeline,odds,seed=PUBLIC_SALT){
 export function createRacing(){return {raceBets:[],raceWeek:{start:0,spent:0}};}
 function keepPending(bets){const pending=bets.filter(b=>b.status==='pending');return [...pending,...bets.filter(b=>b.status!=='pending').sort((a,b)=>b.time-a.time).slice(0,Math.max(0,60-pending.length))].sort((a,b)=>b.time-a.time);}
 const validInt=(v,min=0)=>Number.isSafeInteger(v)&&v>=min;
-function validBet(b){return b&&typeof b.id==='string'&&b.id.length<=40&&isRaceStart(b.raceId)&&Object.hasOwn(BET_TYPES,b.type)&&(b.type==='trifecta'?Array.isArray(b.horse)&&b.horse.length===3&&new Set(b.horse).size===3&&b.horse.every(n=>validInt(n,1)&&n<=10):validInt(b.horse,1)&&b.horse<=10)&&validInt(b.amount,MIN_BET)&&b.amount%BET_STEP===0&&(validInt(b.odds,10)||(b.festival===true&&festivalRace(b.raceId)&&b.status==='pending'&&b.odds===null))&&validInt(b.time)&&(b.status==='pending'?b.payout===0:['won','lost'].includes(b.status)&&validInt(b.payout)&&(b.status==='lost'?b.payout===0:b.payout===payoutFor(b.amount,b.odds)));}
+function validBet(b){return b&&typeof b.id==='string'&&b.id.length<=40&&isRaceStart(b.raceId)&&Object.hasOwn(BET_TYPES,b.type)&&(b.type==='trifecta'?Array.isArray(b.horse)&&b.horse.length===3&&new Set(b.horse).size===3&&b.horse.every(n=>validInt(n,1)&&n<=(festivalExpanded(b.raceId)?16:10)):validInt(b.horse,1)&&b.horse<=(festivalExpanded(b.raceId)?16:10))&&validInt(b.amount,MIN_BET)&&b.amount%BET_STEP===0&&(validInt(b.odds,10)||(b.festival===true&&festivalRace(b.raceId)&&b.status==='pending'&&b.odds===null))&&validInt(b.time)&&(b.status==='pending'?b.payout===0:['won','lost'].includes(b.status)&&validInt(b.payout)&&(b.status==='lost'?b.payout===0:b.payout===payoutFor(b.amount,b.odds)));}
 export function hydrateRacing(raw){
  const racing=createRacing();
  // Every unsettled ticket stays (its KP is already paid); settled ones fill the rest of the 60 shown, newest first.

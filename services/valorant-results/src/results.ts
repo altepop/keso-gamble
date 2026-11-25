@@ -16,6 +16,7 @@ export interface Match {
   };
   players: Array<{
     puuid: string; team_id: string; name?: string; tag?: string; party_id?: string | null; agent?: { id?: string; name?: string } | null;
+    ability_casts?:unknown;
     stats?: { kills?: number; deaths?: number; assists?: number; score?: number; headshots?: number; bodyshots?: number; legshots?: number; damage?: { dealt?: number; received?: number } | null } | null;
   }>;
   rounds?: Array<{
@@ -23,8 +24,12 @@ export interface Match {
     winning_team?: string | null;
     attacking_team?: string | null;
     defending_team?: string | null;
+    winning_team_role?:unknown;
+    stats?: unknown;
+    plant?: unknown;
+    defuse?: unknown;
   }>;
-  kills?: Array<{ round: number; time_in_round_in_ms: number; killer?: { puuid: string } | null; victim: { puuid: string } }>;
+  kills?: Array<{ round: number; time_in_round_in_ms: number; killer?: { puuid: string } | null; victim: { puuid: string }; assistants?: Array<{puuid?:string}> | null; weapon?:unknown }>;
   teams: Array<{ team_id: string; won: boolean; rounds?: { won: number } }>;
 }
 export interface Notice {

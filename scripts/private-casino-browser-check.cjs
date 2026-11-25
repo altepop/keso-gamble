@@ -5,7 +5,7 @@ const server=spawn('python3',['-m','http.server','8794','--bind','127.0.0.1'],{c
  for(let i=0;i<50;i++){try{if((await fetch('http://127.0.0.1:8794')).ok)break;}catch{}await new Promise(r=>setTimeout(r,100));}
  const {playSlot}=await import('../js/casino-more.js');
  const {privateSlotRng}=await import('../js/private-casino-rules.js');
- const {createInitialState}=await import('../js/engine.js');const state={...createInitialState(),serverWallet:true,privateCasino:true,cash:10000,selfUserId:'owner',members:[],ledger:[]};
+ const {createInitialState,MARKET}=await import('../js/engine.js');const state={...createInitialState(),serverWallet:true,privateCasino:true,cash:10000,selfUserId:'owner',members:[],ledger:[]};
  const engine=process.argv[2]||'chromium';browser=await(engine==='webkit'?webkit:chromium).launch(engine==='webkit'?{}:{executablePath:existsSync('/usr/bin/chromium')?'/usr/bin/chromium':undefined,args:['--no-sandbox']});
  const ctx=await browser.newContext({viewport:{width:390,height:844},reducedMotion:'reduce'});await ctx.addInitScript(()=>localStorage.setItem('keso-kp-session-v1','fixture'));
  let ops=0,rejectNextShock=false,failNextState=false;const errors=[],bodies=[],shocks=[];
@@ -79,7 +79,7 @@ const server=spawn('python3',['-m','http.server','8794','--bind','127.0.0.1'],{c
  await page.locator('.private-casino summary').click();
  // Owner-only stock operator in the same private area: actual click, request and shared price refresh.
  await page.locator('details.asset-card.rules').filter({hasText:'裏モード：株価オペレーター'}).locator('summary').click();
- assert.equal(await page.locator('#admin-stock-symbol option').count(),12);
+ assert.equal(await page.locator('#admin-stock-symbol option').count(),MARKET.length,'stock operator options follow current market catalog');
  await page.locator('#admin-stock-symbol').selectOption('keso');
  await page.locator('#admin-stock-direction').selectOption('down');
  await page.locator('#admin-stock-strength').selectOption('50');

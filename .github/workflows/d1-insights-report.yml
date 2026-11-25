@@ -4,13 +4,66 @@ name: D1 read-only insights report
 # Hourly windows are read-only analytics and do not consume D1 Rows read.
 # Scheduled every two hours to catch approaching the limit well before exhaustion.
 on:
+  pull_request:
+    paths:
+      - '.github/workflows/d1-insights-report.yml'
+      - 'scripts/d1-daily-guard.mjs'
+      - 'scripts/d1-daily-guard.test.mjs'
+      - 'scripts/d1-read-audit.mjs'
+      - 'scripts/d1-read-budget-alert.mjs'
+      - 'scripts/d1-read-budget-alert.test.mjs'
+      - 'scripts/d1-read-hotspots.mjs'
+      - 'scripts/d1-read-hotspots.test.mjs'
+      - 'scripts/duel-admin-evidence.mjs'
+      - 'services/valorant-results/test/duel-admin-evidence.test.mjs'
+      - '.github/workflows/duel-monitor-heartbeat.yml'
+      - 'services/valorant-results/test/duel-monitor-heartbeat.test.mjs'
+      - 'services/valorant-results/src/duel-pve-sessions.ts'
+      - 'services/valorant-results/src/kp.ts'
+      - 'services/valorant-results/test/kp.test.ts'
+      - 'services/valorant-results/src/board-duels.ts'
+      - 'services/valorant-results/test/duel-pvp-invite-bounded.test.ts'
+      - 'services/valorant-results/test/duel-pve-sessions.test.ts'
+      - 'scripts/duel-monitor-heartbeat.mjs'
+      - 'scripts/duel-d1-schedule-watch.mjs'
+      - 'services/valorant-results/src/duel-rewards.ts'
+      - 'services/valorant-results/test/duel-rewards.test.ts'
+      - 'services/valorant-results/test/duel-rewards-d1.test.mjs'
+      - 'services/valorant-results/test/duel-d1-schedule-watch.test.mjs'
+      - 'scripts/duel-backup-watchdog-self-schedule.mjs'
+      - 'services/valorant-results/test/duel-backup-watchdog-self-schedule.test.mjs'
   push:
     branches: [main]
     paths:
       - '.github/workflows/d1-insights-report.yml'
       - 'scripts/d1-read-audit.mjs'
+      - 'scripts/d1-read-budget-alert.mjs'
+      - 'scripts/d1-read-budget-alert.test.mjs'
+      - 'scripts/d1-read-hotspots.mjs'
+      - 'scripts/d1-read-hotspots.test.mjs'
+      - 'scripts/duel-admin-evidence.mjs'
+      - 'services/valorant-results/test/duel-admin-evidence.test.mjs'
+      - '.github/workflows/duel-monitor-heartbeat.yml'
+      - 'services/valorant-results/test/duel-monitor-heartbeat.test.mjs'
+      - 'services/valorant-results/src/duel-pve-sessions.ts'
+      - 'services/valorant-results/src/kp.ts'
+      - 'services/valorant-results/test/kp.test.ts'
+      - 'services/valorant-results/src/board-duels.ts'
+      - 'services/valorant-results/test/duel-pvp-invite-bounded.test.ts'
+      - 'services/valorant-results/test/duel-pve-sessions.test.ts'
+      - 'scripts/duel-monitor-heartbeat.mjs'
+      - 'scripts/duel-d1-schedule-watch.mjs'
+      - 'services/valorant-results/src/duel-rewards.ts'
+      - 'services/valorant-results/test/duel-rewards.test.ts'
+      - 'services/valorant-results/test/duel-rewards-d1.test.mjs'
+      - 'services/valorant-results/test/duel-d1-schedule-watch.test.mjs'
+      - 'scripts/duel-backup-watchdog-self-schedule.mjs'
+      - 'services/valorant-results/test/duel-backup-watchdog-self-schedule.test.mjs'
       - 'scripts/d1-daily-guard.mjs'
       - 'scripts/d1-daily-guard.test.mjs'
+      # Read-only observation after future duel-history production changes.
+      # PR validation remains the normal CI; this does not backfill #824.
+      - 'services/valorant-results/src/duel-history.ts'
   workflow_dispatch:
   schedule:
     - cron: '17 * * * *'
@@ -23,9 +76,63 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  inspect:
-    if: github.repository == 'altepop/keso-gamble' && (github.event_name == 'push' || github.event_name == 'schedule' || github.actor == 'altepop')
+  # Independent hourly GitHub-schedule fallback: the duel watch's own :43
+  # cron has demonstrably missed runs. This does not depend on D1 inspect,
+  # which may intentionally fail when the 80,000 Rows read/h warning fires.
+  deployment-watch-fallback:
+    if: github.repository == 'altepop/keso-gamble' && github.event_name == 'schedule'
     runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      contents: read
+      actions: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Verify P12 monitor decisions without D1 or KP
+        run: node --test services/valorant-results/test/duel-deployment-watch.test.mjs services/valorant-results/test/duel-deployment-alert.test.mjs services/valorant-results/test/duel-deployment-schedule-watch.test.mjs services/valorant-results/test/duel-backup-watchdog-self-schedule.test.mjs
+      - name: Fallback check of production Pages and Worker via GitHub metadata
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          DUEL_WATCH_REPORT: ${{ runner.temp }}/duel-watch-fallback.json
+        run: node scripts/duel-deployment-watch.mjs
+      - name: Open or deduplicate incident if deployment or fallback check fails
+        if: failure()
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          DUEL_WATCH_REPORT: ${{ runner.temp }}/duel-watch-fallback.json
+        run: node scripts/duel-deployment-alert.mjs
+      - name: Independently detect missing hourly deployment health schedule
+        if: always() && github.event_name == 'schedule'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/duel-deployment-schedule-watch.mjs
+      - name: Independently detect missing backup watchdog Scheduled
+        if: always() && github.event_name == 'schedule'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/duel-backup-watchdog-self-schedule.mjs
+
+  budget-tests:
+    if: github.repository == 'altepop/keso-gamble' && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Verify sampled telemetry completeness without Cloudflare access
+        run: node --test scripts/d1-daily-guard.test.mjs scripts/d1-read-hotspots.test.mjs scripts/d1-read-budget-alert.test.mjs services/valorant-results/test/duel-admin-evidence.test.mjs services/valorant-results/test/duel-monitor-heartbeat.test.mjs services/valorant-results/test/duel-backup-watchdog-self-schedule.test.mjs services/valorant-results/test/duel-d1-schedule-watch.test.mjs
+  inspect:
+    if: github.repository == 'altepop/keso-gamble' && (github.event_name == 'push' || github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.actor == 'altepop'))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
     timeout-minutes: 8
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -94,7 +201,10 @@ jobs:
           NODE
 
       - name: Inspect 24h vs 1h top-fifty SQL read patterns
+        env:
+          D1_READ_AUDIT_REPORT: ${{ runner.temp }}/d1-read-audit.json
         run: |
+          node --test scripts/d1-read-hotspots.test.mjs
           node --check scripts/d1-read-audit.mjs
           node scripts/d1-read-audit.mjs
       - name: Protect optional Activity histories when account D1 estimate exceeds 4M in UTC day
@@ -103,3 +213,12 @@ jobs:
         run: |
           node --test scripts/d1-daily-guard.test.mjs
           node scripts/d1-daily-guard.mjs
+      - name: Create or deduplicate D1 read-budget alert for warning or unknown audit
+        if: always() && (github.event_name == 'push' || github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.actor == 'altepop'))
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          D1_READ_AUDIT_REPORT: ${{ runner.temp }}/d1-read-audit.json
+        run: |
+          node --test scripts/d1-read-budget-alert.test.mjs
+          node scripts/d1-read-budget-alert.mjs
