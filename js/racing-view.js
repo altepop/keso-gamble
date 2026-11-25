@@ -1,7 +1,7 @@
-import {stockPrice} from './stock-view.js?v=web-28517c2c1efaf40b';
-import { BET_TYPES, BOXES, CLASSES, COURSE_M, CONDITIONS, DAILY_EXCHANGES, GOINGS, MAX_OWNED, MIN_BET, BET_STEP, MAX_RACE_BET, PRIZES, OWNED_PRIZE_MULTIPLIERS, RETIRE_RACES, RUN_MS, STYLES, WEEKLY_LIMIT, FORM_REFORM_FROM, runningNotes, raceBrief, distanceAt, exchangeRemaining, payoutFor, placeSlots, trifectaOdds, festivalRace, FESTIVAL_PRICE, festivalOdds10, festivalExpanded, festivalRumor } from './racing.js?v=web-28517c2c1efaf40b';
-import { LUXURY, TITLES } from './luxury.js?v=web-28517c2c1efaf40b';
-import { escapeHTML } from './progression-views.js?v=web-28517c2c1efaf40b';
+import {stockPrice} from './stock-view.js?v=web-95bbfbbc79496aff';
+import { BET_TYPES, BOXES, CLASSES, COURSE_M, CONDITIONS, DAILY_EXCHANGES, GOINGS, MAX_OWNED, MIN_BET, BET_STEP, MAX_RACE_BET, PRIZES, OWNED_PRIZE_MULTIPLIERS, RETIRE_RACES, RUN_MS, STYLES, WEEKLY_LIMIT, FORM_REFORM_FROM, runningNotes, raceBrief, distanceAt, exchangeRemaining, payoutFor, placeSlots, trifectaOdds, festivalRace, FESTIVAL_PRICE, festivalOdds10, festivalExpanded, festivalRumor } from './racing.js?v=web-95bbfbbc79496aff';
+import { LUXURY, TITLES } from './luxury.js?v=web-95bbfbbc79496aff';
+import { escapeHTML } from './progression-views.js?v=web-95bbfbbc79496aff';
 const kp=n=>n.toLocaleString('ja-JP')+' KP';
 const odd=v=>(v/10).toFixed(1)+'倍';
 export const SILKS=[['#f5f5f5','#111'],['#1f1f1f','#fff'],['#e03131','#fff'],['#1c7ed6','#fff'],['#fcc419','#111'],['#2f9e44','#fff'],['#f76707','#fff'],['#f783ac','#111'],['#845ef7','#fff'],['#20c997','#111'],['#6c757d','#fff'],['#ff922b','#111'],['#ae3ec9','#fff'],['#15aabf','#111'],['#d9480f','#fff'],['#e64980','#fff']];

@@ -1,9 +1,9 @@
-import {escalationRankPanel} from './escalation-rank-view.js?v=web-28517c2c1efaf40b';
-import {hoyoPanel} from './hoyo-view.js?v=web-28517c2c1efaf40b';
-import {steamPanel} from './steam-view.js?v=web-28517c2c1efaf40b';
-import {stockPrice} from './stock-view.js?v=web-28517c2c1efaf40b';
-import { ACTIVITIES, MEMBERS, ORDERS } from './progression.js?v=web-28517c2c1efaf40b';
-import {exchangeRemaining,DAILY_EXCHANGES} from './racing.js?v=web-28517c2c1efaf40b';
+import {escalationRankPanel} from './escalation-rank-view.js?v=web-95bbfbbc79496aff';
+import {hoyoPanel} from './hoyo-view.js?v=web-95bbfbbc79496aff';
+import {steamPanel} from './steam-view.js?v=web-95bbfbbc79496aff';
+import {stockPrice} from './stock-view.js?v=web-95bbfbbc79496aff';
+import { ACTIVITIES, MEMBERS, ORDERS } from './progression.js?v=web-95bbfbbc79496aff';
+import {exchangeRemaining,DAILY_EXCHANGES} from './racing.js?v=web-95bbfbbc79496aff';
 export const escapeHTML=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const kp=n=>n.toLocaleString('ja-JP')+' KP';
 // A history amount with its own sign: +900 KP / −200 KP / ±0 KP.
