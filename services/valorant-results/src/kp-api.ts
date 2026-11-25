@@ -1,3 +1,4 @@
+import {directiveTransferResult} from './kp-directive-lifecycle.ts';
 import {practiceMatches,savePracticeMatch,practiceReview,ownPracticeRow} from './coach-practice-review.ts';
 import {readPrivateRecords,savePrivateRecord,readPrivateBody,privatePracticeState,PrivateRecordError} from './coach-private-records.ts';
 import {readPveBuild,savePveBuild} from './duel-pve-build.ts';
@@ -111,7 +112,7 @@ export async function readKpState(env:KpEnv,mapping:KpMapping,user:string){
  state.quizRates=quizKpRates;state.quizDay=new Date().toISOString().slice(0,10);state.quizLimits=quizKpLimits;state.quizCounts=Object.fromEntries(Object.keys(quizKpRates).map(mode=>[mode,quiz.filter(e=>e.day===state.quizDay&&e.mode===mode).length]));state.quizCompleted=Object.keys(quizKpLimits).filter(mode=>state.quizCounts[mode]>=quizKpLimits[mode]!);
  state.claims=rewards.map(e=>({id:e.id,activity:e.mode,reference:e.match,reward:e.amount,status:'approved',time:e.at})).concat(quiz.map(e=>({id:e.id,activity:'quiz.'+e.mode,reference:e.game,reward:e.amount,status:'approved',time:e.completed_at}))).concat(voice.map(e=>({id:e.id,activity:'voice',reference:'通話 '+e.slot+'回目',reward:e.amount,status:'approved',time:e.at}))).sort((a:{time:number},b:{time:number})=>b.time-a.time).slice(0,100);
  state.claims.push(...state.stockMarket.dividends.map((d:{day:string;amount:number;at:number})=>({id:'dividend:'+d.day,activity:'株配当',reference:d.day,reward:d.amount,status:'approved',time:d.at})));state.claims.sort((a:{time:number},b:{time:number})=>b.time-a.time);
- state.directives=(await env.DB.prepare('SELECT id,issuer,target,task,game,achievement,cost,status,at AS time FROM kp_directives WHERE guild=? AND (issuer=? OR target=?) ORDER BY at DESC,id LIMIT 100').bind(mapping.guildId,user,user).all()).results;
+ state.directives=(await env.DB.prepare(`SELECT d.id,d.issuer,d.target,d.task,d.game,d.achievement,d.cost,d.status,d.at AS time,t.at AS transferredAt,COALESCE(l1.delta,0)+COALESCE(l2.delta,0) AS refunded,COALESCE(b.delta,0) AS earlyBonus FROM kp_directives d LEFT JOIN kp_directive_transfers t ON t.directive_id=d.id LEFT JOIN kp_ledger l1 ON l1.id='directive-refund-1:'||d.id LEFT JOIN kp_ledger l2 ON l2.id='directive-refund-2:'||d.id LEFT JOIN kp_ledger b ON b.id='directive-early:'||d.id WHERE d.guild=? AND (d.issuer=? OR d.target=?) ORDER BY d.at DESC,d.id LIMIT 100`).bind(mapping.guildId,user,user).all()).results;
  state.members=members;
  state.escalationRating=await escalationRatingView(env,mapping.guildId,user);
  state.escalationSpins=(await env.DB.prepare("SELECT s.id,s.kind,s.tier,s.award,s.balance_before AS beforeBalance,s.balance_after AS afterBalance,s.at,COALESCE(e.mode,'escalation') AS mode FROM kp_escalation_spins s LEFT JOIN kp_events e ON e.id=s.id WHERE s.guild=? AND s.user=? ORDER BY s.at DESC LIMIT 12").bind(mapping.guildId,user).all()).results;
@@ -205,11 +206,12 @@ export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:strin
   const loadoutBefore=snapshotLoadout((state as {relics?:RelicCollection}).relics);let directive:Record<string,unknown>|null=null;let stockTrade:Record<string,unknown>|undefined;
   // 借KP: no bet or purchase at all while any is owed, decided before any draw. Checking the result instead would let a
   // winning roll through and refuse only the losing one. Selling, finishing a blackjack hand and settings stay open.
-  const settles=['horse-sell','roast-level','bj-hit','bj-stand','mines-pick','mines-cashout','vp-draw','relic-equip','relic-auto-equip','relic-claim-steam','relic-claim-unite','relic-save-preset','relic-overwrite-preset','relic-load-preset','relic-remove-preset','relic-rename-preset','relic-recycle','relic-shop','relic-voucher','relic-consumable-use','relic-market-list','relic-market-cancel'].includes(action)||(action==='trade'&&args.side==='sell');
+  const settles=['directive-transfer','horse-sell','roast-level','bj-hit','bj-stand','mines-pick','mines-cashout','vp-draw','relic-equip','relic-auto-equip','relic-claim-steam','relic-claim-unite','relic-save-preset','relic-overwrite-preset','relic-load-preset','relic-remove-preset','relic-rename-preset','relic-recycle','relic-shop','relic-voucher','relic-consumable-use','relic-market-list','relic-market-cancel'].includes(action)||(action==='trade'&&args.side==='sell');
   if(!settles&&await debtOf(env,mapping.guildId,user)>0)throw Error(DEBT_BLOCKED);
   if(ownerRound){const round=privateCasinoRound(state,args);action=round.action;args=round.args;result=round.result;}
   else if(action==='trade'){const order=applyStockOrder(state,args);result=order.result;stockTrade=order.stockTrade;}
   else if(action==='spin')result=args.type==='numbers'?spinNumbers(state,args.bets,cryptoRouletteNumber()):spin(state,args.type,args.amount,args.choice??0,cryptoRouletteNumber());
+  else if(action==='directive-transfer')result=await directiveTransferResult(env,mapping,user,args);
   else if(action==='directive'){
    const costs:Record<string,number>={competitive:40000,unrated:12500,solo_competitive:250000,solo_death_unrated:300000},task=String(args.task),target=String(args.target),base=Object.hasOwn(costs,task)?costs[task]:0;
    const discount=stockDiscount(base,state.stockBenefits.percent),cost=discount.paid;
@@ -751,6 +753,6 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping,deferP
    return response({error:'コーチングの分析情報を読み込めませんでした。KP残高とは関係ありません。診断コード：COACH_'+safeStep,code:'COACH_'+safeStep},503);
   }
   const message=error instanceof Error?error.message:'';
-  return response({retryable:!(/[ぁ-んァ-ヶ一-龯]/.test(message)&&!message.includes('SQL')),error:/[ぁ-んァ-ヶ一-龯]/.test(message)&&!message.includes('SQL')?message:message.includes('relic_market_sold')?'出品の状態が変わったため購入・取り下げできません。再読み込みしてください。':message.includes('kp_directive_active')||message.includes('kp_directives.guild, kp_directives.target')?'その相手には実行中の指令があります。':message.includes('kp_horse_limit')?'持てる馬は3頭までです。':message.includes('kp_crowns')?'その枠は埋まりました。もう一度お試しください。':message.includes('kp_horse_not_sellable')?'売れる馬が見つかりません。':'処理を確認できませんでした。残高を更新して確認してください。'},400);
+  return response({retryable:!(/[ぁ-んァ-ヶ一-龯]/.test(message)&&!message.includes('SQL')),error:/[ぁ-んァ-ヶ一-龯]/.test(message)&&!message.includes('SQL')?message:message.includes('relic_market_sold')?'出品の状態が変わったため購入・取り下げできません。再読み込みしてください。':message.includes('directive_transfer_conflict')?'指令の状態が変わりました。再読み込みしてください。':message.includes('kp_directive_active')||message.includes('kp_directives.guild, kp_directives.target')?'その相手には実行中の指令があります。':message.includes('kp_horse_limit')?'持てる馬は3頭までです。':message.includes('kp_crowns')?'その枠は埋まりました。もう一度お試しください。':message.includes('kp_horse_not_sellable')?'売れる馬が見つかりません。':'処理を確認できませんでした。残高を更新して確認してください。'},400);
  }
 }

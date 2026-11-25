@@ -263,7 +263,7 @@ test('premium solo orders charge once and require verified solo parties and deat
  await collectKpMatch(f.env,mapping,m,'p-one');assert.equal(f.sql.prepare('SELECT status FROM kp_directives').get()!.status,'active');
  m.players.pop();await collectKpMatch(f.env,mapping,m,'p-one');assert.equal(f.sql.prepare('SELECT status FROM kp_directives').get()!.status,'completed');
  await operateKp(f.env,mapping,two,'premium-death-order','directive',{target:one,task:'solo_death_unrated'});
- assert.equal((await readKpState(f.env,mapping,two)).cash,50000,'solo death unrated costs 300,000');f.sql.exec('UPDATE kp_directives SET at=0');
+ assert.equal((await readKpState(f.env,mapping,two)).cash,300000,'old solo competitive directive was fully refunded before the 300,000 KP death order');f.sql.exec('UPDATE kp_directives SET at=0');
  const u={...m,metadata:{...m.metadata,match_id:'death-solo',queue:{id:'unrated'}}};
  await collectKpMatch(f.env,mapping,u,'p-one');assert.equal(f.sql.prepare("SELECT status FROM kp_directives WHERE task='solo_death_unrated'").get()!.status,'active');
  f.sql.prepare('INSERT INTO death_unrated_sessions VALUES(?,?,?,?,?,?)').run('One#JP1','premium',1,Date.now()+10000,'death-solo',null);
@@ -1330,4 +1330,44 @@ test('conditional power receipt EXISTS preserves every legacy projection includi
   }
   assert.deepEqual(f.sql.prepare(KP_RUN_MATCH_SQL).all('missing',guild),f.sql.prepare(legacy).all('missing',guild));
  }finally{f.sql.close();}
+});
+
+test('directive refunds are staged, idempotent and never expire active directives',async t=>{
+ const {refundDueDirectives,DIRECTIVE_HOUR:H}=await import('../src/kp-directive-lifecycle.ts');const f=await fixture();seed(f.sql,one,40000);
+ await operateKp(f.env,mapping,one,'directive-refund-fixture','directive',{target:two,task:'competitive'});
+ const at=Date.now();await refundDueDirectives(f.env,mapping,at+24*H-1);
+ assert.equal(f.sql.prepare('SELECT balance FROM kp_wallets WHERE user=?').get(one)?.balance,0);
+ await refundDueDirectives(f.env,mapping,at+24*H);await refundDueDirectives(f.env,mapping,at+24*H);
+ assert.equal(f.sql.prepare('SELECT balance FROM kp_wallets WHERE user=?').get(one)?.balance,20000);
+ await refundDueDirectives(f.env,mapping,at+48*H);await refundDueDirectives(f.env,mapping,at+72*H);
+ assert.equal(f.sql.prepare('SELECT balance FROM kp_wallets WHERE user=?').get(one)?.balance,40000);
+ assert.equal(f.sql.prepare('SELECT status FROM kp_directives').get()?.status,'active');
+});
+test('early directive completion uses verified end and credits once; late completion returns only due portion',async()=>{
+ const {completeDirectiveMatch,DIRECTIVE_HOUR:H,refundDueDirectives}=await import('../src/kp-directive-lifecycle.ts');const f=await fixture();seed(f.sql,one,80000);
+ await operateKp(f.env,mapping,one,'directive-early-fixture','directive',{target:two,task:'competitive'});
+ const at=Date.now();await completeDirectiveMatch(f.env,mapping,two,'competitive',at,at+6*H,'verified-1');await completeDirectiveMatch(f.env,mapping,two,'competitive',at,at+6*H,'verified-1');
+ assert.equal(f.sql.prepare("SELECT SUM(delta) AS n FROM kp_ledger WHERE kind='directive-early'").get()?.n,1000);
+ await operateKp(f.env,mapping,one,'directive-late-fixture','directive',{target:two,task:'competitive'});
+ await completeDirectiveMatch(f.env,mapping,two,'competitive',at+25*H,at+26*H,'verified-2');await refundDueDirectives(f.env,mapping,at+72*H);
+ assert.equal(f.sql.prepare("SELECT SUM(delta) AS n FROM kp_ledger WHERE kind='directive-refund'").get()?.n,20000);
+});
+test('free directive transfer is issuer-only, one time, preserves original refund clock, excludes old matches',async t=>{
+ const {completeDirectiveMatch,DIRECTIVE_HOUR:H,refundDueDirectives}=await import('../src/kp-directive-lifecycle.ts');const f=await fixture();seed(f.sql,one,40000);
+ const third='100000000000000103',m={...mapping,accounts:[...mapping.accounts,{riotId:'Three#JP1',discordUserId:third}]};await initializeKp(f.env,m);
+ await operateKp(f.env,m,one,'directive-transfer-fixture','directive',{target:two,task:'competitive'});
+ const id=String(f.sql.prepare('SELECT id FROM kp_directives').get()?.id),at=Date.now(),args={directiveId:id,target:third};
+ await assert.rejects(operateKp(f.env,m,one,'directive-too-early','directive-transfer',args));
+ t.mock.timers.tick(24*H);await assert.rejects(operateKp(f.env,m,two,'directive-not-owner','directive-transfer',args));
+ await operateKp(f.env,m,one,'directive-move-fixture','directive-transfer',args);await operateKp(f.env,m,one,'directive-move-fixture','directive-transfer',args);
+ assert.equal(f.sql.prepare('SELECT target FROM kp_directives').get()?.target,third);
+ assert.equal(f.sql.prepare('SELECT at FROM kp_directives').get()?.at,at);
+ await assert.rejects(operateKp(f.env,m,one,'directive-move-again','directive-transfer',{directiveId:id,target:two}));
+ await completeDirectiveMatch(f.env,m,two,'competitive',at+24*H,at+25*H,'old-target');
+ await completeDirectiveMatch(f.env,m,third,'competitive',at+23*H,at+25*H,'old-match');
+ assert.equal(f.sql.prepare('SELECT status FROM kp_directives').get()?.status,'active');
+ await refundDueDirectives(f.env,m,at+48*H);
+ await completeDirectiveMatch(f.env,m,third,'competitive',at+48*H,at+49*H,'new-match');
+ assert.equal(f.sql.prepare('SELECT status FROM kp_directives').get()?.status,'completed');
+ assert.equal(f.sql.prepare('SELECT balance FROM kp_wallets WHERE user=?').get(one)?.balance,40000);
 });
