@@ -124,3 +124,23 @@ test('successive roast purchases use disjoint decks; retry does not advance sequ
  await operateKp(f.env,mapping,two,'roast-level-op-9011','roast-level',{level:'mild'});
  await assert.rejects(buy(f,{item:'roast-post',target:two}),/控えめ/);
 });
+
+test('full roast has a unique dramatic opening and three-line bot finale for each deck',()=>{
+ const openings=new Set<string>(),finales=new Set<string>();
+ for(let i=0;i<20;i++){
+  const full=luxuryRoastText('full',i,two,one),normal=luxuryRoastText('normal',i,two,one);
+  const parts=full.split('\n'), marker=parts.indexOf('**【等しいbotからのお知らせ】**');
+  assert.ok(marker>0);
+  const opening=parts[4]!, closing=parts.slice(marker+2,marker+5);
+  assert.equal(closing.length,3);
+  assert.match(closing[0]!,/30,000KP/);
+  assert.equal(parts.at(-1),`提供：<@${one}>`);
+  assert.ok(!openings.has(opening));openings.add(opening);
+  for(const line of closing){assert.ok(!finales.has(line));finales.add(line);}
+  assert.ok(!normal.includes('等しいbotからのお知らせ'));
+  assert.ok(full.length<=2000);
+ }
+ assert.equal(openings.size,20);assert.equal(finales.size,60);
+ assert.match(luxuryRoastText('full',0,two,one),/勝率改善に使われた予算は0KP/);
+ assert.match(luxuryRoastText('full',0,two,one),/ほな、また負けたときにお会いしましょうwwwwww/);
+});
