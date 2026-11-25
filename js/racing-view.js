@@ -1,5 +1,5 @@
 import {stockPrice} from './stock-view.js?v=web-28517c2c1efaf40b';
-import { BET_TYPES, BOXES, CLASSES, COURSE_M, CONDITIONS, DAILY_EXCHANGES, GOINGS, MAX_OWNED, MIN_BET, BET_STEP, MAX_RACE_BET, PRIZES, OWNED_PRIZE_MULTIPLIERS, RETIRE_RACES, RUN_MS, STYLES, WEEKLY_LIMIT, FORM_REFORM_FROM, runningNotes, raceBrief, distanceAt, exchangeDay, payoutFor, placeSlots, trifectaOdds, festivalRace, FESTIVAL_PRICE, festivalOdds10, festivalExpanded, festivalRumor } from './racing.js?v=web-28517c2c1efaf40b';
+import { BET_TYPES, BOXES, CLASSES, COURSE_M, CONDITIONS, DAILY_EXCHANGES, GOINGS, MAX_OWNED, MIN_BET, BET_STEP, MAX_RACE_BET, PRIZES, OWNED_PRIZE_MULTIPLIERS, RETIRE_RACES, RUN_MS, STYLES, WEEKLY_LIMIT, FORM_REFORM_FROM, runningNotes, raceBrief, distanceAt, exchangeRemaining, payoutFor, placeSlots, trifectaOdds, festivalRace, FESTIVAL_PRICE, festivalOdds10, festivalExpanded, festivalRumor } from './racing.js?v=web-28517c2c1efaf40b';
 import { LUXURY, TITLES } from './luxury.js?v=web-28517c2c1efaf40b';
 import { escapeHTML } from './progression-views.js?v=web-28517c2c1efaf40b';
 const kp=n=>n.toLocaleString('ja-JP')+' KP';
@@ -60,14 +60,14 @@ function betPanel(open,odds,draft,state,weeklyLeft){
 
 export function ownerPanel(state,now,pendingHorseSale=null){
  const horses=state.horses??[],active=horses.filter(h=>!h.retired_at),retired=horses.filter(h=>h.retired_at);
- const left=DAILY_EXCHANGES-(state.exchange?.day===exchangeDay(now)?state.exchange.count:0);
+ const left=exchangeRemaining(state,now,'horse');
  const record=h=>`${h.races}戦 ${h.wins}勝・2着${h.seconds}・3着${h.thirds} · 賞金 ${kp(h.earnings)}`;
  const mine=active.length?active.map(h=>`<div class="history-entry"><div><strong>${escapeHTML(h.name)}</strong>${h.nickname?`「${escapeHTML(h.nickname)}」`:''}（${h.gradeLabel} · ${STYLES[h.style].label}）</div><div class="helper">${record(h)} · 引退まであと${h.racesLeft}走</div>${pendingHorseSale===h.id
    ?`<div class="trade-box horse-sale-confirmation" role="group" aria-label="馬の売却確認"><strong>「${escapeHTML(h.name)}」を${kp(h.sellValue)}で売却しますか？</strong><p class="helper">売却すると取り消せません。受け取るKPは確定時の競走成績で計算されます。</p><div class="action-row"><button type="button" class="action-btn" data-action="horse-sell-cancel">キャンセル</button><button type="button" class="action-btn primary" data-action="horse-sell-approve" data-horse="${escapeHTML(h.id)}">売却を確定する（+${kp(h.sellValue)}）</button></div></div>`
    :`<div class="action-row"><button type="button" class="action-btn" data-action="horse-sell" data-horse="${escapeHTML(h.id)}">売る（${kp(h.sellValue)}）</button></div>`}</div>`).join(''):'<p class="helper">まだ馬を持っていません。</p>';
  const boxes=BOXES.map(b=>`<div class="history-entry"><div><strong>${b.label}</strong> ${kp(b.price)}</div><div class="helper">${b.odds.map((p,i)=>p?`${CLASSES[i].grade} ${p}%`:'').filter(Boolean).join(' · ')}</div><div class="action-row"><button class="action-btn primary" data-action="horse-buy" data-box="${b.id}">${b.label}を開ける</button></div></div>`).join('');
  const hall=retired.length?`<h3>殿堂</h3>${retired.map(h=>`<div class="history-entry"><div>${h.statue?'🗿 ':''}${escapeHTML(h.name)}${h.nickname?`「${escapeHTML(h.nickname)}」`:''}（${h.gradeLabel}）</div><div class="helper">${record(h)}</div></div>`).join('')}`:'';
- return `<div class="asset-card"><h2 class="panel-title">馬主</h2><p class="helper">通常のボックスは開封まで等級がわかりません。頂上級確定ボックスは頂上級が100%出ます（能力値・脚質・レースの勝敗は保証されません）。馬は自分と同じ等級のレースにランダムに出走し、3着までに入ると賞金が入ります。馬主馬はエリート戦で賞金2倍、頂上決戦で3.5倍（無料の本人名馬は対象外）。20走で必ず元が取れるとは限りません。旧価格で購入した馬の差額は、台帳で重複なく返金します。調子はあなたの直近の遊び（試合・クイズ・通話、どれも同じ）で決まります。${RETIRE_RACES}走で引退して殿堂入り。持てるのは${MAX_OWNED}頭まで（いま${active.length}頭）。</p>${mine}<h3>ボックス</h3><div class="field"><label for="horse-name">馬の名前（1〜12文字。友人の名前は本人の許可を取ってから）</label><input id="horse-name" class="input" maxlength="12" autocomplete="off"></div><p class="helper">今日の交換はあと${Math.max(0,left)}回（指令・ボックス合わせて1日${DAILY_EXCHANGES}回）。</p>${boxes}${hall}</div>`;
+ return `<div class="asset-card"><h2 class="panel-title">馬主</h2><p class="helper">通常のボックスは開封まで等級がわかりません。頂上級確定ボックスは頂上級が100%出ます（能力値・脚質・レースの勝敗は保証されません）。馬は自分と同じ等級のレースにランダムに出走し、3着までに入ると賞金が入ります。馬主馬はエリート戦で賞金2倍、頂上決戦で3.5倍（無料の本人名馬は対象外）。20走で必ず元が取れるとは限りません。旧価格で購入した馬の差額は、台帳で重複なく返金します。調子はあなたの直近の遊び（試合・クイズ・通話、どれも同じ）で決まります。${RETIRE_RACES}走で引退して殿堂入り。持てるのは${MAX_OWNED}頭まで（いま${active.length}頭）。</p>${mine}<h3>ボックス</h3><div class="field"><label for="horse-name">馬の名前（1〜12文字。友人の名前は本人の許可を取ってから）</label><input id="horse-name" class="input" maxlength="12" autocomplete="off"></div><p class="helper">馬主ボックスは今日あと${left}回（専用枠・1日${DAILY_EXCHANGES}回、午前0時更新）。</p>${boxes}${hall}</div>`;
 }
 export function luxuryPanel(state,{readonly=false,confirmation=null}={}){
  const members=(state.members??[]).filter(m=>m.id!==state.selfUserId),horses=(state.horses??[]);
@@ -93,7 +93,7 @@ export function luxuryPanel(state,{readonly=false,confirmation=null}={}){
  ${detail!==null?`<p class="helper">指定内容：${escapeHTML(detail)}</p>`:''}
  <p class="helper">確定すると本番口座からKPが減る。入力内容を変更した場合は、もう一度確認してください。</p>
  <div class="action-row"><button type="button" class="action-btn primary" data-action="luxury-approve">この内容で購入を確定</button><button type="button" class="action-btn" data-action="luxury-cancel">キャンセル</button></div></div>`:'';
- return `<div class="asset-card"><h2 class="panel-title">KPの使い道（超高級品）</h2>${readonly?'<p class="market-disclaimer">商品一覧のプレビューです。本番KP口座に接続すると購入できます。デモKPでは購入できません。</p>':''}<p class="helper">${state.luxury?.title?`あなたの称号:「${escapeHTML(state.luxury.title)}」 · `:''}どれも1日の交換回数（3回）に含みます。相手が「控えめ」の煽りレベルなら、相手を巻き込む品は使えません。</p>${inputs}${approval}${items}</div>`;
+ return `<div class="asset-card"><h2 class="panel-title">KPの使い道（超高級品）</h2>${readonly?'<p class="market-disclaimer">商品一覧のプレビューです。本番KP口座に接続すると購入できます。デモKPでは購入できません。</p>':''}<p class="helper">${state.luxury?.title?`あなたの称号:「${escapeHTML(state.luxury.title)}」 · `:''}超高級品は今日あと${exchangeRemaining(state,Date.now(),'luxury')}回（専用枠・1日${DAILY_EXCHANGES}回、午前0時更新）。相手が「控えめ」の煽りレベルなら、相手を巻き込む品は使えません。</p>${inputs}${approval}${items}</div>`;
 }
 function history(state){
  const bets=(state.raceBets??[]).slice(0,10);
