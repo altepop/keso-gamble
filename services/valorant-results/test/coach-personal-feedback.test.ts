@@ -182,3 +182,55 @@ test('coaching advice changes words only: original pattern choice and no-warmup 
  assert.doesNotMatch(body!,/🔥/);
  assert.match(body!,/📚 座学：Bind・テレポーターとスプリット/);
 });
+
+const richSession={
+ ...session,date:'2026-11-25T12:00:00.000Z',map:'Bind',agent:'Clove',topic:'pressure',
+ lesson:{track:'dpr',meaning:'今回は12K・18Dでした。',alternatives:'必要なカバーでの死亡もあるため、無駄なデスとは断定しません。',
+  nextGame:'次戦は最初の3交戦で見る角を一つにします。',selfCheck:'どの方向から撃たれたか説明します。',
+  practice:{name:'一つずつ角を確認する',minutes:5,steps:['カスタムで苦手な入口を選びます。','照準を置いて停止射撃を左右5回ずつ行います。','スモークを置いて武器に戻す手順を5回試します。']}},
+ metrics:[{key:'dpr',label:'DPR',current:{value:0.9},baseline:{value:0.6,matches:5}}],
+ followUp:{status:'review',text:'前回の指標 DPR：前回 0.600 → 今回 0.900。練習の実行は確認できません。'}
+};
+const richInput={user:'123456789012345678',name:'選手',map:'Bind',outcome:'loss' as const,
+ swing:{round:7,description:'人数有利から敗れたラウンド（最大2人差）'},session:richSession,
+ daily:{warmup:{title:'固定練習'},study:{map:'Bind',theme:'テレポーターとスプリット'}}};
+const block=(body:string,mark:string)=>body.split('\n\n').find(x=>x.startsWith(mark))!;
+test('full personal curriculum takes priority over generic team swing and retains role-specific actions',()=>{
+ const body=formatPersonalFeedback(richInput)!;
+ assert.ok(body&&body.length<=2000);
+ assert.match(block(body,'💡'),/12K・18D/);
+ assert.match(block(body,'💡'),/無駄なデスとは断定しません/);
+ assert.match(block(body,'💡'),/前回 0\.600 → 今回 0\.900/);
+ assert.match(block(body,'🔥'),/スモークを置いて武器に戻す/);
+ assert.match(block(body,'🔥'),/アップ（5分）/);
+ assert.doesNotMatch(block(body,'🔥'),/キルした直後の動きだけ/);
+ const other=formatPersonalFeedback({...richInput,map:'Haven',session:{...richSession,map:'Haven',agent:'Sova',topic:'cover',
+  lesson:{...richSession.lesson,track:'cover',meaning:'味方の取り返しが少ない記録です。',practice:{name:'二人で同じ角へ出る順番',minutes:5,steps:['味方と角を選びます。','カバー役と交代します。','索敵後に武器へ戻す手順を試します。']}}}})!;
+ assert.match(block(other,'🔥'),/索敵後に武器へ戻す/);
+ assert.notEqual(block(body,'💡'),block(other,'💡'));
+ assert.notEqual(block(body,'🔥'),block(other,'🔥'));
+});
+test('consecutive same-topic records change the drill without asserting practice was performed',()=>{
+ const older={...richSession,date:'2026-11-25T11:00:00.000Z'};
+ const oldest={...richSession,date:'2026-11-25T10:00:00.000Z'};
+ const first=formatPersonalFeedback(richInput)!;
+ const second=formatPersonalFeedback({...richInput,previousSessions:[older]})!;
+ const third=formatPersonalFeedback({...richInput,previousSessions:[oldest,older]})!;
+ assert.match(block(second,'💡'),/同じ課題が保存済みの試合で続いています/);
+ assert.match(block(second,'🔥'),/必要なカバーだったか/);
+ assert.match(block(third,'🔥'),/確認：どの方向から撃たれたか/);
+ assert.notEqual(block(first,'🔥'),block(second,'🔥'));
+ assert.notEqual(block(second,'🔥'),block(third,'🔥'));
+ assert.doesNotMatch(block(second,'💡'),/前回の練習を実行した|練習に失敗/);
+ assert.equal(formatPersonalFeedback({...richInput,previousSessions:[older]}),second);
+});
+test('future or same-time records cannot change the prescription',()=>{
+ const future={...richSession,date:'2026-11-25T13:00:00.000Z'};
+ assert.equal(formatPersonalFeedback({...richInput,previousSessions:[future,richSession]}),formatPersonalFeedback(richInput));
+});
+test('improving prior indicator does not establish practice success or suppress new task',()=>{
+ const body=formatPersonalFeedback({...richInput,session:{...richSession,followUp:{status:'improving',text:'前回の指標は改善方向です。'}}})!;
+ assert.match(block(body,'💡'),/練習の効果が証明されたわけではない/);
+ assert.match(block(body,'💡'),/次戦：/);
+ assert.match(block(body,'🔥'),/一つずつ角を確認する/);
+});
