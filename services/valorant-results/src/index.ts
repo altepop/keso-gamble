@@ -1,3 +1,4 @@
+import {refundDueDirectives} from './kp-directive-lifecycle.ts';
 import {syncCoachProfiles} from './coach-identity.ts';
 import {provisionConfirmedCoachRosterConsents} from './coach-team-default-consents.ts';
 import {runCoachPositionArchiveSlot} from './coach-position-backfill.ts';
@@ -625,7 +626,7 @@ export async function monitor(env: Env, players: Player[] = configuredPlayers): 
     } catch(error) {console.warn('prediction_recovery_pending',{reason:diagnosticReason(error)});}
     if (!players.length) return;
     await flushNotifications(env, players);
-    try {const mapping=await initializeKp(env);if(mapping)await flushKpDirectives(env,mapping);}catch{console.warn('kp_directive_delivery_pending');}
+    try {const mapping=await initializeKp(env);if(mapping){await refundDueDirectives(env,mapping);await flushKpDirectives(env,mapping);}}catch{console.warn('kp_directive_delivery_pending');}
 
   } finally {
     runApiBudget.delete(env);
