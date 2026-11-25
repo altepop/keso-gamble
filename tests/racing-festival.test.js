@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {FESTIVAL_FROM,FESTIVAL_FIRST,FESTIVAL_PRICE,FESTIVAL_MAX_ODDS10,festivalRace,festivalFactor,festivalOdds10,raceCard,raceOdds,raceResult,raceTimeline,distanceAt,createRacing,placeRaceBet,hydrateRacing,settleRaceBets,weekStart,RUN_MS} from '../js/racing.js';
-import {racePreview} from '../js/racing-view.js';
+import {FESTIVAL_FROM,FESTIVAL_FIRST,FESTIVAL_EXPANDED_FROM,FESTIVAL_PRICE,festivalExpanded,festivalRumor,FESTIVAL_MAX_ODDS10,festivalRace,festivalFactor,festivalOdds10,raceCard,raceOdds,raceResult,raceTimeline,distanceAt,createRacing,placeRaceBet,hydrateRacing,settleRaceBets,weekStart,RUN_MS} from '../js/racing.js';
+import {racePreview,raceScreen,SILKS} from '../js/racing-view.js';
 const firstFestival=()=>{for(let t=FESTIVAL_FROM;t<FESTIVAL_FROM+70*86400000;t+=900000)if(festivalRace(t))return t;throw Error('fixture festival missing');};
 const RACE=firstFestival(),NOW=RACE-120000;
 
@@ -47,4 +47,49 @@ test('opening night is Saturday November 14 at 22:00 JST and replaces that week�
  assert.match(raceCard(FESTIVAL_FIRST).name,/一枚で億り人杯$/);assert.doesNotMatch(raceCard(FESTIVAL_FIRST).name,/杯杯/);
  assert.equal(festivalRace(Date.parse('2026-11-15T22:45:00+09:00')),null);
  assert.equal(festivalRace(FESTIVAL_FIRST-900000),null);assert.equal(festivalRace(FESTIVAL_FIRST+900000),null);
+});
+
+test('future festival fields expand to 16 without rewriting previous ten-runner festivals',()=>{
+ const old=raceCard(FESTIVAL_FIRST),original=raceResult(old,'historic-committed-seed');
+ assert.equal(old.size,10);
+ assert.equal(festivalExpanded(FESTIVAL_FIRST),false);
+ assert.equal(original.order.length,10);
+ let future=null;
+ for(let t=FESTIVAL_EXPANDED_FROM;t<FESTIVAL_EXPANDED_FROM+365*86400000;t+=900000){
+  if(festivalRace(t)){future=t;break;}
+ }
+ assert.notEqual(future,null,'find a festival after the date gate');
+ const card=raceCard(future),result=raceResult(card,'future-committed-seed');
+ assert.equal(festivalExpanded(future),true);
+ assert.equal(card.size,16);
+ assert.equal(new Set(card.horses.map(h=>h.name)).size,16);
+ assert.deepEqual(result.order.toSorted((a,b)=>a-b),Array.from({length:16},(_,i)=>i+1));
+ assert.equal(raceCard(FESTIVAL_FIRST).size,10,'historical race stays at ten horses');
+ assert.equal(SILKS.length,16,'all new horse numbers have jockey colors');
+ const rumors=card.horses.map(h=>festivalRumor(card,h));
+ assert.deepEqual(rumors,card.horses.map(h=>festivalRumor(card,h)),'gossip is stable before the start');
+ for(const tip of rumors){
+  assert.match(tip.training,/噂|声|目撃談|評価/);
+  assert.match(tip.condition,/噂|声|読めない/);
+  assert.match(tip.ground,/説|未知数|噂/);
+ }
+ assert.deepEqual(raceResult(card,'future-committed-seed'),result,'reading gossip never alters the result');
+ const betState={...createRacing(),cash:2000};
+ const purchased=placeRaceBet(betState,{raceId:future,type:'win',horse:16,amount:1000},future-120000,[],10);
+ assert.equal(purchased.horse,16);
+ assert.equal(hydrateRacing(betState).raceBets[0].horse,16,'paid ticket survives hydration');
+ const triState={...createRacing(),cash:2000};
+ placeRaceBet(triState,{raceId:future,type:'trifecta',horse:[16,15,14],amount:1000},future-120000,[],10);
+ assert.deepEqual(hydrateRacing(triState).raceBets[0].horse,[16,15,14]);
+ assert.equal(hydrateRacing({raceBets:[{...purchased,raceId:FESTIVAL_FIRST}]}).raceBets.length,0,'old ten-runner races reject new horse numbers');
+ assert.equal(raceCard(Date.parse('2026-11-21T20:45:00+09:00')).size,raceCard(Date.parse('2026-11-21T20:45:00+09:00')).big||festivalRace(Date.parse('2026-11-21T20:45:00+09:00'))?10:8);
+ const html=raceScreen({state:{cash:2000,raceBets:[]},live:true,
+  watch:{card,runs:true,finished:false},open:{card,hash:null},openOdds:raceOdds(card),
+  draft:{type:'win',horse:16,amount:1000},weeklyLeft:400000,tabs:'',nav:''});
+ assert.equal((html.match(/data-race-horse="/g)||[]).length,16);
+ assert.match(html,/16頭立て/);
+ assert.match(html,/style="height:360px"/);
+ assert.match(html,/調教班の噂/);
+ assert.doesNotMatch(html,/調教[A-E] · 馬場[◎○△]/,'exact training grades are not shown in this event');
+ assert.doesNotMatch(html,/絶好調/,'exact condition is hidden in festival preview');
 });
