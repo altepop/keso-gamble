@@ -1,0 +1,44 @@
+name: One-time directive early completion tip
+on:
+  push:
+    branches: [ops/directive-early-tip-20261126]
+    paths: ['.github/workflows/directive-early-tip-once.yml']
+permissions:
+  contents: read
+concurrency:
+  group: directive-early-tip-20261126
+  cancel-in-progress: false
+jobs:
+  post:
+    if: >-
+      github.repository == 'altepop/keso-gamble' &&
+      github.event.head_commit.message == 'ops: queue approved directive tip'
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Queue one exact approved tip to existing earnings channel
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          node --input-type=module <<'NODE'
+          import {D1_B_ID} from './scripts/relic-abuse-audit.mjs';
+          const e=process.env;
+          if(!e.CLOUDFLARE_API_TOKEN||!/^[0-9a-f]{32}$/i.test(e.CLOUDFLARE_ACCOUNT_ID??''))throw Error('Missing Cloudflare credentials');
+          const id='approved-tip:directive-early:20261126';
+          const body=JSON.stringify({content:'💡 **KESOPLAY TIPS｜指令は早めにこなすとお得やで！**\n指令を受けてから6時間以内に達成したら、通常の試合報酬とは別に **+1,000 KP** がもらえるで！\n指令されたら、サクッと片付けて稼いどこな！',allowed_mentions:{parse:[]}});
+          async function query(sql,params){
+            const r=await fetch('https://api.cloudflare.com/client/v4/accounts/'+e.CLOUDFLARE_ACCOUNT_ID+'/d1/database/'+D1_B_ID+'/query',{method:'POST',headers:{Authorization:'Bearer '+e.CLOUDFLARE_API_TOKEN,'Content-Type':'application/json'},body:JSON.stringify({sql,params}),signal:AbortSignal.timeout(20000)});
+            const b=await r.json(),v=b.result?.[0];if(!r.ok||b.success!==true||v?.success!==true)throw Error('D1 query failed HTTP '+r.status);return v;
+          }
+          const created=await query('INSERT OR IGNORE INTO kp_posts(id,body,at) VALUES(?,?,?)',[id,body,Date.now()]);
+          console.log('TIP_QUEUED '+JSON.stringify({inserted:created.meta?.changes??0}));
+          await new Promise(resolve=>setTimeout(resolve,75000));
+          const result=await query('SELECT sent,body FROM kp_posts WHERE id=?',[id]);
+          const row=result.results?.[0];if(!row||row.body!==body)throw Error('Tip queue record mismatch');
+          console.log('TIP_DELIVERY '+JSON.stringify({sent:row.sent===1,queued:true}));
+          NODE
