@@ -198,15 +198,15 @@ const block=(body:string,mark:string)=>body.split('\n\n').find(x=>x.startsWith(m
 test('full personal curriculum takes priority over generic team swing and retains role-specific actions',()=>{
  const body=formatPersonalFeedback(richInput)!;
  assert.ok(body&&body.length<=2000);
- assert.match(block(body,'💡'),/12K・18D/);
- assert.match(block(body,'💡'),/無駄なデスとは断定しません/);
- assert.match(block(body,'💡'),/前回 0\.600 → 今回 0\.900/);
- assert.match(block(body,'🔥'),/スモークを置いて武器に戻す/);
+ assert.match(block(body,'💡'),/10Rあたりデス約3\.0回増/);
+ assert.doesNotMatch(block(body,'💡'),/無駄なデスとは断定しません|前回の指標 DPR/);
+ assert.match(block(body,'💡'),/退路を決めてから/);
+ assert.match(block(body,'🔥'),/スモーク設置→武器に戻す/);
  assert.match(block(body,'🔥'),/アップ（5分）/);
  assert.doesNotMatch(block(body,'🔥'),/キルした直後の動きだけ/);
  const other=formatPersonalFeedback({...richInput,map:'Haven',session:{...richSession,map:'Haven',agent:'Sova',topic:'cover',
   lesson:{...richSession.lesson,track:'cover',meaning:'味方の取り返しが少ない記録です。',practice:{name:'二人で同じ角へ出る順番',minutes:5,steps:['味方と角を選びます。','カバー役と交代します。','索敵後に武器へ戻す手順を試します。']}}}})!;
- assert.match(block(other,'🔥'),/索敵後に武器へ戻す/);
+ assert.match(block(other,'🔥'),/索敵・妨害→武器に戻して/);
  assert.notEqual(block(body,'💡'),block(other,'💡'));
  assert.notEqual(block(body,'🔥'),block(other,'🔥'));
 });
@@ -216,9 +216,9 @@ test('consecutive same-topic records change the drill without asserting practice
  const first=formatPersonalFeedback(richInput)!;
  const second=formatPersonalFeedback({...richInput,previousSessions:[older]})!;
  const third=formatPersonalFeedback({...richInput,previousSessions:[oldest,older]})!;
- assert.match(block(second,'💡'),/同じ課題が保存済みの試合で続いています/);
- assert.match(block(second,'🔥'),/必要なカバーだったか/);
- assert.match(block(third,'🔥'),/確認：どの方向から撃たれたか/);
+ assert.match(block(second,'💡'),/同じ課題が続いている/);
+ assert.match(block(second,'🔥'),/必要なカバーか別射線か/);
+ assert.match(block(third,'🔥'),/引き直す動きを5回/);
  assert.notEqual(block(first,'🔥'),block(second,'🔥'));
  assert.notEqual(block(second,'🔥'),block(third,'🔥'));
  assert.doesNotMatch(block(second,'💡'),/前回の練習を実行した|練習に失敗/);
@@ -230,7 +230,30 @@ test('future or same-time records cannot change the prescription',()=>{
 });
 test('improving prior indicator does not establish practice success or suppress new task',()=>{
  const body=formatPersonalFeedback({...richInput,session:{...richSession,followUp:{status:'improving',text:'前回の指標は改善方向です。'}}})!;
- assert.match(block(body,'💡'),/練習の効果が証明されたわけではない/);
- assert.match(block(body,'💡'),/次戦：/);
- assert.match(block(body,'🔥'),/一つずつ角を確認する/);
+ assert.match(block(body,'💡'),/前回の確認指標は改善方向/);
+ assert.doesNotMatch(block(body,'💡'),/練習が成功|練習の効果が証明/);
+ assert.match(block(body,'💡'),/最初の3交戦/);
+ assert.match(block(body,'🔥'),/角を一つずつ開いて/);
+});
+
+test('Abyss Cypher screenshot regression: no report dump, understandable rates and timed role drill',()=>{
+ const current={...richSession,map:'Abyss',agent:'Cypher',lesson:{...richSession.lesson,
+  meaning:'Abyss / Cypher（センチネル）の記録。本人の直前の記録に比べ、死亡のペースが0.283 / R増え、キルの増加は-0.206 / Rだった。',
+  alternatives:'役割別の手順は次回の練習案であり、今回のスキル使用・位置取りを観測した判定ではない。'},
+  metrics:[{key:'kpr',label:'KPR',current:{value:0.611},baseline:{value:0.817,matches:5}},
+   {key:'dpr',label:'DPR',current:{value:0.833},baseline:{value:0.55,matches:5}}]};
+ const previous={...current,date:'2026-11-25T11:00:00.000Z',topic:'participation',metrics:[
+  {key:'kpr',label:'KPR',current:{value:0.538},baseline:{value:0.8,matches:5}}]};
+ const body=formatPersonalFeedback({...richInput,map:'Abyss',session:current,previousSessions:[previous]})!;
+ const advice=block(body,'💡'),warm=block(body,'🔥');
+ assert.match(advice,/前回よりキルのペースは上がりましたが/);
+ assert.match(advice,/デス約2\.8回増、キル約2\.1回減/);
+ assert.match(advice,/Cypherは生存しながら守備の価値/);
+ assert.doesNotMatch(advice,/Abyss \/ Cypher|役割別の手順|本人の直前|0\.283/);
+ assert.match(warm,/マップ：Abyss/);
+ assert.match(warm,/1分：裏・別入口の担当と退避・合流/);
+ assert.equal(warm.match(/2分：/g)?.length,2);
+ assert.ok(advice.length<=180);
+ assert.ok(warm.length<=180);
+ assert.ok(body.length<=650);
 });
