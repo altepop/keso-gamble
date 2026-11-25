@@ -67,7 +67,7 @@ test('issue #522: cross-cron KP SQL reads are counted and late ledger/notice upd
  const observed:string[]=[];
  const original=f.env.DB.prepare.bind(f.env.DB);
  f.env.DB.prepare=((query:string)=>{
-  if(query.includes('FROM kp_events e')&&query.includes('LEFT JOIN kp_escalation_power_matches'))observed.push(query);
+  if(query.includes('FROM kp_events e')&&query.includes('FROM kp_escalation_power_matches'))observed.push(query);
   return original(query);
  }) as typeof f.env.DB.prepare;
  const first=await prepareKpRun(f.env,mapping);
@@ -103,7 +103,7 @@ test('issue #522: batch fresh cross-cron receipts cut joined calls without hidin
  const calls:string[]=[];
  const base=f.env.DB.prepare.bind(f.env.DB);
  f.env.DB.prepare=((sql:string)=>{
-  if(sql.includes('FROM kp_events e')&&sql.includes('LEFT JOIN kp_escalation_power_matches'))calls.push(sql);
+  if(sql.includes('FROM kp_events e')&&sql.includes('FROM kp_escalation_power_matches'))calls.push(sql);
   return base(sql);
  }) as typeof f.env.DB.prepare;
  // Identical SQLite fixture, same IDs, fresh run snapshots: compare actual
