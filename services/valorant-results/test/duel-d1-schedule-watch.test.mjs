@@ -79,3 +79,68 @@ test('API outage is unknown, no false claim; saturated issue list fails closed',
   return reply(Array.from({length:100},(_,i)=>({number:i+1,title:'other'})));
  },now),/saturated/);
 });
+
+ // Sanitized job/step metadata from real Scheduled D1 #207, run 45450717843.
+ const actual207=[{"name":"deployment-watch-fallback","status":"completed","conclusion":"failure","steps":[{"name":"Set up job","status":"completed","conclusion":"success"},{"name":"Run actions/checkout@v7","status":"completed","conclusion":"success"},{"name":"Run actions/setup-node@v7","status":"completed","conclusion":"success"},{"name":"Verify P12 monitor decisions without D1 or KP","status":"completed","conclusion":"success"},{"name":"Fallback check of production Pages and Worker via GitHub metadata","status":"completed","conclusion":"success"},{"name":"Open or deduplicate incident if deployment or fallback check fails","status":"completed","conclusion":"skipped"},{"name":"Independently detect missing hourly deployment health schedule","status":"completed","conclusion":"failure"},{"name":"Independently detect missing backup watchdog Scheduled","status":"completed","conclusion":"failure"},{"name":"Post Run actions/setup-node@v7","status":"completed","conclusion":"skipped"},{"name":"Post Run actions/checkout@v7","status":"completed","conclusion":"success"},{"name":"Complete job","status":"completed","conclusion":"success"}]},{"name":"inspect","status":"completed","conclusion":"success","steps":[{"name":"Set up job","status":"completed","conclusion":"success"},{"name":"Run actions/checkout@v7","status":"completed","conclusion":"success"},{"name":"Run actions/setup-node@v7","status":"completed","conclusion":"success"},{"name":"Install existing Wrangler dependency","status":"completed","conclusion":"success"},{"name":"Summarize top D1 reads (sanitized SQL, no query values or secrets)","status":"completed","conclusion":"success"},{"name":"Inspect 24h vs 1h top-fifty SQL read patterns","status":"completed","conclusion":"success"},{"name":"Protect optional Activity histories when account D1 estimate exceeds 4M in UTC day","status":"completed","conclusion":"success"},{"name":"Create or deduplicate D1 read-budget alert for warning or unknown audit","status":"completed","conclusion":"success"},{"name":"Post Run actions/setup-node@v7","status":"completed","conclusion":"success"},{"name":"Post Run actions/checkout@v7","status":"completed","conclusion":"success"},{"name":"Complete job","status":"completed","conclusion":"success"}]},{"name":"budget-tests","status":"completed","conclusion":"skipped"}];
+ const recent207={...run(30,'completed','failure'),id:45450717843,run_attempt:1};
+ function scenario(jobs=actual207,scheduled=recent207,{incomplete=false,unavailable=false,dedup=false}={}){
+  const calls=[];
+  const request=async(url,opts={})=>{
+   calls.push({url,method:opts.method??'GET'});
+   if(url.includes('/actions/workflows/'))return reply({workflow_runs:[scheduled]});
+   if(url.includes('/attempts/1/jobs?per_page=100')){
+    assert.match(url,/\/actions\/runs\/45450717843\/attempts\/1\/jobs\?per_page=100$/);
+    return unavailable?{ok:false,status:503}:reply({total_count:jobs.length+(incomplete?1:0),jobs});
+   }
+   if(url.includes('?state=open'))return reply(dedup?[{title:D1_SCHEDULE_ALERT_TITLE,number:870}]:[]);
+   if(opts.method==='POST')return reply({number:99});
+   throw Error('Unexpected request');
+  };
+  return {calls,request};
+ }
+ test('actual #207: new classification retains failure but does not duplicate independent alarms',async()=>{
+  assert.equal(evaluateD1Schedule([recent207],now).state,'failed');
+  const s=scenario();
+  assert.deepEqual(await inspectD1Schedule(env,s.request,now),{ok:false,state:'secondary-alerts-failed',runId:45450717843,ageMinutes:30});
+  assert.deepEqual(s.calls.map(c=>c.method),['GET','GET']);
+  const n=scenario();
+  assert.deepEqual(await inspectAndNotify(env,n.request,now),{state:'secondary-alerts-failed',action:'independent-alerts-retained'});
+  assert.deepEqual(n.calls.map(c=>c.method),['GET','GET']);
+  assert.equal(d1ScheduleIssue({ok:false,state:'secondary-alerts-failed'}),null);
+ });
+ test('actual inspect failure, unknown fallback failure and duplicate job retain D1 alert',async()=>{
+  const cases=[
+   actual207.map(j=>j.name==='inspect'?{...j,conclusion:'failure'}:j),
+   actual207.map(j=>j.name==='deployment-watch-fallback'?{...j,steps:j.steps.map(s=>s.name==='Fallback check of production Pages and Worker via GitHub metadata'?{...s,conclusion:'failure'}:s)}:j),
+   [...actual207,actual207.find(j=>j.name==='inspect')],
+  ];
+  for(const jobs of cases){
+   const s=scenario(jobs);
+   assert.deepEqual(await inspectAndNotify(env,s.request,now),{state:'failed',action:'created',issue:99});
+   assert.deepEqual(s.calls.map(c=>c.method),['GET','GET','GET','POST']);
+  }
+  const s=scenario(cases[0],recent207,{dedup:true});
+  assert.deepEqual(await inspectAndNotify(env,s.request,now),{state:'failed',action:'deduplicated'});
+  assert.deepEqual(s.calls.map(c=>c.method),['GET','GET','GET']);
+ });
+ test('incomplete or unavailable attempt metadata not treated as healthy',async()=>{
+  for(const options of [{incomplete:true},{unavailable:true}]){
+   const s=scenario(actual207,recent207,options);
+   assert.deepEqual(await inspectAndNotify(env,s.request,now),{state:'unknown',action:'created',issue:99});
+   assert.deepEqual(s.calls.map(c=>c.method),['GET','GET','GET','POST']);
+  }
+ });
+ test('stale/missing/stalled/running/healthy never fetch attempt metadata',async()=>{
+  for(const [record,state] of [
+   [{...recent207,created_at:new Date(now-151*60000).toISOString()},'stale'],
+   [{...recent207,event:'push'},'missing'],
+   [{...recent207,event:'workflow_dispatch'},'missing'],
+   [{...recent207,status:'in_progress',created_at:new Date(now-46*60000).toISOString()},'stalled'],
+   [{...recent207,status:'in_progress'},'running'],
+   [{...recent207,conclusion:'success'},'healthy'],
+  ]){
+   const s=scenario(actual207,record);
+   assert.equal((await inspectD1Schedule(env,s.request,now)).state,state);
+   assert.equal(s.calls.length,1);
+  }
+ });

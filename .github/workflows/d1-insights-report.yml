@@ -25,6 +25,8 @@ on:
       - 'services/valorant-results/test/duel-pvp-invite-bounded.test.ts'
       - 'services/valorant-results/test/duel-pve-sessions.test.ts'
       - 'scripts/duel-monitor-heartbeat.mjs'
+      - 'scripts/duel-d1-schedule-watch.mjs'
+      - 'services/valorant-results/test/duel-d1-schedule-watch.test.mjs'
       - 'scripts/duel-backup-watchdog-self-schedule.mjs'
       - 'services/valorant-results/test/duel-backup-watchdog-self-schedule.test.mjs'
   push:
@@ -47,6 +49,8 @@ on:
       - 'services/valorant-results/test/duel-pvp-invite-bounded.test.ts'
       - 'services/valorant-results/test/duel-pve-sessions.test.ts'
       - 'scripts/duel-monitor-heartbeat.mjs'
+      - 'scripts/duel-d1-schedule-watch.mjs'
+      - 'services/valorant-results/test/duel-d1-schedule-watch.test.mjs'
       - 'scripts/duel-backup-watchdog-self-schedule.mjs'
       - 'services/valorant-results/test/duel-backup-watchdog-self-schedule.test.mjs'
       - 'scripts/d1-daily-guard.mjs'
@@ -116,7 +120,7 @@ jobs:
         with:
           node-version: '24'
       - name: Verify sampled telemetry completeness without Cloudflare access
-        run: node --test scripts/d1-daily-guard.test.mjs scripts/d1-read-hotspots.test.mjs scripts/d1-read-budget-alert.test.mjs services/valorant-results/test/duel-admin-evidence.test.mjs services/valorant-results/test/duel-monitor-heartbeat.test.mjs services/valorant-results/test/duel-backup-watchdog-self-schedule.test.mjs
+        run: node --test scripts/d1-daily-guard.test.mjs scripts/d1-read-hotspots.test.mjs scripts/d1-read-budget-alert.test.mjs services/valorant-results/test/duel-admin-evidence.test.mjs services/valorant-results/test/duel-monitor-heartbeat.test.mjs services/valorant-results/test/duel-backup-watchdog-self-schedule.test.mjs services/valorant-results/test/duel-d1-schedule-watch.test.mjs
   inspect:
     if: github.repository == 'altepop/keso-gamble' && (github.event_name == 'push' || github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.actor == 'altepop'))
     runs-on: ubuntu-latest
