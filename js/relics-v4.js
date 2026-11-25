@@ -1,4 +1,4 @@
-import {relicCombinationsSection} from './relics-v7.js?v=web-599310d979169fe7';
+import {relicCombinationsSection} from './relics-v7.js?v=web-ca5d2ee9a5a25ff4';
 // Presentation-only helpers; KP, ownership and equipped slots stay server authoritative.
 const esc=x=>String(x??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 const number=x=>Number(x??0).toLocaleString('ja-JP');

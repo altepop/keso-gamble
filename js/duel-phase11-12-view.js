@@ -1,7 +1,7 @@
-import {duelLegalMoves} from './duel-rules.js?v=web-599310d979169fe7';
-import {hitBlowRemaining} from './duel-hitblow-view.js?v=web-599310d979169fe7';
-import {bluffDie} from './duel-bluff-view.js?v=web-599310d979169fe7';
-import {pokerCardMarkup} from './duel-poker-view.js?v=web-599310d979169fe7';
+import {duelLegalMoves} from './duel-rules.js?v=web-ca5d2ee9a5a25ff4';
+import {hitBlowRemaining} from './duel-hitblow-view.js?v=web-ca5d2ee9a5a25ff4';
+import {bluffDie} from './duel-bluff-view.js?v=web-ca5d2ee9a5a25ff4';
+import {pokerCardMarkup} from './duel-poker-view.js?v=web-ca5d2ee9a5a25ff4';
 /** UI-only rendering for authenticated, server-authoritative six-mode CPU duels.
  * The browser cannot choose the daily game/level or award KP.
  */
