@@ -13,34 +13,27 @@ export async function backfillCoachPositions(db:D1Database,fetchDetail:(region:s
  // resolved source instead of blocking all participants on the first (VDK)
  // attribution. Never use unrelated accounts, stale identities or extra calls.
  const permitted=COACH_MEMBER_ACCOUNTS.map(()=>'?').join(',');
+ // SQLite otherwise may resolve linked sources for every completed match,
+ // including those whose positions are already captured or retries exhausted.
+ // CROSS JOIN keeps the eligibility guards ahead of the indexed cohort lookups.
  const row=await db.prepare(`SELECT q.match_id,s.region,s.puuid AS source_puuid,s.riot_id AS chosen_riot_id,
   q.source_riot_id AS original_riot_id,q.started_at FROM coach_member_queue q
-  JOIN coach_member_sources s ON s.riot_id=(
-   SELECT linked.riot_id FROM coach_member_links l
-   JOIN coach_member_sources linked ON linked.riot_id=l.riot_id
-   WHERE l.match_id=q.match_id AND linked.riot_id IN (${permitted})
-    AND length(linked.puuid) BETWEEN 1 AND 128
-    AND linked.region IN ('ap','na','eu','kr','br','latam')
-    AND (linked.riot_id<>q.source_riot_id OR
-      (linked.puuid=q.source_puuid AND linked.region=q.region))
-   -- After a failed position attempt, prefer a different verified member
-   -- rather than spending every retry on the same originally attributed account.
-   -- The position attempt counter is already bounded to three requests.
-   ORDER BY CASE WHEN COALESCE((
-      SELECT attempts FROM coach_position_backfill
-      WHERE match_id=q.match_id),0)>0
-     THEN CASE WHEN linked.riot_id=q.source_riot_id AND linked.puuid=q.source_puuid
-       AND linked.region=q.region THEN 1 ELSE 0 END
-     ELSE CASE WHEN linked.riot_id=q.source_riot_id AND linked.puuid=q.source_puuid
-       AND linked.region=q.region THEN 0 ELSE 1 END
-    END,linked.riot_id ASC LIMIT 1)
   LEFT JOIN valorant_match_positions p ON p.match_id=q.match_id
   LEFT JOIN coach_position_backfill b ON b.match_id=q.match_id
+  CROSS JOIN coach_member_links l ON l.match_id=q.match_id AND l.riot_id IN (${permitted})
+  CROSS JOIN coach_member_sources s ON s.riot_id=l.riot_id
   WHERE (q.status='complete' OR (q.status='partial' AND q.attempts>=3)) AND COALESCE(p.has_coordinates,0)=0
-   -- A verified linked cohort member is sufficient even if historical queue
-   -- attribution belongs to an unrelated source. Never fetch via that source.
    AND (b.match_id IS NULL OR (b.status IN ('retry','running') AND b.attempts<3 AND b.next_at<=?))
-  ORDER BY q.started_at DESC LIMIT 1`).bind(...COACH_MEMBER_ACCOUNTS.map(p=>p.riotId),now)
+   AND length(s.puuid) BETWEEN 1 AND 128
+   AND s.region IN ('ap','na','eu','kr','br','latam')
+   AND (s.riot_id<>q.source_riot_id OR (s.puuid=q.source_puuid AND s.region=q.region))
+  -- Newest eligible match first; match_id only resolves previously unspecified timestamp ties.
+  -- Within that match preserve original-first / verified-peer-on-retry priority.
+  ORDER BY q.started_at DESC,q.match_id ASC,
+   CASE WHEN COALESCE(b.attempts,0)>0
+    THEN CASE WHEN s.riot_id=q.source_riot_id AND s.puuid=q.source_puuid AND s.region=q.region THEN 1 ELSE 0 END
+    ELSE CASE WHEN s.riot_id=q.source_riot_id AND s.puuid=q.source_puuid AND s.region=q.region THEN 0 ELSE 1 END
+   END,s.riot_id ASC LIMIT 1`).bind(...COACH_MEMBER_ACCOUNTS.map(p=>p.riotId),now)
   .first<{match_id:string;region:string;source_puuid:string;chosen_riot_id:string;original_riot_id:string;started_at:number}>();
  if(!row)return 'idle';
  const claim=await db.prepare(`INSERT INTO coach_position_backfill(match_id,status,attempts,next_at,reason,updated_at)
