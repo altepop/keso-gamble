@@ -1,4 +1,5 @@
 import rules from '../mode-rewards.json' with {type:'json'};
+export const UNITE_WIN_MULTIPLIER=10;
 import {applyLuck,luckFor,luckLabel} from './luck.ts';
 import type {KpEnv} from './kp.ts';
 import {creditVerifiedRelicBonus} from './relics.ts';
@@ -39,7 +40,8 @@ function performanceBonus(win:boolean,p:UnitePerformance|null|undefined){
    :contribution===240&&stoneAssist?'🪨 岩壁サポート'
    :contribution===300?'大活躍':'チーム貢献';
   const parts=[...contribution?[name]:[],...margin?['大差勝利']:[]];
-  return {bonus:contribution+margin,note:parts.length?`（${parts.join('・')} +${contribution+margin} KP）`:''};
+  const bonus=(contribution+margin)*UNITE_WIN_MULTIPLIER;
+  return {bonus,note:parts.length?`（${parts.join('・')} +${bonus} KP）`:''};
  }
  // Losses can only be eased; a defeat can never pay positive KP.
  const close=!p.surrendered&&p.theirs>=p.ours&&p.theirs-p.ours<=80;
