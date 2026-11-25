@@ -1,9 +1,10 @@
 // Shared estimate only. The server recomputes from the authoritative market and settles atomically.
 export const STOCK_ORDER_VERSION=1,STOCK_PRICE_SCALE=1_000_000,STOCK_LIQUIDITY=1_000_000;
-const SCALE=BigInt(STOCK_PRICE_SCALE),LOW=20n*SCALE,HIGH=10_000_000n*SCALE;
+const SCALE=BigInt(STOCK_PRICE_SCALE),HIGH=10_000_000n*SCALE;
 const ceil=(a,b)=>(a+b-1n)/b;
-export function stockOrderQuote({priceUnits,initialPrice,side,quantity}){
- if(!Number.isSafeInteger(priceUnits)||priceUnits<Number(LOW)||priceUnits>Number(HIGH)||!Number.isSafeInteger(initialPrice)||initialPrice<=0||!Number.isSafeInteger(quantity)||quantity<1||quantity>100000||!['buy','sell'].includes(side))throw Error('株の注文内容を確認してください。');
+export function stockOrderQuote({priceUnits,initialPrice,side,quantity,minPrice=20}){
+ const LOW=BigInt(minPrice)*SCALE;
+ if(![1,20].includes(minPrice)||!Number.isSafeInteger(priceUnits)||priceUnits<Number(LOW)||priceUnits>Number(HIGH)||!Number.isSafeInteger(initialPrice)||initialPrice<=0||!Number.isSafeInteger(quantity)||quantity<1||quantity>100000||!['buy','sell'].includes(side))throw Error('株の注文内容を確認してください。');
  const p=BigInt(priceUnits),q=BigInt(quantity),raw=BigInt(initialPrice)**2n,s=raw<SCALE?SCALE:raw;
  const distance=side==='buy'?HIGH-p:p-LOW,move=s*q;
  let numerator,denominator;

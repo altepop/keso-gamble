@@ -79,7 +79,7 @@ let browser;
    const body=legacy?readFileSync(resolve(__dirname,'../tests/fixtures/legacy-casino.js')):revision?require('node:child_process').execFileSync('git',['show',revision+':'+require('node:path').relative(resolve(__dirname,'..'),file)],{cwd:resolve(__dirname,'..')}):readFileSync(file);
    await route.fulfill({status:200,contentType:path.endsWith('.js')?'text/javascript':path.endsWith('.css')?'text/css':'text/html',body});
   });
-  await page.goto('https://100000000000000000.discordsays.com/?frame_id=frame&instance_id=instance&platform='+(engineName==='webkit'||scenario.includes('touch')?'mobile&mobile_app_version=300.0':'desktop')+(scenario.startsWith('guild-')?'&guild_id=100000000000000100&channel_id=100000000000000101':''));
+  await page.goto('https://100000000000000000.discordsays.com/?frame_id=frame&instance_id=instance&platform='+(engineName==='webkit'||scenario.includes('touch')?'mobile&mobile_app_version=300.0':'desktop')+(scenario.startsWith('guild-')?'&guild_id=100000000000000100&channel_id=100000000000000101':''),scenario==='stalled-module'?{waitUntil:'commit'}:undefined);
   if(process.env.KESO_EXPECT_LEGACY_FAILURE){
    await legacyFailure;
    assert.ok(errors.some(message=>message.includes('validCard')),JSON.stringify(errors));assert.deepEqual(await page.evaluate(()=>window.__sdkCommands),[]);assert.equal(await page.locator('.title-screen').count(),0);

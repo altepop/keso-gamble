@@ -1,0 +1,56 @@
+name: P12 duel daily operations audit fallback (read-only)
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/duel-operations-audit-fallback.yml'
+      - 'scripts/duel-operations-audit-fallback.mjs'
+      - 'services/valorant-results/test/duel-operations-audit-fallback.test.mjs'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/duel-operations-audit-fallback.yml'
+      - 'scripts/duel-operations-audit-fallback.mjs'
+      - 'services/valorant-results/test/duel-operations-audit-fallback.test.mjs'
+  workflow_dispatch:
+  schedule:
+    - cron: '17 22 * * *'
+permissions:
+  contents: read
+  actions: read
+  issues: write
+concurrency:
+  group: duel-operations-audit-fallback
+  cancel-in-progress: false
+jobs:
+  fallback:
+    if: github.repository == 'altepop/keso-gamble'
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Verify strict read-only audit and missing-schedule decisions
+        run: node --test services/valorant-results/test/duel-scheduled-operations-audit.test.mjs services/valorant-results/test/duel-scheduled-operations-alert.test.mjs services/valorant-results/test/duel-operations-audit-fallback.test.mjs
+      - name: Check successful or ongoing primary daily audit before any D1 access
+        id: decision
+        if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.actor == 'altepop')
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: node scripts/duel-operations-audit-fallback.mjs
+      - name: Execute missing or failed daily audit as two read-only aggregates
+        if: steps.decision.outputs.execute == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          DUEL_OPERATIONS_AUDIT_REPORT: ${{ runner.temp }}/duel-operations-fallback.json
+        run: node scripts/duel-scheduled-operations-audit.mjs
+      - name: Open or deduplicate GitHub Issue only when an audit ran or the decision failed
+        if: always() && (failure() || steps.decision.outputs.execute == 'true') && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.actor == 'altepop'))
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          DUEL_OPERATIONS_AUDIT_REPORT: ${{ runner.temp }}/duel-operations-fallback.json
+        run: node scripts/duel-scheduled-operations-alert.mjs

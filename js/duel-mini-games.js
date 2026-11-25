@@ -28,6 +28,22 @@ export function connect4Move(board,side,column){
  const next=arr.join('');
  return {board:next,turnSide:won||!next.includes('.')?null:opposite(side),winner:won?side:!next.includes('.')?'draw':null};
 }
+// Presentation-only: return four indices for a visible winning line. The
+// server remains the sole authority for the actual winner and KP settlement.
+export function connect4WinningLine(board,side){
+ if(typeof board!=='string'||board.length!==42||!/^[.ab]{42}$/.test(board)||!['a','b'].includes(side))return [];
+ for(let row=0;row<6;row++)for(let col=0;col<7;col++){
+  if(board[row*7+col]!==side)continue;
+  for(const [dr,dc] of [[0,1],[1,0],[1,1],[1,-1]]){
+   const indices=Array.from({length:4},(_,i)=>(row+dr*i)*7+col+dc*i);
+   if(indices.every((index,i)=>{
+    const r=row+dr*i,c=col+dc*i;
+    return r>=0&&r<6&&c>=0&&c<7&&board[index]===side;
+   }))return indices;
+  }
+ }
+ return [];
+}
 export function hitBlowAnswer(guess,code){
  if(typeof guess!=='string'||!/^[0-9]{4}$/.test(guess)||new Set(guess).size!==4)throw Error('異なる数字4桁を入力してください。');
  return {hit:[...guess].filter((v,i)=>v===code[i]).length,blow:[...guess].filter((v,i)=>v!==code[i]&&code.includes(v)).length};
@@ -68,6 +84,29 @@ export function pokerShowdownReason(a,b){
 }
 export function validBluffBid(bid,count,face){
  return Number.isSafeInteger(count)&&count>=1&&count<=10&&Number.isSafeInteger(face)&&face>=1&&face<=6&&(!bid||count>bid.count||(count===bid.count&&face>bid.face));
+}
+// UI-only helpers. Never inspect, infer or publish the opponent's private hand.
+export function nextBluffBid(bid){
+ if(!bid)return {count:1,face:1};
+ if(!Number.isInteger(bid.count)||bid.count<1||bid.count>10||
+    !Number.isInteger(bid.face)||bid.face<1||bid.face>6)return null;
+ return bid.face<6?{count:bid.count,face:bid.face+1}:
+   bid.count<10?{count:bid.count+1,face:1}:null;
+}
+// Conditional probability of a claim being true given *only* five dice in
+// the current user's private hand. Opponent dice are five unknown fair dice.
+// This is a strategic estimate, not a claim about the actual hidden result.
+export function bluffBidEvidence(hand,bid){
+ if(!Array.isArray(hand)||hand.length!==5||hand.some(x=>!Number.isInteger(x)||x<1||x>6)||
+    !bid||!Number.isInteger(bid.face)||bid.face<1||bid.face>6||
+    !Number.isInteger(bid.count)||bid.count<1||bid.count>10)return null;
+ const own=hand.filter(x=>x===bid.face).length,needed=bid.count-own;
+ let chance=0;
+ for(let k=Math.max(0,needed);k<=5;k++){
+  const choose=[1,5,10,10,5,1][k];
+  chance+=choose*(1/6)**k*(5/6)**(5-k);
+ }
+ return {own,needed,chance:Math.max(0,Math.min(1,chance))};
 }
 function digits(rand){const array=Array.from({length:10},(_,i)=>String(i));for(let i=9;i>0;i--){const j=rand(i+1);[array[i],array[j]]=[array[j],array[i]];}return array.slice(0,4).join('');}
 function dice(rand){return Array.from({length:5},()=>rand(6)+1);}

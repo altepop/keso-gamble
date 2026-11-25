@@ -118,3 +118,29 @@ test('enriched hit/damage provenance never makes the old KDA snapshot appear fre
  const q=coachPerformance([r],accounts).quality.metricCoverage;
  assert.equal(q.kd.recordedAt!.newest,1000);assert.equal(q.hs.recordedAt!.newest,2000);assert.equal(q.adr.recordedAt!.newest,2500);assert.equal(q.ddDelta.recordedAt!.newest,3000);
 });
+
+test('Phase 4 verified map rotation separates historic and missing maps',()=>{
+ const rows=[...Array.from({length:5},(_,i)=>row(100+i,{map:'Bind'})),row(200,{map:'Corrode'}),row(201,{map:'Ascent'}),row(202,{map:null})];
+ const c=coachPerformance(rows,accounts).mapPoolCoverage;
+ assert.equal(c.version,'2026-act6-patch-13.08');
+ assert.deepEqual(c.pool.map(m=>m.map),['Abyss','Bind','Corrode','Haven','Lotus','Summit','Sunset']);
+ assert.equal(c.pool.find(m=>m.map==='Bind')?.status,'集計可能');
+ assert.deepEqual(c.pool.find(m=>m.map==='Bind')?.observedAgents,[{agent:'Sage',matches:5}]);
+ assert.equal(c.pool.find(m=>m.map==='Corrode')?.status,'まだ分かりません');
+ assert.equal(c.pool.find(m=>m.map==='Abyss')?.status,'未収集');
+ assert.deepEqual(c.outsidePool,[{map:'Ascent',matches:1}]);
+ assert.equal(c.unknownMapMatches,1);
+ assert.equal(c.sampleMatches,8);
+ assert.equal(c.poolComplete,false);
+ for(const secret of ['private-a','private-match','private-other'])assert.equal(JSON.stringify(c).includes(secret),false);
+});
+
+test('timestamp-only roster with valid identities is excluded without inventing zero stats',()=>{
+ const real=row(1,{ended_at:Date.parse('2026-11-19T15:00:00Z')});
+ const blank=row(2,{ended_at:Date.parse('2026-11-21T21:57:00Z'),map:null,teams_json:null});
+ const ps=JSON.parse(blank.players_json);ps.forEach((p:Record<string,unknown>)=>{p.agent=null;p.k=null;p.d=null;p.a=null;p.score=null;});
+ const result=coachPerformance([{...blank,players_json:JSON.stringify(ps)},real],accounts);
+ assert.equal(result.overall.matches,1);
+ assert.equal(result.quality.excluded['time-only-record'],1);
+ assert.equal(result.timeline[0].date,new Date(real.ended_at).toISOString());
+});

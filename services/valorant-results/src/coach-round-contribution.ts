@@ -3,7 +3,8 @@ type Row={match_id:string;players_json:string;teams_json:string|null;rounds_json
 type Account={name:string;tag:string;puuid:string|null};
 const parse=(v:string|null):any=>{try{return v?JSON.parse(v):null}catch{return null}};
 const n=(x:unknown,max=10000)=>Number.isSafeInteger(x)&&Number(x)>=0&&Number(x)<=max;
-export function coachRoundContribution<T extends Row>(rows:readonly T[],accounts:readonly Account[],onVerified?:(row:T)=>void){
+export type CoachCombatObservation={rounds:number;enemyKills:number;totalDeaths:number;enemyKnownKillerDeaths:number;teammateRetaliations5s:number;tradeKills5s:number;diedAfterKill5s:number};
+export function coachRoundContribution<T extends Row>(rows:readonly T[],accounts:readonly Account[],onVerified?:(row:T,observation:CoachCombatObservation)=>void){
  const seen=new Set<string>(),excluded:Record<string,number>={};
  const stamps:number[]=[];
  const histogram=[0,0,0,0,0,0,0];let matches=0,rounds=0,noDeath=0,multiWins=0,multiKnown=0;
@@ -23,14 +24,31 @@ export function coachRoundContribution<T extends Row>(rows:readonly T[],accounts
   const valid=ks.every(k=>k&&n(k.r,60)&&n(k.t,900000)&&roundIds.has(k.r)&&byId.has(k.victim)&&(k.killer===null||byId.has(k.killer)));
   if(!valid){reject('invalid-kill-events');continue;}
   const enemyKill=(k:any,puuid:string)=>k.killer===puuid&&byId.get(k.victim)?.team_id!==byId.get(puuid)?.team_id;
-  const deathsById=new Map<string,number>(),killsById=new Map<string,number>(),ownByRound=new Map<number,{kills:number;deaths:number}>();
+  const deathsById=new Map<string,number>(),friendlyDeathsById=new Map<string,number>(),
+   killsById=new Map<string,number>(),ownByRound=new Map<number,{kills:number;deaths:number}>();
   for(const k of ks){
-   deathsById.set(k.victim,(deathsById.get(k.victim)??0)+1);
+   // Some teammate casualties are included in official D and others are not.
+   // Never assume either rule for the entire match. Compare each victim's
+   // scored deaths to observed opponent/unknown-killer deaths and teammate
+   // casualties independently; ambiguous partial credit must stay unverified.
+   const friendly=k.killer!==null&&byId.get(k.killer)?.team_id===byId.get(k.victim)?.team_id;
+   const bucket=friendly?friendlyDeathsById:deathsById;
+   bucket.set(k.victim,(bucket.get(k.victim)??0)+1);
    if(k.killer!==null&&enemyKill(k,k.killer))killsById.set(k.killer,(killsById.get(k.killer)??0)+1);
    let v=ownByRound.get(k.r);if(!v){v={kills:0,deaths:0};ownByRound.set(k.r,v);}
    if(enemyKill(k,p.puuid))v.kills++;if(k.victim===p.puuid)v.deaths++;
   }
-  if(ps.some(x=>(deathsById.get(x.puuid)??0)!==x.d||(killsById.get(x.puuid)??0)!==x.k)){reject('kill-totals-do-not-match-roster');continue;}
+  // Per-player reconciliation: if all teammate casualties for a victim are
+  // uncredited, official D equals opponent/unknown deaths. If all are credited,
+  // it equals the total observed deaths. Intermediate credit cannot be mapped
+  // unambiguously to specific events and is intentionally rejected.
+  const deathParity=ps.every(x=>{
+   const normal=deathsById.get(x.puuid)??0,friendly=friendlyDeathsById.get(x.puuid)??0;
+   return x.d===normal||x.d===normal+friendly;
+  });
+  if(!deathParity||ps.some(x=>(killsById.get(x.puuid)??0)!==x.k)){
+   reject('kill-totals-do-not-match-roster');continue;
+  }
   let assistantsComplete=ks.every(k=>Array.isArray(k.assistants)&&new Set(k.assistants).size===k.assistants.length&&k.assistants.every((id:any)=>typeof id==='string'&&byId.has(id)&&id!==k.killer&&id!==k.victim&&byId.get(id)?.team_id===byId.get(k.killer)?.team_id));
   if(!assistantsComplete)assistQuality.excluded['missing-or-invalid-assistant-ids']=(assistQuality.excluded['missing-or-invalid-assistant-ids']??0)+1;
   else{
@@ -41,7 +59,8 @@ export function coachRoundContribution<T extends Row>(rows:readonly T[],accounts
   if(assistantsComplete)assistQuality.validMatches++;
   const allByRound=new Map<number,typeof ks>();
   for(const k of ks){const group=allByRound.get(k.r)??[];group.push(k);allByRound.set(k.r,group);}
-  onVerified?.(row);matches++;if(Number.isSafeInteger(row.events_recorded_at)&&Number(row.events_recorded_at)>0)stamps.push(row.events_recorded_at!);
+  const before={...combatFollowup};
+  matches++;if(Number.isSafeInteger(row.events_recorded_at)&&Number(row.events_recorded_at)>0)stamps.push(row.events_recorded_at!);
   for(const r of rs){
    const {kills=0,deaths=0}=ownByRound.get(r.r)??{};
    const events=allByRound.get(r.r)??[],ownKills=events.filter((k:any)=>enemyKill(k,p.puuid)),ownDeaths=events.filter((k:any)=>k.victim===p.puuid);
@@ -62,6 +81,7 @@ export function coachRoundContribution<T extends Row>(rows:readonly T[],accounts
    const side=r.attack===r.defense?null:r.attack===p.team_id?'attack':r.defense===p.team_id?'defense':null;
    if(side){sides[side].rounds++;sides[side].kills+=kills;sides[side].deaths+=deaths;}
   }
+  onVerified?.(row,{rounds:rs.length,...Object.fromEntries(Object.entries(combatFollowup).map(([key,value])=>[key,value-before[key as keyof typeof before]]))} as CoachCombatObservation);
  }
  return {quality:{recordedAt:stamps.length?{oldest:Math.min(...stamps),newest:Math.max(...stamps)}:null,missingTimestamps:matches-stamps.length,source:'rounds/kills verified against all ten roster K/D totals',candidateMatches:rows.length,validMatches:matches,excluded},
   assistQuality,combatFollowup,rounds,killHistogram:histogram.map((count,kills)=>({kills:kills===6?'6+':String(kills),count,denominator:rounds})),

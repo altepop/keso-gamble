@@ -367,10 +367,21 @@ type CoachReport=ReturnType<typeof summarizeCoachRounds>&{
  fullDiagnosis:ReturnType<typeof comprehensiveCoachDiagnosis>;
 };
 const readCache=new WeakMap<object,{until:number;value:CoachReport}>();
-export function invalidateCoachRoundReport(db:D1Database){readCache.delete(db);}
+// Share an in-flight read per D1 binding. Two concurrent Activity opens must
+// not each scan the same roster/round archive before the 5-minute cache fills.
+const readInFlight=new WeakMap<object,Promise<CoachReport>>();
+export function invalidateCoachRoundReport(db:D1Database){
+ readCache.delete(db);
+ // Invalidation also revokes the in-flight task's permission to repopulate
+ // the cache. Its existing waiters may finish, but new callers start fresh.
+ readInFlight.delete(db);
+}
 export async function readCoachRoundReport(db:D1Database,now=Date.now()){
  const cached=readCache.get(db);
  if(cached&&now<cached.until)return cached.value;
+ const existing=readInFlight.get(db);
+ if(existing)return existing;
+ const task=(async()=>{
  const result=await db.prepare(`SELECT r.match_id,r.map,r.ended_at,r.players_json,r.teams_json,e.rounds_json,e.kills_json
    FROM valorant_match_round_events e JOIN valorant_match_rosters r ON r.match_id=e.match_id
    WHERE EXISTS (SELECT 1 FROM json_each(r.players_json) p
@@ -416,6 +427,16 @@ export async function readCoachRoundReport(db:D1Database,now=Date.now()){
    successRounds:recommendSuccessRounds(result.results),coachingNotes:coachNotes(report),
    coachSignals:detectCoachSignals(report),
    fullDiagnosis:comprehensiveCoachDiagnosis(report)};
- readCache.set(db,{until:now+5*60000,value});
  return value;
+ })();
+ readInFlight.set(db,task);
+ try{
+  const value=await task;
+  // Never recache a result after an explicit archive invalidation.
+  if(readInFlight.get(db)===task)
+   readCache.set(db,{until:now+5*60000,value});
+  return value;
+ }finally{
+  if(readInFlight.get(db)===task)readInFlight.delete(db);
+ }
 }

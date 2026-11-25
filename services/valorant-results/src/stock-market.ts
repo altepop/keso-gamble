@@ -3,6 +3,8 @@ import {stockOrderQuote,STOCK_ORDER_VERSION,STOCK_PRICE_SCALE} from '../../../js
 // One server market per guild. Quotes, dividends, lots and benefits never use the demo PRNG.
 import type {KpEnv} from './kp.ts';
 import {availableStockNewsTables} from './stock-news-sources.ts';
+// @ts-expect-error Shared fictional event schedule.
+import {VDK_CRASH_START,VDK_IPO_AT,vdkEventPrice,stockTradeRestriction} from '../../../js/vdk-bankruptcy.js';
 // @ts-expect-error Shared pure browser engine.
 import {MARKET,advanceMarket} from '../../../js/engine.js';
 interface Stock {id:string;name:string;initialPrice:number}
@@ -11,6 +13,24 @@ const IDS=STOCKS.map(s=>s.id);
 // A day's news can move a stock at most this far (bps); the luck stocks move with every game, so they get more room.
 const DAY_BUDGET:Record<string,number>={msum:800,tnkn:800,vdk:800};
 export const STOCK_INTERVAL=5*60_000,STOCK_HOLD=86400000,DIVIDEND_CAP=500;
+// One-off fictional GODO market event, confined to KESO TOWN and a fixed JST window.
+export const GODO_EVENT_GUILD='606131625084059674';
+export const GODO_EVENT_START=Date.UTC(2026,10,25,6,40); // Nov 25 15:40 JST
+export const GODO_EVENT_END=Date.UTC(2026,10,28,6,40); // Nov 28 15:40 JST
+const GODO_TARGET=10500,GODO_FINAL_WINDOW=60*60_000;
+export function godoEventQuote(before:number,normal:number,initial:number,begin:number,now:number):number{
+ if(now<begin||now<GODO_EVENT_START||now>=GODO_EVENT_END)return normal;
+ const finish=GODO_EVENT_END-GODO_FINAL_WINDOW;
+ if(now>=finish)return Math.max(10000,Math.min(10999,normal));
+ const p=Math.max(0,Math.min(1,(now-begin)/Math.max(1,finish-begin)));
+ const trend=initial+(GODO_TARGET-initial)*p;
+ // Five alternating waves, tapered at both ends. Keep ordinary noise/news and
+ // trade impacts; nudge toward the reference by at most 0.75% per regular tick.
+ const reference=trend*(1+0.075*Math.sin(10*Math.PI*p)*Math.sin(Math.PI*p));
+ const limit=Math.max(1,Math.round(before*0.0075));
+ const adjustment=Math.max(-limit,Math.min(limit,Math.round((reference-normal)*0.22)));
+ return Math.max(20,Math.min(10000000,normal+adjustment));
+}
 export interface Market {guild:string;version:number;prices:Record<string,number>;history:Record<string,number[]>;at:number;startedAt:number;token:string}
 export interface StockBenefits {eligibleValue:number;percent:number;heldHours:number}
 interface RawMarket {guild:string;version:number;prices:string;history:string;at:number;started_at:number;token:string}
@@ -72,6 +92,8 @@ export async function ensureStocks(env:KpEnv){
  // A partial time-sorted index supports the 12 newest public headlines without
  // scanning and sorting every historical market event on each wallet refresh.
  `CREATE INDEX IF NOT EXISTS stock_news_recent_public ON stock_news(guild,at DESC,id DESC) WHERE applied_version IS NOT NULL AND applied_bps!=0`,
+ `CREATE TABLE IF NOT EXISTS stock_vdk_bankruptcy(guild TEXT PRIMARY KEY,begin_at INTEGER NOT NULL,start_price INTEGER NOT NULL)`,
+ `CREATE TABLE IF NOT EXISTS stock_godo_event_20261125(guild TEXT PRIMARY KEY,begin_at INTEGER NOT NULL,start_price INTEGER NOT NULL)`,
  `CREATE TABLE IF NOT EXISTS stock_ticks(guild TEXT NOT NULL,version INTEGER NOT NULL,prices TEXT NOT NULL,at INTEGER NOT NULL,PRIMARY KEY(guild,version))`,
  `CREATE TABLE IF NOT EXISTS stock_announcements(guild TEXT NOT NULL,symbol TEXT NOT NULL,slot INTEGER NOT NULL,at INTEGER NOT NULL,PRIMARY KEY(guild,symbol,slot))`,
  STOCK_ANNOUNCEMENT_LAST_INDEX_SQL,
@@ -157,9 +179,9 @@ export async function payStockDividends(env:KpEnv,market:Market,now=Date.now()){
   env.DB.prepare(`INSERT OR IGNORE INTO stock_dividends(guild,user,day,amount,eligible_value,at)
    SELECT l.guild,l.user,?,MIN(500,CAST(SUM(l.remaining*CAST(json_extract(m.prices,'$.'||l.symbol) AS INTEGER))/100 AS INTEGER)),SUM(l.remaining*CAST(json_extract(m.prices,'$.'||l.symbol) AS INTEGER)),?
    FROM stock_lots l JOIN stock_dividend_days m ON m.guild=l.guild AND m.day=?
-   WHERE l.guild=? AND l.remaining>0 AND l.at<=?
+   WHERE l.guild=? AND l.remaining>0 AND l.at<=? AND (?=0 OR l.symbol!='vdk')
    GROUP BY l.guild,l.user HAVING SUM(l.remaining*CAST(json_extract(m.prices,'$.'||l.symbol) AS INTEGER))>=100`)
-   .bind(day,now,day,market.guild,boundary-STOCK_HOLD),
+   .bind(day,now,day,market.guild,boundary-STOCK_HOLD,now>=VDK_IPO_AT?1:0),
   env.DB.prepare('INSERT OR IGNORE INTO stock_dividend_runs(guild,day) VALUES(?,?)').bind(market.guild,day),
  ]);
 }
@@ -217,6 +239,7 @@ const FICTION:Record<string,{chance:number;bps:number;up:string[];down:string[]}
 export function fictionNews(draw:()=>number){
  const out:Array<{symbol:string;label:string;bps:number}>=[];
  for(const [symbol,f] of Object.entries(FICTION)){
+  if(symbol==='vdk'&&Date.now()>=VDK_CRASH_START)continue;
   if(draw()>=f.chance)continue;
   const up=draw()<0.5,pool=up?f.up:f.down;
   out.push({symbol,label:pool[Math.min(pool.length-1,Math.floor(draw()*pool.length))],bps:up?f.bps:-f.bps});
@@ -224,7 +247,7 @@ export function fictionNews(draw:()=>number){
  return out;
 }
 export function nextStockPrices(prices:Record<string,number>,news:Array<{symbol:string;bps:number}>,draw:()=>number){
- const volatility:Record<string,number>={keso:120,riso:200,yuya:400,yano:100,msum:80,tnkn:80,komi:300,ishi:160,vdk:500,godo:160,ngya:300,koba:120};
+ const volatility:Record<string,number>={keso:120,riso:200,yuya:400,yano:100,msum:80,tnkn:80,komi:300,ishi:160,vdk:500,vdkc:160,godo:160,ngya:300,koba:120};
  return Object.fromEntries(IDS.map(id=>{
   const impact=Math.max(-250,Math.min(250,news.filter(n=>n.symbol===id).reduce((sum,n)=>sum+n.bps,0)));
   const noise=Math.round((draw()*2-1)*volatility[id]);
@@ -241,10 +264,34 @@ export async function tickStocks(env:KpEnv,market:Market,now=Date.now(),draw:()=
  const used=(await env.DB.prepare("SELECT symbol,SUM(ABS(applied_bps)) AS total,SUM(CASE WHEN id LIKE 'trades:%' THEN ABS(applied_bps) ELSE 0 END) AS trades FROM stock_news INDEXED BY stock_news_daily_used WHERE guild=? AND applied_at>=? AND applied_bps!=0 AND id NOT LIKE 'admin:%' GROUP BY symbol").bind(market.guild,Math.floor(now/STOCK_HOLD)*STOCK_HOLD).all<{symbol:string;total:number;trades:number}>()).results;
  const budgets=new Map(IDS.map(id=>[id,{day:(DAY_BUDGET[id]??300)-(used.find(r=>r.symbol===id)?.total??0),tick:250,trades:30-(used.find(r=>r.symbol===id)?.trades??0)}]));
  const effective=pending.map(n=>{const b=budgets.get(n.symbol);if(!b)return {...n,bps:0};const trading=n.id.startsWith('trades:');const size=Math.max(0,Math.min(Math.abs(n.bps),b.day,b.tick,trading?b.trades:Infinity));b.day-=size;b.tick-=size;if(trading)b.trades-=size;return {...n,bps:Math.sign(n.bps)*size};});
- const prices=nextStockPrices(market.prices,effective,draw),history=Object.fromEntries(IDS.map(id=>[id,[...(market.history[id]??[]),prices[id]].slice(-48)]));
+ const prices=nextStockPrices(market.prices,effective,draw);
+ const godoActive=market.guild===GODO_EVENT_GUILD&&now>=GODO_EVENT_START&&now<GODO_EVENT_END;
+ const godoStart=godoActive?await env.DB.prepare('SELECT begin_at,start_price FROM stock_godo_event_20261125 WHERE guild=?').bind(market.guild).first<{begin_at:number;start_price:number}>():null;
+ if(godoActive)prices.godo=godoEventQuote(market.prices.godo,prices.godo,godoStart?.start_price??market.prices.godo,godoStart?.begin_at??now,now);
+ // Remember the real starting quote from the first active 5-minute tick.
+ if(now>=VDK_CRASH_START){
+  await env.DB.prepare('INSERT OR IGNORE INTO stock_vdk_bankruptcy(guild,begin_at,start_price) VALUES(?,?,?)')
+   .bind(market.guild,now,market.prices.vdk).run();
+  const event=await env.DB.prepare('SELECT begin_at,start_price FROM stock_vdk_bankruptcy WHERE guild=?')
+   .bind(market.guild).first<{begin_at:number;start_price:number}>();
+  if(event)prices.vdk=Math.min(market.prices.vdk,vdkEventPrice(event.start_price,event.begin_at,now));
+ }
+ if(now<VDK_IPO_AT)prices.vdkc=500; // Dormant pre-IPO quote.
+ const history=Object.fromEntries(IDS.map(id=>[id,[...(market.history[id]??[]),prices[id]].slice(-48)]));
  const token=crypto.randomUUID(),version=market.version+1,guard='EXISTS(SELECT 1 FROM stock_markets WHERE guild=? AND token=?)';
  const commands=[env.DB.prepare('UPDATE stock_markets SET version=?,prices=?,history=?,at=?,token=? WHERE guild=? AND version=?').bind(version,JSON.stringify(prices),JSON.stringify(history),now,token,market.guild,market.version),
   env.DB.prepare(`INSERT OR IGNORE INTO stock_ticks SELECT ?,?,?,? WHERE ${guard}`).bind(market.guild,version,JSON.stringify(prices),now,market.guild,token)];
+ if(godoActive&&!godoStart)commands.push(env.DB.prepare(`INSERT OR IGNORE INTO stock_godo_event_20261125(guild,begin_at,start_price) SELECT ?,?,? WHERE ${guard}`).bind(market.guild,now,market.prices.godo,market.guild,token));
+ if(now>=VDK_IPO_AT){
+  const announcement=JSON.stringify({content:'📉 **【速報】VDKブラック商事、ついに倒産！**\n株価1 KPで上場廃止。旧VDK株の売買は終了。\n🏢 **VDKブラックコンサル（VDKC）新規上場！** 初値500 KP。旧株とは別銘柄として再出発。',allowed_mentions:{parse:[]}});
+  commands.push(env.DB.prepare("INSERT OR IGNORE INTO kp_posts(id,body,at) SELECT ?,?,? WHERE EXISTS(SELECT 1 FROM stock_markets WHERE guild=? AND token=?)")
+   .bind('vdk-bankruptcy-ipo:20261121:'+market.guild,announcement,now,market.guild,token));
+  for(const [id,symbol,label] of [
+   ['vdk-bankruptcy-20261121','vdk','【倒産・上場廃止】VDKブラック商事は1 KPで取引終了'],
+   ['vdkc-ipo-20261121','vdkc','【新規上場】VDKブラックコンサル、初値500 KP']
+  ])commands.push(env.DB.prepare("INSERT OR IGNORE INTO stock_news(guild,id,symbol,label,bps,at,applied_version,applied_bps,applied_at) SELECT ?,?,?,?,0,?,?,1,? WHERE EXISTS(SELECT 1 FROM stock_markets WHERE guild=? AND token=?)")
+   .bind(market.guild,id,symbol,label,now,version,now,market.guild,token));
+ }
  for(const n of effective)commands.push(env.DB.prepare(`UPDATE stock_news SET applied_version=?,applied_bps=?,applied_at=? WHERE guild=? AND id=? AND applied_version IS NULL AND ${guard}`).bind(version,n.bps,now,market.guild,n.id,market.guild,token));
  await env.DB.batch(commands);
  return read(env,market.guild);
@@ -266,13 +313,14 @@ export async function prepareStocks(env:KpEnv,guild:string,user?:string,now=Date
 }
 export async function stockBenefits(env:KpEnv,market:Market,user:string,now=Date.now()):Promise<StockBenefits>{
  const lots=(await env.DB.prepare('SELECT symbol,remaining FROM stock_lots WHERE guild=? AND user=? AND remaining>0 AND at<=?').bind(market.guild,user,now-STOCK_HOLD).all<{symbol:string;remaining:number}>()).results;
- const value=lots.reduce((sum,l)=>sum+l.remaining*market.prices[l.symbol],0);
+ const value=lots.reduce((sum,l)=>sum+(now>=VDK_IPO_AT&&l.symbol==='vdk'?0:l.remaining*market.prices[l.symbol]),0);
  return {eligibleValue:value,percent:value>=50000?5:value>=10000?3:0,heldHours:24};
 }
 export function applyStockOrder(state:Record<string,any>,args:Record<string,unknown>){
  const stock=STOCKS.find(s=>s.id===args.symbol);if(!stock)throw Error('存在しない銘柄です。');
+ const restriction=stockTradeRestriction(stock.id,args.side,Date.now());if(restriction)throw Error(restriction);
  if(args.pricingVersion!==STOCK_ORDER_VERSION||!Number.isSafeInteger(args.limit)||Number(args.limit)<0)throw Error('株式売買の仕様が更新されました。Activityを開き直してください。');
- const quote=stockOrderQuote({priceUnits:state.stockMarket.orderQuotes[stock.id],initialPrice:stock.initialPrice,side:args.side,quantity:args.quantity});
+ const quote=stockOrderQuote({priceUnits:state.stockMarket.orderQuotes[stock.id],initialPrice:stock.initialPrice,side:args.side,quantity:args.quantity,minPrice:stock.id==='vdk'?1:20});
  const quantity=Number(args.quantity),buy=args.side==='buy';
  if(buy&&quote.total>Number(args.limit)||!buy&&quote.total<Number(args.limit))throw Error('株価が変わったため注文していません。最新の見込額を確認して、もう一度注文してください。');
  if(buy&&state.cash<quote.total)throw Error('保有KPが不足しています。');
@@ -315,6 +363,7 @@ export async function queueStockPosts(env:KpEnv&{KP_EARNINGS_WEBHOOK_URL?:string
  // One bounded day-count lookup per market tick, regardless of how many symbols move.
  let dailyCount:number|null=null;
  for(const s of STOCKS){
+  if(s.id==='vdk'&&now>=VDK_IPO_AT)continue;
   const change=(market.prices[s.id]/old[s.id]-1)*100;
   if(Math.abs(change)<3)continue;
   const info=await env.DB.prepare('SELECT MAX(at) AS last FROM stock_announcements WHERE guild=? AND symbol=?').bind(market.guild,s.id).first<{last:number|null}>();if(info?.last&&now-info.last<30*60_000)continue;

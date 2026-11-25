@@ -23,6 +23,7 @@ export function valoCommand(configured = players) {
       { type: 1, name: 'players', description: '登録者とRiot IDの一覧' },
       { type: 1, name: 'ranking', description: '最新ACTの登録者勝率ランキング（記録分）', options: [mode] },
       { type: 1, name: 'status', description: '最終確認時刻・送信待ち・API制限の状態' },
+      { type: 1, name: 'coach', description: 'KESO COACHを本人認証で開く（コード入力不要）' },
       { type: 1, name: 'help', description: 'コマンド一覧とデスアンレの使い方' },
     ],
   };

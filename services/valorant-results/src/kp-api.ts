@@ -1,8 +1,28 @@
+import {directiveTransferResult} from './kp-directive-lifecycle.ts';
+import {practiceMatches,savePracticeMatch,practiceReview,ownPracticeRow} from './coach-practice-review.ts';
+import {readPrivateRecords,savePrivateRecord,readPrivateBody,privatePracticeState,PrivateRecordError} from './coach-private-records.ts';
+import {readPveBuild,savePveBuild} from './duel-pve-build.ts';
+import {duelRewardProfile} from './duel-rewards.ts';
+import {duelHistoryRead} from './duel-history.ts';
+import {duelOperationsAudit} from './duel-operations-audit.ts';
+import {duelSeasonRead,duelSeasonEvent} from './duel-season.ts';
+import {listDuelSeasonArchive} from './duel-season-archive.ts';
+import {duelPreservationExport} from './duel-preservation-export.ts';
+import {coachSharingSettings,saveCoachSharing,coachDirectory,coachSharedSummaries,SharingError} from './coach-sharing.ts';
+import {readCoachTeamConsent,saveCoachTeamConsent,coachTeamRoster,CoachTeamError} from './coach-team-consent.ts';
+import {readTeamPdca,writeTeamChallenge,writeTeamSelfStatus} from './coach-team-pdca.ts';
+import {readCoachTeamNotice,saveCoachTeamNotice} from './coach-team-notifications.ts';
+import {coachAuthorizedPartyMetrics} from './coach-team-metrics.ts';
+import {readCoachGoals,parseCoachGoal,saveCoachGoal,GoalError} from './coach-goals.ts';
+import {resolveCoachIdentity,publicCoachIdentity} from './coach-identity.ts';
+import {projectCoachSelfReport} from './coach-self-report.ts';
 import {escalationRatingView} from './escalation-rating.ts';
 import {festivalTerms,publicFestivalResponse} from './race-festival.ts';
 import {personalVerifiedRelicStats} from './relic-economy.ts';
 import {hoyoApi} from './hoyo.ts';
-import {boardDuelApi} from './board-duels.ts';
+import {boardDuelApi,boardDuelParticipantPreview} from './board-duels.ts';
+import {readSpectatorMatch,listSpectatorMatches,isEligibleMainSpectator,SpectatorAccessError} from './duel-spectator-live.ts';
+import {serverPveApi} from './duel-pve-sessions.ts';
 import {steamApi,steamCallback} from './steam-auth.ts';
 import {guildVerifiedRelicStats} from './relic-guild-stats.ts';
 import {privateCasinoAllowed,privateCasinoRound} from './private-casino.ts';
@@ -52,10 +72,11 @@ import {transcendentGodPullPost} from './relic-god-pull.ts';
 import { hydrateMleague, placeMlBet } from '../../../js/mleague.js';
 import { kpRewardHistory } from './kp-reward-history.ts';
 import { healthReport } from './health.ts';
-import {readCoachRoundReport,invalidateCoachRoundReport} from './coach-round-analysis.ts';
+import {invalidateCoachRoundReport} from './coach-round-analysis.ts';
 import {resumeVdkRoundBackfill} from './round-backfill.ts';
 import {enableAllMemberArchive,pauseAllMemberArchive,coachMemberCoverage} from './coach-member-archive.ts';
-import {readCoachMemberReport,readCoachComparison} from './coach-member-report.ts';
+import {readCoachMemberReport} from './coach-member-report.ts';
+import {ensureCoachMmr,mmrReportView} from './coach-mmr.ts';
 import { mlActivityView, mlClosed, mlData, mlLineupTimes, mlResults, seasonStats } from './mleague.ts';
 import { racingView, raceSeed } from './racing-kp.ts';
 import { defaultRoastLevel, validRoastLevel } from './racing-crowns.ts';
@@ -91,7 +112,7 @@ export async function readKpState(env:KpEnv,mapping:KpMapping,user:string){
  state.quizRates=quizKpRates;state.quizDay=new Date().toISOString().slice(0,10);state.quizLimits=quizKpLimits;state.quizCounts=Object.fromEntries(Object.keys(quizKpRates).map(mode=>[mode,quiz.filter(e=>e.day===state.quizDay&&e.mode===mode).length]));state.quizCompleted=Object.keys(quizKpLimits).filter(mode=>state.quizCounts[mode]>=quizKpLimits[mode]!);
  state.claims=rewards.map(e=>({id:e.id,activity:e.mode,reference:e.match,reward:e.amount,status:'approved',time:e.at})).concat(quiz.map(e=>({id:e.id,activity:'quiz.'+e.mode,reference:e.game,reward:e.amount,status:'approved',time:e.completed_at}))).concat(voice.map(e=>({id:e.id,activity:'voice',reference:'通話 '+e.slot+'回目',reward:e.amount,status:'approved',time:e.at}))).sort((a:{time:number},b:{time:number})=>b.time-a.time).slice(0,100);
  state.claims.push(...state.stockMarket.dividends.map((d:{day:string;amount:number;at:number})=>({id:'dividend:'+d.day,activity:'株配当',reference:d.day,reward:d.amount,status:'approved',time:d.at})));state.claims.sort((a:{time:number},b:{time:number})=>b.time-a.time);
- state.directives=(await env.DB.prepare('SELECT id,issuer,target,task,game,achievement,cost,status,at AS time FROM kp_directives WHERE guild=? AND (issuer=? OR target=?) ORDER BY at DESC,id LIMIT 100').bind(mapping.guildId,user,user).all()).results;
+ state.directives=(await env.DB.prepare(`SELECT d.id,d.issuer,d.target,d.task,d.game,d.achievement,d.cost,d.status,d.at AS time,t.at AS transferredAt,COALESCE(l1.delta,0)+COALESCE(l2.delta,0) AS refunded,COALESCE(b.delta,0) AS earlyBonus FROM kp_directives d LEFT JOIN kp_directive_transfers t ON t.directive_id=d.id LEFT JOIN kp_ledger l1 ON l1.id='directive-refund-1:'||d.id LEFT JOIN kp_ledger l2 ON l2.id='directive-refund-2:'||d.id LEFT JOIN kp_ledger b ON b.id='directive-early:'||d.id WHERE d.guild=? AND (d.issuer=? OR d.target=?) ORDER BY d.at DESC,d.id LIMIT 100`).bind(mapping.guildId,user,user).all()).results;
  state.members=members;
  state.escalationRating=await escalationRatingView(env,mapping.guildId,user);
  state.escalationSpins=(await env.DB.prepare("SELECT s.id,s.kind,s.tier,s.award,s.balance_before AS beforeBalance,s.balance_after AS afterBalance,s.at,COALESCE(e.mode,'escalation') AS mode FROM kp_escalation_spins s LEFT JOIN kp_events e ON e.id=s.id WHERE s.guild=? AND s.user=? ORDER BY s.at DESC LIMIT 12").bind(mapping.guildId,user).all()).results;
@@ -185,11 +206,12 @@ export async function operateKp(env:KpEnv,mapping:KpMapping,user:string,id:strin
   const loadoutBefore=snapshotLoadout((state as {relics?:RelicCollection}).relics);let directive:Record<string,unknown>|null=null;let stockTrade:Record<string,unknown>|undefined;
   // 借KP: no bet or purchase at all while any is owed, decided before any draw. Checking the result instead would let a
   // winning roll through and refuse only the losing one. Selling, finishing a blackjack hand and settings stay open.
-  const settles=['horse-sell','roast-level','bj-hit','bj-stand','mines-pick','mines-cashout','vp-draw','relic-equip','relic-auto-equip','relic-claim-steam','relic-claim-unite','relic-save-preset','relic-overwrite-preset','relic-load-preset','relic-remove-preset','relic-rename-preset','relic-recycle','relic-shop','relic-voucher','relic-consumable-use','relic-market-list','relic-market-cancel'].includes(action)||(action==='trade'&&args.side==='sell');
+  const settles=['directive-transfer','horse-sell','roast-level','bj-hit','bj-stand','mines-pick','mines-cashout','vp-draw','relic-equip','relic-auto-equip','relic-claim-steam','relic-claim-unite','relic-save-preset','relic-overwrite-preset','relic-load-preset','relic-remove-preset','relic-rename-preset','relic-recycle','relic-shop','relic-voucher','relic-consumable-use','relic-market-list','relic-market-cancel'].includes(action)||(action==='trade'&&args.side==='sell');
   if(!settles&&await debtOf(env,mapping.guildId,user)>0)throw Error(DEBT_BLOCKED);
   if(ownerRound){const round=privateCasinoRound(state,args);action=round.action;args=round.args;result=round.result;}
   else if(action==='trade'){const order=applyStockOrder(state,args);result=order.result;stockTrade=order.stockTrade;}
   else if(action==='spin')result=args.type==='numbers'?spinNumbers(state,args.bets,cryptoRouletteNumber()):spin(state,args.type,args.amount,args.choice??0,cryptoRouletteNumber());
+  else if(action==='directive-transfer')result=await directiveTransferResult(env,mapping,user,args);
   else if(action==='directive'){
    const costs:Record<string,number>={competitive:40000,unrated:12500,solo_competitive:250000,solo_death_unrated:300000},task=String(args.task),target=String(args.target),base=Object.hasOwn(costs,task)?costs[task]:0;
    const discount=stockDiscount(base,state.stockBenefits.percent),cost=discount.paid;
@@ -377,6 +399,9 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping,deferP
  const headers:Record<string,string>={'Cache-Control':'no-store','Vary':'Origin'};
  if(origin)Object.assign(headers,{'Access-Control-Allow-Origin':origin,'Access-Control-Allow-Headers':'Authorization,Content-Type','Access-Control-Allow-Methods':'GET,POST,OPTIONS'});
  const response=(body:unknown,status=200)=>Response.json(publicFestivalResponse(body),{status,headers});
+ const coachStep=async<T>(step:'IDENTITY'|'GOALS'|'PRACTICE'|'COVERAGE'|'REPORT',load:()=>Promise<T>):Promise<T>=>{
+  try{return await load();}catch(e){throw Object.assign(new Error('Coaching read failed'),{cause:e,coachReadStep:step});}
+ };
  if(request.method==='GET'&&new URL(request.url).pathname==='/api/kp/commands')return response({applicationId:discord.applicationId,version:KP_COMMAND_VERSION,commands:kpCommands});
  if(request.method==='OPTIONS')return new Response(null,{status:204,headers});
  try{
@@ -418,33 +443,110 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping,deferP
   const coachOwner=mapping.accounts.some(a=>a.discordUserId===owner.user&&a.riotId.toLowerCase()==='dolly#sdgs');
   const memberHistoryOwner=mapping.accounts.some(a=>a.discordUserId===owner.user&&
     ['aquatopia#toppy','abema#ttv','dolly#sdgs'].includes(a.riotId.toLowerCase()));
-  if(request.method==='GET'&&path==='/api/kp/coach/rounds'){
-    if(await d1OptionalMode(env))return response({error:'D1節約モード中です。時間を置いてから確認してください。'},429);
-    return response({...await readCoachRoundReport(env.DB),canResume:coachOwner,
-      memberHistory:await coachMemberCoverage(env.DB),canStartMemberHistory:memberHistoryOwner});
+  if((request.method==='GET'&&['/api/kp/coach/practice/matches','/api/kp/coach/practice/review'].includes(path))||(request.method==='POST'&&path==='/api/kp/coach/practice/match')){
+    const identity=await resolveCoachIdentity(env.DB,mapping,owner.user);
+    if(identity.status!=='linked')return response({error:'本人のアカウント対応を確認してください。'},identity.status==='conflict'?409:404);
+    try{
+      const q=new URL(request.url).searchParams;
+      if(request.method==='POST')return response(await savePracticeMatch(env.DB,mapping.guildId,identity,await readPrivateBody(request)));
+      const privateRow=await ownPracticeRow(env.DB,mapping.guildId,identity,q.get('record')??'',path.endsWith('/matches')?(q.get('kind')??'record'):'record');
+      if(await d1OptionalMode(env))return response({error:'D1節約モード中です。記録やメモの保存は利用できます。観察は時間を置いて確認してください。'},429);
+      return response(path.endsWith('/matches')?await practiceMatches(env.DB,mapping.guildId,identity,q.get('record')??'',q.get('kind')??'record',q.get('cursor'),Date.now(),privateRow):await practiceReview(env.DB,mapping.guildId,identity,q.get('record')??'',q.get('previous'),Date.now(),privateRow));
+    }catch(e){if(e instanceof PrivateRecordError)return response({error:e.message},e.status);throw e;}
   }
-  if(request.method==='GET'&&path==='/api/kp/coach/comparison'){
-    if(await d1OptionalMode(env))return response({error:'D1節約モード中のため診断できない。'},429);
-    const people=(new URL(request.url).searchParams.get('people')??'神戸,VDK,石原,藤村,小林').split(',');
-    if(!people.length||people.length>5||new Set(people).size!==people.length||people.some(p=>!['神戸','VDK','石原','藤村','小林'].includes(p)))return response({error:'比較対象が不正である。'},400);
-    return response(await readCoachComparison(env.DB,people));
+  if(['/api/kp/coach/practice/records','/api/kp/coach/notes'].includes(path)&&(request.method==='GET'||request.method==='POST')){
+    const identity=await resolveCoachIdentity(env.DB,mapping,owner.user);
+    if(identity.status!=='linked')return response({error:'本人のアカウント対応を確認してください。'},identity.status==='conflict'?409:404);
+    const kind=path.endsWith('/notes')?'notes':'records';
+    try{return response(request.method==='GET'?await readPrivateRecords(env.DB,mapping.guildId,identity.subjectId,kind,new URL(request.url).searchParams.get('cursor')):await savePrivateRecord(env.DB,mapping.guildId,identity.subjectId,kind,await readPrivateBody(request)));}
+    catch(e){if(e instanceof PrivateRecordError)return response({error:e.message},e.status);throw e;}
   }
-  if(request.method==='GET'&&path==='/api/kp/coach/member'){
-    if(await d1OptionalMode(env))return response({error:'D1節約モード中のため診断できない。'},429);
-    const person=new URL(request.url).searchParams.get('person')??'';
-    if(!['VDK','Abema','Aquatopia','石原','藤村','神戸','小林'].includes(person))
-      return response({error:'診断対象が不正である。'},400);
-    return response(await readCoachMemberReport(env.DB,person));
+  // KP-session + server-verified owner; never trust browser supplied guild/team/owner.
+  if(['/api/kp/coach/team/consent','/api/kp/coach/team/roster','/api/kp/coach/team/metrics','/api/kp/coach/team/pdca','/api/kp/coach/team/challenge','/api/kp/coach/team/status','/api/kp/coach/team/notification'].includes(path)){
+    const identity=await resolveCoachIdentity(env.DB,mapping,owner.user);
+    if(identity.status!=='linked')return response({error:'この表示は利用できません。'},404);
+    try{
+      if(path.endsWith('/consent')&&(request.method==='GET'||request.method==='POST'))
+       return response(request.method==='GET'?
+        await readCoachTeamConsent(env.DB,mapping.guildId,identity,owner.user):
+        await saveCoachTeamConsent(env.DB,mapping.guildId,identity,owner.user,request));
+      if(path.endsWith('/roster')&&request.method==='GET')
+       return response(await coachTeamRoster(env.DB,mapping,identity,owner.user));
+      if(path.endsWith('/notification')&&(request.method==='GET'||request.method==='POST'))
+       return response(request.method==='GET'?
+        await readCoachTeamNotice(env.DB,mapping.guildId,identity,owner.user):
+        await saveCoachTeamNotice(env.DB,mapping.guildId,identity,owner.user,request));
+      if(path.endsWith('/pdca')&&request.method==='GET')
+       return response(await readTeamPdca(env.DB,mapping,identity,owner.user));
+      if(path.endsWith('/challenge')&&request.method==='POST')
+       return response(await writeTeamChallenge(env.DB,mapping,identity,owner.user,request));
+      if(path.endsWith('/status')&&request.method==='POST')
+       return response(await writeTeamSelfStatus(env.DB,mapping,identity,owner.user,request));
+      if(path.endsWith('/metrics')&&request.method==='GET'){
+       if(await d1OptionalMode(env))return response({error:'D1節約モード中です。時間を置いてから確認してください。'},429);
+       return response(await coachAuthorizedPartyMetrics(env.DB,mapping,identity,owner.user));
+      }
+      return response({error:'未対応の操作です。'},405);
+    }catch(e){if(e instanceof CoachTeamError)return response({error:e.message},e.status);throw e;}
   }
-  if(request.method==='GET'&&path==='/api/kp/coach/members/status'){
-    return response({...await coachMemberCoverage(env.DB),canStartMemberHistory:memberHistoryOwner});
+  // Team metrics are aggregate-only, explicitly opted-in and reauthorized at the end of every read.
+  // Personal reports, execution notes and round events remain inaccessible through this route.
+  if(path==='/api/kp/coach/settings'&&(request.method==='GET'||request.method==='POST')){
+    const identity=await resolveCoachIdentity(env.DB,mapping,owner.user);
+    if(identity.status!=='linked')return response({error:'本人のアカウント対応を確認してください。'},identity.status==='conflict'?409:404);
+    try{return response({settings:request.method==='GET'?coachSharingSettings(identity):await saveCoachSharing(env.DB,mapping.guildId,identity,request)});}
+    catch(e){if(e instanceof SharingError)return response({error:e.message},e.status);throw e;}
+  }
+  if(path==='/api/kp/coach/goals'&&(request.method==='GET'||request.method==='POST')){
+    const identity=await resolveCoachIdentity(env.DB,mapping,owner.user);
+    if(identity.status!=='linked')return response({error:'本人のアカウント対応を確認してください。'},identity.status==='conflict'?409:404);
+    if(request.method==='GET')return response(await readCoachGoals(env.DB,mapping.guildId,identity.subjectId));
+    try{return response(await saveCoachGoal(env.DB,mapping.guildId,identity.subjectId,await parseCoachGoal(request)));}
+    catch(e){if(e instanceof GoalError)return response({error:e.message},e.status);throw e;}
+  }
+  if(request.method==='GET'&&path.startsWith('/api/kp/coach/')){
+    if(path==='/api/kp/coach/rounds')return response({error:'表示方法が更新されました。ページを再読み込みしてください。'},410);
+    if(path==='/api/kp/coach/directory')return response(await coachDirectory(env.DB,mapping));
+    if(path==='/api/kp/coach/summary'||path==='/api/kp/coach/comparison'){
+      const params=new URL(request.url).searchParams;
+      const ids=path.endsWith('/summary')?[params.get('subject')??'']:(params.get('subjects')??'').split(',');
+      try{const shared=await coachSharedSummaries(env.DB,mapping,ids,async()=>!await d1OptionalMode(env));return response(path.endsWith('/summary')?shared.summaries[0]:shared);}
+      catch(e){if(e instanceof SharingError)return response({error:e.message},e.status);throw e;}
+    }
+    if(['/api/kp/coach/me','/api/kp/coach/member','/api/kp/coach/members/status'].includes(path)){
+      const identity=await coachStep('IDENTITY',()=>resolveCoachIdentity(env.DB,mapping,owner.user));
+      if(identity.status==='conflict')return response({identity:{status:'conflict'},error:'本人のアカウント対応を確認する必要があります。'},409);
+      if(identity.status!=='linked')return path==='/api/kp/coach/member'?response({error:'この表示は利用できません。'},404):response({identity:publicCoachIdentity(identity),memberHistory:null,report:null,canStartMemberHistory:false});
+      const person=path==='/api/kp/coach/member'?(new URL(request.url).searchParams.get('person')??''):identity.person;
+      if(person!==identity.person&&!identity.accounts.some(a=>a.profile===person))return response({error:'この表示は利用できません。'},404);
+      if(path!=='/api/kp/coach/members/status'&&await d1OptionalMode(env))return response({error:'D1節約モード中です。時間を置いてから確認してください。'},429);
+      const goals=path==='/api/kp/coach/member'?undefined:await coachStep('GOALS',()=>readCoachGoals(env.DB,mapping.guildId,identity.subjectId));
+      const practiceState=path==='/api/kp/coach/member'?undefined:await coachStep('PRACTICE',()=>privatePracticeState(env.DB,mapping.guildId,identity.subjectId));
+      const coverage=await coachStep('COVERAGE',()=>coachMemberCoverage(env.DB,identity.accounts.map(a=>a.riotId)));
+      if(path==='/api/kp/coach/members/status')return response({identity:publicCoachIdentity(identity),settings:coachSharingSettings(identity),practiceState,goals,memberHistory:coverage,canStartMemberHistory:memberHistoryOwner,canResume:coachOwner});
+      const report=await coachStep('REPORT',async()=>{
+        const raw=await readCoachMemberReport(env.DB,person,coverage,identity.accounts);
+        // MMR snapshots (current tier / RR / last change / peak) come from the
+        // HenrikDev v2 MMR endpoint, cached in D1 and refreshed when stale.
+        // A failure here must never break the report; the fields stay unset
+        // and the display keeps its not-acquired state.
+        try{
+          const key=env.HENRIK_API_KEY;
+          const fetcher=key?async(path:string)=>{const res=await fetch('https://api.henrikdev.xyz'+path,{headers:{Authorization:key}});if(!res.ok)throw new Error('henrik_mmr_'+res.status);return res.json();}:null;
+          const snapshots=await ensureCoachMmr(env.DB,identity.accounts,fetcher,Date.now());
+          (raw as unknown as Record<string,unknown>).mmr=mmrReportView(identity.accounts,snapshots);
+        }catch{/* MMR is additive; the report renders without it */}
+        return projectCoachSelfReport(raw);
+      });
+      return path==='/api/kp/coach/member'?response(report):response({identity:publicCoachIdentity(identity),settings:coachSharingSettings(identity),report,practiceState,goals,memberHistory:coverage,canStartMemberHistory:memberHistoryOwner,canResume:coachOwner});
+    }
   }
   if(request.method==='POST'&&path==='/api/kp/coach/members/start'){
     if(!memberHistoryOwner)return response({error:'本人の紐づけ済みKP口座のみが履歴収集を開始できる。'},403);
     if(await d1OptionalMode(env))return response({error:'D1節約モード中のため開始できない。'},429);
     const result=await enableAllMemberArchive(env.DB);
     invalidateCoachRoundReport(env.DB);
-    return response({status:'enabled',...result,
+    return response({status:'enabled',enabled:result.enabled,personsCount:result.persons.length,
       note:'各登録者のHenrik履歴で確認できる試合を段階的に収集。API側にない試合は完全保証できない。'});
   }
   if(request.method==='POST'&&path==='/api/kp/coach/members/pause'){
@@ -461,7 +563,94 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping,deferP
     invalidateCoachRoundReport(env.DB);
     return response({status:result,note:'既存の5分間隔で、保存済みVDK競技試合のみを補完する。'});
   }
-  if(path==='/api/kp/duels')return boardDuelApi(request,env,mapping,owner.user,headers);
+  if(path==='/api/kp/duels/spectator-lobby'){
+   if(request.method!=='GET')return response({error:'未対応の操作です。'},405);
+   if(await d1OptionalMode(env))return response({error:'D1節約モード中です。'},429);
+   try{return response(await listSpectatorMatches(env,mapping,owner.user));}
+   catch(e){if(e instanceof SpectatorAccessError)return response({error:'観戦する権限がありません。'},403);throw e;}
+  }
+  if(path==='/api/kp/duels/spectate'){
+   if(request.method!=='GET')return response({error:'未対応の操作です。'},405);
+   if(await d1OptionalMode(env))return response({error:'D1節約モード中です。'},429);
+   const query=new URL(request.url).searchParams;
+   const revision=query.get('version');
+   if(revision!==null&&!/^(0|[1-9][0-9]{0,9})$/.test(revision))return response({error:'更新番号が不正です。'},400);
+   try{return response(await readSpectatorMatch(env,mapping,owner.user,query.get('id')??'',revision===null?null:Number(revision)));}
+   catch(e){if(e instanceof SpectatorAccessError)return response({error:'対象の試合は参照できません。'},e.status);throw e;}
+  }
+  if(path==='/api/kp/duels/spectator-preview'){
+    // Authenticated owner session and verified guild mapping already required above.
+    // Participant-only; never a public spectating endpoint.
+    if(request.method!=='GET')return response({error:'未対応の操作です。'},405);
+    const query=new URL(request.url).searchParams;
+    const id=query.get('id')??'';
+    const revision=query.get('version');
+    if(revision!==null&&!/^(0|[1-9][0-9]{0,9})$/.test(revision))return response({error:'更新番号が不正です。'},400);
+    try{
+      return response(await boardDuelParticipantPreview(env,mapping.guildId,owner.user,id,revision===null?null:Number(revision)));
+    }catch{
+      return response({error:'対象の試合は参照できません。'},404);
+    }
+  }
+  if(request.method==='GET'&&path==='/api/kp/duels/events'){
+   // The same Bearer KP session and member authorization above protect this
+   // stream. Eligible primary accounts receive all-match version hints, never secret hands or KP,
+   // are sent. No additional D1 schema or per-event database reads.
+   if(!env.RACE_BROADCAST)return response({error:'Real-time notifications unavailable; polling remains active.'},503);
+   const hub=env.RACE_BROADCAST.get(env.RACE_BROADCAST.idFromName('duel:'+mapping.guildId));
+   const stream=await hub.fetch('https://internal/duel/subscribe',{
+    method:'POST',body:JSON.stringify({user:owner.user,observer:await isEligibleMainSpectator(env,mapping,owner.user)})
+   });
+   return new Response(stream.body,{status:stream.status,headers:{
+    ...Object.fromEntries(stream.headers),...headers,'Cache-Control':'no-cache, no-transform'
+   }});
+  }
+  // Public theme contains no member IDs or D1 data; KP authentication still applies.
+  if(path==='/api/kp/duels/season/event'){
+   if(request.method!=='GET')return response({error:'未対応の操作です。'},405);
+   return response({event:duelSeasonEvent()});
+  }
+  if(path==='/api/kp/duels/season/archive'){
+   if(request.method!=='GET')return response({error:'未対応の操作です。'},405);
+   if(!await privateCasinoAllowed(env,mapping.guildId,owner.user))
+    return response({error:'運営者以外は閲覧できません。'},403);
+   if(await d1OptionalMode(env))
+    return response({error:'D1節約モード中のため確定シーズン履歴は取得できません。'},429);
+   return response(await listDuelSeasonArchive(env,mapping.guildId));
+  }
+  if(path==='/api/kp/duels/season'){
+   if(request.method!=='GET')return response({error:'未対応の操作です。'},405);
+   if(!await privateCasinoAllowed(env,mapping.guildId,owner.user))return response({error:'運営者以外は閲覧できません。'},403);
+   if(await d1OptionalMode(env))return response({error:'D1節約モード中のためシーズン順位は取得できません。'},429);
+   return response(await duelSeasonRead(env,mapping.guildId));
+  }
+  if(path==='/api/kp/duels/operations/access'){
+   if(request.method!=='GET')return response({error:'未対応の操作です。'},405);
+   return response({available:await privateCasinoAllowed(env,mapping.guildId,owner.user)});
+  }
+  if(path==='/api/kp/duels/operations'||path==='/api/kp/duels/operations/export'){
+   if(request.method!=='GET')return response({error:'未対応の操作です。'},405);
+   if(!await privateCasinoAllowed(env,mapping.guildId,owner.user))return response({error:'運営者以外は閲覧できません。'},403);
+   if(await d1OptionalMode(env))return response({error:'D1節約モード中です。運営監査を一時停止しています。'},429);
+   return response(path.endsWith('/export')?
+     await duelPreservationExport(env,mapping.guildId):
+     await duelOperationsAudit(env,mapping.guildId));
+  }
+  if(path==='/api/kp/duels/pve/build'){
+   if(request.method==='GET')return response({build:await readPveBuild(env,mapping.guildId,owner.user)});
+   if(request.method!=='POST')return response({error:'未対応の操作です。'},405);
+   const text=await request.text();
+   if(text.length>512)return response({error:'入力が長すぎます。'},400);
+   return response(await savePveBuild(env,mapping.guildId,owner.user,JSON.parse(text)));
+  }
+  if(path==='/api/kp/duels/history'){
+   if(request.method!=='GET')return response({error:'未対応の操作です。'},405);
+   const q=new URL(request.url).searchParams;
+   return response(await duelHistoryRead(env,mapping.guildId,owner.user,{mode:q.get('mode')??'all',game:q.get('game')??'all'}));
+  }
+  if(request.method==='GET'&&path==='/api/kp/duels/rewards')return response(await duelRewardProfile(env,mapping.guildId,owner.user));
+  if(path==='/api/kp/duels/pve')return serverPveApi(request,env,mapping,owner.user,headers);
+  if(path==='/api/kp/duels')return boardDuelApi(request,env,mapping,owner.user,headers,deferPostCommit);
   if(path.startsWith('/api/kp/steam/')){const r=await steamApi(request,env,owner,token!);return new Response(r.body,{status:r.status,headers:{...Object.fromEntries(r.headers),...headers}});}
   if(path.startsWith('/api/kp/hoyo/')){const r=await hoyoApi(request,env,owner);return new Response(r.body,{status:r.status,headers:{...Object.fromEntries(r.headers),...headers}});}
   if(request.method==='POST'&&path==='/api/kp/logout'){await revokeKpSession(env,token!);return response({disconnected:true});}
@@ -554,7 +743,16 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping,deferP
   }
   return response({error:'Not found'},404);
  }catch(error){
+  // A read-only coaching request must never suggest a KP payment or wallet
+  // refresh. Only a fixed category enters logs; identifiers, SQL and tokens do not.
+  if(request.method==='GET'&&new URL(request.url).pathname.startsWith('/api/kp/coach/')){
+   const reason=error instanceof Error&&'cause' in error&&error.cause instanceof Error?error.cause.message:error instanceof Error?error.message:'';
+   const step=error&&typeof error==='object'&&'coachReadStep' in error?String(error.coachReadStep):'UNEXPECTED';
+   const safeStep=['IDENTITY','GOALS','PRACTICE','COVERAGE','REPORT'].includes(step)?step:'UNEXPECTED';
+   console.warn('coach_read_failed',safeStep,/query result exceeded|maximum response size|too large|out of memory|too many resources|resource limit/i.test(reason)?'resource':'internal');
+   return response({error:'コーチングの分析情報を読み込めませんでした。KP残高とは関係ありません。診断コード：COACH_'+safeStep,code:'COACH_'+safeStep},503);
+  }
   const message=error instanceof Error?error.message:'';
-  return response({retryable:!(/[ぁ-んァ-ヶ一-龯]/.test(message)&&!message.includes('SQL')),error:/[ぁ-んァ-ヶ一-龯]/.test(message)&&!message.includes('SQL')?message:message.includes('relic_market_sold')?'出品の状態が変わったため購入・取り下げできません。再読み込みしてください。':message.includes('kp_directive_active')||message.includes('kp_directives.guild, kp_directives.target')?'その相手には実行中の指令があります。':message.includes('kp_horse_limit')?'持てる馬は3頭までです。':message.includes('kp_crowns')?'その枠は埋まりました。もう一度お試しください。':message.includes('kp_horse_not_sellable')?'売れる馬が見つかりません。':'処理を確認できませんでした。残高を更新して確認してください。'},400);
+  return response({retryable:!(/[ぁ-んァ-ヶ一-龯]/.test(message)&&!message.includes('SQL')),error:/[ぁ-んァ-ヶ一-龯]/.test(message)&&!message.includes('SQL')?message:message.includes('relic_market_sold')?'出品の状態が変わったため購入・取り下げできません。再読み込みしてください。':message.includes('directive_transfer_conflict')?'指令の状態が変わりました。再読み込みしてください。':message.includes('kp_directive_active')||message.includes('kp_directives.guild, kp_directives.target')?'その相手には実行中の指令があります。':message.includes('kp_horse_limit')?'持てる馬は3頭までです。':message.includes('kp_crowns')?'その枠は埋まりました。もう一度お試しください。':message.includes('kp_horse_not_sellable')?'売れる馬が見つかりません。':'処理を確認できませんでした。残高を更新して確認してください。'},400);
  }
 }

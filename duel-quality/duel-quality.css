@@ -65,3 +65,672 @@
   .duel-othello .duel-square.duel-flipped-stone::after{display:none}
   .duel-connect4-head button:active,.duel-card:active{transform:none}
 }
+
+/* Othello quality pass: readable move strength, board depth, and score movement.
+   Entirely decorative: no pointer handlers, no predicted outcomes, no KP. */
+.duel-othello{
+  border-radius:10px;
+  border-color:#0a3928;
+  background:#175b43;
+  box-shadow:0 0 0 1px #6bbf9460,0 12px 22px #0005,inset 0 0 0 1px #d0ffdb20;
+}
+.duel-othello .duel-square{
+  background:linear-gradient(150deg,#2b8d67,#227651);
+  border-color:rgba(2,51,31,.46);
+  transition:background-color .13s ease,box-shadow .13s ease;
+}
+.duel-othello .duel-square.available{
+  background:linear-gradient(150deg,#36a476,#268b60);
+  touch-action:manipulation;
+}
+.duel-othello .duel-square.available::before{
+  width:57%;height:57%;
+  background:rgba(3,55,36,.48);
+  border:1px solid rgba(205,255,221,.75);
+  box-shadow:0 0 0 1px #052b1a30;
+  transition:transform .13s ease,background-color .13s ease;
+}
+.duel-othello[data-othello-playing="W"] .duel-square.available::before{
+  background:rgba(242,252,244,.83);
+  border-color:#fff;
+}
+.duel-othello .duel-square .duel-capture-count{
+  position:absolute;inset:0;z-index:2;
+  display:grid;place-items:center;pointer-events:none;
+  color:#f1ffeb;font-size:clamp(10px,2.8vw,13px);
+  font-weight:900;line-height:1;
+  text-shadow:0 1px 2px #00271c;
+}
+.duel-othello[data-othello-playing="W"] .duel-capture-count{
+  color:#143f34;text-shadow:none;
+}
+.duel-othello .duel-square.available:is(:hover,:focus-visible,:active)::before,
+.duel-othello .duel-square.duel-tap-feedback::before{
+  transform:scale(1.13);
+  box-shadow:0 0 0 2px #ecffce75;
+}
+.duel-othello .duel-square.available:focus-visible{
+  outline:3px solid #fff0a4;outline-offset:-3px;z-index:3;
+}
+.duel-othello .duel-square.duel-new-stone::after{
+  content:'';position:absolute;inset:7%;border:2px solid #fff1a3;
+  border-radius:50%;z-index:2;pointer-events:none;
+  animation:duel-placement-wave .52s cubic-bezier(.17,.67,.22,1) both;
+}
+@keyframes duel-placement-wave{
+  0%{opacity:.96;transform:scale(.66)}
+  85%{opacity:.4}
+  100%{opacity:0;transform:scale(1.35)}
+}
+.duel-othello-dashboard{
+  margin:13px 0 2px;display:grid;gap:8px;
+}
+.duel-othello-scorebar{
+  display:flex;width:100%;height:12px;overflow:hidden;border-radius:99px;
+  background:#184e3c;box-shadow:0 0 0 1px #9fd9c255,inset 0 2px 4px #0007;
+}
+.duel-othello-scorebar span{display:block;min-width:0;transition:width .3s ease}
+.duel-score-black{background:linear-gradient(#58636c,#070a0b);box-shadow:inset 0 1px 2px #fff3}
+.duel-score-empty{background:repeating-linear-gradient(45deg,#1d654d,#1d654d 8px,#247355 8px,#247355 16px)}
+.duel-score-white{background:linear-gradient(#fff,#bbc9bb);box-shadow:inset 0 1px 2px #fff9}
+.duel-othello-coach{
+  margin:0;text-align:center;color:#c8e8d8;font-size:11px;
+  line-height:1.55;font-weight:650;
+}
+@media(max-width:350px){
+  .duel-othello .duel-square .duel-capture-count{font-size:10px}
+  .duel-othello-coach{font-size:10px}
+}
+@media(prefers-reduced-motion:reduce){
+  .duel-othello .duel-square,.duel-othello .duel-square.available::before,
+  .duel-othello-scorebar span{transition:none!important}
+  .duel-othello .duel-square.duel-new-stone::after{animation:none!important;display:none}
+}
+
+/* Connect Four premium motion. Never blocks input, state changes or KP. */
+.duel-connect4-board{
+  grid-template-rows:repeat(6,minmax(0,1fr));
+  overflow:hidden;
+  box-shadow:0 9px 24px #0006,inset 0 1px 1px #e1f7ff60;
+  background:linear-gradient(130deg,#218ed3,#1260a4 58%,#064375);
+}
+.duel-connect4-space{position:relative;isolation:isolate;overflow:visible}
+.duel-connect4-space i{
+  aspect-ratio:1/1;
+  min-height:0;
+  box-shadow:inset 0 2px 6px #0008,0 1px 2px #0008;
+}
+.duel-connect4-head button:not(:disabled){
+  cursor:pointer;touch-action:manipulation;
+  transition:background .14s ease,box-shadow .14s ease,transform .12s ease;
+}
+.duel-connect4-head button:not(:disabled):is(:hover,:focus-visible){
+  background:#247daf;box-shadow:0 0 0 2px #aee7ff9c;outline:2px solid #fff;
+}
+.duel-connect4-space.duel-c4-new-chip{z-index:3}
+.duel-connect4-space.duel-c4-new-chip i{
+  animation:duel-c4-drop var(--c4-drop-duration,680ms) linear var(--c4-drop-delay,0ms) both;
+  will-change:transform;
+}
+@keyframes duel-c4-drop{
+  0%{transform:translate3d(0,calc(0px - var(--c4-drop-distance,250px)),0) scale(.88);filter:brightness(1.15)}
+  66%{transform:translate3d(0,8px,0) scale(1.07,.86);filter:brightness(1.13)}
+  79%{transform:translate3d(0,-7px,0) scale(.97,1.05);filter:brightness(1)}
+  91%{transform:translate3d(0,3px,0) scale(1.02,.96)}
+  100%{transform:translate3d(0,0,0) scale(1);filter:none}
+}
+.duel-connect4-space.duel-c4-new-chip::after{
+  content:'';position:absolute;inset:1px;border:2px solid #c8f9ff;border-radius:50%;
+  z-index:4;pointer-events:none;opacity:0;
+  animation:duel-c4-impact 280ms ease-out calc(var(--c4-drop-duration,680ms) - 180ms + var(--c4-drop-delay,0ms)) both;
+}
+@keyframes duel-c4-impact{
+  0%{opacity:.82;transform:scale(.65)}
+  100%{opacity:0;transform:scale(1.43)}
+}
+/* A four-in-a-row line is derived from an already server-confirmed winner. */
+.duel-c4-victory-board .duel-c4-win{z-index:2}
+.duel-c4-victory-board .duel-c4-win i{
+  box-shadow:0 0 0 2px #fff0ae,0 0 13px 4px #fce575b0,inset 0 1px 2px #fffb;
+  animation:duel-c4-victory-pulse 900ms ease-in-out 2 alternate;
+}
+.duel-c4-victory-board .duel-c4-win::after{
+  content:'';position:absolute;inset:-4px;border:2px solid #fff5c2;
+  border-radius:50%;box-shadow:0 0 9px #fff4a7;pointer-events:none;
+  animation:duel-c4-glow 1.2s ease-in-out 2 alternate;
+}
+@keyframes duel-c4-victory-pulse{
+  0%{transform:scale(.95);filter:brightness(1)}
+  100%{transform:scale(1.08);filter:brightness(1.33)}
+}
+@keyframes duel-c4-glow{0%{opacity:.35}100%{opacity:1}}
+.duel-c4-celebration{
+  display:flex;flex-wrap:wrap;align-items:center;justify-content:center;
+  gap:5px 11px;margin:11px 0 3px;padding:12px 9px;
+  border:1px solid #fce28ac7;border-radius:12px;
+  background:linear-gradient(115deg,#123850,#174a4d,#1c345f);
+  box-shadow:0 0 18px #fff1a52a;
+  text-align:center;color:#ffe9a1;
+  animation:duel-c4-celebrate-in 470ms ease-out both;
+}
+.duel-c4-celebration strong{font-size:clamp(13px,4vw,19px);letter-spacing:.11em}
+.duel-c4-celebration>span{color:#ffe177;animation:duel-c4-sparkle 600ms ease-in-out 3 alternate}
+.duel-c4-celebration small{flex-basis:100%;color:#e3f4fb;font-size:12px}
+@keyframes duel-c4-celebrate-in{
+  from{opacity:0;transform:translateY(10px) scale(.95)}
+  to{opacity:1;transform:translateY(0) scale(1)}
+}
+@keyframes duel-c4-sparkle{from{opacity:.35;transform:scale(.65)}to{opacity:1;transform:scale(1.2)}}
+@media (prefers-reduced-motion:reduce){
+ .duel-connect4-space.duel-c4-new-chip i,
+ .duel-connect4-space.duel-c4-new-chip::after,
+ .duel-c4-victory-board .duel-c4-win i,
+ .duel-c4-victory-board .duel-c4-win::after,
+ .duel-c4-celebration,.duel-c4-celebration>span{
+  animation:none!important;transition:none!important;
+ }
+ .duel-connect4-space.duel-c4-new-chip::after{display:none}
+}
+
+/* Bluff Dice theater. All content reflects an authorized, settled server state. */
+.duel-bluff-table{display:grid;gap:10px;margin:13px 0 8px;min-width:0}
+.duel-bluff-header{display:flex;align-items:center;justify-content:space-between;padding:4px 2px;color:#abd9ed;font-size:12px;letter-spacing:.11em;font-weight:800}
+.duel-bluff-header strong{letter-spacing:0;color:#c2ffdb}
+.duel-bluff-score{margin:0;padding:11px 9px;border-radius:12px;border:1px solid #3a6489;background:linear-gradient(110deg,#102b42,#142e3d)}
+.duel-bluff-score>span{display:flex;gap:7px;align-items:center;min-width:0;overflow-wrap:anywhere}
+.duel-bluff-score>span:last-child{text-align:right}
+.duel-bluff-score b{font-size:21px;color:#ffedab;font-variant-numeric:tabular-nums}
+.duel-bluff-score .duel-bluff-score-divider{color:#90a8ba;font-size:11px;white-space:nowrap}
+.duel-bluff-hand{gap:10px;padding:15px 8px;background:radial-gradient(ellipse at top,#214c64,#11243c 75%);border-color:#42758d}
+.duel-bluff-hand>span{display:flex;gap:7px;justify-content:center;align-items:center;flex-wrap:wrap;font-size:13px;font-weight:750;color:#e6fbff}
+.duel-bluff-hand>span small{font-weight:500;font-size:10px;color:#b4d0d9}
+.duel-bluff-hand .duel-own-dice{gap:clamp(3px,1.6vw,9px)}
+.duel-bluff-die{width:clamp(36px,10vw,52px);height:clamp(36px,10vw,52px);flex:0 0 auto;display:grid;place-items:center;
+ border-radius:12px;border:1px solid #f4fbff;
+ background:linear-gradient(145deg,#fffef9 3%,#d6e5f0 75%,#b6c6d5);
+ box-shadow:0 4px 0 #657e92,0 7px 10px #0008,inset 0 1px 2px #fff;
+ transform:translateZ(0)}
+.duel-bluff-die[data-value="0"]{background:linear-gradient(140deg,#43657c,#1c334e);border-color:#6e90a7;box-shadow:0 3px 0 #182c40}
+.duel-bluff-pips{width:76%;height:76%;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);place-items:center}
+.duel-bluff-pip{height:clamp(5px,1.45vw,8px);width:clamp(5px,1.45vw,8px);border-radius:50%;background:#21354b;visibility:hidden;box-shadow:0 1px 1px #0004}
+.duel-bluff-die[data-value="1"] .duel-bluff-pip:nth-child(5),
+.duel-bluff-die[data-value="2"] .duel-bluff-pip:is(:nth-child(1),:nth-child(9)),
+.duel-bluff-die[data-value="3"] .duel-bluff-pip:is(:nth-child(1),:nth-child(5),:nth-child(9)),
+.duel-bluff-die[data-value="4"] .duel-bluff-pip:is(:nth-child(1),:nth-child(3),:nth-child(7),:nth-child(9)),
+.duel-bluff-die[data-value="5"] .duel-bluff-pip:is(:nth-child(1),:nth-child(3),:nth-child(5),:nth-child(7),:nth-child(9)),
+.duel-bluff-die[data-value="6"] .duel-bluff-pip:is(:nth-child(1),:nth-child(3),:nth-child(4),:nth-child(6),:nth-child(7),:nth-child(9)){visibility:visible}
+.duel-bluff-claim{gap:9px;padding:14px 10px;background:linear-gradient(140deg,#172e49,#20314e);border-color:#4b6688}
+.duel-bluff-claim>span{color:#9acbe7;letter-spacing:.06em;font-size:12px;font-weight:750}
+.duel-bluff-claim-main{display:flex;align-items:center;justify-content:center;gap:13px;flex-wrap:wrap}
+.duel-bluff-claim-main .duel-bluff-die{width:42px;height:42px}
+.duel-bluff-claim-main strong{font-size:clamp(15px,4.2vw,21px);color:#ffe8a0}
+.duel-bluff-odds{margin:5px 0 0;padding:8px;border-radius:7px;background:#081f34a8;color:#d9e8ef;line-height:1.5;font-size:11px}
+.duel-bluff-odds strong{color:#ffe7a1;font-size:13px}
+.duel-bluff-odds small{display:block;margin-top:3px;font-size:10px;color:#9eb8c7}
+.duel-bluff-actions{margin:0;gap:9px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+.duel-bluff-actions label{min-width:0}
+.duel-bluff-actions select{min-height:44px;font-size:16px;touch-action:manipulation}
+.duel-bluff-actions button{min-height:46px;grid-column:1/-1;font-weight:800;font-size:15px}
+.duel-bluff-actions .duel-challenge{background:linear-gradient(115deg,#a12e5c,#71244c)!important;border:1px solid #e391b3;box-shadow:0 3px 12px #cb2a6a35}
+.duel-bluff-actions small{grid-column:1/-1;color:#f1d9e1}
+.duel-bluff-showdown{border:1px solid #d5b16c;border-radius:14px;padding:14px 10px;display:grid;gap:10px;
+ background:linear-gradient(150deg,#1e3c50,#12283d 65%,#193348);box-shadow:0 6px 16px #0004}
+.duel-bluff-reveal-heading{display:grid;text-align:center;gap:6px}
+.duel-bluff-reveal-heading span{font-size:11px;color:#f1d59e;font-weight:800;letter-spacing:.07em}
+.duel-bluff-reveal-heading strong{font-size:clamp(15px,4.3vw,20px);color:#ffe19a;text-shadow:0 0 11px #dfad714a}
+.duel-bluff-showdown>p{margin:0;text-align:center;font-size:12px;line-height:1.5;color:#dbe8f3}
+.duel-bluff-showdown>p b{color:#ffebac;font-size:16px}
+.duel-bluff-reveal-row{display:grid;gap:6px;min-width:0}
+.duel-bluff-reveal-row>span{color:#a9d4ec;font-size:11px;overflow-wrap:anywhere}
+.duel-bluff-reveal-dice{display:flex;justify-content:center;gap:clamp(2px,1.4vw,8px)}
+.duel-bluff-reveal-dice .duel-bluff-die{width:clamp(35px,10vw,47px);height:clamp(35px,10vw,47px)}
+.duel-bluff-verdict{text-align:center;padding:9px;border-radius:8px;font-size:14px;font-weight:900;color:#ffeaad;background:#473c2d}
+.duel-bluff-history{border-radius:9px;border:1px solid #34536d;padding:6px 10px;font-size:12px}
+.duel-bluff-history summary{cursor:pointer;min-height:32px;display:flex;align-items:center;font-weight:750;color:#c5dae8;touch-action:manipulation}
+.duel-bluff-history .duel-mini-round{margin:8px 0}
+.duel-bluff-showdown.duel-bluff-reveal-animated{animation:duel-bluff-reveal-in 600ms cubic-bezier(.16,.84,.34,1) both;animation-delay:var(--duel-bluff-delay,0ms)}
+.duel-bluff-reveal-animated .duel-bluff-reveal-dice .duel-bluff-die{
+ animation:duel-bluff-dice-roll 640ms cubic-bezier(.16,.78,.22,1) both;
+ animation-delay:calc(var(--duel-bluff-delay,0ms) + var(--duel-bluff-die-stagger,0ms));
+}
+.duel-bluff-reveal-animated .duel-bluff-verdict{
+ animation:duel-bluff-verdict-pop 380ms ease-out both;
+ animation-delay:calc(var(--duel-bluff-delay,0ms) + 500ms)
+}
+@keyframes duel-bluff-reveal-in{from{opacity:.2;transform:translateY(10px) scale(.98)}to{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes duel-bluff-dice-roll{
+ 0%{opacity:.2;transform:translateY(-18px) rotate(140deg) scale(.7)}
+ 65%{opacity:1;transform:translateY(4px) rotate(-11deg) scale(1.07)}
+ 83%{transform:translateY(-3px) rotate(5deg) scale(.98)}
+ 100%{transform:translateY(0) rotate(0) scale(1)}
+}
+@keyframes duel-bluff-verdict-pop{from{opacity:0;transform:scale(.85)}to{opacity:1;transform:scale(1)}}
+@media(prefers-reduced-motion:reduce){
+ .duel-bluff-showdown.duel-bluff-reveal-animated,
+ .duel-bluff-reveal-animated .duel-bluff-reveal-dice .duel-bluff-die,
+ .duel-bluff-reveal-animated .duel-bluff-verdict{animation:none!important;transition:none!important}
+}
+
+.duel-bluff-history-item{margin:8px 0;padding:9px;border-radius:8px;background:#102c40;display:grid;gap:4px}
+.duel-bluff-history-item b{font-size:12px;color:#e5f2ff}
+.duel-bluff-history-item small{font-size:11px;color:#bdd1df}
+
+/* Poker premium table: visual-only presentation of private and published cards. */
+.duel-poker-table{display:grid;gap:12px;min-width:0;margin:14px 0}
+.duel-poker-table-head{display:flex;justify-content:space-between;align-items:center;gap:8px;color:#d3eddf;font-size:12px}
+.duel-poker-table-head strong{font-size:13px;letter-spacing:.12em;color:#ffe6a0}
+.duel-poker-steps{display:grid;grid-template-columns:minmax(0,1fr) 12px minmax(0,1fr);gap:7px;align-items:center;background:#102a36;border:1px solid #3f6266;border-radius:11px;padding:11px 8px}
+.duel-poker-steps>span{font-size:10px;min-width:0;overflow-wrap:anywhere;color:#adcad4}
+.duel-poker-steps>span:nth-child(2){color:#c5bd8c;text-align:center}
+.duel-poker-steps b{display:block;color:#dde9ef;margin-top:5px;font-size:11px}
+.duel-poker-steps>span.done b{color:#91f3be}
+.duel-poker-private{background:radial-gradient(ellipse at 50% 0,#206857,#102f3d 72%);border-color:#488d80}
+.duel-poker-private>span{color:#e9fff4;font-size:13px;font-weight:800}
+.duel-poker-private>span small{color:#b2d3ce;font-size:10px;font-weight:500}
+.duel-poker-hand{gap:clamp(3px,1.3vw,8px);margin:6px 0 3px}
+.duel-poker-table .duel-card{height:clamp(88px,25vw,112px);position:relative;min-width:0;overflow:hidden;
+ border-radius:8px;padding:6px 2px;display:flex;align-items:center;justify-content:center;flex-direction:column;
+ background:linear-gradient(155deg,#fffef8,#e1eaf2 78%);box-shadow:0 3px 5px #0004,inset 0 1px #fff}
+.duel-poker-table .duel-card.red{color:#c93350}
+.duel-poker-table .duel-card.black{color:#192d3f}
+.duel-poker-hand-card:not(:disabled){cursor:pointer;touch-action:manipulation;transition:transform .15s ease,box-shadow .15s ease,border-color .15s ease}
+.duel-poker-hand-card:not(:disabled):is(:hover,:focus-visible){box-shadow:0 0 0 2px #a7f9de,0 6px 10px #0005;outline:2px solid #a7f9de;outline-offset:0}
+.duel-poker-table .duel-card.selected{background:linear-gradient(155deg,#ffecae,#fffef2 75%);border:3px solid #ffd86d;box-shadow:0 4px 10px #ffd36b5c;transform:translateY(-7px)}
+.duel-poker-table .duel-card:disabled{opacity:.95}
+.duel-poker-corner{position:absolute;top:5px;left:6px;display:grid;line-height:1;font-size:clamp(10px,3.4vw,16px);text-align:center}
+.duel-poker-corner b{font-size:clamp(11px,3.5vw,17px)!important;letter-spacing:0!important}
+.duel-poker-corner span{font-size:clamp(11px,3.2vw,17px)}
+.duel-poker-center{font-size:clamp(23px,8vw,39px);line-height:1}
+.duel-poker-card-bottom{position:absolute;right:4px;bottom:7px;font-size:10px}
+.duel-poker-hand-card small{position:absolute;left:0;right:0;bottom:2px;font-size:10px;font-weight:800;color:#53617a}
+.duel-poker-table .duel-card.selected small{color:#745617}
+.duel-poker-choice-summary{display:flex;align-items:center;flex-wrap:wrap;justify-content:space-between;gap:8px;background:#133c36;padding:10px 12px;border-radius:8px;font-size:12px;color:#cbebe4}
+.duel-poker-choice-summary strong{color:#ffe09b}
+.duel-poker-selected-count b{font-size:18px;color:#fcdf87}
+.duel-poker-guide{margin:0;font-size:12px;color:#b6d3d4;line-height:1.6}
+.duel-poker-submit{min-height:48px;margin:0;touch-action:manipulation;font-weight:850}
+.duel-poker-wait{grid-column:1/-1;display:grid;place-items:center;min-height:88px;color:#bed8d8}
+.duel-poker-showdown{display:grid;gap:14px;padding:15px 9px;border:1px solid #d2a967;background:linear-gradient(155deg,#1c3c40,#0d2838 62%,#1f364d);box-shadow:0 8px 22px #0006}
+.duel-poker-showdown-title{text-align:center;display:grid;gap:5px;color:#fae6a4}
+.duel-poker-showdown-title span{font-size:11px;letter-spacing:.16em}
+.duel-poker-showdown-title strong{font-size:20px;color:#fff0b7}
+.duel-poker-reveal-row{display:grid;gap:7px;min-width:0}
+.duel-poker-reveal-name{display:flex;justify-content:space-between;gap:8px;min-width:0;align-items:center;overflow-wrap:anywhere;font-size:12px;color:#e6fbf6}
+.duel-poker-reveal-name strong{color:#ffe7a1;font-size:12px}
+.duel-poker-reveal-cards{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:clamp(3px,1.3vw,8px)}
+.duel-poker-reveal-cards .duel-card{height:clamp(75px,23vw,103px)}
+.duel-poker-verdict{padding:12px 10px;border-radius:9px;background:#433d29;color:#fff1ba!important;text-align:center;line-height:1.55}
+.duel-poker-showdown.duel-poker-arrival{animation:duel-poker-scene-in .5s ease-out both;animation-delay:var(--poker-reveal-delay,0ms)}
+.duel-poker-arrival .duel-poker-reveal-card{animation:duel-poker-flip .6s cubic-bezier(.12,.72,.25,1) both;animation-delay:calc(var(--poker-reveal-delay,0ms) + var(--poker-stagger,0ms))}
+.duel-poker-arrival .duel-poker-verdict{animation:duel-poker-verdict .55s ease-out both;animation-delay:calc(var(--poker-reveal-delay,0ms) + 400ms)}
+@keyframes duel-poker-scene-in{from{opacity:.2;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+@keyframes duel-poker-flip{0%{opacity:.15;transform:perspective(500px) rotateY(-90deg) translateY(-10px)}58%{opacity:1;transform:perspective(500px) rotateY(12deg) translateY(0)}100%{opacity:1;transform:perspective(500px) rotateY(0)}}
+@keyframes duel-poker-verdict{from{opacity:0;transform:scale(.89)}to{opacity:1;transform:scale(1)}}
+@media(prefers-reduced-motion:reduce){
+ .duel-poker-hand-card,.duel-poker-showdown.duel-poker-arrival,
+ .duel-poker-arrival .duel-poker-reveal-card,.duel-poker-arrival .duel-poker-verdict{animation:none!important;transition:none!important}
+}
+
+/* Hit & Blow detective UI: use only public feedback and viewer-owned code. */
+.duel-hb-table{display:grid;gap:11px;min-width:0;margin:12px 0}
+.duel-hb-private{gap:10px;padding:15px 8px;background:radial-gradient(ellipse at top,#183b60,#0c2942 76%);border-color:#3b729d}
+.duel-hb-private>span{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;font-weight:800;color:#dff9ff}
+.duel-hb-private>span small{font-size:10px;font-weight:500;color:#b2cfdf}
+.duel-hb-own-code{display:flex;justify-content:center;gap:8px}
+.duel-hb-digit{display:inline-grid;place-items:center;min-width:0;flex:0 1 49px;height:55px;
+ background:linear-gradient(145deg,#f7f9ff,#d9e8ef);border:1px solid #f5fbff;border-radius:9px;
+ box-shadow:0 4px 0 #7190ab,0 5px 12px #0005;color:#15314e;font-size:28px;font-weight:900;
+ font-variant-numeric:tabular-nums;line-height:1}
+.duel-hb-intro{display:grid;gap:5px;text-align:center;color:#b3d5e9;font-size:11px}
+.duel-hb-intro strong{font-size:17px;letter-spacing:.15em;color:#efde9d}
+.duel-hb-logic{padding:12px 10px;background:linear-gradient(140deg,#113b49,#132d4d);
+ border:1px solid #306383;border-radius:11px;display:grid;gap:8px}
+.duel-hb-logic>div:first-child{display:flex;justify-content:space-between;gap:8px;color:#b7d8e5;font-size:11px}
+.duel-hb-logic>p{margin:0;text-align:center;color:#cbdde8;font-size:12px}
+.duel-hb-logic>p strong{display:inline-block;color:#ffe9a0;font-size:20px;font-variant-numeric:tabular-nums}
+.duel-hb-logic>p small{display:block;font-size:10px;color:#a5c4d4;margin-top:3px}
+.duel-hb-progress{height:9px;border-radius:50px;background:#092334;overflow:hidden;border:1px solid #356078}
+.duel-hb-progress>span{display:block;height:100%;max-width:100%;border-radius:50px;background:linear-gradient(90deg,#2fd3bc,#f8d879);transition:width .3s ease}
+.duel-hb-entry{display:grid;gap:7px;padding:12px 9px;background:#152b49;border:1px solid #395e8c;border-radius:11px}
+.duel-hb-entry>label{font-size:12px;color:#daeafb;font-weight:800}
+.duel-hb-entry-row{margin:0;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:7px}
+.duel-hb-entry-row input{min-width:0;width:100%;height:49px;letter-spacing:.23em;font-size:22px;
+ text-align:center;font-weight:800;font-variant-numeric:tabular-nums;touch-action:manipulation}
+.duel-hb-entry-row button{min-height:49px;font-size:12px;white-space:nowrap;padding:8px 11px;flex:initial}
+.duel-hb-draft-help{margin:0;color:#edca9d;font-size:11px;min-height:16px}
+.duel-hb-draft-help.valid{color:#9ff2c9}
+.duel-hb-history-head{display:flex;align-items:center;justify-content:space-between;font-size:12px;color:#e2f2ff}
+.duel-hb-history-head small{color:#a8c4d7}
+.duel-hb-history{margin:0;gap:7px;max-height:340px;padding:1px}
+.duel-hb-row{display:grid;grid-template-columns:42px minmax(0,1fr) auto;gap:6px;
+ align-items:center;padding:9px 7px;background:#122b45;border:1px solid #3d5e7c;border-radius:10px;
+ font-size:12px;min-width:0}
+.duel-hb-row.opponent{background:#19283f;border-color:#5b4f77}
+.duel-hb-row .duel-hb-side{font-size:11px;color:#b5d8eb}
+.duel-hb-row .duel-hb-guess{display:flex;gap:3px;min-width:0}
+.duel-hb-row .duel-hb-digit{height:clamp(28px,8vw,39px);flex:1 1 0;
+ font-size:clamp(13px,4.5vw,19px);box-shadow:0 2px 0 #7695a9;border-radius:5px}
+.duel-hb-feedback{display:grid;gap:4px;text-align:center;font-size:11px;min-width:49px}
+.duel-hb-hit{color:#96f1ba;background:#145047;border-radius:5px;padding:4px 5px}
+.duel-hb-blow{color:#ffe39c;background:#644920;border-radius:5px;padding:4px 5px}
+.duel-hb-code-reveal{text-align:center;border:1px solid #e5bb74;border-radius:11px;padding:14px 9px;
+ background:linear-gradient(120deg,#264e54,#1b385a);color:#ffe8aa;display:grid;gap:6px}
+.duel-hb-code-reveal strong{font-size:clamp(16px,4.5vw,22px);letter-spacing:.09em}
+.duel-hb-code-reveal p{margin:0;font-size:12px;color:#e7f2ff}
+.duel-hb-feedback-new{animation:duel-hb-feedback-pulse .65s ease-out both;animation-delay:var(--hb-feedback-delay,0ms)}
+.duel-hb-feedback-new .duel-hb-hit,.duel-hb-feedback-new .duel-hb-blow{
+ animation:duel-hb-badge-in .5s ease-out both;animation-delay:var(--hb-feedback-delay,0ms)}
+.duel-hb-victory-new{animation:duel-hb-victory-in .85s ease-out both;animation-delay:var(--hb-feedback-delay,0ms)}
+@keyframes duel-hb-feedback-pulse{0%{opacity:.3;transform:translateY(10px);box-shadow:0 0 0 1px #ffe9a0}100%{opacity:1;transform:translateY(0);box-shadow:none}}
+@keyframes duel-hb-badge-in{0%{transform:scale(.78)}65%{transform:scale(1.1)}100%{transform:scale(1)}}
+@keyframes duel-hb-victory-in{0%{opacity:.3;transform:scale(.93);filter:brightness(.7)}68%{opacity:1;transform:scale(1.03);filter:brightness(1.28)}100%{transform:scale(1);filter:none}}
+@media(max-width:355px){
+ .duel-hb-row{grid-template-columns:33px minmax(0,1fr) auto;gap:4px;padding:7px 4px}
+ .duel-hb-row .duel-hb-digit{height:30px;font-size:14px}
+ .duel-hb-entry-row{gap:5px}
+ .duel-hb-entry-row button{font-size:11px;padding:7px}
+}
+@media(prefers-reduced-motion:reduce){
+ .duel-hb-progress>span{transition:none!important}
+ .duel-hb-feedback-new,.duel-hb-feedback-new .duel-hb-hit,
+ .duel-hb-feedback-new .duel-hb-blow,.duel-hb-victory-new{animation:none!important}
+}
+
+
+/* Gomoku mobile strategy controls. Zoom preserves 44px minimum touch targets. */
+.duel-gomoku-zoom{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:8px}
+.duel-gomoku-zoom button{display:grid;place-items:center;min-width:45px;min-height:45px;padding:6px 11px;background:#18526a;color:#f2faff;border:1px solid #5d9faf;border-radius:10px;font-size:18px;font-weight:800;touch-action:manipulation;cursor:pointer}
+.duel-gomoku-zoom button[data-gomoku-zoom-action="center"]{margin-left:auto;font-size:12px;padding:8px 12px}
+.duel-gomoku-zoom button:disabled{opacity:.43;cursor:not-allowed}
+.duel-gomoku-zoom button:focus-visible{outline:3px solid #fff09d;outline-offset:2px}
+.duel-gomoku-zoom output{display:inline-grid;min-width:53px;text-align:center;font:800 15px ui-monospace,monospace;color:#ffe4a1}
+.duel-gomoku-last-status{margin:0 0 7px;padding:7px 9px;border-left:3px solid #e4c76e;border-radius:3px;background:#163948;color:#cce4e1;font-size:11px;line-height:1.4}
+.duel-gomoku .duel-square.duel-gomoku-last-confirmed{z-index:2;outline:3px solid #fce686;outline-offset:-3px;box-shadow:inset 0 0 0 1px #182f26,0 0 0 2px #ffbb42}
+.duel-gomoku .duel-square.duel-gomoku-last-confirmed::after{content:'';position:absolute;right:1px;top:1px;width:9px;height:9px;border-radius:50%;background:#ef9520;border:2px solid #fff1ac;box-shadow:0 0 0 1px #553307;pointer-events:none}
+.duel-gomoku .duel-square.duel-gomoku-confirmed-motion{animation:duel-gomoku-confirmed .75s ease-out both;animation-delay:var(--gomoku-move-delay,0ms)}
+@keyframes duel-gomoku-confirmed{0%{filter:brightness(1.55);box-shadow:0 0 0 7px rgba(255,235,124,.75)}65%{filter:brightness(1.18);box-shadow:0 0 0 3px rgba(255,235,124,.45)}100%{filter:none;box-shadow:inset 0 0 0 1px #182f26,0 0 0 2px #ffbb42}}
+@media(max-width:355px){.duel-gomoku-zoom{gap:5px}.duel-gomoku-zoom button{min-width:43px;padding:6px}.duel-gomoku-zoom button[data-gomoku-zoom-action="center"]{font-size:11px}}
+@media(prefers-reduced-motion:reduce){.duel-gomoku .duel-square.duel-gomoku-confirmed-motion{animation:none!important;transition:none!important}}
+
+
+/* Phase 2: the same quiet invite → play → rematch guide in all six games.
+   Never captures pointer events or obstructs the original action controls. */
+.duel-journey{
+  margin:10px 0 14px;padding:12px 13px;border:1px solid #406078;
+  border-radius:14px;background:linear-gradient(125deg,#142c42,#0d2334);
+  color:#eef7ff;min-width:0;
+}
+.duel-journey-steps{
+  display:grid;grid-template-columns:repeat(3,minmax(0,1fr));
+  padding:0;margin:0 0 12px;list-style:none;gap:5px;
+}
+.duel-journey-step{
+  display:flex;align-items:center;justify-content:center;gap:5px;
+  min-width:0;border-radius:9px;padding:7px 2px;
+  font-size:clamp(10px,2.8vw,12px);font-weight:750;
+  color:#92aabe;background:#15283a;white-space:nowrap;
+}
+.duel-journey-step>span{
+  width:19px;height:19px;display:inline-grid;place-items:center;
+  border-radius:50%;background:#3c556b;color:#fff;flex:0 0 auto;
+  font-size:11px;font-variant-numeric:tabular-nums;
+}
+.duel-journey-step.is-done{color:#bde8d7;background:#1d493d}
+.duel-journey-step.is-done>span{background:#338366}
+.duel-journey-step.is-current{
+  color:#112a36;background:#aee9fb;
+  box-shadow:inset 0 0 0 1px #d8f8ff;
+}
+.duel-journey-step.is-current>span{background:#15374c;color:#fff}
+.duel-journey-title{
+  margin:0 0 3px;font-weight:850;font-size:clamp(14px,4vw,18px);
+  letter-spacing:.015em;line-height:1.35;
+}
+.duel-journey-help{
+  margin:0;color:#c7dae6;font-size:12px;line-height:1.6;
+}
+@media (max-width:350px){
+ .duel-journey{padding:10px 8px}
+ .duel-journey-step{gap:3px}
+ .duel-journey-step>span{width:17px;height:17px;font-size:10px}
+}
+@media (prefers-reduced-motion:reduce){
+ .duel-journey,.duel-journey *{animation:none!important;transition:none!important}
+}
+
+
+/* Phase 2 invitation readiness: informative only, never a second submit. */
+.duel-invite-guide{
+  display:grid;gap:3px;padding:10px 12px;margin:9px 0 11px;
+  border-radius:11px;border:1px solid #467791;
+  background:#18364b;color:#ecf8ff;line-height:1.5;
+}
+.duel-invite-guide strong{font-size:13px;line-height:1.35}
+.duel-invite-guide span{font-size:12px;color:#d4e5f0}
+.duel-invite-guide[data-duel-invite-type="ready"]{
+  background:#174335;border-color:#57a889;
+}
+.duel-invite-guide[data-duel-invite-type="low"],
+.duel-invite-guide[data-duel-invite-type="hold"]{
+  border-color:#cc9a57;background:#493321;
+}
+.duel-invite-guide[data-duel-invite-type="low"] span,
+.duel-invite-guide[data-duel-invite-type="hold"] span{color:#fff0d9}
+.duel-opponent-toggle,.duel-opponent-choice,.duel-match,
+.duel-new [data-duel-act="create"]{
+  min-height:44px;touch-action:manipulation;
+}
+.duel-opponent-choice:not(:disabled):active,.duel-opponent-toggle:not(:disabled):active{
+  filter:brightness(1.16);
+}
+@media (prefers-reduced-motion:reduce){
+ .duel-invite-guide,.duel-opponent-toggle,.duel-opponent-choice{animation:none!important;transition:none!important}
+}
+
+
+/* Phase 2 Othello: factual scores and exactly one observed server move.
+   No move hints, results or cards are computed optimistically. */
+.duel-othello-position,.duel-othello-last-note{
+  margin:8px 0 3px;padding:8px 10px;
+  border:1px solid #3c745e;border-radius:9px;background:#11392f;
+  color:#d5f8e6;line-height:1.5;font-size:12px;font-weight:650;
+}
+.duel-othello-last-note{
+  border-color:#cfbb74;background:#483b22;color:#fff2c1;
+}
+.duel-othello .duel-square.duel-othello-last-observed{
+  z-index:2;isolation:isolate;
+}
+.duel-othello .duel-square.duel-othello-last-observed::before{
+  content:'';position:absolute;inset:6%;width:auto;height:auto;
+  border:3px solid #ffe089;border-radius:50%;z-index:3;pointer-events:none;
+  background:transparent;box-shadow:0 0 0 1px #3c2e08b0,inset 0 0 0 1px #ffffff80;
+  animation:none;
+}
+@media(max-width:350px){
+ .duel-othello-position,.duel-othello-last-note{font-size:11px;padding:8px}
+ .duel-othello .duel-square.duel-othello-last-observed::before{border-width:2px}
+}
+@media(prefers-reduced-motion:reduce){
+ .duel-othello .duel-square.duel-othello-last-observed::before{animation:none!important;transition:none!important}
+}
+
+
+/* Shared read-only connectivity guidance. No loading mask or disabled moves. */
+.duel-connection{display:grid;gap:3px;margin:0 0 13px;padding:11px 12px;border-radius:12px;
+ border:1px solid #537793;background:#15374e;color:#e6f6ff;line-height:1.45}
+.duel-connection strong{font-size:13px}
+.duel-connection span{font-size:12px;color:#d0e5f4}
+.duel-connection[data-duel-connection-type="retry"],
+.duel-connection[data-duel-connection-type="offline"]{border-color:#c39967;background:#483323;color:#fff2d4}
+.duel-connection[data-duel-connection-type="retry"] span,
+.duel-connection[data-duel-connection-type="offline"] span{color:#ffeacb}
+@media(prefers-reduced-motion:reduce){.duel-connection{animation:none!important;transition:none!important}}
+
+
+/* Phase 2: result-to-rematch clarity; no input interception or auto-submit. */
+.duel-rematch-guide{margin:1px 0 12px;padding:11px 10px;border-radius:12px;
+ background:#19364b;color:#ecf7ff;border:1px solid #466e88;display:grid;gap:6px}
+.duel-rematch-progress{margin:0 0 3px;padding:0;list-style:none;
+ display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}
+.duel-rematch-progress li{display:grid;place-items:center;text-align:center;min-height:37px;
+ border:1px solid #39576c;border-radius:8px;color:#b7cbda;font-size:11px;
+ font-weight:750;line-height:1.35;padding:3px}
+.duel-rematch-progress li.current{border-color:#9addf3;background:#235373;color:#fff}
+.duel-rematch-guide strong{font-size:14px;line-height:1.4}
+.duel-rematch-guide p{font-size:12px;color:#d2e4ef;margin:0;line-height:1.6}
+@media(max-width:350px){.duel-rematch-progress li{font-size:10px}.duel-rematch-guide{padding:8px}}
+@media(prefers-reduced-motion:reduce){.duel-rematch-guide,.duel-rematch-guide *{animation:none!important;transition:none!important}}
+
+
+/* Shared six-game action cues: no overlay, optimistic pieces or new controls. */
+.duel-action-hint{
+ margin:8px 0 12px;padding:10px 11px;border:1px solid #4c8f83;
+ border-left:4px solid #a7eed3;border-radius:9px;background:#163b36;
+ color:#e5fff0;font-size:12px;line-height:1.65;font-weight:690;
+}
+.duel-arena [data-duel-cell]:not(:disabled),
+.duel-arena [data-duel-mini]:not(:disabled),
+.duel-arena .duel-poker-hand-card:not(:disabled){
+ touch-action:manipulation;cursor:pointer;
+}
+.duel-arena [data-duel-mini]:not(:disabled),
+.duel-arena .duel-poker-hand-card:not(:disabled){
+ min-height:44px;
+}
+.duel-arena [data-duel-mini]:not(:disabled):active,
+.duel-arena .duel-poker-hand-card:not(:disabled):active{
+ filter:brightness(1.15);transform:scale(.98);
+}
+.duel-arena [data-duel-mini]:focus-visible,
+.duel-arena .duel-poker-hand-card:focus-visible,
+.duel-arena .duel-connect4-head button:focus-visible{
+ outline:3px solid #ffef99;outline-offset:2px;
+}
+@media(max-width:350px){.duel-action-hint{font-size:11px;padding:9px 8px}}
+@media(prefers-reduced-motion:reduce){
+ .duel-action-hint{animation:none!important;transition:none!important}
+ .duel-arena [data-duel-mini]:active,
+ .duel-arena .duel-poker-hand-card:active{transform:none!important;transition:none!important}
+}
+
+
+/* Phase 3 beginner guide: native disclosure, no blocking overlay. */
+.duel-beginner{margin:10px 0 13px;border:1px solid #477181;border-radius:12px;
+ background:#102e42;color:#ebf8ff;overflow:hidden}
+.duel-beginner summary{cursor:pointer;list-style-position:inside;padding:12px 13px;
+ font-size:13px;min-height:44px;font-weight:780;line-height:1.5;
+ touch-action:manipulation}
+.duel-beginner summary:focus-visible{outline:3px solid #ffeb92;outline-offset:-3px}
+.duel-beginner[open] summary{border-bottom:1px solid #38556d;background:#1a3b51}
+.duel-beginner dl{margin:0;padding:11px 13px 13px;display:grid;gap:4px}
+.duel-beginner dt{font-size:12px;color:#aee5ef;font-weight:800;margin-top:5px}
+.duel-beginner dd{font-size:12px;line-height:1.6;margin:0;color:#e0eef6}
+@media(max-width:350px){.duel-beginner summary{font-size:12px;padding:10px}.duel-beginner dl{padding:9px 10px}}
+@media(prefers-reduced-motion:reduce){.duel-beginner,.duel-beginner *{transition:none!important;animation:none!important}}
+
+
+/* Phase 3: filter only already-loaded matches. No extra D1 pagination. */
+.duel-history-filter{display:flex;flex-wrap:wrap;align-items:center;gap:6px;
+ margin:10px 0 12px;min-width:0}
+.duel-history-filter button{min-height:44px;padding:7px 10px;border:1px solid #52778c;
+ background:#173348;border-radius:10px;color:#e2eff7;font-size:12px;
+ font-weight:760;touch-action:manipulation}
+.duel-history-filter button[aria-pressed="true"]{background:#91e0e8;color:#0e2b39;
+ border-color:#b7f3f9}
+.duel-history-filter button:focus-visible{outline:3px solid #fff0ab;outline-offset:2px}
+.duel-history-filter-note{flex:1 0 100%;margin:2px 0 0;color:#c6d7e2;
+ font-size:11px;line-height:1.55}
+.duel-history .duel-match[hidden]{display:none!important}
+.duel-finished-review{margin:11px 0 14px;border:1px solid #5c8e7b;border-radius:12px;
+ background:#153b35;color:#edfff6;overflow:hidden}
+.duel-finished-review summary{min-height:44px;padding:11px 12px;
+ cursor:pointer;touch-action:manipulation;font-size:13px;font-weight:770;line-height:1.5}
+.duel-finished-review summary:focus-visible{outline:3px solid #fff0aa;outline-offset:-3px}
+.duel-finished-review dl{margin:0;padding:8px 12px;display:grid;gap:5px}
+.duel-finished-review dt{font-size:11px;font-weight:800;color:#9febcb}
+.duel-finished-review dd{margin:0 0 5px;font-size:12px;line-height:1.55}
+.duel-finished-review p{padding:2px 12px 11px;margin:0;color:#c8e5d9;font-size:11px}
+@media(max-width:350px){.duel-history-filter button{font-size:11px;padding:7px}.duel-finished-review summary{font-size:12px}}
+@media(prefers-reduced-motion:reduce){.duel-history-filter *, .duel-finished-review,.duel-finished-review *{animation:none!important;transition:none!important}}
+
+
+/* Phase 3: optional factual deep-dive. No cards, dice or secrets rendered. */
+.duel-insights{margin:10px 0 13px;border:1px solid #776a9a;border-radius:12px;
+ background:#25263f;color:#f4f1ff;overflow:hidden}
+.duel-insights summary{min-height:44px;line-height:1.5;font-size:13px;font-weight:770;
+ cursor:pointer;touch-action:manipulation;padding:12px 13px}
+.duel-insights summary:focus-visible{outline:3px solid #ffeba6;outline-offset:-3px}
+.duel-insights[open] summary{background:#353452;border-bottom:1px solid #63578c}
+.duel-insights ul{margin:0;padding:10px 15px 12px 31px;display:grid;gap:8px}
+.duel-insights li{font-size:12px;line-height:1.65;color:#e2dff3;overflow-wrap:anywhere}
+@media(max-width:350px){.duel-insights summary{font-size:12px;padding:10px}.duel-insights li{font-size:11px}}
+@media(prefers-reduced-motion:reduce){.duel-insights,.duel-insights *{animation:none!important;transition:none!important}}
+
+
+/* Phase 3: no guessed progress, only states already exposed by the client. */
+.duel-status-help{min-height:44px;display:grid;gap:3px;align-content:center;
+ padding:10px 12px;margin:7px 0 12px;background:#17374b;
+ border:1px solid #517d90;border-radius:12px;color:#f1faff;line-height:1.55}
+.duel-status-help strong{font-size:13px;font-weight:800}
+.duel-status-help p{font-size:12px;margin:0;color:#d1e7f2}
+.duel-status-help[data-duel-status-help-kind="error"],
+.duel-status-help[data-duel-status-help-kind="retry"]{
+ background:#443023;border-color:#d2a16d;color:#fff1d6}
+.duel-status-help[data-duel-status-help-kind="error"] p,
+.duel-status-help[data-duel-status-help-kind="retry"] p{color:#ffe5c9}
+.duel-status-help[data-duel-status-help-kind="initial"],
+.duel-status-help[data-duel-status-help-kind="refresh"]{background:#173749}
+@media(max-width:350px){.duel-status-help{padding:9px 8px}.duel-status-help strong{font-size:12px}.duel-status-help p{font-size:11px}}
+@media(prefers-reduced-motion:reduce){.duel-status-help,.duel-status-help *{animation:none!important;transition:none!important}}
+
+/* Phase 7: smartphone in-match hierarchy. Keep turn, sync, errors and unknown-action alerts visible. */
+@media (max-width: 480px) {
+ .duel-journey[data-duel-journey-stage="active"] {
+  margin: 5px 0 8px;
+  padding: 7px 10px;
+  border-radius: 9px;
+  background: #142c42;
+ }
+ .duel-journey[data-duel-journey-stage="active"] .duel-journey-steps,
+ .duel-journey[data-duel-journey-stage="active"] .duel-journey-help {
+  display: none;
+ }
+ .duel-journey[data-duel-journey-stage="active"] .duel-journey-title {
+  margin: 0;
+  line-height: 1.4;
+ }
+ .duel-journey[data-duel-journey-stage="active"] + .duel-connection,
+ .duel-status-help, .duel-connection { visibility: visible; }
+}
+
+/* Phase 7 gomoku: keep the actionable hint visible; avoid a large competing card on phones. */
+@media(max-width:480px){
+ .duel-arena:has(.duel-board.duel-gomoku) .duel-action-hint{margin:4px 0 6px;padding:5px 8px;border-left-width:2px;font-size:11px;line-height:1.4;font-weight:600}
+}
+
+/* Phase 7 Connect4: keep the actionable column hint visible without a competing card. */
+@media(max-width:480px){
+ .duel-arena:has(.duel-connect4-board) .duel-action-hint{margin:4px 0 6px;padding:5px 8px;border-left-width:2px;font-size:11px;line-height:1.4;font-weight:600}
+}
+
+/* Phase 8: keep essential duel controls legible on small devices.
+   No server state, hidden cards, or pending-action warnings are altered. */
+@media (max-width: 390px) {
+ .duel-arena, .duel-current, .duel-journey { min-width:0; }
+ .duel-arena .duel-turn,
+ .duel-arena .duel-state,
+ .duel-connection,
+ .duel-status-help,
+ .duel-error[role="alert"] { overflow-wrap:break-word; }
+ .duel-arena button:not(.duel-square):not(.duel-connect4-space),
+ .duel-rematch button,
+ .duel-new [data-duel-act="create"] { min-height:44px; }
+ .duel-rematch .duel-rematch-progress { min-width:0; }
+}
+/* When the user requests less animation, eliminate optional decorative motion
+   without affecting visibility, turn state, or confirmation actions. */
+@media (prefers-reduced-motion: reduce) {
+ .duel-journey, .duel-journey *,
+ .duel-rematch-guide, .duel-rematch-guide * { animation:none !important; transition:none !important; }
+}

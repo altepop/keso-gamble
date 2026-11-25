@@ -5,12 +5,34 @@ on:
       - 'services/valorant-results/**'
       - '.github/workflows/valorant-results.yml'
       - 'index.html'
+      - 'coach.html'
+      - 'coach/**'
       - 'js/**'
       - 'css/**'
       - 'assets/escalation-ranks/**'
       - 'tests/**'
       - 'package.json'
       - 'package-lock.json'
+      - 'scripts/d1-daily-guard.mjs'
+      - 'scripts/d1-daily-guard.test.mjs'
+      - '.github/workflows/duel-operations-audit-fallback.yml'
+      - 'scripts/duel-operations-audit-fallback.mjs'
+      - 'services/valorant-results/test/duel-operations-audit-fallback.test.mjs'
+      - 'scripts/d1-read-audit.mjs'
+      - 'scripts/d1-read-budget-alert.mjs'
+      - 'scripts/d1-read-budget-alert.test.mjs'
+      - 'scripts/d1-read-hotspots.mjs'
+      - 'scripts/d1-read-hotspots.test.mjs'
+      - 'scripts/duel-p12-824-read-evidence.mjs'
+      - 'test/duel-p12-824-read-evidence.test.mjs'
+      - 'scripts/duel-p12-827-join-evidence.mjs'
+      - 'test/duel-p12-827-join-evidence.test.mjs'
+      - 'scripts/duel-p12-832-public-list-evidence.mjs'
+      - 'test/duel-p12-832-public-list-evidence.test.mjs'
+      - 'scripts/duel-p12-833-filter-evidence.mjs'
+      - 'test/duel-p12-833-filter-evidence.test.mjs'
+      - 'scripts/duel-p12-837-audit-evidence.mjs'
+      - 'test/duel-p12-837-audit-evidence.test.mjs'
       - 'scripts/build-discord-sdk.mjs'
       - 'scripts/build-activity.mjs'
       - 'scripts/*browser-check.cjs'
@@ -22,12 +44,24 @@ on:
       - 'services/valorant-results/**'
       - '.github/workflows/valorant-results.yml'
       - 'index.html'
+      - 'coach.html'
+      - 'coach/**'
       - 'js/**'
       - 'css/**'
       - 'assets/escalation-ranks/**'
       - 'tests/**'
       - 'package.json'
       - 'package-lock.json'
+      - 'scripts/d1-daily-guard.mjs'
+      - 'scripts/d1-daily-guard.test.mjs'
+      - '.github/workflows/duel-operations-audit-fallback.yml'
+      - 'scripts/duel-operations-audit-fallback.mjs'
+      - 'services/valorant-results/test/duel-operations-audit-fallback.test.mjs'
+      - 'scripts/d1-read-audit.mjs'
+      - 'scripts/d1-read-budget-alert.mjs'
+      - 'scripts/d1-read-budget-alert.test.mjs'
+      - 'scripts/d1-read-hotspots.mjs'
+      - 'scripts/d1-read-hotspots.test.mjs'
       - 'scripts/build-discord-sdk.mjs'
       - 'scripts/build-activity.mjs'
       - 'scripts/*browser-check.cjs'
@@ -90,6 +124,21 @@ jobs:
           .venv-mahjong/bin/python -m pip install --disable-pip-version-check --no-deps --only-binary=:all: --require-hashes -r scripts/sanma-requirements.txt
           echo "SANMA_PYTHON=$PWD/.venv-mahjong/bin/python" >> "$GITHUB_ENV"
       - run: npm run check
+      - name: Verify #824 read-only same-input D1 evidence (mocked Cloudflare only)
+        working-directory: .
+        run: node --test test/duel-p12-824-read-evidence.test.mjs
+      - name: Verify #827 same-input read-only PvP receipt join counterfactual
+        working-directory: .
+        run: node --test test/duel-p12-827-join-evidence.test.mjs
+      - name: Verify #832 public-board list JOIN counterfactual
+        working-directory: .
+        run: node --test test/duel-p12-832-public-list-evidence.test.mjs
+      - name: Verify #833 indexed receipt filter same-input evidence
+        working-directory: .
+        run: node --test test/duel-p12-833-filter-evidence.test.mjs
+      - name: Verify #837 same-cutoff PvP audit counterfactual
+        working-directory: .
+        run: node --test test/duel-p12-837-audit-evidence.test.mjs
       - name: Validate optional DAVE music service source and pure queue tests
         run: |
           node --check ../music-voice/server.mjs
@@ -169,6 +218,17 @@ jobs:
           npm install --no-save playwright@1.63.0
           npx playwright install --with-deps chromium webkit
       - run: npm run test:browser:${{ matrix.suite }}
+        env:
+          COACH_V6_SCREENSHOTS_DIR: ${{ runner.temp }}/coach-v6-comparison
+          COACH_JAPANESE_AUDIT: ${{ runner.temp }}/coach-v6-comparison/japanese.json
+      - name: Keep prototype comparison and Japanese check evidence
+        if: always() && matrix.suite == 'extended'
+        uses: actions/upload-artifact@v7
+        with:
+          name: coach-v6-comparison
+          path: ${{ runner.temp }}/coach-v6-comparison
+          if-no-files-found: error
+          retention-days: 7
   # A failed or cancelled shard must fail the original 'browser' status.
   browser:
     needs: browser-shards
@@ -207,6 +267,12 @@ jobs:
           cp -R services/valorant-results/. "$RUNNER_TEMP/kp-app/services/valorant-results/"
           mkdir -p "$RUNNER_TEMP/kp-app/js"
           cp js/*.js "$RUNNER_TEMP/kp-app/js/"
+          # Include the trusted P9.4 CPU strategy modules in the isolated Worker bundle.
+          mkdir -p "$RUNNER_TEMP/kp-app/duel-preview"
+          cp duel-preview/cpu.js duel-preview/cpu-board-search.js duel-preview/cpu-hidden-games.js duel-preview/cpu-poker.js "$RUNNER_TEMP/kp-app/duel-preview/"
+          cp coach.html "$RUNNER_TEMP/kp-app/coach.html"
+          mkdir -p "$RUNNER_TEMP/kp-app/coach"
+          cp coach/*.js "$RUNNER_TEMP/kp-app/coach/"
           mkdir -p "$RUNNER_TEMP/kp-app/services/music-voice"
           cp services/music-voice/catalog.json "$RUNNER_TEMP/kp-app/services/music-voice/"
           cd "$RUNNER_TEMP/kp-app/services/valorant-results"
@@ -264,12 +330,41 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: node scripts/ensure-round-events.mjs
+      - name: Ensure isolated coaching position evidence table
+        working-directory: ${{ runner.temp }}/kp-app/services/valorant-results
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/ensure-positions.mjs
+      - name: Ensure bounded position backfill state table
+        working-directory: ${{ runner.temp }}/kp-app/services/valorant-results
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/ensure-position-backfill.mjs
       - name: Ensure additive per-person historical archive tables
         working-directory: ${{ runner.temp }}/kp-app/services/valorant-results
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: node scripts/ensure-coach-member-archive.mjs
+      - name: Ensure private coaching identity tables and immutable ownership
+        working-directory: ${{ runner.temp }}/kp-app/services/valorant-results
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/ensure-coach-profiles.mjs
+      - name: Ensure private coaching goals table
+        working-directory: ${{ runner.temp }}/kp-app/services/valorant-results
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          node scripts/ensure-coach-goals.mjs
+          node scripts/ensure-coach-sharing.mjs
+          node scripts/ensure-coach-team-consents.mjs
+          node scripts/ensure-coach-records.mjs
+          node scripts/ensure-coach-review.mjs
       - name: Read-only KESO COACH historical archive audit (aggregate counts only)
         working-directory: ${{ runner.temp }}/kp-app/services/valorant-results
         env:
@@ -293,6 +388,11 @@ jobs:
             *) echo 'Invalid Activity entry mode'; exit 1 ;;
           esac
           node scripts/activity-entry-handler.mjs "--$ENTRYPOINT_MODE"
+      - name: Register KESO COACH under existing /valo without altering other commands
+        working-directory: ${{ runner.temp }}/kp-app/services/valorant-results
+        env:
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+        run: node --experimental-strip-types scripts/sync-valo-command.mjs
       - name: Verify production Activity, Worker and KP reads
         env:
           KESO_SMOKE_WALLET_TOKEN: ${{ secrets.KESO_SMOKE_WALLET_TOKEN }}
@@ -304,8 +404,52 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: node scripts/coach-provider-tail.mjs
+      - name: Audit reported 06:57 match (read-only, no identifiers)
+        if: contains(github.event.head_commit.message, '[coach-0657-audit]')
+        continue-on-error: true
+        working-directory: ${{ runner.temp }}/kp-app/services/valorant-results
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/coach-0657-audit.mjs
+      - name: Verify private coach identity provisioning and unauthenticated boundaries
+        timeout-minutes: 8
+        working-directory: ${{ runner.temp }}/kp-app/services/valorant-results
+        env:
+          KESO_SMOKE_WALLET_TOKEN: ${{ secrets.KESO_SMOKE_WALLET_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          node scripts/coach-profile-audit.mjs
+          node scripts/coach-goals-audit.mjs
+          node scripts/coach-sharing-audit.mjs
+          node scripts/coach-team-consent-audit.mjs
+          node scripts/coach-records-audit.mjs
+          node scripts/coach-review-audit.mjs
+          node scripts/coach-review-cost.mjs
+      - name: Audit isolated position storage (aggregate evidence only)
+        working-directory: ${{ runner.temp }}/kp-app/services/valorant-results
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/coach-position-audit.mjs
+      - name: Verify bounded position backfill progress (read-only aggregate counts)
+        timeout-minutes: 8
+        working-directory: ${{ runner.temp }}/kp-app/services/valorant-results
+        env:
+          WAIT_FOR_POSITION_BACKFILL: ${{ contains(github.event.head_commit.message, '[coach-position-backfill]') && 'true' || 'false' }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/coach-position-backfill-audit.mjs
+      - name: Observe phase 0 position quality from normal responses (no extra Henrik calls)
+        if: contains(github.event.head_commit.message, '[coach-position-audit]')
+        working-directory: ${{ runner.temp }}/kp-app/services/valorant-results
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/coach-position-tail.mjs
       - name: Read-only per-person coaching performance and D1 cost audit
-        if: contains(github.event.head_commit.message, '[coach-performance-audit]')
+        if: contains(github.event.head_commit.message, '[coach-performance-audit]') || contains(github.event.head_commit.message, '[coach-feedback-audit]')
         working-directory: ${{ runner.temp }}/kp-app/services/valorant-results
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

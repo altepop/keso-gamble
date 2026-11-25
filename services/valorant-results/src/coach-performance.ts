@@ -1,3 +1,5 @@
+import {coachMapPoolCoverage} from './coach-map-pool-coverage.ts';
+import {COACH_COMPETITIVE_MAP_POOL_V26_ACT6,COACH_COMPETITIVE_MAP_POOL_VERSION,COACH_COMPETITIVE_MAP_POOL_SOURCE} from './coach-competitive-map-pool.ts';
 // Per-metric quality over the already-authorized archive, independent of kill completeness.
 // No additional queries; never return IDs, account names, parties, or raw JSON.
 type Row={match_id:string;ended_at:number;map:string|null;act_name?:string|null;players_json:string;teams_json:string|null;rounds_json:string|null;recorded_at?:number};
@@ -32,6 +34,12 @@ export function coachPerformance(rows:readonly Row[],accounts:readonly Account[]
    }
   }
   if(Array.isArray(rounds)&&rounds.length&&denominator!==null&&rounds.length!==denominator)denominator=null;
+  // A valid time and identity are not proof of a scorable competitive match.
+  // Exclude empty placeholders from latest-game ordering, never fill null as 0.
+  if(outcome==='unknown'&&denominator===null&&
+     !['k','d','a','score'].some(stat=>valid(p[stat]))){
+   reject('time-only-record');continue;
+  }
   const partySize=typeof p.party_id==='string'&&p.party_id?String(players.filter(t=>t.team_id===p.team_id&&t.party_id===p.party_id).length)+'人パーティー':'パーティー未取得';
   const teammates=[...new Set(cohort.filter(c=>players.some(t=>t.puuid!==p.puuid&&t.team_id===p.team_id&&t.name===c.riotId.slice(0,c.riotId.lastIndexOf('#'))&&t.tag===c.riotId.slice(c.riotId.lastIndexOf('#')+1))).map(c=>c.person==='Abema'?'神戸':c.person))];
   const roleCounts=new Map<string,number>();for(const t of players.filter(t=>t.team_id===p.team_id)){const role=roles[t.agent]??'ロール未確認';roleCounts.set(role,(roleCounts.get(role)??0)+1);}
@@ -142,7 +150,11 @@ export function coachPerformance(rows:readonly Row[],accounts:readonly Account[]
    }
   }
  }
- return {priorityPolicy:'強みと改善候補を分け、同じマップ・エージェントの期間比較、ラウンド基準の直近変化、試合平均の変化、ばらつきの順で提示。各閾値と標本数はカード内に明示。総合実力スコアは作らない。',quality,overall,windows,conditionalWindows,acts:groups('act'),timeBuckets:groups('timeBucket'),rolePeers:[...peerGroups.values()].map(g=>{const rate=(key:'kpr'|'dpr'|'apr')=>{const x=g[key];return {...x,excluded:g.candidateMatches-x.matches,ownRate:x.rounds?x.own/x.rounds:null,peerRate:x.peerRounds?x.peers/x.peerRounds:null};};return {value:g.value,candidateMatches:g.candidateMatches,kpr:rate('kpr'),dpr:rate('dpr'),apr:rate('apr')};}),maps:groups('map'),agents:groups('agent'),outcomes:groups('outcome'),form,mapAgents:groups('mapAgent'),compositions:groups('composition'),teammates:[...new Set(matches.flatMap(m=>m.teammates))].map(person=>({person,with:summary(matches.filter(m=>m.teammates.includes(person))),without:summary(matches.filter(m=>!m.teammates.includes(person)))})),roles:groups('role'),parties:groups('partySize'),notes,
-  timeline:chronological.slice(0,50).map((m,i)=>({adr:m.damageDealt!==null&&m.rounds?m.damageDealt/m.rounds:null,hsPct:m.hs!==null&&m.bs!==null&&m.ls!==null&&(m.hs+m.bs+m.ls)>0?100*m.hs/(m.hs+m.bs+m.ls):null,rollingWinPct5:summary(chronological.slice(i,i+5)).winPct,rollingKd5:summary(chronological.slice(i,i+5)).kd,rollingKd5Matches:chronological.slice(i,i+5).length,form:formByMatch.get(m)!,rounds:m.rounds,date:Number.isFinite(m.at)&&Math.abs(m.at)<=8640000000000000?new Date(m.at).toISOString():null,map:m.map,agent:m.agent,kills:m.k,deaths:m.d,assists:m.a,kd:m.k!==null&&m.d!==null&&m.d>0?m.k/m.d:null,acs:m.score!==null&&m.rounds?m.score/m.rounds:null,outcome:m.outcome})),
+ const mapPoolCoverage=coachMapPoolCoverage(COACH_COMPETITIVE_MAP_POOL_V26_ACT6,
+  matches.map(m=>({map:m.map==='不明'?null:m.map,agent:m.agent==='不明'?null:m.agent})));
+ return {mapPoolCoverage:{...mapPoolCoverage,version:COACH_COMPETITIVE_MAP_POOL_VERSION,
+  source:COACH_COMPETITIVE_MAP_POOL_SOURCE,scope:'本人の保存済み・検証済み競技試合のみ',
+  sampleMatches:matches.length,analysisOnly:true},priorityPolicy:'強みと改善候補を分け、同じマップ・エージェントの期間比較、ラウンド基準の直近変化、試合平均の変化、ばらつきの順で提示。各閾値と標本数はカード内に明示。総合実力スコアは作らない。',quality,overall,windows,conditionalWindows,acts:groups('act'),timeBuckets:groups('timeBucket'),rolePeers:[...peerGroups.values()].map(g=>{const rate=(key:'kpr'|'dpr'|'apr')=>{const x=g[key];return {...x,excluded:g.candidateMatches-x.matches,ownRate:x.rounds?x.own/x.rounds:null,peerRate:x.peerRounds?x.peers/x.peerRounds:null};};return {value:g.value,candidateMatches:g.candidateMatches,kpr:rate('kpr'),dpr:rate('dpr'),apr:rate('apr')};}),maps:groups('map'),agents:groups('agent'),outcomes:groups('outcome'),form,mapAgents:groups('mapAgent'),compositions:groups('composition'),teammates:[...new Set(matches.flatMap(m=>m.teammates))].map(person=>({person,with:summary(matches.filter(m=>m.teammates.includes(person))),without:summary(matches.filter(m=>!m.teammates.includes(person)))})),roles:groups('role'),parties:groups('partySize'),notes,
+  timeline:chronological.slice(0,50).map((m,i)=>({adr:m.damageDealt!==null&&m.rounds?m.damageDealt/m.rounds:null,hsPct:m.hs!==null&&m.bs!==null&&m.ls!==null&&(m.hs+m.bs+m.ls)>0?100*m.hs/(m.hs+m.bs+m.ls):null,rollingWinPct5:summary(chronological.slice(i,i+5)).winPct,rollingKd5:summary(chronological.slice(i,i+5)).kd,rollingKd5Matches:chronological.slice(i,i+5).length,form:formByMatch.get(m)!,rounds:m.rounds,date:Number.isFinite(m.at)&&Math.abs(m.at)<=8640000000000000?new Date(m.at).toISOString():null,map:m.map,agent:m.agent,role:m.role,kills:m.k,deaths:m.d,assists:m.a,kd:m.k!==null&&m.d!==null&&m.d>0?m.k/m.d:null,acs:m.score!==null&&m.rounds?m.score/m.rounds:null,outcome:m.outcome})),
   limitations:['ACSはチームの総ラウンド数で割った値。個人のAFK・途中参加による参加ラウンド数補正は未確認。','比較期間のマップ・役割・試合長は未補正。数値の変化だけで原因や本人の判断ミスを断定しない。','ADR・DDΔは対応するダメージ値が保存された試合だけ。HS%は命中部位を保存した試合だけ。KASTは未算出。欠損を0と扱わない。','VODなしで位置・視線・VC・スキル使用を診断しない。']};
 }

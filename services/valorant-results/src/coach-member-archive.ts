@@ -1,3 +1,4 @@
+import {captureCompetitivePositions} from './coach-position-storage.ts';
 import type {Match} from './results.ts';
 import {recordCompetitiveRoster} from './match-rosters.ts';
 import {recordCompetitiveRoundEvents} from './round-events.ts';
@@ -22,17 +23,19 @@ async function upgradeCaptureQueue(db:D1Database){
  // Only executes after the existing owner opt-in check. No records are removed,
  // and previously unavailable sources keep their backoff/unavailable state.
  await db.prepare(`UPDATE coach_member_queue SET status='pending',attempts=0,next_at=0
-  WHERE status='complete' AND NOT EXISTS(SELECT 1 FROM valorant_match_rosters r
+  WHERE status='complete' AND source_riot_id IN (${COACH_MEMBER_ACCOUNTS.map(()=>'?').join(',')})
+   AND NOT EXISTS(SELECT 1 FROM valorant_match_rosters r
    JOIN valorant_match_round_events e ON e.match_id=r.match_id
    WHERE r.match_id=coach_member_queue.match_id AND ${ROSTER_SCHEMA_SQL} AND ${ASSIST_SCHEMA_SQL} AND ${CONTEXT_SCHEMA_SQL}
-    AND e.rounds_json IS NOT NULL AND e.kills_json IS NOT NULL)`).run();
+    AND e.rounds_json IS NOT NULL AND e.kills_json IS NOT NULL)`)
+  .bind(...COACH_MEMBER_ACCOUNTS.map(p=>p.riotId)).run();
  await db.prepare('INSERT OR IGNORE INTO monitor_state(key,value) VALUES(?,?)').bind(key,'1').run();
 }
 
 type Account={puuid:string;region:string};
 type Source={riot_id:string;puuid:string|null;region:string|null;
  next_page:number;done:number;truncated:number;next_at:number};
-type Candidate={match_id:string;region:string;riot_id:string;puuid:string;started_at:number;attempts:number};
+type Candidate={match_id:string;region:string;riot_id:string;original_riot_id:string;puuid:string;started_at:number;attempts:number};
 type LifetimeMatch={meta?:{id?:unknown;mode?:unknown;started_at?:unknown};metadata?:{match_id?:unknown;queue?:{id?:unknown};started_at?:unknown}};
 export type ArchiveStep='disabled'|'resolved'|'discovered'|'discovery_done'|'refreshed'|'saved'|'already_saved'|'partial'|'unavailable'|'deferred'|'idle';
 const isId=(x:unknown):x is string=>typeof x==='string'&&x.length>0&&x.length<=128;
@@ -47,7 +50,9 @@ async function repairLifetimeCaseDiscovery(db:D1Database){
  // rejected these while still advancing the page. Revisit those pages once,
  // retaining resolved accounts, saved matches, links and the existing API budget.
  // This function is called only after the existing explicit owner opt-in.
- await db.prepare('UPDATE coach_member_sources SET next_page=1,done=0,truncated=0,next_at=0 WHERE next_page>1').run();
+ await db.prepare(`UPDATE coach_member_sources SET next_page=1,done=0,truncated=0,next_at=0
+  WHERE next_page>1 AND riot_id IN (${COACH_MEMBER_ACCOUNTS.map(()=>'?').join(',')})`)
+  .bind(...COACH_MEMBER_ACCOUNTS.map(p=>p.riotId)).run();
  await db.prepare('INSERT OR IGNORE INTO monitor_state(key,value) VALUES(?,?)').bind(key,'1').run();
 }
 const getSwitch=async(db:D1Database)=>(await db.prepare('SELECT value FROM monitor_state WHERE key=?')
@@ -89,7 +94,9 @@ export async function discoverCoachMemberPage(db:D1Database,
  await repairLifetimeCaseDiscovery(db);
  const source=await db.prepare(`SELECT riot_id,puuid,region,next_page,done,truncated,next_at
   FROM coach_member_sources WHERE next_at<=?
-  ORDER BY CASE WHEN puuid IS NULL THEN 0 ELSE 1 END, next_at ASC,next_page ASC,riot_id ASC LIMIT 1`).bind(now).first<Source>();
+   AND riot_id IN (${COACH_MEMBER_ACCOUNTS.map(()=>'?').join(',')})
+  ORDER BY CASE WHEN puuid IS NULL THEN 0 ELSE 1 END, next_at ASC,next_page ASC,riot_id ASC LIMIT 1`)
+  .bind(now,...COACH_MEMBER_ACCOUNTS.map(p=>p.riotId)).first<Source>();
  if(!source)return 'idle';
  if(!isId(source.puuid)||!isRegion(source.region)){
   try{
@@ -168,10 +175,43 @@ export async function fetchNextCoachMemberMatch(db:D1Database,
  // One candidate per tick. The unique match_id queue avoids duplicates across
  // all discovered players. Partial archives are retried at a cooldown until
  // all three total requests are exhausted; never treat missing kills as zero.
- const row=await db.prepare(`SELECT q.match_id,q.region,q.source_riot_id AS riot_id,
-  q.source_puuid AS puuid,q.started_at,q.attempts FROM coach_member_queue q
+ // Phase 5: a shared match may have multiple verified collection sources.
+ // Prefer the queue's original source only while its saved identity still matches;
+ // otherwise select a verified, linked cohort member. No extra network request
+ // or queue ownership mutation is made, including for older unlinked records.
+ const permitted=COACH_MEMBER_ACCOUNTS.map(()=>'?').join(',');
+ const row=await db.prepare(`SELECT q.match_id,
+  COALESCE(source.region,q.region) AS region,
+  COALESCE(source.riot_id,q.source_riot_id) AS riot_id,
+  COALESCE(source.puuid,q.source_puuid) AS puuid,
+  q.source_riot_id AS original_riot_id,q.started_at,q.attempts FROM coach_member_queue q
+  LEFT JOIN coach_member_sources source ON source.riot_id=(
+    SELECT s.riot_id FROM coach_member_links l
+    JOIN coach_member_sources s ON s.riot_id=l.riot_id
+    WHERE l.match_id=q.match_id AND s.riot_id IN (${permitted})
+      AND length(s.puuid) BETWEEN 1 AND 128
+      AND s.region IN ('ap','na','eu','kr','br','latam')
+      AND (s.riot_id<>q.source_riot_id OR
+       (s.puuid=q.source_puuid AND s.region=q.region))
+    -- After a failed detail attempt, prefer an independently verified
+    -- linked peer to avoid retrying only the original account (e.g. VDK).
+    -- The queue still permits at most three attempts and one call per slot.
+    ORDER BY CASE WHEN q.attempts>0
+      THEN CASE WHEN s.riot_id=q.source_riot_id
+         AND s.puuid=q.source_puuid AND s.region=q.region THEN 1 ELSE 0 END
+      ELSE CASE WHEN s.riot_id=q.source_riot_id
+         AND s.puuid=q.source_puuid AND s.region=q.region THEN 0 ELSE 1 END
+     END,s.riot_id ASC LIMIT 1
+  )
   WHERE q.status IN ('pending','partial') AND q.next_at<=? AND q.attempts<3
-  ORDER BY q.started_at DESC LIMIT 1`).bind(now).first<Candidate>();
+   AND (source.riot_id IS NOT NULL OR (
+    q.source_riot_id IN (${permitted}) AND NOT EXISTS(
+     SELECT 1 FROM coach_member_links l0 WHERE l0.match_id=q.match_id)))
+  -- Prefer identity-verified linked matches over legacy unlinked rows.
+  -- A missing legacy source must not monopolize a more useful cohort slot.
+  ORDER BY CASE WHEN source.riot_id IS NOT NULL THEN 0 ELSE 1 END,
+   q.started_at DESC LIMIT 1`)
+  .bind(...COACH_MEMBER_ACCOUNTS.map(p=>p.riotId),now,...COACH_MEMBER_ACCOUNTS.map(p=>p.riotId)).first<Candidate>();
  if(!row)return 'idle';
  const complete=await db.prepare(`SELECT
   (SELECT COUNT(*) FROM valorant_match_rosters r WHERE match_id=? AND ${ROSTER_SCHEMA_SQL}) AS roster,
@@ -201,6 +241,7 @@ export async function fetchNextCoachMemberMatch(db:D1Database,
   }
   await recordCompetitiveRoster(db,detail,now);
   await recordCompetitiveRoundEvents(db,detail,now);
+  await captureCompetitivePositions(db,detail,'detail',now);
   const saved=await db.prepare(`SELECT e.rounds_json,e.kills_json,
    (${ROSTER_SCHEMA_SQL}) AS roster_schema,(${ASSIST_SCHEMA_SQL}) AS assist_schema,(${CONTEXT_SCHEMA_SQL}) AS context_schema
    FROM valorant_match_round_events e LEFT JOIN valorant_match_rosters r ON r.match_id=e.match_id
@@ -211,15 +252,33 @@ export async function fetchNextCoachMemberMatch(db:D1Database,
   return status==='complete'?'saved':'partial';
  }catch(e){
   const notFound=e instanceof Error&&/\b(?:HTTP|API) 404\b/.test(e.message);
+  if(notFound&&row.riot_id===row.original_riot_id&&row.attempts<2){
+   // A 404 can be specific to the original source's region. Only retry if
+   // a separately verified, linked member can fetch in another existing slot.
+   // Do not spend this or a future slot on an unrelated or unresolved account.
+   const peer=await db.prepare(`SELECT 1 AS eligible FROM coach_member_links l
+    JOIN coach_member_sources s ON s.riot_id=l.riot_id
+    WHERE l.match_id=? AND s.riot_id IN (${permitted}) AND s.riot_id<>?
+     AND length(s.puuid) BETWEEN 1 AND 128
+     AND s.region IN ('ap','na','eu','kr','br','latam')
+    LIMIT 1`)
+    .bind(row.match_id,...COACH_MEMBER_ACCOUNTS.map(p=>p.riotId),row.riot_id)
+    .first<{eligible:number}>();
+   if(peer){
+    await postponeCandidate(db,row.match_id,now,'pending');
+    return 'deferred';
+   }
+  }
   await postponeCandidate(db,row.match_id,now,notFound?'unavailable':'pending');
   return notFound?'unavailable':'deferred';
  }
 }
 
-export async function coachMemberCoverage(db:D1Database){
+export async function coachMemberCoverage(db:D1Database,onlyRiots?:readonly string[]){
  // No PUUID, tokens or raw match identifiers leave the authenticated API.
  const enabled=await getSwitch(db);
  const sources=await db.prepare(`SELECT s.riot_id,s.next_page,s.done,s.truncated,
+   MAX(CASE WHEN s.puuid IS NOT NULL AND length(s.puuid)>0 AND s.region IN ('ap','na','eu','kr','br','latam') THEN 1 ELSE 0 END) AS identity_ready,
    COUNT(l.match_id) AS discovered,
    COALESCE(SUM(CASE WHEN q.status='complete' THEN 1 ELSE 0 END),0) AS complete,
    COALESCE(SUM(CASE WHEN q.status='partial' THEN 1 ELSE 0 END),0) AS partial,
@@ -227,16 +286,20 @@ export async function coachMemberCoverage(db:D1Database){
    COALESCE(SUM(CASE WHEN q.status='pending' THEN 1 ELSE 0 END),0) AS pending
    FROM coach_member_sources s LEFT JOIN coach_member_links l ON l.riot_id=s.riot_id
    LEFT JOIN coach_member_queue q ON q.match_id=l.match_id
-   GROUP BY s.riot_id,s.next_page,s.done,s.truncated`).all<{
-    riot_id:string;next_page:number;done:number;truncated:number;discovered:number;
+   ${onlyRiots?'WHERE s.riot_id IN ('+onlyRiots.map(()=>'?').join(',')+')':''}
+   GROUP BY s.riot_id,s.next_page,s.done,s.truncated`).bind(...(onlyRiots??[])).all<{
+    riot_id:string;next_page:number;done:number;truncated:number;identity_ready:number;discovered:number;
     complete:number;partial:number;unavailable:number;pending:number}>();
  return {enabled,refreshIntervalMinutes:COACH_REFRESH_INTERVAL/60000,refreshPageSize:50,supportsPause:true,source:'Henrik lifetime matches (API-known history; not guaranteed exhaustive)',
-  people:COACH_MEMBER_ACCOUNTS.map(person=>{
+  people:COACH_MEMBER_ACCOUNTS.filter(p=>!onlyRiots||onlyRiots.includes(p.riotId)).map(person=>{
    const row=sources.results.find(s=>s.riot_id===person.riotId);
    return {person:person.person,riotId:person.riotId,
     discovered:row?.discovered??0,complete:row?.complete??0,
     partial:row?.partial??0,unavailable:row?.unavailable??0,
     pending:row?.pending??0,
+    sourceResolved:row?.identity_ready===1,
+    collectionStage:!enabled?'停止中':!row?'未登録':row.identity_ready!==1?'本人アカウント確認待ち':
+     row.truncated?'履歴取得上限':row.done?'新しい試合を確認中':'過去試合を収集中',
     discoveryDone:Boolean(row?.done),truncated:Boolean(row?.truncated)};
   })};
 }

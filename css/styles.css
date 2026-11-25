@@ -1313,3 +1313,146 @@ body:has(.screen[data-view="relics"]){--body-bg:#07020f}body:has(.screen[data-vi
 @media(max-width:480px){.esca-heading{align-items:flex-start}.esca-hero-emblem{width:88px;height:88px}.esca-rank-hero{gap:12px;padding:20px 0}.esca-rank-summary h3{font-size:23px}.esca-rank-rr{font-size:11px}.esca-archives{grid-template-columns:1fr}.esca-archive{display:grid;grid-template-columns:1fr 1fr}.esca-act{font-size:10px}.esca-stats strong{font-size:11px}}
 
 .esca-shields{display:flex;align-items:center;gap:12px;padding:12px;margin:12px 0;border:1px solid var(--rank-color);border-radius:12px;background:#ffffff06}.esca-shield-icons{display:flex;gap:5px;font-size:25px;flex-shrink:0}.esca-shield-icons .empty{filter:grayscale(1);opacity:.2}.esca-shields>div{min-width:0;flex:1}.esca-shields strong{overflow-wrap:anywhere;font-size:13px;color:#e2eafb}.esca-shields p{font-size:11px;color:#aabbda;line-height:1.6;margin:4px 0 0;overflow-wrap:anywhere}
+
+/* Read-only, invite-only duel spectating. No controls can submit gameplay actions. */
+.duel-spectator-controls{margin:12px 0;padding:12px;border:1px solid var(--border-color,#576c7d);border-radius:12px}
+.duel-spectator-controls summary{font-weight:700;cursor:pointer;padding:8px 0}
+.duel-spectator-controls input{display:block;max-width:100%;width:100%;margin:6px 0 12px;padding:10px;border-radius:9px}
+.duel-spectator-grid{display:grid;gap:2px;max-width:540px;margin:12px auto;aspect-ratio:1/1}
+.duel-spectator-cell{display:grid;place-items:center;border:1px solid #61707a;border-radius:4px;min-width:0;min-height:0;background:#e5c99b;color:#20252a;font-size:clamp(10px,3vw,26px);user-select:none}
+.duel-spectator-cell.duel-spectator-B,.duel-spectator-cell.duel-spectator-W{font-size:clamp(14px,4vw,32px)}
+.duel-spectator-cell.duel-spectator-B{color:#141414}
+.duel-spectator-cell.duel-spectator-W{color:#fdfdfd;text-shadow:0 0 2px #555}
+.duel-spectator-history{list-style:decimal;margin-left:1.2rem;max-height:18rem;overflow:auto}
+
+/* Duel three-choice home: no secondary operations, wagers or private data in the first view. */
+.duel-entry{padding:16px 14px 24px;display:grid;gap:12px;max-width:680px;margin:auto}
+.duel-entry-lead h2{font-size:clamp(18px,4.3vw,24px);margin:0 0 5px;color:#f1f6ff}
+.duel-entry-lead p{font-size:13px;color:#b4c9dd;margin:0 0 4px;line-height:1.5}
+.duel-entry-card{display:flex;align-items:center;text-align:left;gap:13px;width:100%;min-height:126px;border-radius:16px;border:1px solid #3b6380;padding:15px;background:linear-gradient(125deg,#102842,#0b1b34);color:#f2f7ff;cursor:pointer;box-shadow:0 4px 17px #0002;touch-action:manipulation}
+.duel-entry-card:focus-visible,.duel-entry-back:focus-visible{outline:3px solid #80d4f0;outline-offset:3px}
+.duel-entry-card:active{transform:translateY(1px)}
+.duel-entry-icon{display:grid;place-items:center;flex:0 0 43px;font-size:27px}
+.duel-entry-body{display:grid;gap:5px;flex:1;min-width:0;overflow-wrap:anywhere}
+.duel-entry-body strong{font-size:21px;line-height:1.2}
+.duel-entry-desc{font-size:12px;color:#b6cde2}
+.duel-entry-state{font-size:14px;font-weight:750;color:#e7f5ff}
+.duel-entry-progress{font-size:12px;line-height:1.5;color:#a8eecf}
+.duel-entry-chevron{font-size:27px;color:#9bccf4}
+.duel-entry-card[data-duel-entry="pve"]{border-color:#437b94}
+.duel-entry-card[data-duel-entry="pvp"]{border-color:#8070af;background:linear-gradient(125deg,#221b41,#0d1d35)}
+.duel-entry-card[data-duel-entry="practice"]{border-color:#467c65;background:linear-gradient(125deg,#153b35,#0d1e32)}
+.duel-entry-footnote{font-size:11px;line-height:1.55;color:#a0b4c9;margin:2px 0}
+.duel-entry-refresh{justify-self:start;min-height:44px}
+.duel-entry-back{margin:14px 14px 3px;min-height:44px}
+.duel-mode-header{margin:12px 14px 14px;line-height:1.55}
+.duel-mode-header h2{font-size:20px;margin:0 0 4px;color:#eff5ff}
+.duel-mode-header p{font-size:13px;color:#bdd0e1;margin:0}
+.duel-secondary{margin:12px 14px;padding:12px}
+.duel-secondary summary{cursor:pointer;font-weight:750}
+@media(max-width:400px){
+ .duel-entry{padding:12px 10px 22px;gap:10px}
+ .duel-entry-card{padding:13px 11px;gap:9px;min-height:119px}
+ .duel-entry-icon{flex-basis:35px;font-size:24px}
+ .duel-entry-body strong{font-size:19px}
+ .duel-entry-state{font-size:13px}
+}
+@media(prefers-reduced-motion:reduce){.duel-entry-card:active{transform:none}}
+
+/* Sport-first duel navigation: touch-sized game tiles with authenticated skill values. */
+.duel-sports{margin:12px 12px 22px;padding:15px;border:1px solid #355578;border-radius:21px;background:linear-gradient(150deg,#102c4a,#07172e 74%);box-shadow:0 14px 35px #0004}
+.duel-sports-heading{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:12px;flex-wrap:wrap}
+.duel-sports-heading h3{font-size:20px;margin:0;color:#f4faff}
+.duel-sports-heading span,.duel-sports-note{font-size:12px;color:#b9cee1;line-height:1.55}
+.duel-sports-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.duel-sport-tile{min-height:132px;padding:13px 10px;display:flex;flex-direction:column;align-items:flex-start;gap:6px;text-align:left;color:#f0f8ff;background:linear-gradient(140deg,#163c61,#11233d);border:2px solid #385e83;border-radius:17px;cursor:pointer;touch-action:manipulation;transition:transform .16s ease,background .16s ease,border-color .16s ease;overflow-wrap:anywhere}
+.duel-sport-tile:active{transform:scale(.975)}
+.duel-sport-tile:hover{border-color:#82bddb}
+.duel-sport-tile:focus-visible{outline:3px solid #8dddff;outline-offset:3px}
+.duel-sport-tile.is-selected{border-color:#75e2ca;background:linear-gradient(140deg,#174e59,#153456);box-shadow:inset 0 0 0 1px #75e2ca}
+.duel-sport-emoji{font-size:25px;line-height:1}
+.duel-sport-name{font-size:16px;font-weight:800}
+.duel-sport-points{font-size:14px;font-weight:750;color:#a7f1d5;font-variant-numeric:tabular-nums}
+.duel-sport-hint{font-size:11px;color:#b0c5da}
+.duel-pve-stage{margin:14px 12px 24px;border:1px solid #3b718a;border-radius:22px;overflow:hidden;background:#091c30;box-shadow:0 18px 45px #0006}
+.duel-pve-stage-head{padding:20px 17px 17px;background:radial-gradient(ellipse at 80% 0%,#186b90 0%,transparent 55%),linear-gradient(135deg,#123d61,#0d2842)}
+.duel-pve-kicker{font-size:10px;letter-spacing:.18em;color:#a0edec;font-weight:800}
+.duel-pve-stage-head h3{font-size:clamp(23px,5vw,30px);letter-spacing:.02em;margin:8px 0}
+.duel-pve-stage-head p{font-size:13px;line-height:1.65;color:#d3e7f4;margin:0}
+.duel-pve-stage-body{padding:15px;display:grid;gap:13px}
+.duel-pve-stage-body>.helper{font-size:12px}
+.duel-pve-setup{border:1px solid #3f7290;background:#122b47;padding:15px;border-radius:16px;display:grid;gap:12px}
+.duel-pve-setup .primary{min-height:52px;font-weight:800;font-size:16px}
+.duel-pve-legacy-select{display:none}
+.duel-pve-setup select{min-height:44px;max-width:100%;background:#0b1d34;color:white;border-radius:10px}
+.duel-pve-recovery{padding:10px;border:1px solid #31516b;border-radius:10px}
+.duel-pve-recovery summary{cursor:pointer;font-size:12px;color:#c8dfec}
+.duel-pve-arena{background:radial-gradient(ellipse at 50% 0%,#1c4d70 0%,transparent 65%),#071627;border:1px solid #3b7997;border-radius:19px;padding:16px 12px 21px;box-shadow:inset 0 1px 2px #fff2}
+.duel-pve-arena-top{display:flex;justify-content:space-between;gap:10px;color:#94d6e9;font-size:11px;font-weight:800;letter-spacing:.08em}
+.duel-pve-arena h3{text-align:center;font-size:clamp(23px,6vw,32px);margin:17px 0 4px}
+.duel-pve-turn{text-align:center;color:#a9d5e8;font-size:12px;margin:0 0 18px}
+.duel-pve-board{display:grid;grid-template-columns:repeat(var(--duel-cols),minmax(0,1fr));gap:4px;margin:auto;max-width:610px;background:#174262;padding:8px;border:2px solid #6ba1b7;border-radius:13px}
+.duel-pve-cell{display:grid;place-items:center;aspect-ratio:1;min-width:0;min-height:0;padding:0;border:1px solid #4a819a;border-radius:5px;font-weight:900;font-size:clamp(12px,4vw,30px);line-height:1;background:#dcf0e6;color:#173344;cursor:pointer;touch-action:manipulation}
+.duel-pve-cell:disabled{cursor:default;opacity:1}
+.duel-pve-cell:not(:disabled):hover{background:#b9f6db;box-shadow:0 0 0 2px #65e8ca}
+.duel-pve-cell:focus-visible{outline:3px solid #f8d65e;outline-offset:0}
+.duel-pve-board-gomoku{gap:1px;padding:4px}
+.duel-pve-board-gomoku .duel-pve-cell{font-size:clamp(9px,2.1vw,17px);border-radius:2px}
+.duel-pve-board-othello .duel-pve-cell{background:#18735b;color:#fff}
+.duel-pve-board-othello .duel-pve-cell:not(:disabled):hover{background:#279e77}
+.duel-pve-board-trio .duel-pve-cell{font-size:clamp(28px,8vw,56px);min-height:66px}
+@media(min-width:640px){.duel-sports-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:380px){.duel-sports{margin:9px 8px;padding:10px}.duel-sports-grid{gap:7px}.duel-sport-tile{padding:11px 8px;min-height:125px}.duel-sport-name{font-size:14px}.duel-pve-stage{margin:10px 8px}.duel-pve-stage-body{padding:10px}.duel-pve-board{gap:2px;padding:5px}}
+@media(prefers-reduced-motion:reduce){.duel-sport-tile{transition:none}.duel-sport-tile:active{transform:none}}
+
+
+/* PvE visual parity with the improved duel boards. Server state remains authoritative. */
+.duel-pve-premium{width:100%;min-width:0;margin:12px auto;color:#e8f4ff}
+.duel-pve-connect4 .duel-connect4-head{margin:9px 0 4px;gap:3px}
+.duel-pve-connect4 .duel-connect4-head button{display:grid;place-items:center;min-width:0;min-height:48px;height:48px;line-height:1;gap:0;padding:3px 0;font-size:19px;border-radius:10px 10px 5px 5px;background:linear-gradient(#2587be,#125787);box-shadow:inset 0 1px #bce8ff6e,0 2px 3px #0005}
+.duel-pve-connect4 .duel-connect4-head button:disabled{opacity:.32}
+.duel-pve-col-number{font-size:10px;font-weight:800}
+.duel-pve-connect4 .duel-connect4-board{width:100%;min-width:0;box-sizing:border-box}
+.duel-pve-connect4 .duel-connect4-space{padding:3px;border:0;min-width:0;min-height:0;cursor:pointer;touch-action:manipulation}
+.duel-pve-connect4 .duel-connect4-space:disabled{opacity:1;cursor:default}
+.duel-pve-connect4 .duel-connect4-space:not(:disabled):active{filter:brightness(1.2)}
+.duel-pve-connect4 .duel-connect4-space:focus-visible{outline:2px solid #f4ec93;outline-offset:-3px}
+.duel-pve-connect4 .duel-connect4-space.duel-c4-win{box-shadow:0 0 0 2px #ffec75,inset 0 0 8px #ffef99}
+.duel-pve-connect4 .duel-c4-celebration{margin:7px auto;text-align:center}
+.duel-pve-premium-scroll{max-width:100%;min-width:0;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+.duel-pve-premium-gomoku .duel-pve-premium-scroll{overflow:auto;max-height:min(74vh,630px);border:2px solid #81694d;border-radius:12px;background:#b59a64}
+.duel-pve-premium-othello .duel-pve-premium-scroll{overflow:hidden;border-radius:12px}
+.duel-pve-premium .duel-pve-board{box-sizing:border-box;box-shadow:inset 0 2px 12px #0004,0 7px 18px #0004}
+.duel-pve-premium-othello .duel-pve-board{background:linear-gradient(145deg,#0b6a4a,#075239);border:5px solid #1d624d;gap:2px;padding:5px}
+.duel-pve-premium-gomoku .duel-pve-board{width:600px!important;min-width:600px!important;max-width:none!important;background:#c3a771;border:3px solid #795a32;padding:3px;gap:1px}
+.duel-pve-premium .duel-pve-premium-cell{position:relative;display:grid;place-items:center;overflow:visible;border-radius:1px;aspect-ratio:1;background:transparent;border:1px solid #124c3990;color:#f7f8e4}
+.duel-pve-premium-gomoku .duel-pve-premium-cell{border-color:#69492380}
+.duel-pve-premium .duel-pve-premium-cell.available{background:#8fd9ab30}
+.duel-pve-premium .duel-pve-premium-cell.available:focus-visible,.duel-pve-premium .duel-pve-premium-cell.is-selected{outline:2px solid #f8dd67;outline-offset:-2px;background:#ecd56770}
+.duel-pve-legal-hint{font-size:clamp(12px,2.4vw,19px);color:#c8eec6;line-height:1}
+.duel-pve-premium-gomoku .duel-pve-legal-hint{color:#54724c}
+.duel-pve-stone{display:block;width:86%;height:86%;aspect-ratio:1;border-radius:50%;box-shadow:inset 0 2px 3px #fff4,0 2px 5px #0008}
+.duel-pve-stone.human{background:radial-gradient(circle at 34% 24%,#657b81,#111e2a 67%,#02070d)}
+.duel-pve-stone.cpu{background:radial-gradient(circle at 36% 24%,#fff,#dce4df 68%,#869f9a)}
+.duel-pve-premium-gomoku .duel-pve-stone{width:93%;height:93%}
+.duel-pve-confirm-row{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:12px 0}
+.duel-pve-confirm-row>button{flex:1;min-height:44px}
+.duel-pve-confirm-row>span{width:100%;font-size:13px;color:#e9d59b}
+.duel-pve-board-trio{max-width:340px;background:linear-gradient(145deg,#0b6786,#0b304b)}
+.duel-pve-trio-cell{background:#e4f7ff;font-size:clamp(34px,9vw,60px);border-radius:10px}
+.duel-pve-trio-cell.human{color:#ec5866}
+.duel-pve-trio-cell.cpu{color:#246ad9}
+.duel-pve-hidden{background:linear-gradient(145deg,#102c45,#092035);border:1px solid #35638b;border-radius:15px;padding:13px}
+.duel-pve-insight{padding:10px 12px;border:1px solid #427da4;border-radius:9px;background:#133755;font-size:14px;font-weight:750}
+.duel-pve-history{margin-top:13px}
+.duel-pve-hidden input,.duel-pve-hidden select{min-height:44px}
+.duel-pve-dice-row{display:flex;justify-content:center;flex-wrap:wrap;gap:7px;margin:12px 0}
+.duel-pve-dice-row .duel-bluff-die{flex:0 0 auto}
+.duel-pve-bid-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.duel-pve-bid-row select{max-width:100%}
+.duel-pve-poker-hand{display:flex;justify-content:center;flex-wrap:wrap;gap:5px;margin:12px 0}
+.duel-pve-poker-hand .duel-card{min-width:0;flex:1 1 50px;max-width:88px;min-height:93px}
+.duel-pve-poker-hand .duel-card.selected{transform:translateY(-6px);box-shadow:0 0 0 2px #f1d478,0 8px 15px #0009}
+@media(prefers-reduced-motion:reduce){
+ .duel-pve-premium .duel-c4-new-chip i{animation:none!important}
+}

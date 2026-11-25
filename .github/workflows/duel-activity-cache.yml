@@ -1,0 +1,36 @@
+name: Duel Activity cache synchronization
+on:
+  pull_request:
+    paths:
+      - 'js/**'
+      - 'css/**'
+      - 'index.html'
+      - '.github/workflows/duel-activity-cache.yml'
+permissions:
+  contents: write
+jobs:
+  synchronize:
+    if: github.repository == 'altepop/keso-gamble' && github.event.pull_request.head.repo.full_name == 'altepop/keso-gamble' && (github.head_ref == 'feat/duel-p10-approved-observer-20261122' || github.head_ref == 'feat/duel-p11-ui-p12-operator-20261122' || github.head_ref == 'feat/duel-p11-strategy-p12-season-20261122' || github.head_ref == 'fix/duel-p12-retention-audit-no-health-write-20261122' || github.head_ref == 'hotfix/duel-ios-pve-navigation-subtabs-20261122' || github.head_ref == 'feat/duel-p12-durable-season-archive-20261122')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.head_ref }}
+          persist-credentials: true
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - run: npm ci
+      - name: Refresh exact content-derived browser asset versions
+        run: npm run build:activity
+      - name: Commit only cache-key updates to this owner branch
+        run: |
+          if ! git diff --quiet -- js css index.html; then
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git add js css index.html
+            git commit -m "chore(duel): regenerate verified Activity cache keys"
+            git push origin "HEAD:refs/heads/${GITHUB_HEAD_REF}"
+          fi

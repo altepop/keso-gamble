@@ -76,3 +76,115 @@ The read-only GitHub Actions monitor runs each hour using Cloudflare GraphQL `d1
 ## 2026-11-09 additional audit
 
 The [whole-system audit](D1_AUDIT_20261109.md) records the observed baseline, SQL changes and limits. Relic presentation totals use a transactionally maintained per-member projection after a one-time ledger backfill; financial authorization still uses the original wallet/ledger. Health success timestamps also enforce their five-minute limit in SQL across isolate restarts. The existing UTC-day analytics now reports Rows written and warns at an estimated 70,000; this warning never stops settlements. Compare both reads and writes after rollout before declaring Free-tier readiness.
+
+## 2026-11-23 P12: telemetry completeness versus hard spend cap
+
+The existing account-wide D1 GraphQL dataset is adaptively sampled, delayed, and fetched with a bounded 100-group response. A response with **zero groups**, **no group for the current UTC day**, or **100 groups** is treated as **unknown/incomplete** rather than a verified zero or complete account total. The guard logs the limited reason, reports an unavailable estimate and performs **no new** `kp_settings` write in that case. This does not erase an already-active UTC-day optional-history conservation marker; the existing automatic UTC-day expiry still governs it.
+
+**No strict D1 spending or Rows read/written hard cap has been configured.** The 3.5M/4M read estimates, 70k write warning, and optional feed/trend conservation remain soft signals only. A hard account-level limit cannot be asserted from lagged/adaptively sampled analytics or by stopping only optional reads; automated races, financial ledgers, rankings and other D1 usage remain active. Actual provider-enforced limits, availability, and billing controls must be inspected directly in Cloudflare and cannot be proven by this PR. Do not interpret `unavailable` as healthy or as a quantified remaining quota.
+
+## 2026-11-23 P12 next slice: D1 threshold proposal, NOT an installed hard cap
+
+**Status: proposed; strict account-wide D1 hard cap is NOT configured, NOT verified, and NOT enforced by KESO PLAY.** This slice only makes that status explicit in every return path of `runGuard`. No paid subscription change, billing setting change, D1 schema migration, balance freeze, settlement freeze, or new data deletion is authorized.
+
+### Proposed numeric thresholds and enforcement boundaries
+
+| Measure | Proposed threshold / reference | What enforces it today | Scope and limitation |
+|---|---:|---|---|
+| Free-tier account rows read | 5,000,000 / UTC day | Cloudflare's Free-tier quota, **only if the account is on Workers Free** | Provider errors after exhaustion; account plan is not verified here. This is not a proactive KESO PLAY hard cap. |
+| Free-tier account rows written | 100,000 / UTC day | Cloudflare's Free-tier quota, **only if the account is on Workers Free** | Same; account-wide and D1 reads/writes may fail, including important financial operations. |
+| KESO PLAY read warning | Sampled 3,500,000 | Scheduled GitHub Actions observation | Warning only; sampling or delays may miss the threshold. |
+| Optional-history read conservation | Sampled 4,000,000 | UTC-day `kp_settings.d1_optional_conserve_utc_day` marker | **Only** optional feed/trend read reductions; core KP/ranking/races/trades/settlements continue. |
+| Proposed urgent read warning | Sampled 4,500,000 | **Not implemented** | Future additional warning only, cannot guarantee cap. |
+| Existing write warning | Sampled 70,000 | Log warning | No write blocking. |
+| Proposed urgent write warning | Sampled 90,000 | **Not implemented** | Future notification and read-only review; never halt ledger/settlement automatically. |
+| Strict D1 account hard budget / billing ceiling | No verified setting / amount | **Not configured** | Cannot claim a D1-specific hard bill limit from sampled GraphQL or a `kp_settings` marker. |
+
+### Proposed escalation / actual enforcement path (future work; not enabled by this PR)
+
+1. Confirm Cloudflare account's actual Workers plan, account-wide D1 rows usage, and Billing settings with read-only evidence. Free daily quotas are **provider-enforced** starting September 1, 2026; when exhausted, D1 queries fail until UTC midnight. Verify this account is on Free before treating them as active enforcement.
+2. Keep the existing 3.5M read / 70k write warning, and existing 4.0M read **optional-history-only** soft conservation. The proposed 4.5M read / 90k write urgent alerts require a separate approved implementation and CI before activation.
+3. If a true spending ceiling is required on a Paid plan, verify whether a provider-side D1-specific control exists and can enforce the desired scope; do **not** equate Workers/Durable Objects spending limits with a D1 cap. Cloudflare states that even supported spending limits may lag and may not bound the final invoice.
+4. A possible application-side future gate may fail closed **only for enumerated non-financial optional endpoints**; it must be server-authoritative, measured under concurrency and explicitly allow all wallet, debt, stock, race, KP settlement, purchased ticket, audit, and regulatory retention paths. It **cannot** be presented as an exact account-wide cap, because other clients/Workers/automations can access D1, and sampled GraphQL metrics may lag.
+5. Do not activate any automatic billing-plan change, D1 query shutdown, financial lock, or account-wide kill switch without a separate reviewed proposal, acceptance criteria, and rollback plan. Unknown telemetry remains **unknown**, not 0, healthy, or hard-cap success.
+
+Official references:
+- D1 pricing and quota: https://developers.cloudflare.com/d1/platform/pricing/
+- Free quota enforcement, 2026-09-01: https://developers.cloudflare.com/changelog/post/2026-09-01-d1-free-tier-limit-enforcement/
+- Spending limits apply to Workers/Durable Objects, and may not guarantee maximum final charge: https://developers.cloudflare.com/billing/manage/spend-management/
+
+## 2026-11-23 P12: 1-hour SQL hotspot evidence and reduction runbook
+
+**Observed GitHub Actions evidence (run 45138534373, inspect job 137570546536; read-only):**
+- `scripts/d1-read-audit.mjs` sets `WARN_ROWS_PER_HOUR=80000`, computes the sum of the returned top-50 SQL rows from D1-A and D1-B over 1h, and intentionally sets exit code **2** when that lower bound exceeds the warning. **Never turn this warning into success by relaxing the threshold or blindly rerunning.**
+- At the audited snapshot, 1-hour lower bounds were **D1-A 75**, **D1-B 102,584**, total **102,659 Rows read**. This was **22,659 (28.3%) above** the 80,000/h warning threshold. `D1_READ_AUDIT_DONE successes=4 errors=0` means both databases supplied the two requested 1h/1d Insights windows. The workflow `inspect` step was Failure as designed; the subsequent optional-history guard ran successfully.
+- UTC-day adaptive GraphQL estimates during that run: **1,846,991 Rows read / 14,402 Rows written**. They are estimates, not an accurate account-wide quota remainder or a strict spending cap.
+- The D1-B **24-hour** top SQL shape read **2,392,110 Rows** over **266 calls** (about **8,992/call**), naming `coach_member_queue`, `coach_member_sources`, `coach_member_links`, `coach_position_backfill`, `valorant_match_positions`. This is an investigation priority **for the 24-hour sample only**; the particular SQL shape responsible for the latest **1-hour** overrun has not yet been established.
+- A separate 24-hour top SQL form that traversed `json_each`, `tracked_players`, `monitor_state`, and match round tables was **256,212 Rows / 44 calls** (around **5,823/call**). Future tuning must verify its actual current frequency and its planner/index behavior, not remove retention or mandatory collection blindly.
+
+**This split adds no Cloudflare calls.** It prints the top five 1-hour SQL shapes from the *existing* `wrangler d1 insights --time-period=1h --limit=50` response into Actions logs and the job summary, including operation, table names, calls, Rows read, and percentage of the returned top-50 lower bound. Raw SQL, identifiers, predicates, literal values, access tokens and individual match data are not logged.
+
+**Safe load-reduction workflow for the next authorized optimization PR:**
+1. Compare two separately recorded 1-hour read-only snapshots (same duration) with 1-hour shape frequency and rows/call. Check whether the `coach_member_*` join remains dominant or whether a different form drove the overrun. Compare D1-A and D1-B independently.
+2. If the high-volume coach join persists, inspect the original SQL, indexes and `EXPLAIN QUERY PLAN` on an isolated fixture or read-only plan query before proposing bounded candidate filters, indexes or incremental projections. Check that archived matches, all registered members, and consent/ownership boundaries remain correct.
+3. If scheduled polling is the culprit, use keyed per-member progress or bounded incremental refresh rather than full-table scans. Never disable active match capture, earned KP, stock/races, reconciliations, debt, immutable ledger or retention obligations. Keep backup/restore safeguards and D1 read/write costs in scope.
+4. Make performance changes in a separate PR with fixed SQL fixture regression tests, a rollback path, and read-only production post-deploy Insights comparing 1-hour rows/call and total lower-bound changes. Do not claim a numeric production reduction until that follow-up observation exists.
+
+**What has not been done:** no SQL query or index has been changed in this PR, no verified drop in Rows read has occurred, and no strict D1 hard cap has been enabled or verified. A top-50 lower bound is not the complete account total.
+
+## 2026-11-23 P12 D1 optimization and missed deployment-watch schedules (joint split)
+
+### Production evidence and scope
+
+- 2026-11-23 post-#812 run [45141431345](https://github.com/altepop/keso-gamble/actions/runs/45141431345): 1-hour top-50 **Rows read lower bound 122,736** (D1-A 135, D1-B 122,601), exceeding the existing **80,000/h warning by 42,736**. The audit's exit code 2 is deliberate. Do not raise or bypass this threshold to make CI green.
+- D1-B top one-hour SQL shape: SELECT `valorant_match_rosters`, `valorant_match_round_events`, `json_each`, `monitor_state`, **39 calls / 37,284 rows**. Other related roster SQL: **27 calls / 7,884 rows**. These are grouped by table references; sanitized Insights logs do not prove every call came from one exact code function.
+- Three `sqlite_master` SELECT shapes: **30 calls / 14,940 rows**, **30 / 14,940**, **27 / 13,446**, totaling **43,326 rows** across these top-three forms. They are separately counted Insights SQL forms, not guaranteed to share a call site.
+- Source inspection shows schema metadata reads in `ensureBoardDuels` / `ensureTrioGameConstraint` and the dedicated coach migration/verification scripts, among others. `ensureBoardDuels` is guarded by `kp_settings.board_duel_schema_version` and per-DB-binding readiness; schema migration is conditional. **No single exact caller, schema absence, or repeat rate has been verified from production; no schema checks were removed.**
+- Local **in-memory SQLite fixture** applying the checked-in `0006_competitive_match_rosters.sql` and `0007_competitive_round_events.sql` migration schemas: `EXPLAIN QUERY PLAN` on the existing two read-coach-round queries shows indexed `match_id` lookup for the round archive and per-roster `json_each` virtual-table scans. For the roster-count query the roster is scanned. This is a fixture plan, **not** the Cloudflare production D1 plan or a measured production reduction.
+- Existing roster index `valorant_match_rosters_recent(ended_at DESC)` and the round-event `match_id` primary key already exist. JSON array membership is not an ordinary indexed scalar, so adding an unvalidated general index would not safely solve those full scans.
+
+### Narrow safe optimization implemented
+
+The `readCoachRoundReport` endpoint already cached completed answers for five minutes per D1 binding, but *parallel cold-cache reads could each run two full roster/round queries before either call populated the cache*. An in-flight Promise now coalesces simultaneous reads per binding. Cache duration and actual SQL filters, user ownership, output, completed/partial-match rules, and round data are unchanged. An explicit invalidation disowns the previous in-flight task so it cannot repopulate the cache after new data arrive; a failed task can be retried.
+
+- Regression fixture: two parallel cold-cache requests cause **two D1-mock queries total**, rather than **four without coalescing**, and cached follow-up adds zero. Invalidation triggers fresh reads even if the previous task remains in progress.
+- This is **a proven reduction in duplicate query calls for that fixture case**, not proof that the production top-50 122,736/h lower bound declined. Queries on other isolates or independent binding objects still occur. Post-deploy Insights on equivalent 1-hour windows must be compared before a numeric production-savings claim.
+- A persistent cross-isolate cache, materialized indexed member-to-match mapping, migrations, and `sqlite_master` call suppression need separate validated work. Do not bypass coach roster consent/ownership checks or weaken audit history/settlements.
+
+### Scheduled deployment monitor misses and independent path
+
+- Public GitHub Actions API for workflow ID **427110600** reports the deployment monitor as `active` (not disabled). Default-branch `.github/workflows/duel-deployment-watch.yml` sets `cron: '43 * * * *'`, but its **only** `event=schedule` run in the examined history was run **45109206752** at **2026-11-23 04:00:13 UTC (13:00:13 JST)**, i.e. not precisely :43. No subsequent 14:43, 15:43, 16:43, 17:43 scheduled runs were present when checked. `push` successes do **not** substitute for evidence of a scheduled trigger.
+- GitHub documents that scheduled events may be **delayed or dropped** during load, and gives no guarantee of delivery at the cron minute. Since the workflow is active and no logs for nonexistent runs exist, the **exact GitHub scheduler-side cause remains unverified**. A cron change would not guarantee execution, nor would merely rerunning an existing push job repair missing hourly scheduling.
+- Existing separate D1 read-only insights workflow `cron: '17 * * * *'` has verified scheduled history. This PR adds an independent **`deployment-watch-fallback` job** in that scheduled run. It executes existing read-only GitHub Actions deployment status checks and existing deduplicated GitHub Issue alert logic. It has **no Cloudflare credentials, no D1 or KP reads/writes**, and is independent from the D1-insights `inspect` job's intentional failure when the 80,000 Rows/h warning fires.
+- This provides a second scheduled *path* that will check for deployment failures when the :43 monitor cron goes missing; it does **not** create missing native schedule history for the original workflow, guarantee hourly timing, or prove a genuine scheduled run until a real `schedule` execution of the new fallback is observed. The existing 3-hour heartbeat retains its separate missing-schedule incident logic.
+- The fallback permissions are scoped to `contents:read`, `actions:read`, `issues:write` for a deduplicated incident. No additional D1 Insights queries or paid API calls are added. A failed D1 read budget auditor is **still a failure**.
+
+**Remaining:** production D1 1-hour Rows-read reduction unverified; production fallback actual schedule execution unverified; strict D1 spending/Rows read/written **hard cap not configured**, not verified and not enforced by this app. P8 device, P10 real audio, authenticated wallets and 2-person Discord remain human-only unverified gates. P11/P12 not completed.
+
+## 2026-11-23 P12 daily operations audit execution: conditional independent fallback
+
+**Problem and evidence.** The primary read-only operations audit lives in `.github/workflows/duel-operations-audit.yml` at `31 21 * * *` (06:31 JST). GitHub Actions public API `event=schedule` inventory showed **zero scheduled runs** as of the observation. A configured cron is not proof of successful execution; missing runs have no job logs. GitHub does not guarantee that a scheduled event will execute on time. No claim of a GitHub-internal root cause is made.
+
+**Independent fallback**, in `.github/workflows/duel-operations-audit-fallback.yml` at `17 22 * * *` (07:17 JST), first reads the **GitHub Actions metadata** for the original schedule (no D1 reads). Only when there was *no primary scheduled run* created after 21:31 UTC that is successful or still active does the fallback call the existing two aggregate D1 SELECTs. A failed/cancelled original may be reaudited. If GitHub authorization, response integrity, schedule timing or inventory completeness is unknown, it **fails closed**: no D1 query, an existing deduplicated GitHub Issue reports unknown.
+
+The fallback's own report handling reuses `duel-scheduled-operations-audit.mjs` and `duel-scheduled-operations-alert.mjs`. It never executes any SQL beyond the existing two allowlisted aggregate SELECTs, changes KP, authorizes deletion, restarts Workers, changes billing or writes D1. Its active schedule only creates a redundant safety path and **cannot guarantee GitHub schedule delivery**. The normal primary audit remains unchanged and there is no double-audit when its run is already successful or in progress. On PR and push events, only nonproduction tests run; D1 execution is limited to schedule or authorized manual dispatch.
+
+**Verification required:** PR CI and same-SHA Pages/Worker deploy must pass. The first *real* fallback schedule run at 07:17 JST on a following day must be observed separately; PR and push success cannot prove schedule execution. The existing 18:43 JST deployment monitor and 19:17 JST `deployment-watch-fallback` schedule checks are independent of this daily audit fallback and must each be recorded as observed or missing.
+
+**Boundaries:** Strict account-wide D1 hard cap **not configured**. Existing D1 80,000 Rows read/h alert is unchanged. P11/P12 global completion, P8 device, P10 audio, authenticated wallet and 2-person Discord are unverified.
+
+## 2026-11-23 P12 D1 read-only warning notification (one independent split)
+
+The hourly D1 Insights audit already returns exit code **2** if the **top-50 SQL 1-hour Rows read lower bound exceeds 80,000**. It still does so. This PR does not alter, suppress, rerun, or reclassify that warning, and never claims this lower bound is total D1 usage.
+
+The new `D1_READ_AUDIT_REPORT` is a mode-0600 JSON report containing **only** `state` (warning/healthy/unknown), the existing **80,000 Rows/h** threshold, validated one-hour lower-bound sum or null, window-coverage counts, and `hardCapConfigured:false`. No SQL text, predicates, user IDs, guild IDs, tokens, or private data are retained.
+
+After the original audit and the existing optional-history protection step, `scripts/d1-read-budget-alert.mjs` reads that *same report* and:
+- for a **validated warning**, opens one redacted GitHub Issue with the verified top-50 lower bound and 80,000 threshold;
+- for **unknown** (missing/malformed report, unavailable Insights), opens one Issue without asserting any usage number;
+- for **validated healthy**, does not call the GitHub Issues API;
+- for an already open Issue with the exact alert title, does not create a duplicate; when the 100-item Issue inventory is saturated, stops rather than creating unbounded issues.
+
+The alert script uses **GitHub API metadata only**, no Cloudflare API, no D1 queries, no KP/financial writes, no notifications to Discord, no automatic cost-limit enforcement. Its write permission is restricted to GitHub Issues. A warning continues to make the audit job fail; an alert is additional operational visibility, not a replacement for the failure.
+
+**Unverified until actual operation:** a postmerge GitHub Issue being created by a real threshold breach, or unknown-report failure, and a measured reduction in real Rows read. A PR mock passing does not establish either. Strict D1 hard cap remains **not configured / not verified / not enforced**. Human-only P8/P10/wallet/two-person tests remain unverified and non-blocking; P11/P12 global completion is not claimed.
