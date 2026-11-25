@@ -236,3 +236,30 @@ test('D1 hotspot: completed position history is filtered before linked-source se
   assert.equal(await backfillCoachPositions(f.db,async()=>{throw Error('must not call')},now+900001),'idle');
  }finally{f.sql.close();}
 });
+
+test('local D1 measures actual selector rows_read on identical completed-history fixture',async()=>{
+ const {Miniflare}=await import('miniflare');
+ const runtime=new Miniflare({workers:[{config:{name:'position-read-test',compatibilityDate:'2026-10-24',env:{DB:{type:'d1'}},manifest:{mainModule:'worker.mjs',modules:{'worker.mjs':{type:'esm',contents:'export default {fetch(){return new Response("ok")}}'}}}}}]});
+ try{
+ const db=await runtime.getD1Database('DB','position-read-test');
+ for(const ddl of [
+ 'CREATE TABLE coach_member_queue(match_id TEXT PRIMARY KEY,region TEXT,source_riot_id TEXT,source_puuid TEXT,started_at INTEGER,status TEXT,attempts INTEGER)',
+ 'CREATE TABLE coach_member_sources(riot_id TEXT PRIMARY KEY,puuid TEXT,region TEXT)',
+ 'CREATE TABLE coach_member_links(riot_id TEXT,match_id TEXT,PRIMARY KEY(riot_id,match_id))',
+ 'CREATE TABLE valorant_match_positions(match_id TEXT PRIMARY KEY,has_coordinates INTEGER)',
+ 'CREATE TABLE coach_position_backfill(match_id TEXT PRIMARY KEY,status TEXT,attempts INTEGER,next_at INTEGER)'
+ ])await db.prepare(ddl).run();
+ const ids=['Dolly#SDGs','Abema#ttv','h1d3g1g4s#1037','frin#怖すぎ','Aquatopia#toppy','mecael#2489'];
+ for(const id of ids)await db.prepare("INSERT INTO coach_member_sources VALUES(?,'p0','ap')").bind(id).run();
+ for(let i=0;i<1000;i+=20){const batch=[];for(let j=i;j<i+20;j++){const id='m'+j;batch.push(db.prepare("INSERT INTO coach_member_queue VALUES(?,'ap','Dolly#SDGs','p0',?,'complete',0)").bind(id,j));for(const riot of ids)batch.push(db.prepare('INSERT INTO coach_member_links VALUES(?,?)').bind(riot,id));if(j>0)batch.push(db.prepare("INSERT INTO coach_position_backfill VALUES(?,'saved',1,0)").bind(id));}await db.batch(batch);}
+ const legacy="SELECT q.match_id,s.region,s.puuid AS source_puuid,s.riot_id AS chosen_riot_id,\n  q.source_riot_id AS original_riot_id,q.started_at FROM coach_member_queue q\n  JOIN coach_member_sources s ON s.riot_id=(\n   SELECT linked.riot_id FROM coach_member_links l\n   JOIN coach_member_sources linked ON linked.riot_id=l.riot_id\n   WHERE l.match_id=q.match_id AND linked.riot_id IN (?,?,?,?,?,?)\n    AND length(linked.puuid) BETWEEN 1 AND 128\n    AND linked.region IN ('ap','na','eu','kr','br','latam')\n    AND (linked.riot_id<>q.source_riot_id OR\n      (linked.puuid=q.source_puuid AND linked.region=q.region))\n   -- After a failed position attempt, prefer a different verified member\n   -- rather than spending every retry on the same originally attributed account.\n   -- The position attempt counter is already bounded to three requests.\n   ORDER BY CASE WHEN COALESCE((\n      SELECT attempts FROM coach_position_backfill\n      WHERE match_id=q.match_id),0)>0\n     THEN CASE WHEN linked.riot_id=q.source_riot_id AND linked.puuid=q.source_puuid\n       AND linked.region=q.region THEN 1 ELSE 0 END\n     ELSE CASE WHEN linked.riot_id=q.source_riot_id AND linked.puuid=q.source_puuid\n       AND linked.region=q.region THEN 0 ELSE 1 END\n    END,linked.riot_id ASC LIMIT 1)\n  LEFT JOIN valorant_match_positions p ON p.match_id=q.match_id\n  LEFT JOIN coach_position_backfill b ON b.match_id=q.match_id\n  WHERE (q.status='complete' OR (q.status='partial' AND q.attempts>=3)) AND COALESCE(p.has_coordinates,0)=0\n   -- A verified linked cohort member is sufficient even if historical queue\n   -- attribution belongs to an unrelated source. Never fetch via that source.\n   AND (b.match_id IS NULL OR (b.status IN ('retry','running') AND b.attempts<3 AND b.next_at<=?))\n  ORDER BY q.started_at DESC LIMIT 1";
+ const current="SELECT q.match_id,s.region,s.puuid AS source_puuid,s.riot_id AS chosen_riot_id,\n  q.source_riot_id AS original_riot_id,q.started_at FROM coach_member_queue q\n  LEFT JOIN valorant_match_positions p ON p.match_id=q.match_id\n  LEFT JOIN coach_position_backfill b ON b.match_id=q.match_id\n  CROSS JOIN coach_member_links l ON l.match_id=q.match_id AND l.riot_id IN (?,?,?,?,?,?)\n  CROSS JOIN coach_member_sources s ON s.riot_id=l.riot_id\n  WHERE (q.status='complete' OR (q.status='partial' AND q.attempts>=3)) AND COALESCE(p.has_coordinates,0)=0\n   AND (b.match_id IS NULL OR (b.status IN ('retry','running') AND b.attempts<3 AND b.next_at<=?))\n   AND length(s.puuid) BETWEEN 1 AND 128\n   AND s.region IN ('ap','na','eu','kr','br','latam')\n   AND (s.riot_id<>q.source_riot_id OR (s.puuid=q.source_puuid AND s.region=q.region))\n  -- Newest eligible match first; match_id only resolves previously unspecified timestamp ties.\n  -- Within that match preserve original-first / verified-peer-on-retry priority.\n  ORDER BY q.started_at DESC,q.match_id ASC,\n   CASE WHEN COALESCE(b.attempts,0)>0\n    THEN CASE WHEN s.riot_id=q.source_riot_id AND s.puuid=q.source_puuid AND s.region=q.region THEN 1 ELSE 0 END\n    ELSE CASE WHEN s.riot_id=q.source_riot_id AND s.puuid=q.source_puuid AND s.region=q.region THEN 0 ELSE 1 END\n   END,s.riot_id ASC LIMIT 1";
+ const after=await db.prepare(current).bind(...ids,now).all();
+ assert.equal(after.results[0]?.match_id,'m0');
+ let before;
+ try{before=await db.prepare(legacy).bind(...ids,now).all();}catch(error){console.log('Position D1 exact legacy incompatible',String(error));console.log('Position D1 current rows_read',after.meta.rows_read);return;}
+ assert.deepEqual(after.results,before.results);
+ console.log('Position D1 rows_read',JSON.stringify({before:before.meta.rows_read,after:after.meta.rows_read}));
+ assert.ok(after.meta.rows_read<before.meta.rows_read);
+ }finally{await runtime.dispose();}
+});
