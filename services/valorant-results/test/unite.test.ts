@@ -61,10 +61,10 @@ test('linking records what is already there; later games are posted once and set
  f.set(page([card({win:false,surrendered:true,ko:0,ours:150,theirs:380}),card({pokemon:'Absol',ko:12}),card()]));
  await monitorUnite(f.env,T0+3*60_000,f.request,mapping);
  assert.equal(f.sent.length,2);
- assert.match(f.sent[0],/テスト選手｜ポケモンユナイト ランクマ 勝利/);assert.match(f.sent[0],/🗯️ KO 12。/);assert.match(f.sent[0],/\+560 KP/);assert.match(f.sent[0],/チーム貢献 \+160 KP/);
+ assert.match(f.sent[0],/テスト選手｜ポケモンユナイト ランクマ 勝利/);assert.match(f.sent[0],/🗯️ KO 12。/);assert.match(f.sent[0],/\+5,600 KP/);assert.match(f.sent[0],/チーム貢献 \+1600 KP/);
  assert.match(f.sent[1],/敗北\*\*（降参）/);assert.equal(f.sent[1].split('\n').filter(l=>l.startsWith('🗯️')).length,3);
  assert.match(f.sent[1],new RegExp(`−${UNITE_LOSS} KP`));
- assert.equal(f.balance(cat),UNITE_WIN+160-UNITE_LOSS,'the performance-boosted win is credited before the later loss');
+ assert.equal(f.balance(cat),UNITE_WIN+1600-UNITE_LOSS,'the performance-boosted win is credited before the later loss');
  await monitorUnite(f.env,T0+6*60_000,f.request,mapping);assert.equal(f.sent.length,2,'the same games are not posted again');
  assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM kp_ledger WHERE kind='unite'").get()!.n,2);
 });
@@ -100,10 +100,10 @@ test('Unite streak payouts grow to the cap, reset on opposite result, and do not
  const {luckFor}=await import('../src/luck.ts');
  const seed=Array.from({length:100},(_,i)=>'streak-'+i).find(s=>!luckFor('unite:'+s))!;
  let wins=0,losses=0;
- for(const expected of [400,500,600,700,800,800]){const q=uniteQuote(true,wins,losses,seed);assert.equal(q.net,expected);({wins,losses}=q);}
+ for(const expected of [4000,5000,6000,7000,8000,8000]){const q=uniteQuote(true,wins,losses,seed);assert.equal(q.net,expected);({wins,losses}=q);}
  for(const expected of [-100,-200,-300,-400,-500,-500]){const q=uniteQuote(false,wins,losses,seed);assert.equal(q.net,expected);({wins,losses}=q);}
- assert.equal(uniteQuote(true,wins,losses,seed).base,400);
- assert.equal(uniteQuote(true,5,0,seed,true).base,400,'a history gap starts a new observed streak');
+ assert.equal(uniteQuote(true,wins,losses,seed).base,4000);
+ assert.equal(uniteQuote(true,5,0,seed,true).base,4000,'a history gap starts a new observed streak');
 });
 test('failed Unite credit leaves the cursor and streak untouched; retry pays once and queues the post',async()=>{
  const f=await fixture();await link(f,cat,UID);await monitorUnite(f.env,T0,f.request,mapping);
@@ -115,7 +115,7 @@ test('failed Unite credit leaves the cursor and streak untouched; retry pays onc
  assert.equal(f.sql.prepare('SELECT wins FROM unite_streaks').get()!.wins,0);
  assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM unite_rewards').get()!.n,0);
  f.sql.exec('DROP TRIGGER unite_fail');await monitorUnite(f.env,T0+6*60000,f.request,mapping);
- const balance=f.balance(cat);assert.ok(balance>=200);assert.equal(f.sql.prepare('SELECT wins FROM unite_streaks').get()!.wins,1);
+ const balance=f.balance(cat);assert.ok(balance>=2000);assert.equal(f.sql.prepare('SELECT wins FROM unite_streaks').get()!.wins,1);
  await monitorUnite(f.env,T0+9*60000,f.request,mapping);assert.equal(f.balance(cat),balance);assert.equal(f.sent.length,1);
 });
 test('more than three newly observed Unite games are processed oldest first without dropping games',async()=>{
@@ -156,20 +156,20 @@ test('Unite win bonuses reward attackers, supporters, tankers and team score wit
  const {luckFor,applyLuck}=await import('../src/luck.ts');
  const seed=Array.from({length:200},(_,i)=>'bonus-'+i).find(x=>!luckFor('unite:'+x))!;
  const stats={ko:5,ast:7,ours:350,theirs:230,heal:'5k',tkn:'40k',surrendered:false};
- assert.equal(uniteQuote(true,0,0,seed,false,stats).net,400);
- assert.equal(uniteQuote(true,0,0,seed,false,{...stats,ko:12}).net,560,'19 combined assists+KOs add 160 KP');
- assert.equal(uniteQuote(true,0,0,seed,false,{...stats,ko:20,ast:12}).net,700,'25+ actions add 300 KP once');
- assert.equal(uniteQuote(true,0,0,seed,false,{...stats,ko:0,ast:11}).net,560,'supporter with 11 assists is rewarded');
- assert.equal(uniteQuote(true,0,0,seed,false,{...stats,ko:0,ast:0,heal:'65.5k'}).net,560,'healer gets support credit');
- assert.equal(uniteQuote(true,0,0,seed,false,{...stats,ko:0,ast:0,tkn:'121k'}).net,700,'tank can earn the upper support bonus');
+ assert.equal(uniteQuote(true,0,0,seed,false,stats).net,4000);
+ assert.equal(uniteQuote(true,0,0,seed,false,{...stats,ko:12}).net,5600,'19 combined assists+KOs add 1600 KP');
+ assert.equal(uniteQuote(true,0,0,seed,false,{...stats,ko:20,ast:12}).net,7000,'25+ actions add 3000 KP once');
+ assert.equal(uniteQuote(true,0,0,seed,false,{...stats,ko:0,ast:11}).net,5600,'supporter with 11 assists is rewarded');
+ assert.equal(uniteQuote(true,0,0,seed,false,{...stats,ko:0,ast:0,heal:'65.5k'}).net,5600,'healer gets support credit');
+ assert.equal(uniteQuote(true,0,0,seed,false,{...stats,ko:0,ast:0,tkn:'121k'}).net,7000,'tank can earn the upper support bonus');
  const elite=uniteQuote(true,0,0,seed,false,{...stats,ko:23,ast:18,ours:500,theirs:100,heal:'140k',tkn:'180k'});
- assert.equal(elite.net,820,'300 contribution + 120 victory margin: at most +420 KP');
+ assert.equal(elite.net,8200,'3000 contribution + 1200 victory margin: at most +4200 KP');
  assert.match(elite.note,/大差勝利/);
- assert.equal(uniteQuote(true,0,0,seed,false,{...stats,ko:0,ast:0,heal:'invalid'}).net,400,'garbled stat text never grants KP');
- assert.equal(uniteQuote(true,0,0,seed,false,{...stats,ko:-10,ast:20}).net,400,'invalid statistics do not pay');
- assert.equal(uniteQuote(true,0,0,seed,false,{...stats,ko:23,ast:18,ours:500,theirs:100}).net,820,'server-known performance is stable');
+ assert.equal(uniteQuote(true,0,0,seed,false,{...stats,ko:0,ast:0,heal:'invalid'}).net,4000,'garbled stat text never grants KP');
+ assert.equal(uniteQuote(true,0,0,seed,false,{...stats,ko:-10,ast:20}).net,4000,'invalid statistics do not pay');
+ assert.equal(uniteQuote(true,0,0,seed,false,{...stats,ko:23,ast:18,ours:500,theirs:100}).net,8200,'server-known performance is stable');
  const lucky='unite:'+seed;
- assert.equal(uniteQuote(true,1,0,seed,false,stats).net,applyLuck(500,luckFor(lucky)));
+ assert.equal(uniteQuote(true,1,0,seed,false,stats).net,applyLuck(5000,luckFor(lucky)));
 });
 test('Unite close losses and active play reduce losses but cannot pay for throwing matches',async()=>{
  const {uniteQuote}=await import('../src/unite-rewards.ts');
@@ -191,7 +191,7 @@ test('Unite performance bonus settles and retries once without extra wallet muta
  f.set(page([card({ko:12,ast:9,ours:500,theirs:200,heal:'75k'}),card()]));
  await monitorUnite(f.env,T0+3*60000,f.request,mapping);
  const first=f.balance(cat);
- assert.ok(first>=400,'performance credit should exceed the regular win');
+ assert.ok(first>=4000,'performance credit should exceed the regular win');
  assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM kp_ledger WHERE kind='unite'").get()!.n,1);
  assert.match(f.sent[0],/大差勝利/);
  await monitorUnite(f.env,T0+6*60000,f.request,mapping);
@@ -215,15 +215,15 @@ test('Crustle rock-wall and stealth-zone support earn KP even when KOs are few',
  const seed=Array.from({length:300},(_,i)=>'rockbuild-'+i).find(x=>!luckFor('unite:'+x))!;
  const support={pokemon:'Crustle',rockBuild:true,ko:1,ast:5,int:1,ours:350,theirs:250,dmg:'36k',tkn:'45k',heal:'4k',surrendered:false};
  const wall=uniteQuote(true,0,0,seed,false,support);
- assert.equal(wall.net,700,'400 base + 300 for team control; low KO is fine');
+ assert.equal(wall.net,7000,'4000 base + 3000 for team control; low KO is fine');
  assert.match(wall.note,/岩壁＆ステロ支援/);
  const elite=uniteQuote(true,0,0,seed,false,{...support,ko:2,ast:9,int:2,dmg:'55k',tkn:'62k',ours:520,theirs:250});
- assert.equal(elite.net,980,'400 base + 460 zone control + 120 victory margin');
+ assert.equal(elite.net,9800,'4000 base + 4600 zone control + 1200 victory margin');
  assert.match(elite.note,/がんせき封鎖・ステロ制圧/);
  const ordinaryCrustle=uniteQuote(true,0,0,seed,false,{...support,rockBuild:false});
- assert.equal(ordinaryCrustle.net,640,'when moves are unknown, verified defensive stats still earn +240');
+ assert.equal(ordinaryCrustle.net,6400,'when moves are unknown, verified defensive stats still earn +2400');
  const other=uniteQuote(true,0,0,seed,false,{...support,pokemon:'Pikachu'});
- assert.equal(other.net,400,'specialist bonuses do not leak to other Pokemon');
+ assert.equal(other.net,4000,'specialist bonuses do not leak to other Pokemon');
  const lost=uniteQuote(false,0,4,seed,false,{...support,ast:9,int:2,dmg:'55k',tkn:'62k',ours:220,theirs:280});
  assert.equal(lost.net,-200,'loss -500 reduced by 100 contribution, 100 rock skill, 100 close match');
  assert.ok(lost.net<0,'loss never pays out');
@@ -259,4 +259,22 @@ test('an equipped ユナイト relic adds to a newly settled win once',async()=>
  const before=f.balance(cat);
  await monitorUnite(f.env,T0+6*60_000,f.request,mapping);
  assert.equal(f.balance(cat),before,'the same game is not paid again');
+});
+
+test('Unite 10x wins preserve luck, scale all win bonuses, and leave loss unchanged',async()=>{
+ const {uniteQuote}=await import('../src/unite-rewards.ts');
+ const {luckFor,applyLuck}=await import('../src/luck.ts');
+ const stats={pokemon:'Crustle',rockBuild:true,ko:2,ast:9,int:2,ours:520,theirs:250,dmg:'55k',tkn:'62k',heal:'4k',surrendered:false};
+ for(const kind of [null,'double','triple','unlucky']){
+  const seed=Array.from({length:10000},(_,i)=>'10x-'+i).find(s=>luckFor('unite:'+s)===kind)!;
+  assert.ok(seed);
+  for(let n=0;n<5;n++){
+   const q=uniteQuote(true,n,0,seed,false,stats);
+   assert.equal(q.base,(400+n*100)*10);
+   assert.equal(q.net,(applyLuck(400+n*100,luckFor('unite:'+seed))+580)*10);
+   assert.match(q.note,/\+5800 KP/);
+   const loss=uniteQuote(false,0,n,seed);
+   assert.equal(loss.net,applyLuck(-100*(n+1),luckFor('unite:'+seed)));
+  }
+ }
 });
