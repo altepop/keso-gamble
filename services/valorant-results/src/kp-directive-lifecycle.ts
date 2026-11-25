@@ -36,8 +36,12 @@ export const directiveSchema=[
  SELECT CASE WHEN changes()!=1 THEN RAISE(ABORT,'directive_completion_conflict') END;
  END`
 ];
+const lifecycleReady=new WeakMap<object,Promise<void>>();
 export async function ensureDirectiveLifecycle(env:KpEnv){
- await env.DB.batch(directiveSchema.map(sql=>env.DB.prepare(sql)));
+ const prior=lifecycleReady.get(env.DB);if(prior)return prior;
+ const job=(async()=>{await env.DB.batch(directiveSchema.map(sql=>env.DB.prepare(sql)));})();
+ lifecycleReady.set(env.DB,job);
+ try{await job;}catch(error){lifecycleReady.delete(env.DB);throw error;}
 }
 // Run after match collection, not before. No historical scan: the partial index contains
 // only active directives, at most one per eligible target. No clawback on late ingestion.
