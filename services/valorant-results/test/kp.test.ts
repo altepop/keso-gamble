@@ -263,7 +263,7 @@ test('premium solo orders charge once and require verified solo parties and deat
  await collectKpMatch(f.env,mapping,m,'p-one');assert.equal(f.sql.prepare('SELECT status FROM kp_directives').get()!.status,'active');
  m.players.pop();await collectKpMatch(f.env,mapping,m,'p-one');assert.equal(f.sql.prepare('SELECT status FROM kp_directives').get()!.status,'completed');
  await operateKp(f.env,mapping,two,'premium-death-order','directive',{target:one,task:'solo_death_unrated'});
- assert.equal((await readKpState(f.env,mapping,two)).cash,50000,'solo death unrated costs 300,000');f.sql.exec('UPDATE kp_directives SET at=0');
+ assert.equal((await readKpState(f.env,mapping,two)).cash,300000,'old solo competitive directive was fully refunded before the 300,000 KP death order');f.sql.exec('UPDATE kp_directives SET at=0');
  const u={...m,metadata:{...m.metadata,match_id:'death-solo',queue:{id:'unrated'}}};
  await collectKpMatch(f.env,mapping,u,'p-one');assert.equal(f.sql.prepare("SELECT status FROM kp_directives WHERE task='solo_death_unrated'").get()!.status,'active');
  f.sql.prepare('INSERT INTO death_unrated_sessions VALUES(?,?,?,?,?,?)').run('One#JP1','premium',1,Date.now()+10000,'death-solo',null);
