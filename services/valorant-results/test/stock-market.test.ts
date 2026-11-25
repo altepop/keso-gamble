@@ -6,7 +6,7 @@ import {URL as NodeURL} from 'node:url';
 import {initializeKp,syncKpAccounts} from '../src/kp.ts';
 import type {KpEnv,KpMapping} from '../src/kp.ts';
 import {operateKp,readKpState,kpPulse} from '../src/kp-api.ts';
-import {prepareStocks,payStockDividends,stockBenefits,stockDiscount,convertStocks,tickStocks,raceNewsSince,nextStockPrices,queueStockPosts,STOCK_HOLD,fortuneCounts,fictionNews} from '../src/stock-market.ts';
+import {prepareStocks,payStockDividends,stockBenefits,stockDiscount,convertStocks,tickStocks,raceNewsSince,nextStockPrices,queueStockPosts,STOCK_HOLD,fortuneCounts,fictionNews,godoEventQuote,GODO_EVENT_GUILD,GODO_EVENT_START,GODO_EVENT_END,STOCK_INTERVAL} from '../src/stock-market.ts';
 import {applyStockShock,stockShockPrice} from '../src/stock-admin.ts';
 const guild='100000000000000100',one='100000000000000101',two='100000000000000102';
 const mapping:KpMapping={guildId:guild,accounts:[{riotId:'One#JP1',discordUserId:one},{riotId:'Two#JP1',discordUserId:two}]};
@@ -531,4 +531,37 @@ test('D1 stock alert keeps daily maximum eight when two or more symbols move in 
  assert.equal((f.sql.prepare('SELECT COUNT(*) AS n FROM stock_announcements').get() as {n:number}).n,8);
  assert.equal((f.sql.prepare('SELECT COUNT(*) AS n FROM kp_posts').get() as {n:number}).n,1);
  f.sql.close();
+});
+
+
+test('GODO 3-day event climbs with pullbacks and releases at its fixed deadline',()=>{
+ const initial=6200,begin=GODO_EVENT_START+2*60*60_000;
+ let price=initial,up=0,down=0;
+ for(let at=begin;at<GODO_EVENT_END;at+=STOCK_INTERVAL){
+  const next=godoEventQuote(price,price,initial,begin,at);
+  if(next>price)up++;if(next<price)down++;
+  if(at<GODO_EVENT_END-60*60_000)assert.ok(Math.abs(next-price)<=Math.max(1,Math.round(price*.0075)));
+  price=next;
+ }
+ assert.ok(up>0&&down>0,'trend must include both rising and falling ticks');
+ assert.ok(price>=10000&&price<=10999);
+ assert.equal(godoEventQuote(price,9200,initial,begin,GODO_EVENT_END),9200);
+ assert.equal(godoEventQuote(price,9200,initial,begin,GODO_EVENT_START-1),9200);
+});
+
+test('GODO event captures its actual starting quote, affects only its guild and expires',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:GODO_EVENT_START});const f=await fixture();
+ let m=await prepareStocks(f.env,GODO_EVENT_GUILD),other=await prepareStocks(f.env,guild);
+ f.sql.prepare("UPDATE stock_markets SET prices=json_set(prices,'$.godo',6200) WHERE guild=?").run(GODO_EVENT_GUILD);
+ m=await prepareStocks(f.env,GODO_EVENT_GUILD);
+ const first=GODO_EVENT_START+STOCK_INTERVAL;
+ m=await tickStocks(f.env,m,first,()=>.5);other=await tickStocks(f.env,other,first,()=>.5);
+ assert.equal(m.prices.godo,6200);assert.equal(other.prices.godo,1450);
+ assert.deepEqual({...f.sql.prepare('SELECT begin_at,start_price FROM stock_godo_event_20261125 WHERE guild=?').get(GODO_EVENT_GUILD)},{begin_at:first,start_price:6200});
+ assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM stock_godo_event_20261125').get()!.n,1);
+ const final=GODO_EVENT_END-STOCK_INTERVAL;
+ m=await tickStocks(f.env,m,final,()=>.5);other=await tickStocks(f.env,other,final,()=>.5);
+ assert.equal(m.prices.godo,10000);assert.equal(other.prices.godo,1450);
+ const expired=await tickStocks(f.env,m,GODO_EVENT_END,()=>.49);
+ assert.ok(expired.prices.godo<10000,'normal market is restored immediately at deadline');
 });
