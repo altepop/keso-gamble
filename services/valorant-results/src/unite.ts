@@ -1,9 +1,10 @@
+import rules from '../mode-rewards.json' with {type:'json'};
 import {ensureUniteRewards,settleUnite} from './unite-rewards.ts';
 // Pokémon UNITE results for members linked with /unitelink. UniteAPI (uniteapi.dev) shows a public
 // profile's recent ranked matches; one profile is read per cron minute, at most every two minutes each.
 // A first read only records what is already there, so linking never posts old games.
 // New games are posted by the result bot (the Mahjong Soul post queue) and settled in KP:
-// Wins grow from +400 to +800, losses from -100 to -500; verified contribution/close games add a bounded bonus, and gaps reset the streak.
+// Wins grow from +4000 to +8000, losses from -100 to -500; verified contribution/close games add a bounded bonus, and gaps reset the streak.
 import voice from '../unite-voice.json' with {type:'json'};
 import names from '../unite-names.json' with {type:'json'};
 import {initializeKp,newKpState,kpHash} from './kp.ts';
@@ -15,7 +16,7 @@ import {borrowedBy,debtNote} from './kp-debt.ts';
 
 export interface UniteEnv extends KpEnv {DISCORD_WEBHOOK_URL?:string;KP_EARNINGS_WEBHOOK_URL?:string}
 export interface UniteMatch {win:boolean;surrendered:boolean;map:string;party:string;pokemon:string;level:number;ours:number;theirs:number;ko:number;ast:number;int:number;dmg:string;tkn:string;heal:string;rockBuild?:boolean}
-export const UNITE_WIN=400,UNITE_LOSS=100;
+export const UNITE_WIN=rules.unite.win[0],UNITE_LOSS=-rules.unite.loss[0];
 const GAP=2*60_000,PROFILE='https://uniteapi.dev/p/';
 const initialized=new WeakSet<object>();
 export async function ensureUnite(env:KpEnv){
