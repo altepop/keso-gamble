@@ -1,0 +1,36 @@
+name: Historical directive half relief (one-time)
+on:
+  pull_request:
+    paths:
+      - 'scripts/directive-half-relief-once.mjs'
+      - 'scripts/directive-half-relief-once.test.mjs'
+      - '.github/workflows/directive-half-relief-once.yml'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/directive-half-relief-once.yml'
+permissions:
+  contents: read
+concurrency:
+  group: directive-half-relief-20261125
+  cancel-in-progress: false
+jobs:
+  validate:
+    if: github.repository == 'altepop/keso-gamble'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - run: node --test scripts/directive-half-relief-once.test.mjs
+      - name: Apply owner-approved one-time half relief
+        if: >-
+          github.event_name == 'push' && github.ref == 'refs/heads/main' &&
+          startsWith(github.event.head_commit.message, 'fix: historical directive half relief (one-time)')
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          APPLY_HALF_RELIEF: '2026-11-25-owner-approved'
+        run: node scripts/directive-half-relief-once.mjs
