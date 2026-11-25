@@ -40,7 +40,7 @@ export function issueDirective(state,{target,task,game='',achievement=''},now=Da
  if(!MEMBERS.some(m=>m.id===target))throw Error('指名するメンバーを選んでください');
  const item=ORDERS.find(o=>o.id===task);if(!item)throw Error('指令の種類が不正です');
  if(task==='steam'){game=text(game,'ゲーム名',80);achievement=text(achievement,'実績名',120);}else{game='VALORANT';achievement='';}
- if(state.directives.some(d=>d.target===target&&d.status==='active'))throw Error('この相手には未達成の指令があります');
+ if(state.directives.filter(d=>d.target===target&&d.status==='active').length>=2)throw Error('この相手の未達成指令は2件までです');
  if(state.cash<item.cost)throw Error('指令に使うKPが不足しています');
  capacity(state);
  const directive={id:++state.progressSeq,target,task,game,achievement,cost:item.cost,status:'active',time:now};state.cash-=item.cost;state.directives.unshift(directive);return directive;
@@ -63,7 +63,7 @@ export function hydrateProgress(raw){
   try{if(!d||!int(d.id)||d.id===0||ids.has(d.id)||!int(d.time)||!['active','completed'].includes(d.status))continue;
    const temp={...createProgress(),cash:Number.MAX_SAFE_INTEGER};const checked=issueDirective(temp,d,d.time);
    if((d.cost!==checked.cost&&!({competitive:8000,unrated:2500,solo_competitive:50000,solo_death_unrated:60000,steam:3500}[d.task]===d.cost))||(d.status==='completed'&&!int(d.completedAt)))continue;
-   if(d.status==='active'&&result.directives.some(x=>x.target===d.target&&x.status==='active'))continue;
+   if(d.status==='active'&&result.directives.filter(x=>x.target===d.target&&x.status==='active').length>=2)continue;
    const record={...checked,id:d.id,status:d.status,cost:d.cost};if(d.status==='completed')record.completedAt=d.completedAt;
    result.directives.push(record);ids.add(d.id);
   }catch{/* Drop malformed records. */}

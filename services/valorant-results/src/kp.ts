@@ -43,7 +43,7 @@ export const kpSchema=[
  `CREATE TABLE IF NOT EXISTS kp_operation_limits(guild TEXT NOT NULL,user TEXT NOT NULL,minute INTEGER NOT NULL,count INTEGER NOT NULL,PRIMARY KEY(guild,user,minute))`,
  `CREATE TABLE IF NOT EXISTS kp_directives(id TEXT PRIMARY KEY,guild TEXT NOT NULL,issuer TEXT NOT NULL,target TEXT NOT NULL,task TEXT NOT NULL,game TEXT NOT NULL,achievement TEXT NOT NULL,cost INTEGER NOT NULL,status TEXT NOT NULL DEFAULT 'active',at INTEGER NOT NULL)`,
  `CREATE TABLE IF NOT EXISTS kp_directive_deliveries(id TEXT PRIMARY KEY,status TEXT NOT NULL)`,
- `CREATE UNIQUE INDEX IF NOT EXISTS kp_directive_active ON kp_directives(guild,target) WHERE status='active'`,
+ `CREATE INDEX IF NOT EXISTS kp_directive_active_target ON kp_directives(guild,target) WHERE status='active'`,
  `CREATE TRIGGER IF NOT EXISTS kp_operation_apply AFTER INSERT ON kp_operations BEGIN
  INSERT INTO kp_ledger(id,guild,user,delta,kind,at) VALUES('op:'||NEW.guild||':'||NEW.user||':'||NEW.id,NEW.guild,NEW.user,NEW.delta,'game',NEW.at);
  UPDATE kp_state SET data=NEW.state,version=version+1 WHERE guild=NEW.guild AND user=NEW.user;

@@ -771,6 +771,6 @@ export async function kpApi(request:Request,env:KpEnv,override?:KpMapping,deferP
    return response({error:'コーチングの分析情報を読み込めませんでした。KP残高とは関係ありません。診断コード：COACH_'+safeStep,code:'COACH_'+safeStep},503);
   }
   const message=error instanceof Error?error.message:'';
-  return response({retryable:!(/[ぁ-んァ-ヶ一-龯]/.test(message)&&!message.includes('SQL')),error:/[ぁ-んァ-ヶ一-龯]/.test(message)&&!message.includes('SQL')?message:message.includes('relic_market_sold')?'出品の状態が変わったため購入・取り下げできません。再読み込みしてください。':message.includes('directive_transfer_conflict')?'指令の状態が変わりました。再読み込みしてください。':message.includes('kp_directive_active')||message.includes('kp_directives.guild, kp_directives.target')?'その相手には実行中の指令があります。':message.includes('kp_horse_limit')?'持てる馬は3頭までです。':message.includes('kp_crowns')?'その枠は埋まりました。もう一度お試しください。':message.includes('kp_horse_not_sellable')?'売れる馬が見つかりません。':'処理を確認できませんでした。残高を更新して確認してください。'},400);
+  return response({retryable:!(/[ぁ-んァ-ヶ一-龯]/.test(message)&&!message.includes('SQL')),error:/[ぁ-んァ-ヶ一-龯]/.test(message)&&!message.includes('SQL')?message:message.includes('relic_market_sold')?'出品の状態が変わったため購入・取り下げできません。再読み込みしてください。':message.includes('directive_transfer_conflict')?'指令の状態が変わりました。再読み込みしてください。':message.includes('kp_directive_active')||message.includes('kp_directives.guild, kp_directives.target')?'その相手の未達成指令は2件までです。':message.includes('kp_horse_limit')?'持てる馬は3頭までです。':message.includes('kp_crowns')?'その枠は埋まりました。もう一度お試しください。':message.includes('kp_horse_not_sellable')?'売れる馬が見つかりません。':'処理を確認できませんでした。残高を更新して確認してください。'},400);
  }
 }
