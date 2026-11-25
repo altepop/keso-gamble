@@ -665,7 +665,7 @@ export function luxuryRoastText(level:Exclude<RoastLevel,'mild'>,sequence:number
  const index=sequence%FULL_ROAST_DECKS.length;
  const deck=FULL_ROAST_DECKS[index]!;
  const lines=level==='full'?deck.lines:NORMAL_ROAST_DECKS[index]!;
- return [`📢 <@${target}>`,`🚨 **特製煽り投稿｜${deck.title} 編** 🚨`,'-# KESO PLAY 架空のゲーム内特番', '',...(level==='full'?[ROAST_OPENINGS[index]!,'']:[]),...lines.map(line=>'・'+line),'',...(level==='full'?['**【等しいbotからのお知らせ】**','',...ROAST_FINALES[index]!,'']:[]),`提供：<@${user}>`].join('\n');
+ return [`📢 <@${target}>`,`🚨 **特製煽り投稿｜${deck.title} 編** 🚨`,'-# KESO PLAY 架空のゲーム内特番', '',...(level==='full'?[ROAST_OPENINGS[index]!,'']:[]),...lines.map(line=>'・'+line),'',...(level==='full'?['**【等しいbotからのお知らせ】**','',...ROAST_FINALES[index]!,'']:[]),level==='full'?`提供：<@${user}>`:`🎙️ 30,000 KP提供：<@${user}>`].join('\n');
 }
 // Atomic allocation, unique for each guild and tone until the finite deck wraps.
 // Repeated delivery attempts reuse the same sequence rather than consuming another deck.
