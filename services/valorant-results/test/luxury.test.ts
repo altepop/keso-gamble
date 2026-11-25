@@ -144,3 +144,19 @@ test('full roast has a unique dramatic opening and three-line bot finale for eac
  assert.match(luxuryRoastText('full',0,two,one),/勝率改善に使われた予算は0KP/);
  assert.match(luxuryRoastText('full',0,two,one),/ほな、また負けたときにお会いしましょうwwwwww/);
 });
+
+test('full roast adds unique report and counterpunch lines, normal stays unchanged',()=>{
+ const seen=new Set<string>();
+ for(let i=0;i<20;i++){
+  const full=luxuryRoastText('full',i,two,one),normal=luxuryRoastText('normal',i,two,one);
+  const parts=full.split('\n'),marker=parts.indexOf('🎙️ **等しいbotの追撃**');
+  assert.ok(marker>0);
+  for(const line of [parts[6]!,parts[7]!,parts[marker+1]!,parts[marker+2]!]){
+   assert.ok(line.length>0&&!seen.has(line));seen.add(line);
+   assert.ok(!normal.includes(line));
+  }
+  assert.ok(full.length<=2000);
+  assert.ok(!normal.includes('等しいbotの追撃'));
+ }
+ assert.equal(seen.size,80);
+});
