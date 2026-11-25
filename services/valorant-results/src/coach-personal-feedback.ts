@@ -227,15 +227,18 @@ function detailedWarmup(pattern:AdvicePattern|null,fallback:string):string{
 }
 // Use the already computed personal curriculum, not a team-swing template.
  // No additional D1 reads, no random selection and no future sessions.
-const REPEAT_DRILLS:Record<string,[string,string]>={
- reset:['キル後に続けて戦った場面を一つ選び、残弾・遮蔽・味方の位置から続行と撤退の条件を決めます。','カスタムで同じ角から遮蔽へ戻る経路と味方をカバーし続ける経路を各5回試します。'],
- cover:['味方役と同じ角を見られる二つの立ち位置をカスタムで探し、互いの射線を塞がないか確認します。','デュオなら先頭とカバーを5回交代します。一人ならコンペ開始前にカバー相手と合図を一つ決めます。'],
- conversion:['削った敵を味方が倒したか、自分で追ったかを1交戦だけ振り返ります。確認できない場合は次戦で記録します。','射撃場で近距離と中距離を分け、短いバーストから再照準する動作を各10回試します。'],
- participation:['味方が接敵した場面を一つ振り返り、担当位置を維持する条件と合流する条件をそれぞれ決めます。','カスタムで担当位置から味方の射線へ入る二つの経路を歩き、武器を出す地点を決めます。'],
- pressure:['倒された交戦を一つ思い出し、必要なカバーだったか、別の射線が開いていたかを区別します。','カスタムで同じ入口を使い、遮蔽から角を一つずつ開く入り方と引き直す入り方を各5回試します。'],
- timing:['味方と動く合図を一つ決め、先頭・カバー・スキル担当の順番を声に出して確認します。','カスタムで同じ入口を使い、味方の合図で動く手順と待機してから合流する手順を各5回試します。'],
- repeat:['前の試合で良かった交戦を一つ選び、照準・遮蔽・味方とのタイミングのうち再現できる要素を記録します。','カスタムで同じ準備を近い角と遠い角で各5回試し、キルではなく準備の順序を採点します。'],
- foundation:['射撃場で静止射撃と移動停止後の射撃を各10回比較し、外した時の足と照準を分けて確認します。','射撃場で左右移動後の短い射撃を各10回行い、停止が安定したら距離を変えて同じ順序を試します。']
+// Two distinct approaches per persistent topic: diagnose a real engagement
+// or rehearse a different decision in a controlled situation. Neither proves
+// why the player died or whether the previous prescription was performed.
+const REPEAT_DRILLS:Record<string,[[string,string],[string,string]]>={
+ reset:[['キル後に続けて戦った場面を一つ選び、残弾・遮蔽・味方の位置から続行と撤退の条件を決めます。','次戦の最初の3キル後、続ける理由を一言で確認し、試合後に選択を記録します。'],['カスタムで同じ角から遮蔽へ戻る経路と味方をカバーし続ける経路を各5回試します。','射撃場で短いバースト後に横へ移動し、照準を置き直す動作を左右10回行います。']],
+ cover:[['味方役と同じ角を見られる二つの立ち位置をカスタムで探し、互いの射線を塞がないか確認します。','前の死亡を一つ振り返り、壁・距離・別担当のどれが影響したか確認します。分からなければ次戦で記録します。'],['デュオなら先頭とカバーを5回交代します。一人ならコンペ開始前にカバー相手と合図を一つ決めます。','同じ相手を狙う時に重ならない立ち位置を二つ選び、別の射線から入る手順を確認します。']],
+ conversion:[['削った敵を味方が倒したか、自分で追ったかを1交戦だけ振り返ります。確認できない場合は次戦で記録します。','次戦で削った敵の場所を一言伝え、味方が回収できるなら無理に追わないことを試します。'],['射撃場で近距離と中距離を分け、短いバーストから再照準する動作を各10回試します。','外した時は連射で追わず、横移動から停止して次の初弾を撃つ手順を各10回行います。']],
+ participation:[['味方が接敵した場面を一つ振り返り、担当位置を維持する条件と合流する条件をそれぞれ決めます。','開始前に自分の担当と合流の合図を一文で決め、次戦で一度確認します。'],['カスタムで担当位置から味方の射線へ入る二つの経路を歩き、武器を出す地点を決めます。','経路ごとに途中で確認すべき角を二つ選び、ナイフのまま危険な射線へ出ない動きを5回試します。']],
+ pressure:[['倒された交戦を一つ思い出し、必要なカバーだったか、別の射線が開いていたかを区別します。','次戦の最初の3交戦で、先に確認する角と退く遮蔽を一つずつ決め、倒された場合は理由を記録します。'],['カスタムで同じ入口を使い、遮蔽から角を一つずつ開く入り方と引き直す入り方を各5回試します。','射撃場で停止後の短い射撃と、撃たずに遮蔽へ戻る動きを交互に10回ずつ行います。']],
+ timing:[['味方と動く合図を一つ決め、先頭・カバー・スキル担当の順番を声に出して確認します。','次戦の最初の3Rでその合図を試し、味方が動きやすくなったかを振り返ります。'],['カスタムで同じ入口を使い、味方の合図で動く手順と待機してから合流する手順を各5回試します。','入口に着いた時に味方がまだ準備中なら、撃ち合わずに待てる遮蔽を二つ選びます。']],
+ repeat:[['前の試合で良かった交戦を一つ選び、照準・遮蔽・味方とのタイミングのうち再現できる要素を記録します。','次戦の最初の3交戦で記録した要素を一つ試し、勝敗ではなく手順ができたか確認します。'],['カスタムで同じ準備を近い角と遠い角で各5回試し、キルではなく準備の順序を採点します。','違う角度から同じ照準の準備を試し、使いにくい場合は位置や距離の違いを確認します。']],
+ foundation:[['射撃場で静止射撃と移動停止後の射撃を各10回比較し、外した時の足と照準を分けて確認します。','停止後の初弾が安定した距離を一つ選び、同じ距離で成功回数を数えます。'],['射撃場で左右移動後の短い射撃を各10回行い、停止が安定したら距離を変えて同じ順序を試します。','次は2〜3発ごとに横移動と再照準を挟み、連射せずに再度止まる動作を左右10回行います。']]
 };
 function adaptivePrescription(session:Session,history:readonly Session[]=[]):{advice:string;warmup:string}|null{
  const l=session.lesson,p=l.practice;
@@ -266,15 +269,18 @@ function adaptivePrescription(session:Session,history:readonly Session[]=[]):{ad
   '次戦：'+text(l.nextGame,210)
  ].filter(Boolean).join('\n');
  const repeat=streak>0?REPEAT_DRILLS[session.topic??'']:undefined;
- // Alternate actual drill actions, not merely wording; keep the role-specific
- // third curriculum step, including the solo alternative where applicable.
+ // Alternate distinct drill actions; preserve the role-specific third step.
  const steps=repeat
-  ?[repeat[(streak-1)%2],repeat[streak%2],streak%2===0&&l.selfCheck?'確認：'+l.selfCheck:p.steps[2]]
+  ?[...repeat[(streak-1)%2],streak%2===0&&l.selfCheck?'確認：'+l.selfCheck:p.steps[2]]
   :p.steps.slice(0,3);
+ // Use the actual map in custom-mode actions, without inventing a site or
+ // claiming the member played that particular position.
+ const mapName=session.map&&session.map!=='不明'?text(session.map,24):'';
+ const contextualSteps=steps.map(step=>mapName?step.replace('カスタムで',mapName+'のカスタムで'):step);
  const warmup=[
   'アップ（'+(repeat?6:p.minutes)+'分）',
   (repeat?'反復課題の別アプローチ':text(p.name,65))+(context?'｜'+context:''),
-  ...steps.map((step,i)=>(i+1)+'. '+text(step,180))
+  ...contextualSteps.map((step,i)=>(i+1)+'. '+text(step,180))
  ].join('\n');
  return {advice,warmup};
 }
