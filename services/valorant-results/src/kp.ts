@@ -393,11 +393,11 @@ export async function flushKpDirectives(env:KpEnv & {DISCORD_WEBHOOK_URL:string;
 /** Per monitor run: lazily load only the exact matches Henrik returned.
  * The old cron preloaded a 200-result 5-table JOIN every minute even if no game
  * was played: 451,540 D1 rows/day (2026-11-01 Insights). */
-export interface KpRun { mapping:KpMapping; startsAt:number; credits:Map<string,number>; relicBonuses:Map<string,number>; messages:Map<string,string>; notes?:Map<string,string>; loaded:Set<string>;pendingPower?:Set<string>;act?:{id:string;name:string|null;startedAt:number;episode?:string|null}|null }
+export interface KpRun { directiveRefundDue?:boolean; mapping:KpMapping; startsAt:number; credits:Map<string,number>; relicBonuses:Map<string,number>; messages:Map<string,string>; notes?:Map<string,string>; loaded:Set<string>;pendingPower?:Set<string>;act?:{id:string;name:string|null;startedAt:number;episode?:string|null}|null }
 export async function prepareKpRun(env:KpEnv,mapping:KpMapping):Promise<KpRun>{
  await ensureEscalationRating(env);
- const start=await env.DB.prepare("SELECT s.value,a.act,a.name,a.episode,a.started_at FROM kp_settings s LEFT JOIN kp_escalation_current_acts a ON a.guild=? WHERE s.key='starts_at'").bind(mapping.guildId).first<{value:string;act:string|null;name:string|null;episode:string|null;started_at:number|null}>();
- return {mapping,startsAt:Number(start?.value??Infinity),credits:new Map(),relicBonuses:new Map(),messages:new Map(),notes:new Map(),loaded:new Set(),pendingPower:new Set(),act:start?.act?{id:start.act,name:start.name,episode:start.episode,startedAt:Number(start.started_at)}:null};
+ const start=await env.DB.prepare("SELECT s.value,a.act,a.name,a.episode,a.started_at,EXISTS(SELECT 1 FROM kp_directives d WHERE d.guild=? AND d.status='active' AND d.cost>0 AND d.at<=? AND (NOT EXISTS(SELECT 1 FROM kp_ledger l WHERE l.id='directive-refund-1:'||d.id) OR (d.at<=? AND NOT EXISTS(SELECT 1 FROM kp_ledger l WHERE l.id='directive-refund-2:'||d.id)))) AS refund_due FROM kp_settings s LEFT JOIN kp_escalation_current_acts a ON a.guild=? WHERE s.key='starts_at'").bind(mapping.guildId,Date.now()-86400000,Date.now()-172800000,mapping.guildId).first<{value:string;act:string|null;name:string|null;episode:string|null;started_at:number|null;refund_due:number}>();
+ return {mapping,directiveRefundDue:Boolean(start?.refund_due),startsAt:Number(start?.value??Infinity),credits:new Map(),relicBonuses:new Map(),messages:new Map(),notes:new Map(),loaded:new Set(),pendingPower:new Set(),act:start?.act?{id:start.act,name:start.name,episode:start.episode,startedAt:Number(start.started_at)}:null};
 }
 /** Indexed id lookup: preserves old-match payouts, edited result messages and
  * delayed KP recovery without scanning all historic results for every poll.
