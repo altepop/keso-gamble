@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {DatabaseSync} from 'node:sqlite';
-import {DUEL_REWARD_DDL} from '../src/duel-rewards.ts';
+import {DUEL_REWARD_DDL,DUEL_REWARD_RECENT_SQL} from '../src/duel-rewards.ts';
 import {DUEL_PROGRESSION_DDL} from '../src/duel-progression-schema.ts';
 
 test('reward issuance is opt-in, capped across games, isolated by mode, and idempotent', () => {
@@ -142,4 +142,46 @@ test('PvP lifetime 12-roll decay uses a bounded candidate count and keeps its ex
       .all('guild','alice');
     assert.match(JSON.stringify(plan),/USING COVERING INDEX/);
   } finally { db.close(); }
+});
+
+test('recent roll index preserves exact latest rowid order, all projected values, guild and user isolation',()=>{
+  const db=new DatabaseSync(':memory:');
+  try{
+    for(const sql of DUEL_PROGRESSION_DDL)db.exec(sql);
+    const index=DUEL_REWARD_DDL.find(sql=>sql.includes('CREATE INDEX IF NOT EXISTS kp_duel_reward_rolls_recent'));
+    assert.ok(index);
+    for(const sql of DUEL_REWARD_DDL)if(sql!==index)db.exec(sql);
+    const put=db.prepare('INSERT OR IGNORE INTO kp_duel_reward_rolls VALUES(?,?,?,?,?,?,?,?,?)');
+    const add=(g:string,u:string,i:number)=>put.run(g,u,i%2?'pvp':'pve',String(i),['trio','poker','othello'][i%3],'opponent',20000+Math.floor(i/50),i%10000,5000);
+    const users=[['zero',0],['one',1],['twenty',20],['twentyone',21],['hundred',100],['thousand',1000],['large',10000]] as const;
+    db.exec('BEGIN');
+    for(const [u,n] of users)for(let i=0;i<n;i++)add('g',u,i);
+    for(let i=0;i<2000;i++)add('other','large',i);
+    db.exec('COMMIT');
+    const legacy=db.prepare(DUEL_REWARD_RECENT_SQL);
+    const args=[...users.map(([u])=>['g',u] as const),['other','large'] as const];
+    const snapshots=args.map(([g,u])=>legacy.all(g,u));
+    const originalPlan=db.prepare('EXPLAIN QUERY PLAN '+DUEL_REWARD_RECENT_SQL).all('g','large');
+    assert.match(JSON.stringify(originalPlan),/USE TEMP B-TREE FOR ORDER BY/);
+    db.exec(index);
+    const plan=db.prepare('EXPLAIN QUERY PLAN '+DUEL_REWARD_RECENT_SQL).all('g','large');
+    assert.match(JSON.stringify(plan),/USING INDEX kp_duel_reward_rolls_recent/);
+    assert.doesNotMatch(JSON.stringify(plan),/TEMP B-TREE/);
+    const recent=db.prepare(DUEL_REWARD_RECENT_SQL);
+    for(const [i,[g,u]] of args.entries())assert.deepEqual(recent.all(g,u),snapshots[i]);
+    const oldPath=db.prepare(DUEL_REWARD_RECENT_SQL.replace('FROM kp_duel_reward_rolls','FROM kp_duel_reward_rolls INDEXED BY kp_duel_reward_rolls_day'));
+    const same=()=>assert.deepEqual(recent.all('g','large'),oldPath.all('g','large'));
+    assert.deepEqual(recent.all('g','large').map(x=>Number(x.match_id)),Array.from({length:20},(_,i)=>9999-i));
+    add('g','large',10000);same();
+    add('g','large',10000);same();
+    const remove=db.prepare('DELETE FROM kp_duel_reward_rolls WHERE guild=? AND user=? AND mode=? AND match_id=?');
+    remove.run('g','large','pvp','9999');same();
+    add('g','large',9999);same();
+    assert.equal(recent.all('g','large')[0].match_id,'9999');
+    remove.run('g','large','pve','5000');same();
+    add('g','large',5000);same();
+    assert.equal(recent.all('g','large')[0].match_id,'5000');
+    assert.deepEqual(recent.all('other','large'),snapshots.at(-1));
+    db.exec(index); // idempotent on an already indexed database
+  }finally{db.close();}
 });
