@@ -13,6 +13,24 @@ const IDS=STOCKS.map(s=>s.id);
 // A day's news can move a stock at most this far (bps); the luck stocks move with every game, so they get more room.
 const DAY_BUDGET:Record<string,number>={msum:800,tnkn:800,vdk:800};
 export const STOCK_INTERVAL=5*60_000,STOCK_HOLD=86400000,DIVIDEND_CAP=500;
+// One-off fictional GODO market event, confined to KESO TOWN and a fixed JST window.
+export const GODO_EVENT_GUILD='606131625084059674';
+export const GODO_EVENT_START=Date.UTC(2026,10,25,6,40); // Nov 25 15:40 JST
+export const GODO_EVENT_END=Date.UTC(2026,10,28,6,40); // Nov 28 15:40 JST
+const GODO_TARGET=10500,GODO_FINAL_WINDOW=60*60_000;
+export function godoEventQuote(before:number,normal:number,initial:number,begin:number,now:number):number{
+ if(now<begin||now<GODO_EVENT_START||now>=GODO_EVENT_END)return normal;
+ const finish=GODO_EVENT_END-GODO_FINAL_WINDOW;
+ if(now>=finish)return Math.max(10000,Math.min(10999,normal));
+ const p=Math.max(0,Math.min(1,(now-begin)/Math.max(1,finish-begin)));
+ const trend=initial+(GODO_TARGET-initial)*p;
+ // Five alternating waves, tapered at both ends. Keep ordinary noise/news and
+ // trade impacts; nudge toward the reference by at most 0.75% per regular tick.
+ const reference=trend*(1+0.075*Math.sin(10*Math.PI*p)*Math.sin(Math.PI*p));
+ const limit=Math.max(1,Math.round(before*0.0075));
+ const adjustment=Math.max(-limit,Math.min(limit,Math.round((reference-normal)*0.22)));
+ return Math.max(20,Math.min(10000000,normal+adjustment));
+}
 export interface Market {guild:string;version:number;prices:Record<string,number>;history:Record<string,number[]>;at:number;startedAt:number;token:string}
 export interface StockBenefits {eligibleValue:number;percent:number;heldHours:number}
 interface RawMarket {guild:string;version:number;prices:string;history:string;at:number;started_at:number;token:string}
@@ -75,6 +93,7 @@ export async function ensureStocks(env:KpEnv){
  // scanning and sorting every historical market event on each wallet refresh.
  `CREATE INDEX IF NOT EXISTS stock_news_recent_public ON stock_news(guild,at DESC,id DESC) WHERE applied_version IS NOT NULL AND applied_bps!=0`,
  `CREATE TABLE IF NOT EXISTS stock_vdk_bankruptcy(guild TEXT PRIMARY KEY,begin_at INTEGER NOT NULL,start_price INTEGER NOT NULL)`,
+ `CREATE TABLE IF NOT EXISTS stock_godo_event_20261125(guild TEXT PRIMARY KEY,begin_at INTEGER NOT NULL,start_price INTEGER NOT NULL)`,
  `CREATE TABLE IF NOT EXISTS stock_ticks(guild TEXT NOT NULL,version INTEGER NOT NULL,prices TEXT NOT NULL,at INTEGER NOT NULL,PRIMARY KEY(guild,version))`,
  `CREATE TABLE IF NOT EXISTS stock_announcements(guild TEXT NOT NULL,symbol TEXT NOT NULL,slot INTEGER NOT NULL,at INTEGER NOT NULL,PRIMARY KEY(guild,symbol,slot))`,
  STOCK_ANNOUNCEMENT_LAST_INDEX_SQL,
@@ -246,6 +265,9 @@ export async function tickStocks(env:KpEnv,market:Market,now=Date.now(),draw:()=
  const budgets=new Map(IDS.map(id=>[id,{day:(DAY_BUDGET[id]??300)-(used.find(r=>r.symbol===id)?.total??0),tick:250,trades:30-(used.find(r=>r.symbol===id)?.trades??0)}]));
  const effective=pending.map(n=>{const b=budgets.get(n.symbol);if(!b)return {...n,bps:0};const trading=n.id.startsWith('trades:');const size=Math.max(0,Math.min(Math.abs(n.bps),b.day,b.tick,trading?b.trades:Infinity));b.day-=size;b.tick-=size;if(trading)b.trades-=size;return {...n,bps:Math.sign(n.bps)*size};});
  const prices=nextStockPrices(market.prices,effective,draw);
+ const godoActive=market.guild===GODO_EVENT_GUILD&&now>=GODO_EVENT_START&&now<GODO_EVENT_END;
+ const godoStart=godoActive?await env.DB.prepare('SELECT begin_at,start_price FROM stock_godo_event_20261125 WHERE guild=?').bind(market.guild).first<{begin_at:number;start_price:number}>():null;
+ if(godoActive)prices.godo=godoEventQuote(market.prices.godo,prices.godo,godoStart?.start_price??market.prices.godo,godoStart?.begin_at??now,now);
  // Remember the real starting quote from the first active 5-minute tick.
  if(now>=VDK_CRASH_START){
   await env.DB.prepare('INSERT OR IGNORE INTO stock_vdk_bankruptcy(guild,begin_at,start_price) VALUES(?,?,?)')
@@ -259,6 +281,7 @@ export async function tickStocks(env:KpEnv,market:Market,now=Date.now(),draw:()=
  const token=crypto.randomUUID(),version=market.version+1,guard='EXISTS(SELECT 1 FROM stock_markets WHERE guild=? AND token=?)';
  const commands=[env.DB.prepare('UPDATE stock_markets SET version=?,prices=?,history=?,at=?,token=? WHERE guild=? AND version=?').bind(version,JSON.stringify(prices),JSON.stringify(history),now,token,market.guild,market.version),
   env.DB.prepare(`INSERT OR IGNORE INTO stock_ticks SELECT ?,?,?,? WHERE ${guard}`).bind(market.guild,version,JSON.stringify(prices),now,market.guild,token)];
+ if(godoActive&&!godoStart)commands.push(env.DB.prepare(`INSERT OR IGNORE INTO stock_godo_event_20261125(guild,begin_at,start_price) SELECT ?,?,? WHERE ${guard}`).bind(market.guild,now,market.prices.godo,market.guild,token));
  if(now>=VDK_IPO_AT){
   const announcement=JSON.stringify({content:'📉 **【速報】VDKブラック商事、ついに倒産！**\n株価1 KPで上場廃止。旧VDK株の売買は終了。\n🏢 **VDKブラックコンサル（VDKC）新規上場！** 初値500 KP。旧株とは別銘柄として再出発。',allowed_mentions:{parse:[]}});
   commands.push(env.DB.prepare("INSERT OR IGNORE INTO kp_posts(id,body,at) SELECT ?,?,? WHERE EXISTS(SELECT 1 FROM stock_markets WHERE guild=? AND token=?)")
