@@ -36,6 +36,9 @@ export const DUEL_REWARD_DDL = [
   ) STRICT`,
   `CREATE INDEX IF NOT EXISTS kp_duel_reward_rolls_day
     ON kp_duel_reward_rolls(guild,user,mode,jst_day,opponent)`,
+  // Implicit rowid order within the guild/user prefix serves the latest 20 without sorting history.
+  `CREATE INDEX IF NOT EXISTS kp_duel_reward_rolls_recent
+    ON kp_duel_reward_rolls(guild,user)`,
   `CREATE TABLE IF NOT EXISTS kp_duel_reward_collection (
     guild TEXT NOT NULL, user TEXT NOT NULL, mode TEXT NOT NULL, game TEXT NOT NULL,
     PRIMARY KEY(guild,user,mode,game)
@@ -97,13 +100,15 @@ export async function ensureDuelRewards(env: Pick<KpEnv,'DB'>) {
 type Mode = 'pve' | 'pvp';
 type Skill = {mode: Mode; game: string; wins: number; losses: number; draws: number};
 
+export const DUEL_REWARD_RECENT_SQL = 'SELECT mode,match_id,game,roll,chance_bps FROM kp_duel_reward_rolls WHERE guild=? AND user=? ORDER BY rowid DESC LIMIT 20';
+
 export async function duelRewardProfile(env: KpEnv, guild: string, user: string) {
   await ensureDuelRewards(env);
   const [policy, collection, skills, rolls] = await env.DB.batch([
     env.DB.prepare('SELECT mode,win_bps,loss_bps,draw_bps,daily_cap,starts_at FROM kp_duel_reward_policy_v2 WHERE guild=? AND starts_at<=?').bind(guild,Date.now()),
     env.DB.prepare('SELECT mode,game FROM kp_duel_reward_collection WHERE guild=? AND user=?').bind(guild,user),
     env.DB.prepare('SELECT mode,game,wins,losses,draws FROM kp_duel_mode_skill WHERE guild=? AND user=?').bind(guild,user),
-    env.DB.prepare('SELECT mode,match_id,game,roll,chance_bps FROM kp_duel_reward_rolls WHERE guild=? AND user=? ORDER BY rowid DESC LIMIT 20').bind(guild,user),
+    env.DB.prepare(DUEL_REWARD_RECENT_SQL).bind(guild,user),
   ]);
   return {
     enabled: (policy.results as {mode:Mode}[]).map(({mode})=>mode),
